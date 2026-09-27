@@ -1,5 +1,5 @@
 load("@rules_go//go:def.bzl", "go_binary", "go_library", "go_test")
-load("//bazel:macos.bzl", "signed_binary")
+load("//bazel:macos.bzl", "macho_uuid_linkopts", "signed_binary")
 
 # The REPL's untranslated-output lint reads main.go too.
 exports_files(["main.go"])
@@ -46,6 +46,8 @@ go_library(
 go_binary(
     name = "blitz_unsigned",
     embed = [":cli_lib"],
+    # Its own Mach-O UUID (bazel/macos.bzl).
+    gc_linkopts = macho_uuid_linkopts("dev.blitz.cli"),
     visibility = ["//visibility:public"],
     # The release version (--config=release), else the default in main.go.
     x_defs = {"main.version": "{STABLE_BLITZ_VERSION}"},
@@ -86,6 +88,7 @@ go_test(
     go_binary(
         name = "blitz_" + goos + "_" + goarch,
         embed = [":cli_lib"],
+        gc_linkopts = macho_uuid_linkopts("dev.blitz.cli/" + goos + "/" + goarch),
         goarch = goarch,
         goos = goos,
         pure = "on",

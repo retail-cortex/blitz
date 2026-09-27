@@ -1,7 +1,7 @@
 load("@bazel_lib//lib:copy_to_directory.bzl", "copy_to_directory")
 load("@bazel_lib//lib:transitions.bzl", "platform_transition_filegroup")
 load("@rules_go//go:def.bzl", "go_binary", "go_library", "go_test")
-load("//bazel:macos.bzl", "signed_binary")
+load("//bazel:macos.bzl", "macho_uuid_linkopts", "signed_binary")
 
 # The page is the same for every platform: it's built for this machine
 # (its tools are native), even when the app is built for another.
@@ -58,6 +58,8 @@ go_binary(
     # bazel run (Blitz.app and the .deb put it beside the app instead).
     data = ["//apps/service:blitzd"],
     embed = [":desktop_lib"],
+    # Its own Mach-O UUID (bazel/macos.bzl).
+    gc_linkopts = macho_uuid_linkopts("dev.blitz.desktop"),
     # What `wails build` sets: the native window, not the dev server.
     gotags = [
         "desktop",
@@ -95,6 +97,7 @@ go_test(
     go_binary(
         name = "blitz-desktop_darwin_" + arch,
         embed = [":desktop_lib"],
+        gc_linkopts = macho_uuid_linkopts("dev.blitz.desktop/darwin/" + arch),
         goarch = arch,
         goos = "darwin",
         gotags = [

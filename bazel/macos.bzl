@@ -68,3 +68,36 @@ signed_app = rule(
     doc = "An app bundle (a directory), ad hoc signed so macOS knows it by its bundle identifier.",
     attrs = {"app": attr.label(mandatory = True, allow_single_file = True)},
 )
+
+# ---- Mach-O UUIDs.
+#
+# rules_go links with the fixed build ID "redacted" (for reproducible
+# builds), and Go's linker derives the Mach-O UUID from the build ID: every
+# Go program built here had the same UUID, which macOS uses to tell
+# programs apart (the system log showed the desktop app as an old test
+# binary, and the folder dialog's service turned it away). -B sets the
+# UUID; macho_uuid_linkopts derives a fixed one from a name, so builds stay
+# reproducible and each program is itself.
+
+_CHARS = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._-/"
+_HEX = "0123456789abcdef"
+_MASK = (1 << 64) - 1
+
+def _fnv1a64(s, seed):
+    h = seed
+    for c in s.elems():
+        h = ((h ^ (_CHARS.find(c) + 2)) * 1099511628211) & _MASK
+    return h
+
+def _hex64(n):
+    out = ""
+    for i in range(16):
+        out = _HEX[n & 15] + out
+        n = n >> 4
+    return out
+
+def macho_uuid_linkopts(name):
+    """gc_linkopts giving a Go binary its own fixed Mach-O UUID, from name."""
+    a = _fnv1a64(name, 14695981039346656037)
+    b = _fnv1a64(name, 14695981039346656037 ^ 0x9e3779b97f4a7c15)
+    return ["-B", "0x" + _hex64(a) + _hex64(b)]
