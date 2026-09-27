@@ -9,6 +9,8 @@ import (
 	goruntime "runtime"
 	"strings"
 	"testing"
+
+	"github.com/retail-cortex/blitz/pkg/loginitem"
 )
 
 func TestServiceInstallAndUninstall(t *testing.T) {
@@ -23,18 +25,18 @@ func TestServiceInstallAndUninstall(t *testing.T) {
 	}
 	t.Setenv("PATH", bin)
 	var ran []string
-	old := runSystem
-	runSystem = func(name string, args ...string) error {
+	old := loginitem.RunSystem
+	loginitem.RunSystem = func(name string, args ...string) error {
 		ran = append(ran, name+" "+strings.Join(args, " "))
 		return nil
 	}
-	t.Cleanup(func() { runSystem = old })
+	t.Cleanup(func() { loginitem.RunSystem = old })
 
 	var out bytes.Buffer
 	if err := serviceInstall(&out); err != nil {
 		t.Fatal(err)
 	}
-	path, _ := unitPath()
+	path, _ := loginitem.Path()
 	data, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("login item not written: %v", err)
@@ -57,7 +59,7 @@ func TestServiceInstallAndUninstall(t *testing.T) {
 			t.Errorf("ran %q", ran)
 		}
 	case "linux":
-		if len(ran) != 2 || ran[1] != "systemctl --user enable --now blitz.service" {
+		if len(ran) != 3 || ran[1] != "systemctl --user enable blitz.service" || ran[2] != "systemctl --user restart blitz.service" {
 			t.Errorf("ran %q", ran)
 		}
 	}

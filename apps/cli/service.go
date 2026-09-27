@@ -3,37 +3,18 @@ package main
 import (
 	"errors"
 	"fmt"
-	"html"
 	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
-	goruntime "runtime"
-	"strconv"
 	"strings"
 
 	"github.com/retail-cortex/blitz/pkg/socket"
 
 	"github.com/retail-cortex/blitz/pkg/config"
+	"github.com/retail-cortex/blitz/pkg/loginitem"
 	"github.com/spf13/cobra"
 )
-
-// Starting the service at login: a launchd agent on macOS, a systemd user
-// unit on Linux.
-
-const (
-	launchdLabel = "dev.blitz.service"
-	systemdUnit  = "blitz.service"
-)
-
-// runSystem runs a system command (launchctl, systemctl); tests replace it.
-var runSystem = func(name string, args ...string) error {
-	out, err := exec.Command(name, args...).CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("%s %s: %w: %s", name, strings.Join(args, " "), err, strings.TrimSpace(string(out)))
-	}
-	return nil
-}
 
 func newServiceCommand() *cobra.Command {
 	cmd := &cobra.Command{
@@ -57,97 +38,17 @@ A login item doesn't see your shell's environment: keep API keys in
 	return cmd
 }
 
-// unitPath is where the login item is written.
-func unitPath() (string, error) {
-	switch goruntime.GOOS {
-	case "darwin":
-		return config.ExpandHome("~/Library/LaunchAgents/" + launchdLabel + ".plist"), nil
-	case "linux":
-		return config.ExpandHome("~/.config/systemd/user/" + systemdUnit), nil
-	}
-	return "", fmt.Errorf("starting the service at login isn't supported on %s: run blitzd yourself", goruntime.GOOS)
-}
-
-// launchdPlist is the launchd agent that runs bin (blitzd) and restarts it if
-// it exits with an error.
-func launchdPlist(bin, logFile string) string {
-	x := html.EscapeString
-	return `<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-	<key>Label</key>
-	<string>` + launchdLabel + `</string>
-	<key>ProgramArguments</key>
-	<array>
-		<string>` + x(bin) + `</string>
-	</array>
-	<key>RunAtLoad</key>
-	<true/>
-	<key>KeepAlive</key>
-	<dict>
-		<key>SuccessfulExit</key>
-		<false/>
-	</dict>
-	<key>StandardOutPath</key>
-	<string>` + x(logFile) + `</string>
-	<key>StandardErrorPath</key>
-	<string>` + x(logFile) + `</string>
-</dict>
-</plist>
-`
-}
-
-// systemdUnitFile is the user unit that runs bin (blitzd).
-func systemdUnitFile(bin string) string {
-	return `[Unit]
-Description=Blitz service (workspaces and scheduled workers)
-
-[Service]
-ExecStart=` + strconv.Quote(bin) + `
-Restart=on-failure
-
-[Install]
-WantedBy=default.target
-`
-}
-
 func serviceInstall(out io.Writer) error {
-	path, err := unitPath()
+	path, err := loginitem.Path()
 	if err != nil {
 		return withCode(exitUsage, err)
 	}
-	bin, err := serviceBinary()
+	bin, err := loginitem.FindService(loginitem.Beside())
 	if err != nil {
 		return withCode(exitUsage, err)
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+	if err := loginitem.Install(bin); err != nil {
 		return err
-	}
-	switch goruntime.GOOS {
-	case "darwin":
-		logFile := config.ExpandHome("~/.blitz/logs/service.log")
-		if err := os.MkdirAll(filepath.Dir(logFile), 0o700); err != nil {
-			return err
-		}
-		if err := os.WriteFile(path, []byte(launchdPlist(bin, logFile)), 0o644); err != nil {
-			return err
-		}
-		domain := "gui/" + strconv.Itoa(os.Getuid())
-		_ = runSystem("launchctl", "bootout", domain+"/"+launchdLabel) // a previous install
-		if err := runSystem("launchctl", "bootstrap", domain, path); err != nil {
-			return err
-		}
-	case "linux":
-		if err := os.WriteFile(path, []byte(systemdUnitFile(bin)), 0o644); err != nil {
-			return err
-		}
-		if err := runSystem("systemctl", "--user", "daemon-reload"); err != nil {
-			return err
-		}
-		if err := runSystem("systemctl", "--user", "enable", "--now", systemdUnit); err != nil {
-			return err
-		}
 	}
 	fmt.Fprintf(out, "✓ The Blitz service starts at login (%s).\n", path)
 	fmt.Fprintf(out, "   It runs %s; after upgrading Blitz, run 'blitz service install' again.\n", bin)
@@ -159,33 +60,23 @@ func serviceInstall(out io.Writer) error {
 }
 
 func serviceUninstall(out io.Writer) error {
-	path, err := unitPath()
-	if err != nil {
-		return withCode(exitUsage, err)
-	}
-	switch goruntime.GOOS {
-	case "darwin":
-		_ = runSystem("launchctl", "bootout", "gui/"+strconv.Itoa(os.Getuid())+"/"+launchdLabel)
-	case "linux":
-		_ = runSystem("systemctl", "--user", "disable", "--now", systemdUnit)
-	}
-	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+	if err := loginitem.Uninstall(); err != nil {
+		if errors.Is(err, loginitem.ErrUnsupported) {
+			return withCode(exitUsage, err)
+		}
 		return err
-	}
-	if goruntime.GOOS == "linux" {
-		_ = runSystem("systemctl", "--user", "daemon-reload")
 	}
 	fmt.Fprintln(out, "The Blitz service no longer starts at login.")
 	return nil
 }
 
 func serviceStatus(out io.Writer) error {
-	path, err := unitPath()
+	path, err := loginitem.Path()
 	if err != nil {
 		return withCode(exitUsage, err)
 	}
 	installed := "not installed"
-	if _, err := os.Stat(path); err == nil {
+	if loginitem.Installed() {
 		installed = "installed (" + path + ")"
 	}
 	running := "not running"
@@ -250,24 +141,7 @@ func plural(n int, one, many string) string {
 
 // serviceBinary finds blitzd: beside this blitz (as released and bundled),
 // else on PATH.
-func serviceBinary() (string, error) {
-	name := "blitzd"
-	if goruntime.GOOS == "windows" {
-		name += ".exe"
-	}
-	if exe, err := os.Executable(); err == nil {
-		if exe, err = filepath.EvalSymlinks(exe); err == nil {
-			p := filepath.Join(filepath.Dir(exe), name)
-			if _, err := os.Stat(p); err == nil {
-				return p, nil
-			}
-		}
-	}
-	if p, err := exec.LookPath(name); err == nil {
-		return filepath.EvalSymlinks(p)
-	}
-	return "", errors.New("blitzd, the Blitz service, isn't installed beside blitz or on PATH")
-}
+func serviceBinary() (string, error) { return loginitem.FindService(loginitem.Beside()) }
 
 // newServeCommand keeps "blitz serve" working, for login items installed
 // before the service became its own program: it runs blitzd.

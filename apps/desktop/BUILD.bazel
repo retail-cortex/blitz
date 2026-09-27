@@ -1,7 +1,6 @@
 load("@bazel_lib//lib:copy_to_directory.bzl", "copy_to_directory")
 load("@bazel_lib//lib:transitions.bzl", "platform_transition_filegroup")
 load("@rules_go//go:def.bzl", "go_binary", "go_library", "go_test")
-load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
 
 # The page is the same for every platform: it's built for this machine
 # (its tools are native), even when the app is built for another.
@@ -42,6 +41,7 @@ go_library(
     visibility = ["//visibility:private"],
     deps = [
         "//pkg/config",
+        "//pkg/loginitem",
         "//pkg/socket",
         "@com_github_wailsapp_wails_v2//:wails",
         "@com_github_wailsapp_wails_v2//pkg/options",
@@ -53,6 +53,9 @@ go_library(
 
 go_binary(
     name = "blitz-desktop",
+    # The service it installs and restarts, found in its runfiles under
+    # bazel run (Blitz.app and the .deb put it beside the app instead).
+    data = ["//apps/service:blitzd"],
     embed = [":desktop_lib"],
     # What `wails build` sets: the native window, not the dev server.
     gotags = [
@@ -69,7 +72,10 @@ go_test(
     srcs = [
         "prefs_test.go",
         "proxy_test.go",
+        "service_test.go",
     ],
+    # A real blitzd, which TestStopServiceByPID starts and stops.
+    data = ["//apps/service:blitzd"],
     embed = [":desktop_lib"],
     deps = [
         "//apps/service/servicetest",
@@ -104,15 +110,3 @@ go_test(
         "arm64",
     ]
 ]
-
-# The app with the CLI and the service on PATH, so it can install and
-# restart the service: bazel run //apps/desktop:run
-sh_binary(
-    name = "run",
-    srcs = ["run.sh"],
-    data = [
-        ":blitz-desktop",
-        "//apps/cli:blitz",
-        "//apps/service:blitzd",
-    ],
-)

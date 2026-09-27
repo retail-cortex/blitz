@@ -1,0 +1,15 @@
+load("@rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "loginitem",
+    srcs = ["loginitem.go"],
+    importpath = "github.com/retail-cortex/blitz/pkg/loginitem",
+    visibility = ["//visibility:public"],
+    deps = ["//pkg/config"],
+)
+
+go_test(
+    name = "loginitem_test",
+    srcs = ["loginitem_test.go"],
+    embed = [":loginitem"],
+)

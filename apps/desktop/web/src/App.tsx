@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { mdiAlertOutline, mdiFolderOpenOutline, mdiLightningBolt, mdiServerOff } from "@mdi/js";
 import { onServiceLost, workspaces as workspaceAPI } from "./api";
-import { appVersion, chooseWorkspace, installService, onNotificationOpen, serviceStatus, type ServiceStatus } from "./desktop";
+import { appVersion, chooseWorkspace, installService, onNotificationOpen, restartService, serviceStatus, type ServiceStatus } from "./desktop";
 import { checkService, type ServiceCheck } from "./serviceVersion";
 import { CommandPalette } from "./CommandPalette";
 import { Drawer } from "./Drawer";
@@ -76,19 +76,19 @@ function useServiceVersion(up: boolean) {
 function StaleService({ state, check }: { state: ServiceCheck; check: () => Promise<ServiceCheck | undefined> }) {
   const { stale, info, app } = state;
   const snack = useSnackbar();
-  const [cli, setCli] = useState<string | null>(null);
+  const [bin, setBin] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   useEffect(() => {
-    serviceStatus().then((s) => setCli(s.cli), () => setCli(""));
+    serviceStatus().then((s) => setBin(s.service), () => setBin(""));
   }, []);
   const restart = async () => {
     setBusy(true);
     setError("");
     try {
-      // Re-registers the login item with the blitzd beside this app's CLI
-      // and restarts it (launchd or systemd).
-      await installService();
+      // Stops the stale service (its login item, else its process) and
+      // starts this app's blitzd, at login too.
+      await restartService(info?.pid ?? 0);
       for (let i = 0; i < 30; i++) {
         await new Promise((r) => setTimeout(r, 1000));
         const now = await check();
@@ -109,10 +109,10 @@ function StaleService({ state, check }: { state: ServiceCheck; check: () => Prom
       <Icon path={mdiServerOff} />
       <span className="spacer">
         {t(`desktop.service.stale.${stale}`, { service: info?.version ?? "?", app, path: info?.executable ?? "" })}
-        {cli === "" && <span className="muted"> {t("desktop.service.no_cli_restart")}</span>}
+        {bin === "" && <span className="muted"> {t("desktop.service.no_blitzd")}</span>}
         {error && <span className="error-text"> {error}</span>}
       </span>
-      {cli ? (
+      {bin ? (
         <Button variant="tonal" small disabled={busy} onClick={restart}>
           {busy ? t("desktop.service.restarting") : t("desktop.service.restart")}
         </Button>
@@ -279,12 +279,12 @@ function ServiceDown({ status, onStarted, error, setError }: { status: ServiceSt
         <Icon path={mdiLightningBolt} size="lg" className="brand-mark" />
         <h1 className="t-headline">{t("desktop.service.start_title")}</h1>
         <p className="muted">{t("desktop.service.explain")}</p>
-        {status.cli ? (
+        {status.service ? (
           <Button variant="filled" onClick={install} disabled={busy}>
             {busy ? t("desktop.app.starting") : status.installed ? t("desktop.service.start") : t("desktop.service.install")}
           </Button>
         ) : (
-          <p className="error-text">{t("desktop.service.no_cli", { command: "blitz service install" })}</p>
+          <p className="error-text">{t("desktop.service.no_blitzd")}</p>
         )}
         <p className="t-body-sm muted">{t("desktop.service.waiting", { socket: status.socket })}</p>
         {error && <p className="error-text">{error}</p>}

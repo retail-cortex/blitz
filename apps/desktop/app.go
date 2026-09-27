@@ -6,13 +6,12 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"os/exec"
 	"path/filepath"
-	goruntime "runtime"
 	"sync"
+	"syscall"
 	"time"
 
-	"github.com/retail-cortex/blitz/pkg/config"
+	"github.com/retail-cortex/blitz/pkg/loginitem"
 	"github.com/retail-cortex/blitz/pkg/socket"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
@@ -69,36 +68,75 @@ func (a *App) Notify(title, body, dir string) error {
 	})
 }
 
-// ServiceStatus says whether the service answers and whether it starts at
 // Version is the app's version: the release's tag, or "dev".
 func (a *App) Version() string { return version }
 
+// ServiceStatus says whether the service answers and whether it starts at
 // login.
 type ServiceStatus struct {
 	Running   bool   `json:"running"`
 	Installed bool   `json:"installed"`
 	Socket    string `json:"socket"`
-	// CLI is the blitz binary that installs the service ("" if none).
-	CLI string `json:"cli"`
+	// Service is the blitzd this app installs and restarts ("" if none
+	// was found).
+	Service string `json:"service"`
 }
 
 func (a *App) ServiceStatus() ServiceStatus {
-	cli, _ := findCLI()
-	return ServiceStatus{Running: socket.Running(a.socket), Installed: loginItemInstalled(), Socket: a.socket, CLI: cli}
+	bin, _ := findService()
+	return ServiceStatus{Running: socket.Running(a.socket), Installed: loginitem.Installed(), Socket: a.socket, Service: bin}
 }
 
-// InstallService runs `blitz service install`, which starts the
-// service now and at every login.
-func (a *App) InstallService() (string, error) {
-	cli, err := findCLI()
+// InstallService starts the service now and at every login, with the
+// blitzd that goes with this app, replacing a previous login item.
+func (a *App) InstallService() error {
+	bin, err := findService()
 	if err != nil {
-		return "", err
+		return err
 	}
-	out, err := exec.CommandContext(a.ctx, cli, "service", "install").CombinedOutput()
-	if err != nil {
-		return "", fmt.Errorf("%w: %s", err, out)
+	return loginitem.Install(bin)
+}
+
+// StopService stops the running service: through the login item when there
+// is one, else (or if it's still answering) by signalling pid, the process
+// GetServiceInfo reported (0 when unknown: a service too old to say).
+func (a *App) StopService(pid int) error {
+	if loginitem.Installed() {
+		_ = loginitem.Stop() // not loaded is fine
+		if a.waitStopped(5 * time.Second) {
+			return nil
+		}
 	}
-	return string(out), nil
+	if pid > 0 {
+		if p, err := os.FindProcess(pid); err == nil {
+			_ = p.Signal(syscall.SIGTERM) // turns in progress get a few seconds
+		}
+		if a.waitStopped(15 * time.Second) {
+			return nil
+		}
+	}
+	if !socket.Running(a.socket) {
+		return nil
+	}
+	return errors.New("the service is still running; stop it from a terminal (blitz service uninstall, or kill it)")
+}
+
+// RestartService stops the running service and starts the one that goes
+// with this app, at login too.
+func (a *App) RestartService(pid int) error {
+	if err := a.StopService(pid); err != nil {
+		return err
+	}
+	return a.InstallService()
+}
+
+func (a *App) waitStopped(limit time.Duration) bool {
+	for deadline := time.Now().Add(limit); time.Now().Before(deadline); time.Sleep(200 * time.Millisecond) {
+		if !socket.Running(a.socket) {
+			return true
+		}
+	}
+	return false
 }
 
 // ChooseWorkspace asks for a directory to open ("" if cancelled). The
@@ -137,35 +175,28 @@ func (a *App) OpenURL(link string) error {
 	return nil
 }
 
-// findCLI finds the blitz command: next to this app's binary (as
-// bundled), else on PATH.
-func findCLI() (string, error) {
-	if exe, err := os.Executable(); err == nil {
-		p := filepath.Join(filepath.Dir(exe), "blitz")
-		if goruntime.GOOS == "windows" {
-			p += ".exe"
-		}
-		if _, err := os.Stat(p); err == nil {
-			return p, nil
-		}
+// findService finds the blitzd that goes with this app: beside its
+// executable (Blitz.app, the .deb), in its Bazel runfiles (bazel run), or
+// on PATH.
+func findService() (string, error) {
+	var dirs []string
+	if d := loginitem.Beside(); d != "" {
+		dirs = append(dirs, d)
 	}
-	if p, err := exec.LookPath("blitz"); err == nil {
-		return p, nil
+	for _, root := range runfilesRoots() {
+		dirs = append(dirs, filepath.Join(root, "_main", "apps", "service", "blitzd_"))
 	}
-	return "", errors.New("the blitz command isn't installed")
+	return loginitem.FindService(dirs...)
 }
 
-// loginItemInstalled reports whether `blitz service install` has run.
-func loginItemInstalled() bool {
-	var p string
-	switch goruntime.GOOS {
-	case "darwin":
-		p = "~/Library/LaunchAgents/dev.blitz.service.plist"
-	case "linux":
-		p = "~/.config/systemd/user/blitz.service"
-	default:
-		return false
+// runfilesRoots are where Bazel puts this program's runfiles, when it ran it.
+func runfilesRoots() []string {
+	var out []string
+	if d := os.Getenv("RUNFILES_DIR"); d != "" {
+		out = append(out, d)
 	}
-	_, err := os.Stat(config.ExpandHome(p))
-	return err == nil
+	if exe, err := os.Executable(); err == nil {
+		out = append(out, exe+".runfiles")
+	}
+	return out
 }

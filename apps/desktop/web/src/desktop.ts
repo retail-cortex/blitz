@@ -11,14 +11,16 @@ export interface ServiceStatus {
   running: boolean;
   installed: boolean;
   socket: string;
-  cli: string; // the blitz binary used to install the service ("" if not found)
+  service: string; // the blitzd this app installs and restarts ("" if not found)
 }
 
 type Bound = {
   Version(): Promise<string>;
   ProgramExists(path: string): Promise<boolean>;
   ServiceStatus(): Promise<ServiceStatus>;
-  InstallService(): Promise<string>;
+  InstallService(): Promise<void>;
+  StopService(pid: number): Promise<void>;
+  RestartService(pid: number): Promise<void>;
   ChooseWorkspace(title: string): Promise<string>;
   GetPrefs(): Promise<Prefs>;
   SavePrefs(p: Prefs): Promise<Prefs>;
@@ -48,11 +50,15 @@ export async function serviceStatus(): Promise<ServiceStatus> {
       () => true,
       () => false,
     );
-    return { running, installed: true, socket: "(development server)", cli: "" };
+    return { running, installed: true, socket: "(development server)", service: "" };
   }
   return app().ServiceStatus();
 }
 export const installService = () => app().InstallService();
+/** Stops the running service: its login item, else process pid (0: unknown). */
+export const stopService = (pid: number) => app().StopService(pid);
+/** Stops the running service and starts the blitzd that goes with this app. */
+export const restartService = (pid: number) => app().RestartService(pid);
 
 /** Whether the file a running service started from is still there (true in a browser). */
 export const programExists = async (path: string) => (inApp() && path ? app().ProgramExists(path) : true);

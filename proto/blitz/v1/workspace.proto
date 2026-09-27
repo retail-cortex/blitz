@@ -133,6 +133,9 @@ message GetServiceInfoResponse {
   // been replaced or removed since).
   string executable = 2;
   google.protobuf.Timestamp started = 3;
+  // The service's process, so a client can stop one that isn't a login
+  // item.
+  int32 pid = 4;
 }
 
 message ListWorkspacesRequest {}

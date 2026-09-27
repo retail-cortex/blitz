@@ -32,7 +32,7 @@ func TestGetServiceInfo(t *testing.T) {
 			t.Fatal(err)
 		}
 		exe, _ := os.Executable()
-		if res.Msg.Version != tc.want || res.Msg.Executable != exe || time.Since(res.Msg.Started.AsTime()) > time.Minute {
+		if res.Msg.Version != tc.want || res.Msg.Executable != exe || int(res.Msg.Pid) != os.Getpid() || time.Since(res.Msg.Started.AsTime()) > time.Minute {
 			t.Errorf("info = %v, want version %q, executable %q", res.Msg, tc.want, exe)
 		}
 	}

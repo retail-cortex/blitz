@@ -8,6 +8,7 @@ import { programExists } from "./desktop";
 export interface ServiceInfo {
   version: string;
   executable: string;
+  pid: number;
 }
 
 /** Why the service should be restarted, or "" when it's the expected one. */
@@ -29,7 +30,7 @@ export function staleReason(appVersion: string, info: ServiceInfo | undefined, p
 export async function serviceInfo(): Promise<ServiceInfo | undefined> {
   try {
     const res = await workspaces.getServiceInfo({});
-    return { version: res.version, executable: res.executable };
+    return { version: res.version, executable: res.executable, pid: res.pid };
   } catch (e) {
     if (e instanceof ConnectError && (e.code === Code.Unimplemented || e.code === Code.NotFound)) return undefined;
     throw e;

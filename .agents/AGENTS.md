@@ -14,6 +14,7 @@ A monorepo of independent apps over shared packages, one Go module. The rule: **
 | `apps/desktop` | The desktop app (Wails v2, cgo), forwarding the page's API calls to the service socket; `web/` is its page (React + TypeScript, pnpm, the generated Connect client in `src/gen`), `packaging/` its icon, `Info.plist` and release script |
 | `pkg/api` | The contract between front ends and the engine: `Backend`, and the values, events and errors that cross it. Depends only on `config` and `images` |
 | `pkg/client` | `Backend` over the service's API |
+| `pkg/loginitem` | Starting the service at login and controlling it (launchd, systemd), for the CLI and the desktop app |
 | `pkg/socket` | Where the service listens (the per-user Unix socket), and how to reach it |
 | `pkg/engine` | The program without a UI: `engine.Open` builds a `Workspace` (registries, tools, sessions, model, engine) implementing `api.Backend` with typed operations that return data and never print |
 | `pkg/engine/runtime` | The engine over the ADK runner: models and providers, fallback, per-model settings, compaction, steering, side questions, usage and cost |
@@ -37,7 +38,7 @@ bazel run //:gazelle            # after adding a Go package or an import: update
 bazel test --config=race //...  # the Go tests with the race detector, as CI runs them
 bazel run //bazel:tidy          # go mod tidy, bazel mod tidy, Gazelle (after changing dependencies)
 bazel/check_format.sh           # gofmt, and BUILD files as Gazelle writes them
-bazel run //apps/desktop:run   # the desktop app, with blitz and blitzd on its PATH
+bazel run //apps/desktop:blitz-desktop   # the desktop app (it finds its blitzd in the runfiles)
 bazel run //apps/desktop/web:dev   # the desktop page in a browser (?fake: no service needed)
 bazel build //apps/desktop/packaging:Blitz.app   # the desktop app (macOS; :deb on Linux, which needs webkit2gtk)
 bazel build //release:archives  # the CLI release archives, every platform

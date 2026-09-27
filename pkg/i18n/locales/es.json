@@ -646,15 +646,12 @@
     "desktop.search.searching": "Buscando «{terms}» en la web…",
     "desktop.search.session_none": "Nada en esta conversación coincide con «{terms}».",
     "desktop.send": "Enviar",
-    "desktop.service.cli": "Línea de comandos",
-    "desktop.service.cli_missing": "no encontrado",
     "desktop.service.explain": "El servicio guarda tus espacios de trabajo y ejecuta los trabajadores programados. Sigue funcionando cuando se cierra esta ventana, y esta ventana se conecta a él.",
     "desktop.service.install": "Instalar e iniciar el servicio",
     "desktop.service.install_short": "Instalar",
     "desktop.service.login": "Se inicia al iniciar sesión",
     "desktop.service.login.installed": "Instalado como elemento de inicio.",
     "desktop.service.login.not_installed": "No instalado: solo se ejecuta si se inicia.",
-    "desktop.service.no_cli": "No se encontró el comando blitz. Instala la CLI de Blitz y ejecuta {command}.",
     "desktop.service.not_running": "Detenido",
     "desktop.service.reinstall": "Reinstalar",
     "desktop.service.running": "En ejecución",
@@ -782,9 +779,13 @@
     "desktop.service.restarting": "Reiniciando…",
     "desktop.service.restarted": "El servicio se reinició: versión {version}.",
     "desktop.service.still_stale": "El servicio se reinició, pero aún no es la versión esperada.",
-    "desktop.service.no_cli_restart": "Para reiniciarlo, pon blitz y blitzd en tu PATH o ejecuta blitz service install.",
     "desktop.service.version": "Versión",
     "desktop.service.version_unknown": "anterior (desconocida)",
-    "desktop.service.app_version": "esta aplicación: {version}"
+    "desktop.service.app_version": "esta aplicación: {version}",
+    "desktop.service.no_blitzd": "No se encontró blitzd, el programa del servicio que viene con esta aplicación, junto a ella ni en el PATH. Reinstala Blitz.",
+    "desktop.service.restart_short": "Reiniciar",
+    "desktop.service.stop": "Detener",
+    "desktop.service.program": "Programa del servicio",
+    "desktop.service.program.detail": "El blitzd que esta aplicación inicia y reinicia"
   }
 }

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { staleReason } from "./serviceVersion";
 
 describe("staleReason", () => {
-  const info = { version: "1.4.0", executable: "/usr/lib/blitz-desktop/blitzd" };
+  const info = { version: "1.4.0", executable: "/usr/lib/blitz-desktop/blitzd", pid: 42 };
   it("accepts the service the app expects", () => {
     expect(staleReason("1.4.0", info, true)).toBe("");
     expect(staleReason("dev", { ...info, version: "dev" }, true)).toBe("");

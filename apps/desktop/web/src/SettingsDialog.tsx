@@ -13,7 +13,7 @@ import {
   mdiWeatherNight,
   mdiWhiteBalanceSunny,
 } from "@mdi/js";
-import { appVersion, installService, serviceStatus, type ServiceStatus } from "./desktop";
+import { appVersion, installService, restartService, serviceStatus, stopService, type ServiceStatus } from "./desktop";
 import { checkService, type ServiceCheck } from "./serviceVersion";
 import { languages, t } from "./i18n";
 import { workspaceColor } from "./palette";
@@ -168,14 +168,35 @@ function Service() {
   useEffect(() => {
     refresh();
   }, []);
+  // Runs one service action, then shows the new status.
+  const act = async (f: () => Promise<void>) => {
+    setBusy(true);
+    setError("");
+    try {
+      await f();
+      await refresh();
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
   if (!status) return <p className="muted">{error || t("desktop.checking")}</p>;
   return (
     <div className="stack" style={{ gap: 0 }}>
       <Setting title={t("desktop.service.status")} detail={t("desktop.service.status.detail")}>
         {status.running ? (
-          <Chip className="static" icon={mdiCheckCircleOutline} selected>
-            {t("desktop.service.running")}
-          </Chip>
+          <div className="row">
+            <Chip className="static" icon={mdiCheckCircleOutline} selected>
+              {t("desktop.service.running")}
+            </Chip>
+            <Button small variant="tonal" disabled={!status.service || busy} onClick={() => act(() => restartService(version?.info?.pid ?? 0))}>
+              {t("desktop.service.restart_short")}
+            </Button>
+            <Button small danger disabled={busy} onClick={() => act(() => stopService(version?.info?.pid ?? 0))}>
+              {t("desktop.service.stop")}
+            </Button>
+          </div>
         ) : (
           <Chip className="static" icon={mdiAlertCircleOutline} tone="danger">
             {t("desktop.service.not_running")}
@@ -186,19 +207,8 @@ function Service() {
         <Button
           variant="tonal"
           small
-          disabled={!status.cli || busy}
-          onClick={async () => {
-            setBusy(true);
-            setError("");
-            try {
-              await installService();
-              await refresh();
-            } catch (e) {
-              setError(String(e));
-            } finally {
-              setBusy(false);
-            }
-          }}
+          disabled={!status.service || busy}
+          onClick={() => act(installService)}
         >
           {status.installed ? t("desktop.service.reinstall") : t("desktop.service.install_short")}
         </Button>
@@ -213,8 +223,8 @@ function Service() {
       <Setting title={t("desktop.service.socket")}>
         <code className="muted">{status.socket}</code>
       </Setting>
-      <Setting title={t("desktop.service.cli")}>
-        <code className="muted">{status.cli || t("desktop.service.cli_missing")}</code>
+      <Setting title={t("desktop.service.program")} detail={t("desktop.service.program.detail")}>
+        <code className="muted">{status.service || t("desktop.service.no_blitzd")}</code>
       </Setting>
       {error && <p className="error-text">{error}</p>}
     </div>

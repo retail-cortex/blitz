@@ -646,15 +646,12 @@
     "desktop.search.searching": "Searching the web for “{terms}”…",
     "desktop.search.session_none": "Nothing in this conversation matches “{terms}”.",
     "desktop.send": "Send",
-    "desktop.service.cli": "Command line",
-    "desktop.service.cli_missing": "not found",
     "desktop.service.explain": "The service holds your workspaces and runs scheduled workers. It keeps running after this window closes, and this window connects to it.",
     "desktop.service.install": "Install and start the service",
     "desktop.service.install_short": "Install",
     "desktop.service.login": "Starts at login",
     "desktop.service.login.installed": "Installed as a login item.",
     "desktop.service.login.not_installed": "Not installed: it runs only once started.",
-    "desktop.service.no_cli": "The blitz command wasn't found. Install Blitz's CLI, then run {command}.",
     "desktop.service.not_running": "Not running",
     "desktop.service.reinstall": "Reinstall",
     "desktop.service.running": "Running",
@@ -782,9 +779,13 @@
     "desktop.service.restarting": "Restarting…",
     "desktop.service.restarted": "The service restarted: version {version}.",
     "desktop.service.still_stale": "The service restarted but isn't the expected version yet.",
-    "desktop.service.no_cli_restart": "To restart it, put blitz and blitzd on your PATH, or run blitz service install.",
     "desktop.service.version": "Version",
     "desktop.service.version_unknown": "older (unknown)",
-    "desktop.service.app_version": "this app: {version}"
+    "desktop.service.app_version": "this app: {version}",
+    "desktop.service.no_blitzd": "blitzd, the service program that comes with this app, wasn't found beside it or on PATH. Reinstall Blitz.",
+    "desktop.service.restart_short": "Restart",
+    "desktop.service.stop": "Stop",
+    "desktop.service.program": "Service program",
+    "desktop.service.program.detail": "The blitzd this app starts and restarts"
   }
 }

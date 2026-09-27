@@ -646,15 +646,12 @@
     "desktop.search.searching": "Recherche de « {terms} » sur le Web…",
     "desktop.search.session_none": "Rien dans cette conversation ne correspond à « {terms} ».",
     "desktop.send": "Envoyer",
-    "desktop.service.cli": "Ligne de commande",
-    "desktop.service.cli_missing": "introuvable",
     "desktop.service.explain": "Le service garde vos espaces de travail et exécute les travailleurs planifiés. Il continue de fonctionner après la fermeture de cette fenêtre, qui s'y connecte.",
     "desktop.service.install": "Installer et démarrer le service",
     "desktop.service.install_short": "Installer",
     "desktop.service.login": "Démarre à l'ouverture de session",
     "desktop.service.login.installed": "Installé comme élément d'ouverture.",
     "desktop.service.login.not_installed": "Non installé : il ne tourne qu'une fois démarré.",
-    "desktop.service.no_cli": "La commande blitz est introuvable. Installez la CLI de Blitz, puis exécutez {command}.",
     "desktop.service.not_running": "Arrêté",
     "desktop.service.reinstall": "Réinstaller",
     "desktop.service.running": "En cours",
@@ -782,9 +779,13 @@
     "desktop.service.restarting": "Redémarrage…",
     "desktop.service.restarted": "Le service a redémarré : version {version}.",
     "desktop.service.still_stale": "Le service a redémarré, mais n'est pas encore la version attendue.",
-    "desktop.service.no_cli_restart": "Pour le redémarrer, mettez blitz et blitzd dans votre PATH, ou exécutez blitz service install.",
     "desktop.service.version": "Version",
     "desktop.service.version_unknown": "antérieure (inconnue)",
-    "desktop.service.app_version": "cette application : {version}"
+    "desktop.service.app_version": "cette application : {version}",
+    "desktop.service.no_blitzd": "blitzd, le programme du service livré avec cette application, est introuvable à côté d'elle ou dans le PATH. Réinstallez Blitz.",
+    "desktop.service.restart_short": "Redémarrer",
+    "desktop.service.stop": "Arrêter",
+    "desktop.service.program": "Programme du service",
+    "desktop.service.program.detail": "Le blitzd que cette application démarre et redémarre"
   }
 }
