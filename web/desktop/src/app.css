@@ -284,3 +284,16 @@
 .hljs-strong { font-weight: 600; }
 .dl.add .hljs-string, .dl.del .hljs-string { color: inherit; }
 .dl-sign { display: inline-block; width: 1.2em; user-select: none; }
+
+/* Images attached to the next prompt */
+.chat { position: relative; }
+.drop-overlay { position: absolute; inset: 8px; z-index: 25; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px;
+  border: 2px dashed var(--md-primary); border-radius: var(--md-shape-lg); background: color-mix(in srgb, var(--md-primary-container) 80%, transparent); color: var(--md-on-primary-container); pointer-events: none; }
+.attachments { display: flex; flex-wrap: wrap; gap: 8px; padding-bottom: 4px; }
+.attachment { display: flex; align-items: center; gap: 8px; max-width: 260px; padding: 4px 4px 4px 4px; border-radius: var(--md-shape-md); background: var(--md-surface-container-highest); }
+.attachment img { width: 44px; height: 44px; object-fit: cover; border-radius: var(--md-shape-sm); flex: none; }
+.attachment.failed img { opacity: 0.4; }
+.attachment-text { display: flex; flex-direction: column; min-width: 0; font-size: 13px; }
+.attachment-text small { font-size: 11px; }
+.bubble-images { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
+.bubble-images img { max-width: 180px; max-height: 140px; border-radius: var(--md-shape-md); object-fit: cover; }

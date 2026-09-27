@@ -19,6 +19,7 @@ import {
   mdiFormatListChecks,
   mdiHelpCircleOutline,
   mdiHistory,
+  mdiImagePlusOutline,
   mdiLightbulbOutline,
   mdiMagnify,
   mdiMessageReplyTextOutline,
@@ -39,6 +40,7 @@ import { isUnavailable, message, reason } from "./errors";
 import type { SessionInfo } from "./gen/blitz/v1/session_pb";
 import { Decision, type ApprovalRequest, type Question, type Task, type Usage } from "./gen/blitz/v1/turn_pb";
 import type { GetSettingsResponse } from "./gen/blitz/v1/workspace_pb";
+import { describeImage, imageFiles, readyIds, rejectReason, uploading, type Attachment } from "./attachments";
 import { Markdown } from "./Markdown";
 import { notify, shouldNotify, type NotifyKind } from "./notify";
 import { efforts, effortIcon, modeOf, modes } from "./options";
@@ -78,6 +80,8 @@ export function Conversation({
   const [error, setError] = useState("");
   const [draft, setDraft] = useState("");
   const [plan, setPlan] = useState(false);
+  const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const [dragging, setDragging] = useState(false);
   const [forceRewind, setForceRewind] = useState<{ index: number; mode: string; error: string } | null>(null);
   const abort = useRef<AbortController | null>(null);
   const finished = useRef<Promise<void>>(Promise.resolve());
@@ -166,9 +170,11 @@ export function Conversation({
   };
 
   const run = useCallback(
-    async (text: string, opts: { accepted?: boolean; plan?: boolean } = {}) => {
+    async (text: string, opts: { accepted?: boolean; plan?: boolean; images?: Attachment[] } = {}) => {
       if (!session) return;
-      if (!opts.accepted) setEntries((e) => [...e, { kind: "user", text: opts.plan ? `/plan ${text}` : text }]);
+      const images = opts.images ?? [];
+      if (!opts.accepted)
+        setEntries((e) => [...e, { kind: "user", text: opts.plan ? `/plan ${text}` : text, images: images.length ? images.map((a) => ({ url: a.url, name: a.name })) : undefined }]);
       setRunning(true);
       started.current = Date.now();
       setError("");
@@ -181,7 +187,7 @@ export function Conversation({
       let leftover: string[] = [];
       try {
         const stream = sessions.runTurn(
-          { workspace: dir, sessionId: session.id, turn: { text, accepted: !!opts.accepted, plan: !!opts.plan } },
+          { workspace: dir, sessionId: session.id, turn: { text, accepted: !!opts.accepted, plan: !!opts.plan, imageIds: readyIds(images) } },
           { signal: ctl.signal },
         );
         for await (const res of stream) {
@@ -233,11 +239,49 @@ export function Conversation({
     return () => registerStop(dir, null);
   }, [dir, stop, registerStop]);
 
+  // Images for the next prompt: each uploads as soon as it's added.
+  const imagesOn = settings?.imagesEnabled ?? true;
+  const addFiles = useCallback(
+    (files: File[]) => {
+      if (!imagesOn) {
+        snack("Images are turned off for this workspace ([images] enabled in the configuration).", { error: true });
+        return;
+      }
+      for (const f of files) {
+        const why = rejectReason(f);
+        if (why) {
+          snack(why, { error: true });
+          continue;
+        }
+        const a: Attachment = { key: `${Date.now()}-${Math.random()}`, name: f.name || "pasted image", url: URL.createObjectURL(f) };
+        setAttachments((list) => [...list, a]);
+        (async () => {
+          try {
+            const res = await workspaces.addImage({ workspace: dir, name: a.name, data: new Uint8Array(await f.arrayBuffer()) });
+            const img = res.image!;
+            setAttachments((list) => list.map((x) => (x.key === a.key ? { ...x, id: img.id, detail: describeImage(img) } : x)));
+          } catch (e) {
+            setAttachments((list) => list.map((x) => (x.key === a.key ? { ...x, error: message(e) } : x)));
+          }
+        })();
+      }
+    },
+    [dir, imagesOn, snack],
+  );
+  const removeAttachment = (key: string) =>
+    setAttachments((list) => {
+      const gone = list.find((a) => a.key === key);
+      if (gone) URL.revokeObjectURL(gone.url);
+      return list.filter((a) => a.key !== key);
+    });
+
   const submit = async (text: string) => {
     if (!running) {
       const asPlan = plan;
       setPlan(false);
-      return run(text, { plan: asPlan });
+      const images = attachments.filter((a) => a.id && !a.error);
+      setAttachments([]);
+      return run(text, { plan: asPlan, images });
     }
     // While a turn runs, a message steers it.
     try {
@@ -309,7 +353,28 @@ export function Conversation({
   const shown = prefs.show_thoughts ? entries : entries.filter((e) => e.kind !== "thought");
   const empty = shown.length === 0 && !running;
   return (
-    <div className="chat">
+    <div
+      className={`chat ${dragging ? "dragging" : ""}`}
+      onDragOver={(e) => {
+        if (!Array.from(e.dataTransfer.types).includes("Files")) return;
+        e.preventDefault();
+        setDragging(true);
+      }}
+      onDragLeave={(e) => {
+        if (e.currentTarget === e.target || !e.currentTarget.contains(e.relatedTarget as Node)) setDragging(false);
+      }}
+      onDrop={(e) => {
+        e.preventDefault();
+        setDragging(false);
+        addFiles(imageFiles(e.dataTransfer.files));
+      }}
+    >
+      {dragging && (
+        <div className="drop-overlay">
+          <Icon path={mdiImagePlusOutline} size="lg" />
+          <span className="t-title">Drop images to attach them</span>
+        </div>
+      )}
       <SessionBar session={session} list={list} running={running} onNew={newSession} onLoad={load} onRename={rename} />
       <div className="chat-scroll" ref={scroller} onScroll={onScroll}>
         <div className="chat-column">
@@ -347,6 +412,10 @@ export function Conversation({
       <div className="chat-column dock">
         {tasks.length > 0 && <TaskList tasks={tasks} onDismiss={running ? undefined : () => setTasks([])} />}
         <Composer
+          attachments={attachments}
+          onAddFiles={addFiles}
+          onRemoveAttachment={removeAttachment}
+          imagesOn={imagesOn}
           draft={draft}
           setDraft={setDraft}
           running={running}
@@ -565,6 +634,13 @@ function UserBubble({ entry, running, onRewind, onEdit }: { entry: UserEntry; ru
       </div>
       <div className="bubble">
         {entry.sub === "steer" && <span className="t-label muted">Sent while working</span>}
+        {entry.images && (
+          <div className="bubble-images">
+            {entry.images.map((img) => (
+              <img key={img.url} src={img.url} alt={img.name} title={img.name} />
+            ))}
+          </div>
+        )}
         <div className="bubble-text">{entry.text}</div>
       </div>
     </div>
@@ -790,6 +866,10 @@ function TaskList({ tasks, onDismiss }: { tasks: Task[]; onDismiss?: () => void 
 }
 
 function Composer({
+  attachments,
+  onAddFiles,
+  onRemoveAttachment,
+  imagesOn,
   draft,
   setDraft,
   running,
@@ -801,6 +881,10 @@ function Composer({
   onStop,
   onSettingsChanged,
 }: {
+  attachments: Attachment[];
+  onAddFiles: (files: File[]) => void;
+  onRemoveAttachment: (key: string) => void;
+  imagesOn: boolean;
   draft: string;
   setDraft: (t: string) => void;
   running: boolean;
@@ -814,6 +898,8 @@ function Composer({
 }) {
   const snack = useSnackbar();
   const ref = useRef<HTMLTextAreaElement>(null);
+  const picker = useRef<HTMLInputElement>(null);
+  const busy = uploading(attachments);
   // Grow with the text, up to a limit.
   useEffect(() => {
     const el = ref.current;
@@ -826,7 +912,7 @@ function Composer({
   }, [draft]);
   const send = () => {
     const t = draft.trim();
-    if (!t) return;
+    if (!t || busy) return;
     setDraft("");
     onSubmit(t);
   };
@@ -850,11 +936,32 @@ function Composer({
   const effort = efforts.find((e) => e.value === (settings?.effort ?? "")) ?? efforts[0];
   return (
     <div className={`composer ${running ? "running" : ""}`}>
+      {attachments.length > 0 && (
+        <div className="attachments">
+          {attachments.map((a) => (
+            <div key={a.key} className={`attachment ${a.error ? "failed" : ""}`} title={a.error || `${a.name}${a.detail ? ` · ${a.detail}` : ""}`}>
+              <img src={a.url} alt="" />
+              <span className="attachment-text">
+                <span className="ellipsis">{a.name}</span>
+                <small className={a.error ? "error-text ellipsis" : "muted ellipsis"}>{a.error || a.detail || "Uploading…"}</small>
+              </span>
+              <IconButton icon={mdiClose} label={`Remove ${a.name}`} small onClick={() => onRemoveAttachment(a.key)} />
+            </div>
+          ))}
+        </div>
+      )}
       <textarea
         ref={ref}
         value={draft}
         rows={1}
         onChange={(e) => setDraft(e.target.value)}
+        onPaste={(e) => {
+          const files = imageFiles(e.clipboardData.files);
+          if (files.length) {
+            e.preventDefault();
+            onAddFiles(files);
+          }
+        }}
         onKeyDown={(e) => {
           if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
             e.preventDefault();
@@ -865,6 +972,22 @@ function Composer({
         aria-label="Message"
       />
       <div className="composer-bar">
+        {!running && imagesOn && (
+          <>
+            <IconButton icon={mdiImagePlusOutline} label="Attach images (or paste or drop them)" small onClick={() => picker.current?.click()} />
+            <input
+              ref={picker}
+              type="file"
+              accept="image/*"
+              multiple
+              hidden
+              onChange={(e) => {
+                onAddFiles(imageFiles(e.target.files));
+                e.target.value = "";
+              }}
+            />
+          </>
+        )}
         <Menu
           placement="up start"
           trigger={(p) => (
@@ -893,7 +1016,7 @@ function Composer({
           <kbd>Enter</kbd> to send · <kbd>Shift</kbd>+<kbd>Enter</kbd> for a new line
         </span>
         {running && <IconButton icon={mdiStop} label="Stop" variant="tonal" onClick={onStop} />}
-        <IconButton icon={mdiArrowUp} label={running ? "Steer" : "Send"} variant="filled" disabled={!draft.trim()} onClick={send} />
+        <IconButton icon={mdiArrowUp} label={busy ? "Uploading images…" : running ? "Steer" : "Send"} variant="filled" disabled={!draft.trim() || busy} onClick={send} />
       </div>
     </div>
   );

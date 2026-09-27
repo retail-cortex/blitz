@@ -204,7 +204,10 @@ export function installFake() {
           sess.title = title;
           return { session: sess };
         },
-        runTurn: (req) => runTurn(req.workspace, req.turn?.text ?? "", !!req.turn?.plan),
+        runTurn: (req) => {
+          (globalThis as { __lastTurn?: unknown }).__lastTurn = req.turn; // for checks
+          return runTurn(req.workspace, req.turn?.text ?? "", !!req.turn?.plan);
+        },
         steer: ({ workspace, text }) => {
           active(state(workspace)).messages.push(msg("user", text, "steer"));
           return {};
@@ -287,6 +290,10 @@ export function installFake() {
         revokeApprovals: () => ({ revoked: 1 }),
         closeWorkspace: () => ({}),
         listWorkspaces: () => ({ workspaces: [...states.keys()] }),
+        addImage: async ({ name, data }) => {
+          await sleep(400);
+          return { image: { id: `img-${data.length}`, name, mimeType: "image/png", width: 1280, height: 720, size: BigInt(data.length), resized: false } };
+        },
         listCheckpoints: () => ({ checkpoints: [{ id: 2, label: "Fix the coupon rounding", time: now(), files: ["internal/cart/discount.go", "internal/cart/discount_test.go"] }] }),
         undo: () => ({ label: "Fix the coupon rounding", restored: ["internal/cart/discount.go"] }),
         getDiff: ({ git }) => ({

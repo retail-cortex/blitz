@@ -104,7 +104,7 @@ Suggested order (from NEXT_STEPS): run the manual checks (§9) first — their f
 - **BL-DSK-21** ✅ *Done (DSK-78).* The usage line adds the session total, as in the terminal (TUI-05).
 
 ### 7.4 Images — S
-- **BL-DSK-30** Images can be pasted or dropped into the composer; they're uploaded with `AddImage` and sent with the next turn by ID (SVC-13), shown as thumbnails.
+- **BL-DSK-30** ✅ *Done 2026-09-27 ([spec_desktop_024](spec_desktop_024.md) DSK-78b).* Images can be pasted or dropped into the composer; they're uploaded with `AddImage` and sent with the next turn by ID (SVC-13), shown as thumbnails.
 
 ### 7.5 Localisation — M
 - **BL-DSK-40** Every string in the page comes from the same catalogs as the terminal (served by the service or embedded at build time), follows the interface language (`/locale`), and passes the same catalog checks (I18N-05, I18N-06).

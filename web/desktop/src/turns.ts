@@ -11,7 +11,7 @@ import type { Task, TurnEvent } from "./gen/blitz/v1/turn_pb";
  * the agent worked (steer), a stop hook's request (hook), or the go-ahead
  * for an approved plan (plan).
  */
-export type UserEntry = { kind: "user"; text: string; sub?: "steer" | "hook" | "plan"; index?: number };
+export type UserEntry = { kind: "user"; text: string; sub?: "steer" | "hook" | "plan"; index?: number; images?: { url: string; name: string }[] };
 
 export type Entry =
   | UserEntry

@@ -116,6 +116,10 @@ API used: `SessionService.GetActiveSession`, `NewSession`, `ListSessions`, `Load
 
 - **DSK-79a** Code blocks and diff lines are highlighted with highlight.js grammars through `lowlight` (the common set, about 35 languages), which returns an element tree rendered as React elements — never an HTML string. A block's grammar comes from its fence's language (with aliases: `sh`→bash, `ts`→typescript, `yml`→yaml, `golang`→go, `proto`→protobuf, …); a diff's from the file name (extension, or `Makefile`). Unknown languages, and code over 100 000 characters, stay plain text. Diff lines are highlighted one at a time after their `+`/`−`/space sign (shown in its own column), over the added/removed tint. Token colours are theme tokens (`--hl-*`) with a light and a dark set.
 
+### 11d. Images
+
+- **DSK-78b** Images can be pasted into the composer, dropped anywhere on the conversation (an overlay "Drop images to attach them" shows while dragging files), or chosen with the attach button. Only images up to 20 MB are taken (others are refused in a snackbar); each uploads at once (`AddImage`) and shows as a chip with its thumbnail (a local object URL), name, and the service's dimensions and size ("scaled down" when the service resized it) or its error; chips can be removed. **Send** waits until uploads finish; the turn carries the uploaded images' IDs (`Turn.image_ids`), and the prompt's bubble shows them. With images turned off for the workspace (`imagesEnabled` false) the button is hidden and pasting or dropping explains why. Files dropped elsewhere in the window are ignored, so the web view never navigates to a dropped file. Rules in `attachments.ts`, unit-tested.
+
 ### 11c. Notifications
 
 - **DSK-78a** With **Notifications** on (the default; Settings › Appearance; `notifications` in `desktop.json`), the window notifies when an approval or a question waits ("<workspace>: approval needed" with the request, "<workspace>: the agent asks" with the question), or when a turn that took at least 10 s finishes ("<workspace>: done" with the start of the answer, or "the turn failed" with the error) — but only while the user isn't looking at that conversation: the window isn't focused, or another workspace or view is shown (`shouldNotify`, unit-tested). Bodies are cut to 180 characters. In a browser (development) the web's Notification API stands in.
@@ -150,7 +154,6 @@ API used: `WorkspaceService.ListAgents`, `SetAgent`, `SetModel`, `GetModelSettin
 Not implemented; each is tracked in [spec_backlog_026](spec_backlog_026.md):
 
 - **Slash commands** in the composer and a command palette (BL-DSK-10/11); `/btw`, `/search`, snapshots by name, sessions from other workspaces.
-- **Images**: pasting or dropping into the composer (BL-DSK-30).
 - **Localisation**: the page's strings are English (BL-DSK-40).
 - **Workers**: no refresh on file changes; a run's session doesn't open in the conversation (BL-DSK-50).
 - **Release**: signing, notarisation, a release job, Linux and Windows packages (BL-DSK-60/61).

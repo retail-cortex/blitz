@@ -73,6 +73,16 @@ function Shell() {
   useEffect(() => {
     if (prefsError) snack(prefsError, { error: true });
   }, [prefsError, snack]);
+  // A file dropped outside the chat mustn't make the web view open it.
+  useEffect(() => {
+    const stop = (e: DragEvent) => e.preventDefault();
+    window.addEventListener("dragover", stop);
+    window.addEventListener("drop", stop);
+    return () => {
+      window.removeEventListener("dragover", stop);
+      window.removeEventListener("drop", stop);
+    };
+  }, []);
   // A click on a notification shows its workspace.
   useEffect(() => onNotificationOpen((dir) => update((p) => openWorkspace(p, dir))), [update]);
 
