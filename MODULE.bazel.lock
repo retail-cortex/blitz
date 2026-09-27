@@ -295,14 +295,14 @@
   },
   "selectedYankedVersions": {},
   "moduleExtensions": {
-    "//bazel:pkg_config.bzl%pkg_config": {
+    "//build:pkg_config.bzl%pkg_config": {
       "general": {
         "bzlTransitiveDigest": "yYdEAQLmxYM4hiPOA75oc5KY4wlGnD13ooQG21CSDZI=",
-        "usagesDigest": "6tFyPc3+yFMPiXRdduPkmceSZGit5vJx3vowaMV7N34=",
+        "usagesDigest": "AV173t+verXm8qH45OoTz1AK8UqG2C6xjDDncwYyPkE=",
         "recordedInputs": [],
         "generatedRepoSpecs": {
           "webkitgtk": {
-            "repoRuleId": "@@//bazel:pkg_config.bzl%pkg_config_repository",
+            "repoRuleId": "@@//build:pkg_config.bzl%pkg_config_repository",
             "attributes": {
               "modules": [
                 "gtk+-3.0",

@@ -18,7 +18,7 @@ Blitz is a native Go coding agent built on the Google Agent Development Kit (`go
 
 ## 3. Layout
 
-A monorepo of three apps (`apps/cli`, `apps/service`, `apps/desktop`) over shared packages (`pkg/`, the engine in `pkg/engine/`), with the protos in `proto/` and the build's own pieces in `bazel/` and `release/`: [spec_monorepo_028](spec_monorepo_028.md) §2 has the table and the dependency rules.
+A monorepo of three apps (`apps/cli`, `apps/service`, `apps/desktop`) over shared packages (`pkg/`, the engine in `pkg/engine/`), with the protos in `proto/` the build's rules in `build/`, commands for working on it in `tools/`, changes to outside code in `third_party/`, and the release archives in `release/`: [spec_monorepo_028](spec_monorepo_028.md) §2 has the table and the dependency rules.
 
 - **SET-10** Code private to one app goes in `apps/<app>/internal/`; code more than one app uses goes in `pkg/` (the engine's in `pkg/engine/`). Slash-command logic lives in `pkg/engine`, not in a UI.
 - **SET-11** Build outputs are not committed (`/bazel-*`, `/bin/`, `/dist/`, `/blitz`, `/blz`, `/apps/desktop/web/dist/`, `/apps/desktop/packaging/{bin,dist}/`, `/user.bazelrc`); neither is generated code (MR-12). Editor swap files are ignored.
@@ -40,8 +40,8 @@ A monorepo of three apps (`apps/cli`, `apps/service`, `apps/desktop`) over share
 | `bazel build //release:archives` | The CLI release archives, every platform |
 | `bazel build //apps/desktop/packaging:Blitz.app` / `:deb` | The desktop app's package (macOS / Linux) |
 | `bazel run //:gazelle` | Update the BUILD files after adding a package or import |
-| `bazel run //bazel:tidy` | `go mod tidy`, `bazel mod tidy`, Gazelle |
-| `bazel run //bazel:check_deps`, `bazel/check_format.sh` | The dependency rules; formatting |
+| `bazel run //tools:tidy` | `go mod tidy`, `bazel mod tidy`, Gazelle |
+| `bazel run //tools:check_deps`, `tools/check_format.sh` | The dependency rules; formatting |
 
 ## 6. Conventions (for people and agents changing the code)
 

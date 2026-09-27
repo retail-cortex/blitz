@@ -2,7 +2,7 @@
 # The monorepo's dependency rules (AGENTS.md, Layout), checked on the
 # build graph. Libraries only: tests may use the engine and servicetest.
 #
-#   bazel run //bazel:check_deps
+#   bazel run //tools:check_deps
 set -euo pipefail
 cd "${BUILD_WORKSPACE_DIRECTORY:-$(dirname "$0")/..}"
 

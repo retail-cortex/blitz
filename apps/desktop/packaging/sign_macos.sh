@@ -31,7 +31,7 @@ done
 
 # Nested code first, then the bundle; hardened runtime and a secure
 # timestamp, which notarisation requires. Each program gets a real
-# identifier: Bazel's links are all "a.out" (bazel/macos.bzl).
+# identifier: Bazel's links are all "a.out" (build/macos.bzl).
 signed=""
 if [ -n "${DESKTOP_SIGN_IDENTITY:-}" ]; then
 	codesign --force --options runtime --timestamp --identifier dev.blitz.cli --sign "$DESKTOP_SIGN_IDENTITY" "$app/Contents/MacOS/blitz"

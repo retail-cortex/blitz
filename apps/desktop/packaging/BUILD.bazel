@@ -2,7 +2,7 @@ load("@bazel_lib//lib:copy_to_directory.bzl", "copy_to_directory")
 load("@rules_pkg//pkg:deb.bzl", "pkg_deb")
 load("@rules_pkg//pkg:mappings.bzl", "pkg_attributes", "pkg_files", "pkg_mklink")
 load("@rules_pkg//pkg:tar.bzl", "pkg_tar")
-load("//bazel:macos.bzl", "signed_app")
+load("//build:macos.bzl", "signed_app")
 
 # The desktop app's packages. Build with --config=release for the
 # version; signing, notarising and the disk image are the release
@@ -19,10 +19,10 @@ genrule(
     name = "info_plist",
     srcs = [
         "darwin/Info.plist.in",
-        "//bazel:version",
+        "//build:version",
     ],
     outs = ["app/Contents/Info.plist"],
-    cmd = "sed \"s/@VERSION@/$$(cat $(location //bazel:version))/g\" $(location darwin/Info.plist.in) > $@",
+    cmd = "sed \"s/@VERSION@/$$(cat $(location //build:version))/g\" $(location darwin/Info.plist.in) > $@",
     target_compatible_with = _MACOS,
 )
 
@@ -152,6 +152,6 @@ the service, which it installs and starts.""",
     priority = "optional",
     section = "devel",
     target_compatible_with = _LINUX,
-    version_file = "//bazel:version",
+    version_file = "//build:version",
     visibility = ["//visibility:public"],
 )

@@ -52,7 +52,7 @@ jobs:
           echo "RUNSC_PATH=$RUNNER_TEMP/gvisor/runsc" >> "$GITHUB_ENV"
       # gofmt, and BUILD files as Gazelle writes them. (vet and staticcheck
       # run in every compile: nogo.)
-      - run: bazel/check_format.sh
+      - run: tools/check_format.sh
       # Every test, the Go ones with the race detector: Go, the page's
       # vitest and type check, the proto lint.
       - run: bazel test --config=race //...
@@ -68,7 +68,7 @@ jobs:
             --test_arg=-test.v --test_arg=-test.run=TestGVisor | tee gv.txt
           if grep -q -- '--- SKIP' gv.txt; then exit 1; fi
       # Apps depend on pkg/ only; front ends never on the engine.
-      - run: bazel run //bazel:check_deps
+      - run: bazel run //tools:check_deps
       # Fails only on a vulnerability the code can reach. The scan needs the
       # symbol table to see which packages are linked: without it, every
       # advisory in a required module counts (GO-2026-5932, all of x/crypto
@@ -86,11 +86,11 @@ jobs:
         env:
           BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
         run: |
-          bazel run //bazel:buf -- format --exit-code -d
+          bazel run //tools:buf -- format --exit-code -d
           if git log -1 --format=%B "$GITHUB_SHA" | grep -q '^Breaking-API:'; then
             echo "::notice::API break declared: $(git log -1 --format=%B "$GITHUB_SHA" | grep '^Breaking-API:')"
           elif git cat-file -e "$BASE:proto/blitz/v1" 2>/dev/null || git cat-file -e "$BASE:api/blitz/v1" 2>/dev/null; then
-            bazel run //bazel:buf -- breaking --against ".git#ref=$BASE"
+            bazel run //tools:buf -- breaking --against ".git#ref=$BASE"
           fi
       # The release archives, which the reproducible job compares.
       - run: bazel build //release:archives

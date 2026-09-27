@@ -1,0 +1,23 @@
+# Commands for working on the repository, run with `bazel run //tools:<name>`
+# (check_format.sh and gopackagesdriver.sh run directly).
+
+load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
+
+# The dependency rules between apps and packages; CI runs it.
+sh_binary(
+    name = "check_deps",
+    srcs = ["check_deps.sh"],
+)
+
+# buf itself, for the protos' format and breaking-change checks in CI.
+sh_binary(
+    name = "buf",
+    srcs = ["buf.sh"],
+    data = ["@rules_buf_toolchains//:buf"],
+)
+
+# go mod tidy, bazel mod tidy and Gazelle, in that order.
+sh_binary(
+    name = "tidy",
+    srcs = ["tidy.sh"],
+)

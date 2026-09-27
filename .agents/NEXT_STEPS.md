@@ -43,7 +43,7 @@ Roadmap items 1–22 are done and committed, and item 23 (the desktop app) is in
 | `31531764`, (the commit adding `pkg/engine/workers.go`) | Item 24a–b: worker definitions, schedules, permissions (`ApprovalRequest.Targets`); enabling pinned to the hash, `[workers.policy]` |
 | (the commit adding `pkg/engine/session/title_test.go`) | Session names from the first prompt, `/rename`, terminal title, resume hint on exit |
 
-`bazel test --config=race //...` passes (vet and staticcheck run in every compile), and so does `bazel run //bazel:check_deps`.
+`bazel test --config=race //...` passes (vet and staticcheck run in every compile), and so does `bazel run //tools:check_deps`.
 
 ## Dated reminders
 
@@ -99,7 +99,7 @@ Roadmap items 1–22 are done and committed, and item 23 (the desktop app) is in
 - **No Anthropic server-side web search** (dropped by the user). **No Google Custom Search JSON API**: it shuts down on 2027-01-01, so `google` means Gemini grounding.
 - **`/search web` pre-approves exactly the URLs it hands over, for that turn only** (`tools.WithFetchGrants`); everything else the agent fetches still asks.
 - **Telemetry and OTel need one provider per process:** the ADK binds its tracer to the first global provider.
-- **Bazel, in a monorepo** (2026-09-27, owner's decision; reverses "No Bazel" of 2026-09-26). The engine had bled into the front ends; the repository is now three apps over shared packages (`apps/`, `pkg/`, `pkg/engine/`), and Bazel 9.2 builds and tests everything: Go, the desktop page, the protos (generated, never committed) and the packages. The service is its own program, `blitzd`. Make, GoReleaser and the tools module are gone; tools come through Bazel, and host tools are a last resort (`bazel run //bazel:tidy` for dependencies). The Linux desktop build uses the system's GTK through pkg-config, deliberately not hermetic. [specs/spec_monorepo_028.md](specs/spec_monorepo_028.md).
+- **Bazel, in a monorepo** (2026-09-27, owner's decision; reverses "No Bazel" of 2026-09-26). The engine had bled into the front ends; the repository is now three apps over shared packages (`apps/`, `pkg/`, `pkg/engine/`), and Bazel 9.2 builds and tests everything: Go, the desktop page, the protos (generated, never committed) and the packages. The service is its own program, `blitzd`. Make, GoReleaser and the tools module are gone; tools come through Bazel, and host tools are a last resort (`bazel run //tools:tidy` for dependencies). The Linux desktop build uses the system's GTK through pkg-config, deliberately not hermetic. [specs/spec_monorepo_028.md](specs/spec_monorepo_028.md).
 - **Layout follows golang-standards/project-layout** (2026-09-26): `apps/cli` (CLI/TUI, pure Go) and `apps/desktop` (Wails, cgo, built on each OS); code in `internal/`, `pkg/` only for deliberately public APIs; frontend in `apps/desktop/web`, packaging in `build/`. Slash-command logic moves from `tui` to a UI-agnostic `pkg/engine` shared by both UIs.
 - **One engine service per user** (2026-09-26, replacing "a process per tab"): the service (`blitz serve`; since 2026-09-27 its own program, `blitzd`) hosts every workspace over Connect on a Unix socket; the CLI attaches when it's running, else runs in-process. Scheduled workers (item 24) run in it. See ROADMAP item 23.
 - **The module path is `github.com/retail-cortex/blitz`**, matching the repository.

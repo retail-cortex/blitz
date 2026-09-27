@@ -1,6 +1,10 @@
+# Build rules and settings shared by every package: the Go protos'
+# Connect compiler, nogo's static analysis, and the version stamp. The
+# rules and macros sit beside this file (es_proto.bzl, macos.bzl,
+# pkg_config.bzl); the commands developers run are in //tools.
+
 load("@rules_go//go:def.bzl", "nogo")
 load("@rules_go//proto:compiler.bzl", "go_proto_compiler")
-load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
 
 # Connect's handlers and clients, in the same package as the messages
 # (package_suffix empty), since go_proto_library makes one package.
@@ -14,14 +18,8 @@ go_proto_compiler(
     deps = ["@com_connectrpc_connect//:connect"],
 )
 
-# The dependency rules between apps and packages; CI runs it.
-sh_binary(
-    name = "check_deps",
-    srcs = ["check_deps.sh"],
-)
-
 # The version, for package metadata: the git tag under --config=release
-# (bazel/workspace_status.sh). Packages need it to start with a digit
+# (build/workspace_status.sh). Packages need it to start with a digit
 # (Debian, CFBundleVersion), so anything else (a commit, "dev") is 0.0.0;
 # the binaries still report it.
 genrule(
@@ -189,17 +187,4 @@ nogo(
         "@co_honnef_go_tools//stylecheck/st1018",
         "@co_honnef_go_tools//stylecheck/st1019",
     ],
-)
-
-# buf itself, for the protos' format and breaking-change checks in CI.
-sh_binary(
-    name = "buf",
-    srcs = ["buf.sh"],
-    data = ["@rules_buf_toolchains//:buf"],
-)
-
-# go mod tidy, bazel mod tidy and Gazelle, in that order.
-sh_binary(
-    name = "tidy",
-    srcs = ["tidy.sh"],
 )

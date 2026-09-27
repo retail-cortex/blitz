@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Status | Implemented; on Bazel since 2026-09-27 ([spec_monorepo_028](spec_monorepo_028.md)) |
-| Source | `.github/workflows/ci.yml`, `.github/workflows/release.yml`, `.github/release-footer.md`, `.github/dependabot.yml`, `release/BUILD.bazel`, `apps/desktop/packaging/`, `bazel/` |
+| Source | `.github/workflows/ci.yml`, `.github/workflows/release.yml`, `.github/release-footer.md`, `.github/dependabot.yml`, `release/BUILD.bazel`, `apps/desktop/packaging/`, `build/`, `tools/` |
 | Depends on | [spec_setup_001](spec_setup_001.md), [spec_monorepo_028](spec_monorepo_028.md), all feature specs |
 
 ## 1. Purpose
@@ -13,9 +13,9 @@ Every change is checked on macOS and Linux, including the sandboxes; releases ar
 ## 2. CI (`ci.yml`)
 
 - **REL-01** Triggered on push to `main` and pull requests, except documentation-only changes. The runners' Bazelisk runs the Bazel in `.bazelversion`; `bazel-contrib/setup-bazel` caches Bazelisk, the repository cache and a disk cache per OS. No other toolchain is installed: Bazel brings Go, Node and the tools.
-- **REL-02** `test` job on `ubuntu-latest` and `macos-latest`: `bazel/check_format.sh` (gofmt, BUILD files current), `bazel test --config=race //...` (vet and staticcheck run in every compile, MR-16), `bazel run //bazel:check_deps` (MR-02), govulncheck on the built `blitz` and `blitzd` (fails only on a vulnerability the code reaches).
+- **REL-02** `test` job on `ubuntu-latest` and `macos-latest`: `tools/check_format.sh` (gofmt, BUILD files current), `bazel test --config=race //...` (vet and staticcheck run in every compile, MR-16), `bazel run //tools:check_deps` (MR-02), govulncheck on the built `blitz` and `blitzd` (fails only on a vulnerability the code reaches).
 - **REL-03** Linux installs bubblewrap, GTK and WebKitGTK (for the desktop app's cgo) and a pinned gVisor (`runsc`, checksum-verified). The OS-sandbox enforcement test (`TestOSSandboxEnforcement`) and gVisor tests (`TestGVisor*`) **must not be skipped** — the job fails if their verbose output contains `--- SKIP`.
-- **REL-04** Protos (Linux): lint is a test (`blitzv1_proto_lint`); `bazel run //bazel:buf -- format --exit-code -d`; and `buf breaking` against the previous commit (full history fetched), unless the commit message declares `Breaking-API: <why>`.
+- **REL-04** Protos (Linux): lint is a test (`blitzv1_proto_lint`); `bazel run //tools:buf -- format --exit-code -d`; and `buf breaking` against the previous commit (full history fetched), unless the commit message declares `Breaking-API: <why>`.
 - **REL-05** The desktop app and its page are built and tested by `bazel test //...` like everything else.
 - **REL-06** `reproducible` job: the release archives' checksums (`//release:archives`) from the Linux and macOS runners must be identical (MR-25).
 - **REL-07** Actions are pinned by commit SHA; Dependabot keeps them current.

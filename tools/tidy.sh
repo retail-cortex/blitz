@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Dependency upkeep, all through Bazel: tidies go.mod/go.sum with Bazel's
 # own Go, then MODULE.bazel's repositories to match.
-#   bazel run //bazel:tidy
+#   bazel run //tools:tidy
 # -e: proto/blitz/v1 has no Go files outside the build (Bazel generates
 # them), which tidy would otherwise try to download.
 set -euo pipefail

@@ -4,7 +4,7 @@ diff --color -ru a/internal/frontend/desktop/linux/BUILD.bazel b/internal/fronte
 @@ -1,6 +1,11 @@
  load("@io_bazel_rules_go//go:def.bzl", "go_library")
 +# Blitz: GTK and WebKitGTK flags, which rules_go can't take from
-+# #cgo pkg-config lines (//bazel:pkg_config.bzl).
++# #cgo pkg-config lines (//build:pkg_config.bzl).
 +load("@@+pkg_config+webkitgtk//:defs.bzl", "COPTS", "LINKOPTS")
  
  go_library(
@@ -19,7 +19,7 @@ diff --color -ru a/pkg/assetserver/webview/BUILD.bazel b/pkg/assetserver/webview
 @@ -1,4 +1,7 @@
  load("@io_bazel_rules_go//go:def.bzl", "go_library")
 +# Blitz: GTK and WebKitGTK flags, which rules_go can't take from
-+# #cgo pkg-config lines (//bazel:pkg_config.bzl).
++# #cgo pkg-config lines (//build:pkg_config.bzl).
 +load("@@+pkg_config+webkitgtk//:defs.bzl", "COPTS", "LINKOPTS")
  
  go_library(

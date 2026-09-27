@@ -1,0 +1,3 @@
+# Patches to Wails, applied to its go_deps repository (MODULE.bazel).
+
+exports_files(["linux.patch"])

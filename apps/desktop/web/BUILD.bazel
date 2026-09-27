@@ -5,7 +5,7 @@ load("@npm//apps/desktop/web:@bufbuild/protoc-gen-es/package_json.bzl", protoc_g
 load("@npm//apps/desktop/web:typescript/package_json.bzl", tsc_bin = "bin")
 load("@npm//apps/desktop/web:vite/package_json.bzl", vite_bin = "bin")
 load("@npm//apps/desktop/web:vitest/package_json.bzl", vitest_bin = "bin")
-load("//bazel:es_proto.bzl", "es_proto_library")
+load("//build:es_proto.bzl", "es_proto_library")
 
 exports_files(["pnpm-lock.yaml", "pnpm-workspace.yaml"])
 

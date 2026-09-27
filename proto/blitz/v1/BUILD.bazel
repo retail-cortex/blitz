@@ -20,7 +20,7 @@ go_proto_library(
     name = "blitzv1_go_proto",
     compilers = [
         "@rules_go//proto:go_proto",
-        "//bazel:connect_go",
+        "//build:connect_go",
     ],
     importpath = "github.com/retail-cortex/blitz/proto/blitz/v1",
     proto = ":blitzv1_proto",
