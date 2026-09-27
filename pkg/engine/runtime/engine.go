@@ -12,6 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// Package runtime runs the agent: it wraps Google's ADK runner, builds the
+// agent tree with its tools and sub-agents, runs a prompt as a turn within
+// its limits, delivers steering mid-turn, answers side questions without
+// touching history, compacts history, and records usage and traces. It
+// also makes the models (Gemini, Anthropic, OpenAI, Ollama) and falls back
+// between them (spec_engine_016, spec_models_015).
 package runtime
 
 import (

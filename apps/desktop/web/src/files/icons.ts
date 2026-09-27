@@ -85,6 +85,7 @@ const byExtension: Record<string, string> = {
   txt: mdiFileDocumentOutline,
 };
 
+/** The icon for a file, by its name or extension (a plain page if unknown). */
 export function fileIcon(name: string): string {
   if (/^dockerfile/i.test(name)) return mdiDocker;
   if (/^(makefile|build|workspace|module)(\.bazel)?$/i.test(name)) return mdiFileCogOutline;

@@ -192,6 +192,10 @@ type RunOptions struct {
 	OnEvent func(api.Event)
 }
 
+// RunWorker runs the named worker once, as its schedule would: in a
+// session of its own, with only the permissions it declares and within its
+// limits, recorded in the run log. The worker must be enabled; a
+// scheduled run of one that isn't is recorded as skipped.
 func (w *Workspace) RunWorker(ctx context.Context, name string, o RunOptions) (api.Run, error) {
 	wk, loadErr, err := w.worker(name)
 	if err != nil {

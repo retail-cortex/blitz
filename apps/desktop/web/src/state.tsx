@@ -44,6 +44,10 @@ interface AppState {
 
 const Ctx = createContext<AppState | null>(null);
 
+/**
+ * Provides the window's shared state: loads the preferences, applies the
+ * theme and language, and tracks each workspace's activity.
+ */
 export function AppStateProvider({ children }: { children: ReactNode }) {
   const [prefs, setPrefs] = useState<Prefs>(defaultPrefs);
   const [loaded, setLoaded] = useState(false);
@@ -92,6 +96,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   );
 }
 
+/** The window's shared state (inside AppStateProvider). */
 export function useApp(): AppState {
   const s = useContext(Ctx);
   if (!s) throw new Error("useApp outside AppStateProvider");

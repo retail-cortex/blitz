@@ -18,6 +18,10 @@
 // accent in the top bar. Each works on light and dark surfaces.
 import { t } from "./i18n";
 
+/**
+ * The colours a workspace can be given, by name, each with a shade for the
+ * light theme and one for the dark.
+ */
 export const palette: Record<string, { light: string; dark: string }> = {
   blue: { light: "#0b57d0", dark: "#a8c7fa" },
   teal: { light: "#00696f", dark: "#6fd7df" },
@@ -29,6 +33,7 @@ export const palette: Record<string, { light: string; dark: string }> = {
   grey: { light: "#5f6368", dark: "#bdc1c6" },
 };
 
+/** The colours' names, in the order they're offered. */
 export const colorNames = Object.keys(palette);
 
 /** A colour's name, in the window's language. */

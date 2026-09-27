@@ -209,6 +209,9 @@ func (m *MockLLM) Calls() int {
 	return m.CallCount
 }
 
+// NewMockLLM returns a scripted model for tests: it answers each call with
+// the next of responses, then "Done.", and is named name ("mock-llm" if
+// empty).
 func NewMockLLM(name string, responses ...*genai.Content) *MockLLM {
 	if name == "" {
 		name = "mock-llm"
@@ -219,10 +222,14 @@ func NewMockLLM(name string, responses ...*genai.Content) *MockLLM {
 	}
 }
 
+// Name is the model's name.
 func (m *MockLLM) Name() string {
 	return m.ModelName
 }
 
+// GenerateContent records the request and answers with the next scripted
+// response ("Done." once they run out), as one final response whether or
+// not streaming was asked for.
 func (m *MockLLM) GenerateContent(ctx context.Context, req *model.LLMRequest, stream bool) iter.Seq2[*model.LLMResponse, error] {
 	return func(yield func(*model.LLMResponse, error) bool) {
 		m.mu.Lock()

@@ -62,6 +62,7 @@ var ErrRunInProgress = errors.New("the worker is already running")
 // RunStatus is where a run stands.
 type RunStatus string
 
+// Where a run stands. Running is while it runs; the others are how it ended.
 const (
 	RunRunning   RunStatus = "running"
 	RunSucceeded RunStatus = "succeeded"

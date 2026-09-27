@@ -50,6 +50,9 @@ type ToolRequirement struct {
 // TierUnspecified (never a bypass) and higher tiers compare greater.
 type HITLTier int
 
+// The tiers, lowest risk first: bypass (no checks, only where the policy
+// allows it), automatic reads, audited and checkpointed writes, and
+// approval for everything.
 const (
 	TierUnspecified HITLTier = iota
 	Tier0BypassAll
@@ -65,6 +68,7 @@ var tierNames = map[HITLTier]string{
 	Tier3MandatoryApproval: "TIER_3_MANDATORY_APPROVAL",
 }
 
+// String is the tier's proto enum name, such as TIER_2_AUDITED_WRITE.
 func (t HITLTier) String() string {
 	if n, ok := tierNames[t]; ok {
 		return n
@@ -132,6 +136,8 @@ func (h *ExecutionHints) NeedsNetwork() bool {
 // ScriptLanguage is a script's runtime.
 type ScriptLanguage string
 
+// The languages a skill's scripts can be written in; a script must name
+// one (unspecified is a problem the skill's validation reports).
 const (
 	LanguageUnspecified ScriptLanguage = ""
 	LanguagePython      ScriptLanguage = "python"

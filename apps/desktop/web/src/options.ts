@@ -19,6 +19,7 @@
 import { mdiBrain, mdiFileEditOutline, mdiHandBackRight, mdiLockOutline, mdiShieldCheckOutline, mdiShieldOffOutline } from "@mdi/js";
 import { t } from "./i18n";
 
+/** A choice in a settings menu: its value, name, explanation and icon. */
 export interface Option {
   value: string;
   label: string;
@@ -38,6 +39,7 @@ const modeIcons: Record<string, string> = {
 export const modes = (): Option[] =>
   Object.keys(modeIcons).map((value) => ({ value, icon: modeIcons[value], label: t(`desktop.mode.${value}`), detail: t(`desktop.mode.${value}.detail`) }));
 
+/** The permission mode option for a value (the default mode if unknown). */
 export const modeOf = (v: string) => modes().find((m) => m.value === v) ?? modes()[0];
 
 /** The reasoning efforts ("" is Auto). */
@@ -48,6 +50,7 @@ export const efforts = (): Option[] =>
     detail: t(`desktop.effort.${value || "auto"}.detail`),
   }));
 
+/** The icon for reasoning effort. */
 export const effortIcon = mdiBrain;
 
 /** The agency levels. */

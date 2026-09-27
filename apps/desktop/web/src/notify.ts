@@ -18,6 +18,7 @@
 // for an approval or an answer, while the user is looking elsewhere.
 import { notifyNative } from "./desktop";
 
+/** Why the window notifies: a turn finished, or the agent waits for the user. */
 export type NotifyKind = "finished" | "waiting";
 
 /** A finished turn notifies only if it took at least this long. */

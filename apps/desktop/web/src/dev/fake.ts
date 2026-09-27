@@ -234,6 +234,7 @@ const fakeGit: Record<string, string> = { "internal/cart/discount.go": "modified
 const fakeHidden = (p: string) => (p === ".env" ? "blocked" : p.startsWith("bin") ? "ignored" : p.split("/").pop()!.startsWith(".") ? "dot" : "");
 const fakeVersion = (text: string) => String(text.length) + ":" + [...text].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7).toString(16);
 
+/** Replaces the service with the in-page fake (development: ?fake). */
 export function installFake() {
   setTransport(
     createRouterTransport(({ service }) => {

@@ -95,18 +95,21 @@ func (h *Hooks) Rules() *PermissionRules {
 // NewHooks creates hooks with the given approval policy.
 func NewHooks(policy Policy) *Hooks { return &Hooks{policy: policy, session: map[string]bool{}} }
 
+// SetApprover sets who answers approval requests (the front end's UI).
 func (h *Hooks) SetApprover(a api.Approver) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.approver = a
 }
 
+// SetUserPrompter sets who answers the agent's questions (ask_user).
 func (h *Hooks) SetUserPrompter(p api.UserPromptFunc) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.prompter = p
 }
 
+// SetSubagentInvoker sets how the invoke_agent tool runs a sub-agent.
 func (h *Hooks) SetSubagentInvoker(i InvokeAgentFunc) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -197,6 +200,14 @@ func isUnattended(ctx context.Context) bool {
 	return ok
 }
 
+// Approve decides whether a tool call may proceed, and records the
+// decision in the audit log. A deny rule refuses it in any mode. An
+// unattended run (a worker) decides by its own permissions and can't ask
+// anyone. Otherwise an ask rule goes straight to the approver; else an
+// allow rule, the bypass mode, auto-approved commands, or an approval
+// remembered for the session or stored for good let it through; else the
+// approver is asked, and its answer may be remembered. It returns nil to
+// proceed, or an error wrapping ErrNotApproved.
 func (h *Hooks) Approve(ctx context.Context, req api.ApprovalRequest) error {
 	if h == nil {
 		return fmt.Errorf("%w: no approval hooks configured", ErrNotApproved)

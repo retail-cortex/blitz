@@ -107,33 +107,40 @@ message Message {
   string kind = 4;
 }
 
+// Request message for SessionService.ListSessions.
 message ListSessionsRequest {
   string workspace = 1;
   // Every saved session, not only this workspace's.
   bool all = 2;
 }
 
+// Response message for SessionService.ListSessions.
 message ListSessionsResponse {
   repeated SessionInfo sessions = 1;
 }
 
+// Request message for SessionService.GetActiveSession.
 message GetActiveSessionRequest {
   string workspace = 1;
 }
 
+// Response message for SessionService.GetActiveSession.
 message GetActiveSessionResponse {
   // Unset when no session is active.
   SessionInfo session = 1;
 }
 
+// Request message for SessionService.NewSession.
 message NewSessionRequest {
   string workspace = 1;
 }
 
+// Response message for SessionService.NewSession.
 message NewSessionResponse {
   SessionInfo session = 1;
 }
 
+// Request message for SessionService.OpenSession.
 message OpenSessionRequest {
   string workspace = 1;
   // A session ID, a snapshot name, or "latest"; empty for a new session
@@ -142,18 +149,21 @@ message OpenSessionRequest {
   bool continue_latest = 3;
 }
 
+// Response message for SessionService.OpenSession.
 message OpenSessionResponse {
   SessionInfo session = 1;
   // An existing session was resumed.
   bool resumed = 2;
 }
 
+// Request message for SessionService.LoadSession.
 message LoadSessionRequest {
   string workspace = 1;
   // A session ID or snapshot name.
   string ref = 2;
 }
 
+// Response message for SessionService.LoadSession.
 message LoadSessionResponse {
   // With its messages.
   SessionInfo session = 1;
@@ -161,63 +171,77 @@ message LoadSessionResponse {
   bool branched = 2;
 }
 
+// Request message for SessionService.SaveSnapshot.
 message SaveSnapshotRequest {
   string workspace = 1;
   string name = 2;
   bool force = 3;
 }
 
+// Response message for SessionService.SaveSnapshot.
 message SaveSnapshotResponse {
   SessionInfo snapshot = 1;
 }
 
+// Request message for SessionService.RenameSession.
 message RenameSessionRequest {
   string workspace = 1;
   string title = 2;
 }
 
+// Response message for SessionService.RenameSession.
 message RenameSessionResponse {
   SessionInfo session = 1;
 }
 
+// Request message for SessionService.RunTurn.
 message RunTurnRequest {
   string workspace = 1;
   string session_id = 2;
   Turn turn = 3;
 }
 
+// Response message for SessionService.RunTurn.
 message RunTurnResponse {
   TurnEvent event = 1;
 }
 
+// Request message for SessionService.Steer.
 message SteerRequest {
   string workspace = 1;
   string session_id = 2;
   string text = 3;
 }
 
+// Response message for SessionService.Steer.
 message SteerResponse {}
 
+// Request message for SessionService.Approve.
 message ApproveRequest {
   string workspace = 1;
   string request_id = 2;
   Decision decision = 3;
 }
 
+// Response message for SessionService.Approve.
 message ApproveResponse {}
 
+// Request message for SessionService.Answer.
 message AnswerRequest {
   string workspace = 1;
   string request_id = 2;
   string answer = 3;
 }
 
+// Response message for SessionService.Answer.
 message AnswerResponse {}
 
+// Request message for SessionService.GetUsage.
 message GetUsageRequest {
   string workspace = 1;
 }
 
+// Response message for SessionService.GetUsage.
 message GetUsageResponse {
   Usage usage = 1;
   // The context is compacted when it passes threshold tokens, keeping the
@@ -227,12 +251,14 @@ message GetUsageResponse {
   int32 keep = 4;
 }
 
+// Request message for SessionService.Compact.
 message CompactRequest {
   string workspace = 1;
   // What the summary should keep.
   string focus = 2;
 }
 
+// Response message for SessionService.Compact.
 message CompactResponse {
   int32 events_compacted = 1;
   int32 summary_chars = 2;
@@ -240,6 +266,9 @@ message CompactResponse {
   Usage after = 4;
 }
 
+// A prompt the conversation can be rewound to: its place in the transcript,
+// its text and time, the files the agent changed from it on, and whether
+// the conversation can go back to it.
 message RewindPoint {
   // The prompt's position in the transcript.
   int32 index = 1;
@@ -251,14 +280,17 @@ message RewindPoint {
   bool conversation = 5;
 }
 
+// Request message for SessionService.ListRewindPoints.
 message ListRewindPointsRequest {
   string workspace = 1;
 }
 
+// Response message for SessionService.ListRewindPoints.
 message ListRewindPointsResponse {
   repeated RewindPoint points = 1;
 }
 
+// Request message for SessionService.Rewind.
 message RewindRequest {
   string workspace = 1;
   int32 index = 2;
@@ -268,6 +300,7 @@ message RewindRequest {
   bool force = 4;
 }
 
+// Response message for SessionService.Rewind.
 message RewindResponse {
   string mode = 1;
   repeated string restored = 2;
@@ -276,11 +309,13 @@ message RewindResponse {
   CompactResponse compacted = 4;
 }
 
+// Request message for SessionService.SearchSession.
 message SearchSessionRequest {
   string workspace = 1;
   string terms = 2;
 }
 
+// Response message for SessionService.SearchSession.
 message SearchSessionResponse {
   // How many passages matched.
   int32 found = 1;

@@ -169,6 +169,7 @@ type InvalidError struct {
 	Problems []string
 }
 
+// Error names the WORKER.md and its problems.
 func (e *InvalidError) Error() string {
 	return fmt.Sprintf("%s: %s", e.Path, strings.Join(e.Problems, "; "))
 }

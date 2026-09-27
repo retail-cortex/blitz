@@ -19,6 +19,7 @@
 // "" is the workspace itself.
 import { FileKind, type FileEntry } from "../gen/blitz/v1/file_pb";
 
+/** The tree's state: the folders loaded so far, and which are open. */
 export interface Tree {
   /** Each loaded folder's entries, by the folder's path. */
   children: ReadonlyMap<string, FileEntry[]>;
@@ -26,13 +27,16 @@ export interface Tree {
   expanded: ReadonlySet<string>;
 }
 
+/** A tree with nothing loaded. */
 export const emptyTree: Tree = { children: new Map(), expanded: new Set() };
 
+/** A row shown in the tree: an entry and how deep it is. */
 export interface Row {
   entry: FileEntry;
   depth: number;
 }
 
+/** Whether an entry is a folder. */
 export const isFolder = (e: Pick<FileEntry, "kind">) => e.kind === FileKind.FOLDER;
 
 /** The rows shown: the workspace's entries, and each open folder's under it. */
@@ -56,6 +60,7 @@ export function nameOf(path: string): string {
   return path.slice(path.lastIndexOf("/") + 1);
 }
 
+/** The path of name in the folder dir ("" is the workspace). */
 export function joinPath(dir: string, name: string): string {
   return dir ? `${dir}/${name}` : name;
 }
@@ -80,6 +85,7 @@ export function withChildren(tree: Tree, dir: string, entries: FileEntry[]): Tre
   return { children, expanded };
 }
 
+/** Opens or closes a folder; closing one closes the folders under it too. */
 export function setExpanded(tree: Tree, path: string, open: boolean): Tree {
   const expanded = new Set(tree.expanded);
   if (open) expanded.add(path);

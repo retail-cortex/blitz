@@ -12,6 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// Package tui is the CLI's interactive session: the prompt with its history
+// and completion, the slash commands, streamed Markdown output, approvals
+// and questions answered at the terminal, and Ctrl+C to stop a turn. It
+// drives an api.Backend, so it works the same on a local workspace and on
+// one held by the service (spec_tui_019).
 package tui
 
 import (

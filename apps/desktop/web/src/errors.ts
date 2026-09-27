@@ -19,6 +19,7 @@
 import { Code, ConnectError } from "@connectrpc/connect";
 import { ErrorInfoSchema } from "./gen/blitz/v1/turn_pb";
 
+/** The text of an error: the service's message for its errors, else the error's own. */
 export function message(e: unknown): string {
   if (e instanceof ConnectError) return e.rawMessage;
   return e instanceof Error ? e.message : String(e);

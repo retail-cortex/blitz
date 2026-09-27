@@ -29,6 +29,10 @@ import type { Task, TurnEvent } from "./gen/blitz/v1/turn_pb";
  */
 export type UserEntry = { kind: "user"; text: string; sub?: "steer" | "hook" | "plan" | "aside"; index?: number; images?: { url: string; name: string }[] };
 
+/**
+ * One item of the conversation as shown: a prompt, model text, a thought,
+ * a tool call with its result, or a notice.
+ */
 export type Entry =
   | UserEntry
   | { kind: "model"; text: string; author: string; open: boolean }

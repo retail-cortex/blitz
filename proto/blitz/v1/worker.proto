@@ -91,15 +91,18 @@ message Worker {
   repeated string problems = 15;
 }
 
+// Request message for WorkerService.ListWorkers.
 message ListWorkersRequest {
   // Empty for every registered workspace.
   string workspace = 1;
 }
 
+// Response message for WorkerService.ListWorkers.
 message ListWorkersResponse {
   repeated Worker workers = 1;
 }
 
+// Request message for WorkerService.EnableWorker.
 message EnableWorkerRequest {
   string workspace = 1;
   string name = 2;
@@ -107,15 +110,18 @@ message EnableWorkerRequest {
   string hash = 3;
 }
 
+// Response message for WorkerService.EnableWorker.
 message EnableWorkerResponse {
   Worker worker = 1;
 }
 
+// Request message for WorkerService.DisableWorker.
 message DisableWorkerRequest {
   string workspace = 1;
   string name = 2;
 }
 
+// Response message for WorkerService.DisableWorker.
 message DisableWorkerResponse {
   Worker worker = 1;
 }
@@ -160,15 +166,18 @@ message WorkerRun {
   ErrorInfo error = 12;
 }
 
+// Request message for WorkerService.RunWorker.
 message RunWorkerRequest {
   string workspace = 1;
   string name = 2;
 }
 
+// Response message for WorkerService.RunWorker.
 message RunWorkerResponse {
   WorkerRun run = 1;
 }
 
+// Request message for WorkerService.ListWorkerRuns.
 message ListWorkerRunsRequest {
   string workspace = 1;
   string name = 2;
@@ -176,22 +185,27 @@ message ListWorkerRunsRequest {
   int32 limit = 3;
 }
 
+// Response message for WorkerService.ListWorkerRuns.
 message ListWorkerRunsResponse {
   repeated WorkerRun runs = 1;
 }
 
+// Request message for WorkerService.GetWorkerRun.
 message GetWorkerRunRequest {
   string run_id = 1;
 }
 
+// Response message for WorkerService.GetWorkerRun.
 message GetWorkerRunResponse {
   WorkerRun run = 1;
 }
 
+// Request message for WorkerService.WatchWorkerRun.
 message WatchWorkerRunRequest {
   string run_id = 1;
 }
 
+// Response message for WorkerService.WatchWorkerRun.
 message WatchWorkerRunResponse {
   TurnEvent event = 1;
 }

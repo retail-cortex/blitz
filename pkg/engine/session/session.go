@@ -12,6 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// Package session stores conversations: each session's metadata and its
+// messages and events on disk, snapshots to branch from, search over a
+// session's history, and the store ADK reads the conversation from
+// (spec_sessions_017).
 package session
 
 import (

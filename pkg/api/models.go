@@ -24,6 +24,7 @@ import (
 // UnknownAgentError reports an agent name that isn't registered.
 type UnknownAgentError struct{ Name string }
 
+// Error names the agent that doesn't exist.
 func (e *UnknownAgentError) Error() string { return fmt.Sprintf("unknown agent %q", e.Name) }
 
 // Saved reports where a change was written in the config file. The change
@@ -87,8 +88,10 @@ type ModelSettingsChange struct {
 // key or a value out of range.
 type InvalidSettingError struct{ Err error }
 
+// Error is the reason the value was refused.
 func (e *InvalidSettingError) Error() string { return e.Err.Error() }
 
+// Unwrap returns the reason, for errors.Is and errors.As.
 func (e *InvalidSettingError) Unwrap() error { return e.Err }
 
 // Settings are the values /set changes, plus the model, agent and locale.
@@ -108,6 +111,7 @@ type Settings struct {
 // UnknownSettingError reports a key /set doesn't know.
 type UnknownSettingError struct{ Key string }
 
+// Error names the setting that doesn't exist.
 func (e *UnknownSettingError) Error() string { return fmt.Sprintf("unknown setting %q", e.Key) }
 
 // ErrInvalidAgency reports an agency level other than low, medium, high or extreme.

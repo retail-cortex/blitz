@@ -60,6 +60,8 @@ enum KeySource {
   KEY_SOURCE_INHERITED = 6;
 }
 
+// One provider's settings in a scope, and where its API key comes from
+// (never the key).
 message ProviderConfig {
   // gemini, anthropic or openai.
   string name = 1;
@@ -71,10 +73,12 @@ message ProviderConfig {
   string model = 5;
 }
 
+// Request message for ConfigService.DescribeConfig.
 message DescribeConfigRequest {
   string workspace = 1;
 }
 
+// Response message for ConfigService.DescribeConfig.
 message DescribeConfigResponse {
   // The scope's settings file (it may not exist yet).
   string path = 1;
@@ -93,34 +97,41 @@ message ConfigChange {
   string model_error = 2;
 }
 
+// Request message for ConfigService.SetApiKey.
 message SetApiKeyRequest {
   string workspace = 1;
   string provider = 2;
   string key = 3;
 }
 
+// Response message for ConfigService.SetApiKey.
 message SetApiKeyResponse {
   ConfigChange change = 1;
 }
 
+// Request message for ConfigService.SecureApiKey.
 message SecureApiKeyRequest {
   string workspace = 1;
   string provider = 2;
 }
 
+// Response message for ConfigService.SecureApiKey.
 message SecureApiKeyResponse {
   ConfigChange change = 1;
 }
 
+// Request message for ConfigService.RemoveApiKey.
 message RemoveApiKeyRequest {
   string workspace = 1;
   string provider = 2;
 }
 
+// Response message for ConfigService.RemoveApiKey.
 message RemoveApiKeyResponse {
   ConfigChange change = 1;
 }
 
+// Request message for ConfigService.SetConfigValue.
 message SetConfigValueRequest {
   string workspace = 1;
   // llm.provider, blitz.default_model, llm.<provider>.model or .base_url,
@@ -129,25 +140,30 @@ message SetConfigValueRequest {
   string value = 3;
 }
 
+// Response message for ConfigService.SetConfigValue.
 message SetConfigValueResponse {
   ConfigChange change = 1;
 }
 
+// Request message for ConfigService.GetConfigFile.
 message GetConfigFileRequest {
   string workspace = 1;
 }
 
+// Response message for ConfigService.GetConfigFile.
 message GetConfigFileResponse {
   string path = 1;
   // "" when the file doesn't exist yet.
   string text = 2;
 }
 
+// Request message for ConfigService.SaveConfigFile.
 message SaveConfigFileRequest {
   string workspace = 1;
   string text = 2;
 }
 
+// Response message for ConfigService.SaveConfigFile.
 message SaveConfigFileResponse {
   ConfigChange change = 1;
   // Unknown settings (likely typos) and keys written as plain text.

@@ -41,6 +41,7 @@ export function Icon({ path, size, spin, className = "" }: { path: string; size?
 
 type Variant = "filled" | "tonal" | "outlined" | "text";
 
+/** A Material 3 button: text (the default), tonal, filled or outlined, with an optional icon. */
 export function Button({
   variant = "text",
   icon,
@@ -58,6 +59,7 @@ export function Button({
   );
 }
 
+/** A button with only an icon; label is its tooltip and accessible name. */
 export function IconButton({
   icon,
   label,
@@ -81,6 +83,7 @@ export function IconButton({
   );
 }
 
+/** A Material 3 chip: a small labelled button or status, optionally selected or toned. */
 export function Chip({
   icon,
   selected,
@@ -97,6 +100,7 @@ export function Chip({
   );
 }
 
+/** A segmented button: one of a few options, as radio buttons. */
 export function Segmented<T extends string>({
   value,
   options,
@@ -134,6 +138,7 @@ export function Field({ label, supporting, error, children }: { label: string; s
   );
 }
 
+/** An on/off switch; label is its accessible name. */
 export function Switch({ checked, onChange, label }: { checked: boolean; onChange: (v: boolean) => void; label: string }) {
   return (
     <span className="switch">
@@ -165,6 +170,7 @@ export function useDismiss(open: boolean, ref: React.RefObject<HTMLElement | nul
   }, [open, ref, close]);
 }
 
+/** An item of a menu: its label, icon and detail, and what choosing it does. */
 export interface MenuItem {
   label: string;
   detail?: string;
@@ -197,6 +203,7 @@ export function Menu({
   );
 }
 
+/** What a menu lists: items, dividers and headings. */
 export type MenuEntry = MenuItem | "divider" | { heading: string };
 
 function MenuList({ className, items, onPick, style }: { className: string; items: MenuEntry[]; onPick: () => void; style?: React.CSSProperties }) {
@@ -325,4 +332,5 @@ export function SnackbarProvider({ children }: { children: ReactNode }) {
   );
 }
 
+/** Shows a short message at the bottom of the window (inside SnackbarProvider). */
 export const useSnackbar = () => useContext(SnackContext);

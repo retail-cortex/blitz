@@ -38,6 +38,7 @@ const english = enUS as Catalog;
 /** The languages the window can show, for the setting. */
 export const languages = catalogs.map((c) => ({ tag: c.meta.locale, name: c.meta.name, english: c.meta.english_name }));
 
+/** The pseudo-locale: English, accented and bracketed, to spot text that isn't in a catalog. */
 export const pseudoLocale = "en-XA";
 
 /** The catalogs to look in for tag, most specific first, English last. */

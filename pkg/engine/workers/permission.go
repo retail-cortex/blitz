@@ -44,6 +44,7 @@ type Permission struct {
 	Pattern string
 }
 
+// String is the permission as written: kind:pattern.
 func (p Permission) String() string { return p.Kind + ":" + p.Pattern }
 
 var permissionKinds = map[string]api.ActionKind{

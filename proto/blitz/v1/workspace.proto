@@ -138,8 +138,10 @@ message Saved {
   string error = 2;
 }
 
+// Request message for WorkspaceService.GetServiceInfo.
 message GetServiceInfoRequest {}
 
+// Response message for WorkspaceService.GetServiceInfo.
 message GetServiceInfoResponse {
   // The release (1.4.0), or "dev" for an unstamped build.
   string version = 1;
@@ -152,23 +154,29 @@ message GetServiceInfoResponse {
   int32 pid = 4;
 }
 
+// Request message for WorkspaceService.ListWorkspaces.
 message ListWorkspacesRequest {}
 
+// Response message for WorkspaceService.ListWorkspaces.
 message ListWorkspacesResponse {
   // Absolute directories.
   repeated string workspaces = 1;
 }
 
+// Request message for WorkspaceService.CloseWorkspace.
 message CloseWorkspaceRequest {
   string workspace = 1;
 }
 
+// Response message for WorkspaceService.CloseWorkspace.
 message CloseWorkspaceResponse {}
 
+// Request message for WorkspaceService.GetSandbox.
 message GetSandboxRequest {
   string workspace = 1;
 }
 
+// Response message for WorkspaceService.GetSandbox.
 message GetSandboxResponse {
   repeated string summary = 1;
 }
@@ -183,27 +191,33 @@ message AgentInfo {
   string pinned_model = 5;
 }
 
+// Request message for WorkspaceService.ListAgents.
 message ListAgentsRequest {
   string workspace = 1;
 }
 
+// Response message for WorkspaceService.ListAgents.
 message ListAgentsResponse {
   repeated AgentInfo agents = 1;
 }
 
+// Request message for WorkspaceService.SetAgent.
 message SetAgentRequest {
   string workspace = 1;
   string name = 2;
 }
 
+// Response message for WorkspaceService.SetAgent.
 message SetAgentResponse {
   AgentInfo agent = 1;
 }
 
+// Request message for WorkspaceService.GetModel.
 message GetModelRequest {
   string workspace = 1;
 }
 
+// Response message for WorkspaceService.GetModel.
 message GetModelResponse {
   string name = 1;
   // The configured provider.
@@ -213,24 +227,28 @@ message GetModelResponse {
   string unavailable = 3;
 }
 
+// Request message for WorkspaceService.SetModel.
 message SetModelRequest {
   string workspace = 1;
   // A name or "provider/model".
   string ref = 2;
 }
 
+// Response message for WorkspaceService.SetModel.
 message SetModelResponse {
   // The model the active agent is pinned to, which still applies to it;
   // empty if it isn't pinned.
   string active_pin = 1;
 }
 
+// Request message for WorkspaceService.PinModel.
 message PinModelRequest {
   string workspace = 1;
   string agent = 2;
   string ref = 3;
 }
 
+// Response message for WorkspaceService.PinModel.
 message PinModelResponse {
   string agent = 1;
   // The model the agent now runs on.
@@ -238,11 +256,13 @@ message PinModelResponse {
   Saved saved = 3;
 }
 
+// Request message for WorkspaceService.UnpinModel.
 message UnpinModelRequest {
   string workspace = 1;
   string agent = 2;
 }
 
+// Response message for WorkspaceService.UnpinModel.
 message UnpinModelResponse {
   string agent = 1;
   string model = 2;
@@ -273,12 +293,14 @@ message ModelSettingsInfo {
   int32 global_max_tokens = 5;
 }
 
+// Request message for WorkspaceService.GetModelSettings.
 message GetModelSettingsRequest {
   string workspace = 1;
   // One model ("provider/" optional); empty for every model with settings.
   string ref = 2;
 }
 
+// Response message for WorkspaceService.GetModelSettings.
 message GetModelSettingsResponse {
   // Every model with settings, by name (when ref is empty).
   map<string, ModelSettings> all = 1;
@@ -292,6 +314,7 @@ message Setting {
   string value = 2;
 }
 
+// Request message for WorkspaceService.UpdateModelSettings.
 message UpdateModelSettingsRequest {
   string workspace = 1;
   string ref = 2;
@@ -300,6 +323,7 @@ message UpdateModelSettingsRequest {
   repeated Setting changes = 4;
 }
 
+// Response message for WorkspaceService.UpdateModelSettings.
 message UpdateModelSettingsResponse {
   ModelSettingsInfo model = 1;
   // Keys set that the provider or model ignores.
@@ -307,10 +331,12 @@ message UpdateModelSettingsResponse {
   Saved saved = 3;
 }
 
+// Request message for WorkspaceService.GetSettings.
 message GetSettingsRequest {
   string workspace = 1;
 }
 
+// Response message for WorkspaceService.GetSettings.
 message GetSettingsResponse {
   reserved 1, 2;
   reserved "puppy_name", "owner_name";
@@ -328,6 +354,7 @@ message GetSettingsResponse {
   string effort = 10;
 }
 
+// Request message for WorkspaceService.SetPermissionMode.
 message SetPermissionModeRequest {
   string workspace = 1;
   // default, accept-edits, plan, dont-ask or bypass (other spellings such
@@ -335,6 +362,7 @@ message SetPermissionModeRequest {
   string mode = 2;
 }
 
+// Response message for WorkspaceService.SetPermissionMode.
 message SetPermissionModeResponse {
   // The mode's canonical name.
   string mode = 1;
@@ -350,10 +378,12 @@ message Command {
   string source = 4;
 }
 
+// Request message for WorkspaceService.ListCommands.
 message ListCommandsRequest {
   string workspace = 1;
 }
 
+// Response message for WorkspaceService.ListCommands.
 message ListCommandsResponse {
   repeated Command commands = 1;
 }
@@ -368,14 +398,17 @@ message PermissionRule {
   string source = 3;
 }
 
+// Request message for WorkspaceService.ListPermissionRules.
 message ListPermissionRulesRequest {
   string workspace = 1;
 }
 
+// Response message for WorkspaceService.ListPermissionRules.
 message ListPermissionRulesResponse {
   repeated PermissionRule rules = 1;
 }
 
+// Request message for WorkspaceService.AddPermissionRule.
 message AddPermissionRuleRequest {
   string workspace = 1;
   string effect = 2;
@@ -383,6 +416,7 @@ message AddPermissionRuleRequest {
   bool save = 4;
 }
 
+// Response message for WorkspaceService.AddPermissionRule.
 message AddPermissionRuleResponse {
   // The rule in canonical form.
   string rule = 1;
@@ -391,12 +425,14 @@ message AddPermissionRuleResponse {
   Saved saved = 3;
 }
 
+// Request message for WorkspaceService.RemovePermissionRule.
 message RemovePermissionRuleRequest {
   string workspace = 1;
   string rule = 2;
   bool save = 3;
 }
 
+// Response message for WorkspaceService.RemovePermissionRule.
 message RemovePermissionRuleResponse {
   string rule = 1;
   // How many rules were removed.
@@ -404,6 +440,7 @@ message RemovePermissionRuleResponse {
   Saved saved = 3;
 }
 
+// Request message for WorkspaceService.SetSetting.
 message SetSettingRequest {
   string workspace = 1;
   // "agency".
@@ -411,6 +448,7 @@ message SetSettingRequest {
   string value = 3;
 }
 
+// Response message for WorkspaceService.SetSetting.
 message SetSettingResponse {
   // The key in canonical form.
   string key = 1;
@@ -463,21 +501,25 @@ message SkillScript {
   repeated string reasons = 7;
 }
 
+// Request message for WorkspaceService.ListSkills.
 message ListSkillsRequest {
   string workspace = 1;
   // Only skills matching; empty for all.
   string query = 2;
 }
 
+// Response message for WorkspaceService.ListSkills.
 message ListSkillsResponse {
   repeated SkillInfo skills = 1;
 }
 
+// Request message for WorkspaceService.GetSkill.
 message GetSkillRequest {
   string workspace = 1;
   string name = 2;
 }
 
+// Response message for WorkspaceService.GetSkill.
 message GetSkillResponse {
   SkillInfo skill = 1;
 }
@@ -495,21 +537,26 @@ message Env {
   bool ready = 6;
 }
 
+// Request message for WorkspaceService.ListEnvs.
 message ListEnvsRequest {
   string workspace = 1;
 }
 
+// Response message for WorkspaceService.ListEnvs.
 message ListEnvsResponse {
   repeated Env envs = 1;
 }
 
+// Request message for WorkspaceService.RemoveEnv.
 message RemoveEnvRequest {
   string workspace = 1;
   string key = 2;
 }
 
+// Response message for WorkspaceService.RemoveEnv.
 message RemoveEnvResponse {}
 
+// Request message for WorkspaceService.PruneEnvs.
 message PruneEnvsRequest {
   string workspace = 1;
 }
@@ -520,6 +567,7 @@ message EnvError {
   string error = 2;
 }
 
+// Response message for WorkspaceService.PruneEnvs.
 message PruneEnvsResponse {
   int32 removed = 1;
   // Bytes freed.
@@ -535,10 +583,12 @@ message MCPServer {
   bool auto_approve = 3;
 }
 
+// Request message for WorkspaceService.ListMCPServers.
 message ListMCPServersRequest {
   string workspace = 1;
 }
 
+// Response message for WorkspaceService.ListMCPServers.
 message ListMCPServersResponse {
   repeated MCPServer servers = 1;
 }
@@ -560,31 +610,37 @@ message MCPOffer {
   string prefix = 3;
 }
 
+// Request message for WorkspaceService.ListTools.
 message ListToolsRequest {
   string workspace = 1;
 }
 
+// Response message for WorkspaceService.ListTools.
 message ListToolsResponse {
   string agent = 1;
   repeated ToolInfo tools = 2;
   repeated MCPOffer mcp = 3;
 }
 
+// Request message for WorkspaceService.ReloadMemory.
 message ReloadMemoryRequest {
   string workspace = 1;
 }
 
+// Response message for WorkspaceService.ReloadMemory.
 message ReloadMemoryResponse {
   repeated string paths = 1;
   // The file names looked for, in order.
   repeated string files = 2;
 }
 
+// Request message for WorkspaceService.AddMemory.
 message AddMemoryRequest {
   string workspace = 1;
   string text = 2;
 }
 
+// Response message for WorkspaceService.AddMemory.
 message AddMemoryResponse {
   string path = 1;
 }
@@ -595,22 +651,26 @@ message LocaleInfo {
   string name = 2;
 }
 
+// Request message for WorkspaceService.ListLocales.
 message ListLocalesRequest {
   string workspace = 1;
 }
 
+// Response message for WorkspaceService.ListLocales.
 message ListLocalesResponse {
   repeated LocaleInfo locales = 1;
   // Where custom catalogs are read from; empty if none is configured.
   string custom_dir = 2;
 }
 
+// Request message for WorkspaceService.SetLocale.
 message SetLocaleRequest {
   string workspace = 1;
   // A language tag or name.
   string input = 2;
 }
 
+// Response message for WorkspaceService.SetLocale.
 message SetLocaleResponse {
   string tag = 1;
   // e.g. "Español".
@@ -630,20 +690,24 @@ message Checkpoint {
   repeated string files = 4;
 }
 
+// Request message for WorkspaceService.ListCheckpoints.
 message ListCheckpointsRequest {
   string workspace = 1;
 }
 
+// Response message for WorkspaceService.ListCheckpoints.
 message ListCheckpointsResponse {
   repeated Checkpoint checkpoints = 1;
 }
 
+// Request message for WorkspaceService.Undo.
 message UndoRequest {
   string workspace = 1;
   // Restore even files changed since the agent's edit.
   bool force = 2;
 }
 
+// Response message for WorkspaceService.Undo.
 message UndoResponse {
   string label = 1;
   repeated string restored = 2;
@@ -651,6 +715,7 @@ message UndoResponse {
   ErrorInfo error = 3;
 }
 
+// Request message for WorkspaceService.GetDiff.
 message GetDiffRequest {
   string workspace = 1;
   // git's diff (stat and patch) instead of the agent's changes.
@@ -659,6 +724,7 @@ message GetDiffRequest {
   bool color = 3;
 }
 
+// Response message for WorkspaceService.GetDiff.
 message GetDiffResponse {
   // A unified diff; empty when nothing changed.
   string diff = 1;
@@ -679,14 +745,17 @@ message Approval {
   google.protobuf.Timestamp added = 6;
 }
 
+// Request message for WorkspaceService.ListApprovals.
 message ListApprovalsRequest {
   string workspace = 1;
 }
 
+// Response message for WorkspaceService.ListApprovals.
 message ListApprovalsResponse {
   repeated Approval approvals = 1;
 }
 
+// Request message for WorkspaceService.RevokeApprovals.
 message RevokeApprovalsRequest {
   string workspace = 1;
   repeated string keys = 2;
@@ -694,6 +763,7 @@ message RevokeApprovalsRequest {
   bool all = 3;
 }
 
+// Response message for WorkspaceService.RevokeApprovals.
 message RevokeApprovalsResponse {
   int32 revoked = 1;
 }
@@ -712,22 +782,26 @@ message Image {
   bool resized = 7;
 }
 
+// Request message for WorkspaceService.LoadImage.
 message LoadImageRequest {
   string workspace = 1;
   // Relative to the workspace.
   string path = 2;
 }
 
+// Response message for WorkspaceService.LoadImage.
 message LoadImageResponse {
   Image image = 1;
 }
 
+// Request message for WorkspaceService.AddImage.
 message AddImageRequest {
   string workspace = 1;
   string name = 2;
   bytes data = 3;
 }
 
+// Response message for WorkspaceService.AddImage.
 message AddImageResponse {
   Image image = 1;
 }
@@ -738,19 +812,23 @@ message Link {
   string url = 2;
 }
 
+// Request message for WorkspaceService.GetSearchProvider.
 message GetSearchProviderRequest {
   string workspace = 1;
 }
 
+// Response message for WorkspaceService.GetSearchProvider.
 message GetSearchProviderResponse {
   string provider = 1;
 }
 
+// Request message for WorkspaceService.SearchWeb.
 message SearchWebRequest {
   string workspace = 1;
   string terms = 2;
 }
 
+// Response message for WorkspaceService.SearchWeb.
 message SearchWebResponse {
   // The provider searched.
   string provider = 1;

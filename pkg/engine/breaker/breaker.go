@@ -39,6 +39,8 @@ type Breaker struct {
 	now       func() time.Time // for tests
 }
 
+// How long an open breaker refuses calls: InitialCooldown after the first
+// trip, doubling on each failed trial up to MaxCooldown.
 const (
 	InitialCooldown = 15 * time.Second
 	MaxCooldown     = 5 * time.Minute

@@ -21,6 +21,12 @@ modules:
 lint:
   use:
     - STANDARD
+    # Every service, RPC, message and enum documented; the comments reach
+    # the generated Go and TypeScript.
+    - COMMENT_SERVICE
+    - COMMENT_RPC
+    - COMMENT_MESSAGE
+    - COMMENT_ENUM
 breaking:
   use:
     - FILE

@@ -19,6 +19,7 @@
 // with the system's setting as it changes.
 
 export type ThemePref = "system" | "light" | "dark";
+/** The theme in effect (the preference can also be "system"). */
 export type Theme = "light" | "dark";
 
 /** The theme to show for a preference, given whether the system is dark. */

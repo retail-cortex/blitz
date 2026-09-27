@@ -43,6 +43,8 @@ import (
 // FileKind is what a directory entry is.
 type FileKind string
 
+// The kinds of entry ListDir reports; a symlink to a folder in the
+// workspace is reported as a folder.
 const (
 	KindFile    FileKind = "file"
 	KindFolder  FileKind = "folder"
@@ -95,6 +97,7 @@ type FileChangedError struct {
 	Current string
 }
 
+// Error says the file changed, or was deleted, since it was opened.
 func (e *FileChangedError) Error() string {
 	if e.Current == "" {
 		return e.Path + " was deleted since it was opened"

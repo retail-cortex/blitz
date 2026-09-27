@@ -42,6 +42,8 @@ func AttachWorkersHTTP(hc connect.HTTPClient, baseURL, dir string) *Workers {
 	return &Workers{dir: dir, c: pb.NewWorkerServiceClient(hc, baseURL)}
 }
 
+// ListWorkers lists the workspace's workers with their state and schedule
+// (WorkerService.ListWorkers).
 func (w *Workers) ListWorkers() ([]api.WorkerInfo, error) {
 	res, err := w.c.ListWorkers(context.Background(), connect.NewRequest(&pb.ListWorkersRequest{Workspace: w.dir}))
 	if err != nil {
@@ -54,6 +56,8 @@ func (w *Workers) ListWorkers() ([]api.WorkerInfo, error) {
 	return out, nil
 }
 
+// EnableWorker enables the named worker as shown: hash is its content's,
+// so an edit since it was shown is refused (WorkerService.EnableWorker).
 func (w *Workers) EnableWorker(name, hash string) (api.WorkerInfo, error) {
 	res, err := w.c.EnableWorker(context.Background(), connect.NewRequest(&pb.EnableWorkerRequest{Workspace: w.dir, Name: name, Hash: hash}))
 	if err != nil {
@@ -62,6 +66,7 @@ func (w *Workers) EnableWorker(name, hash string) (api.WorkerInfo, error) {
 	return workerInfo(res.Msg.Worker), nil
 }
 
+// DisableWorker stops the named worker's schedule (WorkerService.DisableWorker).
 func (w *Workers) DisableWorker(name string) (api.WorkerInfo, error) {
 	res, err := w.c.DisableWorker(context.Background(), connect.NewRequest(&pb.DisableWorkerRequest{Workspace: w.dir, Name: name}))
 	if err != nil {
@@ -104,6 +109,8 @@ func (w *Workers) RunWorker(ctx context.Context, name string, on func(api.Event)
 	}
 }
 
+// WorkerRuns lists the named worker's latest runs, at most limit, newest
+// first (WorkerService.ListWorkerRuns).
 func (w *Workers) WorkerRuns(name string, limit int) ([]api.Run, error) {
 	res, err := w.c.ListWorkerRuns(context.Background(), connect.NewRequest(&pb.ListWorkerRunsRequest{Workspace: w.dir, Name: name, Limit: int32(limit)}))
 	if err != nil {

@@ -12,6 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// Package skills loads the skills a workspace offers: a SKILL.md with
+// frontmatter and instructions, optionally scripts, from the built-in set,
+// ~/.blitz/skills and (when trusted) the project; and the policy that caps
+// what their scripts may do (spec_skills_013).
 package skills
 
 import (

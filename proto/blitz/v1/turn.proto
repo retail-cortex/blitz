@@ -92,6 +92,7 @@ message Tasks {
   repeated Task items = 1;
 }
 
+// One item of the agent's task list (the todo tool): its text and state.
 message Task {
   string content = 1;
   // pending, in_progress or done.

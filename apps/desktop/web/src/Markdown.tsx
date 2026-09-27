@@ -119,6 +119,7 @@ const components: Components = {
   ),
 };
 
+/** Model output rendered as Markdown (see the file's header for what it never does). */
 export const Markdown = memo(function Markdown({ text }: { text: string }) {
   useLanguage();
   return (

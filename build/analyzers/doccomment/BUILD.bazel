@@ -1,0 +1,22 @@
+load("@rules_go//go:def.bzl", "go_library", "go_test")
+
+# The analyzer's test packages are data, not code to build.
+# gazelle:exclude testdata
+
+go_library(
+    name = "doccomment",
+    srcs = ["doccomment.go"],
+    importpath = "github.com/retail-cortex/blitz/build/analyzers/doccomment",
+    visibility = ["//visibility:public"],
+    deps = ["@org_golang_x_tools//go/analysis"],
+)
+
+go_test(
+    name = "doccomment_test",
+    srcs = ["doccomment_test.go"],
+    data = glob(["testdata/**"]),
+    deps = [
+        ":doccomment",
+        "@org_golang_x_tools//go/analysis",
+    ],
+)

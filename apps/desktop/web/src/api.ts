@@ -71,7 +71,11 @@ let clients = make();
 
 // Proxies, so a transport swapped in before the first render is used.
 export const sessions = new Proxy({} as ReturnType<typeof make>["sessions"], { get: (_, k) => Reflect.get(clients.sessions, k) });
+/** WorkspaceService: agents, models, settings, permissions, checkpoints, images and the rest. */
 export const workspaces = new Proxy({} as ReturnType<typeof make>["workspaces"], { get: (_, k) => Reflect.get(clients.workspaces, k) });
+/** WorkerService: the workspace's workers and their runs. */
 export const workers = new Proxy({} as ReturnType<typeof make>["workers"], { get: (_, k) => Reflect.get(clients.workers, k) });
+/** ConfigService: providers, API keys and the settings files. */
 export const config = new Proxy({} as ReturnType<typeof make>["config"], { get: (_, k) => Reflect.get(clients.config, k) });
+/** FileService: the workspace's files, for the Files shelf and the editor. */
 export const files = new Proxy({} as ReturnType<typeof make>["files"], { get: (_, k) => Reflect.get(clients.files, k) });

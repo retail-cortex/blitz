@@ -21,6 +21,7 @@ import { Code, ConnectError } from "@connectrpc/connect";
 import { workspaces } from "./api";
 import { programExists } from "./desktop";
 
+/** What the running service says about itself (GetServiceInfo). */
 export interface ServiceInfo {
   version: string;
   executable: string;

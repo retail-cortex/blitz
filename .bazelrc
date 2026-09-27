@@ -13,6 +13,10 @@ test --test_output=errors
 # it makes a stand-in, whatever the machine has installed.
 common --repo_env=ANDROID_HOME=
 
+# The protos' comments reach the generated Go code (its doc comments):
+# descriptor sets keep their source info.
+common --experimental_proto_descriptor_sets_include_source_info
+
 # The desktop app supports macOS 13 and later.
 build --macos_minimum_os=13.0
 build --host_macos_minimum_os=13.0

@@ -23,6 +23,10 @@ import { workspaces } from "./api";
 import { t } from "./i18n";
 import { defaultPrefs, normalizePrefs, type Prefs } from "./prefs";
 
+/**
+ * Whether the service answers, whether its login item is installed, where
+ * its socket is, and which blitzd this app would install.
+ */
 export interface ServiceStatus {
   running: boolean;
   installed: boolean;
@@ -61,6 +65,7 @@ function app(): Bound {
 
 const devPrefsKey = "blitz.desktop.prefs";
 
+/** The service's status (in a browser: whether the dev server's proxy reaches one). */
 export async function serviceStatus(): Promise<ServiceStatus> {
   if (!inApp()) {
     // In a browser the dev server proxies to the service: ask it something.
@@ -72,6 +77,7 @@ export async function serviceStatus(): Promise<ServiceStatus> {
   }
   return app().ServiceStatus();
 }
+/** Installs this app's blitzd as the login item and starts it. */
 export const installService = () => app().InstallService();
 /** Stops the running service: its login item, else process pid (0: unknown). */
 export const stopService = (pid: number) => app().StopService(pid);
@@ -84,11 +90,16 @@ export const programExists = async (path: string) => (inApp() && path ? app().Pr
 /** The app's version ("dev" outside a release, and in a browser). */
 export const appVersion = async () => (inApp() ? app().Version() : "dev");
 
+/**
+ * Asks for a folder to open as a workspace (a native dialog; in a browser,
+ * a prompt); "" when cancelled.
+ */
 export async function chooseWorkspace(): Promise<string> {
   if (!inApp()) return window.prompt(t("desktop.choose.prompt")) ?? "";
   return app().ChooseWorkspace(t("desktop.choose.title"));
 }
 
+/** The window's saved preferences, normalized (in a browser, from localStorage). */
 export async function getPrefs(): Promise<Prefs> {
   if (!inApp()) {
     try {
@@ -100,6 +111,7 @@ export async function getPrefs(): Promise<Prefs> {
   return normalizePrefs(await app().GetPrefs());
 }
 
+/** Saves the preferences and returns them as saved (normalized). */
 export async function savePrefs(p: Prefs): Promise<Prefs> {
   if (!inApp()) {
     try {
@@ -141,7 +153,10 @@ export function setUnsaved(message: string, quit: string, cancel: string) {
 /** Which license text: the NOTICE, the Apache License, or the third-party notices. */
 export type LicenseText = "notice" | "full" | "third-party";
 
-/** One of Blitz's license texts, embedded in the app (in a browser, a note that only the app has them). */
+/**
+ * One of Blitz's license texts, embedded in the app (in a browser, a note
+ * that only the app has them).
+ */
 export async function licenseText(which: LicenseText): Promise<string> {
   if (!inApp()) return t("desktop.license.dev");
   return app().License(which);

@@ -12,9 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// Package builtin holds the skills Blitz ships with (a SKILL.md each),
+// embedded in the binary.
 package builtin
 
 import "embed"
 
+// FS holds the built-in skills, a folder with a SKILL.md each.
+//
 //go:embed */SKILL.md
 var FS embed.FS

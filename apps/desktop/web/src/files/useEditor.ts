@@ -24,6 +24,7 @@ import { errorMeta, message, reason } from "../errors";
 import { fileState, languageSupport } from "./codemirror";
 import { nameOf } from "./tree";
 
+/** An open file: its tab, the version its text is based on, and what the editor knows about it. */
 export interface Tab {
   path: string;
   name: string;
@@ -49,6 +50,10 @@ export interface Target {
   column?: number;
 }
 
+/**
+ * The open files and what can be done with them, for the editor pane, the
+ * shelf and the workspace.
+ */
 export interface EditorModel {
   dir: string;
   tabs: Tab[];
@@ -72,6 +77,10 @@ export interface EditorModel {
   dirtyCount: number;
 }
 
+/**
+ * A workspace's open files: loading, saving (refused over someone else's
+ * change), reloading, and noticing changes made elsewhere.
+ */
 export function useEditor(dir: string): EditorModel {
   const [tabs, setTabs] = useState<Tab[]>([]);
   const [active, setActive] = useState<string | null>(null);

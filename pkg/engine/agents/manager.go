@@ -12,6 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// Package agents loads the agents a workspace offers: the built-in ones and
+// Markdown files with YAML frontmatter from ~/.blitz/agents (and the
+// project's, when it's trusted), each a name, a description, a system
+// prompt, the tools it may use and optionally its own model
+// (spec_agents_014).
 package agents
 
 import (

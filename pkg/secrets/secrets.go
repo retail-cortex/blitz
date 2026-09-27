@@ -198,6 +198,7 @@ type FileStore struct {
 	mu   sync.Mutex
 }
 
+// Kind names the store and its file.
 func (f *FileStore) Kind() string { return "file (" + f.Path + ")" }
 
 func (f *FileStore) read() (map[string]string, error) {
@@ -241,6 +242,7 @@ func (f *FileStore) write(m map[string]string) error {
 	return os.Rename(tmp.Name(), f.Path)
 }
 
+// Get returns the secret stored under name, or ErrNotFound.
 func (f *FileStore) Get(name string) (string, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -255,6 +257,7 @@ func (f *FileStore) Get(name string) (string, error) {
 	return v, nil
 }
 
+// Set stores value under name, rewriting the file atomically.
 func (f *FileStore) Set(name, value string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -266,6 +269,7 @@ func (f *FileStore) Set(name, value string) error {
 	return f.write(m)
 }
 
+// Delete removes name's secret; a missing one isn't an error.
 func (f *FileStore) Delete(name string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -286,8 +290,10 @@ type Memory struct {
 	m  map[string]string
 }
 
+// Kind is "memory".
 func (s *Memory) Kind() string { return "memory" }
 
+// Get returns the secret stored under name, or ErrNotFound.
 func (s *Memory) Get(name string) (string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -298,6 +304,7 @@ func (s *Memory) Get(name string) (string, error) {
 	return v, nil
 }
 
+// Set stores value under name.
 func (s *Memory) Set(name, value string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -308,6 +315,7 @@ func (s *Memory) Set(name, value string) error {
 	return nil
 }
 
+// Delete removes name's secret; a missing one isn't an error.
 func (s *Memory) Delete(name string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()

@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | In progress: step 1 (licensing) done 2026-09-27; steps 2–5 to do. Blocks the next release. |
+| Status | In progress: steps 1 (licensing) and 2 (comments) done 2026-09-27; steps 3–5 to do. Blocks the next release. |
 | Depends on | every earlier spec; [spec_monorepo_028](spec_monorepo_028.md) (the build), [spec_release_025](spec_release_025.md) (packages) |
 
 ## 1. Purpose
@@ -33,8 +33,9 @@ The owner's review (2026-09-27) found the project not ready to release: the old 
 
 - **RR-10** A package comment on every Go package (the 10 missing: the CLI and its REPL, `pkg/config`, and the engine's agents, runtime, session, skills and tools packages and the two `builtin` ones).
 - **RR-11** A doc comment on every exported Go declaration and every exported TypeScript function, component, type and constant, saying what it is for and anything a caller must know (not restating the name). Handlers say which RPC they serve and which errors they return. Unexported code is commented where the why isn't obvious (the existing standard).
-- **RR-12** Kept that way: a `nogo` analyzer (`build/analyzers/doccomment`) fails the build on an exported Go declaration without a doc comment (generated code exempt, as for nogo already); the page's text check gains the same rule for exported TypeScript.
-- **RR-13** The generated Go code keeps the protos' comments: descriptor sets built with source info (`--experimental_proto_descriptor_sets_include_source_info`), closing the known gap in [spec_monorepo_028](spec_monorepo_028.md) §5.
+- **RR-12** Kept that way: a `nogo` analyzer (`//build/analyzers/doccomment`, with its own tests) fails the build on a package or an exported Go declaration without a doc comment; a comment of only directives (`//go:embed`) doesn't count, one on a const, var or type group covers its names, and tests and generated code are exempt. The page's `doc.lint.test.ts` does the same for exported TypeScript (the license header doesn't count). buf's comment rules require a comment on every service, RPC, message and enum (request and response messages say which RPC they belong to).
+- **RR-13** The generated Go code keeps the protos' comments: descriptor sets built with source info (`--experimental_proto_descriptor_sets_include_source_info` in `.bazelrc`), closing the known gap in [spec_monorepo_028](spec_monorepo_028.md) §5.
+- **RR-14** Done 2026-09-27: 122 Go declarations and 10 package comments, 69 TypeScript exports, and 160 proto elements documented; the comments that describe behaviour were checked against the code.
 
 ## 5. Specs brought up to date
 

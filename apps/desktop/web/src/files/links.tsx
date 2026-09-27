@@ -29,7 +29,10 @@ interface FileLinks {
 
 const Context = createContext<FileLinks | null>(null);
 
-/** Provides a workspace's files to the paths in its conversation; refresh changes when files may have. */
+/**
+ * Provides a workspace's files to the paths in its conversation; refresh
+ * changes when files may have.
+ */
 export function FileLinksProvider({ dir, refresh, children }: { dir: string; refresh: number; children: ReactNode }) {
   const [known, setKnown] = useState<ReadonlySet<string>>(new Set());
   const last = useRef({ dir: "", at: 0 });

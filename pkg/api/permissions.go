@@ -77,6 +77,7 @@ type ApprovalRequest struct {
 // Decision is the user's answer to an approval request.
 type Decision int
 
+// The answers to an approval request.
 const (
 	DecisionDeny    Decision = iota
 	DecisionOnce             // allow this one action
@@ -84,6 +85,7 @@ const (
 	DecisionAlways           // allow actions with the same Key, persisted
 )
 
+// String is the decision's name: deny, once, session or always.
 func (d Decision) String() string {
 	switch d {
 	case DecisionOnce:

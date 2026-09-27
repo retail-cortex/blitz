@@ -110,6 +110,7 @@ func resolveSecrets(cfg *Config, store secrets.Store) {
 // KeySource says where a provider's key comes from.
 type KeySource string
 
+// Where a key can come from, as Describe reports it.
 const (
 	KeyNone        KeySource = "none"
 	KeyKeychain    KeySource = "keychain"    // a reference to the OS store

@@ -12,6 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// Package config loads Blitz's settings: one TOML file, .env.toml, in
+// ~/.blitz (or $MODENV_PREFIX, or --config), with a workspace's own
+// settings laid over it from ~/.blitz/workspaces, API keys resolved from
+// the OS keychain, and environment variables applied last. Nothing is
+// read from the workspace itself, so a cloned repository can't redirect
+// a key or turn off approvals. It also edits the file in place, a line at
+// a time, for the settings the front ends change (spec_config_002).
 package config
 
 import (

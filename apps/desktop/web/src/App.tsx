@@ -35,6 +35,10 @@ import { Button, Dialog, Icon, IconButton, SnackbarProvider, useSnackbar } from 
 import { Workspace } from "./Workspace";
 import { WorkspaceDialog } from "./WorkspaceDialog";
 
+/**
+ * The window: its preferences and service check, then the workspaces (or
+ * the welcome page), with the dialogs and banners over them.
+ */
 export function App() {
   return (
     <ErrorBoundary>

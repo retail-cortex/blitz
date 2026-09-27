@@ -12,9 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// Package builtin holds the agents Blitz ships with, as Markdown files
+// embedded in the binary.
 package builtin
 
 import "embed"
 
+// FS holds the built-in agents, a Markdown file each.
+//
 //go:embed *.md
 var FS embed.FS

@@ -19,6 +19,10 @@
 // rules for opening, closing and editing workspaces are tested alone.
 import type { ThemePref } from "./theme";
 
+/**
+ * A workspace as the window knows it: its folder, the name, description
+ * and colour the user gave it, and whether it's open.
+ */
 export interface WorkspacePrefs {
   dir: string;
   name?: string; // "" or unset shows the directory's name
@@ -27,6 +31,7 @@ export interface WorkspacePrefs {
   open: boolean;
 }
 
+/** The window's own settings (everything else belongs to the service). */
 export interface Prefs {
   theme: ThemePref;
   workspaces: WorkspacePrefs[];
@@ -45,6 +50,7 @@ export interface Prefs {
   chat_width: number;
 }
 
+/** The settings before any are saved. */
 export const defaultPrefs: Prefs = {
   theme: "system",
   workspaces: [],
@@ -103,7 +109,9 @@ export function displayName(w: Pick<WorkspacePrefs, "dir" | "name">): string {
   return w.name?.trim() || baseName(w.dir);
 }
 
+/** The open workspaces, in tab order. */
 export const openWorkspaces = (p: Prefs) => p.workspaces.filter((w) => w.open);
+/** The closed workspaces, most recent first. */
 export const recentWorkspaces = (p: Prefs) => p.workspaces.filter((w) => !w.open);
 
 /** Opens dir (keeping what the window remembers about it) and shows it. */

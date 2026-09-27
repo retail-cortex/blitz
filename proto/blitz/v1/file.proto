@@ -36,6 +36,7 @@ service FileService {
   rpc ReadFile(ReadFileRequest) returns (ReadFileResponse);
   // Writes a file if it still has the version read (FILE_CHANGED if not).
   rpc WriteFile(WriteFileRequest) returns (WriteFileResponse);
+  // Creates a folder, and any missing folders above it; it must not exist.
   rpc CreateFolder(CreateFolderRequest) returns (CreateFolderResponse);
   // Moves a file or folder; the destination must not exist.
   rpc RenameFile(RenameFileRequest) returns (RenameFileResponse);
@@ -47,6 +48,7 @@ service FileService {
   rpc StatFiles(StatFilesRequest) returns (StatFilesResponse);
 }
 
+// What a folder entry is.
 enum FileKind {
   FILE_KIND_UNSPECIFIED = 0;
   FILE_KIND_FILE = 1;
@@ -54,6 +56,7 @@ enum FileKind {
   FILE_KIND_SYMLINK = 3;
 }
 
+// One entry of a folder, as ListDir returns it.
 message FileEntry {
   string name = 1;
   string path = 2;
@@ -69,6 +72,7 @@ message FileEntry {
   string agent_rule = 8;
 }
 
+// Request message for FileService.ListDir.
 message ListDirRequest {
   string workspace = 1;
   // "" for the workspace itself.
@@ -76,6 +80,7 @@ message ListDirRequest {
   bool show_hidden = 3;
 }
 
+// Response message for FileService.ListDir.
 message ListDirResponse {
   repeated FileEntry entries = 1;
   // More than 5,000 entries; the rest are left out.
@@ -84,11 +89,13 @@ message ListDirResponse {
   bool repo = 3;
 }
 
+// Request message for FileService.ReadFile.
 message ReadFileRequest {
   string workspace = 1;
   string path = 2;
 }
 
+// Response message for FileService.ReadFile.
 message ReadFileResponse {
   string path = 1;
   // "" for binary and too-large files.
@@ -101,6 +108,7 @@ message ReadFileResponse {
   string agent_rule = 7;
 }
 
+// Request message for FileService.WriteFile.
 message WriteFileRequest {
   string workspace = 1;
   string path = 2;
@@ -109,32 +117,40 @@ message WriteFileRequest {
   string version = 4;
 }
 
+// Response message for FileService.WriteFile.
 message WriteFileResponse {
   string version = 1;
 }
 
+// Request message for FileService.CreateFolder.
 message CreateFolderRequest {
   string workspace = 1;
   string path = 2;
 }
 
+// Response message for FileService.CreateFolder.
 message CreateFolderResponse {}
 
+// Request message for FileService.RenameFile.
 message RenameFileRequest {
   string workspace = 1;
   string from = 2;
   string to = 3;
 }
 
+// Response message for FileService.RenameFile.
 message RenameFileResponse {}
 
+// Request message for FileService.DeleteFile.
 message DeleteFileRequest {
   string workspace = 1;
   string path = 2;
 }
 
+// Response message for FileService.DeleteFile.
 message DeleteFileResponse {}
 
+// Request message for FileService.FindFiles.
 message FindFilesRequest {
   string workspace = 1;
   string query = 2;
@@ -142,15 +158,18 @@ message FindFilesRequest {
   int32 limit = 3;
 }
 
+// Response message for FileService.FindFiles.
 message FindFilesResponse {
   repeated string paths = 1;
 }
 
+// Request message for FileService.StatFiles.
 message StatFilesRequest {
   string workspace = 1;
   repeated string paths = 2;
 }
 
+// Response message for FileService.StatFiles.
 message StatFilesResponse {
   // Path to version; "" for a file that's gone.
   map<string, string> versions = 1;

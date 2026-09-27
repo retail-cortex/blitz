@@ -19,30 +19,38 @@
 // workspace to show a view.
 
 export const composeEvent = "blitz:compose";
+/** What the composer is asked to take. */
 export interface ComposeDetail {
   dir: string;
   text: string;
   /** Run it at once (a command without arguments) instead of filling the composer. */
   run?: boolean;
 }
+/** Asks a workspace's composer to take text (or run a command). */
 export function compose(detail: ComposeDetail) {
   window.dispatchEvent(new CustomEvent(composeEvent, { detail }));
 }
 
+/** The event that switches a workspace's view. */
 export const viewEvent = "blitz:view";
+/** Which workspace, and which view to show ("chat" is always shown, beside the others). */
 export interface ViewDetail {
   dir: string;
   view: "chat" | "editor" | "changes" | "workers";
 }
+/** Asks a workspace to show a view. */
 export function showView(detail: ViewDetail) {
   window.dispatchEvent(new CustomEvent(viewEvent, { detail }));
 }
 
+/** The event that loads a session in a workspace. */
 export const loadSessionEvent = "blitz:load-session";
+/** Which workspace, and the session's ID. */
 export interface LoadSessionDetail {
   dir: string;
   id: string;
 }
+/** Asks a workspace to load a session. */
 export function loadSession(detail: LoadSessionDetail) {
   window.dispatchEvent(new CustomEvent(loadSessionEvent, { detail }));
 }
@@ -51,9 +59,11 @@ export function loadSession(detail: LoadSessionDetail) {
 // ask again whether their model works. dir is the workspace whose own
 // settings changed, or "" for the global ones (every workspace).
 export const configChangedEvent = "blitz:config-changed";
+/** The workspace whose settings changed, or "" for the global ones. */
 export interface ConfigChangedDetail {
   dir: string;
 }
+/** Tells the workspaces their settings changed. */
 export function configChanged(detail: ConfigChangedDetail) {
   window.dispatchEvent(new CustomEvent(configChangedEvent, { detail }));
 }
@@ -62,28 +72,35 @@ export function configChanged(detail: ConfigChangedDetail) {
 // ask for Go to file, or say that files may have changed (a tool ran, a
 // turn ended) so the shelf and editor look again.
 export const openFileEvent = "blitz:open-file";
+/** The workspace and file to open, and where to put the cursor. */
 export interface OpenFileDetail {
   dir: string;
   path: string;
   line?: number;
   column?: number;
 }
+/** Asks a workspace to open a file in its editor. */
 export function openFile(detail: OpenFileDetail) {
   window.dispatchEvent(new CustomEvent(openFileEvent, { detail }));
 }
 
+/** The event that opens Go to file. */
 export const goToFileEvent = "blitz:go-to-file";
+/** Asks a workspace to open Go to file. */
 export function goToFile(detail: { dir: string }) {
   window.dispatchEvent(new CustomEvent(goToFileEvent, { detail }));
 }
 
+/** The event that says a workspace's files may have changed. */
 export const filesTouchedEvent = "blitz:files-touched";
+/** Tells a workspace its files may have changed (a tool ran, a turn ended). */
 export function filesTouched(detail: { dir: string }) {
   window.dispatchEvent(new CustomEvent(filesTouchedEvent, { detail }));
 }
 
 // Show the license dialog (Settings › About, or /license), on one of its texts.
 export const showLicenseEvent = "blitz:show-license";
+/** Opens the Licenses dialog on one of its texts. */
 export function showLicense(detail: { which: "notice" | "full" | "third-party" }) {
   window.dispatchEvent(new CustomEvent(showLicenseEvent, { detail }));
 }

@@ -100,6 +100,8 @@ type ServiceStatus struct {
 	Service string `json:"service"`
 }
 
+// ServiceStatus reports whether the service answers on its socket, whether
+// its login item is installed, and which blitzd this app would install.
 func (a *App) ServiceStatus() ServiceStatus {
 	bin, _ := findService()
 	return ServiceStatus{Running: socket.Running(a.socket), Installed: loginitem.Installed(), Socket: a.socket, Service: bin}

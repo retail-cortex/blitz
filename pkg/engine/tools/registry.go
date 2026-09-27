@@ -12,6 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// Package tools is everything the agent can do and the rules it does it
+// under: file tools through the workspace's sandbox (with checkpoints for
+// undo), shell commands under the command policy and the OS sandbox,
+// approvals and permission rules, web fetch and search, MCP servers, skill
+// scripts, images, the task list and questions to the user
+// (spec_filetools_006, spec_shell_007, spec_approvals_005).
 package tools
 
 import (

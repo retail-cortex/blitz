@@ -19,6 +19,7 @@
 // workspace's custom commands and skills, which run as turns.
 import { t } from "./i18n";
 
+/** A slash command as the composer offers it. */
 export interface CommandSpec {
   name: string; // without the slash
   args?: string; // shown after the name
@@ -62,7 +63,10 @@ export function parseCommand(line: string): { name: string; args: string } | und
   return { name: m[1].toLowerCase(), args: (m[2] ?? "").trim() };
 }
 
-/** The commands offered while the user types "/prefix" (no space yet): prefix matches first, then the rest containing it. */
+/**
+ * The commands offered while the user types "/prefix" (no space yet):
+ * prefix matches first, then the rest containing it.
+ */
 export function matchCommands(draft: string, all: CommandSpec[]): CommandSpec[] {
   const m = /^\/(\S*)$/.exec(draft);
   if (!m) return [];

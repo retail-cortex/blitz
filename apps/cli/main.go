@@ -12,6 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// Command blitz is Blitz's command line: an interactive session (the REPL)
+// in the current directory, a one-shot run with a prompt (`blitz "…"`,
+// `blitz exec`), and the commands around them: doctor, config, service,
+// workers and license. It attaches to the Blitz service when one is
+// running, so the terminal and the desktop app share workspaces; --local
+// runs the workspace in-process instead (spec_cli_020).
 package main
 
 import (

@@ -21,6 +21,10 @@ import { language, t } from "./i18n";
 /** The largest image the window uploads (the service may scale it down). */
 export const maxImageBytes = 20 << 20;
 
+/**
+ * An image attached to the next prompt: shown at once from a local URL,
+ * uploaded to the service in the background.
+ */
 export interface Attachment {
   key: string; // local, for the list
   name: string;

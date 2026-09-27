@@ -63,8 +63,10 @@ var ErrSnapshotNameTaken = errors.New("a snapshot with this name already exists"
 // this workspace, or no session has the given ID or snapshot name.
 type ResumeError struct{ Err error }
 
+// Error is why the session couldn't be resumed.
 func (e *ResumeError) Error() string { return e.Err.Error() }
 
+// Unwrap returns that reason, for errors.Is and errors.As.
 func (e *ResumeError) Unwrap() error { return e.Err }
 
 // ErrWorkspaceBusy reports a workspace another process (or another

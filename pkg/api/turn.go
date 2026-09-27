@@ -95,6 +95,7 @@ func IsLimit(err error) bool {
 // was recorded or sent.
 type BlockedError struct{ Reason string }
 
+// Error says a prompt_submit hook blocked the prompt, and why.
 func (e *BlockedError) Error() string { return "prompt blocked by hook: " + e.Reason }
 
 // Event is something that happened during a turn. Exactly one of Text,
@@ -163,6 +164,7 @@ type Usage struct {
 	Priced     bool // false if any call's model had no price
 }
 
+// Add adds o's calls, tokens and cost to u; u stays priced only if both are.
 func (u *Usage) Add(o Usage) {
 	u.Calls += o.Calls
 	u.Input += o.Input

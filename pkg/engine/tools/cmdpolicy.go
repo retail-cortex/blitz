@@ -123,6 +123,8 @@ func compileCmdPatterns(list []string) ([]cmdPattern, error) {
 	return out, nil
 }
 
+// NewCommandPolicy compiles the configured allow, deny and auto-approve
+// patterns into a policy; an invalid pattern is an error.
 func NewCommandPolicy(cfg CommandPolicyConfig) (*CommandPolicy, error) {
 	compile := compileCmdPatterns
 	var p CommandPolicy
