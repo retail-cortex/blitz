@@ -20,8 +20,9 @@ type TerminalInput struct {
 	rl   *readline.Instance
 	turn chan struct{}
 
-	stdin *escReader
-	edit  func(text string) (string, error) // $EDITOR (Ctrl+G); replaced in tests
+	stdin    *escReader
+	edit     func(text string) (string, error) // $EDITOR (Ctrl+G); replaced in tests
+	pickTerm func() keyTerm                    // raw keys for pickers; replaced in tests
 
 	mu          sync.Mutex
 	onInterrupt func()
@@ -103,6 +104,7 @@ func newTerminalInput(o TerminalOptions, base *readline.Config) (*TerminalInput,
 	}
 	t := &TerminalInput{turn: make(chan struct{}, 1), stdin: &escReader{in: in}}
 	t.edit = func(text string) (string, error) { return editText(text, os.Stdin, os.Stdout, os.Stderr) }
+	t.pickTerm = func() keyTerm { return newPickerKeys(int(os.Stdin.Fd())) }
 	cfg := *base
 	cfg.Stdin = t.stdin
 	cfg.HistoryFile = o.HistoryFile

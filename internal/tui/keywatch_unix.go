@@ -13,9 +13,14 @@ import (
 type ttyKeys struct {
 	fd    int
 	saved *unix.Termios
+	// noSignals makes Ctrl+C a key rather than SIGINT (pickers).
+	noSignals bool
 }
 
 func newTTYKeys(fd int) keyTerm { return &ttyKeys{fd: fd} }
+
+// newPickerKeys is the keyTerm for a picker, which reads Ctrl+C itself.
+func newPickerKeys(fd int) keyTerm { return &ttyKeys{fd: fd, noSignals: true} }
 
 // enter turns off line buffering and echo but keeps signal keys, so Ctrl+C
 // still interrupts the turn exactly as before. On macOS Ctrl+T is the
@@ -27,6 +32,9 @@ func (t *ttyKeys) enter() error {
 	}
 	saved := *cur
 	cur.Lflag &^= unix.ICANON | unix.ECHO
+	if t.noSignals {
+		cur.Lflag &^= unix.ISIG
+	}
 	cur.Cc[unix.VMIN] = 1
 	cur.Cc[unix.VTIME] = 0
 	disableStatusKey(cur)

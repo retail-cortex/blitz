@@ -52,6 +52,9 @@ func HandleCommand(ctx context.Context, input string, app *App) (bool, error) {
 
 	case "agent":
 		if len(args) == 0 {
+			if name, ok := pickAgent(ctx, app); ok {
+				return HandleCommand(ctx, "/agent "+name, app)
+			}
 			a := app.Workspace.ActiveAgent()
 			fmt.Println(i18n.T("agent.current", "name", Bold+safe(a.DisplayName)+Reset, "id", safe(a.Name)))
 			return true, nil
@@ -65,6 +68,9 @@ func HandleCommand(ctx context.Context, input string, app *App) (bool, error) {
 
 	case "model":
 		if len(args) == 0 {
+			if ref, ok := pickModel(ctx, app); ok {
+				return HandleCommand(ctx, "/model "+ref, app)
+			}
 			m := app.Workspace.Model()
 			fmt.Println(i18n.T("model.current", "model", Cyan+safe(m.Name)+Reset, "provider", m.Provider))
 			return true, nil

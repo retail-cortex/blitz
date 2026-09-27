@@ -158,6 +158,9 @@ func NewApprover(in Input, diffLines int) tools.Approver {
 			d, truncated = RenderDiff(req.Diff, diffLines)
 			sb.WriteString(d)
 		}
+		if t, ok := in.(*TerminalInput); ok {
+			return pickApproval(ctx, t, req, sb.String(), truncated)
+		}
 
 		options := i18n.T("approve.yes")
 		valid := "y/N"
@@ -245,8 +248,11 @@ func NewUserPrompter(in Input) tools.UserPromptFunc {
 		for i, opt := range options {
 			fmt.Fprintf(&sb, "   [%d] %s\n", i+1, textutil.SanitizeTerminal(opt))
 		}
-		sb.WriteString("Answer: ")
+		sb.WriteString(i18n.T("question.answer") + " ")
 
+		if t, ok := in.(*TerminalInput); ok && len(options) > 0 {
+			return pickAnswer(ctx, t, sb.String(), options)
+		}
 		answer, err := in.Ask(ctx, sb.String())
 		if err != nil {
 			return "", err

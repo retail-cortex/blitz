@@ -36,6 +36,15 @@ func handleExtraCommand(ctx context.Context, cmd string, args []string, app *App
 	case "mcp":
 		cmdMCP(app)
 	case "resume":
+		if len(args) == 0 {
+			ref, picked, ok := resumeWithPicker(ctx, app)
+			if ok && !picked {
+				break // cancelled
+			}
+			if picked {
+				args = []string{ref}
+			}
+		}
 		cmdSessionLoad(args, app)
 	case "attach":
 		cmdAttach(args, app)

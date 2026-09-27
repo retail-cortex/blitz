@@ -195,7 +195,7 @@ Decision §12.2. **CC** `/cd <path>` (June 2026) moves the session to another di
 - **PAR-UI-07 (P1, S)** `/config [key=value]` shows and sets any supported setting for the session, saving on request, with the in-place editor (CFG-20); `/set` becomes an alias.
 - **PAR-UI-08 (P2, S)** Status line: `[ui] status_line = "<command>"` runs a command (JSON session state on stdin) whose first output line is shown under the prompt; a built-in default shows model, mode, context % and cost.
 - **PAR-UI-09 (P2, S)** Vim editing mode (`[ui] editor = "vim"`), user keybindings (`~/.blitz/keybindings.toml`), and `/theme` for Markdown and diff colours.
-- **PAR-UI-11 (P0, S)** Inline pickers (decision §12.4): an arrow-key, type-to-filter menu inside the existing line editor — no full-screen framework — used by `/rewind` (Esc Esc), `/resume`, `/agent`, `/model`, approval answers and multiple-choice questions. Rich full-screen views (context grid, diff browser, transcript viewer, agent inbox) are built in the desktop app, not the REPL.
+- **PAR-UI-11 (P0, S)** ✅ *Done 2026-09-26 (ROADMAP 25.10; now [spec_tui_019](spec_tui_019.md) TUI-15/16); `/rewind` uses it with PAR-SES-02.* Inline pickers (decision §12.4): an arrow-key, type-to-filter menu inside the existing line editor — no full-screen framework — used by `/rewind` (Esc Esc), `/resume`, `/agent`, `/model`, approval answers and multiple-choice questions. Rich full-screen views (context grid, diff browser, transcript viewer, agent inbox) are built in the desktop app, not the REPL.
 - **PAR-UI-10 (P2, S)** `/diff` becomes browsable: a list of changed files with per-file diffs (paged).
 
 ## 10. Models, providers and installation

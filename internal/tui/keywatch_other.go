@@ -14,6 +14,7 @@ var errKeysUnsupported = errors.New("key watching is not supported on this platf
 type ttyKeys struct{}
 
 func newTTYKeys(int) keyTerm                      { return ttyKeys{} }
+func newPickerKeys(int) keyTerm                   { return ttyKeys{} }
 func (ttyKeys) enter() error                      { return errKeysUnsupported }
 func (ttyKeys) leave() error                      { return nil }
 func (ttyKeys) ready(time.Duration) (bool, error) { return false, errKeysUnsupported }
