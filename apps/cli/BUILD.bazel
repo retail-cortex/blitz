@@ -1,0 +1,77 @@
+load("@rules_go//go:def.bzl", "go_binary", "go_library", "go_test")
+
+# The REPL's untranslated-output lint reads main.go too.
+exports_files(["main.go"])
+
+go_library(
+    name = "cli_lib",
+    srcs = [
+        "configcmd.go",
+        "doctor.go",
+        "exitcode.go",
+        "main.go",
+        "oneshot.go",
+        "service.go",
+        "setup.go",
+        "workers.go",
+    ],
+    importpath = "github.com/retail-cortex/blitz/apps/cli",
+    visibility = ["//visibility:private"],
+    deps = [
+        "//apps/cli/internal/tui",
+        "//pkg/api",
+        "//pkg/client",
+        "//pkg/config",
+        "//pkg/engine",
+        "//pkg/engine/memory",
+        "//pkg/engine/runtime",
+        "//pkg/engine/skills",
+        "//pkg/engine/tools",
+        "//pkg/i18n",
+        "//pkg/images",
+        "//pkg/observability",
+        "//pkg/socket",
+        "@com_github_burntsushi_toml//:toml",
+        "@com_github_spf13_cobra//:cobra",
+        "@com_github_spf13_pflag//:pflag",
+        "@org_golang_google_adk_v2//model",
+        "@org_golang_google_adk_v2//session",
+        "@org_golang_google_genai//:genai",
+        "@org_golang_x_term//:term",
+    ],
+)
+
+go_binary(
+    name = "blitz",
+    embed = [":cli_lib"],
+    visibility = ["//visibility:public"],
+)
+
+go_test(
+    name = "cli_test",
+    srcs = [
+        "attach_test.go",
+        "images_test.go",
+        "leak_test.go",
+        "limits_test.go",
+        "locale_test.go",
+        "main_test.go",
+        "service_test.go",
+        "workers_test.go",
+    ],
+    embed = [":cli_lib"],
+    # Starts commands in the OS sandbox, which can't nest in Bazel's on
+    # macOS.
+    tags = ["no-sandbox"],
+    deps = [
+        "//apps/service/servicetest",
+        "//pkg/api",
+        "//pkg/config",
+        "//pkg/engine",
+        "//pkg/engine/runtime",
+        "//pkg/i18n",
+        "//pkg/socket",
+        "@org_golang_google_genai//:genai",
+        "@org_uber_go_goleak//:goleak",
+    ],
+)

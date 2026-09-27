@@ -1,0 +1,9 @@
+load("@rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "socket",
+    srcs = ["socket.go"],
+    importpath = "github.com/retail-cortex/blitz/pkg/socket",
+    visibility = ["//visibility:public"],
+    deps = ["//pkg/config"],
+)

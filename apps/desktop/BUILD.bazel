@@ -1,0 +1,65 @@
+load("@rules_go//go:def.bzl", "go_binary", "go_library", "go_test")
+
+go_library(
+    name = "desktop_lib",
+    srcs = [
+        "app.go",
+        "link_darwin.go",
+        "main.go",
+        "prefs.go",
+        "proxy.go",
+    ],
+    cgo = True,
+    clinkopts = select({
+        "@rules_go//go/platform:darwin": [
+            "-framework UniformTypeIdentifiers",
+        ],
+        "@rules_go//go/platform:ios": [
+            "-framework UniformTypeIdentifiers",
+        ],
+        "//conditions:default": [],
+    }),
+    # The page, built into dist/ (phase 4: by Bazel).
+    embedsrcs = glob(["dist/**"]),  # keep
+    importpath = "github.com/retail-cortex/blitz/apps/desktop",
+    visibility = ["//visibility:private"],
+    deps = [
+        "//pkg/config",
+        "//pkg/socket",
+        "@com_github_wailsapp_wails_v2//:wails",
+        "@com_github_wailsapp_wails_v2//pkg/options",
+        "@com_github_wailsapp_wails_v2//pkg/options/assetserver",
+        "@com_github_wailsapp_wails_v2//pkg/options/mac",
+        "@com_github_wailsapp_wails_v2//pkg/runtime",
+    ],
+)
+
+go_binary(
+    name = "blitz-desktop",
+    embed = [":desktop_lib"],
+    # What `wails build` sets: the native window, not the dev server.
+    gotags = [
+        "desktop",
+        "production",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+go_test(
+    name = "desktop_test",
+    srcs = [
+        "prefs_test.go",
+        "proxy_test.go",
+    ],
+    embed = [":desktop_lib"],
+    deps = [
+        "//apps/service/servicetest",
+        "//pkg/config",
+        "//pkg/engine",
+        "//pkg/engine/runtime",
+        "//pkg/socket",
+        "//proto/blitz/v1:blitzv1_go_proto",
+        "@com_connectrpc_connect//:connect",
+        "@org_golang_google_genai//:genai",
+    ],
+)

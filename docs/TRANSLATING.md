@@ -20,7 +20,7 @@ You don't have to translate everything: missing keys fall back to the parent lan
 
 ## Checking a catalog
 
-To ship a catalog, add it to `pkg/i18n/locales/`; the build embeds it. `go test ./pkg/i18n` then checks every shipped catalog: no missing keys, no unknown keys, matching placeholders, and answer letters intact. For a file in `~/.blitz/locales`, run `/locale <code>` and look through `/help`, `/cost` and an approval prompt.
+To ship a catalog, add it to `pkg/i18n/locales/`; the build embeds it. `bazel test //pkg/i18n:i18n_test` then checks every shipped catalog: no missing keys, no unknown keys, matching placeholders, and answer letters intact. For a file in `~/.blitz/locales`, run `/locale <code>` and look through `/help`, `/cost` and an approval prompt.
 
 To find text that was never moved into a catalog, use the pseudo-locale: `/locale en-XA`. It shows every catalog string accented and in brackets (`⟦Éxít çáñçélléd.⟧`), so any plain English left on screen was never moved into a catalog. `TestNoUntranslatedOutput` catches most of these in CI.
 

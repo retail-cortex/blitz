@@ -1,0 +1,20 @@
+load("@rules_go//proto:compiler.bzl", "go_proto_compiler")
+load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
+
+# Connect's handlers and clients, in the same package as the messages
+# (package_suffix empty), since go_proto_library makes one package.
+go_proto_compiler(
+    name = "connect_go",
+    options = ["package_suffix="],
+    plugin = "@com_connectrpc_connect//cmd/protoc-gen-connect-go",
+    suffix = ".connect.go",
+    valid_archive = False,
+    visibility = ["//visibility:public"],
+    deps = ["@com_connectrpc_connect//:connect"],
+)
+
+# The dependency rules between apps and packages; CI runs it.
+sh_binary(
+    name = "check_deps",
+    srcs = ["check_deps.sh"],
+)

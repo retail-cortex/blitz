@@ -1,0 +1,23 @@
+load("@rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "api",
+    srcs = [
+        "backend.go",
+        "changes.go",
+        "context.go",
+        "doc.go",
+        "extensions.go",
+        "models.go",
+        "permissions.go",
+        "sessions.go",
+        "turn.go",
+        "workers.go",
+    ],
+    importpath = "github.com/retail-cortex/blitz/pkg/api",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/config",
+        "//pkg/images",
+    ],
+)

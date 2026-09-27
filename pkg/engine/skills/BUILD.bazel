@@ -1,0 +1,38 @@
+load("@rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "skills",
+    srcs = [
+        "definition.go",
+        "policy.go",
+        "provider.go",
+        "skill.go",
+    ],
+    importpath = "github.com/retail-cortex/blitz/pkg/engine/skills",
+    visibility = [
+        # The engine, the service, and the CLI's --local mode; the other
+        # three only in tests (//bazel:deps_test checks libraries).
+        "//apps/cli:__pkg__",
+        "//apps/cli/internal/tui:__pkg__",
+        "//apps/desktop:__pkg__",
+        "//apps/service:__subpackages__",
+        "//pkg/client:__pkg__",
+        "//pkg/engine:__subpackages__",
+    ],
+    deps = [
+        "//pkg/config",
+        "//pkg/engine/skills/builtin",
+        "@in_gopkg_yaml_v3//:yaml_v3",
+    ],
+)
+
+go_test(
+    name = "skills_test",
+    srcs = [
+        "definition_test.go",
+        "policy_test.go",
+        "provider_test.go",
+    ],
+    embed = [":skills"],
+    deps = ["//pkg/config"],
+)

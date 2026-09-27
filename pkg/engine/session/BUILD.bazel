@@ -1,0 +1,46 @@
+load("@rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "session",
+    srcs = [
+        "adkstore.go",
+        "search.go",
+        "session.go",
+        "snapshot.go",
+    ],
+    importpath = "github.com/retail-cortex/blitz/pkg/engine/session",
+    visibility = [
+        # The engine, the service, and the CLI's --local mode; the other
+        # three only in tests (//bazel:deps_test checks libraries).
+        "//apps/cli:__pkg__",
+        "//apps/cli/internal/tui:__pkg__",
+        "//apps/desktop:__pkg__",
+        "//apps/service:__subpackages__",
+        "//pkg/client:__pkg__",
+        "//pkg/engine:__subpackages__",
+    ],
+    deps = [
+        "//pkg/api",
+        "@org_golang_google_adk_v2//session",
+    ],
+)
+
+go_test(
+    name = "session_test",
+    srcs = [
+        "adkstore_test.go",
+        "leak_test.go",
+        "search_test.go",
+        "session_test.go",
+        "snapshot_test.go",
+        "title_test.go",
+    ],
+    embed = [":session"],
+    deps = [
+        "//pkg/api",
+        "@org_golang_google_adk_v2//model",
+        "@org_golang_google_adk_v2//session",
+        "@org_golang_google_genai//:genai",
+        "@org_uber_go_goleak//:goleak",
+    ],
+)

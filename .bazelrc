@@ -1,0 +1,24 @@
+# Linux and macOS each get their own settings below (common:linux, …).
+common --enable_platform_specific_config
+
+# Actions don't see the shell's PATH and variables: builds don't depend on
+# who runs them. (API keys in the environment never reach tests either.)
+build --incompatible_strict_action_env
+test --test_output=errors
+
+# The desktop app supports macOS 13 and later.
+build --macos_minimum_os=13.0
+build --host_macos_minimum_os=13.0
+
+# Wails on Linux: WebKitGTK 4.1 (Ubuntu 24.04, Debian 13 and later).
+common:linux --@rules_go//go/config:tags=webkit2_41
+
+# The gVisor tests find runsc through this; CI sets it, and they skip
+# without it.
+test --test_env=RUNSC_PATH
+
+# Aspect's rulesets report usage unless told not to.
+common --repo_env=ASPECT_TOOLS_TELEMETRY=off
+
+# Personal settings (a disk cache, say) go in user.bazelrc, not committed.
+try-import %workspace%/user.bazelrc

@@ -1,0 +1,27 @@
+load("@protobuf//bazel:proto_library.bzl", "proto_library")
+load("@rules_go//proto:def.bzl", "go_proto_library")
+
+# The service API. Its Go code, messages and Connect's clients and
+# handlers in one package, is generated at build time and never committed.
+proto_library(
+    name = "blitzv1_proto",
+    srcs = glob(["*.proto"]),
+    strip_import_prefix = "/proto",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@protobuf//:duration_proto",
+        "@protobuf//:struct_proto",
+        "@protobuf//:timestamp_proto",
+    ],
+)
+
+go_proto_library(
+    name = "blitzv1_go_proto",
+    compilers = [
+        "@rules_go//proto:go_proto",
+        "//bazel:connect_go",
+    ],
+    importpath = "github.com/retail-cortex/blitz/proto/blitz/v1",
+    proto = ":blitzv1_proto",
+    visibility = ["//visibility:public"],
+)

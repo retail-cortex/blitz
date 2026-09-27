@@ -17,3 +17,7 @@
 /apps/desktop/desktop
 /blitz
 /blz
+
+# Bazel
+/bazel-*
+/user.bazelrc

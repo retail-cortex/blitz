@@ -1,0 +1,44 @@
+diff --color -ru a/internal/frontend/desktop/linux/BUILD.bazel b/internal/frontend/desktop/linux/BUILD.bazel
+--- a/internal/frontend/desktop/linux/BUILD.bazel	2026-09-27 10:12:01
++++ b/internal/frontend/desktop/linux/BUILD.bazel	2026-09-27 10:12:01
+@@ -1,6 +1,11 @@
+ load("@io_bazel_rules_go//go:def.bzl", "go_library")
++# Blitz: GTK and WebKitGTK flags, which rules_go can't take from
++# #cgo pkg-config lines (//bazel:pkg_config.bzl).
++load("@@+pkg_config+webkitgtk//:defs.bzl", "COPTS", "LINKOPTS")
+ 
+ go_library(
++    copts = COPTS,
++    clinkopts = LINKOPTS,
+     name = "linux",
+     srcs = [
+         "browser.go",
+diff --color -ru a/pkg/assetserver/webview/BUILD.bazel b/pkg/assetserver/webview/BUILD.bazel
+--- a/pkg/assetserver/webview/BUILD.bazel	2026-09-27 10:12:01
++++ b/pkg/assetserver/webview/BUILD.bazel	2026-09-27 10:12:01
+@@ -1,4 +1,7 @@
+ load("@io_bazel_rules_go//go:def.bzl", "go_library")
++# Blitz: GTK and WebKitGTK flags, which rules_go can't take from
++# #cgo pkg-config lines (//bazel:pkg_config.bzl).
++load("@@+pkg_config+webkitgtk//:defs.bzl", "COPTS", "LINKOPTS")
+ 
+ go_library(
+     name = "webview",
+@@ -18,7 +21,7 @@
+         "webkit2_legacy.go",
+     ],
+     cgo = True,
+-    clinkopts = select({
++    clinkopts = LINKOPTS + select({
+         "@io_bazel_rules_go//go/platform:darwin": [
+             "-framework Foundation -framework WebKit",
+         ],
+@@ -27,7 +30,7 @@
+         ],
+         "//conditions:default": [],
+     }),
+-    copts = select({
++    copts = COPTS + select({
+         "@io_bazel_rules_go//go/platform:darwin": [
+             "-x objective-c",
+         ],

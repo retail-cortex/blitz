@@ -1,0 +1,44 @@
+load("@rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "observability",
+    srcs = [
+        "logfile.go",
+        "span.go",
+        "telemetry.go",
+    ],
+    importpath = "github.com/retail-cortex/blitz/pkg/observability",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/config",
+        "//pkg/redact",
+        "@io_opentelemetry_go_contrib_bridges_otelslog//:otelslog",
+        "@io_opentelemetry_go_otel//:otel",
+        "@io_opentelemetry_go_otel//attribute",
+        "@io_opentelemetry_go_otel//codes",
+        "@io_opentelemetry_go_otel//propagation",
+        "@io_opentelemetry_go_otel_exporters_otlp_otlplog_otlploghttp//:otlploghttp",
+        "@io_opentelemetry_go_otel_exporters_otlp_otlptrace_otlptracehttp//:otlptracehttp",
+        "@io_opentelemetry_go_otel_log//global",
+        "@io_opentelemetry_go_otel_sdk//resource",
+        "@io_opentelemetry_go_otel_sdk//trace",
+        "@io_opentelemetry_go_otel_sdk//trace/tracetest",
+        "@io_opentelemetry_go_otel_sdk_log//:log",
+        "@io_opentelemetry_go_otel_trace//:trace",
+    ],
+)
+
+go_test(
+    name = "observability_test",
+    srcs = ["observability_test.go"],
+    embed = [":observability"],
+    deps = [
+        "//pkg/config",
+        "//pkg/redact",
+        "@io_opentelemetry_go_otel//attribute",
+        "@io_opentelemetry_go_otel_sdk//trace",
+        "@io_opentelemetry_go_otel_sdk//trace/tracetest",
+        "@io_opentelemetry_go_otel_sdk_log//:log",
+        "@io_opentelemetry_go_otel_trace//:trace",
+    ],
+)

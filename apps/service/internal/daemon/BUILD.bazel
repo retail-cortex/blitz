@@ -1,0 +1,26 @@
+load("@rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "daemon",
+    srcs = ["daemon.go"],
+    importpath = "github.com/retail-cortex/blitz/apps/service/internal/daemon",
+    visibility = ["//apps/service:__subpackages__"],
+    deps = [
+        "//apps/service/internal/server",
+        "//pkg/config",
+        "//pkg/engine",
+        "//pkg/engine/workers",
+        "//pkg/socket",
+    ],
+)
+
+go_test(
+    name = "daemon_test",
+    srcs = ["daemon_test.go"],
+    embed = [":daemon"],
+    deps = [
+        "//pkg/socket",
+        "//proto/blitz/v1:blitzv1_go_proto",
+        "@com_connectrpc_connect//:connect",
+    ],
+)

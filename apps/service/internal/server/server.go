@@ -20,7 +20,6 @@ import (
 	"github.com/retail-cortex/blitz/pkg/engine/workers"
 	"github.com/retail-cortex/blitz/pkg/images"
 	pb "github.com/retail-cortex/blitz/proto/blitz/v1"
-	"github.com/retail-cortex/blitz/proto/blitz/v1/blitzv1connect"
 )
 
 // Opener opens the workspace in dir, an absolute directory. The server
@@ -78,9 +77,9 @@ func New(open Opener, opts ...Option) *Server {
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	limit := connect.WithReadMaxBytes(maxRequestBytes)
-	mux.Handle(blitzv1connect.NewSessionServiceHandler(sessionService{s}, limit))
-	mux.Handle(blitzv1connect.NewWorkspaceServiceHandler(workspaceService{s}, limit))
-	mux.Handle(blitzv1connect.NewWorkerServiceHandler(workerService{s}, limit))
+	mux.Handle(pb.NewSessionServiceHandler(sessionService{s}, limit))
+	mux.Handle(pb.NewWorkspaceServiceHandler(workspaceService{s}, limit))
+	mux.Handle(pb.NewWorkerServiceHandler(workerService{s}, limit))
 	return mux
 }
 

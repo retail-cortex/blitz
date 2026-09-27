@@ -1,0 +1,25 @@
+load("@rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "images",
+    srcs = [
+        "clipboard.go",
+        "images.go",
+        "mentions.go",
+        "store.go",
+    ],
+    importpath = "github.com/retail-cortex/blitz/pkg/images",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@org_golang_google_genai//:genai",
+        "@org_golang_x_image//draw",
+        "@org_golang_x_image//webp",
+    ],
+)
+
+go_test(
+    name = "images_test",
+    srcs = ["images_test.go"],
+    embed = [":images"],
+    deps = ["@org_golang_google_genai//:genai"],
+)

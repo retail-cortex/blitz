@@ -12,7 +12,6 @@ import (
 
 	"connectrpc.com/connect"
 	pb "github.com/retail-cortex/blitz/proto/blitz/v1"
-	"github.com/retail-cortex/blitz/proto/blitz/v1/blitzv1connect"
 )
 
 // socketDir returns a short directory: Unix socket paths are limited to
@@ -64,7 +63,7 @@ func TestServeOverTheSocket(t *testing.T) {
 	done := make(chan error, 1)
 	go func() { done <- Serve(ctx, l, s.Handler(), time.Second) }()
 
-	c := blitzv1connect.NewWorkspaceServiceClient(socket.Client(path), socket.BaseURL)
+	c := pb.NewWorkspaceServiceClient(socket.Client(path), socket.BaseURL)
 	res, err := c.GetModel(context.Background(), connect.NewRequest(&pb.GetModelRequest{Workspace: t.TempDir()}))
 	if err != nil || res.Msg.Name == "" {
 		t.Fatalf("over the socket: %v %v", res, err)

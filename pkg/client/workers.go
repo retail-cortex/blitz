@@ -9,13 +9,12 @@ import (
 
 	"connectrpc.com/connect"
 	pb "github.com/retail-cortex/blitz/proto/blitz/v1"
-	"github.com/retail-cortex/blitz/proto/blitz/v1/blitzv1connect"
 )
 
 // Workers are one workspace's workers in the service.
 type Workers struct {
 	dir string
-	c   blitzv1connect.WorkerServiceClient
+	c   pb.WorkerServiceClient
 }
 
 // AttachWorkers reaches the workers of the workspace dir (absolute) in the
@@ -26,7 +25,7 @@ func AttachWorkers(sock, dir string) *Workers {
 
 // AttachWorkersHTTP is AttachWorkers over any HTTP client.
 func AttachWorkersHTTP(hc connect.HTTPClient, baseURL, dir string) *Workers {
-	return &Workers{dir: dir, c: blitzv1connect.NewWorkerServiceClient(hc, baseURL)}
+	return &Workers{dir: dir, c: pb.NewWorkerServiceClient(hc, baseURL)}
 }
 
 func (w *Workers) ListWorkers() ([]api.WorkerInfo, error) {

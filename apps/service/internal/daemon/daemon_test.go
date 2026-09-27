@@ -11,7 +11,6 @@ import (
 	"connectrpc.com/connect"
 	"github.com/retail-cortex/blitz/pkg/socket"
 	pb "github.com/retail-cortex/blitz/proto/blitz/v1"
-	"github.com/retail-cortex/blitz/proto/blitz/v1/blitzv1connect"
 )
 
 // The service answers over its socket, opens workspaces on demand,
@@ -40,7 +39,7 @@ func TestRun(t *testing.T) {
 		}
 	}
 
-	c := blitzv1connect.NewWorkspaceServiceClient(socket.Client(sock), socket.BaseURL)
+	c := pb.NewWorkspaceServiceClient(socket.Client(sock), socket.BaseURL)
 	agents, err := c.ListAgents(context.Background(), connect.NewRequest(&pb.ListAgentsRequest{Workspace: t.TempDir()}))
 	if err != nil || len(agents.Msg.Agents) == 0 {
 		t.Fatalf("list agents: %v %v", agents, err)

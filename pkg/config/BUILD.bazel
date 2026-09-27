@@ -1,0 +1,32 @@
+load("@rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "config",
+    srcs = [
+        "agentmodels.go",
+        "config.go",
+        "features.go",
+        "locale.go",
+        "modelsettings.go",
+        "permissions.go",
+    ],
+    importpath = "github.com/retail-cortex/blitz/pkg/config",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_burntsushi_toml//:toml",
+        "@com_github_rrmcguinness_modenv//pkg/modenv",
+    ],
+)
+
+go_test(
+    name = "config_test",
+    srcs = [
+        "agentmodels_test.go",
+        "config_test.go",
+        "locale_test.go",
+        "modelsettings_test.go",
+        "pricing_test.go",
+    ],
+    embed = [":config"],
+    deps = ["@com_github_burntsushi_toml//:toml"],
+)

@@ -18,13 +18,12 @@ import (
 	"github.com/retail-cortex/blitz/pkg/engine/runtime"
 	"github.com/retail-cortex/blitz/pkg/engine/workers"
 	pb "github.com/retail-cortex/blitz/proto/blitz/v1"
-	"github.com/retail-cortex/blitz/proto/blitz/v1/blitzv1connect"
 	"google.golang.org/genai"
 )
 
 // serveWorkers starts a server that runs workers, on mock models answering
 // with replies, and returns a worker client for it.
-func serveWorkers(t *testing.T, rescan time.Duration, replies ...*genai.Content) (blitzv1connect.WorkerServiceClient, *Server) {
+func serveWorkers(t *testing.T, rescan time.Duration, replies ...*genai.Content) (pb.WorkerServiceClient, *Server) {
 	t.Helper()
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("MODENV_PREFIX", "")
@@ -42,7 +41,7 @@ func serveWorkers(t *testing.T, rescan time.Duration, replies ...*genai.Content)
 	ctx, cancel := context.WithCancel(context.Background())
 	s.StartScheduler(ctx)
 	t.Cleanup(func() { cancel(); srv.Close(); s.Close() })
-	return blitzv1connect.NewWorkerServiceClient(http.DefaultClient, srv.URL), s
+	return pb.NewWorkerServiceClient(http.DefaultClient, srv.URL), s
 }
 
 func addWorker(t *testing.T, dir, name, content string) {

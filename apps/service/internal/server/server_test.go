@@ -18,14 +18,13 @@ import (
 	"github.com/retail-cortex/blitz/pkg/engine/runtime"
 	"github.com/retail-cortex/blitz/pkg/images"
 	pb "github.com/retail-cortex/blitz/proto/blitz/v1"
-	"github.com/retail-cortex/blitz/proto/blitz/v1/blitzv1connect"
 	"google.golang.org/adk/v2/model"
 	"google.golang.org/genai"
 )
 
 type clients struct {
-	sessions   blitzv1connect.SessionServiceClient
-	workspaces blitzv1connect.WorkspaceServiceClient
+	sessions   pb.SessionServiceClient
+	workspaces pb.WorkspaceServiceClient
 }
 
 // serve starts a server whose workspaces run on mock models answering with
@@ -54,8 +53,8 @@ func serve(t *testing.T, mutate func(*config.Config), replies ...*genai.Content)
 	srv := httptest.NewServer(s.Handler())
 	t.Cleanup(func() { srv.Close(); s.Close() })
 	return clients{
-		sessions:   blitzv1connect.NewSessionServiceClient(http.DefaultClient, srv.URL),
-		workspaces: blitzv1connect.NewWorkspaceServiceClient(http.DefaultClient, srv.URL),
+		sessions:   pb.NewSessionServiceClient(http.DefaultClient, srv.URL),
+		workspaces: pb.NewWorkspaceServiceClient(http.DefaultClient, srv.URL),
 	}, s
 }
 

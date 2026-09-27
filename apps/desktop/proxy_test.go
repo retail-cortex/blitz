@@ -16,7 +16,6 @@ import (
 	"github.com/retail-cortex/blitz/pkg/engine/runtime"
 	"github.com/retail-cortex/blitz/pkg/socket"
 	pb "github.com/retail-cortex/blitz/proto/blitz/v1"
-	"github.com/retail-cortex/blitz/proto/blitz/v1/blitzv1connect"
 	"google.golang.org/genai"
 )
 
@@ -49,7 +48,7 @@ func TestProxyReachesTheService(t *testing.T) {
 
 	page := httptest.NewServer(serviceProxy(path))
 	defer page.Close()
-	sessions := blitzv1connect.NewSessionServiceClient(http.DefaultClient, page.URL)
+	sessions := pb.NewSessionServiceClient(http.DefaultClient, page.URL)
 	ws := t.TempDir()
 	sess, err := sessions.NewSession(context.Background(), connect.NewRequest(&pb.NewSessionRequest{Workspace: ws}))
 	if err != nil {
@@ -88,7 +87,7 @@ func TestProxyReachesTheService(t *testing.T) {
 func TestProxyWithoutAService(t *testing.T) {
 	page := httptest.NewServer(serviceProxy(filepath.Join(t.TempDir(), "none.sock")))
 	defer page.Close()
-	c := blitzv1connect.NewWorkspaceServiceClient(http.DefaultClient, page.URL)
+	c := pb.NewWorkspaceServiceClient(http.DefaultClient, page.URL)
 	_, err := c.GetModel(context.Background(), connect.NewRequest(&pb.GetModelRequest{Workspace: "/x"}))
 	if connect.CodeOf(err) != connect.CodeUnavailable {
 		t.Errorf("err %v (code %v)", err, connect.CodeOf(err))

@@ -1,0 +1,45 @@
+load("@rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "client",
+    srcs = [
+        "client.go",
+        "convert.go",
+        "workers.go",
+    ],
+    importpath = "github.com/retail-cortex/blitz/pkg/client",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/api",
+        "//pkg/config",
+        "//pkg/i18n",
+        "//pkg/images",
+        "//pkg/socket",
+        "//proto/blitz/v1:blitzv1_go_proto",
+        "@com_connectrpc_connect//:connect",
+        "@org_golang_google_protobuf//types/known/durationpb",
+        "@org_golang_google_protobuf//types/known/timestamppb",
+    ],
+)
+
+go_test(
+    name = "client_test",
+    srcs = [
+        "client_test.go",
+        "leak_test.go",
+    ],
+    embed = [":client"],
+    # Starts commands in the OS sandbox, which can't nest in Bazel's on
+    # macOS.
+    tags = ["no-sandbox"],
+    deps = [
+        "//apps/service/servicetest",
+        "//pkg/api",
+        "//pkg/config",
+        "//pkg/engine",
+        "//pkg/engine/runtime",
+        "@org_golang_google_adk_v2//model",
+        "@org_golang_google_genai//:genai",
+        "@org_uber_go_goleak//:goleak",
+    ],
+)

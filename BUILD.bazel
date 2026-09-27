@@ -1,0 +1,17 @@
+load("@gazelle//:def.bzl", "gazelle")
+
+# gazelle:prefix github.com/retail-cortex/blitz
+# Protos have hand-written rules (proto/blitz/v1): the Connect code is
+# generated into the messages' package.
+# gazelle:proto disable
+# gazelle:resolve go github.com/retail-cortex/blitz/proto/blitz/v1 //proto/blitz/v1:blitzv1_go_proto
+# Not Go, or not this module.
+# gazelle:exclude apps/desktop/web
+# gazelle:exclude apps/desktop/packaging
+# gazelle:exclude tools
+# gazelle:exclude bin
+# gazelle:exclude dist
+
+# `bazel run //:gazelle` writes the Go rules; run it after adding a package
+# or an import.
+gazelle(name = "gazelle")

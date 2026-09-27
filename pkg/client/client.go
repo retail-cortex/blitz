@@ -19,15 +19,14 @@ import (
 	"github.com/retail-cortex/blitz/pkg/i18n"
 	"github.com/retail-cortex/blitz/pkg/images"
 	pb "github.com/retail-cortex/blitz/proto/blitz/v1"
-	"github.com/retail-cortex/blitz/proto/blitz/v1/blitzv1connect"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 // Remote is one workspace in the service.
 type Remote struct {
 	dir        string
-	sessions   blitzv1connect.SessionServiceClient
-	workspaces blitzv1connect.WorkspaceServiceClient
+	sessions   pb.SessionServiceClient
+	workspaces pb.WorkspaceServiceClient
 	// warn reports calls that failed where Backend has no error to return
 	// (a listing comes back empty instead).
 	warn     func(string)
@@ -56,8 +55,8 @@ func AttachHTTP(ctx context.Context, hc connect.HTTPClient, baseURL, dir string,
 	}
 	r := &Remote{
 		dir:        abs,
-		sessions:   blitzv1connect.NewSessionServiceClient(hc, baseURL),
-		workspaces: blitzv1connect.NewWorkspaceServiceClient(hc, baseURL),
+		sessions:   pb.NewSessionServiceClient(hc, baseURL),
+		workspaces: pb.NewWorkspaceServiceClient(hc, baseURL),
 		warn:       warn,
 	}
 	// Opens the workspace in the service, and says whether its model works.

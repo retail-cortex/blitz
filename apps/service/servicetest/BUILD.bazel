@@ -1,0 +1,14 @@
+load("@rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "servicetest",
+    testonly = True,
+    srcs = ["servicetest.go"],
+    importpath = "github.com/retail-cortex/blitz/apps/service/servicetest",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//apps/service/internal/daemon",
+        "//apps/service/internal/server",
+        "//pkg/engine",
+    ],
+)

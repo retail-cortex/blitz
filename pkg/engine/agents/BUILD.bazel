@@ -1,0 +1,34 @@
+load("@rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "agents",
+    srcs = [
+        "frontmatter.go",
+        "manager.go",
+    ],
+    importpath = "github.com/retail-cortex/blitz/pkg/engine/agents",
+    visibility = [
+        # The engine, the service, and the CLI's --local mode; the other
+        # three only in tests (//bazel:deps_test checks libraries).
+        "//apps/cli:__pkg__",
+        "//apps/cli/internal/tui:__pkg__",
+        "//apps/desktop:__pkg__",
+        "//apps/service:__subpackages__",
+        "//pkg/client:__pkg__",
+        "//pkg/engine:__subpackages__",
+    ],
+    deps = [
+        "//pkg/config",
+        "//pkg/engine/agents/builtin",
+        "@in_gopkg_yaml_v3//:yaml_v3",
+    ],
+)
+
+go_test(
+    name = "agents_test",
+    srcs = [
+        "frontmatter_test.go",
+        "manager_test.go",
+    ],
+    embed = [":agents"],
+)
