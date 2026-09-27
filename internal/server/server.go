@@ -173,6 +173,10 @@ func (s *Server) openWorkspace(key string, op *opening) {
 	s.workspaces[key] = op.w
 }
 
+// errTurnRunning refuses to close a workspace while a turn runs in it:
+// closing would cut the turn off, maybe another client's.
+var errTurnRunning = errors.New("a turn is running in this workspace")
+
 // closeWorkspace closes and forgets the workspace for dir, if open.
 func (s *Server) closeWorkspace(dir string) error {
 	key, err := canonical(dir)
@@ -181,6 +185,10 @@ func (s *Server) closeWorkspace(dir string) error {
 	}
 	s.mu.Lock()
 	w, ok := s.workspaces[key]
+	if ok && w.Busy() {
+		s.mu.Unlock()
+		return apiError(connect.CodeFailedPrecondition, "TURN_RUNNING", errTurnRunning, "workspace", dir)
+	}
 	delete(s.workspaces, key)
 	s.mu.Unlock()
 	if !ok {

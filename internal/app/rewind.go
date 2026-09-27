@@ -84,6 +84,14 @@ func (w *Workspace) turnEnded(session string) {
 	}
 }
 
+// Busy reports whether a turn is running in any of the workspace's
+// sessions.
+func (w *Workspace) Busy() bool {
+	w.turnsMu.Lock()
+	defer w.turnsMu.Unlock()
+	return len(w.inTurn) > 0
+}
+
 func (w *Workspace) busy(session string) bool {
 	w.turnsMu.Lock()
 	defer w.turnsMu.Unlock()

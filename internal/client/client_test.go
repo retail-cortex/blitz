@@ -304,6 +304,22 @@ func TestRemoteTasks(t *testing.T) {
 	}
 }
 
+// Reasoning settings survive the trip to the service and back.
+func TestRemoteReasoningSettings(t *testing.T) {
+	r := attach(t, nil)
+	ch, err := r.UpdateModelSettings("gpt-5", false, []app.Setting{{Key: "reasoning_effort", Value: "high"}, {Key: "thinking_budget", Value: "2048"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := ch.Settings
+	if s.ReasoningEffort == nil || *s.ReasoningEffort != "high" || s.ThinkingBudget == nil || *s.ThinkingBudget != 2048 {
+		t.Fatalf("after updating: %+v", s)
+	}
+	if all := r.AllModelSettings(); all["gpt-5"].ReasoningEffort == nil {
+		t.Errorf("all settings lost the effort: %+v", all["gpt-5"])
+	}
+}
+
 func TestRemotePermissionRules(t *testing.T) {
 	r := attach(t, nil)
 	if res, err := r.AddPermissionRule("ask", "Bash(git push *)", false); err != nil || res.Rule != "shell(git push *)" {

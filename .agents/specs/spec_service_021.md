@@ -25,6 +25,7 @@
 - **SVC-10** Every request names its workspace by absolute directory. The server keys workspaces by canonical path (symlinks resolved), opens one on first use with a **fresh configuration per workspace** (a workspace owns and mutates its config), streaming on, warnings to the log, and the shared worker store.
 - **SVC-11** Opening is asynchronous and de-duplicated: callers for the same workspace share one open; other workspaces don't wait. A caller whose context ends gets `Canceled`. After close, requests get `SHUTTING_DOWN`.
 - **SVC-12** The workspace lock ([spec_workspace_018](spec_workspace_018.md) WS-03) means a workspace held by the service can't also be opened by `blitz --local` (`WORKSPACE_BUSY`).
+- **SVC-14** `CloseWorkspace` refuses while a turn runs in any of the workspace's sessions (`TURN_RUNNING`, FailedPrecondition): closing would cut off the turn (maybe another client's), and a turn waiting for an approval would hold the close forever. Closing an idle workspace is safe for workers: the scheduler reopens workspaces when a run is due.
 - **SVC-13** Images: each workspace keeps the 16 most recently used prepared images by ID for later turns (`LoadImage`/`AddImage` return IDs; `Turn.image_ids` refer to them; unknown → `UNKNOWN_IMAGE`).
 
 ## 4. Services
@@ -32,7 +33,7 @@
 | Service | RPCs |
 |---|---|
 | `SessionService` | `ListSessions`, `GetActiveSession`, `NewSession`, `OpenSession`, `LoadSession`, `SaveSnapshot`, `RenameSession`, `RunTurn` (server stream), `Steer`, `Approve`, `Answer`, `GetUsage`, `Compact`, `SearchSession` |
-| `WorkspaceService` | `ListWorkspaces`, `CloseWorkspace`, `GetSandbox`, `ListAgents`, `SetAgent`, `GetModel`, `SetModel`, `PinModel`, `UnpinModel`, `GetModelSettings`, `UpdateModelSettings`, `GetSettings` (includes `permission_mode` and `effort`), `SetSetting`, `SetPermissionMode`, `ListCommands`, `ListPermissionRules`, `AddPermissionRule`, `RemovePermissionRule`, `ListSkills`, `GetSkill`, `ListEnvs`, `RemoveEnv`, `PruneEnvs`, `ListMCPServers`, `ListTools`, `ReloadMemory`, `AddMemory`, `ListLocales`, `SetLocale`, `ListCheckpoints`, `Undo`, `GetDiff`, `ListApprovals`, `RevokeApprovals`, `LoadImage`, `AddImage`, `GetSearchProvider`, `SearchWeb` |
+| `WorkspaceService` | `ListWorkspaces`, `CloseWorkspace`, `GetSandbox`, `ListAgents`, `SetAgent`, `GetModel`, `SetModel`, `PinModel`, `UnpinModel`, `GetModelSettings`, `UpdateModelSettings` (every `[model_settings]` key, including `reasoning_effort` and `thinking_budget`), `GetSettings` (includes `permission_mode` and `effort`), `SetSetting`, `SetPermissionMode`, `ListCommands`, `ListPermissionRules`, `AddPermissionRule`, `RemovePermissionRule`, `ListSkills`, `GetSkill`, `ListEnvs`, `RemoveEnv`, `PruneEnvs`, `ListMCPServers`, `ListTools`, `ReloadMemory`, `AddMemory`, `ListLocales`, `SetLocale`, `ListCheckpoints`, `Undo`, `GetDiff`, `ListApprovals`, `RevokeApprovals`, `LoadImage`, `AddImage`, `GetSearchProvider`, `SearchWeb` |
 | `WorkerService` | `ListWorkers` (one workspace or every registered one), `EnableWorker`, `DisableWorker`, `RunWorker`, `ListWorkerRuns`, `GetWorkerRun`, `WatchWorkerRun` (server stream) |
 
 ## 5. Turns over the stream

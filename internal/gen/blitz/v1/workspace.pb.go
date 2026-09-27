@@ -1031,13 +1031,17 @@ func (x *UnpinModelResponse) GetSaved() *Saved {
 // ModelSettings are a model's generation settings; unset fields use the
 // global value or the provider's default.
 type ModelSettings struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Temperature   *float64               `protobuf:"fixed64,1,opt,name=temperature,proto3,oneof" json:"temperature,omitempty"`
-	MaxTokens     *int32                 `protobuf:"varint,2,opt,name=max_tokens,json=maxTokens,proto3,oneof" json:"max_tokens,omitempty"`
-	TopP          *float64               `protobuf:"fixed64,3,opt,name=top_p,json=topP,proto3,oneof" json:"top_p,omitempty"`
-	Seed          *int32                 `protobuf:"varint,4,opt,name=seed,proto3,oneof" json:"seed,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	Temperature *float64               `protobuf:"fixed64,1,opt,name=temperature,proto3,oneof" json:"temperature,omitempty"`
+	MaxTokens   *int32                 `protobuf:"varint,2,opt,name=max_tokens,json=maxTokens,proto3,oneof" json:"max_tokens,omitempty"`
+	TopP        *float64               `protobuf:"fixed64,3,opt,name=top_p,json=topP,proto3,oneof" json:"top_p,omitempty"`
+	Seed        *int32                 `protobuf:"varint,4,opt,name=seed,proto3,oneof" json:"seed,omitempty"`
+	// minimal, low, medium, high or max.
+	ReasoningEffort *string `protobuf:"bytes,5,opt,name=reasoning_effort,json=reasoningEffort,proto3,oneof" json:"reasoning_effort,omitempty"`
+	// Tokens the model may spend thinking; 0 turns thinking off.
+	ThinkingBudget *int32 `protobuf:"varint,6,opt,name=thinking_budget,json=thinkingBudget,proto3,oneof" json:"thinking_budget,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *ModelSettings) Reset() {
@@ -1094,6 +1098,20 @@ func (x *ModelSettings) GetTopP() float64 {
 func (x *ModelSettings) GetSeed() int32 {
 	if x != nil && x.Seed != nil {
 		return *x.Seed
+	}
+	return 0
+}
+
+func (x *ModelSettings) GetReasoningEffort() string {
+	if x != nil && x.ReasoningEffort != nil {
+		return *x.ReasoningEffort
+	}
+	return ""
+}
+
+func (x *ModelSettings) GetThinkingBudget() int32 {
+	if x != nil && x.ThinkingBudget != nil {
+		return *x.ThinkingBudget
 	}
 	return 0
 }
@@ -5460,17 +5478,21 @@ const file_blitz_v1_workspace_proto_rawDesc = "" +
 	"\x12UnpinModelResponse\x12\x14\n" +
 	"\x05agent\x18\x01 \x01(\tR\x05agent\x12\x14\n" +
 	"\x05model\x18\x02 \x01(\tR\x05model\x12%\n" +
-	"\x05saved\x18\x03 \x01(\v2\x0f.blitz.v1.SavedR\x05saved\"\xbf\x01\n" +
+	"\x05saved\x18\x03 \x01(\v2\x0f.blitz.v1.SavedR\x05saved\"\xc6\x02\n" +
 	"\rModelSettings\x12%\n" +
 	"\vtemperature\x18\x01 \x01(\x01H\x00R\vtemperature\x88\x01\x01\x12\"\n" +
 	"\n" +
 	"max_tokens\x18\x02 \x01(\x05H\x01R\tmaxTokens\x88\x01\x01\x12\x18\n" +
 	"\x05top_p\x18\x03 \x01(\x01H\x02R\x04topP\x88\x01\x01\x12\x17\n" +
-	"\x04seed\x18\x04 \x01(\x05H\x03R\x04seed\x88\x01\x01B\x0e\n" +
+	"\x04seed\x18\x04 \x01(\x05H\x03R\x04seed\x88\x01\x01\x12.\n" +
+	"\x10reasoning_effort\x18\x05 \x01(\tH\x04R\x0freasoningEffort\x88\x01\x01\x12,\n" +
+	"\x0fthinking_budget\x18\x06 \x01(\x05H\x05R\x0ethinkingBudget\x88\x01\x01B\x0e\n" +
 	"\f_temperatureB\r\n" +
 	"\v_max_tokensB\b\n" +
 	"\x06_top_pB\a\n" +
-	"\x05_seed\"\xd5\x01\n" +
+	"\x05_seedB\x13\n" +
+	"\x11_reasoning_effortB\x12\n" +
+	"\x10_thinking_budget\"\xd5\x01\n" +
 	"\x11ModelSettingsInfo\x12\x14\n" +
 	"\x05model\x18\x01 \x01(\tR\x05model\x12\x1a\n" +
 	"\bprovider\x18\x02 \x01(\tR\bprovider\x123\n" +

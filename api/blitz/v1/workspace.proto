@@ -223,6 +223,10 @@ message ModelSettings {
   optional int32 max_tokens = 2;
   optional double top_p = 3;
   optional int32 seed = 4;
+  // minimal, low, medium, high or max.
+  optional string reasoning_effort = 5;
+  // Tokens the model may spend thinking; 0 turns thinking off.
+  optional int32 thinking_budget = 6;
 }
 
 // ModelSettingsInfo is one model's settings and what applies otherwise.

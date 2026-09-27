@@ -148,3 +148,35 @@ func TestCancellingWhileAnApprovalWaits(t *testing.T) {
 		t.Error("the write happened without approval")
 	}
 }
+
+// A workspace isn't closed while a turn runs in it: that would cut the
+// turn off, maybe another client's.
+func TestCloseWaitsForRunningTurns(t *testing.T) {
+	c, s := serve(t, nil, call("create_file", map[string]any{"path": "a.txt", "content": "a"}), genai.NewContentFromText("ok", genai.RoleModel))
+	dir := t.TempDir()
+	ctx := context.Background()
+	sess, err := c.sessions.NewSession(ctx, connect.NewRequest(&pb.NewSessionRequest{Workspace: dir}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	stream, err := c.sessions.RunTurn(ctx, connect.NewRequest(&pb.RunTurnRequest{Workspace: dir, SessionId: sess.Msg.Session.Id, Turn: &pb.Turn{Text: "go"}}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for stream.Receive() {
+		ev := stream.Msg().Event
+		if ar := ev.GetApprovalRequest(); ar != nil { // the turn waits here
+			_, cerr := c.workspaces.CloseWorkspace(ctx, connect.NewRequest(&pb.CloseWorkspaceRequest{Workspace: dir}))
+			if code, info := errorReason(t, cerr); code != connect.CodeFailedPrecondition || info.Reason != "TURN_RUNNING" {
+				t.Errorf("closing during a turn: %v %v", code, info)
+			}
+			c.sessions.Approve(ctx, connect.NewRequest(&pb.ApproveRequest{Workspace: dir, RequestId: ar.RequestId, Decision: pb.Decision_DECISION_DENY}))
+		}
+	}
+	if _, err := c.workspaces.CloseWorkspace(ctx, connect.NewRequest(&pb.CloseWorkspaceRequest{Workspace: dir})); err != nil {
+		t.Fatalf("closing after the turn: %v", err)
+	}
+	if got := s.openDirs(); len(got) != 0 {
+		t.Errorf("still open: %v", got)
+	}
+}

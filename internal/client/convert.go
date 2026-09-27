@@ -165,6 +165,11 @@ func modelSettings(s *pb.ModelSettings) config.ModelSettings {
 		v := int(*s.Seed)
 		out.Seed = &v
 	}
+	out.ReasoningEffort = s.ReasoningEffort
+	if s.ThinkingBudget != nil {
+		v := int(*s.ThinkingBudget)
+		out.ThinkingBudget = &v
+	}
 	return out
 }
 

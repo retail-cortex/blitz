@@ -70,6 +70,11 @@ func modelSettingsMsg(s config.ModelSettings) *pb.ModelSettings {
 		v := int32(*s.Seed)
 		out.Seed = &v
 	}
+	out.ReasoningEffort = s.ReasoningEffort
+	if s.ThinkingBudget != nil {
+		v := int32(*s.ThinkingBudget)
+		out.ThinkingBudget = &v
+	}
 	return out
 }
 
