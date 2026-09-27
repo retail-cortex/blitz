@@ -47,6 +47,7 @@ The `Engine` wraps the Google ADK runner (`google.golang.org/adk/v2`). It builds
 
 - **ENG-40** `Steer(session, text)` queues a message. The next tool result **of that session's own turn** (not a sub-agent's session) carries queued messages under `message_from_user` (a string for one, an array for several), so the model reads them before its next step without interrupting anything; the history keeps them where they arrived. A tool error is preserved in the result's `error` field. A trace event `steer` records the count.
 - **ENG-41** `TakeSteers(session)` removes and returns messages no tool result carried (the model finished without another tool call); the front end sends them as the next prompt (`Turn.Accepted`) or drops them if the turn was interrupted.
+- **ENG-43** Path-scoped rules ride on tool results the same way, under `project_rules` ([spec_memory_012](spec_memory_012.md) MEM-07); when both apply, rules come first and steer messages are added to the same result.
 - **ENG-42** Rationale (decision): ADK model callbacks cannot add session events, so tool results are the channel that reaches both the model and the history.
 
 ## 6. Side questions (`/btw`)

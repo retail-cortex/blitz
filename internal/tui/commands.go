@@ -154,6 +154,7 @@ func printHelp() {
 		{"/context", "help.context"},
 		{"/compact [focus]", "help.compact"},
 		{"/memory [reload|add <note>]", "help.memory"},
+		{"/init", "help.init"},
 		{"/approvals [revoke <n>|clear]", "help.approvals"},
 		{"/mcp", "help.mcp"},
 		{"/tools", "help.tools"},

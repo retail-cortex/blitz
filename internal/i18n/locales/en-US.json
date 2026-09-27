@@ -97,6 +97,8 @@
     "memory.loaded": "Loaded instructions:",
     "memory.added": "Remembered in {path}",
     "memory.usage": "Usage: /memory [show|reload|add <note>]",
+    "help.init": "Have the agent write or update BLITZ.md from what it finds in the repository",
+    "memory.local_tracked": "{path} is a personal instructions file but git tracks it; it will be shared with everyone who clones the repository",
     "approvals.revoke_usage": "Usage: /approvals revoke <number>  (see /approvals)",
     "approvals.revoked.one": "Revoked {count} rule.",
     "approvals.revoked.other": "Revoked {count} rules.",

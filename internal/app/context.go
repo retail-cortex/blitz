@@ -89,13 +89,17 @@ func (w *Workspace) MemoryFiles() []string { return w.cfg.Memory.Files }
 // ReloadMemory re-reads project instruction files into the engine and
 // returns their paths.
 func (w *Workspace) ReloadMemory(ctx context.Context) ([]string, error) {
-	w.memory = memory.Load(w.Dir(), w.cfg.Memory)
+	w.loadMemory()
+	w.engine.SetScopedRules(w.memory.Rules)
 	if err := w.engine.SetInstructions(ctx, w.instructions()); err != nil {
 		return nil, err
 	}
-	paths := make([]string, len(w.memory))
-	for i, d := range w.memory {
-		paths[i] = d.Path
+	var paths []string
+	for _, d := range w.memory.Docs {
+		paths = append(paths, d.Path)
+	}
+	for _, r := range w.memory.Rules {
+		paths = append(paths, r.Path+" ("+strings.Join(r.Paths, ", ")+")")
 	}
 	return paths, nil
 }

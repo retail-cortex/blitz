@@ -261,6 +261,17 @@ func RunREPL(ctx context.Context, app *App) error {
 			}
 			continue
 		}
+		if line == "/init" {
+			active, ok := app.Workspace.ActiveSession()
+			if !ok {
+				fmt.Printf("%s✗ %s%s\n", Red, i18n.T("session.none_active"), Reset)
+				continue
+			}
+			runTurn(ctx, app, active.ID, line, interrupts, turnOptions{prompt: runtime.InitPrompt()})
+			// The new BLITZ.md applies from the next prompt.
+			cmdMemory(ctx, []string{"reload"}, app)
+			continue
+		}
 		if rest, ok := strings.CutPrefix(line, "/search"); ok && (rest == "" || rest[0] == ' ') {
 			active, ok := app.Workspace.ActiveSession()
 			if !ok {

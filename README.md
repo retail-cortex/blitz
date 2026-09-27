@@ -94,7 +94,8 @@ Subcommands: `doctor [--online]`, `config init|show|path`, `completion bash|zsh|
 | `/diff [git]` | Everything tools changed this session (or `git diff`) |
 | `/cost`, `/context` | Token usage (including cache reads and writes), estimated cost, context size vs. compaction threshold |
 | `/compact [focus]` | Summarize everything before the latest turn now; the focus says what to keep |
-| `/memory [reload\|add <note>]` | Project instructions (`AGENTS.md`, `BLITZ.md`) |
+| `/memory [reload\|add <note>]` | Project instructions (`AGENTS.md`, `CLAUDE.md`, `GEMINI.md`, `BLITZ.md`, rules) |
+| `/init` | Have the agent write or update `BLITZ.md` from what it finds in the repository (also `blitz init`) |
 | `/approvals [revoke <n>\|clear]` | Remembered approval rules |
 | `/session list [--all]\|new\|load <id\|name>`, `/resume <id\|name>` | Saved sessions — scoped to the current workspace; `--all` shows every directory |
 | `/envs [prune\|remove <key>]` | Python environments of skill scripts: size, packages, which skills use them; `prune` removes the unused |
@@ -181,7 +182,7 @@ On Linux, install `bubblewrap` and allow unprivileged user namespaces. Ubuntu 24
 
 ## Extending
 
-**Project memory** — `AGENTS.md` / `BLITZ.md` from the repository root down to the workspace, plus `~/.blitz/BLITZ.md`, are added to the agents' instructions. They can't grant permissions.
+**Project memory** — `AGENTS.md`, `CLAUDE.md`, `GEMINI.md` and `BLITZ.md` from the repository root down to the workspace, plus `~/.blitz/BLITZ.md`, are added to the agents' instructions, so a repository set up for another agent works unchanged (a copy with the same content loads once). `BLITZ.local.md` and `CLAUDE.local.md` are personal (Blitz warns if git tracks them). A line can import another file with `@docs/style.md`: relative to the file, at most 5 deep, never from outside the repository (or `~/.blitz` for your own files) and never a blocked path such as `.env`. Rule files in `.blitz/rules/`, `.agents/rules/`, `.claude/rules/` and `~/.blitz/rules/` load too; one with frontmatter `paths: ["src/api/**/*.go"]` is given to the agent only when it first reads or edits a matching file. None of these can grant permissions. (A config written by an older `blitz config init` lists `files` explicitly; add the new names there.)
 
 **MCP servers**
 ```toml

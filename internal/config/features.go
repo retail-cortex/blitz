@@ -36,6 +36,14 @@ type MemoryConfig struct {
 	Files    []string `toml:"files"`     // names searched from the workspace up to the repo root
 	Global   string   `toml:"global"`    // user-wide instructions file
 	MaxBytes int      `toml:"max_bytes"` // per file
+	// LocalFiles are personal instruction files (not to be committed),
+	// loaded after Files in each directory.
+	LocalFiles []string `toml:"local_files"`
+	// RuleDirs hold rule files (*.md), relative to each directory from the
+	// repo root to the workspace; a rule with frontmatter "paths" applies
+	// only to matching files. GlobalRules is the user's own rule directory.
+	RuleDirs    []string `toml:"rule_dirs"`
+	GlobalRules string   `toml:"global_rules"`
 }
 
 // ContextConfig controls conversation compaction.
@@ -227,10 +235,16 @@ func applyFeatureDefaults(c *Config) {
 		LocalesDir:    filepath.Join(dir, "locales"),
 	}
 	c.Memory = MemoryConfig{
-		Enabled:  true,
-		Files:    []string{"AGENTS.md", "BLITZ.md"},
-		Global:   filepath.Join(dir, "BLITZ.md"),
-		MaxBytes: 32 * 1024,
+		Enabled: true,
+		// CLAUDE.md and GEMINI.md too, so a repository set up for another
+		// agent works unchanged. BLITZ.md stays last: /memory add appends to
+		// the last file.
+		Files:       []string{"AGENTS.md", "CLAUDE.md", "GEMINI.md", "BLITZ.md"},
+		LocalFiles:  []string{"CLAUDE.local.md", "BLITZ.local.md"},
+		RuleDirs:    []string{".blitz/rules", ".agents/rules", ".claude/rules"},
+		Global:      filepath.Join(dir, "BLITZ.md"),
+		GlobalRules: filepath.Join(dir, "rules"),
+		MaxBytes:    32 * 1024,
 	}
 	c.Context = ContextConfig{Compaction: true, TokenThreshold: 120_000, RetainEvents: 20}
 	c.Tools.ApprovalsFile = filepath.Join(dir, "approvals.json")

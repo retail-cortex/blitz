@@ -161,7 +161,9 @@ retain_days   = 30      # delete stored images unused for this long
 
 [memory]
 enabled = true
-files   = ["AGENTS.md", "BLITZ.md"]
+files   = ["AGENTS.md", "CLAUDE.md", "GEMINI.md", "BLITZ.md"]   # from the repository root down to the workspace
+# local_files = ["CLAUDE.local.md", "BLITZ.local.md"]            # personal, not committed
+# rule_dirs   = [".blitz/rules", ".agents/rules", ".claude/rules"]   # *.md; frontmatter "paths" scopes a rule
 
 [context]
 compaction      = true

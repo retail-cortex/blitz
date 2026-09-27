@@ -56,6 +56,7 @@ type oneShotOptions struct {
 	sessionID  string
 	format     string
 	maxTurns   int
+	sendPrompt string        // sent instead of prompt, which is recorded
 	maxCostUSD float64       // --max-cost-usd (0: unlimited)
 	timeout    time.Duration // --timeout (0: unlimited)
 	plan       bool          // --plan: read-only tools, answer with a plan
@@ -93,7 +94,7 @@ func runOneShot(ctx context.Context, w app.Backend, o oneShotOptions) error {
 		handler = collectHandler(&calls)
 	}
 	turn, runErr := w.Run(ctx, sid, app.Turn{
-		Text: o.prompt, Plan: o.plan, Images: o.images, MaxTurns: o.maxTurns, MaxCostUSD: o.maxCostUSD, Timeout: o.timeout,
+		Text: o.prompt, Prompt: o.sendPrompt, Plan: o.plan, Images: o.images, MaxTurns: o.maxTurns, MaxCostUSD: o.maxCostUSD, Timeout: o.timeout,
 		OnAccepted: func() {
 			if printer != nil {
 				printer.Begin()

@@ -53,7 +53,7 @@ type Workspace struct {
 	engine   *runtime.Engine
 	storage  *session.Storage
 	audit    *audit.Logger
-	memory   []memory.Doc
+	memory   memory.Loaded
 	locales  *i18n.Bundle
 	modelErr error // set when the configured model failed to initialise
 	warn     func(string)
@@ -168,8 +168,13 @@ func Open(ctx context.Context, cfg *config.Config, o Options) (*Workspace, error
 		}
 	}
 
-	w.memory = memory.Load(w.tools.Workspace().Dir(), cfg.Memory)
-	opts := []runtime.Option{runtime.WithSessionService(events)}
+	w.loadMemory()
+	for _, d := range w.memory.Docs {
+		if d.Local && memory.TrackedByGit(d.Path) {
+			o.Warn(i18n.T("memory.local_tracked", "path", d.Path))
+		}
+	}
+	opts := []runtime.Option{runtime.WithSessionService(events), runtime.WithScopedRules(w.memory.Rules)}
 	for agent, ref := range agentModelRefs(cfg, w.agents, o.Warn) {
 		m, err := w.newModel(ctx, cfg, ref)
 		if err != nil {
@@ -273,7 +278,17 @@ func (w *Workspace) LoadAttachments(paths []string, prompt string, warn func(str
 // instructions are the extra system instructions: project memory plus, for
 // non-English locales, which language to reply in.
 func (w *Workspace) instructions() string {
-	return memory.Render(w.memory) + i18n.ReplyInstruction(w.reply)
+	return memory.Render(w.memory.Docs, len(w.memory.Rules) > 0) + i18n.ReplyInstruction(w.reply)
+}
+
+// loadMemory reads instruction files and rules; imports of blocked paths
+// (.env, keys) are never read into the prompt.
+func (w *Workspace) loadMemory() {
+	blocked := w.tools.Workspace().Blocked()
+	w.memory = memory.LoadAll(w.Dir(), w.cfg.Memory, memory.Options{Blocked: func(p string) bool {
+		_, b := blocked.Match(p)
+		return b
+	}})
 }
 
 // agentModelRefs returns the model each agent should run on when it isn't

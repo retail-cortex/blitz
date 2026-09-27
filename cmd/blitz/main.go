@@ -42,6 +42,9 @@ type rootOptions struct {
 	// requirePrompt: a run without a prompt is a usage error (exec),
 	// rather than the interactive session.
 	requirePrompt bool
+	// sendPrompt, if set, is sent to the agent instead of the prompt,
+	// which the transcript records (blitz init records "/init").
+	sendPrompt string
 }
 
 func main() {
@@ -91,7 +94,7 @@ Exit codes: 0 success, 1 error, 2 usage, 3 --max-turns reached,
 	f.BoolVarP(&o.version, "version", "v", false, "Print Blitz version")
 	addRunFlags(f, o)
 
-	root.AddCommand(newExecCommand(o), newDoctorCommand(&o.global), newConfigCommand(&o.global), newServeCommand(&o.global), newWorkersCommand(&o.global), newServiceCommand())
+	root.AddCommand(newExecCommand(o), newInitCommand(o), newDoctorCommand(&o.global), newConfigCommand(&o.global), newServeCommand(&o.global), newWorkersCommand(&o.global), newServiceCommand())
 	return root
 }
 
@@ -112,6 +115,22 @@ func addRunFlags(f *pflag.FlagSet, o *rootOptions) {
 	f.BoolVar(&o.plan, "plan", false, "One-shot plan: the agent may read and search but not edit or run commands")
 	f.BoolVar(&o.local, "local", false, "Run the workspace in this process even when the Blitz service is running")
 	f.StringArrayVar(&o.images, "image", nil, "Attach an image to the first prompt (repeatable); @file.png in a prompt also works")
+}
+
+// newInitCommand is `blitz init`: the agent writes or updates BLITZ.md, as
+// /init does in a session.
+func newInitCommand(root *rootOptions) *cobra.Command {
+	o := &rootOptions{requirePrompt: true, outputFormat: formatText}
+	return &cobra.Command{
+		Use:   "init",
+		Short: "Have the agent write or update BLITZ.md, the project's instructions",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			o.global = root.global // persistent flags (--dir, --config)
+			o.prompt, o.sendPrompt = "/init", runtime.InitPrompt()
+			return runRoot(cmd, o, nil)
+		},
+	}
 }
 
 // newExecCommand is `blitz exec <prompt>`: one run, then exit, as
@@ -272,7 +291,7 @@ func runRoot(cmd *cobra.Command, o *rootOptions, args []string) (err error) {
 		}
 		return runOneShot(ctx, w, oneShotOptions{
 			prompt: prompt, sessionID: sess.ID, format: o.outputFormat, maxTurns: o.maxTurns, plan: o.plan,
-			maxCostUSD: o.maxCostUSD, timeout: o.timeout,
+			maxCostUSD: o.maxCostUSD, timeout: o.timeout, sendPrompt: o.sendPrompt,
 			input: input, stdinTTY: stdinTTY && !stdinUsed, stdout: os.Stdout,
 			markdown: pretty && cfg.UI.Markdown, spinner: pretty && cfg.UI.Spinner, width: terminalWidth(),
 			usageLines: pretty, images: attached, theme: cfg.UI.Theme,
@@ -344,7 +363,7 @@ func newCompleter(w app.Backend) *tui.Completer {
 	c := tui.NewCompleter(w.Dir())
 	for _, cmd := range []string{"help", "agents", "model", "skills", "session", "set", "clear", "sandbox", "exit", "quit",
 		"undo", "checkpoints", "diff", "cost", "context", "compact", "memory", "approvals", "mcp", "resume", "locale", "attach", "paste",
-		"tools", "plan", "show", "pin_model", "unpin", "model_settings", "search", "btw", "rename", "envs"} {
+		"tools", "plan", "show", "init", "pin_model", "unpin", "model_settings", "search", "btw", "rename", "envs"} {
 		c.Command(cmd)
 	}
 	c.Command("skills", "list", "show", "search")

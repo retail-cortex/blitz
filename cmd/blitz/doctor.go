@@ -256,12 +256,16 @@ func runDoctor(ctx context.Context, g *globalFlags, online bool) []check {
 		add("audit log", statusWarn, "disabled")
 	}
 
-	if docs := memory.Load(config.ExpandHome(cfg.Tools.WorkspaceDir), cfg.Memory); len(docs) > 0 {
+	if mem := memory.LoadAll(config.ExpandHome(cfg.Tools.WorkspaceDir), cfg.Memory); len(mem.Docs)+len(mem.Rules) > 0 {
 		var paths []string
-		for _, d := range docs {
+		for _, d := range mem.Docs {
 			paths = append(paths, d.Path)
 		}
-		add("project memory", statusOK, "%s", strings.Join(paths, ", "))
+		detail := strings.Join(paths, ", ")
+		if len(mem.Rules) > 0 {
+			detail += fmt.Sprintf(" (+%d path-scoped rules)", len(mem.Rules))
+		}
+		add("project memory", statusOK, "%s", detail)
 	} else {
 		add("project memory", statusOK, "none found (%s)", strings.Join(cfg.Memory.Files, ", "))
 	}

@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/retail-cortex/blitz/internal/config"
+	"github.com/retail-cortex/blitz/internal/textutil"
 )
 
 // PathMatcher matches absolute paths against blocked-path glob patterns.
@@ -121,31 +122,9 @@ func (m *PathMatcher) Patterns() []string {
 	return out
 }
 
-// globToRegex converts a slash-separated glob to an unanchored regex body using
-// only syntax understood by both Go and the macOS sandbox profile language.
-func globToRegex(glob string) string {
-	var sb strings.Builder
-	for i := 0; i < len(glob); i++ {
-		c := glob[i]
-		switch {
-		case c == '*' && i+1 < len(glob) && glob[i+1] == '*':
-			i++
-			if i+1 < len(glob) && glob[i+1] == '/' {
-				i++
-				sb.WriteString("(.*/)?")
-			} else {
-				sb.WriteString(".*")
-			}
-		case c == '*':
-			sb.WriteString("[^/]*")
-		case c == '?':
-			sb.WriteString("[^/]")
-		default:
-			sb.WriteString(regexp.QuoteMeta(string(c)))
-		}
-	}
-	return sb.String()
-}
+// globToRegex converts a slash-separated glob to an unanchored regex body
+// (see textutil.GlobToRegex).
+func globToRegex(glob string) string { return textutil.GlobToRegex(glob) }
 
 // canonicalGlobPrefix resolves symlinks in the literal (glob-free) directory
 // prefix of an absolute pattern, so "/var/x" also matches "/private/var/x".

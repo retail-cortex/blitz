@@ -138,6 +138,8 @@ type Engine struct {
 	settingsMu sync.RWMutex
 	settings   map[string]config.ModelSettings // model name -> [model_settings]
 
+	scoped scopedRules // path-scoped project rules
+
 	fallbackMu sync.Mutex
 	fallbackBy string // fallback model answering now; "" when the primary is
 
@@ -503,8 +505,16 @@ func (e *Engine) afterTool(ctx agent.Context, t tool.Tool, args, result map[stri
 		entry.Decision, entry.Error = "error", msg
 	}
 	e.toolReg.Hooks().Audit().Log(entry)
-	if r := e.attachSteers(ctx, result, toolErr); r != nil {
-		return r, nil
+	out := result
+	changed := false
+	if r := e.attachRules(ctx, t.Name(), args, out, toolErr); r != nil {
+		out, changed = r, true
+	}
+	if r := e.attachSteers(ctx, out, toolErr); r != nil {
+		out, changed = r, true
+	}
+	if changed {
+		return out, nil
 	}
 	return nil, nil
 }
