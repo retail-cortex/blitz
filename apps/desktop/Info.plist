@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Embedded in the app's executable (__TEXT,__info_plist), so it has a
+     bundle identifier even run outside Blitz.app (bazel run): macOS's
+     open-panel service won't serve a host without one. Blitz.app's own
+     Info.plist (packaging/darwin) takes precedence inside the bundle. -->
+<plist version="1.0">
+<dict>
+	<key>CFBundleIdentifier</key>
+	<string>dev.blitz.desktop</string>
+	<key>CFBundleName</key>
+	<string>Blitz</string>
+	<key>CFBundleDisplayName</key>
+	<string>Blitz</string>
+	<key>CFBundleExecutable</key>
+	<string>blitz-desktop</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>0.0.0</string>
+	<key>CFBundleVersion</key>
+	<string>0.0.0</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>13.0.0</string>
+	<key>NSHighResolutionCapable</key>
+	<true/>
+</dict>
+</plist>
