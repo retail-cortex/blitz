@@ -30,3 +30,14 @@ export interface LoadSessionDetail {
 export function loadSession(detail: LoadSessionDetail) {
   window.dispatchEvent(new CustomEvent(loadSessionEvent, { detail }));
 }
+
+// The settings changed (a key, a provider, a settings file): workspaces
+// ask again whether their model works. dir is the workspace whose own
+// settings changed, or "" for the global ones (every workspace).
+export const configChangedEvent = "blitz:config-changed";
+export interface ConfigChangedDetail {
+  dir: string;
+}
+export function configChanged(detail: ConfigChangedDetail) {
+  window.dispatchEvent(new CustomEvent(configChangedEvent, { detail }));
+}

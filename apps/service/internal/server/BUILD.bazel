@@ -4,6 +4,7 @@ go_library(
     name = "server",
     srcs = [
         "broker.go",
+        "config.go",
         "convert.go",
         "listen.go",
         "scheduler.go",
@@ -33,6 +34,7 @@ go_test(
     name = "server_test",
     srcs = [
         "broker_test.go",
+        "config_test.go",
         "info_test.go",
         "leak_test.go",
         "listen_test.go",
@@ -47,6 +49,7 @@ go_test(
         "//pkg/engine/runtime",
         "//pkg/engine/workers",
         "//pkg/images",
+        "//pkg/secrets",
         "//pkg/socket",
         "//proto/blitz/v1:blitzv1_go_proto",
         "@com_connectrpc_connect//:connect",

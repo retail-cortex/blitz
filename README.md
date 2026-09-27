@@ -38,7 +38,7 @@ Download an archive from the [releases](https://github.com/retail-cortex/blitz/r
 ```bash
 bazel build //apps/cli:blitz //apps/service:blitzd   # -> bazel-bin/apps/{cli,service}/…
 blitz config init               # writes a commented ~/.blitz/.env.toml (mode 600)
-export GEMINI_API_KEY=...       # or ANTHROPIC_API_KEY / OPENAI_API_KEY; or set it in the config file
+blitz config set-key gemini     # stores the key in the OS keychain (or export GEMINI_API_KEY=...)
 blitz doctor                    # checks config, credentials, sandbox, MCP, hooks
 blitz                           # interactive session
 ```
@@ -46,6 +46,8 @@ blitz                           # interactive session
 **Providers.** Set `llm.provider` to `gemini` (default), `anthropic`, `openai`, or `ollama`; the model comes from `llm.<provider>.model` unless `blitz.default_model` or `--model` overrides it. Anthropic defaults to `claude-opus-5` with streaming, prompt caching of the system prompt, thinking preserved across tool calls, and server-side refusal fallback (`llm.anthropic.fallbacks = "default"`, or `"off"`). Without `api_key` it uses `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`, or an `ant auth login` profile.
 
 Configuration is read only from `~/.blitz/.env.toml`, `$MODENV_PREFIX`, or `--config DIR`. A `.env.toml` inside a project is **ignored** unless you pass `--config .` — a cloned repository must not be able to redirect your API key or turn off approvals.
+
+**API keys and per-workspace settings.** `blitz config set-key <provider>` reads a key from stdin and keeps it in the OS keychain (macOS Keychain; the Secret Service on Linux; else an owner-only `~/.blitz/secrets.toml`); the settings file only refers to it (`api_key = "keychain:…"`). `blitz config keys` shows where each provider's key comes from, `secure-key` moves a key written in the file into the keychain, and `remove-key` removes one. With `--workspace` (`-w`) they work on the current workspace's own settings, kept in `~/.blitz/workspaces/<name>-<hash>/.env.toml` (never in the project) and laid over the global ones: a project can use its own key or provider. The desktop app edits all of this in **Settings → Providers & keys** and **Settings file**, and each workspace's keys in its run settings.
 
 ---
 
@@ -389,7 +391,7 @@ limits: { max_turns: 30, max_cost_usd: 0.50, timeout: 20m }
 Check for outdated Go modules and write reports/deps.md.
 ```
 
-Optional `agent:` and `model:` run the worker as another agent or on another model, for its runs only. `blitz workers` lists them; `blitz workers enable <name>` shows exactly what you're approving and enables that content (an edit disables it again); `workers run <name>` runs one now; `workers runs <name>` shows its history. A worker may only do what its `permissions` allow (`shell:`, `write:`, `delete:`, `web:`, `mcp:`), capped by `[workers.policy]`; anything else is refused and recorded, and it can't ask questions. Each run is a session of its own you can open with `/resume`. `blitz service install` starts the service at every login (a launchd agent on macOS, a systemd user unit on Linux), so workers keep their schedules; keep API keys in `~/.blitz/.env.toml`, since a login item doesn't see your shell's environment.
+Optional `agent:` and `model:` run the worker as another agent or on another model, for its runs only. `blitz workers` lists them; `blitz workers enable <name>` shows exactly what you're approving and enables that content (an edit disables it again); `workers run <name>` runs one now; `workers runs <name>` shows its history. A worker may only do what its `permissions` allow (`shell:`, `write:`, `delete:`, `web:`, `mcp:`), capped by `[workers.policy]`; anything else is refused and recorded, and it can't ask questions. Each run is a session of its own you can open with `/resume`. `blitz service install` starts the service at every login (a launchd agent on macOS, a systemd user unit on Linux), so workers keep their schedules; keep API keys in the keychain (`blitz config set-key`) or `~/.blitz/.env.toml`, since a login item doesn't see your shell's environment.
 
 ## Build, Test, Release
 

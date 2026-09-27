@@ -4,6 +4,7 @@
 // service instead (see dev/fake.ts).
 import { createClient, type Interceptor, type Transport } from "@connectrpc/connect";
 import { createConnectTransport } from "@connectrpc/connect-web";
+import { ConfigService } from "./gen/blitz/v1/config_pb";
 import { SessionService } from "./gen/blitz/v1/session_pb";
 import { WorkerService } from "./gen/blitz/v1/worker_pb";
 import { WorkspaceService } from "./gen/blitz/v1/workspace_pb";
@@ -46,6 +47,7 @@ const make = () => ({
   sessions: createClient(SessionService, transport),
   workspaces: createClient(WorkspaceService, transport),
   workers: createClient(WorkerService, transport),
+  config: createClient(ConfigService, transport),
 });
 let clients = make();
 
@@ -53,3 +55,4 @@ let clients = make();
 export const sessions = new Proxy({} as ReturnType<typeof make>["sessions"], { get: (_, k) => Reflect.get(clients.sessions, k) });
 export const workspaces = new Proxy({} as ReturnType<typeof make>["workspaces"], { get: (_, k) => Reflect.get(clients.workspaces, k) });
 export const workers = new Proxy({} as ReturnType<typeof make>["workers"], { get: (_, k) => Reflect.get(clients.workers, k) });
+export const config = new Proxy({} as ReturnType<typeof make>["config"], { get: (_, k) => Reflect.get(clients.config, k) });

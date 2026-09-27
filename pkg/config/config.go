@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/retail-cortex/blitz/pkg/secrets"
 	"github.com/rrmcguinness/modenv/pkg/modenv"
 )
 
@@ -446,7 +447,11 @@ func DefaultConfig() *Config {
 // ship a .env.toml that redirects llm.openai.base_url to an attacker's server
 // and receive the user's API key, or enable auto-approval. Pass --config .
 // to opt in to a workspace config explicitly.
-func Load(prefixDir string) (*Config, error) {
+func Load(prefixDir string) (*Config, error) { return load(prefixDir, "") }
+
+// load is Load with, for a workspace, its own settings over the global ones
+// (LoadWorkspace), and keychain references resolved.
+func load(prefixDir, workspace string) (*Config, error) {
 	cfg := DefaultConfig()
 
 	dir := ConfigDir(prefixDir)
@@ -465,6 +470,10 @@ func Load(prefixDir string) (*Config, error) {
 			return nil, fmt.Errorf("failed to load configuration via modenv: %w", loadErr)
 		}
 	}
+	if err := overlay(cfg, prefixDir, workspace); err != nil {
+		return nil, err
+	}
+	resolveSecrets(cfg, secrets.Default(dir))
 
 	// Apply direct environment variable fallbacks if not populated
 	applyEnvOverrides(cfg)

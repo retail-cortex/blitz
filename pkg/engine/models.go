@@ -236,3 +236,18 @@ func (w *Workspace) Set(ctx context.Context, key, value string) (string, error) 
 	}
 	return key, w.engine.Rebuild(ctx)
 }
+
+// ReloadProviders applies the provider settings (keys, endpoints, provider)
+// of cfg, a fresh load of this workspace's settings, and rebuilds the model:
+// a key set in the settings takes effect without reopening the workspace.
+// It returns why the model still can't be built, if it can't.
+func (w *Workspace) ReloadProviders(ctx context.Context, cfg *config.Config) error {
+	w.cfg.LLM = cfg.LLM
+	w.cfg.Blitz.DefaultModel = cfg.Blitz.DefaultModel
+	llm, err := w.newModel(ctx, w.cfg, "")
+	if err == nil {
+		err = w.engine.SetModel(ctx, llm)
+	}
+	w.modelErr = err
+	return err
+}

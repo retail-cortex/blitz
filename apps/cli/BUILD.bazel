@@ -8,6 +8,7 @@ go_library(
     name = "cli_lib",
     srcs = [
         "configcmd.go",
+        "configkeys.go",
         "doctor.go",
         "exitcode.go",
         "main.go",
@@ -57,6 +58,7 @@ go_test(
     name = "cli_test",
     srcs = [
         "attach_test.go",
+        "configkeys_test.go",
         "images_test.go",
         "leak_test.go",
         "limits_test.go",
@@ -77,6 +79,7 @@ go_test(
         "//pkg/engine/runtime",
         "//pkg/i18n",
         "//pkg/loginitem",
+        "//pkg/secrets",
         "//pkg/socket",
         "@org_golang_google_genai//:genai",
         "@org_uber_go_goleak//:goleak",

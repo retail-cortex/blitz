@@ -1,0 +1,141 @@
+syntax = "proto3";
+
+package blitz.v1;
+
+option go_package = "github.com/retail-cortex/blitz/proto/blitz/v1;blitzv1";
+
+// ConfigService reads and changes the settings: the global file
+// (~/.blitz/.env.toml) and each workspace's own (kept under ~/.blitz, never
+// in the workspace). API keys are kept in the OS keychain; the files refer
+// to them. After a change, open workspaces reload their provider settings
+// and rebuild their model; other settings apply when a workspace next opens.
+// Every request names its scope: workspace is an absolute directory, or ""
+// for the global settings.
+service ConfigService {
+  // What a scope sets: providers and where their keys come from (never the
+  // keys themselves).
+  rpc DescribeConfig(DescribeConfigRequest) returns (DescribeConfigResponse);
+  // Stores a provider's API key in the keychain and refers to it.
+  rpc SetApiKey(SetApiKeyRequest) returns (SetApiKeyResponse);
+  // Moves a provider's API key written in the scope's file (as plain text
+  // or obfuscated) into the keychain.
+  rpc SecureApiKey(SecureApiKeyRequest) returns (SecureApiKeyResponse);
+  // Removes a provider's API key (a workspace then uses the global one).
+  rpc RemoveApiKey(RemoveApiKeyRequest) returns (RemoveApiKeyResponse);
+  // Sets one of the forms' settings ("" removes it).
+  rpc SetConfigValue(SetConfigValueRequest) returns (SetConfigValueResponse);
+  // Returns a scope's settings file as text.
+  rpc GetConfigFile(GetConfigFileRequest) returns (GetConfigFileResponse);
+  // Replaces a scope's settings file, if it's valid.
+  rpc SaveConfigFile(SaveConfigFileRequest) returns (SaveConfigFileResponse);
+}
+
+// KeySource says where a provider's API key comes from.
+enum KeySource {
+  KEY_SOURCE_UNSPECIFIED = 0;
+  KEY_SOURCE_NONE = 1;
+  // The OS keychain (the file holds a reference).
+  KEY_SOURCE_KEYCHAIN = 2;
+  // Written in the file as plain text.
+  KEY_SOURCE_PLAIN = 3;
+  // modenv's xor: value: obfuscated, not encrypted.
+  KEY_SOURCE_OBFUSCATED = 4;
+  // An environment variable of the service.
+  KEY_SOURCE_ENVIRONMENT = 5;
+  // A workspace using the global key.
+  KEY_SOURCE_INHERITED = 6;
+}
+
+message ProviderConfig {
+  // gemini, anthropic or openai.
+  string name = 1;
+  KeySource key_source = 2;
+  // The file refers to a keychain secret that isn't there.
+  bool key_missing = 3;
+  // As set in this scope ("" when not).
+  string base_url = 4;
+  string model = 5;
+}
+
+message DescribeConfigRequest {
+  string workspace = 1;
+}
+
+message DescribeConfigResponse {
+  // The scope's settings file (it may not exist yet).
+  string path = 1;
+  // llm.provider and blitz.default_model as set in this scope.
+  string provider = 2;
+  string default_model = 3;
+  repeated ProviderConfig providers = 4;
+  // Where keys are kept ("macOS Keychain", "Secret Service", a file).
+  string secret_store = 5;
+}
+
+// After a change: the file written, and why the scope's workspace (for a
+// workspace scope, if it's open) still can't build its model ("" if it can).
+message ConfigChange {
+  string path = 1;
+  string model_error = 2;
+}
+
+message SetApiKeyRequest {
+  string workspace = 1;
+  string provider = 2;
+  string key = 3;
+}
+
+message SetApiKeyResponse {
+  ConfigChange change = 1;
+}
+
+message SecureApiKeyRequest {
+  string workspace = 1;
+  string provider = 2;
+}
+
+message SecureApiKeyResponse {
+  ConfigChange change = 1;
+}
+
+message RemoveApiKeyRequest {
+  string workspace = 1;
+  string provider = 2;
+}
+
+message RemoveApiKeyResponse {
+  ConfigChange change = 1;
+}
+
+message SetConfigValueRequest {
+  string workspace = 1;
+  // llm.provider, blitz.default_model, llm.<provider>.model or .base_url,
+  // llm.gemini.project_id or .location.
+  string key = 2;
+  string value = 3;
+}
+
+message SetConfigValueResponse {
+  ConfigChange change = 1;
+}
+
+message GetConfigFileRequest {
+  string workspace = 1;
+}
+
+message GetConfigFileResponse {
+  string path = 1;
+  // "" when the file doesn't exist yet.
+  string text = 2;
+}
+
+message SaveConfigFileRequest {
+  string workspace = 1;
+  string text = 2;
+}
+
+message SaveConfigFileResponse {
+  ConfigChange change = 1;
+  // Unknown settings (likely typos) and keys written as plain text.
+  repeated string warnings = 2;
+}

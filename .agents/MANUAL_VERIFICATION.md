@@ -431,3 +431,15 @@ Set `fallback_models = ["anthropic/claude-sonnet-5"]` with a working Anthropic k
 - [ ] Existing installs: after upgrading, a login item installed as `blitz serve` still starts the service (the hidden command runs `blitzd`); `blitz service install` rewrites it to `blitzd`.
 - [ ] With an older service running (or one whose program was deleted), `bazel run //apps/desktop:blitz-desktop`. **Expected:** a banner says the service is older (or its program is gone) with **Restart the service**; clicking it stops that service (its login item, else its process) and starts this build's `blitzd` at login, and the banner goes, with "The service restarted". Settings › Service shows both versions, the service program, and **Restart** and **Stop**: Stop stops it (the window then offers to start it), also for a `blitzd` started by hand in a terminal.
 - [ ] Open workspace from `bazel run //apps/desktop:blitz-desktop`: the folder dialog stays open until you choose; the terminal logs `open workspace dialog: "<dir>" …` (a dialog that closes on its own logs an empty answer after a moment).
+
+## 40. API keys and per-workspace settings (spec_config_002 §6)
+
+These touch your real keychain and settings: use a test key, or a throwaway `--config DIR` for the CLI steps.
+
+- [ ] `blitz config set-key gemini`, paste a key (not echoed). **Expected:** Keychain Access shows an item "Blitz: global/llm.gemini.api_key" (service `dev.blitz`); `~/.blitz/.env.toml` has `api_key = "keychain:global/llm.gemini.api_key"`; `blitz config keys` says `gemini keychain`; `blitz doctor` and a turn work with no key in the environment. The first read may ask to allow `security` access: **Always Allow**.
+- [ ] A plain key in the file (`api_key = "sk-…"`): `blitz config keys` suggests `secure-key`; `blitz config secure-key anthropic` leaves only the reference in the file.
+- [ ] In a project: `blitz config set-key -w openai` and `llm.provider = "openai"` set for it (desktop, below). **Expected:** that project uses OpenAI with its key; another project still uses the global provider; nothing is written inside either project; the file is under `~/.blitz/workspaces/`.
+- [ ] On Linux with GNOME Keyring: the same, with `secret-tool search service dev.blitz` listing the item. Without a Secret Service (a server): the key goes to `~/.blitz/secrets.toml`, mode 600.
+- [ ] Desktop, Settings › Providers & keys: each provider's status chip matches `blitz config keys`; **Set key** stores it, and a workspace whose model was unavailable ("The model isn't available…") clears the note without reopening; **Move to keychain** on a plain key; **Remove**. Base URLs and the default model save on leaving the field.
+- [ ] Desktop, run settings › API keys: "Global" for inherited keys; **Set key** gives the workspace its own; a provider chosen there applies to that workspace only.
+- [ ] Desktop, Settings › Settings file: the global file and a workspace's; a typo'd setting saves with a warning; `[llm` is refused with the parse error and nothing is written; ⌘S saves; **Revert** restores.

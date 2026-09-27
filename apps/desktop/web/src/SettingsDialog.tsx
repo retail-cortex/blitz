@@ -3,7 +3,9 @@ import {
   mdiBrain,
   mdiCheckCircleOutline,
   mdiCogOutline,
+  mdiFileDocumentEditOutline,
   mdiFolderMultipleOutline,
+  mdiKeyChainVariant,
   mdiInformationOutline,
   mdiMonitor,
   mdiPaletteOutline,
@@ -18,15 +20,18 @@ import { checkService, type ServiceCheck } from "./serviceVersion";
 import { languages, t } from "./i18n";
 import { workspaceColor } from "./palette";
 import { displayName, forgetWorkspace } from "./prefs";
+import { ProviderSettings, SettingsFile } from "./ProviderSettings";
 import { useApp } from "./state";
 import type { ThemePref } from "./theme";
 import { Button, Chip, Dialog, Icon, IconButton, Segmented, Switch } from "./ui/controls";
 import { WorkspaceDialog } from "./WorkspaceDialog";
 
-type Section = "appearance" | "workspaces" | "service" | "about";
+type Section = "appearance" | "providers" | "file" | "workspaces" | "service" | "about";
 
 const sectionIcons: Record<Section, string> = {
   appearance: mdiPaletteOutline,
+  providers: mdiKeyChainVariant,
+  file: mdiFileDocumentEditOutline,
   workspaces: mdiFolderMultipleOutline,
   service: mdiServerNetwork,
   about: mdiInformationOutline,
@@ -48,6 +53,8 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
         </div>
         <div className="settings-pane">
           {section === "appearance" && <Appearance />}
+          {section === "providers" && <ProviderSettings workspace="" />}
+          {section === "file" && <FileSection />}
           {section === "workspaces" && <Workspaces />}
           {section === "service" && <Service />}
           {section === "about" && <About />}
@@ -120,6 +127,12 @@ function Appearance() {
       </p>
     </div>
   );
+}
+
+// The settings file of the global scope or of an open or known workspace.
+function FileSection() {
+  const { prefs } = useApp();
+  return <SettingsFile scopes={prefs.workspaces.map((w) => ({ dir: w.dir, name: displayName(w) }))} />;
 }
 
 function Workspaces() {

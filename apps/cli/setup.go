@@ -42,7 +42,12 @@ func loadConfig(f *globalFlags) (*config.Config, error) {
 		}
 		dir = abs
 	}
-	cfg, err := config.Load(f.config)
+	// The workspace's own settings (kept in ~/.blitz) over the global ones.
+	ws := dir
+	if ws == "" {
+		ws, _ = os.Getwd()
+	}
+	cfg, err := config.LoadWorkspace(f.config, ws)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load configuration: %w", err)
 	}

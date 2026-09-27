@@ -3,7 +3,7 @@ import { mdiCalendarClock, mdiChatOutline, mdiClose, mdiDotsVertical, mdiFileCom
 import { workspaces } from "./api";
 import { Changes } from "./Changes";
 import { Conversation } from "./Conversation";
-import { viewEvent, type ViewDetail } from "./events";
+import { configChangedEvent, viewEvent, type ConfigChangedDetail, type ViewDetail } from "./events";
 import { message } from "./errors";
 import type { GetSettingsResponse } from "./gen/blitz/v1/workspace_pb";
 import { workspaceColor } from "./palette";
@@ -42,6 +42,16 @@ export function Workspace({ ws, visible, onEdit, onClose }: { ws: WorkspacePrefs
   useEffect(() => {
     refreshSettings();
   }, [refreshSettings]);
+
+  // Keys and providers set in the settings: is the model usable now?
+  useEffect(() => {
+    const f = (e: Event) => {
+      const d = (e as CustomEvent<ConfigChangedDetail>).detail;
+      if (d.dir === "" || d.dir === dir) refreshSettings();
+    };
+    window.addEventListener(configChangedEvent, f);
+    return () => window.removeEventListener(configChangedEvent, f);
+  }, [dir, refreshSettings]);
 
   // The command palette can switch the view.
   useEffect(() => {

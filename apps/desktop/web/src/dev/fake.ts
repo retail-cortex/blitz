@@ -11,6 +11,7 @@ import { ActionKind, ErrorInfoSchema, UsageSchema, type Usage } from "../gen/bli
 
 type Out = MessageInitShape<typeof RunTurnResponseSchema>;
 import { RunStatus, WorkerService, WorkerState } from "../gen/blitz/v1/worker_pb";
+import { ConfigService, KeySource } from "../gen/blitz/v1/config_pb";
 import { WorkspaceService } from "../gen/blitz/v1/workspace_pb";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -180,6 +181,21 @@ function notFound(what: string): never {
   throw err;
 }
 
+// The settings: per scope ("" global), the file and where each key is.
+const configs = new Map<string, { text: string; provider: string; model: string; keys: Record<string, KeySource> }>();
+function scopeConfig(workspace: string) {
+  let c = configs.get(workspace);
+  if (!c) {
+    c = workspace
+      ? { text: "", provider: "", model: "", keys: { gemini: KeySource.INHERITED, anthropic: KeySource.INHERITED, openai: KeySource.NONE } }
+      : { text: '[llm]\nprovider = "gemini"\n\n[llm.gemini]\napi_key = "keychain:global/llm.gemini.api_key"\n\n[llm.anthropic]\napi_key = "sk-ant-plain"\n', provider: "gemini", model: "", keys: { gemini: KeySource.KEYCHAIN, anthropic: KeySource.PLAIN, openai: KeySource.NONE } };
+    configs.set(workspace, c);
+  }
+  return c;
+}
+const configPath = (workspace: string) => (workspace ? `~/.blitz/workspaces/${workspace.split("/").pop()}-1a2b/.env.toml` : "~/.blitz/.env.toml");
+const change = (workspace: string) => ({ change: { path: configPath(workspace), modelError: "" } });
+
 export function installFake() {
   setTransport(
     createRouterTransport(({ service }) => {
@@ -311,6 +327,42 @@ export function installFake() {
             ? ""
             : "--- a/internal/cart/discount.go\n+++ b/internal/cart/discount.go\n@@ -40,9 +40,9 @@ func ApplyCoupon(items []Item, c Coupon) int {\n \ttotal := 0\n \tfor _, it := range items {\n-\t\ttotal += round(it.Cents * (100 - c.Percent) / 100)\n+\t\ttotal += it.Cents\n \t}\n-\treturn total\n+\treturn round(total * (100 - c.Percent) / 100)\n }\n--- /dev/null\n+++ b/internal/cart/discount_test.go\n@@ -0,0 +1,6 @@\n+package cart\n+\n+import \"testing\"\n+\n+func TestApplyCouponRounding(t *testing.T) {\n+}\n",
         }),
+      });
+      service(ConfigService, {
+        describeConfig: ({ workspace }) => {
+          const c = scopeConfig(workspace);
+          return {
+            path: configPath(workspace),
+            provider: c.provider,
+            defaultModel: c.model,
+            secretStore: "macOS Keychain",
+            providers: Object.entries(c.keys).map(([name, keySource]) => ({ name, keySource, keyMissing: false, baseUrl: "", model: "" })),
+          };
+        },
+        setApiKey: ({ workspace, provider }) => {
+          scopeConfig(workspace).keys[provider] = KeySource.KEYCHAIN;
+          return change(workspace);
+        },
+        secureApiKey: ({ workspace, provider }) => {
+          scopeConfig(workspace).keys[provider] = KeySource.KEYCHAIN;
+          return change(workspace);
+        },
+        removeApiKey: ({ workspace, provider }) => {
+          scopeConfig(workspace).keys[provider] = workspace ? KeySource.INHERITED : KeySource.NONE;
+          return change(workspace);
+        },
+        setConfigValue: ({ workspace, key, value }) => {
+          const c = scopeConfig(workspace);
+          if (key === "llm.provider") c.provider = value;
+          if (key === "blitz.default_model") c.model = value;
+          return change(workspace);
+        },
+        getConfigFile: ({ workspace }) => ({ path: configPath(workspace), text: scopeConfig(workspace).text }),
+        saveConfigFile: ({ workspace, text }) => {
+          if (text.includes("[[")) throw new ConnectError("line 1: expected a table", Code.InvalidArgument);
+          scopeConfig(workspace).text = text;
+          return { ...change(workspace), warnings: text.includes("sk-") ? ["[llm.anthropic] api_key is written as plain text: set it in Providers & keys to keep it in the keychain"] : [] };
+        },
       });
       service(WorkerService, {
         listWorkers: () => ({

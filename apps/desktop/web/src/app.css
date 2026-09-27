@@ -325,3 +325,10 @@
 .palette-item .detail { margin-left: auto; max-width: 50%; }
 .palette-empty { padding: 24px; text-align: center; }
 .palette-foot { padding: 8px 20px; border-top: 1px solid var(--md-outline-variant); }
+
+/* Providers & keys, and the settings file */
+.provider-row { padding: 12px 0; border-bottom: 1px solid var(--md-outline-variant); }
+.provider-row:last-child { border-bottom: none; }
+.provider-row .field { max-width: 480px; }
+.provider-actions { margin-left: auto; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px; }
+.settings-text { min-height: 220px; font-size: 13px; line-height: 20px; tab-size: 2; }

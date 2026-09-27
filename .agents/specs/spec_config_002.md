@@ -3,8 +3,8 @@
 | | |
 |---|---|
 | Status | Implemented (reverse-engineered from `53f8c53`) |
-| Source | `pkg/config/config.go`, `features.go`, `locale.go`, `agentmodels.go`, `modelsettings.go`; template in `apps/cli/configcmd.go` |
-| Tests | `pkg/config/*_test.go` |
+| Source | `pkg/config/config.go`, `features.go`, `locale.go`, `agentmodels.go`, `modelsettings.go`, `providers.go`; `pkg/secrets`; template and key commands in `apps/cli/configcmd.go`, `configkeys.go` |
+| Tests | `pkg/config/*_test.go`, `pkg/secrets/secrets_test.go`, `apps/cli/configkeys_test.go`, `apps/service/internal/server/config_test.go` |
 | Related | [spec_cli_020](spec_cli_020.md), [spec_models_015](spec_models_015.md) |
 
 ## 1. Purpose
@@ -84,3 +84,16 @@ Front ends change a few settings and persist them without rewriting the file.
 
 ## 5. Model settings values
 - **CFG-30** Keys and ranges: `temperature` [0, 2]; `top_p` (0, 1]; `max_tokens` integer ≥ 1 and ≤ 2³¹−1; `seed` any int32. Empty value clears. Unknown keys are errors listing the known keys. Floats are always written with a decimal point.
+
+## 6. Workspace settings and API keys
+
+Added 2026-09-27 (owner's decisions: keys in the OS keychain; a workspace's own settings kept in `~/.blitz`, never in the workspace; the desktop app edits them through forms and as text).
+
+- **CFG-40** A workspace's own settings are `<config dir>/workspaces/<base>-<8 hex>/.env.toml`, where `<base>` is the directory's name (characters outside `[A-Za-z0-9._-]` as `-`) and the hex the first 4 bytes of the SHA-256 of its absolute, symlink-free path (`WorkspaceSettingsDir`). CFG-01 stands: nothing is read from the workspace.
+- **CFG-41** `LoadWorkspace(dir, workspace)` loads the global file, then the workspace's file over it (every key it sets wins; lists replace), then resolves secrets (CFG-43), then applies the environment (CFG-03). The service's opener and the CLI (`--dir`, else the current directory) use it; `Load` is the global scope alone.
+- **CFG-42** Secrets are kept by `pkg/secrets`: the macOS Keychain (through `/usr/bin/security`, the secret passed on stdin, hex-encoded, never in arguments), the Secret Service on Linux (`secret-tool`, when one answers on the session bus), else an owner-only file (`<config dir>/secrets.toml`, 0600 in a 0700 directory), all under the service name `dev.blitz`. Names are `global/llm.<provider>.api_key` and `workspace/<settings dir name>/llm.<provider>.api_key`.
+- **CFG-43** A settings value `keychain:<name>` refers to a stored secret. Loading replaces the providers' `api_key` references with the secrets (and decodes modenv's `xor:` values from a workspace file); a missing or unreadable secret leaves the key empty, so the environment, then the model's own error, takes over. `xor:` is obfuscation with a default key, not encryption.
+- **CFG-44** `Describe(dir, workspace)` reports a scope without its keys: the file, `llm.provider` and `blitz.default_model` as the scope sets them, where keys are kept, and per provider (`gemini`, `anthropic`, `openai`) the key's source — `keychain`, `plain`, `obfuscated`, `environment`, `inherited` (a workspace using the global key) or `none` — whether a referenced secret is missing, `base_url` and `model`.
+- **CFG-45** Changes, each through CFG-20's editor, in the scope's file: `SetAPIKey` stores the key and writes the reference; `SecureAPIKey` moves a plain or obfuscated key from the file to the store; `RemoveAPIKey` removes the reference and the stored secret (a workspace then inherits); `SetValue` sets one of `llm.provider`, `blitz.default_model`, `llm.<provider>.model`, `llm.{anthropic,openai}.base_url`, `llm.gemini.{project_id,location}` (`""` removes it, so a workspace follows the global setting). Others are refused.
+- **CFG-46** `WriteSettingsFile` replaces a scope's file with text only if it decodes into the configuration; it returns warnings for settings the configuration doesn't know (likely typos) and for API keys written as plain or obfuscated text. `ReadSettingsFile` returns the text (`""` when there's none).
+- **CFG-47** The CLI: `blitz config keys`, `set-key <provider>` (the key from stdin, without echo on a terminal), `remove-key <provider>`, `secure-key <provider>`; `--workspace` (`-w`) works on the workspace's settings. The service's `ConfigService` ([spec_service_021](spec_service_021.md)) offers the same to the desktop app and reloads open workspaces.

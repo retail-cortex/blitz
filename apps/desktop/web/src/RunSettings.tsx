@@ -14,6 +14,7 @@ import { language, t } from "./i18n";
 import type { Usage } from "./gen/blitz/v1/turn_pb";
 import type { AgentInfo, Approval, GetSettingsResponse, LocaleInfo, ModelSettingsInfo, PermissionRule } from "./gen/blitz/v1/workspace_pb";
 import { agencies, efforts, modes } from "./options";
+import { ProviderSettings } from "./ProviderSettings";
 import { useApp } from "./state";
 import { Button, Field, Icon, IconButton, Switch, useSnackbar } from "./ui/controls";
 
@@ -145,6 +146,10 @@ export function RunSettings({ dir, settings, error, onChanged }: { dir: string; 
               </>
             )}
           </Field>
+        </Section>
+
+        <Section title={t("desktop.rs.keys")} open={false}>
+          <ProviderSettings workspace={dir} compact />
         </Section>
 
         <Section title={t("desktop.rs.thinking")}>

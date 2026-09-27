@@ -55,6 +55,7 @@ func newConfigCommand(g *globalFlags) *cobra.Command {
 		},
 	}
 	cmd.AddCommand(initCmd, pathCmd, showCmd)
+	cmd.AddCommand(keyCommands(g)...)
 	return cmd
 }
 

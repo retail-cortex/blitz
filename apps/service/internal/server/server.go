@@ -30,11 +30,12 @@ type Opener func(ctx context.Context, dir string) (*engine.Workspace, error)
 
 // Server holds the open workspaces and serves the API.
 type Server struct {
-	open    Opener
-	version string     // reported by GetServiceInfo
-	started time.Time  // when New ran
-	sched   *scheduler // nil: workers aren't run
-	broker  *broker
+	open      Opener
+	version   string     // reported by GetServiceInfo
+	configDir string     // the settings directory (--config; \"\" for ~/.blitz)
+	started   time.Time  // when New ran
+	sched     *scheduler // nil: workers aren't run
+	broker    *broker
 
 	mu         sync.Mutex
 	workspaces map[string]*workspace // by canonical directory
@@ -83,6 +84,7 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle(pb.NewSessionServiceHandler(sessionService{s}, limit))
 	mux.Handle(pb.NewWorkspaceServiceHandler(workspaceService{s}, limit))
 	mux.Handle(pb.NewWorkerServiceHandler(workerService{s}, limit))
+	mux.Handle(pb.NewConfigServiceHandler(configService{s}, limit))
 	return mux
 }
 
