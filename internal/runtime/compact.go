@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/retail-cortex/blitz/internal/tools"
 	"strings"
 	"time"
 
@@ -56,6 +57,13 @@ func (e *Engine) Compact(ctx context.Context, sessionID, focus string, keepTurns
 	if err != nil {
 		return CompactResult{}, fmt.Errorf("%w: no conversation in this session", ErrNothingToCompact)
 	}
+	hooks := e.toolReg.ScriptHooks()
+	hooks.Async(ctx, "pre_compact", "", tools.HookEvent{SessionID: sessionID, Reason: "manual", Prompt: focus})
+	defer func() {
+		if err == nil {
+			hooks.Async(ctx, "post_compact", "", tools.HookEvent{SessionID: sessionID, Reason: "manual"})
+		}
+	}()
 	sess := got.Session
 
 	var events []*session.Event

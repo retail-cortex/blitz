@@ -54,7 +54,7 @@ One TOML file, `.env.toml`, loaded through `github.com/rrmcguinness/modenv` (hie
 | `[telemetry]` | `enabled` false, `endpoint`, `capture_content` false | | |
 | `[checkpoints]` | `enabled` true, `max_bytes` 64 MiB | | |
 | `[web]` | `enabled` true, `allow_domains`, `deny_domains`, `allow_private` false, `max_bytes` 2 MiB, `timeout_seconds` 20, `search_provider`, `search_api_key`, `search_url`, `search_model`, `search_max_results` | | |
-| `[hooks]` | `pre_tool`, `post_tool`, `prompt_submit` arrays of `{match, command, timeout_seconds, fail_closed}` | | |
+| `[hooks]` | `pre_tool`, `post_tool`, `prompt_submit`, `session_start`, `session_end`, `stop`, `post_tool_failure`, `subagent_start`, `subagent_stop`, `pre_compact`, `post_compact`, `notification`, `permission_request` arrays of `{match, command, timeout_seconds, fail_closed}` | | [spec_hooks_010](spec_hooks_010.md) |
 | `[[mcp.servers]]` | `name, command, args, env, url, tools, auto_approve, sandbox, prefix, agents, timeout_seconds` | | |
 | `[pricing."<model>"]` | `input_per_mtok, output_per_mtok, cached_input_per_mtok, cache_write_per_mtok` | built-ins below | |
 | `[agent_models]` | `agent = "provider/model"` | | |

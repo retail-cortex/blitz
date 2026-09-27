@@ -2,6 +2,7 @@ package tools
 
 import (
 	"cmp"
+	"context"
 	"fmt"
 	"slices"
 	"strings"
@@ -269,6 +270,16 @@ func NewRegistry(cfg *config.Config, agentReg *agents.Registry, skillProv *skill
 		r.Close()
 		return nil, err
 	}
+	scripts := r.scripts
+	r.hooks.SetEventHooks(
+		func(ctx context.Context, req ApprovalRequest) Outcome {
+			return scripts.Run(ctx, "permission_request", req.Tool, HookEvent{
+				Tool: req.Tool, Kind: string(req.Kind), Detail: req.Detail, Targets: req.Targets,
+			})
+		},
+		func(ctx context.Context, typ, message string) {
+			scripts.Async(ctx, "notification", "", HookEvent{Type: typ, Message: message})
+		})
 	return r, nil
 }
 

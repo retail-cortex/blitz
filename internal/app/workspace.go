@@ -68,6 +68,10 @@ type Workspace struct {
 	newModel    func(ctx context.Context, cfg *config.Config, name string) (model.LLM, error)
 	warnedMu    sync.Mutex
 	warned      map[string]bool // messages warnOnce has shown
+	// sessionContext is session_start hook output waiting for each
+	// session's next prompt.
+	hookCtxMu      sync.Mutex
+	sessionContext map[string]string
 }
 
 // warnOnce reports a problem the first time it is seen: things re-read on
@@ -213,6 +217,9 @@ func Open(ctx context.Context, cfg *config.Config, o Options) (*Workspace, error
 		w.Close()
 		return nil, fmt.Errorf("failed to initialize engine: %w", err)
 	}
+	w.tools.ScriptHooks().Info = func(_ context.Context, session string) tools.HookInfo {
+		return tools.HookInfo{TranscriptPath: w.storage.TranscriptPath(session), PermissionMode: string(w.tools.Hooks().Mode()), Agent: w.engine.ActiveAgent()}
+	}
 	opened = true
 	return w, nil
 }
@@ -249,6 +256,11 @@ func (w *Workspace) ModelErr() error { return w.modelErr }
 // and releases the workspace.
 func (w *Workspace) Close() error {
 	var err error
+	if w.storage != nil && w.tools != nil {
+		if a := w.storage.Active(); a != nil {
+			w.sessionEnded(a.ID, "exit") // queued before the hooks drain
+		}
+	}
 	if w.tools != nil {
 		err = w.tools.Close()
 	}

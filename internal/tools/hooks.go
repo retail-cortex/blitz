@@ -103,6 +103,28 @@ type Hooks struct {
 	store    *ApprovalStore
 	audit    *audit.Logger
 	rules    *PermissionRules
+	// permHook runs permission_request hooks; notify runs notification
+	// hooks (in the background). Nil: none.
+	permHook func(context.Context, ApprovalRequest) Outcome
+	notify   func(ctx context.Context, typ, message string)
+}
+
+// SetEventHooks connects the gate to permission_request and notification
+// hooks.
+func (h *Hooks) SetEventHooks(perm func(context.Context, ApprovalRequest) Outcome, notify func(ctx context.Context, typ, message string)) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.permHook, h.notify = perm, notify
+}
+
+// Notify fires notification hooks (e.g. a question waiting for the user).
+func (h *Hooks) Notify(ctx context.Context, typ, message string) {
+	h.mu.RLock()
+	notify := h.notify
+	h.mu.RUnlock()
+	if notify != nil {
+		notify(ctx, typ, message)
+	}
 }
 
 // SetRules attaches the permission rules the gate applies.
@@ -274,9 +296,6 @@ func (h *Hooks) Approve(ctx context.Context, req ApprovalRequest) error {
 	case mustAsk && policy.Mode == ModeDontAsk:
 		record("mode-dont-ask")
 		return fmt.Errorf("%w: %s must be asked about (an ask rule), and the permission mode is dont-ask", ErrNotApproved, req.Tool)
-	case mustAsk && approver == nil:
-		record("no-approver")
-		return fmt.Errorf("%w: %s must be asked about (an ask rule), but no interactive approver is available", ErrNotApproved, req.Tool)
 	case mustAsk:
 		// Straight to the question: modes, allow rules and remembered
 		// approvals don't apply.
@@ -302,9 +321,35 @@ func (h *Hooks) Approve(ctx context.Context, req ApprovalRequest) error {
 	case policy.Mode == ModeDontAsk:
 		record("mode-dont-ask")
 		return fmt.Errorf("%w: %s would need approval, and the permission mode is dont-ask", ErrNotApproved, req.Tool)
-	case approver == nil:
+	}
+
+	// The user's permission_request hooks may answer instead of the user.
+	h.mu.RLock()
+	permHook, notify := h.permHook, h.notify
+	h.mu.RUnlock()
+	if permHook != nil {
+		switch out := permHook(ctx, req); out.Decision {
+		case "allow":
+			record("hook-allow")
+			return nil
+		case "deny":
+			record("hook-deny")
+			why := out.Reason
+			if why == "" {
+				why = "a permission_request hook denied it"
+			}
+			return fmt.Errorf("%w: %s", ErrNotApproved, why)
+		}
+	}
+	if approver == nil {
 		record("no-approver")
+		if mustAsk {
+			return fmt.Errorf("%w: %s must be asked about (an ask rule), but no interactive approver is available", ErrNotApproved, req.Tool)
+		}
 		return fmt.Errorf("%w: %s requires approval but no interactive approver is available (allow it with a rule or a permission mode such as accept-edits)", ErrNotApproved, req.Tool)
+	}
+	if notify != nil {
+		notify(ctx, "permission_prompt", req.Detail)
 	}
 
 	// The span isolates time spent waiting for the user from tool runtime.

@@ -37,5 +37,12 @@ Users run their own commands at three lifecycle points: before a tool (`pre_tool
 - **HK-32** A panic in one event is contained and logged; later events still run.
 - **HK-33** On close, queued hooks get up to 5 s to finish, then running ones are killed.
 
+## 5b. More events (ROADMAP 25.7)
+
+- **HK-50** Every event carries `event`, `session_id`, `workspace` and `cwd`, `prompt_id` (one per accepted prompt; `tools.WithPromptID`), `transcript_path`, `permission_mode` and `agent`.
+- **HK-51** Synchronous: `session_start` (reason `startup`, `resume`, `new`; its output — plain stdout or `additional_context` — is added to the session's next real prompt), `prompt_submit` (may block; its output is added to that prompt, or to a steer message), `stop` (after a successful non-aside turn, with `stop_hook_active` after the first; exit 2 or `{"continue": true, "reason": …}` sends the reason as a new prompt, recorded in the transcript as `(stop hook) …`, at most 5 times per prompt; cost/time limits span them, `max_turns` applies to each), `permission_request` (just before the user would be asked, after rules and modes; `{"decision":"allow"|"deny","reason"}` answers instead of the user, audited `hook-allow`/`hook-deny`).
+- **HK-52** Background (like `post_tool`, same ordered queue and limits): `post_tool_failure` (a tool error or an `error` field; `post_tool` still fires for every call), `session_end` (reason `new`, `load` when another session becomes active, `exit` at close), `subagent_start` (`subagent`, `prompt`) and `subagent_stop` (`output`, `error`), `pre_compact` (`reason: manual`, `prompt`: the focus) and `post_compact` (manual `/compact` only; the ADK's automatic compaction has no hook point), `notification` (`type: permission_prompt` or `question`, `message`).
+- **HK-53** JSON replies: `decision` (`block`, `allow`, `deny`, `ask`), `reason`, `continue`, `additional_context`. Blocks win; the first decision and any continue across a list of hooks count; contexts are joined. `config_change` doesn't apply (Blitz doesn't watch its config file).
+
 ## 6. Diagnostics
-- **HK-40** `doctor` checks the first word of each hook command is resolvable (skipped when it contains `$;|&`).
+- **HK-40** `doctor` checks the first word of every hook command (all events) is resolvable (skipped when it contains `$;|&`).

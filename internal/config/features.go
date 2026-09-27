@@ -114,6 +114,40 @@ type HooksConfig struct {
 	PreTool      []HookConfig `toml:"pre_tool"`
 	PostTool     []HookConfig `toml:"post_tool"`
 	PromptSubmit []HookConfig `toml:"prompt_submit"`
+	// Lifecycle events. session_start and prompt_submit output (plain
+	// text, or additional_context) is given to the agent; stop may ask the
+	// agent to continue; permission_request may answer an approval. The
+	// rest only observe and run in the background.
+	SessionStart      []HookConfig `toml:"session_start"`
+	SessionEnd        []HookConfig `toml:"session_end"`
+	Stop              []HookConfig `toml:"stop"`
+	PostToolFailure   []HookConfig `toml:"post_tool_failure"`
+	SubagentStart     []HookConfig `toml:"subagent_start"`
+	SubagentStop      []HookConfig `toml:"subagent_stop"`
+	PreCompact        []HookConfig `toml:"pre_compact"`
+	PostCompact       []HookConfig `toml:"post_compact"`
+	Notification      []HookConfig `toml:"notification"`
+	PermissionRequest []HookConfig `toml:"permission_request"`
+}
+
+// ByEvent returns the hooks for each event name.
+func (h HooksConfig) ByEvent() map[string][]HookConfig {
+	return map[string][]HookConfig{
+		"pre_tool": h.PreTool, "post_tool": h.PostTool, "prompt_submit": h.PromptSubmit,
+		"session_start": h.SessionStart, "session_end": h.SessionEnd, "stop": h.Stop,
+		"post_tool_failure": h.PostToolFailure, "subagent_start": h.SubagentStart, "subagent_stop": h.SubagentStop,
+		"pre_compact": h.PreCompact, "post_compact": h.PostCompact, "notification": h.Notification,
+		"permission_request": h.PermissionRequest,
+	}
+}
+
+// All returns every configured hook.
+func (h HooksConfig) All() []HookConfig {
+	var out []HookConfig
+	for _, list := range h.ByEvent() {
+		out = append(out, list...)
+	}
+	return out
 }
 
 // MCPServerConfig describes a Model Context Protocol server. Exactly one of

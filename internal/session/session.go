@@ -385,6 +385,15 @@ func (s *Storage) List() ([]*SessionRecord, error) {
 	return sessions, nil
 }
 
+// TranscriptPath is where session id's messages are kept (JSON lines),
+// for hooks; "" for an invalid ID.
+func (s *Storage) TranscriptPath(id string) string {
+	if ValidateID(id) != nil {
+		return ""
+	}
+	return s.path(id, messagesSuffix)
+}
+
 func (s *Storage) path(id, suffix string) string {
 	return filepath.Join(s.dir, id+suffix)
 }

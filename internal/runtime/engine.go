@@ -837,7 +837,7 @@ func drain(events func(yield func(*session.Event, error) bool), handler EventHan
 // session and returns the text it produced. Nesting is limited to
 // MaxSubagentDepth to stop agents delegating to each other indefinitely.
 // Usage and turn limits of the calling run still apply.
-func (e *Engine) InvokeSubagent(ctx context.Context, agentName, prompt string) (string, error) {
+func (e *Engine) InvokeSubagent(ctx context.Context, agentName, prompt string) (_ string, err error) {
 	depth, _ := ctx.Value(subagentDepthKey{}).(int)
 	if depth >= MaxSubagentDepth {
 		return "", fmt.Errorf("%w (%d)", ErrSubagentDepth, MaxSubagentDepth)
@@ -865,7 +865,16 @@ func (e *Engine) InvokeSubagent(ctx context.Context, agentName, prompt string) (
 
 	subCtx := withSettingsLookup(context.WithValue(ctx, subagentDepthKey{}, depth+1), e.lookupSettings)
 	sessionID := fmt.Sprintf("subagent-%s-%d", agentName, e.subagentSeq.Add(1))
+	hooks := e.toolReg.ScriptHooks()
+	hooks.Async(ctx, "subagent_start", agentName, tools.HookEvent{SessionID: e.sessionOf(ctx), Subagent: agentName, Prompt: prompt})
 	var out strings.Builder
+	defer func() {
+		ev := tools.HookEvent{SessionID: e.sessionOf(ctx), Subagent: agentName, Output: out.String()}
+		if err != nil {
+			ev.Error = err.Error()
+		}
+		hooks.Async(ctx, "subagent_stop", agentName, ev)
+	}()
 	err = drain(r.Run(subCtx, "user", sessionID, genai.NewContentFromText(prompt, genai.RoleUser), agent.RunConfig{}),
 		func(ev *session.Event) error {
 			if ev.Author != agentName || ev.Partial || ev.Content == nil {

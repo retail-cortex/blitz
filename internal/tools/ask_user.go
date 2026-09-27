@@ -40,6 +40,7 @@ func NewAskUserQuestionTool(hooks *Hooks) (tool.Tool, error) {
 			if prompter == nil {
 				return AskUserQuestionOutput{Error: "interactive input is not available; proceed with your best judgement"}, nil
 			}
+			hooks.Notify(ctx, "question", input.Question)
 			answer, err := prompter(ctx, input.Question, input.Options)
 			if err != nil {
 				return AskUserQuestionOutput{Error: fmt.Sprintf("prompt failed: %v", err)}, nil

@@ -42,22 +42,78 @@ type HookEvent struct {
 	Result    map[string]any `json:"result,omitempty"`
 	Error     string         `json:"error,omitempty"`
 	Prompt    string         `json:"prompt,omitempty"`
+
+	// Context for every event.
+	PromptID       string `json:"prompt_id,omitempty"`
+	TranscriptPath string `json:"transcript_path,omitempty"`
+	PermissionMode string `json:"permission_mode,omitempty"`
+	Agent          string `json:"agent,omitempty"`
+	Cwd            string `json:"cwd,omitempty"`
+
+	// Event-specific.
+	Reason         string   `json:"reason,omitempty"`           // session_start/end, compaction trigger
+	StopHookActive bool     `json:"stop_hook_active,omitempty"` // stop: already continued by a stop hook
+	Type           string   `json:"type,omitempty"`             // notification type
+	Message        string   `json:"message,omitempty"`          // notification text
+	Kind           string   `json:"kind,omitempty"`             // permission_request: the action kind
+	Detail         string   `json:"detail,omitempty"`           // permission_request: what will happen
+	Targets        []string `json:"targets,omitempty"`          // permission_request
+	Subagent       string   `json:"subagent,omitempty"`         // subagent_start/stop
+	Output         string   `json:"output,omitempty"`           // subagent_stop: its reply
+}
+
+// HookInfo is session context added to every hook event.
+type HookInfo struct {
+	PromptID, TranscriptPath, PermissionMode, Agent string
+}
+
+type promptIDKey struct{}
+
+// WithPromptID tags a turn's context with its prompt's ID, for hooks.
+func WithPromptID(ctx context.Context, id string) context.Context {
+	return context.WithValue(ctx, promptIDKey{}, id)
+}
+
+// PromptID returns the ID WithPromptID set ("" if none).
+func PromptID(ctx context.Context) string {
+	id, _ := ctx.Value(promptIDKey{}).(string)
+	return id
+}
+
+// Outcome is what synchronous hooks decided together.
+type Outcome struct {
+	// Blocked (exit 2 or {"decision":"block"}), with the reason.
+	Blocked bool
+	Reason  string
+	// Decision is "allow", "deny" or "ask" from {"decision": …}
+	// (permission_request, pre_tool).
+	Decision string
+	// Continue: a stop hook asks the agent to keep going (Reason says why).
+	Continue bool
+	// Context is text for the agent: plain stdout on session_start and
+	// prompt_submit, or additional_context.
+	Context string
 }
 
 // hookReply is the optional JSON a hook may print on stdout.
 type hookReply struct {
-	Decision string `json:"decision"` // "block" to block
-	Reason   string `json:"reason"`
+	Decision          string `json:"decision"` // block, allow, deny or ask
+	Reason            string `json:"reason"`
+	Continue          bool   `json:"continue"`
+	AdditionalContext string `json:"additional_context"`
 }
 
 // ScriptHooks runs user-configured commands at lifecycle points. Hooks run
 // through the same ExecEnv as shell commands (sandboxed, guarded, scrubbed
 // environment) in the workspace directory.
 type ScriptHooks struct {
-	pre, post, prompt []config.HookConfig
-	exec              *ExecEnv
-	workspace         string
-	audit             *audit.Logger
+	hooks map[string][]config.HookConfig // by event
+	exec  *ExecEnv
+	// Info adds session context (prompt ID, transcript, mode, agent) to
+	// events; nil adds none.
+	Info      func(ctx context.Context, session string) HookInfo
+	workspace string
+	audit     *audit.Logger
 	// Warn reports hook failures that don't block (defaults to no-op).
 	Warn func(string)
 
@@ -70,6 +126,7 @@ type ScriptHooks struct {
 // the tool's result maps can't race with or alter what the hook sees.
 type postJob struct {
 	ctx     context.Context // detached from the turn; keeps its trace
+	event   string
 	tool    string
 	payload []byte
 	barrier chan struct{} // flush marker: closed when reached
@@ -88,7 +145,7 @@ type postQueue struct {
 
 // NewScriptHooks validates and prepares hooks.
 func NewScriptHooks(cfg config.HooksConfig, env *ExecEnv, workspace string, log *audit.Logger) (*ScriptHooks, error) {
-	for _, list := range [][]config.HookConfig{cfg.PreTool, cfg.PostTool, cfg.PromptSubmit} {
+	for _, list := range cfg.ByEvent() {
 		for _, h := range list {
 			if strings.TrimSpace(h.Command) == "" {
 				return nil, fmt.Errorf("hook with empty command (match %q)", h.Match)
@@ -98,12 +155,20 @@ func NewScriptHooks(cfg config.HooksConfig, env *ExecEnv, workspace string, log 
 			}
 		}
 	}
-	return &ScriptHooks{pre: cfg.PreTool, post: cfg.PostTool, prompt: cfg.PromptSubmit, exec: env, workspace: workspace, audit: log, Warn: func(string) {}}, nil
+	return &ScriptHooks{hooks: cfg.ByEvent(), exec: env, workspace: workspace, audit: log, Warn: func(string) {}}, nil
 }
 
 // Empty reports whether no hooks are configured.
 func (s *ScriptHooks) Empty() bool {
-	return s == nil || len(s.pre)+len(s.post)+len(s.prompt) == 0
+	if s == nil {
+		return true
+	}
+	for _, list := range s.hooks {
+		if len(list) > 0 {
+			return false
+		}
+	}
+	return true
 }
 
 // PreTool runs pre_tool hooks; a non-empty reason means the call is blocked.
@@ -111,7 +176,7 @@ func (s *ScriptHooks) PreTool(ctx context.Context, session, tool string, args ma
 	if s == nil {
 		return ""
 	}
-	return s.runAll(ctx, s.pre, tool, HookEvent{Event: "pre_tool", SessionID: session, Tool: tool, Args: args})
+	return s.runAll(ctx, "pre_tool", tool, HookEvent{SessionID: session, Tool: tool, Args: args}).blockReason()
 }
 
 // PostTool queues post_tool hooks for the background worker and returns
@@ -119,20 +184,39 @@ func (s *ScriptHooks) PreTool(ctx context.Context, session, tool string, args ma
 // delivered in order. If hooks fall so far behind that the queue fills, the
 // event is dropped and reported rather than slowing the agent.
 func (s *ScriptHooks) PostTool(ctx context.Context, session, tool string, args, result map[string]any, toolErr error) {
-	if s == nil || !anyMatch(s.post, tool) {
+	if s == nil {
 		return
 	}
-	ev := HookEvent{Event: "post_tool", SessionID: session, Workspace: s.workspace, Tool: tool, Args: args, Result: result}
+	ev := HookEvent{SessionID: session, Tool: tool, Args: args, Result: result}
 	if toolErr != nil {
 		ev.Error = toolErr.Error()
 	}
+	s.Async(ctx, "post_tool", tool, ev)
+	failed := toolErr != nil
+	if msg, _ := result["error"].(string); msg != "" {
+		failed = true
+		ev.Error = msg
+	}
+	if failed {
+		s.Async(ctx, "post_tool_failure", tool, ev)
+	}
+}
+
+// Async queues an observe-only event for the background worker, in order,
+// and returns at once (tool names filter by each hook's match). Events are
+// encoded now, so later changes to their maps can't alter what hooks see.
+func (s *ScriptHooks) Async(ctx context.Context, event, tool string, ev HookEvent) {
+	if s == nil || !anyMatch(s.hooks[event], tool) {
+		return
+	}
+	ev = s.enrich(ctx, event, ev)
 	payload, err := json.Marshal(ev)
 	if err != nil {
-		s.Warn(fmt.Sprintf("post_tool hook event for %s could not be encoded: %v", tool, err))
+		s.Warn(fmt.Sprintf("%s hook event could not be encoded: %v", event, err))
 		return
 	}
 	q := s.startPost()
-	job := postJob{ctx: trace.ContextWithSpanContext(q.ctx, trace.SpanContextFromContext(ctx)), tool: tool, payload: payload}
+	job := postJob{ctx: trace.ContextWithSpanContext(q.ctx, trace.SpanContextFromContext(ctx)), event: event, tool: tool, payload: payload}
 
 	q.mu.RLock()
 	defer q.mu.RUnlock()
@@ -143,10 +227,10 @@ func (s *ScriptHooks) PostTool(ctx context.Context, session, tool string, args, 
 	case q.jobs <- job:
 	default:
 		if q.dropped.Add(1) == 1 {
-			s.Warn("post_tool hooks are falling behind; events are being dropped (see the log)")
+			s.Warn("background hooks are falling behind; events are being dropped (see the log)")
 		}
-		slog.WarnContext(ctx, "post_tool hook queue full; event dropped", "tool", tool)
-		s.audit.Log(audit.Entry{Kind: audit.KindHook, Tool: tool, Detail: "post_tool: queue full", Decision: "dropped"})
+		slog.WarnContext(ctx, "hook queue full; event dropped", "event", event, "tool", tool)
+		s.audit.Log(audit.Entry{Kind: audit.KindHook, Tool: tool, Detail: event + ": queue full", Decision: "dropped"})
 	}
 }
 
@@ -181,7 +265,7 @@ func (s *ScriptHooks) dispatchSafely(job postJob) {
 			slog.ErrorContext(job.ctx, "post_tool hook panicked", "tool", job.tool, "panic", r, "stack", string(debug.Stack()))
 		}
 	}()
-	s.dispatch(job.ctx, s.post, job.tool, "post_tool", job.payload)
+	s.dispatch(job.ctx, s.hooks[job.event], job.tool, job.event, job.payload)
 }
 
 // flush waits until every post_tool event queued so far has been handled.
@@ -254,55 +338,118 @@ func (s *ScriptHooks) PromptSubmit(ctx context.Context, session, prompt string) 
 	if s == nil {
 		return ""
 	}
-	return s.runAll(ctx, s.prompt, "", HookEvent{Event: "prompt_submit", SessionID: session, Prompt: prompt})
+	return s.PromptSubmitContext(ctx, session, prompt).blockReason()
 }
 
-func (s *ScriptHooks) runAll(ctx context.Context, hooks []config.HookConfig, tool string, ev HookEvent) string {
-	ev.Workspace = s.workspace
+// PromptSubmitContext runs prompt_submit hooks and returns their outcome:
+// a block, or context text for the agent.
+func (s *ScriptHooks) PromptSubmitContext(ctx context.Context, session, prompt string) Outcome {
+	if s == nil {
+		return Outcome{}
+	}
+	return s.runAll(ctx, "prompt_submit", "", HookEvent{SessionID: session, Prompt: prompt})
+}
+
+// Run runs an event's hooks synchronously and returns their outcome (for
+// session_start, stop and permission_request; tool filters by match).
+func (s *ScriptHooks) Run(ctx context.Context, event, tool string, ev HookEvent) Outcome {
+	if s == nil || !anyMatch(s.hooks[event], tool) {
+		return Outcome{}
+	}
+	return s.runAll(ctx, event, tool, ev)
+}
+
+// Has reports whether any hook handles event.
+func (s *ScriptHooks) Has(event string) bool { return s != nil && len(s.hooks[event]) > 0 }
+
+func (o Outcome) blockReason() string {
+	if o.Blocked {
+		return o.Reason
+	}
+	return ""
+}
+
+// enrich fills in the event name, workspace and session context.
+func (s *ScriptHooks) enrich(ctx context.Context, event string, ev HookEvent) HookEvent {
+	ev.Event, ev.Workspace, ev.Cwd = event, s.workspace, s.workspace
+	if ev.PromptID == "" {
+		ev.PromptID = PromptID(ctx)
+	}
+	if s.Info != nil {
+		info := s.Info(ctx, ev.SessionID)
+		if ev.PromptID == "" {
+			ev.PromptID = info.PromptID
+		}
+		ev.TranscriptPath, ev.PermissionMode, ev.Agent = info.TranscriptPath, info.PermissionMode, info.Agent
+	}
+	return ev
+}
+
+func (s *ScriptHooks) runAll(ctx context.Context, event, tool string, ev HookEvent) Outcome {
+	ev = s.enrich(ctx, event, ev)
 	payload, err := json.Marshal(ev)
 	if err != nil {
 		payload = nil // each hook then fails with the encoding error below
 	}
-	return s.dispatch(ctx, hooks, tool, ev.Event, payload)
+	return s.dispatch(ctx, s.hooks[event], tool, event, payload)
 }
 
 // dispatch runs the hooks matching tool on an encoded event; the first
 // block wins.
-func (s *ScriptHooks) dispatch(ctx context.Context, hooks []config.HookConfig, tool, event string, payload []byte) string {
+func (s *ScriptHooks) dispatch(ctx context.Context, hooks []config.HookConfig, tool, event string, payload []byte) Outcome {
+	var out Outcome
+	var contexts []string
 	for _, h := range hooks {
 		if tool != "" && h.Match != "" {
 			if ok, _ := path.Match(h.Match, tool); !ok {
 				continue
 			}
 		}
-		blocked, reason, err := s.run(ctx, h, event, tool, payload)
+		o, err := s.run(ctx, h, event, tool, payload)
 		entry := audit.Entry{Kind: audit.KindHook, Tool: tool, Detail: event + ": " + h.Command}
 		switch {
-		case blocked:
+		case o.Blocked:
 			entry.Decision = "block"
-			entry.Error = reason
+			entry.Error = o.Reason
 			s.audit.Log(entry)
-			return reason
+			o.Context = strings.Join(append(contexts, o.Context), "\n\n")
+			return o
 		case err != nil:
 			entry.Error = err.Error()
 			s.audit.Log(entry)
 			slog.WarnContext(ctx, "hook failed", "event", event, "command", h.Command, "error", err)
 			if h.FailClosed {
-				return fmt.Sprintf("hook %q failed and is fail_closed: %v", h.Command, err)
+				return Outcome{Blocked: true, Reason: fmt.Sprintf("hook %q failed and is fail_closed: %v", h.Command, err)}
 			}
 			s.Warn(fmt.Sprintf("hook %q failed: %v", h.Command, err))
+			continue
+		}
+		if o.Decision != "" && out.Decision == "" {
+			out.Decision, out.Reason = o.Decision, o.Reason
+			entry.Decision = o.Decision
+			s.audit.Log(entry)
+		}
+		if o.Continue && !out.Continue {
+			out.Continue = true
+			if out.Reason == "" {
+				out.Reason = o.Reason
+			}
+		}
+		if strings.TrimSpace(o.Context) != "" {
+			contexts = append(contexts, strings.TrimSpace(o.Context))
 		}
 	}
-	return ""
+	out.Context = strings.Join(contexts, "\n\n")
+	return out
 }
 
 // run executes one hook. Exit 0 continues unless stdout is a JSON block
 // decision; exit 2 blocks with stderr as the reason; other failures are errors.
-func (s *ScriptHooks) run(ctx context.Context, h config.HookConfig, event, tool string, payload []byte) (blocked bool, reason string, err error) {
+func (s *ScriptHooks) run(ctx context.Context, h config.HookConfig, event, tool string, payload []byte) (out Outcome, err error) {
 	ctx, span := observability.Start(ctx, "hook "+event,
 		attribute.String("hook.event", event), attribute.String("tool", tool))
 	defer func() {
-		span.SetAttributes(attribute.Bool("blocked", blocked))
+		span.SetAttributes(attribute.Bool("blocked", out.Blocked))
 		observability.End(span, err)
 	}()
 	timeout := defaultHookTimeout
@@ -313,11 +460,11 @@ func (s *ScriptHooks) run(ctx context.Context, h config.HookConfig, event, tool 
 	defer cancel()
 
 	if payload == nil {
-		return false, "", errors.New("hook event could not be encoded")
+		return Outcome{}, errors.New("hook event could not be encoded")
 	}
 	cmd, err := s.exec.command(hctx, []string{"bash", "-c", h.Command})
 	if err != nil {
-		return false, "", err
+		return Outcome{}, err
 	}
 	cmd.Dir = s.workspace
 	cmd.Stdin = bytes.NewReader(payload)
@@ -326,7 +473,7 @@ func (s *ScriptHooks) run(ctx context.Context, h config.HookConfig, event, tool 
 
 	runErr := cmd.Run()
 	if hctx.Err() == context.DeadlineExceeded {
-		return false, "", fmt.Errorf("timed out after %s", timeout)
+		return Outcome{}, fmt.Errorf("timed out after %s", timeout)
 	}
 	if runErr != nil {
 		if cmd.ProcessState != nil && cmd.ProcessState.ExitCode() == 2 {
@@ -334,17 +481,28 @@ func (s *ScriptHooks) run(ctx context.Context, h config.HookConfig, event, tool 
 			if msg == "" {
 				msg = "blocked by hook"
 			}
-			return true, msg, nil
+			return Outcome{Blocked: true, Reason: msg}, nil
 		}
-		return false, "", fmt.Errorf("%v: %s", runErr, strings.TrimSpace(stderr.String()))
+		return Outcome{}, fmt.Errorf("%v: %s", runErr, strings.TrimSpace(stderr.String()))
 	}
+	text := strings.TrimSpace(stdout.String())
 	var reply hookReply
-	if out := strings.TrimSpace(stdout.String()); strings.HasPrefix(out, "{") && json.Unmarshal([]byte(out), &reply) == nil &&
-		strings.EqualFold(reply.Decision, "block") {
-		if reply.Reason == "" {
-			reply.Reason = "blocked by hook"
+	if strings.HasPrefix(text, "{") && json.Unmarshal([]byte(text), &reply) == nil {
+		out = Outcome{Reason: reply.Reason, Continue: reply.Continue, Context: reply.AdditionalContext}
+		switch d := strings.ToLower(reply.Decision); d {
+		case "block":
+			out.Blocked = true
+			if out.Reason == "" {
+				out.Reason = "blocked by hook"
+			}
+		case "allow", "deny", "ask":
+			out.Decision = d
 		}
-		return true, reply.Reason, nil
+		return out, nil
 	}
-	return false, "", nil
+	// Plain output is context for the agent where an event gives it any.
+	if event == "session_start" || event == "prompt_submit" {
+		out.Context = text
+	}
+	return out, nil
 }

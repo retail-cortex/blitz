@@ -1,12 +1,14 @@
 package app
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"slices"
 	"time"
 
 	"github.com/retail-cortex/blitz/internal/session"
+	"github.com/retail-cortex/blitz/internal/tools"
 )
 
 // Saved sessions: listing, starting, resuming, snapshots and renaming.
@@ -95,21 +97,63 @@ func (w *Workspace) ActiveSession() (SessionInfo, bool) {
 // NewSession starts a new session for the active agent and makes it
 // active. It is named after its first prompt.
 func (w *Workspace) NewSession() (SessionInfo, error) {
+	prev := w.storage.Active()
 	r, err := w.storage.CreateSession(session.NewSessionID(), "", w.engine.ActiveAgent())
 	if err != nil {
 		return SessionInfo{}, err
 	}
+	w.switched(prev, r.ID, "new", "new")
 	return sessionInfo(r), nil
+}
+
+// switched runs session_end for the session that was active (if another)
+// and session_start for the one that now is.
+func (w *Workspace) switched(prev *session.SessionRecord, id, endReason, startReason string) {
+	if prev != nil && prev.ID != id {
+		w.sessionEnded(prev.ID, endReason)
+	}
+	w.sessionStarted(id, startReason)
+}
+
+// sessionStarted runs session_start hooks and keeps what they give as
+// context for the session's next prompt.
+func (w *Workspace) sessionStarted(id, reason string) {
+	out := w.tools.ScriptHooks().Run(context.Background(), "session_start", "", tools.HookEvent{SessionID: id, Reason: reason})
+	if out.Context == "" {
+		return
+	}
+	w.hookCtxMu.Lock()
+	defer w.hookCtxMu.Unlock()
+	if w.sessionContext == nil {
+		w.sessionContext = map[string]string{}
+	}
+	w.sessionContext[id] = out.Context
+}
+
+// sessionEnded runs session_end hooks, in the background.
+func (w *Workspace) sessionEnded(id, reason string) {
+	w.tools.ScriptHooks().Async(context.Background(), "session_end", "", tools.HookEvent{SessionID: id, Reason: reason})
+}
+
+// takeSessionContext returns and forgets a session_start hook's context.
+func (w *Workspace) takeSessionContext(id string) string {
+	w.hookCtxMu.Lock()
+	defer w.hookCtxMu.Unlock()
+	c := w.sessionContext[id]
+	delete(w.sessionContext, id)
+	return c
 }
 
 // LoadSession makes the session ref names active: an ID, or the name of a
 // snapshot, which starts a new session copied from it (branched). A
 // session from another workspace can be loaded by ID.
 func (w *Workspace) LoadSession(ref string) (s SessionInfo, branched bool, err error) {
+	prev := w.storage.Active()
 	r, branched, err := w.storage.Open(ref)
 	if err != nil {
 		return SessionInfo{}, false, err
 	}
+	w.switched(prev, r.ID, "load", "resume")
 	return sessionInfo(r), branched, nil
 }
 
@@ -145,11 +189,17 @@ func (w *Workspace) RenameSession(title string) (SessionInfo, error) {
 // "latest", or else a new session. It reports whether a session was resumed.
 func (w *Workspace) OpenSession(resume string, cont bool) (SessionInfo, bool, error) {
 	// A new session is named after its first prompt.
+	prev := w.storage.Active()
 	rec, resumed, err := selectSession(w.storage, resume, cont, "", w.engine.ActiveAgent())
 	if err != nil {
 		return SessionInfo{}, false, err
 	}
 	w.audit.SetContext(rec.ID, w.Dir())
+	start := "startup"
+	if resumed {
+		start = "resume"
+	}
+	w.switched(prev, rec.ID, "new", start)
 	return sessionInfo(rec), resumed, nil
 }
 

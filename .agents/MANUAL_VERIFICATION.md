@@ -385,3 +385,6 @@ Set `fallback_models = ["anthropic/claude-sonnet-5"]` with a working Anthropic k
 - [ ] 💲 `/review` on uncommitted changes: findings with file and line, and no file edited (plan mode). `/verify` runs `make check` here and reports.
 - [ ] A command with `allowed-tools: Read, Grep`: 💲 ask it to edit a file; the edit is refused with the allowed list.
 - [ ] 💲 `/code-review focus on the new code` runs the built-in skill by name.
+- [ ] 💲 `[[hooks.stop]] command = "grep -q stop_hook_active || echo '{\"continue\": true, \"reason\": \"Now run the tests.\"}'"`: after a turn the agent runs the tests once, and the transcript shows `(stop hook) Now run the tests.`.
+- [ ] `[[hooks.session_start]] command = "echo 'Use tabs.'"` and 💲 ask for a small edit: the agent follows it. `[[hooks.notification]] command = "osascript -e 'display notification \"Blitz needs you\"'"`: a notification appears when an approval waits.
+- [ ] `[[hooks.permission_request]] match = "run_shell_command" command = "grep -q '\"go test' && echo '{\"decision\":\"allow\"}'"`: 💲 `go test` runs without asking; other commands still ask.

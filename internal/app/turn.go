@@ -5,9 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/retail-cortex/blitz/internal/audit"
 	"github.com/retail-cortex/blitz/internal/i18n"
 	"github.com/retail-cortex/blitz/internal/images"
@@ -126,8 +128,11 @@ func (w *Workspace) Run(ctx context.Context, sessionID string, t Turn, on func(E
 // its active one (a worker run has its own). extra are further engine
 // options for a non-aside turn (a worker's agent and model).
 func (w *Workspace) run(ctx context.Context, sessionID string, t Turn, on func(Event), st *session.Storage, extra ...runtime.ExecOption) (TurnResult, error) {
+	ctx = tools.WithPromptID(ctx, uuid.NewString())
+	var hookContext string
 	if !t.Accepted {
-		if err := w.accept(ctx, sessionID, t.Text); err != nil {
+		var err error
+		if hookContext, err = w.accept(ctx, sessionID, t.Text); err != nil {
 			return TurnResult{}, err
 		}
 	}
@@ -185,24 +190,44 @@ func (w *Workspace) run(ctx context.Context, sessionID string, t Turn, on func(E
 	if len(t.FetchGrants) > 0 {
 		ctx = tools.WithFetchGrants(ctx, t.FetchGrants)
 	}
+	// Context from the user's hooks goes to the agent with the prompt: a
+	// session_start hook's with the session's first real prompt.
+	if !t.Aside {
+		prompt = withHookContext(prompt, "session_start", w.takeSessionContext(sessionID))
+	}
+	prompt = withHookContext(prompt, "prompt_submit", hookContext)
 	var err error
 	if t.Aside {
 		err = w.engine.Aside(ctx, sessionID, prompt, handler)
 	} else {
-		opts := append([]runtime.ExecOption(nil), extra...)
+		base := append([]runtime.ExecOption(nil), extra...)
 		if t.MaxTurns > 0 {
-			opts = append(opts, runtime.WithMaxTurns(t.MaxTurns))
+			base = append(base, runtime.WithMaxTurns(t.MaxTurns))
 		}
+		if t.Plan || t.planMode {
+			base = append(base, runtime.WithPlanOnly())
+		}
+		if t.ReadOnly != "" {
+			base = append(base, runtime.WithReadOnly(t.ReadOnly))
+		}
+		opts := slices.Clone(base)
 		for _, img := range t.Images {
 			opts = append(opts, runtime.WithAttachments(images.Part(img)))
 		}
-		if t.Plan || t.planMode {
-			opts = append(opts, runtime.WithPlanOnly())
-		}
-		if t.ReadOnly != "" {
-			opts = append(opts, runtime.WithReadOnly(t.ReadOnly))
-		}
 		err = w.engine.Execute(ctx, sessionID, prompt, handler, opts...)
+		// stop hooks may ask the agent to keep going, a few times at most.
+		for i := 0; err == nil && i < maxStopContinues; i++ {
+			out := w.tools.ScriptHooks().Run(ctx, "stop", "", tools.HookEvent{SessionID: sessionID, StopHookActive: i > 0})
+			if !out.Blocked && !out.Continue {
+				break
+			}
+			reason := strings.TrimSpace(out.Reason)
+			if reason == "" {
+				reason = "A stop hook asked you to continue."
+			}
+			w.recordIn(st, "user", "(stop hook) "+reason)
+			err = w.engine.Execute(ctx, sessionID, reason, handler, base...)
+		}
 	}
 	if cause := context.Cause(ctx); err != nil && (errors.Is(cause, ErrCostLimit) || errors.Is(cause, ErrTimeLimit)) {
 		err = cause
@@ -226,21 +251,35 @@ func (w *Workspace) run(ctx context.Context, sessionID string, t Turn, on func(E
 // agent reads it with its next tool result. prompt_submit hooks apply, as to
 // any prompt (a refusal is a *BlockedError), and the transcript records it.
 func (w *Workspace) Steer(ctx context.Context, sessionID, text string) error {
-	if err := w.accept(ctx, sessionID, text); err != nil {
+	hookContext, err := w.accept(ctx, sessionID, text)
+	if err != nil {
 		return err
 	}
 	w.record("user", text)
-	w.engine.Steer(sessionID, text)
+	w.engine.Steer(sessionID, withHookContext(text, "prompt_submit", hookContext))
 	return nil
 }
 
+// maxStopContinues bounds how often stop hooks can make one prompt go on.
+const maxStopContinues = 5
+
+// withHookContext adds a hook's context for the agent to a prompt.
+func withHookContext(prompt, event, context string) string {
+	if strings.TrimSpace(context) == "" {
+		return prompt
+	}
+	return prompt + "\n\n<" + event + "-hook-context>\n" + strings.TrimSpace(context) + "\n</" + event + "-hook-context>"
+}
+
 // accept runs prompt_submit hooks and audits the prompt.
-func (w *Workspace) accept(ctx context.Context, sessionID, text string) error {
-	if reason := w.tools.ScriptHooks().PromptSubmit(ctx, sessionID, text); reason != "" {
-		return &BlockedError{Reason: reason}
+// It returns what the hooks gave as context for the agent.
+func (w *Workspace) accept(ctx context.Context, sessionID, text string) (string, error) {
+	out := w.tools.ScriptHooks().PromptSubmitContext(ctx, sessionID, text)
+	if out.Blocked {
+		return "", &BlockedError{Reason: out.Reason}
 	}
 	w.tools.Hooks().Audit().Log(audit.Entry{Kind: audit.KindPrompt, Session: sessionID, Detail: text})
-	return nil
+	return out.Context, nil
 }
 
 // record adds a message to the active session's transcript. A failure is

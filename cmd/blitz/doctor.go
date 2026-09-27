@@ -248,7 +248,7 @@ func runDoctor(ctx context.Context, g *globalFlags, online bool) []check {
 		}
 	}
 
-	for _, h := range append(append(cfg.Hooks.PreTool, cfg.Hooks.PostTool...), cfg.Hooks.PromptSubmit...) {
+	for _, h := range cfg.Hooks.All() {
 		first := strings.Fields(h.Command)
 		if len(first) > 0 && !strings.ContainsAny(first[0], "$;|&") {
 			if _, err := exec.LookPath(first[0]); err != nil && !fileExists(first[0]) {
