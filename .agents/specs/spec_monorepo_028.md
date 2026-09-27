@@ -54,3 +54,4 @@ Blitz is three independent apps (the CLI, the service, the desktop app) over sha
 - The generated Go code has no doc comments (the Go proto rules compile descriptor sets without source info); the TypeScript keeps them.
 - The Linux desktop build uses the system's GTK and WebKitGTK through pkg-config; a sysroot would make it hermetic.
 - Plain `go build`, `go test` and `go list` don't work: tools that need them (gopls) use the packages driver.
+- The page's tests run in its output directory (`chdir`), where a source file that was deleted stays until removed from `bazel-bin/apps/desktop/web/src` (or `bazel clean`); the text check (`i18n.lint.test.ts`) then reads it. Running the tests from their runfiles would avoid it.
