@@ -33,9 +33,12 @@ exports_files(
         "LICENSE",
         "NOTICE",
         "README.md",
+        "THIRD_PARTY_NOTICES",
         "buf.yaml",
     ],
     visibility = [
+        "//apps/desktop/packaging:__pkg__",
+        "//pkg/legal:__pkg__",
         "//proto/blitz/v1:__pkg__",
         "//release:__pkg__",
     ],

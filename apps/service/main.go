@@ -26,6 +26,7 @@ import (
 	"syscall"
 
 	"github.com/retail-cortex/blitz/apps/service/internal/daemon"
+	"github.com/retail-cortex/blitz/pkg/legal"
 	"github.com/retail-cortex/blitz/pkg/socket"
 	"github.com/spf13/cobra"
 )
@@ -46,6 +47,7 @@ func main() {
 
 func run(ctx context.Context, args []string) int {
 	var o daemon.Options
+	var license string
 	cmd := &cobra.Command{
 		Use:   "blitzd",
 		Short: "The Blitz service: every workspace, over a Unix socket",
@@ -64,6 +66,9 @@ every login.`,
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			if cmd.Flags().Changed("license") {
+				return showLicense(cmd, license)
+			}
 			ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
 			defer stop()
 			o.Version = version
@@ -72,6 +77,8 @@ every login.`,
 	}
 	cmd.Flags().StringVar(&o.Socket, "socket", "", "Unix socket to listen on (default ~/.blitz/run/blitz.sock, or $BLITZ_SOCKET)")
 	cmd.Flags().StringVar(&o.Config, "config", "", "configuration file (default: the usual search, as the CLI's)")
+	cmd.Flags().StringVar(&license, "license", "", "show the license and exit: the NOTICE, or =full (the Apache License) or =third-party (the notices of the software blitzd includes)")
+	cmd.Flags().Lookup("license").NoOptDefVal = "notice"
 	cmd.SetFlagErrorFunc(func(_ *cobra.Command, err error) error { return fmt.Errorf("%w: %v", errUsage, err) })
 	cmd.SetArgs(args)
 	if err := cmd.ExecuteContext(ctx); err != nil {
@@ -82,6 +89,23 @@ every login.`,
 		return exitFailure
 	}
 	return 0
+}
+
+// showLicense prints the license text --license asks for.
+func showLicense(cmd *cobra.Command, which string) error {
+	var text string
+	switch which {
+	case "notice":
+		text = legal.Summary("blitzd --license=")
+	case "full":
+		text = legal.License
+	case "third-party":
+		text = legal.ThirdParty
+	default:
+		return fmt.Errorf("%w: --license=%s: use full or third-party", errUsage, which)
+	}
+	_, err := fmt.Fprint(cmd.OutOrStdout(), text)
+	return err
 }
 
 // errUsage marks a bad flag or argument.

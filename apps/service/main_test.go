@@ -16,6 +16,9 @@ package main
 
 import (
 	"context"
+	"io"
+	"os"
+	"strings"
 	"testing"
 )
 
@@ -27,5 +30,32 @@ func TestUsageErrors(t *testing.T) {
 	}
 	if code := run(context.Background(), []string{"--version"}); code != 0 {
 		t.Errorf("blitzd --version: exit %d", code)
+	}
+}
+
+// --license shows the NOTICE, the Apache License or the third-party
+// notices, and exits without starting the service.
+func TestLicense(t *testing.T) {
+	for arg, want := range map[string]string{
+		"--license":             "Third-party notices: blitzd --license=third-party",
+		"--license=full":        "Apache License",
+		"--license=third-party": "THIRD-PARTY NOTICES",
+	} {
+		r, w, _ := os.Pipe()
+		old := os.Stdout
+		os.Stdout = w
+		// Read while blitzd writes: the notices outgrow a pipe's buffer.
+		read := make(chan []byte)
+		go func() { b, _ := io.ReadAll(r); read <- b }()
+		code := run(context.Background(), []string{arg})
+		w.Close()
+		os.Stdout = old
+		out := <-read
+		if code != 0 || !strings.Contains(string(out), want) {
+			t.Errorf("blitzd %s: exit %d, no %q in %.200s", arg, code, want, out)
+		}
+	}
+	if code := run(context.Background(), []string{"--license=bogus"}); code != exitUsage {
+		t.Errorf("--license=bogus: exit %d", code)
 	}
 }

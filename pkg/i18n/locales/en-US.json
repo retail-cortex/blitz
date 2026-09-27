@@ -88,6 +88,7 @@
     "help.sandbox": "File, command, and OS sandbox policy",
     "help.locale": "Show or change the interface language (e.g. /locale es)",
     "help.set": "Show settings, or set the agency level: /set agency=low|medium|high|extreme",
+    "help.license": "Blitz's license, or its full text or the third-party notices",
     "help.clear": "Clear the terminal screen",
     "help.exit": "Exit Blitz",
     "help.title": "Blitz Commands",

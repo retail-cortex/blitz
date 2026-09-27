@@ -88,6 +88,7 @@
     "help.sandbox": "Politique de bac à sable pour les fichiers, les commandes et le système",
     "help.locale": "Afficher ou changer la langue de l’interface (p. ex. /locale fr-CA)",
     "help.set": "Afficher les paramètres ou régler l’autonomie : /set agency=low|medium|high|extreme",
+    "help.license": "La licence de Blitz, ou son texte complet ou les avis de tiers",
     "help.clear": "Effacer l’écran du terminal",
     "help.exit": "Quitter Blitz",
     "help.title": "Commandes de Blitz",

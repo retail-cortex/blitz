@@ -408,3 +408,20 @@ func TestExecCommand(t *testing.T) {
 		t.Errorf("exec has no --interactive: %v", err)
 	}
 }
+
+func TestLicenseCommand(t *testing.T) {
+	isolate(t)
+	for args, want := range map[string]string{
+		"license":             "The full license:    blitz license full",
+		"license full":        "Apache License",
+		"license third-party": "THIRD-PARTY NOTICES",
+	} {
+		out, err := runCLI(t, strings.Fields(args)...)
+		if err != nil || !strings.Contains(out, want) {
+			t.Errorf("%s: %v, no %q in %.200s", args, err, want, out)
+		}
+	}
+	if _, err := runCLI(t, "license", "bogus"); exitCodeFor(err) != exitUsage {
+		t.Errorf("bogus: %v", err)
+	}
+}

@@ -25,6 +25,7 @@ go_library(
         "configkeys.go",
         "doctor.go",
         "exitcode.go",
+        "license.go",
         "main.go",
         "oneshot.go",
         "service.go",

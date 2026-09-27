@@ -1,0 +1,35 @@
+load("@bazel_lib//lib:copy_file.bzl", "copy_file")
+load("@rules_go//go:def.bzl", "go_library", "go_test")
+
+# The repository's license texts, copied beside legal.go for go:embed
+# (the root files are the only copies in the tree).
+[
+    copy_file(
+        name = "copy_" + f.lower(),
+        src = "//:" + f,
+        out = f,
+    )
+    for f in [
+        "LICENSE",
+        "NOTICE",
+        "THIRD_PARTY_NOTICES",
+    ]
+]
+
+go_library(
+    name = "legal",
+    srcs = ["legal.go"],
+    embedsrcs = [
+        ":copy_license",  # keep
+        ":copy_notice",  # keep
+        ":copy_third_party_notices",  # keep
+    ],
+    importpath = "github.com/retail-cortex/blitz/pkg/legal",
+    visibility = ["//visibility:public"],
+)
+
+go_test(
+    name = "legal_test",
+    srcs = ["legal_test.go"],
+    embed = [":legal"],
+)

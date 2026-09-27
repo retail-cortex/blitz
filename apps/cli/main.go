@@ -116,7 +116,7 @@ Exit codes: 0 success, 1 error, 2 usage, 3 --max-turns reached,
 	f.BoolVarP(&o.version, "version", "v", false, "Print Blitz version")
 	addRunFlags(f, o)
 
-	root.AddCommand(newExecCommand(o), newInitCommand(o), newDoctorCommand(&o.global), newConfigCommand(&o.global), newServeCommand(), newWorkersCommand(&o.global), newServiceCommand())
+	root.AddCommand(newExecCommand(o), newInitCommand(o), newDoctorCommand(&o.global), newConfigCommand(&o.global), newServeCommand(), newWorkersCommand(&o.global), newServiceCommand(), newLicenseCommand())
 	return root
 }
 
@@ -414,13 +414,14 @@ func newCompleter(w api.Backend) *tui.Completer {
 	c := tui.NewCompleter(w.Dir())
 	for _, cmd := range []string{"help", "agents", "model", "skills", "session", "set", "clear", "sandbox", "exit", "quit",
 		"undo", "checkpoints", "diff", "cost", "context", "compact", "memory", "approvals", "mcp", "resume", "locale", "attach", "paste",
-		"tools", "plan", "show", "init", "mode", "permissions", "effort", "rewind", "pin_model", "unpin", "model_settings", "search", "btw", "rename", "envs"} {
+		"tools", "plan", "show", "init", "mode", "permissions", "effort", "rewind", "pin_model", "unpin", "model_settings", "search", "btw", "rename", "envs", "license"} {
 		c.Command(cmd)
 	}
 	c.Command("skills", "list", "show", "search")
 	c.Command("session", "list", "new", "load", "save")
 	c.Command("search", "web", "session")
 	c.Command("envs", "prune", "remove")
+	c.Command("license", "full", "third-party")
 	c.Command("memory", "show", "reload", "add")
 	c.Command("approvals", "revoke", "clear")
 	c.Command("diff", "git")

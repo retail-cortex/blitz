@@ -18,6 +18,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/retail-cortex/blitz/pkg/api"
@@ -160,6 +161,22 @@ func HandleCommand(ctx context.Context, input string, app *App) (bool, error) {
 		}
 		fmt.Println()
 
+	case "license":
+		which := ""
+		if len(args) > 0 {
+			which = strings.ToLower(args[0])
+		}
+		text, err := LicenseText(which, "/license")
+		if err != nil {
+			fmt.Printf("%s%s%s\n", Red, err, Reset)
+			break
+		}
+		fmt.Println()
+		if err := Page(os.Stdout, text); err != nil {
+			fmt.Printf("%s%s%s\n", Red, err, Reset)
+		}
+		fmt.Println()
+
 	case "exit", "quit":
 		return true, ErrExit
 
@@ -212,6 +229,7 @@ func printHelp(app *App) {
 		{"/paste", "help.paste"},
 		{"/locale [code]", "help.locale"},
 		{"/set [key=value], /show", "help.set"},
+		{"/license [full|third-party]", "help.license"},
 		{"/clear", "help.clear"},
 		{"/exit, /quit", "help.exit"},
 	}
