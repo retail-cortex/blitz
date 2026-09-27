@@ -1,8 +1,10 @@
 package runtime
 
 import (
+	"context"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -68,5 +70,44 @@ func TestWithoutPlanModeToolsRunNormally(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(f.cfg.Tools.WorkspaceDir, "new.txt")); err != nil {
 		t.Fatal("create_file did not run outside plan mode")
+	}
+}
+
+// Every primary agent has the workflow tools, whatever its tool list;
+// sub-agents don't.
+func TestPrimaryAgentsHaveWorkflowTools(t *testing.T) {
+	f := newEngineWith(t, fixtureOpts{})
+	if err := f.eng.SetActiveAgent(context.Background(), "qa"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := collect(t, f.eng, "s", "hi"); err != nil {
+		t.Fatal(err)
+	}
+	var names []string
+	for _, tl := range f.llm.Requests[0].Config.Tools {
+		for _, d := range tl.FunctionDeclarations {
+			names = append(names, d.Name)
+		}
+	}
+	for _, want := range []string{"todo", "exit_plan_mode", "enter_plan_mode", "read_file"} {
+		if !slices.Contains(names, want) {
+			t.Errorf("qa lacks %s: %v", want, names)
+		}
+	}
+	if slices.Contains(names, "apply_patch") {
+		t.Error("qa got a tool its list doesn't have")
+	}
+}
+
+// A turn whose agent entered plan mode refuses tools that change things.
+func TestPlanGateRefusesWrites(t *testing.T) {
+	if r := planRefusal(&runState{}, true, "create_file"); r == nil {
+		t.Error("create_file allowed while planning")
+	}
+	if r := planRefusal(&runState{}, true, "todo"); r != nil {
+		t.Error("todo refused while planning")
+	}
+	if r := planRefusal(&runState{}, false, "create_file"); r != nil {
+		t.Error("create_file refused outside plan mode")
 	}
 }

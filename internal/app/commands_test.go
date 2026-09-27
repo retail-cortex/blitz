@@ -37,7 +37,7 @@ func userTextAt(contents []*genai.Content) string {
 
 func TestCustomCommands(t *testing.T) {
 	create := &genai.Content{Role: genai.RoleModel, Parts: []*genai.Part{{FunctionCall: &genai.FunctionCall{Name: "create_file", Args: map[string]any{"path": "x.txt", "content": "x"}}}}}
-	w, llm := openTestWith(t, func(c *config.Config) { c.Blitz.PermissionMode = "accept-edits" }, text("done"), create, text("ok"), text("reviewed"))
+	w, llm := openTestWith(t, func(c *config.Config) { c.Blitz.PermissionMode = "accept-edits" }, text("done"), create, text("ok"), create, text("reviewed"))
 	writeCommand(t, config.ExpandHome("~/.blitz/commands"), "hello.md", "User hello $1.")
 	writeCommand(t, w.Dir(), ".claude/commands/hello.md", "Project hello $ARGUMENTS.") // project wins
 	writeCommand(t, w.Dir(), ".blitz/commands/db/migrate.md", "---\ndescription: Migrate\nallowed-tools: Read, Grep\n---\nMigrate $1.")
@@ -81,10 +81,14 @@ func TestCustomCommands(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(w.Dir(), "x.txt")); err == nil {
 		t.Error("the command's turn created a file it wasn't allowed to")
 	}
-	// A bundled plan-mode command: the prompt is the review instructions.
-	run("/review")
-	if got := userTextAt(llm.Requests[3].Contents); !strings.Contains(got, "plan-only mode") || !strings.Contains(got, "Review code changes") {
+	// A bundled plan-mode command: read-only, and the prompt is the review
+	// instructions as written (not a request for a plan).
+	result, _ = run("/review")
+	if got := userTextAt(llm.Requests[3].Contents); strings.Contains(got, "plan-only mode") || !strings.Contains(got, "Review code changes") {
 		t.Errorf("review prompt %q", got)
+	}
+	if msg, _ := result["error"].(string); !strings.Contains(msg, "/review is read-only") {
+		t.Errorf("/review could write: %v", result)
 	}
 	// The transcript records the command as typed.
 	msgs := w.storage.Active().Messages

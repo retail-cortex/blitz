@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	core "github.com/retail-cortex/blitz/internal/app"
 	"github.com/retail-cortex/blitz/internal/i18n"
 	"github.com/retail-cortex/blitz/internal/textutil"
 )
@@ -118,4 +119,20 @@ func SummarizeToolResponse(resp map[string]any) (summary string, success bool) {
 		return fmt.Sprintf("%d bytes read", len(cnt)), true
 	}
 	return "", true
+}
+
+// FormatTasks renders the agent's task list as a checklist.
+func FormatTasks(tasks []core.Task) string {
+	var sb strings.Builder
+	for _, t := range tasks {
+		switch t.Status {
+		case "done":
+			fmt.Fprintf(&sb, "  %s☒ %s%s\n", Dim, safe(t.Content), Reset)
+		case "in_progress":
+			fmt.Fprintf(&sb, "  %s☐ %s%s\n", Bold+Cyan, safe(t.Content), Reset)
+		default:
+			fmt.Fprintf(&sb, "  ☐ %s\n", safe(t.Content))
+		}
+	}
+	return sb.String()
 }

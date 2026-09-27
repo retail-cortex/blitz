@@ -190,6 +190,8 @@ func NewRegistry(cfg *config.Config, agentReg *agents.Registry, skillProv *skill
 		}},
 		{[]string{"manage_background_process"}, func() (tool.Tool, error) { return NewManageBackgroundTool(r.processes) }},
 		{[]string{"ask_user_question"}, func() (tool.Tool, error) { return NewAskUserQuestionTool(r.hooks) }},
+		{[]string{"todo"}, func() (tool.Tool, error) { return NewTodoTool() }},
+		{[]string{"exit_plan_mode"}, func() (tool.Tool, error) { return NewExitPlanModeTool(ws, r.hooks) }},
 		{[]string{"view_image"}, func() (tool.Tool, error) {
 			if r.images == nil {
 				return nil, nil
@@ -199,6 +201,9 @@ func NewRegistry(cfg *config.Config, agentReg *agents.Registry, skillProv *skill
 		{[]string{"universal_constructor"}, func() (tool.Tool, error) {
 			return NewUniversalConstructorTool(cfg.Tools.UCToolsDir, r.hooks, env, policy)
 		}},
+	}
+	if cfg.Blitz.PlanReview == config.PlanReviewAgent {
+		entries = append(entries, entry{[]string{"enter_plan_mode"}, func() (tool.Tool, error) { return NewEnterPlanModeTool(r.hooks) }})
 	}
 	if cfg.Web.Enabled {
 		entries = append(entries, entry{[]string{"web_fetch"}, func() (tool.Tool, error) {
@@ -363,6 +368,14 @@ func (r *Registry) GetToolsForAgent(toolNames []string) []tool.Tool {
 	}
 	return result
 }
+
+// workflowTools are the tools every primary agent has, whatever its tool
+// list: they organise the work (a task list, plans for approval) rather
+// than act on anything.
+var workflowTools = []string{"todo", "exit_plan_mode", "enter_plan_mode"}
+
+// WorkflowTools returns the workflow tools that are registered.
+func (r *Registry) WorkflowTools() []tool.Tool { return r.GetToolsForAgent(workflowTools) }
 
 // GetAllTools returns all registered tools (aliases de-duplicated).
 func (r *Registry) GetAllTools() []tool.Tool {

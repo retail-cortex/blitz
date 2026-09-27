@@ -1,6 +1,7 @@
 package app
 
 import (
+	"github.com/retail-cortex/blitz/internal/tools"
 	adksession "google.golang.org/adk/v2/session"
 )
 
@@ -13,6 +14,15 @@ type Event struct {
 	Text       *Text
 	ToolCall   *ToolCall
 	ToolResult *ToolResult
+	// Tasks is the agent's task list, whole, each time it changes (the todo
+	// tool).
+	Tasks []Task
+}
+
+// Task is an item of the agent's task list.
+type Task struct {
+	Content string
+	Status  string // pending, in_progress or done
 }
 
 // Text is model output. With streaming, partial chunks arrive first and a
@@ -61,6 +71,15 @@ func events(ev *adksession.Event) []Event {
 			out = append(out, Event{Author: ev.Author, ToolCall: &ToolCall{ID: p.FunctionCall.ID, Name: p.FunctionCall.Name, Args: p.FunctionCall.Args, Partial: ev.Partial}})
 		case p.FunctionResponse != nil:
 			out = append(out, Event{Author: ev.Author, ToolResult: &ToolResult{ID: p.FunctionResponse.ID, Name: p.FunctionResponse.Name, Result: p.FunctionResponse.Response}})
+			if p.FunctionResponse.Name == "todo" {
+				if items := tools.TodoItems(p.FunctionResponse.Response); items != nil {
+					tasks := make([]Task, len(items))
+					for i, it := range items {
+						tasks[i] = Task{Content: it.Content, Status: it.Status}
+					}
+					out = append(out, Event{Author: ev.Author, Tasks: tasks})
+				}
+			}
 		}
 	}
 	return out

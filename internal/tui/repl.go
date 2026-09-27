@@ -161,6 +161,13 @@ func (p *Printer) Handle(ev core.Event) {
 		if !ev.Text.Thought && !ev.Text.Repeat {
 			p.text(ev.Text.Text)
 		}
+	case ev.Tasks != nil:
+		p.spin.Stop()
+		p.flushText()
+		fmt.Fprint(p.out, FormatTasks(ev.Tasks))
+		p.spin.Start(i18n.T("spinner.working"))
+	case ev.ToolCall != nil && ev.ToolCall.Name == "todo", ev.ToolResult != nil && ev.ToolResult.Name == "todo" && ev.ToolResult.Result["error"] == nil:
+		// Shown as the checklist (Tasks).
 	case ev.ToolCall != nil:
 		p.spin.Stop()
 		p.flushText()

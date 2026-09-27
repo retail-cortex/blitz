@@ -77,6 +77,7 @@ type Message struct {
 const (
 	KindSteer = "steer"
 	KindHook  = "hook"
+	KindPlan  = "plan" // the approved plan's go-ahead
 )
 
 // IsPrompt reports whether m is a prompt the user sent (a rewind point).

@@ -95,8 +95,8 @@ func (w *Workspace) expandCommand(ctx context.Context, t *Turn) ([]runtime.ExecO
 		return nil, fmt.Errorf("%w: /%s", ErrUnknownCommand, name)
 	}
 	t.Prompt = c.Expand(args)
-	if c.Plan {
-		t.planMode = true
+	if c.Plan { // read-only, with the command's own instructions
+		t.ReadOnly = "/" + name
 	}
 	var opts []runtime.ExecOption
 	if c.Agent != "" {

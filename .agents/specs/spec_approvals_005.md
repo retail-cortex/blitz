@@ -47,6 +47,10 @@ Sensitive tool actions (edits, deletions, commands, network, MCP tools, forged t
 
 - **APR-30** Shows the detail and (for edits) a coloured diff truncated to `ui.diff_lines` (120); answers `y` once, `s` session, `a` always, `n` no. Ctrl+C at an approval prompt cancels the whole turn. With no terminal to ask, the request is denied unless covered by config.
 
-## 6. `ask_user_question`
+## 6. `ask_user_question`, plans and the task list
+
+- **APR-41** `exit_plan_mode(plan)`: only while the turn is planning (else an error). Unattended, `dont-ask` or no prompter → `approved: false` and "end your turn with the plan as your answer". Otherwise the plan goes to the user through the question prompter, with options *Yes, carry it out* / *Yes, and accept its file edits without asking* / *No, keep planning* (localized); any other answer is feedback (`approved: false, feedback`), and the agent revises. On approval the plan is saved to `.blitz/plans/<session>-<n>.md` (session ID made file-safe; `n` the first free number), the gate records the mode (`default` or `accept-edits`) and planning ends.
+- **APR-42** `enter_plan_mode(reason?)` (registered only with `plan_review = agent-decides`): refused when no one can review (unattended, `dont-ask`, no prompter); otherwise the rest of the turn plans.
+- **APR-43** `todo(items)`: the whole list, each `{content, status}` with status `pending|in_progress|done` (`todo`, `in-progress`, `completed` and the like are normalized); at most 50 items; empty content or an unknown status is an error; more than one `in_progress` adds a note. The result carries the normalized items, `done` and `total`; front ends show it as a checklist (`app.Event.Tasks`).
 
 - **APR-40** Args `question`, `options?`. Empty question → error. Unattended → error "this run is unattended: no one can answer; decide yourself and say what you assumed". No prompter → "interactive input is not available; proceed with your best judgement". Otherwise returns the user's answer. The prompter shares the front end's input reader (no competing stdin readers).

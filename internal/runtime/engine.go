@@ -415,13 +415,19 @@ func (e *Engine) generateConfig() *genai.GenerateContentConfig {
 }
 
 // newLLMAgent builds spec's agent running on llm.
-func (e *Engine) newLLMAgent(spec *agents.AgentSpec, llm model.LLM, instruction string, subAgents []agent.Agent, toolsets []tool.Toolset) (agent.Agent, error) {
+func (e *Engine) newLLMAgent(spec *agents.AgentSpec, llm model.LLM, instruction string, subAgents []agent.Agent, toolsets []tool.Toolset, extra ...tool.Tool) (agent.Agent, error) {
+	list := e.toolReg.GetToolsForAgent(spec.Tools)
+	for _, t := range extra {
+		if !slices.ContainsFunc(list, func(x tool.Tool) bool { return x.Name() == t.Name() }) {
+			list = append(list, t)
+		}
+	}
 	return llmagent.New(llmagent.Config{
 		Name:                  spec.Name,
 		Description:           spec.Description,
 		Instruction:           instruction + e.imageInstruction(spec) + e.extraInstructions,
 		Model:                 llm,
-		Tools:                 e.toolReg.GetToolsForAgent(spec.Tools),
+		Tools:                 list,
 		Toolsets:              toolsets,
 		SubAgents:             subAgents,
 		GenerateContentConfig: e.generateConfig(),
@@ -506,7 +512,7 @@ func (e *Engine) beforeTool(ctx agent.Context, t tool.Tool, args map[string]any)
 	log := e.toolReg.Hooks().Audit()
 	log.Log(audit.Entry{Kind: audit.KindToolCall, Tool: t.Name(), Args: args})
 
-	if r := planRefusal(stateFrom(ctx), t.Name()); r != nil {
+	if r := planRefusal(stateFrom(ctx), tools.PlanGateFrom(ctx).Planning(), t.Name()); r != nil {
 		return r, nil
 	}
 	if r := allowedRefusal(stateFrom(ctx), t.Name()); r != nil {
@@ -653,7 +659,7 @@ func (e *Engine) buildTreeLocked(active string, override model.LLM) (tree, error
 	// MCP servers choose their agents; by default only the primary agent.
 	llm := e.modelInTreeLocked(active, active, override)
 	t.models[active] = llm
-	rootAgent, err := e.newLLMAgent(rootSpec, llm, rootInstruction, subAgents, e.toolReg.MCP().ToolsetsFor(rootSpec.Name, true))
+	rootAgent, err := e.newLLMAgent(rootSpec, llm, rootInstruction, subAgents, e.toolReg.MCP().ToolsetsFor(rootSpec.Name, true), e.toolReg.WorkflowTools()...)
 	if err != nil {
 		return tree{}, fmt.Errorf("failed to build root agent: %w", err)
 	}

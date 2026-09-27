@@ -214,6 +214,11 @@ func event(ev *pb.TurnEvent) (app.Event, bool) {
 		out.ToolCall = &app.ToolCall{ID: k.ToolCall.Id, Name: k.ToolCall.Name, Args: k.ToolCall.GetArgs().AsMap(), Partial: k.ToolCall.Partial}
 	case *pb.TurnEvent_ToolResult:
 		out.ToolResult = &app.ToolResult{ID: k.ToolResult.Id, Name: k.ToolResult.Name, Result: k.ToolResult.GetResult().AsMap()}
+	case *pb.TurnEvent_Tasks:
+		out.Tasks = []app.Task{}
+		for _, t := range k.Tasks.Items {
+			out.Tasks = append(out.Tasks, app.Task{Content: t.Content, Status: t.Status})
+		}
 	default:
 		return app.Event{}, false
 	}

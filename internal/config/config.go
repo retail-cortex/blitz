@@ -66,6 +66,10 @@ type BlitzConfig struct {
 	// PermissionMode is the starting permission mode: default,
 	// accept-edits, plan, dont-ask or bypass (which needs the OS sandbox).
 	PermissionMode string `toml:"permission_mode"`
+	// PlanReview decides when the agent plans for approval before changing
+	// anything: always (every prompt), agent-decides (it may choose to, with
+	// enter_plan_mode) or never (only in plan mode and /plan).
+	PlanReview string `toml:"plan_review"`
 	// TrustWorkspace allows agents and skills found inside the current
 	// workspace (./agents, ./skills, .agents/skills) to be loaded. Workspace
 	// content can inject prompts, so it is off by default and can only be
@@ -356,6 +360,7 @@ func DefaultConfig() *Config {
 			Temperature:  0.2,
 			MaxTokens:    8192,
 			AutoApprove:  false,
+			PlanReview:   PlanReviewAgent,
 		},
 		LLM: LLMConfig{
 			Provider:            "gemini",
@@ -571,3 +576,10 @@ func applyEnvOverrides(cfg *Config) {
 	}
 
 }
+
+// Plan review policies ([blitz] plan_review).
+const (
+	PlanReviewAlways = "always"
+	PlanReviewAgent  = "agent-decides"
+	PlanReviewNever  = "never"
+)

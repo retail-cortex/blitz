@@ -114,7 +114,7 @@ Subcommands: `doctor [--online]`, `config init|show|path`, `completion bash|zsh|
 | `/search session <terms>` | Find what this session said about something: matching passages from the full transcript (including anything compacted away) go to the agent, which answers from them |
 | `/mode [name]` | Show or change the permission mode (see *Safety Model*) |
 | `/permissions [allow\|ask\|deny\|remove <rule> [--save]]` | Permission rules (see *Safety Model*) |
-| `/plan <goal>` | Ask for a plan without changing anything. The agent can read, search and delegate, but edits, commands and MCP tools are refused for that turn |
+| `/plan <goal>` | Ask for a plan without changing anything: the agent reads, searches and delegates (edits, commands and MCP tools are refused), then shows the plan for approval — carry it out (optionally accepting its edits), type what to change, or keep planning. An approved plan is saved in `.blitz/plans/` and carried out in the same turn |
 | `!<command>` | Run a command yourself, like in your own terminal: in the workspace, with your environment, outside the agent's sandbox and approvals. The agent doesn't see it; the audit log records it |
 | `/attach [path\|clear]`, `/paste` | Queue an image (or the clipboard's) for your next message |
 | `/locale [code]` | Interface language (see below) |
@@ -165,6 +165,8 @@ Both are **read-only turns**: the agent can read files, fetch and search, but ed
 ## Safety Model
 
 **Approvals.** File edits show a colored diff before you approve. Answers: `y` once, `s` for the rest of the session, `a` always (saved to `~/.blitz/approvals.json`), `n` no. Commands are remembered by exact text within a workspace; edits per workspace; web requests per host; MCP tools per server/tool. Ctrl+C at an approval prompt cancels the whole turn. With no terminal to ask, sensitive actions are denied unless auto-approved in config.
+
+**Plans and task lists.** In plan mode, with `/plan`, or when the agent chooses to plan first (`enter_plan_mode`), it presents its plan with `exit_plan_mode`; approving it carries it out right away (leaving plan mode), typing feedback makes it revise. `[blitz] plan_review` sets when plans are required: `always` (every prompt), `agent-decides` (default) or `never`. For work with several steps the agent keeps a task list (`todo`), shown as a checklist that updates as it goes.
 
 **Permission modes** decide what runs without asking: `default` (ask), `accept-edits` (file changes in the workspace go through without asking; commands still ask), `plan` (every prompt is planned; tools that change anything are refused), `dont-ask` (anything that would ask is refused — for CI and scripts), and `bypass` (nothing asks). `bypass` only runs while the OS sandbox is active, and deny rules, blocked paths and the sandboxes still apply; without a sandbox Blitz stays in `default` and says why. Choose one with `--permission-mode`, `[blitz] permission_mode`, or `/mode` in a session (the prompt shows any mode other than `default`). The older `auto_approve = true` means `bypass`. Scheduled workers ignore the mode: they get exactly their own permissions.
 

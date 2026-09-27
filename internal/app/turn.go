@@ -11,6 +11,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/retail-cortex/blitz/internal/audit"
+	"github.com/retail-cortex/blitz/internal/config"
 	"github.com/retail-cortex/blitz/internal/i18n"
 	"github.com/retail-cortex/blitz/internal/images"
 	"github.com/retail-cortex/blitz/internal/runtime"
@@ -109,17 +110,18 @@ func (e *BlockedError) Error() string { return "prompt blocked by hook: " + e.Re
 // refused prompt is a *BlockedError. A turn that fails part way still
 // returns what it produced.
 func (w *Workspace) Run(ctx context.Context, sessionID string, t Turn, on func(Event)) (TurnResult, error) {
-	// Plan permission mode plans every prompt; side questions and
-	// read-only turns are read-only already.
-	if w.tools.Hooks().Mode() == tools.ModePlan && !t.Plan && !t.Aside && t.ReadOnly == "" {
-		t.planMode = true
-	}
 	var opts []runtime.ExecOption
 	if t.Command {
 		var err error
 		if opts, err = w.expandCommand(ctx, &t); err != nil {
 			return TurnResult{}, err
 		}
+	}
+	// Plan permission mode, and plan_review = always, plan every prompt
+	// first; side questions and read-only turns are read-only already.
+	planEvery := w.tools.Hooks().Mode() == tools.ModePlan || w.cfg.Blitz.PlanReview == config.PlanReviewAlways
+	if planEvery && !t.Plan && !t.Aside && t.ReadOnly == "" {
+		t.planMode = true
 	}
 	return w.run(ctx, sessionID, t, on, w.storage, opts...)
 }
@@ -129,6 +131,9 @@ func (w *Workspace) Run(ctx context.Context, sessionID string, t Turn, on func(E
 // options for a non-aside turn (a worker's agent and model).
 func (w *Workspace) run(ctx context.Context, sessionID string, t Turn, on func(Event), st *session.Storage, extra ...runtime.ExecOption) (TurnResult, error) {
 	ctx = tools.WithPromptID(ctx, uuid.NewString())
+	// The turn's plan state: the plan tools report the user's decision here.
+	gate := tools.NewPlanGate(t.Plan || t.planMode)
+	ctx = tools.WithPlanGate(ctx, gate)
 	var hookContext string
 	if !t.Accepted {
 		var err error
@@ -212,17 +217,32 @@ func (w *Workspace) run(ctx context.Context, sessionID string, t Turn, on func(E
 		if t.MaxTurns > 0 {
 			base = append(base, runtime.WithMaxTurns(t.MaxTurns))
 		}
-		if t.Plan || t.planMode {
-			base = append(base, runtime.WithPlanOnly())
-		}
 		if t.ReadOnly != "" {
 			base = append(base, runtime.WithReadOnly(t.ReadOnly))
+		}
+		carryOut := slices.Clone(base) // for a plan once approved
+		if t.Plan || t.planMode {
+			base = append(base, runtime.WithPlanOnly())
 		}
 		opts := slices.Clone(base)
 		for _, img := range t.Images {
 			opts = append(opts, runtime.WithAttachments(images.Part(img)))
 		}
 		err = w.engine.Execute(ctx, sessionID, prompt, handler, opts...)
+		// An approved plan is carried out in the same turn (a few times at
+		// most, should the agent plan again).
+		for i := 0; err == nil && i < maxPlanRounds; i++ {
+			_, path, mode, ok := gate.Take()
+			if !ok {
+				break
+			}
+			w.planApproved(mode)
+			goAhead := runtime.CarryOutPrompt(path)
+			w.appendIn(st, session.Message{Role: "user", Content: "(plan approved) " + goAhead, Kind: session.KindPlan})
+			base = carryOut
+			r.paragraph()
+			err = w.engine.Execute(ctx, sessionID, goAhead, handler, carryOut...)
+		}
 		// stop hooks may ask the agent to keep going, a few times at most.
 		for i := 0; err == nil && i < maxStopContinues; i++ {
 			out := w.tools.ScriptHooks().Run(ctx, "stop", "", tools.HookEvent{SessionID: sessionID, StopHookActive: i > 0})
@@ -234,6 +254,7 @@ func (w *Workspace) run(ctx context.Context, sessionID string, t Turn, on func(E
 				reason = "A stop hook asked you to continue."
 			}
 			w.appendIn(st, session.Message{Role: "user", Content: "(stop hook) " + reason, Kind: session.KindHook})
+			r.paragraph()
 			err = w.engine.Execute(ctx, sessionID, reason, handler, base...)
 		}
 	}
@@ -270,6 +291,21 @@ func (w *Workspace) Steer(ctx context.Context, sessionID, text string) error {
 
 // maxStopContinues bounds how often stop hooks can make one prompt go on.
 const maxStopContinues = 5
+
+// maxPlanRounds bounds how many approved plans one prompt carries out.
+const maxPlanRounds = 3
+
+// planApproved leaves plan mode for the mode the user chose to carry out
+// a plan in. Outside plan mode, only a choice of accept-edits changes it.
+func (w *Workspace) planApproved(mode tools.PermissionMode) {
+	current := w.tools.Hooks().Mode()
+	if current != tools.ModePlan && mode != tools.ModeAcceptEdits || current == mode {
+		return
+	}
+	if _, err := w.SetPermissionMode(string(mode)); err != nil {
+		w.warn(err.Error())
+	}
+}
 
 // withHookContext adds a hook's context for the agent to a prompt.
 func withHookContext(prompt, event, context string) string {
@@ -323,6 +359,18 @@ type relay struct {
 	on       func(Event)
 	streamed bool // answer text arrived in partial chunks since the last final event
 	output   strings.Builder
+}
+
+// paragraph separates the output of a run that follows another in the same
+// turn (a stop hook's or an approved plan's), in the result and on screen.
+func (r *relay) paragraph() {
+	s := r.output.String()
+	if s == "" || strings.HasSuffix(s, "\n\n") {
+		return
+	}
+	sep := strings.Repeat("\n", 2-min(2, len(s)-len(strings.TrimRight(s, "\n"))))
+	r.output.WriteString(sep)
+	r.on(Event{Text: &Text{Text: sep}})
 }
 
 func (r *relay) handle(ev *adksession.Event) error {

@@ -285,6 +285,25 @@ func TestRemoteRewind(t *testing.T) {
 	}
 }
 
+// The agent's task list reaches the client as Tasks events.
+func TestRemoteTasks(t *testing.T) {
+	todo := &genai.Content{Role: genai.RoleModel, Parts: []*genai.Part{{FunctionCall: &genai.FunctionCall{Name: "todo", Args: map[string]any{
+		"items": []any{map[string]any{"content": "step one", "status": "in_progress"}}}}}}}
+	r := attach(t, nil, todo, genai.NewContentFromText("ok", genai.RoleModel))
+	sess, _, _ := r.OpenSession("", false)
+	var tasks []app.Task
+	if _, err := r.Run(context.Background(), sess.ID, app.Turn{Text: "go"}, func(e app.Event) {
+		if e.Tasks != nil {
+			tasks = e.Tasks
+		}
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if len(tasks) != 1 || tasks[0].Content != "step one" || tasks[0].Status != "in_progress" {
+		t.Fatalf("tasks %+v", tasks)
+	}
+}
+
 func TestRemotePermissionRules(t *testing.T) {
 	r := attach(t, nil)
 	if res, err := r.AddPermissionRule("ask", "Bash(git push *)", false); err != nil || res.Rule != "shell(git push *)" {

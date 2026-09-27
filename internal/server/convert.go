@@ -139,6 +139,12 @@ func eventMsg(e app.Event) *pb.TurnEvent {
 		out.Kind = &pb.TurnEvent_ToolCall{ToolCall: &pb.ToolCall{Id: e.ToolCall.ID, Name: e.ToolCall.Name, Args: structMsg(e.ToolCall.Args), Partial: e.ToolCall.Partial}}
 	case e.ToolResult != nil:
 		out.Kind = &pb.TurnEvent_ToolResult{ToolResult: &pb.ToolResult{Id: e.ToolResult.ID, Name: e.ToolResult.Name, Result: structMsg(e.ToolResult.Result)}}
+	case e.Tasks != nil:
+		tasks := &pb.Tasks{}
+		for _, t := range e.Tasks {
+			tasks.Items = append(tasks.Items, &pb.Task{Content: t.Content, Status: t.Status})
+		}
+		out.Kind = &pb.TurnEvent_Tasks{Tasks: tasks}
 	}
 	return out
 }

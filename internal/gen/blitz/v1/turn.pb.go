@@ -317,6 +317,7 @@ type TurnEvent struct {
 	//	*TurnEvent_ApprovalRequest
 	//	*TurnEvent_Question
 	//	*TurnEvent_Finished
+	//	*TurnEvent_Tasks
 	Kind          isTurnEvent_Kind `protobuf_oneof:"kind"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -429,6 +430,15 @@ func (x *TurnEvent) GetFinished() *TurnFinished {
 	return nil
 }
 
+func (x *TurnEvent) GetTasks() *Tasks {
+	if x != nil {
+		if x, ok := x.Kind.(*TurnEvent_Tasks); ok {
+			return x.Tasks
+		}
+	}
+	return nil
+}
+
 type isTurnEvent_Kind interface {
 	isTurnEvent_Kind()
 }
@@ -466,6 +476,11 @@ type TurnEvent_Finished struct {
 	Finished *TurnFinished `protobuf:"bytes,8,opt,name=finished,proto3,oneof"`
 }
 
+type TurnEvent_Tasks struct {
+	// The agent's task list, whole, each time it changes.
+	Tasks *Tasks `protobuf:"bytes,9,opt,name=tasks,proto3,oneof"`
+}
+
 func (*TurnEvent_Accepted) isTurnEvent_Kind() {}
 
 func (*TurnEvent_Text) isTurnEvent_Kind() {}
@@ -480,6 +495,106 @@ func (*TurnEvent_Question) isTurnEvent_Kind() {}
 
 func (*TurnEvent_Finished) isTurnEvent_Kind() {}
 
+func (*TurnEvent_Tasks) isTurnEvent_Kind() {}
+
+// Tasks is the agent's task list (the todo tool).
+type Tasks struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Items         []*Task                `protobuf:"bytes,1,rep,name=items,proto3" json:"items,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Tasks) Reset() {
+	*x = Tasks{}
+	mi := &file_blitz_v1_turn_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Tasks) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Tasks) ProtoMessage() {}
+
+func (x *Tasks) ProtoReflect() protoreflect.Message {
+	mi := &file_blitz_v1_turn_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Tasks.ProtoReflect.Descriptor instead.
+func (*Tasks) Descriptor() ([]byte, []int) {
+	return file_blitz_v1_turn_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *Tasks) GetItems() []*Task {
+	if x != nil {
+		return x.Items
+	}
+	return nil
+}
+
+type Task struct {
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	Content string                 `protobuf:"bytes,1,opt,name=content,proto3" json:"content,omitempty"`
+	// pending, in_progress or done.
+	Status        string `protobuf:"bytes,2,opt,name=status,proto3" json:"status,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Task) Reset() {
+	*x = Task{}
+	mi := &file_blitz_v1_turn_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Task) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Task) ProtoMessage() {}
+
+func (x *Task) ProtoReflect() protoreflect.Message {
+	mi := &file_blitz_v1_turn_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Task.ProtoReflect.Descriptor instead.
+func (*Task) Descriptor() ([]byte, []int) {
+	return file_blitz_v1_turn_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *Task) GetContent() string {
+	if x != nil {
+		return x.Content
+	}
+	return ""
+}
+
+func (x *Task) GetStatus() string {
+	if x != nil {
+		return x.Status
+	}
+	return ""
+}
+
 // Accepted marks the prompt as recorded and about to be sent.
 type Accepted struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -489,7 +604,7 @@ type Accepted struct {
 
 func (x *Accepted) Reset() {
 	*x = Accepted{}
-	mi := &file_blitz_v1_turn_proto_msgTypes[2]
+	mi := &file_blitz_v1_turn_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -501,7 +616,7 @@ func (x *Accepted) String() string {
 func (*Accepted) ProtoMessage() {}
 
 func (x *Accepted) ProtoReflect() protoreflect.Message {
-	mi := &file_blitz_v1_turn_proto_msgTypes[2]
+	mi := &file_blitz_v1_turn_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -514,7 +629,7 @@ func (x *Accepted) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Accepted.ProtoReflect.Descriptor instead.
 func (*Accepted) Descriptor() ([]byte, []int) {
-	return file_blitz_v1_turn_proto_rawDescGZIP(), []int{2}
+	return file_blitz_v1_turn_proto_rawDescGZIP(), []int{4}
 }
 
 // Text is model output. With streaming, partial chunks arrive first and a
@@ -535,7 +650,7 @@ type Text struct {
 
 func (x *Text) Reset() {
 	*x = Text{}
-	mi := &file_blitz_v1_turn_proto_msgTypes[3]
+	mi := &file_blitz_v1_turn_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -547,7 +662,7 @@ func (x *Text) String() string {
 func (*Text) ProtoMessage() {}
 
 func (x *Text) ProtoReflect() protoreflect.Message {
-	mi := &file_blitz_v1_turn_proto_msgTypes[3]
+	mi := &file_blitz_v1_turn_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -560,7 +675,7 @@ func (x *Text) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Text.ProtoReflect.Descriptor instead.
 func (*Text) Descriptor() ([]byte, []int) {
-	return file_blitz_v1_turn_proto_rawDescGZIP(), []int{3}
+	return file_blitz_v1_turn_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *Text) GetText() string {
@@ -606,7 +721,7 @@ type ToolCall struct {
 
 func (x *ToolCall) Reset() {
 	*x = ToolCall{}
-	mi := &file_blitz_v1_turn_proto_msgTypes[4]
+	mi := &file_blitz_v1_turn_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -618,7 +733,7 @@ func (x *ToolCall) String() string {
 func (*ToolCall) ProtoMessage() {}
 
 func (x *ToolCall) ProtoReflect() protoreflect.Message {
-	mi := &file_blitz_v1_turn_proto_msgTypes[4]
+	mi := &file_blitz_v1_turn_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -631,7 +746,7 @@ func (x *ToolCall) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ToolCall.ProtoReflect.Descriptor instead.
 func (*ToolCall) Descriptor() ([]byte, []int) {
-	return file_blitz_v1_turn_proto_rawDescGZIP(), []int{4}
+	return file_blitz_v1_turn_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *ToolCall) GetId() string {
@@ -674,7 +789,7 @@ type ToolResult struct {
 
 func (x *ToolResult) Reset() {
 	*x = ToolResult{}
-	mi := &file_blitz_v1_turn_proto_msgTypes[5]
+	mi := &file_blitz_v1_turn_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -686,7 +801,7 @@ func (x *ToolResult) String() string {
 func (*ToolResult) ProtoMessage() {}
 
 func (x *ToolResult) ProtoReflect() protoreflect.Message {
-	mi := &file_blitz_v1_turn_proto_msgTypes[5]
+	mi := &file_blitz_v1_turn_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -699,7 +814,7 @@ func (x *ToolResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ToolResult.ProtoReflect.Descriptor instead.
 func (*ToolResult) Descriptor() ([]byte, []int) {
-	return file_blitz_v1_turn_proto_rawDescGZIP(), []int{5}
+	return file_blitz_v1_turn_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *ToolResult) GetId() string {
@@ -743,7 +858,7 @@ type ApprovalRequest struct {
 
 func (x *ApprovalRequest) Reset() {
 	*x = ApprovalRequest{}
-	mi := &file_blitz_v1_turn_proto_msgTypes[6]
+	mi := &file_blitz_v1_turn_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -755,7 +870,7 @@ func (x *ApprovalRequest) String() string {
 func (*ApprovalRequest) ProtoMessage() {}
 
 func (x *ApprovalRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_blitz_v1_turn_proto_msgTypes[6]
+	mi := &file_blitz_v1_turn_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -768,7 +883,7 @@ func (x *ApprovalRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ApprovalRequest.ProtoReflect.Descriptor instead.
 func (*ApprovalRequest) Descriptor() ([]byte, []int) {
-	return file_blitz_v1_turn_proto_rawDescGZIP(), []int{6}
+	return file_blitz_v1_turn_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *ApprovalRequest) GetRequestId() string {
@@ -827,7 +942,7 @@ type Question struct {
 
 func (x *Question) Reset() {
 	*x = Question{}
-	mi := &file_blitz_v1_turn_proto_msgTypes[7]
+	mi := &file_blitz_v1_turn_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -839,7 +954,7 @@ func (x *Question) String() string {
 func (*Question) ProtoMessage() {}
 
 func (x *Question) ProtoReflect() protoreflect.Message {
-	mi := &file_blitz_v1_turn_proto_msgTypes[7]
+	mi := &file_blitz_v1_turn_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -852,7 +967,7 @@ func (x *Question) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Question.ProtoReflect.Descriptor instead.
 func (*Question) Descriptor() ([]byte, []int) {
-	return file_blitz_v1_turn_proto_rawDescGZIP(), []int{7}
+	return file_blitz_v1_turn_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *Question) GetRequestId() string {
@@ -898,7 +1013,7 @@ type Usage struct {
 
 func (x *Usage) Reset() {
 	*x = Usage{}
-	mi := &file_blitz_v1_turn_proto_msgTypes[8]
+	mi := &file_blitz_v1_turn_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -910,7 +1025,7 @@ func (x *Usage) String() string {
 func (*Usage) ProtoMessage() {}
 
 func (x *Usage) ProtoReflect() protoreflect.Message {
-	mi := &file_blitz_v1_turn_proto_msgTypes[8]
+	mi := &file_blitz_v1_turn_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -923,7 +1038,7 @@ func (x *Usage) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Usage.ProtoReflect.Descriptor instead.
 func (*Usage) Descriptor() ([]byte, []int) {
-	return file_blitz_v1_turn_proto_rawDescGZIP(), []int{8}
+	return file_blitz_v1_turn_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *Usage) GetCalls() int32 {
@@ -1003,7 +1118,7 @@ type TurnFinished struct {
 
 func (x *TurnFinished) Reset() {
 	*x = TurnFinished{}
-	mi := &file_blitz_v1_turn_proto_msgTypes[9]
+	mi := &file_blitz_v1_turn_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1015,7 +1130,7 @@ func (x *TurnFinished) String() string {
 func (*TurnFinished) ProtoMessage() {}
 
 func (x *TurnFinished) ProtoReflect() protoreflect.Message {
-	mi := &file_blitz_v1_turn_proto_msgTypes[9]
+	mi := &file_blitz_v1_turn_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1028,7 +1143,7 @@ func (x *TurnFinished) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TurnFinished.ProtoReflect.Descriptor instead.
 func (*TurnFinished) Descriptor() ([]byte, []int) {
-	return file_blitz_v1_turn_proto_rawDescGZIP(), []int{9}
+	return file_blitz_v1_turn_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *TurnFinished) GetOutput() string {
@@ -1082,7 +1197,7 @@ type ErrorInfo struct {
 
 func (x *ErrorInfo) Reset() {
 	*x = ErrorInfo{}
-	mi := &file_blitz_v1_turn_proto_msgTypes[10]
+	mi := &file_blitz_v1_turn_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1094,7 +1209,7 @@ func (x *ErrorInfo) String() string {
 func (*ErrorInfo) ProtoMessage() {}
 
 func (x *ErrorInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_blitz_v1_turn_proto_msgTypes[10]
+	mi := &file_blitz_v1_turn_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1107,7 +1222,7 @@ func (x *ErrorInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ErrorInfo.ProtoReflect.Descriptor instead.
 func (*ErrorInfo) Descriptor() ([]byte, []int) {
-	return file_blitz_v1_turn_proto_rawDescGZIP(), []int{10}
+	return file_blitz_v1_turn_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *ErrorInfo) GetReason() string {
@@ -1150,7 +1265,7 @@ const file_blitz_v1_turn_proto_rawDesc = "" +
 	" \x01(\x01R\n" +
 	"maxCostUsd\x123\n" +
 	"\atimeout\x18\v \x01(\v2\x19.google.protobuf.DurationR\atimeout\x12\x18\n" +
-	"\acommand\x18\f \x01(\bR\acommand\"\x9f\x03\n" +
+	"\acommand\x18\f \x01(\bR\acommand\"\xc8\x03\n" +
 	"\tTurnEvent\x12\x16\n" +
 	"\x06author\x18\x01 \x01(\tR\x06author\x120\n" +
 	"\baccepted\x18\x02 \x01(\v2\x12.blitz.v1.AcceptedH\x00R\baccepted\x12$\n" +
@@ -1160,8 +1275,14 @@ const file_blitz_v1_turn_proto_rawDesc = "" +
 	"toolResult\x12F\n" +
 	"\x10approval_request\x18\x06 \x01(\v2\x19.blitz.v1.ApprovalRequestH\x00R\x0fapprovalRequest\x120\n" +
 	"\bquestion\x18\a \x01(\v2\x12.blitz.v1.QuestionH\x00R\bquestion\x124\n" +
-	"\bfinished\x18\b \x01(\v2\x16.blitz.v1.TurnFinishedH\x00R\bfinishedB\x06\n" +
-	"\x04kind\"\n" +
+	"\bfinished\x18\b \x01(\v2\x16.blitz.v1.TurnFinishedH\x00R\bfinished\x12'\n" +
+	"\x05tasks\x18\t \x01(\v2\x0f.blitz.v1.TasksH\x00R\x05tasksB\x06\n" +
+	"\x04kind\"-\n" +
+	"\x05Tasks\x12$\n" +
+	"\x05items\x18\x01 \x03(\v2\x0e.blitz.v1.TaskR\x05items\"8\n" +
+	"\x04Task\x12\x18\n" +
+	"\acontent\x18\x01 \x01(\tR\acontent\x12\x16\n" +
+	"\x06status\x18\x02 \x01(\tR\x06status\"\n" +
 	"\n" +
 	"\bAccepted\"f\n" +
 	"\x04Text\x12\x12\n" +
@@ -1246,46 +1367,50 @@ func file_blitz_v1_turn_proto_rawDescGZIP() []byte {
 }
 
 var file_blitz_v1_turn_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_blitz_v1_turn_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
+var file_blitz_v1_turn_proto_msgTypes = make([]protoimpl.MessageInfo, 14)
 var file_blitz_v1_turn_proto_goTypes = []any{
 	(ActionKind)(0),             // 0: blitz.v1.ActionKind
 	(Decision)(0),               // 1: blitz.v1.Decision
 	(*Turn)(nil),                // 2: blitz.v1.Turn
 	(*TurnEvent)(nil),           // 3: blitz.v1.TurnEvent
-	(*Accepted)(nil),            // 4: blitz.v1.Accepted
-	(*Text)(nil),                // 5: blitz.v1.Text
-	(*ToolCall)(nil),            // 6: blitz.v1.ToolCall
-	(*ToolResult)(nil),          // 7: blitz.v1.ToolResult
-	(*ApprovalRequest)(nil),     // 8: blitz.v1.ApprovalRequest
-	(*Question)(nil),            // 9: blitz.v1.Question
-	(*Usage)(nil),               // 10: blitz.v1.Usage
-	(*TurnFinished)(nil),        // 11: blitz.v1.TurnFinished
-	(*ErrorInfo)(nil),           // 12: blitz.v1.ErrorInfo
-	nil,                         // 13: blitz.v1.ErrorInfo.MetadataEntry
-	(*durationpb.Duration)(nil), // 14: google.protobuf.Duration
-	(*structpb.Struct)(nil),     // 15: google.protobuf.Struct
+	(*Tasks)(nil),               // 4: blitz.v1.Tasks
+	(*Task)(nil),                // 5: blitz.v1.Task
+	(*Accepted)(nil),            // 6: blitz.v1.Accepted
+	(*Text)(nil),                // 7: blitz.v1.Text
+	(*ToolCall)(nil),            // 8: blitz.v1.ToolCall
+	(*ToolResult)(nil),          // 9: blitz.v1.ToolResult
+	(*ApprovalRequest)(nil),     // 10: blitz.v1.ApprovalRequest
+	(*Question)(nil),            // 11: blitz.v1.Question
+	(*Usage)(nil),               // 12: blitz.v1.Usage
+	(*TurnFinished)(nil),        // 13: blitz.v1.TurnFinished
+	(*ErrorInfo)(nil),           // 14: blitz.v1.ErrorInfo
+	nil,                         // 15: blitz.v1.ErrorInfo.MetadataEntry
+	(*durationpb.Duration)(nil), // 16: google.protobuf.Duration
+	(*structpb.Struct)(nil),     // 17: google.protobuf.Struct
 }
 var file_blitz_v1_turn_proto_depIdxs = []int32{
-	14, // 0: blitz.v1.Turn.timeout:type_name -> google.protobuf.Duration
-	4,  // 1: blitz.v1.TurnEvent.accepted:type_name -> blitz.v1.Accepted
-	5,  // 2: blitz.v1.TurnEvent.text:type_name -> blitz.v1.Text
-	6,  // 3: blitz.v1.TurnEvent.tool_call:type_name -> blitz.v1.ToolCall
-	7,  // 4: blitz.v1.TurnEvent.tool_result:type_name -> blitz.v1.ToolResult
-	8,  // 5: blitz.v1.TurnEvent.approval_request:type_name -> blitz.v1.ApprovalRequest
-	9,  // 6: blitz.v1.TurnEvent.question:type_name -> blitz.v1.Question
-	11, // 7: blitz.v1.TurnEvent.finished:type_name -> blitz.v1.TurnFinished
-	15, // 8: blitz.v1.ToolCall.args:type_name -> google.protobuf.Struct
-	15, // 9: blitz.v1.ToolResult.result:type_name -> google.protobuf.Struct
-	0,  // 10: blitz.v1.ApprovalRequest.kind:type_name -> blitz.v1.ActionKind
-	10, // 11: blitz.v1.TurnFinished.before:type_name -> blitz.v1.Usage
-	10, // 12: blitz.v1.TurnFinished.after:type_name -> blitz.v1.Usage
-	12, // 13: blitz.v1.TurnFinished.error:type_name -> blitz.v1.ErrorInfo
-	13, // 14: blitz.v1.ErrorInfo.metadata:type_name -> blitz.v1.ErrorInfo.MetadataEntry
-	15, // [15:15] is the sub-list for method output_type
-	15, // [15:15] is the sub-list for method input_type
-	15, // [15:15] is the sub-list for extension type_name
-	15, // [15:15] is the sub-list for extension extendee
-	0,  // [0:15] is the sub-list for field type_name
+	16, // 0: blitz.v1.Turn.timeout:type_name -> google.protobuf.Duration
+	6,  // 1: blitz.v1.TurnEvent.accepted:type_name -> blitz.v1.Accepted
+	7,  // 2: blitz.v1.TurnEvent.text:type_name -> blitz.v1.Text
+	8,  // 3: blitz.v1.TurnEvent.tool_call:type_name -> blitz.v1.ToolCall
+	9,  // 4: blitz.v1.TurnEvent.tool_result:type_name -> blitz.v1.ToolResult
+	10, // 5: blitz.v1.TurnEvent.approval_request:type_name -> blitz.v1.ApprovalRequest
+	11, // 6: blitz.v1.TurnEvent.question:type_name -> blitz.v1.Question
+	13, // 7: blitz.v1.TurnEvent.finished:type_name -> blitz.v1.TurnFinished
+	4,  // 8: blitz.v1.TurnEvent.tasks:type_name -> blitz.v1.Tasks
+	5,  // 9: blitz.v1.Tasks.items:type_name -> blitz.v1.Task
+	17, // 10: blitz.v1.ToolCall.args:type_name -> google.protobuf.Struct
+	17, // 11: blitz.v1.ToolResult.result:type_name -> google.protobuf.Struct
+	0,  // 12: blitz.v1.ApprovalRequest.kind:type_name -> blitz.v1.ActionKind
+	12, // 13: blitz.v1.TurnFinished.before:type_name -> blitz.v1.Usage
+	12, // 14: blitz.v1.TurnFinished.after:type_name -> blitz.v1.Usage
+	14, // 15: blitz.v1.TurnFinished.error:type_name -> blitz.v1.ErrorInfo
+	15, // 16: blitz.v1.ErrorInfo.metadata:type_name -> blitz.v1.ErrorInfo.MetadataEntry
+	17, // [17:17] is the sub-list for method output_type
+	17, // [17:17] is the sub-list for method input_type
+	17, // [17:17] is the sub-list for extension type_name
+	17, // [17:17] is the sub-list for extension extendee
+	0,  // [0:17] is the sub-list for field type_name
 }
 
 func init() { file_blitz_v1_turn_proto_init() }
@@ -1301,6 +1426,7 @@ func file_blitz_v1_turn_proto_init() {
 		(*TurnEvent_ApprovalRequest)(nil),
 		(*TurnEvent_Question)(nil),
 		(*TurnEvent_Finished)(nil),
+		(*TurnEvent_Tasks)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
@@ -1308,7 +1434,7 @@ func file_blitz_v1_turn_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_blitz_v1_turn_proto_rawDesc), len(file_blitz_v1_turn_proto_rawDesc)),
 			NumEnums:      2,
-			NumMessages:   12,
+			NumMessages:   14,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

@@ -12,7 +12,7 @@ import type { JsonObject, Message } from "@bufbuild/protobuf";
  * Describes the file blitz/v1/turn.proto.
  */
 export const file_blitz_v1_turn: GenFile = /*@__PURE__*/
-  fileDesc("ChNibGl0ei92MS90dXJuLnByb3RvEghibGl0ei52MSL1AQoEVHVybhIMCgR0ZXh0GAEgASgJEg4KBnByb21wdBgCIAEoCRIMCgRwbGFuGAMgASgIEhEKCXJlYWRfb25seRgEIAEoCRINCgVhc2lkZRgFIAEoCBIQCghhY2NlcHRlZBgGIAEoCBIRCglpbWFnZV9pZHMYByADKAkSEQoJbWF4X3R1cm5zGAggASgFEhQKDGZldGNoX2dyYW50cxgJIAMoCRIUCgxtYXhfY29zdF91c2QYCiABKAESKgoHdGltZW91dBgLIAEoCzIZLmdvb2dsZS5wcm90b2J1Zi5EdXJhdGlvbhIPCgdjb21tYW5kGAwgASgIIswCCglUdXJuRXZlbnQSDgoGYXV0aG9yGAEgASgJEiYKCGFjY2VwdGVkGAIgASgLMhIuYmxpdHoudjEuQWNjZXB0ZWRIABIeCgR0ZXh0GAMgASgLMg4uYmxpdHoudjEuVGV4dEgAEicKCXRvb2xfY2FsbBgEIAEoCzISLmJsaXR6LnYxLlRvb2xDYWxsSAASKwoLdG9vbF9yZXN1bHQYBSABKAsyFC5ibGl0ei52MS5Ub29sUmVzdWx0SAASNQoQYXBwcm92YWxfcmVxdWVzdBgGIAEoCzIZLmJsaXR6LnYxLkFwcHJvdmFsUmVxdWVzdEgAEiYKCHF1ZXN0aW9uGAcgASgLMhIuYmxpdHoudjEuUXVlc3Rpb25IABIqCghmaW5pc2hlZBgIIAEoCzIWLmJsaXR6LnYxLlR1cm5GaW5pc2hlZEgAQgYKBGtpbmQiCgoIQWNjZXB0ZWQiRgoEVGV4dBIMCgR0ZXh0GAEgASgJEg8KB3BhcnRpYWwYAiABKAgSDgoGcmVwZWF0GAMgASgIEg8KB3Rob3VnaHQYBCABKAgiXAoIVG9vbENhbGwSCgoCaWQYASABKAkSDAoEbmFtZRgCIAEoCRIlCgRhcmdzGAMgASgLMhcuZ29vZ2xlLnByb3RvYnVmLlN0cnVjdBIPCgdwYXJ0aWFsGAQgASgIIk8KClRvb2xSZXN1bHQSCgoCaWQYASABKAkSDAoEbmFtZRgCIAEoCRInCgZyZXN1bHQYAyABKAsyFy5nb29nbGUucHJvdG9idWYuU3RydWN0IooBCg9BcHByb3ZhbFJlcXVlc3QSEgoKcmVxdWVzdF9pZBgBIAEoCRIMCgR0b29sGAIgASgJEiIKBGtpbmQYAyABKA4yFC5ibGl0ei52MS5BY3Rpb25LaW5kEg4KBmRldGFpbBgEIAEoCRIMCgRkaWZmGAUgASgJEhMKC3Njb3BlX2xhYmVsGAYgASgJIkEKCFF1ZXN0aW9uEhIKCnJlcXVlc3RfaWQYASABKAkSEAoIcXVlc3Rpb24YAiABKAkSDwoHb3B0aW9ucxgDIAMoCSKRAQoFVXNhZ2USDQoFY2FsbHMYASABKAUSDQoFaW5wdXQYAiABKAMSDgoGY2FjaGVkGAMgASgDEhMKC2NhY2hlX3dyaXRlGAQgASgDEg4KBm91dHB1dBgFIAEoAxITCgtsYXN0X3Byb21wdBgGIAEoAxIQCghjb3N0X3VzZBgHIAEoARIOCgZwcmljZWQYCCABKAgilQEKDFR1cm5GaW5pc2hlZBIOCgZvdXRwdXQYASABKAkSHwoGYmVmb3JlGAIgASgLMg8uYmxpdHoudjEuVXNhZ2USHgoFYWZ0ZXIYAyABKAsyDy5ibGl0ei52MS5Vc2FnZRIQCghsZWZ0b3ZlchgEIAMoCRIiCgVlcnJvchgFIAEoCzITLmJsaXR6LnYxLkVycm9ySW5mbyKSAQoJRXJyb3JJbmZvEg4KBnJlYXNvbhgBIAEoCRIzCghtZXRhZGF0YRgCIAMoCzIhLmJsaXR6LnYxLkVycm9ySW5mby5NZXRhZGF0YUVudHJ5Eg8KB21lc3NhZ2UYAyABKAkaLwoNTWV0YWRhdGFFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBKp8BCgpBY3Rpb25LaW5kEhsKF0FDVElPTl9LSU5EX1VOU1BFQ0lGSUVEEAASFwoTQUNUSU9OX0tJTkRfQ09NTUFORBABEhUKEUFDVElPTl9LSU5EX1dSSVRFEAISFgoSQUNUSU9OX0tJTkRfREVMRVRFEAMSFwoTQUNUSU9OX0tJTkRfTkVUV09SSxAEEhMKD0FDVElPTl9LSU5EX01DUBAFKnUKCERlY2lzaW9uEhgKFERFQ0lTSU9OX1VOU1BFQ0lGSUVEEAASEQoNREVDSVNJT05fREVOWRABEhEKDURFQ0lTSU9OX09OQ0UQAhIUChBERUNJU0lPTl9TRVNTSU9OEAMSEwoPREVDSVNJT05fQUxXQVlTEARCmAEKDGNvbS5ibGl0ei52MUIJVHVyblByb3RvUAFaPGdpdGh1Yi5jb20vcmV0YWlsLWNvcnRleC9ibGl0ei9pbnRlcm5hbC9nZW4vYmxpdHovdjE7YmxpdHp2MaICA0JYWKoCCEJsaXR6LlYxygIIQmxpdHpcVjHiAhRCbGl0elxWMVxHUEJNZXRhZGF0YeoCCUJsaXR6OjpWMWIGcHJvdG8z", [file_google_protobuf_duration, file_google_protobuf_struct]);
+  fileDesc("ChNibGl0ei92MS90dXJuLnByb3RvEghibGl0ei52MSL1AQoEVHVybhIMCgR0ZXh0GAEgASgJEg4KBnByb21wdBgCIAEoCRIMCgRwbGFuGAMgASgIEhEKCXJlYWRfb25seRgEIAEoCRINCgVhc2lkZRgFIAEoCBIQCghhY2NlcHRlZBgGIAEoCBIRCglpbWFnZV9pZHMYByADKAkSEQoJbWF4X3R1cm5zGAggASgFEhQKDGZldGNoX2dyYW50cxgJIAMoCRIUCgxtYXhfY29zdF91c2QYCiABKAESKgoHdGltZW91dBgLIAEoCzIZLmdvb2dsZS5wcm90b2J1Zi5EdXJhdGlvbhIPCgdjb21tYW5kGAwgASgIIu4CCglUdXJuRXZlbnQSDgoGYXV0aG9yGAEgASgJEiYKCGFjY2VwdGVkGAIgASgLMhIuYmxpdHoudjEuQWNjZXB0ZWRIABIeCgR0ZXh0GAMgASgLMg4uYmxpdHoudjEuVGV4dEgAEicKCXRvb2xfY2FsbBgEIAEoCzISLmJsaXR6LnYxLlRvb2xDYWxsSAASKwoLdG9vbF9yZXN1bHQYBSABKAsyFC5ibGl0ei52MS5Ub29sUmVzdWx0SAASNQoQYXBwcm92YWxfcmVxdWVzdBgGIAEoCzIZLmJsaXR6LnYxLkFwcHJvdmFsUmVxdWVzdEgAEiYKCHF1ZXN0aW9uGAcgASgLMhIuYmxpdHoudjEuUXVlc3Rpb25IABIqCghmaW5pc2hlZBgIIAEoCzIWLmJsaXR6LnYxLlR1cm5GaW5pc2hlZEgAEiAKBXRhc2tzGAkgASgLMg8uYmxpdHoudjEuVGFza3NIAEIGCgRraW5kIiYKBVRhc2tzEh0KBWl0ZW1zGAEgAygLMg4uYmxpdHoudjEuVGFzayInCgRUYXNrEg8KB2NvbnRlbnQYASABKAkSDgoGc3RhdHVzGAIgASgJIgoKCEFjY2VwdGVkIkYKBFRleHQSDAoEdGV4dBgBIAEoCRIPCgdwYXJ0aWFsGAIgASgIEg4KBnJlcGVhdBgDIAEoCBIPCgd0aG91Z2h0GAQgASgIIlwKCFRvb2xDYWxsEgoKAmlkGAEgASgJEgwKBG5hbWUYAiABKAkSJQoEYXJncxgDIAEoCzIXLmdvb2dsZS5wcm90b2J1Zi5TdHJ1Y3QSDwoHcGFydGlhbBgEIAEoCCJPCgpUb29sUmVzdWx0EgoKAmlkGAEgASgJEgwKBG5hbWUYAiABKAkSJwoGcmVzdWx0GAMgASgLMhcuZ29vZ2xlLnByb3RvYnVmLlN0cnVjdCKKAQoPQXBwcm92YWxSZXF1ZXN0EhIKCnJlcXVlc3RfaWQYASABKAkSDAoEdG9vbBgCIAEoCRIiCgRraW5kGAMgASgOMhQuYmxpdHoudjEuQWN0aW9uS2luZBIOCgZkZXRhaWwYBCABKAkSDAoEZGlmZhgFIAEoCRITCgtzY29wZV9sYWJlbBgGIAEoCSJBCghRdWVzdGlvbhISCgpyZXF1ZXN0X2lkGAEgASgJEhAKCHF1ZXN0aW9uGAIgASgJEg8KB29wdGlvbnMYAyADKAkikQEKBVVzYWdlEg0KBWNhbGxzGAEgASgFEg0KBWlucHV0GAIgASgDEg4KBmNhY2hlZBgDIAEoAxITCgtjYWNoZV93cml0ZRgEIAEoAxIOCgZvdXRwdXQYBSABKAMSEwoLbGFzdF9wcm9tcHQYBiABKAMSEAoIY29zdF91c2QYByABKAESDgoGcHJpY2VkGAggASgIIpUBCgxUdXJuRmluaXNoZWQSDgoGb3V0cHV0GAEgASgJEh8KBmJlZm9yZRgCIAEoCzIPLmJsaXR6LnYxLlVzYWdlEh4KBWFmdGVyGAMgASgLMg8uYmxpdHoudjEuVXNhZ2USEAoIbGVmdG92ZXIYBCADKAkSIgoFZXJyb3IYBSABKAsyEy5ibGl0ei52MS5FcnJvckluZm8ikgEKCUVycm9ySW5mbxIOCgZyZWFzb24YASABKAkSMwoIbWV0YWRhdGEYAiADKAsyIS5ibGl0ei52MS5FcnJvckluZm8uTWV0YWRhdGFFbnRyeRIPCgdtZXNzYWdlGAMgASgJGi8KDU1ldGFkYXRhRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ASqfAQoKQWN0aW9uS2luZBIbChdBQ1RJT05fS0lORF9VTlNQRUNJRklFRBAAEhcKE0FDVElPTl9LSU5EX0NPTU1BTkQQARIVChFBQ1RJT05fS0lORF9XUklURRACEhYKEkFDVElPTl9LSU5EX0RFTEVURRADEhcKE0FDVElPTl9LSU5EX05FVFdPUksQBBITCg9BQ1RJT05fS0lORF9NQ1AQBSp1CghEZWNpc2lvbhIYChRERUNJU0lPTl9VTlNQRUNJRklFRBAAEhEKDURFQ0lTSU9OX0RFTlkQARIRCg1ERUNJU0lPTl9PTkNFEAISFAoQREVDSVNJT05fU0VTU0lPThADEhMKD0RFQ0lTSU9OX0FMV0FZUxAEQpgBCgxjb20uYmxpdHoudjFCCVR1cm5Qcm90b1ABWjxnaXRodWIuY29tL3JldGFpbC1jb3J0ZXgvYmxpdHovaW50ZXJuYWwvZ2VuL2JsaXR6L3YxO2JsaXR6djGiAgNCWFiqAghCbGl0ei5WMcoCCEJsaXR6XFYx4gIUQmxpdHpcVjFcR1BCTWV0YWRhdGHqAglCbGl0ejo6VjFiBnByb3RvMw", [file_google_protobuf_duration, file_google_protobuf_struct]);
 
 /**
  * Turn is one prompt for the agent.
@@ -191,6 +191,14 @@ export type TurnEvent = Message<"blitz.v1.TurnEvent"> & {
      */
     value: TurnFinished;
     case: "finished";
+  } | {
+    /**
+     * The agent's task list, whole, each time it changes.
+     *
+     * @generated from field: blitz.v1.Tasks tasks = 9;
+     */
+    value: Tasks;
+    case: "tasks";
   } | { case: undefined; value?: undefined };
 };
 
@@ -200,6 +208,49 @@ export type TurnEvent = Message<"blitz.v1.TurnEvent"> & {
  */
 export const TurnEventSchema: GenMessage<TurnEvent> = /*@__PURE__*/
   messageDesc(file_blitz_v1_turn, 1);
+
+/**
+ * Tasks is the agent's task list (the todo tool).
+ *
+ * @generated from message blitz.v1.Tasks
+ */
+export type Tasks = Message<"blitz.v1.Tasks"> & {
+  /**
+   * @generated from field: repeated blitz.v1.Task items = 1;
+   */
+  items: Task[];
+};
+
+/**
+ * Describes the message blitz.v1.Tasks.
+ * Use `create(TasksSchema)` to create a new message.
+ */
+export const TasksSchema: GenMessage<Tasks> = /*@__PURE__*/
+  messageDesc(file_blitz_v1_turn, 2);
+
+/**
+ * @generated from message blitz.v1.Task
+ */
+export type Task = Message<"blitz.v1.Task"> & {
+  /**
+   * @generated from field: string content = 1;
+   */
+  content: string;
+
+  /**
+   * pending, in_progress or done.
+   *
+   * @generated from field: string status = 2;
+   */
+  status: string;
+};
+
+/**
+ * Describes the message blitz.v1.Task.
+ * Use `create(TaskSchema)` to create a new message.
+ */
+export const TaskSchema: GenMessage<Task> = /*@__PURE__*/
+  messageDesc(file_blitz_v1_turn, 3);
 
 /**
  * Accepted marks the prompt as recorded and about to be sent.
@@ -214,7 +265,7 @@ export type Accepted = Message<"blitz.v1.Accepted"> & {
  * Use `create(AcceptedSchema)` to create a new message.
  */
 export const AcceptedSchema: GenMessage<Accepted> = /*@__PURE__*/
-  messageDesc(file_blitz_v1_turn, 2);
+  messageDesc(file_blitz_v1_turn, 4);
 
 /**
  * Text is model output. With streaming, partial chunks arrive first and a
@@ -255,7 +306,7 @@ export type Text = Message<"blitz.v1.Text"> & {
  * Use `create(TextSchema)` to create a new message.
  */
 export const TextSchema: GenMessage<Text> = /*@__PURE__*/
-  messageDesc(file_blitz_v1_turn, 3);
+  messageDesc(file_blitz_v1_turn, 5);
 
 /**
  * ToolCall is the agent calling a tool.
@@ -293,7 +344,7 @@ export type ToolCall = Message<"blitz.v1.ToolCall"> & {
  * Use `create(ToolCallSchema)` to create a new message.
  */
 export const ToolCallSchema: GenMessage<ToolCall> = /*@__PURE__*/
-  messageDesc(file_blitz_v1_turn, 4);
+  messageDesc(file_blitz_v1_turn, 6);
 
 /**
  * ToolResult is what a tool returned.
@@ -322,7 +373,7 @@ export type ToolResult = Message<"blitz.v1.ToolResult"> & {
  * Use `create(ToolResultSchema)` to create a new message.
  */
 export const ToolResultSchema: GenMessage<ToolResult> = /*@__PURE__*/
-  messageDesc(file_blitz_v1_turn, 5);
+  messageDesc(file_blitz_v1_turn, 7);
 
 /**
  * ApprovalRequest asks permission for one action.
@@ -375,7 +426,7 @@ export type ApprovalRequest = Message<"blitz.v1.ApprovalRequest"> & {
  * Use `create(ApprovalRequestSchema)` to create a new message.
  */
 export const ApprovalRequestSchema: GenMessage<ApprovalRequest> = /*@__PURE__*/
-  messageDesc(file_blitz_v1_turn, 6);
+  messageDesc(file_blitz_v1_turn, 8);
 
 /**
  * Question is the agent asking the user something.
@@ -408,7 +459,7 @@ export type Question = Message<"blitz.v1.Question"> & {
  * Use `create(QuestionSchema)` to create a new message.
  */
 export const QuestionSchema: GenMessage<Question> = /*@__PURE__*/
-  messageDesc(file_blitz_v1_turn, 7);
+  messageDesc(file_blitz_v1_turn, 9);
 
 /**
  * Usage is the token usage and estimated cost of a session.
@@ -472,7 +523,7 @@ export type Usage = Message<"blitz.v1.Usage"> & {
  * Use `create(UsageSchema)` to create a new message.
  */
 export const UsageSchema: GenMessage<Usage> = /*@__PURE__*/
-  messageDesc(file_blitz_v1_turn, 8);
+  messageDesc(file_blitz_v1_turn, 10);
 
 /**
  * TurnFinished ends a turn's events.
@@ -522,7 +573,7 @@ export type TurnFinished = Message<"blitz.v1.TurnFinished"> & {
  * Use `create(TurnFinishedSchema)` to create a new message.
  */
 export const TurnFinishedSchema: GenMessage<TurnFinished> = /*@__PURE__*/
-  messageDesc(file_blitz_v1_turn, 9);
+  messageDesc(file_blitz_v1_turn, 11);
 
 /**
  * ErrorInfo is a machine-readable error, also attached to failed calls as
@@ -557,7 +608,7 @@ export type ErrorInfo = Message<"blitz.v1.ErrorInfo"> & {
  * Use `create(ErrorInfoSchema)` to create a new message.
  */
 export const ErrorInfoSchema: GenMessage<ErrorInfo> = /*@__PURE__*/
-  messageDesc(file_blitz_v1_turn, 10);
+  messageDesc(file_blitz_v1_turn, 12);
 
 /**
  * ActionKind is the kind of action an approval covers.

@@ -23,6 +23,9 @@ var planReadOnlyTools = map[string]bool{
 	"list_or_search_skills": true,
 	"activate_skill":        true,
 	"ask_user_question":     true,
+	"todo":                  true,
+	"exit_plan_mode":        true,
+	"enter_plan_mode":       true,
 }
 
 // PlanAllows reports whether a tool may run in plan mode.
@@ -40,12 +43,13 @@ func WithReadOnly(mode string) ExecOption {
 }
 
 // planRefusal returns the tool result for a tool refused in plan mode, or
-// nil when the tool may run.
-func planRefusal(st *runState, toolName string) map[string]any {
-	if st == nil || !st.planOnly || planReadOnlyTools[toolName] {
+// nil when the tool may run. planning is the turn's plan state (the agent
+// entered plan mode itself).
+func planRefusal(st *runState, planning bool, toolName string) map[string]any {
+	if planReadOnlyTools[toolName] || !planning && (st == nil || !st.planOnly) {
 		return nil
 	}
-	if st.mode != "" {
+	if st != nil && st.mode != "" {
 		return map[string]any{"error": fmt.Sprintf("%s is read-only: %s is disabled because it could change something.", st.mode, toolName)}
 	}
 	return map[string]any{"error": fmt.Sprintf("plan mode: %s is disabled because it could change something. Describe this step in the plan instead.", toolName)}
@@ -53,13 +57,23 @@ func planRefusal(st *runState, toolName string) map[string]any {
 
 // PlanPrompt wraps a goal in the instructions for plan mode.
 func PlanPrompt(goal string) string {
-	return "You are in plan-only mode. You may read files, search and look things up, but tools that change anything (editing files, running commands) are disabled. Investigate as much as you need, then answer with:\n" +
+	return "You are in plan-only mode. You may read files, search and look things up, but tools that change anything (editing files, running commands) are disabled. Investigate as much as you need, then write a plan with:\n" +
 		"1. A short summary of the objective\n" +
 		"2. A numbered implementation plan, naming the files and functions involved\n" +
 		"3. Risks and unknowns\n" +
 		"4. How to verify the change\n" +
 		"5. Questions for the user, only if something blocks the plan\n\n" +
+		"Present it with exit_plan_mode for the user to approve; if they can't review it, answer with the plan.\n\n" +
 		"Goal:\n" + strings.TrimSpace(goal)
+}
+
+// CarryOutPrompt asks the agent to carry out the plan the user approved.
+func CarryOutPrompt(planFile string) string {
+	s := "The user approved your plan. Carry it out now, step by step, keeping the task list up to date with the todo tool, and verify the result."
+	if planFile != "" {
+		s += " The plan is saved in " + planFile + "."
+	}
+	return s
 }
 
 // InitPrompt asks the agent to write or update BLITZ.md, the project's
