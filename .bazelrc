@@ -6,6 +6,13 @@ common --enable_platform_specific_config
 build --incompatible_strict_action_env
 test --test_output=errors
 
+# Blitz builds nothing for Android, but protobuf's module depends on
+# rules_jvm_external and rules_kotlin, which bring rules_android and its
+# SDK toolchain. rules_android sets that up from ANDROID_HOME, and fails
+# the whole build when the variable names a missing or partial SDK. Empty,
+# it makes a stand-in, whatever the machine has installed.
+common --repo_env=ANDROID_HOME=
+
 # The desktop app supports macOS 13 and later.
 build --macos_minimum_os=13.0
 build --host_macos_minimum_os=13.0
