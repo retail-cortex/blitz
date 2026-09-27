@@ -1,0 +1,81 @@
+load("@aspect_rules_js//js:defs.bzl", "js_run_devserver")
+load("@bazel_lib//lib:copy_to_bin.bzl", "copy_to_bin")
+load("@npm//:defs.bzl", "npm_link_all_packages")
+load("@npm//apps/desktop/web:@bufbuild/protoc-gen-es/package_json.bzl", protoc_gen_es = "bin")
+load("@npm//apps/desktop/web:typescript/package_json.bzl", tsc_bin = "bin")
+load("@npm//apps/desktop/web:vite/package_json.bzl", vite_bin = "bin")
+load("@npm//apps/desktop/web:vitest/package_json.bzl", vitest_bin = "bin")
+load("//bazel:es_proto.bzl", "es_proto_library")
+
+exports_files(["pnpm-lock.yaml", "pnpm-workspace.yaml"])
+
+npm_link_all_packages(name = "node_modules")
+
+# The page's sources, copied once into the output tree for every tool.
+copy_to_bin(
+    name = "srcs",
+    srcs = glob(["src/**"]) + [
+        "index.html",
+        "package.json",
+        "tsconfig.json",
+        "vite.config.ts",
+    ],
+)
+
+protoc_gen_es.protoc_gen_es_binary(name = "protoc_gen_es")
+
+# The API's TypeScript, from the same protos as the Go side; never
+# committed.
+es_proto_library(
+    name = "api_ts",
+    out_dir = "src/gen",
+    plugin = ":protoc_gen_es",
+    proto = "//proto/blitz/v1:blitzv1_proto",
+)
+
+_inputs = [
+    ":srcs",
+    ":api_ts",
+    ":node_modules",
+    "//apps/desktop:wails_json",
+    "//pkg/i18n:locales",
+]
+
+# The page, as the desktop binary embeds it.
+vite_bin.vite(
+    name = "page",
+    srcs = _inputs,
+    args = ["build"],
+    chdir = package_name(),
+    env = {"BLITZ_PAGE_OUT": "dist"},
+    out_dirs = ["dist"],
+    # Vite resolves index.html to its real path, which Bazel's sandbox
+    # symlinks outside the sandbox; outside it, the copy is a real file.
+    tags = ["no-sandbox"],
+    visibility = ["//apps/desktop:__pkg__"],
+)
+
+vitest_bin.vitest_test(
+    name = "test",
+    args = ["run"],
+    chdir = package_name(),
+    data = _inputs,
+)
+
+tsc_bin.tsc_test(
+    name = "typecheck",
+    args = ["--noEmit"],
+    chdir = package_name(),
+    data = _inputs,
+)
+
+vite_bin.vite_binary(name = "vite")
+
+# Vite's dev server on the page, with the generated API code:
+#   bazel run //apps/desktop/web:dev   (then http://localhost:5173/?fake)
+js_run_devserver(
+    name = "dev",
+    chdir = package_name(),
+    data = _inputs,
+    tool = ":vite",
+)

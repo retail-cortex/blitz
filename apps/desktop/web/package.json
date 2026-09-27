@@ -4,12 +4,6 @@
   "version": "0.0.0",
   "type": "module",
   "packageManager": "pnpm@10.24.0",
-  "scripts": {
-    "dev": "vite",
-    "build": "tsc --noEmit && vite build",
-    "typecheck": "tsc --noEmit",
-    "test": "vitest run"
-  },
   "dependencies": {
     "@bufbuild/protobuf": "2.15.0",
     "@connectrpc/connect": "2.2.0",

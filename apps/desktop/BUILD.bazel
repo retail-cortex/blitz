@@ -1,4 +1,20 @@
+load("@bazel_lib//lib:copy_to_bin.bzl", "copy_to_bin")
+load("@bazel_lib//lib:copy_to_directory.bzl", "copy_to_directory")
 load("@rules_go//go:def.bzl", "go_binary", "go_library", "go_test")
+
+# The page reads the app's version from it.
+copy_to_bin(
+    name = "wails_json",
+    srcs = ["wails.json"],
+    visibility = ["//apps/desktop/web:__pkg__"],
+)
+
+# The page, built by //apps/desktop/web:page, where go:embed looks for it.
+copy_to_directory(
+    name = "dist",
+    srcs = ["//apps/desktop/web:page"],
+    root_paths = ["apps/desktop/web/dist"],
+)
 
 go_library(
     name = "desktop_lib",
@@ -19,8 +35,7 @@ go_library(
         ],
         "//conditions:default": [],
     }),
-    # The page, built into dist/ (phase 4: by Bazel).
-    embedsrcs = glob(["dist/**"]),  # keep
+    embedsrcs = [":dist"],  # keep
     importpath = "github.com/retail-cortex/blitz/apps/desktop",
     visibility = ["//visibility:private"],
     deps = [

@@ -1,0 +1,2 @@
+# No dependency runs install scripts (rules_js requires saying so).
+onlyBuiltDependencies: []

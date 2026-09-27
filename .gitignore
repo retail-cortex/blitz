@@ -9,8 +9,7 @@
 /dist/
 
 # Desktop app build outputs (the embedded page is rebuilt from its web/).
-/apps/desktop/dist/*
-!/apps/desktop/dist/.gitkeep
+/apps/desktop/web/dist/
 /apps/desktop/packaging/bin/
 /apps/desktop/packaging/dist/
 /apps/desktop/web/wailsjs/

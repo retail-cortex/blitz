@@ -1,28 +1,18 @@
-import { readFileSync, writeFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { resolve } from "node:path";
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 
-const outDir = "../dist";
+// Bazel builds the page (//apps/desktop/web:page) into its output tree,
+// named by BLITZ_PAGE_OUT, and the desktop binary embeds it from there.
+const outDir = process.env.BLITZ_PAGE_OUT ?? "dist";
 
-// The desktop binary embeds the build, and go:embed only reaches files
-// under its own package, so the build goes there. Emptying it removes the
-// committed placeholder that lets the Go package compile before any build,
-// so it's written back.
 const wails = JSON.parse(readFileSync(resolve(import.meta.dirname, "../wails.json"), "utf8"));
 
 export default defineConfig({
   define: { __APP_VERSION__: JSON.stringify(wails.info.productVersion) },
-  plugins: [
-    react(),
-    {
-      name: "keep-placeholder",
-      closeBundle() {
-        writeFileSync(resolve(import.meta.dirname, outDir, ".gitkeep"), "");
-      },
-    },
-  ],
+  plugins: [react()],
   // The app loads its page from its own binary, so one bundle is fine.
   build: { outDir, emptyOutDir: true, chunkSizeWarningLimit: 1024 },
   // In development (plain browser), API calls go to the service's socket,
