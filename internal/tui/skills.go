@@ -4,13 +4,14 @@ import (
 	"fmt"
 	"strings"
 
-	core "github.com/retail-cortex/blitz/internal/app"
+	"github.com/retail-cortex/blitz/pkg/api"
+
 	"github.com/retail-cortex/blitz/internal/i18n"
 )
 
 // scriptSummary is the one-line state of a skill's scripts for /skills
 // list: how many, their approval tier, and whether they may run.
-func scriptSummary(s core.SkillInfo) string {
+func scriptSummary(s api.SkillInfo) string {
 	if len(s.Scripts) == 0 {
 		return ""
 	}
@@ -29,7 +30,7 @@ func scriptSummary(s core.SkillInfo) string {
 
 // showSkill prints everything about a skill that matters for running its
 // scripts: what it declares and what the policy lets it do.
-func showSkill(s core.SkillInfo) {
+func showSkill(s api.SkillInfo) {
 	var about []string
 	for _, v := range []string{s.Version, s.License, s.Category} {
 		if v != "" {

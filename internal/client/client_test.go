@@ -15,11 +15,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/retail-cortex/blitz/pkg/api"
+
 	"github.com/retail-cortex/blitz/internal/app"
 	"github.com/retail-cortex/blitz/internal/config"
 	"github.com/retail-cortex/blitz/internal/runtime"
 	"github.com/retail-cortex/blitz/internal/server"
-	"github.com/retail-cortex/blitz/internal/tools"
 	"google.golang.org/adk/v2/model"
 	"google.golang.org/genai"
 )
@@ -73,25 +74,25 @@ func TestRemoteOperationsAndTypedErrors(t *testing.T) {
 	if r.ModelErr() != nil || r.Model().Name == "" || r.ActiveAgent().Name != "blitz" {
 		t.Fatalf("model %v %v, agent %v", r.ModelErr(), r.Model(), r.ActiveAgent())
 	}
-	var unknown *app.UnknownAgentError
+	var unknown *api.UnknownAgentError
 	if _, err := r.PinModel(ctx, "nobody", "x"); !errors.As(err, &unknown) || unknown.Name != "nobody" {
 		t.Errorf("unknown agent: %v", err)
 	}
-	var invalid *app.InvalidSettingError
-	if _, err := r.UpdateModelSettings("gpt-5", false, []app.Setting{{Key: "temperature", Value: "9"}}); !errors.As(err, &invalid) {
+	var invalid *api.InvalidSettingError
+	if _, err := r.UpdateModelSettings("gpt-5", false, []api.Setting{{Key: "temperature", Value: "9"}}); !errors.As(err, &invalid) {
 		t.Errorf("invalid setting: %v", err)
 	}
-	if _, err := r.SaveSnapshot("s", false); !errors.Is(err, app.ErrNoActiveSession) {
+	if _, err := r.SaveSnapshot("s", false); !errors.Is(err, api.ErrNoActiveSession) {
 		t.Errorf("no session: %v", err)
 	}
-	if _, err := r.Set(ctx, "agency", "reckless"); !errors.Is(err, app.ErrInvalidAgency) {
+	if _, err := r.Set(ctx, "agency", "reckless"); !errors.Is(err, api.ErrInvalidAgency) {
 		t.Errorf("agency: %v", err)
 	}
 	res, err := r.PinModel(ctx, "qa", "anthropic/claude-haiku-4-5")
 	if err != nil || res.Model != "claude-haiku-4-5" || res.Saved.Err != nil {
 		t.Fatalf("pin %+v %v", res, err)
 	}
-	if i := slices.IndexFunc(r.ListAgents(), func(a app.AgentInfo) bool { return a.Name == "qa" }); i < 0 || r.ListAgents()[i].PinnedModel != "claude-haiku-4-5" {
+	if i := slices.IndexFunc(r.ListAgents(), func(a api.AgentInfo) bool { return a.Name == "qa" }); i < 0 || r.ListAgents()[i].PinnedModel != "claude-haiku-4-5" {
 		t.Error("pin not listed")
 	}
 	if !r.ImagesEnabled() || r.Processes() != nil || len(r.SandboxSummary()) == 0 {
@@ -105,9 +106,9 @@ func TestRemoteTurnWithApprovalAndQuestion(t *testing.T) {
 	r := attach(t, func(c *config.Config) { c.Blitz.AutoApprove = false }, create, ask, text("all done"))
 	var asked []string
 	r.SetUI(
-		func(_ context.Context, req tools.ApprovalRequest) (tools.Decision, error) {
+		func(_ context.Context, req api.ApprovalRequest) (api.Decision, error) {
 			asked = append(asked, "approve:"+string(req.Kind))
-			return tools.DecisionOnce, nil
+			return api.DecisionOnce, nil
 		},
 		func(_ context.Context, q string, _ []string) (string, error) {
 			asked = append(asked, "ask:"+q)
@@ -120,9 +121,9 @@ func TestRemoteTurnWithApprovalAndQuestion(t *testing.T) {
 	}
 	var events []string
 	accepted, finished := false, false
-	res, err := r.Run(context.Background(), s.ID, app.Turn{
+	res, err := r.Run(context.Background(), s.ID, api.Turn{
 		Text: "make a file", OnAccepted: func() { accepted = true }, OnFinished: func() { finished = true },
-	}, func(e app.Event) {
+	}, func(e api.Event) {
 		switch {
 		case e.ToolCall != nil:
 			events = append(events, "call:"+e.ToolCall.Name)
@@ -152,8 +153,8 @@ func TestRemoteBlockedPrompt(t *testing.T) {
 		c.Hooks.PromptSubmit = []config.HookConfig{{Command: `echo "no secrets" >&2; exit 2`}}
 	})
 	s, _ := r.NewSession()
-	_, err := r.Run(context.Background(), s.ID, app.Turn{Text: "my password"}, func(app.Event) {})
-	var blocked *app.BlockedError
+	_, err := r.Run(context.Background(), s.ID, api.Turn{Text: "my password"}, func(api.Event) {})
+	var blocked *api.BlockedError
 	if !errors.As(err, &blocked) || !strings.Contains(blocked.Reason, "no secrets") {
 		t.Errorf("blocked: %v", err)
 	}
@@ -173,7 +174,7 @@ func TestRemoteImages(t *testing.T) {
 		t.Errorf("missing image: %v", err)
 	}
 	s, _ := r.NewSession()
-	if _, err := r.Run(context.Background(), s.ID, app.Turn{Text: "what is this?", Images: imgs}, func(app.Event) {}); err != nil {
+	if _, err := r.Run(context.Background(), s.ID, api.Turn{Text: "what is this?", Images: imgs}, func(api.Event) {}); err != nil {
 		t.Fatalf("turn with an image: %v", err)
 	}
 }
@@ -209,13 +210,13 @@ func TestRemoteTurnLimits(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := r.Run(context.Background(), sess.ID, app.Turn{Text: "loop", MaxTurns: 2}, func(app.Event) {}); !errors.Is(err, app.ErrMaxTurns) {
+	if _, err := r.Run(context.Background(), sess.ID, api.Turn{Text: "loop", MaxTurns: 2}, func(api.Event) {}); !errors.Is(err, api.ErrMaxTurns) {
 		t.Errorf("max turns over the API: %v", err)
 	}
 	r2 := attach(t, func(c *config.Config) { c.Blitz.AutoApprove = true }, call("run_shell_command", map[string]any{"command": "sleep 5"}))
 	sess2, _, _ := r2.OpenSession("", false)
 	start := time.Now()
-	if _, err := r2.Run(context.Background(), sess2.ID, app.Turn{Text: "wait", Timeout: 300 * time.Millisecond}, func(app.Event) {}); !errors.Is(err, app.ErrTimeLimit) {
+	if _, err := r2.Run(context.Background(), sess2.ID, api.Turn{Text: "wait", Timeout: 300 * time.Millisecond}, func(api.Event) {}); !errors.Is(err, api.ErrTimeLimit) {
 		t.Errorf("timeout over the API: %v", err)
 	}
 	if time.Since(start) > 4*time.Second {
@@ -233,7 +234,7 @@ func TestRemotePermissionMode(t *testing.T) {
 	if got := r.Settings().PermissionMode; got != "accept-edits" {
 		t.Errorf("settings mode %q", got)
 	}
-	if _, err := r.SetPermissionMode("yolo"); !errors.Is(err, app.ErrUnknownMode) {
+	if _, err := r.SetPermissionMode("yolo"); !errors.Is(err, api.ErrUnknownMode) {
 		t.Errorf("unknown mode over the API: %v", err)
 	}
 }
@@ -247,7 +248,7 @@ func TestRemoteEffort(t *testing.T) {
 	if got := r.Settings().Effort; got != "high" {
 		t.Errorf("settings effort %q", got)
 	}
-	var invalid *app.InvalidSettingError
+	var invalid *api.InvalidSettingError
 	if _, err := r.Set(context.Background(), "effort", "extreme"); !errors.As(err, &invalid) {
 		t.Errorf("invalid effort over the API: %v", err)
 	}
@@ -262,7 +263,7 @@ func TestRemoteRewind(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, p := range []string{"first", "second"} {
-		if _, err := r.Run(context.Background(), sess.ID, app.Turn{Text: p}, func(app.Event) {}); err != nil {
+		if _, err := r.Run(context.Background(), sess.ID, api.Turn{Text: p}, func(api.Event) {}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -270,8 +271,8 @@ func TestRemoteRewind(t *testing.T) {
 	if err != nil || len(points) != 2 || points[1].Text != "second" || !points[1].Conversation || points[1].Time.IsZero() {
 		t.Fatalf("points %+v %v", points, err)
 	}
-	res, err := r.Rewind(context.Background(), points[1].Index, app.RewindConversation, false)
-	if err != nil || res.Prompt != "second" || res.Mode != app.RewindConversation {
+	res, err := r.Rewind(context.Background(), points[1].Index, api.RewindConversation, false)
+	if err != nil || res.Prompt != "second" || res.Mode != api.RewindConversation {
 		t.Fatalf("rewind %+v %v", res, err)
 	}
 	if a, _ := r.ActiveSession(); a.MessageCount != 2 {
@@ -283,10 +284,10 @@ func TestRemoteRewind(t *testing.T) {
 	if a, _ := r.ActiveSession(); len(a.Messages) != 3 || a.Messages[0].Kind != "" || a.Messages[2].Kind != "steer" {
 		t.Errorf("message kinds over the API: %+v", a.Messages)
 	}
-	if _, err := r.Rewind(context.Background(), 1, app.RewindBoth, false); !errors.Is(err, app.ErrNotRewindPoint) {
+	if _, err := r.Rewind(context.Background(), 1, api.RewindBoth, false); !errors.Is(err, api.ErrNotRewindPoint) {
 		t.Errorf("not a prompt: %v", err)
 	}
-	if _, err := r.Rewind(context.Background(), 0, "sideways", false); !errors.Is(err, app.ErrUnknownRewindMode) {
+	if _, err := r.Rewind(context.Background(), 0, "sideways", false); !errors.Is(err, api.ErrUnknownRewindMode) {
 		t.Errorf("unknown mode: %v", err)
 	}
 }
@@ -297,8 +298,8 @@ func TestRemoteTasks(t *testing.T) {
 		"items": []any{map[string]any{"content": "step one", "status": "in_progress"}}}}}}}
 	r := attach(t, nil, todo, genai.NewContentFromText("ok", genai.RoleModel))
 	sess, _, _ := r.OpenSession("", false)
-	var tasks []app.Task
-	if _, err := r.Run(context.Background(), sess.ID, app.Turn{Text: "go"}, func(e app.Event) {
+	var tasks []api.Task
+	if _, err := r.Run(context.Background(), sess.ID, api.Turn{Text: "go"}, func(e api.Event) {
 		if e.Tasks != nil {
 			tasks = e.Tasks
 		}
@@ -313,7 +314,7 @@ func TestRemoteTasks(t *testing.T) {
 // Reasoning settings survive the trip to the service and back.
 func TestRemoteReasoningSettings(t *testing.T) {
 	r := attach(t, nil)
-	ch, err := r.UpdateModelSettings("gpt-5", false, []app.Setting{{Key: "reasoning_effort", Value: "high"}, {Key: "thinking_budget", Value: "2048"}})
+	ch, err := r.UpdateModelSettings("gpt-5", false, []api.Setting{{Key: "reasoning_effort", Value: "high"}, {Key: "thinking_budget", Value: "2048"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -334,7 +335,7 @@ func TestRemotePermissionRules(t *testing.T) {
 	if got := r.ListPermissionRules(); len(got) != 1 || got[0].Effect != "ask" || got[0].Source != "session" {
 		t.Errorf("list %+v", got)
 	}
-	if _, err := r.AddPermissionRule("deny", "nope(x)", false); !errors.Is(err, app.ErrBadRule) {
+	if _, err := r.AddPermissionRule("deny", "nope(x)", false); !errors.Is(err, api.ErrBadRule) {
 		t.Errorf("bad rule over the API: %v", err)
 	}
 	if res, _ := r.RemovePermissionRule("shell(git push *)", false); res.Removed != 1 {
@@ -354,10 +355,10 @@ func TestRemoteCommands(t *testing.T) {
 		t.Fatal("bundled /review not listed over the API")
 	}
 	sess, _, _ := r.OpenSession("", false)
-	if _, err := r.Run(context.Background(), sess.ID, app.Turn{Text: "/review", Command: true}, func(app.Event) {}); err != nil {
+	if _, err := r.Run(context.Background(), sess.ID, api.Turn{Text: "/review", Command: true}, func(api.Event) {}); err != nil {
 		t.Errorf("run /review over the API: %v", err)
 	}
-	if _, err := r.Run(context.Background(), sess.ID, app.Turn{Text: "/nope", Command: true}, func(app.Event) {}); !errors.Is(err, app.ErrUnknownCommand) {
+	if _, err := r.Run(context.Background(), sess.ID, api.Turn{Text: "/nope", Command: true}, func(api.Event) {}); !errors.Is(err, api.ErrUnknownCommand) {
 		t.Errorf("unknown command over the API: %v", err)
 	}
 }

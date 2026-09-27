@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/retail-cortex/blitz/pkg/api"
+
 	"github.com/retail-cortex/blitz/internal/config"
 )
 
@@ -33,7 +35,7 @@ func TestSkillsReportThePolicyVerdict(t *testing.T) {
 	if _, ok := w.Skill("nope"); ok {
 		t.Error("found a missing skill")
 	}
-	if i := slices.IndexFunc(w.ListSkills(), func(s SkillInfo) bool { return s.Name == "tidy" }); i < 0 {
+	if i := slices.IndexFunc(w.ListSkills(), func(s api.SkillInfo) bool { return s.Name == "tidy" }); i < 0 {
 		t.Error("tidy not listed")
 	}
 	if got := w.SearchSkills("imports"); len(got) != 1 || got[0].Name != "tidy" {
@@ -44,14 +46,14 @@ func TestSkillsReportThePolicyVerdict(t *testing.T) {
 func TestActiveAgentTools(t *testing.T) {
 	w := openTest(t)
 	at := w.ActiveAgentTools()
-	find := func(name string) (ToolInfo, bool) {
-		i := slices.IndexFunc(at.Tools, func(t ToolInfo) bool { return t.Name == name })
+	find := func(name string) (api.ToolInfo, bool) {
+		i := slices.IndexFunc(at.Tools, func(t api.ToolInfo) bool { return t.Name == name })
 		if i < 0 {
-			return ToolInfo{}, false
+			return api.ToolInfo{}, false
 		}
 		return at.Tools[i], true
 	}
-	if at.Agent != "blitz" || !slices.IsSortedFunc(at.Tools, func(a, b ToolInfo) int { return strings.Compare(a.Name, b.Name) }) {
+	if at.Agent != "blitz" || !slices.IsSortedFunc(at.Tools, func(a, b api.ToolInfo) int { return strings.Compare(a.Name, b.Name) }) {
 		t.Errorf("agent %q, tools unsorted", at.Agent)
 	}
 	if r, ok := find("read_file"); !ok || !r.PlanAllowed || r.Description == "" {

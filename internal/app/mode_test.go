@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/retail-cortex/blitz/pkg/api"
+
 	"google.golang.org/genai"
 )
 
@@ -24,7 +26,7 @@ func TestPlanModeAppliesToEveryPrompt(t *testing.T) {
 	}
 	s, _ := w.NewSession()
 	var result map[string]any
-	res, err := w.Run(context.Background(), s.ID, Turn{Text: "add x.txt"}, func(e Event) {
+	res, err := w.Run(context.Background(), s.ID, api.Turn{Text: "add x.txt"}, func(e api.Event) {
 		if e.ToolResult != nil {
 			result = e.ToolResult.Result
 		}
@@ -50,7 +52,7 @@ func TestPlanModeAppliesToEveryPrompt(t *testing.T) {
 
 	// Back to default: the next prompt runs normally.
 	w.SetPermissionMode("default")
-	w.Run(context.Background(), s.ID, Turn{Text: "go"}, func(Event) {})
+	w.Run(context.Background(), s.ID, api.Turn{Text: "go"}, func(api.Event) {})
 	if last := llm.Requests[2].Contents; strings.Contains(last[len(last)-1].Parts[0].Text, "plan-only mode") {
 		t.Error("default mode still planned")
 	}
@@ -58,7 +60,7 @@ func TestPlanModeAppliesToEveryPrompt(t *testing.T) {
 
 func TestSetPermissionModeErrors(t *testing.T) {
 	w, _ := openTestWith(t, nil)
-	if _, err := w.SetPermissionMode("yolo"); !errors.Is(err, ErrUnknownMode) {
+	if _, err := w.SetPermissionMode("yolo"); !errors.Is(err, api.ErrUnknownMode) {
 		t.Errorf("unknown mode: %v", err)
 	}
 	if m, err := w.SetPermissionMode("acceptEdits"); err != nil || m != "accept-edits" {

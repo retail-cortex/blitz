@@ -9,10 +9,9 @@ import (
 	"os"
 	"strings"
 	"time"
-)
 
-// ErrSnapshotNameTaken is returned by Snapshot when another snapshot has the name.
-var ErrSnapshotNameTaken = errors.New("a snapshot with this name already exists")
+	"github.com/retail-cortex/blitz/pkg/api"
+)
 
 // ValidateName reports whether name can label a snapshot. Names follow the
 // ID rules (they never reach a path, but are shown and typed like IDs) and
@@ -54,7 +53,7 @@ func (s *Storage) Snapshot(srcID, name string, replace bool) (*SessionRecord, er
 		return nil, err
 	}
 	if old != nil && !replace {
-		return nil, fmt.Errorf("%w: %s", ErrSnapshotNameTaken, name)
+		return nil, fmt.Errorf("%w: %s", api.ErrSnapshotNameTaken, name)
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()

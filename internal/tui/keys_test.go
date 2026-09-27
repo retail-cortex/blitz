@@ -11,8 +11,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/retail-cortex/blitz/pkg/api"
+
 	"github.com/ergochat/readline"
-	"github.com/retail-cortex/blitz/internal/tools"
 )
 
 // fakeTerminal runs the real line editor on a pipe. Each write reaches the
@@ -235,16 +236,16 @@ func TestKeyWatcherEscInterrupts(t *testing.T) {
 
 func TestNextMode(t *testing.T) {
 	for _, c := range []struct {
-		from   tools.PermissionMode
+		from   api.PermissionMode
 		bypass bool
-		want   tools.PermissionMode
+		want   api.PermissionMode
 	}{
-		{tools.ModeDefault, false, tools.ModeAcceptEdits},
-		{tools.ModeAcceptEdits, false, tools.ModePlan},
-		{tools.ModePlan, false, tools.ModeDefault},
-		{tools.ModePlan, true, tools.ModeBypass},
-		{tools.ModeBypass, true, tools.ModeDefault},
-		{tools.ModeDontAsk, false, tools.ModeDefault},
+		{api.ModeDefault, false, api.ModeAcceptEdits},
+		{api.ModeAcceptEdits, false, api.ModePlan},
+		{api.ModePlan, false, api.ModeDefault},
+		{api.ModePlan, true, api.ModeBypass},
+		{api.ModeBypass, true, api.ModeDefault},
+		{api.ModeDontAsk, false, api.ModeDefault},
 	} {
 		if got := nextMode(string(c.from), c.bypass); got != string(c.want) {
 			t.Errorf("%s (bypass %v) -> %s, want %s", c.from, c.bypass, got, c.want)

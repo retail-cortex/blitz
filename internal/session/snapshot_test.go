@@ -10,6 +10,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/retail-cortex/blitz/pkg/api"
+
 	adksession "google.golang.org/adk/v2/session"
 )
 
@@ -70,7 +72,7 @@ func TestSnapshotNamesAreUniqueUnlessReplaced(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := st.Snapshot(src.ID, "v1", false); !errors.Is(err, ErrSnapshotNameTaken) {
+	if _, err := st.Snapshot(src.ID, "v1", false); !errors.Is(err, api.ErrSnapshotNameTaken) {
 		t.Fatalf("duplicate name: %v", err)
 	}
 	st.AddMessage("user", "third")

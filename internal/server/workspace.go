@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/retail-cortex/blitz/pkg/api"
+
 	"connectrpc.com/connect"
 	"github.com/retail-cortex/blitz/internal/app"
 	pb "github.com/retail-cortex/blitz/internal/gen/blitz/v1"
@@ -134,9 +136,9 @@ func (h workspaceService) UpdateModelSettings(ctx context.Context, r req[pb.Upda
 	if err != nil {
 		return nil, err
 	}
-	var changes []app.Setting
+	var changes []api.Setting
 	for _, c := range r.Msg.Changes {
-		changes = append(changes, app.Setting{Key: c.Key, Value: c.Value})
+		changes = append(changes, api.Setting{Key: c.Key, Value: c.Value})
 	}
 	res, err := w.UpdateModelSettings(r.Msg.Ref, r.Msg.Reset_, changes)
 	if err != nil {
@@ -394,7 +396,7 @@ func (h workspaceService) Undo(ctx context.Context, r req[pb.UndoRequest]) (*con
 	res, err := w.Undo(r.Msg.Force)
 	// A conflict before anything was restored fails the call; anything
 	// else is reported with what was restored.
-	if err != nil && len(res.Restored) == 0 && errors.Is(err, app.ErrUndoConflict) {
+	if err != nil && len(res.Restored) == 0 && errors.Is(err, api.ErrUndoConflict) {
 		return nil, toAPI(err)
 	}
 	return ok(&pb.UndoResponse{Label: res.Label, Restored: res.Restored, Error: errorInfo(err)})

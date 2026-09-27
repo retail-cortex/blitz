@@ -1,8 +1,9 @@
 package tools
 
 import (
-	"errors"
 	"fmt"
+
+	"github.com/retail-cortex/blitz/pkg/api"
 
 	"github.com/retail-cortex/blitz/internal/audit"
 	"github.com/retail-cortex/blitz/internal/images"
@@ -10,10 +11,6 @@ import (
 	"google.golang.org/adk/v2/tool"
 	"google.golang.org/adk/v2/tool/functiontool"
 )
-
-// ErrImagesDisabled is returned when [images] enabled = false (or the image
-// store could not be created).
-var ErrImagesDisabled = errors.New("image support is disabled")
 
 // Images returns the image store, or nil when images are disabled.
 func (r *Registry) Images() *images.Store { return r.images }
@@ -23,7 +20,7 @@ func (r *Registry) Images() *images.Store { return r.images }
 // stores it. The audit log records the path and hash, not the picture.
 func (r *Registry) LoadImage(path string) (*images.Image, error) {
 	if r.images == nil {
-		return nil, ErrImagesDisabled
+		return nil, api.ErrImagesDisabled
 	}
 	rel, err := r.workspace.Rel(path)
 	if err != nil {
@@ -45,7 +42,7 @@ func (r *Registry) LoadImage(path string) (*images.Image, error) {
 // (the clipboard). name is only for display.
 func (r *Registry) AddImage(name string, data []byte) (*images.Image, error) {
 	if r.images == nil {
-		return nil, ErrImagesDisabled
+		return nil, api.ErrImagesDisabled
 	}
 	img, err := r.storeImage(name, data)
 	if err != nil {

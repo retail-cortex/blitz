@@ -8,14 +8,10 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/retail-cortex/blitz/pkg/api"
+
 	"github.com/retail-cortex/blitz/internal/config"
 )
-
-// ErrWorkspaceBusy reports a workspace another process (or another
-// Workspace in this one) has open. Only one may own a workspace at a time:
-// they would otherwise write the same sessions and checkpoints. The lock
-// goes with the process, so a crash never leaves a workspace locked.
-var ErrWorkspaceBusy = errors.New("the workspace is open elsewhere")
 
 // workspaceLock is an exclusive OS file lock held while a workspace is open.
 type workspaceLock struct{ f *os.File }
@@ -35,7 +31,7 @@ func lockWorkspace(dir string) (*workspaceLock, error) {
 	if err := tryLock(f); err != nil {
 		f.Close()
 		if errors.Is(err, errLocked) {
-			return nil, fmt.Errorf("%w: %s", ErrWorkspaceBusy, dir)
+			return nil, fmt.Errorf("%w: %s", api.ErrWorkspaceBusy, dir)
 		}
 		return nil, fmt.Errorf("workspace lock: %w", err)
 	}

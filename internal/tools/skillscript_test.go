@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/retail-cortex/blitz/pkg/api"
+
 	"github.com/retail-cortex/blitz/internal/config"
 	"github.com/retail-cortex/blitz/internal/skills"
 )
@@ -66,7 +68,7 @@ if __name__ == "__main__":
 type scriptFixture struct {
 	ws     string
 	runner *SkillScripts
-	reqs   *[]ApprovalRequest
+	reqs   *[]api.ApprovalRequest
 }
 
 func newScriptFixture(t *testing.T, tier string, approve bool, edit func(*config.SkillPolicy)) scriptFixture {
@@ -179,7 +181,7 @@ func TestRunSkillScriptRefusals(t *testing.T) {
 		t.Fatalf("install: %+v %+v", out, *f.reqs)
 	}
 	r := (*f.reqs)[0]
-	if r.Kind != ActionNetwork || !strings.HasPrefix(r.Key, "pyenv:") || !strings.Contains(r.Detail, "six==1.16.0") || !strings.Contains(r.Detail, "--only-binary :all:") {
+	if r.Kind != api.ActionNetwork || !strings.HasPrefix(r.Key, "pyenv:") || !strings.Contains(r.Detail, "six==1.16.0") || !strings.Contains(r.Detail, "--only-binary :all:") {
 		t.Errorf("install approval: %+v", r)
 	}
 }

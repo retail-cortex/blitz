@@ -11,8 +11,9 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/retail-cortex/blitz/pkg/api"
+
 	"github.com/retail-cortex/blitz/internal/i18n"
-	"github.com/retail-cortex/blitz/internal/tools"
 	"golang.org/x/term"
 )
 
@@ -447,26 +448,26 @@ func terminalPicker(app *App) (Picker, bool) {
 // pickApproval asks for an approval with a picker. header is the request
 // as the line prompt shows it; its last line (the answer keys) is replaced
 // by the picker. Esc denies and stops the turn, as Ctrl+C does.
-func pickApproval(ctx context.Context, t *TerminalInput, req tools.ApprovalRequest, header string, truncated bool) (tools.Decision, error) {
+func pickApproval(ctx context.Context, t *TerminalInput, req api.ApprovalRequest, header string, truncated bool) (api.Decision, error) {
 	label := req.KeyLabel
 	if label == "" {
 		label = i18n.T("approve.matching")
 	}
 	type choice struct {
 		item     PickItem
-		decision tools.Decision
+		decision api.Decision
 		diff     bool
 	}
-	choices := []choice{{item: PickItem{Label: i18n.T("approve.pick_yes"), Key: 'y'}, decision: tools.DecisionOnce}}
+	choices := []choice{{item: PickItem{Label: i18n.T("approve.pick_yes"), Key: 'y'}, decision: api.DecisionOnce}}
 	if req.Key != "" {
 		choices = append(choices,
-			choice{item: PickItem{Label: i18n.T("approve.pick_session", "label", label), Key: 's'}, decision: tools.DecisionSession},
-			choice{item: PickItem{Label: i18n.T("approve.pick_always", "label", label), Key: 'a'}, decision: tools.DecisionAlways})
+			choice{item: PickItem{Label: i18n.T("approve.pick_session", "label", label), Key: 's'}, decision: api.DecisionSession},
+			choice{item: PickItem{Label: i18n.T("approve.pick_always", "label", label), Key: 'a'}, decision: api.DecisionAlways})
 	}
 	if truncated {
 		choices = append(choices, choice{item: PickItem{Label: i18n.T("approve.pick_diff"), Key: 'd'}, diff: true})
 	}
-	choices = append(choices, choice{item: PickItem{Label: i18n.T("approve.pick_no"), Key: 'n'}, decision: tools.DecisionDeny})
+	choices = append(choices, choice{item: PickItem{Label: i18n.T("approve.pick_no"), Key: 'n'}, decision: api.DecisionDeny})
 	items := make([]PickItem, len(choices))
 	for i, c := range choices {
 		items[i] = c.item
@@ -476,10 +477,10 @@ func pickApproval(ctx context.Context, t *TerminalInput, req tools.ApprovalReque
 		i, err := t.Pick(ctx, title, items, 0)
 		if errors.Is(err, ErrPickCancelled) {
 			t.interrupt()
-			return tools.DecisionDeny, fmt.Errorf("no approval input: %w", context.Canceled)
+			return api.DecisionDeny, fmt.Errorf("no approval input: %w", context.Canceled)
 		}
 		if err != nil {
-			return tools.DecisionDeny, fmt.Errorf("no approval input: %w", err)
+			return api.DecisionDeny, fmt.Errorf("no approval input: %w", err)
 		}
 		if !choices[i].diff {
 			return choices[i].decision, nil

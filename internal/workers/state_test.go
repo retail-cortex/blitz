@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/retail-cortex/blitz/pkg/api"
+
 	"github.com/retail-cortex/blitz/internal/config"
 )
 
@@ -20,38 +22,38 @@ func TestStoreStatesAndPersistence(t *testing.T) {
 		t.Fatal(err)
 	}
 	ws := "/work"
-	if got := s.State(ws, w, nil); got != StateNew {
+	if got := s.State(ws, w, nil); got != api.StateNew {
 		t.Errorf("new: %s", got)
 	}
-	if err := s.Enable(ws, w, "sha256:reviewed-something-else"); !errors.Is(err, ErrHashMismatch) {
+	if err := s.Enable(ws, w, "sha256:reviewed-something-else"); !errors.Is(err, api.ErrHashMismatch) {
 		t.Errorf("stale hash: %v", err)
 	}
 	if err := s.Enable(ws, w, w.Hash); err != nil {
 		t.Fatal(err)
 	}
-	if got := s.State(ws, w, nil); got != StateEnabled || len(s.Workspaces()) != 1 {
+	if got := s.State(ws, w, nil); got != api.StateEnabled || len(s.Workspaces()) != 1 {
 		t.Errorf("enabled: %s %v", got, s.Workspaces())
 	}
 
 	// Another process reads the same state.
 	again, _ := OpenStore(path)
-	if got := again.State(ws, w, nil); got != StateEnabled {
+	if got := again.State(ws, w, nil); got != api.StateEnabled {
 		t.Errorf("reloaded: %s", got)
 	}
 
 	// Editing the worker suspends it until re-enabled.
 	os.WriteFile(w.Path, []byte(valid+"\nAlso check tools.\n"), 0o644)
 	edited, _ := Load(dir)
-	if got := s.State(ws, edited, nil); got != StateChanged {
+	if got := s.State(ws, edited, nil); got != api.StateChanged {
 		t.Errorf("edited: %s", got)
 	}
 	if err := s.Disable(ws, "deps"); err != nil {
 		t.Fatal(err)
 	}
-	if got := s.State(ws, edited, nil); got != StateDisabled || len(s.Workspaces()) != 0 {
+	if got := s.State(ws, edited, nil); got != api.StateDisabled || len(s.Workspaces()) != 0 {
 		t.Errorf("disabled: %s %v", got, s.Workspaces())
 	}
-	if got := s.State(ws, edited, errors.New("broken")); got != StateInvalid {
+	if got := s.State(ws, edited, errors.New("broken")); got != api.StateInvalid {
 		t.Errorf("invalid: %s", got)
 	}
 }

@@ -12,6 +12,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/retail-cortex/blitz/pkg/api"
+
 	"github.com/retail-cortex/blitz/internal/agents"
 	"github.com/retail-cortex/blitz/internal/config"
 	"github.com/retail-cortex/blitz/internal/i18n"
@@ -70,7 +72,7 @@ func savedConfig(t *testing.T) *config.Config {
 }
 
 func isResumeError(err error) bool {
-	var re *ResumeError
+	var re *api.ResumeError
 	return errors.As(err, &re)
 }
 

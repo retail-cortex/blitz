@@ -14,6 +14,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/retail-cortex/blitz/pkg/api"
 )
 
 // fileState is a file's state before a change. Its content is kept in the
@@ -65,9 +67,6 @@ type UndoResult struct {
 	Turn     TurnSummary
 	Restored []string
 }
-
-// ErrUndoConflict is returned when files changed after the checkpointed edit.
-var ErrUndoConflict = errors.New("files changed since the edit")
 
 // ErrNothingToUndo is returned when no checkpoint has changes to restore.
 var ErrNothingToUndo = errors.New("nothing to undo")
@@ -468,7 +467,7 @@ func (c *Checkpoints) restoreLocked(turns []*Turn, force bool, forceHint string)
 		return UndoResult{}, false, fmt.Errorf("cannot restore files larger than the snapshot limit: %s (use %s to restore the rest)", strings.Join(unrestorable, ", "), forceHint)
 	}
 	if len(conflicts) > 0 && !force {
-		return UndoResult{}, false, fmt.Errorf("%w: %s (use %s to overwrite)", ErrUndoConflict, strings.Join(conflicts, ", "), forceHint)
+		return UndoResult{}, false, fmt.Errorf("%w: %s (use %s to overwrite)", api.ErrUndoConflict, strings.Join(conflicts, ", "), forceHint)
 	}
 	var errs []error
 	for i := len(order) - 1; i >= 0; i-- {

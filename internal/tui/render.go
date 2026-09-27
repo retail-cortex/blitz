@@ -4,7 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	core "github.com/retail-cortex/blitz/internal/app"
+	"github.com/retail-cortex/blitz/pkg/api"
+
 	"github.com/retail-cortex/blitz/internal/i18n"
 	"github.com/retail-cortex/blitz/internal/textutil"
 )
@@ -122,7 +123,7 @@ func SummarizeToolResponse(resp map[string]any) (summary string, success bool) {
 }
 
 // FormatTasks renders the agent's task list as a checklist.
-func FormatTasks(tasks []core.Task) string {
+func FormatTasks(tasks []api.Task) string {
 	var sb strings.Builder
 	for _, t := range tasks {
 		switch t.Status {

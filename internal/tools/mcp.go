@@ -11,6 +11,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/retail-cortex/blitz/pkg/api"
+
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/retail-cortex/blitz/internal/breaker"
 	"github.com/retail-cortex/blitz/internal/config"
@@ -515,7 +517,7 @@ func (c toolWith) Err() error                  { return c.ctx.Err() }
 func (c toolWith) Value(key any) any           { return c.ctx.Value(key) }
 
 // mcpApproval builds the approval request for an MCP tool call.
-func mcpApproval(server, toolName string, args map[string]any) ApprovalRequest {
+func mcpApproval(server, toolName string, args map[string]any) api.ApprovalRequest {
 	var parts []string
 	for k, v := range args {
 		parts = append(parts, fmt.Sprintf("%s=%v", k, v))
@@ -525,8 +527,8 @@ func mcpApproval(server, toolName string, args map[string]any) ApprovalRequest {
 	if len(parts) > 0 {
 		detail += "\n" + strings.Join(parts, "\n")
 	}
-	return ApprovalRequest{
-		Tool: toolName, Kind: ActionMCP, Detail: detail,
+	return api.ApprovalRequest{
+		Tool: toolName, Kind: api.ActionMCP, Detail: detail,
 		Key: "mcp:" + server + ":" + toolName, KeyLabel: fmt.Sprintf("%s from %s", toolName, server),
 		Targets: []string{server + ":" + toolName},
 	}

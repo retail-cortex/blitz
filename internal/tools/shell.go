@@ -7,6 +7,8 @@ import (
 	"os/exec"
 	"time"
 
+	"github.com/retail-cortex/blitz/pkg/api"
+
 	"google.golang.org/adk/v2/agent"
 	"google.golang.org/adk/v2/tool"
 	"google.golang.org/adk/v2/tool/functiontool"
@@ -103,8 +105,8 @@ func runShellCommand(ctx context.Context, cfg ShellConfig, input RunShellCommand
 		if decision.Reason != "" {
 			detail += "\n(" + decision.Reason + ")"
 		}
-		if err := cfg.Hooks.Approve(ctx, ApprovalRequest{
-			Tool: "run_shell_command", Kind: ActionCommand, Detail: detail,
+		if err := cfg.Hooks.Approve(ctx, api.ApprovalRequest{
+			Tool: "run_shell_command", Kind: api.ActionCommand, Detail: detail,
 			Key: "cmd:" + cfg.Workspace.Dir() + "\x00" + input.Command, KeyLabel: "this exact command in this workspace",
 			Targets: []string{input.Command}, MustAsk: decision.MustAsk,
 		}); err != nil {

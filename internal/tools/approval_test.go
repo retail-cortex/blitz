@@ -8,15 +8,17 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/retail-cortex/blitz/pkg/api"
 )
 
 func TestHooksApprovePolicy(t *testing.T) {
 	ctx := context.Background()
-	cmd := ApprovalRequest{Tool: "run_shell_command", Kind: ActionCommand, Detail: "ls"}
-	write := ApprovalRequest{Tool: "create_file", Kind: ActionWrite, Detail: "f"}
+	cmd := api.ApprovalRequest{Tool: "run_shell_command", Kind: api.ActionCommand, Detail: "ls"}
+	write := api.ApprovalRequest{Tool: "create_file", Kind: api.ActionWrite, Detail: "f"}
 
 	// Positive: bypass mode covers everything.
-	all := NewHooks(Policy{Mode: ModeBypass})
+	all := NewHooks(Policy{Mode: api.ModeBypass})
 	if err := all.Approve(ctx, cmd); err != nil {
 		t.Errorf("auto-approve-all denied command: %v", err)
 	}
@@ -55,7 +57,9 @@ func TestHooksApprovePolicy(t *testing.T) {
 		t.Errorf("approver said no but got %v", err)
 	}
 	failing := NewHooks(Policy{})
-	failing.SetApprover(func(context.Context, ApprovalRequest) (Decision, error) { return DecisionOnce, errors.New("tty gone") })
+	failing.SetApprover(func(context.Context, api.ApprovalRequest) (api.Decision, error) {
+		return api.DecisionOnce, errors.New("tty gone")
+	})
 	if err := failing.Approve(ctx, cmd); !errors.Is(err, ErrNotApproved) {
 		t.Errorf("approver error should deny, got %v", err)
 	}
@@ -154,9 +158,9 @@ func TestApprovalRequestsNameTheirTargets(t *testing.T) {
 	ws, dir := newTestWorkspace(t)
 	var got [][]string
 	h := NewHooks(Policy{})
-	h.SetApprover(func(_ context.Context, req ApprovalRequest) (Decision, error) {
+	h.SetApprover(func(_ context.Context, req api.ApprovalRequest) (api.Decision, error) {
 		got = append(got, req.Targets)
-		return DecisionOnce, nil
+		return api.DecisionOnce, nil
 	})
 	create, err := NewCreateFileTool(ws, h)
 	if err != nil {

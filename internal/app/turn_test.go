@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/retail-cortex/blitz/pkg/api"
+
 	"github.com/retail-cortex/blitz/internal/config"
 	"github.com/retail-cortex/blitz/internal/runtime"
 	"google.golang.org/adk/v2/model"
@@ -16,7 +18,7 @@ import (
 
 func text(s string) *genai.Content { return genai.NewContentFromText(s, genai.RoleModel) }
 
-func ignore(Event) {}
+func ignore(api.Event) {}
 
 // transcript returns the active session's messages as "role: text".
 func transcript(t *testing.T, w *Workspace) []string {
@@ -32,7 +34,7 @@ func transcript(t *testing.T, w *Workspace) []string {
 	return out
 }
 
-func newSession(t *testing.T, w *Workspace) SessionInfo {
+func newSession(t *testing.T, w *Workspace) api.SessionInfo {
 	t.Helper()
 	s, _, err := w.OpenSession("", false)
 	if err != nil {
@@ -47,8 +49,8 @@ func TestRunRecordsBothSidesAndOmitsThoughts(t *testing.T) {
 	sid := newSession(t, w).ID
 	accepted := 0
 	var seen int
-	res, err := w.Run(context.Background(), sid, Turn{Text: "hi", OnAccepted: func() { accepted++ }},
-		func(Event) { seen++ })
+	res, err := w.Run(context.Background(), sid, api.Turn{Text: "hi", OnAccepted: func() { accepted++ }},
+		func(api.Event) { seen++ })
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -64,16 +66,16 @@ func TestRunPlanPromptOverrideAndAside(t *testing.T) {
 	w, llm := openTestWith(t, nil, text("a plan"), text("searched"), text("an aside"))
 	sid := newSession(t, w).ID
 	ctx := context.Background()
-	if _, err := w.Run(ctx, sid, Turn{Text: "add a flag", Plan: true}, ignore); err != nil {
+	if _, err := w.Run(ctx, sid, api.Turn{Text: "add a flag", Plan: true}, ignore); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := w.Run(ctx, sid, Turn{Text: "/search web go", Prompt: "results: …", ReadOnly: "search"}, ignore); err != nil {
+	if _, err := w.Run(ctx, sid, api.Turn{Text: "/search web go", Prompt: "results: …", ReadOnly: "search"}, ignore); err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(lastUserText(llm), "results: …") {
 		t.Errorf("Prompt not sent: %q", lastUserText(llm))
 	}
-	if _, err := w.Run(ctx, sid, Turn{Text: "what's a flag?", Aside: true}, ignore); err != nil {
+	if _, err := w.Run(ctx, sid, api.Turn{Text: "what's a flag?", Aside: true}, ignore); err != nil {
 		t.Fatal(err)
 	}
 	want := []string{"user: /plan add a flag", "model: a plan", "user: /search web go", "model: searched"} // asides are recorded nowhere
@@ -87,7 +89,7 @@ func TestRunAcceptedSkipsHooksAndRecording(t *testing.T) {
 		c.Hooks.PromptSubmit = []config.HookConfig{{Command: `echo "nope" >&2; exit 2`}}
 	}, text("ok"))
 	sid := newSession(t, w).ID
-	if _, err := w.Run(context.Background(), sid, Turn{Text: "late steer", Accepted: true}, ignore); err != nil {
+	if _, err := w.Run(context.Background(), sid, api.Turn{Text: "late steer", Accepted: true}, ignore); err != nil {
 		t.Fatal(err)
 	}
 	if got := transcript(t, w); !slices.Equal(got, []string{"model: ok"}) {
@@ -101,8 +103,8 @@ func TestRunAndSteerBlockedByHook(t *testing.T) {
 	}, text("should not run"))
 	sid := newSession(t, w).ID
 	accepted := false
-	_, err := w.Run(context.Background(), sid, Turn{Text: "my password", OnAccepted: func() { accepted = true }}, ignore)
-	var blocked *BlockedError
+	_, err := w.Run(context.Background(), sid, api.Turn{Text: "my password", OnAccepted: func() { accepted = true }}, ignore)
+	var blocked *api.BlockedError
 	if !errors.As(err, &blocked) || !strings.Contains(blocked.Reason, "no secrets") || accepted || llm.Calls() != 0 {
 		t.Errorf("err %v, accepted %v, calls %d", err, accepted, llm.Calls())
 	}
@@ -120,7 +122,7 @@ func TestSteerRecordsAndUnreadSteersAreLeftOver(t *testing.T) {
 	ctx := context.Background()
 	// A message sent as the agent stops (the front end was still taking it)
 	// must still come back as unread.
-	res, err := w.Run(ctx, sid, Turn{Text: "go", OnFinished: func() {
+	res, err := w.Run(ctx, sid, api.Turn{Text: "go", OnFinished: func() {
 		if err := w.Steer(ctx, sid, "also do this"); err != nil {
 			t.Error(err)
 		}
@@ -160,8 +162,8 @@ func adkText(text string, partial, thought bool) *adksession.Event {
 // Streamed chunks are delivered as they come; the final event that repeats
 // them is marked, and only final answer text reaches the transcript.
 func TestRelayMarksRepeatedText(t *testing.T) {
-	var got []Event
-	r := &relay{on: func(e Event) { got = append(got, e) }}
+	var got []api.Event
+	r := &relay{on: func(e api.Event) { got = append(got, e) }}
 	r.handle(adkText("thinking…", true, true))
 	r.handle(adkText("Hel", true, false))
 	r.handle(adkText("lo", true, false))
@@ -194,7 +196,7 @@ func TestPromptIsRecordedBeforeSteering(t *testing.T) {
 	w, _ := openTestWith(t, nil, text("done"))
 	sid := newSession(t, w).ID
 	ctx := context.Background()
-	_, err := w.Run(ctx, sid, Turn{Text: "reformat", OnAccepted: func() {
+	_, err := w.Run(ctx, sid, api.Turn{Text: "reformat", OnAccepted: func() {
 		if err := w.Steer(ctx, sid, "use tabs"); err != nil {
 			t.Error(err)
 		}

@@ -6,8 +6,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/retail-cortex/blitz/pkg/api"
+
 	"github.com/retail-cortex/blitz/internal/config"
-	"github.com/retail-cortex/blitz/internal/tools"
 	"google.golang.org/genai"
 )
 
@@ -63,7 +64,7 @@ func parallelShellTurn(t *testing.T, maxParallel int) time.Duration {
 	f := newEngineWith(t, fixtureOpts{cfg: func(c *config.Config) { c.Tools.MaxParallel = maxParallel; c.Sandbox.Shell = "off" }},
 		&genai.Content{Role: genai.RoleModel, Parts: calls}, textContent("done"))
 	// Bypass mode needs the OS sandbox, which is off here: approve instead.
-	f.tools.Hooks().SetApprover(func(context.Context, tools.ApprovalRequest) (tools.Decision, error) { return tools.DecisionOnce, nil })
+	f.tools.Hooks().SetApprover(func(context.Context, api.ApprovalRequest) (api.Decision, error) { return api.DecisionOnce, nil })
 	start := time.Now()
 	got, err := functionResponses(t, f.eng, "s", "run four sleeps")
 	if err != nil {

@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/retail-cortex/blitz/pkg/api"
+
 	"google.golang.org/adk/v2/agent"
 	"google.golang.org/adk/v2/session"
 )
@@ -104,7 +106,7 @@ func TestExitPlanMode(t *testing.T) {
 	if g.Planning() {
 		t.Error("still planning after approval")
 	}
-	if _, path, mode, ok := g.Take(); !ok || mode != ModeDefault || path != ".blitz/plans/s_1-1.md" {
+	if _, path, mode, ok := g.Take(); !ok || mode != api.ModeDefault || path != ".blitz/plans/s_1-1.md" {
 		t.Errorf("take: %v %v %v", path, mode, ok)
 	}
 	if _, _, _, ok := g.Take(); ok {
@@ -114,7 +116,7 @@ func TestExitPlanMode(t *testing.T) {
 	answer = "edits"
 	g = NewPlanGate(true)
 	exit.Run(planContext(context.Background(), g), plan)
-	if _, path, mode, _ := g.Take(); mode != ModeAcceptEdits || path != ".blitz/plans/s_1-2.md" {
+	if _, path, mode, _ := g.Take(); mode != api.ModeAcceptEdits || path != ".blitz/plans/s_1-2.md" {
 		t.Errorf("accept-edits: %v %v", mode, path)
 	}
 

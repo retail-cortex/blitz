@@ -13,6 +13,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/retail-cortex/blitz/pkg/api"
+
 	"github.com/retail-cortex/blitz/internal/config"
 	"github.com/retail-cortex/blitz/internal/runtime"
 	"github.com/retail-cortex/blitz/internal/session"
@@ -23,39 +25,6 @@ import (
 // Workers: scheduled workflows the workspace defines in
 // workers/<name>/WORKER.md (ROADMAP item 24). Enabling one after reviewing
 // it pins its content hash; scanning alone never schedules anything.
-
-// WorkerInfo describes a worker and whether it may run.
-type WorkerInfo struct {
-	Workspace   string
-	Name        string
-	Description string
-	Path        string // WORKER.md
-	Hash        string
-	State       workers.State
-	// Schedule as written, as understood, and when it next runs (zero
-	// unless it's enabled and valid).
-	Schedule string
-	Cron     string
-	Timezone string
-	Next     time.Time
-	Agent    string
-	Model    string
-	// CatchUp is "once" when a run missed while nothing was running should
-	// happen as soon as possible, otherwise "none".
-	CatchUp string
-	// Permissions and Limits are what the worker gets after the host
-	// policy (see workers.Apply).
-	Permissions []string
-	Limits      workers.Limits
-	// Problems say why the worker is invalid, or what the policy changed.
-	Problems []string
-}
-
-// ErrUnknownWorker reports a worker name the workspace doesn't define.
-var ErrUnknownWorker = errors.New("no such worker")
-
-// ErrWorkersDisabled reports that workers are turned off ([workers] enabled).
-var ErrWorkersDisabled = errors.New("workers are disabled")
 
 // defaultWorkerStore is where enabled workers are recorded.
 func defaultWorkerStore() (*workers.Store, error) {
@@ -92,8 +61,8 @@ func (w *Workspace) discoverWorkers() map[string]workers.Found {
 	return out
 }
 
-func (w *Workspace) workerInfo(wk *workers.Worker, loadErr error, now time.Time) WorkerInfo {
-	info := WorkerInfo{
+func (w *Workspace) workerInfo(wk *workers.Worker, loadErr error, now time.Time) api.WorkerInfo {
+	info := api.WorkerInfo{
 		Workspace: w.Dir(), Name: wk.Name, Description: wk.Description, Path: wk.Path, Hash: wk.Hash,
 		State:    w.workerStore.State(w.Dir(), wk, loadErr),
 		Schedule: wk.Schedule.Text, Cron: wk.Schedule.Cron, Agent: wk.Agent, Model: wk.Model, CatchUp: wk.CatchUp,
@@ -119,7 +88,7 @@ func (w *Workspace) workerInfo(wk *workers.Worker, loadErr error, now time.Time)
 				info.Problems = append(info.Problems, fmt.Sprintf("agent %q isn't defined: runs will fail until it is", wk.Agent))
 			}
 		}
-		if info.State == workers.StateEnabled {
+		if info.State == api.StateEnabled {
 			info.Next = wk.Schedule.Next(now)
 		}
 	}
@@ -127,13 +96,13 @@ func (w *Workspace) workerInfo(wk *workers.Worker, loadErr error, now time.Time)
 }
 
 // ListWorkers returns the workspace's workers, by name.
-func (w *Workspace) ListWorkers() ([]WorkerInfo, error) {
+func (w *Workspace) ListWorkers() ([]api.WorkerInfo, error) {
 	if !w.cfg.Workers.Enabled {
-		return nil, ErrWorkersDisabled
+		return nil, api.ErrWorkersDisabled
 	}
 	found := w.discoverWorkers()
 	now := time.Now()
-	var out []WorkerInfo
+	var out []api.WorkerInfo
 	for _, name := range slices.Sorted(maps.Keys(found)) {
 		out = append(out, w.workerInfo(found[name].Worker, found[name].Err, now))
 	}
@@ -143,10 +112,10 @@ func (w *Workspace) ListWorkers() ([]WorkerInfo, error) {
 // worker loads one worker by name.
 func (w *Workspace) worker(name string) (*workers.Worker, error, error) {
 	if !w.cfg.Workers.Enabled {
-		return nil, nil, ErrWorkersDisabled
+		return nil, nil, api.ErrWorkersDisabled
 	}
 	if !workers.ValidName(name) { // it names a directory: nothing else is looked up
-		return nil, nil, fmt.Errorf("%w: %q", ErrUnknownWorker, name)
+		return nil, nil, fmt.Errorf("%w: %q", api.ErrUnknownWorker, name)
 	}
 	for _, root := range w.workerRoots() {
 		dir := filepath.Join(root, name)
@@ -155,16 +124,16 @@ func (w *Workspace) worker(name string) (*workers.Worker, error, error) {
 			return wk, loadErr, nil
 		}
 	}
-	return nil, nil, fmt.Errorf("%w: %q", ErrUnknownWorker, name)
+	return nil, nil, fmt.Errorf("%w: %q", api.ErrUnknownWorker, name)
 }
 
 // EnableWorker lets a worker run on its schedule, pinned to hash: the one
-// the caller reviewed, which must still be current (workers.ErrHashMismatch
+// the caller reviewed, which must still be current (api.ErrHashMismatch
 // otherwise). An invalid worker can't be enabled.
-func (w *Workspace) EnableWorker(name, hash string) (WorkerInfo, error) {
+func (w *Workspace) EnableWorker(name, hash string) (api.WorkerInfo, error) {
 	wk, loadErr, err := w.worker(name)
 	if err != nil {
-		return WorkerInfo{}, err
+		return api.WorkerInfo{}, err
 	}
 	if loadErr != nil {
 		return w.workerInfo(wk, loadErr, time.Now()), loadErr
@@ -176,23 +145,16 @@ func (w *Workspace) EnableWorker(name, hash string) (WorkerInfo, error) {
 }
 
 // DisableWorker stops a worker from running.
-func (w *Workspace) DisableWorker(name string) (WorkerInfo, error) {
+func (w *Workspace) DisableWorker(name string) (api.WorkerInfo, error) {
 	wk, loadErr, err := w.worker(name)
 	if err != nil {
-		return WorkerInfo{}, err
+		return api.WorkerInfo{}, err
 	}
 	if err := w.workerStore.Disable(w.Dir(), name); err != nil {
-		return WorkerInfo{}, err
+		return api.WorkerInfo{}, err
 	}
 	return w.workerInfo(wk, loadErr, time.Now()), nil
 }
-
-// ErrWorkerNotEnabled reports running a worker that isn't enabled at its
-// current hash.
-var ErrWorkerNotEnabled = errors.New("the worker isn't enabled")
-
-// ErrRunInProgress reports a run of a worker that is already running.
-var ErrRunInProgress = errors.New("the worker is already running")
 
 // unattendedPreamble tells the agent how a worker run differs from a
 // conversation.
@@ -211,28 +173,28 @@ type RunOptions struct {
 	// Manual: started on request rather than by the schedule.
 	Manual bool
 	// OnStart receives the run's record as it starts (its ID and session).
-	OnStart func(workers.Run)
+	OnStart func(api.Run)
 	// OnEvent receives the turn's events.
-	OnEvent func(Event)
+	OnEvent func(api.Event)
 }
 
-func (w *Workspace) RunWorker(ctx context.Context, name string, o RunOptions) (workers.Run, error) {
+func (w *Workspace) RunWorker(ctx context.Context, name string, o RunOptions) (api.Run, error) {
 	wk, loadErr, err := w.worker(name)
 	if err != nil {
-		return workers.Run{}, err
+		return api.Run{}, err
 	}
-	if state := w.workerStore.State(w.Dir(), wk, loadErr); state != workers.StateEnabled {
-		return workers.Run{}, fmt.Errorf("%w (it is %s)", ErrWorkerNotEnabled, state)
+	if state := w.workerStore.State(w.Dir(), wk, loadErr); state != api.StateEnabled {
+		return api.Run{}, fmt.Errorf("%w (it is %s)", api.ErrWorkerNotEnabled, state)
 	}
 	w.runsMu.Lock()
 	if w.running[name] {
 		w.runsMu.Unlock()
-		skipped := workers.Run{ID: newRunID(), Workspace: w.Dir(), Worker: name, Hash: wk.Hash, Status: workers.RunSkipped,
-			Manual: o.Manual, Started: time.Now(), Error: ErrRunInProgress.Error()}
+		skipped := api.Run{ID: newRunID(), Workspace: w.Dir(), Worker: name, Hash: wk.Hash, Status: api.RunSkipped,
+			Manual: o.Manual, Started: time.Now(), Error: api.ErrRunInProgress.Error()}
 		if !o.Manual { // a scheduled run that couldn't happen is worth a record
 			w.runLog.Append(skipped)
 		}
-		return skipped, ErrRunInProgress
+		return skipped, api.ErrRunInProgress
 	}
 	w.running[name] = true
 	w.runsMu.Unlock()
@@ -244,7 +206,7 @@ func (w *Workspace) RunWorker(ctx context.Context, name string, o RunOptions) (w
 
 	eff := workers.Apply(wk, w.cfg.Workers.Policy)
 	agent := cmp.Or(wk.Agent, w.engine.ActiveAgent())
-	run := workers.Run{ID: newRunID(), Workspace: w.Dir(), Worker: name, Hash: wk.Hash, Status: workers.RunRunning, Manual: o.Manual, Started: time.Now()}
+	run := api.Run{ID: newRunID(), Workspace: w.Dir(), Worker: name, Hash: wk.Hash, Status: api.RunRunning, Manual: o.Manual, Started: time.Now()}
 
 	st, err := session.NewStorage(w.cfg.Session.StorageDir)
 	if err != nil {
@@ -261,19 +223,19 @@ func (w *Workspace) RunWorker(ctx context.Context, name string, o RunOptions) (w
 	}
 
 	var refusalsMu sync.Mutex
-	decide := func(_ context.Context, req tools.ApprovalRequest) (tools.Decision, error) {
+	decide := func(_ context.Context, req api.ApprovalRequest) (api.Decision, error) {
 		if workers.Allows(eff.Permissions, req) {
-			return tools.DecisionOnce, nil
+			return api.DecisionOnce, nil
 		}
 		refusalsMu.Lock()
-		run.Refusals = append(run.Refusals, workers.Refusal{Tool: req.Tool, Kind: req.Kind, Detail: req.Detail, Time: time.Now()})
+		run.Refusals = append(run.Refusals, api.Refusal{Tool: req.Tool, Kind: req.Kind, Detail: req.Detail, Time: time.Now()})
 		refusalsMu.Unlock()
-		return tools.DecisionDeny, nil
+		return api.DecisionDeny, nil
 	}
 	runCtx := tools.Unattended(ctx, decide)
 	on := o.OnEvent
 	if on == nil {
-		on = func(Event) {}
+		on = func(api.Event) {}
 	}
 	// The worker's own agent and model, for this run only.
 	var opts []runtime.ExecOption
@@ -293,22 +255,22 @@ func (w *Workspace) RunWorker(ctx context.Context, name string, o RunOptions) (w
 		}
 	}
 	if runErr == nil {
-		_, runErr = w.run(runCtx, rec.ID, Turn{
+		_, runErr = w.run(runCtx, rec.ID, turn{Turn: api.Turn{
 			Text: wk.Prompt, Prompt: fmt.Sprintf(unattendedPreamble, name) + wk.Prompt,
 			MaxTurns: eff.Limits.MaxTurns, MaxCostUSD: eff.Limits.MaxCostUSD, Timeout: eff.Limits.Timeout,
-		}, on, st, opts...)
+		}}, on, st, opts...)
 	}
 
 	u := w.engine.Usage(rec.ID)
 	run.Duration, run.CostUSD, run.Calls = time.Since(run.Started), u.CostUSD, u.Calls
 	switch {
 	case runErr == nil:
-		run.Status = workers.RunSucceeded
-	case IsLimit(runErr):
-		run.Status = workers.RunLimited
+		run.Status = api.RunSucceeded
+	case api.IsLimit(runErr):
+		run.Status = api.RunLimited
 		run.Error = runErr.Error()
 	default:
-		run.Status = workers.RunFailed
+		run.Status = api.RunFailed
 		run.Error = runErr.Error()
 	}
 	if err := w.runLog.Append(run); err != nil {
@@ -318,9 +280,9 @@ func (w *Workspace) RunWorker(ctx context.Context, name string, o RunOptions) (w
 }
 
 // WorkerRuns returns a worker's recorded runs, newest first.
-func (w *Workspace) WorkerRuns(name string, limit int) ([]workers.Run, error) {
+func (w *Workspace) WorkerRuns(name string, limit int) ([]api.Run, error) {
 	if !workers.ValidName(name) {
-		return nil, fmt.Errorf("%w: %q", ErrUnknownWorker, name)
+		return nil, fmt.Errorf("%w: %q", api.ErrUnknownWorker, name)
 	}
 	return w.runLog.List(w.Dir(), name, limit)
 }

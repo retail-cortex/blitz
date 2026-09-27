@@ -2,47 +2,23 @@ package app
 
 import (
 	"context"
-	"errors"
-	"fmt"
 	"maps"
 	"slices"
 	"strings"
 
+	"github.com/retail-cortex/blitz/pkg/api"
+
 	"github.com/retail-cortex/blitz/internal/config"
 	"github.com/retail-cortex/blitz/internal/runtime"
-	"github.com/retail-cortex/blitz/internal/tools"
 )
 
 // Agents, models, pins, model settings and settings. Operations return data
 // and typed errors, never text for the user: front ends word and localise
 // the results.
 
-// UnknownAgentError reports an agent name that isn't registered.
-type UnknownAgentError struct{ Name string }
-
-func (e *UnknownAgentError) Error() string { return fmt.Sprintf("unknown agent %q", e.Name) }
-
-// Saved reports where a change was written in the config file. The change
-// applies either way; Err is why it wasn't saved.
-type Saved struct {
-	Path string
-	Err  error
-}
-
-// AgentInfo describes an agent.
-type AgentInfo struct {
-	Name        string
-	DisplayName string
-	Description string
-	Active      bool
-	// PinnedModel is the model the agent is pinned to ("" when it runs on
-	// the configured model).
-	PinnedModel string
-}
-
 // ListAgents returns every agent, in registry order.
-func (w *Workspace) ListAgents() []AgentInfo {
-	var out []AgentInfo
+func (w *Workspace) ListAgents() []api.AgentInfo {
+	var out []api.AgentInfo
 	for _, a := range w.agents.List() {
 		out = append(out, w.agentInfo(a.Name))
 	}
@@ -50,18 +26,18 @@ func (w *Workspace) ListAgents() []AgentInfo {
 }
 
 // ActiveAgent describes the agent that answers prompts.
-func (w *Workspace) ActiveAgent() AgentInfo { return w.agentInfo(w.engine.ActiveAgent()) }
+func (w *Workspace) ActiveAgent() api.AgentInfo { return w.agentInfo(w.engine.ActiveAgent()) }
 
 // SetAgent makes name the active agent.
-func (w *Workspace) SetAgent(ctx context.Context, name string) (AgentInfo, error) {
+func (w *Workspace) SetAgent(ctx context.Context, name string) (api.AgentInfo, error) {
 	if err := w.engine.SetActiveAgent(ctx, name); err != nil {
-		return AgentInfo{}, err
+		return api.AgentInfo{}, err
 	}
 	return w.agentInfo(name), nil
 }
 
-func (w *Workspace) agentInfo(name string) AgentInfo {
-	info := AgentInfo{Name: name, Active: name == w.engine.ActiveAgent()}
+func (w *Workspace) agentInfo(name string) api.AgentInfo {
+	info := api.AgentInfo{Name: name, Active: name == w.engine.ActiveAgent()}
 	if spec, ok := w.agents.Get(name); ok {
 		info.DisplayName, info.Description = spec.DisplayName, spec.Description
 	}
@@ -71,15 +47,9 @@ func (w *Workspace) agentInfo(name string) AgentInfo {
 	return info
 }
 
-// ModelInfo names the model the active agent runs on.
-type ModelInfo struct {
-	Name     string
-	Provider string // the configured provider
-}
-
 // Model returns the model the active agent runs on.
-func (w *Workspace) Model() ModelInfo {
-	return ModelInfo{Name: w.engine.ModelName(), Provider: w.cfg.LLM.Provider}
+func (w *Workspace) Model() api.ModelInfo {
+	return api.ModelInfo{Name: w.engine.ModelName(), Provider: w.cfg.LLM.Provider}
 }
 
 // SetModel switches every unpinned agent to ref (a name or "provider/model").
@@ -100,34 +70,27 @@ func (w *Workspace) SetModel(ctx context.Context, ref string) (activePin string,
 	return "", nil
 }
 
-// PinResult describes an agent's model after PinModel or Unpin.
-type PinResult struct {
-	Agent string
-	Model string // the model the agent now runs on
-	Saved Saved
-}
-
 // PinModel runs agent on ref from now on and saves the pin in the config file.
-func (w *Workspace) PinModel(ctx context.Context, agent, ref string) (PinResult, error) {
+func (w *Workspace) PinModel(ctx context.Context, agent, ref string) (api.PinResult, error) {
 	if _, ok := w.agents.Get(agent); !ok {
-		return PinResult{}, &UnknownAgentError{agent}
+		return api.PinResult{}, &api.UnknownAgentError{Name: agent}
 	}
 	llm, err := w.newModel(ctx, w.cfg, ref)
 	if err == nil {
 		err = w.engine.PinModel(ctx, agent, llm)
 	}
 	if err != nil {
-		return PinResult{}, err
+		return api.PinResult{}, err
 	}
-	return PinResult{Agent: agent, Model: llm.Name(), Saved: w.saveAgentModel(agent, ref)}, nil
+	return api.PinResult{Agent: agent, Model: llm.Name(), Saved: w.saveAgentModel(agent, ref)}, nil
 }
 
 // Unpin returns agent to the configured model, or to its own default_model
 // if it declares one, and removes the pin from the config file.
-func (w *Workspace) Unpin(ctx context.Context, agent string) (PinResult, error) {
+func (w *Workspace) Unpin(ctx context.Context, agent string) (api.PinResult, error) {
 	spec, ok := w.agents.Get(agent)
 	if !ok {
-		return PinResult{}, &UnknownAgentError{agent}
+		return api.PinResult{}, &api.UnknownAgentError{Name: agent}
 	}
 	err := w.engine.Unpin(ctx, agent)
 	if err == nil && spec.DefaultModel != "" {
@@ -137,14 +100,14 @@ func (w *Workspace) Unpin(ctx context.Context, agent string) (PinResult, error) 
 		}
 	}
 	if err != nil {
-		return PinResult{}, err
+		return api.PinResult{}, err
 	}
 	m, _ := w.engine.AgentModel(agent)
-	return PinResult{Agent: agent, Model: m, Saved: w.saveAgentModel(agent, "")}, nil
+	return api.PinResult{Agent: agent, Model: m, Saved: w.saveAgentModel(agent, "")}, nil
 }
 
 // saveAgentModel records (or with ref "" removes) a pin in the config file.
-func (w *Workspace) saveAgentModel(agent, ref string) Saved {
+func (w *Workspace) saveAgentModel(agent, ref string) api.Saved {
 	if ref == "" {
 		delete(w.cfg.AgentModels, agent)
 	} else {
@@ -154,22 +117,7 @@ func (w *Workspace) saveAgentModel(agent, ref string) Saved {
 		w.cfg.AgentModels[agent] = ref
 	}
 	path, err := config.SaveAgentModel(config.ConfigDir(""), agent, ref)
-	return Saved{Path: path, Err: err}
-}
-
-// ErrBadModelRef reports a model reference with no model name.
-var ErrBadModelRef = errors.New("not a model name")
-
-// ModelSettingsInfo is one model's generation settings and what applies
-// where it has none.
-type ModelSettingsInfo struct {
-	Model    string // the name settings are kept under, without a provider
-	Provider string
-	Settings config.ModelSettings
-	// GlobalTemperature and GlobalMaxTokens apply when Settings leaves them
-	// unset (0: the provider's default).
-	GlobalTemperature float64
-	GlobalMaxTokens   int
+	return api.Saved{Path: path, Err: err}
 }
 
 // AllModelSettings returns every model's settings, by model name.
@@ -178,42 +126,24 @@ func (w *Workspace) AllModelSettings() map[string]config.ModelSettings {
 }
 
 // ModelSettings returns ref's settings ("provider/" optional).
-func (w *Workspace) ModelSettings(ref string) (ModelSettingsInfo, error) {
+func (w *Workspace) ModelSettings(ref string) (api.ModelSettingsInfo, error) {
 	provider, name := runtime.ParseModelRef(ref, w.cfg.LLM.Provider)
 	if strings.Contains(ref, "=") || name == "" {
-		return ModelSettingsInfo{}, ErrBadModelRef
+		return api.ModelSettingsInfo{}, api.ErrBadModelRef
 	}
-	return ModelSettingsInfo{
+	return api.ModelSettingsInfo{
 		Model: name, Provider: provider, Settings: w.engine.ModelSettings(name),
 		GlobalTemperature: w.cfg.Blitz.Temperature, GlobalMaxTokens: w.cfg.Blitz.MaxTokens,
 	}, nil
 }
 
-// Setting is one key=value change; an empty Value clears the key.
-type Setting struct{ Key, Value string }
-
-// ModelSettingsChange describes the result of UpdateModelSettings.
-type ModelSettingsChange struct {
-	ModelSettingsInfo
-	// Unsupported are keys set that the provider or model ignores.
-	Unsupported []string
-	Saved       Saved
-}
-
-// InvalidSettingError reports a setting that can't be applied: an unknown
-// key or a value out of range.
-type InvalidSettingError struct{ Err error }
-
-func (e *InvalidSettingError) Error() string { return e.Err.Error() }
-func (e *InvalidSettingError) Unwrap() error { return e.Err }
-
 // UpdateModelSettings applies changes to ref's settings (reset clears them
 // all first). They apply from the next model call and are saved in the
 // config file, under the key it already uses for the model if any.
-func (w *Workspace) UpdateModelSettings(ref string, reset bool, changes []Setting) (ModelSettingsChange, error) {
+func (w *Workspace) UpdateModelSettings(ref string, reset bool, changes []api.Setting) (api.ModelSettingsChange, error) {
 	info, err := w.ModelSettings(ref)
 	if err != nil {
-		return ModelSettingsChange{}, err
+		return api.ModelSettingsChange{}, err
 	}
 	s := info.Settings
 	if reset {
@@ -221,19 +151,19 @@ func (w *Workspace) UpdateModelSettings(ref string, reset bool, changes []Settin
 	}
 	for _, c := range changes {
 		if err := s.Set(strings.TrimSpace(c.Key), c.Value); err != nil {
-			return ModelSettingsChange{}, &InvalidSettingError{err}
+			return api.ModelSettingsChange{}, &api.InvalidSettingError{Err: err}
 		}
 	}
 	w.engine.SetModelSettings(info.Model, s)
 	info.Settings = s
-	out := ModelSettingsChange{ModelSettingsInfo: info}
+	out := api.ModelSettingsChange{ModelSettingsInfo: info}
 	for _, key := range config.ModelSettingKeys {
 		if _, set := s.Get(key); set && !runtime.SettingSupported(info.Provider, info.Model, key) {
 			out.Unsupported = append(out.Unsupported, key)
 		}
 	}
 	path, err := config.SaveModelSettings(config.ConfigDir(""), settingsKey(w.cfg, info.Model), s)
-	out.Saved = Saved{Path: path, Err: err}
+	out.Saved = api.Saved{Path: path, Err: err}
 	return out, nil
 }
 
@@ -252,23 +182,9 @@ func settingsKey(cfg *config.Config, name string) string {
 	return name
 }
 
-// Settings are the values /set changes, plus the model, agent and locale.
-type Settings struct {
-	Agency string
-	Model  ModelInfo
-	Agent  string
-	Locale string // the language the model replies in
-	// PermissionMode decides which actions run without asking (see
-	// tools.PermissionMode).
-	PermissionMode string
-	// Effort is the session's reasoning effort ("" when each model uses its
-	// own reasoning_effort or its default).
-	Effort string
-}
-
 // Settings returns the current settings.
-func (w *Workspace) Settings() Settings {
-	return Settings{
+func (w *Workspace) Settings() api.Settings {
+	return api.Settings{
 		Agency: w.cfg.Blitz.AgencyLevel,
 		Model:  w.Model(), Agent: w.engine.ActiveAgent(), Locale: w.reply.Tag().String(),
 		PermissionMode: string(w.tools.Hooks().Mode()),
@@ -276,17 +192,11 @@ func (w *Workspace) Settings() Settings {
 	}
 }
 
-// ErrUnknownMode reports a name that isn't a permission mode.
-var ErrUnknownMode = tools.ErrUnknownMode
-
-// ErrBypassNeedsSandbox refuses bypass mode without an active OS sandbox.
-var ErrBypassNeedsSandbox = tools.ErrBypassNeedsSandbox
-
 // SetPermissionMode changes which actions run without asking, for every
 // session of the workspace, and returns the mode's canonical name. Bypass
 // needs the OS sandbox (ErrBypassNeedsSandbox).
 func (w *Workspace) SetPermissionMode(mode string) (string, error) {
-	m, err := tools.ParsePermissionMode(mode)
+	m, err := api.ParsePermissionMode(mode)
 	if err != nil {
 		return "", err
 	}
@@ -295,14 +205,6 @@ func (w *Workspace) SetPermissionMode(mode string) (string, error) {
 	}
 	return string(m), nil
 }
-
-// UnknownSettingError reports a key /set doesn't know.
-type UnknownSettingError struct{ Key string }
-
-func (e *UnknownSettingError) Error() string { return fmt.Sprintf("unknown setting %q", e.Key) }
-
-// ErrInvalidAgency reports an agency level other than low, medium, high or extreme.
-var ErrInvalidAgency = errors.New("agency must be low, medium, high or extreme")
 
 // Set changes a setting for this session ("agency" or "agency_level") and
 // returns the key in canonical form. The agents' instructions embed it, so
@@ -318,7 +220,7 @@ func (w *Workspace) Set(ctx context.Context, key, value string) (string, error) 
 		}
 		effort, err := config.ParseEffort(v)
 		if err != nil {
-			return "effort", &InvalidSettingError{err}
+			return "effort", &api.InvalidSettingError{Err: err}
 		}
 		w.engine.SetEffort(effort)
 		return "effort", nil
@@ -326,11 +228,11 @@ func (w *Workspace) Set(ctx context.Context, key, value string) (string, error) 
 		switch strings.ToLower(value) {
 		case "low", "medium", "high", "extreme":
 		default:
-			return key, ErrInvalidAgency
+			return key, api.ErrInvalidAgency
 		}
 		w.cfg.Blitz.AgencyLevel = strings.ToLower(value)
 	default:
-		return key, &UnknownSettingError{key}
+		return key, &api.UnknownSettingError{Key: key}
 	}
 	return key, w.engine.Rebuild(ctx)
 }

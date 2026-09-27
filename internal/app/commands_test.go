@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/retail-cortex/blitz/pkg/api"
+
 	"github.com/retail-cortex/blitz/internal/config"
 	"google.golang.org/genai"
 )
@@ -43,7 +45,7 @@ func TestCustomCommands(t *testing.T) {
 	writeCommand(t, w.Dir(), ".blitz/commands/db/migrate.md", "---\ndescription: Migrate\nallowed-tools: Read, Grep\n---\nMigrate $1.")
 	writeCommand(t, w.Dir(), ".agents/workflows/broken.md", "---\nmode: fast\n---\nx")
 
-	byName := map[string]CommandInfo{}
+	byName := map[string]api.CommandInfo{}
 	for _, c := range w.ListCommands() {
 		byName[c.Name] = c
 	}
@@ -60,7 +62,7 @@ func TestCustomCommands(t *testing.T) {
 	s, _ := w.NewSession()
 	run := func(line string) (map[string]any, error) {
 		var result map[string]any
-		_, err := w.Run(context.Background(), s.ID, Turn{Text: line, Command: true}, func(e Event) {
+		_, err := w.Run(context.Background(), s.ID, api.Turn{Text: line, Command: true}, func(e api.Event) {
 			if e.ToolResult != nil {
 				result = e.ToolResult.Result
 			}
@@ -95,7 +97,7 @@ func TestCustomCommands(t *testing.T) {
 	if msgs[0].Content != "/hello world" {
 		t.Errorf("transcript %q", msgs[0].Content)
 	}
-	if _, err := run("/nope"); !errors.Is(err, ErrUnknownCommand) {
+	if _, err := run("/nope"); !errors.Is(err, api.ErrUnknownCommand) {
 		t.Errorf("unknown command: %v", err)
 	}
 }

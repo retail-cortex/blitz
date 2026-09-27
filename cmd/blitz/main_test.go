@@ -10,6 +10,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/retail-cortex/blitz/pkg/api"
+
 	"github.com/retail-cortex/blitz/internal/app"
 	"github.com/retail-cortex/blitz/internal/config"
 	"github.com/retail-cortex/blitz/internal/runtime"
@@ -65,7 +67,7 @@ func TestExitCodes(t *testing.T) {
 		exitOK:          nil,
 		exitFailure:     errors.New("boom"),
 		exitUsage:       withCode(exitUsage, errors.New("bad flag")),
-		exitMaxTurns:    runtime.ErrMaxTurns,
+		exitMaxTurns:    api.ErrMaxTurns,
 		exitInterrupted: context.Canceled,
 		exitBlocked:     withCode(exitBlocked, errors.New("hook")),
 	}

@@ -5,7 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"time"
+
+	"github.com/retail-cortex/blitz/pkg/api"
 
 	"github.com/retail-cortex/blitz/internal/audit"
 	"github.com/retail-cortex/blitz/internal/tools"
@@ -13,59 +14,6 @@ import (
 
 // Rewinding a session to one of its prompts: its files, its conversation,
 // or both, or summarizing the conversation on either side of the prompt.
-
-// RewindPoint is a prompt the session can be rewound to.
-type RewindPoint struct {
-	// Index is the prompt's position in the transcript.
-	Index int
-	Text  string
-	Time  time.Time
-	// Files are what the agent changed from this prompt until the next
-	// (what rewinding the code to it restores, with later prompts' files).
-	Files []string
-	// Conversation reports whether the conversation can be rewound to it
-	// (prompts recorded by older versions can't be).
-	Conversation bool
-}
-
-// RewindMode is what a rewind restores.
-type RewindMode string
-
-const (
-	RewindBoth          RewindMode = "both"            // files and conversation
-	RewindConversation  RewindMode = "conversation"    // conversation only; files stay
-	RewindCode          RewindMode = "code"            // files only; conversation stays
-	RewindSummarizeFrom RewindMode = "summarize_from"  // summarize the prompt and everything after
-	RewindSummarizeUpTo RewindMode = "summarize_up_to" // summarize everything before the prompt
-)
-
-// RewindModes are the modes, in the order offered.
-var RewindModes = []RewindMode{RewindBoth, RewindConversation, RewindCode, RewindSummarizeFrom, RewindSummarizeUpTo}
-
-// RewindResult is what a rewind did.
-type RewindResult struct {
-	Mode RewindMode
-	// Restored are the files put back (code).
-	Restored []string
-	// Prompt is the rewound prompt's text, to edit and send again
-	// (conversation).
-	Prompt string
-	// Compacted is the summary's result (summarize modes).
-	Compacted CompactResult
-}
-
-var (
-	// ErrSessionBusy reports a rewind while a turn runs in the session.
-	ErrSessionBusy = errors.New("a turn is running in this session")
-	// ErrNotRewindPoint reports an index that isn't one of the session's
-	// prompts.
-	ErrNotRewindPoint = errors.New("not a prompt of this session")
-	// ErrCantRewindConversation reports a prompt recorded without its place
-	// in the conversation (by an older version).
-	ErrCantRewindConversation = errors.New("this prompt's place in the conversation isn't known")
-	// ErrUnknownRewindMode reports a mode that isn't one of RewindModes.
-	ErrUnknownRewindMode = errors.New("unknown rewind mode")
-)
 
 func (w *Workspace) turnStarted(session string) {
 	w.turnsMu.Lock()
@@ -99,15 +47,15 @@ func (w *Workspace) busy(session string) bool {
 }
 
 // RewindPoints lists the active session's prompts, oldest first.
-func (w *Workspace) RewindPoints() ([]RewindPoint, error) {
+func (w *Workspace) RewindPoints() ([]api.RewindPoint, error) {
 	active := w.storage.Active()
 	if active == nil {
-		return nil, ErrNoActiveSession
+		return nil, api.ErrNoActiveSession
 	}
-	var points []RewindPoint
+	var points []api.RewindPoint
 	for i, m := range active.Messages {
 		if m.IsPrompt() {
-			points = append(points, RewindPoint{Index: i, Text: m.Content, Time: m.Timestamp, Conversation: m.Events != nil})
+			points = append(points, api.RewindPoint{Index: i, Text: m.Content, Time: m.Timestamp, Conversation: m.Events != nil})
 		}
 	}
 	// A prompt's files: those of the checkpoints between it and the next.
@@ -142,46 +90,46 @@ func appendNew(list []string, add ...string) []string {
 // index. Files are restored first (refusing on conflicts unless force), so
 // a refused rewind changes nothing; then the conversation is cut before the
 // prompt, whose text is returned to send again.
-func (w *Workspace) Rewind(ctx context.Context, index int, mode RewindMode, force bool) (RewindResult, error) {
+func (w *Workspace) Rewind(ctx context.Context, index int, mode api.RewindMode, force bool) (api.RewindResult, error) {
 	active := w.storage.Active()
 	if active == nil {
-		return RewindResult{}, ErrNoActiveSession
+		return api.RewindResult{}, api.ErrNoActiveSession
 	}
 	id := active.ID
 	if w.busy(id) {
-		return RewindResult{}, ErrSessionBusy
+		return api.RewindResult{}, api.ErrSessionBusy
 	}
 	if index < 0 || index >= len(active.Messages) || !active.Messages[index].IsPrompt() {
-		return RewindResult{}, fmt.Errorf("%w: %d", ErrNotRewindPoint, index)
+		return api.RewindResult{}, fmt.Errorf("%w: %d", api.ErrNotRewindPoint, index)
 	}
 	prompt := active.Messages[index]
-	res := RewindResult{Mode: mode, Prompt: prompt.Content}
-	conversation := mode == RewindBoth || mode == RewindConversation
+	res := api.RewindResult{Mode: mode, Prompt: prompt.Content}
+	conversation := mode == api.RewindBoth || mode == api.RewindConversation
 	switch mode {
-	case RewindBoth, RewindConversation, RewindCode:
-	case RewindSummarizeFrom, RewindSummarizeUpTo:
+	case api.RewindBoth, api.RewindConversation, api.RewindCode:
+	case api.RewindSummarizeFrom, api.RewindSummarizeUpTo:
 		if prompt.Events == nil {
-			return RewindResult{}, ErrCantRewindConversation
+			return api.RewindResult{}, api.ErrCantRewindConversation
 		}
 		before := w.engine.Usage(id)
-		c, err := w.engine.CompactAt(ctx, id, "", *prompt.Events, mode == RewindSummarizeUpTo)
+		c, err := w.engine.CompactAt(ctx, id, "", *prompt.Events, mode == api.RewindSummarizeUpTo)
 		if err != nil {
-			return RewindResult{}, err
+			return api.RewindResult{}, err
 		}
-		res.Compacted = CompactResult{EventsCompacted: c.EventsCompacted, SummaryChars: c.SummaryChars, Before: before, After: w.engine.Usage(id)}
+		res.Compacted = api.CompactResult{EventsCompacted: c.EventsCompacted, SummaryChars: c.SummaryChars, Before: before, After: w.engine.Usage(id)}
 		return res, nil
 	default:
-		return RewindResult{}, fmt.Errorf("%w %q", ErrUnknownRewindMode, mode)
+		return api.RewindResult{}, fmt.Errorf("%w %q", api.ErrUnknownRewindMode, mode)
 	}
 	if conversation && prompt.Events == nil {
-		return RewindResult{}, ErrCantRewindConversation
+		return api.RewindResult{}, api.ErrCantRewindConversation
 	}
 
-	if mode != RewindConversation {
+	if mode != api.RewindConversation {
 		undone, err := w.tools.Checkpoints().Rewind(id, index, force)
 		if err != nil && !errors.Is(err, tools.ErrNothingToUndo) {
 			if len(undone.Restored) == 0 {
-				return RewindResult{}, err
+				return api.RewindResult{}, err
 			}
 			// Some files were put back: report the rest, and go on.
 			w.warn(err.Error())

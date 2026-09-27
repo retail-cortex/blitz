@@ -9,6 +9,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/retail-cortex/blitz/pkg/api"
+
 	"connectrpc.com/connect"
 	"github.com/retail-cortex/blitz/internal/app"
 	pb "github.com/retail-cortex/blitz/internal/gen/blitz/v1"
@@ -151,7 +153,7 @@ func (sc *scheduler) rescan(ctx context.Context) {
 			continue
 		}
 		for _, info := range list {
-			if info.State != workers.StateEnabled {
+			if info.State != api.StateEnabled {
 				continue
 			}
 			k := key(dir, info.Name)
@@ -171,7 +173,7 @@ func (sc *scheduler) rescan(ctx context.Context) {
 
 // register adds or updates a worker's cron entry, and catches up on a
 // missed run when the worker asks for it.
-func (sc *scheduler) register(dir string, info app.WorkerInfo) {
+func (sc *scheduler) register(dir string, info api.WorkerInfo) {
 	k := key(dir, info.Name)
 	sc.mu.Lock()
 	old, had := sc.entries[k]
@@ -191,7 +193,7 @@ func (sc *scheduler) register(dir string, info app.WorkerInfo) {
 	}
 	name := info.Name
 	id := sc.cron.Schedule(cronSchedule{sched}, cron.FuncJob(func() {
-		if _, err := sc.start(sc.base, dir, name, false); err != nil && !errors.Is(err, app.ErrRunInProgress) && !errors.Is(err, errStopped) {
+		if _, err := sc.start(sc.base, dir, name, false); err != nil && !errors.Is(err, api.ErrRunInProgress) && !errors.Is(err, errStopped) {
 			slog.Warn("workers: run failed to start", "workspace", dir, "worker", name, "error", err)
 		}
 	}))
@@ -213,7 +215,7 @@ func (sc *scheduler) register(dir string, info app.WorkerInfo) {
 // watchers.
 type liveRun struct {
 	mu      sync.Mutex
-	run     workers.Run
+	run     api.Run
 	events  []*pb.TurnEvent
 	done    bool
 	changed chan struct{} // closed and replaced when events arrive or the run ends
@@ -234,20 +236,20 @@ func (lr *liveRun) add(ev *pb.TurnEvent, done bool) {
 // its record as it starts. A manual run fails at once when every slot is
 // busy; a scheduled one waits, unless the same worker is already waiting
 // (a worker that falls behind runs once, not once per missed tick).
-func (sc *scheduler) start(ctx context.Context, dir, name string, manual bool) (workers.Run, error) {
+func (sc *scheduler) start(ctx context.Context, dir, name string, manual bool) (api.Run, error) {
 	w, err := sc.s.workspace(ctx, dir)
 	if err != nil {
-		return workers.Run{}, err
+		return api.Run{}, err
 	}
 	if err := sc.acquire(dir, name, manual); err != nil {
-		return workers.Run{}, err
+		return api.Run{}, err
 	}
 	if !sc.track() {
 		<-sc.slots
-		return workers.Run{}, errStopped
+		return api.Run{}, errStopped
 	}
 
-	started := make(chan workers.Run, 1)
+	started := make(chan api.Run, 1)
 	failed := make(chan error, 1)
 	go func() {
 		defer sc.wg.Done()
@@ -255,14 +257,14 @@ func (sc *scheduler) start(ctx context.Context, dir, name string, manual bool) (
 		var lr *liveRun
 		run, err := w.RunWorker(sc.base, name, app.RunOptions{
 			Manual: manual,
-			OnStart: func(r workers.Run) {
+			OnStart: func(r api.Run) {
 				lr = &liveRun{run: r, changed: make(chan struct{})}
 				sc.mu.Lock()
 				sc.live[r.ID] = lr
 				sc.mu.Unlock()
 				started <- r
 			},
-			OnEvent: func(e app.Event) { lr.add(eventMsg(e), false) },
+			OnEvent: func(e api.Event) { lr.add(eventMsg(e), false) },
 		})
 		if lr == nil { // never started
 			if err == nil {
@@ -272,7 +274,7 @@ func (sc *scheduler) start(ctx context.Context, dir, name string, manual bool) (
 			return
 		}
 		finished := &pb.TurnFinished{}
-		if run.Status != workers.RunSucceeded {
+		if run.Status != api.RunSucceeded {
 			finished.Error = &pb.ErrorInfo{Reason: "RUN_" + strings.ToUpper(string(run.Status)), Message: run.Error}
 		}
 		lr.mu.Lock()
@@ -288,7 +290,7 @@ func (sc *scheduler) start(ctx context.Context, dir, name string, manual bool) (
 	case r := <-started:
 		return r, nil
 	case err := <-failed:
-		return workers.Run{}, err
+		return api.Run{}, err
 	}
 }
 
@@ -306,7 +308,7 @@ func (sc *scheduler) acquire(dir, name string, manual bool) error {
 	sc.mu.Lock()
 	if sc.waiting[k] {
 		sc.mu.Unlock()
-		return app.ErrRunInProgress
+		return api.ErrRunInProgress
 	}
 	sc.waiting[k] = true
 	sc.mu.Unlock()
@@ -325,10 +327,10 @@ func (sc *scheduler) acquire(dir, name string, manual bool) error {
 
 // liveRuns returns the runs going now, for a workspace and worker ("" for
 // any).
-func (sc *scheduler) liveRuns(dir, name string) []workers.Run {
+func (sc *scheduler) liveRuns(dir, name string) []api.Run {
 	sc.mu.Lock()
 	defer sc.mu.Unlock()
-	var out []workers.Run
+	var out []api.Run
 	for _, lr := range sc.live {
 		lr.mu.Lock()
 		r := lr.run

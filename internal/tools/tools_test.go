@@ -8,6 +8,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/retail-cortex/blitz/pkg/api"
+
 	"github.com/retail-cortex/blitz/internal/agents"
 	"github.com/retail-cortex/blitz/internal/config"
 	"github.com/retail-cortex/blitz/internal/skills"
@@ -92,22 +94,22 @@ func writeFile(t *testing.T, path, content string) {
 }
 
 // allowAll auto-approves every action.
-func allowAll() *Hooks { return NewHooks(Policy{Mode: ModeBypass}) }
+func allowAll() *Hooks { return NewHooks(Policy{Mode: api.ModeBypass}) }
 
 // approverHooks records requests and approves once (true) or denies (false).
-func approverHooks(approve bool) (*Hooks, *[]ApprovalRequest) {
-	d := DecisionDeny
+func approverHooks(approve bool) (*Hooks, *[]api.ApprovalRequest) {
+	d := api.DecisionDeny
 	if approve {
-		d = DecisionOnce
+		d = api.DecisionOnce
 	}
 	return decisionHooks(d)
 }
 
 // decisionHooks records requests and answers with d.
-func decisionHooks(d Decision) (*Hooks, *[]ApprovalRequest) {
-	var reqs []ApprovalRequest
+func decisionHooks(d api.Decision) (*Hooks, *[]api.ApprovalRequest) {
+	var reqs []api.ApprovalRequest
 	h := NewHooks(Policy{})
-	h.SetApprover(func(ctx context.Context, req ApprovalRequest) (Decision, error) {
+	h.SetApprover(func(ctx context.Context, req api.ApprovalRequest) (api.Decision, error) {
 		reqs = append(reqs, req)
 		return d, nil
 	})

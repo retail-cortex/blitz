@@ -8,6 +8,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/retail-cortex/blitz/pkg/api"
+
 	"google.golang.org/adk/v2/agent"
 	"google.golang.org/adk/v2/tool"
 	"google.golang.org/adk/v2/tool/functiontool"
@@ -35,15 +37,6 @@ type BackgroundProcess struct {
 	finished bool
 	exitCode int
 	endTime  time.Time
-}
-
-// ProcessInfo is a snapshot of a background process's status.
-type ProcessInfo struct {
-	ID        int    `json:"id"`
-	Command   string `json:"command"`
-	Running   bool   `json:"running"`
-	ExitCode  int    `json:"exit_code"`
-	RuntimeMs int64  `json:"runtime_ms"`
 }
 
 // ProcessManager owns background processes: it caps how many run at once,
@@ -157,14 +150,14 @@ func (m *ProcessManager) get(id int) (*BackgroundProcess, error) {
 	return bp, nil
 }
 
-func (m *ProcessManager) info(bp *BackgroundProcess) ProcessInfo {
+func (m *ProcessManager) info(bp *BackgroundProcess) api.ProcessInfo {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	end := time.Now()
 	if bp.finished {
 		end = bp.endTime
 	}
-	return ProcessInfo{
+	return api.ProcessInfo{
 		ID:        bp.ID,
 		Command:   bp.Command,
 		Running:   !bp.finished,
@@ -174,19 +167,19 @@ func (m *ProcessManager) info(bp *BackgroundProcess) ProcessInfo {
 }
 
 // Output returns captured output and status for a process.
-func (m *ProcessManager) Output(id int) (string, ProcessInfo, error) {
+func (m *ProcessManager) Output(id int) (string, api.ProcessInfo, error) {
 	bp, err := m.get(id)
 	if err != nil {
-		return "", ProcessInfo{}, err
+		return "", api.ProcessInfo{}, err
 	}
 	return bp.out.String(), m.info(bp), nil
 }
 
 // Kill terminates a process and its descendants, waiting briefly for exit.
-func (m *ProcessManager) Kill(id int) (ProcessInfo, error) {
+func (m *ProcessManager) Kill(id int) (api.ProcessInfo, error) {
 	bp, err := m.get(id)
 	if err != nil {
-		return ProcessInfo{}, err
+		return api.ProcessInfo{}, err
 	}
 	bp.cancel()
 	select {
@@ -198,8 +191,8 @@ func (m *ProcessManager) Kill(id int) (ProcessInfo, error) {
 }
 
 // List returns all tracked processes ordered by ID.
-func (m *ProcessManager) List() []ProcessInfo {
-	infos := make([]ProcessInfo, 0)
+func (m *ProcessManager) List() []api.ProcessInfo {
+	infos := make([]api.ProcessInfo, 0)
 	for _, p := range m.snapshot() {
 		infos = append(infos, m.info(p))
 	}
@@ -207,8 +200,8 @@ func (m *ProcessManager) List() []ProcessInfo {
 }
 
 // Running returns the processes that have not exited, ordered by ID.
-func (m *ProcessManager) Running() []ProcessInfo {
-	var running []ProcessInfo
+func (m *ProcessManager) Running() []api.ProcessInfo {
+	var running []api.ProcessInfo
 	for _, info := range m.List() {
 		if info.Running {
 			running = append(running, info)
@@ -268,10 +261,10 @@ type ManageBackgroundInput struct {
 
 // ManageBackgroundOutput holds the result of manage_background_process.
 type ManageBackgroundOutput struct {
-	Processes []ProcessInfo `json:"processes,omitempty"`
-	Process   *ProcessInfo  `json:"process,omitempty"`
-	Output    string        `json:"output,omitempty"`
-	Error     string        `json:"error,omitempty"`
+	Processes []api.ProcessInfo `json:"processes,omitempty"`
+	Process   *api.ProcessInfo  `json:"process,omitempty"`
+	Output    string            `json:"output,omitempty"`
+	Error     string            `json:"error,omitempty"`
 }
 
 // NewManageBackgroundTool creates the tool for inspecting and stopping background processes.

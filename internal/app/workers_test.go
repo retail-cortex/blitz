@@ -9,8 +9,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/retail-cortex/blitz/pkg/api"
+
 	"github.com/retail-cortex/blitz/internal/config"
-	"github.com/retail-cortex/blitz/internal/tools"
 	"github.com/retail-cortex/blitz/internal/workers"
 	"google.golang.org/genai"
 )
@@ -34,15 +35,15 @@ func TestWorkersLifecycle(t *testing.T) {
 		t.Fatalf("list %v %v", list, err)
 	}
 	broken, deps := list[0], list[1]
-	if broken.State != workers.StateInvalid || len(broken.Problems) == 0 {
+	if broken.State != api.StateInvalid || len(broken.Problems) == 0 {
 		t.Errorf("broken %+v", broken)
 	}
-	if deps.State != workers.StateNew || deps.Cron != "0 6 * * *" || !deps.Next.IsZero() ||
+	if deps.State != api.StateNew || deps.Cron != "0 6 * * *" || !deps.Next.IsZero() ||
 		len(deps.Permissions) != 1 || deps.Limits.MaxTurns == 0 || len(deps.Problems) != 1 || !strings.Contains(deps.Problems[0], "web") {
 		t.Errorf("deps %+v", deps)
 	}
 
-	if _, err := w.EnableWorker("deps", "sha256:stale"); !errors.Is(err, workers.ErrHashMismatch) {
+	if _, err := w.EnableWorker("deps", "sha256:stale"); !errors.Is(err, api.ErrHashMismatch) {
 		t.Errorf("stale hash: %v", err)
 	}
 	if _, err := w.EnableWorker("broken", broken.Hash); err == nil {
@@ -50,35 +51,35 @@ func TestWorkersLifecycle(t *testing.T) {
 	}
 	// A name is never a path: nothing outside workers/ is looked up.
 	for _, bad := range []string{"../deps", "deps/..", "/etc", "Deps"} {
-		if _, err := w.EnableWorker(bad, "x"); !errors.Is(err, ErrUnknownWorker) {
+		if _, err := w.EnableWorker(bad, "x"); !errors.Is(err, api.ErrUnknownWorker) {
 			t.Errorf("enable %q: %v", bad, err)
 		}
-		if _, err := w.WorkerRuns(bad, 1); !errors.Is(err, ErrUnknownWorker) {
+		if _, err := w.WorkerRuns(bad, 1); !errors.Is(err, api.ErrUnknownWorker) {
 			t.Errorf("runs of %q: %v", bad, err)
 		}
 	}
-	if _, err := w.EnableWorker("nope", "x"); !errors.Is(err, ErrUnknownWorker) {
+	if _, err := w.EnableWorker("nope", "x"); !errors.Is(err, api.ErrUnknownWorker) {
 		t.Errorf("unknown: %v", err)
 	}
 	on, err := w.EnableWorker("deps", deps.Hash)
-	if err != nil || on.State != workers.StateEnabled || on.Next.IsZero() {
+	if err != nil || on.State != api.StateEnabled || on.Next.IsZero() {
 		t.Fatalf("enable %+v %v", on, err)
 	}
 
 	// An edit suspends it.
 	addWorker(t, w, "deps", "---\nschedule: Daily at 7 AM\n---\nReport outdated modules.\n")
-	if list, _ := w.ListWorkers(); list[1].State != workers.StateChanged || !list[1].Next.IsZero() {
+	if list, _ := w.ListWorkers(); list[1].State != api.StateChanged || !list[1].Next.IsZero() {
 		t.Errorf("after an edit: %+v", list[1])
 	}
 	off, err := w.DisableWorker("deps")
-	if err != nil || off.State != workers.StateDisabled {
+	if err != nil || off.State != api.StateDisabled {
 		t.Errorf("disable %+v %v", off, err)
 	}
 }
 
 func TestWorkersCanBeTurnedOff(t *testing.T) {
 	w, _ := openTestWith(t, func(c *config.Config) { c.Workers.Enabled = false })
-	if _, err := w.ListWorkers(); !errors.Is(err, ErrWorkersDisabled) {
+	if _, err := w.ListWorkers(); !errors.Is(err, api.ErrWorkersDisabled) {
 		t.Errorf("%v", err)
 	}
 }
@@ -111,21 +112,21 @@ func TestRunWorkerEnforcesPermissions(t *testing.T) {
 	addWorker(t, w, "deps", "---\nschedule: daily at 6 AM\npermissions: [\"write:reports/\"]\n---\nWrite reports/deps.md.\n")
 	user := newSession(t, w)
 
-	if _, err := w.RunWorker(context.Background(), "deps", RunOptions{Manual: true}); !errors.Is(err, ErrWorkerNotEnabled) {
+	if _, err := w.RunWorker(context.Background(), "deps", RunOptions{Manual: true}); !errors.Is(err, api.ErrWorkerNotEnabled) {
 		t.Fatalf("not enabled: %v", err)
 	}
 	enable(t, w, "deps")
 	var results []string
-	var started workers.Run
-	run, err := w.RunWorker(context.Background(), "deps", RunOptions{Manual: true, OnStart: func(r workers.Run) { started = r }, OnEvent: func(e Event) {
+	var started api.Run
+	run, err := w.RunWorker(context.Background(), "deps", RunOptions{Manual: true, OnStart: func(r api.Run) { started = r }, OnEvent: func(e api.Event) {
 		if e.ToolResult != nil {
 			results = append(results, fmt.Sprint(e.ToolResult.Result))
 		}
 	}})
-	if started.ID != run.ID || started.Status != workers.RunRunning {
+	if started.ID != run.ID || started.Status != api.RunRunning {
 		t.Errorf("started %+v", started)
 	}
-	if err != nil || run.Status != workers.RunSucceeded || !run.Manual || run.SessionID == "" || run.SessionID == user.ID {
+	if err != nil || run.Status != api.RunSucceeded || !run.Manual || run.SessionID == "" || run.SessionID == user.ID {
 		t.Fatalf("run %+v %v", run, err)
 	}
 	if _, err := os.Stat(filepath.Join(w.Dir(), "reports", "deps.md")); err != nil {
@@ -134,7 +135,7 @@ func TestRunWorkerEnforcesPermissions(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(w.Dir(), "main.go")); !os.IsNotExist(err) {
 		t.Error("the refused write happened")
 	}
-	if len(run.Refusals) != 1 || run.Refusals[0].Kind != tools.ActionWrite {
+	if len(run.Refusals) != 1 || run.Refusals[0].Kind != api.ActionWrite {
 		t.Errorf("refusals %+v", run.Refusals)
 	}
 	if len(results) != 3 || !strings.Contains(results[2], "unattended") {
@@ -160,7 +161,7 @@ func TestRunWorkerStopsAtItsTurnLimit(t *testing.T) {
 	addWorker(t, w, "loop", "---\nschedule: hourly\nlimits: {max_turns: 2}\n---\nLook around.\n")
 	enable(t, w, "loop")
 	run, err := w.RunWorker(context.Background(), "loop", RunOptions{})
-	if err != nil || run.Status != workers.RunLimited || run.Error == "" {
+	if err != nil || run.Status != api.RunLimited || run.Error == "" {
 		t.Errorf("run %+v %v", run, err)
 	}
 }
@@ -176,7 +177,7 @@ func TestRunWorkerUsesItsAgentAndModel(t *testing.T) {
 	}
 
 	run, err := w.RunWorker(context.Background(), "review", RunOptions{})
-	if err != nil || run.Status != workers.RunSucceeded {
+	if err != nil || run.Status != api.RunSucceeded {
 		t.Fatalf("run %+v %v", run, err)
 	}
 	if main.Calls() != 0 {
@@ -199,7 +200,7 @@ func TestRunWorkerUsesItsAgentAndModel(t *testing.T) {
 		t.Errorf("the run changed the workspace: %s on %s", w.ActiveAgent().Name, w.Model().Name)
 	}
 
-	if run, _ := w.RunWorker(context.Background(), "badmodel", RunOptions{}); run.Status != workers.RunFailed || !strings.Contains(run.Error, "broken") {
+	if run, _ := w.RunWorker(context.Background(), "badmodel", RunOptions{}); run.Status != api.RunFailed || !strings.Contains(run.Error, "broken") {
 		t.Errorf("unbuildable model: %+v", run)
 	}
 	list, _ := w.ListWorkers()
@@ -208,7 +209,7 @@ func TestRunWorkerUsesItsAgentAndModel(t *testing.T) {
 			t.Errorf("unknown agent not reported: %+v", info.Problems)
 		}
 	}
-	if run, _ := w.RunWorker(context.Background(), "nobody", RunOptions{}); run.Status != workers.RunFailed || !strings.Contains(run.Error, "nobody") {
+	if run, _ := w.RunWorker(context.Background(), "nobody", RunOptions{}); run.Status != api.RunFailed || !strings.Contains(run.Error, "nobody") {
 		t.Errorf("unknown agent: %+v", run)
 	}
 }
@@ -221,7 +222,7 @@ func TestRunWorkerStopsAtItsTimeAndCostLimits(t *testing.T) {
 	addWorker(t, w, "slow", "---\nschedule: hourly\npermissions: [\"shell:sleep 5\"]\nlimits: {timeout: 300ms}\n---\nWait.\n")
 	enable(t, w, "slow")
 	run, err := w.RunWorker(context.Background(), "slow", RunOptions{})
-	if err != nil || run.Status != workers.RunLimited || !strings.Contains(run.Error, "time limit") || run.Duration > 4e9 {
+	if err != nil || run.Status != api.RunLimited || !strings.Contains(run.Error, "time limit") || run.Duration > 4e9 {
 		t.Errorf("timeout run %+v %v", run, err)
 	}
 
@@ -231,7 +232,7 @@ func TestRunWorkerStopsAtItsTimeAndCostLimits(t *testing.T) {
 	addWorker(t, w2, "spend", "---\nschedule: hourly\nlimits: {max_cost_usd: 0.0002}\n---\nLook around.\n")
 	enable(t, w2, "spend")
 	run, err = w2.RunWorker(context.Background(), "spend", RunOptions{})
-	if err != nil || run.Status != workers.RunLimited || !strings.Contains(run.Error, "cost limit") {
+	if err != nil || run.Status != api.RunLimited || !strings.Contains(run.Error, "cost limit") {
 		t.Errorf("cost run %+v %v", run, err)
 	}
 }

@@ -8,7 +8,7 @@ import (
 
 	"github.com/retail-cortex/blitz/internal/i18n"
 	"github.com/retail-cortex/blitz/internal/textutil"
-	"github.com/retail-cortex/blitz/internal/tools"
+	"github.com/retail-cortex/blitz/pkg/api"
 )
 
 // ExitPrompt configures ConfirmExit.
@@ -25,7 +25,7 @@ type ExitPrompt struct {
 // them now or wait for them to finish, and a further Ctrl+C (or EOF) at the
 // prompt or while waiting force-quits, killing them. Returns false only when
 // the user cancels the exit.
-func ConfirmExit(ctx context.Context, in Input, pm *tools.ProcessManager, interrupts <-chan os.Signal, opts ExitPrompt) bool {
+func ConfirmExit(ctx context.Context, in Input, pm api.Processes, interrupts <-chan os.Signal, opts ExitPrompt) bool {
 	if pm == nil {
 		return true
 	}
@@ -80,7 +80,7 @@ func ConfirmExit(ctx context.Context, in Input, pm *tools.ProcessManager, interr
 	}
 }
 
-func killAll(pm *tools.ProcessManager) {
+func killAll(pm api.Processes) {
 	n := len(pm.Running())
 	pm.Shutdown()
 	if n > 0 {

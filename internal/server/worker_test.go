@@ -10,6 +10,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/retail-cortex/blitz/pkg/api"
+
 	"connectrpc.com/connect"
 	"github.com/retail-cortex/blitz/internal/app"
 	"github.com/retail-cortex/blitz/internal/config"
@@ -184,7 +186,7 @@ func TestSchedulerWaitsOncePerWorkerAndStops(t *testing.T) {
 			t.Fatal("the scheduled run never waited")
 		}
 	}
-	if err := sc.acquire("/w", "deps", false); !errors.Is(err, app.ErrRunInProgress) {
+	if err := sc.acquire("/w", "deps", false); !errors.Is(err, api.ErrRunInProgress) {
 		t.Errorf("second wait for the same worker: %v", err)
 	}
 	if code, info := errorReason(t, sc.acquire("/w", "other", true)); code != connect.CodeResourceExhausted || info.Reason != "TOO_MANY_RUNS" {

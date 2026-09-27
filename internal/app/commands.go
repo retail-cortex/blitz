@@ -8,22 +8,12 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/retail-cortex/blitz/pkg/api"
+
 	"github.com/retail-cortex/blitz/internal/commands"
 	"github.com/retail-cortex/blitz/internal/config"
 	"github.com/retail-cortex/blitz/internal/runtime"
 )
-
-// CommandInfo describes a custom slash command: a command file, a bundled
-// command, or a skill run by name.
-type CommandInfo struct {
-	Name         string
-	Description  string
-	ArgumentHint string
-	Source       string // project, user, bundled, skill
-}
-
-// ErrUnknownCommand reports a slash command that doesn't exist.
-var ErrUnknownCommand = errors.New("unknown command")
 
 // commandDirs are where command files live, with their source: the user's
 // own, then the workspace's (other agents' directories too), which win.
@@ -70,14 +60,14 @@ func (w *Workspace) commands() (map[string]commands.Command, error) {
 
 // ListCommands returns the custom slash commands, by name. Files that
 // don't parse are reported through the workspace's warnings.
-func (w *Workspace) ListCommands() []CommandInfo {
+func (w *Workspace) ListCommands() []api.CommandInfo {
 	byName, err := w.commands()
 	if err != nil {
 		w.warnOnce(err.Error())
 	}
-	out := make([]CommandInfo, 0, len(byName))
+	out := make([]api.CommandInfo, 0, len(byName))
 	for _, c := range byName {
-		out = append(out, CommandInfo{Name: c.Name, Description: c.Description, ArgumentHint: c.ArgumentHint, Source: c.Source})
+		out = append(out, api.CommandInfo{Name: c.Name, Description: c.Description, ArgumentHint: c.ArgumentHint, Source: c.Source})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	return out
@@ -85,14 +75,14 @@ func (w *Workspace) ListCommands() []CommandInfo {
 
 // expandCommand turns a turn whose Text is "/name args" into the
 // command's prompt and the options its frontmatter asks for.
-func (w *Workspace) expandCommand(ctx context.Context, t *Turn) ([]runtime.ExecOption, error) {
+func (w *Workspace) expandCommand(ctx context.Context, t *api.Turn) ([]runtime.ExecOption, error) {
 	line := strings.TrimPrefix(strings.TrimSpace(t.Text), "/")
 	name, args, _ := strings.Cut(line, " ")
 	name = strings.ToLower(name)
 	byName, _ := w.commands()
 	c, ok := byName[name]
 	if !ok {
-		return nil, fmt.Errorf("%w: /%s", ErrUnknownCommand, name)
+		return nil, fmt.Errorf("%w: /%s", api.ErrUnknownCommand, name)
 	}
 	t.Prompt = c.Expand(args)
 	if c.Plan { // read-only, with the command's own instructions
@@ -101,7 +91,7 @@ func (w *Workspace) expandCommand(ctx context.Context, t *Turn) ([]runtime.ExecO
 	var opts []runtime.ExecOption
 	if c.Agent != "" {
 		if _, ok := w.agents.Get(c.Agent); !ok {
-			return nil, &UnknownAgentError{c.Agent}
+			return nil, &api.UnknownAgentError{Name: c.Agent}
 		}
 		opts = append(opts, runtime.WithAgent(c.Agent))
 	}

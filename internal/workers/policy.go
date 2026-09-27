@@ -5,6 +5,8 @@ import (
 	"slices"
 	"time"
 
+	"github.com/retail-cortex/blitz/pkg/api"
+
 	"github.com/retail-cortex/blitz/internal/config"
 )
 
@@ -14,7 +16,7 @@ import (
 // policy changed.
 type Effective struct {
 	Permissions []Permission
-	Limits      Limits
+	Limits      api.Limits
 	Notes       []string
 }
 

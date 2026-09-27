@@ -4,45 +4,22 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/retail-cortex/blitz/pkg/api"
+
 	"github.com/retail-cortex/blitz/internal/config"
 	"google.golang.org/genai"
 )
-
-// Usage accumulates token counts and estimated cost.
-type Usage struct {
-	Calls      int
-	Input      int64 // prompt tokens, including cached
-	Cached     int64
-	CacheWrite int64 // prompt tokens written to the cache (part of Input)
-	Output     int64 // candidates + thinking tokens
-	LastPrompt int64 // prompt size of the latest call: the current context size
-	CostUSD    float64
-	Priced     bool // false if any call's model had no price
-}
-
-func (u *Usage) Add(o Usage) {
-	u.Calls += o.Calls
-	u.Input += o.Input
-	u.Cached += o.Cached
-	u.CacheWrite += o.CacheWrite
-	u.Output += o.Output
-	u.CostUSD += o.CostUSD
-	u.Priced = u.Priced && o.Priced
-	if o.LastPrompt > 0 {
-		u.LastPrompt = o.LastPrompt
-	}
-}
 
 // UsageTracker records usage per session.
 type UsageTracker struct {
 	mu       sync.Mutex
 	pricing  map[string]config.ModelPrice
-	sessions map[string]*Usage
+	sessions map[string]*api.Usage
 }
 
 // NewUsageTracker creates a tracker with the given price table.
 func NewUsageTracker(pricing map[string]config.ModelPrice) *UsageTracker {
-	return &UsageTracker{pricing: pricing, sessions: map[string]*Usage{}}
+	return &UsageTracker{pricing: pricing, sessions: map[string]*api.Usage{}}
 }
 
 // price finds the price for model: exact, else the longest configured prefix
@@ -72,8 +49,8 @@ func (t *UsageTracker) HasPrice(model string) bool {
 
 // Estimate converts token counts to USD for model. cacheWrites are prompt
 // tokens (already counted in the prompt total) written to the cache.
-func (t *UsageTracker) Estimate(model string, m *genai.GenerateContentResponseUsageMetadata, cacheWrites int64) Usage {
-	u := Usage{Calls: 1, Priced: true}
+func (t *UsageTracker) Estimate(model string, m *genai.GenerateContentResponseUsageMetadata, cacheWrites int64) api.Usage {
+	u := api.Usage{Calls: 1, Priced: true}
 	if m == nil {
 		return u
 	}
@@ -98,18 +75,18 @@ func (t *UsageTracker) Estimate(model string, m *genai.GenerateContentResponseUs
 }
 
 // Record adds one model call's usage to session.
-func (t *UsageTracker) Record(session, model string, m *genai.GenerateContentResponseUsageMetadata) Usage {
+func (t *UsageTracker) Record(session, model string, m *genai.GenerateContentResponseUsageMetadata) api.Usage {
 	return t.RecordWrites(session, model, m, 0)
 }
 
 // RecordWrites is Record with a count of cache-write tokens.
-func (t *UsageTracker) RecordWrites(session, model string, m *genai.GenerateContentResponseUsageMetadata, cacheWrites int64) Usage {
+func (t *UsageTracker) RecordWrites(session, model string, m *genai.GenerateContentResponseUsageMetadata, cacheWrites int64) api.Usage {
 	u := t.Estimate(model, m, cacheWrites)
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	s := t.sessions[session]
 	if s == nil {
-		s = &Usage{Priced: true}
+		s = &api.Usage{Priced: true}
 		t.sessions[session] = s
 	}
 	s.Add(u)
@@ -117,11 +94,11 @@ func (t *UsageTracker) RecordWrites(session, model string, m *genai.GenerateCont
 }
 
 // Session returns the usage recorded for session.
-func (t *UsageTracker) Session(session string) Usage {
+func (t *UsageTracker) Session(session string) api.Usage {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	if s := t.sessions[session]; s != nil {
 		return *s
 	}
-	return Usage{Priced: true}
+	return api.Usage{Priced: true}
 }

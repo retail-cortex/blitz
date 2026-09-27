@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/retail-cortex/blitz/pkg/api"
+
 	"github.com/retail-cortex/blitz/internal/config"
 	"google.golang.org/genai"
 )
@@ -29,7 +31,7 @@ func TestPermissionRulesLiveAndSaved(t *testing.T) {
 		t.Fatalf("add: %+v %v", res, err)
 	}
 	s, _ := w.NewSession()
-	w.Run(context.Background(), s.ID, Turn{Text: "write"}, func(Event) {})
+	w.Run(context.Background(), s.ID, api.Turn{Text: "write"}, func(api.Event) {})
 	if _, err := os.Stat(filepath.Join(w.Dir(), "docs", "a.md")); err != nil {
 		t.Errorf("allow rule didn't apply: %v", err)
 	}
@@ -44,7 +46,7 @@ func TestPermissionRulesLiveAndSaved(t *testing.T) {
 	if res, err := w.AddPermissionRule("deny", "read(secrets/**)", true); err != nil || !res.NextStart {
 		t.Errorf("saved read rule: %+v %v", res, err)
 	}
-	if _, err := w.AddPermissionRule("deny", "what(x)", false); !errors.Is(err, ErrBadRule) {
+	if _, err := w.AddPermissionRule("deny", "what(x)", false); !errors.Is(err, api.ErrBadRule) {
 		t.Errorf("bad rule: %v", err)
 	}
 	// Remove, also from the file.
@@ -63,7 +65,7 @@ func TestToolDenyRuleInTheEngine(t *testing.T) {
 	w, _ := openTestWith(t, func(c *config.Config) { c.Permissions.Deny = []string{"list_agents"} }, agents, text("ok"))
 	s, _ := w.NewSession()
 	var result map[string]any
-	w.Run(context.Background(), s.ID, Turn{Text: "who"}, func(e Event) {
+	w.Run(context.Background(), s.ID, api.Turn{Text: "who"}, func(e api.Event) {
 		if e.ToolResult != nil {
 			result = e.ToolResult.Result
 		}

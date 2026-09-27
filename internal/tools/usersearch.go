@@ -6,21 +6,19 @@ import (
 	"fmt"
 	"net/url"
 
+	"github.com/retail-cortex/blitz/pkg/api"
+
 	"github.com/retail-cortex/blitz/internal/audit"
 )
-
-// ErrNoSearch is returned by Registry.WebSearch when no search provider is
-// configured (web.search_provider), or it can't be used.
-var ErrNoSearch = errors.New("web search is not set up")
 
 // WebSearch runs a search the user asked for (/search web). It isn't an
 // agent action, so it doesn't ask for approval; it is audited.
 func (r *Registry) WebSearch(ctx context.Context, query string, n int) (WebSearchOutput, error) {
 	switch {
 	case r.searchErr != nil:
-		return WebSearchOutput{}, fmt.Errorf("%w: %v", ErrNoSearch, r.searchErr)
+		return WebSearchOutput{}, fmt.Errorf("%w: %v", api.ErrNoSearch, r.searchErr)
 	case r.searcher == nil:
-		return WebSearchOutput{}, ErrNoSearch
+		return WebSearchOutput{}, api.ErrNoSearch
 	}
 	r.hooks.Audit().Log(audit.Entry{Kind: audit.KindUserSearch, Tool: "web_search", Detail: r.searcher.cfg.Provider + ": " + query})
 	out := r.searcher.run(ctx, query, n)

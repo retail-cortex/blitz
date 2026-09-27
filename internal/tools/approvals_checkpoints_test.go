@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/retail-cortex/blitz/pkg/api"
+
 	"github.com/retail-cortex/blitz/internal/config"
 )
 
@@ -17,9 +19,9 @@ func TestApprovalRemembering(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	h, reqs := decisionHooks(DecisionSession)
+	h, reqs := decisionHooks(api.DecisionSession)
 	h.SetStore(store)
-	req := ApprovalRequest{Tool: "run_shell_command", Kind: ActionCommand, Key: "cmd:ls", KeyLabel: "this exact command"}
+	req := api.ApprovalRequest{Tool: "run_shell_command", Kind: api.ActionCommand, Key: "cmd:ls", KeyLabel: "this exact command"}
 
 	// Session: asked once, then remembered for the same key only.
 	for i := 0; i < 3; i++ {
@@ -44,9 +46,9 @@ func TestApprovalRemembering(t *testing.T) {
 	}
 
 	// Always: persisted and honoured by a fresh Hooks with the same store file.
-	always, _ := decisionHooks(DecisionAlways)
+	always, _ := decisionHooks(api.DecisionAlways)
 	always.SetStore(store)
-	if err := always.Approve(ctx, ApprovalRequest{Tool: "t", Kind: ActionWrite, Key: "write:/ws"}); err != nil {
+	if err := always.Approve(ctx, api.ApprovalRequest{Tool: "t", Kind: api.ActionWrite, Key: "write:/ws"}); err != nil {
 		t.Fatal(err)
 	}
 	reloaded, err := OpenApprovalStore(store.path)
@@ -55,7 +57,7 @@ func TestApprovalRemembering(t *testing.T) {
 	}
 	fresh, freshReqs := approverHooks(false)
 	fresh.SetStore(reloaded)
-	if err := fresh.Approve(ctx, ApprovalRequest{Tool: "t", Kind: ActionWrite, Key: "write:/ws"}); err != nil || len(*freshReqs) != 0 {
+	if err := fresh.Approve(ctx, api.ApprovalRequest{Tool: "t", Kind: api.ActionWrite, Key: "write:/ws"}); err != nil || len(*freshReqs) != 0 {
 		t.Errorf("saved rule not applied without prompting: %v prompts=%d", err, len(*freshReqs))
 	}
 	if info, _ := os.Stat(store.path); info.Mode().Perm() != 0o600 {
@@ -67,10 +69,10 @@ func TestApprovalRemembering(t *testing.T) {
 
 	// Negative: unkeyed requests can't be remembered; each one prompts.
 	empty, _ := OpenApprovalStore(filepath.Join(t.TempDir(), "empty.json"))
-	h2, reqs2 := decisionHooks(DecisionAlways)
+	h2, reqs2 := decisionHooks(api.DecisionAlways)
 	h2.SetStore(empty)
 	for i := 0; i < 2; i++ {
-		h2.Approve(ctx, ApprovalRequest{Tool: "t", Kind: ActionWrite})
+		h2.Approve(ctx, api.ApprovalRequest{Tool: "t", Kind: api.ActionWrite})
 	}
 	if len(*reqs2) != 2 || len(empty.Rules()) != 0 {
 		t.Errorf("unkeyed approvals should not be remembered: prompts=%d rules=%v", len(*reqs2), empty.Rules())
@@ -182,7 +184,7 @@ func TestCheckpointUndoConflict(t *testing.T) {
 	ws.WriteFileAtomic("f.txt", []byte("tool edit\n"))
 	os.WriteFile(path, []byte("user edit after\n"), 0o644) // changed outside the tools
 
-	if _, err := cp.Undo(false); !errors.Is(err, ErrUndoConflict) {
+	if _, err := cp.Undo(false); !errors.Is(err, api.ErrUndoConflict) {
 		t.Fatalf("expected conflict, got %v", err)
 	}
 	if b, _ := os.ReadFile(path); string(b) != "user edit after\n" {
@@ -239,7 +241,7 @@ func TestCommandApprovalScopedToWorkspace(t *testing.T) {
 	wsA, _ := newTestWorkspace(t)
 	wsB, _ := newTestWorkspace(t)
 	store, _ := OpenApprovalStore(filepath.Join(t.TempDir(), "a.json"))
-	always, _ := decisionHooks(DecisionAlways)
+	always, _ := decisionHooks(api.DecisionAlways)
 	always.SetStore(store)
 	runShellCommand(context.Background(), ShellConfig{Workspace: wsA, Hooks: always}, RunShellCommandInput{Command: "true"})
 

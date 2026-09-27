@@ -9,6 +9,8 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/retail-cortex/blitz/pkg/api"
+
 	"github.com/retail-cortex/blitz/internal/i18n"
 	"google.golang.org/adk/v2/agent"
 	"google.golang.org/adk/v2/tool"
@@ -22,7 +24,7 @@ type PlanGate struct {
 	mu       sync.Mutex
 	planning bool
 	approved bool
-	mode     PermissionMode // the mode to carry the plan out in
+	mode     api.PermissionMode // the mode to carry the plan out in
 	plan     string
 	path     string // where the approved plan was saved
 }
@@ -45,7 +47,7 @@ func (g *PlanGate) Planning() bool {
 // Take returns the approved plan, the file it was saved to and the mode to
 // carry it out in (ok is false when none was approved), and clears the
 // approval, so each plan is carried out once.
-func (g *PlanGate) Take() (plan, path string, mode PermissionMode, ok bool) {
+func (g *PlanGate) Take() (plan, path string, mode api.PermissionMode, ok bool) {
 	if g == nil {
 		return "", "", "", false
 	}
@@ -85,7 +87,7 @@ func NewEnterPlanModeTool(hooks *Hooks) (tool.Tool, error) {
 		},
 		func(ctx agent.Context, _ EnterPlanModeInput) (map[string]any, error) {
 			g := PlanGateFrom(ctx)
-			if g == nil || isUnattended(ctx) || hooks.Mode() == ModeDontAsk || hooks.userPrompter() == nil {
+			if g == nil || isUnattended(ctx) || hooks.Mode() == api.ModeDontAsk || hooks.userPrompter() == nil {
 				return map[string]any{"error": "no one can review a plan now: go ahead with the task yourself"}, nil
 			}
 			if g.Planning() {
@@ -125,7 +127,7 @@ func NewExitPlanModeTool(ws *Workspace, hooks *Hooks) (tool.Tool, error) {
 				return map[string]any{"error": "the plan is empty"}, nil
 			}
 			noReview := map[string]any{"approved": false, "message": "No one can review the plan now: end your turn with the plan as your answer."}
-			if isUnattended(ctx) || hooks.Mode() == ModeDontAsk {
+			if isUnattended(ctx) || hooks.Mode() == api.ModeDontAsk {
 				return noReview, nil
 			}
 			prompter := hooks.userPrompter()
@@ -140,9 +142,9 @@ func NewExitPlanModeTool(ws *Workspace, hooks *Hooks) (tool.Tool, error) {
 			}
 			switch answer = strings.TrimSpace(answer); answer {
 			case execute, executeEdits:
-				mode := ModeDefault
+				mode := api.ModeDefault
 				if answer == executeEdits {
-					mode = ModeAcceptEdits
+					mode = api.ModeAcceptEdits
 				}
 				path, err := savePlan(ws, ctx.SessionID(), plan)
 				g.mu.Lock()

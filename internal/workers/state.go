@@ -10,28 +10,9 @@ import (
 	"slices"
 	"sync"
 	"time"
+
+	"github.com/retail-cortex/blitz/pkg/api"
 )
-
-// State is whether a worker may run.
-type State string
-
-const (
-	// StateNew: found but never enabled.
-	StateNew State = "new"
-	// StateEnabled: enabled at its current hash; it runs on schedule.
-	StateEnabled State = "enabled"
-	// StateDisabled: turned off.
-	StateDisabled State = "disabled"
-	// StateChanged: enabled at an older hash; the files changed since, so
-	// it doesn't run until re-enabled.
-	StateChanged State = "changed"
-	// StateInvalid: WORKER.md can't be used.
-	StateInvalid State = "invalid"
-)
-
-// ErrHashMismatch reports enabling a worker at a hash other than its
-// current one: the files changed after they were reviewed.
-var ErrHashMismatch = errors.New("the worker changed since it was reviewed")
 
 // entry is what the store keeps for one worker.
 type entry struct {
@@ -73,28 +54,28 @@ func OpenStore(path string) (*Store, error) {
 
 // State says whether the worker w, found in the workspace dir, may run.
 // A worker Load reported invalid is StateInvalid.
-func (s *Store) State(dir string, w *Worker, loadErr error) State {
+func (s *Store) State(dir string, w *Worker, loadErr error) api.State {
 	if loadErr != nil {
-		return StateInvalid
+		return api.StateInvalid
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	e, ok := s.workspaces[dir][w.Name]
 	switch {
 	case !ok:
-		return StateNew
+		return api.StateNew
 	case !e.Enabled:
-		return StateDisabled
+		return api.StateDisabled
 	case e.Hash != w.Hash:
-		return StateChanged
+		return api.StateChanged
 	}
-	return StateEnabled
+	return api.StateEnabled
 }
 
 // Enable enables w at hash, which must be its current hash.
 func (s *Store) Enable(dir string, w *Worker, hash string) error {
 	if hash != w.Hash {
-		return fmt.Errorf("%w: reviewed %s, now %s", ErrHashMismatch, hash, w.Hash)
+		return fmt.Errorf("%w: reviewed %s, now %s", api.ErrHashMismatch, hash, w.Hash)
 	}
 	return s.set(dir, w.Name, entry{Hash: hash, Enabled: true, Changed: time.Now()})
 }

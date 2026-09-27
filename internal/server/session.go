@@ -6,8 +6,9 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/retail-cortex/blitz/pkg/api"
+
 	"connectrpc.com/connect"
-	"github.com/retail-cortex/blitz/internal/app"
 	pb "github.com/retail-cortex/blitz/internal/gen/blitz/v1"
 	"github.com/retail-cortex/blitz/internal/images"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -131,12 +132,12 @@ func (h sessionService) RunTurn(ctx context.Context, r req[pb.RunTurnRequest], s
 		}
 	}
 	ctx = withSink(ctx, send)
-	res, runErr := w.Run(ctx, r.Msg.SessionId, app.Turn{
+	res, runErr := w.Run(ctx, r.Msg.SessionId, api.Turn{
 		Text: t.Text, Prompt: t.Prompt, Plan: t.Plan, ReadOnly: t.ReadOnly, Aside: t.Aside, Accepted: t.Accepted,
 		Images: imgs, MaxTurns: int(t.MaxTurns), FetchGrants: t.FetchGrants,
 		MaxCostUSD: t.MaxCostUsd, Timeout: t.GetTimeout().AsDuration(), Command: t.Command,
 		OnAccepted: func() { send(&pb.TurnEvent{Kind: &pb.TurnEvent_Accepted{Accepted: &pb.Accepted{}}}) },
-	}, func(e app.Event) { send(eventMsg(e)) })
+	}, func(e api.Event) { send(eventMsg(e)) })
 
 	send(&pb.TurnEvent{Kind: &pb.TurnEvent_Finished{Finished: &pb.TurnFinished{
 		Output: res.Output, Before: usageMsg(res.Before), After: usageMsg(res.After), Leftover: res.Leftover, Error: errorInfo(runErr),
@@ -233,7 +234,7 @@ func (h sessionService) Rewind(ctx context.Context, r req[pb.RewindRequest]) (*c
 	if err != nil {
 		return nil, err
 	}
-	res, err := w.Rewind(ctx, int(r.Msg.Index), app.RewindMode(r.Msg.Mode), r.Msg.Force)
+	res, err := w.Rewind(ctx, int(r.Msg.Index), api.RewindMode(r.Msg.Mode), r.Msg.Force)
 	if err != nil {
 		return nil, toAPI(err)
 	}

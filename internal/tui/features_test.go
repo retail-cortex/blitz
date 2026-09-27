@@ -10,7 +10,8 @@ import (
 	"testing"
 	"time"
 
-	core "github.com/retail-cortex/blitz/internal/app"
+	"github.com/retail-cortex/blitz/pkg/api"
+
 	"github.com/retail-cortex/blitz/internal/config"
 	"github.com/retail-cortex/blitz/internal/runtime"
 	"google.golang.org/genai"
@@ -51,8 +52,8 @@ func TestMarkdownStreamRendersProgressively(t *testing.T) {
 	}
 }
 
-func textEvent(text string, partial, repeat bool) core.Event {
-	return core.Event{Text: &core.Text{Text: text, Partial: partial, Repeat: repeat}}
+func textEvent(text string, partial, repeat bool) api.Event {
+	return api.Event{Text: &api.Text{Text: text, Partial: partial, Repeat: repeat}}
 }
 
 func TestPrinterStreamingDedup(t *testing.T) {
@@ -143,8 +144,8 @@ func TestCompleter(t *testing.T) {
 }
 
 func TestUsageLine(t *testing.T) {
-	before := runtime.Usage{Calls: 1, Input: 1000, Output: 100, Priced: true, CostUSD: 0.01}
-	after := runtime.Usage{Calls: 3, Input: 13_400, Output: 1_300, LastPrompt: 12_345, Priced: true, CostUSD: 0.0325}
+	before := api.Usage{Calls: 1, Input: 1000, Output: 100, Priced: true, CostUSD: 0.01}
+	after := api.Usage{Calls: 3, Input: 13_400, Output: 1_300, LastPrompt: 12_345, Priced: true, CostUSD: 0.0325}
 	got := UsageLine(before, after)
 	for _, want := range []string{"12.4k in", "1.2k out", "context 12.3k", "$0.0225", "session $0.0325"} {
 		if !strings.Contains(got, want) {

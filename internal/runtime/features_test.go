@@ -9,6 +9,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/retail-cortex/blitz/pkg/api"
+
 	"github.com/retail-cortex/blitz/internal/agents"
 	"github.com/retail-cortex/blitz/internal/audit"
 	"github.com/retail-cortex/blitz/internal/config"
@@ -126,7 +128,7 @@ func TestEngineMaxTurns(t *testing.T) {
 	}
 	f := newEngineWith(t, fixtureOpts{}, loop...)
 	_, err := functionResponses(t, f.eng, "s", "loop forever", WithMaxTurns(2))
-	if !errors.Is(err, ErrMaxTurns) {
+	if !errors.Is(err, api.ErrMaxTurns) {
 		t.Fatalf("expected ErrMaxTurns, got %v", err)
 	}
 	if f.llm.Calls() != 2 {

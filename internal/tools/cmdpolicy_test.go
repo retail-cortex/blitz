@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/retail-cortex/blitz/pkg/api"
 )
 
 func mustPolicy(t *testing.T, cfg CommandPolicyConfig) *CommandPolicy {
@@ -174,7 +176,7 @@ func TestShellToolEnforcesPolicy(t *testing.T) {
 	}
 
 	// Global auto-approve cannot override a deny rule.
-	cfg.Hooks = NewHooks(Policy{Mode: ModeBypass})
+	cfg.Hooks = NewHooks(Policy{Mode: api.ModeBypass})
 	if out := runShellCommand(context.Background(), cfg, RunShellCommandInput{Command: "touch denied2"}); !strings.Contains(out.Error, "blocked") {
 		t.Errorf("auto-approve-all bypassed deny: %+v", out)
 	}

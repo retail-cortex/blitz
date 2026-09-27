@@ -6,7 +6,8 @@ import (
 	"strings"
 	"time"
 
-	core "github.com/retail-cortex/blitz/internal/app"
+	"github.com/retail-cortex/blitz/pkg/api"
+
 	"github.com/retail-cortex/blitz/internal/i18n"
 )
 
@@ -60,7 +61,7 @@ func cmdEnvs(args []string, app *App) {
 	case sub == "remove" && len(args) == 2:
 		err := app.Workspace.RemoveEnv(args[1])
 		switch {
-		case errors.Is(err, core.ErrScriptsDisabled):
+		case errors.Is(err, api.ErrScriptsDisabled):
 			fmt.Println(i18n.T("skills.disabled"))
 		case err != nil:
 			fmt.Printf("%s✗ %s%s\n", Red, i18n.T("envs.remove_failed", "key", safe(args[1]), "error", safe(err.Error())), Reset)

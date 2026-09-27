@@ -8,6 +8,8 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/retail-cortex/blitz/pkg/api"
+
 	"github.com/retail-cortex/blitz/internal/config"
 	"github.com/retail-cortex/blitz/internal/i18n"
 	"github.com/retail-cortex/blitz/internal/runtime"
@@ -41,7 +43,7 @@ func TestTwoWorkspacesInOneProcess(t *testing.T) {
 	a, b := open("alpha"), open("beta")
 
 	has := func(w *Workspace, name string) bool {
-		return slices.ContainsFunc(w.ListAgents(), func(x AgentInfo) bool { return x.Name == name })
+		return slices.ContainsFunc(w.ListAgents(), func(x api.AgentInfo) bool { return x.Name == name })
 	}
 	if !has(a, "alpha") || has(a, "beta") || !has(b, "beta") || has(b, "alpha") {
 		t.Errorf("each workspace should read its own ./agents: a=%v b=%v", has(a, "alpha"), has(b, "beta"))
@@ -79,7 +81,7 @@ func TestAWorkspaceHasOneOwner(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := open(link); !errors.Is(err, ErrWorkspaceBusy) {
+	if _, err := open(link); !errors.Is(err, api.ErrWorkspaceBusy) {
 		t.Fatalf("second owner (through a symlink): %v", err)
 	}
 	first.Close()

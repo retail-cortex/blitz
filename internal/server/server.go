@@ -13,6 +13,8 @@ import (
 	"slices"
 	"sync"
 
+	"github.com/retail-cortex/blitz/pkg/api"
+
 	"connectrpc.com/connect"
 	"github.com/retail-cortex/blitz/internal/app"
 	pb "github.com/retail-cortex/blitz/internal/gen/blitz/v1"
@@ -155,7 +157,7 @@ func (s *Server) openWorkspace(key string, op *opening) {
 	defer s.mu.Unlock()
 	delete(s.opening, key)
 	switch {
-	case errors.Is(err, app.ErrWorkspaceBusy):
+	case errors.Is(err, api.ErrWorkspaceBusy):
 		op.err = apiError(connect.CodeFailedPrecondition, "WORKSPACE_BUSY", err, "workspace", key)
 		return
 	case err != nil:
@@ -267,11 +269,11 @@ func toAPI(err error) error {
 		return ce
 	}
 	var (
-		unknownAgent   *app.UnknownAgentError
-		resume         *app.ResumeError
-		invalidSetting *app.InvalidSettingError
-		unknownSetting *app.UnknownSettingError
-		blocked        *app.BlockedError
+		unknownAgent   *api.UnknownAgentError
+		resume         *api.ResumeError
+		invalidSetting *api.InvalidSettingError
+		unknownSetting *api.UnknownSettingError
+		blocked        *api.BlockedError
 		invalidWorker  *workers.InvalidError
 	)
 	switch {
@@ -293,33 +295,33 @@ func toAPI(err error) error {
 		code   connect.Code
 		reason string
 	}{
-		{app.ErrNoActiveSession, connect.CodeFailedPrecondition, "NO_ACTIVE_SESSION"},
-		{app.ErrMaxTurns, connect.CodeResourceExhausted, "MAX_TURNS"},
-		{app.ErrUnknownMode, connect.CodeInvalidArgument, "UNKNOWN_MODE"},
-		{app.ErrBadRule, connect.CodeInvalidArgument, "BAD_RULE"},
-		{app.ErrUnknownCommand, connect.CodeNotFound, "UNKNOWN_COMMAND"},
-		{app.ErrBypassNeedsSandbox, connect.CodeFailedPrecondition, "BYPASS_NEEDS_SANDBOX"},
-		{app.ErrCostLimit, connect.CodeResourceExhausted, "COST_LIMIT"},
-		{app.ErrTimeLimit, connect.CodeDeadlineExceeded, "TIME_LIMIT"},
-		{app.ErrSnapshotNameTaken, connect.CodeAlreadyExists, "SNAPSHOT_NAME_TAKEN"},
-		{app.ErrBadModelRef, connect.CodeInvalidArgument, "BAD_MODEL_REF"},
-		{app.ErrInvalidAgency, connect.CodeInvalidArgument, "INVALID_AGENCY"},
-		{app.ErrUndoConflict, connect.CodeFailedPrecondition, "UNDO_CONFLICT"},
-		{app.ErrSessionBusy, connect.CodeFailedPrecondition, "SESSION_BUSY"},
-		{app.ErrNotRewindPoint, connect.CodeInvalidArgument, "NOT_REWIND_POINT"},
-		{app.ErrCantRewindConversation, connect.CodeFailedPrecondition, "CANT_REWIND_CONVERSATION"},
-		{app.ErrUnknownRewindMode, connect.CodeInvalidArgument, "UNKNOWN_REWIND_MODE"},
-		{app.ErrScriptsDisabled, connect.CodeFailedPrecondition, "SCRIPTS_DISABLED"},
-		{app.ErrUnknownLocale, connect.CodeInvalidArgument, "UNKNOWN_LOCALE"},
-		{app.ErrImagesDisabled, connect.CodeFailedPrecondition, "IMAGES_DISABLED"},
-		{app.ErrNoFetch, connect.CodeFailedPrecondition, "NO_FETCH"},
-		{app.ErrNoSearch, connect.CodeFailedPrecondition, "NO_SEARCH"},
-		{app.ErrNothingToCompact, connect.CodeFailedPrecondition, "NOTHING_TO_COMPACT"},
-		{app.ErrUnknownWorker, connect.CodeNotFound, "UNKNOWN_WORKER"},
-		{app.ErrWorkerNotEnabled, connect.CodeFailedPrecondition, "WORKER_DISABLED"},
-		{app.ErrRunInProgress, connect.CodeFailedPrecondition, "RUN_IN_PROGRESS"},
-		{app.ErrWorkersDisabled, connect.CodeFailedPrecondition, "WORKERS_DISABLED"},
-		{workers.ErrHashMismatch, connect.CodeFailedPrecondition, "HASH_MISMATCH"},
+		{api.ErrNoActiveSession, connect.CodeFailedPrecondition, "NO_ACTIVE_SESSION"},
+		{api.ErrMaxTurns, connect.CodeResourceExhausted, "MAX_TURNS"},
+		{api.ErrUnknownMode, connect.CodeInvalidArgument, "UNKNOWN_MODE"},
+		{api.ErrBadRule, connect.CodeInvalidArgument, "BAD_RULE"},
+		{api.ErrUnknownCommand, connect.CodeNotFound, "UNKNOWN_COMMAND"},
+		{api.ErrBypassNeedsSandbox, connect.CodeFailedPrecondition, "BYPASS_NEEDS_SANDBOX"},
+		{api.ErrCostLimit, connect.CodeResourceExhausted, "COST_LIMIT"},
+		{api.ErrTimeLimit, connect.CodeDeadlineExceeded, "TIME_LIMIT"},
+		{api.ErrSnapshotNameTaken, connect.CodeAlreadyExists, "SNAPSHOT_NAME_TAKEN"},
+		{api.ErrBadModelRef, connect.CodeInvalidArgument, "BAD_MODEL_REF"},
+		{api.ErrInvalidAgency, connect.CodeInvalidArgument, "INVALID_AGENCY"},
+		{api.ErrUndoConflict, connect.CodeFailedPrecondition, "UNDO_CONFLICT"},
+		{api.ErrSessionBusy, connect.CodeFailedPrecondition, "SESSION_BUSY"},
+		{api.ErrNotRewindPoint, connect.CodeInvalidArgument, "NOT_REWIND_POINT"},
+		{api.ErrCantRewindConversation, connect.CodeFailedPrecondition, "CANT_REWIND_CONVERSATION"},
+		{api.ErrUnknownRewindMode, connect.CodeInvalidArgument, "UNKNOWN_REWIND_MODE"},
+		{api.ErrScriptsDisabled, connect.CodeFailedPrecondition, "SCRIPTS_DISABLED"},
+		{api.ErrUnknownLocale, connect.CodeInvalidArgument, "UNKNOWN_LOCALE"},
+		{api.ErrImagesDisabled, connect.CodeFailedPrecondition, "IMAGES_DISABLED"},
+		{api.ErrNoFetch, connect.CodeFailedPrecondition, "NO_FETCH"},
+		{api.ErrNoSearch, connect.CodeFailedPrecondition, "NO_SEARCH"},
+		{api.ErrNothingToCompact, connect.CodeFailedPrecondition, "NOTHING_TO_COMPACT"},
+		{api.ErrUnknownWorker, connect.CodeNotFound, "UNKNOWN_WORKER"},
+		{api.ErrWorkerNotEnabled, connect.CodeFailedPrecondition, "WORKER_DISABLED"},
+		{api.ErrRunInProgress, connect.CodeFailedPrecondition, "RUN_IN_PROGRESS"},
+		{api.ErrWorkersDisabled, connect.CodeFailedPrecondition, "WORKERS_DISABLED"},
+		{api.ErrHashMismatch, connect.CodeFailedPrecondition, "HASH_MISMATCH"},
 	} {
 		if errors.Is(err, m.target) {
 			return apiError(m.code, m.reason, err)

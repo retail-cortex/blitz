@@ -7,75 +7,12 @@ import (
 	"sort"
 	"sync"
 
+	"github.com/retail-cortex/blitz/pkg/api"
+
 	"github.com/retail-cortex/blitz/internal/audit"
 	"github.com/retail-cortex/blitz/internal/observability"
 	"go.opentelemetry.io/otel/attribute"
 )
-
-// ActionKind classifies a sensitive tool action for approval purposes.
-type ActionKind string
-
-const (
-	ActionCommand ActionKind = "run_command" // shell commands and forged tool execution
-	ActionWrite   ActionKind = "write_file"  // file creation and edits
-	ActionDelete  ActionKind = "delete_file" // file deletion
-	ActionNetwork ActionKind = "network"     // outbound web requests
-	ActionMCP     ActionKind = "mcp_tool"    // tools served by MCP servers
-)
-
-// ApprovalRequest describes an action awaiting user approval.
-type ApprovalRequest struct {
-	Tool   string
-	Kind   ActionKind
-	Detail string
-	// Diff is a unified diff of the proposed file changes, if any.
-	Diff string
-	// Key identifies what "allow for this session" / "always allow" covers,
-	// e.g. an exact command or all edits in a workspace. Empty means the
-	// approval can only be given once.
-	Key string
-	// KeyLabel describes Key for the user ("this exact command").
-	KeyLabel string
-	// Targets are what the action is on, for policies that match them (a
-	// worker's permissions): workspace-relative paths for file changes (a
-	// patch may touch several), the command, the URL's host, the search
-	// provider, or the MCP tool as "server:tool". Empty when nothing can
-	// match, which such policies refuse.
-	Targets []string
-	// MustAsk: an ask rule covers the action, so the user is asked even
-	// when a mode, an allow rule or a remembered approval would let it
-	// through (and refused where nobody can be asked).
-	MustAsk bool
-}
-
-// Decision is the user's answer to an approval request.
-type Decision int
-
-const (
-	DecisionDeny    Decision = iota
-	DecisionOnce             // allow this one action
-	DecisionSession          // allow actions with the same Key until exit
-	DecisionAlways           // allow actions with the same Key, persisted
-)
-
-func (d Decision) String() string {
-	switch d {
-	case DecisionOnce:
-		return "once"
-	case DecisionSession:
-		return "session"
-	case DecisionAlways:
-		return "always"
-	default:
-		return "deny"
-	}
-}
-
-// Approver asks the user to decide on a sensitive action.
-type Approver func(ctx context.Context, req ApprovalRequest) (Decision, error)
-
-// UserPromptFunc asks the user a question and returns the answer.
-type UserPromptFunc func(ctx context.Context, question string, options []string) (string, error)
 
 // InvokeAgentFunc runs a registered sub-agent with a prompt and returns its reply.
 type InvokeAgentFunc func(ctx context.Context, agentName, prompt string) (string, error)
@@ -84,7 +21,7 @@ type InvokeAgentFunc func(ctx context.Context, agentName, prompt string) (string
 type Policy struct {
 	// Mode is the permission mode ("" is ModeDefault). NewRegistry sets
 	// it from [blitz] permission_mode and auto_approve.
-	Mode                PermissionMode
+	Mode                api.PermissionMode
 	AutoApproveCommands bool // tools.auto_approve_commands
 }
 
@@ -96,8 +33,8 @@ var ErrNotApproved = errors.New("action not approved")
 type Hooks struct {
 	mu       sync.RWMutex
 	policy   Policy
-	approver Approver
-	prompter UserPromptFunc
+	approver api.Approver
+	prompter api.UserPromptFunc
 	invoker  InvokeAgentFunc
 	session  map[string]bool
 	store    *ApprovalStore
@@ -105,13 +42,13 @@ type Hooks struct {
 	rules    *PermissionRules
 	// permHook runs permission_request hooks; notify runs notification
 	// hooks (in the background). Nil: none.
-	permHook func(context.Context, ApprovalRequest) Outcome
+	permHook func(context.Context, api.ApprovalRequest) Outcome
 	notify   func(ctx context.Context, typ, message string)
 }
 
 // SetEventHooks connects the gate to permission_request and notification
 // hooks.
-func (h *Hooks) SetEventHooks(perm func(context.Context, ApprovalRequest) Outcome, notify func(ctx context.Context, typ, message string)) {
+func (h *Hooks) SetEventHooks(perm func(context.Context, api.ApprovalRequest) Outcome, notify func(ctx context.Context, typ, message string)) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.permHook, h.notify = perm, notify
@@ -144,13 +81,13 @@ func (h *Hooks) Rules() *PermissionRules {
 // NewHooks creates hooks with the given approval policy.
 func NewHooks(policy Policy) *Hooks { return &Hooks{policy: policy, session: map[string]bool{}} }
 
-func (h *Hooks) SetApprover(a Approver) {
+func (h *Hooks) SetApprover(a api.Approver) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.approver = a
 }
 
-func (h *Hooks) SetUserPrompter(p UserPromptFunc) {
+func (h *Hooks) SetUserPrompter(p api.UserPromptFunc) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.prompter = p
@@ -186,7 +123,7 @@ func (h *Hooks) Audit() *audit.Logger {
 	return h.audit
 }
 
-func (h *Hooks) userPrompter() UserPromptFunc {
+func (h *Hooks) userPrompter() api.UserPromptFunc {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 	return h.prompter
@@ -236,17 +173,17 @@ type unattendedKey struct{}
 // only to decide, bypassing auto-approval, remembered and saved rules and
 // the interactive approver, and nothing decided is remembered; questions to
 // the user are refused. The run gets exactly what decide permits.
-func Unattended(ctx context.Context, decide Approver) context.Context {
+func Unattended(ctx context.Context, decide api.Approver) context.Context {
 	return context.WithValue(ctx, unattendedKey{}, decide)
 }
 
 // isUnattended reports whether ctx is an unattended run.
 func isUnattended(ctx context.Context) bool {
-	_, ok := ctx.Value(unattendedKey{}).(Approver)
+	_, ok := ctx.Value(unattendedKey{}).(api.Approver)
 	return ok
 }
 
-func (h *Hooks) Approve(ctx context.Context, req ApprovalRequest) error {
+func (h *Hooks) Approve(ctx context.Context, req api.ApprovalRequest) error {
 	if h == nil {
 		return fmt.Errorf("%w: no approval hooks configured", ErrNotApproved)
 	}
@@ -262,13 +199,13 @@ func (h *Hooks) Approve(ctx context.Context, req ApprovalRequest) error {
 	}
 	mustAsk := req.MustAsk || effect == EffectAsk
 
-	if decide, ok := ctx.Value(unattendedKey{}).(Approver); ok {
+	if decide, ok := ctx.Value(unattendedKey{}).(api.Approver); ok {
 		if mustAsk { // an ask rule needs a person, and nobody is watching
 			h.Audit().Log(audit.Entry{Kind: audit.KindDenial, Tool: req.Tool, Detail: req.Detail, Decision: "unattended-refused"})
 			return fmt.Errorf("%w: %s needs to be asked about (an ask rule), and this run is unattended", ErrNotApproved, req.Detail)
 		}
 		decision, err := decide(ctx, req)
-		allowed := err == nil && decision != DecisionDeny
+		allowed := err == nil && decision != api.DecisionDeny
 		h.mu.RLock()
 		log := h.audit
 		h.mu.RUnlock()
@@ -293,7 +230,7 @@ func (h *Hooks) Approve(ctx context.Context, req ApprovalRequest) error {
 	}
 
 	switch {
-	case mustAsk && policy.Mode == ModeDontAsk:
+	case mustAsk && policy.Mode == api.ModeDontAsk:
 		record("mode-dont-ask")
 		return fmt.Errorf("%w: %s must be asked about (an ask rule), and the permission mode is dont-ask", ErrNotApproved, req.Tool)
 	case mustAsk:
@@ -302,10 +239,10 @@ func (h *Hooks) Approve(ctx context.Context, req ApprovalRequest) error {
 	case effect == EffectAllow:
 		record("rule-allow " + rule.String())
 		return nil
-	case policy.Mode == ModeBypass:
+	case policy.Mode == api.ModeBypass:
 		record("mode-bypass")
 		return nil
-	case req.Kind == ActionCommand && policy.AutoApproveCommands:
+	case req.Kind == api.ActionCommand && policy.AutoApproveCommands:
 		record("auto-policy")
 		return nil
 	case remembered:
@@ -314,11 +251,11 @@ func (h *Hooks) Approve(ctx context.Context, req ApprovalRequest) error {
 	case req.Key != "" && store.Has(req.Key):
 		record("saved-rule")
 		return nil
-	case policy.Mode == ModeAcceptEdits && (req.Kind == ActionWrite || req.Kind == ActionDelete):
+	case policy.Mode == api.ModeAcceptEdits && (req.Kind == api.ActionWrite || req.Kind == api.ActionDelete):
 		// The file tools resolved the paths as writable before asking.
 		record("mode-accept-edits")
 		return nil
-	case policy.Mode == ModeDontAsk:
+	case policy.Mode == api.ModeDontAsk:
 		record("mode-dont-ask")
 		return fmt.Errorf("%w: %s would need approval, and the permission mode is dont-ask", ErrNotApproved, req.Tool)
 	}
@@ -365,16 +302,16 @@ func (h *Hooks) Approve(ctx context.Context, req ApprovalRequest) error {
 	record(decision.String())
 
 	switch decision {
-	case DecisionOnce:
+	case api.DecisionOnce:
 		return nil
-	case DecisionSession, DecisionAlways:
+	case api.DecisionSession, api.DecisionAlways:
 		if req.Key == "" {
 			return nil
 		}
 		h.mu.Lock()
 		h.session[req.Key] = true
 		h.mu.Unlock()
-		if decision == DecisionAlways && store != nil {
+		if decision == api.DecisionAlways && store != nil {
 			if err := store.Add(req.Key, req.KeyLabel); err != nil {
 				return fmt.Errorf("approved, but saving the rule failed: %w", err)
 			}

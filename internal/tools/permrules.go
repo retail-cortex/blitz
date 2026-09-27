@@ -9,6 +9,8 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/retail-cortex/blitz/pkg/api"
+
 	"github.com/retail-cortex/blitz/internal/config"
 	"github.com/retail-cortex/blitz/internal/textutil"
 )
@@ -62,9 +64,6 @@ func (r PermissionRule) String() string {
 	return r.Kind + "(" + r.Pattern + ")"
 }
 
-// ErrBadRule reports a rule that can't be parsed.
-var ErrBadRule = errors.New("invalid permission rule")
-
 // ParsePermissionRule reads "kind(pattern)" or a bare tool name. "Bash"
 // and "Edit"/"Write" are accepted for shell and write, as Claude Code
 // spells them.
@@ -72,37 +71,37 @@ func ParsePermissionRule(effect Effect, text, source string) (PermissionRule, er
 	s := strings.TrimSpace(text)
 	r := PermissionRule{Effect: effect, Source: source}
 	if effect != EffectAllow && effect != EffectAsk && effect != EffectDeny {
-		return r, fmt.Errorf("%w: effect %q (allow, ask or deny)", ErrBadRule, effect)
+		return r, fmt.Errorf("%w: effect %q (allow, ask or deny)", api.ErrBadRule, effect)
 	}
 	open := strings.IndexByte(s, '(')
 	switch {
 	case s == "":
-		return r, fmt.Errorf("%w: empty", ErrBadRule)
+		return r, fmt.Errorf("%w: empty", api.ErrBadRule)
 	case open < 0:
 		if !validToolName.MatchString(s) {
-			return r, fmt.Errorf("%w %q: use kind(pattern) or a tool name", ErrBadRule, text)
+			return r, fmt.Errorf("%w %q: use kind(pattern) or a tool name", api.ErrBadRule, text)
 		}
 		r.Kind, r.Pattern = RuleTool, s
 		if k := kindAlias(s); k != "" { // "shell" alone means every command
 			r.Kind, r.Pattern = k, "*"
 		}
 	case !strings.HasSuffix(s, ")"):
-		return r, fmt.Errorf("%w %q: missing )", ErrBadRule, text)
+		return r, fmt.Errorf("%w %q: missing )", api.ErrBadRule, text)
 	default:
 		r.Kind = kindAlias(s[:open])
 		r.Pattern = strings.TrimSpace(s[open+1 : len(s)-1])
 		if r.Kind == "" {
-			return r, fmt.Errorf("%w %q: unknown kind %q (%s)", ErrBadRule, text, s[:open], strings.Join(ruleKinds, ", "))
+			return r, fmt.Errorf("%w %q: unknown kind %q (%s)", api.ErrBadRule, text, s[:open], strings.Join(ruleKinds, ", "))
 		}
 		if r.Pattern == "" {
-			return r, fmt.Errorf("%w %q: empty pattern", ErrBadRule, text)
+			return r, fmt.Errorf("%w %q: empty pattern", api.ErrBadRule, text)
 		}
 	}
 	if r.Kind == RuleRead && effect != EffectDeny {
-		return r, fmt.Errorf("%w %q: reading never asks, so only deny read(...) rules apply", ErrBadRule, text)
+		return r, fmt.Errorf("%w %q: reading never asks, so only deny read(...) rules apply", api.ErrBadRule, text)
 	}
 	if err := r.compile(); err != nil {
-		return r, fmt.Errorf("%w %q: %v", ErrBadRule, text, err)
+		return r, fmt.Errorf("%w %q: %v", api.ErrBadRule, text, err)
 	}
 	return r, nil
 }
@@ -357,20 +356,20 @@ func (p *PermissionRules) shellPatterns(effect Effect) []cmdPattern {
 }
 
 // ruleKind is the kind of rule that governs an approval request.
-func ruleKind(req ApprovalRequest) string {
+func ruleKind(req api.ApprovalRequest) string {
 	switch req.Kind {
-	case ActionWrite:
+	case api.ActionWrite:
 		return RuleWrite
-	case ActionDelete:
+	case api.ActionDelete:
 		return RuleDelete
-	case ActionMCP:
+	case api.ActionMCP:
 		return RuleMCP
-	case ActionNetwork:
+	case api.ActionNetwork:
 		if req.Tool == "web_search" {
 			return RuleSearch
 		}
 		return RuleWeb
-	case ActionCommand:
+	case api.ActionCommand:
 		return RuleShell
 	}
 	return ""

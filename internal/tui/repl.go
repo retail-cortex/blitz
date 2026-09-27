@@ -11,18 +11,17 @@ import (
 	"strings"
 	"sync"
 
-	core "github.com/retail-cortex/blitz/internal/app"
+	"github.com/retail-cortex/blitz/pkg/api"
+
 	"github.com/retail-cortex/blitz/internal/i18n"
 	"github.com/retail-cortex/blitz/internal/images"
-	"github.com/retail-cortex/blitz/internal/runtime"
-	"github.com/retail-cortex/blitz/internal/tools"
 )
 
 // App is the REPL's state: the workspace it drives and the terminal.
 type App struct {
 	// Workspace is the program behind the REPL: every command and turn goes
 	// through it. It runs here or in the Blitz service.
-	Workspace core.Backend
+	Workspace api.Backend
 	Version   string
 	Input     Input
 	// Printer configures output rendering.
@@ -155,7 +154,7 @@ func (p *Printer) flushText() {
 }
 
 // Handle renders a turn's event.
-func (p *Printer) Handle(ev core.Event) {
+func (p *Printer) Handle(ev api.Event) {
 	switch {
 	case ev.Text != nil:
 		if !ev.Text.Thought && !ev.Text.Repeat {
@@ -226,7 +225,7 @@ func RunREPL(ctx context.Context, app *App) error {
 	}
 	if pk, ok := app.Input.(interface{ SetPromptKeys(PromptKeys) }); ok {
 		// Shift+Tab reaches bypass only if the session started in it.
-		withBypass := app.Workspace.Settings().PermissionMode == string(tools.ModeBypass)
+		withBypass := app.Workspace.Settings().PermissionMode == string(api.ModeBypass)
 		pk.SetPromptKeys(PromptKeys{CycleMode: func() string {
 			if !cycleMode(app, withBypass) {
 				return ""
@@ -293,7 +292,7 @@ func RunREPL(ctx context.Context, app *App) error {
 				fmt.Printf("%s✗ %s%s\n", Red, i18n.T("session.none_active"), Reset)
 				continue
 			}
-			runTurn(ctx, app, active.ID, line, interrupts, turnOptions{prompt: runtime.InitPrompt()})
+			runTurn(ctx, app, active.ID, line, interrupts, turnOptions{prompt: api.InitPrompt()})
 			// The new BLITZ.md applies from the next prompt.
 			cmdMemory(ctx, []string{"reload"}, app)
 			continue
@@ -383,7 +382,7 @@ func runTurn(ctx context.Context, app *App, sessionID, line string, interrupts <
 		defer ih.SetInterruptHandler(nil)
 	}
 	stopSteering := func() {}
-	res, streamErr := app.Workspace.Run(turnCtx, sessionID, core.Turn{
+	res, streamErr := app.Workspace.Run(turnCtx, sessionID, api.Turn{
 		Text: line, Prompt: o.prompt, Plan: o.plan, ReadOnly: o.readOnly, Aside: o.aside, Accepted: o.accepted,
 		Images: attached, FetchGrants: o.grants, Command: o.command,
 		OnAccepted: func() {
@@ -408,7 +407,7 @@ func runTurn(ctx context.Context, app *App, sessionID, line string, interrupts <
 		// Waits for a message being typed, so it is sent rather than lost.
 		OnFinished: func() { stopSteering() },
 	}, printer.Handle)
-	var blocked *core.BlockedError
+	var blocked *api.BlockedError
 	if errors.As(streamErr, &blocked) {
 		fmt.Printf("%s✗ %s%s\n", Red, i18n.T("repl.prompt_blocked", "reason", safe(blocked.Reason)), Reset)
 		stopTurn()
@@ -468,7 +467,7 @@ func watchSteering(ctx context.Context, app *App, sessionID string, printer *Pri
 			fmt.Printf("%s%s%s\n", Dim, i18n.T("steer.cancelled"), Reset)
 			return
 		}
-		var blocked *core.BlockedError
+		var blocked *api.BlockedError
 		if err := app.Workspace.Steer(ctx, sessionID, text); errors.As(err, &blocked) {
 			fmt.Printf("%s✗ %s%s\n", Red, i18n.T("repl.prompt_blocked", "reason", safe(blocked.Reason)), Reset)
 			return
@@ -478,7 +477,7 @@ func watchSteering(ctx context.Context, app *App, sessionID string, printer *Pri
 }
 
 // UsageLine summarises a turn's usage: tokens in/out, context size and cost.
-func UsageLine(before, after runtime.Usage) string {
+func UsageLine(before, after api.Usage) string {
 	if after.Calls == before.Calls {
 		return ""
 	}

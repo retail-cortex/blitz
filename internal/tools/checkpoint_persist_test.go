@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/retail-cortex/blitz/pkg/api"
 )
 
 // reopen opens the workspace and its persisted checkpoints again, as a
@@ -149,7 +151,7 @@ func TestRewindChecksEveryFileFirst(t *testing.T) {
 	ws.WriteFileAtomic("b.txt", []byte("b1\n"))
 	os.WriteFile(filepath.Join(dir, "b.txt"), []byte("mine\n"), 0o644)
 
-	if _, err := cp.Rewind("s", 0, false); !errors.Is(err, ErrUndoConflict) || !strings.Contains(err.Error(), "b.txt") {
+	if _, err := cp.Rewind("s", 0, false); !errors.Is(err, api.ErrUndoConflict) || !strings.Contains(err.Error(), "b.txt") {
 		t.Fatalf("conflict: %v", err)
 	}
 	if got := readString(t, filepath.Join(dir, "a.txt")); got != "a1\n" {

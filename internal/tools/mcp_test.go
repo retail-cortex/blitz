@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/retail-cortex/blitz/pkg/api"
+
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/retail-cortex/blitz/internal/config"
 	"google.golang.org/adk/v2/model"
@@ -106,7 +108,7 @@ func TestRegistryApprovesMCPTools(t *testing.T) {
 		t.Fatalf("expected denied approval, got %v (%d prompts)", err, len(*reqs))
 	}
 	req := (*reqs)[0]
-	if req.Kind != ActionMCP || req.Key != "mcp:gh:create_issue" || !strings.Contains(req.Detail, "title=bug") {
+	if req.Kind != api.ActionMCP || req.Key != "mcp:gh:create_issue" || !strings.Contains(req.Detail, "title=bug") {
 		t.Errorf("approval request %+v", req)
 	}
 	// Non-MCP tools pass straight through.

@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/retail-cortex/blitz/pkg/api"
+
 	"github.com/retail-cortex/blitz/internal/config"
 	cpsession "github.com/retail-cortex/blitz/internal/session"
 	"google.golang.org/genai"
@@ -77,11 +79,11 @@ func TestCompactReplacesOldTurns(t *testing.T) {
 
 func TestCompactNothingToDoAndEmptySummary(t *testing.T) {
 	f := newEngineWith(t, fixtureOpts{}, textContent("only"), textContent("two"), textContent(""), textContent("three"))
-	if _, err := f.eng.Compact(context.Background(), "missing", "", 1); !errors.Is(err, ErrNothingToCompact) {
+	if _, err := f.eng.Compact(context.Background(), "missing", "", 1); !errors.Is(err, api.ErrNothingToCompact) {
 		t.Errorf("unknown session: %v", err)
 	}
 	runTurns(t, f.eng, "s", "first")
-	if _, err := f.eng.Compact(context.Background(), "s", "", 1); !errors.Is(err, ErrNothingToCompact) {
+	if _, err := f.eng.Compact(context.Background(), "s", "", 1); !errors.Is(err, api.ErrNothingToCompact) {
 		t.Errorf("single turn: %v", err)
 	}
 	runTurns(t, f.eng, "s", "second")

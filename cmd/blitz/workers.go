@@ -10,28 +10,29 @@ import (
 	"strings"
 	"time"
 
+	"github.com/retail-cortex/blitz/pkg/api"
+
 	"github.com/retail-cortex/blitz/internal/app"
 	"github.com/retail-cortex/blitz/internal/client"
 	"github.com/retail-cortex/blitz/internal/config"
 	"github.com/retail-cortex/blitz/internal/server"
 	"github.com/retail-cortex/blitz/internal/tui"
-	"github.com/retail-cortex/blitz/internal/workers"
 	"github.com/spf13/cobra"
 )
 
 // workerOps are a workspace's workers, in the service or in this process.
 type workerOps interface {
-	ListWorkers() ([]app.WorkerInfo, error)
-	EnableWorker(name, hash string) (app.WorkerInfo, error)
-	DisableWorker(name string) (app.WorkerInfo, error)
-	RunWorker(ctx context.Context, name string, on func(app.Event)) (workers.Run, error)
-	WorkerRuns(name string, limit int) ([]workers.Run, error)
+	ListWorkers() ([]api.WorkerInfo, error)
+	EnableWorker(name, hash string) (api.WorkerInfo, error)
+	DisableWorker(name string) (api.WorkerInfo, error)
+	RunWorker(ctx context.Context, name string, on func(api.Event)) (api.Run, error)
+	WorkerRuns(name string, limit int) ([]api.Run, error)
 }
 
 // localWorkers runs workers in this process, when the service isn't running.
 type localWorkers struct{ *app.Workspace }
 
-func (l localWorkers) RunWorker(ctx context.Context, name string, on func(app.Event)) (workers.Run, error) {
+func (l localWorkers) RunWorker(ctx context.Context, name string, on func(api.Event)) (api.Run, error) {
 	return l.Workspace.RunWorker(ctx, name, app.RunOptions{Manual: true, OnEvent: on})
 }
 
@@ -130,7 +131,7 @@ func workersList(cmd *cobra.Command, g *globalFlags) error {
 }
 
 // describeWorker prints what enabling a worker approves.
-func describeWorker(out io.Writer, w app.WorkerInfo) {
+func describeWorker(out io.Writer, w api.WorkerInfo) {
 	fmt.Fprintf(out, "%s  (%s)\n", w.Name, w.Path)
 	if w.Description != "" {
 		fmt.Fprintf(out, "  %s\n", w.Description)
@@ -154,13 +155,13 @@ func describeWorker(out io.Writer, w app.WorkerInfo) {
 	fmt.Fprintf(out, "  content:     %s\n", w.Hash)
 }
 
-func findWorker(list []app.WorkerInfo, name string) (app.WorkerInfo, bool) {
+func findWorker(list []api.WorkerInfo, name string) (api.WorkerInfo, bool) {
 	for _, w := range list {
 		if w.Name == name {
 			return w, true
 		}
 	}
-	return app.WorkerInfo{}, false
+	return api.WorkerInfo{}, false
 }
 
 func workersEnable(cmd *cobra.Command, g *globalFlags, name string, yes bool) error {
@@ -177,7 +178,7 @@ func workersEnable(cmd *cobra.Command, g *globalFlags, name string, yes bool) er
 	if !found {
 		return withCode(exitUsage, fmt.Errorf("no worker %q (see 'blitz workers')", name))
 	}
-	if w.State == workers.StateInvalid {
+	if w.State == api.StateInvalid {
 		describeWorker(cmd.OutOrStdout(), w)
 		return withCode(exitUsage, fmt.Errorf("worker %q can't be enabled until WORKER.md is fixed", name))
 	}
@@ -234,7 +235,7 @@ func workersRun(cmd *cobra.Command, g *globalFlags, name string) error {
 	}
 	fmt.Fprintln(out)
 	printRun(out, run)
-	if run.Status != workers.RunSucceeded {
+	if run.Status != api.RunSucceeded {
 		return withCode(exitFailure, fmt.Errorf("the run %s", run.Status))
 	}
 	return nil
@@ -259,7 +260,7 @@ func workersRuns(cmd *cobra.Command, g *globalFlags, name string, limit int) err
 	return nil
 }
 
-func printRun(out io.Writer, r workers.Run) {
+func printRun(out io.Writer, r api.Run) {
 	how := "scheduled"
 	if r.Manual {
 		how = "manual"
@@ -277,7 +278,7 @@ func printRun(out io.Writer, r workers.Run) {
 // workerErr gives worker errors the usage exit code where the request,
 // not the system, was at fault.
 func workerErr(err error) error {
-	for _, e := range []error{app.ErrUnknownWorker, app.ErrWorkerNotEnabled, app.ErrRunInProgress, app.ErrWorkersDisabled, workers.ErrHashMismatch} {
+	for _, e := range []error{api.ErrUnknownWorker, api.ErrWorkerNotEnabled, api.ErrRunInProgress, api.ErrWorkersDisabled, api.ErrHashMismatch} {
 		if errors.Is(err, e) {
 			return withCode(exitUsage, err)
 		}

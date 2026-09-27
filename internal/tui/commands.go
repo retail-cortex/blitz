@@ -6,7 +6,8 @@ import (
 	"fmt"
 	"strings"
 
-	core "github.com/retail-cortex/blitz/internal/app"
+	"github.com/retail-cortex/blitz/pkg/api"
+
 	"github.com/retail-cortex/blitz/internal/i18n"
 )
 
@@ -114,9 +115,9 @@ func HandleCommand(ctx context.Context, input string, app *App) (bool, error) {
 		}
 		v := strings.TrimSpace(kv[1])
 		k, err := app.Workspace.Set(ctx, kv[0], v)
-		var unknown *core.UnknownSettingError
+		var unknown *api.UnknownSettingError
 		switch {
-		case errors.Is(err, core.ErrInvalidAgency):
+		case errors.Is(err, api.ErrInvalidAgency):
 			fmt.Printf("%s%s%s\n", Yellow, i18n.T("set.agency_invalid"), Reset)
 		case errors.As(err, &unknown):
 			fmt.Printf("%s%s%s\n", Yellow, i18n.T("set.unknown", "key", safe(unknown.Key)), Reset)

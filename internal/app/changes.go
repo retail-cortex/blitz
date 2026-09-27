@@ -4,47 +4,29 @@ import (
 	"context"
 	"os/exec"
 	"strings"
-	"time"
+
+	"github.com/retail-cortex/blitz/pkg/api"
 
 	"github.com/retail-cortex/blitz/internal/audit"
-	"github.com/retail-cortex/blitz/internal/tools"
 )
 
 // Checkpoints of the agent's file changes, and the approvals it was given.
 
-// Checkpoint is the files one turn changed, which Undo restores.
-type Checkpoint struct {
-	ID    int
-	Label string // the prompt that started the turn, shortened
-	Time  time.Time
-	Files []string
-}
-
 // ListCheckpoints returns the turns that changed files, newest first.
-func (w *Workspace) ListCheckpoints() []Checkpoint {
-	var out []Checkpoint
+func (w *Workspace) ListCheckpoints() []api.Checkpoint {
+	var out []api.Checkpoint
 	for _, c := range w.tools.Checkpoints().List() {
-		out = append(out, Checkpoint{ID: c.ID, Label: c.Label, Time: c.Time, Files: c.Files})
+		out = append(out, api.Checkpoint{ID: c.ID, Label: c.Label, Time: c.Time, Files: c.Files})
 	}
 	return out
-}
-
-// ErrUndoConflict reports files changed since the agent's edit; Undo with
-// force restores them anyway.
-var ErrUndoConflict = tools.ErrUndoConflict
-
-// UndoResult is what Undo restored.
-type UndoResult struct {
-	Label    string // the undone turn's checkpoint label
-	Restored []string
 }
 
 // Undo restores the files the latest turn with changes modified, and
 // audits it. A partial restore returns both what was restored and why the
 // rest wasn't.
-func (w *Workspace) Undo(force bool) (UndoResult, error) {
+func (w *Workspace) Undo(force bool) (api.UndoResult, error) {
 	res, err := w.tools.Checkpoints().Undo(force)
-	out := UndoResult{Label: res.Turn.Label, Restored: res.Restored}
+	out := api.UndoResult{Label: res.Turn.Label, Restored: res.Restored}
 	if len(res.Restored) > 0 {
 		w.tools.Hooks().Audit().Log(audit.Entry{Kind: audit.KindUndo, Detail: strings.Join(res.Restored, ", ")})
 	}
@@ -101,29 +83,11 @@ func noFilters(ctx context.Context, dir string) []string {
 	return args
 }
 
-// Approval is a standing permission: actions it covers run without asking.
-type Approval struct {
-	// Key identifies the approval, for RevokeApprovals.
-	Key string
-	// Kind is what it allows: "cmd" (a shell command), "write", "delete",
-	// "web" (a host), "mcp" (an MCP tool), "uc-run" (a forged tool), or
-	// another kind a newer version added.
-	Kind string
-	// Subject is the command, path, host or tool.
-	Subject string
-	// Dir is the workspace a command approval is limited to ("" if any).
-	Dir string
-	// Always: saved for future sessions (Added says when); otherwise it
-	// lasts until this process exits.
-	Always bool
-	Added  time.Time
-}
-
-func parseApproval(key string) Approval {
-	a := Approval{Key: key}
+func parseApproval(key string) api.Approval {
+	a := api.Approval{Key: key}
 	kind, rest, ok := strings.Cut(key, ":")
 	if !ok {
-		return Approval{Key: key, Subject: key}
+		return api.Approval{Key: key, Subject: key}
 	}
 	a.Kind, a.Subject = kind, rest
 	switch kind {
@@ -138,9 +102,9 @@ func parseApproval(key string) Approval {
 }
 
 // ListApprovals returns this session's approvals, then saved ones.
-func (w *Workspace) ListApprovals() []Approval {
+func (w *Workspace) ListApprovals() []api.Approval {
 	hooks := w.tools.Hooks()
-	var out []Approval
+	var out []api.Approval
 	for _, k := range hooks.SessionRules() {
 		out = append(out, parseApproval(k))
 	}

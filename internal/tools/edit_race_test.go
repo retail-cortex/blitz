@@ -8,6 +8,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/retail-cortex/blitz/pkg/api"
 )
 
 // barrierHooks approves every request, but holds the first approval until a
@@ -19,14 +21,14 @@ func barrierHooks(wait time.Duration) *Hooks {
 	seen := 0
 	second := make(chan struct{})
 	h := NewHooks(Policy{})
-	h.SetApprover(func(ctx context.Context, req ApprovalRequest) (Decision, error) {
+	h.SetApprover(func(ctx context.Context, req api.ApprovalRequest) (api.Decision, error) {
 		mu.Lock()
 		seen++
 		n := seen
 		mu.Unlock()
 		if n == 2 {
 			close(second)
-			return DecisionOnce, nil
+			return api.DecisionOnce, nil
 		}
 		if n == 1 {
 			select {
@@ -34,7 +36,7 @@ func barrierHooks(wait time.Duration) *Hooks {
 			case <-time.After(wait):
 			}
 		}
-		return DecisionOnce, nil
+		return api.DecisionOnce, nil
 	})
 	return h
 }
@@ -109,9 +111,9 @@ func TestEditRefusesWhenFileChangedDuringApproval(t *testing.T) {
 	writeFile(t, path, "hello\n")
 
 	h := NewHooks(Policy{})
-	h.SetApprover(func(ctx context.Context, req ApprovalRequest) (Decision, error) {
+	h.SetApprover(func(ctx context.Context, req api.ApprovalRequest) (api.Decision, error) {
 		writeFile(t, path, "hello\nuser line\n")
-		return DecisionOnce, nil
+		return api.DecisionOnce, nil
 	})
 
 	cases := map[string]func() map[string]any{

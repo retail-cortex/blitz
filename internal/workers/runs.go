@@ -15,48 +15,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/retail-cortex/blitz/internal/tools"
+	"github.com/retail-cortex/blitz/pkg/api"
 )
-
-// RunStatus is where a run stands.
-type RunStatus string
-
-const (
-	RunRunning   RunStatus = "running"
-	RunSucceeded RunStatus = "succeeded"
-	RunFailed    RunStatus = "failed"
-	// RunLimited: stopped at a limit (turns, cost or time).
-	RunLimited RunStatus = "limited"
-	// RunSkipped: not started, because the previous run was still going.
-	RunSkipped RunStatus = "skipped"
-)
-
-// Refusal is an action a run wasn't permitted.
-type Refusal struct {
-	Tool   string           `json:"tool"`
-	Kind   tools.ActionKind `json:"kind"`
-	Detail string           `json:"detail"`
-	Time   time.Time        `json:"time"`
-}
-
-// Run is one run of a worker.
-type Run struct {
-	ID        string    `json:"id"`
-	Workspace string    `json:"workspace"`
-	Worker    string    `json:"worker"`
-	Hash      string    `json:"hash"`
-	Status    RunStatus `json:"status"`
-	// Manual: started on request, not by the schedule.
-	Manual    bool          `json:"manual,omitempty"`
-	Started   time.Time     `json:"started"`
-	Duration  time.Duration `json:"duration"`
-	CostUSD   float64       `json:"cost_usd"`
-	Calls     int           `json:"calls"`
-	SessionID string        `json:"session_id,omitempty"`
-	Refusals  []Refusal     `json:"refusals,omitempty"`
-	// Error is why the run failed or stopped.
-	Error string `json:"error,omitempty"`
-}
 
 // RunLog keeps finished runs, one JSON line each, in a file per worker.
 type RunLog struct {
@@ -78,7 +38,7 @@ func (l *RunLog) file(workspace, worker string) (string, error) {
 }
 
 // Append records a finished run.
-func (l *RunLog) Append(r Run) error {
+func (l *RunLog) Append(r api.Run) error {
 	data, err := json.Marshal(r)
 	if err != nil {
 		return err
@@ -102,7 +62,7 @@ func (l *RunLog) Append(r Run) error {
 }
 
 // List returns a worker's runs, newest first, at most limit (0: all).
-func (l *RunLog) List(workspace, worker string, limit int) ([]Run, error) {
+func (l *RunLog) List(workspace, worker string, limit int) ([]api.Run, error) {
 	name, err := l.file(workspace, worker)
 	if err != nil {
 		return nil, err
@@ -118,15 +78,15 @@ func (l *RunLog) List(workspace, worker string, limit int) ([]Run, error) {
 }
 
 // Get finds a run by ID.
-func (l *RunLog) Get(id string) (Run, bool, error) {
+func (l *RunLog) Get(id string) (api.Run, bool, error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	entries, err := os.ReadDir(l.dir)
 	if errors.Is(err, fs.ErrNotExist) {
-		return Run{}, false, nil
+		return api.Run{}, false, nil
 	}
 	if err != nil {
-		return Run{}, false, err
+		return api.Run{}, false, err
 	}
 	for _, e := range entries {
 		if !strings.HasSuffix(e.Name(), ".jsonl") {
@@ -134,7 +94,7 @@ func (l *RunLog) Get(id string) (Run, bool, error) {
 		}
 		runs, err := readRuns(filepath.Join(l.dir, e.Name()))
 		if err != nil {
-			return Run{}, false, err
+			return api.Run{}, false, err
 		}
 		for _, r := range runs {
 			if r.ID == id {
@@ -142,7 +102,7 @@ func (l *RunLog) Get(id string) (Run, bool, error) {
 			}
 		}
 	}
-	return Run{}, false, nil
+	return api.Run{}, false, nil
 }
 
 // Last is the start of a worker's latest run (zero if none).
@@ -154,7 +114,7 @@ func (l *RunLog) Last(workspace, worker string) time.Time {
 	return runs[0].Started
 }
 
-func readRuns(path string) ([]Run, error) {
+func readRuns(path string) ([]api.Run, error) {
 	f, err := os.Open(path)
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil, nil
@@ -163,11 +123,11 @@ func readRuns(path string) ([]Run, error) {
 		return nil, err
 	}
 	defer f.Close()
-	var out []Run
+	var out []api.Run
 	sc := bufio.NewScanner(f)
 	sc.Buffer(make([]byte, 0, 64<<10), 4<<20)
 	for sc.Scan() {
-		var r Run
+		var r api.Run
 		if json.Unmarshal(sc.Bytes(), &r) == nil {
 			out = append(out, r) // a torn last line is skipped
 		}

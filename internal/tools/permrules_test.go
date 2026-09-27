@@ -10,6 +10,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/retail-cortex/blitz/pkg/api"
+
 	"github.com/retail-cortex/blitz/internal/config"
 	"google.golang.org/adk/v2/tool"
 )
@@ -35,7 +37,7 @@ func TestParsePermissionRule(t *testing.T) {
 		}
 	}
 	for _, bad := range []string{"", "nope(x)", "shell()", "shell(x", "1tool", "bad name"} {
-		if _, err := ParsePermissionRule(EffectDeny, bad, "t"); !errors.Is(err, ErrBadRule) {
+		if _, err := ParsePermissionRule(EffectDeny, bad, "t"); !errors.Is(err, api.ErrBadRule) {
 			t.Errorf("%q should be invalid: %v", bad, err)
 		}
 	}
@@ -81,25 +83,28 @@ func TestRulesDecide(t *testing.T) {
 }
 
 func TestRulesAtTheGate(t *testing.T) {
-	write := func(p string) ApprovalRequest {
-		return ApprovalRequest{Tool: "create_file", Kind: ActionWrite, Detail: "Create " + p, Key: "write:/ws", Targets: []string{p}}
+	write := func(p string) api.ApprovalRequest {
+		return api.ApprovalRequest{Tool: "create_file", Kind: api.ActionWrite, Detail: "Create " + p, Key: "write:/ws", Targets: []string{p}}
 	}
 	rules := rulesOf(t, []string{"write(docs/**)"}, []string{"write(ci/**)"}, []string{"write(**/*.pem)"})
 
 	// deny wins even in bypass mode, and for unattended runs.
-	h := NewHooks(Policy{Mode: ModeBypass})
+	h := NewHooks(Policy{Mode: api.ModeBypass})
 	h.SetRules(rules)
 	if err := h.Approve(context.Background(), write("k.pem")); err == nil || !strings.Contains(err.Error(), "deny write(**/*.pem)") {
 		t.Errorf("deny in bypass: %v", err)
 	}
-	permitAll := func(context.Context, ApprovalRequest) (Decision, error) { return DecisionOnce, nil }
+	permitAll := func(context.Context, api.ApprovalRequest) (api.Decision, error) { return api.DecisionOnce, nil }
 	if err := h.Approve(Unattended(context.Background(), permitAll), write("k.pem")); err == nil {
 		t.Error("deny rule let an unattended run through")
 	}
 
 	// ask asks even in bypass mode and after "always"; in dont-ask it refuses.
 	asked := 0
-	h.SetApprover(func(context.Context, ApprovalRequest) (Decision, error) { asked++; return DecisionSession, nil })
+	h.SetApprover(func(context.Context, api.ApprovalRequest) (api.Decision, error) {
+		asked++
+		return api.DecisionSession, nil
+	})
 	for range 2 {
 		if err := h.Approve(context.Background(), write("ci/deploy.yml")); err != nil {
 			t.Fatal(err)
@@ -108,7 +113,7 @@ func TestRulesAtTheGate(t *testing.T) {
 	if asked != 2 {
 		t.Errorf("ask rule asked %d times, want 2", asked)
 	}
-	dontAsk := NewHooks(Policy{Mode: ModeDontAsk})
+	dontAsk := NewHooks(Policy{Mode: api.ModeDontAsk})
 	dontAsk.SetRules(rules)
 	if err := dontAsk.Approve(context.Background(), write("ci/x")); err == nil {
 		t.Error("dont-ask let an ask-rule action through")
@@ -124,7 +129,7 @@ func TestRulesAtTheGate(t *testing.T) {
 	if err := def.Approve(context.Background(), write("docs/a.md")); err != nil || len(*reqs) != 0 {
 		t.Errorf("allow rule: %v, %d prompts", err, len(*reqs))
 	}
-	denyAll := func(context.Context, ApprovalRequest) (Decision, error) { return DecisionDeny, nil }
+	denyAll := func(context.Context, api.ApprovalRequest) (api.Decision, error) { return api.DecisionDeny, nil }
 	if err := def.Approve(Unattended(context.Background(), denyAll), write("docs/a.md")); err == nil {
 		t.Error("an allow rule widened an unattended run")
 	}

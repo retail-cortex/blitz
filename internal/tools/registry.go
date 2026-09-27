@@ -12,6 +12,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/retail-cortex/blitz/pkg/api"
+
 	"github.com/retail-cortex/blitz/internal/agents"
 	"github.com/retail-cortex/blitz/internal/audit"
 	"github.com/retail-cortex/blitz/internal/config"
@@ -106,17 +108,17 @@ func NewRegistry(cfg *config.Config, agentReg *agents.Registry, skillProv *skill
 	// The starting permission mode: [blitz] permission_mode, or bypass for
 	// the older auto_approve = true. Bypass needs the OS sandbox; without
 	// it the session starts in default mode and says why.
-	mode, err := ParsePermissionMode(cfg.Blitz.PermissionMode)
+	mode, err := api.ParsePermissionMode(cfg.Blitz.PermissionMode)
 	if err != nil {
 		ws.Close()
 		return nil, fmt.Errorf("blitz.permission_mode: %w", err)
 	}
-	if cfg.Blitz.AutoApprove && mode == ModeDefault {
-		mode = ModeBypass
+	if cfg.Blitz.AutoApprove && mode == api.ModeDefault {
+		mode = api.ModeBypass
 	}
 	var modeNote error
-	if mode == ModeBypass && !osb.Active() {
-		mode, modeNote = ModeDefault, ErrBypassNeedsSandbox
+	if mode == api.ModeBypass && !osb.Active() {
+		mode, modeNote = api.ModeDefault, api.ErrBypassNeedsSandbox
 	}
 
 	r := &Registry{
@@ -290,7 +292,7 @@ func NewRegistry(cfg *config.Config, agentReg *agents.Registry, skillProv *skill
 	}
 	scripts := r.scripts
 	r.hooks.SetEventHooks(
-		func(ctx context.Context, req ApprovalRequest) Outcome {
+		func(ctx context.Context, req api.ApprovalRequest) Outcome {
 			return scripts.Run(ctx, "permission_request", req.Tool, HookEvent{
 				Tool: req.Tool, Kind: string(req.Kind), Detail: req.Detail, Targets: req.Targets,
 			})

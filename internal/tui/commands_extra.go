@@ -8,7 +8,8 @@ import (
 	"strconv"
 	"strings"
 
-	core "github.com/retail-cortex/blitz/internal/app"
+	"github.com/retail-cortex/blitz/pkg/api"
+
 	"github.com/retail-cortex/blitz/internal/i18n"
 	"github.com/retail-cortex/blitz/internal/textutil"
 )
@@ -75,7 +76,7 @@ func handleExtraCommand(ctx context.Context, cmd string, args []string, app *App
 func cmdUndo(args []string, app *App) {
 	force := len(args) > 0 && (args[0] == "--force" || args[0] == "-f")
 	res, err := app.Workspace.Undo(force)
-	if errors.Is(err, core.ErrUndoConflict) {
+	if errors.Is(err, api.ErrUndoConflict) {
 		fmt.Printf("%s!  %v%s\n", Yellow, err, Reset)
 		return
 	}
@@ -165,7 +166,7 @@ func cmdCompact(ctx context.Context, args []string, app *App) {
 	fmt.Printf("%s%s%s\n", Dim, i18n.T("compact.running"), Reset)
 	res, err := app.Workspace.Compact(ctx, strings.Join(args, " "))
 	if err != nil {
-		if errors.Is(err, core.ErrNothingToCompact) {
+		if errors.Is(err, api.ErrNothingToCompact) {
 			fmt.Printf("%s%v%s\n", Yellow, err, Reset)
 			return
 		}
@@ -243,7 +244,7 @@ func cmdApprovals(args []string, app *App) {
 }
 
 // describeApproval says what an approval allows, for people.
-func describeApproval(a core.Approval) string {
+func describeApproval(a api.Approval) string {
 	switch a.Kind {
 	case "cmd":
 		if a.Dir != "" {
@@ -332,7 +333,7 @@ func cmdUnpin(ctx context.Context, args []string, app *App) {
 
 // printPinError reports a failed pin or unpin, if err is one.
 func printPinError(err error) bool {
-	var unknown *core.UnknownAgentError
+	var unknown *api.UnknownAgentError
 	switch {
 	case errors.As(err, &unknown):
 		fmt.Printf("%s✗ %s%s\n", Red, i18n.T("pin.unknown_agent", "agent", safe(unknown.Name)), Reset)
@@ -346,7 +347,7 @@ func printPinError(err error) bool {
 
 // printSaved reports where a change was saved in the config file, or why it
 // wasn't.
-func printSaved(s core.Saved) {
+func printSaved(s api.Saved) {
 	if s.Err != nil {
 		fmt.Printf("%s!  %s%s\n", Yellow, i18n.T("pin.save_failed", "error", safe(s.Err.Error())), Reset)
 	} else {
@@ -427,7 +428,7 @@ func cmdRename(args []string, app *App) {
 
 // sessionTitle is a session's title, or a placeholder until its first
 // prompt names it.
-func sessionTitle(s core.SessionInfo) string {
+func sessionTitle(s api.SessionInfo) string {
 	if s.Title == "" {
 		return i18n.T("session.untitled")
 	}
@@ -446,9 +447,9 @@ func cmdSessionSave(args []string, app *App) {
 	name := args[0]
 	s, err := app.Workspace.SaveSnapshot(name, force)
 	switch {
-	case errors.Is(err, core.ErrNoActiveSession):
+	case errors.Is(err, api.ErrNoActiveSession):
 		fmt.Println(i18n.T("session.none_active"))
-	case errors.Is(err, core.ErrSnapshotNameTaken):
+	case errors.Is(err, api.ErrSnapshotNameTaken):
 		fmt.Printf("%s!  %s%s\n", Yellow, i18n.T("snapshot.taken", "name", safe(name)), Reset)
 	case err != nil:
 		fmt.Printf("%s✗ %s%s\n", Red, i18n.T("snapshot.failed", "error", safe(err.Error())), Reset)
@@ -458,7 +459,7 @@ func cmdSessionSave(args []string, app *App) {
 }
 
 // PrintRecap shows the last n messages of a resumed session.
-func PrintRecap(msgs []core.Message, n int) {
+func PrintRecap(msgs []api.Message, n int) {
 	if len(msgs) > n {
 		msgs = msgs[len(msgs)-n:]
 	}

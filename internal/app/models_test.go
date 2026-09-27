@@ -5,6 +5,8 @@ import (
 	"errors"
 	"slices"
 	"testing"
+
+	"github.com/retail-cortex/blitz/pkg/api"
 )
 
 func TestAgentsAndModel(t *testing.T) {
@@ -13,7 +15,7 @@ func TestAgentsAndModel(t *testing.T) {
 	if a := w.ActiveAgent(); a.Name != "blitz" || !a.Active || a.DisplayName == "" {
 		t.Fatalf("active agent %+v", a)
 	}
-	if i := slices.IndexFunc(w.ListAgents(), func(a AgentInfo) bool { return a.Name == "qa" }); i < 0 {
+	if i := slices.IndexFunc(w.ListAgents(), func(a api.AgentInfo) bool { return a.Name == "qa" }); i < 0 {
 		t.Fatal("qa not listed")
 	}
 	if _, err := w.SetAgent(ctx, "nobody"); err == nil {
@@ -41,7 +43,7 @@ func TestAgentsAndModel(t *testing.T) {
 func TestPinAndUnpinSaveToTheConfigFile(t *testing.T) {
 	w := openTest(t)
 	ctx := context.Background()
-	var unknown *UnknownAgentError
+	var unknown *api.UnknownAgentError
 	if _, err := w.PinModel(ctx, "nobody", "x"); !errors.As(err, &unknown) || unknown.Name != "nobody" {
 		t.Fatalf("unknown agent: %v", err)
 	}
@@ -52,7 +54,7 @@ func TestPinAndUnpinSaveToTheConfigFile(t *testing.T) {
 	if got := savedConfig(t).AgentModels["qa"]; got != "anthropic/claude-haiku-4-5" {
 		t.Errorf("saved pin %q", got)
 	}
-	if a := w.ListAgents()[slices.IndexFunc(w.ListAgents(), func(a AgentInfo) bool { return a.Name == "qa" })]; a.PinnedModel != "claude-haiku-4-5" {
+	if a := w.ListAgents()[slices.IndexFunc(w.ListAgents(), func(a api.AgentInfo) bool { return a.Name == "qa" })]; a.PinnedModel != "claude-haiku-4-5" {
 		t.Errorf("listed pin %q", a.PinnedModel)
 	}
 	if res, err = w.Unpin(ctx, "qa"); err != nil || res.Model != "gemini-3.8-flash" {
@@ -66,16 +68,16 @@ func TestPinAndUnpinSaveToTheConfigFile(t *testing.T) {
 func TestUpdateModelSettings(t *testing.T) {
 	w := openTest(t)
 	w.Config().LLM.Provider = "openai"
-	if _, err := w.UpdateModelSettings("temperature=1", false, nil); !errors.Is(err, ErrBadModelRef) {
+	if _, err := w.UpdateModelSettings("temperature=1", false, nil); !errors.Is(err, api.ErrBadModelRef) {
 		t.Errorf("bad ref: %v", err)
 	}
-	res, err := w.UpdateModelSettings("openai/gpt-5", false, []Setting{{"temperature", "0.3"}, {"seed", "7"}})
+	res, err := w.UpdateModelSettings("openai/gpt-5", false, []api.Setting{{Key: "temperature", Value: "0.3"}, {Key: "seed", Value: "7"}})
 	if err != nil || res.Model != "gpt-5" || !slices.Equal(res.Unsupported, []string{"seed"}) || res.Saved.Err != nil {
 		t.Fatalf("update: %+v %v", res, err)
 	}
 	// An invalid value changes nothing, including the valid change before it.
-	var invalid *InvalidSettingError
-	if _, err := w.UpdateModelSettings("gpt-5", false, []Setting{{"top_p", "0.5"}, {"temperature", "9"}}); !errors.As(err, &invalid) {
+	var invalid *api.InvalidSettingError
+	if _, err := w.UpdateModelSettings("gpt-5", false, []api.Setting{{Key: "top_p", Value: "0.5"}, {Key: "temperature", Value: "9"}}); !errors.As(err, &invalid) {
 		t.Errorf("invalid: %v", err)
 	}
 	if s := savedConfig(t).ModelSettings["gpt-5"]; s.TopP != nil || s.Seed == nil || *s.Seed != 7 {
@@ -93,10 +95,10 @@ func TestUpdateModelSettings(t *testing.T) {
 func TestSetChangesSettings(t *testing.T) {
 	w := openTest(t)
 	ctx := context.Background()
-	if _, err := w.Set(ctx, "agency", "reckless"); !errors.Is(err, ErrInvalidAgency) {
+	if _, err := w.Set(ctx, "agency", "reckless"); !errors.Is(err, api.ErrInvalidAgency) {
 		t.Errorf("agency: %v", err)
 	}
-	var unknown *UnknownSettingError
+	var unknown *api.UnknownSettingError
 	if _, err := w.Set(ctx, "Colour", "blue"); !errors.As(err, &unknown) || unknown.Key != "colour" {
 		t.Errorf("unknown: %v", err)
 	}
@@ -114,7 +116,7 @@ func TestSetEffort(t *testing.T) {
 	if key, err := w.Set(ctx, "reasoning_effort", "XHigh"); err != nil || key != "effort" || w.Settings().Effort != "max" {
 		t.Fatalf("set: %q %v %q", key, err, w.Settings().Effort)
 	}
-	var invalid *InvalidSettingError
+	var invalid *api.InvalidSettingError
 	if _, err := w.Set(ctx, "effort", "extreme"); !errors.As(err, &invalid) || w.Settings().Effort != "max" {
 		t.Errorf("invalid: %v, effort %q", err, w.Settings().Effort)
 	}

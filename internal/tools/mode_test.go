@@ -6,28 +6,30 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/retail-cortex/blitz/pkg/api"
+
 	"github.com/retail-cortex/blitz/internal/config"
 )
 
 func TestPermissionModesAtTheGate(t *testing.T) {
-	write := ApprovalRequest{Tool: "create_file", Kind: ActionWrite, Detail: "Create a", Key: "write:/ws", Targets: []string{"a"}}
-	del := ApprovalRequest{Tool: "delete_file", Kind: ActionDelete, Detail: "Delete a", Key: "delete:/ws", Targets: []string{"a"}}
-	cmd := ApprovalRequest{Tool: "run_shell_command", Kind: ActionCommand, Detail: "ls", Key: "cmd:/ws\x00ls", Targets: []string{"ls"}}
-	web := ApprovalRequest{Tool: "web_fetch", Kind: ActionNetwork, Detail: "GET x", Key: "web:x", Targets: []string{"x"}}
-	allowed := func(h *Hooks, req ApprovalRequest) bool { return h.Approve(context.Background(), req) == nil }
+	write := api.ApprovalRequest{Tool: "create_file", Kind: api.ActionWrite, Detail: "Create a", Key: "write:/ws", Targets: []string{"a"}}
+	del := api.ApprovalRequest{Tool: "delete_file", Kind: api.ActionDelete, Detail: "Delete a", Key: "delete:/ws", Targets: []string{"a"}}
+	cmd := api.ApprovalRequest{Tool: "run_shell_command", Kind: api.ActionCommand, Detail: "ls", Key: "cmd:/ws\x00ls", Targets: []string{"ls"}}
+	web := api.ApprovalRequest{Tool: "web_fetch", Kind: api.ActionNetwork, Detail: "GET x", Key: "web:x", Targets: []string{"x"}}
+	allowed := func(h *Hooks, req api.ApprovalRequest) bool { return h.Approve(context.Background(), req) == nil }
 
 	// No approver: whatever would ask is refused, so these show what each
 	// mode lets through by itself.
-	cases := map[PermissionMode][4]bool{ // write, delete, command, web
-		ModeDefault:     {false, false, false, false},
-		ModePlan:        {false, false, false, false},
-		ModeAcceptEdits: {true, true, false, false},
-		ModeDontAsk:     {false, false, false, false},
-		ModeBypass:      {true, true, true, true},
+	cases := map[api.PermissionMode][4]bool{ // write, delete, command, web
+		api.ModeDefault:     {false, false, false, false},
+		api.ModePlan:        {false, false, false, false},
+		api.ModeAcceptEdits: {true, true, false, false},
+		api.ModeDontAsk:     {false, false, false, false},
+		api.ModeBypass:      {true, true, true, true},
 	}
 	for mode, want := range cases {
 		h := NewHooks(Policy{Mode: mode})
-		for i, req := range []ApprovalRequest{write, del, cmd, web} {
+		for i, req := range []api.ApprovalRequest{write, del, cmd, web} {
 			if got := allowed(h, req); got != want[i] {
 				t.Errorf("%s: %s allowed=%v, want %v", mode, req.Tool, got, want[i])
 			}
@@ -36,8 +38,11 @@ func TestPermissionModesAtTheGate(t *testing.T) {
 
 	// dont-ask never reaches the approver, but saved rules still apply.
 	asked := false
-	h := NewHooks(Policy{Mode: ModeDontAsk})
-	h.SetApprover(func(context.Context, ApprovalRequest) (Decision, error) { asked = true; return DecisionOnce, nil })
+	h := NewHooks(Policy{Mode: api.ModeDontAsk})
+	h.SetApprover(func(context.Context, api.ApprovalRequest) (api.Decision, error) {
+		asked = true
+		return api.DecisionOnce, nil
+	})
 	if err := h.Approve(context.Background(), cmd); err == nil || asked {
 		t.Errorf("dont-ask asked (%v) or allowed (%v)", asked, err)
 	}
@@ -49,23 +54,23 @@ func TestPermissionModesAtTheGate(t *testing.T) {
 	}
 
 	// Unattended runs get only their permissions, whatever the mode.
-	bypass := NewHooks(Policy{Mode: ModeBypass})
-	ctx := Unattended(context.Background(), func(context.Context, ApprovalRequest) (Decision, error) { return DecisionDeny, nil })
+	bypass := NewHooks(Policy{Mode: api.ModeBypass})
+	ctx := Unattended(context.Background(), func(context.Context, api.ApprovalRequest) (api.Decision, error) { return api.DecisionDeny, nil })
 	if err := bypass.Approve(ctx, cmd); err == nil {
 		t.Error("bypass mode widened an unattended run")
 	}
 }
 
 func TestParsePermissionMode(t *testing.T) {
-	for in, want := range map[string]PermissionMode{
-		"": ModeDefault, "default": ModeDefault, "acceptEdits": ModeAcceptEdits, "accept_edits": ModeAcceptEdits,
-		"PLAN": ModePlan, "dontAsk": ModeDontAsk, "bypassPermissions": ModeBypass, "bypass": ModeBypass,
+	for in, want := range map[string]api.PermissionMode{
+		"": api.ModeDefault, "default": api.ModeDefault, "acceptEdits": api.ModeAcceptEdits, "accept_edits": api.ModeAcceptEdits,
+		"PLAN": api.ModePlan, "dontAsk": api.ModeDontAsk, "bypassPermissions": api.ModeBypass, "bypass": api.ModeBypass,
 	} {
-		if got, err := ParsePermissionMode(in); err != nil || got != want {
+		if got, err := api.ParsePermissionMode(in); err != nil || got != want {
 			t.Errorf("%q = %q %v", in, got, err)
 		}
 	}
-	if _, err := ParsePermissionMode("yolo"); !errors.Is(err, ErrUnknownMode) {
+	if _, err := api.ParsePermissionMode("yolo"); !errors.Is(err, api.ErrUnknownMode) {
 		t.Errorf("unknown mode: %v", err)
 	}
 }
@@ -86,13 +91,13 @@ func TestBypassNeedsTheSandbox(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if r.Hooks().Mode() != ModeDefault || !errors.Is(r.ModeNote(), ErrBypassNeedsSandbox) {
+		if r.Hooks().Mode() != api.ModeDefault || !errors.Is(r.ModeNote(), api.ErrBypassNeedsSandbox) {
 			t.Errorf("without a sandbox: mode %s, note %v", r.Hooks().Mode(), r.ModeNote())
 		}
-		if err := r.SetPermissionMode(ModeBypass); !errors.Is(err, ErrBypassNeedsSandbox) {
+		if err := r.SetPermissionMode(api.ModeBypass); !errors.Is(err, api.ErrBypassNeedsSandbox) {
 			t.Errorf("SetPermissionMode(bypass) without a sandbox: %v", err)
 		}
-		if err := r.SetPermissionMode(ModeAcceptEdits); err != nil || r.Hooks().Mode() != ModeAcceptEdits {
+		if err := r.SetPermissionMode(api.ModeAcceptEdits); err != nil || r.Hooks().Mode() != api.ModeAcceptEdits {
 			t.Errorf("accept-edits: %v %s", err, r.Hooks().Mode())
 		}
 		r.Close()
@@ -120,7 +125,7 @@ func TestBypassWithTheSandbox(t *testing.T) {
 	if !r.ShellSandbox().Active() {
 		t.Skip("no OS sandbox here: " + r.ShellSandbox().Status())
 	}
-	if r.Hooks().Mode() != ModeBypass || r.ModeNote() != nil {
+	if r.Hooks().Mode() != api.ModeBypass || r.ModeNote() != nil {
 		t.Errorf("auto_approve with a sandbox: %s %v", r.Hooks().Mode(), r.ModeNote())
 	}
 }

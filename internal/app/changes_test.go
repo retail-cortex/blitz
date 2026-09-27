@@ -8,9 +8,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/retail-cortex/blitz/pkg/api"
+
 	"github.com/retail-cortex/blitz/internal/config"
 	"github.com/retail-cortex/blitz/internal/runtime"
-	"github.com/retail-cortex/blitz/internal/tools"
 	"google.golang.org/genai"
 )
 
@@ -75,12 +76,12 @@ func TestUndoAfterResume(t *testing.T) {
 		c.Blitz.AutoApprove = false
 		cfg = c
 	}, toolCall("create_file", map[string]any{"path": "notes.txt", "content": "hi\n"}), text("created"))
-	w.SetUI(func(context.Context, tools.ApprovalRequest) (tools.Decision, error) { return tools.DecisionOnce, nil }, nil)
+	w.SetUI(func(context.Context, api.ApprovalRequest) (api.Decision, error) { return api.DecisionOnce, nil }, nil)
 	s, _, err := w.OpenSession("", false)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := w.Run(context.Background(), s.ID, Turn{Text: "make notes"}, func(Event) {}); err != nil {
+	if _, err := w.Run(context.Background(), s.ID, api.Turn{Text: "make notes"}, func(api.Event) {}); err != nil {
 		t.Fatal(err)
 	}
 	cps := w.ListCheckpoints()

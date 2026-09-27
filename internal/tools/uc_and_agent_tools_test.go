@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/retail-cortex/blitz/pkg/api"
+
 	"github.com/retail-cortex/blitz/internal/agents"
 )
 
@@ -94,11 +96,11 @@ func TestUniversalConstructorApproval(t *testing.T) {
 
 	// Create approved, run denied: separate approvals for write and execution.
 	h := NewHooks(Policy{})
-	h.SetApprover(func(_ context.Context, r ApprovalRequest) (Decision, error) {
-		if r.Kind == ActionWrite {
-			return DecisionOnce, nil
+	h.SetApprover(func(_ context.Context, r api.ApprovalRequest) (api.Decision, error) {
+		if r.Kind == api.ActionWrite {
+			return api.DecisionOnce, nil
 		}
-		return DecisionDeny, nil
+		return api.DecisionDeny, nil
 	})
 	rt = toolOf(t)(NewUniversalConstructorTool(ucDir, h, nil, nil))
 	if out := runTool(t, rt, map[string]any{"action": "create", "tool_name": "t2", "code": "touch ran"}); out["success"] != true {

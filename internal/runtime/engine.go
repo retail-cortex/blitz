@@ -13,6 +13,8 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/retail-cortex/blitz/pkg/api"
+
 	"github.com/retail-cortex/blitz/internal/agents"
 	"github.com/retail-cortex/blitz/internal/audit"
 	"github.com/retail-cortex/blitz/internal/config"
@@ -43,8 +45,6 @@ const MaxSubagentDepth = 3
 var (
 	// ErrSubagentDepth is returned when invoke_agent nesting exceeds MaxSubagentDepth.
 	ErrSubagentDepth = errors.New("maximum sub-agent nesting depth exceeded")
-	// ErrMaxTurns is returned when a run exceeds its model-call budget.
-	ErrMaxTurns = errors.New("maximum turns reached")
 )
 
 type (
@@ -336,7 +336,7 @@ func (e *Engine) modelForLocked(agent string) model.LLM {
 }
 
 // Usage returns the token usage and estimated cost recorded for a session.
-func (e *Engine) Usage(sessionID string) Usage { return e.usage.Session(sessionID) }
+func (e *Engine) Usage(sessionID string) api.Usage { return e.usage.Session(sessionID) }
 
 // settingsName is the key a model's settings are kept under: its name as
 // the provider reports it, without a "provider/" prefix.
@@ -442,7 +442,7 @@ func (e *Engine) newLLMAgent(spec *agents.AgentSpec, llm model.LLM, instruction 
 func (e *Engine) beforeModel(ctx agent.Context, _ *model.LLMRequest) (*model.LLMResponse, error) {
 	if st := stateFrom(ctx); st != nil && st.maxTurns > 0 {
 		if n := st.turns.Add(1); n > int64(st.maxTurns) {
-			return nil, fmt.Errorf("%w (%d model calls)", ErrMaxTurns, st.maxTurns)
+			return nil, fmt.Errorf("%w (%d model calls)", api.ErrMaxTurns, st.maxTurns)
 		}
 	}
 	return nil, nil
@@ -846,7 +846,7 @@ func (e *Engine) recordTurn(ctx context.Context, sessionID string, span trace.Sp
 func drain(events func(yield func(*session.Event, error) bool), handler EventHandler) error {
 	for ev, err := range events {
 		if err != nil {
-			if errors.Is(err, ErrMaxTurns) {
+			if errors.Is(err, api.ErrMaxTurns) {
 				return err
 			}
 			return fmt.Errorf("agent execution error: %w", err)

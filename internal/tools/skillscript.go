@@ -12,6 +12,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/retail-cortex/blitz/pkg/api"
+
 	"github.com/retail-cortex/blitz/internal/audit"
 	"github.com/retail-cortex/blitz/internal/config"
 	"github.com/retail-cortex/blitz/internal/skills"
@@ -136,7 +138,7 @@ func (s *SkillScripts) Run(ctx context.Context, in RunSkillScriptInput) (out Run
 	case ev.Bypass:
 		s.audit(detail, "bypass")
 	case ev.Tier >= skills.Tier3MandatoryApproval:
-		if err := s.hooks.Approve(ctx, ApprovalRequest{Tool: "run_skill_script", Kind: ActionCommand, Detail: detail}); err != nil {
+		if err := s.hooks.Approve(ctx, api.ApprovalRequest{Tool: "run_skill_script", Kind: api.ActionCommand, Detail: detail}); err != nil {
 			return fail("%v", err)
 		}
 	default:
@@ -150,8 +152,8 @@ func (s *SkillScripts) Run(ctx context.Context, in RunSkillScriptInput) (out Run
 		if !ready {
 			// Installing reaches the network and runs installers: approved on
 			// its own, rememberable for exactly this package list.
-			if err := s.hooks.Approve(ctx, ApprovalRequest{
-				Tool: "run_skill_script", Kind: ActionNetwork,
+			if err := s.hooks.Approve(ctx, api.ApprovalRequest{
+				Tool: "run_skill_script", Kind: api.ActionNetwork,
 				Detail: fmt.Sprintf("Install packages for skill %s into an isolated environment (%s): %s", skill.Name, box.Name(), s.envs.InstallCommands(sc.Dependencies)),
 				Key:    "pyenv:" + env.Key, KeyLabel: "installing exactly these packages",
 			}); err != nil {

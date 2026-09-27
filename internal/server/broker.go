@@ -8,9 +8,10 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/retail-cortex/blitz/pkg/api"
+
 	"connectrpc.com/connect"
 	pb "github.com/retail-cortex/blitz/internal/gen/blitz/v1"
-	"github.com/retail-cortex/blitz/internal/tools"
 )
 
 // The broker turns the agent's approval requests and questions, which the
@@ -30,7 +31,7 @@ var errNoClient = errors.New("no client is attached to answer")
 
 // reply is a client's answer: a decision or text.
 type reply struct {
-	decision tools.Decision
+	decision api.Decision
 	text     string
 }
 
@@ -81,20 +82,20 @@ func (b *broker) answer(id string, r reply) error {
 	return nil
 }
 
-// approve is the workspaces' tools.Approver.
-func (b *broker) approve(ctx context.Context, req tools.ApprovalRequest) (tools.Decision, error) {
+// approve is the workspaces' api.Approver.
+func (b *broker) approve(ctx context.Context, req api.ApprovalRequest) (api.Decision, error) {
 	r, err := b.ask(ctx, func(id string) *pb.TurnEvent {
 		return &pb.TurnEvent{Kind: &pb.TurnEvent_ApprovalRequest{ApprovalRequest: &pb.ApprovalRequest{
 			RequestId: id, Tool: req.Tool, Kind: actionKind(req.Kind), Detail: req.Detail, Diff: req.Diff, ScopeLabel: req.KeyLabel,
 		}}}
 	})
 	if err != nil {
-		return tools.DecisionDeny, err
+		return api.DecisionDeny, err
 	}
 	return r.decision, nil
 }
 
-// question is the workspaces' tools.UserPromptFunc.
+// question is the workspaces' api.UserPromptFunc.
 func (b *broker) question(ctx context.Context, question string, options []string) (string, error) {
 	r, err := b.ask(ctx, func(id string) *pb.TurnEvent {
 		return &pb.TurnEvent{Kind: &pb.TurnEvent_Question{Question: &pb.Question{RequestId: id, Question: question, Options: options}}}

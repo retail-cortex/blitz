@@ -7,7 +7,8 @@ import (
 	"os"
 	"strings"
 
-	core "github.com/retail-cortex/blitz/internal/app"
+	"github.com/retail-cortex/blitz/pkg/api"
+
 	"github.com/retail-cortex/blitz/internal/i18n"
 	"github.com/retail-cortex/blitz/internal/textutil"
 )
@@ -44,7 +45,7 @@ func prepareSearch(ctx context.Context, app *App, args string, interrupts <-chan
 	res, err := app.Workspace.SearchWeb(sctx, terms)
 	stop()
 	switch {
-	case errors.Is(err, core.ErrNoSearch):
+	case errors.Is(err, api.ErrNoSearch):
 		fmt.Printf("%s!  %s%s\n", Yellow, i18n.T("search.not_setup", "error", safe(err.Error())), Reset)
 		return searchTurn{}, false
 	case err != nil:

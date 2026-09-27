@@ -12,12 +12,13 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/retail-cortex/blitz/pkg/api"
+
 	"github.com/retail-cortex/blitz/internal/app"
 	"github.com/retail-cortex/blitz/internal/config"
 	"github.com/retail-cortex/blitz/internal/i18n"
 	"github.com/retail-cortex/blitz/internal/runtime"
 	"github.com/retail-cortex/blitz/internal/server"
-	"github.com/retail-cortex/blitz/internal/tools"
 	"github.com/retail-cortex/blitz/internal/tui"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -136,7 +137,7 @@ func newInitCommand(root *rootOptions) *cobra.Command {
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			o.global = root.global // persistent flags (--dir, --config)
-			o.prompt, o.sendPrompt = "/init", runtime.InitPrompt()
+			o.prompt, o.sendPrompt = "/init", api.InitPrompt()
 			return runRoot(cmd, o, nil)
 		},
 	}
@@ -174,7 +175,7 @@ func runRoot(cmd *cobra.Command, o *rootOptions, args []string) (err error) {
 	if o.maxTurns < 0 {
 		return withCode(exitUsage, errors.New("--max-turns must be >= 0"))
 	}
-	if _, err := tools.ParsePermissionMode(o.mode); err != nil {
+	if _, err := api.ParsePermissionMode(o.mode); err != nil {
 		return withCode(exitUsage, fmt.Errorf("--permission-mode: %w", err))
 	}
 	if o.effort != "" {
@@ -312,7 +313,7 @@ func runRoot(cmd *cobra.Command, o *rootOptions, args []string) (err error) {
 
 	sess, resumed, err := w.OpenSession(o.resume, o.cont)
 	if err != nil {
-		var re *app.ResumeError
+		var re *api.ResumeError
 		if errors.As(err, &re) {
 			return withCode(exitUsage, err)
 		}
@@ -393,7 +394,7 @@ func resolvePrompt(flag string, args []string, stdinTTY, interactive bool, stdin
 }
 
 // newCompleter registers slash commands and dynamic argument sources.
-func newCompleter(w app.Backend) *tui.Completer {
+func newCompleter(w api.Backend) *tui.Completer {
 	c := tui.NewCompleter(w.Dir())
 	for _, cmd := range []string{"help", "agents", "model", "skills", "session", "set", "clear", "sandbox", "exit", "quit",
 		"undo", "checkpoints", "diff", "cost", "context", "compact", "memory", "approvals", "mcp", "resume", "locale", "attach", "paste",

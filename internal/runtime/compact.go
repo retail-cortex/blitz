@@ -4,9 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/retail-cortex/blitz/internal/tools"
 	"strings"
 	"time"
+
+	"github.com/retail-cortex/blitz/internal/tools"
+	"github.com/retail-cortex/blitz/pkg/api"
 
 	"github.com/google/uuid"
 	"github.com/retail-cortex/blitz/internal/observability"
@@ -15,9 +17,6 @@ import (
 	"google.golang.org/adk/v2/session/compaction"
 	"google.golang.org/genai"
 )
-
-// ErrNothingToCompact is returned when a session is too short to compact.
-var ErrNothingToCompact = errors.New("nothing to compact yet")
 
 // compactTimeout bounds a manual summarization call.
 const compactTimeout = 3 * time.Minute
@@ -56,7 +55,7 @@ func (e *Engine) Compact(ctx context.Context, sessionID, focus string, keepTurns
 			}
 		}
 		if cut <= 0 {
-			return nil, 0, fmt.Errorf("%w: need more than %d turn(s) of history", ErrNothingToCompact, keepTurns)
+			return nil, 0, fmt.Errorf("%w: need more than %d turn(s) of history", api.ErrNothingToCompact, keepTurns)
 		}
 		return events[:cut], keepTurns, nil
 	})
@@ -78,7 +77,7 @@ func (e *Engine) CompactAt(ctx context.Context, sessionID, focus string, at int,
 		}
 		if upTo {
 			if at == 0 {
-				return nil, 0, fmt.Errorf("%w: nothing before this prompt", ErrNothingToCompact)
+				return nil, 0, fmt.Errorf("%w: nothing before this prompt", api.ErrNothingToCompact)
 			}
 			return events[:at], kept, nil
 		}
@@ -100,7 +99,7 @@ func (e *Engine) compact(ctx context.Context, sessionID, focus, reason string, a
 	}()
 	got, err := e.sessions.Get(ctx, &session.GetRequest{AppName: appName, UserID: "user", SessionID: sessionID})
 	if err != nil {
-		return CompactResult{}, fmt.Errorf("%w: no conversation in this session", ErrNothingToCompact)
+		return CompactResult{}, fmt.Errorf("%w: no conversation in this session", api.ErrNothingToCompact)
 	}
 	hooks := e.toolReg.ScriptHooks()
 	hooks.Async(ctx, "pre_compact", "", tools.HookEvent{SessionID: sessionID, Reason: reason, Prompt: focus})
@@ -117,7 +116,7 @@ func (e *Engine) compact(ctx context.Context, sessionID, focus, reason string, a
 		return CompactResult{}, err
 	}
 	if !hasUncompacted(window) {
-		return CompactResult{}, fmt.Errorf("%w: those turns are already compacted", ErrNothingToCompact)
+		return CompactResult{}, fmt.Errorf("%w: those turns are already compacted", api.ErrNothingToCompact)
 	}
 
 	e.mu.RLock()

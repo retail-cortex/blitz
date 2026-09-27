@@ -10,8 +10,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/retail-cortex/blitz/pkg/api"
+
 	"github.com/retail-cortex/blitz/internal/config"
-	"github.com/retail-cortex/blitz/internal/tools"
 	"google.golang.org/genai"
 )
 
@@ -70,7 +71,7 @@ func TestLifecycleHooks(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	res, err := w.Run(context.Background(), s.ID, Turn{Text: "fix it"}, func(Event) {})
+	res, err := w.Run(context.Background(), s.ID, api.Turn{Text: "fix it"}, func(api.Event) {})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -126,10 +127,10 @@ func TestPermissionRequestAndNotificationHooks(t *testing.T) {
 		c.Hooks.Notification = []config.HookConfig{hookLog(log, "")}
 	}, create("allowed.txt"), create("denied.txt"), create("asked.txt"), text("done"))
 	asked := 0
-	w.SetUI(func(context.Context, tools.ApprovalRequest) (tools.Decision, error) { asked++; return 1, nil }, nil)
+	w.SetUI(func(context.Context, api.ApprovalRequest) (api.Decision, error) { asked++; return 1, nil }, nil)
 	s, _ := w.NewSession()
 	var results []map[string]any
-	w.Run(context.Background(), s.ID, Turn{Text: "make files"}, func(e Event) {
+	w.Run(context.Background(), s.ID, api.Turn{Text: "make files"}, func(e api.Event) {
 		if e.ToolResult != nil {
 			results = append(results, e.ToolResult.Result)
 		}
@@ -158,8 +159,8 @@ func TestSubagentAndCompactionHooks(t *testing.T) {
 		}
 	}, invoke, text("qa says fine"), text("done"), text("second answer"), text("summary of the start"))
 	s, _ := w.NewSession()
-	w.Run(context.Background(), s.ID, Turn{Text: "delegate"}, func(Event) {})
-	w.Run(context.Background(), s.ID, Turn{Text: "again"}, func(Event) {})
+	w.Run(context.Background(), s.ID, api.Turn{Text: "delegate"}, func(api.Event) {})
+	w.Run(context.Background(), s.ID, api.Turn{Text: "again"}, func(api.Event) {})
 	if _, err := w.Compact(context.Background(), "keep decisions"); err != nil {
 		t.Fatal(err)
 	}

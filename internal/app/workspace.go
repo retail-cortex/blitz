@@ -273,13 +273,6 @@ func (w *Workspace) Close() error {
 	return err
 }
 
-// ResumeError reports a session that can't be resumed: none is saved for
-// this workspace, or no session has the given ID or snapshot name.
-type ResumeError struct{ Err error }
-
-func (e *ResumeError) Error() string { return e.Err.Error() }
-func (e *ResumeError) Unwrap() error { return e.Err }
-
 // LoadAttachments loads image files (failures are errors naming the path)
 // and @image mentions in prompt (failures are warnings: the prompt may be
 // piped text that merely contains an @path) through the workspace sandbox.

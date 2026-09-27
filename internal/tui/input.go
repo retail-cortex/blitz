@@ -9,9 +9,10 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/retail-cortex/blitz/pkg/api"
+
 	"github.com/retail-cortex/blitz/internal/i18n"
 	"github.com/retail-cortex/blitz/internal/textutil"
-	"github.com/retail-cortex/blitz/internal/tools"
 )
 
 type lineResult struct {
@@ -136,16 +137,16 @@ func readMultiline(ctx context.Context, prompt string, ask func(context.Context,
 	return strings.Join(lines, "\n"), nil
 }
 
-// NewApprover returns a tools.Approver that asks on the terminal, showing
+// NewApprover returns an api.Approver that asks on the terminal, showing
 // the proposed diff (truncated to diffLines; "d" shows it all). Anything other
 // than an explicit yes is a denial.
-func NewApprover(in Input, diffLines int) tools.Approver {
+func NewApprover(in Input, diffLines int) api.Approver {
 	if diffLines <= 0 {
 		diffLines = 120
 	}
-	return func(ctx context.Context, req tools.ApprovalRequest) (tools.Decision, error) {
+	return func(ctx context.Context, req api.ApprovalRequest) (api.Decision, error) {
 		if ctx.Err() != nil {
-			return tools.DecisionDeny, ctx.Err()
+			return api.DecisionDeny, ctx.Err()
 		}
 		var sb strings.Builder
 		fmt.Fprintf(&sb, "\n%s%s%s [%s]\n", Yellow+Bold, i18n.T("approve.title"), Reset, i18n.T("approve.via", "kind", req.Kind, "tool", safe(req.Tool)))
@@ -182,18 +183,18 @@ func NewApprover(in Input, diffLines int) tools.Approver {
 		for {
 			answer, err := in.Ask(ctx, prompt)
 			if err != nil {
-				return tools.DecisionDeny, fmt.Errorf("no approval input: %w", err)
+				return api.DecisionDeny, fmt.Errorf("no approval input: %w", err)
 			}
 			switch strings.ToLower(strings.TrimSpace(answer)) {
 			case "y", "yes":
-				return tools.DecisionOnce, nil
+				return api.DecisionOnce, nil
 			case "s", "session":
 				if req.Key != "" {
-					return tools.DecisionSession, nil
+					return api.DecisionSession, nil
 				}
 			case "a", "always":
 				if req.Key != "" {
-					return tools.DecisionAlways, nil
+					return api.DecisionAlways, nil
 				}
 			case "d", "diff":
 				if truncated {
@@ -202,7 +203,7 @@ func NewApprover(in Input, diffLines int) tools.Approver {
 					continue
 				}
 			}
-			return tools.DecisionDeny, nil
+			return api.DecisionDeny, nil
 		}
 	}
 }
@@ -236,9 +237,9 @@ func RenderDiff(diff string, maxLines int) (string, bool) {
 	return sb.String(), cut
 }
 
-// NewUserPrompter returns a tools.UserPromptFunc backed by the terminal.
+// NewUserPrompter returns an api.UserPromptFunc backed by the terminal.
 // A numeric answer selects the matching option when options are offered.
-func NewUserPrompter(in Input) tools.UserPromptFunc {
+func NewUserPrompter(in Input) api.UserPromptFunc {
 	return func(ctx context.Context, question string, options []string) (string, error) {
 		if ctx.Err() != nil {
 			return "", ctx.Err()

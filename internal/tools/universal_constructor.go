@@ -13,6 +13,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/retail-cortex/blitz/pkg/api"
+
 	"google.golang.org/adk/v2/agent"
 	"google.golang.org/adk/v2/tool"
 	"google.golang.org/adk/v2/tool/functiontool"
@@ -138,9 +140,9 @@ func (r *ucRegistry) create(ctx context.Context, hooks *Hooks, input UniversalCo
 		return UniversalConstructorOutput{Error: fmt.Sprintf("unsupported language %q; use bash, python, or go", input.Language)}
 	}
 
-	if err := hooks.Approve(ctx, ApprovalRequest{
+	if err := hooks.Approve(ctx, api.ApprovalRequest{
 		Tool:   "universal_constructor",
-		Kind:   ActionWrite,
+		Kind:   api.ActionWrite,
 		Diff:   unifiedDiff(input.ToolName+lang.ext, "", input.Code),
 		Detail: fmt.Sprintf("Forge %s tool %q in %s (%d bytes)", lang.canonical, input.ToolName, r.dir, len(input.Code)),
 	}); err != nil {
@@ -190,9 +192,9 @@ func (r *ucRegistry) run(ctx context.Context, hooks *Hooks, input UniversalConst
 		return UniversalConstructorOutput{Error: "blocked by command policy: " + decision.Reason}
 	}
 	if decision.Verdict != VerdictAutoApprove {
-		if err := hooks.Approve(ctx, ApprovalRequest{
+		if err := hooks.Approve(ctx, api.ApprovalRequest{
 			Tool:     "universal_constructor",
-			Kind:     ActionCommand,
+			Kind:     api.ActionCommand,
 			Detail:   fmt.Sprintf("Run forged tool %q with args %q", meta.Name, args),
 			Key:      "uc-run:" + meta.Name + "\x00" + strings.Join(args, "\x00"),
 			KeyLabel: "this forged tool with these arguments",
@@ -302,8 +304,8 @@ func (r *ucRegistry) delete(ctx context.Context, hooks *Hooks, input UniversalCo
 	if !ok {
 		return UniversalConstructorOutput{Error: fmt.Sprintf("tool '%s' not found", input.ToolName)}
 	}
-	if err := hooks.Approve(ctx, ApprovalRequest{
-		Tool: "universal_constructor", Kind: ActionDelete,
+	if err := hooks.Approve(ctx, api.ApprovalRequest{
+		Tool: "universal_constructor", Kind: api.ActionDelete,
 		Detail: fmt.Sprintf("Delete forged tool %q (%s)", meta.Name, meta.Path),
 	}); err != nil {
 		return UniversalConstructorOutput{Error: err.Error()}

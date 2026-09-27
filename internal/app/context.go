@@ -2,10 +2,11 @@ package app
 
 import (
 	"context"
-	"errors"
 	"net/url"
 	"path"
 	"strings"
+
+	"github.com/retail-cortex/blitz/pkg/api"
 
 	"github.com/retail-cortex/blitz/internal/config"
 	"github.com/retail-cortex/blitz/internal/images"
@@ -18,69 +19,46 @@ import (
 // What the model sees: usage and context size, compaction, project memory,
 // the reply language, images, and searches whose results go to the agent.
 
-// Usage is the token usage and estimated cost of a session.
-type Usage = runtime.Usage
-
 func (w *Workspace) activeID() (string, error) {
 	r := w.storage.Active()
 	if r == nil {
-		return "", ErrNoActiveSession
+		return "", api.ErrNoActiveSession
 	}
 	return r.ID, nil
 }
 
 // SessionUsage returns the active session's usage.
-func (w *Workspace) SessionUsage() (Usage, error) {
+func (w *Workspace) SessionUsage() (api.Usage, error) {
 	id, err := w.activeID()
 	if err != nil {
-		return Usage{}, err
+		return api.Usage{}, err
 	}
 	return w.engine.Usage(id), nil
 }
 
-// ContextInfo is the size of the model's context and when it is compacted.
-type ContextInfo struct {
-	Tokens int64 // the latest prompt's size
-	// AutoCompact: the context is compacted when it passes Threshold
-	// tokens, keeping the last Keep events.
-	AutoCompact bool
-	Threshold   int
-	Keep        int
-}
-
 // Context returns the active session's context size and compaction setting.
-func (w *Workspace) Context() (ContextInfo, error) {
+func (w *Workspace) Context() (api.ContextInfo, error) {
 	u, err := w.SessionUsage()
 	if err != nil {
-		return ContextInfo{}, err
+		return api.ContextInfo{}, err
 	}
 	c := w.cfg.Context
-	return ContextInfo{Tokens: u.LastPrompt, AutoCompact: c.Compaction && c.TokenThreshold > 0, Threshold: c.TokenThreshold, Keep: c.RetainEvents}, nil
-}
-
-// ErrNothingToCompact reports a session too short to compact.
-var ErrNothingToCompact = runtime.ErrNothingToCompact
-
-// CompactResult is what Compact did.
-type CompactResult struct {
-	EventsCompacted int
-	SummaryChars    int
-	Before, After   Usage
+	return api.ContextInfo{Tokens: u.LastPrompt, AutoCompact: c.Compaction && c.TokenThreshold > 0, Threshold: c.TokenThreshold, Keep: c.RetainEvents}, nil
 }
 
 // Compact summarises the active session's older turns, keeping the latest,
 // to shrink the model's context. focus steers what the summary keeps.
-func (w *Workspace) Compact(ctx context.Context, focus string) (CompactResult, error) {
+func (w *Workspace) Compact(ctx context.Context, focus string) (api.CompactResult, error) {
 	id, err := w.activeID()
 	if err != nil {
-		return CompactResult{}, err
+		return api.CompactResult{}, err
 	}
 	before := w.engine.Usage(id)
 	res, err := w.engine.Compact(ctx, id, focus, 1)
 	if err != nil {
-		return CompactResult{}, err
+		return api.CompactResult{}, err
 	}
-	return CompactResult{EventsCompacted: res.EventsCompacted, SummaryChars: res.SummaryChars, Before: before, After: w.engine.Usage(id)}, nil
+	return api.CompactResult{EventsCompacted: res.EventsCompacted, SummaryChars: res.SummaryChars, Before: before, After: w.engine.Usage(id)}, nil
 }
 
 // MemoryFiles are the project instruction file names looked for, in order.
@@ -119,44 +97,27 @@ func (w *Workspace) AddMemory(ctx context.Context, text string) (string, error) 
 	return p, err
 }
 
-// LocaleInfo names an interface language with a catalog.
-type LocaleInfo struct{ Tag, Name string }
-
 // AvailableLocales returns the interface languages with a catalog, and
 // the directory custom catalogs are read from ("" if none is configured).
-func (w *Workspace) AvailableLocales() (list []LocaleInfo, customDir string) {
+func (w *Workspace) AvailableLocales() (list []api.LocaleInfo, customDir string) {
 	for _, m := range w.locales.Available() {
-		list = append(list, LocaleInfo{Tag: m.Locale, Name: m.Name})
+		list = append(list, api.LocaleInfo{Tag: m.Locale, Name: m.Name})
 	}
 	return list, w.cfg.UI.LocalesDir
-}
-
-// ErrUnknownLocale reports input that isn't a language.
-var ErrUnknownLocale = errors.New("not a language")
-
-// LocaleChange describes the interface language after SetLocale.
-type LocaleChange struct {
-	Tag          string
-	NativeName   string // e.g. "Español"
-	LanguageName string // in the new language's terms, e.g. "español"
-	// HasCatalog: the interface is translated; otherwise only the model's
-	// replies are in the language.
-	HasCatalog bool
-	Saved      Saved
 }
 
 // SetLocale switches the language the model replies in, for this
 // workspace, and saves it as ui.locale in the config file. input is a
 // language tag or name. The interface language belongs to the client: a
 // front end switches its own (i18n.SetCurrent) with the returned Tag.
-func (w *Workspace) SetLocale(ctx context.Context, input string) (LocaleChange, error) {
+func (w *Workspace) SetLocale(ctx context.Context, input string) (api.LocaleChange, error) {
 	tag, err := w.locales.Resolve(input)
 	if err != nil {
-		return LocaleChange{}, ErrUnknownLocale
+		return api.LocaleChange{}, api.ErrUnknownLocale
 	}
 	l := w.locales.Localizer(tag)
 	w.reply = l
-	out := LocaleChange{Tag: tag.String(), NativeName: l.NativeName(), LanguageName: l.LanguageName(), HasCatalog: l.HasCatalog()}
+	out := api.LocaleChange{Tag: tag.String(), NativeName: l.NativeName(), LanguageName: l.LanguageName(), HasCatalog: l.HasCatalog()}
 	if err := w.engine.SetInstructions(ctx, w.instructions()); err != nil {
 		out.Saved.Err = err
 		return out, nil
@@ -169,26 +130,16 @@ func (w *Workspace) SetLocale(ctx context.Context, input string) (LocaleChange, 
 // SandboxSummary describes the sandbox commands run in, one line each.
 func (w *Workspace) SandboxSummary() []string { return w.tools.SandboxSummary() }
 
-// ErrImagesDisabled reports that image support is turned off.
-var ErrImagesDisabled = tools.ErrImagesDisabled
-
 // LoadImage reads an image from the workspace for a prompt.
 func (w *Workspace) LoadImage(path string) (*images.Image, error) { return w.tools.LoadImage(path) }
 
 // AddImage stores image data (e.g. pasted from the clipboard) for a prompt.
 func (w *Workspace) AddImage(name string, data []byte) (*images.Image, error) {
 	if w.tools.Images() == nil {
-		return nil, ErrImagesDisabled
+		return nil, api.ErrImagesDisabled
 	}
 	return w.tools.AddImage(name, data)
 }
-
-// ErrNoFetch reports that the agent can't fetch web pages, so a web search
-// would give it nothing to read.
-var ErrNoFetch = errors.New("web fetching is disabled")
-
-// ErrNoSearch reports that no search provider is set up.
-var ErrNoSearch = tools.ErrNoSearch
 
 // Search limits: how many results go to the agent, how many are asked for
 // (room to drop ones it couldn't read), and how many transcript passages a
@@ -202,48 +153,28 @@ const (
 // SearchProvider names the web search provider, or ErrNoFetch.
 func (w *Workspace) SearchProvider() (string, error) {
 	if !w.tools.CanFetch() {
-		return "", ErrNoFetch
+		return "", api.ErrNoFetch
 	}
 	return w.tools.SearchProvider(), nil
 }
 
-// Link is a web search result the agent is asked to read.
-type Link struct{ Title, URL string }
-
-// WebSearch is a search whose results are handed to the agent: run Prompt
-// as a turn with FetchGrants set to the links' URLs, so the agent may read
-// exactly those pages without asking.
-type WebSearch struct {
-	Links  []Link // none: nothing worth handing over
-	Prompt string
-}
-
-// URLs returns the links' URLs, for Turn.FetchGrants.
-func (s WebSearch) URLs() []string {
-	out := make([]string, len(s.Links))
-	for i, l := range s.Links {
-		out[i] = l.URL
-	}
-	return out
-}
-
 // SearchWeb searches the web for terms and prepares the agent's prompt from
 // the results it can read.
-func (w *Workspace) SearchWeb(ctx context.Context, terms string) (WebSearch, error) {
+func (w *Workspace) SearchWeb(ctx context.Context, terms string) (api.WebSearch, error) {
 	if !w.tools.CanFetch() {
-		return WebSearch{}, ErrNoFetch
+		return api.WebSearch{}, api.ErrNoFetch
 	}
 	out, err := w.tools.WebSearch(ctx, terms, searchFetch)
 	if err != nil {
-		return WebSearch{}, err
+		return api.WebSearch{}, err
 	}
 	links := viableLinks(out.Results, searchLinks)
 	if len(links) == 0 {
-		return WebSearch{}, nil
+		return api.WebSearch{}, nil
 	}
-	res := WebSearch{Prompt: runtime.WebSearchPrompt(terms, links, out.Answer)}
+	res := api.WebSearch{Prompt: runtime.WebSearchPrompt(terms, links, out.Answer)}
 	for _, r := range links {
-		res.Links = append(res.Links, Link{Title: r.Title, URL: r.URL})
+		res.Links = append(res.Links, api.Link{Title: r.Title, URL: r.URL})
 	}
 	return res, nil
 }

@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 
-	"github.com/retail-cortex/blitz/internal/app"
+	"github.com/retail-cortex/blitz/pkg/api"
 )
 
 // Exit codes are stable so scripts can react to them.
@@ -41,7 +41,7 @@ func exitCodeFor(err error) int {
 		return exitOK
 	case errors.As(err, &ee):
 		return ee.code
-	case app.IsLimit(err):
+	case api.IsLimit(err):
 		return exitMaxTurns
 	case errors.Is(err, context.Canceled):
 		return exitInterrupted

@@ -6,7 +6,8 @@ import (
 	"slices"
 	"strings"
 
-	core "github.com/retail-cortex/blitz/internal/app"
+	"github.com/retail-cortex/blitz/pkg/api"
+
 	"github.com/retail-cortex/blitz/internal/i18n"
 )
 
@@ -31,7 +32,7 @@ func cmdPermissions(args []string, app *App) {
 	case "allow", "ask", "deny":
 		res, err := app.Workspace.AddPermissionRule(verb, rule, save)
 		switch {
-		case errors.Is(err, core.ErrBadRule):
+		case errors.Is(err, api.ErrBadRule):
 			fmt.Printf("%s✗ %s%s\n", Red, safe(err.Error()), Reset)
 		case err != nil:
 			fmt.Printf("%s✗ %s%s\n", Red, i18n.T("perm.failed", "error", safe(err.Error())), Reset)

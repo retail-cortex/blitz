@@ -9,6 +9,8 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+
+	"github.com/retail-cortex/blitz/pkg/api"
 )
 
 func TestPublicAddr(t *testing.T) {
@@ -127,7 +129,7 @@ func TestWebFetchValidationAndApproval(t *testing.T) {
 	if out := f.fetch(ctx, h, srv.URL); !strings.Contains(out.Error, "not approved") {
 		t.Errorf("expected approval denial: %+v", out)
 	}
-	if len(*reqs) != 1 || (*reqs)[0].Key != "web:127.0.0.1" || (*reqs)[0].Kind != ActionNetwork {
+	if len(*reqs) != 1 || (*reqs)[0].Key != "web:127.0.0.1" || (*reqs)[0].Kind != api.ActionNetwork {
 		t.Errorf("unexpected approval request %+v", *reqs)
 	}
 	// Allow-listed hosts don't prompt.

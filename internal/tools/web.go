@@ -15,6 +15,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/retail-cortex/blitz/pkg/api"
+
 	"github.com/retail-cortex/blitz/internal/audit"
 	"github.com/retail-cortex/blitz/internal/textutil"
 	"golang.org/x/net/html"
@@ -207,8 +209,8 @@ func (f *webFetcher) fetch(ctx context.Context, hooks *Hooks, raw string) WebFet
 	}
 	switch {
 	case effect == EffectAsk:
-		if err := hooks.Approve(ctx, ApprovalRequest{
-			Tool: "web_fetch", Kind: ActionNetwork, Detail: "GET " + u.String(),
+		if err := hooks.Approve(ctx, api.ApprovalRequest{
+			Tool: "web_fetch", Kind: api.ActionNetwork, Detail: "GET " + u.String(),
 			Key: "web:" + host, KeyLabel: "requests to " + host, Targets: []string{host}, MustAsk: true,
 		}); err != nil {
 			return fail(err)
@@ -217,8 +219,8 @@ func (f *webFetcher) fetch(ctx context.Context, hooks *Hooks, raw string) WebFet
 	case fetchGranted(ctx, u):
 		hooks.Audit().Log(audit.Entry{Kind: audit.KindApproval, Tool: "web_fetch", Detail: "GET " + u.String(), Decision: "user-selected"})
 	default:
-		if err := hooks.Approve(ctx, ApprovalRequest{
-			Tool: "web_fetch", Kind: ActionNetwork, Detail: "GET " + u.String(),
+		if err := hooks.Approve(ctx, api.ApprovalRequest{
+			Tool: "web_fetch", Kind: api.ActionNetwork, Detail: "GET " + u.String(),
 			Key: "web:" + host, KeyLabel: "requests to " + host, Targets: []string{host},
 		}); err != nil {
 			return fail(err)

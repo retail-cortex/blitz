@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/retail-cortex/blitz/internal/tools"
+	"github.com/retail-cortex/blitz/pkg/api"
 )
 
 // Permission is something a worker may do without approval, as written in
@@ -32,12 +32,12 @@ type Permission struct {
 
 func (p Permission) String() string { return p.Kind + ":" + p.Pattern }
 
-var permissionKinds = map[string]tools.ActionKind{
-	"shell":  tools.ActionCommand,
-	"write":  tools.ActionWrite,
-	"delete": tools.ActionDelete,
-	"web":    tools.ActionNetwork,
-	"mcp":    tools.ActionMCP,
+var permissionKinds = map[string]api.ActionKind{
+	"shell":  api.ActionCommand,
+	"write":  api.ActionWrite,
+	"delete": api.ActionDelete,
+	"web":    api.ActionNetwork,
+	"mcp":    api.ActionMCP,
 }
 
 // ParsePermission reads "<kind>:<pattern>".
@@ -62,7 +62,7 @@ func ParsePermission(s string) (Permission, error) {
 // Allows reports whether the permissions cover the request: its kind has a
 // permission matching every one of its targets. A request without targets
 // is never covered.
-func Allows(perms []Permission, req tools.ApprovalRequest) bool {
+func Allows(perms []Permission, req api.ApprovalRequest) bool {
 	if len(req.Targets) == 0 {
 		return false
 	}
@@ -79,15 +79,15 @@ func Allows(perms []Permission, req tools.ApprovalRequest) bool {
 // escapes and line breaks.
 const shellMeta = ";&|`$()<>\\\n\r"
 
-func covered(perms []Permission, kind tools.ActionKind, target string) bool {
+func covered(perms []Permission, kind api.ActionKind, target string) bool {
 	switch kind {
-	case tools.ActionWrite, tools.ActionDelete:
+	case api.ActionWrite, api.ActionDelete:
 		target = filepath.ToSlash(target)
 		if target != path.Clean(target) || strings.HasPrefix(target, "/") || target == ".." || strings.HasPrefix(target, "../") {
 			return false // outside the workspace, or not as the tools give it
 		}
 	}
-	chained := kind == tools.ActionCommand && strings.ContainsAny(target, shellMeta)
+	chained := kind == api.ActionCommand && strings.ContainsAny(target, shellMeta)
 	for _, p := range perms {
 		if permissionKinds[p.Kind] != kind {
 			continue

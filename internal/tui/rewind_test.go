@@ -6,7 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	core "github.com/retail-cortex/blitz/internal/app"
+	"github.com/retail-cortex/blitz/pkg/api"
+
 	"google.golang.org/genai"
 )
 
@@ -19,7 +20,7 @@ func rewindApp(t *testing.T) (*App, string) {
 		t.Fatal(err)
 	}
 	for _, p := range []string{"first prompt", "second prompt"} {
-		if _, err := app.Workspace.Run(context.Background(), s.ID, core.Turn{Text: p}, func(core.Event) {}); err != nil {
+		if _, err := app.Workspace.Run(context.Background(), s.ID, api.Turn{Text: p}, func(api.Event) {}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -86,9 +87,9 @@ func TestEscEscAtAnEmptyPromptRewinds(t *testing.T) {
 func TestPrinterShowsTasks(t *testing.T) {
 	var out syncBuffer
 	p := NewPrinter(PrinterOptions{Out: &out})
-	p.Handle(core.Event{ToolCall: &core.ToolCall{Name: "todo", Args: map[string]any{}}})
-	p.Handle(core.Event{ToolResult: &core.ToolResult{Name: "todo", Result: map[string]any{"items": []any{}}}})
-	p.Handle(core.Event{Tasks: []core.Task{{Content: "read", Status: "done"}, {Content: "fix", Status: "in_progress"}, {Content: "test", Status: "pending"}}})
+	p.Handle(api.Event{ToolCall: &api.ToolCall{Name: "todo", Args: map[string]any{}}})
+	p.Handle(api.Event{ToolResult: &api.ToolResult{Name: "todo", Result: map[string]any{"items": []any{}}}})
+	p.Handle(api.Event{Tasks: []api.Task{{Content: "read", Status: "done"}, {Content: "fix", Status: "in_progress"}, {Content: "test", Status: "pending"}}})
 	p.End()
 	got := ansiPattern.ReplaceAllString(out.b.String(), "")
 	if !strings.Contains(got, "☒ read") || !strings.Contains(got, "☐ fix") || !strings.Contains(got, "☐ test") || strings.Contains(got, "todo") {
@@ -96,7 +97,7 @@ func TestPrinterShowsTasks(t *testing.T) {
 	}
 	// A failed todo call is shown like any tool's.
 	out.b.Reset()
-	p.Handle(core.Event{ToolResult: &core.ToolResult{Name: "todo", Result: map[string]any{"error": "item 1 has no content"}}})
+	p.Handle(api.Event{ToolResult: &api.ToolResult{Name: "todo", Result: map[string]any{"error": "item 1 has no content"}}})
 	p.End()
 	if !strings.Contains(out.b.String(), "no content") {
 		t.Errorf("failed todo hidden: %q", out.b.String())

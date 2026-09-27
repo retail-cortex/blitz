@@ -15,6 +15,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/retail-cortex/blitz/pkg/api"
+
 	"github.com/retail-cortex/blitz/internal/textutil"
 	"google.golang.org/adk/v2/agent"
 	"google.golang.org/adk/v2/tool"
@@ -146,8 +148,8 @@ func (s *webSearcher) search(ctx context.Context, hooks *Hooks, in WebSearchInpu
 		return s.run(ctx, q, in.MaxResults) // reports the problem
 	}
 	// The query itself leaves the machine, so it is approved like a request.
-	if err := hooks.Approve(ctx, ApprovalRequest{
-		Tool: "web_search", Kind: ActionNetwork,
+	if err := hooks.Approve(ctx, api.ApprovalRequest{
+		Tool: "web_search", Kind: api.ActionNetwork,
 		Detail: fmt.Sprintf("Search %s for: %s", s.cfg.Provider, q),
 		Key:    "search:" + s.cfg.Provider, KeyLabel: "searches via " + s.cfg.Provider,
 		Targets: []string{s.cfg.Provider},

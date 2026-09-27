@@ -4,21 +4,23 @@ import (
 	"context"
 	"errors"
 	"testing"
+
+	"github.com/retail-cortex/blitz/pkg/api"
 )
 
 func TestSessionOperations(t *testing.T) {
 	w, _ := openTestWith(t, nil, text("noted"))
-	if _, err := w.SaveSnapshot("early", false); !errors.Is(err, ErrNoActiveSession) {
+	if _, err := w.SaveSnapshot("early", false); !errors.Is(err, api.ErrNoActiveSession) {
 		t.Errorf("snapshot without a session: %v", err)
 	}
-	if _, err := w.RenameSession("x"); !errors.Is(err, ErrNoActiveSession) {
+	if _, err := w.RenameSession("x"); !errors.Is(err, api.ErrNoActiveSession) {
 		t.Errorf("rename without a session: %v", err)
 	}
 	first, err := w.NewSession()
 	if err != nil || first.Agent != "blitz" || first.Workspace != w.Dir() {
 		t.Fatalf("new: %+v %v", first, err)
 	}
-	if _, err := w.Run(context.Background(), first.ID, Turn{Text: "remember pineapple"}, ignore); err != nil {
+	if _, err := w.Run(context.Background(), first.ID, api.Turn{Text: "remember pineapple"}, ignore); err != nil {
 		t.Fatal(err)
 	}
 	if s, _ := w.ActiveSession(); s.Title != "remember pineapple" || len(s.Messages) != 2 || s.Messages[0].Text != "remember pineapple" {
@@ -35,7 +37,7 @@ func TestSessionOperations(t *testing.T) {
 	if err != nil || snap.Snapshot != "fruit" || snap.MessageCount != 2 || snap.From != first.ID {
 		t.Fatalf("snapshot: %+v %v", snap, err)
 	}
-	if _, err := w.SaveSnapshot("fruit", false); !errors.Is(err, ErrSnapshotNameTaken) {
+	if _, err := w.SaveSnapshot("fruit", false); !errors.Is(err, api.ErrSnapshotNameTaken) {
 		t.Errorf("taken: %v", err)
 	}
 	if s, _ := w.ActiveSession(); s.ID != first.ID {

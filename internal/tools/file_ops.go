@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/retail-cortex/blitz/pkg/api"
+
 	"google.golang.org/adk/v2/agent"
 	"google.golang.org/adk/v2/tool"
 	"google.golang.org/adk/v2/tool/functiontool"
@@ -335,9 +337,9 @@ func NewDeleteFileTool(ws *Workspace, hooks *Hooks) (tool.Tool, error) {
 			if readErr == nil {
 				diff = unifiedDiff(rel, string(data), "")
 			}
-			if err := hooks.Approve(ctx, ApprovalRequest{
+			if err := hooks.Approve(ctx, api.ApprovalRequest{
 				Tool:     "delete_file",
-				Kind:     ActionDelete,
+				Kind:     api.ActionDelete,
 				Detail:   "Delete " + rel,
 				Diff:     diff,
 				Key:      "delete:" + ws.Dir(),
@@ -361,10 +363,10 @@ func NewDeleteFileTool(ws *Workspace, hooks *Hooks) (tool.Tool, error) {
 
 // writeApproval builds an approval request for a file edit. Remembered
 // approvals cover all edits within the workspace.
-func writeApproval(ws *Workspace, tool, detail, diff string, paths ...string) ApprovalRequest {
-	return ApprovalRequest{
+func writeApproval(ws *Workspace, tool, detail, diff string, paths ...string) api.ApprovalRequest {
+	return api.ApprovalRequest{
 		Tool:     tool,
-		Kind:     ActionWrite,
+		Kind:     api.ActionWrite,
 		Detail:   detail,
 		Diff:     diff,
 		Key:      "write:" + ws.Dir(),

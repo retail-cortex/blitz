@@ -76,20 +76,6 @@ func CarryOutPrompt(planFile string) string {
 	return s
 }
 
-// InitPrompt asks the agent to write or update BLITZ.md, the project's
-// instructions for future sessions (/init, blitz init).
-func InitPrompt() string {
-	return "Study this repository and write BLITZ.md at the workspace root: instructions for an AI coding agent starting a new session here.\n\n" +
-		"Include, briefly and only what you verified in the files:\n" +
-		"1. What the project is, in one or two sentences\n" +
-		"2. How to build, test (all tests and a single test), lint and run it, with the exact commands from the Makefile, package.json, go.mod, pyproject.toml, CI workflows and the like\n" +
-		"3. The layout: the main directories and what lives where\n" +
-		"4. Conventions that aren't obvious from the code: style, naming, error handling, commit and review rules, generated files not to edit\n" +
-		"5. Gotchas: required services or environment, slow or flaky tests, things that look wrong but are deliberate\n\n" +
-		"If BLITZ.md exists, update it instead of replacing it, keeping what is still true. If AGENTS.md or CLAUDE.md already covers something, don't repeat it; refer to it. " +
-		"Don't invent commands, don't include secrets or credentials, and don't run the full test suite. Keep it under 150 lines of Markdown."
-}
-
 // toolAliases maps Claude Code's tool names, as written in commands'
 // allowed-tools, to Blitz's.
 var toolAliases = map[string][]string{

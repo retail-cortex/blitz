@@ -10,9 +10,9 @@ import (
 	"os/signal"
 	"time"
 
-	"github.com/retail-cortex/blitz/internal/app"
+	"github.com/retail-cortex/blitz/pkg/api"
+
 	"github.com/retail-cortex/blitz/internal/images"
-	"github.com/retail-cortex/blitz/internal/runtime"
 	"github.com/retail-cortex/blitz/internal/tui"
 	"golang.org/x/term"
 )
@@ -74,12 +74,12 @@ type oneShotOptions struct {
 // runOneShot executes a single prompt and exits. Background processes are
 // never left behind: the user is asked (text mode on a terminal) or they are
 // killed.
-func runOneShot(ctx context.Context, w app.Backend, o oneShotOptions) error {
+func runOneShot(ctx context.Context, w api.Backend, o oneShotOptions) error {
 	start := time.Now()
 	out := o.stdout
 	sid := o.sessionID
 
-	var handler func(app.Event)
+	var handler func(api.Event)
 	var printer *tui.Printer
 	var calls []toolCallJSON
 	var enc *json.Encoder
@@ -93,7 +93,7 @@ func runOneShot(ctx context.Context, w app.Backend, o oneShotOptions) error {
 	default:
 		handler = collectHandler(&calls)
 	}
-	turn, runErr := w.Run(ctx, sid, app.Turn{
+	turn, runErr := w.Run(ctx, sid, api.Turn{
 		Text: o.prompt, Prompt: o.sendPrompt, Plan: o.plan, Images: o.images, MaxTurns: o.maxTurns, MaxCostUSD: o.maxCostUSD, Timeout: o.timeout,
 		OnAccepted: func() {
 			if printer != nil {
@@ -104,21 +104,21 @@ func runOneShot(ctx context.Context, w app.Backend, o oneShotOptions) error {
 			}
 		},
 	}, handler)
-	var blocked *app.BlockedError
+	var blocked *api.BlockedError
 	if errors.As(runErr, &blocked) {
 		runErr = withCode(exitBlocked, runErr)
 	} else if printer != nil {
 		printer.End()
 		fmt.Fprintln(out)
 	}
-	if ctx.Err() != nil && runErr != nil && !app.IsLimit(runErr) {
+	if ctx.Err() != nil && runErr != nil && !api.IsLimit(runErr) {
 		runErr = withCode(exitInterrupted, runErr)
 	}
 
 	usage, _ := w.SessionUsage() // sid is the active session
 	if o.format == formatText {
 		if o.usageLines {
-			if line := tui.UsageLine(runtime.Usage{}, usage); line != "" {
+			if line := tui.UsageLine(api.Usage{}, usage); line != "" {
 				fmt.Fprintf(os.Stderr, "%s%s%s\n", tui.Dim, line, tui.Reset)
 			}
 		}
@@ -150,8 +150,8 @@ func runOneShot(ctx context.Context, w app.Backend, o oneShotOptions) error {
 }
 
 // streamJSONHandler writes one JSON line per event.
-func streamJSONHandler(enc *json.Encoder) func(app.Event) {
-	return func(ev app.Event) {
+func streamJSONHandler(enc *json.Encoder) func(api.Event) {
+	return func(ev api.Event) {
 		switch {
 		case ev.Text != nil && !ev.Text.Thought:
 			_ = enc.Encode(map[string]any{"type": "text", "text": ev.Text.Text, "partial": ev.Text.Partial, "author": ev.Author})
@@ -164,9 +164,9 @@ func streamJSONHandler(enc *json.Encoder) func(app.Event) {
 }
 
 // collectHandler gathers tool calls for json output.
-func collectHandler(calls *[]toolCallJSON) func(app.Event) {
+func collectHandler(calls *[]toolCallJSON) func(api.Event) {
 	pending := map[string]int{}
-	return func(ev app.Event) {
+	return func(ev api.Event) {
 		switch {
 		case ev.ToolCall != nil && !ev.ToolCall.Partial:
 			pending[ev.ToolCall.ID+ev.ToolCall.Name] = len(*calls)

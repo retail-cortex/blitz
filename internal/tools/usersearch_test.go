@@ -9,6 +9,8 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/retail-cortex/blitz/pkg/api"
 )
 
 // fakeGemini answers generateContent with grounding metadata whose links
@@ -94,7 +96,7 @@ func TestGoogleSearchConfig(t *testing.T) {
 // says so.
 func TestRegistryWebSearch(t *testing.T) {
 	r := &Registry{hooks: NewHooks(Policy{})} // no approver: an approval would fail
-	if _, err := r.WebSearch(context.Background(), "x", 5); !errors.Is(err, ErrNoSearch) {
+	if _, err := r.WebSearch(context.Background(), "x", 5); !errors.Is(err, api.ErrNoSearch) {
 		t.Fatalf("unconfigured: %v", err)
 	}
 	var got captured

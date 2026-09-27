@@ -7,9 +7,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/retail-cortex/blitz/pkg/api"
+
 	"github.com/retail-cortex/blitz/internal/config"
 	"github.com/retail-cortex/blitz/internal/session"
-	"github.com/retail-cortex/blitz/internal/tools"
 	"google.golang.org/genai"
 )
 
@@ -18,7 +19,7 @@ import (
 func planWorkspace(t *testing.T, mutate func(*config.Config), choice any, replies ...*genai.Content) (*Workspace, string) {
 	t.Helper()
 	w, _ := openTestWith(t, mutate, replies...)
-	w.SetUI(func(context.Context, tools.ApprovalRequest) (tools.Decision, error) { return tools.DecisionOnce, nil },
+	w.SetUI(func(context.Context, api.ApprovalRequest) (api.Decision, error) { return api.DecisionOnce, nil },
 		func(_ context.Context, _ string, options []string) (string, error) {
 			if i, ok := choice.(int); ok {
 				return options[i], nil
@@ -37,11 +38,11 @@ func exitPlan(plan string) *genai.Content {
 }
 
 // run collects a turn's tool results by name and its task lists.
-func runCollect(t *testing.T, w *Workspace, id string, turn Turn) (map[string][]map[string]any, [][]Task) {
+func runCollect(t *testing.T, w *Workspace, id string, turn api.Turn) (map[string][]map[string]any, [][]api.Task) {
 	t.Helper()
 	results := map[string][]map[string]any{}
-	var tasks [][]Task
-	if _, err := w.Run(context.Background(), id, turn, func(e Event) {
+	var tasks [][]api.Task
+	if _, err := w.Run(context.Background(), id, turn, func(e api.Event) {
 		if e.ToolResult != nil {
 			results[e.ToolResult.Name] = append(results[e.ToolResult.Name], e.ToolResult.Result)
 		}
@@ -65,7 +66,7 @@ func TestApprovedPlanIsCarriedOut(t *testing.T) {
 		exitPlan("1. Create notes.txt"), text("Plan approved."),
 		toolCall("todo", map[string]any{"items": []any{map[string]any{"content": "create notes.txt", "status": "in_progress"}}}),
 		toolCall("create_file", map[string]any{"path": "notes.txt", "content": "hi\n"}), text("done"))
-	results, tasks := runCollect(t, w, id, Turn{Text: "add notes", Plan: true})
+	results, tasks := runCollect(t, w, id, api.Turn{Text: "add notes", Plan: true})
 	if msg, _ := results["create_file"][0]["error"].(string); !strings.Contains(msg, "plan mode") || exists(w, "early.txt") {
 		t.Errorf("a write went through while planning: %v", results["create_file"][0])
 	}
@@ -102,7 +103,7 @@ func TestApprovingInPlanModeSwitchesMode(t *testing.T) {
 	w, id := planWorkspace(t, func(c *config.Config) { c.Blitz.PermissionMode = "plan" }, 1,
 		exitPlan("1. Create a.txt"), text("ok"),
 		toolCall("create_file", map[string]any{"path": "a.txt", "content": "a"}), text("done"))
-	runCollect(t, w, id, Turn{Text: "make a"})
+	runCollect(t, w, id, api.Turn{Text: "make a"})
 	if got := w.Settings().PermissionMode; got != "accept-edits" || !exists(w, "a.txt") {
 		t.Fatalf("mode %q, a.txt %v", got, exists(w, "a.txt"))
 	}
@@ -110,12 +111,12 @@ func TestApprovingInPlanModeSwitchesMode(t *testing.T) {
 
 func TestKeepPlanningAndRevising(t *testing.T) {
 	w, id := planWorkspace(t, nil, 2, exitPlan("1. Something"), text("Waiting."))
-	results, _ := runCollect(t, w, id, Turn{Text: "think", Plan: true})
+	results, _ := runCollect(t, w, id, api.Turn{Text: "think", Plan: true})
 	if results["exit_plan_mode"][0]["approved"] != false || len(w.storage.Active().Messages) != 2 {
 		t.Fatalf("keep planning: %v", results)
 	}
 	w2, id2 := planWorkspace(t, nil, "use tabs", exitPlan("1. Spaces"), exitPlan("1. Tabs"), text("?"))
-	results, _ = runCollect(t, w2, id2, Turn{Text: "format", Plan: true})
+	results, _ = runCollect(t, w2, id2, api.Turn{Text: "format", Plan: true})
 	if got := results["exit_plan_mode"]; len(got) != 2 || got[0]["feedback"] != "use tabs" {
 		t.Fatalf("revise: %v", got)
 	}
@@ -127,7 +128,7 @@ func TestPlanReviewPolicies(t *testing.T) {
 		toolCall("create_file", map[string]any{"path": "x.txt", "content": "x"}),
 		exitPlan("1. Create x.txt"), text("ok"),
 		toolCall("create_file", map[string]any{"path": "x.txt", "content": "x"}), text("done"))
-	results, _ := runCollect(t, w, id, Turn{Text: "make x"})
+	results, _ := runCollect(t, w, id, api.Turn{Text: "make x"})
 	if msg, _ := results["create_file"][0]["error"].(string); msg == "" || !exists(w, "x.txt") {
 		t.Fatalf("always: %v", results["create_file"])
 	}
@@ -138,7 +139,7 @@ func TestPlanReviewPolicies(t *testing.T) {
 		toolCall("create_file", map[string]any{"path": "y.txt", "content": "y"}),
 		exitPlan("1. Create y.txt"), text("ok"),
 		toolCall("create_file", map[string]any{"path": "y.txt", "content": "y"}), text("done"))
-	results, _ = runCollect(t, w2, id2, Turn{Text: "make y"})
+	results, _ = runCollect(t, w2, id2, api.Turn{Text: "make y"})
 	if msg, _ := results["create_file"][0]["error"].(string); msg == "" || !exists(w2, "y.txt") {
 		t.Fatalf("agent-decides: %v", results["create_file"])
 	}

@@ -19,33 +19,26 @@ import (
 	"strings"
 	"time"
 
+	"github.com/retail-cortex/blitz/pkg/api"
+
 	"gopkg.in/yaml.v3"
 )
 
 // FileName is the file that defines a worker, in its own directory.
 const FileName = "WORKER.md"
 
-// Limits bound one run. Every run has them: the host policy fills in what
-// a worker leaves out.
-type Limits struct {
-	MaxTurns   int           `yaml:"max_turns"`
-	MaxCostUSD float64       `yaml:"max_cost_usd"`
-	Timeout    time.Duration `yaml:"-"`
-	TimeoutRaw string        `yaml:"timeout"`
-}
-
 // frontmatter is WORKER.md's YAML.
 type frontmatter struct {
-	Name        string   `yaml:"name"`
-	Description string   `yaml:"description"`
-	Schedule    string   `yaml:"schedule"`
-	Timezone    string   `yaml:"timezone"`
-	Agent       string   `yaml:"agent"`
-	Model       string   `yaml:"model"`
-	Permissions []string `yaml:"permissions"`
-	Limits      Limits   `yaml:"limits"`
-	Overlap     string   `yaml:"overlap"`
-	CatchUp     string   `yaml:"catch_up"`
+	Name        string     `yaml:"name"`
+	Description string     `yaml:"description"`
+	Schedule    string     `yaml:"schedule"`
+	Timezone    string     `yaml:"timezone"`
+	Agent       string     `yaml:"agent"`
+	Model       string     `yaml:"model"`
+	Permissions []string   `yaml:"permissions"`
+	Limits      api.Limits `yaml:"limits"`
+	Overlap     string     `yaml:"overlap"`
+	CatchUp     string     `yaml:"catch_up"`
 }
 
 // Worker is a worker as read from its directory.
@@ -62,7 +55,7 @@ type Worker struct {
 	Model    string
 	// Permissions are what the worker asks to do without approval.
 	Permissions []Permission
-	Limits      Limits
+	Limits      api.Limits
 	// Overlap is "skip" (a run still going when the next is due skips it).
 	Overlap string
 	// CatchUp is "none" or "once" (run once for runs missed while the

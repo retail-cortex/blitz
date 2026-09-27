@@ -7,7 +7,8 @@ import (
 	"log/slog"
 	"slices"
 	"strings"
-	"time"
+
+	"github.com/retail-cortex/blitz/pkg/api"
 
 	"github.com/google/uuid"
 	"github.com/retail-cortex/blitz/internal/audit"
@@ -21,115 +22,37 @@ import (
 	adksession "google.golang.org/adk/v2/session"
 )
 
-// Turn is one prompt for the agent.
-type Turn struct {
-	// Text is what the user typed. prompt_submit hooks see it and the
-	// transcript records it.
-	Text string
-	// Prompt, if set, is sent to the agent instead of Text (e.g. /search
-	// sends the fetched results, and the transcript records the command).
-	Prompt string
-	// Plan: Text is a goal to plan for. Tools that change anything are
-	// refused for the whole turn (runtime.WithPlanOnly), and the transcript
-	// records "/plan <Text>".
-	Plan bool
-	// ReadOnly names a mode that refuses the same tools as plan mode
-	// (runtime.WithReadOnly).
-	ReadOnly string
-	// Aside: a /btw question, answered in a throwaway copy of the session
-	// (runtime.Engine.Aside) and recorded nowhere. It takes no images, starts
-	// no checkpoint and leaves queued steer messages alone.
-	Aside bool
-	// Accepted: Text already passed prompt_submit hooks and was recorded (a
-	// steer message that arrived too late to be read mid-turn).
-	Accepted bool
-	// Command: Text is a custom slash command ("/name args"), expanded into
-	// its prompt with its agent, model, tools and plan mode; the
-	// transcript records Text.
-	Command bool
-	// Images are sent with the prompt.
-	Images []*images.Image
-	// MaxTurns limits the model calls in the turn (0: unlimited).
-	MaxTurns int
-	// MaxCostUSD stops the turn once it has cost more than this (0:
-	// unlimited); it can only be enforced when the model has a price.
-	MaxCostUSD float64
-	// Timeout stops the turn after this long (0: unlimited).
-	Timeout time.Duration
-	// FetchGrants are URLs the agent may fetch in this turn without asking
-	// (the pages a web search handed it).
-	FetchGrants []string
-	// OnAccepted, if set, runs once the prompt has passed prompt_submit
-	// hooks and been recorded, just before it is sent.
-	OnAccepted func()
-	// OnFinished, if set, runs when the agent has stopped, before unread
-	// steer messages are collected: a front end still taking a steer message
-	// finishes here, so the message ends up in TurnResult.Leftover.
-	OnFinished func()
-
-	// planMode: the workspace is in plan permission mode, so the turn is
-	// planned like Plan but the transcript records the text as typed.
-	planMode bool
-}
-
-// TurnResult describes a finished turn.
-type TurnResult struct {
-	// Output is the model's final text (partial and thought text excluded).
-	Output string
-	// Before and After are the session's usage around the turn.
-	Before, After runtime.Usage
-	// Leftover are steer messages sent after the model's last tool call, so
-	// never read. Front ends send them as the next turn (with Accepted set)
-	// or, if the turn was interrupted, drop them.
-	Leftover []string
-}
-
-// Limits a turn can stop at. They wrap the limit, e.g. "the turn reached
-// its cost limit ($0.50)", and runtime.ErrMaxTurns is re-exported so
-// front ends match all three without importing the engine.
-var (
-	ErrMaxTurns  = runtime.ErrMaxTurns
-	ErrCostLimit = errors.New("the turn reached its cost limit")
-	ErrTimeLimit = errors.New("the turn reached its time limit")
-)
-
-// IsLimit reports whether err is a turn stopping at one of its limits.
-func IsLimit(err error) bool {
-	return errors.Is(err, ErrMaxTurns) || errors.Is(err, ErrCostLimit) || errors.Is(err, ErrTimeLimit)
-}
-
-// BlockedError reports a prompt refused by a prompt_submit hook. Nothing
-// was recorded or sent.
-type BlockedError struct{ Reason string }
-
-func (e *BlockedError) Error() string { return "prompt blocked by hook: " + e.Reason }
-
 // Run sends one prompt to the agent in the session and passes its events to
 // on as they happen. It runs prompt_submit hooks, audits the prompt, starts
 // a checkpoint for /undo and records both sides in the transcript. A
 // refused prompt is a *BlockedError. A turn that fails part way still
 // returns what it produced.
-func (w *Workspace) Run(ctx context.Context, sessionID string, t Turn, on func(Event)) (TurnResult, error) {
+func (w *Workspace) Run(ctx context.Context, sessionID string, t api.Turn, on func(api.Event)) (api.TurnResult, error) {
 	var opts []runtime.ExecOption
 	if t.Command {
 		var err error
 		if opts, err = w.expandCommand(ctx, &t); err != nil {
-			return TurnResult{}, err
+			return api.TurnResult{}, err
 		}
 	}
 	// Plan permission mode, and plan_review = always, plan every prompt
 	// first; side questions and read-only turns are read-only already.
-	planEvery := w.tools.Hooks().Mode() == tools.ModePlan || w.cfg.Blitz.PlanReview == config.PlanReviewAlways
-	if planEvery && !t.Plan && !t.Aside && t.ReadOnly == "" {
-		t.planMode = true
-	}
-	return w.run(ctx, sessionID, t, on, w.storage, opts...)
+	planEvery := w.tools.Hooks().Mode() == api.ModePlan || w.cfg.Blitz.PlanReview == config.PlanReviewAlways
+	return w.run(ctx, sessionID, turn{Turn: t, planMode: planEvery && !t.Plan && !t.Aside && t.ReadOnly == ""}, on, w.storage, opts...)
+}
+
+// turn is a turn as the engine runs it.
+type turn struct {
+	api.Turn
+	// planMode: the workspace is in plan permission mode, so the turn is
+	// planned like Plan but the transcript records the text as typed.
+	planMode bool
 }
 
 // run is Run recording the transcript in st, which holds the session as
 // its active one (a worker run has its own). extra are further engine
 // options for a non-aside turn (a worker's agent and model).
-func (w *Workspace) run(ctx context.Context, sessionID string, t Turn, on func(Event), st *session.Storage, extra ...runtime.ExecOption) (TurnResult, error) {
+func (w *Workspace) run(ctx context.Context, sessionID string, t turn, on func(api.Event), st *session.Storage, extra ...runtime.ExecOption) (api.TurnResult, error) {
 	ctx = tools.WithPromptID(ctx, uuid.NewString())
 	// The turn's plan state: the plan tools report the user's decision here.
 	gate := tools.NewPlanGate(t.Plan || t.planMode)
@@ -138,7 +61,7 @@ func (w *Workspace) run(ctx context.Context, sessionID string, t Turn, on func(E
 	if !t.Accepted {
 		var err error
 		if hookContext, err = w.accept(ctx, sessionID, t.Text); err != nil {
-			return TurnResult{}, err
+			return api.TurnResult{}, err
 		}
 	}
 
@@ -172,7 +95,7 @@ func (w *Workspace) run(ctx context.Context, sessionID string, t Turn, on func(E
 		t.OnAccepted()
 	}
 
-	res := TurnResult{Before: w.engine.Usage(sessionID)}
+	res := api.TurnResult{Before: w.engine.Usage(sessionID)}
 
 	// Cost and time limits cancel the turn with their reason as the cause.
 	limited := ctx
@@ -182,15 +105,15 @@ func (w *Workspace) run(ctx context.Context, sessionID string, t Turn, on func(E
 		defer cancel(nil)
 		if t.Timeout > 0 {
 			var stop context.CancelFunc
-			limited, stop = context.WithTimeoutCause(limited, t.Timeout, fmt.Errorf("%w (%s)", ErrTimeLimit, t.Timeout))
+			limited, stop = context.WithTimeoutCause(limited, t.Timeout, fmt.Errorf("%w (%s)", api.ErrTimeLimit, t.Timeout))
 			defer stop()
 		}
 		if t.MaxCostUSD > 0 {
 			inner := on
-			on = func(e Event) {
+			on = func(e api.Event) {
 				inner(e)
 				if w.engine.Usage(sessionID).CostUSD-res.Before.CostUSD > t.MaxCostUSD {
-					cancel(fmt.Errorf("%w ($%.2f)", ErrCostLimit, t.MaxCostUSD))
+					cancel(fmt.Errorf("%w ($%.2f)", api.ErrCostLimit, t.MaxCostUSD))
 				}
 			}
 		}
@@ -258,7 +181,7 @@ func (w *Workspace) run(ctx context.Context, sessionID string, t Turn, on func(E
 			err = w.engine.Execute(ctx, sessionID, reason, handler, base...)
 		}
 	}
-	if cause := context.Cause(ctx); err != nil && (errors.Is(cause, ErrCostLimit) || errors.Is(cause, ErrTimeLimit)) {
+	if cause := context.Cause(ctx); err != nil && (errors.Is(cause, api.ErrCostLimit) || errors.Is(cause, api.ErrTimeLimit)) {
 		err = cause
 	}
 	if t.OnFinished != nil {
@@ -297,9 +220,9 @@ const maxPlanRounds = 3
 
 // planApproved leaves plan mode for the mode the user chose to carry out
 // a plan in. Outside plan mode, only a choice of accept-edits changes it.
-func (w *Workspace) planApproved(mode tools.PermissionMode) {
+func (w *Workspace) planApproved(mode api.PermissionMode) {
 	current := w.tools.Hooks().Mode()
-	if current != tools.ModePlan && mode != tools.ModeAcceptEdits || current == mode {
+	if current != api.ModePlan && mode != api.ModeAcceptEdits || current == mode {
 		return
 	}
 	if _, err := w.SetPermissionMode(string(mode)); err != nil {
@@ -320,7 +243,7 @@ func withHookContext(prompt, event, context string) string {
 func (w *Workspace) accept(ctx context.Context, sessionID, text string) (string, error) {
 	out := w.tools.ScriptHooks().PromptSubmitContext(ctx, sessionID, text)
 	if out.Blocked {
-		return "", &BlockedError{Reason: out.Reason}
+		return "", &api.BlockedError{Reason: out.Reason}
 	}
 	w.tools.Hooks().Audit().Log(audit.Entry{Kind: audit.KindPrompt, Session: sessionID, Detail: text})
 	return out.Context, nil
@@ -356,7 +279,7 @@ func AttachmentNote(imgs []*images.Image) string {
 // relay passes a turn's ADK events on as Events, marking final text that
 // repeats streamed chunks and collecting the transcript's model text.
 type relay struct {
-	on       func(Event)
+	on       func(api.Event)
 	streamed bool // answer text arrived in partial chunks since the last final event
 	output   strings.Builder
 }
@@ -370,7 +293,7 @@ func (r *relay) paragraph() {
 	}
 	sep := strings.Repeat("\n", 2-min(2, len(s)-len(strings.TrimRight(s, "\n"))))
 	r.output.WriteString(sep)
-	r.on(Event{Text: &Text{Text: sep}})
+	r.on(api.Event{Text: &api.Text{Text: sep}})
 }
 
 func (r *relay) handle(ev *adksession.Event) error {

@@ -8,8 +8,7 @@ import (
 	"testing"
 	"time"
 
-	core "github.com/retail-cortex/blitz/internal/app"
-	"github.com/retail-cortex/blitz/internal/tools"
+	"github.com/retail-cortex/blitz/pkg/api"
 )
 
 func items(labels ...string) []PickItem {
@@ -200,9 +199,9 @@ func (ttyKeysUnavailable) read([]byte) (int, error)          { return 0, nil }
 func TestApprovalPicker(t *testing.T) {
 	f, keys := pickTerminal(t)
 	approve := NewApprover(f.in, 2)
-	req := tools.ApprovalRequest{Kind: "edit", Tool: "edit", Detail: "notes.txt", Key: "k", KeyLabel: "edits to notes.txt",
+	req := api.ApprovalRequest{Kind: "edit", Tool: "edit", Detail: "notes.txt", Key: "k", KeyLabel: "edits to notes.txt",
 		Diff: "--- a/notes.txt\n+++ b/notes.txt\n@@ -1 +1 @@\n-old\n+new\n"}
-	for key, want := range map[string]tools.Decision{"y": tools.DecisionOnce, "s": tools.DecisionSession, "a": tools.DecisionAlways, "n": tools.DecisionDeny} {
+	for key, want := range map[string]api.Decision{"y": api.DecisionOnce, "s": api.DecisionSession, "a": api.DecisionAlways, "n": api.DecisionDeny} {
 		keys.in <- []byte(key)
 		if d, err := approve(context.Background(), req); err != nil || d != want {
 			t.Errorf("%s: %v %v", key, d, err)
@@ -221,7 +220,7 @@ func TestApprovalPicker(t *testing.T) {
 	// d shows the whole diff and asks again, without the diff item.
 	keys.in <- []byte("d")
 	keys.in <- []byte("y")
-	if d, err := approve(context.Background(), req); err != nil || d != tools.DecisionOnce {
+	if d, err := approve(context.Background(), req); err != nil || d != api.DecisionOnce {
 		t.Fatalf("after the diff: %v %v", d, err)
 	}
 	if !strings.Contains(f.output(), "+new") {
@@ -232,7 +231,7 @@ func TestApprovalPicker(t *testing.T) {
 	interrupted := false
 	f.in.SetInterruptHandler(func() { interrupted = true })
 	keys.in <- []byte("\x1b")
-	if d, err := approve(context.Background(), req); d != tools.DecisionDeny || !errors.Is(err, context.Canceled) || !interrupted {
+	if d, err := approve(context.Background(), req); d != api.DecisionDeny || !errors.Is(err, context.Canceled) || !interrupted {
 		t.Fatalf("Esc: %v %v, interrupted %v", d, err, interrupted)
 	}
 }
@@ -287,7 +286,7 @@ func TestResumePicker(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := app.Workspace.Run(context.Background(), first.ID, core.Turn{Text: "remember the milk"}, func(core.Event) {}); err != nil {
+	if _, err := app.Workspace.Run(context.Background(), first.ID, api.Turn{Text: "remember the milk"}, func(api.Event) {}); err != nil {
 		t.Fatal(err)
 	}
 	app.Workspace.NewSession()

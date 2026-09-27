@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/retail-cortex/blitz/pkg/api"
+
 	"connectrpc.com/connect"
-	"github.com/retail-cortex/blitz/internal/app"
 	pb "github.com/retail-cortex/blitz/internal/gen/blitz/v1"
-	"github.com/retail-cortex/blitz/internal/workers"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
@@ -18,23 +18,23 @@ type workerService struct{ s *Server }
 
 var errNoScheduler = apiError(connect.CodeFailedPrecondition, "NO_SCHEDULER", errors.New("this server doesn't run workers"))
 
-func workerState(s workers.State) pb.WorkerState {
+func workerState(s api.State) pb.WorkerState {
 	switch s {
-	case workers.StateNew:
+	case api.StateNew:
 		return pb.WorkerState_WORKER_STATE_NEW
-	case workers.StateEnabled:
+	case api.StateEnabled:
 		return pb.WorkerState_WORKER_STATE_ENABLED
-	case workers.StateDisabled:
+	case api.StateDisabled:
 		return pb.WorkerState_WORKER_STATE_DISABLED
-	case workers.StateChanged:
+	case api.StateChanged:
 		return pb.WorkerState_WORKER_STATE_CHANGED
-	case workers.StateInvalid:
+	case api.StateInvalid:
 		return pb.WorkerState_WORKER_STATE_INVALID
 	}
 	return pb.WorkerState_WORKER_STATE_UNSPECIFIED
 }
 
-func workerMsg(i app.WorkerInfo) *pb.Worker {
+func workerMsg(i api.WorkerInfo) *pb.Worker {
 	return &pb.Worker{
 		Workspace: i.Workspace, Name: i.Name, Description: i.Description, Path: i.Path, Hash: i.Hash,
 		State: workerState(i.State), Schedule: i.Schedule, Cron: i.Cron, Timezone: i.Timezone, NextRun: timestamp(i.Next),
@@ -44,23 +44,23 @@ func workerMsg(i app.WorkerInfo) *pb.Worker {
 	}
 }
 
-func runStatus(s workers.RunStatus) pb.RunStatus {
+func runStatus(s api.RunStatus) pb.RunStatus {
 	switch s {
-	case workers.RunRunning:
+	case api.RunRunning:
 		return pb.RunStatus_RUN_STATUS_RUNNING
-	case workers.RunSucceeded:
+	case api.RunSucceeded:
 		return pb.RunStatus_RUN_STATUS_SUCCEEDED
-	case workers.RunFailed:
+	case api.RunFailed:
 		return pb.RunStatus_RUN_STATUS_FAILED
-	case workers.RunLimited:
+	case api.RunLimited:
 		return pb.RunStatus_RUN_STATUS_LIMITED
-	case workers.RunSkipped:
+	case api.RunSkipped:
 		return pb.RunStatus_RUN_STATUS_SKIPPED
 	}
 	return pb.RunStatus_RUN_STATUS_UNSPECIFIED
 }
 
-func runMsg(r workers.Run) *pb.WorkerRun {
+func runMsg(r api.Run) *pb.WorkerRun {
 	out := &pb.WorkerRun{
 		Id: r.ID, Workspace: r.Workspace, Worker: r.Worker, Hash: r.Hash, Status: runStatus(r.Status), Manual: r.Manual,
 		Started: timestamp(r.Started), Duration: durationpb.New(r.Duration),

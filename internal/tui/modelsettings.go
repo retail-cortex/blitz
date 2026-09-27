@@ -8,7 +8,8 @@ import (
 	"strconv"
 	"strings"
 
-	core "github.com/retail-cortex/blitz/internal/app"
+	"github.com/retail-cortex/blitz/pkg/api"
+
 	"github.com/retail-cortex/blitz/internal/config"
 	"github.com/retail-cortex/blitz/internal/i18n"
 )
@@ -48,7 +49,7 @@ func cmdModelSettings(args []string, app *App) {
 	}
 
 	reset := len(args) == 2 && args[1] == "reset"
-	var changes []core.Setting
+	var changes []api.Setting
 	if !reset {
 		for _, pair := range args[1:] {
 			key, value, ok := strings.Cut(pair, "=")
@@ -56,13 +57,13 @@ func cmdModelSettings(args []string, app *App) {
 				fmt.Printf("%s%s%s\n", Yellow, i18n.T("msettings.bad_pair", "arg", safe(pair)), Reset)
 				return
 			}
-			changes = append(changes, core.Setting{Key: key, Value: value})
+			changes = append(changes, api.Setting{Key: key, Value: value})
 		}
 	}
 	res, err := app.Workspace.UpdateModelSettings(args[0], reset, changes)
-	var invalid *core.InvalidSettingError
+	var invalid *api.InvalidSettingError
 	switch {
-	case errors.Is(err, core.ErrBadModelRef):
+	case errors.Is(err, api.ErrBadModelRef):
 		fmt.Printf("%s%s%s\n", Yellow, i18n.T("msettings.usage"), Reset)
 		return
 	case errors.As(err, &invalid):
@@ -86,7 +87,7 @@ func cmdModelSettings(args []string, app *App) {
 
 // showModelSettings lists every setting for one model: its own value, or
 // where the value comes from when it has none.
-func showModelSettings(info core.ModelSettingsInfo) {
+func showModelSettings(info api.ModelSettingsInfo) {
 	fmt.Printf("\n%s%s%s\n", Bold, safe(info.Model), Reset)
 	for _, key := range config.ModelSettingKeys {
 		if v, ok := info.Settings.Get(key); ok {

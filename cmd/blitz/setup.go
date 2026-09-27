@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/retail-cortex/blitz/pkg/api"
+
 	"github.com/retail-cortex/blitz/internal/app"
 	"github.com/retail-cortex/blitz/internal/client"
 	"github.com/retail-cortex/blitz/internal/config"
@@ -91,7 +93,7 @@ func startObservability(ctx context.Context, cfg *config.Config, warn func(strin
 // is running (unless local), and otherwise opens it in this process. It
 // also returns the interface's translation catalogs, which are always this
 // process's, and whether it attached.
-func openBackend(ctx context.Context, cfg *config.Config, local, streaming bool, warn func(string)) (app.Backend, *i18n.Bundle, bool, error) {
+func openBackend(ctx context.Context, cfg *config.Config, local, streaming bool, warn func(string)) (api.Backend, *i18n.Bundle, bool, error) {
 	socket := server.DefaultSocket()
 	if !local && server.Running(socket) {
 		r, err := client.Attach(ctx, socket, cfg.Tools.WorkspaceDir, warn)
@@ -101,7 +103,7 @@ func openBackend(ctx context.Context, cfg *config.Config, local, streaming bool,
 		return r, app.SetupLocale(cfg, warn), true, nil
 	}
 	w, err := app.Open(ctx, cfg, app.Options{Streaming: streaming, Warn: warn})
-	if errors.Is(err, app.ErrWorkspaceBusy) {
+	if errors.Is(err, api.ErrWorkspaceBusy) {
 		return nil, nil, false, withCode(exitUsage, fmt.Errorf("%w (another blitz has it open)", err))
 	}
 	if err != nil {

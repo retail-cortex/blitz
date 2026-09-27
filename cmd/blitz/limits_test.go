@@ -9,14 +9,15 @@ import (
 	"testing"
 	"time"
 
-	"github.com/retail-cortex/blitz/internal/app"
+	"github.com/retail-cortex/blitz/pkg/api"
+
 	"google.golang.org/genai"
 )
 
 func TestLimitErrorsExitWithThree(t *testing.T) {
 	for _, err := range []error{
-		app.ErrCostLimit, app.ErrTimeLimit, app.ErrMaxTurns,
-		fmt.Errorf("%w ($0.50)", app.ErrCostLimit), fmt.Errorf("wrapped: %w", app.ErrTimeLimit),
+		api.ErrCostLimit, api.ErrTimeLimit, api.ErrMaxTurns,
+		fmt.Errorf("%w ($0.50)", api.ErrCostLimit), fmt.Errorf("wrapped: %w", api.ErrTimeLimit),
 	} {
 		if got := exitCodeFor(err); got != exitMaxTurns {
 			t.Errorf("exitCodeFor(%v) = %d, want %d", err, got, exitMaxTurns)

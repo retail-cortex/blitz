@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/retail-cortex/blitz/pkg/api"
+
 	"github.com/retail-cortex/blitz/internal/i18n"
 	"github.com/retail-cortex/blitz/internal/tools"
 	"google.golang.org/genai"
@@ -39,14 +41,14 @@ func TestViableLinks(t *testing.T) {
 func TestUsageContextAndSessionSearch(t *testing.T) {
 	w, llm := openTestWith(t, nil, text("pineapple noted"))
 	llm.Usage = &genai.GenerateContentResponseUsageMetadata{PromptTokenCount: 100, CandidatesTokenCount: 10}
-	if _, err := w.SessionUsage(); !errors.Is(err, ErrNoActiveSession) {
+	if _, err := w.SessionUsage(); !errors.Is(err, api.ErrNoActiveSession) {
 		t.Errorf("usage without a session: %v", err)
 	}
-	if _, err := w.Context(); !errors.Is(err, ErrNoActiveSession) {
+	if _, err := w.Context(); !errors.Is(err, api.ErrNoActiveSession) {
 		t.Errorf("context without a session: %v", err)
 	}
 	sid := newSession(t, w).ID
-	if _, err := w.Run(context.Background(), sid, Turn{Text: "remember pineapple"}, ignore); err != nil {
+	if _, err := w.Run(context.Background(), sid, api.Turn{Text: "remember pineapple"}, ignore); err != nil {
 		t.Fatal(err)
 	}
 	if u, err := w.SessionUsage(); err != nil || u.Calls != 1 || u.Input != 100 {
@@ -78,7 +80,7 @@ func TestMemoryAndLocale(t *testing.T) {
 		t.Errorf("memory after: %v", paths)
 	}
 
-	if _, err := w.SetLocale(ctx, "zz-top-9"); !errors.Is(err, ErrUnknownLocale) {
+	if _, err := w.SetLocale(ctx, "zz-top-9"); !errors.Is(err, api.ErrUnknownLocale) {
 		t.Errorf("unknown locale: %v", err)
 	}
 	res, err := w.SetLocale(ctx, "japanese")

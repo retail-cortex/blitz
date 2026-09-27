@@ -14,10 +14,11 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/retail-cortex/blitz/pkg/api"
+
 	core "github.com/retail-cortex/blitz/internal/app"
 	"github.com/retail-cortex/blitz/internal/config"
 	"github.com/retail-cortex/blitz/internal/runtime"
-	"github.com/retail-cortex/blitz/internal/tools"
 	"google.golang.org/adk/v2/model"
 )
 
@@ -40,12 +41,12 @@ func TestLineReaderSharedSequentialReads(t *testing.T) {
 }
 
 func TestApprover(t *testing.T) {
-	keyed := tools.ApprovalRequest{Tool: "run_shell_command", Kind: tools.ActionCommand, Detail: "rm -rf build\x1b]52;c;ZXZpbA==\x07",
+	keyed := api.ApprovalRequest{Tool: "run_shell_command", Kind: api.ActionCommand, Detail: "rm -rf build\x1b]52;c;ZXZpbA==\x07",
 		Key: "cmd:rm -rf build", KeyLabel: "this exact command"}
-	cases := map[string]tools.Decision{
-		"y\n": tools.DecisionOnce, "YES\n": tools.DecisionOnce, " y \n": tools.DecisionOnce,
-		"s\n": tools.DecisionSession, "a\n": tools.DecisionAlways, "always\n": tools.DecisionAlways,
-		"\n": tools.DecisionDeny, "n\n": tools.DecisionDeny, "maybe\n": tools.DecisionDeny,
+	cases := map[string]api.Decision{
+		"y\n": api.DecisionOnce, "YES\n": api.DecisionOnce, " y \n": api.DecisionOnce,
+		"s\n": api.DecisionSession, "a\n": api.DecisionAlways, "always\n": api.DecisionAlways,
+		"\n": api.DecisionDeny, "n\n": api.DecisionDeny, "maybe\n": api.DecisionDeny,
 	}
 	for input, want := range cases {
 		var out bytes.Buffer
@@ -63,10 +64,10 @@ func TestApprover(t *testing.T) {
 	}
 
 	// Without a key, session/always are unavailable and deny.
-	unkeyed := tools.ApprovalRequest{Tool: "x", Kind: tools.ActionWrite, Detail: "d"}
+	unkeyed := api.ApprovalRequest{Tool: "x", Kind: api.ActionWrite, Detail: "d"}
 	for _, in := range []string{"s\n", "a\n"} {
 		var out bytes.Buffer
-		if got, _ := NewApprover(NewLineReader(strings.NewReader(in), &out), 0)(context.Background(), unkeyed); got != tools.DecisionDeny {
+		if got, _ := NewApprover(NewLineReader(strings.NewReader(in), &out), 0)(context.Background(), unkeyed); got != api.DecisionDeny {
 			t.Errorf("%q without key should deny, got %v", in, got)
 		}
 		if strings.Contains(out.String(), "[s]") {
@@ -77,24 +78,24 @@ func TestApprover(t *testing.T) {
 	// Negative: EOF and cancelled context deny with an error.
 	var out bytes.Buffer
 	approve := NewApprover(NewLineReader(strings.NewReader(""), &out), 0)
-	if d, err := approve(context.Background(), keyed); d != tools.DecisionDeny || err == nil {
+	if d, err := approve(context.Background(), keyed); d != api.DecisionDeny || err == nil {
 		t.Errorf("expected EOF to deny with error, got %v %v", d, err)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	if d, err := approve(ctx, keyed); d != tools.DecisionDeny || err == nil {
+	if d, err := approve(ctx, keyed); d != api.DecisionDeny || err == nil {
 		t.Errorf("expected cancelled ctx to deny, got %v %v", d, err)
 	}
 }
 
 func TestApproverShowsDiff(t *testing.T) {
 	diff := "--- a/f.go\n+++ b/f.go\n@@ -1,3 +1,3 @@\n ctx\n-old\n+new\n" + strings.Repeat(" more\n", 50)
-	req := tools.ApprovalRequest{Tool: "replace_in_file", Kind: tools.ActionWrite, Detail: "Edit f.go", Diff: diff}
+	req := api.ApprovalRequest{Tool: "replace_in_file", Kind: api.ActionWrite, Detail: "Edit f.go", Diff: diff}
 
 	// Truncated diff offers [d]; choosing it prints the full diff and re-asks.
 	var out bytes.Buffer
 	d, err := NewApprover(NewLineReader(strings.NewReader("d\ny\n"), &out), 10)(context.Background(), req)
-	if err != nil || d != tools.DecisionOnce {
+	if err != nil || d != api.DecisionOnce {
 		t.Fatalf("got %v %v", d, err)
 	}
 	o := out.String()
@@ -110,7 +111,7 @@ func TestApproverShowsDiff(t *testing.T) {
 
 	// Short diffs aren't truncated and don't offer [d].
 	out.Reset()
-	short := tools.ApprovalRequest{Tool: "t", Kind: tools.ActionWrite, Diff: "+x\n"}
+	short := api.ApprovalRequest{Tool: "t", Kind: api.ActionWrite, Diff: "+x\n"}
 	NewApprover(NewLineReader(strings.NewReader("y\n"), &out), 10)(context.Background(), short)
 	if strings.Contains(out.String(), "[d]") {
 		t.Error("[d] offered for an untruncated diff")

@@ -3,11 +3,11 @@ package server
 import (
 	"time"
 
-	"github.com/retail-cortex/blitz/internal/app"
+	"github.com/retail-cortex/blitz/pkg/api"
+
 	"github.com/retail-cortex/blitz/internal/config"
 	pb "github.com/retail-cortex/blitz/internal/gen/blitz/v1"
 	"github.com/retail-cortex/blitz/internal/images"
-	"github.com/retail-cortex/blitz/internal/tools"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -22,7 +22,7 @@ func timestamp(t time.Time) *timestamppb.Timestamp {
 	return timestamppb.New(t)
 }
 
-func sessionMsg(s app.SessionInfo) *pb.SessionInfo {
+func sessionMsg(s api.SessionInfo) *pb.SessionInfo {
 	out := &pb.SessionInfo{
 		Id: s.ID, Title: s.Title, Agent: s.Agent, Workspace: s.Workspace, Snapshot: s.Snapshot, From: s.From,
 		MessageCount: int32(s.MessageCount), Created: timestamp(s.Created), Updated: timestamp(s.Updated),
@@ -33,7 +33,7 @@ func sessionMsg(s app.SessionInfo) *pb.SessionInfo {
 	return out
 }
 
-func sessionMsgs(list []app.SessionInfo) []*pb.SessionInfo {
+func sessionMsgs(list []api.SessionInfo) []*pb.SessionInfo {
 	out := make([]*pb.SessionInfo, len(list))
 	for i, s := range list {
 		out[i] = sessionMsg(s)
@@ -41,14 +41,14 @@ func sessionMsgs(list []app.SessionInfo) []*pb.SessionInfo {
 	return out
 }
 
-func usageMsg(u app.Usage) *pb.Usage {
+func usageMsg(u api.Usage) *pb.Usage {
 	return &pb.Usage{
 		Calls: int32(u.Calls), Input: u.Input, Cached: u.Cached, CacheWrite: u.CacheWrite, Output: u.Output,
 		LastPrompt: u.LastPrompt, CostUsd: u.CostUSD, Priced: u.Priced,
 	}
 }
 
-func savedMsg(s app.Saved) *pb.Saved {
+func savedMsg(s api.Saved) *pb.Saved {
 	out := &pb.Saved{Path: s.Path}
 	if s.Err != nil {
 		out.Error = s.Err.Error()
@@ -56,7 +56,7 @@ func savedMsg(s app.Saved) *pb.Saved {
 	return out
 }
 
-func agentMsg(a app.AgentInfo) *pb.AgentInfo {
+func agentMsg(a api.AgentInfo) *pb.AgentInfo {
 	return &pb.AgentInfo{Name: a.Name, DisplayName: a.DisplayName, Description: a.Description, Active: a.Active, PinnedModel: a.PinnedModel}
 }
 
@@ -78,14 +78,14 @@ func modelSettingsMsg(s config.ModelSettings) *pb.ModelSettings {
 	return out
 }
 
-func modelSettingsInfoMsg(i app.ModelSettingsInfo) *pb.ModelSettingsInfo {
+func modelSettingsInfoMsg(i api.ModelSettingsInfo) *pb.ModelSettingsInfo {
 	return &pb.ModelSettingsInfo{
 		Model: i.Model, Provider: i.Provider, Settings: modelSettingsMsg(i.Settings),
 		GlobalTemperature: i.GlobalTemperature, GlobalMaxTokens: int32(i.GlobalMaxTokens),
 	}
 }
 
-func skillMsg(s app.SkillInfo) *pb.SkillInfo {
+func skillMsg(s api.SkillInfo) *pb.SkillInfo {
 	out := &pb.SkillInfo{
 		Name: s.Name, Description: s.Description, Version: s.Version, License: s.License, Category: s.Category,
 		Compatibility: s.Compatibility, Tags: s.Tags, Hash: s.Hash, Tier: s.Tier, Bypass: s.Bypass,
@@ -103,7 +103,7 @@ func skillMsg(s app.SkillInfo) *pb.SkillInfo {
 	return out
 }
 
-func skillMsgs(list []app.SkillInfo) []*pb.SkillInfo {
+func skillMsgs(list []api.SkillInfo) []*pb.SkillInfo {
 	out := make([]*pb.SkillInfo, len(list))
 	for i, s := range list {
 		out[i] = skillMsg(s)
@@ -118,7 +118,7 @@ func imageMsg(img *images.Image) *pb.Image {
 	}
 }
 
-func approvalMsg(a app.Approval) *pb.Approval {
+func approvalMsg(a api.Approval) *pb.Approval {
 	return &pb.Approval{Key: a.Key, Kind: a.Kind, Subject: a.Subject, Dir: a.Dir, Always: a.Always, Added: timestamp(a.Added)}
 }
 
@@ -135,7 +135,7 @@ func structMsg(m map[string]any) *structpb.Struct {
 	return s
 }
 
-func eventMsg(e app.Event) *pb.TurnEvent {
+func eventMsg(e api.Event) *pb.TurnEvent {
 	out := &pb.TurnEvent{Author: e.Author}
 	switch {
 	case e.Text != nil:
@@ -154,30 +154,30 @@ func eventMsg(e app.Event) *pb.TurnEvent {
 	return out
 }
 
-func actionKind(k tools.ActionKind) pb.ActionKind {
+func actionKind(k api.ActionKind) pb.ActionKind {
 	switch k {
-	case tools.ActionCommand:
+	case api.ActionCommand:
 		return pb.ActionKind_ACTION_KIND_COMMAND
-	case tools.ActionWrite:
+	case api.ActionWrite:
 		return pb.ActionKind_ACTION_KIND_WRITE
-	case tools.ActionDelete:
+	case api.ActionDelete:
 		return pb.ActionKind_ACTION_KIND_DELETE
-	case tools.ActionNetwork:
+	case api.ActionNetwork:
 		return pb.ActionKind_ACTION_KIND_NETWORK
-	case tools.ActionMCP:
+	case api.ActionMCP:
 		return pb.ActionKind_ACTION_KIND_MCP
 	}
 	return pb.ActionKind_ACTION_KIND_UNSPECIFIED
 }
 
-func decision(d pb.Decision) tools.Decision {
+func decision(d pb.Decision) api.Decision {
 	switch d {
 	case pb.Decision_DECISION_ONCE:
-		return tools.DecisionOnce
+		return api.DecisionOnce
 	case pb.Decision_DECISION_SESSION:
-		return tools.DecisionSession
+		return api.DecisionSession
 	case pb.Decision_DECISION_ALWAYS:
-		return tools.DecisionAlways
+		return api.DecisionAlways
 	}
-	return tools.DecisionDeny
+	return api.DecisionDeny
 }
