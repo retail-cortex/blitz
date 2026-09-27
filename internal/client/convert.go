@@ -120,7 +120,7 @@ func session(s *pb.SessionInfo) app.SessionInfo {
 		MessageCount: int(s.MessageCount), Created: timeOf(s.Created), Updated: timeOf(s.Updated),
 	}
 	for _, m := range s.Messages {
-		out.Messages = append(out.Messages, app.Message{Role: m.Role, Text: m.Text, Time: timeOf(m.Time)})
+		out.Messages = append(out.Messages, app.Message{Role: m.Role, Text: m.Text, Time: timeOf(m.Time), Kind: m.Kind})
 	}
 	return out
 }

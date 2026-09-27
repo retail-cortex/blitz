@@ -28,7 +28,7 @@ func sessionMsg(s app.SessionInfo) *pb.SessionInfo {
 		MessageCount: int32(s.MessageCount), Created: timestamp(s.Created), Updated: timestamp(s.Updated),
 	}
 	for _, m := range s.Messages {
-		out.Messages = append(out.Messages, &pb.Message{Role: m.Role, Text: m.Text, Time: timestamp(m.Time)})
+		out.Messages = append(out.Messages, &pb.Message{Role: m.Role, Text: m.Text, Time: timestamp(m.Time), Kind: m.Kind})
 	}
 	return out
 }

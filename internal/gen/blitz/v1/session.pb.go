@@ -148,9 +148,12 @@ func (x *SessionInfo) GetMessages() []*Message {
 type Message struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// "user" or "model".
-	Role          string                 `protobuf:"bytes,1,opt,name=role,proto3" json:"role,omitempty"`
-	Text          string                 `protobuf:"bytes,2,opt,name=text,proto3" json:"text,omitempty"`
-	Time          *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=time,proto3" json:"time,omitempty"`
+	Role string                 `protobuf:"bytes,1,opt,name=role,proto3" json:"role,omitempty"`
+	Text string                 `protobuf:"bytes,2,opt,name=text,proto3" json:"text,omitempty"`
+	Time *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=time,proto3" json:"time,omitempty"`
+	// For user messages: "" for a prompt (a rewind point), "steer", "hook"
+	// (a stop hook's request) or "plan" (an approved plan's go-ahead).
+	Kind          string `protobuf:"bytes,4,opt,name=kind,proto3" json:"kind,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -204,6 +207,13 @@ func (x *Message) GetTime() *timestamppb.Timestamp {
 		return x.Time
 	}
 	return nil
+}
+
+func (x *Message) GetKind() string {
+	if x != nil {
+		return x.Kind
+	}
+	return ""
 }
 
 type ListSessionsRequest struct {
@@ -1956,11 +1966,12 @@ const file_blitz_v1_session_proto_rawDesc = "" +
 	"\acreated\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\acreated\x124\n" +
 	"\aupdated\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\aupdated\x12-\n" +
 	"\bmessages\x18\n" +
-	" \x03(\v2\x11.blitz.v1.MessageR\bmessages\"a\n" +
+	" \x03(\v2\x11.blitz.v1.MessageR\bmessages\"u\n" +
 	"\aMessage\x12\x12\n" +
 	"\x04role\x18\x01 \x01(\tR\x04role\x12\x12\n" +
 	"\x04text\x18\x02 \x01(\tR\x04text\x12.\n" +
-	"\x04time\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\x04time\"E\n" +
+	"\x04time\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\x04time\x12\x12\n" +
+	"\x04kind\x18\x04 \x01(\tR\x04kind\"E\n" +
 	"\x13ListSessionsRequest\x12\x1c\n" +
 	"\tworkspace\x18\x01 \x01(\tR\tworkspace\x12\x10\n" +
 	"\x03all\x18\x02 \x01(\bR\x03all\"I\n" +

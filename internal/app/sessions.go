@@ -40,6 +40,10 @@ type Message struct {
 	Role string // "user" or "model"
 	Text string
 	Time time.Time
+	// Kind tells user messages apart: "" for a prompt (a rewind point),
+	// "steer", "hook" (a stop hook's request) or "plan" (an approved
+	// plan's go-ahead).
+	Kind string
 }
 
 // ErrNoActiveSession reports an operation on the active session when there
@@ -56,7 +60,7 @@ func sessionInfo(r *session.SessionRecord) SessionInfo {
 		MessageCount: r.MessageCount, Created: r.CreatedAt, Updated: r.UpdatedAt,
 	}
 	for _, m := range r.Messages {
-		info.Messages = append(info.Messages, Message{Role: m.Role, Text: m.Content, Time: m.Timestamp})
+		info.Messages = append(info.Messages, Message{Role: m.Role, Text: m.Content, Time: m.Timestamp, Kind: m.Kind})
 	}
 	return info
 }

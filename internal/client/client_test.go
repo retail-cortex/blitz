@@ -277,6 +277,12 @@ func TestRemoteRewind(t *testing.T) {
 	if a, _ := r.ActiveSession(); a.MessageCount != 2 {
 		t.Errorf("messages after rewinding: %d", a.MessageCount)
 	}
+	if err := r.Steer(context.Background(), sess.ID, "a steer message"); err != nil {
+		t.Fatal(err)
+	}
+	if a, _ := r.ActiveSession(); len(a.Messages) != 3 || a.Messages[0].Kind != "" || a.Messages[2].Kind != "steer" {
+		t.Errorf("message kinds over the API: %+v", a.Messages)
+	}
 	if _, err := r.Rewind(context.Background(), 1, app.RewindBoth, false); !errors.Is(err, app.ErrNotRewindPoint) {
 		t.Errorf("not a prompt: %v", err)
 	}
