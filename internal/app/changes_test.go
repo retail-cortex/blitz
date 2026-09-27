@@ -7,7 +7,16 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/retail-cortex/blitz/internal/config"
+	"github.com/retail-cortex/blitz/internal/runtime"
+	"github.com/retail-cortex/blitz/internal/tools"
+	"google.golang.org/genai"
 )
+
+func toolCall(name string, args map[string]any) *genai.Content {
+	return &genai.Content{Role: genai.RoleModel, Parts: []*genai.Part{{FunctionCall: &genai.FunctionCall{Name: name, Args: args}}}}
+}
 
 // The agent can write .git/config; showing the diff must not run what it
 // names there.
@@ -55,5 +64,46 @@ func TestGitDiffRunsNothingFromRepoConfig(t *testing.T) {
 	}
 	if got, _ := filepath.Glob(filepath.Join(dir, "pwned-*")); len(got) > 0 {
 		t.Errorf("git diff ran commands from the repository's config: %v", got)
+	}
+}
+
+// Checkpoints outlive the process: after reopening the workspace and
+// resuming the session, /undo and /diff still work.
+func TestUndoAfterResume(t *testing.T) {
+	var cfg *config.Config
+	w, _ := openTestWith(t, func(c *config.Config) {
+		c.Blitz.AutoApprove = false
+		cfg = c
+	}, toolCall("create_file", map[string]any{"path": "notes.txt", "content": "hi\n"}), text("created"))
+	w.SetUI(func(context.Context, tools.ApprovalRequest) (tools.Decision, error) { return tools.DecisionOnce, nil }, nil)
+	s, _, err := w.OpenSession("", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := w.Run(context.Background(), s.ID, Turn{Text: "make notes"}, func(Event) {}); err != nil {
+		t.Fatal(err)
+	}
+	cps := w.ListCheckpoints()
+	if len(cps) != 1 {
+		t.Fatalf("checkpoints %+v", cps)
+	}
+	w.Close()
+
+	w2, err := Open(context.Background(), cfg, Options{Model: runtime.NewMockLLM("gemini-3.8-flash"), NewModel: mockModels})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer w2.Close()
+	if _, _, err := w2.OpenSession(s.ID, false); err != nil {
+		t.Fatal(err)
+	}
+	if d := w2.SessionDiff(); !strings.Contains(d, "+hi") {
+		t.Errorf("diff after resuming:\n%s", d)
+	}
+	if res, err := w2.Undo(false); err != nil || res.Label != "make notes" {
+		t.Fatalf("undo after reopening: %+v %v", res, err)
+	}
+	if _, err := os.Stat(filepath.Join(cfg.Tools.WorkspaceDir, "notes.txt")); !os.IsNotExist(err) {
+		t.Error("notes.txt is still there")
 	}
 }

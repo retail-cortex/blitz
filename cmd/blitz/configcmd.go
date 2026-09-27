@@ -184,6 +184,8 @@ enabled = false   # export OpenTelemetry traces and logs over OTLP/HTTP (or BLIT
 
 [checkpoints]
 enabled = true
+# dir = "~/.blitz/checkpoints"   # kept between runs for /undo and /rewind ("" = memory only)
+# max_age_days = 30
 
 [web]
 enabled = true

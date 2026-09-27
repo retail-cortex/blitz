@@ -91,9 +91,9 @@ Subcommands: `doctor [--online]`, `config init|show|path`, `completion bash|zsh|
 
 | Command | |
 |---|---|
-| `/undo [--force]` | Revert the file changes made in the last turn |
+| `/undo [--force]` | Revert the file changes made in the last turn (checkpoints are kept between runs, so this works after `--resume`) |
 | `/checkpoints` | Turns that changed files |
-| `/diff [git]` | Everything tools changed this session (or `git diff`) |
+| `/diff [git]` | Everything tools changed in this session, across runs (or `git diff`) |
 | `/cost`, `/context` | Token usage (including cache reads and writes), estimated cost, context size vs. compaction threshold |
 | `/compact [focus]` | Summarize everything before the latest turn now; the focus says what to keep |
 | `/memory [reload\|add <note>]` | Project instructions (`AGENTS.md`, `CLAUDE.md`, `GEMINI.md`, `BLITZ.md`, rules) |
@@ -187,6 +187,8 @@ On Linux, install `bubblewrap` and allow unprivileged user namespaces. Ubuntu 24
 **Background processes never outlive the CLI.** Exiting with processes running asks to kill or wait; a second Ctrl+C force-quits. Each process group is also guarded so it is killed if Blitz dies, even by `SIGKILL`.
 
 **Secrets.** Child processes don't inherit credential variables (`sandbox.scrub_env`, default `*_API_KEY`, `*_SECRET`, …). The audit log masks secrets. Sessions, history, approvals and audit files are owner-only.
+
+**Checkpoints.** Before a file tool changes a file, Blitz keeps a copy, grouped by prompt, so `/undo` can put it back. They are kept between runs in `~/.blitz/checkpoints/<workspace>/` (owner-only, stored by content hash), up to `[checkpoints] max_bytes` (64 MiB) and `max_age_days` (30); `dir = ""` keeps them in memory only. Only the file tools' changes are tracked: if a file changed since (by a command or by you), `/undo` stops and says so (`--force` overwrites).
 
 **Audit log.** `~/.blitz/audit/audit-YYYY-MM-DD.jsonl` records prompts, tool calls and results, approvals, denials, hook decisions, and undos, plus your `!` commands and `/search web` queries (`user_shell`, `user_search`). A page fetched through a `/search web` grant is logged as an approval with decision `user-selected`.
 

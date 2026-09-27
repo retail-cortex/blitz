@@ -93,10 +93,15 @@ type TelemetryConfig struct {
 	CaptureContent bool `toml:"capture_content"`
 }
 
-// CheckpointConfig controls file snapshots used by /undo.
+// CheckpointConfig controls file snapshots used by /undo and /rewind.
 type CheckpointConfig struct {
 	Enabled  bool  `toml:"enabled"`
-	MaxBytes int64 `toml:"max_bytes"` // total snapshot memory before the oldest turns are dropped
+	MaxBytes int64 `toml:"max_bytes"` // total snapshot size before the oldest turns are dropped
+	// Dir keeps checkpoints between runs, one directory per workspace ("":
+	// in memory only).
+	Dir string `toml:"dir"`
+	// MaxAgeDays drops kept checkpoints older than this.
+	MaxAgeDays int `toml:"max_age_days"`
 }
 
 // HookConfig runs a command at a lifecycle point. The command receives a JSON
@@ -284,7 +289,7 @@ func applyFeatureDefaults(c *Config) {
 	c.Tools.ApprovalsFile = filepath.Join(dir, "approvals.json")
 	c.Audit = AuditConfig{Enabled: true, Dir: filepath.Join(dir, "audit")}
 	c.Log = LogConfig{Level: "info", Dir: filepath.Join(dir, "logs"), RetainDays: 14}
-	c.Checkpoints = CheckpointConfig{Enabled: true, MaxBytes: 64 * 1024 * 1024}
+	c.Checkpoints = CheckpointConfig{Enabled: true, MaxBytes: 64 * 1024 * 1024, Dir: "~/.blitz/checkpoints", MaxAgeDays: 30}
 	c.Images = ImagesConfig{Enabled: true, Dir: filepath.Join(dir, "images"), MaxDimension: 1568, MaxInputMB: 20, RetainDays: 30}
 	c.Web = WebConfig{Enabled: true, MaxBytes: 2 * 1024 * 1024, TimeoutSeconds: 20}
 	// Prices in effect when the configuration loads: a service running

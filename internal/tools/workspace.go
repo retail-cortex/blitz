@@ -501,37 +501,37 @@ func (w *Workspace) snapshot(loc location) bool {
 		return false
 	}
 	st := fileState{}
+	var data []byte
 	r := loc.root.root
 	info, err := r.Lstat(loc.rel)
 	if err == nil && info.IsDir() {
 		return false
 	}
 	if err == nil {
-		st.exists = true
-		st.mode = info.Mode().Perm()
+		st.Exists = true
+		st.Mode = info.Mode().Perm()
 		if info.Mode()&fs.ModeSymlink != 0 {
 			if real, err := r.Stat(loc.rel); err == nil {
-				st.mode = real.Mode().Perm()
+				st.Mode = real.Mode().Perm()
 			}
 		}
 		if info.Size() > w.maxFileSize {
-			st.tooLarge = true
-		} else if data, err := r.ReadFile(loc.rel); err == nil {
-			st.data = data
-		} else {
-			st.tooLarge = true
+			st.TooLarge = true
+		} else if data, err = r.ReadFile(loc.rel); err != nil {
+			st.TooLarge = true
 		}
 	}
-	return w.checkpoints.before(loc.abs(), w.display(loc.abs()), st)
+	return w.checkpoints.before(loc.abs(), w.display(loc.abs()), st, data)
 }
 
-// restore puts abs back into state st without checkpointing.
-func (w *Workspace) restore(abs string, st fileState) error {
+// restore puts abs back into state st, with content data, without
+// checkpointing.
+func (w *Workspace) restore(abs string, st fileState, data []byte) error {
 	loc, err := w.resolve(abs, true)
 	if err != nil {
 		return err
 	}
-	if !st.exists {
+	if !st.Exists {
 		err := loc.root.root.Remove(loc.rel)
 		if errors.Is(err, fs.ErrNotExist) {
 			return nil
@@ -541,8 +541,8 @@ func (w *Workspace) restore(abs string, st fileState) error {
 	if err := mkdirParent(loc.root.root, loc.rel); err != nil {
 		return err
 	}
-	mode := st.mode
-	return w.writeAtomic(loc, st.data, &mode)
+	mode := st.Mode
+	return w.writeAtomic(loc, data, &mode)
 }
 
 // WalkEntry is one entry visited by Walk.

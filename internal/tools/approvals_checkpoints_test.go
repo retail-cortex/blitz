@@ -139,7 +139,7 @@ func TestCheckpointUndo(t *testing.T) {
 	if l := cp.List(); len(l) != 2 || l[0].Label != "turn 2" || len(l[1].Files) != 2 {
 		t.Fatalf("unexpected checkpoints %+v", l)
 	}
-	if d := cp.SessionDiff(); !strings.Contains(d, "-v1") || !strings.Contains(d, "+v3") {
+	if d := cp.SessionDiff(""); !strings.Contains(d, "-v1") || !strings.Contains(d, "+v3") {
 		t.Errorf("session diff missing change:\n%s", d)
 	}
 

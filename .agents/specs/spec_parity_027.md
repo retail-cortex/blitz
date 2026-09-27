@@ -76,7 +76,7 @@ The threat is real: Claude Code's project settings have had CVE-2025-59536 (hook
 
 ### 4.1 Rewind to any checkpoint — P0, M
 **CC** `/rewind` (or Esc Esc): pick any earlier prompt, then restore code and conversation, conversation only, or code only, or summarize from/up to there; checkpoints persist with the session (100 kept, ~30 days). **AGY** `/rewind`. **Blitz today:** `/undo` of the latest turn with file changes, checkpoints in memory only ([spec_filetools_006](spec_filetools_006.md) FS-60–66).
-- **PAR-SES-01** Checkpoints are persisted with the session (snapshots content-addressed under `~/.blitz/checkpoints/`, owner-only; the same retention and size budget as today, then a configurable age), so `/undo` and rewind work after `--resume`.
+- **PAR-SES-01** ✅ *Done 2026-09-26 (ROADMAP 25.11; now [spec_filetools_006](spec_filetools_006.md) FS-67).* Checkpoints are persisted with the session (snapshots content-addressed under `~/.blitz/checkpoints/`, owner-only; the same retention and size budget as today, then a configurable age), so `/undo` and rewind work after `--resume`.
 - **PAR-SES-02** `/rewind` lists every prompt of the session; for the chosen one: **code and conversation**, **conversation only** (truncates both the transcript and the ADK event log to before that prompt, keeping files), **code only** (restores files to their state before that prompt, with the same conflict rules as `/undo`), **summarize from here** / **summarize up to here** (targeted compaction). After rewinding the conversation, the chosen prompt is put back in the input line. Esc Esc on an empty prompt opens it.
 - **PAR-SES-03** Messages that steered a running turn aren't rewind points (as in CC); rewinding to the turn's prompt removes them.
 

@@ -3,7 +3,11 @@ package tools
 import (
 	"cmp"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
+	"log/slog"
+	"path/filepath"
 	"slices"
 	"strings"
 	"time"
@@ -141,7 +145,16 @@ func NewRegistry(cfg *config.Config, agentReg *agents.Registry, skillProv *skill
 		r.hooks.SetStore(store)
 	}
 	if cfg.Checkpoints.Enabled {
-		r.checkpoints = NewCheckpoints(ws, cfg.Checkpoints.MaxBytes)
+		opts := CheckpointOptions{MaxBytes: cfg.Checkpoints.MaxBytes, MaxAge: time.Duration(cfg.Checkpoints.MaxAgeDays) * 24 * time.Hour}
+		if cfg.Checkpoints.Dir != "" {
+			// One directory per workspace, named after its path.
+			sum := sha256.Sum256([]byte(ws.Dir()))
+			opts.Dir = filepath.Join(config.ExpandHome(cfg.Checkpoints.Dir), hex.EncodeToString(sum[:12]))
+		}
+		var err error
+		if r.checkpoints, err = OpenCheckpoints(ws, opts); err != nil {
+			slog.Warn("checkpoints", "error", err)
+		}
 	}
 	if cfg.Images.Enabled {
 		r.imageOpts = images.Options{MaxDimension: cfg.Images.MaxDimension, MaxInput: int64(cfg.Images.MaxInputMB) << 20}

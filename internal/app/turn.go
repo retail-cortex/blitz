@@ -148,7 +148,11 @@ func (w *Workspace) run(ctx context.Context, sessionID string, t Turn, on func(E
 		prompt = runtime.PlanPrompt(prompt)
 	}
 	if !t.Aside {
-		w.tools.Checkpoints().Begin(textutil.Ellipsize(strings.Join(strings.Fields(recorded), " "), 60))
+		prompt := -1 // the prompt's index in the transcript, for /rewind
+		if a := st.Active(); a != nil {
+			prompt = a.MessageCount
+		}
+		w.tools.Checkpoints().BeginTurn(sessionID, prompt, textutil.Ellipsize(strings.Join(strings.Fields(recorded), " "), 60))
 		if !t.Accepted {
 			w.recordIn(st, "user", recorded+AttachmentNote(t.Images))
 		}

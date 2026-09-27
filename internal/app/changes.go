@@ -51,9 +51,16 @@ func (w *Workspace) Undo(force bool) (UndoResult, error) {
 	return out, err
 }
 
-// SessionDiff is a unified diff of every file the agent changed this
-// session, against its state before the first change ("" when none).
-func (w *Workspace) SessionDiff() string { return w.tools.Checkpoints().SessionDiff() }
+// SessionDiff is a unified diff of every file the agent changed in the
+// active session, against its state before the first change ("" when
+// none). Checkpoints persist, so this spans the session's earlier runs.
+func (w *Workspace) SessionDiff() string {
+	active := w.storage.Active()
+	if active == nil {
+		return ""
+	}
+	return w.tools.Checkpoints().SessionDiff(active.ID)
+}
 
 // GitDiff runs git diff (stat and patch) in the workspace. color keeps
 // git's terminal colours. On failure the output holds git's message.
