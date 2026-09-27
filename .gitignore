@@ -1,22 +1,12 @@
+# A developer's own environment (direnv) and editor swap files.
 .envrc
-
-
-# Editor swap files
 *.swp
 *.swo
-# Build outputs (Bazel writes to bazel-*; these are older or local copies).
-/bin/
-/dist/
 
-# Desktop app build outputs (the embedded page is rebuilt from its web/).
-/apps/desktop/web/dist/
-/apps/desktop/packaging/bin/
-/apps/desktop/packaging/dist/
-/apps/desktop/web/wailsjs/
-/apps/desktop/desktop
-/blitz
-/blz
-
-# Bazel
+# Bazel's links to its outputs, and a developer's own Bazel settings.
 /bazel-*
 /user.bazelrc
+
+# node_modules that pnpm makes when run on the page directly; Bazel keeps
+# its own (and .bazelignore hides this one from it).
+node_modules/
