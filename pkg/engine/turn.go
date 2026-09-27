@@ -130,6 +130,7 @@ func (w *Workspace) run(ctx context.Context, sessionID string, t turn, on func(a
 	// session_start hook's with the session's first real prompt.
 	if !t.Aside {
 		prompt = withHookContext(prompt, "session_start", w.takeSessionContext(sessionID))
+		prompt = withUserEdits(prompt, w.takeUserEdits())
 	}
 	prompt = withHookContext(prompt, "prompt_submit", hookContext)
 	var err error

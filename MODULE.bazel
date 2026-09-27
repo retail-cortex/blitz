@@ -78,3 +78,12 @@ npm.npm_translate_lock(
     verify_node_modules_ignored = "//:.bazelignore",
 )
 use_repo(npm, "npm")
+
+# pnpm itself, for upkeep of the page's packages without a host pnpm:
+#   bazel run -- @pnpm//:pnpm --dir "$PWD/apps/desktop/web" add <package>
+pnpm = use_extension("@aspect_rules_js//npm:extensions.bzl", "pnpm")
+pnpm.pnpm(
+    name = "pnpm",
+    pnpm_version = "10.24.0",
+)
+use_repo(pnpm, "pnpm")

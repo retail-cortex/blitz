@@ -1,0 +1,143 @@
+syntax = "proto3";
+
+package blitz.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/retail-cortex/blitz/proto/blitz/v1;blitzv1";
+
+// FileService is the workspace's files for the user: the desktop app's
+// explorer and editor. Paths are relative to the workspace, with "/"
+// separators; nothing outside the workspace, and never .git. The agent's
+// path rules bind the agent, not the user: blocked and read-only paths are
+// reported, not refused. The agent's next turn is told of the user's
+// changes.
+//
+// Every request names its workspace by absolute directory. Errors carry an
+// ErrorInfo detail; a write over a changed file is FILE_CHANGED.
+service FileService {
+  // A folder's entries, folders first.
+  rpc ListDir(ListDirRequest) returns (ListDirResponse);
+  // A file for the editor.
+  rpc ReadFile(ReadFileRequest) returns (ReadFileResponse);
+  // Writes a file if it still has the version read (FILE_CHANGED if not).
+  rpc WriteFile(WriteFileRequest) returns (WriteFileResponse);
+  rpc CreateFolder(CreateFolderRequest) returns (CreateFolderResponse);
+  // Moves a file or folder; the destination must not exist.
+  rpc RenameFile(RenameFileRequest) returns (RenameFileResponse);
+  // Deletes a file, or a folder with everything in it.
+  rpc DeleteFile(DeleteFileRequest) returns (DeleteFileResponse);
+  // Files whose path matches a query, best first (Go to file).
+  rpc FindFiles(FindFilesRequest) returns (FindFilesResponse);
+  // Files' current versions, to notice changes made elsewhere.
+  rpc StatFiles(StatFilesRequest) returns (StatFilesResponse);
+}
+
+enum FileKind {
+  FILE_KIND_UNSPECIFIED = 0;
+  FILE_KIND_FILE = 1;
+  FILE_KIND_FOLDER = 2;
+  FILE_KIND_SYMLINK = 3;
+}
+
+message FileEntry {
+  string name = 1;
+  string path = 2;
+  FileKind kind = 3;
+  int64 size = 4;
+  google.protobuf.Timestamp modified = 5;
+  // modified, added, deleted, renamed, untracked, conflicted; "changed"
+  // for a folder with changes under it; "" when clean or not in git.
+  string git = 6;
+  // Why it's hidden by default: "blocked", "ignored", "dot", or "".
+  string hidden = 7;
+  // The agent's rule for it: "blocked", "read_only", or "".
+  string agent_rule = 8;
+}
+
+message ListDirRequest {
+  string workspace = 1;
+  // "" for the workspace itself.
+  string path = 2;
+  bool show_hidden = 3;
+}
+
+message ListDirResponse {
+  repeated FileEntry entries = 1;
+  // More than 5,000 entries; the rest are left out.
+  bool truncated = 2;
+  // The workspace is in a git repository.
+  bool repo = 3;
+}
+
+message ReadFileRequest {
+  string workspace = 1;
+  string path = 2;
+}
+
+message ReadFileResponse {
+  string path = 1;
+  // "" for binary and too-large files.
+  string text = 2;
+  // The content's SHA-256, for WriteFile.
+  string version = 3;
+  int64 size = 4;
+  bool binary = 5;
+  bool too_large = 6;
+  string agent_rule = 7;
+}
+
+message WriteFileRequest {
+  string workspace = 1;
+  string path = 2;
+  string text = 3;
+  // The version read; "" when the file must not exist yet.
+  string version = 4;
+}
+
+message WriteFileResponse {
+  string version = 1;
+}
+
+message CreateFolderRequest {
+  string workspace = 1;
+  string path = 2;
+}
+
+message CreateFolderResponse {}
+
+message RenameFileRequest {
+  string workspace = 1;
+  string from = 2;
+  string to = 3;
+}
+
+message RenameFileResponse {}
+
+message DeleteFileRequest {
+  string workspace = 1;
+  string path = 2;
+}
+
+message DeleteFileResponse {}
+
+message FindFilesRequest {
+  string workspace = 1;
+  string query = 2;
+  // At most this many (default 50).
+  int32 limit = 3;
+}
+
+message FindFilesResponse {
+  repeated string paths = 1;
+}
+
+message StatFilesRequest {
+  string workspace = 1;
+  repeated string paths = 2;
+}
+
+message StatFilesResponse {
+  // Path to version; "" for a file that's gone.
+  map<string, string> versions = 1;
+}

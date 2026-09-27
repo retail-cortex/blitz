@@ -43,6 +43,7 @@ go_library(
         "skillscript.go",
         "todo.go",
         "universal_constructor.go",
+        "userfs.go",
         "usersearch.go",
         "web.go",
         "websearch.go",

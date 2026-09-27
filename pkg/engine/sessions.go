@@ -19,7 +19,7 @@ func sessionInfo(r *session.SessionRecord) api.SessionInfo {
 		MessageCount: r.MessageCount, Created: r.CreatedAt, Updated: r.UpdatedAt,
 	}
 	for _, m := range r.Messages {
-		info.Messages = append(info.Messages, api.Message{Role: m.Role, Text: m.Content, Time: m.Timestamp, Kind: m.Kind})
+		info.Messages = append(info.Messages, api.Message{Role: m.Role, Text: userText(m.Role, m.Content), Time: m.Timestamp, Kind: m.Kind})
 	}
 	return info
 }
@@ -192,4 +192,13 @@ func selectSession(st *session.Storage, resume string, cont bool, title, agent s
 
 func errNoSavedSessions(workspace string) error {
 	return fmt.Errorf("no saved sessions for %s (use --resume <id> for a session from another directory)", workspace)
+}
+
+// userText is a message's text as shown: the user's prompts without what
+// was added for the agent (DisplayPrompt).
+func userText(role, text string) string {
+	if role == "user" {
+		return DisplayPrompt(text)
+	}
+	return text
 }

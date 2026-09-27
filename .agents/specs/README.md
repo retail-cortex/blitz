@@ -34,5 +34,6 @@ Files are named `spec_<name>_NNN.md`, where `NNN` is the order of execution: eac
 | 026 | [backlog](spec_backlog_026.md) | What's missing: unimplemented requirements, verification still owed, and deliberate limitations |
 | 027 | [parity](spec_parity_027.md) | Gaps against Claude Code, Antigravity CLI and Antigravity, as requirements to close before new features |
 | 028 | [monorepo](spec_monorepo_028.md) | Apps over shared packages, their dependency rules, and the Bazel build: generated protos, the page, packages, reproducibility |
+| 029 | [files](spec_files_029.md) | The workspace's files in the desktop app: explorer, editor, diffs, language intelligence |
 
 Background and history: [../ROADMAP.md](../ROADMAP.md), [../NEXT_STEPS.md](../NEXT_STEPS.md), [../AGENTS.md](../AGENTS.md).

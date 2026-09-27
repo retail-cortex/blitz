@@ -76,6 +76,12 @@ type Workspace struct {
 	// mustn't cut under.
 	turnsMu sync.Mutex
 	inTurn  map[string]int
+	// userEdits are the user's changes to files since the agent's last
+	// turn (files.go).
+	editsMu   sync.Mutex
+	userEdits []userEdit
+	// index is the workspace's file list, for FindFiles.
+	index fileIndex
 }
 
 // warnOnce reports a problem the first time it is seen: things re-read on

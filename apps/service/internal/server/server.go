@@ -85,6 +85,7 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle(pb.NewWorkspaceServiceHandler(workspaceService{s}, limit))
 	mux.Handle(pb.NewWorkerServiceHandler(workerService{s}, limit))
 	mux.Handle(pb.NewConfigServiceHandler(configService{s}, limit))
+	mux.Handle(pb.NewFileServiceHandler(fileService{s}, limit))
 	return mux
 }
 

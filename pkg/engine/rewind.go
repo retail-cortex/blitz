@@ -103,7 +103,7 @@ func (w *Workspace) Rewind(ctx context.Context, index int, mode api.RewindMode, 
 		return api.RewindResult{}, fmt.Errorf("%w: %d", api.ErrNotRewindPoint, index)
 	}
 	prompt := active.Messages[index]
-	res := api.RewindResult{Mode: mode, Prompt: prompt.Content}
+	res := api.RewindResult{Mode: mode, Prompt: DisplayPrompt(prompt.Content)}
 	conversation := mode == api.RewindBoth || mode == api.RewindConversation
 	switch mode {
 	case api.RewindBoth, api.RewindConversation, api.RewindCode:
