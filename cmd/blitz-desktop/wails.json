@@ -1,7 +1,7 @@
 {
   "$schema": "https://wails.io/schemas/config.v2.json",
-  "name": "blitz-desktop",
-  "outputfilename": "Blitz",
+  "name": "Blitz",
+  "outputfilename": "blitz-desktop",
   "frontend:dir": "../../web/desktop",
   "frontend:install": "pnpm install --frozen-lockfile",
   "frontend:build": "pnpm run build",

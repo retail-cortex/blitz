@@ -92,15 +92,19 @@ cross-compile: clean
 # webkit2gtk. The Wails CLI is pinned in tools/go.mod.
 WAILS=go tool -modfile=../../tools/go.mod wails
 
-DESKTOP_APP=build/desktop/bin/blitz-desktop.app
+DESKTOP_APP=build/desktop/bin/Blitz.app
 
 # The CLI is bundled next to the app's binary, where the app looks for it
 # to install the service; on macOS the app is then signed again (ad hoc),
-# since adding a file breaks Wails's signature.
+# since adding a file breaks Wails's signature. The app's executable is
+# blitz-desktop (wails.json outputfilename), never "Blitz": macOS file
+# systems ignore case, so the CLI would overwrite it.
 desktop: web/desktop/node_modules
 	cd cmd/blitz-desktop && CGO_CFLAGS=-mmacosx-version-min=13.0 CGO_LDFLAGS=-mmacosx-version-min=13.0 $(WAILS) build -clean
 	@if [ -d "$(DESKTOP_APP)" ]; then \
 		CGO_ENABLED=0 go build $(GOFLAGS_BUILD) -ldflags="$(LDFLAGS)" -o "$(DESKTOP_APP)/Contents/MacOS/blitz" ./cmd/blitz && \
+		test -x "$(DESKTOP_APP)/Contents/MacOS/blitz-desktop" && test "$$(ls "$(DESKTOP_APP)/Contents/MacOS" | wc -l)" -eq 2 || \
+			{ echo "the bundled CLI replaced the app's executable" >&2; exit 1; }; \
 		codesign --force --deep --sign - "$(DESKTOP_APP)"; \
 	else \
 		CGO_ENABLED=0 go build $(GOFLAGS_BUILD) -ldflags="$(LDFLAGS)" -o build/desktop/bin/blitz ./cmd/blitz; \
