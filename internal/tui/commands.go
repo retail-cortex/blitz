@@ -33,7 +33,7 @@ func HandleCommand(ctx context.Context, input string, app *App) (bool, error) {
 
 	switch cmd {
 	case "help":
-		printHelp()
+		printHelp(app)
 
 	case "agents":
 		fmt.Printf("\n%s%s:%s\n", Bold, i18n.T("agents.title"), Reset)
@@ -138,13 +138,16 @@ func HandleCommand(ctx context.Context, input string, app *App) (bool, error) {
 		if handleExtraCommand(ctx, cmd, args, app) {
 			return true, nil
 		}
+		if isCustomCommand(app, cmd) {
+			return false, nil // the REPL runs it as a turn
+		}
 		fmt.Printf("%s%s%s\n", Yellow, i18n.T("command.unknown", "command", safe(cmd)), Reset)
 	}
 
 	return true, nil
 }
 
-func printHelp() {
+func printHelp(app *App) {
 	rows := [][2]string{
 		{"/agents", "help.agents"},
 		{"/agent [name]", "help.agent"},
@@ -185,7 +188,28 @@ func printHelp() {
 	for _, r := range rows {
 		fmt.Printf("  %s%-36s%s %s\n", Bold, r[0], Reset, i18n.T(r[1]))
 	}
+	if cmds := app.Workspace.ListCommands(); len(cmds) > 0 {
+		fmt.Printf("\n%s%s:%s\n", Bold, i18n.T("help.custom_title"), Reset)
+		for _, c := range cmds {
+			usage := "/" + c.Name
+			if c.ArgumentHint != "" {
+				usage += " " + c.ArgumentHint
+			}
+			fmt.Printf("  %s%-36s%s %s %s(%s)%s\n", Bold, safe(usage), Reset, safe(c.Description), Dim, c.Source, Reset)
+		}
+	}
 	fmt.Printf("\n  %s%s%s\n\n", Dim, i18n.T("help.input"), Reset)
+}
+
+// isCustomCommand reports whether name is a custom slash command (a
+// command file, a bundled command or a skill), which runs as a turn.
+func isCustomCommand(app *App, name string) bool {
+	for _, c := range app.Workspace.ListCommands() {
+		if c.Name == name {
+			return true
+		}
+	}
+	return false
 }
 
 func handleSkillsCommand(args []string, app *App) {

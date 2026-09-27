@@ -75,6 +75,9 @@ const (
 	// WorkspaceServiceSetPermissionModeProcedure is the fully-qualified name of the WorkspaceService's
 	// SetPermissionMode RPC.
 	WorkspaceServiceSetPermissionModeProcedure = "/blitz.v1.WorkspaceService/SetPermissionMode"
+	// WorkspaceServiceListCommandsProcedure is the fully-qualified name of the WorkspaceService's
+	// ListCommands RPC.
+	WorkspaceServiceListCommandsProcedure = "/blitz.v1.WorkspaceService/ListCommands"
 	// WorkspaceServiceListPermissionRulesProcedure is the fully-qualified name of the
 	// WorkspaceService's ListPermissionRules RPC.
 	WorkspaceServiceListPermissionRulesProcedure = "/blitz.v1.WorkspaceService/ListPermissionRules"
@@ -178,6 +181,9 @@ type WorkspaceServiceClient interface {
 	// workspace (UNKNOWN_MODE; BYPASS_NEEDS_SANDBOX when bypass is asked for
 	// without an active OS sandbox).
 	SetPermissionMode(context.Context, *connect.Request[v1.SetPermissionModeRequest]) (*connect.Response[v1.SetPermissionModeResponse], error)
+	// Returns the custom slash commands: command files, bundled commands, and
+	// skills run by name.
+	ListCommands(context.Context, *connect.Request[v1.ListCommandsRequest]) (*connect.Response[v1.ListCommandsResponse], error)
 	// Returns the permission rules in force: deny, then ask, then allow.
 	ListPermissionRules(context.Context, *connect.Request[v1.ListPermissionRulesRequest]) (*connect.Response[v1.ListPermissionRulesResponse], error)
 	// Adds an allow, ask or deny rule for the workspace and, with save, to
@@ -326,6 +332,12 @@ func NewWorkspaceServiceClient(httpClient connect.HTTPClient, baseURL string, op
 			httpClient,
 			baseURL+WorkspaceServiceSetPermissionModeProcedure,
 			connect.WithSchema(workspaceServiceMethods.ByName("SetPermissionMode")),
+			connect.WithClientOptions(opts...),
+		),
+		listCommands: connect.NewClient[v1.ListCommandsRequest, v1.ListCommandsResponse](
+			httpClient,
+			baseURL+WorkspaceServiceListCommandsProcedure,
+			connect.WithSchema(workspaceServiceMethods.ByName("ListCommands")),
 			connect.WithClientOptions(opts...),
 		),
 		listPermissionRules: connect.NewClient[v1.ListPermissionRulesRequest, v1.ListPermissionRulesResponse](
@@ -485,6 +497,7 @@ type workspaceServiceClient struct {
 	getSettings          *connect.Client[v1.GetSettingsRequest, v1.GetSettingsResponse]
 	setSetting           *connect.Client[v1.SetSettingRequest, v1.SetSettingResponse]
 	setPermissionMode    *connect.Client[v1.SetPermissionModeRequest, v1.SetPermissionModeResponse]
+	listCommands         *connect.Client[v1.ListCommandsRequest, v1.ListCommandsResponse]
 	listPermissionRules  *connect.Client[v1.ListPermissionRulesRequest, v1.ListPermissionRulesResponse]
 	addPermissionRule    *connect.Client[v1.AddPermissionRuleRequest, v1.AddPermissionRuleResponse]
 	removePermissionRule *connect.Client[v1.RemovePermissionRuleRequest, v1.RemovePermissionRuleResponse]
@@ -578,6 +591,11 @@ func (c *workspaceServiceClient) SetSetting(ctx context.Context, req *connect.Re
 // SetPermissionMode calls blitz.v1.WorkspaceService.SetPermissionMode.
 func (c *workspaceServiceClient) SetPermissionMode(ctx context.Context, req *connect.Request[v1.SetPermissionModeRequest]) (*connect.Response[v1.SetPermissionModeResponse], error) {
 	return c.setPermissionMode.CallUnary(ctx, req)
+}
+
+// ListCommands calls blitz.v1.WorkspaceService.ListCommands.
+func (c *workspaceServiceClient) ListCommands(ctx context.Context, req *connect.Request[v1.ListCommandsRequest]) (*connect.Response[v1.ListCommandsResponse], error) {
+	return c.listCommands.CallUnary(ctx, req)
 }
 
 // ListPermissionRules calls blitz.v1.WorkspaceService.ListPermissionRules.
@@ -728,6 +746,9 @@ type WorkspaceServiceHandler interface {
 	// workspace (UNKNOWN_MODE; BYPASS_NEEDS_SANDBOX when bypass is asked for
 	// without an active OS sandbox).
 	SetPermissionMode(context.Context, *connect.Request[v1.SetPermissionModeRequest]) (*connect.Response[v1.SetPermissionModeResponse], error)
+	// Returns the custom slash commands: command files, bundled commands, and
+	// skills run by name.
+	ListCommands(context.Context, *connect.Request[v1.ListCommandsRequest]) (*connect.Response[v1.ListCommandsResponse], error)
 	// Returns the permission rules in force: deny, then ask, then allow.
 	ListPermissionRules(context.Context, *connect.Request[v1.ListPermissionRulesRequest]) (*connect.Response[v1.ListPermissionRulesResponse], error)
 	// Adds an allow, ask or deny rule for the workspace and, with save, to
@@ -872,6 +893,12 @@ func NewWorkspaceServiceHandler(svc WorkspaceServiceHandler, opts ...connect.Han
 		WorkspaceServiceSetPermissionModeProcedure,
 		svc.SetPermissionMode,
 		connect.WithSchema(workspaceServiceMethods.ByName("SetPermissionMode")),
+		connect.WithHandlerOptions(opts...),
+	)
+	workspaceServiceListCommandsHandler := connect.NewUnaryHandler(
+		WorkspaceServiceListCommandsProcedure,
+		svc.ListCommands,
+		connect.WithSchema(workspaceServiceMethods.ByName("ListCommands")),
 		connect.WithHandlerOptions(opts...),
 	)
 	workspaceServiceListPermissionRulesHandler := connect.NewUnaryHandler(
@@ -1042,6 +1069,8 @@ func NewWorkspaceServiceHandler(svc WorkspaceServiceHandler, opts ...connect.Han
 			workspaceServiceSetSettingHandler.ServeHTTP(w, r)
 		case WorkspaceServiceSetPermissionModeProcedure:
 			workspaceServiceSetPermissionModeHandler.ServeHTTP(w, r)
+		case WorkspaceServiceListCommandsProcedure:
+			workspaceServiceListCommandsHandler.ServeHTTP(w, r)
 		case WorkspaceServiceListPermissionRulesProcedure:
 			workspaceServiceListPermissionRulesHandler.ServeHTTP(w, r)
 		case WorkspaceServiceAddPermissionRuleProcedure:
@@ -1151,6 +1180,10 @@ func (UnimplementedWorkspaceServiceHandler) SetSetting(context.Context, *connect
 
 func (UnimplementedWorkspaceServiceHandler) SetPermissionMode(context.Context, *connect.Request[v1.SetPermissionModeRequest]) (*connect.Response[v1.SetPermissionModeResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("blitz.v1.WorkspaceService.SetPermissionMode is not implemented"))
+}
+
+func (UnimplementedWorkspaceServiceHandler) ListCommands(context.Context, *connect.Request[v1.ListCommandsRequest]) (*connect.Response[v1.ListCommandsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("blitz.v1.WorkspaceService.ListCommands is not implemented"))
 }
 
 func (UnimplementedWorkspaceServiceHandler) ListPermissionRules(context.Context, *connect.Request[v1.ListPermissionRulesRequest]) (*connect.Response[v1.ListPermissionRulesResponse], error) {

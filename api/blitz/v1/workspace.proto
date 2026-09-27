@@ -47,6 +47,9 @@ service WorkspaceService {
   // workspace (UNKNOWN_MODE; BYPASS_NEEDS_SANDBOX when bypass is asked for
   // without an active OS sandbox).
   rpc SetPermissionMode(SetPermissionModeRequest) returns (SetPermissionModeResponse);
+  // Returns the custom slash commands: command files, bundled commands, and
+  // skills run by name.
+  rpc ListCommands(ListCommandsRequest) returns (ListCommandsResponse);
   // Returns the permission rules in force: deny, then ask, then allow.
   rpc ListPermissionRules(ListPermissionRulesRequest) returns (ListPermissionRulesResponse);
   // Adds an allow, ask or deny rule for the workspace and, with save, to
@@ -294,6 +297,24 @@ message SetPermissionModeRequest {
 message SetPermissionModeResponse {
   // The mode's canonical name.
   string mode = 1;
+}
+
+// Command is a custom slash command.
+message Command {
+  // Without the slash; may be namespaced ("db:migrate").
+  string name = 1;
+  string description = 2;
+  string argument_hint = 3;
+  // project, user, bundled or skill.
+  string source = 4;
+}
+
+message ListCommandsRequest {
+  string workspace = 1;
+}
+
+message ListCommandsResponse {
+  repeated Command commands = 1;
 }
 
 // PermissionRule is an allow, ask or deny rule.

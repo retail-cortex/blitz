@@ -60,6 +60,9 @@ type runState struct {
 	attachments []*genai.Part
 	planOnly    bool   // refuse tools that could change anything (see WithPlanOnly)
 	mode        string // names a read-only mode other than plan in refusals (see WithReadOnly)
+	// allowed limits the run to these tools (see WithAllowedTools); nil
+	// means no limit.
+	allowed map[string]bool
 	// agent and model replace the active agent and the configured model for
 	// this run only (see WithAgent, WithModel).
 	agent string
@@ -483,6 +486,9 @@ func (e *Engine) beforeTool(ctx agent.Context, t tool.Tool, args map[string]any)
 	log.Log(audit.Entry{Kind: audit.KindToolCall, Tool: t.Name(), Args: args})
 
 	if r := planRefusal(stateFrom(ctx), t.Name()); r != nil {
+		return r, nil
+	}
+	if r := allowedRefusal(stateFrom(ctx), t.Name()); r != nil {
 		return r, nil
 	}
 	if rule := e.toolReg.Rules().ToolDenied(t.Name(), args); rule != nil {

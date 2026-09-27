@@ -289,6 +289,7 @@ func toAPI(err error) error {
 		{app.ErrMaxTurns, connect.CodeResourceExhausted, "MAX_TURNS"},
 		{app.ErrUnknownMode, connect.CodeInvalidArgument, "UNKNOWN_MODE"},
 		{app.ErrBadRule, connect.CodeInvalidArgument, "BAD_RULE"},
+		{app.ErrUnknownCommand, connect.CodeNotFound, "UNKNOWN_COMMAND"},
 		{app.ErrBypassNeedsSandbox, connect.CodeFailedPrecondition, "BYPASS_NEEDS_SANDBOX"},
 		{app.ErrCostLimit, connect.CodeResourceExhausted, "COST_LIMIT"},
 		{app.ErrTimeLimit, connect.CodeDeadlineExceeded, "TIME_LIMIT"},

@@ -32,7 +32,7 @@ The REPL is a thin front end over `app.Backend`: it reads input, dispatches slas
 
 - **TUI-20** Empty lines are ignored. `!<cmd>` runs a user shell command ([spec_shell_007](spec_shell_007.md) SH-50): terminal attached (interactive programs work), user's environment, audited; the Ctrl+C it receives doesn't count as exit.
 - **TUI-21** `/btw <q>` → aside turn; `/search web|session <terms>` → read-only turn (mode `search`) with the recorded text being the command; `/plan <goal>` → plan turn (a goal starting with `/` is still text). Missing arguments print usage.
-- **TUI-22** Other `/commands` go to `HandleCommand`; anything else is a prompt to the active session (re-read each turn, since `/session new|load` switch sessions).
+- **TUI-22** Other `/commands` go to `HandleCommand`; a name that isn't built in but is a custom command (SK-80) runs as a turn with `Command` set; anything else is a prompt to the active session (re-read each turn, since `/session new|load` switch sessions).
 
 ### 4.1 Commands
 

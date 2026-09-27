@@ -381,3 +381,7 @@ Set `fallback_models = ["anthropic/claude-sonnet-5"]` with a working Anthropic k
 - [ ] `/permissions allow write(docs/**)` then 💲 an edit in `docs/`: no prompt; an edit elsewhere still asks. `/permissions remove write(docs/**) --save` edits `~/.blitz/.env.toml` without touching its comments.
 - [ ] `deny = ["read(secrets/**)"]`, restart: `read_file secrets/x` is blocked, and a shell `cat secrets/x` fails inside the sandbox.
 - [ ] A worker with `permissions: ["shell:git push *"]` and a user `ask` rule for `shell(git push *)`: the run's push is refused and recorded.
+- [ ] `.claude/commands/greet.md` with `Say hello to $1.`; `/help` lists `/greet` under Custom commands; 💲 `/greet Ada` sends "Say hello to Ada." and the transcript shows `/greet Ada`. Tab completes `/gr`.
+- [ ] 💲 `/review` on uncommitted changes: findings with file and line, and no file edited (plan mode). `/verify` runs `make check` here and reports.
+- [ ] A command with `allowed-tools: Read, Grep`: 💲 ask it to edit a file; the edit is refused with the allowed list.
+- [ ] 💲 `/code-review focus on the new code` runs the built-in skill by name.

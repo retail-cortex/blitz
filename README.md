@@ -231,6 +231,20 @@ command = "grep -qv 'password' || { echo 'no secrets' >&2; exit 2; }"
 
 (Google's Custom Search JSON API isn't supported: it's closed to new customers and shuts down on 2027-01-01.) The agent's `web_search` asks for approval (rememberable per provider) because the query leaves your machine; your own `/search web` doesn't. Results from `web.deny_domains` are dropped. `blitz doctor --online` runs a test search. See [Search](#search) for `/search` and its limitations.
 
+**Custom commands** — a Markdown file is a slash command: `~/.blitz/commands/fix.md` is `/fix`, and in the project `.blitz/commands/`, `.claude/commands/` and `.agents/workflows/` work too (the project's win; `db/migrate.md` is `/db:migrate`). The body is the prompt, with `$ARGUMENTS` or `$1`…`$9` for what you type after the command. Optional frontmatter:
+```markdown
+---
+description: Fix a GitHub issue
+argument-hint: <issue>
+agent: qa                      # run as this agent
+model: anthropic/claude-haiku-4-5
+allowed-tools: Read, Grep, Bash(git *)   # this turn may use only these (Claude Code names work)
+mode: plan                     # read-only
+---
+Fix issue #$1: read it with `gh issue view $1`, find the cause, fix it and add a test.
+```
+Every skill is also a command, `/<skill-name> <request>`, and `/review`, `/security-review` (both read-only), `/simplify` and `/verify` are bundled. Built-in commands win name clashes; `/help` lists the custom ones.
+
 **Skills** — `SKILL.md` files in `~/.blitz/skills` (and, with `trust_workspace`, the project's `./skills` and `.agents/skills`). Frontmatter takes the Agent Skills fields (`name`, `description`, `license`, `compatibility`, `allowed-tools`, `metadata`) and the fields of Castor's skill definition (`castor.skills.v1.SkillDefinition`), under their proto names:
 ```yaml
 ---

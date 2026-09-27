@@ -40,6 +40,10 @@ type Turn struct {
 	// Accepted: Text already passed prompt_submit hooks and was recorded (a
 	// steer message that arrived too late to be read mid-turn).
 	Accepted bool
+	// Command: Text is a custom slash command ("/name args"), expanded into
+	// its prompt with its agent, model, tools and plan mode; the
+	// transcript records Text.
+	Command bool
 	// Images are sent with the prompt.
 	Images []*images.Image
 	// MaxTurns limits the model calls in the turn (0: unlimited).
@@ -108,7 +112,14 @@ func (w *Workspace) Run(ctx context.Context, sessionID string, t Turn, on func(E
 	if w.tools.Hooks().Mode() == tools.ModePlan && !t.Plan && !t.Aside && t.ReadOnly == "" {
 		t.planMode = true
 	}
-	return w.run(ctx, sessionID, t, on, w.storage)
+	var opts []runtime.ExecOption
+	if t.Command {
+		var err error
+		if opts, err = w.expandCommand(ctx, &t); err != nil {
+			return TurnResult{}, err
+		}
+	}
+	return w.run(ctx, sessionID, t, on, w.storage, opts...)
 }
 
 // run is Run recording the transcript in st, which holds the session as

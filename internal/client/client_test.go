@@ -253,3 +253,23 @@ func TestRemotePermissionRules(t *testing.T) {
 		t.Errorf("remove %+v", res)
 	}
 }
+
+func TestRemoteCommands(t *testing.T) {
+	r := attach(t, nil, text("reviewed"))
+	found := false
+	for _, c := range r.ListCommands() {
+		if c.Name == "review" && c.Source == "bundled" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("bundled /review not listed over the API")
+	}
+	sess, _, _ := r.OpenSession("", false)
+	if _, err := r.Run(context.Background(), sess.ID, app.Turn{Text: "/review", Command: true}, func(app.Event) {}); err != nil {
+		t.Errorf("run /review over the API: %v", err)
+	}
+	if _, err := r.Run(context.Background(), sess.ID, app.Turn{Text: "/nope", Command: true}, func(app.Event) {}); !errors.Is(err, app.ErrUnknownCommand) {
+		t.Errorf("unknown command over the API: %v", err)
+	}
+}

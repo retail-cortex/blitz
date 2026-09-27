@@ -66,6 +66,7 @@
     "help.clear": "Limpia la pantalla del terminal",
     "help.exit": "Sale de Blitz",
     "help.title": "Comandos de Blitz",
+    "help.custom_title": "Comandos personalizados",
     "help.input": "Entrada: termina una línea con \\ para continuarla, encierra bloques entre \"\"\", Tab completa comandos y @rutas.",
     "skills.disabled": "La integración de Skills no está activada.",
     "skills.discovered": "Skills encontradas ({count})",

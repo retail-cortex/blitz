@@ -311,7 +311,8 @@ func RunREPL(ctx context.Context, app *App) error {
 			fmt.Printf("%s✗ %s%s\n", Red, i18n.T("session.none_active"), Reset)
 			continue
 		}
-		runTurn(ctx, app, active.ID, line, interrupts, turnOptions{plan: plan})
+		// A slash line that wasn't a built-in command is a custom one.
+		runTurn(ctx, app, active.ID, line, interrupts, turnOptions{plan: plan, command: !plan && strings.HasPrefix(line, "/")})
 	}
 }
 
@@ -332,6 +333,9 @@ type turnOptions struct {
 	// aside: a /btw question, answered in a throwaway copy of the session
 	// (runtime.Engine.Aside) and recorded nowhere.
 	aside bool
+	// command: the line is a custom slash command, expanded by the
+	// workspace.
+	command bool
 	// grants are URLs the agent may fetch without asking (/search web).
 	grants []string
 }
@@ -355,7 +359,7 @@ func runTurn(ctx context.Context, app *App, sessionID, line string, interrupts <
 	stopSteering := func() {}
 	res, streamErr := app.Workspace.Run(turnCtx, sessionID, core.Turn{
 		Text: line, Prompt: o.prompt, Plan: o.plan, ReadOnly: o.readOnly, Aside: o.aside, Accepted: o.accepted,
-		Images: attached, FetchGrants: o.grants,
+		Images: attached, FetchGrants: o.grants, Command: o.command,
 		OnAccepted: func() {
 			if len(attached) > 0 {
 				for _, img := range attached {

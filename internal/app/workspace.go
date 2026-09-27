@@ -66,6 +66,23 @@ type Workspace struct {
 	runsMu      sync.Mutex
 	running     map[string]bool // workers running now, by name
 	newModel    func(ctx context.Context, cfg *config.Config, name string) (model.LLM, error)
+	warnedMu    sync.Mutex
+	warned      map[string]bool // messages warnOnce has shown
+}
+
+// warnOnce reports a problem the first time it is seen: things re-read on
+// every use (command files) would otherwise repeat it.
+func (w *Workspace) warnOnce(msg string) {
+	w.warnedMu.Lock()
+	seen := w.warned[msg]
+	if w.warned == nil {
+		w.warned = map[string]bool{}
+	}
+	w.warned[msg] = true
+	w.warnedMu.Unlock()
+	if !seen {
+		w.warn(msg)
+	}
 }
 
 // Open wires registries, tools, the model and the engine for the workspace

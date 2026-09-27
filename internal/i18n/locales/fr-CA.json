@@ -66,6 +66,7 @@
     "help.clear": "Effacer l’écran du terminal",
     "help.exit": "Quitter Blitz",
     "help.title": "Commandes de Blitz",
+    "help.custom_title": "Commandes personnalisées",
     "help.input": "Saisie : terminez une ligne par \\ pour la continuer, entourez les blocs de \"\"\", Tab complète les commandes et les @chemins.",
     "skills.disabled": "L’intégration des Skills n’est pas activée.",
     "skills.discovered": "Skills trouvées ({count})",

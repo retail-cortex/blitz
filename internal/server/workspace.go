@@ -158,6 +158,18 @@ func (h workspaceService) GetSettings(ctx context.Context, r req[pb.GetSettingsR
 	})
 }
 
+func (h workspaceService) ListCommands(ctx context.Context, r req[pb.ListCommandsRequest]) (*connect.Response[pb.ListCommandsResponse], error) {
+	w, err := h.s.workspace(ctx, r.Msg.Workspace)
+	if err != nil {
+		return nil, err
+	}
+	res := &pb.ListCommandsResponse{}
+	for _, c := range w.ListCommands() {
+		res.Commands = append(res.Commands, &pb.Command{Name: c.Name, Description: c.Description, ArgumentHint: c.ArgumentHint, Source: c.Source})
+	}
+	return ok(res)
+}
+
 func (h workspaceService) ListPermissionRules(ctx context.Context, r req[pb.ListPermissionRulesRequest]) (*connect.Response[pb.ListPermissionRulesResponse], error) {
 	w, err := h.s.workspace(ctx, r.Msg.Workspace)
 	if err != nil {

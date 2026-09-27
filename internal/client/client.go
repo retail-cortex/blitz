@@ -104,7 +104,7 @@ func (r *Remote) ImagesEnabled() bool { return r.getSettings().ImagesEnabled }
 func (r *Remote) Run(ctx context.Context, sessionID string, t app.Turn, on func(app.Event)) (app.TurnResult, error) {
 	turn := &pb.Turn{
 		Text: t.Text, Prompt: t.Prompt, Plan: t.Plan, ReadOnly: t.ReadOnly, Aside: t.Aside, Accepted: t.Accepted,
-		MaxTurns: int32(t.MaxTurns), FetchGrants: t.FetchGrants, MaxCostUsd: t.MaxCostUSD,
+		MaxTurns: int32(t.MaxTurns), FetchGrants: t.FetchGrants, MaxCostUsd: t.MaxCostUSD, Command: t.Command,
 	}
 	if t.Timeout > 0 {
 		turn.Timeout = durationpb.New(t.Timeout)
@@ -365,6 +365,19 @@ func (r *Remote) Set(ctx context.Context, key, value string) (string, error) {
 		return strings.ToLower(strings.TrimSpace(key)), fromAPI(err)
 	}
 	return res.Msg.Key, nil
+}
+
+func (r *Remote) ListCommands() []app.CommandInfo {
+	res, err := r.workspaces.ListCommands(context.Background(), connect.NewRequest(&pb.ListCommandsRequest{Workspace: r.dir}))
+	if err != nil {
+		r.failed("listing commands", err)
+		return nil
+	}
+	var out []app.CommandInfo
+	for _, c := range res.Msg.Commands {
+		out = append(out, app.CommandInfo{Name: c.Name, Description: c.Description, ArgumentHint: c.ArgumentHint, Source: c.Source})
+	}
+	return out
 }
 
 func (r *Remote) ListPermissionRules() []app.PermissionRule {

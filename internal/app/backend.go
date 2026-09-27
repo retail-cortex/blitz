@@ -71,6 +71,7 @@ type Backend interface {
 	RemoveEnv(key string) error
 	PruneEnvs() (PruneResult, error)
 	ListMCPServers() []MCPServer
+	ListCommands() []CommandInfo
 	ActiveAgentTools() AgentTools
 
 	// Context, memory and language.

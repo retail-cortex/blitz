@@ -401,6 +401,9 @@ func newCompleter(w app.Backend) *tui.Completer {
 	c.Command("set", "agency=")
 	c.Command("mode", "default", "accept-edits", "plan", "dont-ask", "bypass")
 	c.Command("permissions", "allow", "ask", "deny", "remove")
+	for _, cmd := range w.ListCommands() { // custom commands, as they are at startup
+		c.Command(cmd.Name)
+	}
 	agentNames := func() []string {
 		var names []string
 		for _, a := range w.ListAgents() {

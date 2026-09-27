@@ -41,6 +41,10 @@ message Turn {
   // Stops the turn after this long (unset: unlimited). The turn fails with
   // reason TIME_LIMIT.
   google.protobuf.Duration timeout = 11;
+  // text is a custom slash command ("/name args"): it is expanded into the
+  // command's prompt, agent, model, tools and plan mode; the transcript
+  // records text. An unknown command fails with UNKNOWN_COMMAND.
+  bool command = 12;
 }
 
 // TurnEvent is something that happened during a turn. Events arrive in

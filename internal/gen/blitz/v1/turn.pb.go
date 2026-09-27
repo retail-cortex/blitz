@@ -178,7 +178,11 @@ type Turn struct {
 	MaxCostUsd float64 `protobuf:"fixed64,10,opt,name=max_cost_usd,json=maxCostUsd,proto3" json:"max_cost_usd,omitempty"`
 	// Stops the turn after this long (unset: unlimited). The turn fails with
 	// reason TIME_LIMIT.
-	Timeout       *durationpb.Duration `protobuf:"bytes,11,opt,name=timeout,proto3" json:"timeout,omitempty"`
+	Timeout *durationpb.Duration `protobuf:"bytes,11,opt,name=timeout,proto3" json:"timeout,omitempty"`
+	// text is a custom slash command ("/name args"): it is expanded into the
+	// command's prompt, agent, model, tools and plan mode; the transcript
+	// records text. An unknown command fails with UNKNOWN_COMMAND.
+	Command       bool `protobuf:"varint,12,opt,name=command,proto3" json:"command,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -288,6 +292,13 @@ func (x *Turn) GetTimeout() *durationpb.Duration {
 		return x.Timeout
 	}
 	return nil
+}
+
+func (x *Turn) GetCommand() bool {
+	if x != nil {
+		return x.Command
+	}
+	return false
 }
 
 // TurnEvent is something that happened during a turn. Events arrive in
@@ -1124,7 +1135,7 @@ var File_blitz_v1_turn_proto protoreflect.FileDescriptor
 
 const file_blitz_v1_turn_proto_rawDesc = "" +
 	"\n" +
-	"\x13blitz/v1/turn.proto\x12\bblitz.v1\x1a\x1egoogle/protobuf/duration.proto\x1a\x1cgoogle/protobuf/struct.proto\"\xc9\x02\n" +
+	"\x13blitz/v1/turn.proto\x12\bblitz.v1\x1a\x1egoogle/protobuf/duration.proto\x1a\x1cgoogle/protobuf/struct.proto\"\xe3\x02\n" +
 	"\x04Turn\x12\x12\n" +
 	"\x04text\x18\x01 \x01(\tR\x04text\x12\x16\n" +
 	"\x06prompt\x18\x02 \x01(\tR\x06prompt\x12\x12\n" +
@@ -1138,7 +1149,8 @@ const file_blitz_v1_turn_proto_rawDesc = "" +
 	"\fmax_cost_usd\x18\n" +
 	" \x01(\x01R\n" +
 	"maxCostUsd\x123\n" +
-	"\atimeout\x18\v \x01(\v2\x19.google.protobuf.DurationR\atimeout\"\x9f\x03\n" +
+	"\atimeout\x18\v \x01(\v2\x19.google.protobuf.DurationR\atimeout\x12\x18\n" +
+	"\acommand\x18\f \x01(\bR\acommand\"\x9f\x03\n" +
 	"\tTurnEvent\x12\x16\n" +
 	"\x06author\x18\x01 \x01(\tR\x06author\x120\n" +
 	"\baccepted\x18\x02 \x01(\v2\x12.blitz.v1.AcceptedH\x00R\baccepted\x12$\n" +

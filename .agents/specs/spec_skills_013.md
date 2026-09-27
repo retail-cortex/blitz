@@ -34,6 +34,12 @@ Skills are reusable instructions (`SKILL.md`) an agent loads on demand, optional
 - **SK-23** Per script: language must be in `languages` (default `python`); timeout = script's, else hints', capped by `max_timeout_seconds` (300) which also applies when none is set; each dependency must be a plain PEP 508 requirement (no URLs, paths or pip options), not in `packages.deny`, in `packages.allow` if set (PEP 503-normalised names, globs), and pinned `==` when `require_hashes`.
 - **SK-24** `Problems()` of the policy are warned at startup and by `doctor`.
 
+## 4b. Slash commands
+
+- **SK-80** Custom slash commands (`internal/commands`): Markdown files in `~/.blitz/commands/` (user) and the workspace's `.blitz/commands/`, `.claude/commands/`, `.agents/workflows/` (project, which win; prompt text, so no trust is needed — spec_parity_027 §12.3), read on each use. The name is the path without `.md`, subdirectories as `:` namespaces, lower case (`[a-z0-9][a-z0-9._-]*`). Optional frontmatter: `description` (else the body's first line), `argument-hint`, `agent`, `model`, `allowed-tools` (a list or a comma/space-separated string; `Bash(git *)` stays one entry), `mode: plan`; unknown modes and empty bodies are errors, reported once.
+- **SK-81** Expansion: `$ARGUMENTS` is everything typed after the name, `$1`–`$9` its words; without either, the arguments are appended. The turn (`Turn.Command`) sends the expanded prompt and records the line as typed; `agent`/`model` apply to that turn only (ENG-16), `allowed-tools` limits it (`runtime.WithAllowedTools`; Claude Code names map to Blitz tools, `Bash(…)` counts as the shell tool), `mode: plan` plans it. `ErrUnknownCommand` / `UNKNOWN_COMMAND` otherwise.
+- **SK-82** Every skill is a command `/<skill-name> <request>`, whose prompt carries the request and the skill's instructions (bundled and file commands of the same name win). Bundled commands: `/review` and `/security-review` (plan mode: read-only reviews of the uncommitted changes, a branch or files, verified findings with file and line), `/simplify` (behaviour-preserving cleanup of the changed files, then tests), `/verify` (find and run the project's build, lint and test commands and report). Built-in REPL commands win name clashes; `/help` lists the custom ones with their source; `ListCommands` serves them.
+
 ## 5. Agent tools
 
 - **SK-30** `list_or_search_skills` (query optional) → name, description, tags.
