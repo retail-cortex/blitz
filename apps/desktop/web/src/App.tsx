@@ -222,8 +222,6 @@ function Shell() {
             key={`${w.dir}#${generation}`}
             ws={w}
             visible={w.dir === prefs.active}
-            onEdit={() => setEditing(w.dir)}
-            onClose={() => close(w.dir)}
             onOpenWorkspace={open}
             onEditWorkspace={setEditing}
             onCloseWorkspace={close}

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { mdiCalendarClock, mdiClose, mdiCodeBraces, mdiCogOutline, mdiDotsVertical, mdiFileCompare, mdiFileSearchOutline, mdiFileTreeOutline, mdiPencilOutline, mdiTuneVariant } from "@mdi/js";
+import { mdiCalendarClock, mdiCodeBraces, mdiCogOutline, mdiFileCompare, mdiFileSearchOutline, mdiFileTreeOutline, mdiTuneVariant } from "@mdi/js";
 import { workspaces } from "./api";
 import { Changes } from "./Changes";
 import { Conversation } from "./Conversation";
@@ -17,7 +17,7 @@ import { displayName, type WorkspacePrefs } from "./prefs";
 import { RunSettings } from "./RunSettings";
 import { useApp } from "./state";
 import { t } from "./i18n";
-import { IconButton, Menu, Segmented } from "./ui/controls";
+import { IconButton, Segmented } from "./ui/controls";
 import { WorkspaceSwitcher } from "./WorkspaceSwitcher";
 import { Workers } from "./Workers";
 
@@ -33,8 +33,6 @@ type View = "editor" | "changes" | "workers";
 export function Workspace({
   ws,
   visible,
-  onEdit,
-  onClose,
   onOpenWorkspace,
   onEditWorkspace,
   onCloseWorkspace,
@@ -42,8 +40,6 @@ export function Workspace({
 }: {
   ws: WorkspacePrefs;
   visible: boolean;
-  onEdit: () => void;
-  onClose: () => void;
   onOpenWorkspace: () => void;
   onEditWorkspace: (dir: string) => void;
   onCloseWorkspace: (dir: string) => void;
@@ -184,14 +180,6 @@ export function Workspace({
         <div className="topbar-actions no-drag">
           <IconButton icon={mdiFileSearchOutline} label={t("desktop.files.go_to")} onClick={() => setGoTo(true)} />
           <IconButton icon={mdiTuneVariant} label={t("desktop.run_settings")} selected={prefs.run_settings} onClick={() => update((p) => ({ ...p, run_settings: !p.run_settings }))} />
-          <Menu
-            placement="down end"
-            trigger={(p) => <IconButton icon={mdiDotsVertical} label={t("desktop.more")} {...p} />}
-            items={[
-              { label: t("desktop.edit_details"), icon: mdiPencilOutline, onSelect: onEdit },
-              { label: t("desktop.ws.close"), icon: mdiClose, onSelect: onClose },
-            ]}
-          />
           <IconButton icon={mdiCogOutline} label={t("desktop.settings")} onClick={onSettings} />
         </div>
       </header>

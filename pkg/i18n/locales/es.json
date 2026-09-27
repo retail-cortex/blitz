@@ -571,7 +571,6 @@
     "desktop.model.now": "El modelo ahora es {model}.",
     "desktop.model.unavailable": "El modelo es `{model}` (no disponible: {reason}).",
     "desktop.model_unavailable": "El modelo no está disponible: {reason}. Defina su clave de API en Configuración, Proveedores y claves, o en la configuración de ejecución de este espacio de trabajo.",
-    "desktop.more": "Más",
     "desktop.notify.approval": "{name}: se necesita aprobación",
     "desktop.notify.approval_body": "{tool} quiere: {detail}",
     "desktop.notify.asks": "{name}: el agente pregunta",

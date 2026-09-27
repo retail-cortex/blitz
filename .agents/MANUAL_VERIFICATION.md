@@ -369,7 +369,7 @@ Set `fallback_models = ["anthropic/claude-sonnet-5"]` with a working Anthropic k
 - [ ] First start: `blitz service uninstall`, move `~/.blitz/desktop.json` aside, open the app, click "Install and start the service". **Expected:** within a few seconds the welcome page ("Open a workspace") replaces the install screen.
 - [ ] The window on macOS: the title bar area is the page's (drag it by the top bar; the window buttons don't overlap the workspace dropdown).
 - [ ] Settings › Appearance: System, Light, Dark. **Expected:** System follows System Settings › Appearance while the app is open; the choice survives a restart. Compact density tightens the lists and chat.
-- [ ] Edit a workspace's name, description and colour (dropdown pencil, ⋮ menu, Settings › Workspaces). **Expected:** the dropdown and welcome cards change; after a restart the same workspaces are open, in order, with the same one shown.
+- [ ] Edit a workspace's name, description and colour (dropdown pencil, Settings › Workspaces). **Expected:** the dropdown and welcome cards change; after a restart the same workspaces are open, in order, with the same one shown.
 - [ ] Close a workspace (dropdown ✕): it moves to Recent, "Undo" reopens it. 💲 Close one while a turn runs: the dialog stops the turn first. With the REPL attached and running a turn in the same workspace, closing it in the app leaves the REPL's turn running.
 - [ ] Stop the service (`blitz service stop` or kill it) with the app open, then click something. **Expected:** "isn't answering. Reconnecting…"; start it again: "Reconnected" and the workspaces reload.
 - [ ] 💲 A model answer with a link, a table and a code block: the table and code render; Copy copies the code; clicking the link opens the default browser, not the window. An image in Markdown shows as a link and isn't loaded.
@@ -454,7 +454,7 @@ These touch your real keychain and settings: use a test key, or a throwaway `--c
 - [ ] Right-click in the tree: **New file** (opens it), **New folder**, **Rename** (F2), **Delete** (asks), **Copy path**, **Copy relative path**. Arrow keys move and open folders; Enter opens.
 - [ ] ⌘P: type part of a name (`dsc` finds `discount.go`); `name:12` opens at line 12.
 - [ ] A path in an answer (`internal/cart/discount.go`) and a tool call's path open the file.
-- [ ] Unsaved changes: closing the tab, closing the workspace (⋮ menu, dropdown) and quitting the app (⌘Q, the window's close button) each ask first.
+- [ ] Unsaved changes: closing the tab, closing the workspace (dropdown) and quitting the app (⌘Q, the window's close button) each ask first.
 - [ ] With no file open, the chat is center stage (the middle, full width of its column); open a file during a turn: the chat moves to the right and keeps streaming; close the last file: it returns to the middle. In Changes or Workers it stays on the right.
 - [ ] The IDE layout: files left, editor middle, chat right. Minimize the shelf (≪): a rail with Show files and Go to file remains, and stays after a restart. Drag the chat's left edge: its width is kept after a restart.
 - [ ] The workspace dropdown: switch workspaces; while a turn in another workspace waits for approval, the dropdown shows a `!`; reopen a recent workspace; Open workspace…; Settings is the top bar's far-right button.

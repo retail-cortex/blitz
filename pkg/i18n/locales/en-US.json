@@ -571,7 +571,6 @@
     "desktop.model.now": "The model is now {model}.",
     "desktop.model.unavailable": "The model is `{model}` (unavailable: {reason}).",
     "desktop.model_unavailable": "The model isn't available: {reason}. Set its API key in Settings, Providers & keys, or in this workspace's run settings.",
-    "desktop.more": "More",
     "desktop.notify.approval": "{name}: approval needed",
     "desktop.notify.approval_body": "{tool} wants to: {detail}",
     "desktop.notify.asks": "{name}: the agent asks",
