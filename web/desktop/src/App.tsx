@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { mdiAlertOutline, mdiFolderOpenOutline, mdiLightningBolt, mdiServerOff } from "@mdi/js";
 import { onServiceLost, workspaces as workspaceAPI } from "./api";
 import { chooseWorkspace, installService, onNotificationOpen, serviceStatus, type ServiceStatus } from "./desktop";
+import { CommandPalette } from "./CommandPalette";
 import { Drawer } from "./Drawer";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { message, reason } from "./errors";
@@ -57,6 +58,18 @@ function Shell() {
   const snack = useSnackbar();
   const { service, error, check, setError } = useServiceStatus();
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  // Cmd/Ctrl+K opens the command palette.
+  useEffect(() => {
+    const key = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setPaletteOpen((o) => !o);
+      }
+    };
+    window.addEventListener("keydown", key);
+    return () => window.removeEventListener("keydown", key);
+  }, []);
   const [editing, setEditing] = useState<string | null>(null);
   // Bumped when the service comes back, so workspaces reload what they show.
   const [generation, setGeneration] = useState(0);
@@ -131,6 +144,7 @@ function Shell() {
         ))}
       </main>
       {settingsOpen && <SettingsDialog onClose={() => setSettingsOpen(false)} />}
+      {paletteOpen && <CommandPalette onClose={() => setPaletteOpen(false)} onOpenWorkspace={open} onSettings={() => setSettingsOpen(true)} />}
       {confirmClose && (
         <Dialog
           title="Stop the turn and close?"

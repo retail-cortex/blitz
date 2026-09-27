@@ -3,6 +3,7 @@ import { mdiCalendarClock, mdiChatOutline, mdiClose, mdiDotsVertical, mdiFileCom
 import { workspaces } from "./api";
 import { Changes } from "./Changes";
 import { Conversation } from "./Conversation";
+import { viewEvent, type ViewDetail } from "./events";
 import { message } from "./errors";
 import type { GetSettingsResponse } from "./gen/blitz/v1/workspace_pb";
 import { workspaceColor } from "./palette";
@@ -40,6 +41,16 @@ export function Workspace({ ws, visible, onEdit, onClose }: { ws: WorkspacePrefs
   useEffect(() => {
     refreshSettings();
   }, [refreshSettings]);
+
+  // The command palette can switch the view.
+  useEffect(() => {
+    const f = (e: Event) => {
+      const d = (e as CustomEvent<ViewDetail>).detail;
+      if (d.dir === dir) setView(d.view);
+    };
+    window.addEventListener(viewEvent, f);
+    return () => window.removeEventListener(viewEvent, f);
+  }, [dir]);
 
   const name = displayName(ws);
   return (
@@ -83,7 +94,15 @@ export function Workspace({ ws, visible, onEdit, onClose }: { ws: WorkspacePrefs
       <div className="workspace-body">
         <div className="workspace-view">
           <div hidden={view !== "chat"} className="view-fill">
-            <Conversation dir={dir} name={name} visible={visible && view === "chat"} settings={settings} modelProblem={modelProblem} onSettingsChanged={refreshSettings} />
+            <Conversation
+              dir={dir}
+              name={name}
+              visible={visible && view === "chat"}
+              settings={settings}
+              modelProblem={modelProblem}
+              onSettingsChanged={refreshSettings}
+              onOpenView={setView}
+            />
           </div>
           {view === "changes" && <Changes dir={dir} />}
           {view === "workers" && <Workers dir={dir} />}

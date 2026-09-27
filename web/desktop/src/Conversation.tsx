@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { timestampDate } from "@bufbuild/protobuf/wkt";
 import type { JsonObject } from "@bufbuild/protobuf";
 import {
@@ -40,6 +40,8 @@ import { isUnavailable, message, reason } from "./errors";
 import type { SessionInfo } from "./gen/blitz/v1/session_pb";
 import { Decision, type ApprovalRequest, type Question, type Task, type Usage } from "./gen/blitz/v1/turn_pb";
 import type { GetSettingsResponse } from "./gen/blitz/v1/workspace_pb";
+import { allCommands, helpText, matchCommands, parseCommand, type CommandSpec } from "./commands";
+import { composeEvent, loadSessionEvent, type ComposeDetail, type LoadSessionDetail } from "./events";
 import { describeImage, imageFiles, readyIds, rejectReason, uploading, type Attachment } from "./attachments";
 import { Markdown } from "./Markdown";
 import { notify, shouldNotify, type NotifyKind } from "./notify";
@@ -50,6 +52,20 @@ import { Button, Chip, Dialog, Icon, IconButton, Menu, useSnackbar } from "./ui/
 
 type Pending = { kind: "approval"; req: ApprovalRequest } | { kind: "question"; q: Question };
 
+/** How a turn is sent (see Turn in the API). */
+interface TurnOptions {
+  accepted?: boolean;
+  plan?: boolean;
+  aside?: boolean;
+  command?: boolean;
+  readOnly?: string;
+  prompt?: string;
+  fetchGrants?: string[];
+  images?: Attachment[];
+  /** The prompt as shown, when it differs from the text sent. */
+  shown?: string;
+}
+
 /** One workspace's conversation: its sessions, the chat and the composer. */
 export function Conversation({
   dir,
@@ -58,6 +74,7 @@ export function Conversation({
   settings,
   modelProblem,
   onSettingsChanged,
+  onOpenView,
 }: {
   dir: string;
   name: string;
@@ -66,6 +83,7 @@ export function Conversation({
   settings?: GetSettingsResponse;
   modelProblem: string;
   onSettingsChanged: () => void;
+  onOpenView: (v: "changes" | "workers") => void;
 }) {
   const { prefs, setActivity, registerStop } = useApp();
   const snack = useSnackbar();
@@ -81,6 +99,18 @@ export function Conversation({
   const [draft, setDraft] = useState("");
   const [plan, setPlan] = useState(false);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const [customCommands, setCustomCommands] = useState<CommandSpec[]>([]);
+  useEffect(() => {
+    workspaces
+      .listCommands({ workspace: dir })
+      .then((r) =>
+        setCustomCommands(
+          r.commands.map((c) => ({ name: c.name, args: c.argumentHint || undefined, description: c.description || `Run /${c.name}`, source: (c.source || "project") as CommandSpec["source"] })),
+        ),
+      )
+      .catch(() => {});
+  }, [dir]);
+  const commands = useMemo(() => allCommands(customCommands), [customCommands]);
   const [dragging, setDragging] = useState(false);
   const [forceRewind, setForceRewind] = useState<{ index: number; mode: string; error: string } | null>(null);
   const abort = useRef<AbortController | null>(null);
@@ -170,11 +200,19 @@ export function Conversation({
   };
 
   const run = useCallback(
-    async (text: string, opts: { accepted?: boolean; plan?: boolean; images?: Attachment[] } = {}) => {
+    async (text: string, opts: TurnOptions = {}) => {
       if (!session) return;
       const images = opts.images ?? [];
       if (!opts.accepted)
-        setEntries((e) => [...e, { kind: "user", text: opts.plan ? `/plan ${text}` : text, images: images.length ? images.map((a) => ({ url: a.url, name: a.name })) : undefined }]);
+        setEntries((e) => [
+          ...e,
+          {
+            kind: "user",
+            text: opts.shown ?? (opts.plan ? `/plan ${text}` : text),
+            sub: opts.aside ? "aside" : undefined,
+            images: images.length ? images.map((a) => ({ url: a.url, name: a.name })) : undefined,
+          },
+        ]);
       setRunning(true);
       started.current = Date.now();
       setError("");
@@ -187,7 +225,21 @@ export function Conversation({
       let leftover: string[] = [];
       try {
         const stream = sessions.runTurn(
-          { workspace: dir, sessionId: session.id, turn: { text, accepted: !!opts.accepted, plan: !!opts.plan, imageIds: readyIds(images) } },
+          {
+            workspace: dir,
+            sessionId: session.id,
+            turn: {
+              text,
+              accepted: !!opts.accepted,
+              plan: !!opts.plan,
+              imageIds: readyIds(images),
+              aside: !!opts.aside,
+              readOnly: opts.readOnly ?? "",
+              prompt: opts.prompt ?? "",
+              fetchGrants: opts.fetchGrants ?? [],
+              command: !!opts.command,
+            },
+          },
           { signal: ctl.signal },
         );
         for await (const res of stream) {
@@ -276,6 +328,7 @@ export function Conversation({
     });
 
   const submit = async (text: string) => {
+    if (parseCommand(text) && (await execute(text))) return;
     if (!running) {
       const asPlan = plan;
       setPlan(false);
@@ -350,6 +403,186 @@ export function Conversation({
     }
   };
 
+  // A line of notice text in the conversation (command results).
+  const say = useCallback((text: string, tone: "info" | "error" = "info", markdown = false) => {
+    stick.current = true;
+    setEntries((e) => [...e, { kind: "notice", text, tone, markdown }]);
+  }, []);
+
+  /**
+   * Runs a slash command; false when the line isn't one (a path, say) and
+   * should go to the agent. Unknown commands are refused, never sent.
+   */
+  const execute = async (line: string): Promise<boolean> => {
+    const c = parseCommand(line);
+    if (!c) return false;
+    const spec = commands.find((x) => x.name === c.name);
+    if (!spec) {
+      say(`Unknown command /${c.name}. Type / to see the commands.`, "error");
+      return true;
+    }
+    const startsTurn = spec.source !== "builtin" || ["plan", "btw", "search", "new", "undo", "compact", "rename", "session", "agent", "model"].includes(c.name);
+    if (running && startsTurn) {
+      say(`Wait for the agent to finish (or stop it) before /${c.name}.`, "error");
+      return true;
+    }
+    if (spec.source !== "builtin") {
+      run(line.trim(), { command: true });
+      return true;
+    }
+    const usage = () => say(`Usage: /${spec.name}${spec.args ? " " + spec.args : ""}`, "error");
+    const k = (n: bigint) => Number(n).toLocaleString();
+    try {
+      switch (c.name) {
+        case "plan":
+          return c.args ? (run(c.args, { plan: true }), true) : (usage(), true);
+        case "btw":
+          return c.args ? (run(c.args, { aside: true, shown: `/btw ${c.args}` }), true) : (usage(), true);
+        case "search": {
+          const [sub, ...rest] = c.args.split(/\s+/);
+          const terms = rest.join(" ").trim();
+          if (!terms || (sub !== "web" && sub !== "session")) return usage(), true;
+          const recorded = `/search ${sub} ${terms}`;
+          if (sub === "session") {
+            const r = await sessions.searchSession({ workspace: dir, terms });
+            if (r.found === 0) say(`Nothing in this conversation matches “${terms}”.`);
+            else run(recorded, { prompt: r.prompt, readOnly: "search", shown: recorded });
+            return true;
+          }
+          say(`Searching the web for “${terms}”…`);
+          const r = await workspaces.searchWeb({ workspace: dir, terms });
+          if (r.links.length === 0) {
+            say(`The search found nothing worth reading for “${terms}”.`);
+            return true;
+          }
+          say(`Found with ${r.provider}:\n\n${r.links.map((l, i) => `${i + 1}. [${l.title.replace(/[[\]]/g, "")}](${l.url})`).join("\n")}\n\nThe agent reads them now.`, "info", true);
+          run(recorded, { prompt: r.prompt, readOnly: "search", fetchGrants: r.links.map((l) => l.url), shown: recorded });
+          return true;
+        }
+        case "undo": {
+          const res = await workspaces.undo({ workspace: dir, force: c.args === "--force" });
+          say(res.restored.length ? `Undid “${res.label}”: ${res.restored.join(", ")}.` : "Nothing was restored.");
+          if (res.error) say(res.error.message, "error");
+          return true;
+        }
+        case "checkpoints": {
+          const r = await workspaces.listCheckpoints({ workspace: dir });
+          say(
+            r.checkpoints.length
+              ? "**Turns that changed files** (newest first)\n\n" + r.checkpoints.map((cp) => `- ${cp.label} — ${cp.files.map((f) => `\`${f}\``).join(", ")}`).join("\n")
+              : "No turn has changed files yet.",
+            "info",
+            true,
+          );
+          return true;
+        }
+        case "diff":
+          onOpenView("changes");
+          return true;
+        case "cost":
+        case "context": {
+          const r = await sessions.getUsage({ workspace: dir });
+          const u = r.usage;
+          if (!u || u.calls === 0) return say("Nothing sent in this conversation yet."), true;
+          say(
+            c.name === "cost"
+              ? `| | |\n|---|---|\n| Model calls | ${u.calls} |\n| Tokens sent | ${k(u.input)} (${k(u.cached)} cached) |\n| Tokens received | ${k(u.output)} |\n| Cost | ${u.priced ? "$" + u.costUsd.toFixed(4) : "not priced for this model"} |`
+              : `The context is **${k(u.lastPrompt)} tokens**` + (r.autoCompact ? `; older turns are summarized past ${r.threshold.toLocaleString()}.` : ". Automatic compaction is off: use /compact."),
+            "info",
+            true,
+          );
+          return true;
+        }
+        case "compact": {
+          say("Summarizing older turns…");
+          const r = await sessions.compact({ workspace: dir, focus: c.args });
+          say(`Summarized ${r.eventsCompacted} events into ${r.summaryChars} characters.`);
+          refreshTotal();
+          return true;
+        }
+        case "agent": {
+          if (!c.args) {
+            const r = await workspaces.listAgents({ workspace: dir });
+            say("**Agents**\n\n" + r.agents.map((a) => `- ${a.active ? "**" : ""}${a.displayName}${a.active ? "** (active)" : ""} — \`${a.name}\`: ${a.description}`).join("\n"), "info", true);
+            return true;
+          }
+          const r = await workspaces.setAgent({ workspace: dir, name: c.args });
+          say(`Switched to ${r.agent?.displayName ?? c.args}.`);
+          onSettingsChanged();
+          return true;
+        }
+        case "model": {
+          if (!c.args) {
+            const m = await workspaces.getModel({ workspace: dir });
+            say(`The model is \`${m.provider ? m.provider + "/" : ""}${m.name}\`${m.unavailable ? ` (unavailable: ${m.unavailable})` : ""}.`, "info", true);
+            return true;
+          }
+          await workspaces.setModel({ workspace: dir, ref: c.args });
+          say(`The model is now ${c.args}.`);
+          onSettingsChanged();
+          return true;
+        }
+        case "mode": {
+          if (!c.args) return say(`The permission mode is **${modeOf(settings?.permissionMode ?? "default").label}**. Change it with /mode <name> or the chip below.`, "info", true), true;
+          const r = await workspaces.setPermissionMode({ workspace: dir, mode: c.args });
+          say(`Permission mode: ${modeOf(r.mode).label}.`);
+          onSettingsChanged();
+          return true;
+        }
+        case "effort": {
+          if (!c.args) return say(`Reasoning effort: **${efforts.find((e) => e.value === (settings?.effort ?? ""))?.label ?? "Auto"}**.`, "info", true), true;
+          await workspaces.setSetting({ workspace: dir, key: "effort", value: c.args });
+          say(`Reasoning effort: ${c.args}.`);
+          onSettingsChanged();
+          return true;
+        }
+        case "session": {
+          const m = /^save\s+(\S+)(\s+--force)?$/.exec(c.args);
+          if (!m) return usage(), true;
+          const r = await sessions.saveSnapshot({ workspace: dir, name: m[1], force: !!m[2] });
+          say(`Saved as the snapshot “${r.snapshot?.snapshot ?? m[1]}”. Open it from History to continue from here.`);
+          refreshList();
+          return true;
+        }
+        case "rename":
+          return c.args ? (await rename(c.args), say(`Renamed to “${c.args}”.`), true) : (usage(), true);
+        case "new":
+          await newSession();
+          return true;
+        case "help":
+          say(helpText(commands), "info", true);
+          return true;
+      }
+    } catch (e) {
+      if (isUnavailable(e)) serviceLost();
+      say(message(e), "error");
+      return true;
+    }
+    return false;
+  };
+  useEffect(() => {
+    const f = (e: Event) => {
+      const d = (e as CustomEvent<LoadSessionDetail>).detail;
+      if (d.dir === dir && !running) load(d.id);
+    };
+    window.addEventListener(loadSessionEvent, f);
+    return () => window.removeEventListener(loadSessionEvent, f);
+  });
+  const executeRef = useRef(execute);
+  executeRef.current = execute;
+
+  // The command palette and other windows parts send text here.
+  useEffect(() => {
+    const f = (e: Event) => {
+      const d = (e as CustomEvent<ComposeDetail>).detail;
+      if (d.dir !== dir) return;
+      if (d.run) executeRef.current(d.text);
+      else setDraft(d.text);
+    };
+    window.addEventListener(composeEvent, f);
+    return () => window.removeEventListener(composeEvent, f);
+  }, [dir]);
+
   const shown = prefs.show_thoughts ? entries : entries.filter((e) => e.kind !== "thought");
   const empty = shown.length === 0 && !running;
   return (
@@ -412,6 +645,7 @@ export function Conversation({
       <div className="chat-column dock">
         {tasks.length > 0 && <TaskList tasks={tasks} onDismiss={running ? undefined : () => setTasks([])} />}
         <Composer
+          commands={commands}
           attachments={attachments}
           onAddFiles={addFiles}
           onRemoveAttachment={removeAttachment}
@@ -592,7 +826,13 @@ const EntryView = memo(function EntryView({
     case "tool":
       return <ToolRow name={entry.name} args={entry.args} result={entry.result} />;
     case "notice":
-      return <div className={`notice ${entry.tone}`}>{entry.text}</div>;
+      return entry.markdown ? (
+        <div className={`notice card ${entry.tone}`}>
+          <Markdown text={entry.text} />
+        </div>
+      ) : (
+        <div className={`notice ${entry.tone}`}>{entry.text}</div>
+      );
   }
 });
 
@@ -634,6 +874,7 @@ function UserBubble({ entry, running, onRewind, onEdit }: { entry: UserEntry; ru
       </div>
       <div className="bubble">
         {entry.sub === "steer" && <span className="t-label muted">Sent while working</span>}
+        {entry.sub === "aside" && <span className="t-label muted">Side question: not kept in the conversation</span>}
         {entry.images && (
           <div className="bubble-images">
             {entry.images.map((img) => (
@@ -866,6 +1107,7 @@ function TaskList({ tasks, onDismiss }: { tasks: Task[]; onDismiss?: () => void 
 }
 
 function Composer({
+  commands,
   attachments,
   onAddFiles,
   onRemoveAttachment,
@@ -881,6 +1123,7 @@ function Composer({
   onStop,
   onSettingsChanged,
 }: {
+  commands: CommandSpec[];
   attachments: Attachment[];
   onAddFiles: (files: File[]) => void;
   onRemoveAttachment: (key: string) => void;
@@ -900,6 +1143,13 @@ function Composer({
   const ref = useRef<HTMLTextAreaElement>(null);
   const picker = useRef<HTMLInputElement>(null);
   const busy = uploading(attachments);
+  // Completing a command's name as it's typed.
+  const matches = matchCommands(draft, commands);
+  const [pick, setPick] = useState(0);
+  const [dismissed, setDismissed] = useState("");
+  const menuOpen = matches.length > 0 && dismissed !== draft;
+  useEffect(() => setPick(0), [draft]);
+  const complete = (c: CommandSpec) => setDraft(`/${c.name}${c.args ? " " : ""}`);
   // Grow with the text, up to a limit.
   useEffect(() => {
     const el = ref.current;
@@ -936,6 +1186,31 @@ function Composer({
   const effort = efforts.find((e) => e.value === (settings?.effort ?? "")) ?? efforts[0];
   return (
     <div className={`composer ${running ? "running" : ""}`}>
+      {menuOpen && (
+        <div className="command-menu" role="listbox" aria-label="Commands">
+          {matches.map((c, i) => (
+            <button
+              key={c.name}
+              role="option"
+              aria-selected={i === pick}
+              className={`command-option ${i === pick ? "on" : ""}`}
+              onMouseDown={(e) => {
+                e.preventDefault(); // keep the focus in the field
+                complete(c);
+              }}
+            >
+              <code>/{c.name}</code>
+              {c.args && <span className="muted mono t-body-sm">{c.args}</span>}
+              <span className="spacer ellipsis muted t-body-sm">{c.description}</span>
+              {c.source !== "builtin" && <span className="chip static command-source">{c.source}</span>}
+            </button>
+          ))}
+          <div className="command-hint t-body-sm muted">
+            <kbd>↑</kbd>
+            <kbd>↓</kbd> choose · <kbd>Tab</kbd> complete · <kbd>Esc</kbd> close
+          </div>
+        </div>
+      )}
       {attachments.length > 0 && (
         <div className="attachments">
           {attachments.map((a) => (
@@ -963,12 +1238,31 @@ function Composer({
           }
         }}
         onKeyDown={(e) => {
+          if (menuOpen && !e.nativeEvent.isComposing) {
+            const chosen = matches[Math.min(pick, matches.length - 1)];
+            if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+              e.preventDefault();
+              setPick((p) => (p + (e.key === "ArrowDown" ? 1 : matches.length - 1)) % matches.length);
+              return;
+            }
+            if (e.key === "Escape") {
+              e.preventDefault();
+              setDismissed(draft);
+              return;
+            }
+            // Tab completes; Enter completes too, unless the name is already whole.
+            if (e.key === "Tab" || (e.key === "Enter" && !e.shiftKey && draft !== `/${chosen.name}`)) {
+              e.preventDefault();
+              complete(chosen);
+              return;
+            }
+          }
           if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
             e.preventDefault();
             send();
           }
         }}
-        placeholder={running ? "Steer the agent: it reads this after its current step" : plan ? "Describe the goal to plan for…" : "Ask Blitz to do something…"}
+        placeholder={running ? "Steer the agent: it reads this after its current step" : plan ? "Describe the goal to plan for…" : "Ask Blitz to do something, or type / for commands…"}
         aria-label="Message"
       />
       <div className="composer-bar">

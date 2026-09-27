@@ -232,6 +232,8 @@ export function installFake() {
           return { mode, prompt, restored: mode === "conversation" ? [] : ["internal/cart/discount.go"], compacted: { eventsCompacted: 6, summaryChars: 900 } };
         },
         listRewindPoints: () => ({ points: [] }),
+        searchSession: ({ terms }) => ({ found: terms === "zzz" ? 0 : 2, prompt: `Look at these passages about ${terms}…` }),
+        saveSnapshot: ({ name }) => ({ snapshot: { id: "snap-1", snapshot: name } }),
       });
       service(WorkspaceService, {
         getSettings: ({ workspace }) => {
@@ -290,6 +292,13 @@ export function installFake() {
         revokeApprovals: () => ({ revoked: 1 }),
         closeWorkspace: () => ({}),
         listWorkspaces: () => ({ workspaces: [...states.keys()] }),
+        listCommands: () => ({
+          commands: [
+            { name: "review", description: "Review the uncommitted changes for bugs", argumentHint: "[branch | files]", source: "bundled" },
+            { name: "db:migrate", description: "Write a database migration", argumentHint: "<name>", source: "project" },
+          ],
+        }),
+        searchWeb: ({ terms }) => ({ provider: "Google", links: [{ title: `${terms} — docs`, url: "https://example.com/docs" }], prompt: "Read these pages…" }),
         addImage: async ({ name, data }) => {
           await sleep(400);
           return { image: { id: `img-${data.length}`, name, mimeType: "image/png", width: 1280, height: 720, size: BigInt(data.length), resized: false } };

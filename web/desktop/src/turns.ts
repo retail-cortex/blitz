@@ -11,14 +11,14 @@ import type { Task, TurnEvent } from "./gen/blitz/v1/turn_pb";
  * the agent worked (steer), a stop hook's request (hook), or the go-ahead
  * for an approved plan (plan).
  */
-export type UserEntry = { kind: "user"; text: string; sub?: "steer" | "hook" | "plan"; index?: number; images?: { url: string; name: string }[] };
+export type UserEntry = { kind: "user"; text: string; sub?: "steer" | "hook" | "plan" | "aside"; index?: number; images?: { url: string; name: string }[] };
 
 export type Entry =
   | UserEntry
   | { kind: "model"; text: string; author: string; open: boolean }
   | { kind: "thought"; text: string; open: boolean }
   | { kind: "tool"; id: string; name: string; args?: JsonObject; result?: JsonObject }
-  | { kind: "notice"; text: string; tone: "info" | "error" };
+  | { kind: "notice"; text: string; tone: "info" | "error"; markdown?: boolean };
 
 const subKinds: Record<string, UserEntry["sub"]> = { steer: "steer", hook: "hook", plan: "plan" };
 

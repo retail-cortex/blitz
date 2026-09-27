@@ -96,8 +96,8 @@ Suggested order (from NEXT_STEPS): run the manual checks (§9) first — their f
 - **BL-DSK-02** ✅ *Done (DSK-40–55): closed tabs move to Recent; the service is asked to close the workspace unless a turn runs in it (SVC-14).* Tabs can be closed (the workspace stays open in the service unless no other client uses it; then `CloseWorkspace`), and the open tabs and active tab are restored at the next start.
 
 ### 7.2 Commands in the composer — M
-- **BL-DSK-10** A line starting with `/` in the composer runs the same commands as the REPL, through the same `app.Backend` operations the REPL uses, with results rendered as notices; unknown commands are refused, not sent to the agent. At least: `/plan`, `/btw`, `/search web|session`, `/undo`, `/checkpoints`, `/diff`, `/cost`, `/context`, `/compact`, `/agent`, `/model`, `/session save`, `/rename`.
-- **BL-DSK-11** A command palette (Cmd/Ctrl+K) lists them with completion for agents, models and sessions.
+- **BL-DSK-10** ✅ *Done 2026-09-27 ([spec_desktop_024](spec_desktop_024.md) DSK-78c–e).* A line starting with `/` in the composer runs the same commands as the REPL, through the same `app.Backend` operations the REPL uses, with results rendered as notices; unknown commands are refused, not sent to the agent. At least: `/plan`, `/btw`, `/search web|session`, `/undo`, `/checkpoints`, `/diff`, `/cost`, `/context`, `/compact`, `/agent`, `/model`, `/session save`, `/rename`.
+- **BL-DSK-11** ✅ *Done 2026-09-27 ([spec_desktop_024](spec_desktop_024.md) DSK-78c–e).* A command palette (Cmd/Ctrl+K) lists them with completion for agents, models and sessions.
 
 ### 7.3 Rendering — S
 - **BL-DSK-20** ✅ *Done 2026-09-27: Markdown, safe links, coloured diffs, expandable tool entries (DSK-74/79/90) and syntax highlighting in code blocks and diffs (DSK-79a).* Model text renders as Markdown (code blocks highlighted, links shown but opened only in the system browser after a click, never inside the web view); approval diffs are coloured; a tool entry expands to its arguments and result.
