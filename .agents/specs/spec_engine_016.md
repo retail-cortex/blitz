@@ -3,8 +3,8 @@
 | | |
 |---|---|
 | Status | Implemented (reverse-engineered from `53f8c53`) |
-| Source | `internal/runtime/engine.go`, `plan.go`, `steer.go`, `aside.go`, `compact.go`, `search.go`, `images.go`, `usage.go` |
-| Tests | `internal/runtime/engine_test.go`, `plan_test.go`, `steer_test.go`, `aside_test.go`, `compact_test.go`, `bulkhead_test.go`, `telemetry_test.go`, `runtime_security_test.go`, `mcp_agents_test.go` |
+| Source | `pkg/engine/runtime/engine.go`, `plan.go`, `steer.go`, `aside.go`, `compact.go`, `search.go`, `images.go`, `usage.go` |
+| Tests | `pkg/engine/runtime/engine_test.go`, `plan_test.go`, `steer_test.go`, `aside_test.go`, `compact_test.go`, `bulkhead_test.go`, `telemetry_test.go`, `runtime_security_test.go`, `mcp_agents_test.go` |
 | Related | [spec_models_015](spec_models_015.md), [spec_agents_014](spec_agents_014.md), [spec_workspace_018](spec_workspace_018.md) |
 
 ## 1. Purpose

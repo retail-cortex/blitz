@@ -3,8 +3,8 @@
 | | |
 |---|---|
 | Status | Implemented (reverse-engineered from `53f8c53`) |
-| Source | `internal/agents/{manager,frontmatter}.go`, `internal/agents/builtin/*.md`; `internal/tools/{agent_tools,universal_constructor}.go` |
-| Tests | `internal/agents/*_test.go`; `internal/tools/uc_and_agent_tools_test.go`; `internal/runtime/pin_test.go` |
+| Source | `pkg/engine/agents/{manager,frontmatter}.go`, `pkg/engine/agents/builtin/*.md`; `pkg/engine/tools/{agent_tools,universal_constructor}.go` |
+| Tests | `pkg/engine/agents/*_test.go`; `pkg/engine/tools/uc_and_agent_tools_test.go`; `pkg/engine/runtime/pin_test.go` |
 | Depends on | [spec_config_002](spec_config_002.md), [spec_shell_007](spec_shell_007.md), [spec_approvals_005](spec_approvals_005.md) |
 | Used by | [spec_engine_016](spec_engine_016.md) |
 

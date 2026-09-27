@@ -3,8 +3,8 @@
 | | |
 |---|---|
 | Status | Implemented (reverse-engineered from `53f8c53`) |
-| Source | `internal/tools/scripthooks.go`; called from `internal/runtime/engine.go` and `internal/app/turn.go` |
-| Tests | `internal/tools/scripthooks_test.go`, `posthooks_test.go` |
+| Source | `pkg/engine/tools/scripthooks.go`; called from `pkg/engine/runtime/engine.go` and `pkg/engine/turn.go` |
+| Tests | `pkg/engine/tools/scripthooks_test.go`, `posthooks_test.go` |
 | Depends on | [spec_config_002](spec_config_002.md), [spec_shell_007](spec_shell_007.md) (process guard), [spec_observability_003](spec_observability_003.md) |
 
 ## 1. Purpose

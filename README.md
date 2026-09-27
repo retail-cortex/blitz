@@ -364,7 +364,7 @@ Tools: `read_file`, `list_files`, `glob` (`**/*.go`, `src/**/*.{ts,tsx}`; newest
 
 ## The service
 
-`blitz serve` runs Blitz as a per-user service that holds every workspace a client opens, for the desktop app and other clients. It listens only on a Unix socket this user can open (`~/.blitz/run/blitz.sock`, or `--socket`) and speaks the API in `api/blitz/v1` over Connect: gRPC, gRPC-Web, or plain JSON:
+`blitzd` runs Blitz as a per-user service that holds every workspace a client opens, for the desktop app and other clients. It ships beside `blitz`, and `blitz service install` starts it at every login. It listens only on a Unix socket this user can open (`~/.blitz/run/blitz.sock`, or `--socket`) and speaks the API in `proto/blitz/v1` over Connect: gRPC, gRPC-Web, or plain JSON:
 
 ```bash
 curl --unix-socket ~/.blitz/run/blitz.sock -H 'Content-Type: application/json' \
@@ -373,7 +373,7 @@ curl --unix-socket ~/.blitz/run/blitz.sock -H 'Content-Type: application/json' \
 
 When the service is running, `blitz` attaches to it (the REPL says so), so the CLI, the desktop app and other clients share one copy of each workspace; `--local` runs the workspace in-process instead. A workspace has one owner at a time, so `--local` on a workspace the service holds is refused. `BLITZ_SOCKET` moves the socket for both.
 
-**Desktop app.** `make desktop` builds `Blitz.app` (macOS; `build/desktop/bin/blitz-desktop` elsewhere), a window onto the service: a drawer of workspaces you can name, colour, describe and close; a chat with Markdown, the agent's task list, approvals and plans as cards, and rewind or edit from any prompt; a run settings panel (agent, model, reasoning effort, generation settings, permission mode and rules); a Changes view with the diff beside the agent's summary; and the workspace's workers. Settings › Appearance picks System (the default), Light or Dark, and the interface language (the system's by default; English, Spanish or Canadian French, from the same catalogs as the terminal). The window keeps only its own settings, in `~/.blitz/desktop.json`; everything else lives in the service, so the REPL and the app see the same sessions.
+**Desktop app.** `make desktop` builds `Blitz.app` (macOS; `apps/desktop/packaging/bin/blitz-desktop` elsewhere), a window onto the service: a drawer of workspaces you can name, colour, describe and close; a chat with Markdown, the agent's task list, approvals and plans as cards, and rewind or edit from any prompt; a run settings panel (agent, model, reasoning effort, generation settings, permission mode and rules); a Changes view with the diff beside the agent's summary; and the workspace's workers. Settings › Appearance picks System (the default), Light or Dark, and the interface language (the system's by default; English, Spanish or Canadian French, from the same catalogs as the terminal). The window keeps only its own settings, in `~/.blitz/desktop.json`; everything else lives in the service, so the REPL and the app see the same sessions.
 
 **Workers** are workflows a workspace defines in `workers/<name>/WORKER.md`, which the service runs on a schedule, unattended:
 

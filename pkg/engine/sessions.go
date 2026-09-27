@@ -1,0 +1,195 @@
+package engine
+
+import (
+	"context"
+	"fmt"
+	"slices"
+
+	"github.com/retail-cortex/blitz/pkg/api"
+
+	"github.com/retail-cortex/blitz/pkg/engine/session"
+	"github.com/retail-cortex/blitz/pkg/engine/tools"
+)
+
+// Saved sessions: listing, starting, resuming, snapshots and renaming.
+
+func sessionInfo(r *session.SessionRecord) api.SessionInfo {
+	info := api.SessionInfo{
+		ID: r.ID, Title: r.Title, Agent: r.Agent, Workspace: r.Workspace, Snapshot: r.Name, From: r.From,
+		MessageCount: r.MessageCount, Created: r.CreatedAt, Updated: r.UpdatedAt,
+	}
+	for _, m := range r.Messages {
+		info.Messages = append(info.Messages, api.Message{Role: m.Role, Text: m.Content, Time: m.Timestamp, Kind: m.Kind})
+	}
+	return info
+}
+
+func sessionInfos(list []*session.SessionRecord) []api.SessionInfo {
+	out := make([]api.SessionInfo, len(list))
+	for i, r := range list {
+		out[i] = sessionInfo(r)
+	}
+	return out
+}
+
+// Dir is the workspace directory.
+func (w *Workspace) Dir() string { return w.tools.Workspace().Dir() }
+
+// ListSessions returns this workspace's sessions, or with all every saved
+// session, newest first. Messages are left out.
+func (w *Workspace) ListSessions(all bool) ([]api.SessionInfo, error) {
+	var list []*session.SessionRecord
+	var err error
+	if all {
+		list, err = w.storage.List()
+	} else {
+		list, err = w.storage.ListWorkspace(w.storage.Workspace())
+	}
+	return sessionInfos(list), err
+}
+
+// ActiveSession returns the session prompts go to, with its messages.
+func (w *Workspace) ActiveSession() (api.SessionInfo, bool) {
+	r := w.storage.Active()
+	if r == nil {
+		return api.SessionInfo{}, false
+	}
+	return sessionInfo(r), true
+}
+
+// NewSession starts a new session for the active agent and makes it
+// active. It is named after its first prompt.
+func (w *Workspace) NewSession() (api.SessionInfo, error) {
+	prev := w.storage.Active()
+	r, err := w.storage.CreateSession(session.NewSessionID(), "", w.engine.ActiveAgent())
+	if err != nil {
+		return api.SessionInfo{}, err
+	}
+	w.switched(prev, r.ID, "new", "new")
+	return sessionInfo(r), nil
+}
+
+// switched runs session_end for the session that was active (if another)
+// and session_start for the one that now is.
+func (w *Workspace) switched(prev *session.SessionRecord, id, endReason, startReason string) {
+	if prev != nil && prev.ID != id {
+		w.sessionEnded(prev.ID, endReason)
+	}
+	w.sessionStarted(id, startReason)
+}
+
+// sessionStarted runs session_start hooks and keeps what they give as
+// context for the session's next prompt.
+func (w *Workspace) sessionStarted(id, reason string) {
+	out := w.tools.ScriptHooks().Run(context.Background(), "session_start", "", tools.HookEvent{SessionID: id, Reason: reason})
+	if out.Context == "" {
+		return
+	}
+	w.hookCtxMu.Lock()
+	defer w.hookCtxMu.Unlock()
+	if w.sessionContext == nil {
+		w.sessionContext = map[string]string{}
+	}
+	w.sessionContext[id] = out.Context
+}
+
+// sessionEnded runs session_end hooks, in the background.
+func (w *Workspace) sessionEnded(id, reason string) {
+	w.tools.ScriptHooks().Async(context.Background(), "session_end", "", tools.HookEvent{SessionID: id, Reason: reason})
+}
+
+// takeSessionContext returns and forgets a session_start hook's context.
+func (w *Workspace) takeSessionContext(id string) string {
+	w.hookCtxMu.Lock()
+	defer w.hookCtxMu.Unlock()
+	c := w.sessionContext[id]
+	delete(w.sessionContext, id)
+	return c
+}
+
+// LoadSession makes the session ref names active: an ID, or the name of a
+// snapshot, which starts a new session copied from it (branched). A
+// session from another workspace can be loaded by ID.
+func (w *Workspace) LoadSession(ref string) (s api.SessionInfo, branched bool, err error) {
+	prev := w.storage.Active()
+	r, branched, err := w.storage.Open(ref)
+	if err != nil {
+		return api.SessionInfo{}, false, err
+	}
+	w.switched(prev, r.ID, "load", "resume")
+	return sessionInfo(r), branched, nil
+}
+
+// SaveSnapshot saves a copy of the active session under name. Snapshots are
+// never continued in place: loading one starts a new session from it.
+func (w *Workspace) SaveSnapshot(name string, force bool) (api.SessionInfo, error) {
+	active := w.storage.Active()
+	if active == nil {
+		return api.SessionInfo{}, api.ErrNoActiveSession
+	}
+	r, err := w.storage.Snapshot(active.ID, name, force)
+	if err != nil {
+		return api.SessionInfo{}, err
+	}
+	return sessionInfo(r), nil
+}
+
+// RenameSession sets the active session's title. An empty title is refused.
+func (w *Workspace) RenameSession(title string) (api.SessionInfo, error) {
+	if w.storage.Active() == nil {
+		return api.SessionInfo{}, api.ErrNoActiveSession
+	}
+	if err := w.storage.Rename(title); err != nil {
+		return api.SessionInfo{}, err
+	}
+	s, _ := w.ActiveSession()
+	return s, nil
+}
+
+// OpenSession picks the session to use and points the audit log at it: the
+// session resume names (an ID, or a snapshot to start a new session from),
+// the most recent one in this workspace when cont is set or resume is
+// "latest", or else a new session. It reports whether a session was resumed.
+func (w *Workspace) OpenSession(resume string, cont bool) (api.SessionInfo, bool, error) {
+	// A new session is named after its first prompt.
+	prev := w.storage.Active()
+	rec, resumed, err := selectSession(w.storage, resume, cont, "", w.engine.ActiveAgent())
+	if err != nil {
+		return api.SessionInfo{}, false, err
+	}
+	w.audit.SetContext(rec.ID, w.Dir())
+	start := "startup"
+	if resumed {
+		start = "resume"
+	}
+	w.switched(prev, rec.ID, "new", start)
+	return sessionInfo(rec), resumed, nil
+}
+
+func selectSession(st *session.Storage, resume string, cont bool, title, agent string) (*session.SessionRecord, bool, error) {
+	if resume == "" && !cont {
+		rec, err := st.CreateSession("", title, agent)
+		return rec, false, err
+	}
+	if resume == "" || resume == "latest" {
+		list, err := st.ListWorkspace(st.Workspace())
+		if err != nil {
+			return nil, false, err
+		}
+		// Snapshots are saved copies, not conversations to carry on.
+		list = slices.DeleteFunc(list, func(r *session.SessionRecord) bool { return r.Name != "" })
+		if len(list) == 0 {
+			return nil, false, &api.ResumeError{Err: errNoSavedSessions(st.Workspace())}
+		}
+		resume = list[0].ID
+	}
+	rec, _, err := st.Open(resume) // an ID, or a snapshot name to start from
+	if err != nil {
+		return nil, false, &api.ResumeError{Err: err}
+	}
+	return rec, true, nil
+}
+
+func errNoSavedSessions(workspace string) error {
+	return fmt.Errorf("no saved sessions for %s (use --resume <id> for a session from another directory)", workspace)
+}

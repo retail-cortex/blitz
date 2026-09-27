@@ -3,8 +3,8 @@ package api
 import (
 	"context"
 
-	"github.com/retail-cortex/blitz/internal/config"
-	"github.com/retail-cortex/blitz/internal/images"
+	"github.com/retail-cortex/blitz/pkg/config"
+	"github.com/retail-cortex/blitz/pkg/images"
 )
 
 // Backend is what a front end drives: a *Workspace in this process, or a

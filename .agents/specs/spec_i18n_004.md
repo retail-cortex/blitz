@@ -3,8 +3,8 @@
 | | |
 |---|---|
 | Status | Implemented (reverse-engineered from `53f8c53`) |
-| Source | `internal/i18n/i18n.go`, `internal/i18n/locales/{en-US,es,fr-CA}.json`; `SetupLocale`/`SetLocale` in `internal/app`; `docs/TRANSLATING.md` |
-| Tests | `internal/i18n/i18n_test.go`, `internal/tui/i18n_lint_test.go` (`TestNoUntranslatedOutput`), `internal/tui/locale_test.go`, `cmd/blitz/locale_test.go` |
+| Source | `pkg/i18n/i18n.go`, `pkg/i18n/locales/{en-US,es,fr-CA}.json`; `SetupLocale`/`SetLocale` in `pkg/engine`; `docs/TRANSLATING.md` |
+| Tests | `pkg/i18n/i18n_test.go`, `apps/cli/internal/tui/i18n_lint_test.go` (`TestNoUntranslatedOutput`), `apps/cli/internal/tui/locale_test.go`, `apps/cli/locale_test.go` |
 | Depends on | [spec_config_002](spec_config_002.md) |
 
 ## 1. Purpose

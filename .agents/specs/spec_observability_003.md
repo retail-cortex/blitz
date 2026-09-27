@@ -3,8 +3,8 @@
 | | |
 |---|---|
 | Status | Implemented (reverse-engineered from `53f8c53`) |
-| Source | `internal/audit/audit.go`, `internal/redact/redact.go`, `internal/observability/{logfile,telemetry,span}.go`; wiring in `cmd/blitz/setup.go`, `internal/app/workspace.go` |
-| Tests | `internal/audit/audit_test.go`, `internal/redact/redact_test.go`, `internal/observability/observability_test.go`, `internal/runtime/telemetry_test.go` |
+| Source | `pkg/engine/audit/audit.go`, `pkg/redact/redact.go`, `pkg/observability/{logfile,telemetry,span}.go`; wiring in `apps/cli/setup.go`, `pkg/engine/workspace.go` |
+| Tests | `pkg/engine/audit/audit_test.go`, `pkg/redact/redact_test.go`, `pkg/observability/observability_test.go`, `pkg/engine/runtime/telemetry_test.go` |
 | Depends on | [spec_config_002](spec_config_002.md) |
 
 ## 1. Purpose

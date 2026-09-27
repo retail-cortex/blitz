@@ -3,22 +3,24 @@
 | | |
 |---|---|
 | Status | Implemented (reverse-engineered from `53f8c53`) |
-| Source | `api/blitz/v1/{session,workspace,turn,worker}.proto`, `buf.yaml`, `buf.gen.yaml`; `internal/server/*.go`; `internal/gen` (generated, never edited); `cmd/blitz/serve.go`, `service.go` |
-| Tests | `internal/server/*_test.go`, `cmd/blitz/serve_test.go`, `service_test.go` |
+| Source | `proto/blitz/v1/{session,workspace,turn,worker}.proto`, `buf.yaml`, `buf.gen.yaml`; `apps/service/main.go` (`blitzd`), `apps/service/internal/{daemon,server}/*.go`, `apps/service/servicetest`; `pkg/socket`; `proto` (generated, never edited); `apps/cli/service.go` |
+| Tests | `apps/service/*_test.go`, `apps/service/internal/{daemon,server}/*_test.go`, `apps/cli/attach_test.go`, `service_test.go` |
 | Depends on | [spec_workspace_018](spec_workspace_018.md) |
 | Used by | [spec_client_022](spec_client_022.md), [spec_workers_023](spec_workers_023.md), [spec_desktop_024](spec_desktop_024.md) |
 
 ## 1. Purpose
 
-`blitz serve` runs one engine process per user that holds every workspace a client opens, runs scheduled workers, and exposes `internal/app` over Connect (gRPC, gRPC-Web or plain JSON) on a Unix socket. The CLI and the desktop app share one copy of each workspace through it. Handlers only translate between protos and `internal/app`; they hold no logic.
+`blitzd`, its own program (`apps/service`), runs one engine process per user that holds every workspace a client opens, runs scheduled workers, and exposes `api.Backend` over Connect (gRPC, gRPC-Web or plain JSON) on a Unix socket. The CLI and the desktop app share one copy of each workspace through it. Handlers only translate between protos and `pkg/engine`; they hold no logic.
+
+- **SVC-00** `blitzd [--socket PATH] [--config FILE]`: no arguments (a usage error, exit 2, as a bad flag or a service already answering on the socket); `--version`. It takes no model, agent or workspace flags: each workspace's configuration decides. `blitz serve`, from before `blitzd` existed, is kept as a hidden command that runs `blitzd` (found as in SVC-50) with the same arguments, so login items installed by older versions keep working.
 
 ## 2. Transport and security
 
-- **SVC-01** Socket: `$BLITZ_SOCKET` or `~/.blitz/run/blitz.sock` (`--socket` overrides for `serve`). The service is never on a network port: it runs shell commands.
+- **SVC-01** Socket: `$BLITZ_SOCKET` or `~/.blitz/run/blitz.sock` (`blitzd --socket` overrides it). The service is never on a network port: it runs shell commands.
 - **SVC-02** `Listen`: create the directory 0700 **and chmod it** (no window where others could reach the socket), refuse if a service already answers (`ErrRunning` → exit 2), replace a stale socket, chmod the socket 0600. The socket is removed on exit.
 - **SVC-03** HTTP/1.1 and unencrypted HTTP/2 (for gRPC clients); read-header timeout 10 s. Clients use base URL `http://blitz` with a dialer to the socket.
 - **SVC-04** Shutdown on SIGINT/SIGTERM: stop accepting, wait up to 10 s for calls in progress, then close (turns still running are cut off); the scheduler stops its runs; all workspaces close.
-- **SVC-05** `serve` refuses `--dir` (usage error): clients name their workspaces. Request messages are limited to 32 MiB (an added image is the largest).
+- **SVC-05** Clients name their workspaces in each request. Request messages are limited to 32 MiB (an added image is the largest).
 
 ## 3. Workspaces in the service
 
@@ -45,15 +47,15 @@
 
 ## 6. Errors
 
-- **SVC-30** Errors are Connect errors with an `ErrorInfo{reason, metadata, message}` detail, mapped from `internal/app` typed errors. Reasons: `UNKNOWN_COMMAND`, `BAD_RULE`, `UNKNOWN_MODE`, `BYPASS_NEEDS_SANDBOX`, `MAX_TURNS`, `COST_LIMIT`, `TIME_LIMIT` (a turn stopped at a limit; `Turn.max_cost_usd` and `Turn.timeout` carry the limits), `INVALID_WORKSPACE`, `OPEN_FAILED`, `WORKSPACE_BUSY`, `SHUTTING_DOWN`, `NO_ACTIVE_SESSION`, `SESSION_NOT_FOUND`, `RESUME_FAILED`, `SNAPSHOT_NAME_TAKEN`, `PROMPT_BLOCKED`, `INVALID_TURN`, `UNKNOWN_REQUEST`, `INVALID_DECISION`, `UNKNOWN_AGENT`, `BAD_MODEL_REF`, `INVALID_SETTING`, `UNKNOWN_SETTING`, `INVALID_AGENCY`, `UNKNOWN_LOCALE`, `NOTHING_TO_COMPACT`, `UNDO_CONFLICT`, `GIT_FAILED`, `IMAGES_DISABLED`, `UNKNOWN_IMAGE`, `NO_FETCH`, `NO_SEARCH`, `SCRIPTS_DISABLED`, `SKILL_NOT_FOUND`, `UNKNOWN_WORKER`, `WORKER_INVALID`, `WORKER_DISABLED`, `WORKERS_DISABLED`, `HASH_MISMATCH`, `RUN_IN_PROGRESS`, `RUN_NOT_RUNNING`, `UNKNOWN_RUN`, `TOO_MANY_RUNS`, `NO_SCHEDULER`, `INTERNAL`.
+- **SVC-30** Errors are Connect errors with an `ErrorInfo{reason, metadata, message}` detail, mapped from `pkg/engine` typed errors. Reasons: `UNKNOWN_COMMAND`, `BAD_RULE`, `UNKNOWN_MODE`, `BYPASS_NEEDS_SANDBOX`, `MAX_TURNS`, `COST_LIMIT`, `TIME_LIMIT` (a turn stopped at a limit; `Turn.max_cost_usd` and `Turn.timeout` carry the limits), `INVALID_WORKSPACE`, `OPEN_FAILED`, `WORKSPACE_BUSY`, `SHUTTING_DOWN`, `NO_ACTIVE_SESSION`, `SESSION_NOT_FOUND`, `RESUME_FAILED`, `SNAPSHOT_NAME_TAKEN`, `PROMPT_BLOCKED`, `INVALID_TURN`, `UNKNOWN_REQUEST`, `INVALID_DECISION`, `UNKNOWN_AGENT`, `BAD_MODEL_REF`, `INVALID_SETTING`, `UNKNOWN_SETTING`, `INVALID_AGENCY`, `UNKNOWN_LOCALE`, `NOTHING_TO_COMPACT`, `UNDO_CONFLICT`, `GIT_FAILED`, `IMAGES_DISABLED`, `UNKNOWN_IMAGE`, `NO_FETCH`, `NO_SEARCH`, `SCRIPTS_DISABLED`, `SKILL_NOT_FOUND`, `UNKNOWN_WORKER`, `WORKER_INVALID`, `WORKER_DISABLED`, `WORKERS_DISABLED`, `HASH_MISMATCH`, `RUN_IN_PROGRESS`, `RUN_NOT_RUNNING`, `UNKNOWN_RUN`, `TOO_MANY_RUNS`, `NO_SCHEDULER`, `INTERNAL`.
 - **SVC-31** Errors reported inside a response (e.g. a failed save, a turn failure) use the same `ErrorInfo`.
 
 ## 7. API evolution
 
-- **SVC-40** Protos live in `api/blitz/v1` (package `blitz.v1`), linted with buf `STANDARD`, breaking-change checked with `FILE`. Generated Go (`internal/gen`, `protoc-gen-go` + `protoc-gen-connect-go` pinned in `tools/go.mod`) and TypeScript (`web/desktop/src/gen`, `protoc-gen-es` pinned by the desktop lockfile) are committed. `make proto` regenerates; `make proto-check` fails if protos are unformatted or generated code is stale.
+- **SVC-40** Protos live in `proto/blitz/v1` (package `blitz.v1`), linted with buf `STANDARD`, breaking-change checked with `FILE`. Generated Go (`proto`, `protoc-gen-go` + `protoc-gen-connect-go` pinned in `tools/go.mod`) and TypeScript (`apps/desktop/web/src/gen`, `protoc-gen-es` pinned by the desktop lockfile) are committed. `make proto` regenerates; `make proto-check` fails if protos are unformatted or generated code is stale.
 - **SVC-41** A deliberate breaking change is declared with a `Breaking-API: <why>` line in the commit message, which CI's `buf breaking` step honours.
 
 ## 8. Login item (`blitz service`)
 
-- **SVC-50** `install`: resolves the real executable path; macOS writes `~/Library/LaunchAgents/dev.blitz.service.plist` (RunAtLoad, KeepAlive on unsuccessful exit, stdout/stderr to `~/.blitz/logs/service.log`) and `launchctl bootout`/`bootstrap gui/<uid>`; Linux writes `~/.config/systemd/user/blitz.service` (`Restart=on-failure`, `WantedBy=default.target`), `daemon-reload`, `enable --now`. Other OSes: usage error. Prints that it must be re-run after upgrading, and warns about API keys set only in the shell environment (a login item doesn't see them) by reloading the config without them.
+- **SVC-50** `install`: finds `blitzd` beside the real (symlinks resolved) `blitz` executable, else on `PATH` (neither: usage error), and registers it; macOS writes `~/Library/LaunchAgents/dev.blitz.service.plist` (RunAtLoad, KeepAlive on unsuccessful exit, stdout/stderr to `~/.blitz/logs/service.log`) and `launchctl bootout`/`bootstrap gui/<uid>`; Linux writes `~/.config/systemd/user/blitz.service` (`Restart=on-failure`, `WantedBy=default.target`), `daemon-reload`, `enable --now`. Other OSes: usage error. Prints that it must be re-run after upgrading, and warns about API keys set only in the shell environment (a login item doesn't see them) by reloading the config without them.
 - **SVC-51** `uninstall` stops and removes the item; `status` reports whether the item is installed and whether the service answers.

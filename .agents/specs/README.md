@@ -23,10 +23,10 @@ Files are named `spec_<name>_NNN.md`, where `NNN` is the order of execution: eac
 | 015 | [models](spec_models_015.md) | Providers, retries and stalls, fallback chain, per-model settings |
 | 016 | [engine](spec_engine_016.md) | Turns, plan/read-only modes, steering, `/btw`, compaction, sub-agents, usage, tracing |
 | 017 | [sessions](spec_sessions_017.md) | Transcripts, event log, resume, snapshots, session search |
-| 018 | [workspace](spec_workspace_018.md) | `app.Open`, `app.Backend`, turn lifecycle, typed operations |
+| 018 | [workspace](spec_workspace_018.md) | `engine.Open`, `api.Backend`, turn lifecycle, typed operations |
 | 019 | [tui](spec_tui_019.md) | REPL, slash commands, steering, exit handling |
 | 020 | [cli](spec_cli_020.md) | Commands, flags, one-shot output formats, exit codes, `doctor`, `config` |
-| 021 | [service](spec_service_021.md) | `blitz serve`, socket, Connect API, approval broker, login item |
+| 021 | [service](spec_service_021.md) | `blitzd`, socket, Connect API, approval broker, login item |
 | 022 | [client](spec_client_022.md) | Attaching front ends to the service |
 | 023 | [workers](spec_workers_023.md) | `WORKER.md`, schedules, permissions, enabling, runs, scheduler |
 | 024 | [desktop](spec_desktop_024.md) | Wails desktop app |

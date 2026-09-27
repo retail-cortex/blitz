@@ -194,7 +194,7 @@ prefix = "fs"
 - [ ] `/locale ja` 💲 **Expected:** a note that menus stay in English; replies come in Japanese.
 - [ ] Put a `de.json` with a few keys in `~/.blitz/locales/` (see `docs/TRANSLATING.md`), then `/locale de`. **Expected:** those keys in German, the rest in English.
 - [ ] `/locale en-XA` **Expected:** accented ⟦…⟧ text everywhere; note any plain English you see.
-- [ ] **Native-speaker review:** someone fluent reads `internal/i18n/locales/es.json` and `fr-CA.json` (tone, terminology, Québec typography for fr-CA) and runs a short session in each.
+- [ ] **Native-speaker review:** someone fluent reads `pkg/i18n/locales/es.json` and `fr-CA.json` (tone, terminology, Québec typography for fr-CA) and runs a short session in each.
 - [ ] `/locale en-US` to switch back.
 
 ## 21. Images 💲
@@ -348,7 +348,7 @@ Set `fallback_models = ["anthropic/claude-sonnet-5"]` with a working Anthropic k
 
 ## 36. The service, attaching and workers
 
-- [ ] `blitz serve` in one terminal, `blitz` in a workspace in another. **Expected:** the REPL says it attached; a turn streams as usual; an approval prompt appears in the REPL and its answer is honoured; `/pin_model`, `/session save`, `/undo` work.
+- [ ] `blitzd` in one terminal, `blitz` in a workspace in another. **Expected:** the REPL says it attached; a turn streams as usual; an approval prompt appears in the REPL and its answer is honoured; `/pin_model`, `/session save`, `/undo` work.
 - [ ] While attached, `blitz --local` in the same workspace. **Expected:** refused, naming the other owner (exit code 2).
 - [ ] Stop the service with Ctrl+C during a turn. **Expected:** the turn ends within about 10 s, the socket file is gone, and a new `blitz` in the workspace runs locally.
 - [ ] `blitz service install` on macOS, then log out and in. **Expected:** `blitz service status` says installed and answering; `~/.blitz/logs/service.log` shows it started. With a key only in the shell, install warns about it. `blitz service uninstall` removes it.
@@ -359,7 +359,7 @@ Set `fallback_models = ["anthropic/claude-sonnet-5"]` with a working Anthropic k
 
 ## 37. Desktop app
 
-- [ ] `make desktop`, open `build/desktop/bin/Blitz.app` with no service running. **Expected:** it offers to install the service; accepting runs `blitz service install` and the app continues.
+- [ ] `make desktop`, open `apps/desktop/packaging/bin/Blitz.app` with no service running. **Expected:** it offers to install the service; accepting runs `blitz service install` and the app continues.
 - [ ] With the service running: open a workspace with "+". **Expected:** a tab named after the directory, showing the active agent and model (or why the model is unavailable).
 - [ ] 💲 A turn in the app: its text appears as it streams, not only at the end. **This checks that WebKit streams responses through Wails's asset server**, which the tests can't: they exercise the proxy over plain HTTP.
 - [ ] 💲 A turn that edits a file with approvals on. **Expected:** the approval shows the diff; "Allow once" edits the file; "Deny" doesn't, and the agent says so.

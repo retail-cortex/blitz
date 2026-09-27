@@ -3,8 +3,8 @@
 | | |
 |---|---|
 | Status | Implemented (reverse-engineered from `53f8c53`) |
-| Source | `internal/memory/memory.go`; `/memory` in `internal/tui`, `ReloadMemory`/`AddMemory` in `internal/app/context.go` |
-| Tests | `internal/memory/memory_test.go` |
+| Source | `pkg/engine/memory/memory.go`; `/memory` in `apps/cli/internal/tui`, `ReloadMemory`/`AddMemory` in `pkg/engine/context.go` |
+| Tests | `pkg/engine/memory/memory_test.go` |
 | Depends on | [spec_config_002](spec_config_002.md) |
 
 ## 1. Purpose

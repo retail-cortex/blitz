@@ -26,7 +26,7 @@ Roadmap items 1–22 are done and committed, and item 23 (the desktop app) is in
 | (the commit removing `python/`) | Go-only repository: Python removed (tag `python-final`), Go at the root, workflows `ci.yml` and `release.yml`, Apache 2.0 with `NOTICE`, planning docs in `.agents/` |
 | `1370b80f` | Side questions (`/btw`) |
 | `56a870a4`, `dce9baa9`, `c239dfb8`, `f318498d` | Dependabot and a macOS release note; pinned release tools, `GOTOOLCHAIN=local`, a cross-host reproducibility check; project-layout with code in `internal/`; actions upgraded (checkout v7, setup-go v7, Node 24) |
-| `8ce5c642` | ROADMAP item 23, phase 2: `app.Open` and `app.Workspace` replace `cmd`'s `buildEnv` |
+| `8ce5c642` | ROADMAP item 23, phase 2: `engine.Open` and `engine.Workspace` replace `cmd`'s `buildEnv` |
 | `75630f18` | Phase 3: `Workspace.Run` and `Steer`, one turn lifecycle for the REPL and one-shot runs |
 | `e657a7bd` | Phase 4, agents and models: typed operations for `/agents`, `/agent`, `/model`, `/pin_model`, `/unpin`, `/model_settings`, `/set` |
 | `ef91966a` | Phase 4, sessions: `/session list/new/load/save`, `/resume`, `/rename` |
@@ -34,14 +34,14 @@ Roadmap items 1–22 are done and committed, and item 23 (the desktop app) is in
 | `5bf56f4c` | Phase 4, skills, envs, MCP and tools: `/skills`, `/envs`, `/mcp`, `/tools` |
 | `4ddbb783` | Phase 4, the rest: `/cost`, `/context`, `/compact`, `/memory`, `/locale`, `/sandbox`, `/attach`, `/paste`, `/search`; `tui.App` reduced to the workspace and terminal state |
 | `900c1b96` | ROADMAP item 23 replanned: one service per user, CLI attaches, Connect + buf |
-| `3fb181cd`, `af7cad97` | Phase 5: `app.Event` instead of ADK events for every client; the prompt is recorded before steering can start |
+| `3fb181cd`, `af7cad97` | Phase 5: `api.Event` instead of ADK events for every client; the prompt is recorded before steering can start |
 | `42aaf41b` | Phase 5b: per-workspace state, no dependence on the working directory |
 | `f9a6e7bf` | ROADMAP item 24 planned: workers |
 | `d8c08d91` | Phase 6: the service API as protos, buf, generated Go and Connect code |
-| `2e4cb2c0`, `a6ed23d6`, `a926faa6` | Phase 7: `internal/server`, approvals over the stream, `blitz serve`, the workspace lock |
-| `26e261cd`, `d969c75f`, `d5562753` | Phase 8: `app.Backend`, `internal/client`, the CLI attaching to the service, `--local` |
-| `31531764`, (the commit adding `internal/app/workers.go`) | Item 24a–b: worker definitions, schedules, permissions (`ApprovalRequest.Targets`); enabling pinned to the hash, `[workers.policy]` |
-| (the commit adding `internal/session/title_test.go`) | Session names from the first prompt, `/rename`, terminal title, resume hint on exit |
+| `2e4cb2c0`, `a6ed23d6`, `a926faa6` | Phase 7: `apps/service/internal/server`, approvals over the stream, `blitz serve`, the workspace lock |
+| `26e261cd`, `d969c75f`, `d5562753` | Phase 8: `api.Backend`, `pkg/client`, the CLI attaching to the service, `--local` |
+| `31531764`, (the commit adding `pkg/engine/workers.go`) | Item 24a–b: worker definitions, schedules, permissions (`ApprovalRequest.Targets`); enabling pinned to the hash, `[workers.policy]` |
+| (the commit adding `pkg/engine/session/title_test.go`) | Session names from the first prompt, `/rename`, terminal title, resume hint on exit |
 
 `go vet ./...` and `go test -race ./...` pass.
 
@@ -53,7 +53,7 @@ Roadmap items 1–22 are done and committed, and item 23 (the desktop app) is in
 
 **Priority (2026-09-26, owner's decision): close feature gaps before adding new features.** The gaps are specified as requirements in [specs/spec_backlog_026.md](specs/spec_backlog_026.md) (Blitz's own) and [specs/spec_parity_027.md](specs/spec_parity_027.md) (against Claude Code, Antigravity CLI and Antigravity; §14 gives the order; §12 records the five conflicts with earlier decisions, decided below). Specs 001–025 describe current behaviour; move requirements into them as gaps close.
 
-1. **ROADMAP item 23 is done in a first version**: the per-user service (`blitz serve`, `service install`), the proto API, the CLI attaching to it, workers (item 24), and the desktop app (`make desktop`). **Next, in order:** run MANUAL_VERIFICATION sections 36–37 (the service, workers and the app need a person, and some checks are 💲); then the known gaps: workers' edits joining `/undo`, an attached CLI's process list and `!cmd` audit (ROADMAP 8b, 24c). The app's slash commands, Markdown, images, notifications, translation and release job are done (2026-09-27, branch `desktop-polish`); its signing is item 3.
+1. **ROADMAP item 23 is done in a first version**: the per-user service (`blitzd`, `service install`), the proto API, the CLI attaching to it, workers (item 24), and the desktop app (`make desktop`). **Next, in order:** run MANUAL_VERIFICATION sections 36–37 (the service, workers and the app need a person, and some checks are 💲); then the known gaps: workers' edits joining `/undo`, an attached CLI's process list and `!cmd` audit (ROADMAP 8b, 24c). The app's slash commands, Markdown, images, notifications, translation and release job are done (2026-09-27, branch `desktop-polish`); its signing is item 3.
 2. **Manual verification (needs a person).** Nothing in `MANUAL_VERIFICATION.md` has been run yet. It covers real providers (💲 = paid calls), terminal behavior, the macOS and Linux sandboxes, MCP, steering, fallback and pinning. Record results in the file; any failure becomes the next task.
 3. **Sign and notarize the desktop app** (needs an Apple Developer Program membership). The release job (`release.yml` `desktop`, [spec_release_025](specs/spec_release_025.md) REL-20–25) signs ad hoc and warns until these repository secrets exist (Settings › Secrets and variables › Actions):
    - `MACOS_CERTIFICATE`: a **Developer ID Application** certificate with its private key, exported from Keychain Access as `.p12`, then `base64 -i cert.p12 | pbcopy`;
@@ -65,7 +65,7 @@ Roadmap items 1–22 are done and committed, and item 23 (the desktop app) is in
    To try it locally first: with the certificate in your keychain and the `.p8` on disk, `DESKTOP_SIGN_IDENTITY=… NOTARY_KEY_PATH=… NOTARY_KEY_ID=… NOTARY_ISSUER=… make desktop-package`. Then tag a release and run MANUAL_VERIFICATION §18's desktop checks. Neither the signed path nor the release job has run yet; if `gh release upload` can't find the draft release by its tag, pass the release's ID instead.
    
    The CLI archives stay unnotarized (GoReleaser can sign and notarize them with the same certificate and key: its `notarize.macos` section); until then the release notes (`release.footer`) and the README explain clearing the quarantine flag. Dependabot (`.github/dependabot.yml`) keeps the pinned action SHAs current. `~/.gnupg/gpg-agent.conf` now points at GPG Suite's `pinentry-mac`; the next tag will show whether tag signing works.
-4. **Linux sandbox startup cost.** Before every sandboxed command, `expandBlocked` (`internal/tools/bwrap.go`) scans the writable roots, including the temp and cache directories (e.g. the Go build cache), for blocked names, up to 50,000 entries. Measured in a Linux container: about 0.1 s per command normally, 3.4 s under `-race`. Worth reducing (e.g. skip cache directories for name patterns, or reuse a recent scan), keeping in mind that a file created between scans could then escape masking. CI's parallel-cap test runs with the sandbox off because of this.
+4. **Linux sandbox startup cost.** Before every sandboxed command, `expandBlocked` (`pkg/engine/tools/bwrap.go`) scans the writable roots, including the temp and cache directories (e.g. the Go build cache), for blocked names, up to 50,000 entries. Measured in a Linux container: about 0.1 s per command normally, 3.4 s under `-race`. Worth reducing (e.g. skip cache directories for name patterns, or reuse a recent scan), keeping in mind that a file created between scans could then escape masking. CI's parallel-cap test runs with the sandbox off because of this.
 5. **Skill scripts, follow-ups** (ROADMAP item 22 is done: Castor definitions, `[skills.policy]`, the gVisor/OS `ScriptBox`, environments, `run_skill_script`, `/envs`):
    - TypeScript scripts;
    - scripts that write the workspace directly, with snapshots;
@@ -73,7 +73,7 @@ Roadmap items 1–22 are done and committed, and item 23 (the desktop app) is in
    - `storage_uri` and resources;
    - running the opt-in real-install tests in CI (`BLITZ_PYENV_TESTS=1`);
    - adding a network field to Castor's proto, instead of `custom_hints.network`.
-6. **Optional: reasoning settings per model.** Python's `/model_settings` also sets `reasoning_effort`, extended thinking and budgets. The Go wrapper (`internal/runtime/settings.go`) is where they'd go, mapped to genai `ThinkingConfig`, which each adapter translates differently.
+6. **Optional: reasoning settings per model.** Python's `/model_settings` also sets `reasoning_effort`, extended thinking and budgets. The Go wrapper (`pkg/engine/runtime/settings.go`) is where they'd go, mapped to genai `ThinkingConfig`, which each adapter translates differently.
 7. **Optional, from the Antigravity review (ROADMAP, "Antigravity CLI review"):** `/copy` (last reply to the clipboard, with OSC 52 over SSH), `--add-dir <path>` at startup, `/grill-me` (the agent interviews you before coding), and `/fork [n]` (branch a new session from an earlier turn).
 
 ## Decisions already made (don't redo without a reason)
@@ -83,12 +83,12 @@ Roadmap items 1–22 are done and committed, and item 23 (the desktop app) is in
 - **No shared event bus.** Considered for steering and dropped: audit, hooks and traces are fed from engine callbacks, and steering didn't need a bus.
 - **Steering rides on tool results** (`message_from_user`), because ADK model callbacks can't add session events (`Session()` returns nil there).
 - **Each turn is its own trace root.** Turns are linked to the previous turn and tagged `gen_ai.conversation.id`; the previous turn's traceparent is kept in session metadata as `last_turn`. A session is never one long trace.
-- **Content is never exported by default.** The ADK puts tool arguments and results on every `execute_tool` span, so `internal/observability` filters them before export. OTel providers are built here, not with `adk/telemetry.New`, which adds its own unfiltered exporter.
+- **Content is never exported by default.** The ADK puts tool arguments and results on every `execute_tool` span, so `pkg/observability` filters them before export. OTel providers are built here, not with `adk/telemetry.New`, which adds its own unfiltered exporter.
 - **The Python implementation is gone** (2026-09-26): the Go code is the repository root, and `python-final` tags the last commit with Python (in the former repository's history). Don't reintroduce a second implementation.
 - **Not ported from Python:** `/truncate` (use `/compact`) and `/tutorial`. Reasons are in ROADMAP item 14. (`/cd` was also left out then; it is now planned, see below.)
 - **Parity decisions (2026-09-26, owner), replacing earlier rejections; details in [specs/spec_parity_027.md](specs/spec_parity_027.md) §12:**
   - **`bypass` permission mode instead of `--dangerously-skip-permissions`:** entered only with `--permission-mode bypass`, and it refuses to run unless the OS sandbox is active; deny rules and blocked paths still apply. `blitz.auto_approve` becomes this mode. Prompt fatigue is mainly addressed by `accept-edits` and a reviewing-model `auto` mode.
-  - **`/cd` is adopted:** it closes the workspace and reopens the target through `app.Open` (lock, roots, sandbox, memory, MCP, project config) and moves the session; nothing is patched mid-session.
+  - **`/cd` is adopted:** it closes the workspace and reopens the target through `engine.Open` (lock, roots, sandbox, memory, MCP, project config) and moves the session; nothing is patched mid-session.
   - **Project configuration is adopted in layers:** `.blitz/settings.toml` may tighten without asking; anything that runs code or loosens policy loads only after trust pinned to the workspace path and a content hash; credentials, endpoints, telemetry targets and sandbox loosening are never read from a project. This replaces "configuration only from trusted locations" as the rule for project files; user configuration still loads only from trusted locations.
   - **The REPL stays line-based,** with inline arrow-key pickers; full-screen views go in the desktop app.
   - **`/boost` and agent teams are deferred** until background sub-agents and worktrees exist.
@@ -99,8 +99,8 @@ Roadmap items 1–22 are done and committed, and item 23 (the desktop app) is in
 - **`/search web` pre-approves exactly the URLs it hands over, for that turn only** (`tools.WithFetchGrants`); everything else the agent fetches still asks.
 - **Telemetry and OTel need one provider per process:** the ADK binds its tracer to the first global provider.
 - **No Bazel** (2026-09-26). Go modules, `CGO_ENABLED=0` and GoReleaser already give reproducible CLI builds, and the planned Wails app needs host cgo libraries (WebKit, webkit2gtk) that Bazel can't make hermetic. Close the gaps by pinning tools instead; reconsider only for a multi-language monorepo or a need for remote caching. Make stays as a thin entry point.
-- **Layout follows golang-standards/project-layout** (2026-09-26): `cmd/blitz` (CLI/TUI, pure Go) and `cmd/blitz-desktop` (Wails, cgo, built on each OS); code in `internal/`, `pkg/` only for deliberately public APIs; frontend in `web/desktop`, packaging in `build/`. Slash-command logic moves from `tui` to a UI-agnostic `internal/app` shared by both UIs.
-- **One engine service per user** (2026-09-26, replacing "a process per tab"): `blitz serve` hosts every workspace over Connect on a Unix socket; the CLI attaches when it's running, else runs in-process. Scheduled workers (item 24) run in it. See ROADMAP item 23.
+- **Layout follows golang-standards/project-layout** (2026-09-26): `apps/cli` (CLI/TUI, pure Go) and `apps/desktop` (Wails, cgo, built on each OS); code in `internal/`, `pkg/` only for deliberately public APIs; frontend in `apps/desktop/web`, packaging in `build/`. Slash-command logic moves from `tui` to a UI-agnostic `pkg/engine` shared by both UIs.
+- **One engine service per user** (2026-09-26, replacing "a process per tab"): the service (`blitz serve`; since 2026-09-27 its own program, `blitzd`) hosts every workspace over Connect on a Unix socket; the CLI attaches when it's running, else runs in-process. Scheduled workers (item 24) run in it. See ROADMAP item 23.
 - **The module path is `github.com/retail-cortex/blitz`**, matching the repository.
 
 Conventions, layout and commands: [AGENTS.md](AGENTS.md).

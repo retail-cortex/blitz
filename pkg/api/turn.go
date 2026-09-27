@@ -4,7 +4,7 @@ import (
 	"errors"
 	"time"
 
-	"github.com/retail-cortex/blitz/internal/images"
+	"github.com/retail-cortex/blitz/pkg/images"
 )
 
 // Turn is one prompt for the agent.

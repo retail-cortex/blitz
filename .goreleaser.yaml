@@ -14,7 +14,7 @@ before:
 
 builds:
   - id: blitz
-    main: ./cmd/blitz
+    main: ./apps/cli
     binary: blitz
     env: [CGO_ENABLED=0]
     goos: [darwin, linux, windows]
@@ -25,6 +25,19 @@ builds:
     flags: [-trimpath]
     ldflags: ["-s -w -X main.version={{ .Version }}"]
     mod_timestamp: "{{ .CommitTimestamp }}" # reproducible builds
+  # The service, which `blitz service install` expects beside blitz.
+  - id: blitzd
+    main: ./apps/service
+    binary: blitzd
+    env: [CGO_ENABLED=0]
+    goos: [darwin, linux, windows]
+    goarch: [amd64, arm64]
+    ignore:
+      - goos: windows
+        goarch: arm64
+    flags: [-trimpath]
+    ldflags: ["-s -w -X main.version={{ .Version }}"]
+    mod_timestamp: "{{ .CommitTimestamp }}"
 
 archives:
   - formats: [tar.gz]

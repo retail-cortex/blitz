@@ -3,8 +3,8 @@
 | | |
 |---|---|
 | Status | Implemented (reverse-engineered from `53f8c53`) |
-| Source | `cmd/blitz/main.go`, `exitcode.go`, `oneshot.go`, `setup.go`, `configcmd.go`, `doctor.go` |
-| Tests | `cmd/blitz/main_test.go`, `images_test.go`, `locale_test.go` |
+| Source | `apps/cli/main.go`, `exitcode.go`, `oneshot.go`, `setup.go`, `configcmd.go`, `doctor.go` |
+| Tests | `apps/cli/main_test.go`, `images_test.go`, `locale_test.go` |
 | Related | [spec_config_002](spec_config_002.md), [spec_workspace_018](spec_workspace_018.md), [spec_tui_019](spec_tui_019.md), [spec_service_021](spec_service_021.md), [spec_workers_023](spec_workers_023.md) |
 
 ## 1. Purpose
@@ -19,7 +19,7 @@
 | `blitz exec [flags] <prompt...>` | Always a one-shot run; no prompt is a usage error |
 | `blitz doctor [--online]` | Health checks (§7) |
 | `blitz config init [--force] \| path \| show` | Configuration file management (§8) |
-| `blitz serve [--socket PATH]` | Per-user service ([spec_service_021](spec_service_021.md)) |
+| `blitz serve [...]` | Hidden: runs `blitzd`, the per-user service, with the same arguments ([spec_service_021](spec_service_021.md) SVC-00) |
 | `blitz service install \| uninstall \| status` | Login item for the service |
 | `blitz workers [list] \| enable <name> [-y] \| disable <name> \| run <name> \| runs <name> [-n N]` | Workers ([spec_workers_023](spec_workers_023.md)) |
 | `blitz completion bash\|zsh\|fish\|powershell` | Cobra-generated shell completion |
@@ -90,8 +90,8 @@ Root only: `-i/--interactive` (REPL even with a prompt), `-v/--version` (prints 
 | 0 | success | `nil` |
 | 1 | runtime or model error | default |
 | 2 | invalid flags/arguments | `withCode(exitUsage, …)`, cobra flag errors |
-| 3 | a limit stopped the run (`--max-turns`, `--max-cost-usd`, `--timeout`) | `app.IsLimit(err)`: `ErrMaxTurns`, `ErrCostLimit`, `ErrTimeLimit` (also when attached: `MAX_TURNS`, `COST_LIMIT`, `TIME_LIMIT`) |
-| 4 | prompt blocked by a `prompt_submit` hook | `*app.BlockedError` |
+| 3 | a limit stopped the run (`--max-turns`, `--max-cost-usd`, `--timeout`) | `api.IsLimit(err)`: `ErrMaxTurns`, `ErrCostLimit`, `ErrTimeLimit` (also when attached: `MAX_TURNS`, `COST_LIMIT`, `TIME_LIMIT`) |
+| 4 | prompt blocked by a `prompt_submit` hook | `*api.BlockedError` |
 | 130 | interrupted | `errors.Is(err, context.Canceled)` |
 
 - **CLI-30** Errors are printed once to stderr via the localized `repl.error` message; usage is silenced. Flag errors append "Run '<cmd> --help' for usage." `doctor`, `--help` and CLI errors are English by policy (see [spec_i18n_004](spec_i18n_004.md)).

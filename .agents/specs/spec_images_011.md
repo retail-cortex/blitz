@@ -3,8 +3,8 @@
 | | |
 |---|---|
 | Status | Implemented (reverse-engineered from `53f8c53`) |
-| Source | `internal/images/*.go`, `internal/tools/images.go`, `internal/runtime/images.go`, `openai_images.go`; `/attach`, `/paste` in `internal/tui` |
-| Tests | `internal/images/images_test.go`, `internal/tools/images_test.go`, `internal/runtime/images_test.go`, `internal/tui/attach_test.go`, `cmd/blitz/images_test.go` |
+| Source | `pkg/images/*.go`, `pkg/engine/tools/images.go`, `pkg/engine/runtime/images.go`, `openai_images.go`; `/attach`, `/paste` in `apps/cli/internal/tui` |
+| Tests | `pkg/images/images_test.go`, `pkg/engine/tools/images_test.go`, `pkg/engine/runtime/images_test.go`, `apps/cli/internal/tui/attach_test.go`, `apps/cli/images_test.go` |
 | Depends on | [spec_filetools_006](spec_filetools_006.md) (sandboxed reads) |
 
 ## 1. Purpose

@@ -3,8 +3,8 @@
 | | |
 |---|---|
 | Status | Implemented (reverse-engineered from `53f8c53`) |
-| Source | `internal/tools/workspace.go`, `pathpolicy.go`, `pathlock.go`, `file_ops.go`, `file_edit.go`, `patch.go`, `grep.go`, `checkpoint.go`, `diff.go` |
-| Tests | `internal/tools/workspace_test.go`, `sandbox_paths_test.go`, `file_tools_test.go`, `edit_race_test.go`, `patch_test.go`, `grep_test.go`, `approvals_checkpoints_test.go` |
+| Source | `pkg/engine/tools/workspace.go`, `pathpolicy.go`, `pathlock.go`, `file_ops.go`, `file_edit.go`, `patch.go`, `grep.go`, `checkpoint.go`, `diff.go` |
+| Tests | `pkg/engine/tools/workspace_test.go`, `sandbox_paths_test.go`, `file_tools_test.go`, `edit_race_test.go`, `patch_test.go`, `grep_test.go`, `approvals_checkpoints_test.go` |
 | Depends on | [spec_config_002](spec_config_002.md), [spec_approvals_005](spec_approvals_005.md) (approval gate) |
 
 ## 1. Purpose

@@ -3,14 +3,14 @@
 | | |
 |---|---|
 | Status | Implemented (reverse-engineered from `53f8c53`) |
-| Source | `internal/tui/*.go` |
-| Tests | `internal/tui/*_test.go` (notably `tui_test.go`, `steer_test.go`, `exit_test.go`, `btw_test.go`, `search_test.go`, `remote_test.go`, `i18n_lint_test.go`) |
-| Depends on | [spec_workspace_018](spec_workspace_018.md) (all behaviour goes through `app.Backend`), [spec_i18n_004](spec_i18n_004.md) |
+| Source | `apps/cli/internal/tui/*.go` |
+| Tests | `apps/cli/internal/tui/*_test.go` (notably `tui_test.go`, `steer_test.go`, `exit_test.go`, `btw_test.go`, `search_test.go`, `remote_test.go`, `i18n_lint_test.go`) |
+| Depends on | [spec_workspace_018](spec_workspace_018.md) (all behaviour goes through `api.Backend`), [spec_i18n_004](spec_i18n_004.md) |
 | Used by | [spec_cli_020](spec_cli_020.md) |
 
 ## 1. Purpose
 
-The REPL is a thin front end over `app.Backend`: it reads input, dispatches slash commands to typed workspace operations, renders turn events, and handles terminal concerns (line editing, steering, Ctrl+C, background processes on exit). It works identically in-process or attached to the service. All user-facing text comes from i18n catalogs.
+The REPL is a thin front end over `api.Backend`: it reads input, dispatches slash commands to typed workspace operations, renders turn events, and handles terminal concerns (line editing, steering, Ctrl+C, background processes on exit). It works identically in-process or attached to the service. All user-facing text comes from i18n catalogs.
 
 ## 2. Presentation
 

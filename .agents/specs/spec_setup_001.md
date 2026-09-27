@@ -20,28 +20,28 @@ Blitz is a native Go coding agent built on the Google Agent Development Kit (`go
 
 | Path | Contents |
 |---|---|
-| `cmd/blitz` | CLI (pure Go, `CGO_ENABLED=0`) |
-| `cmd/blitz-desktop` | Desktop app — **its own Go module** (Wails v2, cgo) |
-| `internal/app` | UI-agnostic application layer (`app.Open`, `Workspace`, `Backend`) |
-| `internal/runtime` | Engine over the ADK runner; providers; fallback; settings; compaction; steering; usage |
-| `internal/tools` | Tools and guardrails: workspace sandbox, approvals, command policy, OS sandbox, script sandbox, skills scripts, web, MCP, hooks, checkpoints |
-| `internal/tui` | REPL |
-| `internal/config` | Configuration and in-place editing |
-| `internal/session` | Transcripts, snapshots, ADK event store, search |
-| `internal/skills`, `internal/agents` | Definitions; built-ins embedded |
-| `internal/i18n` | Catalogs (`en-US`, `es`, `fr-CA`) |
-| `internal/observability`, `internal/audit`, `internal/redact` | Logs, telemetry, audit, masking |
-| `internal/images`, `internal/memory`, `internal/workers`, `internal/breaker`, `internal/textutil` | Supporting packages |
-| `internal/server`, `internal/client` | Service handlers; attached client |
-| `internal/gen` | Generated Go/Connect code — committed, **never edited** |
-| `api/blitz/v1` | Service protos |
-| `web/desktop` | Desktop page (React + TypeScript, pnpm); generated TS in `src/gen` |
-| `build/desktop` | Icons and platform packaging |
+| `apps/cli` | CLI (pure Go, `CGO_ENABLED=0`) |
+| `apps/desktop` | Desktop app — **its own Go module** (Wails v2, cgo) |
+| `pkg/engine` | UI-agnostic application layer (`engine.Open`, `Workspace`, `Backend`) |
+| `pkg/engine/runtime` | Engine over the ADK runner; providers; fallback; settings; compaction; steering; usage |
+| `pkg/engine/tools` | Tools and guardrails: workspace sandbox, approvals, command policy, OS sandbox, script sandbox, skills scripts, web, MCP, hooks, checkpoints |
+| `apps/cli/internal/tui` | REPL |
+| `pkg/config` | Configuration and in-place editing |
+| `pkg/engine/session` | Transcripts, snapshots, ADK event store, search |
+| `pkg/engine/skills`, `pkg/engine/agents` | Definitions; built-ins embedded |
+| `pkg/i18n` | Catalogs (`en-US`, `es`, `fr-CA`) |
+| `pkg/observability`, `pkg/engine/audit`, `pkg/redact` | Logs, telemetry, audit, masking |
+| `pkg/images`, `pkg/engine/memory`, `pkg/engine/workers`, `pkg/engine/breaker`, `pkg/textutil` | Supporting packages |
+| `apps/service/internal/server`, `pkg/client` | Service handlers; attached client |
+| `proto` | Generated Go/Connect code — committed, **never edited** |
+| `proto/blitz/v1` | Service protos |
+| `apps/desktop/web` | Desktop page (React + TypeScript, pnpm); generated TS in `src/gen` |
+| `apps/desktop/packaging` | Icons and platform packaging |
 | `tools` | Separate module pinning build tools as `tool` directives |
 | `.agents` | `AGENTS.md`, `ROADMAP.md`, `NEXT_STEPS.md`, `MANUAL_VERIFICATION.md`, `specs/` |
 
-- **SET-10** New code goes in `internal/`; `pkg/` is reserved for deliberately public APIs (none yet). Slash-command logic lives in `internal/app`, not in a UI.
-- **SET-11** Build outputs are not committed (`/bin/`, `/dist/`, `/blitz`, `/blz`, desktop `dist/*` except `.gitkeep`, `/build/desktop/bin/`, `/web/desktop/wailsjs/`); editor swap files ignored.
+- **SET-10** New code goes in `internal/`; `pkg/` is reserved for deliberately public APIs (none yet). Slash-command logic lives in `pkg/engine`, not in a UI.
+- **SET-11** Build outputs are not committed (`/bin/`, `/dist/`, `/blitz`, `/blz`, desktop `dist/*` except `.gitkeep`, `/apps/desktop/packaging/bin/`, `/apps/desktop/web/wailsjs/`); editor swap files ignored.
 
 ## 4. Toolchain
 
@@ -70,6 +70,6 @@ Blitz is a native Go coding agent built on the Google Agent Development Kit (`go
 - **SET-32** New user-facing strings go into all three catalogs (enforced by tests).
 - **SET-33** Each feature updates the README, a ROADMAP item and a MANUAL_VERIFICATION section.
 - **SET-34** Every package's tests fail on leaked goroutines (`goleak`, `leak_test.go`).
-- **SET-35** gVisor code builds only on Linux (`//go:build linux`, stub elsewhere); check `GOOS=linux go vet ./internal/tools` from macOS; its tests need `runsc`.
+- **SET-35** gVisor code builds only on Linux (`//go:build linux`, stub elsewhere); check `GOOS=linux go vet ./pkg/engine/tools` from macOS; its tests need `runsc`.
 - **SET-36** Real-terminal behaviour is checked with `script` against a fake provider (answer the line editor's `ESC[6n` with `ESC[1;1R`).
 - **SET-37** Specs are named `spec_<name>_NNN.md`, NNN being the global order of execution/dependency.

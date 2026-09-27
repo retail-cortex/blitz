@@ -14,7 +14,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/retail-cortex/blitz/internal/config"
+	"github.com/retail-cortex/blitz/pkg/config"
 )
 
 // BaseURL is the URL clients use over the socket (the host is ignored).

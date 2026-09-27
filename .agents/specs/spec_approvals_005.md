@@ -3,8 +3,8 @@
 | | |
 |---|---|
 | Status | Implemented (reverse-engineered from `53f8c53`) |
-| Source | `internal/tools/hooks.go`, `approval_store.go`, `ask_user.go`; approver UI in `internal/tui` |
-| Tests | `internal/tools/approval_test.go`, `approvals_checkpoints_test.go` |
+| Source | `pkg/engine/tools/hooks.go`, `approval_store.go`, `ask_user.go`; approver UI in `apps/cli/internal/tui` |
+| Tests | `pkg/engine/tools/approval_test.go`, `approvals_checkpoints_test.go` |
 | Depends on | [spec_config_002](spec_config_002.md), [spec_observability_003](spec_observability_003.md) (audit) |
 | Used by | [spec_filetools_006](spec_filetools_006.md), [spec_shell_007](spec_shell_007.md), [spec_web_008](spec_web_008.md), [spec_mcp_009](spec_mcp_009.md), [spec_skills_013](spec_skills_013.md), [spec_agents_014](spec_agents_014.md), [spec_workers_023](spec_workers_023.md) |
 
@@ -51,6 +51,6 @@ Sensitive tool actions (edits, deletions, commands, network, MCP tools, forged t
 
 - **APR-41** `exit_plan_mode(plan)`: only while the turn is planning (else an error). Unattended, `dont-ask` or no prompter → `approved: false` and "end your turn with the plan as your answer". Otherwise the plan goes to the user through the question prompter, with options *Yes, carry it out* / *Yes, and accept its file edits without asking* / *No, keep planning* (localized); any other answer is feedback (`approved: false, feedback`), and the agent revises. On approval the plan is saved to `.blitz/plans/<session>-<n>.md` (session ID made file-safe; `n` the first free number), the gate records the mode (`default` or `accept-edits`) and planning ends.
 - **APR-42** `enter_plan_mode(reason?)` (registered only with `plan_review = agent-decides`): refused when no one can review (unattended, `dont-ask`, no prompter); otherwise the rest of the turn plans.
-- **APR-43** `todo(items)`: the whole list, each `{content, status}` with status `pending|in_progress|done` (`todo`, `in-progress`, `completed` and the like are normalized); at most 50 items; empty content or an unknown status is an error; more than one `in_progress` adds a note. The result carries the normalized items, `done` and `total`; front ends show it as a checklist (`app.Event.Tasks`).
+- **APR-43** `todo(items)`: the whole list, each `{content, status}` with status `pending|in_progress|done` (`todo`, `in-progress`, `completed` and the like are normalized); at most 50 items; empty content or an unknown status is an error; more than one `in_progress` adds a note. The result carries the normalized items, `done` and `total`; front ends show it as a checklist (`api.Event.Tasks`).
 
 - **APR-40** Args `question`, `options?`. Empty question → error. Unattended → error "this run is unattended: no one can answer; decide yourself and say what you assumed". No prompter → "interactive input is not available; proceed with your best judgement". Otherwise returns the user's answer. The prompter shares the front end's input reader (no competing stdin readers).

@@ -3,8 +3,8 @@
 | | |
 |---|---|
 | Status | Implemented (reverse-engineered from `53f8c53`) |
-| Source | `internal/runtime/model_factory.go`, `anthropic.go`, `openai_images.go`, `images.go`, `fallback.go`, `httpclient.go`, `settings.go`, `usage.go`; `internal/breaker` |
-| Tests | `internal/runtime/anthropic_test.go`, `fallback_test.go`, `httpclient_test.go`, `settings_test.go`, `pin_test.go`, `images_test.go`; `internal/breaker/breaker_test.go` |
+| Source | `pkg/engine/runtime/model_factory.go`, `anthropic.go`, `openai_images.go`, `images.go`, `fallback.go`, `httpclient.go`, `settings.go`, `usage.go`; `pkg/engine/breaker` |
+| Tests | `pkg/engine/runtime/anthropic_test.go`, `fallback_test.go`, `httpclient_test.go`, `settings_test.go`, `pin_test.go`, `images_test.go`; `pkg/engine/breaker/breaker_test.go` |
 | Depends on | [spec_config_002](spec_config_002.md) |
 | Used by | [spec_engine_016](spec_engine_016.md) |
 
@@ -63,7 +63,7 @@ Every model is an ADK `model.LLM`. A factory builds one from a model reference f
 - **MDL-62** A response from a fallback is marked `CustomMetadata["blitz_fallback_from"] = <primary>` and `ModelVersion = <fallback>` if empty, so cost is priced by the model that answered.
 - **MDL-63** If all fail: "every model failed: <joined errors>".
 - **MDL-64** The engine notifies the user once when a fallback starts answering ("model.fallback") and once when the primary is back ("model.fallback_recovered"), not on every call.
-- **MDL-65** Breaker behaviour (`internal/breaker`): after the threshold the breaker opens for 15 s, doubling up to 5 min; then one half-open trial call is allowed.
+- **MDL-65** Breaker behaviour (`pkg/engine/breaker`): after the threshold the breaker opens for 15 s, doubling up to 5 min; then one half-open trial call is allowed.
 
 ## 6. Per-model settings
 

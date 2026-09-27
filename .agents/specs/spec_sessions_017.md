@@ -3,8 +3,8 @@
 | | |
 |---|---|
 | Status | Implemented (reverse-engineered from `53f8c53`) |
-| Source | `internal/session/{session,snapshot,adkstore,search}.go`; `internal/app/sessions.go` |
-| Tests | `internal/session/*_test.go`, `internal/app/sessions_test.go`, `internal/tui/snapshot_test.go`, `rename_test.go` |
+| Source | `pkg/engine/session/{session,snapshot,adkstore,search}.go`; `pkg/engine/sessions.go` |
+| Tests | `pkg/engine/session/*_test.go`, `pkg/engine/sessions_test.go`, `apps/cli/internal/tui/snapshot_test.go`, `rename_test.go` |
 | Depends on | [spec_config_002](spec_config_002.md) |
 | Used by | [spec_engine_016](spec_engine_016.md), [spec_workspace_018](spec_workspace_018.md) |
 

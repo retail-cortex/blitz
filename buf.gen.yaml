@@ -1,21 +1,21 @@
-# Generated code is committed: Go in internal/gen, so `go install` and the
-# reproducible build need no generator, and TypeScript for the desktop app
-# in web/desktop/src/gen. The Go plugins are pinned in tools/go.mod and run
-# through `go tool`; protoc-gen-es is pinned in web/desktop's lockfile
-# (run `pnpm install` there first).
+# Generated code is committed: Go beside the protos in proto/, so
+# `go install` and the reproducible build need no generator, and TypeScript
+# for the desktop app in apps/desktop/web/src/gen. The Go plugins are
+# pinned in tools/go.mod and run through `go tool`; protoc-gen-es is pinned
+# in apps/desktop/web's lockfile (run `pnpm install` there first).
 version: v2
 managed:
   enabled: true
   override:
     - file_option: go_package_prefix
-      value: github.com/retail-cortex/blitz/internal/gen
+      value: github.com/retail-cortex/blitz/proto
 plugins:
   - local: ["go", "tool", "-modfile=tools/go.mod", "protoc-gen-go"]
-    out: internal/gen
+    out: proto
     opt: paths=source_relative
   - local: ["go", "tool", "-modfile=tools/go.mod", "protoc-gen-connect-go"]
-    out: internal/gen
+    out: proto
     opt: paths=source_relative
-  - local: web/desktop/node_modules/.bin/protoc-gen-es
-    out: web/desktop/src/gen
+  - local: apps/desktop/web/node_modules/.bin/protoc-gen-es
+    out: apps/desktop/web/src/gen
     opt: target=ts

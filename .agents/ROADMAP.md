@@ -1,5 +1,7 @@
 # Blitz Go — Gap Implementation Plan
 
+> **Paths.** Entries written before 2026-09-27 use the layout of the time (`cmd/blitz`, `cmd/blitz-desktop`, `internal/…`, `web/desktop`, `api/`). The repository is now a monorepo: see the map in [AGENTS.md](AGENTS.md#layout); `internal/app` became `pkg/engine`, the other engine packages `pkg/engine/…`, the shared ones `pkg/…`, the REPL `apps/cli/internal/tui`, the service `apps/service` (`blitzd`).
+
 Status key: ✅ done · 🔜 next · 📋 planned · 🔍 needs investigation first
 
 Items 10–22 were added after the first plan and appear before item 9, which stays last because it needs a person. Open work and resume notes: [NEXT_STEPS.md](NEXT_STEPS.md).

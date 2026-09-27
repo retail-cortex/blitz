@@ -3,8 +3,8 @@
 | | |
 |---|---|
 | Status | Implemented (reverse-engineered from `53f8c53`) |
-| Source | `internal/tools/mcp.go`; `internal/breaker` |
-| Tests | `internal/tools/mcp_test.go`, `mcp_resilience_test.go`; `internal/runtime/mcp_agents_test.go` |
+| Source | `pkg/engine/tools/mcp.go`; `pkg/engine/breaker` |
+| Tests | `pkg/engine/tools/mcp_test.go`, `mcp_resilience_test.go`; `pkg/engine/runtime/mcp_agents_test.go` |
 | Depends on | [spec_shell_007](spec_shell_007.md) (exec env, sandbox), [spec_approvals_005](spec_approvals_005.md), [spec_models_015](spec_models_015.md) (breaker) |
 
 ## 1. Purpose

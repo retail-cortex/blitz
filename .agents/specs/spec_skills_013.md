@@ -3,8 +3,8 @@
 | | |
 |---|---|
 | Status | Implemented (reverse-engineered from `53f8c53`) |
-| Source | `internal/skills/{skill,definition,policy,provider}.go`, `internal/skills/builtin/*`; `internal/tools/{skills_tools,skillscript,pyenv,scriptbox,scriptbox_gvisor_linux}.go` |
-| Tests | `internal/skills/*_test.go`; `internal/tools/skillscript_test.go`, `pyenv_test.go`, `scriptbox_test.go`, `scriptbox_gvisor_linux_test.go`; `internal/tui/skills_test.go`, `envs_test.go` |
+| Source | `pkg/engine/skills/{skill,definition,policy,provider}.go`, `pkg/engine/skills/builtin/*`; `pkg/engine/tools/{skills_tools,skillscript,pyenv,scriptbox,scriptbox_gvisor_linux}.go` |
+| Tests | `pkg/engine/skills/*_test.go`; `pkg/engine/tools/skillscript_test.go`, `pyenv_test.go`, `scriptbox_test.go`, `scriptbox_gvisor_linux_test.go`; `apps/cli/internal/tui/skills_test.go`, `envs_test.go` |
 | Depends on | [spec_config_002](spec_config_002.md), [spec_approvals_005](spec_approvals_005.md), [spec_shell_007](spec_shell_007.md) (OS sandbox) |
 
 ## 1. Purpose
@@ -36,7 +36,7 @@ Skills are reusable instructions (`SKILL.md`) an agent loads on demand, optional
 
 ## 4b. Slash commands
 
-- **SK-80** Custom slash commands (`internal/commands`): Markdown files in `~/.blitz/commands/` (user) and the workspace's `.blitz/commands/`, `.claude/commands/`, `.agents/workflows/` (project, which win; prompt text, so no trust is needed — spec_parity_027 §12.3), read on each use. The name is the path without `.md`, subdirectories as `:` namespaces, lower case (`[a-z0-9][a-z0-9._-]*`). Optional frontmatter: `description` (else the body's first line), `argument-hint`, `agent`, `model`, `allowed-tools` (a list or a comma/space-separated string; `Bash(git *)` stays one entry), `mode: plan`; unknown modes and empty bodies are errors, reported once.
+- **SK-80** Custom slash commands (`pkg/engine/commands`): Markdown files in `~/.blitz/commands/` (user) and the workspace's `.blitz/commands/`, `.claude/commands/`, `.agents/workflows/` (project, which win; prompt text, so no trust is needed — spec_parity_027 §12.3), read on each use. The name is the path without `.md`, subdirectories as `:` namespaces, lower case (`[a-z0-9][a-z0-9._-]*`). Optional frontmatter: `description` (else the body's first line), `argument-hint`, `agent`, `model`, `allowed-tools` (a list or a comma/space-separated string; `Bash(git *)` stays one entry), `mode: plan`; unknown modes and empty bodies are errors, reported once.
 - **SK-81** Expansion: `$ARGUMENTS` is everything typed after the name, `$1`–`$9` its words; without either, the arguments are appended. The turn (`Turn.Command`) sends the expanded prompt and records the line as typed; `agent`/`model` apply to that turn only (ENG-16), `allowed-tools` limits it (`runtime.WithAllowedTools`; Claude Code names map to Blitz tools, `Bash(…)` counts as the shell tool), `mode: plan` plans it. `ErrUnknownCommand` / `UNKNOWN_COMMAND` otherwise.
 - **SK-82** Every skill is a command `/<skill-name> <request>`, whose prompt carries the request and the skill's instructions (bundled and file commands of the same name win). Bundled commands: `/review` and `/security-review` (plan mode: read-only reviews of the uncommitted changes, a branch or files, verified findings with file and line), `/simplify` (behaviour-preserving cleanup of the changed files, then tests), `/verify` (find and run the project's build, lint and test commands and report). Built-in REPL commands win name clashes; `/help` lists the custom ones with their source; `ListCommands` serves them.
 

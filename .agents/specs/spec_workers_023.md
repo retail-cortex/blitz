@@ -3,8 +3,8 @@
 | | |
 |---|---|
 | Status | Implemented, first version (reverse-engineered from `53f8c53`) |
-| Source | `internal/workers/{worker,schedule,permission,policy,state,runs}.go`; `internal/app/workers.go`; `internal/server/{scheduler,worker}.go`; `cmd/blitz/workers.go` |
-| Tests | `internal/workers/*_test.go`, `internal/app/workers_test.go`, `internal/server/worker_test.go`, `cmd/blitz/workers_test.go` |
+| Source | `pkg/engine/workers/{worker,schedule,permission,policy,state,runs}.go`; `pkg/engine/workers.go`; `apps/service/internal/server/{scheduler,worker}.go`; `apps/cli/workers.go` |
+| Tests | `pkg/engine/workers/*_test.go`, `pkg/engine/workers_test.go`, `apps/service/internal/server/worker_test.go`, `apps/cli/workers_test.go` |
 | Depends on | [spec_approvals_005](spec_approvals_005.md) (unattended approvals), [spec_workspace_018](spec_workspace_018.md), [spec_service_021](spec_service_021.md) |
 
 ## 1. Purpose
@@ -62,7 +62,7 @@ Check for outdated Go modules and write reports/deps.md.
 
 ## 7. Scheduler (service)
 
-- **WK-50** Runs only in `blitz serve` with `[workers] enabled`. It watches every workspace that has at least one enabled worker, even when no client has it open, rescanning every minute to pick up new, edited and removed workers; a changed hash, cron or time zone re-registers the entry.
+- **WK-50** Runs only in the service (`blitzd`) with `[workers] enabled`. It watches every workspace that has at least one enabled worker, even when no client has it open, rescanning every minute to pick up new, edited and removed workers; a changed hash, cron or time zone re-registers the entry.
 - **WK-51** Concurrency: `max_concurrent` slots across workspaces. A manual run fails at once with `TOO_MANY_RUNS` when all are busy; a scheduled run waits, but a worker already waiting isn't queued again (a worker that falls behind runs once, not once per missed tick).
 - **WK-52** `catch_up: once`: when a worker is first registered and a scheduled time passed since its last run, it runs once as soon as possible.
 - **WK-53** Live runs keep their events so `WatchWorkerRun` replays them, then streams live ones until the run finishes; events aren't kept afterwards. Stopping the scheduler cancels all runs and waits for them.

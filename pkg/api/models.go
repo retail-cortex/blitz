@@ -4,7 +4,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/retail-cortex/blitz/internal/config"
+	"github.com/retail-cortex/blitz/pkg/config"
 )
 
 // UnknownAgentError reports an agent name that isn't registered.

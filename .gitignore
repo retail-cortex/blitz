@@ -8,12 +8,12 @@
 /bin/
 /dist/
 
-# Desktop app build outputs (the embedded page is rebuilt from web/desktop).
-/cmd/blitz-desktop/dist/*
-!/cmd/blitz-desktop/dist/.gitkeep
-/build/desktop/bin/
-/build/desktop/dist/
-/web/desktop/wailsjs/
-/cmd/blitz-desktop/blitz-desktop
+# Desktop app build outputs (the embedded page is rebuilt from its web/).
+/apps/desktop/dist/*
+!/apps/desktop/dist/.gitkeep
+/apps/desktop/packaging/bin/
+/apps/desktop/packaging/dist/
+/apps/desktop/web/wailsjs/
+/apps/desktop/desktop
 /blitz
 /blz

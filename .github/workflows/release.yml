@@ -61,15 +61,14 @@ jobs:
           cache-dependency-path: |
             go.sum
             tools/go.sum
-            cmd/blitz-desktop/go.sum
       - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
         with:
-          package_json_file: web/desktop/package.json
+          package_json_file: apps/desktop/web/package.json
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 22
           cache: pnpm
-          cache-dependency-path: web/desktop/pnpm-lock.yaml
+          cache-dependency-path: apps/desktop/web/pnpm-lock.yaml
       - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
         with:
           cosign-release: v2.6.1
@@ -105,13 +104,13 @@ jobs:
           DESKTOP_SIGN_IDENTITY: ${{ env.SIGNING == 'true' && secrets.DESKTOP_SIGN_IDENTITY || '' }}
           NOTARY_KEY_ID: ${{ secrets.NOTARY_KEY_ID }}
           NOTARY_ISSUER: ${{ secrets.NOTARY_ISSUER }}
-        run: scripts/desktop-package.sh "$GITHUB_REF_NAME"
+        run: apps/desktop/packaging/package.sh "$GITHUB_REF_NAME"
       # The package installs on a clean system: its dependencies resolve and
       # the app's libraries are all found.
       - name: Smoke test
         if: runner.os == 'Linux'
         run: |
-          sudo apt-get install -y ./build/desktop/dist/blitz-desktop_*.deb
+          sudo apt-get install -y ./apps/desktop/packaging/dist/blitz-desktop_*.deb
           if ldd /usr/lib/blitz-desktop/blitz-desktop | grep 'not found'; then exit 1; fi
           /usr/lib/blitz-desktop/blitz --version
           test "$(readlink -f /usr/bin/blitz-desktop)" = /usr/lib/blitz-desktop/blitz-desktop
@@ -119,7 +118,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          cd build/desktop/dist
+          cd apps/desktop/packaging/dist
           for f in *.dmg *.deb; do
             [ -e "$f" ] || continue
             cosign sign-blob --yes --bundle "$f.sigstore.json" "$f"

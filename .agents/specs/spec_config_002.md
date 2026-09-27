@@ -3,8 +3,8 @@
 | | |
 |---|---|
 | Status | Implemented (reverse-engineered from `53f8c53`) |
-| Source | `internal/config/config.go`, `features.go`, `locale.go`, `agentmodels.go`, `modelsettings.go`; template in `cmd/blitz/configcmd.go` |
-| Tests | `internal/config/*_test.go` |
+| Source | `pkg/config/config.go`, `features.go`, `locale.go`, `agentmodels.go`, `modelsettings.go`; template in `apps/cli/configcmd.go` |
+| Tests | `pkg/config/*_test.go` |
 | Related | [spec_cli_020](spec_cli_020.md), [spec_models_015](spec_models_015.md) |
 
 ## 1. Purpose

@@ -8,17 +8,20 @@ GOFLAGS_BUILD=-trimpath -buildvcs=false
 
 all: build
 
+# blitz (the CLI, apps/cli) and blitzd (the service, apps/service), which
+# `blitz service install` expects beside it.
 build:
 	@mkdir -p $(BUILD_DIR)
-	CGO_ENABLED=0 go build $(GOFLAGS_BUILD) -ldflags="$(LDFLAGS)" -o $(BUILD_DIR)/$(BINARY_NAME) ./cmd/blitz
+	CGO_ENABLED=0 go build $(GOFLAGS_BUILD) -ldflags="$(LDFLAGS)" -o $(BUILD_DIR)/$(BINARY_NAME) ./apps/cli
+	CGO_ENABLED=0 go build $(GOFLAGS_BUILD) -ldflags="$(LDFLAGS)" -o $(BUILD_DIR)/blitzd ./apps/service
 	@ln -sf $(BINARY_NAME) $(BUILD_DIR)/blz
-	@echo "✅ Built $(BUILD_DIR)/$(BINARY_NAME) (and $(BUILD_DIR)/blz)"
+	@echo "✅ Built $(BUILD_DIR)/$(BINARY_NAME), $(BUILD_DIR)/blitzd (and $(BUILD_DIR)/blz)"
 
-# Installs blitz, and blz beside it, into $$GOBIN (or $$GOPATH/bin).
+# Installs blitz, blitzd, and blz beside them, into $$GOBIN (or $$GOPATH/bin).
 install: build
 	@dir="$$(go env GOBIN)"; [ -n "$$dir" ] || dir="$$(go env GOPATH)/bin"; \
-	mkdir -p "$$dir" && cp $(BUILD_DIR)/$(BINARY_NAME) "$$dir/" && ln -sf $(BINARY_NAME) "$$dir/blz" && \
-	echo "✅ Installed $$dir/$(BINARY_NAME) and $$dir/blz"
+	mkdir -p "$$dir" && cp $(BUILD_DIR)/$(BINARY_NAME) $(BUILD_DIR)/blitzd "$$dir/" && ln -sf $(BINARY_NAME) "$$dir/blz" && \
+	echo "✅ Installed $$dir/$(BINARY_NAME), $$dir/blitzd and $$dir/blz"
 
 test:
 	CGO_ENABLED=0 go test ./...
@@ -48,75 +51,73 @@ release-check:
 tidy:
 	go mod tidy
 
-# The service API: api/blitz/v1/*.proto -> internal/gen. The tools are
-# pinned in tools/go.mod.
+# The service API: proto/blitz/v1/*.proto -> Go beside them, TypeScript in
+# apps/desktop/web/src/gen. The tools are pinned in tools/go.mod.
 BUF=go tool -modfile=tools/go.mod buf
 
-# protoc-gen-es, for the desktop app's TypeScript, comes from web/desktop.
-web/desktop/node_modules: web/desktop/pnpm-lock.yaml
-	cd web/desktop && pnpm install --frozen-lockfile
+# protoc-gen-es, for the desktop app's TypeScript, comes from its page.
+apps/desktop/web/node_modules: apps/desktop/web/pnpm-lock.yaml
+	cd apps/desktop/web && pnpm install --frozen-lockfile
 	touch $@
 
-proto: web/desktop/node_modules
+proto: apps/desktop/web/node_modules
 	$(BUF) lint
 	$(BUF) format -w
 	$(BUF) generate
 
-# Fails when the protos aren't formatted or internal/gen is out of date.
-proto-check: web/desktop/node_modules
+# Fails when the protos aren't formatted or the generated code is out of date.
+proto-check: apps/desktop/web/node_modules
 	$(BUF) lint
 	$(BUF) format --exit-code -d
 	$(BUF) generate
-	git diff --exit-code -- internal/gen web/desktop/src/gen
-	test -z "$$(git ls-files --others --exclude-standard -- internal/gen web/desktop/src/gen)"
+	git diff --exit-code -- proto apps/desktop/web/src/gen
+	test -z "$$(git ls-files --others --exclude-standard -- proto apps/desktop/web/src/gen)"
 
 clean:
 	rm -rf $(BUILD_DIR)
 
 cross-compile: clean
 	@mkdir -p $(BUILD_DIR)
-	@echo "Building for macOS (arm64)..."
-	GOOS=darwin GOARCH=arm64 CGO_ENABLED=0 go build $(GOFLAGS_BUILD) -ldflags="$(LDFLAGS)" -o $(BUILD_DIR)/$(BINARY_NAME)-darwin-arm64 ./cmd/blitz
-	@echo "Building for macOS (amd64)..."
-	GOOS=darwin GOARCH=amd64 CGO_ENABLED=0 go build $(GOFLAGS_BUILD) -ldflags="$(LDFLAGS)" -o $(BUILD_DIR)/$(BINARY_NAME)-darwin-amd64 ./cmd/blitz
-	@echo "Building for Linux (amd64)..."
-	GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build $(GOFLAGS_BUILD) -ldflags="$(LDFLAGS)" -o $(BUILD_DIR)/$(BINARY_NAME)-linux-amd64 ./cmd/blitz
-	@echo "Building for Linux (arm64)..."
-	GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build $(GOFLAGS_BUILD) -ldflags="$(LDFLAGS)" -o $(BUILD_DIR)/$(BINARY_NAME)-linux-arm64 ./cmd/blitz
-	@echo "Building for Windows (amd64)..."
-	GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build $(GOFLAGS_BUILD) -ldflags="$(LDFLAGS)" -o $(BUILD_DIR)/$(BINARY_NAME)-windows-amd64.exe ./cmd/blitz
-	@echo "✅ All cross-compiled universal binaries created in $(BUILD_DIR)/"
+	@for t in darwin/arm64 darwin/amd64 linux/amd64 linux/arm64 windows/amd64; do \
+		os=$${t%/*}; arch=$${t#*/}; ext=; [ $$os = windows ] && ext=.exe; \
+		echo "Building for $$os/$$arch..."; \
+		GOOS=$$os GOARCH=$$arch CGO_ENABLED=0 go build $(GOFLAGS_BUILD) -ldflags="$(LDFLAGS)" -o $(BUILD_DIR)/$(BINARY_NAME)-$$os-$$arch$$ext ./apps/cli || exit 1; \
+		GOOS=$$os GOARCH=$$arch CGO_ENABLED=0 go build $(GOFLAGS_BUILD) -ldflags="$(LDFLAGS)" -o $(BUILD_DIR)/blitzd-$$os-$$arch$$ext ./apps/service || exit 1; \
+	done
+	@echo "✅ All cross-compiled binaries created in $(BUILD_DIR)/"
 
-# The desktop app (cmd/blitz-desktop, its own module; the page is
-# web/desktop): build/desktop/bin. Needs cgo, pnpm, and on Linux
-# webkit2gtk. The Wails CLI is pinned in tools/go.mod.
+# The desktop app (apps/desktop; its page is apps/desktop/web):
+# apps/desktop/packaging/bin. Needs cgo, pnpm, and on Linux webkit2gtk.
+# The Wails CLI is pinned in tools/go.mod.
 WAILS=go tool -modfile=../../tools/go.mod wails
 
-DESKTOP_APP=build/desktop/bin/Blitz.app
+DESKTOP_BIN=apps/desktop/packaging/bin
+DESKTOP_APP=$(DESKTOP_BIN)/Blitz.app
 
-# The CLI is bundled next to the app's binary, where the app looks for it
-# to install the service; on macOS the app is then signed again (ad hoc),
-# since adding a file breaks Wails's signature. The app's executable is
-# blitz-desktop (wails.json outputfilename), never "Blitz": macOS file
-# systems ignore case, so the CLI would overwrite it.
-desktop: web/desktop/node_modules
-	cd cmd/blitz-desktop && CGO_CFLAGS=-mmacosx-version-min=13.0 CGO_LDFLAGS=-mmacosx-version-min=13.0 $(WAILS) build -clean
-	@if [ -d "$(DESKTOP_APP)" ]; then \
-		CGO_ENABLED=0 go build $(GOFLAGS_BUILD) -ldflags="$(LDFLAGS)" -o "$(DESKTOP_APP)/Contents/MacOS/blitz" ./cmd/blitz && \
-		test -x "$(DESKTOP_APP)/Contents/MacOS/blitz-desktop" && test "$$(ls "$(DESKTOP_APP)/Contents/MacOS" | wc -l)" -eq 2 || \
-			{ echo "the bundled CLI replaced the app's executable" >&2; exit 1; }; \
+# The CLI and the service are bundled next to the app's binary, where the
+# app looks for the CLI to install the service (and the CLI for blitzd);
+# on macOS the app is then signed again (ad hoc), since adding files breaks
+# Wails's signature. The app's executable is blitz-desktop (wails.json
+# outputfilename), never "Blitz": macOS file systems ignore case, so the
+# CLI would overwrite it.
+desktop: apps/desktop/web/node_modules
+	cd apps/desktop && CGO_CFLAGS=-mmacosx-version-min=13.0 CGO_LDFLAGS=-mmacosx-version-min=13.0 $(WAILS) build -clean
+	@if [ -d "$(DESKTOP_APP)" ]; then dir="$(DESKTOP_APP)/Contents/MacOS"; else dir="$(DESKTOP_BIN)"; fi; \
+	CGO_ENABLED=0 go build $(GOFLAGS_BUILD) -ldflags="$(LDFLAGS)" -o "$$dir/blitz" ./apps/cli && \
+	CGO_ENABLED=0 go build $(GOFLAGS_BUILD) -ldflags="$(LDFLAGS)" -o "$$dir/blitzd" ./apps/service && \
+	test -x "$$dir/blitz-desktop" || { echo "the bundled CLI replaced the app's executable" >&2; exit 1; }; \
+	if [ -d "$(DESKTOP_APP)" ]; then \
+		test "$$(ls "$$dir" | wc -l)" -eq 3 || { echo "unexpected files in $$dir" >&2; exit 1; }; \
 		codesign --force --deep --sign - "$(DESKTOP_APP)"; \
-	else \
-		CGO_ENABLED=0 go build $(GOFLAGS_BUILD) -ldflags="$(LDFLAGS)" -o build/desktop/bin/blitz ./cmd/blitz; \
 	fi
-	@echo "✅ Built build/desktop/bin (with the blitz CLI bundled)"
+	@echo "✅ Built $(DESKTOP_BIN) (with blitz and blitzd bundled)"
 
-# The release packages (build/desktop/dist): a universal, signed and
-# notarised disk image on macOS; a .deb on Linux. Signing needs the
-# variables described in scripts/desktop-package.sh.
+# The release packages (apps/desktop/packaging/dist): a universal, signed
+# and notarised disk image on macOS; a .deb on Linux. Signing needs the
+# variables described in apps/desktop/packaging/package.sh.
 desktop-package:
-	scripts/desktop-package.sh $(VERSION)
+	apps/desktop/packaging/package.sh $(VERSION)
 
-desktop-check: web/desktop/node_modules
-	cd web/desktop && pnpm test && pnpm run build
-	cd cmd/blitz-desktop && go vet . && go test -race ./...
+desktop-check: apps/desktop/web/node_modules
+	cd apps/desktop/web && pnpm test && pnpm run build
+	go vet ./apps/desktop && go test -race ./apps/desktop

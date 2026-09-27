@@ -3,13 +3,13 @@
 | | |
 |---|---|
 | Status | Implemented (reverse-engineered from `53f8c53`) |
-| Source | `internal/app/*.go` |
-| Tests | `internal/app/*_test.go` (notably `multi_test.go`, `turn_test.go`, `workspace_test.go`) |
+| Source | `pkg/engine/*.go` |
+| Tests | `pkg/engine/*_test.go` (notably `multi_test.go`, `turn_test.go`, `workspace_test.go`) |
 | Related | [spec_engine_016](spec_engine_016.md), [spec_sessions_017](spec_sessions_017.md), [spec_client_022](spec_client_022.md), [spec_service_021](spec_service_021.md) |
 
 ## 1. Purpose
 
-`internal/app` is Blitz without a user interface. `app.Open` builds a `Workspace` (agents, skills, tools, sessions, audit, model, engine) for one project directory, and the workspace exposes typed operations that return data and typed errors and **never print**. The terminal UI, the service and the desktop app all drive the same operations through the `app.Backend` interface, so a front end behaves identically whether the workspace is in-process or held by the service.
+`pkg/engine` is Blitz without a user interface. `engine.Open` builds a `Workspace` (agents, skills, tools, sessions, audit, model, engine) for one project directory, and the workspace exposes typed operations that return data and typed errors and **never print**. The terminal UI, the service and the desktop app all drive the same operations through the `api.Backend` interface, so a front end behaves identically whether the workspace is in-process or held by the service.
 
 ## 2. Opening a workspace
 
@@ -25,7 +25,7 @@
 
 ## 3. Backend interface
 
-Front ends use only `app.Backend` (implemented by `*Workspace` and by the service client). Groups:
+Front ends use only `api.Backend` (implemented by `*Workspace` and by the service client). Groups:
 
 | Group | Operations |
 |---|---|
@@ -55,7 +55,7 @@ Front ends use only `app.Backend` (implemented by `*Workspace` and by the servic
 - **WS-28** Transcript write failures warn but never fail the turn.
 
 ### 4.1 Events
-- **WS-30** Each ADK event becomes one `app.Event` per part, in order, with `Author`; exactly one of `Text{Text, Partial, Repeat, Thought}`, `ToolCall{ID, Name, Args, Partial}`, `ToolResult{ID, Name, Result}`.
+- **WS-30** Each ADK event becomes one `api.Event` per part, in order, with `Author`; exactly one of `Text{Text, Partial, Repeat, Thought}`, `ToolCall{ID, Name, Args, Partial}`, `ToolResult{ID, Name, Result}`.
 - **WS-31** With streaming, partial text chunks arrive first; the final text event then repeats them with `Repeat=true`. Front ends show partial chunks and non-`Repeat` final text, so text appears once. `streamed` resets after each non-partial event.
 
 ## 5. Agents, models and settings
