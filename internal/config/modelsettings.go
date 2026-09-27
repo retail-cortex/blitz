@@ -16,14 +16,37 @@ type ModelSettings struct {
 	MaxTokens   *int     `toml:"max_tokens"`
 	TopP        *float64 `toml:"top_p"`
 	Seed        *int     `toml:"seed"`
+	// ReasoningEffort is how hard the model thinks: minimal, low, medium,
+	// high or max (providers map it to their own levels).
+	ReasoningEffort *string `toml:"reasoning_effort"`
+	// ThinkingBudget is the most tokens the model may spend thinking; 0
+	// turns thinking off where the model allows it.
+	ThinkingBudget *int `toml:"thinking_budget"`
+}
+
+// Efforts are the reasoning effort levels, lowest first.
+var Efforts = []string{"minimal", "low", "medium", "high", "max"}
+
+// ParseEffort reads an effort level (xhigh counts as max).
+func ParseEffort(s string) (string, error) {
+	e := strings.ToLower(strings.TrimSpace(s))
+	if e == "xhigh" {
+		e = "max"
+	}
+	for _, x := range Efforts {
+		if e == x {
+			return e, nil
+		}
+	}
+	return "", fmt.Errorf("reasoning effort %q: use %s", s, strings.Join(Efforts, ", "))
 }
 
 // ModelSettingKeys are the settings a model can have, in display order.
-var ModelSettingKeys = []string{"temperature", "max_tokens", "top_p", "seed"}
+var ModelSettingKeys = []string{"temperature", "max_tokens", "top_p", "seed", "reasoning_effort", "thinking_budget"}
 
 // IsZero reports whether no setting is set.
 func (s ModelSettings) IsZero() bool {
-	return s.Temperature == nil && s.MaxTokens == nil && s.TopP == nil && s.Seed == nil
+	return s.Temperature == nil && s.MaxTokens == nil && s.TopP == nil && s.Seed == nil && s.ReasoningEffort == nil && s.ThinkingBudget == nil
 }
 
 // Get returns key's value as written in TOML, and whether it is set.
@@ -37,6 +60,13 @@ func (s ModelSettings) Get(key string) (string, bool) {
 		return formatInt(s.MaxTokens)
 	case "seed":
 		return formatInt(s.Seed)
+	case "reasoning_effort":
+		if s.ReasoningEffort == nil {
+			return "", false
+		}
+		return strconv.Quote(*s.ReasoningEffort), true
+	case "thinking_budget":
+		return formatInt(s.ThinkingBudget)
 	}
 	return "", false
 }
@@ -53,6 +83,19 @@ func (s *ModelSettings) Set(key, text string) error {
 		return setInt(&s.MaxTokens, key, text, 1)
 	case "seed":
 		return setInt(&s.Seed, key, text, math.MinInt32)
+	case "reasoning_effort":
+		if text = strings.Trim(text, `"`); text == "" {
+			s.ReasoningEffort = nil
+			return nil
+		}
+		e, err := ParseEffort(text)
+		if err != nil {
+			return err
+		}
+		s.ReasoningEffort = &e
+		return nil
+	case "thinking_budget":
+		return setInt(&s.ThinkingBudget, key, text, 0)
 	}
 	return fmt.Errorf("unknown setting %q (known: %s)", key, strings.Join(ModelSettingKeys, ", "))
 }
@@ -131,12 +174,22 @@ func SaveModelSettings(dir, model string, s ModelSettings) (string, error) {
 			for _, key := range ModelSettingKeys {
 				want, set := s.Get(key)
 				v, present := got[key]
-				if set != present || (set && !sameNumber(v, want)) {
+				if set != present || (set && !sameValue(v, want)) {
 					return fmt.Errorf("could not update [%s] %s", table, key)
 				}
 			}
 			return nil
 		})
+}
+
+// sameValue reports whether a decoded TOML value equals text as written
+// (a number, or a quoted string).
+func sameValue(v any, text string) bool {
+	if str, ok := v.(string); ok {
+		want, err := strconv.Unquote(text)
+		return err == nil && str == want
+	}
+	return sameNumber(v, text)
 }
 
 // sameNumber reports whether a decoded TOML number equals text.

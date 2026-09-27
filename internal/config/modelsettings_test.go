@@ -108,3 +108,44 @@ func TestLoadReadsModelSettings(t *testing.T) {
 		t.Fatalf("loaded %+v", got)
 	}
 }
+
+func TestReasoningSettings(t *testing.T) {
+	var s ModelSettings
+	for _, c := range [][2]string{{"HIGH", "high"}, {`"low"`, "low"}, {"xhigh", "max"}, {" minimal ", "minimal"}} {
+		in, want := c[0], c[1]
+		if err := s.Set("reasoning_effort", in); err != nil || *s.ReasoningEffort != want {
+			t.Errorf("reasoning_effort=%s: %v %v", in, err, s.ReasoningEffort)
+		}
+	}
+	if err := s.Set("reasoning_effort", "extreme"); err == nil || *s.ReasoningEffort != "minimal" {
+		t.Errorf("a bad effort was accepted or changed the setting: %v", err)
+	}
+	if err := s.Set("thinking_budget", "-1"); err == nil {
+		t.Error("a negative thinking budget was accepted")
+	}
+	if err := s.Set("thinking_budget", "0"); err != nil || *s.ThinkingBudget != 0 {
+		t.Errorf("thinking_budget=0 (off): %v", err)
+	}
+	if v, ok := s.Get("reasoning_effort"); !ok || v != `"minimal"` {
+		t.Errorf("effort must be a TOML string: %q", v)
+	}
+	if err := s.Set("reasoning_effort", ""); err != nil || s.ReasoningEffort != nil || s.IsZero() {
+		t.Errorf("clearing: %v %v", err, s.ReasoningEffort)
+	}
+
+	dir := t.TempDir()
+	s.Set("reasoning_effort", "high")
+	if _, err := SaveModelSettings(dir, "claude-opus-5", s); err != nil {
+		t.Fatal(err)
+	}
+	b, _ := os.ReadFile(filepath.Join(dir, ".env.toml"))
+	var got struct {
+		ModelSettings map[string]ModelSettings `toml:"model_settings"`
+	}
+	if _, err := toml.Decode(string(b), &got); err != nil {
+		t.Fatal(err)
+	}
+	if m := got.ModelSettings["claude-opus-5"]; m.ReasoningEffort == nil || *m.ReasoningEffort != "high" || m.ThinkingBudget == nil || *m.ThinkingBudget != 0 {
+		t.Fatalf("saved:\n%s", b)
+	}
+}

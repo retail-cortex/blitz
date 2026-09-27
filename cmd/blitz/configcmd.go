@@ -216,7 +216,7 @@ enabled = true
 # qa = "anthropic/claude-haiku-4-5"
 
 # [model_settings."gpt-5"]                         # per-model generation settings (/model_settings)
-# temperature = 0.3                                # also top_p, max_tokens, seed; wins over the global ones
+# temperature = 0.3                                # also top_p, max_tokens, seed, reasoning_effort, thinking_budget; wins over the global ones
 
 # [pricing."gemini-3.8-flash"]
 # input_per_mtok = 0.75

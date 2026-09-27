@@ -45,6 +45,7 @@ The REPL is a thin front end over `app.Backend`: it reads input, dispatches slas
 | `/model_settings [<model> [k=v…\|reset]]` | Show or change one model's settings; `k=` clears; warns about unsupported keys |
 | `/set [agency=<level>]`, `/show` | Show or change settings (including the permission mode) |
 | `/permissions [allow\|ask\|deny\|remove <rule> [--save]]` | List rules (deny, ask, allow, with source) and change them for the session or, with `--save`, in the config file |
+| `/effort [level\|auto]` | Show or set the session reasoning effort (MDL-74); `/set` shows it |
 | `/mode [name]` | Show the permission modes with the current one marked, or switch (`bypass` refused without the OS sandbox) |
 | `/skills list\|show <n>\|search <q>` | Skills and policy verdicts |
 | `/envs [prune\|remove <key>]` | Script environments |

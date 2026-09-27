@@ -103,7 +103,8 @@ Subcommands: `doctor [--online]`, `config init|show|path`, `completion bash|zsh|
 | `/session save <name> [--force]` | Save a snapshot of this session (📸 in `/session list`). Loading it by name starts a new session from that point and leaves the snapshot unchanged, so you can return to it again. `--continue` skips snapshots |
 | `/agents`, `/agent <name>`, `/model <name>` | Personas and models; `/model anthropic/claude-sonnet-5` can switch provider |
 | `/pin_model [<agent> <model>]`, `/unpin <agent>` | Run an agent on its own model (e.g. qa on a cheaper one); saved under `[agent_models]` |
-| `/model_settings [<model> [key=value…\|reset]]` | Show or set one model's temperature, max_tokens, top_p or seed (`key=` clears one); saved under `[model_settings."<model>"]` |
+| `/model_settings [<model> [key=value…\|reset]]` | Show or set one model's temperature, max_tokens, top_p, seed, reasoning_effort or thinking_budget (`key=` clears one); saved under `[model_settings."<model>"]` |
+| `/effort [minimal\|low\|medium\|high\|max\|auto]` | Show or set how hard every model thinks in this session (`auto`: each model's own `reasoning_effort`) |
 | `/sandbox`, `/mcp`, `/tools` | Active policy; MCP servers; the tools the active agent can use |
 | `/btw <question>` | Ask a side question in the middle of a task. The agent answers with everything this session knows, but the question and answer aren't kept: they aren't in the transcript, the saved session, or anything the agent sees later. The turn is read-only, its tokens count in `/cost`, and images queued with `/attach` wait for your next real prompt |
 | `/search web <terms>` | Search the web and hand the top five readable links to the agent, which reads them and answers with citations. Those five URLs need no approval for that turn; other pages still do. The turn can't edit files or run commands |
@@ -325,8 +326,14 @@ temperature = 0.3
 top_p = 0.9
 max_tokens = 4096
 seed = 7
+
+[model_settings."claude-opus-5-5"]
+reasoning_effort = "high"   # minimal, low, medium, high or max
+thinking_budget = 16000     # tokens the model may spend thinking; 0 turns thinking off
 ```
-The key is the model name; a `provider/` prefix is ignored (for OpenRouter names that contain a slash, write the provider first, as in `fallback_models`). Every model uses its own settings: the main model, pinned agents, and each model in `fallback_models`. `/model_settings gpt-5 temperature=0.3` changes them from the next model call and saves them, keeping the file's comments. A setting the provider doesn't accept is left out of the request (and `/model_settings` warns): OpenAI and Ollama have no `seed`; Anthropic takes only `max_tokens`, plus `temperature` on older models.
+The key is the model name; a `provider/` prefix is ignored (for OpenRouter names that contain a slash, write the provider first, as in `fallback_models`). Every model uses its own settings: the main model, pinned agents, and each model in `fallback_models`. `/model_settings gpt-5 temperature=0.3` changes them from the next model call and saves them, keeping the file's comments. A setting the provider doesn't accept is left out of the request (and `/model_settings` warns): OpenAI and Ollama have no `seed`; Anthropic takes only `max_tokens`, plus `temperature` on older models, `reasoning_effort` on models with the effort control (Opus 4.5 and later), and `thinking_budget` on models with extended thinking (a budget raises `max_tokens` above it when needed, is at least 1024, and leaves out `temperature`); Gemini 2.5 takes a `thinking_budget` but no `reasoning_effort`, and when a Gemini 3 model has both the effort wins. Providers with fewer levels round `max` down to `high` and Claude rounds `minimal` up to `low`.
+
+**Reasoning effort for a session:** `/effort high` (or `--effort high`) applies to every model call from then on, over each model's own `reasoning_effort`, and `/effort auto` goes back to them. It isn't saved; `/set` shows it.
 
 **Context & cost** — history is compacted automatically once a prompt reaches `context.token_threshold` tokens, or on demand with `/compact`. Estimated list prices for the default models are built in; override or add them under `[pricing."model-name"]` (`input_per_mtok`, `output_per_mtok`, `cached_input_per_mtok`, `cache_write_per_mtok`). Costs use the model that actually answered, so refusal fallbacks are priced correctly; `doctor` warns when the active model has no price.
 

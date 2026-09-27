@@ -261,6 +261,9 @@ type Settings struct {
 	// PermissionMode decides which actions run without asking (see
 	// tools.PermissionMode).
 	PermissionMode string
+	// Effort is the session's reasoning effort ("" when each model uses its
+	// own reasoning_effort or its default).
+	Effort string
 }
 
 // Settings returns the current settings.
@@ -269,6 +272,7 @@ func (w *Workspace) Settings() Settings {
 		Agency: w.cfg.Blitz.AgencyLevel,
 		Model:  w.Model(), Agent: w.engine.ActiveAgent(), Locale: w.reply.Tag().String(),
 		PermissionMode: string(w.tools.Hooks().Mode()),
+		Effort:         w.engine.Effort(),
 	}
 }
 
@@ -306,6 +310,18 @@ var ErrInvalidAgency = errors.New("agency must be low, medium, high or extreme")
 func (w *Workspace) Set(ctx context.Context, key, value string) (string, error) {
 	key = strings.ToLower(strings.TrimSpace(key))
 	switch key {
+	case "effort", "reasoning_effort":
+		v := strings.ToLower(strings.TrimSpace(value))
+		if v == "" || v == "auto" || v == "default" {
+			w.engine.SetEffort("")
+			return "effort", nil
+		}
+		effort, err := config.ParseEffort(v)
+		if err != nil {
+			return "effort", &InvalidSettingError{err}
+		}
+		w.engine.SetEffort(effort)
+		return "effort", nil
 	case "agency", "agency_level":
 		switch strings.ToLower(value) {
 		case "low", "medium", "high", "extreme":

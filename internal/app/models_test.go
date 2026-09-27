@@ -107,3 +107,18 @@ func TestSetChangesSettings(t *testing.T) {
 		t.Errorf("settings %+v", s)
 	}
 }
+
+func TestSetEffort(t *testing.T) {
+	w := openTest(t)
+	ctx := context.Background()
+	if key, err := w.Set(ctx, "reasoning_effort", "XHigh"); err != nil || key != "effort" || w.Settings().Effort != "max" {
+		t.Fatalf("set: %q %v %q", key, err, w.Settings().Effort)
+	}
+	var invalid *InvalidSettingError
+	if _, err := w.Set(ctx, "effort", "extreme"); !errors.As(err, &invalid) || w.Settings().Effort != "max" {
+		t.Errorf("invalid: %v, effort %q", err, w.Settings().Effort)
+	}
+	if _, err := w.Set(ctx, "effort", "auto"); err != nil || w.Settings().Effort != "" {
+		t.Errorf("auto: %v %q", err, w.Settings().Effort)
+	}
+}

@@ -175,7 +175,9 @@ type WorkspaceServiceClient interface {
 	UpdateModelSettings(context.Context, *connect.Request[v1.UpdateModelSettingsRequest]) (*connect.Response[v1.UpdateModelSettingsResponse], error)
 	// Returns the agency level, plus model, agent and reply language.
 	GetSettings(context.Context, *connect.Request[v1.GetSettingsRequest]) (*connect.Response[v1.GetSettingsResponse], error)
-	// Changes a setting for the workspace (UNKNOWN_SETTING, INVALID_AGENCY).
+	// Changes a setting for the workspace: agency, or effort (a reasoning
+	// effort, or "auto" to clear it) (UNKNOWN_SETTING, INVALID_AGENCY,
+	// INVALID_SETTING).
 	SetSetting(context.Context, *connect.Request[v1.SetSettingRequest]) (*connect.Response[v1.SetSettingResponse], error)
 	// Changes which actions run without asking, for every session of the
 	// workspace (UNKNOWN_MODE; BYPASS_NEEDS_SANDBOX when bypass is asked for
@@ -740,7 +742,9 @@ type WorkspaceServiceHandler interface {
 	UpdateModelSettings(context.Context, *connect.Request[v1.UpdateModelSettingsRequest]) (*connect.Response[v1.UpdateModelSettingsResponse], error)
 	// Returns the agency level, plus model, agent and reply language.
 	GetSettings(context.Context, *connect.Request[v1.GetSettingsRequest]) (*connect.Response[v1.GetSettingsResponse], error)
-	// Changes a setting for the workspace (UNKNOWN_SETTING, INVALID_AGENCY).
+	// Changes a setting for the workspace: agency, or effort (a reasoning
+	// effort, or "auto" to clear it) (UNKNOWN_SETTING, INVALID_AGENCY,
+	// INVALID_SETTING).
 	SetSetting(context.Context, *connect.Request[v1.SetSettingRequest]) (*connect.Response[v1.SetSettingResponse], error)
 	// Changes which actions run without asking, for every session of the
 	// workspace (UNKNOWN_MODE; BYPASS_NEEDS_SANDBOX when bypass is asked for

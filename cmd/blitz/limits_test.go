@@ -34,6 +34,7 @@ func TestLimitFlagsNeedAOneShotPrompt(t *testing.T) {
 		"negative timeout":       {"--timeout", "-1s", "hi"},
 		"bad timeout":            {"--timeout", "soon", "hi"},
 		"unknown mode":           {"--permission-mode", "yolo", "hi"},
+		"unknown effort":         {"--effort", "extreme", "hi"},
 	} {
 		if _, err := runCLI(t, args...); exitCodeFor(err) != exitUsage {
 			t.Errorf("%s: exit code %d (%v), want %d", name, exitCodeFor(err), err, exitUsage)

@@ -11,6 +11,7 @@ import (
 
 	"github.com/anthropics/anthropic-sdk-go"
 	"github.com/anthropics/anthropic-sdk-go/option"
+	"github.com/anthropics/anthropic-sdk-go/packages/param"
 	"github.com/anthropics/anthropic-sdk-go/shared/constant"
 	"github.com/retail-cortex/blitz/internal/config"
 	"google.golang.org/adk/v2/model"
@@ -62,7 +63,7 @@ func (m *anthropicModel) Name() string { return m.name }
 // the Gemini model produces), which is what the engine persists.
 func (m *anthropicModel) GenerateContent(ctx context.Context, req *model.LLMRequest, stream bool) iter.Seq2[*model.LLMResponse, error] {
 	return func(yield func(*model.LLMResponse, error) bool) {
-		params, err := m.buildParams(req)
+		params, err := m.buildParams(req, effortFrom(ctx))
 		if err != nil {
 			yield(nil, err)
 			return
@@ -120,7 +121,39 @@ func supportsFallbacks(model string) bool {
 	return strings.HasPrefix(model, "claude-opus-5") || strings.HasPrefix(model, "claude-fable-5")
 }
 
-func (m *anthropicModel) buildParams(req *model.LLMRequest) (anthropic.BetaMessageNewParams, error) {
+// supportsEffort reports whether a model takes output_config.effort (the
+// Claude 4.5 generation's Opus and later).
+func supportsEffort(model string) bool {
+	for _, p := range []string{"claude-opus-4-5", "claude-opus-4-6", "claude-sonnet-4-6", "claude-opus-4-7", "claude-opus-4-8"} {
+		if strings.HasPrefix(model, p) {
+			return true
+		}
+	}
+	return !supportsSampling(model) && strings.HasPrefix(model, "claude-")
+}
+
+// supportsThinking reports whether a model has extended thinking (Claude
+// 3.7 Sonnet and later).
+func supportsThinking(model string) bool {
+	for _, p := range []string{"claude-3-5", "claude-3-haiku", "claude-3-opus", "claude-3-sonnet"} {
+		if strings.HasPrefix(model, p) {
+			return false
+		}
+	}
+	return strings.HasPrefix(model, "claude-")
+}
+
+// anthropicEfforts maps Blitz's efforts to Claude's (which have no minimal).
+var anthropicEfforts = map[string]anthropic.BetaOutputConfigEffort{
+	"minimal": anthropic.BetaOutputConfigEffortLow, "low": anthropic.BetaOutputConfigEffortLow,
+	"medium": anthropic.BetaOutputConfigEffortMedium, "high": anthropic.BetaOutputConfigEffortHigh,
+	"max": anthropic.BetaOutputConfigEffortMax,
+}
+
+// minThinkingBudget is the smallest budget Claude accepts.
+const minThinkingBudget = 1024
+
+func (m *anthropicModel) buildParams(req *model.LLMRequest, effort string) (anthropic.BetaMessageNewParams, error) {
 	p := anthropic.BetaMessageNewParams{Model: m.name, MaxTokens: anthropicDefaultMaxTokens}
 	if req.Model != "" {
 		p.Model = req.Model
@@ -137,6 +170,24 @@ func (m *anthropicModel) buildParams(req *model.LLMRequest) (anthropic.BetaMessa
 			// The system prompt (plus the tools rendered before it) is large
 			// and stable across turns: cache it.
 			p.System = []anthropic.BetaTextBlockParam{{Text: sys, CacheControl: anthropic.NewBetaCacheControlEphemeralParam()}}
+		}
+		// Reasoning: the effort level, and a thinking budget (which must be
+		// below max_tokens, and rules out temperature).
+		if e, ok := anthropicEfforts[effort]; ok && supportsEffort(string(p.Model)) {
+			p.OutputConfig.Effort = e
+		}
+		if tc := cfg.ThinkingConfig; tc != nil && tc.ThinkingBudget != nil && supportsThinking(string(p.Model)) {
+			switch b := int64(*tc.ThinkingBudget); {
+			case b == 0:
+				p.Thinking = anthropic.BetaThinkingConfigParamUnion{OfDisabled: &anthropic.BetaThinkingConfigDisabledParam{}}
+			case b > 0:
+				b = max(b, minThinkingBudget)
+				p.Thinking = anthropic.BetaThinkingConfigParamUnion{OfEnabled: &anthropic.BetaThinkingConfigEnabledParam{BudgetTokens: b}}
+				if p.MaxTokens <= b {
+					p.MaxTokens = b + anthropicDefaultMaxTokens
+				}
+				p.Temperature = param.Opt[float64]{}
+			}
 		}
 		tools, err := convertTools(cfg.Tools)
 		if err != nil {

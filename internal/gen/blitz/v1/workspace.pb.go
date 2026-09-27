@@ -1523,8 +1523,10 @@ type GetSettingsResponse struct {
 	ImagesEnabled bool `protobuf:"varint,8,opt,name=images_enabled,json=imagesEnabled,proto3" json:"images_enabled,omitempty"`
 	// default, accept-edits, plan, dont-ask or bypass.
 	PermissionMode string `protobuf:"bytes,9,opt,name=permission_mode,json=permissionMode,proto3" json:"permission_mode,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// The session's reasoning effort (minimal … max), empty when unset.
+	Effort        string `protobuf:"bytes,10,opt,name=effort,proto3" json:"effort,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *GetSettingsResponse) Reset() {
@@ -1602,6 +1604,13 @@ func (x *GetSettingsResponse) GetImagesEnabled() bool {
 func (x *GetSettingsResponse) GetPermissionMode() string {
 	if x != nil {
 		return x.PermissionMode
+	}
+	return ""
+}
+
+func (x *GetSettingsResponse) GetEffort() string {
+	if x != nil {
+		return x.Effort
 	}
 	return ""
 }
@@ -5490,7 +5499,7 @@ const file_blitz_v1_workspace_proto_rawDesc = "" +
 	"\vunsupported\x18\x02 \x03(\tR\vunsupported\x12%\n" +
 	"\x05saved\x18\x03 \x01(\v2\x0f.blitz.v1.SavedR\x05saved\"2\n" +
 	"\x12GetSettingsRequest\x12\x1c\n" +
-	"\tworkspace\x18\x01 \x01(\tR\tworkspace\"\x81\x02\n" +
+	"\tworkspace\x18\x01 \x01(\tR\tworkspace\"\x99\x02\n" +
 	"\x13GetSettingsResponse\x12\x16\n" +
 	"\x06agency\x18\x03 \x01(\tR\x06agency\x12\x14\n" +
 	"\x05model\x18\x04 \x01(\tR\x05model\x12\x1a\n" +
@@ -5498,7 +5507,9 @@ const file_blitz_v1_workspace_proto_rawDesc = "" +
 	"\x05agent\x18\x06 \x01(\tR\x05agent\x12\x16\n" +
 	"\x06locale\x18\a \x01(\tR\x06locale\x12%\n" +
 	"\x0eimages_enabled\x18\b \x01(\bR\rimagesEnabled\x12'\n" +
-	"\x0fpermission_mode\x18\t \x01(\tR\x0epermissionModeJ\x04\b\x01\x10\x02J\x04\b\x02\x10\x03R\n" +
+	"\x0fpermission_mode\x18\t \x01(\tR\x0epermissionMode\x12\x16\n" +
+	"\x06effort\x18\n" +
+	" \x01(\tR\x06effortJ\x04\b\x01\x10\x02J\x04\b\x02\x10\x03R\n" +
 	"puppy_nameR\n" +
 	"owner_name\"L\n" +
 	"\x18SetPermissionModeRequest\x12\x1c\n" +

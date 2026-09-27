@@ -140,6 +140,7 @@ type Engine struct {
 	notice     func(string)
 	settingsMu sync.RWMutex
 	settings   map[string]config.ModelSettings // model name -> [model_settings]
+	effort     string                          // session-wide reasoning effort (/effort)
 
 	scoped scopedRules // path-scoped project rules
 
@@ -347,8 +348,9 @@ func settingsName(ref string) string {
 // ModelSettings returns the generation settings for model ("provider/"
 // prefix optional); the zero value when it has none.
 func (e *Engine) ModelSettings(model string) config.ModelSettings {
-	s, _ := e.lookupSettings(settingsName(model))
-	return s
+	e.settingsMu.RLock()
+	defer e.settingsMu.RUnlock()
+	return e.settings[settingsName(model)]
 }
 
 // AllModelSettings returns every model's settings, by model name.
@@ -379,7 +381,26 @@ func (e *Engine) lookupSettings(name string) (config.ModelSettings, bool) {
 	e.settingsMu.RLock()
 	defer e.settingsMu.RUnlock()
 	s, ok := e.settings[name]
+	if e.effort != "" { // the session's effort wins over the model's own
+		effort := e.effort
+		s.ReasoningEffort, ok = &effort, true
+	}
 	return s, ok
+}
+
+// SetEffort sets the reasoning effort for every model call from now on
+// ("" returns each model to its own reasoning_effort, or the default).
+func (e *Engine) SetEffort(effort string) {
+	e.settingsMu.Lock()
+	defer e.settingsMu.Unlock()
+	e.effort = effort
+}
+
+// Effort returns the session's reasoning effort ("" when unset).
+func (e *Engine) Effort() string {
+	e.settingsMu.RLock()
+	defer e.settingsMu.RUnlock()
+	return e.effort
 }
 
 func (e *Engine) generateConfig() *genai.GenerateContentConfig {

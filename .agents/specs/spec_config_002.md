@@ -58,7 +58,7 @@ One TOML file, `.env.toml`, loaded through `github.com/rrmcguinness/modenv` (hie
 | `[[mcp.servers]]` | `name, command, args, env, url, tools, auto_approve, sandbox, prefix, agents, timeout_seconds` | | |
 | `[pricing."<model>"]` | `input_per_mtok, output_per_mtok, cached_input_per_mtok, cache_write_per_mtok` | built-ins below | |
 | `[agent_models]` | `agent = "provider/model"` | | |
-| `[model_settings."<model>"]` | `temperature, max_tokens, top_p, seed` | | |
+| `[model_settings."<model>"]` | `temperature, max_tokens, top_p, seed, reasoning_effort, thinking_budget` | | `reasoning_effort`: `minimal\|low\|medium\|high\|max`; `thinking_budget` ≥ 0 |
 
 Built-in lists:
 - Blocked paths: `.env`, `.env.local`, `.env.*.local`, `.env.toml`, `.env.*.toml`, `*.pem`, `*.key`, `*.p12`, `id_rsa*`, `id_ecdsa*`, `id_ed25519*`, `~/.ssh`, `~/.aws`, `~/.gnupg`, `~/.config/gcloud`, `~/.azure`, `~/.kube`, `~/.docker/config.json`, `~/.netrc`.

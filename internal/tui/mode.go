@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"context"
 	"errors"
 	"fmt"
 
@@ -54,4 +55,25 @@ func modeTag(mode string) string {
 		return ""
 	}
 	return fmt.Sprintf(" %s[%s]%s", modeColor(mode), mode, Reset)
+}
+
+// cmdEffort shows or sets the session's reasoning effort (/effort [level]).
+func cmdEffort(ctx context.Context, args []string, app *App) {
+	if len(args) == 0 {
+		effort := app.Workspace.Settings().Effort
+		if effort == "" {
+			effort = i18n.T("effort.auto")
+		}
+		fmt.Printf("%s\n", i18n.T("effort.current", "effort", effort))
+		return
+	}
+	if _, err := app.Workspace.Set(ctx, "effort", args[0]); err != nil {
+		fmt.Printf("%s%s%s\n", Yellow, i18n.T("effort.usage"), Reset)
+		return
+	}
+	effort := app.Workspace.Settings().Effort
+	if effort == "" {
+		effort = i18n.T("effort.auto")
+	}
+	fmt.Printf("%s%s%s\n", Green, i18n.T("effort.set", "effort", effort), Reset)
 }

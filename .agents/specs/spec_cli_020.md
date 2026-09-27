@@ -46,6 +46,7 @@ Run flags (root and `exec`):
 | `--plan` | One-shot plan-only run (read-only tools) |
 | `--local` | Run in-process even if the service is running |
 | `--allow RULE`, `--deny RULE` | Add permission rules for this run (repeatable; `read(…)` can't be given this way) |
+| `--effort LEVEL` | Session reasoning effort (`minimal`…`max`; otherwise a usage error). Attached, it changes the service workspace's effort |
 | `--permission-mode MODE` | Start in `default`, `accept-edits`, `plan`, `dont-ask` or `bypass` (needs the OS sandbox; otherwise a usage error). Attached, it changes the service workspace's mode |
 | `--image PATH` | Attach an image to the first prompt (repeatable) |
 

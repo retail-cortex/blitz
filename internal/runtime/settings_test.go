@@ -113,6 +113,13 @@ func TestSettingSupported(t *testing.T) {
 		{"anthropic", "claude-haiku-4-5", "top_p", false},
 		{"anthropic", "claude-sonnet-5", "max_tokens", true},
 		{"anthropic", "claude-sonnet-5", "seed", false},
+		{"anthropic", "claude-opus-5-5", "reasoning_effort", true},
+		{"anthropic", "claude-haiku-4-5", "reasoning_effort", false},
+		{"anthropic", "claude-haiku-4-5", "thinking_budget", true},
+		{"anthropic", "claude-3-5-haiku", "thinking_budget", false},
+		{"gemini", "gemini-2.5-pro", "reasoning_effort", false},
+		{"gemini", "models/gemini-3.8-flash", "reasoning_effort", true},
+		{"openai", "gpt-5", "reasoning_effort", true},
 	}
 	for _, c := range cases {
 		if got := SettingSupported(c.provider, c.model, c.key); got != c.want {
@@ -220,5 +227,75 @@ func TestBareModelSettingsKeyWins(t *testing.T) {
 		if s := f.eng.ModelSettings("gpt-5"); s.Seed == nil || *s.Seed != 2 {
 			t.Fatalf("seed %v", s.Seed)
 		}
+	}
+}
+
+// The effort becomes genai's thinking level (max has no genai level, so it
+// is high there), a budget the thinking budget; Gemini can't take both.
+func TestReasoningSettingsBecomeThinkingConfig(t *testing.T) {
+	cases := []struct {
+		provider, model string
+		s               config.ModelSettings
+		want            *genai.ThinkingConfig
+	}{
+		{"gemini", "gemini-3.8-flash", config.ModelSettings{ReasoningEffort: ptr("max")}, &genai.ThinkingConfig{ThinkingLevel: genai.ThinkingLevelHigh}},
+		{"gemini", "gemini-3.8-flash", config.ModelSettings{ReasoningEffort: ptr("low"), ThinkingBudget: ptr(2048)}, &genai.ThinkingConfig{ThinkingLevel: genai.ThinkingLevelLow}},
+		{"gemini", "gemini-2.5-pro", config.ModelSettings{ReasoningEffort: ptr("low"), ThinkingBudget: ptr(2048)}, &genai.ThinkingConfig{ThinkingBudget: genai.Ptr[int32](2048)}},
+		{"openai", "gpt-5", config.ModelSettings{ReasoningEffort: ptr("minimal")}, &genai.ThinkingConfig{ThinkingLevel: genai.ThinkingLevelMinimal}},
+		{"openai", "gpt-5", config.ModelSettings{ThinkingBudget: ptr(0)}, &genai.ThinkingConfig{ThinkingBudget: genai.Ptr[int32](0)}},
+		{"anthropic", "claude-3-5-haiku-latest", config.ModelSettings{ReasoningEffort: ptr("high"), ThinkingBudget: ptr(0)}, nil},
+	}
+	for _, c := range cases {
+		r := &recorder{name: c.model}
+		m := withModelSettings(r, c.provider)
+		ctx := withSettingsLookup(context.Background(), lookupOf(map[string]config.ModelSettings{c.model: c.s}))
+		for range m.GenerateContent(ctx, &model.LLMRequest{Config: &genai.GenerateContentConfig{}}, false) {
+		}
+		got := r.last(t).ThinkingConfig
+		if (got == nil) != (c.want == nil) || got != nil && (got.ThinkingLevel != c.want.ThinkingLevel ||
+			(got.ThinkingBudget == nil) != (c.want.ThinkingBudget == nil) ||
+			got.ThinkingBudget != nil && *got.ThinkingBudget != *c.want.ThinkingBudget) {
+			t.Errorf("%s %s %+v: thinking %+v, want %+v", c.provider, c.model, c.s, got, c.want)
+		}
+	}
+}
+
+// The session's effort (/effort) wins over a model's own, and applies to
+// models with no settings at all.
+func TestSessionEffortOverridesModelSettings(t *testing.T) {
+	rec := &recorder{name: "gemini-3.8-flash"}
+	f := newEngineWith(t, fixtureOpts{cfg: func(c *config.Config) {
+		c.ModelSettings = map[string]config.ModelSettings{"gemini-3.8-flash": {ReasoningEffort: ptr("low"), Temperature: ptr(0.5)}}
+	}})
+	if err := f.eng.SetModel(context.Background(), withModelSettings(rec, "gemini")); err != nil {
+		t.Fatal(err)
+	}
+	level := func() genai.ThinkingLevel {
+		t.Helper()
+		if _, err := collect(t, f.eng, "s", "hi"); err != nil {
+			t.Fatal(err)
+		}
+		if tc := rec.last(t).ThinkingConfig; tc != nil {
+			return tc.ThinkingLevel
+		}
+		return ""
+	}
+	if got := level(); got != genai.ThinkingLevelLow {
+		t.Fatalf("model setting: %q", got)
+	}
+	f.eng.SetEffort("high")
+	if got := level(); got != genai.ThinkingLevelHigh || *rec.last(t).Temperature != 0.5 || f.eng.Effort() != "high" {
+		t.Fatalf("session effort: %q (the model's other settings must stay)", got)
+	}
+	if s := f.eng.ModelSettings("gemini-3.8-flash"); *s.ReasoningEffort != "low" {
+		t.Errorf("the session effort leaked into the saved settings: %v", *s.ReasoningEffort)
+	}
+	f.eng.SetModelSettings("gemini-3.8-flash", config.ModelSettings{})
+	if got := level(); got != genai.ThinkingLevelHigh {
+		t.Fatalf("session effort without model settings: %q", got)
+	}
+	f.eng.SetEffort("")
+	if got := level(); got != "" {
+		t.Fatalf("after clearing: %q", got)
 	}
 }

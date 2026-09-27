@@ -154,7 +154,7 @@ func (h workspaceService) GetSettings(ctx context.Context, r req[pb.GetSettingsR
 	return ok(&pb.GetSettingsResponse{
 		Agency: st.Agency,
 		Model:  st.Model.Name, Provider: st.Model.Provider, Agent: st.Agent, Locale: st.Locale,
-		ImagesEnabled: w.ImagesEnabled(), PermissionMode: st.PermissionMode,
+		ImagesEnabled: w.ImagesEnabled(), PermissionMode: st.PermissionMode, Effort: st.Effort,
 	})
 }
 

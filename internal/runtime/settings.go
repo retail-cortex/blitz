@@ -4,6 +4,7 @@ import (
 	"context"
 	"iter"
 	"log/slog"
+	"strings"
 
 	"github.com/retail-cortex/blitz/internal/config"
 	"google.golang.org/adk/v2/model"
@@ -43,6 +44,11 @@ func (m *settingsModel) GenerateContent(ctx context.Context, req *model.LLMReque
 	if lookup, _ := ctx.Value(modelSettingsKey{}).(settingsLookup); lookup != nil && req != nil {
 		if s, ok := lookup(m.inner.Name()); ok {
 			req = m.apply(ctx, req, s)
+			if s.ReasoningEffort != nil && SettingSupported(m.provider, m.inner.Name(), "reasoning_effort") {
+				// The exact level, for adapters with more levels than genai's
+				// (Anthropic's max).
+				ctx = context.WithValue(ctx, effortKey{}, *s.ReasoningEffort)
+			}
 		}
 	}
 	return m.inner.GenerateContent(ctx, req, stream)
@@ -76,6 +82,26 @@ func (m *settingsModel) apply(ctx context.Context, req *model.LLMRequest, s conf
 	if s.Seed != nil && use("seed") {
 		gc.Seed = genai.Ptr(int32(*s.Seed))
 	}
+	effort := s.ReasoningEffort != nil && use("reasoning_effort")
+	budget := s.ThinkingBudget != nil && use("thinking_budget")
+	if effort && budget && m.provider == "gemini" {
+		// Gemini rejects a level and a budget together; the level wins.
+		budget = false
+		dropped = append(dropped, "thinking_budget")
+	}
+	if effort || budget {
+		tc := genai.ThinkingConfig{}
+		if gc.ThinkingConfig != nil {
+			tc = *gc.ThinkingConfig
+		}
+		if effort {
+			tc.ThinkingLevel = thinkingLevels[*s.ReasoningEffort]
+		}
+		if budget {
+			tc.ThinkingBudget = genai.Ptr(int32(*s.ThinkingBudget))
+		}
+		gc.ThinkingConfig = &tc
+	}
 	if len(dropped) > 0 {
 		slog.DebugContext(ctx, "model settings not supported by this model; not sent", "model", m.inner.Name(), "settings", dropped)
 	}
@@ -83,20 +109,44 @@ func (m *settingsModel) apply(ctx context.Context, req *model.LLMRequest, s conf
 	return &cp
 }
 
+// effortKey carries the exact reasoning effort in a request's context.
+type effortKey struct{}
+
+// effortFrom returns the reasoning effort set for this request ("" if none).
+func effortFrom(ctx context.Context) string {
+	e, _ := ctx.Value(effortKey{}).(string)
+	return e
+}
+
+// thinkingLevels maps Blitz's efforts to genai's levels, which stop at high.
+var thinkingLevels = map[string]genai.ThinkingLevel{
+	"minimal": genai.ThinkingLevelMinimal, "low": genai.ThinkingLevelLow, "medium": genai.ThinkingLevelMedium,
+	"high": genai.ThinkingLevelHigh, "max": genai.ThinkingLevelHigh,
+}
+
 // SettingSupported reports whether a model of provider accepts a
 // [model_settings] key. Unsupported settings are left out of requests.
 func SettingSupported(provider, modelName, key string) bool {
 	switch provider {
 	case "openai", "ollama":
-		return key != "seed" // the Responses API has no seed
+		// The Responses API has no seed; a thinking budget only chooses
+		// between no reasoning (0) and medium.
+		return key != "seed"
 	case "anthropic":
 		switch key {
 		case "max_tokens":
 			return true
 		case "temperature":
 			return supportsSampling(modelName)
+		case "reasoning_effort":
+			return supportsEffort(modelName)
+		case "thinking_budget":
+			return supportsThinking(modelName)
 		}
 		return false // no seed; top_p isn't mapped (some models reject it with temperature)
+	case "gemini":
+		// Thinking levels came with Gemini 3; earlier models take a budget.
+		return key != "reasoning_effort" || !strings.HasPrefix(strings.TrimPrefix(modelName, "models/"), "gemini-2")
 	}
 	return true
 }

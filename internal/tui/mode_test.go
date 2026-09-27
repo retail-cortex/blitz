@@ -26,3 +26,20 @@ func TestModeCommand(t *testing.T) {
 		t.Errorf("mode %q", got)
 	}
 }
+
+func TestEffortCommand(t *testing.T) {
+	in := "/effort\n/effort high\n/effort extreme\n/set\n/effort auto\n/exit\n"
+	app, _ := newCommandApp(t, in)
+	out := captureStdout(t, func() { RunREPL(context.Background(), app) })
+	for _, want := range []string{
+		"Reasoning effort: auto (each model's own)", "Reasoning effort: high",
+		"Usage: /effort minimal|low|medium|high|max|auto", "Effort:",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("missing %q in:\n%s", want, out)
+		}
+	}
+	if got := app.Workspace.Settings().Effort; got != "" {
+		t.Errorf("effort after auto: %q", got)
+	}
+}

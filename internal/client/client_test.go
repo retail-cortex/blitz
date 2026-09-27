@@ -238,6 +238,21 @@ func TestRemotePermissionMode(t *testing.T) {
 	}
 }
 
+// The session effort is set with Set and read back in the settings.
+func TestRemoteEffort(t *testing.T) {
+	r := attach(t, nil)
+	if _, err := r.Set(context.Background(), "effort", "high"); err != nil {
+		t.Fatal(err)
+	}
+	if got := r.Settings().Effort; got != "high" {
+		t.Errorf("settings effort %q", got)
+	}
+	var invalid *app.InvalidSettingError
+	if _, err := r.Set(context.Background(), "effort", "extreme"); !errors.As(err, &invalid) {
+		t.Errorf("invalid effort over the API: %v", err)
+	}
+}
+
 func TestRemotePermissionRules(t *testing.T) {
 	r := attach(t, nil)
 	if res, err := r.AddPermissionRule("ask", "Bash(git push *)", false); err != nil || res.Rule != "shell(git push *)" {

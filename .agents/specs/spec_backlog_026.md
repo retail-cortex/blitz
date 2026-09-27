@@ -19,9 +19,9 @@ Suggested order (from NEXT_STEPS): run the manual checks (§9) first — their f
 
 ### 2.1 Reasoning settings per model — M
 **Extends** [spec_models_015](spec_models_015.md). *Source: NEXT_STEPS 6.* `/model_settings` covers temperature, max_tokens, top_p and seed, but not reasoning effort or thinking budgets.
-- **BL-ENG-01** `[model_settings."<model>"]` accepts `reasoning_effort` (`low|medium|high`) and `thinking_budget` (tokens; `0` disables thinking where the model allows it), validated like the existing keys (CFG-30).
-- **BL-ENG-02** They map to genai `ThinkingConfig` in the settings wrapper and each adapter translates them: Gemini natively; Anthropic to extended thinking with `budget_tokens` (and `max_tokens` raised above the budget when needed); OpenAI to `reasoning.effort`. A setting a model doesn't accept is dropped and reported as unsupported (MDL-72).
-- **BL-ENG-03** Thinking blocks keep round-tripping unchanged across tool calls (MDL-24) with thinking on.
+- **BL-ENG-01** ✅ *Done (ROADMAP 25.8; MDL-73).* `[model_settings."<model>"]` accepts `reasoning_effort` (`low|medium|high`) and `thinking_budget` (tokens; `0` disables thinking where the model allows it), validated like the existing keys (CFG-30).
+- **BL-ENG-02** ✅ *Done (ROADMAP 25.8; MDL-73).* They map to genai `ThinkingConfig` in the settings wrapper and each adapter translates them: Gemini natively; Anthropic to extended thinking with `budget_tokens` (and `max_tokens` raised above the budget when needed); OpenAI to `reasoning.effort`. A setting a model doesn't accept is dropped and reported as unsupported (MDL-72).
+- **BL-ENG-03** ✅ *Done (ROADMAP 25.8; MDL-73).* Thinking blocks keep round-tripping unchanged across tool calls (MDL-24) with thinking on.
 
 ### 2.2 Usage survives the process — S
 **Extends** [spec_engine_016](spec_engine_016.md) ENG-82. Usage lives in memory only, so after `--resume` (or a service restart) `/cost` and `/context` start at zero and a worker run's cost is known only while the service runs.

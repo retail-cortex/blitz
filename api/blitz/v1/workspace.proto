@@ -41,7 +41,9 @@ service WorkspaceService {
   rpc UpdateModelSettings(UpdateModelSettingsRequest) returns (UpdateModelSettingsResponse);
   // Returns the agency level, plus model, agent and reply language.
   rpc GetSettings(GetSettingsRequest) returns (GetSettingsResponse);
-  // Changes a setting for the workspace (UNKNOWN_SETTING, INVALID_AGENCY).
+  // Changes a setting for the workspace: agency, or effort (a reasoning
+  // effort, or "auto" to clear it) (UNKNOWN_SETTING, INVALID_AGENCY,
+  // INVALID_SETTING).
   rpc SetSetting(SetSettingRequest) returns (SetSettingResponse);
   // Changes which actions run without asking, for every session of the
   // workspace (UNKNOWN_MODE; BYPASS_NEEDS_SANDBOX when bypass is asked for
@@ -285,6 +287,8 @@ message GetSettingsResponse {
   bool images_enabled = 8;
   // default, accept-edits, plan, dont-ask or bypass.
   string permission_mode = 9;
+  // The session's reasoning effort (minimal … max), empty when unset.
+  string effort = 10;
 }
 
 message SetPermissionModeRequest {

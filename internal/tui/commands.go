@@ -93,7 +93,12 @@ func HandleCommand(ctx context.Context, input string, app *App) (bool, error) {
 			fmt.Printf("  %-14s %s\n", i18n.T("settings.model")+":", i18n.T("settings.model_value", "model", st.Model.Name, "provider", st.Model.Provider))
 			fmt.Printf("  %-14s %s\n", i18n.T("settings.agent")+":", st.Agent)
 			fmt.Printf("  %-14s %s\n", i18n.T("settings.locale")+":", st.Locale)
-			fmt.Printf("  %-14s %s\n\n", i18n.T("settings.mode")+":", st.PermissionMode)
+			fmt.Printf("  %-14s %s\n", i18n.T("settings.mode")+":", st.PermissionMode)
+			effort := st.Effort
+			if effort == "" {
+				effort = i18n.T("effort.auto")
+			}
+			fmt.Printf("  %-14s %s\n\n", i18n.T("settings.effort")+":", effort)
 			return true, nil
 		}
 		kv := strings.SplitN(strings.Join(args, " "), "=", 2)
@@ -117,6 +122,9 @@ func HandleCommand(ctx context.Context, input string, app *App) (bool, error) {
 
 	case "mode":
 		cmdMode(args, app)
+
+	case "effort":
+		cmdEffort(ctx, args, app)
 
 	case "permissions", "perms":
 		cmdPermissions(args, app)
@@ -171,6 +179,7 @@ func printHelp(app *App) {
 		{"/tools", "help.tools"},
 		{"/plan <goal>", "help.plan"},
 		{"/mode [default|accept-edits|plan|dont-ask|bypass]", "help.mode"},
+		{"/effort [minimal|low|medium|high|max|auto]", "help.effort"},
 		{"/search web|session <terms>", "help.search"},
 		{"/btw <question>", "help.btw"},
 		{"/rename <name>", "help.rename"},

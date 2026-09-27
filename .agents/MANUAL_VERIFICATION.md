@@ -388,3 +388,5 @@ Set `fallback_models = ["anthropic/claude-sonnet-5"]` with a working Anthropic k
 - [ ] 💲 `[[hooks.stop]] command = "grep -q stop_hook_active || echo '{\"continue\": true, \"reason\": \"Now run the tests.\"}'"`: after a turn the agent runs the tests once, and the transcript shows `(stop hook) Now run the tests.`.
 - [ ] `[[hooks.session_start]] command = "echo 'Use tabs.'"` and 💲 ask for a small edit: the agent follows it. `[[hooks.notification]] command = "osascript -e 'display notification \"Blitz needs you\"'"`: a notification appears when an approval waits.
 - [ ] `[[hooks.permission_request]] match = "run_shell_command" command = "grep -q '\"go test' && echo '{\"decision\":\"allow\"}'"`: 💲 `go test` runs without asking; other commands still ask.
+- [ ] 💲 `/effort max` with `claude-opus-5-5`, then a hard question: the answer arrives (no 400) and `/set` shows `Effort: max`; `/effort auto` clears it. `--effort low` on a one-shot with `gpt-5` works too.
+- [ ] 💲 `/model_settings claude-haiku-4-5 thinking_budget=4000` with `temperature` set globally: the call succeeds (temperature left out) and shows thinking in the transcript.

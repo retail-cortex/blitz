@@ -41,6 +41,7 @@ type rootOptions struct {
 	images       []string
 	local        bool
 	mode         string // --permission-mode
+	effort       string // --effort
 	allowRules   []string
 	denyRules    []string
 	// requirePrompt: a run without a prompt is a usage error (exec),
@@ -120,6 +121,7 @@ func addRunFlags(f *pflag.FlagSet, o *rootOptions) {
 	f.BoolVar(&o.local, "local", false, "Run the workspace in this process even when the Blitz service is running")
 	f.StringArrayVar(&o.allowRules, "allow", nil, `Allow an action without asking, for this run: a rule such as "shell(go test *)" or "write(docs/**)" (repeatable)`)
 	f.StringArrayVar(&o.denyRules, "deny", nil, `Refuse an action, for this run: a rule such as "shell(git push *)" or "web(*.internal)" (repeatable)`)
+	f.StringVar(&o.effort, "effort", "", "Reasoning effort for this run: minimal, low, medium, high, or max (where the model supports it)")
 	f.StringVar(&o.mode, "permission-mode", "", "Start in a permission mode: default, accept-edits, plan, dont-ask, or bypass (needs the OS sandbox)")
 	f.StringArrayVar(&o.images, "image", nil, "Attach an image to the first prompt (repeatable); @file.png in a prompt also works")
 }
@@ -174,6 +176,11 @@ func runRoot(cmd *cobra.Command, o *rootOptions, args []string) (err error) {
 	}
 	if _, err := tools.ParsePermissionMode(o.mode); err != nil {
 		return withCode(exitUsage, fmt.Errorf("--permission-mode: %w", err))
+	}
+	if o.effort != "" {
+		if _, err := config.ParseEffort(o.effort); err != nil {
+			return withCode(exitUsage, fmt.Errorf("--effort: %w", err))
+		}
 	}
 	if o.maxCostUSD < 0 || o.timeout < 0 {
 		return withCode(exitUsage, errors.New("--max-cost-usd and --timeout must be >= 0"))
@@ -241,6 +248,11 @@ func runRoot(cmd *cobra.Command, o *rootOptions, args []string) (err error) {
 	if o.mode != "" {
 		if _, err := w.SetPermissionMode(o.mode); err != nil {
 			return withCode(exitUsage, fmt.Errorf("--permission-mode: %w", err))
+		}
+	}
+	if o.effort != "" {
+		if _, err := w.Set(ctx, "effort", o.effort); err != nil {
+			return withCode(exitUsage, fmt.Errorf("--effort: %w", err))
 		}
 	}
 	for effect, rules := range map[string][]string{"allow": o.allowRules, "deny": o.denyRules} {
@@ -385,7 +397,7 @@ func newCompleter(w app.Backend) *tui.Completer {
 	c := tui.NewCompleter(w.Dir())
 	for _, cmd := range []string{"help", "agents", "model", "skills", "session", "set", "clear", "sandbox", "exit", "quit",
 		"undo", "checkpoints", "diff", "cost", "context", "compact", "memory", "approvals", "mcp", "resume", "locale", "attach", "paste",
-		"tools", "plan", "show", "init", "mode", "permissions", "pin_model", "unpin", "model_settings", "search", "btw", "rename", "envs"} {
+		"tools", "plan", "show", "init", "mode", "permissions", "effort", "pin_model", "unpin", "model_settings", "search", "btw", "rename", "envs"} {
 		c.Command(cmd)
 	}
 	c.Command("skills", "list", "show", "search")
@@ -401,6 +413,7 @@ func newCompleter(w app.Backend) *tui.Completer {
 	c.Command("set", "agency=")
 	c.Command("mode", "default", "accept-edits", "plan", "dont-ask", "bypass")
 	c.Command("permissions", "allow", "ask", "deny", "remove")
+	c.Command("effort", "minimal", "low", "medium", "high", "max", "auto")
 	for _, cmd := range w.ListCommands() { // custom commands, as they are at startup
 		c.Command(cmd.Name)
 	}

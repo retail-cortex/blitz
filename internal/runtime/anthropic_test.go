@@ -411,3 +411,64 @@ func TestAnthropicEngineToolLoop(t *testing.T) {
 		t.Errorf("usage not recorded/priced: %+v", u)
 	}
 }
+
+// Effort goes to output_config.effort on models that take it; a thinking
+// budget turns thinking on (at least 1024, below max_tokens, without a
+// temperature) or, at 0, off.
+func TestAnthropicReasoning(t *testing.T) {
+	temp := float32(0.2)
+	req := func(name string, budget *int32) *model.LLMRequest {
+		cfg := &genai.GenerateContentConfig{Temperature: &temp, MaxOutputTokens: 4096}
+		if budget != nil {
+			cfg.ThinkingConfig = &genai.ThinkingConfig{ThinkingBudget: budget}
+		}
+		return &model.LLMRequest{Model: name, Contents: []*genai.Content{userText("hi")}, Config: cfg}
+	}
+	cases := []struct {
+		model    string
+		effort   string
+		budget   *int32
+		effortIs any
+		thinking string
+		maxTok   float64
+		temp     bool
+	}{
+		{"claude-opus-5-5", "max", nil, "max", "", 4096, false},
+		{"claude-opus-5-5", "minimal", genai.Ptr[int32](0), "low", `{"type":"disabled"}`, 4096, false},
+		{"claude-haiku-4-5", "high", genai.Ptr[int32](100), nil, `{"budget_tokens":1024,"type":"enabled"}`, 4096, false},
+		{"claude-haiku-4-5", "", genai.Ptr[int32](8000), nil, `{"budget_tokens":8000,"type":"enabled"}`, 8000 + anthropicDefaultMaxTokens, false},
+		{"claude-haiku-4-5", "", nil, nil, "", 4096, true},
+		{"claude-3-5-haiku-latest", "high", genai.Ptr[int32](2048), nil, "", 4096, true},
+	}
+	var replies []func(http.ResponseWriter)
+	for range cases {
+		replies = append(replies, jsonReply(message("end_turn", `{"type":"text","text":"a"}`)))
+	}
+	f, opts := newFake(t, replies...)
+	m := newAnthropicModel(config.AnthropicConfig{Fallbacks: "off"}, "claude-opus-5-5", opts...)
+	for i, c := range cases {
+		ctx := context.Background()
+		if c.effort != "" {
+			ctx = context.WithValue(ctx, effortKey{}, c.effort)
+		}
+		for _, err := range m.GenerateContent(ctx, req(c.model, c.budget), false) {
+			if err != nil {
+				t.Fatal(err)
+			}
+		}
+		r := f.requests[i]
+		var effort any
+		if oc, ok := r["output_config"].(map[string]any); ok {
+			effort = oc["effort"]
+		}
+		thinking := ""
+		if th, ok := r["thinking"]; ok {
+			b, _ := json.Marshal(th)
+			thinking = string(b)
+		}
+		_, hasTemp := r["temperature"]
+		if effort != c.effortIs || thinking != c.thinking || r["max_tokens"] != c.maxTok || hasTemp != c.temp {
+			t.Errorf("%s effort=%q budget=%v: effort %v thinking %s max_tokens %v temperature %v", c.model, c.effort, c.budget, effort, thinking, r["max_tokens"], hasTemp)
+		}
+	}
+}
