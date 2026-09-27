@@ -52,8 +52,8 @@ The owner's review (2026-09-27) found the project not ready to release: the old 
   - `development/` — building from source, the monorepo and its rules (from `AGENTS.md`), testing, manual verification, releasing, contributing;
   - `specs/` — the specs, their index, and a page per spec;
   - `project/` — roadmap, next steps, history.
-- **RR-32** Root keeps only what tools and packages need there: `README.md` (short), `LICENSE`, `NOTICE`, `OWNERS.txt`, and `AGENTS.md` as a pointer for coding agents if the owner agrees (§8). `CONTRIBUTING.md` lives at `docs/CONTRIBUTING.md` (GitHub finds it there) and the site mounts it. `.agents/` is emptied into the site.
-- **RR-33** Published to GitHub Pages by a workflow on pushes to `main` that change `docs/`: `bazel build //docs:site`, then `actions/upload-pages-artifact` and `actions/deploy-pages`. Pages for a private repository needs a paid plan, or the repository public (§8).
+- **RR-32** Root keeps only what tools and packages need there: `README.md` (short), `LICENSE`, `NOTICE`, `OWNERS.txt`, and `AGENTS.md` as a short pointer for coding agents (§8). `CONTRIBUTING.md` lives at `docs/CONTRIBUTING.md` (GitHub finds it there) and the site mounts it. `.agents/` is emptied into the site.
+- **RR-33** Built on pushes to `main` that change `docs/` (`bazel build //docs:site`, the link check, the site kept as a workflow artifact); a deploy job (`actions/upload-pages-artifact`, `actions/deploy-pages`) is written but off until Pages is available (§8).
 
 ## 7. README, contributing, owners
 
@@ -61,13 +61,13 @@ The owner's review (2026-09-27) found the project not ready to release: the old 
 - **RR-41** `docs/CONTRIBUTING.md`: how to set up, the Bazel-only rule (tidy, formatting, packages through Bazel), the checks CI runs and how to run them first, commit messages, specs first for features, translations, headers and comments, and the review process.
 - **RR-42** `OWNERS.txt`: the maintainers (name and GitHub handle, no e-mail) and what each owns; `.github/CODEOWNERS` generated from it so reviews are requested automatically.
 
-## 8. Decisions for the owner
+## 8. Decisions (the owner, 2026-09-27)
 
-1. **Upstream attribution in `NOTICE`**: keep the MIT notice for Code Puppy (recommended: required for a port), or remove it.
-2. **GitHub Pages** while the repository is private: make it public, upgrade the plan, or build the site in CI without publishing for now.
-3. **Header style**: the full Apache boilerplate (recommended; what the license's appendix asks for), or the short SPDX form.
-4. **`AGENTS.md`**: a short pointer at the root for coding agents with the content in the site (recommended), or all of it in `docs/`.
-5. **Owners**: who else, besides Ryan McGuinness (@rmcguinness), and what each owns.
+1. **Upstream attribution**: kept — `NOTICE` names Blitz, then carries Code Puppy's MIT notice.
+2. **GitHub Pages**: build only for now — CI builds and tests the site and keeps it as an artifact; the deploy job is written but switched off until the repository is public or the plan allows Pages.
+3. **Headers**: the full Apache boilerplate.
+4. **`AGENTS.md`**: a short pointer at the root; the content lives in the site.
+5. **Owners**: Ryan McGuinness (@rmcguinness) until others are named.
 
 ## 9. Order and size
 
