@@ -12,6 +12,7 @@ import (
 	"sync"
 
 	"github.com/retail-cortex/blitz/pkg/api"
+	"github.com/retail-cortex/blitz/pkg/socket"
 
 	"connectrpc.com/connect"
 	"github.com/retail-cortex/blitz/internal/config"
@@ -19,7 +20,6 @@ import (
 	"github.com/retail-cortex/blitz/internal/gen/blitz/v1/blitzv1connect"
 	"github.com/retail-cortex/blitz/internal/i18n"
 	"github.com/retail-cortex/blitz/internal/images"
-	"github.com/retail-cortex/blitz/internal/server"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
@@ -40,9 +40,9 @@ type Remote struct {
 
 var _ api.Backend = (*Remote)(nil)
 
-// Attach opens dir (made absolute) in the service listening on socket.
-func Attach(ctx context.Context, socket, dir string, warn func(string)) (*Remote, error) {
-	return AttachHTTP(ctx, server.Client(socket), server.BaseURL, dir, warn)
+// Attach opens dir (made absolute) in the service listening on sock.
+func Attach(ctx context.Context, sock, dir string, warn func(string)) (*Remote, error) {
+	return AttachHTTP(ctx, socket.Client(sock), socket.BaseURL, dir, warn)
 }
 
 // AttachHTTP is Attach over any HTTP client, e.g. in tests.

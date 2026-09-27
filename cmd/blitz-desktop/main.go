@@ -7,7 +7,7 @@ import (
 	"log"
 
 	"github.com/retail-cortex/blitz/internal/config"
-	"github.com/retail-cortex/blitz/internal/server"
+	"github.com/retail-cortex/blitz/pkg/socket"
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
@@ -20,7 +20,7 @@ import (
 var dist embed.FS
 
 func main() {
-	app := &App{socket: server.DefaultSocket(), prefs: &prefsStore{path: config.ExpandHome("~/.blitz/desktop.json")}}
+	app := &App{socket: socket.DefaultSocket(), prefs: &prefsStore{path: config.ExpandHome("~/.blitz/desktop.json")}}
 	err := wails.Run(&options.App{
 		Title:     "Blitz",
 		Width:     1280,

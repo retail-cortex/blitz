@@ -11,7 +11,7 @@ import (
 	"connectrpc.com/connect"
 	pb "github.com/retail-cortex/blitz/internal/gen/blitz/v1"
 	"github.com/retail-cortex/blitz/internal/gen/blitz/v1/blitzv1connect"
-	"github.com/retail-cortex/blitz/internal/server"
+	"github.com/retail-cortex/blitz/pkg/socket"
 )
 
 // The serve command answers over its socket, opens workspaces on demand,
@@ -25,14 +25,14 @@ func TestServeCommand(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { os.RemoveAll(dir) })
-	socket := filepath.Join(dir, "s.sock")
-	t.Setenv("BLITZ_SOCKET", socket) // where the CLI looks for the service
+	sock := filepath.Join(dir, "s.sock")
+	t.Setenv("BLITZ_SOCKET", sock) // where the CLI looks for the service
 
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
-	go func() { done <- runServe(ctx, &globalFlags{}, socket) }()
+	go func() { done <- runServe(ctx, &globalFlags{}, sock) }()
 	deadline := time.Now().Add(10 * time.Second)
-	for !server.Running(socket) {
+	for !socket.Running(sock) {
 		if time.Now().After(deadline) {
 			t.Fatal("service didn't start")
 		}
@@ -40,13 +40,13 @@ func TestServeCommand(t *testing.T) {
 	}
 
 	ws := t.TempDir()
-	c := blitzv1connect.NewWorkspaceServiceClient(server.Client(socket), server.BaseURL)
+	c := blitzv1connect.NewWorkspaceServiceClient(socket.Client(sock), socket.BaseURL)
 	agents, err := c.ListAgents(context.Background(), connect.NewRequest(&pb.ListAgentsRequest{Workspace: ws}))
 	if err != nil || len(agents.Msg.Agents) == 0 {
 		t.Fatalf("list agents: %v %v", agents, err)
 	}
 	// A second service on the same socket is refused.
-	if err := runServe(context.Background(), &globalFlags{}, socket); exitCodeFor(err) != exitUsage {
+	if err := runServe(context.Background(), &globalFlags{}, sock); exitCodeFor(err) != exitUsage {
 		t.Errorf("second service: %v", err)
 	}
 	// The CLI attaches to the service's workspace: here it fails on the
@@ -69,7 +69,7 @@ func TestServeCommand(t *testing.T) {
 	case <-time.After(15 * time.Second):
 		t.Fatal("serve didn't stop")
 	}
-	if _, err := os.Stat(socket); !os.IsNotExist(err) {
+	if _, err := os.Stat(sock); !os.IsNotExist(err) {
 		t.Error("socket left behind")
 	}
 }

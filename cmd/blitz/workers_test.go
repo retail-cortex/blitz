@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/retail-cortex/blitz/internal/server"
+	"github.com/retail-cortex/blitz/pkg/socket"
 )
 
 func addWorker(t *testing.T, ws, name, content string) {
@@ -80,13 +80,13 @@ func TestWorkersCommandsThroughTheService(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { os.RemoveAll(dir) })
-	socket := filepath.Join(dir, "s.sock")
-	t.Setenv("BLITZ_SOCKET", socket)
+	sock := filepath.Join(dir, "s.sock")
+	t.Setenv("BLITZ_SOCKET", sock)
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
-	go func() { done <- runServe(ctx, &globalFlags{}, socket) }()
+	go func() { done <- runServe(ctx, &globalFlags{}, sock) }()
 	defer func() { cancel(); <-done }()
-	for deadline := time.Now().Add(10 * time.Second); !server.Running(socket); time.Sleep(20 * time.Millisecond) {
+	for deadline := time.Now().Add(10 * time.Second); !socket.Running(sock); time.Sleep(20 * time.Millisecond) {
 		if time.Now().After(deadline) {
 			t.Fatal("service didn't start")
 		}

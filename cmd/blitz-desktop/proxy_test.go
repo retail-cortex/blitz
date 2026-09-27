@@ -16,6 +16,7 @@ import (
 	"github.com/retail-cortex/blitz/internal/gen/blitz/v1/blitzv1connect"
 	"github.com/retail-cortex/blitz/internal/runtime"
 	"github.com/retail-cortex/blitz/internal/server"
+	"github.com/retail-cortex/blitz/pkg/socket"
 	"google.golang.org/genai"
 )
 
@@ -29,7 +30,7 @@ func TestProxyReachesTheService(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { os.RemoveAll(dir) })
-	socket := filepath.Join(dir, "s.sock")
+	path := filepath.Join(dir, "s.sock")
 
 	create := &genai.Content{Role: genai.RoleModel, Parts: []*genai.Part{{FunctionCall: &genai.FunctionCall{Name: "create_file", Args: map[string]any{"path": "a.txt", "content": "x"}}}}}
 	s := server.New(func(ctx context.Context, d string) (*app.Workspace, error) {
@@ -38,7 +39,7 @@ func TestProxyReachesTheService(t *testing.T) {
 		cfg.Session.StorageDir = t.TempDir()
 		return app.Open(ctx, cfg, app.Options{Model: runtime.NewMockLLM("m", create, genai.NewContentFromText("done", genai.RoleModel))})
 	})
-	l, err := server.Listen(socket)
+	l, err := socket.Listen(path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -46,7 +47,7 @@ func TestProxyReachesTheService(t *testing.T) {
 	go server.Serve(ctx, l, s.Handler(), time.Second)
 	t.Cleanup(func() { cancel(); s.Close() })
 
-	page := httptest.NewServer(serviceProxy(socket))
+	page := httptest.NewServer(serviceProxy(path))
 	defer page.Close()
 	sessions := blitzv1connect.NewSessionServiceClient(http.DefaultClient, page.URL)
 	ws := t.TempDir()

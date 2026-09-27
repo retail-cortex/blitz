@@ -8,6 +8,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/retail-cortex/blitz/pkg/socket"
+
 	"connectrpc.com/connect"
 	pb "github.com/retail-cortex/blitz/internal/gen/blitz/v1"
 	"github.com/retail-cortex/blitz/internal/gen/blitz/v1/blitzv1connect"
@@ -27,7 +29,7 @@ func socketDir(t *testing.T) string {
 
 func TestListenIsPrivateAndSingle(t *testing.T) {
 	path := filepath.Join(socketDir(t), "run", "s.sock")
-	l, err := Listen(path)
+	l, err := socket.Listen(path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -37,14 +39,14 @@ func TestListenIsPrivateAndSingle(t *testing.T) {
 	if fi, _ := os.Stat(filepath.Dir(path)); fi.Mode().Perm() != 0o700 {
 		t.Errorf("directory mode %v", fi.Mode().Perm())
 	}
-	if _, err := Listen(path); !errors.Is(err, ErrRunning) {
+	if _, err := socket.Listen(path); !errors.Is(err, socket.ErrRunning) {
 		t.Errorf("second service: %v", err)
 	}
 	l.Close()
 
 	// A socket left behind by a service that died is replaced.
 	os.WriteFile(path, nil, 0o600)
-	l, err = Listen(path)
+	l, err = socket.Listen(path)
 	if err != nil {
 		t.Fatalf("stale socket: %v", err)
 	}
@@ -54,7 +56,7 @@ func TestListenIsPrivateAndSingle(t *testing.T) {
 func TestServeOverTheSocket(t *testing.T) {
 	_, s := serve(t, nil)
 	path := filepath.Join(socketDir(t), "s.sock")
-	l, err := Listen(path)
+	l, err := socket.Listen(path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -62,7 +64,7 @@ func TestServeOverTheSocket(t *testing.T) {
 	done := make(chan error, 1)
 	go func() { done <- Serve(ctx, l, s.Handler(), time.Second) }()
 
-	c := blitzv1connect.NewWorkspaceServiceClient(Client(path), BaseURL)
+	c := blitzv1connect.NewWorkspaceServiceClient(socket.Client(path), socket.BaseURL)
 	res, err := c.GetModel(context.Background(), connect.NewRequest(&pb.GetModelRequest{Workspace: t.TempDir()}))
 	if err != nil || res.Msg.Name == "" {
 		t.Fatalf("over the socket: %v %v", res, err)

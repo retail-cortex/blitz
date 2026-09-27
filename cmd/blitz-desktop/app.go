@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/retail-cortex/blitz/internal/config"
-	"github.com/retail-cortex/blitz/internal/server"
+	"github.com/retail-cortex/blitz/pkg/socket"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
@@ -80,7 +80,7 @@ type ServiceStatus struct {
 
 func (a *App) ServiceStatus() ServiceStatus {
 	cli, _ := findCLI()
-	return ServiceStatus{Running: server.Running(a.socket), Installed: loginItemInstalled(), Socket: a.socket, CLI: cli}
+	return ServiceStatus{Running: socket.Running(a.socket), Installed: loginItemInstalled(), Socket: a.socket, CLI: cli}
 }
 
 // InstallService runs `blitz service install`, which starts the

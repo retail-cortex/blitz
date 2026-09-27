@@ -6,7 +6,7 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/retail-cortex/blitz/internal/server"
+	"github.com/retail-cortex/blitz/pkg/socket"
 )
 
 // apiPrefix is where the service's API lives; the page's requests there go
@@ -17,14 +17,14 @@ const apiPrefix = "/blitz.v1."
 // socket (a web view can't open one itself), streaming responses as they
 // come. Anything else is not found: the page's own files are served by
 // Wails.
-func serviceProxy(socket string) http.Handler {
-	target, _ := url.Parse(server.BaseURL)
+func serviceProxy(path string) http.Handler {
+	target, _ := url.Parse(socket.BaseURL)
 	proxy := &httputil.ReverseProxy{
 		Rewrite: func(r *httputil.ProxyRequest) {
 			r.SetURL(target)
 			r.Out.Host = target.Host
 		},
-		Transport:     server.Client(socket).Transport,
+		Transport:     socket.Client(path).Transport,
 		FlushInterval: -1, // turns stream their events
 		ErrorHandler: func(w http.ResponseWriter, _ *http.Request, err error) {
 			// Connect's JSON error shape, so the page's client reads it.

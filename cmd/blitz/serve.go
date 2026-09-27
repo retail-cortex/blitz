@@ -14,6 +14,7 @@ import (
 	"github.com/retail-cortex/blitz/internal/config"
 	"github.com/retail-cortex/blitz/internal/server"
 	"github.com/retail-cortex/blitz/internal/workers"
+	"github.com/retail-cortex/blitz/pkg/socket"
 	"github.com/spf13/cobra"
 )
 
@@ -21,7 +22,7 @@ import (
 const serveGrace = 10 * time.Second
 
 func newServeCommand(g *globalFlags) *cobra.Command {
-	var socket string
+	var sock string
 	cmd := &cobra.Command{
 		Use:   "serve",
 		Short: "Run the Blitz service: every workspace, over a Unix socket",
@@ -31,17 +32,17 @@ opens a workspace when a client first names it; a workspace open here can't
 also be opened by a separate CLI.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			if socket == "" {
-				socket = server.DefaultSocket()
+			if sock == "" {
+				sock = socket.DefaultSocket()
 			}
-			return runServe(cmd.Context(), g, socket)
+			return runServe(cmd.Context(), g, sock)
 		},
 	}
-	cmd.Flags().StringVar(&socket, "socket", "", "Unix socket to listen on (default ~/.blitz/run/blitz.sock)")
+	cmd.Flags().StringVar(&sock, "socket", "", "Unix socket to listen on (default ~/.blitz/run/blitz.sock)")
 	return cmd
 }
 
-func runServe(ctx context.Context, g *globalFlags, socket string) error {
+func runServe(ctx context.Context, g *globalFlags, sock string) error {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -90,18 +91,18 @@ func runServe(ctx context.Context, g *globalFlags, socket string) error {
 	}, server.WithScheduler(server.SchedulerConfig{Store: store, Runs: runs, MaxConcurrent: cfg.Workers.Policy.MaxConcurrent}))
 	defer s.Close()
 
-	l, err := server.Listen(socket)
+	l, err := socket.Listen(sock)
 	if err != nil {
-		if errors.Is(err, server.ErrRunning) {
+		if errors.Is(err, socket.ErrRunning) {
 			return withCode(exitUsage, err)
 		}
 		return err
 	}
-	defer os.Remove(socket)
+	defer os.Remove(sock)
 	if cfg.Workers.Enabled {
 		s.StartScheduler(ctx)
 	}
-	fmt.Fprintf(os.Stderr, "Blitz service listening on %s\n", socket)
-	slog.Info("serve", "socket", socket)
+	fmt.Fprintf(os.Stderr, "Blitz service listening on %s\n", sock)
+	slog.Info("serve", "socket", sock)
 	return server.Serve(ctx, l, s.Handler(), serveGrace)
 }

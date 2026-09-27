@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/retail-cortex/blitz/pkg/socket"
+
 	"github.com/retail-cortex/blitz/pkg/api"
 
 	"github.com/retail-cortex/blitz/internal/app"
@@ -16,7 +18,6 @@ import (
 	"github.com/retail-cortex/blitz/internal/config"
 	"github.com/retail-cortex/blitz/internal/i18n"
 	"github.com/retail-cortex/blitz/internal/observability"
-	"github.com/retail-cortex/blitz/internal/server"
 )
 
 // globalFlags are shared by the root command and subcommands.
@@ -94,11 +95,11 @@ func startObservability(ctx context.Context, cfg *config.Config, warn func(strin
 // also returns the interface's translation catalogs, which are always this
 // process's, and whether it attached.
 func openBackend(ctx context.Context, cfg *config.Config, local, streaming bool, warn func(string)) (api.Backend, *i18n.Bundle, bool, error) {
-	socket := server.DefaultSocket()
-	if !local && server.Running(socket) {
-		r, err := client.Attach(ctx, socket, cfg.Tools.WorkspaceDir, warn)
+	sock := socket.DefaultSocket()
+	if !local && socket.Running(sock) {
+		r, err := client.Attach(ctx, sock, cfg.Tools.WorkspaceDir, warn)
 		if err != nil {
-			return nil, nil, false, fmt.Errorf("attaching to the Blitz service at %s: %w (--local runs without it)", socket, err)
+			return nil, nil, false, fmt.Errorf("attaching to the Blitz service at %s: %w (--local runs without it)", sock, err)
 		}
 		return r, app.SetupLocale(cfg, warn), true, nil
 	}

@@ -12,8 +12,9 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/retail-cortex/blitz/pkg/socket"
+
 	"github.com/retail-cortex/blitz/internal/config"
-	"github.com/retail-cortex/blitz/internal/server"
 	"github.com/spf13/cobra"
 )
 
@@ -192,8 +193,8 @@ func serviceStatus(out io.Writer) error {
 		installed = "installed (" + path + ")"
 	}
 	running := "not running"
-	if socket := server.DefaultSocket(); server.Running(socket) {
-		running = "answering on " + socket
+	if sock := socket.DefaultSocket(); socket.Running(sock) {
+		running = "answering on " + sock
 	}
 	fmt.Fprintf(out, "login item: %s\nservice:    %s\n", installed, running)
 	return nil

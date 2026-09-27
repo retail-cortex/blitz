@@ -10,12 +10,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/retail-cortex/blitz/pkg/socket"
+
 	"github.com/retail-cortex/blitz/pkg/api"
 
 	"github.com/retail-cortex/blitz/internal/app"
 	"github.com/retail-cortex/blitz/internal/client"
 	"github.com/retail-cortex/blitz/internal/config"
-	"github.com/retail-cortex/blitz/internal/server"
 	"github.com/retail-cortex/blitz/internal/tui"
 	"github.com/spf13/cobra"
 )
@@ -44,12 +45,12 @@ func openWorkers(ctx context.Context, g *globalFlags) (ops workerOps, close func
 	if err != nil {
 		return nil, nil, err
 	}
-	if socket := server.DefaultSocket(); server.Running(socket) {
+	if sock := socket.DefaultSocket(); socket.Running(sock) {
 		dir, err := filepath.Abs(config.ExpandHome(cfg.Tools.WorkspaceDir))
 		if err != nil {
 			return nil, nil, err
 		}
-		return client.AttachWorkers(socket, dir), func() {}, nil
+		return client.AttachWorkers(sock, dir), func() {}, nil
 	}
 	w, err := app.Open(ctx, cfg, app.Options{})
 	if err != nil {
@@ -202,7 +203,7 @@ func workersEnable(cmd *cobra.Command, g *globalFlags, name string, yes bool) er
 		next = on.Next.Local().Format("Mon Jan 2 15:04")
 	}
 	fmt.Fprintf(out, "✓ %s enabled; next run %s.\n", name, next)
-	if !server.Running(server.DefaultSocket()) {
+	if !socket.Running(socket.DefaultSocket()) {
 		fmt.Fprintln(out, "Workers run in the Blitz service: start it with 'blitz serve'.")
 	}
 	return nil

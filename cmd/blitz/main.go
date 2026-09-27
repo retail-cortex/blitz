@@ -12,13 +12,14 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/retail-cortex/blitz/pkg/socket"
+
 	"github.com/retail-cortex/blitz/pkg/api"
 
 	"github.com/retail-cortex/blitz/internal/app"
 	"github.com/retail-cortex/blitz/internal/config"
 	"github.com/retail-cortex/blitz/internal/i18n"
 	"github.com/retail-cortex/blitz/internal/runtime"
-	"github.com/retail-cortex/blitz/internal/server"
 	"github.com/retail-cortex/blitz/internal/tui"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -239,7 +240,7 @@ func runRoot(cmd *cobra.Command, o *rootOptions, args []string) (err error) {
 		return err
 	}
 	if remote && !oneShot {
-		fmt.Fprintf(os.Stderr, "%s%s%s\n", tui.Dim, i18n.T("startup.attached", "socket", server.DefaultSocket()), tui.Reset)
+		fmt.Fprintf(os.Stderr, "%s%s%s\n", tui.Dim, i18n.T("startup.attached", "socket", socket.DefaultSocket()), tui.Reset)
 	}
 	defer func() {
 		if cerr := w.Close(); cerr != nil && err == nil {

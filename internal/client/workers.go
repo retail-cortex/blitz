@@ -5,11 +5,11 @@ import (
 	"time"
 
 	"github.com/retail-cortex/blitz/pkg/api"
+	"github.com/retail-cortex/blitz/pkg/socket"
 
 	"connectrpc.com/connect"
 	pb "github.com/retail-cortex/blitz/internal/gen/blitz/v1"
 	"github.com/retail-cortex/blitz/internal/gen/blitz/v1/blitzv1connect"
-	"github.com/retail-cortex/blitz/internal/server"
 )
 
 // Workers are one workspace's workers in the service.
@@ -19,9 +19,9 @@ type Workers struct {
 }
 
 // AttachWorkers reaches the workers of the workspace dir (absolute) in the
-// service listening on socket.
-func AttachWorkers(socket, dir string) *Workers {
-	return AttachWorkersHTTP(server.Client(socket), server.BaseURL, dir)
+// service listening on sock.
+func AttachWorkers(sock, dir string) *Workers {
+	return AttachWorkersHTTP(socket.Client(sock), socket.BaseURL, dir)
 }
 
 // AttachWorkersHTTP is AttachWorkers over any HTTP client.
