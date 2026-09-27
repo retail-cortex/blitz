@@ -249,6 +249,9 @@ func RunREPL(ctx context.Context, app *App) error {
 		case errors.Is(err, io.EOF):
 			ConfirmExit(ctx, app.Input, app.Workspace.Processes(), interrupts, ExitPrompt{})
 			return goodbye()
+		case errors.Is(err, ErrRewindKey): // Esc Esc at an empty prompt
+			cmdRewind(ctx, nil, app)
+			continue
 		case errors.Is(err, context.Canceled): // Ctrl+C at the prompt
 			if ConfirmExit(ctx, app.Input, app.Workspace.Processes(), interrupts, exitPrompt) {
 				return goodbye()

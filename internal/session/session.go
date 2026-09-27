@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -62,7 +63,24 @@ type Message struct {
 	Role      string    `json:"role"` // "user", "model", "tool"
 	Content   string    `json:"content"`
 	Timestamp time.Time `json:"timestamp"`
+	// Kind tells user messages apart: "" for a prompt, KindSteer for a
+	// message sent while a turn ran, KindHook for a stop hook's request.
+	// Only prompts are rewind points.
+	Kind string `json:"kind,omitempty"`
+	// Events is how many events the session's event log held before this
+	// prompt, so rewinding the conversation can cut the log there. Unset for
+	// other messages and for prompts recorded by older versions.
+	Events *int `json:"events,omitempty"`
 }
+
+// Kinds of user message other than prompts.
+const (
+	KindSteer = "steer"
+	KindHook  = "hook"
+)
+
+// IsPrompt reports whether m is a prompt the user sent (a rewind point).
+func (m Message) IsPrompt() bool { return m.Role == "user" && m.Kind == "" }
 
 // Storage manages persistent sessions on disk. Metadata lives in
 // <id>.meta.json (small, rewritten atomically) and messages are appended to
@@ -173,6 +191,11 @@ func (s *Storage) CreateSession(id, title, agent string) (*SessionRecord, error)
 
 // AddMessage appends a message to the active session.
 func (s *Storage) AddMessage(role, content string) error {
+	return s.Append(Message{Role: role, Content: content})
+}
+
+// Append adds msg (stamped now) to the active session.
+func (s *Storage) Append(msg Message) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -180,7 +203,8 @@ func (s *Storage) AddMessage(role, content string) error {
 		return errors.New("no active session")
 	}
 
-	msg := Message{Role: role, Content: content, Timestamp: time.Now()}
+	msg.Timestamp = time.Now()
+	role, content := msg.Role, msg.Content
 	line, err := json.Marshal(msg)
 	if err != nil {
 		return err
@@ -204,6 +228,55 @@ func (s *Storage) AddMessage(role, content string) error {
 	}
 	s.active.UpdatedAt = msg.Timestamp
 	return s.writeMeta(s.active)
+}
+
+// Truncate keeps the active session's first n messages and drops the
+// rest (rewinding the conversation). The file is replaced atomically.
+func (s *Storage) Truncate(n int) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.active == nil {
+		return errors.New("no active session")
+	}
+	if n < 0 || n > len(s.active.Messages) {
+		return fmt.Errorf("truncate to %d of %d messages", n, len(s.active.Messages))
+	}
+	var buf bytes.Buffer
+	for _, m := range s.active.Messages[:n] {
+		line, err := json.Marshal(m)
+		if err != nil {
+			return err
+		}
+		buf.Write(append(line, '\n'))
+	}
+	if err := replaceFile(s.path(s.active.ID, messagesSuffix), buf.Bytes()); err != nil {
+		return err
+	}
+	s.active.Messages = slices.Clone(s.active.Messages[:n])
+	s.active.MessageCount = n
+	s.active.UpdatedAt = time.Now()
+	return s.writeMeta(s.active)
+}
+
+// replaceFile writes data to path atomically, owner-only.
+func replaceFile(path string, data []byte) error {
+	tmp, err := os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+"-*")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(tmp.Name())
+	if _, err := tmp.Write(data); err != nil {
+		tmp.Close()
+		return err
+	}
+	if err := tmp.Chmod(filePerm); err != nil {
+		tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	return os.Rename(tmp.Name(), path)
 }
 
 // maxTitle is the longest session title kept, in runes.

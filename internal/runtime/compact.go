@@ -39,14 +39,59 @@ const compactPromptTemplate = "Summarize the conversation below between a user a
 // the summary instead of the covered events. focus, if set, tells the
 // summarizer what to emphasise. The cut is always made at the start of a user
 // turn so a tool call is never separated from its result.
-func (e *Engine) Compact(ctx context.Context, sessionID, focus string, keepTurns int) (out CompactResult, err error) {
+func (e *Engine) Compact(ctx context.Context, sessionID, focus string, keepTurns int) (CompactResult, error) {
 	if keepTurns < 1 {
 		keepTurns = 1
 	}
+	return e.compact(ctx, sessionID, focus, "manual", attribute.Int("keep_turns", keepTurns), func(events []*session.Event) ([]*session.Event, int, error) {
+		// Find the start of the keepTurns-th most recent user turn.
+		cut, seen := -1, 0
+		for i := len(events) - 1; i >= 0; i-- {
+			if isUserTurnStart(events[i]) {
+				seen++
+				if seen == keepTurns {
+					cut = i
+					break
+				}
+			}
+		}
+		if cut <= 0 {
+			return nil, 0, fmt.Errorf("%w: need more than %d turn(s) of history", ErrNothingToCompact, keepTurns)
+		}
+		return events[:cut], keepTurns, nil
+	})
+}
+
+// CompactAt summarises a session's history on one side of the user turn
+// that starts at event index at: the turns before it (upTo) or it and every
+// turn after (from here). The rest stays as it was.
+func (e *Engine) CompactAt(ctx context.Context, sessionID, focus string, at int, upTo bool) (CompactResult, error) {
+	return e.compact(ctx, sessionID, focus, "rewind", attribute.Int("at", at), func(events []*session.Event) ([]*session.Event, int, error) {
+		if at < 0 || at >= len(events) || !isUserTurnStart(events[at]) {
+			return nil, 0, fmt.Errorf("event %d doesn't start a prompt", at)
+		}
+		kept := 0
+		for _, ev := range events[at:] {
+			if isUserTurnStart(ev) {
+				kept++
+			}
+		}
+		if upTo {
+			if at == 0 {
+				return nil, 0, fmt.Errorf("%w: nothing before this prompt", ErrNothingToCompact)
+			}
+			return events[:at], kept, nil
+		}
+		return events[at:], 0, nil
+	})
+}
+
+// compact summarises the window pick chooses from the session's events.
+func (e *Engine) compact(ctx context.Context, sessionID, focus, reason string, attr attribute.KeyValue, pick func([]*session.Event) ([]*session.Event, int, error)) (out CompactResult, err error) {
 	ctx = withSettingsLookup(ctx, e.lookupSettings)
 	ctx, span := observability.Start(ctx, "compact",
 		observability.ConversationID.String(sessionID),
-		attribute.Int("keep_turns", keepTurns),
+		attr,
 		attribute.Bool("focus", focus != ""),
 	)
 	defer func() {
@@ -58,38 +103,21 @@ func (e *Engine) Compact(ctx context.Context, sessionID, focus string, keepTurns
 		return CompactResult{}, fmt.Errorf("%w: no conversation in this session", ErrNothingToCompact)
 	}
 	hooks := e.toolReg.ScriptHooks()
-	hooks.Async(ctx, "pre_compact", "", tools.HookEvent{SessionID: sessionID, Reason: "manual", Prompt: focus})
+	hooks.Async(ctx, "pre_compact", "", tools.HookEvent{SessionID: sessionID, Reason: reason, Prompt: focus})
 	defer func() {
 		if err == nil {
-			hooks.Async(ctx, "post_compact", "", tools.HookEvent{SessionID: sessionID, Reason: "manual"})
+			hooks.Async(ctx, "post_compact", "", tools.HookEvent{SessionID: sessionID, Reason: reason})
 		}
 	}()
 	sess := got.Session
 
-	var events []*session.Event
-	for ev := range sess.Events().All() {
-		if ev != nil && !ev.Partial {
-			events = append(events, ev)
-		}
+	events := finalEvents(sess)
+	window, keptTurns, err := pick(events)
+	if err != nil {
+		return CompactResult{}, err
 	}
-
-	// Find the start of the keepTurns-th most recent user turn.
-	cut, seen := -1, 0
-	for i := len(events) - 1; i >= 0; i-- {
-		if isUserTurnStart(events[i]) {
-			seen++
-			if seen == keepTurns {
-				cut = i
-				break
-			}
-		}
-	}
-	if cut <= 0 {
-		return CompactResult{}, fmt.Errorf("%w: need more than %d turn(s) of history", ErrNothingToCompact, keepTurns)
-	}
-	window := events[:cut]
 	if !hasUncompacted(window) {
-		return CompactResult{}, fmt.Errorf("%w: older turns are already compacted", ErrNothingToCompact)
+		return CompactResult{}, fmt.Errorf("%w: those turns are already compacted", ErrNothingToCompact)
 	}
 
 	e.mu.RLock()
@@ -130,7 +158,62 @@ func (e *Engine) Compact(ctx context.Context, sessionID, focus string, keepTurns
 	for _, p := range summary.Parts {
 		chars += len(p.Text)
 	}
-	return CompactResult{EventsCompacted: len(window), TurnsKept: keepTurns, SummaryChars: chars}, nil
+	return CompactResult{EventsCompacted: len(window), TurnsKept: keptTurns, SummaryChars: chars}, nil
+}
+
+// finalEvents are the session's events, as stored (not partial ones).
+func finalEvents(sess session.Session) []*session.Event {
+	var events []*session.Event
+	for ev := range sess.Events().All() {
+		if ev != nil && !ev.Partial {
+			events = append(events, ev)
+		}
+	}
+	return events
+}
+
+// EventCount is how many events a session's log holds (0 for a new one).
+func (e *Engine) EventCount(ctx context.Context, sessionID string) int {
+	got, err := e.sessions.Get(ctx, &session.GetRequest{AppName: appName, UserID: "user", SessionID: sessionID})
+	if err != nil {
+		return 0
+	}
+	return len(finalEvents(got.Session))
+}
+
+// truncater is a session service that can drop the end of a session's log
+// in place (session.PersistentService).
+type truncater interface {
+	Truncate(ctx context.Context, appName, userID, id string, keep int) error
+}
+
+// TruncateSession keeps the first keep events of a session's log and drops
+// the rest, rewinding the conversation to before them.
+func (e *Engine) TruncateSession(ctx context.Context, sessionID string, keep int) error {
+	if t, ok := e.sessions.(truncater); ok {
+		return t.Truncate(ctx, appName, "user", sessionID, keep)
+	}
+	got, err := e.sessions.Get(ctx, &session.GetRequest{AppName: appName, UserID: "user", SessionID: sessionID})
+	if err != nil {
+		return err
+	}
+	events := finalEvents(got.Session)
+	if keep > len(events) {
+		return fmt.Errorf("session %s has %d events, fewer than %d", sessionID, len(events), keep)
+	}
+	if err := e.sessions.Delete(ctx, &session.DeleteRequest{AppName: appName, UserID: "user", SessionID: sessionID}); err != nil {
+		return err
+	}
+	created, err := e.sessions.Create(ctx, &session.CreateRequest{AppName: appName, UserID: "user", SessionID: sessionID})
+	if err != nil {
+		return err
+	}
+	for _, ev := range events[:keep] {
+		if err := e.sessions.AppendEvent(ctx, created.Session, ev); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // isUserTurnStart reports whether ev is a prompt typed by the user (as

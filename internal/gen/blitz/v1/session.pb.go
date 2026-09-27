@@ -1529,6 +1529,312 @@ func (x *CompactResponse) GetAfter() *Usage {
 	return nil
 }
 
+type RewindPoint struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The prompt's position in the transcript.
+	Index int32                  `protobuf:"varint,1,opt,name=index,proto3" json:"index,omitempty"`
+	Text  string                 `protobuf:"bytes,2,opt,name=text,proto3" json:"text,omitempty"`
+	Time  *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=time,proto3" json:"time,omitempty"`
+	// Files the agent changed from this prompt until the next.
+	Files []string `protobuf:"bytes,4,rep,name=files,proto3" json:"files,omitempty"`
+	// Whether the conversation can be rewound to it.
+	Conversation  bool `protobuf:"varint,5,opt,name=conversation,proto3" json:"conversation,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RewindPoint) Reset() {
+	*x = RewindPoint{}
+	mi := &file_blitz_v1_session_proto_msgTypes[28]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RewindPoint) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RewindPoint) ProtoMessage() {}
+
+func (x *RewindPoint) ProtoReflect() protoreflect.Message {
+	mi := &file_blitz_v1_session_proto_msgTypes[28]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RewindPoint.ProtoReflect.Descriptor instead.
+func (*RewindPoint) Descriptor() ([]byte, []int) {
+	return file_blitz_v1_session_proto_rawDescGZIP(), []int{28}
+}
+
+func (x *RewindPoint) GetIndex() int32 {
+	if x != nil {
+		return x.Index
+	}
+	return 0
+}
+
+func (x *RewindPoint) GetText() string {
+	if x != nil {
+		return x.Text
+	}
+	return ""
+}
+
+func (x *RewindPoint) GetTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.Time
+	}
+	return nil
+}
+
+func (x *RewindPoint) GetFiles() []string {
+	if x != nil {
+		return x.Files
+	}
+	return nil
+}
+
+func (x *RewindPoint) GetConversation() bool {
+	if x != nil {
+		return x.Conversation
+	}
+	return false
+}
+
+type ListRewindPointsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Workspace     string                 `protobuf:"bytes,1,opt,name=workspace,proto3" json:"workspace,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListRewindPointsRequest) Reset() {
+	*x = ListRewindPointsRequest{}
+	mi := &file_blitz_v1_session_proto_msgTypes[29]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListRewindPointsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListRewindPointsRequest) ProtoMessage() {}
+
+func (x *ListRewindPointsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_blitz_v1_session_proto_msgTypes[29]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListRewindPointsRequest.ProtoReflect.Descriptor instead.
+func (*ListRewindPointsRequest) Descriptor() ([]byte, []int) {
+	return file_blitz_v1_session_proto_rawDescGZIP(), []int{29}
+}
+
+func (x *ListRewindPointsRequest) GetWorkspace() string {
+	if x != nil {
+		return x.Workspace
+	}
+	return ""
+}
+
+type ListRewindPointsResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Points        []*RewindPoint         `protobuf:"bytes,1,rep,name=points,proto3" json:"points,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListRewindPointsResponse) Reset() {
+	*x = ListRewindPointsResponse{}
+	mi := &file_blitz_v1_session_proto_msgTypes[30]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListRewindPointsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListRewindPointsResponse) ProtoMessage() {}
+
+func (x *ListRewindPointsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_blitz_v1_session_proto_msgTypes[30]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListRewindPointsResponse.ProtoReflect.Descriptor instead.
+func (*ListRewindPointsResponse) Descriptor() ([]byte, []int) {
+	return file_blitz_v1_session_proto_rawDescGZIP(), []int{30}
+}
+
+func (x *ListRewindPointsResponse) GetPoints() []*RewindPoint {
+	if x != nil {
+		return x.Points
+	}
+	return nil
+}
+
+type RewindRequest struct {
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	Workspace string                 `protobuf:"bytes,1,opt,name=workspace,proto3" json:"workspace,omitempty"`
+	Index     int32                  `protobuf:"varint,2,opt,name=index,proto3" json:"index,omitempty"`
+	// both, conversation, code, summarize_from or summarize_up_to.
+	Mode string `protobuf:"bytes,3,opt,name=mode,proto3" json:"mode,omitempty"`
+	// Restore files even if they changed since the agent's edits.
+	Force         bool `protobuf:"varint,4,opt,name=force,proto3" json:"force,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RewindRequest) Reset() {
+	*x = RewindRequest{}
+	mi := &file_blitz_v1_session_proto_msgTypes[31]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RewindRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RewindRequest) ProtoMessage() {}
+
+func (x *RewindRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_blitz_v1_session_proto_msgTypes[31]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RewindRequest.ProtoReflect.Descriptor instead.
+func (*RewindRequest) Descriptor() ([]byte, []int) {
+	return file_blitz_v1_session_proto_rawDescGZIP(), []int{31}
+}
+
+func (x *RewindRequest) GetWorkspace() string {
+	if x != nil {
+		return x.Workspace
+	}
+	return ""
+}
+
+func (x *RewindRequest) GetIndex() int32 {
+	if x != nil {
+		return x.Index
+	}
+	return 0
+}
+
+func (x *RewindRequest) GetMode() string {
+	if x != nil {
+		return x.Mode
+	}
+	return ""
+}
+
+func (x *RewindRequest) GetForce() bool {
+	if x != nil {
+		return x.Force
+	}
+	return false
+}
+
+type RewindResponse struct {
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	Mode     string                 `protobuf:"bytes,1,opt,name=mode,proto3" json:"mode,omitempty"`
+	Restored []string               `protobuf:"bytes,2,rep,name=restored,proto3" json:"restored,omitempty"`
+	// The prompt's text, to edit and send again.
+	Prompt        string           `protobuf:"bytes,3,opt,name=prompt,proto3" json:"prompt,omitempty"`
+	Compacted     *CompactResponse `protobuf:"bytes,4,opt,name=compacted,proto3" json:"compacted,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RewindResponse) Reset() {
+	*x = RewindResponse{}
+	mi := &file_blitz_v1_session_proto_msgTypes[32]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RewindResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RewindResponse) ProtoMessage() {}
+
+func (x *RewindResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_blitz_v1_session_proto_msgTypes[32]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RewindResponse.ProtoReflect.Descriptor instead.
+func (*RewindResponse) Descriptor() ([]byte, []int) {
+	return file_blitz_v1_session_proto_rawDescGZIP(), []int{32}
+}
+
+func (x *RewindResponse) GetMode() string {
+	if x != nil {
+		return x.Mode
+	}
+	return ""
+}
+
+func (x *RewindResponse) GetRestored() []string {
+	if x != nil {
+		return x.Restored
+	}
+	return nil
+}
+
+func (x *RewindResponse) GetPrompt() string {
+	if x != nil {
+		return x.Prompt
+	}
+	return ""
+}
+
+func (x *RewindResponse) GetCompacted() *CompactResponse {
+	if x != nil {
+		return x.Compacted
+	}
+	return nil
+}
+
 type SearchSessionRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Workspace     string                 `protobuf:"bytes,1,opt,name=workspace,proto3" json:"workspace,omitempty"`
@@ -1539,7 +1845,7 @@ type SearchSessionRequest struct {
 
 func (x *SearchSessionRequest) Reset() {
 	*x = SearchSessionRequest{}
-	mi := &file_blitz_v1_session_proto_msgTypes[28]
+	mi := &file_blitz_v1_session_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1551,7 +1857,7 @@ func (x *SearchSessionRequest) String() string {
 func (*SearchSessionRequest) ProtoMessage() {}
 
 func (x *SearchSessionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_blitz_v1_session_proto_msgTypes[28]
+	mi := &file_blitz_v1_session_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1564,7 +1870,7 @@ func (x *SearchSessionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SearchSessionRequest.ProtoReflect.Descriptor instead.
 func (*SearchSessionRequest) Descriptor() ([]byte, []int) {
-	return file_blitz_v1_session_proto_rawDescGZIP(), []int{28}
+	return file_blitz_v1_session_proto_rawDescGZIP(), []int{33}
 }
 
 func (x *SearchSessionRequest) GetWorkspace() string {
@@ -1592,7 +1898,7 @@ type SearchSessionResponse struct {
 
 func (x *SearchSessionResponse) Reset() {
 	*x = SearchSessionResponse{}
-	mi := &file_blitz_v1_session_proto_msgTypes[29]
+	mi := &file_blitz_v1_session_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1604,7 +1910,7 @@ func (x *SearchSessionResponse) String() string {
 func (*SearchSessionResponse) ProtoMessage() {}
 
 func (x *SearchSessionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_blitz_v1_session_proto_msgTypes[29]
+	mi := &file_blitz_v1_session_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1617,7 +1923,7 @@ func (x *SearchSessionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SearchSessionResponse.ProtoReflect.Descriptor instead.
 func (*SearchSessionResponse) Descriptor() ([]byte, []int) {
-	return file_blitz_v1_session_proto_rawDescGZIP(), []int{29}
+	return file_blitz_v1_session_proto_rawDescGZIP(), []int{34}
 }
 
 func (x *SearchSessionResponse) GetFound() int32 {
@@ -1731,13 +2037,33 @@ const file_blitz_v1_session_proto_rawDesc = "" +
 	"\x10events_compacted\x18\x01 \x01(\x05R\x0feventsCompacted\x12#\n" +
 	"\rsummary_chars\x18\x02 \x01(\x05R\fsummaryChars\x12'\n" +
 	"\x06before\x18\x03 \x01(\v2\x0f.blitz.v1.UsageR\x06before\x12%\n" +
-	"\x05after\x18\x04 \x01(\v2\x0f.blitz.v1.UsageR\x05after\"J\n" +
+	"\x05after\x18\x04 \x01(\v2\x0f.blitz.v1.UsageR\x05after\"\xa1\x01\n" +
+	"\vRewindPoint\x12\x14\n" +
+	"\x05index\x18\x01 \x01(\x05R\x05index\x12\x12\n" +
+	"\x04text\x18\x02 \x01(\tR\x04text\x12.\n" +
+	"\x04time\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\x04time\x12\x14\n" +
+	"\x05files\x18\x04 \x03(\tR\x05files\x12\"\n" +
+	"\fconversation\x18\x05 \x01(\bR\fconversation\"7\n" +
+	"\x17ListRewindPointsRequest\x12\x1c\n" +
+	"\tworkspace\x18\x01 \x01(\tR\tworkspace\"I\n" +
+	"\x18ListRewindPointsResponse\x12-\n" +
+	"\x06points\x18\x01 \x03(\v2\x15.blitz.v1.RewindPointR\x06points\"m\n" +
+	"\rRewindRequest\x12\x1c\n" +
+	"\tworkspace\x18\x01 \x01(\tR\tworkspace\x12\x14\n" +
+	"\x05index\x18\x02 \x01(\x05R\x05index\x12\x12\n" +
+	"\x04mode\x18\x03 \x01(\tR\x04mode\x12\x14\n" +
+	"\x05force\x18\x04 \x01(\bR\x05force\"\x91\x01\n" +
+	"\x0eRewindResponse\x12\x12\n" +
+	"\x04mode\x18\x01 \x01(\tR\x04mode\x12\x1a\n" +
+	"\brestored\x18\x02 \x03(\tR\brestored\x12\x16\n" +
+	"\x06prompt\x18\x03 \x01(\tR\x06prompt\x127\n" +
+	"\tcompacted\x18\x04 \x01(\v2\x19.blitz.v1.CompactResponseR\tcompacted\"J\n" +
 	"\x14SearchSessionRequest\x12\x1c\n" +
 	"\tworkspace\x18\x01 \x01(\tR\tworkspace\x12\x14\n" +
 	"\x05terms\x18\x02 \x01(\tR\x05terms\"E\n" +
 	"\x15SearchSessionResponse\x12\x14\n" +
 	"\x05found\x18\x01 \x01(\x05R\x05found\x12\x16\n" +
-	"\x06prompt\x18\x02 \x01(\tR\x06prompt2\x8a\b\n" +
+	"\x06prompt\x18\x02 \x01(\tR\x06prompt2\xa2\t\n" +
 	"\x0eSessionService\x12M\n" +
 	"\fListSessions\x12\x1d.blitz.v1.ListSessionsRequest\x1a\x1e.blitz.v1.ListSessionsResponse\x12Y\n" +
 	"\x10GetActiveSession\x12!.blitz.v1.GetActiveSessionRequest\x1a\".blitz.v1.GetActiveSessionResponse\x12G\n" +
@@ -1753,7 +2079,9 @@ const file_blitz_v1_session_proto_rawDesc = "" +
 	"\x06Answer\x12\x17.blitz.v1.AnswerRequest\x1a\x18.blitz.v1.AnswerResponse\x12A\n" +
 	"\bGetUsage\x12\x19.blitz.v1.GetUsageRequest\x1a\x1a.blitz.v1.GetUsageResponse\x12>\n" +
 	"\aCompact\x12\x18.blitz.v1.CompactRequest\x1a\x19.blitz.v1.CompactResponse\x12P\n" +
-	"\rSearchSession\x12\x1e.blitz.v1.SearchSessionRequest\x1a\x1f.blitz.v1.SearchSessionResponseB\x9b\x01\n" +
+	"\rSearchSession\x12\x1e.blitz.v1.SearchSessionRequest\x1a\x1f.blitz.v1.SearchSessionResponse\x12Y\n" +
+	"\x10ListRewindPoints\x12!.blitz.v1.ListRewindPointsRequest\x1a\".blitz.v1.ListRewindPointsResponse\x12;\n" +
+	"\x06Rewind\x12\x17.blitz.v1.RewindRequest\x1a\x18.blitz.v1.RewindResponseB\x9b\x01\n" +
 	"\fcom.blitz.v1B\fSessionProtoP\x01Z<github.com/retail-cortex/blitz/internal/gen/blitz/v1;blitzv1\xa2\x02\x03BXX\xaa\x02\bBlitz.V1\xca\x02\bBlitz\\V1\xe2\x02\x14Blitz\\V1\\GPBMetadata\xea\x02\tBlitz::V1b\x06proto3"
 
 var (
@@ -1768,7 +2096,7 @@ func file_blitz_v1_session_proto_rawDescGZIP() []byte {
 	return file_blitz_v1_session_proto_rawDescData
 }
 
-var file_blitz_v1_session_proto_msgTypes = make([]protoimpl.MessageInfo, 30)
+var file_blitz_v1_session_proto_msgTypes = make([]protoimpl.MessageInfo, 35)
 var file_blitz_v1_session_proto_goTypes = []any{
 	(*SessionInfo)(nil),              // 0: blitz.v1.SessionInfo
 	(*Message)(nil),                  // 1: blitz.v1.Message
@@ -1798,19 +2126,24 @@ var file_blitz_v1_session_proto_goTypes = []any{
 	(*GetUsageResponse)(nil),         // 25: blitz.v1.GetUsageResponse
 	(*CompactRequest)(nil),           // 26: blitz.v1.CompactRequest
 	(*CompactResponse)(nil),          // 27: blitz.v1.CompactResponse
-	(*SearchSessionRequest)(nil),     // 28: blitz.v1.SearchSessionRequest
-	(*SearchSessionResponse)(nil),    // 29: blitz.v1.SearchSessionResponse
-	(*timestamppb.Timestamp)(nil),    // 30: google.protobuf.Timestamp
-	(*Turn)(nil),                     // 31: blitz.v1.Turn
-	(*TurnEvent)(nil),                // 32: blitz.v1.TurnEvent
-	(Decision)(0),                    // 33: blitz.v1.Decision
-	(*Usage)(nil),                    // 34: blitz.v1.Usage
+	(*RewindPoint)(nil),              // 28: blitz.v1.RewindPoint
+	(*ListRewindPointsRequest)(nil),  // 29: blitz.v1.ListRewindPointsRequest
+	(*ListRewindPointsResponse)(nil), // 30: blitz.v1.ListRewindPointsResponse
+	(*RewindRequest)(nil),            // 31: blitz.v1.RewindRequest
+	(*RewindResponse)(nil),           // 32: blitz.v1.RewindResponse
+	(*SearchSessionRequest)(nil),     // 33: blitz.v1.SearchSessionRequest
+	(*SearchSessionResponse)(nil),    // 34: blitz.v1.SearchSessionResponse
+	(*timestamppb.Timestamp)(nil),    // 35: google.protobuf.Timestamp
+	(*Turn)(nil),                     // 36: blitz.v1.Turn
+	(*TurnEvent)(nil),                // 37: blitz.v1.TurnEvent
+	(Decision)(0),                    // 38: blitz.v1.Decision
+	(*Usage)(nil),                    // 39: blitz.v1.Usage
 }
 var file_blitz_v1_session_proto_depIdxs = []int32{
-	30, // 0: blitz.v1.SessionInfo.created:type_name -> google.protobuf.Timestamp
-	30, // 1: blitz.v1.SessionInfo.updated:type_name -> google.protobuf.Timestamp
+	35, // 0: blitz.v1.SessionInfo.created:type_name -> google.protobuf.Timestamp
+	35, // 1: blitz.v1.SessionInfo.updated:type_name -> google.protobuf.Timestamp
 	1,  // 2: blitz.v1.SessionInfo.messages:type_name -> blitz.v1.Message
-	30, // 3: blitz.v1.Message.time:type_name -> google.protobuf.Timestamp
+	35, // 3: blitz.v1.Message.time:type_name -> google.protobuf.Timestamp
 	0,  // 4: blitz.v1.ListSessionsResponse.sessions:type_name -> blitz.v1.SessionInfo
 	0,  // 5: blitz.v1.GetActiveSessionResponse.session:type_name -> blitz.v1.SessionInfo
 	0,  // 6: blitz.v1.NewSessionResponse.session:type_name -> blitz.v1.SessionInfo
@@ -1818,45 +2151,52 @@ var file_blitz_v1_session_proto_depIdxs = []int32{
 	0,  // 8: blitz.v1.LoadSessionResponse.session:type_name -> blitz.v1.SessionInfo
 	0,  // 9: blitz.v1.SaveSnapshotResponse.snapshot:type_name -> blitz.v1.SessionInfo
 	0,  // 10: blitz.v1.RenameSessionResponse.session:type_name -> blitz.v1.SessionInfo
-	31, // 11: blitz.v1.RunTurnRequest.turn:type_name -> blitz.v1.Turn
-	32, // 12: blitz.v1.RunTurnResponse.event:type_name -> blitz.v1.TurnEvent
-	33, // 13: blitz.v1.ApproveRequest.decision:type_name -> blitz.v1.Decision
-	34, // 14: blitz.v1.GetUsageResponse.usage:type_name -> blitz.v1.Usage
-	34, // 15: blitz.v1.CompactResponse.before:type_name -> blitz.v1.Usage
-	34, // 16: blitz.v1.CompactResponse.after:type_name -> blitz.v1.Usage
-	2,  // 17: blitz.v1.SessionService.ListSessions:input_type -> blitz.v1.ListSessionsRequest
-	4,  // 18: blitz.v1.SessionService.GetActiveSession:input_type -> blitz.v1.GetActiveSessionRequest
-	6,  // 19: blitz.v1.SessionService.NewSession:input_type -> blitz.v1.NewSessionRequest
-	8,  // 20: blitz.v1.SessionService.OpenSession:input_type -> blitz.v1.OpenSessionRequest
-	10, // 21: blitz.v1.SessionService.LoadSession:input_type -> blitz.v1.LoadSessionRequest
-	12, // 22: blitz.v1.SessionService.SaveSnapshot:input_type -> blitz.v1.SaveSnapshotRequest
-	14, // 23: blitz.v1.SessionService.RenameSession:input_type -> blitz.v1.RenameSessionRequest
-	16, // 24: blitz.v1.SessionService.RunTurn:input_type -> blitz.v1.RunTurnRequest
-	18, // 25: blitz.v1.SessionService.Steer:input_type -> blitz.v1.SteerRequest
-	20, // 26: blitz.v1.SessionService.Approve:input_type -> blitz.v1.ApproveRequest
-	22, // 27: blitz.v1.SessionService.Answer:input_type -> blitz.v1.AnswerRequest
-	24, // 28: blitz.v1.SessionService.GetUsage:input_type -> blitz.v1.GetUsageRequest
-	26, // 29: blitz.v1.SessionService.Compact:input_type -> blitz.v1.CompactRequest
-	28, // 30: blitz.v1.SessionService.SearchSession:input_type -> blitz.v1.SearchSessionRequest
-	3,  // 31: blitz.v1.SessionService.ListSessions:output_type -> blitz.v1.ListSessionsResponse
-	5,  // 32: blitz.v1.SessionService.GetActiveSession:output_type -> blitz.v1.GetActiveSessionResponse
-	7,  // 33: blitz.v1.SessionService.NewSession:output_type -> blitz.v1.NewSessionResponse
-	9,  // 34: blitz.v1.SessionService.OpenSession:output_type -> blitz.v1.OpenSessionResponse
-	11, // 35: blitz.v1.SessionService.LoadSession:output_type -> blitz.v1.LoadSessionResponse
-	13, // 36: blitz.v1.SessionService.SaveSnapshot:output_type -> blitz.v1.SaveSnapshotResponse
-	15, // 37: blitz.v1.SessionService.RenameSession:output_type -> blitz.v1.RenameSessionResponse
-	17, // 38: blitz.v1.SessionService.RunTurn:output_type -> blitz.v1.RunTurnResponse
-	19, // 39: blitz.v1.SessionService.Steer:output_type -> blitz.v1.SteerResponse
-	21, // 40: blitz.v1.SessionService.Approve:output_type -> blitz.v1.ApproveResponse
-	23, // 41: blitz.v1.SessionService.Answer:output_type -> blitz.v1.AnswerResponse
-	25, // 42: blitz.v1.SessionService.GetUsage:output_type -> blitz.v1.GetUsageResponse
-	27, // 43: blitz.v1.SessionService.Compact:output_type -> blitz.v1.CompactResponse
-	29, // 44: blitz.v1.SessionService.SearchSession:output_type -> blitz.v1.SearchSessionResponse
-	31, // [31:45] is the sub-list for method output_type
-	17, // [17:31] is the sub-list for method input_type
-	17, // [17:17] is the sub-list for extension type_name
-	17, // [17:17] is the sub-list for extension extendee
-	0,  // [0:17] is the sub-list for field type_name
+	36, // 11: blitz.v1.RunTurnRequest.turn:type_name -> blitz.v1.Turn
+	37, // 12: blitz.v1.RunTurnResponse.event:type_name -> blitz.v1.TurnEvent
+	38, // 13: blitz.v1.ApproveRequest.decision:type_name -> blitz.v1.Decision
+	39, // 14: blitz.v1.GetUsageResponse.usage:type_name -> blitz.v1.Usage
+	39, // 15: blitz.v1.CompactResponse.before:type_name -> blitz.v1.Usage
+	39, // 16: blitz.v1.CompactResponse.after:type_name -> blitz.v1.Usage
+	35, // 17: blitz.v1.RewindPoint.time:type_name -> google.protobuf.Timestamp
+	28, // 18: blitz.v1.ListRewindPointsResponse.points:type_name -> blitz.v1.RewindPoint
+	27, // 19: blitz.v1.RewindResponse.compacted:type_name -> blitz.v1.CompactResponse
+	2,  // 20: blitz.v1.SessionService.ListSessions:input_type -> blitz.v1.ListSessionsRequest
+	4,  // 21: blitz.v1.SessionService.GetActiveSession:input_type -> blitz.v1.GetActiveSessionRequest
+	6,  // 22: blitz.v1.SessionService.NewSession:input_type -> blitz.v1.NewSessionRequest
+	8,  // 23: blitz.v1.SessionService.OpenSession:input_type -> blitz.v1.OpenSessionRequest
+	10, // 24: blitz.v1.SessionService.LoadSession:input_type -> blitz.v1.LoadSessionRequest
+	12, // 25: blitz.v1.SessionService.SaveSnapshot:input_type -> blitz.v1.SaveSnapshotRequest
+	14, // 26: blitz.v1.SessionService.RenameSession:input_type -> blitz.v1.RenameSessionRequest
+	16, // 27: blitz.v1.SessionService.RunTurn:input_type -> blitz.v1.RunTurnRequest
+	18, // 28: blitz.v1.SessionService.Steer:input_type -> blitz.v1.SteerRequest
+	20, // 29: blitz.v1.SessionService.Approve:input_type -> blitz.v1.ApproveRequest
+	22, // 30: blitz.v1.SessionService.Answer:input_type -> blitz.v1.AnswerRequest
+	24, // 31: blitz.v1.SessionService.GetUsage:input_type -> blitz.v1.GetUsageRequest
+	26, // 32: blitz.v1.SessionService.Compact:input_type -> blitz.v1.CompactRequest
+	33, // 33: blitz.v1.SessionService.SearchSession:input_type -> blitz.v1.SearchSessionRequest
+	29, // 34: blitz.v1.SessionService.ListRewindPoints:input_type -> blitz.v1.ListRewindPointsRequest
+	31, // 35: blitz.v1.SessionService.Rewind:input_type -> blitz.v1.RewindRequest
+	3,  // 36: blitz.v1.SessionService.ListSessions:output_type -> blitz.v1.ListSessionsResponse
+	5,  // 37: blitz.v1.SessionService.GetActiveSession:output_type -> blitz.v1.GetActiveSessionResponse
+	7,  // 38: blitz.v1.SessionService.NewSession:output_type -> blitz.v1.NewSessionResponse
+	9,  // 39: blitz.v1.SessionService.OpenSession:output_type -> blitz.v1.OpenSessionResponse
+	11, // 40: blitz.v1.SessionService.LoadSession:output_type -> blitz.v1.LoadSessionResponse
+	13, // 41: blitz.v1.SessionService.SaveSnapshot:output_type -> blitz.v1.SaveSnapshotResponse
+	15, // 42: blitz.v1.SessionService.RenameSession:output_type -> blitz.v1.RenameSessionResponse
+	17, // 43: blitz.v1.SessionService.RunTurn:output_type -> blitz.v1.RunTurnResponse
+	19, // 44: blitz.v1.SessionService.Steer:output_type -> blitz.v1.SteerResponse
+	21, // 45: blitz.v1.SessionService.Approve:output_type -> blitz.v1.ApproveResponse
+	23, // 46: blitz.v1.SessionService.Answer:output_type -> blitz.v1.AnswerResponse
+	25, // 47: blitz.v1.SessionService.GetUsage:output_type -> blitz.v1.GetUsageResponse
+	27, // 48: blitz.v1.SessionService.Compact:output_type -> blitz.v1.CompactResponse
+	34, // 49: blitz.v1.SessionService.SearchSession:output_type -> blitz.v1.SearchSessionResponse
+	30, // 50: blitz.v1.SessionService.ListRewindPoints:output_type -> blitz.v1.ListRewindPointsResponse
+	32, // 51: blitz.v1.SessionService.Rewind:output_type -> blitz.v1.RewindResponse
+	36, // [36:52] is the sub-list for method output_type
+	20, // [20:36] is the sub-list for method input_type
+	20, // [20:20] is the sub-list for extension type_name
+	20, // [20:20] is the sub-list for extension extendee
+	0,  // [0:20] is the sub-list for field type_name
 }
 
 func init() { file_blitz_v1_session_proto_init() }
@@ -1871,7 +2211,7 @@ func file_blitz_v1_session_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_blitz_v1_session_proto_rawDesc), len(file_blitz_v1_session_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   30,
+			NumMessages:   35,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

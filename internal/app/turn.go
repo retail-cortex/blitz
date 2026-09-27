@@ -154,8 +154,12 @@ func (w *Workspace) run(ctx context.Context, sessionID string, t Turn, on func(E
 		}
 		w.tools.Checkpoints().BeginTurn(sessionID, prompt, textutil.Ellipsize(strings.Join(strings.Fields(recorded), " "), 60))
 		if !t.Accepted {
-			w.recordIn(st, "user", recorded+AttachmentNote(t.Images))
+			// Where the conversation stood, so /rewind can cut it here.
+			events := w.engine.EventCount(ctx, sessionID)
+			w.appendIn(st, session.Message{Role: "user", Content: recorded + AttachmentNote(t.Images), Events: &events})
 		}
+		w.turnStarted(sessionID)
+		defer w.turnEnded(sessionID)
 	}
 	// After recording: a front end may take steer messages from here on,
 	// and they must follow the prompt in the transcript.
@@ -229,7 +233,7 @@ func (w *Workspace) run(ctx context.Context, sessionID string, t Turn, on func(E
 			if reason == "" {
 				reason = "A stop hook asked you to continue."
 			}
-			w.recordIn(st, "user", "(stop hook) "+reason)
+			w.appendIn(st, session.Message{Role: "user", Content: "(stop hook) " + reason, Kind: session.KindHook})
 			err = w.engine.Execute(ctx, sessionID, reason, handler, base...)
 		}
 	}
@@ -259,7 +263,7 @@ func (w *Workspace) Steer(ctx context.Context, sessionID, text string) error {
 	if err != nil {
 		return err
 	}
-	w.record("user", text)
+	w.appendIn(w.storage, session.Message{Role: "user", Content: text, Kind: session.KindSteer})
 	w.engine.Steer(sessionID, withHookContext(text, "prompt_submit", hookContext))
 	return nil
 }
@@ -286,13 +290,15 @@ func (w *Workspace) accept(ctx context.Context, sessionID, text string) (string,
 	return out.Context, nil
 }
 
-// record adds a message to the active session's transcript. A failure is
-// reported, not returned: the conversation goes on without it.
-func (w *Workspace) record(role, text string) { w.recordIn(w.storage, role, text) }
-
-// recordIn adds a message to st's active session.
+// recordIn adds a message to st's active session. A failure is reported,
+// not returned: the conversation goes on without it.
 func (w *Workspace) recordIn(st *session.Storage, role, text string) {
-	if err := st.AddMessage(role, text); err != nil {
+	w.appendIn(st, session.Message{Role: role, Content: text})
+}
+
+// appendIn adds m to st's active session.
+func (w *Workspace) appendIn(st *session.Storage, m session.Message) {
+	if err := st.Append(m); err != nil {
 		slog.Warn("session save failed", "error", err)
 		w.warn(i18n.T("session.save_failed", "error", err))
 	}

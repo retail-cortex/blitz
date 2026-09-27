@@ -534,6 +534,30 @@ func (r *Remote) Compact(ctx context.Context, focus string) (app.CompactResult, 
 	return app.CompactResult{EventsCompacted: int(res.Msg.EventsCompacted), SummaryChars: int(res.Msg.SummaryChars), Before: usage(res.Msg.Before), After: usage(res.Msg.After)}, nil
 }
 
+// RewindPoints lists the active session's prompts.
+func (r *Remote) RewindPoints() ([]app.RewindPoint, error) {
+	res, err := r.sessions.ListRewindPoints(context.Background(), connect.NewRequest(&pb.ListRewindPointsRequest{Workspace: r.dir}))
+	if err != nil {
+		return nil, fromAPI(err)
+	}
+	var out []app.RewindPoint
+	for _, p := range res.Msg.Points {
+		out = append(out, app.RewindPoint{Index: int(p.Index), Text: p.Text, Time: p.Time.AsTime(), Files: p.Files, Conversation: p.Conversation})
+	}
+	return out, nil
+}
+
+// Rewind takes the active session back to one of its prompts.
+func (r *Remote) Rewind(ctx context.Context, index int, mode app.RewindMode, force bool) (app.RewindResult, error) {
+	res, err := r.sessions.Rewind(ctx, connect.NewRequest(&pb.RewindRequest{Workspace: r.dir, Index: int32(index), Mode: string(mode), Force: force}))
+	if err != nil {
+		return app.RewindResult{}, fromAPI(err)
+	}
+	c := res.Msg.Compacted
+	return app.RewindResult{Mode: app.RewindMode(res.Msg.Mode), Restored: res.Msg.Restored, Prompt: res.Msg.Prompt,
+		Compacted: app.CompactResult{EventsCompacted: int(c.GetEventsCompacted()), SummaryChars: int(c.GetSummaryChars()), Before: usage(c.GetBefore()), After: usage(c.GetAfter())}}, nil
+}
+
 func (r *Remote) memory(ctx context.Context) (*pb.ReloadMemoryResponse, error) {
 	res, err := r.workspaces.ReloadMemory(ctx, connect.NewRequest(&pb.ReloadMemoryRequest{Workspace: r.dir}))
 	if err != nil {

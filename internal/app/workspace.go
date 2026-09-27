@@ -72,6 +72,10 @@ type Workspace struct {
 	// session's next prompt.
 	hookCtxMu      sync.Mutex
 	sessionContext map[string]string
+	// inTurn counts the turns running in each session, which a rewind
+	// mustn't cut under.
+	turnsMu sync.Mutex
+	inTurn  map[string]int
 }
 
 // warnOnce reports a problem the first time it is seen: things re-read on

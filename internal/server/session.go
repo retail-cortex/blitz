@@ -10,6 +10,7 @@ import (
 	"github.com/retail-cortex/blitz/internal/app"
 	pb "github.com/retail-cortex/blitz/internal/gen/blitz/v1"
 	"github.com/retail-cortex/blitz/internal/images"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // sessionService implements SessionService.
@@ -209,4 +210,34 @@ func (h sessionService) Answer(_ context.Context, r req[pb.AnswerRequest]) (*con
 		return nil, err
 	}
 	return ok(&pb.AnswerResponse{})
+}
+
+func (h sessionService) ListRewindPoints(ctx context.Context, r req[pb.ListRewindPointsRequest]) (*connect.Response[pb.ListRewindPointsResponse], error) {
+	w, err := h.s.workspace(ctx, r.Msg.Workspace)
+	if err != nil {
+		return nil, err
+	}
+	points, err := w.RewindPoints()
+	if err != nil {
+		return nil, toAPI(err)
+	}
+	out := &pb.ListRewindPointsResponse{}
+	for _, p := range points {
+		out.Points = append(out.Points, &pb.RewindPoint{Index: int32(p.Index), Text: p.Text, Time: timestamppb.New(p.Time), Files: p.Files, Conversation: p.Conversation})
+	}
+	return ok(out)
+}
+
+func (h sessionService) Rewind(ctx context.Context, r req[pb.RewindRequest]) (*connect.Response[pb.RewindResponse], error) {
+	w, err := h.s.workspace(ctx, r.Msg.Workspace)
+	if err != nil {
+		return nil, err
+	}
+	res, err := w.Rewind(ctx, int(r.Msg.Index), app.RewindMode(r.Msg.Mode), r.Msg.Force)
+	if err != nil {
+		return nil, toAPI(err)
+	}
+	c := res.Compacted
+	return ok(&pb.RewindResponse{Mode: string(res.Mode), Restored: res.Restored, Prompt: res.Prompt,
+		Compacted: &pb.CompactResponse{EventsCompacted: int32(c.EventsCompacted), SummaryChars: int32(c.SummaryChars), Before: usageMsg(c.Before), After: usageMsg(c.After)}})
 }

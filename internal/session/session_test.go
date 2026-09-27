@@ -313,3 +313,53 @@ func TestLastTurnPersistsForActiveAndOtherSessions(t *testing.T) {
 		t.Error("SetLastTurn on a missing session should fail")
 	}
 }
+
+func TestMessageKindsAndTruncate(t *testing.T) {
+	s, _ := newStorage(t)
+	rec, err := s.CreateSession("", "", "blitz")
+	if err != nil {
+		t.Fatal(err)
+	}
+	three := 3
+	for _, m := range []Message{
+		{Role: "user", Content: "first", Events: new(int)},
+		{Role: "model", Content: "reply"},
+		{Role: "user", Content: "mid-turn", Kind: KindSteer},
+		{Role: "user", Content: "second", Events: &three},
+		{Role: "model", Content: "reply 2"},
+	} {
+		if err := s.Append(m); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got, err := s.Load(rec.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var prompts []string
+	for _, m := range got.Messages {
+		if m.IsPrompt() {
+			prompts = append(prompts, m.Content)
+		}
+	}
+	if strings.Join(prompts, ",") != "first,second" || got.Messages[3].Events == nil || *got.Messages[3].Events != 3 || got.Messages[2].Kind != KindSteer {
+		t.Fatalf("round trip: %+v", got.Messages)
+	}
+
+	if err := s.Truncate(3); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Truncate(9); err == nil {
+		t.Error("truncating past the end")
+	}
+	got, _ = s.Load(rec.ID)
+	if got.MessageCount != 3 || len(got.Messages) != 3 || got.Messages[2].Content != "mid-turn" {
+		t.Fatalf("after truncating: %d %+v", got.MessageCount, got.Messages)
+	}
+	if err := s.AddMessage("user", "third"); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ = s.Load(rec.ID); got.MessageCount != 4 || got.Messages[3].Content != "third" {
+		t.Errorf("appending after truncating: %+v", got.Messages)
+	}
+}

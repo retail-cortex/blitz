@@ -87,11 +87,12 @@ Subcommands: `doctor [--online]`, `config init|show|path`, `completion bash|zsh|
 - **Steering**: while the agent is working, start typing (or press Ctrl+T) to send it a message, e.g. "use tabs" or "skip the tests". Output pauses while you type. The message reaches the agent with its next tool result, so nothing is interrupted, and it is kept in the conversation history. If the agent finishes without another tool call, the message is sent as your next prompt. `prompt_submit` hooks apply to these messages too. (macOS and Linux.)
 - **Ctrl+C** or **Esc** cancels the running turn (Esc at an approval too, and in the steer prompt it drops the message); at the prompt Ctrl+C exits (see *Background processes*).
 - **Pickers**: `/resume`, `/agent` and `/model` without an argument, approvals and the agent's multiple-choice questions open a menu under the prompt — arrow keys (or Ctrl+P/N) move, typing filters, Enter chooses, Esc clears the filter or cancels. At an approval `y`, `s`, `a`, `n` still answer at once, and Esc means no and stops the turn. With piped input the commands and prompts stay line-based.
-- **Shift+Tab** switches the permission mode: `default` → `accept-edits` → `plan` → `default` (and `bypass`, only if the session started in it). **Ctrl+G** opens the prompt in `$VISUAL` or `$EDITOR` and sends what you save (an empty file sends nothing). **Esc Esc** clears the line.
+- **Shift+Tab** switches the permission mode: `default` → `accept-edits` → `plan` → `default` (and `bypass`, only if the session started in it). **Ctrl+G** opens the prompt in `$VISUAL` or `$EDITOR` and sends what you save (an empty file sends nothing). **Esc Esc** clears the line, or on an empty line opens `/rewind`.
 
 | Command | |
 |---|---|
 | `/undo [--force]` | Revert the file changes made in the last turn (checkpoints are kept between runs, so this works after `--resume`) |
+| `/rewind [n [mode]] [--force]` | Go back to before an earlier prompt (Esc Esc on an empty line): restore its files and the conversation, either one, or summarize the conversation from or up to it. After rewinding the conversation the prompt is back in the input line |
 | `/checkpoints` | Turns that changed files |
 | `/diff [git]` | Everything tools changed in this session, across runs (or `git diff`) |
 | `/cost`, `/context` | Token usage (including cache reads and writes), estimated cost, context size vs. compaction threshold |
@@ -188,7 +189,7 @@ On Linux, install `bubblewrap` and allow unprivileged user namespaces. Ubuntu 24
 
 **Secrets.** Child processes don't inherit credential variables (`sandbox.scrub_env`, default `*_API_KEY`, `*_SECRET`, …). The audit log masks secrets. Sessions, history, approvals and audit files are owner-only.
 
-**Checkpoints.** Before a file tool changes a file, Blitz keeps a copy, grouped by prompt, so `/undo` can put it back. They are kept between runs in `~/.blitz/checkpoints/<workspace>/` (owner-only, stored by content hash), up to `[checkpoints] max_bytes` (64 MiB) and `max_age_days` (30); `dir = ""` keeps them in memory only. Only the file tools' changes are tracked: if a file changed since (by a command or by you), `/undo` stops and says so (`--force` overwrites).
+**Checkpoints.** Before a file tool changes a file, Blitz keeps a copy, grouped by prompt, so `/undo` can put it back. They are kept between runs in `~/.blitz/checkpoints/<workspace>/` (owner-only, stored by content hash), up to `[checkpoints] max_bytes` (64 MiB) and `max_age_days` (30); `dir = ""` keeps them in memory only. `/rewind` picks any earlier prompt of the session (newest first) and restores the files as they were before it (all later prompts' changes, checked first), the conversation (the transcript and what the model sees are cut before it, and the prompt comes back to edit), both, or summarizes the conversation from or up to it. Messages sent while a turn ran aren't rewind points. Only the file tools' changes are tracked: if a file changed since (by a command or by you), `/undo` stops and says so (`--force` overwrites).
 
 **Audit log.** `~/.blitz/audit/audit-YYYY-MM-DD.jsonl` records prompts, tool calls and results, approvals, denials, hook decisions, and undos, plus your `!` commands and `/search web` queries (`user_shell`, `user_search`). A page fetched through a `/search web` grant is logged as an approval with decision `user-selected`.
 

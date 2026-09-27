@@ -14,7 +14,7 @@ import type { Message as Message$1 } from "@bufbuild/protobuf";
  * Describes the file blitz/v1/session.proto.
  */
 export const file_blitz_v1_session: GenFile = /*@__PURE__*/
-  fileDesc("ChZibGl0ei92MS9zZXNzaW9uLnByb3RvEghibGl0ei52MSKAAgoLU2Vzc2lvbkluZm8SCgoCaWQYASABKAkSDQoFdGl0bGUYAiABKAkSDQoFYWdlbnQYAyABKAkSEQoJd29ya3NwYWNlGAQgASgJEhAKCHNuYXBzaG90GAUgASgJEgwKBGZyb20YBiABKAkSFQoNbWVzc2FnZV9jb3VudBgHIAEoBRIrCgdjcmVhdGVkGAggASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIrCgd1cGRhdGVkGAkgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIjCghtZXNzYWdlcxgKIAMoCzIRLmJsaXR6LnYxLk1lc3NhZ2UiTwoHTWVzc2FnZRIMCgRyb2xlGAEgASgJEgwKBHRleHQYAiABKAkSKAoEdGltZRgDIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAiNQoTTGlzdFNlc3Npb25zUmVxdWVzdBIRCgl3b3Jrc3BhY2UYASABKAkSCwoDYWxsGAIgASgIIj8KFExpc3RTZXNzaW9uc1Jlc3BvbnNlEicKCHNlc3Npb25zGAEgAygLMhUuYmxpdHoudjEuU2Vzc2lvbkluZm8iLAoXR2V0QWN0aXZlU2Vzc2lvblJlcXVlc3QSEQoJd29ya3NwYWNlGAEgASgJIkIKGEdldEFjdGl2ZVNlc3Npb25SZXNwb25zZRImCgdzZXNzaW9uGAEgASgLMhUuYmxpdHoudjEuU2Vzc2lvbkluZm8iJgoRTmV3U2Vzc2lvblJlcXVlc3QSEQoJd29ya3NwYWNlGAEgASgJIjwKEk5ld1Nlc3Npb25SZXNwb25zZRImCgdzZXNzaW9uGAEgASgLMhUuYmxpdHoudjEuU2Vzc2lvbkluZm8iUAoST3BlblNlc3Npb25SZXF1ZXN0EhEKCXdvcmtzcGFjZRgBIAEoCRIOCgZyZXN1bWUYAiABKAkSFwoPY29udGludWVfbGF0ZXN0GAMgASgIIk4KE09wZW5TZXNzaW9uUmVzcG9uc2USJgoHc2Vzc2lvbhgBIAEoCzIVLmJsaXR6LnYxLlNlc3Npb25JbmZvEg8KB3Jlc3VtZWQYAiABKAgiNAoSTG9hZFNlc3Npb25SZXF1ZXN0EhEKCXdvcmtzcGFjZRgBIAEoCRILCgNyZWYYAiABKAkiTwoTTG9hZFNlc3Npb25SZXNwb25zZRImCgdzZXNzaW9uGAEgASgLMhUuYmxpdHoudjEuU2Vzc2lvbkluZm8SEAoIYnJhbmNoZWQYAiABKAgiRQoTU2F2ZVNuYXBzaG90UmVxdWVzdBIRCgl3b3Jrc3BhY2UYASABKAkSDAoEbmFtZRgCIAEoCRINCgVmb3JjZRgDIAEoCCI/ChRTYXZlU25hcHNob3RSZXNwb25zZRInCghzbmFwc2hvdBgBIAEoCzIVLmJsaXR6LnYxLlNlc3Npb25JbmZvIjgKFFJlbmFtZVNlc3Npb25SZXF1ZXN0EhEKCXdvcmtzcGFjZRgBIAEoCRINCgV0aXRsZRgCIAEoCSI/ChVSZW5hbWVTZXNzaW9uUmVzcG9uc2USJgoHc2Vzc2lvbhgBIAEoCzIVLmJsaXR6LnYxLlNlc3Npb25JbmZvIlUKDlJ1blR1cm5SZXF1ZXN0EhEKCXdvcmtzcGFjZRgBIAEoCRISCgpzZXNzaW9uX2lkGAIgASgJEhwKBHR1cm4YAyABKAsyDi5ibGl0ei52MS5UdXJuIjUKD1J1blR1cm5SZXNwb25zZRIiCgVldmVudBgBIAEoCzITLmJsaXR6LnYxLlR1cm5FdmVudCJDCgxTdGVlclJlcXVlc3QSEQoJd29ya3NwYWNlGAEgASgJEhIKCnNlc3Npb25faWQYAiABKAkSDAoEdGV4dBgDIAEoCSIPCg1TdGVlclJlc3BvbnNlIl0KDkFwcHJvdmVSZXF1ZXN0EhEKCXdvcmtzcGFjZRgBIAEoCRISCgpyZXF1ZXN0X2lkGAIgASgJEiQKCGRlY2lzaW9uGAMgASgOMhIuYmxpdHoudjEuRGVjaXNpb24iEQoPQXBwcm92ZVJlc3BvbnNlIkYKDUFuc3dlclJlcXVlc3QSEQoJd29ya3NwYWNlGAEgASgJEhIKCnJlcXVlc3RfaWQYAiABKAkSDgoGYW5zd2VyGAMgASgJIhAKDkFuc3dlclJlc3BvbnNlIiQKD0dldFVzYWdlUmVxdWVzdBIRCgl3b3Jrc3BhY2UYASABKAkiaQoQR2V0VXNhZ2VSZXNwb25zZRIeCgV1c2FnZRgBIAEoCzIPLmJsaXR6LnYxLlVzYWdlEhQKDGF1dG9fY29tcGFjdBgCIAEoCBIRCgl0aHJlc2hvbGQYAyABKAUSDAoEa2VlcBgEIAEoBSIyCg5Db21wYWN0UmVxdWVzdBIRCgl3b3Jrc3BhY2UYASABKAkSDQoFZm9jdXMYAiABKAkigwEKD0NvbXBhY3RSZXNwb25zZRIYChBldmVudHNfY29tcGFjdGVkGAEgASgFEhUKDXN1bW1hcnlfY2hhcnMYAiABKAUSHwoGYmVmb3JlGAMgASgLMg8uYmxpdHoudjEuVXNhZ2USHgoFYWZ0ZXIYBCABKAsyDy5ibGl0ei52MS5Vc2FnZSI4ChRTZWFyY2hTZXNzaW9uUmVxdWVzdBIRCgl3b3Jrc3BhY2UYASABKAkSDQoFdGVybXMYAiABKAkiNgoVU2VhcmNoU2Vzc2lvblJlc3BvbnNlEg0KBWZvdW5kGAEgASgFEg4KBnByb21wdBgCIAEoCTKKCAoOU2Vzc2lvblNlcnZpY2USTQoMTGlzdFNlc3Npb25zEh0uYmxpdHoudjEuTGlzdFNlc3Npb25zUmVxdWVzdBoeLmJsaXR6LnYxLkxpc3RTZXNzaW9uc1Jlc3BvbnNlElkKEEdldEFjdGl2ZVNlc3Npb24SIS5ibGl0ei52MS5HZXRBY3RpdmVTZXNzaW9uUmVxdWVzdBoiLmJsaXR6LnYxLkdldEFjdGl2ZVNlc3Npb25SZXNwb25zZRJHCgpOZXdTZXNzaW9uEhsuYmxpdHoudjEuTmV3U2Vzc2lvblJlcXVlc3QaHC5ibGl0ei52MS5OZXdTZXNzaW9uUmVzcG9uc2USSgoLT3BlblNlc3Npb24SHC5ibGl0ei52MS5PcGVuU2Vzc2lvblJlcXVlc3QaHS5ibGl0ei52MS5PcGVuU2Vzc2lvblJlc3BvbnNlEkoKC0xvYWRTZXNzaW9uEhwuYmxpdHoudjEuTG9hZFNlc3Npb25SZXF1ZXN0Gh0uYmxpdHoudjEuTG9hZFNlc3Npb25SZXNwb25zZRJNCgxTYXZlU25hcHNob3QSHS5ibGl0ei52MS5TYXZlU25hcHNob3RSZXF1ZXN0Gh4uYmxpdHoudjEuU2F2ZVNuYXBzaG90UmVzcG9uc2USUAoNUmVuYW1lU2Vzc2lvbhIeLmJsaXR6LnYxLlJlbmFtZVNlc3Npb25SZXF1ZXN0Gh8uYmxpdHoudjEuUmVuYW1lU2Vzc2lvblJlc3BvbnNlEkAKB1J1blR1cm4SGC5ibGl0ei52MS5SdW5UdXJuUmVxdWVzdBoZLmJsaXR6LnYxLlJ1blR1cm5SZXNwb25zZTABEjgKBVN0ZWVyEhYuYmxpdHoudjEuU3RlZXJSZXF1ZXN0GhcuYmxpdHoudjEuU3RlZXJSZXNwb25zZRI+CgdBcHByb3ZlEhguYmxpdHoudjEuQXBwcm92ZVJlcXVlc3QaGS5ibGl0ei52MS5BcHByb3ZlUmVzcG9uc2USOwoGQW5zd2VyEhcuYmxpdHoudjEuQW5zd2VyUmVxdWVzdBoYLmJsaXR6LnYxLkFuc3dlclJlc3BvbnNlEkEKCEdldFVzYWdlEhkuYmxpdHoudjEuR2V0VXNhZ2VSZXF1ZXN0GhouYmxpdHoudjEuR2V0VXNhZ2VSZXNwb25zZRI+CgdDb21wYWN0EhguYmxpdHoudjEuQ29tcGFjdFJlcXVlc3QaGS5ibGl0ei52MS5Db21wYWN0UmVzcG9uc2USUAoNU2VhcmNoU2Vzc2lvbhIeLmJsaXR6LnYxLlNlYXJjaFNlc3Npb25SZXF1ZXN0Gh8uYmxpdHoudjEuU2VhcmNoU2Vzc2lvblJlc3BvbnNlQpsBCgxjb20uYmxpdHoudjFCDFNlc3Npb25Qcm90b1ABWjxnaXRodWIuY29tL3JldGFpbC1jb3J0ZXgvYmxpdHovaW50ZXJuYWwvZ2VuL2JsaXR6L3YxO2JsaXR6djGiAgNCWFiqAghCbGl0ei5WMcoCCEJsaXR6XFYx4gIUQmxpdHpcVjFcR1BCTWV0YWRhdGHqAglCbGl0ejo6VjFiBnByb3RvMw", [file_blitz_v1_turn, file_google_protobuf_timestamp]);
+  fileDesc("ChZibGl0ei92MS9zZXNzaW9uLnByb3RvEghibGl0ei52MSKAAgoLU2Vzc2lvbkluZm8SCgoCaWQYASABKAkSDQoFdGl0bGUYAiABKAkSDQoFYWdlbnQYAyABKAkSEQoJd29ya3NwYWNlGAQgASgJEhAKCHNuYXBzaG90GAUgASgJEgwKBGZyb20YBiABKAkSFQoNbWVzc2FnZV9jb3VudBgHIAEoBRIrCgdjcmVhdGVkGAggASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIrCgd1cGRhdGVkGAkgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIjCghtZXNzYWdlcxgKIAMoCzIRLmJsaXR6LnYxLk1lc3NhZ2UiTwoHTWVzc2FnZRIMCgRyb2xlGAEgASgJEgwKBHRleHQYAiABKAkSKAoEdGltZRgDIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAiNQoTTGlzdFNlc3Npb25zUmVxdWVzdBIRCgl3b3Jrc3BhY2UYASABKAkSCwoDYWxsGAIgASgIIj8KFExpc3RTZXNzaW9uc1Jlc3BvbnNlEicKCHNlc3Npb25zGAEgAygLMhUuYmxpdHoudjEuU2Vzc2lvbkluZm8iLAoXR2V0QWN0aXZlU2Vzc2lvblJlcXVlc3QSEQoJd29ya3NwYWNlGAEgASgJIkIKGEdldEFjdGl2ZVNlc3Npb25SZXNwb25zZRImCgdzZXNzaW9uGAEgASgLMhUuYmxpdHoudjEuU2Vzc2lvbkluZm8iJgoRTmV3U2Vzc2lvblJlcXVlc3QSEQoJd29ya3NwYWNlGAEgASgJIjwKEk5ld1Nlc3Npb25SZXNwb25zZRImCgdzZXNzaW9uGAEgASgLMhUuYmxpdHoudjEuU2Vzc2lvbkluZm8iUAoST3BlblNlc3Npb25SZXF1ZXN0EhEKCXdvcmtzcGFjZRgBIAEoCRIOCgZyZXN1bWUYAiABKAkSFwoPY29udGludWVfbGF0ZXN0GAMgASgIIk4KE09wZW5TZXNzaW9uUmVzcG9uc2USJgoHc2Vzc2lvbhgBIAEoCzIVLmJsaXR6LnYxLlNlc3Npb25JbmZvEg8KB3Jlc3VtZWQYAiABKAgiNAoSTG9hZFNlc3Npb25SZXF1ZXN0EhEKCXdvcmtzcGFjZRgBIAEoCRILCgNyZWYYAiABKAkiTwoTTG9hZFNlc3Npb25SZXNwb25zZRImCgdzZXNzaW9uGAEgASgLMhUuYmxpdHoudjEuU2Vzc2lvbkluZm8SEAoIYnJhbmNoZWQYAiABKAgiRQoTU2F2ZVNuYXBzaG90UmVxdWVzdBIRCgl3b3Jrc3BhY2UYASABKAkSDAoEbmFtZRgCIAEoCRINCgVmb3JjZRgDIAEoCCI/ChRTYXZlU25hcHNob3RSZXNwb25zZRInCghzbmFwc2hvdBgBIAEoCzIVLmJsaXR6LnYxLlNlc3Npb25JbmZvIjgKFFJlbmFtZVNlc3Npb25SZXF1ZXN0EhEKCXdvcmtzcGFjZRgBIAEoCRINCgV0aXRsZRgCIAEoCSI/ChVSZW5hbWVTZXNzaW9uUmVzcG9uc2USJgoHc2Vzc2lvbhgBIAEoCzIVLmJsaXR6LnYxLlNlc3Npb25JbmZvIlUKDlJ1blR1cm5SZXF1ZXN0EhEKCXdvcmtzcGFjZRgBIAEoCRISCgpzZXNzaW9uX2lkGAIgASgJEhwKBHR1cm4YAyABKAsyDi5ibGl0ei52MS5UdXJuIjUKD1J1blR1cm5SZXNwb25zZRIiCgVldmVudBgBIAEoCzITLmJsaXR6LnYxLlR1cm5FdmVudCJDCgxTdGVlclJlcXVlc3QSEQoJd29ya3NwYWNlGAEgASgJEhIKCnNlc3Npb25faWQYAiABKAkSDAoEdGV4dBgDIAEoCSIPCg1TdGVlclJlc3BvbnNlIl0KDkFwcHJvdmVSZXF1ZXN0EhEKCXdvcmtzcGFjZRgBIAEoCRISCgpyZXF1ZXN0X2lkGAIgASgJEiQKCGRlY2lzaW9uGAMgASgOMhIuYmxpdHoudjEuRGVjaXNpb24iEQoPQXBwcm92ZVJlc3BvbnNlIkYKDUFuc3dlclJlcXVlc3QSEQoJd29ya3NwYWNlGAEgASgJEhIKCnJlcXVlc3RfaWQYAiABKAkSDgoGYW5zd2VyGAMgASgJIhAKDkFuc3dlclJlc3BvbnNlIiQKD0dldFVzYWdlUmVxdWVzdBIRCgl3b3Jrc3BhY2UYASABKAkiaQoQR2V0VXNhZ2VSZXNwb25zZRIeCgV1c2FnZRgBIAEoCzIPLmJsaXR6LnYxLlVzYWdlEhQKDGF1dG9fY29tcGFjdBgCIAEoCBIRCgl0aHJlc2hvbGQYAyABKAUSDAoEa2VlcBgEIAEoBSIyCg5Db21wYWN0UmVxdWVzdBIRCgl3b3Jrc3BhY2UYASABKAkSDQoFZm9jdXMYAiABKAkigwEKD0NvbXBhY3RSZXNwb25zZRIYChBldmVudHNfY29tcGFjdGVkGAEgASgFEhUKDXN1bW1hcnlfY2hhcnMYAiABKAUSHwoGYmVmb3JlGAMgASgLMg8uYmxpdHoudjEuVXNhZ2USHgoFYWZ0ZXIYBCABKAsyDy5ibGl0ei52MS5Vc2FnZSJ5CgtSZXdpbmRQb2ludBINCgVpbmRleBgBIAEoBRIMCgR0ZXh0GAIgASgJEigKBHRpbWUYAyABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEg0KBWZpbGVzGAQgAygJEhQKDGNvbnZlcnNhdGlvbhgFIAEoCCIsChdMaXN0UmV3aW5kUG9pbnRzUmVxdWVzdBIRCgl3b3Jrc3BhY2UYASABKAkiQQoYTGlzdFJld2luZFBvaW50c1Jlc3BvbnNlEiUKBnBvaW50cxgBIAMoCzIVLmJsaXR6LnYxLlJld2luZFBvaW50Ik4KDVJld2luZFJlcXVlc3QSEQoJd29ya3NwYWNlGAEgASgJEg0KBWluZGV4GAIgASgFEgwKBG1vZGUYAyABKAkSDQoFZm9yY2UYBCABKAgibgoOUmV3aW5kUmVzcG9uc2USDAoEbW9kZRgBIAEoCRIQCghyZXN0b3JlZBgCIAMoCRIOCgZwcm9tcHQYAyABKAkSLAoJY29tcGFjdGVkGAQgASgLMhkuYmxpdHoudjEuQ29tcGFjdFJlc3BvbnNlIjgKFFNlYXJjaFNlc3Npb25SZXF1ZXN0EhEKCXdvcmtzcGFjZRgBIAEoCRINCgV0ZXJtcxgCIAEoCSI2ChVTZWFyY2hTZXNzaW9uUmVzcG9uc2USDQoFZm91bmQYASABKAUSDgoGcHJvbXB0GAIgASgJMqIJCg5TZXNzaW9uU2VydmljZRJNCgxMaXN0U2Vzc2lvbnMSHS5ibGl0ei52MS5MaXN0U2Vzc2lvbnNSZXF1ZXN0Gh4uYmxpdHoudjEuTGlzdFNlc3Npb25zUmVzcG9uc2USWQoQR2V0QWN0aXZlU2Vzc2lvbhIhLmJsaXR6LnYxLkdldEFjdGl2ZVNlc3Npb25SZXF1ZXN0GiIuYmxpdHoudjEuR2V0QWN0aXZlU2Vzc2lvblJlc3BvbnNlEkcKCk5ld1Nlc3Npb24SGy5ibGl0ei52MS5OZXdTZXNzaW9uUmVxdWVzdBocLmJsaXR6LnYxLk5ld1Nlc3Npb25SZXNwb25zZRJKCgtPcGVuU2Vzc2lvbhIcLmJsaXR6LnYxLk9wZW5TZXNzaW9uUmVxdWVzdBodLmJsaXR6LnYxLk9wZW5TZXNzaW9uUmVzcG9uc2USSgoLTG9hZFNlc3Npb24SHC5ibGl0ei52MS5Mb2FkU2Vzc2lvblJlcXVlc3QaHS5ibGl0ei52MS5Mb2FkU2Vzc2lvblJlc3BvbnNlEk0KDFNhdmVTbmFwc2hvdBIdLmJsaXR6LnYxLlNhdmVTbmFwc2hvdFJlcXVlc3QaHi5ibGl0ei52MS5TYXZlU25hcHNob3RSZXNwb25zZRJQCg1SZW5hbWVTZXNzaW9uEh4uYmxpdHoudjEuUmVuYW1lU2Vzc2lvblJlcXVlc3QaHy5ibGl0ei52MS5SZW5hbWVTZXNzaW9uUmVzcG9uc2USQAoHUnVuVHVybhIYLmJsaXR6LnYxLlJ1blR1cm5SZXF1ZXN0GhkuYmxpdHoudjEuUnVuVHVyblJlc3BvbnNlMAESOAoFU3RlZXISFi5ibGl0ei52MS5TdGVlclJlcXVlc3QaFy5ibGl0ei52MS5TdGVlclJlc3BvbnNlEj4KB0FwcHJvdmUSGC5ibGl0ei52MS5BcHByb3ZlUmVxdWVzdBoZLmJsaXR6LnYxLkFwcHJvdmVSZXNwb25zZRI7CgZBbnN3ZXISFy5ibGl0ei52MS5BbnN3ZXJSZXF1ZXN0GhguYmxpdHoudjEuQW5zd2VyUmVzcG9uc2USQQoIR2V0VXNhZ2USGS5ibGl0ei52MS5HZXRVc2FnZVJlcXVlc3QaGi5ibGl0ei52MS5HZXRVc2FnZVJlc3BvbnNlEj4KB0NvbXBhY3QSGC5ibGl0ei52MS5Db21wYWN0UmVxdWVzdBoZLmJsaXR6LnYxLkNvbXBhY3RSZXNwb25zZRJQCg1TZWFyY2hTZXNzaW9uEh4uYmxpdHoudjEuU2VhcmNoU2Vzc2lvblJlcXVlc3QaHy5ibGl0ei52MS5TZWFyY2hTZXNzaW9uUmVzcG9uc2USWQoQTGlzdFJld2luZFBvaW50cxIhLmJsaXR6LnYxLkxpc3RSZXdpbmRQb2ludHNSZXF1ZXN0GiIuYmxpdHoudjEuTGlzdFJld2luZFBvaW50c1Jlc3BvbnNlEjsKBlJld2luZBIXLmJsaXR6LnYxLlJld2luZFJlcXVlc3QaGC5ibGl0ei52MS5SZXdpbmRSZXNwb25zZUKbAQoMY29tLmJsaXR6LnYxQgxTZXNzaW9uUHJvdG9QAVo8Z2l0aHViLmNvbS9yZXRhaWwtY29ydGV4L2JsaXR6L2ludGVybmFsL2dlbi9ibGl0ei92MTtibGl0enYxogIDQlhYqgIIQmxpdHouVjHKAghCbGl0elxWMeICFEJsaXR6XFYxXEdQQk1ldGFkYXRh6gIJQmxpdHo6OlYxYgZwcm90bzM", [file_blitz_v1_turn, file_google_protobuf_timestamp]);
 
 /**
  * SessionInfo describes a saved session.
@@ -692,6 +692,153 @@ export const CompactResponseSchema: GenMessage<CompactResponse> = /*@__PURE__*/
   messageDesc(file_blitz_v1_session, 27);
 
 /**
+ * @generated from message blitz.v1.RewindPoint
+ */
+export type RewindPoint = Message$1<"blitz.v1.RewindPoint"> & {
+  /**
+   * The prompt's position in the transcript.
+   *
+   * @generated from field: int32 index = 1;
+   */
+  index: number;
+
+  /**
+   * @generated from field: string text = 2;
+   */
+  text: string;
+
+  /**
+   * @generated from field: google.protobuf.Timestamp time = 3;
+   */
+  time?: Timestamp | undefined;
+
+  /**
+   * Files the agent changed from this prompt until the next.
+   *
+   * @generated from field: repeated string files = 4;
+   */
+  files: string[];
+
+  /**
+   * Whether the conversation can be rewound to it.
+   *
+   * @generated from field: bool conversation = 5;
+   */
+  conversation: boolean;
+};
+
+/**
+ * Describes the message blitz.v1.RewindPoint.
+ * Use `create(RewindPointSchema)` to create a new message.
+ */
+export const RewindPointSchema: GenMessage<RewindPoint> = /*@__PURE__*/
+  messageDesc(file_blitz_v1_session, 28);
+
+/**
+ * @generated from message blitz.v1.ListRewindPointsRequest
+ */
+export type ListRewindPointsRequest = Message$1<"blitz.v1.ListRewindPointsRequest"> & {
+  /**
+   * @generated from field: string workspace = 1;
+   */
+  workspace: string;
+};
+
+/**
+ * Describes the message blitz.v1.ListRewindPointsRequest.
+ * Use `create(ListRewindPointsRequestSchema)` to create a new message.
+ */
+export const ListRewindPointsRequestSchema: GenMessage<ListRewindPointsRequest> = /*@__PURE__*/
+  messageDesc(file_blitz_v1_session, 29);
+
+/**
+ * @generated from message blitz.v1.ListRewindPointsResponse
+ */
+export type ListRewindPointsResponse = Message$1<"blitz.v1.ListRewindPointsResponse"> & {
+  /**
+   * @generated from field: repeated blitz.v1.RewindPoint points = 1;
+   */
+  points: RewindPoint[];
+};
+
+/**
+ * Describes the message blitz.v1.ListRewindPointsResponse.
+ * Use `create(ListRewindPointsResponseSchema)` to create a new message.
+ */
+export const ListRewindPointsResponseSchema: GenMessage<ListRewindPointsResponse> = /*@__PURE__*/
+  messageDesc(file_blitz_v1_session, 30);
+
+/**
+ * @generated from message blitz.v1.RewindRequest
+ */
+export type RewindRequest = Message$1<"blitz.v1.RewindRequest"> & {
+  /**
+   * @generated from field: string workspace = 1;
+   */
+  workspace: string;
+
+  /**
+   * @generated from field: int32 index = 2;
+   */
+  index: number;
+
+  /**
+   * both, conversation, code, summarize_from or summarize_up_to.
+   *
+   * @generated from field: string mode = 3;
+   */
+  mode: string;
+
+  /**
+   * Restore files even if they changed since the agent's edits.
+   *
+   * @generated from field: bool force = 4;
+   */
+  force: boolean;
+};
+
+/**
+ * Describes the message blitz.v1.RewindRequest.
+ * Use `create(RewindRequestSchema)` to create a new message.
+ */
+export const RewindRequestSchema: GenMessage<RewindRequest> = /*@__PURE__*/
+  messageDesc(file_blitz_v1_session, 31);
+
+/**
+ * @generated from message blitz.v1.RewindResponse
+ */
+export type RewindResponse = Message$1<"blitz.v1.RewindResponse"> & {
+  /**
+   * @generated from field: string mode = 1;
+   */
+  mode: string;
+
+  /**
+   * @generated from field: repeated string restored = 2;
+   */
+  restored: string[];
+
+  /**
+   * The prompt's text, to edit and send again.
+   *
+   * @generated from field: string prompt = 3;
+   */
+  prompt: string;
+
+  /**
+   * @generated from field: blitz.v1.CompactResponse compacted = 4;
+   */
+  compacted?: CompactResponse | undefined;
+};
+
+/**
+ * Describes the message blitz.v1.RewindResponse.
+ * Use `create(RewindResponseSchema)` to create a new message.
+ */
+export const RewindResponseSchema: GenMessage<RewindResponse> = /*@__PURE__*/
+  messageDesc(file_blitz_v1_session, 32);
+
+/**
  * @generated from message blitz.v1.SearchSessionRequest
  */
 export type SearchSessionRequest = Message$1<"blitz.v1.SearchSessionRequest"> & {
@@ -711,7 +858,7 @@ export type SearchSessionRequest = Message$1<"blitz.v1.SearchSessionRequest"> & 
  * Use `create(SearchSessionRequestSchema)` to create a new message.
  */
 export const SearchSessionRequestSchema: GenMessage<SearchSessionRequest> = /*@__PURE__*/
-  messageDesc(file_blitz_v1_session, 28);
+  messageDesc(file_blitz_v1_session, 33);
 
 /**
  * @generated from message blitz.v1.SearchSessionResponse
@@ -735,7 +882,7 @@ export type SearchSessionResponse = Message$1<"blitz.v1.SearchSessionResponse"> 
  * Use `create(SearchSessionResponseSchema)` to create a new message.
  */
 export const SearchSessionResponseSchema: GenMessage<SearchSessionResponse> = /*@__PURE__*/
-  messageDesc(file_blitz_v1_session, 29);
+  messageDesc(file_blitz_v1_session, 34);
 
 /**
  * SessionService runs conversations in a workspace: saved sessions, turns,
@@ -898,6 +1045,28 @@ export const SessionService: GenService<{
     methodKind: "unary";
     input: typeof SearchSessionRequestSchema;
     output: typeof SearchSessionResponseSchema;
+  },
+  /**
+   * Lists the active session's prompts, which it can be rewound to.
+   *
+   * @generated from rpc blitz.v1.SessionService.ListRewindPoints
+   */
+  listRewindPoints: {
+    methodKind: "unary";
+    input: typeof ListRewindPointsRequestSchema;
+    output: typeof ListRewindPointsResponseSchema;
+  },
+  /**
+   * Takes the active session back to one of its prompts: files,
+   * conversation or both, or summarizes either side of it (SESSION_BUSY,
+   * NOT_REWIND_POINT, CANT_REWIND_CONVERSATION, UNDO_CONFLICT unless force).
+   *
+   * @generated from rpc blitz.v1.SessionService.Rewind
+   */
+  rewind: {
+    methodKind: "unary";
+    input: typeof RewindRequestSchema;
+    output: typeof RewindResponseSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_blitz_v1_session, 0);

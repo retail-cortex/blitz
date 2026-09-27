@@ -253,6 +253,38 @@ func TestRemoteEffort(t *testing.T) {
 	}
 }
 
+// Rewinding goes through the service: points, a conversation rewind, and
+// typed errors.
+func TestRemoteRewind(t *testing.T) {
+	r := attach(t, nil, genai.NewContentFromText("one", genai.RoleModel), genai.NewContentFromText("two", genai.RoleModel))
+	sess, _, err := r.OpenSession("", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range []string{"first", "second"} {
+		if _, err := r.Run(context.Background(), sess.ID, app.Turn{Text: p}, func(app.Event) {}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	points, err := r.RewindPoints()
+	if err != nil || len(points) != 2 || points[1].Text != "second" || !points[1].Conversation || points[1].Time.IsZero() {
+		t.Fatalf("points %+v %v", points, err)
+	}
+	res, err := r.Rewind(context.Background(), points[1].Index, app.RewindConversation, false)
+	if err != nil || res.Prompt != "second" || res.Mode != app.RewindConversation {
+		t.Fatalf("rewind %+v %v", res, err)
+	}
+	if a, _ := r.ActiveSession(); a.MessageCount != 2 {
+		t.Errorf("messages after rewinding: %d", a.MessageCount)
+	}
+	if _, err := r.Rewind(context.Background(), 1, app.RewindBoth, false); !errors.Is(err, app.ErrNotRewindPoint) {
+		t.Errorf("not a prompt: %v", err)
+	}
+	if _, err := r.Rewind(context.Background(), 0, "sideways", false); !errors.Is(err, app.ErrUnknownRewindMode) {
+		t.Errorf("unknown mode: %v", err)
+	}
+}
+
 func TestRemotePermissionRules(t *testing.T) {
 	r := attach(t, nil)
 	if res, err := r.AddPermissionRule("ask", "Bash(git push *)", false); err != nil || res.Rule != "shell(git push *)" {

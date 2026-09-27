@@ -94,7 +94,12 @@ type action int
 const (
 	actionNone   action = iota
 	actionEditor        // Ctrl+G: edit the line in $EDITOR
+	actionRewind        // Esc Esc at an empty prompt: /rewind
 )
+
+// ErrRewindKey is what ReadInput returns when Esc Esc was pressed at an
+// empty prompt: the REPL opens /rewind.
+var ErrRewindKey = errors.New("rewind requested")
 
 // keyState is one read's view of the keys.
 type keyState struct {
@@ -129,8 +134,12 @@ func (t *TerminalInput) filterKey(r rune) (rune, bool) {
 			now := time.Now()
 			if now.Sub(ks.lastEsc) < doubleEscWindow {
 				ks.lastEsc = time.Time{}
-				if ks.line != "" { // Esc Esc clears the line
+				switch {
+				case ks.line != "": // Esc Esc clears the line
 					t.stdin.push(injectClear)
+				case ks.kind == readEntry: // or, when empty, opens /rewind
+					ks.action = actionRewind
+					t.stdin.push(injectSubmit)
 				}
 				return r, false
 			}
@@ -163,6 +172,14 @@ func (t *TerminalInput) listen(line []rune, _ int, key rune) ([]rune, int, bool)
 		t.ks.line = string(line)
 	}
 	return nil, 0, false
+}
+
+// SetNextInput puts text in the next REPL prompt's line, to edit or send
+// (a rewound prompt).
+func (t *TerminalInput) SetNextInput(text string) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.nextInput = text
 }
 
 // SetPromptKeys sets what the REPL's own keys do at the main prompt.

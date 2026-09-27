@@ -69,6 +69,11 @@ const (
 	// SessionServiceSearchSessionProcedure is the fully-qualified name of the SessionService's
 	// SearchSession RPC.
 	SessionServiceSearchSessionProcedure = "/blitz.v1.SessionService/SearchSession"
+	// SessionServiceListRewindPointsProcedure is the fully-qualified name of the SessionService's
+	// ListRewindPoints RPC.
+	SessionServiceListRewindPointsProcedure = "/blitz.v1.SessionService/ListRewindPoints"
+	// SessionServiceRewindProcedure is the fully-qualified name of the SessionService's Rewind RPC.
+	SessionServiceRewindProcedure = "/blitz.v1.SessionService/Rewind"
 )
 
 // SessionServiceClient is a client for the blitz.v1.SessionService service.
@@ -113,6 +118,12 @@ type SessionServiceClient interface {
 	// Looks for terms in the active session's transcript and returns the
 	// prompt that asks the agent about the matches (run it as a turn).
 	SearchSession(context.Context, *connect.Request[v1.SearchSessionRequest]) (*connect.Response[v1.SearchSessionResponse], error)
+	// Lists the active session's prompts, which it can be rewound to.
+	ListRewindPoints(context.Context, *connect.Request[v1.ListRewindPointsRequest]) (*connect.Response[v1.ListRewindPointsResponse], error)
+	// Takes the active session back to one of its prompts: files,
+	// conversation or both, or summarizes either side of it (SESSION_BUSY,
+	// NOT_REWIND_POINT, CANT_REWIND_CONVERSATION, UNDO_CONFLICT unless force).
+	Rewind(context.Context, *connect.Request[v1.RewindRequest]) (*connect.Response[v1.RewindResponse], error)
 }
 
 // NewSessionServiceClient constructs a client for the blitz.v1.SessionService service. By default,
@@ -210,6 +221,18 @@ func NewSessionServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			connect.WithSchema(sessionServiceMethods.ByName("SearchSession")),
 			connect.WithClientOptions(opts...),
 		),
+		listRewindPoints: connect.NewClient[v1.ListRewindPointsRequest, v1.ListRewindPointsResponse](
+			httpClient,
+			baseURL+SessionServiceListRewindPointsProcedure,
+			connect.WithSchema(sessionServiceMethods.ByName("ListRewindPoints")),
+			connect.WithClientOptions(opts...),
+		),
+		rewind: connect.NewClient[v1.RewindRequest, v1.RewindResponse](
+			httpClient,
+			baseURL+SessionServiceRewindProcedure,
+			connect.WithSchema(sessionServiceMethods.ByName("Rewind")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -229,6 +252,8 @@ type sessionServiceClient struct {
 	getUsage         *connect.Client[v1.GetUsageRequest, v1.GetUsageResponse]
 	compact          *connect.Client[v1.CompactRequest, v1.CompactResponse]
 	searchSession    *connect.Client[v1.SearchSessionRequest, v1.SearchSessionResponse]
+	listRewindPoints *connect.Client[v1.ListRewindPointsRequest, v1.ListRewindPointsResponse]
+	rewind           *connect.Client[v1.RewindRequest, v1.RewindResponse]
 }
 
 // ListSessions calls blitz.v1.SessionService.ListSessions.
@@ -301,6 +326,16 @@ func (c *sessionServiceClient) SearchSession(ctx context.Context, req *connect.R
 	return c.searchSession.CallUnary(ctx, req)
 }
 
+// ListRewindPoints calls blitz.v1.SessionService.ListRewindPoints.
+func (c *sessionServiceClient) ListRewindPoints(ctx context.Context, req *connect.Request[v1.ListRewindPointsRequest]) (*connect.Response[v1.ListRewindPointsResponse], error) {
+	return c.listRewindPoints.CallUnary(ctx, req)
+}
+
+// Rewind calls blitz.v1.SessionService.Rewind.
+func (c *sessionServiceClient) Rewind(ctx context.Context, req *connect.Request[v1.RewindRequest]) (*connect.Response[v1.RewindResponse], error) {
+	return c.rewind.CallUnary(ctx, req)
+}
+
 // SessionServiceHandler is an implementation of the blitz.v1.SessionService service.
 type SessionServiceHandler interface {
 	// Returns the workspace's sessions (or with all, every saved session),
@@ -343,6 +378,12 @@ type SessionServiceHandler interface {
 	// Looks for terms in the active session's transcript and returns the
 	// prompt that asks the agent about the matches (run it as a turn).
 	SearchSession(context.Context, *connect.Request[v1.SearchSessionRequest]) (*connect.Response[v1.SearchSessionResponse], error)
+	// Lists the active session's prompts, which it can be rewound to.
+	ListRewindPoints(context.Context, *connect.Request[v1.ListRewindPointsRequest]) (*connect.Response[v1.ListRewindPointsResponse], error)
+	// Takes the active session back to one of its prompts: files,
+	// conversation or both, or summarizes either side of it (SESSION_BUSY,
+	// NOT_REWIND_POINT, CANT_REWIND_CONVERSATION, UNDO_CONFLICT unless force).
+	Rewind(context.Context, *connect.Request[v1.RewindRequest]) (*connect.Response[v1.RewindResponse], error)
 }
 
 // NewSessionServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -436,6 +477,18 @@ func NewSessionServiceHandler(svc SessionServiceHandler, opts ...connect.Handler
 		connect.WithSchema(sessionServiceMethods.ByName("SearchSession")),
 		connect.WithHandlerOptions(opts...),
 	)
+	sessionServiceListRewindPointsHandler := connect.NewUnaryHandler(
+		SessionServiceListRewindPointsProcedure,
+		svc.ListRewindPoints,
+		connect.WithSchema(sessionServiceMethods.ByName("ListRewindPoints")),
+		connect.WithHandlerOptions(opts...),
+	)
+	sessionServiceRewindHandler := connect.NewUnaryHandler(
+		SessionServiceRewindProcedure,
+		svc.Rewind,
+		connect.WithSchema(sessionServiceMethods.ByName("Rewind")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/blitz.v1.SessionService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case SessionServiceListSessionsProcedure:
@@ -466,6 +519,10 @@ func NewSessionServiceHandler(svc SessionServiceHandler, opts ...connect.Handler
 			sessionServiceCompactHandler.ServeHTTP(w, r)
 		case SessionServiceSearchSessionProcedure:
 			sessionServiceSearchSessionHandler.ServeHTTP(w, r)
+		case SessionServiceListRewindPointsProcedure:
+			sessionServiceListRewindPointsHandler.ServeHTTP(w, r)
+		case SessionServiceRewindProcedure:
+			sessionServiceRewindHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -529,4 +586,12 @@ func (UnimplementedSessionServiceHandler) Compact(context.Context, *connect.Requ
 
 func (UnimplementedSessionServiceHandler) SearchSession(context.Context, *connect.Request[v1.SearchSessionRequest]) (*connect.Response[v1.SearchSessionResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("blitz.v1.SessionService.SearchSession is not implemented"))
+}
+
+func (UnimplementedSessionServiceHandler) ListRewindPoints(context.Context, *connect.Request[v1.ListRewindPointsRequest]) (*connect.Response[v1.ListRewindPointsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("blitz.v1.SessionService.ListRewindPoints is not implemented"))
+}
+
+func (UnimplementedSessionServiceHandler) Rewind(context.Context, *connect.Request[v1.RewindRequest]) (*connect.Response[v1.RewindResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("blitz.v1.SessionService.Rewind is not implemented"))
 }

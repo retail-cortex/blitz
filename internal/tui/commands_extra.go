@@ -19,6 +19,8 @@ func handleExtraCommand(ctx context.Context, cmd string, args []string, app *App
 	switch cmd {
 	case "undo":
 		cmdUndo(args, app)
+	case "rewind":
+		cmdRewind(ctx, args, app)
 	case "checkpoints":
 		cmdCheckpoints(app)
 	case "diff":

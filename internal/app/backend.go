@@ -88,6 +88,8 @@ type Backend interface {
 	// Checkpoints and approvals.
 	ListCheckpoints() []Checkpoint
 	Undo(force bool) (UndoResult, error)
+	RewindPoints() ([]RewindPoint, error)
+	Rewind(ctx context.Context, index int, mode RewindMode, force bool) (RewindResult, error)
 	SessionDiff() string
 	GitDiff(ctx context.Context, color bool) (string, error)
 	ListApprovals() []Approval

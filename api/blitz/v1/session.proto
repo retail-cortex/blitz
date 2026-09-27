@@ -53,6 +53,12 @@ service SessionService {
   // Looks for terms in the active session's transcript and returns the
   // prompt that asks the agent about the matches (run it as a turn).
   rpc SearchSession(SearchSessionRequest) returns (SearchSessionResponse);
+  // Lists the active session's prompts, which it can be rewound to.
+  rpc ListRewindPoints(ListRewindPointsRequest) returns (ListRewindPointsResponse);
+  // Takes the active session back to one of its prompts: files,
+  // conversation or both, or summarizes either side of it (SESSION_BUSY,
+  // NOT_REWIND_POINT, CANT_REWIND_CONVERSATION, UNDO_CONFLICT unless force).
+  rpc Rewind(RewindRequest) returns (RewindResponse);
 }
 
 // SessionInfo describes a saved session.
@@ -213,6 +219,42 @@ message CompactResponse {
   int32 summary_chars = 2;
   Usage before = 3;
   Usage after = 4;
+}
+
+message RewindPoint {
+  // The prompt's position in the transcript.
+  int32 index = 1;
+  string text = 2;
+  google.protobuf.Timestamp time = 3;
+  // Files the agent changed from this prompt until the next.
+  repeated string files = 4;
+  // Whether the conversation can be rewound to it.
+  bool conversation = 5;
+}
+
+message ListRewindPointsRequest {
+  string workspace = 1;
+}
+
+message ListRewindPointsResponse {
+  repeated RewindPoint points = 1;
+}
+
+message RewindRequest {
+  string workspace = 1;
+  int32 index = 2;
+  // both, conversation, code, summarize_from or summarize_up_to.
+  string mode = 3;
+  // Restore files even if they changed since the agent's edits.
+  bool force = 4;
+}
+
+message RewindResponse {
+  string mode = 1;
+  repeated string restored = 2;
+  // The prompt's text, to edit and send again.
+  string prompt = 3;
+  CompactResponse compacted = 4;
 }
 
 message SearchSessionRequest {

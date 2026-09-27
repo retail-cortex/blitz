@@ -172,6 +172,7 @@ func printHelp(app *App) {
 		{"/skills list|show <name>|search <q>", "help.skills"},
 		{"/session list [--all]|new|load <id|name>|save <name>", "help.session"},
 		{"/undo [--force]", "help.undo"},
+		{"/rewind [n [mode]] [--force]", "help.rewind"},
 		{"/checkpoints", "help.checkpoints"},
 		{"/diff [git]", "help.diff"},
 		{"/cost", "help.cost"},

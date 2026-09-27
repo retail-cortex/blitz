@@ -44,6 +44,12 @@ A session is one conversation. Two stores persist it, both owner-only under `ses
 - **SES-41** Names follow the ID rules, may not start with `session-` (never mistaken for an ID) and may not be `latest`.
 - **SES-42** Snapshots are **never continued in place**: opening one by name or ID (`/session load`, `/resume`, `--resume=`) copies it to a new session with `from = <snapshot>`. `--continue` skips snapshots. Snapshots are marked 📸 in `/session list`.
 
+## 6a. Rewind
+
+- **SES-45** Transcript messages carry `kind` (`""` prompt, `steer`, `hook` for a stop hook's request) and, on prompts, `events`: how many events the session's event log held before the prompt. Only prompts (`role user`, no kind) are rewind points (PAR-SES-03); prompts recorded before this have no `events` and can only have their files rewound (`ErrCantRewindConversation`).
+- **SES-46** `Rewind(index, mode, force)` on the active session, refused while a turn runs in it (`ErrSessionBusy`, counted per session in `Run`) and for an index that isn't a prompt (`ErrNotRewindPoint`); modes `both`, `conversation`, `code`, `summarize_from`, `summarize_up_to` (`ErrUnknownRewindMode`). Files first (checkpoints' `Rewind`, FS-68; a conflict refuses the whole rewind unless `force`; nothing to restore is fine), then the conversation: the event log is cut to the prompt's `events` (`PersistentService.Truncate` rewrites the file atomically and rebuilds the in-memory session; other services by delete, create and re-append), the transcript to the prompt's index (atomically), and the dropped prompts' checkpoints are detached (FS-68). The prompt's text is returned. Summarize modes run `Engine.CompactAt` on the events from the prompt on, or before it, and change neither files nor transcript.
+- **SES-47** `RewindPoints` lists the prompts oldest first with time, whether the conversation can be rewound, and the files changed by the checkpoints between each prompt and the next. API: `SessionService.ListRewindPoints` and `Rewind` (reasons `SESSION_BUSY`, `NOT_REWIND_POINT`, `CANT_REWIND_CONVERSATION`, `UNKNOWN_REWIND_MODE`, `UNDO_CONFLICT`).
+
 ## 7. Session search
 
 - **SES-50** `SearchTerms` splits a query into words and `"quoted phrases"`. `Search` matches case-insensitively and literally (no stemming), skipping earlier `/search` commands; it keeps at most `limit` (12) messages — most distinct terms first, then most recent — presented oldest first, each as an excerpt of ~300 chars around the hit cut at rune boundaries with "…". It returns the total match count.

@@ -397,7 +397,7 @@ func newCompleter(w app.Backend) *tui.Completer {
 	c := tui.NewCompleter(w.Dir())
 	for _, cmd := range []string{"help", "agents", "model", "skills", "session", "set", "clear", "sandbox", "exit", "quit",
 		"undo", "checkpoints", "diff", "cost", "context", "compact", "memory", "approvals", "mcp", "resume", "locale", "attach", "paste",
-		"tools", "plan", "show", "init", "mode", "permissions", "effort", "pin_model", "unpin", "model_settings", "search", "btw", "rename", "envs"} {
+		"tools", "plan", "show", "init", "mode", "permissions", "effort", "rewind", "pin_model", "unpin", "model_settings", "search", "btw", "rename", "envs"} {
 		c.Command(cmd)
 	}
 	c.Command("skills", "list", "show", "search")
@@ -414,6 +414,7 @@ func newCompleter(w app.Backend) *tui.Completer {
 	c.Command("mode", "default", "accept-edits", "plan", "dont-ask", "bypass")
 	c.Command("permissions", "allow", "ask", "deny", "remove")
 	c.Command("effort", "minimal", "low", "medium", "high", "max", "auto")
+	c.Command("rewind", "--force")
 	for _, cmd := range w.ListCommands() { // custom commands, as they are at startup
 		c.Command(cmd.Name)
 	}

@@ -129,6 +129,51 @@ func (p *PersistentService) AppendEvent(ctx context.Context, s adksession.Sessio
 	return f.Close()
 }
 
+// Truncate keeps the first keep events of a session and drops the rest,
+// on disk (atomically) and in memory (rewinding the conversation).
+func (p *PersistentService) Truncate(ctx context.Context, appName, userID, id string, keep int) error {
+	path, err := p.eventsPath(id)
+	if err != nil {
+		return err
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	data, err := os.ReadFile(path)
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	var out bytes.Buffer
+	n := 0
+	sc := bufio.NewScanner(bytes.NewReader(data))
+	sc.Buffer(make([]byte, 0, 64*1024), 64<<20)
+	for sc.Scan() && n < keep {
+		line := bytes.TrimSpace(sc.Bytes())
+		var ev adksession.Event
+		if len(line) == 0 || json.Unmarshal(line, &ev) != nil {
+			continue // replay skips these too
+		}
+		out.Write(line)
+		out.WriteByte('\n')
+		n++
+	}
+	if err := sc.Err(); err != nil {
+		return err
+	}
+	if n < keep {
+		return fmt.Errorf("session %s has %d events, fewer than %d", id, n, keep)
+	}
+	if err := replaceFile(path, out.Bytes()); err != nil {
+		return err
+	}
+	// Rebuild the in-memory session from the file.
+	_ = p.inner.Delete(ctx, &adksession.DeleteRequest{AppName: appName, UserID: userID, SessionID: id})
+	created, err := p.inner.Create(ctx, &adksession.CreateRequest{AppName: appName, UserID: userID, SessionID: id})
+	if err != nil {
+		return err
+	}
+	return p.replayLocked(ctx, created.Session)
+}
+
 func (p *PersistentService) replayLocked(ctx context.Context, s adksession.Session) error {
 	path, err := p.eventsPath(s.ID())
 	if err != nil {

@@ -29,6 +29,7 @@ type TerminalInput struct {
 	keys        *keyWatcher // set while a turn is running (steering)
 	ks          *keyState   // the read in progress
 	promptKeys  PromptKeys
+	nextInput   string // the next entry's starting text
 }
 
 // WatchKeys lets the user steer the running turn: typing (or Ctrl+T) calls
@@ -193,6 +194,11 @@ func (t *TerminalInput) readLine(ctx context.Context, text string, kind readKind
 	}()
 
 	t.rl.SetPrompt(prompt)
+	if kind == readEntry && prefill == "" {
+		t.mu.Lock()
+		prefill, t.nextInput = t.nextInput, ""
+		t.mu.Unlock()
+	}
 	for {
 		ks := &keyState{kind: kind, line: prefill}
 		t.mu.Lock()
@@ -215,6 +221,9 @@ func (t *TerminalInput) readLine(ctx context.Context, text string, kind readKind
 		t.mu.Lock()
 		act, saved := ks.action, ks.saved
 		t.mu.Unlock()
+		if err == nil && act == actionRewind {
+			return "", ErrRewindKey
+		}
 		if err != nil || act != actionEditor {
 			return line, err
 		}
