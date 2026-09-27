@@ -14,6 +14,7 @@ import {
   mdiWhiteBalanceSunny,
 } from "@mdi/js";
 import { installService, serviceStatus, type ServiceStatus } from "./desktop";
+import { languages, t } from "./i18n";
 import { workspaceColor } from "./palette";
 import { displayName, forgetWorkspace } from "./prefs";
 import { useApp } from "./state";
@@ -23,24 +24,24 @@ import { WorkspaceDialog } from "./WorkspaceDialog";
 
 type Section = "appearance" | "workspaces" | "service" | "about";
 
-const sections: { id: Section; label: string; icon: string }[] = [
-  { id: "appearance", label: "Appearance", icon: mdiPaletteOutline },
-  { id: "workspaces", label: "Workspaces", icon: mdiFolderMultipleOutline },
-  { id: "service", label: "Service", icon: mdiServerNetwork },
-  { id: "about", label: "About", icon: mdiInformationOutline },
-];
+const sectionIcons: Record<Section, string> = {
+  appearance: mdiPaletteOutline,
+  workspaces: mdiFolderMultipleOutline,
+  service: mdiServerNetwork,
+  about: mdiInformationOutline,
+};
 
 /** The window's settings. The agent's settings are per workspace, in its run settings panel. */
 export function SettingsDialog({ onClose }: { onClose: () => void }) {
   const [section, setSection] = useState<Section>("appearance");
   return (
-    <Dialog title="Settings" icon={mdiCogOutline} onClose={onClose} wide footer={<Button onClick={onClose}>Done</Button>}>
+    <Dialog title={t("desktop.settings")} icon={mdiCogOutline} onClose={onClose} wide footer={<Button onClick={onClose}>{t("desktop.done")}</Button>}>
       <div className="settings">
         <div className="settings-nav list" role="tablist">
-          {sections.map((s) => (
-            <button key={s.id} role="tab" aria-selected={s.id === section} className={`list-item ${s.id === section ? "active" : ""}`} onClick={() => setSection(s.id)}>
-              <Icon path={s.icon} />
-              {s.label}
+          {(Object.keys(sectionIcons) as Section[]).map((id) => (
+            <button key={id} role="tab" aria-selected={id === section} className={`list-item ${id === section ? "active" : ""}`} onClick={() => setSection(id)}>
+              <Icon path={sectionIcons[id]} />
+              {t(`desktop.settings.${id}`)}
             </button>
           ))}
         </div>
@@ -71,40 +72,50 @@ function Appearance() {
   const { prefs, update } = useApp();
   return (
     <div className="stack" style={{ gap: 0 }}>
-      <Setting title="Theme" detail="System follows your computer's light or dark setting.">
+      <Setting title={t("desktop.settings.theme")} detail={t("desktop.settings.theme.detail")}>
         <Segmented<ThemePref>
-          label="Theme"
+          label={t("desktop.settings.theme")}
           value={prefs.theme}
           onChange={(theme) => update((p) => ({ ...p, theme }))}
           options={[
-            { value: "system", label: "System", icon: mdiMonitor },
-            { value: "light", label: "Light", icon: mdiWhiteBalanceSunny },
-            { value: "dark", label: "Dark", icon: mdiWeatherNight },
+            { value: "system", label: t("desktop.settings.theme.system"), icon: mdiMonitor },
+            { value: "light", label: t("desktop.settings.theme.light"), icon: mdiWhiteBalanceSunny },
+            { value: "dark", label: t("desktop.settings.theme.dark"), icon: mdiWeatherNight },
           ]}
         />
       </Setting>
-      <Setting title="Density" detail="Compact fits more on screen.">
+      <Setting title={t("desktop.settings.language")} detail={t("desktop.settings.language.detail")}>
+        <select className="select language-select" aria-label={t("desktop.settings.language")} value={prefs.language} onChange={(e) => update((p) => ({ ...p, language: e.target.value }))}>
+          <option value="system">{t("desktop.settings.language.system")}</option>
+          {languages.map((l) => (
+            <option key={l.tag} value={l.tag}>
+              {l.name}
+            </option>
+          ))}
+        </select>
+      </Setting>
+      <Setting title={t("desktop.settings.density")} detail={t("desktop.settings.density.detail")}>
         <Segmented
-          label="Density"
+          label={t("desktop.settings.density")}
           value={prefs.density}
           onChange={(density) => update((p) => ({ ...p, density }))}
           options={[
-            { value: "comfortable", label: "Comfortable" },
-            { value: "compact", label: "Compact" },
+            { value: "comfortable", label: t("desktop.settings.density.comfortable") },
+            { value: "compact", label: t("desktop.settings.density.compact") },
           ]}
         />
       </Setting>
-      <Setting title="Show thinking" detail="Show the model's reasoning, folded, above its answer (when the model shares it).">
-        <Switch label="Show thinking" checked={prefs.show_thoughts} onChange={(show_thoughts) => update((p) => ({ ...p, show_thoughts }))} />
+      <Setting title={t("desktop.settings.thinking")} detail={t("desktop.settings.thinking.detail")}>
+        <Switch label={t("desktop.settings.thinking")} checked={prefs.show_thoughts} onChange={(show_thoughts) => update((p) => ({ ...p, show_thoughts }))} />
       </Setting>
-      <Setting title="Notifications" detail="Tell me when the agent needs me, or finishes a longer turn, while I'm in another window or workspace.">
-        <Switch label="Notifications" checked={prefs.notifications === "on"} onChange={(on) => update((p) => ({ ...p, notifications: on ? "on" : "off" }))} />
+      <Setting title={t("desktop.settings.notifications")} detail={t("desktop.settings.notifications.detail")}>
+        <Switch label={t("desktop.settings.notifications")} checked={prefs.notifications === "on"} onChange={(on) => update((p) => ({ ...p, notifications: on ? "on" : "off" }))} />
       </Setting>
-      <Setting title="Run settings panel" detail="Show the agent, model and permission settings beside the conversation.">
-        <Switch label="Run settings panel" checked={prefs.run_settings} onChange={(run_settings) => update((p) => ({ ...p, run_settings }))} />
+      <Setting title={t("desktop.settings.panel")} detail={t("desktop.settings.panel.detail")}>
+        <Switch label={t("desktop.settings.panel")} checked={prefs.run_settings} onChange={(run_settings) => update((p) => ({ ...p, run_settings }))} />
       </Setting>
       <p className="t-body-sm muted" style={{ marginTop: 16 }}>
-        <Icon path={mdiBrain} size="sm" /> How hard the model thinks, its permissions and its model are set per workspace, in the run settings panel.
+        <Icon path={mdiBrain} size="sm" /> {t("desktop.settings.per_workspace")}
       </p>
     </div>
   );
@@ -114,7 +125,7 @@ function Workspaces() {
   const { prefs, update, theme } = useApp();
   const [editing, setEditing] = useState<string | null>(null);
   const ws = prefs.workspaces.find((w) => w.dir === editing);
-  if (prefs.workspaces.length === 0) return <p className="muted">No workspaces yet.</p>;
+  if (prefs.workspaces.length === 0) return <p className="muted">{t("desktop.settings.no_workspaces")}</p>;
   return (
     <div className="list">
       {prefs.workspaces.map((w) => (
@@ -127,8 +138,14 @@ function Workspaces() {
             <small className="ellipsis mono">{w.dir}</small>
           </span>
           <span className="trailing">
-            {w.open ? <Chip className="static">Open</Chip> : <Button small onClick={() => update((p) => forgetWorkspace(p, w.dir))}>Forget</Button>}
-            <IconButton icon={mdiPencilOutline} label="Edit details" small onClick={() => setEditing(w.dir)} />
+            {w.open ? (
+              <Chip className="static">{t("desktop.settings.open")}</Chip>
+            ) : (
+              <Button small onClick={() => update((p) => forgetWorkspace(p, w.dir))}>
+                {t("desktop.forget")}
+              </Button>
+            )}
+            <IconButton icon={mdiPencilOutline} label={t("desktop.edit_details")} small onClick={() => setEditing(w.dir)} />
           </span>
         </div>
       ))}
@@ -145,21 +162,21 @@ function Service() {
   useEffect(() => {
     refresh();
   }, []);
-  if (!status) return <p className="muted">{error || "Checking…"}</p>;
+  if (!status) return <p className="muted">{error || t("desktop.checking")}</p>;
   return (
     <div className="stack" style={{ gap: 0 }}>
-      <Setting title="Status" detail="The service holds workspaces and runs workers, also while this window is closed.">
+      <Setting title={t("desktop.service.status")} detail={t("desktop.service.status.detail")}>
         {status.running ? (
           <Chip className="static" icon={mdiCheckCircleOutline} selected>
-            Running
+            {t("desktop.service.running")}
           </Chip>
         ) : (
           <Chip className="static" icon={mdiAlertCircleOutline} tone="danger">
-            Not running
+            {t("desktop.service.not_running")}
           </Chip>
         )}
       </Setting>
-      <Setting title="Starts at login" detail={status.installed ? "Installed as a login item." : "Not installed: it runs only once started."}>
+      <Setting title={t("desktop.service.login")} detail={status.installed ? t("desktop.service.login.installed") : t("desktop.service.login.not_installed")}>
         <Button
           variant="tonal"
           small
@@ -177,14 +194,14 @@ function Service() {
             }
           }}
         >
-          {status.installed ? "Reinstall" : "Install"}
+          {status.installed ? t("desktop.service.reinstall") : t("desktop.service.install_short")}
         </Button>
       </Setting>
-      <Setting title="Socket">
+      <Setting title={t("desktop.service.socket")}>
         <code className="muted">{status.socket}</code>
       </Setting>
-      <Setting title="Command line">
-        <code className="muted">{status.cli || "not found"}</code>
+      <Setting title={t("desktop.service.cli")}>
+        <code className="muted">{status.cli || t("desktop.service.cli_missing")}</code>
       </Setting>
       {error && <p className="error-text">{error}</p>}
     </div>
@@ -194,13 +211,10 @@ function Service() {
 function About() {
   return (
     <div className="stack">
-      <span className="t-title-lg">Blitz</span>
-      <span className="muted">Desktop app {__APP_VERSION__}</span>
-      <p className="muted">
-        A window onto the Blitz service on this computer. Your workspaces, sessions and workers live in the service; this window keeps only its own settings, in{" "}
-        <code>~/.blitz/desktop.json</code>.
-      </p>
-      <p className="t-body-sm muted">Apache License 2.0.</p>
+      <span className="t-title-lg">{t("desktop.brand")}</span>
+      <span className="muted">{t("desktop.about.version", { version: __APP_VERSION__ })}</span>
+      <p className="muted">{t("desktop.about.body", { file: "~/.blitz/desktop.json" })}</p>
+      <p className="t-body-sm muted">{t("desktop.about.license")}</p>
     </div>
   );
 }

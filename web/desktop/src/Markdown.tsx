@@ -8,6 +8,7 @@ import remarkGfm from "remark-gfm";
 import { mdiCheck, mdiContentCopy, mdiImageOutline, mdiOpenInNew } from "@mdi/js";
 import { openURL } from "./desktop";
 import { highlight, languageFor } from "./highlight";
+import { t, useLanguage } from "./i18n";
 import { Icon, IconButton, useSnackbar } from "./ui/controls";
 
 function Link({ href, children }: { href?: string; children?: ReactNode }) {
@@ -36,7 +37,7 @@ function CodeBlock({ children, lang }: { children: string; lang: string }) {
         <span className="t-label muted">{lang || "text"}</span>
         <IconButton
           icon={copied ? mdiCheck : mdiContentCopy}
-          label={copied ? "Copied" : "Copy code"}
+          label={copied ? t("desktop.code.copied") : t("desktop.code.copy")}
           small
           onClick={() =>
             navigator.clipboard?.writeText(children).then(() => {
@@ -79,6 +80,7 @@ const components: Components = {
 };
 
 export const Markdown = memo(function Markdown({ text }: { text: string }) {
+  useLanguage();
   return (
     <div className="markdown">
       <ReactMarkdown remarkPlugins={[remarkGfm]} components={components} skipHtml>

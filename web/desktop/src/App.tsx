@@ -5,6 +5,7 @@ import { chooseWorkspace, installService, onNotificationOpen, serviceStatus, typ
 import { CommandPalette } from "./CommandPalette";
 import { Drawer } from "./Drawer";
 import { ErrorBoundary } from "./ErrorBoundary";
+import { t, useLanguage } from "./i18n";
 import { message, reason } from "./errors";
 import { closeWorkspace, displayName, openWorkspace, openWorkspaces, recentWorkspaces } from "./prefs";
 import { SettingsDialog } from "./SettingsDialog";
@@ -54,6 +55,7 @@ function useServiceStatus() {
 
 function Shell() {
   const { prefs, loaded, update, prefsError, activity, stop, drawer } = useApp();
+  useLanguage(); // the whole window follows a language change
   const [confirmClose, setConfirmClose] = useState<string | null>(null);
   const snack = useSnackbar();
   const { service, error, check, setError } = useServiceStatus();
@@ -80,7 +82,7 @@ function Shell() {
     if (service.state === "up" && wasLost) {
       setWasLost(false);
       setGeneration((g) => g + 1);
-      snack("Reconnected to the Blitz service.");
+      snack(t("desktop.app.reconnected"));
     }
   }, [service.state, wasLost, snack]);
   useEffect(() => {
@@ -113,8 +115,8 @@ function Shell() {
         // Another client's turn keeps it open in the service; the tab goes anyway.
         if (reason(e) !== "TURN_RUNNING") snack(message(e), { error: true });
       }
-      snack(`Closed ${displayName(prefs.workspaces.find((w) => w.dir === dir) ?? { dir })}.`, {
-        action: { label: "Undo", run: () => update((p) => openWorkspace(p, dir)) },
+      snack(t("desktop.app.closed", { name: displayName(prefs.workspaces.find((w) => w.dir === dir) ?? { dir }) }), {
+        action: { label: t("desktop.undo"), run: () => update((p) => openWorkspace(p, dir)) },
       });
     },
     [update, snack, prefs.workspaces],
@@ -122,7 +124,7 @@ function Shell() {
   // A turn running here is stopped first, once the user agrees.
   const close = useCallback((dir: string) => (activity[dir]?.running ? setConfirmClose(dir) : doClose(dir)), [activity, doClose]);
 
-  if (!loaded || service.state === "checking") return <Splash text={error || "Starting…"} />;
+  if (!loaded || service.state === "checking") return <Splash text={error || t("desktop.app.starting")} />;
   if (service.state === "down") return <ServiceDown status={service.status} onStarted={check} error={error} setError={setError} />;
 
   const open_ = openWorkspaces(prefs);
@@ -134,7 +136,7 @@ function Shell() {
         {service.state === "lost" && (
           <div className="banner">
             <Icon path={mdiServerOff} />
-            <span>The Blitz service isn't answering. Reconnecting…</span>
+            <span>{t("desktop.app.lost")}</span>
             <div className="progress spacer" />
           </div>
         )}
@@ -147,12 +149,12 @@ function Shell() {
       {paletteOpen && <CommandPalette onClose={() => setPaletteOpen(false)} onOpenWorkspace={open} onSettings={() => setSettingsOpen(true)} />}
       {confirmClose && (
         <Dialog
-          title="Stop the turn and close?"
+          title={t("desktop.app.stop_close.title")}
           icon={mdiAlertOutline}
           onClose={() => setConfirmClose(null)}
           footer={
             <>
-              <Button onClick={() => setConfirmClose(null)}>Cancel</Button>
+              <Button onClick={() => setConfirmClose(null)}>{t("desktop.cancel")}</Button>
               <Button
                 variant="filled"
                 danger
@@ -163,15 +165,12 @@ function Shell() {
                   doClose(dir);
                 }}
               >
-                Stop and close
+                {t("desktop.app.stop_close")}
               </Button>
             </>
           }
         >
-          <p className="muted">
-            The agent is working in {displayName(prefs.workspaces.find((w) => w.dir === confirmClose) ?? { dir: confirmClose })}. Closing stops its turn; what
-            it already changed stays.
-          </p>
+          <p className="muted">{t("desktop.app.stop_close.body", { name: displayName(prefs.workspaces.find((w) => w.dir === confirmClose) ?? { dir: confirmClose }) })}</p>
         </Dialog>
       )}
       {editingWs && <WorkspaceDialog ws={editingWs} onClose={() => setEditing(null)} onCloseWorkspace={editingWs.open ? () => (setEditing(null), close(editingWs.dir)) : undefined} />}
@@ -208,20 +207,16 @@ function ServiceDown({ status, onStarted, error, setError }: { status: ServiceSt
       <div className="drag-region" />
       <div className="splash-card">
         <Icon path={mdiLightningBolt} size="lg" className="brand-mark" />
-        <h1 className="t-headline">Start the Blitz service</h1>
-        <p className="muted">
-          The service holds your workspaces and runs scheduled workers. It keeps running after this window closes, and this window connects to it.
-        </p>
+        <h1 className="t-headline">{t("desktop.service.start_title")}</h1>
+        <p className="muted">{t("desktop.service.explain")}</p>
         {status.cli ? (
           <Button variant="filled" onClick={install} disabled={busy}>
-            {busy ? "Starting…" : status.installed ? "Start the service" : "Install and start the service"}
+            {busy ? t("desktop.app.starting") : status.installed ? t("desktop.service.start") : t("desktop.service.install")}
           </Button>
         ) : (
-          <p className="error-text">
-            The blitz command wasn't found. Install Blitz's CLI, then run <code>blitz service install</code>.
-          </p>
+          <p className="error-text">{t("desktop.service.no_cli", { command: "blitz service install" })}</p>
         )}
-        <p className="t-body-sm muted">Waiting for it on {status.socket}…</p>
+        <p className="t-body-sm muted">{t("desktop.service.waiting", { socket: status.socket })}</p>
         {error && <p className="error-text">{error}</p>}
       </div>
     </div>
@@ -235,14 +230,14 @@ function Welcome({ onOpen }: { onOpen: () => void }) {
     <div className="welcome">
       <div className="drag-region" />
       <div className="welcome-body">
-        <h1 className="t-display">Welcome to Blitz</h1>
-        <p className="t-title muted">Open a project folder to start working with the agent.</p>
+        <h1 className="t-display">{t("desktop.welcome.title")}</h1>
+        <p className="t-title muted">{t("desktop.welcome.body")}</p>
         <Button variant="filled" icon={mdiFolderOpenOutline} onClick={onOpen}>
-          Open a workspace
+          {t("desktop.workspace.open_one")}
         </Button>
         {recent.length > 0 && (
           <>
-            <h2 className="t-title-sm muted welcome-recent">Recent</h2>
+            <h2 className="t-title-sm muted welcome-recent">{t("desktop.recent")}</h2>
             <div className="recent-grid">
               {recent.map((w) => (
                 <button key={w.dir} className="recent-card" onClick={() => update((p) => openWorkspace(p, w.dir))} title={w.dir}>

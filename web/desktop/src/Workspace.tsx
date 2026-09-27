@@ -10,6 +10,7 @@ import { workspaceColor } from "./palette";
 import { displayName, type WorkspacePrefs } from "./prefs";
 import { RunSettings } from "./RunSettings";
 import { useApp } from "./state";
+import { t } from "./i18n";
 import { IconButton, Menu, Segmented } from "./ui/controls";
 import { Workers } from "./Workers";
 
@@ -58,7 +59,7 @@ export function Workspace({ ws, visible, onEdit, onClose }: { ws: WorkspacePrefs
       <header className="topbar drag-region">
         <span className="ws-dot" />
         <div className="topbar-title">
-          <button className="title-button no-drag" onClick={onEdit} title="Edit the workspace's details">
+          <button className="title-button no-drag" onClick={onEdit} title={t("desktop.ws.edit_title")}>
             <span className="t-title-lg ellipsis">{name}</span>
             <IconButtonGlyph />
           </button>
@@ -68,25 +69,25 @@ export function Workspace({ ws, visible, onEdit, onClose }: { ws: WorkspacePrefs
         </div>
         <div className="no-drag">
           <Segmented<View>
-            label="View"
+            label={t("desktop.ws.view")}
             small
             value={view}
             onChange={setView}
             options={[
-              { value: "chat", label: "Chat", icon: mdiChatOutline },
-              { value: "changes", label: "Changes", icon: mdiFileCompare },
-              { value: "workers", label: "Workers", icon: mdiCalendarClock },
+              { value: "chat", label: t("desktop.view.chat"), icon: mdiChatOutline },
+              { value: "changes", label: t("desktop.view.changes"), icon: mdiFileCompare },
+              { value: "workers", label: t("desktop.view.workers"), icon: mdiCalendarClock },
             ]}
           />
         </div>
         <div className="topbar-actions no-drag">
-          <IconButton icon={mdiTuneVariant} label="Run settings" selected={prefs.run_settings} onClick={() => update((p) => ({ ...p, run_settings: !p.run_settings }))} />
+          <IconButton icon={mdiTuneVariant} label={t("desktop.run_settings")} selected={prefs.run_settings} onClick={() => update((p) => ({ ...p, run_settings: !p.run_settings }))} />
           <Menu
             placement="down end"
-            trigger={(p) => <IconButton icon={mdiDotsVertical} label="More" {...p} />}
+            trigger={(p) => <IconButton icon={mdiDotsVertical} label={t("desktop.more")} {...p} />}
             items={[
-              { label: "Edit details", icon: mdiPencilOutline, onSelect: onEdit },
-              { label: "Close workspace", icon: mdiClose, onSelect: onClose },
+              { label: t("desktop.edit_details"), icon: mdiPencilOutline, onSelect: onEdit },
+              { label: t("desktop.ws.close"), icon: mdiClose, onSelect: onClose },
             ]}
           />
         </div>

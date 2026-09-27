@@ -15,6 +15,7 @@ You don't have to translate everything: missing keys fall back to the parent lan
 - **Placeholders** like `{name}` or `{count}` must appear in the translation, spelled exactly as in English. Their order can change.
 - **Plurals** use `.one` and `.other` keys (`session.messages.one`, `session.messages.other`). French treats 0 as singular. Japanese, Chinese, Korean, Thai, Vietnamese and Indonesian always use `.other`.
 - **Answer letters** in brackets (`[y]`, `[s]`, `[a]`, `[n]`, `[d]`, `[k]`, `[w]`, `[c]`) are what the user types. Keep them even when the word changes: `[y] sí`, not `[s] sí`.
+- **The desktop app** uses the same catalogs: its keys start with `desktop.` and it embeds the shipped catalogs when it's built (files in `~/.blitz/locales` don't reach it yet). Its language is set in its own Settings › Appearance.
 - **Keep literal** anything the user types or the program reads: commands (`/diff git`), config keys (`[context] compaction = false`), file names.
 
 ## Checking a catalog

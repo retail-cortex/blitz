@@ -1,6 +1,7 @@
 // Slash commands in the composer: the built-in ones the window runs
 // through the service's API (as the terminal's REPL does), and the
 // workspace's custom commands and skills, which run as turns.
+import { t } from "./i18n";
 
 export interface CommandSpec {
   name: string; // without the slash
@@ -10,25 +11,29 @@ export interface CommandSpec {
   source: "builtin" | "project" | "user" | "bundled" | "skill";
 }
 
-export const builtins: CommandSpec[] = [
-  { name: "plan", args: "<goal>", description: "Plan first: investigate, then show a plan to approve before changing anything", source: "builtin" },
-  { name: "btw", args: "<question>", description: "Ask a side question; the answer isn't kept in the conversation", source: "builtin" },
-  { name: "search", args: "web|session <terms>", description: "Search the web (then read the best pages) or this conversation", source: "builtin" },
-  { name: "undo", args: "[--force]", description: "Revert the files the last turn changed", source: "builtin" },
-  { name: "checkpoints", description: "List the turns that changed files", source: "builtin" },
-  { name: "diff", description: "Show everything the agent changed in this session", source: "builtin" },
-  { name: "cost", description: "Tokens and cost of this session", source: "builtin" },
-  { name: "context", description: "How full the model's context is", source: "builtin" },
-  { name: "compact", args: "[focus]", description: "Summarize older turns to free context", source: "builtin" },
-  { name: "agent", args: "[name]", description: "Show the agents, or switch to one", source: "builtin" },
-  { name: "model", args: "[provider/model]", description: "Show the model, or switch to another", source: "builtin" },
-  { name: "mode", args: "[default|accept-edits|plan|dont-ask|bypass]", description: "Show or change the permission mode", source: "builtin" },
-  { name: "effort", args: "[minimal|low|medium|high|max|auto]", description: "Show or set how hard the model thinks", source: "builtin" },
-  { name: "session", args: "save <name> [--force]", description: "Save this conversation as a named snapshot", source: "builtin" },
-  { name: "rename", args: "<title>", description: "Rename this conversation", source: "builtin" },
-  { name: "new", description: "Start a new conversation", source: "builtin" },
-  { name: "help", description: "List the commands", source: "builtin" },
-];
+const builtinArgs: Record<string, string | undefined> = {
+  plan: "<goal>",
+  btw: "<question>",
+  search: "web|session <terms>",
+  undo: "[--force]",
+  checkpoints: undefined,
+  diff: undefined,
+  cost: undefined,
+  context: undefined,
+  compact: "[focus]",
+  agent: "[name]",
+  model: "[provider/model]",
+  mode: "[default|accept-edits|plan|dont-ask|bypass]",
+  effort: "[minimal|low|medium|high|max|auto]",
+  session: "save <name> [--force]",
+  rename: "<title>",
+  new: undefined,
+  help: undefined,
+};
+
+/** The built-in commands, described in the window's language. */
+export const builtins = (): CommandSpec[] =>
+  Object.entries(builtinArgs).map(([name, args]) => ({ name, args, description: t(`desktop.cmd.${name}`), source: "builtin" }));
 
 /** A composer line as a command, or undefined when it isn't one. */
 export function parseCommand(line: string): { name: string; args: string } | undefined {
@@ -52,8 +57,9 @@ export function matchCommands(draft: string, all: CommandSpec[]): CommandSpec[] 
 
 /** Every command: the built-in ones first, then the workspace's (a built-in name wins). */
 export function allCommands(custom: CommandSpec[]): CommandSpec[] {
-  const names = new Set(builtins.map((b) => b.name));
-  return [...builtins, ...custom.filter((c) => !names.has(c.name))];
+  const own = builtins();
+  const names = new Set(own.map((b) => b.name));
+  return [...own, ...custom.filter((c) => !names.has(c.name))];
 }
 
 /** /help's text, as Markdown. */
@@ -62,9 +68,10 @@ export function helpText(all: CommandSpec[]): string {
   const cell = (s: string) => s.replace(/\|/g, "\\|");
   const row = (c: CommandSpec) => `| \`/${cell(c.name + (c.args ? " " + c.args : ""))}\` | ${cell(c.description)} |`;
   const custom = all.filter((c) => c.source !== "builtin");
-  let s = "**Commands**\n\n| Command | What it does |\n|---|---|\n" + all.filter((c) => c.source === "builtin").map(row).join("\n");
-  if (custom.length) s += "\n\n**This workspace's commands and skills**\n\n| Command | What it does |\n|---|---|\n" + custom.map(row).join("\n");
-  s += "\n\nPress **Cmd/Ctrl+K** for the command palette.";
+  const head = `| ${t("desktop.help.command")} | ${t("desktop.help.does")} |\n|---|---|\n`;
+  let s = `**${t("desktop.help.title")}**\n\n${head}` + all.filter((c) => c.source === "builtin").map(row).join("\n");
+  if (custom.length) s += `\n\n**${t("desktop.help.custom")}**\n\n${head}` + custom.map(row).join("\n");
+  s += `\n\n${t("desktop.help.palette")}`;
   return s;
 }
 

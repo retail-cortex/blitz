@@ -1,4 +1,5 @@
 import { Component, type ReactNode } from "react";
+import { t } from "./i18n";
 
 /**
  * Catches a crash while drawing the page, so the window shows what went
@@ -19,15 +20,15 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, { error: E
       <div className="splash">
         <div className="drag-region" />
         <div className="splash-card">
-          <h1 className="t-headline">Something went wrong</h1>
-          <p className="muted">The window hit an error it couldn't recover from. Your workspaces and sessions are safe in the Blitz service.</p>
+          <h1 className="t-headline">{t("desktop.crash.title")}</h1>
+          <p className="muted">{t("desktop.crash.body")}</p>
           <pre className="json crash-details">{details}</pre>
           <div className="row">
             <button className="btn filled" onClick={() => location.reload()}>
-              Reload the window
+              {t("desktop.crash.reload")}
             </button>
             <button className="btn text" onClick={() => navigator.clipboard?.writeText(details)}>
-              Copy the details
+              {t("desktop.crash.copy")}
             </button>
           </div>
         </div>

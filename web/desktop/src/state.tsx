@@ -1,8 +1,9 @@
 // State shared across the window: the preferences (saved as they change),
 // the theme in effect, and what each open workspace is doing (for the
 // drawer's indicators).
-import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { getPrefs, savePrefs } from "./desktop";
+import { setLanguage } from "./i18n";
 import { defaultPrefs, type Prefs } from "./prefs";
 import { applyTheme, narrowQuery, onSystemThemeChange, resolveTheme, systemIsDark, type Theme } from "./theme";
 
@@ -54,6 +55,8 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   useEffect(() => onSystemThemeChange(setSystemDark), []);
 
   const theme = resolveTheme(prefs.theme, systemDark);
+  // Before the screen is painted, so no text shows in the wrong language.
+  useLayoutEffect(() => setLanguage(prefs.language), [prefs.language]);
   useEffect(() => applyTheme(theme, prefs.density), [theme, prefs.density]);
 
   // Saves run one after another, so the file ends with the latest.

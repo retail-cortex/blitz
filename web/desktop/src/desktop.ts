@@ -4,6 +4,7 @@
 // window.go at run time. In a plain browser (development) they fall back
 // to stand-ins: settings in localStorage, links in a new tab.
 import { workspaces } from "./api";
+import { t } from "./i18n";
 import { defaultPrefs, normalizePrefs, type Prefs } from "./prefs";
 
 export interface ServiceStatus {
@@ -16,7 +17,7 @@ export interface ServiceStatus {
 type Bound = {
   ServiceStatus(): Promise<ServiceStatus>;
   InstallService(): Promise<string>;
-  ChooseWorkspace(): Promise<string>;
+  ChooseWorkspace(title: string): Promise<string>;
   GetPrefs(): Promise<Prefs>;
   SavePrefs(p: Prefs): Promise<Prefs>;
   OpenURL(url: string): Promise<void>;
@@ -52,8 +53,8 @@ export async function serviceStatus(): Promise<ServiceStatus> {
 export const installService = () => app().InstallService();
 
 export async function chooseWorkspace(): Promise<string> {
-  if (!inApp()) return window.prompt("Workspace directory (absolute path)") ?? "";
-  return app().ChooseWorkspace();
+  if (!inApp()) return window.prompt(t("desktop.choose.prompt")) ?? "";
+  return app().ChooseWorkspace(t("desktop.choose.title"));
 }
 
 export async function getPrefs(): Promise<Prefs> {

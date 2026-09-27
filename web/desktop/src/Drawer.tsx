@@ -2,6 +2,7 @@ import { mdiClose, mdiCogOutline, mdiDeleteOutline, mdiLightningBolt, mdiMenu, m
 import { workspaceColor } from "./palette";
 import { displayName, forgetWorkspace, openWorkspace, openWorkspaces, recentWorkspaces, type WorkspacePrefs } from "./prefs";
 import { useApp } from "./state";
+import { t } from "./i18n";
 import { Icon, IconButton } from "./ui/controls";
 
 /**
@@ -27,27 +28,27 @@ export function Drawer({
   const show = (dir: string) => update((p) => openWorkspace(p, dir));
 
   return (
-    <nav className="drawer" aria-label="Workspaces">
+    <nav className="drawer" aria-label={t("desktop.drawer.label")}>
       <div className="drawer-top drag-region">
         <IconButton
           icon={mdiMenu}
-          label={forced ? "Widen the window to expand the menu" : rail ? "Expand the menu" : "Collapse the menu"}
+          label={forced ? t("desktop.drawer.menu_forced") : rail ? t("desktop.drawer.menu_expand") : t("desktop.drawer.menu_collapse")}
           disabled={forced}
           onClick={() => update((p) => ({ ...p, drawer: rail ? "open" : "rail" }))}
         />
         {!rail && (
           <span className="brand">
             <Icon path={mdiLightningBolt} className="brand-mark" />
-            Blitz
+            {t("desktop.brand")}
           </span>
         )}
       </div>
       <div className="drawer-scroll">
-        <button className={`new-workspace ${rail ? "fab" : ""}`} onClick={onOpen} title="Open a workspace">
+        <button className={`new-workspace ${rail ? "fab" : ""}`} onClick={onOpen} title={t("desktop.workspace.open_one")}>
           <Icon path={mdiPlus} />
-          {!rail && <span>Open workspace</span>}
+          {!rail && <span>{t("desktop.drawer.open")}</span>}
         </button>
-        {open.length > 0 && !rail && <div className="drawer-label">Workspaces</div>}
+        {open.length > 0 && !rail && <div className="drawer-label">{t("desktop.drawer.label")}</div>}
         <div className="list">
           {open.map((w) => (
             <WorkspaceItem key={w.dir} w={w} rail={rail} active={w.dir === prefs.active} onShow={() => show(w.dir)} onClose={() => onClose(w.dir)} onEdit={() => onEdit(w.dir)} />
@@ -55,11 +56,11 @@ export function Drawer({
         </div>
         {recent.length > 0 && !rail && (
           <>
-            <div className="drawer-label">Recent</div>
+            <div className="drawer-label">{t("desktop.recent")}</div>
             <div className="list">
               {recent.map((w) => (
                 <div key={w.dir} className="list-item recent">
-                  <button className="item-main" onClick={() => show(w.dir)} title={`Reopen ${w.dir}`}>
+                  <button className="item-main" onClick={() => show(w.dir)} title={t("desktop.drawer.reopen", { dir: w.dir })}>
                     <span className="lines">
                       <span className="ellipsis">{displayName(w)}</span>
                     </span>
@@ -67,7 +68,7 @@ export function Drawer({
                   <span className="trailing hover-only">
                     <IconButton
                       icon={mdiDeleteOutline}
-                      label="Forget"
+                      label={t("desktop.forget")}
                       small
                       onClick={() => update((p) => forgetWorkspace(p, w.dir))}
                     />
@@ -79,9 +80,9 @@ export function Drawer({
         )}
       </div>
       <div className="drawer-bottom">
-        <button className="list-item" onClick={onSettings} title="Settings">
+        <button className="list-item" onClick={onSettings} title={t("desktop.settings")}>
           <Icon path={mdiCogOutline} />
-          {!rail && <span>Settings</span>}
+          {!rail && <span>{t("desktop.settings")}</span>}
         </button>
       </div>
     </nav>
@@ -107,7 +108,7 @@ function WorkspaceItem({
   const a = activity[w.dir];
   const color = workspaceColor(w.color, theme);
   const name = displayName(w);
-  const status = a?.waiting ? "Waiting for you" : a?.running ? "Working" : "";
+  const status = a?.waiting ? t("desktop.drawer.waiting") : a?.running ? t("desktop.drawer.working") : "";
   return (
     <div className={`list-item workspace-item ${active ? "active" : ""}`}>
       <button className="item-main" onClick={onShow} aria-current={active ? "page" : undefined} title={`${name}\n${w.dir}${status ? `\n${status}` : ""}`}>
@@ -127,13 +128,13 @@ function WorkspaceItem({
           <span className="trailing hover-only">
             <IconButton
               icon={mdiPencilOutline}
-              label="Edit details"
+              label={t("desktop.edit_details")}
               small
               onClick={onEdit}
             />
             <IconButton
               icon={mdiClose}
-              label={`Close ${name}`}
+              label={t("desktop.drawer.close", { name })}
               small
               onClick={onClose}
             />

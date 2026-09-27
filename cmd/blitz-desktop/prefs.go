@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"sync"
@@ -35,6 +36,9 @@ type Prefs struct {
 	// Notifications is "on" (the default: when the agent finishes or waits
 	// while the window is elsewhere) or "off".
 	Notifications string `json:"notifications"`
+	// Language is the window's language: "system" (the default) or a
+	// catalog's tag such as "fr-CA".
+	Language string `json:"language"`
 }
 
 // WorkspacePrefs is a workspace as the window shows it.
@@ -45,6 +49,9 @@ type WorkspacePrefs struct {
 	Color       string `json:"color,omitempty"` // one of the palette's names
 	Open        bool   `json:"open"`
 }
+
+// languageTag is what the language setting may hold.
+var languageTag = regexp.MustCompile(`^(system|[A-Za-z]{2,3}(-[A-Za-z0-9]+)*)$`)
 
 // maxRecent bounds the closed workspaces remembered.
 const maxRecent = 20
@@ -65,6 +72,9 @@ func (p *Prefs) normalize() {
 	}
 	if p.Notifications != "off" {
 		p.Notifications = "on"
+	}
+	if !languageTag.MatchString(p.Language) {
+		p.Language = "system"
 	}
 	seen := map[string]bool{}
 	var open, closed []WorkspacePrefs

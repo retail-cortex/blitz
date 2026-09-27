@@ -12,6 +12,7 @@ import {
   type ReactNode,
 } from "react";
 import { mdiClose } from "@mdi/js";
+import { t } from "../i18n";
 
 /** A Material Design icon, given its SVG path (from @mdi/js). */
 export function Icon({ path, size, spin, className = "" }: { path: string; size?: "sm" | "lg"; spin?: boolean; className?: string }) {
@@ -281,7 +282,7 @@ export function SnackbarProvider({ children }: { children: ReactNode }) {
               {snack.action.label}
             </Button>
           )}
-          <IconButton icon={mdiClose} label="Dismiss" small onClick={() => setSnack(null)} />
+          <IconButton icon={mdiClose} label={t("desktop.dismiss")} small onClick={() => setSnack(null)} />
         </div>
       )}
     </SnackContext.Provider>

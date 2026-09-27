@@ -44,6 +44,7 @@ import { allCommands, helpText, matchCommands, parseCommand, type CommandSpec } 
 import { composeEvent, loadSessionEvent, type ComposeDetail, type LoadSessionDetail } from "./events";
 import { describeImage, imageFiles, readyIds, rejectReason, uploading, type Attachment } from "./attachments";
 import { Markdown } from "./Markdown";
+import { language, t, tn, useLanguage } from "./i18n";
 import { notify, shouldNotify, type NotifyKind } from "./notify";
 import { efforts, effortIcon, modeOf, modes } from "./options";
 import { useApp } from "./state";
@@ -185,8 +186,8 @@ export function Conversation({
     [prefs.notifications, dir],
   );
   useEffect(() => {
-    if (pending?.kind === "approval") tell("waiting", `${name}: approval needed`, `${pending.req.tool} wants to: ${pending.req.detail}`);
-    if (pending?.kind === "question") tell("waiting", `${name}: the agent asks`, pending.q.question.replace(/[#*`_>]/g, "").trim());
+    if (pending?.kind === "approval") tell("waiting", t("desktop.notify.approval", { name }), t("desktop.notify.approval_body", { tool: pending.req.tool, detail: pending.req.detail }));
+    if (pending?.kind === "question") tell("waiting", t("desktop.notify.asks", { name }), pending.q.question.replace(/[#*`_>]/g, "").trim());
   }, [pending, name, tell]);
 
   // Follow new output, unless the user scrolled up to read.
@@ -244,8 +245,8 @@ export function Conversation({
         );
         for await (const res of stream) {
           const ev = res.event!;
-          const t = tasksOf(ev);
-          if (t) setTasks(t);
+          const taskList = tasksOf(ev);
+          if (taskList) setTasks(taskList);
           else if (ev.kind.case === "approvalRequest") setPending({ kind: "approval", req: ev.kind.value });
           else if (ev.kind.case === "question") setPending({ kind: "question", q: ev.kind.value });
           else setEntries((e) => applyEvent(e, ev));
@@ -254,12 +255,12 @@ export function Conversation({
             setTotal(ev.kind.value.after);
             leftover = ev.kind.value.leftover;
             const f = ev.kind.value;
-            tell("finished", f.error ? `${name}: the turn failed` : `${name}: done`, f.error ? f.error.message : f.output || "The agent finished.");
+            tell("finished", f.error ? t("desktop.notify.failed", { name }) : t("desktop.notify.done", { name }), f.error ? f.error.message : f.output || t("desktop.notify.finished"));
           }
         }
       } catch (e) {
         if (!ctl.signal.aborted) fail(e);
-        else setEntries((e) => [...e, { kind: "notice", text: "Stopped.", tone: "info" }]);
+        else setEntries((e) => [...e, { kind: "notice", text: t("desktop.stopped"), tone: "info" }]);
       } finally {
         setRunning(false);
         setPending(null);
@@ -296,7 +297,7 @@ export function Conversation({
   const addFiles = useCallback(
     (files: File[]) => {
       if (!imagesOn) {
-        snack("Images are turned off for this workspace ([images] enabled in the configuration).", { error: true });
+        snack(t("desktop.images.off"), { error: true });
         return;
       }
       for (const f of files) {
@@ -391,12 +392,12 @@ export function Conversation({
         await reload();
         setDraft(res.prompt); // to change and send again
       }
-      const files = res.restored.length ? ` Restored ${res.restored.length} file${res.restored.length === 1 ? "" : "s"}.` : "";
+      const files = res.restored.length ? tn("desktop.rewind.restored", res.restored.length) : "";
       if (mode.startsWith("summarize")) {
         const c = res.compacted;
-        snack(`Summarized ${c?.eventsCompacted ?? 0} events into ${c?.summaryChars ?? 0} characters.`);
+        snack(t("desktop.compacted", { events: c?.eventsCompacted ?? 0, chars: c?.summaryChars ?? 0 }));
         refreshTotal();
-      } else snack(mode === "code" ? `Files restored to before that prompt.${files}` : `Rewound to before that prompt.${files}`);
+      } else snack(mode === "code" ? t("desktop.rewind.code_done", { files }) : t("desktop.rewind.done", { files }));
     } catch (e) {
       if (reason(e) === "UNDO_CONFLICT") setForceRewind({ index, mode, error: message(e) });
       else snack(message(e), { error: true });
@@ -418,20 +419,20 @@ export function Conversation({
     if (!c) return false;
     const spec = commands.find((x) => x.name === c.name);
     if (!spec) {
-      say(`Unknown command /${c.name}. Type / to see the commands.`, "error");
+      say(t("desktop.cmd.unknown", { name: c.name }), "error");
       return true;
     }
     const startsTurn = spec.source !== "builtin" || ["plan", "btw", "search", "new", "undo", "compact", "rename", "session", "agent", "model"].includes(c.name);
     if (running && startsTurn) {
-      say(`Wait for the agent to finish (or stop it) before /${c.name}.`, "error");
+      say(t("desktop.cmd.wait", { name: c.name }), "error");
       return true;
     }
     if (spec.source !== "builtin") {
       run(line.trim(), { command: true });
       return true;
     }
-    const usage = () => say(`Usage: /${spec.name}${spec.args ? " " + spec.args : ""}`, "error");
-    const k = (n: bigint) => Number(n).toLocaleString();
+    const usage = () => say(t("desktop.cmd.usage", { usage: `/${spec.name}${spec.args ? " " + spec.args : ""}` }), "error");
+    const k = (n: bigint) => Number(n).toLocaleString(language());
     try {
       switch (c.name) {
         case "plan":
@@ -445,23 +446,23 @@ export function Conversation({
           const recorded = `/search ${sub} ${terms}`;
           if (sub === "session") {
             const r = await sessions.searchSession({ workspace: dir, terms });
-            if (r.found === 0) say(`Nothing in this conversation matches “${terms}”.`);
+            if (r.found === 0) say(t("desktop.search.session_none", { terms }));
             else run(recorded, { prompt: r.prompt, readOnly: "search", shown: recorded });
             return true;
           }
-          say(`Searching the web for “${terms}”…`);
+          say(t("desktop.search.searching", { terms }));
           const r = await workspaces.searchWeb({ workspace: dir, terms });
           if (r.links.length === 0) {
-            say(`The search found nothing worth reading for “${terms}”.`);
+            say(t("desktop.search.none", { terms }));
             return true;
           }
-          say(`Found with ${r.provider}:\n\n${r.links.map((l, i) => `${i + 1}. [${l.title.replace(/[[\]]/g, "")}](${l.url})`).join("\n")}\n\nThe agent reads them now.`, "info", true);
+          say(`${t("desktop.search.found", { provider: r.provider })}\n\n${r.links.map((l, i) => `${i + 1}. [${l.title.replace(/[[\]]/g, "")}](${l.url})`).join("\n")}\n\n${t("desktop.search.reading")}`, "info", true);
           run(recorded, { prompt: r.prompt, readOnly: "search", fetchGrants: r.links.map((l) => l.url), shown: recorded });
           return true;
         }
         case "undo": {
           const res = await workspaces.undo({ workspace: dir, force: c.args === "--force" });
-          say(res.restored.length ? `Undid “${res.label}”: ${res.restored.join(", ")}.` : "Nothing was restored.");
+          say(res.restored.length ? t("desktop.changes.undid", { label: res.label, files: res.restored.join(", ") }) : t("desktop.undo.nothing"));
           if (res.error) say(res.error.message, "error");
           return true;
         }
@@ -469,8 +470,8 @@ export function Conversation({
           const r = await workspaces.listCheckpoints({ workspace: dir });
           say(
             r.checkpoints.length
-              ? "**Turns that changed files** (newest first)\n\n" + r.checkpoints.map((cp) => `- ${cp.label} — ${cp.files.map((f) => `\`${f}\``).join(", ")}`).join("\n")
-              : "No turn has changed files yet.",
+              ? t("desktop.checkpoints.title") + "\n\n" + r.checkpoints.map((cp) => `- ${cp.label} — ${cp.files.map((f) => `\`${f}\``).join(", ")}`).join("\n")
+              : t("desktop.checkpoints.none"),
             "info",
             true,
           );
@@ -483,56 +484,57 @@ export function Conversation({
         case "context": {
           const r = await sessions.getUsage({ workspace: dir });
           const u = r.usage;
-          if (!u || u.calls === 0) return say("Nothing sent in this conversation yet."), true;
+          if (!u || u.calls === 0) return say(t("desktop.usage.none")), true;
           say(
             c.name === "cost"
-              ? `| | |\n|---|---|\n| Model calls | ${u.calls} |\n| Tokens sent | ${k(u.input)} (${k(u.cached)} cached) |\n| Tokens received | ${k(u.output)} |\n| Cost | ${u.priced ? "$" + u.costUsd.toFixed(4) : "not priced for this model"} |`
-              : `The context is **${k(u.lastPrompt)} tokens**` + (r.autoCompact ? `; older turns are summarized past ${r.threshold.toLocaleString()}.` : ". Automatic compaction is off: use /compact."),
+              ? `| | |\n|---|---|\n| ${t("desktop.usage.calls")} | ${u.calls} |\n| ${t("desktop.usage.sent")} | ${k(u.input)} (${t("desktop.usage.cached", { count: k(u.cached) })}) |\n| ${t("desktop.usage.received")} | ${k(u.output)} |\n| ${t("desktop.usage.cost")} | ${u.priced ? "$" + u.costUsd.toFixed(4) : t("desktop.usage.unpriced")} |`
+              : t("desktop.usage.context", { count: k(u.lastPrompt) }) + (r.autoCompact ? t("desktop.usage.auto", { threshold: r.threshold.toLocaleString(language()) }) : t("desktop.usage.manual")),
             "info",
             true,
           );
           return true;
         }
         case "compact": {
-          say("Summarizing older turns…");
+          say(t("desktop.compacting"));
           const r = await sessions.compact({ workspace: dir, focus: c.args });
-          say(`Summarized ${r.eventsCompacted} events into ${r.summaryChars} characters.`);
+          say(t("desktop.compacted", { events: r.eventsCompacted, chars: r.summaryChars }));
           refreshTotal();
           return true;
         }
         case "agent": {
           if (!c.args) {
             const r = await workspaces.listAgents({ workspace: dir });
-            say("**Agents**\n\n" + r.agents.map((a) => `- ${a.active ? "**" : ""}${a.displayName}${a.active ? "** (active)" : ""} — \`${a.name}\`: ${a.description}`).join("\n"), "info", true);
+            say(t("desktop.agents.title") + "\n\n" + r.agents.map((a) => `- ${a.active ? "**" : ""}${a.displayName}${a.active ? `** ${t("desktop.agents.active")}` : ""} — \`${a.name}\`: ${a.description}`).join("\n"), "info", true);
             return true;
           }
           const r = await workspaces.setAgent({ workspace: dir, name: c.args });
-          say(`Switched to ${r.agent?.displayName ?? c.args}.`);
+          say(t("desktop.agents.switched", { name: r.agent?.displayName ?? c.args }));
           onSettingsChanged();
           return true;
         }
         case "model": {
           if (!c.args) {
             const m = await workspaces.getModel({ workspace: dir });
-            say(`The model is \`${m.provider ? m.provider + "/" : ""}${m.name}\`${m.unavailable ? ` (unavailable: ${m.unavailable})` : ""}.`, "info", true);
+            const ref = `${m.provider ? m.provider + "/" : ""}${m.name}`;
+            say(m.unavailable ? t("desktop.model.unavailable", { model: ref, reason: m.unavailable }) : t("desktop.model.is", { model: ref }), "info", true);
             return true;
           }
           await workspaces.setModel({ workspace: dir, ref: c.args });
-          say(`The model is now ${c.args}.`);
+          say(t("desktop.model.now", { model: c.args }));
           onSettingsChanged();
           return true;
         }
         case "mode": {
-          if (!c.args) return say(`The permission mode is **${modeOf(settings?.permissionMode ?? "default").label}**. Change it with /mode <name> or the chip below.`, "info", true), true;
+          if (!c.args) return say(t("desktop.mode.is", { mode: modeOf(settings?.permissionMode ?? "default").label }), "info", true), true;
           const r = await workspaces.setPermissionMode({ workspace: dir, mode: c.args });
-          say(`Permission mode: ${modeOf(r.mode).label}.`);
+          say(t("desktop.mode.now", { mode: modeOf(r.mode).label }));
           onSettingsChanged();
           return true;
         }
         case "effort": {
-          if (!c.args) return say(`Reasoning effort: **${efforts.find((e) => e.value === (settings?.effort ?? ""))?.label ?? "Auto"}**.`, "info", true), true;
+          if (!c.args) return say(t("desktop.effort.is", { effort: efforts().find((e) => e.value === (settings?.effort ?? ""))?.label ?? t("desktop.effort.auto") }), "info", true), true;
           await workspaces.setSetting({ workspace: dir, key: "effort", value: c.args });
-          say(`Reasoning effort: ${c.args}.`);
+          say(t("desktop.effort.now", { effort: c.args }));
           onSettingsChanged();
           return true;
         }
@@ -540,12 +542,12 @@ export function Conversation({
           const m = /^save\s+(\S+)(\s+--force)?$/.exec(c.args);
           if (!m) return usage(), true;
           const r = await sessions.saveSnapshot({ workspace: dir, name: m[1], force: !!m[2] });
-          say(`Saved as the snapshot “${r.snapshot?.snapshot ?? m[1]}”. Open it from History to continue from here.`);
+          say(t("desktop.snapshot.saved", { name: r.snapshot?.snapshot ?? m[1] }));
           refreshList();
           return true;
         }
         case "rename":
-          return c.args ? (await rename(c.args), say(`Renamed to “${c.args}”.`), true) : (usage(), true);
+          return c.args ? (await rename(c.args), say(t("desktop.renamed", { title: c.args })), true) : (usage(), true);
         case "new":
           await newSession();
           return true;
@@ -605,7 +607,7 @@ export function Conversation({
       {dragging && (
         <div className="drop-overlay">
           <Icon path={mdiImagePlusOutline} size="lg" />
-          <span className="t-title">Drop images to attach them</span>
+          <span className="t-title">{t("desktop.drop")}</span>
         </div>
       )}
       <SessionBar session={session} list={list} running={running} onNew={newSession} onLoad={load} onRename={rename} />
@@ -614,10 +616,10 @@ export function Conversation({
           {modelProblem && (
             <div className="card warn row">
               <Icon path={mdiAlertCircleOutline} />
-              <span>The model isn't available: {modelProblem}</span>
+              <span>{t("desktop.model_unavailable", { reason: modelProblem })}</span>
             </div>
           )}
-          {empty && <EmptyState name={name} onPick={(t) => setDraft(t)} />}
+          {empty && <EmptyState name={name} onPick={(text) => setDraft(text)} />}
           {groupTools(shown).map((g) =>
             g.kind === "tools" ? (
               <ToolGroup key={g.at} tools={g.tools} />
@@ -628,7 +630,7 @@ export function Conversation({
           {running && !pending && (
             <div className="working">
               <Icon path={mdiProgressClock} className="pulse" />
-              <span className="muted">Working…</span>
+              <span className="muted">{t("desktop.working")}</span>
             </div>
           )}
           {pending?.kind === "approval" && <ApprovalCard req={pending.req} onDecide={decide} />}
@@ -637,7 +639,7 @@ export function Conversation({
             <div className="card error row">
               <Icon path={mdiAlertCircleOutline} />
               <span className="spacer">{error}</span>
-              <IconButton icon={mdiClose} label="Dismiss" small onClick={() => setError("")} />
+              <IconButton icon={mdiClose} label={t("desktop.dismiss")} small onClick={() => setError("")} />
             </div>
           )}
         </div>
@@ -665,12 +667,12 @@ export function Conversation({
       </div>
       {forceRewind && (
         <Dialog
-          title="Files changed since"
+          title={t("desktop.conflict.title")}
           icon={mdiAlertCircleOutline}
           onClose={() => setForceRewind(null)}
           footer={
             <>
-              <Button onClick={() => setForceRewind(null)}>Keep them</Button>
+              <Button onClick={() => setForceRewind(null)}>{t("desktop.conflict.keep")}</Button>
               <Button
                 variant="filled"
                 danger
@@ -680,13 +682,13 @@ export function Conversation({
                   rewind(f.index, f.mode, true);
                 }}
               >
-                Overwrite them
+                {t("desktop.overwrite")}
               </Button>
             </>
           }
         >
           <p className="muted">{forceRewind.error}</p>
-          <p className="muted">Rewinding would overwrite changes made after the agent's edits (by you, or by a command).</p>
+          <p className="muted">{t("desktop.rewind.overwrite_body")}</p>
         </Dialog>
       )}
     </div>
@@ -710,11 +712,11 @@ function SessionBar({
 }) {
   const [editing, setEditing] = useState(false);
   const [title, setTitle] = useState("");
-  const untitled = session?.title ? "" : "New chat";
+  const untitled = session?.title ? "" : t("desktop.chat.new");
   const commit = () => {
     setEditing(false);
-    const t = title.trim();
-    if (t && t !== session?.title) onRename(t);
+    const next = title.trim();
+    if (next && next !== session?.title) onRename(next);
   };
   return (
     <div className="session-bar chat-column">
@@ -734,7 +736,7 @@ function SessionBar({
       ) : (
         <button
           className="session-title"
-          title="Rename this chat"
+          title={t("desktop.chat.rename")}
           onClick={() => {
             setTitle(session?.title ?? "");
             setEditing(true);
@@ -749,17 +751,17 @@ function SessionBar({
         placement="down end"
         trigger={(p) => (
           <Button icon={mdiHistory} small disabled={running} {...p}>
-            History
+            {t("desktop.chat.history")}
           </Button>
         )}
         items={
           list.length === 0
-            ? [{ heading: "No other chats yet" }]
+            ? [{ heading: t("desktop.chat.none") }]
             : [
-                { heading: "Chats in this workspace" },
+                { heading: t("desktop.chat.list") },
                 ...list.map((s) => ({
                   label: s.snapshot ? `📸 ${s.snapshot}` : s.title || "(untitled)",
-                  detail: `${s.messageCount} messages${s.updated ? ` · ${timestampDate(s.updated).toLocaleString()}` : ""}`,
+                  detail: tn("desktop.messages", s.messageCount) + (s.updated ? ` · ${timestampDate(s.updated).toLocaleString(language())}` : ""),
                   on: s.id === session?.id,
                   onSelect: () => onLoad(s.id),
                 })),
@@ -767,28 +769,28 @@ function SessionBar({
         }
       />
       <Button icon={mdiPlus} small variant="tonal" onClick={onNew} disabled={running}>
-        New chat
+        {t("desktop.chat.new")}
       </Button>
     </div>
   );
 }
 
 const suggestions = [
-  { icon: mdiMagnify, text: "Explain how this project is organised, and how to build and test it." },
-  { icon: mdiWrenchOutline, text: "Find the most likely bug in the code I changed last, and fix it." },
-  { icon: mdiFormatListChecks, text: "Write tests for the least-tested part of this code." },
-  { icon: mdiLightbulbOutline, text: "Suggest three improvements to this codebase, most valuable first." },
+  { icon: mdiMagnify, key: "explain" },
+  { icon: mdiWrenchOutline, key: "bug" },
+  { icon: mdiFormatListChecks, key: "tests" },
+  { icon: mdiLightbulbOutline, key: "improve" },
 ];
 
 function EmptyState({ name, onPick }: { name: string; onPick: (t: string) => void }) {
   return (
     <div className="empty">
-      <h2 className="t-display gradient-text">What are we working on in {name}?</h2>
+      <h2 className="t-display gradient-text">{t("desktop.empty.title", { name })}</h2>
       <div className="suggestions">
         {suggestions.map((s) => (
-          <button key={s.text} className="suggestion" onClick={() => onPick(s.text)}>
+          <button key={s.key} className="suggestion" onClick={() => onPick(t(`desktop.suggest.${s.key}`))}>
             <Icon path={s.icon} />
-            <span>{s.text}</span>
+            <span>{t(`desktop.suggest.${s.key}`)}</span>
           </button>
         ))}
       </div>
@@ -807,6 +809,7 @@ const EntryView = memo(function EntryView({
   onRewind: (index: number, mode: string) => void;
   onEdit: (text: string) => void;
 }) {
+  useLanguage();
   switch (entry.kind) {
     case "user":
       return <UserBubble entry={entry} running={running} onRewind={onRewind} onEdit={onEdit} />;
@@ -842,7 +845,7 @@ function UserBubble({ entry, running, onRewind, onEdit }: { entry: UserEntry; ru
     return (
       <div className="notice info row">
         <Icon path={entry.sub === "plan" ? mdiClipboardCheckOutline : mdiMessageReplyTextOutline} size="sm" />
-        <span>{entry.sub === "plan" ? "Plan approved: carrying it out." : entry.text.replace(/^\(stop hook\) /, "Stop hook: ")}</span>
+        <span>{entry.sub === "plan" ? t("desktop.plan_approved") : t("desktop.stop_hook", { text: entry.text.replace(/^\(stop hook\) /, "") })}</span>
       </div>
     );
   }
@@ -850,31 +853,31 @@ function UserBubble({ entry, running, onRewind, onEdit }: { entry: UserEntry; ru
   return (
     <div className={`turn-user ${entry.sub === "steer" ? "steer" : ""}`}>
       <div className="bubble-actions">
-        <IconButton icon={mdiContentCopy} label="Copy" small onClick={() => navigator.clipboard?.writeText(entry.text).then(() => snack("Copied."))} />
+        <IconButton icon={mdiContentCopy} label={t("desktop.copy")} small onClick={() => navigator.clipboard?.writeText(entry.text).then(() => snack(t("desktop.copied")))} />
         {canRewind && (
           <>
-            <IconButton icon={mdiPencilOutline} label="Edit (goes back to before this prompt, files included)" small onClick={() => onRewind(entry.index!, "both")} />
+            <IconButton icon={mdiPencilOutline} label={t("desktop.prompt.edit")} small onClick={() => onRewind(entry.index!, "both")} />
             <Menu
               placement="down end"
-              trigger={(p) => <IconButton icon={mdiDotsHorizontal} label="Rewind" small {...p} />}
+              trigger={(p) => <IconButton icon={mdiDotsHorizontal} label={t("desktop.prompt.rewind")} small {...p} />}
               items={[
-                { heading: "Go back to before this prompt" },
-                { label: "Code and conversation", detail: "Restore the files and forget from here", icon: mdiUndoVariant, onSelect: () => onRewind(entry.index!, "both") },
-                { label: "Conversation only", detail: "Keep the files as they are", icon: mdiMessageReplyTextOutline, onSelect: () => onRewind(entry.index!, "conversation") },
-                { label: "Code only", detail: "Restore the files; keep the conversation", icon: mdiFileEditOutline, onSelect: () => onRewind(entry.index!, "code") },
+                { heading: t("desktop.rewind.heading") },
+                { label: t("desktop.rewind.both"), detail: t("desktop.rewind.both.detail"), icon: mdiUndoVariant, onSelect: () => onRewind(entry.index!, "both") },
+                { label: t("desktop.rewind.conversation"), detail: t("desktop.rewind.conversation.detail"), icon: mdiMessageReplyTextOutline, onSelect: () => onRewind(entry.index!, "conversation") },
+                { label: t("desktop.rewind.code"), detail: t("desktop.rewind.code.detail"), icon: mdiFileEditOutline, onSelect: () => onRewind(entry.index!, "code") },
                 "divider",
-                { label: "Summarize from here", detail: "Shrink the context: summarize this and later turns", icon: mdiPlaylistEdit, onSelect: () => onRewind(entry.index!, "summarize_from") },
-                { label: "Summarize up to here", detail: "Summarize the turns before this one", icon: mdiPlaylistEdit, onSelect: () => onRewind(entry.index!, "summarize_up_to") },
+                { label: t("desktop.rewind.from"), detail: t("desktop.rewind.from.detail"), icon: mdiPlaylistEdit, onSelect: () => onRewind(entry.index!, "summarize_from") },
+                { label: t("desktop.rewind.upto"), detail: t("desktop.rewind.upto.detail"), icon: mdiPlaylistEdit, onSelect: () => onRewind(entry.index!, "summarize_up_to") },
                 "divider",
-                { label: "Copy into the composer", icon: mdiContentCopy, onSelect: () => onEdit(entry.text) },
+                { label: t("desktop.rewind.copy"), icon: mdiContentCopy, onSelect: () => onEdit(entry.text) },
               ]}
             />
           </>
         )}
       </div>
       <div className="bubble">
-        {entry.sub === "steer" && <span className="t-label muted">Sent while working</span>}
-        {entry.sub === "aside" && <span className="t-label muted">Side question: not kept in the conversation</span>}
+        {entry.sub === "steer" && <span className="t-label muted">{t("desktop.bubble.steer")}</span>}
+        {entry.sub === "aside" && <span className="t-label muted">{t("desktop.bubble.aside")}</span>}
         {entry.images && (
           <div className="bubble-images">
             {entry.images.map((img) => (
@@ -894,7 +897,7 @@ function Thought({ text, open }: { text: string; open: boolean }) {
     <div className="thought">
       <button className="thought-head" onClick={() => setExpanded((x) => !x)} aria-expanded={expanded}>
         <Icon path={effortIcon} size="sm" className={open ? "pulse" : ""} />
-        <span>{open ? "Thinking…" : "Thoughts"}</span>
+        <span>{open ? t("desktop.thinking") : t("desktop.thoughts")}</span>
         <Icon path={expanded ? mdiChevronDown : mdiChevronRight} size="sm" />
       </button>
       {expanded && (
@@ -936,20 +939,21 @@ function groupTools(entries: Entry[]): Item[] {
 
 /** A run of tool calls: open while they run (or when one failed), folded after. */
 function ToolGroup({ tools }: { tools: ToolEntry[] }) {
-  const busy = tools.some((t) => t.result === undefined);
-  const failures = tools.filter((t) => failed(t.result)).length;
+  const busy = tools.some((x) => x.result === undefined);
+  const failures = tools.filter((x) => failed(x.result)).length;
   const [open, setOpen] = useState<boolean | null>(null);
   const shown = open ?? (busy || failures > 0);
   return (
     <div className={`tool-group ${shown ? "open" : ""}`}>
       <button className="tool-group-head" onClick={() => setOpen(!shown)} aria-expanded={shown}>
         <span className="tool-icons">
-          {[...new Set(tools.map((t) => toolIcon(t.name)))].slice(0, 4).map((p) => (
+          {[...new Set(tools.map((x) => toolIcon(x.name)))].slice(0, 4).map((p) => (
             <Icon key={p} path={p} size="sm" />
           ))}
         </span>
         <span>
-          Used {tools.length} tools{failures > 0 ? ` · ${failures} failed` : ""}
+          {tn("desktop.tools.used", tools.length)}
+          {failures > 0 ? t("desktop.tools.failed", { count: failures }) : ""}
         </span>
         {busy && <Icon path={mdiProgressClock} size="sm" className="pulse" />}
         <span className="spacer" />
@@ -957,8 +961,8 @@ function ToolGroup({ tools }: { tools: ToolEntry[] }) {
       </button>
       {shown && (
         <div className="tool-group-body">
-          {tools.map((t, i) => (
-            <ToolRow key={i} name={t.name} args={t.args} result={t.result} />
+          {tools.map((x, i) => (
+            <ToolRow key={i} name={x.name} args={x.args} result={x.result} />
           ))}
         </div>
       )}
@@ -982,8 +986,8 @@ function ToolRow({ name, args, result }: { name: string; args?: JsonObject; resu
       </button>
       {open && (
         <div className="tool-body">
-          {args && <JsonBlock label="Arguments" value={args} />}
-          {result && <JsonBlock label="Result" value={result} />}
+          {args && <JsonBlock label={t("desktop.tool.args")} value={args} />}
+          {result && <JsonBlock label={t("desktop.tool.result")} value={result} />}
         </div>
       )}
     </div>
@@ -1004,29 +1008,29 @@ function JsonBlock({ label, value }: { label: string; value: JsonObject }) {
 function ApprovalCard({ req, onDecide }: { req: ApprovalRequest; onDecide: (d: Decision) => void }) {
   const files = req.diff ? parseDiff(req.diff) : [];
   return (
-    <div className="card approval" role="alertdialog" aria-label="Approval required">
+    <div className="card approval" role="alertdialog" aria-label={t("desktop.approval.label")}>
       <div className="row">
         <Icon path={mdiShieldAlertOutline} size="lg" />
         <div className="stack" style={{ gap: 2 }}>
-          <span className="t-title">Allow this?</span>
+          <span className="t-title">{t("desktop.approval.title")}</span>
           <span className="muted">
-            <code>{req.tool}</code> wants to: {req.detail}
+            {t("desktop.approval.wants", { tool: req.tool, detail: req.detail })}
           </span>
         </div>
       </div>
       {files.length > 0 && <DiffView files={files} compact />}
       <div className="row wrap">
         <Button variant="filled" onClick={() => onDecide(Decision.ONCE)} autoFocus>
-          Allow once
+          {t("desktop.approval.once")}
         </Button>
         {req.scopeLabel && (
           <Button variant="tonal" onClick={() => onDecide(Decision.SESSION)}>
-            Allow {req.scopeLabel} this session
+            {t("desktop.approval.session", { scope: req.scopeLabel })}
           </Button>
         )}
-        {req.scopeLabel && <Button onClick={() => onDecide(Decision.ALWAYS)}>Always allow {req.scopeLabel}</Button>}
+        {req.scopeLabel && <Button onClick={() => onDecide(Decision.ALWAYS)}>{t("desktop.approval.always", { scope: req.scopeLabel })}</Button>}
         <Button variant="outlined" danger onClick={() => onDecide(Decision.DENY)}>
-          Deny
+          {t("desktop.approval.deny")}
         </Button>
       </div>
     </div>
@@ -1037,10 +1041,10 @@ function QuestionCard({ q, onAnswer }: { q: Question; onAnswer: (a: string) => v
   const [text, setText] = useState("");
   // A plan review lists "carry it out" first: make that the primary choice.
   return (
-    <div className="card question" role="alertdialog" aria-label="The agent asks">
+    <div className="card question" role="alertdialog" aria-label={t("desktop.question.title")}>
       <div className="row">
         <Icon path={mdiHelpCircleOutline} size="lg" />
-        <span className="t-title">The agent asks</span>
+        <span className="t-title">{t("desktop.question.title")}</span>
       </div>
       <div className="question-text">
         <Markdown text={q.question} />
@@ -1061,9 +1065,9 @@ function QuestionCard({ q, onAnswer }: { q: Question; onAnswer: (a: string) => v
           if (text.trim()) onAnswer(text.trim());
         }}
       >
-        <input className="input" value={text} onChange={(e) => setText(e.target.value)} placeholder={q.options.length ? "Or answer in your own words (feedback on a plan, say)" : "Your answer"} autoFocus={q.options.length === 0} />
+        <input className="input" value={text} onChange={(e) => setText(e.target.value)} placeholder={q.options.length ? t("desktop.question.other") : t("desktop.question.answer")} autoFocus={q.options.length === 0} />
         <Button variant="text" type="submit" disabled={!text.trim()}>
-          Send
+          {t("desktop.send")}
         </Button>
       </form>
     </div>
@@ -1071,7 +1075,7 @@ function QuestionCard({ q, onAnswer }: { q: Question; onAnswer: (a: string) => v
 }
 
 function TaskList({ tasks, onDismiss }: { tasks: Task[]; onDismiss?: () => void }) {
-  const done = tasks.filter((t) => t.status === "done").length;
+  const done = tasks.filter((x) => x.status === "done").length;
   const allDone = done === tasks.length;
   const [open, setOpen] = useState(true);
   useEffect(() => setOpen(!allDone), [allDone]); // folds itself once every task is done
@@ -1080,24 +1084,24 @@ function TaskList({ tasks, onDismiss }: { tasks: Task[]; onDismiss?: () => void 
       <div className="row">
         <button className="tasks-head" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
           <Icon path={mdiFormatListChecks} size="sm" />
-          <span className="t-title-sm">Tasks</span>
+          <span className="t-title-sm">{t("desktop.tasks.title")}</span>
           <span className="muted t-body-sm">
-            {done} of {tasks.length} done
+            {t("desktop.tasks.progress", { done, total: tasks.length })}
           </span>
           <Icon path={open ? mdiChevronDown : mdiChevronRight} size="sm" />
         </button>
         <span className="spacer" />
-        {onDismiss && <IconButton icon={mdiClose} label="Hide the task list" small onClick={onDismiss} />}
+        {onDismiss && <IconButton icon={mdiClose} label={t("desktop.tasks.hide")} small onClick={onDismiss} />}
       </div>
       <div className="progress-bar">
         <span style={{ width: `${(done / tasks.length) * 100}%` }} />
       </div>
       {open && (
         <ul className="task-items">
-          {tasks.map((t, i) => (
-            <li key={i} className={t.status}>
-              <Icon path={t.status === "done" ? mdiCheckboxMarked : t.status === "in_progress" ? mdiProgressClock : mdiCheckboxBlankOutline} size="sm" className={t.status === "in_progress" ? "pulse" : ""} />
-              <span>{t.content}</span>
+          {tasks.map((task, i) => (
+            <li key={i} className={task.status}>
+              <Icon path={task.status === "done" ? mdiCheckboxMarked : task.status === "in_progress" ? mdiProgressClock : mdiCheckboxBlankOutline} size="sm" className={task.status === "in_progress" ? "pulse" : ""} />
+              <span>{task.content}</span>
             </li>
           ))}
         </ul>
@@ -1161,17 +1165,17 @@ function Composer({
     if (draft) ref.current?.focus();
   }, [draft]);
   const send = () => {
-    const t = draft.trim();
-    if (!t || busy) return;
+    const text = draft.trim();
+    if (!text || busy) return;
     setDraft("");
-    onSubmit(t);
+    onSubmit(text);
   };
   const setMode = async (mode: string) => {
     try {
       await workspaces.setPermissionMode({ workspace: dir, mode });
       onSettingsChanged();
     } catch (e) {
-      snack(reason(e) === "BYPASS_NEEDS_SANDBOX" ? "Bypass needs the OS sandbox, which isn't active." : message(e), { error: true });
+      snack(reason(e) === "BYPASS_NEEDS_SANDBOX" ? t("desktop.bypass_needs_sandbox") : message(e), { error: true });
     }
   };
   const setEffort = async (value: string) => {
@@ -1183,11 +1187,11 @@ function Composer({
     }
   };
   const mode = modeOf(settings?.permissionMode ?? "default");
-  const effort = efforts.find((e) => e.value === (settings?.effort ?? "")) ?? efforts[0];
+  const effort = efforts().find((e) => e.value === (settings?.effort ?? "")) ?? efforts()[0];
   return (
     <div className={`composer ${running ? "running" : ""}`}>
       {menuOpen && (
-        <div className="command-menu" role="listbox" aria-label="Commands">
+        <div className="command-menu" role="listbox" aria-label={t("desktop.commands")}>
           {matches.map((c, i) => (
             <button
               key={c.name}
@@ -1207,7 +1211,7 @@ function Composer({
           ))}
           <div className="command-hint t-body-sm muted">
             <kbd>↑</kbd>
-            <kbd>↓</kbd> choose · <kbd>Tab</kbd> complete · <kbd>Esc</kbd> close
+            <kbd>↓</kbd> {t("desktop.keys.choose")} · <kbd>{t("desktop.keys.tab")}</kbd> {t("desktop.keys.complete")} · <kbd>{t("desktop.keys.esc")}</kbd> {t("desktop.keys.close")}
           </div>
         </div>
       )}
@@ -1218,9 +1222,9 @@ function Composer({
               <img src={a.url} alt="" />
               <span className="attachment-text">
                 <span className="ellipsis">{a.name}</span>
-                <small className={a.error ? "error-text ellipsis" : "muted ellipsis"}>{a.error || a.detail || "Uploading…"}</small>
+                <small className={a.error ? "error-text ellipsis" : "muted ellipsis"}>{a.error || a.detail || t("desktop.attach.uploading")}</small>
               </span>
-              <IconButton icon={mdiClose} label={`Remove ${a.name}`} small onClick={() => onRemoveAttachment(a.key)} />
+              <IconButton icon={mdiClose} label={t("desktop.attach.remove", { name: a.name })} small onClick={() => onRemoveAttachment(a.key)} />
             </div>
           ))}
         </div>
@@ -1262,13 +1266,13 @@ function Composer({
             send();
           }
         }}
-        placeholder={running ? "Steer the agent: it reads this after its current step" : plan ? "Describe the goal to plan for…" : "Ask Blitz to do something, or type / for commands…"}
-        aria-label="Message"
+        placeholder={running ? t("desktop.composer.steer") : plan ? t("desktop.composer.plan") : t("desktop.composer.ask")}
+        aria-label={t("desktop.composer.message")}
       />
       <div className="composer-bar">
         {!running && imagesOn && (
           <>
-            <IconButton icon={mdiImagePlusOutline} label="Attach images (or paste or drop them)" small onClick={() => picker.current?.click()} />
+            <IconButton icon={mdiImagePlusOutline} label={t("desktop.attach")} small onClick={() => picker.current?.click()} />
             <input
               ref={picker}
               type="file"
@@ -1289,28 +1293,28 @@ function Composer({
               {mode.label}
             </Chip>
           )}
-          items={[{ heading: "Permission mode" }, ...modes.map((m) => ({ label: m.label, detail: m.detail, icon: m.icon, on: m.value === mode.value, onSelect: () => setMode(m.value) }))]}
+          items={[{ heading: t("desktop.composer.mode") }, ...modes().map((m) => ({ label: m.label, detail: m.detail, icon: m.icon, on: m.value === mode.value, onSelect: () => setMode(m.value) }))]}
         />
         <Menu
           placement="up start"
           trigger={(p) => (
-            <Chip icon={effortIcon} selected={!!effort.value} title="How hard the model thinks" {...p}>
-              {effort.value ? `Effort: ${effort.label}` : "Effort"}
+            <Chip icon={effortIcon} selected={!!effort.value} title={t("desktop.composer.effort_title")} {...p}>
+              {effort.value ? t("desktop.composer.effort_set", { effort: effort.label }) : t("desktop.composer.effort")}
             </Chip>
           )}
-          items={[{ heading: "Reasoning effort" }, ...efforts.map((e) => ({ label: e.label, detail: e.detail, on: e.value === effort.value, onSelect: () => setEffort(e.value) }))]}
+          items={[{ heading: t("desktop.composer.effort_heading") }, ...efforts().map((e) => ({ label: e.label, detail: e.detail, on: e.value === effort.value, onSelect: () => setEffort(e.value) }))]}
         />
         {!running && (
-          <Chip icon={mdiClipboardCheckOutline} selected={plan} onClick={() => setPlan(!plan)} title="Plan first: the agent investigates and shows you a plan to approve before changing anything">
-            Plan first
+          <Chip icon={mdiClipboardCheckOutline} selected={plan} onClick={() => setPlan(!plan)} title={t("desktop.composer.plan_first_hint")}>
+            {t("desktop.composer.plan_first")}
           </Chip>
         )}
         <span className="spacer" />
         <span className="t-body-sm muted hint">
-          <kbd>Enter</kbd> to send · <kbd>Shift</kbd>+<kbd>Enter</kbd> for a new line
+          <kbd>{t("desktop.keys.enter")}</kbd> {t("desktop.keys.to_send")} · <kbd>{t("desktop.keys.shift")}</kbd>+<kbd>{t("desktop.keys.enter")}</kbd> {t("desktop.keys.new_line")}
         </span>
-        {running && <IconButton icon={mdiStop} label="Stop" variant="tonal" onClick={onStop} />}
-        <IconButton icon={mdiArrowUp} label={busy ? "Uploading images…" : running ? "Steer" : "Send"} variant="filled" disabled={!draft.trim() || busy} onClick={send} />
+        {running && <IconButton icon={mdiStop} label={t("desktop.stop")} variant="tonal" onClick={onStop} />}
+        <IconButton icon={mdiArrowUp} label={busy ? t("desktop.uploading") : running ? t("desktop.steer") : t("desktop.send")} variant="filled" disabled={!draft.trim() || busy} onClick={send} />
       </div>
     </div>
   );
@@ -1319,7 +1323,7 @@ function Composer({
 function UsageFooter({ turn, total }: { turn: string; total?: Usage }) {
   const parts = [turn];
   if (total && total.calls > 0) {
-    parts.push(`session ${k(total.input + total.output)} tokens` + (total.priced ? ` · $${total.costUsd.toFixed(4)}` : ""));
+    parts.push(t("desktop.usage.session", { tokens: k(total.input + total.output) }) + (total.priced ? ` · $${total.costUsd.toFixed(4)}` : ""));
   }
   const line = parts.filter(Boolean).join("  ·  ");
   return <div className="usage t-body-sm muted">{line || " "}</div>;
@@ -1329,7 +1333,7 @@ const k = (n: bigint) => (n >= 1_000_000n ? `${(Number(n) / 1e6).toFixed(1)}M` :
 
 function usageLine(before?: Usage, after?: Usage): string {
   if (!after || !before || after.calls === before.calls) return "";
-  let s = `This turn: ${k(after.input - before.input)} in · ${k(after.output - before.output)} out · context ${k(after.lastPrompt)}`;
+  let s = t("desktop.usage.turn", { in: k(after.input - before.input), out: k(after.output - before.output), context: k(after.lastPrompt) });
   if (after.priced) s += ` · $${(after.costUsd - before.costUsd).toFixed(4)}`;
   return s;
 }

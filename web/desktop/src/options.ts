@@ -1,30 +1,39 @@
-// The choices the run settings offer, with what each means.
+// The choices the run settings offer, with what each means (translated
+// when asked for, so a language change shows at once).
 import { mdiBrain, mdiFileEditOutline, mdiHandBackRight, mdiLockOutline, mdiShieldCheckOutline, mdiShieldOffOutline } from "@mdi/js";
+import { t } from "./i18n";
 
-export const modes = [
-  { value: "default", label: "Ask", detail: "Ask before edits, commands and other sensitive actions", icon: mdiShieldCheckOutline },
-  { value: "accept-edits", label: "Accept edits", detail: "Change files in the workspace without asking; commands still ask", icon: mdiFileEditOutline },
-  { value: "plan", label: "Plan", detail: "Plan only: tools that change anything are refused until you approve a plan", icon: mdiLockOutline },
-  { value: "dont-ask", label: "Don't ask", detail: "Never ask: anything not already allowed is refused", icon: mdiHandBackRight },
-  { value: "bypass", label: "Bypass", detail: "Ask for nothing (only inside the OS sandbox; deny rules still apply)", icon: mdiShieldOffOutline },
-];
+export interface Option {
+  value: string;
+  label: string;
+  detail: string;
+  icon?: string;
+}
 
-export const modeOf = (v: string) => modes.find((m) => m.value === v) ?? modes[0];
+const modeIcons: Record<string, string> = {
+  default: mdiShieldCheckOutline,
+  "accept-edits": mdiFileEditOutline,
+  plan: mdiLockOutline,
+  "dont-ask": mdiHandBackRight,
+  bypass: mdiShieldOffOutline,
+};
 
-export const efforts = [
-  { value: "", label: "Auto", detail: "Each model's own setting" },
-  { value: "minimal", label: "Minimal", detail: "Answer with as little thinking as possible" },
-  { value: "low", label: "Low", detail: "Think briefly" },
-  { value: "medium", label: "Medium", detail: "Think moderately" },
-  { value: "high", label: "High", detail: "Think carefully" },
-  { value: "max", label: "Max", detail: "Think as long as it helps (slower, costlier)" },
-];
+/** The permission modes. */
+export const modes = (): Option[] =>
+  Object.keys(modeIcons).map((value) => ({ value, icon: modeIcons[value], label: t(`desktop.mode.${value}`), detail: t(`desktop.mode.${value}.detail`) }));
+
+export const modeOf = (v: string) => modes().find((m) => m.value === v) ?? modes()[0];
+
+/** The reasoning efforts ("" is Auto). */
+export const efforts = (): Option[] =>
+  ["", "minimal", "low", "medium", "high", "max"].map((value) => ({
+    value,
+    label: t(`desktop.effort.${value || "auto"}`),
+    detail: t(`desktop.effort.${value || "auto"}.detail`),
+  }));
 
 export const effortIcon = mdiBrain;
 
-export const agencies = [
-  { value: "low", label: "Low", detail: "Stop after each meaningful unit of work and ask" },
-  { value: "medium", label: "Medium", detail: "Do routine tasks; pause at major milestones" },
-  { value: "high", label: "High", detail: "Work autonomously; ask only when blocked" },
-  { value: "extreme", label: "Extreme", detail: "Maximally autonomous, polling background tasks" },
-];
+/** The agency levels. */
+export const agencies = (): Option[] =>
+  ["low", "medium", "high", "extreme"].map((value) => ({ value, label: t(`desktop.agency.${value}`), detail: t(`desktop.agency.${value}.detail`) }));

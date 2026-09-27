@@ -107,7 +107,8 @@ Suggested order (from NEXT_STEPS): run the manual checks (§9) first — their f
 - **BL-DSK-30** ✅ *Done 2026-09-27 ([spec_desktop_024](spec_desktop_024.md) DSK-78b).* Images can be pasted or dropped into the composer; they're uploaded with `AddImage` and sent with the next turn by ID (SVC-13), shown as thumbnails.
 
 ### 7.5 Localisation — M
-- **BL-DSK-40** Every string in the page comes from the same catalogs as the terminal (served by the service or embedded at build time), follows the interface language (`/locale`), and passes the same catalog checks (I18N-05, I18N-06).
+- **BL-DSK-40** ✅ *Done 2026-09-27 ([spec_desktop_024](spec_desktop_024.md) DSK-78f/g): embedded at build time; the window has its own language setting (System by default) rather than following `/locale` — see BL-DSK-41.* Every string in the page comes from the same catalogs as the terminal (served by the service or embedded at build time), follows the interface language (`/locale`), and passes the same catalog checks (I18N-05, I18N-06).
+- **BL-DSK-41** The window's **System** language follows the terminal's `[ui] locale` when one is set, and user catalogs in `~/.blitz/locales` load too (the service would serve them: the desktop module can't read the configuration itself).
 
 ### 7.6 Workers view — S
 - **BL-DSK-50** The workers list refreshes when `WORKER.md` files change (polling `ListWorkers`, or a watch RPC); a run's session opens in the conversation view with one click.

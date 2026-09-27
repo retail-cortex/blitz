@@ -97,9 +97,10 @@ func (a *App) InstallService() (string, error) {
 	return string(out), nil
 }
 
-// ChooseWorkspace asks for a directory to open ("" if cancelled).
-func (a *App) ChooseWorkspace() (string, error) {
-	return runtime.OpenDirectoryDialog(a.ctx, runtime.OpenDialogOptions{Title: "Open a workspace", CanCreateDirectories: true})
+// ChooseWorkspace asks for a directory to open ("" if cancelled). The
+// page gives the dialog's title, in the window's language.
+func (a *App) ChooseWorkspace(title string) (string, error) {
+	return runtime.OpenDirectoryDialog(a.ctx, runtime.OpenDialogOptions{Title: title, CanCreateDirectories: true})
 }
 
 // GetPrefs returns the window's settings (the defaults when none are

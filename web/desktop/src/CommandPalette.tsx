@@ -20,6 +20,7 @@ import { allCommands, filterPalette, type CommandSpec, type PaletteItem } from "
 import { compose, loadSession, showView } from "./events";
 import { displayName, openWorkspace, openWorkspaces, recentWorkspaces } from "./prefs";
 import { useApp } from "./state";
+import { t, tn } from "./i18n";
 import { Icon } from "./ui/controls";
 
 /**
@@ -42,11 +43,11 @@ export function CommandPalette({ onClose, onOpenWorkspace, onSettings }: { onClo
     if (!dir) return;
     workspaces
       .listCommands({ workspace: dir })
-      .then((r) => setCustom(r.commands.map((c) => ({ name: c.name, args: c.argumentHint || undefined, description: c.description || `Run /${c.name}`, source: (c.source || "project") as CommandSpec["source"] }))))
+      .then((r) => setCustom(r.commands.map((c) => ({ name: c.name, args: c.argumentHint || undefined, description: c.description || t("desktop.cmd.run", { name: c.name }), source: (c.source || "project") as CommandSpec["source"] }))))
       .catch(() => {});
     sessions
       .listSessions({ workspace: dir })
-      .then((r) => setChats(r.sessions.slice(0, 30).map((s) => ({ id: s.id, title: s.snapshot ? `📸 ${s.snapshot}` : s.title || "(untitled)", detail: `${s.messageCount} messages` }))))
+      .then((r) => setChats(r.sessions.slice(0, 30).map((s) => ({ id: s.id, title: s.snapshot ? `📸 ${s.snapshot}` : s.title || t("desktop.untitled"), detail: tn("desktop.messages", s.messageCount) }))))
       .catch(() => {});
   }, [dir]);
 
@@ -60,7 +61,7 @@ export function CommandPalette({ onClose, onOpenWorkspace, onSettings }: { onClo
       for (const c of allCommands(custom)) {
         const needsArgs = !!c.args && !c.args.startsWith("[");
         out.push({
-          group: "Commands",
+          group: t("desktop.palette.group.commands"),
           label: `/${c.name}`,
           detail: c.description,
           icon: mdiConsoleLine,
@@ -71,24 +72,24 @@ export function CommandPalette({ onClose, onOpenWorkspace, onSettings }: { onClo
         });
       }
       out.push(
-        { group: "View", label: "Show the chat", icon: mdiChatOutline, run: done(() => showView({ dir, view: "chat" })) },
-        { group: "View", label: "Show the changes", icon: mdiFileCompare, run: done(() => showView({ dir, view: "changes" })) },
-        { group: "View", label: "Show the workers", icon: mdiCalendarClock, run: done(() => showView({ dir, view: "workers" })) },
+        { group: t("desktop.palette.group.view"), label: t("desktop.palette.show_chat"), icon: mdiChatOutline, run: done(() => showView({ dir, view: "chat" })) },
+        { group: t("desktop.palette.group.view"), label: t("desktop.palette.show_changes"), icon: mdiFileCompare, run: done(() => showView({ dir, view: "changes" })) },
+        { group: t("desktop.palette.group.view"), label: t("desktop.palette.show_workers"), icon: mdiCalendarClock, run: done(() => showView({ dir, view: "workers" })) },
       );
-      for (const c of chats) out.push({ group: "Chats", label: c.title, detail: c.detail, icon: mdiHistory, run: done(() => (showView({ dir, view: "chat" }), loadSession({ dir, id: c.id }))) });
+      for (const c of chats) out.push({ group: t("desktop.palette.group.chats"), label: c.title, detail: c.detail, icon: mdiHistory, run: done(() => (showView({ dir, view: "chat" }), loadSession({ dir, id: c.id }))) });
     }
     for (const w of openWorkspaces(prefs))
-      out.push({ group: "Workspaces", label: displayName(w), detail: w.dir, icon: mdiFolderOutline, run: done(() => update((p) => openWorkspace(p, w.dir))) });
+      out.push({ group: t("desktop.palette.group.workspaces"), label: displayName(w), detail: w.dir, icon: mdiFolderOutline, run: done(() => update((p) => openWorkspace(p, w.dir))) });
     for (const w of recentWorkspaces(prefs))
-      out.push({ group: "Workspaces", label: `Reopen ${displayName(w)}`, detail: w.dir, icon: mdiFolderOutline, run: done(() => update((p) => openWorkspace(p, w.dir))) });
+      out.push({ group: t("desktop.palette.group.workspaces"), label: t("desktop.palette.reopen", { name: displayName(w) }), detail: w.dir, icon: mdiFolderOutline, run: done(() => update((p) => openWorkspace(p, w.dir))) });
     out.push(
-      { group: "Workspaces", label: "Open a workspace…", icon: mdiFolderOpenOutline, run: done(onOpenWorkspace) },
-      { group: "Settings", label: "Settings", icon: mdiCogOutline, run: done(onSettings) },
-      { group: "Settings", label: "Theme: follow the system", icon: mdiMonitor, run: done(() => update((p) => ({ ...p, theme: "system" }))) },
-      { group: "Settings", label: "Theme: light", icon: mdiWhiteBalanceSunny, run: done(() => update((p) => ({ ...p, theme: "light" }))) },
-      { group: "Settings", label: "Theme: dark", icon: mdiWeatherNight, run: done(() => update((p) => ({ ...p, theme: "dark" }))) },
-      { group: "Settings", label: prefs.run_settings ? "Hide the run settings" : "Show the run settings", icon: mdiTuneVariant, run: done(() => update((p) => ({ ...p, run_settings: !p.run_settings }))) },
-      { group: "Settings", label: prefs.drawer === "rail" ? "Expand the menu" : "Collapse the menu", icon: mdiMenu, run: done(() => update((p) => ({ ...p, drawer: p.drawer === "rail" ? "open" : "rail" }))) },
+      { group: t("desktop.palette.group.workspaces"), label: t("desktop.palette.open_workspace"), icon: mdiFolderOpenOutline, run: done(onOpenWorkspace) },
+      { group: t("desktop.palette.group.settings"), label: t("desktop.settings"), icon: mdiCogOutline, run: done(onSettings) },
+      { group: t("desktop.palette.group.settings"), label: t("desktop.palette.theme_system"), icon: mdiMonitor, run: done(() => update((p) => ({ ...p, theme: "system" }))) },
+      { group: t("desktop.palette.group.settings"), label: t("desktop.palette.theme_light"), icon: mdiWhiteBalanceSunny, run: done(() => update((p) => ({ ...p, theme: "light" }))) },
+      { group: t("desktop.palette.group.settings"), label: t("desktop.palette.theme_dark"), icon: mdiWeatherNight, run: done(() => update((p) => ({ ...p, theme: "dark" }))) },
+      { group: t("desktop.palette.group.settings"), label: prefs.run_settings ? t("desktop.palette.hide_panel") : t("desktop.palette.show_panel"), icon: mdiTuneVariant, run: done(() => update((p) => ({ ...p, run_settings: !p.run_settings }))) },
+      { group: t("desktop.palette.group.settings"), label: prefs.drawer === "rail" ? t("desktop.drawer.menu_expand") : t("desktop.drawer.menu_collapse"), icon: mdiMenu, run: done(() => update((p) => ({ ...p, drawer: p.drawer === "rail" ? "open" : "rail" }))) },
     );
     return out;
   }, [dir, custom, chats, prefs, update, onClose, onOpenWorkspace, onSettings]);
@@ -100,14 +101,14 @@ export function CommandPalette({ onClose, onOpenWorkspace, onSettings }: { onClo
   let lastGroup = "";
   return (
     <div className="scrim palette-scrim" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="palette" role="dialog" aria-modal="true" aria-label="Command palette">
+      <div className="palette" role="dialog" aria-modal="true" aria-label={t("desktop.palette.label")}>
         <div className="palette-search">
           <Icon path={mdiMagnify} />
           <input
             ref={input}
             value={query}
-            placeholder="Type a command, a workspace, a chat or a setting…"
-            aria-label="Search"
+            placeholder={t("desktop.palette.placeholder")}
+            aria-label={t("desktop.search")}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === "Escape") onClose();
@@ -122,7 +123,7 @@ export function CommandPalette({ onClose, onOpenWorkspace, onSettings }: { onClo
           />
         </div>
         <div className="palette-list" ref={list} role="listbox">
-          {shown.length === 0 && <p className="palette-empty muted">Nothing matches.</p>}
+          {shown.length === 0 && <p className="palette-empty muted">{t("desktop.palette.none")}</p>}
           {shown.map((it, i) => {
             const head = it.group !== lastGroup && !query ? <div className="palette-group">{it.group}</div> : null;
             lastGroup = it.group;
@@ -140,7 +141,7 @@ export function CommandPalette({ onClose, onOpenWorkspace, onSettings }: { onClo
         </div>
         <div className="palette-foot t-body-sm muted">
           <kbd>↑</kbd>
-          <kbd>↓</kbd> choose · <kbd>Enter</kbd> run · <kbd>Esc</kbd> close
+          <kbd>↓</kbd> {t("desktop.keys.choose")} · <kbd>{t("desktop.keys.enter")}</kbd> {t("desktop.keys.run")} · <kbd>{t("desktop.keys.esc")}</kbd> {t("desktop.keys.close")}
         </div>
       </div>
     </div>

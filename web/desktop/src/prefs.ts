@@ -20,6 +20,8 @@ export interface Prefs {
   show_thoughts: boolean;
   density: "comfortable" | "compact";
   notifications: "on" | "off";
+  /** The window's language: "system" (the default) or a catalog's tag. */
+  language: string;
 }
 
 export const defaultPrefs: Prefs = {
@@ -30,6 +32,7 @@ export const defaultPrefs: Prefs = {
   show_thoughts: false,
   density: "comfortable",
   notifications: "on",
+  language: "system",
 };
 
 const pick = <T extends string>(v: unknown, allowed: readonly T[], fallback: T): T => (allowed.includes(v as T) ? (v as T) : fallback);
@@ -60,6 +63,7 @@ export function normalizePrefs(raw: unknown): Prefs {
     show_thoughts: r.show_thoughts === true,
     density: pick(r.density, ["comfortable", "compact"] as const, "comfortable"),
     notifications: pick(r.notifications, ["on", "off"] as const, "on"),
+    language: typeof r.language === "string" && /^[A-Za-z]{2,3}(-[A-Za-z0-9]+)*$|^system$/.test(r.language) ? r.language : "system",
   };
 }
 

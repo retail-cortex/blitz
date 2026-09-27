@@ -36,7 +36,7 @@ describe("commands", () => {
     expect(help).toContain("`/db:migrate <name>`");
     expect(help).toContain("`/undo [--force]`");
     expect(help).toContain("`/mode [default\\|accept-edits\\|plan\\|dont-ask\\|bypass]`"); // pipes escaped in the table
-    expect(builtins.every((b) => help.includes(`/${b.name}`))).toBe(true);
+    expect(builtins().every((b) => help.includes(`/${b.name}`))).toBe(true);
   });
 });
 

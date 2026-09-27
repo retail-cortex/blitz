@@ -1,5 +1,6 @@
 // Images attached to the next prompt: pasted, dropped or chosen, uploaded
 // to the service at once (AddImage), sent with the turn by ID.
+import { language, t } from "./i18n";
 
 /** The largest image the window uploads (the service may scale it down). */
 export const maxImageBytes = 20 << 20;
@@ -20,16 +21,17 @@ export function imageFiles(files: Iterable<File> | ArrayLike<File> | null | unde
 
 /** Why a file can't be attached ("" if it can). */
 export function rejectReason(f: Pick<File, "type" | "size" | "name">): string {
-  if (!f.type.startsWith("image/")) return `${f.name} isn't an image`;
-  if (f.size > maxImageBytes) return `${f.name} is larger than ${maxImageBytes >> 20} MB`;
+  if (!f.type.startsWith("image/")) return t("desktop.attach.not_image", { name: f.name });
+  if (f.size > maxImageBytes) return t("desktop.attach.too_large", { name: f.name, size: maxImageBytes >> 20 });
   return "";
 }
 
 /** A short description of an uploaded image. */
 export function describeImage(i: { width: number; height: number; size: bigint | number; resized: boolean }): string {
   const bytes = Number(i.size);
-  const size = bytes >= 1 << 20 ? `${(bytes / (1 << 20)).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`;
-  return `${i.width}×${i.height} · ${size}${i.resized ? " · scaled down" : ""}`;
+  const fmt = (n: number, digits: number) => n.toLocaleString(language(), { minimumFractionDigits: digits, maximumFractionDigits: digits });
+  const size = bytes >= 1 << 20 ? t("desktop.attach.mb", { size: fmt(bytes / (1 << 20), 1) }) : t("desktop.attach.kb", { size: fmt(Math.max(1, Math.round(bytes / 1024)), 0) });
+  return `${i.width}×${i.height} · ${size}${i.resized ? ` · ${t("desktop.attach.scaled")}` : ""}`;
 }
 
 /** The IDs to send: uploaded images only. */

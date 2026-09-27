@@ -10,6 +10,7 @@ import {
 } from "@mdi/js";
 import { sessions, workspaces } from "./api";
 import { message, reason } from "./errors";
+import { language, t } from "./i18n";
 import type { Usage } from "./gen/blitz/v1/turn_pb";
 import type { AgentInfo, Approval, GetSettingsResponse, LocaleInfo, ModelSettingsInfo, PermissionRule } from "./gen/blitz/v1/workspace_pb";
 import { agencies, efforts, modes } from "./options";
@@ -85,7 +86,7 @@ export function RunSettings({ dir, settings, error, onChanged }: { dir: string; 
       await load();
       if (done) snack(done);
     } catch (e) {
-      snack(reason(e) === "BYPASS_NEEDS_SANDBOX" ? "Bypass needs the OS sandbox, which isn't active." : message(e), { error: true });
+      snack(reason(e) === "BYPASS_NEEDS_SANDBOX" ? t("desktop.bypass_needs_sandbox") : message(e), { error: true });
     }
   };
 
@@ -93,17 +94,17 @@ export function RunSettings({ dir, settings, error, onChanged }: { dir: string; 
     act(async () => {
       const r = await workspaces.updateModelSettings({ workspace: dir, ref: model, changes: [{ key, value }] });
       setModelInfo(r.model);
-      if (r.unsupported.length) snack(`${model} doesn't use ${r.unsupported.join(", ")}: it's saved but not sent.`);
+      if (r.unsupported.length) snack(t("desktop.rs.unsupported", { model, keys: r.unsupported.join(", ") }));
     });
 
   const s = modelInfo?.settings;
   return (
-    <aside className="run-settings" aria-label="Run settings">
+    <aside className="run-settings" aria-label={t("desktop.run_settings")}>
       <div className="panel-head">
         <Icon path={mdiTuneVariant} />
-        <span className="t-title">Run settings</span>
+        <span className="t-title">{t("desktop.run_settings")}</span>
         <span className="spacer" />
-        <IconButton icon={mdiClose} label="Close the panel" small onClick={() => update((p) => ({ ...p, run_settings: false }))} />
+        <IconButton icon={mdiClose} label={t("desktop.rs.close")} small onClick={() => update((p) => ({ ...p, run_settings: false }))} />
       </div>
       {error && (
         <div className="card error row small-card">
@@ -111,10 +112,10 @@ export function RunSettings({ dir, settings, error, onChanged }: { dir: string; 
         </div>
       )}
       <div className="panel-scroll">
-        <Section title="Agent and model">
-          <Field label="Agent">
+        <Section title={t("desktop.rs.agent_model")}>
+          <Field label={t("desktop.rs.agent")}>
             {(id) => (
-              <select id={id} className="select" value={settings?.agent ?? ""} onChange={(e) => act(() => workspaces.setAgent({ workspace: dir, name: e.target.value }), "Agent switched.")}>
+              <select id={id} className="select" value={settings?.agent ?? ""} onChange={(e) => act(() => workspaces.setAgent({ workspace: dir, name: e.target.value }), t("desktop.rs.agent_switched"))}>
                 {agents.map((a) => (
                   <option key={a.name} value={a.name}>
                     {a.displayName}
@@ -124,7 +125,7 @@ export function RunSettings({ dir, settings, error, onChanged }: { dir: string; 
               </select>
             )}
           </Field>
-          <Field label="Model" supporting="A model name, or provider/model (gemini, anthropic, openai, ollama).">
+          <Field label={t("desktop.rs.model")} supporting={t("desktop.rs.model_help")}>
             {(id) => (
               <>
                 <input
@@ -134,7 +135,7 @@ export function RunSettings({ dir, settings, error, onChanged }: { dir: string; 
                   value={modelRef}
                   onChange={(e) => setModelRef(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
-                  onBlur={() => modelRef.trim() && modelRef.trim() !== model && act(() => workspaces.setModel({ workspace: dir, ref: modelRef.trim() }), `Model set to ${modelRef.trim()}.`)}
+                  onBlur={() => modelRef.trim() && modelRef.trim() !== model && act(() => workspaces.setModel({ workspace: dir, ref: modelRef.trim() }), t("desktop.rs.model_set", { model: modelRef.trim() }))}
                 />
                 <datalist id={`${id}-models`}>
                   {[model, ...models].filter(Boolean).map((m) => (
@@ -146,11 +147,11 @@ export function RunSettings({ dir, settings, error, onChanged }: { dir: string; 
           </Field>
         </Section>
 
-        <Section title="Thinking">
-          <Field label="Reasoning effort" supporting="For this session, over each model's own setting.">
+        <Section title={t("desktop.rs.thinking")}>
+          <Field label={t("desktop.rs.effort")} supporting={t("desktop.rs.effort_help")}>
             {(id) => (
               <select id={id} className="select" value={settings?.effort ?? ""} onChange={(e) => act(() => workspaces.setSetting({ workspace: dir, key: "effort", value: e.target.value || "auto" }))}>
-                {efforts.map((e) => (
+                {efforts().map((e) => (
                   <option key={e.value} value={e.value}>
                     {e.label} — {e.detail}
                   </option>
@@ -158,24 +159,24 @@ export function RunSettings({ dir, settings, error, onChanged }: { dir: string; 
               </select>
             )}
           </Field>
-          <NumberSetting label="Thinking budget (tokens)" help="0 turns thinking off where the model allows it." value={s?.thinkingBudget} min={0} step={1024} onCommit={(v) => setModelSetting("thinking_budget", v)} />
+          <NumberSetting label={t("desktop.rs.budget")} help={t("desktop.rs.budget_help")} value={s?.thinkingBudget} min={0} step={1024} onCommit={(v) => setModelSetting("thinking_budget", v)} />
         </Section>
 
-        <Section title={`Generation${settings?.model ? ` · ${settings.model}` : ""}`}>
-          <SliderSetting label="Temperature" value={s?.temperature} fallback={modelInfo?.globalTemperature} min={0} max={2} step={0.05} onCommit={(v) => setModelSetting("temperature", v)} />
-          <SliderSetting label="Top P" value={s?.topP} fallback={1} min={0.01} max={1} step={0.01} onCommit={(v) => setModelSetting("top_p", v)} />
-          <NumberSetting label="Max output tokens" value={s?.maxTokens} placeholder={modelInfo?.globalMaxTokens ? String(modelInfo.globalMaxTokens) : ""} min={1} step={256} onCommit={(v) => setModelSetting("max_tokens", v)} />
-          <p className="t-body-sm muted">Saved to this model's settings in your configuration; empty uses the defaults.</p>
-          <Button small onClick={() => act(async () => setModelInfo((await workspaces.updateModelSettings({ workspace: dir, ref: model, reset: true })).model), "Settings reset.")}>
-            Reset to defaults
+        <Section title={settings?.model ? t("desktop.rs.generation_for", { model: settings.model }) : t("desktop.rs.generation")}>
+          <SliderSetting label={t("desktop.rs.temperature")} value={s?.temperature} fallback={modelInfo?.globalTemperature} min={0} max={2} step={0.05} onCommit={(v) => setModelSetting("temperature", v)} />
+          <SliderSetting label={t("desktop.rs.top_p")} value={s?.topP} fallback={1} min={0.01} max={1} step={0.01} onCommit={(v) => setModelSetting("top_p", v)} />
+          <NumberSetting label={t("desktop.rs.max_tokens")} value={s?.maxTokens} placeholder={modelInfo?.globalMaxTokens ? String(modelInfo.globalMaxTokens) : ""} min={1} step={256} onCommit={(v) => setModelSetting("max_tokens", v)} />
+          <p className="t-body-sm muted">{t("desktop.rs.saved_note")}</p>
+          <Button small onClick={() => act(async () => setModelInfo((await workspaces.updateModelSettings({ workspace: dir, ref: model, reset: true })).model), t("desktop.rs.reset_done"))}>
+            {t("desktop.rs.reset")}
           </Button>
         </Section>
 
-        <Section title="Behaviour">
-          <Field label="Permission mode" supporting={modes.find((m) => m.value === settings?.permissionMode)?.detail}>
+        <Section title={t("desktop.rs.behaviour")}>
+          <Field label={t("desktop.rs.mode")} supporting={modes().find((m) => m.value === settings?.permissionMode)?.detail}>
             {(id) => (
               <select id={id} className="select" value={settings?.permissionMode ?? "default"} onChange={(e) => act(() => workspaces.setPermissionMode({ workspace: dir, mode: e.target.value }))}>
-                {modes.map((m) => (
+                {modes().map((m) => (
                   <option key={m.value} value={m.value}>
                     {m.label}
                   </option>
@@ -183,10 +184,10 @@ export function RunSettings({ dir, settings, error, onChanged }: { dir: string; 
               </select>
             )}
           </Field>
-          <Field label="Agency" supporting={agencies.find((a) => a.value === settings?.agency)?.detail}>
+          <Field label={t("desktop.rs.agency")} supporting={agencies().find((a) => a.value === settings?.agency)?.detail}>
             {(id) => (
               <select id={id} className="select" value={settings?.agency ?? "high"} onChange={(e) => act(() => workspaces.setSetting({ workspace: dir, key: "agency", value: e.target.value }))}>
-                {agencies.map((a) => (
+                {agencies().map((a) => (
                   <option key={a.value} value={a.value}>
                     {a.label}
                   </option>
@@ -194,9 +195,9 @@ export function RunSettings({ dir, settings, error, onChanged }: { dir: string; 
               </select>
             )}
           </Field>
-          <Field label="Replies in">
+          <Field label={t("desktop.rs.replies_in")}>
             {(id) => (
-              <select id={id} className="select" value={settings?.locale ?? ""} onChange={(e) => act(() => workspaces.setLocale({ workspace: dir, input: e.target.value }), "Language changed.")}>
+              <select id={id} className="select" value={settings?.locale ?? ""} onChange={(e) => act(() => workspaces.setLocale({ workspace: dir, input: e.target.value }), t("desktop.rs.language_changed"))}>
                 {settings?.locale && !locales.some((l) => l.tag === settings.locale) && <option value={settings.locale}>{settings.locale}</option>}
                 {locales.map((l) => (
                   <option key={l.tag} value={l.tag}>
@@ -208,12 +209,12 @@ export function RunSettings({ dir, settings, error, onChanged }: { dir: string; 
           </Field>
         </Section>
 
-        <Section title={`Permission rules (${rules.length})`} open={false}>
+        <Section title={t("desktop.rs.rules", { count: rules.length })} open={false}>
           <Rules dir={dir} rules={rules} act={act} />
         </Section>
 
-        <Section title={`Standing approvals (${approvals.length})`} open={false}>
-          {approvals.length === 0 && <p className="t-body-sm muted">None. Choosing “allow this session” or “always allow” adds one.</p>}
+        <Section title={t("desktop.rs.approvals", { count: approvals.length })} open={false}>
+          {approvals.length === 0 && <p className="t-body-sm muted">{t("desktop.rs.approvals_none")}</p>}
           <div className="list">
             {approvals.map((a) => (
               <div key={a.key} className="rule">
@@ -221,36 +222,36 @@ export function RunSettings({ dir, settings, error, onChanged }: { dir: string; 
                 <code className="ellipsis" title={a.subject}>
                   {a.subject}
                 </code>
-                <span className="t-body-sm muted">{a.always ? "always" : "session"}</span>
-                <IconButton icon={mdiDeleteOutline} label="Revoke" small onClick={() => act(() => workspaces.revokeApprovals({ workspace: dir, keys: [a.key] }), "Revoked.")} />
+                <span className="t-body-sm muted">{a.always ? t("desktop.rs.always") : t("desktop.rs.session")}</span>
+                <IconButton icon={mdiDeleteOutline} label={t("desktop.rs.revoke")} small onClick={() => act(() => workspaces.revokeApprovals({ workspace: dir, keys: [a.key] }), t("desktop.rs.revoked"))} />
               </div>
             ))}
           </div>
           {approvals.length > 1 && (
-            <Button small danger onClick={() => act(() => workspaces.revokeApprovals({ workspace: dir, all: true }), "All approvals revoked.")}>
-              Revoke all
+            <Button small danger onClick={() => act(() => workspaces.revokeApprovals({ workspace: dir, all: true }), t("desktop.rs.revoked_all"))}>
+              {t("desktop.rs.revoke_all")}
             </Button>
           )}
         </Section>
 
-        <Section title="Context" open={false}>
+        <Section title={t("desktop.rs.context")} open={false}>
           {usage && usage.calls > 0 ? (
             <dl className="facts">
-              <dt>Context now</dt>
-              <dd>{Number(usage.lastPrompt).toLocaleString()} tokens</dd>
-              <dt>Sent / received</dt>
+              <dt>{t("desktop.rs.context_now")}</dt>
+              <dd>{t("desktop.rs.tokens", { count: Number(usage.lastPrompt).toLocaleString(language()) })}</dd>
+              <dt>{t("desktop.rs.sent_received")}</dt>
               <dd>
-                {Number(usage.input).toLocaleString()} / {Number(usage.output).toLocaleString()}
+                {Number(usage.input).toLocaleString(language())} / {Number(usage.output).toLocaleString(language())}
               </dd>
               {usage.priced && (
                 <>
-                  <dt>Cost</dt>
+                  <dt>{t("desktop.rs.cost")}</dt>
                   <dd>${usage.costUsd.toFixed(4)}</dd>
                 </>
               )}
             </dl>
           ) : (
-            <p className="t-body-sm muted">Nothing sent in this session yet.</p>
+            <p className="t-body-sm muted">{t("desktop.rs.nothing_sent")}</p>
           )}
           <Button
             small
@@ -258,11 +259,11 @@ export function RunSettings({ dir, settings, error, onChanged }: { dir: string; 
             onClick={() =>
               act(async () => {
                 const r = await sessions.compact({ workspace: dir });
-                snack(`Summarized ${r.eventsCompacted} events into ${r.summaryChars} characters.`);
+                snack(t("desktop.compacted", { events: r.eventsCompacted, chars: r.summaryChars }));
               })
             }
           >
-            Compact the context
+            {t("desktop.rs.compact")}
           </Button>
         </Section>
       </div>
@@ -293,7 +294,7 @@ function SliderSetting({
     <div className="field">
       <label className="row">
         <span className="spacer">{label}</span>
-        <span className="muted">{value === undefined ? "default" : ""}</span>
+        <span className="muted">{value === undefined ? t("desktop.rs.default") : ""}</span>
         <input
           className="input slider-value"
           type="number"
@@ -356,7 +357,7 @@ function Rules({ dir, rules, act }: { dir: string; rules: PermissionRule[]; act:
   return (
     <>
       <p className="t-body-sm muted">
-        Rules like <code>shell(git status)</code>, <code>write(docs/**)</code> or <code>web(github.com)</code>. Deny beats ask beats allow.
+        {t("desktop.rs.rules_help", { examples: "shell(git status), write(docs/**), web(github.com)" })}
       </p>
       <div className="list">
         {rules.map((r) => (
@@ -366,7 +367,7 @@ function Rules({ dir, rules, act }: { dir: string; rules: PermissionRule[]; act:
               {r.rule}
             </code>
             <span className="t-body-sm muted">{r.source}</span>
-            <IconButton icon={mdiDeleteOutline} label="Remove" small onClick={() => act(() => workspaces.removePermissionRule({ workspace: dir, rule: r.rule, save: r.source === "config" }), "Rule removed.")} />
+            <IconButton icon={mdiDeleteOutline} label={t("desktop.rs.remove")} small onClick={() => act(() => workspaces.removePermissionRule({ workspace: dir, rule: r.rule, save: r.source === "config" }), t("desktop.rs.rule_removed"))} />
           </div>
         ))}
       </div>
@@ -375,22 +376,22 @@ function Rules({ dir, rules, act }: { dir: string; rules: PermissionRule[]; act:
         onSubmit={(e) => {
           e.preventDefault();
           if (!rule.trim()) return;
-          act(() => workspaces.addPermissionRule({ workspace: dir, effect, rule: rule.trim(), save }), "Rule added.").then(() => setRule(""));
+          act(() => workspaces.addPermissionRule({ workspace: dir, effect, rule: rule.trim(), save }), t("desktop.rs.rule_added")).then(() => setRule(""));
         }}
       >
         <div className="row">
-          <select className="select rule-effect" value={effect} onChange={(e) => setEffect(e.target.value)} aria-label="Effect">
-            <option value="allow">allow</option>
-            <option value="ask">ask</option>
-            <option value="deny">deny</option>
+          <select className="select rule-effect" value={effect} onChange={(e) => setEffect(e.target.value)} aria-label={t("desktop.rs.effect")}>
+            <option value="allow">{t("desktop.rs.effect.allow")}</option>
+            <option value="ask">{t("desktop.rs.effect.ask")}</option>
+            <option value="deny">{t("desktop.rs.effect.deny")}</option>
           </select>
-          <input className="input mono" value={rule} onChange={(e) => setRule(e.target.value)} placeholder="shell(npm test)" aria-label="Rule" />
+          <input className="input mono" value={rule} onChange={(e) => setRule(e.target.value)} placeholder="shell(npm test)" aria-label={t("desktop.rs.rule")} />
         </div>
         <div className="row">
-          <Switch label="Save to the configuration" checked={save} onChange={setSave} />
-          <span className="t-body-sm muted spacer">{save ? "Kept in the configuration" : "For this session"}</span>
+          <Switch label={t("desktop.rs.save_config")} checked={save} onChange={setSave} />
+          <span className="t-body-sm muted spacer">{save ? t("desktop.rs.kept_config") : t("desktop.rs.for_session")}</span>
           <Button small variant="tonal" icon={mdiPlus} type="submit" disabled={!rule.trim()}>
-            Add
+            {t("desktop.add")}
           </Button>
         </div>
       </form>

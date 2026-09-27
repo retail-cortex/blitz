@@ -3,6 +3,7 @@ import { timestampDate } from "@bufbuild/protobuf/wkt";
 import { mdiAlertCircleOutline, mdiFileCompare, mdiRefresh, mdiSourceBranch, mdiTextBoxOutline, mdiUndoVariant } from "@mdi/js";
 import { sessions, workspaces } from "./api";
 import { message, reason } from "./errors";
+import { language, t, tn } from "./i18n";
 import type { Checkpoint } from "./gen/blitz/v1/workspace_pb";
 import { languageFor } from "./highlight";
 import { Markdown } from "./Markdown";
@@ -86,7 +87,7 @@ export function Changes({ dir }: { dir: string }) {
   const undo = async (force = false) => {
     try {
       const res = await workspaces.undo({ workspace: dir, force });
-      snack(`Undid “${res.label}”: ${res.restored.join(", ") || "nothing to restore"}.`);
+      snack(t("desktop.changes.undid", { label: res.label, files: res.restored.join(", ") || t("desktop.changes.nothing_restored") }));
       if (res.error) snack(res.error.message, { error: true });
       refresh();
     } catch (e) {
@@ -101,24 +102,24 @@ export function Changes({ dir }: { dir: string }) {
     <div className="changes">
       <div className="changes-toolbar">
         <Segmented<Source>
-          label="Changes shown"
+          label={t("desktop.changes.shown")}
           small
           value={source}
           onChange={setSource}
           options={[
-            { value: "session", label: "This session", icon: mdiFileCompare },
-            { value: "git", label: "Git", icon: mdiSourceBranch },
+            { value: "session", label: t("desktop.changes.session"), icon: mdiFileCompare },
+            { value: "git", label: t("desktop.changes.git"), icon: mdiSourceBranch },
           ]}
         />
         {files && files.length > 0 && (
           <span className="t-body-sm muted">
-            {files.length} file{files.length === 1 ? "" : "s"} · <span className="add-count">+{totals.added}</span> <span className="del-count">−{totals.removed}</span>
+            {tn("desktop.changes.count", files.length)} · <span className="add-count">+{totals.added}</span> <span className="del-count">−{totals.removed}</span>
           </span>
         )}
         <span className="spacer" />
-        <IconButton icon={mdiRefresh} label="Refresh" onClick={refresh} />
+        <IconButton icon={mdiRefresh} label={t("desktop.refresh")} onClick={refresh} />
         <Button variant="tonal" small icon={mdiUndoVariant} disabled={checkpoints.length === 0} onClick={() => undo()}>
-          Undo last turn
+          {t("desktop.changes.undo_last")}
         </Button>
       </div>
       {error && (
@@ -128,8 +129,8 @@ export function Changes({ dir }: { dir: string }) {
       )}
       <div className="changes-body">
         <aside className="changes-side">
-          <div className="t-label muted side-label">Files</div>
-          {files?.length === 0 && <p className="muted t-body-sm">{source === "session" ? "The agent hasn't changed any files in this session." : "No uncommitted changes."}</p>}
+          <div className="t-label muted side-label">{t("desktop.changes.files")}</div>
+          {files?.length === 0 && <p className="muted t-body-sm">{source === "session" ? t("desktop.changes.none_session") : t("desktop.changes.none_git")}</p>}
           <div className="list">
             {files?.map((f) => (
               <button key={f.path} className={`list-item file-item ${f.path === selected ? "active" : ""}`} onClick={() => setSelected(f.path)} title={f.path}>
@@ -146,13 +147,13 @@ export function Changes({ dir }: { dir: string }) {
           </div>
           {source === "session" && checkpoints.length > 0 && (
             <>
-              <div className="t-label muted side-label">Turns that changed files</div>
+              <div className="t-label muted side-label">{t("desktop.changes.turns")}</div>
               <ul className="timeline">
                 {checkpoints.map((c) => (
                   <li key={c.id}>
                     <span className="ellipsis">{c.label}</span>
                     <small className="muted">
-                      {c.time && timestampDate(c.time).toLocaleTimeString()} · {c.files.length} file{c.files.length === 1 ? "" : "s"}
+                      {c.time && timestampDate(c.time).toLocaleTimeString(language())} · {tn("desktop.changes.count", c.files.length)}
                     </small>
                   </li>
                 ))}
@@ -164,22 +165,22 @@ export function Changes({ dir }: { dir: string }) {
           {summary && source === "session" && files && files.length > 0 && (
             <details className="card walkthrough" open>
               <summary className="row t-title-sm">
-                <Icon path={mdiTextBoxOutline} size="sm" /> The agent's latest summary
+                <Icon path={mdiTextBoxOutline} size="sm" /> {t("desktop.changes.summary")}
               </summary>
               <Markdown text={summary} />
             </details>
           )}
-          {file ? <DiffView files={[file]} /> : files === null ? <p className="muted">Loading…</p> : null}
+          {file ? <DiffView files={[file]} /> : files === null ? <p className="muted">{t("desktop.loading")}</p> : null}
         </div>
       </div>
       {conflict && (
         <Dialog
-          title="Files changed since"
+          title={t("desktop.conflict.title")}
           icon={mdiAlertCircleOutline}
           onClose={() => setConflict("")}
           footer={
             <>
-              <Button onClick={() => setConflict("")}>Keep them</Button>
+              <Button onClick={() => setConflict("")}>{t("desktop.conflict.keep")}</Button>
               <Button
                 variant="filled"
                 danger
@@ -188,7 +189,7 @@ export function Changes({ dir }: { dir: string }) {
                   undo(true);
                 }}
               >
-                Undo anyway
+                {t("desktop.changes.undo_anyway")}
               </Button>
             </>
           }
