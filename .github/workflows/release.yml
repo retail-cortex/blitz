@@ -18,12 +18,14 @@ jobs:
       # GitHub's Ubuntu runners start with about 14 GB free, too little for
       # the build, the race-detector tests and five platforms' archives
       # (a run failed with "No space left on device"). Toolchains Blitz
-      # doesn't use take most of the disk: remove them first.
+      # doesn't use take most of the disk: remove them first. (Not the
+      # Android SDK: ANDROID_HOME stays set, and rules_android, a
+      # transitive dependency, fails when the SDK it names is gone.)
       - name: Free disk space
         if: runner.os == 'Linux'
         run: |
           df -h /
-          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL /usr/local/share/boost /usr/local/share/powershell
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL /usr/local/share/boost /usr/local/share/powershell
           sudo docker image prune --all --force > /dev/null 2>&1 || true
           df -h /
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -79,12 +81,14 @@ jobs:
       # GitHub's Ubuntu runners start with about 14 GB free, too little for
       # the build, the race-detector tests and five platforms' archives
       # (a run failed with "No space left on device"). Toolchains Blitz
-      # doesn't use take most of the disk: remove them first.
+      # doesn't use take most of the disk: remove them first. (Not the
+      # Android SDK: ANDROID_HOME stays set, and rules_android, a
+      # transitive dependency, fails when the SDK it names is gone.)
       - name: Free disk space
         if: runner.os == 'Linux'
         run: |
           df -h /
-          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL /usr/local/share/boost /usr/local/share/powershell
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL /usr/local/share/boost /usr/local/share/powershell
           sudo docker image prune --all --force > /dev/null 2>&1 || true
           df -h /
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
