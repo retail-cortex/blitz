@@ -880,8 +880,6 @@
     "desktop.switcher.others_working": "Blitz is working in another workspace",
     "desktop.view.editor": "Editor",
     "desktop.palette.show_editor": "Show the editor",
-    "desktop.files.none_open": "No file open",
-    "desktop.files.none_open.detail": "Open one from the files on the left, with Go to file (⌘P), or from a path in the chat.",
     "desktop.chat.resize": "Resize the chat"
   }
 }

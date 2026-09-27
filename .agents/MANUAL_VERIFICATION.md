@@ -455,5 +455,6 @@ These touch your real keychain and settings: use a test key, or a throwaway `--c
 - [ ] ⌘P: type part of a name (`dsc` finds `discount.go`); `name:12` opens at line 12.
 - [ ] A path in an answer (`internal/cart/discount.go`) and a tool call's path open the file.
 - [ ] Unsaved changes: closing the tab, closing the workspace (⋮ menu, dropdown) and quitting the app (⌘Q, the window's close button) each ask first.
+- [ ] With no file open, the chat is center stage (the middle, full width of its column); open a file during a turn: the chat moves to the right and keeps streaming; close the last file: it returns to the middle. In Changes or Workers it stays on the right.
 - [ ] The IDE layout: files left, editor middle, chat right. Minimize the shelf (≪): a rail with Show files and Go to file remains, and stays after a restart. Drag the chat's left edge: its width is kept after a restart.
 - [ ] The workspace dropdown: switch workspaces; while a turn in another workspace waits for approval, the dropdown shows a `!`; reopen a recent workspace; Open workspace…; Settings is the top bar's far-right button.

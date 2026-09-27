@@ -17,7 +17,7 @@ import { displayName, type WorkspacePrefs } from "./prefs";
 import { RunSettings } from "./RunSettings";
 import { useApp } from "./state";
 import { t } from "./i18n";
-import { Button, Icon, IconButton, Menu, Segmented } from "./ui/controls";
+import { IconButton, Menu, Segmented } from "./ui/controls";
 import { WorkspaceSwitcher } from "./WorkspaceSwitcher";
 import { Workers } from "./Workers";
 
@@ -156,6 +156,7 @@ export function Workspace({
   useEffect(() => () => reportUnsaved(dir, 0), [dir]);
 
   const chatWidth = prefs.chat_width || Math.max(380, Math.min(520, Math.round(window.innerWidth * 0.32)));
+  const chatCenter = view === "editor" && editor.tabs.length === 0;
   const revealInTree = (path: string) => {
     if (!prefs.files) update((p) => ({ ...p, files: true }));
     setReveal({ path });
@@ -217,32 +218,16 @@ export function Workspace({
             <IconButton icon={mdiFileSearchOutline} label={t("desktop.files.go_to")} onClick={() => setGoTo(true)} />
           </nav>
         )}
-        <div className="workspace-center">
-          {view === "editor" &&
-            (editor.tabs.length > 0 ? (
-              <EditorPane model={editor} onReveal={revealInTree} />
-            ) : (
-              <div className="editor-empty">
-                <Icon path={mdiCodeBraces} size="lg" className="muted" />
-                <p className="t-title-sm">{t("desktop.files.none_open")}</p>
-                <p className="t-body-sm muted">{t("desktop.files.none_open.detail")}</p>
-                <div className="row">
-                  <Button variant="tonal" icon={mdiFileSearchOutline} onClick={() => setGoTo(true)}>
-                    {t("desktop.files.go_to")}
-                  </Button>
-                  {!prefs.files && (
-                    <Button icon={mdiFileTreeOutline} onClick={() => update((p) => ({ ...p, files: true }))}>
-                      {t("desktop.files.show")}
-                    </Button>
-                  )}
-                </div>
-              </div>
-            ))}
-          {view === "changes" && <Changes dir={dir} />}
-          {view === "workers" && <Workers dir={dir} />}
-        </div>
-        <aside className="chat-panel" style={{ width: chatWidth }} aria-label={t("desktop.view.chat")}>
-          <ResizeHandle width={chatWidth} onResize={(w) => update((p) => ({ ...p, chat_width: w }))} />
+        {/* With no file open, the chat takes the middle (center stage). */}
+        {!chatCenter && (
+          <div className="workspace-center">
+            {view === "editor" && <EditorPane model={editor} onReveal={revealInTree} />}
+            {view === "changes" && <Changes dir={dir} />}
+            {view === "workers" && <Workers dir={dir} />}
+          </div>
+        )}
+        <aside className={`chat-panel ${chatCenter ? "center" : ""}`} style={chatCenter ? undefined : { width: chatWidth }} aria-label={t("desktop.view.chat")}>
+          {!chatCenter && <ResizeHandle width={chatWidth} onResize={(w) => update((p) => ({ ...p, chat_width: w }))} />}
           <FileLinksProvider dir={dir} refresh={touched}>
             <Conversation dir={dir} name={name} visible={visible} settings={settings} modelProblem={modelProblem} onSettingsChanged={refreshSettings} onOpenView={setView} />
           </FileLinksProvider>

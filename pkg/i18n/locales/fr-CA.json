@@ -880,8 +880,6 @@
     "desktop.switcher.others_working": "Blitz travaille dans un autre espace de travail",
     "desktop.view.editor": "Éditeur",
     "desktop.palette.show_editor": "Afficher l'éditeur",
-    "desktop.files.none_open": "Aucun fichier ouvert",
-    "desktop.files.none_open.detail": "Ouvrez-en un depuis les fichiers à gauche, avec Aller au fichier (⌘P) ou depuis un chemin dans le clavardage.",
     "desktop.chat.resize": "Redimensionner le clavardage"
   }
 }
