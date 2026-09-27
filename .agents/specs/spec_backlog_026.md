@@ -100,7 +100,7 @@ Suggested order (from NEXT_STEPS): run the manual checks (§9) first — their f
 - **BL-DSK-11** A command palette (Cmd/Ctrl+K) lists them with completion for agents, models and sessions.
 
 ### 7.3 Rendering — S
-- **BL-DSK-20** 🟡 *Markdown, safe links, coloured diffs and expandable tool entries done (DSK-74/79/90); syntax highlighting not yet.* Model text renders as Markdown (code blocks highlighted, links shown but opened only in the system browser after a click, never inside the web view); approval diffs are coloured; a tool entry expands to its arguments and result.
+- **BL-DSK-20** ✅ *Done 2026-09-27: Markdown, safe links, coloured diffs, expandable tool entries (DSK-74/79/90) and syntax highlighting in code blocks and diffs (DSK-79a).* Model text renders as Markdown (code blocks highlighted, links shown but opened only in the system browser after a click, never inside the web view); approval diffs are coloured; a tool entry expands to its arguments and result.
 - **BL-DSK-21** ✅ *Done (DSK-78).* The usage line adds the session total, as in the terminal (TUI-05).
 
 ### 7.4 Images — S

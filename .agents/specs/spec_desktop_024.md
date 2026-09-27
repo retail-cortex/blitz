@@ -109,7 +109,11 @@ API used: `SessionService.GetActiveSession`, `NewSession`, `ListSessions`, `Load
 
 ### 11a. Markdown
 
-- **DSK-79** Model text, questions and summaries render with `react-markdown` and GitHub-flavoured Markdown (tables, task lists, strikethrough) to React elements; raw HTML is skipped, never rendered. Links show their target on hover and open with `OpenURL` after a click (never in the window). Images are never loaded: they show as links. Fenced code blocks show their language and a **Copy** button (no syntax highlighting yet); inline code is tinted; wide tables scroll.
+- **DSK-79** Model text, questions and summaries render with `react-markdown` and GitHub-flavoured Markdown (tables, task lists, strikethrough) to React elements; raw HTML is skipped, never rendered. Links show their target on hover and open with `OpenURL` after a click (never in the window). Images are never loaded: they show as links. Fenced code blocks show their language and a **Copy** button and are syntax-highlighted (§11b); inline code is tinted; wide tables scroll.
+
+### 11b. Syntax highlighting
+
+- **DSK-79a** Code blocks and diff lines are highlighted with highlight.js grammars through `lowlight` (the common set, about 35 languages), which returns an element tree rendered as React elements — never an HTML string. A block's grammar comes from its fence's language (with aliases: `sh`→bash, `ts`→typescript, `yml`→yaml, `golang`→go, `proto`→protobuf, …); a diff's from the file name (extension, or `Makefile`). Unknown languages, and code over 100 000 characters, stay plain text. Diff lines are highlighted one at a time after their `+`/`−`/space sign (shown in its own column), over the added/removed tint. Token colours are theme tokens (`--hl-*`) with a light and a dark set.
 
 ## 12. Approvals, questions and plans
 
@@ -134,7 +138,7 @@ API used: `WorkspaceService.ListAgents`, `SetAgent`, `SetModel`, `GetModelSettin
 - **DSK-96** `make desktop-check`: `pnpm test` (vitest), the page build, then `go vet` and `go test -race` in the desktop module. CI's `desktop` job (macOS) runs `make desktop-check` and then `make desktop`.
 - **DSK-97** Tests: the proxy against a real `internal/server` service (API calls, a streamed turn and its approval, the `unavailable` error); the preferences file (defaults, normalization, owner-only atomic writes, a damaged file set aside) and `OpenURL`'s scheme check; the page's pure logic (turn events, message kinds, prompt indices, task lists, diff parsing, the workspace list rules, theme resolution, colours).
 - **DSK-98** Development: `pnpm dev` serves the page and proxies `/blitz.v1.*` to the service socket (`$BLITZ_SOCKET` or `~/.blitz/run/blitz.sock`). `?fake` in a development build uses an in-page fake service (`dev/fake.ts`, left out of production builds) whose turns script every state — streamed Markdown, thinking, tool calls, a task list, an approval, a plan review — for working on the page and taking screenshots without a service or a model.
-- **DSK-99** Dependencies are pinned: React 19, Connect-ES 2, protobuf-es 2 (`protoc-gen-es` generates `src/gen` via `make proto`), react-markdown 10 with remark-gfm 4, `@mdi/js` 7, Vite 8, TypeScript 5.9, vitest 5; pnpm 10.24 via `packageManager`. The page is one bundle (about 610 kB, 190 kB compressed), loaded from the app's binary.
+- **DSK-99** Dependencies are pinned: React 19, Connect-ES 2, protobuf-es 2 (`protoc-gen-es` generates `src/gen` via `make proto`), react-markdown 10 with remark-gfm 4, lowlight 3 with hast-util-to-jsx-runtime 2, `@mdi/js` 7, Vite 8, TypeScript 5.9, vitest 5; pnpm 10.24 via `packageManager`. The page is one bundle (about 610 kB, 190 kB compressed), loaded from the app's binary.
 
 ## 16. Known gaps
 
@@ -143,7 +147,6 @@ Not implemented; each is tracked in [spec_backlog_026](spec_backlog_026.md):
 - **Slash commands** in the composer and a command palette (BL-DSK-10/11); `/btw`, `/search`, snapshots by name, sessions from other workspaces.
 - **Images**: pasting or dropping into the composer (BL-DSK-30).
 - **Localisation**: the page's strings are English (BL-DSK-40).
-- **Syntax highlighting** in code blocks and diffs (BL-DSK-20, rest).
 - **Workers**: no refresh on file changes; a run's session doesn't open in the conversation (BL-DSK-50).
 - **Notifications** when a turn finishes or waits while the window is in the background (PAR-UI-03).
 - **Release**: signing, notarisation, a release job, Linux and Windows packages (BL-DSK-60/61).

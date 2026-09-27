@@ -270,3 +270,17 @@
   .chat-column { padding: 0 16px; }
 }
 .crash-details { max-width: 560px; max-height: 200px; text-align: left; }
+
+/* Syntax highlighting (highlight.js classes, M3-tinted colours). */
+.hljs-keyword, .hljs-selector-tag, .hljs-literal, .hljs-built_in, .hljs-doctag { color: var(--hl-keyword); }
+.hljs-string, .hljs-regexp, .hljs-addition, .hljs-template-string { color: var(--hl-string); }
+.hljs-number, .hljs-symbol, .hljs-bullet { color: var(--hl-number); }
+.hljs-comment, .hljs-quote { color: var(--hl-comment); font-style: italic; }
+.hljs-title, .hljs-section, .hljs-function .hljs-title, .hljs-title.function_ { color: var(--hl-title); }
+.hljs-type, .hljs-title.class_, .hljs-class .hljs-title { color: var(--hl-type); }
+.hljs-attr, .hljs-attribute, .hljs-variable, .hljs-template-variable, .hljs-property, .hljs-params { color: var(--hl-attr); }
+.hljs-meta, .hljs-name, .hljs-tag { color: var(--hl-meta); }
+.hljs-emphasis { font-style: italic; }
+.hljs-strong { font-weight: 600; }
+.dl.add .hljs-string, .dl.del .hljs-string { color: inherit; }
+.dl-sign { display: inline-block; width: 1.2em; user-select: none; }

@@ -4,11 +4,15 @@ import { mdiAlertCircleOutline, mdiFileCompare, mdiRefresh, mdiSourceBranch, mdi
 import { sessions, workspaces } from "./api";
 import { message, reason } from "./errors";
 import type { Checkpoint } from "./gen/blitz/v1/workspace_pb";
+import { languageFor } from "./highlight";
 import { Markdown } from "./Markdown";
 import { parseDiff, type FileDiff } from "./turns";
+import { highlight } from "./highlight";
 import { Button, Dialog, Icon, IconButton, Segmented, useSnackbar } from "./ui/controls";
 
-/** Coloured diff of one or more files. */
+const lang = (path: string) => languageFor(path);
+
+/** Coloured, highlighted diff of one or more files. */
 export function DiffView({ files, compact }: { files: FileDiff[]; compact?: boolean }) {
   return (
     <div className={`diff ${compact ? "compact" : ""}`}>
@@ -20,10 +24,17 @@ export function DiffView({ files, compact }: { files: FileDiff[]; compact?: bool
             <span className="add-count">+{f.added}</span>
             <span className="del-count">−{f.removed}</span>
           </div>
-          <pre className="diff-lines">
+          <pre className="diff-lines hljs">
             {f.lines.map((l, i) => (
               <div key={i} className={`dl ${l.kind}`}>
-                {l.text || " "}
+                {l.kind === "add" || l.kind === "del" || l.kind === "ctx" ? (
+                  <>
+                    <span className="dl-sign">{l.text.slice(0, 1) || " "}</span>
+                    {highlight(l.text.slice(1), lang(f.path))}
+                  </>
+                ) : (
+                  l.text || " "
+                )}
               </div>
             ))}
           </pre>

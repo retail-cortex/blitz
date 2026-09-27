@@ -43,6 +43,14 @@
   --md-diff-del: #fce8e6;
   --md-diff-del-fg: #a50e0e;
   --md-code-bg: #f0f4f9;
+  --hl-keyword: #a626a4;
+  --hl-string: #1e7d32;
+  --hl-number: #b35900;
+  --hl-comment: #6e7781;
+  --hl-title: #0b57d0;
+  --hl-type: #00696f;
+  --hl-attr: #8b5000;
+  --hl-meta: #5f6368;
 
   --md-shape-xs: 4px;
   --md-shape-sm: 8px;
@@ -105,6 +113,14 @@
   --md-diff-del: rgb(234 67 53 / 0.16);
   --md-diff-del-fg: #f28b82;
   --md-code-bg: #1b1b1b;
+  --hl-keyword: #d0a8ff;
+  --hl-string: #9bd9a6;
+  --hl-number: #ffb870;
+  --hl-comment: #8e918f;
+  --hl-title: #a8c7fa;
+  --hl-type: #6fd7df;
+  --hl-attr: #f8c77e;
+  --hl-meta: #bdc1c6;
 }
 
 :root[data-density="compact"] {

@@ -7,6 +7,7 @@ import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { mdiCheck, mdiContentCopy, mdiImageOutline, mdiOpenInNew } from "@mdi/js";
 import { openURL } from "./desktop";
+import { highlight, languageFor } from "./highlight";
 import { Icon, IconButton, useSnackbar } from "./ui/controls";
 
 function Link({ href, children }: { href?: string; children?: ReactNode }) {
@@ -46,7 +47,7 @@ function CodeBlock({ children, lang }: { children: string; lang: string }) {
         />
       </div>
       <pre>
-        <code>{children}</code>
+        <code className="hljs">{highlight(children, languageFor(lang))}</code>
       </pre>
     </div>
   );
