@@ -9,7 +9,7 @@
 
 ## 1. Purpose
 
-`blitz` (also `blz`, a symlink created by `make build`/`make install`) is a single static Go binary. With no prompt it starts an interactive REPL in a workspace; with a prompt it runs one turn and exits. Subcommands cover diagnostics, configuration, the per-user service and workers.
+`blitz` (also `blz`, a link to it in the release archives) is a single static Go binary. With no prompt it starts an interactive REPL in a workspace; with a prompt it runs one turn and exits. Subcommands cover diagnostics, configuration, the per-user service and workers.
 
 ## 2. Command tree
 
@@ -50,7 +50,7 @@ Run flags (root and `exec`):
 | `--permission-mode MODE` | Start in `default`, `accept-edits`, `plan`, `dont-ask` or `bypass` (needs the OS sandbox; otherwise a usage error). Attached, it changes the service workspace's mode |
 | `--image PATH` | Attach an image to the first prompt (repeatable) |
 
-Root only: `-i/--interactive` (REPL even with a prompt), `-v/--version` (prints `Blitz Go (Google ADK) version <v>`; version injected by `-ldflags -X main.version`, default `2.0.0-go`).
+Root only: `-i/--interactive` (REPL even with a prompt), `-v/--version` (prints `Blitz Go (Google ADK) version <v>`; version stamped into release builds from the git tag (`bazel build --config=release`), `dev` otherwise).
 
 ## 4. Requirements
 
@@ -110,5 +110,4 @@ Root only: `-i/--interactive` (REPL even with a prompt), `-v/--version` (prints 
 - **CLI-61** `config path` prints the file location; `config show` prints the effective configuration as TOML with Gemini/OpenAI/Anthropic keys and every MCP `env` value masked.
 
 ## 8. Non-goals / known gaps
-- Release archives do not include the `blz` symlink (only `make build`/`install` create it).
 - A `blz refactor` command is proposed but not designed.

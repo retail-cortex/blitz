@@ -6,7 +6,7 @@ Files are named `spec_<name>_NNN.md`, where `NNN` is the order of execution: eac
 
 | # | Spec | Covers |
 |---|---|---|
-| 001 | [setup](spec_setup_001.md) | Identity, layout, toolchain, Make targets, conventions |
+| 001 | [setup](spec_setup_001.md) | Identity, layout, toolchain, commands, conventions |
 | 002 | [config](spec_config_002.md) | `.env.toml` location and trust, schema and defaults, in-place editing |
 | 003 | [observability](spec_observability_003.md) | Redaction, audit log, diagnostic log, OpenTelemetry |
 | 004 | [i18n](spec_i18n_004.md) | Catalogs, locale resolution, interface vs reply language |
@@ -33,5 +33,6 @@ Files are named `spec_<name>_NNN.md`, where `NNN` is the order of execution: eac
 | 025 | [release](spec_release_025.md) | CI, reproducible and signed releases |
 | 026 | [backlog](spec_backlog_026.md) | What's missing: unimplemented requirements, verification still owed, and deliberate limitations |
 | 027 | [parity](spec_parity_027.md) | Gaps against Claude Code, Antigravity CLI and Antigravity, as requirements to close before new features |
+| 028 | [monorepo](spec_monorepo_028.md) | Apps over shared packages, their dependency rules, and the Bazel build: generated protos, the page, packages, reproducibility |
 
 Background and history: [../ROADMAP.md](../ROADMAP.md), [../NEXT_STEPS.md](../NEXT_STEPS.md), [../AGENTS.md](../AGENTS.md).

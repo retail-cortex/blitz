@@ -33,12 +33,14 @@ blitz
 
 ## Quick Start
 
+Download an archive from the [releases](https://github.com/retail-cortex/blitz/releases) (it holds `blitz`, `blitzd` and the `blz` shortcut) and put its folder on your `PATH`, or build from source with [Bazelisk](https://github.com/bazelbuild/bazelisk) (`bazel`); Bazel brings Go, Node and every tool:
+
 ```bash
-make build                      # -> ./bin/blitz
-./bin/blitz config init        # writes a commented ~/.blitz/.env.toml (mode 600)
+bazel build //apps/cli:blitz //apps/service:blitzd   # -> bazel-bin/apps/{cli,service}/…
+blitz config init               # writes a commented ~/.blitz/.env.toml (mode 600)
 export GEMINI_API_KEY=...       # or ANTHROPIC_API_KEY / OPENAI_API_KEY; or set it in the config file
-./bin/blitz doctor             # checks config, credentials, sandbox, MCP, hooks
-./bin/blitz                    # interactive session
+blitz doctor                    # checks config, credentials, sandbox, MCP, hooks
+blitz                           # interactive session
 ```
 
 **Providers.** Set `llm.provider` to `gemini` (default), `anthropic`, `openai`, or `ollama`; the model comes from `llm.<provider>.model` unless `blitz.default_model` or `--model` overrides it. Anthropic defaults to `claude-opus-5` with streaming, prompt caching of the system prompt, thinking preserved across tool calls, and server-side refusal fallback (`llm.anthropic.fallbacks = "default"`, or `"off"`). Without `api_key` it uses `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`, or an `ant auth login` profile.
@@ -373,7 +375,7 @@ curl --unix-socket ~/.blitz/run/blitz.sock -H 'Content-Type: application/json' \
 
 When the service is running, `blitz` attaches to it (the REPL says so), so the CLI, the desktop app and other clients share one copy of each workspace; `--local` runs the workspace in-process instead. A workspace has one owner at a time, so `--local` on a workspace the service holds is refused. `BLITZ_SOCKET` moves the socket for both.
 
-**Desktop app.** `make desktop` builds `Blitz.app` (macOS; `apps/desktop/packaging/bin/blitz-desktop` elsewhere), a window onto the service: a drawer of workspaces you can name, colour, describe and close; a chat with Markdown, the agent's task list, approvals and plans as cards, and rewind or edit from any prompt; a run settings panel (agent, model, reasoning effort, generation settings, permission mode and rules); a Changes view with the diff beside the agent's summary; and the workspace's workers. Settings › Appearance picks System (the default), Light or Dark, and the interface language (the system's by default; English, Spanish or Canadian French, from the same catalogs as the terminal). The window keeps only its own settings, in `~/.blitz/desktop.json`; everything else lives in the service, so the REPL and the app see the same sessions.
+**Desktop app.** `bazel build //apps/desktop/packaging:Blitz.app` builds `Blitz.app` (macOS; `:deb`, a Debian package, on Linux), a window onto the service: a drawer of workspaces you can name, colour, describe and close; a chat with Markdown, the agent's task list, approvals and plans as cards, and rewind or edit from any prompt; a run settings panel (agent, model, reasoning effort, generation settings, permission mode and rules); a Changes view with the diff beside the agent's summary; and the workspace's workers. Settings › Appearance picks System (the default), Light or Dark, and the interface language (the system's by default; English, Spanish or Canadian French, from the same catalogs as the terminal). The window keeps only its own settings, in `~/.blitz/desktop.json`; everything else lives in the service, so the REPL and the app see the same sessions.
 
 **Workers** are workflows a workspace defines in `workers/<name>/WORKER.md`, which the service runs on a schedule, unattended:
 
@@ -391,14 +393,15 @@ Optional `agent:` and `model:` run the worker as another agent or on another mod
 
 ## Build, Test, Release
 
+Blitz is a monorepo built with Bazel: the CLI (`apps/cli`), the service (`apps/service`, `blitzd`) and the desktop app (`apps/desktop`) over shared packages (`pkg/`). See [AGENTS.md](.agents/AGENTS.md) for the layout and its rules.
+
 ```bash
-make build          # bin/blitz (version from git describe)
-make check          # go vet + go test -race
-make cross-compile  # darwin/linux amd64+arm64, windows amd64
-make snapshot       # local GoReleaser build into dist/
+bazel build //...                      # everything for this machine
+bazel test --config=race //...         # every test (Go with the race detector, the desktop page, the protos)
+bazel build --config=release //release:archives   # the release archives, every platform, stamped with the git tag
 ```
 
-Tagging `v*` runs `.github/workflows/release.yml`: reproducible builds, archives (with `LICENSE` and `NOTICE`), SPDX SBOMs, and a cosign-signed checksum file (keyless, via GitHub OIDC). Verify a release against this repository's release workflow, not just any GitHub workflow:
+Tagging `v*` runs `.github/workflows/release.yml`: reproducible builds (the archives come out byte for byte the same on macOS and Linux), archives with `blitz`, `blitzd`, `blz`, `LICENSE` and `NOTICE`, SPDX SBOMs, and a cosign-signed checksum file (keyless, via GitHub OIDC). Verify a release against this repository's release workflow, not just any GitHub workflow:
 
 ```bash
 cosign verify-blob --bundle checksums.txt.sigstore.json \
@@ -408,11 +411,11 @@ sha256sum --ignore-missing -c checksums.txt
 ```
 (Releases made before the move to `retail-cortex/blitz`, such as `v0.1.0`, were signed by the former repository's workflow and verify against that identity: `^https://github.com/rmcguinness/code_puppy/\.github/workflows/go-release\.yml@refs/tags/v`.)
 
-The desktop app comes as `Blitz_<version>_macos_universal.dmg` (signed with a Developer ID and notarized) and `blitz-desktop_<version>_<arch>.deb` for Ubuntu 24.04 / Debian 13 and later (`sudo apt install ./blitz-desktop_*.deb`). Each has its own cosign bundle, verified the same way: `cosign verify-blob --bundle <file>.sigstore.json` with the flags above, then the file. `make desktop-package` builds the package for the machine you're on.
+The desktop app comes as `Blitz_<version>_macos_universal.dmg` (signed with a Developer ID and notarized) and `blitz-desktop_<version>_<arch>.deb` for Ubuntu 24.04 / Debian 13 and later (`sudo apt install ./blitz-desktop_*.deb`). Each has its own cosign bundle, verified the same way: `cosign verify-blob --bundle <file>.sigstore.json` with the flags above, then the file. `bazel build //apps/desktop/packaging:Blitz.app` (or `:deb`) builds the package for the machine you're on.
 
-The macOS CLI binaries aren't Apple-notarized, so a copy downloaded in a browser is quarantined and Gatekeeper won't run it. Clear the flag with `xattr -d com.apple.quarantine blitz`, or open it once through Finder's context menu. Each release's notes say this too.
+The macOS CLI binaries aren't Apple-notarized, so a copy downloaded in a browser is quarantined and Gatekeeper won't run it. Clear the flag with `xattr -d com.apple.quarantine blitz blitzd`, or open it once through Finder's context menu. Each release's notes say this too.
 
-CI (`ci.yml`) runs vet and race tests on macOS and Linux, and checks the API protos in `proto/` (lint, formatting, generated code current, no breaking changes). The Linux job installs bubblewrap and a pinned gVisor, and fails if the sandbox enforcement or gVisor tests are skipped.
+CI (`ci.yml`) runs every test through Bazel on macOS and Linux (vet and staticcheck run in every compile), checks the dependency rules between apps and packages, formatting and the API protos in `proto/` (lint, formatting, no breaking changes), runs govulncheck, and compares the release archives built on both. The Linux job installs bubblewrap and a pinned gVisor, and fails if the sandbox enforcement or gVisor tests are skipped.
 
 **Project docs:** [.agents/ROADMAP.md](.agents/ROADMAP.md) (what was built and why), [.agents/MANUAL_VERIFICATION.md](.agents/MANUAL_VERIFICATION.md) (checks that need a person), [.agents/NEXT_STEPS.md](.agents/NEXT_STEPS.md) (where to pick up), [.agents/AGENTS.md](.agents/AGENTS.md) (conventions for working on the code), [docs/TRANSLATING.md](docs/TRANSLATING.md), [docs/HISTORY.md](docs/HISTORY.md) (the port from Python).
 

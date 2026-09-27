@@ -2,7 +2,7 @@
 
 Everything here needs a person, a real terminal, real credentials, or GitHub. The automated suite (413 tests on macOS and Linux) covers the logic behind each item; this list checks the parts it can't. Each item has an **expected** result — if you see something else, note it next to the item.
 
-Setup for most items: `make build`, then use `./bin/blitz` (or put `bin/` on your `PATH`). Use a scratch Git repository as the workspace so edits are safe.
+Setup for most items: `bazel build //apps/cli:blitz //apps/service:blitzd`, then put `bazel-bin/apps/cli/blitz_` and `bazel-bin/apps/service/blitzd_` on your `PATH` (or use a release archive). Use a scratch Git repository as the workspace so edits are safe.
 
 **Cost note:** items marked 💲 call a paid API. A short session costs cents; long sessions and `/compact` cost more.
 
@@ -359,7 +359,7 @@ Set `fallback_models = ["anthropic/claude-sonnet-5"]` with a working Anthropic k
 
 ## 37. Desktop app
 
-- [ ] `make desktop`, open `apps/desktop/packaging/bin/Blitz.app` with no service running. **Expected:** it offers to install the service; accepting runs `blitz service install` and the app continues.
+- [ ] `bazel build //apps/desktop/packaging:Blitz.app`, copy it out of Bazel's output (`ditto "$(bazel cquery --output=files //apps/desktop/packaging:Blitz.app)" /tmp/Blitz.app`) and open it with no service running. **Expected:** it offers to install the service; accepting runs `blitz service install` and the app continues.
 - [ ] With the service running: open a workspace with "+". **Expected:** a tab named after the directory, showing the active agent and model (or why the model is unavailable).
 - [ ] 💲 A turn in the app: its text appears as it streams, not only at the end. **This checks that WebKit streams responses through Wails's asset server**, which the tests can't: they exercise the proxy over plain HTTP.
 - [ ] 💲 A turn that edits a file with approvals on. **Expected:** the approval shows the diff; "Allow once" edits the file; "Deny" doesn't, and the agent says so.
@@ -402,7 +402,7 @@ Set `fallback_models = ["anthropic/claude-sonnet-5"]` with a working Anthropic k
 - [ ] `deny = ["read(secrets/**)"]`, restart: `read_file secrets/x` is blocked, and a shell `cat secrets/x` fails inside the sandbox.
 - [ ] A worker with `permissions: ["shell:git push *"]` and a user `ask` rule for `shell(git push *)`: the run's push is refused and recorded.
 - [ ] `.claude/commands/greet.md` with `Say hello to $1.`; `/help` lists `/greet` under Custom commands; 💲 `/greet Ada` sends "Say hello to Ada." and the transcript shows `/greet Ada`. Tab completes `/gr`.
-- [ ] 💲 `/review` on uncommitted changes: findings with file and line, and no file edited (plan mode). `/verify` runs `make check` here and reports.
+- [ ] 💲 `/review` on uncommitted changes: findings with file and line, and no file edited (plan mode). `/verify` runs this repository's Bazel tests (`bazel test //...`) and reports.
 - [ ] A command with `allowed-tools: Read, Grep`: 💲 ask it to edit a file; the edit is refused with the allowed list.
 - [ ] 💲 `/code-review focus on the new code` runs the built-in skill by name.
 - [ ] 💲 `[[hooks.stop]] command = "grep -q stop_hook_active || echo '{\"continue\": true, \"reason\": \"Now run the tests.\"}'"`: after a turn the agent runs the tests once, and the transcript shows `(stop hook) Now run the tests.`.
@@ -418,3 +418,15 @@ Set `fallback_models = ["anthropic/claude-sonnet-5"]` with a working Anthropic k
 - [ ] 💲 Three prompts, the second and third editing files. Esc Esc on an empty line: pick the second prompt → "Code and conversation": the files are as before it, the model doesn't remember prompts 2–3, and the second prompt is in the input line to edit. `/rewind` → "Conversation only" keeps files; "Summarize up to here" shrinks `/context`. Edit a file by hand, then rewind its prompt: the conflict picker offers to overwrite. `/exit`, `--resume`, `/rewind` still works.
 - [ ] 💲 `/plan add a --version flag`: the plan shows in a picker; "Yes, carry it out" makes the change in the same turn and `.blitz/plans/` has the plan. Again with feedback typed ("also update the README"): the agent revises and asks again. `/mode plan`, a prompt, "Yes, and accept its file edits": the prompt tag becomes `[accept-edits]`.
 - [ ] 💲 A three-step task: the checklist appears and ticks off (☐ → ☒) as the agent works. `plan_review = "always"` in the config: a simple prompt is planned first.
+
+## 39. Monorepo and Bazel (spec_monorepo_028)
+
+- [ ] A fresh clone on a Mac with only Bazelisk (`brew install bazelisk`): `bazel test //...` passes, downloading Go, Node and the tools itself.
+- [ ] The same on Ubuntu 24.04 with `libgtk-3-dev libwebkit2gtk-4.1-dev pkg-config` (and bubblewrap): `bazel test //...` passes; `bazel build //apps/desktop/packaging:deb`, `sudo apt install ./…deb`, and Blitz opens from the app launcher.
+- [ ] The Bazel-built `Blitz.app` (section 37) opens, shows its version under Settings › About (`dev`, or the tag in a `--config=release` build), installs the service (its `blitzd` beside `blitz`), and works as before. On an Intel Mac too, if one is at hand.
+- [ ] `bazel run //apps/desktop/web:dev`, then http://localhost:5173/?fake: the page works without a service.
+- [ ] Your editor with `GOPACKAGESDRIVER=<repo>/bazel/gopackagesdriver.sh`: go to definition from `pkg/client` into `proto/blitz/v1` (generated) works; no false errors.
+- [ ] The first push of the branch: every CI step passes on both runners, and the reproducible job finds the archives identical.
+- [ ] The first tag after the move: the draft release has five archives with `blitz`, `blitzd` and `blz`, their SBOMs, `checksums.txt` and its bundle, the dmg and two .debs with bundles; `blitz --version` and `blitzd --version` show the tag.
+- [ ] Existing installs: after upgrading, a login item installed as `blitz serve` still starts the service (the hidden command runs `blitzd`); `blitz service install` rewrites it to `blitzd`.
+
