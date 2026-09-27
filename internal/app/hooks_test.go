@@ -89,11 +89,12 @@ func TestLifecycleHooks(t *testing.T) {
 	if got := strings.Join(recorded, "|"); !strings.HasPrefix(got, "fix it|") || !strings.Contains(got, "(stop hook) Now run the tests.") {
 		t.Errorf("transcript %q", got)
 	}
-	w.NewSession() // ends the first session
+	w.NewSession() // ends the first session (in the background) and starts one
 
-	evs := hookEvents(t, log, 6)
+	// session_start twice, prompt_submit, post_tool_failure, stop twice, session_end.
+	evs := hookEvents(t, log, 7)
 	start, submit, stop, failure, end := ofEvent(evs, "session_start"), ofEvent(evs, "prompt_submit"), ofEvent(evs, "stop"), ofEvent(evs, "post_tool_failure"), ofEvent(evs, "session_end")
-	if len(start) < 1 || start[0]["reason"] != "startup" {
+	if len(start) != 2 || start[0]["reason"] != "startup" || start[1]["reason"] != "new" {
 		t.Errorf("session_start %v", start)
 	}
 	if len(stop) != 2 || stop[0]["stop_hook_active"] == true || stop[1]["stop_hook_active"] != true {
