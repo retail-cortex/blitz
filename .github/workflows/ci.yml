@@ -95,6 +95,9 @@ jobs:
           if grep -q -- '--- SKIP' gv.txt; then exit 1; fi
       # Apps depend on pkg/ only; front ends never on the engine.
       - run: bazel run //tools:check_deps
+      # THIRD_PARTY_NOTICES matches what the programs link, and every
+      # license in it is one Blitz accepts.
+      - run: tools/third_party_notices.sh --check
       # Fails only on a vulnerability the code can reach. The scan needs the
       # symbol table to see which packages are linked: without it, every
       # advisory in a required module counts (GO-2026-5932, all of x/crypto

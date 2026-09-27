@@ -22,9 +22,6 @@ load("@gazelle//:def.bzl", "gazelle")
 # Not Go, or not this module.
 # gazelle:exclude apps/desktop/web
 # gazelle:exclude apps/desktop/packaging
-# gazelle:exclude tools
-# gazelle:exclude bin
-# gazelle:exclude dist
 
 # `bazel run //:gazelle` writes the Go rules; run it after adding a package
 # or an import.
