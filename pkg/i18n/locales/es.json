@@ -774,6 +774,17 @@
     "desktop.wsd.path_copied": "Ruta copiada.",
     "desktop.wsd.title": "Detalles del espacio de trabajo",
     "desktop.choose.title": "Abrir un espacio de trabajo",
-    "desktop.choose.prompt": "Directorio del espacio de trabajo (ruta absoluta)"
+    "desktop.choose.prompt": "Directorio del espacio de trabajo (ruta absoluta)",
+    "desktop.service.stale.old": "El servicio de Blitz en ejecución es más antiguo que esta aplicación. Reinícialo para usar la versión que corresponde.",
+    "desktop.service.stale.mismatch": "El servicio de Blitz es la versión {service}; esta aplicación es la {app}. Reinícialo para usar la versión que corresponde.",
+    "desktop.service.stale.missing": "El servicio de Blitz ejecuta un programa que ya se eliminó o reemplazó ({path}). Reinícialo.",
+    "desktop.service.restart": "Reiniciar el servicio",
+    "desktop.service.restarting": "Reiniciando…",
+    "desktop.service.restarted": "El servicio se reinició: versión {version}.",
+    "desktop.service.still_stale": "El servicio se reinició, pero aún no es la versión esperada.",
+    "desktop.service.no_cli_restart": "Para reiniciarlo, pon blitz y blitzd en tu PATH o ejecuta blitz service install.",
+    "desktop.service.version": "Versión",
+    "desktop.service.version_unknown": "anterior (desconocida)",
+    "desktop.service.app_version": "esta aplicación: {version}"
   }
 }

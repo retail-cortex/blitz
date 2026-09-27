@@ -37,6 +37,7 @@ bazel run //:gazelle            # after adding a Go package or an import: update
 bazel test --config=race //...  # the Go tests with the race detector, as CI runs them
 bazel run //bazel:tidy          # go mod tidy, bazel mod tidy, Gazelle (after changing dependencies)
 bazel/check_format.sh           # gofmt, and BUILD files as Gazelle writes them
+bazel run //apps/desktop:run   # the desktop app, with blitz and blitzd on its PATH
 bazel run //apps/desktop/web:dev   # the desktop page in a browser (?fake: no service needed)
 bazel build //apps/desktop/packaging:Blitz.app   # the desktop app (macOS; :deb on Linux, which needs webkit2gtk)
 bazel build //release:archives  # the CLI release archives, every platform

@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"slices"
 	"sync"
+	"time"
 
 	"github.com/retail-cortex/blitz/pkg/api"
 
@@ -29,9 +30,11 @@ type Opener func(ctx context.Context, dir string) (*engine.Workspace, error)
 
 // Server holds the open workspaces and serves the API.
 type Server struct {
-	open   Opener
-	sched  *scheduler // nil: workers aren't run
-	broker *broker
+	open    Opener
+	version string     // reported by GetServiceInfo
+	started time.Time  // when New ran
+	sched   *scheduler // nil: workers aren't run
+	broker  *broker
 
 	mu         sync.Mutex
 	workspaces map[string]*workspace // by canonical directory
@@ -66,7 +69,7 @@ type workspace struct {
 
 // New returns a server that opens workspaces with open.
 func New(open Opener, opts ...Option) *Server {
-	s := &Server{open: open, broker: newBroker(), workspaces: map[string]*workspace{}, opening: map[string]*opening{}}
+	s := &Server{open: open, version: "dev", started: time.Now(), broker: newBroker(), workspaces: map[string]*workspace{}, opening: map[string]*opening{}}
 	for _, o := range opts {
 		o(s)
 	}

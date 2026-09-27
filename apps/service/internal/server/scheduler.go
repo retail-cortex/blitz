@@ -36,6 +36,15 @@ type SchedulerConfig struct {
 // Option configures a Server.
 type Option func(*Server)
 
+// WithVersion is the version GetServiceInfo reports ("dev" otherwise).
+func WithVersion(v string) Option {
+	return func(s *Server) {
+		if v != "" {
+			s.version = v
+		}
+	}
+}
+
 // WithScheduler makes the server run enabled workers on their schedules
 // (StartScheduler) and serve WorkerService.
 func WithScheduler(c SchedulerConfig) Option {

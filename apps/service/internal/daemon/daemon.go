@@ -72,7 +72,7 @@ func Run(ctx context.Context, o Options) error {
 		}
 		slog.Info("workspace opened", "workspace", dir)
 		return w, nil
-	}, server.WithScheduler(server.SchedulerConfig{Store: store, Runs: runs, MaxConcurrent: cfg.Workers.Policy.MaxConcurrent}))
+	}, server.WithScheduler(server.SchedulerConfig{Store: store, Runs: runs, MaxConcurrent: cfg.Workers.Policy.MaxConcurrent}), server.WithVersion(o.Version))
 	defer s.Close()
 
 	l, err := socket.Listen(o.Socket)

@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { mdiAlertOutline, mdiFolderOpenOutline, mdiLightningBolt, mdiServerOff } from "@mdi/js";
 import { onServiceLost, workspaces as workspaceAPI } from "./api";
-import { chooseWorkspace, installService, onNotificationOpen, serviceStatus, type ServiceStatus } from "./desktop";
+import { appVersion, chooseWorkspace, installService, onNotificationOpen, serviceStatus, type ServiceStatus } from "./desktop";
+import { checkService, type ServiceCheck } from "./serviceVersion";
 import { CommandPalette } from "./CommandPalette";
 import { Drawer } from "./Drawer";
 import { ErrorBoundary } from "./ErrorBoundary";
@@ -53,12 +54,80 @@ function useServiceStatus() {
   return { service, error, check, setError };
 }
 
+/** Whether the service holding the socket is the one this app expects (DSK-51a). */
+function useServiceVersion(up: boolean) {
+  const [state, setState] = useState<ServiceCheck>({ app: "", stale: "" });
+  const check = useCallback(async () => {
+    try {
+      const next = await checkService(await appVersion());
+      setState(next);
+      return next;
+    } catch {
+      return undefined; // an unreachable service is reported by the status checks
+    }
+  }, []);
+  useEffect(() => {
+    if (up) check();
+  }, [up, check]);
+  return { ...state, check };
+}
+
+/** Says the service is stale, and restarts it with the matching version. */
+function StaleService({ state, check }: { state: ServiceCheck; check: () => Promise<ServiceCheck | undefined> }) {
+  const { stale, info, app } = state;
+  const snack = useSnackbar();
+  const [cli, setCli] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  useEffect(() => {
+    serviceStatus().then((s) => setCli(s.cli), () => setCli(""));
+  }, []);
+  const restart = async () => {
+    setBusy(true);
+    setError("");
+    try {
+      // Re-registers the login item with the blitzd beside this app's CLI
+      // and restarts it (launchd or systemd).
+      await installService();
+      for (let i = 0; i < 30; i++) {
+        await new Promise((r) => setTimeout(r, 1000));
+        const now = await check();
+        if (now && !now.stale) {
+          snack(t("desktop.service.restarted", { version: now.info?.version ?? "?" }));
+          return;
+        }
+      }
+      setError(t("desktop.service.still_stale"));
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="banner">
+      <Icon path={mdiServerOff} />
+      <span className="spacer">
+        {t(`desktop.service.stale.${stale}`, { service: info?.version ?? "?", app, path: info?.executable ?? "" })}
+        {cli === "" && <span className="muted"> {t("desktop.service.no_cli_restart")}</span>}
+        {error && <span className="error-text"> {error}</span>}
+      </span>
+      {cli ? (
+        <Button variant="tonal" small disabled={busy} onClick={restart}>
+          {busy ? t("desktop.service.restarting") : t("desktop.service.restart")}
+        </Button>
+      ) : null}
+    </div>
+  );
+}
+
 function Shell() {
   const { prefs, loaded, update, prefsError, activity, stop, drawer } = useApp();
   useLanguage(); // the whole window follows a language change
   const [confirmClose, setConfirmClose] = useState<string | null>(null);
   const snack = useSnackbar();
   const { service, error, check, setError } = useServiceStatus();
+  const version = useServiceVersion(service.state === "up");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
   // Cmd/Ctrl+K opens the command palette.
@@ -140,6 +209,7 @@ function Shell() {
             <div className="progress spacer" />
           </div>
         )}
+        {service.state === "up" && version.stale && <StaleService state={version} check={version.check} />}
         {open_.length === 0 && <Welcome onOpen={open} />}
         {open_.map((w) => (
           <Workspace key={`${w.dir}#${generation}`} ws={w} visible={w.dir === prefs.active} onEdit={() => setEditing(w.dir)} onClose={() => close(w.dir)} />

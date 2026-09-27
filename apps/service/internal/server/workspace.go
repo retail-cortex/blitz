@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 
 	"github.com/retail-cortex/blitz/pkg/api"
 
@@ -19,6 +20,11 @@ type workspaceService struct{ s *Server }
 type req[T any] = *connect.Request[T]
 
 func ok[T any](msg *T) (*connect.Response[T], error) { return connect.NewResponse(msg), nil }
+
+func (h workspaceService) GetServiceInfo(context.Context, req[pb.GetServiceInfoRequest]) (*connect.Response[pb.GetServiceInfoResponse], error) {
+	exe, _ := os.Executable()
+	return ok(&pb.GetServiceInfoResponse{Version: h.s.version, Executable: exe, Started: timestamppb.New(h.s.started)})
+}
 
 func (h workspaceService) ListWorkspaces(context.Context, req[pb.ListWorkspacesRequest]) (*connect.Response[pb.ListWorkspacesResponse], error) {
 	return ok(&pb.ListWorkspacesResponse{Workspaces: h.s.openDirs()})

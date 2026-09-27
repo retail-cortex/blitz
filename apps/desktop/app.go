@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -103,7 +104,19 @@ func (a *App) InstallService() (string, error) {
 // ChooseWorkspace asks for a directory to open ("" if cancelled). The
 // page gives the dialog's title, in the window's language.
 func (a *App) ChooseWorkspace(title string) (string, error) {
-	return runtime.OpenDirectoryDialog(a.ctx, runtime.OpenDialogOptions{Title: title, CanCreateDirectories: true})
+	start := time.Now()
+	dir, err := runtime.OpenDirectoryDialog(a.ctx, runtime.OpenDialogOptions{Title: title, CanCreateDirectories: true})
+	// A dialog that closes on its own shows here as an empty answer after
+	// a moment (on the terminal the app runs from).
+	log.Printf("open workspace dialog: %q, error %v, after %s", dir, err, time.Since(start).Round(time.Millisecond))
+	return dir, err
+}
+
+// ProgramExists reports whether path is a file: the program a running
+// service started from may have been removed since (DSK-51a).
+func (a *App) ProgramExists(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && !info.IsDir()
 }
 
 // GetPrefs returns the window's settings (the defaults when none are

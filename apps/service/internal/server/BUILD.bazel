@@ -33,6 +33,7 @@ go_test(
     name = "server_test",
     srcs = [
         "broker_test.go",
+        "info_test.go",
         "leak_test.go",
         "listen_test.go",
         "server_test.go",

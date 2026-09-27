@@ -17,6 +17,9 @@ option go_package = "github.com/retail-cortex/blitz/proto/blitz/v1;blitzv1";
 // Every request names its workspace by absolute directory; the service opens
 // it on first use. Errors carry an ErrorInfo detail.
 service WorkspaceService {
+  // Describes the service itself, so a client can tell whether it's the
+  // version it expects (older services don't have it: Unimplemented).
+  rpc GetServiceInfo(GetServiceInfoRequest) returns (GetServiceInfoResponse);
   // Returns the workspaces the service has open.
   rpc ListWorkspaces(ListWorkspacesRequest) returns (ListWorkspacesResponse);
   // Closes a workspace: kills its background processes and MCP servers.
@@ -119,6 +122,17 @@ message Saved {
   string path = 1;
   // Why it wasn't saved; empty on success.
   string error = 2;
+}
+
+message GetServiceInfoRequest {}
+
+message GetServiceInfoResponse {
+  // The release (1.4.0), or "dev" for an unstamped build.
+  string version = 1;
+  // The program the service runs from, as it started (the file may have
+  // been replaced or removed since).
+  string executable = 2;
+  google.protobuf.Timestamp started = 3;
 }
 
 message ListWorkspacesRequest {}

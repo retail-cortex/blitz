@@ -14,6 +14,7 @@ import {
   mdiWhiteBalanceSunny,
 } from "@mdi/js";
 import { appVersion, installService, serviceStatus, type ServiceStatus } from "./desktop";
+import { checkService, type ServiceCheck } from "./serviceVersion";
 import { languages, t } from "./i18n";
 import { workspaceColor } from "./palette";
 import { displayName, forgetWorkspace } from "./prefs";
@@ -158,7 +159,12 @@ function Service() {
   const [status, setStatus] = useState<ServiceStatus | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
-  const refresh = () => serviceStatus().then(setStatus, (e) => setError(String(e)));
+  const [version, setVersion] = useState<ServiceCheck | null>(null);
+  const refresh = () =>
+    serviceStatus().then((s) => {
+      setStatus(s);
+      if (s.running) appVersion().then(checkService).then(setVersion, () => setVersion(null));
+    }, (e) => setError(String(e)));
   useEffect(() => {
     refresh();
   }, []);
@@ -197,6 +203,13 @@ function Service() {
           {status.installed ? t("desktop.service.reinstall") : t("desktop.service.install_short")}
         </Button>
       </Setting>
+      {version && (
+        <Setting title={t("desktop.service.version")} detail={version.stale ? t(`desktop.service.stale.${version.stale}`, { service: version.info?.version ?? "?", app: version.app, path: version.info?.executable ?? "" }) : undefined}>
+          <span className={version.stale ? "error-text" : "muted"}>
+            {version.info ? version.info.version : t("desktop.service.version_unknown")} · {t("desktop.service.app_version", { version: version.app })}
+          </span>
+        </Setting>
+      )}
       <Setting title={t("desktop.service.socket")}>
         <code className="muted">{status.socket}</code>
       </Setting>

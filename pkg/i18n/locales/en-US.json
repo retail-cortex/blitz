@@ -774,6 +774,17 @@
     "desktop.wsd.path_copied": "Path copied.",
     "desktop.wsd.title": "Workspace details",
     "desktop.choose.title": "Open a workspace",
-    "desktop.choose.prompt": "Workspace directory (absolute path)"
+    "desktop.choose.prompt": "Workspace directory (absolute path)",
+    "desktop.service.stale.old": "The Blitz service running is older than this app. Restart it to use the matching version.",
+    "desktop.service.stale.mismatch": "The Blitz service is version {service}; this app is {app}. Restart it to use the matching version.",
+    "desktop.service.stale.missing": "The Blitz service runs a program that has since been removed or replaced ({path}). Restart it.",
+    "desktop.service.restart": "Restart the service",
+    "desktop.service.restarting": "Restarting…",
+    "desktop.service.restarted": "The service restarted: version {version}.",
+    "desktop.service.still_stale": "The service restarted but isn't the expected version yet.",
+    "desktop.service.no_cli_restart": "To restart it, put blitz and blitzd on your PATH, or run blitz service install.",
+    "desktop.service.version": "Version",
+    "desktop.service.version_unknown": "older (unknown)",
+    "desktop.service.app_version": "this app: {version}"
   }
 }

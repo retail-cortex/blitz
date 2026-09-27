@@ -291,6 +291,7 @@ export function installFake() {
         listApprovals: () => ({ approvals: [{ key: "k1", kind: "write", subject: "internal/cart", always: false }] }),
         revokeApprovals: () => ({ revoked: 1 }),
         closeWorkspace: () => ({}),
+        getServiceInfo: () => ({ version: "dev", executable: "" }),
         listWorkspaces: () => ({ workspaces: [...states.keys()] }),
         listCommands: () => ({
           commands: [

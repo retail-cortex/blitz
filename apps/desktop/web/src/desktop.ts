@@ -16,6 +16,7 @@ export interface ServiceStatus {
 
 type Bound = {
   Version(): Promise<string>;
+  ProgramExists(path: string): Promise<boolean>;
   ServiceStatus(): Promise<ServiceStatus>;
   InstallService(): Promise<string>;
   ChooseWorkspace(title: string): Promise<string>;
@@ -52,6 +53,9 @@ export async function serviceStatus(): Promise<ServiceStatus> {
   return app().ServiceStatus();
 }
 export const installService = () => app().InstallService();
+
+/** Whether the file a running service started from is still there (true in a browser). */
+export const programExists = async (path: string) => (inApp() && path ? app().ProgramExists(path) : true);
 
 /** The app's version ("dev" outside a release, and in a browser). */
 export const appVersion = async () => (inApp() ? app().Version() : "dev");
