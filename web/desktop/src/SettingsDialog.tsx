@@ -97,6 +97,9 @@ function Appearance() {
       <Setting title="Show thinking" detail="Show the model's reasoning, folded, above its answer (when the model shares it).">
         <Switch label="Show thinking" checked={prefs.show_thoughts} onChange={(show_thoughts) => update((p) => ({ ...p, show_thoughts }))} />
       </Setting>
+      <Setting title="Notifications" detail="Tell me when the agent needs me, or finishes a longer turn, while I'm in another window or workspace.">
+        <Switch label="Notifications" checked={prefs.notifications === "on"} onChange={(on) => update((p) => ({ ...p, notifications: on ? "on" : "off" }))} />
+      </Setting>
       <Setting title="Run settings panel" detail="Show the agent, model and permission settings beside the conversation.">
         <Switch label="Run settings panel" checked={prefs.run_settings} onChange={(run_settings) => update((p) => ({ ...p, run_settings }))} />
       </Setting>

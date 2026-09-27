@@ -373,6 +373,7 @@ Set `fallback_models = ["anthropic/claude-sonnet-5"]` with a working Anthropic k
 - [ ] 💲 "Plan first" with a small task: the plan shows as a card; "Yes, carry it out" makes the change; typed feedback makes the agent revise. The mode chip changes the permission mode (the REPL attached to the same workspace shows it too).
 - [ ] Run settings: change the model, effort, temperature (saved to `[model_settings]`), mode, agency; add and remove a permission rule; revoke an approval; compact the context.
 - [ ] Changes view after a turn that edited files: the files, their diffs, the agent's summary, "Undo last turn"; the Git toggle shows `git diff`.
+- [ ] 💲 Notifications: start a turn that needs an approval, switch to another app. **Expected:** macOS asks once to allow notifications; then "<workspace>: approval needed"; clicking it brings Blitz back on that workspace. A long turn finishing while another workspace is shown notifies "done"; a quick one doesn't; nothing notifies while you watch the conversation. Settings › Notifications off stops them.
 - [ ] A narrow window (about 800 px): the drawer is a rail, the run settings float over the chat, the view switcher shows icons.
 
 ## 38. Parity features (ROADMAP item 25)

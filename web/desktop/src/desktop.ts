@@ -20,6 +20,7 @@ type Bound = {
   GetPrefs(): Promise<Prefs>;
   SavePrefs(p: Prefs): Promise<Prefs>;
   OpenURL(url: string): Promise<void>;
+  Notify(title: string, body: string, dir: string): Promise<void>;
 };
 
 function bound(): Bound | undefined {
@@ -85,4 +86,24 @@ export async function openURL(url: string): Promise<void> {
     return;
   }
   return app().OpenURL(url);
+}
+
+/** Shows a system notification; a click brings the window to dir. */
+export async function notifyNative(title: string, body: string, dir: string): Promise<void> {
+  if (inApp()) return app().Notify(title, body, dir);
+  // A browser (development): the web's own notifications.
+  if (typeof Notification === "undefined") return;
+  if (Notification.permission === "default") await Notification.requestPermission();
+  if (Notification.permission === "granted") new Notification(title, { body }).onclick = () => window.focus();
+}
+
+type WailsRuntime = { EventsOn(name: string, f: (...args: unknown[]) => void): () => void };
+
+/** Calls f with the workspace a clicked notification is about. */
+export function onNotificationOpen(f: (dir: string) => void): () => void {
+  const rt = (window as unknown as { runtime?: WailsRuntime }).runtime;
+  if (!rt?.EventsOn) return () => {};
+  return rt.EventsOn("notification:open", (dir) => {
+    if (typeof dir === "string") f(dir);
+  });
 }

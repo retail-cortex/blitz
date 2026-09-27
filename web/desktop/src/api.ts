@@ -32,7 +32,9 @@ const watchAvailability: Interceptor = (next) => async (req) => {
   }
 };
 
-let transport: Transport = createConnectTransport({ baseUrl: window.location.origin, interceptors: [watchAvailability] });
+// The page talks to its own origin (tests import this without a window).
+const origin = typeof window === "undefined" ? "http://localhost" : window.location.origin;
+let transport: Transport = createConnectTransport({ baseUrl: origin, interceptors: [watchAvailability] });
 
 /** Replaces the transport (development: the fake service). */
 export function setTransport(t: Transport) {

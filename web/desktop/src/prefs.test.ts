@@ -68,6 +68,7 @@ describe("normalizePrefs", () => {
     // What Go sends with no workspaces yet, and a damaged or older shape.
     expect(normalizePrefs({ theme: "dark", workspaces: null }).workspaces).toEqual([]);
     expect(normalizePrefs(null)).toEqual({ ...defaultPrefs, active: undefined });
+    expect(normalizePrefs({ notifications: "sometimes" }).notifications).toBe("on");
     const p = normalizePrefs({
       theme: "sepia",
       density: 3,

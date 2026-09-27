@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { mdiAlertOutline, mdiFolderOpenOutline, mdiLightningBolt, mdiServerOff } from "@mdi/js";
 import { onServiceLost, workspaces as workspaceAPI } from "./api";
-import { chooseWorkspace, installService, serviceStatus, type ServiceStatus } from "./desktop";
+import { chooseWorkspace, installService, onNotificationOpen, serviceStatus, type ServiceStatus } from "./desktop";
 import { Drawer } from "./Drawer";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { message, reason } from "./errors";
@@ -73,6 +73,8 @@ function Shell() {
   useEffect(() => {
     if (prefsError) snack(prefsError, { error: true });
   }, [prefsError, snack]);
+  // A click on a notification shows its workspace.
+  useEffect(() => onNotificationOpen((dir) => update((p) => openWorkspace(p, dir))), [update]);
 
   const open = useCallback(async () => {
     const dir = await chooseWorkspace().catch((e) => (snack(String(e), { error: true }), ""));

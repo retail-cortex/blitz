@@ -11,7 +11,7 @@ import (
 func TestPrefsDefaultsAndRoundTrip(t *testing.T) {
 	s := &prefsStore{path: filepath.Join(t.TempDir(), "blitz", "desktop.json")}
 	p, err := s.load()
-	if err != nil || p.Theme != "system" || p.Drawer != "open" || p.Density != "comfortable" || len(p.Workspaces) != 0 {
+	if err != nil || p.Theme != "system" || p.Drawer != "open" || p.Density != "comfortable" || p.Notifications != "on" || len(p.Workspaces) != 0 {
 		t.Fatalf("defaults %+v %v", p, err)
 	}
 	a, b := t.TempDir(), t.TempDir()

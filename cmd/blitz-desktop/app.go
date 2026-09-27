@@ -8,6 +8,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	goruntime "runtime"
+	"sync"
+	"time"
 
 	"github.com/retail-cortex/blitz/internal/config"
 	"github.com/retail-cortex/blitz/internal/server"
@@ -21,9 +23,50 @@ type App struct {
 	ctx    context.Context
 	socket string
 	prefs  *prefsStore
+
+	notifyOnce sync.Once
+	notifyOK   bool // notifications work and the user allowed them
 }
 
-func (a *App) startup(ctx context.Context) { a.ctx = ctx }
+func (a *App) startup(ctx context.Context) {
+	a.ctx = ctx
+	// A click on a notification brings the window back, on its workspace.
+	if runtime.InitializeNotifications(ctx) == nil {
+		runtime.OnNotificationResponse(ctx, func(r runtime.NotificationResult) {
+			if r.Error != nil {
+				return
+			}
+			runtime.WindowUnminimise(ctx)
+			runtime.WindowShow(ctx)
+			if dir, ok := r.Response.UserInfo["dir"].(string); ok {
+				runtime.EventsEmit(ctx, "notification:open", dir)
+			}
+		})
+	}
+}
+
+// Notify shows a system notification (the agent finished, or waits for
+// the user). The first one asks the user's permission; without it, or
+// where notifications don't work, it does nothing. dir is the workspace a
+// click opens.
+func (a *App) Notify(title, body, dir string) error {
+	a.notifyOnce.Do(func() {
+		if !runtime.IsNotificationAvailable(a.ctx) {
+			return
+		}
+		ok, err := runtime.RequestNotificationAuthorization(a.ctx)
+		a.notifyOK = ok && err == nil
+	})
+	if !a.notifyOK {
+		return nil
+	}
+	return runtime.SendNotification(a.ctx, runtime.NotificationOptions{
+		ID:    fmt.Sprintf("blitz-%d", time.Now().UnixNano()),
+		Title: title,
+		Body:  body,
+		Data:  map[string]any{"dir": dir},
+	})
+}
 
 // ServiceStatus says whether the service answers and whether it starts at
 // login.

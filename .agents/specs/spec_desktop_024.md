@@ -58,6 +58,7 @@ It keeps only its own settings (theme, layout, the workspaces it knows and how t
 | `ChooseWorkspace() → dir` | Native directory dialog "Open a workspace" (may create directories); `""` when cancelled. |
 | `GetPrefs() → Prefs` | The window's settings (§7), defaults when none are saved. An unreadable file is renamed `desktop.json.damaged` and reported once; the defaults are returned. |
 | `SavePrefs(Prefs) → Prefs` | Normalizes (§7) and writes them atomically, owner-only (0600, directory 0700); returns what was saved. |
+| `Notify(title, body, dir)` | A system notification (Wails's native notifications; macOS's needs the bundle identifier). The first call asks the user's permission; without it, or where notifications aren't available, it does nothing. A click on the notification unminimises and shows the window and emits `notification:open` with `dir`, which shows that workspace. |
 | `OpenURL(url)` | Opens `http`/`https` links (with a host) and `mailto:` links in the system browser; anything else (`file:`, `javascript:`, custom schemes, relative) is refused. Never navigates the window. |
 
 - **DSK-30** Outside the Wails window (a browser in development) the page uses stand-ins: preferences in `localStorage`, the status from a call to the service through the dev server's proxy, a prompt for the directory, links in a new tab. Calling the Go bindings themselves throws "not running inside the Blitz desktop app".
@@ -70,7 +71,7 @@ It keeps only its own settings (theme, layout, the workspaces it knows and how t
 
 ## 7. Window settings and workspaces
 
-- **DSK-40** `~/.blitz/desktop.json` (`Prefs`): `theme` (`system|light|dark`), `density` (`comfortable|compact`), `drawer` (`open|rail`), `run_settings` (panel shown), `show_thoughts`, `active` (a directory), and `workspaces`: every workspace the window has opened, each `{dir, name, description, color, open}`. Normalization: unknown values fall back to defaults; directories are cleaned, must be absolute, and appear once; open workspaces come first in tab order, then closed ones (at most 20, most recent first); `active` must be an open workspace, else the first open one.
+- **DSK-40** `~/.blitz/desktop.json` (`Prefs`): `theme` (`system|light|dark`), `density` (`comfortable|compact`), `notifications` (`on|off`), `drawer` (`open|rail`), `run_settings` (panel shown), `show_thoughts`, `active` (a directory), and `workspaces`: every workspace the window has opened, each `{dir, name, description, color, open}`. Normalization: unknown values fall back to defaults; directories are cleaned, must be absolute, and appear once; open workspaces come first in tab order, then closed ones (at most 20, most recent first); `active` must be an open workspace, else the first open one.
 - **DSK-41** The rules for the list are pure functions (`prefs.ts`), unit-tested: opening a known workspace keeps its name, description and colour and shows it (opening an open one just shows it); closing moves it to the front of the recent ones and shows the tab after it (else before); a closed workspace can be forgotten (open ones can't); open ones can be reordered. A workspace is shown by its name, else its directory's last element.
 - **DSK-43** The Go side always sends `workspaces` as a list (`[]`, never `null`), and the page normalizes whatever it loads (`normalizePrefs`, unit-tested: every field of the right type, else its default; workspaces without a directory dropped). An error while drawing the page shows "Something went wrong" with the details, **Reload the window** and **Copy the details** (an error boundary), never a frozen or blank window.
 - **DSK-42** Saving happens on every change, one save after another so the file ends with the latest.
@@ -115,6 +116,10 @@ API used: `SessionService.GetActiveSession`, `NewSession`, `ListSessions`, `Load
 
 - **DSK-79a** Code blocks and diff lines are highlighted with highlight.js grammars through `lowlight` (the common set, about 35 languages), which returns an element tree rendered as React elements — never an HTML string. A block's grammar comes from its fence's language (with aliases: `sh`→bash, `ts`→typescript, `yml`→yaml, `golang`→go, `proto`→protobuf, …); a diff's from the file name (extension, or `Makefile`). Unknown languages, and code over 100 000 characters, stay plain text. Diff lines are highlighted one at a time after their `+`/`−`/space sign (shown in its own column), over the added/removed tint. Token colours are theme tokens (`--hl-*`) with a light and a dark set.
 
+### 11c. Notifications
+
+- **DSK-78a** With **Notifications** on (the default; Settings › Appearance; `notifications` in `desktop.json`), the window notifies when an approval or a question waits ("<workspace>: approval needed" with the request, "<workspace>: the agent asks" with the question), or when a turn that took at least 10 s finishes ("<workspace>: done" with the start of the answer, or "the turn failed" with the error) — but only while the user isn't looking at that conversation: the window isn't focused, or another workspace or view is shown (`shouldNotify`, unit-tested). Bodies are cut to 180 characters. In a browser (development) the web's Notification API stands in.
+
 ## 12. Approvals, questions and plans
 
 - **DSK-80** An approval request shows as a card: "Allow this?", `<tool>` wants to: <detail>, the diff coloured per file (§14), and **Allow once** (focused, filled), **Allow <scope> this session**, **Always allow <scope>** (when the request has a scope), **Deny** (outlined, red).
@@ -148,5 +153,4 @@ Not implemented; each is tracked in [spec_backlog_026](spec_backlog_026.md):
 - **Images**: pasting or dropping into the composer (BL-DSK-30).
 - **Localisation**: the page's strings are English (BL-DSK-40).
 - **Workers**: no refresh on file changes; a run's session doesn't open in the conversation (BL-DSK-50).
-- **Notifications** when a turn finishes or waits while the window is in the background (PAR-UI-03).
 - **Release**: signing, notarisation, a release job, Linux and Windows packages (BL-DSK-60/61).

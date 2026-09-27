@@ -83,7 +83,7 @@ export function Workspace({ ws, visible, onEdit, onClose }: { ws: WorkspacePrefs
       <div className="workspace-body">
         <div className="workspace-view">
           <div hidden={view !== "chat"} className="view-fill">
-            <Conversation dir={dir} name={name} settings={settings} modelProblem={modelProblem} onSettingsChanged={refreshSettings} />
+            <Conversation dir={dir} name={name} visible={visible && view === "chat"} settings={settings} modelProblem={modelProblem} onSettingsChanged={refreshSettings} />
           </div>
           {view === "changes" && <Changes dir={dir} />}
           {view === "workers" && <Workers dir={dir} />}

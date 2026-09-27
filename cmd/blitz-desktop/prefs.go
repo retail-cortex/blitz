@@ -32,6 +32,9 @@ type Prefs struct {
 	ShowThoughts bool `json:"show_thoughts"`
 	// Density is "comfortable" (the default) or "compact".
 	Density string `json:"density"`
+	// Notifications is "on" (the default: when the agent finishes or waits
+	// while the window is elsewhere) or "off".
+	Notifications string `json:"notifications"`
 }
 
 // WorkspacePrefs is a workspace as the window shows it.
@@ -59,6 +62,9 @@ func (p *Prefs) normalize() {
 	}
 	if p.Density != "compact" {
 		p.Density = "comfortable"
+	}
+	if p.Notifications != "off" {
+		p.Notifications = "on"
 	}
 	seen := map[string]bool{}
 	var open, closed []WorkspacePrefs

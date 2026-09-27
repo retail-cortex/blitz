@@ -19,6 +19,7 @@ export interface Prefs {
   run_settings: boolean;
   show_thoughts: boolean;
   density: "comfortable" | "compact";
+  notifications: "on" | "off";
 }
 
 export const defaultPrefs: Prefs = {
@@ -28,6 +29,7 @@ export const defaultPrefs: Prefs = {
   run_settings: false,
   show_thoughts: false,
   density: "comfortable",
+  notifications: "on",
 };
 
 const pick = <T extends string>(v: unknown, allowed: readonly T[], fallback: T): T => (allowed.includes(v as T) ? (v as T) : fallback);
@@ -57,6 +59,7 @@ export function normalizePrefs(raw: unknown): Prefs {
     run_settings: r.run_settings === true,
     show_thoughts: r.show_thoughts === true,
     density: pick(r.density, ["comfortable", "compact"] as const, "comfortable"),
+    notifications: pick(r.notifications, ["on", "off"] as const, "on"),
   };
 }
 

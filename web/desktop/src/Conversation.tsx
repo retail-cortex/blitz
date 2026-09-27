@@ -40,6 +40,7 @@ import type { SessionInfo } from "./gen/blitz/v1/session_pb";
 import { Decision, type ApprovalRequest, type Question, type Task, type Usage } from "./gen/blitz/v1/turn_pb";
 import type { GetSettingsResponse } from "./gen/blitz/v1/workspace_pb";
 import { Markdown } from "./Markdown";
+import { notify, shouldNotify, type NotifyKind } from "./notify";
 import { efforts, effortIcon, modeOf, modes } from "./options";
 import { useApp } from "./state";
 import { applyEvent, assignPromptIndices, failed, fromMessages, parseDiff, summarizeArgs, tasksOf, type Entry, type UserEntry } from "./turns";
@@ -51,12 +52,15 @@ type Pending = { kind: "approval"; req: ApprovalRequest } | { kind: "question"; 
 export function Conversation({
   dir,
   name,
+  visible,
   settings,
   modelProblem,
   onSettingsChanged,
 }: {
   dir: string;
   name: string;
+  /** The user can see this conversation (its workspace and view are shown). */
+  visible: boolean;
   settings?: GetSettingsResponse;
   modelProblem: string;
   onSettingsChanged: () => void;
@@ -135,6 +139,22 @@ export function Conversation({
 
   useEffect(() => setActivity(dir, { running, waiting: !!pending }), [dir, running, pending, setActivity]);
 
+  // Tell the user, when they're looking elsewhere, that the agent waits or is done.
+  const started = useRef(0);
+  const visibleRef = useRef(visible);
+  visibleRef.current = visible;
+  const tell = useCallback(
+    (kind: NotifyKind, title: string, body: string) => {
+      const s = { enabled: prefs.notifications === "on", focused: document.hasFocus(), shown: visibleRef.current, elapsedMs: Date.now() - started.current };
+      if (shouldNotify(kind, s)) notify(title, body, dir);
+    },
+    [prefs.notifications, dir],
+  );
+  useEffect(() => {
+    if (pending?.kind === "approval") tell("waiting", `${name}: approval needed`, `${pending.req.tool} wants to: ${pending.req.detail}`);
+    if (pending?.kind === "question") tell("waiting", `${name}: the agent asks`, pending.q.question.replace(/[#*`_>]/g, "").trim());
+  }, [pending, name, tell]);
+
   // Follow new output, unless the user scrolled up to read.
   useEffect(() => {
     const el = scroller.current;
@@ -150,6 +170,7 @@ export function Conversation({
       if (!session) return;
       if (!opts.accepted) setEntries((e) => [...e, { kind: "user", text: opts.plan ? `/plan ${text}` : text }]);
       setRunning(true);
+      started.current = Date.now();
       setError("");
       setTurnUsage("");
       stick.current = true;
@@ -174,6 +195,8 @@ export function Conversation({
             setTurnUsage(usageLine(ev.kind.value.before, ev.kind.value.after));
             setTotal(ev.kind.value.after);
             leftover = ev.kind.value.leftover;
+            const f = ev.kind.value;
+            tell("finished", f.error ? `${name}: the turn failed` : `${name}: done`, f.error ? f.error.message : f.output || "The agent finished.");
           }
         }
       } catch (e) {
@@ -198,7 +221,7 @@ export function Conversation({
       // read: they are the next turn (unless the turn was stopped).
       if (leftover.length > 0 && !ctl.signal.aborted) run(leftover.join("\n\n"), { accepted: true });
     },
-    [dir, session, refreshList, fail, onSettingsChanged],
+    [dir, session, refreshList, fail, onSettingsChanged, tell, name],
   );
 
   const stop = useCallback(async () => {
