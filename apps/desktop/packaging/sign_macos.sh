@@ -30,17 +30,19 @@ for exe in blitz blitzd blitz-desktop; do
 done
 
 # Nested code first, then the bundle; hardened runtime and a secure
-# timestamp, which notarisation requires.
+# timestamp, which notarisation requires. Each program gets a real
+# identifier: Bazel's links are all "a.out" (bazel/macos.bzl).
 signed=""
 if [ -n "${DESKTOP_SIGN_IDENTITY:-}" ]; then
-	for exe in blitz blitzd; do
-		codesign --force --options runtime --timestamp --sign "$DESKTOP_SIGN_IDENTITY" "$app/Contents/MacOS/$exe"
-	done
+	codesign --force --options runtime --timestamp --identifier dev.blitz.cli --sign "$DESKTOP_SIGN_IDENTITY" "$app/Contents/MacOS/blitz"
+	codesign --force --options runtime --timestamp --identifier dev.blitz.service --sign "$DESKTOP_SIGN_IDENTITY" "$app/Contents/MacOS/blitzd"
 	codesign --force --options runtime --timestamp --sign "$DESKTOP_SIGN_IDENTITY" "$app"
 	signed=1
 else
 	echo "warning: DESKTOP_SIGN_IDENTITY isn't set: signing ad hoc, not notarising" >&2
-	codesign --force --deep --sign - "$app"
+	codesign --force --identifier dev.blitz.cli --sign - "$app/Contents/MacOS/blitz"
+	codesign --force --identifier dev.blitz.service --sign - "$app/Contents/MacOS/blitzd"
+	codesign --force --sign - "$app"
 fi
 codesign --verify --strict --deep --verbose=2 "$app"
 

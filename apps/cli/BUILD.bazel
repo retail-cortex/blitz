@@ -1,4 +1,5 @@
 load("@rules_go//go:def.bzl", "go_binary", "go_library", "go_test")
+load("//bazel:macos.bzl", "signed_binary")
 
 # The REPL's untranslated-output lint reads main.go too.
 exports_files(["main.go"])
@@ -43,7 +44,7 @@ go_library(
 )
 
 go_binary(
-    name = "blitz",
+    name = "blitz_unsigned",
     embed = [":cli_lib"],
     visibility = ["//visibility:public"],
     # The release version (--config=release), else the default in main.go.
@@ -102,3 +103,12 @@ go_test(
         ("windows", "amd64"),
     ]
 ]
+
+# blitz signed as dev.blitz.cli on macOS (//bazel:macos.bzl): Bazel's links
+# are all "a.out" to macOS otherwise.
+signed_binary(
+    name = "blitz",
+    binary = ":blitz_unsigned",
+    identifier = "dev.blitz.cli",
+    visibility = ["//visibility:public"],
+)

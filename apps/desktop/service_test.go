@@ -14,7 +14,7 @@ import (
 // can install and restart the service without the CLI.
 func TestFindServiceInRunfiles(t *testing.T) {
 	root := t.TempDir()
-	dir := filepath.Join(root, "_main", "apps", "service", "blitzd_")
+	dir := filepath.Join(root, "_main", "apps", "service")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}

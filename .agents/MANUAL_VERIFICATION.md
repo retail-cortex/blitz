@@ -2,7 +2,7 @@
 
 Everything here needs a person, a real terminal, real credentials, or GitHub. The automated suite (413 tests on macOS and Linux) covers the logic behind each item; this list checks the parts it can't. Each item has an **expected** result — if you see something else, note it next to the item.
 
-Setup for most items: `bazel build //apps/cli:blitz //apps/service:blitzd`, then put `bazel-bin/apps/cli/blitz_` and `bazel-bin/apps/service/blitzd_` on your `PATH` (or use a release archive). Use a scratch Git repository as the workspace so edits are safe.
+Setup for most items: `bazel build //apps/cli:blitz //apps/service:blitzd`, then put `bazel-bin/apps/cli` and `bazel-bin/apps/service` on your `PATH` (or use a release archive). Use a scratch Git repository as the workspace so edits are safe.
 
 **Cost note:** items marked 💲 call a paid API. A short session costs cents; long sessions and `/compact` cost more.
 

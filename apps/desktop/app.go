@@ -184,7 +184,7 @@ func findService() (string, error) {
 		dirs = append(dirs, d)
 	}
 	for _, root := range runfilesRoots() {
-		dirs = append(dirs, filepath.Join(root, "_main", "apps", "service", "blitzd_"))
+		dirs = append(dirs, filepath.Join(root, "_main", "apps", "service"))
 	}
 	return loginitem.FindService(dirs...)
 }

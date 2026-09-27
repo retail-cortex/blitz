@@ -1,6 +1,7 @@
 load("@bazel_lib//lib:copy_to_directory.bzl", "copy_to_directory")
 load("@bazel_lib//lib:transitions.bzl", "platform_transition_filegroup")
 load("@rules_go//go:def.bzl", "go_binary", "go_library", "go_test")
+load("//bazel:macos.bzl", "signed_binary")
 
 # The page is the same for every platform: it's built for this machine
 # (its tools are native), even when the app is built for another.
@@ -52,7 +53,7 @@ go_library(
 )
 
 go_binary(
-    name = "blitz-desktop",
+    name = "blitz-desktop_unsigned",
     # The service it installs and restarts, found in its runfiles under
     # bazel run (Blitz.app and the .deb put it beside the app instead).
     data = ["//apps/service:blitzd"],
@@ -110,3 +111,13 @@ go_test(
         "arm64",
     ]
 ]
+
+# The app as `bazel run //apps/desktop:blitz-desktop` runs it: signed as
+# dev.blitz.desktop on macOS (//bazel:macos.bzl), with blitzd in its
+# runfiles.
+signed_binary(
+    name = "blitz-desktop",
+    binary = ":blitz-desktop_unsigned",
+    identifier = "dev.blitz.desktop",
+    visibility = ["//visibility:public"],
+)
