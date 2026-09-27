@@ -38,7 +38,7 @@ The `Engine` wraps the Google ADK runner (`google.golang.org/adk/v2`). It builds
 
 ## 4. Plan mode and read-only modes
 
-- **ENG-30** Tools allowed in plan/read-only mode: `read_file`, `list_files`, `grep`, `view_image`, `web_fetch`, `web_search`, `list_agents`, `invoke_agent`, `list_or_search_skills`, `activate_skill`, `ask_user_question`. Everything else, including every MCP tool, is refused. Sub-agents run inside the same run and are equally restricted.
+- **ENG-30** Tools allowed in plan/read-only mode: `read_file`, `list_files`, `glob`, `grep`, `view_image`, `web_fetch`, `web_search`, `list_agents`, `invoke_agent`, `list_or_search_skills`, `activate_skill`, `ask_user_question`. Everything else, including every MCP tool, is refused. Sub-agents run inside the same run and are equally restricted.
 - **ENG-31** Refusal text: plan mode — "plan mode: X is disabled because it could change something. Describe this step in the plan instead."; named mode — "<mode> is read-only: X is disabled because it could change something."
 - **ENG-32** `PlanPrompt(goal)` asks for: objective summary, numbered implementation plan naming files/functions, risks and unknowns, verification, and questions only if blocking.
 - **ENG-33** Read-only modes are used by `/search` (`WithReadOnly`) and `/btw` (mode `btw`).

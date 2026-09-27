@@ -109,7 +109,7 @@ Decision §12.2. **CC** `/cd <path>` (June 2026) moves the session to another di
 
 ### 5.1 Missing built-in tools — P0/P1
 **CC** `Glob`, `NotebookEdit`, `LSP`, `Monitor`, `WebSearch`, `TodoWrite`, `AskUserQuestion` (multiple-choice). **Blitz today:** `list_files`, `grep`, file tools, shell, background processes, web, `ask_user_question` (free text + options).
-- **PAR-TOOL-01 (P0, S)** `glob(pattern, path?)`: files matching `**` globs under the roots, blocked paths excluded, sorted by modification time, capped (default 200), with the same skip rules as `grep`.
+- **PAR-TOOL-01 (P0, S)** ✅ *Done 2026-09-26 (ROADMAP 25.1; now [spec_filetools_006](spec_filetools_006.md)).* `glob(pattern, path?)`: files matching `**` globs under the roots, blocked paths excluded, sorted by modification time, capped (default 200), with the same skip rules as `grep`.
 - **PAR-TOOL-02 (P1, S)** `notebook_edit(path, cell, action, source)`: replace, insert or delete a Jupyter cell (JSON-preserving), through the file sandbox, approvals, diffs and checkpoints; `read_file` renders notebooks as cells with outputs.
 - **PAR-TOOL-03 (P1, L)** Code intelligence: an `lsp` tool (definition, references, hover, workspace symbols, diagnostics) backed by language servers configured under `[lsp.<language>]` (e.g. `gopls`, `typescript-language-server`, `pyright`), started lazily in the OS sandbox; after each edit, new diagnostics for the edited file are appended to the tool result.
 - **PAR-TOOL-04 (P1, S)** Background output reaches the agent: `run_shell_command(background: true, notify: true)` delivers the process's exit (and optionally lines matching a pattern) to the agent as a steer-style message at its next tool result or as a new turn when idle (CC `Monitor`).

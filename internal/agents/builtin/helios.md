@@ -6,6 +6,7 @@ agency_level: "high"
 tools:
   - universal_constructor
   - list_files
+  - glob
   - read_file
   - view_image
   - grep

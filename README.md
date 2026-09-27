@@ -315,7 +315,7 @@ The key is the model name; a `provider/` prefix is ignored (for OpenRouter names
 | `agent-creator` | Creates custom agent specs and skills |
 | `model-judge` | Model comparisons |
 
-Tools: `read_file`, `list_files`, `grep`, `create_file`, `replace_in_file`/`edit`, `delete_snippet`, `apply_patch` (unified diff or `*** Begin Patch`, atomic, multi-file), `delete_file`, `run_shell_command`, `manage_background_process`, `web_fetch`, `web_search` (when configured), `ask_user_question`, skills (`list_or_search_skills`, `activate_skill`, `run_skill_script`), `list_agents`/`invoke_agent`, `universal_constructor`, and MCP tools.
+Tools: `read_file`, `list_files`, `glob` (`**/*.go`, `src/**/*.{ts,tsx}`; newest first), `grep`, `create_file`, `replace_in_file`/`edit`, `delete_snippet`, `apply_patch` (unified diff or `*** Begin Patch`, atomic, multi-file), `delete_file`, `run_shell_command`, `manage_background_process`, `web_fetch`, `web_search` (when configured), `ask_user_question`, skills (`list_or_search_skills`, `activate_skill`, `run_skill_script`), `list_agents`/`invoke_agent`, `universal_constructor`, and MCP tools.
 
 ---
 

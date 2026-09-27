@@ -5,6 +5,7 @@ description: "Creates and validates custom agent markdown specifications and ski
 agency_level: "high"
 tools:
   - list_files
+  - glob
   - read_file
   - grep
   - create_file

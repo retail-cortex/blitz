@@ -7,6 +7,7 @@ tools:
   - web_fetch
   - web_search
   - list_files
+  - glob
   - read_file
   - grep
   - create_file

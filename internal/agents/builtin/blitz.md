@@ -9,6 +9,7 @@ tools:
   - read_file
   - view_image
   - list_files
+  - glob
   - create_file
   - edit
   - replace_in_file
@@ -37,7 +38,7 @@ When given a coding task:
 
 Important rules:
 - Before major tool use, think through your approach and planned next steps
-- Explore directories with `list_files` before reading or modifying files
+- Explore directories with `list_files`, and find files by name with `glob` (e.g. `**/*_test.go`), before reading or modifying files
 - Read existing files with `read_file` before modifying them
 - Prefer `edit` or `replace_in_file` over `create_file` for existing files. Keep diffs targeted
 - You're encouraged to loop between reasoning, file tools, and `run_shell_command` to test output in order to write working programs

@@ -5,6 +5,7 @@ description: "Quality assurance testing, test-driven development, regression sui
 agency_level: "high"
 tools:
   - list_files
+  - glob
   - read_file
   - view_image
   - grep

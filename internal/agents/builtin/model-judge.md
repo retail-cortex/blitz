@@ -5,6 +5,7 @@ description: "Benchmarks and compares model responses, quality, reasoning depth,
 agency_level: "medium"
 tools:
   - list_files
+  - glob
   - read_file
   - grep
   - create_file

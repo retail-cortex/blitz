@@ -489,6 +489,12 @@ deny           = ["*-nightly"]
 
 ---
 
+## 25. Parity with Claude Code and Antigravity — 🚧 in progress
+
+The gaps and the owner's decisions are in [specs/spec_parity_027.md](specs/spec_parity_027.md); this item records what is built, in §14's order. Each part moves its requirements into the spec it extends.
+
+1. ✅ **`glob` tool** (PAR-TOOL-01, S). Finds files by path pattern (`**`, `*`, `?`, `{a,b}`, nested braces capped at 64 alternatives) under the workspace or a given directory, newest first, 200 by default (max 1000). It walks through the file sandbox, so blocked paths and symlinks out of the roots never appear; dot and dependency directories are skipped unless the pattern names them (`.github/**`). Read-only, so plan mode allows it; every built-in agent has it. Tests: `internal/tools/glob_test.go`.
+
 ## Antigravity CLI review (2026-09-25)
 
 Google's Antigravity CLI (`agy`) was compared feature by feature with Blitz Go, from a feature summary of its docs (https://antigravity.google/docs/cli/features/). The summary read as AI-generated, so its descriptions were treated as approximate.

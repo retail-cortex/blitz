@@ -12,6 +12,7 @@ import (
 var planReadOnlyTools = map[string]bool{
 	"read_file":             true,
 	"list_files":            true,
+	"glob":                  true,
 	"grep":                  true,
 	"view_image":            true,
 	"web_fetch":             true,

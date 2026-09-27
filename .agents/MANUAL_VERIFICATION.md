@@ -362,3 +362,7 @@ Set `fallback_models = ["anthropic/claude-sonnet-5"]` with a working Anthropic k
 - [ ] 💲 While a turn runs, type a message and press Steer. **Expected:** "Queued for the agent", and the agent takes it into account at its next tool call; Stop ends the turn with "Interrupted."
 - [ ] 💲 An `ask_user_question`. **Expected:** the question with its options; the answer reaches the agent.
 - [ ] Two workspace tabs, a turn in each at once. **Expected:** both stream independently.
+
+## 38. Parity features (ROADMAP item 25)
+
+- [ ] 💲 Ask "which test files are there?" in this repository. **Expected:** the agent calls `glob` with a pattern like `**/*_test.go` and lists them without shelling out to `find`.

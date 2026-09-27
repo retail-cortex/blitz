@@ -118,6 +118,7 @@ func NewRegistry(cfg *config.Config, agentReg *agents.Registry, skillProv *skill
 	entries := []entry{
 		{[]string{"read_file"}, func() (tool.Tool, error) { return NewReadFileTool(ws) }},
 		{[]string{"list_files"}, func() (tool.Tool, error) { return NewListFilesTool(ws) }},
+		{[]string{"glob"}, func() (tool.Tool, error) { return NewGlobTool(ws) }},
 		{[]string{"create_file"}, func() (tool.Tool, error) { return NewCreateFileTool(ws, r.hooks) }},
 		{[]string{"delete_file"}, func() (tool.Tool, error) { return NewDeleteFileTool(ws, r.hooks) }},
 		{[]string{"replace_in_file", "edit"}, func() (tool.Tool, error) { return NewReplaceInFileTool(ws, r.hooks) }},
