@@ -1,7 +1,8 @@
 import { create } from "@bufbuild/protobuf";
 import { describe, expect, it } from "vitest";
 import { TurnEventSchema, type TurnEvent } from "./gen/blitz/v1/turn_pb";
-import { applyEvent, failed, summarizeArgs, type Entry } from "./turns";
+import { MessageSchema } from "./gen/blitz/v1/session_pb";
+import { applyEvent, assignPromptIndices, failed, fromMessages, parseDiff, summarizeArgs, tasksOf, type Entry } from "./turns";
 
 const text = (t: string, opts: { partial?: boolean; repeat?: boolean; thought?: boolean } = {}): TurnEvent =>
   create(TurnEventSchema, { author: "blitz", kind: { case: "text", value: { text: t, ...opts } } });
@@ -25,9 +26,12 @@ describe("applyEvent", () => {
     ]);
   });
 
-  it("leaves out thoughts and streamed copies of tool calls", () => {
+  it("keeps thoughts apart and leaves out streamed copies of tool calls", () => {
     const got = run([text("hmm", { thought: true }), call("1", "read_file", { path: "a" }, true), call("1", "read_file", { path: "a" })]);
-    expect(got).toEqual([{ kind: "tool", id: "1", name: "read_file", args: { path: "a" } }]);
+    expect(got).toEqual([
+      { kind: "thought", text: "hmm", open: false },
+      { kind: "tool", id: "1", name: "read_file", args: { path: "a" } },
+    ]);
   });
 
   it("matches results to their calls", () => {
@@ -51,5 +55,53 @@ describe("summaries", () => {
     expect(summarizeArgs({ command: "x".repeat(100) })).toHaveLength(80);
     expect(failed({ error: "nope" })).toBe(true);
     expect(failed({ success: true })).toBe(false);
+  });
+});
+
+const msg = (role: string, text: string, kind = "") => create(MessageSchema, { role, text, kind });
+
+describe("thoughts and kinds", () => {
+  it("collects streamed thinking once, apart from the answer", () => {
+    const got = run([text("Let me ", { thought: true, partial: true }), text("look.", { thought: true, partial: true }), text("Let me look.", { thought: true }), text("Done")]);
+    expect(got).toEqual([
+      { kind: "thought", text: "Let me look.", open: false },
+      { kind: "model", text: "Done", author: "blitz", open: false },
+    ]);
+  });
+
+  it("adds a separator between runs to the answer, not as an entry", () => {
+    const got = run([text("Plan approved."), text("\n\n"), text("done")]);
+    expect(got.map((e) => ("text" in e ? e.text : ""))).toEqual(["Plan approved.\n\n", "done"]);
+  });
+
+  it("tells prompts from other user messages and numbers them", () => {
+    const saved = [msg("user", "fix it"), msg("model", "ok"), msg("user", "also this", "steer"), msg("user", "(plan approved) go", "plan"), msg("user", "next")];
+    const entries = fromMessages(saved);
+    expect(entries.map((e) => (e.kind === "user" ? `${e.sub ?? "prompt"}:${e.index ?? "-"}` : e.kind))).toEqual(["prompt:0", "model", "steer:-", "plan:-", "prompt:4"]);
+  });
+
+  it("learns the index of prompts sent in this window", () => {
+    const shown = [...fromMessages([msg("user", "a"), msg("model", "b")]), { kind: "user" as const, text: "c" }];
+    const after = assignPromptIndices(shown, [msg("user", "a"), msg("model", "b"), msg("user", "c"), msg("model", "d")]);
+    expect(after[2]).toMatchObject({ kind: "user", index: 2 });
+    expect(assignPromptIndices(after, [msg("user", "a"), msg("model", "b"), msg("user", "c")])).toBe(after); // unchanged: same array
+  });
+
+  it("reads task lists from events", () => {
+    const ev = create(TurnEventSchema, { kind: { case: "tasks", value: { items: [{ content: "x", status: "done" }] } } });
+    expect(tasksOf(ev)?.[0].content).toBe("x");
+    expect(tasksOf(text("hi"))).toBeUndefined();
+  });
+});
+
+describe("parseDiff", () => {
+  it("splits files and counts changes", () => {
+    const d = "--- a/x.go\n+++ b/x.go\n@@ -1,2 +1,2 @@\n ctx\n-old\n+new\n+more\n--- /dev/null\n+++ b/new.txt\n@@ -0,0 +1 @@\n+hi\n# big.bin: too large to diff\n";
+    const files = parseDiff(d);
+    expect(files.map((f) => `${f.path} +${f.added} -${f.removed}`)).toEqual(["x.go +2 -1", "new.txt +1 -0", "big.bin +0 -0"]);
+    expect(files[0].lines.map((l) => l.kind)).toEqual(["hunk", "ctx", "del", "add", "add"]);
+    expect(files[2].lines[0]).toEqual({ kind: "meta", text: "big.bin: too large to diff" });
+    const deleted = parseDiff("--- a/gone.txt\n+++ /dev/null\n@@ -1 +0,0 @@\n-bye\n");
+    expect(deleted[0].path).toBe("gone.txt");
   });
 });

@@ -361,7 +361,18 @@ Set `fallback_models = ["anthropic/claude-sonnet-5"]` with a working Anthropic k
 - [ ] 💲 A turn that edits a file with approvals on. **Expected:** the approval shows the diff; "Allow once" edits the file; "Deny" doesn't, and the agent says so.
 - [ ] 💲 While a turn runs, type a message and press Steer. **Expected:** "Queued for the agent", and the agent takes it into account at its next tool call; Stop ends the turn with "Interrupted."
 - [ ] 💲 An `ask_user_question`. **Expected:** the question with its options; the answer reaches the agent.
-- [ ] Two workspace tabs, a turn in each at once. **Expected:** both stream independently.
+- [ ] Two workspace tabs, a turn in each at once. **Expected:** both stream independently; switching between them doesn't interrupt either, and the drawer shows a pulsing dot on each (a red `!` when one waits for an approval).
+- [ ] The window on macOS: the title bar area is the page's (drag it by the top bar or the drawer's top; the window buttons don't overlap the menu button, also in the rail).
+- [ ] Settings › Appearance: System, Light, Dark. **Expected:** System follows System Settings › Appearance while the app is open; the choice survives a restart. Compact density tightens the lists and chat.
+- [ ] Edit a workspace's name, description and colour (drawer pencil, title, Settings › Workspaces). **Expected:** the drawer, title bar and welcome cards change; after a restart the same workspaces are open, in order, with the same one shown.
+- [ ] Close a workspace (drawer ✕): it moves to Recent, "Undo" reopens it. 💲 Close one while a turn runs: the dialog stops the turn first. With the REPL attached and running a turn in the same workspace, closing it in the app leaves the REPL's turn running.
+- [ ] Stop the service (`blitz service stop` or kill it) with the app open, then click something. **Expected:** "isn't answering. Reconnecting…"; start it again: "Reconnected" and the workspaces reload.
+- [ ] 💲 A model answer with a link, a table and a code block: the table and code render; Copy copies the code; clicking the link opens the default browser, not the window. An image in Markdown shows as a link and isn't loaded.
+- [ ] 💲 Hover a prompt › Edit: the files and conversation go back, and the prompt is in the composer. "Code only" restores files and keeps the chat. After editing a file by hand, a rewind asks to overwrite.
+- [ ] 💲 "Plan first" with a small task: the plan shows as a card; "Yes, carry it out" makes the change; typed feedback makes the agent revise. The mode chip changes the permission mode (the REPL attached to the same workspace shows it too).
+- [ ] Run settings: change the model, effort, temperature (saved to `[model_settings]`), mode, agency; add and remove a permission rule; revoke an approval; compact the context.
+- [ ] Changes view after a turn that edited files: the files, their diffs, the agent's summary, "Undo last turn"; the Git toggle shows `git diff`.
+- [ ] A narrow window (about 800 px): the drawer is a rail, the run settings float over the chat, the view switcher shows icons.
 
 ## 38. Parity features (ROADMAP item 25)
 

@@ -92,16 +92,16 @@ Suggested order (from NEXT_STEPS): run the manual checks (§9) first — their f
 **Extends** [spec_desktop_024](spec_desktop_024.md) §11. *Source: NEXT_STEPS 1, ROADMAP 23.9.*
 
 ### 7.1 Service lifecycle and tabs — S
-- **BL-DSK-01** When a call fails with `unavailable`, the app returns to the "service isn't running" screen (DSK-40) with **Start the service**, and restores the open tabs once it answers again.
-- **BL-DSK-02** Tabs can be closed (the workspace stays open in the service unless no other client uses it; then `CloseWorkspace`), and the open tabs and active tab are restored at the next start.
+- **BL-DSK-01** ✅ *Done 2026-09-27 ([spec_desktop_024](spec_desktop_024.md) DSK-51): a banner and polling, not the full service screen; open workspaces are kept.* When a call fails with `unavailable`, the app returns to the "service isn't running" screen (DSK-40) with **Start the service**, and restores the open tabs once it answers again.
+- **BL-DSK-02** ✅ *Done (DSK-40–55): closed tabs move to Recent; the service is asked to close the workspace unless a turn runs in it (SVC-14).* Tabs can be closed (the workspace stays open in the service unless no other client uses it; then `CloseWorkspace`), and the open tabs and active tab are restored at the next start.
 
 ### 7.2 Commands in the composer — M
 - **BL-DSK-10** A line starting with `/` in the composer runs the same commands as the REPL, through the same `app.Backend` operations the REPL uses, with results rendered as notices; unknown commands are refused, not sent to the agent. At least: `/plan`, `/btw`, `/search web|session`, `/undo`, `/checkpoints`, `/diff`, `/cost`, `/context`, `/compact`, `/agent`, `/model`, `/session save`, `/rename`.
 - **BL-DSK-11** A command palette (Cmd/Ctrl+K) lists them with completion for agents, models and sessions.
 
 ### 7.3 Rendering — S
-- **BL-DSK-20** Model text renders as Markdown (code blocks highlighted, links shown but opened only in the system browser after a click, never inside the web view); approval diffs are coloured; a tool entry expands to its arguments and result.
-- **BL-DSK-21** The usage line adds the session total, as in the terminal (TUI-05).
+- **BL-DSK-20** 🟡 *Markdown, safe links, coloured diffs and expandable tool entries done (DSK-74/79/90); syntax highlighting not yet.* Model text renders as Markdown (code blocks highlighted, links shown but opened only in the system browser after a click, never inside the web view); approval diffs are coloured; a tool entry expands to its arguments and result.
+- **BL-DSK-21** ✅ *Done (DSK-78).* The usage line adds the session total, as in the terminal (TUI-05).
 
 ### 7.4 Images — S
 - **BL-DSK-30** Images can be pasted or dropped into the composer; they're uploaded with `AddImage` and sent with the next turn by ID (SVC-13), shown as thumbnails.

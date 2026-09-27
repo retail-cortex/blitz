@@ -1,27 +1,42 @@
 import { useCallback, useEffect, useState } from "react";
-import { ConnectError } from "@connectrpc/connect";
 import { timestampDate } from "@bufbuild/protobuf/wkt";
+import {
+  mdiAlertCircleOutline,
+  mdiCalendarClock,
+  mdiCheckCircleOutline,
+  mdiCloseCircleOutline,
+  mdiPauseCircleOutline,
+  mdiPlay,
+  mdiProgressClock,
+  mdiRefresh,
+  mdiShieldCheckOutline,
+} from "@mdi/js";
 import { workers } from "./api";
+import { message } from "./errors";
 import { RunStatus, WorkerState, type Worker, type WorkerRun } from "./gen/blitz/v1/worker_pb";
 import { applyEvent, failed, summarizeArgs, type Entry } from "./turns";
+import { Button, Chip, Icon, IconButton } from "./ui/controls";
 
 const stateLabel: Record<WorkerState, string> = {
   [WorkerState.UNSPECIFIED]: "?",
-  [WorkerState.NEW]: "new",
-  [WorkerState.ENABLED]: "enabled",
-  [WorkerState.DISABLED]: "disabled",
-  [WorkerState.CHANGED]: "changed since enabled",
-  [WorkerState.INVALID]: "invalid",
+  [WorkerState.NEW]: "New",
+  [WorkerState.ENABLED]: "Enabled",
+  [WorkerState.DISABLED]: "Disabled",
+  [WorkerState.CHANGED]: "Changed since enabled",
+  [WorkerState.INVALID]: "Invalid",
 };
 
 const runLabel: Record<RunStatus, string> = {
   [RunStatus.UNSPECIFIED]: "?",
-  [RunStatus.RUNNING]: "running",
-  [RunStatus.SUCCEEDED]: "succeeded",
-  [RunStatus.FAILED]: "failed",
-  [RunStatus.LIMITED]: "stopped at a limit",
-  [RunStatus.SKIPPED]: "skipped",
+  [RunStatus.RUNNING]: "Running",
+  [RunStatus.SUCCEEDED]: "Succeeded",
+  [RunStatus.FAILED]: "Failed",
+  [RunStatus.LIMITED]: "Stopped at a limit",
+  [RunStatus.SKIPPED]: "Skipped",
 };
+
+const runIcon = (s: RunStatus) =>
+  s === RunStatus.SUCCEEDED ? mdiCheckCircleOutline : s === RunStatus.RUNNING ? mdiProgressClock : s === RunStatus.SKIPPED ? mdiPauseCircleOutline : mdiCloseCircleOutline;
 
 /** A workspace's workers: review and enable them, run them, see their runs. */
 export function Workers({ dir }: { dir: string }) {
@@ -31,7 +46,9 @@ export function Workers({ dir }: { dir: string }) {
 
   const refresh = useCallback(async () => {
     try {
-      setList((await workers.listWorkers({ workspace: dir })).workers);
+      const ws = (await workers.listWorkers({ workspace: dir })).workers;
+      setList(ws);
+      setSelected((cur) => cur || ws[0]?.name || "");
     } catch (e) {
       setError(message(e));
     }
@@ -42,21 +59,38 @@ export function Workers({ dir }: { dir: string }) {
 
   const worker = list.find((w) => w.name === selected);
   return (
-    <div className="conversation">
-      <aside className="sessions">
-        {list.length === 0 && <p className="muted small">No workers: add workers/&lt;name&gt;/WORKER.md to this workspace.</p>}
-        {list.map((w) => (
-          <button key={w.name} className={w.name === selected ? "session active" : "session"} onClick={() => setSelected(w.name)}>
-            {w.name}
-            <small>
-              {stateLabel[w.state]} · {w.schedule}
-            </small>
-          </button>
-        ))}
+    <div className="split">
+      <aside className="split-side">
+        <div className="row side-head">
+          <span className="t-title-sm spacer">Workers</span>
+          <IconButton icon={mdiRefresh} label="Refresh" small onClick={refresh} />
+        </div>
+        {list.length === 0 && (
+          <p className="muted t-body-sm">
+            No workers. Add <code>workers/&lt;name&gt;/WORKER.md</code> to this workspace to run a prompt on a schedule.
+          </p>
+        )}
+        <div className="list">
+          {list.map((w) => (
+            <button key={w.name} className={`list-item ${w.name === selected ? "active" : ""}`} onClick={() => setSelected(w.name)}>
+              <Icon path={mdiCalendarClock} />
+              <span className="lines">
+                <span className="ellipsis">{w.name}</span>
+                <small className="ellipsis">
+                  {stateLabel[w.state]} · {w.schedule}
+                </small>
+              </span>
+            </button>
+          ))}
+        </div>
       </aside>
-      <section className="chat">
-        {error && <p className="error">{error}</p>}
-        {worker ? <WorkerView dir={dir} worker={worker} onChange={refresh} key={worker.name + worker.hash} /> : <p className="muted">Choose a worker.</p>}
+      <section className="split-main">
+        {error && (
+          <div className="card error row">
+            <Icon path={mdiAlertCircleOutline} /> {error}
+          </div>
+        )}
+        {worker ? <WorkerView dir={dir} worker={worker} onChange={refresh} key={worker.name + worker.hash} /> : list.length > 0 && <p className="muted">Choose a worker.</p>}
       </section>
     </div>
   );
@@ -101,84 +135,111 @@ function WorkerView({ dir, worker, onChange }: { dir: string; worker: Worker; on
     });
 
   const limits = worker.limits;
+  const enabled = worker.state === WorkerState.ENABLED;
   return (
-    <div className="entries">
-      <h3>{worker.name}</h3>
-      {worker.description && <p>{worker.description}</p>}
-      <dl className="facts">
-        <dt>State</dt>
-        <dd>{stateLabel[worker.state]}</dd>
-        <dt>Schedule</dt>
-        <dd>
-          {worker.schedule} = <code>{worker.cron}</code> ({worker.timezone})
-          {worker.nextRun && `, next ${timestampDate(worker.nextRun).toLocaleString()}`}
-        </dd>
-        {worker.agent && (
-          <>
-            <dt>Agent</dt>
-            <dd>{worker.agent}</dd>
-          </>
-        )}
-        {worker.model && (
-          <>
-            <dt>Model</dt>
-            <dd>{worker.model}</dd>
-          </>
-        )}
-        <dt>May</dt>
-        <dd>{worker.permissions.length ? worker.permissions.map((p) => <code key={p}>{p} </code>) : "read only"}</dd>
-        <dt>Limits</dt>
-        <dd>
-          {limits?.maxTurns} model calls, ${limits?.maxCostUsd.toFixed(2)}, {limits?.timeout ? `${Number(limits.timeout.seconds) / 60} min` : "?"}
-        </dd>
-        <dt>Content</dt>
-        <dd>
-          <code className="small">{worker.hash}</code>
-        </dd>
-      </dl>
-      {worker.problems.map((p) => (
-        <p key={p} className="error small">
-          ! {p}
-        </p>
-      ))}
-      <div className="buttons">
-        {worker.state !== WorkerState.ENABLED && worker.state !== WorkerState.INVALID && (
-          <button onClick={enable} title={`Read ${worker.path} first: it runs unattended with these permissions`}>
-            Enable as shown
-          </button>
-        )}
-        {worker.state === WorkerState.ENABLED && <button onClick={disable}>Disable</button>}
-        {worker.state === WorkerState.ENABLED && <button onClick={runNow}>Run now</button>}
+    <div className="worker">
+      <div className="row">
+        <h2 className="t-headline spacer">{worker.name}</h2>
+        <Chip className="static" selected={enabled} tone={worker.state === WorkerState.INVALID ? "danger" : worker.state === WorkerState.CHANGED ? "warn" : undefined}>
+          {stateLabel[worker.state]}
+        </Chip>
       </div>
-      {error && <p className="error">{error}</p>}
+      {worker.description && <p className="muted">{worker.description}</p>}
+      <div className="card outlined">
+        <dl className="facts">
+          <dt>Schedule</dt>
+          <dd>
+            {worker.schedule} · <code>{worker.cron}</code> ({worker.timezone})
+            {worker.nextRun && enabled && <div className="t-body-sm muted">Next run {timestampDate(worker.nextRun).toLocaleString()}</div>}
+          </dd>
+          {worker.agent && (
+            <>
+              <dt>Agent</dt>
+              <dd>{worker.agent}</dd>
+            </>
+          )}
+          {worker.model && (
+            <>
+              <dt>Model</dt>
+              <dd>{worker.model}</dd>
+            </>
+          )}
+          <dt>May</dt>
+          <dd className="row wrap">{worker.permissions.length ? worker.permissions.map((p) => <code key={p} className="chip static">{p}</code>) : "Read only"}</dd>
+          <dt>Limits</dt>
+          <dd>
+            {limits?.maxTurns} model calls · ${limits?.maxCostUsd.toFixed(2)} · {limits?.timeout ? `${Number(limits.timeout.seconds) / 60} min` : "?"}
+          </dd>
+          <dt>Content</dt>
+          <dd>
+            <code className="t-body-sm muted">{worker.hash}</code>
+          </dd>
+        </dl>
+      </div>
+      {worker.problems.map((p) => (
+        <div key={p} className="card error row">
+          <Icon path={mdiAlertCircleOutline} size="sm" /> {p}
+        </div>
+      ))}
+      <div className="row wrap">
+        {!enabled && worker.state !== WorkerState.INVALID && (
+          <Button variant="filled" icon={mdiShieldCheckOutline} onClick={enable} title={`Read ${worker.path} first: it runs unattended with these permissions`}>
+            Enable as shown
+          </Button>
+        )}
+        {enabled && (
+          <Button variant="filled" icon={mdiPlay} onClick={runNow}>
+            Run now
+          </Button>
+        )}
+        {enabled && (
+          <Button variant="outlined" onClick={disable}>
+            Disable
+          </Button>
+        )}
+      </div>
+      {error && <p className="error-text">{error}</p>}
       {live && (
-        <div className="prompt">
+        <div className="card outlined live-run">
+          <div className="t-title-sm">This run</div>
           {live.length === 0 && <p className="muted">Running…</p>}
-          {live.map((e, i) => (
-            <div key={i} className={`entry ${e.kind}`}>
-              {e.kind === "tool" ? `${e.name} ${summarizeArgs(e.args)}${e.result === undefined ? " …" : failed(e.result) ? " ✗" : " ✓"}` : "text" in e ? e.text : ""}
-            </div>
-          ))}
+          {live.map((e, i) =>
+            e.kind === "tool" ? (
+              <div key={i} className={`t-body-sm ${failed(e.result) ? "error-text" : "muted"}`}>
+                <code>{e.name}</code> {summarizeArgs(e.args)} {e.result === undefined ? "…" : failed(e.result) ? "✗" : "✓"}
+              </div>
+            ) : "text" in e && e.kind !== "thought" ? (
+              <div key={i} className="live-text">
+                {e.text}
+              </div>
+            ) : null,
+          )}
         </div>
       )}
-      <h4>Runs</h4>
-      {runs.length === 0 && <p className="muted small">It hasn't run yet.</p>}
-      {runs.map((r) => (
-        <div key={r.id} className="entry small">
-          {r.started && timestampDate(r.started).toLocaleString()} · {runLabel[r.status]} · {r.manual ? "manual" : "scheduled"} · ${r.usage?.costUsd.toFixed(4)} · session{" "}
-          <code>{r.sessionId}</code>
-          {r.refusals.map((f, i) => (
-            <div key={i} className="muted">
-              refused: {f.detail}
+      <h3 className="t-title">Runs</h3>
+      {runs.length === 0 && <p className="muted t-body-sm">It hasn't run yet.</p>}
+      <div className="runs">
+        {runs.map((r) => (
+          <div key={r.id} className="run">
+            <Icon path={runIcon(r.status)} className={r.status === RunStatus.FAILED || r.status === RunStatus.LIMITED ? "error-text" : "muted"} />
+            <div className="stack" style={{ gap: 2 }}>
+              <span>
+                {runLabel[r.status]} · {r.manual ? "manual" : "scheduled"}
+                {r.usage?.priced ? ` · $${r.usage.costUsd.toFixed(4)}` : ""}
+              </span>
+              <span className="t-body-sm muted">
+                {r.started && timestampDate(r.started).toLocaleString()} · session <code>{r.sessionId}</code>
+              </span>
+              {r.refusals.map((f, i) => (
+                <span key={i} className="t-body-sm muted">
+                  Refused: {f.detail}
+                </span>
+              ))}
+              {r.error && <span className="t-body-sm error-text">{r.error.message}</span>}
             </div>
-          ))}
-          {r.error && <div className="error">{r.error.message}</div>}
-        </div>
-      ))}
+          </div>
+        ))}
+      </div>
     </div>
   );
-}
-
-function message(e: unknown): string {
-  return e instanceof ConnectError ? e.rawMessage : String(e);
 }

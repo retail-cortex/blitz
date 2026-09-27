@@ -373,6 +373,8 @@ curl --unix-socket ~/.blitz/run/blitz.sock -H 'Content-Type: application/json' \
 
 When the service is running, `blitz` attaches to it (the REPL says so), so the CLI, the desktop app and other clients share one copy of each workspace; `--local` runs the workspace in-process instead. A workspace has one owner at a time, so `--local` on a workspace the service holds is refused. `BLITZ_SOCKET` moves the socket for both.
 
+**Desktop app.** `make desktop` builds `Blitz.app` (macOS; `build/desktop/bin/blitz-desktop` elsewhere), a window onto the service: a drawer of workspaces you can name, colour, describe and close; a chat with Markdown, the agent's task list, approvals and plans as cards, and rewind or edit from any prompt; a run settings panel (agent, model, reasoning effort, generation settings, permission mode and rules); a Changes view with the diff beside the agent's summary; and the workspace's workers. Settings › Appearance picks System (the default), Light or Dark. The window keeps only its own settings, in `~/.blitz/desktop.json`; everything else lives in the service, so the REPL and the app see the same sessions.
+
 **Workers** are workflows a workspace defines in `workers/<name>/WORKER.md`, which the service runs on a schedule, unattended:
 
 ```markdown

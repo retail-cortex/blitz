@@ -20,6 +20,7 @@ import (
 type App struct {
 	ctx    context.Context
 	socket string
+	prefs  *prefsStore
 }
 
 func (a *App) startup(ctx context.Context) { a.ctx = ctx }
@@ -56,6 +57,24 @@ func (a *App) InstallService() (string, error) {
 // ChooseWorkspace asks for a directory to open ("" if cancelled).
 func (a *App) ChooseWorkspace() (string, error) {
 	return runtime.OpenDirectoryDialog(a.ctx, runtime.OpenDialogOptions{Title: "Open a workspace", CanCreateDirectories: true})
+}
+
+// GetPrefs returns the window's settings (the defaults when none are
+// saved). A damaged file is reported once and replaced by the defaults.
+func (a *App) GetPrefs() (Prefs, error) { return a.prefs.load() }
+
+// SavePrefs saves the window's settings and returns them as saved
+// (normalized).
+func (a *App) SavePrefs(p Prefs) (Prefs, error) { return a.prefs.save(p) }
+
+// OpenURL opens a web or mail link in the system browser, never in the
+// window. Other schemes are refused.
+func (a *App) OpenURL(link string) error {
+	if !safeURL(link) {
+		return fmt.Errorf("not opening %q: only web and mail links open", link)
+	}
+	runtime.BrowserOpenURL(a.ctx, link)
+	return nil
 }
 
 // findCLI finds the blitz command: next to this app's binary (as
