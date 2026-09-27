@@ -36,6 +36,9 @@ type WebFetchConfig struct {
 	AllowNetwork bool     // mirrors sandbox.allow_network
 	MaxBytes     int64
 	Timeout      time.Duration
+	// Rules are the permission rules: web(host) deny refuses, ask always
+	// asks (even for allow_domains), allow skips the question.
+	Rules *PermissionRules
 }
 
 // ErrBlockedAddress is returned when a request targets a non-public address.
@@ -198,7 +201,18 @@ func (f *webFetcher) fetch(ctx context.Context, hooks *Hooks, raw string) WebFet
 		return fail(err)
 	}
 	host := strings.ToLower(u.Hostname())
+	effect, rule := f.cfg.Rules.Decide(RuleWeb, []string{host})
+	if effect == EffectDeny {
+		return fail(fmt.Errorf("%s is denied by the permission rule deny %s", host, rule))
+	}
 	switch {
+	case effect == EffectAsk:
+		if err := hooks.Approve(ctx, ApprovalRequest{
+			Tool: "web_fetch", Kind: ActionNetwork, Detail: "GET " + u.String(),
+			Key: "web:" + host, KeyLabel: "requests to " + host, Targets: []string{host}, MustAsk: true,
+		}); err != nil {
+			return fail(err)
+		}
 	case matchDomain(f.cfg.AllowDomains, host):
 	case fetchGranted(ctx, u):
 		hooks.Audit().Log(audit.Entry{Kind: audit.KindApproval, Tool: "web_fetch", Detail: "GET " + u.String(), Decision: "user-selected"})

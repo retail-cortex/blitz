@@ -158,6 +158,42 @@ func (h workspaceService) GetSettings(ctx context.Context, r req[pb.GetSettingsR
 	})
 }
 
+func (h workspaceService) ListPermissionRules(ctx context.Context, r req[pb.ListPermissionRulesRequest]) (*connect.Response[pb.ListPermissionRulesResponse], error) {
+	w, err := h.s.workspace(ctx, r.Msg.Workspace)
+	if err != nil {
+		return nil, err
+	}
+	res := &pb.ListPermissionRulesResponse{}
+	for _, x := range w.ListPermissionRules() {
+		res.Rules = append(res.Rules, &pb.PermissionRule{Effect: x.Effect, Rule: x.Rule, Source: x.Source})
+	}
+	return ok(res)
+}
+
+func (h workspaceService) AddPermissionRule(ctx context.Context, r req[pb.AddPermissionRuleRequest]) (*connect.Response[pb.AddPermissionRuleResponse], error) {
+	w, err := h.s.workspace(ctx, r.Msg.Workspace)
+	if err != nil {
+		return nil, err
+	}
+	res, err := w.AddPermissionRule(r.Msg.Effect, r.Msg.Rule, r.Msg.Save)
+	if err != nil {
+		return nil, toAPI(err)
+	}
+	return ok(&pb.AddPermissionRuleResponse{Rule: res.Rule, NextStart: res.NextStart, Saved: savedMsg(res.Saved)})
+}
+
+func (h workspaceService) RemovePermissionRule(ctx context.Context, r req[pb.RemovePermissionRuleRequest]) (*connect.Response[pb.RemovePermissionRuleResponse], error) {
+	w, err := h.s.workspace(ctx, r.Msg.Workspace)
+	if err != nil {
+		return nil, err
+	}
+	res, err := w.RemovePermissionRule(r.Msg.Rule, r.Msg.Save)
+	if err != nil {
+		return nil, toAPI(err)
+	}
+	return ok(&pb.RemovePermissionRuleResponse{Rule: res.Rule, Removed: int32(res.Removed), Saved: savedMsg(res.Saved)})
+}
+
 func (h workspaceService) SetPermissionMode(ctx context.Context, r req[pb.SetPermissionModeRequest]) (*connect.Response[pb.SetPermissionModeResponse], error) {
 	w, err := h.s.workspace(ctx, r.Msg.Workspace)
 	if err != nil {

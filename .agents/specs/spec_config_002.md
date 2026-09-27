@@ -42,6 +42,7 @@ One TOML file, `.env.toml`, loaded through `github.com/rrmcguinness/modenv` (hie
 | `[workers]` | `enabled`, `paths`, `[workers.policy]` | on; `workers` | see [spec_workers_023](spec_workers_023.md) |
 | `[tools]` | `shell_timeout_seconds` 120, `max_file_size_bytes` 10 MiB, `workspace_dir` `.`, `auto_approve_commands` false, `uc_tools_dir`, `approvals_file` `~/.blitz/approvals.json`, `max_parallel` 8 | | |
 | `[session]` | `storage_dir` `~/.blitz/sessions`, `auto_save` true | | |
+| `[permissions]` | `allow`, `ask`, `deny` lists of rules | `[]` | [spec_approvals_005](spec_approvals_005.md) APR-15; not the same as `sandbox.commands.allow` (an allow-list) |
 | `[sandbox]` | `allowed_paths`, `read_only_paths`, `blocked_paths` (defaults below), `shell_writable_paths` (`~/.cache`, `~/go/pkg/mod`, `~/.npm`), `shell` `auto`, `allow_network` true, `scrub_env` (defaults below) | | see [spec_filetools_006](spec_filetools_006.md), [spec_shell_007](spec_shell_007.md) |
 | `[sandbox.commands]` | `allow`, `deny` (defaults below), `auto_approve` | | |
 | `[ui]` | `markdown` true, `spinner` true, `terminal_title` true, `history_file` `~/.blitz/history`, `history_size` 1000, `diff_lines` 120, `theme` `auto`, `locale` `en-US`, `locales_dir` `~/.blitz/locales` | | |

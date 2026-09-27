@@ -205,6 +205,13 @@ func runDoctor(ctx context.Context, g *globalFlags, online bool) []check {
 		default:
 			add("permissions", statusOK, "%s", mode)
 		}
+		if rules := reg.Rules().List(); len(rules) > 0 {
+			counts := map[tools.Effect]int{}
+			for _, r := range rules {
+				counts[r.Effect]++
+			}
+			add("permission rules", statusOK, "%d deny, %d ask, %d allow (/permissions lists them)", counts[tools.EffectDeny], counts[tools.EffectAsk], counts[tools.EffectAllow])
+		}
 
 		switch {
 		case cfg.Web.SearchProvider == "":

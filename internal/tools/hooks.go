@@ -42,6 +42,10 @@ type ApprovalRequest struct {
 	// provider, or the MCP tool as "server:tool". Empty when nothing can
 	// match, which such policies refuse.
 	Targets []string
+	// MustAsk: an ask rule covers the action, so the user is asked even
+	// when a mode, an allow rule or a remembered approval would let it
+	// through (and refused where nobody can be asked).
+	MustAsk bool
 }
 
 // Decision is the user's answer to an approval request.
@@ -98,6 +102,21 @@ type Hooks struct {
 	session  map[string]bool
 	store    *ApprovalStore
 	audit    *audit.Logger
+	rules    *PermissionRules
+}
+
+// SetRules attaches the permission rules the gate applies.
+func (h *Hooks) SetRules(r *PermissionRules) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.rules = r
+}
+
+// Rules returns the permission rules (nil when none are attached).
+func (h *Hooks) Rules() *PermissionRules {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	return h.rules
 }
 
 // NewHooks creates hooks with the given approval policy.
@@ -209,7 +228,23 @@ func (h *Hooks) Approve(ctx context.Context, req ApprovalRequest) error {
 	if h == nil {
 		return fmt.Errorf("%w: no approval hooks configured", ErrNotApproved)
 	}
+	// Permission rules first: deny wins in every mode and run, and ask
+	// forces the question below.
+	h.mu.RLock()
+	rules := h.rules
+	h.mu.RUnlock()
+	effect, rule := rules.Decide(ruleKind(req), req.Targets)
+	if effect == EffectDeny {
+		h.Audit().Log(audit.Entry{Kind: audit.KindDenial, Tool: req.Tool, Detail: req.Detail, Decision: "rule-deny " + rule.String()})
+		return fmt.Errorf("%w: %s is denied by the permission rule deny %s", ErrNotApproved, req.Detail, rule)
+	}
+	mustAsk := req.MustAsk || effect == EffectAsk
+
 	if decide, ok := ctx.Value(unattendedKey{}).(Approver); ok {
+		if mustAsk { // an ask rule needs a person, and nobody is watching
+			h.Audit().Log(audit.Entry{Kind: audit.KindDenial, Tool: req.Tool, Detail: req.Detail, Decision: "unattended-refused"})
+			return fmt.Errorf("%w: %s needs to be asked about (an ask rule), and this run is unattended", ErrNotApproved, req.Detail)
+		}
 		decision, err := decide(ctx, req)
 		allowed := err == nil && decision != DecisionDeny
 		h.mu.RLock()
@@ -236,6 +271,18 @@ func (h *Hooks) Approve(ctx context.Context, req ApprovalRequest) error {
 	}
 
 	switch {
+	case mustAsk && policy.Mode == ModeDontAsk:
+		record("mode-dont-ask")
+		return fmt.Errorf("%w: %s must be asked about (an ask rule), and the permission mode is dont-ask", ErrNotApproved, req.Tool)
+	case mustAsk && approver == nil:
+		record("no-approver")
+		return fmt.Errorf("%w: %s must be asked about (an ask rule), but no interactive approver is available", ErrNotApproved, req.Tool)
+	case mustAsk:
+		// Straight to the question: modes, allow rules and remembered
+		// approvals don't apply.
+	case effect == EffectAllow:
+		record("rule-allow " + rule.String())
+		return nil
 	case policy.Mode == ModeBypass:
 		record("mode-bypass")
 		return nil

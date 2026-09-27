@@ -47,6 +47,14 @@ service WorkspaceService {
   // workspace (UNKNOWN_MODE; BYPASS_NEEDS_SANDBOX when bypass is asked for
   // without an active OS sandbox).
   rpc SetPermissionMode(SetPermissionModeRequest) returns (SetPermissionModeResponse);
+  // Returns the permission rules in force: deny, then ask, then allow.
+  rpc ListPermissionRules(ListPermissionRulesRequest) returns (ListPermissionRulesResponse);
+  // Adds an allow, ask or deny rule for the workspace and, with save, to
+  // the config file (BAD_RULE). Read rules must be saved and apply from
+  // the next start.
+  rpc AddPermissionRule(AddPermissionRuleRequest) returns (AddPermissionRuleResponse);
+  // Removes a rule (any effect), and with save from the config file.
+  rpc RemovePermissionRule(RemovePermissionRuleRequest) returns (RemovePermissionRuleResponse);
 
   // Returns the skills found, or those matching a query.
   rpc ListSkills(ListSkillsRequest) returns (ListSkillsResponse);
@@ -286,6 +294,52 @@ message SetPermissionModeRequest {
 message SetPermissionModeResponse {
   // The mode's canonical name.
   string mode = 1;
+}
+
+// PermissionRule is an allow, ask or deny rule.
+message PermissionRule {
+  // allow, ask or deny.
+  string effect = 1;
+  // kind(pattern), e.g. shell(git push *), or a tool name.
+  string rule = 2;
+  // config or session.
+  string source = 3;
+}
+
+message ListPermissionRulesRequest {
+  string workspace = 1;
+}
+
+message ListPermissionRulesResponse {
+  repeated PermissionRule rules = 1;
+}
+
+message AddPermissionRuleRequest {
+  string workspace = 1;
+  string effect = 2;
+  string rule = 3;
+  bool save = 4;
+}
+
+message AddPermissionRuleResponse {
+  // The rule in canonical form.
+  string rule = 1;
+  // Saved, but only applies from the next start (read rules).
+  bool next_start = 2;
+  Saved saved = 3;
+}
+
+message RemovePermissionRuleRequest {
+  string workspace = 1;
+  string rule = 2;
+  bool save = 3;
+}
+
+message RemovePermissionRuleResponse {
+  string rule = 1;
+  // How many rules were removed.
+  int32 removed = 2;
+  Saved saved = 3;
 }
 
 message SetSettingRequest {

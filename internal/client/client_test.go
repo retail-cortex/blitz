@@ -237,3 +237,19 @@ func TestRemotePermissionMode(t *testing.T) {
 		t.Errorf("unknown mode over the API: %v", err)
 	}
 }
+
+func TestRemotePermissionRules(t *testing.T) {
+	r := attach(t, nil)
+	if res, err := r.AddPermissionRule("ask", "Bash(git push *)", false); err != nil || res.Rule != "shell(git push *)" {
+		t.Fatalf("add: %+v %v", res, err)
+	}
+	if got := r.ListPermissionRules(); len(got) != 1 || got[0].Effect != "ask" || got[0].Source != "session" {
+		t.Errorf("list %+v", got)
+	}
+	if _, err := r.AddPermissionRule("deny", "nope(x)", false); !errors.Is(err, app.ErrBadRule) {
+		t.Errorf("bad rule over the API: %v", err)
+	}
+	if res, _ := r.RemovePermissionRule("shell(git push *)", false); res.Removed != 1 {
+		t.Errorf("remove %+v", res)
+	}
+}

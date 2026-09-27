@@ -196,6 +196,7 @@ func (r *ucRegistry) run(ctx context.Context, hooks *Hooks, input UniversalConst
 			Detail:   fmt.Sprintf("Run forged tool %q with args %q", meta.Name, args),
 			Key:      "uc-run:" + meta.Name + "\x00" + strings.Join(args, "\x00"),
 			KeyLabel: "this forged tool with these arguments",
+			MustAsk:  decision.MustAsk,
 		}); err != nil {
 			return UniversalConstructorOutput{Error: err.Error()}
 		}

@@ -377,3 +377,7 @@ Set `fallback_models = ["anthropic/claude-sonnet-5"]` with a working Anthropic k
 - [ ] 💲 `/mode plan`, then "add a README section". **Expected:** a plan, no file changed, and the transcript (`/session list`, resume) shows the prompt as typed.
 - [ ] `blitz --permission-mode dont-ask exec "delete tmp.txt"` (💲). **Expected:** the deletion is refused without a prompt; the agent reports it.
 - [ ] macOS or Linux with the sandbox: `blitz --permission-mode bypass`. **Expected:** the prompt shows a red `[bypass]`; commands run without asking. With `[sandbox] shell = "off"`: `--permission-mode bypass` is a usage error, `/mode bypass` is refused, and `auto_approve = true` starts in default with a warning (`doctor` shows it under permissions).
+- [ ] `[permissions] ask = ["shell(git push *)"]`, `/mode bypass` (with the sandbox), 💲 then ask the agent to push. **Expected:** it still asks; "always" doesn't stop the next push from asking. `deny = ["shell(rm -rf *)"]`: `rm -rf build` is refused, also as `bash -c 'rm -rf build'`.
+- [ ] `/permissions allow write(docs/**)` then 💲 an edit in `docs/`: no prompt; an edit elsewhere still asks. `/permissions remove write(docs/**) --save` edits `~/.blitz/.env.toml` without touching its comments.
+- [ ] `deny = ["read(secrets/**)"]`, restart: `read_file secrets/x` is blocked, and a shell `cat secrets/x` fails inside the sandbox.
+- [ ] A worker with `permissions: ["shell:git push *"]` and a user `ask` rule for `shell(git push *)`: the run's push is refused and recorded.

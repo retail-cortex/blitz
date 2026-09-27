@@ -485,6 +485,10 @@ func (e *Engine) beforeTool(ctx agent.Context, t tool.Tool, args map[string]any)
 	if r := planRefusal(stateFrom(ctx), t.Name()); r != nil {
 		return r, nil
 	}
+	if rule := e.toolReg.Rules().ToolDenied(t.Name(), args); rule != nil {
+		log.Log(audit.Entry{Kind: audit.KindDenial, Tool: t.Name(), Decision: "rule-deny " + rule.String()})
+		return map[string]any{"error": fmt.Sprintf("denied by the permission rule deny %s", rule)}, nil
+	}
 	if err := e.toolReg.ApproveMCP(ctx, t.Name(), args); err != nil {
 		return map[string]any{"error": err.Error()}, nil
 	}

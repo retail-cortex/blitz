@@ -535,8 +535,15 @@ func mcpApproval(server, toolName string, args map[string]any) ApprovalRequest {
 // ApproveMCP gates an MCP tool call; it returns nil for non-MCP tools.
 func (r *Registry) ApproveMCP(ctx context.Context, toolName string, args map[string]any) error {
 	server, auto, ok := r.mcp.Lookup(toolName)
-	if !ok || auto {
+	if !ok {
 		return nil
 	}
-	return r.hooks.Approve(ctx, mcpApproval(server, toolName, args))
+	req := mcpApproval(server, toolName, args)
+	if auto {
+		// auto_approve skips the question, not deny and ask rules.
+		if effect, _ := r.hooks.Rules().Decide(RuleMCP, req.Targets); effect != EffectDeny && effect != EffectAsk {
+			return nil
+		}
+	}
+	return r.hooks.Approve(ctx, req)
 }

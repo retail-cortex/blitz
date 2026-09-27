@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 
 	"mvdan.cc/sh/v3/syntax"
@@ -26,6 +27,10 @@ type CommandDecision struct {
 	Verdict  Verdict
 	Reason   string   // why it was denied or not auto-approved
 	Commands []string // every simple command found, as evaluated
+	// MustAsk: a permission ask rule matched (or couldn't be ruled out), so
+	// the user is asked even in a mode or with a saved approval that would
+	// let the command through.
+	MustAsk bool
 }
 
 // CommandPolicyConfig lists command patterns. A pattern is matched against a
@@ -48,6 +53,17 @@ type CommandPolicyConfig struct {
 // script can still do anything. Use it with the OS sandbox.
 type CommandPolicy struct {
 	allow, deny, auto []cmdPattern
+	// rules add [permissions] shell(...) rules, which can change while a
+	// session runs: deny joins deny, allow joins auto-approve, and ask
+	// forces a question.
+	rules *PermissionRules
+}
+
+// SetRules makes the policy apply permission rules' shell patterns.
+func (p *CommandPolicy) SetRules(r *PermissionRules) {
+	if p != nil {
+		p.rules = r
+	}
 }
 
 type cmdPattern struct {
@@ -56,42 +72,45 @@ type cmdPattern struct {
 }
 
 // NewCommandPolicy compiles the configured patterns.
-func NewCommandPolicy(cfg CommandPolicyConfig) (*CommandPolicy, error) {
-	compile := func(list []string) ([]cmdPattern, error) {
-		var out []cmdPattern
-		for _, raw := range list {
-			p := strings.Join(strings.Fields(raw), " ")
-			if p == "" {
-				continue
-			}
-			base, anyArgs := p, false
-			if strings.HasSuffix(p, " *") {
-				base, anyArgs = strings.TrimSuffix(p, " *"), true
-			}
-			var sb strings.Builder
-			sb.WriteString("^")
-			for _, r := range base {
-				switch r {
-				case '*':
-					sb.WriteString(".*")
-				case '?':
-					sb.WriteString(".")
-				default:
-					sb.WriteString(regexp.QuoteMeta(string(r)))
-				}
-			}
-			if anyArgs {
-				sb.WriteString("( .*)?")
-			}
-			sb.WriteString("$")
-			re, err := regexp.Compile(sb.String())
-			if err != nil {
-				return nil, fmt.Errorf("invalid command pattern %q: %w", raw, err)
-			}
-			out = append(out, cmdPattern{raw: raw, re: re})
+// compileCmdPatterns compiles command patterns (see CommandPolicyConfig).
+func compileCmdPatterns(list []string) ([]cmdPattern, error) {
+	var out []cmdPattern
+	for _, raw := range list {
+		p := strings.Join(strings.Fields(raw), " ")
+		if p == "" {
+			continue
 		}
-		return out, nil
+		base, anyArgs := p, false
+		if strings.HasSuffix(p, " *") {
+			base, anyArgs = strings.TrimSuffix(p, " *"), true
+		}
+		var sb strings.Builder
+		sb.WriteString("^")
+		for _, r := range base {
+			switch r {
+			case '*':
+				sb.WriteString(".*")
+			case '?':
+				sb.WriteString(".")
+			default:
+				sb.WriteString(regexp.QuoteMeta(string(r)))
+			}
+		}
+		if anyArgs {
+			sb.WriteString("( .*)?")
+		}
+		sb.WriteString("$")
+		re, err := regexp.Compile(sb.String())
+		if err != nil {
+			return nil, fmt.Errorf("invalid command pattern %q: %w", raw, err)
+		}
+		out = append(out, cmdPattern{raw: raw, re: re})
 	}
+	return out, nil
+}
+
+func NewCommandPolicy(cfg CommandPolicyConfig) (*CommandPolicy, error) {
+	compile := compileCmdPatterns
 	var p CommandPolicy
 	var err error
 	if p.allow, err = compile(cfg.Allow); err != nil {
@@ -193,23 +212,44 @@ func (p *CommandPolicy) Evaluate(script string) CommandDecision {
 		return d
 	}
 	allowActive := len(p.allow) > 0
+	deny, auto := p.deny, p.auto
+	var ask []cmdPattern
+	if p.rules != nil {
+		deny = append(slices.Clone(deny), p.rules.shellPatterns(EffectDeny)...)
+		auto = append(slices.Clone(auto), p.rules.shellPatterns(EffectAllow)...)
+		ask = p.rules.shellPatterns(EffectAsk)
+	}
 
 	if parseErr != nil {
 		if allowActive {
 			return CommandDecision{Verdict: VerdictDeny, Reason: "could not parse the command to check it against the allow-list: " + parseErr.Error(), Commands: rendered}
 		}
 		d.Reason = "could not parse command: " + parseErr.Error()
+		d.MustAsk = len(ask) > 0 // an ask rule can't be ruled out
 		return d
 	}
 
 	// Deny always wins, including for wrappers themselves.
 	for _, c := range cmds {
-		if pat, ok := matchAny(p.deny, c); ok {
+		if pat, ok := matchAny(deny, c); ok {
 			return CommandDecision{Verdict: VerdictDeny, Reason: fmt.Sprintf("%q matches deny rule %q", c.String(), pat), Commands: rendered}
 		}
 	}
+	// Then ask rules: any command they cover (or can't rule out) asks.
+	if len(ask) > 0 {
+		for _, c := range cmds {
+			if pat, ok := matchAny(ask, c); ok {
+				d.MustAsk, d.Reason = true, fmt.Sprintf("%q matches ask rule %q", c.String(), pat)
+				break
+			}
+			if c.unverified != "" && !c.transparent {
+				d.MustAsk, d.Reason = true, fmt.Sprintf("an ask rule can't be checked: %s", c.unverified)
+				break
+			}
+		}
+	}
 
-	autoOK := len(p.auto) > 0
+	autoOK := len(auto) > 0 && !d.MustAsk
 	for _, c := range cmds {
 		if c.transparent {
 			continue
@@ -231,7 +271,7 @@ func (p *CommandPolicy) Evaluate(script string) CommandDecision {
 			if c.dynamic() {
 				autoOK = false
 				d.Reason = fmt.Sprintf("%q uses runtime expansion", c.String())
-			} else if _, ok := matchAny(p.auto, c); !ok {
+			} else if _, ok := matchAny(auto, c); !ok {
 				autoOK = false
 			}
 		}

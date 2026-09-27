@@ -367,6 +367,35 @@ func (r *Remote) Set(ctx context.Context, key, value string) (string, error) {
 	return res.Msg.Key, nil
 }
 
+func (r *Remote) ListPermissionRules() []app.PermissionRule {
+	res, err := r.workspaces.ListPermissionRules(context.Background(), connect.NewRequest(&pb.ListPermissionRulesRequest{Workspace: r.dir}))
+	if err != nil {
+		r.failed("listing permission rules", err)
+		return nil
+	}
+	var out []app.PermissionRule
+	for _, x := range res.Msg.Rules {
+		out = append(out, app.PermissionRule{Effect: x.Effect, Rule: x.Rule, Source: x.Source})
+	}
+	return out
+}
+
+func (r *Remote) AddPermissionRule(effect, rule string, save bool) (app.PermissionChange, error) {
+	res, err := r.workspaces.AddPermissionRule(context.Background(), connect.NewRequest(&pb.AddPermissionRuleRequest{Workspace: r.dir, Effect: effect, Rule: rule, Save: save}))
+	if err != nil {
+		return app.PermissionChange{}, fromAPI(err)
+	}
+	return app.PermissionChange{Rule: res.Msg.Rule, NextStart: res.Msg.NextStart, Saved: saved(res.Msg.Saved)}, nil
+}
+
+func (r *Remote) RemovePermissionRule(rule string, save bool) (app.PermissionChange, error) {
+	res, err := r.workspaces.RemovePermissionRule(context.Background(), connect.NewRequest(&pb.RemovePermissionRuleRequest{Workspace: r.dir, Rule: rule, Save: save}))
+	if err != nil {
+		return app.PermissionChange{}, fromAPI(err)
+	}
+	return app.PermissionChange{Rule: res.Msg.Rule, Removed: int(res.Msg.Removed), Saved: saved(res.Msg.Saved)}, nil
+}
+
 func (r *Remote) SetPermissionMode(mode string) (string, error) {
 	res, err := r.workspaces.SetPermissionMode(context.Background(), connect.NewRequest(&pb.SetPermissionModeRequest{Workspace: r.dir, Mode: mode}))
 	if err != nil {

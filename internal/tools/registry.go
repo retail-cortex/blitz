@@ -3,6 +3,7 @@ package tools
 import (
 	"cmp"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -35,7 +36,12 @@ type Registry struct {
 	// modeNote is why the configured permission mode couldn't be used
 	// (bypass without the OS sandbox); nil when it was.
 	modeNote error
+	rules    *PermissionRules
 }
+
+// Rules are the permission rules in force; they can change while a
+// session runs (read rules only take effect at the next start).
+func (r *Registry) Rules() *PermissionRules { return r.rules }
 
 // ModeNote is why the configured permission mode wasn't used, or nil.
 func (r *Registry) ModeNote() error { return r.modeNote }
@@ -44,11 +50,18 @@ func (r *Registry) ModeNote() error { return r.modeNote }
 // to stop background processes and release the workspace handle.
 func NewRegistry(cfg *config.Config, agentReg *agents.Registry, skillProv *skills.Provider) (*Registry, error) {
 	sb := cfg.Sandbox
+	rules, err := NewPermissionRules(cfg.Permissions, "config")
+	if err != nil {
+		return nil, fmt.Errorf("[permissions]: %w", err)
+	}
+	// deny read(...) rules are blocked paths: the file tools and the OS
+	// sandbox hide them from then on.
+	blocked := append(slices.Clone(sb.BlockedPaths), rules.Patterns(RuleRead, EffectDeny)...)
 	ws, err := OpenWorkspace(WorkspaceOptions{
 		Dir:           cfg.Tools.WorkspaceDir,
 		AllowedPaths:  sb.AllowedPaths,
 		ReadOnlyPaths: sb.ReadOnlyPaths,
-		BlockedPaths:  sb.BlockedPaths,
+		BlockedPaths:  blocked,
 		MaxFileSize:   cfg.Tools.MaxFileSizeBytes,
 	})
 	if err != nil {
@@ -109,11 +122,14 @@ func NewRegistry(cfg *config.Config, agentReg *agents.Registry, skillProv *skill
 			AutoApproveCommands: cfg.Tools.AutoApproveCommands,
 		}),
 		modeNote:  modeNote,
+		rules:     rules,
 		processes: NewProcessManager(0, 0),
 		policy:    policy,
 		exec:      env,
 	}
 	r.processes.exec = env
+	r.hooks.SetRules(rules)
+	policy.SetRules(rules)
 
 	if cfg.Tools.ApprovalsFile != "" {
 		store, err := OpenApprovalStore(cfg.Tools.ApprovalsFile)
@@ -178,6 +194,7 @@ func NewRegistry(cfg *config.Config, agentReg *agents.Registry, skillProv *skill
 				AllowPrivate: cfg.Web.AllowPrivate,
 				AllowNetwork: sb.AllowNetwork,
 				MaxBytes:     cfg.Web.MaxBytes,
+				Rules:        rules,
 				Timeout:      time.Duration(cfg.Web.TimeoutSeconds) * time.Second,
 			}, r.hooks)
 		}})

@@ -59,6 +59,9 @@ type Backend interface {
 	Settings() Settings
 	Set(ctx context.Context, key, value string) (string, error)
 	SetPermissionMode(mode string) (string, error)
+	ListPermissionRules() []PermissionRule
+	AddPermissionRule(effect, rule string, save bool) (PermissionChange, error)
+	RemovePermissionRule(rule string, save bool) (PermissionChange, error)
 
 	// Skills, environments, MCP and tools.
 	ListSkills() []SkillInfo

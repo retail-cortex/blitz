@@ -118,6 +118,9 @@ func HandleCommand(ctx context.Context, input string, app *App) (bool, error) {
 	case "mode":
 		cmdMode(args, app)
 
+	case "permissions", "perms":
+		cmdPermissions(args, app)
+
 	case "clear":
 		fmt.Print("\033[H\033[2J")
 
@@ -160,6 +163,7 @@ func printHelp() {
 		{"/memory [reload|add <note>]", "help.memory"},
 		{"/init", "help.init"},
 		{"/approvals [revoke <n>|clear]", "help.approvals"},
+		{"/permissions [allow|ask|deny|remove <rule> [--save]]", "help.permissions"},
 		{"/mcp", "help.mcp"},
 		{"/tools", "help.tools"},
 		{"/plan <goal>", "help.plan"},

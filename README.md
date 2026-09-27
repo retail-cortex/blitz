@@ -109,6 +109,7 @@ Subcommands: `doctor [--online]`, `config init|show|path`, `completion bash|zsh|
 | `/search web <terms>` | Search the web and hand the top five readable links to the agent, which reads them and answers with citations. Those five URLs need no approval for that turn; other pages still do. The turn can't edit files or run commands |
 | `/search session <terms>` | Find what this session said about something: matching passages from the full transcript (including anything compacted away) go to the agent, which answers from them |
 | `/mode [name]` | Show or change the permission mode (see *Safety Model*) |
+| `/permissions [allow\|ask\|deny\|remove <rule> [--save]]` | Permission rules (see *Safety Model*) |
 | `/plan <goal>` | Ask for a plan without changing anything. The agent can read, search and delegate, but edits, commands and MCP tools are refused for that turn |
 | `!<command>` | Run a command yourself, like in your own terminal: in the workspace, with your environment, outside the agent's sandbox and approvals. The agent doesn't see it; the audit log records it |
 | `/attach [path\|clear]`, `/paste` | Queue an image (or the clipboard's) for your next message |
@@ -162,6 +163,15 @@ Both are **read-only turns**: the agent can read files, fetch and search, but ed
 **Approvals.** File edits show a colored diff before you approve. Answers: `y` once, `s` for the rest of the session, `a` always (saved to `~/.blitz/approvals.json`), `n` no. Commands are remembered by exact text within a workspace; edits per workspace; web requests per host; MCP tools per server/tool. Ctrl+C at an approval prompt cancels the whole turn. With no terminal to ask, sensitive actions are denied unless auto-approved in config.
 
 **Permission modes** decide what runs without asking: `default` (ask), `accept-edits` (file changes in the workspace go through without asking; commands still ask), `plan` (every prompt is planned; tools that change anything are refused), `dont-ask` (anything that would ask is refused — for CI and scripts), and `bypass` (nothing asks). `bypass` only runs while the OS sandbox is active, and deny rules, blocked paths and the sandboxes still apply; without a sandbox Blitz stays in `default` and says why. Choose one with `--permission-mode`, `[blitz] permission_mode`, or `/mode` in a session (the prompt shows any mode other than `default`). The older `auto_approve = true` means `bypass`. Scheduled workers ignore the mode: they get exactly their own permissions.
+
+**Permission rules** say what runs without asking (`allow`), always asks (`ask`), or never runs (`deny`), in every mode; deny wins over ask, ask over allow:
+```toml
+[permissions]
+allow = ["shell(go test *)", "shell(git status)", "write(docs/**)", "web(*.go.dev)"]
+ask   = ["shell(git push *)", "write(.github/**)"]
+deny  = ["shell(rm -rf *)", "read(secrets/**)", "mcp(github:delete_*)", "web_search"]
+```
+Kinds: `shell(…)` (checked on every sub-command, through pipes, `bash -c` and wrappers), `write(…)`, `delete(…)` and `read(…)` (path globs relative to the workspace; `read` rules only deny, and become blocked paths), `web(host)`, `search(provider)`, `mcp(server:tool)`, `skill(name)`, `agent(name)`, or a bare tool name. Claude Code's spellings (`Bash(…)`, `Edit(…)`) work too. `ask` asks even in `bypass` mode or after "always"; scheduled workers are refused anything an `ask` or `deny` rule covers, and `allow` rules never widen their permissions. `/permissions` lists the rules and adds or removes them for the session (`--save` writes the config file, keeping its comments); `--allow` and `--deny` add them for one run. (`sandbox.commands.allow` is different: an allow-*list* of the only commands that may run.)
 
 **File sandbox.** File tools only reach the workspace plus `sandbox.allowed_paths` (read-write) and `sandbox.read_only_paths`, enforced with `os.Root` (no `..` or symlink escapes). `sandbox.blocked_paths` (default: `.env`, keys, `~/.ssh`, cloud credentials, …) are never readable or writable — including through symlinks, `grep`, and `list_files`.
 

@@ -23,6 +23,7 @@ var sentinels = map[string]error{
 	"NO_ACTIVE_SESSION":    app.ErrNoActiveSession,
 	"MAX_TURNS":            app.ErrMaxTurns,
 	"UNKNOWN_MODE":         app.ErrUnknownMode,
+	"BAD_RULE":             app.ErrBadRule,
 	"BYPASS_NEEDS_SANDBOX": app.ErrBypassNeedsSandbox,
 	"COST_LIMIT":           app.ErrCostLimit,
 	"TIME_LIMIT":           app.ErrTimeLimit,

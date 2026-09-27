@@ -75,6 +75,15 @@ const (
 	// WorkspaceServiceSetPermissionModeProcedure is the fully-qualified name of the WorkspaceService's
 	// SetPermissionMode RPC.
 	WorkspaceServiceSetPermissionModeProcedure = "/blitz.v1.WorkspaceService/SetPermissionMode"
+	// WorkspaceServiceListPermissionRulesProcedure is the fully-qualified name of the
+	// WorkspaceService's ListPermissionRules RPC.
+	WorkspaceServiceListPermissionRulesProcedure = "/blitz.v1.WorkspaceService/ListPermissionRules"
+	// WorkspaceServiceAddPermissionRuleProcedure is the fully-qualified name of the WorkspaceService's
+	// AddPermissionRule RPC.
+	WorkspaceServiceAddPermissionRuleProcedure = "/blitz.v1.WorkspaceService/AddPermissionRule"
+	// WorkspaceServiceRemovePermissionRuleProcedure is the fully-qualified name of the
+	// WorkspaceService's RemovePermissionRule RPC.
+	WorkspaceServiceRemovePermissionRuleProcedure = "/blitz.v1.WorkspaceService/RemovePermissionRule"
 	// WorkspaceServiceListSkillsProcedure is the fully-qualified name of the WorkspaceService's
 	// ListSkills RPC.
 	WorkspaceServiceListSkillsProcedure = "/blitz.v1.WorkspaceService/ListSkills"
@@ -169,6 +178,14 @@ type WorkspaceServiceClient interface {
 	// workspace (UNKNOWN_MODE; BYPASS_NEEDS_SANDBOX when bypass is asked for
 	// without an active OS sandbox).
 	SetPermissionMode(context.Context, *connect.Request[v1.SetPermissionModeRequest]) (*connect.Response[v1.SetPermissionModeResponse], error)
+	// Returns the permission rules in force: deny, then ask, then allow.
+	ListPermissionRules(context.Context, *connect.Request[v1.ListPermissionRulesRequest]) (*connect.Response[v1.ListPermissionRulesResponse], error)
+	// Adds an allow, ask or deny rule for the workspace and, with save, to
+	// the config file (BAD_RULE). Read rules must be saved and apply from
+	// the next start.
+	AddPermissionRule(context.Context, *connect.Request[v1.AddPermissionRuleRequest]) (*connect.Response[v1.AddPermissionRuleResponse], error)
+	// Removes a rule (any effect), and with save from the config file.
+	RemovePermissionRule(context.Context, *connect.Request[v1.RemovePermissionRuleRequest]) (*connect.Response[v1.RemovePermissionRuleResponse], error)
 	// Returns the skills found, or those matching a query.
 	ListSkills(context.Context, *connect.Request[v1.ListSkillsRequest]) (*connect.Response[v1.ListSkillsResponse], error)
 	// Returns one skill (SKILL_NOT_FOUND).
@@ -311,6 +328,24 @@ func NewWorkspaceServiceClient(httpClient connect.HTTPClient, baseURL string, op
 			connect.WithSchema(workspaceServiceMethods.ByName("SetPermissionMode")),
 			connect.WithClientOptions(opts...),
 		),
+		listPermissionRules: connect.NewClient[v1.ListPermissionRulesRequest, v1.ListPermissionRulesResponse](
+			httpClient,
+			baseURL+WorkspaceServiceListPermissionRulesProcedure,
+			connect.WithSchema(workspaceServiceMethods.ByName("ListPermissionRules")),
+			connect.WithClientOptions(opts...),
+		),
+		addPermissionRule: connect.NewClient[v1.AddPermissionRuleRequest, v1.AddPermissionRuleResponse](
+			httpClient,
+			baseURL+WorkspaceServiceAddPermissionRuleProcedure,
+			connect.WithSchema(workspaceServiceMethods.ByName("AddPermissionRule")),
+			connect.WithClientOptions(opts...),
+		),
+		removePermissionRule: connect.NewClient[v1.RemovePermissionRuleRequest, v1.RemovePermissionRuleResponse](
+			httpClient,
+			baseURL+WorkspaceServiceRemovePermissionRuleProcedure,
+			connect.WithSchema(workspaceServiceMethods.ByName("RemovePermissionRule")),
+			connect.WithClientOptions(opts...),
+		),
 		listSkills: connect.NewClient[v1.ListSkillsRequest, v1.ListSkillsResponse](
 			httpClient,
 			baseURL+WorkspaceServiceListSkillsProcedure,
@@ -436,40 +471,43 @@ func NewWorkspaceServiceClient(httpClient connect.HTTPClient, baseURL string, op
 
 // workspaceServiceClient implements WorkspaceServiceClient.
 type workspaceServiceClient struct {
-	listWorkspaces      *connect.Client[v1.ListWorkspacesRequest, v1.ListWorkspacesResponse]
-	closeWorkspace      *connect.Client[v1.CloseWorkspaceRequest, v1.CloseWorkspaceResponse]
-	getSandbox          *connect.Client[v1.GetSandboxRequest, v1.GetSandboxResponse]
-	listAgents          *connect.Client[v1.ListAgentsRequest, v1.ListAgentsResponse]
-	setAgent            *connect.Client[v1.SetAgentRequest, v1.SetAgentResponse]
-	getModel            *connect.Client[v1.GetModelRequest, v1.GetModelResponse]
-	setModel            *connect.Client[v1.SetModelRequest, v1.SetModelResponse]
-	pinModel            *connect.Client[v1.PinModelRequest, v1.PinModelResponse]
-	unpinModel          *connect.Client[v1.UnpinModelRequest, v1.UnpinModelResponse]
-	getModelSettings    *connect.Client[v1.GetModelSettingsRequest, v1.GetModelSettingsResponse]
-	updateModelSettings *connect.Client[v1.UpdateModelSettingsRequest, v1.UpdateModelSettingsResponse]
-	getSettings         *connect.Client[v1.GetSettingsRequest, v1.GetSettingsResponse]
-	setSetting          *connect.Client[v1.SetSettingRequest, v1.SetSettingResponse]
-	setPermissionMode   *connect.Client[v1.SetPermissionModeRequest, v1.SetPermissionModeResponse]
-	listSkills          *connect.Client[v1.ListSkillsRequest, v1.ListSkillsResponse]
-	getSkill            *connect.Client[v1.GetSkillRequest, v1.GetSkillResponse]
-	listEnvs            *connect.Client[v1.ListEnvsRequest, v1.ListEnvsResponse]
-	removeEnv           *connect.Client[v1.RemoveEnvRequest, v1.RemoveEnvResponse]
-	pruneEnvs           *connect.Client[v1.PruneEnvsRequest, v1.PruneEnvsResponse]
-	listMCPServers      *connect.Client[v1.ListMCPServersRequest, v1.ListMCPServersResponse]
-	listTools           *connect.Client[v1.ListToolsRequest, v1.ListToolsResponse]
-	reloadMemory        *connect.Client[v1.ReloadMemoryRequest, v1.ReloadMemoryResponse]
-	addMemory           *connect.Client[v1.AddMemoryRequest, v1.AddMemoryResponse]
-	listLocales         *connect.Client[v1.ListLocalesRequest, v1.ListLocalesResponse]
-	setLocale           *connect.Client[v1.SetLocaleRequest, v1.SetLocaleResponse]
-	listCheckpoints     *connect.Client[v1.ListCheckpointsRequest, v1.ListCheckpointsResponse]
-	undo                *connect.Client[v1.UndoRequest, v1.UndoResponse]
-	getDiff             *connect.Client[v1.GetDiffRequest, v1.GetDiffResponse]
-	listApprovals       *connect.Client[v1.ListApprovalsRequest, v1.ListApprovalsResponse]
-	revokeApprovals     *connect.Client[v1.RevokeApprovalsRequest, v1.RevokeApprovalsResponse]
-	loadImage           *connect.Client[v1.LoadImageRequest, v1.LoadImageResponse]
-	addImage            *connect.Client[v1.AddImageRequest, v1.AddImageResponse]
-	getSearchProvider   *connect.Client[v1.GetSearchProviderRequest, v1.GetSearchProviderResponse]
-	searchWeb           *connect.Client[v1.SearchWebRequest, v1.SearchWebResponse]
+	listWorkspaces       *connect.Client[v1.ListWorkspacesRequest, v1.ListWorkspacesResponse]
+	closeWorkspace       *connect.Client[v1.CloseWorkspaceRequest, v1.CloseWorkspaceResponse]
+	getSandbox           *connect.Client[v1.GetSandboxRequest, v1.GetSandboxResponse]
+	listAgents           *connect.Client[v1.ListAgentsRequest, v1.ListAgentsResponse]
+	setAgent             *connect.Client[v1.SetAgentRequest, v1.SetAgentResponse]
+	getModel             *connect.Client[v1.GetModelRequest, v1.GetModelResponse]
+	setModel             *connect.Client[v1.SetModelRequest, v1.SetModelResponse]
+	pinModel             *connect.Client[v1.PinModelRequest, v1.PinModelResponse]
+	unpinModel           *connect.Client[v1.UnpinModelRequest, v1.UnpinModelResponse]
+	getModelSettings     *connect.Client[v1.GetModelSettingsRequest, v1.GetModelSettingsResponse]
+	updateModelSettings  *connect.Client[v1.UpdateModelSettingsRequest, v1.UpdateModelSettingsResponse]
+	getSettings          *connect.Client[v1.GetSettingsRequest, v1.GetSettingsResponse]
+	setSetting           *connect.Client[v1.SetSettingRequest, v1.SetSettingResponse]
+	setPermissionMode    *connect.Client[v1.SetPermissionModeRequest, v1.SetPermissionModeResponse]
+	listPermissionRules  *connect.Client[v1.ListPermissionRulesRequest, v1.ListPermissionRulesResponse]
+	addPermissionRule    *connect.Client[v1.AddPermissionRuleRequest, v1.AddPermissionRuleResponse]
+	removePermissionRule *connect.Client[v1.RemovePermissionRuleRequest, v1.RemovePermissionRuleResponse]
+	listSkills           *connect.Client[v1.ListSkillsRequest, v1.ListSkillsResponse]
+	getSkill             *connect.Client[v1.GetSkillRequest, v1.GetSkillResponse]
+	listEnvs             *connect.Client[v1.ListEnvsRequest, v1.ListEnvsResponse]
+	removeEnv            *connect.Client[v1.RemoveEnvRequest, v1.RemoveEnvResponse]
+	pruneEnvs            *connect.Client[v1.PruneEnvsRequest, v1.PruneEnvsResponse]
+	listMCPServers       *connect.Client[v1.ListMCPServersRequest, v1.ListMCPServersResponse]
+	listTools            *connect.Client[v1.ListToolsRequest, v1.ListToolsResponse]
+	reloadMemory         *connect.Client[v1.ReloadMemoryRequest, v1.ReloadMemoryResponse]
+	addMemory            *connect.Client[v1.AddMemoryRequest, v1.AddMemoryResponse]
+	listLocales          *connect.Client[v1.ListLocalesRequest, v1.ListLocalesResponse]
+	setLocale            *connect.Client[v1.SetLocaleRequest, v1.SetLocaleResponse]
+	listCheckpoints      *connect.Client[v1.ListCheckpointsRequest, v1.ListCheckpointsResponse]
+	undo                 *connect.Client[v1.UndoRequest, v1.UndoResponse]
+	getDiff              *connect.Client[v1.GetDiffRequest, v1.GetDiffResponse]
+	listApprovals        *connect.Client[v1.ListApprovalsRequest, v1.ListApprovalsResponse]
+	revokeApprovals      *connect.Client[v1.RevokeApprovalsRequest, v1.RevokeApprovalsResponse]
+	loadImage            *connect.Client[v1.LoadImageRequest, v1.LoadImageResponse]
+	addImage             *connect.Client[v1.AddImageRequest, v1.AddImageResponse]
+	getSearchProvider    *connect.Client[v1.GetSearchProviderRequest, v1.GetSearchProviderResponse]
+	searchWeb            *connect.Client[v1.SearchWebRequest, v1.SearchWebResponse]
 }
 
 // ListWorkspaces calls blitz.v1.WorkspaceService.ListWorkspaces.
@@ -540,6 +578,21 @@ func (c *workspaceServiceClient) SetSetting(ctx context.Context, req *connect.Re
 // SetPermissionMode calls blitz.v1.WorkspaceService.SetPermissionMode.
 func (c *workspaceServiceClient) SetPermissionMode(ctx context.Context, req *connect.Request[v1.SetPermissionModeRequest]) (*connect.Response[v1.SetPermissionModeResponse], error) {
 	return c.setPermissionMode.CallUnary(ctx, req)
+}
+
+// ListPermissionRules calls blitz.v1.WorkspaceService.ListPermissionRules.
+func (c *workspaceServiceClient) ListPermissionRules(ctx context.Context, req *connect.Request[v1.ListPermissionRulesRequest]) (*connect.Response[v1.ListPermissionRulesResponse], error) {
+	return c.listPermissionRules.CallUnary(ctx, req)
+}
+
+// AddPermissionRule calls blitz.v1.WorkspaceService.AddPermissionRule.
+func (c *workspaceServiceClient) AddPermissionRule(ctx context.Context, req *connect.Request[v1.AddPermissionRuleRequest]) (*connect.Response[v1.AddPermissionRuleResponse], error) {
+	return c.addPermissionRule.CallUnary(ctx, req)
+}
+
+// RemovePermissionRule calls blitz.v1.WorkspaceService.RemovePermissionRule.
+func (c *workspaceServiceClient) RemovePermissionRule(ctx context.Context, req *connect.Request[v1.RemovePermissionRuleRequest]) (*connect.Response[v1.RemovePermissionRuleResponse], error) {
+	return c.removePermissionRule.CallUnary(ctx, req)
 }
 
 // ListSkills calls blitz.v1.WorkspaceService.ListSkills.
@@ -675,6 +728,14 @@ type WorkspaceServiceHandler interface {
 	// workspace (UNKNOWN_MODE; BYPASS_NEEDS_SANDBOX when bypass is asked for
 	// without an active OS sandbox).
 	SetPermissionMode(context.Context, *connect.Request[v1.SetPermissionModeRequest]) (*connect.Response[v1.SetPermissionModeResponse], error)
+	// Returns the permission rules in force: deny, then ask, then allow.
+	ListPermissionRules(context.Context, *connect.Request[v1.ListPermissionRulesRequest]) (*connect.Response[v1.ListPermissionRulesResponse], error)
+	// Adds an allow, ask or deny rule for the workspace and, with save, to
+	// the config file (BAD_RULE). Read rules must be saved and apply from
+	// the next start.
+	AddPermissionRule(context.Context, *connect.Request[v1.AddPermissionRuleRequest]) (*connect.Response[v1.AddPermissionRuleResponse], error)
+	// Removes a rule (any effect), and with save from the config file.
+	RemovePermissionRule(context.Context, *connect.Request[v1.RemovePermissionRuleRequest]) (*connect.Response[v1.RemovePermissionRuleResponse], error)
 	// Returns the skills found, or those matching a query.
 	ListSkills(context.Context, *connect.Request[v1.ListSkillsRequest]) (*connect.Response[v1.ListSkillsResponse], error)
 	// Returns one skill (SKILL_NOT_FOUND).
@@ -811,6 +872,24 @@ func NewWorkspaceServiceHandler(svc WorkspaceServiceHandler, opts ...connect.Han
 		WorkspaceServiceSetPermissionModeProcedure,
 		svc.SetPermissionMode,
 		connect.WithSchema(workspaceServiceMethods.ByName("SetPermissionMode")),
+		connect.WithHandlerOptions(opts...),
+	)
+	workspaceServiceListPermissionRulesHandler := connect.NewUnaryHandler(
+		WorkspaceServiceListPermissionRulesProcedure,
+		svc.ListPermissionRules,
+		connect.WithSchema(workspaceServiceMethods.ByName("ListPermissionRules")),
+		connect.WithHandlerOptions(opts...),
+	)
+	workspaceServiceAddPermissionRuleHandler := connect.NewUnaryHandler(
+		WorkspaceServiceAddPermissionRuleProcedure,
+		svc.AddPermissionRule,
+		connect.WithSchema(workspaceServiceMethods.ByName("AddPermissionRule")),
+		connect.WithHandlerOptions(opts...),
+	)
+	workspaceServiceRemovePermissionRuleHandler := connect.NewUnaryHandler(
+		WorkspaceServiceRemovePermissionRuleProcedure,
+		svc.RemovePermissionRule,
+		connect.WithSchema(workspaceServiceMethods.ByName("RemovePermissionRule")),
 		connect.WithHandlerOptions(opts...),
 	)
 	workspaceServiceListSkillsHandler := connect.NewUnaryHandler(
@@ -963,6 +1042,12 @@ func NewWorkspaceServiceHandler(svc WorkspaceServiceHandler, opts ...connect.Han
 			workspaceServiceSetSettingHandler.ServeHTTP(w, r)
 		case WorkspaceServiceSetPermissionModeProcedure:
 			workspaceServiceSetPermissionModeHandler.ServeHTTP(w, r)
+		case WorkspaceServiceListPermissionRulesProcedure:
+			workspaceServiceListPermissionRulesHandler.ServeHTTP(w, r)
+		case WorkspaceServiceAddPermissionRuleProcedure:
+			workspaceServiceAddPermissionRuleHandler.ServeHTTP(w, r)
+		case WorkspaceServiceRemovePermissionRuleProcedure:
+			workspaceServiceRemovePermissionRuleHandler.ServeHTTP(w, r)
 		case WorkspaceServiceListSkillsProcedure:
 			workspaceServiceListSkillsHandler.ServeHTTP(w, r)
 		case WorkspaceServiceGetSkillProcedure:
@@ -1066,6 +1151,18 @@ func (UnimplementedWorkspaceServiceHandler) SetSetting(context.Context, *connect
 
 func (UnimplementedWorkspaceServiceHandler) SetPermissionMode(context.Context, *connect.Request[v1.SetPermissionModeRequest]) (*connect.Response[v1.SetPermissionModeResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("blitz.v1.WorkspaceService.SetPermissionMode is not implemented"))
+}
+
+func (UnimplementedWorkspaceServiceHandler) ListPermissionRules(context.Context, *connect.Request[v1.ListPermissionRulesRequest]) (*connect.Response[v1.ListPermissionRulesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("blitz.v1.WorkspaceService.ListPermissionRules is not implemented"))
+}
+
+func (UnimplementedWorkspaceServiceHandler) AddPermissionRule(context.Context, *connect.Request[v1.AddPermissionRuleRequest]) (*connect.Response[v1.AddPermissionRuleResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("blitz.v1.WorkspaceService.AddPermissionRule is not implemented"))
+}
+
+func (UnimplementedWorkspaceServiceHandler) RemovePermissionRule(context.Context, *connect.Request[v1.RemovePermissionRuleRequest]) (*connect.Response[v1.RemovePermissionRuleResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("blitz.v1.WorkspaceService.RemovePermissionRule is not implemented"))
 }
 
 func (UnimplementedWorkspaceServiceHandler) ListSkills(context.Context, *connect.Request[v1.ListSkillsRequest]) (*connect.Response[v1.ListSkillsResponse], error) {

@@ -41,6 +41,8 @@ type rootOptions struct {
 	images       []string
 	local        bool
 	mode         string // --permission-mode
+	allowRules   []string
+	denyRules    []string
 	// requirePrompt: a run without a prompt is a usage error (exec),
 	// rather than the interactive session.
 	requirePrompt bool
@@ -116,6 +118,8 @@ func addRunFlags(f *pflag.FlagSet, o *rootOptions) {
 	f.DurationVar(&o.timeout, "timeout", 0, "Stop a one-shot run after this long, e.g. 10m (0 = unlimited)")
 	f.BoolVar(&o.plan, "plan", false, "One-shot plan: the agent may read and search but not edit or run commands")
 	f.BoolVar(&o.local, "local", false, "Run the workspace in this process even when the Blitz service is running")
+	f.StringArrayVar(&o.allowRules, "allow", nil, `Allow an action without asking, for this run: a rule such as "shell(go test *)" or "write(docs/**)" (repeatable)`)
+	f.StringArrayVar(&o.denyRules, "deny", nil, `Refuse an action, for this run: a rule such as "shell(git push *)" or "web(*.internal)" (repeatable)`)
 	f.StringVar(&o.mode, "permission-mode", "", "Start in a permission mode: default, accept-edits, plan, dont-ask, or bypass (needs the OS sandbox)")
 	f.StringArrayVar(&o.images, "image", nil, "Attach an image to the first prompt (repeatable); @file.png in a prompt also works")
 }
@@ -237,6 +241,13 @@ func runRoot(cmd *cobra.Command, o *rootOptions, args []string) (err error) {
 	if o.mode != "" {
 		if _, err := w.SetPermissionMode(o.mode); err != nil {
 			return withCode(exitUsage, fmt.Errorf("--permission-mode: %w", err))
+		}
+	}
+	for effect, rules := range map[string][]string{"allow": o.allowRules, "deny": o.denyRules} {
+		for _, rule := range rules {
+			if _, err := w.AddPermissionRule(effect, rule, false); err != nil {
+				return withCode(exitUsage, fmt.Errorf("--%s %q: %w", effect, rule, err))
+			}
 		}
 	}
 	if merr := w.ModelErr(); merr != nil {
@@ -374,7 +385,7 @@ func newCompleter(w app.Backend) *tui.Completer {
 	c := tui.NewCompleter(w.Dir())
 	for _, cmd := range []string{"help", "agents", "model", "skills", "session", "set", "clear", "sandbox", "exit", "quit",
 		"undo", "checkpoints", "diff", "cost", "context", "compact", "memory", "approvals", "mcp", "resume", "locale", "attach", "paste",
-		"tools", "plan", "show", "init", "mode", "pin_model", "unpin", "model_settings", "search", "btw", "rename", "envs"} {
+		"tools", "plan", "show", "init", "mode", "permissions", "pin_model", "unpin", "model_settings", "search", "btw", "rename", "envs"} {
 		c.Command(cmd)
 	}
 	c.Command("skills", "list", "show", "search")
@@ -389,6 +400,7 @@ func newCompleter(w app.Backend) *tui.Completer {
 	c.Command("compact")
 	c.Command("set", "agency=")
 	c.Command("mode", "default", "accept-edits", "plan", "dont-ask", "bypass")
+	c.Command("permissions", "allow", "ask", "deny", "remove")
 	agentNames := func() []string {
 		var names []string
 		for _, a := range w.ListAgents() {

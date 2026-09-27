@@ -28,6 +28,9 @@ type Config struct {
 	Tools   ToolsConfig   `toml:"tools"`
 	Session SessionConfig `toml:"session"`
 	Sandbox SandboxConfig `toml:"sandbox"`
+	// Permissions are allow, ask and deny rules for actions, as
+	// "kind(pattern)" (see tools.ParsePermissionRule).
+	Permissions PermissionsConfig `toml:"permissions"`
 
 	UI          UIConfig              `toml:"ui"`
 	Memory      MemoryConfig          `toml:"memory"`
@@ -268,6 +271,18 @@ type ToolsConfig struct {
 	// MaxParallel caps how many tool calls from one model response run at
 	// once (0 = unlimited). Nested batches (sub-agents) get their own cap.
 	MaxParallel int `toml:"max_parallel"`
+}
+
+// PermissionsConfig lists permission rules. Deny wins over ask, ask over
+// allow: an allow rule lets a matching action run without asking; an ask
+// rule makes it ask even when a mode or a saved approval would let it
+// through; a deny rule refuses it in every mode. (Unlike
+// sandbox.commands.allow, which is an allow-list of the only commands
+// that may run, permissions.allow only skips the question.)
+type PermissionsConfig struct {
+	Allow []string `toml:"allow"`
+	Ask   []string `toml:"ask"`
+	Deny  []string `toml:"deny"`
 }
 
 // SandboxConfig bounds what tools may touch.
