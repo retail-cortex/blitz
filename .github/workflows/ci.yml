@@ -1,0 +1,136 @@
+name: ci
+
+# Documentation-only changes don't need a build.
+on:
+  push:
+    branches: [main]
+    paths-ignore: ["**.md", ".agents/**", "docs/**", "LICENSE", "NOTICE"]
+  pull_request:
+    paths-ignore: ["**.md", ".agents/**", "docs/**", "LICENSE", "NOTICE"]
+
+# Use exactly the Go version setup-go installs from go.mod; never download another.
+env:
+  GOTOOLCHAIN: local
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # buf breaking compares with the previous commit
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: |
+            go.sum
+            tools/go.sum
+      # Linux runs the real bubblewrap sandbox tests.
+      - name: Install bubblewrap
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y bubblewrap
+          # Ubuntu 24.04 restricts unprivileged user namespaces via AppArmor.
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
+      # gVisor runs skill scripts on Linux; pinned release and checksum.
+      - name: Install gVisor (runsc)
+        if: runner.os == 'Linux'
+        env:
+          GVISOR_RELEASE: "20260921.0"
+          GVISOR_SHA512: 7c899979bed334f0987888c41e545cede8e1f7e67a257978c8de244c3867e32bc30d08491e9af36720273c502acd01d8d86c9844ebcbe125790c43fe6bdf563e
+        run: |
+          cd "$RUNNER_TEMP"
+          curl -fsSLo gvisor.tar.bz2 "https://storage.googleapis.com/gvisor/releases/release/${GVISOR_RELEASE}/x86_64/gvisor.tar.bz2"
+          echo "${GVISOR_SHA512}  gvisor.tar.bz2" | sha512sum -c -
+          mkdir -p gvisor && tar -xjf gvisor.tar.bz2 -C gvisor
+          echo "RUNSC_PATH=$RUNNER_TEMP/gvisor/runsc" >> "$GITHUB_ENV"
+      # Fails when gofmt lists a file. (`… | (! read)` fails under macOS's
+      # bash 3.2 with -e even when nothing is listed.)
+      - run: test -z "$(gofmt -l cmd internal | tee /dev/stderr)"
+      - run: go vet ./...
+      - run: make lint
+      # Fails only on a vulnerability the code can reach.
+      - run: make vulncheck
+      # protoc-gen-es (the desktop app's TypeScript) runs on Node.
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        if: runner.os == 'Linux'
+        with:
+          package_json_file: web/desktop/package.json
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        if: runner.os == 'Linux'
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: web/desktop/pnpm-lock.yaml
+      # The API protos: lint, formatting, generated code current, and no
+      # breaking change against the previous commit (once it had protos).
+      - name: Protos
+        if: runner.os == 'Linux'
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          make proto-check
+          # A deliberate break says so in its commit message, with a line
+          # "Breaking-API: <why>". Otherwise compare with the base, when it
+          # has the same proto package (the rename to blitz.v1 had none).
+          if git log -1 --format=%B "$GITHUB_SHA" | grep -q '^Breaking-API:'; then
+            echo "::notice::API break declared: $(git log -1 --format=%B "$GITHUB_SHA" | grep '^Breaking-API:')"
+          elif git cat-file -e "$BASE:api/blitz/v1" 2>/dev/null; then
+            go tool -modfile=tools/go.mod buf breaking --against ".git#ref=$BASE"
+          fi
+      - run: go test -race ./...
+      - name: Sandbox enforcement must not be skipped
+        run: go test -count=1 -v -run TestOSSandboxEnforcement ./internal/tools/ | tee out.txt && ! grep -q -- '--- SKIP' out.txt
+      - name: gVisor script sandbox must not be skipped
+        if: runner.os == 'Linux'
+        run: go test -count=1 -v -run 'TestGVisor' ./internal/tools/ | tee gv.txt && ! grep -q -- '--- SKIP' gv.txt
+      - run: make cross-compile
+      # The reproducible job compares these across runners.
+      - run: (cd bin && shasum -a 256 blitz-*) > sums-${{ runner.os }}.txt
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: sums-${{ runner.os }}
+          path: sums-${{ runner.os }}.txt
+
+  # The desktop app: its own module (cgo, WebKit), its page, and a build.
+  desktop:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: |
+            go.sum
+            tools/go.sum
+            cmd/blitz-desktop/go.sum
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          package_json_file: web/desktop/package.json
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: web/desktop/pnpm-lock.yaml
+      - run: make desktop-check
+      - run: make desktop
+
+  # Every target, cross-compiled on Linux and on macOS, must come out
+  # byte-for-byte identical: the build may not depend on the host.
+  reproducible:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: sums-*
+          merge-multiple: true
+      - run: diff sums-Linux.txt sums-macOS.txt

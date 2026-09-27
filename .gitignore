@@ -1,0 +1,18 @@
+.envrc
+
+
+# Editor swap files
+*.swp
+*.swo
+# Build outputs: binaries are produced by `make build` / GoReleaser, not committed.
+/bin/
+/dist/
+
+# Desktop app build outputs (the embedded page is rebuilt from web/desktop).
+/cmd/blitz-desktop/dist/*
+!/cmd/blitz-desktop/dist/.gitkeep
+/build/desktop/bin/
+/web/desktop/wailsjs/
+/cmd/blitz-desktop/blitz-desktop
+/blitz
+/blz
