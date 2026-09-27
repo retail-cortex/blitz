@@ -297,7 +297,7 @@
   "moduleExtensions": {
     "//build:pkg_config.bzl%pkg_config": {
       "general": {
-        "bzlTransitiveDigest": "yYdEAQLmxYM4hiPOA75oc5KY4wlGnD13ooQG21CSDZI=",
+        "bzlTransitiveDigest": "M7Wf4AuyVJbA26tP3s2zBgiPiicYgGpxDT70ZOsZL/8=",
         "usagesDigest": "AV173t+verXm8qH45OoTz1AK8UqG2C6xjDDncwYyPkE=",
         "recordedInputs": [],
         "generatedRepoSpecs": {

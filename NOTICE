@@ -1,11 +1,13 @@
-Code Puppy
+Blitz
 Copyright 2026 Retail Cortex
 
 This product is licensed under the Apache License, Version 2.0 (see LICENSE).
+The third-party software it includes, and those licenses, are listed in
+THIRD_PARTY_NOTICES.
 
-It began as a Go port of Code Puppy by Mike Pfaffenberger
-(https://github.com/mpfaffenberger/code_puppy), which was released under
-the MIT License:
+Blitz began as a Go port of Code Puppy by Mike Pfaffenberger
+(https://github.com/mpfaffenberger/code_puppy), which is released under the
+MIT License:
 
   Copyright (c) 2025 Mike Pfaffenberger
 
@@ -26,7 +28,3 @@ the MIT License:
   LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
   OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
   SOFTWARE.
-
-The last version containing the Python implementation is tagged python-final in
-the history of the former repository (github.com/rmcguinness/code_puppy); this
-repository (github.com/retail-cortex/blitz) starts from a fresh history.

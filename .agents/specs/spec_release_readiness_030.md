@@ -53,7 +53,7 @@ The owner's review (2026-09-27) found the project not ready to release: the old 
   - `specs/` — the specs, their index, and a page per spec;
   - `project/` — roadmap, next steps, history.
 - **RR-32** Root keeps only what tools and packages need there: `README.md` (short), `LICENSE`, `NOTICE`, `OWNERS.txt`, and `AGENTS.md` as a short pointer for coding agents (§8). `CONTRIBUTING.md` lives at `docs/CONTRIBUTING.md` (GitHub finds it there) and the site mounts it. `.agents/` is emptied into the site.
-- **RR-33** Built on pushes to `main` that change `docs/` (`bazel build //docs:site`, the link check, the site kept as a workflow artifact); a deploy job (`actions/upload-pages-artifact`, `actions/deploy-pages`) is written but off until Pages is available (§8).
+- **RR-33** Published to GitHub Pages by a workflow on pushes to `main` that change `docs/` (and by hand): `bazel build //docs:site`, the link check, then `actions/upload-pages-artifact` and `actions/deploy-pages`.
 
 ## 7. README, contributing, owners
 
@@ -64,7 +64,7 @@ The owner's review (2026-09-27) found the project not ready to release: the old 
 ## 8. Decisions (the owner, 2026-09-27)
 
 1. **Upstream attribution**: kept — `NOTICE` names Blitz, then carries Code Puppy's MIT notice.
-2. **GitHub Pages**: build only for now — CI builds and tests the site and keeps it as an artifact; the deploy job is written but switched off until the repository is public or the plan allows Pages.
+2. **GitHub Pages**: build only at first; the owner enabled Pages for the repository the same day, so the site deploys from `main` (RR-33).
 3. **Headers**: the full Apache boilerplate.
 4. **`AGENTS.md`**: a short pointer at the root; the content lives in the site.
 5. **Owners**: Ryan McGuinness (@rmcguinness) until others are named.

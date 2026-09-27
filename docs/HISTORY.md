@@ -1,6 +1,6 @@
 # History: the port from Python
 
-Code Puppy began as a Go port of the Python [Code Puppy](https://github.com/mpfaffenberger/code_puppy). Both lived in this repository (`python/` and `go/`) until the Go version reached feature parity; on 2026-09-26 the Python implementation was removed and the Go code moved to the repository root. The last commit with both is tagged `python-final`.
+Blitz began as a Go port of the Python [Code Puppy](https://github.com/mpfaffenberger/code_puppy), under that name. Both implementations lived in one repository (`python/` and `go/`, at github.com/rmcguinness/code_puppy) until the Go version reached feature parity; on 2026-09-26 the Python implementation was removed, the Go code moved to the repository root, and the product was renamed Blitz. The last commit with both is tagged `python-final` in that former repository. This repository (github.com/retail-cortex/blitz) starts from a fresh history.
 
 What follows is the comparison as it stood when the Python code was retired, kept as a record. Paths such as `python/` and `go/` refer to that layout, and features added afterwards aren't in it.
 
