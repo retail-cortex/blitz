@@ -25,6 +25,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/retail-cortex/blitz/pkg/legal"
 	"github.com/retail-cortex/blitz/pkg/loginitem"
 	"github.com/retail-cortex/blitz/pkg/socket"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
@@ -181,6 +182,21 @@ func (a *App) GetPrefs() (Prefs, error) { return a.prefs.load() }
 // SavePrefs saves the window's settings and returns them as saved
 // (normalized).
 func (a *App) SavePrefs(p Prefs) (Prefs, error) { return a.prefs.save(p) }
+
+// License returns one of Blitz's license texts for the About view:
+// "notice" (the NOTICE), "full" (the Apache License) or "third-party"
+// (the notices of the software the app includes).
+func (a *App) License(which string) (string, error) {
+	switch which {
+	case "notice":
+		return legal.Notice, nil
+	case "full":
+		return legal.License, nil
+	case "third-party":
+		return legal.ThirdParty, nil
+	}
+	return "", fmt.Errorf("unknown license text %q", which)
+}
 
 // OpenURL opens a web or mail link in the system browser, never in the
 // window. Other schemes are refused.

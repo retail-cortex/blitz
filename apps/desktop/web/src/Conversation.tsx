@@ -57,7 +57,7 @@ import type { SessionInfo } from "./gen/blitz/v1/session_pb";
 import { Decision, type ApprovalRequest, type Question, type Task, type Usage } from "./gen/blitz/v1/turn_pb";
 import type { GetSettingsResponse } from "./gen/blitz/v1/workspace_pb";
 import { allCommands, helpText, matchCommands, parseCommand, type CommandSpec } from "./commands";
-import { composeEvent, filesTouched, loadSessionEvent, type ComposeDetail, type LoadSessionDetail } from "./events";
+import { composeEvent, filesTouched, loadSessionEvent, showLicense, type ComposeDetail, type LoadSessionDetail } from "./events";
 import { describeImage, imageFiles, readyIds, rejectReason, uploading, type Attachment } from "./attachments";
 import { Markdown } from "./Markdown";
 import { language, t, tn, useLanguage } from "./i18n";
@@ -569,6 +569,12 @@ export function Conversation({
         case "new":
           await newSession();
           return true;
+        case "license": {
+          const which = c.args === "full" || c.args === "third-party" ? c.args : c.args ? null : "notice";
+          if (!which) return usage(), true;
+          showLicense({ which });
+          return true;
+        }
         case "help":
           say(helpText(commands), "info", true);
           return true;

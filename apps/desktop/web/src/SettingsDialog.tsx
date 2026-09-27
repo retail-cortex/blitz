@@ -26,12 +26,14 @@ import {
   mdiMonitor,
   mdiPaletteOutline,
   mdiPencilOutline,
+  mdiScaleBalance,
   mdiServerNetwork,
   mdiAlertCircleOutline,
   mdiWeatherNight,
   mdiWhiteBalanceSunny,
 } from "@mdi/js";
 import { appVersion, installService, restartService, serviceStatus, stopService, type ServiceStatus } from "./desktop";
+import { showLicense } from "./events";
 import { checkService, type ServiceCheck } from "./serviceVersion";
 import { languages, t } from "./i18n";
 import { workspaceColor } from "./palette";
@@ -270,7 +272,15 @@ function About() {
       <span className="t-title-lg">{t("desktop.brand")}</span>
       <span className="muted">{t("desktop.about.version", { version })}</span>
       <p className="muted">{t("desktop.about.body", { file: "~/.blitz/desktop.json" })}</p>
-      <p className="t-body-sm muted">{t("desktop.about.license")}</p>
+      <div className="row wrap">
+        <span className="t-body-sm muted">{t("desktop.about.license")}</span>
+        <Button small icon={mdiScaleBalance} onClick={() => showLicense({ which: "notice" })}>
+          {t("desktop.license.show")}
+        </Button>
+        <Button small onClick={() => showLicense({ which: "third-party" })}>
+          {t("desktop.license.third_party")}
+        </Button>
+      </div>
     </div>
   );
 }

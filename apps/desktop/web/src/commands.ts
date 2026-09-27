@@ -44,6 +44,7 @@ const builtinArgs: Record<string, string | undefined> = {
   session: "save <name> [--force]",
   rename: "<title>",
   new: undefined,
+  license: "[full|third-party]",
   help: undefined,
 };
 

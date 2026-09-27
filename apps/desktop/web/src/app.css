@@ -408,3 +408,6 @@ code.file-link:hover { text-decoration-color: currentColor; }
 /* The chat as a side panel: a smaller greeting (center stage keeps the full one). */
 .chat-panel:not(.center) .empty .t-display { font-size: 30px; line-height: 38px; }
 .chat-panel:not(.center) .chat-column { padding: 0 20px; }
+
+/* The license texts: monospace, wrapped, scrolling inside the dialog. */
+.license-text { max-height: 60vh; overflow: auto; margin: 0; padding: 16px; border-radius: var(--md-shape-md); background: var(--md-surface-container-low); font-size: 12px; line-height: 18px; white-space: pre-wrap; overflow-wrap: anywhere; }

@@ -43,6 +43,7 @@ type Bound = {
   OpenURL(url: string): Promise<void>;
   Notify(title: string, body: string, dir: string): Promise<void>;
   SetUnsaved(u: { message: string; quit: string; cancel: string }): Promise<void>;
+  License(which: string): Promise<string>;
 };
 
 function bound(): Bound | undefined {
@@ -135,6 +136,15 @@ export async function notifyNative(title: string, body: string, dir: string): Pr
  */
 export function setUnsaved(message: string, quit: string, cancel: string) {
   if (inApp()) app().SetUnsaved({ message, quit, cancel }).catch(() => {});
+}
+
+/** Which license text: the NOTICE, the Apache License, or the third-party notices. */
+export type LicenseText = "notice" | "full" | "third-party";
+
+/** One of Blitz's license texts, embedded in the app (in a browser, a note that only the app has them). */
+export async function licenseText(which: LicenseText): Promise<string> {
+  if (!inApp()) return t("desktop.license.dev");
+  return app().License(which);
 }
 
 type WailsRuntime = { EventsOn(name: string, f: (...args: unknown[]) => void): () => void };

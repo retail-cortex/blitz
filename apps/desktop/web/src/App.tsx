@@ -17,13 +17,15 @@
 import { useCallback, useEffect, useState } from "react";
 import { mdiAlertOutline, mdiCogOutline, mdiFolderOpenOutline, mdiLightningBolt, mdiServerOff } from "@mdi/js";
 import { onServiceLost, workspaces as workspaceAPI } from "./api";
-import { appVersion, chooseWorkspace, installService, onNotificationOpen, restartService, serviceStatus, type ServiceStatus } from "./desktop";
+import { appVersion, chooseWorkspace, type LicenseText, installService, onNotificationOpen, restartService, serviceStatus, type ServiceStatus } from "./desktop";
 import { checkService, type ServiceCheck } from "./serviceVersion";
 import { CommandPalette } from "./CommandPalette";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { t, useLanguage } from "./i18n";
 import { message, reason } from "./errors";
+import { showLicenseEvent } from "./events";
 import { UnsavedDialog } from "./files/EditorPane";
+import { LicenseDialog } from "./LicenseDialog";
 import { Brand, WorkspaceSwitcher } from "./WorkspaceSwitcher";
 import { unsavedIn } from "./files/unsaved";
 import { closeWorkspace, displayName, openWorkspace, openWorkspaces, recentWorkspaces } from "./prefs";
@@ -211,6 +213,13 @@ function Shell() {
   // Unsaved files are discarded, and a turn running here stopped, only
   // once the user agrees.
   const [unsavedClose, setUnsavedClose] = useState<string | null>(null);
+  // The license dialog, from Settings › About or /license.
+  const [license, setLicense] = useState<LicenseText | null>(null);
+  useEffect(() => {
+    const f = (e: Event) => setLicense((e as CustomEvent<{ which: LicenseText }>).detail.which);
+    window.addEventListener(showLicenseEvent, f);
+    return () => window.removeEventListener(showLicenseEvent, f);
+  }, []);
   const close = useCallback(
     (dir: string, unsavedOK = false) => (!unsavedOK && unsavedIn(dir) ? setUnsavedClose(dir) : activity[dir]?.running ? setConfirmClose(dir) : doClose(dir)),
     [activity, doClose],
@@ -258,6 +267,7 @@ function Shell() {
         />
       )}
       {settingsOpen && <SettingsDialog onClose={() => setSettingsOpen(false)} />}
+      {license && <LicenseDialog initial={license} onClose={() => setLicense(null)} />}
       {paletteOpen && <CommandPalette onClose={() => setPaletteOpen(false)} onOpenWorkspace={open} onSettings={() => setSettingsOpen(true)} />}
       {confirmClose && (
         <Dialog
