@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -36,6 +37,24 @@ func TestPrefsDefaultsAndRoundTrip(t *testing.T) {
 	got, err := s.load()
 	if err != nil || got.Theme != "dark" || len(got.Workspaces) != 2 || got.Workspaces[1].Description != "old" || got.Workspaces[1].Open {
 		t.Fatalf("loaded %+v %v", got, err)
+	}
+}
+
+// The page reads workspaces as a list: with none it must be [], not null
+// (a first start crashed the page when the service came up).
+func TestPrefsSendAnEmptyListNotNull(t *testing.T) {
+	s := &prefsStore{path: filepath.Join(t.TempDir(), "desktop.json")}
+	p, err := s.load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, _ := json.Marshal(p)
+	if !strings.Contains(string(data), `"workspaces":[]`) {
+		t.Fatalf("defaults encode as %s", data)
+	}
+	saved, _ := s.save(Prefs{})
+	if data, _ := json.Marshal(saved); !strings.Contains(string(data), `"workspaces":[]`) {
+		t.Fatalf("saved encode as %s", data)
 	}
 }
 

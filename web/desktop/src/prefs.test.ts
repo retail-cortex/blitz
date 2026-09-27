@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { baseName, closeWorkspace, defaultPrefs, displayName, editWorkspace, forgetWorkspace, moveWorkspace, openWorkspace, type Prefs } from "./prefs";
+import { normalizePrefs, baseName, closeWorkspace, defaultPrefs, displayName, editWorkspace, forgetWorkspace, moveWorkspace, openWorkspace, type Prefs } from "./prefs";
 import { resolveTheme } from "./theme";
 import { workspaceColor } from "./palette";
 
@@ -60,5 +60,30 @@ describe("theme", () => {
   it("gives each workspace colour a shade per theme", () => {
     expect(workspaceColor("teal", "light")).not.toBe(workspaceColor("teal", "dark"));
     expect(workspaceColor("nonsense", "light")).toBe(workspaceColor("blue", "light"));
+  });
+});
+
+describe("normalizePrefs", () => {
+  it("makes whatever was loaded usable", () => {
+    // What Go sends with no workspaces yet, and a damaged or older shape.
+    expect(normalizePrefs({ theme: "dark", workspaces: null }).workspaces).toEqual([]);
+    expect(normalizePrefs(null)).toEqual({ ...defaultPrefs, active: undefined });
+    const p = normalizePrefs({
+      theme: "sepia",
+      density: 3,
+      drawer: "rail",
+      run_settings: "yes",
+      workspaces: [{ dir: "/a", open: true, name: 7 }, { dir: "" }, "nonsense", { dir: "/b", color: "teal" }],
+      active: "/b",
+    });
+    expect(p.theme).toBe("system");
+    expect(p.density).toBe("comfortable");
+    expect(p.drawer).toBe("rail");
+    expect(p.run_settings).toBe(false);
+    expect(p.workspaces).toEqual([
+      { dir: "/a", open: true, name: undefined, description: undefined, color: undefined },
+      { dir: "/b", open: false, name: undefined, description: undefined, color: "teal" },
+    ]);
+    expect(p.active).toBe("/a"); // /b is closed
   });
 });

@@ -269,3 +269,4 @@
   .topbar-title .t-body-sm { display: none; }
   .chat-column { padding: 0 16px; }
 }
+.crash-details { max-width: 560px; max-height: 200px; text-align: left; }

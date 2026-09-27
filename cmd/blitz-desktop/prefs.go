@@ -76,7 +76,8 @@ func (p *Prefs) normalize() {
 			closed = append(closed, w)
 		}
 	}
-	p.Workspaces = append(open, closed...)
+	// Never nil: the page reads a list (JSON null would break it).
+	p.Workspaces = append(append([]WorkspacePrefs{}, open...), closed...)
 	if !slices.ContainsFunc(open, func(w WorkspacePrefs) bool { return w.Dir == p.Active }) {
 		p.Active = ""
 	}

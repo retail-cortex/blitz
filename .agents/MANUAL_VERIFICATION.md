@@ -362,6 +362,7 @@ Set `fallback_models = ["anthropic/claude-sonnet-5"]` with a working Anthropic k
 - [ ] 💲 While a turn runs, type a message and press Steer. **Expected:** "Queued for the agent", and the agent takes it into account at its next tool call; Stop ends the turn with "Interrupted."
 - [ ] 💲 An `ask_user_question`. **Expected:** the question with its options; the answer reaches the agent.
 - [ ] Two workspace tabs, a turn in each at once. **Expected:** both stream independently; switching between them doesn't interrupt either, and the drawer shows a pulsing dot on each (a red `!` when one waits for an approval).
+- [ ] First start: `blitz service uninstall`, move `~/.blitz/desktop.json` aside, open the app, click "Install and start the service". **Expected:** within a few seconds the welcome page ("Open a workspace") replaces the install screen.
 - [ ] The window on macOS: the title bar area is the page's (drag it by the top bar or the drawer's top; the window buttons don't overlap the menu button, also in the rail).
 - [ ] Settings › Appearance: System, Light, Dark. **Expected:** System follows System Settings › Appearance while the app is open; the choice survives a restart. Compact density tightens the lists and chat.
 - [ ] Edit a workspace's name, description and colour (drawer pencil, title, Settings › Workspaces). **Expected:** the drawer, title bar and welcome cards change; after a restart the same workspaces are open, in order, with the same one shown.

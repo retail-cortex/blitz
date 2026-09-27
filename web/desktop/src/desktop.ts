@@ -4,7 +4,7 @@
 // window.go at run time. In a plain browser (development) they fall back
 // to stand-ins: settings in localStorage, links in a new tab.
 import { workspaces } from "./api";
-import { defaultPrefs, type Prefs } from "./prefs";
+import { defaultPrefs, normalizePrefs, type Prefs } from "./prefs";
 
 export interface ServiceStatus {
   running: boolean;
@@ -58,12 +58,12 @@ export async function chooseWorkspace(): Promise<string> {
 export async function getPrefs(): Promise<Prefs> {
   if (!inApp()) {
     try {
-      return { ...defaultPrefs, ...JSON.parse(localStorage.getItem(devPrefsKey) ?? "{}") };
+      return normalizePrefs(JSON.parse(localStorage.getItem(devPrefsKey) ?? "{}"));
     } catch {
       return defaultPrefs;
     }
   }
-  return { ...defaultPrefs, ...(await app().GetPrefs()) };
+  return normalizePrefs(await app().GetPrefs());
 }
 
 export async function savePrefs(p: Prefs): Promise<Prefs> {
@@ -75,7 +75,7 @@ export async function savePrefs(p: Prefs): Promise<Prefs> {
     }
     return p;
   }
-  return { ...defaultPrefs, ...(await app().SavePrefs(p)) };
+  return normalizePrefs(await app().SavePrefs(p));
 }
 
 /** Opens a link from model output in the system browser (never the window). */

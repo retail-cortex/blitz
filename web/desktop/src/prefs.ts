@@ -30,6 +30,36 @@ export const defaultPrefs: Prefs = {
   density: "comfortable",
 };
 
+const pick = <T extends string>(v: unknown, allowed: readonly T[], fallback: T): T => (allowed.includes(v as T) ? (v as T) : fallback);
+
+/**
+ * Makes preferences from whatever was loaded (the Go side, localStorage,
+ * or an older file): every field of the right type, else its default.
+ */
+export function normalizePrefs(raw: unknown): Prefs {
+  const r = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+  const list = Array.isArray(r.workspaces) ? r.workspaces : [];
+  const workspaces: WorkspacePrefs[] = list
+    .filter((w): w is Record<string, unknown> => !!w && typeof w === "object" && typeof (w as { dir?: unknown }).dir === "string" && (w as { dir: string }).dir !== "")
+    .map((w) => ({
+      dir: w.dir as string,
+      name: typeof w.name === "string" ? w.name : undefined,
+      description: typeof w.description === "string" ? w.description : undefined,
+      color: typeof w.color === "string" ? w.color : undefined,
+      open: w.open === true,
+    }));
+  const active = typeof r.active === "string" && workspaces.some((w) => w.open && w.dir === r.active) ? r.active : workspaces.find((w) => w.open)?.dir;
+  return {
+    theme: pick(r.theme, ["system", "light", "dark"] as const, "system"),
+    workspaces,
+    active,
+    drawer: pick(r.drawer, ["open", "rail"] as const, "open"),
+    run_settings: r.run_settings === true,
+    show_thoughts: r.show_thoughts === true,
+    density: pick(r.density, ["comfortable", "compact"] as const, "comfortable"),
+  };
+}
+
 /** The last element of a directory path. */
 export function baseName(dir: string): string {
   const parts = dir.replace(/[/\\]+$/, "").split(/[/\\]/);

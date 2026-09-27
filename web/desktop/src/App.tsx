@@ -3,6 +3,7 @@ import { mdiAlertOutline, mdiFolderOpenOutline, mdiLightningBolt, mdiServerOff }
 import { onServiceLost, workspaces as workspaceAPI } from "./api";
 import { chooseWorkspace, installService, serviceStatus, type ServiceStatus } from "./desktop";
 import { Drawer } from "./Drawer";
+import { ErrorBoundary } from "./ErrorBoundary";
 import { message, reason } from "./errors";
 import { closeWorkspace, displayName, openWorkspace, openWorkspaces, recentWorkspaces } from "./prefs";
 import { SettingsDialog } from "./SettingsDialog";
@@ -13,11 +14,13 @@ import { WorkspaceDialog } from "./WorkspaceDialog";
 
 export function App() {
   return (
-    <AppStateProvider>
-      <SnackbarProvider>
-        <Shell />
-      </SnackbarProvider>
-    </AppStateProvider>
+    <ErrorBoundary>
+      <AppStateProvider>
+        <SnackbarProvider>
+          <Shell />
+        </SnackbarProvider>
+      </AppStateProvider>
+    </ErrorBoundary>
   );
 }
 
