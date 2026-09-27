@@ -8,14 +8,12 @@ on:
   pull_request:
     paths-ignore: ["**.md", ".agents/**", "docs/**", "LICENSE", "NOTICE"]
 
-# Use exactly the Go version setup-go installs from go.mod; never download another.
-env:
-  GOTOOLCHAIN: local
-
 permissions:
   contents: read
 
 jobs:
+  # Everything goes through Bazel (the runners ship Bazelisk; .bazelversion
+  # picks Bazel): Go, the page, the protos, the tools.
   test:
     strategy:
       fail-fast: false
@@ -26,18 +24,18 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0 # buf breaking compares with the previous commit
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+      - uses: bazel-contrib/setup-bazel@c5acdfb288317d0b5c0bbd7a396a3dc868bb0f86 # 0.19.0
         with:
-          go-version-file: go.mod
-          cache-dependency-path: |
-            go.sum
-            tools/go.sum
-      # Linux runs the real bubblewrap sandbox tests.
-      - name: Install bubblewrap
+          bazelisk-cache: true
+          disk-cache: ${{ github.workflow }}-${{ matrix.os }}
+          repository-cache: true
+      # Linux runs the real bubblewrap sandbox tests, and builds the
+      # desktop app against the system's GTK and WebKitGTK.
+      - name: Linux packages
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y bubblewrap
+          sudo apt-get install -y bubblewrap pkg-config libgtk-3-dev libwebkit2gtk-4.1-dev
           # Ubuntu 24.04 restricts unprivileged user namespaces via AppArmor.
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
       # gVisor runs skill scripts on Linux; pinned release and checksum.
@@ -52,78 +50,58 @@ jobs:
           echo "${GVISOR_SHA512}  gvisor.tar.bz2" | sha512sum -c -
           mkdir -p gvisor && tar -xjf gvisor.tar.bz2 -C gvisor
           echo "RUNSC_PATH=$RUNNER_TEMP/gvisor/runsc" >> "$GITHUB_ENV"
-      # Fails when gofmt lists a file. (`… | (! read)` fails under macOS's
-      # bash 3.2 with -e even when nothing is listed.)
-      - run: test -z "$(gofmt -l apps pkg proto | tee /dev/stderr)"
-      - run: go vet ./...
-      - run: make lint
+      # gofmt, and BUILD files as Gazelle writes them. (vet and staticcheck
+      # run in every compile: nogo.)
+      - run: bazel/check_format.sh
+      # Every test, the Go ones with the race detector: Go, the page's
+      # vitest and type check, the proto lint.
+      - run: bazel test --config=race //...
+      - name: Sandbox enforcement must not be skipped
+        run: |
+          bazel test //pkg/engine/tools:tools_test --nocache_test_results --test_output=all \
+            --test_arg=-test.v --test_arg=-test.run=TestOSSandboxEnforcement | tee out.txt
+          if grep -q -- '--- SKIP' out.txt; then exit 1; fi
+      - name: gVisor script sandbox must not be skipped
+        if: runner.os == 'Linux'
+        run: |
+          bazel test //pkg/engine/tools:tools_test --nocache_test_results --test_output=all \
+            --test_arg=-test.v --test_arg=-test.run=TestGVisor | tee gv.txt
+          if grep -q -- '--- SKIP' gv.txt; then exit 1; fi
+      # Apps depend on pkg/ only; front ends never on the engine.
+      - run: bazel run //bazel:check_deps
       # Fails only on a vulnerability the code can reach.
-      - run: make vulncheck
-      # protoc-gen-es (the desktop app's TypeScript) runs on Node.
-      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
-        if: runner.os == 'Linux'
-        with:
-          package_json_file: apps/desktop/web/package.json
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        if: runner.os == 'Linux'
-        with:
-          node-version: 22
-          cache: pnpm
-          cache-dependency-path: apps/desktop/web/pnpm-lock.yaml
-      # The API protos: lint, formatting, generated code current, and no
-      # breaking change against the previous commit (once it had protos).
+      - name: govulncheck
+        run: |
+          bazel build //apps/cli:blitz //apps/service:blitzd
+          for t in //apps/cli:blitz //apps/service:blitzd; do
+            bazel run @org_golang_x_vuln//cmd/govulncheck -- -mode=binary "$PWD/$(bazel cquery --output=files "$t")"
+          done
+      # The API protos: formatting, and no breaking change against the
+      # previous commit, unless its message declares "Breaking-API: <why>".
       - name: Protos
         if: runner.os == 'Linux'
         env:
           BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
         run: |
-          make proto-check
-          # A deliberate break says so in its commit message, with a line
-          # "Breaking-API: <why>". Otherwise compare with the base, when it
-          # has the same proto package (the rename to blitz.v1 had none).
+          bazel run //bazel:buf -- format --exit-code -d
           if git log -1 --format=%B "$GITHUB_SHA" | grep -q '^Breaking-API:'; then
             echo "::notice::API break declared: $(git log -1 --format=%B "$GITHUB_SHA" | grep '^Breaking-API:')"
           elif git cat-file -e "$BASE:proto/blitz/v1" 2>/dev/null || git cat-file -e "$BASE:api/blitz/v1" 2>/dev/null; then
-            go tool -modfile=tools/go.mod buf breaking --against ".git#ref=$BASE"
+            bazel run //bazel:buf -- breaking --against ".git#ref=$BASE"
           fi
-      - run: go test -race ./...
-      - name: Sandbox enforcement must not be skipped
-        run: go test -count=1 -v -run TestOSSandboxEnforcement ./pkg/engine/tools/ | tee out.txt && ! grep -q -- '--- SKIP' out.txt
-      - name: gVisor script sandbox must not be skipped
-        if: runner.os == 'Linux'
-        run: go test -count=1 -v -run 'TestGVisor' ./pkg/engine/tools/ | tee gv.txt && ! grep -q -- '--- SKIP' gv.txt
-      - run: make cross-compile
-      # The reproducible job compares these across runners.
-      - run: (cd bin && shasum -a 256 blitz-*) > sums-${{ runner.os }}.txt
+      # The release archives, which the reproducible job compares.
+      - run: bazel build //release:archives
+      - run: |
+          for f in $(bazel cquery --output=files //release:archives); do
+            shasum -a 256 "$f" | awk -v n="$(basename "$f")" '{print $1, n}'
+          done > sums-${{ runner.os }}.txt
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: sums-${{ runner.os }}
           path: sums-${{ runner.os }}.txt
 
-  # The desktop app: its page, its Go side, and a build (cgo, WebKit).
-  desktop:
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version-file: go.mod
-          cache-dependency-path: |
-            go.sum
-            tools/go.sum
-      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
-        with:
-          package_json_file: apps/desktop/web/package.json
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: 22
-          cache: pnpm
-          cache-dependency-path: apps/desktop/web/pnpm-lock.yaml
-      - run: make desktop-check
-      - run: make desktop
-
-  # Every target, cross-compiled on Linux and on macOS, must come out
-  # byte-for-byte identical: the build may not depend on the host.
+  # The release archives, built on Linux and on macOS, must come out byte
+  # for byte identical: the build may not depend on the machine.
   reproducible:
     needs: test
     runs-on: ubuntu-latest

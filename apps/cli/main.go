@@ -25,7 +25,8 @@ import (
 	"github.com/spf13/pflag"
 )
 
-var version = "2.0.0-go"
+// version is set when a release is built (the git tag).
+var version = "dev"
 
 // rootOptions are the flags of the main (prompt/REPL) command.
 type rootOptions struct {
@@ -88,7 +89,7 @@ Exit codes: 0 success, 1 error, 2 usage, 3 --max-turns reached,
 		},
 	}
 	root.SetFlagErrorFunc(func(c *cobra.Command, err error) error {
-		//lint:ignore ST1005 shown to the user as is, after the flag error
+		//nolint:ST1005 // shown to the user as is, after the flag error
 		return withCode(exitUsage, fmt.Errorf("%w\nRun '%s --help' for usage.", err, c.CommandPath()))
 	})
 

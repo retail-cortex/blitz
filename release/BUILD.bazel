@@ -1,0 +1,78 @@
+load("@rules_pkg//pkg:mappings.bzl", "pkg_attributes", "pkg_files", "pkg_mklink")
+load("@rules_pkg//pkg:tar.bzl", "pkg_tar")
+load("@rules_pkg//pkg:zip.bzl", "pkg_zip")
+
+# The release archives: blitz and blitzd (which `blitz service install`
+# expects beside it) for each platform, with blz (a link to blitz) where
+# links exist, and the README, license and notice. Built on any machine
+# (pure Go); the release workflow adds the version to the file names,
+# checksums them and signs the checksums. The desktop app's packages are
+# //apps/desktop/packaging's.
+
+_PLATFORMS = [
+    ("darwin", "amd64"),
+    ("darwin", "arm64"),
+    ("linux", "amd64"),
+    ("linux", "arm64"),
+    ("windows", "amd64"),
+]
+
+pkg_files(
+    name = "docs",
+    srcs = [
+        "//:LICENSE",
+        "//:NOTICE",
+        "//:README.md",
+    ],
+)
+
+pkg_mklink(
+    name = "blz",
+    link_name = "blz",
+    target = "blitz",
+)
+
+[
+    pkg_files(
+        name = "programs_%s_%s" % (goos, goarch),
+        srcs = [
+            "//apps/cli:blitz_%s_%s" % (goos, goarch),
+            "//apps/service:blitzd_%s_%s" % (goos, goarch),
+        ],
+        attributes = pkg_attributes(mode = "0755"),
+        renames = {
+            "//apps/cli:blitz_%s_%s" % (goos, goarch): "blitz" + (".exe" if goos == "windows" else ""),
+            "//apps/service:blitzd_%s_%s" % (goos, goarch): "blitzd" + (".exe" if goos == "windows" else ""),
+        },
+    )
+    for goos, goarch in _PLATFORMS
+]
+
+[
+    pkg_tar(
+        name = "blitz_%s_%s" % (goos, goarch),
+        srcs = [
+            ":blz",
+            ":docs",
+            ":programs_%s_%s" % (goos, goarch),
+        ],
+        extension = "tar.gz",
+        package_dir = "blitz_%s_%s" % (goos, goarch),
+    )
+    for goos, goarch in _PLATFORMS
+    if goos != "windows"
+]
+
+pkg_zip(
+    name = "blitz_windows_amd64",
+    srcs = [
+        ":docs",
+        ":programs_windows_amd64",
+    ],
+    package_dir = "blitz_windows_amd64",
+)
+
+filegroup(
+    name = "archives",
+    srcs = [":blitz_%s_%s" % (goos, goarch) for goos, goarch in _PLATFORMS],
+)

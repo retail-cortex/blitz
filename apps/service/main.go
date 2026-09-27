@@ -16,8 +16,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// version is set at build time.
-var version = "2.0.0-go"
+// version is set when a release is built (the git tag).
+var version = "dev"
 
 // Exit codes, as the CLI's: 1 for a failure, 2 for a usage error (such as
 // a service already running on the socket).

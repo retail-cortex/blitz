@@ -37,7 +37,6 @@ _inputs = [
     ":srcs",
     ":api_ts",
     ":node_modules",
-    "//apps/desktop:wails_json",
     "//pkg/i18n:locales",
 ]
 

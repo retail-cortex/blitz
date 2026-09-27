@@ -15,3 +15,17 @@ load("@gazelle//:def.bzl", "gazelle")
 # `bazel run //:gazelle` writes the Go rules; run it after adding a package
 # or an import.
 gazelle(name = "gazelle")
+
+# In every release archive.
+exports_files(
+    [
+        "LICENSE",
+        "NOTICE",
+        "README.md",
+        "buf.yaml",
+    ],
+    visibility = [
+        "//proto/blitz/v1:__pkg__",
+        "//release:__pkg__",
+    ],
+)

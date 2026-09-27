@@ -16,6 +16,8 @@ go_binary(
     name = "blitzd",
     embed = [":service_lib"],
     visibility = ["//visibility:public"],
+    # The release version (--config=release), else the default in main.go.
+    x_defs = {"main.version": "{STABLE_BLITZ_VERSION}"},
 )
 
 go_test(
@@ -23,3 +25,26 @@ go_test(
     srcs = ["main_test.go"],
     embed = [":service_lib"],
 )
+
+# blitzd for each released platform (//release), pure Go.
+[
+    go_binary(
+        name = "blitzd_" + goos + "_" + goarch,
+        embed = [":service_lib"],
+        goarch = goarch,
+        goos = goos,
+        pure = "on",
+        visibility = [
+            "//apps/desktop/packaging:__pkg__",
+            "//release:__pkg__",
+        ],
+        x_defs = {"main.version": "{STABLE_BLITZ_VERSION}"},
+    )
+    for goos, goarch in [
+        ("darwin", "amd64"),
+        ("darwin", "arm64"),
+        ("linux", "amd64"),
+        ("linux", "arm64"),
+        ("windows", "amd64"),
+    ]
+]

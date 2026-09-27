@@ -19,6 +19,9 @@ import (
 //go:embed all:dist
 var dist embed.FS
 
+// version is set when a release is built (the git tag).
+var version = "dev"
+
 func main() {
 	app := &App{socket: socket.DefaultSocket(), prefs: &prefsStore{path: config.ExpandHome("~/.blitz/desktop.json")}}
 	err := wails.Run(&options.App{

@@ -20,5 +20,20 @@ test --test_env=RUNSC_PATH
 # Aspect's rulesets report usage unless told not to.
 common --repo_env=ASPECT_TOOLS_TELEMETRY=off
 
+# The Go tests with the race detector (CI runs them this way). Only tests:
+# the release binaries are pure Go, which -race can't build.
+test:race --@rules_go//go/config:race
+test:race --build_tests_only
+
+# Output directories are named after the target platform, not the host's
+# CPU: generated Go files' paths end up in the binaries, and the release
+# binaries must come out byte for byte the same on every machine.
+common --experimental_platform_in_output_dir
+
+# Releases are stamped with the version from git (bazel/workspace_status.sh);
+# other builds aren't, so they stay cacheable.
+common --workspace_status_command=bazel/workspace_status.sh
+common:release --stamp
+
 # Personal settings (a disk cache, say) go in user.bazelrc, not committed.
 try-import %workspace%/user.bazelrc

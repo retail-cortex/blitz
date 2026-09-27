@@ -1,4 +1,6 @@
-# Protos for Blitz's service API. `make proto` lints and generates.
+# Protos for Blitz's service API. Bazel lints them (//proto/blitz/v1:blitzv1_proto_lint)
+# and generates their code; CI checks formatting and breaking changes
+# with `bazel run //bazel:buf`.
 version: v2
 modules:
   - path: proto

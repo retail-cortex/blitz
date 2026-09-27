@@ -4,25 +4,24 @@ on:
   push:
     tags: ["v*"]
 
-# Use exactly the Go version setup-go installs from go.mod; never download another.
-env:
-  GOTOOLCHAIN: local
-
 permissions:
   contents: write # create the GitHub release
   id-token: write # keyless cosign signing
 
 jobs:
+  # The CLI archives (blitz and blitzd for five platforms, pure Go, built on
+  # one machine by Bazel, stamped with the tag), their SBOMs, a signed
+  # checksum file, and the draft release that the desktop jobs add to.
   release:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          fetch-depth: 0
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+          fetch-depth: 0 # the version comes from git describe
+      - uses: bazel-contrib/setup-bazel@c5acdfb288317d0b5c0bbd7a396a3dc868bb0f86 # 0.19.0
         with:
-          go-version-file: go.mod
-          cache-dependency-path: go.sum
+          bazelisk-cache: true
+          repository-cache: true
       # Release tools are pinned to exact versions, so a rebuild of a tag
       # uses the same tools as the original release.
       - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
@@ -31,19 +30,31 @@ jobs:
       - uses: anchore/sbom-action/download-syft@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2
         with:
           syft-version: v1.52.0
-      - uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7.2.3
-        with:
-          distribution: goreleaser
-          version: v2.18.2
-          args: release --clean
+      - run: bazel build --config=release //release:archives
+      - name: Archives, SBOMs and checksums
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          mkdir dist
+          for f in $(bazel cquery --config=release --output=files //release:archives); do
+            name="$(basename "$f")"        # blitz_linux_amd64.tar.gz
+            out="dist/blitz_${version}_${name#blitz_}"
+            cp "$f" "$out"
+            syft scan "file:$out" -o "spdx-json=$out.sbom.json"
+          done
+          (cd dist && sha256sum blitz_* > checksums.txt)
+          cosign sign-blob --yes --bundle dist/checksums.txt.sigstore.json dist/checksums.txt
+      - name: Draft release
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" --draft --verify-tag --generate-notes \
+            --notes-file .github/release-footer.md dist/*
 
-  # The desktop app (spec_release_025 §4): a universal macOS disk image
-  # and Linux .debs, attached to the draft release, each signed keylessly
-  # with its own cosign bundle. The macOS app is signed with a Developer
-  # ID and notarised when the signing secrets are set, else signed ad
-  # hoc with a warning.
+  # The desktop app: a universal macOS disk image and Linux .debs, attached
+  # to the draft release, each signed keylessly with its own cosign bundle.
+  # Bazel builds the app and the packages; on macOS sign_macos.sh signs it
+  # with a Developer ID and notarises it when the signing secrets are set
+  # (spec_release_025 REL-22), else signs it ad hoc with a warning.
   desktop:
     needs: release
     strategy:
@@ -55,26 +66,18 @@ jobs:
       SIGNING: ${{ secrets.MACOS_CERTIFICATE != '' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version-file: go.mod
-          cache-dependency-path: |
-            go.sum
-            tools/go.sum
-      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+          fetch-depth: 0 # the version comes from git describe
+      - uses: bazel-contrib/setup-bazel@c5acdfb288317d0b5c0bbd7a396a3dc868bb0f86 # 0.19.0
         with:
-          package_json_file: apps/desktop/web/package.json
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: 22
-          cache: pnpm
-          cache-dependency-path: apps/desktop/web/pnpm-lock.yaml
+          bazelisk-cache: true
+          repository-cache: true
       - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
         with:
           cosign-release: v2.6.1
       - name: Linux build dependencies
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libgtk-3-dev libwebkit2gtk-4.1-dev
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends pkg-config libgtk-3-dev libwebkit2gtk-4.1-dev
       # A throwaway keychain holding the Developer ID certificate, and the
       # App Store Connect API key for notarytool.
       - name: Signing keychain
@@ -99,26 +102,43 @@ jobs:
       - name: Unsigned
         if: runner.os == 'macOS' && env.SIGNING != 'true'
         run: echo "::warning::MACOS_CERTIFICATE isn't set; the macOS app is signed ad hoc and not notarised"
-      - name: Package
+      - name: macOS disk image
+        if: runner.os == 'macOS'
         env:
           DESKTOP_SIGN_IDENTITY: ${{ env.SIGNING == 'true' && secrets.DESKTOP_SIGN_IDENTITY || '' }}
           NOTARY_KEY_ID: ${{ secrets.NOTARY_KEY_ID }}
           NOTARY_ISSUER: ${{ secrets.NOTARY_ISSUER }}
-        run: apps/desktop/packaging/package.sh "$GITHUB_REF_NAME"
-      # The package installs on a clean system: its dependencies resolve and
-      # the app's libraries are all found.
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          bazel build --config=release //apps/desktop/packaging:Blitz.app
+          mkdir dist
+          apps/desktop/packaging/sign_macos.sh \
+            "$(bazel cquery --config=release --output=files //apps/desktop/packaging:Blitz.app)" \
+            "$version" "dist/Blitz_${version}_macos_universal.dmg"
+      - name: Linux package
+        if: runner.os == 'Linux'
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          bazel build --config=release //apps/desktop/packaging:deb
+          mkdir dist
+          deb="$(bazel cquery --config=release --output=files //apps/desktop/packaging:deb | grep '\.deb$' | head -1)"
+          cp "$deb" "dist/blitz-desktop_${version}_$(dpkg --print-architecture).deb"
+      # The package installs on a clean system: its dependencies resolve,
+      # the app's libraries are all found, and the programs run.
       - name: Smoke test
         if: runner.os == 'Linux'
         run: |
-          sudo apt-get install -y ./apps/desktop/packaging/dist/blitz-desktop_*.deb
-          if ldd /usr/lib/blitz-desktop/blitz-desktop | grep 'not found'; then exit 1; fi
+          sudo apt-get install -y ./dist/blitz-desktop_*.deb
+          ldd /usr/lib/blitz-desktop/blitz-desktop > ldd.txt
+          if grep 'not found' ldd.txt; then exit 1; fi
           /usr/lib/blitz-desktop/blitz --version
+          /usr/lib/blitz-desktop/blitzd --version
           test "$(readlink -f /usr/bin/blitz-desktop)" = /usr/lib/blitz-desktop/blitz-desktop
       - name: Sign and attach
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          cd apps/desktop/packaging/dist
+          cd dist
           for f in *.dmg *.deb; do
             [ -e "$f" ] || continue
             cosign sign-blob --yes --bundle "$f.sigstore.json" "$f"

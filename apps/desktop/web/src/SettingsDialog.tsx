@@ -13,7 +13,7 @@ import {
   mdiWeatherNight,
   mdiWhiteBalanceSunny,
 } from "@mdi/js";
-import { installService, serviceStatus, type ServiceStatus } from "./desktop";
+import { appVersion, installService, serviceStatus, type ServiceStatus } from "./desktop";
 import { languages, t } from "./i18n";
 import { workspaceColor } from "./palette";
 import { displayName, forgetWorkspace } from "./prefs";
@@ -209,10 +209,14 @@ function Service() {
 }
 
 function About() {
+  const [version, setVersion] = useState("");
+  useEffect(() => {
+    appVersion().then(setVersion, () => setVersion("?"));
+  }, []);
   return (
     <div className="stack">
       <span className="t-title-lg">{t("desktop.brand")}</span>
-      <span className="muted">{t("desktop.about.version", { version: __APP_VERSION__ })}</span>
+      <span className="muted">{t("desktop.about.version", { version })}</span>
       <p className="muted">{t("desktop.about.body", { file: "~/.blitz/desktop.json" })}</p>
       <p className="t-body-sm muted">{t("desktop.about.license")}</p>
     </div>

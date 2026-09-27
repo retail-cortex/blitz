@@ -2,10 +2,10 @@ syntax = "proto3";
 
 package blitz.v1;
 
-option go_package = "github.com/retail-cortex/blitz/proto/blitz/v1;blitzv1";
-
 import "google/protobuf/duration.proto";
 import "google/protobuf/struct.proto";
+
+option go_package = "github.com/retail-cortex/blitz/proto/blitz/v1;blitzv1";
 
 // A turn: one prompt to the agent and everything that happens until it
 // answers. Mirrors pkg/api's Turn, Event and TurnResult.

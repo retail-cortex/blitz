@@ -4,7 +4,7 @@
 # Editor swap files
 *.swp
 *.swo
-# Build outputs: binaries are produced by `make build` / GoReleaser, not committed.
+# Build outputs (Bazel writes to bazel-*; these are older or local copies).
 /bin/
 /dist/
 

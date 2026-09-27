@@ -15,6 +15,7 @@ export interface ServiceStatus {
 }
 
 type Bound = {
+  Version(): Promise<string>;
   ServiceStatus(): Promise<ServiceStatus>;
   InstallService(): Promise<string>;
   ChooseWorkspace(title: string): Promise<string>;
@@ -51,6 +52,9 @@ export async function serviceStatus(): Promise<ServiceStatus> {
   return app().ServiceStatus();
 }
 export const installService = () => app().InstallService();
+
+/** The app's version ("dev" outside a release, and in a browser). */
+export const appVersion = async () => (inApp() ? app().Version() : "dev");
 
 export async function chooseWorkspace(): Promise<string> {
   if (!inApp()) return window.prompt(t("desktop.choose.prompt")) ?? "";

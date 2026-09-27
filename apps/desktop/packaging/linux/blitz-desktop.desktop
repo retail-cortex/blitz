@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Blitz
+Comment=A coding agent for your projects
+Exec=blitz-desktop
+Icon=blitz-desktop
+Terminal=false
+Categories=Development;
+StartupWMClass=blitz-desktop

@@ -1,18 +1,19 @@
-load("@bazel_lib//lib:copy_to_bin.bzl", "copy_to_bin")
 load("@bazel_lib//lib:copy_to_directory.bzl", "copy_to_directory")
+load("@bazel_lib//lib:transitions.bzl", "platform_transition_filegroup")
 load("@rules_go//go:def.bzl", "go_binary", "go_library", "go_test")
 
-# The page reads the app's version from it.
-copy_to_bin(
-    name = "wails_json",
-    srcs = ["wails.json"],
-    visibility = ["//apps/desktop/web:__pkg__"],
+# The page is the same for every platform: it's built for this machine
+# (its tools are native), even when the app is built for another.
+platform_transition_filegroup(
+    name = "page",
+    srcs = ["//apps/desktop/web:page"],
+    target_platform = "@platforms//host",
 )
 
-# The page, built by //apps/desktop/web:page, where go:embed looks for it.
+# The page, where go:embed looks for it.
 copy_to_directory(
     name = "dist",
-    srcs = ["//apps/desktop/web:page"],
+    srcs = [":page"],
     root_paths = ["apps/desktop/web/dist"],
 )
 
@@ -58,6 +59,8 @@ go_binary(
         "production",
     ],
     visibility = ["//visibility:public"],
+    # The release version (--config=release), else the default in main.go.
+    x_defs = {"main.version": "{STABLE_BLITZ_VERSION}"},
 )
 
 go_test(
@@ -78,3 +81,25 @@ go_test(
         "@org_golang_google_genai//:genai",
     ],
 )
+
+# The app for each Mac, for the universal Blitz.app (//apps/desktop/packaging).
+[
+    go_binary(
+        name = "blitz-desktop_darwin_" + arch,
+        embed = [":desktop_lib"],
+        goarch = arch,
+        goos = "darwin",
+        gotags = [
+            "desktop",
+            "production",
+        ],
+        pure = "off",
+        target_compatible_with = ["@platforms//os:macos"],
+        visibility = ["//apps/desktop/packaging:__pkg__"],
+        x_defs = {"main.version": "{STABLE_BLITZ_VERSION}"},
+    )
+    for arch in [
+        "amd64",
+        "arm64",
+    ]
+]

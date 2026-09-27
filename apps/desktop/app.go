@@ -69,6 +69,9 @@ func (a *App) Notify(title, body, dir string) error {
 }
 
 // ServiceStatus says whether the service answers and whether it starts at
+// Version is the app's version: the release's tag, or "dev".
+func (a *App) Version() string { return version }
+
 // login.
 type ServiceStatus struct {
 	Running   bool   `json:"running"`

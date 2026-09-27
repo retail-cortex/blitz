@@ -2,11 +2,11 @@ syntax = "proto3";
 
 package blitz.v1;
 
-option go_package = "github.com/retail-cortex/blitz/proto/blitz/v1;blitzv1";
-
 import "blitz/v1/turn.proto";
 import "google/protobuf/duration.proto";
 import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/retail-cortex/blitz/proto/blitz/v1;blitzv1";
 
 // WorkspaceService covers everything about a workspace except its
 // conversations (SessionService) and workers (WorkerService): agents and
