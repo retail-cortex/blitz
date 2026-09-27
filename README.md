@@ -408,7 +408,9 @@ sha256sum --ignore-missing -c checksums.txt
 ```
 (Releases made before the move to `retail-cortex/blitz`, such as `v0.1.0`, were signed by the former repository's workflow and verify against that identity: `^https://github.com/rmcguinness/code_puppy/\.github/workflows/go-release\.yml@refs/tags/v`.)
 
-The macOS binaries aren't Apple-notarized, so a copy downloaded in a browser is quarantined and Gatekeeper won't run it. Clear the flag with `xattr -d com.apple.quarantine blitz`, or open it once through Finder's context menu. Each release's notes say this too.
+The desktop app comes as `Blitz_<version>_macos_universal.dmg` (signed with a Developer ID and notarized) and `blitz-desktop_<version>_<arch>.deb` for Ubuntu 24.04 / Debian 13 and later (`sudo apt install ./blitz-desktop_*.deb`). Each has its own cosign bundle, verified the same way: `cosign verify-blob --bundle <file>.sigstore.json` with the flags above, then the file. `make desktop-package` builds the package for the machine you're on.
+
+The macOS CLI binaries aren't Apple-notarized, so a copy downloaded in a browser is quarantined and Gatekeeper won't run it. Clear the flag with `xattr -d com.apple.quarantine blitz`, or open it once through Finder's context menu. Each release's notes say this too.
 
 CI (`ci.yml`) runs vet and race tests on macOS and Linux, and checks the API protos in `api/` (lint, formatting, generated code current, no breaking changes; `make proto` regenerates). The Linux job installs bubblewrap and a pinned gVisor, and fails if the sandbox enforcement or gVisor tests are skipped.
 

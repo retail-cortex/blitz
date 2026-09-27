@@ -176,6 +176,10 @@ prefix = "fs"
   ```
   **Expected:** `Verified OK` and every file `OK`; the former repository's identity is rejected. (The items above were run against `rmcguinness/code_puppy`.)
 
+- [ ] Desktop release, before the Apple secrets are set: a tag's draft release has `Blitz_<v>_macos_universal.dmg`, `blitz-desktop_<v>_amd64.deb`, `blitz-desktop_<v>_arm64.deb` and a `.sigstore.json` for each, and the macOS job warns that it signed ad hoc. `cosign verify-blob --bundle <file>.sigstore.json` (identity flags as for `checksums.txt`) accepts each.
+- [ ] Set the six secrets (spec_release_025 REL-22), tag again. **Expected:** the macOS job notarises (a few minutes) and `spctl` passes. Download the dmg in Safari, open it, drag Blitz to Applications, open it: no Gatekeeper warning, About shows the tag's version, and "Install and start the service" works (the bundled CLI is signed too). On an Intel Mac too, if one is at hand.
+- [ ] On Ubuntu 24.04: `sudo apt install ./blitz-desktop_<v>_amd64.deb`; Blitz is in the app launcher with its icon, opens, installs the service (`systemctl --user status blitz`), and `sudo apt remove blitz-desktop` removes it.
+
 ## 19. Cost sanity 💲
 
 - [ ] After a day of use, compare `/cost` totals with your provider's billing dashboard. **Expected:** same order of magnitude; if not, adjust `[pricing]`.

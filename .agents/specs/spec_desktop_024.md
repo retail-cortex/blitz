@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Status | Implemented, second version (Material 3 redesign, 2026-09-27) |
-| Source | Go side: `cmd/blitz-desktop/{main,app,proxy,prefs}.go`, `wails.json`, `go.mod` (own module). Page: `web/desktop/src/` — shell `App.tsx`, `Drawer.tsx`, `state.tsx`; views `Workspace.tsx`, `Conversation.tsx`, `RunSettings.tsx`, `Changes.tsx`, `Workers.tsx`; dialogs `SettingsDialog.tsx`, `WorkspaceDialog.tsx`; `Markdown.tsx`; logic `turns.ts`, `prefs.ts`, `theme.ts`, `palette.ts`, `options.ts`, `errors.ts`; `api.ts`, `desktop.ts`; design system `m3.css`, `app.css`, `ui/controls.tsx`; development fake `dev/fake.ts`; `gen/` (generated). Build: `web/desktop/{package.json,vite.config.ts,index.html}`, `build/desktop/{appicon.png,darwin/Info*.plist,windows/*}`, `Makefile` (`desktop`, `desktop-check`), `.github/workflows/ci.yml` (`desktop` job) |
+| Source | Go side: `cmd/blitz-desktop/{main,app,proxy,prefs}.go`, `wails.json`, `go.mod` (own module). Page: `web/desktop/src/` — shell `App.tsx`, `Drawer.tsx`, `state.tsx`; views `Workspace.tsx`, `Conversation.tsx`, `RunSettings.tsx`, `Changes.tsx`, `Workers.tsx`; dialogs `SettingsDialog.tsx`, `WorkspaceDialog.tsx`; `Markdown.tsx`; logic `turns.ts`, `prefs.ts`, `theme.ts`, `palette.ts`, `options.ts`, `errors.ts`; `api.ts`, `desktop.ts`; design system `m3.css`, `app.css`, `ui/controls.tsx`; development fake `dev/fake.ts`; `gen/` (generated). Build: `web/desktop/{package.json,vite.config.ts,index.html}`, `build/desktop/{appicon.png,darwin/Info*.plist}`, `Makefile` (`desktop`, `desktop-check`, `desktop-package`), `scripts/desktop-package.sh`, `.github/workflows/ci.yml` and `release.yml` (`desktop` jobs) |
 | Tests | `cmd/blitz-desktop/{proxy,prefs}_test.go` (Go, `-race`); `web/desktop/src/{turns,prefs}.test.ts` (vitest); manual checks in MANUAL_VERIFICATION §37 |
 | Depends on | [spec_service_021](spec_service_021.md) (all behaviour), [spec_workers_023](spec_workers_023.md), [spec_approvals_005](spec_approvals_005.md), [spec_sessions_017](spec_sessions_017.md) (rewind) |
 
@@ -15,11 +15,11 @@ It keeps only its own settings (theme, layout, the workspaces it knows and how t
 
 ## 2. Identity and packaging
 
-- **DSK-01** Product name **Blitz**; macOS bundle `Blitz.app` (Wails project `name`), bundle identifier `dev.blitz.desktop`, executable `blitz-desktop` (Wails `outputfilename`), product version from `wails.json` `info.productVersion` (currently `0.1.0`, independent of the CLI's version), copyright "Ryan McGuinness, Apache License 2.0".
+- **DSK-01** Product name **Blitz**; macOS bundle `Blitz.app` (Wails project `name`), bundle identifier `dev.blitz.desktop`, executable `blitz-desktop` (Wails `outputfilename`), product version from `wails.json` `info.productVersion` (`0.1.0` in development builds; a release sets it to the tag, REL-20), copyright "Ryan McGuinness, Apache License 2.0".
 - **DSK-02** The app's executable must never be named `blitz`/`Blitz`: macOS file systems ignore case, and the bundled CLI (`Contents/MacOS/blitz`) would overwrite it. `make desktop` fails if the bundle's `MacOS` directory doesn't hold exactly `blitz-desktop` and `blitz` afterwards.
 - **DSK-03** Minimum macOS 13.0: the build sets `-mmacosx-version-min=13.0`, and `LSMinimumSystemVersion` in `Info.plist`/`Info.dev.plist` says the same.
 - **DSK-04** The CLI is bundled beside the app's executable (`Blitz.app/Contents/MacOS/blitz` on macOS; `build/desktop/bin/blitz` elsewhere) so the app can install the service without a separate CLI install. On macOS the bundle is re-signed ad hoc after adding it (adding a file breaks Wails's signature).
-- **DSK-05** Windows packaging files (manifest, icon, version info, NSIS installer scripts) are Wails's templates and are not built or tested.
+- **DSK-05** Releases package the app for macOS (a universal, notarised disk image) and Linux (`.deb`): [spec_release_025](spec_release_025.md) REL-20–25. There's no Windows package, since the service doesn't install there.
 
 ## 3. Architecture
 
@@ -167,4 +167,3 @@ Not implemented; each is tracked in [spec_backlog_026](spec_backlog_026.md):
 - Sessions from other workspaces, and opening a snapshot by name (the History menu lists this workspace's).
 - **Localisation**: the window doesn't follow the terminal's `/locale` (`[ui] locale`) or load catalogs from `~/.blitz/locales`; it has its own language setting and the shipped catalogs (BL-DSK-41).
 - **Workers**: no refresh on file changes; a run's session doesn't open in the conversation (BL-DSK-50).
-- **Release**: signing, notarisation, a release job, Linux and Windows packages (BL-DSK-60/61).

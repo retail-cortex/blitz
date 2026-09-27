@@ -4,7 +4,7 @@ VERSION ?= $(shell git describe --tags --match 'v*' --always --dirty 2>/dev/null
 LDFLAGS=-s -w -X main.version=$(VERSION)
 GOFLAGS_BUILD=-trimpath -buildvcs=false
 
-.PHONY: all build install test test-race vet lint vulncheck check clean cross-compile tidy snapshot release-check proto proto-check desktop desktop-check
+.PHONY: all build install test test-race vet lint vulncheck check clean cross-compile tidy snapshot release-check proto proto-check desktop desktop-check desktop-package
 
 all: build
 
@@ -110,6 +110,12 @@ desktop: web/desktop/node_modules
 		CGO_ENABLED=0 go build $(GOFLAGS_BUILD) -ldflags="$(LDFLAGS)" -o build/desktop/bin/blitz ./cmd/blitz; \
 	fi
 	@echo "✅ Built build/desktop/bin (with the blitz CLI bundled)"
+
+# The release packages (build/desktop/dist): a universal, signed and
+# notarised disk image on macOS; a .deb on Linux. Signing needs the
+# variables described in scripts/desktop-package.sh.
+desktop-package:
+	scripts/desktop-package.sh $(VERSION)
 
 desktop-check: web/desktop/node_modules
 	cd web/desktop && pnpm test && pnpm run build

@@ -114,8 +114,8 @@ Suggested order (from NEXT_STEPS): run the manual checks (§9) first — their f
 - **BL-DSK-50** The workers list refreshes when `WORKER.md` files change (polling `ListWorkers`, or a watch RPC); a run's session opens in the conversation view with one click.
 
 ### 7.7 Releasing the app — M
-- **BL-DSK-60** A macOS release job builds a universal `Blitz.app`, signs it with a Developer ID, notarises and staples it, and attaches a `.dmg` to the release; the app's version is the release tag's.
-- **BL-DSK-61** Linux: an AppImage (or `.deb`) built in CI. Windows: the NSIS installer is built and smoke-tested, or the Windows packaging files are removed.
+- **BL-DSK-60** ✅ *Done 2026-09-27 ([spec_release_025](spec_release_025.md) REL-20–24): signed and notarised once the Apple secrets are set, ad hoc until then.* A macOS release job builds a universal `Blitz.app`, signs it with a Developer ID, notarises and staples it, and attaches a `.dmg` to the release; the app's version is the release tag's.
+- **BL-DSK-61** ✅ *Done 2026-09-27 (REL-23, REL-25): `.deb` for amd64 and arm64, smoke-tested by installing it; Windows packaging removed.* Linux: an AppImage (or `.deb`) built in CI. Windows: the NSIS installer is built and smoke-tested, or the Windows packaging files are removed.
 
 ## 8. CLI and REPL
 

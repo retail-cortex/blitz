@@ -38,3 +38,93 @@ jobs:
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # The desktop app (spec_release_025 §4): a universal macOS disk image
+  # and Linux .debs, attached to the draft release, each signed keylessly
+  # with its own cosign bundle. The macOS app is signed with a Developer
+  # ID and notarised when the signing secrets are set, else signed ad
+  # hoc with a warning.
+  desktop:
+    needs: release
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, ubuntu-24.04, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.os }}
+    env:
+      SIGNING: ${{ secrets.MACOS_CERTIFICATE != '' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: |
+            go.sum
+            tools/go.sum
+            cmd/blitz-desktop/go.sum
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          package_json_file: web/desktop/package.json
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: web/desktop/pnpm-lock.yaml
+      - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+        with:
+          cosign-release: v2.6.1
+      - name: Linux build dependencies
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libgtk-3-dev libwebkit2gtk-4.1-dev
+      # A throwaway keychain holding the Developer ID certificate, and the
+      # App Store Connect API key for notarytool.
+      - name: Signing keychain
+        if: runner.os == 'macOS' && env.SIGNING == 'true'
+        env:
+          MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
+          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          NOTARY_KEY: ${{ secrets.NOTARY_KEY }}
+        run: |
+          keychain="$RUNNER_TEMP/signing.keychain-db"
+          pass="$(openssl rand -hex 16)"
+          security create-keychain -p "$pass" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$pass" "$keychain"
+          printf '%s' "$MACOS_CERTIFICATE" | base64 --decode >"$RUNNER_TEMP/cert.p12"
+          security import "$RUNNER_TEMP/cert.p12" -k "$keychain" -P "$MACOS_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          rm "$RUNNER_TEMP/cert.p12"
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$pass" "$keychain" >/dev/null
+          security list-keychains -d user -s "$keychain" $(security list-keychains -d user | tr -d '"')
+          printf '%s' "$NOTARY_KEY" >"$RUNNER_TEMP/notary.p8"
+          echo "NOTARY_KEY_PATH=$RUNNER_TEMP/notary.p8" >>"$GITHUB_ENV"
+      - name: Unsigned
+        if: runner.os == 'macOS' && env.SIGNING != 'true'
+        run: echo "::warning::MACOS_CERTIFICATE isn't set; the macOS app is signed ad hoc and not notarised"
+      - name: Package
+        env:
+          DESKTOP_SIGN_IDENTITY: ${{ env.SIGNING == 'true' && secrets.DESKTOP_SIGN_IDENTITY || '' }}
+          NOTARY_KEY_ID: ${{ secrets.NOTARY_KEY_ID }}
+          NOTARY_ISSUER: ${{ secrets.NOTARY_ISSUER }}
+        run: scripts/desktop-package.sh "$GITHUB_REF_NAME"
+      # The package installs on a clean system: its dependencies resolve and
+      # the app's libraries are all found.
+      - name: Smoke test
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get install -y ./build/desktop/dist/blitz-desktop_*.deb
+          if ldd /usr/lib/blitz-desktop/blitz-desktop | grep 'not found'; then exit 1; fi
+          /usr/lib/blitz-desktop/blitz --version
+          test "$(readlink -f /usr/bin/blitz-desktop)" = /usr/lib/blitz-desktop/blitz-desktop
+      - name: Sign and attach
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cd build/desktop/dist
+          for f in *.dmg *.deb; do
+            [ -e "$f" ] || continue
+            cosign sign-blob --yes --bundle "$f.sigstore.json" "$f"
+            gh release upload "$GITHUB_REF_NAME" "$f" "$f.sigstore.json" --clobber
+          done
+      - name: Remove the signing keychain
+        if: always() && runner.os == 'macOS' && env.SIGNING == 'true'
+        run: security delete-keychain "$RUNNER_TEMP/signing.keychain-db" && rm -f "$RUNNER_TEMP/notary.p8"
