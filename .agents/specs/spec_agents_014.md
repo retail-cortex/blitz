@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Implemented (reverse-engineered from `53f8c53`) |
+| Status | Implemented. Reverse-engineered from `53f8c53` (2026-09-24) and kept with the code since; its paths and names checked 2026-09-27 (`//tools/specs`). |
 | Source | `pkg/engine/agents/{manager,frontmatter}.go`, `pkg/engine/agents/builtin/*.md`; `pkg/engine/tools/{agent_tools,universal_constructor}.go` |
 | Tests | `pkg/engine/agents/*_test.go`; `pkg/engine/tools/uc_and_agent_tools_test.go`; `pkg/engine/runtime/pin_test.go` |
 | Depends on | [spec_config_002](spec_config_002.md), [spec_shell_007](spec_shell_007.md), [spec_approvals_005](spec_approvals_005.md) |

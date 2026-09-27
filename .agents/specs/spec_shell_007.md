@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Implemented (reverse-engineered from `53f8c53`) |
+| Status | Implemented. Reverse-engineered from `53f8c53` (2026-09-24) and kept with the code since; its paths and names checked 2026-09-27 (`//tools/specs`). |
 | Source | `pkg/engine/tools/shell.go`, `exec.go`, `cmdpolicy.go`, `ossandbox*.go`, `bwrap.go`, `background.go`, `procgroup_*.go`, `capped_buffer.go` |
 | Tests | `pkg/engine/tools/shell_test.go`, `cmdpolicy_test.go`, `ossandbox_test.go`, `bwrap_test.go`, `guard_test.go` |
 | Depends on | [spec_filetools_006](spec_filetools_006.md) (roots, blocked patterns), [spec_approvals_005](spec_approvals_005.md) |

@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Implemented (reverse-engineered from `53f8c53`) |
+| Status | Implemented. Reverse-engineered from `53f8c53` (2026-09-24) and kept with the code since; its paths and names checked 2026-09-27 (`//tools/specs`). |
 | Source | `pkg/engine/tools/scripthooks.go`; called from `pkg/engine/runtime/engine.go` and `pkg/engine/turn.go` |
 | Tests | `pkg/engine/tools/scripthooks_test.go`, `posthooks_test.go` |
 | Depends on | [spec_config_002](spec_config_002.md), [spec_shell_007](spec_shell_007.md) (process guard), [spec_observability_003](spec_observability_003.md) |

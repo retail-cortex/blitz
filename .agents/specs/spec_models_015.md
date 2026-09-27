@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Implemented (reverse-engineered from `53f8c53`) |
+| Status | Implemented. Reverse-engineered from `53f8c53` (2026-09-24) and kept with the code since; its paths and names checked 2026-09-27 (`//tools/specs`). |
 | Source | `pkg/engine/runtime/model_factory.go`, `anthropic.go`, `openai_images.go`, `images.go`, `fallback.go`, `httpclient.go`, `settings.go`, `usage.go`; `pkg/engine/breaker` |
 | Tests | `pkg/engine/runtime/anthropic_test.go`, `fallback_test.go`, `httpclient_test.go`, `settings_test.go`, `pin_test.go`, `images_test.go`; `pkg/engine/breaker/breaker_test.go` |
 | Depends on | [spec_config_002](spec_config_002.md) |

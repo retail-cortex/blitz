@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | In progress: steps 1 (licensing) and 2 (comments) done 2026-09-27; steps 3–5 to do. Blocks the next release. |
+| Status | In progress: steps 1 (licensing), 2 (comments) and 3 (specs) done 2026-09-27; steps 4–5 to do. Blocks the next release. |
 | Depends on | every earlier spec; [spec_monorepo_028](spec_monorepo_028.md) (the build), [spec_release_025](spec_release_025.md) (packages) |
 
 ## 1. Purpose
@@ -40,8 +40,9 @@ The owner's review (2026-09-27) found the project not ready to release: the old 
 ## 5. Specs brought up to date
 
 - **RR-20** Every spec checked against the code: paths (`internal/…` → `apps/…`, `pkg/…`), commands (Make → Bazel, `blitz serve` → `blitzd`), the desktop layout (the drawer is gone), statuses (Implemented / Partial / Planned, with what's missing), and each "Source" and "Tests" row.
-- **RR-21** Kept that way: a test (`//docs:spec_paths_test`) fails when a spec's Source or Tests row names a file or directory that doesn't exist, or when the specs index misses a spec.
+- **RR-21** Kept that way: `bazel run //tools/specs` (CI) fails when a spec isn't in the specs index, or names a repository path that doesn't exist (anywhere in its text, old-layout paths included; examples and paths marked "(planned)" aside). It moves with the specs to the site in step 4.
 - **RR-22** `ROADMAP`, `NEXT_STEPS` and `MANUAL_VERIFICATION` updated the same way; finished items leave `NEXT_STEPS`.
+- **RR-23** Done 2026-09-27: the check found 9 stale references (the desktop app's former separate module, pre-monorepo paths, the service still called `blitz serve`), all fixed; every spec's status says what's true (the parity spec 29 of 99 requirements done and 2 in part, the backlog 13 of 45); `ROADMAP` keeps its dated entries under a note mapping the old layout, and `NEXT_STEPS` marks the superseded layout decision.
 
 ## 6. Documentation as a site
 
@@ -53,14 +54,14 @@ The owner's review (2026-09-27) found the project not ready to release: the old 
   - `development/` — building from source, the monorepo and its rules (from `AGENTS.md`), testing, manual verification, releasing, contributing;
   - `specs/` — the specs, their index, and a page per spec;
   - `project/` — roadmap, next steps, history.
-- **RR-32** Root keeps only what tools and packages need there: `README.md` (short), `LICENSE`, `NOTICE`, `OWNERS.txt`, and `AGENTS.md` as a short pointer for coding agents (§8). `CONTRIBUTING.md` lives at `docs/CONTRIBUTING.md` (GitHub finds it there) and the site mounts it. `.agents/` is emptied into the site.
+- **RR-32** Root keeps only what tools and packages need there: `README.md` (short), `LICENSE`, `NOTICE`, `OWNERS.txt` (planned), and `AGENTS.md` as a short pointer for coding agents (§8). `CONTRIBUTING.md` lives at `docs/CONTRIBUTING.md` (planned) (GitHub finds it there) and the site mounts it. `.agents/` is emptied into the site.
 - **RR-33** Published to GitHub Pages by a workflow on pushes to `main` that change `docs/` (and by hand): `bazel build //docs:site`, the link check, then `actions/upload-pages-artifact` and `actions/deploy-pages`.
 
 ## 7. README, contributing, owners
 
 - **RR-40** `README.md`: what Blitz is and why, a screenshot of the desktop app, install (release downloads and how to verify them), a five-minute quick start, **Building from source** in detail (prerequisites per OS: Bazelisk; Xcode command-line tools on macOS; `libgtk-3-dev libwebkit2gtk-4.1-dev pkg-config` and bubblewrap on Linux; then build, test, run the CLI, the service and the desktop app, the page's dev server, packages, and common problems), and links to the site for everything else.
-- **RR-41** `docs/CONTRIBUTING.md`: how to set up, the Bazel-only rule (tidy, formatting, packages through Bazel), the checks CI runs and how to run them first, commit messages, specs first for features, translations, headers and comments, and the review process.
-- **RR-42** `OWNERS.txt`: the maintainers (name and GitHub handle, no e-mail) and what each owns; `.github/CODEOWNERS` generated from it so reviews are requested automatically.
+- **RR-41** `docs/CONTRIBUTING.md` (planned): how to set up, the Bazel-only rule (tidy, formatting, packages through Bazel), the checks CI runs and how to run them first, commit messages, specs first for features, translations, headers and comments, and the review process.
+- **RR-42** `OWNERS.txt` (planned): the maintainers (name and GitHub handle, no e-mail) and what each owns; `.github/CODEOWNERS` (planned) generated from it so reviews are requested automatically.
 
 ## 8. Decisions (the owner, 2026-09-27)
 

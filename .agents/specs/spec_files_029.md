@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Phase 1 implemented (2026-09-27, branch `monorepo`); phases 2 and 3 planned |
+| Status | Phase 1 implemented (2026-09-27, on `main`); phases 2 and 3 planned |
 | Source | `pkg/engine/files.go`, `pkg/engine/tools/userfs.go`, `proto/blitz/v1/file.proto`, `apps/service/internal/server/files.go`, `apps/desktop/unsaved.go`; the page's `src/files/` |
 | Depends on | [spec_workspace_018](spec_workspace_018.md), [spec_service_021](spec_service_021.md), [spec_desktop_024](spec_desktop_024.md), [spec_filetools_006](spec_filetools_006.md) |
 
@@ -52,7 +52,7 @@ Every request names its workspace (SVC-10) and a path relative to it.
 - **FIL-32** Opening a file shows it in the editor in the middle, between the shelf and the chat (switching the middle from Changes or Workers). With no file open the chat takes the middle instead, and moves back to the side when one opens. The chat's width is dragged at its left edge (remembered); the editor takes the rest.
 - **FIL-33** The window notices changes made elsewhere: after each tool call that writes, at the end of a turn, and every 5 seconds while the shelf or editor is shown, it lists the open folders again and checks the open files (`StatFiles`). A file you haven't changed reloads; one you have gets a bar: **Reload** (discard yours) or **Keep mine** (the next save asks to overwrite).
 - **FIL-34** **Go to file** (⌘P, and in the command palette): `FindFiles` as you type, Enter opens.
-- **FIL-35** Paths in the conversation open the editor: file paths in tool calls, and inline code in answers that names a file in the workspace (`internal/cart/discount.go`, with `:42` or `:42:7` going to that line). The inline code gets a link style only once the file is known to exist (FindFiles' list).
+- **FIL-35** Paths in the conversation open the editor: file paths in tool calls, and inline code in answers that names a file in the workspace (for example `internal/cart/discount.go`, with `:42` or `:42:7` going to that line). The inline code gets a link style only once the file is known to exist (FindFiles' list).
 
 ## 6. The editor (phase 1)
 

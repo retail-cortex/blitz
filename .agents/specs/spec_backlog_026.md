@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | **Not implemented.** Forward-looking requirements, collected 2026-09-26 from the known-gaps sections of specs 001–025, `.agents/ROADMAP.md` (item gaps, the Antigravity review's candidates) and `.agents/NEXT_STEPS.md` |
+| Status | **Partly implemented:** 13 of its 45 requirements done (counted 2026-09-27); the rest open. Forward-looking requirements, collected 2026-09-26 from the known-gaps sections of specs 001–025, `.agents/ROADMAP.md` (item gaps, the Antigravity review's candidates) and `.agents/NEXT_STEPS.md` |
 | Depends on | Everything before it: each item extends the spec named in its **Extends** line |
 
 ## 1. Purpose

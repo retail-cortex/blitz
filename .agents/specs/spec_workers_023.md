@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Implemented, first version (reverse-engineered from `53f8c53`) |
+| Status | Implemented, first version. Reverse-engineered from `53f8c53` (2026-09-24) and kept with the code since; its paths and names checked 2026-09-27 (`//tools/specs`). |
 | Source | `pkg/engine/workers/{worker,schedule,permission,policy,state,runs}.go`; `pkg/engine/workers.go`; `apps/service/internal/server/{scheduler,worker}.go`; `apps/cli/workers.go` |
 | Tests | `pkg/engine/workers/*_test.go`, `pkg/engine/workers_test.go`, `apps/service/internal/server/worker_test.go`, `apps/cli/workers_test.go` |
 | Depends on | [spec_approvals_005](spec_approvals_005.md) (unattended approvals), [spec_workspace_018](spec_workspace_018.md), [spec_service_021](spec_service_021.md) |

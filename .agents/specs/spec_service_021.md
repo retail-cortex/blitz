@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Implemented (reverse-engineered from `53f8c53`) |
+| Status | Implemented. Reverse-engineered from `53f8c53` (2026-09-24) and kept with the code since; its paths and names checked 2026-09-27 (`//tools/specs`). |
 | Source | `proto/blitz/v1/{session,workspace,turn,worker}.proto`, `buf.yaml`, `buf.gen.yaml`; `apps/service/main.go` (`blitzd`), `apps/service/internal/{daemon,server}/*.go`, `apps/service/servicetest`; `pkg/socket`; `proto` (generated, never edited); `apps/cli/service.go` |
 | Tests | `apps/service/*_test.go`, `apps/service/internal/{daemon,server}/*_test.go`, `apps/cli/attach_test.go`, `service_test.go` |
 | Depends on | [spec_workspace_018](spec_workspace_018.md) |

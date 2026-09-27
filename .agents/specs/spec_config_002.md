@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Implemented (reverse-engineered from `53f8c53`) |
+| Status | Implemented. Reverse-engineered from `53f8c53` (2026-09-24) and kept with the code since; its paths and names checked 2026-09-27 (`//tools/specs`). |
 | Source | `pkg/config/config.go`, `features.go`, `locale.go`, `agentmodels.go`, `modelsettings.go`, `providers.go`; `pkg/secrets`; template and key commands in `apps/cli/configcmd.go`, `configkeys.go` |
 | Tests | `pkg/config/*_test.go`, `pkg/secrets/secrets_test.go`, `apps/cli/configkeys_test.go`, `apps/service/internal/server/config_test.go` |
 | Related | [spec_cli_020](spec_cli_020.md), [spec_models_015](spec_models_015.md) |

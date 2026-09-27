@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Implemented (reverse-engineered from `53f8c53`) |
+| Status | Implemented. Reverse-engineered from `53f8c53` (2026-09-24) and kept with the code since; its paths and names checked 2026-09-27 (`//tools/specs`). |
 | Source | `apps/cli/main.go`, `exitcode.go`, `oneshot.go`, `setup.go`, `configcmd.go`, `doctor.go` |
 | Tests | `apps/cli/main_test.go`, `images_test.go`, `locale_test.go` |
 | Related | [spec_config_002](spec_config_002.md), [spec_workspace_018](spec_workspace_018.md), [spec_tui_019](spec_tui_019.md), [spec_service_021](spec_service_021.md), [spec_workers_023](spec_workers_023.md) |

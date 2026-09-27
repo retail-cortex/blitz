@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | **Not implemented.** Gap analysis of 2026-09-26, to be closed before new features are added |
+| Status | **Partly implemented:** 29 of its 99 requirements done and 2 in part (counted 2026-09-27); the rest open. A gap analysis of 2026-09-26, to be closed before new features are added. |
 | Compared with | **Claude Code** (current docs at code.claude.com, September 2026: v2.1.28x); **Antigravity CLI** (`agy` 1.1–1.2, September 2026); **Antigravity** 2.0 (Google's agent-first IDE and Agent Manager) |
 | Depends on | Specs 001–025 (what Blitz does today) and [spec_backlog_026](spec_backlog_026.md) (Blitz's own gaps; overlapping items are referenced, not repeated) |
 

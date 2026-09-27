@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Implemented (reverse-engineered from `53f8c53`) |
+| Status | Implemented. Reverse-engineered from `53f8c53` (2026-09-24) and kept with the code since; its paths and names checked 2026-09-27 (`//tools/specs`). |
 | Source | `pkg/client/{client,convert,workers}.go`; backend selection in `apps/cli/setup.go`, `workers.go` |
 | Tests | `pkg/client/client_test.go`, `apps/cli/internal/tui/remote_test.go` |
 | Depends on | [spec_service_021](spec_service_021.md), [spec_workspace_018](spec_workspace_018.md) |

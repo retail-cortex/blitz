@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Implemented (reverse-engineered from `53f8c53`) |
+| Status | Implemented. Reverse-engineered from `53f8c53` (2026-09-24) and kept with the code since; its paths and names checked 2026-09-27 (`//tools/specs`). |
 | Source | `pkg/images/*.go`, `pkg/engine/tools/images.go`, `pkg/engine/runtime/images.go`, `openai_images.go`; `/attach`, `/paste` in `apps/cli/internal/tui` |
 | Tests | `pkg/images/images_test.go`, `pkg/engine/tools/images_test.go`, `pkg/engine/runtime/images_test.go`, `apps/cli/internal/tui/attach_test.go`, `apps/cli/images_test.go` |
 | Depends on | [spec_filetools_006](spec_filetools_006.md) (sandboxed reads) |

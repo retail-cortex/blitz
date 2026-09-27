@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Implemented (reverse-engineered from `53f8c53`) |
+| Status | Implemented. Reverse-engineered from `53f8c53` (2026-09-24) and kept with the code since; its paths and names checked 2026-09-27 (`//tools/specs`). |
 | Source | `go.mod`, `MODULE.bazel`, `.bazelrc`, `.gitignore`, `buf.yaml`, `.agents/AGENTS.md`, `LICENSE`, `NOTICE`, `docs/HISTORY.md` |
 | Next | [spec_config_002](spec_config_002.md) … [spec_release_025](spec_release_025.md) |
 

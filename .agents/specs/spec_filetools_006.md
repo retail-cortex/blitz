@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Implemented (reverse-engineered from `53f8c53`) |
+| Status | Implemented. Reverse-engineered from `53f8c53` (2026-09-24) and kept with the code since; its paths and names checked 2026-09-27 (`//tools/specs`). |
 | Source | `pkg/engine/tools/workspace.go`, `pathpolicy.go`, `pathlock.go`, `file_ops.go`, `file_edit.go`, `patch.go`, `grep.go`, `checkpoint.go`, `diff.go` |
 | Tests | `pkg/engine/tools/workspace_test.go`, `sandbox_paths_test.go`, `file_tools_test.go`, `edit_race_test.go`, `patch_test.go`, `grep_test.go`, `approvals_checkpoints_test.go` |
 | Depends on | [spec_config_002](spec_config_002.md), [spec_approvals_005](spec_approvals_005.md) (approval gate) |

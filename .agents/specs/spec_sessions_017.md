@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Implemented (reverse-engineered from `53f8c53`) |
+| Status | Implemented. Reverse-engineered from `53f8c53` (2026-09-24) and kept with the code since; its paths and names checked 2026-09-27 (`//tools/specs`). |
 | Source | `pkg/engine/session/{session,snapshot,adkstore,search}.go`; `pkg/engine/sessions.go` |
 | Tests | `pkg/engine/session/*_test.go`, `pkg/engine/sessions_test.go`, `apps/cli/internal/tui/snapshot_test.go`, `rename_test.go` |
 | Depends on | [spec_config_002](spec_config_002.md) |

@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Implemented (reverse-engineered from `53f8c53`) |
+| Status | Implemented. Reverse-engineered from `53f8c53` (2026-09-24) and kept with the code since; its paths and names checked 2026-09-27 (`//tools/specs`). |
 | Source | `pkg/engine/skills/{skill,definition,policy,provider}.go`, `pkg/engine/skills/builtin/*`; `pkg/engine/tools/{skills_tools,skillscript,pyenv,scriptbox,scriptbox_gvisor_linux}.go` |
 | Tests | `pkg/engine/skills/*_test.go`; `pkg/engine/tools/skillscript_test.go`, `pyenv_test.go`, `scriptbox_test.go`, `scriptbox_gvisor_linux_test.go`; `apps/cli/internal/tui/skills_test.go`, `envs_test.go` |
 | Depends on | [spec_config_002](spec_config_002.md), [spec_approvals_005](spec_approvals_005.md), [spec_shell_007](spec_shell_007.md) (OS sandbox) |

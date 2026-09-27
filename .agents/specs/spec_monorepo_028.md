@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Implemented (2026-09-27, branch `monorepo`) |
+| Status | Implemented (2026-09-27; merged to `main` the same day) |
 | Source | `MODULE.bazel`, `BUILD.bazel`, `.bazelrc`, `.bazelversion`, `.bazelignore`, `build/`, `tools/`, `third_party/`, every `BUILD.bazel`, `release/`, `apps/desktop/packaging/`, `go.mod` (`tool` directives) |
 | Replaces | [spec_setup_001](spec_setup_001.md) §3–5 (layout, toolchain, Make), GoReleaser in [spec_release_025](spec_release_025.md) |
 | Depends on | [spec_setup_001](spec_setup_001.md) |
@@ -15,9 +15,9 @@ Blitz is three independent apps (the CLI, the service, the desktop app) over sha
 
 | Path | What |
 |---|---|
-| `apps/cli` | `blitz`; `internal/tui` is the REPL |
-| `apps/service` | `blitzd`; `internal/daemon` runs it, `internal/server` has the Connect handlers; `servicetest` runs it in other packages' tests (`testonly`) |
-| `apps/desktop` | The desktop app (Wails v2, cgo); `web/` its page, `packaging/` its packages |
+| `apps/cli` | `blitz`; `apps/cli/internal/tui` is the REPL |
+| `apps/service` | `blitzd`; `apps/service/internal/daemon` runs it, `apps/service/internal/server` has the Connect handlers; `apps/service/servicetest` runs it in other packages' tests (`testonly`) |
+| `apps/desktop` | The desktop app (Wails v2, cgo); `apps/desktop/web` its page, `apps/desktop/packaging` its packages |
 | `pkg/api` | The contract between front ends and the engine: `Backend` and what crosses it |
 | `pkg/client`, `pkg/socket` | `Backend` over the service's API; where the service listens |
 | `pkg/engine`, `pkg/engine/…` | The engine (`engine.Open` → `Workspace`, implementing `api.Backend`) |

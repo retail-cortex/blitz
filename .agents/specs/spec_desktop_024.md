@@ -9,7 +9,7 @@
 
 ## 1. Purpose and scope
 
-`Blitz.app` is a window onto the per-user Blitz service: one tab per workspace, each with a conversation view and a workers view. It contains **no engine**. Every workspace, turn, approval, session and worker lives in the service (`blitz serve`), which keeps running — and keeps running workers — after the window closes. The app adds only what the service can't do for itself: detecting and installing the service, native dialogs, and a bridge from the web view to the service's Unix socket.
+`Blitz.app` is a window onto the per-user Blitz service, laid out like an IDE: the workspace in view chosen from a dropdown, its files, an editor and the conversation, with its changes and workers a click away. It contains **no engine**. Every workspace, turn, approval, session and worker lives in the service (`blitzd`), which keeps running — and keeps running workers — after the window closes. The app adds only what the service can't do for itself: detecting and installing the service, native dialogs, and a bridge from the web view to the service's Unix socket.
 
 It keeps only its own settings (theme, layout, the workspaces it knows and how they are named) in `~/.blitz/desktop.json`. The design follows Material 3, with an IDE's layout since 2026-09-27 (files, editor, chat; earlier Google AI Studio's: a navigation drawer, a centred conversation, a run settings panel). Not yet: see §16.
 
@@ -37,7 +37,7 @@ It keeps only its own settings (theme, layout, the workspaces it knows and how t
 └───────────────────────────────────────────┘
 ```
 
-- **DSK-10** Separate Go module (`apps/desktop/go.mod`, cgo; WebKit on macOS, webkit2gtk on Linux) so the CLI module stays `CGO_ENABLED=0`. It imports `apps/service/internal/server` only for the socket path, `BaseURL` and the socket HTTP client.
+- **DSK-10** Part of the repository's one Go module; the desktop app alone uses cgo (WebKit on macOS, WebKitGTK on Linux), so the CLI and the service stay pure Go. It never reaches the engine or the service's internals ([spec_monorepo_028](spec_monorepo_028.md) MR-01): it uses `pkg/socket` (the socket's path, `BaseURL` and HTTP client), `pkg/loginitem`, `pkg/config` and `pkg/legal`; its tests run a real service through `apps/service/servicetest`.
 - **DSK-11** Window: title "Blitz", 1280×820, minimum 720×480. On macOS the title bar is hidden and inset (`mac.TitleBarHiddenInset`): the page draws the whole window in its theme's colours, leaves room for the window buttons at the left of the top bar, and marks its top areas as drag regions (`--wails-draggable: drag`; controls in them are `no-drag`). One Go `App` value is bound to the page (`window.go.main.App`).
 - **DSK-12** The page is built by Bazel (`//apps/desktop/web:page`, Vite) for the host platform and embedded with `//go:embed all:dist` from a directory the build assembles (`//apps/desktop:dist`); nothing is written into the source tree.
 

@@ -98,6 +98,8 @@ jobs:
       # THIRD_PARTY_NOTICES matches what the programs link, and every
       # license in it is one Blitz accepts.
       - run: tools/third_party_notices.sh --check
+      # Every spec is indexed and every repository path it names exists.
+      - run: bazel run //tools/specs
       # Fails only on a vulnerability the code can reach. The scan needs the
       # symbol table to see which packages are linked: without it, every
       # advisory in a required module counts (GO-2026-5932, all of x/crypto
