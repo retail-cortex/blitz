@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   mdiCalendarClock,
-  mdiChatOutline,
+  mdiCodeBraces,
   mdiCogOutline,
   mdiConsoleLine,
   mdiFileCompare,
@@ -11,7 +11,6 @@ import {
   mdiFolderOutline,
   mdiHistory,
   mdiMagnify,
-  mdiMenu,
   mdiMonitor,
   mdiTuneVariant,
   mdiWeatherNight,
@@ -76,7 +75,7 @@ export function CommandPalette({ onClose, onOpenWorkspace, onSettings }: { onClo
       out.push(
         { group: t("desktop.palette.group.view"), label: t("desktop.files.go_to"), detail: "⌘P", icon: mdiFileSearchOutline, run: done(() => goToFile({ dir })) },
         { group: t("desktop.palette.group.view"), label: prefs.files ? t("desktop.files.hide") : t("desktop.files.show"), icon: mdiFileTreeOutline, run: done(() => update((p) => ({ ...p, files: !p.files }))) },
-        { group: t("desktop.palette.group.view"), label: t("desktop.palette.show_chat"), icon: mdiChatOutline, run: done(() => showView({ dir, view: "chat" })) },
+        { group: t("desktop.palette.group.view"), label: t("desktop.palette.show_editor"), icon: mdiCodeBraces, run: done(() => showView({ dir, view: "editor" })) },
         { group: t("desktop.palette.group.view"), label: t("desktop.palette.show_changes"), icon: mdiFileCompare, run: done(() => showView({ dir, view: "changes" })) },
         { group: t("desktop.palette.group.view"), label: t("desktop.palette.show_workers"), icon: mdiCalendarClock, run: done(() => showView({ dir, view: "workers" })) },
       );
@@ -93,7 +92,6 @@ export function CommandPalette({ onClose, onOpenWorkspace, onSettings }: { onClo
       { group: t("desktop.palette.group.settings"), label: t("desktop.palette.theme_light"), icon: mdiWhiteBalanceSunny, run: done(() => update((p) => ({ ...p, theme: "light" }))) },
       { group: t("desktop.palette.group.settings"), label: t("desktop.palette.theme_dark"), icon: mdiWeatherNight, run: done(() => update((p) => ({ ...p, theme: "dark" }))) },
       { group: t("desktop.palette.group.settings"), label: prefs.run_settings ? t("desktop.palette.hide_panel") : t("desktop.palette.show_panel"), icon: mdiTuneVariant, run: done(() => update((p) => ({ ...p, run_settings: !p.run_settings }))) },
-      { group: t("desktop.palette.group.settings"), label: prefs.drawer === "rail" ? t("desktop.drawer.menu_expand") : t("desktop.drawer.menu_collapse"), icon: mdiMenu, run: done(() => update((p) => ({ ...p, drawer: p.drawer === "rail" ? "open" : "rail" }))) },
     );
     return out;
   }, [dir, custom, chats, prefs, update, onClose, onOpenWorkspace, onSettings]);

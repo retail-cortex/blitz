@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { mdiAlertCircleOutline, mdiChevronRight, mdiClose, mdiContentSave, mdiEyeOffOutline, mdiLockOutline, mdiWrap } from "@mdi/js";
+import { mdiAlertCircleOutline, mdiChevronRight, mdiClose, mdiContentSave, mdiLockOutline, mdiWrap } from "@mdi/js";
 import { EditorView } from "@codemirror/view";
 import { t, tn } from "../i18n";
 import { Button, Dialog, Icon, IconButton } from "../ui/controls";
@@ -12,11 +12,10 @@ import type { EditorModel, Tab } from "./useEditor";
  * tabs, the active one's path, notes about it, and CodeMirror. One view
  * shows each tab's own state in turn.
  */
-export function EditorPane({ model, width, onResize, onHide, onReveal }: { model: EditorModel; width: number; onResize: (w: number) => void; onHide: () => void; onReveal: (path: string) => void }) {
+export function EditorPane({ model, onReveal }: { model: EditorModel; onReveal: (path: string) => void }) {
   const host = useRef<HTMLDivElement>(null);
   const view = useRef<EditorView | null>(null);
   const shown = useRef<string | null>(null);
-  const pane = useRef<HTMLElement>(null);
   const [closing, setClosing] = useState<Tab | null>(null);
   const tab = model.tabs.find((x) => x.path === model.active);
   const ready = tab && !tab.loading && !tab.error && !tab.binary && !tab.tooLarge;
@@ -63,27 +62,8 @@ export function EditorPane({ model, width, onResize, onHide, onReveal }: { model
 
   const closeTab = (x: Tab) => (x.dirty ? setClosing(x) : model.close(x.path));
 
-  // Dragging the left edge sets the width (kept when let go).
-  const drag = (e: React.PointerEvent) => {
-    e.preventDefault();
-    const right = pane.current!.getBoundingClientRect().right;
-    let w = width;
-    const move = (ev: PointerEvent) => {
-      w = Math.round(Math.min(Math.max(right - ev.clientX, 320), window.innerWidth - 480));
-      pane.current!.style.width = `${w}px`;
-    };
-    const up = () => {
-      window.removeEventListener("pointermove", move);
-      window.removeEventListener("pointerup", up);
-      onResize(w);
-    };
-    window.addEventListener("pointermove", move);
-    window.addEventListener("pointerup", up);
-  };
-
   return (
-    <section className="editor-pane" ref={pane} style={{ width }} aria-label={t("desktop.files.editor")}>
-      <div className="editor-resize" onPointerDown={drag} role="separator" aria-orientation="vertical" aria-label={t("desktop.files.resize")} />
+    <section className="editor-pane" aria-label={t("desktop.files.editor")}>
       <div className="editor-tabs" role="tablist">
         {model.tabs.map((x) => (
           <div
@@ -111,7 +91,6 @@ export function EditorPane({ model, width, onResize, onHide, onReveal }: { model
         ))}
         <span className="spacer" />
         <IconButton icon={mdiWrap} label={t("desktop.files.wrap")} small selected={model.wrap} onClick={() => model.setWrap(!model.wrap)} />
-        <IconButton icon={mdiEyeOffOutline} label={t("desktop.files.hide_editor")} small onClick={onHide} />
       </div>
       {tab && (
         <div className="editor-head">

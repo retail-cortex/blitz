@@ -25,8 +25,6 @@ type Prefs struct {
 	Workspaces []WorkspacePrefs `json:"workspaces"`
 	// Active is the directory of the workspace in view.
 	Active string `json:"active,omitempty"`
-	// Drawer is the navigation drawer's state: "open" or "rail".
-	Drawer string `json:"drawer"`
 	// RunSettings shows the run settings panel beside the conversation.
 	RunSettings bool `json:"run_settings"`
 	// ShowThoughts shows the model's thinking, collapsed.
@@ -44,8 +42,9 @@ type Prefs struct {
 	// ShowHidden lists hidden files in the shelf: dotfiles, files git
 	// ignores, and the agent's blocked paths.
 	ShowHidden bool `json:"show_hidden"`
-	// EditorWidth is the editor's width in pixels (0: half the window).
-	EditorWidth int `json:"editor_width,omitempty"`
+	// ChatWidth is the chat panel's width in pixels (0: a third of the
+	// window).
+	ChatWidth int `json:"chat_width,omitempty"`
 }
 
 // WorkspacePrefs is a workspace as the window shows it.
@@ -71,9 +70,6 @@ func (p *Prefs) normalize() {
 	if !themes[p.Theme] {
 		p.Theme = "system"
 	}
-	if p.Drawer != "rail" {
-		p.Drawer = "open"
-	}
 	if p.Density != "compact" {
 		p.Density = "comfortable"
 	}
@@ -83,8 +79,8 @@ func (p *Prefs) normalize() {
 	if !languageTag.MatchString(p.Language) {
 		p.Language = "system"
 	}
-	if p.EditorWidth < 0 || p.EditorWidth > 10000 {
-		p.EditorWidth = 0
+	if p.ChatWidth < 0 || p.ChatWidth > 10000 {
+		p.ChatWidth = 0
 	}
 	seen := map[string]bool{}
 	var open, closed []WorkspacePrefs

@@ -72,14 +72,12 @@ describe("normalizePrefs", () => {
     const p = normalizePrefs({
       theme: "sepia",
       density: 3,
-      drawer: "rail",
       run_settings: "yes",
       workspaces: [{ dir: "/a", open: true, name: 7 }, { dir: "" }, "nonsense", { dir: "/b", color: "teal" }],
       active: "/b",
     });
     expect(p.theme).toBe("system");
     expect(p.density).toBe("comfortable");
-    expect(p.drawer).toBe("rail");
     expect(p.run_settings).toBe(false);
     expect(p.workspaces).toEqual([
       { dir: "/a", open: true, name: undefined, description: undefined, color: undefined },
@@ -88,7 +86,7 @@ describe("normalizePrefs", () => {
     expect(p.active).toBe("/a"); // /b is closed
   });
   it("keeps the files settings when they're right", () => {
-    expect(normalizePrefs({ files: true, show_hidden: true, editor_width: 612.4 })).toMatchObject({ files: true, show_hidden: true, editor_width: 612 });
-    expect(normalizePrefs({ files: "yes", show_hidden: 1, editor_width: -5 })).toMatchObject({ files: false, show_hidden: false, editor_width: 0 });
+    expect(normalizePrefs({ files: true, show_hidden: true, chat_width: 612.4 })).toMatchObject({ files: true, show_hidden: true, chat_width: 612 });
+    expect(normalizePrefs({ files: "yes", show_hidden: 1, chat_width: -5 })).toMatchObject({ files: false, show_hidden: false, chat_width: 0 });
   });
 });

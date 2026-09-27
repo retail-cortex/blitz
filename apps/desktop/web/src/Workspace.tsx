@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { mdiCalendarClock, mdiChatOutline, mdiClose, mdiCodeBraces, mdiDotsVertical, mdiFileCompare, mdiFileSearchOutline, mdiFileTreeOutline, mdiPencilOutline, mdiTuneVariant } from "@mdi/js";
+import { mdiCalendarClock, mdiClose, mdiCodeBraces, mdiCogOutline, mdiDotsVertical, mdiFileCompare, mdiFileSearchOutline, mdiFileTreeOutline, mdiPencilOutline, mdiTuneVariant } from "@mdi/js";
 import { workspaces } from "./api";
 import { Changes } from "./Changes";
 import { Conversation } from "./Conversation";
@@ -17,19 +17,40 @@ import { displayName, type WorkspacePrefs } from "./prefs";
 import { RunSettings } from "./RunSettings";
 import { useApp } from "./state";
 import { t } from "./i18n";
-import { IconButton, Menu, Segmented } from "./ui/controls";
+import { Button, Icon, IconButton, Menu, Segmented } from "./ui/controls";
+import { WorkspaceSwitcher } from "./WorkspaceSwitcher";
 import { Workers } from "./Workers";
 
-type View = "chat" | "changes" | "workers";
+type View = "editor" | "changes" | "workers";
 
 /**
- * One open workspace: its top bar, the chat, changes or workers view, and
- * the run settings panel. Kept mounted while another is shown, so a turn
- * keeps streaming.
+ * One open workspace, laid out like an IDE: the top bar (the workspace
+ * dropdown, the view, actions, settings), the Files shelf on the left, the
+ * editor (or the Changes or Workers view) in the middle, the chat on the
+ * right, and the run settings panel beside it. Kept mounted while another
+ * is shown, so a turn keeps streaming.
  */
-export function Workspace({ ws, visible, onEdit, onClose }: { ws: WorkspacePrefs; visible: boolean; onEdit: () => void; onClose: () => void }) {
+export function Workspace({
+  ws,
+  visible,
+  onEdit,
+  onClose,
+  onOpenWorkspace,
+  onEditWorkspace,
+  onCloseWorkspace,
+  onSettings,
+}: {
+  ws: WorkspacePrefs;
+  visible: boolean;
+  onEdit: () => void;
+  onClose: () => void;
+  onOpenWorkspace: () => void;
+  onEditWorkspace: (dir: string) => void;
+  onCloseWorkspace: (dir: string) => void;
+  onSettings: () => void;
+}) {
   const { prefs, update, theme } = useApp();
-  const [view, setView] = useState<View>("chat");
+  const [view, setView] = useState<View>("editor");
   const [settings, setSettings] = useState<GetSettingsResponse>();
   const [modelProblem, setModelProblem] = useState("");
   const [settingsError, setSettingsError] = useState("");
@@ -63,7 +84,8 @@ export function Workspace({ ws, visible, onEdit, onClose }: { ws: WorkspacePrefs
   useEffect(() => {
     const f = (e: Event) => {
       const d = (e as CustomEvent<ViewDetail>).detail;
-      if (d.dir === dir) setView(d.view);
+      // The chat is always shown, beside the editor.
+      if (d.dir === dir && d.view !== "chat") setView(d.view);
     };
     window.addEventListener(viewEvent, f);
     return () => window.removeEventListener(viewEvent, f);
@@ -71,17 +93,16 @@ export function Workspace({ ws, visible, onEdit, onClose }: { ws: WorkspacePrefs
 
   // Files (spec_files_029): the shelf, the editor, Go to file.
   const editor = useEditor(dir);
-  const [editorShown, setEditorShown] = useState(true);
   const [goTo, setGoTo] = useState(false);
   const [reveal, setReveal] = useState<{ path: string } | null>(null);
   const [touched, setTouched] = useState(0);
   const editorRef = useRef(editor);
   editorRef.current = editor;
-  const showsFiles = prefs.files || (editorShown && editor.tabs.length > 0);
+  const showsFiles = prefs.files || editor.tabs.length > 0;
 
   const open = useCallback((path: string, line?: number, column?: number) => {
     editorRef.current.open(path, line, column);
-    setEditorShown(true);
+    setView("editor");
   }, []);
 
   useEffect(() => {
@@ -134,22 +155,17 @@ export function Workspace({ ws, visible, onEdit, onClose }: { ws: WorkspacePrefs
   useEffect(() => reportUnsaved(dir, editor.dirtyCount), [dir, editor.dirtyCount]);
   useEffect(() => () => reportUnsaved(dir, 0), [dir]);
 
-  const editorWidth = prefs.editor_width || Math.max(420, Math.round(window.innerWidth * 0.4));
+  const chatWidth = prefs.chat_width || Math.max(380, Math.min(520, Math.round(window.innerWidth * 0.32)));
+  const revealInTree = (path: string) => {
+    if (!prefs.files) update((p) => ({ ...p, files: true }));
+    setReveal({ path });
+  };
 
   const name = displayName(ws);
   return (
     <section className="workspace" hidden={!visible} aria-label={name} style={{ ["--ws-color" as string]: workspaceColor(ws.color, theme) }}>
       <header className="topbar drag-region">
-        <span className="ws-dot" />
-        <div className="topbar-title">
-          <button className="title-button no-drag" onClick={onEdit} title={t("desktop.ws.edit_title")}>
-            <span className="t-title-lg ellipsis">{name}</span>
-            <IconButtonGlyph />
-          </button>
-          <span className="t-body-sm muted ellipsis" title={dir}>
-            {ws.description || dir}
-          </span>
-        </div>
+        <WorkspaceSwitcher onOpen={onOpenWorkspace} onClose={onCloseWorkspace} onEdit={onEditWorkspace} />
         <div className="no-drag">
           <Segmented<View>
             label={t("desktop.ws.view")}
@@ -157,16 +173,15 @@ export function Workspace({ ws, visible, onEdit, onClose }: { ws: WorkspacePrefs
             value={view}
             onChange={setView}
             options={[
-              { value: "chat", label: t("desktop.view.chat"), icon: mdiChatOutline },
+              { value: "editor", label: t("desktop.view.editor"), icon: mdiCodeBraces },
               { value: "changes", label: t("desktop.view.changes"), icon: mdiFileCompare },
               { value: "workers", label: t("desktop.view.workers"), icon: mdiCalendarClock },
             ]}
           />
         </div>
+        <span className="spacer" />
         <div className="topbar-actions no-drag">
-          <IconButton icon={mdiFileTreeOutline} label={t("desktop.files.title")} selected={prefs.files} onClick={() => update((p) => ({ ...p, files: !p.files }))} />
           <IconButton icon={mdiFileSearchOutline} label={t("desktop.files.go_to")} onClick={() => setGoTo(true)} />
-          {editor.tabs.length > 0 && !editorShown && <IconButton icon={mdiCodeBraces} label={t("desktop.files.show_editor")} onClick={() => setEditorShown(true)} />}
           <IconButton icon={mdiTuneVariant} label={t("desktop.run_settings")} selected={prefs.run_settings} onClick={() => update((p) => ({ ...p, run_settings: !p.run_settings }))} />
           <Menu
             placement="down end"
@@ -176,15 +191,16 @@ export function Workspace({ ws, visible, onEdit, onClose }: { ws: WorkspacePrefs
               { label: t("desktop.ws.close"), icon: mdiClose, onSelect: onClose },
             ]}
           />
+          <IconButton icon={mdiCogOutline} label={t("desktop.settings")} onClick={onSettings} />
         </div>
       </header>
       <div className="workspace-body">
-        {prefs.files && (
+        {prefs.files ? (
           <FilesShelf
             dir={dir}
             showHidden={prefs.show_hidden}
             onToggleHidden={() => update((p) => ({ ...p, show_hidden: !p.show_hidden }))}
-            active={editorShown ? editor.active : null}
+            active={view === "editor" ? editor.active : null}
             refresh={touched}
             reveal={reveal}
             onOpen={(p) => {
@@ -195,36 +211,42 @@ export function Workspace({ ws, visible, onEdit, onClose }: { ws: WorkspacePrefs
             onMoved={editor.moved}
             onClose={() => update((p) => ({ ...p, files: false }))}
           />
+        ) : (
+          <nav className="files-rail" aria-label={t("desktop.files.title")}>
+            <IconButton icon={mdiFileTreeOutline} label={t("desktop.files.show")} onClick={() => update((p) => ({ ...p, files: true }))} />
+            <IconButton icon={mdiFileSearchOutline} label={t("desktop.files.go_to")} onClick={() => setGoTo(true)} />
+          </nav>
         )}
-        <div className="workspace-view">
-          <div hidden={view !== "chat"} className="view-fill">
-            <FileLinksProvider dir={dir} refresh={touched}>
-            <Conversation
-              dir={dir}
-              name={name}
-              visible={visible && view === "chat"}
-              settings={settings}
-              modelProblem={modelProblem}
-              onSettingsChanged={refreshSettings}
-              onOpenView={setView}
-            />
-            </FileLinksProvider>
-          </div>
+        <div className="workspace-center">
+          {view === "editor" &&
+            (editor.tabs.length > 0 ? (
+              <EditorPane model={editor} onReveal={revealInTree} />
+            ) : (
+              <div className="editor-empty">
+                <Icon path={mdiCodeBraces} size="lg" className="muted" />
+                <p className="t-title-sm">{t("desktop.files.none_open")}</p>
+                <p className="t-body-sm muted">{t("desktop.files.none_open.detail")}</p>
+                <div className="row">
+                  <Button variant="tonal" icon={mdiFileSearchOutline} onClick={() => setGoTo(true)}>
+                    {t("desktop.files.go_to")}
+                  </Button>
+                  {!prefs.files && (
+                    <Button icon={mdiFileTreeOutline} onClick={() => update((p) => ({ ...p, files: true }))}>
+                      {t("desktop.files.show")}
+                    </Button>
+                  )}
+                </div>
+              </div>
+            ))}
           {view === "changes" && <Changes dir={dir} />}
           {view === "workers" && <Workers dir={dir} />}
         </div>
-        {editorShown && editor.tabs.length > 0 && (
-          <EditorPane
-            model={editor}
-            width={editorWidth}
-            onResize={(w) => update((p) => ({ ...p, editor_width: w }))}
-            onHide={() => setEditorShown(false)}
-            onReveal={(path) => {
-              if (!prefs.files) update((p) => ({ ...p, files: true }));
-              setReveal({ path });
-            }}
-          />
-        )}
+        <aside className="chat-panel" style={{ width: chatWidth }} aria-label={t("desktop.view.chat")}>
+          <ResizeHandle width={chatWidth} onResize={(w) => update((p) => ({ ...p, chat_width: w }))} />
+          <FileLinksProvider dir={dir} refresh={touched}>
+            <Conversation dir={dir} name={name} visible={visible} settings={settings} modelProblem={modelProblem} onSettingsChanged={refreshSettings} onOpenView={setView} />
+          </FileLinksProvider>
+        </aside>
         {prefs.run_settings && <RunSettings dir={dir} settings={settings} error={settingsError} onChanged={refreshSettings} />}
       </div>
       {goTo && <GoToFile dir={dir} onOpen={open} onClose={() => setGoTo(false)} />}
@@ -232,11 +254,25 @@ export function Workspace({ ws, visible, onEdit, onClose }: { ws: WorkspacePrefs
   );
 }
 
-// A small pencil that shows on hover beside the workspace's name.
-function IconButtonGlyph() {
-  return (
-    <svg className="icon sm title-edit" viewBox="0 0 24 24" aria-hidden="true">
-      <path d={mdiPencilOutline} />
-    </svg>
-  );
+// The chat panel's left edge: dragging it sets the panel's width, kept
+// when let go.
+function ResizeHandle({ width, onResize }: { width: number; onResize: (w: number) => void }) {
+  const drag = (e: React.PointerEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    const panel = e.currentTarget.parentElement!;
+    const right = panel.getBoundingClientRect().right;
+    let w = width;
+    const move = (ev: PointerEvent) => {
+      w = Math.round(Math.min(Math.max(right - ev.clientX, 320), window.innerWidth - 520));
+      panel.style.width = `${w}px`;
+    };
+    const up = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      onResize(w);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  };
+  return <div className="panel-resize" onPointerDown={drag} role="separator" aria-orientation="vertical" aria-label={t("desktop.chat.resize")} />;
 }

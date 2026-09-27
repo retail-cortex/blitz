@@ -751,11 +751,7 @@ function SessionBar({
       <span className="spacer" />
       <Menu
         placement="down end"
-        trigger={(p) => (
-          <Button icon={mdiHistory} small disabled={running} {...p}>
-            {t("desktop.chat.history")}
-          </Button>
-        )}
+        trigger={(p) => <IconButton icon={mdiHistory} label={t("desktop.chat.history")} disabled={running} {...p} />}
         items={
           list.length === 0
             ? [{ heading: t("desktop.chat.none") }]
@@ -770,9 +766,7 @@ function SessionBar({
               ]
         }
       />
-      <Button icon={mdiPlus} small variant="tonal" onClick={onNew} disabled={running}>
-        {t("desktop.chat.new")}
-      </Button>
+      <IconButton icon={mdiPlus} label={t("desktop.chat.new")} variant="tonal" onClick={onNew} disabled={running} />
     </div>
   );
 }

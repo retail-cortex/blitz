@@ -365,12 +365,12 @@ Set `fallback_models = ["anthropic/claude-sonnet-5"]` with a working Anthropic k
 - [ ] 💲 A turn that edits a file with approvals on. **Expected:** the approval shows the diff; "Allow once" edits the file; "Deny" doesn't, and the agent says so.
 - [ ] 💲 While a turn runs, type a message and press Steer. **Expected:** "Queued for the agent", and the agent takes it into account at its next tool call; Stop ends the turn with "Interrupted."
 - [ ] 💲 An `ask_user_question`. **Expected:** the question with its options; the answer reaches the agent.
-- [ ] Two workspace tabs, a turn in each at once. **Expected:** both stream independently; switching between them doesn't interrupt either, and the drawer shows a pulsing dot on each (a red `!` when one waits for an approval).
+- [ ] Two workspace tabs, a turn in each at once. **Expected:** both stream independently; switching between them doesn't interrupt either, and the workspace dropdown shows a pulsing dot on each (a red `!` when one waits for an approval).
 - [ ] First start: `blitz service uninstall`, move `~/.blitz/desktop.json` aside, open the app, click "Install and start the service". **Expected:** within a few seconds the welcome page ("Open a workspace") replaces the install screen.
-- [ ] The window on macOS: the title bar area is the page's (drag it by the top bar or the drawer's top; the window buttons don't overlap the menu button, also in the rail).
+- [ ] The window on macOS: the title bar area is the page's (drag it by the top bar; the window buttons don't overlap the workspace dropdown).
 - [ ] Settings › Appearance: System, Light, Dark. **Expected:** System follows System Settings › Appearance while the app is open; the choice survives a restart. Compact density tightens the lists and chat.
-- [ ] Edit a workspace's name, description and colour (drawer pencil, title, Settings › Workspaces). **Expected:** the drawer, title bar and welcome cards change; after a restart the same workspaces are open, in order, with the same one shown.
-- [ ] Close a workspace (drawer ✕): it moves to Recent, "Undo" reopens it. 💲 Close one while a turn runs: the dialog stops the turn first. With the REPL attached and running a turn in the same workspace, closing it in the app leaves the REPL's turn running.
+- [ ] Edit a workspace's name, description and colour (dropdown pencil, ⋮ menu, Settings › Workspaces). **Expected:** the dropdown and welcome cards change; after a restart the same workspaces are open, in order, with the same one shown.
+- [ ] Close a workspace (dropdown ✕): it moves to Recent, "Undo" reopens it. 💲 Close one while a turn runs: the dialog stops the turn first. With the REPL attached and running a turn in the same workspace, closing it in the app leaves the REPL's turn running.
 - [ ] Stop the service (`blitz service stop` or kill it) with the app open, then click something. **Expected:** "isn't answering. Reconnecting…"; start it again: "Reconnected" and the workspaces reload.
 - [ ] 💲 A model answer with a link, a table and a code block: the table and code render; Copy copies the code; clicking the link opens the default browser, not the window. An image in Markdown shows as a link and isn't loaded.
 - [ ] 💲 Hover a prompt › Edit: the files and conversation go back, and the prompt is in the composer. "Code only" restores files and keeps the chat. After editing a file by hand, a rewind asks to overwrite.
@@ -378,10 +378,10 @@ Set `fallback_models = ["anthropic/claude-sonnet-5"]` with a working Anthropic k
 - [ ] Run settings: change the model, effort, temperature (saved to `[model_settings]`), mode, agency; add and remove a permission rule; revoke an approval; compact the context.
 - [ ] Changes view after a turn that edited files: the files, their diffs, the agent's summary, "Undo last turn"; the Git toggle shows `git diff`.
 - [ ] 💲 Notifications: start a turn that needs an approval, switch to another app. **Expected:** macOS asks once to allow notifications; then "<workspace>: approval needed"; clicking it brings Blitz back on that workspace. A long turn finishing while another workspace is shown notifies "done"; a quick one doesn't; nothing notifies while you watch the conversation. Settings › Notifications off stops them.
-- [ ] 💲 Images: paste a screenshot (Cmd+Shift+Ctrl+4, then Cmd+V) into the composer, drop a PNG from Finder onto the chat, and attach one with the button: each shows a thumbnail with its size; ask about them and the model describes them. Dropping a file on the drawer does nothing (the window doesn't open it).
+- [ ] 💲 Images: paste a screenshot (Cmd+Shift+Ctrl+4, then Cmd+V) into the composer, drop a PNG from Finder onto the chat, and attach one with the button: each shows a thumbnail with its size; ask about them and the model describes them. Dropping a file on the top bar does nothing (the window doesn't open it).
 - [ ] Commands: type `/` and pick with the arrows; `/cost`, `/context`, `/checkpoints`, `/help` show results; `/nope` is refused; `/usr/bin is odd` goes to the agent as text. 💲 `/btw what is this repo?` answers without adding to History's message count; `/search web connect-go interceptors` lists links then reads them; a workspace command (`.claude/commands/x.md`) runs. Cmd+K: "changes" + Enter shows Changes; a workspace name switches to it; "theme dark" switches the theme.
-- [ ] Settings › Appearance › Interface language: Español, then Français (Canada). **Expected:** the whole window changes at once — drawer, composer, menus, settings, the "Open a workspace" folder dialog's title — and stays after a restart; System follows System Settings › Language & Region. Set `"language": "en-XA"` in `~/.blitz/desktop.json`: no plain English left except what the service or model wrote.
-- [ ] A narrow window (about 800 px): the drawer is a rail, the run settings float over the chat, the view switcher shows icons.
+- [ ] Settings › Appearance › Interface language: Español, then Français (Canada). **Expected:** the whole window changes at once — top bar, dropdown, composer, menus, settings, the "Open a workspace" folder dialog's title — and stays after a restart; System follows System Settings › Language & Region. Set `"language": "en-XA"` in `~/.blitz/desktop.json`: no plain English left except what the service or model wrote.
+- [ ] A narrower window (about 1000 px): the run settings float over the chat, the Files shelf floats over the editor and minimizes when a file opens, the view switcher shows icons.
 
 ## 38. Parity features (ROADMAP item 25)
 
@@ -454,5 +454,6 @@ These touch your real keychain and settings: use a test key, or a throwaway `--c
 - [ ] Right-click in the tree: **New file** (opens it), **New folder**, **Rename** (F2), **Delete** (asks), **Copy path**, **Copy relative path**. Arrow keys move and open folders; Enter opens.
 - [ ] ⌘P: type part of a name (`dsc` finds `discount.go`); `name:12` opens at line 12.
 - [ ] A path in an answer (`internal/cart/discount.go`) and a tool call's path open the file.
-- [ ] Unsaved changes: closing the tab, closing the workspace (menu, drawer) and quitting the app (⌘Q, the window's close button) each ask first.
-- [ ] Drag the editor's edge: the width is kept after a restart. In a narrow window, the shelf floats and hides when a file opens.
+- [ ] Unsaved changes: closing the tab, closing the workspace (⋮ menu, dropdown) and quitting the app (⌘Q, the window's close button) each ask first.
+- [ ] The IDE layout: files left, editor middle, chat right. Minimize the shelf (≪): a rail with Show files and Go to file remains, and stays after a restart. Drag the chat's left edge: its width is kept after a restart.
+- [ ] The workspace dropdown: switch workspaces; while a turn in another workspace waits for approval, the dropdown shows a `!`; reopen a recent workspace; Open workspace…; Settings is the top bar's far-right button.

@@ -12,7 +12,7 @@ The desktop app shows only the conversation: you can't see where things are, so 
 
 The owner's decisions (2026-09-27):
 
-- **The editor sits beside the conversation**, not in a view of its own, so you can talk while you look ("test and learn": revisit once used).
+- **The editor sits beside the conversation**, not in a view of its own, so you can talk while you look ("test and learn": revisit once used). Revisited the same day: the window is laid out like an IDE — files on the left (minimizable), the editor in the middle, the chat on the right, the workspace a dropdown in the top bar ([spec_desktop_024](spec_desktop_024.md) DSK-65).
 - **Blitz installs a missing language server** when you agree (phase 3).
 - **The agent is told about files you change** between its turns.
 - **Hidden files** (dotfiles, ignored files, the agent's blocked paths) **are hidden by default**, with a toggle to show them.
@@ -47,9 +47,9 @@ Every request names its workspace (SVC-10) and a path relative to it.
 
 ## 5. The window (phase 1)
 
-- **FIL-30** The **Files** shelf: a panel on the left of the conversation, shown with the top bar's **Files** button (remembered per window). It lists the workspace as a tree loaded folder by folder: icons by kind, git status as a coloured letter (M, A, D, R, U, !) with the name tinted, folders with changes marked, hidden entries dimmed when shown, a lock on blocked or read-only ones with the rule in its tooltip. The header has **New file**, **New folder**, **Refresh**, **Collapse all**, **Show hidden files** (off by default, remembered per window) and **Hide**. In windows too narrow for the shelf, the conversation and the editor, the shelf floats and gets out of the way when a file opens.
+- **FIL-30** The **Files** shelf: a panel on the left of the window, minimized to a rail (**Show files**, **Go to file**) with its **Minimize** button (remembered per window). It lists the workspace as a tree loaded folder by folder: icons by kind, git status as a coloured letter (M, A, D, R, U, !) with the name tinted, folders with changes marked, hidden entries dimmed when shown, a lock on blocked or read-only ones with the rule in its tooltip. The header has **New file**, **New folder**, **Refresh**, **Collapse all**, **Show hidden files** (off by default, remembered per window) and **Minimize**. Under 1100 px the shelf floats over the editor and minimizes when a file opens.
 - **FIL-31** Each entry's menu: **Open**, **New file**, **New folder** (in a folder), **Rename** (in place), **Delete** (confirmed, saying a folder goes with everything in it and that only git can bring files back), **Copy path**, **Copy relative path**. Keyboard: arrows move and open folders, Enter opens, F2 renames, Delete deletes.
-- **FIL-32** Opening a file opens the editor beside the conversation (FIL-40); the conversation keeps at least 360 px and the divider can be dragged (remembered). In windows too narrow for both, the editor covers the conversation with a button back to it.
+- **FIL-32** Opening a file shows it in the editor in the middle, between the shelf and the chat (switching the middle from Changes or Workers). With no file open the middle says how to open one. The chat's width is dragged at its left edge (remembered); the editor takes the rest.
 - **FIL-33** The window notices changes made elsewhere: after each tool call that writes, at the end of a turn, and every 5 seconds while the shelf or editor is shown, it lists the open folders again and checks the open files (`StatFiles`). A file you haven't changed reloads; one you have gets a bar: **Reload** (discard yours) or **Keep mine** (the next save asks to overwrite).
 - **FIL-34** **Go to file** (⌘P, and in the command palette): `FindFiles` as you type, Enter opens.
 - **FIL-35** Paths in the conversation open the editor: file paths in tool calls, and inline code in answers that names a file in the workspace (`internal/cart/discount.go`, with `:42` or `:42:7` going to that line). The inline code gets a link style only once the file is known to exist (FindFiles' list).
@@ -61,7 +61,7 @@ Every request names its workspace (SVC-10) and a path relative to it.
 - **FIL-42** Completion without a language server: the language's keywords and snippets where CodeMirror has them, and words from the open files. Phase 3 adds a language server's.
 - **FIL-43** ⌘S saves (`WriteFile` with the version it loaded). `FILE_CHANGED` asks: **Overwrite**, **Reload** (discard yours), or cancel; phase 2 adds **Compare**.
 - **FIL-44** Binary and too-large files open as a note saying so, with the size. Blocked files open with a bar: "Blitz's agent can't read this file"; read-only roots likewise.
-- **FIL-45** Unsaved changes survive switching workspaces and views; closing a workspace (any way: its menu, the drawer, its details) or the window with unsaved changes asks first. The page tells the app how many files are unsaved (`SetUnsaved`, in the window's language), and the app's close handler asks with a native dialog.
+- **FIL-45** Unsaved changes survive switching workspaces and views; closing a workspace (any way: its menu, the workspace dropdown, its details) or the window with unsaved changes asks first. The page tells the app how many files are unsaved (`SetUnsaved`, in the window's language), and the app's close handler asks with a native dialog.
 
 ## 7. Phase 2 (outline)
 

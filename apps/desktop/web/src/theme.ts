@@ -25,11 +25,6 @@ export function applyTheme(theme: Theme, density: "comfortable" | "compact" = "c
   root.dataset.density = density;
 }
 
-/** Whether the window is narrower than px (kept up to date). */
-export function narrowQuery(px: number) {
-  return window.matchMedia?.(`(max-width: ${px}px)`);
-}
-
 /** Calls f whenever the system switches between light and dark. */
 export function onSystemThemeChange(f: (dark: boolean) => void): () => void {
   const q = darkQuery();

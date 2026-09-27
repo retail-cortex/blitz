@@ -1,11 +1,11 @@
 // State shared across the window: the preferences (saved as they change),
 // the theme in effect, and what each open workspace is doing (for the
-// drawer's indicators).
+// workspace dropdown's indicators).
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { getPrefs, savePrefs } from "./desktop";
 import { setLanguage } from "./i18n";
 import { defaultPrefs, type Prefs } from "./prefs";
-import { applyTheme, narrowQuery, onSystemThemeChange, resolveTheme, systemIsDark, type Theme } from "./theme";
+import { applyTheme, onSystemThemeChange, resolveTheme, systemIsDark, type Theme } from "./theme";
 
 /** What a workspace is doing: a turn running, or waiting for the user. */
 export interface Activity {
@@ -18,8 +18,6 @@ interface AppState {
   loaded: boolean;
   update: (f: (p: Prefs) => Prefs) => void;
   theme: Theme;
-  /** The drawer as shown: the user's choice, or a rail in a narrow window. */
-  drawer: "open" | "rail";
   activity: Record<string, Activity>;
   setActivity: (dir: string, a: Activity) => void;
   prefsError: string;
@@ -35,14 +33,6 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   const [loaded, setLoaded] = useState(false);
   const [prefsError, setPrefsError] = useState("");
   const [systemDark, setSystemDark] = useState(systemIsDark);
-  const [narrow, setNarrow] = useState(() => narrowQuery(980)?.matches ?? false);
-  useEffect(() => {
-    const q = narrowQuery(980);
-    if (!q) return;
-    const f = (e: MediaQueryListEvent) => setNarrow(e.matches);
-    q.addEventListener("change", f);
-    return () => q.removeEventListener("change", f);
-  }, []);
   const [activity, setAllActivity] = useState<Record<string, Activity>>({});
   const saving = useRef<Promise<unknown>>(Promise.resolve());
 
@@ -82,7 +72,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <Ctx.Provider value={{ prefs, loaded, update, theme, drawer: narrow ? "rail" : prefs.drawer, activity, setActivity, prefsError, registerStop, stop }}>{children}</Ctx.Provider>
+    <Ctx.Provider value={{ prefs, loaded, update, theme, activity, setActivity, prefsError, registerStop, stop }}>{children}</Ctx.Provider>
   );
 }
 

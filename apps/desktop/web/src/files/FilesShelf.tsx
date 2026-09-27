@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   mdiChevronDown,
   mdiChevronRight,
-  mdiClose,
+  mdiChevronDoubleLeft,
   mdiCollapseAllOutline,
   mdiContentCopy,
   mdiDeleteOutline,
@@ -252,7 +252,7 @@ export function FilesShelf({
         <IconButton icon={mdiRefresh} label={t("desktop.files.refresh")} small onClick={() => void reloadAll()} />
         <IconButton icon={mdiCollapseAllOutline} label={t("desktop.files.collapse")} small onClick={() => setTree((tr) => ({ ...tr, expanded: new Set() }))} />
         <IconButton icon={showHidden ? mdiEyeOutline : mdiEyeOffOutline} label={t("desktop.files.show_hidden")} small selected={showHidden} onClick={onToggleHidden} />
-        <IconButton icon={mdiClose} label={t("desktop.files.hide")} small onClick={onClose} />
+        <IconButton icon={mdiChevronDoubleLeft} label={t("desktop.files.hide")} small onClick={onClose} />
       </div>
       <div
         className="files-tree"

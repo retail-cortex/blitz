@@ -67,8 +67,6 @@
   --md-font-display: "Google Sans", "Google Sans Text", Roboto, system-ui, -apple-system, "Segoe UI", sans-serif;
   --md-mono: "Google Sans Mono", "SF Mono", ui-monospace, Menlo, Consolas, monospace;
 
-  --drawer-width: 280px;
-  --rail-width: 72px;
   --panel-width: 340px;
   --topbar-height: 64px;
   --content-width: 860px;

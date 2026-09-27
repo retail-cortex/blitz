@@ -11,7 +11,7 @@ import (
 func TestPrefsDefaultsAndRoundTrip(t *testing.T) {
 	s := &prefsStore{path: filepath.Join(t.TempDir(), "blitz", "desktop.json")}
 	p, err := s.load()
-	if err != nil || p.Theme != "system" || p.Drawer != "open" || p.Density != "comfortable" || p.Notifications != "on" || len(p.Workspaces) != 0 {
+	if err != nil || p.Theme != "system" || p.Density != "comfortable" || p.Notifications != "on" || len(p.Workspaces) != 0 {
 		t.Fatalf("defaults %+v %v", p, err)
 	}
 	a, b := t.TempDir(), t.TempDir()
@@ -23,12 +23,12 @@ func TestPrefsDefaultsAndRoundTrip(t *testing.T) {
 		{Dir: "relative/dir", Open: true}, // not a directory the service can open
 	}
 	p.Active = b // closed: can't be active
-	p.Files, p.ShowHidden, p.EditorWidth = true, true, -3
+	p.Files, p.ShowHidden, p.ChatWidth = true, true, -3
 	saved, err := s.save(p)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(saved.Workspaces) != 2 || saved.Workspaces[0].Dir != a || saved.Workspaces[0].Name != "Shop" || saved.Active != a || !saved.Files || !saved.ShowHidden || saved.EditorWidth != 0 {
+	if len(saved.Workspaces) != 2 || saved.Workspaces[0].Dir != a || saved.Workspaces[0].Name != "Shop" || saved.Active != a || !saved.Files || !saved.ShowHidden || saved.ChatWidth != 0 {
 		t.Fatalf("normalized %+v", saved)
 	}
 	info, err := os.Stat(s.path)

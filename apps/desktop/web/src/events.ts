@@ -16,7 +16,7 @@ export function compose(detail: ComposeDetail) {
 export const viewEvent = "blitz:view";
 export interface ViewDetail {
   dir: string;
-  view: "chat" | "changes" | "workers";
+  view: "chat" | "editor" | "changes" | "workers";
 }
 export function showView(detail: ViewDetail) {
   window.dispatchEvent(new CustomEvent(viewEvent, { detail }));

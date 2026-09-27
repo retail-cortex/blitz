@@ -128,7 +128,7 @@ export function Switch({ checked, onChange, label }: { checked: boolean; onChang
 }
 
 /** Closes on a click outside ref or on Escape. */
-function useDismiss(open: boolean, ref: React.RefObject<HTMLElement | null>, close: () => void) {
+export function useDismiss(open: boolean, ref: React.RefObject<HTMLElement | null>, close: () => void) {
   useEffect(() => {
     if (!open) return;
     const down = (e: MouseEvent) => {

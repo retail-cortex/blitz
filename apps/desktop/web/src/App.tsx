@@ -1,19 +1,19 @@
 import { useCallback, useEffect, useState } from "react";
-import { mdiAlertOutline, mdiFolderOpenOutline, mdiLightningBolt, mdiServerOff } from "@mdi/js";
+import { mdiAlertOutline, mdiCogOutline, mdiFolderOpenOutline, mdiLightningBolt, mdiServerOff } from "@mdi/js";
 import { onServiceLost, workspaces as workspaceAPI } from "./api";
 import { appVersion, chooseWorkspace, installService, onNotificationOpen, restartService, serviceStatus, type ServiceStatus } from "./desktop";
 import { checkService, type ServiceCheck } from "./serviceVersion";
 import { CommandPalette } from "./CommandPalette";
-import { Drawer } from "./Drawer";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { t, useLanguage } from "./i18n";
 import { message, reason } from "./errors";
 import { UnsavedDialog } from "./files/EditorPane";
+import { WorkspaceSwitcher } from "./WorkspaceSwitcher";
 import { unsavedIn } from "./files/unsaved";
 import { closeWorkspace, displayName, openWorkspace, openWorkspaces, recentWorkspaces } from "./prefs";
 import { SettingsDialog } from "./SettingsDialog";
 import { AppStateProvider, useApp } from "./state";
-import { Button, Dialog, Icon, SnackbarProvider, useSnackbar } from "./ui/controls";
+import { Button, Dialog, Icon, IconButton, SnackbarProvider, useSnackbar } from "./ui/controls";
 import { Workspace } from "./Workspace";
 import { WorkspaceDialog } from "./WorkspaceDialog";
 
@@ -124,7 +124,7 @@ function StaleService({ state, check }: { state: ServiceCheck; check: () => Prom
 }
 
 function Shell() {
-  const { prefs, loaded, update, prefsError, activity, stop, drawer } = useApp();
+  const { prefs, loaded, update, prefsError, activity, stop } = useApp();
   useLanguage(); // the whole window follows a language change
   const [confirmClose, setConfirmClose] = useState<string | null>(null);
   const snack = useSnackbar();
@@ -206,8 +206,7 @@ function Shell() {
   const open_ = openWorkspaces(prefs);
   const editingWs = prefs.workspaces.find((w) => w.dir === editing);
   return (
-    <div className={`shell drawer-${drawer}`}>
-      <Drawer onOpen={open} onClose={close} onSettings={() => setSettingsOpen(true)} onEdit={setEditing} />
+    <div className="shell">
       <main className="main">
         {service.state === "lost" && (
           <div className="banner">
@@ -217,9 +216,19 @@ function Shell() {
           </div>
         )}
         {service.state === "up" && version.stale && <StaleService state={version} check={version.check} />}
-        {open_.length === 0 && <Welcome onOpen={open} />}
+        {open_.length === 0 && <Welcome onOpen={open} onEdit={setEditing} onClose={close} onSettings={() => setSettingsOpen(true)} />}
         {open_.map((w) => (
-          <Workspace key={`${w.dir}#${generation}`} ws={w} visible={w.dir === prefs.active} onEdit={() => setEditing(w.dir)} onClose={() => close(w.dir)} />
+          <Workspace
+            key={`${w.dir}#${generation}`}
+            ws={w}
+            visible={w.dir === prefs.active}
+            onEdit={() => setEditing(w.dir)}
+            onClose={() => close(w.dir)}
+            onOpenWorkspace={open}
+            onEditWorkspace={setEditing}
+            onCloseWorkspace={close}
+            onSettings={() => setSettingsOpen(true)}
+          />
         ))}
       </main>
       {unsavedClose && (
@@ -312,12 +321,18 @@ function ServiceDown({ status, onStarted, error, setError }: { status: ServiceSt
   );
 }
 
-function Welcome({ onOpen }: { onOpen: () => void }) {
+function Welcome({ onOpen, onEdit, onClose, onSettings }: { onOpen: () => void; onEdit: (dir: string) => void; onClose: (dir: string) => void; onSettings: () => void }) {
   const { prefs, update } = useApp();
   const recent = recentWorkspaces(prefs).slice(0, 6);
   return (
     <div className="welcome">
-      <div className="drag-region" />
+      <header className="topbar drag-region welcome-bar">
+        <WorkspaceSwitcher onOpen={onOpen} onClose={onClose} onEdit={onEdit} />
+        <span className="spacer" />
+        <div className="topbar-actions no-drag">
+          <IconButton icon={mdiCogOutline} label={t("desktop.settings")} onClick={onSettings} />
+        </div>
+      </header>
       <div className="welcome-body">
         <h1 className="t-display">{t("desktop.welcome.title")}</h1>
         <p className="t-title muted">{t("desktop.welcome.body")}</p>

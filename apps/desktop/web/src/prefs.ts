@@ -15,7 +15,6 @@ export interface Prefs {
   theme: ThemePref;
   workspaces: WorkspacePrefs[];
   active?: string;
-  drawer: "open" | "rail";
   run_settings: boolean;
   show_thoughts: boolean;
   density: "comfortable" | "compact";
@@ -26,14 +25,13 @@ export interface Prefs {
   files: boolean;
   /** List hidden files: dotfiles, files git ignores, the agent's blocked paths. */
   show_hidden: boolean;
-  /** The editor's width in pixels (0: half the window). */
-  editor_width: number;
+  /** The chat panel's width in pixels (0: a third of the window). */
+  chat_width: number;
 }
 
 export const defaultPrefs: Prefs = {
   theme: "system",
   workspaces: [],
-  drawer: "open",
   run_settings: false,
   show_thoughts: false,
   density: "comfortable",
@@ -41,7 +39,7 @@ export const defaultPrefs: Prefs = {
   language: "system",
   files: false,
   show_hidden: false,
-  editor_width: 0,
+  chat_width: 0,
 };
 
 const pick = <T extends string>(v: unknown, allowed: readonly T[], fallback: T): T => (allowed.includes(v as T) ? (v as T) : fallback);
@@ -67,7 +65,6 @@ export function normalizePrefs(raw: unknown): Prefs {
     theme: pick(r.theme, ["system", "light", "dark"] as const, "system"),
     workspaces,
     active,
-    drawer: pick(r.drawer, ["open", "rail"] as const, "open"),
     run_settings: r.run_settings === true,
     show_thoughts: r.show_thoughts === true,
     density: pick(r.density, ["comfortable", "compact"] as const, "comfortable"),
@@ -75,7 +72,7 @@ export function normalizePrefs(raw: unknown): Prefs {
     language: typeof r.language === "string" && /^[A-Za-z]{2,3}(-[A-Za-z0-9]+)*$|^system$/.test(r.language) ? r.language : "system",
     files: r.files === true,
     show_hidden: r.show_hidden === true,
-    editor_width: typeof r.editor_width === "number" && r.editor_width >= 0 && r.editor_width <= 10000 ? Math.round(r.editor_width) : 0,
+    chat_width: typeof r.chat_width === "number" && r.chat_width >= 0 && r.chat_width <= 10000 ? Math.round(r.chat_width) : 0,
   };
 }
 
