@@ -27,4 +27,6 @@ the MIT License:
   OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
   SOFTWARE.
 
-The last version containing the Python implementation is tagged python-final.
+The last version containing the Python implementation is tagged python-final in
+the history of the former repository (github.com/rmcguinness/code_puppy); this
+repository (github.com/retail-cortex/blitz) starts from a fresh history.

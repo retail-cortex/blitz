@@ -342,7 +342,7 @@ limits: { max_turns: 30, max_cost_usd: 0.50, timeout: 20m }
 Check for outdated Go modules and write reports/deps.md.
 ```
 
-`blitz workers` lists them; `blitz workers enable <name>` shows exactly what you're approving and enables that content (an edit disables it again); `workers run <name>` runs one now; `workers runs <name>` shows its history. A worker may only do what its `permissions` allow (`shell:`, `write:`, `delete:`, `web:`, `mcp:`), capped by `[workers.policy]`; anything else is refused and recorded, and it can't ask questions. Each run is a session of its own you can open with `/resume`. `blitz service install` starts the service at every login (a launchd agent on macOS, a systemd user unit on Linux), so workers keep their schedules; keep API keys in `~/.blitz/.env.toml`, since a login item doesn't see your shell's environment.
+Optional `agent:` and `model:` run the worker as another agent or on another model, for its runs only. `blitz workers` lists them; `blitz workers enable <name>` shows exactly what you're approving and enables that content (an edit disables it again); `workers run <name>` runs one now; `workers runs <name>` shows its history. A worker may only do what its `permissions` allow (`shell:`, `write:`, `delete:`, `web:`, `mcp:`), capped by `[workers.policy]`; anything else is refused and recorded, and it can't ask questions. Each run is a session of its own you can open with `/resume`. `blitz service install` starts the service at every login (a launchd agent on macOS, a systemd user unit on Linux), so workers keep their schedules; keep API keys in `~/.blitz/.env.toml`, since a login item doesn't see your shell's environment.
 
 ## Build, Test, Release
 
@@ -357,11 +357,11 @@ Tagging `v*` runs `.github/workflows/release.yml`: reproducible builds, archives
 
 ```bash
 cosign verify-blob --bundle checksums.txt.sigstore.json \
-  --certificate-identity-regexp '^https://github.com/rmcguinness/code_puppy/\.github/workflows/release\.yml@refs/tags/v' \
+  --certificate-identity-regexp '^https://github.com/retail-cortex/blitz/\.github/workflows/release\.yml@refs/tags/v' \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com checksums.txt
 sha256sum --ignore-missing -c checksums.txt
 ```
-(`v0.1.0` was signed before the workflow was renamed: use `go-release\.yml` for it.)
+(Releases made before the move to `retail-cortex/blitz`, such as `v0.1.0`, were signed by the former repository's workflow and verify against that identity: `^https://github.com/rmcguinness/code_puppy/\.github/workflows/go-release\.yml@refs/tags/v`.)
 
 The macOS binaries aren't Apple-notarized, so a copy downloaded in a browser is quarantined and Gatekeeper won't run it. Clear the flag with `xattr -d com.apple.quarantine blitz`, or open it once through Finder's context menu. Each release's notes say this too.
 
@@ -371,4 +371,4 @@ CI (`ci.yml`) runs vet and race tests on macOS and Linux, and checks the API pro
 
 ## License
 
-Apache License 2.0; see [LICENSE](LICENSE) and [NOTICE](NOTICE). Blitz began as a Go port of [Blitz](https://github.com/mpfaffenberger/code_puppy) by Mike Pfaffenberger (MIT); the Python implementation was removed after the port and is kept at the `python-final` tag.
+Apache License 2.0; see [LICENSE](LICENSE) and [NOTICE](NOTICE). Blitz began as a Go port of [Code Puppy](https://github.com/mpfaffenberger/code_puppy) by Mike Pfaffenberger (MIT); the Python implementation was removed after the port and is kept at the `python-final` tag of the former repository, `rmcguinness/code_puppy` (this repository starts from a fresh history).

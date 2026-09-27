@@ -167,6 +167,14 @@ prefix = "fs"
   **Expected:** `Verified OK` and every file `OK`. Then publish the draft.
   *Verified 2026-09-26 with cosign v3.1.3 (the bundle was made by cosign v2 in CI), using the exact identity `https://github.com/rmcguinness/code_puppy/.github/workflows/go-release.yml@refs/tags/v0.1.0`: `Verified OK`. A tampered `checksums.txt` and a wrong identity were both rejected. All 10 files `OK`. The SBOMs are SPDX 2.3 with 96 Go modules (95 in the binary's build info). The darwin/arm64 binary reports `0.1.0` and `vcs.revision=4e008b41`, and `doctor` runs. Draft assets need authentication: `gh api repos/<owner>/<repo>/releases/<id>/assets`, then download each asset with `Accept: application/octet-stream`. Not yet published.*
 - [x] Publish the draft. *Published 2026-09-26 as Latest, after deleting a stray empty release on the same tag; the public `checksums.txt` is identical to the verified one.* Binaries aren't Apple-notarized: on macOS, a copy downloaded in a browser gets the quarantine flag, and Gatekeeper refuses to run it until it's cleared (`xattr -d com.apple.quarantine blitz`) or opened through Finder's context menu. Document this in the release notes, or notarize later.
+- [ ] After the move to `retail-cortex/blitz` (fresh history, 2026-09-26): the first `v*` tag pushed here produces a draft release, and it verifies against the new identity:
+  ```bash
+  cosign verify-blob --bundle checksums.txt.sigstore.json \
+    --certificate-identity-regexp '^https://github.com/retail-cortex/blitz/\.github/workflows/release\.yml@refs/tags/v' \
+    --certificate-oidc-issuer https://token.actions.githubusercontent.com checksums.txt
+  shasum -a 256 --ignore-missing -c checksums.txt
+  ```
+  **Expected:** `Verified OK` and every file `OK`; the former repository's identity is rejected. (The items above were run against `rmcguinness/code_puppy`.)
 
 ## 19. Cost sanity 💲
 
@@ -343,10 +351,11 @@ Set `fallback_models = ["anthropic/claude-sonnet-5"]` with a working Anthropic k
 - [ ] Same on Linux with systemd (`systemctl --user status blitz`).
 - [ ] 💲 A worker `workers/check/WORKER.md` with `schedule: every 5 minutes` and `permissions: ["write:reports/"]` whose workflow writes `reports/check.md` and also tries to edit `main.go`. `blitz workers enable check`, wait. **Expected:** it runs on schedule; `reports/check.md` exists, `main.go` is unchanged; `blitz workers runs check` lists the run with one refusal; `/resume <session>` shows the conversation. Edit `WORKER.md`: the listing says "changed" and it stops running until re-enabled.
 - [ ] 💲 A worker with `limits: {max_cost_usd: 0.001}`. **Expected:** stopped as "limited" with the cost limit as the reason.
+- [ ] 💲 A worker with `agent: qa` and `model: anthropic/claude-haiku-4-5` (the workspace on another model). `blitz workers enable` shows both; `blitz workers run` it. **Expected:** the run's session (`/resume` it) is the `qa` agent's, the run is priced as Haiku in `workers runs`, and the workspace's `/agents` and `/model` are unchanged afterwards. With `agent: nobody`, `blitz workers` lists the problem and a run fails naming it.
 
 ## 37. Desktop app
 
-- [ ] `make desktop`, open `build/desktop/bin/blitz-desktop.app` with no service running. **Expected:** it offers to install the service; accepting runs `blitz service install` and the app continues.
+- [ ] `make desktop`, open `build/desktop/bin/Blitz.app` with no service running. **Expected:** it offers to install the service; accepting runs `blitz service install` and the app continues.
 - [ ] With the service running: open a workspace with "+". **Expected:** a tab named after the directory, showing the active agent and model (or why the model is unavailable).
 - [ ] 💲 A turn in the app: its text appears as it streams, not only at the end. **This checks that WebKit streams responses through Wails's asset server**, which the tests can't: they exercise the proxy over plain HTTP.
 - [ ] 💲 A turn that edits a file with approvals on. **Expected:** the approval shows the diff; "Allow once" edits the file; "Deny" doesn't, and the agent says so.
