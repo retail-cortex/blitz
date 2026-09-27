@@ -1,10 +1,20 @@
 import { useCallback, useRef, useState } from "react";
-import { mdiChevronDown, mdiClose, mdiDeleteOutline, mdiFolderOpenOutline, mdiPencilOutline } from "@mdi/js";
+import { mdiChevronDown, mdiClose, mdiDeleteOutline, mdiFolderOpenOutline, mdiLightningBolt, mdiPencilOutline } from "@mdi/js";
 import { workspaceColor } from "./palette";
 import { displayName, forgetWorkspace, openWorkspace, openWorkspaces, recentWorkspaces, type WorkspacePrefs } from "./prefs";
 import { useApp } from "./state";
 import { t } from "./i18n";
 import { Icon, IconButton, useDismiss } from "./ui/controls";
+
+/** The app's name and mark, at the left of the top bar. */
+export function Brand() {
+  return (
+    <span className="brand">
+      <Icon path={mdiLightningBolt} className="brand-mark" />
+      {t("desktop.brand")}
+    </span>
+  );
+}
 
 /**
  * The workspace in view, as a dropdown at the left of the top bar: the

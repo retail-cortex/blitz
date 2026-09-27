@@ -8,7 +8,7 @@ import { ErrorBoundary } from "./ErrorBoundary";
 import { t, useLanguage } from "./i18n";
 import { message, reason } from "./errors";
 import { UnsavedDialog } from "./files/EditorPane";
-import { WorkspaceSwitcher } from "./WorkspaceSwitcher";
+import { Brand, WorkspaceSwitcher } from "./WorkspaceSwitcher";
 import { unsavedIn } from "./files/unsaved";
 import { closeWorkspace, displayName, openWorkspace, openWorkspaces, recentWorkspaces } from "./prefs";
 import { SettingsDialog } from "./SettingsDialog";
@@ -325,6 +325,7 @@ function Welcome({ onOpen, onEdit, onClose, onSettings }: { onOpen: () => void; 
   return (
     <div className="welcome">
       <header className="topbar drag-region welcome-bar">
+        <Brand />
         <WorkspaceSwitcher onOpen={onOpen} onClose={onClose} onEdit={onEdit} />
         <span className="spacer" />
         <div className="topbar-actions no-drag">

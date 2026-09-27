@@ -18,7 +18,7 @@ import { RunSettings } from "./RunSettings";
 import { useApp } from "./state";
 import { t } from "./i18n";
 import { IconButton, Segmented } from "./ui/controls";
-import { WorkspaceSwitcher } from "./WorkspaceSwitcher";
+import { Brand, WorkspaceSwitcher } from "./WorkspaceSwitcher";
 import { Workers } from "./Workers";
 
 type View = "editor" | "changes" | "workers";
@@ -162,6 +162,7 @@ export function Workspace({
   return (
     <section className="workspace" hidden={!visible} aria-label={name} style={{ ["--ws-color" as string]: workspaceColor(ws.color, theme) }}>
       <header className="topbar drag-region">
+        <Brand />
         <WorkspaceSwitcher onOpen={onOpenWorkspace} onClose={onCloseWorkspace} onEdit={onEditWorkspace} />
         <div className="no-drag">
           <Segmented<View>

@@ -48,6 +48,9 @@
 .title-edit { opacity: 0; color: var(--md-on-surface-variant); transition: opacity 0.1s; }
 .session-title:hover .title-edit { opacity: 1; }
 
+/* The app's name, then a little room before the workspace dropdown. */
+.brand { display: flex; align-items: center; gap: 6px; flex: none; margin-right: 12px; font: 500 20px/28px var(--md-font-display); }
+
 /* The workspace dropdown. */
 .switcher { position: relative; min-width: 0; }
 .switcher-button { display: flex; align-items: center; gap: 8px; max-width: 320px; height: 40px; padding: 0 10px 0 6px; border: 1px solid var(--md-outline-variant); border-radius: var(--md-shape-md); background: var(--md-surface); color: var(--md-on-surface); cursor: pointer; }
