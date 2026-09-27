@@ -458,3 +458,11 @@ These touch your real keychain and settings: use a test key, or a throwaway `--c
 - [ ] With no file open, the chat is center stage (the middle, full width of its column); open a file during a turn: the chat moves to the right and keeps streaming; close the last file: it returns to the middle. In Changes or Workers it stays on the right.
 - [ ] The IDE layout: files left, editor middle, chat right. Minimize the shelf (≪): a rail with Show files and Go to file remains, and stays after a restart. Drag the chat's left edge: its width is kept after a restart.
 - [ ] The workspace dropdown: switch workspaces; while a turn in another workspace waits for approval, the dropdown shows a `!`; reopen a recent workspace; Open workspace…; Settings is the top bar's far-right button.
+
+## 42. Licensing (spec_release_readiness_030 §3)
+
+- [ ] `blitz license`: Blitz's NOTICE (Copyright 2026 Retail Cortex, then Code Puppy's MIT notice) and where the rest is; `blitz license full` the Apache License; `blitz license third-party` the notices, in `less` (or `$PAGER`); `/license` in the REPL the same.
+- [ ] `blitzd --license`, `--license=full`, `--license=third-party`: the texts, and the service doesn't start.
+- [ ] The desktop app: Settings › About › **Licenses** and **Third-party notices**, and `/license` in the composer, open the Licenses dialog; its three tabs show the texts.
+- [ ] A release: each archive has `LICENSE`, `NOTICE` and `THIRD_PARTY_NOTICES`; `Blitz.app/Contents/Resources` has them; after installing the `.deb`, `/usr/share/doc/blitz-desktop/` has `copyright`, `NOTICE` and `THIRD_PARTY_NOTICES`.
+- [ ] Add a Go or npm dependency without updating the notices: CI's "third_party_notices --check" fails until `tools/third_party_notices.sh` is run.

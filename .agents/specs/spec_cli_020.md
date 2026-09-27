@@ -22,6 +22,7 @@
 | `blitz serve [...]` | Hidden: runs `blitzd`, the per-user service, with the same arguments ([spec_service_021](spec_service_021.md) SVC-00) |
 | `blitz service install \| uninstall \| status` | Login item for the service |
 | `blitz workers [list] \| enable <name> [-y] \| disable <name> \| run <name> \| runs <name> [-n N]` | Workers ([spec_workers_023](spec_workers_023.md)) |
+| `blitz license [full\|third-party]` | The NOTICE (with pointers to the rest), the Apache License, or the third-party notices, paged on a terminal; the REPL's `/license` shows the same ([spec_release_readiness_030](spec_release_readiness_030.md) RR-05) |
 | `blitz completion bash\|zsh\|fish\|powershell` | Cobra-generated shell completion |
 
 ## 3. Flags

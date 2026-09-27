@@ -423,4 +423,4 @@ CI (`ci.yml`) runs every test through Bazel on macOS and Linux (vet and staticch
 
 ## License
 
-Apache License 2.0; see [LICENSE](LICENSE) and [NOTICE](NOTICE). Blitz began as a Go port of [Code Puppy](https://github.com/mpfaffenberger/code_puppy) by Mike Pfaffenberger (MIT); the Python implementation was removed after the port and is kept at the `python-final` tag of the former repository, `rmcguinness/code_puppy` (this repository starts from a fresh history).
+Apache License 2.0; see [LICENSE](LICENSE), [NOTICE](NOTICE), and [THIRD_PARTY_NOTICES](THIRD_PARTY_NOTICES) for the software Blitz includes. Every program shows them: `blitz license [full|third-party]` (and `/license`), `blitzd --license`, and the desktop app's Settings › About. Blitz began as a Go port of [Code Puppy](https://github.com/mpfaffenberger/code_puppy) by Mike Pfaffenberger (MIT); the Python implementation was removed after the port and is kept at the `python-final` tag of the former repository, `rmcguinness/code_puppy` (this repository starts from a fresh history).

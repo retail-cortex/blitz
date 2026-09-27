@@ -12,7 +12,7 @@
 
 `blitzd`, its own program (`apps/service`), runs one engine process per user that holds every workspace a client opens, runs scheduled workers, and exposes `api.Backend` over Connect (gRPC, gRPC-Web or plain JSON) on a Unix socket. The CLI and the desktop app share one copy of each workspace through it. Handlers only translate between protos and `pkg/engine`; they hold no logic.
 
-- **SVC-00** `blitzd [--socket PATH] [--config FILE]`: no arguments (a usage error, exit 2, as a bad flag or a service already answering on the socket); `--version`. It takes no model, agent or workspace flags: each workspace's configuration decides. `blitz serve`, from before `blitzd` existed, is kept as a hidden command that runs `blitzd` (found as in SVC-50) with the same arguments, so login items installed by older versions keep working.
+- **SVC-00** `blitzd [--socket PATH] [--config FILE]`: no arguments (a usage error, exit 2, as a bad flag or a service already answering on the socket); `--version`; `--license[=full|third-party]` prints the NOTICE, the Apache License or the third-party notices and exits without starting. It takes no model, agent or workspace flags: each workspace's configuration decides. `blitz serve`, from before `blitzd` existed, is kept as a hidden command that runs `blitzd` (found as in SVC-50) with the same arguments, so login items installed by older versions keep working.
 
 ## 2. Transport and security
 
