@@ -61,6 +61,7 @@ blitz --resume=before-refactor          # start a new session from a snapshot sa
 blitz --output-format json "…"          # one JSON result object on stdout
 blitz --output-format stream-json "…"   # one JSON object per event, then the result
 blitz --max-turns 20 "…"                # cap model calls in a one-shot run
+blitz --max-cost-usd 0.50 --timeout 15m "…"   # cap its cost and wall-clock time
 blitz --plan "add rate limiting"         # a plan only: reads and searches, no edits or commands
 blitz --image ui.png "why is this misaligned?"   # attach images (repeatable; @ui.png in the prompt works too)
 ```
@@ -70,7 +71,7 @@ blitz --image ui.png "why is this misaligned?"   # attach images (repeatable; @u
 | 0 | success |
 | 1 | runtime or model error |
 | 2 | invalid flags/arguments |
-| 3 | `--max-turns` reached |
+| 3 | a limit stopped the run: `--max-turns`, `--max-cost-usd` or `--timeout` |
 | 4 | prompt blocked by a `prompt_submit` hook |
 | 130 | interrupted |
 

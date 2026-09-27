@@ -13,6 +13,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/retail-cortex/blitz/internal/app"
 	"github.com/retail-cortex/blitz/internal/config"
@@ -193,5 +194,31 @@ func TestAttachReportsAnUnavailableModel(t *testing.T) {
 	r, err := AttachHTTP(context.Background(), http.DefaultClient, srv.URL, t.TempDir(), nil)
 	if err != nil || r.ModelErr() == nil {
 		t.Errorf("attach %v, model error %v", err, r.ModelErr())
+	}
+}
+
+// Limits travel with a remote turn and come back as app's errors, so an
+// attached one-shot run exits as a local one does.
+func TestRemoteTurnLimits(t *testing.T) {
+	loop := make([]*genai.Content, 6)
+	for i := range loop {
+		loop[i] = call("list_files", map[string]any{})
+	}
+	r := attach(t, func(c *config.Config) { c.Blitz.AutoApprove = true }, loop...)
+	sess, _, err := r.OpenSession("", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := r.Run(context.Background(), sess.ID, app.Turn{Text: "loop", MaxTurns: 2}, func(app.Event) {}); !errors.Is(err, app.ErrMaxTurns) {
+		t.Errorf("max turns over the API: %v", err)
+	}
+	r2 := attach(t, func(c *config.Config) { c.Blitz.AutoApprove = true }, call("run_shell_command", map[string]any{"command": "sleep 5"}))
+	sess2, _, _ := r2.OpenSession("", false)
+	start := time.Now()
+	if _, err := r2.Run(context.Background(), sess2.ID, app.Turn{Text: "wait", Timeout: 300 * time.Millisecond}, func(app.Event) {}); !errors.Is(err, app.ErrTimeLimit) {
+		t.Errorf("timeout over the API: %v", err)
+	}
+	if time.Since(start) > 4*time.Second {
+		t.Error("the timeout wasn't applied in the service")
 	}
 }

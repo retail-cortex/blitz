@@ -2,6 +2,7 @@ syntax = "proto3";
 
 package blitz.v1;
 
+import "google/protobuf/duration.proto";
 import "google/protobuf/struct.proto";
 
 // A turn: one prompt to the agent and everything that happens until it
@@ -33,6 +34,13 @@ message Turn {
   // URLs the agent may fetch in this turn without asking (the pages a web
   // search handed it).
   repeated string fetch_grants = 9;
+  // Stops the turn once it has cost more than this, in USD (0: unlimited;
+  // only enforced when the model has a price). The turn fails with reason
+  // COST_LIMIT.
+  double max_cost_usd = 10;
+  // Stops the turn after this long (unset: unlimited). The turn fails with
+  // reason TIME_LIMIT.
+  google.protobuf.Duration timeout = 11;
 }
 
 // TurnEvent is something that happened during a turn. Events arrive in

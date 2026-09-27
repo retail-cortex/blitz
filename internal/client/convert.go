@@ -21,6 +21,9 @@ import (
 // sentinels are app's errors that carry no data, by ErrorInfo reason.
 var sentinels = map[string]error{
 	"NO_ACTIVE_SESSION":   app.ErrNoActiveSession,
+	"MAX_TURNS":           app.ErrMaxTurns,
+	"COST_LIMIT":          app.ErrCostLimit,
+	"TIME_LIMIT":          app.ErrTimeLimit,
 	"SNAPSHOT_NAME_TAKEN": app.ErrSnapshotNameTaken,
 	"BAD_MODEL_REF":       app.ErrBadModelRef,
 	"INVALID_AGENCY":      app.ErrInvalidAgency,

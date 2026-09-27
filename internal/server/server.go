@@ -286,6 +286,9 @@ func toAPI(err error) error {
 		reason string
 	}{
 		{app.ErrNoActiveSession, connect.CodeFailedPrecondition, "NO_ACTIVE_SESSION"},
+		{app.ErrMaxTurns, connect.CodeResourceExhausted, "MAX_TURNS"},
+		{app.ErrCostLimit, connect.CodeResourceExhausted, "COST_LIMIT"},
+		{app.ErrTimeLimit, connect.CodeDeadlineExceeded, "TIME_LIMIT"},
 		{app.ErrSnapshotNameTaken, connect.CodeAlreadyExists, "SNAPSHOT_NAME_TAKEN"},
 		{app.ErrBadModelRef, connect.CodeInvalidArgument, "BAD_MODEL_REF"},
 		{app.ErrInvalidAgency, connect.CodeInvalidArgument, "INVALID_AGENCY"},

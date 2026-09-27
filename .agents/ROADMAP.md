@@ -495,6 +495,8 @@ The gaps and the owner's decisions are in [specs/spec_parity_027.md](specs/spec_
 
 1. ✅ **`glob` tool** (PAR-TOOL-01, S). Finds files by path pattern (`**`, `*`, `?`, `{a,b}`, nested braces capped at 64 alternatives) under the workspace or a given directory, newest first, 200 by default (max 1000). It walks through the file sandbox, so blocked paths and symlinks out of the roots never appear; dot and dependency directories are skipped unless the pattern names them (`.github/**`). Read-only, so plan mode allows it; every built-in agent has it. Tests: `internal/tools/glob_test.go`.
 
+2. ✅ **Cost and time limits for one-shot runs** (PAR-CLI-01, S). `--max-cost-usd` and `--timeout` stop a one-shot run at the limit with exit code 3, like `--max-turns`; all three now require a one-shot prompt (they used to be ignored silently in a session). The limits live on `app.Turn` (`MaxCostUSD`, `Timeout`) and are enforced in the one turn path, with `app.ErrCostLimit` / `ErrTimeLimit` (and `ErrMaxTurns`) as reasons; workers' `max_cost_usd` and `timeout` now use the same code instead of their own. They travel over the API (`Turn.max_cost_usd`, `Turn.timeout`) and come back as `COST_LIMIT` / `TIME_LIMIT`. Found on the way: an attached one-shot `--max-turns` exited 1, because `ErrMaxTurns` reached the client as `INTERNAL`; it is now `MAX_TURNS` (regression test in `internal/client`). The cost check needs a priced model; the CLI warns when there is none.
+
 ## Antigravity CLI review (2026-09-25)
 
 Google's Antigravity CLI (`agy`) was compared feature by feature with Blitz Go, from a feature summary of its docs (https://antigravity.google/docs/cli/features/). The summary read as AI-generated, so its descriptions were treated as approximate.

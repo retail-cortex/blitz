@@ -194,9 +194,6 @@ var ErrWorkerNotEnabled = errors.New("the worker isn't enabled")
 // ErrRunInProgress reports a run of a worker that is already running.
 var ErrRunInProgress = errors.New("the worker is already running")
 
-// errOverBudget stops a run that spent its max_cost_usd.
-var errOverBudget = errors.New("the run reached its cost limit")
-
 // unattendedPreamble tells the agent how a worker run differs from a
 // conversation.
 const unattendedPreamble = "You are running unattended as the scheduled worker %q: nobody is watching or can answer questions. " +
@@ -273,13 +270,7 @@ func (w *Workspace) RunWorker(ctx context.Context, name string, o RunOptions) (w
 		refusalsMu.Unlock()
 		return tools.DecisionDeny, nil
 	}
-	runCtx, cancel := context.WithCancelCause(tools.Unattended(ctx, decide))
-	defer cancel(nil)
-	if eff.Limits.Timeout > 0 {
-		var stop context.CancelFunc
-		runCtx, stop = context.WithTimeoutCause(runCtx, eff.Limits.Timeout, fmt.Errorf("the run reached its time limit (%s)", eff.Limits.Timeout))
-		defer stop()
-	}
+	runCtx := tools.Unattended(ctx, decide)
 	on := o.OnEvent
 	if on == nil {
 		on = func(Event) {}
@@ -303,27 +294,19 @@ func (w *Workspace) RunWorker(ctx context.Context, name string, o RunOptions) (w
 	}
 	if runErr == nil {
 		_, runErr = w.run(runCtx, rec.ID, Turn{
-			Text: wk.Prompt, Prompt: fmt.Sprintf(unattendedPreamble, name) + wk.Prompt, MaxTurns: eff.Limits.MaxTurns,
-		}, func(e Event) {
-			on(e)
-			if eff.Limits.MaxCostUSD > 0 && w.engine.Usage(rec.ID).CostUSD > eff.Limits.MaxCostUSD {
-				cancel(errOverBudget)
-			}
-		}, st, opts...)
+			Text: wk.Prompt, Prompt: fmt.Sprintf(unattendedPreamble, name) + wk.Prompt,
+			MaxTurns: eff.Limits.MaxTurns, MaxCostUSD: eff.Limits.MaxCostUSD, Timeout: eff.Limits.Timeout,
+		}, on, st, opts...)
 	}
 
 	u := w.engine.Usage(rec.ID)
 	run.Duration, run.CostUSD, run.Calls = time.Since(run.Started), u.CostUSD, u.Calls
-	cause := context.Cause(runCtx)
 	switch {
 	case runErr == nil:
 		run.Status = workers.RunSucceeded
-	case errors.Is(runErr, runtime.ErrMaxTurns) || errors.Is(cause, errOverBudget) || errors.Is(runCtx.Err(), context.DeadlineExceeded):
+	case IsLimit(runErr):
 		run.Status = workers.RunLimited
 		run.Error = runErr.Error()
-		if cause != nil && !errors.Is(cause, context.Canceled) {
-			run.Error = cause.Error()
-		}
 	default:
 		run.Status = workers.RunFailed
 		run.Error = runErr.Error()

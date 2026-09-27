@@ -41,6 +41,8 @@ Run flags (root and `exec`):
 | `-C/--continue` | Continue this workspace's most recent non-snapshot session |
 | `--output-format text\|json\|stream-json` | One-shot output format (default `text`) |
 | `--max-turns N` | Cap model calls in a one-shot run (0 = unlimited) |
+| `--max-cost-usd N` | Stop a one-shot run once it has cost more than N USD (0 = unlimited; needs a priced model, else a warning) |
+| `--timeout D` | Stop a one-shot run after D (e.g. `15m`; 0 = unlimited) |
 | `--plan` | One-shot plan-only run (read-only tools) |
 | `--local` | Run in-process even if the service is running |
 | `--image PATH` | Attach an image to the first prompt (repeatable) |
@@ -55,7 +57,7 @@ Root only: `-i/--interactive` (REPL even with a prompt), `-v/--version` (prints 
 - **CLI-03** Empty stdin when stdin was to be read is a usage error ("stdin was empty (use -i …)").
 - **CLI-04** `-p TEXT` together with positional arguments is a usage error.
 - **CLI-05** A run is one-shot iff a prompt exists and `-i` is not set.
-- **CLI-06** `--plan` or a non-text `--output-format` without a one-shot prompt is a usage error. `--max-turns < 0` and an unknown `--output-format` are usage errors.
+- **CLI-06** `--plan`, a non-text `--output-format`, or any of `--max-turns`/`--max-cost-usd`/`--timeout` without a one-shot prompt is a usage error. Negative limits and an unknown `--output-format` are usage errors.
 - **CLI-07** `exec` with no prompt from any source is a usage error.
 
 ### 4.2 Startup
@@ -85,7 +87,7 @@ Root only: `-i/--interactive` (REPL even with a prompt), `-v/--version` (prints 
 | 0 | success | `nil` |
 | 1 | runtime or model error | default |
 | 2 | invalid flags/arguments | `withCode(exitUsage, …)`, cobra flag errors |
-| 3 | `--max-turns` reached | `errors.Is(err, runtime.ErrMaxTurns)` |
+| 3 | a limit stopped the run (`--max-turns`, `--max-cost-usd`, `--timeout`) | `app.IsLimit(err)`: `ErrMaxTurns`, `ErrCostLimit`, `ErrTimeLimit` (also when attached: `MAX_TURNS`, `COST_LIMIT`, `TIME_LIMIT`) |
 | 4 | prompt blocked by a `prompt_submit` hook | `*app.BlockedError` |
 | 130 | interrupted | `errors.Is(err, context.Canceled)` |
 

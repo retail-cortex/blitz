@@ -40,7 +40,9 @@ Front ends use only `app.Backend` (implemented by `*Workspace` and by the servic
 
 ## 4. Turn lifecycle (`Run`)
 
-`Turn` fields: `Text`, `Prompt` (sent instead of Text), `Plan`, `ReadOnly` (mode name), `Aside` (/btw), `Accepted`, `Images`, `MaxTurns`, `FetchGrants`, `OnAccepted`, `OnFinished`.
+`Turn` fields: `Text`, `Prompt` (sent instead of Text), `Plan`, `ReadOnly` (mode name), `Aside` (/btw), `Accepted`, `Images`, `MaxTurns`, `MaxCostUSD`, `Timeout`, `FetchGrants`, `OnAccepted`, `OnFinished`.
+
+- **WS-29** Limits: `MaxTurns` (model calls; `ErrMaxTurns`), `MaxCostUSD` (checked after every event against the session's cost since the turn began; needs a priced model; `ErrCostLimit`, message "the turn reached its cost limit ($x)"), `Timeout` (`ErrTimeLimit`). The cost and time limits cancel the turn's context with the limit as the cause, and the turn returns that cause. `IsLimit(err)` matches all three; workers use the same fields for their `limits`.
 
 - **WS-20** Unless `Accepted`, the text passes `prompt_submit` hooks first; a refusal returns `*BlockedError{Reason}` with nothing recorded or sent. Accepted prompts are audited (`prompt`).
 - **WS-21** The sent prompt is `Prompt` if set, else `Text`. With `Plan`, the prompt is wrapped by `runtime.PlanPrompt` and the transcript records `/plan <Text>`.

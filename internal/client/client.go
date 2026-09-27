@@ -20,6 +20,7 @@ import (
 	"github.com/retail-cortex/blitz/internal/images"
 	"github.com/retail-cortex/blitz/internal/server"
 	"github.com/retail-cortex/blitz/internal/tools"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 // Remote is one workspace in the service.
@@ -103,7 +104,10 @@ func (r *Remote) ImagesEnabled() bool { return r.getSettings().ImagesEnabled }
 func (r *Remote) Run(ctx context.Context, sessionID string, t app.Turn, on func(app.Event)) (app.TurnResult, error) {
 	turn := &pb.Turn{
 		Text: t.Text, Prompt: t.Prompt, Plan: t.Plan, ReadOnly: t.ReadOnly, Aside: t.Aside, Accepted: t.Accepted,
-		MaxTurns: int32(t.MaxTurns), FetchGrants: t.FetchGrants,
+		MaxTurns: int32(t.MaxTurns), FetchGrants: t.FetchGrants, MaxCostUsd: t.MaxCostUSD,
+	}
+	if t.Timeout > 0 {
+		turn.Timeout = durationpb.New(t.Timeout)
 	}
 	for _, img := range t.Images {
 		turn.ImageIds = append(turn.ImageIds, img.SHA256)

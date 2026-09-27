@@ -123,7 +123,7 @@ Decision §12.2. **CC** `/cd <path>` (June 2026) moves the session to another di
 
 ### 5.3 Headless and scripting — P0/P1
 **CC** `--output-format stream-json` plus `--input-format stream-json`, `--json-schema`, `--max-budget-usd`, `--include-partial-messages`, `--permission-prompt-tool`, `--no-session-persistence`. **AGY** `--json-schema`, `--print-timeout`. **Blitz today:** text / json / stream-json output, `--max-turns`, `--plan`.
-- **PAR-CLI-01 (P0, S)** `--max-cost-usd N` stops a one-shot run when its cost passes N (exit 3, like `--max-turns`), and `--timeout <duration>` stops it after a wall-clock limit (exit 3).
+- **PAR-CLI-01 (P0, S)** ✅ *Done 2026-09-26 (ROADMAP 25.2; now [spec_cli_020](spec_cli_020.md) CLI-06 and [spec_workspace_018](spec_workspace_018.md) WS-29).* `--max-cost-usd N` stops a one-shot run when its cost passes N (exit 3, like `--max-turns`), and `--timeout <duration>` stops it after a wall-clock limit (exit 3).
 - **PAR-CLI-02 (P1, M)** `--json-schema <file|json>`: the final answer must be JSON valid against the schema; the model is asked for it (native structured output where the provider supports it), the result is validated and retried once with the validation error, and it appears as `structured_result` in json output (exit 1 if still invalid).
 - **PAR-CLI-03 (P1, M)** `--input-format stream-json`: stdin carries a stream of user messages, approval answers and question answers as JSON lines, so another program can drive a multi-turn session and answer approvals without a terminal.
 - **PAR-CLI-04 (P2, S)** `--no-session-persistence` runs without saving the session or the audit context (the audit log itself is still written).

@@ -212,3 +212,26 @@ func TestRunWorkerUsesItsAgentAndModel(t *testing.T) {
 		t.Errorf("unknown agent: %+v", run)
 	}
 }
+
+// A run's timeout and cost limit stop it as "limited", with the limit as
+// the reason (they share the turn's limits since the refactor).
+func TestRunWorkerStopsAtItsTimeAndCostLimits(t *testing.T) {
+	sleep := &genai.Content{Role: genai.RoleModel, Parts: []*genai.Part{{FunctionCall: &genai.FunctionCall{Name: "run_shell_command", Args: map[string]any{"command": "sleep 5"}}}}}
+	w, _ := openTestWith(t, func(c *config.Config) { c.Workers.Policy.Allow = []string{"shell"} }, sleep, sleep)
+	addWorker(t, w, "slow", "---\nschedule: hourly\npermissions: [\"shell:sleep 5\"]\nlimits: {timeout: 300ms}\n---\nWait.\n")
+	enable(t, w, "slow")
+	run, err := w.RunWorker(context.Background(), "slow", RunOptions{})
+	if err != nil || run.Status != workers.RunLimited || !strings.Contains(run.Error, "time limit") || run.Duration > 4e9 {
+		t.Errorf("timeout run %+v %v", run, err)
+	}
+
+	list := &genai.Content{Role: genai.RoleModel, Parts: []*genai.Part{{FunctionCall: &genai.FunctionCall{Name: "list_files", Args: map[string]any{}}}}}
+	w2, llm := openTestWith(t, nil, list, list, list, list, list, list)
+	llm.Usage = &genai.GenerateContentResponseUsageMetadata{PromptTokenCount: 100, CandidatesTokenCount: 10}
+	addWorker(t, w2, "spend", "---\nschedule: hourly\nlimits: {max_cost_usd: 0.0002}\n---\nLook around.\n")
+	enable(t, w2, "spend")
+	run, err = w2.RunWorker(context.Background(), "spend", RunOptions{})
+	if err != nil || run.Status != workers.RunLimited || !strings.Contains(run.Error, "cost limit") {
+		t.Errorf("cost run %+v %v", run, err)
+	}
+}

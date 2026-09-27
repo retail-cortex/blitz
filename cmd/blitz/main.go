@@ -10,10 +10,12 @@ import (
 	"os/signal"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/retail-cortex/blitz/internal/app"
 	"github.com/retail-cortex/blitz/internal/config"
 	"github.com/retail-cortex/blitz/internal/i18n"
+	"github.com/retail-cortex/blitz/internal/runtime"
 	"github.com/retail-cortex/blitz/internal/server"
 	"github.com/retail-cortex/blitz/internal/tui"
 	"github.com/spf13/cobra"
@@ -32,6 +34,8 @@ type rootOptions struct {
 	cont         bool
 	outputFormat string
 	maxTurns     int
+	maxCostUSD   float64
+	timeout      time.Duration
 	plan         bool
 	images       []string
 	local        bool
@@ -103,6 +107,8 @@ func addRunFlags(f *pflag.FlagSet, o *rootOptions) {
 	f.BoolVarP(&o.cont, "continue", "C", false, "Continue the most recent session")
 	f.StringVar(&o.outputFormat, "output-format", formatText, "Output for one-shot runs: text, json, or stream-json")
 	f.IntVar(&o.maxTurns, "max-turns", 0, "Stop after this many model calls in a one-shot run (0 = unlimited)")
+	f.Float64Var(&o.maxCostUSD, "max-cost-usd", 0, "Stop a one-shot run once it has cost more than this, in USD (0 = unlimited)")
+	f.DurationVar(&o.timeout, "timeout", 0, "Stop a one-shot run after this long, e.g. 10m (0 = unlimited)")
 	f.BoolVar(&o.plan, "plan", false, "One-shot plan: the agent may read and search but not edit or run commands")
 	f.BoolVar(&o.local, "local", false, "Run the workspace in this process even when the Blitz service is running")
 	f.StringArrayVar(&o.images, "image", nil, "Attach an image to the first prompt (repeatable); @file.png in a prompt also works")
@@ -140,6 +146,9 @@ func runRoot(cmd *cobra.Command, o *rootOptions, args []string) (err error) {
 	if o.maxTurns < 0 {
 		return withCode(exitUsage, errors.New("--max-turns must be >= 0"))
 	}
+	if o.maxCostUSD < 0 || o.timeout < 0 {
+		return withCode(exitUsage, errors.New("--max-cost-usd and --timeout must be >= 0"))
+	}
 
 	stdinTTY := tui.StdinIsTerminal()
 	prompt, stdinUsed, err := resolvePrompt(o.prompt, args, stdinTTY, o.interactive, os.Stdin)
@@ -152,6 +161,9 @@ func runRoot(cmd *cobra.Command, o *rootOptions, args []string) (err error) {
 	oneShot := prompt != "" && !o.interactive
 	if !oneShot && o.plan {
 		return withCode(exitUsage, errors.New("--plan requires a prompt (in a session, use /plan <goal>)"))
+	}
+	if !oneShot && (o.maxTurns > 0 || o.maxCostUSD > 0 || o.timeout > 0) {
+		return withCode(exitUsage, errors.New("--max-turns, --max-cost-usd and --timeout limit a one-shot run and require a prompt"))
 	}
 	if !oneShot && o.outputFormat != formatText {
 		return withCode(exitUsage, errors.New("--output-format json/stream-json requires a prompt"))
@@ -255,8 +267,12 @@ func runRoot(cmd *cobra.Command, o *rootOptions, args []string) (err error) {
 	}
 
 	if oneShot {
+		if model := w.Model().Name; o.maxCostUSD > 0 && !runtime.NewUsageTracker(cfg.Pricing).HasPrice(model) {
+			warnFn(i18n.T("startup.cost_unpriced", "model", model))
+		}
 		return runOneShot(ctx, w, oneShotOptions{
 			prompt: prompt, sessionID: sess.ID, format: o.outputFormat, maxTurns: o.maxTurns, plan: o.plan,
+			maxCostUSD: o.maxCostUSD, timeout: o.timeout,
 			input: input, stdinTTY: stdinTTY && !stdinUsed, stdout: os.Stdout,
 			markdown: pretty && cfg.UI.Markdown, spinner: pretty && cfg.UI.Spinner, width: terminalWidth(),
 			usageLines: pretty, images: attached, theme: cfg.UI.Theme,

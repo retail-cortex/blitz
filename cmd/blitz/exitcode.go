@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 
-	"github.com/retail-cortex/blitz/internal/runtime"
+	"github.com/retail-cortex/blitz/internal/app"
 )
 
 // Exit codes are stable so scripts can react to them.
@@ -12,7 +12,7 @@ const (
 	exitOK          = 0
 	exitFailure     = 1   // runtime or model error
 	exitUsage       = 2   // invalid flags or arguments
-	exitMaxTurns    = 3   // --max-turns reached before the agent finished
+	exitMaxTurns    = 3   // a limit (--max-turns, --max-cost-usd, --timeout) stopped the run
 	exitBlocked     = 4   // a prompt_submit hook blocked the prompt
 	exitInterrupted = 130 // Ctrl+C / SIGINT
 )
@@ -41,7 +41,7 @@ func exitCodeFor(err error) int {
 		return exitOK
 	case errors.As(err, &ee):
 		return ee.code
-	case errors.Is(err, runtime.ErrMaxTurns):
+	case app.IsLimit(err):
 		return exitMaxTurns
 	case errors.Is(err, context.Canceled):
 		return exitInterrupted

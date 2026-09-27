@@ -2,8 +2,11 @@ package app
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"log/slog"
 	"strings"
+	"time"
 
 	"github.com/retail-cortex/blitz/internal/audit"
 	"github.com/retail-cortex/blitz/internal/i18n"
@@ -41,6 +44,11 @@ type Turn struct {
 	Images []*images.Image
 	// MaxTurns limits the model calls in the turn (0: unlimited).
 	MaxTurns int
+	// MaxCostUSD stops the turn once it has cost more than this (0:
+	// unlimited); it can only be enforced when the model has a price.
+	MaxCostUSD float64
+	// Timeout stops the turn after this long (0: unlimited).
+	Timeout time.Duration
 	// FetchGrants are URLs the agent may fetch in this turn without asking
 	// (the pages a web search handed it).
 	FetchGrants []string
@@ -63,6 +71,20 @@ type TurnResult struct {
 	// never read. Front ends send them as the next turn (with Accepted set)
 	// or, if the turn was interrupted, drop them.
 	Leftover []string
+}
+
+// Limits a turn can stop at. They wrap the limit, e.g. "the turn reached
+// its cost limit ($0.50)", and runtime.ErrMaxTurns is re-exported so
+// front ends match all three without importing the engine.
+var (
+	ErrMaxTurns  = runtime.ErrMaxTurns
+	ErrCostLimit = errors.New("the turn reached its cost limit")
+	ErrTimeLimit = errors.New("the turn reached its time limit")
+)
+
+// IsLimit reports whether err is a turn stopping at one of its limits.
+func IsLimit(err error) bool {
+	return errors.Is(err, ErrMaxTurns) || errors.Is(err, ErrCostLimit) || errors.Is(err, ErrTimeLimit)
 }
 
 // BlockedError reports a prompt refused by a prompt_submit hook. Nothing
@@ -109,10 +131,34 @@ func (w *Workspace) run(ctx context.Context, sessionID string, t Turn, on func(E
 		t.OnAccepted()
 	}
 
+	res := TurnResult{Before: w.engine.Usage(sessionID)}
+
+	// Cost and time limits cancel the turn with their reason as the cause.
+	limited := ctx
+	if t.MaxCostUSD > 0 || t.Timeout > 0 {
+		var cancel context.CancelCauseFunc
+		limited, cancel = context.WithCancelCause(ctx)
+		defer cancel(nil)
+		if t.Timeout > 0 {
+			var stop context.CancelFunc
+			limited, stop = context.WithTimeoutCause(limited, t.Timeout, fmt.Errorf("%w (%s)", ErrTimeLimit, t.Timeout))
+			defer stop()
+		}
+		if t.MaxCostUSD > 0 {
+			inner := on
+			on = func(e Event) {
+				inner(e)
+				if w.engine.Usage(sessionID).CostUSD-res.Before.CostUSD > t.MaxCostUSD {
+					cancel(fmt.Errorf("%w ($%.2f)", ErrCostLimit, t.MaxCostUSD))
+				}
+			}
+		}
+	}
+	ctx = limited
+
 	r := &relay{on: on}
 	handler := r.handle
 
-	res := TurnResult{Before: w.engine.Usage(sessionID)}
 	if len(t.FetchGrants) > 0 {
 		ctx = tools.WithFetchGrants(ctx, t.FetchGrants)
 	}
@@ -134,6 +180,9 @@ func (w *Workspace) run(ctx context.Context, sessionID string, t Turn, on func(E
 			opts = append(opts, runtime.WithReadOnly(t.ReadOnly))
 		}
 		err = w.engine.Execute(ctx, sessionID, prompt, handler, opts...)
+	}
+	if cause := context.Cause(ctx); err != nil && (errors.Is(cause, ErrCostLimit) || errors.Is(cause, ErrTimeLimit)) {
+		err = cause
 	}
 	if t.OnFinished != nil {
 		t.OnFinished()

@@ -9,6 +9,7 @@ package blitzv1
 import (
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
+	durationpb "google.golang.org/protobuf/types/known/durationpb"
 	structpb "google.golang.org/protobuf/types/known/structpb"
 	reflect "reflect"
 	sync "sync"
@@ -170,7 +171,14 @@ type Turn struct {
 	MaxTurns int32 `protobuf:"varint,8,opt,name=max_turns,json=maxTurns,proto3" json:"max_turns,omitempty"`
 	// URLs the agent may fetch in this turn without asking (the pages a web
 	// search handed it).
-	FetchGrants   []string `protobuf:"bytes,9,rep,name=fetch_grants,json=fetchGrants,proto3" json:"fetch_grants,omitempty"`
+	FetchGrants []string `protobuf:"bytes,9,rep,name=fetch_grants,json=fetchGrants,proto3" json:"fetch_grants,omitempty"`
+	// Stops the turn once it has cost more than this, in USD (0: unlimited;
+	// only enforced when the model has a price). The turn fails with reason
+	// COST_LIMIT.
+	MaxCostUsd float64 `protobuf:"fixed64,10,opt,name=max_cost_usd,json=maxCostUsd,proto3" json:"max_cost_usd,omitempty"`
+	// Stops the turn after this long (unset: unlimited). The turn fails with
+	// reason TIME_LIMIT.
+	Timeout       *durationpb.Duration `protobuf:"bytes,11,opt,name=timeout,proto3" json:"timeout,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -264,6 +272,20 @@ func (x *Turn) GetMaxTurns() int32 {
 func (x *Turn) GetFetchGrants() []string {
 	if x != nil {
 		return x.FetchGrants
+	}
+	return nil
+}
+
+func (x *Turn) GetMaxCostUsd() float64 {
+	if x != nil {
+		return x.MaxCostUsd
+	}
+	return 0
+}
+
+func (x *Turn) GetTimeout() *durationpb.Duration {
+	if x != nil {
+		return x.Timeout
 	}
 	return nil
 }
@@ -1102,7 +1124,7 @@ var File_blitz_v1_turn_proto protoreflect.FileDescriptor
 
 const file_blitz_v1_turn_proto_rawDesc = "" +
 	"\n" +
-	"\x13blitz/v1/turn.proto\x12\bblitz.v1\x1a\x1cgoogle/protobuf/struct.proto\"\xf2\x01\n" +
+	"\x13blitz/v1/turn.proto\x12\bblitz.v1\x1a\x1egoogle/protobuf/duration.proto\x1a\x1cgoogle/protobuf/struct.proto\"\xc9\x02\n" +
 	"\x04Turn\x12\x12\n" +
 	"\x04text\x18\x01 \x01(\tR\x04text\x12\x16\n" +
 	"\x06prompt\x18\x02 \x01(\tR\x06prompt\x12\x12\n" +
@@ -1112,7 +1134,11 @@ const file_blitz_v1_turn_proto_rawDesc = "" +
 	"\baccepted\x18\x06 \x01(\bR\baccepted\x12\x1b\n" +
 	"\timage_ids\x18\a \x03(\tR\bimageIds\x12\x1b\n" +
 	"\tmax_turns\x18\b \x01(\x05R\bmaxTurns\x12!\n" +
-	"\ffetch_grants\x18\t \x03(\tR\vfetchGrants\"\x9f\x03\n" +
+	"\ffetch_grants\x18\t \x03(\tR\vfetchGrants\x12 \n" +
+	"\fmax_cost_usd\x18\n" +
+	" \x01(\x01R\n" +
+	"maxCostUsd\x123\n" +
+	"\atimeout\x18\v \x01(\v2\x19.google.protobuf.DurationR\atimeout\"\x9f\x03\n" +
 	"\tTurnEvent\x12\x16\n" +
 	"\x06author\x18\x01 \x01(\tR\x06author\x120\n" +
 	"\baccepted\x18\x02 \x01(\v2\x12.blitz.v1.AcceptedH\x00R\baccepted\x12$\n" +
@@ -1210,42 +1236,44 @@ func file_blitz_v1_turn_proto_rawDescGZIP() []byte {
 var file_blitz_v1_turn_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
 var file_blitz_v1_turn_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
 var file_blitz_v1_turn_proto_goTypes = []any{
-	(ActionKind)(0),         // 0: blitz.v1.ActionKind
-	(Decision)(0),           // 1: blitz.v1.Decision
-	(*Turn)(nil),            // 2: blitz.v1.Turn
-	(*TurnEvent)(nil),       // 3: blitz.v1.TurnEvent
-	(*Accepted)(nil),        // 4: blitz.v1.Accepted
-	(*Text)(nil),            // 5: blitz.v1.Text
-	(*ToolCall)(nil),        // 6: blitz.v1.ToolCall
-	(*ToolResult)(nil),      // 7: blitz.v1.ToolResult
-	(*ApprovalRequest)(nil), // 8: blitz.v1.ApprovalRequest
-	(*Question)(nil),        // 9: blitz.v1.Question
-	(*Usage)(nil),           // 10: blitz.v1.Usage
-	(*TurnFinished)(nil),    // 11: blitz.v1.TurnFinished
-	(*ErrorInfo)(nil),       // 12: blitz.v1.ErrorInfo
-	nil,                     // 13: blitz.v1.ErrorInfo.MetadataEntry
-	(*structpb.Struct)(nil), // 14: google.protobuf.Struct
+	(ActionKind)(0),             // 0: blitz.v1.ActionKind
+	(Decision)(0),               // 1: blitz.v1.Decision
+	(*Turn)(nil),                // 2: blitz.v1.Turn
+	(*TurnEvent)(nil),           // 3: blitz.v1.TurnEvent
+	(*Accepted)(nil),            // 4: blitz.v1.Accepted
+	(*Text)(nil),                // 5: blitz.v1.Text
+	(*ToolCall)(nil),            // 6: blitz.v1.ToolCall
+	(*ToolResult)(nil),          // 7: blitz.v1.ToolResult
+	(*ApprovalRequest)(nil),     // 8: blitz.v1.ApprovalRequest
+	(*Question)(nil),            // 9: blitz.v1.Question
+	(*Usage)(nil),               // 10: blitz.v1.Usage
+	(*TurnFinished)(nil),        // 11: blitz.v1.TurnFinished
+	(*ErrorInfo)(nil),           // 12: blitz.v1.ErrorInfo
+	nil,                         // 13: blitz.v1.ErrorInfo.MetadataEntry
+	(*durationpb.Duration)(nil), // 14: google.protobuf.Duration
+	(*structpb.Struct)(nil),     // 15: google.protobuf.Struct
 }
 var file_blitz_v1_turn_proto_depIdxs = []int32{
-	4,  // 0: blitz.v1.TurnEvent.accepted:type_name -> blitz.v1.Accepted
-	5,  // 1: blitz.v1.TurnEvent.text:type_name -> blitz.v1.Text
-	6,  // 2: blitz.v1.TurnEvent.tool_call:type_name -> blitz.v1.ToolCall
-	7,  // 3: blitz.v1.TurnEvent.tool_result:type_name -> blitz.v1.ToolResult
-	8,  // 4: blitz.v1.TurnEvent.approval_request:type_name -> blitz.v1.ApprovalRequest
-	9,  // 5: blitz.v1.TurnEvent.question:type_name -> blitz.v1.Question
-	11, // 6: blitz.v1.TurnEvent.finished:type_name -> blitz.v1.TurnFinished
-	14, // 7: blitz.v1.ToolCall.args:type_name -> google.protobuf.Struct
-	14, // 8: blitz.v1.ToolResult.result:type_name -> google.protobuf.Struct
-	0,  // 9: blitz.v1.ApprovalRequest.kind:type_name -> blitz.v1.ActionKind
-	10, // 10: blitz.v1.TurnFinished.before:type_name -> blitz.v1.Usage
-	10, // 11: blitz.v1.TurnFinished.after:type_name -> blitz.v1.Usage
-	12, // 12: blitz.v1.TurnFinished.error:type_name -> blitz.v1.ErrorInfo
-	13, // 13: blitz.v1.ErrorInfo.metadata:type_name -> blitz.v1.ErrorInfo.MetadataEntry
-	14, // [14:14] is the sub-list for method output_type
-	14, // [14:14] is the sub-list for method input_type
-	14, // [14:14] is the sub-list for extension type_name
-	14, // [14:14] is the sub-list for extension extendee
-	0,  // [0:14] is the sub-list for field type_name
+	14, // 0: blitz.v1.Turn.timeout:type_name -> google.protobuf.Duration
+	4,  // 1: blitz.v1.TurnEvent.accepted:type_name -> blitz.v1.Accepted
+	5,  // 2: blitz.v1.TurnEvent.text:type_name -> blitz.v1.Text
+	6,  // 3: blitz.v1.TurnEvent.tool_call:type_name -> blitz.v1.ToolCall
+	7,  // 4: blitz.v1.TurnEvent.tool_result:type_name -> blitz.v1.ToolResult
+	8,  // 5: blitz.v1.TurnEvent.approval_request:type_name -> blitz.v1.ApprovalRequest
+	9,  // 6: blitz.v1.TurnEvent.question:type_name -> blitz.v1.Question
+	11, // 7: blitz.v1.TurnEvent.finished:type_name -> blitz.v1.TurnFinished
+	15, // 8: blitz.v1.ToolCall.args:type_name -> google.protobuf.Struct
+	15, // 9: blitz.v1.ToolResult.result:type_name -> google.protobuf.Struct
+	0,  // 10: blitz.v1.ApprovalRequest.kind:type_name -> blitz.v1.ActionKind
+	10, // 11: blitz.v1.TurnFinished.before:type_name -> blitz.v1.Usage
+	10, // 12: blitz.v1.TurnFinished.after:type_name -> blitz.v1.Usage
+	12, // 13: blitz.v1.TurnFinished.error:type_name -> blitz.v1.ErrorInfo
+	13, // 14: blitz.v1.ErrorInfo.metadata:type_name -> blitz.v1.ErrorInfo.MetadataEntry
+	15, // [15:15] is the sub-list for method output_type
+	15, // [15:15] is the sub-list for method input_type
+	15, // [15:15] is the sub-list for extension type_name
+	15, // [15:15] is the sub-list for extension extendee
+	0,  // [0:15] is the sub-list for field type_name
 }
 
 func init() { file_blitz_v1_turn_proto_init() }

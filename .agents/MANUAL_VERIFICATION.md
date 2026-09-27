@@ -366,3 +366,6 @@ Set `fallback_models = ["anthropic/claude-sonnet-5"]` with a working Anthropic k
 ## 38. Parity features (ROADMAP item 25)
 
 - [ ] 💲 Ask "which test files are there?" in this repository. **Expected:** the agent calls `glob` with a pattern like `**/*_test.go` and lists them without shelling out to `find`.
+- [ ] 💲 `blitz exec --max-cost-usd 0.01 "refactor the whole repository"`. **Expected:** it stops soon with "the turn reached its cost limit ($0.01)" and exit code 3 (`echo $?`); with `--output-format json` the result has `is_error: true` and `exit_code: 3`. The same with the service running (attached) gives the same exit code.
+- [ ] 💲 `blitz exec --timeout 20s "run the full test suite and fix failures"`. **Expected:** stops after about 20 s with "time limit (20s)", exit 3, and no test process left running.
+- [ ] `blitz --max-cost-usd 1` with no prompt. **Expected:** usage error (exit 2). With a model that has no price, a one-shot run warns that the cost limit can't be enforced.

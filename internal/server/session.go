@@ -133,6 +133,7 @@ func (h sessionService) RunTurn(ctx context.Context, r req[pb.RunTurnRequest], s
 	res, runErr := w.Run(ctx, r.Msg.SessionId, app.Turn{
 		Text: t.Text, Prompt: t.Prompt, Plan: t.Plan, ReadOnly: t.ReadOnly, Aside: t.Aside, Accepted: t.Accepted,
 		Images: imgs, MaxTurns: int(t.MaxTurns), FetchGrants: t.FetchGrants,
+		MaxCostUSD: t.MaxCostUsd, Timeout: t.GetTimeout().AsDuration(),
 		OnAccepted: func() { send(&pb.TurnEvent{Kind: &pb.TurnEvent_Accepted{Accepted: &pb.Accepted{}}}) },
 	}, func(e app.Event) { send(eventMsg(e)) })
 

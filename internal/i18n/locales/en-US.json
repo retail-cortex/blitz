@@ -167,6 +167,7 @@
     "resume.starting": "Resuming session {id} ({messages})",
     "resume.other_workspace_id": "session {id} was started in {workspace}; file references in its history may not match this workspace",
     "startup.placeholder_model": "run 'blitz doctor' to check your configuration; using a placeholder model",
+    "startup.cost_unpriced": "--max-cost-usd can't be enforced: {model} has no price (add [pricing.\"{model}\"])",
     "startup.attached": "Attached to the Blitz service ({socket}); --local runs here instead.",
     "startup.model_failed": "model initialization failed: {error}",
     "startup.line_editor": "line editor unavailable: {error}",
