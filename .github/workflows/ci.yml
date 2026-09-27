@@ -69,12 +69,15 @@ jobs:
           if grep -q -- '--- SKIP' gv.txt; then exit 1; fi
       # Apps depend on pkg/ only; front ends never on the engine.
       - run: bazel run //bazel:check_deps
-      # Fails only on a vulnerability the code can reach.
+      # Fails only on a vulnerability the code can reach. The scan needs the
+      # symbol table to see which packages are linked: without it, every
+      # advisory in a required module counts (GO-2026-5932, all of x/crypto
+      # for its unused openpgp package), so it scans unstripped builds.
       - name: govulncheck
         run: |
-          bazel build //apps/cli:blitz //apps/service:blitzd
+          bazel build --strip=never //apps/cli:blitz //apps/service:blitzd
           for t in //apps/cli:blitz //apps/service:blitzd; do
-            bazel run @org_golang_x_vuln//cmd/govulncheck -- -mode=binary "$PWD/$(bazel cquery --output=files "$t")"
+            bazel run @org_golang_x_vuln//cmd/govulncheck -- -mode=binary "$PWD/$(bazel cquery --strip=never --output=files "$t")"
           done
       # The API protos: formatting, and no breaking change against the
       # previous commit, unless its message declares "Breaking-API: <why>".
