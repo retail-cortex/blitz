@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"time"
 )
 
 // UIConfig controls terminal presentation.
@@ -156,11 +157,12 @@ type WebConfig struct {
 	SearchMaxResults int    `toml:"search_max_results"`
 }
 
-// DefaultPricing holds estimated list prices for the default models. They
-// change over time; override them under [pricing."model-name"].
+// DefaultPricing holds estimated list prices for the default models, as of
+// the start of PriceChanges. They change over time; override them under
+// [pricing."model-name"]. Use DefaultPricingAt for the prices in effect.
 var DefaultPricing = map[string]ModelPrice{
-	// Gemini 3.8 Flash at its introductory price, valid through 2026-12-31;
-	// from 2027-01-01 it is 1.50 / 7.50 / 0.15. Update this entry then.
+	// Gemini 3.8 Flash at its introductory price, valid through 2026-12-31
+	// (PriceChanges has the price from 2027-01-01).
 	"gemini-3.8-flash": {InputPerMTok: 0.75, OutputPerMTok: 3.75, CachedInputPerMTok: 0.075},
 	"gemini-2.5-pro":   {InputPerMTok: 1.25, OutputPerMTok: 10.00, CachedInputPerMTok: 0.31},
 	"gpt-4o":           {InputPerMTok: 2.50, OutputPerMTok: 10.00, CachedInputPerMTok: 1.25},
@@ -169,6 +171,37 @@ var DefaultPricing = map[string]ModelPrice{
 	"claude-opus-5":    {InputPerMTok: 5.00, OutputPerMTok: 25.00, CachedInputPerMTok: 0.50, CacheWritePerMTok: 6.25},
 	"claude-sonnet-5":  {InputPerMTok: 2.00, OutputPerMTok: 10.00, CachedInputPerMTok: 0.20, CacheWritePerMTok: 2.50},
 	"claude-haiku-4-5": {InputPerMTok: 1.00, OutputPerMTok: 5.00, CachedInputPerMTok: 0.10, CacheWritePerMTok: 1.25},
+}
+
+// PriceChange is a published list price that takes effect on a date.
+type PriceChange struct {
+	Model string
+	From  time.Time // UTC
+	Price ModelPrice
+}
+
+// PriceChanges are announced changes to DefaultPricing, so a build made
+// before a change still prices correctly after it.
+var PriceChanges = []PriceChange{
+	// The introductory Gemini 3.8 Flash price ends on 2026-12-31.
+	{Model: "gemini-3.8-flash", From: time.Date(2027, 1, 1, 0, 0, 0, 0, time.UTC),
+		Price: ModelPrice{InputPerMTok: 1.50, OutputPerMTok: 7.50, CachedInputPerMTok: 0.15}},
+}
+
+// DefaultPricingAt returns DefaultPricing with every price change in
+// effect at t applied (a fresh map the caller may change).
+func DefaultPricingAt(t time.Time) map[string]ModelPrice {
+	out := make(map[string]ModelPrice, len(DefaultPricing))
+	for k, v := range DefaultPricing {
+		out[k] = v
+	}
+	var applied = map[string]time.Time{}
+	for _, c := range PriceChanges {
+		if !t.Before(c.From) && !c.From.Before(applied[c.Model]) {
+			out[c.Model], applied[c.Model] = c.Price, c.From
+		}
+	}
+	return out
 }
 
 // Dir returns the Blitz home directory (~/.blitz).
@@ -206,8 +239,7 @@ func applyFeatureDefaults(c *Config) {
 	c.Checkpoints = CheckpointConfig{Enabled: true, MaxBytes: 64 * 1024 * 1024}
 	c.Images = ImagesConfig{Enabled: true, Dir: filepath.Join(dir, "images"), MaxDimension: 1568, MaxInputMB: 20, RetainDays: 30}
 	c.Web = WebConfig{Enabled: true, MaxBytes: 2 * 1024 * 1024, TimeoutSeconds: 20}
-	c.Pricing = make(map[string]ModelPrice, len(DefaultPricing))
-	for k, v := range DefaultPricing {
-		c.Pricing[k] = v
-	}
+	// Prices in effect when the configuration loads: a service running
+	// across a price change picks the new price up at its next restart.
+	c.Pricing = DefaultPricingAt(time.Now())
 }

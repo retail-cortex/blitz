@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/retail-cortex/blitz/internal/agents"
 	"github.com/retail-cortex/blitz/internal/audit"
@@ -268,7 +269,7 @@ func TestEnginePricesServedModelAndCacheWrites(t *testing.T) {
 	g.llm.Usage = &genai.GenerateContentResponseUsageMetadata{PromptTokenCount: 1_000_000}
 	g.llm.ServedBy = "gemini-3.8-flash-exp-0927"
 	collect(t, g.eng, "s", "go")
-	want := config.DefaultPricing["gemini-3.8-flash"].InputPerMTok // 1M input tokens
+	want := config.DefaultPricingAt(time.Now())["gemini-3.8-flash"].InputPerMTok // 1M input tokens
 	if u := g.eng.Usage("s"); !u.Priced || abs(u.CostUSD-want) > 1e-9 {
 		t.Errorf("prefix-priced served model: %+v", u)
 	}
