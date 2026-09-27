@@ -92,7 +92,8 @@ func HandleCommand(ctx context.Context, input string, app *App) (bool, error) {
 			fmt.Printf("  %-14s %s\n", i18n.T("settings.agency")+":", st.Agency)
 			fmt.Printf("  %-14s %s\n", i18n.T("settings.model")+":", i18n.T("settings.model_value", "model", st.Model.Name, "provider", st.Model.Provider))
 			fmt.Printf("  %-14s %s\n", i18n.T("settings.agent")+":", st.Agent)
-			fmt.Printf("  %-14s %s\n\n", i18n.T("settings.locale")+":", st.Locale)
+			fmt.Printf("  %-14s %s\n", i18n.T("settings.locale")+":", st.Locale)
+			fmt.Printf("  %-14s %s\n\n", i18n.T("settings.mode")+":", st.PermissionMode)
 			return true, nil
 		}
 		kv := strings.SplitN(strings.Join(args, " "), "=", 2)
@@ -113,6 +114,9 @@ func HandleCommand(ctx context.Context, input string, app *App) (bool, error) {
 		default:
 			fmt.Printf("%s %s%s\n", Green, i18n.T("set.updated", "key", k, "value", safe(v)), Reset)
 		}
+
+	case "mode":
+		cmdMode(args, app)
 
 	case "clear":
 		fmt.Print("\033[H\033[2J")
@@ -159,6 +163,7 @@ func printHelp() {
 		{"/mcp", "help.mcp"},
 		{"/tools", "help.tools"},
 		{"/plan <goal>", "help.plan"},
+		{"/mode [default|accept-edits|plan|dont-ask|bypass]", "help.mode"},
 		{"/search web|session <terms>", "help.search"},
 		{"/btw <question>", "help.btw"},
 		{"/rename <name>", "help.rename"},

@@ -221,7 +221,7 @@ func RunREPL(ctx context.Context, app *App) error {
 				shownTitle = t
 			}
 		}
-		prompt := fmt.Sprintf("%s%s ›%s ", Bold+Green, app.Workspace.ActiveAgent().Name, Reset)
+		prompt := fmt.Sprintf("%s%s%s%s %s›%s ", Bold+Green, app.Workspace.ActiveAgent().Name, Reset, modeTag(app.Workspace.Settings().PermissionMode), Bold+Green, Reset)
 		idleCtx, stopIdle := cancelOnSignal(ctx, interrupts)
 		line, err := app.Input.ReadInput(idleCtx, prompt)
 		stopIdle()

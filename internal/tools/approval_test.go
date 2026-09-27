@@ -15,8 +15,8 @@ func TestHooksApprovePolicy(t *testing.T) {
 	cmd := ApprovalRequest{Tool: "run_shell_command", Kind: ActionCommand, Detail: "ls"}
 	write := ApprovalRequest{Tool: "create_file", Kind: ActionWrite, Detail: "f"}
 
-	// Positive: AutoApproveAll covers everything.
-	all := NewHooks(Policy{AutoApproveAll: true})
+	// Positive: bypass mode covers everything.
+	all := NewHooks(Policy{Mode: ModeBypass})
 	if err := all.Approve(ctx, cmd); err != nil {
 		t.Errorf("auto-approve-all denied command: %v", err)
 	}

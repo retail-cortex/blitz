@@ -197,6 +197,14 @@ func runDoctor(ctx context.Context, g *globalFlags, online bool) []check {
 			st = statusWarn
 		}
 		add("shell sandbox", st, "%s", reg.ShellSandbox().Status())
+		switch mode := reg.Hooks().Mode(); {
+		case reg.ModeNote() != nil:
+			add("permissions", statusWarn, "bypass requested (permission_mode or auto_approve) but %v; starting in default mode", reg.ModeNote())
+		case cfg.Blitz.AutoApprove && cfg.Blitz.PermissionMode == "":
+			add("permissions", statusOK, "bypass (from auto_approve = true; prefer permission_mode = \"bypass\")")
+		default:
+			add("permissions", statusOK, "%s", mode)
+		}
 
 		switch {
 		case cfg.Web.SearchProvider == "":

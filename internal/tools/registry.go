@@ -32,7 +32,13 @@ type Registry struct {
 	searcher     *webSearcher  // nil: no search provider configured
 	searchErr    error         // why the configured provider can't be used
 	fetch        bool          // web_fetch is available
+	// modeNote is why the configured permission mode couldn't be used
+	// (bypass without the OS sandbox); nil when it was.
+	modeNote error
 }
+
+// ModeNote is why the configured permission mode wasn't used, or nil.
+func (r *Registry) ModeNote() error { return r.modeNote }
 
 // NewRegistry initializes all standard Blitz tools. Call Close when done
 // to stop background processes and release the workspace handle.
@@ -79,13 +85,30 @@ func NewRegistry(cfg *config.Config, agentReg *agents.Registry, skillProv *skill
 	}
 	env := &ExecEnv{Sandbox: osb, ScrubEnv: sb.ScrubEnv, Dir: ws.Dir()}
 
+	// The starting permission mode: [blitz] permission_mode, or bypass for
+	// the older auto_approve = true. Bypass needs the OS sandbox; without
+	// it the session starts in default mode and says why.
+	mode, err := ParsePermissionMode(cfg.Blitz.PermissionMode)
+	if err != nil {
+		ws.Close()
+		return nil, fmt.Errorf("blitz.permission_mode: %w", err)
+	}
+	if cfg.Blitz.AutoApprove && mode == ModeDefault {
+		mode = ModeBypass
+	}
+	var modeNote error
+	if mode == ModeBypass && !osb.Active() {
+		mode, modeNote = ModeDefault, ErrBypassNeedsSandbox
+	}
+
 	r := &Registry{
 		tools:     make(map[string]tool.Tool),
 		workspace: ws,
 		hooks: NewHooks(Policy{
-			AutoApproveAll:      cfg.Blitz.AutoApprove,
+			Mode:                mode,
 			AutoApproveCommands: cfg.Tools.AutoApproveCommands,
 		}),
+		modeNote:  modeNote,
 		processes: NewProcessManager(0, 0),
 		policy:    policy,
 		exec:      env,

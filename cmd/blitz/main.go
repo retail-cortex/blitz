@@ -17,6 +17,7 @@ import (
 	"github.com/retail-cortex/blitz/internal/i18n"
 	"github.com/retail-cortex/blitz/internal/runtime"
 	"github.com/retail-cortex/blitz/internal/server"
+	"github.com/retail-cortex/blitz/internal/tools"
 	"github.com/retail-cortex/blitz/internal/tui"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -39,6 +40,7 @@ type rootOptions struct {
 	plan         bool
 	images       []string
 	local        bool
+	mode         string // --permission-mode
 	// requirePrompt: a run without a prompt is a usage error (exec),
 	// rather than the interactive session.
 	requirePrompt bool
@@ -114,6 +116,7 @@ func addRunFlags(f *pflag.FlagSet, o *rootOptions) {
 	f.DurationVar(&o.timeout, "timeout", 0, "Stop a one-shot run after this long, e.g. 10m (0 = unlimited)")
 	f.BoolVar(&o.plan, "plan", false, "One-shot plan: the agent may read and search but not edit or run commands")
 	f.BoolVar(&o.local, "local", false, "Run the workspace in this process even when the Blitz service is running")
+	f.StringVar(&o.mode, "permission-mode", "", "Start in a permission mode: default, accept-edits, plan, dont-ask, or bypass (needs the OS sandbox)")
 	f.StringArrayVar(&o.images, "image", nil, "Attach an image to the first prompt (repeatable); @file.png in a prompt also works")
 }
 
@@ -164,6 +167,9 @@ func runRoot(cmd *cobra.Command, o *rootOptions, args []string) (err error) {
 	}
 	if o.maxTurns < 0 {
 		return withCode(exitUsage, errors.New("--max-turns must be >= 0"))
+	}
+	if _, err := tools.ParsePermissionMode(o.mode); err != nil {
+		return withCode(exitUsage, fmt.Errorf("--permission-mode: %w", err))
 	}
 	if o.maxCostUSD < 0 || o.timeout < 0 {
 		return withCode(exitUsage, errors.New("--max-cost-usd and --timeout must be >= 0"))
@@ -228,6 +234,11 @@ func runRoot(cmd *cobra.Command, o *rootOptions, args []string) (err error) {
 			err = cerr
 		}
 	}()
+	if o.mode != "" {
+		if _, err := w.SetPermissionMode(o.mode); err != nil {
+			return withCode(exitUsage, fmt.Errorf("--permission-mode: %w", err))
+		}
+	}
 	if merr := w.ModelErr(); merr != nil {
 		msg := i18n.T("startup.model_failed", "error", app.ModelErrorSummary(merr, cfg))
 		if oneShot {
@@ -363,7 +374,7 @@ func newCompleter(w app.Backend) *tui.Completer {
 	c := tui.NewCompleter(w.Dir())
 	for _, cmd := range []string{"help", "agents", "model", "skills", "session", "set", "clear", "sandbox", "exit", "quit",
 		"undo", "checkpoints", "diff", "cost", "context", "compact", "memory", "approvals", "mcp", "resume", "locale", "attach", "paste",
-		"tools", "plan", "show", "init", "pin_model", "unpin", "model_settings", "search", "btw", "rename", "envs"} {
+		"tools", "plan", "show", "init", "mode", "pin_model", "unpin", "model_settings", "search", "btw", "rename", "envs"} {
 		c.Command(cmd)
 	}
 	c.Command("skills", "list", "show", "search")
@@ -377,6 +388,7 @@ func newCompleter(w app.Backend) *tui.Completer {
 	c.Command("undo", "--force")
 	c.Command("compact")
 	c.Command("set", "agency=")
+	c.Command("mode", "default", "accept-edits", "plan", "dont-ask", "bypass")
 	agentNames := func() []string {
 		var names []string
 		for _, a := range w.ListAgents() {

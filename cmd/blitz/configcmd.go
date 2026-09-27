@@ -104,7 +104,8 @@ default_agent = "blitz"
 agency_level  = "high"      # low | medium | high | extreme
 temperature   = 0.2
 max_tokens    = 8192
-auto_approve  = false       # true skips ALL approval prompts (deny rules still apply)
+permission_mode = "default" # default | accept-edits | plan | dont-ask | bypass (bypass needs the OS sandbox)
+auto_approve  = false       # older spelling of permission_mode = "bypass"
 trust_workspace = false     # load ./agents and ./skills from the project
 
 [llm]

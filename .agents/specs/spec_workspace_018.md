@@ -64,7 +64,7 @@ Front ends use only `app.Backend` (implemented by `*Workspace` and by the servic
 - **WS-41** `PinModel(agent, ref)` requires a known agent (`*UnknownAgentError`), builds the model, pins it, and saves `[agent_models]`. `Unpin` removes the pin, restores the agent's own `default_model` if declared, and removes the saved line. Results carry `Saved{Path, Err}`.
 - **WS-42** `ModelSettings(ref)` rejects refs containing `=` or with no name (`ErrBadModelRef`); returns settings plus global temperature/max_tokens. `UpdateModelSettings(ref, reset, changes)` validates (`*InvalidSettingError`), applies from the next model call, lists keys the provider ignores as `Unsupported`, and saves under the key the file already uses for that model (e.g. a hand-written `openai/gpt-5`) else the bare name.
 - **WS-43** `Set(key, value)` supports only `agency`/`agency_level` (`low|medium|high|extreme`, else `ErrInvalidAgency`; unknown keys `*UnknownSettingError`); agents' instructions embed agency, so the engine rebuilds. Session-only.
-- **WS-44** `Settings()` returns agency, model, active agent, and the reply locale.
+- **WS-44** `Settings()` returns agency, model, active agent, the reply locale and the permission mode. `SetPermissionMode(mode)` changes the workspace's mode (`ErrUnknownMode`, `ErrBypassNeedsSandbox`); in plan mode `Run` plans every prompt ([spec_approvals_005](spec_approvals_005.md) APR-14).
 
 ## 6. Context, memory, locale, search
 

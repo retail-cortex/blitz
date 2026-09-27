@@ -45,6 +45,7 @@ Run flags (root and `exec`):
 | `--timeout D` | Stop a one-shot run after D (e.g. `15m`; 0 = unlimited) |
 | `--plan` | One-shot plan-only run (read-only tools) |
 | `--local` | Run in-process even if the service is running |
+| `--permission-mode MODE` | Start in `default`, `accept-edits`, `plan`, `dont-ask` or `bypass` (needs the OS sandbox; otherwise a usage error). Attached, it changes the service workspace's mode |
 | `--image PATH` | Attach an image to the first prompt (repeatable) |
 
 Root only: `-i/--interactive` (REPL even with a prompt), `-v/--version` (prints `Blitz Go (Google ADK) version <v>`; version injected by `-ldflags -X main.version`, default `2.0.0-go`).

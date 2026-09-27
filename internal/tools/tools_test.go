@@ -92,7 +92,7 @@ func writeFile(t *testing.T, path, content string) {
 }
 
 // allowAll auto-approves every action.
-func allowAll() *Hooks { return NewHooks(Policy{AutoApproveAll: true}) }
+func allowAll() *Hooks { return NewHooks(Policy{Mode: ModeBypass}) }
 
 // approverHooks records requests and approves once (true) or denies (false).
 func approverHooks(approve bool) (*Hooks, *[]ApprovalRequest) {

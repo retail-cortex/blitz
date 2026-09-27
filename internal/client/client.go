@@ -353,6 +353,7 @@ func (r *Remote) getSettings() settings {
 	return settings{Settings: app.Settings{
 		Agency: m.Agency,
 		Model:  app.ModelInfo{Name: m.Model, Provider: m.Provider}, Agent: m.Agent, Locale: m.Locale,
+		PermissionMode: m.PermissionMode,
 	}, ImagesEnabled: m.ImagesEnabled}
 }
 
@@ -364,6 +365,14 @@ func (r *Remote) Set(ctx context.Context, key, value string) (string, error) {
 		return strings.ToLower(strings.TrimSpace(key)), fromAPI(err)
 	}
 	return res.Msg.Key, nil
+}
+
+func (r *Remote) SetPermissionMode(mode string) (string, error) {
+	res, err := r.workspaces.SetPermissionMode(context.Background(), connect.NewRequest(&pb.SetPermissionModeRequest{Workspace: r.dir, Mode: mode}))
+	if err != nil {
+		return "", fromAPI(err)
+	}
+	return res.Msg.Mode, nil
 }
 
 func (r *Remote) listSkills(query string) []app.SkillInfo {

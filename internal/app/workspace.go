@@ -134,6 +134,9 @@ func Open(ctx context.Context, cfg *config.Config, o Options) (*Workspace, error
 		return nil, fmt.Errorf("failed to initialize tools: %w", err)
 	}
 	w.tools.SetWarn(o.Warn)
+	if note := w.tools.ModeNote(); note != nil {
+		o.Warn(i18n.T("mode.bypass_unavailable"))
+	}
 	if st := w.tools.Images(); st != nil && cfg.Images.RetainDays > 0 {
 		if _, err := st.Prune(time.Duration(cfg.Images.RetainDays) * 24 * time.Hour); err != nil {
 			o.Warn("image cleanup: " + err.Error())

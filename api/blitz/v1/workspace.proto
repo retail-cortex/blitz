@@ -43,6 +43,10 @@ service WorkspaceService {
   rpc GetSettings(GetSettingsRequest) returns (GetSettingsResponse);
   // Changes a setting for the workspace (UNKNOWN_SETTING, INVALID_AGENCY).
   rpc SetSetting(SetSettingRequest) returns (SetSettingResponse);
+  // Changes which actions run without asking, for every session of the
+  // workspace (UNKNOWN_MODE; BYPASS_NEEDS_SANDBOX when bypass is asked for
+  // without an active OS sandbox).
+  rpc SetPermissionMode(SetPermissionModeRequest) returns (SetPermissionModeResponse);
 
   // Returns the skills found, or those matching a query.
   rpc ListSkills(ListSkillsRequest) returns (ListSkillsResponse);
@@ -268,6 +272,20 @@ message GetSettingsResponse {
   string locale = 7;
   // Images can be attached to prompts.
   bool images_enabled = 8;
+  // default, accept-edits, plan, dont-ask or bypass.
+  string permission_mode = 9;
+}
+
+message SetPermissionModeRequest {
+  string workspace = 1;
+  // default, accept-edits, plan, dont-ask or bypass (other spellings such
+  // as acceptEdits are accepted).
+  string mode = 2;
+}
+
+message SetPermissionModeResponse {
+  // The mode's canonical name.
+  string mode = 1;
 }
 
 message SetSettingRequest {

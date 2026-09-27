@@ -78,7 +78,9 @@ type InvokeAgentFunc func(ctx context.Context, agentName, prompt string) (string
 
 // Policy controls which actions skip the approval prompt.
 type Policy struct {
-	AutoApproveAll      bool // blitz.auto_approve
+	// Mode is the permission mode ("" is ModeDefault). NewRegistry sets
+	// it from [blitz] permission_mode and auto_approve.
+	Mode                PermissionMode
 	AutoApproveCommands bool // tools.auto_approve_commands
 }
 
@@ -234,7 +236,10 @@ func (h *Hooks) Approve(ctx context.Context, req ApprovalRequest) error {
 	}
 
 	switch {
-	case policy.AutoApproveAll || (req.Kind == ActionCommand && policy.AutoApproveCommands):
+	case policy.Mode == ModeBypass:
+		record("mode-bypass")
+		return nil
+	case req.Kind == ActionCommand && policy.AutoApproveCommands:
 		record("auto-policy")
 		return nil
 	case remembered:
@@ -243,9 +248,16 @@ func (h *Hooks) Approve(ctx context.Context, req ApprovalRequest) error {
 	case req.Key != "" && store.Has(req.Key):
 		record("saved-rule")
 		return nil
+	case policy.Mode == ModeAcceptEdits && (req.Kind == ActionWrite || req.Kind == ActionDelete):
+		// The file tools resolved the paths as writable before asking.
+		record("mode-accept-edits")
+		return nil
+	case policy.Mode == ModeDontAsk:
+		record("mode-dont-ask")
+		return fmt.Errorf("%w: %s would need approval, and the permission mode is dont-ask", ErrNotApproved, req.Tool)
 	case approver == nil:
 		record("no-approver")
-		return fmt.Errorf("%w: %s requires approval but no interactive approver is available (enable auto-approve in config to allow it)", ErrNotApproved, req.Tool)
+		return fmt.Errorf("%w: %s requires approval but no interactive approver is available (allow it with a rule or a permission mode such as accept-edits)", ErrNotApproved, req.Tool)
 	}
 
 	// The span isolates time spent waiting for the user from tool runtime.

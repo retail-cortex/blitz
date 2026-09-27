@@ -14,7 +14,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file blitz/v1/workspace.proto.
  */
 export const file_blitz_v1_workspace: GenFile = /*@__PURE__*/
-  fileDesc("ChhibGl0ei92MS93b3Jrc3BhY2UucHJvdG8SCGJsaXR6LnYxIiQKBVNhdmVkEgwKBHBhdGgYASABKAkSDQoFZXJyb3IYAiABKAkiFwoVTGlzdFdvcmtzcGFjZXNSZXF1ZXN0IiwKFkxpc3RXb3Jrc3BhY2VzUmVzcG9uc2USEgoKd29ya3NwYWNlcxgBIAMoCSIqChVDbG9zZVdvcmtzcGFjZVJlcXVlc3QSEQoJd29ya3NwYWNlGAEgASgJIhgKFkNsb3NlV29ya3NwYWNlUmVzcG9uc2UiJgoRR2V0U2FuZGJveFJlcXVlc3QSEQoJd29ya3NwYWNlGAEgASgJIiUKEkdldFNhbmRib3hSZXNwb25zZRIPCgdzdW1tYXJ5GAEgAygJImoKCUFnZW50SW5mbxIMCgRuYW1lGAEgASgJEhQKDGRpc3BsYXlfbmFtZRgCIAEoCRITCgtkZXNjcmlwdGlvbhgDIAEoCRIOCgZhY3RpdmUYBCABKAgSFAoMcGlubmVkX21vZGVsGAUgASgJIiYKEUxpc3RBZ2VudHNSZXF1ZXN0EhEKCXdvcmtzcGFjZRgBIAEoCSI5ChJMaXN0QWdlbnRzUmVzcG9uc2USIwoGYWdlbnRzGAEgAygLMhMuYmxpdHoudjEuQWdlbnRJbmZvIjIKD1NldEFnZW50UmVxdWVzdBIRCgl3b3Jrc3BhY2UYASABKAkSDAoEbmFtZRgCIAEoCSI2ChBTZXRBZ2VudFJlc3BvbnNlEiIKBWFnZW50GAEgASgLMhMuYmxpdHoudjEuQWdlbnRJbmZvIiQKD0dldE1vZGVsUmVxdWVzdBIRCgl3b3Jrc3BhY2UYASABKAkiRwoQR2V0TW9kZWxSZXNwb25zZRIMCgRuYW1lGAEgASgJEhAKCHByb3ZpZGVyGAIgASgJEhMKC3VuYXZhaWxhYmxlGAMgASgJIjEKD1NldE1vZGVsUmVxdWVzdBIRCgl3b3Jrc3BhY2UYASABKAkSCwoDcmVmGAIgASgJIiYKEFNldE1vZGVsUmVzcG9uc2USEgoKYWN0aXZlX3BpbhgBIAEoCSJACg9QaW5Nb2RlbFJlcXVlc3QSEQoJd29ya3NwYWNlGAEgASgJEg0KBWFnZW50GAIgASgJEgsKA3JlZhgDIAEoCSJQChBQaW5Nb2RlbFJlc3BvbnNlEg0KBWFnZW50GAEgASgJEg0KBW1vZGVsGAIgASgJEh4KBXNhdmVkGAMgASgLMg8uYmxpdHoudjEuU2F2ZWQiNQoRVW5waW5Nb2RlbFJlcXVlc3QSEQoJd29ya3NwYWNlGAEgASgJEg0KBWFnZW50GAIgASgJIlIKElVucGluTW9kZWxSZXNwb25zZRINCgVhZ2VudBgBIAEoCRINCgVtb2RlbBgCIAEoCRIeCgVzYXZlZBgDIAEoCzIPLmJsaXR6LnYxLlNhdmVkIpsBCg1Nb2RlbFNldHRpbmdzEhgKC3RlbXBlcmF0dXJlGAEgASgBSACIAQESFwoKbWF4X3Rva2VucxgCIAEoBUgBiAEBEhIKBXRvcF9wGAMgASgBSAKIAQESEQoEc2VlZBgEIAEoBUgDiAEBQg4KDF90ZW1wZXJhdHVyZUINCgtfbWF4X3Rva2Vuc0IICgZfdG9wX3BCBwoFX3NlZWQilgEKEU1vZGVsU2V0dGluZ3NJbmZvEg0KBW1vZGVsGAEgASgJEhAKCHByb3ZpZGVyGAIgASgJEikKCHNldHRpbmdzGAMgASgLMhcuYmxpdHoudjEuTW9kZWxTZXR0aW5ncxIaChJnbG9iYWxfdGVtcGVyYXR1cmUYBCABKAESGQoRZ2xvYmFsX21heF90b2tlbnMYBSABKAUiOQoXR2V0TW9kZWxTZXR0aW5nc1JlcXVlc3QSEQoJd29ya3NwYWNlGAEgASgJEgsKA3JlZhgCIAEoCSLFAQoYR2V0TW9kZWxTZXR0aW5nc1Jlc3BvbnNlEjgKA2FsbBgBIAMoCzIrLmJsaXR6LnYxLkdldE1vZGVsU2V0dGluZ3NSZXNwb25zZS5BbGxFbnRyeRIqCgVtb2RlbBgCIAEoCzIbLmJsaXR6LnYxLk1vZGVsU2V0dGluZ3NJbmZvGkMKCEFsbEVudHJ5EgsKA2tleRgBIAEoCRImCgV2YWx1ZRgCIAEoCzIXLmJsaXR6LnYxLk1vZGVsU2V0dGluZ3M6AjgBIiUKB1NldHRpbmcSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJIm8KGlVwZGF0ZU1vZGVsU2V0dGluZ3NSZXF1ZXN0EhEKCXdvcmtzcGFjZRgBIAEoCRILCgNyZWYYAiABKAkSDQoFcmVzZXQYAyABKAgSIgoHY2hhbmdlcxgEIAMoCzIRLmJsaXR6LnYxLlNldHRpbmcifgobVXBkYXRlTW9kZWxTZXR0aW5nc1Jlc3BvbnNlEioKBW1vZGVsGAEgASgLMhsuYmxpdHoudjEuTW9kZWxTZXR0aW5nc0luZm8SEwoLdW5zdXBwb3J0ZWQYAiADKAkSHgoFc2F2ZWQYAyABKAsyDy5ibGl0ei52MS5TYXZlZCInChJHZXRTZXR0aW5nc1JlcXVlc3QSEQoJd29ya3NwYWNlGAEgASgJIqEBChNHZXRTZXR0aW5nc1Jlc3BvbnNlEg4KBmFnZW5jeRgDIAEoCRINCgVtb2RlbBgEIAEoCRIQCghwcm92aWRlchgFIAEoCRINCgVhZ2VudBgGIAEoCRIOCgZsb2NhbGUYByABKAkSFgoOaW1hZ2VzX2VuYWJsZWQYCCABKAhKBAgBEAJKBAgCEANSCnB1cHB5X25hbWVSCm93bmVyX25hbWUiQgoRU2V0U2V0dGluZ1JlcXVlc3QSEQoJd29ya3NwYWNlGAEgASgJEgsKA2tleRgCIAEoCRINCgV2YWx1ZRgDIAEoCSIhChJTZXRTZXR0aW5nUmVzcG9uc2USCwoDa2V5GAEgASgJItcCCglTa2lsbEluZm8SDAoEbmFtZRgBIAEoCRITCgtkZXNjcmlwdGlvbhgCIAEoCRIPCgd2ZXJzaW9uGAMgASgJEg8KB2xpY2Vuc2UYBCABKAkSEAoIY2F0ZWdvcnkYBSABKAkSFQoNY29tcGF0aWJpbGl0eRgGIAEoCRIMCgR0YWdzGAcgAygJEgwKBGhhc2gYCCABKAkSIgoFdG9vbHMYCSADKAsyEy5ibGl0ei52MS5Ta2lsbFRvb2wSJgoHc2NyaXB0cxgKIAMoCzIVLmJsaXR6LnYxLlNraWxsU2NyaXB0EgwKBHRpZXIYCyABKAkSDgoGYnlwYXNzGAwgASgIEg8KB25ldHdvcmsYDSABKAgSFQoNbmVlZHNfbmV0d29yaxgOIAEoCBILCgNlbnYYDyADKAkSEAoId2l0aGhlbGQYECADKAkSDwoHYmxvY2tlZBgRIAMoCSI2CglTa2lsbFRvb2wSDAoEbmFtZRgBIAEoCRIOCgZzY29wZXMYAiADKAkSCwoDd2h5GAMgASgJIpkBCgtTa2lsbFNjcmlwdBIMCgRuYW1lGAEgASgJEhAKCGxhbmd1YWdlGAIgASgJEg4KBnNvdXJjZRgDIAEoCRIqCgd0aW1lb3V0GAQgASgLMhkuZ29vZ2xlLnByb3RvYnVmLkR1cmF0aW9uEgwKBGRlcHMYBSADKAkSDwoHYWxsb3dlZBgGIAEoCBIPCgdyZWFzb25zGAcgAygJIjUKEUxpc3RTa2lsbHNSZXF1ZXN0EhEKCXdvcmtzcGFjZRgBIAEoCRINCgVxdWVyeRgCIAEoCSI5ChJMaXN0U2tpbGxzUmVzcG9uc2USIwoGc2tpbGxzGAEgAygLMhMuYmxpdHoudjEuU2tpbGxJbmZvIjIKD0dldFNraWxsUmVxdWVzdBIRCgl3b3Jrc3BhY2UYASABKAkSDAoEbmFtZRgCIAEoCSI2ChBHZXRTa2lsbFJlc3BvbnNlEiIKBXNraWxsGAEgASgLMhMuYmxpdHoudjEuU2tpbGxJbmZvInwKA0VudhILCgNrZXkYASABKAkSDAoEZGVwcxgCIAMoCRIOCgZza2lsbHMYAyADKAkSDAoEc2l6ZRgEIAEoAxItCglsYXN0X3VzZWQYBSABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEg0KBXJlYWR5GAYgASgIIiQKD0xpc3RFbnZzUmVxdWVzdBIRCgl3b3Jrc3BhY2UYASABKAkiLwoQTGlzdEVudnNSZXNwb25zZRIbCgRlbnZzGAEgAygLMg0uYmxpdHoudjEuRW52IjIKEFJlbW92ZUVudlJlcXVlc3QSEQoJd29ya3NwYWNlGAEgASgJEgsKA2tleRgCIAEoCSITChFSZW1vdmVFbnZSZXNwb25zZSIlChBQcnVuZUVudnNSZXF1ZXN0EhEKCXdvcmtzcGFjZRgBIAEoCSImCghFbnZFcnJvchILCgNrZXkYASABKAkSDQoFZXJyb3IYAiABKAkiVwoRUHJ1bmVFbnZzUmVzcG9uc2USDwoHcmVtb3ZlZBgBIAEoBRINCgVmcmVlZBgCIAEoAxIiCgZmYWlsZWQYAyADKAsyEi5ibGl0ei52MS5FbnZFcnJvciI/CglNQ1BTZXJ2ZXISDAoEbmFtZRgBIAEoCRIOCgZ0YXJnZXQYAiABKAkSFAoMYXV0b19hcHByb3ZlGAMgASgIIioKFUxpc3RNQ1BTZXJ2ZXJzUmVxdWVzdBIRCgl3b3Jrc3BhY2UYASABKAkiPgoWTGlzdE1DUFNlcnZlcnNSZXNwb25zZRIkCgdzZXJ2ZXJzGAEgAygLMhMuYmxpdHoudjEuTUNQU2VydmVyIkMKCFRvb2xJbmZvEgwKBG5hbWUYASABKAkSEwoLZGVzY3JpcHRpb24YAiABKAkSFAoMcGxhbl9hbGxvd2VkGAMgASgIIjkKCE1DUE9mZmVyEg4KBnNlcnZlchgBIAEoCRINCgV0b29scxgCIAMoCRIOCgZwcmVmaXgYAyABKAkiJQoQTGlzdFRvb2xzUmVxdWVzdBIRCgl3b3Jrc3BhY2UYASABKAkiZgoRTGlzdFRvb2xzUmVzcG9uc2USDQoFYWdlbnQYASABKAkSIQoFdG9vbHMYAiADKAsyEi5ibGl0ei52MS5Ub29sSW5mbxIfCgNtY3AYAyADKAsyEi5ibGl0ei52MS5NQ1BPZmZlciIoChNSZWxvYWRNZW1vcnlSZXF1ZXN0EhEKCXdvcmtzcGFjZRgBIAEoCSI0ChRSZWxvYWRNZW1vcnlSZXNwb25zZRINCgVwYXRocxgBIAMoCRINCgVmaWxlcxgCIAMoCSIzChBBZGRNZW1vcnlSZXF1ZXN0EhEKCXdvcmtzcGFjZRgBIAEoCRIMCgR0ZXh0GAIgASgJIiEKEUFkZE1lbW9yeVJlc3BvbnNlEgwKBHBhdGgYASABKAkiJwoKTG9jYWxlSW5mbxILCgN0YWcYASABKAkSDAoEbmFtZRgCIAEoCSInChJMaXN0TG9jYWxlc1JlcXVlc3QSEQoJd29ya3NwYWNlGAEgASgJIlAKE0xpc3RMb2NhbGVzUmVzcG9uc2USJQoHbG9jYWxlcxgBIAMoCzIULmJsaXR6LnYxLkxvY2FsZUluZm8SEgoKY3VzdG9tX2RpchgCIAEoCSI0ChBTZXRMb2NhbGVSZXF1ZXN0EhEKCXdvcmtzcGFjZRgBIAEoCRINCgVpbnB1dBgCIAEoCSKBAQoRU2V0TG9jYWxlUmVzcG9uc2USCwoDdGFnGAEgASgJEhMKC25hdGl2ZV9uYW1lGAIgASgJEhUKDWxhbmd1YWdlX25hbWUYAyABKAkSEwoLaGFzX2NhdGFsb2cYBCABKAgSHgoFc2F2ZWQYBSABKAsyDy5ibGl0ei52MS5TYXZlZCJgCgpDaGVja3BvaW50EgoKAmlkGAEgASgFEg0KBWxhYmVsGAIgASgJEigKBHRpbWUYAyABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEg0KBWZpbGVzGAQgAygJIisKFkxpc3RDaGVja3BvaW50c1JlcXVlc3QSEQoJd29ya3NwYWNlGAEgASgJIkQKF0xpc3RDaGVja3BvaW50c1Jlc3BvbnNlEikKC2NoZWNrcG9pbnRzGAEgAygLMhQuYmxpdHoudjEuQ2hlY2twb2ludCIvCgtVbmRvUmVxdWVzdBIRCgl3b3Jrc3BhY2UYASABKAkSDQoFZm9yY2UYAiABKAgiUwoMVW5kb1Jlc3BvbnNlEg0KBWxhYmVsGAEgASgJEhAKCHJlc3RvcmVkGAIgAygJEiIKBWVycm9yGAMgASgLMhMuYmxpdHoudjEuRXJyb3JJbmZvIj8KDkdldERpZmZSZXF1ZXN0EhEKCXdvcmtzcGFjZRgBIAEoCRILCgNnaXQYAiABKAgSDQoFY29sb3IYAyABKAgiHwoPR2V0RGlmZlJlc3BvbnNlEgwKBGRpZmYYASABKAkifgoIQXBwcm92YWwSCwoDa2V5GAEgASgJEgwKBGtpbmQYAiABKAkSDwoHc3ViamVjdBgDIAEoCRILCgNkaXIYBCABKAkSDgoGYWx3YXlzGAUgASgIEikKBWFkZGVkGAYgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcCIpChRMaXN0QXBwcm92YWxzUmVxdWVzdBIRCgl3b3Jrc3BhY2UYASABKAkiPgoVTGlzdEFwcHJvdmFsc1Jlc3BvbnNlEiUKCWFwcHJvdmFscxgBIAMoCzISLmJsaXR6LnYxLkFwcHJvdmFsIkYKFlJldm9rZUFwcHJvdmFsc1JlcXVlc3QSEQoJd29ya3NwYWNlGAEgASgJEgwKBGtleXMYAiADKAkSCwoDYWxsGAMgASgIIioKF1Jldm9rZUFwcHJvdmFsc1Jlc3BvbnNlEg8KB3Jldm9rZWQYASABKAUicgoFSW1hZ2USCgoCaWQYASABKAkSDAoEbmFtZRgCIAEoCRIRCgltaW1lX3R5cGUYAyABKAkSDQoFd2lkdGgYBCABKAUSDgoGaGVpZ2h0GAUgASgFEgwKBHNpemUYBiABKAMSDwoHcmVzaXplZBgHIAEoCCIzChBMb2FkSW1hZ2VSZXF1ZXN0EhEKCXdvcmtzcGFjZRgBIAEoCRIMCgRwYXRoGAIgASgJIjMKEUxvYWRJbWFnZVJlc3BvbnNlEh4KBWltYWdlGAEgASgLMg8uYmxpdHoudjEuSW1hZ2UiQAoPQWRkSW1hZ2VSZXF1ZXN0EhEKCXdvcmtzcGFjZRgBIAEoCRIMCgRuYW1lGAIgASgJEgwKBGRhdGEYAyABKAwiMgoQQWRkSW1hZ2VSZXNwb25zZRIeCgVpbWFnZRgBIAEoCzIPLmJsaXR6LnYxLkltYWdlIiIKBExpbmsSDQoFdGl0bGUYASABKAkSCwoDdXJsGAIgASgJIi0KGEdldFNlYXJjaFByb3ZpZGVyUmVxdWVzdBIRCgl3b3Jrc3BhY2UYASABKAkiLQoZR2V0U2VhcmNoUHJvdmlkZXJSZXNwb25zZRIQCghwcm92aWRlchgBIAEoCSI0ChBTZWFyY2hXZWJSZXF1ZXN0EhEKCXdvcmtzcGFjZRgBIAEoCRINCgV0ZXJtcxgCIAEoCSJUChFTZWFyY2hXZWJSZXNwb25zZRIQCghwcm92aWRlchgBIAEoCRIdCgVsaW5rcxgCIAMoCzIOLmJsaXR6LnYxLkxpbmsSDgoGcHJvbXB0GAMgASgJMroTChBXb3Jrc3BhY2VTZXJ2aWNlElMKDkxpc3RXb3Jrc3BhY2VzEh8uYmxpdHoudjEuTGlzdFdvcmtzcGFjZXNSZXF1ZXN0GiAuYmxpdHoudjEuTGlzdFdvcmtzcGFjZXNSZXNwb25zZRJTCg5DbG9zZVdvcmtzcGFjZRIfLmJsaXR6LnYxLkNsb3NlV29ya3NwYWNlUmVxdWVzdBogLmJsaXR6LnYxLkNsb3NlV29ya3NwYWNlUmVzcG9uc2USRwoKR2V0U2FuZGJveBIbLmJsaXR6LnYxLkdldFNhbmRib3hSZXF1ZXN0GhwuYmxpdHoudjEuR2V0U2FuZGJveFJlc3BvbnNlEkcKCkxpc3RBZ2VudHMSGy5ibGl0ei52MS5MaXN0QWdlbnRzUmVxdWVzdBocLmJsaXR6LnYxLkxpc3RBZ2VudHNSZXNwb25zZRJBCghTZXRBZ2VudBIZLmJsaXR6LnYxLlNldEFnZW50UmVxdWVzdBoaLmJsaXR6LnYxLlNldEFnZW50UmVzcG9uc2USQQoIR2V0TW9kZWwSGS5ibGl0ei52MS5HZXRNb2RlbFJlcXVlc3QaGi5ibGl0ei52MS5HZXRNb2RlbFJlc3BvbnNlEkEKCFNldE1vZGVsEhkuYmxpdHoudjEuU2V0TW9kZWxSZXF1ZXN0GhouYmxpdHoudjEuU2V0TW9kZWxSZXNwb25zZRJBCghQaW5Nb2RlbBIZLmJsaXR6LnYxLlBpbk1vZGVsUmVxdWVzdBoaLmJsaXR6LnYxLlBpbk1vZGVsUmVzcG9uc2USRwoKVW5waW5Nb2RlbBIbLmJsaXR6LnYxLlVucGluTW9kZWxSZXF1ZXN0GhwuYmxpdHoudjEuVW5waW5Nb2RlbFJlc3BvbnNlElkKEEdldE1vZGVsU2V0dGluZ3MSIS5ibGl0ei52MS5HZXRNb2RlbFNldHRpbmdzUmVxdWVzdBoiLmJsaXR6LnYxLkdldE1vZGVsU2V0dGluZ3NSZXNwb25zZRJiChNVcGRhdGVNb2RlbFNldHRpbmdzEiQuYmxpdHoudjEuVXBkYXRlTW9kZWxTZXR0aW5nc1JlcXVlc3QaJS5ibGl0ei52MS5VcGRhdGVNb2RlbFNldHRpbmdzUmVzcG9uc2USSgoLR2V0U2V0dGluZ3MSHC5ibGl0ei52MS5HZXRTZXR0aW5nc1JlcXVlc3QaHS5ibGl0ei52MS5HZXRTZXR0aW5nc1Jlc3BvbnNlEkcKClNldFNldHRpbmcSGy5ibGl0ei52MS5TZXRTZXR0aW5nUmVxdWVzdBocLmJsaXR6LnYxLlNldFNldHRpbmdSZXNwb25zZRJHCgpMaXN0U2tpbGxzEhsuYmxpdHoudjEuTGlzdFNraWxsc1JlcXVlc3QaHC5ibGl0ei52MS5MaXN0U2tpbGxzUmVzcG9uc2USQQoIR2V0U2tpbGwSGS5ibGl0ei52MS5HZXRTa2lsbFJlcXVlc3QaGi5ibGl0ei52MS5HZXRTa2lsbFJlc3BvbnNlEkEKCExpc3RFbnZzEhkuYmxpdHoudjEuTGlzdEVudnNSZXF1ZXN0GhouYmxpdHoudjEuTGlzdEVudnNSZXNwb25zZRJECglSZW1vdmVFbnYSGi5ibGl0ei52MS5SZW1vdmVFbnZSZXF1ZXN0GhsuYmxpdHoudjEuUmVtb3ZlRW52UmVzcG9uc2USRAoJUHJ1bmVFbnZzEhouYmxpdHoudjEuUHJ1bmVFbnZzUmVxdWVzdBobLmJsaXR6LnYxLlBydW5lRW52c1Jlc3BvbnNlElMKDkxpc3RNQ1BTZXJ2ZXJzEh8uYmxpdHoudjEuTGlzdE1DUFNlcnZlcnNSZXF1ZXN0GiAuYmxpdHoudjEuTGlzdE1DUFNlcnZlcnNSZXNwb25zZRJECglMaXN0VG9vbHMSGi5ibGl0ei52MS5MaXN0VG9vbHNSZXF1ZXN0GhsuYmxpdHoudjEuTGlzdFRvb2xzUmVzcG9uc2USTQoMUmVsb2FkTWVtb3J5Eh0uYmxpdHoudjEuUmVsb2FkTWVtb3J5UmVxdWVzdBoeLmJsaXR6LnYxLlJlbG9hZE1lbW9yeVJlc3BvbnNlEkQKCUFkZE1lbW9yeRIaLmJsaXR6LnYxLkFkZE1lbW9yeVJlcXVlc3QaGy5ibGl0ei52MS5BZGRNZW1vcnlSZXNwb25zZRJKCgtMaXN0TG9jYWxlcxIcLmJsaXR6LnYxLkxpc3RMb2NhbGVzUmVxdWVzdBodLmJsaXR6LnYxLkxpc3RMb2NhbGVzUmVzcG9uc2USRAoJU2V0TG9jYWxlEhouYmxpdHoudjEuU2V0TG9jYWxlUmVxdWVzdBobLmJsaXR6LnYxLlNldExvY2FsZVJlc3BvbnNlElYKD0xpc3RDaGVja3BvaW50cxIgLmJsaXR6LnYxLkxpc3RDaGVja3BvaW50c1JlcXVlc3QaIS5ibGl0ei52MS5MaXN0Q2hlY2twb2ludHNSZXNwb25zZRI1CgRVbmRvEhUuYmxpdHoudjEuVW5kb1JlcXVlc3QaFi5ibGl0ei52MS5VbmRvUmVzcG9uc2USPgoHR2V0RGlmZhIYLmJsaXR6LnYxLkdldERpZmZSZXF1ZXN0GhkuYmxpdHoudjEuR2V0RGlmZlJlc3BvbnNlElAKDUxpc3RBcHByb3ZhbHMSHi5ibGl0ei52MS5MaXN0QXBwcm92YWxzUmVxdWVzdBofLmJsaXR6LnYxLkxpc3RBcHByb3ZhbHNSZXNwb25zZRJWCg9SZXZva2VBcHByb3ZhbHMSIC5ibGl0ei52MS5SZXZva2VBcHByb3ZhbHNSZXF1ZXN0GiEuYmxpdHoudjEuUmV2b2tlQXBwcm92YWxzUmVzcG9uc2USRAoJTG9hZEltYWdlEhouYmxpdHoudjEuTG9hZEltYWdlUmVxdWVzdBobLmJsaXR6LnYxLkxvYWRJbWFnZVJlc3BvbnNlEkEKCEFkZEltYWdlEhkuYmxpdHoudjEuQWRkSW1hZ2VSZXF1ZXN0GhouYmxpdHoudjEuQWRkSW1hZ2VSZXNwb25zZRJcChFHZXRTZWFyY2hQcm92aWRlchIiLmJsaXR6LnYxLkdldFNlYXJjaFByb3ZpZGVyUmVxdWVzdBojLmJsaXR6LnYxLkdldFNlYXJjaFByb3ZpZGVyUmVzcG9uc2USRAoJU2VhcmNoV2ViEhouYmxpdHoudjEuU2VhcmNoV2ViUmVxdWVzdBobLmJsaXR6LnYxLlNlYXJjaFdlYlJlc3BvbnNlQp0BCgxjb20uYmxpdHoudjFCDldvcmtzcGFjZVByb3RvUAFaPGdpdGh1Yi5jb20vcmV0YWlsLWNvcnRleC9ibGl0ei9pbnRlcm5hbC9nZW4vYmxpdHovdjE7YmxpdHp2MaICA0JYWKoCCEJsaXR6LlYxygIIQmxpdHpcVjHiAhRCbGl0elxWMVxHUEJNZXRhZGF0YeoCCUJsaXR6OjpWMWIGcHJvdG8z", [file_blitz_v1_turn, file_google_protobuf_duration, file_google_protobuf_timestamp]);
+  fileDesc("ChhibGl0ei92MS93b3Jrc3BhY2UucHJvdG8SCGJsaXR6LnYxIiQKBVNhdmVkEgwKBHBhdGgYASABKAkSDQoFZXJyb3IYAiABKAkiFwoVTGlzdFdvcmtzcGFjZXNSZXF1ZXN0IiwKFkxpc3RXb3Jrc3BhY2VzUmVzcG9uc2USEgoKd29ya3NwYWNlcxgBIAMoCSIqChVDbG9zZVdvcmtzcGFjZVJlcXVlc3QSEQoJd29ya3NwYWNlGAEgASgJIhgKFkNsb3NlV29ya3NwYWNlUmVzcG9uc2UiJgoRR2V0U2FuZGJveFJlcXVlc3QSEQoJd29ya3NwYWNlGAEgASgJIiUKEkdldFNhbmRib3hSZXNwb25zZRIPCgdzdW1tYXJ5GAEgAygJImoKCUFnZW50SW5mbxIMCgRuYW1lGAEgASgJEhQKDGRpc3BsYXlfbmFtZRgCIAEoCRITCgtkZXNjcmlwdGlvbhgDIAEoCRIOCgZhY3RpdmUYBCABKAgSFAoMcGlubmVkX21vZGVsGAUgASgJIiYKEUxpc3RBZ2VudHNSZXF1ZXN0EhEKCXdvcmtzcGFjZRgBIAEoCSI5ChJMaXN0QWdlbnRzUmVzcG9uc2USIwoGYWdlbnRzGAEgAygLMhMuYmxpdHoudjEuQWdlbnRJbmZvIjIKD1NldEFnZW50UmVxdWVzdBIRCgl3b3Jrc3BhY2UYASABKAkSDAoEbmFtZRgCIAEoCSI2ChBTZXRBZ2VudFJlc3BvbnNlEiIKBWFnZW50GAEgASgLMhMuYmxpdHoudjEuQWdlbnRJbmZvIiQKD0dldE1vZGVsUmVxdWVzdBIRCgl3b3Jrc3BhY2UYASABKAkiRwoQR2V0TW9kZWxSZXNwb25zZRIMCgRuYW1lGAEgASgJEhAKCHByb3ZpZGVyGAIgASgJEhMKC3VuYXZhaWxhYmxlGAMgASgJIjEKD1NldE1vZGVsUmVxdWVzdBIRCgl3b3Jrc3BhY2UYASABKAkSCwoDcmVmGAIgASgJIiYKEFNldE1vZGVsUmVzcG9uc2USEgoKYWN0aXZlX3BpbhgBIAEoCSJACg9QaW5Nb2RlbFJlcXVlc3QSEQoJd29ya3NwYWNlGAEgASgJEg0KBWFnZW50GAIgASgJEgsKA3JlZhgDIAEoCSJQChBQaW5Nb2RlbFJlc3BvbnNlEg0KBWFnZW50GAEgASgJEg0KBW1vZGVsGAIgASgJEh4KBXNhdmVkGAMgASgLMg8uYmxpdHoudjEuU2F2ZWQiNQoRVW5waW5Nb2RlbFJlcXVlc3QSEQoJd29ya3NwYWNlGAEgASgJEg0KBWFnZW50GAIgASgJIlIKElVucGluTW9kZWxSZXNwb25zZRINCgVhZ2VudBgBIAEoCRINCgVtb2RlbBgCIAEoCRIeCgVzYXZlZBgDIAEoCzIPLmJsaXR6LnYxLlNhdmVkIpsBCg1Nb2RlbFNldHRpbmdzEhgKC3RlbXBlcmF0dXJlGAEgASgBSACIAQESFwoKbWF4X3Rva2VucxgCIAEoBUgBiAEBEhIKBXRvcF9wGAMgASgBSAKIAQESEQoEc2VlZBgEIAEoBUgDiAEBQg4KDF90ZW1wZXJhdHVyZUINCgtfbWF4X3Rva2Vuc0IICgZfdG9wX3BCBwoFX3NlZWQilgEKEU1vZGVsU2V0dGluZ3NJbmZvEg0KBW1vZGVsGAEgASgJEhAKCHByb3ZpZGVyGAIgASgJEikKCHNldHRpbmdzGAMgASgLMhcuYmxpdHoudjEuTW9kZWxTZXR0aW5ncxIaChJnbG9iYWxfdGVtcGVyYXR1cmUYBCABKAESGQoRZ2xvYmFsX21heF90b2tlbnMYBSABKAUiOQoXR2V0TW9kZWxTZXR0aW5nc1JlcXVlc3QSEQoJd29ya3NwYWNlGAEgASgJEgsKA3JlZhgCIAEoCSLFAQoYR2V0TW9kZWxTZXR0aW5nc1Jlc3BvbnNlEjgKA2FsbBgBIAMoCzIrLmJsaXR6LnYxLkdldE1vZGVsU2V0dGluZ3NSZXNwb25zZS5BbGxFbnRyeRIqCgVtb2RlbBgCIAEoCzIbLmJsaXR6LnYxLk1vZGVsU2V0dGluZ3NJbmZvGkMKCEFsbEVudHJ5EgsKA2tleRgBIAEoCRImCgV2YWx1ZRgCIAEoCzIXLmJsaXR6LnYxLk1vZGVsU2V0dGluZ3M6AjgBIiUKB1NldHRpbmcSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJIm8KGlVwZGF0ZU1vZGVsU2V0dGluZ3NSZXF1ZXN0EhEKCXdvcmtzcGFjZRgBIAEoCRILCgNyZWYYAiABKAkSDQoFcmVzZXQYAyABKAgSIgoHY2hhbmdlcxgEIAMoCzIRLmJsaXR6LnYxLlNldHRpbmcifgobVXBkYXRlTW9kZWxTZXR0aW5nc1Jlc3BvbnNlEioKBW1vZGVsGAEgASgLMhsuYmxpdHoudjEuTW9kZWxTZXR0aW5nc0luZm8SEwoLdW5zdXBwb3J0ZWQYAiADKAkSHgoFc2F2ZWQYAyABKAsyDy5ibGl0ei52MS5TYXZlZCInChJHZXRTZXR0aW5nc1JlcXVlc3QSEQoJd29ya3NwYWNlGAEgASgJIroBChNHZXRTZXR0aW5nc1Jlc3BvbnNlEg4KBmFnZW5jeRgDIAEoCRINCgVtb2RlbBgEIAEoCRIQCghwcm92aWRlchgFIAEoCRINCgVhZ2VudBgGIAEoCRIOCgZsb2NhbGUYByABKAkSFgoOaW1hZ2VzX2VuYWJsZWQYCCABKAgSFwoPcGVybWlzc2lvbl9tb2RlGAkgASgJSgQIARACSgQIAhADUgpwdXBweV9uYW1lUgpvd25lcl9uYW1lIjsKGFNldFBlcm1pc3Npb25Nb2RlUmVxdWVzdBIRCgl3b3Jrc3BhY2UYASABKAkSDAoEbW9kZRgCIAEoCSIpChlTZXRQZXJtaXNzaW9uTW9kZVJlc3BvbnNlEgwKBG1vZGUYASABKAkiQgoRU2V0U2V0dGluZ1JlcXVlc3QSEQoJd29ya3NwYWNlGAEgASgJEgsKA2tleRgCIAEoCRINCgV2YWx1ZRgDIAEoCSIhChJTZXRTZXR0aW5nUmVzcG9uc2USCwoDa2V5GAEgASgJItcCCglTa2lsbEluZm8SDAoEbmFtZRgBIAEoCRITCgtkZXNjcmlwdGlvbhgCIAEoCRIPCgd2ZXJzaW9uGAMgASgJEg8KB2xpY2Vuc2UYBCABKAkSEAoIY2F0ZWdvcnkYBSABKAkSFQoNY29tcGF0aWJpbGl0eRgGIAEoCRIMCgR0YWdzGAcgAygJEgwKBGhhc2gYCCABKAkSIgoFdG9vbHMYCSADKAsyEy5ibGl0ei52MS5Ta2lsbFRvb2wSJgoHc2NyaXB0cxgKIAMoCzIVLmJsaXR6LnYxLlNraWxsU2NyaXB0EgwKBHRpZXIYCyABKAkSDgoGYnlwYXNzGAwgASgIEg8KB25ldHdvcmsYDSABKAgSFQoNbmVlZHNfbmV0d29yaxgOIAEoCBILCgNlbnYYDyADKAkSEAoId2l0aGhlbGQYECADKAkSDwoHYmxvY2tlZBgRIAMoCSI2CglTa2lsbFRvb2wSDAoEbmFtZRgBIAEoCRIOCgZzY29wZXMYAiADKAkSCwoDd2h5GAMgASgJIpkBCgtTa2lsbFNjcmlwdBIMCgRuYW1lGAEgASgJEhAKCGxhbmd1YWdlGAIgASgJEg4KBnNvdXJjZRgDIAEoCRIqCgd0aW1lb3V0GAQgASgLMhkuZ29vZ2xlLnByb3RvYnVmLkR1cmF0aW9uEgwKBGRlcHMYBSADKAkSDwoHYWxsb3dlZBgGIAEoCBIPCgdyZWFzb25zGAcgAygJIjUKEUxpc3RTa2lsbHNSZXF1ZXN0EhEKCXdvcmtzcGFjZRgBIAEoCRINCgVxdWVyeRgCIAEoCSI5ChJMaXN0U2tpbGxzUmVzcG9uc2USIwoGc2tpbGxzGAEgAygLMhMuYmxpdHoudjEuU2tpbGxJbmZvIjIKD0dldFNraWxsUmVxdWVzdBIRCgl3b3Jrc3BhY2UYASABKAkSDAoEbmFtZRgCIAEoCSI2ChBHZXRTa2lsbFJlc3BvbnNlEiIKBXNraWxsGAEgASgLMhMuYmxpdHoudjEuU2tpbGxJbmZvInwKA0VudhILCgNrZXkYASABKAkSDAoEZGVwcxgCIAMoCRIOCgZza2lsbHMYAyADKAkSDAoEc2l6ZRgEIAEoAxItCglsYXN0X3VzZWQYBSABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEg0KBXJlYWR5GAYgASgIIiQKD0xpc3RFbnZzUmVxdWVzdBIRCgl3b3Jrc3BhY2UYASABKAkiLwoQTGlzdEVudnNSZXNwb25zZRIbCgRlbnZzGAEgAygLMg0uYmxpdHoudjEuRW52IjIKEFJlbW92ZUVudlJlcXVlc3QSEQoJd29ya3NwYWNlGAEgASgJEgsKA2tleRgCIAEoCSITChFSZW1vdmVFbnZSZXNwb25zZSIlChBQcnVuZUVudnNSZXF1ZXN0EhEKCXdvcmtzcGFjZRgBIAEoCSImCghFbnZFcnJvchILCgNrZXkYASABKAkSDQoFZXJyb3IYAiABKAkiVwoRUHJ1bmVFbnZzUmVzcG9uc2USDwoHcmVtb3ZlZBgBIAEoBRINCgVmcmVlZBgCIAEoAxIiCgZmYWlsZWQYAyADKAsyEi5ibGl0ei52MS5FbnZFcnJvciI/CglNQ1BTZXJ2ZXISDAoEbmFtZRgBIAEoCRIOCgZ0YXJnZXQYAiABKAkSFAoMYXV0b19hcHByb3ZlGAMgASgIIioKFUxpc3RNQ1BTZXJ2ZXJzUmVxdWVzdBIRCgl3b3Jrc3BhY2UYASABKAkiPgoWTGlzdE1DUFNlcnZlcnNSZXNwb25zZRIkCgdzZXJ2ZXJzGAEgAygLMhMuYmxpdHoudjEuTUNQU2VydmVyIkMKCFRvb2xJbmZvEgwKBG5hbWUYASABKAkSEwoLZGVzY3JpcHRpb24YAiABKAkSFAoMcGxhbl9hbGxvd2VkGAMgASgIIjkKCE1DUE9mZmVyEg4KBnNlcnZlchgBIAEoCRINCgV0b29scxgCIAMoCRIOCgZwcmVmaXgYAyABKAkiJQoQTGlzdFRvb2xzUmVxdWVzdBIRCgl3b3Jrc3BhY2UYASABKAkiZgoRTGlzdFRvb2xzUmVzcG9uc2USDQoFYWdlbnQYASABKAkSIQoFdG9vbHMYAiADKAsyEi5ibGl0ei52MS5Ub29sSW5mbxIfCgNtY3AYAyADKAsyEi5ibGl0ei52MS5NQ1BPZmZlciIoChNSZWxvYWRNZW1vcnlSZXF1ZXN0EhEKCXdvcmtzcGFjZRgBIAEoCSI0ChRSZWxvYWRNZW1vcnlSZXNwb25zZRINCgVwYXRocxgBIAMoCRINCgVmaWxlcxgCIAMoCSIzChBBZGRNZW1vcnlSZXF1ZXN0EhEKCXdvcmtzcGFjZRgBIAEoCRIMCgR0ZXh0GAIgASgJIiEKEUFkZE1lbW9yeVJlc3BvbnNlEgwKBHBhdGgYASABKAkiJwoKTG9jYWxlSW5mbxILCgN0YWcYASABKAkSDAoEbmFtZRgCIAEoCSInChJMaXN0TG9jYWxlc1JlcXVlc3QSEQoJd29ya3NwYWNlGAEgASgJIlAKE0xpc3RMb2NhbGVzUmVzcG9uc2USJQoHbG9jYWxlcxgBIAMoCzIULmJsaXR6LnYxLkxvY2FsZUluZm8SEgoKY3VzdG9tX2RpchgCIAEoCSI0ChBTZXRMb2NhbGVSZXF1ZXN0EhEKCXdvcmtzcGFjZRgBIAEoCRINCgVpbnB1dBgCIAEoCSKBAQoRU2V0TG9jYWxlUmVzcG9uc2USCwoDdGFnGAEgASgJEhMKC25hdGl2ZV9uYW1lGAIgASgJEhUKDWxhbmd1YWdlX25hbWUYAyABKAkSEwoLaGFzX2NhdGFsb2cYBCABKAgSHgoFc2F2ZWQYBSABKAsyDy5ibGl0ei52MS5TYXZlZCJgCgpDaGVja3BvaW50EgoKAmlkGAEgASgFEg0KBWxhYmVsGAIgASgJEigKBHRpbWUYAyABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEg0KBWZpbGVzGAQgAygJIisKFkxpc3RDaGVja3BvaW50c1JlcXVlc3QSEQoJd29ya3NwYWNlGAEgASgJIkQKF0xpc3RDaGVja3BvaW50c1Jlc3BvbnNlEikKC2NoZWNrcG9pbnRzGAEgAygLMhQuYmxpdHoudjEuQ2hlY2twb2ludCIvCgtVbmRvUmVxdWVzdBIRCgl3b3Jrc3BhY2UYASABKAkSDQoFZm9yY2UYAiABKAgiUwoMVW5kb1Jlc3BvbnNlEg0KBWxhYmVsGAEgASgJEhAKCHJlc3RvcmVkGAIgAygJEiIKBWVycm9yGAMgASgLMhMuYmxpdHoudjEuRXJyb3JJbmZvIj8KDkdldERpZmZSZXF1ZXN0EhEKCXdvcmtzcGFjZRgBIAEoCRILCgNnaXQYAiABKAgSDQoFY29sb3IYAyABKAgiHwoPR2V0RGlmZlJlc3BvbnNlEgwKBGRpZmYYASABKAkifgoIQXBwcm92YWwSCwoDa2V5GAEgASgJEgwKBGtpbmQYAiABKAkSDwoHc3ViamVjdBgDIAEoCRILCgNkaXIYBCABKAkSDgoGYWx3YXlzGAUgASgIEikKBWFkZGVkGAYgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcCIpChRMaXN0QXBwcm92YWxzUmVxdWVzdBIRCgl3b3Jrc3BhY2UYASABKAkiPgoVTGlzdEFwcHJvdmFsc1Jlc3BvbnNlEiUKCWFwcHJvdmFscxgBIAMoCzISLmJsaXR6LnYxLkFwcHJvdmFsIkYKFlJldm9rZUFwcHJvdmFsc1JlcXVlc3QSEQoJd29ya3NwYWNlGAEgASgJEgwKBGtleXMYAiADKAkSCwoDYWxsGAMgASgIIioKF1Jldm9rZUFwcHJvdmFsc1Jlc3BvbnNlEg8KB3Jldm9rZWQYASABKAUicgoFSW1hZ2USCgoCaWQYASABKAkSDAoEbmFtZRgCIAEoCRIRCgltaW1lX3R5cGUYAyABKAkSDQoFd2lkdGgYBCABKAUSDgoGaGVpZ2h0GAUgASgFEgwKBHNpemUYBiABKAMSDwoHcmVzaXplZBgHIAEoCCIzChBMb2FkSW1hZ2VSZXF1ZXN0EhEKCXdvcmtzcGFjZRgBIAEoCRIMCgRwYXRoGAIgASgJIjMKEUxvYWRJbWFnZVJlc3BvbnNlEh4KBWltYWdlGAEgASgLMg8uYmxpdHoudjEuSW1hZ2UiQAoPQWRkSW1hZ2VSZXF1ZXN0EhEKCXdvcmtzcGFjZRgBIAEoCRIMCgRuYW1lGAIgASgJEgwKBGRhdGEYAyABKAwiMgoQQWRkSW1hZ2VSZXNwb25zZRIeCgVpbWFnZRgBIAEoCzIPLmJsaXR6LnYxLkltYWdlIiIKBExpbmsSDQoFdGl0bGUYASABKAkSCwoDdXJsGAIgASgJIi0KGEdldFNlYXJjaFByb3ZpZGVyUmVxdWVzdBIRCgl3b3Jrc3BhY2UYASABKAkiLQoZR2V0U2VhcmNoUHJvdmlkZXJSZXNwb25zZRIQCghwcm92aWRlchgBIAEoCSI0ChBTZWFyY2hXZWJSZXF1ZXN0EhEKCXdvcmtzcGFjZRgBIAEoCRINCgV0ZXJtcxgCIAEoCSJUChFTZWFyY2hXZWJSZXNwb25zZRIQCghwcm92aWRlchgBIAEoCRIdCgVsaW5rcxgCIAMoCzIOLmJsaXR6LnYxLkxpbmsSDgoGcHJvbXB0GAMgASgJMpgUChBXb3Jrc3BhY2VTZXJ2aWNlElMKDkxpc3RXb3Jrc3BhY2VzEh8uYmxpdHoudjEuTGlzdFdvcmtzcGFjZXNSZXF1ZXN0GiAuYmxpdHoudjEuTGlzdFdvcmtzcGFjZXNSZXNwb25zZRJTCg5DbG9zZVdvcmtzcGFjZRIfLmJsaXR6LnYxLkNsb3NlV29ya3NwYWNlUmVxdWVzdBogLmJsaXR6LnYxLkNsb3NlV29ya3NwYWNlUmVzcG9uc2USRwoKR2V0U2FuZGJveBIbLmJsaXR6LnYxLkdldFNhbmRib3hSZXF1ZXN0GhwuYmxpdHoudjEuR2V0U2FuZGJveFJlc3BvbnNlEkcKCkxpc3RBZ2VudHMSGy5ibGl0ei52MS5MaXN0QWdlbnRzUmVxdWVzdBocLmJsaXR6LnYxLkxpc3RBZ2VudHNSZXNwb25zZRJBCghTZXRBZ2VudBIZLmJsaXR6LnYxLlNldEFnZW50UmVxdWVzdBoaLmJsaXR6LnYxLlNldEFnZW50UmVzcG9uc2USQQoIR2V0TW9kZWwSGS5ibGl0ei52MS5HZXRNb2RlbFJlcXVlc3QaGi5ibGl0ei52MS5HZXRNb2RlbFJlc3BvbnNlEkEKCFNldE1vZGVsEhkuYmxpdHoudjEuU2V0TW9kZWxSZXF1ZXN0GhouYmxpdHoudjEuU2V0TW9kZWxSZXNwb25zZRJBCghQaW5Nb2RlbBIZLmJsaXR6LnYxLlBpbk1vZGVsUmVxdWVzdBoaLmJsaXR6LnYxLlBpbk1vZGVsUmVzcG9uc2USRwoKVW5waW5Nb2RlbBIbLmJsaXR6LnYxLlVucGluTW9kZWxSZXF1ZXN0GhwuYmxpdHoudjEuVW5waW5Nb2RlbFJlc3BvbnNlElkKEEdldE1vZGVsU2V0dGluZ3MSIS5ibGl0ei52MS5HZXRNb2RlbFNldHRpbmdzUmVxdWVzdBoiLmJsaXR6LnYxLkdldE1vZGVsU2V0dGluZ3NSZXNwb25zZRJiChNVcGRhdGVNb2RlbFNldHRpbmdzEiQuYmxpdHoudjEuVXBkYXRlTW9kZWxTZXR0aW5nc1JlcXVlc3QaJS5ibGl0ei52MS5VcGRhdGVNb2RlbFNldHRpbmdzUmVzcG9uc2USSgoLR2V0U2V0dGluZ3MSHC5ibGl0ei52MS5HZXRTZXR0aW5nc1JlcXVlc3QaHS5ibGl0ei52MS5HZXRTZXR0aW5nc1Jlc3BvbnNlEkcKClNldFNldHRpbmcSGy5ibGl0ei52MS5TZXRTZXR0aW5nUmVxdWVzdBocLmJsaXR6LnYxLlNldFNldHRpbmdSZXNwb25zZRJcChFTZXRQZXJtaXNzaW9uTW9kZRIiLmJsaXR6LnYxLlNldFBlcm1pc3Npb25Nb2RlUmVxdWVzdBojLmJsaXR6LnYxLlNldFBlcm1pc3Npb25Nb2RlUmVzcG9uc2USRwoKTGlzdFNraWxscxIbLmJsaXR6LnYxLkxpc3RTa2lsbHNSZXF1ZXN0GhwuYmxpdHoudjEuTGlzdFNraWxsc1Jlc3BvbnNlEkEKCEdldFNraWxsEhkuYmxpdHoudjEuR2V0U2tpbGxSZXF1ZXN0GhouYmxpdHoudjEuR2V0U2tpbGxSZXNwb25zZRJBCghMaXN0RW52cxIZLmJsaXR6LnYxLkxpc3RFbnZzUmVxdWVzdBoaLmJsaXR6LnYxLkxpc3RFbnZzUmVzcG9uc2USRAoJUmVtb3ZlRW52EhouYmxpdHoudjEuUmVtb3ZlRW52UmVxdWVzdBobLmJsaXR6LnYxLlJlbW92ZUVudlJlc3BvbnNlEkQKCVBydW5lRW52cxIaLmJsaXR6LnYxLlBydW5lRW52c1JlcXVlc3QaGy5ibGl0ei52MS5QcnVuZUVudnNSZXNwb25zZRJTCg5MaXN0TUNQU2VydmVycxIfLmJsaXR6LnYxLkxpc3RNQ1BTZXJ2ZXJzUmVxdWVzdBogLmJsaXR6LnYxLkxpc3RNQ1BTZXJ2ZXJzUmVzcG9uc2USRAoJTGlzdFRvb2xzEhouYmxpdHoudjEuTGlzdFRvb2xzUmVxdWVzdBobLmJsaXR6LnYxLkxpc3RUb29sc1Jlc3BvbnNlEk0KDFJlbG9hZE1lbW9yeRIdLmJsaXR6LnYxLlJlbG9hZE1lbW9yeVJlcXVlc3QaHi5ibGl0ei52MS5SZWxvYWRNZW1vcnlSZXNwb25zZRJECglBZGRNZW1vcnkSGi5ibGl0ei52MS5BZGRNZW1vcnlSZXF1ZXN0GhsuYmxpdHoudjEuQWRkTWVtb3J5UmVzcG9uc2USSgoLTGlzdExvY2FsZXMSHC5ibGl0ei52MS5MaXN0TG9jYWxlc1JlcXVlc3QaHS5ibGl0ei52MS5MaXN0TG9jYWxlc1Jlc3BvbnNlEkQKCVNldExvY2FsZRIaLmJsaXR6LnYxLlNldExvY2FsZVJlcXVlc3QaGy5ibGl0ei52MS5TZXRMb2NhbGVSZXNwb25zZRJWCg9MaXN0Q2hlY2twb2ludHMSIC5ibGl0ei52MS5MaXN0Q2hlY2twb2ludHNSZXF1ZXN0GiEuYmxpdHoudjEuTGlzdENoZWNrcG9pbnRzUmVzcG9uc2USNQoEVW5kbxIVLmJsaXR6LnYxLlVuZG9SZXF1ZXN0GhYuYmxpdHoudjEuVW5kb1Jlc3BvbnNlEj4KB0dldERpZmYSGC5ibGl0ei52MS5HZXREaWZmUmVxdWVzdBoZLmJsaXR6LnYxLkdldERpZmZSZXNwb25zZRJQCg1MaXN0QXBwcm92YWxzEh4uYmxpdHoudjEuTGlzdEFwcHJvdmFsc1JlcXVlc3QaHy5ibGl0ei52MS5MaXN0QXBwcm92YWxzUmVzcG9uc2USVgoPUmV2b2tlQXBwcm92YWxzEiAuYmxpdHoudjEuUmV2b2tlQXBwcm92YWxzUmVxdWVzdBohLmJsaXR6LnYxLlJldm9rZUFwcHJvdmFsc1Jlc3BvbnNlEkQKCUxvYWRJbWFnZRIaLmJsaXR6LnYxLkxvYWRJbWFnZVJlcXVlc3QaGy5ibGl0ei52MS5Mb2FkSW1hZ2VSZXNwb25zZRJBCghBZGRJbWFnZRIZLmJsaXR6LnYxLkFkZEltYWdlUmVxdWVzdBoaLmJsaXR6LnYxLkFkZEltYWdlUmVzcG9uc2USXAoRR2V0U2VhcmNoUHJvdmlkZXISIi5ibGl0ei52MS5HZXRTZWFyY2hQcm92aWRlclJlcXVlc3QaIy5ibGl0ei52MS5HZXRTZWFyY2hQcm92aWRlclJlc3BvbnNlEkQKCVNlYXJjaFdlYhIaLmJsaXR6LnYxLlNlYXJjaFdlYlJlcXVlc3QaGy5ibGl0ei52MS5TZWFyY2hXZWJSZXNwb25zZUKdAQoMY29tLmJsaXR6LnYxQg5Xb3Jrc3BhY2VQcm90b1ABWjxnaXRodWIuY29tL3JldGFpbC1jb3J0ZXgvYmxpdHovaW50ZXJuYWwvZ2VuL2JsaXR6L3YxO2JsaXR6djGiAgNCWFiqAghCbGl0ei5WMcoCCEJsaXR6XFYx4gIUQmxpdHpcVjFcR1BCTWV0YWRhdGHqAglCbGl0ejo6VjFiBnByb3RvMw", [file_blitz_v1_turn, file_google_protobuf_duration, file_google_protobuf_timestamp]);
 
 /**
  * Saved reports where a change was written in the config file. The change
@@ -720,6 +720,13 @@ export type GetSettingsResponse = Message<"blitz.v1.GetSettingsResponse"> & {
    * @generated from field: bool images_enabled = 8;
    */
   imagesEnabled: boolean;
+
+  /**
+   * default, accept-edits, plan, dont-ask or bypass.
+   *
+   * @generated from field: string permission_mode = 9;
+   */
+  permissionMode: string;
 };
 
 /**
@@ -728,6 +735,50 @@ export type GetSettingsResponse = Message<"blitz.v1.GetSettingsResponse"> & {
  */
 export const GetSettingsResponseSchema: GenMessage<GetSettingsResponse> = /*@__PURE__*/
   messageDesc(file_blitz_v1_workspace, 28);
+
+/**
+ * @generated from message blitz.v1.SetPermissionModeRequest
+ */
+export type SetPermissionModeRequest = Message<"blitz.v1.SetPermissionModeRequest"> & {
+  /**
+   * @generated from field: string workspace = 1;
+   */
+  workspace: string;
+
+  /**
+   * default, accept-edits, plan, dont-ask or bypass (other spellings such
+   * as acceptEdits are accepted).
+   *
+   * @generated from field: string mode = 2;
+   */
+  mode: string;
+};
+
+/**
+ * Describes the message blitz.v1.SetPermissionModeRequest.
+ * Use `create(SetPermissionModeRequestSchema)` to create a new message.
+ */
+export const SetPermissionModeRequestSchema: GenMessage<SetPermissionModeRequest> = /*@__PURE__*/
+  messageDesc(file_blitz_v1_workspace, 29);
+
+/**
+ * @generated from message blitz.v1.SetPermissionModeResponse
+ */
+export type SetPermissionModeResponse = Message<"blitz.v1.SetPermissionModeResponse"> & {
+  /**
+   * The mode's canonical name.
+   *
+   * @generated from field: string mode = 1;
+   */
+  mode: string;
+};
+
+/**
+ * Describes the message blitz.v1.SetPermissionModeResponse.
+ * Use `create(SetPermissionModeResponseSchema)` to create a new message.
+ */
+export const SetPermissionModeResponseSchema: GenMessage<SetPermissionModeResponse> = /*@__PURE__*/
+  messageDesc(file_blitz_v1_workspace, 30);
 
 /**
  * @generated from message blitz.v1.SetSettingRequest
@@ -756,7 +807,7 @@ export type SetSettingRequest = Message<"blitz.v1.SetSettingRequest"> & {
  * Use `create(SetSettingRequestSchema)` to create a new message.
  */
 export const SetSettingRequestSchema: GenMessage<SetSettingRequest> = /*@__PURE__*/
-  messageDesc(file_blitz_v1_workspace, 29);
+  messageDesc(file_blitz_v1_workspace, 31);
 
 /**
  * @generated from message blitz.v1.SetSettingResponse
@@ -775,7 +826,7 @@ export type SetSettingResponse = Message<"blitz.v1.SetSettingResponse"> & {
  * Use `create(SetSettingResponseSchema)` to create a new message.
  */
 export const SetSettingResponseSchema: GenMessage<SetSettingResponse> = /*@__PURE__*/
-  messageDesc(file_blitz_v1_workspace, 30);
+  messageDesc(file_blitz_v1_workspace, 32);
 
 /**
  * SkillInfo describes a skill and what the skills policy lets it do.
@@ -888,7 +939,7 @@ export type SkillInfo = Message<"blitz.v1.SkillInfo"> & {
  * Use `create(SkillInfoSchema)` to create a new message.
  */
 export const SkillInfoSchema: GenMessage<SkillInfo> = /*@__PURE__*/
-  messageDesc(file_blitz_v1_workspace, 31);
+  messageDesc(file_blitz_v1_workspace, 33);
 
 /**
  * SkillTool is a tool a skill needs.
@@ -917,7 +968,7 @@ export type SkillTool = Message<"blitz.v1.SkillTool"> & {
  * Use `create(SkillToolSchema)` to create a new message.
  */
 export const SkillToolSchema: GenMessage<SkillTool> = /*@__PURE__*/
-  messageDesc(file_blitz_v1_workspace, 32);
+  messageDesc(file_blitz_v1_workspace, 34);
 
 /**
  * SkillScript is one of a skill's scripts and the policy's verdict.
@@ -968,7 +1019,7 @@ export type SkillScript = Message<"blitz.v1.SkillScript"> & {
  * Use `create(SkillScriptSchema)` to create a new message.
  */
 export const SkillScriptSchema: GenMessage<SkillScript> = /*@__PURE__*/
-  messageDesc(file_blitz_v1_workspace, 33);
+  messageDesc(file_blitz_v1_workspace, 35);
 
 /**
  * @generated from message blitz.v1.ListSkillsRequest
@@ -992,7 +1043,7 @@ export type ListSkillsRequest = Message<"blitz.v1.ListSkillsRequest"> & {
  * Use `create(ListSkillsRequestSchema)` to create a new message.
  */
 export const ListSkillsRequestSchema: GenMessage<ListSkillsRequest> = /*@__PURE__*/
-  messageDesc(file_blitz_v1_workspace, 34);
+  messageDesc(file_blitz_v1_workspace, 36);
 
 /**
  * @generated from message blitz.v1.ListSkillsResponse
@@ -1009,7 +1060,7 @@ export type ListSkillsResponse = Message<"blitz.v1.ListSkillsResponse"> & {
  * Use `create(ListSkillsResponseSchema)` to create a new message.
  */
 export const ListSkillsResponseSchema: GenMessage<ListSkillsResponse> = /*@__PURE__*/
-  messageDesc(file_blitz_v1_workspace, 35);
+  messageDesc(file_blitz_v1_workspace, 37);
 
 /**
  * @generated from message blitz.v1.GetSkillRequest
@@ -1031,7 +1082,7 @@ export type GetSkillRequest = Message<"blitz.v1.GetSkillRequest"> & {
  * Use `create(GetSkillRequestSchema)` to create a new message.
  */
 export const GetSkillRequestSchema: GenMessage<GetSkillRequest> = /*@__PURE__*/
-  messageDesc(file_blitz_v1_workspace, 36);
+  messageDesc(file_blitz_v1_workspace, 38);
 
 /**
  * @generated from message blitz.v1.GetSkillResponse
@@ -1048,7 +1099,7 @@ export type GetSkillResponse = Message<"blitz.v1.GetSkillResponse"> & {
  * Use `create(GetSkillResponseSchema)` to create a new message.
  */
 export const GetSkillResponseSchema: GenMessage<GetSkillResponse> = /*@__PURE__*/
-  messageDesc(file_blitz_v1_workspace, 37);
+  messageDesc(file_blitz_v1_workspace, 39);
 
 /**
  * Env is an isolated Python environment built for skill scripts.
@@ -1098,7 +1149,7 @@ export type Env = Message<"blitz.v1.Env"> & {
  * Use `create(EnvSchema)` to create a new message.
  */
 export const EnvSchema: GenMessage<Env> = /*@__PURE__*/
-  messageDesc(file_blitz_v1_workspace, 38);
+  messageDesc(file_blitz_v1_workspace, 40);
 
 /**
  * @generated from message blitz.v1.ListEnvsRequest
@@ -1115,7 +1166,7 @@ export type ListEnvsRequest = Message<"blitz.v1.ListEnvsRequest"> & {
  * Use `create(ListEnvsRequestSchema)` to create a new message.
  */
 export const ListEnvsRequestSchema: GenMessage<ListEnvsRequest> = /*@__PURE__*/
-  messageDesc(file_blitz_v1_workspace, 39);
+  messageDesc(file_blitz_v1_workspace, 41);
 
 /**
  * @generated from message blitz.v1.ListEnvsResponse
@@ -1132,7 +1183,7 @@ export type ListEnvsResponse = Message<"blitz.v1.ListEnvsResponse"> & {
  * Use `create(ListEnvsResponseSchema)` to create a new message.
  */
 export const ListEnvsResponseSchema: GenMessage<ListEnvsResponse> = /*@__PURE__*/
-  messageDesc(file_blitz_v1_workspace, 40);
+  messageDesc(file_blitz_v1_workspace, 42);
 
 /**
  * @generated from message blitz.v1.RemoveEnvRequest
@@ -1154,7 +1205,7 @@ export type RemoveEnvRequest = Message<"blitz.v1.RemoveEnvRequest"> & {
  * Use `create(RemoveEnvRequestSchema)` to create a new message.
  */
 export const RemoveEnvRequestSchema: GenMessage<RemoveEnvRequest> = /*@__PURE__*/
-  messageDesc(file_blitz_v1_workspace, 41);
+  messageDesc(file_blitz_v1_workspace, 43);
 
 /**
  * @generated from message blitz.v1.RemoveEnvResponse
@@ -1167,7 +1218,7 @@ export type RemoveEnvResponse = Message<"blitz.v1.RemoveEnvResponse"> & {
  * Use `create(RemoveEnvResponseSchema)` to create a new message.
  */
 export const RemoveEnvResponseSchema: GenMessage<RemoveEnvResponse> = /*@__PURE__*/
-  messageDesc(file_blitz_v1_workspace, 42);
+  messageDesc(file_blitz_v1_workspace, 44);
 
 /**
  * @generated from message blitz.v1.PruneEnvsRequest
@@ -1184,7 +1235,7 @@ export type PruneEnvsRequest = Message<"blitz.v1.PruneEnvsRequest"> & {
  * Use `create(PruneEnvsRequestSchema)` to create a new message.
  */
 export const PruneEnvsRequestSchema: GenMessage<PruneEnvsRequest> = /*@__PURE__*/
-  messageDesc(file_blitz_v1_workspace, 43);
+  messageDesc(file_blitz_v1_workspace, 45);
 
 /**
  * EnvError is an environment that couldn't be removed.
@@ -1208,7 +1259,7 @@ export type EnvError = Message<"blitz.v1.EnvError"> & {
  * Use `create(EnvErrorSchema)` to create a new message.
  */
 export const EnvErrorSchema: GenMessage<EnvError> = /*@__PURE__*/
-  messageDesc(file_blitz_v1_workspace, 44);
+  messageDesc(file_blitz_v1_workspace, 46);
 
 /**
  * @generated from message blitz.v1.PruneEnvsResponse
@@ -1237,7 +1288,7 @@ export type PruneEnvsResponse = Message<"blitz.v1.PruneEnvsResponse"> & {
  * Use `create(PruneEnvsResponseSchema)` to create a new message.
  */
 export const PruneEnvsResponseSchema: GenMessage<PruneEnvsResponse> = /*@__PURE__*/
-  messageDesc(file_blitz_v1_workspace, 45);
+  messageDesc(file_blitz_v1_workspace, 47);
 
 /**
  * MCPServer is a configured MCP server.
@@ -1268,7 +1319,7 @@ export type MCPServer = Message<"blitz.v1.MCPServer"> & {
  * Use `create(MCPServerSchema)` to create a new message.
  */
 export const MCPServerSchema: GenMessage<MCPServer> = /*@__PURE__*/
-  messageDesc(file_blitz_v1_workspace, 46);
+  messageDesc(file_blitz_v1_workspace, 48);
 
 /**
  * @generated from message blitz.v1.ListMCPServersRequest
@@ -1285,7 +1336,7 @@ export type ListMCPServersRequest = Message<"blitz.v1.ListMCPServersRequest"> & 
  * Use `create(ListMCPServersRequestSchema)` to create a new message.
  */
 export const ListMCPServersRequestSchema: GenMessage<ListMCPServersRequest> = /*@__PURE__*/
-  messageDesc(file_blitz_v1_workspace, 47);
+  messageDesc(file_blitz_v1_workspace, 49);
 
 /**
  * @generated from message blitz.v1.ListMCPServersResponse
@@ -1302,7 +1353,7 @@ export type ListMCPServersResponse = Message<"blitz.v1.ListMCPServersResponse"> 
  * Use `create(ListMCPServersResponseSchema)` to create a new message.
  */
 export const ListMCPServersResponseSchema: GenMessage<ListMCPServersResponse> = /*@__PURE__*/
-  messageDesc(file_blitz_v1_workspace, 48);
+  messageDesc(file_blitz_v1_workspace, 50);
 
 /**
  * ToolInfo is a tool an agent can call.
@@ -1333,7 +1384,7 @@ export type ToolInfo = Message<"blitz.v1.ToolInfo"> & {
  * Use `create(ToolInfoSchema)` to create a new message.
  */
 export const ToolInfoSchema: GenMessage<ToolInfo> = /*@__PURE__*/
-  messageDesc(file_blitz_v1_workspace, 49);
+  messageDesc(file_blitz_v1_workspace, 51);
 
 /**
  * MCPOffer is an MCP server offered to an agent.
@@ -1366,7 +1417,7 @@ export type MCPOffer = Message<"blitz.v1.MCPOffer"> & {
  * Use `create(MCPOfferSchema)` to create a new message.
  */
 export const MCPOfferSchema: GenMessage<MCPOffer> = /*@__PURE__*/
-  messageDesc(file_blitz_v1_workspace, 50);
+  messageDesc(file_blitz_v1_workspace, 52);
 
 /**
  * @generated from message blitz.v1.ListToolsRequest
@@ -1383,7 +1434,7 @@ export type ListToolsRequest = Message<"blitz.v1.ListToolsRequest"> & {
  * Use `create(ListToolsRequestSchema)` to create a new message.
  */
 export const ListToolsRequestSchema: GenMessage<ListToolsRequest> = /*@__PURE__*/
-  messageDesc(file_blitz_v1_workspace, 51);
+  messageDesc(file_blitz_v1_workspace, 53);
 
 /**
  * @generated from message blitz.v1.ListToolsResponse
@@ -1410,7 +1461,7 @@ export type ListToolsResponse = Message<"blitz.v1.ListToolsResponse"> & {
  * Use `create(ListToolsResponseSchema)` to create a new message.
  */
 export const ListToolsResponseSchema: GenMessage<ListToolsResponse> = /*@__PURE__*/
-  messageDesc(file_blitz_v1_workspace, 52);
+  messageDesc(file_blitz_v1_workspace, 54);
 
 /**
  * @generated from message blitz.v1.ReloadMemoryRequest
@@ -1427,7 +1478,7 @@ export type ReloadMemoryRequest = Message<"blitz.v1.ReloadMemoryRequest"> & {
  * Use `create(ReloadMemoryRequestSchema)` to create a new message.
  */
 export const ReloadMemoryRequestSchema: GenMessage<ReloadMemoryRequest> = /*@__PURE__*/
-  messageDesc(file_blitz_v1_workspace, 53);
+  messageDesc(file_blitz_v1_workspace, 55);
 
 /**
  * @generated from message blitz.v1.ReloadMemoryResponse
@@ -1451,7 +1502,7 @@ export type ReloadMemoryResponse = Message<"blitz.v1.ReloadMemoryResponse"> & {
  * Use `create(ReloadMemoryResponseSchema)` to create a new message.
  */
 export const ReloadMemoryResponseSchema: GenMessage<ReloadMemoryResponse> = /*@__PURE__*/
-  messageDesc(file_blitz_v1_workspace, 54);
+  messageDesc(file_blitz_v1_workspace, 56);
 
 /**
  * @generated from message blitz.v1.AddMemoryRequest
@@ -1473,7 +1524,7 @@ export type AddMemoryRequest = Message<"blitz.v1.AddMemoryRequest"> & {
  * Use `create(AddMemoryRequestSchema)` to create a new message.
  */
 export const AddMemoryRequestSchema: GenMessage<AddMemoryRequest> = /*@__PURE__*/
-  messageDesc(file_blitz_v1_workspace, 55);
+  messageDesc(file_blitz_v1_workspace, 57);
 
 /**
  * @generated from message blitz.v1.AddMemoryResponse
@@ -1490,7 +1541,7 @@ export type AddMemoryResponse = Message<"blitz.v1.AddMemoryResponse"> & {
  * Use `create(AddMemoryResponseSchema)` to create a new message.
  */
 export const AddMemoryResponseSchema: GenMessage<AddMemoryResponse> = /*@__PURE__*/
-  messageDesc(file_blitz_v1_workspace, 56);
+  messageDesc(file_blitz_v1_workspace, 58);
 
 /**
  * LocaleInfo names a language with an interface catalog.
@@ -1514,7 +1565,7 @@ export type LocaleInfo = Message<"blitz.v1.LocaleInfo"> & {
  * Use `create(LocaleInfoSchema)` to create a new message.
  */
 export const LocaleInfoSchema: GenMessage<LocaleInfo> = /*@__PURE__*/
-  messageDesc(file_blitz_v1_workspace, 57);
+  messageDesc(file_blitz_v1_workspace, 59);
 
 /**
  * @generated from message blitz.v1.ListLocalesRequest
@@ -1531,7 +1582,7 @@ export type ListLocalesRequest = Message<"blitz.v1.ListLocalesRequest"> & {
  * Use `create(ListLocalesRequestSchema)` to create a new message.
  */
 export const ListLocalesRequestSchema: GenMessage<ListLocalesRequest> = /*@__PURE__*/
-  messageDesc(file_blitz_v1_workspace, 58);
+  messageDesc(file_blitz_v1_workspace, 60);
 
 /**
  * @generated from message blitz.v1.ListLocalesResponse
@@ -1555,7 +1606,7 @@ export type ListLocalesResponse = Message<"blitz.v1.ListLocalesResponse"> & {
  * Use `create(ListLocalesResponseSchema)` to create a new message.
  */
 export const ListLocalesResponseSchema: GenMessage<ListLocalesResponse> = /*@__PURE__*/
-  messageDesc(file_blitz_v1_workspace, 59);
+  messageDesc(file_blitz_v1_workspace, 61);
 
 /**
  * @generated from message blitz.v1.SetLocaleRequest
@@ -1579,7 +1630,7 @@ export type SetLocaleRequest = Message<"blitz.v1.SetLocaleRequest"> & {
  * Use `create(SetLocaleRequestSchema)` to create a new message.
  */
 export const SetLocaleRequestSchema: GenMessage<SetLocaleRequest> = /*@__PURE__*/
-  messageDesc(file_blitz_v1_workspace, 60);
+  messageDesc(file_blitz_v1_workspace, 62);
 
 /**
  * @generated from message blitz.v1.SetLocaleResponse
@@ -1622,7 +1673,7 @@ export type SetLocaleResponse = Message<"blitz.v1.SetLocaleResponse"> & {
  * Use `create(SetLocaleResponseSchema)` to create a new message.
  */
 export const SetLocaleResponseSchema: GenMessage<SetLocaleResponse> = /*@__PURE__*/
-  messageDesc(file_blitz_v1_workspace, 61);
+  messageDesc(file_blitz_v1_workspace, 63);
 
 /**
  * Checkpoint is the files one turn changed.
@@ -1656,7 +1707,7 @@ export type Checkpoint = Message<"blitz.v1.Checkpoint"> & {
  * Use `create(CheckpointSchema)` to create a new message.
  */
 export const CheckpointSchema: GenMessage<Checkpoint> = /*@__PURE__*/
-  messageDesc(file_blitz_v1_workspace, 62);
+  messageDesc(file_blitz_v1_workspace, 64);
 
 /**
  * @generated from message blitz.v1.ListCheckpointsRequest
@@ -1673,7 +1724,7 @@ export type ListCheckpointsRequest = Message<"blitz.v1.ListCheckpointsRequest"> 
  * Use `create(ListCheckpointsRequestSchema)` to create a new message.
  */
 export const ListCheckpointsRequestSchema: GenMessage<ListCheckpointsRequest> = /*@__PURE__*/
-  messageDesc(file_blitz_v1_workspace, 63);
+  messageDesc(file_blitz_v1_workspace, 65);
 
 /**
  * @generated from message blitz.v1.ListCheckpointsResponse
@@ -1690,7 +1741,7 @@ export type ListCheckpointsResponse = Message<"blitz.v1.ListCheckpointsResponse"
  * Use `create(ListCheckpointsResponseSchema)` to create a new message.
  */
 export const ListCheckpointsResponseSchema: GenMessage<ListCheckpointsResponse> = /*@__PURE__*/
-  messageDesc(file_blitz_v1_workspace, 64);
+  messageDesc(file_blitz_v1_workspace, 66);
 
 /**
  * @generated from message blitz.v1.UndoRequest
@@ -1714,7 +1765,7 @@ export type UndoRequest = Message<"blitz.v1.UndoRequest"> & {
  * Use `create(UndoRequestSchema)` to create a new message.
  */
 export const UndoRequestSchema: GenMessage<UndoRequest> = /*@__PURE__*/
-  messageDesc(file_blitz_v1_workspace, 65);
+  messageDesc(file_blitz_v1_workspace, 67);
 
 /**
  * @generated from message blitz.v1.UndoResponse
@@ -1743,7 +1794,7 @@ export type UndoResponse = Message<"blitz.v1.UndoResponse"> & {
  * Use `create(UndoResponseSchema)` to create a new message.
  */
 export const UndoResponseSchema: GenMessage<UndoResponse> = /*@__PURE__*/
-  messageDesc(file_blitz_v1_workspace, 66);
+  messageDesc(file_blitz_v1_workspace, 68);
 
 /**
  * @generated from message blitz.v1.GetDiffRequest
@@ -1774,7 +1825,7 @@ export type GetDiffRequest = Message<"blitz.v1.GetDiffRequest"> & {
  * Use `create(GetDiffRequestSchema)` to create a new message.
  */
 export const GetDiffRequestSchema: GenMessage<GetDiffRequest> = /*@__PURE__*/
-  messageDesc(file_blitz_v1_workspace, 67);
+  messageDesc(file_blitz_v1_workspace, 69);
 
 /**
  * @generated from message blitz.v1.GetDiffResponse
@@ -1793,7 +1844,7 @@ export type GetDiffResponse = Message<"blitz.v1.GetDiffResponse"> & {
  * Use `create(GetDiffResponseSchema)` to create a new message.
  */
 export const GetDiffResponseSchema: GenMessage<GetDiffResponse> = /*@__PURE__*/
-  messageDesc(file_blitz_v1_workspace, 68);
+  messageDesc(file_blitz_v1_workspace, 70);
 
 /**
  * Approval is a standing permission.
@@ -1847,7 +1898,7 @@ export type Approval = Message<"blitz.v1.Approval"> & {
  * Use `create(ApprovalSchema)` to create a new message.
  */
 export const ApprovalSchema: GenMessage<Approval> = /*@__PURE__*/
-  messageDesc(file_blitz_v1_workspace, 69);
+  messageDesc(file_blitz_v1_workspace, 71);
 
 /**
  * @generated from message blitz.v1.ListApprovalsRequest
@@ -1864,7 +1915,7 @@ export type ListApprovalsRequest = Message<"blitz.v1.ListApprovalsRequest"> & {
  * Use `create(ListApprovalsRequestSchema)` to create a new message.
  */
 export const ListApprovalsRequestSchema: GenMessage<ListApprovalsRequest> = /*@__PURE__*/
-  messageDesc(file_blitz_v1_workspace, 70);
+  messageDesc(file_blitz_v1_workspace, 72);
 
 /**
  * @generated from message blitz.v1.ListApprovalsResponse
@@ -1881,7 +1932,7 @@ export type ListApprovalsResponse = Message<"blitz.v1.ListApprovalsResponse"> & 
  * Use `create(ListApprovalsResponseSchema)` to create a new message.
  */
 export const ListApprovalsResponseSchema: GenMessage<ListApprovalsResponse> = /*@__PURE__*/
-  messageDesc(file_blitz_v1_workspace, 71);
+  messageDesc(file_blitz_v1_workspace, 73);
 
 /**
  * @generated from message blitz.v1.RevokeApprovalsRequest
@@ -1910,7 +1961,7 @@ export type RevokeApprovalsRequest = Message<"blitz.v1.RevokeApprovalsRequest"> 
  * Use `create(RevokeApprovalsRequestSchema)` to create a new message.
  */
 export const RevokeApprovalsRequestSchema: GenMessage<RevokeApprovalsRequest> = /*@__PURE__*/
-  messageDesc(file_blitz_v1_workspace, 72);
+  messageDesc(file_blitz_v1_workspace, 74);
 
 /**
  * @generated from message blitz.v1.RevokeApprovalsResponse
@@ -1927,7 +1978,7 @@ export type RevokeApprovalsResponse = Message<"blitz.v1.RevokeApprovalsResponse"
  * Use `create(RevokeApprovalsResponseSchema)` to create a new message.
  */
 export const RevokeApprovalsResponseSchema: GenMessage<RevokeApprovalsResponse> = /*@__PURE__*/
-  messageDesc(file_blitz_v1_workspace, 73);
+  messageDesc(file_blitz_v1_workspace, 75);
 
 /**
  * Image is an image stored for a prompt.
@@ -1982,7 +2033,7 @@ export type Image = Message<"blitz.v1.Image"> & {
  * Use `create(ImageSchema)` to create a new message.
  */
 export const ImageSchema: GenMessage<Image> = /*@__PURE__*/
-  messageDesc(file_blitz_v1_workspace, 74);
+  messageDesc(file_blitz_v1_workspace, 76);
 
 /**
  * @generated from message blitz.v1.LoadImageRequest
@@ -2006,7 +2057,7 @@ export type LoadImageRequest = Message<"blitz.v1.LoadImageRequest"> & {
  * Use `create(LoadImageRequestSchema)` to create a new message.
  */
 export const LoadImageRequestSchema: GenMessage<LoadImageRequest> = /*@__PURE__*/
-  messageDesc(file_blitz_v1_workspace, 75);
+  messageDesc(file_blitz_v1_workspace, 77);
 
 /**
  * @generated from message blitz.v1.LoadImageResponse
@@ -2023,7 +2074,7 @@ export type LoadImageResponse = Message<"blitz.v1.LoadImageResponse"> & {
  * Use `create(LoadImageResponseSchema)` to create a new message.
  */
 export const LoadImageResponseSchema: GenMessage<LoadImageResponse> = /*@__PURE__*/
-  messageDesc(file_blitz_v1_workspace, 76);
+  messageDesc(file_blitz_v1_workspace, 78);
 
 /**
  * @generated from message blitz.v1.AddImageRequest
@@ -2050,7 +2101,7 @@ export type AddImageRequest = Message<"blitz.v1.AddImageRequest"> & {
  * Use `create(AddImageRequestSchema)` to create a new message.
  */
 export const AddImageRequestSchema: GenMessage<AddImageRequest> = /*@__PURE__*/
-  messageDesc(file_blitz_v1_workspace, 77);
+  messageDesc(file_blitz_v1_workspace, 79);
 
 /**
  * @generated from message blitz.v1.AddImageResponse
@@ -2067,7 +2118,7 @@ export type AddImageResponse = Message<"blitz.v1.AddImageResponse"> & {
  * Use `create(AddImageResponseSchema)` to create a new message.
  */
 export const AddImageResponseSchema: GenMessage<AddImageResponse> = /*@__PURE__*/
-  messageDesc(file_blitz_v1_workspace, 78);
+  messageDesc(file_blitz_v1_workspace, 80);
 
 /**
  * Link is a search result handed to the agent.
@@ -2091,7 +2142,7 @@ export type Link = Message<"blitz.v1.Link"> & {
  * Use `create(LinkSchema)` to create a new message.
  */
 export const LinkSchema: GenMessage<Link> = /*@__PURE__*/
-  messageDesc(file_blitz_v1_workspace, 79);
+  messageDesc(file_blitz_v1_workspace, 81);
 
 /**
  * @generated from message blitz.v1.GetSearchProviderRequest
@@ -2108,7 +2159,7 @@ export type GetSearchProviderRequest = Message<"blitz.v1.GetSearchProviderReques
  * Use `create(GetSearchProviderRequestSchema)` to create a new message.
  */
 export const GetSearchProviderRequestSchema: GenMessage<GetSearchProviderRequest> = /*@__PURE__*/
-  messageDesc(file_blitz_v1_workspace, 80);
+  messageDesc(file_blitz_v1_workspace, 82);
 
 /**
  * @generated from message blitz.v1.GetSearchProviderResponse
@@ -2125,7 +2176,7 @@ export type GetSearchProviderResponse = Message<"blitz.v1.GetSearchProviderRespo
  * Use `create(GetSearchProviderResponseSchema)` to create a new message.
  */
 export const GetSearchProviderResponseSchema: GenMessage<GetSearchProviderResponse> = /*@__PURE__*/
-  messageDesc(file_blitz_v1_workspace, 81);
+  messageDesc(file_blitz_v1_workspace, 83);
 
 /**
  * @generated from message blitz.v1.SearchWebRequest
@@ -2147,7 +2198,7 @@ export type SearchWebRequest = Message<"blitz.v1.SearchWebRequest"> & {
  * Use `create(SearchWebRequestSchema)` to create a new message.
  */
 export const SearchWebRequestSchema: GenMessage<SearchWebRequest> = /*@__PURE__*/
-  messageDesc(file_blitz_v1_workspace, 82);
+  messageDesc(file_blitz_v1_workspace, 84);
 
 /**
  * @generated from message blitz.v1.SearchWebResponse
@@ -2178,7 +2229,7 @@ export type SearchWebResponse = Message<"blitz.v1.SearchWebResponse"> & {
  * Use `create(SearchWebResponseSchema)` to create a new message.
  */
 export const SearchWebResponseSchema: GenMessage<SearchWebResponse> = /*@__PURE__*/
-  messageDesc(file_blitz_v1_workspace, 83);
+  messageDesc(file_blitz_v1_workspace, 85);
 
 /**
  * WorkspaceService covers everything about a workspace except its
@@ -2323,6 +2374,18 @@ export const WorkspaceService: GenService<{
     methodKind: "unary";
     input: typeof SetSettingRequestSchema;
     output: typeof SetSettingResponseSchema;
+  },
+  /**
+   * Changes which actions run without asking, for every session of the
+   * workspace (UNKNOWN_MODE; BYPASS_NEEDS_SANDBOX when bypass is asked for
+   * without an active OS sandbox).
+   *
+   * @generated from rpc blitz.v1.WorkspaceService.SetPermissionMode
+   */
+  setPermissionMode: {
+    methodKind: "unary";
+    input: typeof SetPermissionModeRequestSchema;
+    output: typeof SetPermissionModeResponseSchema;
   },
   /**
    * Returns the skills found, or those matching a query.

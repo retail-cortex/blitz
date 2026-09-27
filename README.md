@@ -108,6 +108,7 @@ Subcommands: `doctor [--online]`, `config init|show|path`, `completion bash|zsh|
 | `/btw <question>` | Ask a side question in the middle of a task. The agent answers with everything this session knows, but the question and answer aren't kept: they aren't in the transcript, the saved session, or anything the agent sees later. The turn is read-only, its tokens count in `/cost`, and images queued with `/attach` wait for your next real prompt |
 | `/search web <terms>` | Search the web and hand the top five readable links to the agent, which reads them and answers with citations. Those five URLs need no approval for that turn; other pages still do. The turn can't edit files or run commands |
 | `/search session <terms>` | Find what this session said about something: matching passages from the full transcript (including anything compacted away) go to the agent, which answers from them |
+| `/mode [name]` | Show or change the permission mode (see *Safety Model*) |
 | `/plan <goal>` | Ask for a plan without changing anything. The agent can read, search and delegate, but edits, commands and MCP tools are refused for that turn |
 | `!<command>` | Run a command yourself, like in your own terminal: in the workspace, with your environment, outside the agent's sandbox and approvals. The agent doesn't see it; the audit log records it |
 | `/attach [path\|clear]`, `/paste` | Queue an image (or the clipboard's) for your next message |
@@ -159,6 +160,8 @@ Both are **read-only turns**: the agent can read files, fetch and search, but ed
 ## Safety Model
 
 **Approvals.** File edits show a colored diff before you approve. Answers: `y` once, `s` for the rest of the session, `a` always (saved to `~/.blitz/approvals.json`), `n` no. Commands are remembered by exact text within a workspace; edits per workspace; web requests per host; MCP tools per server/tool. Ctrl+C at an approval prompt cancels the whole turn. With no terminal to ask, sensitive actions are denied unless auto-approved in config.
+
+**Permission modes** decide what runs without asking: `default` (ask), `accept-edits` (file changes in the workspace go through without asking; commands still ask), `plan` (every prompt is planned; tools that change anything are refused), `dont-ask` (anything that would ask is refused — for CI and scripts), and `bypass` (nothing asks). `bypass` only runs while the OS sandbox is active, and deny rules, blocked paths and the sandboxes still apply; without a sandbox Blitz stays in `default` and says why. Choose one with `--permission-mode`, `[blitz] permission_mode`, or `/mode` in a session (the prompt shows any mode other than `default`). The older `auto_approve = true` means `bypass`. Scheduled workers ignore the mode: they get exactly their own permissions.
 
 **File sandbox.** File tools only reach the workspace plus `sandbox.allowed_paths` (read-write) and `sandbox.read_only_paths`, enforced with `os.Root` (no `..` or symlink escapes). `sandbox.blocked_paths` (default: `.env`, keys, `~/.ssh`, cloud credentials, …) are never readable or writable — including through symlinks, `grep`, and `list_files`.
 

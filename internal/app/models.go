@@ -10,6 +10,7 @@ import (
 
 	"github.com/retail-cortex/blitz/internal/config"
 	"github.com/retail-cortex/blitz/internal/runtime"
+	"github.com/retail-cortex/blitz/internal/tools"
 )
 
 // Agents, models, pins, model settings and settings. Operations return data
@@ -257,6 +258,9 @@ type Settings struct {
 	Model  ModelInfo
 	Agent  string
 	Locale string // the language the model replies in
+	// PermissionMode decides which actions run without asking (see
+	// tools.PermissionMode).
+	PermissionMode string
 }
 
 // Settings returns the current settings.
@@ -264,7 +268,28 @@ func (w *Workspace) Settings() Settings {
 	return Settings{
 		Agency: w.cfg.Blitz.AgencyLevel,
 		Model:  w.Model(), Agent: w.engine.ActiveAgent(), Locale: w.reply.Tag().String(),
+		PermissionMode: string(w.tools.Hooks().Mode()),
 	}
+}
+
+// ErrUnknownMode reports a name that isn't a permission mode.
+var ErrUnknownMode = tools.ErrUnknownMode
+
+// ErrBypassNeedsSandbox refuses bypass mode without an active OS sandbox.
+var ErrBypassNeedsSandbox = tools.ErrBypassNeedsSandbox
+
+// SetPermissionMode changes which actions run without asking, for every
+// session of the workspace, and returns the mode's canonical name. Bypass
+// needs the OS sandbox (ErrBypassNeedsSandbox).
+func (w *Workspace) SetPermissionMode(mode string) (string, error) {
+	m, err := tools.ParsePermissionMode(mode)
+	if err != nil {
+		return "", err
+	}
+	if err := w.tools.SetPermissionMode(m); err != nil {
+		return "", err
+	}
+	return string(m), nil
 }
 
 // UnknownSettingError reports a key /set doesn't know.

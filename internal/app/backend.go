@@ -58,6 +58,7 @@ type Backend interface {
 	UpdateModelSettings(ref string, reset bool, changes []Setting) (ModelSettingsChange, error)
 	Settings() Settings
 	Set(ctx context.Context, key, value string) (string, error)
+	SetPermissionMode(mode string) (string, error)
 
 	// Skills, environments, MCP and tools.
 	ListSkills() []SkillInfo

@@ -15,7 +15,7 @@ The REPL is a thin front end over `app.Backend`: it reads input, dispatches slas
 ## 2. Presentation
 
 - **TUI-01** Banner: one line `Blitz <version>  agent <name> · model <name>`, then a dim hint (`/help`, Ctrl+C); then the first sandbox summary line, a hint line, and (when steering is available) a steering hint.
-- **TUI-02** Prompt: bold green `<agent> ›`. Status marks only `✓ ✗ ! ↳`; no mascot or persona.
+- **TUI-02** Prompt: bold green `<agent> ›`, with `[mode]` after the agent when the permission mode isn't `default` (yellow; red for `bypass`). Status marks only `✓ ✗ ! ↳`; no mascot or persona.
 - **TUI-03** Model text streams; with `ui.markdown` on a TTY it is rendered as Markdown (glamour, theme `ui.theme`: auto/dark/light/notty), falling back to plain text on error. Thought text and final text that repeats streamed chunks are not printed.
 - **TUI-04** Tool calls and results are printed as compact one-line summaries; a spinner (`ui.spinner`, TTY only) shows "thinking"/"working" with elapsed time.
 - **TUI-05** After each turn, a dim usage line: `↳ <in> in · <out> out · context <ctx> · $<turn> ($<total>)` (tokens humanised `12.4k`, `1.2M`; cost only when priced).
@@ -43,7 +43,8 @@ The REPL is a thin front end over `app.Backend`: it reads input, dispatches slas
 | `/model [<ref>]` | Show / switch model for unpinned agents; warns if the active agent is pinned |
 | `/pin_model [<agent> <model>]`, `/unpin <agent>` | Show pins / pin / unpin; reports where it was saved |
 | `/model_settings [<model> [k=v…\|reset]]` | Show or change one model's settings; `k=` clears; warns about unsupported keys |
-| `/set [agency=<level>]`, `/show` | Show or change settings |
+| `/set [agency=<level>]`, `/show` | Show or change settings (including the permission mode) |
+| `/mode [name]` | Show the permission modes with the current one marked, or switch (`bypass` refused without the OS sandbox) |
 | `/skills list\|show <n>\|search <q>` | Skills and policy verdicts |
 | `/envs [prune\|remove <key>]` | Script environments |
 | `/session list [--all]\|new\|load <ref>\|save <name> [--force]`, `/resume <ref>`, `/rename <name>` | Sessions ([spec_sessions_017](spec_sessions_017.md)); resuming prints a recap |

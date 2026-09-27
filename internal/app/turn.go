@@ -59,6 +59,10 @@ type Turn struct {
 	// steer messages are collected: a front end still taking a steer message
 	// finishes here, so the message ends up in TurnResult.Leftover.
 	OnFinished func()
+
+	// planMode: the workspace is in plan permission mode, so the turn is
+	// planned like Plan but the transcript records the text as typed.
+	planMode bool
 }
 
 // TurnResult describes a finished turn.
@@ -99,6 +103,11 @@ func (e *BlockedError) Error() string { return "prompt blocked by hook: " + e.Re
 // refused prompt is a *BlockedError. A turn that fails part way still
 // returns what it produced.
 func (w *Workspace) Run(ctx context.Context, sessionID string, t Turn, on func(Event)) (TurnResult, error) {
+	// Plan permission mode plans every prompt; side questions and
+	// read-only turns are read-only already.
+	if w.tools.Hooks().Mode() == tools.ModePlan && !t.Plan && !t.Aside && t.ReadOnly == "" {
+		t.planMode = true
+	}
 	return w.run(ctx, sessionID, t, on, w.storage)
 }
 
@@ -116,8 +125,11 @@ func (w *Workspace) run(ctx context.Context, sessionID string, t Turn, on func(E
 	if t.Prompt != "" {
 		prompt = t.Prompt
 	}
-	if t.Plan {
+	switch {
+	case t.Plan:
 		prompt, recorded = runtime.PlanPrompt(t.Text), "/plan "+t.Text
+	case t.planMode:
+		prompt = runtime.PlanPrompt(prompt)
 	}
 	if !t.Aside {
 		w.tools.Checkpoints().Begin(textutil.Ellipsize(strings.Join(strings.Fields(recorded), " "), 60))
@@ -173,7 +185,7 @@ func (w *Workspace) run(ctx context.Context, sessionID string, t Turn, on func(E
 		for _, img := range t.Images {
 			opts = append(opts, runtime.WithAttachments(images.Part(img)))
 		}
-		if t.Plan {
+		if t.Plan || t.planMode {
 			opts = append(opts, runtime.WithPlanOnly())
 		}
 		if t.ReadOnly != "" {

@@ -154,8 +154,20 @@ func (h workspaceService) GetSettings(ctx context.Context, r req[pb.GetSettingsR
 	return ok(&pb.GetSettingsResponse{
 		Agency: st.Agency,
 		Model:  st.Model.Name, Provider: st.Model.Provider, Agent: st.Agent, Locale: st.Locale,
-		ImagesEnabled: w.ImagesEnabled(),
+		ImagesEnabled: w.ImagesEnabled(), PermissionMode: st.PermissionMode,
 	})
+}
+
+func (h workspaceService) SetPermissionMode(ctx context.Context, r req[pb.SetPermissionModeRequest]) (*connect.Response[pb.SetPermissionModeResponse], error) {
+	w, err := h.s.workspace(ctx, r.Msg.Workspace)
+	if err != nil {
+		return nil, err
+	}
+	mode, err := w.SetPermissionMode(r.Msg.Mode)
+	if err != nil {
+		return nil, toAPI(err)
+	}
+	return ok(&pb.SetPermissionModeResponse{Mode: mode})
 }
 
 func (h workspaceService) SetSetting(ctx context.Context, r req[pb.SetSettingRequest]) (*connect.Response[pb.SetSettingResponse], error) {

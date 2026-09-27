@@ -1521,8 +1521,10 @@ type GetSettingsResponse struct {
 	Locale string `protobuf:"bytes,7,opt,name=locale,proto3" json:"locale,omitempty"`
 	// Images can be attached to prompts.
 	ImagesEnabled bool `protobuf:"varint,8,opt,name=images_enabled,json=imagesEnabled,proto3" json:"images_enabled,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	// default, accept-edits, plan, dont-ask or bypass.
+	PermissionMode string `protobuf:"bytes,9,opt,name=permission_mode,json=permissionMode,proto3" json:"permission_mode,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *GetSettingsResponse) Reset() {
@@ -1597,6 +1599,112 @@ func (x *GetSettingsResponse) GetImagesEnabled() bool {
 	return false
 }
 
+func (x *GetSettingsResponse) GetPermissionMode() string {
+	if x != nil {
+		return x.PermissionMode
+	}
+	return ""
+}
+
+type SetPermissionModeRequest struct {
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	Workspace string                 `protobuf:"bytes,1,opt,name=workspace,proto3" json:"workspace,omitempty"`
+	// default, accept-edits, plan, dont-ask or bypass (other spellings such
+	// as acceptEdits are accepted).
+	Mode          string `protobuf:"bytes,2,opt,name=mode,proto3" json:"mode,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SetPermissionModeRequest) Reset() {
+	*x = SetPermissionModeRequest{}
+	mi := &file_blitz_v1_workspace_proto_msgTypes[29]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SetPermissionModeRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetPermissionModeRequest) ProtoMessage() {}
+
+func (x *SetPermissionModeRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_blitz_v1_workspace_proto_msgTypes[29]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetPermissionModeRequest.ProtoReflect.Descriptor instead.
+func (*SetPermissionModeRequest) Descriptor() ([]byte, []int) {
+	return file_blitz_v1_workspace_proto_rawDescGZIP(), []int{29}
+}
+
+func (x *SetPermissionModeRequest) GetWorkspace() string {
+	if x != nil {
+		return x.Workspace
+	}
+	return ""
+}
+
+func (x *SetPermissionModeRequest) GetMode() string {
+	if x != nil {
+		return x.Mode
+	}
+	return ""
+}
+
+type SetPermissionModeResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The mode's canonical name.
+	Mode          string `protobuf:"bytes,1,opt,name=mode,proto3" json:"mode,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SetPermissionModeResponse) Reset() {
+	*x = SetPermissionModeResponse{}
+	mi := &file_blitz_v1_workspace_proto_msgTypes[30]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SetPermissionModeResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetPermissionModeResponse) ProtoMessage() {}
+
+func (x *SetPermissionModeResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_blitz_v1_workspace_proto_msgTypes[30]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetPermissionModeResponse.ProtoReflect.Descriptor instead.
+func (*SetPermissionModeResponse) Descriptor() ([]byte, []int) {
+	return file_blitz_v1_workspace_proto_rawDescGZIP(), []int{30}
+}
+
+func (x *SetPermissionModeResponse) GetMode() string {
+	if x != nil {
+		return x.Mode
+	}
+	return ""
+}
+
 type SetSettingRequest struct {
 	state     protoimpl.MessageState `protogen:"open.v1"`
 	Workspace string                 `protobuf:"bytes,1,opt,name=workspace,proto3" json:"workspace,omitempty"`
@@ -1609,7 +1717,7 @@ type SetSettingRequest struct {
 
 func (x *SetSettingRequest) Reset() {
 	*x = SetSettingRequest{}
-	mi := &file_blitz_v1_workspace_proto_msgTypes[29]
+	mi := &file_blitz_v1_workspace_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1621,7 +1729,7 @@ func (x *SetSettingRequest) String() string {
 func (*SetSettingRequest) ProtoMessage() {}
 
 func (x *SetSettingRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_blitz_v1_workspace_proto_msgTypes[29]
+	mi := &file_blitz_v1_workspace_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1634,7 +1742,7 @@ func (x *SetSettingRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetSettingRequest.ProtoReflect.Descriptor instead.
 func (*SetSettingRequest) Descriptor() ([]byte, []int) {
-	return file_blitz_v1_workspace_proto_rawDescGZIP(), []int{29}
+	return file_blitz_v1_workspace_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *SetSettingRequest) GetWorkspace() string {
@@ -1668,7 +1776,7 @@ type SetSettingResponse struct {
 
 func (x *SetSettingResponse) Reset() {
 	*x = SetSettingResponse{}
-	mi := &file_blitz_v1_workspace_proto_msgTypes[30]
+	mi := &file_blitz_v1_workspace_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1680,7 +1788,7 @@ func (x *SetSettingResponse) String() string {
 func (*SetSettingResponse) ProtoMessage() {}
 
 func (x *SetSettingResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_blitz_v1_workspace_proto_msgTypes[30]
+	mi := &file_blitz_v1_workspace_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1693,7 +1801,7 @@ func (x *SetSettingResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetSettingResponse.ProtoReflect.Descriptor instead.
 func (*SetSettingResponse) Descriptor() ([]byte, []int) {
-	return file_blitz_v1_workspace_proto_rawDescGZIP(), []int{30}
+	return file_blitz_v1_workspace_proto_rawDescGZIP(), []int{32}
 }
 
 func (x *SetSettingResponse) GetKey() string {
@@ -1736,7 +1844,7 @@ type SkillInfo struct {
 
 func (x *SkillInfo) Reset() {
 	*x = SkillInfo{}
-	mi := &file_blitz_v1_workspace_proto_msgTypes[31]
+	mi := &file_blitz_v1_workspace_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1748,7 +1856,7 @@ func (x *SkillInfo) String() string {
 func (*SkillInfo) ProtoMessage() {}
 
 func (x *SkillInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_blitz_v1_workspace_proto_msgTypes[31]
+	mi := &file_blitz_v1_workspace_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1761,7 +1869,7 @@ func (x *SkillInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SkillInfo.ProtoReflect.Descriptor instead.
 func (*SkillInfo) Descriptor() ([]byte, []int) {
-	return file_blitz_v1_workspace_proto_rawDescGZIP(), []int{31}
+	return file_blitz_v1_workspace_proto_rawDescGZIP(), []int{33}
 }
 
 func (x *SkillInfo) GetName() string {
@@ -1895,7 +2003,7 @@ type SkillTool struct {
 
 func (x *SkillTool) Reset() {
 	*x = SkillTool{}
-	mi := &file_blitz_v1_workspace_proto_msgTypes[32]
+	mi := &file_blitz_v1_workspace_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1907,7 +2015,7 @@ func (x *SkillTool) String() string {
 func (*SkillTool) ProtoMessage() {}
 
 func (x *SkillTool) ProtoReflect() protoreflect.Message {
-	mi := &file_blitz_v1_workspace_proto_msgTypes[32]
+	mi := &file_blitz_v1_workspace_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1920,7 +2028,7 @@ func (x *SkillTool) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SkillTool.ProtoReflect.Descriptor instead.
 func (*SkillTool) Descriptor() ([]byte, []int) {
-	return file_blitz_v1_workspace_proto_rawDescGZIP(), []int{32}
+	return file_blitz_v1_workspace_proto_rawDescGZIP(), []int{34}
 }
 
 func (x *SkillTool) GetName() string {
@@ -1961,7 +2069,7 @@ type SkillScript struct {
 
 func (x *SkillScript) Reset() {
 	*x = SkillScript{}
-	mi := &file_blitz_v1_workspace_proto_msgTypes[33]
+	mi := &file_blitz_v1_workspace_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1973,7 +2081,7 @@ func (x *SkillScript) String() string {
 func (*SkillScript) ProtoMessage() {}
 
 func (x *SkillScript) ProtoReflect() protoreflect.Message {
-	mi := &file_blitz_v1_workspace_proto_msgTypes[33]
+	mi := &file_blitz_v1_workspace_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1986,7 +2094,7 @@ func (x *SkillScript) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SkillScript.ProtoReflect.Descriptor instead.
 func (*SkillScript) Descriptor() ([]byte, []int) {
-	return file_blitz_v1_workspace_proto_rawDescGZIP(), []int{33}
+	return file_blitz_v1_workspace_proto_rawDescGZIP(), []int{35}
 }
 
 func (x *SkillScript) GetName() string {
@@ -2049,7 +2157,7 @@ type ListSkillsRequest struct {
 
 func (x *ListSkillsRequest) Reset() {
 	*x = ListSkillsRequest{}
-	mi := &file_blitz_v1_workspace_proto_msgTypes[34]
+	mi := &file_blitz_v1_workspace_proto_msgTypes[36]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2061,7 +2169,7 @@ func (x *ListSkillsRequest) String() string {
 func (*ListSkillsRequest) ProtoMessage() {}
 
 func (x *ListSkillsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_blitz_v1_workspace_proto_msgTypes[34]
+	mi := &file_blitz_v1_workspace_proto_msgTypes[36]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2074,7 +2182,7 @@ func (x *ListSkillsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListSkillsRequest.ProtoReflect.Descriptor instead.
 func (*ListSkillsRequest) Descriptor() ([]byte, []int) {
-	return file_blitz_v1_workspace_proto_rawDescGZIP(), []int{34}
+	return file_blitz_v1_workspace_proto_rawDescGZIP(), []int{36}
 }
 
 func (x *ListSkillsRequest) GetWorkspace() string {
@@ -2100,7 +2208,7 @@ type ListSkillsResponse struct {
 
 func (x *ListSkillsResponse) Reset() {
 	*x = ListSkillsResponse{}
-	mi := &file_blitz_v1_workspace_proto_msgTypes[35]
+	mi := &file_blitz_v1_workspace_proto_msgTypes[37]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2112,7 +2220,7 @@ func (x *ListSkillsResponse) String() string {
 func (*ListSkillsResponse) ProtoMessage() {}
 
 func (x *ListSkillsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_blitz_v1_workspace_proto_msgTypes[35]
+	mi := &file_blitz_v1_workspace_proto_msgTypes[37]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2125,7 +2233,7 @@ func (x *ListSkillsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListSkillsResponse.ProtoReflect.Descriptor instead.
 func (*ListSkillsResponse) Descriptor() ([]byte, []int) {
-	return file_blitz_v1_workspace_proto_rawDescGZIP(), []int{35}
+	return file_blitz_v1_workspace_proto_rawDescGZIP(), []int{37}
 }
 
 func (x *ListSkillsResponse) GetSkills() []*SkillInfo {
@@ -2145,7 +2253,7 @@ type GetSkillRequest struct {
 
 func (x *GetSkillRequest) Reset() {
 	*x = GetSkillRequest{}
-	mi := &file_blitz_v1_workspace_proto_msgTypes[36]
+	mi := &file_blitz_v1_workspace_proto_msgTypes[38]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2157,7 +2265,7 @@ func (x *GetSkillRequest) String() string {
 func (*GetSkillRequest) ProtoMessage() {}
 
 func (x *GetSkillRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_blitz_v1_workspace_proto_msgTypes[36]
+	mi := &file_blitz_v1_workspace_proto_msgTypes[38]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2170,7 +2278,7 @@ func (x *GetSkillRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetSkillRequest.ProtoReflect.Descriptor instead.
 func (*GetSkillRequest) Descriptor() ([]byte, []int) {
-	return file_blitz_v1_workspace_proto_rawDescGZIP(), []int{36}
+	return file_blitz_v1_workspace_proto_rawDescGZIP(), []int{38}
 }
 
 func (x *GetSkillRequest) GetWorkspace() string {
@@ -2196,7 +2304,7 @@ type GetSkillResponse struct {
 
 func (x *GetSkillResponse) Reset() {
 	*x = GetSkillResponse{}
-	mi := &file_blitz_v1_workspace_proto_msgTypes[37]
+	mi := &file_blitz_v1_workspace_proto_msgTypes[39]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2208,7 +2316,7 @@ func (x *GetSkillResponse) String() string {
 func (*GetSkillResponse) ProtoMessage() {}
 
 func (x *GetSkillResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_blitz_v1_workspace_proto_msgTypes[37]
+	mi := &file_blitz_v1_workspace_proto_msgTypes[39]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2221,7 +2329,7 @@ func (x *GetSkillResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetSkillResponse.ProtoReflect.Descriptor instead.
 func (*GetSkillResponse) Descriptor() ([]byte, []int) {
-	return file_blitz_v1_workspace_proto_rawDescGZIP(), []int{37}
+	return file_blitz_v1_workspace_proto_rawDescGZIP(), []int{39}
 }
 
 func (x *GetSkillResponse) GetSkill() *SkillInfo {
@@ -2249,7 +2357,7 @@ type Env struct {
 
 func (x *Env) Reset() {
 	*x = Env{}
-	mi := &file_blitz_v1_workspace_proto_msgTypes[38]
+	mi := &file_blitz_v1_workspace_proto_msgTypes[40]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2261,7 +2369,7 @@ func (x *Env) String() string {
 func (*Env) ProtoMessage() {}
 
 func (x *Env) ProtoReflect() protoreflect.Message {
-	mi := &file_blitz_v1_workspace_proto_msgTypes[38]
+	mi := &file_blitz_v1_workspace_proto_msgTypes[40]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2274,7 +2382,7 @@ func (x *Env) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Env.ProtoReflect.Descriptor instead.
 func (*Env) Descriptor() ([]byte, []int) {
-	return file_blitz_v1_workspace_proto_rawDescGZIP(), []int{38}
+	return file_blitz_v1_workspace_proto_rawDescGZIP(), []int{40}
 }
 
 func (x *Env) GetKey() string {
@@ -2328,7 +2436,7 @@ type ListEnvsRequest struct {
 
 func (x *ListEnvsRequest) Reset() {
 	*x = ListEnvsRequest{}
-	mi := &file_blitz_v1_workspace_proto_msgTypes[39]
+	mi := &file_blitz_v1_workspace_proto_msgTypes[41]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2340,7 +2448,7 @@ func (x *ListEnvsRequest) String() string {
 func (*ListEnvsRequest) ProtoMessage() {}
 
 func (x *ListEnvsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_blitz_v1_workspace_proto_msgTypes[39]
+	mi := &file_blitz_v1_workspace_proto_msgTypes[41]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2353,7 +2461,7 @@ func (x *ListEnvsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListEnvsRequest.ProtoReflect.Descriptor instead.
 func (*ListEnvsRequest) Descriptor() ([]byte, []int) {
-	return file_blitz_v1_workspace_proto_rawDescGZIP(), []int{39}
+	return file_blitz_v1_workspace_proto_rawDescGZIP(), []int{41}
 }
 
 func (x *ListEnvsRequest) GetWorkspace() string {
@@ -2372,7 +2480,7 @@ type ListEnvsResponse struct {
 
 func (x *ListEnvsResponse) Reset() {
 	*x = ListEnvsResponse{}
-	mi := &file_blitz_v1_workspace_proto_msgTypes[40]
+	mi := &file_blitz_v1_workspace_proto_msgTypes[42]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2384,7 +2492,7 @@ func (x *ListEnvsResponse) String() string {
 func (*ListEnvsResponse) ProtoMessage() {}
 
 func (x *ListEnvsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_blitz_v1_workspace_proto_msgTypes[40]
+	mi := &file_blitz_v1_workspace_proto_msgTypes[42]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2397,7 +2505,7 @@ func (x *ListEnvsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListEnvsResponse.ProtoReflect.Descriptor instead.
 func (*ListEnvsResponse) Descriptor() ([]byte, []int) {
-	return file_blitz_v1_workspace_proto_rawDescGZIP(), []int{40}
+	return file_blitz_v1_workspace_proto_rawDescGZIP(), []int{42}
 }
 
 func (x *ListEnvsResponse) GetEnvs() []*Env {
@@ -2417,7 +2525,7 @@ type RemoveEnvRequest struct {
 
 func (x *RemoveEnvRequest) Reset() {
 	*x = RemoveEnvRequest{}
-	mi := &file_blitz_v1_workspace_proto_msgTypes[41]
+	mi := &file_blitz_v1_workspace_proto_msgTypes[43]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2429,7 +2537,7 @@ func (x *RemoveEnvRequest) String() string {
 func (*RemoveEnvRequest) ProtoMessage() {}
 
 func (x *RemoveEnvRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_blitz_v1_workspace_proto_msgTypes[41]
+	mi := &file_blitz_v1_workspace_proto_msgTypes[43]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2442,7 +2550,7 @@ func (x *RemoveEnvRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RemoveEnvRequest.ProtoReflect.Descriptor instead.
 func (*RemoveEnvRequest) Descriptor() ([]byte, []int) {
-	return file_blitz_v1_workspace_proto_rawDescGZIP(), []int{41}
+	return file_blitz_v1_workspace_proto_rawDescGZIP(), []int{43}
 }
 
 func (x *RemoveEnvRequest) GetWorkspace() string {
@@ -2467,7 +2575,7 @@ type RemoveEnvResponse struct {
 
 func (x *RemoveEnvResponse) Reset() {
 	*x = RemoveEnvResponse{}
-	mi := &file_blitz_v1_workspace_proto_msgTypes[42]
+	mi := &file_blitz_v1_workspace_proto_msgTypes[44]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2479,7 +2587,7 @@ func (x *RemoveEnvResponse) String() string {
 func (*RemoveEnvResponse) ProtoMessage() {}
 
 func (x *RemoveEnvResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_blitz_v1_workspace_proto_msgTypes[42]
+	mi := &file_blitz_v1_workspace_proto_msgTypes[44]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2492,7 +2600,7 @@ func (x *RemoveEnvResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RemoveEnvResponse.ProtoReflect.Descriptor instead.
 func (*RemoveEnvResponse) Descriptor() ([]byte, []int) {
-	return file_blitz_v1_workspace_proto_rawDescGZIP(), []int{42}
+	return file_blitz_v1_workspace_proto_rawDescGZIP(), []int{44}
 }
 
 type PruneEnvsRequest struct {
@@ -2504,7 +2612,7 @@ type PruneEnvsRequest struct {
 
 func (x *PruneEnvsRequest) Reset() {
 	*x = PruneEnvsRequest{}
-	mi := &file_blitz_v1_workspace_proto_msgTypes[43]
+	mi := &file_blitz_v1_workspace_proto_msgTypes[45]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2516,7 +2624,7 @@ func (x *PruneEnvsRequest) String() string {
 func (*PruneEnvsRequest) ProtoMessage() {}
 
 func (x *PruneEnvsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_blitz_v1_workspace_proto_msgTypes[43]
+	mi := &file_blitz_v1_workspace_proto_msgTypes[45]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2529,7 +2637,7 @@ func (x *PruneEnvsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PruneEnvsRequest.ProtoReflect.Descriptor instead.
 func (*PruneEnvsRequest) Descriptor() ([]byte, []int) {
-	return file_blitz_v1_workspace_proto_rawDescGZIP(), []int{43}
+	return file_blitz_v1_workspace_proto_rawDescGZIP(), []int{45}
 }
 
 func (x *PruneEnvsRequest) GetWorkspace() string {
@@ -2550,7 +2658,7 @@ type EnvError struct {
 
 func (x *EnvError) Reset() {
 	*x = EnvError{}
-	mi := &file_blitz_v1_workspace_proto_msgTypes[44]
+	mi := &file_blitz_v1_workspace_proto_msgTypes[46]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2562,7 +2670,7 @@ func (x *EnvError) String() string {
 func (*EnvError) ProtoMessage() {}
 
 func (x *EnvError) ProtoReflect() protoreflect.Message {
-	mi := &file_blitz_v1_workspace_proto_msgTypes[44]
+	mi := &file_blitz_v1_workspace_proto_msgTypes[46]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2575,7 +2683,7 @@ func (x *EnvError) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EnvError.ProtoReflect.Descriptor instead.
 func (*EnvError) Descriptor() ([]byte, []int) {
-	return file_blitz_v1_workspace_proto_rawDescGZIP(), []int{44}
+	return file_blitz_v1_workspace_proto_rawDescGZIP(), []int{46}
 }
 
 func (x *EnvError) GetKey() string {
@@ -2604,7 +2712,7 @@ type PruneEnvsResponse struct {
 
 func (x *PruneEnvsResponse) Reset() {
 	*x = PruneEnvsResponse{}
-	mi := &file_blitz_v1_workspace_proto_msgTypes[45]
+	mi := &file_blitz_v1_workspace_proto_msgTypes[47]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2616,7 +2724,7 @@ func (x *PruneEnvsResponse) String() string {
 func (*PruneEnvsResponse) ProtoMessage() {}
 
 func (x *PruneEnvsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_blitz_v1_workspace_proto_msgTypes[45]
+	mi := &file_blitz_v1_workspace_proto_msgTypes[47]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2629,7 +2737,7 @@ func (x *PruneEnvsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PruneEnvsResponse.ProtoReflect.Descriptor instead.
 func (*PruneEnvsResponse) Descriptor() ([]byte, []int) {
-	return file_blitz_v1_workspace_proto_rawDescGZIP(), []int{45}
+	return file_blitz_v1_workspace_proto_rawDescGZIP(), []int{47}
 }
 
 func (x *PruneEnvsResponse) GetRemoved() int32 {
@@ -2666,7 +2774,7 @@ type MCPServer struct {
 
 func (x *MCPServer) Reset() {
 	*x = MCPServer{}
-	mi := &file_blitz_v1_workspace_proto_msgTypes[46]
+	mi := &file_blitz_v1_workspace_proto_msgTypes[48]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2678,7 +2786,7 @@ func (x *MCPServer) String() string {
 func (*MCPServer) ProtoMessage() {}
 
 func (x *MCPServer) ProtoReflect() protoreflect.Message {
-	mi := &file_blitz_v1_workspace_proto_msgTypes[46]
+	mi := &file_blitz_v1_workspace_proto_msgTypes[48]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2691,7 +2799,7 @@ func (x *MCPServer) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MCPServer.ProtoReflect.Descriptor instead.
 func (*MCPServer) Descriptor() ([]byte, []int) {
-	return file_blitz_v1_workspace_proto_rawDescGZIP(), []int{46}
+	return file_blitz_v1_workspace_proto_rawDescGZIP(), []int{48}
 }
 
 func (x *MCPServer) GetName() string {
@@ -2724,7 +2832,7 @@ type ListMCPServersRequest struct {
 
 func (x *ListMCPServersRequest) Reset() {
 	*x = ListMCPServersRequest{}
-	mi := &file_blitz_v1_workspace_proto_msgTypes[47]
+	mi := &file_blitz_v1_workspace_proto_msgTypes[49]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2736,7 +2844,7 @@ func (x *ListMCPServersRequest) String() string {
 func (*ListMCPServersRequest) ProtoMessage() {}
 
 func (x *ListMCPServersRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_blitz_v1_workspace_proto_msgTypes[47]
+	mi := &file_blitz_v1_workspace_proto_msgTypes[49]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2749,7 +2857,7 @@ func (x *ListMCPServersRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListMCPServersRequest.ProtoReflect.Descriptor instead.
 func (*ListMCPServersRequest) Descriptor() ([]byte, []int) {
-	return file_blitz_v1_workspace_proto_rawDescGZIP(), []int{47}
+	return file_blitz_v1_workspace_proto_rawDescGZIP(), []int{49}
 }
 
 func (x *ListMCPServersRequest) GetWorkspace() string {
@@ -2768,7 +2876,7 @@ type ListMCPServersResponse struct {
 
 func (x *ListMCPServersResponse) Reset() {
 	*x = ListMCPServersResponse{}
-	mi := &file_blitz_v1_workspace_proto_msgTypes[48]
+	mi := &file_blitz_v1_workspace_proto_msgTypes[50]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2780,7 +2888,7 @@ func (x *ListMCPServersResponse) String() string {
 func (*ListMCPServersResponse) ProtoMessage() {}
 
 func (x *ListMCPServersResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_blitz_v1_workspace_proto_msgTypes[48]
+	mi := &file_blitz_v1_workspace_proto_msgTypes[50]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2793,7 +2901,7 @@ func (x *ListMCPServersResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListMCPServersResponse.ProtoReflect.Descriptor instead.
 func (*ListMCPServersResponse) Descriptor() ([]byte, []int) {
-	return file_blitz_v1_workspace_proto_rawDescGZIP(), []int{48}
+	return file_blitz_v1_workspace_proto_rawDescGZIP(), []int{50}
 }
 
 func (x *ListMCPServersResponse) GetServers() []*MCPServer {
@@ -2816,7 +2924,7 @@ type ToolInfo struct {
 
 func (x *ToolInfo) Reset() {
 	*x = ToolInfo{}
-	mi := &file_blitz_v1_workspace_proto_msgTypes[49]
+	mi := &file_blitz_v1_workspace_proto_msgTypes[51]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2828,7 +2936,7 @@ func (x *ToolInfo) String() string {
 func (*ToolInfo) ProtoMessage() {}
 
 func (x *ToolInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_blitz_v1_workspace_proto_msgTypes[49]
+	mi := &file_blitz_v1_workspace_proto_msgTypes[51]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2841,7 +2949,7 @@ func (x *ToolInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ToolInfo.ProtoReflect.Descriptor instead.
 func (*ToolInfo) Descriptor() ([]byte, []int) {
-	return file_blitz_v1_workspace_proto_rawDescGZIP(), []int{49}
+	return file_blitz_v1_workspace_proto_rawDescGZIP(), []int{51}
 }
 
 func (x *ToolInfo) GetName() string {
@@ -2879,7 +2987,7 @@ type MCPOffer struct {
 
 func (x *MCPOffer) Reset() {
 	*x = MCPOffer{}
-	mi := &file_blitz_v1_workspace_proto_msgTypes[50]
+	mi := &file_blitz_v1_workspace_proto_msgTypes[52]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2891,7 +2999,7 @@ func (x *MCPOffer) String() string {
 func (*MCPOffer) ProtoMessage() {}
 
 func (x *MCPOffer) ProtoReflect() protoreflect.Message {
-	mi := &file_blitz_v1_workspace_proto_msgTypes[50]
+	mi := &file_blitz_v1_workspace_proto_msgTypes[52]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2904,7 +3012,7 @@ func (x *MCPOffer) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MCPOffer.ProtoReflect.Descriptor instead.
 func (*MCPOffer) Descriptor() ([]byte, []int) {
-	return file_blitz_v1_workspace_proto_rawDescGZIP(), []int{50}
+	return file_blitz_v1_workspace_proto_rawDescGZIP(), []int{52}
 }
 
 func (x *MCPOffer) GetServer() string {
@@ -2937,7 +3045,7 @@ type ListToolsRequest struct {
 
 func (x *ListToolsRequest) Reset() {
 	*x = ListToolsRequest{}
-	mi := &file_blitz_v1_workspace_proto_msgTypes[51]
+	mi := &file_blitz_v1_workspace_proto_msgTypes[53]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2949,7 +3057,7 @@ func (x *ListToolsRequest) String() string {
 func (*ListToolsRequest) ProtoMessage() {}
 
 func (x *ListToolsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_blitz_v1_workspace_proto_msgTypes[51]
+	mi := &file_blitz_v1_workspace_proto_msgTypes[53]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2962,7 +3070,7 @@ func (x *ListToolsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListToolsRequest.ProtoReflect.Descriptor instead.
 func (*ListToolsRequest) Descriptor() ([]byte, []int) {
-	return file_blitz_v1_workspace_proto_rawDescGZIP(), []int{51}
+	return file_blitz_v1_workspace_proto_rawDescGZIP(), []int{53}
 }
 
 func (x *ListToolsRequest) GetWorkspace() string {
@@ -2983,7 +3091,7 @@ type ListToolsResponse struct {
 
 func (x *ListToolsResponse) Reset() {
 	*x = ListToolsResponse{}
-	mi := &file_blitz_v1_workspace_proto_msgTypes[52]
+	mi := &file_blitz_v1_workspace_proto_msgTypes[54]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2995,7 +3103,7 @@ func (x *ListToolsResponse) String() string {
 func (*ListToolsResponse) ProtoMessage() {}
 
 func (x *ListToolsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_blitz_v1_workspace_proto_msgTypes[52]
+	mi := &file_blitz_v1_workspace_proto_msgTypes[54]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3008,7 +3116,7 @@ func (x *ListToolsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListToolsResponse.ProtoReflect.Descriptor instead.
 func (*ListToolsResponse) Descriptor() ([]byte, []int) {
-	return file_blitz_v1_workspace_proto_rawDescGZIP(), []int{52}
+	return file_blitz_v1_workspace_proto_rawDescGZIP(), []int{54}
 }
 
 func (x *ListToolsResponse) GetAgent() string {
@@ -3041,7 +3149,7 @@ type ReloadMemoryRequest struct {
 
 func (x *ReloadMemoryRequest) Reset() {
 	*x = ReloadMemoryRequest{}
-	mi := &file_blitz_v1_workspace_proto_msgTypes[53]
+	mi := &file_blitz_v1_workspace_proto_msgTypes[55]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3053,7 +3161,7 @@ func (x *ReloadMemoryRequest) String() string {
 func (*ReloadMemoryRequest) ProtoMessage() {}
 
 func (x *ReloadMemoryRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_blitz_v1_workspace_proto_msgTypes[53]
+	mi := &file_blitz_v1_workspace_proto_msgTypes[55]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3066,7 +3174,7 @@ func (x *ReloadMemoryRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReloadMemoryRequest.ProtoReflect.Descriptor instead.
 func (*ReloadMemoryRequest) Descriptor() ([]byte, []int) {
-	return file_blitz_v1_workspace_proto_rawDescGZIP(), []int{53}
+	return file_blitz_v1_workspace_proto_rawDescGZIP(), []int{55}
 }
 
 func (x *ReloadMemoryRequest) GetWorkspace() string {
@@ -3087,7 +3195,7 @@ type ReloadMemoryResponse struct {
 
 func (x *ReloadMemoryResponse) Reset() {
 	*x = ReloadMemoryResponse{}
-	mi := &file_blitz_v1_workspace_proto_msgTypes[54]
+	mi := &file_blitz_v1_workspace_proto_msgTypes[56]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3099,7 +3207,7 @@ func (x *ReloadMemoryResponse) String() string {
 func (*ReloadMemoryResponse) ProtoMessage() {}
 
 func (x *ReloadMemoryResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_blitz_v1_workspace_proto_msgTypes[54]
+	mi := &file_blitz_v1_workspace_proto_msgTypes[56]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3112,7 +3220,7 @@ func (x *ReloadMemoryResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReloadMemoryResponse.ProtoReflect.Descriptor instead.
 func (*ReloadMemoryResponse) Descriptor() ([]byte, []int) {
-	return file_blitz_v1_workspace_proto_rawDescGZIP(), []int{54}
+	return file_blitz_v1_workspace_proto_rawDescGZIP(), []int{56}
 }
 
 func (x *ReloadMemoryResponse) GetPaths() []string {
@@ -3139,7 +3247,7 @@ type AddMemoryRequest struct {
 
 func (x *AddMemoryRequest) Reset() {
 	*x = AddMemoryRequest{}
-	mi := &file_blitz_v1_workspace_proto_msgTypes[55]
+	mi := &file_blitz_v1_workspace_proto_msgTypes[57]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3151,7 +3259,7 @@ func (x *AddMemoryRequest) String() string {
 func (*AddMemoryRequest) ProtoMessage() {}
 
 func (x *AddMemoryRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_blitz_v1_workspace_proto_msgTypes[55]
+	mi := &file_blitz_v1_workspace_proto_msgTypes[57]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3164,7 +3272,7 @@ func (x *AddMemoryRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AddMemoryRequest.ProtoReflect.Descriptor instead.
 func (*AddMemoryRequest) Descriptor() ([]byte, []int) {
-	return file_blitz_v1_workspace_proto_rawDescGZIP(), []int{55}
+	return file_blitz_v1_workspace_proto_rawDescGZIP(), []int{57}
 }
 
 func (x *AddMemoryRequest) GetWorkspace() string {
@@ -3190,7 +3298,7 @@ type AddMemoryResponse struct {
 
 func (x *AddMemoryResponse) Reset() {
 	*x = AddMemoryResponse{}
-	mi := &file_blitz_v1_workspace_proto_msgTypes[56]
+	mi := &file_blitz_v1_workspace_proto_msgTypes[58]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3202,7 +3310,7 @@ func (x *AddMemoryResponse) String() string {
 func (*AddMemoryResponse) ProtoMessage() {}
 
 func (x *AddMemoryResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_blitz_v1_workspace_proto_msgTypes[56]
+	mi := &file_blitz_v1_workspace_proto_msgTypes[58]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3215,7 +3323,7 @@ func (x *AddMemoryResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AddMemoryResponse.ProtoReflect.Descriptor instead.
 func (*AddMemoryResponse) Descriptor() ([]byte, []int) {
-	return file_blitz_v1_workspace_proto_rawDescGZIP(), []int{56}
+	return file_blitz_v1_workspace_proto_rawDescGZIP(), []int{58}
 }
 
 func (x *AddMemoryResponse) GetPath() string {
@@ -3236,7 +3344,7 @@ type LocaleInfo struct {
 
 func (x *LocaleInfo) Reset() {
 	*x = LocaleInfo{}
-	mi := &file_blitz_v1_workspace_proto_msgTypes[57]
+	mi := &file_blitz_v1_workspace_proto_msgTypes[59]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3248,7 +3356,7 @@ func (x *LocaleInfo) String() string {
 func (*LocaleInfo) ProtoMessage() {}
 
 func (x *LocaleInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_blitz_v1_workspace_proto_msgTypes[57]
+	mi := &file_blitz_v1_workspace_proto_msgTypes[59]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3261,7 +3369,7 @@ func (x *LocaleInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LocaleInfo.ProtoReflect.Descriptor instead.
 func (*LocaleInfo) Descriptor() ([]byte, []int) {
-	return file_blitz_v1_workspace_proto_rawDescGZIP(), []int{57}
+	return file_blitz_v1_workspace_proto_rawDescGZIP(), []int{59}
 }
 
 func (x *LocaleInfo) GetTag() string {
@@ -3287,7 +3395,7 @@ type ListLocalesRequest struct {
 
 func (x *ListLocalesRequest) Reset() {
 	*x = ListLocalesRequest{}
-	mi := &file_blitz_v1_workspace_proto_msgTypes[58]
+	mi := &file_blitz_v1_workspace_proto_msgTypes[60]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3299,7 +3407,7 @@ func (x *ListLocalesRequest) String() string {
 func (*ListLocalesRequest) ProtoMessage() {}
 
 func (x *ListLocalesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_blitz_v1_workspace_proto_msgTypes[58]
+	mi := &file_blitz_v1_workspace_proto_msgTypes[60]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3312,7 +3420,7 @@ func (x *ListLocalesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListLocalesRequest.ProtoReflect.Descriptor instead.
 func (*ListLocalesRequest) Descriptor() ([]byte, []int) {
-	return file_blitz_v1_workspace_proto_rawDescGZIP(), []int{58}
+	return file_blitz_v1_workspace_proto_rawDescGZIP(), []int{60}
 }
 
 func (x *ListLocalesRequest) GetWorkspace() string {
@@ -3333,7 +3441,7 @@ type ListLocalesResponse struct {
 
 func (x *ListLocalesResponse) Reset() {
 	*x = ListLocalesResponse{}
-	mi := &file_blitz_v1_workspace_proto_msgTypes[59]
+	mi := &file_blitz_v1_workspace_proto_msgTypes[61]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3345,7 +3453,7 @@ func (x *ListLocalesResponse) String() string {
 func (*ListLocalesResponse) ProtoMessage() {}
 
 func (x *ListLocalesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_blitz_v1_workspace_proto_msgTypes[59]
+	mi := &file_blitz_v1_workspace_proto_msgTypes[61]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3358,7 +3466,7 @@ func (x *ListLocalesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListLocalesResponse.ProtoReflect.Descriptor instead.
 func (*ListLocalesResponse) Descriptor() ([]byte, []int) {
-	return file_blitz_v1_workspace_proto_rawDescGZIP(), []int{59}
+	return file_blitz_v1_workspace_proto_rawDescGZIP(), []int{61}
 }
 
 func (x *ListLocalesResponse) GetLocales() []*LocaleInfo {
@@ -3386,7 +3494,7 @@ type SetLocaleRequest struct {
 
 func (x *SetLocaleRequest) Reset() {
 	*x = SetLocaleRequest{}
-	mi := &file_blitz_v1_workspace_proto_msgTypes[60]
+	mi := &file_blitz_v1_workspace_proto_msgTypes[62]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3398,7 +3506,7 @@ func (x *SetLocaleRequest) String() string {
 func (*SetLocaleRequest) ProtoMessage() {}
 
 func (x *SetLocaleRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_blitz_v1_workspace_proto_msgTypes[60]
+	mi := &file_blitz_v1_workspace_proto_msgTypes[62]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3411,7 +3519,7 @@ func (x *SetLocaleRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetLocaleRequest.ProtoReflect.Descriptor instead.
 func (*SetLocaleRequest) Descriptor() ([]byte, []int) {
-	return file_blitz_v1_workspace_proto_rawDescGZIP(), []int{60}
+	return file_blitz_v1_workspace_proto_rawDescGZIP(), []int{62}
 }
 
 func (x *SetLocaleRequest) GetWorkspace() string {
@@ -3444,7 +3552,7 @@ type SetLocaleResponse struct {
 
 func (x *SetLocaleResponse) Reset() {
 	*x = SetLocaleResponse{}
-	mi := &file_blitz_v1_workspace_proto_msgTypes[61]
+	mi := &file_blitz_v1_workspace_proto_msgTypes[63]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3456,7 +3564,7 @@ func (x *SetLocaleResponse) String() string {
 func (*SetLocaleResponse) ProtoMessage() {}
 
 func (x *SetLocaleResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_blitz_v1_workspace_proto_msgTypes[61]
+	mi := &file_blitz_v1_workspace_proto_msgTypes[63]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3469,7 +3577,7 @@ func (x *SetLocaleResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetLocaleResponse.ProtoReflect.Descriptor instead.
 func (*SetLocaleResponse) Descriptor() ([]byte, []int) {
-	return file_blitz_v1_workspace_proto_rawDescGZIP(), []int{61}
+	return file_blitz_v1_workspace_proto_rawDescGZIP(), []int{63}
 }
 
 func (x *SetLocaleResponse) GetTag() string {
@@ -3520,7 +3628,7 @@ type Checkpoint struct {
 
 func (x *Checkpoint) Reset() {
 	*x = Checkpoint{}
-	mi := &file_blitz_v1_workspace_proto_msgTypes[62]
+	mi := &file_blitz_v1_workspace_proto_msgTypes[64]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3532,7 +3640,7 @@ func (x *Checkpoint) String() string {
 func (*Checkpoint) ProtoMessage() {}
 
 func (x *Checkpoint) ProtoReflect() protoreflect.Message {
-	mi := &file_blitz_v1_workspace_proto_msgTypes[62]
+	mi := &file_blitz_v1_workspace_proto_msgTypes[64]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3545,7 +3653,7 @@ func (x *Checkpoint) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Checkpoint.ProtoReflect.Descriptor instead.
 func (*Checkpoint) Descriptor() ([]byte, []int) {
-	return file_blitz_v1_workspace_proto_rawDescGZIP(), []int{62}
+	return file_blitz_v1_workspace_proto_rawDescGZIP(), []int{64}
 }
 
 func (x *Checkpoint) GetId() int32 {
@@ -3585,7 +3693,7 @@ type ListCheckpointsRequest struct {
 
 func (x *ListCheckpointsRequest) Reset() {
 	*x = ListCheckpointsRequest{}
-	mi := &file_blitz_v1_workspace_proto_msgTypes[63]
+	mi := &file_blitz_v1_workspace_proto_msgTypes[65]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3597,7 +3705,7 @@ func (x *ListCheckpointsRequest) String() string {
 func (*ListCheckpointsRequest) ProtoMessage() {}
 
 func (x *ListCheckpointsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_blitz_v1_workspace_proto_msgTypes[63]
+	mi := &file_blitz_v1_workspace_proto_msgTypes[65]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3610,7 +3718,7 @@ func (x *ListCheckpointsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListCheckpointsRequest.ProtoReflect.Descriptor instead.
 func (*ListCheckpointsRequest) Descriptor() ([]byte, []int) {
-	return file_blitz_v1_workspace_proto_rawDescGZIP(), []int{63}
+	return file_blitz_v1_workspace_proto_rawDescGZIP(), []int{65}
 }
 
 func (x *ListCheckpointsRequest) GetWorkspace() string {
@@ -3629,7 +3737,7 @@ type ListCheckpointsResponse struct {
 
 func (x *ListCheckpointsResponse) Reset() {
 	*x = ListCheckpointsResponse{}
-	mi := &file_blitz_v1_workspace_proto_msgTypes[64]
+	mi := &file_blitz_v1_workspace_proto_msgTypes[66]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3641,7 +3749,7 @@ func (x *ListCheckpointsResponse) String() string {
 func (*ListCheckpointsResponse) ProtoMessage() {}
 
 func (x *ListCheckpointsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_blitz_v1_workspace_proto_msgTypes[64]
+	mi := &file_blitz_v1_workspace_proto_msgTypes[66]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3654,7 +3762,7 @@ func (x *ListCheckpointsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListCheckpointsResponse.ProtoReflect.Descriptor instead.
 func (*ListCheckpointsResponse) Descriptor() ([]byte, []int) {
-	return file_blitz_v1_workspace_proto_rawDescGZIP(), []int{64}
+	return file_blitz_v1_workspace_proto_rawDescGZIP(), []int{66}
 }
 
 func (x *ListCheckpointsResponse) GetCheckpoints() []*Checkpoint {
@@ -3675,7 +3783,7 @@ type UndoRequest struct {
 
 func (x *UndoRequest) Reset() {
 	*x = UndoRequest{}
-	mi := &file_blitz_v1_workspace_proto_msgTypes[65]
+	mi := &file_blitz_v1_workspace_proto_msgTypes[67]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3687,7 +3795,7 @@ func (x *UndoRequest) String() string {
 func (*UndoRequest) ProtoMessage() {}
 
 func (x *UndoRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_blitz_v1_workspace_proto_msgTypes[65]
+	mi := &file_blitz_v1_workspace_proto_msgTypes[67]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3700,7 +3808,7 @@ func (x *UndoRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UndoRequest.ProtoReflect.Descriptor instead.
 func (*UndoRequest) Descriptor() ([]byte, []int) {
-	return file_blitz_v1_workspace_proto_rawDescGZIP(), []int{65}
+	return file_blitz_v1_workspace_proto_rawDescGZIP(), []int{67}
 }
 
 func (x *UndoRequest) GetWorkspace() string {
@@ -3729,7 +3837,7 @@ type UndoResponse struct {
 
 func (x *UndoResponse) Reset() {
 	*x = UndoResponse{}
-	mi := &file_blitz_v1_workspace_proto_msgTypes[66]
+	mi := &file_blitz_v1_workspace_proto_msgTypes[68]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3741,7 +3849,7 @@ func (x *UndoResponse) String() string {
 func (*UndoResponse) ProtoMessage() {}
 
 func (x *UndoResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_blitz_v1_workspace_proto_msgTypes[66]
+	mi := &file_blitz_v1_workspace_proto_msgTypes[68]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3754,7 +3862,7 @@ func (x *UndoResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UndoResponse.ProtoReflect.Descriptor instead.
 func (*UndoResponse) Descriptor() ([]byte, []int) {
-	return file_blitz_v1_workspace_proto_rawDescGZIP(), []int{66}
+	return file_blitz_v1_workspace_proto_rawDescGZIP(), []int{68}
 }
 
 func (x *UndoResponse) GetLabel() string {
@@ -3791,7 +3899,7 @@ type GetDiffRequest struct {
 
 func (x *GetDiffRequest) Reset() {
 	*x = GetDiffRequest{}
-	mi := &file_blitz_v1_workspace_proto_msgTypes[67]
+	mi := &file_blitz_v1_workspace_proto_msgTypes[69]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3803,7 +3911,7 @@ func (x *GetDiffRequest) String() string {
 func (*GetDiffRequest) ProtoMessage() {}
 
 func (x *GetDiffRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_blitz_v1_workspace_proto_msgTypes[67]
+	mi := &file_blitz_v1_workspace_proto_msgTypes[69]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3816,7 +3924,7 @@ func (x *GetDiffRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetDiffRequest.ProtoReflect.Descriptor instead.
 func (*GetDiffRequest) Descriptor() ([]byte, []int) {
-	return file_blitz_v1_workspace_proto_rawDescGZIP(), []int{67}
+	return file_blitz_v1_workspace_proto_rawDescGZIP(), []int{69}
 }
 
 func (x *GetDiffRequest) GetWorkspace() string {
@@ -3850,7 +3958,7 @@ type GetDiffResponse struct {
 
 func (x *GetDiffResponse) Reset() {
 	*x = GetDiffResponse{}
-	mi := &file_blitz_v1_workspace_proto_msgTypes[68]
+	mi := &file_blitz_v1_workspace_proto_msgTypes[70]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3862,7 +3970,7 @@ func (x *GetDiffResponse) String() string {
 func (*GetDiffResponse) ProtoMessage() {}
 
 func (x *GetDiffResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_blitz_v1_workspace_proto_msgTypes[68]
+	mi := &file_blitz_v1_workspace_proto_msgTypes[70]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3875,7 +3983,7 @@ func (x *GetDiffResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetDiffResponse.ProtoReflect.Descriptor instead.
 func (*GetDiffResponse) Descriptor() ([]byte, []int) {
-	return file_blitz_v1_workspace_proto_rawDescGZIP(), []int{68}
+	return file_blitz_v1_workspace_proto_rawDescGZIP(), []int{70}
 }
 
 func (x *GetDiffResponse) GetDiff() string {
@@ -3905,7 +4013,7 @@ type Approval struct {
 
 func (x *Approval) Reset() {
 	*x = Approval{}
-	mi := &file_blitz_v1_workspace_proto_msgTypes[69]
+	mi := &file_blitz_v1_workspace_proto_msgTypes[71]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3917,7 +4025,7 @@ func (x *Approval) String() string {
 func (*Approval) ProtoMessage() {}
 
 func (x *Approval) ProtoReflect() protoreflect.Message {
-	mi := &file_blitz_v1_workspace_proto_msgTypes[69]
+	mi := &file_blitz_v1_workspace_proto_msgTypes[71]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3930,7 +4038,7 @@ func (x *Approval) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Approval.ProtoReflect.Descriptor instead.
 func (*Approval) Descriptor() ([]byte, []int) {
-	return file_blitz_v1_workspace_proto_rawDescGZIP(), []int{69}
+	return file_blitz_v1_workspace_proto_rawDescGZIP(), []int{71}
 }
 
 func (x *Approval) GetKey() string {
@@ -3984,7 +4092,7 @@ type ListApprovalsRequest struct {
 
 func (x *ListApprovalsRequest) Reset() {
 	*x = ListApprovalsRequest{}
-	mi := &file_blitz_v1_workspace_proto_msgTypes[70]
+	mi := &file_blitz_v1_workspace_proto_msgTypes[72]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3996,7 +4104,7 @@ func (x *ListApprovalsRequest) String() string {
 func (*ListApprovalsRequest) ProtoMessage() {}
 
 func (x *ListApprovalsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_blitz_v1_workspace_proto_msgTypes[70]
+	mi := &file_blitz_v1_workspace_proto_msgTypes[72]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4009,7 +4117,7 @@ func (x *ListApprovalsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListApprovalsRequest.ProtoReflect.Descriptor instead.
 func (*ListApprovalsRequest) Descriptor() ([]byte, []int) {
-	return file_blitz_v1_workspace_proto_rawDescGZIP(), []int{70}
+	return file_blitz_v1_workspace_proto_rawDescGZIP(), []int{72}
 }
 
 func (x *ListApprovalsRequest) GetWorkspace() string {
@@ -4028,7 +4136,7 @@ type ListApprovalsResponse struct {
 
 func (x *ListApprovalsResponse) Reset() {
 	*x = ListApprovalsResponse{}
-	mi := &file_blitz_v1_workspace_proto_msgTypes[71]
+	mi := &file_blitz_v1_workspace_proto_msgTypes[73]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4040,7 +4148,7 @@ func (x *ListApprovalsResponse) String() string {
 func (*ListApprovalsResponse) ProtoMessage() {}
 
 func (x *ListApprovalsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_blitz_v1_workspace_proto_msgTypes[71]
+	mi := &file_blitz_v1_workspace_proto_msgTypes[73]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4053,7 +4161,7 @@ func (x *ListApprovalsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListApprovalsResponse.ProtoReflect.Descriptor instead.
 func (*ListApprovalsResponse) Descriptor() ([]byte, []int) {
-	return file_blitz_v1_workspace_proto_rawDescGZIP(), []int{71}
+	return file_blitz_v1_workspace_proto_rawDescGZIP(), []int{73}
 }
 
 func (x *ListApprovalsResponse) GetApprovals() []*Approval {
@@ -4075,7 +4183,7 @@ type RevokeApprovalsRequest struct {
 
 func (x *RevokeApprovalsRequest) Reset() {
 	*x = RevokeApprovalsRequest{}
-	mi := &file_blitz_v1_workspace_proto_msgTypes[72]
+	mi := &file_blitz_v1_workspace_proto_msgTypes[74]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4087,7 +4195,7 @@ func (x *RevokeApprovalsRequest) String() string {
 func (*RevokeApprovalsRequest) ProtoMessage() {}
 
 func (x *RevokeApprovalsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_blitz_v1_workspace_proto_msgTypes[72]
+	mi := &file_blitz_v1_workspace_proto_msgTypes[74]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4100,7 +4208,7 @@ func (x *RevokeApprovalsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RevokeApprovalsRequest.ProtoReflect.Descriptor instead.
 func (*RevokeApprovalsRequest) Descriptor() ([]byte, []int) {
-	return file_blitz_v1_workspace_proto_rawDescGZIP(), []int{72}
+	return file_blitz_v1_workspace_proto_rawDescGZIP(), []int{74}
 }
 
 func (x *RevokeApprovalsRequest) GetWorkspace() string {
@@ -4133,7 +4241,7 @@ type RevokeApprovalsResponse struct {
 
 func (x *RevokeApprovalsResponse) Reset() {
 	*x = RevokeApprovalsResponse{}
-	mi := &file_blitz_v1_workspace_proto_msgTypes[73]
+	mi := &file_blitz_v1_workspace_proto_msgTypes[75]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4145,7 +4253,7 @@ func (x *RevokeApprovalsResponse) String() string {
 func (*RevokeApprovalsResponse) ProtoMessage() {}
 
 func (x *RevokeApprovalsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_blitz_v1_workspace_proto_msgTypes[73]
+	mi := &file_blitz_v1_workspace_proto_msgTypes[75]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4158,7 +4266,7 @@ func (x *RevokeApprovalsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RevokeApprovalsResponse.ProtoReflect.Descriptor instead.
 func (*RevokeApprovalsResponse) Descriptor() ([]byte, []int) {
-	return file_blitz_v1_workspace_proto_rawDescGZIP(), []int{73}
+	return file_blitz_v1_workspace_proto_rawDescGZIP(), []int{75}
 }
 
 func (x *RevokeApprovalsResponse) GetRevoked() int32 {
@@ -4187,7 +4295,7 @@ type Image struct {
 
 func (x *Image) Reset() {
 	*x = Image{}
-	mi := &file_blitz_v1_workspace_proto_msgTypes[74]
+	mi := &file_blitz_v1_workspace_proto_msgTypes[76]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4199,7 +4307,7 @@ func (x *Image) String() string {
 func (*Image) ProtoMessage() {}
 
 func (x *Image) ProtoReflect() protoreflect.Message {
-	mi := &file_blitz_v1_workspace_proto_msgTypes[74]
+	mi := &file_blitz_v1_workspace_proto_msgTypes[76]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4212,7 +4320,7 @@ func (x *Image) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Image.ProtoReflect.Descriptor instead.
 func (*Image) Descriptor() ([]byte, []int) {
-	return file_blitz_v1_workspace_proto_rawDescGZIP(), []int{74}
+	return file_blitz_v1_workspace_proto_rawDescGZIP(), []int{76}
 }
 
 func (x *Image) GetId() string {
@@ -4275,7 +4383,7 @@ type LoadImageRequest struct {
 
 func (x *LoadImageRequest) Reset() {
 	*x = LoadImageRequest{}
-	mi := &file_blitz_v1_workspace_proto_msgTypes[75]
+	mi := &file_blitz_v1_workspace_proto_msgTypes[77]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4287,7 +4395,7 @@ func (x *LoadImageRequest) String() string {
 func (*LoadImageRequest) ProtoMessage() {}
 
 func (x *LoadImageRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_blitz_v1_workspace_proto_msgTypes[75]
+	mi := &file_blitz_v1_workspace_proto_msgTypes[77]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4300,7 +4408,7 @@ func (x *LoadImageRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LoadImageRequest.ProtoReflect.Descriptor instead.
 func (*LoadImageRequest) Descriptor() ([]byte, []int) {
-	return file_blitz_v1_workspace_proto_rawDescGZIP(), []int{75}
+	return file_blitz_v1_workspace_proto_rawDescGZIP(), []int{77}
 }
 
 func (x *LoadImageRequest) GetWorkspace() string {
@@ -4326,7 +4434,7 @@ type LoadImageResponse struct {
 
 func (x *LoadImageResponse) Reset() {
 	*x = LoadImageResponse{}
-	mi := &file_blitz_v1_workspace_proto_msgTypes[76]
+	mi := &file_blitz_v1_workspace_proto_msgTypes[78]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4338,7 +4446,7 @@ func (x *LoadImageResponse) String() string {
 func (*LoadImageResponse) ProtoMessage() {}
 
 func (x *LoadImageResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_blitz_v1_workspace_proto_msgTypes[76]
+	mi := &file_blitz_v1_workspace_proto_msgTypes[78]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4351,7 +4459,7 @@ func (x *LoadImageResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LoadImageResponse.ProtoReflect.Descriptor instead.
 func (*LoadImageResponse) Descriptor() ([]byte, []int) {
-	return file_blitz_v1_workspace_proto_rawDescGZIP(), []int{76}
+	return file_blitz_v1_workspace_proto_rawDescGZIP(), []int{78}
 }
 
 func (x *LoadImageResponse) GetImage() *Image {
@@ -4372,7 +4480,7 @@ type AddImageRequest struct {
 
 func (x *AddImageRequest) Reset() {
 	*x = AddImageRequest{}
-	mi := &file_blitz_v1_workspace_proto_msgTypes[77]
+	mi := &file_blitz_v1_workspace_proto_msgTypes[79]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4384,7 +4492,7 @@ func (x *AddImageRequest) String() string {
 func (*AddImageRequest) ProtoMessage() {}
 
 func (x *AddImageRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_blitz_v1_workspace_proto_msgTypes[77]
+	mi := &file_blitz_v1_workspace_proto_msgTypes[79]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4397,7 +4505,7 @@ func (x *AddImageRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AddImageRequest.ProtoReflect.Descriptor instead.
 func (*AddImageRequest) Descriptor() ([]byte, []int) {
-	return file_blitz_v1_workspace_proto_rawDescGZIP(), []int{77}
+	return file_blitz_v1_workspace_proto_rawDescGZIP(), []int{79}
 }
 
 func (x *AddImageRequest) GetWorkspace() string {
@@ -4430,7 +4538,7 @@ type AddImageResponse struct {
 
 func (x *AddImageResponse) Reset() {
 	*x = AddImageResponse{}
-	mi := &file_blitz_v1_workspace_proto_msgTypes[78]
+	mi := &file_blitz_v1_workspace_proto_msgTypes[80]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4442,7 +4550,7 @@ func (x *AddImageResponse) String() string {
 func (*AddImageResponse) ProtoMessage() {}
 
 func (x *AddImageResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_blitz_v1_workspace_proto_msgTypes[78]
+	mi := &file_blitz_v1_workspace_proto_msgTypes[80]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4455,7 +4563,7 @@ func (x *AddImageResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AddImageResponse.ProtoReflect.Descriptor instead.
 func (*AddImageResponse) Descriptor() ([]byte, []int) {
-	return file_blitz_v1_workspace_proto_rawDescGZIP(), []int{78}
+	return file_blitz_v1_workspace_proto_rawDescGZIP(), []int{80}
 }
 
 func (x *AddImageResponse) GetImage() *Image {
@@ -4476,7 +4584,7 @@ type Link struct {
 
 func (x *Link) Reset() {
 	*x = Link{}
-	mi := &file_blitz_v1_workspace_proto_msgTypes[79]
+	mi := &file_blitz_v1_workspace_proto_msgTypes[81]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4488,7 +4596,7 @@ func (x *Link) String() string {
 func (*Link) ProtoMessage() {}
 
 func (x *Link) ProtoReflect() protoreflect.Message {
-	mi := &file_blitz_v1_workspace_proto_msgTypes[79]
+	mi := &file_blitz_v1_workspace_proto_msgTypes[81]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4501,7 +4609,7 @@ func (x *Link) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Link.ProtoReflect.Descriptor instead.
 func (*Link) Descriptor() ([]byte, []int) {
-	return file_blitz_v1_workspace_proto_rawDescGZIP(), []int{79}
+	return file_blitz_v1_workspace_proto_rawDescGZIP(), []int{81}
 }
 
 func (x *Link) GetTitle() string {
@@ -4527,7 +4635,7 @@ type GetSearchProviderRequest struct {
 
 func (x *GetSearchProviderRequest) Reset() {
 	*x = GetSearchProviderRequest{}
-	mi := &file_blitz_v1_workspace_proto_msgTypes[80]
+	mi := &file_blitz_v1_workspace_proto_msgTypes[82]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4539,7 +4647,7 @@ func (x *GetSearchProviderRequest) String() string {
 func (*GetSearchProviderRequest) ProtoMessage() {}
 
 func (x *GetSearchProviderRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_blitz_v1_workspace_proto_msgTypes[80]
+	mi := &file_blitz_v1_workspace_proto_msgTypes[82]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4552,7 +4660,7 @@ func (x *GetSearchProviderRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetSearchProviderRequest.ProtoReflect.Descriptor instead.
 func (*GetSearchProviderRequest) Descriptor() ([]byte, []int) {
-	return file_blitz_v1_workspace_proto_rawDescGZIP(), []int{80}
+	return file_blitz_v1_workspace_proto_rawDescGZIP(), []int{82}
 }
 
 func (x *GetSearchProviderRequest) GetWorkspace() string {
@@ -4571,7 +4679,7 @@ type GetSearchProviderResponse struct {
 
 func (x *GetSearchProviderResponse) Reset() {
 	*x = GetSearchProviderResponse{}
-	mi := &file_blitz_v1_workspace_proto_msgTypes[81]
+	mi := &file_blitz_v1_workspace_proto_msgTypes[83]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4583,7 +4691,7 @@ func (x *GetSearchProviderResponse) String() string {
 func (*GetSearchProviderResponse) ProtoMessage() {}
 
 func (x *GetSearchProviderResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_blitz_v1_workspace_proto_msgTypes[81]
+	mi := &file_blitz_v1_workspace_proto_msgTypes[83]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4596,7 +4704,7 @@ func (x *GetSearchProviderResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetSearchProviderResponse.ProtoReflect.Descriptor instead.
 func (*GetSearchProviderResponse) Descriptor() ([]byte, []int) {
-	return file_blitz_v1_workspace_proto_rawDescGZIP(), []int{81}
+	return file_blitz_v1_workspace_proto_rawDescGZIP(), []int{83}
 }
 
 func (x *GetSearchProviderResponse) GetProvider() string {
@@ -4616,7 +4724,7 @@ type SearchWebRequest struct {
 
 func (x *SearchWebRequest) Reset() {
 	*x = SearchWebRequest{}
-	mi := &file_blitz_v1_workspace_proto_msgTypes[82]
+	mi := &file_blitz_v1_workspace_proto_msgTypes[84]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4628,7 +4736,7 @@ func (x *SearchWebRequest) String() string {
 func (*SearchWebRequest) ProtoMessage() {}
 
 func (x *SearchWebRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_blitz_v1_workspace_proto_msgTypes[82]
+	mi := &file_blitz_v1_workspace_proto_msgTypes[84]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4641,7 +4749,7 @@ func (x *SearchWebRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SearchWebRequest.ProtoReflect.Descriptor instead.
 func (*SearchWebRequest) Descriptor() ([]byte, []int) {
-	return file_blitz_v1_workspace_proto_rawDescGZIP(), []int{82}
+	return file_blitz_v1_workspace_proto_rawDescGZIP(), []int{84}
 }
 
 func (x *SearchWebRequest) GetWorkspace() string {
@@ -4671,7 +4779,7 @@ type SearchWebResponse struct {
 
 func (x *SearchWebResponse) Reset() {
 	*x = SearchWebResponse{}
-	mi := &file_blitz_v1_workspace_proto_msgTypes[83]
+	mi := &file_blitz_v1_workspace_proto_msgTypes[85]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4683,7 +4791,7 @@ func (x *SearchWebResponse) String() string {
 func (*SearchWebResponse) ProtoMessage() {}
 
 func (x *SearchWebResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_blitz_v1_workspace_proto_msgTypes[83]
+	mi := &file_blitz_v1_workspace_proto_msgTypes[85]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4696,7 +4804,7 @@ func (x *SearchWebResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SearchWebResponse.ProtoReflect.Descriptor instead.
 func (*SearchWebResponse) Descriptor() ([]byte, []int) {
-	return file_blitz_v1_workspace_proto_rawDescGZIP(), []int{83}
+	return file_blitz_v1_workspace_proto_rawDescGZIP(), []int{85}
 }
 
 func (x *SearchWebResponse) GetProvider() string {
@@ -4820,16 +4928,22 @@ const file_blitz_v1_workspace_proto_rawDesc = "" +
 	"\vunsupported\x18\x02 \x03(\tR\vunsupported\x12%\n" +
 	"\x05saved\x18\x03 \x01(\v2\x0f.blitz.v1.SavedR\x05saved\"2\n" +
 	"\x12GetSettingsRequest\x12\x1c\n" +
-	"\tworkspace\x18\x01 \x01(\tR\tworkspace\"\xd8\x01\n" +
+	"\tworkspace\x18\x01 \x01(\tR\tworkspace\"\x81\x02\n" +
 	"\x13GetSettingsResponse\x12\x16\n" +
 	"\x06agency\x18\x03 \x01(\tR\x06agency\x12\x14\n" +
 	"\x05model\x18\x04 \x01(\tR\x05model\x12\x1a\n" +
 	"\bprovider\x18\x05 \x01(\tR\bprovider\x12\x14\n" +
 	"\x05agent\x18\x06 \x01(\tR\x05agent\x12\x16\n" +
 	"\x06locale\x18\a \x01(\tR\x06locale\x12%\n" +
-	"\x0eimages_enabled\x18\b \x01(\bR\rimagesEnabledJ\x04\b\x01\x10\x02J\x04\b\x02\x10\x03R\n" +
+	"\x0eimages_enabled\x18\b \x01(\bR\rimagesEnabled\x12'\n" +
+	"\x0fpermission_mode\x18\t \x01(\tR\x0epermissionModeJ\x04\b\x01\x10\x02J\x04\b\x02\x10\x03R\n" +
 	"puppy_nameR\n" +
-	"owner_name\"Y\n" +
+	"owner_name\"L\n" +
+	"\x18SetPermissionModeRequest\x12\x1c\n" +
+	"\tworkspace\x18\x01 \x01(\tR\tworkspace\x12\x12\n" +
+	"\x04mode\x18\x02 \x01(\tR\x04mode\"/\n" +
+	"\x19SetPermissionModeResponse\x12\x12\n" +
+	"\x04mode\x18\x01 \x01(\tR\x04mode\"Y\n" +
 	"\x11SetSettingRequest\x12\x1c\n" +
 	"\tworkspace\x18\x01 \x01(\tR\tworkspace\x12\x10\n" +
 	"\x03key\x18\x02 \x01(\tR\x03key\x12\x14\n" +
@@ -5026,7 +5140,7 @@ const file_blitz_v1_workspace_proto_rawDesc = "" +
 	"\x11SearchWebResponse\x12\x1a\n" +
 	"\bprovider\x18\x01 \x01(\tR\bprovider\x12$\n" +
 	"\x05links\x18\x02 \x03(\v2\x0e.blitz.v1.LinkR\x05links\x12\x16\n" +
-	"\x06prompt\x18\x03 \x01(\tR\x06prompt2\xba\x13\n" +
+	"\x06prompt\x18\x03 \x01(\tR\x06prompt2\x98\x14\n" +
 	"\x10WorkspaceService\x12S\n" +
 	"\x0eListWorkspaces\x12\x1f.blitz.v1.ListWorkspacesRequest\x1a .blitz.v1.ListWorkspacesResponse\x12S\n" +
 	"\x0eCloseWorkspace\x12\x1f.blitz.v1.CloseWorkspaceRequest\x1a .blitz.v1.CloseWorkspaceResponse\x12G\n" +
@@ -5044,7 +5158,8 @@ const file_blitz_v1_workspace_proto_rawDesc = "" +
 	"\x13UpdateModelSettings\x12$.blitz.v1.UpdateModelSettingsRequest\x1a%.blitz.v1.UpdateModelSettingsResponse\x12J\n" +
 	"\vGetSettings\x12\x1c.blitz.v1.GetSettingsRequest\x1a\x1d.blitz.v1.GetSettingsResponse\x12G\n" +
 	"\n" +
-	"SetSetting\x12\x1b.blitz.v1.SetSettingRequest\x1a\x1c.blitz.v1.SetSettingResponse\x12G\n" +
+	"SetSetting\x12\x1b.blitz.v1.SetSettingRequest\x1a\x1c.blitz.v1.SetSettingResponse\x12\\\n" +
+	"\x11SetPermissionMode\x12\".blitz.v1.SetPermissionModeRequest\x1a#.blitz.v1.SetPermissionModeResponse\x12G\n" +
 	"\n" +
 	"ListSkills\x12\x1b.blitz.v1.ListSkillsRequest\x1a\x1c.blitz.v1.ListSkillsResponse\x12A\n" +
 	"\bGetSkill\x12\x19.blitz.v1.GetSkillRequest\x1a\x1a.blitz.v1.GetSkillResponse\x12A\n" +
@@ -5080,7 +5195,7 @@ func file_blitz_v1_workspace_proto_rawDescGZIP() []byte {
 	return file_blitz_v1_workspace_proto_rawDescData
 }
 
-var file_blitz_v1_workspace_proto_msgTypes = make([]protoimpl.MessageInfo, 85)
+var file_blitz_v1_workspace_proto_msgTypes = make([]protoimpl.MessageInfo, 87)
 var file_blitz_v1_workspace_proto_goTypes = []any{
 	(*Saved)(nil),                       // 0: blitz.v1.Saved
 	(*ListWorkspacesRequest)(nil),       // 1: blitz.v1.ListWorkspacesRequest
@@ -5111,65 +5226,67 @@ var file_blitz_v1_workspace_proto_goTypes = []any{
 	(*UpdateModelSettingsResponse)(nil), // 26: blitz.v1.UpdateModelSettingsResponse
 	(*GetSettingsRequest)(nil),          // 27: blitz.v1.GetSettingsRequest
 	(*GetSettingsResponse)(nil),         // 28: blitz.v1.GetSettingsResponse
-	(*SetSettingRequest)(nil),           // 29: blitz.v1.SetSettingRequest
-	(*SetSettingResponse)(nil),          // 30: blitz.v1.SetSettingResponse
-	(*SkillInfo)(nil),                   // 31: blitz.v1.SkillInfo
-	(*SkillTool)(nil),                   // 32: blitz.v1.SkillTool
-	(*SkillScript)(nil),                 // 33: blitz.v1.SkillScript
-	(*ListSkillsRequest)(nil),           // 34: blitz.v1.ListSkillsRequest
-	(*ListSkillsResponse)(nil),          // 35: blitz.v1.ListSkillsResponse
-	(*GetSkillRequest)(nil),             // 36: blitz.v1.GetSkillRequest
-	(*GetSkillResponse)(nil),            // 37: blitz.v1.GetSkillResponse
-	(*Env)(nil),                         // 38: blitz.v1.Env
-	(*ListEnvsRequest)(nil),             // 39: blitz.v1.ListEnvsRequest
-	(*ListEnvsResponse)(nil),            // 40: blitz.v1.ListEnvsResponse
-	(*RemoveEnvRequest)(nil),            // 41: blitz.v1.RemoveEnvRequest
-	(*RemoveEnvResponse)(nil),           // 42: blitz.v1.RemoveEnvResponse
-	(*PruneEnvsRequest)(nil),            // 43: blitz.v1.PruneEnvsRequest
-	(*EnvError)(nil),                    // 44: blitz.v1.EnvError
-	(*PruneEnvsResponse)(nil),           // 45: blitz.v1.PruneEnvsResponse
-	(*MCPServer)(nil),                   // 46: blitz.v1.MCPServer
-	(*ListMCPServersRequest)(nil),       // 47: blitz.v1.ListMCPServersRequest
-	(*ListMCPServersResponse)(nil),      // 48: blitz.v1.ListMCPServersResponse
-	(*ToolInfo)(nil),                    // 49: blitz.v1.ToolInfo
-	(*MCPOffer)(nil),                    // 50: blitz.v1.MCPOffer
-	(*ListToolsRequest)(nil),            // 51: blitz.v1.ListToolsRequest
-	(*ListToolsResponse)(nil),           // 52: blitz.v1.ListToolsResponse
-	(*ReloadMemoryRequest)(nil),         // 53: blitz.v1.ReloadMemoryRequest
-	(*ReloadMemoryResponse)(nil),        // 54: blitz.v1.ReloadMemoryResponse
-	(*AddMemoryRequest)(nil),            // 55: blitz.v1.AddMemoryRequest
-	(*AddMemoryResponse)(nil),           // 56: blitz.v1.AddMemoryResponse
-	(*LocaleInfo)(nil),                  // 57: blitz.v1.LocaleInfo
-	(*ListLocalesRequest)(nil),          // 58: blitz.v1.ListLocalesRequest
-	(*ListLocalesResponse)(nil),         // 59: blitz.v1.ListLocalesResponse
-	(*SetLocaleRequest)(nil),            // 60: blitz.v1.SetLocaleRequest
-	(*SetLocaleResponse)(nil),           // 61: blitz.v1.SetLocaleResponse
-	(*Checkpoint)(nil),                  // 62: blitz.v1.Checkpoint
-	(*ListCheckpointsRequest)(nil),      // 63: blitz.v1.ListCheckpointsRequest
-	(*ListCheckpointsResponse)(nil),     // 64: blitz.v1.ListCheckpointsResponse
-	(*UndoRequest)(nil),                 // 65: blitz.v1.UndoRequest
-	(*UndoResponse)(nil),                // 66: blitz.v1.UndoResponse
-	(*GetDiffRequest)(nil),              // 67: blitz.v1.GetDiffRequest
-	(*GetDiffResponse)(nil),             // 68: blitz.v1.GetDiffResponse
-	(*Approval)(nil),                    // 69: blitz.v1.Approval
-	(*ListApprovalsRequest)(nil),        // 70: blitz.v1.ListApprovalsRequest
-	(*ListApprovalsResponse)(nil),       // 71: blitz.v1.ListApprovalsResponse
-	(*RevokeApprovalsRequest)(nil),      // 72: blitz.v1.RevokeApprovalsRequest
-	(*RevokeApprovalsResponse)(nil),     // 73: blitz.v1.RevokeApprovalsResponse
-	(*Image)(nil),                       // 74: blitz.v1.Image
-	(*LoadImageRequest)(nil),            // 75: blitz.v1.LoadImageRequest
-	(*LoadImageResponse)(nil),           // 76: blitz.v1.LoadImageResponse
-	(*AddImageRequest)(nil),             // 77: blitz.v1.AddImageRequest
-	(*AddImageResponse)(nil),            // 78: blitz.v1.AddImageResponse
-	(*Link)(nil),                        // 79: blitz.v1.Link
-	(*GetSearchProviderRequest)(nil),    // 80: blitz.v1.GetSearchProviderRequest
-	(*GetSearchProviderResponse)(nil),   // 81: blitz.v1.GetSearchProviderResponse
-	(*SearchWebRequest)(nil),            // 82: blitz.v1.SearchWebRequest
-	(*SearchWebResponse)(nil),           // 83: blitz.v1.SearchWebResponse
-	nil,                                 // 84: blitz.v1.GetModelSettingsResponse.AllEntry
-	(*durationpb.Duration)(nil),         // 85: google.protobuf.Duration
-	(*timestamppb.Timestamp)(nil),       // 86: google.protobuf.Timestamp
-	(*ErrorInfo)(nil),                   // 87: blitz.v1.ErrorInfo
+	(*SetPermissionModeRequest)(nil),    // 29: blitz.v1.SetPermissionModeRequest
+	(*SetPermissionModeResponse)(nil),   // 30: blitz.v1.SetPermissionModeResponse
+	(*SetSettingRequest)(nil),           // 31: blitz.v1.SetSettingRequest
+	(*SetSettingResponse)(nil),          // 32: blitz.v1.SetSettingResponse
+	(*SkillInfo)(nil),                   // 33: blitz.v1.SkillInfo
+	(*SkillTool)(nil),                   // 34: blitz.v1.SkillTool
+	(*SkillScript)(nil),                 // 35: blitz.v1.SkillScript
+	(*ListSkillsRequest)(nil),           // 36: blitz.v1.ListSkillsRequest
+	(*ListSkillsResponse)(nil),          // 37: blitz.v1.ListSkillsResponse
+	(*GetSkillRequest)(nil),             // 38: blitz.v1.GetSkillRequest
+	(*GetSkillResponse)(nil),            // 39: blitz.v1.GetSkillResponse
+	(*Env)(nil),                         // 40: blitz.v1.Env
+	(*ListEnvsRequest)(nil),             // 41: blitz.v1.ListEnvsRequest
+	(*ListEnvsResponse)(nil),            // 42: blitz.v1.ListEnvsResponse
+	(*RemoveEnvRequest)(nil),            // 43: blitz.v1.RemoveEnvRequest
+	(*RemoveEnvResponse)(nil),           // 44: blitz.v1.RemoveEnvResponse
+	(*PruneEnvsRequest)(nil),            // 45: blitz.v1.PruneEnvsRequest
+	(*EnvError)(nil),                    // 46: blitz.v1.EnvError
+	(*PruneEnvsResponse)(nil),           // 47: blitz.v1.PruneEnvsResponse
+	(*MCPServer)(nil),                   // 48: blitz.v1.MCPServer
+	(*ListMCPServersRequest)(nil),       // 49: blitz.v1.ListMCPServersRequest
+	(*ListMCPServersResponse)(nil),      // 50: blitz.v1.ListMCPServersResponse
+	(*ToolInfo)(nil),                    // 51: blitz.v1.ToolInfo
+	(*MCPOffer)(nil),                    // 52: blitz.v1.MCPOffer
+	(*ListToolsRequest)(nil),            // 53: blitz.v1.ListToolsRequest
+	(*ListToolsResponse)(nil),           // 54: blitz.v1.ListToolsResponse
+	(*ReloadMemoryRequest)(nil),         // 55: blitz.v1.ReloadMemoryRequest
+	(*ReloadMemoryResponse)(nil),        // 56: blitz.v1.ReloadMemoryResponse
+	(*AddMemoryRequest)(nil),            // 57: blitz.v1.AddMemoryRequest
+	(*AddMemoryResponse)(nil),           // 58: blitz.v1.AddMemoryResponse
+	(*LocaleInfo)(nil),                  // 59: blitz.v1.LocaleInfo
+	(*ListLocalesRequest)(nil),          // 60: blitz.v1.ListLocalesRequest
+	(*ListLocalesResponse)(nil),         // 61: blitz.v1.ListLocalesResponse
+	(*SetLocaleRequest)(nil),            // 62: blitz.v1.SetLocaleRequest
+	(*SetLocaleResponse)(nil),           // 63: blitz.v1.SetLocaleResponse
+	(*Checkpoint)(nil),                  // 64: blitz.v1.Checkpoint
+	(*ListCheckpointsRequest)(nil),      // 65: blitz.v1.ListCheckpointsRequest
+	(*ListCheckpointsResponse)(nil),     // 66: blitz.v1.ListCheckpointsResponse
+	(*UndoRequest)(nil),                 // 67: blitz.v1.UndoRequest
+	(*UndoResponse)(nil),                // 68: blitz.v1.UndoResponse
+	(*GetDiffRequest)(nil),              // 69: blitz.v1.GetDiffRequest
+	(*GetDiffResponse)(nil),             // 70: blitz.v1.GetDiffResponse
+	(*Approval)(nil),                    // 71: blitz.v1.Approval
+	(*ListApprovalsRequest)(nil),        // 72: blitz.v1.ListApprovalsRequest
+	(*ListApprovalsResponse)(nil),       // 73: blitz.v1.ListApprovalsResponse
+	(*RevokeApprovalsRequest)(nil),      // 74: blitz.v1.RevokeApprovalsRequest
+	(*RevokeApprovalsResponse)(nil),     // 75: blitz.v1.RevokeApprovalsResponse
+	(*Image)(nil),                       // 76: blitz.v1.Image
+	(*LoadImageRequest)(nil),            // 77: blitz.v1.LoadImageRequest
+	(*LoadImageResponse)(nil),           // 78: blitz.v1.LoadImageResponse
+	(*AddImageRequest)(nil),             // 79: blitz.v1.AddImageRequest
+	(*AddImageResponse)(nil),            // 80: blitz.v1.AddImageResponse
+	(*Link)(nil),                        // 81: blitz.v1.Link
+	(*GetSearchProviderRequest)(nil),    // 82: blitz.v1.GetSearchProviderRequest
+	(*GetSearchProviderResponse)(nil),   // 83: blitz.v1.GetSearchProviderResponse
+	(*SearchWebRequest)(nil),            // 84: blitz.v1.SearchWebRequest
+	(*SearchWebResponse)(nil),           // 85: blitz.v1.SearchWebResponse
+	nil,                                 // 86: blitz.v1.GetModelSettingsResponse.AllEntry
+	(*durationpb.Duration)(nil),         // 87: google.protobuf.Duration
+	(*timestamppb.Timestamp)(nil),       // 88: google.protobuf.Timestamp
+	(*ErrorInfo)(nil),                   // 89: blitz.v1.ErrorInfo
 }
 var file_blitz_v1_workspace_proto_depIdxs = []int32{
 	7,  // 0: blitz.v1.ListAgentsResponse.agents:type_name -> blitz.v1.AgentInfo
@@ -5177,32 +5294,32 @@ var file_blitz_v1_workspace_proto_depIdxs = []int32{
 	0,  // 2: blitz.v1.PinModelResponse.saved:type_name -> blitz.v1.Saved
 	0,  // 3: blitz.v1.UnpinModelResponse.saved:type_name -> blitz.v1.Saved
 	20, // 4: blitz.v1.ModelSettingsInfo.settings:type_name -> blitz.v1.ModelSettings
-	84, // 5: blitz.v1.GetModelSettingsResponse.all:type_name -> blitz.v1.GetModelSettingsResponse.AllEntry
+	86, // 5: blitz.v1.GetModelSettingsResponse.all:type_name -> blitz.v1.GetModelSettingsResponse.AllEntry
 	21, // 6: blitz.v1.GetModelSettingsResponse.model:type_name -> blitz.v1.ModelSettingsInfo
 	24, // 7: blitz.v1.UpdateModelSettingsRequest.changes:type_name -> blitz.v1.Setting
 	21, // 8: blitz.v1.UpdateModelSettingsResponse.model:type_name -> blitz.v1.ModelSettingsInfo
 	0,  // 9: blitz.v1.UpdateModelSettingsResponse.saved:type_name -> blitz.v1.Saved
-	32, // 10: blitz.v1.SkillInfo.tools:type_name -> blitz.v1.SkillTool
-	33, // 11: blitz.v1.SkillInfo.scripts:type_name -> blitz.v1.SkillScript
-	85, // 12: blitz.v1.SkillScript.timeout:type_name -> google.protobuf.Duration
-	31, // 13: blitz.v1.ListSkillsResponse.skills:type_name -> blitz.v1.SkillInfo
-	31, // 14: blitz.v1.GetSkillResponse.skill:type_name -> blitz.v1.SkillInfo
-	86, // 15: blitz.v1.Env.last_used:type_name -> google.protobuf.Timestamp
-	38, // 16: blitz.v1.ListEnvsResponse.envs:type_name -> blitz.v1.Env
-	44, // 17: blitz.v1.PruneEnvsResponse.failed:type_name -> blitz.v1.EnvError
-	46, // 18: blitz.v1.ListMCPServersResponse.servers:type_name -> blitz.v1.MCPServer
-	49, // 19: blitz.v1.ListToolsResponse.tools:type_name -> blitz.v1.ToolInfo
-	50, // 20: blitz.v1.ListToolsResponse.mcp:type_name -> blitz.v1.MCPOffer
-	57, // 21: blitz.v1.ListLocalesResponse.locales:type_name -> blitz.v1.LocaleInfo
+	34, // 10: blitz.v1.SkillInfo.tools:type_name -> blitz.v1.SkillTool
+	35, // 11: blitz.v1.SkillInfo.scripts:type_name -> blitz.v1.SkillScript
+	87, // 12: blitz.v1.SkillScript.timeout:type_name -> google.protobuf.Duration
+	33, // 13: blitz.v1.ListSkillsResponse.skills:type_name -> blitz.v1.SkillInfo
+	33, // 14: blitz.v1.GetSkillResponse.skill:type_name -> blitz.v1.SkillInfo
+	88, // 15: blitz.v1.Env.last_used:type_name -> google.protobuf.Timestamp
+	40, // 16: blitz.v1.ListEnvsResponse.envs:type_name -> blitz.v1.Env
+	46, // 17: blitz.v1.PruneEnvsResponse.failed:type_name -> blitz.v1.EnvError
+	48, // 18: blitz.v1.ListMCPServersResponse.servers:type_name -> blitz.v1.MCPServer
+	51, // 19: blitz.v1.ListToolsResponse.tools:type_name -> blitz.v1.ToolInfo
+	52, // 20: blitz.v1.ListToolsResponse.mcp:type_name -> blitz.v1.MCPOffer
+	59, // 21: blitz.v1.ListLocalesResponse.locales:type_name -> blitz.v1.LocaleInfo
 	0,  // 22: blitz.v1.SetLocaleResponse.saved:type_name -> blitz.v1.Saved
-	86, // 23: blitz.v1.Checkpoint.time:type_name -> google.protobuf.Timestamp
-	62, // 24: blitz.v1.ListCheckpointsResponse.checkpoints:type_name -> blitz.v1.Checkpoint
-	87, // 25: blitz.v1.UndoResponse.error:type_name -> blitz.v1.ErrorInfo
-	86, // 26: blitz.v1.Approval.added:type_name -> google.protobuf.Timestamp
-	69, // 27: blitz.v1.ListApprovalsResponse.approvals:type_name -> blitz.v1.Approval
-	74, // 28: blitz.v1.LoadImageResponse.image:type_name -> blitz.v1.Image
-	74, // 29: blitz.v1.AddImageResponse.image:type_name -> blitz.v1.Image
-	79, // 30: blitz.v1.SearchWebResponse.links:type_name -> blitz.v1.Link
+	88, // 23: blitz.v1.Checkpoint.time:type_name -> google.protobuf.Timestamp
+	64, // 24: blitz.v1.ListCheckpointsResponse.checkpoints:type_name -> blitz.v1.Checkpoint
+	89, // 25: blitz.v1.UndoResponse.error:type_name -> blitz.v1.ErrorInfo
+	88, // 26: blitz.v1.Approval.added:type_name -> google.protobuf.Timestamp
+	71, // 27: blitz.v1.ListApprovalsResponse.approvals:type_name -> blitz.v1.Approval
+	76, // 28: blitz.v1.LoadImageResponse.image:type_name -> blitz.v1.Image
+	76, // 29: blitz.v1.AddImageResponse.image:type_name -> blitz.v1.Image
+	81, // 30: blitz.v1.SearchWebResponse.links:type_name -> blitz.v1.Link
 	20, // 31: blitz.v1.GetModelSettingsResponse.AllEntry.value:type_name -> blitz.v1.ModelSettings
 	1,  // 32: blitz.v1.WorkspaceService.ListWorkspaces:input_type -> blitz.v1.ListWorkspacesRequest
 	3,  // 33: blitz.v1.WorkspaceService.CloseWorkspace:input_type -> blitz.v1.CloseWorkspaceRequest
@@ -5216,62 +5333,64 @@ var file_blitz_v1_workspace_proto_depIdxs = []int32{
 	22, // 41: blitz.v1.WorkspaceService.GetModelSettings:input_type -> blitz.v1.GetModelSettingsRequest
 	25, // 42: blitz.v1.WorkspaceService.UpdateModelSettings:input_type -> blitz.v1.UpdateModelSettingsRequest
 	27, // 43: blitz.v1.WorkspaceService.GetSettings:input_type -> blitz.v1.GetSettingsRequest
-	29, // 44: blitz.v1.WorkspaceService.SetSetting:input_type -> blitz.v1.SetSettingRequest
-	34, // 45: blitz.v1.WorkspaceService.ListSkills:input_type -> blitz.v1.ListSkillsRequest
-	36, // 46: blitz.v1.WorkspaceService.GetSkill:input_type -> blitz.v1.GetSkillRequest
-	39, // 47: blitz.v1.WorkspaceService.ListEnvs:input_type -> blitz.v1.ListEnvsRequest
-	41, // 48: blitz.v1.WorkspaceService.RemoveEnv:input_type -> blitz.v1.RemoveEnvRequest
-	43, // 49: blitz.v1.WorkspaceService.PruneEnvs:input_type -> blitz.v1.PruneEnvsRequest
-	47, // 50: blitz.v1.WorkspaceService.ListMCPServers:input_type -> blitz.v1.ListMCPServersRequest
-	51, // 51: blitz.v1.WorkspaceService.ListTools:input_type -> blitz.v1.ListToolsRequest
-	53, // 52: blitz.v1.WorkspaceService.ReloadMemory:input_type -> blitz.v1.ReloadMemoryRequest
-	55, // 53: blitz.v1.WorkspaceService.AddMemory:input_type -> blitz.v1.AddMemoryRequest
-	58, // 54: blitz.v1.WorkspaceService.ListLocales:input_type -> blitz.v1.ListLocalesRequest
-	60, // 55: blitz.v1.WorkspaceService.SetLocale:input_type -> blitz.v1.SetLocaleRequest
-	63, // 56: blitz.v1.WorkspaceService.ListCheckpoints:input_type -> blitz.v1.ListCheckpointsRequest
-	65, // 57: blitz.v1.WorkspaceService.Undo:input_type -> blitz.v1.UndoRequest
-	67, // 58: blitz.v1.WorkspaceService.GetDiff:input_type -> blitz.v1.GetDiffRequest
-	70, // 59: blitz.v1.WorkspaceService.ListApprovals:input_type -> blitz.v1.ListApprovalsRequest
-	72, // 60: blitz.v1.WorkspaceService.RevokeApprovals:input_type -> blitz.v1.RevokeApprovalsRequest
-	75, // 61: blitz.v1.WorkspaceService.LoadImage:input_type -> blitz.v1.LoadImageRequest
-	77, // 62: blitz.v1.WorkspaceService.AddImage:input_type -> blitz.v1.AddImageRequest
-	80, // 63: blitz.v1.WorkspaceService.GetSearchProvider:input_type -> blitz.v1.GetSearchProviderRequest
-	82, // 64: blitz.v1.WorkspaceService.SearchWeb:input_type -> blitz.v1.SearchWebRequest
-	2,  // 65: blitz.v1.WorkspaceService.ListWorkspaces:output_type -> blitz.v1.ListWorkspacesResponse
-	4,  // 66: blitz.v1.WorkspaceService.CloseWorkspace:output_type -> blitz.v1.CloseWorkspaceResponse
-	6,  // 67: blitz.v1.WorkspaceService.GetSandbox:output_type -> blitz.v1.GetSandboxResponse
-	9,  // 68: blitz.v1.WorkspaceService.ListAgents:output_type -> blitz.v1.ListAgentsResponse
-	11, // 69: blitz.v1.WorkspaceService.SetAgent:output_type -> blitz.v1.SetAgentResponse
-	13, // 70: blitz.v1.WorkspaceService.GetModel:output_type -> blitz.v1.GetModelResponse
-	15, // 71: blitz.v1.WorkspaceService.SetModel:output_type -> blitz.v1.SetModelResponse
-	17, // 72: blitz.v1.WorkspaceService.PinModel:output_type -> blitz.v1.PinModelResponse
-	19, // 73: blitz.v1.WorkspaceService.UnpinModel:output_type -> blitz.v1.UnpinModelResponse
-	23, // 74: blitz.v1.WorkspaceService.GetModelSettings:output_type -> blitz.v1.GetModelSettingsResponse
-	26, // 75: blitz.v1.WorkspaceService.UpdateModelSettings:output_type -> blitz.v1.UpdateModelSettingsResponse
-	28, // 76: blitz.v1.WorkspaceService.GetSettings:output_type -> blitz.v1.GetSettingsResponse
-	30, // 77: blitz.v1.WorkspaceService.SetSetting:output_type -> blitz.v1.SetSettingResponse
-	35, // 78: blitz.v1.WorkspaceService.ListSkills:output_type -> blitz.v1.ListSkillsResponse
-	37, // 79: blitz.v1.WorkspaceService.GetSkill:output_type -> blitz.v1.GetSkillResponse
-	40, // 80: blitz.v1.WorkspaceService.ListEnvs:output_type -> blitz.v1.ListEnvsResponse
-	42, // 81: blitz.v1.WorkspaceService.RemoveEnv:output_type -> blitz.v1.RemoveEnvResponse
-	45, // 82: blitz.v1.WorkspaceService.PruneEnvs:output_type -> blitz.v1.PruneEnvsResponse
-	48, // 83: blitz.v1.WorkspaceService.ListMCPServers:output_type -> blitz.v1.ListMCPServersResponse
-	52, // 84: blitz.v1.WorkspaceService.ListTools:output_type -> blitz.v1.ListToolsResponse
-	54, // 85: blitz.v1.WorkspaceService.ReloadMemory:output_type -> blitz.v1.ReloadMemoryResponse
-	56, // 86: blitz.v1.WorkspaceService.AddMemory:output_type -> blitz.v1.AddMemoryResponse
-	59, // 87: blitz.v1.WorkspaceService.ListLocales:output_type -> blitz.v1.ListLocalesResponse
-	61, // 88: blitz.v1.WorkspaceService.SetLocale:output_type -> blitz.v1.SetLocaleResponse
-	64, // 89: blitz.v1.WorkspaceService.ListCheckpoints:output_type -> blitz.v1.ListCheckpointsResponse
-	66, // 90: blitz.v1.WorkspaceService.Undo:output_type -> blitz.v1.UndoResponse
-	68, // 91: blitz.v1.WorkspaceService.GetDiff:output_type -> blitz.v1.GetDiffResponse
-	71, // 92: blitz.v1.WorkspaceService.ListApprovals:output_type -> blitz.v1.ListApprovalsResponse
-	73, // 93: blitz.v1.WorkspaceService.RevokeApprovals:output_type -> blitz.v1.RevokeApprovalsResponse
-	76, // 94: blitz.v1.WorkspaceService.LoadImage:output_type -> blitz.v1.LoadImageResponse
-	78, // 95: blitz.v1.WorkspaceService.AddImage:output_type -> blitz.v1.AddImageResponse
-	81, // 96: blitz.v1.WorkspaceService.GetSearchProvider:output_type -> blitz.v1.GetSearchProviderResponse
-	83, // 97: blitz.v1.WorkspaceService.SearchWeb:output_type -> blitz.v1.SearchWebResponse
-	65, // [65:98] is the sub-list for method output_type
-	32, // [32:65] is the sub-list for method input_type
+	31, // 44: blitz.v1.WorkspaceService.SetSetting:input_type -> blitz.v1.SetSettingRequest
+	29, // 45: blitz.v1.WorkspaceService.SetPermissionMode:input_type -> blitz.v1.SetPermissionModeRequest
+	36, // 46: blitz.v1.WorkspaceService.ListSkills:input_type -> blitz.v1.ListSkillsRequest
+	38, // 47: blitz.v1.WorkspaceService.GetSkill:input_type -> blitz.v1.GetSkillRequest
+	41, // 48: blitz.v1.WorkspaceService.ListEnvs:input_type -> blitz.v1.ListEnvsRequest
+	43, // 49: blitz.v1.WorkspaceService.RemoveEnv:input_type -> blitz.v1.RemoveEnvRequest
+	45, // 50: blitz.v1.WorkspaceService.PruneEnvs:input_type -> blitz.v1.PruneEnvsRequest
+	49, // 51: blitz.v1.WorkspaceService.ListMCPServers:input_type -> blitz.v1.ListMCPServersRequest
+	53, // 52: blitz.v1.WorkspaceService.ListTools:input_type -> blitz.v1.ListToolsRequest
+	55, // 53: blitz.v1.WorkspaceService.ReloadMemory:input_type -> blitz.v1.ReloadMemoryRequest
+	57, // 54: blitz.v1.WorkspaceService.AddMemory:input_type -> blitz.v1.AddMemoryRequest
+	60, // 55: blitz.v1.WorkspaceService.ListLocales:input_type -> blitz.v1.ListLocalesRequest
+	62, // 56: blitz.v1.WorkspaceService.SetLocale:input_type -> blitz.v1.SetLocaleRequest
+	65, // 57: blitz.v1.WorkspaceService.ListCheckpoints:input_type -> blitz.v1.ListCheckpointsRequest
+	67, // 58: blitz.v1.WorkspaceService.Undo:input_type -> blitz.v1.UndoRequest
+	69, // 59: blitz.v1.WorkspaceService.GetDiff:input_type -> blitz.v1.GetDiffRequest
+	72, // 60: blitz.v1.WorkspaceService.ListApprovals:input_type -> blitz.v1.ListApprovalsRequest
+	74, // 61: blitz.v1.WorkspaceService.RevokeApprovals:input_type -> blitz.v1.RevokeApprovalsRequest
+	77, // 62: blitz.v1.WorkspaceService.LoadImage:input_type -> blitz.v1.LoadImageRequest
+	79, // 63: blitz.v1.WorkspaceService.AddImage:input_type -> blitz.v1.AddImageRequest
+	82, // 64: blitz.v1.WorkspaceService.GetSearchProvider:input_type -> blitz.v1.GetSearchProviderRequest
+	84, // 65: blitz.v1.WorkspaceService.SearchWeb:input_type -> blitz.v1.SearchWebRequest
+	2,  // 66: blitz.v1.WorkspaceService.ListWorkspaces:output_type -> blitz.v1.ListWorkspacesResponse
+	4,  // 67: blitz.v1.WorkspaceService.CloseWorkspace:output_type -> blitz.v1.CloseWorkspaceResponse
+	6,  // 68: blitz.v1.WorkspaceService.GetSandbox:output_type -> blitz.v1.GetSandboxResponse
+	9,  // 69: blitz.v1.WorkspaceService.ListAgents:output_type -> blitz.v1.ListAgentsResponse
+	11, // 70: blitz.v1.WorkspaceService.SetAgent:output_type -> blitz.v1.SetAgentResponse
+	13, // 71: blitz.v1.WorkspaceService.GetModel:output_type -> blitz.v1.GetModelResponse
+	15, // 72: blitz.v1.WorkspaceService.SetModel:output_type -> blitz.v1.SetModelResponse
+	17, // 73: blitz.v1.WorkspaceService.PinModel:output_type -> blitz.v1.PinModelResponse
+	19, // 74: blitz.v1.WorkspaceService.UnpinModel:output_type -> blitz.v1.UnpinModelResponse
+	23, // 75: blitz.v1.WorkspaceService.GetModelSettings:output_type -> blitz.v1.GetModelSettingsResponse
+	26, // 76: blitz.v1.WorkspaceService.UpdateModelSettings:output_type -> blitz.v1.UpdateModelSettingsResponse
+	28, // 77: blitz.v1.WorkspaceService.GetSettings:output_type -> blitz.v1.GetSettingsResponse
+	32, // 78: blitz.v1.WorkspaceService.SetSetting:output_type -> blitz.v1.SetSettingResponse
+	30, // 79: blitz.v1.WorkspaceService.SetPermissionMode:output_type -> blitz.v1.SetPermissionModeResponse
+	37, // 80: blitz.v1.WorkspaceService.ListSkills:output_type -> blitz.v1.ListSkillsResponse
+	39, // 81: blitz.v1.WorkspaceService.GetSkill:output_type -> blitz.v1.GetSkillResponse
+	42, // 82: blitz.v1.WorkspaceService.ListEnvs:output_type -> blitz.v1.ListEnvsResponse
+	44, // 83: blitz.v1.WorkspaceService.RemoveEnv:output_type -> blitz.v1.RemoveEnvResponse
+	47, // 84: blitz.v1.WorkspaceService.PruneEnvs:output_type -> blitz.v1.PruneEnvsResponse
+	50, // 85: blitz.v1.WorkspaceService.ListMCPServers:output_type -> blitz.v1.ListMCPServersResponse
+	54, // 86: blitz.v1.WorkspaceService.ListTools:output_type -> blitz.v1.ListToolsResponse
+	56, // 87: blitz.v1.WorkspaceService.ReloadMemory:output_type -> blitz.v1.ReloadMemoryResponse
+	58, // 88: blitz.v1.WorkspaceService.AddMemory:output_type -> blitz.v1.AddMemoryResponse
+	61, // 89: blitz.v1.WorkspaceService.ListLocales:output_type -> blitz.v1.ListLocalesResponse
+	63, // 90: blitz.v1.WorkspaceService.SetLocale:output_type -> blitz.v1.SetLocaleResponse
+	66, // 91: blitz.v1.WorkspaceService.ListCheckpoints:output_type -> blitz.v1.ListCheckpointsResponse
+	68, // 92: blitz.v1.WorkspaceService.Undo:output_type -> blitz.v1.UndoResponse
+	70, // 93: blitz.v1.WorkspaceService.GetDiff:output_type -> blitz.v1.GetDiffResponse
+	73, // 94: blitz.v1.WorkspaceService.ListApprovals:output_type -> blitz.v1.ListApprovalsResponse
+	75, // 95: blitz.v1.WorkspaceService.RevokeApprovals:output_type -> blitz.v1.RevokeApprovalsResponse
+	78, // 96: blitz.v1.WorkspaceService.LoadImage:output_type -> blitz.v1.LoadImageResponse
+	80, // 97: blitz.v1.WorkspaceService.AddImage:output_type -> blitz.v1.AddImageResponse
+	83, // 98: blitz.v1.WorkspaceService.GetSearchProvider:output_type -> blitz.v1.GetSearchProviderResponse
+	85, // 99: blitz.v1.WorkspaceService.SearchWeb:output_type -> blitz.v1.SearchWebResponse
+	66, // [66:100] is the sub-list for method output_type
+	32, // [32:66] is the sub-list for method input_type
 	32, // [32:32] is the sub-list for extension type_name
 	32, // [32:32] is the sub-list for extension extendee
 	0,  // [0:32] is the sub-list for field type_name
@@ -5290,7 +5409,7 @@ func file_blitz_v1_workspace_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_blitz_v1_workspace_proto_rawDesc), len(file_blitz_v1_workspace_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   85,
+			NumMessages:   87,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

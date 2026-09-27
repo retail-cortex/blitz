@@ -174,7 +174,7 @@ func TestShellToolEnforcesPolicy(t *testing.T) {
 	}
 
 	// Global auto-approve cannot override a deny rule.
-	cfg.Hooks = NewHooks(Policy{AutoApproveAll: true})
+	cfg.Hooks = NewHooks(Policy{Mode: ModeBypass})
 	if out := runShellCommand(context.Background(), cfg, RunShellCommandInput{Command: "touch denied2"}); !strings.Contains(out.Error, "blocked") {
 		t.Errorf("auto-approve-all bypassed deny: %+v", out)
 	}

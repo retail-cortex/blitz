@@ -58,7 +58,11 @@ type BlitzConfig struct {
 	AgencyLevel  string  `toml:"agency_level"`
 	Temperature  float64 `toml:"temperature"`
 	MaxTokens    int     `toml:"max_tokens"`
-	AutoApprove  bool    `toml:"auto_approve"`
+	// AutoApprove is the older spelling of PermissionMode = "bypass".
+	AutoApprove bool `toml:"auto_approve"`
+	// PermissionMode is the starting permission mode: default,
+	// accept-edits, plan, dont-ask or bypass (which needs the OS sandbox).
+	PermissionMode string `toml:"permission_mode"`
 	// TrustWorkspace allows agents and skills found inside the current
 	// workspace (./agents, ./skills, .agents/skills) to be loaded. Workspace
 	// content can inject prompts, so it is off by default and can only be

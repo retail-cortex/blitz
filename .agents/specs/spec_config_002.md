@@ -28,7 +28,8 @@ One TOML file, `.env.toml`, loaded through `github.com/rrmcguinness/modenv` (hie
 | | `default_model` | `""` | overrides `llm.<provider>.model` |
 | | `agency_level` | `high` | `low\|medium\|high\|extreme` |
 | | `temperature` / `max_tokens` | `0.2` / `8192` | global generation settings |
-| | `auto_approve` | `false` | skips **all** approval prompts (deny rules still apply) |
+| | `permission_mode` | `default` | `default\|accept-edits\|plan\|dont-ask\|bypass`; bypass needs the OS sandbox ([spec_approvals_005](spec_approvals_005.md) APR-14) |
+| | `auto_approve` | `false` | older spelling of `permission_mode = "bypass"` |
 | | `trust_workspace` | `false` | |
 | `[llm]` | `provider` | `gemini` | `gemini\|anthropic\|openai\|ollama` |
 | | `max_retries` | `3` | `0` disables |

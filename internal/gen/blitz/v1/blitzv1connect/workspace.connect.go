@@ -72,6 +72,9 @@ const (
 	// WorkspaceServiceSetSettingProcedure is the fully-qualified name of the WorkspaceService's
 	// SetSetting RPC.
 	WorkspaceServiceSetSettingProcedure = "/blitz.v1.WorkspaceService/SetSetting"
+	// WorkspaceServiceSetPermissionModeProcedure is the fully-qualified name of the WorkspaceService's
+	// SetPermissionMode RPC.
+	WorkspaceServiceSetPermissionModeProcedure = "/blitz.v1.WorkspaceService/SetPermissionMode"
 	// WorkspaceServiceListSkillsProcedure is the fully-qualified name of the WorkspaceService's
 	// ListSkills RPC.
 	WorkspaceServiceListSkillsProcedure = "/blitz.v1.WorkspaceService/ListSkills"
@@ -162,6 +165,10 @@ type WorkspaceServiceClient interface {
 	GetSettings(context.Context, *connect.Request[v1.GetSettingsRequest]) (*connect.Response[v1.GetSettingsResponse], error)
 	// Changes a setting for the workspace (UNKNOWN_SETTING, INVALID_AGENCY).
 	SetSetting(context.Context, *connect.Request[v1.SetSettingRequest]) (*connect.Response[v1.SetSettingResponse], error)
+	// Changes which actions run without asking, for every session of the
+	// workspace (UNKNOWN_MODE; BYPASS_NEEDS_SANDBOX when bypass is asked for
+	// without an active OS sandbox).
+	SetPermissionMode(context.Context, *connect.Request[v1.SetPermissionModeRequest]) (*connect.Response[v1.SetPermissionModeResponse], error)
 	// Returns the skills found, or those matching a query.
 	ListSkills(context.Context, *connect.Request[v1.ListSkillsRequest]) (*connect.Response[v1.ListSkillsResponse], error)
 	// Returns one skill (SKILL_NOT_FOUND).
@@ -296,6 +303,12 @@ func NewWorkspaceServiceClient(httpClient connect.HTTPClient, baseURL string, op
 			httpClient,
 			baseURL+WorkspaceServiceSetSettingProcedure,
 			connect.WithSchema(workspaceServiceMethods.ByName("SetSetting")),
+			connect.WithClientOptions(opts...),
+		),
+		setPermissionMode: connect.NewClient[v1.SetPermissionModeRequest, v1.SetPermissionModeResponse](
+			httpClient,
+			baseURL+WorkspaceServiceSetPermissionModeProcedure,
+			connect.WithSchema(workspaceServiceMethods.ByName("SetPermissionMode")),
 			connect.WithClientOptions(opts...),
 		),
 		listSkills: connect.NewClient[v1.ListSkillsRequest, v1.ListSkillsResponse](
@@ -436,6 +449,7 @@ type workspaceServiceClient struct {
 	updateModelSettings *connect.Client[v1.UpdateModelSettingsRequest, v1.UpdateModelSettingsResponse]
 	getSettings         *connect.Client[v1.GetSettingsRequest, v1.GetSettingsResponse]
 	setSetting          *connect.Client[v1.SetSettingRequest, v1.SetSettingResponse]
+	setPermissionMode   *connect.Client[v1.SetPermissionModeRequest, v1.SetPermissionModeResponse]
 	listSkills          *connect.Client[v1.ListSkillsRequest, v1.ListSkillsResponse]
 	getSkill            *connect.Client[v1.GetSkillRequest, v1.GetSkillResponse]
 	listEnvs            *connect.Client[v1.ListEnvsRequest, v1.ListEnvsResponse]
@@ -521,6 +535,11 @@ func (c *workspaceServiceClient) GetSettings(ctx context.Context, req *connect.R
 // SetSetting calls blitz.v1.WorkspaceService.SetSetting.
 func (c *workspaceServiceClient) SetSetting(ctx context.Context, req *connect.Request[v1.SetSettingRequest]) (*connect.Response[v1.SetSettingResponse], error) {
 	return c.setSetting.CallUnary(ctx, req)
+}
+
+// SetPermissionMode calls blitz.v1.WorkspaceService.SetPermissionMode.
+func (c *workspaceServiceClient) SetPermissionMode(ctx context.Context, req *connect.Request[v1.SetPermissionModeRequest]) (*connect.Response[v1.SetPermissionModeResponse], error) {
+	return c.setPermissionMode.CallUnary(ctx, req)
 }
 
 // ListSkills calls blitz.v1.WorkspaceService.ListSkills.
@@ -652,6 +671,10 @@ type WorkspaceServiceHandler interface {
 	GetSettings(context.Context, *connect.Request[v1.GetSettingsRequest]) (*connect.Response[v1.GetSettingsResponse], error)
 	// Changes a setting for the workspace (UNKNOWN_SETTING, INVALID_AGENCY).
 	SetSetting(context.Context, *connect.Request[v1.SetSettingRequest]) (*connect.Response[v1.SetSettingResponse], error)
+	// Changes which actions run without asking, for every session of the
+	// workspace (UNKNOWN_MODE; BYPASS_NEEDS_SANDBOX when bypass is asked for
+	// without an active OS sandbox).
+	SetPermissionMode(context.Context, *connect.Request[v1.SetPermissionModeRequest]) (*connect.Response[v1.SetPermissionModeResponse], error)
 	// Returns the skills found, or those matching a query.
 	ListSkills(context.Context, *connect.Request[v1.ListSkillsRequest]) (*connect.Response[v1.ListSkillsResponse], error)
 	// Returns one skill (SKILL_NOT_FOUND).
@@ -782,6 +805,12 @@ func NewWorkspaceServiceHandler(svc WorkspaceServiceHandler, opts ...connect.Han
 		WorkspaceServiceSetSettingProcedure,
 		svc.SetSetting,
 		connect.WithSchema(workspaceServiceMethods.ByName("SetSetting")),
+		connect.WithHandlerOptions(opts...),
+	)
+	workspaceServiceSetPermissionModeHandler := connect.NewUnaryHandler(
+		WorkspaceServiceSetPermissionModeProcedure,
+		svc.SetPermissionMode,
+		connect.WithSchema(workspaceServiceMethods.ByName("SetPermissionMode")),
 		connect.WithHandlerOptions(opts...),
 	)
 	workspaceServiceListSkillsHandler := connect.NewUnaryHandler(
@@ -932,6 +961,8 @@ func NewWorkspaceServiceHandler(svc WorkspaceServiceHandler, opts ...connect.Han
 			workspaceServiceGetSettingsHandler.ServeHTTP(w, r)
 		case WorkspaceServiceSetSettingProcedure:
 			workspaceServiceSetSettingHandler.ServeHTTP(w, r)
+		case WorkspaceServiceSetPermissionModeProcedure:
+			workspaceServiceSetPermissionModeHandler.ServeHTTP(w, r)
 		case WorkspaceServiceListSkillsProcedure:
 			workspaceServiceListSkillsHandler.ServeHTTP(w, r)
 		case WorkspaceServiceGetSkillProcedure:
@@ -1031,6 +1062,10 @@ func (UnimplementedWorkspaceServiceHandler) GetSettings(context.Context, *connec
 
 func (UnimplementedWorkspaceServiceHandler) SetSetting(context.Context, *connect.Request[v1.SetSettingRequest]) (*connect.Response[v1.SetSettingResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("blitz.v1.WorkspaceService.SetSetting is not implemented"))
+}
+
+func (UnimplementedWorkspaceServiceHandler) SetPermissionMode(context.Context, *connect.Request[v1.SetPermissionModeRequest]) (*connect.Response[v1.SetPermissionModeResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("blitz.v1.WorkspaceService.SetPermissionMode is not implemented"))
 }
 
 func (UnimplementedWorkspaceServiceHandler) ListSkills(context.Context, *connect.Request[v1.ListSkillsRequest]) (*connect.Response[v1.ListSkillsResponse], error) {

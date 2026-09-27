@@ -1,0 +1,57 @@
+package tui
+
+import (
+	"errors"
+	"fmt"
+
+	core "github.com/retail-cortex/blitz/internal/app"
+	"github.com/retail-cortex/blitz/internal/i18n"
+	"github.com/retail-cortex/blitz/internal/tools"
+)
+
+// cmdMode shows or changes the permission mode (/mode [name]).
+func cmdMode(args []string, app *App) {
+	if len(args) == 0 {
+		current := app.Workspace.Settings().PermissionMode
+		fmt.Printf("%s\n", i18n.T("mode.current", "mode", current))
+		for _, m := range tools.Modes {
+			mark := "  "
+			if string(m) == current {
+				mark = Green + "● " + Reset
+			}
+			fmt.Printf("  %s%-13s %s%s%s\n", mark, m, Dim, i18n.T("mode.describe."+string(m)), Reset)
+		}
+		return
+	}
+	mode, err := app.Workspace.SetPermissionMode(args[0])
+	switch {
+	case errors.Is(err, core.ErrUnknownMode):
+		fmt.Printf("%s%s%s\n", Yellow, i18n.T("mode.usage"), Reset)
+	case errors.Is(err, core.ErrBypassNeedsSandbox):
+		fmt.Printf("%s✗ %s%s\n", Red, i18n.T("mode.bypass_unavailable"), Reset)
+	case err != nil:
+		fmt.Printf("%s✗ %s%s\n", Red, i18n.T("set.failed", "error", safe(err.Error())), Reset)
+	default:
+		fmt.Printf("%s%s%s\n", modeColor(mode), i18n.T("mode.set", "mode", mode), Reset)
+	}
+}
+
+// modeColor is how the prompt and messages show a mode: red for bypass,
+// yellow for the others that change what asks, nothing for default.
+func modeColor(mode string) string {
+	switch tools.PermissionMode(mode) {
+	case tools.ModeBypass:
+		return Red + Bold
+	case tools.ModeDefault, "":
+		return ""
+	}
+	return Yellow
+}
+
+// modeTag is the prompt's mark for a mode other than default.
+func modeTag(mode string) string {
+	if mode == "" || mode == string(tools.ModeDefault) {
+		return ""
+	}
+	return fmt.Sprintf(" %s[%s]%s", modeColor(mode), mode, Reset)
+}

@@ -222,3 +222,18 @@ func TestRemoteTurnLimits(t *testing.T) {
 		t.Error("the timeout wasn't applied in the service")
 	}
 }
+
+// The permission mode is the workspace's in the service: set over the API
+// and read back in the settings, with typed errors.
+func TestRemotePermissionMode(t *testing.T) {
+	r := attach(t, nil)
+	if m, err := r.SetPermissionMode("acceptEdits"); err != nil || m != "accept-edits" {
+		t.Fatalf("set: %q %v", m, err)
+	}
+	if got := r.Settings().PermissionMode; got != "accept-edits" {
+		t.Errorf("settings mode %q", got)
+	}
+	if _, err := r.SetPermissionMode("yolo"); !errors.Is(err, app.ErrUnknownMode) {
+		t.Errorf("unknown mode over the API: %v", err)
+	}
+}
