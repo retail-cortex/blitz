@@ -390,3 +390,6 @@ Set `fallback_models = ["anthropic/claude-sonnet-5"]` with a working Anthropic k
 - [ ] `[[hooks.permission_request]] match = "run_shell_command" command = "grep -q '\"go test' && echo '{\"decision\":\"allow\"}'"`: 💲 `go test` runs without asking; other commands still ask.
 - [ ] 💲 `/effort max` with `claude-opus-5-5`, then a hard question: the answer arrives (no 400) and `/set` shows `Effort: max`; `/effort auto` clears it. `--effort low` on a one-shot with `gpt-5` works too.
 - [ ] 💲 `/model_settings claude-haiku-4-5 thinking_budget=4000` with `temperature` set globally: the call succeeds (temperature left out) and shows thinking in the transcript.
+- [ ] In a real terminal (Terminal.app, iTerm2, and over ssh): 💲 Esc while the agent works stops the turn ("interrupted"); arrow keys and Alt+arrows still edit the line; Esc at an approval cancels the turn; Esc in the steer prompt drops the message and the turn goes on.
+- [ ] Shift+Tab at the prompt shows `[accept-edits]`, then `[plan]`, then no tag, with the prompt redrawn in place (no leftover characters). Started with `--permission-mode bypass` (sandbox on), the cycle includes `[bypass]`.
+- [ ] `EDITOR=vim`: type a draft, Ctrl+G, add lines, `:wq` — the whole text is sent and shown after the prompt; `:cq` or an empty file returns to the draft. `VISUAL="code --wait"` works. Esc Esc clears a typed line.

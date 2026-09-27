@@ -85,7 +85,8 @@ Subcommands: `doctor [--online]`, `config init|show|path`, `completion bash|zsh|
 - **Multi-line input**: end a line with `\`, or put a block between two lines of `"""`.
 - **Streaming Markdown** rendering, a progress spinner, and a per-turn usage line: `↳ 12.4k in · 1.2k out · context 12.3k · $0.0023`.
 - **Steering**: while the agent is working, start typing (or press Ctrl+T) to send it a message, e.g. "use tabs" or "skip the tests". Output pauses while you type. The message reaches the agent with its next tool result, so nothing is interrupted, and it is kept in the conversation history. If the agent finishes without another tool call, the message is sent as your next prompt. `prompt_submit` hooks apply to these messages too. (macOS and Linux.)
-- **Ctrl+C** cancels the running turn; at the prompt it exits (see *Background processes*).
+- **Ctrl+C** or **Esc** cancels the running turn (Esc at an approval too, and in the steer prompt it drops the message); at the prompt Ctrl+C exits (see *Background processes*).
+- **Shift+Tab** switches the permission mode: `default` → `accept-edits` → `plan` → `default` (and `bypass`, only if the session started in it). **Ctrl+G** opens the prompt in `$VISUAL` or `$EDITOR` and sends what you save (an empty file sends nothing). **Esc Esc** clears the line.
 
 | Command | |
 |---|---|

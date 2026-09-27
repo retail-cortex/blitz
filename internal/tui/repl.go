@@ -15,6 +15,7 @@ import (
 	"github.com/retail-cortex/blitz/internal/i18n"
 	"github.com/retail-cortex/blitz/internal/images"
 	"github.com/retail-cortex/blitz/internal/runtime"
+	"github.com/retail-cortex/blitz/internal/tools"
 )
 
 // App is the REPL's state: the workspace it drives and the terminal.
@@ -180,6 +181,7 @@ func RunREPL(ctx context.Context, app *App) error {
 		fmt.Printf("   %s%s%s\n", Dim, i18n.T("repl.hint"), Reset)
 		if _, ok := app.Input.(steerInput); ok {
 			fmt.Printf("   %s%s%s\n", Dim, i18n.T("steer.hint"), Reset)
+			fmt.Printf("   %s%s%s\n", Dim, i18n.T("keys.hint"), Reset)
 		}
 		fmt.Println()
 	}
@@ -212,6 +214,20 @@ func RunREPL(ctx context.Context, app *App) error {
 		return nil
 	}
 	exitPrompt := ExitPrompt{CanPrompt: true, AllowCancel: true}
+	promptText := func() string {
+		return fmt.Sprintf("%s%s%s%s %s›%s ", Bold+Green, app.Workspace.ActiveAgent().Name, Reset, modeTag(app.Workspace.Settings().PermissionMode), Bold+Green, Reset)
+	}
+	if pk, ok := app.Input.(interface{ SetPromptKeys(PromptKeys) }); ok {
+		// Shift+Tab reaches bypass only if the session started in it.
+		withBypass := app.Workspace.Settings().PermissionMode == string(tools.ModeBypass)
+		pk.SetPromptKeys(PromptKeys{CycleMode: func() string {
+			if !cycleMode(app, withBypass) {
+				return ""
+			}
+			return promptText()
+		}})
+		defer pk.SetPromptKeys(PromptKeys{})
+	}
 
 	for {
 		if app.TerminalTitle {
@@ -221,7 +237,7 @@ func RunREPL(ctx context.Context, app *App) error {
 				shownTitle = t
 			}
 		}
-		prompt := fmt.Sprintf("%s%s%s%s %s›%s ", Bold+Green, app.Workspace.ActiveAgent().Name, Reset, modeTag(app.Workspace.Settings().PermissionMode), Bold+Green, Reset)
+		prompt := promptText()
 		idleCtx, stopIdle := cancelOnSignal(ctx, interrupts)
 		line, err := app.Input.ReadInput(idleCtx, prompt)
 		stopIdle()

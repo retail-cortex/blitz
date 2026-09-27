@@ -32,6 +32,7 @@ type keyTerm interface {
 type keyWatcher struct {
 	term  keyTerm
 	onKey func(prefill string)
+	onEsc func() // a lone Esc: interrupt the turn
 
 	pauseReq chan chan struct{}
 	resume   chan struct{}
@@ -39,10 +40,11 @@ type keyWatcher struct {
 	done     chan struct{}
 }
 
-func startKeyWatcher(term keyTerm, onKey func(prefill string)) *keyWatcher {
+func startKeyWatcher(term keyTerm, onKey func(prefill string), onEsc func()) *keyWatcher {
 	w := &keyWatcher{
 		term:     term,
 		onKey:    onKey,
+		onEsc:    onEsc,
 		pauseReq: make(chan chan struct{}),
 		resume:   make(chan struct{}),
 		stop:     make(chan struct{}),
@@ -95,6 +97,12 @@ func (w *keyWatcher) run() {
 		n, err := w.term.read(buf)
 		if err != nil || n == 0 {
 			return
+		}
+		if n == 1 && buf[0] == 0x1b { // Esc on its own, not a key's escape sequence
+			if w.onEsc != nil {
+				w.onEsc()
+			}
+			continue
 		}
 		prefill, trigger := steerTrigger(buf[:n])
 		if !trigger {

@@ -20,9 +20,14 @@ type TerminalInput struct {
 	rl   *readline.Instance
 	turn chan struct{}
 
+	stdin *escReader
+	edit  func(text string) (string, error) // $EDITOR (Ctrl+G); replaced in tests
+
 	mu          sync.Mutex
 	onInterrupt func()
 	keys        *keyWatcher // set while a turn is running (steering)
+	ks          *keyState   // the read in progress
+	promptKeys  PromptKeys
 }
 
 // WatchKeys lets the user steer the running turn: typing (or Ctrl+T) calls
@@ -30,7 +35,7 @@ type TerminalInput struct {
 // turn pause the watcher automatically. Call stop when the turn ends; it
 // waits for an open steer prompt to be finished.
 func (t *TerminalInput) WatchKeys(onKey func(prefill string)) (stop func()) {
-	w := startKeyWatcher(newTTYKeys(int(os.Stdin.Fd())), onKey)
+	w := startKeyWatcher(newTTYKeys(int(os.Stdin.Fd())), onKey, t.interrupt)
 	t.mu.Lock()
 	t.keys = w
 	t.mu.Unlock()
@@ -46,7 +51,17 @@ func (t *TerminalInput) WatchKeys(onKey func(prefill string)) (stop func()) {
 // typed. It is called from the key watcher, which has handed over the
 // terminal, so it doesn't pause the watcher itself.
 func (t *TerminalInput) AskSteer(ctx context.Context, prompt, prefill string) (string, error) {
-	return t.readLine(ctx, prompt, false, prefill)
+	return t.readLine(ctx, prompt, readSteer, prefill)
+}
+
+// interrupt does what Ctrl+C does during a turn (Esc while the agent works).
+func (t *TerminalInput) interrupt() {
+	t.mu.Lock()
+	f := t.onInterrupt
+	t.mu.Unlock()
+	if f != nil {
+		f()
+	}
 }
 
 // SetInterruptHandler sets what Ctrl+C does while a prompt is shown during a
@@ -67,6 +82,12 @@ type TerminalOptions struct {
 
 // NewTerminalInput creates the line editor on stdin/stdout.
 func NewTerminalInput(o TerminalOptions) (*TerminalInput, error) {
+	return newTerminalInput(o, &readline.Config{})
+}
+
+// newTerminalInput creates the line editor with base's terminal settings
+// (tests supply a pipe and a fake terminal).
+func newTerminalInput(o TerminalOptions, base *readline.Config) (*TerminalInput, error) {
 	if o.HistoryFile != "" {
 		if err := os.MkdirAll(filepath.Dir(o.HistoryFile), 0o700); err != nil {
 			return nil, err
@@ -76,19 +97,29 @@ func NewTerminalInput(o TerminalOptions) (*TerminalInput, error) {
 			f.Close()
 		}
 	}
-	rl, err := readline.NewFromConfig(&readline.Config{
-		HistoryFile:            o.HistoryFile,
-		HistoryLimit:           o.HistorySize,
-		DisableAutoSaveHistory: true, // multi-line entries are saved whole
-		HistorySearchFold:      true,
-		AutoComplete:           o.Completer,
-		InterruptPrompt:        "^C",
-		EOFPrompt:              "",
-	})
+	in := base.Stdin
+	if in == nil {
+		in = os.Stdin
+	}
+	t := &TerminalInput{turn: make(chan struct{}, 1), stdin: &escReader{in: in}}
+	t.edit = func(text string) (string, error) { return editText(text, os.Stdin, os.Stdout, os.Stderr) }
+	cfg := *base
+	cfg.Stdin = t.stdin
+	cfg.HistoryFile = o.HistoryFile
+	cfg.HistoryLimit = o.HistorySize
+	cfg.DisableAutoSaveHistory = true // multi-line entries are saved whole
+	cfg.HistorySearchFold = true
+	cfg.AutoComplete = o.Completer
+	cfg.InterruptPrompt = "^C"
+	cfg.EOFPrompt = ""
+	cfg.FuncFilterInputRune = t.filterKey
+	cfg.Listener = t.listen
+	rl, err := readline.NewFromConfig(&cfg)
 	if err != nil {
 		return nil, err
 	}
-	return &TerminalInput{rl: rl, turn: make(chan struct{}, 1)}, nil
+	t.rl = rl
+	return t, nil
 }
 
 // Close restores the terminal.
@@ -97,12 +128,12 @@ func (t *TerminalInput) Close() error { return t.rl.Close() }
 // Ask prints text (which may span lines) and reads one answer without
 // recording it in history.
 func (t *TerminalInput) Ask(ctx context.Context, text string) (string, error) {
-	return t.read(ctx, text, false)
+	return t.read(ctx, text, readAsk)
 }
 
 // read pauses the key watcher (if a turn is running) so the prompt gets the
 // keyboard, then reads a line.
-func (t *TerminalInput) read(ctx context.Context, text string, history bool) (string, error) {
+func (t *TerminalInput) read(ctx context.Context, text string, kind readKind) (string, error) {
 	t.mu.Lock()
 	keys := t.keys
 	t.mu.Unlock()
@@ -113,13 +144,17 @@ func (t *TerminalInput) read(ctx context.Context, text string, history bool) (st
 		}
 		defer resume()
 	}
-	return t.readLine(ctx, text, history, "")
+	return t.readLine(ctx, text, kind, "")
 }
 
 // ReadInput reads a REPL entry (multi-line aware) and saves it to history.
 func (t *TerminalInput) ReadInput(ctx context.Context, prompt string) (string, error) {
 	entry, err := readMultiline(ctx, prompt, func(ctx context.Context, p string) (string, error) {
-		return t.read(ctx, p, true)
+		kind := readEntry
+		if p == continuationPrompt {
+			kind = readContinue
+		}
+		return t.read(ctx, p, kind)
 	})
 	if err == nil && strings.TrimSpace(entry) != "" {
 		_ = t.rl.SaveToHistory(entry)
@@ -127,7 +162,7 @@ func (t *TerminalInput) ReadInput(ctx context.Context, prompt string) (string, e
 	return entry, err
 }
 
-func (t *TerminalInput) readLine(ctx context.Context, text string, history bool, prefill string) (string, error) {
+func (t *TerminalInput) readLine(ctx context.Context, text string, kind readKind, prefill string) (string, error) {
 	select {
 	case t.turn <- struct{}{}:
 	case <-ctx.Done():
@@ -141,37 +176,52 @@ func (t *TerminalInput) readLine(ctx context.Context, text string, history bool,
 		io.WriteString(t.rl.Stdout(), text[:i+1])
 		prompt = text[i+1:]
 	}
-	if !history {
+	if kind != readEntry && kind != readContinue {
 		t.rl.DisableHistory()
 		defer t.rl.EnableHistory()
 	}
-	t.rl.SetPrompt(prompt)
-
 	// The editor can't abandon a read; closing it is the only way to unblock,
 	// which is fine because cancellation here means the process is exiting.
 	stop := context.AfterFunc(ctx, func() { t.rl.Close() })
 	defer stop()
-
-	var line string
-	var err error
-	if prefill != "" {
-		line, err = t.rl.ReadLineWithDefault(prefill)
-	} else {
-		line, err = t.rl.ReadLine()
-	}
-	switch {
-	case errors.Is(err, readline.ErrInterrupt):
+	defer func() {
 		t.mu.Lock()
-		f := t.onInterrupt
+		t.ks = nil
 		t.mu.Unlock()
-		if f != nil {
-			f()
+	}()
+
+	t.rl.SetPrompt(prompt)
+	for {
+		ks := &keyState{kind: kind, line: prefill}
+		t.mu.Lock()
+		t.ks = ks
+		t.mu.Unlock()
+		var line string
+		var err error
+		if prefill != "" {
+			line, err = t.rl.ReadLineWithDefault(prefill)
+		} else {
+			line, err = t.rl.ReadLine()
 		}
-		return "", context.Canceled // Ctrl+C: same meaning as SIGINT at the prompt
-	case err != nil && ctx.Err() != nil:
-		return "", ctx.Err()
+		switch {
+		case errors.Is(err, readline.ErrInterrupt):
+			t.interrupt()
+			return "", context.Canceled // Ctrl+C: same meaning as SIGINT at the prompt
+		case err != nil && ctx.Err() != nil:
+			return "", ctx.Err()
+		}
+		t.mu.Lock()
+		act, saved := ks.action, ks.saved
+		t.mu.Unlock()
+		if err != nil || act != actionEditor {
+			return line, err
+		}
+		// Ctrl+G: submit what the editor saves, or go back to the line.
+		if edited, ok := t.runEditor(t.rl.GetConfig().Prompt, saved); ok {
+			return edited, nil
+		}
+		prefill = saved
 	}
-	return line, err
 }
 
 // Completer completes slash commands, their arguments, and @path references

@@ -14,7 +14,7 @@ The REPL is a thin front end over `app.Backend`: it reads input, dispatches slas
 
 ## 2. Presentation
 
-- **TUI-01** Banner: one line `Blitz <version>  agent <name> · model <name>`, then a dim hint (`/help`, Ctrl+C); then the first sandbox summary line, a hint line, and (when steering is available) a steering hint.
+- **TUI-01** Banner: one line `Blitz <version>  agent <name> · model <name>`, then a dim hint (`/help`, Ctrl+C); then the first sandbox summary line, a hint line, and (when steering is available) a steering hint and a keys hint (Shift+Tab, Ctrl+G, Esc Esc).
 - **TUI-02** Prompt: bold green `<agent> ›`, with `[mode]` after the agent when the permission mode isn't `default` (yellow; red for `bypass`). Status marks only `✓ ✗ ! ↳`; no mascot or persona.
 - **TUI-03** Model text streams; with `ui.markdown` on a TTY it is rendered as Markdown (glamour, theme `ui.theme`: auto/dark/light/notty), falling back to plain text on error. Thought text and final text that repeats streamed chunks are not printed.
 - **TUI-04** Tool calls and results are printed as compact one-line summaries; a spinner (`ui.spinner`, TTY only) shows "thinking"/"working" with elapsed time.
@@ -26,6 +26,8 @@ The REPL is a thin front end over `app.Backend`: it reads input, dispatches slas
 
 - **TUI-10** One input source for everything read from the terminal (REPL, approvals, `ask_user_question`, steering) — separate readers on the same fd would steal each other's buffered input. A read abandoned by cancellation stays in flight and its line goes to the next caller.
 - **TUI-11** On a TTY: line editor with history in `ui.history_file` (created owner-only, `ui.history_size` 1000), Ctrl+R reverse search, Tab completion for `/commands`, their arguments ([spec_cli_020](spec_cli_020.md) CLI-40/41) and `@path` files.
+- **TUI-13** Keys at the REPL prompt: Shift+Tab cycles `default → accept-edits → plan → default` (inserting `bypass` after `plan` only when the REPL started in `bypass`; failing to enter it skips to `default`) and redraws the prompt; Ctrl+G opens the line in `$VISUAL`/`$EDITOR` (run through `/bin/sh`, so it may carry arguments) and submits the saved text, echoed after the prompt (no editor, a failure or an empty file: a note, and the typed line comes back); Esc Esc within 600 ms clears the line. Ctrl+G works in the steer prompt too; Shift+Tab and Ctrl+G do nothing at approvals and questions.
+- **TUI-14** Esc: the line editor reads a lone Esc byte as the start of an escape sequence, so its stdin (`escReader`) turns a read of just `ESC` into a private-use rune first (a terminal sends a key's sequence in one write). Keys that must change or end the line inject bytes the editor reads next (Ctrl+E Ctrl+U to clear, Enter to submit, Ctrl+C to interrupt). Esc at an approval or question is Ctrl+C; in the steer prompt it submits nothing (the message is dropped, the turn goes on).
 - **TUI-12** Multi-line entries: end a line with `\`, or enclose a block between two `"""` lines.
 
 ## 4. Dispatch
@@ -64,7 +66,7 @@ The REPL is a thin front end over `app.Backend`: it reads input, dispatches slas
 ## 5. Turns
 
 - **TUI-30** Queued attachments (and `@image` mentions) are collected before a non-aside turn; a failure aborts the turn. Once accepted, attachment summaries print and the queue clears; plan/btw modes print a dim note.
-- **TUI-31** Ctrl+C during a turn cancels only that turn ("interrupted"); during an approval prompt (raw mode) it also cancels the turn. A blocked prompt prints "✗ prompt blocked: <reason>".
+- **TUI-31** Ctrl+C, or Esc on its own (read by the steering key watcher), during a turn cancels only that turn ("interrupted"); during an approval prompt (raw mode) it also cancels the turn. A blocked prompt prints "✗ prompt blocked: <reason>".
 - **TUI-32** Steering (macOS, Linux; TTY line editor): while a turn runs, typing or Ctrl+T opens a steer prompt pre-filled with what was typed; output is held back while typing and released afterwards (the spinner resumes only if it was showing). An empty message cancels. The message goes through `Backend.Steer` (hooks apply; a block is shown). Stopping the watcher at the end of the turn waits for an open steer prompt, so the message isn't lost.
 - **TUI-33** Leftover steer messages (sent after the model's last tool call) are sent as the next turn, marked accepted; if the turn was interrupted they are dropped with a notice.
 

@@ -43,3 +43,22 @@ func TestEffortCommand(t *testing.T) {
 		t.Errorf("effort after auto: %q", got)
 	}
 }
+
+func TestCycleModeSkipsAnUnavailableBypass(t *testing.T) {
+	app, _ := newCommandApp(t, "")
+	app.Workspace.SetPermissionMode("default")
+	var seen []string
+	for range 4 {
+		cycleMode(app, true)
+		seen = append(seen, app.Workspace.Settings().PermissionMode)
+	}
+	want := []string{"accept-edits", "plan"}
+	if _, err := app.Workspace.SetPermissionMode("bypass"); err == nil {
+		want = append(want, "bypass", "default") // this machine has the OS sandbox
+	} else {
+		want = append(want, "default", "accept-edits")
+	}
+	if strings.Join(seen, ",") != strings.Join(want, ",") {
+		t.Fatalf("cycle %v, want %v", seen, want)
+	}
+}

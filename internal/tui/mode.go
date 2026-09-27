@@ -77,3 +77,36 @@ func cmdEffort(ctx context.Context, args []string, app *App) {
 	}
 	fmt.Printf("%s%s%s\n", Green, i18n.T("effort.set", "effort", effort), Reset)
 }
+
+// nextMode is the mode Shift+Tab switches to: default, accept-edits, plan,
+// then bypass only when the session started in it (dont-ask is left for
+// /mode), then default again.
+func nextMode(current string, withBypass bool) string {
+	switch tools.PermissionMode(current) {
+	case tools.ModeDefault:
+		return string(tools.ModeAcceptEdits)
+	case tools.ModeAcceptEdits:
+		return string(tools.ModePlan)
+	case tools.ModePlan:
+		if withBypass {
+			return string(tools.ModeBypass)
+		}
+	}
+	return string(tools.ModeDefault)
+}
+
+// cycleMode switches to the next mode (Shift+Tab) and reports whether it
+// changed. Failing to enter bypass (the sandbox went away) skips it.
+func cycleMode(app *App, withBypass bool) bool {
+	current := app.Workspace.Settings().PermissionMode
+	next := nextMode(current, withBypass)
+	if _, err := app.Workspace.SetPermissionMode(next); err != nil {
+		if next != string(tools.ModeBypass) {
+			return false
+		}
+		if _, err := app.Workspace.SetPermissionMode(string(tools.ModeDefault)); err != nil {
+			return false
+		}
+	}
+	return app.Workspace.Settings().PermissionMode != current
+}

@@ -80,7 +80,7 @@ func TestKeyWatcherTriggersPausesAndRestores(t *testing.T) {
 			t.Error("onKey ran with the terminal still in key mode")
 		}
 		got <- prefill
-	})
+	}, nil)
 
 	keys.in <- []byte("\r") // ignored
 	keys.in <- []byte("fix")
@@ -130,7 +130,7 @@ func TestKeyWatcherTriggersPausesAndRestores(t *testing.T) {
 func TestKeyWatcherPauseWaitsForOpenSteerPrompt(t *testing.T) {
 	keys := newChanKeys()
 	release := make(chan struct{})
-	w := startKeyWatcher(keys, func(string) { <-release })
+	w := startKeyWatcher(keys, func(string) { <-release }, nil)
 	defer w.close()
 	keys.in <- []byte("a")
 	time.Sleep(100 * time.Millisecond) // steer prompt now "open"
