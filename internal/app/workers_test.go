@@ -164,3 +164,51 @@ func TestRunWorkerStopsAtItsTurnLimit(t *testing.T) {
 		t.Errorf("run %+v %v", run, err)
 	}
 }
+
+// A worker's agent and model apply to its runs only.
+func TestRunWorkerUsesItsAgentAndModel(t *testing.T) {
+	w, main := openTestWith(t, nil, text("from the workspace model"))
+	addWorker(t, w, "review", "---\nschedule: hourly\nagent: qa\nmodel: anthropic/claude-sonnet-5\n---\nReview the tests.\n")
+	addWorker(t, w, "badmodel", "---\nschedule: hourly\nmodel: broken\n---\nDo it.\n")
+	addWorker(t, w, "nobody", "---\nschedule: hourly\nagent: nobody\n---\nDo it.\n")
+	for _, name := range []string{"review", "badmodel", "nobody"} {
+		enable(t, w, name)
+	}
+
+	run, err := w.RunWorker(context.Background(), "review", RunOptions{})
+	if err != nil || run.Status != workers.RunSucceeded {
+		t.Fatalf("run %+v %v", run, err)
+	}
+	if main.Calls() != 0 {
+		t.Errorf("the workspace model answered %d times; the worker's model should have", main.Calls())
+	}
+	sessions, _ := w.ListSessions(false)
+	found := false
+	for _, s := range sessions {
+		if s.ID == run.SessionID {
+			found = true
+			if s.Agent != "qa" {
+				t.Errorf("run session agent %q, want qa", s.Agent)
+			}
+		}
+	}
+	if !found {
+		t.Errorf("run session %s not listed", run.SessionID)
+	}
+	if w.ActiveAgent().Name != "blitz" || w.Model().Name != "gemini-3.8-flash" {
+		t.Errorf("the run changed the workspace: %s on %s", w.ActiveAgent().Name, w.Model().Name)
+	}
+
+	if run, _ := w.RunWorker(context.Background(), "badmodel", RunOptions{}); run.Status != workers.RunFailed || !strings.Contains(run.Error, "broken") {
+		t.Errorf("unbuildable model: %+v", run)
+	}
+	list, _ := w.ListWorkers()
+	for _, info := range list {
+		if info.Name == "nobody" && (len(info.Problems) == 0 || !strings.Contains(info.Problems[0], "nobody")) {
+			t.Errorf("unknown agent not reported: %+v", info.Problems)
+		}
+	}
+	if run, _ := w.RunWorker(context.Background(), "nobody", RunOptions{}); run.Status != workers.RunFailed || !strings.Contains(run.Error, "nobody") {
+		t.Errorf("unknown agent: %+v", run)
+	}
+}

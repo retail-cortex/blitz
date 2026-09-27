@@ -1,6 +1,7 @@
 package runtime
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -59,6 +60,13 @@ type runState struct {
 	attachments []*genai.Part
 	planOnly    bool   // refuse tools that could change anything (see WithPlanOnly)
 	mode        string // names a read-only mode other than plan in refusals (see WithReadOnly)
+	// agent and model replace the active agent and the configured model for
+	// this run only (see WithAgent, WithModel).
+	agent string
+	model model.LLM
+	// models names the model each agent of an overridden tree runs on, for
+	// pricing; nil when the run uses the engine's own tree.
+	models map[string]string
 }
 
 func stateFrom(ctx context.Context) *runState {
@@ -380,12 +388,13 @@ func (e *Engine) generateConfig() *genai.GenerateContentConfig {
 	return gc
 }
 
-func (e *Engine) newLLMAgent(spec *agents.AgentSpec, instruction string, subAgents []agent.Agent, toolsets []tool.Toolset) (agent.Agent, error) {
+// newLLMAgent builds spec's agent running on llm.
+func (e *Engine) newLLMAgent(spec *agents.AgentSpec, llm model.LLM, instruction string, subAgents []agent.Agent, toolsets []tool.Toolset) (agent.Agent, error) {
 	return llmagent.New(llmagent.Config{
 		Name:                  spec.Name,
 		Description:           spec.Description,
 		Instruction:           instruction + e.imageInstruction(spec) + e.extraInstructions,
-		Model:                 e.modelForLocked(spec.Name),
+		Model:                 llm,
 		Tools:                 e.toolReg.GetToolsForAgent(spec.Tools),
 		Toolsets:              toolsets,
 		SubAgents:             subAgents,
@@ -425,6 +434,9 @@ func (e *Engine) afterModel(ctx agent.Context, resp *model.LLMResponse, respErr 
 	served := resp.ModelVersion
 	if served == "" || !e.usage.HasPrice(served) {
 		name, _ := e.AgentModel(ctx.AgentName()) // the calling agent's model (it may be pinned)
+		if st := stateFrom(ctx); st != nil && st.models[ctx.AgentName()] != "" {
+			name = st.models[ctx.AgentName()] // a run with its own agent or model
+		}
 		served = name
 	}
 	var writes int64
@@ -524,23 +536,62 @@ func (e *Engine) subInstruction(spec *agents.AgentSpec) string {
 
 // rebuildLocked requires e.mu held for writing.
 func (e *Engine) rebuildLocked() error {
-	rootSpec, ok := e.agentReg.Get(e.active)
-	if !ok {
-		rootSpec, ok = e.agentReg.Get("blitz")
-		if !ok {
+	if _, ok := e.agentReg.Get(e.active); !ok {
+		if _, ok := e.agentReg.Get("blitz"); !ok {
 			return fmt.Errorf("default agent 'blitz' not found in registry")
 		}
 		e.active = "blitz"
 	}
+	t, err := e.buildTreeLocked(e.active, nil)
+	if err != nil {
+		return err
+	}
+	e.runner, e.rootAgent, e.compactionCfg = t.runner, t.root, t.compaction
+	return nil
+}
+
+// tree is a runner over an agent tree, and the model each agent runs on.
+type tree struct {
+	runner     *runner.Runner
+	root       agent.Agent
+	compaction *compaction.Config
+	models     map[string]model.LLM
+}
+
+// modelInTreeLocked is the model agent runs on in a tree rooted at active
+// whose configured model is replaced by override (nil: none): the override
+// runs the root agent even when it is pinned, and every unpinned agent.
+// e.mu must be held.
+func (e *Engine) modelInTreeLocked(agentName, active string, override model.LLM) model.LLM {
+	if override != nil {
+		if _, pinned := e.agentModels[agentName]; agentName == active || !pinned {
+			return override
+		}
+	}
+	return e.modelForLocked(agentName)
+}
+
+// buildTreeLocked builds a runner whose root is active, with every other
+// agent as a sub-agent. override (nil: none) replaces the configured model
+// (see modelInTreeLocked). It changes nothing in e, so e.mu may be held
+// for reading only.
+func (e *Engine) buildTreeLocked(active string, override model.LLM) (tree, error) {
+	rootSpec, ok := e.agentReg.Get(active)
+	if !ok {
+		return tree{}, fmt.Errorf("agent '%s' not found", active)
+	}
+	t := tree{models: map[string]model.LLM{}}
 
 	var subAgents []agent.Agent
 	for _, spec := range e.agentReg.List() {
-		if spec.Name == e.active {
+		if spec.Name == active {
 			continue
 		}
-		sub, err := e.newLLMAgent(spec, e.subInstruction(spec), nil, e.toolReg.MCP().ToolsetsFor(spec.Name, false))
+		llm := e.modelInTreeLocked(spec.Name, active, override)
+		t.models[spec.Name] = llm
+		sub, err := e.newLLMAgent(spec, llm, e.subInstruction(spec), nil, e.toolReg.MCP().ToolsetsFor(spec.Name, false))
 		if err != nil {
-			return fmt.Errorf("failed to build sub-agent %s: %w", spec.Name, err)
+			return tree{}, fmt.Errorf("failed to build sub-agent %s: %w", spec.Name, err)
 		}
 		subAgents = append(subAgents, sub)
 	}
@@ -559,9 +610,11 @@ func (e *Engine) rebuildLocked() error {
 	}
 
 	// MCP servers choose their agents; by default only the primary agent.
-	rootAgent, err := e.newLLMAgent(rootSpec, rootInstruction, subAgents, e.toolReg.MCP().ToolsetsFor(rootSpec.Name, true))
+	llm := e.modelInTreeLocked(active, active, override)
+	t.models[active] = llm
+	rootAgent, err := e.newLLMAgent(rootSpec, llm, rootInstruction, subAgents, e.toolReg.MCP().ToolsetsFor(rootSpec.Name, true))
 	if err != nil {
-		return fmt.Errorf("failed to build root agent: %w", err)
+		return tree{}, fmt.Errorf("failed to build root agent: %w", err)
 	}
 
 	rc := runner.Config{
@@ -587,10 +640,10 @@ func (e *Engine) rebuildLocked() error {
 	rc.Compaction = &compaction.Config{TokenThreshold: threshold, EventRetentionSize: retain}
 	r, err := runner.New(rc)
 	if err != nil {
-		return fmt.Errorf("failed to instantiate ADK runner: %w", err)
+		return tree{}, fmt.Errorf("failed to instantiate ADK runner: %w", err)
 	}
-	e.runner, e.rootAgent, e.compactionCfg = r, rootAgent, rc.Compaction
-	return nil
+	t.runner, t.root, t.compaction = r, rootAgent, rc.Compaction
+	return t, nil
 }
 
 // ExecOption configures one Execute call.
@@ -599,20 +652,27 @@ type ExecOption func(*runState)
 // WithMaxTurns limits the number of model calls in the run (0 = unlimited).
 func WithMaxTurns(n int) ExecOption { return func(s *runState) { s.maxTurns = n } }
 
+// WithAgent runs the prompt with name as the root agent instead of the
+// active one, for this run only (e.g. a worker's agent).
+func WithAgent(name string) ExecOption { return func(s *runState) { s.agent = name } }
+
+// WithModel runs the prompt on llm instead of the configured model, for
+// this run only: the root agent runs on it even if pinned, and so does
+// every unpinned agent (e.g. a worker's model).
+func WithModel(llm model.LLM) ExecOption { return func(s *runState) { s.model = llm } }
+
 // Execute runs a prompt within a session and streams ADK events to the handler.
 func (e *Engine) Execute(ctx context.Context, sessionID, prompt string, handler EventHandler, opts ...ExecOption) error {
-	e.mu.RLock()
-	r := e.runner
-	e.mu.RUnlock()
-	if r == nil {
-		return fmt.Errorf("runner is not initialized")
-	}
 	if sessionID == "" {
 		sessionID = "default"
 	}
 	st := &runState{sessionID: sessionID}
 	for _, o := range opts {
 		o(st)
+	}
+	r, agentName, modelName, err := e.runnerFor(st)
+	if err != nil {
+		return err
 	}
 	ctx = context.WithValue(ctx, runStateKey{}, st)
 	ctx = withSettingsLookup(ctx, e.lookupSettings)
@@ -625,8 +685,8 @@ func (e *Engine) Execute(ctx context.Context, sessionID, prompt string, handler 
 	}
 
 	ctx, span, index := e.startTurn(ctx, sessionID,
-		attribute.String("agent", e.ActiveAgent()),
-		attribute.String("model", e.ModelName()),
+		attribute.String("agent", agentName),
+		attribute.String("model", modelName),
 		attribute.Int("prompt.chars", len(prompt)),
 		attribute.Int("attachments", len(st.attachments)),
 		attribute.Int("max_turns", st.maxTurns),
@@ -634,7 +694,7 @@ func (e *Engine) Execute(ctx context.Context, sessionID, prompt string, handler 
 	)
 	defer e.recordTurn(ctx, sessionID, span, index)
 	before := e.usage.Session(sessionID)
-	err := drain(r.Run(ctx, "user", sessionID, userContent(prompt, st.attachments), rc), handler)
+	err = drain(r.Run(ctx, "user", sessionID, userContent(prompt, st.attachments), rc), handler)
 	after := e.usage.Session(sessionID)
 	span.SetAttributes(
 		attribute.Int64("model_calls", int64(after.Calls-before.Calls)),
@@ -649,6 +709,34 @@ func (e *Engine) Execute(ctx context.Context, sessionID, prompt string, handler 
 		slog.ErrorContext(ctx, "turn failed", "session", sessionID, "error", err)
 	}
 	return err
+}
+
+// runnerFor returns the runner for a run and the root agent and model it
+// uses: the engine's own, or, when the run names an agent or a model, one
+// built for it alone (st.models then names each agent's model for pricing).
+func (e *Engine) runnerFor(st *runState) (*runner.Runner, string, string, error) {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	if st.agent == "" && st.model == nil {
+		if e.runner == nil {
+			return nil, "", "", fmt.Errorf("runner is not initialized")
+		}
+		return e.runner, e.active, e.modelForLocked(e.active).Name(), nil
+	}
+	active := cmp.Or(st.agent, e.active)
+	var override model.LLM
+	if st.model != nil {
+		override = withImages(st.model, e.toolReg.Images())
+	}
+	t, err := e.buildTreeLocked(active, override)
+	if err != nil {
+		return nil, "", "", err
+	}
+	st.models = make(map[string]string, len(t.models))
+	for name, m := range t.models {
+		st.models[name] = m.Name()
+	}
+	return t.runner, active, t.models[active].Name(), nil
 }
 
 // boundedRunner runs the tool calls of one model response with at most
@@ -740,7 +828,11 @@ func (e *Engine) InvokeSubagent(ctx context.Context, agentName, prompt string) (
 	}
 
 	e.mu.RLock()
-	sub, err := e.newLLMAgent(spec, e.subInstruction(spec), nil, e.toolReg.MCP().ToolsetsFor(agentName, false))
+	llm := e.modelForLocked(spec.Name)
+	if st := stateFrom(ctx); st != nil && st.model != nil { // a run with its own model
+		llm = e.modelInTreeLocked(spec.Name, cmp.Or(st.agent, e.active), withImages(st.model, e.toolReg.Images()))
+	}
+	sub, err := e.newLLMAgent(spec, llm, e.subInstruction(spec), nil, e.toolReg.MCP().ToolsetsFor(agentName, false))
 	e.mu.RUnlock()
 	if err != nil {
 		return "", fmt.Errorf("failed to build sub-agent %s: %w", agentName, err)

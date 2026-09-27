@@ -1,6 +1,7 @@
 package app
 
 import (
+	"cmp"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
@@ -113,8 +114,10 @@ func (w *Workspace) workerInfo(wk *workers.Worker, loadErr error, now time.Time)
 		}
 		info.Limits = eff.Limits
 		info.Problems = append(info.Problems, eff.Notes...)
-		if wk.Agent != "" || wk.Model != "" {
-			info.Problems = append(info.Problems, "agent and model in WORKER.md aren't applied yet: runs use the workspace's active agent and model")
+		if wk.Agent != "" {
+			if _, ok := w.agents.Get(wk.Agent); !ok {
+				info.Problems = append(info.Problems, fmt.Sprintf("agent %q isn't defined: runs will fail until it is", wk.Agent))
+			}
 		}
 		if info.State == workers.StateEnabled {
 			info.Next = wk.Schedule.Next(now)
@@ -243,6 +246,7 @@ func (w *Workspace) RunWorker(ctx context.Context, name string, o RunOptions) (w
 	}()
 
 	eff := workers.Apply(wk, w.cfg.Workers.Policy)
+	agent := cmp.Or(wk.Agent, w.engine.ActiveAgent())
 	run := workers.Run{ID: newRunID(), Workspace: w.Dir(), Worker: name, Hash: wk.Hash, Status: workers.RunRunning, Manual: o.Manual, Started: time.Now()}
 
 	st, err := session.NewStorage(w.cfg.Session.StorageDir)
@@ -250,7 +254,7 @@ func (w *Workspace) RunWorker(ctx context.Context, name string, o RunOptions) (w
 		return run, err
 	}
 	st.SetWorkspace(w.Dir())
-	rec, err := st.CreateSession(session.NewSessionID(), fmt.Sprintf("⏰ %s %s", name, run.Started.Format("2006-01-02 15:04")), w.engine.ActiveAgent())
+	rec, err := st.CreateSession(session.NewSessionID(), fmt.Sprintf("⏰ %s %s", name, run.Started.Format("2006-01-02 15:04")), agent)
 	if err != nil {
 		return run, err
 	}
@@ -280,14 +284,33 @@ func (w *Workspace) RunWorker(ctx context.Context, name string, o RunOptions) (w
 	if on == nil {
 		on = func(Event) {}
 	}
-	_, runErr := w.run(runCtx, rec.ID, Turn{
-		Text: wk.Prompt, Prompt: fmt.Sprintf(unattendedPreamble, name) + wk.Prompt, MaxTurns: eff.Limits.MaxTurns,
-	}, func(e Event) {
-		on(e)
-		if eff.Limits.MaxCostUSD > 0 && w.engine.Usage(rec.ID).CostUSD > eff.Limits.MaxCostUSD {
-			cancel(errOverBudget)
+	// The worker's own agent and model, for this run only.
+	var opts []runtime.ExecOption
+	var runErr error
+	if wk.Agent != "" {
+		opts = append(opts, runtime.WithAgent(wk.Agent))
+		if _, ok := w.agents.Get(wk.Agent); !ok {
+			runErr = fmt.Errorf("agent %q isn't defined", wk.Agent)
 		}
-	}, st)
+	}
+	if wk.Model != "" && runErr == nil {
+		llm, err := w.newModel(ctx, w.cfg, wk.Model)
+		if err != nil {
+			runErr = fmt.Errorf("model %q: %s", wk.Model, ModelErrorSummary(err, w.cfg))
+		} else {
+			opts = append(opts, runtime.WithModel(llm))
+		}
+	}
+	if runErr == nil {
+		_, runErr = w.run(runCtx, rec.ID, Turn{
+			Text: wk.Prompt, Prompt: fmt.Sprintf(unattendedPreamble, name) + wk.Prompt, MaxTurns: eff.Limits.MaxTurns,
+		}, func(e Event) {
+			on(e)
+			if eff.Limits.MaxCostUSD > 0 && w.engine.Usage(rec.ID).CostUSD > eff.Limits.MaxCostUSD {
+				cancel(errOverBudget)
+			}
+		}, st, opts...)
+	}
 
 	u := w.engine.Usage(rec.ID)
 	run.Duration, run.CostUSD, run.Calls = time.Since(run.Started), u.CostUSD, u.Calls

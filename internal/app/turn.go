@@ -81,8 +81,9 @@ func (w *Workspace) Run(ctx context.Context, sessionID string, t Turn, on func(E
 }
 
 // run is Run recording the transcript in st, which holds the session as
-// its active one (a worker run has its own).
-func (w *Workspace) run(ctx context.Context, sessionID string, t Turn, on func(Event), st *session.Storage) (TurnResult, error) {
+// its active one (a worker run has its own). extra are further engine
+// options for a non-aside turn (a worker's agent and model).
+func (w *Workspace) run(ctx context.Context, sessionID string, t Turn, on func(Event), st *session.Storage, extra ...runtime.ExecOption) (TurnResult, error) {
 	if !t.Accepted {
 		if err := w.accept(ctx, sessionID, t.Text); err != nil {
 			return TurnResult{}, err
@@ -119,7 +120,7 @@ func (w *Workspace) run(ctx context.Context, sessionID string, t Turn, on func(E
 	if t.Aside {
 		err = w.engine.Aside(ctx, sessionID, prompt, handler)
 	} else {
-		var opts []runtime.ExecOption
+		opts := append([]runtime.ExecOption(nil), extra...)
 		if t.MaxTurns > 0 {
 			opts = append(opts, runtime.WithMaxTurns(t.MaxTurns))
 		}

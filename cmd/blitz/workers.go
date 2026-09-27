@@ -136,6 +136,12 @@ func describeWorker(out io.Writer, w app.WorkerInfo) {
 		fmt.Fprintf(out, "  %s\n", w.Description)
 	}
 	fmt.Fprintf(out, "  schedule:    %s = %s (%s)\n", w.Schedule, w.Cron, w.Timezone)
+	if w.Agent != "" {
+		fmt.Fprintf(out, "  agent:       %s\n", w.Agent)
+	}
+	if w.Model != "" {
+		fmt.Fprintf(out, "  model:       %s\n", w.Model)
+	}
 	perms := "none (it can read, and write nothing)"
 	if len(w.Permissions) > 0 {
 		perms = strings.Join(w.Permissions, ", ")

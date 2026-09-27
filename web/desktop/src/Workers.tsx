@@ -113,6 +113,18 @@ function WorkerView({ dir, worker, onChange }: { dir: string; worker: Worker; on
           {worker.schedule} = <code>{worker.cron}</code> ({worker.timezone})
           {worker.nextRun && `, next ${timestampDate(worker.nextRun).toLocaleString()}`}
         </dd>
+        {worker.agent && (
+          <>
+            <dt>Agent</dt>
+            <dd>{worker.agent}</dd>
+          </>
+        )}
+        {worker.model && (
+          <>
+            <dt>Model</dt>
+            <dd>{worker.model}</dd>
+          </>
+        )}
         <dt>May</dt>
         <dd>{worker.permissions.length ? worker.permissions.map((p) => <code key={p}>{p} </code>) : "read only"}</dd>
         <dt>Limits</dt>
