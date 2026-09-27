@@ -166,7 +166,7 @@ export function Menu({
   placement = "down start",
 }: {
   trigger: (props: { onClick: () => void; "aria-expanded": boolean; "aria-haspopup": "menu" }) => ReactNode;
-  items: (MenuItem | "divider" | { heading: string })[];
+  items: MenuEntry[];
   placement?: string;
 }) {
   const [open, setOpen] = useState(false);
@@ -176,38 +176,58 @@ export function Menu({
   return (
     <span className="menu-anchor" ref={ref}>
       {trigger({ onClick: () => setOpen((o) => !o), "aria-expanded": open, "aria-haspopup": "menu" })}
-      {open && (
-        <div className={`menu ${placement}`} role="menu">
-          {items.map((it, i) =>
-            it === "divider" ? (
-              <div key={i} className="menu-divider" />
-            ) : "heading" in it ? (
-              <div key={i} className="menu-label">
-                {it.heading}
-              </div>
-            ) : (
-              <button
-                key={i}
-                type="button"
-                role="menuitem"
-                className={`menu-item ${it.on ? "on" : ""}`}
-                disabled={it.disabled}
-                style={it.danger ? { color: "var(--md-error)" } : undefined}
-                onClick={() => {
-                  setOpen(false);
-                  it.onSelect();
-                }}
-              >
-                {it.icon && <Icon path={it.icon} />}
-                <span>
-                  {it.label}
-                  {it.detail && <small>{it.detail}</small>}
-                </span>
-              </button>
-            ),
-          )}
-        </div>
+      {open && <MenuList className={`menu ${placement}`} items={items} onPick={() => setOpen(false)} />}
+    </span>
+  );
+}
+
+export type MenuEntry = MenuItem | "divider" | { heading: string };
+
+function MenuList({ className, items, onPick, style }: { className: string; items: MenuEntry[]; onPick: () => void; style?: React.CSSProperties }) {
+  return (
+    <div className={className} role="menu" style={style}>
+      {items.map((it, i) =>
+        it === "divider" ? (
+          <div key={i} className="menu-divider" />
+        ) : "heading" in it ? (
+          <div key={i} className="menu-label">
+            {it.heading}
+          </div>
+        ) : (
+          <button
+            key={i}
+            type="button"
+            role="menuitem"
+            className={`menu-item ${it.on ? "on" : ""}`}
+            disabled={it.disabled}
+            style={it.danger ? { color: "var(--md-error)" } : undefined}
+            onClick={() => {
+              onPick();
+              it.onSelect();
+            }}
+          >
+            {it.icon && <Icon path={it.icon} />}
+            <span>
+              {it.label}
+              {it.detail && <small>{it.detail}</small>}
+            </span>
+          </button>
+        ),
       )}
+    </div>
+  );
+}
+
+/** A menu at a point (a right click); a click elsewhere or Escape closes it. */
+export function ContextMenu({ x, y, items, onClose }: { x: number; y: number; items: MenuEntry[]; onClose: () => void }) {
+  const ref = useRef<HTMLSpanElement>(null);
+  useDismiss(true, ref, onClose);
+  // Kept inside the window.
+  const left = Math.min(x, window.innerWidth - 240);
+  const top = Math.min(y, window.innerHeight - 40 * items.length - 16);
+  return (
+    <span ref={ref}>
+      <MenuList className="menu context-menu" items={items} onPick={onClose} style={{ position: "fixed", left, top: Math.max(8, top) }} />
     </span>
   );
 }

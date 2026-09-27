@@ -12,6 +12,7 @@ import { ActionKind, ErrorInfoSchema, UsageSchema, type Usage } from "../gen/bli
 type Out = MessageInitShape<typeof RunTurnResponseSchema>;
 import { RunStatus, WorkerService, WorkerState } from "../gen/blitz/v1/worker_pb";
 import { ConfigService, KeySource } from "../gen/blitz/v1/config_pb";
+import { FileKind, FileService } from "../gen/blitz/v1/file_pb";
 import { WorkspaceService } from "../gen/blitz/v1/workspace_pb";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -196,6 +197,27 @@ function scopeConfig(workspace: string) {
 const configPath = (workspace: string) => (workspace ? `~/.blitz/workspaces/${workspace.split("/").pop()}-1a2b/.env.toml` : "~/.blitz/.env.toml");
 const change = (workspace: string) => ({ change: { path: configPath(workspace), modelError: "" } });
 
+// The workspace's files: a small Go project, some of it changed.
+const fakeFiles = new Map<string, string>([
+  ["go.mod", "module example.com/shop\n\ngo 1.27\n"],
+  ["README.md", "# Shop\n\nA small shop server. Run it with `go run ./cmd/shop`.\n"],
+  ["cmd/shop/main.go", 'package main\n\nimport (\n\t"log"\n\t"net/http"\n\n\t"example.com/shop/internal/cart"\n)\n\nfunc main() {\n\thttp.HandleFunc("/cart", cart.Handler)\n\tlog.Fatal(http.ListenAndServe(":8080", nil))\n}\n'],
+  [
+    "internal/cart/discount.go",
+    "package cart\n\n// ApplyCoupon returns the total of items with the coupon's percentage off,\n// rounded once, in cents.\nfunc ApplyCoupon(items []Item, c Coupon) int {\n\ttotal := 0\n\tfor _, it := range items {\n\t\ttotal += it.Cents\n\t}\n\treturn round(total * (100 - c.Percent) / 100)\n}\n\nfunc round(cents int) int {\n\tif cents < 0 {\n\t\treturn 0\n\t}\n\treturn cents\n}\n",
+  ],
+  ["internal/cart/discount_test.go", "package cart\n\nimport \"testing\"\n\nfunc TestApplyCouponRounding(t *testing.T) {\n}\n"],
+  ["internal/cart/cart.go", "package cart\n\ntype Item struct {\n\tName  string\n\tCents int\n}\n\ntype Coupon struct{ Percent int }\n"],
+  ["internal/store/queries.sql", "-- name: ListItems :many\nSELECT id, name, cents FROM items ORDER BY name;\n"],
+  ["web/app.ts", "export function total(items: { cents: number }[]): number {\n  return items.reduce((a, b) => a + b.cents, 0);\n}\n"],
+  [".env", "STRIPE_KEY=sk_test_fake\n"],
+  [".gitignore", "bin/\n*.log\n"],
+  ["bin/shop", "\u0000binary"],
+]);
+const fakeGit: Record<string, string> = { "internal/cart/discount.go": "modified", "internal/cart/discount_test.go": "untracked", "web/app.ts": "added" };
+const fakeHidden = (p: string) => (p === ".env" ? "blocked" : p.startsWith("bin") ? "ignored" : p.split("/").pop()!.startsWith(".") ? "dot" : "");
+const fakeVersion = (text: string) => String(text.length) + ":" + [...text].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7).toString(16);
+
 export function installFake() {
   setTransport(
     createRouterTransport(({ service }) => {
@@ -363,6 +385,68 @@ export function installFake() {
           scopeConfig(workspace).text = text;
           return { ...change(workspace), warnings: text.includes("sk-") ? ["[llm.anthropic] api_key is written as plain text: set it in Providers & keys to keep it in the keychain"] : [] };
         },
+      });
+      service(FileService, {
+        listDir: ({ path, showHidden }) => {
+          const prefix = path ? path + "/" : "";
+          const seen = new Map<string, boolean>();
+          for (const p of fakeFiles.keys()) {
+            if (!p.startsWith(prefix)) continue;
+            const rest = p.slice(prefix.length);
+            const name = rest.split("/")[0];
+            seen.set(name, seen.get(name) || rest.includes("/"));
+          }
+          const entries = [...seen].map(([name, folder]) => {
+            const p = prefix + name;
+            const git = folder ? (Object.keys(fakeGit).some((g) => g.startsWith(p + "/")) ? "changed" : "") : (fakeGit[p] ?? "");
+            return { name, path: p, kind: folder ? FileKind.FOLDER : FileKind.FILE, size: BigInt(fakeFiles.get(p)?.length ?? 0), git, hidden: fakeHidden(p), agentRule: p === ".env" ? "blocked" : "" };
+          });
+          entries.sort((a, b) => (a.kind !== b.kind ? (a.kind === FileKind.FOLDER ? -1 : 1) : a.name.localeCompare(b.name)));
+          return { entries: showHidden ? entries : entries.filter((e) => !e.hidden), repo: true };
+        },
+        readFile: ({ path }) => {
+          const text = fakeFiles.get(path);
+          if (text === undefined) notFound(path);
+          const binary = text.includes("\u0000");
+          return { path, text: binary ? "" : text, version: fakeVersion(text), size: BigInt(text.length), binary, agentRule: path === ".env" ? "blocked" : "" };
+        },
+        writeFile: ({ path, text, version }) => {
+          const now = fakeFiles.get(path);
+          if ((now === undefined ? "" : fakeVersion(now)) !== version) {
+            const err = new ConnectError(`${path} was changed since it was opened`, Code.FailedPrecondition);
+            err.details.push({ desc: ErrorInfoSchema, value: { reason: "FILE_CHANGED", metadata: { current_version: now === undefined ? "" : fakeVersion(now) } } });
+            throw err;
+          }
+          fakeFiles.set(path, text);
+          return { version: fakeVersion(text) };
+        },
+        createFolder: ({ path }) => {
+          fakeFiles.set(path + "/.keep", "");
+          return {};
+        },
+        renameFile: ({ from, to }) => {
+          for (const [p, v] of [...fakeFiles]) {
+            if (p === from || p.startsWith(from + "/")) {
+              fakeFiles.delete(p);
+              fakeFiles.set(to + p.slice(from.length), v);
+            }
+          }
+          return {};
+        },
+        deleteFile: ({ path }) => {
+          for (const p of [...fakeFiles.keys()]) if (p === path || p.startsWith(path + "/")) fakeFiles.delete(p);
+          return {};
+        },
+        findFiles: ({ query }) => {
+          const q = query.toLowerCase().replace(/\s/g, "");
+          const match = (p: string) => {
+            let i = 0;
+            for (const c of p.toLowerCase()) if (c === q[i]) i++;
+            return i === q.length;
+          };
+          return { paths: [...fakeFiles.keys()].filter((p) => !fakeHidden(p) && !p.split("/").some((x) => x.startsWith(".")) && match(p)).sort((a, b) => a.length - b.length) };
+        },
+        statFiles: ({ paths }) => ({ versions: Object.fromEntries(paths.map((p) => [p, fakeFiles.has(p) ? fakeVersion(fakeFiles.get(p)!) : ""])) }),
       });
       service(WorkerService, {
         listWorkers: () => ({

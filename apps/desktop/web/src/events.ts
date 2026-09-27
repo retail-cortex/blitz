@@ -41,3 +41,27 @@ export interface ConfigChangedDetail {
 export function configChanged(detail: ConfigChangedDetail) {
   window.dispatchEvent(new CustomEvent(configChangedEvent, { detail }));
 }
+
+// Files (spec_files_029): open a file in a workspace's editor (at a line),
+// ask for Go to file, or say that files may have changed (a tool ran, a
+// turn ended) so the shelf and editor look again.
+export const openFileEvent = "blitz:open-file";
+export interface OpenFileDetail {
+  dir: string;
+  path: string;
+  line?: number;
+  column?: number;
+}
+export function openFile(detail: OpenFileDetail) {
+  window.dispatchEvent(new CustomEvent(openFileEvent, { detail }));
+}
+
+export const goToFileEvent = "blitz:go-to-file";
+export function goToFile(detail: { dir: string }) {
+  window.dispatchEvent(new CustomEvent(goToFileEvent, { detail }));
+}
+
+export const filesTouchedEvent = "blitz:files-touched";
+export function filesTouched(detail: { dir: string }) {
+  window.dispatchEvent(new CustomEvent(filesTouchedEvent, { detail }));
+}

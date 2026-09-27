@@ -332,3 +332,65 @@
 .provider-row .field { max-width: 480px; }
 .provider-actions { margin-left: auto; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px; }
 .settings-text { min-height: 220px; font-size: 13px; line-height: 20px; tab-size: 2; }
+
+/* Files (spec_files_029): the shelf, the editor beside the conversation. */
+.files-shelf { width: 272px; flex: none; display: flex; flex-direction: column; min-height: 0; border-right: 1px solid var(--md-outline-variant); background: var(--md-surface-container-low); }
+.files-head { padding: 10px 6px 6px 16px; gap: 0; }
+.files-tree { flex: 1; overflow: auto; padding: 0 6px 24px; outline: none; }
+.files-note { padding: 8px 12px; }
+.tree-row { display: flex; align-items: center; gap: 6px; width: 100%; height: 28px; padding-right: 8px; border: none; border-radius: var(--md-shape-xs); background: none; color: var(--md-on-surface); font: 400 13px/20px var(--md-font); text-align: left; cursor: pointer; white-space: nowrap; }
+.tree-row:hover { background: color-mix(in srgb, var(--md-on-surface) 6%, transparent); }
+.tree-row:focus-visible { outline: 2px solid var(--md-primary); outline-offset: -2px; }
+.tree-row.selected { background: color-mix(in srgb, var(--md-on-surface) 8%, transparent); }
+.tree-row.active { background: var(--md-secondary-container); color: var(--md-on-secondary-container); }
+.tree-row.hidden-entry .tree-name, .tree-row.hidden-entry .tree-icon { opacity: 0.55; }
+.tree-twisty { width: 18px; flex: none; display: inline-flex; color: var(--md-on-surface-variant); }
+.tree-icon { flex: none; color: var(--md-on-surface-variant); }
+.tree-name { flex: 1; min-width: 0; }
+.tree-row.git-modified .tree-name, .tree-row.git-renamed .tree-name { color: var(--hl-number); }
+.tree-row.git-added .tree-name, .tree-row.git-untracked .tree-name { color: var(--hl-string); }
+.tree-row.git-conflicted .tree-name, .tree-row.git-deleted .tree-name { color: var(--md-error); }
+.git-letter { flex: none; width: 14px; text-align: center; font: 600 11px/16px var(--md-mono); color: inherit; }
+.tree-row.git-modified .git-letter, .tree-row.git-renamed .git-letter { color: var(--hl-number); }
+.tree-row.git-added .git-letter, .tree-row.git-untracked .git-letter { color: var(--hl-string); }
+.tree-row.git-conflicted .git-letter, .tree-row.git-deleted .git-letter { color: var(--md-error); }
+.git-dot { flex: none; width: 6px; height: 6px; margin: 0 4px; border-radius: 50%; background: var(--hl-number); }
+.tree-row.naming { cursor: default; }
+.tree-row.naming:hover { background: none; }
+.tree-input { flex: 1; min-width: 0; height: 24px; padding: 0 6px; font: 400 13px/20px var(--md-font); }
+
+.editor-pane { position: relative; flex: none; display: flex; flex-direction: column; min-width: 320px; min-height: 0; border-left: 1px solid var(--md-outline-variant); background: var(--md-surface); }
+.editor-resize { position: absolute; left: -3px; top: 0; bottom: 0; width: 6px; cursor: col-resize; z-index: 5; }
+.editor-resize:hover { background: color-mix(in srgb, var(--md-primary) 30%, transparent); }
+.editor-tabs { display: flex; align-items: center; gap: 2px; min-height: 40px; padding: 4px 6px 0; overflow-x: auto; border-bottom: 1px solid var(--md-outline-variant); background: var(--md-surface-container-low); }
+.editor-tab { display: flex; align-items: center; gap: 6px; max-width: 220px; height: 34px; padding: 0 2px 0 10px; border-radius: var(--md-shape-xs) var(--md-shape-xs) 0 0; color: var(--md-on-surface-variant); font: 400 13px/20px var(--md-font); cursor: pointer; flex: none; }
+.editor-tab:hover { background: color-mix(in srgb, var(--md-on-surface) 6%, transparent); }
+.editor-tab.active { background: var(--md-surface); color: var(--md-on-surface); box-shadow: inset 0 2px 0 var(--md-primary); }
+.editor-tab .icon-btn { opacity: 0.6; }
+.editor-tab:hover .icon-btn, .editor-tab.active .icon-btn { opacity: 1; }
+.dirty-dot { width: 8px; height: 8px; flex: none; border-radius: 50%; background: var(--md-primary); }
+.editor-head { display: flex; align-items: center; gap: 8px; min-height: 40px; padding: 4px 8px 4px 14px; border-bottom: 1px solid var(--md-outline-variant); }
+.crumbs { flex: 1; display: flex; align-items: center; min-width: 0; font: 400 13px/20px var(--md-font); color: var(--md-on-surface-variant); }
+.crumb { display: inline-flex; align-items: center; }
+.crumb:last-child .link-button { color: var(--md-on-surface); }
+.link-button { border: none; background: none; padding: 0 2px; color: inherit; font: inherit; cursor: pointer; border-radius: 4px; }
+.link-button:hover { text-decoration: underline; }
+.chip.small { height: 26px; padding: 0 8px; font-size: 12px; gap: 4px; }
+.editor-bar { display: flex; align-items: center; gap: 8px; padding: 6px 10px 6px 14px; font: 400 13px/18px var(--md-font); }
+.editor-bar.warn { background: var(--md-warning-container); color: var(--md-on-warning-container); }
+.editor-body { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.editor-host { flex: 1; min-height: 0; }
+.editor-host[hidden] { display: none; }
+.editor-note { padding: 24px; }
+.file-link { cursor: pointer; }
+span.file-link:hover { color: var(--md-primary); text-decoration: underline; }
+code.file-link { color: var(--md-primary); text-decoration: underline; text-decoration-color: color-mix(in srgb, var(--md-primary) 40%, transparent); text-underline-offset: 2px; }
+code.file-link:hover { text-decoration-color: currentColor; }
+.menu.context-menu { position: fixed; z-index: 60; }
+
+/* Narrow windows: the shelf and the editor float over the conversation. */
+@media (max-width: 1100px) {
+  .files-shelf { position: absolute; top: 0; left: 0; bottom: 0; z-index: 21; box-shadow: var(--md-elevation-3); }
+  .editor-pane { position: absolute; top: 0; right: 0; bottom: 0; z-index: 19; width: min(100%, 720px) !important; box-shadow: var(--md-elevation-3); }
+}
+.files-shelf, .editor-tabs, .menu { -webkit-user-select: none; user-select: none; }

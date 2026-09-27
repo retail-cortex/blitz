@@ -41,13 +41,14 @@ import type { SessionInfo } from "./gen/blitz/v1/session_pb";
 import { Decision, type ApprovalRequest, type Question, type Task, type Usage } from "./gen/blitz/v1/turn_pb";
 import type { GetSettingsResponse } from "./gen/blitz/v1/workspace_pb";
 import { allCommands, helpText, matchCommands, parseCommand, type CommandSpec } from "./commands";
-import { composeEvent, loadSessionEvent, type ComposeDetail, type LoadSessionDetail } from "./events";
+import { composeEvent, filesTouched, loadSessionEvent, type ComposeDetail, type LoadSessionDetail } from "./events";
 import { describeImage, imageFiles, readyIds, rejectReason, uploading, type Attachment } from "./attachments";
 import { Markdown } from "./Markdown";
 import { language, t, tn, useLanguage } from "./i18n";
 import { notify, shouldNotify, type NotifyKind } from "./notify";
 import { efforts, effortIcon, modeOf, modes } from "./options";
 import { useApp } from "./state";
+import { useOpenPath } from "./files/links";
 import { applyEvent, assignPromptIndices, failed, fromMessages, parseDiff, summarizeArgs, tasksOf, type Entry, type UserEntry } from "./turns";
 import { Button, Chip, Dialog, Icon, IconButton, Menu, useSnackbar } from "./ui/controls";
 
@@ -250,6 +251,7 @@ export function Conversation({
           else if (ev.kind.case === "approvalRequest") setPending({ kind: "approval", req: ev.kind.value });
           else if (ev.kind.case === "question") setPending({ kind: "question", q: ev.kind.value });
           else setEntries((e) => applyEvent(e, ev));
+          if (ev.kind.case === "toolResult" || ev.kind.case === "finished") filesTouched({ dir });
           if (ev.kind.case === "finished") {
             setTurnUsage(usageLine(ev.kind.value.before, ev.kind.value.after));
             setTotal(ev.kind.value.after);
@@ -972,6 +974,7 @@ function ToolGroup({ tools }: { tools: ToolEntry[] }) {
 
 function ToolRow({ name, args, result }: { name: string; args?: JsonObject; result?: JsonObject }) {
   const [open, setOpen] = useState(false);
+  const openPath = useOpenPath();
   const bad = failed(result);
   const status = result === undefined ? <Icon path={mdiProgressClock} size="sm" className="pulse" /> : bad ? <Icon path={mdiClose} size="sm" /> : <Icon path={mdiCheck} size="sm" />;
   return (
@@ -979,7 +982,28 @@ function ToolRow({ name, args, result }: { name: string; args?: JsonObject; resu
       <button className="tool-head" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
         <Icon path={toolIcon(name)} size="sm" />
         <code>{name}</code>
-        <span className="ellipsis muted">{summarizeArgs(args)}</span>
+        {openPath && typeof args?.path === "string" && args.path ? (
+          <span
+            role="link"
+            tabIndex={0}
+            className="ellipsis muted file-link"
+            title={t("desktop.files.open_path", { path: args.path })}
+            onClick={(e) => {
+              e.stopPropagation();
+              openPath(args.path as string);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.stopPropagation();
+                openPath(args.path as string);
+              }
+            }}
+          >
+            {summarizeArgs(args)}
+          </span>
+        ) : (
+          <span className="ellipsis muted">{summarizeArgs(args)}</span>
+        )}
         <span className="spacer" />
         {bad && <span className="ellipsis tool-error">{String(result!.error)}</span>}
         {status}

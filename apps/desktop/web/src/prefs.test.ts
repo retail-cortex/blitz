@@ -87,4 +87,8 @@ describe("normalizePrefs", () => {
     ]);
     expect(p.active).toBe("/a"); // /b is closed
   });
+  it("keeps the files settings when they're right", () => {
+    expect(normalizePrefs({ files: true, show_hidden: true, editor_width: 612.4 })).toMatchObject({ files: true, show_hidden: true, editor_width: 612 });
+    expect(normalizePrefs({ files: "yes", show_hidden: 1, editor_width: -5 })).toMatchObject({ files: false, show_hidden: false, editor_width: 0 });
+  });
 });

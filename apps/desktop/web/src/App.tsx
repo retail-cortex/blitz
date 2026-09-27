@@ -8,6 +8,8 @@ import { Drawer } from "./Drawer";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { t, useLanguage } from "./i18n";
 import { message, reason } from "./errors";
+import { UnsavedDialog } from "./files/EditorPane";
+import { unsavedIn } from "./files/unsaved";
 import { closeWorkspace, displayName, openWorkspace, openWorkspaces, recentWorkspaces } from "./prefs";
 import { SettingsDialog } from "./SettingsDialog";
 import { AppStateProvider, useApp } from "./state";
@@ -190,8 +192,13 @@ function Shell() {
     },
     [update, snack, prefs.workspaces],
   );
-  // A turn running here is stopped first, once the user agrees.
-  const close = useCallback((dir: string) => (activity[dir]?.running ? setConfirmClose(dir) : doClose(dir)), [activity, doClose]);
+  // Unsaved files are discarded, and a turn running here stopped, only
+  // once the user agrees.
+  const [unsavedClose, setUnsavedClose] = useState<string | null>(null);
+  const close = useCallback(
+    (dir: string, unsavedOK = false) => (!unsavedOK && unsavedIn(dir) ? setUnsavedClose(dir) : activity[dir]?.running ? setConfirmClose(dir) : doClose(dir)),
+    [activity, doClose],
+  );
 
   if (!loaded || service.state === "checking") return <Splash text={error || t("desktop.app.starting")} />;
   if (service.state === "down") return <ServiceDown status={service.status} onStarted={check} error={error} setError={setError} />;
@@ -215,6 +222,18 @@ function Shell() {
           <Workspace key={`${w.dir}#${generation}`} ws={w} visible={w.dir === prefs.active} onEdit={() => setEditing(w.dir)} onClose={() => close(w.dir)} />
         ))}
       </main>
+      {unsavedClose && (
+        <UnsavedDialog
+          names={[displayName(prefs.workspaces.find((w) => w.dir === unsavedClose) ?? { dir: unsavedClose })]}
+          count={unsavedIn(unsavedClose)}
+          onDiscard={() => {
+            const dir = unsavedClose;
+            setUnsavedClose(null);
+            close(dir, true);
+          }}
+          onCancel={() => setUnsavedClose(null)}
+        />
+      )}
       {settingsOpen && <SettingsDialog onClose={() => setSettingsOpen(false)} />}
       {paletteOpen && <CommandPalette onClose={() => setPaletteOpen(false)} onOpenWorkspace={open} onSettings={() => setSettingsOpen(true)} />}
       {confirmClose && (

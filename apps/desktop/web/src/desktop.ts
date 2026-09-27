@@ -26,6 +26,7 @@ type Bound = {
   SavePrefs(p: Prefs): Promise<Prefs>;
   OpenURL(url: string): Promise<void>;
   Notify(title: string, body: string, dir: string): Promise<void>;
+  SetUnsaved(u: { message: string; quit: string; cancel: string }): Promise<void>;
 };
 
 function bound(): Bound | undefined {
@@ -110,6 +111,14 @@ export async function notifyNative(title: string, body: string, dir: string): Pr
   if (typeof Notification === "undefined") return;
   if (Notification.permission === "default") await Notification.requestPermission();
   if (Notification.permission === "granted") new Notification(title, { body }).onclick = () => window.focus();
+}
+
+/**
+ * Tells the app whether the editor has unsaved changes, so closing the
+ * window asks first (message "" when there are none).
+ */
+export function setUnsaved(message: string, quit: string, cancel: string) {
+  if (inApp()) app().SetUnsaved({ message, quit, cancel }).catch(() => {});
 }
 
 type WailsRuntime = { EventsOn(name: string, f: (...args: unknown[]) => void): () => void };

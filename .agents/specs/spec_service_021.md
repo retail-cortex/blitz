@@ -37,6 +37,7 @@
 |---|---|
 | `SessionService` | `ListSessions`, `GetActiveSession`, `NewSession`, `OpenSession`, `LoadSession`, `SaveSnapshot`, `RenameSession`, `RunTurn` (server stream), `Steer`, `Approve`, `Answer`, `GetUsage`, `Compact`, `SearchSession` |
 | `WorkspaceService` | `ListWorkspaces`, `CloseWorkspace`, `GetSandbox`, `ListAgents`, `SetAgent`, `GetModel`, `SetModel`, `PinModel`, `UnpinModel`, `GetModelSettings`, `UpdateModelSettings` (every `[model_settings]` key, including `reasoning_effort` and `thinking_budget`), `GetSettings` (includes `permission_mode` and `effort`), `SetSetting`, `SetPermissionMode`, `ListCommands`, `ListPermissionRules`, `AddPermissionRule`, `RemovePermissionRule`, `ListSkills`, `GetSkill`, `ListEnvs`, `RemoveEnv`, `PruneEnvs`, `ListMCPServers`, `ListTools`, `ReloadMemory`, `AddMemory`, `ListLocales`, `SetLocale`, `ListCheckpoints`, `Undo`, `GetDiff`, `ListApprovals`, `RevokeApprovals`, `LoadImage`, `AddImage`, `GetSearchProvider`, `SearchWeb` |
+| `FileService` | `ListDir`, `ReadFile`, `WriteFile`, `CreateFolder`, `RenameFile`, `DeleteFile`, `FindFiles`, `StatFiles` ([spec_files_029](spec_files_029.md) §3; reasons `FILE_CHANGED` with `current_version`, `BAD_PATH`, `FILE_NOT_FOUND`, `FILE_EXISTS`) |
 | `ConfigService` | `DescribeConfig`, `SetApiKey`, `SecureApiKey`, `RemoveApiKey`, `SetConfigValue`, `GetConfigFile`, `SaveConfigFile` (SVC-35) |
 | `WorkerService` | `ListWorkers` (one workspace or every registered one), `EnableWorker`, `DisableWorker`, `RunWorker`, `ListWorkerRuns`, `GetWorkerRun`, `WatchWorkerRun` (server stream) |
 

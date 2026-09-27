@@ -23,11 +23,12 @@ func TestPrefsDefaultsAndRoundTrip(t *testing.T) {
 		{Dir: "relative/dir", Open: true}, // not a directory the service can open
 	}
 	p.Active = b // closed: can't be active
+	p.Files, p.ShowHidden, p.EditorWidth = true, true, -3
 	saved, err := s.save(p)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(saved.Workspaces) != 2 || saved.Workspaces[0].Dir != a || saved.Workspaces[0].Name != "Shop" || saved.Active != a {
+	if len(saved.Workspaces) != 2 || saved.Workspaces[0].Dir != a || saved.Workspaces[0].Name != "Shop" || saved.Active != a || !saved.Files || !saved.ShowHidden || saved.EditorWidth != 0 {
 		t.Fatalf("normalized %+v", saved)
 	}
 	info, err := os.Stat(s.path)

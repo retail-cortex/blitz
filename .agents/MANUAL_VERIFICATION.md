@@ -443,3 +443,16 @@ These touch your real keychain and settings: use a test key, or a throwaway `--c
 - [ ] Desktop, Settings › Providers & keys: each provider's status chip matches `blitz config keys`; **Set key** stores it, and a workspace whose model was unavailable ("The model isn't available…") clears the note without reopening; **Move to keychain** on a plain key; **Remove**. Base URLs and the default model save on leaving the field.
 - [ ] Desktop, run settings › API keys: "Global" for inherited keys; **Set key** gives the workspace its own; a provider chosen there applies to that workspace only.
 - [ ] Desktop, Settings › Settings file: the global file and a workspace's; a typo'd setting saves with a warning; `[llm` is refused with the parse error and nothing is written; ⌘S saves; **Revert** restores.
+
+## 41. Files: the shelf and the editor (spec_files_029, phase 1)
+
+- [ ] In a git project, the top bar's **Files** button: the tree lists folders first, modified files in orange with **M**, new ones in green with **U**/**A**, folders with changes marked. Dotfiles, ignored files (`node_modules`, `bin/`) and `.env` aren't listed; **Show hidden files** lists them dimmed, `.env` with a lock ("Hidden from Blitz"); the setting is remembered after a restart.
+- [ ] Open a Go, a TypeScript, a Markdown and a YAML file: each is highlighted in the window's colours (light and dark); typing offers the file's words and the language's keywords; ⌘F searches and replaces; ⌃G goes to a line.
+- [ ] Change a file, ⌘S: the tab's dot goes, the tree shows it modified, `git diff` shows the change. Ask the agent something next: it's told you edited the file (and your prompt in the history doesn't show that note).
+- [ ] Edit a file in another editor while it's open and unchanged here: within 5 seconds it reloads. Change it here too, then save: "This file changed since you opened it" — **Overwrite** writes yours, **Reload** takes theirs.
+- [ ] Let the agent edit a file you have open (unchanged here): it reloads after the tool runs. With your own unsaved changes: "Changed on disk…".
+- [ ] Right-click in the tree: **New file** (opens it), **New folder**, **Rename** (F2), **Delete** (asks), **Copy path**, **Copy relative path**. Arrow keys move and open folders; Enter opens.
+- [ ] ⌘P: type part of a name (`dsc` finds `discount.go`); `name:12` opens at line 12.
+- [ ] A path in an answer (`internal/cart/discount.go`) and a tool call's path open the file.
+- [ ] Unsaved changes: closing the tab, closing the workspace (menu, drawer) and quitting the app (⌘Q, the window's close button) each ask first.
+- [ ] Drag the editor's edge: the width is kept after a restart. In a narrow window, the shelf floats and hides when a file opens.

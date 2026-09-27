@@ -1,9 +1,15 @@
-import { useCallback, useEffect, useState } from "react";
-import { mdiCalendarClock, mdiChatOutline, mdiClose, mdiDotsVertical, mdiFileCompare, mdiPencilOutline, mdiTuneVariant } from "@mdi/js";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { mdiCalendarClock, mdiChatOutline, mdiClose, mdiCodeBraces, mdiDotsVertical, mdiFileCompare, mdiFileSearchOutline, mdiFileTreeOutline, mdiPencilOutline, mdiTuneVariant } from "@mdi/js";
 import { workspaces } from "./api";
 import { Changes } from "./Changes";
 import { Conversation } from "./Conversation";
-import { configChangedEvent, viewEvent, type ConfigChangedDetail, type ViewDetail } from "./events";
+import { configChangedEvent, filesTouchedEvent, goToFileEvent, openFileEvent, viewEvent, type ConfigChangedDetail, type OpenFileDetail, type ViewDetail } from "./events";
+import { EditorPane } from "./files/EditorPane";
+import { FilesShelf } from "./files/FilesShelf";
+import { GoToFile } from "./files/GoToFile";
+import { FileLinksProvider } from "./files/links";
+import { reportUnsaved } from "./files/unsaved";
+import { useEditor } from "./files/useEditor";
 import { message } from "./errors";
 import type { GetSettingsResponse } from "./gen/blitz/v1/workspace_pb";
 import { workspaceColor } from "./palette";
@@ -63,6 +69,73 @@ export function Workspace({ ws, visible, onEdit, onClose }: { ws: WorkspacePrefs
     return () => window.removeEventListener(viewEvent, f);
   }, [dir]);
 
+  // Files (spec_files_029): the shelf, the editor, Go to file.
+  const editor = useEditor(dir);
+  const [editorShown, setEditorShown] = useState(true);
+  const [goTo, setGoTo] = useState(false);
+  const [reveal, setReveal] = useState<{ path: string } | null>(null);
+  const [touched, setTouched] = useState(0);
+  const editorRef = useRef(editor);
+  editorRef.current = editor;
+  const showsFiles = prefs.files || (editorShown && editor.tabs.length > 0);
+
+  const open = useCallback((path: string, line?: number, column?: number) => {
+    editorRef.current.open(path, line, column);
+    setEditorShown(true);
+  }, []);
+
+  useEffect(() => {
+    const onOpen = (e: Event) => {
+      const d = (e as CustomEvent<OpenFileDetail>).detail;
+      if (d.dir === dir) open(d.path, d.line, d.column);
+    };
+    const onGoTo = (e: Event) => (e as CustomEvent<{ dir: string }>).detail.dir === dir && setGoTo(true);
+    // A tool ran or a turn ended: look again soon (tools come in bursts).
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const onTouched = (e: Event) => {
+      if ((e as CustomEvent<{ dir: string }>).detail.dir !== dir) return;
+      clearTimeout(timer);
+      timer = setTimeout(() => setTouched((n) => n + 1), 300);
+    };
+    window.addEventListener(openFileEvent, onOpen);
+    window.addEventListener(goToFileEvent, onGoTo);
+    window.addEventListener(filesTouchedEvent, onTouched);
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener(openFileEvent, onOpen);
+      window.removeEventListener(goToFileEvent, onGoTo);
+      window.removeEventListener(filesTouchedEvent, onTouched);
+    };
+  }, [dir, open]);
+
+  // While files are shown, look for changes made elsewhere every 5 seconds.
+  useEffect(() => {
+    if (!visible || !showsFiles) return;
+    const timer = setInterval(() => setTouched((n) => n + 1), 5000);
+    return () => clearInterval(timer);
+  }, [visible, showsFiles]);
+  useEffect(() => {
+    if (touched) void editorRef.current.check();
+  }, [touched]);
+
+  // ⌘P: Go to file.
+  useEffect(() => {
+    if (!visible) return;
+    const key = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && !e.shiftKey && e.key.toLowerCase() === "p") {
+        e.preventDefault();
+        setGoTo(true);
+      }
+    };
+    window.addEventListener("keydown", key);
+    return () => window.removeEventListener("keydown", key);
+  }, [visible]);
+
+  useEffect(() => reportUnsaved(dir, editor.dirtyCount), [dir, editor.dirtyCount]);
+  useEffect(() => () => reportUnsaved(dir, 0), [dir]);
+
+  const editorWidth = prefs.editor_width || Math.max(420, Math.round(window.innerWidth * 0.4));
+
   const name = displayName(ws);
   return (
     <section className="workspace" hidden={!visible} aria-label={name} style={{ ["--ws-color" as string]: workspaceColor(ws.color, theme) }}>
@@ -91,6 +164,9 @@ export function Workspace({ ws, visible, onEdit, onClose }: { ws: WorkspacePrefs
           />
         </div>
         <div className="topbar-actions no-drag">
+          <IconButton icon={mdiFileTreeOutline} label={t("desktop.files.title")} selected={prefs.files} onClick={() => update((p) => ({ ...p, files: !p.files }))} />
+          <IconButton icon={mdiFileSearchOutline} label={t("desktop.files.go_to")} onClick={() => setGoTo(true)} />
+          {editor.tabs.length > 0 && !editorShown && <IconButton icon={mdiCodeBraces} label={t("desktop.files.show_editor")} onClick={() => setEditorShown(true)} />}
           <IconButton icon={mdiTuneVariant} label={t("desktop.run_settings")} selected={prefs.run_settings} onClick={() => update((p) => ({ ...p, run_settings: !p.run_settings }))} />
           <Menu
             placement="down end"
@@ -103,8 +179,26 @@ export function Workspace({ ws, visible, onEdit, onClose }: { ws: WorkspacePrefs
         </div>
       </header>
       <div className="workspace-body">
+        {prefs.files && (
+          <FilesShelf
+            dir={dir}
+            showHidden={prefs.show_hidden}
+            onToggleHidden={() => update((p) => ({ ...p, show_hidden: !p.show_hidden }))}
+            active={editorShown ? editor.active : null}
+            refresh={touched}
+            reveal={reveal}
+            onOpen={(p) => {
+              open(p);
+              // Narrow, the shelf floats over the editor: make way.
+              if (window.matchMedia("(max-width: 1100px)").matches) update((x) => ({ ...x, files: false }));
+            }}
+            onMoved={editor.moved}
+            onClose={() => update((p) => ({ ...p, files: false }))}
+          />
+        )}
         <div className="workspace-view">
           <div hidden={view !== "chat"} className="view-fill">
+            <FileLinksProvider dir={dir} refresh={touched}>
             <Conversation
               dir={dir}
               name={name}
@@ -114,12 +208,26 @@ export function Workspace({ ws, visible, onEdit, onClose }: { ws: WorkspacePrefs
               onSettingsChanged={refreshSettings}
               onOpenView={setView}
             />
+            </FileLinksProvider>
           </div>
           {view === "changes" && <Changes dir={dir} />}
           {view === "workers" && <Workers dir={dir} />}
         </div>
+        {editorShown && editor.tabs.length > 0 && (
+          <EditorPane
+            model={editor}
+            width={editorWidth}
+            onResize={(w) => update((p) => ({ ...p, editor_width: w }))}
+            onHide={() => setEditorShown(false)}
+            onReveal={(path) => {
+              if (!prefs.files) update((p) => ({ ...p, files: true }));
+              setReveal({ path });
+            }}
+          />
+        )}
         {prefs.run_settings && <RunSettings dir={dir} settings={settings} error={settingsError} onChanged={refreshSettings} />}
       </div>
+      {goTo && <GoToFile dir={dir} onOpen={open} onClose={() => setGoTo(false)} />}
     </section>
   );
 }

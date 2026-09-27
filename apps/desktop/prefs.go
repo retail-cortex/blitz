@@ -39,6 +39,13 @@ type Prefs struct {
 	// Language is the window's language: "system" (the default) or a
 	// catalog's tag such as "fr-CA".
 	Language string `json:"language"`
+	// Files shows the Files shelf beside the conversation.
+	Files bool `json:"files"`
+	// ShowHidden lists hidden files in the shelf: dotfiles, files git
+	// ignores, and the agent's blocked paths.
+	ShowHidden bool `json:"show_hidden"`
+	// EditorWidth is the editor's width in pixels (0: half the window).
+	EditorWidth int `json:"editor_width,omitempty"`
 }
 
 // WorkspacePrefs is a workspace as the window shows it.
@@ -75,6 +82,9 @@ func (p *Prefs) normalize() {
 	}
 	if !languageTag.MatchString(p.Language) {
 		p.Language = "system"
+	}
+	if p.EditorWidth < 0 || p.EditorWidth > 10000 {
+		p.EditorWidth = 0
 	}
 	seen := map[string]bool{}
 	var open, closed []WorkspacePrefs

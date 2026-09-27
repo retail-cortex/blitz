@@ -2,8 +2,8 @@
 
 | | |
 |---|---|
-| Status | Phase 1 in progress (2026-09-27, branch `monorepo`) |
-| Source | `pkg/engine/files.go`, `proto/blitz/v1/file.proto`, `apps/service/internal/server/files.go`; the page's `Files*.tsx`, `editor/` |
+| Status | Phase 1 implemented (2026-09-27, branch `monorepo`); phases 2 and 3 planned |
+| Source | `pkg/engine/files.go`, `pkg/engine/tools/userfs.go`, `proto/blitz/v1/file.proto`, `apps/service/internal/server/files.go`, `apps/desktop/unsaved.go`; the page's `src/files/` |
 | Depends on | [spec_workspace_018](spec_workspace_018.md), [spec_service_021](spec_service_021.md), [spec_desktop_024](spec_desktop_024.md), [spec_filetools_006](spec_filetools_006.md) |
 
 ## 1. Purpose
@@ -47,8 +47,8 @@ Every request names its workspace (SVC-10) and a path relative to it.
 
 ## 5. The window (phase 1)
 
-- **FIL-30** The **Files** shelf: a panel on the left of the conversation, shown with the top bar's **Files** button (remembered per window). It lists the workspace as a tree loaded folder by folder: icons by kind, git status as a coloured letter (M, A, D, R, U, !) with the name tinted, folders with changes marked, hidden entries dimmed when shown, a lock on blocked or read-only ones with the rule in its tooltip. The header has **New file**, **New folder**, **Refresh**, **Collapse all** and **Show hidden files** (off by default, remembered per window).
-- **FIL-31** Each entry's menu: **Open**, **New file**, **New folder** (in a folder), **Rename** (in place), **Delete** (confirmed; a folder with its count of files), **Copy path**, **Copy relative path**. Keyboard: arrows move and open folders, Enter opens, F2 renames, Delete deletes.
+- **FIL-30** The **Files** shelf: a panel on the left of the conversation, shown with the top bar's **Files** button (remembered per window). It lists the workspace as a tree loaded folder by folder: icons by kind, git status as a coloured letter (M, A, D, R, U, !) with the name tinted, folders with changes marked, hidden entries dimmed when shown, a lock on blocked or read-only ones with the rule in its tooltip. The header has **New file**, **New folder**, **Refresh**, **Collapse all**, **Show hidden files** (off by default, remembered per window) and **Hide**. In windows too narrow for the shelf, the conversation and the editor, the shelf floats and gets out of the way when a file opens.
+- **FIL-31** Each entry's menu: **Open**, **New file**, **New folder** (in a folder), **Rename** (in place), **Delete** (confirmed, saying a folder goes with everything in it and that only git can bring files back), **Copy path**, **Copy relative path**. Keyboard: arrows move and open folders, Enter opens, F2 renames, Delete deletes.
 - **FIL-32** Opening a file opens the editor beside the conversation (FIL-40); the conversation keeps at least 360 px and the divider can be dragged (remembered). In windows too narrow for both, the editor covers the conversation with a button back to it.
 - **FIL-33** The window notices changes made elsewhere: after each tool call that writes, at the end of a turn, and every 5 seconds while the shelf or editor is shown, it lists the open folders again and checks the open files (`StatFiles`). A file you haven't changed reloads; one you have gets a bar: **Reload** (discard yours) or **Keep mine** (the next save asks to overwrite).
 - **FIL-34** **Go to file** (⌘P, and in the command palette): `FindFiles` as you type, Enter opens.
@@ -56,12 +56,12 @@ Every request names its workspace (SVC-10) and a path relative to it.
 
 ## 6. The editor (phase 1)
 
-- **FIL-40** CodeMirror 6: tabs (a dot for unsaved changes, middle click or ⌘W closes, asking about unsaved changes), the path as breadcrumbs, line numbers, the active line, bracket matching, folding, search and replace (⌘F, ⌥⌘F), go to line (⌃G), multiple cursors, indentation from the file (tabs or spaces), soft wrap off (a toggle).
+- **FIL-40** CodeMirror 6: tabs (a dot for unsaved changes, middle click or ⌘W closes, asking about unsaved changes), the path as breadcrumbs, line numbers, the active line, bracket matching, folding, search and replace (⌘F), go to line (⌃G), multiple cursors, indentation from the file (tabs or spaces), soft wrap off (a toggle).
 - **FIL-41** Highlighting by file name (`@codemirror/language-data`: Go, TypeScript and JavaScript, Python, Rust, Java, C and C++, JSON, YAML, TOML, Markdown, HTML, CSS, SQL, shell, protobuf, Dockerfile and more), each language's parser loaded when first needed. Colours from the window's theme, light and dark, matching the conversation's code blocks.
 - **FIL-42** Completion without a language server: the language's keywords and snippets where CodeMirror has them, and words from the open files. Phase 3 adds a language server's.
 - **FIL-43** ⌘S saves (`WriteFile` with the version it loaded). `FILE_CHANGED` asks: **Overwrite**, **Reload** (discard yours), or cancel; phase 2 adds **Compare**.
 - **FIL-44** Binary and too-large files open as a note saying so, with the size. Blocked files open with a bar: "Blitz's agent can't read this file"; read-only roots likewise.
-- **FIL-45** Unsaved changes survive switching workspaces and views; closing a workspace or the window with unsaved changes asks first.
+- **FIL-45** Unsaved changes survive switching workspaces and views; closing a workspace (any way: its menu, the drawer, its details) or the window with unsaved changes asks first. The page tells the app how many files are unsaved (`SetUnsaved`, in the window's language), and the app's close handler asks with a native dialog.
 
 ## 7. Phase 2 (outline)
 

@@ -7,6 +7,7 @@ import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { mdiCheck, mdiContentCopy, mdiImageOutline, mdiOpenInNew } from "@mdi/js";
 import { openURL } from "./desktop";
+import { useFileRef } from "./files/links";
 import { highlight, languageFor } from "./highlight";
 import { t, useLanguage } from "./i18n";
 import { Icon, IconButton, useSnackbar } from "./ui/controls";
@@ -54,6 +55,29 @@ function CodeBlock({ children, lang }: { children: string; lang: string }) {
   );
 }
 
+// Inline code that names a file in the workspace opens it in the editor.
+function InlineCode({ text }: { text: string }) {
+  const ref = useFileRef(text);
+  if (!ref) return <code className="inline-code">{text}</code>;
+  return (
+    <code
+      className="inline-code file-link"
+      role="link"
+      tabIndex={0}
+      title={t("desktop.files.open_path", { path: ref.path })}
+      onClick={(e) => {
+        // Inside a link, the file wins.
+        e.preventDefault();
+        e.stopPropagation();
+        ref.open();
+      }}
+      onKeyDown={(e) => e.key === "Enter" && ref.open()}
+    >
+      {text}
+    </code>
+  );
+}
+
 const components: Components = {
   a: ({ href, children }) => <Link href={href}>{children}</Link>,
   img: ({ src, alt }) =>
@@ -70,7 +94,7 @@ const components: Components = {
     const lang = /language-([\w+-]+)/.exec(className ?? "")?.[1];
     // Fenced blocks have a language or span lines; the rest is inline code.
     if (lang || text.includes("\n")) return <CodeBlock lang={lang ?? ""}>{text.replace(/\n$/, "")}</CodeBlock>;
-    return <code className="inline-code">{children}</code>;
+    return <InlineCode text={text} />;
   },
   table: ({ children }) => (
     <div className="table-wrap">

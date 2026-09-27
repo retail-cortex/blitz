@@ -41,7 +41,9 @@ func main() {
 			Handler: serviceProxy(app.socket),
 		},
 		OnStartup: app.startup,
-		Bind:      []any{app},
+		// A window with unsaved changes in the editor asks first.
+		OnBeforeClose: app.beforeClose,
+		Bind:          []any{app},
 	})
 	if err != nil {
 		log.Fatal(err)

@@ -14,6 +14,12 @@ export function reason(e: unknown): string {
   return e.findDetails(ErrorInfoSchema)[0]?.reason ?? "";
 }
 
+/** A value of the error's ErrorInfo metadata ("" when it has none). */
+export function errorMeta(e: unknown, key: string): string {
+  if (!(e instanceof ConnectError)) return "";
+  return e.findDetails(ErrorInfoSchema)[0]?.metadata[key] ?? "";
+}
+
 /** Whether the service couldn't be reached (it stopped, is stopping, or isn't running). */
 export function isUnavailable(e: unknown): boolean {
   return e instanceof ConnectError && e.code === Code.Unavailable;

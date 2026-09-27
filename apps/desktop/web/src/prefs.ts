@@ -22,6 +22,12 @@ export interface Prefs {
   notifications: "on" | "off";
   /** The window's language: "system" (the default) or a catalog's tag. */
   language: string;
+  /** The Files shelf beside the conversation. */
+  files: boolean;
+  /** List hidden files: dotfiles, files git ignores, the agent's blocked paths. */
+  show_hidden: boolean;
+  /** The editor's width in pixels (0: half the window). */
+  editor_width: number;
 }
 
 export const defaultPrefs: Prefs = {
@@ -33,6 +39,9 @@ export const defaultPrefs: Prefs = {
   density: "comfortable",
   notifications: "on",
   language: "system",
+  files: false,
+  show_hidden: false,
+  editor_width: 0,
 };
 
 const pick = <T extends string>(v: unknown, allowed: readonly T[], fallback: T): T => (allowed.includes(v as T) ? (v as T) : fallback);
@@ -64,6 +73,9 @@ export function normalizePrefs(raw: unknown): Prefs {
     density: pick(r.density, ["comfortable", "compact"] as const, "comfortable"),
     notifications: pick(r.notifications, ["on", "off"] as const, "on"),
     language: typeof r.language === "string" && /^[A-Za-z]{2,3}(-[A-Za-z0-9]+)*$|^system$/.test(r.language) ? r.language : "system",
+    files: r.files === true,
+    show_hidden: r.show_hidden === true,
+    editor_width: typeof r.editor_width === "number" && r.editor_width >= 0 && r.editor_width <= 10000 ? Math.round(r.editor_width) : 0,
   };
 }
 

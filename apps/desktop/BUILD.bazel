@@ -38,6 +38,7 @@ go_library(
         "main.go",
         "prefs.go",
         "proxy.go",
+        "unsaved.go",
     ],
     cdeps = [":embedded_info_plist"],  # keep
     cgo = True,

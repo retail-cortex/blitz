@@ -26,6 +26,9 @@ type App struct {
 
 	notifyOnce sync.Once
 	notifyOK   bool // notifications work and the user allowed them
+
+	unsavedMu sync.Mutex
+	unsaved   Unsaved // the editor's unsaved changes (unsaved.go)
 }
 
 func (a *App) startup(ctx context.Context) {
