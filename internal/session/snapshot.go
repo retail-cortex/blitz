@@ -11,8 +11,8 @@ import (
 	"time"
 )
 
-// ErrNameTaken is returned by Snapshot when another snapshot has the name.
-var ErrNameTaken = errors.New("a snapshot with this name already exists")
+// ErrSnapshotNameTaken is returned by Snapshot when another snapshot has the name.
+var ErrSnapshotNameTaken = errors.New("a snapshot with this name already exists")
 
 // ValidateName reports whether name can label a snapshot. Names follow the
 // ID rules (they never reach a path, but are shown and typed like IDs) and
@@ -42,7 +42,7 @@ func (s *Storage) FindName(name string) (*SessionRecord, error) {
 
 // Snapshot saves a named copy of session srcID: its transcript, metadata
 // and the model's event log, under a new ID. The source is left as it is
-// and stays active. An existing snapshot with the name is an ErrNameTaken
+// and stays active. An existing snapshot with the name is an ErrSnapshotNameTaken
 // error unless replace is set, in which case it is deleted once the new
 // one is written.
 func (s *Storage) Snapshot(srcID, name string, replace bool) (*SessionRecord, error) {
@@ -54,7 +54,7 @@ func (s *Storage) Snapshot(srcID, name string, replace bool) (*SessionRecord, er
 		return nil, err
 	}
 	if old != nil && !replace {
-		return nil, fmt.Errorf("%w: %s", ErrNameTaken, name)
+		return nil, fmt.Errorf("%w: %s", ErrSnapshotNameTaken, name)
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()

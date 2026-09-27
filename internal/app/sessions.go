@@ -52,7 +52,7 @@ var ErrNoActiveSession = errors.New("no active session")
 
 // ErrSnapshotNameTaken reports a snapshot name already in use (SaveSnapshot
 // with force replaces it).
-var ErrSnapshotNameTaken = session.ErrNameTaken
+var ErrSnapshotNameTaken = session.ErrSnapshotNameTaken
 
 func sessionInfo(r *session.SessionRecord) SessionInfo {
 	info := SessionInfo{

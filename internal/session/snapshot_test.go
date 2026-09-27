@@ -70,7 +70,7 @@ func TestSnapshotNamesAreUniqueUnlessReplaced(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := st.Snapshot(src.ID, "v1", false); !errors.Is(err, ErrNameTaken) {
+	if _, err := st.Snapshot(src.ID, "v1", false); !errors.Is(err, ErrSnapshotNameTaken) {
 		t.Fatalf("duplicate name: %v", err)
 	}
 	st.AddMessage("user", "third")

@@ -20,7 +20,7 @@ type Usage struct {
 	Priced     bool // false if any call's model had no price
 }
 
-func (u *Usage) add(o Usage) {
+func (u *Usage) Add(o Usage) {
 	u.Calls += o.Calls
 	u.Input += o.Input
 	u.Cached += o.Cached
@@ -112,7 +112,7 @@ func (t *UsageTracker) RecordWrites(session, model string, m *genai.GenerateCont
 		s = &Usage{Priced: true}
 		t.sessions[session] = s
 	}
-	s.add(u)
+	s.Add(u)
 	return u
 }
 
