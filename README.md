@@ -86,7 +86,9 @@ bazel run //apps/service:blitzd                          # run the service in th
 
 bazel run //apps/desktop:blitz-desktop                   # the desktop app, with its own blitzd
 bazel run //apps/desktop/web:dev                         # the desktop page in a browser, http://localhost:5173/?fake
-bazel build //apps/desktop/packaging:Blitz.app           # macOS app bundle (universal); :deb on Linux
+bazel build //apps/desktop/packaging:Blitz.app           # macOS app bundle (universal)
+bazel build //apps/desktop/packaging:deb                 # Linux: bazel-bin/apps/desktop/packaging/blitz-desktop_amd64.deb
+sudo apt install ./bazel-bin/apps/desktop/packaging/blitz-desktop_amd64.deb   # the ./ makes apt read the file
 
 bazel build --config=release //release:archives          # the release archives, every platform, version from git
 bazel run //docs:serve                                   # the docs site, http://localhost:1313

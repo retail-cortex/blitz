@@ -198,6 +198,13 @@ the service, which it installs and starts.""",
     homepage = "https://github.com/retail-cortex/blitz",
     maintainer = "Blitz <https://github.com/retail-cortex/blitz/issues>",
     package = "blitz-desktop",
+    # Debian's name_arch; rules_pkg's default, name_version_arch, would
+    # leave the version out ("blitz-desktop__amd64.deb"): it comes from
+    # version_file, at build time. The release workflow adds it.
+    package_file_name = select({
+        "@platforms//cpu:arm64": "blitz-desktop_arm64.deb",
+        "@platforms//cpu:x86_64": "blitz-desktop_amd64.deb",
+    }),
     priority = "optional",
     section = "devel",
     target_compatible_with = _LINUX,

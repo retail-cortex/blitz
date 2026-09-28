@@ -49,6 +49,8 @@ Tested on Ubuntu 24.04 (x86-64); Debian 13 and later work too.
    bazel build //apps/desktop/packaging:deb
    ```
 
+   The package is `bazel-bin/apps/desktop/packaging/blitz-desktop_amd64.deb` (`_arm64` on ARM). To install it here or on another machine (Ubuntu 24.04, Debian 13 or later, the same architecture), give apt the file's path, with the `./`, or it looks for a package of that name in its repositories: `sudo apt install ./blitz-desktop_amd64.deb`. It installs the programs in `/usr/lib/blitz-desktop/`, with `blitz-desktop` on the `PATH` and a launcher in the applications menu.
+
 4. Ubuntu 24.04 restricts unprivileged user namespaces through AppArmor, which bubblewrap and gVisor need. To run the sandbox tests, allow them: `sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0`. Without that, Blitz runs commands unsandboxed in `auto` mode and `blitz doctor` says why.
 
 ## Windows
