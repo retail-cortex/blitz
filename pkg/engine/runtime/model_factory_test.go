@@ -71,6 +71,7 @@ func TestGeminiClientConfig(t *testing.T) {
 	}{
 		{name: "an API key", gemini: config.GeminiConfig{APIKey: "AIza"}, backend: genai.BackendGeminiAPI, apiKey: "AIza"},
 		{name: "an API key, said so", gemini: config.GeminiConfig{Auth: config.AuthAPIKey, APIKey: "AIza"}, backend: genai.BackendGeminiAPI, apiKey: "AIza"},
+		{name: "an API key ignores Vertex AI's project", gemini: config.GeminiConfig{APIKey: "AIza", ProjectID: "p", Location: "us-central1"}, backend: genai.BackendGeminiAPI, apiKey: "AIza"},
 		{name: "no key leaves genai to the environment", gemini: config.GeminiConfig{ProjectID: "p"}, backend: genai.BackendUnspecified, project: "p"},
 		{
 			name:    "ADC with a project and location",

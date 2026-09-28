@@ -213,9 +213,12 @@ func geminiClientConfig(ctx context.Context, g config.GeminiConfig, pol retryPol
 	switch g.Auth {
 	case "", config.AuthAPIKey:
 		cc := pol.geminiConfig(g.APIKey)
-		cc.Project, cc.Location = g.ProjectID, g.Location
 		if g.APIKey != "" {
+			// The Gemini API refuses a project and location, which are
+			// Vertex AI's (left in the settings when switching from adc).
 			cc.Backend = genai.BackendGeminiAPI
+		} else {
+			cc.Project, cc.Location = g.ProjectID, g.Location
 		}
 		return cc, nil
 	case config.AuthADC:
