@@ -26,9 +26,10 @@ mode=()
 if [ "${1:-}" = "--check" ]; then
 	mode=(-check)
 fi
-# Only tracked files: never Bazel's outputs, node_modules or local files.
+# Tracked and new files (not ignored ones: never Bazel's outputs,
+# node_modules or local files), so a file is checked before its commit.
 # Generated code ("Code generated … DO NOT EDIT") is skipped by addlicense.
-git ls-files -z | xargs -0 "$tool" "${mode[@]}" -l apache -c "Retail Cortex" -y 2026 \
+git ls-files -z --cached --others --exclude-standard | xargs -0 "$tool" "${mode[@]}" -l apache -c "Retail Cortex" -y 2026 \
 	-ignore '**/testdata/**' -ignore '**/*.lock' -ignore '**/pnpm-lock.yaml' \
 	>"${TMPDIR:-/tmp}/license_headers.$$" 2>&1 || {
 	status=$?
