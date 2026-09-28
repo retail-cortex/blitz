@@ -235,7 +235,7 @@
     "usage.cost": "{cost} (session {total})",
     "resume.starting": "Reprise de la session {id} ({messages})",
     "resume.other_workspace_id": "la session {id} a été démarrée dans {workspace}; les références de fichiers de son historique peuvent ne pas correspondre à cet espace de travail",
-    "startup.placeholder_model": "exécutez 'blitz doctor' pour vérifier votre configuration; un modèle provisoire est utilisé",
+    "startup.placeholder_model": "exécutez 'blitz doctor' pour vérifier votre configuration; les tours échouent jusqu'à ce que le modèle fonctionne",
     "startup.cost_unpriced": "--max-cost-usd ne peut pas être appliqué : {model} n'a pas de prix (ajoutez [pricing.\"{model}\"])",
     "startup.attached": "Connecté au service Blitz ({socket}); --local l’exécute ici.",
     "startup.model_failed": "échec de l’initialisation du modèle : {error}",

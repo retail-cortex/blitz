@@ -288,7 +288,7 @@ func runRoot(cmd *cobra.Command, o *rootOptions, args []string) (err error) {
 	if merr := w.ModelErr(); merr != nil {
 		msg := i18n.T("startup.model_failed", "error", engine.ModelErrorSummary(merr, cfg))
 		if oneShot {
-			// A placeholder model would "succeed" silently; scripts need a real failure.
+			// Every turn would fail; say why at once, with an exit code.
 			return withCode(exitFailure, fmt.Errorf("%s (run 'blitz doctor')", msg))
 		}
 		warnFn(msg)

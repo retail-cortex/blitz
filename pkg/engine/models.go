@@ -283,6 +283,9 @@ func (w *Workspace) rebuildModels(ctx context.Context) error {
 	llm, err := w.newModel(ctx, w.cfg, "")
 	if err == nil {
 		err = w.engine.SetModel(ctx, llm)
+	} else {
+		// Not the previous model, which the settings no longer describe.
+		w.engine.SetModel(ctx, unavailable(w.cfg, err))
 	}
 	w.modelMu.Lock()
 	w.modelErr = err

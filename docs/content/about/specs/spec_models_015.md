@@ -79,7 +79,7 @@ Every model is an ADK `model.LLM`. A factory builds one from a model reference f
 - **MDL-74** The session effort (`/effort`, `--effort`, `SetSetting effort`) overrides every model's `reasoning_effort` for the requests only: `ModelSettings` and saved settings are unchanged. `auto` (or empty) clears it. It is not persisted.
 
 ## 7. Test model
-- **MDL-80** `MockLLM` returns scripted contents in order (then "Done."), records requests, and can attach usage, `ServedBy` and metadata. It backs the placeholder model and tests.
+- **MDL-80** `MockLLM` returns scripted contents in order (then "Done."), records requests, and can attach usage, `ServedBy` and metadata. It backs tests; a model that can't be built is `NewUnavailableModel` instead, which fails every call (WS-05).
 
 ## 8. Known gaps
 - Reasoning settings per model (effort, thinking budgets) are not implemented.

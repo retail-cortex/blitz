@@ -139,6 +139,39 @@ func TestRetryModelAfterSignIn(t *testing.T) {
 	}
 }
 
+// A model that can't be built doesn't answer: a turn fails with why,
+// both at open and after a settings change that breaks a working model
+// (not the old model, which the settings no longer describe).
+func TestUnavailableModelFailsTurns(t *testing.T) {
+	models := &signInModels{}
+	cfg := isolatedConfig(t)
+	w, err := Open(context.Background(), cfg, Options{NewModel: models.build})
+	require.NoError(t, err)
+	t.Cleanup(func() { w.Close() })
+	assert.Equal(t, cfg.ModelName(), w.Model().Name, "the configured model's name")
+
+	turn := func() (api.TurnResult, error) {
+		sess, err := w.NewSession()
+		require.NoError(t, err)
+		return w.Run(context.Background(), sess.ID, api.Turn{Text: "hi"}, func(api.Event) {})
+	}
+	res, err := turn()
+	require.Error(t, err)
+	assert.ErrorContains(t, err, "the model isn't available")
+	assert.ErrorContains(t, err, "no credentials: sign in first")
+	assert.NotEqual(t, "Done.", res.Output)
+
+	// Working, then broken by a settings change.
+	models.signedIn.Store(true)
+	res, err = turn()
+	require.NoError(t, err)
+	assert.Equal(t, "done", res.Output)
+	models.signedIn.Store(false)
+	assert.Error(t, w.ReloadProviders(context.Background(), config.DefaultConfig()))
+	_, err = turn()
+	assert.ErrorContains(t, err, "the model isn't available", "the old model answered")
+}
+
 // A settings change rebuilds agents' pinned models too, not only the
 // configured one, so they sign in the new way.
 func TestReloadProvidersRebuildsPins(t *testing.T) {

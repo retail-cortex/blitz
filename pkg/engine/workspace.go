@@ -215,9 +215,7 @@ func Open(ctx context.Context, cfg *config.Config, o Options) (*Workspace, error
 	if llm == nil {
 		if llm, err = w.newModel(ctx, cfg, ""); err != nil {
 			w.modelErr = err
-		}
-		if llm == nil {
-			llm = runtime.NewMockLLM("unconfigured-model")
+			llm = unavailable(cfg, err)
 		}
 	}
 
@@ -347,6 +345,12 @@ func (w *Workspace) loadMemory() {
 		_, b := blocked.Match(p)
 		return b
 	}})
+}
+
+// unavailable stands in for the configured model when it can't be built:
+// turns fail with why (secrets removed) until it can.
+func unavailable(cfg *config.Config, err error) model.LLM {
+	return runtime.NewUnavailableModel(cfg.ModelName(), ModelErrorSummary(err, cfg))
 }
 
 // agentModelRefs returns the model each agent should run on when it isn't

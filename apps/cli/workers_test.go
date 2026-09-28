@@ -17,6 +17,10 @@ package main
 import (
 	"bytes"
 	"context"
+	"fmt"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -49,8 +53,25 @@ func runCLIWithInput(t *testing.T, in string, args ...string) (string, error) {
 	return out.String(), err
 }
 
+// fakeModel answers every model call with "done", as an OpenAI-compatible
+// server set in the settings of home (from isolate): worker runs need a
+// working model, and a model that can't be built fails them.
+func fakeModel(t *testing.T, home string) {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		io.Copy(io.Discard, r.Body)
+		w.Header().Set("Content-Type", "application/json")
+		io.WriteString(w, `{"id":"resp_1","model":"fake","output":[{"type":"message","content":[{"type":"output_text","text":"done"}]}],"usage":{"input_tokens":1,"input_tokens_details":{"cached_tokens":0},"output_tokens":1,"output_tokens_details":{"reasoning_tokens":0},"total_tokens":2}}`)
+	}))
+	t.Cleanup(srv.Close)
+	dir := filepath.Join(home, ".blitz")
+	require.NoError(t, os.MkdirAll(dir, 0o700))
+	settings := fmt.Sprintf("[llm]\nprovider = \"ollama\"\n\n[llm.openai]\nbase_url = %q\nmodel = \"fake\"\n", srv.URL+"/v1")
+	require.NoError(t, os.WriteFile(filepath.Join(dir, ".env.toml"), []byte(settings), 0o600))
+}
+
 func TestWorkersCommandsLocally(t *testing.T) {
-	isolate(t)
+	fakeModel(t, isolate(t))
 	t.Setenv("BLITZ_SOCKET", filepath.Join(t.TempDir(), "none.sock")) // no service
 	ws := t.TempDir()
 	addWorker(t, ws, "deps", "---\ndescription: Report outdated modules\nschedule: Weekdays at 9:30\npermissions: [\"write:reports/\"]\n---\nWrite reports/deps.md.\n")
@@ -87,7 +108,7 @@ func TestWorkersCommandsLocally(t *testing.T) {
 }
 
 func TestWorkersCommandsThroughTheService(t *testing.T) {
-	isolate(t)
+	fakeModel(t, isolate(t))
 	dir, err := os.MkdirTemp("/tmp", "cp") // socket paths must be short
 	require.NoError(t, err)
 	t.Cleanup(func() { os.RemoveAll(dir) })
