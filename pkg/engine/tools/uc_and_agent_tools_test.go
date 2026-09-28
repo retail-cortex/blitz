@@ -37,8 +37,10 @@ func TestUniversalConstructorNameValidation(t *testing.T) {
 
 	// Negative: traversal and separator names are rejected and nothing is written.
 	for _, name := range []string{"../evil", "a/b", "..", ".hidden", "sp ace", strings.Repeat("x", 65)} {
-		out := runTool(t, rt, map[string]any{"action": "create", "tool_name": name, "code": "echo hi"})
-		assert.NotEqual(t, "", errOf(out), "expected rejection for tool_name %q", name)
+		t.Run(name, func(t *testing.T) {
+			out := runTool(t, rt, map[string]any{"action": "create", "tool_name": name, "code": "echo hi"})
+			assert.NotEqual(t, "", errOf(out), "expected rejection for tool_name %q", name)
+		})
 	}
 	_, err := os.Stat(filepath.Join(base, "evil.sh"))
 	assert.ErrorIs(t, err, fs.ErrNotExist, "traversal wrote outside the tools directory")
@@ -192,8 +194,10 @@ func TestUniversalConstructorPersistence(t *testing.T) {
 	out = runTool(t, second, map[string]any{"action": "delete", "tool_name": "greet"})
 	require.Equal(t, true, out["success"], "delete: %v", out)
 	for _, f := range []string{"greet.py", "greet.json"} {
-		_, err := os.Stat(filepath.Join(ucDir, f))
-		assert.ErrorIs(t, err, fs.ErrNotExist, "%s not removed", f)
+		t.Run(f, func(t *testing.T) {
+			_, err := os.Stat(filepath.Join(ucDir, f))
+			assert.ErrorIs(t, err, fs.ErrNotExist, "%s not removed", f)
+		})
 	}
 	third := toolOf(t)(NewUniversalConstructorTool(ucDir, allowAll(), nil, nil))
 	tools, _ = runTool(t, third, map[string]any{"action": "list"})["tools"].([]any)

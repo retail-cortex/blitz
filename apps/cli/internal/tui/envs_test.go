@@ -58,7 +58,9 @@ func TestEnvsListPruneRemove(t *testing.T) {
 
 	out := run("/envs")
 	for _, want := range []string{"Script environments (3)", needed, "six==1.16.0", "used by s", "incomplete"} {
-		assert.Contains(t, out, want, "list lacks %q:\n%s", want, out)
+		t.Run(want, func(t *testing.T) {
+			assert.Contains(t, out, want, "list lacks %q:\n%s", want, out)
+		})
 	}
 	out = run("/envs prune")
 	assert.Contains(t, out, "Removed 2 environment(s)", "prune:\n%s", out)

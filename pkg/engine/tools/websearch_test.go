@@ -112,10 +112,12 @@ func TestWebSearchApprovalAndErrors(t *testing.T) {
 	assert.Contains(t, out.Error, "disabled", "network off: %+v", out)
 
 	for status, want := range map[int]string{401: "authentication failed", 429: "rate limited", 500: "HTTP 500"} {
-		var e captured
-		bad := searcher(t, WebSearchConfig{Provider: "brave", APIKey: "k", BaseURL: searchServer(t, `{"error":"x"}`, status, &e)})
-		out := bad.search(ctx, allowAll(), WebSearchInput{Query: "x"})
-		assert.Contains(t, out.Error, want, "status %d: %q", status, out.Error)
+		t.Run(want, func(t *testing.T) {
+			var e captured
+			bad := searcher(t, WebSearchConfig{Provider: "brave", APIKey: "k", BaseURL: searchServer(t, `{"error":"x"}`, status, &e)})
+			out := bad.search(ctx, allowAll(), WebSearchInput{Query: "x"})
+			assert.Contains(t, out.Error, want, "status %d: %q", status, out.Error)
+		})
 	}
 	var g captured
 	garbage := searcher(t, WebSearchConfig{Provider: "brave", APIKey: "k", BaseURL: searchServer(t, `<html>`, 200, &g)})
@@ -132,8 +134,10 @@ func TestWebSearchConfigValidation(t *testing.T) {
 		"searxng no url": {Provider: "searxng"},
 		"bad url":        {Provider: "searxng", BaseURL: "file:///etc"},
 	} {
-		_, err := newWebSearcher(cfg)
-		assert.Error(t, err, "%s: expected error", name)
+		t.Run(name, func(t *testing.T) {
+			_, err := newWebSearcher(cfg)
+			assert.Error(t, err, "%s: expected error", name)
+		})
 	}
 	s, err := newWebSearcher(WebSearchConfig{Provider: "Tavily"})
 	assert.NoError(t, err, "env key / default endpoint: %+v", s)

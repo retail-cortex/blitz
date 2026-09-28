@@ -58,8 +58,10 @@ func TestSaveModelSettingsWritesAndRemoves(t *testing.T) {
 	gpt.Set("max_tokens", "4096")
 	local.Set("seed", "7")
 	for model, s := range map[string]ModelSettings{"gpt-4.1": gpt, "qwen2.5-coder:7b": local} {
-		_, err := SaveModelSettings(dir, model, s)
-		require.NoError(t, err, "%s", model)
+		t.Run(model, func(t *testing.T) {
+			_, err := SaveModelSettings(dir, model, s)
+			require.NoError(t, err, "%s", model)
+		})
 	}
 	gpt.Set("max_tokens", "") // remove one key
 	_, err := SaveModelSettings(dir, "gpt-4.1", gpt)
@@ -79,7 +81,9 @@ func TestSaveModelSettingsWritesAndRemoves(t *testing.T) {
 	require.NotNil(t, l.Seed, "qwen = %+v\n%s", l, b)
 	require.Equal(t, 7, *l.Seed, "qwen = %+v\n%s", l, b)
 	for _, keep := range []string{"# mine", "# global", `qa = "gpt-5"`} {
-		require.Contains(t, string(b), keep, "lost %q:\n%s", keep, b)
+		t.Run(keep, func(t *testing.T) {
+			require.Contains(t, string(b), keep, "lost %q:\n%s", keep, b)
+		})
 	}
 
 	// Clearing everything removes the table.

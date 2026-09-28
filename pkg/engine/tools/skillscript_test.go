@@ -131,7 +131,9 @@ func TestRunSkillScriptTier2(t *testing.T) {
 	require.Equal(t, "", out.Error, "%+v", out)
 	require.Equal(t, 0, out.ExitCode, "%+v", out)
 	for _, want := range []string{"args ['a b', 'c']", "readme original", "env hi passed None None", "workspace write: refused", "output True"} {
-		assert.Contains(t, out.Stdout, want, "stdout lacks %q:\n%s\n%s", want, out.Stdout, out.Stderr)
+		t.Run(want, func(t *testing.T) {
+			assert.Contains(t, out.Stdout, want, "stdout lacks %q:\n%s\n%s", want, out.Stdout, out.Stderr)
+		})
 	}
 	b, _ := os.ReadFile(filepath.Join(f.ws, "README.md"))
 	require.Equal(t, "original", string(b), "the script changed the workspace: %q", b)
@@ -171,8 +173,10 @@ func TestRunSkillScriptRefusals(t *testing.T) {
 		"ts":      `language "typescript" isn't in skills.policy.languages`,
 		"missing": `has no script "missing"`,
 	} {
-		out := f.runner.Run(context.Background(), RunSkillScriptInput{Skill: "demo", Script: script})
-		assert.Contains(t, out.Error, want, "%s: %+v", script, out)
+		t.Run(script, func(t *testing.T) {
+			out := f.runner.Run(context.Background(), RunSkillScriptInput{Skill: "demo", Script: script})
+			assert.Contains(t, out.Error, want, "%s: %+v", script, out)
+		})
 	}
 	out := f.runner.Run(context.Background(), RunSkillScriptInput{Skill: "nope", Script: "x"})
 	assert.Contains(t, out.Error, "no skill", "unknown skill: %+v", out)

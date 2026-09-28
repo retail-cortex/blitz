@@ -27,7 +27,9 @@ func TestTexts(t *testing.T) {
 		"Notice":     {Notice, "Blitz\nCopyright 2026 Retail Cortex"},
 		"ThirdParty": {ThirdParty, "THIRD-PARTY NOTICES"},
 	} {
-		assert.Contains(t, c.text, c.want, "%s doesn't contain %q", name, c.want)
+		t.Run(name, func(t *testing.T) {
+			assert.Contains(t, c.text, c.want, "%s doesn't contain %q", name, c.want)
+		})
 	}
 	assert.Contains(t, ThirdParty, "Go standard library", "third-party notices miss Go or the page's packages")
 	assert.Contains(t, ThirdParty, "react", "third-party notices miss Go or the page's packages")

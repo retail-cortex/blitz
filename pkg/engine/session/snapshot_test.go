@@ -60,9 +60,11 @@ func TestSnapshotCopiesTheSessionAndLeavesItActive(t *testing.T) {
 	a := st.Active()
 	require.Equal(t, src.ID, a.ID, "active changed to %s", a.ID)
 	for _, suffix := range []string{metaSuffix, messagesSuffix, eventsSuffix} {
-		info, err := os.Stat(filepath.Join(dir, snap.ID+suffix))
-		require.NoError(t, err, "%s: %v %v", suffix, err, info)
-		require.Equal(t, fs.FileMode(filePerm), info.Mode().Perm(), "%s: %v %v", suffix, err, info)
+		t.Run(suffix, func(t *testing.T) {
+			info, err := os.Stat(filepath.Join(dir, snap.ID+suffix))
+			require.NoError(t, err, "%s: %v %v", suffix, err, info)
+			require.Equal(t, fs.FileMode(filePerm), info.Mode().Perm(), "%s: %v %v", suffix, err, info)
+		})
 	}
 	// The source keeps growing on its own.
 	st.AddMessage("user", "more")
@@ -87,16 +89,20 @@ func TestSnapshotNamesAreUniqueUnlessReplaced(t *testing.T) {
 	require.Equal(t, second.ID, found.ID, "after replace: %+v", found)
 	require.Equal(t, 3, found.MessageCount, "after replace: %+v", found)
 	for _, suffix := range []string{metaSuffix, messagesSuffix, eventsSuffix} {
-		_, err := os.Stat(filepath.Join(dir, first.ID+suffix))
-		require.ErrorIs(t, err, os.ErrNotExist, "replaced snapshot's %s still there: %v", suffix, err)
+		t.Run(suffix, func(t *testing.T) {
+			_, err := os.Stat(filepath.Join(dir, first.ID+suffix))
+			require.ErrorIs(t, err, os.ErrNotExist, "replaced snapshot's %s still there: %v", suffix, err)
+		})
 	}
 }
 
 func TestSnapshotRefusesBadNamesAndEmptySessions(t *testing.T) {
 	st, _, src, _ := conversation(t)
 	for _, name := range []string{"", "../x", "a b", "session-20260101-000000-abcd", ".hidden"} {
-		_, err := st.Snapshot(src.ID, name, false)
-		assert.Error(t, err, "name %q accepted", name)
+		t.Run(name, func(t *testing.T) {
+			_, err := st.Snapshot(src.ID, name, false)
+			assert.Error(t, err, "name %q accepted", name)
+		})
 	}
 	empty, _ := st.CreateSession("", "empty", "a")
 	_, err := st.Snapshot(empty.ID, "nothing", false)

@@ -32,6 +32,8 @@ func TestPermissionsCommand(t *testing.T) {
 		"Removed shell(git push *)",
 		"No rule shell(nope)",
 	} {
-		assert.Contains(t, out, want, "missing %q in:\n%s", want, out)
+		t.Run(want, func(t *testing.T) {
+			assert.Contains(t, out, want, "missing %q in:\n%s", want, out)
+		})
 	}
 }

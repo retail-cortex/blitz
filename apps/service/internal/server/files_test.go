@@ -75,8 +75,10 @@ func TestFileService(t *testing.T) {
 			return err
 		}(), "FILE_EXISTS"},
 	} {
-		_, info := errorReason(t, call.err)
-		assert.Equal(t, call.reason, info.Reason, "%s: %v", name, info)
+		t.Run(name, func(t *testing.T) {
+			_, info := errorReason(t, call.err)
+			assert.Equal(t, call.reason, info.Reason, "%s: %v", name, info)
+		})
 	}
 
 	_, err = files.RenameFile(ctx, connect.NewRequest(&pb.RenameFileRequest{Workspace: dir, From: "src/a.go", To: "lib/a.go"}))

@@ -208,8 +208,10 @@ func TestWorkspacesAreKeptAndClosed(t *testing.T) {
 	link := filepath.Join(t.TempDir(), "link")
 	require.NoError(t, os.Symlink(a, link))
 	for _, dir := range []string{a, b, link} {
-		_, err := c.workspaces.GetModel(ctx, connect.NewRequest(&pb.GetModelRequest{Workspace: dir}))
-		require.NoError(t, err)
+		t.Run(dir, func(t *testing.T) {
+			_, err := c.workspaces.GetModel(ctx, connect.NewRequest(&pb.GetModelRequest{Workspace: dir}))
+			require.NoError(t, err)
+		})
 	}
 	list, _ := c.workspaces.ListWorkspaces(ctx, connect.NewRequest(&pb.ListWorkspacesRequest{}))
 	require.Len(t, list.Msg.Workspaces, 2, "workspaces %v", list.Msg.Workspaces)

@@ -24,9 +24,11 @@ import (
 func TestLicense(t *testing.T) {
 	a := &App{}
 	for which, want := range map[string]string{"notice": "Retail Cortex", "full": "Apache License", "third-party": "THIRD-PARTY NOTICES"} {
-		text, err := a.License(which)
-		assert.NoError(t, err, "License(%q): %v, no %q", which, err, want)
-		assert.Contains(t, text, want, "License(%q): %v, no %q", which, err, want)
+		t.Run(which, func(t *testing.T) {
+			text, err := a.License(which)
+			assert.NoError(t, err, "License(%q): %v, no %q", which, err, want)
+			assert.Contains(t, text, want, "License(%q): %v, no %q", which, err, want)
+		})
 	}
 	_, err := a.License("bogus")
 	assert.Error(t, err, "bogus accepted")

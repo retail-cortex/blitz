@@ -31,8 +31,10 @@ func rewindApp(t *testing.T) (*App, string) {
 	s, err := app.Workspace.NewSession()
 	require.NoError(t, err)
 	for _, p := range []string{"first prompt", "second prompt"} {
-		_, err := app.Workspace.Run(context.Background(), s.ID, api.Turn{Text: p}, func(api.Event) {})
-		require.NoError(t, err)
+		t.Run(p, func(t *testing.T) {
+			_, err := app.Workspace.Run(context.Background(), s.ID, api.Turn{Text: p}, func(api.Event) {})
+			require.NoError(t, err)
+		})
 	}
 	return app, s.ID
 }
@@ -49,8 +51,10 @@ func TestRewindCommandOnAPipe(t *testing.T) {
 	a, _ := app.Workspace.ActiveSession()
 	assert.Equal(t, 2, a.MessageCount, "messages %d", a.MessageCount)
 	for _, bad := range []string{"/rewind 5", "/rewind 1 sideways"} {
-		out := captureStdout(t, func() { HandleCommand(context.Background(), bad, app) })
-		assert.Contains(t, out, "Usage: /rewind", "%s:\n%s", bad, out)
+		t.Run(bad, func(t *testing.T) {
+			out := captureStdout(t, func() { HandleCommand(context.Background(), bad, app) })
+			assert.Contains(t, out, "Usage: /rewind", "%s:\n%s", bad, out)
+		})
 	}
 }
 

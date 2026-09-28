@@ -134,8 +134,10 @@ func TestExpandHome(t *testing.T) {
 		"":            "",
 	}
 	for in, want := range cases {
-		got := ExpandHome(in)
-		assert.Equal(t, want, got, "ExpandHome(%q) = %q, want %q", in, got, want)
+		t.Run(in, func(t *testing.T) {
+			got := ExpandHome(in)
+			assert.Equal(t, want, got, "ExpandHome(%q) = %q, want %q", in, got, want)
+		})
 	}
 }
 
@@ -179,7 +181,9 @@ func TestSandboxDefaults(t *testing.T) {
 		return false
 	}
 	for _, p := range []string{".env", "~/.ssh", "*.pem"} {
-		assert.True(t, has(sb.BlockedPaths, p), "default blocked paths missing %q", p)
+		t.Run(p, func(t *testing.T) {
+			assert.True(t, has(sb.BlockedPaths, p), "default blocked paths missing %q", p)
+		})
 	}
 	assert.True(t, has(sb.Commands.Deny, "sudo *"), "default deny list missing sudo")
 	// Defaults are copies: mutating one config must not affect another.
@@ -224,6 +228,8 @@ func TestSkillPolicyProblems(t *testing.T) {
 	p := SkillPolicy{MinHITLTier: 5, Sandbox: "docker", Network: "some", NetworkAllow: []string{"x"}, Languages: []string{"python", "rust"}, MaxTimeoutSeconds: -1}
 	got := strings.Join(p.Problems(), "\n")
 	for _, want := range []string{"min_hitl_tier = 5", `sandbox = "docker"`, `network = "some"`, "network_allow is ignored", `unknown language "rust"`, "max_timeout_seconds"} {
-		assert.Contains(t, got, want, "missing %q in:\n%s", want, got)
+		t.Run(want, func(t *testing.T) {
+			assert.Contains(t, got, want, "missing %q in:\n%s", want, got)
+		})
 	}
 }

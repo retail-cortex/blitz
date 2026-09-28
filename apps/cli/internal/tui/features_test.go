@@ -44,8 +44,10 @@ func TestCompleteBlocks(t *testing.T) {
 		"~~~\ncode\n~~~\n":          len("~~~\ncode\n~~~\n"),
 	}
 	for in, want := range cases {
-		got := completeBlocks(in)
-		assert.Equal(t, want, got, "completeBlocks(%q) = %d, want %d", in, got, want)
+		t.Run(in, func(t *testing.T) {
+			got := completeBlocks(in)
+			assert.Equal(t, want, got, "completeBlocks(%q) = %d, want %d", in, got, want)
+		})
 	}
 }
 
@@ -147,7 +149,9 @@ func TestUsageLine(t *testing.T) {
 	after := api.Usage{Calls: 3, Input: 13_400, Output: 1_300, LastPrompt: 12_345, Priced: true, CostUSD: 0.0325}
 	got := UsageLine(before, after)
 	for _, want := range []string{"12.4k in", "1.2k out", "context 12.3k", "$0.0225", "session $0.0325"} {
-		assert.Contains(t, got, want, "usage line %q missing %q", got, want)
+		t.Run(want, func(t *testing.T) {
+			assert.Contains(t, got, want, "usage line %q missing %q", got, want)
+		})
 	}
 	after.Priced = false
 	assert.NotContains(t, UsageLine(before, after), "$", "unpriced usage should not show cost")
@@ -194,7 +198,9 @@ func TestREPLTurnUndoDiffCost(t *testing.T) {
 	_, err := os.Stat(made)
 	assert.ErrorIs(t, err, fs.ErrNotExist, "/undo did not remove the file the turn created")
 	for _, want := range []string{"+by tool", "Model calls:   2", "make a file", "Undid", "context 500"} {
-		assert.Contains(t, out, want, "REPL output missing %q:\n%s", want, out)
+		t.Run(want, func(t *testing.T) {
+			assert.Contains(t, out, want, "REPL output missing %q:\n%s", want, out)
+		})
 	}
 }
 
@@ -238,9 +244,11 @@ func TestResumeCommand(t *testing.T) {
 
 func TestThemeFromEnv(t *testing.T) {
 	for v, want := range map[string]string{"": "dark", "15;0": "dark", "0;15": "light", "0;7": "light", "garbage": "dark"} {
-		t.Setenv("COLORFGBG", v)
-		got := themeFromEnv()
-		assert.Equal(t, want, got, "COLORFGBG=%q -> %q, want %q", v, got, want)
+		t.Run(v, func(t *testing.T) {
+			t.Setenv("COLORFGBG", v)
+			got := themeFromEnv()
+			assert.Equal(t, want, got, "COLORFGBG=%q -> %q, want %q", v, got, want)
+		})
 	}
 }
 
@@ -315,7 +323,9 @@ func TestCompactCommand(t *testing.T) {
 	local(app).Storage().CreateSession("", "t", "blitz")
 	sid := local(app).Storage().Active().ID
 	for _, p := range []string{"make a file", "second turn"} {
-		require.NoError(t, local(app).Engine().Execute(ctx, sid, p, nil))
+		t.Run(p, func(t *testing.T) {
+			require.NoError(t, local(app).Engine().Execute(ctx, sid, p, nil))
+		})
 	}
 	out := captureStdout(t, func() { HandleCommand(ctx, "/compact keep file names", app) })
 	assert.Contains(t, out, "Replaced", "/compact output: %s", out)

@@ -132,9 +132,11 @@ func TestParsePickKeys(t *testing.T) {
 		"\x7f\x15\x03": {pkBackspace, pkClear, pkInterrupt},
 		"\x10\x0e":     {pkUp, pkDown},
 	} {
-		got := kinds(in)
-		assert.Len(t, got, len(want), "%q: %v, want %v", in, got, want)
-		assert.False(t, len(want) > 0 && strings.Join(kindNames(got), ",") != strings.Join(kindNames(want), ","), "%q: %v, want %v", in, got, want)
+		t.Run(in, func(t *testing.T) {
+			got := kinds(in)
+			assert.Len(t, got, len(want), "%q: %v, want %v", in, got, want)
+			assert.False(t, len(want) > 0 && strings.Join(kindNames(got), ",") != strings.Join(kindNames(want), ","), "%q: %v, want %v", in, got, want)
+		})
 	}
 }
 
@@ -205,14 +207,18 @@ func TestApprovalPicker(t *testing.T) {
 	req := api.ApprovalRequest{Kind: "edit", Tool: "edit", Detail: "notes.txt", Key: "k", KeyLabel: "edits to notes.txt",
 		Diff: "--- a/notes.txt\n+++ b/notes.txt\n@@ -1 +1 @@\n-old\n+new\n"}
 	for key, want := range map[string]api.Decision{"y": api.DecisionOnce, "s": api.DecisionSession, "a": api.DecisionAlways, "n": api.DecisionDeny} {
-		keys.in <- []byte(key)
-		d, err := approve(context.Background(), req)
-		assert.NoError(t, err, "%s: %v", key, d)
-		assert.Equal(t, want, d, "%s: %v %v", key, d, err)
+		t.Run(key, func(t *testing.T) {
+			keys.in <- []byte(key)
+			d, err := approve(context.Background(), req)
+			assert.NoError(t, err, "%s: %v", key, d)
+			assert.Equal(t, want, d, "%s: %v %v", key, d, err)
+		})
 	}
 	out := f.output()
 	for _, want := range []string{"Approval required", "Yes, and allow edits to notes.txt this session", "Show the whole diff", "Allow?"} {
-		assert.Contains(t, out, want, "missing %q in:\n%s", want, out)
+		t.Run(want, func(t *testing.T) {
+			assert.Contains(t, out, want, "missing %q in:\n%s", want, out)
+		})
 	}
 	assert.NotContains(t, out, "[y/s/a/d/N]", "the line prompt's answer keys are shown with the picker")
 
@@ -302,9 +308,11 @@ func TestPickRenderFitsTheWidth(t *testing.T) {
 	lines := strings.Split(strings.TrimSuffix(sb.String(), "\n"), "\n")
 	require.Len(t, lines, n, "%d lines drawn, %d counted", len(lines), n)
 	for _, l := range lines {
-		plain := ansiPattern.ReplaceAllString(strings.TrimPrefix(l, "\r\x1b[2K"), "")
-		w := len([]rune(plain))
-		assert.LessOrEqual(t, w, 40, "line of %d columns: %q", w, plain)
+		t.Run(l, func(t *testing.T) {
+			plain := ansiPattern.ReplaceAllString(strings.TrimPrefix(l, "\r\x1b[2K"), "")
+			w := len([]rune(plain))
+			assert.LessOrEqual(t, w, 40, "line of %d columns: %q", w, plain)
+		})
 	}
 }
 

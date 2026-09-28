@@ -32,10 +32,14 @@ import (
 func TestPublicAddr(t *testing.T) {
 	for _, s := range []string{"127.0.0.1", "10.1.2.3", "172.16.0.1", "192.168.1.1", "169.254.169.254", "::1", "fe80::1",
 		"0.0.0.0", "100.64.0.1", "224.0.0.1", "::ffff:127.0.0.1", "fc00::1", "0.1.2.3"} {
-		assert.False(t, publicAddr(netip.MustParseAddr(s)), "%s should be blocked", s)
+		t.Run(s, func(t *testing.T) {
+			assert.False(t, publicAddr(netip.MustParseAddr(s)), "%s should be blocked", s)
+		})
 	}
 	for _, s := range []string{"8.8.8.8", "1.1.1.1", "2606:4700:4700::1111"} {
-		assert.True(t, publicAddr(netip.MustParseAddr(s)), "%s should be allowed", s)
+		t.Run(s, func(t *testing.T) {
+			assert.True(t, publicAddr(netip.MustParseAddr(s)), "%s should be allowed", s)
+		})
 	}
 }
 
@@ -45,8 +49,10 @@ func TestMatchDomain(t *testing.T) {
 		"pkg.go.dev": true, "go.dev": true, "EXAMPLE.com": true, "example.com.": true,
 		"evilgo.dev": false, "go.dev.evil.com": false, "sub.example.com": false,
 	} {
-		got := matchDomain(globs, host)
-		assert.Equal(t, want, got, "matchDomain(%q) = %v, want %v", host, got, want)
+		t.Run(host, func(t *testing.T) {
+			got := matchDomain(globs, host)
+			assert.Equal(t, want, got, "matchDomain(%q) = %v, want %v", host, got, want)
+		})
 	}
 }
 
@@ -97,7 +103,9 @@ func TestWebFetchContent(t *testing.T) {
 	out := f.fetch(ctx, allowAll(), srv.URL+"/page")
 	require.Equal(t, "", out.Error, out.Error)
 	for _, want := range []string{"# Heading", "Hello world .", "- one", "- two", "docs (https://go.dev/doc)"} {
-		assert.Contains(t, out.Content, want, "html text missing %q:\n%s", want, out.Content)
+		t.Run(want, func(t *testing.T) {
+			assert.Contains(t, out.Content, want, "html text missing %q:\n%s", want, out.Content)
+		})
 	}
 	assert.NotContains(t, out.Content, "alert", "script/style leaked: %s", out.Content)
 	assert.NotContains(t, out.Content, ".x{}", "script/style leaked: %s", out.Content)
@@ -120,8 +128,10 @@ func TestWebFetchValidationAndApproval(t *testing.T) {
 	f := testFetcher(WebFetchConfig{AllowPrivate: true, DenyDomains: []string{"*.evil.test"}})
 
 	for _, bad := range []string{"file:///etc/passwd", "ftp://x.org/f", "http://", "http://user:pw@example.com/", "https://a.evil.test/x"} {
-		out := f.fetch(ctx, allowAll(), bad)
-		assert.NotEqual(t, "", out.Error, "%q should be rejected", bad)
+		t.Run(bad, func(t *testing.T) {
+			out := f.fetch(ctx, allowAll(), bad)
+			assert.NotEqual(t, "", out.Error, "%q should be rejected", bad)
+		})
 	}
 
 	// Non-allow-listed hosts need approval, keyed per host.

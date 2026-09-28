@@ -70,12 +70,14 @@ func TestTurnTraceNestsADKSpansWithoutContent(t *testing.T) {
 	parent := map[string]string{} // span ID -> parent span ID
 	idName := map[string]string{}
 	for _, s := range spans.GetSpans() {
-		byName[s.Name] = s
-		idName[s.SpanContext.SpanID().String()] = s.Name
-		parent[s.SpanContext.SpanID().String()] = s.Parent.SpanID().String()
-		for _, kv := range s.Attributes {
-			assert.NotContains(t, kv.Value.String(), content, "span %q attribute %s carries file content", s.Name, kv.Key)
-		}
+		t.Run(s.Name, func(t *testing.T) {
+			byName[s.Name] = s
+			idName[s.SpanContext.SpanID().String()] = s.Name
+			parent[s.SpanContext.SpanID().String()] = s.Parent.SpanID().String()
+			for _, kv := range s.Attributes {
+				assert.NotContains(t, kv.Value.String(), content, "span %q attribute %s carries file content", s.Name, kv.Key)
+			}
+		})
 	}
 	t.Logf("spans: %v", idName)
 	turn, ok := byName["turn"]
@@ -134,8 +136,10 @@ func TestTurnsChainAcrossResume(t *testing.T) {
 	rec, _ := store.CreateSession("", "chain", "blitz")
 	f := newEngineWith(t, fixtureOpts{opts: []Option{WithTurnStore(store)}}, textContent("one"), textContent("two"))
 	for _, p := range []string{"first", "second"} {
-		_, err := collect(t, f.eng, rec.ID, p)
-		require.NoError(t, err)
+		t.Run(p, func(t *testing.T) {
+			_, err := collect(t, f.eng, rec.ID, p)
+			require.NoError(t, err)
+		})
 	}
 
 	// A later process: new storage and engine, same session.

@@ -201,7 +201,9 @@ func TestEngineAuditsToolCalls(t *testing.T) {
 	require.Len(t, files, 1, "audit files %v", files)
 	b, _ := os.ReadFile(files[0])
 	for _, want := range []string{`"kind":"tool_call"`, `"kind":"tool_result"`, `"tool":"list_files"`} {
-		assert.Contains(t, string(b), want, "audit log missing %s:\n%s", want, b)
+		t.Run(want, func(t *testing.T) {
+			assert.Contains(t, string(b), want, "audit log missing %s:\n%s", want, b)
+		})
 	}
 }
 

@@ -101,8 +101,10 @@ func TestListDirHiddenAndGit(t *testing.T) {
 	all, err := w.ListDir(ctx, ".", true)
 	require.NoError(t, err)
 	for name, hidden := range map[string]string{"build": "ignored", "debug.log": "ignored", ".env": "blocked", ".editorconfig": "dot", ".gitignore": "dot"} {
-		e := entry(t, all, name)
-		assert.Equal(t, hidden, e.Hidden, "%s hidden %q, want %q", name, e.Hidden, hidden)
+		t.Run(name, func(t *testing.T) {
+			e := entry(t, all, name)
+			assert.Equal(t, hidden, e.Hidden, "%s hidden %q, want %q", name, e.Hidden, hidden)
+		})
 	}
 	e = entry(t, all, ".env")
 	assert.Equal(t, "blocked", e.AgentRule, ".env rule %q", e.AgentRule)
@@ -120,10 +122,12 @@ func TestFilesStayInTheWorkspace(t *testing.T) {
 	write(t, outside, "secret.txt", "no")
 	require.NoError(t, os.Symlink(outside, filepath.Join(w.Dir(), "out")))
 	for _, p := range []string{"../x", "/etc/passwd", "out/secret.txt", ".git/config", "a/../../x"} {
-		_, err := w.ReadFile(p)
-		assert.Error(t, err, "read %s", p)
-		_, err = w.WriteFile(ctx, p, "x", "")
-		assert.Error(t, err, "wrote %s", p)
+		t.Run(p, func(t *testing.T) {
+			_, err := w.ReadFile(p)
+			assert.Error(t, err, "read %s", p)
+			_, err = w.WriteFile(ctx, p, "x", "")
+			assert.Error(t, err, "wrote %s", p)
+		})
 	}
 	_, err := os.Stat(filepath.Join(outside, "x"))
 	assert.ErrorIs(t, err, fs.ErrNotExist, "wrote outside")
@@ -229,12 +233,16 @@ func TestFindFiles(t *testing.T) {
 
 func TestUserPath(t *testing.T) {
 	for in, want := range map[string]string{"": ".", "a/b": filepath.Join("a", "b"), "a//b/": filepath.Join("a", "b"), "./x": "x"} {
-		got, err := tools.UserPath(in)
-		assert.NoError(t, err, "%q: %q", in, got)
-		assert.Equal(t, want, got, "%q: %q %v", in, got, err)
+		t.Run(in, func(t *testing.T) {
+			got, err := tools.UserPath(in)
+			assert.NoError(t, err, "%q: %q", in, got)
+			assert.Equal(t, want, got, "%q: %q %v", in, got, err)
+		})
 	}
 	for _, in := range []string{"..", "../a", "/a", ".git", ".git/HEAD"} {
-		_, err := tools.UserPath(in)
-		assert.Error(t, err, "%q accepted", in)
+		t.Run(in, func(t *testing.T) {
+			_, err := tools.UserPath(in)
+			assert.Error(t, err, "%q accepted", in)
+		})
 	}
 }

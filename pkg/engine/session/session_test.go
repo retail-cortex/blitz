@@ -44,9 +44,11 @@ func TestStoragePermissions(t *testing.T) {
 	info, _ := os.Stat(dir)
 	assert.Equal(t, fs.FileMode(0o700), info.Mode().Perm(), "session dir mode = %v, want 0700", info.Mode().Perm())
 	for _, suffix := range []string{metaSuffix, messagesSuffix} {
-		info, err := os.Stat(filepath.Join(dir, rec.ID+suffix))
-		require.NoError(t, err)
-		assert.Equal(t, fs.FileMode(0o600), info.Mode().Perm(), "%s mode = %v, want 0600", suffix, info.Mode().Perm())
+		t.Run(suffix, func(t *testing.T) {
+			info, err := os.Stat(filepath.Join(dir, rec.ID+suffix))
+			require.NoError(t, err)
+			assert.Equal(t, fs.FileMode(0o600), info.Mode().Perm(), "%s mode = %v, want 0600", suffix, info.Mode().Perm())
+		})
 	}
 }
 
@@ -66,15 +68,19 @@ func TestSessionIDValidation(t *testing.T) {
 
 	// Negative: traversal and unsafe IDs rejected for both create and load.
 	for _, id := range []string{"../stolen", "a/b", ".hidden", "..", "x y", strings.Repeat("a", 200)} {
-		_, err := s.CreateSession(id, "t", "a")
-		assert.ErrorIs(t, err, ErrInvalidID, "CreateSession(%q) expected ErrInvalidID, got %v", id, err)
-		_, err = s.Load(id)
-		assert.ErrorIs(t, err, ErrInvalidID, "Load(%q) expected ErrInvalidID, got %v", id, err)
+		t.Run(id, func(t *testing.T) {
+			_, err := s.CreateSession(id, "t", "a")
+			assert.ErrorIs(t, err, ErrInvalidID, "CreateSession(%q) expected ErrInvalidID, got %v", id, err)
+			_, err = s.Load(id)
+			assert.ErrorIs(t, err, ErrInvalidID, "Load(%q) expected ErrInvalidID, got %v", id, err)
+		})
 	}
 	// Positive: well-formed IDs accepted.
 	for _, id := range []string{"session-1", "abc.DEF_9"} {
-		_, err := s.CreateSession(id, "t", "a")
-		assert.NoError(t, err, "CreateSession(%q)", id)
+		t.Run(id, func(t *testing.T) {
+			_, err := s.CreateSession(id, "t", "a")
+			assert.NoError(t, err, "CreateSession(%q)", id)
+		})
 	}
 }
 
@@ -250,8 +256,10 @@ func TestLastTurnPersistsForActiveAndOtherSessions(t *testing.T) {
 
 	s2, _ := NewStorage(dir) // a later process, e.g. --resume
 	for id, want := range map[string]string{a.ID: tpA, b.ID: tpB} {
-		tp, _ := s2.LastTurn(id)
-		assert.Equal(t, want, tp, "%s: LastTurn = %q, want %q", id, tp, want)
+		t.Run(id, func(t *testing.T) {
+			tp, _ := s2.LastTurn(id)
+			assert.Equal(t, want, tp, "%s: LastTurn = %q, want %q", id, tp, want)
+		})
 	}
 	_, n = s2.LastTurn(a.ID)
 	assert.Equal(t, 3, n, "index = %d, want 3", n)
@@ -297,6 +305,6 @@ func TestMessageKindsAndTruncate(t *testing.T) {
 	got, _ = s.Load(rec.ID)
 	assert.Equal(t, 4, got.MessageCount, "appending after truncating")
 	if assert.Len(t, got.Messages, 4, "appending after truncating") {
-	assert.Equal(t, "third", got.Messages[3].Content)
+		assert.Equal(t, "third", got.Messages[3].Content)
 	}
 }

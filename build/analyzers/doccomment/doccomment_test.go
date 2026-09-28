@@ -44,16 +44,18 @@ func run(t *testing.T, dir string) (got, want []string) {
 	var files []*ast.File
 	wantRe := regexp.MustCompile("want `([^`]*)`")
 	for _, n := range names {
-		f, err := parser.ParseFile(fset, n, nil, parser.ParseComments)
-		require.NoError(t, err)
-		files = append(files, f)
-		for _, cg := range f.Comments {
-			for _, c := range cg.List {
-				if m := wantRe.FindStringSubmatch(c.Text); m != nil {
-					want = append(want, lineMsg(fset, c.Pos(), m[1]))
+		t.Run(n, func(t *testing.T) {
+			f, err := parser.ParseFile(fset, n, nil, parser.ParseComments)
+			require.NoError(t, err)
+			files = append(files, f)
+			for _, cg := range f.Comments {
+				for _, c := range cg.List {
+					if m := wantRe.FindStringSubmatch(c.Text); m != nil {
+						want = append(want, lineMsg(fset, c.Pos(), m[1]))
+					}
 				}
 			}
-		}
+		})
 	}
 	info := &types.Info{Defs: map[*ast.Ident]types.Object{}, Uses: map[*ast.Ident]types.Object{}, Types: map[ast.Expr]types.TypeAndValue{}}
 	pkg, err := (&types.Config{Importer: importer.Default()}).Check(filepath.Base(dir), fset, files, info)
@@ -76,10 +78,12 @@ func lineMsg(fset *token.FileSet, pos token.Pos, msg string) string {
 
 func TestAnalyzer(t *testing.T) {
 	for _, pkg := range []string{"a", "b"} {
-		dir := filepath.Join("testdata", "src", pkg)
-		_, err := os.Stat(dir)
-		require.NoError(t, err)
-		got, want := run(t, dir)
-		assert.Equal(t, strings.Join(want, "\n"), strings.Join(got, "\n"), "%s:\ngot:\n  %s\nwant:\n  %s", pkg, strings.Join(got, "\n  "), strings.Join(want, "\n  "))
+		t.Run(pkg, func(t *testing.T) {
+			dir := filepath.Join("testdata", "src", pkg)
+			_, err := os.Stat(dir)
+			require.NoError(t, err)
+			got, want := run(t, dir)
+			assert.Equal(t, strings.Join(want, "\n"), strings.Join(got, "\n"), "%s:\ngot:\n  %s\nwant:\n  %s", pkg, strings.Join(got, "\n  "), strings.Join(want, "\n  "))
+		})
 	}
 }

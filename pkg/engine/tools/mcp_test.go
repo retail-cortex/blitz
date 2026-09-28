@@ -125,8 +125,10 @@ func TestNewMCPManagerValidation(t *testing.T) {
 		"neither":   {{Name: "a"}},
 		"duplicate": {{Name: "a", Command: "x"}, {Name: "a", URL: "http://y"}},
 	} {
-		_, err := NewMCPManager(cfgs, nil, nil)
-		assert.Error(t, err, "%s: expected error", name)
+		t.Run(name, func(t *testing.T) {
+			_, err := NewMCPManager(cfgs, nil, nil)
+			assert.Error(t, err, "%s: expected error", name)
+		})
 	}
 	m, err := NewMCPManager([]config.MCPServerConfig{{Name: "local", Command: "true"}, {Name: "remote", URL: "https://example.com/mcp"}}, nil, nil)
 	assert.NoError(t, err, "valid config: %v %v", err, m.Servers())

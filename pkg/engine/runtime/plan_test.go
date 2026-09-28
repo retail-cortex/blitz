@@ -92,7 +92,9 @@ func TestPrimaryAgentsHaveWorkflowTools(t *testing.T) {
 		}
 	}
 	for _, want := range []string{"todo", "exit_plan_mode", "enter_plan_mode", "read_file"} {
-		assert.Contains(t, names, want, "qa lacks %s: %v", want, names)
+		t.Run(want, func(t *testing.T) {
+			assert.Contains(t, names, want, "qa lacks %s: %v", want, names)
+		})
 	}
 	assert.NotContains(t, names, "apply_patch", "qa got a tool its list doesn't have")
 }

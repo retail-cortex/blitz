@@ -81,7 +81,9 @@ func TestShellPassthroughRunsInWorkspaceWithoutTheAgent(t *testing.T) {
 	require.NoError(t, err, "command did not run in the workspace: %q", b)
 	require.Equal(t, "hi", strings.TrimSpace(string(b)), "command did not run in the workspace: %q %v", b, err)
 	for _, want := range []string{"$ echo hi > made.txt", "Done", "Exit code 3", "Usage: !<command>"} {
-		assert.Contains(t, out, want, "output missing %q:\n%s", want, out)
+		t.Run(want, func(t *testing.T) {
+			assert.Contains(t, out, want, "output missing %q:\n%s", want, out)
+		})
 	}
 	require.Len(t, userMessages(local(app).Storage()), 0, "! commands were recorded as prompts")
 }
@@ -108,7 +110,9 @@ func TestToolsAndShowCommands(t *testing.T) {
 	local(app).Config().MCP.Servers = []config.MCPServerConfig{{Name: "gh", Prefix: "gh"}, {Name: "qa-only", Agents: []string{"qa"}}}
 	out := captureStdout(t, func() { HandleCommand(context.Background(), "/tools", app) })
 	for _, want := range []string{"read_file", "run_shell_command", "mcp:gh", "gh__"} {
-		assert.Contains(t, out, want, "/tools missing %q:\n%s", want, out)
+		t.Run(want, func(t *testing.T) {
+			assert.Contains(t, out, want, "/tools missing %q:\n%s", want, out)
+		})
 	}
 	assert.NotContains(t, out, "qa-only", "/tools listed an MCP server not offered to the active agent")
 	// read_file is marked as available in /plan, run_shell_command is not.

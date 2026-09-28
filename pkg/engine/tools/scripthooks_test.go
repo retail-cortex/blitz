@@ -60,7 +60,9 @@ func TestScriptHookReceivesEvent(t *testing.T) {
 	require.NoError(t, h.flush(context.Background()))
 	b, _ := os.ReadFile(out)
 	for _, want := range []string{`"event":"post_tool"`, `"tool":"grep"`, `"session_id":"sess"`, `"query":"x"`, `"total_matches":1`} {
-		assert.Contains(t, string(b), want, "hook stdin missing %s: %s", want, b)
+		t.Run(want, func(t *testing.T) {
+			assert.Contains(t, string(b), want, "hook stdin missing %s: %s", want, b)
+		})
 	}
 	r := h.PromptSubmit(context.Background(), "sess", "hello there")
 	assert.Equal(t, "", r, "prompt hook blocked: %q", r)

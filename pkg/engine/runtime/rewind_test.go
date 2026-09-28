@@ -77,10 +77,14 @@ func TestCompactAtEitherSideOfAPrompt(t *testing.T) {
 	runTurns(t, f.eng, "s", "q4")
 	got := lastRequestText(f.llm)
 	for _, want := range []string{"q1", "r1", "SUMMARY-FROM", "q4"} {
-		assert.Contains(t, got, want, "missing %q: %s", want, got)
+		t.Run(want, func(t *testing.T) {
+			assert.Contains(t, got, want, "missing %q: %s", want, got)
+		})
 	}
 	for _, gone := range []string{"q2", "r3"} {
-		assert.NotContains(t, got, gone, "summarized %q still sent: %s", gone, got)
+		t.Run(gone, func(t *testing.T) {
+			assert.NotContains(t, got, gone, "summarized %q still sent: %s", gone, got)
+		})
 	}
 
 	g := newEngineWith(t, fixtureOpts{}, textContent("r1"), textContent("r2"), textContent("SUMMARY-UPTO"), textContent("after"))

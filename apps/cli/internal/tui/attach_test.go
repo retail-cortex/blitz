@@ -83,7 +83,9 @@ func TestAttachCommandsAndMentions(t *testing.T) {
 		HandleCommand(ctx, "/attach", app) // lists
 	})
 	for _, want := range []string{"Usage: /attach <image>", "a.png 40×30", "will be sent with your next message", "already queued", "Could not attach missing.png", "1 image waiting"} {
-		assert.Contains(t, out, want, "output lacks %q:\n%s", want, out)
+		t.Run(want, func(t *testing.T) {
+			assert.Contains(t, out, want, "output lacks %q:\n%s", want, out)
+		})
 	}
 
 	// Queue plus an inline mention: both go with the prompt, then the

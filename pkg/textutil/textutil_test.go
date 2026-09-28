@@ -64,16 +64,20 @@ func TestSanitizeTerminal(t *testing.T) {
 		"bad\xffbyte":              "bad�byte",
 	}
 	for in, want := range cases {
-		got := SanitizeTerminal(in)
-		assert.Equal(t, want, got, "SanitizeTerminal(%q) = %q, want %q", in, got, want)
+		t.Run(in, func(t *testing.T) {
+			got := SanitizeTerminal(in)
+			assert.Equal(t, want, got, "SanitizeTerminal(%q) = %q, want %q", in, got, want)
+		})
 	}
 }
 
 func TestTrimPartialRune(t *testing.T) {
 	// Positive: complete strings are untouched.
 	for _, s := range []string{"", "abc", "ab🐶", "é"} {
-		got := TrimPartialRune(s)
-		assert.Equal(t, s, got, "TrimPartialRune(%q) = %q, want unchanged", s, got)
+		t.Run(s, func(t *testing.T) {
+			got := TrimPartialRune(s)
+			assert.Equal(t, s, got, "TrimPartialRune(%q) = %q, want unchanged", s, got)
+		})
 	}
 	// Negative: a rune cut mid-sequence is removed.
 	dog := "ab🐶"

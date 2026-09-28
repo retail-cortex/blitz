@@ -84,7 +84,9 @@ func TestInstallStopUninstall(t *testing.T) {
 func TestFindService(t *testing.T) {
 	beside, onPath := t.TempDir(), t.TempDir()
 	for _, d := range []string{beside, onPath} {
-		require.NoError(t, os.WriteFile(filepath.Join(d, "blitzd"), []byte("#!/bin/sh\n"), 0o755))
+		t.Run(d, func(t *testing.T) {
+			require.NoError(t, os.WriteFile(filepath.Join(d, "blitzd"), []byte("#!/bin/sh\n"), 0o755))
+		})
 	}
 	t.Setenv("PATH", onPath)
 	want := func(d string) string { p, _ := filepath.EvalSymlinks(filepath.Join(d, "blitzd")); return p }

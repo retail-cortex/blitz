@@ -29,8 +29,10 @@ func TestTitleFrom(t *testing.T) {
 		strings.Repeat("é", 80): strings.Repeat("é", 59) + "…",
 	}
 	for in, want := range cases {
-		got := TitleFrom(in)
-		assert.Equal(t, want, got, "TitleFrom(%q) = %q, want %q", in, got, want)
+		t.Run(in, func(t *testing.T) {
+			got := TitleFrom(in)
+			assert.Equal(t, want, got, "TitleFrom(%q) = %q, want %q", in, got, want)
+		})
 	}
 }
 

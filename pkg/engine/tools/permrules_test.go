@@ -42,13 +42,17 @@ func TestParsePermissionRule(t *testing.T) {
 		"write( docs/** )": "write(docs/**)", "web(*.go.dev)": "web(*.go.dev)", "mcp(github:create_*)": "mcp(github:create_*)",
 		"web_search": "web_search", "shell": "shell(*)", "skill(deploy)": "skill(deploy)", "agent(qa)": "agent(qa)",
 	} {
-		r, err := ParsePermissionRule(EffectAllow, text, "t")
-		assert.NoError(t, err, "%q = %q %v, want %q", text, r.String(), err, want)
-		assert.Equal(t, want, r.String(), "%q = %q %v, want %q", text, r.String(), err, want)
+		t.Run(text, func(t *testing.T) {
+			r, err := ParsePermissionRule(EffectAllow, text, "t")
+			assert.NoError(t, err, "%q = %q %v, want %q", text, r.String(), err, want)
+			assert.Equal(t, want, r.String(), "%q = %q %v, want %q", text, r.String(), err, want)
+		})
 	}
 	for _, bad := range []string{"", "nope(x)", "shell()", "shell(x", "1tool", "bad name"} {
-		_, err := ParsePermissionRule(EffectDeny, bad, "t")
-		assert.ErrorIs(t, err, api.ErrBadRule, "%q should be invalid: %v", bad, err)
+		t.Run(bad, func(t *testing.T) {
+			_, err := ParsePermissionRule(EffectDeny, bad, "t")
+			assert.ErrorIs(t, err, api.ErrBadRule, "%q should be invalid: %v", bad, err)
+		})
 	}
 	_, err := ParsePermissionRule(EffectAllow, "read(src/**)", "t")
 	assert.Error(t, err, "allow read(...) should be refused: reading never asks")
@@ -145,9 +149,11 @@ func TestShellRulesInTheCommandPolicy(t *testing.T) {
 		"make build":             {VerdictNeedsApproval, false},
 		"eval \"$CMD\"":          {VerdictNeedsApproval, true}, // can't rule out an ask rule
 	} {
-		d := p.Evaluate(script)
-		assert.Equal(t, want.v, d.Verdict, "%q: verdict %v mustAsk %v (%s), want %v %v", script, d.Verdict, d.MustAsk, d.Reason, want.v, want.mustAsk)
-		assert.Equal(t, want.mustAsk, d.MustAsk, "%q: verdict %v mustAsk %v (%s), want %v %v", script, d.Verdict, d.MustAsk, d.Reason, want.v, want.mustAsk)
+		t.Run(script, func(t *testing.T) {
+			d := p.Evaluate(script)
+			assert.Equal(t, want.v, d.Verdict, "%q: verdict %v mustAsk %v (%s), want %v %v", script, d.Verdict, d.MustAsk, d.Reason, want.v, want.mustAsk)
+			assert.Equal(t, want.mustAsk, d.MustAsk, "%q: verdict %v mustAsk %v (%s), want %v %v", script, d.Verdict, d.MustAsk, d.Reason, want.v, want.mustAsk)
+		})
 	}
 }
 

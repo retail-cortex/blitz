@@ -247,8 +247,10 @@ func TestRemoteRewind(t *testing.T) {
 	sess, _, err := r.OpenSession("", false)
 	require.NoError(t, err)
 	for _, p := range []string{"first", "second"} {
-		_, err := r.Run(context.Background(), sess.ID, api.Turn{Text: p}, func(api.Event) {})
-		require.NoError(t, err)
+		t.Run(p, func(t *testing.T) {
+			_, err := r.Run(context.Background(), sess.ID, api.Turn{Text: p}, func(api.Event) {})
+			require.NoError(t, err)
+		})
 	}
 	points, err := r.RewindPoints()
 	require.NoError(t, err, "points %+v", points)

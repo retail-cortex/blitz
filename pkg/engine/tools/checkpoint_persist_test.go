@@ -59,9 +59,11 @@ func TestCheckpointsOutliveTheProcess(t *testing.T) {
 	ws.CreateExclusive("new.txt", []byte("n\n"))
 
 	for _, p := range []string{store, filepath.Join(store, "index.json"), filepath.Join(store, "blobs")} {
-		info, err := os.Stat(p)
-		require.NoError(t, err)
-		assert.Equal(t, fs.FileMode(0), info.Mode().Perm()&0o077, "%s is %v, not owner-only", p, info.Mode().Perm())
+		t.Run(p, func(t *testing.T) {
+			info, err := os.Stat(p)
+			require.NoError(t, err)
+			assert.Equal(t, fs.FileMode(0), info.Mode().Perm()&0o077, "%s is %v, not owner-only", p, info.Mode().Perm())
+		})
 	}
 	blobs, _ := os.ReadDir(filepath.Join(store, "blobs"))
 	require.Len(t, blobs, 1, "blobs %v", blobs)

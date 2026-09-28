@@ -34,17 +34,21 @@ func TestRedactPatterns(t *testing.T) {
 		"-----BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAKCAQEA\n-----END RSA PRIVATE KEY-----",
 	}
 	for _, s := range secrets {
-		out := r.String("value: " + s + " end")
-		assert.NotContains(t, out, s, "secret not masked: %q -> %q", s, out)
-		assert.Contains(t, out, mask, "secret not masked: %q -> %q", s, out)
+		t.Run(s, func(t *testing.T) {
+			out := r.String("value: " + s + " end")
+			assert.NotContains(t, out, s, "secret not masked: %q -> %q", s, out)
+			assert.Contains(t, out, mask, "secret not masked: %q -> %q", s, out)
+		})
 	}
 	// Assignment style keeps the key, masks the value.
 	got := r.String(`export DB_PASSWORD="hunter2secret"`)
 	assert.Equal(t, `export DB_PASSWORD="`+mask+`"`, got, "assignment masking = %q", got)
 	// Negative: ordinary text is untouched.
 	for _, s := range []string{"go test ./...", "the token count is 12", "password=", "sk-short", ""} {
-		got := r.String(s)
-		assert.Equal(t, s, got, "false positive: %q -> %q", s, got)
+		t.Run(s, func(t *testing.T) {
+			got := r.String(s)
+			assert.Equal(t, s, got, "false positive: %q -> %q", s, got)
+		})
 	}
 }
 

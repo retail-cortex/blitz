@@ -37,7 +37,9 @@ func TestRenameTitleAndResumeHint(t *testing.T) {
 		"\033]0;\007", // restored at exit
 		"Resume with: blitz --resume=" + local(app).Storage().Active().ID,
 	} {
-		assert.Contains(t, out, want, "output lacks %q:\n%q", want, out)
+		t.Run(want, func(t *testing.T) {
+			assert.Contains(t, out, want, "output lacks %q:\n%q", want, out)
+		})
 	}
 	require.Equal(t, "Login work", local(app).Storage().Active().Title, "title %q", local(app).Storage().Active().Title)
 }

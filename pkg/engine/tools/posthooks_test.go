@@ -43,9 +43,11 @@ func readHookEvents(t *testing.T, path string) []HookEvent {
 	t.Helper()
 	var evs []HookEvent
 	for _, l := range readHookLines(t, path) {
-		var ev HookEvent
-		require.NoError(t, json.Unmarshal([]byte(l), &ev), "bad event %q", l)
-		evs = append(evs, ev)
+		t.Run(l, func(t *testing.T) {
+			var ev HookEvent
+			require.NoError(t, json.Unmarshal([]byte(l), &ev), "bad event %q", l)
+			evs = append(evs, ev)
+		})
 	}
 	return evs
 }

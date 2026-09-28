@@ -36,9 +36,11 @@ func TestEmbeddedCatalogs(t *testing.T) {
 	b := mustBundle(t)
 	var got []string
 	for _, m := range b.Available() {
-		got = append(got, m.Locale)
-		assert.NotEqual(t, "", m.Name, "%s: missing names: %+v", m.Locale, m)
-		assert.NotEqual(t, "", m.EnglishName, "%s: missing names: %+v", m.Locale, m)
+		t.Run(m.Name, func(t *testing.T) {
+			got = append(got, m.Locale)
+			assert.NotEqual(t, "", m.Name, "%s: missing names: %+v", m.Locale, m)
+			assert.NotEqual(t, "", m.EnglishName, "%s: missing names: %+v", m.Locale, m)
+		})
 	}
 	require.Equal(t, "en-US,es,fr-CA", strings.Join(got, ","), "available = %v", got)
 }
@@ -48,10 +50,12 @@ func TestEmbeddedCatalogs(t *testing.T) {
 func TestShippedTranslationsComplete(t *testing.T) {
 	b := mustBundle(t)
 	for _, tag := range []string{"es", "fr-CA"} {
-		m := b.Missing(tag)
-		assert.LessOrEqual(t, len(m), 0, "%s is missing %d keys: %v", tag, len(m), m)
-		p := b.Problems(tag)
-		assert.LessOrEqual(t, len(p), 0, "%s problems:\n  %s", tag, strings.Join(p, "\n  "))
+		t.Run(tag, func(t *testing.T) {
+			m := b.Missing(tag)
+			assert.LessOrEqual(t, len(m), 0, "%s is missing %d keys: %v", tag, len(m), m)
+			p := b.Problems(tag)
+			assert.LessOrEqual(t, len(p), 0, "%s problems:\n  %s", tag, strings.Join(p, "\n  "))
+		})
 	}
 }
 
@@ -69,12 +73,14 @@ func TestTranslationsKeepAnswerLetters(t *testing.T) {
 		"approvals.none":      {"[s]", "[a]"},
 	}
 	for _, m := range b.Available() {
-		c, _ := b.Catalog(m.Locale)
-		for key, letters := range keys {
-			for _, l := range letters {
-				assert.Contains(t, c.Messages[key], l, "%s %s = %q lacks %s", m.Locale, key, c.Messages[key], l)
+		t.Run(m.Name, func(t *testing.T) {
+			c, _ := b.Catalog(m.Locale)
+			for key, letters := range keys {
+				for _, l := range letters {
+					assert.Contains(t, c.Messages[key], l, "%s %s = %q lacks %s", m.Locale, key, c.Messages[key], l)
+				}
 			}
-		}
+		})
 	}
 }
 
@@ -87,13 +93,17 @@ func TestResolve(t *testing.T) {
 		"en-US": "en-US", "de": "de", "German": "de", "japanese": "ja", "日本語": "ja", "ja-JP": "ja-JP", "en-XA": "en-XA",
 	}
 	for in, want := range cases {
-		got, err := b.Resolve(in)
-		assert.NoError(t, err, "Resolve(%q) = %v, %v; want %s", in, got, err, want)
-		assert.Equal(t, want, got.String(), "Resolve(%q) = %v, %v; want %s", in, got, err, want)
+		t.Run(in, func(t *testing.T) {
+			got, err := b.Resolve(in)
+			assert.NoError(t, err, "Resolve(%q) = %v, %v; want %s", in, got, err, want)
+			assert.Equal(t, want, got.String(), "Resolve(%q) = %v, %v; want %s", in, got, err, want)
+		})
 	}
 	for _, bad := range []string{"", "   ", "klingonese", "123", "x"} {
-		_, err := b.Resolve(bad)
-		assert.Error(t, err, "Resolve(%q) should fail", bad)
+		t.Run(bad, func(t *testing.T) {
+			_, err := b.Resolve(bad)
+			assert.Error(t, err, "Resolve(%q) should fail", bad)
+		})
 	}
 }
 
@@ -122,14 +132,18 @@ func TestPlaceholdersAndPlurals(t *testing.T) {
 	got = en.T("agent.current", "name", "X")
 	assert.Equal(t, "Current agent: X ({id})", got, "an unfilled placeholder should stay visible, got %q", got)
 	for n, want := range map[int]string{0: "0 messages", 1: "1 message", 2: "2 messages"} {
-		got := en.N("session.messages", n)
-		assert.Equal(t, want, got, "en N(%d) = %q", n, got)
+		t.Run(want, func(t *testing.T) {
+			got := en.N("session.messages", n)
+			assert.Equal(t, want, got, "en N(%d) = %q", n, got)
+		})
 	}
 	// French treats 0 as singular.
 	fr := b.Localizer(language.MustParse("fr-CA"))
 	for n, want := range map[int]string{0: "0 règle révoquée.", 1: "1 règle révoquée.", 3: "3 règles révoquées."} {
-		got := fr.N("approvals.revoked", n)
-		assert.Equal(t, want, got, "fr N(%d) = %q, want %q", n, got, want)
+		t.Run(want, func(t *testing.T) {
+			got := fr.N("approvals.revoked", n)
+			assert.Equal(t, want, got, "fr N(%d) = %q, want %q", n, got, want)
+		})
 	}
 	// Japanese has no singular: always "other".
 	got = pluralCategory(language.Japanese, 1)

@@ -43,8 +43,10 @@ func rewindSession(t *testing.T, extra ...*genai.Content) (*Workspace, *config.C
 	s, _, err := w.OpenSession("", false)
 	require.NoError(t, err)
 	for _, p := range []string{"make notes", "second draft"} {
-		_, err := w.Run(context.Background(), s.ID, api.Turn{Text: p}, func(api.Event) {})
-		require.NoError(t, err)
+		t.Run(p, func(t *testing.T) {
+			_, err := w.Run(context.Background(), s.ID, api.Turn{Text: p}, func(api.Event) {})
+			require.NoError(t, err)
+		})
 	}
 	return w, cfg, llm, s.ID
 }

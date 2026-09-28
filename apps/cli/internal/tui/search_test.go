@@ -96,7 +96,9 @@ func TestSearchWebHandsFiveReadableLinksToTheAgent(t *testing.T) {
 	assert.NotContains(t, out, "manual.pdf", "results shown:\n%s", out)
 	prompt := llm.Requests[0].Contents[len(llm.Requests[0].Contents)-1].Parts[0].Text
 	for _, want := range []string{"I searched the web for: golang errors", pages + "/one", pages + "/five", "about /two"} {
-		assert.Contains(t, prompt, want, "prompt lacks %q:\n%s", want, prompt)
+		t.Run(want, func(t *testing.T) {
+			assert.Contains(t, prompt, want, "prompt lacks %q:\n%s", want, prompt)
+		})
 	}
 	assert.NotContains(t, prompt, "/six", "prompt has links it shouldn't:\n%s", prompt)
 	assert.NotContains(t, prompt, "manual.pdf", "prompt has links it shouldn't:\n%s", prompt)

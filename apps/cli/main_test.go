@@ -62,7 +62,7 @@ func TestResolvePrompt(t *testing.T) {
 	for _, c := range cases {
 		got, used, err := resolvePrompt(c.flag, c.args, c.tty, c.interactive, stdin(c.in))
 		if !assert.Equal(t, c.wantErr, err != nil, "%s: err = %v", c.name, err) {
-		continue
+			continue
 		}
 		assert.False(t, err == nil && got != c.want, "%s: prompt = %q, want %q", c.name, got, c.want)
 		assert.False(t, err == nil && used != c.wantStdin, "%s: stdinUsed = %v, want %v", c.name, used, c.wantStdin)
@@ -109,8 +109,10 @@ func TestRootFlagValidation(t *testing.T) {
 		"bad dir":        {"-d", "/definitely/not/here", "hi"},
 		"plan no prompt": {"--plan", "-i"},
 	} {
-		_, err := runCLI(t, args...)
-		assert.Equal(t, exitUsage, exitCodeFor(err), "%s: exit code %d (%v), want %d", name, exitCodeFor(err), err, exitUsage)
+		t.Run(name, func(t *testing.T) {
+			_, err := runCLI(t, args...)
+			assert.Equal(t, exitUsage, exitCodeFor(err), "%s: exit code %d (%v), want %d", name, exitCodeFor(err), err, exitUsage)
+		})
 	}
 	out, err := runCLI(t, "config", "path")
 	assert.NoError(t, err, "config path: %q", out)
@@ -235,9 +237,11 @@ func TestOneShotStreamJSONAndMaxTurns(t *testing.T) {
 	lines := strings.Split(strings.TrimSpace(out.String()), "\n")
 	var types []string
 	for _, l := range lines {
-		var m map[string]any
-		require.NoError(t, json.Unmarshal([]byte(l), &m), "line is not JSON: %q", l)
-		types = append(types, m["type"].(string))
+		t.Run(l, func(t *testing.T) {
+			var m map[string]any
+			require.NoError(t, json.Unmarshal([]byte(l), &m), "line is not JSON: %q", l)
+			types = append(types, m["type"].(string))
+		})
 	}
 	assert.Equal(t, "session", types[0], "event types %v", types)
 	assert.Equal(t, "result", types[len(types)-1], "event types %v", types)
@@ -262,8 +266,10 @@ func TestOneShotPromptHookBlocks(t *testing.T) {
 
 func TestMaskSecret(t *testing.T) {
 	for in, want := range map[string]string{"": "", "short": "*****", "sk-abcdefghijklmnop": "sk-…mnop"} {
-		got := maskSecret(in)
-		assert.Equal(t, want, got, "maskSecret(%q) = %q, want %q", in, got, want)
+		t.Run(in, func(t *testing.T) {
+			got := maskSecret(in)
+			assert.Equal(t, want, got, "maskSecret(%q) = %q, want %q", in, got, want)
+		})
 	}
 }
 
@@ -285,11 +291,13 @@ func TestDoctorPricingCheck(t *testing.T) {
 	checks := runDoctor(context.Background(), &globalFlags{}, false)
 	found := false
 	for _, c := range checks {
-		if c.name == "pricing" {
-			found = true
-			assert.Equal(t, statusWarn, c.status, "pricing check %+v", c)
-			assert.Contains(t, c.detail, "mystery-model-1", "pricing check %+v", c)
-		}
+		t.Run(c.name, func(t *testing.T) {
+			if c.name == "pricing" {
+				found = true
+				assert.Equal(t, statusWarn, c.status, "pricing check %+v", c)
+				assert.Contains(t, c.detail, "mystery-model-1", "pricing check %+v", c)
+			}
+		})
 	}
 	assert.True(t, found, "doctor has no pricing check")
 }
@@ -367,9 +375,11 @@ func TestLicenseCommand(t *testing.T) {
 		"license full":        "Apache License",
 		"license third-party": "THIRD-PARTY NOTICES",
 	} {
-		out, err := runCLI(t, strings.Fields(args)...)
-		assert.NoError(t, err, "%s: %v, no %q in %.200s", args, err, want, out)
-		assert.Contains(t, out, want, "%s: %v, no %q in %.200s", args, err, want, out)
+		t.Run(args, func(t *testing.T) {
+			out, err := runCLI(t, strings.Fields(args)...)
+			assert.NoError(t, err, "%s: %v, no %q in %.200s", args, err, want, out)
+			assert.Contains(t, out, want, "%s: %v, no %q in %.200s", args, err, want, out)
+		})
 	}
 	_, err := runCLI(t, "license", "bogus")
 	assert.Equal(t, exitUsage, exitCodeFor(err), "bogus: %v", err)

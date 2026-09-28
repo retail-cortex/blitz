@@ -82,10 +82,12 @@ func TestGlobNewestFirstAndCapped(t *testing.T) {
 	ws, dir := newTestWorkspace(t)
 	now := time.Now()
 	for i, name := range []string{"old.txt", "mid.txt", "new.txt"} {
-		p := filepath.Join(dir, name)
-		writeFile(t, p, "x")
-		mt := now.Add(time.Duration(i-3) * time.Hour)
-		require.NoError(t, os.Chtimes(p, mt, mt))
+		t.Run(name, func(t *testing.T) {
+			p := filepath.Join(dir, name)
+			writeFile(t, p, "x")
+			mt := now.Add(time.Duration(i-3) * time.Hour)
+			require.NoError(t, os.Chtimes(p, mt, mt))
+		})
 	}
 	out := globFiles(t, ws, GlobInput{Pattern: "*.txt"})
 	want := []string{"new.txt", "mid.txt", "old.txt"}

@@ -34,8 +34,10 @@ func TestIdentify(t *testing.T) {
 		"GNU GENERAL PUBLIC LICENSE Version 3":                                             "",
 		"All rights reserved.":                                                             "",
 	} {
-		got := identify(text)
-		assert.Equal(t, want, got, "identify(%q) = %q, want %q", text[:20], got, want)
+		t.Run(text, func(t *testing.T) {
+			got := identify(text)
+			assert.Equal(t, want, got, "identify(%q) = %q, want %q", text[:20], got, want)
+		})
 	}
 }
 

@@ -58,14 +58,18 @@ func TestCommandPolicyDeny(t *testing.T) {
 		"if true; then curl x; fi",      // compound commands
 	}
 	for _, cmd := range denied {
-		d := p.Evaluate(cmd)
-		assert.Equal(t, VerdictDeny, d.Verdict, "expected deny for %q, got %v (%s) cmds=%q", cmd, d.Verdict, d.Reason, d.Commands)
+		t.Run(cmd, func(t *testing.T) {
+			d := p.Evaluate(cmd)
+			assert.Equal(t, VerdictDeny, d.Verdict, "expected deny for %q, got %v (%s) cmds=%q", cmd, d.Verdict, d.Reason, d.Commands)
+		})
 	}
 
 	allowed := []string{"ls -la", "rm -rf ./build", "git push", "echo sudo", "curlie x", "grep -r curl ."}
 	for _, cmd := range allowed {
-		d := p.Evaluate(cmd)
-		assert.NotEqual(t, VerdictDeny, d.Verdict, "unexpected deny for %q: %s", cmd, d.Reason)
+		t.Run(cmd, func(t *testing.T) {
+			d := p.Evaluate(cmd)
+			assert.NotEqual(t, VerdictDeny, d.Verdict, "unexpected deny for %q: %s", cmd, d.Reason)
+		})
 	}
 }
 
@@ -85,8 +89,10 @@ func TestCommandPolicyAllowList(t *testing.T) {
 		`bash -c "git diff"`,
 		"echo $HOME", // dynamic arguments are fine for allow
 	} {
-		d := p.Evaluate(cmd)
-		assert.NotEqual(t, VerdictDeny, d.Verdict, "expected %q to be allowed: %s", cmd, d.Reason)
+		t.Run(cmd, func(t *testing.T) {
+			d := p.Evaluate(cmd)
+			assert.NotEqual(t, VerdictDeny, d.Verdict, "expected %q to be allowed: %s", cmd, d.Reason)
+		})
 	}
 
 	for cmd, why := range map[string]string{
@@ -106,7 +112,7 @@ func TestCommandPolicyAllowList(t *testing.T) {
 	} {
 		d := p.Evaluate(cmd)
 		if !assert.Equal(t, VerdictDeny, d.Verdict, "%q is denied", cmd) {
-		continue
+			continue
 		}
 		assert.Contains(t, d.Reason, why, "%q: reason %q should mention %q", cmd, d.Reason, why)
 	}
@@ -116,8 +122,10 @@ func TestCommandPolicyAutoApprove(t *testing.T) {
 	p := mustPolicy(t, CommandPolicyConfig{AutoApprove: []string{"git status", "go test *", "ls *"}})
 
 	for _, cmd := range []string{"git status", "go test ./pkg/...", "ls -la && git status"} {
-		d := p.Evaluate(cmd)
-		assert.Equal(t, VerdictAutoApprove, d.Verdict, "expected auto-approve for %q, got %v (%s)", cmd, d.Verdict, d.Reason)
+		t.Run(cmd, func(t *testing.T) {
+			d := p.Evaluate(cmd)
+			assert.Equal(t, VerdictAutoApprove, d.Verdict, "expected auto-approve for %q, got %v (%s)", cmd, d.Verdict, d.Reason)
+		})
 	}
 	for _, cmd := range []string{
 		"git status && rm x",     // one command not covered
@@ -126,8 +134,10 @@ func TestCommandPolicyAutoApprove(t *testing.T) {
 		"eval ls",                // unverifiable
 		"git status --porcelain", // exact pattern
 	} {
-		d := p.Evaluate(cmd)
-		assert.Equal(t, VerdictNeedsApproval, d.Verdict, "expected approval for %q, got %v", cmd, d.Verdict)
+		t.Run(cmd, func(t *testing.T) {
+			d := p.Evaluate(cmd)
+			assert.Equal(t, VerdictNeedsApproval, d.Verdict, "expected approval for %q, got %v", cmd, d.Verdict)
+		})
 	}
 
 	// With no auto patterns nothing is auto-approved; nil policy always asks.

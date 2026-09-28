@@ -103,9 +103,11 @@ func TestHITLTierNames(t *testing.T) {
 		"TIER_3_MANDATORY_APPROVAL":     Tier3MandatoryApproval,
 		"":                              TierUnspecified,
 	} {
-		got, err := ParseHITLTier(in)
-		assert.NoError(t, err, "%q: %v", in, got)
-		assert.Equal(t, want, got, "%q: %v %v", in, got, err)
+		t.Run(in, func(t *testing.T) {
+			got, err := ParseHITLTier(in)
+			assert.NoError(t, err, "%q: %v", in, got)
+			assert.Equal(t, want, got, "%q: %v %v", in, got, err)
+		})
 	}
 	_, err := ParseHITLTier("TIER_9")
 	assert.Error(t, err, "unknown tier accepted")
@@ -157,7 +159,9 @@ tool_requirements:
 		`execution_hints: invalid environment variable name "1BAD"`,
 		`tool_requirements[0]: needs a name`,
 	} {
-		assert.Contains(t, all, want, "missing problem %q in:\n%s", want, all)
+		t.Run(want, func(t *testing.T) {
+			assert.Contains(t, all, want, "missing problem %q in:\n%s", want, all)
+		})
 	}
 	_, err = ParseSkillMD([]byte("---\nname: x\nscripts:\n  - name: s\n    language: cobol\n---\n"), "")
 	assert.Error(t, err, "unknown language accepted")
@@ -168,7 +172,9 @@ func TestInBundle(t *testing.T) {
 		"scripts/a.py": true, "a.py": true, "./a.py": true, "x/../a.py": true,
 		"../a.py": false, "/etc/passwd": false, "x/../../a.py": false, `scripts\a.py`: false, ".": false,
 	} {
-		assert.Equal(t, want, inBundle(p), "inBundle(%q) = %v", p, !want)
+		t.Run(p, func(t *testing.T) {
+			assert.Equal(t, want, inBundle(p), "inBundle(%q) = %v", p, !want)
+		})
 	}
 }
 
@@ -226,8 +232,10 @@ func TestScriptPathStaysInsideTheSkill(t *testing.T) {
 	require.NoError(t, err, "ok: %q", got)
 	require.Equal(t, filepath.Join(skill, "scripts", "ok.py"), got, "ok: %q %v", got, err)
 	for _, bad := range []string{"scripts/link.py", "../outside.py", "scripts", "missing.py"} {
-		got, err := s.ScriptPath(bad)
-		assert.Error(t, err, "%s accepted: %s", bad, got)
+		t.Run(bad, func(t *testing.T) {
+			got, err := s.ScriptPath(bad)
+			assert.Error(t, err, "%s accepted: %s", bad, got)
+		})
 	}
 	b, _ := p.Get("code-review")
 	_, err = b.ScriptPath("SKILL.md")

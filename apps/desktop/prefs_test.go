@@ -118,7 +118,9 @@ func TestSafeURL(t *testing.T) {
 		"data:text/html,<script>":   false,
 		" https://example.com/ok  ": true,
 	} {
-		got := safeURL(link)
-		assert.Equal(t, want, got, "%q: %v", link, got)
+		t.Run(link, func(t *testing.T) {
+			got := safeURL(link)
+			assert.Equal(t, want, got, "%q: %v", link, got)
+		})
 	}
 }

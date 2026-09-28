@@ -62,7 +62,9 @@ scripts:
 		"Network: not needed, off", "Receives: GITHUB_TOKEN", "won't receive (skills.policy.env_passthrough): AWS_SECRET_ACCESS_KEY",
 		"✗ list", "isn't a plain package requirement", "✓ fmt", "inline, 30s",
 	} {
-		assert.Contains(t, out, want, "show lacks %q:\n%s", want, out)
+		t.Run(want, func(t *testing.T) {
+			assert.Contains(t, out, want, "show lacks %q:\n%s", want, out)
+		})
 	}
 	out = run("/skills show nope")
 	assert.Contains(t, out, "No skill named nope", "unknown:\n%s", out)

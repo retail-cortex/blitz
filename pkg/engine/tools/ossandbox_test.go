@@ -38,7 +38,9 @@ func TestSeatbeltProfile(t *testing.T) {
 		`(regex #"/\.env(/.*)?$")`,
 		"(deny network*)",
 	} {
-		assert.Contains(t, profile, want, "profile missing %q:\n%s", want, profile)
+		t.Run(want, func(t *testing.T) {
+			assert.Contains(t, profile, want, "profile missing %q:\n%s", want, profile)
+		})
 	}
 	// Read-only and blocked rules must come after the writable allowances so they win.
 	allowAt := strings.Index(profile, "(allow file-write*")
@@ -121,8 +123,10 @@ func TestOSSandboxEnforcement(t *testing.T) {
 	assert.Equal(t, 0, out.ExitCode, "allowed writes failed: %+v", out)
 	// Negative: writes to read-only roots and outside all roots are denied.
 	for _, target := range []string{filepath.Join(f.docs, "x.md"), filepath.Join(f.outside, "x.txt"), filepath.Join(f.work, "vendor-ro", "../vendor-ro/x.go")} {
-		out := run("echo pwned > '" + target + "'")
-		assert.NotEqual(t, 0, out.ExitCode, "sandbox allowed write to %s", target)
+		t.Run(target, func(t *testing.T) {
+			out := run("echo pwned > '" + target + "'")
+			assert.NotEqual(t, 0, out.ExitCode, "sandbox allowed write to %s", target)
+		})
 	}
 	b, _ := os.ReadFile(filepath.Join(f.outside, "x.txt"))
 	assert.Equal(t, "outside\n", string(b), "file outside the sandbox was modified")

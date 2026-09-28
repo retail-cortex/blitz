@@ -182,7 +182,9 @@ func TestSpansDropContentUnlessCaptured(t *testing.T) {
 	require.False(t, ok, "tool response exported without capture")
 	require.Equal(t, "read_file", got["gen_ai.tool.name"], "tool name lost: %v", got)
 	for k, v := range got {
-		require.NotContains(t, v, secret, "secret in %s: %s", k, v)
+		t.Run(string(k), func(t *testing.T) {
+			require.NotContains(t, v, secret, "secret in %s: %s", k, v)
+		})
 	}
 
 	got = map[attribute.Key]string{}

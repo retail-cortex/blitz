@@ -42,8 +42,10 @@ func TestParseAndExpand(t *testing.T) {
 	got = two.Expand("a")
 	assert.Equal(t, "a then , not a0", got, "positional %q", got)
 	for _, bad := range []string{"---\nmode: fast\n---\nx", "---\ndescription: x\n", "---\n---\n   "} {
-		_, err := Parse("b", "user", "", []byte(bad))
-		assert.Error(t, err, "%q should fail", bad)
+		t.Run(bad, func(t *testing.T) {
+			_, err := Parse("b", "user", "", []byte(bad))
+			assert.Error(t, err, "%q should fail", bad)
+		})
 	}
 }
 
@@ -70,8 +72,10 @@ func TestLoadNamespacesAndBundled(t *testing.T) {
 		bundled[c.Name] = c
 	}
 	for _, name := range []string{"review", "security-review", "simplify", "verify"} {
-		_, ok := bundled[name]
-		assert.True(t, ok, "bundled command %s missing", name)
+		t.Run(name, func(t *testing.T) {
+			_, ok := bundled[name]
+			assert.True(t, ok, "bundled command %s missing", name)
+		})
 	}
 	assert.True(t, bundled["review"].Plan, "review should be read-only (plan), simplify shouldn't")
 	assert.False(t, bundled["simplify"].Plan, "review should be read-only (plan), simplify shouldn't")

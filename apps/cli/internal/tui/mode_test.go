@@ -35,7 +35,9 @@ func TestModeCommand(t *testing.T) {
 		"Permission mode: accept-edits", "Usage: /mode default|accept-edits|plan|dont-ask|bypass",
 		"[accept-edits]", // the prompt shows a mode other than default
 	} {
-		assert.Contains(t, out, want, "missing %q in:\n%s", want, out)
+		t.Run(want, func(t *testing.T) {
+			assert.Contains(t, out, want, "missing %q in:\n%s", want, out)
+		})
 	}
 	got := app.Workspace.Settings().PermissionMode
 	assert.Equal(t, "accept-edits", got, "mode %q", got)
@@ -49,7 +51,9 @@ func TestEffortCommand(t *testing.T) {
 		"Reasoning effort: auto (each model's own)", "Reasoning effort: high",
 		"Usage: /effort minimal|low|medium|high|max|auto", "Effort:",
 	} {
-		assert.Contains(t, out, want, "missing %q in:\n%s", want, out)
+		t.Run(want, func(t *testing.T) {
+			assert.Contains(t, out, want, "missing %q in:\n%s", want, out)
+		})
 	}
 	got := app.Workspace.Settings().Effort
 	assert.Equal(t, "", got, "effort after auto: %q", got)

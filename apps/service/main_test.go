@@ -40,18 +40,20 @@ func TestLicense(t *testing.T) {
 		"--license=full":        "Apache License",
 		"--license=third-party": "THIRD-PARTY NOTICES",
 	} {
-		r, w, _ := os.Pipe()
-		old := os.Stdout
-		os.Stdout = w
-		// Read while blitzd writes: the notices outgrow a pipe's buffer.
-		read := make(chan []byte)
-		go func() { b, _ := io.ReadAll(r); read <- b }()
-		code := run(context.Background(), []string{arg})
-		w.Close()
-		os.Stdout = old
-		out := <-read
-		assert.Equal(t, 0, code, "blitzd %s: exit %d, no %q in %.200s", arg, code, want, out)
-		assert.Contains(t, string(out), want, "blitzd %s: exit %d, no %q in %.200s", arg, code, want, out)
+		t.Run(arg, func(t *testing.T) {
+			r, w, _ := os.Pipe()
+			old := os.Stdout
+			os.Stdout = w
+			// Read while blitzd writes: the notices outgrow a pipe's buffer.
+			read := make(chan []byte)
+			go func() { b, _ := io.ReadAll(r); read <- b }()
+			code := run(context.Background(), []string{arg})
+			w.Close()
+			os.Stdout = old
+			out := <-read
+			assert.Equal(t, 0, code, "blitzd %s: exit %d, no %q in %.200s", arg, code, want, out)
+			assert.Contains(t, string(out), want, "blitzd %s: exit %d, no %q in %.200s", arg, code, want, out)
+		})
 	}
 	code := run(context.Background(), []string{"--license=bogus"})
 	assert.Equal(t, exitUsage, code, "--license=bogus: exit %d", code)

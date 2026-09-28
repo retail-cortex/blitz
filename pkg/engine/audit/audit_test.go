@@ -80,8 +80,10 @@ func TestAuditRotatesDaily(t *testing.T) {
 	l.Log(Entry{Kind: KindPrompt})
 	l.Close()
 	for _, name := range []string{"audit-2026-01-01.jsonl", "audit-2026-01-02.jsonl"} {
-		_, err := os.Stat(filepath.Join(dir, name))
-		assert.NoError(t, err, "missing %s", name)
+		t.Run(name, func(t *testing.T) {
+			_, err := os.Stat(filepath.Join(dir, name))
+			assert.NoError(t, err, "missing %s", name)
+		})
 	}
 }
 

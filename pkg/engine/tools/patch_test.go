@@ -114,8 +114,10 @@ func TestParseBeginPatch(t *testing.T) {
 		"not a patch":   "just some text",
 		"hunk w/o file": "@@ -1 +1 @@\n-a\n+b\n",
 	} {
-		_, err := parsePatch(bad)
-		assert.Error(t, err, "%s: expected parse error", name)
+		t.Run(name, func(t *testing.T) {
+			_, err := parsePatch(bad)
+			assert.Error(t, err, "%s: expected parse error", name)
+		})
 	}
 }
 
@@ -184,8 +186,10 @@ func TestApplyPatchAllOrNothing(t *testing.T) {
 		"add exist": "*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch",
 		"del miss":  "*** Begin Patch\n*** Delete File: nope.txt\n*** End Patch",
 	} {
-		out := runTool(t, rt, map[string]any{"patch": p})
-		assert.NotEqual(t, true, out["success"], "%s: expected failure", name)
+		t.Run(name, func(t *testing.T) {
+			out := runTool(t, rt, map[string]any{"patch": p})
+			assert.NotEqual(t, true, out["success"], "%s: expected failure", name)
+		})
 	}
 	_, err := os.Stat(filepath.Join(filepath.Dir(dir), "evil.txt"))
 	assert.Error(t, err, "patch escaped the workspace")

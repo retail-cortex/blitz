@@ -51,13 +51,17 @@ func TestParseSchedule(t *testing.T) {
 		"daily at 12 am":            "0 0 * * *",
 		"Every Sunday at 7:15 a.m.": "15 7 * * 0",
 	} {
-		s, err := ParseSchedule(text, "")
-		assert.NoError(t, err, "%q: cron %q, %v; want %q", text, s.Cron, err, want)
-		assert.Equal(t, want, s.Cron, "%q: cron %q, %v; want %q", text, s.Cron, err, want)
+		t.Run(text, func(t *testing.T) {
+			s, err := ParseSchedule(text, "")
+			assert.NoError(t, err, "%q: cron %q, %v; want %q", text, s.Cron, err, want)
+			assert.Equal(t, want, s.Cron, "%q: cron %q, %v; want %q", text, s.Cron, err, want)
+		})
 	}
 	for _, text := range []string{"", "sometimes", "every blue moon", "daily at 25:00", "daily at 13 pm", "every funday at 9", "* * *"} {
-		_, err := ParseSchedule(text, "")
-		assert.Error(t, err, "%q was accepted", text)
+		t.Run(text, func(t *testing.T) {
+			_, err := ParseSchedule(text, "")
+			assert.Error(t, err, "%q was accepted", text)
+		})
 	}
 	_, err := ParseSchedule("@daily", "Mars/Olympus")
 	assert.Error(t, err, "an unknown time zone was accepted")
@@ -127,10 +131,12 @@ func TestLoadRejectsBadWorkers(t *testing.T) {
 		"Bad_Name":       "---\nschedule: hourly\n---\ndo it\n",
 		"bad-timeout":    "---\nschedule: hourly\nlimits: {timeout: soon}\n---\ndo it\n",
 	} {
-		_, err := Load(writeWorker(t, root, name, content))
-		var invalid *InvalidError
-		assert.Error(t, err, "%s", name)
-		assert.False(t, !errors.As(err, &invalid) && name != "no-frontmatter" && name != "misspelled", "%s: %v", name, err)
+		t.Run(name, func(t *testing.T) {
+			_, err := Load(writeWorker(t, root, name, content))
+			var invalid *InvalidError
+			assert.Error(t, err, "%s", name)
+			assert.False(t, !errors.As(err, &invalid) && name != "no-frontmatter" && name != "misspelled", "%s: %v", name, err)
+		})
 	}
 }
 
@@ -154,9 +160,11 @@ func TestDiscover(t *testing.T) {
 func TestPermissions(t *testing.T) {
 	var perms []Permission
 	for _, s := range []string{"shell:go list -m -u all", "shell:git log *", "shell:make lint && make test", "write:reports/", "delete:tmp/*.log", "web:proxy.golang.org", "mcp:github:create_*"} {
-		p, err := ParsePermission(s)
-		require.NoError(t, err)
-		perms = append(perms, p)
+		t.Run(s, func(t *testing.T) {
+			p, err := ParsePermission(s)
+			require.NoError(t, err)
+			perms = append(perms, p)
+		})
 	}
 	req := func(kind api.ActionKind, targets ...string) api.ApprovalRequest {
 		return api.ApprovalRequest{Kind: kind, Targets: targets}
@@ -193,7 +201,9 @@ func TestPermissions(t *testing.T) {
 		assert.Equal(t, c.want, got, "%v %v: %v, want %v", c.req.Kind, c.req.Targets, got, c.want)
 	}
 	for _, bad := range []string{"read:x", "shell", "write:../x", "write:/abs", "web:"} {
-		_, err := ParsePermission(bad)
-		assert.Error(t, err, "%q accepted", bad)
+		t.Run(bad, func(t *testing.T) {
+			_, err := ParsePermission(bad)
+			assert.Error(t, err, "%q accepted", bad)
+		})
 	}
 }

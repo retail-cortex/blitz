@@ -139,9 +139,11 @@ func TestDependencies(t *testing.T) {
 		"./local.whl":                      "isn't a plain package requirement",
 		"pkg @ https://example.com/p.whl":  "isn't a plain package requirement",
 	} {
-		got := checkDependency(dep, p)
-		assert.Equal(t, (got == ""), (want == ""), "%q: %q", dep, got)
-		assert.Contains(t, got, want, "%q: %q", dep, got)
+		t.Run(dep, func(t *testing.T) {
+			got := checkDependency(dep, p)
+			assert.Equal(t, (got == ""), (want == ""), "%q: %q", dep, got)
+			assert.Contains(t, got, want, "%q: %q", dep, got)
+		})
 	}
 	p.Deny = []string{"*-Nightly", "evil_pkg"}
 	r := checkDependency("torch-nightly==2.0", p)
@@ -153,6 +155,8 @@ func TestDependencies(t *testing.T) {
 	assert.Contains(t, r, "isn't in skills.policy.packages.allow", "allow list: %q", r)
 	p.RequireHashes = true
 	for dep, ok := range map[string]bool{"requests==2.32.3": true, "requests>=2": false, "requests==2.*": false, "rich": false} {
-		assert.Equal(t, ok, (checkDependency(dep, p) == ""), "require_hashes %q: %q", dep, checkDependency(dep, p))
+		t.Run(dep, func(t *testing.T) {
+			assert.Equal(t, ok, (checkDependency(dep, p) == ""), "require_hashes %q: %q", dep, checkDependency(dep, p))
+		})
 	}
 }

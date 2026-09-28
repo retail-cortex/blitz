@@ -42,9 +42,11 @@ func TestLineReaderSharedSequentialReads(t *testing.T) {
 	lr := NewLineReader(strings.NewReader("first\r\nsecond\nlast-no-newline"), &out)
 
 	for _, want := range []string{"first", "second", "last-no-newline"} {
-		got, err := lr.ReadLine("> ")
-		require.NoError(t, err, "ReadLine = %q, %v; want %q", got, err, want)
-		require.Equal(t, want, got, "ReadLine = %q, %v; want %q", got, err, want)
+		t.Run(want, func(t *testing.T) {
+			got, err := lr.ReadLine("> ")
+			require.NoError(t, err, "ReadLine = %q, %v; want %q", got, err, want)
+			require.Equal(t, want, got, "ReadLine = %q, %v; want %q", got, err, want)
+		})
 	}
 	_, err := lr.ReadLine("> ")
 	assert.ErrorIs(t, err, io.EOF, "expected EOF, got %v", err)
@@ -60,24 +62,28 @@ func TestApprover(t *testing.T) {
 		"\n": api.DecisionDeny, "n\n": api.DecisionDeny, "maybe\n": api.DecisionDeny,
 	}
 	for input, want := range cases {
-		var out bytes.Buffer
-		approve := NewApprover(NewLineReader(strings.NewReader(input), &out), 0)
-		got, err := approve(context.Background(), keyed)
-		assert.NoError(t, err, "input %q: got %v, %v; want %v", input, got, err, want)
-		assert.Equal(t, want, got, "input %q: got %v, %v; want %v", input, got, err, want)
-		assert.NotContains(t, out.String(), "\x1b]52", "approval prompt echoed raw escape sequence: %q", out.String())
-		assert.NotContains(t, out.String(), "\x07", "approval prompt echoed raw escape sequence: %q", out.String())
-		assert.Contains(t, out.String(), "rm -rf build", "approval prompt missing detail or scope: %q", out.String())
-		assert.Contains(t, out.String(), "this exact command", "approval prompt missing detail or scope: %q", out.String())
+		t.Run(input, func(t *testing.T) {
+			var out bytes.Buffer
+			approve := NewApprover(NewLineReader(strings.NewReader(input), &out), 0)
+			got, err := approve(context.Background(), keyed)
+			assert.NoError(t, err, "input %q: got %v, %v; want %v", input, got, err, want)
+			assert.Equal(t, want, got, "input %q: got %v, %v; want %v", input, got, err, want)
+			assert.NotContains(t, out.String(), "\x1b]52", "approval prompt echoed raw escape sequence: %q", out.String())
+			assert.NotContains(t, out.String(), "\x07", "approval prompt echoed raw escape sequence: %q", out.String())
+			assert.Contains(t, out.String(), "rm -rf build", "approval prompt missing detail or scope: %q", out.String())
+			assert.Contains(t, out.String(), "this exact command", "approval prompt missing detail or scope: %q", out.String())
+		})
 	}
 
 	// Without a key, session/always are unavailable and deny.
 	unkeyed := api.ApprovalRequest{Tool: "x", Kind: api.ActionWrite, Detail: "d"}
 	for _, in := range []string{"s\n", "a\n"} {
-		var out bytes.Buffer
-		got, _ := NewApprover(NewLineReader(strings.NewReader(in), &out), 0)(context.Background(), unkeyed)
-		assert.Equal(t, api.DecisionDeny, got, "%q without key should deny, got %v", in, got)
-		assert.NotContains(t, out.String(), "[s]", "session option offered without a key")
+		t.Run(in, func(t *testing.T) {
+			var out bytes.Buffer
+			got, _ := NewApprover(NewLineReader(strings.NewReader(in), &out), 0)(context.Background(), unkeyed)
+			assert.Equal(t, api.DecisionDeny, got, "%q without key should deny, got %v", in, got)
+			assert.NotContains(t, out.String(), "[s]", "session option offered without a key")
+		})
 	}
 
 	// Negative: EOF and cancelled context deny with an error.
@@ -123,9 +129,11 @@ func TestReadMultiline(t *testing.T) {
 		"\"\"\"\nline 1\n\nline 3\n\"\"\"\n": "line 1\n\nline 3",
 	}
 	for in, want := range cases {
-		got, err := NewLineReader(strings.NewReader(in), io.Discard).ReadInput(context.Background(), "> ")
-		assert.NoError(t, err, "ReadInput(%q) = %q, %v; want %q", in, got, err, want)
-		assert.Equal(t, want, got, "ReadInput(%q) = %q, %v; want %q", in, got, err, want)
+		t.Run(in, func(t *testing.T) {
+			got, err := NewLineReader(strings.NewReader(in), io.Discard).ReadInput(context.Background(), "> ")
+			assert.NoError(t, err, "ReadInput(%q) = %q, %v; want %q", in, got, err, want)
+			assert.Equal(t, want, got, "ReadInput(%q) = %q, %v; want %q", in, got, err, want)
+		})
 	}
 	// Negative: EOF inside a block is an error, not a silent partial entry.
 	_, err := NewLineReader(strings.NewReader("\"\"\"\nunterminated\n"), io.Discard).ReadInput(context.Background(), "> ")

@@ -130,7 +130,9 @@ func TestConvertContents(t *testing.T) {
 		`"tool_use_id":"toolu_a"`,
 		`"is_error":true`,
 	} {
-		assert.Contains(t, got, want, "missing %s in\n%s", want, got)
+		t.Run(want, func(t *testing.T) {
+			assert.Contains(t, got, want, "missing %s in\n%s", want, got)
+		})
 	}
 	assert.NotContains(t, got, "unsigned thought", "unsigned thinking must be dropped")
 	n := len(msgs[2].Content)
@@ -163,7 +165,9 @@ func TestConvertToolsSchemas(t *testing.T) {
 		`"n":{"description":"count","type":"integer"}`, `"items":{"type":"string"}`, `"type":"array"`,
 		`"name":"no_params"`,
 	} {
-		assert.Contains(t, got, want, "missing %s in\n%s", want, got)
+		t.Run(want, func(t *testing.T) {
+			assert.Contains(t, got, want, "missing %s in\n%s", want, got)
+		})
 	}
 	assert.NotContains(t, got, "INTEGER", "schema not normalised: %s", got)
 	assert.NotContains(t, got, "$schema", "schema not normalised: %s", got)
@@ -301,9 +305,11 @@ func TestAnthropicErrors(t *testing.T) {
 	m := newAnthropicModel(config.AnthropicConfig{}, "claude-opus-5", opts...)
 	req := &model.LLMRequest{Contents: []*genai.Content{userText("x")}}
 	for _, want := range []string{"authentication failed", "rate limited", "API error (529)"} {
-		_, err := collectResponses(t, m, req, false)
-		assert.Error(t, err, "want %q, got", want)
-		assert.Contains(t, err.Error(), want, "want %q, got %v", want, err)
+		t.Run(want, func(t *testing.T) {
+			_, err := collectResponses(t, m, req, false)
+			assert.Error(t, err, "want %q, got", want)
+			assert.Contains(t, err.Error(), want, "want %q, got %v", want, err)
+		})
 	}
 	// Empty requests are rejected before any network call.
 	_, err := collectResponses(t, m, &model.LLMRequest{}, false)
@@ -313,9 +319,11 @@ func TestAnthropicErrors(t *testing.T) {
 func TestModelNameResolution(t *testing.T) {
 	cfg := config.DefaultConfig()
 	for provider, want := range map[string]string{"gemini": "gemini-3.8-flash", "anthropic": "claude-opus-5", "openai": "gpt-4o", "ollama": "gpt-4o"} {
-		cfg.LLM.Provider = provider
-		got := cfg.ModelName()
-		assert.Equal(t, want, got, "%s: ModelName = %q, want %q", provider, got, want)
+		t.Run(provider, func(t *testing.T) {
+			cfg.LLM.Provider = provider
+			got := cfg.ModelName()
+			assert.Equal(t, want, got, "%s: ModelName = %q, want %q", provider, got, want)
+		})
 	}
 	cfg.Blitz.DefaultModel = "claude-sonnet-5"
 	assert.Equal(t, "claude-sonnet-5", cfg.ModelName(), "default_model should override the provider model")
@@ -366,7 +374,9 @@ func TestAnthropicEngineToolLoop(t *testing.T) {
 	require.Len(t, f.requests, 2, "expected 2 API calls, got %d", len(f.requests))
 	second, _ := json.Marshal(f.requests[1]["messages"])
 	for _, want := range []string{`"signature":"sig-loop"`, `"id":"toolu_loop"`, `"tool_use_id":"toolu_loop"`} {
-		assert.Contains(t, string(second), want, "second request missing %s:\n%s", want, second)
+		t.Run(want, func(t *testing.T) {
+			assert.Contains(t, string(second), want, "second request missing %s:\n%s", want, second)
+		})
 	}
 	tools, _ := json.Marshal(f.requests[0]["tools"])
 	assert.Contains(t, string(tools), `"name":"list_files"`, "tools not sent: %s", tools)

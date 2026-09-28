@@ -32,11 +32,13 @@ func TestLicenseCommand(t *testing.T) {
 		" third-party": "THIRD-PARTY NOTICES",
 		" bogus":       "unknown license text",
 	} {
-		out := captureStdout(t, func() {
-			handled, err := HandleCommand(ctx, "/license"+arg, app)
-			assert.True(t, handled, "/license%s: handled %v, %v", arg, handled, err)
-			assert.NoError(t, err, "/license%s: handled %v,", arg, handled)
+		t.Run(arg, func(t *testing.T) {
+			out := captureStdout(t, func() {
+				handled, err := HandleCommand(ctx, "/license"+arg, app)
+				assert.True(t, handled, "/license%s: handled %v, %v", arg, handled, err)
+				assert.NoError(t, err, "/license%s: handled %v,", arg, handled)
+			})
+			assert.Contains(t, out, want, "/license%s: no %q in\n%.300s", arg, want, out)
 		})
-		assert.Contains(t, out, want, "/license%s: no %q in\n%.300s", arg, want, out)
 	}
 }

@@ -33,7 +33,9 @@ func TestLocaleCommand(t *testing.T) {
 
 	out := captureStdout(t, func() { HandleCommand(ctx, "/locale", app) })
 	for _, want := range []string{"Interface language: English (US) (en-US)", "es (Español)", "fr-CA (Français (Canada))", local(app).Config().UI.LocalesDir} {
-		assert.Contains(t, out, want, "/locale output lacks %q:\n%s", want, out)
+		t.Run(want, func(t *testing.T) {
+			assert.Contains(t, out, want, "/locale output lacks %q:\n%s", want, out)
+		})
 	}
 
 	// The user's example: "/locale ES-sp" means Spanish.

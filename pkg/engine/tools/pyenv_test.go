@@ -48,8 +48,10 @@ func TestMountsFor(t *testing.T) {
 		"/opt/python3.13/bin/python3.13":                             "/opt/python3.13",
 		"/home/u/.local/share/uv/python/cpython-3.13/bin/python3.13": "/home/u/.local/share/uv/python/cpython-3.13",
 	} {
-		got := strings.Join(MountsFor(py), ",")
-		assert.Equal(t, want, got, "%s: %q, want %q", py, got, want)
+		t.Run(py, func(t *testing.T) {
+			got := strings.Join(MountsFor(py), ",")
+			assert.Equal(t, want, got, "%s: %q, want %q", py, got, want)
+		})
 	}
 }
 

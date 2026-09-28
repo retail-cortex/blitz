@@ -26,9 +26,11 @@ import (
 func TestRefs(t *testing.T) {
 	assert.Equal(t, "keychain:global/llm.gemini.api_key", Ref("global/llm.gemini.api_key"), Ref("x"))
 	for v, want := range map[string]string{"keychain:a/b": "a/b", "keychain:": "", "sk-plain": "", "xor:0102": ""} {
-		got, ok := ParseRef(v)
-		assert.Equal(t, want, got, "ParseRef(%q) = %q, %v", v, got, ok)
-		assert.Equal(t, (want != ""), ok, "ParseRef(%q) = %q, %v", v, got, ok)
+		t.Run(v, func(t *testing.T) {
+			got, ok := ParseRef(v)
+			assert.Equal(t, want, got, "ParseRef(%q) = %q, %v", v, got, ok)
+			assert.Equal(t, (want != ""), ok, "ParseRef(%q) = %q, %v", v, got, ok)
+		})
 	}
 }
 
@@ -38,10 +40,12 @@ func exercise(t *testing.T, s Store, name string) {
 	_, err := s.Get(name)
 	require.ErrorIs(t, err, ErrNotFound, "get before set: %v", err)
 	for _, v := range []string{"sk-first \"quoted\" \\ value", "sk-second"} {
-		require.NoError(t, s.Set(name, v))
-		got, err := s.Get(name)
-		require.NoError(t, err, "get = %q, %v; want %q", got, err, v)
-		require.Equal(t, v, got, "get = %q, %v; want %q", got, err, v)
+		t.Run(v, func(t *testing.T) {
+			require.NoError(t, s.Set(name, v))
+			got, err := s.Get(name)
+			require.NoError(t, err, "get = %q, %v; want %q", got, err, v)
+			require.Equal(t, v, got, "get = %q, %v; want %q", got, err, v)
+		})
 	}
 	require.NoError(t, s.Delete(name))
 	_, err = s.Get(name)
@@ -57,9 +61,11 @@ func TestFileStoreIsPrivate(t *testing.T) {
 	s := &FileStore{Path: path}
 	require.NoError(t, s.Set("k", "v"))
 	for p, want := range map[string]os.FileMode{path: 0o600, filepath.Dir(path): 0o700} {
-		info, err := os.Stat(p)
-		assert.NoError(t, err, "%s: %v %v, want %v", p, info.Mode().Perm(), err, want)
-		assert.Equal(t, want, info.Mode().Perm(), "%s: %v %v, want %v", p, info.Mode().Perm(), err, want)
+		t.Run(p, func(t *testing.T) {
+			info, err := os.Stat(p)
+			assert.NoError(t, err, "%s: %v %v, want %v", p, info.Mode().Perm(), err, want)
+			assert.Equal(t, want, info.Mode().Perm(), "%s: %v %v, want %v", p, info.Mode().Perm(), err, want)
+		})
 	}
 }
 

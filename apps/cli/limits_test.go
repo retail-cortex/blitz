@@ -50,8 +50,10 @@ func TestLimitFlagsNeedAOneShotPrompt(t *testing.T) {
 		"unknown mode":           {"--permission-mode", "yolo", "hi"},
 		"unknown effort":         {"--effort", "extreme", "hi"},
 	} {
-		_, err := runCLI(t, args...)
-		assert.Equal(t, exitUsage, exitCodeFor(err), "%s: exit code %d (%v), want %d", name, exitCodeFor(err), err, exitUsage)
+		t.Run(name, func(t *testing.T) {
+			_, err := runCLI(t, args...)
+			assert.Equal(t, exitUsage, exitCodeFor(err), "%s: exit code %d (%v), want %d", name, exitCodeFor(err), err, exitUsage)
+		})
 	}
 }
 

@@ -121,8 +121,10 @@ func TestRules(t *testing.T) {
 	assert.Equal(t, "API rules", api.Content, "rule bodies %q %q", api.Content, tests.Content)
 	assert.Equal(t, "Test rules", tests.Content, "rule bodies %q %q", api.Content, tests.Content)
 	for p, want := range map[string]bool{"src/api/v1/h.go": true, "cmd/main.go": true, "cmd/x/main.go": false, "src/web/a.go": false} {
-		got := api.Matches(filepath.Join(real, p))
-		assert.Equal(t, want, got, "api rule matches %s = %v", p, got)
+		t.Run(p, func(t *testing.T) {
+			got := api.Matches(filepath.Join(real, p))
+			assert.Equal(t, want, got, "api rule matches %s = %v", p, got)
+		})
 	}
 	assert.True(t, tests.Matches(filepath.Join(real, "a", "b_test.go")), "test rule matching")
 	assert.False(t, tests.Matches(filepath.Join(t.TempDir(), "x_test.go")), "test rule matching")

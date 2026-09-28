@@ -45,8 +45,10 @@ func TestReadFileTool(t *testing.T) {
 
 	// Negative: outside the workspace, missing, and directories.
 	for _, p := range []string{"../escape.txt", "/etc/hosts", "missing.txt", "."} {
-		out := runTool(t, rt, map[string]any{"path": p})
-		assert.NotEqual(t, "", errOf(out), "expected error reading %q, got %v", p, out)
+		t.Run(p, func(t *testing.T) {
+			out := runTool(t, rt, map[string]any{"path": p})
+			assert.NotEqual(t, "", errOf(out), "expected error reading %q, got %v", p, out)
+		})
 	}
 }
 
@@ -124,8 +126,10 @@ func TestCreateFileTool(t *testing.T) {
 	// Negative: outside workspace, and the workspace root itself.
 	outside := filepath.Join(t.TempDir(), "evil.txt")
 	for _, p := range []string{"../evil.txt", outside, "."} {
-		out := runTool(t, rt, map[string]any{"path": p, "content": "x"})
-		assert.NotEqual(t, "", errOf(out), "expected error creating %q", p)
+		t.Run(p, func(t *testing.T) {
+			out := runTool(t, rt, map[string]any{"path": p, "content": "x"})
+			assert.NotEqual(t, "", errOf(out), "expected error creating %q", p)
+		})
 	}
 	_, err := os.Stat(outside)
 	assert.ErrorIs(t, err, fs.ErrNotExist, "file created outside workspace")
@@ -145,8 +149,10 @@ func TestDeleteFileTool(t *testing.T) {
 	victim := filepath.Join(outsideDir, "victim.txt")
 	writeFile(t, victim, "keep me")
 	for _, p := range []string{victim, "../victim.txt", "missing.txt", "."} {
-		out := runTool(t, rt, map[string]any{"path": p})
-		assert.NotEqual(t, "", errOf(out), "expected error deleting %q", p)
+		t.Run(p, func(t *testing.T) {
+			out := runTool(t, rt, map[string]any{"path": p})
+			assert.NotEqual(t, "", errOf(out), "expected error deleting %q", p)
+		})
 	}
 	_, err = os.Stat(victim)
 	assert.NoError(t, err, "file outside workspace was deleted")

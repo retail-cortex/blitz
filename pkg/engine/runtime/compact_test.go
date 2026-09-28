@@ -49,8 +49,10 @@ func lastRequestText(m *MockLLM) string {
 func runTurns(t *testing.T, eng *Engine, sid string, prompts ...string) {
 	t.Helper()
 	for _, p := range prompts {
-		_, err := collect(t, eng, sid, p)
-		require.NoError(t, err)
+		t.Run(p, func(t *testing.T) {
+			_, err := collect(t, eng, sid, p)
+			require.NoError(t, err)
+		})
 	}
 }
 
@@ -73,10 +75,14 @@ func TestCompactReplacesOldTurns(t *testing.T) {
 	got := lastRequestText(f.llm)
 	assert.Contains(t, got, "SUMMARY-XYZ", "summary not in next prompt: %s", got)
 	for _, gone := range []string{"turn-one", "reply-one", "turn-two", "reply-two"} {
-		assert.NotContains(t, got, gone, "compacted %q still sent: %s", gone, got)
+		t.Run(gone, func(t *testing.T) {
+			assert.NotContains(t, got, gone, "compacted %q still sent: %s", gone, got)
+		})
 	}
 	for _, kept := range []string{"turn-three", "reply-three", "turn-four"} {
-		assert.Contains(t, got, kept, "kept %q missing: %s", kept, got)
+		t.Run(kept, func(t *testing.T) {
+			assert.Contains(t, got, kept, "kept %q missing: %s", kept, got)
+		})
 	}
 }
 

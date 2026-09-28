@@ -112,8 +112,10 @@ func TestPrepareRejects(t *testing.T) {
 		"truncated": pngBytes(t, 50, 50)[:40],
 	}
 	for name, data := range cases {
-		_, err := Prepare(name+".png", data, Options{})
-		assert.Error(t, err, "%s accepted", name)
+		t.Run(name, func(t *testing.T) {
+			_, err := Prepare(name+".png", data, Options{})
+			assert.Error(t, err, "%s accepted", name)
+		})
 	}
 	_, err := Prepare("big.png", pngBytes(t, 10, 10), Options{MaxInput: 10})
 	assert.Error(t, err, "size limit")
@@ -163,15 +165,17 @@ func TestStore(t *testing.T) {
 	file := filepath.Join(dir, img.SHA256+".png")
 	info, statErr := os.Stat(file)
 	if assert.NoError(t, statErr) {
-	assert.Equal(t, fs.FileMode(0o600), info.Mode().Perm(), "the stored image is owner-only")
+		assert.Equal(t, fs.FileMode(0o600), info.Mode().Perm(), "the stored image is owner-only")
 	}
 	data, mime, err := s.Get(img.URI())
 	assert.NoError(t, err, "Get: %s", mime)
 	assert.Equal(t, "image/png", mime, "Get: %s %v", mime, err)
 	assert.True(t, bytes.Equal(data, img.Data), "Get: %s %v", mime, err)
 	for _, bad := range []string{"", "blitz-image:../../etc/passwd", URIScheme + strings.Repeat("A", 64), "file:///x.png"} {
-		_, _, err := s.Get(bad)
-		assert.Error(t, err, "Get(%q) should fail", bad)
+		t.Run(bad, func(t *testing.T) {
+			_, _, err := s.Get(bad)
+			assert.Error(t, err, "Get(%q) should fail", bad)
+		})
 	}
 	_, _, err = s.Get(URIScheme + strings.Repeat("0", 64))
 	assert.ErrorIs(t, err, os.ErrNotExist, "missing image: %v", err)

@@ -44,8 +44,10 @@ func TestPathMatcher(t *testing.T) {
 		"/opt/secret/a/b/token",
 	}
 	for _, p := range blocked {
-		_, ok := m.Match(p)
-		assert.True(t, ok, "expected %s to be blocked", p)
+		t.Run(p, func(t *testing.T) {
+			_, ok := m.Match(p)
+			assert.True(t, ok, "expected %s to be blocked", p)
+		})
 	}
 	allowed := []string{
 		filepath.Join(root, ".env.example"),
@@ -57,8 +59,10 @@ func TestPathMatcher(t *testing.T) {
 		"/opt/secret/tokens",
 	}
 	for _, p := range allowed {
-		pat, ok := m.Match(p)
-		assert.False(t, ok, "expected %s to be allowed, blocked by %q", p, pat)
+		t.Run(p, func(t *testing.T) {
+			pat, ok := m.Match(p)
+			assert.False(t, ok, "expected %s to be allowed, blocked by %q", p, pat)
+		})
 	}
 
 	if caseInsensitiveFS {
@@ -125,10 +129,12 @@ func TestWorkspaceMultiRootAccess(t *testing.T) {
 	// ...negative: but not writable or deletable, including a read-only root
 	// nested inside the writable workspace.
 	for _, p := range []string{guide, filepath.Join(f.docs, "new.md"), "vendor-ro/lib.go"} {
-		err := ws.WriteFileAtomic(p, []byte("x"))
-		assert.ErrorIs(t, err, ErrReadOnlyPath, "write %s: expected ErrReadOnlyPath, got %v", p, err)
-		_, err = ws.WritablePath(p)
-		assert.ErrorIs(t, err, ErrReadOnlyPath, "WritablePath %s: expected ErrReadOnlyPath, got %v", p, err)
+		t.Run(p, func(t *testing.T) {
+			err := ws.WriteFileAtomic(p, []byte("x"))
+			assert.ErrorIs(t, err, ErrReadOnlyPath, "write %s: expected ErrReadOnlyPath, got %v", p, err)
+			_, err = ws.WritablePath(p)
+			assert.ErrorIs(t, err, ErrReadOnlyPath, "WritablePath %s: expected ErrReadOnlyPath, got %v", p, err)
+		})
 	}
 	err = ws.RemoveFile(guide)
 	assert.ErrorIs(t, err, ErrReadOnlyPath, "delete in read-only root: %v", err)
@@ -143,10 +149,12 @@ func TestWorkspaceBlockedPaths(t *testing.T) {
 	ws := f.ws
 
 	for _, p := range []string{".env", "certs/tls.pem", filepath.Join(f.work, ".env")} {
-		_, err := ws.ReadFile(p)
-		assert.ErrorIs(t, err, ErrBlockedPath, "read %s: expected ErrBlockedPath, got %v", p, err)
-		err = ws.WriteFileAtomic(p, []byte("x"))
-		assert.ErrorIs(t, err, ErrBlockedPath, "write %s: expected ErrBlockedPath, got %v", p, err)
+		t.Run(p, func(t *testing.T) {
+			_, err := ws.ReadFile(p)
+			assert.ErrorIs(t, err, ErrBlockedPath, "read %s: expected ErrBlockedPath, got %v", p, err)
+			err = ws.WriteFileAtomic(p, []byte("x"))
+			assert.ErrorIs(t, err, ErrBlockedPath, "write %s: expected ErrBlockedPath, got %v", p, err)
+		})
 	}
 	// Creating a new blocked file is refused too.
 	assert.ErrorIs(t, ws.CreateExclusive("sub/.env", []byte("x")), ErrBlockedPath, "create blocked")
@@ -197,10 +205,12 @@ func TestDefaultShellWritableDirs(t *testing.T) {
 	require.NoError(t, err)
 	found := false
 	for _, d := range dirs {
-		if d == tmp || strings.HasPrefix(tmp, d+string(filepath.Separator)) {
-			found = true
-		}
-		assert.True(t, filepath.IsAbs(d), "non-absolute writable dir %q", d)
+		t.Run(d, func(t *testing.T) {
+			if d == tmp || strings.HasPrefix(tmp, d+string(filepath.Separator)) {
+				found = true
+			}
+			assert.True(t, filepath.IsAbs(d), "non-absolute writable dir %q", d)
+		})
 	}
 	assert.True(t, found, "temp dir %s not writable by default: %v", tmp, dirs)
 }

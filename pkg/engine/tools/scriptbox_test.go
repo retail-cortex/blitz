@@ -36,18 +36,20 @@ func newScriptDirs(t *testing.T) scriptDirs {
 	t.Helper()
 	d := scriptDirs{writable: t.TempDir(), readOnly: t.TempDir(), outside: t.TempDir()}
 	for _, p := range []string{d.writable, d.readOnly, d.outside} {
-		// Canonical paths: on macOS the temp dir is behind a symlink.
-		c, err := filepath.EvalSymlinks(p)
-		require.NoError(t, err)
-		os.WriteFile(filepath.Join(c, "hello.txt"), []byte("hello"), 0o644)
-		switch p {
-		case d.writable:
-			d.writable = c
-		case d.readOnly:
-			d.readOnly = c
-		default:
-			d.outside = c
-		}
+		t.Run(p, func(t *testing.T) {
+			// Canonical paths: on macOS the temp dir is behind a symlink.
+			c, err := filepath.EvalSymlinks(p)
+			require.NoError(t, err)
+			os.WriteFile(filepath.Join(c, "hello.txt"), []byte("hello"), 0o644)
+			switch p {
+			case d.writable:
+				d.writable = c
+			case d.readOnly:
+				d.readOnly = c
+			default:
+				d.outside = c
+			}
+		})
 	}
 	return d
 }
@@ -76,10 +78,12 @@ func testScriptBoxBehaviour(t *testing.T, box ScriptBox) {
 	b, _ := os.ReadFile(filepath.Join(d.writable, "out.txt"))
 	require.Equal(t, "made\n", string(b), "write to the writable dir didn't reach the host: %q", b)
 	for _, target := range []string{d.readOnly + "/x.txt", d.outside + "/x.txt"} {
-		res, out, _ := runScript(t, box, d, "echo pwned > "+target, 0)
-		assert.NotEqual(t, 0, res.ExitCode, "wrote %s: %s", target, out)
-		_, err := os.Stat(target)
-		assert.Error(t, err, "%s exists on the host", target)
+		t.Run(target, func(t *testing.T) {
+			res, out, _ := runScript(t, box, d, "echo pwned > "+target, 0)
+			assert.NotEqual(t, 0, res.ExitCode, "wrote %s: %s", target, out)
+			_, err := os.Stat(target)
+			assert.Error(t, err, "%s exists on the host", target)
+		})
 	}
 
 	res, out, _ = runScript(t, box, d, `echo "secret=[$CP_TEST_SECRET] given=[$GIVEN] home=[$HOME]"; echo tmp > "$TMPDIR/t" && cat "$TMPDIR/t"`, 0, "GIVEN=yes")

@@ -42,11 +42,13 @@ func TestPermissionModesAtTheGate(t *testing.T) {
 		api.ModeBypass:      {true, true, true, true},
 	}
 	for mode, want := range cases {
-		h := NewHooks(Policy{Mode: mode})
-		for i, req := range []api.ApprovalRequest{write, del, cmd, web} {
-			got := allowed(h, req)
-			assert.Equal(t, want[i], got, "%s: %s allowed=%v, want %v", mode, req.Tool, got, want[i])
-		}
+		t.Run(string(mode), func(t *testing.T) {
+			h := NewHooks(Policy{Mode: mode})
+			for i, req := range []api.ApprovalRequest{write, del, cmd, web} {
+				got := allowed(h, req)
+				assert.Equal(t, want[i], got, "%s: %s allowed=%v, want %v", mode, req.Tool, got, want[i])
+			}
+		})
 	}
 
 	// dont-ask never reaches the approver, but saved rules still apply.
@@ -75,9 +77,11 @@ func TestParsePermissionMode(t *testing.T) {
 		"": api.ModeDefault, "default": api.ModeDefault, "acceptEdits": api.ModeAcceptEdits, "accept_edits": api.ModeAcceptEdits,
 		"PLAN": api.ModePlan, "dontAsk": api.ModeDontAsk, "bypassPermissions": api.ModeBypass, "bypass": api.ModeBypass,
 	} {
-		got, err := api.ParsePermissionMode(in)
-		assert.NoError(t, err, "%q = %q", in, got)
-		assert.Equal(t, want, got, "%q = %q %v", in, got, err)
+		t.Run(in, func(t *testing.T) {
+			got, err := api.ParsePermissionMode(in)
+			assert.NoError(t, err, "%q = %q", in, got)
+			assert.Equal(t, want, got, "%q = %q %v", in, got, err)
+		})
 	}
 	_, err := api.ParsePermissionMode("yolo")
 	assert.ErrorIs(t, err, api.ErrUnknownMode, "unknown mode: %v", err)

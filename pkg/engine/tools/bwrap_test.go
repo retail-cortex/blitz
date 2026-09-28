@@ -41,7 +41,9 @@ func TestBwrapArgs(t *testing.T) {
 		"--tmpfs " + ws + "/secrets --remount-ro " + ws + "/secrets",
 		"--unshare-net",
 	} {
-		assert.Contains(t, joined, want, "args missing %q:\n%s", want, joined)
+		t.Run(want, func(t *testing.T) {
+			assert.Contains(t, joined, want, "args missing %q:\n%s", want, joined)
+		})
 	}
 	assert.NotContains(t, joined, "/definitely/missing", "missing writable dir should be skipped (bwrap fails on it)")
 	assert.Equal(t, "--", args[len(args)-1], "args must end with --")
@@ -66,7 +68,9 @@ func TestExpandBlocked(t *testing.T) {
 	files, dirs := expandBlocked(OSSandboxSpec{WritableDirs: []string{ws}, Blocked: m})
 	joined := strings.Join(append(files, dirs...), ",")
 	for _, want := range []string{filepath.Join(ws, ".env"), filepath.Join(ws, "deep", "a", "server.pem"), filepath.Join(home, ".ssh")} {
-		assert.Contains(t, joined, want, "expected %s blocked; got %s", want, joined)
+		t.Run(want, func(t *testing.T) {
+			assert.Contains(t, joined, want, "expected %s blocked; got %s", want, joined)
+		})
 	}
 	assert.NotContains(t, joined, "ok.txt", "unexpected entries: %s", joined)
 	assert.NotContains(t, joined, "node_modules", "unexpected entries: %s", joined)

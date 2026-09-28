@@ -63,10 +63,12 @@ func TestWorkersLifecycle(t *testing.T) {
 	assert.Error(t, brokenErr, "an invalid worker isn't enabled")
 	// A name is never a path: nothing outside workers/ is looked up.
 	for _, bad := range []string{"../deps", "deps/..", "/etc", "Deps"} {
-		_, err := w.EnableWorker(bad, "x")
-		assert.ErrorIs(t, err, api.ErrUnknownWorker, "enable %q: %v", bad, err)
-		_, err = w.WorkerRuns(bad, 1)
-		assert.ErrorIs(t, err, api.ErrUnknownWorker, "runs of %q: %v", bad, err)
+		t.Run(bad, func(t *testing.T) {
+			_, err := w.EnableWorker(bad, "x")
+			assert.ErrorIs(t, err, api.ErrUnknownWorker, "enable %q: %v", bad, err)
+			_, err = w.WorkerRuns(bad, 1)
+			assert.ErrorIs(t, err, api.ErrUnknownWorker, "runs of %q: %v", bad, err)
+		})
 	}
 	_, unknownErr := w.EnableWorker("nope", "x")
 	assert.ErrorIs(t, unknownErr, api.ErrUnknownWorker)
@@ -195,7 +197,9 @@ func TestRunWorkerUsesItsAgentAndModel(t *testing.T) {
 	assert.Contains(t, run.Error, "broken", "unbuildable model: %+v", run)
 	list, _ := w.ListWorkers()
 	for _, info := range list {
-		assert.False(t, info.Name == "nobody" && (len(info.Problems) == 0 || !strings.Contains(info.Problems[0], "nobody")), "unknown agent not reported: %+v", info.Problems)
+		t.Run(info.Name, func(t *testing.T) {
+			assert.False(t, info.Name == "nobody" && (len(info.Problems) == 0 || !strings.Contains(info.Problems[0], "nobody")), "unknown agent not reported: %+v", info.Problems)
+		})
 	}
 	run, _ = w.RunWorker(context.Background(), "nobody", RunOptions{})
 	assert.Equal(t, api.RunFailed, run.Status, "unknown agent: %+v", run)

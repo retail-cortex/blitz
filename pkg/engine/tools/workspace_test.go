@@ -41,7 +41,7 @@ func TestWorkspaceRel(t *testing.T) {
 	for in, want := range positive {
 		got, err := ws.Rel(in)
 		if !assert.NoError(t, err, "Rel(%q)", in) {
-		continue
+			continue
 		}
 		assert.Equal(t, want, got, "Rel(%q) = %q, want %q", in, got, want)
 	}
@@ -55,8 +55,10 @@ func TestWorkspaceRel(t *testing.T) {
 		filepath.Join(filepath.Dir(dir), "sibling", "f.txt"),
 	}
 	for _, in := range negative {
-		_, err := ws.Rel(in)
-		assert.ErrorIs(t, err, ErrOutsideWorkspace, "Rel(%q) expected ErrOutsideWorkspace, got %v", in, err)
+		t.Run(in, func(t *testing.T) {
+			_, err := ws.Rel(in)
+			assert.ErrorIs(t, err, ErrOutsideWorkspace, "Rel(%q) expected ErrOutsideWorkspace, got %v", in, err)
+		})
 	}
 }
 
