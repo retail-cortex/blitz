@@ -15,7 +15,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { staleReason } from "./serviceVersion";
+import { staleReason, waitForService, withTimeout } from "./serviceVersion";
 
 describe("staleReason", () => {
   const info = { version: "1.4.0", executable: "/usr/lib/blitz-desktop/blitzd", pid: 42 };
@@ -33,5 +33,37 @@ describe("staleReason", () => {
   it("flags another version", () => {
     expect(staleReason("1.5.0", info, true)).toBe("mismatch");
     expect(staleReason("dev", info, true)).toBe("mismatch");
+  });
+});
+
+describe("waitForService", () => {
+  const noSleep = () => Promise.resolve();
+  it("waits for a service that starts late", async () => {
+    let calls = 0;
+    const status = async () => ({ running: ++calls >= 4 });
+    const got = await waitForService(status, true, 15_000, 300, noSleep);
+    expect(got).toEqual({ status: { running: true }, settled: true });
+    expect(calls).toBe(4);
+  });
+  it("waits for a service to stop", async () => {
+    let calls = 0;
+    const got = await waitForService(async () => ({ running: ++calls < 3 }), false, 15_000, 300, noSleep);
+    expect(got.settled).toBe(true);
+    expect(calls).toBe(3);
+  });
+  it("gives up after the timeout, with the last status", async () => {
+    let calls = 0;
+    const got = await waitForService(async () => (calls++, { running: false }), true, 1_000, 300, noSleep);
+    expect(got).toEqual({ status: { running: false }, settled: false });
+    expect(calls).toBe(5); // at 0, 300, 600, 900 and 1200 ms
+  });
+});
+
+describe("withTimeout", () => {
+  it("passes an answer through", async () => {
+    await expect(withTimeout(Promise.resolve(7), 1_000)).resolves.toBe(7);
+  });
+  it("rejects a call that doesn't answer", async () => {
+    await expect(withTimeout(new Promise(() => {}), 10)).rejects.toThrow("no answer");
   });
 });

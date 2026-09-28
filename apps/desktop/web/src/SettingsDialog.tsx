@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   mdiBrain,
   mdiCheckCircleOutline,
@@ -22,6 +22,7 @@ import {
   mdiFileDocumentEditOutline,
   mdiFolderMultipleOutline,
   mdiKeyChainVariant,
+  mdiProgressClock,
   mdiShieldCheckOutline,
   mdiInformationOutline,
   mdiMonitor,
@@ -35,7 +36,7 @@ import {
 } from "@mdi/js";
 import { appVersion, installService, restartService, serviceStatus, stopService, type ServiceStatus } from "./desktop";
 import { showLicense } from "./events";
-import { checkService, type ServiceCheck } from "./serviceVersion";
+import { checkService, settleTimeout, type ServiceCheck, waitForService, withTimeout } from "./serviceVersion";
 import { languages, t } from "./i18n";
 import { workspaceColor } from "./palette";
 import { displayName, forgetWorkspace } from "./prefs";
@@ -194,25 +195,46 @@ function Service() {
   const [status, setStatus] = useState<ServiceStatus | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [waiting, setWaiting] = useState(false);
   const [version, setVersion] = useState<ServiceCheck | null>(null);
-  const refresh = () =>
-    serviceStatus().then((s) => {
-      setStatus(s);
-      if (s.running) appVersion().then(checkService).then(setVersion, () => setVersion(null));
-    }, (e) => setError(String(e)));
+  // Shows a status, and the running service's version (never an earlier
+  // one's); a service still starting may not answer, so the check is short.
+  const show = useCallback(async (s: ServiceStatus) => {
+    setStatus(s);
+    if (!s.running) return setVersion(null);
+    try {
+      setVersion(await withTimeout(appVersion().then(checkService), 5_000));
+    } catch {
+      setVersion(null);
+    }
+  }, []);
+  const refresh = useCallback(() => serviceStatus().then(show, (e) => setError(String(e))), [show]);
   useEffect(() => {
     refresh();
-  }, []);
-  // Runs one service action, then shows the new status.
-  const act = async (f: () => Promise<void>) => {
+  }, [refresh]);
+  // Kept current while open: the service can change from elsewhere (the
+  // CLI, a crash).
+  useEffect(() => {
+    if (busy) return;
+    const timer = setInterval(refresh, 5_000);
+    return () => clearInterval(timer);
+  }, [busy, refresh]);
+  // Runs one service action, then waits for the service to be running (or
+  // stopped): installing or restarting returns before the new one listens.
+  const act = async (f: () => Promise<void>, running: boolean) => {
     setBusy(true);
     setError("");
     try {
       await f();
-      await refresh();
+      setWaiting(true);
+      const { status: s, settled } = await waitForService(serviceStatus, running);
+      await show(s);
+      if (!settled) setError(t(running ? "desktop.service.didnt_start" : "desktop.service.didnt_stop", { seconds: settleTimeout / 1000 }));
     } catch (e) {
       setError(String(e));
+      await refresh();
     } finally {
+      setWaiting(false);
       setBusy(false);
     }
   };
@@ -220,15 +242,19 @@ function Service() {
   return (
     <div className="stack" style={{ gap: 0 }}>
       <Setting title={t("desktop.service.status")} detail={t("desktop.service.status.detail")}>
-        {status.running ? (
+        {waiting ? (
+          <Chip className="static" icon={mdiProgressClock}>
+            {t("desktop.service.waiting")}
+          </Chip>
+        ) : status.running ? (
           <div className="row">
             <Chip className="static" icon={mdiCheckCircleOutline} selected>
               {t("desktop.service.running")}
             </Chip>
-            <Button small variant="tonal" disabled={!status.service || busy} onClick={() => act(() => restartService(version?.info?.pid ?? 0))}>
+            <Button small variant="tonal" disabled={!status.service || busy} onClick={() => act(() => restartService(version?.info?.pid ?? 0), true)}>
               {t("desktop.service.restart_short")}
             </Button>
-            <Button small danger disabled={busy} onClick={() => act(() => stopService(version?.info?.pid ?? 0))}>
+            <Button small danger disabled={busy} onClick={() => act(() => stopService(version?.info?.pid ?? 0), false)}>
               {t("desktop.service.stop")}
             </Button>
           </div>
@@ -243,7 +269,7 @@ function Service() {
           variant="tonal"
           small
           disabled={!status.service || busy}
-          onClick={() => act(installService)}
+          onClick={() => act(installService, true)}
         >
           {status.installed ? t("desktop.service.reinstall") : t("desktop.service.install_short")}
         </Button>

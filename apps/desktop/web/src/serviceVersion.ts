@@ -67,3 +67,40 @@ export async function checkService(app: string): Promise<ServiceCheck> {
   const there = info ? await programExists(info.executable) : true;
   return { info, app, stale: staleReason(app, info, there) };
 }
+
+/** How long to wait for the service to start or stop after an action. */
+export const settleTimeout = 15_000;
+
+/**
+ * Asks status until running is want, every interval, for at most timeout:
+ * after installing or restarting the service (which returns before the
+ * new one listens) or stopping it. Resolves with the last status and
+ * whether it settled.
+ */
+export async function waitForService<S extends { running: boolean }>(
+  status: () => Promise<S>,
+  want: boolean,
+  timeout = settleTimeout,
+  interval = 300,
+  sleep: (ms: number) => Promise<void> = (ms) => new Promise((r) => setTimeout(r, ms)),
+): Promise<{ status: S; settled: boolean }> {
+  let waited = 0;
+  for (;;) {
+    const s = await status();
+    if (s.running === want) return { status: s, settled: true };
+    if (waited >= timeout) return { status: s, settled: false };
+    await sleep(interval);
+    waited += interval;
+  }
+}
+
+/** p, or a rejection after ms: a call to a service that's starting may never answer. */
+export function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`no answer in ${ms / 1000} s`)), ms);
+    p.then(
+      (v) => (clearTimeout(timer), resolve(v)),
+      (e) => (clearTimeout(timer), reject(e)),
+    );
+  });
+}
