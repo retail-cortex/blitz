@@ -147,6 +147,18 @@ func (h configService) SetConfigValue(ctx context.Context, r req[pb.SetConfigVal
 	return ok(&pb.SetConfigValueResponse{Change: h.changed(ctx, dir, path)})
 }
 
+func (h configService) SetProvider(ctx context.Context, r req[pb.SetProviderRequest]) (*connect.Response[pb.SetProviderResponse], error) {
+	dir, err := scope(r.Msg.Workspace)
+	if err != nil {
+		return nil, err
+	}
+	path, err := config.SetProvider(h.s.configDir, dir, config.ProviderChoice{Provider: r.Msg.Provider, Model: r.Msg.DefaultModel, Key: r.Msg.Key})
+	if err != nil {
+		return nil, invalid(err)
+	}
+	return ok(&pb.SetProviderResponse{Change: h.changed(ctx, dir, path)})
+}
+
 func (h configService) GetConfigFile(_ context.Context, r req[pb.GetConfigFileRequest]) (*connect.Response[pb.GetConfigFileResponse], error) {
 	dir, err := scope(r.Msg.Workspace)
 	if err != nil {

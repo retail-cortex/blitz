@@ -742,6 +742,8 @@
     "desktop.keys.source.missing.detail": "The settings refer to a {provider} key that isn't in the keychain. Set it again.",
     "desktop.keys.key_label": "{provider} API key",
     "desktop.keys.key_placeholder": "Paste the API key",
+    "desktop.keys.key_keep": "Leave empty to keep the current key",
+    "desktop.keys.provider_saved": "Provider settings saved",
     "desktop.keys.set": "Set key",
     "desktop.keys.replace": "Replace",
     "desktop.keys.save": "Save",

@@ -374,6 +374,61 @@ func SetValue(prefixDir, workspace, key, value string) (string, error) {
 		})
 }
 
+// ProviderChoice is what the provider form saves as one change: a scope's
+// llm.provider and blitz.default_model ("" removes either, so a workspace
+// follows the global setting again) and, unless Key is "", a new API key
+// for Provider.
+type ProviderChoice struct {
+	Provider string
+	Model    string
+	Key      string
+}
+
+// SetProvider saves a ProviderChoice in a scope as one change: everything
+// is checked before anything is written, the key goes to the OS store, and
+// the file is written once. It returns the file written.
+func SetProvider(prefixDir, workspace string, c ProviderChoice) (string, error) {
+	c.Model, c.Key = strings.TrimSpace(c.Model), strings.TrimSpace(c.Key)
+	if c.Provider != "" && !knownProvider(c.Provider) && c.Provider != "ollama" {
+		return "", fmt.Errorf("unknown provider %q (gemini, anthropic, openai or ollama)", c.Provider)
+	}
+	var ref string
+	if c.Key != "" {
+		if !knownProvider(c.Provider) {
+			return "", fmt.Errorf("choose a provider that takes an API key (%s) for the key", strings.Join(KeyedProviders, ", "))
+		}
+		name := secretName(prefixDir, workspace, c.Provider)
+		if err := secrets.Default(ConfigDir(prefixDir)).Set(name, c.Key); err != nil {
+			return "", err
+		}
+		ref = secrets.Ref(name)
+	}
+	set := func(doc, table, key, value string) string {
+		if value == "" {
+			return removeTOMLKey(doc, table, key)
+		}
+		return setTOMLKey(doc, table, key, strconv.Quote(value))
+	}
+	return editConfigFile(scopeDir(prefixDir, workspace),
+		func(doc string) string {
+			doc = set(doc, "llm", "provider", c.Provider)
+			doc = set(doc, "blitz", "default_model", c.Model)
+			if ref != "" {
+				doc = set(doc, "llm."+c.Provider, "api_key", ref)
+			}
+			return doc
+		},
+		func(check map[string]any) error {
+			if str(lookup(check, "llm", "provider")) != c.Provider || str(lookup(check, "blitz", "default_model")) != c.Model {
+				return errors.New("could not set the provider and default model")
+			}
+			if ref != "" && lookup(check, "llm", c.Provider, "api_key") != ref {
+				return fmt.Errorf("could not set [llm.%s] api_key", c.Provider)
+			}
+			return nil
+		})
+}
+
 // ReadSettingsFile returns a scope's settings file and its text ("" when it
 // doesn't exist yet).
 func ReadSettingsFile(prefixDir, workspace string) (string, string, error) {

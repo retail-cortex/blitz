@@ -67,6 +67,15 @@ func TestConfigService(t *testing.T) {
 	assert.Equal(t, pb.KeySource_KEY_SOURCE_KEYCHAIN, sources["gemini"], "workspace sources: %v", sources)
 	assert.Equal(t, pb.KeySource_KEY_SOURCE_INHERITED, sources["anthropic"], "workspace sources: %v", sources)
 
+	// Provider, model and key in one change: one reload, one model error.
+	set, err := cfg.SetProvider(ctx, connect.NewRequest(&pb.SetProviderRequest{Workspace: dir, Provider: "openai", DefaultModel: "gpt-5", Key: "sk-project"}))
+	require.NoError(t, err)
+	assert.Contains(t, set.Msg.Change.Path, "/.blitz/workspaces/", "set provider: %v", set)
+	wdesc, _ = cfg.DescribeConfig(ctx, connect.NewRequest(&pb.DescribeConfigRequest{Workspace: dir}))
+	assert.Equal(t, "openai", wdesc.Msg.Provider, "workspace: %v", wdesc.Msg)
+	assert.Equal(t, "gpt-5", wdesc.Msg.DefaultModel, "workspace: %v", wdesc.Msg)
+	assert.NotContains(t, wdesc.Msg.String(), "sk-project", "the description shows the key")
+
 	// Bad input is refused as such.
 	for _, call := range []func() error{
 		func() error {
@@ -75,6 +84,10 @@ func TestConfigService(t *testing.T) {
 		},
 		func() error {
 			_, err := cfg.SetConfigValue(ctx, connect.NewRequest(&pb.SetConfigValueRequest{Key: "blitz.auto_approve", Value: "true"}))
+			return err
+		},
+		func() error {
+			_, err := cfg.SetProvider(ctx, connect.NewRequest(&pb.SetProviderRequest{Provider: "ollama", Key: "x"}))
 			return err
 		},
 		func() error {

@@ -742,6 +742,8 @@
     "desktop.keys.source.missing.detail": "Les réglages font référence à une clé {provider} absente du trousseau. Définissez-la de nouveau.",
     "desktop.keys.key_label": "Clé d'API {provider}",
     "desktop.keys.key_placeholder": "Collez la clé d'API",
+    "desktop.keys.key_keep": "Laissez vide pour garder la clé actuelle",
+    "desktop.keys.provider_saved": "Réglages du fournisseur enregistrés",
     "desktop.keys.set": "Définir la clé",
     "desktop.keys.replace": "Remplacer",
     "desktop.keys.save": "Enregistrer",

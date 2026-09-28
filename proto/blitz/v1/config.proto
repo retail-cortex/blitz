@@ -36,6 +36,10 @@ service ConfigService {
   rpc SecureApiKey(SecureApiKeyRequest) returns (SecureApiKeyResponse);
   // Removes a provider's API key (a workspace then uses the global one).
   rpc RemoveApiKey(RemoveApiKeyRequest) returns (RemoveApiKeyResponse);
+  // Saves a scope's provider, default model and, optionally, the
+  // provider's API key as one change: all checked before anything is
+  // written, and the open workspaces reload once.
+  rpc SetProvider(SetProviderRequest) returns (SetProviderResponse);
   // Sets one of the forms' settings ("" removes it).
   rpc SetConfigValue(SetConfigValueRequest) returns (SetConfigValueResponse);
   // Returns a scope's settings file as text.
@@ -142,6 +146,23 @@ message SetConfigValueRequest {
 
 // Response message for ConfigService.SetConfigValue.
 message SetConfigValueResponse {
+  ConfigChange change = 1;
+}
+
+// Request message for ConfigService.SetProvider.
+message SetProviderRequest {
+  string workspace = 1;
+  // llm.provider: gemini, anthropic, openai or ollama ("" removes it).
+  string provider = 2;
+  // blitz.default_model ("" removes it).
+  string default_model = 3;
+  // A new API key for the provider, kept in the keychain ("" keeps the
+  // current one).
+  string key = 4;
+}
+
+// Response message for ConfigService.SetProvider.
+message SetProviderResponse {
   ConfigChange change = 1;
 }
 

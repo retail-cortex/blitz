@@ -742,6 +742,8 @@
     "desktop.keys.source.missing.detail": "La configuración hace referencia a una clave de {provider} que no está en el llavero. Vuelva a definirla.",
     "desktop.keys.key_label": "Clave de API de {provider}",
     "desktop.keys.key_placeholder": "Pegue la clave de API",
+    "desktop.keys.key_keep": "Déjela vacía para conservar la clave actual",
+    "desktop.keys.provider_saved": "Configuración del proveedor guardada",
     "desktop.keys.set": "Definir clave",
     "desktop.keys.replace": "Reemplazar",
     "desktop.keys.save": "Guardar",

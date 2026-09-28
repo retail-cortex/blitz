@@ -150,6 +150,55 @@ func TestSetValue(t *testing.T) {
 	assert.Error(t, err, "a key for a provider that takes none")
 }
 
+// The form's provider, model and key are saved together, or not at all.
+func TestSetProvider(t *testing.T) {
+	_, store := keysEnv(t)
+	ws := t.TempDir()
+
+	// All three in a workspace: the key goes to the store, the rest to the file.
+	path, err := SetProvider("", ws, ProviderChoice{Provider: "anthropic", Model: " claude-sonnet-5 ", Key: " sk-ant-project "})
+	require.NoError(t, err)
+	data, _ := os.ReadFile(path)
+	assert.NotContains(t, string(data), "sk-ant-project", "file:\n%s", data)
+	cfg, err := LoadWorkspace("", ws)
+	require.NoError(t, err)
+	assert.Equal(t, "anthropic", cfg.LLM.Provider)
+	assert.Equal(t, "claude-sonnet-5", cfg.Blitz.DefaultModel)
+	assert.Equal(t, "sk-ant-project", cfg.LLM.Anthropic.APIKey)
+
+	// No key keeps the one stored; "" removes the provider and model.
+	_, err = SetProvider("", ws, ProviderChoice{Provider: "anthropic", Model: "claude-opus-5-5"})
+	require.NoError(t, err)
+	cfg, _ = LoadWorkspace("", ws)
+	assert.Equal(t, "claude-opus-5-5", cfg.Blitz.DefaultModel)
+	assert.Equal(t, "sk-ant-project", cfg.LLM.Anthropic.APIKey, "the key was kept")
+	_, err = SetProvider("", ws, ProviderChoice{})
+	require.NoError(t, err)
+	info, _ := Describe("", ws)
+	assert.Equal(t, "", info.Provider, "provider removed")
+	assert.Equal(t, "", info.DefaultModel, "model removed")
+	assert.Equal(t, KeyKeychain, source(t, ws, "anthropic").KeySource, "removing the provider keeps its key")
+
+	// Refused before anything is written.
+	for _, tc := range []struct {
+		name   string
+		choice ProviderChoice
+	}{
+		{"an unknown provider", ProviderChoice{Provider: "nope", Model: "m"}},
+		{"a key for a provider that takes none", ProviderChoice{Provider: "ollama", Model: "m", Key: "x"}},
+		{"a key without a provider", ProviderChoice{Model: "m", Key: "x"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := SetProvider("", "", tc.choice)
+			assert.Error(t, err)
+			info, _ := Describe("", "")
+			assert.Equal(t, "", info.DefaultModel, "the model was written")
+			_, err = store.Get("global/llm.ollama.api_key")
+			assert.ErrorIs(t, err, secrets.ErrNotFound, "a key was stored")
+		})
+	}
+}
+
 func TestWriteSettingsFile(t *testing.T) {
 	keysEnv(t)
 	path, warnings, err := WriteSettingsFile("", "", "# mine\n[llm]\nprovider = \"openai\"\n[llm.openai]\napi_key = \"sk-plain\"\n[llm.typo]\nx = 1\n")

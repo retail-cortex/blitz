@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type KeyboardEvent } from "react";
 import { mdiAlertCircleOutline, mdiCheckCircleOutline, mdiKeyOutline, mdiLockOutline } from "@mdi/js";
 import { config } from "./api";
 import { message } from "./errors";
@@ -40,42 +40,59 @@ const sourceKeys: Record<KeySource, string> = {
 /** The key is written in this scope's file (so it can be removed here). */
 const inFile = (p: ProviderConfig) => p.keySource === KeySource.KEYCHAIN || p.keySource === KeySource.PLAIN || p.keySource === KeySource.OBFUSCATED;
 
+/** Where a provider's key comes from, when it has one. */
+const hasKey = (p?: ProviderConfig) => !!p && !p.keyMissing && p.keySource !== KeySource.NONE && p.keySource !== KeySource.UNSPECIFIED;
+
+/** The provider, default model and new key the form saves as one change. */
+interface Choice {
+  provider: string;
+  model: string;
+  key: string;
+}
+
 /**
  * A scope's providers and API keys: the global settings (workspace "") or
- * one workspace's own, which override the global ones. Keys go to the OS
- * keychain; the page never sees them.
+ * one workspace's own, which override the global ones. The provider, its
+ * default model and its key are one change, saved together; below, each
+ * provider's key. Keys go to the OS keychain; the page never sees them.
  */
 export function ProviderSettings({ workspace, compact }: { workspace: string; compact?: boolean }) {
   const snack = useSnackbar();
   const [desc, setDesc] = useState<DescribeConfigResponse>();
   const [error, setError] = useState("");
+  const [modelError, setModelError] = useState("");
   const [busy, setBusy] = useState(false);
-  const [model, setModel] = useState("");
+  const [choice, setChoice] = useState<Choice>({ provider: "", model: "", key: "" });
 
-  const load = useCallback(async () => {
-    try {
-      const d = await config.describeConfig({ workspace });
-      setDesc(d);
-      setModel(d.defaultModel);
-      setError("");
-    } catch (e) {
-      setError(message(e));
-    }
-  }, [workspace]);
+  // Reads the scope; fresh also starts the choice over from what's saved.
+  const load = useCallback(
+    async (fresh?: boolean) => {
+      try {
+        const d = await config.describeConfig({ workspace });
+        setDesc(d);
+        if (fresh) setChoice({ provider: d.provider, model: d.defaultModel, key: "" });
+        setError("");
+      } catch (e) {
+        setError(message(e));
+      }
+    },
+    [workspace],
+  );
   useEffect(() => {
-    load();
+    load(true);
   }, [load]);
 
-  // Runs one change, reloads, and tells the workspaces.
-  const act = async (f: () => Promise<{ change?: ConfigChange }>, done?: string) => {
+  // Runs one change, reloads, and tells the workspaces. A model that still
+  // can't be built is said in the form, where it stays until the next change.
+  const act = async (f: () => Promise<{ change?: ConfigChange }>, done?: string, fresh?: boolean) => {
     setBusy(true);
     setError("");
     try {
       const { change } = await f();
-      if (change?.modelError) snack(t("desktop.keys.model_error", { reason: change.modelError }), { error: true });
-      else if (done) snack(done);
+      setModelError(change?.modelError ?? "");
+      if (done && !change?.modelError) snack(done);
       configChanged({ dir: workspace });
-      await load();
+      await load(fresh);
       return true;
     } catch (e) {
       setError(message(e));
@@ -84,9 +101,15 @@ export function ProviderSettings({ workspace, compact }: { workspace: string; co
       setBusy(false);
     }
   };
-  const setValue = (key: string, value: string) => act(() => config.setConfigValue({ workspace, key, value }));
 
   if (!desc) return <p className="muted">{error || t("desktop.checking")}</p>;
+  const keyed = desc.providers.find((p) => p.name === choice.provider);
+  const dirty = choice.provider !== desc.provider || choice.model.trim() !== desc.defaultModel || choice.key.trim() !== "";
+  const save = () =>
+    dirty &&
+    !busy &&
+    act(() => config.setProvider({ workspace, provider: choice.provider, defaultModel: choice.model.trim(), key: choice.key.trim() }), t("desktop.keys.provider_saved"), true);
+  const onEnter = (e: KeyboardEvent) => e.key === "Enter" && save();
   return (
     <div className="stack provider-settings" style={{ gap: 12 }}>
       <p className="t-body-sm muted">
@@ -95,7 +118,7 @@ export function ProviderSettings({ workspace, compact }: { workspace: string; co
       <div className={compact ? "stack" : "row wrap"} style={{ gap: 12 }}>
         <label className="field">
           <span className="t-label">{t("desktop.keys.provider")}</span>
-          <select className="select" value={desc.provider} disabled={busy} onChange={(e) => setValue("llm.provider", e.target.value)}>
+          <select className="select" value={choice.provider} disabled={busy} onChange={(e) => setChoice({ ...choice, provider: e.target.value, key: "" })}>
             <option value="">{t(workspace ? "desktop.keys.use_global" : "desktop.keys.provider_default")}</option>
             {providers.map((p) => (
               <option key={p} value={p}>
@@ -108,15 +131,44 @@ export function ProviderSettings({ workspace, compact }: { workspace: string; co
           <span className="t-label">{t("desktop.keys.default_model")}</span>
           <input
             className="input mono"
-            value={model}
+            value={choice.model}
             placeholder={t(workspace ? "desktop.keys.use_global" : "desktop.keys.model_placeholder")}
             disabled={busy}
-            onChange={(e) => setModel(e.target.value)}
-            onBlur={() => model !== desc.defaultModel && setValue("blitz.default_model", model.trim())}
-            onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
+            onChange={(e) => setChoice({ ...choice, model: e.target.value })}
+            onKeyDown={onEnter}
           />
         </label>
+        {keyed && (
+          <label className="field" style={{ flex: 1 }}>
+            <span className="t-label">{t("desktop.keys.key_label", { provider: providerNames[keyed.name] ?? keyed.name })}</span>
+            <input
+              className="input mono"
+              type="password"
+              autoComplete="off"
+              spellCheck={false}
+              value={choice.key}
+              placeholder={t(hasKey(keyed) ? "desktop.keys.key_keep" : "desktop.keys.key_placeholder")}
+              disabled={busy}
+              onChange={(e) => setChoice({ ...choice, key: e.target.value })}
+              onKeyDown={onEnter}
+            />
+          </label>
+        )}
       </div>
+      <div className="row" style={{ justifyContent: "flex-end", gap: 8 }}>
+        <Button small disabled={!dirty || busy} onClick={() => setChoice({ provider: desc.provider, model: desc.defaultModel, key: "" })}>
+          {t("desktop.file.revert")}
+        </Button>
+        <Button small variant="filled" disabled={!dirty || busy} onClick={save}>
+          {t("desktop.keys.save")}
+        </Button>
+      </div>
+      {modelError && (
+        <p className="card warn row t-body-sm">
+          <Icon path={mdiAlertCircleOutline} size="sm" />
+          <span>{t("desktop.keys.model_error", { reason: modelError })}</span>
+        </p>
+      )}
       <div className="provider-list">
         {desc.providers.map((p) => (
           <ProviderRow key={p.name} workspace={workspace} p={p} busy={busy} compact={compact} act={act} />
@@ -145,7 +197,7 @@ function ProviderRow({
   const [baseURL, setBaseURL] = useState(p.baseUrl);
   useEffect(() => setBaseURL(p.baseUrl), [p.baseUrl]);
   const source = p.keyMissing ? "missing" : sourceKeys[p.keySource];
-  const good = !p.keyMissing && p.keySource !== KeySource.NONE && p.keySource !== KeySource.UNSPECIFIED;
+  const good = hasKey(p);
   const insecure = p.keySource === KeySource.PLAIN || p.keySource === KeySource.OBFUSCATED;
   const name = providerNames[p.name] ?? p.name;
 

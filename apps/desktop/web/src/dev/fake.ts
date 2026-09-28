@@ -390,6 +390,14 @@ export function installFake() {
           scopeConfig(workspace).keys[provider] = workspace ? KeySource.INHERITED : KeySource.NONE;
           return change(workspace);
         },
+        setProvider: ({ workspace, provider, defaultModel, key }) => {
+          if (key && !["gemini", "anthropic", "openai"].includes(provider)) throw new ConnectError(`${provider || "no provider"} takes no API key`, Code.InvalidArgument);
+          const c = scopeConfig(workspace);
+          c.provider = provider;
+          c.model = defaultModel;
+          if (key) c.keys[provider] = KeySource.KEYCHAIN;
+          return change(workspace);
+        },
         setConfigValue: ({ workspace, key, value }) => {
           const c = scopeConfig(workspace);
           if (key === "llm.provider") c.provider = value;
