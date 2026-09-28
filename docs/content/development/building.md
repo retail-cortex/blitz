@@ -1,0 +1,92 @@
+---
+title: Building from source
+weight: 10
+---
+
+Blitz builds with [Bazel](https://bazel.build) 9.2. Bazel downloads Go, Node, pnpm, buf, Hugo and every dependency at pinned versions, so the machine needs only Bazelisk (which picks the Bazel version in `.bazelversion`), git, and, for the desktop app, the platform's native toolkit.
+
+## macOS
+
+Tested on macOS 13 and later, Apple silicon and Intel.
+
+1. Install Xcode from the App Store (the builds are tested with Xcode installed) and select it: `sudo xcode-select -s /Applications/Xcode.app`.
+2. Install Bazelisk: `brew install bazelisk` (it installs as `bazel`).
+3. Clone and build:
+
+   ```bash
+   git clone https://github.com/retail-cortex/blitz.git && cd blitz
+   bazel build //apps/cli:blitz //apps/service:blitzd
+   bazel-bin/apps/cli/blitz --version      # and bazel-bin/apps/service/blitzd
+   ```
+
+4. The desktop app, as `Blitz.app` (universal: both architectures build on either Mac):
+
+   ```bash
+   bazel build //apps/desktop/packaging:Blitz.app
+   ```
+
+## Linux
+
+Tested on Ubuntu 24.04 (x86-64); Debian 13 and later work too.
+
+1. Install the build dependencies. The CLI and the service need only git; the desktop app also needs GTK and WebKitGTK 4.1, and the shell sandbox needs bubblewrap:
+
+   ```bash
+   sudo apt-get install -y git bubblewrap pkg-config libgtk-3-dev libwebkit2gtk-4.1-dev
+   ```
+
+2. Install Bazelisk from its [releases](https://github.com/bazelbuild/bazelisk/releases) as `bazel` on your `PATH`, for example:
+
+   ```bash
+   sudo curl -fsSLo /usr/local/bin/bazel https://github.com/bazelbuild/bazelisk/releases/latest/download/bazelisk-linux-amd64
+   sudo chmod +x /usr/local/bin/bazel
+   ```
+
+3. Build as on macOS. The desktop app is a Debian package on Linux:
+
+   ```bash
+   bazel build //apps/cli:blitz //apps/service:blitzd
+   bazel build //apps/desktop/packaging:deb
+   ```
+
+4. Ubuntu 24.04 restricts unprivileged user namespaces through AppArmor, which bubblewrap and gVisor need. To run the sandbox tests, allow them: `sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0`. Without that, Blitz runs commands unsandboxed in `auto` mode and `blitz doctor` says why.
+
+## Windows
+
+Building on Windows isn't supported. Build in WSL 2 with the Linux steps, or cross-compile: the release archives, Windows included, build on macOS or Linux:
+
+```bash
+bazel build //release:archives          # every platform's archive
+```
+
+On Windows, Blitz runs without the OS sandbox and the process guard; skill scripts don't run.
+
+## Tests and checks
+
+```bash
+bazel test //...                        # every test: Go, the desktop page, the protos
+bazel test --config=race //...          # the Go tests with the race detector, as CI runs them
+tools/check_format.sh                   # formatting, BUILD files and license headers
+bazel run //tools:check_deps            # the dependency rules between apps and packages
+```
+
+Some tests need more than the build: the gVisor tests need `runsc` (`RUNSC_PATH`), and the sandbox tests on Linux need bubblewrap and user namespaces. They skip without them locally; CI fails if they're skipped.
+
+## Release builds
+
+`--config=release` stamps the version from `git describe`:
+
+```bash
+bazel build --config=release //release:archives
+```
+
+The archives come out byte for byte the same on macOS and Linux; CI builds them on both and compares. The [build architecture](../architecture/build.md) explains how.
+
+## The docs
+
+This site is in `docs/`, built with Hugo through Bazel:
+
+```bash
+bazel build //docs:site                 # the site, in bazel-bin/docs/site
+bazel run //docs:serve                  # a local preview at http://localhost:1313
+```

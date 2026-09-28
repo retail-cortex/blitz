@@ -1,0 +1,53 @@
+{{- /*
+  Copyright 2026 Retail Cortex
+
+  Licensed under the Apache License, Version 2.0 (the "License");
+  you may not use this file except in compliance with the License.
+  You may obtain a copy of the License at
+
+      http://www.apache.org/licenses/LICENSE-2.0
+
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
+
+  Adapted from the Geekdoc theme's render-link.html (MIT).
+*/ -}}
+{{- /*
+  Links between the Markdown files (guide.md, ../about/specs/x.md#part)
+  resolve to their pages, so the files read the same on GitHub and on the
+  site. Other links pass through. A missing page fails the build.
+*/ -}}
+{{- $dest := .Destination -}}
+{{- $u := urls.Parse $dest -}}
+{{- if and (not $u.Scheme) (not (hasPrefix $dest "/")) (not (hasPrefix $dest "#")) (strings.HasSuffix $u.Path ".md") -}}
+  {{- $target := $u.Path -}}
+  {{- $base := path.Base $target -}}
+  {{- if or (eq $base "_index.md") (eq $base "README.md") -}}
+    {{- $target = path.Dir $target -}}
+  {{- end -}}
+  {{- $dir := .PageInner.File.Dir -}}
+  {{- $p := .PageInner.GetPage (path.Join "/" $dir $target) -}}
+  {{- if $p -}}
+    {{- $dest = $p.RelPermalink -}}
+    {{- with $u.Fragment }}{{ $dest = printf "%s#%s" $dest . }}{{ end -}}
+  {{- else -}}
+    {{- errorf "%s: no page for the link %q" .PageInner.File.Path .Destination -}}
+  {{- end -}}
+{{- end -}}
+{{- $raw := or (hasPrefix .Text "<img") (hasPrefix .Text "<figure") -}}
+{{- $code := hasPrefix .Text "<code" -}}
+<a
+  class="gdoc-markdown__link{{ if $raw -}}
+    --raw
+  {{- else if $code -}}
+    --code
+  {{- end }}"
+  href="{{ $dest | safeURL }}"
+  {{- with .Title }}{{ printf "title=\"%s\"" . | safeHTMLAttr }}{{- end }}
+>
+  {{- .Text | safeHTML -}}
+</a>
+{{- /* Drop trailing newlines */ -}}

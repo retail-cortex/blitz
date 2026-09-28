@@ -136,7 +136,7 @@ Mention an image in a prompt (`what's wrong with @screenshots/login.png?`, or `@
 
 ### Language
 
-The interface speaks English (`en-US`, the default), Spanish (`es`) and Canadian French (`fr-CA`). `/locale` shows the current language; `/locale es` switches and saves `[ui] locale = "es"` to `~/.blitz/.env.toml`. Codes are forgiving: `es-ES`, `es_MX`, `ES-sp`, `spanish` and `español` all work. Any other language (`/locale ja`) changes the language the model replies in, while menus stay in English until someone adds a catalog. Code, paths, commands and tool output are never translated, and `doctor`, `--help` and CLI errors stay in English so they can be shared in bug reports. To add or correct a language, drop a JSON catalog in `~/.blitz/locales/` — see [docs/TRANSLATING.md](docs/TRANSLATING.md).
+The interface speaks English (`en-US`, the default), Spanish (`es`) and Canadian French (`fr-CA`). `/locale` shows the current language; `/locale es` switches and saves `[ui] locale = "es"` to `~/.blitz/.env.toml`. Codes are forgiving: `es-ES`, `es_MX`, `ES-sp`, `spanish` and `español` all work. Any other language (`/locale ja`) changes the language the model replies in, while menus stay in English until someone adds a catalog. Code, paths, commands and tool output are never translated, and `doctor`, `--help` and CLI errors stay in English so they can be shared in bug reports. To add or correct a language, drop a JSON catalog in `~/.blitz/locales/` — see [translating](docs/content/development/translating.md).
 
 ### Search
 
@@ -395,7 +395,7 @@ Optional `agent:` and `model:` run the worker as another agent or on another mod
 
 ## Build, Test, Release
 
-Blitz is a monorepo built with Bazel: the CLI (`apps/cli`), the service (`apps/service`, `blitzd`) and the desktop app (`apps/desktop`) over shared packages (`pkg/`). See [AGENTS.md](.agents/AGENTS.md) for the layout and its rules.
+Blitz is a monorepo built with Bazel: the CLI (`apps/cli`), the service (`apps/service`, `blitzd`) and the desktop app (`apps/desktop`) over shared packages (`pkg/`). See the [development guide](docs/content/development/_index.md) for the layout and its rules.
 
 ```bash
 bazel build //...                      # everything for this machine
@@ -419,7 +419,7 @@ The macOS CLI binaries aren't Apple-notarized, so a copy downloaded in a browser
 
 CI (`ci.yml`) runs every test through Bazel on macOS and Linux (vet and staticcheck run in every compile), checks the dependency rules between apps and packages, formatting and the API protos in `proto/` (lint, formatting, no breaking changes), runs govulncheck, and compares the release archives built on both. The Linux job installs bubblewrap and a pinned gVisor, and fails if the sandbox enforcement or gVisor tests are skipped.
 
-**Project docs:** [.agents/ROADMAP.md](.agents/ROADMAP.md) (what was built and why), [.agents/MANUAL_VERIFICATION.md](.agents/MANUAL_VERIFICATION.md) (checks that need a person), [.agents/NEXT_STEPS.md](.agents/NEXT_STEPS.md) (where to pick up), [.agents/AGENTS.md](.agents/AGENTS.md) (conventions for working on the code), [docs/TRANSLATING.md](docs/TRANSLATING.md), [docs/HISTORY.md](docs/HISTORY.md) (the port from Python).
+**Documentation:** the site at https://retail-cortex.github.io/blitz/, built from [`docs/`](docs/content/_index.md): the [roadmap](docs/content/about/roadmap.md), [specifications](docs/content/about/specs/_index.md), [manual verification](docs/content/development/manual-verification.md), [where to pick up](docs/content/development/next-steps.md), [development](docs/content/development/_index.md), [history](docs/content/about/history.md).
 
 ## License
 

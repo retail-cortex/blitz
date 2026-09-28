@@ -101,3 +101,29 @@ pnpm.pnpm(
     pnpm_version = "10.24.0",
 )
 use_repo(pnpm, "pnpm")
+
+# The documentation site (docs/): Hugo and its Geekdoc theme. rules_hugo
+# isn't in the Bazel Central Registry; this is Retail Cortex's fork.
+bazel_dep(name = "rules_hugo", version = "0.3.0")
+archive_override(
+    module_name = "rules_hugo",
+    integrity = "sha256-YN2Pwayr5D/3tH2GHKrJL8H4pSPagsAaNhFeW0lJ76Q=",
+    strip_prefix = "rules-hugo-0.3.0",
+    urls = ["https://github.com/retail-cortex/rules-hugo/archive/refs/tags/v0.3.0.tar.gz"],
+)
+
+# rules_hugo's own module registers @hugo (extended Hugo 0.162.0).
+hugo_deps = use_extension("@rules_hugo//hugo:extensions.bzl", "hugo_deps")
+hugo_deps.http_archive(
+    name = "geekdoc",
+    build_file_content = """filegroup(
+    name = "files",
+    srcs = glob(["**"]),
+    visibility = ["//visibility:public"],
+)
+
+exports_files(["LICENSE", "data/assets.json"])""",
+    sha256 = "325d3960e568cb623ee47b498f70ae2da851c6b377b4c6723d5f73dfe24e9d21",
+    url = "https://github.com/thegeeklab/hugo-geekdoc/releases/download/v4.1.3/hugo-geekdoc.tar.gz",
+)
+use_repo(hugo_deps, "geekdoc", "hugo")

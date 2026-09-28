@@ -174,7 +174,7 @@
     "locale.current": "Langue de l’interface : {name} ({tag})",
     "locale.no_catalog": "Aucun catalogue de traduction pour {name}; les menus restent en anglais, mais les réponses seront en {name}.",
     "locale.available": "Disponibles : {list}",
-    "locale.custom_hint": "Pour ajouter une langue, placez un catalogue dans {dir} (voir docs/TRANSLATING.md).",
+    "locale.custom_hint": "Pour ajouter une langue, placez un catalogue dans {dir} (voir https://retail-cortex.github.io/blitz/development/translating/).",
     "locale.unknown": "Langue inconnue {input}. Essayez un code comme es, fr-CA ou de.",
     "locale.changed": "Langue de l’interface : {name} ({tag}).",
     "locale.save_failed": "La langue a changé pour cette session, mais l’enregistrement a échoué : {error}",

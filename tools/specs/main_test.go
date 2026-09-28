@@ -34,7 +34,7 @@ func TestCheck(t *testing.T) {
 		require.NoError(t, os.WriteFile(p, []byte(text), 0o644))
 	}
 	write("pkg/real/real.go", "package real")
-	write("specs/README.md", "[a](spec_a_001.md)")
+	write("specs/_index.md", "[a](spec_a_001.md)")
 	write("specs/spec_a_001.md", "Source: `pkg/real/real.go`, `pkg/real/*.go`, `pkg/{real,gone}`, `internal/app`; "+
 		"for example `internal/cart/x.go`; `docs/X.md` (planned); `~/.blitz/x`; `//pkg/real`; `pkg/engine/…`.")
 	write("specs/spec_b_002.md", "Nothing.")
@@ -43,7 +43,7 @@ func TestCheck(t *testing.T) {
 	want := []string{
 		"spec_a_001.md: `internal/app` doesn't exist",
 		"spec_a_001.md: `pkg/{real,gone}` doesn't exist",
-		"spec_b_002.md: not in the specs index (README.md)",
+		"spec_b_002.md: not in the specs index (_index.md)",
 	}
 	assert.Equal(t, 2, n, "%d specs, problems:\n%s", n, strings.Join(problems, "\n"))
 	assert.Equal(t, strings.Join(want, "\n"), strings.Join(problems, "\n"), "%d specs, problems:\n%s", n, strings.Join(problems, "\n"))

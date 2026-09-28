@@ -12,9 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package server serves Blitz's API (api/blitz/v1) over Connect:
+// Package server serves Blitz's API (proto/blitz/v1) over Connect:
 // one process holding every workspace a user opens, each an engine.Workspace.
-// Handlers translate between the protos and internal/app; they hold no
+// Handlers translate between the protos and the engine; they hold no
 // logic of their own.
 package server
 

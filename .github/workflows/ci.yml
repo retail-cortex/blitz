@@ -14,13 +14,13 @@
 
 name: ci
 
-# Documentation-only changes don't need a build.
+# Documentation-only changes don't need a build; docs.yml builds the site.
 on:
   push:
     branches: [main]
-    paths-ignore: ["**.md", ".agents/**", "docs/**", "LICENSE", "NOTICE"]
+    paths-ignore: ["**.md", "docs/**", "LICENSE", "NOTICE"]
   pull_request:
-    paths-ignore: ["**.md", ".agents/**", "docs/**", "LICENSE", "NOTICE"]
+    paths-ignore: ["**.md", "docs/**", "LICENSE", "NOTICE"]
 
 permissions:
   contents: read
@@ -133,6 +133,12 @@ jobs:
         with:
           name: sums-${{ runner.os }}
           path: sums-${{ runner.os }}.txt
+      # setup-bazel saves its caches after the job, compressing them on the
+      # runner's disk, which the build has all but filled on Linux. The
+      # output tree isn't cached; removing it makes room.
+      - name: Make room to save the caches
+        if: always() && runner.os == 'Linux'
+        run: bazel clean
 
   # The release archives, built on Linux and on macOS, must come out byte
   # for byte identical: the build may not depend on the machine.

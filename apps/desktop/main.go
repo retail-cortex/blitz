@@ -12,8 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Command blitz-desktop is Blitz's desktop app: a window with a
-// tab per workspace, driving the per-user Blitz service.
+// Command blitz-desktop is Blitz's desktop app: a window laid out like an
+// IDE (the workspace's files, an editor and the agent's chat), driving the
+// per-user Blitz service (spec_desktop_024).
 package main
 
 import (

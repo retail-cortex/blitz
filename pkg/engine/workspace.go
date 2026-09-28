@@ -12,10 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package app is Blitz without a user interface: it opens a workspace
+// Package engine is Blitz without a user interface: it opens a workspace
 // (registries, tools, sessions, the model and the engine) and exposes what a
-// front end needs. The terminal UI and, later, other front ends drive it;
-// none of it prints.
+// front end needs as an api.Backend. The service and the CLI's --local mode
+// run it; none of it prints (spec_workspace_018).
 package engine
 
 import (

@@ -19,7 +19,7 @@
 // too, since none of them exist any more. A path introduced as an example
 // ("e.g.", "for example") or followed by "(planned)" isn't checked.
 //
-//	bazel run //tools/specs [-- --dir=.agents/specs]
+//	bazel run //tools/specs [-- --dir=docs/content/about/specs]
 package main
 
 import (
@@ -44,8 +44,11 @@ var rootFiles = map[string]bool{"MODULE.bazel": true, "BUILD.bazel": true, ".baz
 	"go.mod": true, "go.sum": true, "buf.yaml": true, "LICENSE": true, "NOTICE": true, "THIRD_PARTY_NOTICES": true, "README.md": true,
 	"MODULE.bazel.lock": true, "OWNERS.txt": true}
 
+// indexFile is the specs' index: their section's page on the docs site.
+const indexFile = "_index.md"
+
 func main() {
-	dir := flag.String("dir", ".agents/specs", "the specs, relative to the repository")
+	dir := flag.String("dir", "docs/content/about/specs", "the specs, relative to the repository")
 	flag.Parse()
 	if ws := os.Getenv("BUILD_WORKSPACE_DIRECTORY"); ws != "" {
 		if err := os.Chdir(ws); err != nil {
@@ -74,7 +77,7 @@ func check(dir string) ([]string, int, error) {
 	if err != nil {
 		return nil, 0, err
 	}
-	index, err := os.ReadFile(filepath.Join(dir, "README.md"))
+	index, err := os.ReadFile(filepath.Join(dir, indexFile))
 	if err != nil {
 		return nil, 0, err
 	}
@@ -82,7 +85,7 @@ func check(dir string) ([]string, int, error) {
 	for _, s := range specs {
 		name := filepath.Base(s)
 		if !strings.Contains(string(index), "("+name+")") {
-			problems = append(problems, name+": not in the specs index (README.md)")
+			problems = append(problems, name+": not in the specs index ("+indexFile+")")
 		}
 		text, err := os.ReadFile(s)
 		if err != nil {

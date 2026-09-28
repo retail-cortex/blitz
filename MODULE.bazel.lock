@@ -446,6 +446,53 @@
         }
       }
     },
+    "@@rules_hugo+//hugo:extensions.bzl%hugo_deps": {
+      "general": {
+        "bzlTransitiveDigest": "9Ylq7z2wjNCGe2yaBe1WI2oidZRbdsuLuU8xx164AUs=",
+        "usagesDigest": "0Bm5GC1QhCnyyl176z5iNQgXTr/ZmqHdqpjY++QRaFE=",
+        "recordedInputs": [
+          "REPO_MAPPING:rules_hugo+,bazel_tools bazel_tools"
+        ],
+        "generatedRepoSpecs": {
+          "geekdoc": {
+            "repoRuleId": "@@bazel_tools//tools/build_defs/repo:http.bzl%http_archive",
+            "attributes": {
+              "url": "https://github.com/thegeeklab/hugo-geekdoc/releases/download/v4.1.3/hugo-geekdoc.tar.gz",
+              "sha256": "325d3960e568cb623ee47b498f70ae2da851c6b377b4c6723d5f73dfe24e9d21",
+              "build_file_content": "filegroup(\n    name = \"files\",\n    srcs = glob([\"**\"]),\n    visibility = [\"//visibility:public\"],\n)\n\nexports_files([\"LICENSE\", \"data/assets.json\"])",
+              "strip_prefix": ""
+            }
+          },
+          "hugo": {
+            "repoRuleId": "@@rules_hugo+//hugo:internal/hugo_repository.bzl%hugo_repository",
+            "attributes": {
+              "version": "0.162.0",
+              "extended": true,
+              "sha256": "",
+              "os_arch": ""
+            }
+          },
+          "hugo_theme_book": {
+            "repoRuleId": "@@bazel_tools//tools/build_defs/repo:http.bzl%http_archive",
+            "attributes": {
+              "url": "https://github.com/alex-shpak/hugo-book/archive/refs/tags/v11.0.0.zip",
+              "sha256": "adf41c4282974dc7b42aa28762e34b704a0aad4ec8d648eb425484dbdfbbefc8",
+              "build_file_content": "\nfilegroup(\n    name = \"files\",\n    srcs = glob([\"**\"]),\n    visibility = [\"//visibility:public\"]\n)\n        ",
+              "strip_prefix": "hugo-book-11.0.0"
+            }
+          },
+          "hugo_theme_geekdoc": {
+            "repoRuleId": "@@bazel_tools//tools/build_defs/repo:http.bzl%http_archive",
+            "attributes": {
+              "url": "https://github.com/thegeeklab/hugo-geekdoc/releases/download/v4.1.1/hugo-geekdoc.tar.gz",
+              "sha256": "d53aca4bbcad45770b0b1e7bc03253b7b824270536578f2028966f68ba3a98d1",
+              "build_file_content": "\nfilegroup(\n    name = \"files\",\n    srcs = glob([\"**\"]),\n    visibility = [\"//visibility:public\"]\n)\n    ",
+              "strip_prefix": ""
+            }
+          }
+        }
+      }
+    },
     "@@rules_python+//python/extensions:config.bzl%config": {
       "general": {
         "bzlTransitiveDigest": "dzD8Q2YmrP3fz8saWLHPmlwPLO91ImtTmP/c9JKTStM=",
