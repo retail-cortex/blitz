@@ -3,7 +3,25 @@ title: "Where to pick up"
 weight: 20
 ---
 
-Written 2026-09-24 at commit `7e211697` on `main`; updated 2026-09-25 and 2026-09-26. On 2026-09-26 the code moved to `github.com/retail-cortex/blitz` with a fresh history (initial commit `53f8c53`): the commit hashes below, and the `python-final` and `v0.1.0` tags, exist only in the former repository, `rmcguinness/code_puppy`. Read this first when resuming. [the roadmap](../about/roadmap.md) has the detail behind each finished item, and [Manual verification](manual-verification.md) has the checks that need a person.
+Written 2026-09-24 at commit `7e211697` on `main`; updated 2026-09-25, 2026-09-26 and 2026-09-27. On 2026-09-26 the code moved to `github.com/retail-cortex/blitz` with a fresh history (initial commit `53f8c53`): the commit hashes below, and the `python-final` and `v0.1.0` tags, exist only in the former repository, `rmcguinness/code_puppy`. Read this first when resuming. [the roadmap](../about/roadmap.md) has the detail behind each finished item, and [Manual verification](manual-verification.md) has the checks that need a person.
+
+## Resume here (2026-09-27, end of day)
+
+**The first release candidate, `v0.1.0-rc.1`, is ready to tag but blocked on GitHub billing.**
+
+- `main` is at `1930d13`. Both CI build jobs passed on it (tests, coverage 78.6% on Linux against the 78% floor, every check), and the Linux and macOS archive checksums are identical. Only the `reproducible` job (run `36369532092`) failed, twice, without starting: *"recent account payments have failed or your spending limit needs to be increased"*. Every workflow is blocked until the organization's **Settings › Billing & plans** is fixed.
+- Checked locally with a throwaway tag: the stamp reads `0.1.0-rc.1` in `blitz`, `blitzd` and `Info.plist`; each archive holds `blitz`, `blitzd`, `blz`, README, LICENSE, NOTICE and THIRD_PARTY_NOTICES; `sign_macos.sh` builds the unsigned disk image (95 MB).
+- Tag signing is off for this repository only (`git config --local tag.gpgSign false`; the owner's global setting signs, and needs a pinentry prompt).
+
+**Next, in order:**
+
+1. Once billing is fixed: re-run the failed job (`gh run rerun 36369532092 --failed`), then `git tag -a v0.1.0-rc.1 -m "Blitz 0.1.0-rc.1" 1930d13 && git push origin v0.1.0-rc.1`. The release workflow makes a **draft** release: five archives with SBOMs, signed `checksums.txt`, the macOS disk image (ad hoc signed: no Apple Developer ID yet; the owner has applied), and `.deb`s for x86-64 and ARM, each with a cosign bundle.
+2. Check the draft against the README: `cosign verify-blob` and `sha256sum -c`, archive contents, versions. The owner tests the Linux binary; send them the download-and-verify commands and what to try (`--version`, `license`, `doctor`, a short session).
+3. Pin the Linux jobs to `ubuntu-24.04`: GitHub moves `ubuntu-latest` to Ubuntu 26 from 2026-10-19 (WebKitGTK 4.1, user namespaces for the sandbox).
+4. `sign_macos.sh`: `hdiutil create` is deprecated in favour of `diskutil image`.
+5. The owner may enable **private vulnerability reporting** (Settings › Security); `docs/CONTRIBUTING.md` already points reporters there.
+6. proto-gen-md-diagrams (the owner maintains it): upstream fixes for escaping comments, skipping the license header and optional front matter would let `docs/api_pages.sh` go. The owner is checking the repository's state first.
+7. Coverage: the lowest packages on Linux are `pkg/loginitem` 42.8%, `pkg/client` 46.8%, `apps/desktop` 47.3%, `pkg/secrets` 52.3%.
 
 ## State
 
