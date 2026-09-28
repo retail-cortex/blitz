@@ -89,10 +89,15 @@ go_binary(
     embed = [":desktop_lib"],
     # Its own Mach-O UUID (build/macos.bzl).
     gc_linkopts = macho_uuid_linkopts("dev.blitz.desktop"),
-    # What `wails build` sets: the native window, not the dev server.
+    # What `wails build` sets: the native window, not the dev server. A
+    # binary's gotags replace --@rules_go//go/config:tags, so the
+    # WebKitGTK 4.1 tag from .bazelrc goes here too: without it Wails
+    # builds its legacy web view, which hands the page's API requests to
+    # the proxy as GETs with no body. The tag only selects Linux files.
     gotags = [
         "desktop",
         "production",
+        "webkit2_41",
     ],
     visibility = ["//visibility:public"],
     # The release version (--config=release), else the default in main.go.

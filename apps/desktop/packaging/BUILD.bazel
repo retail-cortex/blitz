@@ -187,9 +187,11 @@ pkg_deb(
         "@platforms//cpu:x86_64": "amd64",
     }),
     data = ":deb_data",
+    # 2.40 is the first WebKitGTK that hands the app a request's body
+    # (the webkit2_41 web view, apps/desktop/BUILD.bazel).
     depends = [
         "libgtk-3-0t64 | libgtk-3-0",
-        "libwebkit2gtk-4.1-0",
+        "libwebkit2gtk-4.1-0 (>= 2.40)",
     ],
     description = """Blitz desktop app
 A window onto the Blitz service: workspaces, chats with the agent,
