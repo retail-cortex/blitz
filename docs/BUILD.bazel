@@ -33,10 +33,30 @@ copy_file(
     out = "static/licenses/hugo-geekdoc.txt",
 )
 
+# The API reference: a page per proto in proto/blitz/v1, with its
+# messages, enums and services as Mermaid class diagrams.
+genrule(
+    name = "api",
+    srcs = ["//proto/blitz/v1:srcs"],
+    outs = ["content/architecture/api/%s.md" % p for p in [
+        "config",
+        "file",
+        "session",
+        "turn",
+        "worker",
+        "workspace",
+    ]],
+    cmd = "$(location api_pages.sh) $(execpath @com_github_googlecloudplatform_proto_gen_md_diagrams//:proto-gen-md-diagrams) $(RULEDIR)/content/architecture/api $(SRCS)",
+    tools = [
+        "api_pages.sh",
+        "@com_github_googlecloudplatform_proto_gen_md_diagrams//:proto-gen-md-diagrams",
+    ],
+)
+
 hugo_site(
     name = "site",
     config = "hugo.yaml",
-    content = glob(["content/**"]),
+    content = glob(["content/**"]) + [":api"],
     # rules_hugo copies a theme's layouts, assets and static files, not its
     # data; Geekdoc finds its fingerprinted assets through this file.
     data = ["@geekdoc//:data/assets.json"],

@@ -47,6 +47,13 @@ go_deps.gazelle_override(
     path = "github.com/rrmcguinness/modenv",
 )
 
+# proto-gen-md-diagrams (the API diagrams on the docs site) ships BUILD
+# files for its own workspace too.
+go_deps.gazelle_override(
+    build_file_generation = "clean",
+    path = "github.com/GoogleCloudPlatform/proto-gen-md-diagrams",
+)
+
 # Wails picks its native window with build tags; keep those files.
 go_deps.gazelle_override(
     build_file_generation = "on",
@@ -61,7 +68,7 @@ go_deps.module_override(
     patches = ["//third_party/wails:linux.patch"],
     path = "github.com/wailsapp/wails/v2",
 )
-use_repo(go_deps, "cc_mvdan_sh_v3", "co_honnef_go_tools", "com_connectrpc_connect", "com_github_anthropics_anthropic_sdk_go", "com_github_aymanbagabas_go_udiff", "com_github_burntsushi_toml", "com_github_charmbracelet_glamour", "com_github_ergochat_readline", "com_github_google_addlicense", "com_github_google_uuid", "com_github_modelcontextprotocol_go_sdk", "com_github_openai_openai_go_v3", "com_github_robfig_cron_v3", "com_github_rrmcguinness_modenv", "com_github_spf13_cobra", "com_github_spf13_pflag", "com_github_stretchr_testify", "com_github_wailsapp_wails_v2", "dev_gvisor_gvisor", "in_gopkg_yaml_v3", "io_opentelemetry_go_contrib_bridges_otelslog", "io_opentelemetry_go_otel", "io_opentelemetry_go_otel_exporters_otlp_otlplog_otlploghttp", "io_opentelemetry_go_otel_exporters_otlp_otlptrace_otlptracehttp", "io_opentelemetry_go_otel_log", "io_opentelemetry_go_otel_sdk", "io_opentelemetry_go_otel_sdk_log", "io_opentelemetry_go_otel_trace", "org_golang_google_adk_v2", "org_golang_google_genai", "org_golang_google_protobuf", "org_golang_x_image", "org_golang_x_net", "org_golang_x_sys", "org_golang_x_term", "org_golang_x_text", "org_golang_x_tools", "org_golang_x_vuln", "org_uber_go_goleak")
+use_repo(go_deps, "cc_mvdan_sh_v3", "co_honnef_go_tools", "com_connectrpc_connect", "com_github_anthropics_anthropic_sdk_go", "com_github_aymanbagabas_go_udiff", "com_github_burntsushi_toml", "com_github_charmbracelet_glamour", "com_github_ergochat_readline", "com_github_google_addlicense", "com_github_google_uuid", "com_github_googlecloudplatform_proto_gen_md_diagrams", "com_github_modelcontextprotocol_go_sdk", "com_github_openai_openai_go_v3", "com_github_robfig_cron_v3", "com_github_rrmcguinness_modenv", "com_github_spf13_cobra", "com_github_spf13_pflag", "com_github_stretchr_testify", "com_github_wailsapp_wails_v2", "dev_gvisor_gvisor", "in_gopkg_yaml_v3", "io_opentelemetry_go_contrib_bridges_otelslog", "io_opentelemetry_go_otel", "io_opentelemetry_go_otel_exporters_otlp_otlplog_otlploghttp", "io_opentelemetry_go_otel_exporters_otlp_otlptrace_otlptracehttp", "io_opentelemetry_go_otel_log", "io_opentelemetry_go_otel_sdk", "io_opentelemetry_go_otel_sdk_log", "io_opentelemetry_go_otel_trace", "org_golang_google_adk_v2", "org_golang_google_genai", "org_golang_google_protobuf", "org_golang_x_image", "org_golang_x_net", "org_golang_x_sys", "org_golang_x_term", "org_golang_x_text", "org_golang_x_tools", "org_golang_x_vuln", "org_uber_go_goleak")
 
 pkg_config = use_extension("//build:pkg_config.bzl", "pkg_config")
 pkg_config.library(

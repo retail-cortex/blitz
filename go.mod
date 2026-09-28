@@ -47,6 +47,7 @@ require (
 	cloud.google.com/go/auth/oauth2adapt v0.2.8 // indirect
 	cloud.google.com/go/compute/metadata v0.9.0 // indirect
 	git.sr.ht/~jackmordaunt/go-toast/v2 v2.0.3 // indirect
+	github.com/GoogleCloudPlatform/proto-gen-md-diagrams v0.0.0-20260825161644-7d6555ce1966 // indirect
 	github.com/alecthomas/chroma/v2 v2.20.0 // indirect
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect
 	github.com/aymerick/douceur v0.2.0 // indirect
@@ -146,6 +147,7 @@ require (
 )
 
 tool (
+	github.com/GoogleCloudPlatform/proto-gen-md-diagrams
 	github.com/google/addlicense
 	golang.org/x/vuln/cmd/govulncheck
 	honnef.co/go/tools/cmd/staticcheck

@@ -17,6 +17,8 @@ The API is defined in `proto/blitz/v1` (package `blitz.v1`) and served with [Con
 | `config.proto` | `ConfigService` | 7 |
 | `worker.proto` | `WorkerService` | 7 |
 
+The [API reference](api/_index.md) has every message, enum and RPC, with class diagrams, generated from the protos.
+
 The generated code is never committed. Bazel generates one Go package (`blitzv1`: the messages, and Connect's clients and handlers) and a TypeScript client for the desktop page. buf lints the protos (`STANDARD`, with a comment on every service, RPC, message and enum) and CI checks each push for breaking changes against the previous commit (a pull request, against its base); a deliberate break is declared with a `Breaking-API: <why>` line in the commit message.
 
 ## Handlers translate, nothing more

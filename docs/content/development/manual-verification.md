@@ -476,3 +476,4 @@ These touch your real keychain and settings: use a test key, or a throwaway `--c
 - [ ] After a push to `main` that changes `docs/`, the **docs** workflow deploys, and https://retail-cortex.github.io/blitz/ shows the change; the architecture page's diagrams render; **Edit page** opens the file on GitHub.
 - [ ] A link to a missing page (`[x](nope.md)` in any page) fails `bazel build //docs:site` with the page and the link named.
 - [ ] On a phone-width window, the menu opens from the ☰ button and no page scrolls sideways.
+- [ ] Architecture › API reference: a page per proto; every diagram draws (the workspace page has 100 and takes a few seconds), in light and dark mode; a comment with a placeholder (`turn.proto`'s `plan` field: "/plan <text>") shows the placeholder.

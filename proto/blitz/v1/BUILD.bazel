@@ -30,6 +30,13 @@ proto_library(
     ],
 )
 
+# The sources themselves, for the docs site's API reference (//docs:api).
+filegroup(
+    name = "srcs",
+    srcs = glob(["*.proto"]),
+    visibility = ["//docs:__pkg__"],
+)
+
 go_proto_library(
     name = "blitzv1_go_proto",
     compilers = [

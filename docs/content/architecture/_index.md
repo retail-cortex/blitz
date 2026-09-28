@@ -53,6 +53,6 @@ This is why the CLI behaves the same attached or local, and why a session starte
 ## Where to read next
 
 - [The engine](engine.md): a workspace, a turn, and the ADK.
-- [The service API](service-api.md): the protos, streaming turns, approvals across processes.
+- [The service API](service-api.md): the protos, streaming turns, approvals across processes; and the [API reference](api/_index.md), generated from them.
 - [Sandboxing and trust](security.md): the layers between the model and your machine.
 - [The build](build.md): Bazel, generated code, static analysis, reproducible releases.

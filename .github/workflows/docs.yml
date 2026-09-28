@@ -14,14 +14,15 @@
 
 name: docs
 
-# The documentation site (docs/): built by Bazel on every change to it, and
-# published to GitHub Pages from main.
+# The documentation site (docs/): built by Bazel on every change to it or
+# to the protos its API reference is generated from, and published to
+# GitHub Pages from main.
 on:
   push:
     branches: [main]
-    paths: ["docs/**", ".github/workflows/docs.yml"]
+    paths: ["docs/**", "proto/**", ".github/workflows/docs.yml"]
   pull_request:
-    paths: ["docs/**", ".github/workflows/docs.yml"]
+    paths: ["docs/**", "proto/**", ".github/workflows/docs.yml"]
   workflow_dispatch:
 
 permissions:

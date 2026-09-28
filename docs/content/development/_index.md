@@ -58,6 +58,13 @@ bazel test //pkg/engine/tools:tools_test --test_env=BLITZ_PYENV_TESTS=1 --test_f
 
 Everything goes through Bazel; host `go`, `pnpm` or `buf` commands are a last resort (`bazel run @rules_go//go -- …` is the go command). Plain `go build` and `go test` don't work anyway: `proto/blitz/v1` exists only in the build. Editors: point gopls at Bazel with `GOPACKAGESDRIVER=$PWD/tools/gopackagesdriver.sh`; for the page's generated code, `bazel build //apps/desktop/web:api_ts` once. Static analysis (vet, staticcheck) runs in every compile; silence one finding with `//nolint:<check>`.
 
+## The docs
+
+This site is in `docs/`: Markdown pages in `docs/content/`, built by Hugo with the Geekdoc theme through Bazel (`bazel build //docs:site`; `bazel run //docs:serve` previews it). Link pages by their files (`../guide/safety.md`); a link to a missing page fails the build.
+
+- **Diagrams** are Mermaid: a fenced code block with the language `mermaid` (flowcharts, sequence, class and state diagrams, …) renders as a diagram, in both themes. Geekdoc's code-block render hook loads Mermaid only on pages that use it.
+- **The API reference** (`architecture/api/`) is generated, never written: `//docs:api` runs [proto-gen-md-diagrams](https://github.com/GoogleCloudPlatform/proto-gen-md-diagrams) (a `go.mod` tool, built by Bazel) over `proto/blitz/v1`, and `docs/api_pages.sh` makes its Markdown into pages. A new proto file needs adding to the list in `docs/BUILD.bazel`; better comments in the protos make better pages.
+
 ## Conventions
 
 - One commit per feature, with a message explaining why.
