@@ -91,4 +91,5 @@ js_run_devserver(
     chdir = package_name(),
     data = _inputs,
     tool = ":vite",
+    visibility = ["//:__pkg__"],
 )

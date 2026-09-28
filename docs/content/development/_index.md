@@ -35,10 +35,13 @@ A monorepo of independent apps over shared packages, one Go module. The rule: **
 
 ## Commands
 
+The short names (`//:blitz`, `//:desktop`, `//:build-all`, …) are aliases in the root `BUILD.bazel`, which lists them all.
+
 ```bash
 bazel build //...               # everything; binaries in bazel-bin/apps/{cli,service,desktop}
+bazel build //:build-all        # this machine's programs and desktop package (//:build-all-linux, //:build-all-mac)
 bazel test //...                # every test (cached: only what changed runs again)
-bazel run //apps/cli:blitz -- doctor --online
+bazel run //:blitz -- doctor --online   # the CLI; //:blitzd the service
 bazel run //tools:check_deps    # apps depend on pkg/ only; front ends never on the engine
 bazel run //:gazelle            # after adding a Go package or an import: update the BUILD files
 bazel test --config=race //...  # the Go tests with the race detector, as CI runs them
@@ -47,13 +50,13 @@ tools/check_format.sh           # gofmt, BUILD files as Gazelle writes them, lic
 bazel run //tools:license_headers   # add the Apache header to new files
 tools/third_party_notices.sh    # regenerate THIRD_PARTY_NOTICES after changing dependencies
 bazel run //tools/specs         # the specs' index and the paths they name
-bazel run //docs:serve          # this site at http://localhost:1313
+bazel run //:docs               # this site at http://localhost:1313
 tools/coverage.sh               # test coverage of apps/ and pkg/; fails below tools/coverage/floor.txt
 bazel run //tools/codeowners    # .github/CODEOWNERS from OWNERS.txt
-bazel run //apps/desktop:blitz-desktop   # the desktop app (it finds its blitzd in the runfiles)
-bazel run //apps/desktop/web:dev   # the desktop page in a browser (?fake: no service needed)
-bazel build //apps/desktop/packaging:Blitz.app   # the desktop app (macOS; :deb on Linux, which needs webkit2gtk)
-bazel build //release:archives  # the CLI release archives, every platform
+bazel run //:desktop            # the desktop app (it finds its blitzd in the runfiles)
+bazel run //:desktop-web        # the desktop page in a browser (?fake: no service needed)
+bazel build //:mac-app          # the desktop app (macOS; //:deb on Linux, which needs webkit2gtk)
+bazel build //:archives         # the CLI release archives, every platform
 BLITZ_TELEMETRY=1 BLITZ_LOG_LEVEL=debug bazel run //apps/cli:blitz   # traces to http://localhost:4318; logs in ~/.blitz/logs
 bazel test //pkg/engine/tools:tools_test --test_env=BLITZ_PYENV_TESTS=1 --test_filter='PyEnv|InstallsPackages'   # real Python environments (network)
 ```

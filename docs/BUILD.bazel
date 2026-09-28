@@ -92,4 +92,5 @@ hugo_site(
 hugo_serve(
     name = "serve",
     dep = [":site"],
+    visibility = ["//:__pkg__"],
 )

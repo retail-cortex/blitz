@@ -92,6 +92,7 @@ pkg_zip(
 filegroup(
     name = "archives",
     srcs = [":blitz_%s_%s" % (goos, goarch) for goos, goarch in _PLATFORMS],
+    visibility = ["//:__pkg__"],
 )
 
 # The archives carry the license files.

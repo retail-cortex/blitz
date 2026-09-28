@@ -43,3 +43,92 @@ exports_files(
         "//release:__pkg__",
     ],
 )
+
+# ---- Short names for what developers build and run, so nobody has to
+# look for them (README.md, "Build, test and run"):
+#
+#   bazel run //:blitz -- doctor         the CLI (arguments after --)
+#   bazel run //:blitzd                  the service, in the foreground
+#   bazel run //:desktop                 the desktop app, with its own blitzd
+#   bazel run //:desktop-web             the desktop page in a browser (?fake)
+#   bazel run //:docs                    the docs site, http://localhost:1313
+#   bazel build //:deb                   the desktop .deb (Linux)
+#   bazel build //:mac-app               Blitz.app (macOS)
+#   bazel build //:archives              every platform's release archive
+#   bazel build //:build-all             everything this machine can build:
+#                                        //:build-all-linux or -mac
+
+alias(
+    name = "blitz",
+    actual = "//apps/cli:blitz",
+)
+
+alias(
+    name = "blitzd",
+    actual = "//apps/service:blitzd",
+)
+
+alias(
+    name = "desktop",
+    actual = "//apps/desktop:blitz-desktop",
+)
+
+alias(
+    name = "desktop-web",
+    actual = "//apps/desktop/web:dev",
+)
+
+alias(
+    name = "docs",
+    actual = "//docs:serve",
+)
+
+alias(
+    name = "deb",
+    actual = "//apps/desktop/packaging:deb",
+)
+
+alias(
+    name = "mac-app",
+    actual = "//apps/desktop/packaging:Blitz.app",
+)
+
+alias(
+    name = "archives",
+    actual = "//release:archives",
+)
+
+# The programs and the desktop package for this machine. Manual: //...
+# already builds each of them, and one OS's set fails on the other.
+filegroup(
+    name = "build-all-linux",
+    srcs = [
+        ":blitz",
+        ":blitzd",
+        ":deb",
+        ":desktop",
+    ],
+    tags = ["manual"],
+    target_compatible_with = ["@platforms//os:linux"],
+)
+
+filegroup(
+    name = "build-all-mac",
+    srcs = [
+        ":blitz",
+        ":blitzd",
+        ":desktop",
+        ":mac-app",
+    ],
+    tags = ["manual"],
+    target_compatible_with = ["@platforms//os:macos"],
+)
+
+alias(
+    name = "build-all",
+    actual = select({
+        "@platforms//os:linux": ":build-all-linux",
+        "@platforms//os:macos": ":build-all-mac",
+    }),
+    tags = ["manual"],
+)

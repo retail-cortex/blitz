@@ -90,20 +90,22 @@ Building on Windows isn't supported: use WSL 2 and the Linux steps. The Windows 
 ### Build, test and run
 
 ```bash
-bazel build //apps/cli:blitz //apps/service:blitzd       # bazel-bin/apps/cli/blitz, bazel-bin/apps/service/blitzd
-bazel test //...                                         # every test: Go, the desktop page, the protos
-bazel run //apps/cli:blitz -- doctor                     # run the CLI (arguments after --)
-bazel run //apps/service:blitzd                          # run the service in the foreground
+bazel build //:build-all                  # everything for this machine: //:build-all-linux or //:build-all-mac
+bazel test //...                          # every test: Go, the desktop page, the protos
 
-bazel run //apps/desktop:blitz-desktop                   # the desktop app, with its own blitzd
-bazel run //apps/desktop/web:dev                         # the desktop page in a browser, http://localhost:5173/?fake
-bazel build //apps/desktop/packaging:Blitz.app           # macOS app bundle (universal)
-bazel build //apps/desktop/packaging:deb                 # Linux: bazel-bin/apps/desktop/packaging/blitz-desktop_amd64.deb
-sudo apt install ./bazel-bin/apps/desktop/packaging/blitz-desktop_amd64.deb   # the ./ makes apt read the file
+bazel run //:blitz -- doctor              # the CLI (arguments after --); built at bazel-bin/apps/cli/blitz
+bazel run //:blitzd                       # the service, in the foreground
+bazel run //:desktop                      # the desktop app, with its own blitzd
+bazel run //:desktop-web                  # the desktop page in a browser, http://localhost:5173/?fake
+bazel run //:docs                         # the docs site, http://localhost:1313
 
-bazel build --config=release //release:archives          # the release archives, every platform, version from git
-bazel run //docs:serve                                   # the docs site, http://localhost:1313
+bazel build //:mac-app                    # macOS: Blitz.app (universal)
+bazel build //:deb                        # Linux: bazel-bin/apps/desktop/packaging/blitz-desktop_amd64.deb
+sudo dpkg -i bazel-bin/apps/desktop/packaging/blitz-desktop_amd64.deb   # reinstalls even at the same version
+bazel build --config=release //:archives  # the release archives, every platform, version from git
 ```
+
+The short names are aliases in the root `BUILD.bazel`, which lists them; the full labels still work.
 
 ### Common problems
 
