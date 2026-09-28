@@ -52,12 +52,21 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0 # buf breaking compares with the previous commit
+      # The disk cache's key hashes MODULE.bazel and every BUILD file: a
+      # change to one restores the last cache and saves it again, with this
+      # run's outputs added. Pull requests restore main's caches but don't
+      # save their own, which only that pull request could use.
       - name: Set up Bazel
         uses: bazel-contrib/setup-bazel@c5acdfb288317d0b5c0bbd7a396a3dc868bb0f86 # 0.19.0
         with:
           bazelisk-cache: true
           disk-cache: ${{ github.workflow }}-${{ matrix.os }}
           repository-cache: true
+          cache-save: ${{ github.event_name != 'pull_request' }}
+      # Bazel touches each disk cache entry it reads or writes: what this
+      # run didn't touch is removed before the cache is saved (below).
+      - name: Mark the build's start
+        run: touch "$RUNNER_TEMP/build-start"
       # Linux runs the real bubblewrap sandbox tests, and builds the
       # desktop app against the system's GTK and WebKitGTK.
       - name: Linux packages
@@ -161,6 +170,16 @@ jobs:
         with:
           name: sums-${{ runner.os }}
           path: sums-${{ runner.os }}.txt
+      # Otherwise the disk cache only grows: every entry any earlier run
+      # wrote is restored and saved again (it reached 4.6 GB on macOS).
+      # Only after a whole run, so that everything the build needs was
+      # touched.
+      - name: Keep only this run's disk cache entries
+        if: success()
+        run: |
+          du -sh ~/.cache/bazel-disk
+          find ~/.cache/bazel-disk -type f ! -newer "$RUNNER_TEMP/build-start" -delete
+          du -sh ~/.cache/bazel-disk
       # setup-bazel saves its caches after the job, compressing them on the
       # runner's disk, which the build has all but filled on Linux. The
       # output tree isn't cached; removing it makes room.
@@ -181,3 +200,31 @@ jobs:
           merge-multiple: true
       - name: Linux and macOS built the same archives
         run: diff sums-Linux.txt sums-macOS.txt
+
+  # A cache is never updated, only saved again under a new key, and GitHub
+  # keeps the superseded ones for a week: on main, keep only the newest
+  # setup-bazel cache of each kind (OS, workflow, disk or repository).
+  prune-caches:
+    needs: build
+    if: always() && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+      - name: Delete superseded caches
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          declare -A newest
+          gh cache list --ref refs/heads/main --key setup-bazel- --sort created_at --order desc --limit 100 \
+            --json id,key,sizeInBytes --jq '.[] | "\(.id) \(.sizeInBytes) \(.key)"' |
+            while read -r id size key; do
+              kind="${key%-*}" # the key without its hash
+              if [ -n "${newest[$kind]:-}" ]; then
+                echo "deleting $key ($((size / 1000000)) MB)"
+                gh cache delete "$id"
+              else
+                newest[$kind]=1
+              fi
+            done

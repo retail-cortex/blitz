@@ -50,6 +50,7 @@ jobs:
           bazelisk-cache: true
           disk-cache: ${{ github.workflow }}
           repository-cache: true
+          cache-save: ${{ github.event_name != 'pull_request' }}
       # The specs live in the site; a docs-only change skips ci.yml.
       - run: bazel run //tools/specs
       # The coverage page's report: from the CI run that triggered this one,
