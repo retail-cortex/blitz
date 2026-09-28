@@ -548,7 +548,7 @@ The owner's review found the project not ready to release ([spec_release_readine
 4. **The docs site**: every document moved into `docs/`, built by Hugo (rules_hugo, the Geekdoc theme) through Bazel and published to GitHub Pages: products, guide, architecture, shared packages, development, and about (performance, roadmap, history, specs). A link to a missing page fails the build.
 
 5. **README, contributing and owners**: the README short (what, why, install, quick start, building from source on each OS, common problems), `docs/CONTRIBUTING.md` (also on the site), `OWNERS.txt` with `CODEOWNERS` generated from it.
-6. **Test coverage**: measured in CI on every push (78.7% at first), with a floor that fails the build if it drops, and a coverage page on the site.
+6. **Test coverage**: measured in CI on every push (78.6% at first; the floor is 78%), with a floor that fails the build if it drops, and a coverage page on the site.
 
 Next: raise coverage where it's lowest (the client, the desktop app's Go side, secrets, the login item).
 

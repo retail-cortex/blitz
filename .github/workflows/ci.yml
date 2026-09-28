@@ -27,8 +27,9 @@ permissions:
 
 jobs:
   # Everything goes through Bazel (the runners ship Bazelisk; .bazelversion
-  # picks Bazel): Go, the page, the protos, the tools.
-  test:
+  # picks Bazel): Go, the page, the protos, the tools. One job per OS
+  # builds, tests and checks everything.
+  build:
     strategy:
       fail-fast: false
       matrix:
@@ -47,10 +48,12 @@ jobs:
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL /usr/local/share/boost /usr/local/share/powershell
           sudo docker image prune --all --force > /dev/null 2>&1 || true
           df -h /
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0 # buf breaking compares with the previous commit
-      - uses: bazel-contrib/setup-bazel@c5acdfb288317d0b5c0bbd7a396a3dc868bb0f86 # 0.19.0
+      - name: Set up Bazel
+        uses: bazel-contrib/setup-bazel@c5acdfb288317d0b5c0bbd7a396a3dc868bb0f86 # 0.19.0
         with:
           bazelisk-cache: true
           disk-cache: ${{ github.workflow }}-${{ matrix.os }}
@@ -78,18 +81,22 @@ jobs:
           echo "RUNSC_PATH=$RUNNER_TEMP/gvisor/runsc" >> "$GITHUB_ENV"
       # gofmt, and BUILD files as Gazelle writes them. (vet and staticcheck
       # run in every compile: nogo.)
-      - run: tools/check_format.sh
+      - name: Formatting and license headers
+        run: tools/check_format.sh
       # Every test, the Go ones with the race detector: Go, the page's
       # vitest and type check, the proto lint.
-      - if: runner.os != 'Linux'
+      - name: Tests
+        if: runner.os != 'Linux'
         run: bazel test --config=race //...
       # On Linux, where the sandbox and gVisor tests also run, the same
       # tests run instrumented: the coverage of apps/ and pkg/ goes into the
       # job summary, and the job fails below tools/coverage/floor.txt.
       # docs.yml publishes the report on the site.
-      - if: runner.os == 'Linux'
+      - name: Tests, with coverage
+        if: runner.os == 'Linux'
         run: tools/coverage.sh --config=race -- --markdown="$GITHUB_STEP_SUMMARY"
-      - if: runner.os == 'Linux'
+      - name: Upload the coverage report
+        if: runner.os == 'Linux'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: coverage
@@ -106,14 +113,18 @@ jobs:
             --test_arg=-test.v --test_arg=-test.run=TestGVisor | tee gv.txt
           if grep -q -- '--- SKIP' gv.txt; then exit 1; fi
       # Apps depend on pkg/ only; front ends never on the engine.
-      - run: bazel run //tools:check_deps
+      - name: Dependency rules
+        run: bazel run //tools:check_deps
       # THIRD_PARTY_NOTICES matches what the programs link, and every
       # license in it is one Blitz accepts.
-      - run: tools/third_party_notices.sh --check
+      - name: Third-party notices
+        run: tools/third_party_notices.sh --check
       # Every spec is indexed and every repository path it names exists.
-      - run: bazel run //tools/specs
+      - name: Specs
+        run: bazel run //tools/specs
       # .github/CODEOWNERS is generated from OWNERS.txt.
-      - run: bazel run //tools/codeowners -- --check
+      - name: Code owners
+        run: bazel run //tools/codeowners -- --check
       # Fails only on a vulnerability the code can reach. The scan needs the
       # symbol table to see which packages are linked: without it, every
       # advisory in a required module counts (GO-2026-5932, all of x/crypto
@@ -138,12 +149,15 @@ jobs:
             bazel run //tools:buf -- breaking --against ".git#ref=$BASE"
           fi
       # The release archives, which the reproducible job compares.
-      - run: bazel build //release:archives
-      - run: |
+      - name: Release archives
+        run: bazel build //release:archives
+      - name: Archive checksums
+        run: |
           for f in $(bazel cquery --output=files //release:archives); do
             shasum -a 256 "$f" | awk -v n="$(basename "$f")" '{print $1, n}'
           done > sums-${{ runner.os }}.txt
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - name: Upload the checksums
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: sums-${{ runner.os }}
           path: sums-${{ runner.os }}.txt
@@ -157,11 +171,13 @@ jobs:
   # The release archives, built on Linux and on macOS, must come out byte
   # for byte identical: the build may not depend on the machine.
   reproducible:
-    needs: test
+    needs: build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      - name: Download the checksums
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           pattern: sums-*
           merge-multiple: true
-      - run: diff sums-Linux.txt sums-macOS.txt
+      - name: Linux and macOS built the same archives
+        run: diff sums-Linux.txt sums-macOS.txt
