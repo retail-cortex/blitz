@@ -340,6 +340,16 @@
 .palette-foot { padding: 8px 20px; border-top: 1px solid var(--md-outline-variant); }
 
 /* Providers & keys, and the settings file */
+/* The provider, model and sign-in saved as one change: two fields a row,
+   one in the narrow run settings panel. */
+.provider-choice { display: flex; flex-direction: column; gap: 16px; }
+.provider-choice .pair { display: grid; grid-template-columns: minmax(160px, 1fr) 2fr; gap: 12px 16px; }
+.provider-choice .pair.even { grid-template-columns: 1fr 1fr; }
+.provider-choice.compact { padding: 12px; }
+.provider-choice.compact .pair { grid-template-columns: 1fr; }
+.provider-choice .single { max-width: 480px; }
+.provider-choice .field .select, .provider-choice .field .input { width: 100%; }
+.provider-choice .seg { align-self: flex-start; }
 .provider-row { padding: 12px 0; border-bottom: 1px solid var(--md-outline-variant); }
 .provider-row:last-child { border-bottom: none; }
 .provider-row .field { max-width: 480px; }

@@ -21,11 +21,13 @@ import { message } from "./errors";
 import { configChanged } from "./events";
 import { KeySource, type ConfigChange, type DescribeConfigResponse, type ProviderConfig } from "./gen/blitz/v1/config_pb";
 import { t } from "./i18n";
-import { Button, Chip, Icon, useSnackbar } from "./ui/controls";
+import { Button, Chip, Icon, Segmented, useSnackbar } from "./ui/controls";
 
 /** Providers llm.provider can name; the first three take API keys. */
 const providers = ["gemini", "anthropic", "openai", "ollama"];
 const providerNames: Record<string, string> = { gemini: "Gemini", anthropic: "Anthropic", openai: "OpenAI", ollama: "Ollama" };
+/** The models a provider's sign-in notes speak of. */
+const modelNames: Record<string, string> = { gemini: "Gemini", anthropic: "Claude" };
 
 const sourceKeys: Record<KeySource, string> = {
   [KeySource.UNSPECIFIED]: "none",
@@ -151,7 +153,7 @@ export function ProviderSettings({ workspace, compact }: { workspace: string; co
   const onEnter = (e: KeyboardEvent) => e.key === "Enter" && save();
   const set = (field: keyof Choice) => (e: { target: { value: string } }) => setChoice({ ...choice, [field]: e.target.value });
   const text = (field: "projectId" | "location" | "profile", label: string, placeholder: string) => (
-    <label className="field" style={{ flex: 1 }}>
+    <label className="field">
       <span className="t-label">{t(label)}</span>
       <input className="input mono" value={choice[field]} placeholder={t(placeholder)} spellCheck={false} disabled={busy} onChange={set(field)} onKeyDown={onEnter} />
     </label>
@@ -161,51 +163,62 @@ export function ProviderSettings({ workspace, compact }: { workspace: string; co
       <p className="t-body-sm muted">
         <Icon path={mdiLockOutline} size="sm" /> {t(workspace ? "desktop.keys.intro_workspace" : "desktop.keys.intro", { store: desc.secretStore })}
       </p>
-      <div className={compact ? "stack" : "row wrap"} style={{ gap: 12 }}>
-        <label className="field">
-          <span className="t-label">{t("desktop.keys.provider")}</span>
-          <select className="select" value={choice.provider} disabled={busy} onChange={(e) => setChoice(savedChoice(desc, e.target.value, choice.model))}>
-            <option value="">{t(workspace ? "desktop.keys.use_global" : "desktop.keys.provider_default")}</option>
-            {providers.map((p) => (
-              <option key={p} value={p}>
-                {providerNames[p]}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="field" style={{ flex: 1 }}>
-          <span className="t-label">{t("desktop.keys.default_model")}</span>
-          <input
-            className="input mono"
-            value={choice.model}
-            placeholder={t(workspace ? "desktop.keys.use_global" : "desktop.keys.model_placeholder")}
-            disabled={busy}
-            onChange={set("model")}
-            onKeyDown={onEnter}
-          />
-        </label>
-        {keyed && others.length > 0 && (
+      <section className={`card provider-choice ${compact ? "compact" : ""}`}>
+        <div className="pair">
           <label className="field">
-            <span className="t-label">{t("desktop.keys.sign_in")}</span>
-            <select className="select" value={choice.method} disabled={busy} onChange={set("method")}>
-              <option value="api_key">{t("desktop.keys.auth.api_key")}</option>
-              {others.map((m) => (
-                <option key={m} value={m}>
-                  {t(`desktop.keys.auth.${m}`)}
+            <span className="t-label">{t("desktop.keys.provider")}</span>
+            <select className="select" value={choice.provider} disabled={busy} onChange={(e) => setChoice(savedChoice(desc, e.target.value, choice.model))}>
+              <option value="">{t(workspace ? "desktop.keys.use_global" : "desktop.keys.provider_default")}</option>
+              {providers.map((p) => (
+                <option key={p} value={p}>
+                  {providerNames[p]}
                 </option>
               ))}
             </select>
           </label>
+          <label className="field">
+            <span className="t-label">{t("desktop.keys.default_model")}</span>
+            <input
+              className="input mono"
+              value={choice.model}
+              placeholder={t(workspace ? "desktop.keys.use_global" : "desktop.keys.model_placeholder")}
+              disabled={busy}
+              onChange={set("model")}
+              onKeyDown={onEnter}
+            />
+          </label>
+        </div>
+        {keyed && others.length > 0 && (
+          <div className="field">
+            <span className="t-label">{t("desktop.keys.sign_in")}</span>
+            {compact ? (
+              <select className="select" aria-label={t("desktop.keys.sign_in")} value={choice.method} disabled={busy} onChange={set("method")}>
+                {["api_key", ...others].map((m) => (
+                  <option key={m} value={m}>
+                    {t(`desktop.keys.auth.${m}`)}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <Segmented
+                small
+                label={t("desktop.keys.sign_in")}
+                value={choice.method}
+                options={["api_key", ...others].map((m) => ({ value: m, label: t(`desktop.keys.auth.${m}`) }))}
+                onChange={(method) => !busy && setChoice({ ...choice, method })}
+              />
+            )}
+          </div>
         )}
         {keyed && choice.method === "adc" && (
-          <>
+          <div className="pair even">
             {text("projectId", "desktop.keys.project", "desktop.keys.project_placeholder")}
             {text("location", "desktop.keys.location", "desktop.keys.location_placeholder")}
-          </>
+          </div>
         )}
-        {keyed && choice.method === "oauth" && text("profile", "desktop.keys.profile", "desktop.keys.profile_placeholder")}
+        {keyed && choice.method === "oauth" && <div className="single">{text("profile", "desktop.keys.profile", "desktop.keys.profile_placeholder")}</div>}
         {keyed && choice.method === "api_key" && (
-          <label className="field" style={{ flex: 1 }}>
+          <label className="field single">
             <span className="t-label">{t("desktop.keys.key_label", { provider: providerNames[keyed.name] ?? keyed.name })}</span>
             <input
               className="input mono"
@@ -220,16 +233,16 @@ export function ProviderSettings({ workspace, compact }: { workspace: string; co
             />
           </label>
         )}
-      </div>
-      {keyed && choice.method !== "api_key" && <p className="t-body-sm muted">{t(`desktop.keys.${choice.method}_hint`, { provider: providerNames[choice.provider] ?? choice.provider })}</p>}
-      <div className="row" style={{ justifyContent: "flex-end", gap: 8 }}>
-        <Button small disabled={!dirty || busy} onClick={() => setChoice(savedChoice(desc, desc.provider))}>
-          {t("desktop.file.revert")}
-        </Button>
-        <Button small variant="filled" disabled={!dirty || busy} onClick={save}>
-          {t("desktop.keys.save")}
-        </Button>
-      </div>
+        {keyed && choice.method !== "api_key" && <p className="t-body-sm muted">{t(`desktop.keys.${choice.method}_hint`, { provider: modelNames[choice.provider] ?? choice.provider })}</p>}
+        <div className="row" style={{ justifyContent: "flex-end", gap: 8 }}>
+          <Button small disabled={!dirty || busy} onClick={() => setChoice(savedChoice(desc, desc.provider))}>
+            {t("desktop.file.revert")}
+          </Button>
+          <Button small variant="filled" disabled={!dirty || busy} onClick={save}>
+            {t("desktop.keys.save")}
+          </Button>
+        </div>
+      </section>
       {modelError && (
         <p className="card warn row t-body-sm">
           <Icon path={mdiAlertCircleOutline} size="sm" />

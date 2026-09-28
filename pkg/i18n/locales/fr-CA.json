@@ -754,7 +754,7 @@
     "desktop.keys.project_from_env": "de GOOGLE_CLOUD_PROJECT",
     "desktop.keys.location": "Emplacement",
     "desktop.keys.location_placeholder": "global",
-    "desktop.keys.profile": "Profil ant",
+    "desktop.keys.profile": "Profil (ant auth login)",
     "desktop.keys.profile_placeholder": "Le profil actif d'ant",
     "desktop.keys.adc_hint": "{provider} s'exécute sur Vertex AI avec les identifiants par défaut de l'application de l'ordinateur où tourne le service Blitz : connectez-vous-y avec gcloud auth application-default login.",
     "desktop.keys.oauth_hint": "Claude utilise la connexion Anthropic Console de l'ordinateur où tourne le service Blitz : connectez-vous-y avec ant auth login. L'utilisation de l'API est facturée à cette organisation.",

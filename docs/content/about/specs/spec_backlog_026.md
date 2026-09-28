@@ -7,7 +7,7 @@ weight: 26
 
 | | |
 |---|---|
-| Status | **Partly implemented:** 13 of its 45 requirements done (counted 2026-09-27); the rest open. Forward-looking requirements, collected 2026-09-26 from the known-gaps sections of specs 001–025, the roadmap (`docs/content/about/roadmap.md`) (item gaps, the Antigravity review's candidates) and `.agents/NEXT_STEPS.md` |
+| Status | **Partly implemented:** 13 of its 49 requirements done (counted 2026-09-28); the rest open. Forward-looking requirements, collected 2026-09-26 from the known-gaps sections of specs 001–025, the roadmap (`docs/content/about/roadmap.md`) (item gaps, the Antigravity review's candidates) and `.agents/NEXT_STEPS.md` |
 | Depends on | Everything before it: each item extends the spec named in its **Extends** line |
 
 ## 1. Purpose
@@ -32,6 +32,12 @@ Suggested order (from NEXT_STEPS): run the manual checks (§9) first — their f
 **Extends** [spec_engine_016](spec_engine_016.md) ENG-82. Usage lives in memory only, so after `--resume` (or a service restart) `/cost` and `/context` start at zero and a worker run's cost is known only while the service runs.
 - **BL-ENG-10** A session's cumulative usage (calls, tokens by kind, cost, priced flag, last prompt size) is stored in its metadata after each model call's turn and restored when the session is opened.
 - **BL-ENG-11** `/context` after resuming reports the last prompt's size, not 0.
+
+### 2.3 Signing in with Google Cloud and Anthropic accounts — S
+**Extends** [spec_models_015](spec_models_015.md) (Gemini and Claude on Vertex AI, `auth = "adc"`; Claude with `auth = "oauth"`). Found 2026-09-28 trying Claude Opus 5.5 on Vertex AI, which answered `429 RESOURCE_EXHAUSTED` (no quota yet for the project).
+- **BL-ENG-20** A quota error from Vertex AI (`429` with `RESOURCE_EXHAUSTED`, "Quota exceeded for …") is reported as quota, with Google's message and the quota to raise, not as "rate limited": in `blitz doctor --online` (the whole message, not its first line), the "model isn't available" note, and a turn's error.
+- **BL-ENG-21** `thinking_budget` on current Claude models: a budget above 0 sends `budget_tokens`, which Claude Opus 4.7 and later, Claude Sonnet 5 and Fable reject (400); `0` sends thinking disabled, which Claude Opus 5.5 and Fable reject. On those models thinking stays adaptive and the setting maps to effort, or is reported as unsupported (MDL-72).
+- **BL-ENG-22** Claude on Vertex AI has no server-side refusal fallback (it's off there): use the SDK's client-side fallback middleware (`lib/betafallback`) with per-conversation state, so `fallbacks` works on Vertex AI too.
 
 ## 3. Sessions
 
@@ -141,6 +147,7 @@ Suggested order (from NEXT_STEPS): run the manual checks (§9) first — their f
 Not code, but blocking confidence in the specs above. *Source: ROADMAP 9, MANUAL_VERIFICATION.*
 - **BL-VER-01** Run every unchecked item of `MANUAL_VERIFICATION.md` (real providers 💲, terminal behaviour, macOS and Linux sandboxes, MCP, steering, fallback and pinning, the service, workers and the desktop app — §§36–37), and record results there; each failure becomes a backlog item here.
 - **BL-VER-02** Verify the first release from `retail-cortex/blitz` against its new cosign identity (§18).
+- **BL-VER-04** Claude on Vertex AI, live, once project `rmcguinness-lab` has Claude Opus quota (requested after 2026-09-28; `global` and `us-east5` both answered `429 RESOURCE_EXHAUSTED`): `blitz config set-auth anthropic adc`, then `blitz doctor --online` and a session with Claude Opus 5.5 (streaming, a tool call, an image, prompt caching in `/cost`), and the desktop form's "Google Cloud (ADC)". Blitz's side was checked up to the request: the credentials, the Vertex path and the model were accepted.
 - **BL-VER-03** Windows: build, run, and document what's unsupported (no OS sandbox, no process guard, no skill scripts; shell tools need Git Bash or WSL).
 
 ## 10. Deliberate limitations (not backlog)
