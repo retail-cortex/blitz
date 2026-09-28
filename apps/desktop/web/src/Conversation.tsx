@@ -261,7 +261,10 @@ export function Conversation({
           { signal: ctl.signal },
         );
         for await (const res of stream) {
-          const ev = res.event!;
+          // The desktop app keeps a quiet stream moving with empty messages
+          // (proxy.go): WebKitGTK may hold back what came before a pause.
+          const ev = res.event;
+          if (!ev) continue;
           const taskList = tasksOf(ev);
           if (taskList) setTasks(taskList);
           else if (ev.kind.case === "approvalRequest") setPending({ kind: "approval", req: ev.kind.value });

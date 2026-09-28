@@ -15,7 +15,10 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"encoding/binary"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -96,4 +99,113 @@ func TestProxyWithoutAService(t *testing.T) {
 	c := pb.NewWorkspaceServiceClient(http.DefaultClient, page.URL)
 	_, err := c.GetModel(context.Background(), connect.NewRequest(&pb.GetModelRequest{Workspace: "/x"}))
 	assert.Equal(t, connect.CodeUnavailable, connect.CodeOf(err), "err %v (code %v)", err, connect.CodeOf(err))
+}
+
+// frame is a Connect stream message: flags, length, payload.
+func frame(flags byte, payload string) []byte {
+	b := make([]byte, 5, 5+len(payload))
+	b[0] = flags
+	binary.BigEndian.PutUint32(b[1:], uint32(len(payload)))
+	return append(b, payload...)
+}
+
+// messages splits a Connect stream into its messages' payloads, "(end)"
+// marking the end-of-stream message.
+func messages(t *testing.T, stream []byte) []string {
+	t.Helper()
+	var out []string
+	for len(stream) > 0 {
+		require.GreaterOrEqual(t, len(stream), 5, "a message cut short")
+		n := int(binary.BigEndian.Uint32(stream[1:5]))
+		payload := string(stream[5 : 5+n])
+		if stream[0]&2 != 0 {
+			payload = "(end)" + payload
+		}
+		out = append(out, payload)
+		stream = stream[5+n:]
+	}
+	return out
+}
+
+// A quiet Connect stream gets empty messages, never inside a message or
+// after the end, so a web view that holds back data before a pause gets it.
+func TestKeepalive(t *testing.T) {
+	const interval = 20 * time.Millisecond
+	for _, tc := range []struct {
+		name  string
+		write func(w io.Writer)
+		want  []string
+	}{
+		{
+			name: "a pause between messages",
+			write: func(w io.Writer) {
+				w.Write(frame(0, `{"event":1}`))
+				time.Sleep(3 * interval)
+				w.Write(frame(2, `{}`))
+			},
+			want: []string{`{"event":1}`, "{}", "(end){}"},
+		},
+		{
+			name: "a message arriving in pieces",
+			write: func(w io.Writer) {
+				m := frame(0, `{"event":"long"}`)
+				w.Write(m[:3])
+				time.Sleep(3 * interval)
+				w.Write(m[3:9])
+				time.Sleep(3 * interval)
+				w.Write(m[9:])
+				w.Write(frame(2, `{}`))
+			},
+			want: []string{"{}", `{"event":"long"}`, "(end){}"},
+		},
+		{
+			name: "quiet after the end",
+			write: func(w io.Writer) {
+				w.Write(frame(0, `{"event":1}`))
+				w.Write(frame(2, `{}`))
+				time.Sleep(5 * interval)
+			},
+			want: []string{`{"event":1}`, "(end){}"},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r, w := io.Pipe()
+			go func() { tc.write(w); w.Close() }()
+			empty, ok := emptyMessage("application/connect+json")
+			require.True(t, ok)
+			got, err := io.ReadAll(newKeepalive(r, interval, empty))
+			require.NoError(t, err)
+			msgs := messages(t, got)
+			// Timing decides how many empty messages a pause gets; one or more.
+			var squashed []string
+			for _, m := range msgs {
+				if m == "{}" && len(squashed) > 0 && squashed[len(squashed)-1] == "{}" {
+					continue
+				}
+				squashed = append(squashed, m)
+			}
+			assert.Equal(t, tc.want, squashed)
+		})
+	}
+}
+
+// Only Connect streams get empty messages, in their own codec.
+func TestEmptyMessage(t *testing.T) {
+	for _, tc := range []struct {
+		contentType string
+		want        []byte
+		ok          bool
+	}{
+		{"application/connect+json", frame(0, "{}"), true},
+		{"application/connect+json; charset=utf-8", frame(0, "{}"), true},
+		{"application/connect+proto", frame(0, ""), true},
+		{"application/json", nil, false},
+		{"text/html", nil, false},
+	} {
+		t.Run(tc.contentType, func(t *testing.T) {
+			got, ok := emptyMessage(tc.contentType)
+			assert.Equal(t, tc.ok, ok)
+			assert.True(t, bytes.Equal(tc.want, got), "%q", got)
+		})
+	}
 }

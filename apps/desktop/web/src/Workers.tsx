@@ -143,7 +143,8 @@ function WorkerView({ dir, worker, onChange }: { dir: string; worker: Worker; on
       setLive([]);
       try {
         for await (const res of workers.watchWorkerRun({ runId: started.id })) {
-          setLive((e) => applyEvent(e ?? [], res.event!));
+          const ev = res.event; // none in the proxy's keepalive messages
+          if (ev) setLive((e) => applyEvent(e ?? [], ev));
         }
       } catch {
         // A run too quick to watch is simply recorded.
