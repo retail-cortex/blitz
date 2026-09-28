@@ -55,6 +55,9 @@ func withModelSettings(m model.LLM, provider string) model.LLM {
 func (m *settingsModel) Name() string { return m.inner.Name() }
 
 func (m *settingsModel) GenerateContent(ctx context.Context, req *model.LLMRequest, stream bool) iter.Seq2[*model.LLMResponse, error] {
+	if m.provider == "gemini" {
+		req = attachLoneSignatures(req)
+	}
 	if lookup, _ := ctx.Value(modelSettingsKey{}).(settingsLookup); lookup != nil && req != nil {
 		if s, ok := lookup(m.inner.Name()); ok {
 			req = m.apply(ctx, req, s)
