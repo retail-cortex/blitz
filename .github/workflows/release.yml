@@ -73,7 +73,11 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" --draft --verify-tag --generate-notes \
+          # A tag with a suffix (v0.1.0-rc.1) is a pre-release, which GitHub
+          # doesn't offer as the latest.
+          pre=()
+          [[ "$GITHUB_REF_NAME" == *-* ]] && pre=(--prerelease)
+          gh release create "$GITHUB_REF_NAME" --draft --verify-tag --generate-notes "${pre[@]}" \
             --notes-file .github/release-footer.md dist/*
 
   # The desktop app: a universal macOS disk image and Linux .debs, attached
