@@ -15,12 +15,15 @@
 name: ci
 
 # Documentation-only changes don't need a build; docs.yml builds the site.
+# A run can also be started by hand (Actions > ci > Run workflow): after
+# pushes marked [skip ci], or that changed only documentation.
 on:
   push:
     branches: [main]
     paths-ignore: ["**.md", "docs/**", "LICENSE", "NOTICE"]
   pull_request:
     paths-ignore: ["**.md", "docs/**", "LICENSE", "NOTICE"]
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -203,10 +206,11 @@ jobs:
 
   # A cache is never updated, only saved again under a new key, and GitHub
   # keeps the superseded ones for a week: on main, keep only the newest
-  # setup-bazel cache of each kind (OS, workflow, disk or repository).
+  # setup-bazel cache of each kind (OS, workflow, disk or repository),
+  # after a push or a run started by hand.
   prune-caches:
     needs: build
-    if: always() && github.event_name == 'push'
+    if: always() && github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     permissions:
       actions: write
