@@ -411,7 +411,7 @@ export function installFake() {
         setProvider: ({ workspace, provider, defaultModel, key, auth }) => {
           if (key && !["gemini", "anthropic", "openai"].includes(provider)) throw new ConnectError(`${provider || "no provider"} takes no API key`, Code.InvalidArgument);
           const method = auth?.method === "api_key" ? "" : (auth?.method ?? "");
-          if (method && method !== { gemini: "adc", anthropic: "oauth" }[provider]) throw new ConnectError(`${provider} doesn't sign in with ${method}`, Code.InvalidArgument);
+          if (method && !({ gemini: ["adc"], anthropic: ["oauth", "adc"] }[provider] ?? []).includes(method)) throw new ConnectError(`${provider} doesn't sign in with ${method}`, Code.InvalidArgument);
           const c = scopeConfig(workspace);
           c.provider = provider;
           c.model = defaultModel;

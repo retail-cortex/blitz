@@ -68,6 +68,10 @@ func TestConfigKeyCommands(t *testing.T) {
 	out, _ = run("", "config", "keys")
 	assert.Contains(t, out, "gemini     Google Cloud ADC, project my-project, location from GOOGLE_CLOUD_LOCATION, else global", "keys:\n%s", out)
 	assert.Contains(t, out, "anthropic  OAuth, `ant auth login` profile work (key: keychain, unused)", "keys:\n%s", out)
+	_, err = run("", "config", "set-auth", "anthropic", "adc", "--project", "claude-p", "--location", "us-east5")
+	require.NoError(t, err)
+	out, _ = run("", "config", "keys")
+	assert.Contains(t, out, "anthropic  Google Cloud ADC, project claude-p, location us-east5", "keys:\n%s", out)
 	_, err = run("", "config", "set-auth", "anthropic", "api_key")
 	require.NoError(t, err)
 	out, _ = run("", "config", "keys")
@@ -78,6 +82,7 @@ func TestConfigKeyCommands(t *testing.T) {
 		"not keyed":        {"config", "set-key", "ollama"},
 		"nothing here":     {"config", "secure-key", "openai"},
 		"not Gemini's":     {"config", "set-auth", "gemini", "oauth"},
+		"no project flag":  {"config", "set-auth", "anthropic", "adc", "--projet", "p"},
 		"no such method":   {"config", "set-auth", "anthropic", "password"},
 		"a key only":       {"config", "set-auth", "openai", "adc"},
 		"no method at all": {"config", "set-auth", "gemini"},

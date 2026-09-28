@@ -324,6 +324,11 @@ func TestDoctorSignInCheck(t *testing.T) {
 				require.NoError(t, os.WriteFile(filepath.Join(dir, "application_default_credentials.json"), []byte("{}"), 0o600))
 			},
 			status: statusOK, detail: "project p, location global: gcloud's application-default login"},
+		{name: "Claude on Vertex AI", settings: "[llm]\nprovider = \"anthropic\"\n[llm.anthropic]\nauth = \"adc\"\nproject_id = \"claude-p\"\nlocation = \"us-east5\"\n",
+			setup: func(t *testing.T, home string) {
+				t.Setenv("GOOGLE_APPLICATION_CREDENTIALS", filepath.Join(home, "key.json"))
+			},
+			status: statusOK, detail: "Claude on Vertex AI, Google Cloud ADC, project claude-p, location us-east5: GOOGLE_APPLICATION_CREDENTIALS"},
 		{name: "OAuth without a profile", settings: "[llm]\nprovider = \"anthropic\"\n[llm.anthropic]\nauth = \"oauth\"\nprofile = \"work\"\n",
 			status: statusFail, detail: "no `ant auth login` profile \"work\""},
 		{name: "OAuth with ant's profile", settings: "[llm]\nprovider = \"anthropic\"\n[llm.anthropic]\nauth = \"oauth\"\n",
@@ -339,6 +344,10 @@ func TestDoctorSignInCheck(t *testing.T) {
 			t.Setenv("GOOGLE_CLOUD_LOCATION", "")
 			t.Setenv("GOOGLE_APPLICATION_CREDENTIALS", "")
 			t.Setenv("CLOUDSDK_CONFIG", filepath.Join(home, "no-gcloud"))
+			// Building the model looks for ADC; not finding a file, Google's
+			// libraries would probe for a metadata server (and outlive the
+			// test). Naming one skips the probe; nothing asks it for a token.
+			t.Setenv("GCE_METADATA_HOST", "127.0.0.1:1")
 			t.Setenv("ANTHROPIC_CONFIG_DIR", filepath.Join(home, "ant"))
 			t.Setenv("ANTHROPIC_PROFILE", "")
 			if tc.setup != nil {

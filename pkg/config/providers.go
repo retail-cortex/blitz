@@ -22,6 +22,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -340,18 +341,20 @@ func RemoveAPIKey(prefixDir, workspace, provider string) (string, error) {
 // settableValues are the settings the forms change (SetValue); the rest is
 // edited as the file itself.
 var settableValues = map[string]bool{
-	"llm.provider":           true,
-	"blitz.default_model":    true,
-	"llm.gemini.model":       true,
-	"llm.gemini.auth":        true,
-	"llm.gemini.project_id":  true,
-	"llm.gemini.location":    true,
-	"llm.anthropic.model":    true,
-	"llm.anthropic.auth":     true,
-	"llm.anthropic.profile":  true,
-	"llm.anthropic.base_url": true,
-	"llm.openai.model":       true,
-	"llm.openai.base_url":    true,
+	"llm.provider":             true,
+	"blitz.default_model":      true,
+	"llm.gemini.model":         true,
+	"llm.gemini.auth":          true,
+	"llm.gemini.project_id":    true,
+	"llm.gemini.location":      true,
+	"llm.anthropic.model":      true,
+	"llm.anthropic.auth":       true,
+	"llm.anthropic.profile":    true,
+	"llm.anthropic.project_id": true,
+	"llm.anthropic.location":   true,
+	"llm.anthropic.base_url":   true,
+	"llm.openai.model":         true,
+	"llm.openai.base_url":      true,
 }
 
 // SetValue sets one of the form's settings in a scope (value "" removes it,
@@ -394,8 +397,8 @@ func SetValue(prefixDir, workspace, key, value string) (string, error) {
 }
 
 // ProviderAuth is how a provider signs in: Method "api_key" ("" too), "adc"
-// (Gemini through Vertex AI with Application Default Credentials, in
-// ProjectID and Location) or "oauth" (Anthropic, with the `ant auth login`
+// (Gemini, or Claude, on Vertex AI with Application Default Credentials,
+// in ProjectID and Location) or "oauth" (Claude, with the `ant auth login`
 // profile named by Profile, else ant's active one). Empty fields are
 // removed, so the environment's or the global settings' apply.
 type ProviderAuth struct {
@@ -405,21 +408,23 @@ type ProviderAuth struct {
 	Profile   string
 }
 
-// authMethods are the sign-in methods each provider takes besides an API key.
-var authMethods = map[string]string{"gemini": AuthADC, "anthropic": AuthOAuth}
+// authMethods are the sign-in methods each provider takes besides an API
+// key: Google Cloud's Application Default Credentials (Gemini, and Claude
+// on Vertex AI) and an `ant auth login` profile (Claude).
+var authMethods = map[string][]string{"gemini": {AuthADC}, "anthropic": {AuthOAuth, AuthADC}}
 
 func (a ProviderAuth) check(provider string) error {
-	switch a.Method {
-	case "", AuthAPIKey:
+	if a.Method == "" || a.Method == AuthAPIKey {
 		return nil
-	case authMethods[provider]:
+	}
+	if slices.Contains(authMethods[provider], a.Method) {
 		if strings.ContainsAny(a.Profile, `/\`) {
 			return fmt.Errorf("%q isn't a profile name", a.Profile)
 		}
 		return nil
 	}
-	if m := authMethods[provider]; m != "" {
-		return fmt.Errorf("%s signs in with api_key or %s, not %q", provider, m, a.Method)
+	if m := authMethods[provider]; len(m) > 0 {
+		return fmt.Errorf("%s signs in with api_key or %s, not %q", provider, strings.Join(m, " or "), a.Method)
 	}
 	return fmt.Errorf("%s signs in with an API key only, not %q", provider, a.Method)
 }

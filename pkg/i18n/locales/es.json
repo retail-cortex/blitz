@@ -756,7 +756,7 @@
     "desktop.keys.location_placeholder": "global",
     "desktop.keys.profile": "Perfil de ant",
     "desktop.keys.profile_placeholder": "El perfil activo de ant",
-    "desktop.keys.adc_hint": "Gemini se ejecuta en Vertex AI con las credenciales predeterminadas de la aplicación del equipo donde se ejecuta el servicio de Blitz: inicie sesión allí con gcloud auth application-default login.",
+    "desktop.keys.adc_hint": "{provider} se ejecuta en Vertex AI con las credenciales predeterminadas de la aplicación del equipo donde se ejecuta el servicio de Blitz: inicie sesión allí con gcloud auth application-default login.",
     "desktop.keys.oauth_hint": "Claude usa el inicio de sesión de Anthropic Console del equipo donde se ejecuta el servicio de Blitz: inicie sesión allí con ant auth login. El uso de la API se factura a esa organización.",
     "desktop.keys.source.adc": "ADC de Google Cloud",
     "desktop.keys.source.adc.detail": "{provider} inicia sesión con las credenciales predeterminadas de la aplicación, a través de Vertex AI (proyecto {project}).",

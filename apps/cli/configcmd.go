@@ -142,6 +142,10 @@ model = "gemini-3.8-flash"
 # api_key   = "..."         # or ANTHROPIC_API_KEY, ANTHROPIC_AUTH_TOKEN, or an "ant auth login" profile
 # auth    = "oauth"         # instead of a key: an Anthropic Console sign-in (ant auth login)
 # profile = "..."           # oauth: the profile, else ant's active one
+# auth    = "adc"           # or Claude on Vertex AI with Google Cloud's Application Default
+#                           # Credentials (gcloud auth application-default login)
+# project_id = "..."        # adc: or GOOGLE_CLOUD_PROJECT
+# location = "global"       # adc: or GOOGLE_CLOUD_LOCATION
 model     = "claude-opus-5"
 fallbacks = "default"       # server-side refusal fallback: "default", a model ID, or "off"
 # base_url = "https://..."  # gateway/proxy

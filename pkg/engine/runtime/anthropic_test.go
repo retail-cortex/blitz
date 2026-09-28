@@ -17,6 +17,7 @@ package runtime
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -224,7 +225,7 @@ func TestAnthropicRequestShape(t *testing.T) {
 
 func mustAnthropicModel(t *testing.T, cfg config.AnthropicConfig, name string, opts ...option.RequestOption) *anthropicModel {
 	t.Helper()
-	m, err := newAnthropicModel(cfg, name, opts...)
+	m, err := newAnthropicModel(context.Background(), cfg, name, opts...)
 	require.NoError(t, err)
 	return m
 }
@@ -261,10 +262,79 @@ func TestAnthropicOAuthProfile(t *testing.T) {
 		})
 	}
 
-	_, err := newAnthropicModel(config.AnthropicConfig{Auth: config.AuthOAuth, Profile: "missing"}, "claude-opus-5")
+	_, err := newAnthropicModel(context.Background(), config.AnthropicConfig{Auth: config.AuthOAuth, Profile: "missing"}, "claude-opus-5")
 	assert.ErrorContains(t, err, "ant auth login")
-	_, err = newAnthropicModel(config.AnthropicConfig{Auth: "password"}, "claude-opus-5")
+	_, err = newAnthropicModel(context.Background(), config.AnthropicConfig{Auth: "password"}, "claude-opus-5")
 	assert.ErrorContains(t, err, "unknown [llm.anthropic] auth")
+}
+
+// auth = "adc" runs Claude on Vertex AI: the request goes to the model's
+// Vertex path with Application Default Credentials' token and quota
+// project, no API key, and no server-side fallback (Vertex has none).
+func TestClaudeOnVertex(t *testing.T) {
+	t.Setenv("ANTHROPIC_API_KEY", "sk-ant-from-env")
+	t.Setenv("GOOGLE_CLOUD_PROJECT", "")
+	t.Setenv("GOOGLE_CLOUD_LOCATION", "")
+	fakeADC(t, nil)
+	var (
+		path    string
+		headers http.Header
+		body    map[string]any
+	)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		path, headers = r.URL.Path, r.Header.Clone()
+		json.NewDecoder(r.Body).Decode(&body)
+		if strings.HasSuffix(r.URL.Path, ":streamRawPredict") {
+			sseReply(
+				`{"type":"message_start","message":{"id":"msg_v","type":"message","role":"assistant","model":"claude-opus-5","content":[],"stop_reason":null,"stop_sequence":null,"usage":{"input_tokens":1,"output_tokens":1}}}`,
+				`{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}`,
+				`{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"streamed"}}`,
+				`{"type":"content_block_stop","index":0}`,
+				`{"type":"message_delta","delta":{"stop_reason":"end_turn","stop_sequence":null},"usage":{"output_tokens":2}}`,
+				`{"type":"message_stop"}`,
+			)(w)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		io.WriteString(w, message("end_turn", `{"type":"text","text":"from vertex"}`))
+	}))
+	defer srv.Close()
+	pol := retryPolicy{maxRetries: 0, stall: time.Minute}
+	cfg := config.AnthropicConfig{Auth: config.AuthADC, ProjectID: "claude-p", APIKey: "sk-ant-in-settings", BaseURL: srv.URL}
+
+	m := mustAnthropicModel(t, cfg, "claude-opus-5", pol.anthropicOptions()...)
+	out, err := collectResponses(t, m, &model.LLMRequest{Contents: []*genai.Content{userText("hi")}}, false)
+	require.NoError(t, err)
+	require.Len(t, out, 1)
+	assert.Equal(t, "from vertex", out[0].Content.Parts[0].Text)
+	assert.Equal(t, "/v1/projects/claude-p/locations/global/publishers/anthropic/models/claude-opus-5:rawPredict", path)
+	assert.Equal(t, "Bearer adc-token", headers.Get("Authorization"))
+	assert.Equal(t, "quota-p", headers.Get("X-Goog-User-Project"))
+	assert.Empty(t, headers.Get("X-Api-Key"), "an API key was sent to Vertex AI")
+	assert.NotContains(t, body, "fallbacks", "server-side fallback isn't on Vertex AI")
+	assert.Contains(t, body, "anthropic_version")
+
+	// Streaming goes to the model's streaming path.
+	_, err = collectResponses(t, m, &model.LLMRequest{Contents: []*genai.Content{userText("hi")}}, true)
+	require.NoError(t, err)
+	assert.Equal(t, "/v1/projects/claude-p/locations/global/publishers/anthropic/models/claude-opus-5:streamRawPredict", path)
+	assert.Equal(t, "Bearer adc-token", headers.Get("Authorization"))
+
+	for _, tc := range []struct {
+		name string
+		cfg  config.AnthropicConfig
+		adc  error
+		err  string
+	}{
+		{"no project", config.AnthropicConfig{Auth: config.AuthADC}, nil, "anthropic on Vertex AI with Application Default Credentials needs a Google Cloud project"},
+		{"no credentials", config.AnthropicConfig{Auth: config.AuthADC, ProjectID: "p"}, errors.New("could not find default credentials"), "gcloud auth application-default login"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			fakeADC(t, tc.adc)
+			_, err := newAnthropicModel(context.Background(), tc.cfg, "claude-opus-5")
+			assert.ErrorContains(t, err, tc.err)
+		})
+	}
 }
 
 func TestAnthropicResponseConversion(t *testing.T) {

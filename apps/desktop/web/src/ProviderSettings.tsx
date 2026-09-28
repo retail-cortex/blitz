@@ -43,8 +43,8 @@ const inFile = (p: ProviderConfig) => p.keySource === KeySource.KEYCHAIN || p.ke
 /** Where a provider's key comes from, when it has one. */
 const hasKey = (p?: ProviderConfig) => !!p && !p.keyMissing && p.keySource !== KeySource.NONE && p.keySource !== KeySource.UNSPECIFIED;
 
-/** The sign-in each provider takes besides an API key. */
-const authMethods: Record<string, string> = { gemini: "adc", anthropic: "oauth" };
+/** The sign-ins each provider takes besides an API key. */
+const authMethods: Record<string, string[]> = { gemini: ["adc"], anthropic: ["oauth", "adc"] };
 
 /**
  * What the form saves as one change: the provider, the default model, and
@@ -131,7 +131,7 @@ export function ProviderSettings({ workspace, compact }: { workspace: string; co
 
   if (!desc) return <p className="muted">{error || t("desktop.checking")}</p>;
   const keyed = desc.providers.find((p) => p.name === choice.provider);
-  const other = authMethods[choice.provider];
+  const others = authMethods[choice.provider] ?? [];
   const dirty = !sameChoice(choice, savedChoice(desc, desc.provider));
   const save = () =>
     dirty &&
@@ -143,7 +143,7 @@ export function ProviderSettings({ workspace, compact }: { workspace: string; co
           provider: choice.provider,
           defaultModel: choice.model.trim(),
           key: choice.method === "api_key" ? choice.key.trim() : "",
-          auth: other ? { method: choice.method, projectId: choice.projectId.trim(), location: choice.location.trim(), profile: choice.profile.trim() } : undefined,
+          auth: others.length ? { method: choice.method, projectId: choice.projectId.trim(), location: choice.location.trim(), profile: choice.profile.trim() } : undefined,
         }),
       t("desktop.keys.provider_saved"),
       true,
@@ -184,12 +184,16 @@ export function ProviderSettings({ workspace, compact }: { workspace: string; co
             onKeyDown={onEnter}
           />
         </label>
-        {keyed && other && (
+        {keyed && others.length > 0 && (
           <label className="field">
             <span className="t-label">{t("desktop.keys.sign_in")}</span>
             <select className="select" value={choice.method} disabled={busy} onChange={set("method")}>
               <option value="api_key">{t("desktop.keys.auth.api_key")}</option>
-              <option value={other}>{t(`desktop.keys.auth.${other}`)}</option>
+              {others.map((m) => (
+                <option key={m} value={m}>
+                  {t(`desktop.keys.auth.${m}`)}
+                </option>
+              ))}
             </select>
           </label>
         )}
@@ -217,7 +221,7 @@ export function ProviderSettings({ workspace, compact }: { workspace: string; co
           </label>
         )}
       </div>
-      {keyed && choice.method !== "api_key" && <p className="t-body-sm muted">{t(`desktop.keys.${choice.method}_hint`)}</p>}
+      {keyed && choice.method !== "api_key" && <p className="t-body-sm muted">{t(`desktop.keys.${choice.method}_hint`, { provider: providerNames[choice.provider] ?? choice.provider })}</p>}
       <div className="row" style={{ justifyContent: "flex-end", gap: 8 }}>
         <Button small disabled={!dirty || busy} onClick={() => setChoice(savedChoice(desc, desc.provider))}>
           {t("desktop.file.revert")}

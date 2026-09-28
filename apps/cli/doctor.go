@@ -103,8 +103,11 @@ func runDoctor(ctx context.Context, g *globalFlags, online bool) []check {
 
 	switch key := apiKeyFor(cfg); {
 	case cfg.LLM.Provider == "gemini" && cfg.LLM.Gemini.UsesADC():
-		st, detail := checkADC(cfg.LLM.Gemini)
+		st, detail := checkADC("gemini", cfg.LLM.Gemini.ProjectID, cfg.LLM.Gemini.Location)
 		add("credentials", st, "%s", detail)
+	case cfg.LLM.Provider == "anthropic" && cfg.LLM.Anthropic.UsesADC():
+		st, detail := checkADC("anthropic", cfg.LLM.Anthropic.ProjectID, cfg.LLM.Anthropic.Location)
+		add("credentials", st, "Claude on Vertex AI, %s", detail)
 	case cfg.LLM.Provider == "anthropic" && cfg.LLM.Anthropic.UsesOAuth():
 		dir, name := cfg.LLM.Anthropic.OAuthProfile()
 		if _, err := os.Stat(filepath.Join(dir, "credentials", name+".json")); err != nil {
@@ -323,15 +326,15 @@ func printChecks(w io.Writer, checks []check) (failed int) {
 	return failed
 }
 
-// checkADC says whether Gemini on Vertex AI has a project and Application
-// Default Credentials: a key file, gcloud's login, or (unseen from here) a
-// Google Cloud machine's metadata server.
-func checkADC(g config.GeminiConfig) (checkStatus, string) {
-	project := cmp.Or(g.ProjectID, os.Getenv("GOOGLE_CLOUD_PROJECT"))
+// checkADC says whether provider on Vertex AI has a project and
+// Application Default Credentials: a key file, gcloud's login, or (unseen
+// from here) a Google Cloud machine's metadata server.
+func checkADC(provider, project, location string) (checkStatus, string) {
+	project = cmp.Or(project, os.Getenv("GOOGLE_CLOUD_PROJECT"))
 	if project == "" {
-		return statusFail, "Google Cloud ADC needs a project: set [llm.gemini] project_id or GOOGLE_CLOUD_PROJECT"
+		return statusFail, fmt.Sprintf("Google Cloud ADC needs a project: set [llm.%s] project_id or GOOGLE_CLOUD_PROJECT", provider)
 	}
-	where := fmt.Sprintf("Google Cloud ADC, project %s, location %s: ", project, cmp.Or(g.Location, os.Getenv("GOOGLE_CLOUD_LOCATION"), "global"))
+	where := fmt.Sprintf("Google Cloud ADC, project %s, location %s: ", project, cmp.Or(location, os.Getenv("GOOGLE_CLOUD_LOCATION"), "global"))
 	if os.Getenv("GOOGLE_APPLICATION_CREDENTIALS") != "" {
 		return statusOK, where + "GOOGLE_APPLICATION_CREDENTIALS (use --online to confirm)"
 	}

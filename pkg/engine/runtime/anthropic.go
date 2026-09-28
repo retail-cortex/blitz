@@ -15,6 +15,7 @@
 package runtime
 
 import (
+	"cmp"
 	"context"
 	"encoding/base64"
 	"encoding/json"
@@ -23,11 +24,13 @@ import (
 	"iter"
 	"strings"
 
+	"cloud.google.com/go/auth/oauth2adapt"
 	"github.com/anthropics/anthropic-sdk-go"
 	anthropicconfig "github.com/anthropics/anthropic-sdk-go/config"
 	"github.com/anthropics/anthropic-sdk-go/option"
 	"github.com/anthropics/anthropic-sdk-go/packages/param"
 	"github.com/anthropics/anthropic-sdk-go/shared/constant"
+	"github.com/anthropics/anthropic-sdk-go/vertex"
 	"github.com/retail-cortex/blitz/pkg/config"
 	"google.golang.org/adk/v2/model"
 	"google.golang.org/genai"
@@ -54,10 +57,13 @@ type anthropicModel struct {
 // newAnthropicModel builds the adapter. With auth = "oauth" it uses an `ant
 // auth login` profile (the one named, else ant's active one) and nothing
 // from the environment, so a stray ANTHROPIC_API_KEY can't take its place.
-// Otherwise, with no api_key the SDK resolves credentials itself
+// With auth = "adc" it runs on Vertex AI with Application Default
+// Credentials, where server-side refusal fallback doesn't exist (so it's
+// off). Otherwise, with no api_key the SDK resolves credentials itself
 // (ANTHROPIC_API_KEY, ANTHROPIC_AUTH_TOKEN, `ant auth login` profiles,
 // workload identity).
-func newAnthropicModel(cfg config.AnthropicConfig, name string, opts ...option.RequestOption) (*anthropicModel, error) {
+func newAnthropicModel(ctx context.Context, cfg config.AnthropicConfig, name string, opts ...option.RequestOption) (*anthropicModel, error) {
+	fb := cmp.Or(cfg.Fallbacks, "default")
 	switch cfg.Auth {
 	case "", config.AuthAPIKey:
 		if cfg.APIKey != "" {
@@ -69,8 +75,15 @@ func newAnthropicModel(cfg config.AnthropicConfig, name string, opts ...option.R
 			return nil, err
 		}
 		opts = append(opts, option.WithoutEnvironmentDefaults(), option.WithConfig(profile))
+	case config.AuthADC:
+		vertexOpts, err := claudeOnVertex(ctx, cfg)
+		if err != nil {
+			return nil, err
+		}
+		opts = append(opts, vertexOpts...)
+		fb = "off"
 	default:
-		return nil, fmt.Errorf("unknown [llm.anthropic] auth %q (api_key or oauth)", cfg.Auth)
+		return nil, fmt.Errorf("unknown [llm.anthropic] auth %q (api_key, oauth or adc)", cfg.Auth)
 	}
 	if cfg.BaseURL != "" {
 		opts = append(opts, option.WithBaseURL(cfg.BaseURL))
@@ -78,11 +91,28 @@ func newAnthropicModel(cfg config.AnthropicConfig, name string, opts ...option.R
 	if name == "" {
 		name = DefaultAnthropicModel
 	}
-	fb := cfg.Fallbacks
-	if fb == "" {
-		fb = "default"
-	}
 	return &anthropicModel{client: anthropic.NewClient(opts...), name: name, fallbacks: fb}, nil
+}
+
+// claudeOnVertex are the client options for Claude on Vertex AI: the
+// Application Default Credentials (found here, so that missing ones fail
+// the model's build instead of panicking in the SDK's WithGoogleAuth),
+// the project and location, and the quota project to bill. They come
+// after the HTTP client, which the SDK then wraps rather than replaces.
+func claudeOnVertex(ctx context.Context, cfg config.AnthropicConfig) ([]option.RequestOption, error) {
+	project, location, err := vertexPlace("anthropic", cfg.ProjectID, cfg.Location)
+	if err != nil {
+		return nil, err
+	}
+	creds, err := googleCredentials()
+	if err != nil {
+		return nil, fmt.Errorf("claude on Vertex AI with Application Default Credentials: %w (sign in with `gcloud auth application-default login` on the machine running Blitz)", err)
+	}
+	opts := []option.RequestOption{vertex.WithCredentials(ctx, location, project, oauth2adapt.Oauth2CredentialsFromAuthCredentials(creds))}
+	if quota, err := creds.QuotaProjectID(ctx); err == nil && quota != "" {
+		opts = append(opts, option.WithHeader("X-Goog-User-Project", quota))
+	}
+	return opts, nil
 }
 
 // anthropicProfile loads the `ant auth login` profile Claude signs in with.

@@ -165,13 +165,19 @@ type AnthropicConfig struct {
 	// APIKey is optional: without it the SDK also accepts ANTHROPIC_AUTH_TOKEN
 	// and `ant auth login` profiles.
 	APIKey string `toml:"api_key"`
-	// Auth is "api_key" ("" too) or "oauth": the `ant auth login` profile
-	// named by Profile (empty: ant's active profile), with any API key in
-	// the settings or the environment ignored.
+	// Auth is "api_key" ("" too); "oauth": the `ant auth login` profile
+	// named by Profile (empty: ant's active profile); or "adc": Claude on
+	// Vertex AI with Application Default Credentials, in ProjectID and
+	// Location. With either, any API key in the settings or the environment
+	// is ignored.
 	Auth    string `toml:"auth"`
 	Profile string `toml:"profile"`
-	Model   string `toml:"model"`
-	BaseURL string `toml:"base_url"` // for gateways/proxies; empty uses the API default
+	// ProjectID and Location are Vertex AI's (auth = "adc"); empty, they
+	// come from GOOGLE_CLOUD_PROJECT and GOOGLE_CLOUD_LOCATION ("global").
+	ProjectID string `toml:"project_id"`
+	Location  string `toml:"location"`
+	Model     string `toml:"model"`
+	BaseURL   string `toml:"base_url"` // for gateways/proxies; empty uses the API default
 	// Fallbacks controls server-side refusal fallback on models that support
 	// it (claude-opus-5, claude-fable-5*): "default" routes by refusal
 	// category, a model ID pins one fallback model, "off" disables it.
@@ -181,6 +187,10 @@ type AnthropicConfig struct {
 // UsesOAuth reports whether Claude authenticates with an `ant auth login`
 // OAuth profile rather than an API key.
 func (a AnthropicConfig) UsesOAuth() bool { return a.Auth == AuthOAuth }
+
+// UsesADC reports whether Claude runs on Vertex AI with Application
+// Default Credentials.
+func (a AnthropicConfig) UsesADC() bool { return a.Auth == AuthADC }
 
 // OAuthProfile is the `ant auth login` profile Claude signs in with, and
 // the directory ant keeps it in: Profile, else the one ant would use

@@ -160,17 +160,18 @@ func keyCommands(g *globalFlags) []*cobra.Command {
 	var auth config.ProviderAuth
 	setAuth := &cobra.Command{
 		Use:   "set-auth <provider> <api_key|adc|oauth>",
-		Short: "Choose how a provider signs in: an API key, Google Cloud ADC (gemini) or an ant OAuth profile (anthropic)",
+		Short: "Choose how a provider signs in: an API key, Google Cloud ADC (gemini, anthropic) or an ant OAuth profile (anthropic)",
 		Long: `Choose how a provider signs in.
 
   api_key  the provider's API key (the default; blitz config set-key)
-  adc      gemini through Vertex AI with Google Cloud's Application Default
-           Credentials (gcloud auth application-default login): --project
-           and --location, else GOOGLE_CLOUD_PROJECT and GOOGLE_CLOUD_LOCATION
-           (default global)
+  adc      gemini or anthropic (Claude) on Vertex AI with Google Cloud's
+           Application Default Credentials (gcloud auth application-default
+           login): --project and --location, else GOOGLE_CLOUD_PROJECT and
+           GOOGLE_CLOUD_LOCATION (default global)
   oauth    anthropic with an Anthropic Console sign-in (ant auth login):
            --profile, else ant's active profile`,
 		Example: `  blitz config set-auth gemini adc --project my-project
+  blitz config set-auth anthropic adc --project my-project --location us-east5
   blitz config set-auth anthropic oauth --profile work
   blitz config set-auth gemini api_key`,
 		Args: cobra.ExactArgs(2),

@@ -18,7 +18,6 @@ import (
 	"cmp"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"iter"
 	"log/slog"
@@ -150,7 +149,7 @@ func buildProviderModel(ctx context.Context, cfg *config.Config, provider, model
 		return newOpenAIModel(ctx, modelName, apiKey, baseURL, pol.openAIOptions()...)
 
 	case "anthropic":
-		return newAnthropicModel(cfg.LLM.Anthropic, modelName, pol.anthropicOptions()...)
+		return newAnthropicModel(ctx, cfg.LLM.Anthropic, modelName, pol.anthropicOptions()...)
 
 	case "":
 		// If Gemini key is set and provider is empty, try gemini, else fallback to openai/ollama
@@ -163,7 +162,7 @@ func buildProviderModel(ctx context.Context, cfg *config.Config, provider, model
 			if cfg.Blitz.DefaultModel == "" {
 				modelName = cfg.LLM.Anthropic.Model
 			}
-			return newAnthropicModel(cfg.LLM.Anthropic, modelName, pol.anthropicOptions()...)
+			return newAnthropicModel(ctx, cfg.LLM.Anthropic, modelName, pol.anthropicOptions()...)
 		}
 		if cfg.LLM.OpenAI.APIKey != "" || cfg.LLM.OpenAI.BaseURL != "" {
 			apiKey := cfg.LLM.OpenAI.APIKey
@@ -192,6 +191,17 @@ var googleCredentials = func() (*auth.Credentials, error) {
 	return credentials.DetectDefault(&credentials.DetectOptions{Scopes: []string{"https://www.googleapis.com/auth/cloud-platform"}})
 }
 
+// vertexPlace is the Vertex AI project and location for provider's
+// settings: as set, else GOOGLE_CLOUD_PROJECT and GOOGLE_CLOUD_LOCATION,
+// the location "global" by default. A project is required.
+func vertexPlace(provider, project, location string) (string, string, error) {
+	project = cmp.Or(project, os.Getenv("GOOGLE_CLOUD_PROJECT"))
+	if project == "" {
+		return "", "", fmt.Errorf("%s on Vertex AI with Application Default Credentials needs a Google Cloud project: set [llm.%s] project_id or GOOGLE_CLOUD_PROJECT", provider, provider)
+	}
+	return project, cmp.Or(location, os.Getenv("GOOGLE_CLOUD_LOCATION"), "global"), nil
+}
+
 // geminiClientConfig is the genai client for Gemini's settings: the Gemini
 // API with an API key, or Vertex AI with Application Default Credentials
 // (auth = "adc"). genai signs requests itself only on an HTTP client of its
@@ -211,11 +221,11 @@ func geminiClientConfig(ctx context.Context, g config.GeminiConfig, pol retryPol
 	case config.AuthADC:
 		cc := pol.geminiConfig("")
 		cc.Backend = genai.BackendVertexAI
-		cc.Project = cmp.Or(g.ProjectID, os.Getenv("GOOGLE_CLOUD_PROJECT"))
-		cc.Location = cmp.Or(g.Location, os.Getenv("GOOGLE_CLOUD_LOCATION"), "global")
-		if cc.Project == "" {
-			return nil, errors.New("gemini with Application Default Credentials needs a Google Cloud project: set [llm.gemini] project_id or GOOGLE_CLOUD_PROJECT")
+		project, location, err := vertexPlace("gemini", g.ProjectID, g.Location)
+		if err != nil {
+			return nil, err
 		}
+		cc.Project, cc.Location = project, location
 		creds, err := googleCredentials()
 		if err != nil {
 			return nil, fmt.Errorf("gemini with Application Default Credentials: %w (sign in with `gcloud auth application-default login` on the machine running Blitz)", err)
