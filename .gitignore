@@ -10,3 +10,7 @@
 # node_modules that pnpm makes when run on the page directly; Bazel keeps
 # its own (and .bazelignore hides this one from it).
 node_modules/
+
+# The coverage summary tools/coverage.sh writes for the docs site; CI
+# makes its own.
+/docs/data/coverage.json

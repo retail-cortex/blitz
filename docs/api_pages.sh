@@ -43,7 +43,8 @@ for proto in "$@"; do
     if [[ "${order[$i]}" == "$name" ]]; then weight=$((i + 1)); fi
   done
   {
-    printf -- '---\ntitle: "%s.proto"\nweight: %d\n---\n\n' "$name" "$weight"
+    # "Edit page" opens the proto: that's where a fix to this page belongs.
+    printf -- '---\ntitle: "%s.proto"\nweight: %d\ngeekdocEditPath: edit/main\ngeekdocFilePath: proto/blitz/v1/%s.proto\n---\n\n' "$name" "$weight" "$name"
     printf 'Generated from [`proto/blitz/v1/%s.proto`](https://github.com/retail-cortex/blitz/blob/main/proto/blitz/v1/%s.proto) by [proto-gen-md-diagrams](https://github.com/GoogleCloudPlatform/proto-gen-md-diagrams).\n\n' "$name" "$name"
     awk 'NR == 1 && /^# Package:/ { next }
          /^<div class="comment">/ && /Licensed under the Apache License/ { next }

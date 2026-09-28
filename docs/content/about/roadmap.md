@@ -538,16 +538,19 @@ The engine had bled into every front end: the REPL, the client and the desktop a
 
 Verified: every test on macOS and Linux (gVisor included), the desktop app on both, the `.deb` installed and removed on Ubuntu 24.04, the archives compared across the two. Not yet: a GitHub run of either workflow (MANUAL_VERIFICATION §39).
 
-## 27. Release readiness — 🚧 in progress (L), 2026-09-27
+## 27. Release readiness — ✅ done (L), 2026-09-27
 
-The owner's review found the project not ready to release ([spec_release_readiness_030](specs/spec_release_readiness_030.md)). Done so far:
+The owner's review found the project not ready to release ([spec_release_readiness_030](specs/spec_release_readiness_030.md)). Done:
 
 1. **Licensing**: the Apache header on every source file (checked in CI), `NOTICE` under Blitz's name with Code Puppy's MIT notice, generated `THIRD_PARTY_NOTICES`, and the license texts in every program (`blitz license`, `/license`, `blitzd --license`, the desktop app's About) and package.
 2. **Comments**: every package and exported name documented, enforced by the `doccomment` analyzer, a lint test for the page, and buf's comment rules.
 3. **Specs** brought up to date and checked in CI (`//tools/specs`); Go tests moved to Testify, table-driven cases as subtests.
 4. **The docs site**: every document moved into `docs/`, built by Hugo (rules_hugo, the Geekdoc theme) through Bazel and published to GitHub Pages: products, guide, architecture, shared packages, development, and about (performance, roadmap, history, specs). A link to a missing page fails the build.
 
-Next: the README rewritten short, with building from source per OS; `CONTRIBUTING.md`; `OWNERS.txt` and `CODEOWNERS`.
+5. **README, contributing and owners**: the README short (what, why, install, quick start, building from source on each OS, common problems), `docs/CONTRIBUTING.md` (also on the site), `OWNERS.txt` with `CODEOWNERS` generated from it.
+6. **Test coverage**: measured in CI on every push (78.7% at first), with a floor that fails the build if it drops, and a coverage page on the site.
+
+Next: raise coverage where it's lowest (the client, the desktop app's Go side, secrets, the login item).
 
 ## Antigravity CLI review (2026-09-25)
 

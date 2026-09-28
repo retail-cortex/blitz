@@ -3,7 +3,7 @@ title: "Development"
 weight: 50
 ---
 
-Blitz is an AI coding agent in Go, built on the Google Agent Development Kit (`google.golang.org/adk/v2`). This section is for people and agents changing the code; the [architecture](../architecture/_index.md) and [shared packages](../packages/_index.md) explain how the pieces fit. Start with [Where to pick up](next-steps.md) (where work stands and what's next); [the roadmap](../about/roadmap.md) explains what was built and why, and [Manual verification](manual-verification.md) holds the checks that need a person.
+Blitz is an AI coding agent in Go, built on the Google Agent Development Kit (`google.golang.org/adk/v2`). This section is for people and agents changing the code ([contributing](contributing.md) is the short version); the [architecture](../architecture/_index.md) and [shared packages](../packages/_index.md) explain how the pieces fit. Start with [Where to pick up](next-steps.md) (where work stands and what's next); [the roadmap](../about/roadmap.md) explains what was built and why, and [Manual verification](manual-verification.md) holds the checks that need a person.
 
 ## Layout
 
@@ -48,6 +48,8 @@ bazel run //tools:license_headers   # add the Apache header to new files
 tools/third_party_notices.sh    # regenerate THIRD_PARTY_NOTICES after changing dependencies
 bazel run //tools/specs         # the specs' index and the paths they name
 bazel run //docs:serve          # this site at http://localhost:1313
+tools/coverage.sh               # test coverage of apps/ and pkg/; fails below tools/coverage/floor.txt
+bazel run //tools/codeowners    # .github/CODEOWNERS from OWNERS.txt
 bazel run //apps/desktop:blitz-desktop   # the desktop app (it finds its blitzd in the runfiles)
 bazel run //apps/desktop/web:dev   # the desktop page in a browser (?fake: no service needed)
 bazel build //apps/desktop/packaging:Blitz.app   # the desktop app (macOS; :deb on Linux, which needs webkit2gtk)

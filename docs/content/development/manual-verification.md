@@ -477,3 +477,10 @@ These touch your real keychain and settings: use a test key, or a throwaway `--c
 - [ ] A link to a missing page (`[x](nope.md)` in any page) fails `bazel build //docs:site` with the page and the link named.
 - [ ] On a phone-width window, the menu opens from the ☰ button and no page scrolls sideways.
 - [ ] Architecture › API reference: a page per proto; every diagram draws (the workspace page has 100 and takes a few seconds), in light and dark mode; a comment with a placeholder (`turn.proto`'s `plan` field: "/plan <text>") shows the placeholder.
+
+## 44. README, owners and coverage (spec_release_readiness_030 §7)
+
+- [ ] On GitHub: the README shows the desktop screenshot and its links work; **Contributing** in the repository's sidebar opens `docs/CONTRIBUTING.md`.
+- [ ] Open a pull request: GitHub requests a review from the owner in `.github/CODEOWNERS`.
+- [ ] CI's Linux job summary has the coverage table; lower `tools/coverage/floor.txt`'s number above the total on a branch and the job fails.
+- [ ] After CI on `main`, the site's **About › Coverage** shows the same total, the commit it measured, and each package's files when expanded.

@@ -53,13 +53,35 @@ genrule(
     ],
 )
 
+# CONTRIBUTING.md stays in docs/, where GitHub finds it, and appears on the
+# site under Development: front matter added, its title dropped (the site
+# shows it), its links to content/… made relative to the page, and "Edit
+# page" pointed at the file itself.
+genrule(
+    name = "contributing",
+    srcs = ["CONTRIBUTING.md"],
+    outs = ["content/development/contributing.md"],
+    cmd = """{
+  printf -- '---\\ntitle: Contributing\\nweight: 5\\ngeekdocFilePath: CONTRIBUTING.md\\n---\\n\\n'
+  sed -e '1{/^# /d;}' -e 's#](content/#](../#g' $<
+} > $@""",
+)
+
 hugo_site(
     name = "site",
     config = "hugo.yaml",
-    content = glob(["content/**"]) + [":api"],
-    # rules_hugo copies a theme's layouts, assets and static files, not its
-    # data; Geekdoc finds its fingerprinted assets through this file.
-    data = ["@geekdoc//:data/assets.json"],
+    content = glob(["content/**"]) + [
+        ":api",
+        ":contributing",
+    ],
+    # data/coverage.json, when tools/coverage.sh (or CI) has written it, is
+    # the coverage page's report. rules_hugo copies a theme's layouts,
+    # assets and static files, not its data; Geekdoc finds its
+    # fingerprinted assets through its assets.json.
+    data = glob(
+        ["data/**"],
+        allow_empty = True,
+    ) + ["@geekdoc//:data/assets.json"],
     layouts = glob(["layouts/**"]),
     # Hugo's errors (a broken link, say) are only printed when not quiet.
     quiet = False,

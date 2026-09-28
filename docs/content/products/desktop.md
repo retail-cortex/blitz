@@ -5,6 +5,8 @@ weight: 30
 
 Blitz's desktop app is a window onto the [service](service.md), laid out like an IDE: the workspace's files on the left, an editor in the middle, and the agent's chat on the right. It contains no engine. Every workspace, turn, approval, session and worker lives in the service, which keeps running, and keeps running workers, after the window closes. Source: `apps/desktop` (Go, Wails v2) and `apps/desktop/web` (React and TypeScript). Specs: [desktop](../about/specs/spec_desktop_024.md), [files](../about/specs/spec_files_029.md).
 
+![The desktop app: the workspace's files, an editor, and the chat with an approval and the agent's task list](../../images/desktop.png)
+
 ## Install
 
 `Blitz_<version>_macos_universal.dmg` for macOS 13 and later (signed with a Developer ID and notarized), or `blitz-desktop_<version>_<arch>.deb` for Ubuntu 24.04, Debian 13 and later. Each carries its own `blitz` and `blitzd`, so the app can install the service without a separate download. There is no Windows package, because the service doesn't install there.

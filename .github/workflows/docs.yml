@@ -15,8 +15,8 @@
 name: docs
 
 # The documentation site (docs/): built by Bazel on every change to it or
-# to the protos its API reference is generated from, and published to
-# GitHub Pages from main.
+# to the protos its API reference is generated from, and after CI on main
+# for the coverage report; published to GitHub Pages from main.
 on:
   push:
     branches: [main]
@@ -24,9 +24,15 @@ on:
   pull_request:
     paths: ["docs/**", "proto/**", ".github/workflows/docs.yml"]
   workflow_dispatch:
+  # Also after each successful CI run on main, for its coverage report.
+  workflow_run:
+    workflows: [ci]
+    types: [completed]
+    branches: [main]
 
 permissions:
   contents: read
+  actions: read # the coverage report, from a CI run's artifacts
 
 # One deployment at a time; a newer push replaces a queued one.
 concurrency:
@@ -35,6 +41,7 @@ concurrency:
 
 jobs:
   build:
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -45,6 +52,18 @@ jobs:
           repository-cache: true
       # The specs live in the site; a docs-only change skips ci.yml.
       - run: bazel run //tools/specs
+      # The coverage page's report: from the CI run that triggered this one,
+      # else the latest successful CI run on main (a docs-only change skips
+      # CI). Without one the page says so.
+      - name: Coverage report
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+        run: |
+          run="${RUN_ID:-$(gh run list --repo "$GITHUB_REPOSITORY" --workflow ci --branch main --status success --limit 1 --json databaseId --jq '.[0].databaseId')}"
+          if [ -z "$run" ] || ! gh run download "$run" --repo "$GITHUB_REPOSITORY" --name coverage --dir docs/data; then
+            echo "::warning::no coverage report from CI (run: ${run:-none}); the page will say so"
+          fi
       # A link to a missing page fails the build (docs/layouts).
       - run: bazel build //docs:site
       # Bazel's outputs are read-only; the artifact is a plain copy.

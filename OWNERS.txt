@@ -1,0 +1,11 @@
+# Who maintains Blitz, and what each maintainer owns.
+#
+# One maintainer per line: their name, their GitHub handle, then the paths
+# they own, as CODEOWNERS patterns (* is everything; later lines win for
+# the paths they name). .github/CODEOWNERS is generated from this file:
+#
+#   bazel run //tools/codeowners
+#
+# (CI fails if it's out of date.)
+
+Ryan McGuinness    @rmcguinness    *

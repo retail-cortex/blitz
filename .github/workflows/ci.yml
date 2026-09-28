@@ -81,7 +81,19 @@ jobs:
       - run: tools/check_format.sh
       # Every test, the Go ones with the race detector: Go, the page's
       # vitest and type check, the proto lint.
-      - run: bazel test --config=race //...
+      - if: runner.os != 'Linux'
+        run: bazel test --config=race //...
+      # On Linux, where the sandbox and gVisor tests also run, the same
+      # tests run instrumented: the coverage of apps/ and pkg/ goes into the
+      # job summary, and the job fails below tools/coverage/floor.txt.
+      # docs.yml publishes the report on the site.
+      - if: runner.os == 'Linux'
+        run: tools/coverage.sh --config=race -- --markdown="$GITHUB_STEP_SUMMARY"
+      - if: runner.os == 'Linux'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: coverage
+          path: docs/data/coverage.json
       - name: Sandbox enforcement must not be skipped
         run: |
           bazel test //pkg/engine/tools:tools_test --nocache_test_results --test_output=all \
@@ -100,6 +112,8 @@ jobs:
       - run: tools/third_party_notices.sh --check
       # Every spec is indexed and every repository path it names exists.
       - run: bazel run //tools/specs
+      # .github/CODEOWNERS is generated from OWNERS.txt.
+      - run: bazel run //tools/codeowners -- --check
       # Fails only on a vulnerability the code can reach. The scan needs the
       # symbol table to see which packages are linked: without it, every
       # advisory in a required module counts (GO-2026-5932, all of x/crypto

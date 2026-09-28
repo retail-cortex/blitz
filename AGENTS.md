@@ -8,5 +8,6 @@ The rules that matter most:
 - Apps depend on `pkg/`, never on each other; front ends never on `pkg/engine` (`bazel run //tools:check_deps`).
 - Every source file has the Apache header (`bazel run //tools:license_headers`); every package and exported name has a doc comment.
 - Go tests use Testify, with table-driven cases as subtests.
-- Before committing: `tools/check_format.sh`, and `tools/third_party_notices.sh` after changing dependencies.
+- Before committing: `tools/check_format.sh`, and `tools/third_party_notices.sh` after changing dependencies. New code comes with tests: CI fails if coverage drops below `tools/coverage/floor.txt` (`tools/coverage.sh`).
+- How to contribute: [`docs/CONTRIBUTING.md`](docs/CONTRIBUTING.md).
 - Specs are in [`docs/content/about/specs/`](docs/content/about/specs/_index.md); a feature updates its spec and its pages on the site.

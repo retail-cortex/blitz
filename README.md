@@ -2,408 +2,25 @@
 
 > **The zero-gimmick, high-performance Go coding agent.**
 
-Blitz is a native Go coding agent built for speed and focus. It reads your workspace, makes the change, checks it, and gets out of the way: no persona, no filler, no chatter.
+Blitz reads your workspace, makes the change, checks it, and gets out of the way: no persona, no filler, no chatter. It's written in Go on Google's Agent Development Kit and runs Gemini, Claude, OpenAI-compatible or Ollama models.
 
----
+![The Blitz desktop app: files, an editor and the agent's chat](docs/static/images/desktop.png)
 
-## Why Blitz?
+**Documentation: https://retail-cortex.github.io/blitz/**
 
-Many AI coding assistants put personality ahead of the work: commentary, noisy output, and abstractions that keep you waiting. Blitz doesn't. Like a good working bird dog, it moves without waste, holds its position quietly, and stays on the task.
+## Why Blitz
 
-* **Compiled Go.** The CLI is a single static binary: instant start, low memory, no runtime to install. It builds on the Google Agent Development Kit (`google.golang.org/adk/v2`) and runs Gemini, Claude, OpenAI or Ollama models.
-* **No antics.** Terse output, plain status marks, and a short summary when it's done.
-* **Safe by default.** Commands run in a sandbox; changes need your approval unless you've allowed them; every turn can be undone.
-* **Terminal first.** `blitz` (or `blz`) in any project. The same engine runs as a per-user service for the desktop app and scheduled workers.
-* **Works with Castor.** Skill definitions follow Castor's `SkillDefinition` schema, with host guardrails for what a skill may do.
+- **Compiled Go.** The CLI starts in about 20 ms and idles in about 40 MB; one static binary, no runtime to install.
+- **Safe by default.** Commands run in an OS sandbox (Seatbelt on macOS, bubblewrap on Linux), edits need your approval unless you've allowed them, and every turn can be undone.
+- **Three ways in, one engine.** `blitz` in the terminal, the per-user service `blitzd` (which also runs scheduled workers), and a desktop app laid out like an IDE. A session started in one continues in the others.
+- **Works with what you have.** `AGENTS.md`, `CLAUDE.md` and `GEMINI.md` load as project instructions; MCP servers, hooks, custom commands and Agent Skills all work.
+- **Scriptable.** JSON and streaming JSON output, limits on turns, cost and time, and distinct exit codes.
 
-## Quick example
+## Install
 
-```bash
-# One prompt, then exit
-blitz exec "add unit tests for user_service.go covering edge cases"
+Download the archive for your platform from the [releases](https://github.com/retail-cortex/blitz/releases): macOS (`darwin_arm64`, `darwin_amd64`), Linux (`linux_amd64`, `linux_arm64`) or Windows (`windows_amd64`). Each holds `blitz`, `blitzd`, the `blz` shortcut and the license files; put its folder on your `PATH`. The desktop app is `Blitz_<version>_macos_universal.dmg`, or `blitz-desktop_<version>_<arch>.deb` for Ubuntu 24.04, Debian 13 and later.
 
-# The same in another project, from anywhere
-blz -d ~/src/api exec "migrate session storage in ./pkg/auth to Redis"
-
-# An interactive session
-blitz
-```
-
----
-
-## Quick Start
-
-Download an archive from the [releases](https://github.com/retail-cortex/blitz/releases) (it holds `blitz`, `blitzd` and the `blz` shortcut) and put its folder on your `PATH`, or build from source with [Bazelisk](https://github.com/bazelbuild/bazelisk) (`bazel`); Bazel brings Go, Node and every tool:
-
-```bash
-bazel build //apps/cli:blitz //apps/service:blitzd   # -> bazel-bin/apps/{cli,service}/…
-blitz config init               # writes a commented ~/.blitz/.env.toml (mode 600)
-blitz config set-key gemini     # stores the key in the OS keychain (or export GEMINI_API_KEY=...)
-blitz doctor                    # checks config, credentials, sandbox, MCP, hooks
-blitz                           # interactive session
-```
-
-**Providers.** Set `llm.provider` to `gemini` (default), `anthropic`, `openai`, or `ollama`; the model comes from `llm.<provider>.model` unless `blitz.default_model` or `--model` overrides it. Anthropic defaults to `claude-opus-5` with streaming, prompt caching of the system prompt, thinking preserved across tool calls, and server-side refusal fallback (`llm.anthropic.fallbacks = "default"`, or `"off"`). Without `api_key` it uses `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`, or an `ant auth login` profile.
-
-Configuration is read only from `~/.blitz/.env.toml`, `$MODENV_PREFIX`, or `--config DIR`. A `.env.toml` inside a project is **ignored** unless you pass `--config .` — a cloned repository must not be able to redirect your API key or turn off approvals.
-
-**API keys and per-workspace settings.** `blitz config set-key <provider>` reads a key from stdin and keeps it in the OS keychain (macOS Keychain; the Secret Service on Linux; else an owner-only `~/.blitz/secrets.toml`); the settings file only refers to it (`api_key = "keychain:…"`). `blitz config keys` shows where each provider's key comes from, `secure-key` moves a key written in the file into the keychain, and `remove-key` removes one. With `--workspace` (`-w`) they work on the current workspace's own settings, kept in `~/.blitz/workspaces/<name>-<hash>/.env.toml` (never in the project) and laid over the global ones: a project can use its own key or provider. The desktop app edits all of this in **Settings → Providers & keys** and **Settings file**, and each workspace's keys in its run settings.
-
----
-
-## Usage
-
-```bash
-blitz                                   # interactive REPL in the current directory
-blitz -d ~/src/app                      # ...in another workspace
-blitz "fix the failing test"            # run once and exit
-git diff | blitz review this change     # piped input becomes part of the prompt
-blitz -p - < task.md                    # prompt from stdin
-blitz --continue "now add docs"         # continue this directory's most recent session
-blitz --resume session-2026…            # resume a specific session (or -r for this directory's latest)
-blitz --resume=before-refactor          # start a new session from a snapshot saved with /session save
-blitz --output-format json "…"          # one JSON result object on stdout
-blitz --output-format stream-json "…"   # one JSON object per event, then the result
-blitz --max-turns 20 "…"                # cap model calls in a one-shot run
-blitz --max-cost-usd 0.50 --timeout 15m "…"   # cap its cost and wall-clock time
-blitz --plan "add rate limiting"         # a plan only: reads and searches, no edits or commands
-blitz --image ui.png "why is this misaligned?"   # attach images (repeatable; @ui.png in the prompt works too)
-```
-
-| Exit code | Meaning |
-|---|---|
-| 0 | success |
-| 1 | runtime or model error |
-| 2 | invalid flags/arguments |
-| 3 | a limit stopped the run: `--max-turns`, `--max-cost-usd` or `--timeout` |
-| 4 | prompt blocked by a `prompt_submit` hook |
-| 130 | interrupted |
-
-Subcommands: `doctor [--online]`, `config init|show|path`, `completion bash|zsh|fish|powershell`.
-
----
-
-## Interactive session
-
-- **Line editing** with history (`~/.blitz/history`, owner-only), Ctrl+R search, and **Tab completion** for `/commands`, their arguments, and `@path` file references.
-- **Multi-line input**: end a line with `\`, or put a block between two lines of `"""`.
-- **Streaming Markdown** rendering, a progress spinner, and a per-turn usage line: `↳ 12.4k in · 1.2k out · context 12.3k · $0.0023`.
-- **Steering**: while the agent is working, start typing (or press Ctrl+T) to send it a message, e.g. "use tabs" or "skip the tests". Output pauses while you type. The message reaches the agent with its next tool result, so nothing is interrupted, and it is kept in the conversation history. If the agent finishes without another tool call, the message is sent as your next prompt. `prompt_submit` hooks apply to these messages too. (macOS and Linux.)
-- **Ctrl+C** or **Esc** cancels the running turn (Esc at an approval too, and in the steer prompt it drops the message); at the prompt Ctrl+C exits (see *Background processes*).
-- **Pickers**: `/resume`, `/agent` and `/model` without an argument, approvals and the agent's multiple-choice questions open a menu under the prompt — arrow keys (or Ctrl+P/N) move, typing filters, Enter chooses, Esc clears the filter or cancels. At an approval `y`, `s`, `a`, `n` still answer at once, and Esc means no and stops the turn. With piped input the commands and prompts stay line-based.
-- **Shift+Tab** switches the permission mode: `default` → `accept-edits` → `plan` → `default` (and `bypass`, only if the session started in it). **Ctrl+G** opens the prompt in `$VISUAL` or `$EDITOR` and sends what you save (an empty file sends nothing). **Esc Esc** clears the line, or on an empty line opens `/rewind`.
-
-| Command | |
-|---|---|
-| `/undo [--force]` | Revert the file changes made in the last turn (checkpoints are kept between runs, so this works after `--resume`) |
-| `/rewind [n [mode]] [--force]` | Go back to before an earlier prompt (Esc Esc on an empty line): restore its files and the conversation, either one, or summarize the conversation from or up to it. After rewinding the conversation the prompt is back in the input line |
-| `/checkpoints` | Turns that changed files |
-| `/diff [git]` | Everything tools changed in this session, across runs (or `git diff`) |
-| `/cost`, `/context` | Token usage (including cache reads and writes), estimated cost, context size vs. compaction threshold |
-| `/compact [focus]` | Summarize everything before the latest turn now; the focus says what to keep |
-| `/memory [reload\|add <note>]` | Project instructions (`AGENTS.md`, `CLAUDE.md`, `GEMINI.md`, `BLITZ.md`, rules) |
-| `/init` | Have the agent write or update `BLITZ.md` from what it finds in the repository (also `blitz init`) |
-| `/approvals [revoke <n>\|clear]` | Remembered approval rules |
-| `/session list [--all]\|new\|load <id\|name>`, `/resume <id\|name>` | Saved sessions — scoped to the current workspace; `--all` shows every directory |
-| `/envs [prune\|remove <key>]` | Python environments of skill scripts: size, packages, which skills use them; `prune` removes the unused |
-| `/rename <name>` | Name this session. New sessions are named after their first prompt; the name shows in `/session list` and the terminal window title (`ui.terminal_title`, on by default). On exit, Blitz prints the `blitz --resume=<id>` command for the session |
-| `/session save <name> [--force]` | Save a snapshot of this session (📸 in `/session list`). Loading it by name starts a new session from that point and leaves the snapshot unchanged, so you can return to it again. `--continue` skips snapshots |
-| `/agents`, `/agent <name>`, `/model <name>` | Personas and models; `/model anthropic/claude-sonnet-5` can switch provider |
-| `/pin_model [<agent> <model>]`, `/unpin <agent>` | Run an agent on its own model (e.g. qa on a cheaper one); saved under `[agent_models]` |
-| `/model_settings [<model> [key=value…\|reset]]` | Show or set one model's temperature, max_tokens, top_p, seed, reasoning_effort or thinking_budget (`key=` clears one); saved under `[model_settings."<model>"]` |
-| `/effort [minimal\|low\|medium\|high\|max\|auto]` | Show or set how hard every model thinks in this session (`auto`: each model's own `reasoning_effort`) |
-| `/sandbox`, `/mcp`, `/tools` | Active policy; MCP servers; the tools the active agent can use |
-| `/btw <question>` | Ask a side question in the middle of a task. The agent answers with everything this session knows, but the question and answer aren't kept: they aren't in the transcript, the saved session, or anything the agent sees later. The turn is read-only, its tokens count in `/cost`, and images queued with `/attach` wait for your next real prompt |
-| `/search web <terms>` | Search the web and hand the top five readable links to the agent, which reads them and answers with citations. Those five URLs need no approval for that turn; other pages still do. The turn can't edit files or run commands |
-| `/search session <terms>` | Find what this session said about something: matching passages from the full transcript (including anything compacted away) go to the agent, which answers from them |
-| `/mode [name]` | Show or change the permission mode (see *Safety Model*) |
-| `/permissions [allow\|ask\|deny\|remove <rule> [--save]]` | Permission rules (see *Safety Model*) |
-| `/plan <goal>` | Ask for a plan without changing anything: the agent reads, searches and delegates (edits, commands and MCP tools are refused), then shows the plan for approval — carry it out (optionally accepting its edits), type what to change, or keep planning. An approved plan is saved in `.blitz/plans/` and carried out in the same turn |
-| `!<command>` | Run a command yourself, like in your own terminal: in the workspace, with your environment, outside the agent's sandbox and approvals. The agent doesn't see it; the audit log records it |
-| `/attach [path\|clear]`, `/paste` | Queue an image (or the clipboard's) for your next message |
-| `/locale [code]` | Interface language (see below) |
-| `/skills list\|show <name>\|search <q>` | Skills; `show` gives a skill's scripts, dependencies, approval tier and what `[skills.policy]` allows |
-| `/set` (`/show`), `/clear`, `/exit` | |
-
-### Images
-
-Mention an image in a prompt (`what's wrong with @screenshots/login.png?`, or `@"with spaces.png"`), queue one with `/attach <path>`, or paste a screenshot with `/paste`; the model also has a `view_image` tool for images it finds in the workspace. PNG, JPEG, GIF and WebP work with Gemini, Anthropic and OpenAI-compatible models (for Ollama, pick a vision model).
-
-- Files are read through the workspace sandbox: blocked paths and anything outside the workspace are refused.
-- Pictures larger than `[images] max_dimension` (1568 px) or 3.75 MB are scaled down and re-encoded; headers are checked before decoding, so oversized "decompression bomb" files are rejected.
-- Session files store a short reference, not the image; the picture lives once in `~/.blitz/images` (owner-only, named by SHA-256) and is deleted after `retain_days` (30) unused. The audit log records the path and hash.
-- `/paste` uses `osascript` on macOS, `wl-paste` or `xclip` on Linux, and PowerShell on Windows.
-
-### Language
-
-The interface speaks English (`en-US`, the default), Spanish (`es`) and Canadian French (`fr-CA`). `/locale` shows the current language; `/locale es` switches and saves `[ui] locale = "es"` to `~/.blitz/.env.toml`. Codes are forgiving: `es-ES`, `es_MX`, `ES-sp`, `spanish` and `español` all work. Any other language (`/locale ja`) changes the language the model replies in, while menus stay in English until someone adds a catalog. Code, paths, commands and tool output are never translated, and `doctor`, `--help` and CLI errors stay in English so they can be shared in bug reports. To add or correct a language, drop a JSON catalog in `~/.blitz/locales/` — see [translating](docs/content/development/translating.md).
-
-### Search
-
-```text
-/search web how do I wrap errors in Go 1.26        # find pages; the agent reads them and answers
-/search session "circuit breaker"                  # what did we say about it earlier?
-```
-
-**`/search web <terms>`** searches with `web.search_provider` (see [Web search](#-extending) below) and lists the first five results the agent can read. It skips non-web links, PDFs, archives, images and office documents, and duplicates. The agent then fetches those pages and answers from them, citing the URLs it used. You aren't asked to approve the search, since you typed it, or those five pages, since you picked them by running the command. Both are recorded in the audit log.
-
-**`/search session <terms>`** looks through this session's saved transcript for the words or `"quoted phrases"`, ignoring case. The transcript keeps what `/compact` has summarized away. Up to 12 matching messages, with about 300 characters around each match, go to the agent. It says what was said or decided and when. If nothing matches, it's still asked, and says so if the subject never came up.
-
-Both are **read-only turns**: the agent can read files, fetch and search, but edits, commands and MCP tools are refused. To act on the answer, send a normal prompt afterwards. The transcript records the `/search` command, not the prompt built from it.
-
-**Limitations**
-- **Only those five pages are pre-approved.** Any other page the agent wants, including one linked from a result or another page on the same site, asks for approval. A redirect to another host is refused, so the agent has to request the target itself.
-- **Readability is judged from the URL.** A page that turns out to be a PDF or other binary without the file extension, or one that needs JavaScript to show its content, comes back empty or as an error. The agent skips it.
-- **Five links at most.** Ten results are requested so there's room to drop unreadable ones; if fewer than five are readable, fewer are handed over.
-- **Session search is literal.** It matches words and phrases, with no stemming or meaning-based search (`retries` doesn't find `retry`). It covers the current session only, not other sessions or snapshots. The transcript stores your prompts and the agent's replies, not tool calls or their output, so something that appeared only in a file the agent read or a command it ran can't be found.
-- **Google search** (`search_provider = "google"`):
-  - Results are the pages Gemini chose to cite, often fewer than ten, not Google's ranked list. Titles are usually just the site's domain.
-  - Google bills each search query Gemini runs, and one `/search web` can run several: 5,000 a month are free across Gemini 3 models, then $14 per 1,000. These charges aren't in `/cost`.
-  - Google's own links are redirects. Blitz resolves them to the real pages, and one that can't be resolved is left out.
-  - Google's Search Suggestions widget (HTML) isn't shown in the terminal. Check that Google's terms for grounding with Google Search fit your use.
-  - Only a Gemini API key works: Vertex AI credentials (`project_id`/`location` without a key) aren't supported for search.
-- **SearXNG**: most public instances turn off the JSON output Blitz needs, so run your own. Its Google engine scrapes results and can be rate-limited or blocked under heavy use.
-
----
-
-## Safety Model
-
-**Approvals.** File edits show a colored diff before you approve. Answers: `y` once, `s` for the rest of the session, `a` always (saved to `~/.blitz/approvals.json`), `n` no. Commands are remembered by exact text within a workspace; edits per workspace; web requests per host; MCP tools per server/tool. Ctrl+C at an approval prompt cancels the whole turn. With no terminal to ask, sensitive actions are denied unless auto-approved in config.
-
-**Plans and task lists.** In plan mode, with `/plan`, or when the agent chooses to plan first (`enter_plan_mode`), it presents its plan with `exit_plan_mode`; approving it carries it out right away (leaving plan mode), typing feedback makes it revise. `[blitz] plan_review` sets when plans are required: `always` (every prompt), `agent-decides` (default) or `never`. For work with several steps the agent keeps a task list (`todo`), shown as a checklist that updates as it goes.
-
-**Permission modes** decide what runs without asking: `default` (ask), `accept-edits` (file changes in the workspace go through without asking; commands still ask), `plan` (every prompt is planned; tools that change anything are refused), `dont-ask` (anything that would ask is refused — for CI and scripts), and `bypass` (nothing asks). `bypass` only runs while the OS sandbox is active, and deny rules, blocked paths and the sandboxes still apply; without a sandbox Blitz stays in `default` and says why. Choose one with `--permission-mode`, `[blitz] permission_mode`, or `/mode` in a session (the prompt shows any mode other than `default`). The older `auto_approve = true` means `bypass`. Scheduled workers ignore the mode: they get exactly their own permissions.
-
-**Permission rules** say what runs without asking (`allow`), always asks (`ask`), or never runs (`deny`), in every mode; deny wins over ask, ask over allow:
-```toml
-[permissions]
-allow = ["shell(go test *)", "shell(git status)", "write(docs/**)", "web(*.go.dev)"]
-ask   = ["shell(git push *)", "write(.github/**)"]
-deny  = ["shell(rm -rf *)", "read(secrets/**)", "mcp(github:delete_*)", "web_search"]
-```
-Kinds: `shell(…)` (checked on every sub-command, through pipes, `bash -c` and wrappers), `write(…)`, `delete(…)` and `read(…)` (path globs relative to the workspace; `read` rules only deny, and become blocked paths), `web(host)`, `search(provider)`, `mcp(server:tool)`, `skill(name)`, `agent(name)`, or a bare tool name. Claude Code's spellings (`Bash(…)`, `Edit(…)`) work too. `ask` asks even in `bypass` mode or after "always"; scheduled workers are refused anything an `ask` or `deny` rule covers, and `allow` rules never widen their permissions. `/permissions` lists the rules and adds or removes them for the session (`--save` writes the config file, keeping its comments); `--allow` and `--deny` add them for one run. (`sandbox.commands.allow` is different: an allow-*list* of the only commands that may run.)
-
-**File sandbox.** File tools only reach the workspace plus `sandbox.allowed_paths` (read-write) and `sandbox.read_only_paths`, enforced with `os.Root` (no `..` or symlink escapes). `sandbox.blocked_paths` (default: `.env`, keys, `~/.ssh`, cloud credentials, …) are never readable or writable — including through symlinks, `grep`, and `list_files`.
-
-**Command policy.** Every shell command is parsed and each sub-command checked (pipes, `$(…)`, `bash -c`, `find -exec`, `env`/`xargs`/`timeout` wrappers; disguises like `s\udo` or `{r,}m` are caught). `sandbox.commands.deny` always wins; if `allow` is set, only matching commands run; `auto_approve` skips the prompt. This is a guardrail — the OS sandbox is the boundary.
-
-**OS sandbox** (`sandbox.shell = auto|required|off`). Shell commands, forged tools and stdio MCP servers run under **Seatbelt** (macOS) or **bubblewrap** (Linux): writes only to writable roots, temp/cache dirs and `shell_writable_paths`; blocked paths unreadable; network off when `allow_network = false`. `required` refuses to start without it.
-
-On Linux, install `bubblewrap` and allow unprivileged user namespaces. Ubuntu 24.04 restricts them through AppArmor (`kernel.apparmor_restrict_unprivileged_userns`), and Docker's default seccomp profile blocks them. In `auto` mode Blitz then runs unsandboxed and `/sandbox` or `doctor` shows why. bubblewrap can only hide paths that exist when a command starts, so a file matching `blocked_paths` that a command creates is visible to that same command; macOS blocks it immediately.
-
-**Background processes never outlive the CLI.** Exiting with processes running asks to kill or wait; a second Ctrl+C force-quits. Each process group is also guarded so it is killed if Blitz dies, even by `SIGKILL`.
-
-**Secrets.** Child processes don't inherit credential variables (`sandbox.scrub_env`, default `*_API_KEY`, `*_SECRET`, …). The audit log masks secrets. Sessions, history, approvals and audit files are owner-only.
-
-**Checkpoints.** Before a file tool changes a file, Blitz keeps a copy, grouped by prompt, so `/undo` can put it back. They are kept between runs in `~/.blitz/checkpoints/<workspace>/` (owner-only, stored by content hash), up to `[checkpoints] max_bytes` (64 MiB) and `max_age_days` (30); `dir = ""` keeps them in memory only. `/rewind` picks any earlier prompt of the session (newest first) and restores the files as they were before it (all later prompts' changes, checked first), the conversation (the transcript and what the model sees are cut before it, and the prompt comes back to edit), both, or summarizes the conversation from or up to it. Messages sent while a turn ran aren't rewind points. Only the file tools' changes are tracked: if a file changed since (by a command or by you), `/undo` stops and says so (`--force` overwrites).
-
-**Audit log.** `~/.blitz/audit/audit-YYYY-MM-DD.jsonl` records prompts, tool calls and results, approvals, denials, hook decisions, and undos, plus your `!` commands and `/search web` queries (`user_shell`, `user_search`). A page fetched through a `/search web` grant is logged as an approval with decision `user-selected`.
-
-**Diagnostic log.** `~/.blitz/logs/blitz-YYYY-MM-DD.jsonl` (owner-only, secrets masked, kept `log.retain_days` = 14) records warnings, failed turns and errors, with trace IDs when telemetry is on. `log.level` (or `BLITZ_LOG_LEVEL`) is `debug`, `info`, `warn`, `error` or `off`. A background goroutine writes it, so logging never waits on the disk.
-
-**Web.** `web_fetch` only reaches public addresses (checked after DNS resolution and on every redirect — no `localhost`, private ranges, or cloud metadata), needs approval per host unless in `web.allow_domains`, and caps response size. The agent's `web_search` asks before each query leaves your machine (rememberable per provider). Your own `/search web` doesn't ask. It pre-approves exactly the five URLs it hands to the agent, for that turn only; every other fetch still asks, and the turn can't edit files or run commands.
-
----
-
-## Extending
-
-**Project memory** — `AGENTS.md`, `CLAUDE.md`, `GEMINI.md` and `BLITZ.md` from the repository root down to the workspace, plus `~/.blitz/BLITZ.md`, are added to the agents' instructions, so a repository set up for another agent works unchanged (a copy with the same content loads once). `BLITZ.local.md` and `CLAUDE.local.md` are personal (Blitz warns if git tracks them). A line can import another file with `@docs/style.md`: relative to the file, at most 5 deep, never from outside the repository (or `~/.blitz` for your own files) and never a blocked path such as `.env`. Rule files in `.blitz/rules/`, `.agents/rules/`, `.claude/rules/` and `~/.blitz/rules/` load too; one with frontmatter `paths: ["src/api/**/*.go"]` is given to the agent only when it first reads or edits a matching file. None of these can grant permissions. (A config written by an older `blitz config init` lists `files` explicitly; add the new names there.)
-
-**MCP servers**
-```toml
-[[mcp.servers]]
-name    = "github"
-command = "npx"
-args    = ["-y", "@modelcontextprotocol/server-github"]
-env     = { GITHUB_PERSONAL_ACCESS_TOKEN = "..." }
-# url = "https://example.com/mcp"   # streamable HTTP instead of stdio
-# tools = ["create_issue"]          # optional allow-list
-# auto_approve = false
-# sandbox = true                    # stdio servers run in the OS sandbox
-# prefix = "gh"                     # expose tools as gh__create_issue
-# agents = ["blitz", "qa"]  # who gets these tools; default: primary agent; "*" = all
-```
-MCP tools need approval per server/tool unless `auto_approve = true`, and can't shadow built-in tools (use `prefix` to avoid clashes). Listing a server's tools times out after 30 s and each call after `timeout_seconds` (default 300). A stdio server that crashes is restarted on the next call. After two failures in a row a server is paused (its tools disappear from the model's list) for 15 s, doubling up to 5 minutes, and then one call is let through as a trial. You get one warning when a server fails, one when it's paused, and one when it recovers.
-
-**Hooks** receive a JSON event on stdin (`event`, `session_id`, `prompt_id`, `workspace`/`cwd`, `transcript_path`, `permission_mode`, `agent`, plus the event's own fields such as `tool`, `args`, `result`, `error`, `prompt`, `reason`). Exit `2` blocks (stderr is the reason) or print `{"decision":"block","reason":"…"}`; other failures warn unless `fail_closed = true`. `pre_tool` and `prompt_submit` hooks run before the action and can block it; what a `prompt_submit` or `session_start` hook prints (or its `additional_context`) is given to the agent with the prompt. A `stop` hook runs when the agent finishes and can keep it going with `{"continue": true, "reason": "now run the tests"}` (or exit 2), at most 5 times per prompt. A `permission_request` hook can answer an approval for you with `{"decision": "allow"}` or `"deny"` (deny rules still come first). `post_tool` (every result), `post_tool_failure`, `session_end`, `subagent_start`, `subagent_stop`, `pre_compact`, `post_compact` (manual `/compact`) and `notification` (an approval or question waiting) hooks only observe, so they run in the background, in order, and never delay the agent. Each event is captured when the tool finishes. If hooks fall far behind (256 queued), further events are dropped with a warning, and at exit queued hooks get up to 5 s to finish. Hooks are your own code from trusted config, so they run outside the OS sandbox with your full environment (they are still killed with Blitz).
-```toml
-[[hooks.pre_tool]]
-match   = "run_shell_command"   # tool-name glob
-command = "~/.blitz/hooks/check.sh"
-[[hooks.post_tool]]
-command = "jq -c . >> ~/tool-log.jsonl"
-[[hooks.prompt_submit]]
-command = "grep -qv 'password' || { echo 'no secrets' >&2; exit 2; }"
-```
-
-**Web search** — set `web.search_provider` to one of:
-- `google`: Gemini's grounding with Google Search, using your Gemini key (`web.search_api_key`, `[llm.gemini] api_key` or `GEMINI_API_KEY`). It works whatever `llm.provider` is. `web.search_model` picks the Gemini model (default `llm.gemini.model`, else `gemini-3.8-flash`). Google bills per search query the model runs: 5,000 a month free across Gemini 3 models, then $14 per 1,000. `/cost` doesn't include this. Results are the pages Gemini cited, resolved from Google's redirect links, plus Gemini's summary.
-- `searxng` (`web.search_url`): open source and self-hosted; it can include Google results without an API key. Enable the JSON format in its `settings.yml` (`search: formats: [html, json]`).
-- `brave` or `tavily`: key in `web.search_api_key` or `BRAVE_API_KEY` / `TAVILY_API_KEY`.
-
-(Google's Custom Search JSON API isn't supported: it's closed to new customers and shuts down on 2027-01-01.) The agent's `web_search` asks for approval (rememberable per provider) because the query leaves your machine; your own `/search web` doesn't. Results from `web.deny_domains` are dropped. `blitz doctor --online` runs a test search. See [Search](#search) for `/search` and its limitations.
-
-**Custom commands** — a Markdown file is a slash command: `~/.blitz/commands/fix.md` is `/fix`, and in the project `.blitz/commands/`, `.claude/commands/` and `.agents/workflows/` work too (the project's win; `db/migrate.md` is `/db:migrate`). The body is the prompt, with `$ARGUMENTS` or `$1`…`$9` for what you type after the command. Optional frontmatter:
-```markdown
----
-description: Fix a GitHub issue
-argument-hint: <issue>
-agent: qa                      # run as this agent
-model: anthropic/claude-haiku-4-5
-allowed-tools: Read, Grep, Bash(git *)   # this turn may use only these (Claude Code names work)
-mode: plan                     # read-only
----
-Fix issue #$1: read it with `gh issue view $1`, find the cause, fix it and add a test.
-```
-Every skill is also a command, `/<skill-name> <request>`, and `/review`, `/security-review` (both read-only), `/simplify` and `/verify` are bundled. Built-in commands win name clashes; `/help` lists the custom ones.
-
-**Skills** — `SKILL.md` files in `~/.blitz/skills` (and, with `trust_workspace`, the project's `./skills` and `.agents/skills`). Frontmatter takes the Agent Skills fields (`name`, `description`, `license`, `compatibility`, `allowed-tools`, `metadata`) and the fields of Castor's skill definition (`castor.skills.v1.SkillDefinition`), under their proto names:
-```yaml
----
-name: gh-issues
-description: Triage GitHub issues
-tool_requirements:
-  - {name: Bash, scopes: ["gh:*"], description: read issues}
-execution_hints:
-  hitl_tier: TIER_2_AUDITED_WRITE      # a tier name, never a number
-  environment_variables: [GITHUB_TOKEN]
-  custom_hints: {network: "true"}      # the scripts need the network
-scripts:
-  - name: list
-    language: python
-    relative_path: scripts/list.py
-    dependencies: ["requests>=2.31"]
-    timeout_seconds: 60
----
-```
-`[skills.policy]` caps what skills may ask for: approval tier, script languages, network, which environment variables pass through, timeouts, trusted content hashes, denied tools and scopes, and packages (index, wheels only, allow/deny, pinning). The stricter of the skill's request and the policy always applies:
-- A missing tier gets `min_hitl_tier` (default 2).
-- `TIER_0_BYPASS_ALL` needs both the skill's `allow_hitl_bypass` and the policy's; otherwise it becomes tier 3.
-- Dependencies must be plain package requirements: URLs, paths and pip options are refused.
-
-`/skills show <name>` lists every decision and the skill's content hash, for `trusted_hashes`. `doctor` reports skills that don't parse and scripts the policy blocks.
-
-**Where scripts will run.** `skills.policy.sandbox` chooses the sandbox, and `doctor` shows which is in use:
-- **`gvisor`** (Linux). Each script gets its own gVisor sandbox, whose user-space kernel keeps a kernel exploit in a script or package away from the host. Only the host's binaries and libraries, `/etc`, and the script's own paths are mounted; home directories don't exist inside, `/tmp` is private, and the network is off unless allowed. Install gVisor's release tarball (`runsc` beside its `gvisor-bin/`) on your `PATH`, in `~/.blitz/bin`, or at `RUNSC_PATH`. It needs unprivileged user namespaces, as bubblewrap does.
-- **`os`**. Seatbelt or bubblewrap, as for shell commands: writes limited to the script's paths, blocked paths hidden, the network as allowed.
-- **`auto`** (default) uses gVisor when a test run works, otherwise the OS sandbox.
-
-Either way a script sees only the variables the policy passes, and it's stopped at its timeout or when you press Ctrl+C. If no sandbox is available (e.g. on Windows), scripts don't run.
-
-**Running scripts.** `activate_skill` lists a skill's scripts and whether the policy lets each run; the agent runs them with `run_skill_script`. Python scripts only, for now.
-- **Dependencies** go into an isolated environment in `~/.blitz/envs`, one per distinct set of requirements. It's built inside the sandbox with the network on and writes allowed only to the environment and the package cache, using `uv` if it's installed (else `venv` and `pip`), from `packages.index`, wheels only by default. You approve each install once, with the package list shown; "always" remembers exactly that list. The system Python is never touched. `/envs` lists environments, `/envs prune` removes those no allowed script needs, and `/envs remove <key>` removes one.
-- **Scripts read the workspace but never write it.** At tier 2 or above, a script writes to its own `.blitz/skill-output/<skill>/<run>/` (`$SKILL_OUTPUT`). The agent reads the results there and makes any changes with the file tools, so diffs, approvals, checkpoints and `/undo` work as usual.
-
-| Tier | Approval | Can write |
-|---|---|---|
-| 1 | none (audited) | nothing but its private `/tmp` |
-| 2 (default) | none (audited) | its output directory |
-| 3 | asked every time; can't be remembered | its output directory |
-| 0 (bypass; both sides must allow it) | none | its output directory |
-
-The script gets `$SKILL_DIR`, only the environment variables the policy passes, and the network only if allowed, and it's stopped at its timeout. With `entry_point`, that function is called and its return value is the exit code.
-
-**Forged tools** — tools built by `universal_constructor` are saved with a manifest in `~/.blitz/uc_tools` and reloaded on start; `action: "delete"` removes one.
-
-**Telemetry (OpenTelemetry)** — off by default, and nothing is sent unless you turn it on. With `[telemetry] enabled = true` (or `BLITZ_TELEMETRY=1`), traces and logs are exported over OTLP/HTTP to `telemetry.endpoint`, else `OTEL_EXPORTER_OTLP_ENDPOINT`, else `http://localhost:4318`. Other `OTEL_EXPORTER_OTLP_*` settings (headers, timeouts) apply. Each prompt is one trace: a `turn` span (agent, model, token counts, cost) containing the ADK's agent, model-call and tool spans, plus `approval` (time spent waiting on you), `hook` and `compact` spans. A session is a chain of turns, not one long trace, because sessions last days and resume in new processes. Every span carries the session as `gen_ai.conversation.id`, and each `turn` has a `turn.index` and a span link to the previous turn, even after `--resume`. Search by `gen_ai.conversation.id` to list a session, or follow the links turn by turn. Prompts, replies, tool arguments and tool results are **not** exported. The ADK attaches tool arguments and results to every tool span, so Blitz removes them before export. Set `capture_content = true` to include them, with secrets masked. Export runs on background goroutines and gives up after 3 s at exit if the collector is unreachable.
-```toml
-[telemetry]
-enabled = true
-endpoint = "http://localhost:4318"
-# capture_content = false
-```
-
-**Resilience** — model requests are retried on rate limits, overload, 5xx responses and dropped connections, with exponential backoff that honours `Retry-After` (`llm.max_retries`, default 3; `0` disables retries). A request that sends nothing for `llm.stall_timeout_seconds` (default 600: no response headers, or a stream that goes quiet) fails instead of hanging the turn. Keep this above your longest non-streamed generation. A stream that fails partway through is not retried, because the text has already been shown. At most `tools.max_parallel` (default 8) tool calls from one model response run at once. Each sub-agent's calls are capped separately.
-
-**Fallback models** — if the model fails before answering (after its retries: an outage, rate limit or bad credentials), the next one in `llm.fallback_models` answers instead:
-```toml
-[llm]
-provider = "gemini"
-fallback_models = ["anthropic/claude-sonnet-5", "gemini-3.5-flash-lite"]   # "provider/model", or a model of the same provider
-```
-Each provider uses its own credentials section. A failed model is skipped for 15 s, doubling up to 5 minutes, then tried again. You see one notice when a fallback takes over and one when the primary is back. Cost is priced by the model that answered. A model that fails after it started answering isn't replaced, because part of the answer is already on screen. For OpenRouter names that contain a slash, write the provider first: `openai/anthropic/claude-sonnet-5`. `blitz doctor --online` checks each model separately.
-
-**Per-agent models** — agents can run on different models, e.g. a cheap one for reviews:
-```toml
-[agent_models]
-qa = "anthropic/claude-haiku-4-5"
-```
-A pin wins over an agent's own `default_model` (agent frontmatter), and both win over the configured model. Pinned agents keep the `fallback_models` chain, and each agent's tokens are priced by its own model. `/pin_model` and `/unpin` change pins in the session and in the config file, keeping its comments. `doctor` checks each pinned model.
-
-**Per-model settings** — generation settings for one model, which win over the global `blitz.temperature` and `max_tokens`:
-```toml
-[model_settings."gpt-5"]
-temperature = 0.3
-top_p = 0.9
-max_tokens = 4096
-seed = 7
-
-[model_settings."claude-opus-5-5"]
-reasoning_effort = "high"   # minimal, low, medium, high or max
-thinking_budget = 16000     # tokens the model may spend thinking; 0 turns thinking off
-```
-The key is the model name; a `provider/` prefix is ignored (for OpenRouter names that contain a slash, write the provider first, as in `fallback_models`). Every model uses its own settings: the main model, pinned agents, and each model in `fallback_models`. `/model_settings gpt-5 temperature=0.3` changes them from the next model call and saves them, keeping the file's comments. A setting the provider doesn't accept is left out of the request (and `/model_settings` warns): OpenAI and Ollama have no `seed`; Anthropic takes only `max_tokens`, plus `temperature` on older models, `reasoning_effort` on models with the effort control (Opus 4.5 and later), and `thinking_budget` on models with extended thinking (a budget raises `max_tokens` above it when needed, is at least 1024, and leaves out `temperature`); Gemini 2.5 takes a `thinking_budget` but no `reasoning_effort`, and when a Gemini 3 model has both the effort wins. Providers with fewer levels round `max` down to `high` and Claude rounds `minimal` up to `low`.
-
-**Reasoning effort for a session:** `/effort high` (or `--effort high`) applies to every model call from then on, over each model's own `reasoning_effort`, and `/effort auto` goes back to them. It isn't saved; `/set` shows it.
-
-**Context & cost** — history is compacted automatically once a prompt reaches `context.token_threshold` tokens, or on demand with `/compact`. Estimated list prices for the default models are built in; override or add them under `[pricing."model-name"]` (`input_per_mtok`, `output_per_mtok`, `cached_input_per_mtok`, `cache_write_per_mtok`). Costs use the model that actually answered, so refusal fallbacks are priced correctly; `doctor` warns when the active model has no price.
-
----
-
-## Built-in agents
-
-| Agent | Role |
-|---|---|
-| `blitz` | Primary autonomous coding agent |
-| `helios` | Universal Constructor; builds and runs custom tools |
-| `qa` | Test loops, edge cases, regression suites |
-| `web-retriever` | Documentation and web research (`web_fetch`) |
-| `planning-agent` | Requirement decomposition and roadmaps |
-| `agent-creator` | Creates custom agent specs and skills |
-| `model-judge` | Model comparisons |
-
-Tools: `read_file`, `list_files`, `glob` (`**/*.go`, `src/**/*.{ts,tsx}`; newest first), `grep`, `create_file`, `replace_in_file`/`edit`, `delete_snippet`, `apply_patch` (unified diff or `*** Begin Patch`, atomic, multi-file), `delete_file`, `run_shell_command`, `manage_background_process`, `web_fetch`, `web_search` (when configured), `ask_user_question`, skills (`list_or_search_skills`, `activate_skill`, `run_skill_script`), `list_agents`/`invoke_agent`, `universal_constructor`, and MCP tools.
-
----
-
-## The service
-
-`blitzd` runs Blitz as a per-user service that holds every workspace a client opens, for the desktop app and other clients. It ships beside `blitz`, and `blitz service install` starts it at every login. It listens only on a Unix socket this user can open (`~/.blitz/run/blitz.sock`, or `--socket`) and speaks the API in `proto/blitz/v1` over Connect: gRPC, gRPC-Web, or plain JSON:
-
-```bash
-curl --unix-socket ~/.blitz/run/blitz.sock -H 'Content-Type: application/json' \
-  -d '{"workspace": "/path/to/project"}' http://localhost/blitz.v1.WorkspaceService/GetModel
-```
-
-When the service is running, `blitz` attaches to it (the REPL says so), so the CLI, the desktop app and other clients share one copy of each workspace; `--local` runs the workspace in-process instead. A workspace has one owner at a time, so `--local` on a workspace the service holds is refused. `BLITZ_SOCKET` moves the socket for both.
-
-**Desktop app.** `bazel build //apps/desktop/packaging:Blitz.app` builds `Blitz.app` (macOS; `:deb`, a Debian package, on Linux), a window onto the service, laid out like an IDE: a dropdown of workspaces you can name, colour, describe and close, files on the left, an editor in the middle and the chat on the right; a chat with Markdown, the agent's task list, approvals and plans as cards, and rewind or edit from any prompt; a run settings panel (agent, model, reasoning effort, generation settings, permission mode and rules); a Changes view with the diff beside the agent's summary; the files as a tree with git status (⌘P to go to a file), and an editor with highlighting, completion and saving that won't overwrite someone else's change, the agent being told what you edited; and the workspace's workers. Settings › Appearance picks System (the default), Light or Dark, and the interface language (the system's by default; English, Spanish or Canadian French, from the same catalogs as the terminal). The window keeps only its own settings, in `~/.blitz/desktop.json`; everything else lives in the service, so the REPL and the app see the same sessions.
-
-**Workers** are workflows a workspace defines in `workers/<name>/WORKER.md`, which the service runs on a schedule, unattended:
-
-```markdown
----
-description: Report outdated Go modules
-schedule: Weekdays at 9:30            # or cron "30 9 * * 1-5", or "@every 2h"
-permissions: ["shell:go list -m -u all", "write:reports/"]
-limits: { max_turns: 30, max_cost_usd: 0.50, timeout: 20m }
----
-Check for outdated Go modules and write reports/deps.md.
-```
-
-Optional `agent:` and `model:` run the worker as another agent or on another model, for its runs only. `blitz workers` lists them; `blitz workers enable <name>` shows exactly what you're approving and enables that content (an edit disables it again); `workers run <name>` runs one now; `workers runs <name>` shows its history. A worker may only do what its `permissions` allow (`shell:`, `write:`, `delete:`, `web:`, `mcp:`), capped by `[workers.policy]`; anything else is refused and recorded, and it can't ask questions. Each run is a session of its own you can open with `/resume`. `blitz service install` starts the service at every login (a launchd agent on macOS, a systemd user unit on Linux), so workers keep their schedules; keep API keys in the keychain (`blitz config set-key`) or `~/.blitz/.env.toml`, since a login item doesn't see your shell's environment.
-
-## Build, Test, Release
-
-Blitz is a monorepo built with Bazel: the CLI (`apps/cli`), the service (`apps/service`, `blitzd`) and the desktop app (`apps/desktop`) over shared packages (`pkg/`). See the [development guide](docs/content/development/_index.md) for the layout and its rules.
-
-```bash
-bazel build //...                      # everything for this machine
-bazel test --config=race //...         # every test (Go with the race detector, the desktop page, the protos)
-bazel build --config=release //release:archives   # the release archives, every platform, stamped with the git tag
-```
-
-Tagging `v*` runs `.github/workflows/release.yml`: reproducible builds (the archives come out byte for byte the same on macOS and Linux), archives with `blitz`, `blitzd`, `blz`, `LICENSE` and `NOTICE`, SPDX SBOMs, and a cosign-signed checksum file (keyless, via GitHub OIDC). Verify a release against this repository's release workflow, not just any GitHub workflow:
+Verify a download against this repository's release workflow:
 
 ```bash
 cosign verify-blob --bundle checksums.txt.sigstore.json \
@@ -411,16 +28,87 @@ cosign verify-blob --bundle checksums.txt.sigstore.json \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com checksums.txt
 sha256sum --ignore-missing -c checksums.txt
 ```
-(Releases made before the move to `retail-cortex/blitz`, such as `v0.1.0`, were signed by the former repository's workflow and verify against that identity: `^https://github.com/rmcguinness/code_puppy/\.github/workflows/go-release\.yml@refs/tags/v`.)
 
-The desktop app comes as `Blitz_<version>_macos_universal.dmg` (signed with a Developer ID and notarized) and `blitz-desktop_<version>_<arch>.deb` for Ubuntu 24.04 / Debian 13 and later (`sudo apt install ./blitz-desktop_*.deb`). Each has its own cosign bundle, verified the same way: `cosign verify-blob --bundle <file>.sigstore.json` with the flags above, then the file. `bazel build //apps/desktop/packaging:Blitz.app` (or `:deb`) builds the package for the machine you're on.
+The macOS command-line binaries aren't notarized: clear the quarantine flag with `xattr -d com.apple.quarantine blitz blitzd`.
 
-The macOS CLI binaries aren't Apple-notarized, so a copy downloaded in a browser is quarantined and Gatekeeper won't run it. Clear the flag with `xattr -d com.apple.quarantine blitz blitzd`, or open it once through Finder's context menu. Each release's notes say this too.
+## Quick start
 
-CI (`ci.yml`) runs every test through Bazel on macOS and Linux (vet and staticcheck run in every compile), checks the dependency rules between apps and packages, formatting and the API protos in `proto/` (lint, formatting, no breaking changes), runs govulncheck, and compares the release archives built on both. The Linux job installs bubblewrap and a pinned gVisor, and fails if the sandbox enforcement or gVisor tests are skipped.
+```bash
+blitz config init               # a commented ~/.blitz/.env.toml
+blitz config set-key gemini     # your API key, into the OS keychain (or anthropic, openai)
+blitz doctor                    # checks the settings, the key and the sandbox
 
-**Documentation:** the site at https://retail-cortex.github.io/blitz/, built from [`docs/`](docs/content/_index.md): the [roadmap](docs/content/about/roadmap.md), [specifications](docs/content/about/specs/_index.md), [manual verification](docs/content/development/manual-verification.md), [where to pick up](docs/content/development/next-steps.md), [development](docs/content/development/_index.md), [history](docs/content/about/history.md).
+cd ~/src/project
+blitz                           # an interactive session
+blitz "why does the build fail?"   # one prompt, then exit
+```
+
+In a session, ask for what you want. Blitz shows a diff before each edit and asks before commands run: `y` once, `s` for the session, `a` always, `n` no. `/undo` reverts the last turn and `/help` lists the commands. To use the desktop app and scheduled workers, start the service at login with `blitz service install`.
+
+[Getting started](https://retail-cortex.github.io/blitz/getting-started/) goes further, and the [guide](https://retail-cortex.github.io/blitz/guide/) covers configuration, safety, models, extending and more.
+
+## Building from source
+
+Blitz builds with [Bazel](https://bazel.build) 9.2, which downloads Go, Node, pnpm, buf, Hugo and every dependency at pinned versions. Install [Bazelisk](https://github.com/bazelbuild/bazelisk) as `bazel` (it picks the version in `.bazelversion`); nothing else of that toolchain needs installing.
+
+### macOS (13 or later, Apple silicon or Intel)
+
+```bash
+xcode-select --install                   # or install Xcode, and: sudo xcode-select -s /Applications/Xcode.app
+brew install bazelisk
+git clone https://github.com/retail-cortex/blitz.git && cd blitz
+```
+
+The builds and tests are run with the full Xcode installed.
+
+### Linux (Ubuntu 24.04 or Debian 13 and later)
+
+```bash
+sudo apt-get install -y git bubblewrap pkg-config libgtk-3-dev libwebkit2gtk-4.1-dev
+sudo curl -fsSLo /usr/local/bin/bazel https://github.com/bazelbuild/bazelisk/releases/latest/download/bazelisk-linux-amd64
+sudo chmod +x /usr/local/bin/bazel       # bazelisk-linux-arm64 on ARM
+git clone https://github.com/retail-cortex/blitz.git && cd blitz
+```
+
+GTK and WebKitGTK are only for the desktop app; bubblewrap is the shell sandbox.
+
+### Windows
+
+Building on Windows isn't supported: use WSL 2 and the Linux steps. The Windows archive cross-compiles on macOS or Linux (`bazel build //release:archives`).
+
+### Build, test and run
+
+```bash
+bazel build //apps/cli:blitz //apps/service:blitzd       # bazel-bin/apps/cli/blitz, bazel-bin/apps/service/blitzd
+bazel test //...                                         # every test: Go, the desktop page, the protos
+bazel run //apps/cli:blitz -- doctor                     # run the CLI (arguments after --)
+bazel run //apps/service:blitzd                          # run the service in the foreground
+
+bazel run //apps/desktop:blitz-desktop                   # the desktop app, with its own blitzd
+bazel run //apps/desktop/web:dev                         # the desktop page in a browser, http://localhost:5173/?fake
+bazel build //apps/desktop/packaging:Blitz.app           # macOS app bundle (universal); :deb on Linux
+
+bazel build --config=release //release:archives          # the release archives, every platform, version from git
+bazel run //docs:serve                                   # the docs site, http://localhost:1313
+```
+
+### Common problems
+
+- **"bazel: command not found" or the wrong Bazel version.** Install Bazelisk as `bazel`; don't install Bazel itself.
+- **The desktop app fails to build on Linux with a missing `gtk+-3.0` or `webkit2gtk-4.1`.** Install `libgtk-3-dev libwebkit2gtk-4.1-dev pkg-config`. Older distributions only ship WebKitGTK 4.0, which isn't supported.
+- **`doctor` says the sandbox is unavailable on Ubuntu 24.04.** AppArmor restricts unprivileged user namespaces, which bubblewrap needs: `sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0` (or an AppArmor profile for `bwrap`). Inside Docker, the default seccomp profile blocks them too.
+- **The sandbox or gVisor tests skip.** They need bubblewrap (Linux) and `runsc` (`RUNSC_PATH`); CI fails if they skip, locally they don't.
+- **Out of disk space.** A full build with tests and every platform's archive takes several gigabytes under Bazel's output base; `bazel clean` frees the build outputs.
+- **`go build` fails.** Use Bazel: the API's generated Go code exists only in the build.
+
+More in [building from source](https://retail-cortex.github.io/blitz/development/building/).
+
+## Contributing
+
+See [CONTRIBUTING.md](docs/CONTRIBUTING.md) and the [development guide](https://retail-cortex.github.io/blitz/development/). Maintainers are listed in [OWNERS.txt](OWNERS.txt).
 
 ## License
 
-Apache License 2.0; see [LICENSE](LICENSE), [NOTICE](NOTICE), and [THIRD_PARTY_NOTICES](THIRD_PARTY_NOTICES) for the software Blitz includes. Every program shows them: `blitz license [full|third-party]` (and `/license`), `blitzd --license`, and the desktop app's Settings › About. Blitz began as a Go port of [Code Puppy](https://github.com/mpfaffenberger/code_puppy) by Mike Pfaffenberger (MIT); the Python implementation was removed after the port and is kept at the `python-final` tag of the former repository, `rmcguinness/code_puppy` (this repository starts from a fresh history).
+Apache License 2.0: see [LICENSE](LICENSE), [NOTICE](NOTICE), and [THIRD_PARTY_NOTICES](THIRD_PARTY_NOTICES) for the software Blitz includes. Every program shows them: `blitz license` (and `/license`), `blitzd --license`, and the desktop app's **Settings › About**.
+
+Blitz began as a Go port of [Code Puppy](https://github.com/mpfaffenberger/code_puppy) by Mike Pfaffenberger (MIT).

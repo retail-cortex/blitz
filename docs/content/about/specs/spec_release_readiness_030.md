@@ -7,7 +7,7 @@ weight: 30
 
 | | |
 |---|---|
-| Status | In progress: steps 1 (licensing), 2 (comments), 3 (specs) and 4 (the docs site) done 2026-09-27; step 5 to do. Blocks the next release. |
+| Status | Implemented: steps 1 (licensing), 2 (comments), 3 (specs), 4 (the docs site) and 5 (README, contributing, owners, and test coverage) done 2026-09-27. |
 | Depends on | every earlier spec; [spec_monorepo_028](spec_monorepo_028.md) (the build), [spec_release_025](spec_release_025.md) (packages) |
 
 ## 1. Purpose
@@ -61,14 +61,15 @@ The owner's review (2026-09-27) found the project not ready to release: the old 
   - `packages/`: a page per shared package under `pkg/`;
   - `development/`: working on Blitz (from `AGENTS.md`), building from source on each OS, where to pick up, manual verification, translating;
   - `about/`: performance (measured, and by design), the roadmap, history, and the specs (`about/specs/`, the index as `_index.md`).
-- **RR-32** Root keeps only what tools and packages need there: `README.md` (short), `LICENSE`, `NOTICE`, `OWNERS.txt` (planned), and `AGENTS.md` as a short pointer for coding agents (§8). `CONTRIBUTING.md` lives at `docs/CONTRIBUTING.md` (planned) (GitHub finds it there) and the site mounts it. `.agents/` is emptied into the site.
+- **RR-32** Root keeps only what tools and packages need there: `README.md` (short), `LICENSE`, `NOTICE`, `OWNERS.txt`, and `AGENTS.md` as a short pointer for coding agents (§8). `CONTRIBUTING.md` lives at `docs/CONTRIBUTING.md` (GitHub finds it there) and the site mounts it (`//docs:contributing`, under Development). `.agents/` is emptied into the site.
 - **RR-33** Published to GitHub Pages by a workflow on pushes to `main` that change `docs/` (and by hand): `bazel build //docs:site`, the link check, then `actions/upload-pages-artifact` and `actions/deploy-pages`.
 
 ## 7. README, contributing, owners
 
-- **RR-40** `README.md`: what Blitz is and why, a screenshot of the desktop app, install (release downloads and how to verify them), a five-minute quick start, **Building from source** in detail (prerequisites per OS: Bazelisk; Xcode command-line tools on macOS; `libgtk-3-dev libwebkit2gtk-4.1-dev pkg-config` and bubblewrap on Linux; then build, test, run the CLI, the service and the desktop app, the page's dev server, packages, and common problems), and links to the site for everything else.
-- **RR-41** `docs/CONTRIBUTING.md` (planned): how to set up, the Bazel-only rule (tidy, formatting, packages through Bazel), the checks CI runs and how to run them first, commit messages, specs first for features, translations, headers and comments, and the review process.
-- **RR-42** `OWNERS.txt` (planned): the maintainers (name and GitHub handle, no e-mail) and what each owns; `.github/CODEOWNERS` (planned) generated from it so reviews are requested automatically.
+- **RR-40** `README.md` (the desktop screenshot is `docs/static/images/desktop.png`, taken from the page with its fake service): what Blitz is and why, a screenshot of the desktop app, install (release downloads and how to verify them), a five-minute quick start, **Building from source** in detail (prerequisites per OS: Bazelisk; Xcode command-line tools on macOS; `libgtk-3-dev libwebkit2gtk-4.1-dev pkg-config` and bubblewrap on Linux; then build, test, run the CLI, the service and the desktop app, the page's dev server, packages, and common problems), and links to the site for everything else.
+- **RR-41** `docs/CONTRIBUTING.md`: how to set up, the Bazel-only rule (tidy, formatting, packages through Bazel), the checks CI runs and how to run them first, commit messages, specs first for features, translations, headers and comments, and the review process.
+- **RR-42** `OWNERS.txt`: the maintainers (name and GitHub handle, no e-mail) and what each owns; `.github/CODEOWNERS` generated from it by `bazel run //tools/codeowners` so reviews are requested automatically (CI: `-- --check`).
+- **RR-43** Test coverage, measured and kept from falling (the owner's request, 2026-09-27): `tools/coverage.sh` runs `bazel coverage` over every test with the instrumentation limited to `apps/` and `pkg/`, and `//tools/coverage` summarizes Bazel's combined LCOV report per package and file. CI's Linux job runs the tests this way (with the race detector), puts the table in the job summary, uploads the summary, and fails below the floor in `tools/coverage/floor.txt`, which only ever goes up. The docs workflow publishes the latest summary from CI on `main` as **About › Coverage**. First measured 2026-09-27: 78.7% of 19,936 lines (macOS); lowest `apps/desktop` 47.3%, `pkg/client` 47.4%, `pkg/secrets` 50.3%, `pkg/loginitem` 55.4%.
 
 ## 8. Decisions (the owner, 2026-09-27)
 

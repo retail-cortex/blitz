@@ -1,0 +1,4 @@
+# Generated from OWNERS.txt by //tools/codeowners. Don't edit: change
+# OWNERS.txt and run bazel run //tools/codeowners.
+
+* @rmcguinness

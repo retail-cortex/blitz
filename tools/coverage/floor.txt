@@ -1,0 +1,4 @@
+# The lowest total coverage CI accepts, in percent of lines in apps/ and
+# pkg/ (tools/coverage.sh). Raise it when coverage rises, so it only goes
+# up; never lower it to let a change through.
+77.0
