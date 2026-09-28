@@ -154,6 +154,14 @@ pkg_files(
     renames = {"appicon.png": "blitz-desktop.png"},
 )
 
+# The icon's source, which the desktop draws sharp at any size.
+pkg_files(
+    name = "deb_icon_scalable",
+    srcs = ["appicon.svg"],
+    prefix = "usr/share/icons/hicolor/scalable/apps",
+    renames = {"appicon.svg": "blitz-desktop.svg"},
+)
+
 # Debian's copyright file (the Apache License is the system's copy, in
 # /usr/share/common-licenses), with the notice and the third-party notices.
 pkg_files(
@@ -172,6 +180,7 @@ pkg_tar(
     srcs = [
         ":deb_doc",
         ":deb_icon",
+        ":deb_icon_scalable",
         ":deb_launcher",
         ":deb_link",
         ":deb_programs",
