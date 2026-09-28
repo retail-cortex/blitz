@@ -19,7 +19,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -27,6 +26,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/engine/breaker"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/adk/v2/agent"
 	"google.golang.org/adk/v2/tool"
 )
@@ -63,26 +63,23 @@ func TestUnhealthyServerIsSkippedUntilCooldown(t *testing.T) {
 	ts := m.Toolsets()[0]
 
 	for range 5 { // model calls while the server is down
-		if tl, err := ts.Tools(createTestToolContext()); err != nil || len(tl) != 0 {
-			t.Fatalf("down server: %v %v", tl, err)
-		}
+		tl, err := ts.Tools(createTestToolContext())
+		require.NoError(t, err, "down server: %v", tl)
+		require.Len(t, tl, 0, "down server: %v %v", tl, err)
 	}
-	if n := fts.calls.Load(); n != mcpFailThreshold {
-		t.Fatalf("server contacted %d times while down; want %d then paused", n, mcpFailThreshold)
-	}
-	if len(warnings) != 2 || !strings.Contains(warnings[0], "connection refused") || !strings.Contains(warnings[1], "paused") {
-		t.Fatalf("warnings = %q", warnings)
-	}
+	n := fts.calls.Load()
+	require.Equal(t, int32(mcpFailThreshold), n, "server contacted %d times while down; want %d then paused", n, mcpFailThreshold)
+	require.Len(t, warnings, 2, "warnings = %q", warnings)
+	require.Contains(t, warnings[0], "connection refused", "warnings = %q", warnings)
+	require.Contains(t, warnings[1], "paused", "warnings = %q", warnings)
 
 	fts.broken.Store(false)
 	clk.advance(breaker.InitialCooldown)
 	tl, err := ts.Tools(createTestToolContext())
-	if err != nil || len(tl) != 1 {
-		t.Fatalf("recovered server: %v %v", tl, err)
-	}
-	if last := warnings[len(warnings)-1]; !strings.Contains(last, "available again") {
-		t.Fatalf("no recovery notice: %q", warnings)
-	}
+	require.NoError(t, err, "recovered server: %v", tl)
+	require.Len(t, tl, 1, "recovered server: %v %v", tl, err)
+	last := warnings[len(warnings)-1]
+	require.Contains(t, last, "available again", "no recovery notice: %q", warnings)
 }
 
 // TestMCPHelperServer is not a test: run with BLITZ_MCP_HELPER=1 it is
@@ -119,14 +116,11 @@ func helperServer(t *testing.T, timeoutSeconds int) (*MCPManager, map[string]run
 		Env:            map[string]string{"BLITZ_MCP_HELPER": "1"},
 		TimeoutSeconds: timeoutSeconds,
 	}}, nil, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	t.Cleanup(m.Close)
 	tl, err := m.Toolsets()[0].Tools(createTestToolContext())
-	if err != nil || len(tl) != 4 {
-		t.Fatalf("helper tools: %v %v", toolNames(tl), err)
-	}
+	require.NoError(t, err, "helper tools: %v", toolNames(tl))
+	require.Len(t, tl, 4, "helper tools: %v %v", toolNames(tl), err)
 	tools := map[string]runnerTool{}
 	for _, x := range tl {
 		tools[x.Name()] = x.(runnerTool)
@@ -143,43 +137,29 @@ func echoText(t *testing.T, rt runnerTool) (string, error) {
 func TestCrashedStdioServerIsRestarted(t *testing.T) {
 	m, tools := helperServer(t, 0)
 	first, err := echoText(t, tools["echo"])
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := tools["crash"].Run(createTestToolContext(), map[string]any{"text": "x"}); err == nil {
-		t.Fatal("crash tool returned no error")
-	}
+	require.NoError(t, err)
+	_, crashErr := tools["crash"].Run(createTestToolContext(), map[string]any{"text": "x"})
+	require.Error(t, crashErr, "the crash tool reports an error")
 	second, err := echoText(t, tools["echo"])
-	if err != nil {
-		t.Fatalf("server not restarted after a crash: %v", err)
-	}
-	if first == second {
-		t.Fatalf("same process answered before and after the crash: %s", first)
-	}
-	if ok, _ := m.servers[0].health.Allow(); !ok {
-		t.Fatal("breaker open after a successful call")
-	}
+	require.NoError(t, err, "server not restarted after a crash")
+	require.NotEqual(t, second, first, "same process answered before and after the crash: %s", first)
+	ok, _ := m.servers[0].health.Allow()
+	require.True(t, ok, "breaker open after a successful call")
 }
 
 func TestSlowMCPCallTimesOutAndToolErrorsKeepServerHealthy(t *testing.T) {
 	m, tools := helperServer(t, 1)
 	start := time.Now()
 	_, err := tools["slow"].Run(createTestToolContext(), map[string]any{"text": "x"})
-	if err == nil || !strings.Contains(err.Error(), "timed out") {
-		t.Fatalf("slow call: %v", err)
-	}
-	if d := time.Since(start); d > 5*time.Second {
-		t.Fatalf("timeout took %v", d)
-	}
-	if m.servers[0].health.Failures() != 1 {
-		t.Fatalf("timeout not counted: %d failures", m.servers[0].health.Failures())
-	}
+	require.Error(t, err, "slow call")
+	require.Contains(t, err.Error(), "timed out", "slow call: %v", err)
+	d := time.Since(start)
+	require.LessOrEqual(t, d, 5*time.Second, "timeout took %v", d)
+	require.Equal(t, 1, m.servers[0].health.Failures(), "timeout not counted: %d failures", m.servers[0].health.Failures())
 
 	// A tool-level error means the server is working: it resets the streak.
-	if _, err := tools["fail"].Run(createTestToolContext(), map[string]any{"text": "x"}); err == nil || !strings.Contains(err.Error(), "bad input") {
-		t.Fatalf("fail tool: %v", err)
-	}
-	if m.servers[0].health.Failures() != 0 {
-		t.Fatal("a tool error was counted as a server failure")
-	}
+	_, err = tools["fail"].Run(createTestToolContext(), map[string]any{"text": "x"})
+	require.Error(t, err, "fail tool")
+	require.Contains(t, err.Error(), "bad input", "fail tool: %v", err)
+	require.Equal(t, 0, m.servers[0].health.Failures(), "a tool error was counted as a server failure")
 }

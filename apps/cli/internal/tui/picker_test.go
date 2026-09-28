@@ -23,6 +23,8 @@ import (
 	"time"
 
 	"github.com/retail-cortex/blitz/pkg/api"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func items(labels ...string) []PickItem {
@@ -52,50 +54,44 @@ func TestPickStateFiltersMovesAndChooses(t *testing.T) {
 		}
 		return out
 	}
-	if done, i := press(pickKey{kind: pkEnter}); done != pickChosen || i != 1 {
-		t.Fatalf("the current item isn't selected first: %v %d", done, i)
-	}
+	done, i := press(pickKey{kind: pkEnter})
+	require.Equal(t, pickChosen, done, "the current item isn't selected first: %v %d", done, i)
+	require.Equal(t, 1, i, "the current item isn't selected first: %v %d", done, i)
 	// Typing filters on label and detail, word by word, ignoring case.
 	st = newPickState(st.items, 0)
 	press(char("WRITES do")...)
-	if len(st.visible) != 1 || st.visible[0] != 2 {
-		t.Fatalf("filter: %v", st.visible)
-	}
+	require.Len(t, st.visible, 1, "filter: %v", st.visible)
+	require.Equal(t, 2, st.visible[0], "filter: %v", st.visible)
 	press(pickKey{kind: pkBackspace}, pickKey{kind: pkBackspace})
-	if len(st.visible) != 2 {
-		t.Fatalf("after backspace: %v", st.visible)
-	}
-	if done, i := press(pickKey{kind: pkDown}, pickKey{kind: pkDown}, pickKey{kind: pkEnter}); done != pickChosen || i != 2 {
-		t.Fatalf("down past the end stays on the last: %v %d", done, i)
-	}
+	require.Len(t, st.visible, 2, "after backspace: %v", st.visible)
+	done, i = press(pickKey{kind: pkDown}, pickKey{kind: pkDown}, pickKey{kind: pkEnter})
+	require.Equal(t, pickChosen, done, "down past the end stays on the last: %v %d", done, i)
+	require.Equal(t, 2, i, "down past the end stays on the last: %v %d", done, i)
 	// Esc clears the filter, then cancels.
 	st = newPickState(st.items, 0)
 	press(char("zzz")...)
-	if done, _ := press(pickKey{kind: pkEnter}); done != pickOpen {
-		t.Fatal("Enter with nothing matching chose something")
-	}
-	if done, _ := press(pickKey{kind: pkEsc}); done != pickOpen || len(st.visible) != 3 {
-		t.Fatalf("first Esc: %v %v", done, st.visible)
-	}
-	if done, _ := press(pickKey{kind: pkEsc}); done != pickCancelled {
-		t.Fatalf("second Esc: %v", done)
-	}
-	if done, _ := press(pickKey{kind: pkInterrupt}); done != pickInterrupted {
-		t.Fatalf("Ctrl+C: %v", done)
-	}
+	done, _ = press(pickKey{kind: pkEnter})
+	require.Equal(t, pickOpen, done, "Enter with nothing matching chose something")
+	done, _ = press(pickKey{kind: pkEsc})
+	require.Equal(t, pickOpen, done, "first Esc: %v %v", done, st.visible)
+	require.Len(t, st.visible, 3, "first Esc: %v %v", done, st.visible)
+	done, _ = press(pickKey{kind: pkEsc})
+	require.Equal(t, pickCancelled, done, "second Esc: %v", done)
+	done, _ = press(pickKey{kind: pkInterrupt})
+	require.Equal(t, pickInterrupted, done, "Ctrl+C: %v", done)
 }
 
 func TestPickKeysSelectOnlyBeforeFiltering(t *testing.T) {
 	its := []PickItem{{Label: "Yes", Key: 'y'}, {Label: "No", Key: 'n'}, {Label: "Maybe not"}}
 	st := newPickState(its, 0)
-	if done, i := st.handle(pickKey{kind: pkChar, r: 'N'}); done != pickChosen || i != 1 {
-		t.Fatalf("key: %v %d", done, i)
-	}
+	done, i := st.handle(pickKey{kind: pkChar, r: 'N'})
+	require.Equal(t, pickChosen, done, "key: %v %d", done, i)
+	require.Equal(t, 1, i, "key: %v %d", done, i)
 	st = newPickState(its, 0)
 	st.handle(pickKey{kind: pkChar, r: 'm'})
-	if done, _ := st.handle(pickKey{kind: pkChar, r: 'y'}); done != pickOpen || string(st.filter) != "my" {
-		t.Fatalf("a key after filter text is text: %v %q", done, string(st.filter))
-	}
+	done, _ = st.handle(pickKey{kind: pkChar, r: 'y'})
+	require.Equal(t, pickOpen, done, "a key after filter text is text: %v %q", done, string(st.filter))
+	require.Equal(t, "my", string(st.filter), "a key after filter text is text: %v %q", done, string(st.filter))
 }
 
 func TestPickStateScrolls(t *testing.T) {
@@ -107,18 +103,15 @@ func TestPickStateScrolls(t *testing.T) {
 	for range 12 {
 		st.handle(pickKey{kind: pkDown})
 	}
-	if st.cursor != 12 || st.top != 3 {
-		t.Fatalf("cursor %d top %d", st.cursor, st.top)
-	}
+	require.Equal(t, 12, st.cursor, "cursor %d top %d", st.cursor, st.top)
+	require.Equal(t, 3, st.top, "cursor %d top %d", st.cursor, st.top)
 	st.handle(pickKey{kind: pkPageDown})
 	st.handle(pickKey{kind: pkPageDown})
-	if st.cursor != 24 {
-		t.Fatalf("page down: %d", st.cursor)
-	}
+	require.Equal(t, 24, st.cursor, "page down: %d", st.cursor)
 	var sb strings.Builder
-	if n := st.render(&sb, "Pick", 80); n != pickRows+2 || !strings.Contains(sb.String(), "25/25") {
-		t.Fatalf("render: %d lines\n%s", n, sb.String())
-	}
+	n := st.render(&sb, "Pick", 80)
+	require.Equal(t, pickRows+2, n, "render: %d lines\n%s", n, sb.String())
+	require.Contains(t, sb.String(), "25/25", "render: %d lines\n%s", n, sb.String())
 }
 
 func TestParsePickKeys(t *testing.T) {
@@ -139,9 +132,9 @@ func TestParsePickKeys(t *testing.T) {
 		"\x7f\x15\x03": {pkBackspace, pkClear, pkInterrupt},
 		"\x10\x0e":     {pkUp, pkDown},
 	} {
-		if got := kinds(in); len(got) != len(want) || (len(want) > 0 && strings.Join(kindNames(got), ",") != strings.Join(kindNames(want), ",")) {
-			t.Errorf("%q: %v, want %v", in, got, want)
-		}
+		got := kinds(in)
+		assert.Len(t, got, len(want), "%q: %v, want %v", in, got, want)
+		assert.False(t, len(want) > 0 && strings.Join(kindNames(got), ",") != strings.Join(kindNames(want), ","), "%q: %v, want %v", in, got, want)
 	}
 }
 
@@ -166,27 +159,23 @@ func TestTerminalPick(t *testing.T) {
 	keys.in <- []byte("\x1b[B")
 	keys.in <- []byte("\r")
 	i, err := f.in.Pick(context.Background(), "Intro\nChoose", items("one", "two"), 0)
-	if err != nil || i != 1 {
-		t.Fatalf("%d %v", i, err)
-	}
+	require.NoError(t, err, "%d", i)
+	require.Equal(t, 1, i, "%d %v", i, err)
 	out := f.output()
-	if strings.Count(out, "Intro") != 1 || !strings.Contains(out, "❯ ") || !strings.Contains(out, "Choose"+Reset+" two") {
-		t.Errorf("output:\n%q", out)
-	}
-	if keys.inMode.Load() {
-		t.Error("the terminal was left in key mode")
-	}
+	assert.Equal(t, 1, strings.Count(out, "Intro"), "output:\n%q", out)
+	assert.Contains(t, out, "❯ ", "output:\n%q", out)
+	assert.Contains(t, out, "Choose"+Reset+" two", "output:\n%q", out)
+	assert.False(t, keys.inMode.Load(), "the terminal was left in key mode")
 
 	interrupted := false
 	f.in.SetInterruptHandler(func() { interrupted = true })
 	keys.in <- []byte("\x03")
-	if _, err := f.in.Pick(context.Background(), "Choose", items("one"), 0); !errors.Is(err, context.Canceled) || !interrupted {
-		t.Fatalf("Ctrl+C: %v, interrupted %v", err, interrupted)
-	}
+	_, err = f.in.Pick(context.Background(), "Choose", items("one"), 0)
+	require.ErrorIs(t, err, context.Canceled, "Ctrl+C: %v, interrupted %v", err, interrupted)
+	require.True(t, interrupted, "Ctrl+C: %v, interrupted %v", err, interrupted)
 	keys.in <- []byte("\x1b")
-	if _, err := f.in.Pick(context.Background(), "Choose", items("one"), 0); !errors.Is(err, ErrPickCancelled) {
-		t.Fatalf("Esc: %v", err)
-	}
+	_, err = f.in.Pick(context.Background(), "Choose", items("one"), 0)
+	require.ErrorIs(t, err, ErrPickCancelled, "Esc: %v", err)
 }
 
 // Without raw keys the picker asks for a number on the line editor.
@@ -198,9 +187,9 @@ func TestTerminalPickFallsBackToANumber(t *testing.T) {
 		i, err := f.in.Pick(context.Background(), "Choose", items("one", "two"), 0)
 		return string(rune('0' + i)), err
 	})
-	if err != nil || i != "1" || !strings.Contains(f.output(), " 2. two") {
-		t.Fatalf("%q %v\n%s", i, err, f.output())
-	}
+	require.NoError(t, err, "%q %v\n%s", i, err, f.output())
+	require.Equal(t, "1", i, "%q %v\n%s", i, err, f.output())
+	require.Contains(t, f.output(), " 2. two", "%q %v\n%s", i, err, f.output())
 }
 
 type ttyKeysUnavailable struct{}
@@ -217,58 +206,50 @@ func TestApprovalPicker(t *testing.T) {
 		Diff: "--- a/notes.txt\n+++ b/notes.txt\n@@ -1 +1 @@\n-old\n+new\n"}
 	for key, want := range map[string]api.Decision{"y": api.DecisionOnce, "s": api.DecisionSession, "a": api.DecisionAlways, "n": api.DecisionDeny} {
 		keys.in <- []byte(key)
-		if d, err := approve(context.Background(), req); err != nil || d != want {
-			t.Errorf("%s: %v %v", key, d, err)
-		}
+		d, err := approve(context.Background(), req)
+		assert.NoError(t, err, "%s: %v", key, d)
+		assert.Equal(t, want, d, "%s: %v %v", key, d, err)
 	}
 	out := f.output()
 	for _, want := range []string{"Approval required", "Yes, and allow edits to notes.txt this session", "Show the whole diff", "Allow?"} {
-		if !strings.Contains(out, want) {
-			t.Errorf("missing %q in:\n%s", want, out)
-		}
+		assert.Contains(t, out, want, "missing %q in:\n%s", want, out)
 	}
-	if strings.Contains(out, "[y/s/a/d/N]") {
-		t.Error("the line prompt's answer keys are shown with the picker")
-	}
+	assert.NotContains(t, out, "[y/s/a/d/N]", "the line prompt's answer keys are shown with the picker")
 
 	// d shows the whole diff and asks again, without the diff item.
 	keys.in <- []byte("d")
 	keys.in <- []byte("y")
-	if d, err := approve(context.Background(), req); err != nil || d != api.DecisionOnce {
-		t.Fatalf("after the diff: %v %v", d, err)
-	}
-	if !strings.Contains(f.output(), "+new") {
-		t.Error("the whole diff wasn't shown")
-	}
+	d, err := approve(context.Background(), req)
+	require.NoError(t, err, "after the diff: %v", d)
+	require.Equal(t, api.DecisionOnce, d, "after the diff: %v %v", d, err)
+	assert.Contains(t, f.output(), "+new", "the whole diff wasn't shown")
 
 	// Esc denies and stops the turn.
 	interrupted := false
 	f.in.SetInterruptHandler(func() { interrupted = true })
 	keys.in <- []byte("\x1b")
-	if d, err := approve(context.Background(), req); d != api.DecisionDeny || !errors.Is(err, context.Canceled) || !interrupted {
-		t.Fatalf("Esc: %v %v, interrupted %v", d, err, interrupted)
-	}
+	d, err = approve(context.Background(), req)
+	require.Equal(t, api.DecisionDeny, d, "Esc: %v %v, interrupted %v", d, err, interrupted)
+	require.ErrorIs(t, err, context.Canceled, "Esc: %v %v, interrupted %v", d, err, interrupted)
+	require.True(t, interrupted, "Esc: %v %v, interrupted %v", d, err, interrupted)
 }
 
 func TestQuestionPicker(t *testing.T) {
 	f, keys := pickTerminal(t)
 	ask := NewUserPrompter(f.in)
 	keys.in <- []byte("\x1b[B\r")
-	if got, err := ask(context.Background(), "Which database?", []string{"Postgres", "SQLite"}); err != nil || got != "SQLite" {
-		t.Fatalf("%q %v", got, err)
-	}
+	got, err := ask(context.Background(), "Which database?", []string{"Postgres", "SQLite"})
+	require.NoError(t, err, "%q", got)
+	require.Equal(t, "SQLite", got, "%q %v", got, err)
 	// The last item asks for another answer on the line.
 	keys.in <- []byte("another\r")
 	f.keys(t, "DuckDB\r")
-	got, err := within(t, func() (string, error) {
+	got, err = within(t, func() (string, error) {
 		return ask(context.Background(), "Which database?", []string{"Postgres", "SQLite"})
 	})
-	if err != nil || got != "DuckDB" {
-		t.Fatalf("other: %q %v", got, err)
-	}
-	if strings.Contains(f.output(), "[1] Postgres") {
-		t.Error("the numbered options are shown with the picker")
-	}
+	require.NoError(t, err, "other: %q", got)
+	require.Equal(t, "DuckDB", got, "other: %q %v", got, err)
+	assert.NotContains(t, f.output(), "[1] Postgres", "the numbered options are shown with the picker")
 }
 
 func TestAgentAndModelPickers(t *testing.T) {
@@ -277,45 +258,36 @@ func TestAgentAndModelPickers(t *testing.T) {
 	app.Input = f.in
 	keys.in <- []byte("qa\r")
 	out := captureStdout(t, func() { HandleCommand(context.Background(), "/agent", app) })
-	if got := app.Workspace.ActiveAgent().Name; got != "qa" {
-		t.Fatalf("agent %q\n%s", got, out)
-	}
+	got := app.Workspace.ActiveAgent().Name
+	require.Equal(t, "qa", got, "agent %q\n%s", got, out)
 	// Choosing the active agent just shows it.
 	keys.in <- []byte("\r")
 	out = captureStdout(t, func() { HandleCommand(context.Background(), "/agent", app) })
-	if !strings.Contains(out, "Current agent:") {
-		t.Errorf("choosing the active agent:\n%s", out)
-	}
+	assert.Contains(t, out, "Current agent:", "choosing the active agent:\n%s", out)
 
 	keys.in <- []byte("\x1b")
 	out = captureStdout(t, func() { HandleCommand(context.Background(), "/model", app) })
-	if !strings.Contains(out, "Current model:") || !strings.Contains(f.output(), "current") {
-		t.Errorf("cancelled model picker:\n%s\n%s", out, f.output())
-	}
+	assert.Contains(t, out, "Current model:", "cancelled model picker:\n%s\n%s", out, f.output())
+	assert.Contains(t, f.output(), "current", "cancelled model picker:\n%s\n%s", out, f.output())
 }
 
 func TestResumePicker(t *testing.T) {
 	app, _ := newCommandApp(t, "")
 	first, err := app.Workspace.NewSession()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := app.Workspace.Run(context.Background(), first.ID, api.Turn{Text: "remember the milk"}, func(api.Event) {}); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
+	_, err = app.Workspace.Run(context.Background(), first.ID, api.Turn{Text: "remember the milk"}, func(api.Event) {})
+	require.NoError(t, err)
 	app.Workspace.NewSession()
 	f, keys := pickTerminal(t)
 	app.Input = f.in
 	keys.in <- []byte("milk\r")
 	out := captureStdout(t, func() { HandleCommand(context.Background(), "/resume", app) })
-	if a, _ := app.Workspace.ActiveSession(); a.ID != first.ID {
-		t.Fatalf("resumed %s, want %s\n%s\n%s", a.ID, first.ID, out, f.output())
-	}
+	a, _ := app.Workspace.ActiveSession()
+	require.Equal(t, first.ID, a.ID, "resumed %s, want %s\n%s\n%s", a.ID, first.ID, out, f.output())
 	// Cancelling doesn't print the usage.
 	keys.in <- []byte("\x1b")
-	if out := captureStdout(t, func() { HandleCommand(context.Background(), "/resume", app) }); strings.Contains(out, "Usage") {
-		t.Errorf("cancel printed:\n%s", out)
-	}
+	out = captureStdout(t, func() { HandleCommand(context.Background(), "/resume", app) })
+	assert.NotContains(t, out, "Usage", "cancel printed:\n%s", out)
 }
 
 // Every drawn line fits the width, so erasing the picker counts right.
@@ -328,14 +300,11 @@ func TestPickRenderFitsTheWidth(t *testing.T) {
 	var sb strings.Builder
 	n := st.render(&sb, strings.Repeat("T", 100), 40)
 	lines := strings.Split(strings.TrimSuffix(sb.String(), "\n"), "\n")
-	if len(lines) != n {
-		t.Fatalf("%d lines drawn, %d counted", len(lines), n)
-	}
+	require.Len(t, lines, n, "%d lines drawn, %d counted", len(lines), n)
 	for _, l := range lines {
 		plain := ansiPattern.ReplaceAllString(strings.TrimPrefix(l, "\r\x1b[2K"), "")
-		if w := len([]rune(plain)); w > 40 {
-			t.Errorf("line of %d columns: %q", w, plain)
-		}
+		w := len([]rune(plain))
+		assert.LessOrEqual(t, w, 40, "line of %d columns: %q", w, plain)
 	}
 }
 

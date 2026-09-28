@@ -19,6 +19,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/require"
 	"google.golang.org/genai"
 )
 
@@ -31,25 +32,19 @@ func TestBtwIsAnsweredAndForgotten(t *testing.T) {
 		genai.NewContentFromText("carrying on", genai.RoleModel))
 	out := captureStdout(t, func() { RunREPL(context.Background(), app) })
 
-	if !strings.Contains(out, "Usage: /btw <question>") || !strings.Contains(out, "Side question") {
-		t.Fatalf("output:\n%s", out)
-	}
-	if llm.Calls() != 3 {
-		t.Fatalf("%d model calls", llm.Calls())
-	}
+	require.Contains(t, out, "Usage: /btw <question>", "output:\n%s", out)
+	require.Contains(t, out, "Side question", "output:\n%s", out)
+	require.Equal(t, 3, llm.Calls(), "%d model calls", llm.Calls())
 	aside := requestTextAt(llm, 1)
-	if !strings.Contains(aside, "remember pineapple") || !strings.Contains(aside, "what was the word?") {
-		t.Fatalf("the side question lacked context:\n%s", aside)
-	}
+	require.Contains(t, aside, "remember pineapple", "the side question lacked context:\n%s", aside)
+	require.Contains(t, aside, "what was the word?", "the side question lacked context:\n%s", aside)
 	next := requestTextAt(llm, 2)
-	if strings.Contains(next, "what was the word") || strings.Contains(next, "it was pineapple") {
-		t.Fatalf("the next prompt saw the side question:\n%s", next)
-	}
+	require.NotContains(t, next, "what was the word", "the next prompt saw the side question:\n%s", next)
+	require.NotContains(t, next, "it was pineapple", "the next prompt saw the side question:\n%s", next)
 	var recorded []string
 	for _, m := range local(app).Storage().Active().Messages {
 		recorded = append(recorded, m.Content)
 	}
-	if got := strings.Join(recorded, "|"); got != "remember pineapple|noted|carry on|carrying on" {
-		t.Fatalf("transcript: %s", got)
-	}
+	got := strings.Join(recorded, "|")
+	require.Equal(t, "remember pineapple|noted|carry on|carrying on", got, "transcript: %s", got)
 }

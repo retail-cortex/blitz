@@ -18,7 +18,6 @@ import (
 	"context"
 	"os"
 	"path/filepath"
-	"strings"
 	"sync"
 	"testing"
 
@@ -26,6 +25,8 @@ import (
 	"github.com/retail-cortex/blitz/pkg/engine/session"
 	"github.com/retail-cortex/blitz/pkg/observability"
 	"github.com/retail-cortex/blitz/pkg/redact"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/attribute"
 	sdklog "go.opentelemetry.io/otel/sdk/log"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
@@ -54,20 +55,15 @@ func TestTurnTraceNestsADKSpansWithoutContent(t *testing.T) {
 		toolCall("read_file", map[string]any{"path": "notes.txt"}),
 		textContent("done"))
 	f.llm.Usage = &genai.GenerateContentResponseUsageMetadata{PromptTokenCount: 100, CandidatesTokenCount: 10}
-	if err := os.WriteFile(filepath.Join(f.cfg.Tools.WorkspaceDir, "notes.txt"), []byte(content), 0o600); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(filepath.Join(f.cfg.Tools.WorkspaceDir, "notes.txt"), []byte(content), 0o600))
 
 	tel, spans := testTelemetry()
 	spans.Reset()
 
 	got, err := functionResponses(t, f.eng, "s", "read my notes")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if c, _ := got["read_file"]["content"].(string); !strings.Contains(c, content) {
-		t.Fatalf("tool did not run as expected: %v", got)
-	}
+	require.NoError(t, err)
+	c, _ := got["read_file"]["content"].(string)
+	require.Contains(t, c, content, "tool did not run as expected: %v", got)
 	tel.Flush(context.Background()) // not Shutdown: it clears the in-memory exporter
 
 	byName := map[string]tracetest.SpanStub{}
@@ -78,35 +74,26 @@ func TestTurnTraceNestsADKSpansWithoutContent(t *testing.T) {
 		idName[s.SpanContext.SpanID().String()] = s.Name
 		parent[s.SpanContext.SpanID().String()] = s.Parent.SpanID().String()
 		for _, kv := range s.Attributes {
-			if strings.Contains(kv.Value.String(), content) {
-				t.Errorf("span %q attribute %s carries file content", s.Name, kv.Key)
-			}
+			assert.NotContains(t, kv.Value.String(), content, "span %q attribute %s carries file content", s.Name, kv.Key)
 		}
 	}
 	t.Logf("spans: %v", idName)
 	turn, ok := byName["turn"]
-	if !ok {
-		t.Fatalf("no turn span; got %v", idName)
-	}
+	require.True(t, ok, "no turn span; got %v", idName)
 	tool, ok := byName["execute_tool read_file"]
-	if !ok {
-		t.Fatalf("no execute_tool span; got %v", idName)
-	}
-	if tool.SpanContext.TraceID() != turn.SpanContext.TraceID() {
-		t.Fatal("tool span is in a different trace from the turn")
-	}
+	require.True(t, ok, "no execute_tool span; got %v", idName)
+	require.Equal(t, turn.SpanContext.TraceID(), tool.SpanContext.TraceID(), "tool span is in a different trace from the turn")
 	// Walk up from the tool span: it must reach the turn span.
 	id, hops := tool.SpanContext.SpanID().String(), 0
 	for id != turn.SpanContext.SpanID().String() {
-		if id = parent[id]; id == "" || hops > 10 {
-			t.Fatalf("tool span is not nested under the turn span")
-		}
+		id = parent[id]
+		require.NotEmpty(t, id, "the tool span is not nested under the turn span")
+		require.LessOrEqual(t, hops, 10, "the tool span is not nested under the turn span")
 		hops++
 	}
 	for _, kv := range tool.Attributes {
-		if kv.Key == "gcp.vertex.agent.tool_call_args" || kv.Key == "gcp.vertex.agent.tool_response" {
-			t.Errorf("tool content attribute %s exported", kv.Key)
-		}
+		assert.NotEqual(t, attribute.Key("gcp.vertex.agent.tool_call_args"), kv.Key, "tool content attribute %s exported", kv.Key)
+		assert.NotEqual(t, attribute.Key("gcp.vertex.agent.tool_response"), kv.Key, "tool content attribute %s exported", kv.Key)
 	}
 	calls := false
 	for _, kv := range turn.Attributes {
@@ -114,9 +101,7 @@ func TestTurnTraceNestsADKSpansWithoutContent(t *testing.T) {
 			calls = true
 		}
 	}
-	if !calls {
-		t.Errorf("turn span model_calls != 2: %v", turn.Attributes)
-	}
+	assert.True(t, calls, "turn span model_calls != 2: %v", turn.Attributes)
 }
 
 func turnSpans(spans *tracetest.InMemoryExporter) []tracetest.SpanStub {
@@ -149,49 +134,35 @@ func TestTurnsChainAcrossResume(t *testing.T) {
 	rec, _ := store.CreateSession("", "chain", "blitz")
 	f := newEngineWith(t, fixtureOpts{opts: []Option{WithTurnStore(store)}}, textContent("one"), textContent("two"))
 	for _, p := range []string{"first", "second"} {
-		if _, err := collect(t, f.eng, rec.ID, p); err != nil {
-			t.Fatal(err)
-		}
+		_, err := collect(t, f.eng, rec.ID, p)
+		require.NoError(t, err)
 	}
 
 	// A later process: new storage and engine, same session.
 	store2, _ := session.NewStorage(dir)
-	if _, err := store2.Load(rec.ID); err != nil {
-		t.Fatal(err)
-	}
+	_, err := store2.Load(rec.ID)
+	require.NoError(t, err)
 	f2 := newEngineWith(t, fixtureOpts{opts: []Option{WithTurnStore(store2)}}, textContent("three"))
-	if _, err := collect(t, f2.eng, rec.ID, "third"); err != nil {
-		t.Fatal(err)
-	}
+	_, err = collect(t, f2.eng, rec.ID, "third")
+	require.NoError(t, err)
 	tel.Flush(context.Background())
 
 	turns := turnSpans(spans)
-	if len(turns) != 3 {
-		t.Fatalf("want 3 turn spans, got %d", len(turns))
-	}
+	require.Len(t, turns, 3, "want 3 turn spans, got %d", len(turns))
 	for i, s := range turns {
-		if got := attr(s, "gen_ai.conversation.id").AsString(); got != rec.ID {
-			t.Errorf("turn %d: conversation id %q", i+1, got)
-		}
-		if got := attr(s, "turn.index").AsInt64(); got != int64(i+1) {
-			t.Errorf("turn %d: turn.index = %d", i+1, got)
-		}
-		if s.Parent.IsValid() {
-			t.Errorf("turn %d is not a trace root", i+1)
-		}
+		got := attr(s, "gen_ai.conversation.id").AsString()
+		assert.Equal(t, rec.ID, got, "turn %d: conversation id %q", i+1, got)
+		assert.Equal(t, int64(i+1), attr(s, "turn.index").AsInt64(), "turn %d: turn.index", i+1)
+		assert.False(t, s.Parent.IsValid(), "turn %d is not a trace root", i+1)
 		if i == 0 {
-			if len(s.Links) != 0 {
-				t.Errorf("first turn has links: %v", s.Links)
-			}
+			assert.Len(t, s.Links, 0, "first turn has links: %v", s.Links)
 			continue
 		}
 		prev := turns[i-1].SpanContext
-		if s.SpanContext.TraceID() == prev.TraceID() {
-			t.Errorf("turn %d shares a trace with the previous turn", i+1)
-		}
-		if len(s.Links) != 1 || s.Links[0].SpanContext.SpanID() != prev.SpanID() || s.Links[0].SpanContext.TraceID() != prev.TraceID() {
-			t.Errorf("turn %d does not link to turn %d: %+v", i+1, i, s.Links)
-		}
+		assert.NotEqual(t, prev.TraceID(), s.SpanContext.TraceID(), "turn %d shares a trace with the previous turn", i+1)
+		assert.Len(t, s.Links, 1, "turn %d does not link to turn %d: %+v", i+1, i, s.Links)
+		assert.Equal(t, prev.SpanID(), s.Links[0].SpanContext.SpanID(), "turn %d does not link to turn %d: %+v", i+1, i, s.Links)
+		assert.Equal(t, prev.TraceID(), s.Links[0].SpanContext.TraceID(), "turn %d does not link to turn %d: %+v", i+1, i, s.Links)
 	}
 }
 
@@ -208,7 +179,5 @@ func TestTurnNotRecordedWithoutTrace(t *testing.T) {
 	store := &countingStore{}
 	e := &Engine{turns: store}
 	e.recordTurn(context.Background(), "s", trace.SpanFromContext(context.Background()), 1)
-	if store.sets != 0 {
-		t.Fatal("turn recorded without a trace")
-	}
+	require.Equal(t, 0, store.sets, "turn recorded without a trace")
 }

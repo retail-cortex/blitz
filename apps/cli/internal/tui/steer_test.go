@@ -29,6 +29,8 @@ import (
 	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/engine/runtime"
 	"github.com/retail-cortex/blitz/pkg/engine/session"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/adk/v2/model"
 	"google.golang.org/genai"
 )
@@ -50,9 +52,8 @@ func TestSteerTrigger(t *testing.T) {
 	}
 	for _, c := range cases {
 		p, trig := steerTrigger([]byte(c.in))
-		if p != c.prefill || trig != c.trigger {
-			t.Errorf("%q: got (%q, %v), want (%q, %v)", c.in, p, trig, c.prefill, c.trigger)
-		}
+		assert.Equal(t, c.prefill, p, "%q: got (%q, %v), want (%q, %v)", c.in, p, trig, c.prefill, c.trigger)
+		assert.Equal(t, c.trigger, trig, "%q: got (%q, %v), want (%q, %v)", c.in, p, trig, c.prefill, c.trigger)
 	}
 }
 
@@ -90,9 +91,7 @@ func TestKeyWatcherTriggersPausesAndRestores(t *testing.T) {
 	keys := newChanKeys()
 	got := make(chan string, 4)
 	w := startKeyWatcher(keys, func(prefill string) {
-		if keys.inMode.Load() {
-			t.Error("onKey ran with the terminal still in key mode")
-		}
+		assert.False(t, keys.inMode.Load(), "onKey ran with the terminal still in key mode")
 		got <- prefill
 	}, nil)
 
@@ -100,20 +99,14 @@ func TestKeyWatcherTriggersPausesAndRestores(t *testing.T) {
 	keys.in <- []byte("fix")
 	select {
 	case p := <-got:
-		if p != "fix" {
-			t.Fatalf("prefill %q", p)
-		}
+		require.Equal(t, "fix", p, "prefill %q", p)
 	case <-time.After(2 * time.Second):
 		t.Fatal("typing did not open the steer prompt")
 	}
 
 	resume, err := w.pause(context.Background())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if keys.inMode.Load() {
-		t.Fatal("terminal still in key mode while paused")
-	}
+	require.NoError(t, err)
+	require.False(t, keys.inMode.Load(), "terminal still in key mode while paused")
 	keys.in <- []byte("x")
 	select {
 	case p := <-got:
@@ -123,20 +116,17 @@ func TestKeyWatcherTriggersPausesAndRestores(t *testing.T) {
 	resume()
 	select {
 	case p := <-got:
-		if p != "x" {
-			t.Fatalf("after resume: %q", p)
-		}
+		require.Equal(t, "x", p, "after resume: %q", p)
 	case <-time.After(2 * time.Second):
 		t.Fatal("key typed during the pause was lost")
 	}
 
 	w.close()
-	if keys.inMode.Load() || keys.entered.Load() != keys.left.Load() {
-		t.Fatalf("terminal not restored: entered %d, left %d", keys.entered.Load(), keys.left.Load())
-	}
-	if resume, err := w.pause(context.Background()); err != nil || resume == nil {
-		t.Fatal("pause after close must be a no-op")
-	}
+	require.False(t, keys.inMode.Load(), "terminal not restored: entered %d, left %d", keys.entered.Load(), keys.left.Load())
+	require.Equal(t, keys.left.Load(), keys.entered.Load(), "terminal not restored: entered %d, left %d", keys.entered.Load(), keys.left.Load())
+	resume, err = w.pause(context.Background())
+	require.NoError(t, err, "pause after close must be a no-op")
+	require.NotNil(t, resume, "pause after close must be a no-op")
 }
 
 // A prompt during the turn (an approval) waits while a steer message is
@@ -151,14 +141,11 @@ func TestKeyWatcherPauseWaitsForOpenSteerPrompt(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
-	if _, err := w.pause(ctx); err == nil {
-		t.Fatal("pause succeeded while a steer prompt was open")
-	}
+	_, err := w.pause(ctx)
+	require.Error(t, err, "pause succeeded while a steer prompt was open")
 	close(release)
 	resume, err := w.pause(context.Background())
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	resume()
 }
 
@@ -168,23 +155,15 @@ func TestPrinterPauseHoldsOutputAndOnlyRespinsIfSpinning(t *testing.T) {
 	p.text("before ")
 	p.Pause()
 	p.text("during ")
-	if strings.Contains(out.String(), "during") {
-		t.Fatal("output written while paused")
-	}
+	require.NotContains(t, out.String(), "during", "output written while paused")
 	p.Resume()
-	if !strings.Contains(out.String(), "before during ") {
-		t.Fatalf("held output not flushed in order: %q", out.String())
-	}
-	if p.spin.Running() {
-		t.Fatal("spinner restarted mid-text")
-	}
+	require.Contains(t, out.String(), "before during ", "held output not flushed in order: %q", out.String())
+	require.False(t, p.spin.Running(), "spinner restarted mid-text")
 
 	p.spin.Start("working")
 	p.Pause()
 	p.Resume()
-	if !p.spin.Running() {
-		t.Fatal("spinner not restored after pause")
-	}
+	require.True(t, p.spin.Running(), "spinner not restored after pause")
 	p.End()
 }
 
@@ -269,9 +248,8 @@ func TestREPLSteerReachesTheAgentMidTurn(t *testing.T) {
 	app, llm := newSteerApp(t, "use tabs", nil, listFilesCall(), genai.NewContentFromText("done", genai.RoleModel))
 	runTurn(context.Background(), app, local(app).Storage().Active().ID, "reformat", nil, turnOptions{})
 
-	if n := llm.Calls(); n != 2 {
-		t.Fatalf("want 2 model calls, got %d", n)
-	}
+	n := llm.Calls()
+	require.Equal(t, 2, n, "want 2 model calls, got %d", n)
 	found := false
 	for _, c := range llm.Requests[1].Contents {
 		for _, p := range c.Parts {
@@ -280,12 +258,9 @@ func TestREPLSteerReachesTheAgentMidTurn(t *testing.T) {
 			}
 		}
 	}
-	if !found {
-		t.Fatal("steer message not in the tool result the model read")
-	}
-	if got := fmt.Sprint(userMessages(local(app).Storage())); got != "[reformat use tabs]" {
-		t.Fatalf("transcript user messages = %s", got)
-	}
+	require.True(t, found, "steer message not in the tool result the model read")
+	got := fmt.Sprint(userMessages(local(app).Storage()))
+	require.Equal(t, "[reformat use tabs]", got, "transcript user messages = %s", got)
 }
 
 func TestREPLLateSteerIsSentAsTheNextPrompt(t *testing.T) {
@@ -294,16 +269,13 @@ func TestREPLLateSteerIsSentAsTheNextPrompt(t *testing.T) {
 		genai.NewContentFromText("test added", genai.RoleModel)) // the follow-up turn
 	runTurn(context.Background(), app, local(app).Storage().Active().ID, "fix the bug", nil, turnOptions{})
 
-	if n := llm.Calls(); n != 2 {
-		t.Fatalf("want a follow-up turn (2 model calls), got %d", n)
-	}
+	n := llm.Calls()
+	require.Equal(t, 2, n, "want a follow-up turn (2 model calls), got %d", n)
 	last := llm.Requests[1].Contents[len(llm.Requests[1].Contents)-1]
-	if last.Role != genai.RoleUser || !strings.Contains(last.Parts[0].Text, "and add a test") {
-		t.Fatalf("follow-up prompt = %+v", last)
-	}
-	if got := fmt.Sprint(userMessages(local(app).Storage())); got != "[fix the bug and add a test]" {
-		t.Fatalf("message recorded twice or not at all: %s", got)
-	}
+	require.Equal(t, genai.RoleUser, last.Role, "follow-up prompt = %+v", last)
+	require.Contains(t, last.Parts[0].Text, "and add a test", "follow-up prompt = %+v", last)
+	got := fmt.Sprint(userMessages(local(app).Storage()))
+	require.Equal(t, "[fix the bug and add a test]", got, "message recorded twice or not at all: %s", got)
 }
 
 func TestREPLSteerGoesThroughPromptHooks(t *testing.T) {
@@ -314,12 +286,10 @@ func TestREPLSteerGoesThroughPromptHooks(t *testing.T) {
 
 	for _, c := range llm.Requests[len(llm.Requests)-1].Contents {
 		for _, p := range c.Parts {
-			if r := p.FunctionResponse; r != nil && r.Response[runtime.SteerKey] != nil {
-				t.Fatal("blocked message reached the agent")
-			}
+			r := p.FunctionResponse
+			require.False(t, r != nil && r.Response[runtime.SteerKey] != nil, "blocked message reached the agent")
 		}
 	}
-	if got := fmt.Sprint(userMessages(local(app).Storage())); strings.Contains(got, "hunter2") {
-		t.Fatalf("blocked message recorded: %s", got)
-	}
+	got := fmt.Sprint(userMessages(local(app).Storage()))
+	require.NotContains(t, got, "hunter2", "blocked message recorded: %s", got)
 }

@@ -25,6 +25,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"gvisor.dev/gvisor/sandboxexec/sandbox"
 )
 
@@ -34,18 +36,14 @@ func gvisorBoxForTest(t *testing.T) *gvisorBox {
 		t.Skipf("gVisor tests need runsc: %v", err)
 	}
 	box, _, err := NewScriptBox(ScriptBoxConfig{Mode: "gvisor", StateDir: t.TempDir()})
-	if err != nil {
-		t.Fatalf("runsc is installed but gVisor doesn't work: %v", err)
-	}
+	require.NoError(t, err, "runsc is installed but gVisor doesn't work")
 	return box.(*gvisorBox)
 }
 
 func runscList(t *testing.T, b *gvisorBox) []string {
 	t.Helper()
 	out, err := exec.Command(b.runsc, "--root", b.stateDir, "list", "-quiet").Output()
-	if err != nil {
-		t.Fatalf("runsc list: %v", err)
-	}
+	require.NoError(t, err, "runsc list")
 	return strings.Fields(string(out))
 }
 
@@ -57,21 +55,16 @@ func TestGVisorScriptBox(t *testing.T) {
 	// Only what is mounted exists: not the outside directory, not $HOME.
 	home, _ := os.UserHomeDir()
 	for _, p := range []string{d.outside, home} {
-		if res, out, _ := runScript(t, b, d, "ls "+p, 0); res.ExitCode == 0 {
-			t.Errorf("%s exists inside the sandbox:\n%s", p, out)
-		}
+		res, out, _ := runScript(t, b, d, "ls "+p, 0)
+		assert.NotEqual(t, 0, res.ExitCode, "%s exists inside the sandbox:\n%s", p, out)
 	}
-	if _, out, _ := runScript(t, b, d, "uname -r", 0); !strings.Contains(out, "gvisor") {
-		t.Errorf("not running under gVisor: %s", out)
-	}
+	_, uname, _ := runScript(t, b, d, "uname -r", 0)
+	assert.Contains(t, uname, "gvisor", "running under gVisor")
 	// Every run cleans up after itself, including timeouts and cancellations
 	// (run above by testScriptBoxBehaviour).
-	if left := runscList(t, b); len(left) != 0 {
-		t.Fatalf("sandboxes left behind: %v", left)
-	}
-	if entries, _ := os.ReadDir(b.bundles); len(entries) != 0 {
-		t.Fatalf("bundles left behind: %d", len(entries))
-	}
+	require.Empty(t, runscList(t, b), "sandboxes left behind")
+	bundles, _ := os.ReadDir(b.bundles)
+	require.Empty(t, bundles, "bundles left behind")
 }
 
 // A sandbox whose Blitz died (so its Close never ran) is removed the
@@ -79,28 +72,18 @@ func TestGVisorScriptBox(t *testing.T) {
 func TestGVisorSweepsOrphans(t *testing.T) {
 	b := gvisorBoxForTest(t)
 	dead := exec.Command("/bin/true")
-	if err := dead.Run(); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, dead.Run())
 	orphan := "cp-" + strconv.Itoa(dead.Process.Pid) + "-1"
 	live := "cp-" + strconv.Itoa(os.Getpid()) + "-999"
 	os.Setenv(sandbox.RunscPathEnvVar, b.runsc)
 	for _, id := range []string{orphan, live} {
-		if _, err := sandbox.New(context.Background(), sandbox.WithID(id), sandbox.WithStateDir(b.stateDir), sandbox.WithRuntimeDir(b.bundles)); err != nil {
-			t.Fatal(err)
-		}
+		_, err := sandbox.New(context.Background(), sandbox.WithID(id), sandbox.WithStateDir(b.stateDir), sandbox.WithRuntimeDir(b.bundles))
+		require.NoError(t, err)
 	}
-	if got := runscList(t, b); len(got) != 2 {
-		t.Fatalf("before: %v", got)
-	}
+	require.Len(t, runscList(t, b), 2, "before the sweep")
 	b.sweep(context.Background())
-	got := runscList(t, b)
-	if len(got) != 1 || got[0] != live {
-		t.Fatalf("after sweep: %v (want only %s)", got, live)
-	}
-	if _, err := os.Stat(filepath.Join(b.bundles, orphan)); err == nil {
-		t.Fatal("orphan's bundle left behind")
-	}
+	require.Equal(t, []string{live}, runscList(t, b), "only the live sandbox is left")
+	require.NoDirExists(t, filepath.Join(b.bundles, orphan), "the orphan's bundle is removed")
 	exec.Command(b.runsc, "--root", b.stateDir, "kill", live, "SIGKILL").Run()
 	exec.Command(b.runsc, "--root", b.stateDir, "delete", "--force", live).Run()
 }
@@ -111,19 +94,15 @@ func TestGVisorHidesBlockedPaths(t *testing.T) {
 		t.Skipf("gVisor tests need runsc: %v", err)
 	}
 	m, err := NewPathMatcher([]string{".env", "secrets"}, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	box, _, err := NewScriptBox(ScriptBoxConfig{Mode: "gvisor", StateDir: t.TempDir(), Blocked: m})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	d := newScriptDirs(t)
 	os.WriteFile(filepath.Join(d.readOnly, ".env"), []byte("API_KEY=topsecret"), 0o600)
 	os.MkdirAll(filepath.Join(d.readOnly, "secrets"), 0o700)
 	os.WriteFile(filepath.Join(d.readOnly, "secrets", "key.pem"), []byte("PRIVATE"), 0o600)
 	_, out, _ := runScript(t, box, d, "cat "+d.readOnly+"/.env; ls "+d.readOnly+"/secrets; cat "+d.readOnly+"/hello.txt", 0)
-	if strings.Contains(out, "topsecret") || strings.Contains(out, "key.pem") || !strings.Contains(out, "hello") {
-		t.Fatalf("blocked paths visible, or allowed file hidden:\n%s", out)
-	}
+	require.NotContains(t, out, "topsecret", "a blocked file is visible")
+	require.NotContains(t, out, "key.pem", "a blocked folder is visible")
+	require.Contains(t, out, "hello", "an allowed file is hidden")
 }

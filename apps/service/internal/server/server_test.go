@@ -16,7 +16,6 @@ package server
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -32,6 +31,8 @@ import (
 	"github.com/retail-cortex/blitz/pkg/engine/runtime"
 	"github.com/retail-cortex/blitz/pkg/images"
 	pb "github.com/retail-cortex/blitz/proto/blitz/v1"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/adk/v2/model"
 	"google.golang.org/genai"
 )
@@ -76,9 +77,7 @@ func serve(t *testing.T, mutate func(*config.Config), replies ...*genai.Content)
 func errorReason(t *testing.T, err error) (connect.Code, *pb.ErrorInfo) {
 	t.Helper()
 	var ce *connect.Error
-	if !errors.As(err, &ce) {
-		t.Fatalf("not a Connect error: %v", err)
-	}
+	require.ErrorAs(t, err, &ce, "not a Connect error: %v", err)
 	for _, d := range ce.Details() {
 		if v, derr := d.Value(); derr == nil {
 			if info, ok := v.(*pb.ErrorInfo); ok {
@@ -98,41 +97,38 @@ func TestWorkspaceOperationsOverTheAPI(t *testing.T) {
 	dir := t.TempDir()
 
 	agents, err := c.workspaces.ListAgents(ctx, connect.NewRequest(&pb.ListAgentsRequest{Workspace: dir}))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if i := slices.IndexFunc(agents.Msg.Agents, func(a *pb.AgentInfo) bool { return a.Active }); i < 0 || agents.Msg.Agents[i].Name != "blitz" {
-		t.Errorf("agents %v", agents.Msg.Agents)
-	}
-	if _, err := c.workspaces.SetAgent(ctx, connect.NewRequest(&pb.SetAgentRequest{Workspace: dir, Name: "qa"})); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
+	i := slices.IndexFunc(agents.Msg.Agents, func(a *pb.AgentInfo) bool { return a.Active })
+	assert.GreaterOrEqual(t, i, 0, "agents %v", agents.Msg.Agents)
+	assert.Equal(t, "blitz", agents.Msg.Agents[i].Name, "agents %v", agents.Msg.Agents)
+	_, setErr := c.workspaces.SetAgent(ctx, connect.NewRequest(&pb.SetAgentRequest{Workspace: dir, Name: "qa"}))
+	require.NoError(t, setErr)
 	pin, err := c.workspaces.PinModel(ctx, connect.NewRequest(&pb.PinModelRequest{Workspace: dir, Agent: "qa", Ref: "anthropic/claude-haiku-4-5"}))
-	if err != nil || pin.Msg.Model != "claude-haiku-4-5" || pin.Msg.Saved.Error != "" {
-		t.Fatalf("pin %v %v", pin, err)
-	}
-	if m, _ := c.workspaces.GetModel(ctx, connect.NewRequest(&pb.GetModelRequest{Workspace: dir})); m.Msg.Name != "claude-haiku-4-5" {
-		t.Errorf("model %v", m.Msg)
-	}
+	require.NoError(t, err, "pin %v", pin)
+	require.Equal(t, "claude-haiku-4-5", pin.Msg.Model, "pin %v %v", pin, err)
+	require.Equal(t, "", pin.Msg.Saved.Error, "pin %v %v", pin, err)
+	m, _ := c.workspaces.GetModel(ctx, connect.NewRequest(&pb.GetModelRequest{Workspace: dir}))
+	assert.Equal(t, "claude-haiku-4-5", m.Msg.Name, "model %v", m.Msg)
 
 	// Typed errors arrive as codes with an ErrorInfo detail.
 	_, err = c.workspaces.PinModel(ctx, connect.NewRequest(&pb.PinModelRequest{Workspace: dir, Agent: "nobody", Ref: "x"}))
-	if code, info := errorReason(t, err); code != connect.CodeNotFound || info.Reason != "UNKNOWN_AGENT" || info.Metadata["name"] != "nobody" {
-		t.Errorf("unknown agent: %v %v", code, info)
-	}
+	code, info := errorReason(t, err)
+	assert.Equal(t, connect.CodeNotFound, code, "unknown agent: %v %v", code, info)
+	assert.Equal(t, "UNKNOWN_AGENT", info.Reason, "unknown agent: %v %v", code, info)
+	assert.Equal(t, "nobody", info.Metadata["name"], "unknown agent: %v %v", code, info)
 	_, err = c.workspaces.UpdateModelSettings(ctx, connect.NewRequest(&pb.UpdateModelSettingsRequest{Workspace: dir, Ref: "gpt-5", Changes: []*pb.Setting{{Key: "temperature", Value: "9"}}}))
-	if code, info := errorReason(t, err); code != connect.CodeInvalidArgument || info.Reason != "INVALID_SETTING" {
-		t.Errorf("invalid setting: %v %v", code, info)
-	}
+	code, info = errorReason(t, err)
+	assert.Equal(t, connect.CodeInvalidArgument, code, "invalid setting: %v %v", code, info)
+	assert.Equal(t, "INVALID_SETTING", info.Reason, "invalid setting: %v %v", code, info)
 	_, err = c.workspaces.ListAgents(ctx, connect.NewRequest(&pb.ListAgentsRequest{Workspace: "relative/dir"}))
-	if code, info := errorReason(t, err); code != connect.CodeInvalidArgument || info.Reason != "INVALID_WORKSPACE" {
-		t.Errorf("relative workspace: %v %v", code, info)
-	}
+	code, info = errorReason(t, err)
+	assert.Equal(t, connect.CodeInvalidArgument, code, "relative workspace: %v %v", code, info)
+	assert.Equal(t, "INVALID_WORKSPACE", info.Reason, "relative workspace: %v %v", code, info)
 
 	tools, err := c.workspaces.ListTools(ctx, connect.NewRequest(&pb.ListToolsRequest{Workspace: dir}))
-	if err != nil || tools.Msg.Agent != "qa" || len(tools.Msg.Tools) == 0 {
-		t.Errorf("tools %v %v", tools, err)
-	}
+	assert.NoError(t, err, "tools %v", tools)
+	assert.Equal(t, "qa", tools.Msg.Agent, "tools %v %v", tools, err)
+	assert.NotEqual(t, 0, len(tools.Msg.Tools), "tools %v %v", tools, err)
 }
 
 func TestTurnsAndSessionsOverTheAPI(t *testing.T) {
@@ -141,13 +137,10 @@ func TestTurnsAndSessionsOverTheAPI(t *testing.T) {
 	dir := t.TempDir()
 
 	opened, err := c.sessions.OpenSession(ctx, connect.NewRequest(&pb.OpenSessionRequest{Workspace: dir}))
-	if err != nil || opened.Msg.Resumed {
-		t.Fatalf("open %v %v", opened, err)
-	}
+	require.NoError(t, err, "open %v", opened)
+	require.False(t, opened.Msg.Resumed, "open %v %v", opened, err)
 	stream, err := c.sessions.RunTurn(ctx, connect.NewRequest(&pb.RunTurnRequest{Workspace: dir, SessionId: opened.Msg.Session.Id, Turn: &pb.Turn{Text: "hi"}}))
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	var kinds []string
 	var finished *pb.TurnFinished
 	for stream.Receive() {
@@ -162,32 +155,29 @@ func TestTurnsAndSessionsOverTheAPI(t *testing.T) {
 			finished = k.Finished
 		}
 	}
-	if err := stream.Err(); err != nil {
-		t.Fatal(err)
-	}
-	if !slices.Equal(kinds, []string{"accepted", "text:hello there", "finished"}) || finished.Output != "hello there" || finished.Error != nil {
-		t.Errorf("events %v, finished %v", kinds, finished)
-	}
+	require.NoError(t, stream.Err())
+	assert.Equal(t, []string{"accepted", "text:hello there", "finished"}, kinds, "events %v, finished %v", kinds, finished)
+	assert.Equal(t, "hello there", finished.Output, "events %v, finished %v", kinds, finished)
+	assert.Nil(t, finished.Error, "events %v, finished %v", kinds, finished)
 
 	active, err := c.sessions.GetActiveSession(ctx, connect.NewRequest(&pb.GetActiveSessionRequest{Workspace: dir}))
-	if err != nil || len(active.Msg.Session.Messages) != 2 || active.Msg.Session.Title != "hi" {
-		t.Errorf("active %v %v", active, err)
-	}
-	if _, err := c.sessions.SaveSnapshot(ctx, connect.NewRequest(&pb.SaveSnapshotRequest{Workspace: dir, Name: "s"})); err != nil {
-		t.Fatal(err)
-	}
+	assert.NoError(t, err, "active %v", active)
+	assert.Len(t, active.Msg.Session.Messages, 2, "active %v %v", active, err)
+	assert.Equal(t, "hi", active.Msg.Session.Title, "active %v %v", active, err)
+	_, saveErr := c.sessions.SaveSnapshot(ctx, connect.NewRequest(&pb.SaveSnapshotRequest{Workspace: dir, Name: "s"}))
+	require.NoError(t, saveErr)
 	_, err = c.sessions.SaveSnapshot(ctx, connect.NewRequest(&pb.SaveSnapshotRequest{Workspace: dir, Name: "s"}))
-	if code, info := errorReason(t, err); code != connect.CodeAlreadyExists || info.Reason != "SNAPSHOT_NAME_TAKEN" {
-		t.Errorf("taken: %v %v", code, info)
-	}
+	code, info := errorReason(t, err)
+	assert.Equal(t, connect.CodeAlreadyExists, code, "taken: %v %v", code, info)
+	assert.Equal(t, "SNAPSHOT_NAME_TAKEN", info.Reason, "taken: %v %v", code, info)
 
 	// An image must be loaded or added before a turn can use it.
 	stream, _ = c.sessions.RunTurn(ctx, connect.NewRequest(&pb.RunTurnRequest{Workspace: dir, SessionId: opened.Msg.Session.Id, Turn: &pb.Turn{Text: "see", ImageIds: []string{"nope"}}}))
 	for stream.Receive() {
 	}
-	if code, info := errorReason(t, stream.Err()); code != connect.CodeNotFound || info.Reason != "UNKNOWN_IMAGE" {
-		t.Errorf("unknown image: %v %v", code, info)
-	}
+	code, info = errorReason(t, stream.Err())
+	assert.Equal(t, connect.CodeNotFound, code, "unknown image: %v %v", code, info)
+	assert.Equal(t, "UNKNOWN_IMAGE", info.Reason, "unknown image: %v %v", code, info)
 }
 
 func TestBlockedTurnReportsTheReason(t *testing.T) {
@@ -198,18 +188,16 @@ func TestBlockedTurnReportsTheReason(t *testing.T) {
 	dir := t.TempDir()
 	s, _ := c.sessions.NewSession(ctx, connect.NewRequest(&pb.NewSessionRequest{Workspace: dir}))
 	stream, err := c.sessions.RunTurn(ctx, connect.NewRequest(&pb.RunTurnRequest{Workspace: dir, SessionId: s.Msg.Session.Id, Turn: &pb.Turn{Text: "my password"}}))
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	var finished *pb.TurnFinished
 	for stream.Receive() {
 		if f := stream.Msg().Event.GetFinished(); f != nil {
 			finished = f
 		}
 	}
-	if finished == nil || finished.Error.GetReason() != "PROMPT_BLOCKED" || finished.Error.Metadata["reason"] == "" {
-		t.Errorf("finished %v", finished)
-	}
+	assert.NotNil(t, finished, "finished %v", finished)
+	assert.Equal(t, "PROMPT_BLOCKED", finished.Error.GetReason(), "finished %v", finished)
+	assert.NotEqual(t, "", finished.Error.Metadata["reason"], "finished %v", finished)
 }
 
 func TestWorkspacesAreKeptAndClosed(t *testing.T) {
@@ -218,24 +206,17 @@ func TestWorkspacesAreKeptAndClosed(t *testing.T) {
 	a, b := t.TempDir(), t.TempDir()
 	// Another spelling of a, through a symlink, is the same workspace.
 	link := filepath.Join(t.TempDir(), "link")
-	if err := os.Symlink(a, link); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.Symlink(a, link))
 	for _, dir := range []string{a, b, link} {
-		if _, err := c.workspaces.GetModel(ctx, connect.NewRequest(&pb.GetModelRequest{Workspace: dir})); err != nil {
-			t.Fatal(err)
-		}
+		_, err := c.workspaces.GetModel(ctx, connect.NewRequest(&pb.GetModelRequest{Workspace: dir}))
+		require.NoError(t, err)
 	}
 	list, _ := c.workspaces.ListWorkspaces(ctx, connect.NewRequest(&pb.ListWorkspacesRequest{}))
-	if len(list.Msg.Workspaces) != 2 {
-		t.Fatalf("workspaces %v", list.Msg.Workspaces)
-	}
-	if _, err := c.workspaces.CloseWorkspace(ctx, connect.NewRequest(&pb.CloseWorkspaceRequest{Workspace: link})); err != nil {
-		t.Fatal(err)
-	}
-	if got := s.openDirs(); len(got) != 1 {
-		t.Errorf("after close: %v", got)
-	}
+	require.Len(t, list.Msg.Workspaces, 2, "workspaces %v", list.Msg.Workspaces)
+	_, err := c.workspaces.CloseWorkspace(ctx, connect.NewRequest(&pb.CloseWorkspaceRequest{Workspace: link}))
+	require.NoError(t, err)
+	got := s.openDirs()
+	assert.Len(t, got, 1, "after close: %v", got)
 }
 
 // A slow open holds up only its own workspace; callers for it share one
@@ -263,29 +244,26 @@ func TestWorkspacesOpenIndependently(t *testing.T) {
 	for range 2 {
 		go func() {
 			w, err := s.workspace(ctx, slow)
-			if err != nil {
-				t.Error(err)
-			}
+			assert.NoError(t, err)
 			got <- w
 		}()
 	}
-	if _, err := s.workspace(ctx, fast); err != nil {
-		t.Fatalf("another workspace waited on a slow open: %v", err)
-	}
+	_, err := s.workspace(ctx, fast)
+	require.NoError(t, err, "another workspace waited on a slow open")
 	gone, cancel := context.WithCancel(ctx)
 	cancel()
-	if _, err := s.workspace(gone, slow); connect.CodeOf(err) != connect.CodeCanceled {
-		t.Errorf("a caller that gives up: %v", err)
-	}
+	_, err = s.workspace(gone, slow)
+	assert.Equal(t, connect.CodeCanceled, connect.CodeOf(err), "a caller that gives up: %v", err)
 	close(release)
-	if a, b := <-got, <-got; a == nil || a != b || opens.Load() != 1 {
-		t.Errorf("shared open: %p %p, %d opens", a, b, opens.Load())
-	}
+	a, b := <-got, <-got
+	assert.NotNil(t, a, "shared open: %p %p, %d opens", a, b, opens.Load())
+	assert.Same(t, b, a, "shared open: %p %p, %d opens", a, b, opens.Load())
+	assert.Equal(t, int32(1), opens.Load(), "shared open: %p %p, %d opens", a, b, opens.Load())
 
 	s.Close()
-	if code, info := errorReason(t, func() error { _, err := s.workspace(ctx, fast); return err }()); code != connect.CodeUnavailable || info.Reason != "SHUTTING_DOWN" {
-		t.Errorf("after Close: %v %v", code, info)
-	}
+	code, info := errorReason(t, func() error { _, err := s.workspace(ctx, fast); return err }())
+	assert.Equal(t, connect.CodeUnavailable, code, "after Close: %v %v", code, info)
+	assert.Equal(t, "SHUTTING_DOWN", info.Reason, "after Close: %v %v", code, info)
 }
 
 // A workspace keeps only its most recently used images.
@@ -296,17 +274,13 @@ func TestKeptImagesAreBounded(t *testing.T) {
 		if i == 0 {
 			continue
 		}
-		if _, err := w.image("0"); err != nil { // keep the first in use
-			t.Fatal(err)
-		}
+		_, err := w.image("0")
+		require.NoError(t, err)
 	}
-	if len(w.images) != keptImages || len(w.order) != keptImages {
-		t.Fatalf("kept %d images, %d in order", len(w.images), len(w.order))
-	}
-	if _, err := w.image("0"); err != nil {
-		t.Error("the image in use was forgotten")
-	}
-	if _, err := w.image("1"); err == nil {
-		t.Error("the least recently used image was kept")
-	}
+	require.Len(t, w.images, keptImages, "kept %d images, %d in order", len(w.images), len(w.order))
+	require.Len(t, w.order, keptImages, "kept %d images, %d in order", len(w.images), len(w.order))
+	_, err := w.image("0")
+	assert.NoError(t, err, "the image in use was forgotten")
+	_, err = w.image("1")
+	assert.Error(t, err, "the least recently used image was kept")
 }

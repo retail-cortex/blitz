@@ -25,4 +25,5 @@ go_test(
     name = "redact_test",
     srcs = ["redact_test.go"],
     embed = [":redact"],
+    deps = ["@com_github_stretchr_testify//assert"],
 )

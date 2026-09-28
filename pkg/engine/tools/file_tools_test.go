@@ -15,10 +15,14 @@
 package tools
 
 import (
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestReadFileTool(t *testing.T) {
@@ -29,37 +33,27 @@ func TestReadFileTool(t *testing.T) {
 	// Positive: slicing returns only the requested lines, numbered.
 	out := runTool(t, rt, map[string]any{"path": "f.txt", "start_line": 2, "end_line": 3})
 	content := out["content"].(string)
-	if content != "   2: two\n   3: three\n" {
-		t.Errorf("unexpected slice content %q", content)
-	}
-	if out["total_lines"].(float64) != 5 { // trailing newline yields an empty 5th line
-		t.Errorf("expected 5 total lines, got %v", out["total_lines"])
-	}
+	assert.Equal(t, "   2: two\n   3: three\n", content, "unexpected slice content %q", content)
+	assert.Equal(t, float64(5), out["total_lines"].(float64), "expected 5 total lines, got %v", out["total_lines"])
 
 	// Positive: out-of-range start clamps to the last line; end < start clamps to start.
 	out = runTool(t, rt, map[string]any{"path": "f.txt", "start_line": 99})
-	if errOf(out) != "" || out["content"].(string) != "   5: \n" {
-		t.Errorf("unexpected clamped output %v", out)
-	}
+	assert.Equal(t, "", errOf(out), "unexpected clamped output %v", out)
+	assert.Equal(t, "   5: \n", out["content"].(string), "unexpected clamped output %v", out)
 	out = runTool(t, rt, map[string]any{"path": "f.txt", "start_line": 3, "end_line": 1})
-	if out["content"].(string) != "   3: three\n" {
-		t.Errorf("expected end<start to clamp to start, got %q", out["content"])
-	}
+	assert.Equal(t, "   3: three\n", out["content"].(string), "expected end<start to clamp to start, got %q", out["content"])
 
 	// Negative: outside the workspace, missing, and directories.
 	for _, p := range []string{"../escape.txt", "/etc/hosts", "missing.txt", "."} {
-		if out := runTool(t, rt, map[string]any{"path": p}); errOf(out) == "" {
-			t.Errorf("expected error reading %q, got %v", p, out)
-		}
+		out := runTool(t, rt, map[string]any{"path": p})
+		assert.NotEqual(t, "", errOf(out), "expected error reading %q, got %v", p, out)
 	}
 }
 
 func TestReadFileToolLimits(t *testing.T) {
 	dir := t.TempDir()
 	ws, err := NewWorkspace(dir, 2*maxReadOutputBytes)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	defer ws.Close()
 	rt := toolOf(t)(NewReadFileTool(ws))
 
@@ -67,19 +61,13 @@ func TestReadFileToolLimits(t *testing.T) {
 	line := strings.Repeat("x", 99) + "\n"
 	writeFile(t, filepath.Join(dir, "large.txt"), strings.Repeat(line, (maxReadOutputBytes/100)+500))
 	out := runTool(t, rt, map[string]any{"path": "large.txt"})
-	if out["truncated"] != true {
-		t.Errorf("expected truncated=true")
-	}
-	if len(out["content"].(string)) > maxReadOutputBytes+200 {
-		t.Errorf("content exceeds cap: %d bytes", len(out["content"].(string)))
-	}
+	assert.Equal(t, true, out["truncated"], "expected truncated=true")
+	assert.LessOrEqual(t, len(out["content"].(string)), maxReadOutputBytes+200, "content exceeds cap: %d bytes", len(out["content"].(string)))
 
 	// Files above the workspace size limit are refused outright.
 	writeFile(t, filepath.Join(dir, "huge.txt"), strings.Repeat("y", 2*maxReadOutputBytes+1))
 	out = runTool(t, rt, map[string]any{"path": "huge.txt"})
-	if !strings.Contains(errOf(out), "limit") {
-		t.Errorf("expected size limit error, got %v", out)
-	}
+	assert.Contains(t, errOf(out), "limit", "expected size limit error, got %v", out)
 }
 
 func TestListFilesTool(t *testing.T) {
@@ -100,26 +88,19 @@ func TestListFilesTool(t *testing.T) {
 
 	// Positive: non-recursive lists top-level only and hides dot-dirs.
 	got := strings.Join(paths(runTool(t, rt, map[string]any{})), ",")
-	if got != "a.txt,sub" {
-		t.Errorf("non-recursive listing = %q", got)
-	}
+	assert.Equal(t, "a.txt,sub", got, "non-recursive listing = %q", got)
 	// Positive: recursive includes nested files.
 	got = strings.Join(paths(runTool(t, rt, map[string]any{"recursive": true})), ",")
-	if got != "a.txt,sub,sub/b.txt" {
-		t.Errorf("recursive listing = %q", got)
-	}
+	assert.Equal(t, "a.txt,sub,sub/b.txt", got, "recursive listing = %q", got)
 	// Positive: max_entries is honoured.
-	if n := len(paths(runTool(t, rt, map[string]any{"recursive": true, "max_entries": 1}))); n != 1 {
-		t.Errorf("expected 1 entry, got %d", n)
-	}
+	n := len(paths(runTool(t, rt, map[string]any{"recursive": true, "max_entries": 1})))
+	assert.Equal(t, 1, n, "expected 1 entry, got %d", n)
 
 	// Negative: outside workspace and missing directory.
-	if out := runTool(t, rt, map[string]any{"directory": ".."}); errOf(out) == "" {
-		t.Error("expected error listing outside workspace")
-	}
-	if out := runTool(t, rt, map[string]any{"directory": "nope"}); errOf(out) == "" {
-		t.Error("expected error listing missing directory")
-	}
+	out := runTool(t, rt, map[string]any{"directory": ".."})
+	assert.NotEqual(t, "", errOf(out), "expected error listing outside workspace")
+	out = runTool(t, rt, map[string]any{"directory": "nope"})
+	assert.NotEqual(t, "", errOf(out), "expected error listing missing directory")
 }
 
 func TestCreateFileTool(t *testing.T) {
@@ -128,31 +109,26 @@ func TestCreateFileTool(t *testing.T) {
 
 	// Positive: creates nested file.
 	out := runTool(t, rt, map[string]any{"path": "new/dir/f.txt", "content": "hello"})
-	if out["success"] != true || out["bytes_written"].(float64) != 5 {
-		t.Fatalf("create failed: %v", out)
-	}
+	require.Equal(t, true, out["success"], "create failed: %v", out)
+	require.Equal(t, float64(5), out["bytes_written"].(float64), "create failed: %v", out)
 
 	// Negative: existing file without overwrite.
 	out = runTool(t, rt, map[string]any{"path": "new/dir/f.txt", "content": "again"})
-	if !strings.Contains(errOf(out), "already exists") {
-		t.Errorf("expected already-exists error, got %v", out)
-	}
+	assert.Contains(t, errOf(out), "already exists", "expected already-exists error, got %v", out)
 	// Positive: overwrite=true replaces.
 	out = runTool(t, rt, map[string]any{"path": "new/dir/f.txt", "content": "again", "overwrite": true})
-	if b, _ := os.ReadFile(filepath.Join(dir, "new", "dir", "f.txt")); out["success"] != true || string(b) != "again" {
-		t.Errorf("overwrite failed: %v, content %q", out, b)
-	}
+	b, _ := os.ReadFile(filepath.Join(dir, "new", "dir", "f.txt"))
+	assert.Equal(t, true, out["success"], "overwrite failed: %v, content %q", out, b)
+	assert.Equal(t, "again", string(b), "overwrite failed: %v, content %q", out, b)
 
 	// Negative: outside workspace, and the workspace root itself.
 	outside := filepath.Join(t.TempDir(), "evil.txt")
 	for _, p := range []string{"../evil.txt", outside, "."} {
-		if out := runTool(t, rt, map[string]any{"path": p, "content": "x"}); errOf(out) == "" {
-			t.Errorf("expected error creating %q", p)
-		}
+		out := runTool(t, rt, map[string]any{"path": p, "content": "x"})
+		assert.NotEqual(t, "", errOf(out), "expected error creating %q", p)
 	}
-	if _, err := os.Stat(outside); !os.IsNotExist(err) {
-		t.Errorf("file created outside workspace")
-	}
+	_, err := os.Stat(outside)
+	assert.ErrorIs(t, err, fs.ErrNotExist, "file created outside workspace")
 }
 
 func TestDeleteFileTool(t *testing.T) {
@@ -160,24 +136,20 @@ func TestDeleteFileTool(t *testing.T) {
 	writeFile(t, filepath.Join(dir, "gone.txt"), "x")
 	rt := toolOf(t)(NewDeleteFileTool(ws, allowAll()))
 
-	if out := runTool(t, rt, map[string]any{"path": "gone.txt"}); out["success"] != true {
-		t.Errorf("delete failed: %v", out)
-	}
-	if _, err := os.Stat(filepath.Join(dir, "gone.txt")); !os.IsNotExist(err) {
-		t.Error("file still exists after delete")
-	}
+	out := runTool(t, rt, map[string]any{"path": "gone.txt"})
+	assert.Equal(t, true, out["success"], "delete failed: %v", out)
+	_, err := os.Stat(filepath.Join(dir, "gone.txt"))
+	assert.ErrorIs(t, err, fs.ErrNotExist, "file still exists after delete")
 
 	outsideDir := t.TempDir()
 	victim := filepath.Join(outsideDir, "victim.txt")
 	writeFile(t, victim, "keep me")
 	for _, p := range []string{victim, "../victim.txt", "missing.txt", "."} {
-		if out := runTool(t, rt, map[string]any{"path": p}); errOf(out) == "" {
-			t.Errorf("expected error deleting %q", p)
-		}
+		out := runTool(t, rt, map[string]any{"path": p})
+		assert.NotEqual(t, "", errOf(out), "expected error deleting %q", p)
 	}
-	if _, err := os.Stat(victim); err != nil {
-		t.Error("file outside workspace was deleted")
-	}
+	_, err = os.Stat(victim)
+	assert.NoError(t, err, "file outside workspace was deleted")
 }
 
 func TestReplaceInFileTool(t *testing.T) {
@@ -190,36 +162,25 @@ func TestReplaceInFileTool(t *testing.T) {
 	// Negative: empty target must be rejected (previously corrupted the file).
 	reset()
 	out := runTool(t, rt, map[string]any{"path": "code.go", "target_content": "", "replacement_content": "X", "allow_multiple": true})
-	if errOf(out) == "" {
-		t.Error("expected error for empty target_content")
-	}
-	if b, _ := os.ReadFile(path); string(b) != "foo bar foo\n" {
-		t.Errorf("file modified on rejected edit: %q", b)
-	}
+	assert.NotEqual(t, "", errOf(out), "expected error for empty target_content")
+	b, _ := os.ReadFile(path)
+	assert.Equal(t, "foo bar foo\n", string(b), "file modified on rejected edit: %q", b)
 
 	// Negative: ambiguous target without allow_multiple; missing target.
 	out = runTool(t, rt, map[string]any{"path": "code.go", "target_content": "foo", "replacement_content": "baz"})
-	if !strings.Contains(errOf(out), "matched 2 times") {
-		t.Errorf("expected ambiguity error, got %v", out)
-	}
+	assert.Contains(t, errOf(out), "matched 2 times", "expected ambiguity error, got %v", out)
 	out = runTool(t, rt, map[string]any{"path": "code.go", "target_content": "absent", "replacement_content": "x"})
-	if !strings.Contains(errOf(out), "not found") {
-		t.Errorf("expected not-found error, got %v", out)
-	}
+	assert.Contains(t, errOf(out), "not found", "expected not-found error, got %v", out)
 
 	// Positive: allow_multiple replaces all.
 	out = runTool(t, rt, map[string]any{"path": "code.go", "target_content": "foo", "replacement_content": "baz", "allow_multiple": true})
-	if out["replacements_count"].(float64) != 2 {
-		t.Errorf("expected 2 replacements, got %v", out)
-	}
-	if b, _ := os.ReadFile(path); string(b) != "baz bar baz\n" {
-		t.Errorf("unexpected content %q", b)
-	}
+	assert.Equal(t, float64(2), out["replacements_count"].(float64), "expected 2 replacements, got %v", out)
+	b, _ = os.ReadFile(path)
+	assert.Equal(t, "baz bar baz\n", string(b), "unexpected content %q", b)
 
 	// Negative: outside the workspace.
-	if out := runTool(t, rt, map[string]any{"path": "../x.go", "target_content": "a", "replacement_content": "b"}); errOf(out) == "" {
-		t.Error("expected error editing outside workspace")
-	}
+	out = runTool(t, rt, map[string]any{"path": "../x.go", "target_content": "a", "replacement_content": "b"})
+	assert.NotEqual(t, "", errOf(out), "expected error editing outside workspace")
 }
 
 func TestDeleteSnippetTool(t *testing.T) {
@@ -228,16 +189,12 @@ func TestDeleteSnippetTool(t *testing.T) {
 	writeFile(t, path, "keep REMOVE keep")
 	rt := toolOf(t)(NewDeleteSnippetTool(ws, allowAll()))
 
-	if out := runTool(t, rt, map[string]any{"path": "s.txt", "snippet": ""}); errOf(out) == "" {
-		t.Error("expected error for empty snippet")
-	}
-	if out := runTool(t, rt, map[string]any{"path": "s.txt", "snippet": "absent"}); errOf(out) == "" {
-		t.Error("expected error for missing snippet")
-	}
-	if out := runTool(t, rt, map[string]any{"path": "s.txt", "snippet": "REMOVE "}); out["success"] != true {
-		t.Errorf("delete_snippet failed: %v", out)
-	}
-	if b, _ := os.ReadFile(path); string(b) != "keep keep" {
-		t.Errorf("unexpected content %q", b)
-	}
+	out := runTool(t, rt, map[string]any{"path": "s.txt", "snippet": ""})
+	assert.NotEqual(t, "", errOf(out), "expected error for empty snippet")
+	out = runTool(t, rt, map[string]any{"path": "s.txt", "snippet": "absent"})
+	assert.NotEqual(t, "", errOf(out), "expected error for missing snippet")
+	out = runTool(t, rt, map[string]any{"path": "s.txt", "snippet": "REMOVE "})
+	assert.Equal(t, true, out["success"], "delete_snippet failed: %v", out)
+	b, _ := os.ReadFile(path)
+	assert.Equal(t, "keep keep", string(b), "unexpected content %q", b)
 }

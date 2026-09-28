@@ -32,6 +32,8 @@ import (
 	"github.com/retail-cortex/blitz/pkg/engine/agents"
 	"github.com/retail-cortex/blitz/pkg/engine/skills"
 	"github.com/retail-cortex/blitz/pkg/engine/tools"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/adk/v2/model"
 	"google.golang.org/adk/v2/session"
 	"google.golang.org/genai"
@@ -116,14 +118,10 @@ func TestConvertContents(t *testing.T) {
 		{Role: genai.RoleUser, Parts: []*genai.Part{{FunctionResponse: &genai.FunctionResponse{ID: "toolu_b", Name: "grep", Response: map[string]any{"error": "bad regex"}}}}},
 	}
 	msgs, err := convertContents(contents)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	raw, _ := json.Marshal(msgs)
 	got := string(raw)
-	if len(msgs) != 3 {
-		t.Fatalf("expected user/assistant/user, got %d messages: %s", len(msgs), got)
-	}
+	require.Len(t, msgs, 3, "expected user/assistant/user, got %d messages: %s", len(msgs), got)
 	for _, want := range []string{
 		`{"signature":"sig-1","thinking":"reasoning","type":"thinking"}`,
 		`{"data":"opaque","type":"redacted_thinking"}`,
@@ -132,21 +130,15 @@ func TestConvertContents(t *testing.T) {
 		`"tool_use_id":"toolu_a"`,
 		`"is_error":true`,
 	} {
-		if !strings.Contains(got, want) {
-			t.Errorf("missing %s in\n%s", want, got)
-		}
+		assert.Contains(t, got, want, "missing %s in\n%s", want, got)
 	}
-	if strings.Contains(got, "unsigned thought") {
-		t.Error("unsigned thinking must be dropped")
-	}
-	if n := len(msgs[2].Content); n != 2 {
-		t.Errorf("parallel tool results should share one user message, got %d blocks", n)
-	}
+	assert.NotContains(t, got, "unsigned thought", "unsigned thinking must be dropped")
+	n := len(msgs[2].Content)
+	assert.Equal(t, 2, n, "parallel tool results should share one user message, got %d blocks", n)
 
 	// Negative: a conversation must begin with the user.
-	if _, err := convertContents([]*genai.Content{{Role: genai.RoleModel, Parts: []*genai.Part{{Text: "hi"}}}}); err == nil {
-		t.Error("expected error for assistant-first conversation")
-	}
+	_, err = convertContents([]*genai.Content{{Role: genai.RoleModel, Parts: []*genai.Part{{Text: "hi"}}}})
+	assert.Error(t, err, "expected error for assistant-first conversation")
 }
 
 func TestConvertToolsSchemas(t *testing.T) {
@@ -163,9 +155,7 @@ func TestConvertToolsSchemas(t *testing.T) {
 		{Name: "no_params"},
 	}}}
 	out, err := convertTools(tools)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	raw, _ := json.Marshal(out)
 	got := string(raw)
 	for _, want := range []string{
@@ -173,13 +163,10 @@ func TestConvertToolsSchemas(t *testing.T) {
 		`"n":{"description":"count","type":"integer"}`, `"items":{"type":"string"}`, `"type":"array"`,
 		`"name":"no_params"`,
 	} {
-		if !strings.Contains(got, want) {
-			t.Errorf("missing %s in\n%s", want, got)
-		}
+		assert.Contains(t, got, want, "missing %s in\n%s", want, got)
 	}
-	if strings.Contains(got, "INTEGER") || strings.Contains(got, "$schema") {
-		t.Errorf("schema not normalised: %s", got)
-	}
+	assert.NotContains(t, got, "INTEGER", "schema not normalised: %s", got)
+	assert.NotContains(t, got, "$schema", "schema not normalised: %s", got)
 }
 
 func TestAnthropicRequestShape(t *testing.T) {
@@ -198,39 +185,29 @@ func TestAnthropicRequestShape(t *testing.T) {
 	f, opts := newFake(t, jsonReply(message("end_turn", `{"type":"text","text":"a"}`)), jsonReply(message("end_turn", `{"type":"text","text":"b"}`)), jsonReply(message("end_turn", `{"type":"text","text":"c"}`)))
 	m := newAnthropicModel(config.AnthropicConfig{APIKey: "sk-ant-test"}, "claude-opus-5", opts...)
 
-	if _, err := collectResponses(t, m, req("claude-opus-5"), false); err != nil {
-		t.Fatal(err)
-	}
+	_, err := collectResponses(t, m, req("claude-opus-5"), false)
+	require.NoError(t, err)
 	r := f.requests[0]
-	if r["model"] != "claude-opus-5" || r["max_tokens"] != float64(4096) {
-		t.Errorf("model/max_tokens: %v", r)
-	}
-	if _, ok := r["temperature"]; ok {
-		t.Error("temperature must not be sent to claude-opus-5 (400 on current models)")
-	}
+	assert.Equal(t, "claude-opus-5", r["model"], "model/max_tokens: %v", r)
+	assert.Equal(t, float64(4096), r["max_tokens"], "model/max_tokens: %v", r)
+	_, ok := r["temperature"]
+	assert.False(t, ok, "temperature must not be sent to claude-opus-5 (400 on current models)")
 	sys, _ := json.Marshal(r["system"])
-	if !strings.Contains(string(sys), `"cache_control":{"type":"ephemeral"}`) || !strings.Contains(string(sys), "You are a puppy.") {
-		t.Errorf("system not cached: %s", sys)
-	}
-	if r["fallbacks"] != "default" || !strings.Contains(f.headers[0].Get("Anthropic-Beta"), "server-side-fallback-2026-07-01") {
-		t.Errorf("default fallbacks not enabled: %v / %q", r["fallbacks"], f.headers[0].Get("Anthropic-Beta"))
-	}
-	if f.headers[0].Get("X-Api-Key") != "sk-ant-test" {
-		t.Error("api key header missing")
-	}
+	assert.Contains(t, string(sys), `"cache_control":{"type":"ephemeral"}`, "system not cached: %s", sys)
+	assert.Contains(t, string(sys), "You are a puppy.", "system not cached: %s", sys)
+	assert.Equal(t, "default", r["fallbacks"], "default fallbacks not enabled: %v / %q", r["fallbacks"], f.headers[0].Get("Anthropic-Beta"))
+	assert.Contains(t, f.headers[0].Get("Anthropic-Beta"), "server-side-fallback-2026-07-01", "default fallbacks not enabled: %v / %q", r["fallbacks"], f.headers[0].Get("Anthropic-Beta"))
+	assert.Equal(t, "sk-ant-test", f.headers[0].Get("X-Api-Key"), "api key header missing")
 
 	// Older model: temperature allowed, no fallbacks.
 	collectResponses(t, m, req("claude-haiku-4-5"), false)
-	if f.requests[1]["temperature"] == nil || f.requests[1]["fallbacks"] != nil {
-		t.Errorf("haiku request: %v", f.requests[1])
-	}
+	assert.NotNil(t, f.requests[1]["temperature"], "haiku request: %v", f.requests[1])
+	assert.Nil(t, f.requests[1]["fallbacks"], "haiku request: %v", f.requests[1])
 
 	// Fallbacks off.
 	off := newAnthropicModel(config.AnthropicConfig{Fallbacks: "off"}, "claude-opus-5", opts...)
 	collectResponses(t, off, req("claude-opus-5"), false)
-	if f.requests[2]["fallbacks"] != nil {
-		t.Error("fallbacks should be omitted when off")
-	}
+	assert.Nil(t, f.requests[2]["fallbacks"], "fallbacks should be omitted when off")
 }
 
 func TestAnthropicResponseConversion(t *testing.T) {
@@ -243,31 +220,30 @@ func TestAnthropicResponseConversion(t *testing.T) {
 	req := &model.LLMRequest{Contents: []*genai.Content{userText("go")}}
 
 	out, err := collectResponses(t, m, req, false)
-	if err != nil || len(out) != 1 {
-		t.Fatalf("%v %v", out, err)
-	}
+	require.NoError(t, err, "%v", out)
+	require.Len(t, out, 1, "%v %v", out, err)
 	r := out[0]
 	parts := r.Content.Parts
-	if len(parts) != 3 || !parts[0].Thought || string(parts[0].ThoughtSignature) != "sig-9" || parts[1].Text != "Checking." {
-		t.Fatalf("parts %+v", parts)
-	}
+	require.Len(t, parts, 3, "parts %+v", parts)
+	require.True(t, parts[0].Thought, "parts %+v", parts)
+	require.Equal(t, "sig-9", string(parts[0].ThoughtSignature), "parts %+v", parts)
+	require.Equal(t, "Checking.", parts[1].Text, "parts %+v", parts)
 	fc := parts[2].FunctionCall
-	if fc == nil || fc.ID != "toolu_1" || fc.Name != "list_files" || fc.Args["recursive"] != true {
-		t.Errorf("function call %+v", fc)
-	}
+	assert.NotNil(t, fc, "function call %+v", fc)
+	assert.Equal(t, "toolu_1", fc.ID, "function call %+v", fc)
+	assert.Equal(t, "list_files", fc.Name, "function call %+v", fc)
+	assert.Equal(t, true, fc.Args["recursive"], "function call %+v", fc)
 	u := r.UsageMetadata
-	if u.PromptTokenCount != 550 || u.CachedContentTokenCount != 400 || u.CandidatesTokenCount != 20 || r.FinishReason != genai.FinishReasonStop {
-		t.Errorf("usage/finish %+v %v", u, r.FinishReason)
-	}
+	assert.Equal(t, int32(550), u.PromptTokenCount, "usage/finish %+v %v", u, r.FinishReason)
+	assert.Equal(t, int32(400), u.CachedContentTokenCount, "usage/finish %+v %v", u, r.FinishReason)
+	assert.Equal(t, int32(20), u.CandidatesTokenCount, "usage/finish %+v %v", u, r.FinishReason)
+	assert.Equal(t, genai.FinishReasonStop, r.FinishReason, "usage/finish %+v %v", u, r.FinishReason)
 
 	out, _ = collectResponses(t, m, req, false)
-	if out[0].FinishReason != genai.FinishReasonSafety || !strings.Contains(out[0].Content.Parts[len(out[0].Content.Parts)-1].Text, "declined") {
-		t.Errorf("refusal not surfaced: %+v", out[0])
-	}
+	assert.Equal(t, genai.FinishReasonSafety, out[0].FinishReason, "refusal not surfaced: %+v", out[0])
+	assert.Contains(t, out[0].Content.Parts[len(out[0].Content.Parts)-1].Text, "declined", "refusal not surfaced: %+v", out[0])
 	out, _ = collectResponses(t, m, req, false)
-	if out[0].FinishReason != genai.FinishReasonMaxTokens {
-		t.Errorf("max_tokens finish: %v", out[0].FinishReason)
-	}
+	assert.Equal(t, genai.FinishReasonMaxTokens, out[0].FinishReason, "max_tokens finish: %v", out[0].FinishReason)
 }
 
 func sseReply(events ...string) func(http.ResponseWriter) {
@@ -297,26 +273,20 @@ func TestAnthropicStreaming(t *testing.T) {
 	))
 	m := newAnthropicModel(config.AnthropicConfig{}, "claude-opus-5", opts...)
 	out, err := collectResponses(t, m, &model.LLMRequest{Contents: []*genai.Content{userText("go")}}, true)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(out) != 3 || !out[0].Partial || !out[1].Partial || out[2].Partial {
-		t.Fatalf("expected 2 partials + final, got %d: %+v", len(out), out)
-	}
-	if out[0].Content.Parts[0].Text+out[1].Content.Parts[0].Text != "Hello" {
-		t.Error("partial text wrong")
-	}
+	require.NoError(t, err)
+	require.Len(t, out, 3, "expected 2 partials + final, got %d: %+v", len(out), out)
+	require.True(t, out[0].Partial, "expected 2 partials + final, got %d: %+v", len(out), out)
+	require.True(t, out[1].Partial, "expected 2 partials + final, got %d: %+v", len(out), out)
+	require.False(t, out[2].Partial, "expected 2 partials + final, got %d: %+v", len(out), out)
+	assert.Equal(t, "Hello", out[0].Content.Parts[0].Text+out[1].Content.Parts[0].Text, "partial text wrong")
 	final := out[2]
-	if final.Content.Parts[0].Text != "Hello" {
-		t.Errorf("final text %q", final.Content.Parts[0].Text)
-	}
+	assert.Equal(t, "Hello", final.Content.Parts[0].Text, "final text %q", final.Content.Parts[0].Text)
 	fc := final.Content.Parts[1].FunctionCall
-	if fc == nil || fc.ID != "toolu_s" || fc.Args["query"] != "TODO" {
-		t.Errorf("streamed tool call %+v", fc)
-	}
-	if final.UsageMetadata.CandidatesTokenCount != 42 || final.UsageMetadata.PromptTokenCount != 10 {
-		t.Errorf("streamed usage %+v", final.UsageMetadata)
-	}
+	assert.NotNil(t, fc, "streamed tool call %+v", fc)
+	assert.Equal(t, "toolu_s", fc.ID, "streamed tool call %+v", fc)
+	assert.Equal(t, "TODO", fc.Args["query"], "streamed tool call %+v", fc)
+	assert.Equal(t, int32(42), final.UsageMetadata.CandidatesTokenCount, "streamed usage %+v", final.UsageMetadata)
+	assert.Equal(t, int32(10), final.UsageMetadata.PromptTokenCount, "streamed usage %+v", final.UsageMetadata)
 }
 
 func TestAnthropicErrors(t *testing.T) {
@@ -332,38 +302,31 @@ func TestAnthropicErrors(t *testing.T) {
 	req := &model.LLMRequest{Contents: []*genai.Content{userText("x")}}
 	for _, want := range []string{"authentication failed", "rate limited", "API error (529)"} {
 		_, err := collectResponses(t, m, req, false)
-		if err == nil || !strings.Contains(err.Error(), want) {
-			t.Errorf("want %q, got %v", want, err)
-		}
+		assert.Error(t, err, "want %q, got", want)
+		assert.Contains(t, err.Error(), want, "want %q, got %v", want, err)
 	}
 	// Empty requests are rejected before any network call.
-	if _, err := collectResponses(t, m, &model.LLMRequest{}, false); err == nil {
-		t.Error("expected error for empty request")
-	}
+	_, err := collectResponses(t, m, &model.LLMRequest{}, false)
+	assert.Error(t, err, "expected error for empty request")
 }
 
 func TestModelNameResolution(t *testing.T) {
 	cfg := config.DefaultConfig()
 	for provider, want := range map[string]string{"gemini": "gemini-3.8-flash", "anthropic": "claude-opus-5", "openai": "gpt-4o", "ollama": "gpt-4o"} {
 		cfg.LLM.Provider = provider
-		if got := cfg.ModelName(); got != want {
-			t.Errorf("%s: ModelName = %q, want %q", provider, got, want)
-		}
+		got := cfg.ModelName()
+		assert.Equal(t, want, got, "%s: ModelName = %q, want %q", provider, got, want)
 	}
 	cfg.Blitz.DefaultModel = "claude-sonnet-5"
-	if cfg.ModelName() != "claude-sonnet-5" {
-		t.Error("default_model should override the provider model")
-	}
+	assert.Equal(t, "claude-sonnet-5", cfg.ModelName(), "default_model should override the provider model")
 
 	cfg = config.DefaultConfig()
 	cfg.LLM.Provider = "anthropic"
 	m, err := NewModel(context.Background(), cfg, "")
-	if err != nil || m.Name() != "claude-opus-5" {
-		t.Fatalf("NewModel(anthropic) = %v, %v", m, err)
-	}
-	if m2, _ := NewModel(context.Background(), cfg, "claude-haiku-4-5"); m2.Name() != "claude-haiku-4-5" {
-		t.Error("override ignored")
-	}
+	require.NoError(t, err, "NewModel(anthropic) = %v,", m)
+	require.Equal(t, "claude-opus-5", m.Name(), "NewModel(anthropic) = %v, %v", m, err)
+	m2, _ := NewModel(context.Background(), cfg, "claude-haiku-4-5")
+	assert.Equal(t, "claude-haiku-4-5", m2.Name(), "override ignored")
 }
 
 // TestAnthropicEngineToolLoop drives a full tool round trip through the ADK
@@ -381,15 +344,11 @@ func TestAnthropicEngineToolLoop(t *testing.T) {
 	agentReg, _ := agents.NewRegistry()
 	skillProv, _ := skills.NewProvider()
 	reg, err := tools.NewRegistry(cfg, agentReg, skillProv)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	defer reg.Close()
 	llm := newAnthropicModel(cfg.LLM.Anthropic, "claude-opus-5", opts...)
 	eng, err := NewEngine(context.Background(), cfg, agentReg, skillProv, reg, llm)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
 	var text strings.Builder
 	err = eng.Execute(context.Background(), "s", "list files", func(ev *session.Event) error {
@@ -402,28 +361,21 @@ func TestAnthropicEngineToolLoop(t *testing.T) {
 		}
 		return nil
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(text.String(), "Found them.") {
-		t.Errorf("final text %q", text.String())
-	}
-	if len(f.requests) != 2 {
-		t.Fatalf("expected 2 API calls, got %d", len(f.requests))
-	}
+	require.NoError(t, err)
+	assert.Contains(t, text.String(), "Found them.", "final text %q", text.String())
+	require.Len(t, f.requests, 2, "expected 2 API calls, got %d", len(f.requests))
 	second, _ := json.Marshal(f.requests[1]["messages"])
 	for _, want := range []string{`"signature":"sig-loop"`, `"id":"toolu_loop"`, `"tool_use_id":"toolu_loop"`} {
-		if !strings.Contains(string(second), want) {
-			t.Errorf("second request missing %s:\n%s", want, second)
-		}
+		assert.Contains(t, string(second), want, "second request missing %s:\n%s", want, second)
 	}
 	tools, _ := json.Marshal(f.requests[0]["tools"])
-	if !strings.Contains(string(tools), `"name":"list_files"`) || !strings.Contains(string(tools), `"input_schema"`) {
-		t.Errorf("tools not sent: %s", tools)
-	}
-	if u := eng.Usage("s"); u.Calls != 2 || u.Cached != 800 || u.CacheWrite != 100 || !u.Priced {
-		t.Errorf("usage not recorded/priced: %+v", u)
-	}
+	assert.Contains(t, string(tools), `"name":"list_files"`, "tools not sent: %s", tools)
+	assert.Contains(t, string(tools), `"input_schema"`, "tools not sent: %s", tools)
+	u := eng.Usage("s")
+	assert.Equal(t, 2, u.Calls, "usage not recorded/priced: %+v", u)
+	assert.Equal(t, int64(800), u.Cached, "usage not recorded/priced: %+v", u)
+	assert.Equal(t, int64(100), u.CacheWrite, "usage not recorded/priced: %+v", u)
+	assert.True(t, u.Priced, "usage not recorded/priced: %+v", u)
 }
 
 // Effort goes to output_config.effort on models that take it; a thinking
@@ -466,9 +418,7 @@ func TestAnthropicReasoning(t *testing.T) {
 			ctx = context.WithValue(ctx, effortKey{}, c.effort)
 		}
 		for _, err := range m.GenerateContent(ctx, req(c.model, c.budget), false) {
-			if err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, err)
 		}
 		r := f.requests[i]
 		var effort any
@@ -481,8 +431,9 @@ func TestAnthropicReasoning(t *testing.T) {
 			thinking = string(b)
 		}
 		_, hasTemp := r["temperature"]
-		if effort != c.effortIs || thinking != c.thinking || r["max_tokens"] != c.maxTok || hasTemp != c.temp {
-			t.Errorf("%s effort=%q budget=%v: effort %v thinking %s max_tokens %v temperature %v", c.model, c.effort, c.budget, effort, thinking, r["max_tokens"], hasTemp)
-		}
+		assert.Equal(t, c.effortIs, effort, "%s effort=%q budget=%v: effort %v thinking %s max_tokens %v temperature %v", c.model, c.effort, c.budget, effort, thinking, r["max_tokens"], hasTemp)
+		assert.Equal(t, c.thinking, thinking, "%s effort=%q budget=%v: effort %v thinking %s max_tokens %v temperature %v", c.model, c.effort, c.budget, effort, thinking, r["max_tokens"], hasTemp)
+		assert.Equal(t, c.maxTok, r["max_tokens"], "%s effort=%q budget=%v: effort %v thinking %s max_tokens %v temperature %v", c.model, c.effort, c.budget, effort, thinking, r["max_tokens"], hasTemp)
+		assert.Equal(t, c.temp, hasTemp, "%s effort=%q budget=%v: effort %v thinking %s max_tokens %v temperature %v", c.model, c.effort, c.budget, effort, thinking, r["max_tokens"], hasTemp)
 	}
 }

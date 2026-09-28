@@ -16,8 +16,10 @@ package tui
 
 import (
 	"context"
-	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestRenameTitleAndResumeHint(t *testing.T) {
@@ -35,19 +37,14 @@ func TestRenameTitleAndResumeHint(t *testing.T) {
 		"\033]0;\007", // restored at exit
 		"Resume with: blitz --resume=" + local(app).Storage().Active().ID,
 	} {
-		if !strings.Contains(out, want) {
-			t.Errorf("output lacks %q:\n%q", want, out)
-		}
+		assert.Contains(t, out, want, "output lacks %q:\n%q", want, out)
 	}
-	if local(app).Storage().Active().Title != "Login work" {
-		t.Fatalf("title %q", local(app).Storage().Active().Title)
-	}
+	require.Equal(t, "Login work", local(app).Storage().Active().Title, "title %q", local(app).Storage().Active().Title)
 }
 
 func TestNoTerminalTitleOrHintWhenOff(t *testing.T) {
 	app, _ := newCommandApp(t, "/exit\n")
 	out := captureStdout(t, func() { RunREPL(context.Background(), app) })
-	if strings.Contains(out, "\033]0;") || strings.Contains(out, "Resume with") {
-		t.Fatalf("output:\n%q", out)
-	}
+	require.NotContains(t, out, "\033]0;", "output:\n%q", out)
+	require.NotContains(t, out, "Resume with", "output:\n%q", out)
 }

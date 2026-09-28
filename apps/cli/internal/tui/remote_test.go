@@ -18,7 +18,6 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 
 	"github.com/retail-cortex/blitz/apps/service/servicetest"
@@ -26,6 +25,8 @@ import (
 	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/engine"
 	"github.com/retail-cortex/blitz/pkg/engine/runtime"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/adk/v2/model"
 	"google.golang.org/genai"
 )
@@ -49,31 +50,19 @@ func TestREPLOnARemoteWorkspace(t *testing.T) {
 	srv := httptest.NewServer(s.Handler())
 	defer func() { srv.Close(); s.Close() }()
 	r, err := client.AttachHTTP(context.Background(), http.DefaultClient, srv.URL, t.TempDir(), func(w string) { t.Errorf("warning %s", w) })
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	app := &App{Workspace: r, Printer: PrinterOptions{}}
 	ctx := context.Background()
 	run := func(cmd string) string { return captureStdout(t, func() { HandleCommand(ctx, cmd, app) }) }
 
-	if out := run("/pin_model qa anthropic/claude-haiku-4-5"); !strings.Contains(out, "qa now runs on claude-haiku-4-5") {
-		t.Errorf("/pin_model:\n%s", out)
-	}
-	if out := run("/pin_model nobody x"); !strings.Contains(out, "Unknown agent") {
-		t.Errorf("unknown agent:\n%s", out)
-	}
-	if out := run("/session save early"); !strings.Contains(out, "No active session") {
-		t.Errorf("no session:\n%s", out)
-	}
+	assert.Contains(t, run("/pin_model qa anthropic/claude-haiku-4-5"), "qa now runs on claude-haiku-4-5", "/pin_model")
+	assert.Contains(t, run("/pin_model nobody x"), "Unknown agent", "unknown agent")
+	assert.Contains(t, run("/session save early"), "No active session", "no session")
 	s1, _ := r.NewSession()
 	out := captureStdout(t, func() { runTurn(ctx, app, s1.ID, "hi", nil, turnOptions{}) })
-	if !strings.Contains(out, "remote hello") {
-		t.Errorf("turn:\n%s", out)
-	}
-	if out := run("/session save first"); !strings.Contains(out, "Saved snapshot first") {
-		t.Errorf("/session save:\n%s", out)
-	}
-	if out := run("/session save first"); !strings.Contains(out, "--force replaces it") {
-		t.Errorf("taken:\n%s", out)
-	}
+	assert.Contains(t, out, "remote hello", "turn:\n%s", out)
+	out = run("/session save first")
+	assert.Contains(t, out, "Saved snapshot first", "/session save:\n%s", out)
+	out = run("/session save first")
+	assert.Contains(t, out, "--force replaces it", "taken:\n%s", out)
 }

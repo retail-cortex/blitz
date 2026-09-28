@@ -45,4 +45,8 @@ go_test(
         "manager_test.go",
     ],
     embed = [":agents"],
+    deps = [
+        "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//require",
+    ],
 )

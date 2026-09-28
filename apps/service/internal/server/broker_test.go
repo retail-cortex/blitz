@@ -16,6 +16,7 @@ package server
 
 import (
 	"context"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"testing"
@@ -24,6 +25,8 @@ import (
 	"connectrpc.com/connect"
 	"github.com/retail-cortex/blitz/pkg/config"
 	pb "github.com/retail-cortex/blitz/proto/blitz/v1"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/genai"
 )
 
@@ -37,13 +40,9 @@ func runTurn(t *testing.T, c clients, dir, prompt string, decide pb.Decision, an
 	t.Helper()
 	ctx := context.Background()
 	s, err := c.sessions.NewSession(ctx, connect.NewRequest(&pb.NewSessionRequest{Workspace: dir}))
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	stream, err := c.sessions.RunTurn(ctx, connect.NewRequest(&pb.RunTurnRequest{Workspace: dir, SessionId: s.Msg.Session.Id, Turn: &pb.Turn{Text: prompt}}))
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	var results []*pb.ToolResult
 	var finished *pb.TurnFinished
 	for stream.Receive() {
@@ -51,26 +50,22 @@ func runTurn(t *testing.T, c clients, dir, prompt string, decide pb.Decision, an
 		switch {
 		case ev.GetApprovalRequest() != nil:
 			ar := ev.GetApprovalRequest()
-			if ar.Kind != pb.ActionKind_ACTION_KIND_WRITE || ar.Detail == "" || ar.RequestId == "" {
-				t.Errorf("approval request %v", ar)
-			}
-			if _, err := c.sessions.Approve(ctx, connect.NewRequest(&pb.ApproveRequest{Workspace: dir, RequestId: ar.RequestId, Decision: decide})); err != nil {
-				t.Errorf("approve: %v", err)
-			}
+			assert.Equal(t, pb.ActionKind_ACTION_KIND_WRITE, ar.Kind, "approval request %v", ar)
+			assert.NotEqual(t, "", ar.Detail, "approval request %v", ar)
+			assert.NotEqual(t, "", ar.RequestId, "approval request %v", ar)
+			_, err := c.sessions.Approve(ctx, connect.NewRequest(&pb.ApproveRequest{Workspace: dir, RequestId: ar.RequestId, Decision: decide}))
+			assert.NoError(t, err, "approve")
 		case ev.GetQuestion() != nil:
 			q := ev.GetQuestion()
-			if _, err := c.sessions.Answer(ctx, connect.NewRequest(&pb.AnswerRequest{Workspace: dir, RequestId: q.RequestId, Answer: answer})); err != nil {
-				t.Errorf("answer: %v", err)
-			}
+			_, err := c.sessions.Answer(ctx, connect.NewRequest(&pb.AnswerRequest{Workspace: dir, RequestId: q.RequestId, Answer: answer}))
+			assert.NoError(t, err, "answer")
 		case ev.GetToolResult() != nil:
 			results = append(results, ev.GetToolResult())
 		case ev.GetFinished() != nil:
 			finished = ev.GetFinished()
 		}
 	}
-	if err := stream.Err(); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, stream.Err())
 	return results, finished
 }
 
@@ -80,51 +75,45 @@ func TestApprovalsTravelOverTheStream(t *testing.T) {
 	dir := t.TempDir()
 
 	// Approved once: the file is written.
-	if _, fin := runTurn(t, c, dir, "make a file", pb.Decision_DECISION_ONCE, ""); fin == nil || fin.Error != nil {
-		t.Fatalf("finished %v", fin)
-	}
-	if _, err := os.Stat(filepath.Join(dir, "made.txt")); err != nil {
-		t.Fatalf("approved write didn't happen: %v", err)
-	}
+	_, fin := runTurn(t, c, dir, "make a file", pb.Decision_DECISION_ONCE, "")
+	require.NotNil(t, fin, "finished %v", fin)
+	require.Nil(t, fin.Error, "finished %v", fin)
+	_, err := os.Stat(filepath.Join(dir, "made.txt"))
+	require.NoError(t, err, "approved write didn't happen")
 	os.Remove(filepath.Join(dir, "made.txt"))
 
 	// Denied: the tool reports the refusal and nothing is written.
 	results, _ := runTurn(t, c, dir, "make it again", pb.Decision_DECISION_DENY, "")
-	if len(results) != 1 {
-		t.Fatalf("results %v", results)
-	}
-	if _, err := os.Stat(filepath.Join(dir, "made.txt")); !os.IsNotExist(err) {
-		t.Error("denied write happened")
-	}
+	require.Len(t, results, 1, "results %v", results)
+	_, err = os.Stat(filepath.Join(dir, "made.txt"))
+	assert.ErrorIs(t, err, fs.ErrNotExist, "denied write happened")
 }
 
 func TestQuestionsTravelOverTheStream(t *testing.T) {
 	ask := call("ask_user_question", map[string]any{"question": "Tabs or spaces?", "options": []any{"tabs", "spaces"}})
 	c, _ := serve(t, nil, ask, text("ok"))
 	results, _ := runTurn(t, c, t.TempDir(), "ask me", pb.Decision_DECISION_UNSPECIFIED, "tabs")
-	if len(results) != 1 || results[0].Result.AsMap()["answer"] != "tabs" {
-		t.Errorf("results %v", results)
-	}
+	assert.Len(t, results, 1, "results %v", results)
+	assert.Equal(t, "tabs", results[0].Result.AsMap()["answer"], "results %v", results)
 }
 
 func TestAnsweringAnUnknownRequestFails(t *testing.T) {
 	c, _ := serve(t, nil)
 	_, err := c.sessions.Approve(context.Background(), connect.NewRequest(&pb.ApproveRequest{Workspace: t.TempDir(), RequestId: "nope", Decision: pb.Decision_DECISION_ONCE}))
-	if code, info := errorReason(t, err); code != connect.CodeNotFound || info.Reason != "UNKNOWN_REQUEST" {
-		t.Errorf("%v %v", code, info)
-	}
+	code, info := errorReason(t, err)
+	assert.Equal(t, connect.CodeNotFound, code, "%v %v", code, info)
+	assert.Equal(t, "UNKNOWN_REQUEST", info.Reason, "%v %v", code, info)
 	_, err = c.sessions.Approve(context.Background(), connect.NewRequest(&pb.ApproveRequest{RequestId: "nope"}))
-	if code, info := errorReason(t, err); code != connect.CodeInvalidArgument || info.Reason != "INVALID_DECISION" {
-		t.Errorf("%v %v", code, info)
-	}
+	code, info = errorReason(t, err)
+	assert.Equal(t, connect.CodeInvalidArgument, code, "%v %v", code, info)
+	assert.Equal(t, "INVALID_DECISION", info.Reason, "%v %v", code, info)
 }
 
 // Outside a turn nobody can answer, so a request is refused at once.
 func TestRequestsWithoutAClientAreRefused(t *testing.T) {
 	b := newBroker()
-	if _, err := b.question(context.Background(), "q", nil); err != errNoClient {
-		t.Errorf("err = %v", err)
-	}
+	_, err := b.question(context.Background(), "q", nil)
+	assert.ErrorIs(t, err, errNoClient, "err = %v", err)
 }
 
 // A client that goes away while an approval waits ends the turn; nothing
@@ -137,9 +126,7 @@ func TestCancellingWhileAnApprovalWaits(t *testing.T) {
 	defer cancel()
 	sess, _ := c.sessions.NewSession(ctx, connect.NewRequest(&pb.NewSessionRequest{Workspace: dir}))
 	stream, err := c.sessions.RunTurn(ctx, connect.NewRequest(&pb.RunTurnRequest{Workspace: dir, SessionId: sess.Msg.Session.Id, Turn: &pb.Turn{Text: "make a file"}}))
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	for stream.Receive() {
 		if stream.Msg().Event.GetApprovalRequest() != nil {
 			cancel()
@@ -153,14 +140,11 @@ func TestCancellingWhileAnApprovalWaits(t *testing.T) {
 		if n == 0 {
 			break
 		}
-		if time.Now().After(deadline) {
-			t.Fatalf("%d requests still pending", n)
-		}
+		require.False(t, time.Now().After(deadline), "%d requests still pending", n)
 		time.Sleep(10 * time.Millisecond)
 	}
-	if _, err := os.Stat(filepath.Join(dir, "made.txt")); !os.IsNotExist(err) {
-		t.Error("the write happened without approval")
-	}
+	_, err = os.Stat(filepath.Join(dir, "made.txt"))
+	assert.ErrorIs(t, err, fs.ErrNotExist, "the write happened without approval")
 }
 
 // A workspace isn't closed while a turn runs in it: that would cut the
@@ -170,27 +154,21 @@ func TestCloseWaitsForRunningTurns(t *testing.T) {
 	dir := t.TempDir()
 	ctx := context.Background()
 	sess, err := c.sessions.NewSession(ctx, connect.NewRequest(&pb.NewSessionRequest{Workspace: dir}))
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	stream, err := c.sessions.RunTurn(ctx, connect.NewRequest(&pb.RunTurnRequest{Workspace: dir, SessionId: sess.Msg.Session.Id, Turn: &pb.Turn{Text: "go"}}))
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	for stream.Receive() {
 		ev := stream.Msg().Event
 		if ar := ev.GetApprovalRequest(); ar != nil { // the turn waits here
 			_, cerr := c.workspaces.CloseWorkspace(ctx, connect.NewRequest(&pb.CloseWorkspaceRequest{Workspace: dir}))
-			if code, info := errorReason(t, cerr); code != connect.CodeFailedPrecondition || info.Reason != "TURN_RUNNING" {
-				t.Errorf("closing during a turn: %v %v", code, info)
-			}
+			code, info := errorReason(t, cerr)
+			assert.Equal(t, connect.CodeFailedPrecondition, code, "closing during a turn: %v %v", code, info)
+			assert.Equal(t, "TURN_RUNNING", info.Reason, "closing during a turn: %v %v", code, info)
 			c.sessions.Approve(ctx, connect.NewRequest(&pb.ApproveRequest{Workspace: dir, RequestId: ar.RequestId, Decision: pb.Decision_DECISION_DENY}))
 		}
 	}
-	if _, err := c.workspaces.CloseWorkspace(ctx, connect.NewRequest(&pb.CloseWorkspaceRequest{Workspace: dir})); err != nil {
-		t.Fatalf("closing after the turn: %v", err)
-	}
-	if got := s.openDirs(); len(got) != 0 {
-		t.Errorf("still open: %v", got)
-	}
+	_, err = c.workspaces.CloseWorkspace(ctx, connect.NewRequest(&pb.CloseWorkspaceRequest{Workspace: dir}))
+	require.NoError(t, err, "closing after the turn")
+	got := s.openDirs()
+	assert.Len(t, got, 0, "still open: %v", got)
 }

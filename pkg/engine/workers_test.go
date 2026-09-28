@@ -16,17 +16,18 @@ package engine
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/retail-cortex/blitz/pkg/api"
-
 	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/engine/workers"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/genai"
 )
 
@@ -34,9 +35,7 @@ func addWorker(t *testing.T, w *Workspace, name, content string) {
 	t.Helper()
 	dir := filepath.Join(w.Dir(), "workers", name)
 	os.MkdirAll(dir, 0o755)
-	if err := os.WriteFile(filepath.Join(dir, workers.FileName), []byte(content), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(filepath.Join(dir, workers.FileName), []byte(content), 0o644))
 }
 
 func TestWorkersLifecycle(t *testing.T) {
@@ -45,70 +44,61 @@ func TestWorkersLifecycle(t *testing.T) {
 	addWorker(t, w, "broken", "---\nschedule: whenever\n---\ndo it\n")
 
 	list, err := w.ListWorkers()
-	if err != nil || len(list) != 2 {
-		t.Fatalf("list %v %v", list, err)
-	}
+	require.NoError(t, err, "list %v", list)
+	require.Len(t, list, 2, "list %v %v", list, err)
 	broken, deps := list[0], list[1]
-	if broken.State != api.StateInvalid || len(broken.Problems) == 0 {
-		t.Errorf("broken %+v", broken)
-	}
-	if deps.State != api.StateNew || deps.Cron != "0 6 * * *" || !deps.Next.IsZero() ||
-		len(deps.Permissions) != 1 || deps.Limits.MaxTurns == 0 || len(deps.Problems) != 1 || !strings.Contains(deps.Problems[0], "web") {
-		t.Errorf("deps %+v", deps)
-	}
+	assert.Equal(t, api.StateInvalid, broken.State, "broken %+v", broken)
+	assert.NotEqual(t, 0, len(broken.Problems), "broken %+v", broken)
+	assert.Equal(t, api.StateNew, deps.State, "deps %+v", deps)
+	assert.Equal(t, "0 6 * * *", deps.Cron, "deps %+v", deps)
+	assert.True(t, deps.Next.IsZero(), "deps %+v", deps)
+	assert.Len(t, deps.Permissions, 1, "deps %+v", deps)
+	assert.NotEqual(t, 0, deps.Limits.MaxTurns, "deps %+v", deps)
+	assert.Len(t, deps.Problems, 1, "deps %+v", deps)
+	assert.Contains(t, deps.Problems[0], "web", "deps %+v", deps)
 
-	if _, err := w.EnableWorker("deps", "sha256:stale"); !errors.Is(err, api.ErrHashMismatch) {
-		t.Errorf("stale hash: %v", err)
-	}
-	if _, err := w.EnableWorker("broken", broken.Hash); err == nil {
-		t.Error("an invalid worker was enabled")
-	}
+	_, staleErr := w.EnableWorker("deps", "sha256:stale")
+	assert.ErrorIs(t, staleErr, api.ErrHashMismatch, "enabling a stale hash")
+	_, brokenErr := w.EnableWorker("broken", broken.Hash)
+	assert.Error(t, brokenErr, "an invalid worker isn't enabled")
 	// A name is never a path: nothing outside workers/ is looked up.
 	for _, bad := range []string{"../deps", "deps/..", "/etc", "Deps"} {
-		if _, err := w.EnableWorker(bad, "x"); !errors.Is(err, api.ErrUnknownWorker) {
-			t.Errorf("enable %q: %v", bad, err)
-		}
-		if _, err := w.WorkerRuns(bad, 1); !errors.Is(err, api.ErrUnknownWorker) {
-			t.Errorf("runs of %q: %v", bad, err)
-		}
+		_, err := w.EnableWorker(bad, "x")
+		assert.ErrorIs(t, err, api.ErrUnknownWorker, "enable %q: %v", bad, err)
+		_, err = w.WorkerRuns(bad, 1)
+		assert.ErrorIs(t, err, api.ErrUnknownWorker, "runs of %q: %v", bad, err)
 	}
-	if _, err := w.EnableWorker("nope", "x"); !errors.Is(err, api.ErrUnknownWorker) {
-		t.Errorf("unknown: %v", err)
-	}
+	_, unknownErr := w.EnableWorker("nope", "x")
+	assert.ErrorIs(t, unknownErr, api.ErrUnknownWorker)
 	on, err := w.EnableWorker("deps", deps.Hash)
-	if err != nil || on.State != api.StateEnabled || on.Next.IsZero() {
-		t.Fatalf("enable %+v %v", on, err)
-	}
+	require.NoError(t, err, "enable %+v", on)
+	require.Equal(t, api.StateEnabled, on.State, "enable %+v %v", on, err)
+	require.False(t, on.Next.IsZero(), "enable %+v %v", on, err)
 
 	// An edit suspends it.
 	addWorker(t, w, "deps", "---\nschedule: Daily at 7 AM\n---\nReport outdated modules.\n")
-	if list, _ := w.ListWorkers(); list[1].State != api.StateChanged || !list[1].Next.IsZero() {
-		t.Errorf("after an edit: %+v", list[1])
-	}
+	list, _ = w.ListWorkers()
+	assert.Equal(t, api.StateChanged, list[1].State, "after an edit: %+v", list[1])
+	assert.True(t, list[1].Next.IsZero(), "after an edit: %+v", list[1])
 	off, err := w.DisableWorker("deps")
-	if err != nil || off.State != api.StateDisabled {
-		t.Errorf("disable %+v %v", off, err)
-	}
+	assert.NoError(t, err, "disable %+v", off)
+	assert.Equal(t, api.StateDisabled, off.State, "disable %+v %v", off, err)
 }
 
 func TestWorkersCanBeTurnedOff(t *testing.T) {
 	w, _ := openTestWith(t, func(c *config.Config) { c.Workers.Enabled = false })
-	if _, err := w.ListWorkers(); !errors.Is(err, api.ErrWorkersDisabled) {
-		t.Errorf("%v", err)
-	}
+	_, err := w.ListWorkers()
+	assert.ErrorIs(t, err, api.ErrWorkersDisabled, "%v", err)
 }
 
 func enable(t *testing.T, w *Workspace, name string) {
 	t.Helper()
 	list, err := w.ListWorkers()
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	for _, info := range list {
 		if info.Name == name {
-			if _, err := w.EnableWorker(name, info.Hash); err != nil {
-				t.Fatal(err)
-			}
+			_, err := w.EnableWorker(name, info.Hash)
+			require.NoError(t, err)
 			return
 		}
 	}
@@ -126,9 +116,8 @@ func TestRunWorkerEnforcesPermissions(t *testing.T) {
 	addWorker(t, w, "deps", "---\nschedule: daily at 6 AM\npermissions: [\"write:reports/\"]\n---\nWrite reports/deps.md.\n")
 	user := newSession(t, w)
 
-	if _, err := w.RunWorker(context.Background(), "deps", RunOptions{Manual: true}); !errors.Is(err, api.ErrWorkerNotEnabled) {
-		t.Fatalf("not enabled: %v", err)
-	}
+	_, err := w.RunWorker(context.Background(), "deps", RunOptions{Manual: true})
+	require.ErrorIs(t, err, api.ErrWorkerNotEnabled, "not enabled: %v", err)
 	enable(t, w, "deps")
 	var results []string
 	var started api.Run
@@ -137,36 +126,31 @@ func TestRunWorkerEnforcesPermissions(t *testing.T) {
 			results = append(results, fmt.Sprint(e.ToolResult.Result))
 		}
 	}})
-	if started.ID != run.ID || started.Status != api.RunRunning {
-		t.Errorf("started %+v", started)
-	}
-	if err != nil || run.Status != api.RunSucceeded || !run.Manual || run.SessionID == "" || run.SessionID == user.ID {
-		t.Fatalf("run %+v %v", run, err)
-	}
-	if _, err := os.Stat(filepath.Join(w.Dir(), "reports", "deps.md")); err != nil {
-		t.Errorf("the permitted write didn't happen: %v", err)
-	}
-	if _, err := os.Stat(filepath.Join(w.Dir(), "main.go")); !os.IsNotExist(err) {
-		t.Error("the refused write happened")
-	}
-	if len(run.Refusals) != 1 || run.Refusals[0].Kind != api.ActionWrite {
-		t.Errorf("refusals %+v", run.Refusals)
-	}
-	if len(results) != 3 || !strings.Contains(results[2], "unattended") {
-		t.Errorf("results %q", results)
-	}
+	assert.Equal(t, run.ID, started.ID, "started %+v", started)
+	assert.Equal(t, api.RunRunning, started.Status, "started %+v", started)
+	require.NoError(t, err, "run %+v", run)
+	require.Equal(t, api.RunSucceeded, run.Status, "run %+v %v", run, err)
+	require.True(t, run.Manual, "run %+v %v", run, err)
+	require.NotEqual(t, "", run.SessionID, "run %+v %v", run, err)
+	require.NotEqual(t, user.ID, run.SessionID, "run %+v %v", run, err)
+	assert.FileExists(t, filepath.Join(w.Dir(), "reports", "deps.md"), "the permitted write happened")
+	assert.NoFileExists(t, filepath.Join(w.Dir(), "main.go"), "the refused write didn't happen")
+	assert.Len(t, run.Refusals, 1, "refusals %+v", run.Refusals)
+	assert.Equal(t, api.ActionWrite, run.Refusals[0].Kind, "refusals %+v", run.Refusals)
+	assert.Len(t, results, 3, "results %q", results)
+	assert.Contains(t, results[2], "unattended", "results %q", results)
 	first := llm.Requests[0].Contents
-	if got := first[len(first)-1].Parts[0].Text; !strings.Contains(got, "running unattended") || !strings.Contains(got, "Write reports/deps.md.") {
-		t.Error("the agent wasn't told it runs unattended")
-	}
+	got := first[len(first)-1].Parts[0].Text
+	assert.Contains(t, got, "running unattended", "the agent wasn't told it runs unattended")
+	assert.Contains(t, got, "Write reports/deps.md.", "the agent wasn't told it runs unattended")
 	// The workspace's own session was left alone.
-	if active, _ := w.ActiveSession(); active.ID != user.ID || len(active.Messages) != 0 {
-		t.Errorf("active session %s with %d messages", active.ID, len(active.Messages))
-	}
+	active, _ := w.ActiveSession()
+	assert.Equal(t, user.ID, active.ID, "active session %s with %d messages", active.ID, len(active.Messages))
+	assert.Len(t, active.Messages, 0, "active session %s with %d messages", active.ID, len(active.Messages))
 	runs, err := w.WorkerRuns("deps", 0)
-	if err != nil || len(runs) != 1 || runs[0].ID != run.ID {
-		t.Errorf("recorded runs %+v %v", runs, err)
-	}
+	assert.NoError(t, err, "recorded runs %+v", runs)
+	assert.Len(t, runs, 1, "recorded runs %+v %v", runs, err)
+	assert.Equal(t, run.ID, runs[0].ID, "recorded runs %+v %v", runs, err)
 }
 
 func TestRunWorkerStopsAtItsTurnLimit(t *testing.T) {
@@ -175,9 +159,9 @@ func TestRunWorkerStopsAtItsTurnLimit(t *testing.T) {
 	addWorker(t, w, "loop", "---\nschedule: hourly\nlimits: {max_turns: 2}\n---\nLook around.\n")
 	enable(t, w, "loop")
 	run, err := w.RunWorker(context.Background(), "loop", RunOptions{})
-	if err != nil || run.Status != api.RunLimited || run.Error == "" {
-		t.Errorf("run %+v %v", run, err)
-	}
+	assert.NoError(t, err, "run %+v", run)
+	assert.Equal(t, api.RunLimited, run.Status, "run %+v %v", run, err)
+	assert.NotEqual(t, "", run.Error, "run %+v %v", run, err)
 }
 
 // A worker's agent and model apply to its runs only.
@@ -191,41 +175,31 @@ func TestRunWorkerUsesItsAgentAndModel(t *testing.T) {
 	}
 
 	run, err := w.RunWorker(context.Background(), "review", RunOptions{})
-	if err != nil || run.Status != api.RunSucceeded {
-		t.Fatalf("run %+v %v", run, err)
-	}
-	if main.Calls() != 0 {
-		t.Errorf("the workspace model answered %d times; the worker's model should have", main.Calls())
-	}
+	require.NoError(t, err, "run %+v", run)
+	require.Equal(t, api.RunSucceeded, run.Status, "run %+v %v", run, err)
+	assert.Equal(t, 0, main.Calls(), "the workspace model answered %d times; the worker's model should have", main.Calls())
 	sessions, _ := w.ListSessions(false)
 	found := false
 	for _, s := range sessions {
 		if s.ID == run.SessionID {
 			found = true
-			if s.Agent != "qa" {
-				t.Errorf("run session agent %q, want qa", s.Agent)
-			}
+			assert.Equal(t, "qa", s.Agent, "run session agent %q, want qa", s.Agent)
 		}
 	}
-	if !found {
-		t.Errorf("run session %s not listed", run.SessionID)
-	}
-	if w.ActiveAgent().Name != "blitz" || w.Model().Name != "gemini-3.8-flash" {
-		t.Errorf("the run changed the workspace: %s on %s", w.ActiveAgent().Name, w.Model().Name)
-	}
+	assert.True(t, found, "run session %s not listed", run.SessionID)
+	assert.Equal(t, "blitz", w.ActiveAgent().Name, "the run changed the workspace: %s on %s", w.ActiveAgent().Name, w.Model().Name)
+	assert.Equal(t, "gemini-3.8-flash", w.Model().Name, "the run changed the workspace: %s on %s", w.ActiveAgent().Name, w.Model().Name)
 
-	if run, _ := w.RunWorker(context.Background(), "badmodel", RunOptions{}); run.Status != api.RunFailed || !strings.Contains(run.Error, "broken") {
-		t.Errorf("unbuildable model: %+v", run)
-	}
+	run, _ = w.RunWorker(context.Background(), "badmodel", RunOptions{})
+	assert.Equal(t, api.RunFailed, run.Status, "unbuildable model: %+v", run)
+	assert.Contains(t, run.Error, "broken", "unbuildable model: %+v", run)
 	list, _ := w.ListWorkers()
 	for _, info := range list {
-		if info.Name == "nobody" && (len(info.Problems) == 0 || !strings.Contains(info.Problems[0], "nobody")) {
-			t.Errorf("unknown agent not reported: %+v", info.Problems)
-		}
+		assert.False(t, info.Name == "nobody" && (len(info.Problems) == 0 || !strings.Contains(info.Problems[0], "nobody")), "unknown agent not reported: %+v", info.Problems)
 	}
-	if run, _ := w.RunWorker(context.Background(), "nobody", RunOptions{}); run.Status != api.RunFailed || !strings.Contains(run.Error, "nobody") {
-		t.Errorf("unknown agent: %+v", run)
-	}
+	run, _ = w.RunWorker(context.Background(), "nobody", RunOptions{})
+	assert.Equal(t, api.RunFailed, run.Status, "unknown agent: %+v", run)
+	assert.Contains(t, run.Error, "nobody", "unknown agent: %+v", run)
 }
 
 // A run's timeout and cost limit stop it as "limited", with the limit as
@@ -236,9 +210,10 @@ func TestRunWorkerStopsAtItsTimeAndCostLimits(t *testing.T) {
 	addWorker(t, w, "slow", "---\nschedule: hourly\npermissions: [\"shell:sleep 5\"]\nlimits: {timeout: 300ms}\n---\nWait.\n")
 	enable(t, w, "slow")
 	run, err := w.RunWorker(context.Background(), "slow", RunOptions{})
-	if err != nil || run.Status != api.RunLimited || !strings.Contains(run.Error, "time limit") || run.Duration > 4e9 {
-		t.Errorf("timeout run %+v %v", run, err)
-	}
+	assert.NoError(t, err, "timeout run %+v", run)
+	assert.Equal(t, api.RunLimited, run.Status, "timeout run %+v %v", run, err)
+	assert.Contains(t, run.Error, "time limit", "timeout run %+v %v", run, err)
+	assert.LessOrEqual(t, run.Duration, time.Duration(4e9), "timeout run %+v %v", run, err)
 
 	list := &genai.Content{Role: genai.RoleModel, Parts: []*genai.Part{{FunctionCall: &genai.FunctionCall{Name: "list_files", Args: map[string]any{}}}}}
 	w2, llm := openTestWith(t, nil, list, list, list, list, list, list)
@@ -246,7 +221,7 @@ func TestRunWorkerStopsAtItsTimeAndCostLimits(t *testing.T) {
 	addWorker(t, w2, "spend", "---\nschedule: hourly\nlimits: {max_cost_usd: 0.0002}\n---\nLook around.\n")
 	enable(t, w2, "spend")
 	run, err = w2.RunWorker(context.Background(), "spend", RunOptions{})
-	if err != nil || run.Status != api.RunLimited || !strings.Contains(run.Error, "cost limit") {
-		t.Errorf("cost run %+v %v", run, err)
-	}
+	assert.NoError(t, err, "cost run %+v", run)
+	assert.Equal(t, api.RunLimited, run.Status, "cost run %+v %v", run, err)
+	assert.Contains(t, run.Error, "cost limit", "cost run %+v %v", run, err)
 }

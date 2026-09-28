@@ -18,19 +18,18 @@ import (
 	"context"
 	"io"
 	"os"
-	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestUsageErrors(t *testing.T) {
 	for _, args := range [][]string{{"extra"}, {"--nope"}} {
-		if code := run(context.Background(), args); code != exitUsage {
-			t.Errorf("blitzd %v: exit %d, want %d", args, code, exitUsage)
-		}
+		code := run(context.Background(), args)
+		assert.Equal(t, exitUsage, code, "blitzd %v: exit %d, want %d", args, code, exitUsage)
 	}
-	if code := run(context.Background(), []string{"--version"}); code != 0 {
-		t.Errorf("blitzd --version: exit %d", code)
-	}
+	code := run(context.Background(), []string{"--version"})
+	assert.Equal(t, 0, code, "blitzd --version: exit %d", code)
 }
 
 // --license shows the NOTICE, the Apache License or the third-party
@@ -51,11 +50,9 @@ func TestLicense(t *testing.T) {
 		w.Close()
 		os.Stdout = old
 		out := <-read
-		if code != 0 || !strings.Contains(string(out), want) {
-			t.Errorf("blitzd %s: exit %d, no %q in %.200s", arg, code, want, out)
-		}
+		assert.Equal(t, 0, code, "blitzd %s: exit %d, no %q in %.200s", arg, code, want, out)
+		assert.Contains(t, string(out), want, "blitzd %s: exit %d, no %q in %.200s", arg, code, want, out)
 	}
-	if code := run(context.Background(), []string{"--license=bogus"}); code != exitUsage {
-		t.Errorf("--license=bogus: exit %d", code)
-	}
+	code := run(context.Background(), []string{"--license=bogus"})
+	assert.Equal(t, exitUsage, code, "--license=bogus: exit %d", code)
 }

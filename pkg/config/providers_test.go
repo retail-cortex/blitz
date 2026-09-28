@@ -15,12 +15,15 @@
 package config
 
 import (
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/retail-cortex/blitz/pkg/secrets"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // keysEnv isolates the settings and gives them an in-memory secret store.
@@ -38,9 +41,7 @@ func keysEnv(t *testing.T) (home string, store *secrets.Memory) {
 func source(t *testing.T, workspace, provider string) ProviderInfo {
 	t.Helper()
 	info, err := Describe("", workspace)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	for _, p := range info.Providers {
 		if p.Name == provider {
 			return p
@@ -55,33 +56,24 @@ func source(t *testing.T, workspace, provider string) ProviderInfo {
 func TestGlobalAPIKeyInTheStore(t *testing.T) {
 	home, store := keysEnv(t)
 	path, err := SetAPIKey("", "", "gemini", "  AIza-global  ")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if path != filepath.Join(home, ".blitz", ".env.toml") {
-		t.Errorf("wrote %s", path)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, filepath.Join(home, ".blitz", ".env.toml"), path, "wrote %s", path)
 	data, _ := os.ReadFile(path)
-	if strings.Contains(string(data), "AIza") || !strings.Contains(string(data), `api_key = "keychain:global/llm.gemini.api_key"`) {
-		t.Errorf("file:\n%s", data)
-	}
-	if v, _ := store.Get("global/llm.gemini.api_key"); v != "AIza-global" {
-		t.Errorf("stored %q", v)
-	}
+	assert.NotContains(t, string(data), "AIza", "file:\n%s", data)
+	assert.Contains(t, string(data), `api_key = "keychain:global/llm.gemini.api_key"`, "file:\n%s", data)
+	v, _ := store.Get("global/llm.gemini.api_key")
+	assert.Equal(t, "AIza-global", v, "stored %q", v)
 	cfg, err := Load("")
-	if err != nil || cfg.LLM.Gemini.APIKey != "AIza-global" {
-		t.Errorf("loaded %q, %v", cfg.LLM.Gemini.APIKey, err)
-	}
-	if p := source(t, "", "gemini"); p.KeySource != KeyKeychain || p.KeyMissing {
-		t.Errorf("gemini: %+v", p)
-	}
-	if p := source(t, "", "openai"); p.KeySource != KeyNone {
-		t.Errorf("openai: %+v", p)
-	}
+	assert.NoError(t, err, "loaded %q,", cfg.LLM.Gemini.APIKey)
+	assert.Equal(t, "AIza-global", cfg.LLM.Gemini.APIKey, "loaded %q, %v", cfg.LLM.Gemini.APIKey, err)
+	p := source(t, "", "gemini")
+	assert.Equal(t, KeyKeychain, p.KeySource, "gemini: %+v", p)
+	assert.False(t, p.KeyMissing, "gemini: %+v", p)
+	p = source(t, "", "openai")
+	assert.Equal(t, KeyNone, p.KeySource, "openai: %+v", p)
 	t.Setenv("OPENAI_API_KEY", "sk-env")
-	if p := source(t, "", "openai"); p.KeySource != KeyEnvironment {
-		t.Errorf("openai from the environment: %+v", p)
-	}
+	p = source(t, "", "openai")
+	assert.Equal(t, KeyEnvironment, p.KeySource, "openai from the environment: %+v", p)
 }
 
 // A workspace's own key wins there, lives in the user's directory (not the
@@ -89,45 +81,31 @@ func TestGlobalAPIKeyInTheStore(t *testing.T) {
 func TestWorkspaceKeys(t *testing.T) {
 	home, store := keysEnv(t)
 	ws := t.TempDir()
-	if _, err := SetAPIKey("", "", "anthropic", "sk-ant-global"); err != nil {
-		t.Fatal(err)
-	}
+	_, err := SetAPIKey("", "", "anthropic", "sk-ant-global")
+	require.NoError(t, err)
 	path, err := SetAPIKey("", ws, "anthropic", "sk-ant-project")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.HasPrefix(path, filepath.Join(home, ".blitz", "workspaces")+string(filepath.Separator)) || !strings.Contains(filepath.Base(filepath.Dir(path)), filepath.Base(ws)+"-") {
-		t.Errorf("workspace settings at %s", path)
-	}
-	if _, err := os.Stat(filepath.Join(ws, ".blitz")); !os.IsNotExist(err) {
-		t.Error("wrote into the workspace")
-	}
+	require.NoError(t, err)
+	assert.True(t, strings.HasPrefix(path, filepath.Join(home, ".blitz", "workspaces")+string(filepath.Separator)), "workspace settings at %s", path)
+	assert.Contains(t, filepath.Base(filepath.Dir(path)), filepath.Base(ws)+"-", "workspace settings at %s", path)
+	assert.NoDirExists(t, filepath.Join(ws, ".blitz"), "nothing is written into the workspace")
 	cfg, err := LoadWorkspace("", ws)
-	if err != nil || cfg.LLM.Anthropic.APIKey != "sk-ant-project" {
-		t.Errorf("workspace: %q %v", cfg.LLM.Anthropic.APIKey, err)
-	}
-	if cfg, _ := Load(""); cfg.LLM.Anthropic.APIKey != "sk-ant-global" {
-		t.Errorf("global: %q", cfg.LLM.Anthropic.APIKey)
-	}
-	if other, _ := LoadWorkspace("", t.TempDir()); other.LLM.Anthropic.APIKey != "sk-ant-global" {
-		t.Errorf("another workspace: %q", other.LLM.Anthropic.APIKey)
-	}
-	if p := source(t, ws, "anthropic"); p.KeySource != KeyKeychain {
-		t.Errorf("workspace anthropic: %+v", p)
-	}
+	assert.NoError(t, err, "workspace: %q", cfg.LLM.Anthropic.APIKey)
+	assert.Equal(t, "sk-ant-project", cfg.LLM.Anthropic.APIKey, "workspace: %q %v", cfg.LLM.Anthropic.APIKey, err)
+	cfg, _ = Load("")
+	assert.Equal(t, "sk-ant-global", cfg.LLM.Anthropic.APIKey, "global: %q", cfg.LLM.Anthropic.APIKey)
+	other, _ := LoadWorkspace("", t.TempDir())
+	assert.Equal(t, "sk-ant-global", other.LLM.Anthropic.APIKey, "another workspace: %q", other.LLM.Anthropic.APIKey)
+	p := source(t, ws, "anthropic")
+	assert.Equal(t, KeyKeychain, p.KeySource, "workspace anthropic: %+v", p)
 
-	if _, err := RemoveAPIKey("", ws, "anthropic"); err != nil {
-		t.Fatal(err)
-	}
-	if p := source(t, ws, "anthropic"); p.KeySource != KeyInherited {
-		t.Errorf("after removing: %+v", p)
-	}
-	if cfg, _ := LoadWorkspace("", ws); cfg.LLM.Anthropic.APIKey != "sk-ant-global" {
-		t.Errorf("after removing: %q", cfg.LLM.Anthropic.APIKey)
-	}
-	if name := "workspace/" + filepath.Base(filepath.Dir(path)) + "/llm.anthropic.api_key"; mustMissing(store, name) != nil {
-		t.Errorf("the workspace's secret is still stored")
-	}
+	_, err = RemoveAPIKey("", ws, "anthropic")
+	require.NoError(t, err)
+	p = source(t, ws, "anthropic")
+	assert.Equal(t, KeyInherited, p.KeySource, "after removing: %+v", p)
+	cfg, _ = LoadWorkspace("", ws)
+	assert.Equal(t, "sk-ant-global", cfg.LLM.Anthropic.APIKey, "after removing: %q", cfg.LLM.Anthropic.APIKey)
+	name := "workspace/" + filepath.Base(filepath.Dir(path)) + "/llm.anthropic.api_key"
+	assert.NoError(t, mustMissing(store, name), "the workspace's secret is still stored")
 }
 
 func mustMissing(s secrets.Store, name string) error {
@@ -140,94 +118,68 @@ func mustMissing(s secrets.Store, name string) error {
 // A reference to a secret that's gone is reported, and loads as no key.
 func TestMissingSecret(t *testing.T) {
 	_, store := keysEnv(t)
-	if _, err := SetAPIKey("", "", "openai", "sk-1"); err != nil {
-		t.Fatal(err)
-	}
+	_, err := SetAPIKey("", "", "openai", "sk-1")
+	require.NoError(t, err)
 	store.Delete("global/llm.openai.api_key")
-	if p := source(t, "", "openai"); p.KeySource != KeyKeychain || !p.KeyMissing {
-		t.Errorf("openai: %+v", p)
-	}
-	if cfg, _ := Load(""); cfg.LLM.OpenAI.APIKey != "" {
-		t.Errorf("loaded %q", cfg.LLM.OpenAI.APIKey)
-	}
+	p := source(t, "", "openai")
+	assert.Equal(t, KeyKeychain, p.KeySource, "openai: %+v", p)
+	assert.True(t, p.KeyMissing, "openai: %+v", p)
+	cfg, _ := Load("")
+	assert.Equal(t, "", cfg.LLM.OpenAI.APIKey, "loaded %q", cfg.LLM.OpenAI.APIKey)
 }
 
 func TestSetValue(t *testing.T) {
 	keysEnv(t)
 	ws := t.TempDir()
-	if _, err := SetValue("", "", "llm.provider", "anthropic"); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := SetValue("", ws, "blitz.default_model", "claude-sonnet-5"); err != nil {
-		t.Fatal(err)
-	}
+	_, err := SetValue("", "", "llm.provider", "anthropic")
+	require.NoError(t, err)
+	_, err = SetValue("", ws, "blitz.default_model", "claude-sonnet-5")
+	require.NoError(t, err)
 	cfg, _ := LoadWorkspace("", ws)
-	if cfg.LLM.Provider != "anthropic" || cfg.Blitz.DefaultModel != "claude-sonnet-5" {
-		t.Errorf("provider %q model %q", cfg.LLM.Provider, cfg.Blitz.DefaultModel)
-	}
-	if _, err := SetValue("", ws, "blitz.default_model", ""); err != nil {
-		t.Fatal(err)
-	}
-	if cfg, _ := LoadWorkspace("", ws); cfg.Blitz.DefaultModel != "" {
-		t.Errorf("removed default model: %q", cfg.Blitz.DefaultModel)
-	}
+	assert.Equal(t, "anthropic", cfg.LLM.Provider, "provider %q model %q", cfg.LLM.Provider, cfg.Blitz.DefaultModel)
+	assert.Equal(t, "claude-sonnet-5", cfg.Blitz.DefaultModel, "provider %q model %q", cfg.LLM.Provider, cfg.Blitz.DefaultModel)
+	_, err = SetValue("", ws, "blitz.default_model", "")
+	require.NoError(t, err)
+	cfg, _ = LoadWorkspace("", ws)
+	assert.Equal(t, "", cfg.Blitz.DefaultModel, "removed default model: %q", cfg.Blitz.DefaultModel)
 	for _, bad := range [][2]string{{"blitz.auto_approve", "true"}, {"llm.provider", "nope"}} {
-		if _, err := SetValue("", "", bad[0], bad[1]); err == nil {
-			t.Errorf("SetValue(%s=%s) accepted", bad[0], bad[1])
-		}
+		_, err := SetValue("", "", bad[0], bad[1])
+		assert.Error(t, err, "SetValue(%s=%s) accepted", bad[0], bad[1])
 	}
-	if _, err := SetAPIKey("", "", "ollama", "x"); err == nil {
-		t.Error("a key for a provider that takes none")
-	}
+	_, err = SetAPIKey("", "", "ollama", "x")
+	assert.Error(t, err, "a key for a provider that takes none")
 }
 
 func TestWriteSettingsFile(t *testing.T) {
 	keysEnv(t)
 	path, warnings, err := WriteSettingsFile("", "", "# mine\n[llm]\nprovider = \"openai\"\n[llm.openai]\napi_key = \"sk-plain\"\n[llm.typo]\nx = 1\n")
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	joined := strings.Join(warnings, "\n")
-	if !strings.Contains(joined, "unknown setting llm.typo") || !strings.Contains(joined, "openai API key is in the file as plain text") {
-		t.Errorf("warnings: %q", warnings)
-	}
-	if _, text, _ := ReadSettingsFile("", ""); !strings.HasPrefix(text, "# mine\n") {
-		t.Errorf("read back %q", text)
-	}
-	if info, _ := os.Stat(path); info.Mode().Perm() != 0o600 {
-		t.Errorf("mode %v", info.Mode().Perm())
-	}
-	if _, _, err := WriteSettingsFile("", "", "[llm\nbroken"); err == nil {
-		t.Error("saved invalid TOML")
-	}
-	if _, _, err := WriteSettingsFile("", "", "[llm]\nprovider = 3\n"); err == nil {
-		t.Error("saved a setting of the wrong type")
-	}
-	if _, text, _ := ReadSettingsFile("", ""); !strings.HasPrefix(text, "# mine\n") {
-		t.Error("a refused write changed the file")
-	}
+	assert.Contains(t, joined, "unknown setting llm.typo", "warnings: %q", warnings)
+	assert.Contains(t, joined, "openai API key is in the file as plain text", "warnings: %q", warnings)
+	_, text, _ := ReadSettingsFile("", "")
+	assert.True(t, strings.HasPrefix(text, "# mine\n"), "read back %q", text)
+	info, _ := os.Stat(path)
+	assert.Equal(t, fs.FileMode(0o600), info.Mode().Perm(), "mode %v", info.Mode().Perm())
+	_, _, err = WriteSettingsFile("", "", "[llm\nbroken")
+	assert.Error(t, err, "saved invalid TOML")
+	_, _, err = WriteSettingsFile("", "", "[llm]\nprovider = 3\n")
+	assert.Error(t, err, "saved a setting of the wrong type")
+	_, text, _ = ReadSettingsFile("", "")
+	assert.True(t, strings.HasPrefix(text, "# mine\n"), "a refused write changed the file")
 }
 
 func TestSecureAPIKey(t *testing.T) {
 	_, store := keysEnv(t)
 	dir := ConfigDir("")
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(dir, ".env.toml"), []byte("[llm.openai]\napi_key = \"sk-plain\"\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := SecureAPIKey("", "", "openai"); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.MkdirAll(dir, 0o700))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, ".env.toml"), []byte("[llm.openai]\napi_key = \"sk-plain\"\n"), 0o600))
+	_, err := SecureAPIKey("", "", "openai")
+	require.NoError(t, err)
 	data, _ := os.ReadFile(filepath.Join(dir, ".env.toml"))
-	if strings.Contains(string(data), "sk-plain") {
-		t.Errorf("the key is still in the file:\n%s", data)
-	}
-	if v, _ := store.Get("global/llm.openai.api_key"); v != "sk-plain" {
-		t.Errorf("stored %q", v)
-	}
-	if _, err := SecureAPIKey("", "", "openai"); err == nil {
-		t.Error("moved a reference")
-	}
+	assert.NotContains(t, string(data), "sk-plain", "the key is still in the file:\n%s", data)
+	v, _ := store.Get("global/llm.openai.api_key")
+	assert.Equal(t, "sk-plain", v, "stored %q", v)
+	_, err = SecureAPIKey("", "", "openai")
+	assert.Error(t, err, "moved a reference")
 }

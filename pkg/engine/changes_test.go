@@ -16,16 +16,17 @@ package engine
 
 import (
 	"context"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/retail-cortex/blitz/pkg/api"
-
 	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/engine/runtime"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/genai"
 )
 
@@ -45,15 +46,12 @@ func TestGitDiffRunsNothingFromRepoConfig(t *testing.T) {
 		t.Helper()
 		cmd := exec.Command("git", args...)
 		cmd.Dir = dir
-		if out, err := cmd.CombinedOutput(); err != nil {
-			t.Fatalf("git %v: %v\n%s", args, err, out)
-		}
+		out, err := cmd.CombinedOutput()
+		require.NoError(t, err, "git %v: %v\n%s", args, err, out)
 	}
 	write := func(name, content string) {
 		t.Helper()
-		if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0o644); err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, os.WriteFile(filepath.Join(dir, name), []byte(content), 0o644))
 	}
 	git("init", "-q")
 	write("f.txt", "before\n")
@@ -74,12 +72,10 @@ func TestGitDiffRunsNothingFromRepoConfig(t *testing.T) {
 	write("f.txt", "after\n")
 
 	out, err := w.GitDiff(context.Background(), false)
-	if err != nil || !strings.Contains(out, "+after") {
-		t.Fatalf("diff %v:\n%s", err, out)
-	}
-	if got, _ := filepath.Glob(filepath.Join(dir, "pwned-*")); len(got) > 0 {
-		t.Errorf("git diff ran commands from the repository's config: %v", got)
-	}
+	require.NoError(t, err, "diff %v:\n%s", err, out)
+	require.Contains(t, out, "+after", "diff %v:\n%s", err, out)
+	got, _ := filepath.Glob(filepath.Join(dir, "pwned-*"))
+	assert.LessOrEqual(t, len(got), 0, "git diff ran commands from the repository's config: %v", got)
 }
 
 // Checkpoints outlive the process: after reopening the workspace and
@@ -92,33 +88,23 @@ func TestUndoAfterResume(t *testing.T) {
 	}, toolCall("create_file", map[string]any{"path": "notes.txt", "content": "hi\n"}), text("created"))
 	w.SetUI(func(context.Context, api.ApprovalRequest) (api.Decision, error) { return api.DecisionOnce, nil }, nil)
 	s, _, err := w.OpenSession("", false)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := w.Run(context.Background(), s.ID, api.Turn{Text: "make notes"}, func(api.Event) {}); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
+	_, runErr := w.Run(context.Background(), s.ID, api.Turn{Text: "make notes"}, func(api.Event) {})
+	require.NoError(t, runErr)
 	cps := w.ListCheckpoints()
-	if len(cps) != 1 {
-		t.Fatalf("checkpoints %+v", cps)
-	}
+	require.Len(t, cps, 1, "checkpoints %+v", cps)
 	w.Close()
 
 	w2, err := Open(context.Background(), cfg, Options{Model: runtime.NewMockLLM("gemini-3.8-flash"), NewModel: mockModels})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	defer w2.Close()
-	if _, _, err := w2.OpenSession(s.ID, false); err != nil {
-		t.Fatal(err)
-	}
-	if d := w2.SessionDiff(); !strings.Contains(d, "+hi") {
-		t.Errorf("diff after resuming:\n%s", d)
-	}
-	if res, err := w2.Undo(false); err != nil || res.Label != "make notes" {
-		t.Fatalf("undo after reopening: %+v %v", res, err)
-	}
-	if _, err := os.Stat(filepath.Join(cfg.Tools.WorkspaceDir, "notes.txt")); !os.IsNotExist(err) {
-		t.Error("notes.txt is still there")
-	}
+	_, _, err = w2.OpenSession(s.ID, false)
+	require.NoError(t, err)
+	d := w2.SessionDiff()
+	assert.Contains(t, d, "+hi", "diff after resuming:\n%s", d)
+	res, err := w2.Undo(false)
+	require.NoError(t, err, "undo after reopening: %+v", res)
+	require.Equal(t, "make notes", res.Label, "undo after reopening: %+v %v", res, err)
+	_, err = os.Stat(filepath.Join(cfg.Tools.WorkspaceDir, "notes.txt"))
+	assert.ErrorIs(t, err, fs.ErrNotExist, "notes.txt is still there")
 }

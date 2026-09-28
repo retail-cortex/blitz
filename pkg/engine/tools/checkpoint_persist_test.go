@@ -16,7 +16,7 @@ package tools
 
 import (
 	"encoding/json"
-	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -24,6 +24,8 @@ import (
 	"time"
 
 	"github.com/retail-cortex/blitz/pkg/api"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // reopen opens the workspace and its persisted checkpoints again, as a
@@ -31,14 +33,10 @@ import (
 func reopen(t *testing.T, dir, store string) (*Workspace, *Checkpoints) {
 	t.Helper()
 	ws, err := NewWorkspace(dir, 0)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	t.Cleanup(func() { ws.Close() })
 	cp, err := OpenCheckpoints(ws, CheckpointOptions{Dir: store})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	return ws, cp
 }
 
@@ -62,53 +60,43 @@ func TestCheckpointsOutliveTheProcess(t *testing.T) {
 
 	for _, p := range []string{store, filepath.Join(store, "index.json"), filepath.Join(store, "blobs")} {
 		info, err := os.Stat(p)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if info.Mode().Perm()&0o077 != 0 {
-			t.Errorf("%s is %v, not owner-only", p, info.Mode().Perm())
-		}
+		require.NoError(t, err)
+		assert.Equal(t, fs.FileMode(0), info.Mode().Perm()&0o077, "%s is %v, not owner-only", p, info.Mode().Perm())
 	}
 	blobs, _ := os.ReadDir(filepath.Join(store, "blobs"))
-	if len(blobs) != 1 {
-		t.Fatalf("blobs %v", blobs)
-	}
-	if info, _ := blobs[0].Info(); info.Mode().Perm() != 0o600 {
-		t.Errorf("blob mode %v", info.Mode().Perm())
-	}
+	require.Len(t, blobs, 1, "blobs %v", blobs)
+	info, _ := blobs[0].Info()
+	assert.Equal(t, fs.FileMode(0o600), info.Mode().Perm(), "blob mode %v", info.Mode().Perm())
 
 	// A later process sees both turns, and undoes them from the stored snapshots.
 	ws.Close()
 	_, cp2 := reopen(t, dir, store)
 	l := cp2.List()
-	if len(l) != 2 || l[0].Label != "second" || l[0].Session != "s1" || l[0].Prompt != 2 || l[1].Prompt != 0 {
-		t.Fatalf("after reopening: %+v", l)
-	}
-	if d := cp2.SessionDiff("s1"); !strings.Contains(d, "-v1") || !strings.Contains(d, "+v2") || !strings.Contains(d, "+n") {
-		t.Errorf("session diff:\n%s", d)
-	}
-	if d := cp2.SessionDiff("other"); d != "" {
-		t.Errorf("another session's diff: %q", d)
-	}
+	require.Len(t, l, 2, "after reopening: %+v", l)
+	require.Equal(t, "second", l[0].Label, "after reopening: %+v", l)
+	require.Equal(t, "s1", l[0].Session, "after reopening: %+v", l)
+	require.Equal(t, 2, l[0].Prompt, "after reopening: %+v", l)
+	require.Equal(t, 0, l[1].Prompt, "after reopening: %+v", l)
+	d := cp2.SessionDiff("s1")
+	assert.Contains(t, d, "-v1", "session diff:\n%s", d)
+	assert.Contains(t, d, "+v2", "session diff:\n%s", d)
+	assert.Contains(t, d, "+n", "session diff:\n%s", d)
+	d = cp2.SessionDiff("other")
+	assert.Equal(t, "", d, "another session's diff: %q", d)
 	for range 2 {
-		if _, err := cp2.Undo(false); err != nil {
-			t.Fatal(err)
-		}
+		_, err := cp2.Undo(false)
+		require.NoError(t, err)
 	}
-	if got := readString(t, filepath.Join(dir, "f.txt")); got != "v1\n" {
-		t.Errorf("f.txt %q", got)
-	}
-	if _, err := os.Stat(filepath.Join(dir, "new.txt")); !os.IsNotExist(err) {
-		t.Error("new.txt not removed")
-	}
+	got := readString(t, filepath.Join(dir, "f.txt"))
+	assert.Equal(t, "v1\n", got, "f.txt %q", got)
+	_, err := os.Stat(filepath.Join(dir, "new.txt"))
+	assert.ErrorIs(t, err, fs.ErrNotExist, "new.txt not removed")
 	// Undone turns' snapshots go.
-	if blobs, _ := os.ReadDir(filepath.Join(store, "blobs")); len(blobs) != 0 {
-		t.Errorf("blobs left: %v", blobs)
-	}
+	blobs, _ = os.ReadDir(filepath.Join(store, "blobs"))
+	assert.Len(t, blobs, 0, "blobs left: %v", blobs)
 	_, cp3 := reopen(t, dir, store)
-	if l := cp3.List(); len(l) != 0 {
-		t.Errorf("undone turns came back: %+v", l)
-	}
+	l = cp3.List()
+	assert.Len(t, l, 0, "undone turns came back: %+v", l)
 }
 
 func TestRewindRestoresEveryChangeFromAPrompt(t *testing.T) {
@@ -127,31 +115,21 @@ func TestRewindRestoresEveryChangeFromAPrompt(t *testing.T) {
 	ws.WriteFileAtomic("a.txt", []byte("a3\n"))
 
 	res, err := cp.Rewind("s", 2, false)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got := readString(t, filepath.Join(dir, "a.txt")); got != "a1\n" {
-		t.Errorf("a.txt %q, want the state before prompt 2", got)
-	}
-	if _, err := os.Stat(filepath.Join(dir, "c.txt")); !os.IsNotExist(err) {
-		t.Error("c.txt, created from prompt 2 on, is still there")
-	}
-	if got := readString(t, filepath.Join(dir, "b.txt")); got != "b1\n" {
-		t.Errorf("another session's change was undone: %q", got)
-	}
-	if strings.Join(res.Restored, ",") != "a.txt,c.txt" {
-		t.Errorf("restored %v", res.Restored)
-	}
+	require.NoError(t, err)
+	got := readString(t, filepath.Join(dir, "a.txt"))
+	assert.Equal(t, "a1\n", got, "a.txt %q, want the state before prompt 2", got)
+	_, err = os.Stat(filepath.Join(dir, "c.txt"))
+	assert.ErrorIs(t, err, fs.ErrNotExist, "c.txt, created from prompt 2 on, is still there")
+	got = readString(t, filepath.Join(dir, "b.txt"))
+	assert.Equal(t, "b1\n", got, "another session's change was undone: %q", got)
+	assert.Equal(t, "a.txt,c.txt", strings.Join(res.Restored, ","), "restored %v", res.Restored)
 	var left []string
 	for _, s := range cp.List() {
 		left = append(left, s.Label)
 	}
-	if strings.Join(left, ",") != "elsewhere,p0" {
-		t.Errorf("turns left %v", left)
-	}
-	if _, err := cp.Rewind("s", 2, false); !errors.Is(err, ErrNothingToUndo) {
-		t.Errorf("nothing left to rewind: %v", err)
-	}
+	assert.Equal(t, "elsewhere,p0", strings.Join(left, ","), "turns left %v", left)
+	_, err = cp.Rewind("s", 2, false)
+	assert.ErrorIs(t, err, ErrNothingToUndo, "nothing left to rewind: %v", err)
 }
 
 func TestRewindChecksEveryFileFirst(t *testing.T) {
@@ -165,18 +143,15 @@ func TestRewindChecksEveryFileFirst(t *testing.T) {
 	ws.WriteFileAtomic("b.txt", []byte("b1\n"))
 	os.WriteFile(filepath.Join(dir, "b.txt"), []byte("mine\n"), 0o644)
 
-	if _, err := cp.Rewind("s", 0, false); !errors.Is(err, api.ErrUndoConflict) || !strings.Contains(err.Error(), "b.txt") {
-		t.Fatalf("conflict: %v", err)
-	}
-	if got := readString(t, filepath.Join(dir, "a.txt")); got != "a1\n" {
-		t.Error("a file was restored before the conflict was found")
-	}
-	if _, err := cp.Rewind("s", 0, true); err != nil {
-		t.Fatal(err)
-	}
-	if readString(t, filepath.Join(dir, "a.txt")) != "a0\n" || readString(t, filepath.Join(dir, "b.txt")) != "b0\n" {
-		t.Error("forced rewind didn't restore both")
-	}
+	_, err := cp.Rewind("s", 0, false)
+	require.ErrorIs(t, err, api.ErrUndoConflict, "conflict: %v", err)
+	require.Contains(t, err.Error(), "b.txt", "conflict: %v", err)
+	got := readString(t, filepath.Join(dir, "a.txt"))
+	assert.Equal(t, "a1\n", got, "a file was restored before the conflict was found")
+	_, err = cp.Rewind("s", 0, true)
+	require.NoError(t, err)
+	assert.Equal(t, "a0\n", readString(t, filepath.Join(dir, "a.txt")), "forced rewind didn't restore both")
+	assert.Equal(t, "b0\n", readString(t, filepath.Join(dir, "b.txt")), "forced rewind didn't restore both")
 }
 
 // After the conversation is rewound without the files, the changes made
@@ -193,18 +168,14 @@ func TestDetachAfterAConversationRewind(t *testing.T) {
 	cp.BeginTurn("s", 2, "new p1")
 	ws.WriteFileAtomic("a.txt", []byte("a3\n"))
 
-	if _, err := cp.Rewind("s", 2, false); err != nil {
-		t.Fatal(err)
-	}
-	if got := readString(t, filepath.Join(dir, "a.txt")); got != "a2\n" {
-		t.Fatalf("rewinding the new prompt: %q (the detached change must stay)", got)
-	}
-	if _, err := cp.Rewind("s", 0, false); err != nil {
-		t.Fatal(err)
-	}
-	if got := readString(t, filepath.Join(dir, "a.txt")); got != "a0\n" {
-		t.Fatalf("rewinding the first prompt: %q", got)
-	}
+	_, err := cp.Rewind("s", 2, false)
+	require.NoError(t, err)
+	got := readString(t, filepath.Join(dir, "a.txt"))
+	require.Equal(t, "a2\n", got, "rewinding the new prompt: %q (the detached change must stay)", got)
+	_, err = cp.Rewind("s", 0, false)
+	require.NoError(t, err)
+	got = readString(t, filepath.Join(dir, "a.txt"))
+	require.Equal(t, "a0\n", got, "rewinding the first prompt: %q", got)
 }
 
 func TestPersistedCheckpointsAgeOutAndSurviveDamage(t *testing.T) {
@@ -227,33 +198,28 @@ func TestPersistedCheckpointsAgeOutAndSurviveDamage(t *testing.T) {
 	os.WriteFile(path, data, 0o600)
 
 	_, cp2 := reopen(t, dir, store)
-	if l := cp2.List(); len(l) != 1 || l[0].Label != "new" {
-		t.Fatalf("aged turn kept: %+v", l)
-	}
-	if blobs, _ := os.ReadDir(filepath.Join(store, "blobs")); len(blobs) != 1 {
-		t.Errorf("the aged turn's snapshot wasn't removed: %d blobs", len(blobs))
-	}
+	l := cp2.List()
+	require.Len(t, l, 1, "aged turn kept: %+v", l)
+	require.Equal(t, "new", l[0].Label, "aged turn kept: %+v", l)
+	blobs, _ := os.ReadDir(filepath.Join(store, "blobs"))
+	assert.Len(t, blobs, 1, "the aged turn's snapshot wasn't removed: %d blobs", len(blobs))
 
 	// A missing snapshot can't be restored.
-	blobs, _ := os.ReadDir(filepath.Join(store, "blobs"))
+	blobs, _ = os.ReadDir(filepath.Join(store, "blobs"))
 	os.Remove(filepath.Join(store, "blobs", blobs[0].Name()))
 	_, cp3 := reopen(t, dir, store)
-	if _, err := cp3.Undo(false); err == nil || !strings.Contains(err.Error(), "snapshot limit") {
-		t.Errorf("undo without its snapshot: %v", err)
-	}
+	_, err := cp3.Undo(false)
+	assert.Error(t, err, "undo without its snapshot")
+	assert.Contains(t, err.Error(), "snapshot limit", "undo without its snapshot: %v", err)
 
 	// A damaged index is set aside; the store starts empty.
 	os.WriteFile(path, []byte("{nope"), 0o600)
 	ws4, err := NewWorkspace(dir, 0)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	defer ws4.Close()
 	cp4, err := OpenCheckpoints(ws4, CheckpointOptions{Dir: store})
-	if err == nil || len(cp4.List()) != 0 {
-		t.Fatalf("damaged index: %v %+v", err, cp4.List())
-	}
-	if _, err := os.Stat(path + ".damaged"); err != nil {
-		t.Error("the damaged index wasn't kept aside")
-	}
+	require.Error(t, err, "damaged index: %v %+v", err, cp4.List())
+	require.Len(t, cp4.List(), 0, "damaged index: %v %+v", err, cp4.List())
+	_, err = os.Stat(path + ".damaged")
+	assert.NoError(t, err, "the damaged index wasn't kept aside")
 }

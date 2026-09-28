@@ -22,10 +22,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/retail-cortex/blitz/pkg/api"
-
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"github.com/retail-cortex/blitz/pkg/api"
 	"github.com/retail-cortex/blitz/pkg/config"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/adk/v2/model"
 	"google.golang.org/adk/v2/tool"
 	"google.golang.org/adk/v2/tool/mcptoolset"
@@ -49,14 +50,10 @@ func inMemoryMCP(t *testing.T, names ...string) tool.Toolset {
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 	ss, err := server.Connect(ctx, serverT, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	t.Cleanup(func() { ss.Close() }) // ends the client session over the pipe too
 	ts, err := mcptoolset.New(mcptoolset.Config{Transport: clientT})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	return ts
 }
 
@@ -79,26 +76,21 @@ func TestMCPManagerRecordsAndFilters(t *testing.T) {
 	var all []string
 	for _, ts := range m.Toolsets() {
 		tl, err := ts.Tools(createTestToolContext())
-		if err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, err)
 		all = append(all, toolNames(tl)...)
 	}
-	if strings.Join(all, ",") != "search,deploy" {
-		t.Errorf("tools = %v", all)
-	}
-	if len(warnings) != 2 {
-		t.Errorf("expected shadow + duplicate warnings, got %v", warnings)
-	}
-	if srv, auto, ok := m.Lookup("search"); !ok || srv != "alpha" || auto {
-		t.Errorf("lookup search = %s %v %v", srv, auto, ok)
-	}
-	if srv, auto, ok := m.Lookup("deploy"); !ok || srv != "beta" || !auto {
-		t.Errorf("lookup deploy = %s %v %v", srv, auto, ok)
-	}
-	if _, _, ok := m.Lookup("read_file"); ok {
-		t.Error("built-in name should not be owned by MCP")
-	}
+	assert.Equal(t, "search,deploy", strings.Join(all, ","), "tools = %v", all)
+	assert.Len(t, warnings, 2, "expected shadow + duplicate warnings, got %v", warnings)
+	srv, auto, ok := m.Lookup("search")
+	assert.True(t, ok, "lookup search = %s %v %v", srv, auto, ok)
+	assert.Equal(t, "alpha", srv, "lookup search = %s %v %v", srv, auto, ok)
+	assert.False(t, auto, "lookup search = %s %v %v", srv, auto, ok)
+	srv, auto, ok = m.Lookup("deploy")
+	assert.True(t, ok, "lookup deploy = %s %v %v", srv, auto, ok)
+	assert.Equal(t, "beta", srv, "lookup deploy = %s %v %v", srv, auto, ok)
+	assert.True(t, auto, "lookup deploy = %s %v %v", srv, auto, ok)
+	_, _, ok = m.Lookup("read_file")
+	assert.False(t, ok, "built-in name should not be owned by MCP")
 }
 
 func TestRegistryApprovesMCPTools(t *testing.T) {
@@ -106,9 +98,7 @@ func TestRegistryApprovesMCPTools(t *testing.T) {
 	cfg.Tools.WorkspaceDir = t.TempDir()
 	cfg.Tools.ApprovalsFile = ""
 	reg, err := NewRegistry(cfg, nil, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	defer reg.Close()
 	reg.mcp = newMCPManagerWithToolsets(map[string]tool.Toolset{"gh": inMemoryMCP(t, "create_issue")}, nil, nil)
 	for _, ts := range reg.mcp.Toolsets() {
@@ -118,17 +108,14 @@ func TestRegistryApprovesMCPTools(t *testing.T) {
 	h, reqs := approverHooks(false)
 	reg.hooks = h
 	err = reg.ApproveMCP(context.Background(), "create_issue", map[string]any{"title": "bug"})
-	if err == nil || len(*reqs) != 1 {
-		t.Fatalf("expected denied approval, got %v (%d prompts)", err, len(*reqs))
-	}
+	require.Error(t, err, "expected denied approval, got %v (%d prompts)", err, len(*reqs))
+	require.Len(t, *reqs, 1, "expected denied approval, got %v (%d prompts)", err, len(*reqs))
 	req := (*reqs)[0]
-	if req.Kind != api.ActionMCP || req.Key != "mcp:gh:create_issue" || !strings.Contains(req.Detail, "title=bug") {
-		t.Errorf("approval request %+v", req)
-	}
+	assert.Equal(t, api.ActionMCP, req.Kind, "approval request %+v", req)
+	assert.Equal(t, "mcp:gh:create_issue", req.Key, "approval request %+v", req)
+	assert.Contains(t, req.Detail, "title=bug", "approval request %+v", req)
 	// Non-MCP tools pass straight through.
-	if err := reg.ApproveMCP(context.Background(), "grep", nil); err != nil {
-		t.Errorf("built-in tool gated as MCP: %v", err)
-	}
+	assert.NoError(t, reg.ApproveMCP(context.Background(), "grep", nil), "built-in tool gated as MCP")
 }
 
 func TestNewMCPManagerValidation(t *testing.T) {
@@ -138,26 +125,22 @@ func TestNewMCPManagerValidation(t *testing.T) {
 		"neither":   {{Name: "a"}},
 		"duplicate": {{Name: "a", Command: "x"}, {Name: "a", URL: "http://y"}},
 	} {
-		if _, err := NewMCPManager(cfgs, nil, nil); err == nil {
-			t.Errorf("%s: expected error", name)
-		}
+		_, err := NewMCPManager(cfgs, nil, nil)
+		assert.Error(t, err, "%s: expected error", name)
 	}
 	m, err := NewMCPManager([]config.MCPServerConfig{{Name: "local", Command: "true"}, {Name: "remote", URL: "https://example.com/mcp"}}, nil, nil)
-	if err != nil || strings.Join(m.Servers(), ",") != "local,remote" {
-		t.Errorf("valid config: %v %v", err, m.Servers())
-	}
+	assert.NoError(t, err, "valid config: %v %v", err, m.Servers())
+	assert.Equal(t, "local,remote", strings.Join(m.Servers(), ","), "valid config: %v %v", err, m.Servers())
 	m.Close()
 	// An unreachable server yields no tools and a warning, not an error.
 	var warned bool
 	m.Warn = func(string) { warned = true }
 	for _, ts := range m.Toolsets() {
-		if tl, err := ts.Tools(createTestToolContext()); err != nil || len(tl) != 0 {
-			t.Errorf("broken server: %v %v", tl, err)
-		}
+		tl, err := ts.Tools(createTestToolContext())
+		assert.NoError(t, err, "broken server: %v", tl)
+		assert.Len(t, tl, 0, "broken server: %v %v", tl, err)
 	}
-	if !warned {
-		t.Error("expected a warning for unreachable servers")
-	}
+	assert.True(t, warned, "expected a warning for unreachable servers")
 }
 
 func TestMCPPrefixedTools(t *testing.T) {
@@ -166,35 +149,27 @@ func TestMCPPrefixedTools(t *testing.T) {
 		Toolset: inMemoryMCP(t, "create_issue", "grep"), // "grep" would shadow a built-in without the prefix
 	}}, []string{"grep"})
 	tl, err := m.Toolsets()[0].Tools(createTestToolContext())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got := strings.Join(toolNames(tl), ","); got != "gh__create_issue,gh__grep" {
-		t.Fatalf("prefixed names = %s", got)
-	}
+	require.NoError(t, err)
+	got := strings.Join(toolNames(tl), ",")
+	require.Equal(t, "gh__create_issue,gh__grep", got, "prefixed names = %s", got)
 	pt := tl[0].(*managedTool)
-	if d := pt.Declaration(); d == nil || d.Name != "gh__create_issue" {
-		t.Errorf("declaration name %+v", d)
-	}
+	d := pt.Declaration()
+	assert.NotNil(t, d, "declaration name %+v", d)
+	assert.Equal(t, "gh__create_issue", d.Name, "declaration name %+v", d)
 	// The call reaches the server under the original name.
 	res, err := pt.Run(createTestToolContext(), map[string]any{"text": "hello from gh"})
-	if err != nil || !strings.Contains(fmt.Sprint(res), "hello from gh") {
-		t.Errorf("run through prefix: %v %v", res, err)
-	}
+	assert.NoError(t, err, "run through prefix: %v", res)
+	assert.Contains(t, fmt.Sprint(res), "hello from gh", "run through prefix: %v %v", res, err)
 	// Registered in the request under the prefixed name.
 	req := &model.LLMRequest{}
-	if err := pt.ProcessRequest(createTestToolContext(), req); err != nil {
-		t.Fatal(err)
-	}
-	if _, ok := req.Tools["gh__create_issue"]; !ok {
-		t.Errorf("request tools %v", req.Tools)
-	}
-	if srv, _, ok := m.Lookup("gh__grep"); !ok || srv != "github" {
-		t.Errorf("lookup prefixed: %s %v", srv, ok)
-	}
-	if _, _, ok := m.Lookup("create_issue"); ok {
-		t.Error("the unprefixed name must not be routed")
-	}
+	require.NoError(t, pt.ProcessRequest(createTestToolContext(), req))
+	_, ok := req.Tools["gh__create_issue"]
+	assert.True(t, ok, "request tools %v", req.Tools)
+	srv, _, ok := m.Lookup("gh__grep")
+	assert.True(t, ok, "lookup prefixed: %s %v", srv, ok)
+	assert.Equal(t, "github", srv, "lookup prefixed: %s %v", srv, ok)
+	_, _, ok = m.Lookup("create_issue")
+	assert.False(t, ok, "the unprefixed name must not be routed")
 }
 
 func TestMCPToolsetsForAgents(t *testing.T) {
@@ -221,14 +196,11 @@ func TestMCPToolsetsForAgents(t *testing.T) {
 		{"helios", false, "mcp:everyone"},
 	}
 	for _, c := range cases {
-		if got := names(m.ToolsetsFor(c.agent, c.primary)); got != c.want {
-			t.Errorf("ToolsetsFor(%s, %v) = %s, want %s", c.agent, c.primary, got, c.want)
-		}
+		got := names(m.ToolsetsFor(c.agent, c.primary))
+		assert.Equal(t, c.want, got, "ToolsetsFor(%s, %v) = %s, want %s", c.agent, c.primary, got, c.want)
 	}
 	var nilManager *MCPManager
-	if nilManager.ToolsetsFor("x", true) != nil {
-		t.Error("nil manager should offer nothing")
-	}
+	assert.Nil(t, nilManager.ToolsetsFor("x", true), "nil manager should offer nothing")
 }
 
 // Closing the manager ends an HTTP server's session: the ADK toolset has
@@ -244,17 +216,13 @@ func TestMCPManagerCloseEndsHTTPSessions(t *testing.T) {
 	defer srv.Close()
 
 	m, err := NewMCPManager([]config.MCPServerConfig{{Name: "remote", URL: srv.URL}}, nil, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	tl, err := m.Toolsets()[0].Tools(createTestToolContext())
-	if err != nil || len(tl) != 1 {
-		t.Fatalf("tools = %v, %v", tl, err)
-	}
+	require.NoError(t, err, "tools = %v,", tl)
+	require.Len(t, tl, 1, "tools = %v, %v", tl, err)
 	m.Close()
-	if tl, _ := m.Toolsets()[0].Tools(createTestToolContext()); len(tl) != 0 {
-		t.Error("a closed manager reconnected")
-	}
+	tl, _ = m.Toolsets()[0].Tools(createTestToolContext())
+	assert.Len(t, tl, 0, "a closed manager reconnected")
 	for ss := range server.Sessions() { // the test server's side of it
 		ss.Close()
 	}

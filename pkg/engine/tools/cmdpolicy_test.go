@@ -16,20 +16,20 @@ package tools
 
 import (
 	"context"
+	"io/fs"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/retail-cortex/blitz/pkg/api"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func mustPolicy(t *testing.T, cfg CommandPolicyConfig) *CommandPolicy {
 	t.Helper()
 	p, err := NewCommandPolicy(cfg)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	return p
 }
 
@@ -58,16 +58,14 @@ func TestCommandPolicyDeny(t *testing.T) {
 		"if true; then curl x; fi",      // compound commands
 	}
 	for _, cmd := range denied {
-		if d := p.Evaluate(cmd); d.Verdict != VerdictDeny {
-			t.Errorf("expected deny for %q, got %v (%s) cmds=%q", cmd, d.Verdict, d.Reason, d.Commands)
-		}
+		d := p.Evaluate(cmd)
+		assert.Equal(t, VerdictDeny, d.Verdict, "expected deny for %q, got %v (%s) cmds=%q", cmd, d.Verdict, d.Reason, d.Commands)
 	}
 
 	allowed := []string{"ls -la", "rm -rf ./build", "git push", "echo sudo", "curlie x", "grep -r curl ."}
 	for _, cmd := range allowed {
-		if d := p.Evaluate(cmd); d.Verdict == VerdictDeny {
-			t.Errorf("unexpected deny for %q: %s", cmd, d.Reason)
-		}
+		d := p.Evaluate(cmd)
+		assert.NotEqual(t, VerdictDeny, d.Verdict, "unexpected deny for %q: %s", cmd, d.Reason)
 	}
 }
 
@@ -87,9 +85,8 @@ func TestCommandPolicyAllowList(t *testing.T) {
 		`bash -c "git diff"`,
 		"echo $HOME", // dynamic arguments are fine for allow
 	} {
-		if d := p.Evaluate(cmd); d.Verdict == VerdictDeny {
-			t.Errorf("expected %q to be allowed: %s", cmd, d.Reason)
-		}
+		d := p.Evaluate(cmd)
+		assert.NotEqual(t, VerdictDeny, d.Verdict, "expected %q to be allowed: %s", cmd, d.Reason)
 	}
 
 	for cmd, why := range map[string]string{
@@ -108,13 +105,10 @@ func TestCommandPolicyAllowList(t *testing.T) {
 		"git status &&":        "could not parse",
 	} {
 		d := p.Evaluate(cmd)
-		if d.Verdict != VerdictDeny {
-			t.Errorf("expected deny for %q, got %v", cmd, d.Verdict)
-			continue
+		if !assert.Equal(t, VerdictDeny, d.Verdict, "%q is denied", cmd) {
+		continue
 		}
-		if !strings.Contains(d.Reason, why) {
-			t.Errorf("%q: reason %q should mention %q", cmd, d.Reason, why)
-		}
+		assert.Contains(t, d.Reason, why, "%q: reason %q should mention %q", cmd, d.Reason, why)
 	}
 }
 
@@ -122,9 +116,8 @@ func TestCommandPolicyAutoApprove(t *testing.T) {
 	p := mustPolicy(t, CommandPolicyConfig{AutoApprove: []string{"git status", "go test *", "ls *"}})
 
 	for _, cmd := range []string{"git status", "go test ./pkg/...", "ls -la && git status"} {
-		if d := p.Evaluate(cmd); d.Verdict != VerdictAutoApprove {
-			t.Errorf("expected auto-approve for %q, got %v (%s)", cmd, d.Verdict, d.Reason)
-		}
+		d := p.Evaluate(cmd)
+		assert.Equal(t, VerdictAutoApprove, d.Verdict, "expected auto-approve for %q, got %v (%s)", cmd, d.Verdict, d.Reason)
 	}
 	for _, cmd := range []string{
 		"git status && rm x",     // one command not covered
@@ -133,19 +126,16 @@ func TestCommandPolicyAutoApprove(t *testing.T) {
 		"eval ls",                // unverifiable
 		"git status --porcelain", // exact pattern
 	} {
-		if d := p.Evaluate(cmd); d.Verdict != VerdictNeedsApproval {
-			t.Errorf("expected approval for %q, got %v", cmd, d.Verdict)
-		}
+		d := p.Evaluate(cmd)
+		assert.Equal(t, VerdictNeedsApproval, d.Verdict, "expected approval for %q, got %v", cmd, d.Verdict)
 	}
 
 	// With no auto patterns nothing is auto-approved; nil policy always asks.
-	if d := mustPolicy(t, CommandPolicyConfig{}).Evaluate("ls"); d.Verdict != VerdictNeedsApproval {
-		t.Errorf("empty policy should need approval, got %v", d.Verdict)
-	}
+	d := mustPolicy(t, CommandPolicyConfig{}).Evaluate("ls")
+	assert.Equal(t, VerdictNeedsApproval, d.Verdict, "empty policy should need approval, got %v", d.Verdict)
 	var nilPolicy *CommandPolicy
-	if d := nilPolicy.Evaluate("ls"); d.Verdict != VerdictNeedsApproval {
-		t.Errorf("nil policy should need approval, got %v", d.Verdict)
-	}
+	d = nilPolicy.Evaluate("ls")
+	assert.Equal(t, VerdictNeedsApproval, d.Verdict, "nil policy should need approval, got %v", d.Verdict)
 }
 
 func TestCommandPolicyConcurrentEvaluate(t *testing.T) {
@@ -155,9 +145,7 @@ func TestCommandPolicyConcurrentEvaluate(t *testing.T) {
 		go func() { done <- p.Evaluate("ls | grep x && rm y").Verdict == VerdictDeny }()
 	}
 	for i := 0; i < 20; i++ {
-		if !<-done {
-			t.Error("concurrent evaluation gave wrong verdict")
-		}
+		assert.True(t, <-done, "concurrent evaluation gave wrong verdict")
 	}
 }
 
@@ -169,39 +157,29 @@ func TestShellToolEnforcesPolicy(t *testing.T) {
 	hooks, reqs := approverHooks(true)
 	cfg := ShellConfig{Workspace: ws, Hooks: hooks, Policy: policy}
 	out := runShellCommand(context.Background(), cfg, RunShellCommandInput{Command: "touch denied.marker"})
-	if !strings.Contains(out.Error, "blocked by command policy") {
-		t.Errorf("expected policy block, got %+v", out)
-	}
-	if _, err := os.Stat(filepath.Join(dir, "denied.marker")); !os.IsNotExist(err) {
-		t.Error("denied command ran")
-	}
-	if len(*reqs) != 0 {
-		t.Error("user was asked to approve a denied command")
-	}
+	assert.Contains(t, out.Error, "blocked by command policy", "expected policy block, got %+v", out)
+	_, err := os.Stat(filepath.Join(dir, "denied.marker"))
+	assert.ErrorIs(t, err, fs.ErrNotExist, "denied command ran")
+	assert.Len(t, *reqs, 0, "user was asked to approve a denied command")
 
 	// Auto-approved: runs with no approver configured at all.
 	cfg.Hooks = NewHooks(Policy{})
 	out = runShellCommand(context.Background(), cfg, RunShellCommandInput{Command: "touch auto.marker"})
-	if out.Error != "" {
-		t.Errorf("auto-approved command failed: %+v", out)
-	}
-	if _, err := os.Stat(filepath.Join(dir, "auto.marker")); err != nil {
-		t.Error("auto-approved command didn't run")
-	}
+	assert.Equal(t, "", out.Error, "auto-approved command failed: %+v", out)
+	_, err = os.Stat(filepath.Join(dir, "auto.marker"))
+	assert.NoError(t, err, "auto-approved command didn't run")
 
 	// Global auto-approve cannot override a deny rule.
 	cfg.Hooks = NewHooks(Policy{Mode: api.ModeBypass})
-	if out := runShellCommand(context.Background(), cfg, RunShellCommandInput{Command: "touch denied2"}); !strings.Contains(out.Error, "blocked") {
-		t.Errorf("auto-approve-all bypassed deny: %+v", out)
-	}
+	out = runShellCommand(context.Background(), cfg, RunShellCommandInput{Command: "touch denied2"})
+	assert.Contains(t, out.Error, "blocked", "auto-approve-all bypassed deny: %+v", out)
 
 	// Approval detail explains why a command wasn't auto-approved.
 	hooks, reqs = approverHooks(false)
 	cfg.Hooks = hooks
 	runShellCommand(context.Background(), cfg, RunShellCommandInput{Command: "touch auto-$X"})
-	if len(*reqs) != 1 || !strings.Contains((*reqs)[0].Detail, "runtime expansion") {
-		t.Errorf("expected approval detail with reason, got %v", *reqs)
-	}
+	assert.Len(t, *reqs, 1, "expected approval detail with reason, got %v", *reqs)
+	assert.Contains(t, (*reqs)[0].Detail, "runtime expansion", "expected approval detail with reason, got %v", *reqs)
 }
 
 func TestUniversalConstructorRespectsPolicy(t *testing.T) {
@@ -211,20 +189,16 @@ func TestUniversalConstructorRespectsPolicy(t *testing.T) {
 	runTool(t, rt, map[string]any{"action": "create", "tool_name": "safe", "code": "echo ok"})
 	runTool(t, rt, map[string]any{"action": "create", "tool_name": "other", "code": "echo no"})
 
-	if out := runTool(t, rt, map[string]any{"action": "run", "tool_name": "safe", "args": "a 'b"}); out["success"] != true {
-		t.Errorf("allowed forged tool failed: %v", out)
-	}
-	if out := runTool(t, rt, map[string]any{"action": "run", "tool_name": "other"}); !strings.Contains(errOf(out), "allow-list") {
-		t.Errorf("expected allow-list denial, got %v", out)
-	}
+	out := runTool(t, rt, map[string]any{"action": "run", "tool_name": "safe", "args": "a 'b"})
+	assert.Equal(t, true, out["success"], "allowed forged tool failed: %v", out)
+	out = runTool(t, rt, map[string]any{"action": "run", "tool_name": "other"})
+	assert.Contains(t, errOf(out), "allow-list", "expected allow-list denial, got %v", out)
 }
 
 func TestNewCommandPolicySkipsBlankPatterns(t *testing.T) {
 	p := mustPolicy(t, CommandPolicyConfig{Allow: []string{"  ", "ls"}})
-	if len(p.allow) != 1 {
-		t.Errorf("expected blank pattern skipped, got %d", len(p.allow))
-	}
-	if lines := p.Describe(); len(lines) == 0 || !strings.Contains(lines[0], "ls") {
-		t.Errorf("unexpected Describe %v", lines)
-	}
+	assert.Len(t, p.allow, 1, "expected blank pattern skipped, got %d", len(p.allow))
+	lines := p.Describe()
+	assert.NotEqual(t, 0, len(lines), "unexpected Describe %v", lines)
+	assert.Contains(t, lines[0], "ls", "unexpected Describe %v", lines)
 }

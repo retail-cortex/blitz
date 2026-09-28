@@ -25,19 +25,17 @@ import (
 	"testing"
 
 	"github.com/retail-cortex/blitz/pkg/api"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestPublicAddr(t *testing.T) {
 	for _, s := range []string{"127.0.0.1", "10.1.2.3", "172.16.0.1", "192.168.1.1", "169.254.169.254", "::1", "fe80::1",
 		"0.0.0.0", "100.64.0.1", "224.0.0.1", "::ffff:127.0.0.1", "fc00::1", "0.1.2.3"} {
-		if publicAddr(netip.MustParseAddr(s)) {
-			t.Errorf("%s should be blocked", s)
-		}
+		assert.False(t, publicAddr(netip.MustParseAddr(s)), "%s should be blocked", s)
 	}
 	for _, s := range []string{"8.8.8.8", "1.1.1.1", "2606:4700:4700::1111"} {
-		if !publicAddr(netip.MustParseAddr(s)) {
-			t.Errorf("%s should be allowed", s)
-		}
+		assert.True(t, publicAddr(netip.MustParseAddr(s)), "%s should be allowed", s)
 	}
 }
 
@@ -47,9 +45,8 @@ func TestMatchDomain(t *testing.T) {
 		"pkg.go.dev": true, "go.dev": true, "EXAMPLE.com": true, "example.com.": true,
 		"evilgo.dev": false, "go.dev.evil.com": false, "sub.example.com": false,
 	} {
-		if got := matchDomain(globs, host); got != want {
-			t.Errorf("matchDomain(%q) = %v, want %v", host, got, want)
-		}
+		got := matchDomain(globs, host)
+		assert.Equal(t, want, got, "matchDomain(%q) = %v, want %v", host, got, want)
 	}
 }
 
@@ -63,15 +60,12 @@ func TestWebFetchBlocksPrivateByDefault(t *testing.T) {
 	defer srv.Close()
 
 	out := testFetcher(WebFetchConfig{}).fetch(context.Background(), allowAll(), srv.URL)
-	if !strings.Contains(out.Error, "not a public address") || strings.Contains(out.Content, "secret") {
-		t.Errorf("expected loopback to be blocked: %+v", out)
-	}
+	assert.Contains(t, out.Error, "not a public address", "expected loopback to be blocked: %+v", out)
+	assert.NotContains(t, out.Content, "secret", "expected loopback to be blocked: %+v", out)
 	// "localhost" resolves to loopback and is blocked at dial time too.
 	u, _ := url.Parse(srv.URL)
 	out = testFetcher(WebFetchConfig{}).fetch(context.Background(), allowAll(), "http://localhost:"+u.Port())
-	if out.Error == "" {
-		t.Error("localhost should be blocked")
-	}
+	assert.NotEqual(t, "", out.Error, "localhost should be blocked")
 }
 
 func TestWebFetchContent(t *testing.T) {
@@ -101,29 +95,22 @@ func TestWebFetchContent(t *testing.T) {
 	ctx := context.Background()
 
 	out := f.fetch(ctx, allowAll(), srv.URL+"/page")
-	if out.Error != "" {
-		t.Fatal(out.Error)
-	}
+	require.Equal(t, "", out.Error, out.Error)
 	for _, want := range []string{"# Heading", "Hello world .", "- one", "- two", "docs (https://go.dev/doc)"} {
-		if !strings.Contains(out.Content, want) {
-			t.Errorf("html text missing %q:\n%s", want, out.Content)
-		}
+		assert.Contains(t, out.Content, want, "html text missing %q:\n%s", want, out.Content)
 	}
-	if strings.Contains(out.Content, "alert") || strings.Contains(out.Content, ".x{}") {
-		t.Errorf("script/style leaked: %s", out.Content)
-	}
-	if out := f.fetch(ctx, allowAll(), srv.URL+"/json"); out.Content != `{"ok":true}` {
-		t.Errorf("json: %+v", out)
-	}
-	if out := f.fetch(ctx, allowAll(), srv.URL+"/big"); !out.Truncated || len(out.Content) != 1000 {
-		t.Errorf("size cap: truncated=%v len=%d", out.Truncated, len(out.Content))
-	}
-	if out := f.fetch(ctx, allowAll(), srv.URL+"/bin"); !strings.Contains(out.Error, "unsupported content type") {
-		t.Errorf("binary: %+v", out)
-	}
-	if out := f.fetch(ctx, allowAll(), srv.URL+"/404"); out.Status != 404 || out.Error != "HTTP 404" {
-		t.Errorf("404: %+v", out)
-	}
+	assert.NotContains(t, out.Content, "alert", "script/style leaked: %s", out.Content)
+	assert.NotContains(t, out.Content, ".x{}", "script/style leaked: %s", out.Content)
+	out = f.fetch(ctx, allowAll(), srv.URL+"/json")
+	assert.Equal(t, `{"ok":true}`, out.Content, "json: %+v", out)
+	out = f.fetch(ctx, allowAll(), srv.URL+"/big")
+	assert.True(t, out.Truncated, "size cap: truncated=%v len=%d", out.Truncated, len(out.Content))
+	assert.Len(t, out.Content, 1000, "size cap: truncated=%v len=%d", out.Truncated, len(out.Content))
+	out = f.fetch(ctx, allowAll(), srv.URL+"/bin")
+	assert.Contains(t, out.Error, "unsupported content type", "binary: %+v", out)
+	out = f.fetch(ctx, allowAll(), srv.URL+"/404")
+	assert.Equal(t, 404, out.Status, "404: %+v", out)
+	assert.Equal(t, "HTTP 404", out.Error, "404: %+v", out)
 }
 
 func TestWebFetchValidationAndApproval(t *testing.T) {
@@ -133,31 +120,28 @@ func TestWebFetchValidationAndApproval(t *testing.T) {
 	f := testFetcher(WebFetchConfig{AllowPrivate: true, DenyDomains: []string{"*.evil.test"}})
 
 	for _, bad := range []string{"file:///etc/passwd", "ftp://x.org/f", "http://", "http://user:pw@example.com/", "https://a.evil.test/x"} {
-		if out := f.fetch(ctx, allowAll(), bad); out.Error == "" {
-			t.Errorf("%q should be rejected", bad)
-		}
+		out := f.fetch(ctx, allowAll(), bad)
+		assert.NotEqual(t, "", out.Error, "%q should be rejected", bad)
 	}
 
 	// Non-allow-listed hosts need approval, keyed per host.
 	h, reqs := approverHooks(false)
-	if out := f.fetch(ctx, h, srv.URL); !strings.Contains(out.Error, "not approved") {
-		t.Errorf("expected approval denial: %+v", out)
-	}
-	if len(*reqs) != 1 || (*reqs)[0].Key != "web:127.0.0.1" || (*reqs)[0].Kind != api.ActionNetwork {
-		t.Errorf("unexpected approval request %+v", *reqs)
-	}
+	out := f.fetch(ctx, h, srv.URL)
+	assert.Contains(t, out.Error, "not approved", "expected approval denial: %+v", out)
+	assert.Len(t, *reqs, 1, "unexpected approval request %+v", *reqs)
+	assert.Equal(t, "web:127.0.0.1", (*reqs)[0].Key, "unexpected approval request %+v", *reqs)
+	assert.Equal(t, api.ActionNetwork, (*reqs)[0].Kind, "unexpected approval request %+v", *reqs)
 	// Allow-listed hosts don't prompt.
 	allowed := testFetcher(WebFetchConfig{AllowPrivate: true, AllowDomains: []string{"127.0.0.1"}})
 	h, reqs = approverHooks(false)
-	if out := allowed.fetch(ctx, h, srv.URL); out.Content != "ok" || len(*reqs) != 0 {
-		t.Errorf("allow-listed fetch: %+v prompts=%d", out, len(*reqs))
-	}
+	out = allowed.fetch(ctx, h, srv.URL)
+	assert.Equal(t, "ok", out.Content, "allow-listed fetch: %+v prompts=%d", out, len(*reqs))
+	assert.Len(t, *reqs, 0, "allow-listed fetch: %+v prompts=%d", out, len(*reqs))
 
 	// Network disabled by sandbox.
 	off := newWebFetcher(WebFetchConfig{AllowPrivate: true})
-	if out := off.fetch(ctx, allowAll(), srv.URL); !strings.Contains(out.Error, "disabled") {
-		t.Errorf("expected network disabled: %+v", out)
-	}
+	out = off.fetch(ctx, allowAll(), srv.URL)
+	assert.Contains(t, out.Error, "disabled", "expected network disabled: %+v", out)
 }
 
 func TestWebFetchRedirects(t *testing.T) {
@@ -184,26 +168,19 @@ func TestWebFetchRedirects(t *testing.T) {
 	f.allowAddr = func(ap netip.AddrPort) bool { return ap.Port() != internalPort }
 
 	out := f.fetch(context.Background(), allowAll(), public.URL+"/to-internal")
-	if out.Error == "" || strings.Contains(out.Content, "metadata-secret") {
-		t.Errorf("redirect to internal address followed: %+v", out)
-	}
-	if !errors.Is(errors.New(out.Error), ErrBlockedAddress) && !strings.Contains(out.Error, "not a public address") && !strings.Contains(out.Error, "redirected") {
-		t.Errorf("unexpected error: %s", out.Error)
-	}
-	if out := f.fetch(context.Background(), allowAll(), public.URL+"/loop"); !strings.Contains(out.Error, "redirects") {
-		t.Errorf("redirect loop: %+v", out)
-	}
-	if out := f.fetch(context.Background(), allowAll(), public.URL+"/to-self"); out.Content != "final page" || !strings.HasSuffix(out.FinalURL, "/final") {
-		t.Errorf("same-host redirect: %+v", out)
-	}
+	assert.NotEqual(t, "", out.Error, "redirect to internal address followed: %+v", out)
+	assert.NotContains(t, out.Content, "metadata-secret", "redirect to internal address followed: %+v", out)
+	assert.False(t, !errors.Is(errors.New(out.Error), ErrBlockedAddress) && !strings.Contains(out.Error, "not a public address") && !strings.Contains(out.Error, "redirected"), "unexpected error: %s", out.Error)
+	out = f.fetch(context.Background(), allowAll(), public.URL+"/loop")
+	assert.Contains(t, out.Error, "redirects", "redirect loop: %+v", out)
+	out = f.fetch(context.Background(), allowAll(), public.URL+"/to-self")
+	assert.Equal(t, "final page", out.Content, "same-host redirect: %+v", out)
+	assert.True(t, strings.HasSuffix(out.FinalURL, "/final"), "same-host redirect: %+v", out)
 }
 
 func TestHTMLToText(t *testing.T) {
 	got := htmlToText("<div>a</div><div>b</div><p></p><p></p><p>c</p><noscript>x</noscript>")
-	if got != "a\nb\nc" {
-		t.Errorf("htmlToText = %q", got)
-	}
-	if got := htmlToText("not html at all"); got != "not html at all" {
-		t.Errorf("plain text = %q", got)
-	}
+	assert.Equal(t, "a\nb\nc", got, "htmlToText = %q", got)
+	got = htmlToText("not html at all")
+	assert.Equal(t, "not html at all", got, "plain text = %q", got)
 }

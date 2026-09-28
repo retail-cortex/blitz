@@ -21,6 +21,8 @@ import (
 	"testing"
 
 	"github.com/BurntSushi/toml"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestSaveUILocale(t *testing.T) {
@@ -48,29 +50,24 @@ func TestSaveUILocale(t *testing.T) {
 				os.WriteFile(path, []byte(tc.before), 0o640)
 			}
 			got, err := SaveUILocale(dir, "es")
-			if err != nil || got != path {
-				t.Fatalf("SaveUILocale = %q, %v", got, err)
-			}
+			require.NoError(t, err, "SaveUILocale = %q,", got)
+			require.Equal(t, path, got, "SaveUILocale = %q, %v", got, err)
 			data, _ := os.ReadFile(path)
 			for _, w := range tc.want {
-				if !strings.Contains(string(data), w) {
-					t.Errorf("result lacks %q:\n%s", w, data)
-				}
+				assert.Contains(t, string(data), w, "result lacks %q:\n%s", w, data)
 			}
 			var cfg struct {
 				UI struct{ Locale string } `toml:"ui"`
 			}
-			if _, err := toml.Decode(string(data), &cfg); err != nil || cfg.UI.Locale != "es" {
-				t.Errorf("decoded locale %q, %v", cfg.UI.Locale, err)
-			}
+			_, err = toml.Decode(string(data), &cfg)
+			assert.NoError(t, err, "decoded locale %q,", cfg.UI.Locale)
+			assert.Equal(t, "es", cfg.UI.Locale, "decoded locale %q, %v", cfg.UI.Locale, err)
 			info, _ := os.Stat(path)
 			wantPerm := os.FileMode(0o600)
 			if tc.before != "" {
 				wantPerm = 0o640 // existing permissions are kept
 			}
-			if info.Mode().Perm() != wantPerm {
-				t.Errorf("mode = %v, want %v", info.Mode().Perm(), wantPerm)
-			}
+			assert.Equal(t, wantPerm, info.Mode().Perm(), "mode = %v, want %v", info.Mode().Perm(), wantPerm)
 		})
 	}
 }
@@ -80,19 +77,16 @@ func TestSaveUILocaleRefusesToBreakConfig(t *testing.T) {
 	path := filepath.Join(dir, ".env.toml")
 	bad := "[ui\nlocale = \n"
 	os.WriteFile(path, []byte(bad), 0o600)
-	if _, err := SaveUILocale(dir, "es"); err == nil {
-		t.Fatal("expected an error for an unparseable file")
-	}
-	if data, _ := os.ReadFile(path); string(data) != bad {
-		t.Error("file must be left untouched on failure")
-	}
-	if _, err := SaveUILocale("", "es"); err == nil {
-		t.Error("empty dir should fail")
-	}
+	_, err := SaveUILocale(dir, "es")
+	require.Error(t, err, "expected an error for an unparseable file")
+	data, _ := os.ReadFile(path)
+	assert.Equal(t, bad, string(data), "file must be left untouched on failure")
+	_, err = SaveUILocale("", "es")
+	assert.Error(t, err, "empty dir should fail")
 }
 
 func TestDefaultLocale(t *testing.T) {
-	if c := DefaultConfig(); c.UI.Locale != "en-US" || !strings.HasSuffix(c.UI.LocalesDir, "locales") {
-		t.Errorf("defaults: %q %q", c.UI.Locale, c.UI.LocalesDir)
-	}
+	c := DefaultConfig()
+	assert.Equal(t, "en-US", c.UI.Locale, "defaults: %q %q", c.UI.Locale, c.UI.LocalesDir)
+	assert.True(t, strings.HasSuffix(c.UI.LocalesDir, "locales"), "defaults: %q %q", c.UI.Locale, c.UI.LocalesDir)
 }

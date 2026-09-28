@@ -16,18 +16,23 @@ package main
 
 import (
 	"encoding/json"
+	"io/fs"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestPrefsDefaultsAndRoundTrip(t *testing.T) {
 	s := &prefsStore{path: filepath.Join(t.TempDir(), "blitz", "desktop.json")}
 	p, err := s.load()
-	if err != nil || p.Theme != "system" || p.Density != "comfortable" || p.Notifications != "on" || len(p.Workspaces) != 0 {
-		t.Fatalf("defaults %+v %v", p, err)
-	}
+	require.NoError(t, err, "defaults %+v", p)
+	require.Equal(t, "system", p.Theme, "defaults %+v %v", p, err)
+	require.Equal(t, "comfortable", p.Density, "defaults %+v %v", p, err)
+	require.Equal(t, "on", p.Notifications, "defaults %+v %v", p, err)
+	require.Len(t, p.Workspaces, 0, "defaults %+v %v", p, err)
 	a, b := t.TempDir(), t.TempDir()
 	p.Theme = "dark"
 	p.Workspaces = []WorkspacePrefs{
@@ -39,20 +44,23 @@ func TestPrefsDefaultsAndRoundTrip(t *testing.T) {
 	p.Active = b // closed: can't be active
 	p.Files, p.ShowHidden, p.ChatWidth = true, true, -3
 	saved, err := s.save(p)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(saved.Workspaces) != 2 || saved.Workspaces[0].Dir != a || saved.Workspaces[0].Name != "Shop" || saved.Active != a || !saved.Files || !saved.ShowHidden || saved.ChatWidth != 0 {
-		t.Fatalf("normalized %+v", saved)
-	}
+	require.NoError(t, err)
+	require.Len(t, saved.Workspaces, 2, "normalized %+v", saved)
+	require.Equal(t, a, saved.Workspaces[0].Dir, "normalized %+v", saved)
+	require.Equal(t, "Shop", saved.Workspaces[0].Name, "normalized %+v", saved)
+	require.Equal(t, a, saved.Active, "normalized %+v", saved)
+	require.True(t, saved.Files, "normalized %+v", saved)
+	require.True(t, saved.ShowHidden, "normalized %+v", saved)
+	require.Equal(t, 0, saved.ChatWidth, "normalized %+v", saved)
 	info, err := os.Stat(s.path)
-	if err != nil || info.Mode().Perm() != 0o600 {
-		t.Fatalf("file mode %v %v", info, err)
-	}
+	require.NoError(t, err, "file mode %v", info)
+	require.Equal(t, fs.FileMode(0o600), info.Mode().Perm(), "file mode %v %v", info, err)
 	got, err := s.load()
-	if err != nil || got.Theme != "dark" || len(got.Workspaces) != 2 || got.Workspaces[1].Description != "old" || got.Workspaces[1].Open {
-		t.Fatalf("loaded %+v %v", got, err)
-	}
+	require.NoError(t, err, "loaded %+v", got)
+	require.Equal(t, "dark", got.Theme, "loaded %+v %v", got, err)
+	require.Len(t, got.Workspaces, 2, "loaded %+v %v", got, err)
+	require.Equal(t, "old", got.Workspaces[1].Description, "loaded %+v %v", got, err)
+	require.False(t, got.Workspaces[1].Open, "loaded %+v %v", got, err)
 }
 
 // The page reads workspaces as a list: with none it must be [], not null
@@ -60,17 +68,12 @@ func TestPrefsDefaultsAndRoundTrip(t *testing.T) {
 func TestPrefsSendAnEmptyListNotNull(t *testing.T) {
 	s := &prefsStore{path: filepath.Join(t.TempDir(), "desktop.json")}
 	p, err := s.load()
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	data, _ := json.Marshal(p)
-	if !strings.Contains(string(data), `"workspaces":[]`) {
-		t.Fatalf("defaults encode as %s", data)
-	}
+	require.Contains(t, string(data), `"workspaces":[]`, "defaults encode as %s", data)
 	saved, _ := s.save(Prefs{})
-	if data, _ := json.Marshal(saved); !strings.Contains(string(data), `"workspaces":[]`) {
-		t.Fatalf("saved encode as %s", data)
-	}
+	data, _ = json.Marshal(saved)
+	require.Contains(t, string(data), `"workspaces":[]`, "saved encode as %s", data)
 }
 
 func TestPrefsKeepOpenWorkspacesFirstAndBoundRecent(t *testing.T) {
@@ -81,9 +84,10 @@ func TestPrefsKeepOpenWorkspacesFirstAndBoundRecent(t *testing.T) {
 	p.Workspaces = append(p.Workspaces, WorkspacePrefs{Dir: "/open", Open: true})
 	p.Theme = "sepia"
 	p.normalize()
-	if p.Workspaces[0].Dir != "/open" || len(p.Workspaces) != maxRecent+1 || p.Theme != "system" || p.Active != "/open" {
-		t.Fatalf("%d workspaces, first %s, theme %s, active %s", len(p.Workspaces), p.Workspaces[0].Dir, p.Theme, p.Active)
-	}
+	require.Equal(t, "/open", p.Workspaces[0].Dir, "%d workspaces, first %s, theme %s, active %s", len(p.Workspaces), p.Workspaces[0].Dir, p.Theme, p.Active)
+	require.Len(t, p.Workspaces, maxRecent+1, "%d workspaces, first %s, theme %s, active %s", len(p.Workspaces), p.Workspaces[0].Dir, p.Theme, p.Active)
+	require.Equal(t, "system", p.Theme, "%d workspaces, first %s, theme %s, active %s", len(p.Workspaces), p.Workspaces[0].Dir, p.Theme, p.Active)
+	require.Equal(t, "/open", p.Active, "%d workspaces, first %s, theme %s, active %s", len(p.Workspaces), p.Workspaces[0].Dir, p.Theme, p.Active)
 }
 
 func TestDamagedPrefsAreSetAside(t *testing.T) {
@@ -91,15 +95,13 @@ func TestDamagedPrefsAreSetAside(t *testing.T) {
 	s := &prefsStore{path: filepath.Join(dir, "desktop.json")}
 	os.WriteFile(s.path, []byte("{nope"), 0o600)
 	p, err := s.load()
-	if err == nil || !strings.Contains(err.Error(), "set aside") || p.Theme != "system" {
-		t.Fatalf("%+v %v", p, err)
-	}
-	if _, err := os.Stat(s.path + ".damaged"); err != nil {
-		t.Error("the damaged file wasn't kept")
-	}
-	if _, err := s.load(); err != nil {
-		t.Errorf("after setting it aside: %v", err)
-	}
+	require.Error(t, err, "%+v", p)
+	require.Contains(t, err.Error(), "set aside", "%+v %v", p, err)
+	require.Equal(t, "system", p.Theme, "%+v %v", p, err)
+	_, err = os.Stat(s.path + ".damaged")
+	assert.NoError(t, err, "the damaged file wasn't kept")
+	_, err = s.load()
+	assert.NoError(t, err, "after setting it aside")
 }
 
 func TestSafeURL(t *testing.T) {
@@ -116,8 +118,7 @@ func TestSafeURL(t *testing.T) {
 		"data:text/html,<script>":   false,
 		" https://example.com/ok  ": true,
 	} {
-		if got := safeURL(link); got != want {
-			t.Errorf("%q: %v", link, got)
-		}
+		got := safeURL(link)
+		assert.Equal(t, want, got, "%q: %v", link, got)
 	}
 }

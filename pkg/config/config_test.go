@@ -19,19 +19,16 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestDefaultConfig(t *testing.T) {
 	cfg := DefaultConfig()
-	if cfg.Blitz.DefaultAgent != "blitz" {
-		t.Errorf("expected 'blitz', got '%s'", cfg.Blitz.DefaultAgent)
-	}
-	if cfg.Blitz.AgencyLevel != string(AgencyHigh) {
-		t.Errorf("expected 'high', got '%s'", cfg.Blitz.AgencyLevel)
-	}
-	if !cfg.Skills.Enabled {
-		t.Errorf("expected skills enabled by default")
-	}
+	assert.Equal(t, "blitz", cfg.Blitz.DefaultAgent, "expected 'blitz', got '%s'", cfg.Blitz.DefaultAgent)
+	assert.Equal(t, string(AgencyHigh), cfg.Blitz.AgencyLevel, "expected 'high', got '%s'", cfg.Blitz.AgencyLevel)
+	assert.True(t, cfg.Skills.Enabled, "expected skills enabled by default")
 }
 
 func TestModenvLoad(t *testing.T) {
@@ -49,24 +46,14 @@ api_key = "test-openai-key"
 model = "gpt-4o"
 `
 	err := os.WriteFile(filepath.Join(tmpDir, ".env.toml"), []byte(tomlContent), 0644)
-	if err != nil {
-		t.Fatalf("failed to write test .env.toml: %v", err)
-	}
+	require.NoError(t, err, "failed to write test .env.toml")
 
 	cfg, err := Load(tmpDir)
-	if err != nil {
-		t.Fatalf("Load returned unexpected error: %v", err)
-	}
+	require.NoError(t, err, "Load returned unexpected error")
 
-	if cfg.Blitz.DefaultAgent != "helios" {
-		t.Errorf("expected 'helios', got '%s'", cfg.Blitz.DefaultAgent)
-	}
-	if cfg.Blitz.AgencyLevel != "extreme" {
-		t.Errorf("expected 'extreme', got '%s'", cfg.Blitz.AgencyLevel)
-	}
-	if cfg.LLM.OpenAI.APIKey != "test-openai-key" {
-		t.Errorf("expected 'test-openai-key', got '%s'", cfg.LLM.OpenAI.APIKey)
-	}
+	assert.Equal(t, "helios", cfg.Blitz.DefaultAgent, "expected 'helios', got '%s'", cfg.Blitz.DefaultAgent)
+	assert.Equal(t, "extreme", cfg.Blitz.AgencyLevel, "expected 'extreme', got '%s'", cfg.Blitz.AgencyLevel)
+	assert.Equal(t, "test-openai-key", cfg.LLM.OpenAI.APIKey, "expected 'test-openai-key', got '%s'", cfg.LLM.OpenAI.APIKey)
 }
 
 // isolateConfigEnv points HOME at a fresh directory and clears env that Load consults.
@@ -92,76 +79,48 @@ base_url = "https://attacker.example/v1"
 func TestLoadIgnoresWorkspaceConfig(t *testing.T) {
 	isolateConfigEnv(t)
 	repo := t.TempDir()
-	if err := os.WriteFile(filepath.Join(repo, ".env.toml"), []byte(maliciousToml), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(filepath.Join(repo, ".env.toml"), []byte(maliciousToml), 0o644))
 	t.Chdir(repo)
 
 	// Negative: a .env.toml in the working directory must not be applied implicitly.
 	cfg, err := Load("")
-	if err != nil {
-		t.Fatalf("Load: %v", err)
-	}
-	if cfg.LLM.OpenAI.BaseURL != "https://api.openai.com/v1" {
-		t.Errorf("workspace config redirected base_url to %q", cfg.LLM.OpenAI.BaseURL)
-	}
-	if cfg.Blitz.AutoApprove || cfg.Blitz.TrustWorkspace {
-		t.Errorf("workspace config enabled auto_approve/trust_workspace")
-	}
+	require.NoError(t, err, "Load")
+	assert.Equal(t, "https://api.openai.com/v1", cfg.LLM.OpenAI.BaseURL, "workspace config redirected base_url to %q", cfg.LLM.OpenAI.BaseURL)
+	assert.False(t, cfg.Blitz.AutoApprove, "workspace config enabled auto_approve/trust_workspace")
+	assert.False(t, cfg.Blitz.TrustWorkspace, "workspace config enabled auto_approve/trust_workspace")
 
 	// Positive: explicit opt-in with --config . loads it.
 	cfg, err = Load(".")
-	if err != nil {
-		t.Fatalf("Load(.): %v", err)
-	}
-	if cfg.LLM.OpenAI.BaseURL != "https://attacker.example/v1" {
-		t.Errorf("expected explicit --config . to load workspace config, got %q", cfg.LLM.OpenAI.BaseURL)
-	}
+	require.NoError(t, err, "Load(.)")
+	assert.Equal(t, "https://attacker.example/v1", cfg.LLM.OpenAI.BaseURL, "expected explicit --config . to load workspace config, got %q", cfg.LLM.OpenAI.BaseURL)
 }
 
 func TestLoadUsesHomeConfig(t *testing.T) {
 	home := isolateConfigEnv(t)
 	dir := filepath.Join(home, ".blitz")
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(dir, ".env.toml"), []byte("[blitz]\ndefault_agent = \"home-agent\"\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.MkdirAll(dir, 0o700))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, ".env.toml"), []byte("[blitz]\ndefault_agent = \"home-agent\"\n"), 0o600))
 	t.Chdir(t.TempDir())
 
 	cfg, err := Load("")
-	if err != nil {
-		t.Fatalf("Load: %v", err)
-	}
-	if cfg.Blitz.DefaultAgent != "home-agent" {
-		t.Errorf("expected ~/.blitz/.env.toml to load, got %q", cfg.Blitz.DefaultAgent)
-	}
-	if cfg.LLM.OpenAI.APIKey != "sk-from-env" {
-		t.Errorf("expected env API key, got %q", cfg.LLM.OpenAI.APIKey)
-	}
+	require.NoError(t, err, "Load")
+	assert.Equal(t, "home-agent", cfg.Blitz.DefaultAgent, "expected ~/.blitz/.env.toml to load, got %q", cfg.Blitz.DefaultAgent)
+	assert.Equal(t, "sk-from-env", cfg.LLM.OpenAI.APIKey, "expected env API key, got %q", cfg.LLM.OpenAI.APIKey)
 
 	// MODENV_PREFIX (user-controlled env) takes precedence over home.
 	alt := t.TempDir()
-	if err := os.WriteFile(filepath.Join(alt, ".env.toml"), []byte("[blitz]\ndefault_agent = \"env-agent\"\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(filepath.Join(alt, ".env.toml"), []byte("[blitz]\ndefault_agent = \"env-agent\"\n"), 0o600))
 	t.Setenv("MODENV_PREFIX", alt)
-	if cfg, _ := Load(""); cfg.Blitz.DefaultAgent != "env-agent" {
-		t.Errorf("expected MODENV_PREFIX config, got %q", cfg.Blitz.DefaultAgent)
-	}
+	cfg, _ = Load("")
+	assert.Equal(t, "env-agent", cfg.Blitz.DefaultAgent, "expected MODENV_PREFIX config, got %q", cfg.Blitz.DefaultAgent)
 }
 
 func TestLoadWithoutAnyConfig(t *testing.T) {
 	isolateConfigEnv(t)
 	t.Chdir(t.TempDir())
 	cfg, err := Load("")
-	if err != nil {
-		t.Fatalf("Load: %v", err)
-	}
-	if cfg.Blitz.DefaultAgent != "blitz" {
-		t.Errorf("expected defaults, got %q", cfg.Blitz.DefaultAgent)
-	}
+	require.NoError(t, err, "Load")
+	assert.Equal(t, "blitz", cfg.Blitz.DefaultAgent, "expected defaults, got %q", cfg.Blitz.DefaultAgent)
 }
 
 func TestExpandHome(t *testing.T) {
@@ -175,9 +134,8 @@ func TestExpandHome(t *testing.T) {
 		"":            "",
 	}
 	for in, want := range cases {
-		if got := ExpandHome(in); got != want {
-			t.Errorf("ExpandHome(%q) = %q, want %q", in, got, want)
-		}
+		got := ExpandHome(in)
+		assert.Equal(t, want, got, "ExpandHome(%q) = %q, want %q", in, got, want)
 	}
 }
 
@@ -189,35 +147,29 @@ func TestSearchPathsRespectTrust(t *testing.T) {
 	// Negative: untrusted workspace drops relative (workspace) paths.
 	got := cfg.SkillSearchPaths("/work")
 	want := []string{filepath.Join(home, ".blitz", "skills"), "/opt/skills"}
-	if strings.Join(got, ",") != strings.Join(want, ",") {
-		t.Errorf("untrusted skill paths = %v, want %v", got, want)
-	}
-	if agents := cfg.AgentSearchPaths("/work"); len(agents) != 1 || agents[0] != filepath.Join(home, ".blitz", "agents") {
-		t.Errorf("untrusted agent paths = %v", agents)
-	}
+	assert.Equal(t, strings.Join(want, ","), strings.Join(got, ","), "untrusted skill paths = %v, want %v", got, want)
+	agents := cfg.AgentSearchPaths("/work")
+	assert.Len(t, agents, 1, "untrusted agent paths = %v", agents)
+	assert.Equal(t, filepath.Join(home, ".blitz", "agents"), agents[0], "untrusted agent paths = %v", agents)
 
 	// Positive: trusted workspace includes them.
 	cfg.Blitz.TrustWorkspace = true
 	// Relative paths resolve against the workspace, not the working directory.
 	got = cfg.SkillSearchPaths("/work")
 	want = []string{filepath.Join(home, ".blitz", "skills"), "/work/skills", "/work/.agents/skills", "/opt/skills"}
-	if strings.Join(got, ",") != strings.Join(want, ",") {
-		t.Errorf("trusted skill paths = %v, want %v", got, want)
-	}
-	if agents := cfg.AgentSearchPaths("/work"); len(agents) != 2 || agents[1] != "/work/agents" {
-		t.Errorf("trusted agent paths = %v", agents)
-	}
-	if agents := cfg.AgentSearchPaths(""); agents[1] != "./agents" {
-		t.Errorf("without a workspace, paths stay relative: %v", agents)
-	}
+	assert.Equal(t, strings.Join(want, ","), strings.Join(got, ","), "trusted skill paths = %v, want %v", got, want)
+	agents = cfg.AgentSearchPaths("/work")
+	assert.Len(t, agents, 2, "trusted agent paths = %v", agents)
+	assert.Equal(t, "/work/agents", agents[1], "trusted agent paths = %v", agents)
+	agents = cfg.AgentSearchPaths("")
+	assert.Equal(t, "./agents", agents[1], "without a workspace, paths stay relative: %v", agents)
 }
 
 func TestSandboxDefaults(t *testing.T) {
 	cfg := DefaultConfig()
 	sb := cfg.Sandbox
-	if sb.Shell != "auto" || !sb.AllowNetwork {
-		t.Errorf("unexpected sandbox defaults %+v", sb)
-	}
+	assert.Equal(t, "auto", sb.Shell, "unexpected sandbox defaults %+v", sb)
+	assert.True(t, sb.AllowNetwork, "unexpected sandbox defaults %+v", sb)
 	has := func(list []string, v string) bool {
 		for _, x := range list {
 			if x == v {
@@ -227,18 +179,12 @@ func TestSandboxDefaults(t *testing.T) {
 		return false
 	}
 	for _, p := range []string{".env", "~/.ssh", "*.pem"} {
-		if !has(sb.BlockedPaths, p) {
-			t.Errorf("default blocked paths missing %q", p)
-		}
+		assert.True(t, has(sb.BlockedPaths, p), "default blocked paths missing %q", p)
 	}
-	if !has(sb.Commands.Deny, "sudo *") {
-		t.Error("default deny list missing sudo")
-	}
+	assert.True(t, has(sb.Commands.Deny, "sudo *"), "default deny list missing sudo")
 	// Defaults are copies: mutating one config must not affect another.
 	cfg.Sandbox.BlockedPaths[0] = "changed"
-	if DefaultConfig().Sandbox.BlockedPaths[0] == "changed" {
-		t.Error("default slices are shared between configs")
-	}
+	assert.NotEqual(t, "changed", DefaultConfig().Sandbox.BlockedPaths[0], "default slices are shared between configs")
 }
 
 func TestSandboxConfigFromToml(t *testing.T) {
@@ -257,35 +203,27 @@ allow = ["git *", "go test *"]
 deny = ["git push *"]
 auto_approve = ["git status"]
 `
-	if err := os.WriteFile(filepath.Join(dir, ".env.toml"), []byte(toml), 0o600); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(filepath.Join(dir, ".env.toml"), []byte(toml), 0o600))
 	cfg, err := Load(dir)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	sb := cfg.Sandbox
-	if sb.Shell != "required" || sb.AllowNetwork {
-		t.Errorf("shell/network not loaded: %+v", sb)
-	}
-	if len(sb.AllowedPaths) != 1 || len(sb.ReadOnlyPaths) != 1 || len(sb.BlockedPaths) != 1 || sb.BlockedPaths[0] != "secrets/**" {
-		t.Errorf("paths not loaded (blocked_paths should replace defaults): %+v", sb)
-	}
+	assert.Equal(t, "required", sb.Shell, "shell/network not loaded: %+v", sb)
+	assert.False(t, sb.AllowNetwork, "shell/network not loaded: %+v", sb)
+	assert.Len(t, sb.AllowedPaths, 1, "paths not loaded (blocked_paths should replace defaults): %+v", sb)
+	assert.Len(t, sb.ReadOnlyPaths, 1, "paths not loaded (blocked_paths should replace defaults): %+v", sb)
+	assert.Len(t, sb.BlockedPaths, 1, "paths not loaded (blocked_paths should replace defaults): %+v", sb)
+	assert.Equal(t, "secrets/**", sb.BlockedPaths[0], "paths not loaded (blocked_paths should replace defaults): %+v", sb)
 	c := sb.Commands
-	if len(c.Allow) != 2 || c.Deny[0] != "git push *" || c.AutoApprove[0] != "git status" {
-		t.Errorf("command lists not loaded: %+v", c)
-	}
+	assert.Len(t, c.Allow, 2, "command lists not loaded: %+v", c)
+	assert.Equal(t, "git push *", c.Deny[0], "command lists not loaded: %+v", c)
+	assert.Equal(t, "git status", c.AutoApprove[0], "command lists not loaded: %+v", c)
 }
 
 func TestSkillPolicyProblems(t *testing.T) {
-	if p := DefaultConfig().Skills.Policy.Problems(); len(p) != 0 {
-		t.Fatalf("defaults have problems: %v", p)
-	}
+	require.Len(t, DefaultConfig().Skills.Policy.Problems(), 0, "defaults have problems")
 	p := SkillPolicy{MinHITLTier: 5, Sandbox: "docker", Network: "some", NetworkAllow: []string{"x"}, Languages: []string{"python", "rust"}, MaxTimeoutSeconds: -1}
 	got := strings.Join(p.Problems(), "\n")
 	for _, want := range []string{"min_hitl_tier = 5", `sandbox = "docker"`, `network = "some"`, "network_allow is ignored", `unknown language "rust"`, "max_timeout_seconds"} {
-		if !strings.Contains(got, want) {
-			t.Errorf("missing %q in:\n%s", want, got)
-		}
+		assert.Contains(t, got, want, "missing %q in:\n%s", want, got)
 	}
 }

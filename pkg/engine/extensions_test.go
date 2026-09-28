@@ -20,10 +20,12 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/retail-cortex/blitz/pkg/api"
-
 	"github.com/retail-cortex/blitz/pkg/config"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestSkillsReportThePolicyVerdict(t *testing.T) {
@@ -31,30 +33,28 @@ func TestSkillsReportThePolicyVerdict(t *testing.T) {
 	dir := t.TempDir()
 	os.MkdirAll(filepath.Join(dir, "tidy"), 0o755)
 	os.WriteFile(filepath.Join(dir, "tidy", "SKILL.md"), []byte("---\nname: tidy\ndescription: tidies imports\nscripts:\n  - name: run\n    language: python\n    inline_code: print(1)\n    dependencies: [\"six==1.16.0\"]\n---\n"), 0o644)
-	if err := w.Skills().DiscoverExternal([]string{dir}); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, w.Skills().DiscoverExternal([]string{dir}))
 	s, ok := w.Skill("tidy")
-	if !ok || s.Description != "tidies imports" || len(s.Scripts) != 1 {
-		t.Fatalf("skill %+v %v", s, ok)
-	}
+	require.True(t, ok, "skill %+v %v", s, ok)
+	require.Equal(t, "tidies imports", s.Description, "skill %+v %v", s, ok)
+	require.Len(t, s.Scripts, 1, "skill %+v %v", s, ok)
 	sc := s.Scripts[0]
-	if sc.Language != "python" || sc.Source != "inline" || !slices.Equal(sc.Deps, []string{"six==1.16.0"}) || sc.Timeout <= 0 {
-		t.Errorf("script %+v", sc)
-	}
+	assert.Equal(t, "python", sc.Language, "script %+v", sc)
+	assert.Equal(t, "inline", sc.Source, "script %+v", sc)
+	assert.Equal(t, []string{"six==1.16.0"}, sc.Deps, "script %+v", sc)
+	assert.Greater(t, sc.Timeout, time.Duration(0), "script %+v", sc)
 	// python isn't among the policy's languages.
-	if sc.Allowed || len(sc.Reasons) == 0 || s.Runnable() || s.Tier == "" {
-		t.Errorf("verdict %+v, tier %q", sc, s.Tier)
-	}
-	if _, ok := w.Skill("nope"); ok {
-		t.Error("found a missing skill")
-	}
-	if i := slices.IndexFunc(w.ListSkills(), func(s api.SkillInfo) bool { return s.Name == "tidy" }); i < 0 {
-		t.Error("tidy not listed")
-	}
-	if got := w.SearchSkills("imports"); len(got) != 1 || got[0].Name != "tidy" {
-		t.Errorf("search %+v", got)
-	}
+	assert.False(t, sc.Allowed, "verdict %+v, tier %q", sc, s.Tier)
+	assert.NotEqual(t, 0, len(sc.Reasons), "verdict %+v, tier %q", sc, s.Tier)
+	assert.False(t, s.Runnable(), "verdict %+v, tier %q", sc, s.Tier)
+	assert.NotEqual(t, "", s.Tier, "verdict %+v, tier %q", sc, s.Tier)
+	_, ok = w.Skill("nope")
+	assert.False(t, ok, "found a missing skill")
+	i := slices.IndexFunc(w.ListSkills(), func(s api.SkillInfo) bool { return s.Name == "tidy" })
+	assert.GreaterOrEqual(t, i, 0, "tidy not listed")
+	got := w.SearchSkills("imports")
+	assert.Len(t, got, 1, "search %+v", got)
+	assert.Equal(t, "tidy", got[0].Name, "search %+v", got)
 }
 
 func TestActiveAgentTools(t *testing.T) {
@@ -67,16 +67,16 @@ func TestActiveAgentTools(t *testing.T) {
 		}
 		return at.Tools[i], true
 	}
-	if at.Agent != "blitz" || !slices.IsSortedFunc(at.Tools, func(a, b api.ToolInfo) int { return strings.Compare(a.Name, b.Name) }) {
-		t.Errorf("agent %q, tools unsorted", at.Agent)
-	}
-	if r, ok := find("read_file"); !ok || !r.PlanAllowed || r.Description == "" {
-		t.Errorf("read_file %+v %v", r, ok)
-	}
-	if c, ok := find("create_file"); !ok || c.PlanAllowed {
-		t.Errorf("create_file %+v %v", c, ok)
-	}
-	if !mcpOfferedTo(nil, "a") || !mcpOfferedTo([]string{"*"}, "a") || mcpOfferedTo([]string{"b"}, "a") {
-		t.Error("MCP offer rule")
-	}
+	assert.Equal(t, "blitz", at.Agent, "agent %q, tools unsorted", at.Agent)
+	assert.True(t, slices.IsSortedFunc(at.Tools, func(a, b api.ToolInfo) int { return strings.Compare(a.Name, b.Name) }), "agent %q, tools unsorted", at.Agent)
+	r, ok := find("read_file")
+	assert.True(t, ok, "read_file %+v %v", r, ok)
+	assert.True(t, r.PlanAllowed, "read_file %+v %v", r, ok)
+	assert.NotEqual(t, "", r.Description, "read_file %+v %v", r, ok)
+	c, ok := find("create_file")
+	assert.True(t, ok, "create_file %+v %v", c, ok)
+	assert.False(t, c.PlanAllowed, "create_file %+v %v", c, ok)
+	assert.True(t, mcpOfferedTo(nil, "a"), "MCP offer rule")
+	assert.True(t, mcpOfferedTo([]string{"*"}, "a"), "MCP offer rule")
+	assert.False(t, mcpOfferedTo([]string{"b"}, "a"), "MCP offer rule")
 }

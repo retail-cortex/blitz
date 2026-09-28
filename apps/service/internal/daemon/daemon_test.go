@@ -16,7 +16,7 @@ package daemon
 
 import (
 	"context"
-	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"testing"
@@ -25,6 +25,8 @@ import (
 	"connectrpc.com/connect"
 	"github.com/retail-cortex/blitz/pkg/socket"
 	pb "github.com/retail-cortex/blitz/proto/blitz/v1"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // The service answers over its socket, opens workspaces on demand,
@@ -38,9 +40,7 @@ func TestRun(t *testing.T) {
 	}
 	t.Chdir(t.TempDir())
 	dir, err := os.MkdirTemp("/tmp", "bd") // socket paths must be short
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	t.Cleanup(func() { os.RemoveAll(dir) })
 	sock := filepath.Join(dir, "s.sock")
 
@@ -48,30 +48,23 @@ func TestRun(t *testing.T) {
 	done := make(chan error, 1)
 	go func() { done <- Run(ctx, Options{Socket: sock}) }()
 	for deadline := time.Now().Add(10 * time.Second); !socket.Running(sock); time.Sleep(20 * time.Millisecond) {
-		if time.Now().After(deadline) {
-			t.Fatal("service didn't start")
-		}
+		require.False(t, time.Now().After(deadline), "service didn't start")
 	}
 
 	c := pb.NewWorkspaceServiceClient(socket.Client(sock), socket.BaseURL)
 	agents, err := c.ListAgents(context.Background(), connect.NewRequest(&pb.ListAgentsRequest{Workspace: t.TempDir()}))
-	if err != nil || len(agents.Msg.Agents) == 0 {
-		t.Fatalf("list agents: %v %v", agents, err)
-	}
-	if err := Run(context.Background(), Options{Socket: sock}); !errors.Is(err, socket.ErrRunning) {
-		t.Errorf("second service: %v", err)
-	}
+	require.NoError(t, err, "list agents: %v", agents)
+	require.NotEqual(t, 0, len(agents.Msg.Agents), "list agents: %v %v", agents, err)
+	err = Run(context.Background(), Options{Socket: sock})
+	assert.ErrorIs(t, err, socket.ErrRunning, "second service: %v", err)
 
 	cancel()
 	select {
 	case err := <-done:
-		if err != nil {
-			t.Errorf("serve: %v", err)
-		}
+		assert.NoError(t, err, "serve")
 	case <-time.After(15 * time.Second):
 		t.Fatal("service didn't stop")
 	}
-	if _, err := os.Stat(sock); !os.IsNotExist(err) {
-		t.Error("socket left behind")
-	}
+	_, err = os.Stat(sock)
+	assert.ErrorIs(t, err, fs.ErrNotExist, "socket left behind")
 }

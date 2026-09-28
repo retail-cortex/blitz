@@ -26,6 +26,8 @@ import (
 	"github.com/retail-cortex/blitz/pkg/engine"
 	"github.com/retail-cortex/blitz/pkg/engine/runtime"
 	"github.com/retail-cortex/blitz/pkg/i18n"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/genai"
 )
 
@@ -53,45 +55,36 @@ func TestLocaleReachesModelAndConfig(t *testing.T) {
 
 	reply := func() *genai.Content { return genai.NewContentFromText("ok", genai.RoleModel) }
 	llm := runtime.NewMockLLM("gemini-3.8-flash", reply(), reply())
-	if err := e.Engine().SetModel(ctx, llm); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, e.Engine().SetModel(ctx, llm))
 	run := func() string {
 		sess, _ := e.Storage().CreateSession("", "t", "blitz")
 		var out bytes.Buffer
-		if err := runOneShot(ctx, e, oneShotOptions{prompt: "hi", sessionID: sess.ID, format: formatText, stdout: &out}); err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, runOneShot(ctx, e, oneShotOptions{prompt: "hi", sessionID: sess.ID, format: formatText, stdout: &out}))
 		return lastSystemText(llm)
 	}
 
 	res, err := e.SetLocale(ctx, "ES-sp")
-	if err != nil || res.Tag != "es" || res.Saved.Path != cfgFile || res.Saved.Err != nil {
-		t.Fatalf("SetLocale = %+v, %v", res, err)
-	}
-	if sys := run(); !strings.Contains(sys, "## Response Language") || !strings.Contains(sys, "Spanish") {
-		t.Errorf("system prompt lacks the reply-language instruction:\n%s", sys)
-	}
+	require.NoError(t, err, "SetLocale = %+v,", res)
+	require.Equal(t, "es", res.Tag, "SetLocale = %+v, %v", res, err)
+	require.Equal(t, cfgFile, res.Saved.Path, "SetLocale = %+v, %v", res, err)
+	require.NoError(t, res.Saved.Err, "SetLocale = %+v, %v", res, err)
+	sys := run()
+	assert.Contains(t, sys, "## Response Language", "system prompt lacks the reply-language instruction:\n%s", sys)
+	assert.Contains(t, sys, "Spanish", "system prompt lacks the reply-language instruction:\n%s", sys)
 	data, _ := os.ReadFile(cfgFile)
-	if !strings.Contains(string(data), "# my settings\n[ui]\nlocale = \"es\"   # keep me") {
-		t.Errorf("config not edited in place:\n%s", data)
-	}
+	assert.Contains(t, string(data), "# my settings\n[ui]\nlocale = \"es\"   # keep me", "config not edited in place:\n%s", data)
 
 	// Restart: the saved locale is picked up.
 	i18n.SetCurrent(nil)
 	cfg, err := config.Load(cfgDir)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	engine.SetupLocale(cfg, func(string) {})
-	if got := i18n.Current().Tag().String(); got != "es" || i18n.T("exit.cancelled") != "Salida cancelada." {
-		t.Errorf("after reload: %s", got)
-	}
+	got := i18n.Current().Tag().String()
+	assert.Equal(t, "es", got, "after reload: %s", got)
+	assert.Equal(t, "Salida cancelada.", i18n.T("exit.cancelled"), "after reload: %s", got)
 
-	if _, err := e.SetLocale(ctx, "en-US"); err != nil {
-		t.Fatal(err)
-	}
-	if sys := run(); strings.Contains(sys, "Response Language") {
-		t.Errorf("English should not add a language instruction:\n%s", sys)
-	}
+	_, err = e.SetLocale(ctx, "en-US")
+	require.NoError(t, err)
+	sys = run()
+	assert.NotContains(t, sys, "Response Language", "English should not add a language instruction:\n%s", sys)
 }

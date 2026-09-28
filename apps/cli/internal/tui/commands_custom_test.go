@@ -18,9 +18,10 @@ import (
 	"context"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/genai"
 )
 
@@ -34,13 +35,10 @@ func TestCustomCommandInTheREPL(t *testing.T) {
 	os.WriteFile(filepath.Join(dir, "help.md"), []byte("I shadow /help."), 0o644)
 	out := captureStdout(t, func() { RunREPL(context.Background(), app) })
 
-	if !strings.Contains(out, "Custom commands") || !strings.Contains(out, "/greet <name>") || !strings.Contains(out, "Greet someone") {
-		t.Errorf("/help doesn't list the command:\n%s", out)
-	}
-	if llm.Calls() != 1 || !strings.Contains(requestTextAt(llm, 0), "Say hello to Ada.") {
-		t.Fatalf("the command's prompt wasn't sent (%d calls)", llm.Calls())
-	}
-	if !strings.Contains(out, "Unknown command") {
-		t.Errorf("/nope wasn't reported unknown:\n%s", out)
-	}
+	assert.Contains(t, out, "Custom commands", "/help doesn't list the command:\n%s", out)
+	assert.Contains(t, out, "/greet <name>", "/help doesn't list the command:\n%s", out)
+	assert.Contains(t, out, "Greet someone", "/help doesn't list the command:\n%s", out)
+	require.Equal(t, 1, llm.Calls(), "the command's prompt wasn't sent (%d calls)", llm.Calls())
+	require.Contains(t, requestTextAt(llm, 0), "Say hello to Ada.", "the command's prompt wasn't sent (%d calls)", llm.Calls())
+	assert.Contains(t, out, "Unknown command", "/nope wasn't reported unknown:\n%s", out)
 }

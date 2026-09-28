@@ -18,12 +18,12 @@ import (
 	"context"
 	"os"
 	"path/filepath"
-	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/retail-cortex/blitz/pkg/api"
+	"github.com/stretchr/testify/require"
 )
 
 // barrierHooks approves every request, but holds the first approval until a
@@ -81,14 +81,11 @@ func TestParallelEditsToSameFileKeepBothChanges(t *testing.T) {
 		},
 	)
 	for _, out := range outs {
-		if e := errOf(out); e != "" {
-			t.Fatalf("edit failed: %s", e)
-		}
+		e := errOf(out)
+		require.Equal(t, "", e, "edit failed: %s", e)
 	}
 	got, _ := os.ReadFile(path)
-	if string(got) != "ALPHA\nBETA\n" {
-		t.Fatalf("an edit was lost: %q", got)
-	}
+	require.Equal(t, "ALPHA\nBETA\n", string(got), "an edit was lost: %q", got)
 }
 
 func TestParallelPatchAndEditKeepBothChanges(t *testing.T) {
@@ -107,14 +104,11 @@ func TestParallelPatchAndEditKeepBothChanges(t *testing.T) {
 		},
 	)
 	for _, out := range outs {
-		if e := errOf(out); e != "" {
-			t.Fatalf("call failed: %s", e)
-		}
+		e := errOf(out)
+		require.Equal(t, "", e, "call failed: %s", e)
 	}
 	got, _ := os.ReadFile(filepath.Join(dir, "a.txt"))
-	if string(got) != "ONE\ntwo\nthree\nfour\nFIVE\n" {
-		t.Fatalf("an edit was lost: %q", got)
-	}
+	require.Equal(t, "ONE\ntwo\nthree\nfour\nFIVE\n", string(got), "an edit was lost: %q", got)
 }
 
 // A file changed outside the tools while the user was looking at the diff
@@ -151,12 +145,10 @@ func TestEditRefusesWhenFileChangedDuringApproval(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			writeFile(t, path, "hello\n")
 			out := run()
-			if e := errOf(out); !strings.Contains(e, "changed") {
-				t.Fatalf("want a changed-file error, got %v", out)
-			}
-			if got, _ := os.ReadFile(path); string(got) != "hello\nuser line\n" {
-				t.Fatalf("user's change was overwritten: %q", got)
-			}
+			e := errOf(out)
+			require.Contains(t, e, "changed", "want a changed-file error, got %v", out)
+			got, _ := os.ReadFile(path)
+			require.Equal(t, "hello\nuser line\n", string(got), "user's change was overwritten: %q", got)
 		})
 	}
 }
@@ -164,20 +156,15 @@ func TestEditRefusesWhenFileChangedDuringApproval(t *testing.T) {
 func TestPathLocksHonourContext(t *testing.T) {
 	ws, _ := newTestWorkspace(t)
 	unlock, err := ws.lockPaths(context.Background(), "x")
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	defer unlock()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
 	defer cancel()
-	if _, err := ws.lockPaths(ctx, "y", "x"); err == nil {
-		t.Fatal("lock on a held path should fail when ctx expires")
-	}
+	_, lockErr := ws.lockPaths(ctx, "y", "x")
+	require.Error(t, lockErr, "locking a held path fails when ctx expires")
 	// "y" must have been released after the failed attempt.
 	u2, err := ws.lockPaths(context.Background(), "y")
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	u2()
 }

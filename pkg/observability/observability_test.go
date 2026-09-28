@@ -20,18 +20,19 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
-	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/redact"
+	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/attribute"
 	sdklog "go.opentelemetry.io/otel/sdk/log"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
@@ -44,21 +45,15 @@ const secret = "sk-test-SECRET-123456"
 func readLines(t *testing.T, dir string) []map[string]any {
 	t.Helper()
 	files, _ := filepath.Glob(filepath.Join(dir, logPrefix+"*"+logSuffix))
-	if len(files) != 1 {
-		t.Fatalf("want one log file, got %v", files)
-	}
+	require.Len(t, files, 1, "want one log file, got %v", files)
 	f, err := os.Open(files[0])
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	defer f.Close()
 	var out []map[string]any
 	sc := bufio.NewScanner(f)
 	for sc.Scan() {
 		var m map[string]any
-		if err := json.Unmarshal(sc.Bytes(), &m); err != nil {
-			t.Fatalf("bad line %q: %v", sc.Text(), err)
-		}
+		require.NoError(t, json.Unmarshal(sc.Bytes(), &m), "bad line %q", sc.Text())
 		out = append(out, m)
 	}
 	return out
@@ -67,9 +62,7 @@ func readLines(t *testing.T, dir string) []map[string]any {
 func TestLogFileMasksSecretsAndKeepsEveryRecord(t *testing.T) {
 	dir := t.TempDir()
 	logger, closer, err := OpenLog(config.LogConfig{Level: "debug", Dir: dir}, redact.New(secret))
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
 	const writers, each = 8, 100 // 800 < queue size: nothing may be dropped
 	var wg sync.WaitGroup
@@ -85,18 +78,14 @@ func TestLogFileMasksSecretsAndKeepsEveryRecord(t *testing.T) {
 	closer.Close()
 
 	lines := readLines(t, dir)
-	if len(lines) != writers*each+1 {
-		t.Fatalf("want %d lines, got %d", writers*each+1, len(lines))
-	}
+	require.Len(t, lines, writers*each+1, "want %d lines, got %d", writers*each+1, len(lines))
 	for _, l := range lines {
-		if b, _ := json.Marshal(l); strings.Contains(string(b), secret) {
-			t.Fatalf("secret written to log: %s", b)
-		}
+		b, _ := json.Marshal(l)
+		require.NotContains(t, string(b), secret, "secret written to log: %s", b)
 	}
 	info, err := os.Stat(dir)
-	if err != nil || info.Mode().Perm() != 0o700 {
-		t.Fatalf("log dir mode = %v, %v", info.Mode().Perm(), err)
-	}
+	require.NoError(t, err, "log dir mode = %v,", info.Mode().Perm())
+	require.Equal(t, fs.FileMode(0o700), info.Mode().Perm(), "log dir mode = %v, %v", info.Mode().Perm(), err)
 }
 
 func TestLogFileNeverBlocksAndReportsDrops(t *testing.T) {
@@ -108,19 +97,13 @@ func TestLogFileNeverBlocksAndReportsDrops(t *testing.T) {
 	for i := range 10 {
 		s.Write(fmt.Appendf(nil, `{"n":%d}`+"\n", i))
 	}
-	if time.Since(start) > time.Second {
-		t.Fatal("Write blocked on a full queue")
-	}
+	require.LessOrEqual(t, time.Since(start), time.Second, "Write blocked on a full queue")
 	go s.run()
 	s.Close()
 
 	lines := readLines(t, dir)
-	if len(lines) != 3 {
-		t.Fatalf("want 2 records and a drop notice, got %v", lines)
-	}
-	if lines[2]["count"] != float64(8) {
-		t.Fatalf("drop notice = %v", lines[2])
-	}
+	require.Len(t, lines, 3, "want 2 records and a drop notice, got %v", lines)
+	require.Equal(t, float64(8), lines[2]["count"], "drop notice = %v", lines[2])
 	s.Write([]byte("after close\n")) // must not panic
 }
 
@@ -132,33 +115,25 @@ func TestLogFilePrunesOldFiles(t *testing.T) {
 		os.WriteFile(p, []byte("x\n"), 0o600)
 	}
 	logger, closer, err := OpenLog(config.LogConfig{Level: "info", Dir: dir, RetainDays: 7}, redact.New())
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	logger.Info("hello")
 	closer.Close()
-	if _, err := os.Stat(old); !os.IsNotExist(err) {
-		t.Fatal("old log file not pruned")
-	}
-	if _, err := os.Stat(other); err != nil {
-		t.Fatal("unrelated file removed")
-	}
+	_, err = os.Stat(old)
+	require.ErrorIs(t, err, fs.ErrNotExist, "old log file not pruned")
+	_, err = os.Stat(other)
+	require.NoError(t, err, "unrelated file removed")
 }
 
 func TestLogLevelOffWritesNothing(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "logs")
 	logger, closer, err := OpenLog(config.LogConfig{Level: "off", Dir: dir}, redact.New())
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	logger.Error("x")
 	closer.Close()
-	if _, err := os.Stat(dir); !os.IsNotExist(err) {
-		t.Fatal("log dir created with logging off")
-	}
-	if _, _, err := OpenLog(config.LogConfig{Level: "loud"}, redact.New()); err == nil {
-		t.Fatal("unknown level accepted")
-	}
+	_, err = os.Stat(dir)
+	require.ErrorIs(t, err, fs.ErrNotExist, "log dir created with logging off")
+	_, _, err = OpenLog(config.LogConfig{Level: "loud"}, redact.New())
+	require.Error(t, err, "unknown level accepted")
 }
 
 func TestLogLinesCarryTraceIDs(t *testing.T) {
@@ -169,9 +144,8 @@ func TestLogLinesCarryTraceIDs(t *testing.T) {
 	logger.InfoContext(ctx, "inside")
 	span.End()
 	closer.Close()
-	if l := readLines(t, dir)[0]; l["trace_id"] != span.SpanContext().TraceID().String() {
-		t.Fatalf("trace_id missing: %v", l)
-	}
+	l := readLines(t, dir)[0]
+	require.Equal(t, span.SpanContext().TraceID().String(), l["trace_id"], "trace_id missing: %v", l)
 }
 
 func exportThrough(t *testing.T, capture bool, attrs ...attribute.KeyValue) []attribute.KeyValue {
@@ -183,12 +157,9 @@ func exportThrough(t *testing.T, capture bool, attrs ...attribute.KeyValue) []at
 	span.AddEvent("e", trace.WithAttributes(attrs...))
 	span.End()
 	spans := mem.GetSpans()
-	if len(spans) != 1 {
-		t.Fatalf("want 1 span, got %d", len(spans))
-	}
-	if ev := spans[0].Events[0].Attributes; len(ev) != len(spans[0].Attributes) {
-		t.Fatalf("event attributes filtered differently: %v vs %v", ev, spans[0].Attributes)
-	}
+	require.Len(t, spans, 1, "want 1 span, got %d", len(spans))
+	ev := spans[0].Events[0].Attributes
+	require.Len(t, ev, len(spans[0].Attributes), "event attributes filtered differently: %v vs %v", ev, spans[0].Attributes)
 	return spans[0].Attributes
 }
 
@@ -205,31 +176,23 @@ func TestSpansDropContentUnlessCaptured(t *testing.T) {
 	for _, kv := range exportThrough(t, false, in...) {
 		got[kv.Key] = kv.Value.String()
 	}
-	if _, ok := got["gcp.vertex.agent.tool_call_args"]; ok {
-		t.Fatal("tool args exported without capture")
-	}
-	if _, ok := got["gcp.vertex.agent.tool_response"]; ok {
-		t.Fatal("tool response exported without capture")
-	}
-	if got["gen_ai.tool.name"] != "read_file" {
-		t.Fatalf("tool name lost: %v", got)
-	}
+	_, ok := got["gcp.vertex.agent.tool_call_args"]
+	require.False(t, ok, "tool args exported without capture")
+	_, ok = got["gcp.vertex.agent.tool_response"]
+	require.False(t, ok, "tool response exported without capture")
+	require.Equal(t, "read_file", got["gen_ai.tool.name"], "tool name lost: %v", got)
 	for k, v := range got {
-		if strings.Contains(v, secret) {
-			t.Fatalf("secret in %s: %s", k, v)
-		}
+		require.NotContains(t, v, secret, "secret in %s: %s", k, v)
 	}
 
 	got = map[attribute.Key]string{}
 	for _, kv := range exportThrough(t, true, in...) {
 		got[kv.Key] = kv.Value.String()
 	}
-	if got["gcp.vertex.agent.tool_call_args"] != `{"path":".env"}` {
-		t.Fatalf("captured args missing: %v", got)
-	}
-	if v := got["gcp.vertex.agent.tool_response"]; v == "" || strings.Contains(v, secret) {
-		t.Fatalf("captured response not masked: %q", v)
-	}
+	require.Equal(t, `{"path":".env"}`, got["gcp.vertex.agent.tool_call_args"], "captured args missing: %v", got)
+	v := got["gcp.vertex.agent.tool_response"]
+	require.NotEqual(t, "", v, "captured response not masked: %q", v)
+	require.NotContains(t, v, secret, "captured response not masked: %q", v)
 }
 
 type memLogExporter struct {
@@ -252,45 +215,33 @@ func TestTelemetryLogHandlerMasksSecrets(t *testing.T) {
 	spans, logs := tracetest.NewInMemoryExporter(), &memLogExporter{}
 	tel := NewTelemetry(config.TelemetryConfig{Enabled: true}, "test", redact.New(secret), spans, logs)
 	logger, closer, err := OpenLog(config.LogConfig{Level: "off"}, redact.New(secret), tel.LogHandler())
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	ctx, span := Start(context.Background(), "turn")
 	logger.WarnContext(ctx, "auth failed with "+secret, "detail", "key="+secret)
 	End(span, errors.New("401 for "+secret))
 	closer.Close()
 	tel.Flush(context.Background())
 	got := spans.GetSpans() // read before Shutdown, which clears the exporter
-	if err := tel.Shutdown(context.Background()); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, tel.Shutdown(context.Background()))
 
-	if len(logs.recs) != 1 {
-		t.Fatalf("want 1 exported log record, got %d", len(logs.recs))
-	}
+	require.Len(t, logs.recs, 1, "want 1 exported log record, got %d", len(logs.recs))
 	rec := logs.recs[0]
 	text := rec.Body().String()
 	rec.WalkAttributes(func(kv attribute.KeyValue) bool { text += " " + kv.Value.String(); return true })
-	if strings.Contains(text, secret) || !strings.Contains(text, "auth failed") {
-		t.Fatalf("log record not masked: %s", text)
-	}
-	if rec.TraceID() != span.SpanContext().TraceID() {
-		t.Fatal("log record not linked to the span")
-	}
+	require.NotContains(t, text, secret, "log record not masked: %s", text)
+	require.Contains(t, text, "auth failed", "log record not masked: %s", text)
+	require.Equal(t, span.SpanContext().TraceID(), rec.TraceID(), "log record not linked to the span")
 
-	if len(got) != 1 || strings.Contains(got[0].Status.Description, secret) {
-		t.Fatalf("span status not masked: %+v", got)
-	}
+	require.Len(t, got, 1, "span status not masked: %+v", got)
+	require.NotContains(t, got[0].Status.Description, secret, "span status not masked: %+v", got)
 }
 
 func TestTelemetryOffIsNil(t *testing.T) {
 	tel, err := StartTelemetry(context.Background(), config.TelemetryConfig{}, "v", redact.New())
-	if tel != nil || err != nil {
-		t.Fatalf("got %v, %v", tel, err)
-	}
-	if tel.LogHandler() != nil || tel.Shutdown(context.Background()) != nil {
-		t.Fatal("nil telemetry must be a no-op")
-	}
+	require.Nil(t, tel, "got %v, %v", tel, err)
+	require.NoError(t, err, "got %v,", tel)
+	require.Nil(t, tel.LogHandler(), "nil telemetry must be a no-op")
+	require.NoError(t, tel.Shutdown(context.Background()), "nil telemetry must be a no-op")
 }
 
 // StartTelemetry's real OTLP/HTTP exporters must post to <endpoint>/v1/traces
@@ -307,34 +258,26 @@ func TestStartTelemetryExportsOverOTLPHTTP(t *testing.T) {
 	defer srv.Close()
 
 	tel, err := StartTelemetry(context.Background(), config.TelemetryConfig{Enabled: true, Endpoint: srv.URL + "/"}, "test", redact.New())
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	logger := slog.New(tel.LogHandler())
 	ctx, span := Start(context.Background(), "turn")
 	logger.InfoContext(ctx, "hello")
 	End(span, nil)
-	if err := tel.Shutdown(context.Background()); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, tel.Shutdown(context.Background()))
 	mu.Lock()
 	defer mu.Unlock()
-	if paths["/v1/traces"] == 0 || paths["/v1/logs"] == 0 {
-		t.Fatalf("collector received %v", paths)
-	}
+	require.NotEqual(t, 0, paths["/v1/traces"], "collector received %v", paths)
+	require.NotEqual(t, 0, paths["/v1/logs"], "collector received %v", paths)
 }
 
 func TestEndpointDefaultsToPlainHTTP(t *testing.T) {
 	t.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "")
 	t.Setenv("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", "")
-	if got := endpointFor("", "TRACES"); got != "http://localhost:4318" {
-		t.Fatalf("default = %q", got)
-	}
-	if got := endpointFor("https://otel.example.com/", "TRACES"); got != "https://otel.example.com" {
-		t.Fatalf("configured = %q", got)
-	}
+	got := endpointFor("", "TRACES")
+	require.Equal(t, "http://localhost:4318", got, "default = %q", got)
+	got = endpointFor("https://otel.example.com/", "TRACES")
+	require.Equal(t, "https://otel.example.com", got, "configured = %q", got)
 	t.Setenv("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", "https://x/v1/traces")
-	if got := endpointFor("", "TRACES"); got != "" {
-		t.Fatalf("env endpoint must be left to the exporter, got %q", got)
-	}
+	got = endpointFor("", "TRACES")
+	require.Equal(t, "", got, "env endpoint must be left to the exporter, got %q", got)
 }

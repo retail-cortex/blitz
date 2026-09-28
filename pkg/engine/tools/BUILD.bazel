@@ -158,6 +158,8 @@ go_test(
         "//pkg/engine/breaker",
         "//pkg/engine/skills",
         "@com_github_modelcontextprotocol_go_sdk//mcp",
+        "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//require",
         "@org_golang_google_adk_v2//agent",
         "@org_golang_google_adk_v2//model",
         "@org_golang_google_adk_v2//session",

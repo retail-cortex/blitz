@@ -20,6 +20,8 @@ import (
 	"testing"
 
 	"github.com/retail-cortex/blitz/pkg/secrets"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestConfigKeyCommands(t *testing.T) {
@@ -38,39 +40,32 @@ func TestConfigKeyCommands(t *testing.T) {
 		return out.String(), err
 	}
 
-	if _, err := run("sk-ant-cli\n", "config", "set-key", "anthropic"); err != nil {
-		t.Fatal(err)
-	}
-	if v, _ := store.Get("global/llm.anthropic.api_key"); v != "sk-ant-cli" {
-		t.Errorf("stored %q", v)
-	}
+	_, err := run("sk-ant-cli\n", "config", "set-key", "anthropic")
+	require.NoError(t, err)
+	v, _ := store.Get("global/llm.anthropic.api_key")
+	assert.Equal(t, "sk-ant-cli", v, "stored %q", v)
 	out, err := run("", "config", "keys")
-	if err != nil || !strings.Contains(out, "anthropic  keychain") || strings.Contains(out, "sk-ant-cli") {
-		t.Errorf("keys:\n%s %v", out, err)
-	}
+	assert.NoError(t, err, "keys:\n%s", out)
+	assert.Contains(t, out, "anthropic  keychain", "keys:\n%s %v", out, err)
+	assert.NotContains(t, out, "sk-ant-cli", "keys:\n%s %v", out, err)
 
 	// The workspace's own key, for the current directory.
-	if _, err := run("AIza-ws\n", "config", "set-key", "--workspace", "gemini"); err != nil {
-		t.Fatal(err)
-	}
+	_, err = run("AIza-ws\n", "config", "set-key", "--workspace", "gemini")
+	require.NoError(t, err)
 	out, _ = run("", "config", "keys", "-w")
-	if !strings.Contains(out, "gemini     keychain") || !strings.Contains(out, "anthropic  inherited") {
-		t.Errorf("workspace keys:\n%s", out)
-	}
-	if _, err := run("", "config", "remove-key", "-w", "gemini"); err != nil {
-		t.Fatal(err)
-	}
-	if out, _ = run("", "config", "keys", "-w"); !strings.Contains(out, "gemini     none") {
-		t.Errorf("after remove:\n%s", out)
-	}
+	assert.Contains(t, out, "gemini     keychain", "workspace keys:\n%s", out)
+	assert.Contains(t, out, "anthropic  inherited", "workspace keys:\n%s", out)
+	_, err = run("", "config", "remove-key", "-w", "gemini")
+	require.NoError(t, err)
+	out, _ = run("", "config", "keys", "-w")
+	assert.Contains(t, out, "gemini     none", "after remove")
 
 	for name, args := range map[string][]string{
 		"no key":       {"config", "set-key", "openai"},
 		"not keyed":    {"config", "set-key", "ollama"},
 		"nothing here": {"config", "secure-key", "openai"},
 	} {
-		if _, err := run("", args...); err == nil {
-			t.Errorf("%s: no error", name)
-		}
+		_, err := run("", args...)
+		assert.Error(t, err, "%s: no error", name)
 	}
 }

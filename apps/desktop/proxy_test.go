@@ -30,6 +30,8 @@ import (
 	"github.com/retail-cortex/blitz/pkg/engine/runtime"
 	"github.com/retail-cortex/blitz/pkg/socket"
 	pb "github.com/retail-cortex/blitz/proto/blitz/v1"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/genai"
 )
 
@@ -39,9 +41,7 @@ func TestProxyReachesTheService(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("MODENV_PREFIX", "")
 	dir, err := os.MkdirTemp("/tmp", "cpd") // socket paths must be short
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	t.Cleanup(func() { os.RemoveAll(dir) })
 	path := filepath.Join(dir, "s.sock")
 
@@ -53,9 +53,7 @@ func TestProxyReachesTheService(t *testing.T) {
 		return engine.Open(ctx, cfg, engine.Options{Model: runtime.NewMockLLM("m", create, genai.NewContentFromText("done", genai.RoleModel))})
 	})
 	l, err := socket.Listen(path)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	ctx, cancel := context.WithCancel(context.Background())
 	go servicetest.Serve(ctx, l, s.Handler(), time.Second)
 	t.Cleanup(func() { cancel(); s.Close() })
@@ -65,36 +63,30 @@ func TestProxyReachesTheService(t *testing.T) {
 	sessions := pb.NewSessionServiceClient(http.DefaultClient, page.URL)
 	ws := t.TempDir()
 	sess, err := sessions.NewSession(context.Background(), connect.NewRequest(&pb.NewSessionRequest{Workspace: ws}))
-	if err != nil {
-		t.Fatalf("through the proxy: %v", err)
-	}
+	require.NoError(t, err, "through the proxy")
 	stream, err := sessions.RunTurn(context.Background(), connect.NewRequest(&pb.RunTurnRequest{Workspace: ws, SessionId: sess.Msg.Session.Id, Turn: &pb.Turn{Text: "go"}}))
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	var output string
 	for stream.Receive() {
 		ev := stream.Msg().Event
 		if ar := ev.GetApprovalRequest(); ar != nil {
-			if _, err := sessions.Approve(context.Background(), connect.NewRequest(&pb.ApproveRequest{Workspace: ws, RequestId: ar.RequestId, Decision: pb.Decision_DECISION_ONCE})); err != nil {
-				t.Errorf("approve: %v", err)
-			}
+			_, err := sessions.Approve(context.Background(), connect.NewRequest(&pb.ApproveRequest{Workspace: ws, RequestId: ar.RequestId, Decision: pb.Decision_DECISION_ONCE}))
+			assert.NoError(t, err, "approve")
 		}
 		if f := ev.GetFinished(); f != nil {
 			output = f.Output
 		}
 	}
-	if err := stream.Err(); err != nil || output != "done" {
-		t.Fatalf("streamed turn: %q %v", output, err)
-	}
-	if _, err := os.Stat(filepath.Join(ws, "a.txt")); err != nil {
-		t.Errorf("approved write: %v", err)
-	}
+	err = stream.Err()
+	require.NoError(t, err, "streamed turn: %q", output)
+	require.Equal(t, "done", output, "streamed turn: %q %v", output, err)
+	_, err = os.Stat(filepath.Join(ws, "a.txt"))
+	assert.NoError(t, err, "approved write")
 
 	// Only the API is forwarded.
-	if res, err := http.Get(page.URL + "/index.html"); err != nil || res.StatusCode != http.StatusNotFound {
-		t.Errorf("non-API path: %v %v", res, err)
-	}
+	res, err := http.Get(page.URL + "/index.html")
+	assert.NoError(t, err, "non-API path: %v", res)
+	assert.Equal(t, http.StatusNotFound, res.StatusCode, "non-API path: %v %v", res, err)
 }
 
 // With no service, the page gets an error its client can read.
@@ -103,7 +95,5 @@ func TestProxyWithoutAService(t *testing.T) {
 	defer page.Close()
 	c := pb.NewWorkspaceServiceClient(http.DefaultClient, page.URL)
 	_, err := c.GetModel(context.Background(), connect.NewRequest(&pb.GetModelRequest{Workspace: "/x"}))
-	if connect.CodeOf(err) != connect.CodeUnavailable {
-		t.Errorf("err %v (code %v)", err, connect.CodeOf(err))
-	}
+	assert.Equal(t, connect.CodeUnavailable, connect.CodeOf(err), "err %v (code %v)", err, connect.CodeOf(err))
 }

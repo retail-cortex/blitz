@@ -17,8 +17,10 @@ package main
 import (
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestIdentify(t *testing.T) {
@@ -32,25 +34,21 @@ func TestIdentify(t *testing.T) {
 		"GNU GENERAL PUBLIC LICENSE Version 3":                                             "",
 		"All rights reserved.":                                                             "",
 	} {
-		if got := identify(text); got != want {
-			t.Errorf("identify(%q) = %q, want %q", text[:20], got, want)
-		}
+		got := identify(text)
+		assert.Equal(t, want, got, "identify(%q) = %q, want %q", text[:20], got, want)
 	}
 }
 
 func TestNames(t *testing.T) {
-	if got := repoName("github.com/pkg/errors"); got != "com_github_pkg_errors" {
-		t.Errorf("repoName: %s", got)
-	}
-	if got := repoName("gopkg.in/yaml.v3"); got != "in_gopkg_yaml_v3" {
-		t.Errorf("repoName: %s", got)
-	}
-	if got := storeDir("react-dom@19.3.0(react@19.3.0)"); got != "react-dom@19.3.0_react@19.3.0" {
-		t.Errorf("storeDir: %s", got)
-	}
-	if n, v := splitNpmKey("@codemirror/view@6.43.13"); n != "@codemirror/view" || v != "6.43.13" {
-		t.Errorf("splitNpmKey: %s %s", n, v)
-	}
+	got := repoName("github.com/pkg/errors")
+	assert.Equal(t, "com_github_pkg_errors", got, "repoName: %s", got)
+	got = repoName("gopkg.in/yaml.v3")
+	assert.Equal(t, "in_gopkg_yaml_v3", got, "repoName: %s", got)
+	got = storeDir("react-dom@19.3.0(react@19.3.0)")
+	assert.Equal(t, "react-dom@19.3.0_react@19.3.0", got, "storeDir: %s", got)
+	n, v := splitNpmKey("@codemirror/view@6.43.13")
+	assert.Equal(t, "@codemirror/view", n, "splitNpmKey: %s %s", n, v)
+	assert.Equal(t, "6.43.13", v, "splitNpmKey: %s %s", n, v)
 }
 
 // A component with no license file, or an unaccepted one, is refused;
@@ -58,24 +56,20 @@ func TestNames(t *testing.T) {
 func TestReadComponent(t *testing.T) {
 	dir := t.TempDir()
 	write := func(name, text string) {
-		if err := os.WriteFile(filepath.Join(dir, name), []byte(text), 0o644); err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, os.WriteFile(filepath.Join(dir, name), []byte(text), 0o644))
 	}
-	if _, err := readComponent("x", "1", dir); err == nil || !strings.Contains(err.Error(), "no license file") {
-		t.Errorf("no file: %v", err)
-	}
+	_, err := readComponent("x", "1", dir)
+	assert.Error(t, err, "no file")
+	assert.Contains(t, err.Error(), "no license file", "no file: %v", err)
 	write("package.json", `{"license": "MIT", "author": {"name": "Ada"}}`)
 	c, err := readNpm("x", "1", dir)
-	if err != nil || c.license != "MIT" || !strings.Contains(c.texts["package.json"], "Author: Ada") {
-		t.Errorf("package.json fallback: %+v %v", c, err)
-	}
+	assert.NoError(t, err, "package.json fallback: %+v", c)
+	assert.Equal(t, "MIT", c.license, "package.json fallback: %+v %v", c, err)
+	assert.Contains(t, c.texts["package.json"], "Author: Ada", "package.json fallback: %+v %v", c, err)
 	write("package.json", `{"license": "GPL-3.0"}`)
-	if _, err := readNpm("x", "1", dir); err == nil {
-		t.Error("GPL accepted")
-	}
+	_, err = readNpm("x", "1", dir)
+	assert.Error(t, err, "GPL accepted")
 	write("LICENSE", "GNU GENERAL PUBLIC LICENSE Version 3")
-	if _, err := readComponent("x", "1", dir); err == nil {
-		t.Error("an unaccepted license file accepted")
-	}
+	_, err = readComponent("x", "1", dir)
+	assert.Error(t, err, "an unaccepted license file accepted")
 }

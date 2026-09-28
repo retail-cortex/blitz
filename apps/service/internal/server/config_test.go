@@ -18,12 +18,13 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 
 	"connectrpc.com/connect"
 	"github.com/retail-cortex/blitz/pkg/secrets"
 	pb "github.com/retail-cortex/blitz/proto/blitz/v1"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestConfigService(t *testing.T) {
@@ -39,42 +40,32 @@ func TestConfigService(t *testing.T) {
 	ctx := context.Background()
 
 	// A global key goes to the keychain; the description never shows it.
-	if _, err := cfg.SetApiKey(ctx, connect.NewRequest(&pb.SetApiKeyRequest{Provider: "anthropic", Key: "sk-ant-secret"})); err != nil {
-		t.Fatal(err)
-	}
+	_, err := cfg.SetApiKey(ctx, connect.NewRequest(&pb.SetApiKeyRequest{Provider: "anthropic", Key: "sk-ant-secret"}))
+	require.NoError(t, err)
 	desc, err := cfg.DescribeConfig(ctx, connect.NewRequest(&pb.DescribeConfigRequest{}))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if strings.Contains(desc.Msg.String(), "sk-ant-secret") {
-		t.Error("the description shows the key")
-	}
+	require.NoError(t, err)
+	assert.NotContains(t, desc.Msg.String(), "sk-ant-secret", "the description shows the key")
 	for _, p := range desc.Msg.Providers {
-		if p.Name == "anthropic" && p.KeySource != pb.KeySource_KEY_SOURCE_KEYCHAIN {
-			t.Errorf("anthropic: %v", p)
-		}
+		assert.False(t, p.Name == "anthropic" && p.KeySource != pb.KeySource_KEY_SOURCE_KEYCHAIN, "anthropic: %v", p)
 	}
-	if file, _ := cfg.GetConfigFile(ctx, connect.NewRequest(&pb.GetConfigFileRequest{})); !strings.Contains(file.Msg.Text, `"keychain:global/llm.anthropic.api_key"`) {
-		t.Errorf("file:\n%s", file.Msg.Text)
-	}
+	file, _ := cfg.GetConfigFile(ctx, connect.NewRequest(&pb.GetConfigFileRequest{}))
+	assert.Contains(t, file.Msg.Text, `"keychain:global/llm.anthropic.api_key"`, "file:\n%s", file.Msg.Text)
 
 	// A workspace key while the workspace is open: it reloads.
 	dir := t.TempDir()
-	if _, err := c.workspaces.ListAgents(ctx, connect.NewRequest(&pb.ListAgentsRequest{Workspace: dir})); err != nil {
-		t.Fatal(err)
-	}
+	_, openErr := c.workspaces.ListAgents(ctx, connect.NewRequest(&pb.ListAgentsRequest{Workspace: dir}))
+	require.NoError(t, openErr, "opening the workspace")
 	res, err := cfg.SetApiKey(ctx, connect.NewRequest(&pb.SetApiKeyRequest{Workspace: dir, Provider: "gemini", Key: "AIza-project"}))
-	if err != nil || res.Msg.Change.ModelError != "" || !strings.Contains(res.Msg.Change.Path, "/.blitz/workspaces/") {
-		t.Errorf("workspace key: %v %v", res, err)
-	}
+	assert.NoError(t, err, "workspace key: %v", res)
+	assert.Equal(t, "", res.Msg.Change.ModelError, "workspace key: %v %v", res, err)
+	assert.Contains(t, res.Msg.Change.Path, "/.blitz/workspaces/", "workspace key: %v %v", res, err)
 	wdesc, _ := cfg.DescribeConfig(ctx, connect.NewRequest(&pb.DescribeConfigRequest{Workspace: dir}))
 	sources := map[string]pb.KeySource{}
 	for _, p := range wdesc.Msg.Providers {
 		sources[p.Name] = p.KeySource
 	}
-	if sources["gemini"] != pb.KeySource_KEY_SOURCE_KEYCHAIN || sources["anthropic"] != pb.KeySource_KEY_SOURCE_INHERITED {
-		t.Errorf("workspace sources: %v", sources)
-	}
+	assert.Equal(t, pb.KeySource_KEY_SOURCE_KEYCHAIN, sources["gemini"], "workspace sources: %v", sources)
+	assert.Equal(t, pb.KeySource_KEY_SOURCE_INHERITED, sources["anthropic"], "workspace sources: %v", sources)
 
 	// Bad input is refused as such.
 	for _, call := range []func() error{
@@ -91,12 +82,10 @@ func TestConfigService(t *testing.T) {
 			return err
 		},
 	} {
-		if err := call(); connect.CodeOf(err) != connect.CodeInvalidArgument {
-			t.Errorf("want invalid argument, got %v", err)
-		}
+		err := call()
+		assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err), "want invalid argument, got %v", err)
 	}
 	saved, err := cfg.SaveConfigFile(ctx, connect.NewRequest(&pb.SaveConfigFileRequest{Text: "[llm]\nprovider = \"gemini\"\nnope = 1\n"}))
-	if err != nil || len(saved.Msg.Warnings) != 1 {
-		t.Errorf("save: %v %v", saved, err)
-	}
+	assert.NoError(t, err, "save: %v", saved)
+	assert.Len(t, saved.Msg.Warnings, 1, "save: %v %v", saved, err)
 }

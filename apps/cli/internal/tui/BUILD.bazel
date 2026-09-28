@@ -122,6 +122,8 @@ go_test(
         "//pkg/i18n",
         "//pkg/images",
         "@com_github_ergochat_readline//:readline",
+        "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//require",
         "@org_golang_google_adk_v2//model",
         "@org_golang_google_adk_v2//session",
         "@org_golang_google_genai//:genai",

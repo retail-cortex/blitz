@@ -18,6 +18,7 @@ import (
 	"bytes"
 	"encoding/xml"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	goruntime "runtime"
@@ -25,6 +26,8 @@ import (
 	"testing"
 
 	"github.com/retail-cortex/blitz/pkg/loginitem"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestServiceInstallAndUninstall(t *testing.T) {
@@ -34,9 +37,7 @@ func TestServiceInstallAndUninstall(t *testing.T) {
 	isolate(t)
 	// The login item runs blitzd, found on PATH here.
 	bin := t.TempDir()
-	if err := os.WriteFile(filepath.Join(bin, "blitzd"), []byte("#!/bin/sh\n"), 0o755); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(filepath.Join(bin, "blitzd"), []byte("#!/bin/sh\n"), 0o755))
 	t.Setenv("PATH", bin)
 	var ran []string
 	old := loginitem.RunSystem
@@ -47,18 +48,12 @@ func TestServiceInstallAndUninstall(t *testing.T) {
 	t.Cleanup(func() { loginitem.RunSystem = old })
 
 	var out bytes.Buffer
-	if err := serviceInstall(&out); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, serviceInstall(&out))
 	path, _ := loginitem.Path()
 	data, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("login item not written: %v", err)
-	}
+	require.NoError(t, err, "login item not written")
 	unit := string(data)
-	if !strings.Contains(unit, filepath.Join(bin, "blitzd")) {
-		t.Errorf("unit doesn't run blitzd:\n%s", unit)
-	}
+	assert.Contains(t, unit, filepath.Join(bin, "blitzd"), "unit doesn't run blitzd:\n%s", unit)
 	switch goruntime.GOOS {
 	case "darwin":
 		dec := xml.NewDecoder(strings.NewReader(unit))
@@ -69,43 +64,32 @@ func TestServiceInstallAndUninstall(t *testing.T) {
 				t.Fatalf("plist isn't well-formed: %v", err)
 			}
 		}
-		if len(ran) != 2 || !strings.HasPrefix(ran[1], "launchctl bootstrap gui/") {
-			t.Errorf("ran %q", ran)
-		}
+		assert.Len(t, ran, 2, "ran %q", ran)
+		assert.True(t, strings.HasPrefix(ran[1], "launchctl bootstrap gui/"), "ran %q", ran)
 	case "linux":
-		if len(ran) != 3 || ran[1] != "systemctl --user enable blitz.service" || ran[2] != "systemctl --user restart blitz.service" {
-			t.Errorf("ran %q", ran)
-		}
+		assert.Len(t, ran, 3, "ran %q", ran)
+		assert.Equal(t, "systemctl --user enable blitz.service", ran[1], "ran %q", ran)
+		assert.Equal(t, "systemctl --user restart blitz.service", ran[2], "ran %q", ran)
 	}
 	out.Reset()
 	serviceStatus(&out)
-	if !strings.Contains(out.String(), "login item: installed") {
-		t.Errorf("status:\n%s", out.String())
-	}
+	assert.Contains(t, out.String(), "login item: installed", "status:\n%s", out.String())
 
 	ran = nil
-	if err := serviceUninstall(&out); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := os.Stat(path); !os.IsNotExist(err) {
-		t.Error("login item left behind")
-	}
-	if len(ran) == 0 {
-		t.Error("the service wasn't stopped")
-	}
+	require.NoError(t, serviceUninstall(&out))
+	_, err = os.Stat(path)
+	assert.ErrorIs(t, err, fs.ErrNotExist, "login item left behind")
+	assert.NotEqual(t, 0, len(ran), "the service wasn't stopped")
 }
 
 // A key only exported in the shell won't reach a login item.
 func TestKeysOnlyInEnvironment(t *testing.T) {
 	isolate(t)
-	if got := keysOnlyInEnvironment(); len(got) != 0 {
-		t.Errorf("no keys: %v", got)
-	}
+	got := keysOnlyInEnvironment()
+	assert.Len(t, got, 0, "no keys: %v", got)
 	t.Setenv("OPENAI_API_KEY", "sk-test-only-in-shell")
-	if got := keysOnlyInEnvironment(); len(got) != 1 || got[0] != "OPENAI_API_KEY" {
-		t.Errorf("shell-only key: %v", got)
-	}
-	if os.Getenv("OPENAI_API_KEY") != "sk-test-only-in-shell" {
-		t.Error("the environment wasn't restored")
-	}
+	got = keysOnlyInEnvironment()
+	assert.Len(t, got, 1, "shell-only key: %v", got)
+	assert.Equal(t, "OPENAI_API_KEY", got[0], "shell-only key: %v", got)
+	assert.Equal(t, "sk-test-only-in-shell", os.Getenv("OPENAI_API_KEY"), "the environment wasn't restored")
 }

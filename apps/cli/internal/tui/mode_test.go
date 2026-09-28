@@ -19,6 +19,9 @@ import (
 	"context"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestModeCommand(t *testing.T) {
@@ -32,13 +35,10 @@ func TestModeCommand(t *testing.T) {
 		"Permission mode: accept-edits", "Usage: /mode default|accept-edits|plan|dont-ask|bypass",
 		"[accept-edits]", // the prompt shows a mode other than default
 	} {
-		if !strings.Contains(out, want) {
-			t.Errorf("missing %q in:\n%s", want, out)
-		}
+		assert.Contains(t, out, want, "missing %q in:\n%s", want, out)
 	}
-	if got := app.Workspace.Settings().PermissionMode; got != "accept-edits" {
-		t.Errorf("mode %q", got)
-	}
+	got := app.Workspace.Settings().PermissionMode
+	assert.Equal(t, "accept-edits", got, "mode %q", got)
 }
 
 func TestEffortCommand(t *testing.T) {
@@ -49,13 +49,10 @@ func TestEffortCommand(t *testing.T) {
 		"Reasoning effort: auto (each model's own)", "Reasoning effort: high",
 		"Usage: /effort minimal|low|medium|high|max|auto", "Effort:",
 	} {
-		if !strings.Contains(out, want) {
-			t.Errorf("missing %q in:\n%s", want, out)
-		}
+		assert.Contains(t, out, want, "missing %q in:\n%s", want, out)
 	}
-	if got := app.Workspace.Settings().Effort; got != "" {
-		t.Errorf("effort after auto: %q", got)
-	}
+	got := app.Workspace.Settings().Effort
+	assert.Equal(t, "", got, "effort after auto: %q", got)
 }
 
 func TestCycleModeSkipsAnUnavailableBypass(t *testing.T) {
@@ -72,7 +69,5 @@ func TestCycleModeSkipsAnUnavailableBypass(t *testing.T) {
 	} else {
 		want = append(want, "default", "accept-edits")
 	}
-	if strings.Join(seen, ",") != strings.Join(want, ",") {
-		t.Fatalf("cycle %v, want %v", seen, want)
-	}
+	require.Equal(t, strings.Join(want, ","), strings.Join(seen, ","), "cycle %v, want %v", seen, want)
 }

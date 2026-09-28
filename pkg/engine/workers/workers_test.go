@@ -23,6 +23,8 @@ import (
 	"time"
 
 	"github.com/retail-cortex/blitz/pkg/api"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestParseSchedule(t *testing.T) {
@@ -50,40 +52,32 @@ func TestParseSchedule(t *testing.T) {
 		"Every Sunday at 7:15 a.m.": "15 7 * * 0",
 	} {
 		s, err := ParseSchedule(text, "")
-		if err != nil || s.Cron != want {
-			t.Errorf("%q: cron %q, %v; want %q", text, s.Cron, err, want)
-		}
+		assert.NoError(t, err, "%q: cron %q, %v; want %q", text, s.Cron, err, want)
+		assert.Equal(t, want, s.Cron, "%q: cron %q, %v; want %q", text, s.Cron, err, want)
 	}
 	for _, text := range []string{"", "sometimes", "every blue moon", "daily at 25:00", "daily at 13 pm", "every funday at 9", "* * *"} {
-		if _, err := ParseSchedule(text, ""); err == nil {
-			t.Errorf("%q was accepted", text)
-		}
+		_, err := ParseSchedule(text, "")
+		assert.Error(t, err, "%q was accepted", text)
 	}
-	if _, err := ParseSchedule("@daily", "Mars/Olympus"); err == nil {
-		t.Error("an unknown time zone was accepted")
-	}
+	_, err := ParseSchedule("@daily", "Mars/Olympus")
+	assert.Error(t, err, "an unknown time zone was accepted")
 }
 
 func TestScheduleNextUsesItsTimeZone(t *testing.T) {
 	s, err := ParseSchedule("daily at 6 AM", "America/Chicago")
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	chicago, _ := time.LoadLocation("America/Chicago")
 	from := time.Date(2026, 9, 26, 12, 0, 0, 0, time.UTC) // 7 AM in Chicago
 	want := time.Date(2026, 9, 27, 6, 0, 0, 0, chicago)
-	if got := s.Next(from); !got.Equal(want) {
-		t.Errorf("next %v, want %v", got, want)
-	}
+	got := s.Next(from)
+	assert.True(t, got.Equal(want), "next %v, want %v", got, want)
 }
 
 func writeWorker(t *testing.T, root, name, content string) string {
 	t.Helper()
 	dir := filepath.Join(root, name)
 	os.MkdirAll(dir, 0o755)
-	if err := os.WriteFile(filepath.Join(dir, FileName), []byte(content), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(filepath.Join(dir, FileName), []byte(content), 0o644))
 	return dir
 }
 
@@ -101,21 +95,23 @@ func TestLoadWorker(t *testing.T) {
 	root := t.TempDir()
 	dir := writeWorker(t, root, "deps", valid)
 	w, err := Load(dir)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if w.Name != "deps" || w.Schedule.Cron != "0 6 * * *" || w.Schedule.Location.String() != "America/Chicago" ||
-		len(w.Permissions) != 2 || w.Limits.MaxTurns != 30 || w.Limits.Timeout != 20*time.Minute ||
-		w.Overlap != "skip" || w.CatchUp != "none" || !strings.HasPrefix(w.Prompt, "Check for outdated") || !strings.HasPrefix(w.Hash, "sha256:") {
-		t.Errorf("worker %+v", w)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, "deps", w.Name, "worker %+v", w)
+	assert.Equal(t, "0 6 * * *", w.Schedule.Cron, "worker %+v", w)
+	assert.Equal(t, "America/Chicago", w.Schedule.Location.String(), "worker %+v", w)
+	assert.Len(t, w.Permissions, 2, "worker %+v", w)
+	assert.Equal(t, 30, w.Limits.MaxTurns, "worker %+v", w)
+	assert.Equal(t, 20*time.Minute, w.Limits.Timeout, "worker %+v", w)
+	assert.Equal(t, "skip", w.Overlap, "worker %+v", w)
+	assert.Equal(t, "none", w.CatchUp, "worker %+v", w)
+	assert.True(t, strings.HasPrefix(w.Prompt, "Check for outdated"), "worker %+v", w)
+	assert.True(t, strings.HasPrefix(w.Hash, "sha256:"), "worker %+v", w)
 
 	// Any change to the worker's files changes its hash.
 	before := w.Hash
 	os.WriteFile(filepath.Join(dir, "template.md"), []byte("# Report"), 0o644)
-	if w2, _ := Load(dir); w2.Hash == before {
-		t.Error("adding a file didn't change the hash")
-	}
+	w2, _ := Load(dir)
+	assert.NotEqual(t, before, w2.Hash, "adding a file didn't change the hash")
 }
 
 func TestLoadRejectsBadWorkers(t *testing.T) {
@@ -133,9 +129,8 @@ func TestLoadRejectsBadWorkers(t *testing.T) {
 	} {
 		_, err := Load(writeWorker(t, root, name, content))
 		var invalid *InvalidError
-		if err == nil || (!errors.As(err, &invalid) && name != "no-frontmatter" && name != "misspelled") {
-			t.Errorf("%s: %v", name, err)
-		}
+		assert.Error(t, err, "%s", name)
+		assert.False(t, !errors.As(err, &invalid) && name != "no-frontmatter" && name != "misspelled", "%s: %v", name, err)
 	}
 }
 
@@ -145,27 +140,22 @@ func TestDiscover(t *testing.T) {
 	writeWorker(t, root, "broken", "---\nschedule: whenever\n---\ndo it\n")
 	os.MkdirAll(filepath.Join(root, "notes"), 0o755) // no WORKER.md: ignored
 	list, err := Discover(root, filepath.Join(root, "missing"))
-	if err != nil || len(list) != 2 {
-		t.Fatalf("found %d workers, %v", len(list), err)
-	}
+	require.NoError(t, err, "found %d workers,", len(list))
+	require.Len(t, list, 2, "found %d workers, %v", len(list), err)
 	invalid := 0
 	for _, f := range list {
 		if f.Err != nil {
 			invalid++
 		}
 	}
-	if invalid != 1 {
-		t.Errorf("%d invalid, want 1", invalid)
-	}
+	assert.Equal(t, 1, invalid, "%d invalid, want 1", invalid)
 }
 
 func TestPermissions(t *testing.T) {
 	var perms []Permission
 	for _, s := range []string{"shell:go list -m -u all", "shell:git log *", "shell:make lint && make test", "write:reports/", "delete:tmp/*.log", "web:proxy.golang.org", "mcp:github:create_*"} {
 		p, err := ParsePermission(s)
-		if err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, err)
 		perms = append(perms, p)
 	}
 	req := func(kind api.ActionKind, targets ...string) api.ApprovalRequest {
@@ -199,13 +189,11 @@ func TestPermissions(t *testing.T) {
 		{req(api.ActionMCP, "github:delete_repo"), false},
 		{req(api.ActionWrite), false}, // nothing to match
 	} {
-		if got := Allows(perms, c.req); got != c.want {
-			t.Errorf("%v %v: %v, want %v", c.req.Kind, c.req.Targets, got, c.want)
-		}
+		got := Allows(perms, c.req)
+		assert.Equal(t, c.want, got, "%v %v: %v, want %v", c.req.Kind, c.req.Targets, got, c.want)
 	}
 	for _, bad := range []string{"read:x", "shell", "write:../x", "write:/abs", "web:"} {
-		if _, err := ParsePermission(bad); err == nil {
-			t.Errorf("%q accepted", bad)
-		}
+		_, err := ParsePermission(bad)
+		assert.Error(t, err, "%q accepted", bad)
 	}
 }

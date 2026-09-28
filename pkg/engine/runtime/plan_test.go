@@ -18,9 +18,11 @@ import (
 	"context"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestPlanModeRefusesChangesButAllowsReading(t *testing.T) {
@@ -31,18 +33,13 @@ func TestPlanModeRefusesChangesButAllowsReading(t *testing.T) {
 	os.WriteFile(filepath.Join(f.cfg.Tools.WorkspaceDir, "notes.txt"), []byte("existing notes"), 0o600)
 
 	got, err := functionResponses(t, f.eng, "s", PlanPrompt("add a file"), WithPlanOnly())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if e, _ := got["create_file"]["error"].(string); !strings.Contains(e, "plan mode") {
-		t.Fatalf("create_file not refused: %v", got["create_file"])
-	}
-	if _, err := os.Stat(filepath.Join(f.cfg.Tools.WorkspaceDir, "new.txt")); err == nil {
-		t.Fatal("file created in plan mode")
-	}
-	if c, _ := got["read_file"]["content"].(string); !strings.Contains(c, "existing notes") {
-		t.Fatalf("read_file blocked in plan mode: %v", got["read_file"])
-	}
+	require.NoError(t, err)
+	e, _ := got["create_file"]["error"].(string)
+	require.Contains(t, e, "plan mode", "create_file not refused: %v", got["create_file"])
+	_, err = os.Stat(filepath.Join(f.cfg.Tools.WorkspaceDir, "new.txt"))
+	require.Error(t, err, "file created in plan mode")
+	c, _ := got["read_file"]["content"].(string)
+	require.Contains(t, c, "existing notes", "read_file blocked in plan mode: %v", got["read_file"])
 }
 
 func TestPlanModeCoversSubagents(t *testing.T) {
@@ -51,12 +48,10 @@ func TestPlanModeCoversSubagents(t *testing.T) {
 		toolCall("create_file", map[string]any{"path": "sub.txt", "content": "x"}), // the sub-agent tries to write
 		textContent("sub-agent done"),
 		textContent("plan ready"))
-	if _, err := functionResponses(t, f.eng, "s", PlanPrompt("tests"), WithPlanOnly()); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := os.Stat(filepath.Join(f.cfg.Tools.WorkspaceDir, "sub.txt")); err == nil {
-		t.Fatal("sub-agent wrote a file in plan mode")
-	}
+	_, err := functionResponses(t, f.eng, "s", PlanPrompt("tests"), WithPlanOnly())
+	require.NoError(t, err)
+	_, err = os.Stat(filepath.Join(f.cfg.Tools.WorkspaceDir, "sub.txt"))
+	require.Error(t, err, "sub-agent wrote a file in plan mode")
 	// The sub-agent really ran and was refused (not skipped): its second
 	// model call carries the refusal of its create_file.
 	refused := false
@@ -70,33 +65,26 @@ func TestPlanModeCoversSubagents(t *testing.T) {
 			}
 		}
 	}
-	if !refused {
-		t.Fatal("sub-agent's create_file was never attempted and refused")
-	}
+	require.True(t, refused, "sub-agent's create_file was never attempted and refused")
 }
 
 func TestWithoutPlanModeToolsRunNormally(t *testing.T) {
 	f := newEngineWith(t, fixtureOpts{},
 		toolCall("create_file", map[string]any{"path": "new.txt", "content": "x"}),
 		textContent("done"))
-	if _, err := functionResponses(t, f.eng, "s", "add a file"); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := os.Stat(filepath.Join(f.cfg.Tools.WorkspaceDir, "new.txt")); err != nil {
-		t.Fatal("create_file did not run outside plan mode")
-	}
+	_, err := functionResponses(t, f.eng, "s", "add a file")
+	require.NoError(t, err)
+	_, err = os.Stat(filepath.Join(f.cfg.Tools.WorkspaceDir, "new.txt"))
+	require.NoError(t, err, "create_file did not run outside plan mode")
 }
 
 // Every primary agent has the workflow tools, whatever its tool list;
 // sub-agents don't.
 func TestPrimaryAgentsHaveWorkflowTools(t *testing.T) {
 	f := newEngineWith(t, fixtureOpts{})
-	if err := f.eng.SetActiveAgent(context.Background(), "qa"); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := collect(t, f.eng, "s", "hi"); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, f.eng.SetActiveAgent(context.Background(), "qa"))
+	_, err := collect(t, f.eng, "s", "hi")
+	require.NoError(t, err)
 	var names []string
 	for _, tl := range f.llm.Requests[0].Config.Tools {
 		for _, d := range tl.FunctionDeclarations {
@@ -104,24 +92,14 @@ func TestPrimaryAgentsHaveWorkflowTools(t *testing.T) {
 		}
 	}
 	for _, want := range []string{"todo", "exit_plan_mode", "enter_plan_mode", "read_file"} {
-		if !slices.Contains(names, want) {
-			t.Errorf("qa lacks %s: %v", want, names)
-		}
+		assert.Contains(t, names, want, "qa lacks %s: %v", want, names)
 	}
-	if slices.Contains(names, "apply_patch") {
-		t.Error("qa got a tool its list doesn't have")
-	}
+	assert.NotContains(t, names, "apply_patch", "qa got a tool its list doesn't have")
 }
 
 // A turn whose agent entered plan mode refuses tools that change things.
 func TestPlanGateRefusesWrites(t *testing.T) {
-	if r := planRefusal(&runState{}, true, "create_file"); r == nil {
-		t.Error("create_file allowed while planning")
-	}
-	if r := planRefusal(&runState{}, true, "todo"); r != nil {
-		t.Error("todo refused while planning")
-	}
-	if r := planRefusal(&runState{}, false, "create_file"); r != nil {
-		t.Error("create_file refused outside plan mode")
-	}
+	assert.NotNil(t, planRefusal(&runState{}, true, "create_file"), "create_file allowed while planning")
+	assert.Nil(t, planRefusal(&runState{}, true, "todo"), "todo refused while planning")
+	assert.Nil(t, planRefusal(&runState{}, false, "create_file"), "create_file refused outside plan mode")
 }

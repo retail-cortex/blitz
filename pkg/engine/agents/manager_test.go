@@ -17,46 +17,39 @@ package agents
 import (
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func writeAgent(t *testing.T, dir, file, name, display string) {
 	t.Helper()
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.MkdirAll(dir, 0o755))
 	content := "---\nname: " + name + "\ndisplay_name: \"" + display + "\"\ndescription: test\ntools:\n  - run_shell_command\n---\nInjected prompt.\n"
-	if err := os.WriteFile(filepath.Join(dir, file), []byte(content), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(filepath.Join(dir, file), []byte(content), 0o644))
 }
 
 func TestLoadExternalAgents(t *testing.T) {
 	reg, err := NewRegistry()
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	dir := t.TempDir()
 	writeAgent(t, dir, "custom.md", "custom-agent", "Custom")
 	writeAgent(t, dir, "evil.md", "blitz", "Evil Puppy")
-	if err := os.WriteFile(filepath.Join(dir, "broken.md"), []byte("no frontmatter"), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "broken.md"), []byte("no frontmatter"), 0o644))
 
 	err = reg.LoadExternalAgents(dir, filepath.Join(dir, "missing"))
 
 	// Positive: new agent loaded.
-	if spec, ok := reg.Get("custom-agent"); !ok || spec.DisplayName != "Custom" {
-		t.Errorf("expected custom agent to load")
-	}
+	spec, ok := reg.Get("custom-agent")
+	assert.True(t, ok, "expected custom agent to load")
+	assert.Equal(t, "Custom", spec.DisplayName, "expected custom agent to load")
 	// Negative: built-in cannot be overridden; conflict and parse error reported.
-	if spec, _ := reg.Get("blitz"); spec.DisplayName == "Evil Puppy" {
-		t.Error("external spec overrode built-in blitz")
-	}
-	if err == nil || !strings.Contains(err.Error(), "reserved") || !strings.Contains(err.Error(), "broken.md") {
-		t.Errorf("expected reserved-name and parse errors, got %v", err)
-	}
+	spec, _ = reg.Get("blitz")
+	assert.NotEqual(t, "Evil Puppy", spec.DisplayName, "external spec overrode built-in blitz")
+	assert.Error(t, err, "expected reserved-name and parse errors, got")
+	assert.Contains(t, err.Error(), "reserved", "expected reserved-name and parse errors, got %v", err)
+	assert.Contains(t, err.Error(), "broken.md", "expected reserved-name and parse errors, got %v", err)
 }
 
 func TestLoadExternalAgentsExpandsHome(t *testing.T) {
@@ -65,13 +58,8 @@ func TestLoadExternalAgentsExpandsHome(t *testing.T) {
 	writeAgent(t, filepath.Join(home, ".blitz", "agents"), "mine.md", "home-agent", "Home")
 
 	reg, err := NewRegistry()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := reg.LoadExternalAgents("~/.blitz/agents"); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if _, ok := reg.Get("home-agent"); !ok {
-		t.Error("expected ~ to expand to HOME")
-	}
+	require.NoError(t, err)
+	require.NoError(t, reg.LoadExternalAgents("~/.blitz/agents"), "unexpected error")
+	_, ok := reg.Get("home-agent")
+	assert.True(t, ok, "expected ~ to expand to HOME")
 }

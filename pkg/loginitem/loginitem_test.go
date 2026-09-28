@@ -22,6 +22,9 @@ import (
 	goruntime "runtime"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // record replaces RunSystem for a test and returns what ran.
@@ -43,14 +46,11 @@ func TestInstallStopUninstall(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	ran := record(t)
 	bin := "/opt/blitz & co/blitzd" // escaped in the plist, quoted in the unit
-	if err := Install(bin); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, Install(bin))
 	path, _ := Path()
 	data, err := os.ReadFile(path)
-	if err != nil || !Installed() {
-		t.Fatalf("login item not written: %v", err)
-	}
+	require.NoError(t, err, "login item not written")
+	require.True(t, Installed(), "login item not written: %v", err)
 	switch goruntime.GOOS {
 	case "darwin":
 		dec := xml.NewDecoder(strings.NewReader(string(data)))
@@ -61,51 +61,40 @@ func TestInstallStopUninstall(t *testing.T) {
 				t.Fatalf("plist isn't well-formed: %v", err)
 			}
 		}
-		if !strings.Contains(string(data), "/opt/blitz &amp; co/blitzd") {
-			t.Errorf("plist doesn't run blitzd:\n%s", data)
-		}
-		if len(*ran) != 2 || !strings.HasPrefix((*ran)[0], "launchctl bootout gui/") || !strings.HasPrefix((*ran)[1], "launchctl bootstrap gui/") {
-			t.Errorf("install ran %q", *ran)
-		}
+		assert.Contains(t, string(data), "/opt/blitz &amp; co/blitzd", "plist doesn't run blitzd:\n%s", data)
+		assert.Len(t, *ran, 2, "install ran %q", *ran)
+		assert.True(t, strings.HasPrefix((*ran)[0], "launchctl bootout gui/"), "install ran %q", *ran)
+		assert.True(t, strings.HasPrefix((*ran)[1], "launchctl bootstrap gui/"), "install ran %q", *ran)
 	case "linux":
-		if !strings.Contains(string(data), `ExecStart="/opt/blitz & co/blitzd"`) {
-			t.Errorf("unit doesn't run blitzd:\n%s", data)
-		}
+		assert.Contains(t, string(data), `ExecStart="/opt/blitz & co/blitzd"`, "unit doesn't run blitzd:\n%s", data)
 		// A running unit restarts, so a reinstall runs the new program.
-		if strings.Join(*ran, "; ") != "systemctl --user daemon-reload; systemctl --user enable blitz.service; systemctl --user restart blitz.service" {
-			t.Errorf("install ran %q", *ran)
-		}
+		assert.Equal(t, "systemctl --user daemon-reload; systemctl --user enable blitz.service; systemctl --user restart blitz.service", strings.Join(*ran, "; "), "install ran %q", *ran)
 	}
 
 	*ran = nil
-	if err := Stop(); err != nil || len(*ran) != 1 {
-		t.Errorf("stop: %v, ran %q", err, *ran)
-	}
-	if !Installed() {
-		t.Error("stop removed the login item")
-	}
-	if err := Uninstall(); err != nil || Installed() {
-		t.Errorf("uninstall: %v, installed %v", err, Installed())
-	}
+	err = Stop()
+	assert.NoError(t, err, "stop: %v, ran %q", err, *ran)
+	assert.Len(t, *ran, 1, "stop: %v, ran %q", err, *ran)
+	assert.True(t, Installed(), "stop removed the login item")
+	err = Uninstall()
+	assert.NoError(t, err, "uninstall: %v, installed %v", err, Installed())
+	assert.False(t, Installed(), "uninstall: %v, installed %v", err, Installed())
 }
 
 func TestFindService(t *testing.T) {
 	beside, onPath := t.TempDir(), t.TempDir()
 	for _, d := range []string{beside, onPath} {
-		if err := os.WriteFile(filepath.Join(d, "blitzd"), []byte("#!/bin/sh\n"), 0o755); err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, os.WriteFile(filepath.Join(d, "blitzd"), []byte("#!/bin/sh\n"), 0o755))
 	}
 	t.Setenv("PATH", onPath)
 	want := func(d string) string { p, _ := filepath.EvalSymlinks(filepath.Join(d, "blitzd")); return p }
-	if got, err := FindService(t.TempDir(), beside); err != nil || got != want(beside) {
-		t.Errorf("beside: %q, %v", got, err)
-	}
-	if got, err := FindService(t.TempDir()); err != nil || got != want(onPath) {
-		t.Errorf("on PATH: %q, %v", got, err)
-	}
+	got, err := FindService(t.TempDir(), beside)
+	assert.NoError(t, err, "beside: %q,", got)
+	assert.Equal(t, want(beside), got, "beside: %q, %v", got, err)
+	got, err = FindService(t.TempDir())
+	assert.NoError(t, err, "on PATH: %q,", got)
+	assert.Equal(t, want(onPath), got, "on PATH: %q, %v", got, err)
 	t.Setenv("PATH", t.TempDir())
-	if _, err := FindService(); err == nil {
-		t.Error("found a blitzd that isn't there")
-	}
+	_, err = FindService()
+	assert.Error(t, err, "found a blitzd that isn't there")
 }

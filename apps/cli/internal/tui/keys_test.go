@@ -17,7 +17,6 @@ package tui
 import (
 	"bytes"
 	"context"
-	"errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -25,9 +24,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/retail-cortex/blitz/pkg/api"
-
 	"github.com/ergochat/readline"
+	"github.com/retail-cortex/blitz/pkg/api"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // fakeTerminal runs the real line editor on a pipe. Each write reaches the
@@ -70,9 +70,7 @@ func newFakeTerminal(t *testing.T) *fakeTerminal {
 		FuncGetSize:        func() (int, int) { return 80, 24 },
 		FuncOnWidthChanged: func(func()) {},
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	t.Cleanup(func() { w.Close(); in.Close() })
 	return &fakeTerminal{in: in, w: w, out: out}
 }
@@ -124,19 +122,19 @@ func TestEscAtThePrompt(t *testing.T) {
 
 	// One Esc does nothing; typing goes on.
 	f.keys(t, "ab", "\x1b", "c\r")
-	if line, err := within(t, func() (string, error) { return f.in.ReadInput(ctx, "> ") }); err != nil || line != "abc" {
-		t.Fatalf("single Esc: %q %v", line, err)
-	}
+	line, err := within(t, func() (string, error) { return f.in.ReadInput(ctx, "> ") })
+	require.NoError(t, err, "single Esc: %q", line)
+	require.Equal(t, "abc", line, "single Esc: %q %v", line, err)
 	// Esc Esc clears the line.
 	f.keys(t, "draft", "\x1b", "\x1b", "new\r")
-	if line, err := within(t, func() (string, error) { return f.in.ReadInput(ctx, "> ") }); err != nil || line != "new" {
-		t.Fatalf("Esc Esc: %q %v", line, err)
-	}
+	line, err = within(t, func() (string, error) { return f.in.ReadInput(ctx, "> ") })
+	require.NoError(t, err, "Esc Esc: %q", line)
+	require.Equal(t, "new", line, "Esc Esc: %q %v", line, err)
 	// An arrow key's escape sequence is still an arrow key: left, then insert.
 	f.keys(t, "ac", "\x1b[D", "b\r")
-	if line, err := within(t, func() (string, error) { return f.in.ReadInput(ctx, "> ") }); err != nil || line != "abc" {
-		t.Fatalf("arrow key: %q %v", line, err)
-	}
+	line, err = within(t, func() (string, error) { return f.in.ReadInput(ctx, "> ") })
+	require.NoError(t, err, "arrow key: %q", line)
+	require.Equal(t, "abc", line, "arrow key: %q %v", line, err)
 }
 
 // At an approval Esc is Ctrl+C: the turn's interrupt handler runs.
@@ -145,9 +143,8 @@ func TestEscAtAnApprovalInterrupts(t *testing.T) {
 	interrupted := make(chan struct{}, 1)
 	f.in.SetInterruptHandler(func() { interrupted <- struct{}{} })
 	f.keys(t, "\x1b")
-	if _, err := within(t, func() (string, error) { return f.in.Ask(context.Background(), "Allow? ") }); !errors.Is(err, context.Canceled) {
-		t.Fatalf("Esc at an approval: %v", err)
-	}
+	_, err := within(t, func() (string, error) { return f.in.Ask(context.Background(), "Allow? ") })
+	require.ErrorIs(t, err, context.Canceled, "Esc at an approval: %v", err)
 	select {
 	case <-interrupted:
 	default:
@@ -160,9 +157,9 @@ func TestEscCancelsASteerMessage(t *testing.T) {
 	f := newFakeTerminal(t)
 	f.in.SetInterruptHandler(func() { t.Error("Esc in the steer prompt interrupted the turn") })
 	f.keys(t, " more", "\x1b")
-	if line, err := within(t, func() (string, error) { return f.in.AskSteer(context.Background(), "steer> ", "fix") }); err != nil || line != "" {
-		t.Fatalf("Esc in the steer prompt: %q %v", line, err)
-	}
+	line, err := within(t, func() (string, error) { return f.in.AskSteer(context.Background(), "steer> ", "fix") })
+	require.NoError(t, err, "Esc in the steer prompt: %q", line)
+	require.Equal(t, "", line, "Esc in the steer prompt: %q %v", line, err)
 }
 
 func TestShiftTabCyclesTheMode(t *testing.T) {
@@ -170,17 +167,16 @@ func TestShiftTabCyclesTheMode(t *testing.T) {
 	calls := 0
 	f.in.SetPromptKeys(PromptKeys{CycleMode: func() string { calls++; return "[plan] > " }})
 	f.keys(t, "hi", "\x1b[Z", "!\r")
-	if line, err := within(t, func() (string, error) { return f.in.ReadInput(context.Background(), "> ") }); err != nil || line != "hi!" {
-		t.Fatalf("line %q %v", line, err)
-	}
-	if calls != 1 || !strings.Contains(f.output(), "[plan] > ") {
-		t.Fatalf("calls %d, output %q", calls, f.output())
-	}
+	line, err := within(t, func() (string, error) { return f.in.ReadInput(context.Background(), "> ") })
+	require.NoError(t, err, "line %q", line)
+	require.Equal(t, "hi!", line, "line %q %v", line, err)
+	require.Equal(t, 1, calls, "calls %d, output %q", calls, f.output())
+	require.Contains(t, f.output(), "[plan] > ", "calls %d, output %q", calls, f.output())
 	// Not at a question.
 	f.keys(t, "\x1b[Z", "y\r")
-	if line, _ := within(t, func() (string, error) { return f.in.Ask(context.Background(), "? ") }); line != "y" || calls != 1 {
-		t.Fatalf("Shift+Tab at a question: %q, calls %d", line, calls)
-	}
+	line, _ = within(t, func() (string, error) { return f.in.Ask(context.Background(), "? ") })
+	require.Equal(t, "y", line, "Shift+Tab at a question: %q, calls %d", line, calls)
+	require.Equal(t, 1, calls, "Shift+Tab at a question: %q, calls %d", line, calls)
 }
 
 func TestCtrlGEditsAndSubmits(t *testing.T) {
@@ -189,12 +185,10 @@ func TestCtrlGEditsAndSubmits(t *testing.T) {
 	f.in.edit = func(text string) (string, error) { got = text; return text + "\nsecond line", nil }
 	f.keys(t, "draft", "\x07")
 	line, err := within(t, func() (string, error) { return f.in.ReadInput(context.Background(), "> ") })
-	if err != nil || line != "draft\nsecond line" || got != "draft" {
-		t.Fatalf("line %q err %v, editor got %q", line, err, got)
-	}
-	if !strings.Contains(f.output(), "> draft\nsecond line") {
-		t.Errorf("the edited text isn't echoed: %q", f.output())
-	}
+	require.NoError(t, err, "line %q err %v, editor got %q", line, err, got)
+	require.Equal(t, "draft\nsecond line", line, "line %q err %v, editor got %q", line, err, got)
+	require.Equal(t, "draft", got, "line %q err %v, editor got %q", line, err, got)
+	assert.Contains(t, f.output(), "> draft\nsecond line", "the edited text isn't echoed: %q", f.output())
 
 	// No editor: a note, and the typed line comes back to finish.
 	f.in.edit = func(string) (string, error) { return "", errNoEditor }
@@ -206,9 +200,9 @@ func TestCtrlGEditsAndSubmits(t *testing.T) {
 		f.w.Write([]byte("!\r"))
 	}()
 	line, err = within(t, func() (string, error) { return f.in.ReadInput(context.Background(), "> ") })
-	if err != nil || line != "draft!" || !strings.Contains(f.output(), "$EDITOR") {
-		t.Fatalf("without an editor: %q %v\n%s", line, err, f.output())
-	}
+	require.NoError(t, err, "without an editor: %q %v\n%s", line, err, f.output())
+	require.Equal(t, "draft!", line, "without an editor: %q %v\n%s", line, err, f.output())
+	require.Contains(t, f.output(), "$EDITOR", "without an editor: %q %v\n%s", line, err, f.output())
 }
 
 func TestEditText(t *testing.T) {
@@ -217,18 +211,15 @@ func TestEditText(t *testing.T) {
 	t.Setenv("VISUAL", "")
 	t.Setenv("EDITOR", script)
 	got, err := editText("start", nil, io.Discard, io.Discard)
-	if err != nil || got != "start and more" {
-		t.Fatalf("%q %v", got, err)
-	}
+	require.NoError(t, err, "%q", got)
+	require.Equal(t, "start and more", got, "%q %v", got, err)
 	t.Setenv("VISUAL", "false")
-	if _, err := editText("x", nil, io.Discard, io.Discard); err == nil {
-		t.Error("a failing $VISUAL (which wins over $EDITOR) wasn't reported")
-	}
+	_, err = editText("x", nil, io.Discard, io.Discard)
+	assert.Error(t, err, "a failing $VISUAL (which wins over $EDITOR) wasn't reported")
 	t.Setenv("VISUAL", "")
 	t.Setenv("EDITOR", "")
-	if _, err := editText("x", nil, io.Discard, io.Discard); !errors.Is(err, errNoEditor) {
-		t.Errorf("no editor: %v", err)
-	}
+	_, err = editText("x", nil, io.Discard, io.Discard)
+	assert.ErrorIs(t, err, errNoEditor, "no editor: %v", err)
 }
 
 func TestKeyWatcherEscInterrupts(t *testing.T) {
@@ -243,9 +234,7 @@ func TestKeyWatcherEscInterrupts(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatal("Esc did not interrupt")
 	}
-	if len(escs) != 0 {
-		t.Error("the arrow key interrupted too")
-	}
+	assert.Len(t, escs, 0, "the arrow key interrupted too")
 }
 
 func TestNextMode(t *testing.T) {
@@ -261,9 +250,8 @@ func TestNextMode(t *testing.T) {
 		{api.ModeBypass, true, api.ModeDefault},
 		{api.ModeDontAsk, false, api.ModeDefault},
 	} {
-		if got := nextMode(string(c.from), c.bypass); got != string(c.want) {
-			t.Errorf("%s (bypass %v) -> %s, want %s", c.from, c.bypass, got, c.want)
-		}
+		got := nextMode(string(c.from), c.bypass)
+		assert.Equal(t, string(c.want), got, "%s (bypass %v) -> %s, want %s", c.from, c.bypass, got, c.want)
 	}
 }
 
@@ -273,7 +261,8 @@ func TestCtrlGEditsAPrefilledLine(t *testing.T) {
 	var got string
 	f.in.edit = func(text string) (string, error) { got = text; return "edited", nil }
 	f.keys(t, "\x07")
-	if line, err := within(t, func() (string, error) { return f.in.AskSteer(context.Background(), "steer> ", "fix it") }); err != nil || line != "edited" || got != "fix it" {
-		t.Fatalf("line %q err %v, editor got %q", line, err, got)
-	}
+	line, err := within(t, func() (string, error) { return f.in.AskSteer(context.Background(), "steer> ", "fix it") })
+	require.NoError(t, err, "line %q err %v, editor got %q", line, err, got)
+	require.Equal(t, "edited", line, "line %q err %v, editor got %q", line, err, got)
+	require.Equal(t, "fix it", got, "line %q err %v, editor got %q", line, err, got)
 }

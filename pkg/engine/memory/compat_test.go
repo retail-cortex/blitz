@@ -21,6 +21,8 @@ import (
 	"testing"
 
 	"github.com/retail-cortex/blitz/pkg/config"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func defaults() config.MemoryConfig {
@@ -47,12 +49,10 @@ func TestOtherAgentsFilesAndDuplicates(t *testing.T) {
 	write(t, filepath.Join(ws, "GEMINI.md"), "gemini rules")
 	write(t, filepath.Join(ws, "BLITZ.local.md"), "my own rules")
 	docs := Load(ws, defaults())
-	if got := strings.Join(contents(docs), "|"); got != "shared rules|gemini rules|my own rules" {
-		t.Errorf("docs %q", got)
-	}
-	if !docs[2].Local || docs[0].Local {
-		t.Errorf("local flags: %+v", docs)
-	}
+	got := strings.Join(contents(docs), "|")
+	assert.Equal(t, "shared rules|gemini rules|my own rules", got, "docs %q", got)
+	assert.True(t, docs[2].Local, "local flags: %+v", docs)
+	assert.False(t, docs[0].Local, "local flags: %+v", docs)
 }
 
 func TestImports(t *testing.T) {
@@ -80,15 +80,14 @@ func TestImports(t *testing.T) {
 	blocked := func(p string) bool { return filepath.Base(p) == ".env" }
 	docs := Load(repo, defaults(), Options{Blocked: blocked})
 	got := contents(docs)
-	if len(got) != 3 || !strings.HasPrefix(got[0], "root rules") || got[1] != "style guide\nsee @deep.md" || got[2] != "deep file @style.md" {
-		t.Fatalf("imports %q", got)
-	}
-	if docs[1].ImportedFrom != filepath.Join(repo, "AGENTS.md") || docs[2].ImportedFrom != filepath.Join(repo, "docs", "style.md") {
-		t.Errorf("imported-from %+v", docs)
-	}
-	if r := Render(docs); !strings.Contains(r, "(imported by ") {
-		t.Errorf("render doesn't say where imports came from:\n%s", r)
-	}
+	require.Len(t, got, 3, "imports %q", got)
+	require.True(t, strings.HasPrefix(got[0], "root rules"), "imports %q", got)
+	require.Equal(t, "style guide\nsee @deep.md", got[1], "imports %q", got)
+	require.Equal(t, "deep file @style.md", got[2], "imports %q", got)
+	assert.Equal(t, filepath.Join(repo, "AGENTS.md"), docs[1].ImportedFrom, "imported-from %+v", docs)
+	assert.Equal(t, filepath.Join(repo, "docs", "style.md"), docs[2].ImportedFrom, "imported-from %+v", docs)
+	r := Render(docs)
+	assert.Contains(t, r, "(imported by ", "render doesn't say where imports came from:\n%s", r)
 }
 
 func TestImportDepthIsBounded(t *testing.T) {
@@ -101,9 +100,8 @@ func TestImportDepthIsBounded(t *testing.T) {
 		}
 		write(t, filepath.Join(ws, "l"+string(rune('0'+i))+".md"), "level "+string(rune('0'+i))+next)
 	}
-	if docs := Load(ws, defaults()); len(docs) != 1+maxImportDepth {
-		t.Errorf("loaded %d files, want %d", len(docs), 1+maxImportDepth)
-	}
+	docs := Load(ws, defaults())
+	assert.Len(t, docs, 1+maxImportDepth, "loaded %d files, want %d", len(docs), 1+maxImportDepth)
 }
 
 func TestRules(t *testing.T) {
@@ -114,26 +112,20 @@ func TestRules(t *testing.T) {
 	write(t, filepath.Join(repo, ".claude", "rules", "sub", "tests.md"), "---\npaths: \"**/*_test.go\"\n---\nTest rules")
 	write(t, filepath.Join(repo, ".blitz", "rules", "notes.txt"), "not a rule")
 	l := LoadAll(repo, defaults())
-	if got := contents(l.Docs); len(got) != 1 || got[0] != "always applies" {
-		t.Errorf("unscoped rules as docs: %q", got)
-	}
-	if len(l.Rules) != 2 {
-		t.Fatalf("scoped rules %+v", l.Rules)
-	}
+	got := contents(l.Docs)
+	assert.Len(t, got, 1, "unscoped rules as docs: %q", got)
+	assert.Equal(t, "always applies", got[0], "unscoped rules as docs: %q", got)
+	require.Len(t, l.Rules, 2, "scoped rules %+v", l.Rules)
 	real, _ := filepath.EvalSymlinks(repo)
 	api, tests := &l.Rules[0], &l.Rules[1]
-	if api.Content != "API rules" || tests.Content != "Test rules" {
-		t.Errorf("rule bodies %q %q", api.Content, tests.Content)
-	}
+	assert.Equal(t, "API rules", api.Content, "rule bodies %q %q", api.Content, tests.Content)
+	assert.Equal(t, "Test rules", tests.Content, "rule bodies %q %q", api.Content, tests.Content)
 	for p, want := range map[string]bool{"src/api/v1/h.go": true, "cmd/main.go": true, "cmd/x/main.go": false, "src/web/a.go": false} {
-		if got := api.Matches(filepath.Join(real, p)); got != want {
-			t.Errorf("api rule matches %s = %v", p, got)
-		}
+		got := api.Matches(filepath.Join(real, p))
+		assert.Equal(t, want, got, "api rule matches %s = %v", p, got)
 	}
-	if !tests.Matches(filepath.Join(real, "a", "b_test.go")) || tests.Matches(filepath.Join(t.TempDir(), "x_test.go")) {
-		t.Error("test rule matching")
-	}
-	if r := Render(l.Docs, true); !strings.Contains(r, "project_rules") {
-		t.Error("render should announce scoped rules")
-	}
+	assert.True(t, tests.Matches(filepath.Join(real, "a", "b_test.go")), "test rule matching")
+	assert.False(t, tests.Matches(filepath.Join(t.TempDir(), "x_test.go")), "test rule matching")
+	r := Render(l.Docs, true)
+	assert.Contains(t, r, "project_rules", "render should announce scoped rules")
 }

@@ -36,6 +36,8 @@ import (
 	"github.com/retail-cortex/blitz/pkg/config"
 	cpsession "github.com/retail-cortex/blitz/pkg/engine/session"
 	"github.com/retail-cortex/blitz/pkg/images"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/adk/v2/model"
 	"google.golang.org/adk/v2/model/gemini"
 	"google.golang.org/genai"
@@ -74,21 +76,16 @@ func TestEngineAttachmentsStayOutOfSessionFiles(t *testing.T) {
 	svc, _ := cpsession.NewPersistentService(sessDir)
 	f := newEngineWith(t, fixtureOpts{cfg: imagesDir(t), opts: []Option{WithSessionService(svc)}}, textContent("a cat"), textContent("still a cat"))
 	img, err := f.tools.AddImage("cat.png", testPNG(t, 64, 48))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := f.eng.Execute(context.Background(), "s", "what is this?", nil, WithAttachments(images.Part(img))); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
+	require.NoError(t, f.eng.Execute(context.Background(), "s", "what is this?", nil, WithAttachments(images.Part(img))))
 	got := inlineImages(f.llm)
-	if len(got) != 1 || got[0].MIMEType != "image/png" || !bytes.Equal(got[0].Data, img.Data) {
-		t.Fatalf("model did not receive the image: %+v", got)
-	}
+	require.Len(t, got, 1, "model did not receive the image: %+v", got)
+	require.Equal(t, "image/png", got[0].MIMEType, "model did not receive the image: %+v", got)
+	require.True(t, bytes.Equal(got[0].Data, img.Data), "model did not receive the image: %+v", got)
 	// Image first, then the question.
 	parts := f.llm.Requests[0].Contents[len(f.llm.Requests[0].Contents)-1].Parts
-	if parts[0].InlineData == nil || parts[1].Text != "what is this?" {
-		t.Errorf("attachment order: %+v", parts)
-	}
+	assert.NotNil(t, parts[0].InlineData, "attachment order: %+v", parts)
+	assert.Equal(t, "what is this?", parts[1].Text, "attachment order: %+v", parts)
 
 	files, _ := filepath.Glob(filepath.Join(sessDir, "*"))
 	var stored []byte
@@ -97,19 +94,15 @@ func TestEngineAttachmentsStayOutOfSessionFiles(t *testing.T) {
 		stored = append(stored, b...)
 	}
 	b64 := base64.StdEncoding.EncodeToString(img.Data)
-	if bytes.Contains(stored, []byte(b64[:40])) || !bytes.Contains(stored, []byte(img.URI())) {
-		t.Errorf("session files should hold the reference, not the bytes (%d bytes stored)", len(stored))
-	}
+	assert.False(t, bytes.Contains(stored, []byte(b64[:40])), "session files should hold the reference, not the bytes (%d bytes stored)", len(stored))
+	assert.True(t, bytes.Contains(stored, []byte(img.URI())), "session files should hold the reference, not the bytes (%d bytes stored)", len(stored))
 
 	// Resume in a new engine: history still includes the picture.
 	svc2, _ := cpsession.NewPersistentService(sessDir)
 	g := newEngineWith(t, fixtureOpts{cfg: func(c *config.Config) { c.Images.Dir = f.cfg.Images.Dir }, opts: []Option{WithSessionService(svc2)}}, textContent("yes"))
-	if err := g.eng.Execute(context.Background(), "s", "and now?", nil); err != nil {
-		t.Fatal(err)
-	}
-	if got := inlineImages(g.llm); len(got) != 1 {
-		t.Errorf("resumed history lost the image: %d", len(got))
-	}
+	require.NoError(t, g.eng.Execute(context.Background(), "s", "and now?", nil))
+	got = inlineImages(g.llm)
+	assert.Len(t, got, 1, "resumed history lost the image: %d", len(got))
 }
 
 // The model can ask to see a workspace image; the picture follows the tool
@@ -129,38 +122,33 @@ func TestViewImageTool(t *testing.T) {
 	os.WriteFile(filepath.Join(ws, "id_rsa_backup.png"), testPNG(t, 8, 8), 0o644) // matches a blocked pattern
 
 	res, err := functionResponses(t, f.eng, "s", "look at the screenshot")
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	r := res["view_image"]
-	if r["error"] != nil || r["width"] != float64(30) || !strings.HasPrefix(fmt.Sprint(r["image_uri"]), images.URIScheme) {
-		t.Fatalf("view_image result: %v", r)
-	}
+	require.Nil(t, r["error"], "view_image result: %v", r)
+	require.Equal(t, float64(30), r["width"], "view_image result: %v", r)
+	require.True(t, strings.HasPrefix(fmt.Sprint(r["image_uri"]), images.URIScheme), "view_image result: %v", r)
 	last := f.llm.Requests[len(f.llm.Requests)-1].Contents
 	tool := last[len(last)-1]
-	if len(tool.Parts) != 2 || tool.Parts[0].FunctionResponse == nil || tool.Parts[1].InlineData == nil {
-		t.Errorf("image should follow the tool result: %+v", tool.Parts)
-	}
+	assert.Len(t, tool.Parts, 2, "image should follow the tool result: %+v", tool.Parts)
+	assert.NotNil(t, tool.Parts[0].FunctionResponse, "image should follow the tool result: %+v", tool.Parts)
+	assert.NotNil(t, tool.Parts[1].InlineData, "image should follow the tool result: %+v", tool.Parts)
 
 	// In the order the mock issues the calls.
 	for _, c := range []struct{ prompt, want string }{{"now the text file", "not a PNG"}, {"and outside", "outside"}, {"blocked one", "blocked"}} {
 		prompt, want := c.prompt, c.want
 		res, _ := functionResponses(t, f.eng, "s", prompt)
-		if msg := fmt.Sprint(res["view_image"]["error"]); !strings.Contains(msg, want) {
-			t.Errorf("%s: want an error mentioning %q, got %v", prompt, want, res["view_image"])
-		}
+		msg := fmt.Sprint(res["view_image"]["error"])
+		assert.Contains(t, msg, want, "%s: want an error mentioning %q, got %v", prompt, want, res["view_image"])
 	}
 }
 
 func TestViewImageDisabled(t *testing.T) {
 	off := func(c *config.Config) { c.Images.Enabled = false }
 	f := newEngineWith(t, fixtureOpts{cfg: off})
-	if f.tools.Images() != nil || len(f.tools.GetToolsForAgent([]string{"view_image"})) != 0 {
-		t.Error("view_image should not exist when images are disabled")
-	}
-	if _, err := f.tools.AddImage("x.png", testPNG(t, 2, 2)); err == nil {
-		t.Error("AddImage should fail when disabled")
-	}
+	assert.Nil(t, f.tools.Images(), "view_image should not exist when images are disabled")
+	assert.Len(t, f.tools.GetToolsForAgent([]string{"view_image"}), 0, "view_image should not exist when images are disabled")
+	_, err := f.tools.AddImage("x.png", testPNG(t, 2, 2))
+	assert.Error(t, err, "AddImage should fail when disabled")
 }
 
 func TestAnthropicImages(t *testing.T) {
@@ -176,24 +164,17 @@ func TestAnthropicImages(t *testing.T) {
 		}},
 		{Role: genai.RoleUser, Parts: []*genai.Part{{InlineData: &genai.Blob{Data: []byte("%PDF"), MIMEType: "application/pdf"}}}},
 	}}
-	if _, err := collectResponses(t, m, req, false); err != nil {
-		t.Fatal(err)
-	}
+	_, err := collectResponses(t, m, req, false)
+	require.NoError(t, err)
 	msgs, _ := json.Marshal(f.requests[0]["messages"])
 	s := string(msgs)
 	b64 := base64.StdEncoding.EncodeToString(pic)
 	wantUser := `{"source":{"data":"` + b64 + `","media_type":"image/png","type":"base64"},"type":"image"},{"text":"what?","type":"text"}`
-	if !strings.Contains(s, wantUser) {
-		t.Errorf("user image block missing or out of order:\n%s", s)
-	}
+	assert.Contains(t, s, wantUser, "user image block missing or out of order:\n%s", s)
 	// The tool's image is inside its tool_result, not a separate block.
 	wantTool := `"content":[{"text":"{\"path\":\"a.png\"}","type":"text"},{"source":{"data":"` + b64
-	if !strings.Contains(s, wantTool) {
-		t.Errorf("tool_result should contain the image:\n%s", s)
-	}
-	if !strings.Contains(s, "application/pdf attachment omitted") {
-		t.Errorf("unsupported media should become a note:\n%s", s)
-	}
+	assert.Contains(t, s, wantTool, "tool_result should contain the image:\n%s", s)
+	assert.Contains(t, s, "application/pdf attachment omitted", "unsupported media should become a note:\n%s", s)
 }
 
 // fakeOpenAI records Responses API request bodies.
@@ -219,9 +200,7 @@ func TestOpenAIImages(t *testing.T) {
 	f := &fakeOpenAI{}
 	srv := f.server(t)
 	m, err := newOpenAIModel(context.Background(), "gpt-test", "sk-test", srv.URL+"/v1", option.WithMaxRetries(0), option.WithRequestTimeout(10*time.Second))
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	pic := testPNG(t, 4, 4)
 	userParts := []*genai.Part{{InlineData: &genai.Blob{Data: pic, MIMEType: "image/png"}}, genai.NewPartFromText("what?")}
 	req := &model.LLMRequest{Contents: []*genai.Content{
@@ -234,40 +213,26 @@ func TestOpenAIImages(t *testing.T) {
 	}}
 	var text string
 	for resp, err := range m.GenerateContent(context.Background(), req, false) {
-		if err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, err)
 		text += resp.Content.Parts[0].Text
 	}
-	if text != "seen" {
-		t.Errorf("reply %q", text)
-	}
+	assert.Equal(t, "seen", text, "reply %q", text)
 	body := f.bodies[0]
 	dataURL := "data:image/png;base64," + base64.StdEncoding.EncodeToString(pic)
-	if strings.Count(body, `"type":"input_image"`) != 2 || strings.Count(body, dataURL) != 2 {
-		t.Errorf("expected two input_image items:\n%s", body)
-	}
-	if strings.Contains(body, "blitz-image") {
-		t.Errorf("a marker leaked to the provider:\n%s", body)
-	}
-	if strings.Index(body, `"input_image"`) > strings.Index(body, `"what?"`) {
-		t.Error("image should come before the question")
-	}
+	assert.Equal(t, 2, strings.Count(body, `"type":"input_image"`), "expected two input_image items:\n%s", body)
+	assert.Equal(t, 2, strings.Count(body, dataURL), "expected two input_image items:\n%s", body)
+	assert.NotContains(t, body, "blitz-image", "a marker leaked to the provider:\n%s", body)
+	assert.LessOrEqual(t, strings.Index(body, `"input_image"`), strings.Index(body, `"what?"`), "image should come before the question")
 	// The caller's request is not modified.
-	if userParts[0].InlineData == nil || userParts[0].Text != "" {
-		t.Error("request contents were mutated")
-	}
+	assert.NotNil(t, userParts[0].InlineData, "request contents were mutated")
+	assert.Equal(t, "", userParts[0].Text, "request contents were mutated")
 
 	// Without images, the body goes out as the ADK built it.
 	plain := &model.LLMRequest{Contents: []*genai.Content{genai.NewContentFromText("hi", genai.RoleUser)}}
 	for _, err := range m.GenerateContent(context.Background(), plain, false) {
-		if err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, err)
 	}
-	if strings.Contains(f.bodies[1], "input_image") {
-		t.Error("unexpected image in a plain request")
-	}
+	assert.NotContains(t, f.bodies[1], "input_image", "unexpected image in a plain request")
 }
 
 // A marker typed by the user (or quoted by a tool) is not a hook for
@@ -275,9 +240,8 @@ func TestOpenAIImages(t *testing.T) {
 func TestOpenAIMarkerNotSpoofable(t *testing.T) {
 	body := []byte(`{"input":[{"role":"user","content":[{"type":"input_text","text":"` + imageMarkerPrefix + `deadbeef"}]}],"temperature":0.1}`)
 	out, err := rewriteImageMarkers(body, openAIImages{imageMarkerPrefix + "other": "data:image/png;base64,AA=="})
-	if err != nil || !bytes.Equal(out, body) {
-		t.Errorf("unknown marker rewritten: %s %v", out, err)
-	}
+	assert.NoError(t, err, "unknown marker rewritten: %s", out)
+	assert.True(t, bytes.Equal(out, body), "unknown marker rewritten: %s %v", out, err)
 }
 
 // Images go through the real Gemini SDK (against a fake server), whose
@@ -294,9 +258,7 @@ func TestGeminiDeveloperAPIAcceptsImages(t *testing.T) {
 	defer srv.Close()
 	llm, err := gemini.NewModel(context.Background(), "gemini-3.8-flash", &genai.ClientConfig{
 		APIKey: "test-key", Backend: genai.BackendGeminiAPI, HTTPOptions: genai.HTTPOptions{BaseURL: srv.URL}})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	store, _ := images.OpenStore(t.TempDir())
 	img, _ := images.Prepare("clipboard-120000.png", testPNG(t, 8, 8), images.Options{})
 	store.Put(img)
@@ -309,30 +271,23 @@ func TestGeminiDeveloperAPIAcceptsImages(t *testing.T) {
 			Name: "view_image", Response: map[string]any{images.ToolResultKey: img.URI()}}}}},
 	}}
 	for _, err := range m.GenerateContent(context.Background(), req, false) {
-		if err != nil {
-			t.Fatalf("Gemini rejected the request: %v", err)
-		}
+		require.NoError(t, err, "Gemini rejected the request")
 	}
 	b64 := base64.StdEncoding.EncodeToString(img.Data)
-	if strings.Count(body, `"inlineData":{"data":"`+b64+`","mimeType":"image/png"}`) != 2 {
-		t.Errorf("expected two inline images in the request:\n%s", body)
-	}
+	assert.Equal(t, 2, strings.Count(body, `"inlineData":{"data":"`+b64+`","mimeType":"image/png"}`), "expected two inline images in the request:\n%s", body)
 	// References must never go out as file parts (the tool result's own
 	// image_uri field is just text).
-	if strings.Contains(body, "displayName") || strings.Contains(body, "fileData") {
-		t.Errorf("display names or file references reached the API:\n%s", body)
-	}
+	assert.NotContains(t, body, "displayName", "display names or file references reached the API:\n%s", body)
+	assert.NotContains(t, body, "fileData", "display names or file references reached the API:\n%s", body)
 }
 
 func TestImageInstructionInSystemPrompt(t *testing.T) {
 	on := newEngineWith(t, fixtureOpts{cfg: imagesDir(t)}, textContent("ok"))
 	runTurns(t, on.eng, "s", "hi")
-	if sys := systemText(on.llm); !strings.Contains(sys, "You can see images") || !strings.Contains(sys, "call view_image") {
-		t.Errorf("image guidance missing:\n%s", sys)
-	}
+	sys := systemText(on.llm)
+	assert.Contains(t, sys, "You can see images", "image guidance missing:\n%s", sys)
+	assert.Contains(t, sys, "call view_image", "image guidance missing:\n%s", sys)
 	off := newEngineWith(t, fixtureOpts{cfg: func(c *config.Config) { c.Images.Enabled = false }}, textContent("ok"))
 	runTurns(t, off.eng, "s", "hi")
-	if strings.Contains(systemText(off.llm), "You can see images") {
-		t.Error("no image guidance when images are disabled")
-	}
+	assert.NotContains(t, systemText(off.llm), "You can see images", "no image guidance when images are disabled")
 }

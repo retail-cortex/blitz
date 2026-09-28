@@ -26,6 +26,8 @@ import (
 	"testing"
 
 	"github.com/retail-cortex/blitz/pkg/config"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/adk/v2/model"
 	"google.golang.org/genai"
 )
@@ -57,9 +59,8 @@ func (r *recorder) last(t *testing.T) *genai.GenerateContentConfig {
 	t.Helper()
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if len(r.configs) == 0 || r.configs[len(r.configs)-1] == nil {
-		t.Fatalf("%s got no config", r.name)
-	}
+	require.NotEqual(t, 0, len(r.configs), "%s got no config", r.name)
+	require.NotNil(t, r.configs[len(r.configs)-1], "%s got no config", r.name)
 	return r.configs[len(r.configs)-1]
 }
 
@@ -79,22 +80,21 @@ func TestEachFallbackModelGetsItsOwnSettings(t *testing.T) {
 	}))
 	global := &genai.GenerateContentConfig{Temperature: genai.Ptr[float32](0.2), MaxOutputTokens: 8192}
 	for _, err := range chain.GenerateContent(ctx, &model.LLMRequest{Config: global}, false) {
-		if err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, err)
 	}
 
 	p := primary.last(t)
-	if *p.Temperature != 0.9 || *p.Seed != 7 || p.MaxOutputTokens != 8192 {
-		t.Errorf("primary: temperature %v seed %v max %d", *p.Temperature, *p.Seed, p.MaxOutputTokens)
-	}
+	assert.Equal(t, float32(0.9), *p.Temperature, "primary: temperature %v seed %v max %d", *p.Temperature, *p.Seed, p.MaxOutputTokens)
+	assert.Equal(t, int32(7), *p.Seed, "primary: temperature %v seed %v max %d", *p.Temperature, *p.Seed, p.MaxOutputTokens)
+	assert.Equal(t, int32(8192), p.MaxOutputTokens, "primary: temperature %v seed %v max %d", *p.Temperature, *p.Seed, p.MaxOutputTokens)
 	b := backup.last(t)
-	if *b.Temperature != 0.2 || *b.TopP != 0.5 || b.Seed != nil || b.MaxOutputTokens != 8192 {
-		t.Errorf("backup must keep the global temperature, get its top_p and no seed: %+v", b)
-	}
-	if *global.Temperature != 0.2 || global.Seed != nil || global.TopP != nil {
-		t.Errorf("the shared request config was changed: %+v", global)
-	}
+	assert.Equal(t, float32(0.2), *b.Temperature, "backup must keep the global temperature, get its top_p and no seed: %+v", b)
+	assert.Equal(t, float32(0.5), *b.TopP, "backup must keep the global temperature, get its top_p and no seed: %+v", b)
+	assert.Nil(t, b.Seed, "backup must keep the global temperature, get its top_p and no seed: %+v", b)
+	assert.Equal(t, int32(8192), b.MaxOutputTokens, "backup must keep the global temperature, get its top_p and no seed: %+v", b)
+	assert.Equal(t, float32(0.2), *global.Temperature, "the shared request config was changed: %+v", global)
+	assert.Nil(t, global.Seed, "the shared request config was changed: %+v", global)
+	assert.Nil(t, global.TopP, "the shared request config was changed: %+v", global)
 }
 
 func TestSettingsWithoutLookupOrEntryLeaveTheRequestAlone(t *testing.T) {
@@ -107,9 +107,7 @@ func TestSettingsWithoutLookupOrEntryLeaveTheRequestAlone(t *testing.T) {
 	} {
 		for range m.GenerateContent(ctx, &model.LLMRequest{Config: cfg}, false) {
 		}
-		if r.last(t) != cfg {
-			t.Fatal("request was copied or changed without settings for the model")
-		}
+		require.Same(t, cfg, r.last(t), "request was copied or changed without settings for the model")
 	}
 }
 
@@ -136,9 +134,8 @@ func TestSettingSupported(t *testing.T) {
 		{"openai", "gpt-5", "reasoning_effort", true},
 	}
 	for _, c := range cases {
-		if got := SettingSupported(c.provider, c.model, c.key); got != c.want {
-			t.Errorf("%s %s %s = %v", c.provider, c.model, c.key, got)
-		}
+		got := SettingSupported(c.provider, c.model, c.key)
+		assert.Equal(t, c.want, got, "%s %s %s = %v", c.provider, c.model, c.key, got)
 	}
 }
 
@@ -150,31 +147,26 @@ func TestEngineAppliesModelSettingsAndChangesTakeEffect(t *testing.T) {
 			"unused":                  {},
 		}
 	}})
-	if err := f.eng.SetModel(context.Background(), withModelSettings(rec, "gemini")); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := collect(t, f.eng, "s", "hi"); err != nil {
-		t.Fatal(err)
-	}
-	if got := rec.last(t); *got.Temperature != 1.1 || got.MaxOutputTokens != int32(f.cfg.Blitz.MaxTokens) {
-		t.Fatalf("first call: temperature %v, max %d", *got.Temperature, got.MaxOutputTokens)
-	}
-	if all := f.eng.AllModelSettings(); len(all) != 1 || all["gemini-3.8-flash"].Temperature == nil {
-		t.Fatalf("AllModelSettings = %v", all)
-	}
+	require.NoError(t, f.eng.SetModel(context.Background(), withModelSettings(rec, "gemini")))
+	_, err := collect(t, f.eng, "s", "hi")
+	require.NoError(t, err)
+	got := rec.last(t)
+	require.Equal(t, float32(1.1), *got.Temperature, "first call: temperature %v, max %d", *got.Temperature, got.MaxOutputTokens)
+	require.Equal(t, int32(f.cfg.Blitz.MaxTokens), got.MaxOutputTokens, "first call: temperature %v, max %d", *got.Temperature, got.MaxOutputTokens)
+	all := f.eng.AllModelSettings()
+	require.Len(t, all, 1, "AllModelSettings = %v", all)
+	require.NotNil(t, all["gemini-3.8-flash"].Temperature, "AllModelSettings = %v", all)
 
 	f.eng.SetModelSettings("gemini-3.8-flash", config.ModelSettings{MaxTokens: ptr(100)})
-	if _, err := collect(t, f.eng, "s", "again"); err != nil {
-		t.Fatal(err)
-	}
-	if got := rec.last(t); got.MaxOutputTokens != 100 || *got.Temperature != float32(f.cfg.Blitz.Temperature) {
-		t.Fatalf("after change: max %d temperature %v", got.MaxOutputTokens, *got.Temperature)
-	}
+	_, err = collect(t, f.eng, "s", "again")
+	require.NoError(t, err)
+	got = rec.last(t)
+	require.Equal(t, int32(100), got.MaxOutputTokens, "after change: max %d temperature %v", got.MaxOutputTokens, *got.Temperature)
+	require.Equal(t, float32(f.cfg.Blitz.Temperature), *got.Temperature, "after change: max %d temperature %v", got.MaxOutputTokens, *got.Temperature)
 
 	f.eng.SetModelSettings("gemini-3.8-flash", config.ModelSettings{})
-	if s := f.eng.ModelSettings("gemini-3.8-flash"); !s.IsZero() {
-		t.Fatalf("not removed: %+v", s)
-	}
+	s := f.eng.ModelSettings("gemini-3.8-flash")
+	require.True(t, s.IsZero(), "not removed: %+v", s)
 }
 
 func TestSubagentUsesModelSettings(t *testing.T) {
@@ -186,12 +178,11 @@ func TestSubagentUsesModelSettings(t *testing.T) {
 		opts: []Option{WithAgentModel("qa", withModelSettings(sub, "anthropic"))},
 	})
 	// Called directly, as a hook would, without a run context.
-	if _, err := f.eng.InvokeSubagent(context.Background(), "qa", "review"); err != nil {
-		t.Fatal(err)
-	}
-	if got := sub.last(t); got.Temperature == nil || *got.Temperature != 0.3 {
-		t.Fatalf("sub-agent temperature %v", got.Temperature)
-	}
+	_, err := f.eng.InvokeSubagent(context.Background(), "qa", "review")
+	require.NoError(t, err)
+	got := sub.last(t)
+	require.NotNil(t, got.Temperature, "sub-agent temperature %v", got.Temperature)
+	require.Equal(t, float32(0.3), *got.Temperature, "sub-agent temperature %v", got.Temperature)
 }
 
 // The settings reach the wire through the real OpenAI adapter, and a seed
@@ -208,24 +199,19 @@ func TestOpenAIRequestCarriesModelSettings(t *testing.T) {
 	cfg := config.DefaultConfig()
 	cfg.LLM.Provider, cfg.LLM.OpenAI.BaseURL, cfg.LLM.OpenAI.APIKey, cfg.LLM.MaxRetries = "openai", srv.URL+"/v1", "sk-test", 0
 	m, err := NewModel(context.Background(), cfg, "gpt-test")
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	ctx := withSettingsLookup(context.Background(), lookupOf(map[string]config.ModelSettings{
 		"gpt-test": {Temperature: ptr(0.25), TopP: ptr(0.75), MaxTokens: ptr(321), Seed: ptr(42)},
 	}))
 	req := &model.LLMRequest{Contents: []*genai.Content{genai.NewContentFromText("hi", genai.RoleUser)}}
 	for _, err := range m.GenerateContent(ctx, req, false) {
-		if err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, err)
 	}
-	if body["temperature"] != 0.25 || body["top_p"] != 0.75 || body["max_output_tokens"] != 321.0 {
-		t.Fatalf("request body: temperature %v top_p %v max_output_tokens %v", body["temperature"], body["top_p"], body["max_output_tokens"])
-	}
-	if _, ok := body["seed"]; ok {
-		t.Fatal("seed was sent")
-	}
+	require.Equal(t, 0.25, body["temperature"], "request body: temperature %v top_p %v max_output_tokens %v", body["temperature"], body["top_p"], body["max_output_tokens"])
+	require.Equal(t, 0.75, body["top_p"], "request body: temperature %v top_p %v max_output_tokens %v", body["temperature"], body["top_p"], body["max_output_tokens"])
+	require.Equal(t, 321.0, body["max_output_tokens"], "request body: temperature %v top_p %v max_output_tokens %v", body["temperature"], body["top_p"], body["max_output_tokens"])
+	_, ok := body["seed"]
+	require.False(t, ok, "seed was sent")
 }
 
 // When both a bare and a "provider/" key name the same model, the bare one
@@ -238,9 +224,9 @@ func TestBareModelSettingsKeyWins(t *testing.T) {
 				"gpt-5":        {Seed: ptr(2)},
 			}
 		}})
-		if s := f.eng.ModelSettings("gpt-5"); s.Seed == nil || *s.Seed != 2 {
-			t.Fatalf("seed %v", s.Seed)
-		}
+		s := f.eng.ModelSettings("gpt-5")
+		require.NotNil(t, s.Seed, "seed %v", s.Seed)
+		require.Equal(t, 2, *s.Seed, "seed %v", s.Seed)
 	}
 }
 
@@ -266,11 +252,10 @@ func TestReasoningSettingsBecomeThinkingConfig(t *testing.T) {
 		for range m.GenerateContent(ctx, &model.LLMRequest{Config: &genai.GenerateContentConfig{}}, false) {
 		}
 		got := r.last(t).ThinkingConfig
-		if (got == nil) != (c.want == nil) || got != nil && (got.ThinkingLevel != c.want.ThinkingLevel ||
+		assert.Equal(t, (c.want == nil), (got == nil), "%s %s %+v: thinking %+v, want %+v", c.provider, c.model, c.s, got, c.want)
+		assert.False(t, got != nil && (got.ThinkingLevel != c.want.ThinkingLevel ||
 			(got.ThinkingBudget == nil) != (c.want.ThinkingBudget == nil) ||
-			got.ThinkingBudget != nil && *got.ThinkingBudget != *c.want.ThinkingBudget) {
-			t.Errorf("%s %s %+v: thinking %+v, want %+v", c.provider, c.model, c.s, got, c.want)
-		}
+			got.ThinkingBudget != nil && *got.ThinkingBudget != *c.want.ThinkingBudget), "%s %s %+v: thinking %+v, want %+v", c.provider, c.model, c.s, got, c.want)
 	}
 }
 
@@ -281,35 +266,29 @@ func TestSessionEffortOverridesModelSettings(t *testing.T) {
 	f := newEngineWith(t, fixtureOpts{cfg: func(c *config.Config) {
 		c.ModelSettings = map[string]config.ModelSettings{"gemini-3.8-flash": {ReasoningEffort: ptr("low"), Temperature: ptr(0.5)}}
 	}})
-	if err := f.eng.SetModel(context.Background(), withModelSettings(rec, "gemini")); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, f.eng.SetModel(context.Background(), withModelSettings(rec, "gemini")))
 	level := func() genai.ThinkingLevel {
 		t.Helper()
-		if _, err := collect(t, f.eng, "s", "hi"); err != nil {
-			t.Fatal(err)
-		}
+		_, err := collect(t, f.eng, "s", "hi")
+		require.NoError(t, err)
 		if tc := rec.last(t).ThinkingConfig; tc != nil {
 			return tc.ThinkingLevel
 		}
 		return ""
 	}
-	if got := level(); got != genai.ThinkingLevelLow {
-		t.Fatalf("model setting: %q", got)
-	}
+	got := level()
+	require.Equal(t, genai.ThinkingLevelLow, got, "model setting: %q", got)
 	f.eng.SetEffort("high")
-	if got := level(); got != genai.ThinkingLevelHigh || *rec.last(t).Temperature != 0.5 || f.eng.Effort() != "high" {
-		t.Fatalf("session effort: %q (the model's other settings must stay)", got)
-	}
-	if s := f.eng.ModelSettings("gemini-3.8-flash"); *s.ReasoningEffort != "low" {
-		t.Errorf("the session effort leaked into the saved settings: %v", *s.ReasoningEffort)
-	}
+	got = level()
+	require.Equal(t, genai.ThinkingLevelHigh, got, "session effort: %q (the model's other settings must stay)", got)
+	require.Equal(t, float32(0.5), *rec.last(t).Temperature, "session effort: %q (the model's other settings must stay)", got)
+	require.Equal(t, "high", f.eng.Effort(), "session effort: %q (the model's other settings must stay)", got)
+	s := f.eng.ModelSettings("gemini-3.8-flash")
+	assert.Equal(t, "low", *s.ReasoningEffort, "the session effort leaked into the saved settings: %v", *s.ReasoningEffort)
 	f.eng.SetModelSettings("gemini-3.8-flash", config.ModelSettings{})
-	if got := level(); got != genai.ThinkingLevelHigh {
-		t.Fatalf("session effort without model settings: %q", got)
-	}
+	got = level()
+	require.Equal(t, genai.ThinkingLevelHigh, got, "session effort without model settings: %q", got)
 	f.eng.SetEffort("")
-	if got := level(); got != "" {
-		t.Fatalf("after clearing: %q", got)
-	}
+	got = level()
+	require.Equal(t, genai.ThinkingLevel(""), got, "after clearing: %q", got)
 }

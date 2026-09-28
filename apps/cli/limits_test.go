@@ -19,12 +19,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strings"
 	"testing"
 	"time"
 
 	"github.com/retail-cortex/blitz/pkg/api"
-
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/genai"
 )
 
@@ -33,9 +33,8 @@ func TestLimitErrorsExitWithThree(t *testing.T) {
 		api.ErrCostLimit, api.ErrTimeLimit, api.ErrMaxTurns,
 		fmt.Errorf("%w ($0.50)", api.ErrCostLimit), fmt.Errorf("wrapped: %w", api.ErrTimeLimit),
 	} {
-		if got := exitCodeFor(err); got != exitMaxTurns {
-			t.Errorf("exitCodeFor(%v) = %d, want %d", err, got, exitMaxTurns)
-		}
+		got := exitCodeFor(err)
+		assert.Equal(t, exitMaxTurns, got, "exitCodeFor(%v) = %d, want %d", err, got, exitMaxTurns)
 	}
 }
 
@@ -51,9 +50,8 @@ func TestLimitFlagsNeedAOneShotPrompt(t *testing.T) {
 		"unknown mode":           {"--permission-mode", "yolo", "hi"},
 		"unknown effort":         {"--effort", "extreme", "hi"},
 	} {
-		if _, err := runCLI(t, args...); exitCodeFor(err) != exitUsage {
-			t.Errorf("%s: exit code %d (%v), want %d", name, exitCodeFor(err), err, exitUsage)
-		}
+		_, err := runCLI(t, args...)
+		assert.Equal(t, exitUsage, exitCodeFor(err), "%s: exit code %d (%v), want %d", name, exitCodeFor(err), err, exitUsage)
 	}
 }
 
@@ -72,16 +70,14 @@ func TestOneShotStopsAtItsCostLimit(t *testing.T) {
 	sess, _ := e.Storage().CreateSession("", "t", "blitz")
 	var out bytes.Buffer
 	err := runOneShot(context.Background(), e, oneShotOptions{prompt: "loop", sessionID: sess.ID, format: formatJSON, maxCostUSD: 0.0002, stdout: &out})
-	if exitCodeFor(err) != exitMaxTurns || !strings.Contains(fmt.Sprint(err), "cost limit") {
-		t.Fatalf("expected a cost-limit exit, got %v", err)
-	}
+	require.Equal(t, exitMaxTurns, exitCodeFor(err), "expected a cost-limit exit, got %v", err)
+	require.Contains(t, fmt.Sprint(err), "cost limit", "expected a cost-limit exit, got %v", err)
 	var res runResult
-	if err := json.Unmarshal(out.Bytes(), &res); err != nil {
-		t.Fatalf("json: %v %s", err, out.String())
-	}
-	if !res.IsError || res.ExitCode != exitMaxTurns || res.Usage.ModelCalls < 2 || res.Usage.ModelCalls > 3 {
-		t.Errorf("result %+v", res)
-	}
+	require.NoError(t, json.Unmarshal(out.Bytes(), &res), "json: %v %s", err, out.String())
+	assert.True(t, res.IsError, "result %+v", res)
+	assert.Equal(t, exitMaxTurns, res.ExitCode, "result %+v", res)
+	assert.GreaterOrEqual(t, res.Usage.ModelCalls, 2, "result %+v", res)
+	assert.LessOrEqual(t, res.Usage.ModelCalls, 3, "result %+v", res)
 }
 
 func TestOneShotStopsAtItsTimeout(t *testing.T) {
@@ -89,10 +85,8 @@ func TestOneShotStopsAtItsTimeout(t *testing.T) {
 	sess, _ := e.Storage().CreateSession("", "t", "blitz")
 	start := time.Now()
 	err := runOneShot(context.Background(), e, oneShotOptions{prompt: "wait", sessionID: sess.ID, format: formatJSON, timeout: 300 * time.Millisecond, stdout: &bytes.Buffer{}})
-	if exitCodeFor(err) != exitMaxTurns || !strings.Contains(fmt.Sprint(err), "time limit") {
-		t.Fatalf("expected a time-limit exit, got %v", err)
-	}
-	if d := time.Since(start); d > 4*time.Second {
-		t.Errorf("took %s: the timeout didn't stop the running command", d)
-	}
+	require.Equal(t, exitMaxTurns, exitCodeFor(err), "expected a time-limit exit, got %v", err)
+	require.Contains(t, fmt.Sprint(err), "time limit", "expected a time-limit exit, got %v", err)
+	d := time.Since(start)
+	assert.LessOrEqual(t, d, 4*time.Second, "took %s: the timeout didn't stop the running command", d)
 }

@@ -48,5 +48,9 @@ go_test(
         "provider_test.go",
     ],
     embed = [":skills"],
-    deps = ["//pkg/config"],
+    deps = [
+        "//pkg/config",
+        "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//require",
+    ],
 )

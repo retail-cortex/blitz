@@ -21,9 +21,11 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"strings"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // scriptDirs are host directories for a script: one it may write, one it
@@ -36,9 +38,7 @@ func newScriptDirs(t *testing.T) scriptDirs {
 	for _, p := range []string{d.writable, d.readOnly, d.outside} {
 		// Canonical paths: on macOS the temp dir is behind a symlink.
 		c, err := filepath.EvalSymlinks(p)
-		if err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, err)
 		os.WriteFile(filepath.Join(c, "hello.txt"), []byte("hello"), 0o644)
 		switch p {
 		case d.writable:
@@ -69,38 +69,36 @@ func testScriptBoxBehaviour(t *testing.T, box ScriptBox) {
 	t.Setenv("CP_TEST_SECRET", "leaked")
 
 	res, out, err := runScript(t, box, d, "cat "+d.readOnly+"/hello.txt && echo made > "+d.writable+"/out.txt && pwd", 0)
-	if err != nil || res.ExitCode != 0 || !strings.Contains(out, "hello") || !strings.Contains(out, d.writable) {
-		t.Fatalf("allowed work: %+v %v\n%s", res, err, out)
-	}
-	if b, _ := os.ReadFile(filepath.Join(d.writable, "out.txt")); string(b) != "made\n" {
-		t.Fatalf("write to the writable dir didn't reach the host: %q", b)
-	}
+	require.NoError(t, err, "allowed work: %+v %v\n%s", res, err, out)
+	require.Equal(t, 0, res.ExitCode, "allowed work: %+v %v\n%s", res, err, out)
+	require.Contains(t, out, "hello", "allowed work: %+v %v\n%s", res, err, out)
+	require.Contains(t, out, d.writable, "allowed work: %+v %v\n%s", res, err, out)
+	b, _ := os.ReadFile(filepath.Join(d.writable, "out.txt"))
+	require.Equal(t, "made\n", string(b), "write to the writable dir didn't reach the host: %q", b)
 	for _, target := range []string{d.readOnly + "/x.txt", d.outside + "/x.txt"} {
-		if res, out, _ := runScript(t, box, d, "echo pwned > "+target, 0); res.ExitCode == 0 {
-			t.Errorf("wrote %s: %s", target, out)
-		}
-		if _, err := os.Stat(target); err == nil {
-			t.Errorf("%s exists on the host", target)
-		}
+		res, out, _ := runScript(t, box, d, "echo pwned > "+target, 0)
+		assert.NotEqual(t, 0, res.ExitCode, "wrote %s: %s", target, out)
+		_, err := os.Stat(target)
+		assert.Error(t, err, "%s exists on the host", target)
 	}
 
 	res, out, _ = runScript(t, box, d, `echo "secret=[$CP_TEST_SECRET] given=[$GIVEN] home=[$HOME]"; echo tmp > "$TMPDIR/t" && cat "$TMPDIR/t"`, 0, "GIVEN=yes")
-	if !strings.Contains(out, "secret=[]") || !strings.Contains(out, "given=[yes]") || strings.Contains(out, "home=[]") || !strings.Contains(out, "\ntmp") {
-		t.Errorf("environment: %+v\n%s", res, out)
-	}
+	assert.Contains(t, out, "secret=[]", "environment: %+v\n%s", res, out)
+	assert.Contains(t, out, "given=[yes]", "environment: %+v\n%s", res, out)
+	assert.NotContains(t, out, "home=[]", "environment: %+v\n%s", res, out)
+	assert.Contains(t, out, "\ntmp", "environment: %+v\n%s", res, out)
 
 	start := time.Now()
 	res, _, err = runScript(t, box, d, "sleep 30", 500*time.Millisecond)
-	if err != nil || !res.TimedOut || res.ExitCode == 0 || time.Since(start) > 20*time.Second {
-		t.Errorf("timeout: %+v %v after %v", res, err, time.Since(start))
-	}
+	assert.NoError(t, err, "timeout: %+v %v after %v", res, err, time.Since(start))
+	assert.True(t, res.TimedOut, "timeout: %+v %v after %v", res, err, time.Since(start))
+	assert.NotEqual(t, 0, res.ExitCode, "timeout: %+v %v after %v", res, err, time.Since(start))
+	assert.LessOrEqual(t, time.Since(start), 20*time.Second, "timeout: %+v %v after %v", res, err, time.Since(start))
 
 	ctx, cancel := context.WithCancel(context.Background())
 	go func() { time.Sleep(500 * time.Millisecond); cancel() }()
 	_, err = box.Run(ctx, ScriptRequest{Argv: []string{"/bin/sh", "-c", "sleep 30"}, Dir: d.writable, Writable: []string{d.writable}})
-	if !errors.Is(err, context.Canceled) {
-		t.Errorf("cancel: %v", err)
-	}
+	assert.ErrorIs(t, err, context.Canceled, "cancel: %v", err)
 }
 
 func TestOSScriptBox(t *testing.T) {
@@ -108,27 +106,25 @@ func TestOSScriptBox(t *testing.T) {
 	if err != nil {
 		t.Skipf("no OS sandbox on %s: %v", runtime.GOOS, err)
 	}
-	if box.Name() != "os" {
-		t.Fatalf("name %q", box.Name())
-	}
+	require.Equal(t, "os", box.Name(), "name %q", box.Name())
 	testScriptBoxBehaviour(t, box)
 }
 
 func TestScriptBoxSelection(t *testing.T) {
-	if _, _, err := NewScriptBox(ScriptBoxConfig{Mode: "docker"}); err == nil || !strings.Contains(err.Error(), "unknown") {
-		t.Errorf("unknown mode: %v", err)
-	}
+	_, _, err := NewScriptBox(ScriptBoxConfig{Mode: "docker"})
+	assert.Error(t, err, "unknown mode")
+	assert.Contains(t, err.Error(), "unknown", "unknown mode: %v", err)
 	if runtime.GOOS != "linux" {
-		if _, _, err := NewScriptBox(ScriptBoxConfig{Mode: "gvisor"}); err == nil || !strings.Contains(err.Error(), "only on Linux") {
-			t.Errorf("gvisor off Linux: %v", err)
-		}
+		_, _, err := NewScriptBox(ScriptBoxConfig{Mode: "gvisor"})
+		assert.Error(t, err, "gvisor off Linux")
+		assert.Contains(t, err.Error(), "only on Linux", "gvisor off Linux: %v", err)
 	}
 	// Without any sandbox, scripts don't run: there is no unsandboxed fallback.
 	orig := platformSandboxProbe
 	platformSandboxProbe = func() error { return errors.New("no sandbox here") }
 	defer func() { platformSandboxProbe = orig }()
 	t.Setenv("RUNSC_PATH", filepath.Join(t.TempDir(), "missing-runsc"))
-	if _, note, err := NewScriptBox(ScriptBoxConfig{Mode: "auto", StateDir: t.TempDir()}); !errors.Is(err, ErrNoScriptBox) || note == "" {
-		t.Errorf("auto with nothing available: %q %v", note, err)
-	}
+	_, note, err := NewScriptBox(ScriptBoxConfig{Mode: "auto", StateDir: t.TempDir()})
+	assert.ErrorIs(t, err, ErrNoScriptBox, "auto with nothing available: %q %v", note, err)
+	assert.NotEqual(t, "", note, "auto with nothing available: %q %v", note, err)
 }

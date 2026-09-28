@@ -22,17 +22,17 @@ import (
 	"image/png"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
 	"github.com/retail-cortex/blitz/pkg/api"
-
 	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/engine/agents"
 	"github.com/retail-cortex/blitz/pkg/engine/runtime"
 	"github.com/retail-cortex/blitz/pkg/engine/session"
 	"github.com/retail-cortex/blitz/pkg/i18n"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/adk/v2/model"
 	"google.golang.org/genai"
 )
@@ -59,9 +59,7 @@ func openTestWith(t *testing.T, mutate func(*config.Config), replies ...*genai.C
 	}
 	llm := runtime.NewMockLLM("gemini-3.8-flash", replies...)
 	w, err := Open(context.Background(), cfg, Options{Model: llm, NewModel: mockModels})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	t.Cleanup(func() { w.Close() })
 	return w, llm
 }
@@ -79,9 +77,7 @@ func mockModels(_ context.Context, _ *config.Config, ref string) (model.LLM, err
 func savedConfig(t *testing.T) *config.Config {
 	t.Helper()
 	cfg, err := config.Load(filepath.Join(os.Getenv("HOME"), ".blitz"))
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	return cfg
 }
 
@@ -94,68 +90,58 @@ func writePNG(t *testing.T, path string) {
 	t.Helper()
 	var buf bytes.Buffer
 	png.Encode(&buf, image.NewRGBA(image.Rect(0, 0, 12, 8)))
-	if err := os.WriteFile(path, buf.Bytes(), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(path, buf.Bytes(), 0o644))
 }
 
 func TestOpenSessionSetsAuditContextAndMapsResumeErrors(t *testing.T) {
 	w := openTest(t)
-	if _, _, err := w.OpenSession("", true); !isResumeError(err) {
-		t.Errorf("--continue with no sessions: %v", err)
-	}
+	_, _, err := w.OpenSession("", true)
+	assert.True(t, isResumeError(err), "--continue with no sessions: %v", err)
 	rec, resumed, err := w.OpenSession("", false)
-	if err != nil || resumed || rec.Agent != w.Engine().ActiveAgent() {
-		t.Fatalf("new session: %+v %v %v", rec, resumed, err)
-	}
+	require.NoError(t, err, "new session: %+v %v", rec, resumed)
+	require.False(t, resumed, "new session: %+v %v %v", rec, resumed, err)
+	require.Equal(t, w.Engine().ActiveAgent(), rec.Agent, "new session: %+v %v %v", rec, resumed, err)
 	got, resumed, err := w.OpenSession(rec.ID, false)
-	if err != nil || !resumed || got.ID != rec.ID {
-		t.Errorf("resume by id: %+v %v %v", got, resumed, err)
-	}
+	assert.NoError(t, err, "resume by id: %+v %v", got, resumed)
+	assert.True(t, resumed, "resume by id: %+v %v %v", got, resumed, err)
+	assert.Equal(t, rec.ID, got.ID, "resume by id: %+v %v %v", got, resumed, err)
 }
 
 func TestSelectSession(t *testing.T) {
 	st, err := session.NewStorage(t.TempDir())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, _, err := selectSession(st, "", true, "t", "a"); !isResumeError(err) {
-		t.Errorf("--continue with no sessions: %v", err)
-	}
+	require.NoError(t, err)
+	_, _, continueErr := selectSession(st, "", true, "t", "a")
+	assert.True(t, isResumeError(continueErr), "--continue with no sessions: %v", continueErr)
 	first, resumed, _ := selectSession(st, "", false, "first", "a")
-	if resumed {
-		t.Error("new session reported as resumed")
-	}
+	assert.False(t, resumed, "new session reported as resumed")
 	st.AddMessage("user", "hello")
 	latest, resumed, err := selectSession(st, "latest", false, "", "")
-	if err != nil || !resumed || latest.ID != first.ID || len(latest.Messages) != 1 {
-		t.Errorf("resume latest: %+v %v %v", latest, resumed, err)
-	}
+	assert.NoError(t, err, "resume latest: %+v %v", latest, resumed)
+	assert.True(t, resumed, "resume latest: %+v %v %v", latest, resumed, err)
+	assert.Equal(t, first.ID, latest.ID, "resume latest: %+v %v %v", latest, resumed, err)
+	assert.Len(t, latest.Messages, 1, "resume latest: %+v %v %v", latest, resumed, err)
 	byID, _, err := selectSession(st, first.ID, false, "", "")
-	if err != nil || byID.ID != first.ID {
-		t.Errorf("resume by id: %v", err)
-	}
-	if _, _, err := selectSession(st, "no-such-session", false, "", ""); !isResumeError(err) {
-		t.Errorf("unknown id: %v", err)
-	}
+	assert.NoError(t, err, "resume by id")
+	assert.Equal(t, first.ID, byID.ID, "resume by id: %v", err)
+	_, _, unknownErr := selectSession(st, "no-such-session", false, "", "")
+	assert.True(t, isResumeError(unknownErr), "an unknown id: %v", unknownErr)
 	// --resume <name> starts a new session from the snapshot.
 	snap, err := st.Snapshot(first.ID, "greeting", false)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	branch, resumed, err := selectSession(st, "greeting", false, "", "")
-	if err != nil || !resumed || branch.ID == first.ID || branch.ID == snap.ID || branch.From != snap.ID || len(branch.Messages) != 1 {
-		t.Errorf("resume by name: %+v %v %v", branch, resumed, err)
-	}
+	assert.NoError(t, err, "resume by name: %+v %v", branch, resumed)
+	assert.True(t, resumed, "resume by name: %+v %v %v", branch, resumed, err)
+	assert.NotEqual(t, first.ID, branch.ID, "resume by name: %+v %v %v", branch, resumed, err)
+	assert.NotEqual(t, snap.ID, branch.ID, "resume by name: %+v %v %v", branch, resumed, err)
+	assert.Equal(t, snap.ID, branch.From, "resume by name: %+v %v %v", branch, resumed, err)
+	assert.Len(t, branch.Messages, 1, "resume by name: %+v %v %v", branch, resumed, err)
 	// --continue skips snapshots even when one is the newest session.
 	time.Sleep(10 * time.Millisecond)
-	if _, err := st.Snapshot(branch.ID, "newest", false); err != nil {
-		t.Fatal(err)
-	}
+	_, snapErr := st.Snapshot(branch.ID, "newest", false)
+	require.NoError(t, snapErr)
 	cont, _, err := selectSession(st, "", true, "", "")
-	if err != nil || cont.ID != branch.ID {
-		t.Errorf("--continue picked %s, want %s: %v", cont.ID, branch.ID, err)
-	}
+	assert.NoError(t, err, "--continue picked %s, want %s", cont.ID, branch.ID)
+	assert.Equal(t, branch.ID, cont.ID, "--continue picked %s, want %s: %v", cont.ID, branch.ID, err)
 }
 
 func TestModelErrorSummary(t *testing.T) {
@@ -163,13 +149,9 @@ func TestModelErrorSummary(t *testing.T) {
 	cfg.LLM.Gemini.APIKey = "AIzaSySECRETSECRETSECRETSECRETSECRET123"
 	err := errors.New(`api key is required. ClientConfig: &genai.ClientConfig{APIKey:"AIzaSySECRETSECRETSECRETSECRETSECRET123"}` + "\nmore")
 	got := ModelErrorSummary(err, cfg)
-	if got != "api key is required" {
-		t.Errorf("summary = %q", got)
-	}
+	assert.Equal(t, "api key is required", got, "summary = %q", got)
 	leak := ModelErrorSummary(errors.New("bad key AIzaSySECRETSECRETSECRETSECRETSECRET123"), cfg)
-	if strings.Contains(leak, "SECRET") {
-		t.Errorf("key leaked: %q", leak)
-	}
+	assert.NotContains(t, leak, "SECRET", "key leaked: %q", leak)
 }
 
 func TestSelectSessionScopedToWorkspace(t *testing.T) {
@@ -181,18 +163,18 @@ func TestSelectSessionScopedToWorkspace(t *testing.T) {
 
 	st.SetWorkspace("/proj/one")
 	got, resumed, err := selectSession(st, "", true, "", "")
-	if err != nil || !resumed || got.ID != one.ID {
-		t.Errorf("--continue in /proj/one picked %v (%v), want %s", got, err, one.ID)
-	}
+	assert.NoError(t, err, "--continue in /proj/one picked %v (%v), want %s", got, err, one.ID)
+	assert.True(t, resumed, "--continue in /proj/one picked %v (%v), want %s", got, err, one.ID)
+	assert.Equal(t, one.ID, got.ID, "--continue in /proj/one picked %v (%v), want %s", got, err, one.ID)
 	// Explicit IDs still work across workspaces.
 	got, _, err = selectSession(st, two.ID, false, "", "")
-	if err != nil || got.ID != two.ID || got.Workspace != "/proj/two" {
-		t.Errorf("explicit resume across workspaces: %+v %v", got, err)
-	}
+	assert.NoError(t, err, "explicit resume across workspaces: %+v", got)
+	assert.Equal(t, two.ID, got.ID, "explicit resume across workspaces: %+v %v", got, err)
+	assert.Equal(t, "/proj/two", got.Workspace, "explicit resume across workspaces: %+v %v", got, err)
 	st.SetWorkspace("/proj/three")
-	if _, _, err := selectSession(st, "latest", false, "", ""); !isResumeError(err) || !strings.Contains(err.Error(), "/proj/three") {
-		t.Errorf("empty workspace should be a usage error naming it: %v", err)
-	}
+	_, _, err = selectSession(st, "latest", false, "", "")
+	assert.True(t, isResumeError(err), "empty workspace should be a usage error naming it: %v", err)
+	assert.Contains(t, err.Error(), "/proj/three", "empty workspace should be a usage error naming it: %v", err)
 }
 
 func TestAgentModelRefsPrecedence(t *testing.T) {
@@ -201,19 +183,16 @@ func TestAgentModelRefsPrecedence(t *testing.T) {
 		os.WriteFile(filepath.Join(dir, name+".md"), []byte("---\nname: "+name+"\ndisplay_name: "+name+"\ndescription: d\ntools: []\ndefault_model: "+model+"\n---\nprompt\n"), 0o600)
 	}
 	reg, _ := agents.NewRegistry()
-	if err := reg.LoadExternalAgents(dir); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, reg.LoadExternalAgents(dir))
 	cfg := config.DefaultConfig()
 	cfg.AgentModels = map[string]string{"alpha": "gemini-3.8-flash", "ghost": "x"}
 	var warnings []string
 	refs := agentModelRefs(cfg, reg, func(s string) { warnings = append(warnings, s) })
-	if refs["alpha"] != "gemini-3.8-flash" || refs["beta"] != "openai/gpt-5" || len(refs) != 2 {
-		t.Fatalf("refs = %v (config pin must win over default_model)", refs)
-	}
-	if len(warnings) != 1 || !strings.Contains(warnings[0], "ghost") {
-		t.Fatalf("warnings = %v", warnings)
-	}
+	require.Equal(t, "gemini-3.8-flash", refs["alpha"], "refs = %v (config pin must win over default_model)", refs)
+	require.Equal(t, "openai/gpt-5", refs["beta"], "refs = %v (config pin must win over default_model)", refs)
+	require.Len(t, refs, 2, "refs = %v (config pin must win over default_model)", refs)
+	require.Len(t, warnings, 1, "warnings = %v", warnings)
+	require.Contains(t, warnings[0], "ghost", "warnings = %v", warnings)
 }
 
 func TestLoadAttachments(t *testing.T) {
@@ -225,15 +204,13 @@ func TestLoadAttachments(t *testing.T) {
 	var warnings []string
 	warn := func(s string) { warnings = append(warnings, s) }
 	got, err := e.LoadAttachments([]string{"a.png"}, "diff mentions @b.png and @gone.png", warn)
-	if err != nil || len(got) != 1 {
-		t.Fatalf("got %d images, %v", len(got), err)
-	}
-	if len(warnings) != 1 || !strings.Contains(warnings[0], "gone.png") {
-		t.Errorf("a bad mention should warn, not fail: %q", warnings)
-	}
-	if _, err := e.LoadAttachments([]string{"missing.png"}, "", warn); err == nil || !strings.Contains(err.Error(), "missing.png") {
-		t.Errorf("a bad image path must fail: %v", err)
-	}
+	require.NoError(t, err, "got %d images,", len(got))
+	require.Len(t, got, 1, "got %d images, %v", len(got), err)
+	assert.Len(t, warnings, 1, "a bad mention should warn, not fail: %q", warnings)
+	assert.Contains(t, warnings[0], "gone.png", "a bad mention should warn, not fail: %q", warnings)
+	_, err = e.LoadAttachments([]string{"missing.png"}, "", warn)
+	assert.Error(t, err, "a bad image path must fail")
+	assert.Contains(t, err.Error(), "missing.png", "a bad image path must fail: %v", err)
 }
 
 func TestSetupLocaleWarnsAndFallsBack(t *testing.T) {
@@ -245,10 +222,8 @@ func TestSetupLocaleWarnsAndFallsBack(t *testing.T) {
 	cfg.UI.LocalesDir = dir
 	var warnings []string
 	SetupLocale(cfg, func(s string) { warnings = append(warnings, s) })
-	if len(warnings) != 2 || !strings.Contains(warnings[0], "bad.json") || !strings.Contains(warnings[1], "not a language") {
-		t.Errorf("warnings = %q", warnings)
-	}
-	if i18n.Current().Tag().String() != "en-US" {
-		t.Errorf("fallback locale = %s", i18n.Current().Tag())
-	}
+	assert.Len(t, warnings, 2, "warnings = %q", warnings)
+	assert.Contains(t, warnings[0], "bad.json", "warnings = %q", warnings)
+	assert.Contains(t, warnings[1], "not a language", "warnings = %q", warnings)
+	assert.Equal(t, "en-US", i18n.Current().Tag().String(), "fallback locale = %s", i18n.Current().Tag())
 }

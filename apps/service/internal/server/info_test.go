@@ -24,6 +24,8 @@ import (
 
 	"connectrpc.com/connect"
 	pb "github.com/retail-cortex/blitz/proto/blitz/v1"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // The service says which version it is and what it runs from, so clients
@@ -42,12 +44,11 @@ func TestGetServiceInfo(t *testing.T) {
 		res, err := c.GetServiceInfo(context.Background(), connect.NewRequest(&pb.GetServiceInfoRequest{}))
 		srv.Close()
 		s.Close()
-		if err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, err)
 		exe, _ := os.Executable()
-		if res.Msg.Version != tc.want || res.Msg.Executable != exe || int(res.Msg.Pid) != os.Getpid() || time.Since(res.Msg.Started.AsTime()) > time.Minute {
-			t.Errorf("info = %v, want version %q, executable %q", res.Msg, tc.want, exe)
-		}
+		assert.Equal(t, tc.want, res.Msg.Version, "info = %v, want version %q, executable %q", res.Msg, tc.want, exe)
+		assert.Equal(t, exe, res.Msg.Executable, "info = %v, want version %q, executable %q", res.Msg, tc.want, exe)
+		assert.Equal(t, os.Getpid(), int(res.Msg.Pid), "info = %v, want version %q, executable %q", res.Msg, tc.want, exe)
+		assert.LessOrEqual(t, time.Since(res.Msg.Started.AsTime()), time.Minute, "info = %v, want version %q, executable %q", res.Msg, tc.want, exe)
 	}
 }

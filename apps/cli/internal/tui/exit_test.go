@@ -23,13 +23,14 @@ import (
 	"time"
 
 	"github.com/retail-cortex/blitz/pkg/engine/tools"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func startSleep(t *testing.T, pm *tools.ProcessManager, secs string) {
 	t.Helper()
-	if _, err := pm.Start("sleep "+secs, t.TempDir()); err != nil {
-		t.Fatal(err)
-	}
+	_, err := pm.Start("sleep "+secs, t.TempDir())
+	require.NoError(t, err)
 }
 
 func newPM(t *testing.T) *tools.ProcessManager {
@@ -44,73 +45,52 @@ var interactive = ExitPrompt{CanPrompt: true, AllowCancel: true}
 
 func TestConfirmExitNoProcesses(t *testing.T) {
 	ctx := context.Background()
-	if !ConfirmExit(ctx, input(""), nil, nil, interactive) {
-		t.Error("nil manager should allow exit")
-	}
-	if !ConfirmExit(ctx, input(""), newPM(t), nil, interactive) {
-		t.Error("no running processes should allow exit without prompting")
-	}
+	assert.True(t, ConfirmExit(ctx, input(""), nil, nil, interactive), "nil manager should allow exit")
+	assert.True(t, ConfirmExit(ctx, input(""), newPM(t), nil, interactive), "no running processes should allow exit without prompting")
 }
 
 func TestConfirmExitKill(t *testing.T) {
 	pm := newPM(t)
 	startSleep(t, pm, "30")
-	if !ConfirmExit(context.Background(), input("k\n"), pm, nil, interactive) {
-		t.Fatal("kill should exit")
-	}
-	if n := len(pm.Running()); n != 0 {
-		t.Errorf("%d processes still running after kill", n)
-	}
+	require.True(t, ConfirmExit(context.Background(), input("k\n"), pm, nil, interactive), "kill should exit")
+	n := len(pm.Running())
+	assert.Equal(t, 0, n, "%d processes still running after kill", n)
 }
 
 func TestConfirmExitWait(t *testing.T) {
 	pm := newPM(t)
 	startSleep(t, pm, "0.3")
 	start := time.Now()
-	if !ConfirmExit(context.Background(), input("w\n"), pm, nil, interactive) {
-		t.Fatal("wait should exit")
-	}
-	if time.Since(start) < 200*time.Millisecond {
-		t.Error("returned before the process finished")
-	}
+	require.True(t, ConfirmExit(context.Background(), input("w\n"), pm, nil, interactive), "wait should exit")
+	assert.GreaterOrEqual(t, time.Since(start), 200*time.Millisecond, "returned before the process finished")
 	list := pm.List()
-	if len(list) != 1 || list[0].Running || list[0].ExitCode != 0 {
-		t.Errorf("process should have finished normally: %+v", list)
-	}
+	assert.Len(t, list, 1, "process should have finished normally: %+v", list)
+	assert.False(t, list[0].Running, "process should have finished normally: %+v", list)
+	assert.Equal(t, 0, list[0].ExitCode, "process should have finished normally: %+v", list)
 }
 
 func TestConfirmExitCancel(t *testing.T) {
 	pm := newPM(t)
 	startSleep(t, pm, "30")
-	if ConfirmExit(context.Background(), input("c\n"), pm, nil, interactive) {
-		t.Fatal("cancel should not exit")
-	}
-	if len(pm.Running()) != 1 {
-		t.Error("cancel must leave processes running")
-	}
+	require.False(t, ConfirmExit(context.Background(), input("c\n"), pm, nil, interactive), "cancel should not exit")
+	assert.Len(t, pm.Running(), 1, "cancel must leave processes running")
 	// Without AllowCancel (one-shot mode), anything but wait kills.
-	if !ConfirmExit(context.Background(), input("c\n"), pm, nil, ExitPrompt{CanPrompt: true}) {
-		t.Fatal("expected exit when cancel is not offered")
-	}
-	if len(pm.Running()) != 0 {
-		t.Error("processes should be killed")
-	}
+	require.True(t, ConfirmExit(context.Background(), input("c\n"), pm, nil, ExitPrompt{CanPrompt: true}), "expected exit when cancel is not offered")
+	assert.Len(t, pm.Running(), 0, "processes should be killed")
 }
 
 func TestConfirmExitForceQuit(t *testing.T) {
 	// EOF at the prompt force-quits.
 	pm := newPM(t)
 	startSleep(t, pm, "30")
-	if !ConfirmExit(context.Background(), input(""), pm, nil, interactive) || len(pm.Running()) != 0 {
-		t.Error("EOF should force quit and kill")
-	}
+	assert.True(t, ConfirmExit(context.Background(), input(""), pm, nil, interactive), "EOF should force quit and kill")
+	assert.Len(t, pm.Running(), 0, "EOF should force quit and kill")
 
 	// Cannot prompt (non-interactive): kill without reading input.
 	pm = newPM(t)
 	startSleep(t, pm, "30")
-	if !ConfirmExit(context.Background(), input("c\n"), pm, nil, ExitPrompt{}) || len(pm.Running()) != 0 {
-		t.Error("non-interactive exit should kill")
-	}
+	assert.True(t, ConfirmExit(context.Background(), input("c\n"), pm, nil, ExitPrompt{}), "non-interactive exit should kill")
+	assert.Len(t, pm.Running(), 0, "non-interactive exit should kill")
 
 	// Second Ctrl+C at the prompt force-quits.
 	pm = newPM(t)
@@ -125,9 +105,8 @@ func TestConfirmExitForceQuit(t *testing.T) {
 	}()
 	select {
 	case ok := <-done:
-		if !ok || len(pm.Running()) != 0 {
-			t.Error("Ctrl+C at prompt should kill and exit")
-		}
+		assert.True(t, ok, "Ctrl+C at prompt should kill and exit")
+		assert.Len(t, pm.Running(), 0, "Ctrl+C at prompt should kill and exit")
 	case <-time.After(5 * time.Second):
 		t.Fatal("Ctrl+C at prompt did not force quit")
 	}
@@ -138,12 +117,9 @@ func TestConfirmExitForceQuit(t *testing.T) {
 	sigs = make(chan os.Signal, 1)
 	go func() { time.Sleep(300 * time.Millisecond); sigs <- os.Interrupt }()
 	start := time.Now()
-	if !ConfirmExit(context.Background(), input("w\n"), pm, sigs, interactive) {
-		t.Fatal("expected exit")
-	}
-	if time.Since(start) > 5*time.Second || len(pm.Running()) != 0 {
-		t.Error("Ctrl+C while waiting should kill promptly")
-	}
+	require.True(t, ConfirmExit(context.Background(), input("w\n"), pm, sigs, interactive), "expected exit")
+	assert.LessOrEqual(t, time.Since(start), 5*time.Second, "Ctrl+C while waiting should kill promptly")
+	assert.Len(t, pm.Running(), 0, "Ctrl+C while waiting should kill promptly")
 }
 
 func TestREPLExitWithBackgroundProcesses(t *testing.T) {
@@ -157,15 +133,11 @@ func TestREPLExitWithBackgroundProcesses(t *testing.T) {
 	go func() { done <- RunREPL(context.Background(), app) }()
 	select {
 	case err := <-done:
-		if err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, err)
 	case <-time.After(10 * time.Second):
 		t.Fatal("REPL did not exit")
 	}
-	if len(pm.Running()) != 0 {
-		t.Error("background process survived REPL exit")
-	}
+	assert.Len(t, pm.Running(), 0, "background process survived REPL exit")
 }
 
 func TestREPLCtrlCAtPromptWithBackgroundProcess(t *testing.T) {
@@ -194,7 +166,5 @@ func TestREPLCtrlCAtPromptWithBackgroundProcess(t *testing.T) {
 		t.Fatal("REPL did not exit after choosing kill")
 	}
 	pw.Close()
-	if len(pm.Running()) != 0 {
-		t.Error("background process survived")
-	}
+	assert.Len(t, pm.Running(), 0, "background process survived")
 }

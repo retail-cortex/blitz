@@ -20,6 +20,9 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestBwrapArgs(t *testing.T) {
@@ -38,24 +41,14 @@ func TestBwrapArgs(t *testing.T) {
 		"--tmpfs " + ws + "/secrets --remount-ro " + ws + "/secrets",
 		"--unshare-net",
 	} {
-		if !strings.Contains(joined, want) {
-			t.Errorf("args missing %q:\n%s", want, joined)
-		}
+		assert.Contains(t, joined, want, "args missing %q:\n%s", want, joined)
 	}
-	if strings.Contains(joined, "/definitely/missing") {
-		t.Error("missing writable dir should be skipped (bwrap fails on it)")
-	}
-	if args[len(args)-1] != "--" {
-		t.Error("args must end with --")
-	}
+	assert.NotContains(t, joined, "/definitely/missing", "missing writable dir should be skipped (bwrap fails on it)")
+	assert.Equal(t, "--", args[len(args)-1], "args must end with --")
 	// Order: read-only and masks come after writable binds so they win.
-	if slices.Index(args, "--bind") > slices.Index(args, ro) {
-		t.Error("read-only bind must follow writable binds")
-	}
+	assert.LessOrEqual(t, slices.Index(args, "--bind"), slices.Index(args, ro), "read-only bind must follow writable binds")
 	spec.AllowNetwork = true
-	if strings.Contains(strings.Join(bwrapArgs("bwrap", spec, nil, nil), " "), "--unshare-net") {
-		t.Error("network should be shared when allowed")
-	}
+	assert.NotContains(t, strings.Join(bwrapArgs("bwrap", spec, nil, nil), " "), "--unshare-net", "network should be shared when allowed")
 }
 
 func TestExpandBlocked(t *testing.T) {
@@ -69,23 +62,15 @@ func TestExpandBlocked(t *testing.T) {
 	writeFile(t, filepath.Join(home, ".ssh", "id_ed25519"), "x")
 
 	m, err := NewPathMatcher([]string{".env", "*.pem", "~/.ssh"}, []string{ws})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	files, dirs := expandBlocked(OSSandboxSpec{WritableDirs: []string{ws}, Blocked: m})
 	joined := strings.Join(append(files, dirs...), ",")
 	for _, want := range []string{filepath.Join(ws, ".env"), filepath.Join(ws, "deep", "a", "server.pem"), filepath.Join(home, ".ssh")} {
-		if !strings.Contains(joined, want) {
-			t.Errorf("expected %s blocked; got %s", want, joined)
-		}
+		assert.Contains(t, joined, want, "expected %s blocked; got %s", want, joined)
 	}
-	if strings.Contains(joined, "ok.txt") || strings.Contains(joined, "node_modules") {
-		t.Errorf("unexpected entries: %s", joined)
-	}
-	if !slices.Contains(dirs, filepath.Join(home, ".ssh")) {
-		t.Error("~/.ssh should be masked as a directory")
-	}
-	if f, d := expandBlocked(OSSandboxSpec{WritableDirs: []string{ws}}); len(f)+len(d) != 0 {
-		t.Error("no matcher -> nothing blocked")
-	}
+	assert.NotContains(t, joined, "ok.txt", "unexpected entries: %s", joined)
+	assert.NotContains(t, joined, "node_modules", "unexpected entries: %s", joined)
+	assert.Contains(t, dirs, filepath.Join(home, ".ssh"), "~/.ssh should be masked as a directory")
+	f, d := expandBlocked(OSSandboxSpec{WritableDirs: []string{ws}})
+	assert.Equal(t, 0, len(f)+len(d), "no matcher -> nothing blocked")
 }

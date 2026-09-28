@@ -52,6 +52,8 @@ go_test(
         "//pkg/config",
         "//pkg/engine",
         "//pkg/engine/runtime",
+        "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//require",
         "@org_golang_google_adk_v2//model",
         "@org_golang_google_genai//:genai",
         "@org_uber_go_goleak//:goleak",

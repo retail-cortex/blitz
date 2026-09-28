@@ -17,7 +17,6 @@ package client
 import (
 	"bytes"
 	"context"
-	"errors"
 	"image"
 	"image/png"
 	"net/http"
@@ -25,16 +24,16 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"strings"
 	"testing"
 	"time"
 
-	"github.com/retail-cortex/blitz/pkg/api"
-
 	"github.com/retail-cortex/blitz/apps/service/servicetest"
+	"github.com/retail-cortex/blitz/pkg/api"
 	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/engine"
 	"github.com/retail-cortex/blitz/pkg/engine/runtime"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/adk/v2/model"
 	"google.golang.org/genai"
 )
@@ -65,13 +64,9 @@ func attach(t *testing.T, mutate func(*config.Config), replies ...*genai.Content
 	t.Cleanup(func() { srv.Close(); s.Close() })
 	var warnings []string
 	r, err := AttachHTTP(context.Background(), http.DefaultClient, srv.URL, t.TempDir(), func(w string) { warnings = append(warnings, w) })
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	t.Cleanup(func() {
-		if len(warnings) > 0 {
-			t.Errorf("warnings: %q", warnings)
-		}
+		assert.LessOrEqual(t, len(warnings), 0, "warnings: %q", warnings)
 	})
 	return r
 }
@@ -85,33 +80,30 @@ func call(name string, args map[string]any) *genai.Content {
 func TestRemoteOperationsAndTypedErrors(t *testing.T) {
 	r := attach(t, nil)
 	ctx := context.Background()
-	if r.ModelErr() != nil || r.Model().Name == "" || r.ActiveAgent().Name != "blitz" {
-		t.Fatalf("model %v %v, agent %v", r.ModelErr(), r.Model(), r.ActiveAgent())
-	}
+	require.NoError(t, r.ModelErr(), "model %v %v, agent %v", r.ModelErr(), r.Model(), r.ActiveAgent())
+	require.NotEqual(t, "", r.Model().Name, "model %v %v, agent %v", r.ModelErr(), r.Model(), r.ActiveAgent())
+	require.Equal(t, "blitz", r.ActiveAgent().Name, "model %v %v, agent %v", r.ModelErr(), r.Model(), r.ActiveAgent())
 	var unknown *api.UnknownAgentError
-	if _, err := r.PinModel(ctx, "nobody", "x"); !errors.As(err, &unknown) || unknown.Name != "nobody" {
-		t.Errorf("unknown agent: %v", err)
-	}
+	_, err := r.PinModel(ctx, "nobody", "x")
+	assert.ErrorAs(t, err, &unknown, "unknown agent: %v", err)
+	assert.Equal(t, "nobody", unknown.Name, "unknown agent: %v", err)
 	var invalid *api.InvalidSettingError
-	if _, err := r.UpdateModelSettings("gpt-5", false, []api.Setting{{Key: "temperature", Value: "9"}}); !errors.As(err, &invalid) {
-		t.Errorf("invalid setting: %v", err)
-	}
-	if _, err := r.SaveSnapshot("s", false); !errors.Is(err, api.ErrNoActiveSession) {
-		t.Errorf("no session: %v", err)
-	}
-	if _, err := r.Set(ctx, "agency", "reckless"); !errors.Is(err, api.ErrInvalidAgency) {
-		t.Errorf("agency: %v", err)
-	}
+	_, err = r.UpdateModelSettings("gpt-5", false, []api.Setting{{Key: "temperature", Value: "9"}})
+	assert.ErrorAs(t, err, &invalid, "invalid setting: %v", err)
+	_, err = r.SaveSnapshot("s", false)
+	assert.ErrorIs(t, err, api.ErrNoActiveSession, "no session: %v", err)
+	_, err = r.Set(ctx, "agency", "reckless")
+	assert.ErrorIs(t, err, api.ErrInvalidAgency, "agency: %v", err)
 	res, err := r.PinModel(ctx, "qa", "anthropic/claude-haiku-4-5")
-	if err != nil || res.Model != "claude-haiku-4-5" || res.Saved.Err != nil {
-		t.Fatalf("pin %+v %v", res, err)
-	}
-	if i := slices.IndexFunc(r.ListAgents(), func(a api.AgentInfo) bool { return a.Name == "qa" }); i < 0 || r.ListAgents()[i].PinnedModel != "claude-haiku-4-5" {
-		t.Error("pin not listed")
-	}
-	if !r.ImagesEnabled() || r.Processes() != nil || len(r.SandboxSummary()) == 0 {
-		t.Errorf("images %v, processes %v, sandbox %v", r.ImagesEnabled(), r.Processes(), r.SandboxSummary())
-	}
+	require.NoError(t, err, "pin %+v", res)
+	require.Equal(t, "claude-haiku-4-5", res.Model, "pin %+v %v", res, err)
+	require.NoError(t, res.Saved.Err, "pin %+v %v", res, err)
+	i := slices.IndexFunc(r.ListAgents(), func(a api.AgentInfo) bool { return a.Name == "qa" })
+	assert.GreaterOrEqual(t, i, 0, "pin not listed")
+	assert.Equal(t, "claude-haiku-4-5", r.ListAgents()[i].PinnedModel, "pin not listed")
+	assert.True(t, r.ImagesEnabled(), "images %v, processes %v, sandbox %v", r.ImagesEnabled(), r.Processes(), r.SandboxSummary())
+	assert.Nil(t, r.Processes(), "images %v, processes %v, sandbox %v", r.ImagesEnabled(), r.Processes(), r.SandboxSummary())
+	assert.NotEqual(t, 0, len(r.SandboxSummary()), "images %v, processes %v, sandbox %v", r.ImagesEnabled(), r.Processes(), r.SandboxSummary())
 }
 
 func TestRemoteTurnWithApprovalAndQuestion(t *testing.T) {
@@ -130,9 +122,7 @@ func TestRemoteTurnWithApprovalAndQuestion(t *testing.T) {
 		},
 	)
 	s, err := r.NewSession()
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	var events []string
 	accepted, finished := false, false
 	res, err := r.Run(context.Background(), s.ID, api.Turn{
@@ -145,21 +135,16 @@ func TestRemoteTurnWithApprovalAndQuestion(t *testing.T) {
 			events = append(events, "result:"+e.ToolResult.Name)
 		}
 	})
-	if err != nil || res.Output != "all done" || !accepted || !finished {
-		t.Fatalf("run: %+v %v accepted=%v finished=%v", res, err, accepted, finished)
-	}
-	if !slices.Equal(asked, []string{"approve:write_file", "ask:Tabs or spaces?"}) {
-		t.Errorf("asked %v", asked)
-	}
-	if !slices.Equal(events, []string{"call:create_file", "result:create_file", "call:ask_user_question", "result:ask_user_question"}) {
-		t.Errorf("events %v", events)
-	}
-	if _, err := os.Stat(filepath.Join(r.Dir(), "made.txt")); err != nil {
-		t.Errorf("approved write: %v", err)
-	}
-	if active, _ := r.ActiveSession(); len(active.Messages) != 2 {
-		t.Errorf("transcript %+v", active.Messages)
-	}
+	require.NoError(t, err, "run: %+v %v accepted=%v finished=%v", res, err, accepted, finished)
+	require.Equal(t, "all done", res.Output, "run: %+v %v accepted=%v finished=%v", res, err, accepted, finished)
+	require.True(t, accepted, "run: %+v %v accepted=%v finished=%v", res, err, accepted, finished)
+	require.True(t, finished, "run: %+v %v accepted=%v finished=%v", res, err, accepted, finished)
+	assert.Equal(t, []string{"approve:write_file", "ask:Tabs or spaces?"}, asked, "asked %v", asked)
+	assert.Equal(t, []string{"call:create_file", "result:create_file", "call:ask_user_question", "result:ask_user_question"}, events, "events %v", events)
+	_, err = os.Stat(filepath.Join(r.Dir(), "made.txt"))
+	assert.NoError(t, err, "approved write")
+	active, _ := r.ActiveSession()
+	assert.Len(t, active.Messages, 2, "transcript %+v", active.Messages)
 }
 
 func TestRemoteBlockedPrompt(t *testing.T) {
@@ -169,9 +154,8 @@ func TestRemoteBlockedPrompt(t *testing.T) {
 	s, _ := r.NewSession()
 	_, err := r.Run(context.Background(), s.ID, api.Turn{Text: "my password"}, func(api.Event) {})
 	var blocked *api.BlockedError
-	if !errors.As(err, &blocked) || !strings.Contains(blocked.Reason, "no secrets") {
-		t.Errorf("blocked: %v", err)
-	}
+	assert.ErrorAs(t, err, &blocked, "blocked: %v", err)
+	assert.Contains(t, blocked.Reason, "no secrets", "blocked: %v", err)
 }
 
 func TestRemoteImages(t *testing.T) {
@@ -181,16 +165,16 @@ func TestRemoteImages(t *testing.T) {
 	os.WriteFile(filepath.Join(r.Dir(), "a.png"), buf.Bytes(), 0o644)
 
 	imgs, err := r.LoadAttachments([]string{"a.png"}, "", func(w string) { t.Errorf("warning %s", w) })
-	if err != nil || len(imgs) != 1 || imgs[0].Width != 12 || !strings.Contains(imgs[0].Summary(), "12×8") {
-		t.Fatalf("attachments %v %v", imgs, err)
-	}
-	if _, err := r.LoadAttachments([]string{"missing.png"}, "", nil); err == nil || !strings.Contains(err.Error(), "missing.png") {
-		t.Errorf("missing image: %v", err)
-	}
+	require.NoError(t, err, "attachments %v", imgs)
+	require.Len(t, imgs, 1, "attachments %v %v", imgs, err)
+	require.Equal(t, 12, imgs[0].Width, "attachments %v %v", imgs, err)
+	require.Contains(t, imgs[0].Summary(), "12×8", "attachments %v %v", imgs, err)
+	_, err = r.LoadAttachments([]string{"missing.png"}, "", nil)
+	assert.Error(t, err, "missing image")
+	assert.Contains(t, err.Error(), "missing.png", "missing image: %v", err)
 	s, _ := r.NewSession()
-	if _, err := r.Run(context.Background(), s.ID, api.Turn{Text: "what is this?", Images: imgs}, func(api.Event) {}); err != nil {
-		t.Fatalf("turn with an image: %v", err)
-	}
+	_, err = r.Run(context.Background(), s.ID, api.Turn{Text: "what is this?", Images: imgs}, func(api.Event) {})
+	require.NoError(t, err, "turn with an image")
 }
 
 func TestAttachReportsAnUnavailableModel(t *testing.T) {
@@ -207,9 +191,8 @@ func TestAttachReportsAnUnavailableModel(t *testing.T) {
 	srv := httptest.NewServer(s.Handler())
 	defer func() { srv.Close(); s.Close() }()
 	r, err := AttachHTTP(context.Background(), http.DefaultClient, srv.URL, t.TempDir(), nil)
-	if err != nil || r.ModelErr() == nil {
-		t.Errorf("attach %v, model error %v", err, r.ModelErr())
-	}
+	assert.NoError(t, err, "attach %v, model error %v", err, r.ModelErr())
+	assert.Error(t, r.ModelErr(), "attach %v, model error %v", err, r.ModelErr())
 }
 
 // Limits travel with a remote turn and come back as app's errors, so an
@@ -221,51 +204,40 @@ func TestRemoteTurnLimits(t *testing.T) {
 	}
 	r := attach(t, func(c *config.Config) { c.Blitz.AutoApprove = true }, loop...)
 	sess, _, err := r.OpenSession("", false)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := r.Run(context.Background(), sess.ID, api.Turn{Text: "loop", MaxTurns: 2}, func(api.Event) {}); !errors.Is(err, api.ErrMaxTurns) {
-		t.Errorf("max turns over the API: %v", err)
-	}
+	require.NoError(t, err)
+	_, err = r.Run(context.Background(), sess.ID, api.Turn{Text: "loop", MaxTurns: 2}, func(api.Event) {})
+	assert.ErrorIs(t, err, api.ErrMaxTurns, "max turns over the API: %v", err)
 	r2 := attach(t, func(c *config.Config) { c.Blitz.AutoApprove = true }, call("run_shell_command", map[string]any{"command": "sleep 5"}))
 	sess2, _, _ := r2.OpenSession("", false)
 	start := time.Now()
-	if _, err := r2.Run(context.Background(), sess2.ID, api.Turn{Text: "wait", Timeout: 300 * time.Millisecond}, func(api.Event) {}); !errors.Is(err, api.ErrTimeLimit) {
-		t.Errorf("timeout over the API: %v", err)
-	}
-	if time.Since(start) > 4*time.Second {
-		t.Error("the timeout wasn't applied in the service")
-	}
+	_, err = r2.Run(context.Background(), sess2.ID, api.Turn{Text: "wait", Timeout: 300 * time.Millisecond}, func(api.Event) {})
+	assert.ErrorIs(t, err, api.ErrTimeLimit, "timeout over the API: %v", err)
+	assert.LessOrEqual(t, time.Since(start), 4*time.Second, "the timeout wasn't applied in the service")
 }
 
 // The permission mode is the workspace's in the service: set over the API
 // and read back in the settings, with typed errors.
 func TestRemotePermissionMode(t *testing.T) {
 	r := attach(t, nil)
-	if m, err := r.SetPermissionMode("acceptEdits"); err != nil || m != "accept-edits" {
-		t.Fatalf("set: %q %v", m, err)
-	}
-	if got := r.Settings().PermissionMode; got != "accept-edits" {
-		t.Errorf("settings mode %q", got)
-	}
-	if _, err := r.SetPermissionMode("yolo"); !errors.Is(err, api.ErrUnknownMode) {
-		t.Errorf("unknown mode over the API: %v", err)
-	}
+	m, err := r.SetPermissionMode("acceptEdits")
+	require.NoError(t, err, "set: %q", m)
+	require.Equal(t, "accept-edits", m, "set: %q %v", m, err)
+	got := r.Settings().PermissionMode
+	assert.Equal(t, "accept-edits", got, "settings mode %q", got)
+	_, err = r.SetPermissionMode("yolo")
+	assert.ErrorIs(t, err, api.ErrUnknownMode, "unknown mode over the API: %v", err)
 }
 
 // The session effort is set with Set and read back in the settings.
 func TestRemoteEffort(t *testing.T) {
 	r := attach(t, nil)
-	if _, err := r.Set(context.Background(), "effort", "high"); err != nil {
-		t.Fatal(err)
-	}
-	if got := r.Settings().Effort; got != "high" {
-		t.Errorf("settings effort %q", got)
-	}
+	_, err := r.Set(context.Background(), "effort", "high")
+	require.NoError(t, err)
+	got := r.Settings().Effort
+	assert.Equal(t, "high", got, "settings effort %q", got)
 	var invalid *api.InvalidSettingError
-	if _, err := r.Set(context.Background(), "effort", "extreme"); !errors.As(err, &invalid) {
-		t.Errorf("invalid effort over the API: %v", err)
-	}
+	_, err = r.Set(context.Background(), "effort", "extreme")
+	assert.ErrorAs(t, err, &invalid, "invalid effort over the API: %v", err)
 }
 
 // Rewinding goes through the service: points, a conversation rewind, and
@@ -273,37 +245,32 @@ func TestRemoteEffort(t *testing.T) {
 func TestRemoteRewind(t *testing.T) {
 	r := attach(t, nil, genai.NewContentFromText("one", genai.RoleModel), genai.NewContentFromText("two", genai.RoleModel))
 	sess, _, err := r.OpenSession("", false)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	for _, p := range []string{"first", "second"} {
-		if _, err := r.Run(context.Background(), sess.ID, api.Turn{Text: p}, func(api.Event) {}); err != nil {
-			t.Fatal(err)
-		}
+		_, err := r.Run(context.Background(), sess.ID, api.Turn{Text: p}, func(api.Event) {})
+		require.NoError(t, err)
 	}
 	points, err := r.RewindPoints()
-	if err != nil || len(points) != 2 || points[1].Text != "second" || !points[1].Conversation || points[1].Time.IsZero() {
-		t.Fatalf("points %+v %v", points, err)
-	}
+	require.NoError(t, err, "points %+v", points)
+	require.Len(t, points, 2, "points %+v %v", points, err)
+	require.Equal(t, "second", points[1].Text, "points %+v %v", points, err)
+	require.True(t, points[1].Conversation, "points %+v %v", points, err)
+	require.False(t, points[1].Time.IsZero(), "points %+v %v", points, err)
 	res, err := r.Rewind(context.Background(), points[1].Index, api.RewindConversation, false)
-	if err != nil || res.Prompt != "second" || res.Mode != api.RewindConversation {
-		t.Fatalf("rewind %+v %v", res, err)
-	}
-	if a, _ := r.ActiveSession(); a.MessageCount != 2 {
-		t.Errorf("messages after rewinding: %d", a.MessageCount)
-	}
-	if err := r.Steer(context.Background(), sess.ID, "a steer message"); err != nil {
-		t.Fatal(err)
-	}
-	if a, _ := r.ActiveSession(); len(a.Messages) != 3 || a.Messages[0].Kind != "" || a.Messages[2].Kind != "steer" {
-		t.Errorf("message kinds over the API: %+v", a.Messages)
-	}
-	if _, err := r.Rewind(context.Background(), 1, api.RewindBoth, false); !errors.Is(err, api.ErrNotRewindPoint) {
-		t.Errorf("not a prompt: %v", err)
-	}
-	if _, err := r.Rewind(context.Background(), 0, "sideways", false); !errors.Is(err, api.ErrUnknownRewindMode) {
-		t.Errorf("unknown mode: %v", err)
-	}
+	require.NoError(t, err, "rewind %+v", res)
+	require.Equal(t, "second", res.Prompt, "rewind %+v %v", res, err)
+	require.Equal(t, api.RewindConversation, res.Mode, "rewind %+v %v", res, err)
+	a, _ := r.ActiveSession()
+	assert.Equal(t, 2, a.MessageCount, "messages after rewinding: %d", a.MessageCount)
+	require.NoError(t, r.Steer(context.Background(), sess.ID, "a steer message"))
+	a, _ = r.ActiveSession()
+	assert.Len(t, a.Messages, 3, "message kinds over the API: %+v", a.Messages)
+	assert.Equal(t, "", a.Messages[0].Kind, "message kinds over the API: %+v", a.Messages)
+	assert.Equal(t, "steer", a.Messages[2].Kind, "message kinds over the API: %+v", a.Messages)
+	_, err = r.Rewind(context.Background(), 1, api.RewindBoth, false)
+	assert.ErrorIs(t, err, api.ErrNotRewindPoint, "not a prompt: %v", err)
+	_, err = r.Rewind(context.Background(), 0, "sideways", false)
+	assert.ErrorIs(t, err, api.ErrUnknownRewindMode, "unknown mode: %v", err)
 }
 
 // The agent's task list reaches the client as Tasks events.
@@ -313,48 +280,44 @@ func TestRemoteTasks(t *testing.T) {
 	r := attach(t, nil, todo, genai.NewContentFromText("ok", genai.RoleModel))
 	sess, _, _ := r.OpenSession("", false)
 	var tasks []api.Task
-	if _, err := r.Run(context.Background(), sess.ID, api.Turn{Text: "go"}, func(e api.Event) {
+	_, err := r.Run(context.Background(), sess.ID, api.Turn{Text: "go"}, func(e api.Event) {
 		if e.Tasks != nil {
 			tasks = e.Tasks
 		}
-	}); err != nil {
-		t.Fatal(err)
-	}
-	if len(tasks) != 1 || tasks[0].Content != "step one" || tasks[0].Status != "in_progress" {
-		t.Fatalf("tasks %+v", tasks)
-	}
+	})
+	require.NoError(t, err)
+	require.Len(t, tasks, 1, "tasks %+v", tasks)
+	require.Equal(t, "step one", tasks[0].Content, "tasks %+v", tasks)
+	require.Equal(t, "in_progress", tasks[0].Status, "tasks %+v", tasks)
 }
 
 // Reasoning settings survive the trip to the service and back.
 func TestRemoteReasoningSettings(t *testing.T) {
 	r := attach(t, nil)
 	ch, err := r.UpdateModelSettings("gpt-5", false, []api.Setting{{Key: "reasoning_effort", Value: "high"}, {Key: "thinking_budget", Value: "2048"}})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	s := ch.Settings
-	if s.ReasoningEffort == nil || *s.ReasoningEffort != "high" || s.ThinkingBudget == nil || *s.ThinkingBudget != 2048 {
-		t.Fatalf("after updating: %+v", s)
-	}
-	if all := r.AllModelSettings(); all["gpt-5"].ReasoningEffort == nil {
-		t.Errorf("all settings lost the effort: %+v", all["gpt-5"])
-	}
+	require.NotNil(t, s.ReasoningEffort, "after updating: %+v", s)
+	require.Equal(t, "high", *s.ReasoningEffort, "after updating: %+v", s)
+	require.NotNil(t, s.ThinkingBudget, "after updating: %+v", s)
+	require.Equal(t, 2048, *s.ThinkingBudget, "after updating: %+v", s)
+	all := r.AllModelSettings()
+	assert.NotNil(t, all["gpt-5"].ReasoningEffort, "all settings lost the effort: %+v", all["gpt-5"])
 }
 
 func TestRemotePermissionRules(t *testing.T) {
 	r := attach(t, nil)
-	if res, err := r.AddPermissionRule("ask", "Bash(git push *)", false); err != nil || res.Rule != "shell(git push *)" {
-		t.Fatalf("add: %+v %v", res, err)
-	}
-	if got := r.ListPermissionRules(); len(got) != 1 || got[0].Effect != "ask" || got[0].Source != "session" {
-		t.Errorf("list %+v", got)
-	}
-	if _, err := r.AddPermissionRule("deny", "nope(x)", false); !errors.Is(err, api.ErrBadRule) {
-		t.Errorf("bad rule over the API: %v", err)
-	}
-	if res, _ := r.RemovePermissionRule("shell(git push *)", false); res.Removed != 1 {
-		t.Errorf("remove %+v", res)
-	}
+	res, err := r.AddPermissionRule("ask", "Bash(git push *)", false)
+	require.NoError(t, err, "add: %+v", res)
+	require.Equal(t, "shell(git push *)", res.Rule, "add: %+v %v", res, err)
+	got := r.ListPermissionRules()
+	assert.Len(t, got, 1, "list %+v", got)
+	assert.Equal(t, "ask", got[0].Effect, "list %+v", got)
+	assert.Equal(t, "session", got[0].Source, "list %+v", got)
+	_, err = r.AddPermissionRule("deny", "nope(x)", false)
+	assert.ErrorIs(t, err, api.ErrBadRule, "bad rule over the API: %v", err)
+	res, _ = r.RemovePermissionRule("shell(git push *)", false)
+	assert.Equal(t, 1, res.Removed, "remove %+v", res)
 }
 
 func TestRemoteCommands(t *testing.T) {
@@ -365,14 +328,10 @@ func TestRemoteCommands(t *testing.T) {
 			found = true
 		}
 	}
-	if !found {
-		t.Fatal("bundled /review not listed over the API")
-	}
+	require.True(t, found, "bundled /review not listed over the API")
 	sess, _, _ := r.OpenSession("", false)
-	if _, err := r.Run(context.Background(), sess.ID, api.Turn{Text: "/review", Command: true}, func(api.Event) {}); err != nil {
-		t.Errorf("run /review over the API: %v", err)
-	}
-	if _, err := r.Run(context.Background(), sess.ID, api.Turn{Text: "/nope", Command: true}, func(api.Event) {}); !errors.Is(err, api.ErrUnknownCommand) {
-		t.Errorf("unknown command over the API: %v", err)
-	}
+	_, err := r.Run(context.Background(), sess.ID, api.Turn{Text: "/review", Command: true}, func(api.Event) {})
+	assert.NoError(t, err, "run /review over the API")
+	_, err = r.Run(context.Background(), sess.ID, api.Turn{Text: "/nope", Command: true}, func(api.Event) {})
+	assert.ErrorIs(t, err, api.ErrUnknownCommand, "unknown command over the API: %v", err)
 }

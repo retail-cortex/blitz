@@ -15,47 +15,38 @@
 package secrets
 
 import (
-	"errors"
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestRefs(t *testing.T) {
-	if Ref("global/llm.gemini.api_key") != "keychain:global/llm.gemini.api_key" {
-		t.Error(Ref("x"))
-	}
+	assert.Equal(t, "keychain:global/llm.gemini.api_key", Ref("global/llm.gemini.api_key"), Ref("x"))
 	for v, want := range map[string]string{"keychain:a/b": "a/b", "keychain:": "", "sk-plain": "", "xor:0102": ""} {
 		got, ok := ParseRef(v)
-		if got != want || ok != (want != "") {
-			t.Errorf("ParseRef(%q) = %q, %v", v, got, ok)
-		}
+		assert.Equal(t, want, got, "ParseRef(%q) = %q, %v", v, got, ok)
+		assert.Equal(t, (want != ""), ok, "ParseRef(%q) = %q, %v", v, got, ok)
 	}
 }
 
 // exercise runs a store through set, get, replace and delete.
 func exercise(t *testing.T, s Store, name string) {
 	t.Helper()
-	if _, err := s.Get(name); !errors.Is(err, ErrNotFound) {
-		t.Fatalf("get before set: %v", err)
-	}
+	_, err := s.Get(name)
+	require.ErrorIs(t, err, ErrNotFound, "get before set: %v", err)
 	for _, v := range []string{"sk-first \"quoted\" \\ value", "sk-second"} {
-		if err := s.Set(name, v); err != nil {
-			t.Fatal(err)
-		}
-		if got, err := s.Get(name); err != nil || got != v {
-			t.Fatalf("get = %q, %v; want %q", got, err, v)
-		}
+		require.NoError(t, s.Set(name, v))
+		got, err := s.Get(name)
+		require.NoError(t, err, "get = %q, %v; want %q", got, err, v)
+		require.Equal(t, v, got, "get = %q, %v; want %q", got, err, v)
 	}
-	if err := s.Delete(name); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := s.Get(name); !errors.Is(err, ErrNotFound) {
-		t.Errorf("get after delete: %v", err)
-	}
-	if err := s.Delete(name); err != nil {
-		t.Errorf("deleting what's gone: %v", err)
-	}
+	require.NoError(t, s.Delete(name))
+	_, err = s.Get(name)
+	assert.ErrorIs(t, err, ErrNotFound, "get after delete: %v", err)
+	assert.NoError(t, s.Delete(name), "deleting what's gone")
 }
 
 func TestMemory(t *testing.T) { exercise(t, &Memory{}, "a") }
@@ -64,13 +55,11 @@ func TestFileStoreIsPrivate(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "blitz", "secrets.toml")
 	exercise(t, &FileStore{Path: path}, "global/llm.gemini.api_key")
 	s := &FileStore{Path: path}
-	if err := s.Set("k", "v"); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, s.Set("k", "v"))
 	for p, want := range map[string]os.FileMode{path: 0o600, filepath.Dir(path): 0o700} {
-		if info, err := os.Stat(p); err != nil || info.Mode().Perm() != want {
-			t.Errorf("%s: %v %v, want %v", p, info.Mode().Perm(), err, want)
-		}
+		info, err := os.Stat(p)
+		assert.NoError(t, err, "%s: %v %v, want %v", p, info.Mode().Perm(), err, want)
+		assert.Equal(t, want, info.Mode().Perm(), "%s: %v %v, want %v", p, info.Mode().Perm(), err, want)
 	}
 }
 

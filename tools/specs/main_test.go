@@ -19,6 +19,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // A spec naming a missing path, or missing from the index, is reported;
@@ -27,12 +30,8 @@ func TestCheck(t *testing.T) {
 	root := t.TempDir()
 	t.Chdir(root)
 	write := func(p, text string) {
-		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(p, []byte(text), 0o644); err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, os.MkdirAll(filepath.Dir(p), 0o755))
+		require.NoError(t, os.WriteFile(p, []byte(text), 0o644))
 	}
 	write("pkg/real/real.go", "package real")
 	write("specs/README.md", "[a](spec_a_001.md)")
@@ -40,15 +39,12 @@ func TestCheck(t *testing.T) {
 		"for example `internal/cart/x.go`; `docs/X.md` (planned); `~/.blitz/x`; `//pkg/real`; `pkg/engine/…`.")
 	write("specs/spec_b_002.md", "Nothing.")
 	problems, n, err := check("specs")
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	want := []string{
 		"spec_a_001.md: `internal/app` doesn't exist",
 		"spec_a_001.md: `pkg/{real,gone}` doesn't exist",
 		"spec_b_002.md: not in the specs index (README.md)",
 	}
-	if n != 2 || strings.Join(problems, "\n") != strings.Join(want, "\n") {
-		t.Errorf("%d specs, problems:\n%s", n, strings.Join(problems, "\n"))
-	}
+	assert.Equal(t, 2, n, "%d specs, problems:\n%s", n, strings.Join(problems, "\n"))
+	assert.Equal(t, strings.Join(want, "\n"), strings.Join(problems, "\n"), "%d specs, problems:\n%s", n, strings.Join(problems, "\n"))
 }

@@ -29,10 +29,11 @@ import (
 	"unicode/utf8"
 
 	"github.com/retail-cortex/blitz/pkg/api"
-
 	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/engine"
 	"github.com/retail-cortex/blitz/pkg/engine/runtime"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/adk/v2/model"
 )
 
@@ -42,16 +43,12 @@ func TestLineReaderSharedSequentialReads(t *testing.T) {
 
 	for _, want := range []string{"first", "second", "last-no-newline"} {
 		got, err := lr.ReadLine("> ")
-		if err != nil || got != want {
-			t.Fatalf("ReadLine = %q, %v; want %q", got, err, want)
-		}
+		require.NoError(t, err, "ReadLine = %q, %v; want %q", got, err, want)
+		require.Equal(t, want, got, "ReadLine = %q, %v; want %q", got, err, want)
 	}
-	if _, err := lr.ReadLine("> "); !errors.Is(err, io.EOF) {
-		t.Errorf("expected EOF, got %v", err)
-	}
-	if strings.Count(out.String(), "> ") != 4 {
-		t.Errorf("prompt not echoed each time: %q", out.String())
-	}
+	_, err := lr.ReadLine("> ")
+	assert.ErrorIs(t, err, io.EOF, "expected EOF, got %v", err)
+	assert.Equal(t, 4, strings.Count(out.String(), "> "), "prompt not echoed each time: %q", out.String())
 }
 
 func TestApprover(t *testing.T) {
@@ -66,40 +63,34 @@ func TestApprover(t *testing.T) {
 		var out bytes.Buffer
 		approve := NewApprover(NewLineReader(strings.NewReader(input), &out), 0)
 		got, err := approve(context.Background(), keyed)
-		if err != nil || got != want {
-			t.Errorf("input %q: got %v, %v; want %v", input, got, err, want)
-		}
-		if strings.Contains(out.String(), "\x1b]52") || strings.Contains(out.String(), "\x07") {
-			t.Errorf("approval prompt echoed raw escape sequence: %q", out.String())
-		}
-		if !strings.Contains(out.String(), "rm -rf build") || !strings.Contains(out.String(), "this exact command") {
-			t.Errorf("approval prompt missing detail or scope: %q", out.String())
-		}
+		assert.NoError(t, err, "input %q: got %v, %v; want %v", input, got, err, want)
+		assert.Equal(t, want, got, "input %q: got %v, %v; want %v", input, got, err, want)
+		assert.NotContains(t, out.String(), "\x1b]52", "approval prompt echoed raw escape sequence: %q", out.String())
+		assert.NotContains(t, out.String(), "\x07", "approval prompt echoed raw escape sequence: %q", out.String())
+		assert.Contains(t, out.String(), "rm -rf build", "approval prompt missing detail or scope: %q", out.String())
+		assert.Contains(t, out.String(), "this exact command", "approval prompt missing detail or scope: %q", out.String())
 	}
 
 	// Without a key, session/always are unavailable and deny.
 	unkeyed := api.ApprovalRequest{Tool: "x", Kind: api.ActionWrite, Detail: "d"}
 	for _, in := range []string{"s\n", "a\n"} {
 		var out bytes.Buffer
-		if got, _ := NewApprover(NewLineReader(strings.NewReader(in), &out), 0)(context.Background(), unkeyed); got != api.DecisionDeny {
-			t.Errorf("%q without key should deny, got %v", in, got)
-		}
-		if strings.Contains(out.String(), "[s]") {
-			t.Error("session option offered without a key")
-		}
+		got, _ := NewApprover(NewLineReader(strings.NewReader(in), &out), 0)(context.Background(), unkeyed)
+		assert.Equal(t, api.DecisionDeny, got, "%q without key should deny, got %v", in, got)
+		assert.NotContains(t, out.String(), "[s]", "session option offered without a key")
 	}
 
 	// Negative: EOF and cancelled context deny with an error.
 	var out bytes.Buffer
 	approve := NewApprover(NewLineReader(strings.NewReader(""), &out), 0)
-	if d, err := approve(context.Background(), keyed); d != api.DecisionDeny || err == nil {
-		t.Errorf("expected EOF to deny with error, got %v %v", d, err)
-	}
+	d, err := approve(context.Background(), keyed)
+	assert.Equal(t, api.DecisionDeny, d, "expected EOF to deny with error, got %v %v", d, err)
+	assert.Error(t, err, "expected EOF to deny with error, got %v", d)
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	if d, err := approve(ctx, keyed); d != api.DecisionDeny || err == nil {
-		t.Errorf("expected cancelled ctx to deny, got %v %v", d, err)
-	}
+	d, err = approve(ctx, keyed)
+	assert.Equal(t, api.DecisionDeny, d, "expected cancelled ctx to deny, got %v %v", d, err)
+	assert.Error(t, err, "expected cancelled ctx to deny, got %v", d)
 }
 
 func TestApproverShowsDiff(t *testing.T) {
@@ -109,27 +100,20 @@ func TestApproverShowsDiff(t *testing.T) {
 	// Truncated diff offers [d]; choosing it prints the full diff and re-asks.
 	var out bytes.Buffer
 	d, err := NewApprover(NewLineReader(strings.NewReader("d\ny\n"), &out), 10)(context.Background(), req)
-	if err != nil || d != api.DecisionOnce {
-		t.Fatalf("got %v %v", d, err)
-	}
+	require.NoError(t, err, "got %v", d)
+	require.Equal(t, api.DecisionOnce, d, "got %v %v", d, err)
 	o := out.String()
-	if !strings.Contains(o, Red+"-old"+Reset) || !strings.Contains(o, Green+"+new"+Reset) {
-		t.Errorf("diff not colourised: %q", o)
-	}
-	if !strings.Contains(o, "diff truncated") || !strings.Contains(o, "[d] show full diff") {
-		t.Errorf("expected truncation notice and [d] option")
-	}
-	if strings.Count(o, " more") < 50 {
-		t.Errorf("full diff not shown after [d]")
-	}
+	assert.Contains(t, o, Red+"-old"+Reset, "diff not colourised: %q", o)
+	assert.Contains(t, o, Green+"+new"+Reset, "diff not colourised: %q", o)
+	assert.Contains(t, o, "diff truncated", "expected truncation notice and [d] option")
+	assert.Contains(t, o, "[d] show full diff", "expected truncation notice and [d] option")
+	assert.GreaterOrEqual(t, strings.Count(o, " more"), 50, "full diff not shown after [d]")
 
 	// Short diffs aren't truncated and don't offer [d].
 	out.Reset()
 	short := api.ApprovalRequest{Tool: "t", Kind: api.ActionWrite, Diff: "+x\n"}
 	NewApprover(NewLineReader(strings.NewReader("y\n"), &out), 10)(context.Background(), short)
-	if strings.Contains(out.String(), "[d]") {
-		t.Error("[d] offered for an untruncated diff")
-	}
+	assert.NotContains(t, out.String(), "[d]", "[d] offered for an untruncated diff")
 }
 
 func TestReadMultiline(t *testing.T) {
@@ -140,14 +124,12 @@ func TestReadMultiline(t *testing.T) {
 	}
 	for in, want := range cases {
 		got, err := NewLineReader(strings.NewReader(in), io.Discard).ReadInput(context.Background(), "> ")
-		if err != nil || got != want {
-			t.Errorf("ReadInput(%q) = %q, %v; want %q", in, got, err, want)
-		}
+		assert.NoError(t, err, "ReadInput(%q) = %q, %v; want %q", in, got, err, want)
+		assert.Equal(t, want, got, "ReadInput(%q) = %q, %v; want %q", in, got, err, want)
 	}
 	// Negative: EOF inside a block is an error, not a silent partial entry.
-	if _, err := NewLineReader(strings.NewReader("\"\"\"\nunterminated\n"), io.Discard).ReadInput(context.Background(), "> "); err == nil {
-		t.Error("expected error for unterminated block")
-	}
+	_, err := NewLineReader(strings.NewReader("\"\"\"\nunterminated\n"), io.Discard).ReadInput(context.Background(), "> ")
+	assert.Error(t, err, "expected error for unterminated block")
 }
 
 func TestUserPrompter(t *testing.T) {
@@ -156,67 +138,50 @@ func TestUserPrompter(t *testing.T) {
 	ask := NewUserPrompter(lr)
 	opts := []string{"alpha", "beta"}
 
-	if got, _ := ask(context.Background(), "pick", opts); got != "beta" {
-		t.Errorf("numeric choice = %q, want beta", got)
-	}
-	if got, _ := ask(context.Background(), "pick", opts); got != "free text" {
-		t.Errorf("free text = %q", got)
-	}
+	got, _ := ask(context.Background(), "pick", opts)
+	assert.Equal(t, "beta", got, "numeric choice = %q, want beta", got)
+	got, _ = ask(context.Background(), "pick", opts)
+	assert.Equal(t, "free text", got, "free text = %q", got)
 	// Out-of-range number is returned verbatim rather than panicking.
-	if got, _ := ask(context.Background(), "pick", opts); got != "9" {
-		t.Errorf("out-of-range = %q", got)
-	}
-	if _, err := ask(context.Background(), "pick", opts); err == nil {
-		t.Error("expected EOF error")
-	}
+	got, _ = ask(context.Background(), "pick", opts)
+	assert.Equal(t, "9", got, "out-of-range = %q", got)
+	_, err := ask(context.Background(), "pick", opts)
+	assert.Error(t, err, "expected EOF error")
 }
 
 func TestFormatToolCallSanitizesAndTruncates(t *testing.T) {
 	evil := "\x1b[2J\x1b]0;pwned\x07ls"
 	s := FormatToolCall("run_shell_command", map[string]any{"command": evil})
-	if strings.Contains(s, "\x1b[2J") || strings.Contains(s, "\x1b]0") || strings.Contains(s, "\x07") {
-		t.Errorf("unsanitized output %q", s)
-	}
-	if !strings.Contains(s, "ls") {
-		t.Errorf("command text lost: %q", s)
-	}
+	assert.NotContains(t, s, "\x1b[2J", "unsanitized output %q", s)
+	assert.NotContains(t, s, "\x1b]0", "unsanitized output %q", s)
+	assert.NotContains(t, s, "\x07", "unsanitized output %q", s)
+	assert.Contains(t, s, "ls", "command text lost: %q", s)
 
 	long := strings.Repeat("🐶", 40) // multi-byte; old code sliced mid-rune
 	s = FormatToolCall("run_shell_command", map[string]any{"command": long})
-	if !utf8.ValidString(s) {
-		t.Errorf("truncation produced invalid UTF-8: %q", s)
-	}
-	if !strings.Contains(s, "...") {
-		t.Errorf("expected ellipsis for long command")
-	}
+	assert.True(t, utf8.ValidString(s), "truncation produced invalid UTF-8: %q", s)
+	assert.Contains(t, s, "...", "expected ellipsis for long command")
 }
 
 func TestFormatToolResult(t *testing.T) {
 	s := FormatToolResult("grep", true, "line1\n\x1b[31mFAKE ✅ [other] done\x1b[0m\nline3")
-	if strings.Count(s, "\n") != 1 {
-		t.Errorf("summary should be collapsed to one line: %q", s)
-	}
-	if strings.Contains(s, "\x1b[31m") {
-		t.Errorf("escape sequence leaked: %q", s)
-	}
-	if !strings.Contains(FormatToolResult("x", false, ""), "done") {
-		t.Error("empty summary should render done badge")
-	}
+	assert.Equal(t, 1, strings.Count(s, "\n"), "summary should be collapsed to one line: %q", s)
+	assert.NotContains(t, s, "\x1b[31m", "escape sequence leaked: %q", s)
+	assert.Contains(t, FormatToolResult("x", false, ""), "done", "empty summary should render done badge")
 }
 
 func TestSummarizeToolResponse(t *testing.T) {
-	if s, ok := SummarizeToolResponse(map[string]any{"error": "boom"}); ok || s != "boom" {
-		t.Errorf("error summary = %q %v", s, ok)
-	}
-	if s, ok := SummarizeToolResponse(map[string]any{"result": "fine"}); !ok || s != "fine" {
-		t.Errorf("result summary = %q %v", s, ok)
-	}
-	if s, _ := SummarizeToolResponse(map[string]any{"content": "abcd"}); s != "4 bytes read" {
-		t.Errorf("content summary = %q", s)
-	}
-	if s, ok := SummarizeToolResponse(nil); !ok || s != "" {
-		t.Errorf("nil summary = %q %v", s, ok)
-	}
+	s, ok := SummarizeToolResponse(map[string]any{"error": "boom"})
+	assert.False(t, ok, "error summary = %q %v", s, ok)
+	assert.Equal(t, "boom", s, "error summary = %q %v", s, ok)
+	s, ok = SummarizeToolResponse(map[string]any{"result": "fine"})
+	assert.True(t, ok, "result summary = %q %v", s, ok)
+	assert.Equal(t, "fine", s, "result summary = %q %v", s, ok)
+	s, _ = SummarizeToolResponse(map[string]any{"content": "abcd"})
+	assert.Equal(t, "4 bytes read", s, "content summary = %q", s)
+	s, ok = SummarizeToolResponse(nil)
+	assert.True(t, ok, "nil summary = %q %v", s, ok)
+	assert.Equal(t, "", s, "nil summary = %q %v", s, ok)
 }
 
 // isolateHome points HOME at a temporary directory, so opening a workspace
@@ -241,9 +206,7 @@ func openAppWith(t *testing.T, cfg *config.Config, o engine.Options) *App {
 	t.Helper()
 	cfg.Session.StorageDir = t.TempDir()
 	w, err := engine.Open(context.Background(), cfg, o)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	t.Cleanup(func() { w.Close() })
 	return &App{Workspace: w, Printer: PrinterOptions{Out: io.Discard}}
 }
@@ -255,9 +218,7 @@ func local(app *App) *engine.Workspace { return app.Workspace.(*engine.Workspace
 func savedConfig(t *testing.T) *config.Config {
 	t.Helper()
 	cfg, err := config.Load(filepath.Join(os.Getenv("HOME"), ".blitz"))
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	return cfg
 }
 
@@ -282,17 +243,15 @@ func TestHandleCommandModel(t *testing.T) {
 	})
 
 	// Positive: /model rebuilds the engine with the new LLM.
-	if handled, err := HandleCommand(ctx, "/model mock-b", app); !handled || err != nil {
-		t.Fatalf("handled=%v err=%v", handled, err)
-	}
-	if local(app).Engine().ModelName() != "mock-b" || local(app).Config().Blitz.DefaultModel != "mock-b" {
-		t.Errorf("model not switched: engine=%q cfg=%q", local(app).Engine().ModelName(), local(app).Config().Blitz.DefaultModel)
-	}
+	handled, err := HandleCommand(ctx, "/model mock-b", app)
+	require.True(t, handled, "handled=%v err=%v", handled, err)
+	require.NoError(t, err, "handled=%v err=%v", handled, err)
+	assert.Equal(t, "mock-b", local(app).Engine().ModelName(), "model not switched: engine=%q cfg=%q", local(app).Engine().ModelName(), local(app).Config().Blitz.DefaultModel)
+	assert.Equal(t, "mock-b", local(app).Config().Blitz.DefaultModel, "model not switched: engine=%q cfg=%q", local(app).Engine().ModelName(), local(app).Config().Blitz.DefaultModel)
 	// Negative: factory failure leaves the current model in place.
 	HandleCommand(ctx, "/model bad-model", app)
-	if local(app).Engine().ModelName() != "mock-b" || local(app).Config().Blitz.DefaultModel != "mock-b" {
-		t.Errorf("failed switch changed model to %q", local(app).Engine().ModelName())
-	}
+	assert.Equal(t, "mock-b", local(app).Engine().ModelName(), "failed switch changed model to %q", local(app).Engine().ModelName())
+	assert.Equal(t, "mock-b", local(app).Config().Blitz.DefaultModel, "failed switch changed model to %q", local(app).Engine().ModelName())
 }
 
 func TestHandleCommandSetAndSession(t *testing.T) {
@@ -300,68 +259,54 @@ func TestHandleCommandSetAndSession(t *testing.T) {
 	app := newTestApp(t, nil)
 
 	HandleCommand(ctx, "/set agency=low", app)
-	if local(app).Config().Blitz.AgencyLevel != "low" {
-		t.Errorf("agency not updated: %q", local(app).Config().Blitz.AgencyLevel)
-	}
+	assert.Equal(t, "low", local(app).Config().Blitz.AgencyLevel, "agency not updated: %q", local(app).Config().Blitz.AgencyLevel)
 	// Negative: invalid agency rejected.
 	HandleCommand(ctx, "/set agency=reckless", app)
-	if local(app).Config().Blitz.AgencyLevel != "low" {
-		t.Errorf("invalid agency accepted: %q", local(app).Config().Blitz.AgencyLevel)
-	}
+	assert.Equal(t, "low", local(app).Config().Blitz.AgencyLevel, "invalid agency accepted: %q", local(app).Config().Blitz.AgencyLevel)
 	// The persona settings are gone.
-	if out := captureStdout(t, func() { HandleCommand(ctx, "/set owner_name=Ada", app) }); !strings.Contains(out, "owner_name") {
-		t.Errorf("owner_name should be unknown now:\n%s", out)
-	}
+	out := captureStdout(t, func() { HandleCommand(ctx, "/set owner_name=Ada", app) })
+	assert.Contains(t, out, "owner_name", "owner_name should be unknown now:\n%s", out)
 
 	// /session new records the active agent and becomes active.
 	HandleCommand(ctx, "/agent helios", app)
 	HandleCommand(ctx, "/session new", app)
-	if a := local(app).Storage().Active(); a == nil || a.Agent != "helios" {
-		t.Errorf("new session should use active agent, got %+v", a)
-	}
+	a := local(app).Storage().Active()
+	assert.NotNil(t, a, "new session should use active agent, got %+v", a)
+	assert.Equal(t, "helios", a.Agent, "new session should use active agent, got %+v", a)
 	// Negative: unknown agent keeps current one.
 	HandleCommand(ctx, "/agent ghost", app)
-	if local(app).Engine().ActiveAgent() != "helios" {
-		t.Errorf("unknown agent changed active agent")
-	}
+	assert.Equal(t, "helios", local(app).Engine().ActiveAgent(), "unknown agent changed active agent")
 }
 
 func TestHandleCommandRouting(t *testing.T) {
 	app := newTestApp(t, nil)
 	ctx := context.Background()
-	if handled, _ := HandleCommand(ctx, "hello puppy", app); handled {
-		t.Error("plain text should not be handled as a command")
-	}
-	if _, err := HandleCommand(ctx, "/quit", app); !errors.Is(err, ErrExit) {
-		t.Errorf("expected ErrExit, got %v", err)
-	}
-	if handled, err := HandleCommand(ctx, "/nonsense", app); !handled || err != nil {
-		t.Errorf("unknown command: handled=%v err=%v", handled, err)
-	}
+	handled, _ := HandleCommand(ctx, "hello puppy", app)
+	assert.False(t, handled, "plain text should not be handled as a command")
+	_, err := HandleCommand(ctx, "/quit", app)
+	assert.ErrorIs(t, err, ErrExit, "expected ErrExit, got %v", err)
+	handled, err = HandleCommand(ctx, "/nonsense", app)
+	assert.True(t, handled, "unknown command: handled=%v err=%v", handled, err)
+	assert.NoError(t, err, "unknown command: handled=%v err=%v", handled, err)
 	// /model without a factory is reported, not a panic.
-	if handled, _ := HandleCommand(ctx, "/model x", app); !handled {
-		t.Error("expected /model to be handled")
-	}
+	handled, _ = HandleCommand(ctx, "/model x", app)
+	assert.True(t, handled, "expected /model to be handled")
 }
 
 func TestRunREPLUsesCurrentSession(t *testing.T) {
 	app := newTestApp(t, nil)
 	var out bytes.Buffer
 	app.Input = NewLineReader(strings.NewReader("hello\n/session new\nsecond\n/exit\n"), &out)
-	if err := RunREPL(context.Background(), app); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, RunREPL(context.Background(), app))
 	// The second prompt must be recorded in the session created by /session new.
 	active := local(app).Storage().Active()
-	if active == nil || len(active.Messages) == 0 || active.Messages[0].Content != "second" {
-		t.Errorf("expected 'second' in the new active session, got %+v", active)
-	}
+	assert.NotNil(t, active, "expected 'second' in the new active session, got %+v", active)
+	assert.NotEqual(t, 0, len(active.Messages), "expected 'second' in the new active session, got %+v", active)
+	assert.Equal(t, "second", active.Messages[0].Content, "expected 'second' in the new active session, got %+v", active)
 
 	// EOF ends the REPL cleanly.
 	app.Input = NewLineReader(strings.NewReader(""), &out)
-	if err := RunREPL(context.Background(), app); err != nil {
-		t.Errorf("EOF should end REPL without error, got %v", err)
-	}
+	assert.NoError(t, RunREPL(context.Background(), app), "EOF should end REPL without error, got")
 }
 
 func TestLineReaderCancelDoesNotLoseInput(t *testing.T) {
@@ -376,9 +321,7 @@ func TestLineReaderCancelDoesNotLoseInput(t *testing.T) {
 	cancel()
 	select {
 	case err := <-errCh:
-		if !errors.Is(err, context.Canceled) {
-			t.Fatalf("expected context.Canceled, got %v", err)
-		}
+		require.ErrorIs(t, err, context.Canceled, "expected context.Canceled, got %v", err)
 	case <-time.After(2 * time.Second):
 		t.Fatal("cancelled Ask did not return")
 	}
@@ -386,9 +329,8 @@ func TestLineReaderCancelDoesNotLoseInput(t *testing.T) {
 	// Positive: the line typed afterwards goes to the next reader, not the abandoned one.
 	go pw.Write([]byte("kept\n"))
 	got, err := lr.ReadLine("> ")
-	if err != nil || got != "kept" {
-		t.Fatalf("expected 'kept', got %q %v", got, err)
-	}
+	require.NoError(t, err, "expected 'kept', got %q", got)
+	require.Equal(t, "kept", got, "expected 'kept', got %q %v", got, err)
 	pw.Close()
 }
 
@@ -412,9 +354,7 @@ func TestLineReaderSerializesConcurrentAsks(t *testing.T) {
 		got[a] = true
 	}
 	// Each prompt must be paired with exactly one full answer.
-	if !(got["Q1:\na"] && got["Q2:\nb"]) && !(got["Q1:\nb"] && got["Q2:\na"]) {
-		t.Errorf("answers mixed up: %v", got)
-	}
+	assert.False(t, !(got["Q1:\na"] && got["Q2:\nb"]) && !(got["Q1:\nb"] && got["Q2:\na"]), "answers mixed up: %v", got)
 }
 
 type syncBuffer struct {
@@ -457,9 +397,7 @@ func TestREPLInterruptAtPromptExits(t *testing.T) {
 	sigs <- os.Interrupt
 	select {
 	case err := <-done:
-		if err != nil {
-			t.Errorf("expected clean exit, got %v", err)
-		}
+		assert.NoError(t, err, "expected clean exit, got")
 	case <-time.After(3 * time.Second):
 		t.Fatal("REPL did not exit on interrupt while idle")
 	}
@@ -468,9 +406,7 @@ func TestREPLInterruptAtPromptExits(t *testing.T) {
 func TestREPLInterruptCancelsTurnOnly(t *testing.T) {
 	app := newTestApp(t, nil)
 	llm := &blockingLLM{started: make(chan struct{}, 1)}
-	if err := local(app).Engine().SetModel(context.Background(), llm); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, local(app).Engine().SetModel(context.Background(), llm))
 	pr, pw := io.Pipe()
 	app.Input = NewLineReader(pr, io.Discard)
 	sigs := make(chan os.Signal, 1)
@@ -491,9 +427,7 @@ func TestREPLInterruptCancelsTurnOnly(t *testing.T) {
 	go pw.Write([]byte("/exit\n"))
 	select {
 	case err := <-done:
-		if err != nil {
-			t.Errorf("unexpected error %v", err)
-		}
+		assert.NoError(t, err, "unexpected error")
 	case <-time.After(3 * time.Second):
 		t.Fatal("REPL did not return to the prompt after interrupting a turn")
 	}

@@ -19,11 +19,11 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"slices"
-	"strings"
 	"testing"
 
 	"github.com/retail-cortex/blitz/pkg/api"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestHooksApprovePolicy(t *testing.T) {
@@ -33,50 +33,36 @@ func TestHooksApprovePolicy(t *testing.T) {
 
 	// Positive: bypass mode covers everything.
 	all := NewHooks(Policy{Mode: api.ModeBypass})
-	if err := all.Approve(ctx, cmd); err != nil {
-		t.Errorf("auto-approve-all denied command: %v", err)
-	}
-	if err := all.Approve(ctx, write); err != nil {
-		t.Errorf("auto-approve-all denied write: %v", err)
-	}
+	assert.NoError(t, all.Approve(ctx, cmd), "auto-approve-all denied command")
+	assert.NoError(t, all.Approve(ctx, write), "auto-approve-all denied write")
 
 	// AutoApproveCommands covers commands only; writes still fail closed.
 	cmds := NewHooks(Policy{AutoApproveCommands: true})
-	if err := cmds.Approve(ctx, cmd); err != nil {
-		t.Errorf("auto-approve-commands denied command: %v", err)
-	}
-	if err := cmds.Approve(ctx, write); !errors.Is(err, ErrNotApproved) {
-		t.Errorf("expected write to need approval, got %v", err)
-	}
+	assert.NoError(t, cmds.Approve(ctx, cmd), "auto-approve-commands denied command")
+	err := cmds.Approve(ctx, write)
+	assert.ErrorIs(t, err, ErrNotApproved, "expected write to need approval, got %v", err)
 
 	// Negative: no approver configured => denied (fail closed), incl. nil hooks.
-	if err := NewHooks(Policy{}).Approve(ctx, cmd); !errors.Is(err, ErrNotApproved) {
-		t.Errorf("expected fail-closed denial, got %v", err)
-	}
+	err = NewHooks(Policy{}).Approve(ctx, cmd)
+	assert.ErrorIs(t, err, ErrNotApproved, "expected fail-closed denial, got %v", err)
 	var nilHooks *Hooks
-	if err := nilHooks.Approve(ctx, cmd); !errors.Is(err, ErrNotApproved) {
-		t.Errorf("expected nil hooks to deny, got %v", err)
-	}
+	err = nilHooks.Approve(ctx, cmd)
+	assert.ErrorIs(t, err, ErrNotApproved, "expected nil hooks to deny, got %v", err)
 
 	// Approver decisions and errors.
 	yes, reqs := approverHooks(true)
-	if err := yes.Approve(ctx, cmd); err != nil {
-		t.Errorf("approver said yes but got %v", err)
-	}
-	if len(*reqs) != 1 || (*reqs)[0].Detail != "ls" {
-		t.Errorf("approver did not receive request: %v", *reqs)
-	}
+	assert.NoError(t, yes.Approve(ctx, cmd), "approver said yes but got")
+	assert.Len(t, *reqs, 1, "approver did not receive request: %v", *reqs)
+	assert.Equal(t, "ls", (*reqs)[0].Detail, "approver did not receive request: %v", *reqs)
 	no, _ := approverHooks(false)
-	if err := no.Approve(ctx, cmd); !errors.Is(err, ErrNotApproved) {
-		t.Errorf("approver said no but got %v", err)
-	}
+	err = no.Approve(ctx, cmd)
+	assert.ErrorIs(t, err, ErrNotApproved, "approver said no but got %v", err)
 	failing := NewHooks(Policy{})
 	failing.SetApprover(func(context.Context, api.ApprovalRequest) (api.Decision, error) {
 		return api.DecisionOnce, errors.New("tty gone")
 	})
-	if err := failing.Approve(ctx, cmd); !errors.Is(err, ErrNotApproved) {
-		t.Errorf("approver error should deny, got %v", err)
-	}
+	err = failing.Approve(ctx, cmd)
+	assert.ErrorIs(t, err, ErrNotApproved, "approver error should deny, got %v", err)
 }
 
 func TestMutatingToolsRespectApproval(t *testing.T) {
@@ -96,39 +82,29 @@ func TestMutatingToolsRespectApproval(t *testing.T) {
 		{"create_file", func(h *Hooks) runnerTool { return toolOf(t)(NewCreateFileTool(ws, h)) },
 			map[string]any{"path": "created.txt", "content": "x"},
 			func(t *testing.T, applied bool) {
-				if exists("created.txt") != applied {
-					t.Errorf("create_file applied=%v but file exists=%v", applied, exists("created.txt"))
-				}
+				assert.Equal(t, applied, exists("created.txt"), "create_file applied=%v but file exists=%v", applied, exists("created.txt"))
 			}},
 		{"replace_in_file", func(h *Hooks) runnerTool { return toolOf(t)(NewReplaceInFileTool(ws, h)) },
 			map[string]any{"path": "existing.txt", "target_content": "original", "replacement_content": "edited"},
 			func(t *testing.T, applied bool) {
-				if (content("existing.txt") == "edited") != applied {
-					t.Errorf("replace_in_file applied=%v content=%q", applied, content("existing.txt"))
-				}
+				assert.Equal(t, applied, (content("existing.txt") == "edited"), "replace_in_file applied=%v content=%q", applied, content("existing.txt"))
 			}},
 		{"delete_snippet", func(h *Hooks) runnerTool { return toolOf(t)(NewDeleteSnippetTool(ws, h)) },
 			map[string]any{"path": "existing.txt", "snippet": "ited"},
 			func(t *testing.T, applied bool) {
-				if (content("existing.txt") == "ed") != applied {
-					t.Errorf("delete_snippet applied=%v content=%q", applied, content("existing.txt"))
-				}
+				assert.Equal(t, applied, (content("existing.txt") == "ed"), "delete_snippet applied=%v content=%q", applied, content("existing.txt"))
 			}},
 		{"run_shell_command", func(h *Hooks) runnerTool {
 			return toolOf(t)(NewRunShellCommandTool(ShellConfig{Workspace: ws, Hooks: h}))
 		},
 			map[string]any{"command": "touch ran.marker"},
 			func(t *testing.T, applied bool) {
-				if exists("ran.marker") != applied {
-					t.Errorf("shell applied=%v marker exists=%v", applied, exists("ran.marker"))
-				}
+				assert.Equal(t, applied, exists("ran.marker"), "shell applied=%v marker exists=%v", applied, exists("ran.marker"))
 			}},
 		{"delete_file", func(h *Hooks) runnerTool { return toolOf(t)(NewDeleteFileTool(ws, h)) },
 			map[string]any{"path": "existing.txt"},
 			func(t *testing.T, applied bool) {
-				if exists("existing.txt") == applied {
-					t.Errorf("delete_file applied=%v but file exists=%v", applied, exists("existing.txt"))
-				}
+				assert.NotEqual(t, applied, exists("existing.txt"), "delete_file applied=%v but file exists=%v", applied, exists("existing.txt"))
 			}},
 	}
 
@@ -137,30 +113,21 @@ func TestMutatingToolsRespectApproval(t *testing.T) {
 			// Negative first: denial leaves the workspace untouched and reports why.
 			denied, deniedReqs := approverHooks(false)
 			out := runTool(t, c.build(denied), c.args)
-			if !strings.Contains(errOf(out), "not approved") {
-				t.Errorf("expected not-approved error, got %v", out)
-			}
-			if len(*deniedReqs) != 1 {
-				t.Errorf("expected exactly one approval request, got %d", len(*deniedReqs))
-			}
+			assert.Contains(t, errOf(out), "not approved", "expected not-approved error, got %v", out)
+			assert.Len(t, *deniedReqs, 1, "expected exactly one approval request, got %d", len(*deniedReqs))
 			c.check(t, false)
 
 			// No approver at all: fail closed.
 			out = runTool(t, c.build(NewHooks(Policy{})), c.args)
-			if !strings.Contains(errOf(out), "not approved") {
-				t.Errorf("expected fail-closed denial, got %v", out)
-			}
+			assert.Contains(t, errOf(out), "not approved", "expected fail-closed denial, got %v", out)
 			c.check(t, false)
 
 			// Positive: approval applies the change.
 			approved, reqs := approverHooks(true)
 			out = runTool(t, c.build(approved), c.args)
-			if errOf(out) != "" {
-				t.Fatalf("approved call failed: %v", out)
-			}
-			if len(*reqs) != 1 || (*reqs)[0].Tool != c.name {
-				t.Errorf("unexpected approval requests %v", *reqs)
-			}
+			require.Equal(t, "", errOf(out), "approved call failed: %v", out)
+			assert.Len(t, *reqs, 1, "unexpected approval requests %v", *reqs)
+			assert.Equal(t, c.name, (*reqs)[0].Tool, "unexpected approval requests %v", *reqs)
 			c.check(t, true)
 		})
 	}
@@ -177,13 +144,11 @@ func TestApprovalRequestsNameTheirTargets(t *testing.T) {
 		return api.DecisionOnce, nil
 	})
 	create, err := NewCreateFileTool(ws, h)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	runTool(t, create.(runnerTool), map[string]any{"path": "reports/deps.md", "content": "x\n"})
 	cfg := ShellConfig{Workspace: ws, Hooks: h, Exec: &ExecEnv{Dir: dir}}
 	runShellCommand(context.Background(), cfg, RunShellCommandInput{Command: "echo hi"})
-	if len(got) != 2 || !slices.Equal(got[0], []string{"reports/deps.md"}) || !slices.Equal(got[1], []string{"echo hi"}) {
-		t.Errorf("targets %q", got)
-	}
+	assert.Len(t, got, 2, "targets %q", got)
+	assert.Equal(t, []string{"reports/deps.md"}, got[0], "targets %q", got)
+	assert.Equal(t, []string{"echo hi"}, got[1], "targets %q", got)
 }

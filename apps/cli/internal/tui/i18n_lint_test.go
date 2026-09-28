@@ -23,6 +23,9 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // English words in a printed literal mean text that bypasses the catalogs.
@@ -45,9 +48,7 @@ func TestNoUntranslatedOutput(t *testing.T) {
 			continue
 		}
 		f, err := parser.ParseFile(fset, file, nil, 0)
-		if err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, err)
 		ast.Inspect(f, func(n ast.Node) bool {
 			call, ok := n.(*ast.CallExpr)
 			if !ok {
@@ -69,9 +70,7 @@ func TestNoUntranslatedOutput(t *testing.T) {
 				for _, a := range lintAllowed {
 					s = strings.ReplaceAll(s, a, "")
 				}
-				if wordRE.MatchString(s) {
-					t.Errorf("%s: untranslated output %s; use i18n.T", fset.Position(lit.Pos()), lit.Value)
-				}
+				assert.False(t, wordRE.MatchString(s), "%s: untranslated output %s; use i18n.T", fset.Position(lit.Pos()), lit.Value)
 			}
 			return true
 		})

@@ -23,6 +23,8 @@ import (
 
 	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/engine/memory"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/adk/v2/session"
 	"google.golang.org/genai"
 )
@@ -33,9 +35,7 @@ import (
 func TestScopedRulesArriveWithTheFirstMatchingFile(t *testing.T) {
 	real := t.TempDir()
 	link := filepath.Join(t.TempDir(), "ws")
-	if err := os.Symlink(real, link); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.Symlink(real, link))
 	for name, body := range map[string]string{
 		"a.go": "package a", "b.go": "package b", "notes.txt": "notes",
 		".blitz/rules/go.md": "---\npaths: [\"**/*.go\"]\n---\nUse tabs in Go files.",
@@ -46,9 +46,7 @@ func TestScopedRulesArriveWithTheFirstMatchingFile(t *testing.T) {
 	}
 	mc := config.MemoryConfig{Enabled: true, RuleDirs: []string{".blitz/rules"}}
 	rules := memory.LoadAll(link, mc).Rules
-	if len(rules) != 1 {
-		t.Fatalf("rules %+v", rules)
-	}
+	require.Len(t, rules, 1, "rules %+v", rules)
 	read := func(p string) *genai.Content { return toolCall("read_file", map[string]any{"path": p}) }
 	f := newEngineWith(t, fixtureOpts{
 		cfg:  func(c *config.Config) { c.Tools.WorkspaceDir = link },
@@ -67,30 +65,22 @@ func TestScopedRulesArriveWithTheFirstMatchingFile(t *testing.T) {
 		}
 		return nil
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(results) != 5 {
-		t.Fatalf("got %d tool results", len(results))
-	}
+	require.NoError(t, err)
+	require.Len(t, results, 5, "got %d tool results", len(results))
 	for i, want := range []bool{false, false, false, true, false} {
 		got, _ := results[i][RulesKey].(string)
-		if (got != "") != want {
-			t.Errorf("result %d: rules %q, want present=%v", i, got, want)
-		}
+		assert.Equal(t, want, (got != ""), "result %d: rules %q, want present=%v", i, got, want)
 	}
-	if got, _ := results[3][RulesKey].(string); !strings.Contains(got, "Use tabs in Go files.") || !strings.Contains(got, "**/*.go") {
-		t.Errorf("rendered rule %q", got)
-	}
+	got, _ := results[3][RulesKey].(string)
+	assert.Contains(t, got, "Use tabs in Go files.", "rendered rule %q", got)
+	assert.Contains(t, got, "**/*.go", "rendered rule %q", got)
 }
 
 func TestPatchPaths(t *testing.T) {
 	unified := "--- a/src/x.go\t2026-01-01\n+++ b/src/x.go\n@@ -1 +1 @@\n-a\n+b\n--- /dev/null\n+++ b/new.go\n"
 	begin := "*** Begin Patch\n*** Update File: a.go\n*** Move to: b.go\n*** Add File: c.go\n*** Delete File: d.go\n*** End Patch"
-	if got := strings.Join(patchPaths(unified), ","); got != "src/x.go,src/x.go,new.go" {
-		t.Errorf("unified %q", got)
-	}
-	if got := strings.Join(patchPaths(begin), ","); got != "a.go,b.go,c.go,d.go" {
-		t.Errorf("begin patch %q", got)
-	}
+	got := strings.Join(patchPaths(unified), ",")
+	assert.Equal(t, "src/x.go,src/x.go,new.go", got, "unified %q", got)
+	got = strings.Join(patchPaths(begin), ",")
+	assert.Equal(t, "a.go,b.go,c.go,d.go", got, "begin patch %q", got)
 }

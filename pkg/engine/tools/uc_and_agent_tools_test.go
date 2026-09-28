@@ -18,14 +18,16 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/retail-cortex/blitz/pkg/api"
-
 	"github.com/retail-cortex/blitz/pkg/engine/agents"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestUniversalConstructorNameValidation(t *testing.T) {
@@ -36,23 +38,17 @@ func TestUniversalConstructorNameValidation(t *testing.T) {
 	// Negative: traversal and separator names are rejected and nothing is written.
 	for _, name := range []string{"../evil", "a/b", "..", ".hidden", "sp ace", strings.Repeat("x", 65)} {
 		out := runTool(t, rt, map[string]any{"action": "create", "tool_name": name, "code": "echo hi"})
-		if errOf(out) == "" {
-			t.Errorf("expected rejection for tool_name %q", name)
-		}
+		assert.NotEqual(t, "", errOf(out), "expected rejection for tool_name %q", name)
 	}
-	if _, err := os.Stat(filepath.Join(base, "evil.sh")); !os.IsNotExist(err) {
-		t.Error("traversal wrote outside the tools directory")
-	}
+	_, err := os.Stat(filepath.Join(base, "evil.sh"))
+	assert.ErrorIs(t, err, fs.ErrNotExist, "traversal wrote outside the tools directory")
 	// Negative: unsupported language and missing code.
-	if out := runTool(t, rt, map[string]any{"action": "create", "tool_name": "x", "code": "1", "language": "ruby"}); errOf(out) == "" {
-		t.Error("expected unsupported language error")
-	}
-	if out := runTool(t, rt, map[string]any{"action": "create", "tool_name": "x"}); errOf(out) == "" {
-		t.Error("expected missing code error")
-	}
-	if out := runTool(t, rt, map[string]any{"action": "bogus"}); errOf(out) == "" {
-		t.Error("expected unknown action error")
-	}
+	out := runTool(t, rt, map[string]any{"action": "create", "tool_name": "x", "code": "1", "language": "ruby"})
+	assert.NotEqual(t, "", errOf(out), "expected unsupported language error")
+	out = runTool(t, rt, map[string]any{"action": "create", "tool_name": "x"})
+	assert.NotEqual(t, "", errOf(out), "expected missing code error")
+	out = runTool(t, rt, map[string]any{"action": "bogus"})
+	assert.NotEqual(t, "", errOf(out), "expected unknown action error")
 }
 
 func TestUniversalConstructorCreateRun(t *testing.T) {
@@ -63,33 +59,25 @@ func TestUniversalConstructorCreateRun(t *testing.T) {
 		"action": "create", "tool_name": "count_args", "language": "bash",
 		"code": "echo \"$# [$1] [$2]\"", "description": "counts args",
 	})
-	if out["success"] != true {
-		t.Fatalf("create failed: %v", out)
-	}
+	require.Equal(t, true, out["success"], "create failed: %v", out)
 	info, err := os.Stat(filepath.Join(ucDir, "count_args.sh"))
-	if err != nil || info.Mode().Perm() != 0o700 {
-		t.Errorf("expected owner-only script, got %v %v", info, err)
-	}
+	assert.NoError(t, err, "expected owner-only script, got %v", info)
+	assert.Equal(t, fs.FileMode(0o700), info.Mode().Perm(), "expected owner-only script, got %v %v", info, err)
 
 	// Positive: args are split into separate argv entries.
 	out = runTool(t, rt, map[string]any{"action": "run", "tool_name": "count_args", "args": "one two"})
-	if strings.TrimSpace(out["result"].(string)) != "2 [one] [two]" {
-		t.Errorf("unexpected run output %v", out)
-	}
+	assert.Equal(t, "2 [one] [two]", strings.TrimSpace(out["result"].(string)), "unexpected run output %v", out)
 
 	list := runTool(t, rt, map[string]any{"action": "list"})
-	if tools, _ := list["tools"].([]any); len(tools) != 1 {
-		t.Errorf("expected 1 listed tool, got %v", list)
-	}
+	tools, _ := list["tools"].([]any)
+	assert.Len(t, tools, 1, "expected 1 listed tool, got %v", list)
 
 	// Negative: running an unknown tool, and a failing tool.
-	if out := runTool(t, rt, map[string]any{"action": "run", "tool_name": "nope"}); errOf(out) == "" {
-		t.Error("expected error for unknown tool")
-	}
+	out = runTool(t, rt, map[string]any{"action": "run", "tool_name": "nope"})
+	assert.NotEqual(t, "", errOf(out), "expected error for unknown tool")
 	runTool(t, rt, map[string]any{"action": "create", "tool_name": "fails", "code": "exit 4"})
-	if out := runTool(t, rt, map[string]any{"action": "run", "tool_name": "fails"}); out["success"] == true {
-		t.Error("expected failing tool to report failure")
-	}
+	out = runTool(t, rt, map[string]any{"action": "run", "tool_name": "fails"})
+	assert.NotEqual(t, true, out["success"], "expected failing tool to report failure")
 }
 
 func TestUniversalConstructorApproval(t *testing.T) {
@@ -98,15 +86,11 @@ func TestUniversalConstructorApproval(t *testing.T) {
 	denied, reqs := approverHooks(false)
 	rt := toolOf(t)(NewUniversalConstructorTool(ucDir, denied, nil, nil))
 	out := runTool(t, rt, map[string]any{"action": "create", "tool_name": "t1", "code": "echo hi"})
-	if !strings.Contains(errOf(out), "not approved") {
-		t.Errorf("expected denial, got %v", out)
-	}
-	if _, err := os.Stat(filepath.Join(ucDir, "t1.sh")); !os.IsNotExist(err) {
-		t.Error("denied tool was written to disk")
-	}
-	if len(*reqs) != 1 || !strings.Contains((*reqs)[0].Diff, "+echo hi") {
-		t.Errorf("approval request should show the code as a diff: %v", *reqs)
-	}
+	assert.Contains(t, errOf(out), "not approved", "expected denial, got %v", out)
+	_, err := os.Stat(filepath.Join(ucDir, "t1.sh"))
+	assert.ErrorIs(t, err, fs.ErrNotExist, "denied tool was written to disk")
+	assert.Len(t, *reqs, 1, "approval request should show the code as a diff: %v", *reqs)
+	assert.Contains(t, (*reqs)[0].Diff, "+echo hi", "approval request should show the code as a diff: %v", *reqs)
 
 	// Create approved, run denied: separate approvals for write and execution.
 	h := NewHooks(Policy{})
@@ -117,34 +101,25 @@ func TestUniversalConstructorApproval(t *testing.T) {
 		return api.DecisionDeny, nil
 	})
 	rt = toolOf(t)(NewUniversalConstructorTool(ucDir, h, nil, nil))
-	if out := runTool(t, rt, map[string]any{"action": "create", "tool_name": "t2", "code": "touch ran"}); out["success"] != true {
-		t.Fatalf("approved create failed: %v", out)
-	}
-	if out := runTool(t, rt, map[string]any{"action": "run", "tool_name": "t2"}); !strings.Contains(errOf(out), "not approved") {
-		t.Errorf("expected run to be denied, got %v", out)
-	}
+	out = runTool(t, rt, map[string]any{"action": "create", "tool_name": "t2", "code": "touch ran"})
+	require.Equal(t, true, out["success"], "approved create failed: %v", out)
+	out = runTool(t, rt, map[string]any{"action": "run", "tool_name": "t2"})
+	assert.Contains(t, errOf(out), "not approved", "expected run to be denied, got %v", out)
 }
 
 func TestInvokeAgentTool(t *testing.T) {
 	reg, err := agents.NewRegistry()
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	hooks := NewHooks(Policy{})
 	rt := toolOf(t)(NewInvokeAgentTool(reg, hooks))
 
 	// Negative: no invoker wired must be an explicit error, not a fake success.
 	out := runTool(t, rt, map[string]any{"agent_name": "helios", "prompt": "do it"})
-	if !strings.Contains(errOf(out), "not available") || out["response"] != "" {
-		t.Errorf("expected unavailable error, got %v", out)
-	}
+	assert.Contains(t, errOf(out), "not available", "expected unavailable error, got %v", out)
+	assert.Equal(t, "", out["response"], "expected unavailable error, got %v", out)
 	// Negative: unknown agent and empty prompt.
-	if out := runTool(t, rt, map[string]any{"agent_name": "ghost", "prompt": "x"}); errOf(out) == "" {
-		t.Error("expected unknown agent error")
-	}
-	if out := runTool(t, rt, map[string]any{"agent_name": "helios", "prompt": "  "}); errOf(out) == "" {
-		t.Error("expected empty prompt error")
-	}
+	assert.NotEmpty(t, errOf(runTool(t, rt, map[string]any{"agent_name": "ghost", "prompt": "x"})), "an unknown agent is an error")
+	assert.NotEmpty(t, errOf(runTool(t, rt, map[string]any{"agent_name": "helios", "prompt": "  "})), "an empty prompt is an error")
 
 	// Positive: invoker result is returned; errors surface.
 	var gotAgent, gotPrompt string
@@ -156,26 +131,23 @@ func TestInvokeAgentTool(t *testing.T) {
 		return "done: " + prompt, nil
 	})
 	out = runTool(t, rt, map[string]any{"agent_name": "helios", "prompt": "build"})
-	if out["response"] != "done: build" || gotAgent != "helios" || gotPrompt != "build" {
-		t.Errorf("unexpected invoke result %v", out)
-	}
-	if out := runTool(t, rt, map[string]any{"agent_name": "helios", "prompt": "fail"}); !strings.Contains(errOf(out), "boom") {
-		t.Errorf("expected invoker error, got %v", out)
-	}
+	assert.Equal(t, "done: build", out["response"], "unexpected invoke result %v", out)
+	assert.Equal(t, "helios", gotAgent, "unexpected invoke result %v", out)
+	assert.Equal(t, "build", gotPrompt, "unexpected invoke result %v", out)
+	out = runTool(t, rt, map[string]any{"agent_name": "helios", "prompt": "fail"})
+	assert.Contains(t, errOf(out), "boom", "expected invoker error, got %v", out)
 }
 
 func TestListAgentsFilter(t *testing.T) {
 	reg, err := agents.NewRegistry()
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	rt := toolOf(t)(NewListAgentsTool(reg))
 	all, _ := runTool(t, rt, map[string]any{})["agents"].([]any)
 	filtered, _ := runTool(t, rt, map[string]any{"filter": "HELI"})["agents"].([]any)
 	none, _ := runTool(t, rt, map[string]any{"filter": "zzz"})["agents"].([]any)
-	if len(all) < 7 || len(filtered) != 1 || len(none) != 0 {
-		t.Errorf("filter not applied: all=%d filtered=%d none=%d", len(all), len(filtered), len(none))
-	}
+	assert.GreaterOrEqual(t, len(all), 7, "filter not applied: all=%d filtered=%d none=%d", len(all), len(filtered), len(none))
+	assert.Len(t, filtered, 1, "filter not applied: all=%d filtered=%d none=%d", len(all), len(filtered), len(none))
+	assert.Len(t, none, 0, "filter not applied: all=%d filtered=%d none=%d", len(all), len(filtered), len(none))
 }
 
 func TestAskUserQuestionTool(t *testing.T) {
@@ -183,12 +155,9 @@ func TestAskUserQuestionTool(t *testing.T) {
 	rt := toolOf(t)(NewAskUserQuestionTool(hooks))
 
 	// Negative: no prompter => explicit error instead of reading stdin directly.
-	if out := runTool(t, rt, map[string]any{"question": "?"}); errOf(out) == "" {
-		t.Error("expected error without prompter")
-	}
-	if out := runTool(t, rt, map[string]any{"question": ""}); errOf(out) == "" {
-		t.Error("expected error for empty question")
-	}
+	out := runTool(t, rt, map[string]any{"question": "?"})
+	assert.NotEqual(t, "", errOf(out), "expected error without prompter")
+	assert.NotEmpty(t, errOf(runTool(t, rt, map[string]any{"question": ""})), "an empty question is an error")
 
 	hooks.SetUserPrompter(func(ctx context.Context, q string, opts []string) (string, error) {
 		if q == "fail?" {
@@ -196,58 +165,48 @@ func TestAskUserQuestionTool(t *testing.T) {
 		}
 		return q + "->" + strings.Join(opts, "|"), nil
 	})
-	out := runTool(t, rt, map[string]any{"question": "pick", "options": []string{"a", "b"}})
-	if out["answer"] != "pick->a|b" {
-		t.Errorf("unexpected answer %v", out)
-	}
-	if out := runTool(t, rt, map[string]any{"question": "fail?"}); errOf(out) == "" {
-		t.Error("expected prompter error to surface")
-	}
+	out = runTool(t, rt, map[string]any{"question": "pick", "options": []string{"a", "b"}})
+	assert.Equal(t, "pick->a|b", out["answer"], "unexpected answer %v", out)
+	out = runTool(t, rt, map[string]any{"question": "fail?"})
+	assert.NotEqual(t, "", errOf(out), "expected prompter error to surface")
 }
 
 func TestUniversalConstructorPersistence(t *testing.T) {
 	ucDir := filepath.Join(t.TempDir(), "uc")
 	first := toolOf(t)(NewUniversalConstructorTool(ucDir, allowAll(), nil, nil))
 	runTool(t, first, map[string]any{"action": "create", "tool_name": "greet", "language": "python", "code": "import sys\nprint('hi', sys.argv[1])", "description": "says hi"})
-	if info, err := os.Stat(filepath.Join(ucDir, "greet.json")); err != nil || info.Mode().Perm() != 0o600 {
-		t.Fatalf("manifest missing or not owner-only: %v %v", info, err)
-	}
+	info, err := os.Stat(filepath.Join(ucDir, "greet.json"))
+	require.NoError(t, err, "manifest missing or not owner-only: %v", info)
+	require.Equal(t, fs.FileMode(0o600), info.Mode().Perm(), "manifest missing or not owner-only: %v %v", info, err)
 
 	// A new process sees and can run the tool.
 	second := toolOf(t)(NewUniversalConstructorTool(ucDir, allowAll(), nil, nil))
 	list := runTool(t, second, map[string]any{"action": "list"})
-	if tools, _ := list["tools"].([]any); len(tools) != 1 || !strings.Contains(tools[0].(string), "greet (python): says hi") {
-		t.Fatalf("persisted tool not listed: %v", list)
-	}
-	if out := runTool(t, second, map[string]any{"action": "run", "tool_name": "greet", "args": "puppy"}); !strings.Contains(fmt.Sprint(out["result"]), "hi puppy") {
-		t.Errorf("persisted tool did not run: %v", out)
-	}
+	tools, _ := list["tools"].([]any)
+	require.Len(t, tools, 1, "persisted tool not listed: %v", list)
+	require.Contains(t, tools[0].(string), "greet (python): says hi", "persisted tool not listed: %v", list)
+	out := runTool(t, second, map[string]any{"action": "run", "tool_name": "greet", "args": "puppy"})
+	assert.Contains(t, fmt.Sprint(out["result"]), "hi puppy", "persisted tool did not run: %v", out)
 
 	// Delete removes script and manifest; a fresh load no longer sees it.
-	if out := runTool(t, second, map[string]any{"action": "delete", "tool_name": "greet"}); out["success"] != true {
-		t.Fatalf("delete: %v", out)
-	}
+	out = runTool(t, second, map[string]any{"action": "delete", "tool_name": "greet"})
+	require.Equal(t, true, out["success"], "delete: %v", out)
 	for _, f := range []string{"greet.py", "greet.json"} {
-		if _, err := os.Stat(filepath.Join(ucDir, f)); !os.IsNotExist(err) {
-			t.Errorf("%s not removed", f)
-		}
+		_, err := os.Stat(filepath.Join(ucDir, f))
+		assert.ErrorIs(t, err, fs.ErrNotExist, "%s not removed", f)
 	}
 	third := toolOf(t)(NewUniversalConstructorTool(ucDir, allowAll(), nil, nil))
-	if tools, _ := runTool(t, third, map[string]any{"action": "list"})["tools"].([]any); len(tools) != 0 {
-		t.Errorf("deleted tool reloaded: %v", tools)
-	}
-	if out := runTool(t, third, map[string]any{"action": "delete", "tool_name": "greet"}); errOf(out) == "" {
-		t.Error("deleting a missing tool should fail")
-	}
+	tools, _ = runTool(t, third, map[string]any{"action": "list"})["tools"].([]any)
+	assert.Len(t, tools, 0, "deleted tool reloaded: %v", tools)
+	out = runTool(t, third, map[string]any{"action": "delete", "tool_name": "greet"})
+	assert.NotEqual(t, "", errOf(out), "deleting a missing tool should fail")
 	denied, _ := approverHooks(false)
 	runTool(t, first, map[string]any{"action": "create", "tool_name": "keep", "code": "echo k"})
 	guarded := toolOf(t)(NewUniversalConstructorTool(ucDir, denied, nil, nil))
-	if out := runTool(t, guarded, map[string]any{"action": "delete", "tool_name": "keep"}); !strings.Contains(errOf(out), "not approved") {
-		t.Errorf("delete should need approval: %v", out)
-	}
-	if _, err := os.Stat(filepath.Join(ucDir, "keep.sh")); err != nil {
-		t.Error("denied delete removed the script")
-	}
+	out = runTool(t, guarded, map[string]any{"action": "delete", "tool_name": "keep"})
+	assert.Contains(t, errOf(out), "not approved", "delete should need approval: %v", out)
+	_, err = os.Stat(filepath.Join(ucDir, "keep.sh"))
+	assert.NoError(t, err, "denied delete removed the script")
 }
 
 func TestUniversalConstructorRejectsTamperedManifests(t *testing.T) {
@@ -266,18 +225,14 @@ func TestUniversalConstructorRejectsTamperedManifests(t *testing.T) {
 	write("noscript.json", `{"name":"noscript","language":"bash"}`)
 	write("garbage.json", `{not json`)
 	write("link.json", `{"name":"link","language":"bash"}`)
-	if err := os.Symlink(outside, filepath.Join(ucDir, "link.sh")); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.Symlink(outside, filepath.Join(ucDir, "link.sh")))
 	write("good.json", `{"name":"good","language":"bash","description":"fine"}`)
 	write("good.sh", "echo good")
 
 	rt := toolOf(t)(NewUniversalConstructorTool(ucDir, allowAll(), nil, nil))
 	tools, _ := runTool(t, rt, map[string]any{"action": "list"})["tools"].([]any)
-	if len(tools) != 1 || !strings.HasPrefix(tools[0].(string), "good ") {
-		t.Errorf("only the valid manifest should load, got %v", tools)
-	}
-	if out := runTool(t, rt, map[string]any{"action": "run", "tool_name": "link"}); errOf(out) == "" {
-		t.Error("symlinked script must not be runnable")
-	}
+	assert.Len(t, tools, 1, "only the valid manifest should load, got %v", tools)
+	assert.True(t, strings.HasPrefix(tools[0].(string), "good "), "only the valid manifest should load, got %v", tools)
+	out := runTool(t, rt, map[string]any{"action": "run", "tool_name": "link"})
+	assert.NotEqual(t, "", errOf(out), "symlinked script must not be runnable")
 }

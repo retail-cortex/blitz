@@ -18,20 +18,21 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
-	"errors"
 	"hash/crc32"
 	"image"
 	"image/color"
 	"image/jpeg"
 	"image/png"
+	"io/fs"
 	"math/rand/v2"
 	"os"
 	"path/filepath"
-	"reflect"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/genai"
 )
 
@@ -44,9 +45,7 @@ func pngBytes(t *testing.T, w, h int) []byte {
 		}
 	}
 	var buf bytes.Buffer
-	if err := png.Encode(&buf, img); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, png.Encode(&buf, img))
 	return buf.Bytes()
 }
 
@@ -66,52 +65,44 @@ func noisyPNG(t *testing.T, w, h int) []byte {
 func TestPrepareKeepsSmallImages(t *testing.T) {
 	data := pngBytes(t, 200, 100)
 	img, err := Prepare("dir/shot.png", data, Options{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if img.Resized || !bytes.Equal(img.Data, data) || img.MIME != "image/png" || img.Width != 200 || img.Height != 100 {
-		t.Errorf("small image changed: %+v", img)
-	}
-	if img.Name != "shot.png" || len(img.SHA256) != 64 || !strings.HasPrefix(img.URI(), URIScheme) {
-		t.Errorf("metadata: %q %q", img.Name, img.URI())
-	}
-	if s := img.Summary(); !strings.Contains(s, "shot.png 200×100") {
-		t.Errorf("summary %q", s)
-	}
+	require.NoError(t, err)
+	assert.False(t, img.Resized, "small image changed: %+v", img)
+	assert.True(t, bytes.Equal(img.Data, data), "small image changed: %+v", img)
+	assert.Equal(t, "image/png", img.MIME, "small image changed: %+v", img)
+	assert.Equal(t, 200, img.Width, "small image changed: %+v", img)
+	assert.Equal(t, 100, img.Height, "small image changed: %+v", img)
+	assert.Equal(t, "shot.png", img.Name, "metadata: %q %q", img.Name, img.URI())
+	assert.Len(t, img.SHA256, 64, "metadata: %q %q", img.Name, img.URI())
+	assert.True(t, strings.HasPrefix(img.URI(), URIScheme), "metadata: %q %q", img.Name, img.URI())
+	s := img.Summary()
+	assert.Contains(t, s, "shot.png 200×100", "summary %q", s)
 }
 
 func TestPrepareScalesLargeImages(t *testing.T) {
 	img, err := Prepare("wide.png", pngBytes(t, 3200, 800), Options{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !img.Resized || img.Width != 1568 || img.Height != 392 || img.MIME != "image/png" {
-		t.Errorf("got %dx%d %s resized=%v", img.Width, img.Height, img.MIME, img.Resized)
-	}
+	require.NoError(t, err)
+	assert.True(t, img.Resized, "got %dx%d %s resized=%v", img.Width, img.Height, img.MIME, img.Resized)
+	assert.Equal(t, 1568, img.Width, "got %dx%d %s resized=%v", img.Width, img.Height, img.MIME, img.Resized)
+	assert.Equal(t, 392, img.Height, "got %dx%d %s resized=%v", img.Width, img.Height, img.MIME, img.Resized)
+	assert.Equal(t, "image/png", img.MIME, "got %dx%d %s resized=%v", img.Width, img.Height, img.MIME, img.Resized)
 	cfg, _, err := image.DecodeConfig(bytes.NewReader(img.Data))
-	if err != nil || cfg.Width != 1568 {
-		t.Errorf("stored data doesn't match: %+v %v", cfg, err)
-	}
+	assert.NoError(t, err, "stored data doesn't match: %+v", cfg)
+	assert.Equal(t, 1568, cfg.Width, "stored data doesn't match: %+v %v", cfg, err)
 	tall, _ := Prepare("tall.png", pngBytes(t, 300, 900), Options{MaxDimension: 300})
-	if tall.Width != 100 || tall.Height != 300 {
-		t.Errorf("portrait: %dx%d", tall.Width, tall.Height)
-	}
+	assert.Equal(t, 100, tall.Width, "portrait: %dx%d", tall.Width, tall.Height)
+	assert.Equal(t, 300, tall.Height, "portrait: %dx%d", tall.Width, tall.Height)
 }
 
 // A picture within the pixel limit but over the byte limit is re-encoded as
 // JPEG rather than sent too large.
 func TestPrepareCompressesHeavyImages(t *testing.T) {
 	data := noisyPNG(t, 1500, 1000)
-	if len(data) <= MaxEncodedBytes {
-		t.Fatalf("fixture too small: %d", len(data))
-	}
+	require.Greater(t, len(data), MaxEncodedBytes, "fixture too small: %d", len(data))
 	img, err := Prepare("noise.png", data, Options{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if img.MIME != "image/jpeg" || len(img.Data) > MaxEncodedBytes || img.Width != 1500 {
-		t.Errorf("got %s %d bytes %dx%d", img.MIME, len(img.Data), img.Width, img.Height)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, "image/jpeg", img.MIME, "got %s %d bytes %dx%d", img.MIME, len(img.Data), img.Width, img.Height)
+	assert.LessOrEqual(t, len(img.Data), MaxEncodedBytes, "got %s %d bytes %dx%d", img.MIME, len(img.Data), img.Width, img.Height)
+	assert.Equal(t, 1500, img.Width, "got %s %d bytes %dx%d", img.MIME, len(img.Data), img.Width, img.Height)
 }
 
 func TestPrepareRejects(t *testing.T) {
@@ -121,16 +112,14 @@ func TestPrepareRejects(t *testing.T) {
 		"truncated": pngBytes(t, 50, 50)[:40],
 	}
 	for name, data := range cases {
-		if _, err := Prepare(name+".png", data, Options{}); err == nil {
-			t.Errorf("%s accepted", name)
-		}
+		_, err := Prepare(name+".png", data, Options{})
+		assert.Error(t, err, "%s accepted", name)
 	}
-	if _, err := Prepare("big.png", pngBytes(t, 10, 10), Options{MaxInput: 10}); err == nil || !strings.Contains(err.Error(), "limit") {
-		t.Errorf("size limit: %v", err)
-	}
-	if _, err := Prepare("x.txt", []byte("plain"), Options{}); !errors.Is(err, ErrNotImage) {
-		t.Errorf("want ErrNotImage, got %v", err)
-	}
+	_, err := Prepare("big.png", pngBytes(t, 10, 10), Options{MaxInput: 10})
+	assert.Error(t, err, "size limit")
+	assert.Contains(t, err.Error(), "limit", "size limit: %v", err)
+	_, err = Prepare("x.txt", []byte("plain"), Options{})
+	assert.ErrorIs(t, err, ErrNotImage, "want ErrNotImage, got %v", err)
 }
 
 // A decompression bomb declares a huge canvas in a tiny file; it must be
@@ -142,9 +131,9 @@ func TestPrepareRejectsDecompressionBomb(t *testing.T) {
 	bomb := bytes.Clone(data)
 	copy(bomb[16:24], []byte{0, 0, 0xC3, 0x50, 0, 0, 0xC3, 0x50})
 	binary.BigEndian.PutUint32(bomb[29:33], crc32.ChecksumIEEE(bomb[12:29]))
-	if _, err := Prepare("bomb.png", bomb, Options{}); err == nil || !strings.Contains(err.Error(), "too large") {
-		t.Errorf("bomb: %v", err)
-	}
+	_, err := Prepare("bomb.png", bomb, Options{})
+	assert.Error(t, err, "bomb")
+	assert.Contains(t, err.Error(), "too large", "bomb: %v", err)
 }
 
 func TestPrepareFlattensTransparencyForJPEG(t *testing.T) {
@@ -153,50 +142,39 @@ func TestPrepareFlattensTransparencyForJPEG(t *testing.T) {
 	png.Encode(&buf, src)
 	// A JPEG source takes the JPEG path.
 	img := &Image{Data: buf.Bytes(), MIME: "image/jpeg", Width: 40, Height: 40}
-	if err := img.shrink(src, 20); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, img.shrink(src, 20))
 	dec, err := jpeg.Decode(bytes.NewReader(img.Data))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if r, g, b, _ := dec.At(5, 5).RGBA(); r>>8 < 250 || g>>8 < 250 || b>>8 < 250 {
-		t.Errorf("transparent pixels should become white, got %v %v %v", r>>8, g>>8, b>>8)
-	}
+	require.NoError(t, err)
+	r, g, b, _ := dec.At(5, 5).RGBA()
+	assert.GreaterOrEqual(t, r>>8, uint32(250), "transparent pixels should become white, got %v %v %v", r>>8, g>>8, b>>8)
+	assert.GreaterOrEqual(t, g>>8, uint32(250), "transparent pixels should become white, got %v %v %v", r>>8, g>>8, b>>8)
+	assert.GreaterOrEqual(t, b>>8, uint32(250), "transparent pixels should become white, got %v %v %v", r>>8, g>>8, b>>8)
 }
 
 func TestStore(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "images")
 	s, err := OpenStore(dir)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if info, _ := os.Stat(dir); info.Mode().Perm() != 0o700 {
-		t.Errorf("dir mode %v", info.Mode().Perm())
-	}
+	require.NoError(t, err)
+	info, _ := os.Stat(dir)
+	assert.Equal(t, fs.FileMode(0o700), info.Mode().Perm(), "dir mode %v", info.Mode().Perm())
 	img, _ := Prepare("a.png", pngBytes(t, 20, 20), Options{})
-	if err := s.Put(img); err != nil {
-		t.Fatal(err)
-	}
-	if err := s.Put(img); err != nil { // idempotent
-		t.Fatal(err)
-	}
+	require.NoError(t, s.Put(img))
+	require.NoError(t, s.Put(img))
 	file := filepath.Join(dir, img.SHA256+".png")
-	if info, err := os.Stat(file); err != nil || info.Mode().Perm() != 0o600 {
-		t.Errorf("file: %v %v", info, err)
+	info, statErr := os.Stat(file)
+	if assert.NoError(t, statErr) {
+	assert.Equal(t, fs.FileMode(0o600), info.Mode().Perm(), "the stored image is owner-only")
 	}
 	data, mime, err := s.Get(img.URI())
-	if err != nil || mime != "image/png" || !bytes.Equal(data, img.Data) {
-		t.Errorf("Get: %s %v", mime, err)
-	}
+	assert.NoError(t, err, "Get: %s", mime)
+	assert.Equal(t, "image/png", mime, "Get: %s %v", mime, err)
+	assert.True(t, bytes.Equal(data, img.Data), "Get: %s %v", mime, err)
 	for _, bad := range []string{"", "blitz-image:../../etc/passwd", URIScheme + strings.Repeat("A", 64), "file:///x.png"} {
-		if _, _, err := s.Get(bad); err == nil {
-			t.Errorf("Get(%q) should fail", bad)
-		}
+		_, _, err := s.Get(bad)
+		assert.Error(t, err, "Get(%q) should fail", bad)
 	}
-	if _, _, err := s.Get(URIScheme + strings.Repeat("0", 64)); !errors.Is(err, os.ErrNotExist) {
-		t.Errorf("missing image: %v", err)
-	}
+	_, _, err = s.Get(URIScheme + strings.Repeat("0", 64))
+	assert.ErrorIs(t, err, os.ErrNotExist, "missing image: %v", err)
 
 	// Prune removes old images only; Put refreshes the age of reused ones.
 	old := time.Now().Add(-48 * time.Hour)
@@ -205,18 +183,15 @@ func TestStore(t *testing.T) {
 	s.Put(other)
 	os.WriteFile(filepath.Join(dir, "notes.txt"), []byte("x"), 0o600)
 	os.Chtimes(filepath.Join(dir, "notes.txt"), old, old)
-	if n, err := s.Prune(24 * time.Hour); err != nil || n != 1 {
-		t.Errorf("Prune = %d, %v", n, err)
-	}
-	if _, _, err := s.Get(img.URI()); err == nil {
-		t.Error("old image should be pruned")
-	}
-	if _, _, err := s.Get(other.URI()); err != nil {
-		t.Error("recent image pruned")
-	}
-	if _, err := os.Stat(filepath.Join(dir, "notes.txt")); err != nil {
-		t.Error("prune must only touch image files")
-	}
+	n, err := s.Prune(24 * time.Hour)
+	assert.NoError(t, err, "Prune = %d,", n)
+	assert.Equal(t, 1, n, "Prune = %d, %v", n, err)
+	_, _, err = s.Get(img.URI())
+	assert.Error(t, err, "old image should be pruned")
+	_, _, err = s.Get(other.URI())
+	assert.NoError(t, err, "recent image pruned")
+	_, err = os.Stat(filepath.Join(dir, "notes.txt"))
+	assert.NoError(t, err, "prune must only touch image files")
 }
 
 func TestExpand(t *testing.T) {
@@ -234,45 +209,36 @@ func TestExpand(t *testing.T) {
 	snapshot := []*genai.Part{user.Parts[0], user.Parts[1]}
 
 	out := Expand(in, s)
-	if out[0] != plain {
-		t.Error("contents without images should be passed through")
-	}
-	if b := out[1].Parts[0].InlineData; b == nil || b.MIMEType != "image/png" || !bytes.Equal(b.Data, img.Data) || out[1].Parts[1].Text != "what is this?" {
-		t.Errorf("user image not expanded: %+v", out[1].Parts)
-	}
-	if len(out[2].Parts) != 2 || out[2].Parts[0].FunctionResponse == nil || out[2].Parts[1].InlineData == nil {
-		t.Errorf("tool image should follow its result: %+v", out[2].Parts)
-	}
-	if !strings.Contains(out[3].Parts[0].Text, "gone.png is no longer available") {
-		t.Errorf("missing image: %+v", out[3].Parts[0])
-	}
+	assert.Same(t, plain, out[0], "contents without images should be passed through")
+	b := out[1].Parts[0].InlineData
+	assert.NotNil(t, b, "user image not expanded: %+v", out[1].Parts)
+	assert.Equal(t, "image/png", b.MIMEType, "user image not expanded: %+v", out[1].Parts)
+	assert.True(t, bytes.Equal(b.Data, img.Data), "user image not expanded: %+v", out[1].Parts)
+	assert.Equal(t, "what is this?", out[1].Parts[1].Text, "user image not expanded: %+v", out[1].Parts)
+	assert.Len(t, out[2].Parts, 2, "tool image should follow its result: %+v", out[2].Parts)
+	assert.NotNil(t, out[2].Parts[0].FunctionResponse, "tool image should follow its result: %+v", out[2].Parts)
+	assert.NotNil(t, out[2].Parts[1].InlineData, "tool image should follow its result: %+v", out[2].Parts)
+	assert.Contains(t, out[3].Parts[0].Text, "gone.png is no longer available", "missing image: %+v", out[3].Parts[0])
 	// The session's own contents are untouched.
-	if !reflect.DeepEqual(user.Parts, snapshot) || user.Parts[0].InlineData != nil || len(tool.Parts) != 1 {
-		t.Error("Expand modified its input")
-	}
-	if got := Expand([]*genai.Content{plain}, s); got[0] != plain {
-		t.Error("no refs: same slice expected")
-	}
-	if nilStore := Expand([]*genai.Content{user}, nil); nilStore[0].Parts[0].Text == "" {
-		t.Error("nil store should give a placeholder")
-	}
+	assert.Equal(t, snapshot, user.Parts, "Expand modified its input")
+	assert.Nil(t, user.Parts[0].InlineData, "Expand modified its input")
+	assert.Len(t, tool.Parts, 1, "Expand modified its input")
+	got := Expand([]*genai.Content{plain}, s)
+	assert.Same(t, plain, got[0], "no refs: same slice expected")
+	nilStore := Expand([]*genai.Content{user}, nil)
+	assert.NotEqual(t, "", nilStore[0].Parts[0].Text, "nil store should give a placeholder")
 }
 
 func TestMentions(t *testing.T) {
 	got := Mentions(`look at @shot.png and @"My Screens/a b.JPG", not me@example.png, @src/main.go, again @shot.png. And @ui/x.webp,`)
 	want := []string{"shot.png", "My Screens/a b.JPG", "ui/x.webp"}
-	if !reflect.DeepEqual(got, want) {
-		t.Errorf("Mentions = %q", got)
-	}
-	if Mentions("no mentions here") != nil {
-		t.Error("expected none")
-	}
+	assert.Equal(t, want, got, "Mentions = %q", got)
+	assert.Nil(t, Mentions("no mentions here"), "expected none")
 }
 
 func TestReadClipboardIsReplaceable(t *testing.T) {
 	defer func(f func(context.Context) ([]byte, error)) { ReadClipboard = f }(ReadClipboard)
 	ReadClipboard = func(context.Context) ([]byte, error) { return nil, ErrNoClipboardImage }
-	if _, err := ReadClipboard(context.Background()); !errors.Is(err, ErrNoClipboardImage) {
-		t.Error(err)
-	}
+	_, err := ReadClipboard(context.Background())
+	assert.ErrorIs(t, err, ErrNoClipboardImage, "%v", err)
 }

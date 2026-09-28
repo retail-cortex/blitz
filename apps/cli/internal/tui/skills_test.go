@@ -18,8 +18,10 @@ import (
 	"context"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestSkillsListAndShow(t *testing.T) {
@@ -47,35 +49,26 @@ scripts:
     timeout_seconds: 30
 ---
 `), 0o644)
-	if err := local(app).Skills().DiscoverExternal([]string{dir}); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, local(app).Skills().DiscoverExternal([]string{dir}))
 	local(app).Config().Skills.Policy.EnvPassthrough = []string{"GITHUB_TOKEN"}
 	run := func(cmd string) string {
 		return captureStdout(t, func() { HandleCommand(context.Background(), cmd, app) })
 	}
 
-	if out := run("/skills list"); !strings.Contains(out, "2 scripts · TIER_2_AUDITED_WRITE · allowed by skills.policy") {
-		t.Errorf("list:\n%s", out)
-	}
+	assert.Contains(t, run("/skills list"), "2 scripts · TIER_2_AUDITED_WRITE · allowed by skills.policy", "list")
 	out := run("/skills show gh-issues")
 	for _, want := range []string{
 		"1.2 · MIT", "Content: sha256:", "Needs Bash (gh:*): read issues", "approval tier TIER_2_AUDITED_WRITE",
 		"Network: not needed, off", "Receives: GITHUB_TOKEN", "won't receive (skills.policy.env_passthrough): AWS_SECRET_ACCESS_KEY",
 		"✗ list", "isn't a plain package requirement", "✓ fmt", "inline, 30s",
 	} {
-		if !strings.Contains(out, want) {
-			t.Errorf("show lacks %q:\n%s", want, out)
-		}
+		assert.Contains(t, out, want, "show lacks %q:\n%s", want, out)
 	}
-	if out := run("/skills show nope"); !strings.Contains(out, "No skill named nope") {
-		t.Errorf("unknown:\n%s", out)
-	}
-	if out := run("/skills show"); !strings.Contains(out, "Usage: /skills show") {
-		t.Errorf("usage:\n%s", out)
-	}
+	out = run("/skills show nope")
+	assert.Contains(t, out, "No skill named nope", "unknown:\n%s", out)
+	out = run("/skills show")
+	assert.Contains(t, out, "Usage: /skills show", "usage:\n%s", out)
 	local(app).Config().Skills.Policy.Languages = nil
-	if out := run("/skills list"); !strings.Contains(out, `2 scripts · blocked: language "python"`) {
-		t.Errorf("blocked list:\n%s", out)
-	}
+	out = run("/skills list")
+	assert.Contains(t, out, `2 scripts · blocked: language "python"`, "blocked list:\n%s", out)
 }

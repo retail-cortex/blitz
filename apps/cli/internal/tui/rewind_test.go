@@ -16,12 +16,11 @@ package tui
 
 import (
 	"context"
-	"errors"
-	"strings"
 	"testing"
 
 	"github.com/retail-cortex/blitz/pkg/api"
-
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/genai"
 )
 
@@ -30,13 +29,10 @@ func rewindApp(t *testing.T) (*App, string) {
 	t.Helper()
 	app, _ := newCommandApp(t, "", genai.NewContentFromText("one", genai.RoleModel), genai.NewContentFromText("two", genai.RoleModel))
 	s, err := app.Workspace.NewSession()
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	for _, p := range []string{"first prompt", "second prompt"} {
-		if _, err := app.Workspace.Run(context.Background(), s.ID, api.Turn{Text: p}, func(api.Event) {}); err != nil {
-			t.Fatal(err)
-		}
+		_, err := app.Workspace.Run(context.Background(), s.ID, api.Turn{Text: p}, func(api.Event) {})
+		require.NoError(t, err)
 	}
 	return app, s.ID
 }
@@ -44,20 +40,17 @@ func rewindApp(t *testing.T) (*App, string) {
 func TestRewindCommandOnAPipe(t *testing.T) {
 	app, _ := rewindApp(t)
 	out := ansiPattern.ReplaceAllString(captureStdout(t, func() { HandleCommand(context.Background(), "/rewind", app) }), "")
-	if !strings.Contains(out, "1  second prompt") || !strings.Contains(out, "2  first prompt") || !strings.Contains(out, "Usage: /rewind") {
-		t.Fatalf("list:\n%s", out)
-	}
+	require.Contains(t, out, "1  second prompt", "list:\n%s", out)
+	require.Contains(t, out, "2  first prompt", "list:\n%s", out)
+	require.Contains(t, out, "Usage: /rewind", "list:\n%s", out)
 	out = captureStdout(t, func() { HandleCommand(context.Background(), "/rewind 1 conversation", app) })
-	if !strings.Contains(out, "Conversation rewound") || !strings.Contains(out, "The prompt was: second prompt") {
-		t.Fatalf("rewind:\n%s", out)
-	}
-	if a, _ := app.Workspace.ActiveSession(); a.MessageCount != 2 {
-		t.Errorf("messages %d", a.MessageCount)
-	}
+	require.Contains(t, out, "Conversation rewound", "rewind:\n%s", out)
+	require.Contains(t, out, "The prompt was: second prompt", "rewind:\n%s", out)
+	a, _ := app.Workspace.ActiveSession()
+	assert.Equal(t, 2, a.MessageCount, "messages %d", a.MessageCount)
 	for _, bad := range []string{"/rewind 5", "/rewind 1 sideways"} {
-		if out := captureStdout(t, func() { HandleCommand(context.Background(), bad, app) }); !strings.Contains(out, "Usage: /rewind") {
-			t.Errorf("%s:\n%s", bad, out)
-		}
+		out := captureStdout(t, func() { HandleCommand(context.Background(), bad, app) })
+		assert.Contains(t, out, "Usage: /rewind", "%s:\n%s", bad, out)
 	}
 }
 
@@ -68,32 +61,27 @@ func TestRewindPickersPutThePromptBack(t *testing.T) {
 	keys.in <- []byte("\r") // the latest prompt
 	keys.in <- []byte("\r") // the first mode offered: conversation (no files changed)
 	out := captureStdout(t, func() { HandleCommand(context.Background(), "/rewind", app) })
-	if !strings.Contains(out, "Conversation rewound") {
-		t.Fatalf("output:\n%s\n%s", out, f.output())
-	}
+	require.Contains(t, out, "Conversation rewound", "output:\n%s\n%s", out, f.output())
 	screen := f.output()
-	if !strings.Contains(screen, "second prompt") || !strings.Contains(screen, "Conversation only") || strings.Contains(screen, "Code only") {
-		t.Errorf("pickers (code modes must be left out when no files changed):\n%s", screen)
-	}
+	assert.Contains(t, screen, "second prompt", "pickers (code modes must be left out when no files changed):\n%s", screen)
+	assert.Contains(t, screen, "Conversation only", "pickers (code modes must be left out when no files changed):\n%s", screen)
+	assert.NotContains(t, screen, "Code only", "pickers (code modes must be left out when no files changed):\n%s", screen)
 	// The next prompt starts with the rewound text.
 	f.keys(t, " again\r")
 	line, err := within(t, func() (string, error) { return f.in.ReadInput(context.Background(), "> ") })
-	if err != nil || line != "second prompt again" {
-		t.Fatalf("next input %q %v", line, err)
-	}
+	require.NoError(t, err, "next input %q", line)
+	require.Equal(t, "second prompt again", line, "next input %q %v", line, err)
 }
 
 func TestEscEscAtAnEmptyPromptRewinds(t *testing.T) {
 	f := newFakeTerminal(t)
 	f.keys(t, "\x1b", "\x1b")
-	if _, err := within(t, func() (string, error) { return f.in.ReadInput(context.Background(), "> ") }); !errors.Is(err, ErrRewindKey) {
-		t.Fatalf("Esc Esc: %v", err)
-	}
+	_, err := within(t, func() (string, error) { return f.in.ReadInput(context.Background(), "> ") })
+	require.ErrorIs(t, err, ErrRewindKey, "Esc Esc: %v", err)
 	// Not in a question.
 	f.keys(t, "\x1b")
-	if _, err := within(t, func() (string, error) { return f.in.Ask(context.Background(), "? ") }); errors.Is(err, ErrRewindKey) {
-		t.Fatal("Esc at a question opened /rewind")
-	}
+	_, err = within(t, func() (string, error) { return f.in.Ask(context.Background(), "? ") })
+	require.NotErrorIs(t, err, ErrRewindKey, "Esc at a question opened /rewind")
 }
 
 // The agent's task list is drawn as a checklist, instead of the todo
@@ -106,14 +94,13 @@ func TestPrinterShowsTasks(t *testing.T) {
 	p.Handle(api.Event{Tasks: []api.Task{{Content: "read", Status: "done"}, {Content: "fix", Status: "in_progress"}, {Content: "test", Status: "pending"}}})
 	p.End()
 	got := ansiPattern.ReplaceAllString(out.b.String(), "")
-	if !strings.Contains(got, "☒ read") || !strings.Contains(got, "☐ fix") || !strings.Contains(got, "☐ test") || strings.Contains(got, "todo") {
-		t.Errorf("output:\n%s", got)
-	}
+	assert.Contains(t, got, "☒ read", "output:\n%s", got)
+	assert.Contains(t, got, "☐ fix", "output:\n%s", got)
+	assert.Contains(t, got, "☐ test", "output:\n%s", got)
+	assert.NotContains(t, got, "todo", "output:\n%s", got)
 	// A failed todo call is shown like any tool's.
 	out.b.Reset()
 	p.Handle(api.Event{ToolResult: &api.ToolResult{Name: "todo", Result: map[string]any{"error": "item 1 has no content"}}})
 	p.End()
-	if !strings.Contains(out.b.String(), "no content") {
-		t.Errorf("failed todo hidden: %q", out.b.String())
-	}
+	assert.Contains(t, out.b.String(), "no content", "failed todo hidden: %q", out.b.String())
 }

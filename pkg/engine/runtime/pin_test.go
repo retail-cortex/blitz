@@ -19,6 +19,7 @@ import (
 	"testing"
 
 	"github.com/retail-cortex/blitz/pkg/config"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/genai"
 )
 
@@ -29,51 +30,39 @@ func TestPinnedSubagentRunsAndIsPricedOnItsModel(t *testing.T) {
 		toolCall("invoke_agent", map[string]any{"agent_name": "qa", "prompt": "review"}),
 		textContent("done"))
 
-	if _, err := functionResponses(t, f.eng, "s", "get a review"); err != nil {
-		t.Fatal(err)
-	}
-	if haiku.Calls() != 1 {
-		t.Fatalf("pinned model got %d calls, want 1", haiku.Calls())
-	}
-	if f.llm.Calls() != 2 {
-		t.Fatalf("main model got %d calls, want 2 (the sub-agent's call went elsewhere)", f.llm.Calls())
-	}
+	_, err := functionResponses(t, f.eng, "s", "get a review")
+	require.NoError(t, err)
+	require.Equal(t, 1, haiku.Calls(), "pinned model got %d calls, want 1", haiku.Calls())
+	require.Equal(t, 2, f.llm.Calls(), "main model got %d calls, want 2 (the sub-agent's call went elsewhere)", f.llm.Calls())
 	// The mock reports no model version: the sub-agent's tokens must be
 	// priced as its own (pinned) model, not the active agent's.
 	want := config.DefaultPricing["claude-haiku-4-5"].InputPerMTok
-	if u := f.eng.Usage("s"); abs(u.CostUSD-want) > 1e-9 {
-		t.Fatalf("cost $%v, want $%v (haiku input for 1M tokens)", u.CostUSD, want)
-	}
-	if name, pinned := f.eng.AgentModel("qa"); name != "claude-haiku-4-5" || !pinned {
-		t.Fatalf("AgentModel = %s %v", name, pinned)
-	}
-	if name, pinned := f.eng.AgentModel("blitz"); name != "gemini-3.8-flash" || pinned {
-		t.Fatalf("unpinned agent: %s %v", name, pinned)
-	}
+	u := f.eng.Usage("s")
+	require.LessOrEqual(t, abs(u.CostUSD-want), 1e-9, "cost $%v, want $%v (haiku input for 1M tokens)", u.CostUSD, want)
+	name, pinned := f.eng.AgentModel("qa")
+	require.Equal(t, "claude-haiku-4-5", name, "AgentModel = %s %v", name, pinned)
+	require.True(t, pinned, "AgentModel = %s %v", name, pinned)
+	name, pinned = f.eng.AgentModel("blitz")
+	require.Equal(t, "gemini-3.8-flash", name, "unpinned agent: %s %v", name, pinned)
+	require.False(t, pinned, "unpinned agent: %s %v", name, pinned)
 }
 
 func TestPinAndUnpinTheActiveAgent(t *testing.T) {
 	f := newEngineWith(t, fixtureOpts{}, textContent("from main"))
 	pinned := NewMockLLM("claude-sonnet-5", textContent("from pinned"))
 	ctx := context.Background()
-	if err := f.eng.PinModel(ctx, "nope", pinned); err == nil {
-		t.Fatal("pinned an unknown agent")
-	}
-	if err := f.eng.PinModel(ctx, "blitz", pinned); err != nil {
-		t.Fatal(err)
-	}
-	if f.eng.ModelName() != "claude-sonnet-5" {
-		t.Fatalf("ModelName = %s", f.eng.ModelName())
-	}
-	if _, err := collect(t, f.eng, "s", "hi"); err != nil || pinned.Calls() != 1 || f.llm.Calls() != 0 {
-		t.Fatalf("pinned %d, main %d, err %v", pinned.Calls(), f.llm.Calls(), err)
-	}
-	if err := f.eng.Unpin(ctx, "blitz"); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := collect(t, f.eng, "s", "hi"); err != nil || f.llm.Calls() != 1 || f.eng.ModelName() != "gemini-3.8-flash" {
-		t.Fatalf("after unpin: main %d calls, model %s, err %v", f.llm.Calls(), f.eng.ModelName(), err)
-	}
+	require.Error(t, f.eng.PinModel(ctx, "nope", pinned), "pinned an unknown agent")
+	require.NoError(t, f.eng.PinModel(ctx, "blitz", pinned))
+	require.Equal(t, "claude-sonnet-5", f.eng.ModelName(), "ModelName = %s", f.eng.ModelName())
+	_, err := collect(t, f.eng, "s", "hi")
+	require.NoError(t, err, "pinned %d, main %d, err", pinned.Calls(), f.llm.Calls())
+	require.Equal(t, 1, pinned.Calls(), "pinned %d, main %d, err %v", pinned.Calls(), f.llm.Calls(), err)
+	require.Equal(t, 0, f.llm.Calls(), "pinned %d, main %d, err %v", pinned.Calls(), f.llm.Calls(), err)
+	require.NoError(t, f.eng.Unpin(ctx, "blitz"))
+	_, err = collect(t, f.eng, "s", "hi")
+	require.NoError(t, err, "after unpin: main %d calls, model %s, err", f.llm.Calls(), f.eng.ModelName())
+	require.Equal(t, 1, f.llm.Calls(), "after unpin: main %d calls, model %s, err %v", f.llm.Calls(), f.eng.ModelName(), err)
+	require.Equal(t, "gemini-3.8-flash", f.eng.ModelName(), "after unpin: main %d calls, model %s, err %v", f.llm.Calls(), f.eng.ModelName(), err)
 }
 
 func TestNewModelAcceptsAProviderQualifiedName(t *testing.T) {
@@ -81,17 +70,14 @@ func TestNewModelAcceptsAProviderQualifiedName(t *testing.T) {
 	cfg.LLM.Provider = "gemini"
 	cfg.LLM.Anthropic.APIKey = "sk-ant-test"
 	m, err := NewModel(context.Background(), cfg, "anthropic/claude-sonnet-5")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if sm, ok := m.(*settingsModel); !ok || m.Name() != "claude-sonnet-5" {
-		t.Fatalf("got %T %q", m, m.Name())
-	} else if _, ok := sm.inner.(*anthropicModel); !ok {
-		t.Fatalf("wraps %T", sm.inner)
-	}
+	require.NoError(t, err)
+	sm, ok := m.(*settingsModel)
+	require.True(t, ok, "got %T", m)
+	require.Equal(t, "claude-sonnet-5", m.Name())
+	require.IsType(t, &anthropicModel{}, sm.inner, "wraps the Anthropic model")
 	// The configured default model can name its provider too.
 	cfg.Blitz.DefaultModel = "anthropic/claude-haiku-4-5"
-	if m, err := NewModel(context.Background(), cfg, ""); err != nil || m.Name() != "claude-haiku-4-5" {
-		t.Fatalf("default_model with provider: %v %v", m, err)
-	}
+	m, err = NewModel(context.Background(), cfg, "")
+	require.NoError(t, err, "default_model with provider: %v", m)
+	require.Equal(t, "claude-haiku-4-5", m.Name(), "default_model with provider: %v %v", m, err)
 }

@@ -28,6 +28,8 @@ import (
 	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/engine/runtime"
 	"github.com/retail-cortex/blitz/pkg/images"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/genai"
 )
 
@@ -81,9 +83,7 @@ func TestAttachCommandsAndMentions(t *testing.T) {
 		HandleCommand(ctx, "/attach", app) // lists
 	})
 	for _, want := range []string{"Usage: /attach <image>", "a.png 40×30", "will be sent with your next message", "already queued", "Could not attach missing.png", "1 image waiting"} {
-		if !strings.Contains(out, want) {
-			t.Errorf("output lacks %q:\n%s", want, out)
-		}
+		assert.Contains(t, out, want, "output lacks %q:\n%s", want, out)
 	}
 
 	// Queue plus an inline mention: both go with the prompt, then the
@@ -91,16 +91,13 @@ func TestAttachCommandsAndMentions(t *testing.T) {
 	out = captureStdout(t, func() {
 		runTurn(ctx, app, local(app).Storage().Active().ID, "compare these with @b.png", nil, turnOptions{})
 	})
-	if n := sentImages(llm); n != 2 {
-		t.Errorf("sent %d images, want 2", n)
-	}
-	if len(app.Attachments) != 0 || !strings.Contains(out, "b.png 50×30") {
-		t.Errorf("queue not emptied / not shown:\n%s", out)
-	}
+	n := sentImages(llm)
+	assert.Equal(t, 2, n, "sent %d images, want 2", n)
+	assert.Len(t, app.Attachments, 0, "queue not emptied / not shown:\n%s", out)
+	assert.Contains(t, out, "b.png 50×30", "queue not emptied / not shown:\n%s", out)
 	msgs := local(app).Storage().Active().Messages
-	if last := msgs[len(msgs)-2].Content; !strings.Contains(last, "[images: a.png, b.png]") {
-		t.Errorf("transcript note missing: %q", last)
-	}
+	last := msgs[len(msgs)-2].Content
+	assert.Contains(t, last, "[images: a.png, b.png]", "transcript note missing: %q", last)
 
 	// A bad mention stops the turn and keeps the queue.
 	HandleCommand(ctx, "/attach a.png", app)
@@ -108,19 +105,17 @@ func TestAttachCommandsAndMentions(t *testing.T) {
 	out = captureStdout(t, func() {
 		runTurn(ctx, app, local(app).Storage().Active().ID, "what about @nope.png", nil, turnOptions{})
 	})
-	if len(llm.Requests) != calls || len(app.Attachments) != 1 || !strings.Contains(out, "Nothing was sent") {
-		t.Errorf("bad mention should not send (calls %d→%d, queue %d):\n%s", calls, len(llm.Requests), len(app.Attachments), out)
-	}
+	assert.Len(t, llm.Requests, calls, "bad mention should not send (calls %d→%d, queue %d):\n%s", calls, len(llm.Requests), len(app.Attachments), out)
+	assert.Len(t, app.Attachments, 1, "bad mention should not send (calls %d→%d, queue %d):\n%s", calls, len(llm.Requests), len(app.Attachments), out)
+	assert.Contains(t, out, "Nothing was sent", "bad mention should not send (calls %d→%d, queue %d):\n%s", calls, len(llm.Requests), len(app.Attachments), out)
 	out = captureStdout(t, func() { HandleCommand(ctx, "/attach clear", app) })
-	if len(app.Attachments) != 0 || !strings.Contains(out, "Removed 1 queued image.") {
-		t.Errorf("clear: %s", out)
-	}
+	assert.Len(t, app.Attachments, 0, "clear: %s", out)
+	assert.Contains(t, out, "Removed 1 queued image.", "clear: %s", out)
 
 	// Plain prompts send no images.
 	runTurn(ctx, app, local(app).Storage().Active().ID, "just text, mail me@example.png", nil, turnOptions{})
-	if n := sentImages(llm); n != 0 {
-		t.Errorf("plain prompt sent %d images", n)
-	}
+	n = sentImages(llm)
+	assert.Equal(t, 0, n, "plain prompt sent %d images", n)
 }
 
 func TestAttachRespectsSandbox(t *testing.T) {
@@ -128,9 +123,8 @@ func TestAttachRespectsSandbox(t *testing.T) {
 	outside := filepath.Join(t.TempDir(), "secret.png")
 	os.WriteFile(outside, pngOf(t, 4, 4), 0o644)
 	out := captureStdout(t, func() { HandleCommand(context.Background(), "/attach "+outside, app) })
-	if len(app.Attachments) != 0 || !strings.Contains(out, "Could not attach") {
-		t.Errorf("outside file attached:\n%s", out)
-	}
+	assert.Len(t, app.Attachments, 0, "outside file attached:\n%s", out)
+	assert.Contains(t, out, "Could not attach", "outside file attached:\n%s", out)
 }
 
 func TestPaste(t *testing.T) {
@@ -140,29 +134,21 @@ func TestPaste(t *testing.T) {
 
 	images.ReadClipboard = func(context.Context) ([]byte, error) { return nil, images.ErrNoClipboardImage }
 	out := captureStdout(t, func() { HandleCommand(ctx, "/paste", app) })
-	if !strings.Contains(out, "clipboard has no image") || len(app.Attachments) != 0 {
-		t.Errorf("empty clipboard: %s", out)
-	}
+	assert.Contains(t, out, "clipboard has no image", "empty clipboard: %s", out)
+	assert.Len(t, app.Attachments, 0, "empty clipboard: %s", out)
 	images.ReadClipboard = func(context.Context) ([]byte, error) { return []byte("plain text"), nil }
 	out = captureStdout(t, func() { HandleCommand(ctx, "/paste", app) })
-	if !strings.Contains(out, "not a PNG") {
-		t.Errorf("non-image clipboard: %s", out)
-	}
+	assert.Contains(t, out, "not a PNG", "non-image clipboard: %s", out)
 	images.ReadClipboard = func(context.Context) ([]byte, error) { return pngOf(t, 20, 10), nil }
 	out = captureStdout(t, func() { HandleCommand(ctx, "/paste", app) })
-	if len(app.Attachments) != 1 || !strings.HasPrefix(app.Attachments[0].Name, "clipboard-") {
-		t.Fatalf("paste: %s", out)
-	}
+	require.Len(t, app.Attachments, 1, "paste: %s", out)
+	require.True(t, strings.HasPrefix(app.Attachments[0].Name, "clipboard-"), "paste: %s", out)
 	runTurn(ctx, app, local(app).Storage().Active().ID, "what is this?", nil, turnOptions{})
-	if sentImages(llm) != 1 {
-		t.Error("pasted image not sent")
-	}
+	assert.Equal(t, 1, sentImages(llm), "pasted image not sent")
 
 	images.ReadClipboard = func(context.Context) ([]byte, error) { return nil, errors.New("osascript exploded") }
 	out = captureStdout(t, func() { HandleCommand(ctx, "/paste", app) })
-	if !strings.Contains(out, "osascript exploded") {
-		t.Errorf("unexpected errors should be shown: %s", out)
-	}
+	assert.Contains(t, out, "osascript exploded", "unexpected errors should be shown: %s", out)
 }
 
 func TestAttachDisabled(t *testing.T) {
@@ -175,7 +161,6 @@ func TestAttachDisabled(t *testing.T) {
 		HandleCommand(context.Background(), "/paste", app)
 		HandleCommand(context.Background(), "/attach x.png", app)
 	})
-	if !strings.Contains(out, "Images are disabled") || !strings.Contains(out, "image support is disabled") {
-		t.Errorf("disabled: %s", out)
-	}
+	assert.Contains(t, out, "Images are disabled", "disabled: %s", out)
+	assert.Contains(t, out, "image support is disabled", "disabled: %s", out)
 }

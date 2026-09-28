@@ -16,15 +16,15 @@ package engine
 
 import (
 	"context"
-	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/retail-cortex/blitz/pkg/api"
-
 	"github.com/retail-cortex/blitz/pkg/config"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/genai"
 )
 
@@ -32,9 +32,7 @@ func writeCommand(t *testing.T, dir, name, body string) {
 	t.Helper()
 	p := filepath.Join(dir, filepath.FromSlash(name))
 	os.MkdirAll(filepath.Dir(p), 0o755)
-	if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(p, []byte(body), 0o644))
 }
 
 // userTextAt is the latest user text in a request's contents.
@@ -63,15 +61,12 @@ func TestCustomCommands(t *testing.T) {
 	for _, c := range w.ListCommands() {
 		byName[c.Name] = c
 	}
-	if byName["hello"].Source != "project" || byName["db:migrate"].Description != "Migrate" || byName["review"].Source != "bundled" {
-		t.Fatalf("commands %+v", byName)
-	}
-	if _, ok := byName["broken"]; ok {
-		t.Error("a broken command file was listed")
-	}
-	if byName["code-review"].Source != "skill" { // a built-in skill, runnable by name
-		t.Errorf("skills as commands: %+v", byName["code-review"])
-	}
+	require.Equal(t, "project", byName["hello"].Source, "commands %+v", byName)
+	require.Equal(t, "Migrate", byName["db:migrate"].Description, "commands %+v", byName)
+	require.Equal(t, "bundled", byName["review"].Source, "commands %+v", byName)
+	_, ok := byName["broken"]
+	assert.False(t, ok, "a broken command file was listed")
+	assert.Equal(t, "skill", byName["code-review"].Source, "skills as commands: %+v", byName["code-review"])
 
 	s, _ := w.NewSession()
 	run := func(line string) (map[string]any, error) {
@@ -83,35 +78,27 @@ func TestCustomCommands(t *testing.T) {
 		})
 		return result, err
 	}
-	if _, err := run("/hello world"); err != nil {
-		t.Fatal(err)
-	}
-	if got := userTextAt(llm.Requests[0].Contents); got != "Project hello world." {
-		t.Errorf("expanded %q", got)
-	}
+	_, err := run("/hello world")
+	require.NoError(t, err)
+	got := userTextAt(llm.Requests[0].Contents)
+	assert.Equal(t, "Project hello world.", got, "expanded %q", got)
 	// allowed-tools limits the turn: create_file is refused, even in accept-edits.
 	result, _ := run("/db:migrate users")
-	if msg, _ := result["error"].(string); !strings.Contains(msg, "isn't among the tools this command allows") {
-		t.Errorf("allowed-tools not applied: %v", result)
-	}
-	if _, err := os.Stat(filepath.Join(w.Dir(), "x.txt")); err == nil {
-		t.Error("the command's turn created a file it wasn't allowed to")
-	}
+	msg, _ := result["error"].(string)
+	assert.Contains(t, msg, "isn't among the tools this command allows", "allowed-tools not applied: %v", result)
+	_, err = os.Stat(filepath.Join(w.Dir(), "x.txt"))
+	assert.Error(t, err, "the command's turn created a file it wasn't allowed to")
 	// A bundled plan-mode command: read-only, and the prompt is the review
 	// instructions as written (not a request for a plan).
 	result, _ = run("/review")
-	if got := userTextAt(llm.Requests[3].Contents); strings.Contains(got, "plan-only mode") || !strings.Contains(got, "Review code changes") {
-		t.Errorf("review prompt %q", got)
-	}
-	if msg, _ := result["error"].(string); !strings.Contains(msg, "/review is read-only") {
-		t.Errorf("/review could write: %v", result)
-	}
+	got = userTextAt(llm.Requests[3].Contents)
+	assert.NotContains(t, got, "plan-only mode", "review prompt %q", got)
+	assert.Contains(t, got, "Review code changes", "review prompt %q", got)
+	msg, _ = result["error"].(string)
+	assert.Contains(t, msg, "/review is read-only", "/review could write: %v", result)
 	// The transcript records the command as typed.
 	msgs := w.storage.Active().Messages
-	if msgs[0].Content != "/hello world" {
-		t.Errorf("transcript %q", msgs[0].Content)
-	}
-	if _, err := run("/nope"); !errors.Is(err, api.ErrUnknownCommand) {
-		t.Errorf("unknown command: %v", err)
-	}
+	assert.Equal(t, "/hello world", msgs[0].Content, "transcript %q", msgs[0].Content)
+	_, err = run("/nope")
+	assert.ErrorIs(t, err, api.ErrUnknownCommand, "unknown command: %v", err)
 }

@@ -20,15 +20,15 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"golang.org/x/text/language"
 )
 
 func mustBundle(t *testing.T, dirs ...string) *Bundle {
 	t.Helper()
 	b, errs := NewBundle(dirs...)
-	if len(errs) > 0 {
-		t.Fatalf("NewBundle: %v", errs)
-	}
+	require.LessOrEqual(t, len(errs), 0, "NewBundle: %v", errs)
 	return b
 }
 
@@ -37,13 +37,10 @@ func TestEmbeddedCatalogs(t *testing.T) {
 	var got []string
 	for _, m := range b.Available() {
 		got = append(got, m.Locale)
-		if m.Name == "" || m.EnglishName == "" {
-			t.Errorf("%s: missing names: %+v", m.Locale, m)
-		}
+		assert.NotEqual(t, "", m.Name, "%s: missing names: %+v", m.Locale, m)
+		assert.NotEqual(t, "", m.EnglishName, "%s: missing names: %+v", m.Locale, m)
 	}
-	if strings.Join(got, ",") != "en-US,es,fr-CA" {
-		t.Fatalf("available = %v", got)
-	}
+	require.Equal(t, "en-US,es,fr-CA", strings.Join(got, ","), "available = %v", got)
 }
 
 // Shipped translations must be complete and keep every placeholder, or a
@@ -51,12 +48,10 @@ func TestEmbeddedCatalogs(t *testing.T) {
 func TestShippedTranslationsComplete(t *testing.T) {
 	b := mustBundle(t)
 	for _, tag := range []string{"es", "fr-CA"} {
-		if m := b.Missing(tag); len(m) > 0 {
-			t.Errorf("%s is missing %d keys: %v", tag, len(m), m)
-		}
-		if p := b.Problems(tag); len(p) > 0 {
-			t.Errorf("%s problems:\n  %s", tag, strings.Join(p, "\n  "))
-		}
+		m := b.Missing(tag)
+		assert.LessOrEqual(t, len(m), 0, "%s is missing %d keys: %v", tag, len(m), m)
+		p := b.Problems(tag)
+		assert.LessOrEqual(t, len(p), 0, "%s problems:\n  %s", tag, strings.Join(p, "\n  "))
 	}
 }
 
@@ -77,9 +72,7 @@ func TestTranslationsKeepAnswerLetters(t *testing.T) {
 		c, _ := b.Catalog(m.Locale)
 		for key, letters := range keys {
 			for _, l := range letters {
-				if !strings.Contains(c.Messages[key], l) {
-					t.Errorf("%s %s = %q lacks %s", m.Locale, key, c.Messages[key], l)
-				}
+				assert.Contains(t, c.Messages[key], l, "%s %s = %q lacks %s", m.Locale, key, c.Messages[key], l)
 			}
 		}
 	}
@@ -95,14 +88,12 @@ func TestResolve(t *testing.T) {
 	}
 	for in, want := range cases {
 		got, err := b.Resolve(in)
-		if err != nil || got.String() != want {
-			t.Errorf("Resolve(%q) = %v, %v; want %s", in, got, err, want)
-		}
+		assert.NoError(t, err, "Resolve(%q) = %v, %v; want %s", in, got, err, want)
+		assert.Equal(t, want, got.String(), "Resolve(%q) = %v, %v; want %s", in, got, err, want)
 	}
 	for _, bad := range []string{"", "   ", "klingonese", "123", "x"} {
-		if _, err := b.Resolve(bad); err == nil {
-			t.Errorf("Resolve(%q) should fail", bad)
-		}
+		_, err := b.Resolve(bad)
+		assert.Error(t, err, "Resolve(%q) should fail", bad)
 	}
 }
 
@@ -110,69 +101,55 @@ func TestFallbackChain(t *testing.T) {
 	b := mustBundle(t)
 	loc := func(s string) *Localizer { return b.Localizer(language.MustParse(s)) }
 
-	if got := loc("es-MX").T("recap.you"); got != "tú" {
-		t.Errorf("es-MX should use the es catalog, got %q", got)
-	}
-	if got := loc("fr").T("exit.cancelled"); got != "Fermeture annulée." {
-		t.Errorf("fr should borrow fr-CA, got %q", got)
-	}
+	got := loc("es-MX").T("recap.you")
+	assert.Equal(t, "tú", got, "es-MX should use the es catalog, got %q", got)
+	got = loc("fr").T("exit.cancelled")
+	assert.Equal(t, "Fermeture annulée.", got, "fr should borrow fr-CA, got %q", got)
 	de := loc("de")
-	if de.HasCatalog() || de.T("exit.cancelled") != "Exit cancelled." {
-		t.Errorf("de should fall back to English: %v %q", de.HasCatalog(), de.T("exit.cancelled"))
-	}
-	if !loc("en-GB").HasCatalog() || !loc("es").HasCatalog() {
-		t.Error("English variants and es have catalogs")
-	}
-	if got := loc("es").T("no.such.key"); got != "no.such.key" {
-		t.Errorf("missing keys render as the key, got %q", got)
-	}
+	assert.False(t, de.HasCatalog(), "de should fall back to English: %v %q", de.HasCatalog(), de.T("exit.cancelled"))
+	assert.Equal(t, "Exit cancelled.", de.T("exit.cancelled"), "de should fall back to English: %v %q", de.HasCatalog(), de.T("exit.cancelled"))
+	assert.True(t, loc("en-GB").HasCatalog(), "English variants and es have catalogs")
+	assert.True(t, loc("es").HasCatalog(), "English variants and es have catalogs")
+	got = loc("es").T("no.such.key")
+	assert.Equal(t, "no.such.key", got, "missing keys render as the key, got %q", got)
 }
 
 func TestPlaceholdersAndPlurals(t *testing.T) {
 	b := mustBundle(t)
 	en := b.Localizer(language.MustParse("en-US"))
-	if got := en.T("agent.current", "name", "Helios", "id", "helios"); got != "Current agent: Helios (helios)" {
-		t.Errorf("got %q", got)
-	}
-	if got := en.T("agent.current", "name", "X"); got != "Current agent: X ({id})" {
-		t.Errorf("an unfilled placeholder should stay visible, got %q", got)
-	}
+	got := en.T("agent.current", "name", "Helios", "id", "helios")
+	assert.Equal(t, "Current agent: Helios (helios)", got, "got %q", got)
+	got = en.T("agent.current", "name", "X")
+	assert.Equal(t, "Current agent: X ({id})", got, "an unfilled placeholder should stay visible, got %q", got)
 	for n, want := range map[int]string{0: "0 messages", 1: "1 message", 2: "2 messages"} {
-		if got := en.N("session.messages", n); got != want {
-			t.Errorf("en N(%d) = %q", n, got)
-		}
+		got := en.N("session.messages", n)
+		assert.Equal(t, want, got, "en N(%d) = %q", n, got)
 	}
 	// French treats 0 as singular.
 	fr := b.Localizer(language.MustParse("fr-CA"))
 	for n, want := range map[int]string{0: "0 règle révoquée.", 1: "1 règle révoquée.", 3: "3 règles révoquées."} {
-		if got := fr.N("approvals.revoked", n); got != want {
-			t.Errorf("fr N(%d) = %q, want %q", n, got, want)
-		}
+		got := fr.N("approvals.revoked", n)
+		assert.Equal(t, want, got, "fr N(%d) = %q, want %q", n, got, want)
 	}
 	// Japanese has no singular: always "other".
-	if got := pluralCategory(language.Japanese, 1); got != "other" {
-		t.Errorf("ja plural = %s", got)
-	}
+	got = pluralCategory(language.Japanese, 1)
+	assert.Equal(t, "other", got, "ja plural = %s", got)
 }
 
 func TestPseudoLocale(t *testing.T) {
 	b := mustBundle(t)
 	l := b.Localizer(language.MustParse(PseudoLocale))
 	got := l.T("agent.current", "name", "helios", "id", "x")
-	if !strings.HasPrefix(got, "⟦") || !strings.Contains(got, "helios") || strings.Contains(got, "Current") {
-		t.Errorf("pseudo = %q", got)
-	}
-	if ReplyInstruction(l) != "" {
-		t.Error("pseudo-locale should not change the model's language")
-	}
+	assert.True(t, strings.HasPrefix(got, "⟦"), "pseudo = %q", got)
+	assert.Contains(t, got, "helios", "pseudo = %q", got)
+	assert.NotContains(t, got, "Current", "pseudo = %q", got)
+	assert.Equal(t, "", ReplyInstruction(l), "pseudo-locale should not change the model's language")
 }
 
 func TestExternalCatalogs(t *testing.T) {
 	dir := t.TempDir()
 	write := func(name, body string) {
-		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o600); err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, os.WriteFile(filepath.Join(dir, name), []byte(body), 0o600))
 	}
 	write("de.json", `{"meta":{"locale":"de"},"messages":{"exit.cancelled":"Beenden abgebrochen.","session.messages.one":"{count} Nachricht","session.messages.other":"{count} Nachrichten"}}`)
 	write("es-fix.json", `{"meta":{"locale":"es"},"messages":{"recap.blitz":"perrito"}}`)
@@ -181,26 +158,21 @@ func TestExternalCatalogs(t *testing.T) {
 	write("notes.txt", "ignored")
 
 	b, errs := NewBundle(dir, filepath.Join(dir, "missing"))
-	if len(errs) != 2 {
-		t.Fatalf("want 2 errors (broken, nolocale), got %v", errs)
-	}
+	require.Len(t, errs, 2, "want 2 errors (broken, nolocale), got %v", errs)
 	de := b.Localizer(language.German)
-	if !de.HasCatalog() || de.T("exit.cancelled") != "Beenden abgebrochen." || de.N("session.messages", 2) != "2 Nachrichten" {
-		t.Errorf("de catalog not used")
-	}
-	if de.T("exit.force_quit") != "Force quit." {
-		t.Error("untranslated keys should fall back to English")
-	}
-	if c, _ := b.Catalog("de"); c.Meta.EnglishName != "German" || c.Meta.Name != "Deutsch" {
-		t.Errorf("names should default from CLDR: %+v", c.Meta)
-	}
+	assert.True(t, de.HasCatalog(), "de catalog not used")
+	assert.Equal(t, "Beenden abgebrochen.", de.T("exit.cancelled"), "de catalog not used")
+	assert.Equal(t, "2 Nachrichten", de.N("session.messages", 2), "de catalog not used")
+	assert.Equal(t, "Force quit.", de.T("exit.force_quit"), "untranslated keys should fall back to English")
+	c, _ := b.Catalog("de")
+	assert.Equal(t, "German", c.Meta.EnglishName, "names should default from CLDR: %+v", c.Meta)
+	assert.Equal(t, "Deutsch", c.Meta.Name, "names should default from CLDR: %+v", c.Meta)
 	es := b.Localizer(language.Spanish)
-	if es.T("recap.blitz") != "perrito" || es.T("recap.you") != "tú" {
-		t.Error("an external file should override single keys and keep the rest")
-	}
-	if tag, err := b.Resolve("german"); err != nil || tag != language.German {
-		t.Errorf("Resolve(german) = %v, %v", tag, err)
-	}
+	assert.Equal(t, "perrito", es.T("recap.blitz"), "an external file should override single keys and keep the rest")
+	assert.Equal(t, "tú", es.T("recap.you"), "an external file should override single keys and keep the rest")
+	tag, err := b.Resolve("german")
+	assert.NoError(t, err, "Resolve(german) = %v,", tag)
+	assert.Equal(t, language.German, tag, "Resolve(german) = %v, %v", tag, err)
 }
 
 func TestProblemsDetectsBadTranslations(t *testing.T) {
@@ -211,37 +183,29 @@ func TestProblemsDetectsBadTranslations(t *testing.T) {
 		"session.messages.one":"{count} messaggio"}}`), 0o600)
 	b := mustBundle(t, dir)
 	p := strings.Join(b.Problems("it"), "\n")
-	if !strings.Contains(p, "agent.current: placeholders") || !strings.Contains(p, "unknown key made.up") {
-		t.Errorf("problems = %s", p)
-	}
-	if strings.Contains(p, "session.messages.one") {
-		t.Errorf("valid plural form flagged: %s", p)
-	}
+	assert.Contains(t, p, "agent.current: placeholders", "problems = %s", p)
+	assert.Contains(t, p, "unknown key made.up", "problems = %s", p)
+	assert.NotContains(t, p, "session.messages.one", "valid plural form flagged: %s", p)
 }
 
 func TestReplyInstruction(t *testing.T) {
 	b := mustBundle(t)
-	if ReplyInstruction(b.Localizer(language.MustParse("en-US"))) != "" || ReplyInstruction(nil) != "" {
-		t.Error("English needs no reply instruction")
-	}
+	assert.Equal(t, "", ReplyInstruction(b.Localizer(language.MustParse("en-US"))), "English needs no reply instruction")
+	assert.Equal(t, "", ReplyInstruction(nil), "English needs no reply instruction")
 	got := ReplyInstruction(b.Localizer(language.MustParse("es")))
-	if !strings.Contains(got, "Spanish") || !strings.Contains(got, "file paths") {
-		t.Errorf("got %q", got)
-	}
+	assert.Contains(t, got, "Spanish")
+	assert.Contains(t, got, "file paths")
 	// Languages without a catalog still get replies in that language.
-	if got := ReplyInstruction(b.Localizer(language.MustParse("ja"))); !strings.Contains(got, "Japanese") {
-		t.Errorf("got %q", got)
-	}
+	got = ReplyInstruction(b.Localizer(language.MustParse("ja")))
+	assert.Contains(t, got, "Japanese", "got %q", got)
 }
 
 func TestCurrentDefaultsToEnglish(t *testing.T) {
 	defer SetCurrent(nil)
 	SetCurrent(nil)
-	if Current().Tag().String() != DefaultLocale || T("exit.cancelled") != "Exit cancelled." {
-		t.Error("default should be en-US")
-	}
+	assert.Equal(t, DefaultLocale, Current().Tag().String(), "default should be en-US")
+	assert.Equal(t, "Exit cancelled.", T("exit.cancelled"), "default should be en-US")
 	SetCurrent(Default().Localizer(language.Spanish))
-	if T("exit.cancelled") != "Salida cancelada." || N("session.messages", 1) != "1 mensaje" {
-		t.Error("SetCurrent not applied")
-	}
+	assert.Equal(t, "Salida cancelada.", T("exit.cancelled"), "SetCurrent not applied")
+	assert.Equal(t, "1 mensaje", N("session.messages", 1), "SetCurrent not applied")
 }

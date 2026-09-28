@@ -18,6 +18,7 @@ import (
 	"bytes"
 	"context"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -25,9 +26,10 @@ import (
 	"time"
 
 	"github.com/retail-cortex/blitz/pkg/api"
-
 	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/engine/runtime"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/genai"
 )
 
@@ -42,28 +44,23 @@ func TestCompleteBlocks(t *testing.T) {
 		"~~~\ncode\n~~~\n":          len("~~~\ncode\n~~~\n"),
 	}
 	for in, want := range cases {
-		if got := completeBlocks(in); got != want {
-			t.Errorf("completeBlocks(%q) = %d, want %d", in, got, want)
-		}
+		got := completeBlocks(in)
+		assert.Equal(t, want, got, "completeBlocks(%q) = %d, want %d", in, got, want)
 	}
 }
 
 func TestMarkdownStreamRendersProgressively(t *testing.T) {
 	var out bytes.Buffer
 	md, err := newMarkdownStream(&out, "dark", 80)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	md.Write("# Title\n\nSome **bold**")
 	first := out.String()
-	if !strings.Contains(first, "Title") || strings.Contains(first, "bold") {
-		t.Errorf("expected only the completed heading block, got %q", first)
-	}
+	assert.Contains(t, first, "Title", "expected only the completed heading block, got %q", first)
+	assert.NotContains(t, first, "bold", "expected only the completed heading block, got %q", first)
 	md.Write(" text.\n")
 	md.Flush()
-	if !strings.Contains(out.String(), "bold") || strings.Contains(out.String(), "**") {
-		t.Errorf("markdown not rendered: %q", out.String())
-	}
+	assert.Contains(t, out.String(), "bold", "markdown not rendered: %q", out.String())
+	assert.NotContains(t, out.String(), "**", "markdown not rendered: %q", out.String())
 }
 
 func textEvent(text string, partial, repeat bool) api.Event {
@@ -77,15 +74,11 @@ func TestPrinterStreamingDedup(t *testing.T) {
 	p.Handle(textEvent("lo", true, false))
 	p.Handle(textEvent("Hello", false, true)) // final aggregate repeats streamed text
 	p.Handle(textEvent(" again", false, false))
-	if out.String() != "Hello again" {
-		t.Errorf("printed %q, want streamed text once", out.String())
-	}
+	assert.Equal(t, "Hello again", out.String(), "printed %q, want streamed text once", out.String())
 	// Control sequences in model text are neutralised.
 	out.Reset()
 	p.Handle(textEvent("\x1b]52;c;x\x07ok", false, false))
-	if strings.ContainsRune(out.String(), '\x1b') {
-		t.Errorf("escape leaked: %q", out.String())
-	}
+	assert.False(t, strings.ContainsRune(out.String(), '\x1b'), "escape leaked: %q", out.String())
 }
 
 func TestSpinner(t *testing.T) {
@@ -97,16 +90,14 @@ func TestSpinner(t *testing.T) {
 	s.Stop()
 	s.Stop() // idempotent
 	o := out.b.String()
-	if !strings.Contains(o, "thinking") || strings.Contains(o, "again") || !strings.HasSuffix(o, "\r\033[2K") {
-		t.Errorf("spinner output %q", o)
-	}
+	assert.Contains(t, o, "thinking", "spinner output %q", o)
+	assert.NotContains(t, o, "again", "spinner output %q", o)
+	assert.True(t, strings.HasSuffix(o, "\r\033[2K"), "spinner output %q", o)
 	var off bytes.Buffer
 	d := NewSpinner(&off, false)
 	d.Start("x")
 	d.Stop()
-	if off.Len() != 0 {
-		t.Error("disabled spinner wrote output")
-	}
+	assert.Equal(t, 0, off.Len(), "disabled spinner wrote output")
 	var nilSpinner *Spinner
 	nilSpinner.Start("x")
 	nilSpinner.Stop()
@@ -130,31 +121,25 @@ func TestCompleter(t *testing.T) {
 		}
 		return out
 	}
-	if got := do("/un"); len(got) != 1 || got[0] != "do " {
-		t.Errorf("/un -> %q", got)
-	}
-	if got := do("/agent he"); len(got) != 1 || got[0] != "lios" {
-		t.Errorf("/agent he -> %q", got)
-	}
-	if got := do("/undo "); len(got) != 1 || got[0] != "--force" {
-		t.Errorf("/undo -> %q", got)
-	}
-	if got := strings.Join(do("look at @src/"), ","); got != "main.go,pkg/" {
-		t.Errorf("@src/ -> %q", got)
-	}
+	got := do("/un")
+	assert.Len(t, got, 1, "/un -> %q", got)
+	assert.Equal(t, "do ", got[0], "/un -> %q", got)
+	got = do("/agent he")
+	assert.Len(t, got, 1, "/agent he -> %q", got)
+	assert.Equal(t, "lios", got[0], "/agent he -> %q", got)
+	got = do("/undo ")
+	assert.Len(t, got, 1, "/undo -> %q", got)
+	assert.Equal(t, "--force", got[0], "/undo -> %q", got)
+	assert.Equal(t, "main.go,pkg/", strings.Join(do("look at @src/"), ","), "@src/ ->")
 	// Negative: hidden files only when asked for, no traversal, nothing for plain words.
-	if got := do("@"); strings.Contains(strings.Join(got, ","), ".env") {
-		t.Errorf("hidden file offered: %q", got)
-	}
-	if got := do("@."); !strings.Contains(strings.Join(got, ","), "env") {
-		t.Errorf("hidden file not offered for '@.': %q", got)
-	}
-	if got := do("@../"); len(got) != 0 {
-		t.Errorf("traversal completed: %q", got)
-	}
-	if got := do("hello wor"); len(got) != 0 {
-		t.Errorf("plain text completed: %q", got)
-	}
+	got = do("@")
+	assert.NotContains(t, strings.Join(got, ","), ".env", "hidden file offered: %q", got)
+	got = do("@.")
+	assert.Contains(t, strings.Join(got, ","), "env", "hidden file not offered for '@.': %q", got)
+	got = do("@../")
+	assert.Len(t, got, 0, "traversal completed: %q", got)
+	got = do("hello wor")
+	assert.Len(t, got, 0, "plain text completed: %q", got)
 }
 
 func TestUsageLine(t *testing.T) {
@@ -162,17 +147,11 @@ func TestUsageLine(t *testing.T) {
 	after := api.Usage{Calls: 3, Input: 13_400, Output: 1_300, LastPrompt: 12_345, Priced: true, CostUSD: 0.0325}
 	got := UsageLine(before, after)
 	for _, want := range []string{"12.4k in", "1.2k out", "context 12.3k", "$0.0225", "session $0.0325"} {
-		if !strings.Contains(got, want) {
-			t.Errorf("usage line %q missing %q", got, want)
-		}
+		assert.Contains(t, got, want, "usage line %q missing %q", got, want)
 	}
 	after.Priced = false
-	if strings.Contains(UsageLine(before, after), "$") {
-		t.Error("unpriced usage should not show cost")
-	}
-	if UsageLine(before, before) != "" {
-		t.Error("no calls -> no line")
-	}
+	assert.NotContains(t, UsageLine(before, after), "$", "unpriced usage should not show cost")
+	assert.Equal(t, "", UsageLine(before, before), "no calls -> no line")
 }
 
 func newFullApp(t *testing.T) *App {
@@ -209,18 +188,13 @@ func TestREPLTurnUndoDiffCost(t *testing.T) {
 	app := newFullApp(t)
 	app.Input = NewLineReader(strings.NewReader("make a file\n/diff\n/cost\n/checkpoints\n/undo\n/exit\n"), io.Discard)
 	out := captureStdout(t, func() {
-		if err := RunREPL(context.Background(), app); err != nil {
-			t.Error(err)
-		}
+		assert.NoError(t, RunREPL(context.Background(), app))
 	})
 	made := filepath.Join(local(app).Tools().Workspace().Dir(), "made.txt")
-	if _, err := os.Stat(made); !os.IsNotExist(err) {
-		t.Error("/undo did not remove the file the turn created")
-	}
+	_, err := os.Stat(made)
+	assert.ErrorIs(t, err, fs.ErrNotExist, "/undo did not remove the file the turn created")
 	for _, want := range []string{"+by tool", "Model calls:   2", "make a file", "Undid", "context 500"} {
-		if !strings.Contains(out, want) {
-			t.Errorf("REPL output missing %q:\n%s", want, out)
-		}
+		assert.Contains(t, out, want, "REPL output missing %q:\n%s", want, out)
 	}
 }
 
@@ -231,31 +205,22 @@ func TestApprovalsAndMemoryCommands(t *testing.T) {
 	hooks.Store().Add("cmd:ls -la", "")
 
 	out := captureStdout(t, func() { HandleCommand(ctx, "/approvals", app) })
-	if !strings.Contains(out, "command: ls -la") {
-		t.Errorf("/approvals output: %s", out)
-	}
+	assert.Contains(t, out, "command: ls -la", "/approvals output: %s", out)
 	captureStdout(t, func() { HandleCommand(ctx, "/approvals revoke 1", app) })
-	if hooks.Store().Has("cmd:ls -la") {
-		t.Error("revoke did not remove the rule")
-	}
-	if out := captureStdout(t, func() { HandleCommand(ctx, "/approvals revoke 9", app) }); !strings.Contains(out, "Usage") {
-		t.Errorf("bad revoke index: %s", out)
-	}
+	assert.False(t, hooks.Store().Has("cmd:ls -la"), "revoke did not remove the rule")
+	out = captureStdout(t, func() { HandleCommand(ctx, "/approvals revoke 9", app) })
+	assert.Contains(t, out, "Usage", "bad revoke index: %s", out)
 
 	captureStdout(t, func() { HandleCommand(ctx, "/memory add always run go vet", app) })
 	b, err := os.ReadFile(filepath.Join(app.Workspace.Dir(), "BLITZ.md"))
-	if err != nil || !strings.Contains(string(b), "- always run go vet") {
-		t.Errorf("/memory add: %q %v", b, err)
-	}
-	if out := captureStdout(t, func() { HandleCommand(ctx, "/memory", app) }); !strings.Contains(out, "BLITZ.md") {
-		t.Errorf("/memory: %s", out)
-	}
-	if out := captureStdout(t, func() { HandleCommand(ctx, "/mcp", app) }); !strings.Contains(out, "No MCP servers") {
-		t.Errorf("/mcp: %s", out)
-	}
-	if out := captureStdout(t, func() { HandleCommand(ctx, "/undo", app) }); !strings.Contains(out, "nothing to undo") {
-		t.Errorf("/undo with nothing: %s", out)
-	}
+	assert.NoError(t, err, "/memory add: %q", b)
+	assert.Contains(t, string(b), "- always run go vet", "/memory add: %q %v", b, err)
+	out = captureStdout(t, func() { HandleCommand(ctx, "/memory", app) })
+	assert.Contains(t, out, "BLITZ.md", "/memory: %s", out)
+	out = captureStdout(t, func() { HandleCommand(ctx, "/mcp", app) })
+	assert.Contains(t, out, "No MCP servers", "/mcp: %s", out)
+	out = captureStdout(t, func() { HandleCommand(ctx, "/undo", app) })
+	assert.Contains(t, out, "nothing to undo", "/undo with nothing: %s", out)
 }
 
 func TestResumeCommand(t *testing.T) {
@@ -265,20 +230,17 @@ func TestResumeCommand(t *testing.T) {
 	local(app).Storage().CreateSession("", "later", "blitz")
 
 	out := captureStdout(t, func() { HandleCommand(context.Background(), "/resume "+rec.ID, app) })
-	if local(app).Storage().Active().ID != rec.ID || !strings.Contains(out, "remember the plan") {
-		t.Errorf("resume: active=%s out=%s", local(app).Storage().Active().ID, out)
-	}
-	if out := captureStdout(t, func() { HandleCommand(context.Background(), "/resume ../../etc", app) }); !strings.Contains(out, "invalid session id") {
-		t.Errorf("bad id: %s", out)
-	}
+	assert.Equal(t, rec.ID, local(app).Storage().Active().ID, "resume: active=%s out=%s", local(app).Storage().Active().ID, out)
+	assert.Contains(t, out, "remember the plan", "resume: active=%s out=%s", local(app).Storage().Active().ID, out)
+	out = captureStdout(t, func() { HandleCommand(context.Background(), "/resume ../../etc", app) })
+	assert.Contains(t, out, "invalid session id", "bad id: %s", out)
 }
 
 func TestThemeFromEnv(t *testing.T) {
 	for v, want := range map[string]string{"": "dark", "15;0": "dark", "0;15": "light", "0;7": "light", "garbage": "dark"} {
 		t.Setenv("COLORFGBG", v)
-		if got := themeFromEnv(); got != want {
-			t.Errorf("COLORFGBG=%q -> %q, want %q", v, got, want)
-		}
+		got := themeFromEnv()
+		assert.Equal(t, want, got, "COLORFGBG=%q -> %q, want %q", v, got, want)
 	}
 }
 
@@ -324,18 +286,10 @@ func TestCtrlCAtApprovalCancelsTurn(t *testing.T) {
 	reg.Hooks().SetApprover(NewApprover(in, 0))
 
 	out := captureStdout(t, func() { RunREPL(context.Background(), app) })
-	if in.asked == 0 {
-		t.Fatal("approval was never requested")
-	}
-	if !strings.Contains(out, "Interrupted") {
-		t.Errorf("turn was not cancelled by Ctrl+C at the approval prompt:\n%s", out)
-	}
-	if llm.Calls() > 1 {
-		t.Errorf("model kept running after Ctrl+C (%d calls)", llm.Calls())
-	}
-	if in.handler != nil {
-		t.Error("interrupt handler should be cleared after the turn")
-	}
+	require.NotEqual(t, 0, in.asked, "approval was never requested")
+	assert.Contains(t, out, "Interrupted", "turn was not cancelled by Ctrl+C at the approval prompt:\n%s", out)
+	assert.LessOrEqual(t, llm.Calls(), 1, "model kept running after Ctrl+C (%d calls)", llm.Calls())
+	assert.Nil(t, in.handler, "interrupt handler should be cleared after the turn")
 }
 
 func TestSessionListScopedToWorkspace(t *testing.T) {
@@ -346,35 +300,27 @@ func TestSessionListScopedToWorkspace(t *testing.T) {
 	local(app).Storage().CreateSession("", "local", "blitz")
 
 	out := captureStdout(t, func() { HandleCommand(context.Background(), "/session list", app) })
-	if !strings.Contains(out, "local") || strings.Contains(out, "elsewhere") || !strings.Contains(out, "(1)") {
-		t.Errorf("/session list should show only this workspace:\n%s", out)
-	}
+	assert.Contains(t, out, "local", "/session list should show only this workspace:\n%s", out)
+	assert.NotContains(t, out, "elsewhere", "/session list should show only this workspace:\n%s", out)
+	assert.Contains(t, out, "(1)", "/session list should show only this workspace:\n%s", out)
 	out = captureStdout(t, func() { HandleCommand(context.Background(), "/session list --all", app) })
-	if !strings.Contains(out, "elsewhere") || !strings.Contains(out, "/proj/other") {
-		t.Errorf("/session list --all should show every workspace:\n%s", out)
-	}
+	assert.Contains(t, out, "elsewhere", "/session list --all should show every workspace:\n%s", out)
+	assert.Contains(t, out, "/proj/other", "/session list --all should show every workspace:\n%s", out)
 }
 
 func TestCompactCommand(t *testing.T) {
 	app := newFullApp(t) // mock: create_file call, "created", then default replies
 	ctx := context.Background()
-	if out := captureStdout(t, func() { HandleCommand(ctx, "/compact", app) }); !strings.Contains(out, "No active session") {
-		t.Errorf("no session: %s", out)
-	}
+	assert.Contains(t, captureStdout(t, func() { HandleCommand(ctx, "/compact", app) }), "No active session", "no session")
 	local(app).Storage().CreateSession("", "t", "blitz")
 	sid := local(app).Storage().Active().ID
 	for _, p := range []string{"make a file", "second turn"} {
-		if err := local(app).Engine().Execute(ctx, sid, p, nil); err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, local(app).Engine().Execute(ctx, sid, p, nil))
 	}
 	out := captureStdout(t, func() { HandleCommand(ctx, "/compact keep file names", app) })
-	if !strings.Contains(out, "Replaced") {
-		t.Errorf("/compact output: %s", out)
-	}
+	assert.Contains(t, out, "Replaced", "/compact output: %s", out)
 	fresh := newFullApp(t)
 	local(fresh).Storage().CreateSession("", "t", "blitz")
-	if out := captureStdout(t, func() { HandleCommand(ctx, "/compact", fresh) }); !strings.Contains(out, "nothing to compact") {
-		t.Errorf("empty session: %s", out)
-	}
+	out = captureStdout(t, func() { HandleCommand(ctx, "/compact", fresh) })
+	assert.Contains(t, out, "nothing to compact", "empty session: %s", out)
 }

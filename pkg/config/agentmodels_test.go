@@ -15,12 +15,13 @@
 package config
 
 import (
+	"io/fs"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/BurntSushi/toml"
+	"github.com/stretchr/testify/require"
 )
 
 func TestSaveAgentModelPinsAndUnpins(t *testing.T) {
@@ -37,29 +38,25 @@ func TestSaveAgentModelPinsAndUnpins(t *testing.T) {
 		{"helios", ""}, // unpin
 	}
 	for _, s := range steps {
-		if _, err := SaveAgentModel(dir, s.agent, s.ref); err != nil {
-			t.Fatalf("%v: %v", s, err)
-		}
+		_, err := SaveAgentModel(dir, s.agent, s.ref)
+		require.NoError(t, err, "%v", s)
 	}
 	b, _ := os.ReadFile(path)
 	var got struct {
 		LLM         map[string]any    `toml:"llm"`
 		AgentModels map[string]string `toml:"agent_models"`
 	}
-	if _, err := toml.Decode(string(b), &got); err != nil {
-		t.Fatalf("invalid TOML:\n%s\n%v", b, err)
-	}
+	_, err := toml.Decode(string(b), &got)
+	require.NoError(t, err, "invalid TOML:\n%s\n%v", b, err)
 	want := map[string]string{"qa": "gemini-3.8-flash", "my agent": "ollama/qwen2.5-coder:7b"}
-	if len(got.AgentModels) != len(want) || got.AgentModels["qa"] != want["qa"] || got.AgentModels["my agent"] != want["my agent"] {
-		t.Fatalf("agent_models = %v\n%s", got.AgentModels, b)
-	}
-	if !strings.Contains(string(b), "# my settings") || !strings.Contains(string(b), "# keep me") || got.LLM["provider"] != "gemini" {
-		t.Fatalf("other settings or comments lost:\n%s", b)
-	}
-	if info, _ := os.Stat(path); info.Mode().Perm() != 0o600 {
-		t.Fatalf("mode %v", info.Mode().Perm())
-	}
-	if _, err := SaveAgentModel(dir, "nobody", ""); err != nil {
-		t.Fatalf("unpinning an unpinned agent: %v", err)
-	}
+	require.Len(t, got.AgentModels, len(want), "agent_models = %v\n%s", got.AgentModels, b)
+	require.Equal(t, want["qa"], got.AgentModels["qa"], "agent_models = %v\n%s", got.AgentModels, b)
+	require.Equal(t, want["my agent"], got.AgentModels["my agent"], "agent_models = %v\n%s", got.AgentModels, b)
+	require.Contains(t, string(b), "# my settings", "other settings or comments lost:\n%s", b)
+	require.Contains(t, string(b), "# keep me", "other settings or comments lost:\n%s", b)
+	require.Equal(t, "gemini", got.LLM["provider"], "other settings or comments lost:\n%s", b)
+	info, _ := os.Stat(path)
+	require.Equal(t, fs.FileMode(0o600), info.Mode().Perm(), "mode %v", info.Mode().Perm())
+	_, err = SaveAgentModel(dir, "nobody", "")
+	require.NoError(t, err, "unpinning an unpinned agent")
 }

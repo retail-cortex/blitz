@@ -25,15 +25,15 @@ import (
 
 	"github.com/retail-cortex/blitz/apps/service/servicetest"
 	"github.com/retail-cortex/blitz/pkg/socket"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func addWorker(t *testing.T, ws, name, content string) {
 	t.Helper()
 	dir := filepath.Join(ws, "workers", name)
 	os.MkdirAll(dir, 0o755)
-	if err := os.WriteFile(filepath.Join(dir, "WORKER.md"), []byte(content), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "WORKER.md"), []byte(content), 0o644))
 }
 
 // runCLIWithInput is runCLI with stdin.
@@ -56,44 +56,40 @@ func TestWorkersCommandsLocally(t *testing.T) {
 	addWorker(t, ws, "deps", "---\ndescription: Report outdated modules\nschedule: Weekdays at 9:30\npermissions: [\"write:reports/\"]\n---\nWrite reports/deps.md.\n")
 
 	out, err := runCLI(t, "-d", ws, "workers")
-	if err != nil || !strings.Contains(out, "deps") || !strings.Contains(out, "new") || !strings.Contains(out, "30 9 * * 1-5") {
-		t.Fatalf("list: %v\n%s", err, out)
-	}
+	require.NoError(t, err, "list: %v\n%s", err, out)
+	require.Contains(t, out, "deps", "list: %v\n%s", err, out)
+	require.Contains(t, out, "new", "list: %v\n%s", err, out)
+	require.Contains(t, out, "30 9 * * 1-5", "list: %v\n%s", err, out)
 	out, err = runCLIWithInput(t, "n\n", "-d", ws, "workers", "enable", "deps")
-	if err == nil || !strings.Contains(out, "write:reports/") || !strings.Contains(out, "sha256:") {
-		t.Errorf("declined enable: %v\n%s", err, out)
-	}
-	if out, _ := runCLI(t, "-d", ws, "workers"); !strings.Contains(out, "new") {
-		t.Errorf("declining enabled it:\n%s", out)
-	}
+	assert.Error(t, err, "declined enable: %v\n%s", err, out)
+	assert.Contains(t, out, "write:reports/", "declined enable: %v\n%s", err, out)
+	assert.Contains(t, out, "sha256:", "declined enable: %v\n%s", err, out)
+	listing, _ := runCLI(t, "-d", ws, "workers")
+	assert.Contains(t, listing, "new", "declining enabled it")
 	out, err = runCLI(t, "-d", ws, "workers", "enable", "deps", "--yes")
-	if err != nil || !strings.Contains(out, "deps enabled") || !strings.Contains(out, "blitzd") {
-		t.Fatalf("enable: %v\n%s", err, out)
-	}
+	require.NoError(t, err, "enable: %v\n%s", err, out)
+	require.Contains(t, out, "deps enabled", "enable: %v\n%s", err, out)
+	require.Contains(t, out, "blitzd", "enable: %v\n%s", err, out)
 	out, err = runCLI(t, "-d", ws, "workers", "run", "deps")
-	if err != nil || !strings.Contains(out, "succeeded") {
-		t.Fatalf("run: %v\n%s", err, out)
-	}
-	if out, err := runCLI(t, "-d", ws, "workers", "runs", "deps"); err != nil || !strings.Contains(out, "succeeded") || !strings.Contains(out, "manual") {
-		t.Errorf("runs: %v\n%s", err, out)
-	}
-	if _, err := runCLI(t, "-d", ws, "workers", "run", "nope"); exitCodeFor(err) != exitUsage {
-		t.Errorf("unknown worker: %v", err)
-	}
-	if out, err := runCLI(t, "-d", ws, "workers", "disable", "deps"); err != nil || !strings.Contains(out, "disabled") {
-		t.Errorf("disable: %v\n%s", err, out)
-	}
-	if _, err := runCLI(t, "-d", ws, "workers", "run", "deps"); exitCodeFor(err) != exitUsage {
-		t.Errorf("running a disabled worker: %v", err)
-	}
+	require.NoError(t, err, "run: %v\n%s", err, out)
+	require.Contains(t, out, "succeeded", "run: %v\n%s", err, out)
+	out, err = runCLI(t, "-d", ws, "workers", "runs", "deps")
+	assert.NoError(t, err, "runs: %v\n%s", err, out)
+	assert.Contains(t, out, "succeeded", "runs: %v\n%s", err, out)
+	assert.Contains(t, out, "manual", "runs: %v\n%s", err, out)
+	_, err = runCLI(t, "-d", ws, "workers", "run", "nope")
+	assert.Equal(t, exitUsage, exitCodeFor(err), "unknown worker: %v", err)
+	out, err = runCLI(t, "-d", ws, "workers", "disable", "deps")
+	assert.NoError(t, err, "disable: %v\n%s", err, out)
+	assert.Contains(t, out, "disabled", "disable: %v\n%s", err, out)
+	_, err = runCLI(t, "-d", ws, "workers", "run", "deps")
+	assert.Equal(t, exitUsage, exitCodeFor(err), "running a disabled worker: %v", err)
 }
 
 func TestWorkersCommandsThroughTheService(t *testing.T) {
 	isolate(t)
 	dir, err := os.MkdirTemp("/tmp", "cp") // socket paths must be short
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	t.Cleanup(func() { os.RemoveAll(dir) })
 	sock := filepath.Join(dir, "s.sock")
 	t.Setenv("BLITZ_SOCKET", sock)
@@ -102,18 +98,16 @@ func TestWorkersCommandsThroughTheService(t *testing.T) {
 	go func() { done <- servicetest.Run(ctx, sock) }()
 	defer func() { cancel(); <-done }()
 	for deadline := time.Now().Add(10 * time.Second); !socket.Running(sock); time.Sleep(20 * time.Millisecond) {
-		if time.Now().After(deadline) {
-			t.Fatal("service didn't start")
-		}
+		require.False(t, time.Now().After(deadline), "service didn't start")
 	}
 
 	ws := t.TempDir()
 	addWorker(t, ws, "hello", "---\nschedule: daily at noon\n---\nSay hello.\n")
-	if out, err := runCLI(t, "-d", ws, "workers", "enable", "hello", "--yes"); err != nil || !strings.Contains(out, "hello enabled") || strings.Contains(out, "blitzd") {
-		t.Fatalf("enable through the service: %v\n%s", err, out)
-	}
+	enabled, enableErr := runCLI(t, "-d", ws, "workers", "enable", "hello", "--yes")
+	require.NoError(t, enableErr, "enable through the service")
+	require.Contains(t, enabled, "hello enabled")
+	require.NotContains(t, enabled, "blitzd")
 	out, err := runCLI(t, "-d", ws, "workers", "run", "hello")
-	if err != nil || !strings.Contains(out, "succeeded") {
-		t.Fatalf("run through the service: %v\n%s", err, out)
-	}
+	require.NoError(t, err, "run through the service: %v\n%s", err, out)
+	require.Contains(t, out, "succeeded", "run through the service: %v\n%s", err, out)
 }

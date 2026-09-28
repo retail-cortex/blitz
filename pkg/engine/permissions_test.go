@@ -16,15 +16,14 @@ package engine
 
 import (
 	"context"
-	"errors"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/retail-cortex/blitz/pkg/api"
-
 	"github.com/retail-cortex/blitz/pkg/config"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/genai"
 )
 
@@ -36,41 +35,35 @@ func TestPermissionRulesLiveAndSaved(t *testing.T) {
 	os.MkdirAll(cfgDir, 0o700)
 	os.WriteFile(filepath.Join(cfgDir, ".env.toml"), []byte("# mine\n[permissions]\ndeny = [\"shell(rm *)\"]\n"), 0o600)
 
-	if got := w.ListPermissionRules(); len(got) != 1 || got[0].Rule != "shell(rm *)" || got[0].Source != "config" {
-		t.Fatalf("rules %+v", got)
-	}
+	got := w.ListPermissionRules()
+	require.Len(t, got, 1, "rules %+v", got)
+	require.Equal(t, "shell(rm *)", got[0].Rule, "rules %+v", got)
+	require.Equal(t, "config", got[0].Source, "rules %+v", got)
 	// A session allow rule applies at once: no approver, yet the write runs.
 	res, err := w.AddPermissionRule("allow", "Edit(docs/**)", true)
-	if err != nil || res.Rule != "write(docs/**)" || res.Saved.Err != nil {
-		t.Fatalf("add: %+v %v", res, err)
-	}
+	require.NoError(t, err, "add: %+v", res)
+	require.Equal(t, "write(docs/**)", res.Rule, "add: %+v %v", res, err)
+	require.NoError(t, res.Saved.Err, "add: %+v %v", res, err)
 	s, _ := w.NewSession()
 	w.Run(context.Background(), s.ID, api.Turn{Text: "write"}, func(api.Event) {})
-	if _, err := os.Stat(filepath.Join(w.Dir(), "docs", "a.md")); err != nil {
-		t.Errorf("allow rule didn't apply: %v", err)
-	}
+	_, err = os.Stat(filepath.Join(w.Dir(), "docs", "a.md"))
+	assert.NoError(t, err, "allow rule didn't apply")
 	data, _ := os.ReadFile(filepath.Join(cfgDir, ".env.toml"))
-	if !strings.Contains(string(data), `allow = ["write(docs/**)"]`) || !strings.Contains(string(data), "# mine") {
-		t.Errorf("config file:\n%s", data)
-	}
+	assert.Contains(t, string(data), `allow = ["write(docs/**)"]`, "config file:\n%s", data)
+	assert.Contains(t, string(data), "# mine", "config file:\n%s", data)
 	// Read rules must be saved and apply from the next start.
-	if _, err := w.AddPermissionRule("deny", "read(secrets/**)", false); err == nil {
-		t.Error("an unsaved read rule was accepted")
-	}
-	if res, err := w.AddPermissionRule("deny", "read(secrets/**)", true); err != nil || !res.NextStart {
-		t.Errorf("saved read rule: %+v %v", res, err)
-	}
-	if _, err := w.AddPermissionRule("deny", "what(x)", false); !errors.Is(err, api.ErrBadRule) {
-		t.Errorf("bad rule: %v", err)
-	}
+	_, err = w.AddPermissionRule("deny", "read(secrets/**)", false)
+	assert.Error(t, err, "an unsaved read rule was accepted")
+	res, err = w.AddPermissionRule("deny", "read(secrets/**)", true)
+	assert.NoError(t, err, "saved read rule: %+v", res)
+	assert.True(t, res.NextStart, "saved read rule: %+v %v", res, err)
+	_, err = w.AddPermissionRule("deny", "what(x)", false)
+	assert.ErrorIs(t, err, api.ErrBadRule, "bad rule: %v", err)
 	// Remove, also from the file.
-	if res, _ := w.RemovePermissionRule("write(docs/**)", true); res.Removed != 1 {
-		t.Errorf("remove: %+v", res)
-	}
+	res, _ = w.RemovePermissionRule("write(docs/**)", true)
+	assert.Equal(t, 1, res.Removed, "remove: %+v", res)
 	data, _ = os.ReadFile(filepath.Join(cfgDir, ".env.toml"))
-	if strings.Contains(string(data), "write(docs/**)") {
-		t.Errorf("rule still saved:\n%s", data)
-	}
+	assert.NotContains(t, string(data), "write(docs/**)", "rule still saved:\n%s", data)
 }
 
 // A deny rule naming a tool refuses the call before it runs.
@@ -84,7 +77,6 @@ func TestToolDenyRuleInTheEngine(t *testing.T) {
 			result = e.ToolResult.Result
 		}
 	})
-	if msg, _ := result["error"].(string); !strings.Contains(msg, "deny list_agents") {
-		t.Errorf("list_agents wasn't refused: %v", result)
-	}
+	msg, _ := result["error"].(string)
+	assert.Contains(t, msg, "deny list_agents", "list_agents wasn't refused: %v", result)
 }

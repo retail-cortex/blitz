@@ -18,12 +18,13 @@ import (
 	"context"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
 	"github.com/retail-cortex/blitz/apps/service/servicetest"
 	"github.com/retail-cortex/blitz/pkg/socket"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // The CLI attaches to a workspace the service holds, and --local on it is
@@ -33,9 +34,7 @@ func TestAttachToTheService(t *testing.T) {
 	t.Setenv("GEMINI_API_KEY", "")
 	t.Setenv("GOOGLE_API_KEY", "")
 	dir, err := os.MkdirTemp("/tmp", "cp") // socket paths must be short
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	t.Cleanup(func() { os.RemoveAll(dir) })
 	sock := filepath.Join(dir, "s.sock")
 	t.Setenv("BLITZ_SOCKET", sock) // where the CLI looks for the service
@@ -45,9 +44,7 @@ func TestAttachToTheService(t *testing.T) {
 	go func() { done <- servicetest.Run(ctx, sock) }()
 	deadline := time.Now().Add(10 * time.Second)
 	for !socket.Running(sock) {
-		if time.Now().After(deadline) {
-			t.Fatal("service didn't start")
-		}
+		require.False(t, time.Now().After(deadline), "service didn't start")
 		time.Sleep(20 * time.Millisecond)
 	}
 
@@ -55,20 +52,18 @@ func TestAttachToTheService(t *testing.T) {
 	// The CLI attaches to the service's workspace: here it fails on the
 	// service's unconfigured model (exit 1). Opening the workspace itself
 	// would have failed on the lock instead (exit 2).
-	if _, err := runCLI(t, "-d", ws, "--output-format", "json", "hello"); exitCodeFor(err) != exitFailure || !strings.Contains(err.Error(), "model initialization failed") {
-		t.Errorf("attached one-shot: %v", err)
-	}
+	_, err = runCLI(t, "-d", ws, "--output-format", "json", "hello")
+	assert.Equal(t, exitFailure, exitCodeFor(err), "attached one-shot: %v", err)
+	assert.Contains(t, err.Error(), "model initialization failed", "attached one-shot: %v", err)
 	// --local opens it here, which the service's lock refuses.
-	if _, err := runCLI(t, "--local", "-d", ws, "hello"); exitCodeFor(err) != exitUsage || !strings.Contains(err.Error(), "open elsewhere") {
-		t.Errorf("--local on a workspace the service holds: %v", err)
-	}
+	_, err = runCLI(t, "--local", "-d", ws, "hello")
+	assert.Equal(t, exitUsage, exitCodeFor(err), "--local on a workspace the service holds: %v", err)
+	assert.Contains(t, err.Error(), "open elsewhere", "--local on a workspace the service holds: %v", err)
 
 	cancel()
 	select {
 	case err := <-done:
-		if err != nil {
-			t.Errorf("service: %v", err)
-		}
+		assert.NoError(t, err, "service")
 	case <-time.After(15 * time.Second):
 		t.Fatal("service didn't stop")
 	}

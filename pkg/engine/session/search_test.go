@@ -15,16 +15,15 @@
 package session
 
 import (
-	"slices"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestSearchTerms(t *testing.T) {
 	got := SearchTerms(`retry "circuit breaker" Retry  backoff`)
-	if !slices.Equal(got, []string{"circuit breaker", "retry", "backoff"}) {
-		t.Fatalf("%q", got)
-	}
+	require.Equal(t, []string{"circuit breaker", "retry", "backoff"}, got)
 }
 
 func TestSearchRanksAndExcerpts(t *testing.T) {
@@ -38,28 +37,23 @@ func TestSearchRanksAndExcerpts(t *testing.T) {
 		{Role: "user", Content: "RETRY later"},                            // 5: one term
 	}
 	got, total := Search(msgs, `"circuit breaker" retry backoff`, 3)
-	if total != 4 {
-		t.Fatalf("total %d", total)
-	}
+	require.Equal(t, 4, total, "total %d", total)
 	// Best first (1 has two terms), then the most recent single hits (5, 4),
 	// shown oldest first.
 	idx := []int{}
 	for _, m := range got {
 		idx = append(idx, m.Index)
 	}
-	if !slices.Equal(idx, []int{1, 4, 5}) {
-		t.Fatalf("indexes %v", idx)
-	}
+	require.Equal(t, []int{1, 4, 5}, idx, "indexes %v", idx)
 	ex := got[1].Excerpt
-	if !strings.HasPrefix(ex, "…") || !strings.HasSuffix(ex, "…") || !strings.Contains(ex, "Circuit Breaker opens") || !utf8Valid(ex) {
-		t.Fatalf("excerpt %q", ex)
-	}
-	if len(ex) > 700*2 {
-		t.Fatalf("excerpt too long: %d bytes", len(ex))
-	}
-	if got, total := Search(msgs, "   ", 5); got != nil || total != 0 {
-		t.Fatal("empty query matched")
-	}
+	require.True(t, strings.HasPrefix(ex, "…"), "excerpt %q", ex)
+	require.True(t, strings.HasSuffix(ex, "…"), "excerpt %q", ex)
+	require.Contains(t, ex, "Circuit Breaker opens", "excerpt %q", ex)
+	require.True(t, utf8Valid(ex), "excerpt %q", ex)
+	require.LessOrEqual(t, len(ex), 700*2, "excerpt too long: %d bytes", len(ex))
+	got, total = Search(msgs, "   ", 5)
+	require.Nil(t, got, "empty query matched")
+	require.Equal(t, 0, total, "empty query matched")
 }
 
 func utf8Valid(s string) bool { return strings.ToValidUTF8(s, "�") == s }

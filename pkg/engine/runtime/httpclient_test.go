@@ -16,16 +16,15 @@ package runtime
 
 import (
 	"context"
-	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/retail-cortex/blitz/pkg/config"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/adk/v2/model"
 	"google.golang.org/adk/v2/model/gemini"
 	"google.golang.org/genai"
@@ -44,18 +43,13 @@ func TestStalledBodyFails(t *testing.T) {
 
 	client := retryPolicy{stall: 200 * time.Millisecond}.httpClient()
 	resp, err := client.Get(srv.URL)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	defer resp.Body.Close()
 	start := time.Now()
 	_, err = io.ReadAll(resp.Body)
-	if !errors.Is(err, ErrStalled) {
-		t.Fatalf("want ErrStalled, got %v", err)
-	}
-	if d := time.Since(start); d > 2*time.Second {
-		t.Fatalf("stall detected after %v", d)
-	}
+	require.ErrorIs(t, err, ErrStalled, "want ErrStalled, got %v", err)
+	d := time.Since(start)
+	require.LessOrEqual(t, d, 2*time.Second, "stall detected after %v", d)
 }
 
 func TestSlowButSteadyStreamIsNotCutOff(t *testing.T) {
@@ -69,13 +63,11 @@ func TestSlowButSteadyStreamIsNotCutOff(t *testing.T) {
 	defer srv.Close()
 
 	resp, err := retryPolicy{stall: 300 * time.Millisecond}.httpClient().Get(srv.URL)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	defer resp.Body.Close()
-	if b, err := io.ReadAll(resp.Body); err != nil || string(b) != "xxxxxxxx" {
-		t.Fatalf("got %q, %v", b, err)
-	}
+	b, err := io.ReadAll(resp.Body)
+	require.NoError(t, err, "got %q,", b)
+	require.Equal(t, "xxxxxxxx", string(b), "got %q, %v", b, err)
 }
 
 func TestNoHeadersFailsFast(t *testing.T) {
@@ -87,12 +79,10 @@ func TestNoHeadersFailsFast(t *testing.T) {
 	}))
 	defer srv.Close()
 	start := time.Now()
-	if _, err := (retryPolicy{stall: 200 * time.Millisecond}).httpClient().Get(srv.URL); err == nil {
-		t.Fatal("request without headers succeeded")
-	}
-	if d := time.Since(start); d > 2*time.Second {
-		t.Fatalf("header timeout took %v", d)
-	}
+	_, err := (retryPolicy{stall: 200 * time.Millisecond}).httpClient().Get(srv.URL)
+	require.Error(t, err, "request without headers succeeded")
+	d := time.Since(start)
+	require.LessOrEqual(t, d, 2*time.Second, "header timeout took %v", d)
 }
 
 // flaky answers the first `fail` requests with status, then with ok.
@@ -146,18 +136,14 @@ func TestProvidersRetryTransientErrors(t *testing.T) {
 			cfg.LLM.Provider, cfg.LLM.Anthropic.BaseURL, cfg.LLM.Anthropic.APIKey, cfg.LLM.MaxRetries = "anthropic", url, "sk-ant-test", retries
 			cfg.LLM.Anthropic.Fallbacks = "off"
 			m, err := NewModel(context.Background(), cfg, "")
-			if err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, err)
 			return m
 		}},
 		{"openai 503", 503, openAIOK, func(t *testing.T, url string, retries int) model.LLM {
 			cfg := config.DefaultConfig()
 			cfg.LLM.Provider, cfg.LLM.OpenAI.BaseURL, cfg.LLM.OpenAI.APIKey, cfg.LLM.MaxRetries = "openai", url+"/v1", "sk-test", retries
 			m, err := NewModel(context.Background(), cfg, "gpt-test")
-			if err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, err)
 			return m
 		}},
 		{"gemini 429", 429, geminiOK, func(t *testing.T, url string, retries int) model.LLM {
@@ -168,9 +154,7 @@ func TestProvidersRetryTransientErrors(t *testing.T) {
 			gc.Backend = genai.BackendGeminiAPI
 			gc.HTTPOptions.BaseURL = url
 			m, err := gemini.NewModel(context.Background(), "gemini-3.8-flash", gc)
-			if err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, err)
 			return m
 		}},
 	}
@@ -178,20 +162,16 @@ func TestProvidersRetryTransientErrors(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			srv, calls := flaky(t, 2, c.status, c.ok)
 			text, err := generateText(t, c.build(t, srv.URL, 2))
-			if err != nil || text != "ok" {
-				t.Fatalf("with 2 retries: %q, %v", text, err)
-			}
-			if n := calls.Load(); n != 3 {
-				t.Fatalf("want 3 attempts, got %d", n)
-			}
+			require.NoError(t, err, "with 2 retries: %q,", text)
+			require.Equal(t, "ok", text, "with 2 retries: %q, %v", text, err)
+			n := calls.Load()
+			require.Equal(t, int32(3), n, "want 3 attempts, got %d", n)
 
 			srv, calls = flaky(t, 1, c.status, c.ok)
-			if _, err := generateText(t, c.build(t, srv.URL, 0)); err == nil {
-				t.Fatal("max_retries = 0 still retried")
-			}
-			if n := calls.Load(); n != 1 {
-				t.Fatalf("max_retries = 0: want 1 attempt, got %d", n)
-			}
+			_, err = generateText(t, c.build(t, srv.URL, 0))
+			require.Error(t, err, "max_retries = 0 still retried")
+			n = calls.Load()
+			require.Equal(t, int32(1), n, "max_retries = 0: want 1 attempt, got %d", n)
 		})
 	}
 }
@@ -201,23 +181,19 @@ func TestClientErrorsAreNotRetried(t *testing.T) {
 	cfg := config.DefaultConfig()
 	cfg.LLM.Provider, cfg.LLM.OpenAI.BaseURL, cfg.LLM.OpenAI.APIKey = "openai", srv.URL+"/v1", "sk-test"
 	m, err := NewModel(context.Background(), cfg, "gpt-test")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := generateText(t, m); err == nil || !strings.Contains(err.Error(), "400") {
-		t.Fatalf("want a 400 error, got %v", err)
-	}
-	if n := calls.Load(); n != 1 {
-		t.Fatalf("a 400 was retried: %d attempts", n)
-	}
+	require.NoError(t, err)
+	_, err = generateText(t, m)
+	require.Error(t, err, "want a 400 error, got")
+	require.Contains(t, err.Error(), "400", "want a 400 error, got %v", err)
+	n := calls.Load()
+	require.Equal(t, int32(1), n, "a 400 was retried: %d attempts", n)
 }
 
 func TestPolicyDefaults(t *testing.T) {
 	p := policyFrom(config.LLMConfig{MaxRetries: -1})
-	if p.maxRetries != 0 || p.stall != defaultStallTimeout {
-		t.Fatalf("policy = %+v", p)
-	}
-	if d := config.DefaultConfig().LLM; d.MaxRetries != 3 || d.StallTimeoutSeconds != 600 {
-		t.Fatalf("config defaults = %d retries, %ds stall", d.MaxRetries, d.StallTimeoutSeconds)
-	}
+	require.Equal(t, 0, p.maxRetries, "policy = %+v", p)
+	require.Equal(t, defaultStallTimeout, p.stall, "policy = %+v", p)
+	d := config.DefaultConfig().LLM
+	require.Equal(t, 3, d.MaxRetries, "config defaults = %d retries, %ds stall", d.MaxRetries, d.StallTimeoutSeconds)
+	require.Equal(t, 600, d.StallTimeoutSeconds, "config defaults = %d retries, %ds stall", d.MaxRetries, d.StallTimeoutSeconds)
 }

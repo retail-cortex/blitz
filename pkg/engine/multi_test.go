@@ -16,17 +16,17 @@ package engine
 
 import (
 	"context"
-	"errors"
 	"os"
 	"path/filepath"
 	"slices"
 	"testing"
 
 	"github.com/retail-cortex/blitz/pkg/api"
-
 	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/engine/runtime"
 	"github.com/retail-cortex/blitz/pkg/i18n"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // One process can hold several workspaces (the per-user service does):
@@ -48,9 +48,7 @@ func TestTwoWorkspacesInOneProcess(t *testing.T) {
 		cfg.Blitz.TrustWorkspace = true // so ./agents is read
 		cfg.Session.StorageDir = t.TempDir()
 		w, err := Open(context.Background(), cfg, Options{Model: runtime.NewMockLLM("m"), NewModel: mockModels})
-		if err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, err)
 		t.Cleanup(func() { w.Close() })
 		return w
 	}
@@ -59,20 +57,17 @@ func TestTwoWorkspacesInOneProcess(t *testing.T) {
 	has := func(w *Workspace, name string) bool {
 		return slices.ContainsFunc(w.ListAgents(), func(x api.AgentInfo) bool { return x.Name == name })
 	}
-	if !has(a, "alpha") || has(a, "beta") || !has(b, "beta") || has(b, "alpha") {
-		t.Errorf("each workspace should read its own ./agents: a=%v b=%v", has(a, "alpha"), has(b, "beta"))
-	}
-	if a.Dir() == b.Dir() {
-		t.Fatal("same directory")
-	}
+	assert.True(t, has(a, "alpha"), "each workspace should read its own ./agents: a=%v b=%v", has(a, "alpha"), has(b, "beta"))
+	assert.False(t, has(a, "beta"), "each workspace should read its own ./agents: a=%v b=%v", has(a, "alpha"), has(b, "beta"))
+	assert.True(t, has(b, "beta"), "each workspace should read its own ./agents: a=%v b=%v", has(a, "alpha"), has(b, "beta"))
+	assert.False(t, has(b, "alpha"), "each workspace should read its own ./agents: a=%v b=%v", has(a, "alpha"), has(b, "beta"))
+	require.NotEqual(t, b.Dir(), a.Dir(), "same directory")
 
 	// Reply languages are per workspace.
-	if _, err := a.SetLocale(context.Background(), "es"); err != nil {
-		t.Fatal(err)
-	}
-	if a.Settings().Locale != "es" || b.Settings().Locale != "en-US" {
-		t.Errorf("locales a=%s b=%s", a.Settings().Locale, b.Settings().Locale)
-	}
+	_, err := a.SetLocale(context.Background(), "es")
+	require.NoError(t, err)
+	assert.Equal(t, "es", a.Settings().Locale, "locales a=%s b=%s", a.Settings().Locale, b.Settings().Locale)
+	assert.Equal(t, "en-US", b.Settings().Locale, "locales a=%s b=%s", a.Settings().Locale, b.Settings().Locale)
 
 }
 
@@ -82,9 +77,7 @@ func TestAWorkspaceHasOneOwner(t *testing.T) {
 	t.Setenv("MODENV_PREFIX", "")
 	dir := t.TempDir()
 	link := filepath.Join(t.TempDir(), "link")
-	if err := os.Symlink(dir, link); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.Symlink(dir, link))
 	open := func(d string) (*Workspace, error) {
 		cfg := config.DefaultConfig()
 		cfg.Tools.WorkspaceDir = d
@@ -92,16 +85,11 @@ func TestAWorkspaceHasOneOwner(t *testing.T) {
 		return Open(context.Background(), cfg, Options{Model: runtime.NewMockLLM("m")})
 	}
 	first, err := open(dir)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := open(link); !errors.Is(err, api.ErrWorkspaceBusy) {
-		t.Fatalf("second owner (through a symlink): %v", err)
-	}
+	require.NoError(t, err)
+	_, secondErr := open(link)
+	require.ErrorIs(t, secondErr, api.ErrWorkspaceBusy, "a second owner, through a symlink")
 	first.Close()
 	again, err := open(dir)
-	if err != nil {
-		t.Fatalf("after Close: %v", err)
-	}
+	require.NoError(t, err, "after Close")
 	again.Close()
 }

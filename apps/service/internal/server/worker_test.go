@@ -16,7 +16,6 @@ package server
 
 import (
 	"context"
-	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -24,14 +23,15 @@ import (
 	"testing"
 	"time"
 
-	"github.com/retail-cortex/blitz/pkg/api"
-
 	"connectrpc.com/connect"
+	"github.com/retail-cortex/blitz/pkg/api"
 	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/engine"
 	"github.com/retail-cortex/blitz/pkg/engine/runtime"
 	"github.com/retail-cortex/blitz/pkg/engine/workers"
 	pb "github.com/retail-cortex/blitz/proto/blitz/v1"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/genai"
 )
 
@@ -42,9 +42,7 @@ func serveWorkers(t *testing.T, rescan time.Duration, replies ...*genai.Content)
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("MODENV_PREFIX", "")
 	store, err := workers.OpenStore(filepath.Join(t.TempDir(), "workers.json"))
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	s := New(func(ctx context.Context, dir string) (*engine.Workspace, error) {
 		cfg := config.DefaultConfig()
 		cfg.Tools.WorkspaceDir = dir
@@ -62,9 +60,7 @@ func addWorker(t *testing.T, dir, name, content string) {
 	t.Helper()
 	wd := filepath.Join(dir, "workers", name)
 	os.MkdirAll(wd, 0o755)
-	if err := os.WriteFile(filepath.Join(wd, workers.FileName), []byte(content), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(filepath.Join(wd, workers.FileName), []byte(content), 0o644))
 }
 
 func TestWorkersOverTheAPI(t *testing.T) {
@@ -74,37 +70,35 @@ func TestWorkersOverTheAPI(t *testing.T) {
 	addWorker(t, dir, "deps", "---\nschedule: Daily at 6 AM\n---\nWrite the report.\n")
 
 	list, err := c.ListWorkers(ctx, connect.NewRequest(&pb.ListWorkersRequest{Workspace: dir}))
-	if err != nil || len(list.Msg.Workers) != 1 {
-		t.Fatalf("list %v %v", list, err)
-	}
+	require.NoError(t, err, "list %v", list)
+	require.Len(t, list.Msg.Workers, 1, "list %v %v", list, err)
 	wk := list.Msg.Workers[0]
-	if wk.State != pb.WorkerState_WORKER_STATE_NEW || wk.Cron != "0 6 * * *" || wk.Limits.GetMaxTurns() == 0 {
-		t.Errorf("worker %v", wk)
-	}
+	assert.Equal(t, pb.WorkerState_WORKER_STATE_NEW, wk.State, "worker %v", wk)
+	assert.Equal(t, "0 6 * * *", wk.Cron, "worker %v", wk)
+	assert.NotEqual(t, int32(0), wk.Limits.GetMaxTurns(), "worker %v", wk)
 	_, err = c.RunWorker(ctx, connect.NewRequest(&pb.RunWorkerRequest{Workspace: dir, Name: "deps"}))
-	if code, info := errorReason(t, err); code != connect.CodeFailedPrecondition || info.Reason != "WORKER_DISABLED" {
-		t.Errorf("run before enabling: %v %v", code, info)
-	}
+	code, info := errorReason(t, err)
+	assert.Equal(t, connect.CodeFailedPrecondition, code, "run before enabling: %v %v", code, info)
+	assert.Equal(t, "WORKER_DISABLED", info.Reason, "run before enabling: %v %v", code, info)
 	_, err = c.EnableWorker(ctx, connect.NewRequest(&pb.EnableWorkerRequest{Workspace: dir, Name: "deps", Hash: "sha256:stale"}))
-	if code, info := errorReason(t, err); code != connect.CodeFailedPrecondition || info.Reason != "HASH_MISMATCH" {
-		t.Errorf("stale hash: %v %v", code, info)
-	}
+	code, info = errorReason(t, err)
+	assert.Equal(t, connect.CodeFailedPrecondition, code, "stale hash: %v %v", code, info)
+	assert.Equal(t, "HASH_MISMATCH", info.Reason, "stale hash: %v %v", code, info)
 	_, err = c.EnableWorker(ctx, connect.NewRequest(&pb.EnableWorkerRequest{Workspace: dir, Name: "nope", Hash: "x"}))
-	if code, info := errorReason(t, err); code != connect.CodeNotFound || info.Reason != "UNKNOWN_WORKER" {
-		t.Errorf("unknown worker: %v %v", code, info)
-	}
+	code, info = errorReason(t, err)
+	assert.Equal(t, connect.CodeNotFound, code, "unknown worker: %v %v", code, info)
+	assert.Equal(t, "UNKNOWN_WORKER", info.Reason, "unknown worker: %v %v", code, info)
 	on, err := c.EnableWorker(ctx, connect.NewRequest(&pb.EnableWorkerRequest{Workspace: dir, Name: "deps", Hash: wk.Hash}))
-	if err != nil || on.Msg.Worker.State != pb.WorkerState_WORKER_STATE_ENABLED || on.Msg.Worker.NextRun == nil {
-		t.Fatalf("enable %v %v", on, err)
-	}
-	if all, _ := c.ListWorkers(ctx, connect.NewRequest(&pb.ListWorkersRequest{})); len(all.Msg.Workers) != 1 {
-		t.Errorf("every registered workspace: %v", all.Msg.Workers)
-	}
+	require.NoError(t, err, "enable %v", on)
+	require.Equal(t, pb.WorkerState_WORKER_STATE_ENABLED, on.Msg.Worker.State, "enable %v %v", on, err)
+	require.NotNil(t, on.Msg.Worker.NextRun, "enable %v %v", on, err)
+	all, _ := c.ListWorkers(ctx, connect.NewRequest(&pb.ListWorkersRequest{}))
+	assert.Len(t, all.Msg.Workers, 1, "every registered workspace: %v", all.Msg.Workers)
 
 	started, err := c.RunWorker(ctx, connect.NewRequest(&pb.RunWorkerRequest{Workspace: dir, Name: "deps"}))
-	if err != nil || started.Msg.Run.Status != pb.RunStatus_RUN_STATUS_RUNNING || !started.Msg.Run.Manual {
-		t.Fatalf("run %v %v", started, err)
-	}
+	require.NoError(t, err, "run %v", started)
+	require.Equal(t, pb.RunStatus_RUN_STATUS_RUNNING, started.Msg.Run.Status, "run %v %v", started, err)
+	require.True(t, started.Msg.Run.Manual, "run %v %v", started, err)
 	id := started.Msg.Run.Id
 	// Watching may begin after the run has; the events come from its start.
 	var text string
@@ -121,9 +115,7 @@ func TestWorkersOverTheAPI(t *testing.T) {
 		}
 	}
 	// A run too quick to watch is already recorded; either way it succeeded.
-	if finished != nil && (finished.Error != nil || text != "Report written.") {
-		t.Errorf("watched %q, finished %v", text, finished)
-	}
+	assert.False(t, finished != nil && (finished.Error != nil || text != "Report written."), "watched %q, finished %v", text, finished)
 	var run *pb.WorkerRun
 	for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
 		if got, err := c.GetWorkerRun(ctx, connect.NewRequest(&pb.GetWorkerRunRequest{RunId: id})); err == nil && got.Msg.Run.Status != pb.RunStatus_RUN_STATUS_RUNNING {
@@ -131,21 +123,20 @@ func TestWorkersOverTheAPI(t *testing.T) {
 			break
 		}
 	}
-	if run == nil || run.Status != pb.RunStatus_RUN_STATUS_SUCCEEDED || run.SessionId == "" {
-		t.Fatalf("run record %v", run)
-	}
+	require.NotNil(t, run, "run record %v", run)
+	require.Equal(t, pb.RunStatus_RUN_STATUS_SUCCEEDED, run.Status, "run record %v", run)
+	require.NotEqual(t, "", run.SessionId, "run record %v", run)
 	runs, err := c.ListWorkerRuns(ctx, connect.NewRequest(&pb.ListWorkerRunsRequest{Workspace: dir, Name: "deps"}))
-	if err != nil || len(runs.Msg.Runs) != 1 || runs.Msg.Runs[0].Id != id {
-		t.Errorf("runs %v %v", runs, err)
-	}
+	assert.NoError(t, err, "runs %v", runs)
+	assert.Len(t, runs.Msg.Runs, 1, "runs %v %v", runs, err)
+	assert.Equal(t, id, runs.Msg.Runs[0].Id, "runs %v %v", runs, err)
 	_, err = c.GetWorkerRun(ctx, connect.NewRequest(&pb.GetWorkerRunRequest{RunId: "nope"}))
-	if code, info := errorReason(t, err); code != connect.CodeNotFound || info.Reason != "UNKNOWN_RUN" {
-		t.Errorf("unknown run: %v %v", code, info)
-	}
+	code, info = errorReason(t, err)
+	assert.Equal(t, connect.CodeNotFound, code, "unknown run: %v %v", code, info)
+	assert.Equal(t, "UNKNOWN_RUN", info.Reason, "unknown run: %v %v", code, info)
 	off, err := c.DisableWorker(ctx, connect.NewRequest(&pb.DisableWorkerRequest{Workspace: dir, Name: "deps"}))
-	if err != nil || off.Msg.Worker.State != pb.WorkerState_WORKER_STATE_DISABLED {
-		t.Errorf("disable %v %v", off, err)
-	}
+	assert.NoError(t, err, "disable %v", off)
+	assert.Equal(t, pb.WorkerState_WORKER_STATE_DISABLED, off.Msg.Worker.State, "disable %v %v", off, err)
 }
 
 // An enabled worker runs on its schedule without anyone asking.
@@ -155,12 +146,9 @@ func TestWorkersRunOnSchedule(t *testing.T) {
 	dir, _ := filepath.EvalSymlinks(t.TempDir())
 	addWorker(t, dir, "ticker", "---\nschedule: \"@every 1s\"\n---\nSay tick.\n")
 	list, err := c.ListWorkers(ctx, connect.NewRequest(&pb.ListWorkersRequest{Workspace: dir}))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := c.EnableWorker(ctx, connect.NewRequest(&pb.EnableWorkerRequest{Workspace: dir, Name: "ticker", Hash: list.Msg.Workers[0].Hash})); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
+	_, err = c.EnableWorker(ctx, connect.NewRequest(&pb.EnableWorkerRequest{Workspace: dir, Name: "ticker", Hash: list.Msg.Workers[0].Hash}))
+	require.NoError(t, err)
 	for deadline := time.Now().Add(10 * time.Second); ; time.Sleep(100 * time.Millisecond) {
 		runs, err := c.ListWorkerRuns(ctx, connect.NewRequest(&pb.ListWorkerRunsRequest{Workspace: dir, Name: "ticker"}))
 		if err == nil {
@@ -195,22 +183,16 @@ func TestSchedulerWaitsOncePerWorkerAndStops(t *testing.T) {
 		if w {
 			break
 		}
-		if time.Now().After(deadline) {
-			t.Fatal("the scheduled run never waited")
-		}
+		require.False(t, time.Now().After(deadline), "the scheduled run never waited")
 	}
-	if err := sc.acquire("/w", "deps", false); !errors.Is(err, api.ErrRunInProgress) {
-		t.Errorf("second wait for the same worker: %v", err)
-	}
-	if code, info := errorReason(t, sc.acquire("/w", "other", true)); code != connect.CodeResourceExhausted || info.Reason != "TOO_MANY_RUNS" {
-		t.Errorf("manual run with no slot: %v %v", code, info)
-	}
+	err := sc.acquire("/w", "deps", false)
+	assert.ErrorIs(t, err, api.ErrRunInProgress, "second wait for the same worker: %v", err)
+	code, info := errorReason(t, sc.acquire("/w", "other", true))
+	assert.Equal(t, connect.CodeResourceExhausted, code, "manual run with no slot: %v %v", code, info)
+	assert.Equal(t, "TOO_MANY_RUNS", info.Reason, "manual run with no slot: %v %v", code, info)
 
 	s.Close()
-	if err := <-waited; !errors.Is(err, errStopped) {
-		t.Errorf("waiting run after Close: %v", err)
-	}
-	if sc.track() {
-		t.Error("a stopped scheduler started a run")
-	}
+	err = <-waited
+	assert.ErrorIs(t, err, errStopped, "waiting run after Close: %v", err)
+	assert.False(t, sc.track(), "a stopped scheduler started a run")
 }

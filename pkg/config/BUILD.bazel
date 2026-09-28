@@ -48,5 +48,7 @@ go_test(
     deps = [
         "//pkg/secrets",
         "@com_github_burntsushi_toml//:toml",
+        "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//require",
     ],
 )

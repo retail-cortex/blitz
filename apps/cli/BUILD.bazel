@@ -96,6 +96,8 @@ go_test(
         "//pkg/loginitem",
         "//pkg/secrets",
         "//pkg/socket",
+        "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//require",
         "@org_golang_google_genai//:genai",
         "@org_uber_go_goleak//:goleak",
     ],

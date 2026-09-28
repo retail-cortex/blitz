@@ -41,4 +41,8 @@ go_test(
     name = "commands_test",
     srcs = ["commands_test.go"],
     embed = [":commands"],
+    deps = [
+        "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//require",
+    ],
 )

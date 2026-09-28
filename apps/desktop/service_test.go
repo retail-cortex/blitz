@@ -22,6 +22,8 @@ import (
 	"time"
 
 	"github.com/retail-cortex/blitz/pkg/socket"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // The app finds its blitzd in Bazel's runfiles when Bazel runs it, so it
@@ -29,24 +31,18 @@ import (
 func TestFindServiceInRunfiles(t *testing.T) {
 	root := t.TempDir()
 	dir := filepath.Join(root, "_main", "apps", "service")
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.MkdirAll(dir, 0o755))
 	bin := filepath.Join(dir, "blitzd")
-	if err := os.WriteFile(bin, []byte("#!/bin/sh\n"), 0o755); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(bin, []byte("#!/bin/sh\n"), 0o755))
 	t.Setenv("RUNFILES_DIR", root)
 	t.Setenv("PATH", t.TempDir())
 	got, err := findService()
 	want, _ := filepath.EvalSymlinks(bin)
-	if err != nil || got != want {
-		t.Errorf("findService() = %q, %v; want %q", got, err, want)
-	}
+	assert.NoError(t, err, "findService() = %q, %v; want %q", got, err, want)
+	assert.Equal(t, want, got, "findService() = %q, %v; want %q", got, err, want)
 	t.Setenv("RUNFILES_DIR", t.TempDir())
-	if got, err := findService(); err == nil && got == want {
-		t.Errorf("found %q without runfiles", got)
-	}
+	got, err = findService()
+	assert.False(t, err == nil && got == want, "found %q without runfiles", got)
 }
 
 // A service that isn't a login item (started by hand) stops by its
@@ -59,35 +55,25 @@ func TestStopServiceByPID(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)                 // no login item here
 	dir, err := os.MkdirTemp("/tmp", "bd") // socket paths must be short
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	t.Cleanup(func() { os.RemoveAll(dir) })
 	sock := filepath.Join(dir, "s.sock")
 	cmd := exec.Command(bin, "--socket", sock)
 	cmd.Env = append(os.Environ(), "HOME="+home, "GEMINI_API_KEY=", "GOOGLE_API_KEY=", "MODENV_PREFIX=")
-	if err := cmd.Start(); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, cmd.Start())
 	done := make(chan error, 1)
 	go func() { done <- cmd.Wait() }()
 	t.Cleanup(func() { cmd.Process.Kill() })
 	for deadline := time.Now().Add(10 * time.Second); !socket.Running(sock); time.Sleep(50 * time.Millisecond) {
-		if time.Now().After(deadline) {
-			t.Fatal("blitzd didn't start")
-		}
+		require.False(t, time.Now().After(deadline), "blitzd didn't start")
 	}
 
 	a := &App{socket: sock}
-	if err := a.StopService(cmd.Process.Pid); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, a.StopService(cmd.Process.Pid))
 	select {
 	case <-done:
 	case <-time.After(10 * time.Second):
 		t.Fatal("blitzd still running")
 	}
-	if socket.Running(sock) {
-		t.Error("the socket still answers")
-	}
+	assert.False(t, socket.Running(sock), "the socket still answers")
 }

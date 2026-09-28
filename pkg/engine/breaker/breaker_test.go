@@ -17,6 +17,8 @@ package breaker
 import (
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/require"
 )
 
 type fakeClock struct{ t time.Time }
@@ -29,53 +31,43 @@ func TestOpensBacksOffAndRecovers(t *testing.T) {
 	b := New(2)
 	b.SetClock(clk.now)
 
-	if ok, _ := b.Allow(); !ok {
-		t.Fatal("new breaker refused a call")
-	}
-	if _, opened, _ := b.Failure(); opened {
-		t.Fatal("opened after one failure")
-	}
+	ok, _ := b.Allow()
+	require.True(t, ok, "new breaker refused a call")
+	_, opened, _ := b.Failure()
+	require.False(t, opened, "opened after one failure")
 	_, opened, cd := b.Failure()
-	if !opened || cd != InitialCooldown {
-		t.Fatalf("second failure: opened=%v cooldown=%v", opened, cd)
-	}
-	if ok, retryIn := b.Allow(); ok || retryIn != InitialCooldown {
-		t.Fatalf("open breaker: ok=%v retryIn=%v", ok, retryIn)
-	}
+	require.True(t, opened, "second failure: opened=%v cooldown=%v", opened, cd)
+	require.Equal(t, InitialCooldown, cd, "second failure: opened=%v cooldown=%v", opened, cd)
+	ok, retryIn := b.Allow()
+	require.False(t, ok, "open breaker: ok=%v retryIn=%v", ok, retryIn)
+	require.Equal(t, InitialCooldown, retryIn, "open breaker: ok=%v retryIn=%v", ok, retryIn)
 
 	clk.advance(InitialCooldown)
-	if ok, _ := b.Allow(); !ok {
-		t.Fatal("no trial after the cooldown")
-	}
-	if ok, _ := b.Allow(); ok {
-		t.Fatal("a second caller got through during the trial")
-	}
-	if _, opened, cd := b.Failure(); !opened || cd != 2*InitialCooldown {
-		t.Fatalf("failed trial: opened=%v cooldown=%v", opened, cd)
-	}
+	ok, _ = b.Allow()
+	require.True(t, ok, "no trial after the cooldown")
+	ok, _ = b.Allow()
+	require.False(t, ok, "a second caller got through during the trial")
+	_, opened, cd = b.Failure()
+	require.True(t, opened, "failed trial: opened=%v cooldown=%v", opened, cd)
+	require.Equal(t, 2*InitialCooldown, cd, "failed trial: opened=%v cooldown=%v", opened, cd)
 
 	for range 10 { // back-off is capped
 		clk.advance(MaxCooldown)
 		b.Allow()
 		b.Failure()
 	}
-	if b.cooldown != MaxCooldown {
-		t.Fatalf("cooldown = %v, want cap %v", b.cooldown, MaxCooldown)
-	}
+	require.Equal(t, MaxCooldown, b.cooldown, "cooldown = %v, want cap %v", b.cooldown, MaxCooldown)
 
 	clk.advance(MaxCooldown)
 	b.Allow()
-	if !b.Success() {
-		t.Fatal("successful trial did not report recovery")
-	}
-	if ok, _ := b.Allow(); !ok || b.Success() {
-		t.Fatal("breaker not closed after recovery")
-	}
+	require.True(t, b.Success(), "successful trial did not report recovery")
+	ok, _ = b.Allow()
+	require.True(t, ok, "breaker not closed after recovery")
+	require.False(t, b.Success(), "breaker not closed after recovery")
 }
 
 func TestThresholdOfOneOpensOnFirstFailure(t *testing.T) {
 	b := New(0) // clamped to 1
-	if _, opened, _ := b.Failure(); !opened {
-		t.Fatal("threshold 1 did not open on the first failure")
-	}
+	_, opened, _ := b.Failure()
+	require.True(t, opened, "threshold 1 did not open on the first failure")
 }

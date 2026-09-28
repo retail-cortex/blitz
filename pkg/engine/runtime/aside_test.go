@@ -23,6 +23,7 @@ import (
 	"testing"
 
 	cpsession "github.com/retail-cortex/blitz/pkg/engine/session"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/adk/v2/model"
 	"google.golang.org/adk/v2/session"
 	"google.golang.org/genai"
@@ -46,9 +47,7 @@ func requestText(req *model.LLMRequest) string {
 func TestAsideSeesHistoryAndLeavesNoTrace(t *testing.T) {
 	dir := t.TempDir()
 	svc, err := cpsession.NewPersistentService(dir)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	f := newEngineWith(t, fixtureOpts{opts: []Option{WithSessionService(svc)}},
 		textContent("noted: pineapple"),
 		toolCall("create_file", map[string]any{"path": "x.txt", "content": "x"}),
@@ -56,9 +55,8 @@ func TestAsideSeesHistoryAndLeavesNoTrace(t *testing.T) {
 		textContent("next answer"))
 	f.llm.Usage = &genai.GenerateContentResponseUsageMetadata{PromptTokenCount: 10, CandidatesTokenCount: 2}
 	ctx := context.Background()
-	if _, err := collect(t, f.eng, "s", "remember pineapple"); err != nil {
-		t.Fatal(err)
-	}
+	_, turnErr := collect(t, f.eng, "s", "remember pineapple")
+	require.NoError(t, turnErr)
 	logPath := filepath.Join(dir, "s.events.jsonl")
 	before, _ := os.ReadFile(logPath)
 	usage := f.eng.Usage("s").Calls
@@ -72,49 +70,34 @@ func TestAsideSeesHistoryAndLeavesNoTrace(t *testing.T) {
 		}
 		return nil
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(answer.String(), "the word was pineapple") {
-		t.Fatalf("answer %q", answer.String())
-	}
+	require.NoError(t, err)
+	require.Contains(t, answer.String(), "the word was pineapple", "answer %q", answer.String())
 	f.llm.mu.Lock()
 	asideFirst, asideSecond := requestText(f.llm.Requests[1]), requestText(f.llm.Requests[2])
 	f.llm.mu.Unlock()
-	if !strings.Contains(asideFirst, "remember pineapple") || !strings.Contains(asideFirst, "btw, what was the word?") {
-		t.Fatalf("aside request lacks history or question:\n%s", asideFirst)
-	}
-	if !strings.Contains(asideSecond, "btw is read-only") {
-		t.Fatalf("create_file wasn't refused as read-only:\n%s", asideSecond)
-	}
-	if _, err := os.Stat(filepath.Join(f.cfg.Tools.WorkspaceDir, "x.txt")); err == nil {
-		t.Fatal("the side question wrote a file")
-	}
-	if after, _ := os.ReadFile(logPath); string(after) != string(before) {
-		t.Fatalf("the saved event log changed:\n%s", after)
-	}
-	if got := f.eng.Usage("s").Calls; got != usage+2 {
-		t.Fatalf("usage calls %d, want %d", got, usage+2)
-	}
+	require.Contains(t, asideFirst, "remember pineapple", "aside request lacks history or question:\n%s", asideFirst)
+	require.Contains(t, asideFirst, "btw, what was the word?", "aside request lacks history or question:\n%s", asideFirst)
+	require.Contains(t, asideSecond, "btw is read-only", "create_file wasn't refused as read-only:\n%s", asideSecond)
+	_, err = os.Stat(filepath.Join(f.cfg.Tools.WorkspaceDir, "x.txt"))
+	require.Error(t, err, "the side question wrote a file")
+	after, _ := os.ReadFile(logPath)
+	require.Equal(t, string(before), string(after), "the saved event log changed:\n%s", after)
+	got := f.eng.Usage("s").Calls
+	require.Equal(t, usage+2, got, "usage calls %d, want %d", got, usage+2)
 
-	if _, err := collect(t, f.eng, "s", "carry on"); err != nil {
-		t.Fatal(err)
-	}
+	_, err = collect(t, f.eng, "s", "carry on")
+	require.NoError(t, err)
 	f.llm.mu.Lock()
 	next := requestText(f.llm.Requests[3])
 	f.llm.mu.Unlock()
-	if !strings.Contains(next, "remember pineapple") || strings.Contains(next, "btw") || strings.Contains(next, "the word was") {
-		t.Fatalf("the next turn saw the side question:\n%s", next)
-	}
+	require.Contains(t, next, "remember pineapple", "the next turn saw the side question:\n%s", next)
+	require.NotContains(t, next, "btw", "the next turn saw the side question:\n%s", next)
+	require.NotContains(t, next, "the word was", "the next turn saw the side question:\n%s", next)
 }
 
 // With no turns yet, a side question still works (on an empty history).
 func TestAsideOnANewSession(t *testing.T) {
 	f := newEngineWith(t, fixtureOpts{}, textContent("hello"))
-	if err := f.eng.Aside(context.Background(), "fresh", "hi?", func(*session.Event) error { return nil }); err != nil {
-		t.Fatal(err)
-	}
-	if f.llm.Calls() != 1 {
-		t.Fatalf("%d calls", f.llm.Calls())
-	}
+	require.NoError(t, f.eng.Aside(context.Background(), "fresh", "hi?", func(*session.Event) error { return nil }))
+	require.Equal(t, 1, f.llm.Calls(), "%d calls", f.llm.Calls())
 }

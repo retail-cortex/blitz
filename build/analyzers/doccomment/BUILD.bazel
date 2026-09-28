@@ -31,6 +31,8 @@ go_test(
     data = glob(["testdata/**"]),
     deps = [
         ":doccomment",
+        "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//require",
         "@org_golang_x_tools//go/analysis",
     ],
 )

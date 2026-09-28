@@ -16,70 +16,57 @@ package tools
 
 import (
 	"context"
-	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/retail-cortex/blitz/pkg/api"
-
 	"github.com/retail-cortex/blitz/pkg/config"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestApprovalRemembering(t *testing.T) {
 	ctx := context.Background()
 	store, err := OpenApprovalStore(filepath.Join(t.TempDir(), "approvals.json"))
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	h, reqs := decisionHooks(api.DecisionSession)
 	h.SetStore(store)
 	req := api.ApprovalRequest{Tool: "run_shell_command", Kind: api.ActionCommand, Key: "cmd:ls", KeyLabel: "this exact command"}
 
 	// Session: asked once, then remembered for the same key only.
 	for i := 0; i < 3; i++ {
-		if err := h.Approve(ctx, req); err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, h.Approve(ctx, req))
 	}
-	if len(*reqs) != 1 {
-		t.Errorf("expected 1 prompt for repeated session-approved action, got %d", len(*reqs))
-	}
+	assert.Len(t, *reqs, 1, "expected 1 prompt for repeated session-approved action, got %d", len(*reqs))
 	other := req
 	other.Key = "cmd:ls -la"
 	h.Approve(ctx, other)
-	if len(*reqs) != 2 {
-		t.Error("session approval leaked to a different key")
-	}
-	if store.Has("cmd:ls") {
-		t.Error("session decision must not be persisted")
-	}
-	if !h.RevokeSession("cmd:ls") || h.RevokeSession("cmd:ls") {
-		t.Error("RevokeSession should remove the rule once")
-	}
+	assert.Len(t, *reqs, 2, "session approval leaked to a different key")
+	assert.False(t, store.Has("cmd:ls"), "session decision must not be persisted")
+	assert.True(t, h.RevokeSession("cmd:ls"), "RevokeSession should remove the rule once")
+	assert.False(t, h.RevokeSession("cmd:ls"), "RevokeSession should remove the rule once")
 
 	// Always: persisted and honoured by a fresh Hooks with the same store file.
 	always, _ := decisionHooks(api.DecisionAlways)
 	always.SetStore(store)
-	if err := always.Approve(ctx, api.ApprovalRequest{Tool: "t", Kind: api.ActionWrite, Key: "write:/ws"}); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, always.Approve(ctx, api.ApprovalRequest{Tool: "t", Kind: api.ActionWrite, Key: "write:/ws"}))
 	reloaded, err := OpenApprovalStore(store.path)
-	if err != nil || !reloaded.Has("write:/ws") {
-		t.Fatalf("always rule not persisted: %v", err)
-	}
+	require.NoError(t, err, "always rule not persisted")
+	require.True(t, reloaded.Has("write:/ws"), "always rule not persisted: %v", err)
 	fresh, freshReqs := approverHooks(false)
 	fresh.SetStore(reloaded)
-	if err := fresh.Approve(ctx, api.ApprovalRequest{Tool: "t", Kind: api.ActionWrite, Key: "write:/ws"}); err != nil || len(*freshReqs) != 0 {
-		t.Errorf("saved rule not applied without prompting: %v prompts=%d", err, len(*freshReqs))
-	}
-	if info, _ := os.Stat(store.path); info.Mode().Perm() != 0o600 {
-		t.Errorf("approvals file mode %v", info.Mode().Perm())
-	}
-	if ok, err := reloaded.Remove("write:/ws"); !ok || err != nil || reloaded.Has("write:/ws") {
-		t.Error("Remove failed")
-	}
+	err = fresh.Approve(ctx, api.ApprovalRequest{Tool: "t", Kind: api.ActionWrite, Key: "write:/ws"})
+	assert.NoError(t, err, "saved rule not applied without prompting: %v prompts=%d", err, len(*freshReqs))
+	assert.Len(t, *freshReqs, 0, "saved rule not applied without prompting: %v prompts=%d", err, len(*freshReqs))
+	info, _ := os.Stat(store.path)
+	assert.Equal(t, fs.FileMode(0o600), info.Mode().Perm(), "approvals file mode %v", info.Mode().Perm())
+	ok, err := reloaded.Remove("write:/ws")
+	assert.True(t, ok, "Remove failed")
+	assert.NoError(t, err, "Remove failed")
+	assert.False(t, reloaded.Has("write:/ws"), "Remove failed")
 
 	// Negative: unkeyed requests can't be remembered; each one prompts.
 	empty, _ := OpenApprovalStore(filepath.Join(t.TempDir(), "empty.json"))
@@ -88,16 +75,14 @@ func TestApprovalRemembering(t *testing.T) {
 	for i := 0; i < 2; i++ {
 		h2.Approve(ctx, api.ApprovalRequest{Tool: "t", Kind: api.ActionWrite})
 	}
-	if len(*reqs2) != 2 || len(empty.Rules()) != 0 {
-		t.Errorf("unkeyed approvals should not be remembered: prompts=%d rules=%v", len(*reqs2), empty.Rules())
-	}
+	assert.Len(t, *reqs2, 2, "unkeyed approvals should not be remembered: prompts=%d rules=%v", len(*reqs2), empty.Rules())
+	assert.Len(t, empty.Rules(), 0, "unkeyed approvals should not be remembered: prompts=%d rules=%v", len(*reqs2), empty.Rules())
 
 	// Negative: corrupt store file.
 	bad := filepath.Join(t.TempDir(), "bad.json")
 	os.WriteFile(bad, []byte("{nope"), 0o600)
-	if _, err := OpenApprovalStore(bad); err == nil {
-		t.Error("expected error for corrupt approvals file")
-	}
+	_, err = OpenApprovalStore(bad)
+	assert.Error(t, err, "expected error for corrupt approvals file")
 }
 
 func TestSavedCommandRuleCannotBypassDeny(t *testing.T) {
@@ -108,12 +93,9 @@ func TestSavedCommandRuleCannotBypassDeny(t *testing.T) {
 	h.SetStore(store)
 	policy := mustPolicy(t, CommandPolicyConfig{Deny: []string{"touch *"}})
 	out := runShellCommand(context.Background(), ShellConfig{Workspace: ws, Hooks: h, Policy: policy}, RunShellCommandInput{Command: "touch x"})
-	if !strings.Contains(out.Error, "blocked") {
-		t.Errorf("saved rule bypassed deny: %+v", out)
-	}
-	if _, err := os.Stat(filepath.Join(dir, "x")); err == nil {
-		t.Error("denied command ran")
-	}
+	assert.Contains(t, out.Error, "blocked", "saved rule bypassed deny: %+v", out)
+	_, err := os.Stat(filepath.Join(dir, "x"))
+	assert.Error(t, err, "denied command ran")
 }
 
 func TestWriteToolsSendDiffAndKey(t *testing.T) {
@@ -123,19 +105,15 @@ func TestWriteToolsSendDiffAndKey(t *testing.T) {
 	runTool(t, toolOf(t)(NewReplaceInFileTool(ws, h)), map[string]any{"path": "a.txt", "target_content": "two", "replacement_content": "TWO"})
 	runTool(t, toolOf(t)(NewCreateFileTool(ws, h)), map[string]any{"path": "b.txt", "content": "new\n"})
 	runTool(t, toolOf(t)(NewDeleteFileTool(ws, h)), map[string]any{"path": "b.txt"})
-	if len(*reqs) != 3 {
-		t.Fatalf("expected 3 approvals, got %d", len(*reqs))
-	}
+	require.Len(t, *reqs, 3, "expected 3 approvals, got %d", len(*reqs))
 	r := *reqs
-	if !strings.Contains(r[0].Diff, "-two") || !strings.Contains(r[0].Diff, "+TWO") || r[0].Key != "write:"+ws.Dir() {
-		t.Errorf("replace approval: diff=%q key=%q", r[0].Diff, r[0].Key)
-	}
-	if !strings.Contains(r[1].Diff, "/dev/null") || !strings.Contains(r[1].Diff, "+new") {
-		t.Errorf("create approval diff: %q", r[1].Diff)
-	}
-	if !strings.Contains(r[2].Diff, "-new") || r[2].Key != "delete:"+ws.Dir() {
-		t.Errorf("delete approval: diff=%q key=%q", r[2].Diff, r[2].Key)
-	}
+	assert.Contains(t, r[0].Diff, "-two", "replace approval: diff=%q key=%q", r[0].Diff, r[0].Key)
+	assert.Contains(t, r[0].Diff, "+TWO", "replace approval: diff=%q key=%q", r[0].Diff, r[0].Key)
+	assert.Equal(t, "write:"+ws.Dir(), r[0].Key, "replace approval: diff=%q key=%q", r[0].Diff, r[0].Key)
+	assert.Contains(t, r[1].Diff, "/dev/null", "create approval diff: %q", r[1].Diff)
+	assert.Contains(t, r[1].Diff, "+new", "create approval diff: %q", r[1].Diff)
+	assert.Contains(t, r[2].Diff, "-new", "delete approval: diff=%q key=%q", r[2].Diff, r[2].Key)
+	assert.Equal(t, "delete:"+ws.Dir(), r[2].Key, "delete approval: diff=%q key=%q", r[2].Diff, r[2].Key)
 }
 
 func TestCheckpointUndo(t *testing.T) {
@@ -152,41 +130,32 @@ func TestCheckpointUndo(t *testing.T) {
 	cp.Begin("turn 2")
 	ws.RemoveFile("new.txt")
 
-	if l := cp.List(); len(l) != 2 || l[0].Label != "turn 2" || len(l[1].Files) != 2 {
-		t.Fatalf("unexpected checkpoints %+v", l)
-	}
-	if d := cp.SessionDiff(""); !strings.Contains(d, "-v1") || !strings.Contains(d, "+v3") {
-		t.Errorf("session diff missing change:\n%s", d)
-	}
+	l := cp.List()
+	require.Len(t, l, 2, "unexpected checkpoints %+v", l)
+	require.Equal(t, "turn 2", l[0].Label, "unexpected checkpoints %+v", l)
+	require.Len(t, l[1].Files, 2, "unexpected checkpoints %+v", l)
+	d := cp.SessionDiff("")
+	assert.Contains(t, d, "-v1", "session diff missing change:\n%s", d)
+	assert.Contains(t, d, "+v3", "session diff missing change:\n%s", d)
 
 	// Undo turn 2: deleted file comes back.
-	if _, err := cp.Undo(false); err != nil {
-		t.Fatal(err)
-	}
-	if b, _ := os.ReadFile(filepath.Join(dir, "new.txt")); string(b) != "n\n" {
-		t.Errorf("deleted file not restored: %q", b)
-	}
+	_, err := cp.Undo(false)
+	require.NoError(t, err)
+	b, _ := os.ReadFile(filepath.Join(dir, "new.txt"))
+	assert.Equal(t, "n\n", string(b), "deleted file not restored: %q", b)
 	// Undo turn 1: original content and mode restored, created file removed.
 	res, err := cp.Undo(false)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if b, _ := os.ReadFile(path); string(b) != "v1\n" {
-		t.Errorf("content not restored: %q", b)
-	}
-	if info, _ := os.Stat(path); info.Mode().Perm() != 0o755 {
-		t.Errorf("mode not restored: %v", info.Mode().Perm())
-	}
-	if _, err := os.Stat(filepath.Join(dir, "new.txt")); !os.IsNotExist(err) {
-		t.Error("created file not removed by undo")
-	}
-	if len(res.Restored) != 2 {
-		t.Errorf("restored %v", res.Restored)
-	}
+	require.NoError(t, err)
+	b, _ = os.ReadFile(path)
+	assert.Equal(t, "v1\n", string(b), "content not restored: %q", b)
+	info, _ := os.Stat(path)
+	assert.Equal(t, fs.FileMode(0o755), info.Mode().Perm(), "mode not restored: %v", info.Mode().Perm())
+	_, err = os.Stat(filepath.Join(dir, "new.txt"))
+	assert.ErrorIs(t, err, fs.ErrNotExist, "created file not removed by undo")
+	assert.Len(t, res.Restored, 2, "restored %v", res.Restored)
 	// Negative: nothing left.
-	if _, err := cp.Undo(false); err == nil {
-		t.Error("expected nothing to undo")
-	}
+	_, err = cp.Undo(false)
+	assert.Error(t, err, "expected nothing to undo")
 }
 
 func TestCheckpointUndoConflict(t *testing.T) {
@@ -198,18 +167,14 @@ func TestCheckpointUndoConflict(t *testing.T) {
 	ws.WriteFileAtomic("f.txt", []byte("tool edit\n"))
 	os.WriteFile(path, []byte("user edit after\n"), 0o644) // changed outside the tools
 
-	if _, err := cp.Undo(false); !errors.Is(err, api.ErrUndoConflict) {
-		t.Fatalf("expected conflict, got %v", err)
-	}
-	if b, _ := os.ReadFile(path); string(b) != "user edit after\n" {
-		t.Error("conflicting undo modified the file")
-	}
-	if _, err := cp.Undo(true); err != nil {
-		t.Fatalf("forced undo: %v", err)
-	}
-	if b, _ := os.ReadFile(path); string(b) != "orig\n" {
-		t.Errorf("forced undo did not restore: %q", b)
-	}
+	_, err := cp.Undo(false)
+	require.ErrorIs(t, err, api.ErrUndoConflict, "expected conflict, got %v", err)
+	b, _ := os.ReadFile(path)
+	assert.Equal(t, "user edit after\n", string(b), "conflicting undo modified the file")
+	_, err = cp.Undo(true)
+	require.NoError(t, err, "forced undo")
+	b, _ = os.ReadFile(path)
+	assert.Equal(t, "orig\n", string(b), "forced undo did not restore: %q", b)
 }
 
 func TestCheckpointFailedWriteNotRecorded(t *testing.T) {
@@ -217,21 +182,14 @@ func TestCheckpointFailedWriteNotRecorded(t *testing.T) {
 	cp := NewCheckpoints(ws, 0)
 	os.Mkdir(filepath.Join(dir, "adir"), 0o755)
 	cp.Begin("t")
-	if err := ws.WriteFileAtomic("adir", []byte("x")); err == nil {
-		t.Fatal("expected write over directory to fail")
-	}
-	if err := ws.CreateExclusive("adir", []byte("x")); err == nil {
-		t.Fatal("expected create over directory to fail")
-	}
-	if l := cp.List(); len(l) != 0 {
-		t.Errorf("failed writes were recorded: %+v", l)
-	}
-	if _, err := cp.Undo(false); err == nil {
-		t.Error("undo should have nothing to do")
-	}
-	if _, err := os.Stat(filepath.Join(dir, "adir")); err != nil {
-		t.Error("directory was removed")
-	}
+	require.Error(t, ws.WriteFileAtomic("adir", []byte("x")), "expected write over directory to fail")
+	require.Error(t, ws.CreateExclusive("adir", []byte("x")), "expected create over directory to fail")
+	l := cp.List()
+	assert.Len(t, l, 0, "failed writes were recorded: %+v", l)
+	_, err := cp.Undo(false)
+	assert.Error(t, err, "undo should have nothing to do")
+	_, err = os.Stat(filepath.Join(dir, "adir"))
+	assert.NoError(t, err, "directory was removed")
 }
 
 func TestCheckpointMemoryBudget(t *testing.T) {
@@ -243,12 +201,9 @@ func TestCheckpointMemoryBudget(t *testing.T) {
 		ws.WriteFileAtomic(name, []byte{byte('0' + i)})
 	}
 	l := cp.List()
-	if len(l) == 0 || len(l) == 3 {
-		t.Errorf("expected oldest turns dropped to fit budget, have %d", len(l))
-	}
-	if l[0].Label != "c" {
-		t.Error("most recent turn must be kept")
-	}
+	assert.NotEqual(t, 0, len(l), "expected oldest turns dropped to fit budget, have %d", len(l))
+	assert.NotEqual(t, 3, len(l), "expected oldest turns dropped to fit budget, have %d", len(l))
+	assert.Equal(t, "c", l[0].Label, "most recent turn must be kept")
 }
 
 func TestCommandApprovalScopedToWorkspace(t *testing.T) {
@@ -263,15 +218,14 @@ func TestCommandApprovalScopedToWorkspace(t *testing.T) {
 	h, reqs := approverHooks(false)
 	h.SetStore(store)
 	out := runShellCommand(context.Background(), ShellConfig{Workspace: wsB, Hooks: h}, RunShellCommandInput{Command: "true"})
-	if len(*reqs) != 1 || !strings.Contains(out.Error, "not approved") {
-		t.Errorf("saved rule leaked across workspaces: prompts=%d out=%+v", len(*reqs), out)
-	}
+	assert.Len(t, *reqs, 1, "saved rule leaked across workspaces: prompts=%d out=%+v", len(*reqs), out)
+	assert.Contains(t, out.Error, "not approved", "saved rule leaked across workspaces: prompts=%d out=%+v", len(*reqs), out)
 	// Same workspace: remembered.
 	h2, reqs2 := approverHooks(false)
 	h2.SetStore(store)
-	if out := runShellCommand(context.Background(), ShellConfig{Workspace: wsA, Hooks: h2}, RunShellCommandInput{Command: "true"}); out.Error != "" || len(*reqs2) != 0 {
-		t.Errorf("saved rule not applied in its workspace: %+v", out)
-	}
+	out = runShellCommand(context.Background(), ShellConfig{Workspace: wsA, Hooks: h2}, RunShellCommandInput{Command: "true"})
+	assert.Equal(t, "", out.Error, "saved rule not applied in its workspace: %+v", out)
+	assert.Len(t, *reqs2, 0, "saved rule not applied in its workspace: %+v", out)
 }
 
 func TestHooksRunOutsideSandbox(t *testing.T) {
@@ -281,13 +235,10 @@ func TestHooksRunOutsideSandbox(t *testing.T) {
 	outside := filepath.Join(t.TempDir(), "hook-log.txt") // not writable by sandboxed commands
 	cfg.Hooks.PostTool = []config.HookConfig{{Command: "echo logged >> " + outside}}
 	reg, err := NewRegistry(cfg, nil, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	defer reg.Close()
 	reg.ScriptHooks().PostTool(context.Background(), "s", "grep", nil, nil, nil)
 	reg.ScriptHooks().flush(context.Background()) // post_tool hooks run in the background
-	if b, _ := os.ReadFile(outside); !strings.Contains(string(b), "logged") {
-		t.Error("hook could not write outside the workspace; hooks should not be sandboxed")
-	}
+	b, _ := os.ReadFile(outside)
+	assert.Contains(t, string(b), "logged", "hook could not write outside the workspace; hooks should not be sandboxed")
 }

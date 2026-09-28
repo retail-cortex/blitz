@@ -16,8 +16,9 @@ package tui
 
 import (
 	"context"
-	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestPermissionsCommand(t *testing.T) {
@@ -31,8 +32,6 @@ func TestPermissionsCommand(t *testing.T) {
 		"Removed shell(git push *)",
 		"No rule shell(nope)",
 	} {
-		if !strings.Contains(out, want) {
-			t.Errorf("missing %q in:\n%s", want, out)
-		}
+		assert.Contains(t, out, want, "missing %q in:\n%s", want, out)
 	}
 }

@@ -17,6 +17,8 @@ package redact
 import (
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestRedactPatterns(t *testing.T) {
@@ -33,19 +35,16 @@ func TestRedactPatterns(t *testing.T) {
 	}
 	for _, s := range secrets {
 		out := r.String("value: " + s + " end")
-		if strings.Contains(out, s) || !strings.Contains(out, mask) {
-			t.Errorf("secret not masked: %q -> %q", s, out)
-		}
+		assert.NotContains(t, out, s, "secret not masked: %q -> %q", s, out)
+		assert.Contains(t, out, mask, "secret not masked: %q -> %q", s, out)
 	}
 	// Assignment style keeps the key, masks the value.
-	if got := r.String(`export DB_PASSWORD="hunter2secret"`); got != `export DB_PASSWORD="`+mask+`"` {
-		t.Errorf("assignment masking = %q", got)
-	}
+	got := r.String(`export DB_PASSWORD="hunter2secret"`)
+	assert.Equal(t, `export DB_PASSWORD="`+mask+`"`, got, "assignment masking = %q", got)
 	// Negative: ordinary text is untouched.
 	for _, s := range []string{"go test ./...", "the token count is 12", "password=", "sk-short", ""} {
-		if got := r.String(s); got != s {
-			t.Errorf("false positive: %q -> %q", s, got)
-		}
+		got := r.String(s)
+		assert.Equal(t, s, got, "false positive: %q -> %q", s, got)
 	}
 }
 
@@ -56,19 +55,15 @@ func TestRedactValuesAndEnv(t *testing.T) {
 
 	in := "a custom-secret-value-123 b another-literal-secret c abc"
 	out := r.String(in)
-	if strings.Contains(out, "custom-secret-value-123") || strings.Contains(out, "another-literal-secret") {
-		t.Errorf("literal secrets leaked: %q", out)
-	}
-	if !strings.HasSuffix(out, " abc") {
-		t.Errorf("short value should not be redacted: %q", out)
-	}
+	assert.NotContains(t, out, "custom-secret-value-123", "literal secrets leaked: %q", out)
+	assert.NotContains(t, out, "another-literal-secret", "literal secrets leaked: %q", out)
+	assert.True(t, strings.HasSuffix(out, " abc"), "short value should not be redacted: %q", out)
 
 	nested := r.Value(map[string]any{"cmd": "curl -H custom-secret-value-123", "n": 3, "list": []any{"x", "another-literal-secret"}}).(map[string]any)
-	if strings.Contains(nested["cmd"].(string), "custom-secret") || nested["n"] != 3 || nested["list"].([]any)[1] != mask {
-		t.Errorf("nested redaction failed: %v", nested)
-	}
+	assert.NotContains(t, nested["cmd"].(string), "custom-secret", "nested redaction failed: %v", nested)
+	assert.Equal(t, 3, nested["n"], "nested redaction failed: %v", nested)
+	assert.Equal(t, mask, nested["list"].([]any)[1], "nested redaction failed: %v", nested)
 	var nilR *Redactor
-	if got := nilR.String("key sk-proj-abcdefghijklmnopqrstuvwxyz123456"); strings.Contains(got, "sk-proj") {
-		t.Error("nil redactor should still apply built-in patterns")
-	}
+	got := nilR.String("key sk-proj-abcdefghijklmnopqrstuvwxyz123456")
+	assert.NotContains(t, got, "sk-proj", "nil redactor should still apply built-in patterns")
 }

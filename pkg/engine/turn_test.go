@@ -16,15 +16,14 @@ package engine
 
 import (
 	"context"
-	"errors"
-	"slices"
 	"strings"
 	"testing"
 
 	"github.com/retail-cortex/blitz/pkg/api"
-
 	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/engine/runtime"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/adk/v2/model"
 	adksession "google.golang.org/adk/v2/session"
 	"google.golang.org/genai"
@@ -38,9 +37,7 @@ func ignore(api.Event) {}
 func transcript(t *testing.T, w *Workspace) []string {
 	t.Helper()
 	s, ok := w.ActiveSession()
-	if !ok {
-		t.Fatal("no active session")
-	}
+	require.True(t, ok, "no active session")
 	var out []string
 	for _, m := range s.Messages {
 		out = append(out, m.Role+": "+m.Text)
@@ -51,9 +48,7 @@ func transcript(t *testing.T, w *Workspace) []string {
 func newSession(t *testing.T, w *Workspace) api.SessionInfo {
 	t.Helper()
 	s, _, err := w.OpenSession("", false)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	return s
 }
 
@@ -65,37 +60,29 @@ func TestRunRecordsBothSidesAndOmitsThoughts(t *testing.T) {
 	var seen int
 	res, err := w.Run(context.Background(), sid, api.Turn{Text: "hi", OnAccepted: func() { accepted++ }},
 		func(api.Event) { seen++ })
-	if err != nil {
-		t.Fatal(err)
-	}
-	if res.Output != "hello there" || accepted != 1 || seen == 0 || llm.Calls() != 1 {
-		t.Errorf("output %q, accepted %d, events %d, calls %d", res.Output, accepted, seen, llm.Calls())
-	}
-	if got := transcript(t, w); !slices.Equal(got, []string{"user: hi", "model: hello there"}) {
-		t.Errorf("transcript %q", got)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, "hello there", res.Output, "output %q, accepted %d, events %d, calls %d", res.Output, accepted, seen, llm.Calls())
+	assert.Equal(t, 1, accepted, "output %q, accepted %d, events %d, calls %d", res.Output, accepted, seen, llm.Calls())
+	assert.NotEqual(t, 0, seen, "output %q, accepted %d, events %d, calls %d", res.Output, accepted, seen, llm.Calls())
+	assert.Equal(t, 1, llm.Calls(), "output %q, accepted %d, events %d, calls %d", res.Output, accepted, seen, llm.Calls())
+	got := transcript(t, w)
+	assert.Equal(t, []string{"user: hi", "model: hello there"}, got, "transcript %q", got)
 }
 
 func TestRunPlanPromptOverrideAndAside(t *testing.T) {
 	w, llm := openTestWith(t, nil, text("a plan"), text("searched"), text("an aside"))
 	sid := newSession(t, w).ID
 	ctx := context.Background()
-	if _, err := w.Run(ctx, sid, api.Turn{Text: "add a flag", Plan: true}, ignore); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := w.Run(ctx, sid, api.Turn{Text: "/search web go", Prompt: "results: …", ReadOnly: "search"}, ignore); err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(lastUserText(llm), "results: …") {
-		t.Errorf("Prompt not sent: %q", lastUserText(llm))
-	}
-	if _, err := w.Run(ctx, sid, api.Turn{Text: "what's a flag?", Aside: true}, ignore); err != nil {
-		t.Fatal(err)
-	}
+	_, err := w.Run(ctx, sid, api.Turn{Text: "add a flag", Plan: true}, ignore)
+	require.NoError(t, err)
+	_, err = w.Run(ctx, sid, api.Turn{Text: "/search web go", Prompt: "results: …", ReadOnly: "search"}, ignore)
+	require.NoError(t, err)
+	assert.Contains(t, lastUserText(llm), "results: …", "Prompt not sent: %q", lastUserText(llm))
+	_, err = w.Run(ctx, sid, api.Turn{Text: "what's a flag?", Aside: true}, ignore)
+	require.NoError(t, err)
 	want := []string{"user: /plan add a flag", "model: a plan", "user: /search web go", "model: searched"} // asides are recorded nowhere
-	if got := transcript(t, w); !slices.Equal(got, want) {
-		t.Errorf("transcript %q, want %q", got, want)
-	}
+	got := transcript(t, w)
+	assert.Equal(t, want, got, "transcript %q, want %q", got, want)
 }
 
 func TestRunAcceptedSkipsHooksAndRecording(t *testing.T) {
@@ -103,12 +90,10 @@ func TestRunAcceptedSkipsHooksAndRecording(t *testing.T) {
 		c.Hooks.PromptSubmit = []config.HookConfig{{Command: `echo "nope" >&2; exit 2`}}
 	}, text("ok"))
 	sid := newSession(t, w).ID
-	if _, err := w.Run(context.Background(), sid, api.Turn{Text: "late steer", Accepted: true}, ignore); err != nil {
-		t.Fatal(err)
-	}
-	if got := transcript(t, w); !slices.Equal(got, []string{"model: ok"}) {
-		t.Errorf("transcript %q", got)
-	}
+	_, err := w.Run(context.Background(), sid, api.Turn{Text: "late steer", Accepted: true}, ignore)
+	require.NoError(t, err)
+	got := transcript(t, w)
+	assert.Equal(t, []string{"model: ok"}, got, "transcript %q", got)
 }
 
 func TestRunAndSteerBlockedByHook(t *testing.T) {
@@ -119,15 +104,14 @@ func TestRunAndSteerBlockedByHook(t *testing.T) {
 	accepted := false
 	_, err := w.Run(context.Background(), sid, api.Turn{Text: "my password", OnAccepted: func() { accepted = true }}, ignore)
 	var blocked *api.BlockedError
-	if !errors.As(err, &blocked) || !strings.Contains(blocked.Reason, "no secrets") || accepted || llm.Calls() != 0 {
-		t.Errorf("err %v, accepted %v, calls %d", err, accepted, llm.Calls())
-	}
-	if err := w.Steer(context.Background(), sid, "my password"); !errors.As(err, &blocked) {
-		t.Errorf("steer: %v", err)
-	}
-	if got := transcript(t, w); len(got) != 0 {
-		t.Errorf("a blocked prompt was recorded: %q", got)
-	}
+	assert.ErrorAs(t, err, &blocked, "err %v, accepted %v, calls %d", err, accepted, llm.Calls())
+	assert.Contains(t, blocked.Reason, "no secrets", "err %v, accepted %v, calls %d", err, accepted, llm.Calls())
+	assert.False(t, accepted, "err %v, accepted %v, calls %d", err, accepted, llm.Calls())
+	assert.Equal(t, 0, llm.Calls(), "err %v, accepted %v, calls %d", err, accepted, llm.Calls())
+	err = w.Steer(context.Background(), sid, "my password")
+	assert.ErrorAs(t, err, &blocked, "steer: %v", err)
+	got := transcript(t, w)
+	assert.Len(t, got, 0, "a blocked prompt was recorded: %q", got)
 }
 
 func TestSteerRecordsAndUnreadSteersAreLeftOver(t *testing.T) {
@@ -137,19 +121,12 @@ func TestSteerRecordsAndUnreadSteersAreLeftOver(t *testing.T) {
 	// A message sent as the agent stops (the front end was still taking it)
 	// must still come back as unread.
 	res, err := w.Run(ctx, sid, api.Turn{Text: "go", OnFinished: func() {
-		if err := w.Steer(ctx, sid, "also do this"); err != nil {
-			t.Error(err)
-		}
+		assert.NoError(t, w.Steer(ctx, sid, "also do this"))
 	}}, ignore)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !slices.Equal(res.Leftover, []string{"also do this"}) {
-		t.Errorf("leftover %q", res.Leftover)
-	}
-	if got := transcript(t, w); !slices.Equal(got, []string{"user: go", "user: also do this", "model: done"}) {
-		t.Errorf("transcript %q", got)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, []string{"also do this"}, res.Leftover, "leftover %q", res.Leftover)
+	got := transcript(t, w)
+	assert.Equal(t, []string{"user: go", "user: also do this", "model: done"}, got, "transcript %q", got)
 }
 
 // lastUserText is the text of the last user message the model was sent.
@@ -184,24 +161,19 @@ func TestRelayMarksRepeatedText(t *testing.T) {
 	r.handle(adkText("Hello", false, false))  // repeats the chunks
 	r.handle(adkText(" again", false, false)) // not streamed
 	r.handle(&adksession.Event{})             // no content
-	if len(got) != 5 {
-		t.Fatalf("got %d events", len(got))
-	}
+	require.Len(t, got, 5, "got %d events", len(got))
 	var shown strings.Builder
 	for _, e := range got {
-		if e.Author != "blitz" || e.Text == nil {
-			t.Fatalf("event %+v", e)
-		}
+		require.Equal(t, "blitz", e.Author, "event %+v", e)
+		require.NotNil(t, e.Text, "event %+v", e)
 		if !e.Text.Thought && (e.Text.Partial || !e.Text.Repeat) {
 			shown.WriteString(e.Text.Text)
 		}
 	}
-	if shown.String() != "Hello again" || !got[3].Text.Repeat || got[4].Text.Repeat {
-		t.Errorf("shown %q, events %+v", shown.String(), got)
-	}
-	if r.output.String() != "Hello again" {
-		t.Errorf("transcript text %q", r.output.String())
-	}
+	assert.Equal(t, "Hello again", shown.String(), "shown %q, events %+v", shown.String(), got)
+	assert.True(t, got[3].Text.Repeat, "shown %q, events %+v", shown.String(), got)
+	assert.False(t, got[4].Text.Repeat, "shown %q, events %+v", shown.String(), got)
+	assert.Equal(t, "Hello again", r.output.String(), "transcript text %q", r.output.String())
 }
 
 // A front end may take steer messages as soon as the prompt is accepted;
@@ -211,14 +183,11 @@ func TestPromptIsRecordedBeforeSteering(t *testing.T) {
 	sid := newSession(t, w).ID
 	ctx := context.Background()
 	_, err := w.Run(ctx, sid, api.Turn{Text: "reformat", OnAccepted: func() {
-		if err := w.Steer(ctx, sid, "use tabs"); err != nil {
-			t.Error(err)
-		}
+		assert.NoError(t, w.Steer(ctx, sid, "use tabs"))
 	}}, ignore)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got := transcript(t, w); len(got) < 2 || got[0] != "user: reformat" || got[1] != "user: use tabs" {
-		t.Errorf("transcript %q", got)
-	}
+	require.NoError(t, err)
+	got := transcript(t, w)
+	assert.GreaterOrEqual(t, len(got), 2, "transcript %q", got)
+	assert.Equal(t, "user: reformat", got[0], "transcript %q", got)
+	assert.Equal(t, "user: use tabs", got[1], "transcript %q", got)
 }

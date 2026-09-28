@@ -35,7 +35,11 @@ go_test(
     name = "i18n_test",
     srcs = ["i18n_test.go"],
     embed = [":i18n"],
-    deps = ["@org_golang_x_text//language"],
+    deps = [
+        "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//require",
+        "@org_golang_x_text//language",
+    ],
 )
 
 # The catalogs, which the desktop page reads too.

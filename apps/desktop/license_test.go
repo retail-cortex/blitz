@@ -15,19 +15,19 @@
 package main
 
 import (
-	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 // The About view's texts are the embedded ones; others are refused.
 func TestLicense(t *testing.T) {
 	a := &App{}
 	for which, want := range map[string]string{"notice": "Retail Cortex", "full": "Apache License", "third-party": "THIRD-PARTY NOTICES"} {
-		if text, err := a.License(which); err != nil || !strings.Contains(text, want) {
-			t.Errorf("License(%q): %v, no %q", which, err, want)
-		}
+		text, err := a.License(which)
+		assert.NoError(t, err, "License(%q): %v, no %q", which, err, want)
+		assert.Contains(t, text, want, "License(%q): %v, no %q", which, err, want)
 	}
-	if _, err := a.License("bogus"); err == nil {
-		t.Error("bogus accepted")
-	}
+	_, err := a.License("bogus")
+	assert.Error(t, err, "bogus accepted")
 }

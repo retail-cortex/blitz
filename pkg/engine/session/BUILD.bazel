@@ -52,6 +52,8 @@ go_test(
     embed = [":session"],
     deps = [
         "//pkg/api",
+        "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//require",
         "@org_golang_google_adk_v2//model",
         "@org_golang_google_adk_v2//session",
         "@org_golang_google_genai//:genai",

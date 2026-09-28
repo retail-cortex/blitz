@@ -22,8 +22,9 @@ import (
 	"time"
 
 	"github.com/retail-cortex/blitz/pkg/api"
-
 	"github.com/retail-cortex/blitz/pkg/config"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestStoreStatesAndPersistence(t *testing.T) {
@@ -32,44 +33,33 @@ func TestStoreStatesAndPersistence(t *testing.T) {
 	w, _ := Load(dir)
 	path := filepath.Join(t.TempDir(), "workers.json")
 	s, err := OpenStore(path)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	ws := "/work"
-	if got := s.State(ws, w, nil); got != api.StateNew {
-		t.Errorf("new: %s", got)
-	}
-	if err := s.Enable(ws, w, "sha256:reviewed-something-else"); !errors.Is(err, api.ErrHashMismatch) {
-		t.Errorf("stale hash: %v", err)
-	}
-	if err := s.Enable(ws, w, w.Hash); err != nil {
-		t.Fatal(err)
-	}
-	if got := s.State(ws, w, nil); got != api.StateEnabled || len(s.Workspaces()) != 1 {
-		t.Errorf("enabled: %s %v", got, s.Workspaces())
-	}
+	got := s.State(ws, w, nil)
+	assert.Equal(t, api.StateNew, got, "new: %s", got)
+	err = s.Enable(ws, w, "sha256:reviewed-something-else")
+	assert.ErrorIs(t, err, api.ErrHashMismatch, "stale hash: %v", err)
+	require.NoError(t, s.Enable(ws, w, w.Hash))
+	got = s.State(ws, w, nil)
+	assert.Equal(t, api.StateEnabled, got, "enabled: %s %v", got, s.Workspaces())
+	assert.Len(t, s.Workspaces(), 1, "enabled: %s %v", got, s.Workspaces())
 
 	// Another process reads the same state.
 	again, _ := OpenStore(path)
-	if got := again.State(ws, w, nil); got != api.StateEnabled {
-		t.Errorf("reloaded: %s", got)
-	}
+	got = again.State(ws, w, nil)
+	assert.Equal(t, api.StateEnabled, got, "reloaded: %s", got)
 
 	// Editing the worker suspends it until re-enabled.
 	os.WriteFile(w.Path, []byte(valid+"\nAlso check tools.\n"), 0o644)
 	edited, _ := Load(dir)
-	if got := s.State(ws, edited, nil); got != api.StateChanged {
-		t.Errorf("edited: %s", got)
-	}
-	if err := s.Disable(ws, "deps"); err != nil {
-		t.Fatal(err)
-	}
-	if got := s.State(ws, edited, nil); got != api.StateDisabled || len(s.Workspaces()) != 0 {
-		t.Errorf("disabled: %s %v", got, s.Workspaces())
-	}
-	if got := s.State(ws, edited, errors.New("broken")); got != api.StateInvalid {
-		t.Errorf("invalid: %s", got)
-	}
+	got = s.State(ws, edited, nil)
+	assert.Equal(t, api.StateChanged, got, "edited: %s", got)
+	require.NoError(t, s.Disable(ws, "deps"))
+	got = s.State(ws, edited, nil)
+	assert.Equal(t, api.StateDisabled, got, "disabled: %s %v", got, s.Workspaces())
+	assert.Len(t, s.Workspaces(), 0, "disabled: %s %v", got, s.Workspaces())
+	got = s.State(ws, edited, errors.New("broken"))
+	assert.Equal(t, api.StateInvalid, got, "invalid: %s", got)
 }
 
 func TestApplyPolicy(t *testing.T) {
@@ -80,19 +70,14 @@ limits: { max_turns: 500, timeout: 5h }
 ---
 do it
 `))
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	p := config.DefaultConfig().Workers.Policy
 	p.Allow = []string{"shell", "write"}
 	eff := Apply(w, p)
-	if len(eff.Permissions) != 1 || eff.Permissions[0].Kind != "shell" {
-		t.Errorf("permissions %v", eff.Permissions)
-	}
-	if eff.Limits.MaxTurns != p.MaxTurns || eff.Limits.MaxCostUSD != p.DefaultMaxCostUSD || eff.Limits.Timeout != 2*time.Hour {
-		t.Errorf("limits %+v", eff.Limits)
-	}
-	if len(eff.Notes) != 3 {
-		t.Errorf("notes %q", eff.Notes)
-	}
+	assert.Len(t, eff.Permissions, 1, "permissions %v", eff.Permissions)
+	assert.Equal(t, "shell", eff.Permissions[0].Kind, "permissions %v", eff.Permissions)
+	assert.Equal(t, p.MaxTurns, eff.Limits.MaxTurns, "limits %+v", eff.Limits)
+	assert.Equal(t, p.DefaultMaxCostUSD, eff.Limits.MaxCostUSD, "limits %+v", eff.Limits)
+	assert.Equal(t, 2*time.Hour, eff.Limits.Timeout, "limits %+v", eff.Limits)
+	assert.Len(t, eff.Notes, 3, "notes %q", eff.Notes)
 }

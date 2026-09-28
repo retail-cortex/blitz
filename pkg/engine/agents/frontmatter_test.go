@@ -16,6 +16,9 @@ package agents
 
 import (
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestParseMarkdownSpec(t *testing.T) {
@@ -33,50 +36,33 @@ You are {puppy_name}, working for {owner_name}.
 `
 
 	spec, err := ParseMarkdownSpec([]byte(sample))
-	if err != nil {
-		t.Fatalf("ParseMarkdownSpec failed: %v", err)
-	}
+	require.NoError(t, err, "ParseMarkdownSpec failed")
 
-	if spec.Name != "test-agent" {
-		t.Errorf("expected 'test-agent', got '%s'", spec.Name)
-	}
-	if spec.DisplayName != "Test Agent 🤖" {
-		t.Errorf("expected 'Test Agent 🤖', got '%s'", spec.DisplayName)
-	}
-	if len(spec.Tools) != 2 || spec.Tools[0] != "read_file" {
-		t.Errorf("unexpected tools: %v", spec.Tools)
-	}
+	assert.Equal(t, "test-agent", spec.Name, "expected 'test-agent', got '%s'", spec.Name)
+	assert.Equal(t, "Test Agent 🤖", spec.DisplayName, "expected 'Test Agent 🤖', got '%s'", spec.DisplayName)
+	assert.Len(t, spec.Tools, 2, "unexpected tools: %v", spec.Tools)
+	assert.Equal(t, "read_file", spec.Tools[0], "unexpected tools: %v", spec.Tools)
 
 	interpolated := spec.InterpolatePrompt("extreme")
-	if !contains(interpolated, "EXTREME agency") {
-		t.Errorf("expected extreme agency instructions, got: %s", interpolated)
-	}
+	assert.True(t, contains(interpolated, "EXTREME agency"), "expected extreme agency instructions, got: %s", interpolated)
 }
 
 func TestEmbeddedRegistry(t *testing.T) {
 	reg, err := NewRegistry()
-	if err != nil {
-		t.Fatalf("failed to create registry: %v", err)
-	}
+	require.NoError(t, err, "failed to create registry")
 
 	list := reg.List()
-	if len(list) < 7 {
-		t.Errorf("expected at least 7 embedded agents, got %d", len(list))
-	}
+	assert.GreaterOrEqual(t, len(list), 7, "expected at least 7 embedded agents, got %d", len(list))
 
 	puppy, ok := reg.Get("blitz")
-	if !ok || puppy == nil {
-		t.Fatalf("expected to find 'blitz' agent")
-	}
+	require.True(t, ok, "expected to find 'blitz' agent")
+	require.NotNil(t, puppy, "expected to find 'blitz' agent")
 
-	if puppy.DisplayName != "Blitz" {
-		t.Errorf("expected 'Blitz', got '%s'", puppy.DisplayName)
-	}
+	assert.Equal(t, "Blitz", puppy.DisplayName, "expected 'Blitz', got '%s'", puppy.DisplayName)
 
 	helios, ok := reg.Get("helios")
-	if !ok || helios == nil {
-		t.Fatalf("expected to find 'helios' agent")
-	}
+	require.True(t, ok, "expected to find 'helios' agent")
+	require.NotNil(t, helios, "expected to find 'helios' agent")
 }
 
 func contains(s, substr string) bool {

@@ -20,6 +20,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/genai"
 )
 
@@ -31,12 +33,9 @@ func TestInitWritesAndLoadsBlitzMD(t *testing.T) {
 	app, llm := newCommandApp(t, "/init\nhello\n/exit\n", write, genai.NewContentFromText("wrote BLITZ.md", genai.RoleModel), genai.NewContentFromText("hi", genai.RoleModel))
 	out := captureStdout(t, func() { RunREPL(context.Background(), app) })
 
-	if first := requestTextAt(llm, 0); !strings.Contains(first, "write BLITZ.md at the workspace root") {
-		t.Fatalf("the init prompt wasn't sent:\n%s", first)
-	}
-	if !strings.Contains(out, filepath.Join(local(app).Dir(), "BLITZ.md")) {
-		t.Errorf("memory wasn't reloaded after /init:\n%s", out)
-	}
+	first := requestTextAt(llm, 0)
+	require.Contains(t, first, "write BLITZ.md at the workspace root", "the init prompt wasn't sent:\n%s", first)
+	assert.Contains(t, out, filepath.Join(local(app).Dir(), "BLITZ.md"), "memory wasn't reloaded after /init:\n%s", out)
 	// Memory is part of the system instruction, not the conversation.
 	var system strings.Builder
 	if cfg := llm.Requests[2].Config; cfg != nil && cfg.SystemInstruction != nil {
@@ -44,17 +43,12 @@ func TestInitWritesAndLoadsBlitzMD(t *testing.T) {
 			system.WriteString(p.Text)
 		}
 	}
-	if !strings.Contains(system.String(), "Run tests with `make check`.") {
-		t.Errorf("the next prompt's instructions don't carry the new BLITZ.md")
-	}
-	if strings.Contains(requestTextAt(llm, 0), "Run tests with") {
-		t.Error("BLITZ.md was loaded before /init wrote it")
-	}
+	assert.Contains(t, system.String(), "Run tests with `make check`.", "the next prompt's instructions don't carry the new BLITZ.md")
+	assert.NotContains(t, requestTextAt(llm, 0), "Run tests with", "BLITZ.md was loaded before /init wrote it")
 	var recorded []string
 	for _, m := range local(app).Storage().Active().Messages {
 		recorded = append(recorded, m.Content)
 	}
-	if len(recorded) == 0 || recorded[0] != "/init" {
-		t.Errorf("transcript %q", recorded)
-	}
+	assert.NotEqual(t, 0, len(recorded), "transcript %q", recorded)
+	assert.Equal(t, "/init", recorded[0], "transcript %q", recorded)
 }

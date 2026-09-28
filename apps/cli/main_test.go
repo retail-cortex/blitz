@@ -19,16 +19,18 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/retail-cortex/blitz/pkg/api"
-
 	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/engine"
 	"github.com/retail-cortex/blitz/pkg/engine/runtime"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/genai"
 )
 
@@ -59,21 +61,15 @@ func TestResolvePrompt(t *testing.T) {
 	}
 	for _, c := range cases {
 		got, used, err := resolvePrompt(c.flag, c.args, c.tty, c.interactive, stdin(c.in))
-		if (err != nil) != c.wantErr {
-			t.Errorf("%s: err = %v", c.name, err)
-			continue
+		if !assert.Equal(t, c.wantErr, err != nil, "%s: err = %v", c.name, err) {
+		continue
 		}
-		if err == nil && got != c.want {
-			t.Errorf("%s: prompt = %q, want %q", c.name, got, c.want)
-		}
-		if err == nil && used != c.wantStdin {
-			t.Errorf("%s: stdinUsed = %v, want %v", c.name, used, c.wantStdin)
-		}
+		assert.False(t, err == nil && got != c.want, "%s: prompt = %q, want %q", c.name, got, c.want)
+		assert.False(t, err == nil && used != c.wantStdin, "%s: stdinUsed = %v, want %v", c.name, used, c.wantStdin)
 	}
 	// "-" with args: args frame the piped content.
-	if got, _, _ := resolvePrompt("-", []string{"summarize"}, true, false, stdin("body")); got != "summarize\n\nbody" {
-		t.Errorf("dash with args = %q", got)
-	}
+	got, _, _ := resolvePrompt("-", []string{"summarize"}, true, false, stdin("body"))
+	assert.Equal(t, "summarize\n\nbody", got, "dash with args = %q", got)
 }
 
 func TestExitCodes(t *testing.T) {
@@ -86,13 +82,10 @@ func TestExitCodes(t *testing.T) {
 		exitBlocked:     withCode(exitBlocked, errors.New("hook")),
 	}
 	for want, err := range cases {
-		if got := exitCodeFor(err); got != want {
-			t.Errorf("exitCodeFor(%v) = %d, want %d", err, got, want)
-		}
+		got := exitCodeFor(err)
+		assert.Equal(t, want, got, "exitCodeFor(%v) = %d, want %d", err, got, want)
 	}
-	if withCode(3, nil) != nil {
-		t.Error("withCode(nil) must be nil")
-	}
+	assert.NoError(t, withCode(3, nil), "withCode(nil) must be nil")
 }
 
 func runCLI(t *testing.T, args ...string) (string, error) {
@@ -117,13 +110,11 @@ func TestRootFlagValidation(t *testing.T) {
 		"plan no prompt": {"--plan", "-i"},
 	} {
 		_, err := runCLI(t, args...)
-		if exitCodeFor(err) != exitUsage {
-			t.Errorf("%s: exit code %d (%v), want %d", name, exitCodeFor(err), err, exitUsage)
-		}
+		assert.Equal(t, exitUsage, exitCodeFor(err), "%s: exit code %d (%v), want %d", name, exitCodeFor(err), err, exitUsage)
 	}
-	if out, err := runCLI(t, "config", "path"); err != nil || !strings.HasSuffix(strings.TrimSpace(out), ".env.toml") {
-		t.Errorf("config path: %q %v", out, err)
-	}
+	out, err := runCLI(t, "config", "path")
+	assert.NoError(t, err, "config path: %q", out)
+	assert.True(t, strings.HasSuffix(strings.TrimSpace(out), ".env.toml"), "config path: %q %v", out, err)
 }
 
 // --dir names the workspace; the process's working directory stays put.
@@ -132,20 +123,14 @@ func TestDirFlagDoesNotChangeTheWorkingDirectory(t *testing.T) {
 	before, _ := os.Getwd()
 	ws := t.TempDir()
 	cfg, err := loadConfig(&globalFlags{dir: ws})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if after, _ := os.Getwd(); after != before {
-		t.Errorf("working directory changed to %s", after)
-	}
-	if cfg.Tools.WorkspaceDir != ws {
-		t.Errorf("workspace %q, want %q", cfg.Tools.WorkspaceDir, ws)
-	}
+	require.NoError(t, err)
+	after, _ := os.Getwd()
+	assert.Equal(t, before, after, "working directory changed to %s", after)
+	assert.Equal(t, ws, cfg.Tools.WorkspaceDir, "workspace %q, want %q", cfg.Tools.WorkspaceDir, ws)
 	file := filepath.Join(ws, "f")
 	os.WriteFile(file, nil, 0o600)
-	if _, err := loadConfig(&globalFlags{dir: file}); exitCodeFor(err) != exitUsage {
-		t.Errorf("a file as --dir: %v", err)
-	}
+	_, err = loadConfig(&globalFlags{dir: file})
+	assert.Equal(t, exitUsage, exitCodeFor(err), "a file as --dir: %v", err)
 }
 
 // isolate points HOME and config at temp dirs, and hides API keys.
@@ -166,36 +151,26 @@ func isolate(t *testing.T) string {
 func TestConfigInitAndShow(t *testing.T) {
 	home := isolate(t)
 	t.Setenv("GEMINI_API_KEY", "AIzaSyTESTKEY-1234567890abcdefghijklmnop")
-	if _, err := runCLI(t, "config", "init"); err != nil {
-		t.Fatal(err)
-	}
+	_, err := runCLI(t, "config", "init")
+	require.NoError(t, err)
 	path := filepath.Join(home, ".blitz", ".env.toml")
 	info, err := os.Stat(path)
-	if err != nil || info.Mode().Perm() != 0o600 {
-		t.Fatalf("template not written owner-only: %v %v", info, err)
-	}
+	require.NoError(t, err, "template not written owner-only: %v", info)
+	require.Equal(t, fs.FileMode(0o600), info.Mode().Perm(), "template not written owner-only: %v %v", info, err)
 	// Negative: refuses to overwrite without --force.
-	if _, err := runCLI(t, "config", "init"); exitCodeFor(err) != exitUsage {
-		t.Errorf("expected usage error on overwrite, got %v", err)
-	}
-	if _, err := runCLI(t, "config", "init", "--force"); err != nil {
-		t.Errorf("--force: %v", err)
-	}
+	_, overwriteErr := runCLI(t, "config", "init")
+	assert.Equal(t, exitUsage, exitCodeFor(overwriteErr), "overwriting without --force is a usage error: %v", overwriteErr)
+	_, forceErr := runCLI(t, "config", "init", "--force")
+	assert.NoError(t, forceErr, "--force")
 	// The template is valid config.
 	cfg, err := config.Load("")
-	if err != nil {
-		t.Fatalf("template does not load: %v", err)
-	}
-	if cfg.Sandbox.Shell != "auto" || !cfg.Memory.Enabled {
-		t.Errorf("template values not applied: %+v", cfg.Sandbox)
-	}
+	require.NoError(t, err, "template does not load")
+	assert.Equal(t, "auto", cfg.Sandbox.Shell, "template values not applied: %+v", cfg.Sandbox)
+	assert.True(t, cfg.Memory.Enabled, "template values not applied: %+v", cfg.Sandbox)
 	out, err := runCLI(t, "config", "show")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if strings.Contains(out, "TESTKEY-1234567890") || !strings.Contains(out, "AIz…mnop") {
-		t.Errorf("config show leaked or failed to mask the key:\n%s", out)
-	}
+	require.NoError(t, err)
+	assert.NotContains(t, out, "TESTKEY-1234567890", "config show leaked or failed to mask the key:\n%s", out)
+	assert.Contains(t, out, "AIz…mnop", "config show leaked or failed to mask the key:\n%s", out)
 }
 
 // testEnv opens a workspace around a mock model.
@@ -217,9 +192,7 @@ func testEnvWith(t *testing.T, mutate func(*config.Config), responses ...*genai.
 	llm := runtime.NewMockLLM("gemini-3.8-flash", responses...)
 	llm.Usage = &genai.GenerateContentResponseUsageMetadata{PromptTokenCount: 100, CandidatesTokenCount: 10}
 	e, err := engine.Open(context.Background(), cfg, engine.Options{Model: llm})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	t.Cleanup(func() { e.Close() })
 	return e
 }
@@ -233,22 +206,20 @@ func TestOneShotJSON(t *testing.T) {
 	sess, _ := e.Storage().CreateSession("", "t", "blitz")
 	var out bytes.Buffer
 	err := runOneShot(context.Background(), e, oneShotOptions{prompt: "list", sessionID: sess.ID, format: formatJSON, stdout: &out})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	var res runResult
-	if err := json.Unmarshal(out.Bytes(), &res); err != nil {
-		t.Fatalf("stdout is not a single JSON object: %v\n%s", err, out.String())
-	}
-	if res.Type != "result" || res.Result != "all done" || res.IsError || res.ExitCode != 0 || res.SessionID != sess.ID {
-		t.Errorf("result %+v", res)
-	}
-	if len(res.ToolCalls) != 1 || res.ToolCalls[0].Name != "list_files" || res.ToolCalls[0].Result == nil {
-		t.Errorf("tool calls %+v", res.ToolCalls)
-	}
-	if res.Usage.ModelCalls != 2 || res.Usage.InputTokens != 200 || res.CostUSD == nil {
-		t.Errorf("usage %+v cost %v", res.Usage, res.CostUSD)
-	}
+	require.NoError(t, json.Unmarshal(out.Bytes(), &res), "stdout is not a single JSON object: %v\n%s", err, out.String())
+	assert.Equal(t, "result", res.Type, "result %+v", res)
+	assert.Equal(t, "all done", res.Result, "result %+v", res)
+	assert.False(t, res.IsError, "result %+v", res)
+	assert.Equal(t, 0, res.ExitCode, "result %+v", res)
+	assert.Equal(t, sess.ID, res.SessionID, "result %+v", res)
+	assert.Len(t, res.ToolCalls, 1, "tool calls %+v", res.ToolCalls)
+	assert.Equal(t, "list_files", res.ToolCalls[0].Name, "tool calls %+v", res.ToolCalls)
+	assert.NotNil(t, res.ToolCalls[0].Result, "tool calls %+v", res.ToolCalls)
+	assert.Equal(t, 2, res.Usage.ModelCalls, "usage %+v cost %v", res.Usage, res.CostUSD)
+	assert.Equal(t, int64(200), res.Usage.InputTokens, "usage %+v cost %v", res.Usage, res.CostUSD)
+	assert.NotNil(t, res.CostUSD, "usage %+v cost %v", res.Usage, res.CostUSD)
 }
 
 func TestOneShotStreamJSONAndMaxTurns(t *testing.T) {
@@ -260,26 +231,21 @@ func TestOneShotStreamJSONAndMaxTurns(t *testing.T) {
 	sess, _ := e.Storage().CreateSession("", "t", "blitz")
 	var out bytes.Buffer
 	err := runOneShot(context.Background(), e, oneShotOptions{prompt: "loop", sessionID: sess.ID, format: formatStreamJSON, maxTurns: 2, stdout: &out})
-	if exitCodeFor(err) != exitMaxTurns {
-		t.Fatalf("expected max-turns exit, got %v", err)
-	}
+	require.Equal(t, exitMaxTurns, exitCodeFor(err), "expected max-turns exit, got %v", err)
 	lines := strings.Split(strings.TrimSpace(out.String()), "\n")
 	var types []string
 	for _, l := range lines {
 		var m map[string]any
-		if err := json.Unmarshal([]byte(l), &m); err != nil {
-			t.Fatalf("line is not JSON: %q", l)
-		}
+		require.NoError(t, json.Unmarshal([]byte(l), &m), "line is not JSON: %q", l)
 		types = append(types, m["type"].(string))
 	}
-	if types[0] != "session" || types[len(types)-1] != "result" || !strings.Contains(strings.Join(types, ","), "tool_call,tool_result") {
-		t.Errorf("event types %v", types)
-	}
+	assert.Equal(t, "session", types[0], "event types %v", types)
+	assert.Equal(t, "result", types[len(types)-1], "event types %v", types)
+	assert.Contains(t, strings.Join(types, ","), "tool_call,tool_result", "event types %v", types)
 	var res runResult
 	json.Unmarshal([]byte(lines[len(lines)-1]), &res)
-	if !res.IsError || res.ExitCode != exitMaxTurns {
-		t.Errorf("final result %+v", res)
-	}
+	assert.True(t, res.IsError, "final result %+v", res)
+	assert.Equal(t, exitMaxTurns, res.ExitCode, "final result %+v", res)
 }
 
 func TestOneShotPromptHookBlocks(t *testing.T) {
@@ -289,19 +255,15 @@ func TestOneShotPromptHookBlocks(t *testing.T) {
 	sess, _ := e.Storage().CreateSession("", "t", "blitz")
 	var out bytes.Buffer
 	err := runOneShot(context.Background(), e, oneShotOptions{prompt: "my password is x", sessionID: sess.ID, format: formatJSON, stdout: &out})
-	if exitCodeFor(err) != exitBlocked || !strings.Contains(err.Error(), "no secrets in prompts") {
-		t.Errorf("expected blocked exit, got %v", err)
-	}
-	if !strings.Contains(out.String(), `"is_error":true`) {
-		t.Errorf("result should report the block: %s", out.String())
-	}
+	assert.Equal(t, exitBlocked, exitCodeFor(err), "expected blocked exit, got %v", err)
+	assert.Contains(t, err.Error(), "no secrets in prompts", "expected blocked exit, got %v", err)
+	assert.Contains(t, out.String(), `"is_error":true`, "result should report the block: %s", out.String())
 }
 
 func TestMaskSecret(t *testing.T) {
 	for in, want := range map[string]string{"": "", "short": "*****", "sk-abcdefghijklmnop": "sk-…mnop"} {
-		if got := maskSecret(in); got != want {
-			t.Errorf("maskSecret(%q) = %q, want %q", in, got, want)
-		}
+		got := maskSecret(in)
+		assert.Equal(t, want, got, "maskSecret(%q) = %q, want %q", in, got, want)
 	}
 }
 
@@ -312,9 +274,8 @@ func TestOneShotFailsWithoutModel(t *testing.T) {
 	os.MkdirAll(filepath.Join(home, ".blitz"), 0o700)
 	os.WriteFile(filepath.Join(home, ".blitz", ".env.toml"), []byte("[llm]\nprovider = \"nonexistent\"\n"), 0o600)
 	_, err := runCLI(t, "--output-format", "json", "hello")
-	if exitCodeFor(err) != exitFailure || !strings.Contains(err.Error(), "model initialization failed") {
-		t.Errorf("expected model failure, got %v", err)
-	}
+	assert.Equal(t, exitFailure, exitCodeFor(err), "expected model failure, got %v", err)
+	assert.Contains(t, err.Error(), "model initialization failed", "expected model failure, got %v", err)
 }
 
 func TestDoctorPricingCheck(t *testing.T) {
@@ -326,14 +287,11 @@ func TestDoctorPricingCheck(t *testing.T) {
 	for _, c := range checks {
 		if c.name == "pricing" {
 			found = true
-			if c.status != statusWarn || !strings.Contains(c.detail, "mystery-model-1") {
-				t.Errorf("pricing check %+v", c)
-			}
+			assert.Equal(t, statusWarn, c.status, "pricing check %+v", c)
+			assert.Contains(t, c.detail, "mystery-model-1", "pricing check %+v", c)
 		}
 	}
-	if !found {
-		t.Error("doctor has no pricing check")
-	}
+	assert.True(t, found, "doctor has no pricing check")
 }
 
 func TestOneShotPlanRefusesEdits(t *testing.T) {
@@ -342,19 +300,15 @@ func TestOneShotPlanRefusesEdits(t *testing.T) {
 		genai.NewContentFromText("1. make x.txt", genai.RoleModel))
 	sess, _ := e.Storage().CreateSession("", "t", "blitz")
 	var out bytes.Buffer
-	if err := runOneShot(context.Background(), e, oneShotOptions{prompt: "add x.txt", sessionID: sess.ID, format: formatJSON, plan: true, stdout: &out}); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := os.Stat(filepath.Join(e.Tools().Workspace().Dir(), "x.txt")); err == nil {
-		t.Fatal("--plan created a file")
-	}
+	require.NoError(t, runOneShot(context.Background(), e, oneShotOptions{prompt: "add x.txt", sessionID: sess.ID, format: formatJSON, plan: true, stdout: &out}))
+	_, err := os.Stat(filepath.Join(e.Tools().Workspace().Dir(), "x.txt"))
+	require.Error(t, err, "--plan created a file")
 	var res runResult
-	if err := json.Unmarshal(out.Bytes(), &res); err != nil || res.Result != "1. make x.txt" {
-		t.Fatalf("result %+v %v", res, err)
-	}
-	if e, _ := res.ToolCalls[0].Result["error"].(string); !strings.Contains(e, "plan mode") {
-		t.Fatalf("create_file result %+v", res.ToolCalls[0])
-	}
+	err = json.Unmarshal(out.Bytes(), &res)
+	require.NoError(t, err, "result %+v", res)
+	require.Equal(t, "1. make x.txt", res.Result, "result %+v %v", res, err)
+	toolErr, _ := res.ToolCalls[0].Result["error"].(string)
+	require.Contains(t, toolErr, "plan mode", "create_file result %+v", res.ToolCalls[0])
 }
 
 func TestDoctorSkillsCheck(t *testing.T) {
@@ -387,26 +341,23 @@ func TestDoctorSkillsCheck(t *testing.T) {
 	has("skills", statusWarn, "TIER_9")
 	has("skill net-skill", statusWarn, "needs the network")
 	has("skills", statusOK, "2 with scripts, 1 blocked")
-	if len(byName["skill ok-skill"]) != 0 {
-		t.Errorf("ok-skill reported: %+v", byName["skill ok-skill"])
-	}
+	assert.Len(t, byName["skill ok-skill"], 0, "ok-skill reported: %+v", byName["skill ok-skill"])
 }
 
 // exec runs one prompt, like `blitz <prompt>`, and never the REPL.
 func TestExecCommand(t *testing.T) {
 	isolate(t) // no API key: the model can't be built
 	ws := t.TempDir()
-	if _, err := runCLIWithInput(t, "", "-d", ws, "exec"); exitCodeFor(err) != exitUsage || !strings.Contains(err.Error(), "no prompt") {
-		t.Errorf("exec without a prompt: %v", err)
-	}
+	_, err := runCLIWithInput(t, "", "-d", ws, "exec")
+	assert.Equal(t, exitUsage, exitCodeFor(err), "exec without a prompt: %v", err)
+	assert.Contains(t, err.Error(), "no prompt", "exec without a prompt: %v", err)
 	// With a prompt it's a one-shot run in the -d workspace: here it fails
 	// on the missing model, which only a one-shot run reports as an error.
-	if _, err := runCLI(t, "-d", ws, "exec", "--output-format", "json", "hello"); exitCodeFor(err) != exitFailure || !strings.Contains(err.Error(), "model initialization failed") {
-		t.Errorf("exec with a prompt: %v", err)
-	}
-	if _, err := runCLI(t, "exec", "--interactive", "hi"); exitCodeFor(err) != exitUsage {
-		t.Errorf("exec has no --interactive: %v", err)
-	}
+	_, err = runCLI(t, "-d", ws, "exec", "--output-format", "json", "hello")
+	assert.Equal(t, exitFailure, exitCodeFor(err), "exec with a prompt: %v", err)
+	assert.Contains(t, err.Error(), "model initialization failed", "exec with a prompt: %v", err)
+	_, err = runCLI(t, "exec", "--interactive", "hi")
+	assert.Equal(t, exitUsage, exitCodeFor(err), "exec has no --interactive: %v", err)
 }
 
 func TestLicenseCommand(t *testing.T) {
@@ -417,11 +368,9 @@ func TestLicenseCommand(t *testing.T) {
 		"license third-party": "THIRD-PARTY NOTICES",
 	} {
 		out, err := runCLI(t, strings.Fields(args)...)
-		if err != nil || !strings.Contains(out, want) {
-			t.Errorf("%s: %v, no %q in %.200s", args, err, want, out)
-		}
+		assert.NoError(t, err, "%s: %v, no %q in %.200s", args, err, want, out)
+		assert.Contains(t, out, want, "%s: %v, no %q in %.200s", args, err, want, out)
 	}
-	if _, err := runCLI(t, "license", "bogus"); exitCodeFor(err) != exitUsage {
-		t.Errorf("bogus: %v", err)
-	}
+	_, err := runCLI(t, "license", "bogus")
+	assert.Equal(t, exitUsage, exitCodeFor(err), "bogus: %v", err)
 }

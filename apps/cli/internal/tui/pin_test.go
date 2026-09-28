@@ -24,6 +24,8 @@ import (
 	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/engine"
 	"github.com/retail-cortex/blitz/pkg/engine/runtime"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/adk/v2/model"
 )
 
@@ -54,40 +56,32 @@ func TestPinModelAndUnpin(t *testing.T) {
 		return captureStdout(t, func() { HandleCommand(ctx, cmd, app) })
 	}
 
-	if out := run("/pin_model"); !strings.Contains(out, "No agent is pinned") {
-		t.Errorf("empty list:\n%s", out)
-	}
-	if out := run("/pin_model nobody anthropic/x"); !strings.Contains(out, "Unknown agent") || len(savedConfig(t).AgentModels) != 0 {
-		t.Errorf("unknown agent:\n%s", out)
-	}
-	if out := run("/pin_model qa"); !strings.Contains(out, "Usage: /pin_model") {
-		t.Errorf("usage:\n%s", out)
-	}
+	assert.Contains(t, run("/pin_model"), "No agent is pinned", "empty list")
+	out := run("/pin_model nobody anthropic/x")
+	assert.Contains(t, out, "Unknown agent", "unknown agent:\n%s", out)
+	assert.Len(t, savedConfig(t).AgentModels, 0, "unknown agent:\n%s", out)
+	assert.Contains(t, run("/pin_model qa"), "Usage: /pin_model", "usage")
 
-	out := run("/pin_model qa anthropic/claude-haiku-4-5")
-	if !strings.Contains(out, "qa now runs on claude-haiku-4-5") || !strings.Contains(out, "Saved in") {
-		t.Errorf("pin:\n%s", out)
-	}
-	if m, pinned := local(app).Engine().AgentModel("qa"); !pinned || m != "claude-haiku-4-5" {
-		t.Fatalf("engine pin: %s %v", m, pinned)
-	}
-	if got := savedConfig(t).AgentModels; len(got) != 1 || got["qa"] != "anthropic/claude-haiku-4-5" {
-		t.Fatalf("saved = %v", got)
-	}
-	if out := run("/pin_model"); !strings.Contains(out, "qa") || !strings.Contains(out, "claude-haiku-4-5") {
-		t.Errorf("list:\n%s", out)
-	}
-	if out := run("/agents"); !strings.Contains(out, "pinned claude-haiku-4-5") {
-		t.Errorf("/agents doesn't show the pin:\n%s", out)
-	}
+	out = run("/pin_model qa anthropic/claude-haiku-4-5")
+	assert.Contains(t, out, "qa now runs on claude-haiku-4-5", "pin:\n%s", out)
+	assert.Contains(t, out, "Saved in", "pin:\n%s", out)
+	m, pinned := local(app).Engine().AgentModel("qa")
+	require.True(t, pinned, "engine pin: %s %v", m, pinned)
+	require.Equal(t, "claude-haiku-4-5", m, "engine pin: %s %v", m, pinned)
+	got := savedConfig(t).AgentModels
+	require.Len(t, got, 1, "saved = %v", got)
+	require.Equal(t, "anthropic/claude-haiku-4-5", got["qa"], "saved = %v", got)
+	list := run("/pin_model")
+	assert.Contains(t, list, "qa")
+	assert.Contains(t, list, "claude-haiku-4-5")
+	assert.Contains(t, run("/agents"), "pinned claude-haiku-4-5", "/agents doesn't show the pin")
 
 	out = run("/unpin qa")
-	if _, pinned := local(app).Engine().AgentModel("qa"); pinned || !strings.Contains(out, "qa now runs on gemini-3.8-flash") {
-		t.Fatalf("unpin:\n%s", out)
-	}
-	if got := savedConfig(t).AgentModels; len(got) != 0 {
-		t.Fatalf("unpin not saved: %v", got)
-	}
+	_, pinned = local(app).Engine().AgentModel("qa")
+	require.False(t, pinned, "unpin:\n%s", out)
+	require.Contains(t, out, "qa now runs on gemini-3.8-flash", "unpin:\n%s", out)
+	got = savedConfig(t).AgentModels
+	require.Len(t, got, 0, "unpin not saved: %v", got)
 }
 
 func TestModelCommandNotesAPinnedActiveAgent(t *testing.T) {
@@ -95,12 +89,8 @@ func TestModelCommandNotesAPinnedActiveAgent(t *testing.T) {
 	ctx := context.Background()
 	captureStdout(t, func() { HandleCommand(ctx, "/pin_model blitz anthropic/claude-sonnet-5", app) })
 	out := captureStdout(t, func() { HandleCommand(ctx, "/model gemini-3.5-flash-lite", app) })
-	if !strings.Contains(out, "blitz is pinned to claude-sonnet-5") {
-		t.Fatalf("no note that the active agent keeps its pin:\n%s", out)
-	}
-	if local(app).Engine().ModelName() != "claude-sonnet-5" {
-		t.Fatalf("active agent's model = %s", local(app).Engine().ModelName())
-	}
+	require.Contains(t, out, "blitz is pinned to claude-sonnet-5", "no note that the active agent keeps its pin:\n%s", out)
+	require.Equal(t, "claude-sonnet-5", local(app).Engine().ModelName(), "active agent's model = %s", local(app).Engine().ModelName())
 }
 
 // An agent that declares default_model goes back to it on /unpin.
@@ -113,7 +103,6 @@ func TestUnpinRestoresTheAgentsOwnDefault(t *testing.T) {
 	ctx := context.Background()
 	captureStdout(t, func() { HandleCommand(ctx, "/pin_model reviewer anthropic/claude-sonnet-5", app) })
 	out := captureStdout(t, func() { HandleCommand(ctx, "/unpin reviewer", app) })
-	if m, _ := local(app).Engine().AgentModel("reviewer"); m != "claude-haiku-4-5" {
-		t.Fatalf("after /unpin reviewer runs on %s, want its default_model:\n%s", m, out)
-	}
+	m, _ := local(app).Engine().AgentModel("reviewer")
+	require.Equal(t, "claude-haiku-4-5", m, "after /unpin reviewer runs on %s, want its default_model:\n%s", m, out)
 }

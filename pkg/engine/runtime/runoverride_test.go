@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/retail-cortex/blitz/pkg/config"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/adk/v2/session"
 	"google.golang.org/genai"
 )
@@ -31,22 +32,18 @@ func TestWithModelRunsOnlyThatRunOnTheModel(t *testing.T) {
 	sonnet := NewMockLLM("claude-sonnet-5", textContent("from sonnet"))
 	sonnet.Usage = &genai.GenerateContentResponseUsageMetadata{PromptTokenCount: 1_000_000}
 
-	if _, err := functionResponses(t, f.eng, "s", "hi", WithModel(sonnet)); err != nil {
-		t.Fatal(err)
-	}
-	if sonnet.Calls() != 1 || f.llm.Calls() != 0 {
-		t.Fatalf("override %d calls, main %d", sonnet.Calls(), f.llm.Calls())
-	}
+	_, err := functionResponses(t, f.eng, "s", "hi", WithModel(sonnet))
+	require.NoError(t, err)
+	require.Equal(t, 1, sonnet.Calls(), "override %d calls, main %d", sonnet.Calls(), f.llm.Calls())
+	require.Equal(t, 0, f.llm.Calls(), "override %d calls, main %d", sonnet.Calls(), f.llm.Calls())
 	want := config.DefaultPricingAt(time.Now())["claude-sonnet-5"].InputPerMTok
-	if u := f.eng.Usage("s"); abs(u.CostUSD-want) > 1e-9 {
-		t.Fatalf("cost $%v, want $%v (sonnet input for 1M tokens)", u.CostUSD, want)
-	}
-	if f.eng.ModelName() == "claude-sonnet-5" {
-		t.Fatal("the override changed the engine's model")
-	}
-	if _, err := collect(t, f.eng, "s", "again"); err != nil || f.llm.Calls() != 1 || sonnet.Calls() != 1 {
-		t.Fatalf("next run: main %d, override %d, err %v", f.llm.Calls(), sonnet.Calls(), err)
-	}
+	u := f.eng.Usage("s")
+	require.LessOrEqual(t, abs(u.CostUSD-want), 1e-9, "cost $%v, want $%v (sonnet input for 1M tokens)", u.CostUSD, want)
+	require.NotEqual(t, "claude-sonnet-5", f.eng.ModelName(), "the override changed the engine's model")
+	_, err = collect(t, f.eng, "s", "again")
+	require.NoError(t, err, "next run: main %d, override %d, err", f.llm.Calls(), sonnet.Calls())
+	require.Equal(t, 1, f.llm.Calls(), "next run: main %d, override %d, err %v", f.llm.Calls(), sonnet.Calls(), err)
+	require.Equal(t, 1, sonnet.Calls(), "next run: main %d, override %d, err %v", f.llm.Calls(), sonnet.Calls(), err)
 }
 
 // A run with its own agent answers as that agent; the active agent stays.
@@ -59,18 +56,11 @@ func TestWithAgentRunsAsThatAgent(t *testing.T) {
 		}
 		return nil
 	}, WithAgent("qa"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(authors) == 0 || authors[len(authors)-1] != "qa" {
-		t.Fatalf("authors %v, want qa", authors)
-	}
-	if f.eng.ActiveAgent() != "blitz" {
-		t.Fatalf("active agent changed to %s", f.eng.ActiveAgent())
-	}
-	if err := f.eng.Execute(context.Background(), "s", "x", nil, WithAgent("nobody")); err == nil {
-		t.Fatal("ran as an unknown agent")
-	}
+	require.NoError(t, err)
+	require.NotEqual(t, 0, len(authors), "authors %v, want qa", authors)
+	require.Equal(t, "qa", authors[len(authors)-1], "authors %v, want qa", authors)
+	require.Equal(t, "blitz", f.eng.ActiveAgent(), "active agent changed to %s", f.eng.ActiveAgent())
+	require.Error(t, f.eng.Execute(context.Background(), "s", "x", nil, WithAgent("nobody")), "ran as an unknown agent")
 }
 
 // The override runs the root agent even when it is pinned, and unpinned
@@ -85,17 +75,10 @@ func TestWithModelKeepsOtherAgentsPins(t *testing.T) {
 		textContent("retriever answer"),
 		textContent("done"))
 
-	if _, err := functionResponses(t, f.eng, "s", "go", WithModel(sonnet)); err != nil {
-		t.Fatal(err)
-	}
-	if pinnedRoot.Calls() != 0 {
-		t.Fatalf("pinned root agent ran on its pin (%d calls), not the override", pinnedRoot.Calls())
-	}
-	if haiku.Calls() != 1 {
-		t.Fatalf("pinned sub-agent got %d calls, want 1", haiku.Calls())
-	}
+	_, err := functionResponses(t, f.eng, "s", "go", WithModel(sonnet))
+	require.NoError(t, err)
+	require.Equal(t, 0, pinnedRoot.Calls(), "pinned root agent ran on its pin (%d calls), not the override", pinnedRoot.Calls())
+	require.Equal(t, 1, haiku.Calls(), "pinned sub-agent got %d calls, want 1", haiku.Calls())
 	// Root: invoke qa, invoke web-retriever, final answer; web-retriever: one answer.
-	if sonnet.Calls() != 4 {
-		t.Fatalf("override got %d calls, want 4", sonnet.Calls())
-	}
+	require.Equal(t, 4, sonnet.Calls(), "override got %d calls, want 4", sonnet.Calls())
 }

@@ -25,6 +25,7 @@ import (
 
 	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/engine/runtime"
+	"github.com/stretchr/testify/assert"
 	"google.golang.org/genai"
 )
 
@@ -89,33 +90,29 @@ func TestSearchWebHandsFiveReadableLinksToTheAgent(t *testing.T) {
 	}
 	out := captureStdout(t, func() { RunREPL(context.Background(), app) })
 
-	if !strings.Contains(out, "Usage: /search web <terms>") {
-		t.Errorf("usage:\n%s", out)
-	}
-	if !strings.Contains(out, "Searching searxng for golang errors") || !strings.Contains(out, "5. Page /five") || strings.Contains(out, "manual.pdf") {
-		t.Errorf("results shown:\n%s", out)
-	}
+	assert.Contains(t, out, "Usage: /search web <terms>", "usage:\n%s", out)
+	assert.Contains(t, out, "Searching searxng for golang errors", "results shown:\n%s", out)
+	assert.Contains(t, out, "5. Page /five", "results shown:\n%s", out)
+	assert.NotContains(t, out, "manual.pdf", "results shown:\n%s", out)
 	prompt := llm.Requests[0].Contents[len(llm.Requests[0].Contents)-1].Parts[0].Text
 	for _, want := range []string{"I searched the web for: golang errors", pages + "/one", pages + "/five", "about /two"} {
-		if !strings.Contains(prompt, want) {
-			t.Errorf("prompt lacks %q:\n%s", want, prompt)
-		}
+		assert.Contains(t, prompt, want, "prompt lacks %q:\n%s", want, prompt)
 	}
-	if strings.Contains(prompt, "/six") || strings.Contains(prompt, "manual.pdf") || strings.Count(prompt, pages+"/one") != 1 {
-		t.Errorf("prompt has links it shouldn't:\n%s", prompt)
-	}
+	assert.NotContains(t, prompt, "/six", "prompt has links it shouldn't:\n%s", prompt)
+	assert.NotContains(t, prompt, "manual.pdf", "prompt has links it shouldn't:\n%s", prompt)
+	assert.Equal(t, 1, strings.Count(prompt, pages+"/one"), "prompt has links it shouldn't:\n%s", prompt)
 
 	res := toolResults(llm)
-	if fetches := res["web_fetch"]; len(fetches) != 2 || fetches[0]["content"] != "contents of /two" || !strings.Contains(fmt.Sprint(fetches[1]["error"]), "approv") {
-		t.Errorf("web_fetch results: %v", fetches)
-	}
-	if cf := res["create_file"]; len(cf) != 1 || !strings.Contains(fmt.Sprint(cf[0]["error"]), "search is read-only") {
-		t.Errorf("create_file result: %v", cf)
-	}
+	fetches := res["web_fetch"]
+	assert.Len(t, fetches, 2, "web_fetch results: %v", fetches)
+	assert.Equal(t, "contents of /two", fetches[0]["content"], "web_fetch results: %v", fetches)
+	assert.Contains(t, fmt.Sprint(fetches[1]["error"]), "approv", "web_fetch results: %v", fetches)
+	cf := res["create_file"]
+	assert.Len(t, cf, 1, "create_file result: %v", cf)
+	assert.Contains(t, fmt.Sprint(cf[0]["error"]), "search is read-only", "create_file result: %v", cf)
 	msgs := local(app).Storage().Active().Messages
-	if len(msgs) < 1 || msgs[0].Content != "/search web golang errors" {
-		t.Errorf("transcript: %+v", msgs)
-	}
+	assert.GreaterOrEqual(t, len(msgs), 1, "transcript: %+v", msgs)
+	assert.Equal(t, "/search web golang errors", msgs[0].Content, "transcript: %+v", msgs)
 }
 
 func TestSearchSessionSendsMatchingPassages(t *testing.T) {
@@ -129,15 +126,12 @@ func TestSearchSessionSendsMatchingPassages(t *testing.T) {
 	st.AddMessage("user", "ok")
 
 	out := captureStdout(t, func() { RunREPL(context.Background(), app) })
-	if !strings.Contains(out, "Found 1 message about it in this session") || !strings.Contains(out, "Nothing in this session's transcript mentions it") {
-		t.Errorf("output:\n%s", out)
-	}
+	assert.Contains(t, out, "Found 1 message about it in this session", "output:\n%s", out)
+	assert.Contains(t, out, "Nothing in this session's transcript mentions it", "output:\n%s", out)
 	first := llm.Requests[0].Contents[len(llm.Requests[0].Contents)-1].Parts[0].Text
-	if !strings.Contains(first, "Look back through this conversation for: pineapple") || !strings.Contains(first, "[message 2, model,") || !strings.Contains(first, "I suggest PINEAPPLE") {
-		t.Errorf("first prompt:\n%s", first)
-	}
+	assert.Contains(t, first, "Look back through this conversation for: pineapple", "first prompt:\n%s", first)
+	assert.Contains(t, first, "[message 2, model,", "first prompt:\n%s", first)
+	assert.Contains(t, first, "I suggest PINEAPPLE", "first prompt:\n%s", first)
 	second := llm.Requests[1].Contents[len(llm.Requests[1].Contents)-1].Parts[0].Text
-	if !strings.Contains(second, "No message in the session transcript contains these words") {
-		t.Errorf("second prompt:\n%s", second)
-	}
+	assert.Contains(t, second, "No message in the session transcript contains these words", "second prompt:\n%s", second)
 }

@@ -16,17 +16,18 @@ package tools
 
 import (
 	"context"
+	"io/fs"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
 	"github.com/retail-cortex/blitz/pkg/api"
-
 	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/engine/agents"
 	"github.com/retail-cortex/blitz/pkg/engine/skills"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/adk/v2/agent"
 	"google.golang.org/adk/v2/session"
 	"google.golang.org/adk/v2/tool"
@@ -61,9 +62,7 @@ func newTestWorkspace(t *testing.T) (*Workspace, string) {
 	t.Helper()
 	dir := t.TempDir()
 	ws, err := NewWorkspace(dir, 0)
-	if err != nil {
-		t.Fatalf("NewWorkspace: %v", err)
-	}
+	require.NoError(t, err, "NewWorkspace")
 	t.Cleanup(func() { ws.Close() })
 	return ws, dir
 }
@@ -72,13 +71,9 @@ func newTestWorkspace(t *testing.T) (*Workspace, string) {
 func toolOf(t *testing.T) func(tool.Tool, error) runnerTool {
 	return func(tl tool.Tool, err error) runnerTool {
 		t.Helper()
-		if err != nil {
-			t.Fatalf("failed to create tool: %v", err)
-		}
+		require.NoError(t, err, "failed to create tool")
 		rt, ok := tl.(runnerTool)
-		if !ok {
-			t.Fatalf("%T does not implement runnerTool", tl)
-		}
+		require.True(t, ok, "%T does not implement runnerTool", tl)
 		return rt
 	}
 }
@@ -86,9 +81,7 @@ func toolOf(t *testing.T) func(tool.Tool, error) runnerTool {
 func runTool(t *testing.T, rt runnerTool, args map[string]any) map[string]any {
 	t.Helper()
 	out, err := rt.Run(createTestToolContext(), args)
-	if err != nil {
-		t.Fatalf("tool run returned error: %v", err)
-	}
+	require.NoError(t, err, "tool run returned error")
 	return out
 }
 
@@ -99,12 +92,8 @@ func errOf(out map[string]any) string {
 
 func writeFile(t *testing.T, path, content string) {
 	t.Helper()
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+	require.NoError(t, os.WriteFile(path, []byte(content), 0o644))
 }
 
 // allowAll auto-approves every action.
@@ -141,103 +130,75 @@ func TestToolsSuite(t *testing.T) {
 	cfg.Blitz.AutoApprove = true
 
 	agentReg, err := agents.NewRegistry()
-	if err != nil {
-		t.Fatalf("failed to create agent registry: %v", err)
-	}
+	require.NoError(t, err, "failed to create agent registry")
 	skillProv, err := skills.NewProvider()
-	if err != nil {
-		t.Fatalf("failed to create skill provider: %v", err)
-	}
+	require.NoError(t, err, "failed to create skill provider")
 
 	toolReg, err := NewRegistry(cfg, agentReg, skillProv)
-	if err != nil {
-		t.Fatalf("failed to create tool registry: %v", err)
-	}
+	require.NoError(t, err, "failed to create tool registry")
 	defer toolReg.Close()
 
 	all := toolReg.GetAllTools()
-	if len(all) < 10 {
-		t.Errorf("expected at least 10 tools, got %d", len(all))
-	}
+	assert.GreaterOrEqual(t, len(all), 10, "expected at least 10 tools, got %d", len(all))
 	seen := map[string]bool{}
 	for _, tl := range all {
-		if tl.Name() == "" {
-			t.Errorf("tool missing name: %T", tl)
-		}
-		if tl.Description() == "" {
-			t.Errorf("tool %s missing description", tl.Name())
-		}
-		if seen[tl.Name()] {
-			t.Errorf("GetAllTools returned duplicate %s", tl.Name())
-		}
+		assert.NotEqual(t, "", tl.Name(), "tool missing name: %T", tl)
+		assert.NotEqual(t, "", tl.Description(), "tool %s missing description", tl.Name())
+		assert.False(t, seen[tl.Name()], "GetAllTools returned duplicate %s", tl.Name())
 		seen[tl.Name()] = true
 	}
-	if !seen["manage_background_process"] {
-		t.Errorf("expected manage_background_process to be registered")
-	}
+	assert.True(t, seen["manage_background_process"], "expected manage_background_process to be registered")
 
 	// UC tools dir is created lazily, not at registry construction.
-	if _, err := os.Stat(cfg.Tools.UCToolsDir); !os.IsNotExist(err) {
-		t.Errorf("expected uc tools dir to not be created eagerly, stat err=%v", err)
-	}
+	_, err = os.Stat(cfg.Tools.UCToolsDir)
+	assert.ErrorIs(t, err, fs.ErrNotExist, "expected uc tools dir to not be created eagerly, stat err=%v", err)
 
 	writeFile(t, filepath.Join(tmpDir, "test.txt"), "line 1\nline 2 target\nline 3\n")
 	ws := toolReg.Workspace()
 	hooks := toolReg.Hooks()
 
 	readOut := runTool(t, toolOf(t)(NewReadFileTool(ws)), map[string]any{"path": "test.txt"})
-	if content, _ := readOut["content"].(string); !strings.Contains(content, "line 2 target") {
-		t.Errorf("expected read_file to contain 'line 2 target', got: %v", content)
-	}
+	content, _ := readOut["content"].(string)
+	assert.Contains(t, content, "line 2 target", "expected read_file to contain 'line 2 target', got: %v", content)
 
 	runTool(t, toolOf(t)(NewReplaceInFileTool(ws, hooks)), map[string]any{
 		"path":                "test.txt",
 		"target_content":      "line 2 target",
 		"replacement_content": "line 2 replaced",
 	})
-	if b, _ := os.ReadFile(filepath.Join(tmpDir, "test.txt")); !strings.Contains(string(b), "line 2 replaced") {
-		t.Errorf("expected updated content, got %s", b)
-	}
+	b, _ := os.ReadFile(filepath.Join(tmpDir, "test.txt"))
+	assert.Contains(t, string(b), "line 2 replaced", "expected updated content, got %s", b)
 
 	grepOut := runTool(t, toolOf(t)(NewGrepTool(ws)), map[string]any{"query": "line 2 replaced"})
-	if matches, _ := grepOut["matches"].([]any); len(matches) == 0 {
-		t.Errorf("expected grep to find matches, got 0")
-	}
+	matches, _ := grepOut["matches"].([]any)
+	assert.NotEqual(t, 0, len(matches), "expected grep to find matches, got 0")
 
 	shellOut := runTool(t, toolOf(t)(NewRunShellCommandTool(ShellConfig{Workspace: ws, Hooks: hooks})),
 		map[string]any{"command": "echo 'puppy power'"})
-	if output, _ := shellOut["output"].(string); !strings.Contains(output, "puppy power") {
-		t.Errorf("expected shell output 'puppy power', got: %s", output)
-	}
+	output, _ := shellOut["output"].(string)
+	assert.Contains(t, output, "puppy power", "expected shell output 'puppy power', got: %s", output)
 
-	if got := toolReg.GetToolsForAgent([]string{"read_file", "list_files", "run_shell_command"}); len(got) != 3 {
-		t.Errorf("expected 3 tools for agent, got %d", len(got))
-	}
+	got := toolReg.GetToolsForAgent([]string{"read_file", "list_files", "run_shell_command"})
+	assert.Len(t, got, 3, "expected 3 tools for agent, got %d", len(got))
 	// Aliases resolve to the same tool and are de-duplicated.
-	if got := toolReg.GetToolsForAgent([]string{"edit", "replace_in_file", "missing_tool"}); len(got) != 1 {
-		t.Errorf("expected alias de-duplication and unknown names skipped, got %d tools", len(got))
-	}
+	got = toolReg.GetToolsForAgent([]string{"edit", "replace_in_file", "missing_tool"})
+	assert.Len(t, got, 1, "expected alias de-duplication and unknown names skipped, got %d tools", len(got))
 }
 
 func TestRegistryRejectsMissingWorkspace(t *testing.T) {
 	cfg := config.DefaultConfig()
 	cfg.Tools.WorkspaceDir = filepath.Join(t.TempDir(), "does-not-exist")
-	if _, err := NewRegistry(cfg, nil, nil); err == nil {
-		t.Fatal("expected error for missing workspace directory")
-	}
+	_, err := NewRegistry(cfg, nil, nil)
+	require.Error(t, err, "expected error for missing workspace directory")
 }
 
 func TestRegistryCloseKillsBackgroundProcesses(t *testing.T) {
 	cfg := config.DefaultConfig()
 	cfg.Tools.WorkspaceDir = t.TempDir()
 	reg, err := NewRegistry(cfg, nil, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	bp, err := reg.Processes().Start("sleep 30", reg.Workspace().Dir())
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	reg.Close()
 	select {
 	case <-bp.done:

@@ -15,8 +15,9 @@
 package legal
 
 import (
-	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 // The embedded texts are the repository's, whole.
@@ -26,14 +27,11 @@ func TestTexts(t *testing.T) {
 		"Notice":     {Notice, "Blitz\nCopyright 2026 Retail Cortex"},
 		"ThirdParty": {ThirdParty, "THIRD-PARTY NOTICES"},
 	} {
-		if !strings.Contains(c.text, c.want) {
-			t.Errorf("%s doesn't contain %q", name, c.want)
-		}
+		assert.Contains(t, c.text, c.want, "%s doesn't contain %q", name, c.want)
 	}
-	if !strings.Contains(ThirdParty, "Go standard library") || !strings.Contains(ThirdParty, "react") {
-		t.Error("third-party notices miss Go or the page's packages")
-	}
-	if s := Summary("blitz license"); !strings.Contains(s, "blitz license third-party") || !strings.Contains(s, "Code Puppy") {
-		t.Errorf("summary:\n%s", s)
-	}
+	assert.Contains(t, ThirdParty, "Go standard library", "third-party notices miss Go or the page's packages")
+	assert.Contains(t, ThirdParty, "react", "third-party notices miss Go or the page's packages")
+	s := Summary("blitz license")
+	assert.Contains(t, s, "blitz license third-party", "summary:\n%s", s)
+	assert.Contains(t, s, "Code Puppy", "summary:\n%s", s)
 }

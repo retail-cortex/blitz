@@ -22,9 +22,10 @@ import (
 	"testing"
 
 	"github.com/retail-cortex/blitz/pkg/api"
-
 	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/engine/skills"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 const scriptSkill = `---
@@ -97,16 +98,12 @@ func newScriptFixture(t *testing.T, tier string, approve bool, edit func(*config
 	os.WriteFile(filepath.Join(dir, "SKILL.md"), []byte(doc), 0o644)
 	os.WriteFile(filepath.Join(dir, "scripts", "work.py"), []byte(workPy), 0o644)
 	prov, _ := skills.NewProvider()
-	if err := prov.DiscoverExternal([]string{skillsDir}); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, prov.DiscoverExternal([]string{skillsDir}))
 
 	wsDir, _ := filepath.EvalSymlinks(t.TempDir())
 	os.WriteFile(filepath.Join(wsDir, "README.md"), []byte("original"), 0o644)
 	ws, err := OpenWorkspace(WorkspaceOptions{Dir: wsDir})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	t.Cleanup(func() { ws.Close() })
 	policy := config.DefaultConfig().Skills.Policy
 	policy.EnvPassthrough = []string{"CP_PASSED"}
@@ -131,49 +128,41 @@ func TestRunSkillScriptTier2(t *testing.T) {
 	t.Setenv("CP_WITHHELD", "withheld")
 	t.Setenv("CP_SECRET", "secret")
 	out := f.runner.Run(context.Background(), RunSkillScriptInput{Skill: "demo", Script: "work", Args: []string{"a b", "c"}})
-	if out.Error != "" || out.ExitCode != 0 {
-		t.Fatalf("%+v", out)
-	}
+	require.Equal(t, "", out.Error, "%+v", out)
+	require.Equal(t, 0, out.ExitCode, "%+v", out)
 	for _, want := range []string{"args ['a b', 'c']", "readme original", "env hi passed None None", "workspace write: refused", "output True"} {
-		if !strings.Contains(out.Stdout, want) {
-			t.Errorf("stdout lacks %q:\n%s\n%s", want, out.Stdout, out.Stderr)
-		}
+		assert.Contains(t, out.Stdout, want, "stdout lacks %q:\n%s\n%s", want, out.Stdout, out.Stderr)
 	}
-	if b, _ := os.ReadFile(filepath.Join(f.ws, "README.md")); string(b) != "original" {
-		t.Fatalf("the script changed the workspace: %q", b)
-	}
-	if out.Tier != "TIER_2_AUDITED_WRITE" || len(*f.reqs) != 0 {
-		t.Errorf("tier 2 should run without asking: %s, %d prompts", out.Tier, len(*f.reqs))
-	}
-	if !strings.HasPrefix(out.OutputDir, SkillOutputDir+"/demo/work-") || len(out.Files) != 1 || !strings.HasSuffix(out.Files[0], "result.txt") {
-		t.Fatalf("output: %q %v", out.OutputDir, out.Files)
-	}
-	if b, _ := os.ReadFile(filepath.Join(f.ws, out.Files[0])); string(b) != "done" {
-		t.Fatalf("result file: %q", b)
-	}
+	b, _ := os.ReadFile(filepath.Join(f.ws, "README.md"))
+	require.Equal(t, "original", string(b), "the script changed the workspace: %q", b)
+	assert.Equal(t, "TIER_2_AUDITED_WRITE", out.Tier, "tier 2 should run without asking: %s, %d prompts", out.Tier, len(*f.reqs))
+	assert.Len(t, *f.reqs, 0, "tier 2 should run without asking: %s, %d prompts", out.Tier, len(*f.reqs))
+	require.True(t, strings.HasPrefix(out.OutputDir, SkillOutputDir+"/demo/work-"), "output: %q %v", out.OutputDir, out.Files)
+	require.Len(t, out.Files, 1, "output: %q %v", out.OutputDir, out.Files)
+	require.True(t, strings.HasSuffix(out.Files[0], "result.txt"), "output: %q %v", out.OutputDir, out.Files)
+	b, _ = os.ReadFile(filepath.Join(f.ws, out.Files[0]))
+	require.Equal(t, "done", string(b), "result file: %q", b)
 }
 
 func TestRunSkillScriptEntryInlineAndTier1(t *testing.T) {
 	f := newScriptFixture(t, "TIER_1_AUTO_READ", true, func(p *config.SkillPolicy) { p.MinHITLTier = 1 })
 	out := f.runner.Run(context.Background(), RunSkillScriptInput{Skill: "demo", Script: "entry"})
-	if out.ExitCode != 3 || !strings.Contains(out.Stdout, "entry point") || strings.Contains(out.Stdout, "args") && strings.Contains(out.Stdout, "__main__") {
-		t.Fatalf("entry point: %+v", out)
-	}
-	if out.OutputDir != "" || !strings.Contains(out.Stdout, "output False") {
-		t.Errorf("tier 1 got an output directory: %+v", out)
-	}
+	require.Equal(t, 3, out.ExitCode, "entry point: %+v", out)
+	require.Contains(t, out.Stdout, "entry point", "entry point: %+v", out)
+	require.False(t, strings.Contains(out.Stdout, "args") && strings.Contains(out.Stdout, "__main__"), "entry point: %+v", out)
+	assert.Equal(t, "", out.OutputDir, "tier 1 got an output directory: %+v", out)
+	assert.Contains(t, out.Stdout, "output False", "tier 1 got an output directory: %+v", out)
 	out = f.runner.Run(context.Background(), RunSkillScriptInput{Skill: "demo", Script: "inline", Args: []string{"x"}})
-	if out.ExitCode != 0 || !strings.Contains(out.Stdout, "inline ['x']") {
-		t.Fatalf("inline: %+v", out)
-	}
+	require.Equal(t, 0, out.ExitCode, "inline: %+v", out)
+	require.Contains(t, out.Stdout, "inline ['x']", "inline: %+v", out)
 }
 
 func TestRunSkillScriptTier3AsksEveryTime(t *testing.T) {
 	f := newScriptFixture(t, "TIER_3_MANDATORY_APPROVAL", false, nil)
 	out := f.runner.Run(context.Background(), RunSkillScriptInput{Skill: "demo", Script: "inline"})
-	if !strings.Contains(out.Error, "not approved") || len(*f.reqs) != 1 || (*f.reqs)[0].Key != "" {
-		t.Fatalf("tier 3 denied: %+v %+v", out, *f.reqs)
-	}
+	require.Contains(t, out.Error, "not approved", "tier 3 denied: %+v %+v", out, *f.reqs)
+	require.Len(t, *f.reqs, 1, "tier 3 denied: %+v %+v", out, *f.reqs)
+	require.Equal(t, "", (*f.reqs)[0].Key, "tier 3 denied: %+v %+v", out, *f.reqs)
 }
 
 func TestRunSkillScriptRefusals(t *testing.T) {
@@ -182,30 +171,27 @@ func TestRunSkillScriptRefusals(t *testing.T) {
 		"ts":      `language "typescript" isn't in skills.policy.languages`,
 		"missing": `has no script "missing"`,
 	} {
-		if out := f.runner.Run(context.Background(), RunSkillScriptInput{Skill: "demo", Script: script}); !strings.Contains(out.Error, want) {
-			t.Errorf("%s: %+v", script, out)
-		}
+		out := f.runner.Run(context.Background(), RunSkillScriptInput{Skill: "demo", Script: script})
+		assert.Contains(t, out.Error, want, "%s: %+v", script, out)
 	}
-	if out := f.runner.Run(context.Background(), RunSkillScriptInput{Skill: "nope", Script: "x"}); !strings.Contains(out.Error, "no skill") {
-		t.Errorf("unknown skill: %+v", out)
-	}
+	out := f.runner.Run(context.Background(), RunSkillScriptInput{Skill: "nope", Script: "x"})
+	assert.Contains(t, out.Error, "no skill", "unknown skill: %+v", out)
 	// Installing packages needs its own approval, rememberable per package list.
-	out := f.runner.Run(context.Background(), RunSkillScriptInput{Skill: "demo", Script: "needs-pkgs"})
-	if !strings.Contains(out.Error, "not approved") || len(*f.reqs) != 1 {
-		t.Fatalf("install: %+v %+v", out, *f.reqs)
-	}
+	out = f.runner.Run(context.Background(), RunSkillScriptInput{Skill: "demo", Script: "needs-pkgs"})
+	require.Contains(t, out.Error, "not approved", "install: %+v %+v", out, *f.reqs)
+	require.Len(t, *f.reqs, 1, "install: %+v %+v", out, *f.reqs)
 	r := (*f.reqs)[0]
-	if r.Kind != api.ActionNetwork || !strings.HasPrefix(r.Key, "pyenv:") || !strings.Contains(r.Detail, "six==1.16.0") || !strings.Contains(r.Detail, "--only-binary :all:") {
-		t.Errorf("install approval: %+v", r)
-	}
+	assert.Equal(t, api.ActionNetwork, r.Kind, "install approval: %+v", r)
+	assert.True(t, strings.HasPrefix(r.Key, "pyenv:"), "install approval: %+v", r)
+	assert.Contains(t, r.Detail, "six==1.16.0", "install approval: %+v", r)
+	assert.Contains(t, r.Detail, "--only-binary :all:", "install approval: %+v", r)
 }
 
 func TestRunSkillScriptTimeout(t *testing.T) {
 	f := newScriptFixture(t, "", true, nil)
 	out := f.runner.Run(context.Background(), RunSkillScriptInput{Skill: "demo", Script: "slow"})
-	if !out.TimedOut || !strings.Contains(out.Error, "timeout") {
-		t.Fatalf("%+v", out)
-	}
+	require.True(t, out.TimedOut, "%+v", out)
+	require.Contains(t, out.Error, "timeout", "%+v", out)
 }
 
 func TestActivateSkillListsScripts(t *testing.T) {
@@ -221,9 +207,8 @@ func TestActivateSkillListsScripts(t *testing.T) {
 			blocked++
 		}
 	}
-	if allowed != 5 || blocked != 1 {
-		t.Fatalf("allowed %d, blocked %d", allowed, blocked)
-	}
+	require.Equal(t, 5, allowed, "allowed %d, blocked %d", allowed, blocked)
+	require.Equal(t, 1, blocked, "allowed %d, blocked %d", allowed, blocked)
 }
 
 // The whole path with packages: approval, build, and a run that imports
@@ -234,16 +219,15 @@ func TestRunSkillScriptInstallsPackages(t *testing.T) {
 	}
 	f := newScriptFixture(t, "", true, nil)
 	out := f.runner.Run(context.Background(), RunSkillScriptInput{Skill: "demo", Script: "needs-pkgs"})
-	if out.Error != "" || out.ExitCode != 0 || len(*f.reqs) != 1 {
-		t.Fatalf("%+v (%d approvals)", out, len(*f.reqs))
-	}
+	require.Equal(t, "", out.Error, "%+v (%d approvals)", out, len(*f.reqs))
+	require.Equal(t, 0, out.ExitCode, "%+v (%d approvals)", out, len(*f.reqs))
+	require.Len(t, *f.reqs, 1, "%+v (%d approvals)", out, len(*f.reqs))
 	// Built once: the next run doesn't ask or install again.
-	if out := f.runner.Run(context.Background(), RunSkillScriptInput{Skill: "demo", Script: "needs-pkgs"}); out.ExitCode != 0 || len(*f.reqs) != 1 {
-		t.Fatalf("second run: %+v (%d approvals)", out, len(*f.reqs))
-	}
+	second := f.runner.Run(context.Background(), RunSkillScriptInput{Skill: "demo", Script: "needs-pkgs"})
+	require.Equal(t, 0, second.ExitCode, "second run: %+v", second)
+	require.Len(t, *f.reqs, 1, "the second run asks nothing more")
 	envs := f.runner.Envs().List()
-	if len(envs) != 1 || envs[0].Skills[0] != "demo" {
-		t.Fatalf("envs: %+v", envs)
-	}
+	require.Len(t, envs, 1, "envs: %+v", envs)
+	require.Equal(t, "demo", envs[0].Skills[0], "envs: %+v", envs)
 	t.Logf("sandbox %s", out.Sandbox)
 }

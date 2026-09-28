@@ -16,12 +16,13 @@ package tools
 
 import (
 	"context"
-	"errors"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestPathMatcher(t *testing.T) {
@@ -29,9 +30,7 @@ func TestPathMatcher(t *testing.T) {
 	t.Setenv("HOME", home)
 	root := t.TempDir()
 	m, err := NewPathMatcher([]string{".env", "*.pem", "~/.ssh", "config/prod/*.yaml", "/opt/secret/**/token"}, []string{root})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
 	blocked := []string{
 		filepath.Join(root, ".env"),
@@ -45,9 +44,8 @@ func TestPathMatcher(t *testing.T) {
 		"/opt/secret/a/b/token",
 	}
 	for _, p := range blocked {
-		if _, ok := m.Match(p); !ok {
-			t.Errorf("expected %s to be blocked", p)
-		}
+		_, ok := m.Match(p)
+		assert.True(t, ok, "expected %s to be blocked", p)
 	}
 	allowed := []string{
 		filepath.Join(root, ".env.example"),
@@ -59,25 +57,21 @@ func TestPathMatcher(t *testing.T) {
 		"/opt/secret/tokens",
 	}
 	for _, p := range allowed {
-		if pat, ok := m.Match(p); ok {
-			t.Errorf("expected %s to be allowed, blocked by %q", p, pat)
-		}
+		pat, ok := m.Match(p)
+		assert.False(t, ok, "expected %s to be allowed, blocked by %q", p, pat)
 	}
 
 	if caseInsensitiveFS {
-		if _, ok := m.Match(filepath.Join(root, ".ENV")); !ok {
-			t.Error("expected case-insensitive match on this platform")
-		}
+		_, ok := m.Match(filepath.Join(root, ".ENV"))
+		assert.True(t, ok, "expected case-insensitive match on this platform")
 	}
 
 	// Negative: patterns that could break out of the sandbox profile string.
-	if _, err := NewPathMatcher([]string{`bad"pattern`}, nil); err == nil {
-		t.Error("expected error for pattern containing a quote")
-	}
+	_, err = NewPathMatcher([]string{`bad"pattern`}, nil)
+	assert.Error(t, err, "expected error for pattern containing a quote")
 	var nilMatcher *PathMatcher
-	if _, ok := nilMatcher.Match("/x"); ok {
-		t.Error("nil matcher should match nothing")
-	}
+	_, ok := nilMatcher.Match("/x")
+	assert.False(t, ok, "nil matcher should match nothing")
 }
 
 type sandboxFixture struct {
@@ -102,9 +96,7 @@ func newSandboxFixture(t *testing.T) sandboxFixture {
 		ReadOnlyPaths: []string{f.docs, filepath.Join(f.work, "vendor-ro")},
 		BlockedPaths:  []string{".env", "*.pem"},
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	t.Cleanup(func() { ws.Close() })
 	f.ws = ws
 	return f
@@ -116,43 +108,34 @@ func TestWorkspaceMultiRootAccess(t *testing.T) {
 
 	// Positive: read and write in the extra read-write root by absolute path.
 	notes := filepath.Join(f.shared, "notes.md")
-	if b, err := ws.ReadFile(notes); err != nil || string(b) != "shared notes\n" {
-		t.Errorf("read allowed root: %q %v", b, err)
-	}
-	if err := ws.WriteFileAtomic(filepath.Join(f.shared, "new.md"), []byte("x")); err != nil {
-		t.Errorf("write allowed root: %v", err)
-	}
+	b, err := ws.ReadFile(notes)
+	assert.NoError(t, err, "read allowed root: %q", b)
+	assert.Equal(t, "shared notes\n", string(b), "read allowed root: %q %v", b, err)
+	assert.NoError(t, ws.WriteFileAtomic(filepath.Join(f.shared, "new.md"), []byte("x")), "write allowed root")
 	// Display paths: workspace-relative inside, absolute outside.
-	if got, _ := ws.Rel(filepath.Join(f.work, "main.go")); got != "main.go" {
-		t.Errorf("Rel inside workspace = %q", got)
-	}
-	if got, _ := ws.Rel(notes); got != filepath.Join(ws.RootDirs()[1], "notes.md") {
-		t.Errorf("Rel in allowed root = %q", got)
-	}
+	got, _ := ws.Rel(filepath.Join(f.work, "main.go"))
+	assert.Equal(t, "main.go", got, "Rel inside workspace = %q", got)
+	got, _ = ws.Rel(notes)
+	assert.Equal(t, filepath.Join(ws.RootDirs()[1], "notes.md"), got, "Rel in allowed root = %q", got)
 
 	// Positive: read-only roots are readable...
 	guide := filepath.Join(f.docs, "guide.md")
-	if _, err := ws.ReadFile(guide); err != nil {
-		t.Errorf("read read-only root: %v", err)
-	}
+	_, err = ws.ReadFile(guide)
+	assert.NoError(t, err, "read read-only root")
 	// ...negative: but not writable or deletable, including a read-only root
 	// nested inside the writable workspace.
 	for _, p := range []string{guide, filepath.Join(f.docs, "new.md"), "vendor-ro/lib.go"} {
-		if err := ws.WriteFileAtomic(p, []byte("x")); !errors.Is(err, ErrReadOnlyPath) {
-			t.Errorf("write %s: expected ErrReadOnlyPath, got %v", p, err)
-		}
-		if _, err := ws.WritablePath(p); !errors.Is(err, ErrReadOnlyPath) {
-			t.Errorf("WritablePath %s: expected ErrReadOnlyPath, got %v", p, err)
-		}
+		err := ws.WriteFileAtomic(p, []byte("x"))
+		assert.ErrorIs(t, err, ErrReadOnlyPath, "write %s: expected ErrReadOnlyPath, got %v", p, err)
+		_, err = ws.WritablePath(p)
+		assert.ErrorIs(t, err, ErrReadOnlyPath, "WritablePath %s: expected ErrReadOnlyPath, got %v", p, err)
 	}
-	if err := ws.RemoveFile(guide); !errors.Is(err, ErrReadOnlyPath) {
-		t.Errorf("delete in read-only root: %v", err)
-	}
+	err = ws.RemoveFile(guide)
+	assert.ErrorIs(t, err, ErrReadOnlyPath, "delete in read-only root: %v", err)
 
 	// Negative: paths outside every root.
-	if _, err := ws.ReadFile(filepath.Join(f.outside, "x.txt")); !errors.Is(err, ErrOutsideWorkspace) {
-		t.Errorf("expected ErrOutsideWorkspace, got %v", err)
-	}
+	_, err = ws.ReadFile(filepath.Join(f.outside, "x.txt"))
+	assert.ErrorIs(t, err, ErrOutsideWorkspace, "expected ErrOutsideWorkspace, got %v", err)
 }
 
 func TestWorkspaceBlockedPaths(t *testing.T) {
@@ -160,55 +143,41 @@ func TestWorkspaceBlockedPaths(t *testing.T) {
 	ws := f.ws
 
 	for _, p := range []string{".env", "certs/tls.pem", filepath.Join(f.work, ".env")} {
-		if _, err := ws.ReadFile(p); !errors.Is(err, ErrBlockedPath) {
-			t.Errorf("read %s: expected ErrBlockedPath, got %v", p, err)
-		}
-		if err := ws.WriteFileAtomic(p, []byte("x")); !errors.Is(err, ErrBlockedPath) {
-			t.Errorf("write %s: expected ErrBlockedPath, got %v", p, err)
-		}
+		_, err := ws.ReadFile(p)
+		assert.ErrorIs(t, err, ErrBlockedPath, "read %s: expected ErrBlockedPath, got %v", p, err)
+		err = ws.WriteFileAtomic(p, []byte("x"))
+		assert.ErrorIs(t, err, ErrBlockedPath, "write %s: expected ErrBlockedPath, got %v", p, err)
 	}
 	// Creating a new blocked file is refused too.
-	if err := ws.CreateExclusive("sub/.env", []byte("x")); !errors.Is(err, ErrBlockedPath) {
-		t.Errorf("create blocked: %v", err)
-	}
+	assert.ErrorIs(t, ws.CreateExclusive("sub/.env", []byte("x")), ErrBlockedPath, "create blocked")
 
 	// A symlink with an innocent name pointing at a blocked file is refused.
-	if err := os.Symlink(".env", filepath.Join(f.work, "innocent.txt")); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := ws.ReadFile("innocent.txt"); !errors.Is(err, ErrBlockedPath) {
-		t.Errorf("symlink to blocked file: expected ErrBlockedPath, got %v", err)
-	}
+	require.NoError(t, os.Symlink(".env", filepath.Join(f.work, "innocent.txt")))
+	_, err := ws.ReadFile("innocent.txt")
+	assert.ErrorIs(t, err, ErrBlockedPath, "symlink to blocked file: expected ErrBlockedPath, got %v", err)
 
 	// grep and list_files never surface blocked content.
 	m, err := grepWorkspace(context.Background(), ws, GrepInput{Query: "secret-token"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(m) != 1 || m[0].File != "main.go" {
-		t.Errorf("grep leaked blocked files: %v", m)
-	}
-	if _, err := grepWorkspace(context.Background(), ws, GrepInput{Query: "x", Path: ".env"}); err == nil {
-		t.Error("expected grep on a blocked path to fail")
-	}
+	require.NoError(t, err)
+	assert.Len(t, m, 1, "grep leaked blocked files: %v", m)
+	assert.Equal(t, "main.go", m[0].File, "grep leaked blocked files: %v", m)
+	_, err = grepWorkspace(context.Background(), ws, GrepInput{Query: "x", Path: ".env"})
+	assert.Error(t, err, "expected grep on a blocked path to fail")
 	out := runTool(t, toolOf(t)(NewListFilesTool(ws)), map[string]any{"recursive": true})
 	for _, e := range out["files"].([]any) {
-		if p := e.(map[string]any)["path"].(string); strings.HasSuffix(p, ".pem") {
-			t.Errorf("list_files showed blocked file %s", p)
-		}
+		p := e.(map[string]any)["path"].(string)
+		assert.False(t, strings.HasSuffix(p, ".pem"), "list_files showed blocked file %s", p)
 	}
 }
 
 func TestWorkspaceRejectsBadRoots(t *testing.T) {
 	dir := t.TempDir()
-	if _, err := OpenWorkspace(WorkspaceOptions{Dir: dir, AllowedPaths: []string{filepath.Join(dir, "missing")}}); err == nil {
-		t.Error("expected error for missing allowed path")
-	}
+	_, err := OpenWorkspace(WorkspaceOptions{Dir: dir, AllowedPaths: []string{filepath.Join(dir, "missing")}})
+	assert.Error(t, err, "expected error for missing allowed path")
 	file := filepath.Join(dir, "f")
 	writeFile(t, file, "x")
-	if _, err := OpenWorkspace(WorkspaceOptions{Dir: dir, ReadOnlyPaths: []string{file}}); err == nil {
-		t.Error("expected error when a root is a file")
-	}
+	_, err = OpenWorkspace(WorkspaceOptions{Dir: dir, ReadOnlyPaths: []string{file}})
+	assert.Error(t, err, "expected error when a root is a file")
 }
 
 func TestWriteToolsSkipApprovalWhenSandboxRefuses(t *testing.T) {
@@ -216,36 +185,24 @@ func TestWriteToolsSkipApprovalWhenSandboxRefuses(t *testing.T) {
 	hooks, reqs := approverHooks(true)
 	create := toolOf(t)(NewCreateFileTool(f.ws, hooks))
 	out := runTool(t, create, map[string]any{"path": filepath.Join(f.docs, "x.md"), "content": "x"})
-	if !strings.Contains(errOf(out), "read-only") {
-		t.Errorf("expected read-only error, got %v", out)
-	}
+	assert.Contains(t, errOf(out), "read-only", "expected read-only error, got %v", out)
 	out = runTool(t, toolOf(t)(NewDeleteFileTool(f.ws, hooks)), map[string]any{"path": ".env"})
-	if !strings.Contains(errOf(out), "blocked") {
-		t.Errorf("expected blocked error, got %v", out)
-	}
-	if len(*reqs) != 0 {
-		t.Errorf("user was asked to approve %d writes the sandbox refuses", len(*reqs))
-	}
+	assert.Contains(t, errOf(out), "blocked", "expected blocked error, got %v", out)
+	assert.Len(t, *reqs, 0, "user was asked to approve %d writes the sandbox refuses", len(*reqs))
 }
 
 func TestDefaultShellWritableDirs(t *testing.T) {
 	dirs := DefaultShellWritableDirs()
 	tmp, err := canonicalDir(os.TempDir())
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	found := false
 	for _, d := range dirs {
 		if d == tmp || strings.HasPrefix(tmp, d+string(filepath.Separator)) {
 			found = true
 		}
-		if !filepath.IsAbs(d) {
-			t.Errorf("non-absolute writable dir %q", d)
-		}
+		assert.True(t, filepath.IsAbs(d), "non-absolute writable dir %q", d)
 	}
-	if !found {
-		t.Errorf("temp dir %s not writable by default: %v", tmp, dirs)
-	}
+	assert.True(t, found, "temp dir %s not writable by default: %v", tmp, dirs)
 }
 
 func TestExecEnvScrubsCredentials(t *testing.T) {
@@ -256,17 +213,13 @@ func TestExecEnvScrubsCredentials(t *testing.T) {
 	cfg := ShellConfig{Workspace: ws, Hooks: allowAll(), Exec: &ExecEnv{ScrubEnv: []string{"*_api_key", "*_SECRET"}}}
 
 	out := runShellCommand(context.Background(), cfg, RunShellCommandInput{Command: "env"})
-	if strings.Contains(out.Output, "sk-leak") || strings.Contains(out.Output, "hunter2") {
-		t.Errorf("credentials leaked to child process:\n%s", out.Output)
-	}
-	if !strings.Contains(out.Output, "HARMLESS_VALUE=visible") {
-		t.Error("non-secret variables should pass through")
-	}
+	assert.NotContains(t, out.Output, "sk-leak", "credentials leaked to child process:\n%s", out.Output)
+	assert.NotContains(t, out.Output, "hunter2", "credentials leaked to child process:\n%s", out.Output)
+	assert.Contains(t, out.Output, "HARMLESS_VALUE=visible", "non-secret variables should pass through")
 	// Without scrubbing configured, the environment is inherited unchanged.
 	cfg.Exec = &ExecEnv{}
-	if out := runShellCommand(context.Background(), cfg, RunShellCommandInput{Command: "env"}); !strings.Contains(out.Output, "sk-leak") {
-		t.Error("expected unscrubbed environment when ScrubEnv is empty")
-	}
+	out = runShellCommand(context.Background(), cfg, RunShellCommandInput{Command: "env"})
+	assert.Contains(t, out.Output, "sk-leak", "expected unscrubbed environment when ScrubEnv is empty")
 }
 
 // Commands run in the ExecEnv's directory, not the process's.
@@ -274,14 +227,11 @@ func TestExecEnvRunsInItsDir(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(t.TempDir())
 	cmd, err := (&ExecEnv{Dir: dir}).command(context.Background(), []string{"pwd", "-P"})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	out, err := cmd.Output()
 	want, _ := filepath.EvalSymlinks(dir)
-	if err != nil || strings.TrimSpace(string(out)) != want {
-		t.Errorf("ran in %q (%v), want %q", out, err, want)
-	}
+	assert.NoError(t, err, "ran in %q (%v), want %q", out, err, want)
+	assert.Equal(t, want, strings.TrimSpace(string(out)), "ran in %q (%v), want %q", out, err, want)
 }
 
 // Relative extra roots are relative to the workspace, wherever the process is.
@@ -292,12 +242,8 @@ func TestExtraRootsResolveAgainstTheWorkspace(t *testing.T) {
 	os.MkdirAll(shared, 0o755)
 	t.Chdir(t.TempDir())
 	w, err := OpenWorkspace(WorkspaceOptions{Dir: ws, ReadOnlyPaths: []string{"../shared"}})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	defer w.Close()
 	want, _ := filepath.EvalSymlinks(shared)
-	if !slices.Contains(w.RootDirs(), want) {
-		t.Errorf("roots %v lack %s", w.RootDirs(), want)
-	}
+	assert.Contains(t, w.RootDirs(), want, "roots %v lack %s", w.RootDirs(), want)
 }

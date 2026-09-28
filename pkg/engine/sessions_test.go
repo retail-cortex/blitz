@@ -16,62 +16,60 @@ package engine
 
 import (
 	"context"
-	"errors"
 	"testing"
 
 	"github.com/retail-cortex/blitz/pkg/api"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestSessionOperations(t *testing.T) {
 	w, _ := openTestWith(t, nil, text("noted"))
-	if _, err := w.SaveSnapshot("early", false); !errors.Is(err, api.ErrNoActiveSession) {
-		t.Errorf("snapshot without a session: %v", err)
-	}
-	if _, err := w.RenameSession("x"); !errors.Is(err, api.ErrNoActiveSession) {
-		t.Errorf("rename without a session: %v", err)
-	}
+	_, err := w.SaveSnapshot("early", false)
+	assert.ErrorIs(t, err, api.ErrNoActiveSession, "snapshot without a session: %v", err)
+	_, err = w.RenameSession("x")
+	assert.ErrorIs(t, err, api.ErrNoActiveSession, "rename without a session: %v", err)
 	first, err := w.NewSession()
-	if err != nil || first.Agent != "blitz" || first.Workspace != w.Dir() {
-		t.Fatalf("new: %+v %v", first, err)
-	}
-	if _, err := w.Run(context.Background(), first.ID, api.Turn{Text: "remember pineapple"}, ignore); err != nil {
-		t.Fatal(err)
-	}
-	if s, _ := w.ActiveSession(); s.Title != "remember pineapple" || len(s.Messages) != 2 || s.Messages[0].Text != "remember pineapple" {
-		t.Errorf("active: %+v", s)
-	}
-	if _, err := w.RenameSession(" "); err == nil {
-		t.Error("an empty title was accepted")
-	}
-	if s, err := w.RenameSession("fruit talk"); err != nil || s.Title != "fruit talk" {
-		t.Errorf("rename: %+v %v", s, err)
-	}
+	require.NoError(t, err, "new: %+v", first)
+	require.Equal(t, "blitz", first.Agent, "new: %+v %v", first, err)
+	require.Equal(t, w.Dir(), first.Workspace, "new: %+v %v", first, err)
+	_, runErr := w.Run(context.Background(), first.ID, api.Turn{Text: "remember pineapple"}, ignore)
+	require.NoError(t, runErr)
+	s, _ := w.ActiveSession()
+	assert.Equal(t, "remember pineapple", s.Title, "active: %+v", s)
+	assert.Len(t, s.Messages, 2, "active: %+v", s)
+	assert.Equal(t, "remember pineapple", s.Messages[0].Text, "active: %+v", s)
+	_, emptyErr := w.RenameSession(" ")
+	assert.Error(t, emptyErr, "an empty title is refused")
+	renamed, renameErr := w.RenameSession("fruit talk")
+	assert.NoError(t, renameErr, "rename")
+	assert.Equal(t, "fruit talk", renamed.Title)
 
 	snap, err := w.SaveSnapshot("fruit", false)
-	if err != nil || snap.Snapshot != "fruit" || snap.MessageCount != 2 || snap.From != first.ID {
-		t.Fatalf("snapshot: %+v %v", snap, err)
-	}
-	if _, err := w.SaveSnapshot("fruit", false); !errors.Is(err, api.ErrSnapshotNameTaken) {
-		t.Errorf("taken: %v", err)
-	}
-	if s, _ := w.ActiveSession(); s.ID != first.ID {
-		t.Error("saving a snapshot switched sessions")
-	}
+	require.NoError(t, err, "snapshot: %+v", snap)
+	require.Equal(t, "fruit", snap.Snapshot, "snapshot: %+v %v", snap, err)
+	require.Equal(t, 2, snap.MessageCount, "snapshot: %+v %v", snap, err)
+	require.Equal(t, first.ID, snap.From, "snapshot: %+v %v", snap, err)
+	_, takenErr := w.SaveSnapshot("fruit", false)
+	assert.ErrorIs(t, takenErr, api.ErrSnapshotNameTaken)
+	s, _ = w.ActiveSession()
+	assert.Equal(t, first.ID, s.ID, "saving a snapshot switched sessions")
 
 	branch, branched, err := w.LoadSession("fruit")
-	if err != nil || !branched || branch.ID == first.ID || branch.ID == snap.ID || len(branch.Messages) != 2 {
-		t.Fatalf("load snapshot: %+v %v %v", branch, branched, err)
-	}
+	require.NoError(t, err, "load snapshot: %+v %v", branch, branched)
+	require.True(t, branched, "load snapshot: %+v %v %v", branch, branched, err)
+	require.NotEqual(t, first.ID, branch.ID, "load snapshot: %+v %v %v", branch, branched, err)
+	require.NotEqual(t, snap.ID, branch.ID, "load snapshot: %+v %v %v", branch, branched, err)
+	require.Len(t, branch.Messages, 2, "load snapshot: %+v %v %v", branch, branched, err)
 	back, branched, err := w.LoadSession(first.ID)
-	if err != nil || branched || back.ID != first.ID {
-		t.Fatalf("load by id: %+v %v %v", back, branched, err)
-	}
-	if _, _, err := w.LoadSession("nope"); err == nil {
-		t.Error("loaded an unknown session")
-	}
+	require.NoError(t, err, "load by id: %+v %v", back, branched)
+	require.False(t, branched, "load by id: %+v %v %v", back, branched, err)
+	require.Equal(t, first.ID, back.ID, "load by id: %+v %v %v", back, branched, err)
+	_, _, unknownErr := w.LoadSession("nope")
+	assert.Error(t, unknownErr, "an unknown session doesn't load")
 
 	list, err := w.ListSessions(false)
-	if err != nil || len(list) != 3 || list[0].Messages != nil {
-		t.Errorf("list: %d sessions, %v", len(list), err)
-	}
+	assert.NoError(t, err, "list: %d sessions,", len(list))
+	assert.Len(t, list, 3, "list: %d sessions, %v", len(list), err)
+	assert.Nil(t, list[0].Messages, "list: %d sessions, %v", len(list), err)
 }

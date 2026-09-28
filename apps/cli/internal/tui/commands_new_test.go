@@ -25,6 +25,8 @@ import (
 
 	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/engine/runtime"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/genai"
 )
 
@@ -52,50 +54,36 @@ func TestPlanCommandRefusesEditsAndRecordsTheGoal(t *testing.T) {
 		genai.NewContentFromText("1. Create notes.txt", genai.RoleModel))
 	out := captureStdout(t, func() { RunREPL(context.Background(), app) })
 
-	if !strings.Contains(out, "Usage: /plan <goal>") {
-		t.Errorf("bare /plan should print usage:\n%s", out)
-	}
-	if llm.Calls() != 2 {
-		t.Fatalf("want 2 model calls for the plan, got %d", llm.Calls())
-	}
-	if _, err := os.Stat(filepath.Join(local(app).Tools().Workspace().Dir(), "notes.txt")); err == nil {
-		t.Fatal("/plan created a file")
-	}
+	assert.Contains(t, out, "Usage: /plan <goal>", "bare /plan should print usage:\n%s", out)
+	require.Equal(t, 2, llm.Calls(), "want 2 model calls for the plan, got %d", llm.Calls())
+	_, err := os.Stat(filepath.Join(local(app).Tools().Workspace().Dir(), "notes.txt"))
+	require.Error(t, err, "/plan created a file")
 	first := llm.Requests[0].Contents
-	if text := first[len(first)-1].Parts[0].Text; !strings.Contains(text, "plan-only mode") || !strings.Contains(text, "add notes.txt") {
-		t.Fatalf("plan prompt = %q", text)
-	}
-	if got := userMessages(local(app).Storage()); len(got) != 1 || got[0] != "/plan add notes.txt" {
-		t.Fatalf("transcript = %v", got)
-	}
+	text := first[len(first)-1].Parts[0].Text
+	require.Contains(t, text, "plan-only mode", "plan prompt = %q", text)
+	require.Contains(t, text, "add notes.txt", "plan prompt = %q", text)
+	got := userMessages(local(app).Storage())
+	require.Len(t, got, 1, "transcript = %v", got)
+	require.Equal(t, "/plan add notes.txt", got[0], "transcript = %v", got)
 }
 
 func TestPlanGoalIsNotRunAsACommand(t *testing.T) {
 	app, llm := newCommandApp(t, "/plan /clear everything\n/exit\n", genai.NewContentFromText("plan", genai.RoleModel))
 	captureStdout(t, func() { RunREPL(context.Background(), app) })
-	if llm.Calls() != 1 {
-		t.Fatalf("goal starting with / was not sent to the agent (%d calls)", llm.Calls())
-	}
+	require.Equal(t, 1, llm.Calls(), "goal starting with / was not sent to the agent (%d calls)", llm.Calls())
 }
 
 func TestShellPassthroughRunsInWorkspaceWithoutTheAgent(t *testing.T) {
 	app, llm := newCommandApp(t, "!echo hi > made.txt\n!exit 3\n!\n/exit\n")
 	out := captureStdout(t, func() { RunREPL(context.Background(), app) })
-	if llm.Calls() != 0 {
-		t.Fatalf("! reached the agent (%d calls)", llm.Calls())
-	}
+	require.Equal(t, 0, llm.Calls(), "! reached the agent (%d calls)", llm.Calls())
 	b, err := os.ReadFile(filepath.Join(local(app).Tools().Workspace().Dir(), "made.txt"))
-	if err != nil || strings.TrimSpace(string(b)) != "hi" {
-		t.Fatalf("command did not run in the workspace: %q %v", b, err)
-	}
+	require.NoError(t, err, "command did not run in the workspace: %q", b)
+	require.Equal(t, "hi", strings.TrimSpace(string(b)), "command did not run in the workspace: %q %v", b, err)
 	for _, want := range []string{"$ echo hi > made.txt", "Done", "Exit code 3", "Usage: !<command>"} {
-		if !strings.Contains(out, want) {
-			t.Errorf("output missing %q:\n%s", want, out)
-		}
+		assert.Contains(t, out, want, "output missing %q:\n%s", want, out)
 	}
-	if len(userMessages(local(app).Storage())) != 0 {
-		t.Fatal("! commands were recorded as prompts")
-	}
+	require.Len(t, userMessages(local(app).Storage()), 0, "! commands were recorded as prompts")
 }
 
 // Ctrl+C during a ! command stops the command; the REPL's copy of the
@@ -112,9 +100,7 @@ func TestCtrlCDuringShellPassthroughDoesNotExit(t *testing.T) {
 		sigs <- os.Interrupt
 	}()
 	captureStdout(t, func() { RunREPL(context.Background(), app) })
-	if llm.Calls() != 1 {
-		t.Fatalf("the prompt after the ! command was not sent (%d model calls); a stale Ctrl+C ended the session", llm.Calls())
-	}
+	require.Equal(t, 1, llm.Calls(), "the prompt after the ! command was not sent (%d model calls); a stale Ctrl+C ended the session", llm.Calls())
 }
 
 func TestToolsAndShowCommands(t *testing.T) {
@@ -122,13 +108,9 @@ func TestToolsAndShowCommands(t *testing.T) {
 	local(app).Config().MCP.Servers = []config.MCPServerConfig{{Name: "gh", Prefix: "gh"}, {Name: "qa-only", Agents: []string{"qa"}}}
 	out := captureStdout(t, func() { HandleCommand(context.Background(), "/tools", app) })
 	for _, want := range []string{"read_file", "run_shell_command", "mcp:gh", "gh__"} {
-		if !strings.Contains(out, want) {
-			t.Errorf("/tools missing %q:\n%s", want, out)
-		}
+		assert.Contains(t, out, want, "/tools missing %q:\n%s", want, out)
 	}
-	if strings.Contains(out, "qa-only") {
-		t.Error("/tools listed an MCP server not offered to the active agent")
-	}
+	assert.NotContains(t, out, "qa-only", "/tools listed an MCP server not offered to the active agent")
 	// read_file is marked as available in /plan, run_shell_command is not.
 	for _, line := range strings.Split(out, "\n") {
 		switch {
@@ -141,9 +123,8 @@ func TestToolsAndShowCommands(t *testing.T) {
 
 	show := captureStdout(t, func() { HandleCommand(context.Background(), "/show", app) })
 	set := captureStdout(t, func() { HandleCommand(context.Background(), "/set", app) })
-	if show == "" || show != set {
-		t.Fatalf("/show should match /set:\n%s\nvs\n%s", show, set)
-	}
+	require.NotEqual(t, "", show, "/show should match /set:\n%s\nvs\n%s", show, set)
+	require.Equal(t, set, show, "/show should match /set:\n%s\nvs\n%s", show, set)
 }
 
 // slowReader returns its chunks one per Read, pausing before each after the first.

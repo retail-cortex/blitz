@@ -19,11 +19,12 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
 	"github.com/retail-cortex/blitz/pkg/engine/tools"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestEnvsListPruneRemove(t *testing.T) {
@@ -36,9 +37,7 @@ func TestEnvsListPruneRemove(t *testing.T) {
 	skillsDir := t.TempDir()
 	os.MkdirAll(filepath.Join(skillsDir, "s"), 0o755)
 	os.WriteFile(filepath.Join(skillsDir, "s", "SKILL.md"), []byte("---\nname: s\nscripts:\n  - name: r\n    language: python\n    inline_code: x\n    dependencies: [\"six==1.16.0\"]\n---\n"), 0o644)
-	if err := local(app).Skills().DiscoverExternal([]string{skillsDir}); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, local(app).Skills().DiscoverExternal([]string{skillsDir}))
 	envs := local(app).Tools().SkillScripts().Envs()
 	dir := filepath.Join(home, ".blitz", "envs")
 	mk := func(key string, marker bool, deps ...string) {
@@ -59,27 +58,19 @@ func TestEnvsListPruneRemove(t *testing.T) {
 
 	out := run("/envs")
 	for _, want := range []string{"Script environments (3)", needed, "six==1.16.0", "used by s", "incomplete"} {
-		if !strings.Contains(out, want) {
-			t.Errorf("list lacks %q:\n%s", want, out)
-		}
+		assert.Contains(t, out, want, "list lacks %q:\n%s", want, out)
 	}
-	if out := run("/envs prune"); !strings.Contains(out, "Removed 2 environment(s)") {
-		t.Errorf("prune:\n%s", out)
-	}
+	out = run("/envs prune")
+	assert.Contains(t, out, "Removed 2 environment(s)", "prune:\n%s", out)
 	left, _ := os.ReadDir(dir)
-	if len(left) != 1 || left[0].Name() != needed {
-		t.Fatalf("after prune: %v", left)
-	}
-	if out := run("/envs remove " + needed); !strings.Contains(out, "Removed environment") {
-		t.Errorf("remove:\n%s", out)
-	}
-	if out := run("/envs remove ../x"); !strings.Contains(out, "Could not remove") {
-		t.Errorf("bad key:\n%s", out)
-	}
-	if out := run("/envs"); !strings.Contains(out, "No script environments") {
-		t.Errorf("empty:\n%s", out)
-	}
-	if out := run("/envs bogus"); !strings.Contains(out, "Usage: /envs") {
-		t.Errorf("usage:\n%s", out)
-	}
+	require.Len(t, left, 1, "after prune: %v", left)
+	require.Equal(t, needed, left[0].Name(), "after prune: %v", left)
+	out = run("/envs remove " + needed)
+	assert.Contains(t, out, "Removed environment", "remove:\n%s", out)
+	out = run("/envs remove ../x")
+	assert.Contains(t, out, "Could not remove", "bad key:\n%s", out)
+	out = run("/envs")
+	assert.Contains(t, out, "No script environments", "empty:\n%s", out)
+	out = run("/envs bogus")
+	assert.Contains(t, out, "Usage: /envs", "usage:\n%s", out)
 }

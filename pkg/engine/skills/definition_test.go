@@ -17,9 +17,11 @@ package skills
 import (
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 const castorSkill = `---
@@ -65,33 +67,32 @@ Instructions here.
 
 func TestParseCastorFrontmatter(t *testing.T) {
 	s, err := ParseSkillMD([]byte(castorSkill), "x/SKILL.md")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(s.Problems) != 0 {
-		t.Fatalf("problems: %v", s.Problems)
-	}
-	if s.License != "Apache-2.0" || s.Compatibility == "" || s.Metadata["owner"] != "platform" || s.Category != "devops" ||
-		len(s.Authors) != 1 || s.Authors[0].Email != "ada@example.com" || s.SkillID != "sk-1" || s.SourceURI == "" {
-		t.Errorf("metadata: %+v", s.SkillMetadata)
-	}
-	if got := s.AllowedToolsList(); !slices.Equal(got, []string{"Bash(gh:*)", "Read"}) {
-		t.Errorf("allowed-tools: %q", got)
-	}
+	require.NoError(t, err)
+	require.Len(t, s.Problems, 0, "problems: %v", s.Problems)
+	assert.Equal(t, "Apache-2.0", s.License, "metadata: %+v", s.SkillMetadata)
+	assert.NotEqual(t, "", s.Compatibility, "metadata: %+v", s.SkillMetadata)
+	assert.Equal(t, "platform", s.Metadata["owner"], "metadata: %+v", s.SkillMetadata)
+	assert.Equal(t, "devops", s.Category, "metadata: %+v", s.SkillMetadata)
+	assert.Len(t, s.Authors, 1, "metadata: %+v", s.SkillMetadata)
+	assert.Equal(t, "ada@example.com", s.Authors[0].Email, "metadata: %+v", s.SkillMetadata)
+	assert.Equal(t, "sk-1", s.SkillID, "metadata: %+v", s.SkillMetadata)
+	assert.NotEqual(t, "", s.SourceURI, "metadata: %+v", s.SkillMetadata)
+	got := s.AllowedToolsList()
+	assert.Equal(t, []string{"Bash(gh:*)", "Read"}, got, "allowed-tools: %q", got)
 	h := s.ExecutionHints
-	if h == nil || h.HITLTier != Tier2AuditedWrite || !h.NeedsNetwork() || h.TimeoutSeconds != 120 || len(h.EnvironmentVariables) != 2 {
-		t.Fatalf("hints: %+v", h)
-	}
+	require.NotNil(t, h, "hints: %+v", h)
+	require.Equal(t, Tier2AuditedWrite, h.HITLTier, "hints: %+v", h)
+	require.True(t, h.NeedsNetwork(), "hints: %+v", h)
+	require.Equal(t, 120, h.TimeoutSeconds, "hints: %+v", h)
+	require.Len(t, h.EnvironmentVariables, 2, "hints: %+v", h)
 	sc := s.Scripts[0]
-	if sc.Language != LanguagePython || sc.RelativePath != "scripts/list.py" || len(sc.Dependencies) != 2 || sc.EnvironmentVariables["PAGE_SIZE"] != "50" {
-		t.Errorf("script: %+v", sc)
-	}
-	if s.CompiledReference.SHA256Hash != "abc123" || s.ToolRequirements[0].Scopes[0] != "gh:*" {
-		t.Errorf("reference/tools: %+v %+v", s.CompiledReference, s.ToolRequirements)
-	}
-	if s.Content != "Instructions here." {
-		t.Errorf("content %q", s.Content)
-	}
+	assert.Equal(t, LanguagePython, sc.Language, "script: %+v", sc)
+	assert.Equal(t, "scripts/list.py", sc.RelativePath, "script: %+v", sc)
+	assert.Len(t, sc.Dependencies, 2, "script: %+v", sc)
+	assert.Equal(t, "50", sc.EnvironmentVariables["PAGE_SIZE"], "script: %+v", sc)
+	assert.Equal(t, "abc123", s.CompiledReference.SHA256Hash, "reference/tools: %+v %+v", s.CompiledReference, s.ToolRequirements)
+	assert.Equal(t, "gh:*", s.ToolRequirements[0].Scopes[0], "reference/tools: %+v %+v", s.CompiledReference, s.ToolRequirements)
+	assert.Equal(t, "Instructions here.", s.Content, "content %q", s.Content)
 }
 
 func TestHITLTierNames(t *testing.T) {
@@ -102,23 +103,19 @@ func TestHITLTierNames(t *testing.T) {
 		"TIER_3_MANDATORY_APPROVAL":     Tier3MandatoryApproval,
 		"":                              TierUnspecified,
 	} {
-		if got, err := ParseHITLTier(in); err != nil || got != want {
-			t.Errorf("%q: %v %v", in, got, err)
-		}
+		got, err := ParseHITLTier(in)
+		assert.NoError(t, err, "%q: %v", in, got)
+		assert.Equal(t, want, got, "%q: %v %v", in, got, err)
 	}
-	if _, err := ParseHITLTier("TIER_9"); err == nil {
-		t.Error("unknown tier accepted")
-	}
+	_, err := ParseHITLTier("TIER_9")
+	assert.Error(t, err, "unknown tier accepted")
 	// A number is ambiguous (the proto numbers tier 2 as 3), so it's refused.
-	_, err := ParseSkillMD([]byte("---\nname: x\nexecution_hints:\n  hitl_tier: 2\n---\n"), "")
-	if err == nil || !strings.Contains(err.Error(), "not a number") {
-		t.Fatalf("numeric tier: %v", err)
-	}
+	_, err = ParseSkillMD([]byte("---\nname: x\nexecution_hints:\n  hitl_tier: 2\n---\n"), "")
+	require.Error(t, err, "numeric tier")
+	require.Contains(t, err.Error(), "not a number", "numeric tier: %v", err)
 	// Omitted means unspecified, never a bypass.
 	s, _ := ParseSkillMD([]byte("---\nname: x\n---\n"), "")
-	if s.DeclaredTier() != TierUnspecified {
-		t.Fatalf("omitted tier = %v", s.DeclaredTier())
-	}
+	require.Equal(t, TierUnspecified, s.DeclaredTier(), "omitted tier = %v", s.DeclaredTier())
 }
 
 func TestValidateScripts(t *testing.T) {
@@ -146,9 +143,7 @@ tool_requirements:
 ---
 `
 	s, err := ParseSkillMD([]byte(doc), "")
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	all := strings.Join(s.Problems, "\n")
 	for _, want := range []string{
 		`script "a": relative_path must stay inside`,
@@ -162,13 +157,10 @@ tool_requirements:
 		`execution_hints: invalid environment variable name "1BAD"`,
 		`tool_requirements[0]: needs a name`,
 	} {
-		if !strings.Contains(all, want) {
-			t.Errorf("missing problem %q in:\n%s", want, all)
-		}
+		assert.Contains(t, all, want, "missing problem %q in:\n%s", want, all)
 	}
-	if _, err := ParseSkillMD([]byte("---\nname: x\nscripts:\n  - name: s\n    language: cobol\n---\n"), ""); err == nil {
-		t.Error("unknown language accepted")
-	}
+	_, err = ParseSkillMD([]byte("---\nname: x\nscripts:\n  - name: s\n    language: cobol\n---\n"), "")
+	assert.Error(t, err, "unknown language accepted")
 }
 
 func TestInBundle(t *testing.T) {
@@ -176,9 +168,7 @@ func TestInBundle(t *testing.T) {
 		"scripts/a.py": true, "a.py": true, "./a.py": true, "x/../a.py": true,
 		"../a.py": false, "/etc/passwd": false, "x/../../a.py": false, `scripts\a.py`: false, ".": false,
 	} {
-		if inBundle(p) != want {
-			t.Errorf("inBundle(%q) = %v", p, !want)
-		}
+		assert.Equal(t, want, inBundle(p), "inBundle(%q) = %v", p, !want)
 	}
 }
 
@@ -188,30 +178,24 @@ func TestContentHashCoversEveryFileAndSkipsSymlinks(t *testing.T) {
 	os.WriteFile(filepath.Join(dir, "SKILL.md"), []byte("---\nname: h\n---\n"), 0o644)
 	os.WriteFile(filepath.Join(dir, "scripts", "a.py"), []byte("print(1)"), 0o644)
 	p, _ := NewProvider()
-	if err := p.DiscoverExternal([]string{dir}); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, p.DiscoverExternal([]string{dir}))
 	s, _ := p.Get("h")
 	h1, err := s.ContentHash()
-	if err != nil || !strings.HasPrefix(h1, "sha256:") {
-		t.Fatalf("%q %v", h1, err)
-	}
-	if h, _ := s.ContentHash(); h != h1 {
-		t.Fatal("hash isn't stable")
-	}
+	require.NoError(t, err, "%q", h1)
+	require.True(t, strings.HasPrefix(h1, "sha256:"), "%q %v", h1, err)
+	h, _ := s.ContentHash()
+	require.Equal(t, h1, h, "hash isn't stable")
 	os.Symlink("/etc/hosts", filepath.Join(dir, "scripts", "link"))
-	if h, _ := s.ContentHash(); h != h1 {
-		t.Fatal("a symbolic link changed the hash")
-	}
+	h, _ = s.ContentHash()
+	require.Equal(t, h1, h, "a symbolic link changed the hash")
 	os.WriteFile(filepath.Join(dir, "scripts", "a.py"), []byte("print(2)"), 0o644)
-	if h, _ := s.ContentHash(); h == h1 {
-		t.Fatal("changing a script didn't change the hash")
-	}
+	h, _ = s.ContentHash()
+	require.NotEqual(t, h1, h, "changing a script didn't change the hash")
 	// Built-in skills hash too.
 	b, _ := p.Get("code-review")
-	if h, err := b.ContentHash(); err != nil || h == "" {
-		t.Fatalf("builtin: %q %v", h, err)
-	}
+	h, err = b.ContentHash()
+	require.NoError(t, err, "builtin: %q", h)
+	require.NotEqual(t, "", h, "builtin: %q %v", h, err)
 }
 
 func TestDiscoveryReportsUnparseableSkills(t *testing.T) {
@@ -220,12 +204,11 @@ func TestDiscoveryReportsUnparseableSkills(t *testing.T) {
 	os.WriteFile(filepath.Join(dir, "broken", "SKILL.md"), []byte("---\nname: broken\nexecution_hints:\n  hitl_tier: TIER_7\n---\n"), 0o644)
 	p, _ := NewProvider()
 	err := p.DiscoverExternal([]string{dir})
-	if err == nil || !strings.Contains(err.Error(), "broken/SKILL.md") || !strings.Contains(err.Error(), "TIER_7") {
-		t.Fatalf("error: %v", err)
-	}
-	if _, ok := p.Get("broken"); ok {
-		t.Fatal("an unparseable skill was loaded")
-	}
+	require.Error(t, err, "error")
+	require.Contains(t, err.Error(), "broken/SKILL.md", "error: %v", err)
+	require.Contains(t, err.Error(), "TIER_7", "error: %v", err)
+	_, ok := p.Get("broken")
+	require.False(t, ok, "an unparseable skill was loaded")
 }
 
 func TestScriptPathStaysInsideTheSkill(t *testing.T) {
@@ -237,27 +220,20 @@ func TestScriptPathStaysInsideTheSkill(t *testing.T) {
 	os.WriteFile(filepath.Join(dir, "outside.py"), []byte("print('escaped')"), 0o644)
 	os.Symlink(filepath.Join(dir, "outside.py"), filepath.Join(skill, "scripts", "link.py"))
 	p, _ := NewProvider()
-	if err := p.DiscoverExternal([]string{dir}); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, p.DiscoverExternal([]string{dir}))
 	s, _ := p.Get("s")
-	if got, err := s.ScriptPath("scripts/ok.py"); err != nil || got != filepath.Join(skill, "scripts", "ok.py") {
-		t.Fatalf("ok: %q %v", got, err)
-	}
+	got, err := s.ScriptPath("scripts/ok.py")
+	require.NoError(t, err, "ok: %q", got)
+	require.Equal(t, filepath.Join(skill, "scripts", "ok.py"), got, "ok: %q %v", got, err)
 	for _, bad := range []string{"scripts/link.py", "../outside.py", "scripts", "missing.py"} {
-		if got, err := s.ScriptPath(bad); err == nil {
-			t.Errorf("%s accepted: %s", bad, got)
-		}
+		got, err := s.ScriptPath(bad)
+		assert.Error(t, err, "%s accepted: %s", bad, got)
 	}
 	b, _ := p.Get("code-review")
-	if _, err := b.ScriptPath("SKILL.md"); err == nil {
-		t.Error("built-in skill gave a host path")
-	}
+	_, err = b.ScriptPath("SKILL.md")
+	assert.Error(t, err, "built-in skill gave a host path")
 	out := t.TempDir()
-	if err := b.CopyTo(out); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := os.Stat(filepath.Join(out, "SKILL.md")); err != nil {
-		t.Fatalf("CopyTo: %v", err)
-	}
+	require.NoError(t, b.CopyTo(out))
+	_, err = os.Stat(filepath.Join(out, "SKILL.md"))
+	require.NoError(t, err, "CopyTo")
 }

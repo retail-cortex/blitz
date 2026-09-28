@@ -21,8 +21,8 @@ import (
 	"time"
 
 	"github.com/retail-cortex/blitz/pkg/api"
-
 	"github.com/retail-cortex/blitz/pkg/config"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/genai"
 )
 
@@ -40,12 +40,9 @@ func TestBoundedRunnerCapsConcurrencyAndRunsEveryTask(t *testing.T) {
 		}
 	}
 	boundedRunner(3)(context.Background(), tasks)
-	if ran.Load() != 20 {
-		t.Fatalf("ran %d of 20 tasks", ran.Load())
-	}
-	if p := peak.Load(); p != 3 {
-		t.Fatalf("peak concurrency %d, want 3", p)
-	}
+	require.Equal(t, int32(20), ran.Load(), "ran %d of 20 tasks", ran.Load())
+	p := peak.Load()
+	require.Equal(t, int32(3), p, "peak concurrency %d, want 3", p)
 }
 
 // A task that fans out again (a sub-agent's tool calls) must not deadlock
@@ -81,20 +78,16 @@ func parallelShellTurn(t *testing.T, maxParallel int) time.Duration {
 	f.tools.Hooks().SetApprover(func(context.Context, api.ApprovalRequest) (api.Decision, error) { return api.DecisionOnce, nil })
 	start := time.Now()
 	got, err := functionResponses(t, f.eng, "s", "run four sleeps")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if r := got["run_shell_command"]; r == nil || r["error"] != nil && r["error"] != "" {
-		t.Fatalf("shell call failed: %v", r)
-	}
+	require.NoError(t, err)
+	r := got["run_shell_command"]
+	require.NotNil(t, r, "shell call failed: %v", r)
+	require.False(t, r["error"] != nil && r["error"] != "", "shell call failed: %v", r)
 	return time.Since(start)
 }
 
 func TestEngineCapsParallelToolCalls(t *testing.T) {
-	if d := parallelShellTurn(t, 1); d < 1100*time.Millisecond {
-		t.Fatalf("max_parallel=1 ran 4×0.3s sleeps in %v; they overlapped", d)
-	}
-	if d := parallelShellTurn(t, 0); d > 1100*time.Millisecond {
-		t.Fatalf("unlimited took %v; calls did not run in parallel", d)
-	}
+	d := parallelShellTurn(t, 1)
+	require.GreaterOrEqual(t, d, 1100*time.Millisecond, "max_parallel=1 ran 4×0.3s sleeps in %v; they overlapped", d)
+	d = parallelShellTurn(t, 0)
+	require.LessOrEqual(t, d, 1100*time.Millisecond, "unlimited took %v; calls did not run in parallel", d)
 }

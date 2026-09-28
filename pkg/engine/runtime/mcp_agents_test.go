@@ -21,6 +21,8 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/engine/tools"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/adk/v2/tool/mcptoolset"
 )
 
@@ -34,9 +36,7 @@ func inMemoryServer(t *testing.T, name string) *mcptoolset.Config {
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 	ss, err := server.Connect(ctx, st, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	t.Cleanup(func() { ss.Close() }) // ends the client session over the pipe too
 	return &mcptoolset.Config{Transport: ct}
 }
@@ -44,28 +44,20 @@ func inMemoryServer(t *testing.T, name string) *mcptoolset.Config {
 func TestMCPToolsReachChosenSubAgentOnly(t *testing.T) {
 	f := newEngineWith(t, fixtureOpts{}, textContent("root reply"), textContent("kitten reply"))
 	ts, err := mcptoolset.New(*inMemoryServer(t, "run_e2e_tests"))
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	f.tools.SetMCP(tools.NewMCPManagerFromToolsets([]tools.MCPToolset{{
 		Config: config.MCPServerConfig{Name: "qa", Agents: []string{"qa"}, Prefix: "qa"}, Toolset: ts,
 	}}, nil))
-	if err := f.eng.Rebuild(context.Background()); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, f.eng.Rebuild(context.Background()))
 
-	if _, err := collect(t, f.eng, "s", "hello"); err != nil {
-		t.Fatal(err)
-	}
-	if _, ok := f.llm.Requests[0].Tools["qa__run_e2e_tests"]; ok {
-		t.Error("primary agent was offered a server scoped to qa")
-	}
-	if _, err := f.eng.InvokeSubagent(context.Background(), "qa", "run the tests"); err != nil {
-		t.Fatal(err)
-	}
-	if _, ok := f.llm.Requests[1].Tools["qa__run_e2e_tests"]; !ok {
-		t.Errorf("qa not offered its MCP tool; tools: %v", keys(f.llm.Requests[1].Tools))
-	}
+	_, err = collect(t, f.eng, "s", "hello")
+	require.NoError(t, err)
+	_, ok := f.llm.Requests[0].Tools["qa__run_e2e_tests"]
+	assert.False(t, ok, "primary agent was offered a server scoped to qa")
+	_, err = f.eng.InvokeSubagent(context.Background(), "qa", "run the tests")
+	require.NoError(t, err)
+	_, ok = f.llm.Requests[1].Tools["qa__run_e2e_tests"]
+	assert.True(t, ok, "qa not offered its MCP tool; tools: %v", keys(f.llm.Requests[1].Tools))
 }
 
 func keys(m map[string]any) []string {

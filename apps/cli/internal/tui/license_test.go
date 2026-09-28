@@ -16,8 +16,9 @@ package tui
 
 import (
 	"context"
-	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 // /license shows the NOTICE, the full license, or the third-party
@@ -32,12 +33,10 @@ func TestLicenseCommand(t *testing.T) {
 		" bogus":       "unknown license text",
 	} {
 		out := captureStdout(t, func() {
-			if handled, err := HandleCommand(ctx, "/license"+arg, app); !handled || err != nil {
-				t.Errorf("/license%s: handled %v, %v", arg, handled, err)
-			}
+			handled, err := HandleCommand(ctx, "/license"+arg, app)
+			assert.True(t, handled, "/license%s: handled %v, %v", arg, handled, err)
+			assert.NoError(t, err, "/license%s: handled %v,", arg, handled)
 		})
-		if !strings.Contains(out, want) {
-			t.Errorf("/license%s: no %q in\n%.300s", arg, want, out)
-		}
+		assert.Contains(t, out, want, "/license%s: no %q in\n%.300s", arg, want, out)
 	}
 }

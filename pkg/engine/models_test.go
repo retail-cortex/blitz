@@ -16,125 +16,123 @@ package engine
 
 import (
 	"context"
-	"errors"
 	"slices"
 	"testing"
 
 	"github.com/retail-cortex/blitz/pkg/api"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestAgentsAndModel(t *testing.T) {
 	w := openTest(t)
 	ctx := context.Background()
-	if a := w.ActiveAgent(); a.Name != "blitz" || !a.Active || a.DisplayName == "" {
-		t.Fatalf("active agent %+v", a)
-	}
-	if i := slices.IndexFunc(w.ListAgents(), func(a api.AgentInfo) bool { return a.Name == "qa" }); i < 0 {
-		t.Fatal("qa not listed")
-	}
-	if _, err := w.SetAgent(ctx, "nobody"); err == nil {
-		t.Error("switched to an unknown agent")
-	}
-	if a, err := w.SetAgent(ctx, "qa"); err != nil || !a.Active || w.ActiveAgent().Name != "qa" {
-		t.Fatalf("switch: %+v %v", a, err)
-	}
+	a := w.ActiveAgent()
+	require.Equal(t, "blitz", a.Name, "active agent %+v", a)
+	require.True(t, a.Active, "active agent %+v", a)
+	require.NotEqual(t, "", a.DisplayName, "active agent %+v", a)
+	i := slices.IndexFunc(w.ListAgents(), func(a api.AgentInfo) bool { return a.Name == "qa" })
+	require.GreaterOrEqual(t, i, 0, "qa not listed")
+	_, err := w.SetAgent(ctx, "nobody")
+	assert.Error(t, err, "switched to an unknown agent")
+	a, err = w.SetAgent(ctx, "qa")
+	require.NoError(t, err, "switch: %+v", a)
+	require.True(t, a.Active, "switch: %+v %v", a, err)
+	require.Equal(t, "qa", w.ActiveAgent().Name, "switch: %+v %v", a, err)
 
-	if _, err := w.SetModel(ctx, "broken"); err == nil {
-		t.Error("switched to a model that failed to build")
-	}
-	if pin, err := w.SetModel(ctx, "openai/gpt-5"); err != nil || pin != "" || w.Model().Name != "gpt-5" || w.Config().Blitz.DefaultModel != "openai/gpt-5" {
-		t.Fatalf("set model: %q %v %+v", pin, err, w.Model())
-	}
+	_, err = w.SetModel(ctx, "broken")
+	assert.Error(t, err, "switched to a model that failed to build")
+	pin, err := w.SetModel(ctx, "openai/gpt-5")
+	require.NoError(t, err, "set model: %q %v %+v", pin, err, w.Model())
+	require.Equal(t, "", pin, "set model: %q %v %+v", pin, err, w.Model())
+	require.Equal(t, "gpt-5", w.Model().Name, "set model: %q %v %+v", pin, err, w.Model())
+	require.Equal(t, "openai/gpt-5", w.Config().Blitz.DefaultModel, "set model: %q %v %+v", pin, err, w.Model())
 	// The active agent's pin still decides what it runs on.
-	if _, err := w.PinModel(ctx, "qa", "anthropic/claude-haiku-4-5"); err != nil {
-		t.Fatal(err)
-	}
-	if pin, err := w.SetModel(ctx, "gemini-3.8-flash"); err != nil || pin != "claude-haiku-4-5" {
-		t.Errorf("active pin = %q, %v", pin, err)
-	}
+	_, err = w.PinModel(ctx, "qa", "anthropic/claude-haiku-4-5")
+	require.NoError(t, err)
+	pin, err = w.SetModel(ctx, "gemini-3.8-flash")
+	assert.NoError(t, err, "active pin = %q,", pin)
+	assert.Equal(t, "claude-haiku-4-5", pin, "active pin = %q, %v", pin, err)
 }
 
 func TestPinAndUnpinSaveToTheConfigFile(t *testing.T) {
 	w := openTest(t)
 	ctx := context.Background()
 	var unknown *api.UnknownAgentError
-	if _, err := w.PinModel(ctx, "nobody", "x"); !errors.As(err, &unknown) || unknown.Name != "nobody" {
-		t.Fatalf("unknown agent: %v", err)
-	}
+	_, err := w.PinModel(ctx, "nobody", "x")
+	require.ErrorAs(t, err, &unknown, "unknown agent: %v", err)
+	require.Equal(t, "nobody", unknown.Name, "unknown agent: %v", err)
 	res, err := w.PinModel(ctx, "qa", "anthropic/claude-haiku-4-5")
-	if err != nil || res.Model != "claude-haiku-4-5" || res.Saved.Err != nil || res.Saved.Path == "" {
-		t.Fatalf("pin: %+v %v", res, err)
-	}
-	if got := savedConfig(t).AgentModels["qa"]; got != "anthropic/claude-haiku-4-5" {
-		t.Errorf("saved pin %q", got)
-	}
-	if a := w.ListAgents()[slices.IndexFunc(w.ListAgents(), func(a api.AgentInfo) bool { return a.Name == "qa" })]; a.PinnedModel != "claude-haiku-4-5" {
-		t.Errorf("listed pin %q", a.PinnedModel)
-	}
-	if res, err = w.Unpin(ctx, "qa"); err != nil || res.Model != "gemini-3.8-flash" {
-		t.Fatalf("unpin: %+v %v", res, err)
-	}
-	if got := savedConfig(t).AgentModels; len(got) != 0 {
-		t.Errorf("pin still saved: %v", got)
-	}
+	require.NoError(t, err, "pin: %+v", res)
+	require.Equal(t, "claude-haiku-4-5", res.Model, "pin: %+v %v", res, err)
+	require.NoError(t, res.Saved.Err, "pin: %+v %v", res, err)
+	require.NotEqual(t, "", res.Saved.Path, "pin: %+v %v", res, err)
+	got := savedConfig(t).AgentModels["qa"]
+	assert.Equal(t, "anthropic/claude-haiku-4-5", got, "saved pin %q", got)
+	a := w.ListAgents()[slices.IndexFunc(w.ListAgents(), func(a api.AgentInfo) bool { return a.Name == "qa" })]
+	assert.Equal(t, "claude-haiku-4-5", a.PinnedModel, "listed pin %q", a.PinnedModel)
+	res, err = w.Unpin(ctx, "qa")
+	require.NoError(t, err, "unpin")
+	require.Equal(t, "gemini-3.8-flash", res.Model, "unpin: %+v", res)
+	assert.Len(t, savedConfig(t).AgentModels, 0, "pin still saved")
 }
 
 func TestUpdateModelSettings(t *testing.T) {
 	w := openTest(t)
 	w.Config().LLM.Provider = "openai"
-	if _, err := w.UpdateModelSettings("temperature=1", false, nil); !errors.Is(err, api.ErrBadModelRef) {
-		t.Errorf("bad ref: %v", err)
-	}
+	_, err := w.UpdateModelSettings("temperature=1", false, nil)
+	assert.ErrorIs(t, err, api.ErrBadModelRef, "bad ref: %v", err)
 	res, err := w.UpdateModelSettings("openai/gpt-5", false, []api.Setting{{Key: "temperature", Value: "0.3"}, {Key: "seed", Value: "7"}})
-	if err != nil || res.Model != "gpt-5" || !slices.Equal(res.Unsupported, []string{"seed"}) || res.Saved.Err != nil {
-		t.Fatalf("update: %+v %v", res, err)
-	}
+	require.NoError(t, err, "update: %+v", res)
+	require.Equal(t, "gpt-5", res.Model, "update: %+v %v", res, err)
+	require.Equal(t, []string{"seed"}, res.Unsupported, "update: %+v %v", res, err)
+	require.NoError(t, res.Saved.Err, "update: %+v %v", res, err)
 	// An invalid value changes nothing, including the valid change before it.
 	var invalid *api.InvalidSettingError
-	if _, err := w.UpdateModelSettings("gpt-5", false, []api.Setting{{Key: "top_p", Value: "0.5"}, {Key: "temperature", Value: "9"}}); !errors.As(err, &invalid) {
-		t.Errorf("invalid: %v", err)
-	}
-	if s := savedConfig(t).ModelSettings["gpt-5"]; s.TopP != nil || s.Seed == nil || *s.Seed != 7 {
-		t.Errorf("saved %+v", s)
-	}
+	_, err = w.UpdateModelSettings("gpt-5", false, []api.Setting{{Key: "top_p", Value: "0.5"}, {Key: "temperature", Value: "9"}})
+	assert.ErrorAs(t, err, &invalid, "invalid: %v", err)
+	s := savedConfig(t).ModelSettings["gpt-5"]
+	assert.Nil(t, s.TopP, "saved %+v", s)
+	assert.NotNil(t, s.Seed, "saved %+v", s)
+	assert.Equal(t, 7, *s.Seed, "saved %+v", s)
 	info, _ := w.ModelSettings("gpt-5")
-	if info.Settings.TopP != nil || info.GlobalTemperature != w.Config().Blitz.Temperature {
-		t.Errorf("info %+v", info)
-	}
-	if res, _ := w.UpdateModelSettings("gpt-5", true, nil); !res.Settings.IsZero() || len(w.AllModelSettings()) != 0 {
-		t.Errorf("reset: %+v", res)
-	}
+	assert.Nil(t, info.Settings.TopP, "info %+v", info)
+	assert.Equal(t, w.Config().Blitz.Temperature, info.GlobalTemperature, "info %+v", info)
+	res, _ = w.UpdateModelSettings("gpt-5", true, nil)
+	assert.True(t, res.Settings.IsZero(), "reset: %+v", res)
+	assert.Len(t, w.AllModelSettings(), 0, "reset: %+v", res)
 }
 
 func TestSetChangesSettings(t *testing.T) {
 	w := openTest(t)
 	ctx := context.Background()
-	if _, err := w.Set(ctx, "agency", "reckless"); !errors.Is(err, api.ErrInvalidAgency) {
-		t.Errorf("agency: %v", err)
-	}
+	_, err := w.Set(ctx, "agency", "reckless")
+	assert.ErrorIs(t, err, api.ErrInvalidAgency, "agency: %v", err)
 	var unknown *api.UnknownSettingError
-	if _, err := w.Set(ctx, "Colour", "blue"); !errors.As(err, &unknown) || unknown.Key != "colour" {
-		t.Errorf("unknown: %v", err)
-	}
-	if key, err := w.Set(ctx, " Agency_Level ", "HIGH"); err != nil || key != "agency_level" {
-		t.Fatalf("set: %q %v", key, err)
-	}
-	if s := w.Settings(); s.Agency != "high" || s.Agent != "blitz" || s.Locale == "" {
-		t.Errorf("settings %+v", s)
-	}
+	_, err = w.Set(ctx, "Colour", "blue")
+	assert.ErrorAs(t, err, &unknown, "unknown: %v", err)
+	assert.Equal(t, "colour", unknown.Key, "unknown: %v", err)
+	key, err := w.Set(ctx, " Agency_Level ", "HIGH")
+	require.NoError(t, err, "set: %q", key)
+	require.Equal(t, "agency_level", key, "set: %q %v", key, err)
+	s := w.Settings()
+	assert.Equal(t, "high", s.Agency, "settings %+v", s)
+	assert.Equal(t, "blitz", s.Agent, "settings %+v", s)
+	assert.NotEqual(t, "", s.Locale, "settings %+v", s)
 }
 
 func TestSetEffort(t *testing.T) {
 	w := openTest(t)
 	ctx := context.Background()
-	if key, err := w.Set(ctx, "reasoning_effort", "XHigh"); err != nil || key != "effort" || w.Settings().Effort != "max" {
-		t.Fatalf("set: %q %v %q", key, err, w.Settings().Effort)
-	}
+	key, err := w.Set(ctx, "reasoning_effort", "XHigh")
+	require.NoError(t, err, "set: %q %v %q", key, err, w.Settings().Effort)
+	require.Equal(t, "effort", key, "set: %q %v %q", key, err, w.Settings().Effort)
+	require.Equal(t, "max", w.Settings().Effort, "set: %q %v %q", key, err, w.Settings().Effort)
 	var invalid *api.InvalidSettingError
-	if _, err := w.Set(ctx, "effort", "extreme"); !errors.As(err, &invalid) || w.Settings().Effort != "max" {
-		t.Errorf("invalid: %v, effort %q", err, w.Settings().Effort)
-	}
-	if _, err := w.Set(ctx, "effort", "auto"); err != nil || w.Settings().Effort != "" {
-		t.Errorf("auto: %v %q", err, w.Settings().Effort)
-	}
+	_, err = w.Set(ctx, "effort", "extreme")
+	assert.ErrorAs(t, err, &invalid, "invalid: %v, effort %q", err, w.Settings().Effort)
+	assert.Equal(t, "max", w.Settings().Effort, "invalid: %v, effort %q", err, w.Settings().Effort)
+	_, err = w.Set(ctx, "effort", "auto")
+	assert.NoError(t, err, "auto: %v %q", err, w.Settings().Effort)
+	assert.Equal(t, "", w.Settings().Effort, "auto: %v %q", err, w.Settings().Effort)
 }

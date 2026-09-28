@@ -16,16 +16,16 @@ package engine
 
 import (
 	"context"
-	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/retail-cortex/blitz/pkg/api"
-
 	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/engine/runtime"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/genai"
 )
 
@@ -41,13 +41,10 @@ func rewindSession(t *testing.T, extra ...*genai.Content) (*Workspace, *config.C
 	w, llm := openTestWith(t, func(c *config.Config) { cfg = c }, append(replies, extra...)...)
 	w.SetUI(func(context.Context, api.ApprovalRequest) (api.Decision, error) { return api.DecisionOnce, nil }, nil)
 	s, _, err := w.OpenSession("", false)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	for _, p := range []string{"make notes", "second draft"} {
-		if _, err := w.Run(context.Background(), s.ID, api.Turn{Text: p}, func(api.Event) {}); err != nil {
-			t.Fatal(err)
-		}
+		_, err := w.Run(context.Background(), s.ID, api.Turn{Text: p}, func(api.Event) {})
+		require.NoError(t, err)
 	}
 	return w, cfg, llm, s.ID
 }
@@ -63,87 +60,72 @@ func notes(t *testing.T, cfg *config.Config) string {
 
 func TestRewindPoints(t *testing.T) {
 	w, _, _, id := rewindSession(t)
-	if err := w.Steer(context.Background(), id, "a steer message"); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, w.Steer(context.Background(), id, "a steer message"))
 	points, err := w.RewindPoints()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(points) != 2 || points[0].Text != "make notes" || points[1].Text != "second draft" || points[0].Index != 0 || points[1].Index != 2 {
-		t.Fatalf("points %+v", points)
-	}
+	require.NoError(t, err)
+	require.Len(t, points, 2, "points %+v", points)
+	require.Equal(t, "make notes", points[0].Text, "points %+v", points)
+	require.Equal(t, "second draft", points[1].Text, "points %+v", points)
+	require.Equal(t, 0, points[0].Index, "points %+v", points)
+	require.Equal(t, 2, points[1].Index, "points %+v", points)
 	for _, p := range points {
-		if !p.Conversation || len(p.Files) != 1 || p.Files[0] != "notes.txt" {
-			t.Errorf("point %+v", p)
-		}
+		assert.True(t, p.Conversation, "point %+v", p)
+		assert.Len(t, p.Files, 1, "point %+v", p)
+		assert.Equal(t, "notes.txt", p.Files[0], "point %+v", p)
 	}
 }
 
 func TestRewindCodeAndConversation(t *testing.T) {
 	w, cfg, llm, id := rewindSession(t, text("redone"))
 	res, err := w.Rewind(context.Background(), 2, api.RewindBoth, false)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if res.Prompt != "second draft" || len(res.Restored) != 1 || notes(t, cfg) != "v1\n" {
-		t.Fatalf("rewind %+v, notes %q", res, notes(t, cfg))
-	}
+	require.NoError(t, err)
+	require.Equal(t, "second draft", res.Prompt, "rewind %+v, notes %q", res, notes(t, cfg))
+	require.Len(t, res.Restored, 1, "rewind %+v, notes %q", res, notes(t, cfg))
+	require.Equal(t, "v1\n", notes(t, cfg), "rewind %+v, notes %q", res, notes(t, cfg))
 	a, _ := w.ActiveSession()
-	if a.MessageCount != 2 {
-		t.Errorf("transcript has %d messages, want 2", a.MessageCount)
-	}
-	if _, err := w.Run(context.Background(), id, api.Turn{Text: "third try"}, func(api.Event) {}); err != nil {
-		t.Fatal(err)
-	}
+	assert.Equal(t, 2, a.MessageCount, "transcript has %d messages, want 2", a.MessageCount)
+	_, err = w.Run(context.Background(), id, api.Turn{Text: "third try"}, func(api.Event) {})
+	require.NoError(t, err)
 	var sent strings.Builder
 	for _, c := range llm.Requests[len(llm.Requests)-1].Contents {
 		for _, p := range c.Parts {
 			sent.WriteString(p.Text + "|")
 		}
 	}
-	if strings.Contains(sent.String(), "second draft") || !strings.Contains(sent.String(), "make notes") {
-		t.Errorf("the model still sees the rewound prompt: %s", sent.String())
-	}
-	if points, _ := w.RewindPoints(); len(points) != 2 || points[1].Text != "third try" {
-		t.Errorf("points after rewinding %+v", points)
-	}
+	assert.NotContains(t, sent.String(), "second draft", "the model still sees the rewound prompt: %s", sent.String())
+	assert.Contains(t, sent.String(), "make notes", "the model still sees the rewound prompt: %s", sent.String())
+	points, _ := w.RewindPoints()
+	assert.Len(t, points, 2, "points after rewinding %+v", points)
+	assert.Equal(t, "third try", points[1].Text, "points after rewinding %+v", points)
 }
 
 func TestRewindConversationOnlyKeepsFiles(t *testing.T) {
 	w, cfg, _, id := rewindSession(t, text("nothing to change"))
-	if _, err := w.Rewind(context.Background(), 2, api.RewindConversation, false); err != nil {
-		t.Fatal(err)
-	}
-	if notes(t, cfg) != "v2\n" {
-		t.Errorf("files changed: %q", notes(t, cfg))
-	}
+	_, err := w.Rewind(context.Background(), 2, api.RewindConversation, false)
+	require.NoError(t, err)
+	assert.Equal(t, "v2\n", notes(t, cfg), "files changed: %q", notes(t, cfg))
 	// A new prompt takes the rewound one's place; rewinding its code leaves
 	// the kept change, which came before it.
-	if _, err := w.Run(context.Background(), id, api.Turn{Text: "look around"}, func(api.Event) {}); err != nil {
-		t.Fatal(err)
-	}
-	if res, err := w.Rewind(context.Background(), 2, api.RewindCode, false); err != nil || len(res.Restored) != 0 || notes(t, cfg) != "v2\n" {
-		t.Fatalf("rewinding the new prompt: %+v %v, notes %q", res, err, notes(t, cfg))
-	}
+	_, err = w.Run(context.Background(), id, api.Turn{Text: "look around"}, func(api.Event) {})
+	require.NoError(t, err)
+	res, err := w.Rewind(context.Background(), 2, api.RewindCode, false)
+	require.NoError(t, err, "rewinding the new prompt: %+v %v, notes %q", res, err, notes(t, cfg))
+	require.Len(t, res.Restored, 0, "rewinding the new prompt: %+v %v, notes %q", res, err, notes(t, cfg))
+	require.Equal(t, "v2\n", notes(t, cfg), "rewinding the new prompt: %+v %v, notes %q", res, err, notes(t, cfg))
 	// The kept change now belongs before the next prompt: rewinding the
 	// first prompt's code still restores through it.
-	if _, err := w.Rewind(context.Background(), 0, api.RewindCode, false); err != nil {
-		t.Fatal(err)
-	}
-	if notes(t, cfg) != "<none>" {
-		t.Errorf("notes after rewinding the first prompt: %q", notes(t, cfg))
-	}
+	_, err = w.Rewind(context.Background(), 0, api.RewindCode, false)
+	require.NoError(t, err)
+	assert.Equal(t, "<none>", notes(t, cfg), "notes after rewinding the first prompt: %q", notes(t, cfg))
 }
 
 func TestRewindCodeOnlyKeepsTheConversation(t *testing.T) {
 	w, cfg, _, _ := rewindSession(t)
-	if _, err := w.Rewind(context.Background(), 2, api.RewindCode, false); err != nil {
-		t.Fatal(err)
-	}
-	if a, _ := w.ActiveSession(); a.MessageCount != 4 || notes(t, cfg) != "v1\n" {
-		t.Errorf("messages %d, notes %q", a.MessageCount, notes(t, cfg))
-	}
+	_, err := w.Rewind(context.Background(), 2, api.RewindCode, false)
+	require.NoError(t, err)
+	a, _ := w.ActiveSession()
+	assert.Equal(t, 4, a.MessageCount, "messages %d, notes %q", a.MessageCount, notes(t, cfg))
+	assert.Equal(t, "v1\n", notes(t, cfg), "messages %d, notes %q", a.MessageCount, notes(t, cfg))
 }
 
 func TestRewindRefusals(t *testing.T) {
@@ -158,26 +140,22 @@ func TestRewindRefusals(t *testing.T) {
 		{9, api.RewindBoth, api.ErrNotRewindPoint},
 		{0, "sideways", api.ErrUnknownRewindMode},
 	} {
-		if _, err := w.Rewind(ctx, c.index, c.mode, false); !errors.Is(err, c.want) {
-			t.Errorf("%d %s: %v", c.index, c.mode, err)
-		}
+		_, err := w.Rewind(ctx, c.index, c.mode, false)
+		assert.ErrorIs(t, err, c.want, "%d %s: %v", c.index, c.mode, err)
 	}
 	// A file changed since: nothing happens, not even to the conversation.
 	os.WriteFile(filepath.Join(cfg.Tools.WorkspaceDir, "notes.txt"), []byte("mine\n"), 0o644)
-	if _, err := w.Rewind(ctx, 2, api.RewindBoth, false); !errors.Is(err, api.ErrUndoConflict) {
-		t.Fatalf("conflict: %v", err)
-	}
-	if a, _ := w.ActiveSession(); a.MessageCount != 4 {
-		t.Error("a refused rewind changed the conversation")
-	}
+	_, err := w.Rewind(ctx, 2, api.RewindBoth, false)
+	require.ErrorIs(t, err, api.ErrUndoConflict, "conflict: %v", err)
+	a, _ := w.ActiveSession()
+	assert.Equal(t, 4, a.MessageCount, "a refused rewind changed the conversation")
 	w.turnStarted(id)
-	if _, err := w.Rewind(ctx, 2, api.RewindCode, true); !errors.Is(err, api.ErrSessionBusy) {
-		t.Errorf("during a turn: %v", err)
-	}
+	_, err = w.Rewind(ctx, 2, api.RewindCode, true)
+	assert.ErrorIs(t, err, api.ErrSessionBusy, "during a turn: %v", err)
 	w.turnEnded(id)
-	if _, err := w.Rewind(ctx, 2, api.RewindBoth, true); err != nil || notes(t, cfg) != "v1\n" {
-		t.Errorf("forced: %v %q", err, notes(t, cfg))
-	}
+	_, err = w.Rewind(ctx, 2, api.RewindBoth, true)
+	assert.NoError(t, err, "forced: %v %q", err, notes(t, cfg))
+	assert.Equal(t, "v1\n", notes(t, cfg), "forced: %v %q", err, notes(t, cfg))
 }
 
 // The conversation can be rewound after the workspace was closed and the
@@ -186,25 +164,19 @@ func TestRewindAfterResume(t *testing.T) {
 	w, cfg, _, id := rewindSession(t)
 	w.Close()
 	w2, err := Open(context.Background(), cfg, Options{Model: runtime.NewMockLLM("gemini-3.8-flash"), NewModel: mockModels})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	defer w2.Close()
-	if _, _, err := w2.OpenSession(id, false); err != nil {
-		t.Fatal(err)
-	}
+	_, _, openErr := w2.OpenSession(id, false)
+	require.NoError(t, openErr)
 	res, err := w2.Rewind(context.Background(), 2, api.RewindBoth, false)
-	if err != nil || notes(t, cfg) != "v1\n" || res.Prompt != "second draft" {
-		t.Fatalf("%+v %v %q", res, err, notes(t, cfg))
-	}
+	require.NoError(t, err, "%+v %v %q", res, err, notes(t, cfg))
+	require.Equal(t, "v1\n", notes(t, cfg), "%+v %v %q", res, err, notes(t, cfg))
+	require.Equal(t, "second draft", res.Prompt, "%+v %v %q", res, err, notes(t, cfg))
 	w2.Close()
 	w3, err := Open(context.Background(), cfg, Options{Model: runtime.NewMockLLM("gemini-3.8-flash"), NewModel: mockModels})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	defer w3.Close()
 	s, _, err := w3.OpenSession(id, false)
-	if err != nil || s.MessageCount != 2 {
-		t.Fatalf("reopened: %d messages, %v", s.MessageCount, err)
-	}
+	require.NoError(t, err, "reopened: %d messages,", s.MessageCount)
+	require.Equal(t, 2, s.MessageCount, "reopened: %d messages, %v", s.MessageCount, err)
 }

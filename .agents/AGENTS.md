@@ -46,13 +46,14 @@ BLITZ_TELEMETRY=1 BLITZ_LOG_LEVEL=debug bazel run //apps/cli:blitz   # traces to
 bazel test //pkg/engine/tools:tools_test --test_env=BLITZ_PYENV_TESTS=1 --test_filter='PyEnv|InstallsPackages'   # real Python environments (network)
 ```
 
-Everything goes through Bazel; host `go`, `pnpm` or `buf` commands are a last resort (`bazel run @rules_go//go -- …` is the go command). Plain `go build` and `go test` don't work anyway: `proto/blitz/v1` exists only in the build. Editors: point gopls at Bazel with `GOPACKAGESDRIVER=$PWD/bazel/gopackagesdriver.sh`; for the page's generated code, `bazel build //apps/desktop/web:api_ts` once. Static analysis (vet, staticcheck) runs in every compile; silence one finding with `//nolint:<check>`.
+Everything goes through Bazel; host `go`, `pnpm` or `buf` commands are a last resort (`bazel run @rules_go//go -- …` is the go command). Plain `go build` and `go test` don't work anyway: `proto/blitz/v1` exists only in the build. Editors: point gopls at Bazel with `GOPACKAGESDRIVER=$PWD/tools/gopackagesdriver.sh`; for the page's generated code, `bazel build //apps/desktop/web:api_ts` once. Static analysis (vet, staticcheck) runs in every compile; silence one finding with `//nolint:<check>`.
 
 ## Conventions
 
 - One commit per feature, with a message explaining why.
 - New user-facing strings go into all three catalogs in `pkg/i18n/locales/` (`en-US`, `es`, `fr-CA`); `i18n_lint_test.go` enforces this.
 - A bug fix comes with a test that was confirmed to fail without the fix (temporarily revert, run, restore).
+- Go tests use Testify: `require` for what the rest of the test depends on (setup, a value it goes on to use), `assert` for the checks; one assertion per fact, not `a || b`; the specific assertion (`ErrorIs`, `Contains`, `Len`, `FileExists`), not `True(x == y)`; messages add what the values don't say (which case, what it means) and never restate got and want. Table-driven loops run each case as a subtest, `t.Run(name, …)`. `t.Fatal` and `t.Error` stay for control flow: a `select`'s timeout, an unexpected event, a helper that found nothing.
 - Each feature updates the README, a ROADMAP item, and a MANUAL_VERIFICATION section (all in `.agents/` except the README).
 - Real-terminal behavior was checked with `script` against a local fake provider. Answer the line editor's cursor-position query (`ESC[6n`) with `ESC[1;1R` in the scripted input, or it waits forever.
 - gVisor code only builds on Linux (`//go:build linux`, stub elsewhere); check it from macOS with `bazel build --platforms=@rules_go//go/toolchain:linux_arm64 //pkg/engine/tools`. Its tests need `runsc` (`RUNSC_PATH`); CI fails if they're skipped.

@@ -17,35 +17,33 @@ package commands
 import (
 	"os"
 	"path/filepath"
-	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestParseAndExpand(t *testing.T) {
 	c, err := Parse("fix", "project", "", []byte("---\ndescription: Fix an issue\nargument-hint: <issue>\nagent: qa\nallowed-tools: Read, Grep Bash(git *)\nmode: plan\n---\nFix issue #$1 ($ARGUMENTS).\n"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if c.Description != "Fix an issue" || c.ArgumentHint != "<issue>" || c.Agent != "qa" || !c.Plan ||
-		!reflect.DeepEqual(c.AllowedTools, []string{"Read", "Grep", "Bash(git *)"}) {
-		t.Errorf("parsed %+v", c)
-	}
-	if got := c.Expand("42 urgent"); got != "Fix issue #42 (42 urgent)." {
-		t.Errorf("expand %q", got)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, "Fix an issue", c.Description, "parsed %+v", c)
+	assert.Equal(t, "<issue>", c.ArgumentHint, "parsed %+v", c)
+	assert.Equal(t, "qa", c.Agent, "parsed %+v", c)
+	assert.True(t, c.Plan, "parsed %+v", c)
+	assert.Equal(t, []string{"Read", "Grep", "Bash(git *)"}, c.AllowedTools, "parsed %+v", c)
+	got := c.Expand("42 urgent")
+	assert.Equal(t, "Fix issue #42 (42 urgent).", got, "expand %q", got)
 	plain, _ := Parse("note", "user", "", []byte("# Summarize\nSummarize the diff."))
-	if plain.Description != "Summarize" || plain.Expand("focus on tests") != "# Summarize\nSummarize the diff.\n\nfocus on tests" || plain.Expand("") != "# Summarize\nSummarize the diff." {
-		t.Errorf("plain %+v / %q", plain, plain.Expand("focus on tests"))
-	}
+	assert.Equal(t, "Summarize", plain.Description, "plain %+v / %q", plain, plain.Expand("focus on tests"))
+	assert.Equal(t, "# Summarize\nSummarize the diff.\n\nfocus on tests", plain.Expand("focus on tests"), "plain %+v / %q", plain, plain.Expand("focus on tests"))
+	assert.Equal(t, "# Summarize\nSummarize the diff.", plain.Expand(""), "plain %+v / %q", plain, plain.Expand("focus on tests"))
 	two, _ := Parse("x", "user", "", []byte("$1 then $2, not $10"))
-	if got := two.Expand("a"); got != "a then , not a0" {
-		t.Errorf("positional %q", got)
-	}
+	got = two.Expand("a")
+	assert.Equal(t, "a then , not a0", got, "positional %q", got)
 	for _, bad := range []string{"---\nmode: fast\n---\nx", "---\ndescription: x\n", "---\n---\n   "} {
-		if _, err := Parse("b", "user", "", []byte(bad)); err == nil {
-			t.Errorf("%q should fail", bad)
-		}
+		_, err := Parse("b", "user", "", []byte(bad))
+		assert.Error(t, err, "%q should fail", bad)
 	}
 }
 
@@ -61,22 +59,20 @@ func TestLoadNamespacesAndBundled(t *testing.T) {
 	for _, c := range list {
 		names = append(names, c.Name)
 	}
-	if strings.Join(names, ",") != "db:migrate,deploy" || err == nil || !strings.Contains(err.Error(), "bad name") {
-		t.Errorf("loaded %v, err %v", names, err)
-	}
-	if list, err := Load(filepath.Join(dir, "missing"), "user"); len(list) != 0 || err != nil {
-		t.Errorf("missing dir: %v %v", list, err)
-	}
+	assert.Equal(t, "db:migrate,deploy", strings.Join(names, ","), "loaded %v, err %v", names, err)
+	assert.Error(t, err, "loaded %v, err", names)
+	assert.Contains(t, err.Error(), "bad name", "loaded %v, err %v", names, err)
+	list, err = Load(filepath.Join(dir, "missing"), "user")
+	assert.Len(t, list, 0, "missing dir: %v %v", list, err)
+	assert.NoError(t, err, "missing dir: %v", list)
 	bundled := map[string]Command{}
 	for _, c := range Bundled() {
 		bundled[c.Name] = c
 	}
 	for _, name := range []string{"review", "security-review", "simplify", "verify"} {
-		if _, ok := bundled[name]; !ok {
-			t.Errorf("bundled command %s missing", name)
-		}
+		_, ok := bundled[name]
+		assert.True(t, ok, "bundled command %s missing", name)
 	}
-	if !bundled["review"].Plan || bundled["simplify"].Plan {
-		t.Error("review should be read-only (plan), simplify shouldn't")
-	}
+	assert.True(t, bundled["review"].Plan, "review should be read-only (plan), simplify shouldn't")
+	assert.False(t, bundled["simplify"].Plan, "review should be read-only (plan), simplify shouldn't")
 }

@@ -22,9 +22,10 @@ import (
 	"testing"
 
 	"github.com/retail-cortex/blitz/pkg/api"
-
 	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/engine/session"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/genai"
 )
 
@@ -41,9 +42,7 @@ func planWorkspace(t *testing.T, mutate func(*config.Config), choice any, replie
 			return choice.(string), nil
 		})
 	s, err := w.NewSession()
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	return w, s.ID
 }
 
@@ -56,16 +55,15 @@ func runCollect(t *testing.T, w *Workspace, id string, turn api.Turn) (map[strin
 	t.Helper()
 	results := map[string][]map[string]any{}
 	var tasks [][]api.Task
-	if _, err := w.Run(context.Background(), id, turn, func(e api.Event) {
+	_, err := w.Run(context.Background(), id, turn, func(e api.Event) {
 		if e.ToolResult != nil {
 			results[e.ToolResult.Name] = append(results[e.ToolResult.Name], e.ToolResult.Result)
 		}
 		if e.Tasks != nil {
 			tasks = append(tasks, e.Tasks)
 		}
-	}); err != nil {
-		t.Fatal(err)
-	}
+	})
+	require.NoError(t, err)
 	return results, tasks
 }
 
@@ -81,35 +79,25 @@ func TestApprovedPlanIsCarriedOut(t *testing.T) {
 		toolCall("todo", map[string]any{"items": []any{map[string]any{"content": "create notes.txt", "status": "in_progress"}}}),
 		toolCall("create_file", map[string]any{"path": "notes.txt", "content": "hi\n"}), text("done"))
 	results, tasks := runCollect(t, w, id, api.Turn{Text: "add notes", Plan: true})
-	if msg, _ := results["create_file"][0]["error"].(string); !strings.Contains(msg, "plan mode") || exists(w, "early.txt") {
-		t.Errorf("a write went through while planning: %v", results["create_file"][0])
-	}
-	if !exists(w, "notes.txt") {
-		t.Fatalf("the approved plan wasn't carried out: %v", results)
-	}
-	if len(tasks) != 1 || tasks[0][0].Status != "in_progress" {
-		t.Errorf("tasks %+v", tasks)
-	}
-	if b, _ := os.ReadFile(filepath.Join(w.Dir(), ".blitz", "plans", id+"-1.md")); !strings.Contains(string(b), "Create notes.txt") {
-		t.Errorf("the plan wasn't saved: %q", b)
-	}
+	msg, _ := results["create_file"][0]["error"].(string)
+	assert.Contains(t, msg, "plan mode", "a write went through while planning: %v", results["create_file"][0])
+	assert.False(t, exists(w, "early.txt"), "a write went through while planning: %v", results["create_file"][0])
+	require.True(t, exists(w, "notes.txt"), "the approved plan wasn't carried out: %v", results)
+	assert.Len(t, tasks, 1, "tasks %+v", tasks)
+	assert.Equal(t, "in_progress", tasks[0][0].Status, "tasks %+v", tasks)
+	b, _ := os.ReadFile(filepath.Join(w.Dir(), ".blitz", "plans", id+"-1.md"))
+	assert.Contains(t, string(b), "Create notes.txt", "the plan wasn't saved: %q", b)
 	var kinds []string
 	for _, m := range w.storage.Active().Messages {
 		kinds = append(kinds, m.Kind)
-		if m.Kind == session.KindPlan && !strings.Contains(m.Content, ".blitz/plans/") {
-			t.Errorf("go-ahead %q", m.Content)
-		}
+		assert.False(t, m.Kind == session.KindPlan && !strings.Contains(m.Content, ".blitz/plans/"), "go-ahead %q", m.Content)
 	}
-	if strings.Join(kinds, ",") != ",plan," {
-		t.Errorf("transcript kinds %v", kinds)
-	}
-	if out := w.storage.Active().Messages[2].Content; out != "Plan approved.\n\ndone" {
-		t.Errorf("the runs' output isn't separated: %q", out)
-	}
+	assert.Equal(t, ",plan,", strings.Join(kinds, ","), "transcript kinds %v", kinds)
+	out := w.storage.Active().Messages[2].Content
+	assert.Equal(t, "Plan approved.\n\ndone", out, "the runs' output isn't separated: %q", out)
 	// The go-ahead isn't a prompt to rewind to.
-	if points, _ := w.RewindPoints(); len(points) != 1 {
-		t.Errorf("rewind points %+v", points)
-	}
+	points, _ := w.RewindPoints()
+	assert.Len(t, points, 1, "rewind points %+v", points)
 }
 
 // In plan permission mode, approving leaves plan mode for the mode chosen.
@@ -118,22 +106,21 @@ func TestApprovingInPlanModeSwitchesMode(t *testing.T) {
 		exitPlan("1. Create a.txt"), text("ok"),
 		toolCall("create_file", map[string]any{"path": "a.txt", "content": "a"}), text("done"))
 	runCollect(t, w, id, api.Turn{Text: "make a"})
-	if got := w.Settings().PermissionMode; got != "accept-edits" || !exists(w, "a.txt") {
-		t.Fatalf("mode %q, a.txt %v", got, exists(w, "a.txt"))
-	}
+	got := w.Settings().PermissionMode
+	require.Equal(t, "accept-edits", got, "mode %q, a.txt %v", got, exists(w, "a.txt"))
+	require.True(t, exists(w, "a.txt"), "mode %q, a.txt %v", got, exists(w, "a.txt"))
 }
 
 func TestKeepPlanningAndRevising(t *testing.T) {
 	w, id := planWorkspace(t, nil, 2, exitPlan("1. Something"), text("Waiting."))
 	results, _ := runCollect(t, w, id, api.Turn{Text: "think", Plan: true})
-	if results["exit_plan_mode"][0]["approved"] != false || len(w.storage.Active().Messages) != 2 {
-		t.Fatalf("keep planning: %v", results)
-	}
+	require.Equal(t, false, results["exit_plan_mode"][0]["approved"], "keep planning: %v", results)
+	require.Len(t, w.storage.Active().Messages, 2, "keep planning: %v", results)
 	w2, id2 := planWorkspace(t, nil, "use tabs", exitPlan("1. Spaces"), exitPlan("1. Tabs"), text("?"))
 	results, _ = runCollect(t, w2, id2, api.Turn{Text: "format", Plan: true})
-	if got := results["exit_plan_mode"]; len(got) != 2 || got[0]["feedback"] != "use tabs" {
-		t.Fatalf("revise: %v", got)
-	}
+	got := results["exit_plan_mode"]
+	require.Len(t, got, 2, "revise: %v", got)
+	require.Equal(t, "use tabs", got[0]["feedback"], "revise: %v", got)
 }
 
 func TestPlanReviewPolicies(t *testing.T) {
@@ -143,9 +130,9 @@ func TestPlanReviewPolicies(t *testing.T) {
 		exitPlan("1. Create x.txt"), text("ok"),
 		toolCall("create_file", map[string]any{"path": "x.txt", "content": "x"}), text("done"))
 	results, _ := runCollect(t, w, id, api.Turn{Text: "make x"})
-	if msg, _ := results["create_file"][0]["error"].(string); msg == "" || !exists(w, "x.txt") {
-		t.Fatalf("always: %v", results["create_file"])
-	}
+	msg, _ := results["create_file"][0]["error"].(string)
+	require.NotEqual(t, "", msg, "always: %v", results["create_file"])
+	require.True(t, exists(w, "x.txt"), "always: %v", results["create_file"])
 
 	// agent-decides (the default): the agent may enter plan mode itself.
 	w2, id2 := planWorkspace(t, nil, 0,
@@ -154,15 +141,13 @@ func TestPlanReviewPolicies(t *testing.T) {
 		exitPlan("1. Create y.txt"), text("ok"),
 		toolCall("create_file", map[string]any{"path": "y.txt", "content": "y"}), text("done"))
 	results, _ = runCollect(t, w2, id2, api.Turn{Text: "make y"})
-	if msg, _ := results["create_file"][0]["error"].(string); msg == "" || !exists(w2, "y.txt") {
-		t.Fatalf("agent-decides: %v", results["create_file"])
-	}
+	msg, _ = results["create_file"][0]["error"].(string)
+	require.NotEqual(t, "", msg, "agent-decides: %v", results["create_file"])
+	require.True(t, exists(w2, "y.txt"), "agent-decides: %v", results["create_file"])
 
 	// never: no enter_plan_mode tool.
 	w3, _ := planWorkspace(t, func(c *config.Config) { c.Blitz.PlanReview = config.PlanReviewNever }, 0)
 	for _, tl := range w3.tools.WorkflowTools() {
-		if tl.Name() == "enter_plan_mode" {
-			t.Error("enter_plan_mode offered with plan_review = never")
-		}
+		assert.NotEqual(t, "enter_plan_mode", tl.Name(), "enter_plan_mode offered with plan_review = never")
 	}
 }

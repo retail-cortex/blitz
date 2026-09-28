@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/retail-cortex/blitz/pkg/config"
+	"github.com/stretchr/testify/require"
 )
 
 // appendHook appends each event (one JSON document) as a line to out.
@@ -34,9 +35,7 @@ func appendHook(out string, extra string) config.HooksConfig {
 func readHookLines(t *testing.T, path string) []string {
 	t.Helper()
 	b, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	return strings.Split(strings.TrimSpace(string(b)), "\n")
 }
 
@@ -45,9 +44,7 @@ func readHookEvents(t *testing.T, path string) []HookEvent {
 	var evs []HookEvent
 	for _, l := range readHookLines(t, path) {
 		var ev HookEvent
-		if err := json.Unmarshal([]byte(l), &ev); err != nil {
-			t.Fatalf("bad event %q: %v", l, err)
-		}
+		require.NoError(t, json.Unmarshal([]byte(l), &ev), "bad event %q", l)
 		evs = append(evs, ev)
 	}
 	return evs
@@ -57,9 +54,8 @@ func TestPostToolDoesNotWaitForHooks(t *testing.T) {
 	h, _ := newHooks(t, config.HooksConfig{PostTool: []config.HookConfig{{Command: "sleep 2"}}})
 	start := time.Now()
 	h.PostTool(context.Background(), "s", "grep", nil, nil, nil)
-	if d := time.Since(start); d > 500*time.Millisecond {
-		t.Fatalf("PostTool blocked for %v", d)
-	}
+	d := time.Since(start)
+	require.LessOrEqual(t, d, 500*time.Millisecond, "PostTool blocked for %v", d)
 }
 
 func TestPostToolHooksRunInOrderOnSnapshots(t *testing.T) {
@@ -71,17 +67,13 @@ func TestPostToolHooksRunInOrderOnSnapshots(t *testing.T) {
 		h.PostTool(context.Background(), "s", "grep", map[string]any{"n": i}, result, nil)
 		result["v"] = "mutated after the call" // must not reach the hook
 	}
-	if err := h.flush(context.Background()); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, h.flush(context.Background()))
 	evs := readHookEvents(t, out)
-	if len(evs) != n {
-		t.Fatalf("want %d events, got %d", n, len(evs))
-	}
+	require.Len(t, evs, n, "want %d events, got %d", n, len(evs))
 	for i, ev := range evs {
-		if ev.Tool != "grep" || ev.Args["n"] != float64(i) || ev.Result["v"] != "original" {
-			t.Fatalf("event %d = %+v, want n=%d with the original result", i, ev, i)
-		}
+		require.Equal(t, "grep", ev.Tool, "event %d = %+v, want n=%d with the original result", i, ev, i)
+		require.Equal(t, float64(i), ev.Args["n"], "event %d = %+v, want n=%d with the original result", i, ev, i)
+		require.Equal(t, "original", ev.Result["v"], "event %d = %+v, want n=%d with the original result", i, ev, i)
 	}
 }
 
@@ -94,23 +86,19 @@ func TestPostToolHooksOutliveTheTurnContext(t *testing.T) {
 	h.PostTool(ctx, "s", "grep", map[string]any{"n": 1}, nil, nil)
 	cancel()
 	h.flush(context.Background())
-	if lines := readHookLines(t, out); len(lines) != 1 {
-		t.Fatalf("hook did not run after cancellation: %v", lines)
-	}
+	lines := readHookLines(t, out)
+	require.Len(t, lines, 1, "hook did not run after cancellation: %v", lines)
 }
 
 func TestPostToolHooksOnlyForMatchingTools(t *testing.T) {
 	out := filepath.Join(t.TempDir(), "events.jsonl")
 	h, _ := newHooks(t, config.HooksConfig{PostTool: []config.HookConfig{{Match: "run_*", Command: "cat >> " + out}}})
 	h.PostTool(context.Background(), "s", "read_file", nil, nil, nil)
-	if h.postQ.jobs != nil {
-		t.Fatal("worker started for a tool no hook matches")
-	}
+	require.Nil(t, h.postQ.jobs, "worker started for a tool no hook matches")
 	h.PostTool(context.Background(), "s", "run_shell_command", nil, nil, nil)
 	h.flush(context.Background())
-	if b, _ := os.ReadFile(out); !strings.Contains(string(b), "run_shell_command") {
-		t.Fatalf("matching hook did not run: %s", b)
-	}
+	b, _ := os.ReadFile(out)
+	require.Contains(t, string(b), "run_shell_command", "matching hook did not run: %s", b)
 }
 
 func TestCloseDrainsQueuedHooks(t *testing.T) {
@@ -120,9 +108,8 @@ func TestCloseDrainsQueuedHooks(t *testing.T) {
 		h.PostTool(context.Background(), "s", "grep", map[string]any{"n": i}, nil, nil)
 	}
 	h.Close()
-	if lines := readHookLines(t, out); len(lines) != 3 {
-		t.Fatalf("Close did not drain: %v", lines)
-	}
+	lines := readHookLines(t, out)
+	require.Len(t, lines, 3, "Close did not drain: %v", lines)
 	h.PostTool(context.Background(), "s", "grep", nil, nil, nil) // after Close: ignored, no panic
 	h.Close()                                                    // idempotent
 }
@@ -137,9 +124,8 @@ func TestCloseStopsHungHooks(t *testing.T) {
 	time.Sleep(50 * time.Millisecond) // let the hook start
 	start := time.Now()
 	h.Close()
-	if d := time.Since(start); d > 5*time.Second {
-		t.Fatalf("Close took %v with a hung hook", d)
-	}
+	d := time.Since(start)
+	require.LessOrEqual(t, d, 5*time.Second, "Close took %v with a hung hook", d)
 }
 
 func TestFullQueueDropsInsteadOfBlocking(t *testing.T) {
@@ -152,15 +138,10 @@ func TestFullQueueDropsInsteadOfBlocking(t *testing.T) {
 	for range 5 {
 		h.PostTool(context.Background(), "s", "grep", nil, nil, nil)
 	}
-	if d := time.Since(start); d > 500*time.Millisecond {
-		t.Fatalf("PostTool blocked on a full queue for %v", d)
-	}
-	if h.postQ.dropped.Load() == 0 {
-		t.Fatal("no events dropped from a full queue")
-	}
-	if len(*warnings) != 1 {
-		t.Fatalf("want one warning for the whole backlog, got %v", *warnings)
-	}
+	d := time.Since(start)
+	require.LessOrEqual(t, d, 500*time.Millisecond, "PostTool blocked on a full queue for %v", d)
+	require.NotEqual(t, int64(0), h.postQ.dropped.Load(), "no events dropped from a full queue")
+	require.Len(t, *warnings, 1, "want one warning for the whole backlog, got %v", *warnings)
 }
 
 func TestPostToolWorkerSurvivesAPanic(t *testing.T) {
@@ -172,10 +153,7 @@ func TestPostToolWorkerSurvivesAPanic(t *testing.T) {
 	h.Warn = func(string) { panic("warn exploded") }
 	h.PostTool(context.Background(), "s", "boom", nil, nil, nil)
 	h.PostTool(context.Background(), "s", "grep", nil, nil, nil)
-	if err := h.flush(context.Background()); err != nil {
-		t.Fatal(err)
-	}
-	if b, _ := os.ReadFile(out); !strings.Contains(string(b), `"tool":"grep"`) {
-		t.Fatal("worker stopped after a panic")
-	}
+	require.NoError(t, h.flush(context.Background()))
+	b, _ := os.ReadFile(out)
+	require.Contains(t, string(b), `"tool":"grep"`, "worker stopped after a panic")
 }

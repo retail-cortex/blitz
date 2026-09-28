@@ -34,4 +34,5 @@ go_test(
     name = "breaker_test",
     srcs = ["breaker_test.go"],
     embed = [":breaker"],
+    deps = ["@com_github_stretchr_testify//require"],
 )

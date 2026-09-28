@@ -16,6 +16,7 @@ package server
 
 import (
 	"context"
+	"io/fs"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -24,6 +25,8 @@ import (
 
 	"connectrpc.com/connect"
 	pb "github.com/retail-cortex/blitz/proto/blitz/v1"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestFileService(t *testing.T) {
@@ -35,28 +38,25 @@ func TestFileService(t *testing.T) {
 	dir := t.TempDir()
 
 	w, err := files.WriteFile(ctx, connect.NewRequest(&pb.WriteFileRequest{Workspace: dir, Path: "src/a.go", Text: "package a\n"}))
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	l, err := files.ListDir(ctx, connect.NewRequest(&pb.ListDirRequest{Workspace: dir}))
-	if err != nil || len(l.Msg.Entries) != 1 || l.Msg.Entries[0].Kind != pb.FileKind_FILE_KIND_FOLDER || l.Msg.Entries[0].Path != "src" {
-		t.Fatalf("list: %v %v", l, err)
-	}
+	require.NoError(t, err, "list: %v", l)
+	require.Len(t, l.Msg.Entries, 1, "list: %v %v", l, err)
+	require.Equal(t, pb.FileKind_FILE_KIND_FOLDER, l.Msg.Entries[0].Kind, "list: %v %v", l, err)
+	require.Equal(t, "src", l.Msg.Entries[0].Path, "list: %v %v", l, err)
 	f, err := files.ReadFile(ctx, connect.NewRequest(&pb.ReadFileRequest{Workspace: dir, Path: "src/a.go"}))
-	if err != nil || f.Msg.Text != "package a\n" || f.Msg.Version != w.Msg.Version {
-		t.Fatalf("read: %v %v", f, err)
-	}
+	require.NoError(t, err, "read: %v", f)
+	require.Equal(t, "package a\n", f.Msg.Text, "read: %v %v", f, err)
+	require.Equal(t, w.Msg.Version, f.Msg.Version, "read: %v %v", f, err)
 
 	// Changed elsewhere: FILE_CHANGED, with the current version.
-	if err := os.WriteFile(filepath.Join(dir, "src", "a.go"), []byte("package b\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "src", "a.go"), []byte("package b\n"), 0o644))
 	st, _ := files.StatFiles(ctx, connect.NewRequest(&pb.StatFilesRequest{Workspace: dir, Paths: []string{"src/a.go"}}))
 	_, err = files.WriteFile(ctx, connect.NewRequest(&pb.WriteFileRequest{Workspace: dir, Path: "src/a.go", Text: "mine", Version: w.Msg.Version}))
 	code, info := errorReason(t, err)
-	if code != connect.CodeFailedPrecondition || info.Reason != "FILE_CHANGED" || info.Metadata["current_version"] != st.Msg.Versions["src/a.go"] {
-		t.Errorf("stale write: %v %v", code, info)
-	}
+	assert.Equal(t, connect.CodeFailedPrecondition, code, "stale write: %v %v", code, info)
+	assert.Equal(t, "FILE_CHANGED", info.Reason, "stale write: %v %v", code, info)
+	assert.Equal(t, st.Msg.Versions["src/a.go"], info.Metadata["current_version"], "stale write: %v %v", code, info)
 
 	for name, call := range map[string]struct {
 		err    error
@@ -75,22 +75,17 @@ func TestFileService(t *testing.T) {
 			return err
 		}(), "FILE_EXISTS"},
 	} {
-		if _, info := errorReason(t, call.err); info.Reason != call.reason {
-			t.Errorf("%s: %v", name, info)
-		}
+		_, info := errorReason(t, call.err)
+		assert.Equal(t, call.reason, info.Reason, "%s: %v", name, info)
 	}
 
-	if _, err := files.RenameFile(ctx, connect.NewRequest(&pb.RenameFileRequest{Workspace: dir, From: "src/a.go", To: "lib/a.go"})); err != nil {
-		t.Fatal(err)
-	}
+	_, err = files.RenameFile(ctx, connect.NewRequest(&pb.RenameFileRequest{Workspace: dir, From: "src/a.go", To: "lib/a.go"}))
+	require.NoError(t, err)
 	found, _ := files.FindFiles(ctx, connect.NewRequest(&pb.FindFilesRequest{Workspace: dir, Query: "la"}))
-	if len(found.Msg.Paths) != 1 || found.Msg.Paths[0] != "lib/a.go" {
-		t.Errorf("find: %v", found.Msg.Paths)
-	}
-	if _, err := files.DeleteFile(ctx, connect.NewRequest(&pb.DeleteFileRequest{Workspace: dir, Path: "lib"})); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := os.Stat(filepath.Join(dir, "lib")); !os.IsNotExist(err) {
-		t.Error("not deleted")
-	}
+	assert.Len(t, found.Msg.Paths, 1, "find: %v", found.Msg.Paths)
+	assert.Equal(t, "lib/a.go", found.Msg.Paths[0], "find: %v", found.Msg.Paths)
+	_, err = files.DeleteFile(ctx, connect.NewRequest(&pb.DeleteFileRequest{Workspace: dir, Path: "lib"}))
+	require.NoError(t, err)
+	_, err = os.Stat(filepath.Join(dir, "lib"))
+	assert.ErrorIs(t, err, fs.ErrNotExist, "not deleted")
 }

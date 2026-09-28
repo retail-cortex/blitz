@@ -28,6 +28,8 @@ import (
 	"syscall"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/require"
 )
 
 func pidAlive(pid int) bool {
@@ -69,9 +71,7 @@ func TestForegroundStragglersKilled(t *testing.T) {
 	// The command returns immediately but leaves a daemon-like child behind.
 	out := runShellCommand(context.Background(), ShellConfig{Workspace: ws, Hooks: allowAll()},
 		RunShellCommandInput{Command: fmt.Sprintf("nohup sleep 60 >/dev/null 2>&1 & echo $! > %q", pidFile)})
-	if out.ExitCode != 0 {
-		t.Fatalf("command failed: %+v", out)
-	}
+	require.Equal(t, 0, out.ExitCode, "command failed: %+v", out)
 	waitDead(t, readPid(t, pidFile), 5*time.Second)
 }
 
@@ -91,18 +91,12 @@ func TestGuardKillsChildrenWhenParentKilled(t *testing.T) {
 	pidFile := filepath.Join(t.TempDir(), "child.pid")
 	helper := exec.Command(os.Args[0], "-test.run=^TestGuardKillsChildrenWhenParentKilled$", "-test.v")
 	helper.Env = append(os.Environ(), "CP_GUARD_HELPER=1", "CP_GUARD_PIDFILE="+pidFile)
-	if err := helper.Start(); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, helper.Start())
 	childPid := readPid(t, pidFile)
-	if !pidAlive(childPid) {
-		t.Fatal("background child not running")
-	}
+	require.True(t, pidAlive(childPid), "background child not running")
 
 	// SIGKILL: no deferred cleanup, no signal handlers — only the guard can help.
-	if err := helper.Process.Kill(); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, helper.Process.Kill())
 	_ = helper.Wait()
 	waitDead(t, childPid, 5*time.Second)
 }

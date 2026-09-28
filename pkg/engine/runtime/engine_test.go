@@ -23,6 +23,8 @@ import (
 	"github.com/retail-cortex/blitz/pkg/engine/agents"
 	"github.com/retail-cortex/blitz/pkg/engine/skills"
 	"github.com/retail-cortex/blitz/pkg/engine/tools"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/adk/v2/session"
 	"google.golang.org/genai"
 )
@@ -32,32 +34,22 @@ func TestEngineExecution(t *testing.T) {
 	cfg := config.DefaultConfig()
 
 	agentReg, err := agents.NewRegistry()
-	if err != nil {
-		t.Fatalf("failed to create agent registry: %v", err)
-	}
+	require.NoError(t, err, "failed to create agent registry")
 
 	skillProv, err := skills.NewProvider()
-	if err != nil {
-		t.Fatalf("failed to create skill provider: %v", err)
-	}
+	require.NoError(t, err, "failed to create skill provider")
 
 	toolReg, err := tools.NewRegistry(cfg, agentReg, skillProv)
-	if err != nil {
-		t.Fatalf("failed to create tool registry: %v", err)
-	}
+	require.NoError(t, err, "failed to create tool registry")
 
 	mockModel := NewMockLLM("mock-model",
 		genai.NewContentFromText("Wrote the code.", genai.RoleModel),
 	)
 
 	eng, err := NewEngine(ctx, cfg, agentReg, skillProv, toolReg, mockModel)
-	if err != nil {
-		t.Fatalf("failed to create engine: %v", err)
-	}
+	require.NoError(t, err, "failed to create engine")
 
-	if eng.ActiveAgent() != "blitz" {
-		t.Errorf("expected active agent 'blitz', got '%s'", eng.ActiveAgent())
-	}
+	assert.Equal(t, "blitz", eng.ActiveAgent(), "expected active agent 'blitz', got '%s'", eng.ActiveAgent())
 
 	var observedTexts []string
 	err = eng.Execute(ctx, "session-1", "Write a hello world program", func(ev *session.Event) error {
@@ -71,21 +63,13 @@ func TestEngineExecution(t *testing.T) {
 		return nil
 	})
 
-	if err != nil {
-		t.Fatalf("engine execution failed: %v", err)
-	}
+	require.NoError(t, err, "engine execution failed")
 
 	joined := strings.Join(observedTexts, " ")
-	if !strings.Contains(joined, "Wrote the code.") {
-		t.Errorf("expected output to contain 'Wrote the code.', got: %s", joined)
-	}
+	assert.Contains(t, joined, "Wrote the code.", "expected output to contain 'Wrote the code.', got: %s", joined)
 
 	// Test switching agent to helios
 	err = eng.SetActiveAgent(ctx, "helios")
-	if err != nil {
-		t.Fatalf("failed to switch agent to helios: %v", err)
-	}
-	if eng.ActiveAgent() != "helios" {
-		t.Errorf("expected active agent 'helios', got '%s'", eng.ActiveAgent())
-	}
+	require.NoError(t, err, "failed to switch agent to helios")
+	assert.Equal(t, "helios", eng.ActiveAgent(), "expected active agent 'helios', got '%s'", eng.ActiveAgent())
 }
