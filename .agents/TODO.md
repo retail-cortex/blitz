@@ -7,7 +7,7 @@ means. Written 2026-09-28; the backlog spec
 
 ## P0: broken, misleading, or unverified now
 
-1. **Run CI on everything pushed today (S).** Every commit since the
+1. ✅ *Done 2026-09-28: run 36493663203, green on macOS and Linux (`db7e5fa` added a manual trigger).* **Run CI on everything pushed today (S).** Every commit since the
    release candidate went up with `[skip ci]` or had its run cancelled:
    the ADC/OAuth sign-in, Claude on Vertex AI, the permission rules, the
    stream keepalive, the thought-signature fix. Only local tests (Linux)
@@ -16,7 +16,7 @@ means. Written 2026-09-28; the backlog spec
    run on macOS and Linux, and the docs site rebuilt (the safety and
    configuration guides changed).
 
-2. **An unavailable model silently answers "Done." (S).** When the
+2. ✅ *Done (`74b759f`).* **An unavailable model silently answers "Done." (S).** When the
    configured model can't be built (no credentials, a bad setting), the
    workspace runs turns on a placeholder model that replies "Done."
    instead of failing (`pkg/engine/workspace.go`, `runtime.NewMockLLM`).
@@ -24,7 +24,7 @@ means. Written 2026-09-28; the backlog spec
    with no working model fails with the model's error (after
    `RetryModel`), in the desktop, the CLI and worker runs.
 
-3. **Settings › Service hangs after reinstalling the service (S).** The
+3. ✅ *Done (`62fbb78`); to confirm in the app.* **Settings › Service hangs after reinstalling the service (S).** The
    status doesn't refresh after **Reinstall**; it stays as it was until
    the dialog is reopened. Likely the check runs once, before the new
    service is up (`apps/desktop/web/src/SettingsDialog.tsx`, `Service`;
@@ -32,7 +32,7 @@ means. Written 2026-09-28; the backlog spec
    the status polls until it settles (with a timeout and an error if it
    doesn't).
 
-4. **Prove each workspace gets its own configuration (S).** Already the
+4. ✅ *Done: `TestWorkspacesKeepTheirOwnSettings` (daemon). Open question: agent model pins (`/pin_model`) are saved in the global settings, so a pin made in one workspace applies to all of them when they next open (and not to those already open); `/locale` and `/model_settings` are global too, which suits them.* **Prove each workspace gets its own configuration (S).** Already the
    design: the service opens each workspace as its own engine with
    `config.LoadWorkspace` (the global settings plus
    `~/.blitz/workspaces/<name>-<sha256 of the path>/.env.toml`), keyed by

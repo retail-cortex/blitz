@@ -33,6 +33,7 @@ go_test(
     srcs = ["daemon_test.go"],
     embed = [":daemon"],
     deps = [
+        "//pkg/config",
         "//pkg/socket",
         "//proto/blitz/v1:blitzv1_go_proto",
         "@com_connectrpc_connect//:connect",
