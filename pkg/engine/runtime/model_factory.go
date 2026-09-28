@@ -15,14 +15,21 @@
 package runtime
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"iter"
 	"log/slog"
+	"net/http"
+	"os"
 	"strings"
 	"sync"
 
+	"cloud.google.com/go/auth"
+	"cloud.google.com/go/auth/credentials"
+	"cloud.google.com/go/auth/httptransport"
 	"github.com/openai/openai-go/v3/option"
 	"github.com/retail-cortex/blitz/pkg/config"
 	"google.golang.org/adk/v2/model"
@@ -132,18 +139,10 @@ func buildProviderModel(ctx context.Context, cfg *config.Config, provider, model
 	pol := policyFrom(cfg.LLM)
 	switch provider {
 	case "gemini":
-		apiKey := cfg.LLM.Gemini.APIKey
-		clientCfg := pol.geminiConfig(apiKey)
-		if cfg.LLM.Gemini.ProjectID != "" {
-			clientCfg.Project = cfg.LLM.Gemini.ProjectID
+		clientCfg, err := geminiClientConfig(ctx, cfg.LLM.Gemini, pol)
+		if err != nil {
+			return nil, err
 		}
-		if cfg.LLM.Gemini.Location != "" {
-			clientCfg.Location = cfg.LLM.Gemini.Location
-		}
-		if apiKey != "" {
-			clientCfg.Backend = genai.BackendGeminiAPI
-		}
-
 		return gemini.NewModel(ctx, modelName, clientCfg)
 
 	case "openai", "ollama":
@@ -151,7 +150,7 @@ func buildProviderModel(ctx context.Context, cfg *config.Config, provider, model
 		return newOpenAIModel(ctx, modelName, apiKey, baseURL, pol.openAIOptions()...)
 
 	case "anthropic":
-		return newAnthropicModel(cfg.LLM.Anthropic, modelName, pol.anthropicOptions()...), nil
+		return newAnthropicModel(cfg.LLM.Anthropic, modelName, pol.anthropicOptions()...)
 
 	case "":
 		// If Gemini key is set and provider is empty, try gemini, else fallback to openai/ollama
@@ -164,7 +163,7 @@ func buildProviderModel(ctx context.Context, cfg *config.Config, provider, model
 			if cfg.Blitz.DefaultModel == "" {
 				modelName = cfg.LLM.Anthropic.Model
 			}
-			return newAnthropicModel(cfg.LLM.Anthropic, modelName, pol.anthropicOptions()...), nil
+			return newAnthropicModel(cfg.LLM.Anthropic, modelName, pol.anthropicOptions()...)
 		}
 		if cfg.LLM.OpenAI.APIKey != "" || cfg.LLM.OpenAI.BaseURL != "" {
 			apiKey := cfg.LLM.OpenAI.APIKey
@@ -183,6 +182,54 @@ func buildProviderModel(ctx context.Context, cfg *config.Config, provider, model
 		}
 		return nil, fmt.Errorf("unsupported or unconfigured LLM provider '%s'", provider)
 	}
+}
+
+// googleCredentials finds Application Default Credentials: a service
+// account's key file (GOOGLE_APPLICATION_CREDENTIALS), gcloud's
+// application-default login, or a Google Cloud machine's metadata server.
+// A variable so that tests can supply their own.
+var googleCredentials = func() (*auth.Credentials, error) {
+	return credentials.DetectDefault(&credentials.DetectOptions{Scopes: []string{"https://www.googleapis.com/auth/cloud-platform"}})
+}
+
+// geminiClientConfig is the genai client for Gemini's settings: the Gemini
+// API with an API key, or Vertex AI with Application Default Credentials
+// (auth = "adc"). genai signs requests itself only on an HTTP client of its
+// own; ours (retries, stalls) gets the credentials added here, as genai's
+// UseDefaultCredentials would, with the quota project genai would send.
+// Credentials that can't be found fail here, when the model is built,
+// rather than at the first request.
+func geminiClientConfig(ctx context.Context, g config.GeminiConfig, pol retryPolicy) (*genai.ClientConfig, error) {
+	switch g.Auth {
+	case "", config.AuthAPIKey:
+		cc := pol.geminiConfig(g.APIKey)
+		cc.Project, cc.Location = g.ProjectID, g.Location
+		if g.APIKey != "" {
+			cc.Backend = genai.BackendGeminiAPI
+		}
+		return cc, nil
+	case config.AuthADC:
+		cc := pol.geminiConfig("")
+		cc.Backend = genai.BackendVertexAI
+		cc.Project = cmp.Or(g.ProjectID, os.Getenv("GOOGLE_CLOUD_PROJECT"))
+		cc.Location = cmp.Or(g.Location, os.Getenv("GOOGLE_CLOUD_LOCATION"), "global")
+		if cc.Project == "" {
+			return nil, errors.New("gemini with Application Default Credentials needs a Google Cloud project: set [llm.gemini] project_id or GOOGLE_CLOUD_PROJECT")
+		}
+		creds, err := googleCredentials()
+		if err != nil {
+			return nil, fmt.Errorf("gemini with Application Default Credentials: %w (sign in with `gcloud auth application-default login` on the machine running Blitz)", err)
+		}
+		if err := httptransport.AddAuthorizationMiddleware(cc.HTTPClient, creds); err != nil {
+			return nil, fmt.Errorf("gemini with Application Default Credentials: %w", err)
+		}
+		cc.Credentials = creds
+		if quota, err := creds.QuotaProjectID(ctx); err == nil && quota != "" {
+			cc.HTTPOptions.Headers = http.Header{"X-Goog-User-Project": []string{quota}}
+		}
+		return cc, nil
+	}
+	return nil, fmt.Errorf("unknown [llm.gemini] auth %q (api_key or adc)", g.Auth)
 }
 
 // MockLLM provides an in-memory LLM implementation for tests and offline validation.

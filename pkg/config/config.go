@@ -22,11 +22,13 @@
 package config
 
 import (
+	"cmp"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 
+	anthropicconfig "github.com/anthropics/anthropic-sdk-go/config"
 	"github.com/retail-cortex/blitz/pkg/secrets"
 	"github.com/rrmcguinness/modenv/pkg/modenv"
 )
@@ -124,13 +126,32 @@ type LLMConfig struct {
 	Anthropic AnthropicConfig `toml:"anthropic"`
 }
 
+// How a provider authenticates: an API key (the default, also for ""),
+// Google Cloud's Application Default Credentials (Gemini through Vertex
+// AI), or an Anthropic OAuth profile from `ant auth login`.
+const (
+	AuthAPIKey = "api_key"
+	AuthADC    = "adc"
+	AuthOAuth  = "oauth"
+)
+
 // GeminiConfig holds settings for Google Gemini / Vertex AI.
 type GeminiConfig struct {
-	APIKey    string `toml:"api_key"`
-	Model     string `toml:"model"`
+	APIKey string `toml:"api_key"`
+	Model  string `toml:"model"`
+	// Auth is "api_key" ("" too: the Gemini API) or "adc": Vertex AI with
+	// Application Default Credentials (`gcloud auth application-default
+	// login`, or a service account), in ProjectID and Location.
+	Auth string `toml:"auth"`
+	// ProjectID and Location are Vertex AI's; empty, they come from
+	// GOOGLE_CLOUD_PROJECT and GOOGLE_CLOUD_LOCATION (Location: "global").
 	ProjectID string `toml:"project_id"`
 	Location  string `toml:"location"`
 }
+
+// UsesADC reports whether Gemini authenticates with Application Default
+// Credentials, through Vertex AI.
+func (g GeminiConfig) UsesADC() bool { return g.Auth == AuthADC }
 
 // OpenAIConfig holds settings for OpenAI, OpenRouter, or Ollama.
 type OpenAIConfig struct {
@@ -143,13 +164,34 @@ type OpenAIConfig struct {
 type AnthropicConfig struct {
 	// APIKey is optional: without it the SDK also accepts ANTHROPIC_AUTH_TOKEN
 	// and `ant auth login` profiles.
-	APIKey  string `toml:"api_key"`
+	APIKey string `toml:"api_key"`
+	// Auth is "api_key" ("" too) or "oauth": the `ant auth login` profile
+	// named by Profile (empty: ant's active profile), with any API key in
+	// the settings or the environment ignored.
+	Auth    string `toml:"auth"`
+	Profile string `toml:"profile"`
 	Model   string `toml:"model"`
 	BaseURL string `toml:"base_url"` // for gateways/proxies; empty uses the API default
 	// Fallbacks controls server-side refusal fallback on models that support
 	// it (claude-opus-5, claude-fable-5*): "default" routes by refusal
 	// category, a model ID pins one fallback model, "off" disables it.
 	Fallbacks string `toml:"fallbacks"`
+}
+
+// UsesOAuth reports whether Claude authenticates with an `ant auth login`
+// OAuth profile rather than an API key.
+func (a AnthropicConfig) UsesOAuth() bool { return a.Auth == AuthOAuth }
+
+// OAuthProfile is the `ant auth login` profile Claude signs in with, and
+// the directory ant keeps it in: Profile, else the one ant would use
+// (ANTHROPIC_PROFILE, its active profile, "default").
+func (a AnthropicConfig) OAuthProfile() (dir, name string) {
+	dir = anthropicconfig.DefaultDir()
+	if a.Profile != "" {
+		return dir, a.Profile
+	}
+	active, _ := os.ReadFile(anthropicconfig.ActiveConfigPath(dir))
+	return dir, cmp.Or(os.Getenv("ANTHROPIC_PROFILE"), strings.TrimSpace(string(active)), "default")
 }
 
 // ModelName returns the model to use: blitz.default_model when set,

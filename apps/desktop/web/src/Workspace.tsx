@@ -92,6 +92,16 @@ export function Workspace({
     return () => window.removeEventListener(configChangedEvent, f);
   }, [dir, refreshSettings]);
 
+  // A model unavailable for want of a sign-in made outside the app (gcloud,
+  // ant auth login) works once it's made: coming back to the window asks
+  // again, and the service tries the model again when asked.
+  useEffect(() => {
+    if (!modelProblem) return;
+    const f = () => refreshSettings();
+    window.addEventListener("focus", f);
+    return () => window.removeEventListener("focus", f);
+  }, [modelProblem, refreshSettings]);
+
   // The command palette can switch the view.
   useEffect(() => {
     const f = (e: Event) => {

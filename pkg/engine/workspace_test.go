@@ -18,10 +18,12 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"image"
 	"image/png"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -71,6 +73,91 @@ func mockModels(_ context.Context, _ *config.Config, ref string) (model.LLM, err
 	}
 	_, name := runtime.ParseModelRef(ref, "")
 	return runtime.NewMockLLM(name), nil
+}
+
+// signInModels builds mock models only once signedIn is set, as a sign-in
+// outside Blitz would allow; each build is a new generation of the model,
+// named "<name>-v<generation>".
+type signInModels struct {
+	signedIn   atomic.Bool
+	generation atomic.Int32
+}
+
+func (s *signInModels) build(_ context.Context, _ *config.Config, ref string) (model.LLM, error) {
+	if !s.signedIn.Load() {
+		return nil, errors.New("no credentials: sign in first")
+	}
+	_, name := runtime.ParseModelRef(ref, "")
+	if name == "" {
+		name = "configured"
+	}
+	return runtime.NewMockLLM(fmt.Sprintf("%s-v%d", name, s.generation.Load()), genai.NewContentFromText("done", genai.RoleModel)), nil
+}
+
+// isolatedConfig is a configuration kept away from the real home directory.
+func isolatedConfig(t *testing.T) *config.Config {
+	t.Helper()
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("MODENV_PREFIX", "")
+	t.Chdir(t.TempDir())
+	cfg := config.DefaultConfig()
+	cfg.Tools.WorkspaceDir = t.TempDir()
+	cfg.Session.StorageDir = t.TempDir()
+	cfg.Tools.ApprovalsFile = filepath.Join(t.TempDir(), "a.json")
+	return cfg
+}
+
+// A model that couldn't be built (no sign-in yet) is built again when
+// asked about, or before a turn, once the sign-in exists.
+func TestRetryModelAfterSignIn(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		retry func(t *testing.T, w *Workspace)
+	}{
+		{"when asked", func(t *testing.T, w *Workspace) { require.NoError(t, w.RetryModel(context.Background())) }},
+		{"before a turn", func(t *testing.T, w *Workspace) {
+			sess, err := w.NewSession()
+			require.NoError(t, err)
+			res, err := w.Run(context.Background(), sess.ID, api.Turn{Text: "hi"}, func(api.Event) {})
+			require.NoError(t, err)
+			assert.Equal(t, "done", res.Output)
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			models := &signInModels{}
+			w, err := Open(context.Background(), isolatedConfig(t), Options{NewModel: models.build})
+			require.NoError(t, err)
+			t.Cleanup(func() { w.Close() })
+			require.Error(t, w.ModelErr(), "the model was built without a sign-in")
+			assert.Error(t, w.RetryModel(context.Background()), "still no sign-in")
+
+			models.signedIn.Store(true)
+			tc.retry(t, w)
+			assert.NoError(t, w.ModelErr())
+			assert.Equal(t, "configured-v0", w.Model().Name)
+		})
+	}
+}
+
+// A settings change rebuilds agents' pinned models too, not only the
+// configured one, so they sign in the new way.
+func TestReloadProvidersRebuildsPins(t *testing.T) {
+	cfg := isolatedConfig(t)
+	cfg.AgentModels = map[string]string{cfg.Blitz.DefaultAgent: "gemini/pinned"}
+	models := &signInModels{}
+	models.signedIn.Store(true)
+	w, err := Open(context.Background(), cfg, Options{NewModel: models.build})
+	require.NoError(t, err)
+	t.Cleanup(func() { w.Close() })
+	name, pinned := w.engine.AgentModel(cfg.Blitz.DefaultAgent)
+	require.True(t, pinned)
+	assert.Equal(t, "pinned-v0", name)
+
+	models.generation.Store(1)
+	reloaded := config.DefaultConfig()
+	require.NoError(t, w.ReloadProviders(context.Background(), reloaded))
+	name, _ = w.engine.AgentModel(cfg.Blitz.DefaultAgent)
+	assert.Equal(t, "pinned-v1", name, "the pin kept its old model")
 }
 
 // savedConfig reads back the config file that operations save to.

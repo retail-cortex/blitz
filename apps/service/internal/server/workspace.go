@@ -88,6 +88,8 @@ func (h workspaceService) GetModel(ctx context.Context, r req[pb.GetModelRequest
 	if err != nil {
 		return nil, err
 	}
+	// Asking is when a sign-in made outside Blitz is noticed.
+	w.RetryModel(ctx)
 	m := w.Model()
 	out := &pb.GetModelResponse{Name: m.Name, Provider: m.Provider}
 	if err := w.ModelErr(); err != nil {

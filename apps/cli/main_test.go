@@ -302,6 +302,63 @@ func TestDoctorPricingCheck(t *testing.T) {
 	assert.True(t, found, "doctor has no pricing check")
 }
 
+// doctor checks the sign-in the provider uses: a project and ADC for
+// Gemini on Vertex AI, an ant profile for Claude with OAuth.
+func TestDoctorSignInCheck(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		settings string
+		setup    func(t *testing.T, home string)
+		status   checkStatus
+		detail   string
+	}{
+		{name: "ADC without a project", settings: "[llm]\nprovider = \"gemini\"\n[llm.gemini]\nauth = \"adc\"\n",
+			status: statusFail, detail: "needs a project"},
+		{name: "ADC without credentials", settings: "[llm]\nprovider = \"gemini\"\n[llm.gemini]\nauth = \"adc\"\nproject_id = \"p\"\n",
+			status: statusWarn, detail: "gcloud auth application-default login"},
+		{name: "ADC from gcloud's login", settings: "[llm]\nprovider = \"gemini\"\n[llm.gemini]\nauth = \"adc\"\nproject_id = \"p\"\n",
+			setup: func(t *testing.T, home string) {
+				dir := filepath.Join(home, "gcloud")
+				t.Setenv("CLOUDSDK_CONFIG", dir)
+				require.NoError(t, os.MkdirAll(dir, 0o700))
+				require.NoError(t, os.WriteFile(filepath.Join(dir, "application_default_credentials.json"), []byte("{}"), 0o600))
+			},
+			status: statusOK, detail: "project p, location global: gcloud's application-default login"},
+		{name: "OAuth without a profile", settings: "[llm]\nprovider = \"anthropic\"\n[llm.anthropic]\nauth = \"oauth\"\nprofile = \"work\"\n",
+			status: statusFail, detail: "no `ant auth login` profile \"work\""},
+		{name: "OAuth with ant's profile", settings: "[llm]\nprovider = \"anthropic\"\n[llm.anthropic]\nauth = \"oauth\"\n",
+			setup: func(t *testing.T, home string) {
+				require.NoError(t, os.MkdirAll(filepath.Join(home, "ant", "credentials"), 0o700))
+				require.NoError(t, os.WriteFile(filepath.Join(home, "ant", "credentials", "default.json"), []byte("{}"), 0o600))
+			},
+			status: statusOK, detail: "profile \"default\""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			home := isolate(t)
+			t.Setenv("GOOGLE_CLOUD_PROJECT", "")
+			t.Setenv("GOOGLE_CLOUD_LOCATION", "")
+			t.Setenv("GOOGLE_APPLICATION_CREDENTIALS", "")
+			t.Setenv("CLOUDSDK_CONFIG", filepath.Join(home, "no-gcloud"))
+			t.Setenv("ANTHROPIC_CONFIG_DIR", filepath.Join(home, "ant"))
+			t.Setenv("ANTHROPIC_PROFILE", "")
+			if tc.setup != nil {
+				tc.setup(t, home)
+			}
+			require.NoError(t, os.MkdirAll(filepath.Join(home, ".blitz"), 0o700))
+			require.NoError(t, os.WriteFile(filepath.Join(home, ".blitz", ".env.toml"), []byte(tc.settings), 0o600))
+			var got *check
+			for _, c := range runDoctor(context.Background(), &globalFlags{}, false) {
+				if c.name == "credentials" {
+					got = &c
+				}
+			}
+			require.NotNil(t, got, "doctor has no credentials check")
+			assert.Equal(t, tc.status, got.status, "%+v", got)
+			assert.Contains(t, got.detail, tc.detail)
+		})
+	}
+}
+
 func TestOneShotPlanRefusesEdits(t *testing.T) {
 	e := testEnv(t,
 		toolCall("create_file", map[string]any{"path": "x.txt", "content": "x"}),

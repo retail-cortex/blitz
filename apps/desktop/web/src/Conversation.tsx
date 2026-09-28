@@ -640,7 +640,10 @@ export function Conversation({
           {modelProblem && (
             <div className="card warn row">
               <Icon path={mdiAlertCircleOutline} />
-              <span>{t("desktop.model_unavailable", { reason: modelProblem })}</span>
+              <span style={{ flex: 1 }}>{t("desktop.model_unavailable", { reason: modelProblem })}</span>
+              <Button small onClick={onSettingsChanged}>
+                {t("desktop.model_check_again")}
+              </Button>
             </div>
           )}
           {empty && <EmptyState name={name} onPick={(text) => setDraft(text)} />}

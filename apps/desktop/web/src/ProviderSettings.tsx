@@ -43,12 +43,39 @@ const inFile = (p: ProviderConfig) => p.keySource === KeySource.KEYCHAIN || p.ke
 /** Where a provider's key comes from, when it has one. */
 const hasKey = (p?: ProviderConfig) => !!p && !p.keyMissing && p.keySource !== KeySource.NONE && p.keySource !== KeySource.UNSPECIFIED;
 
-/** The provider, default model and new key the form saves as one change. */
+/** The sign-in each provider takes besides an API key. */
+const authMethods: Record<string, string> = { gemini: "adc", anthropic: "oauth" };
+
+/**
+ * What the form saves as one change: the provider, the default model, and
+ * how the provider signs in: an API key (a new one, or "" to keep the
+ * current one), Google Cloud's ADC (a project and location) or an ant
+ * OAuth profile.
+ */
 interface Choice {
   provider: string;
   model: string;
+  method: string;
   key: string;
+  projectId: string;
+  location: string;
+  profile: string;
 }
+
+/** The choice as saved in the scope, for provider. */
+function savedChoice(d: DescribeConfigResponse, provider: string, model = d.defaultModel): Choice {
+  const p = d.providers.find((x) => x.name === provider);
+  return { provider, model, method: p?.auth || "api_key", key: "", projectId: p?.projectId ?? "", location: p?.location ?? "", profile: p?.profile ?? "" };
+}
+
+const sameChoice = (a: Choice, b: Choice) =>
+  a.provider === b.provider &&
+  a.model.trim() === b.model.trim() &&
+  a.method === b.method &&
+  a.key.trim() === "" &&
+  a.projectId.trim() === b.projectId &&
+  a.location.trim() === b.location &&
+  a.profile.trim() === b.profile;
 
 /**
  * A scope's providers and API keys: the global settings (workspace "") or
@@ -62,7 +89,7 @@ export function ProviderSettings({ workspace, compact }: { workspace: string; co
   const [error, setError] = useState("");
   const [modelError, setModelError] = useState("");
   const [busy, setBusy] = useState(false);
-  const [choice, setChoice] = useState<Choice>({ provider: "", model: "", key: "" });
+  const [choice, setChoice] = useState<Choice>({ provider: "", model: "", method: "api_key", key: "", projectId: "", location: "", profile: "" });
 
   // Reads the scope; fresh also starts the choice over from what's saved.
   const load = useCallback(
@@ -70,7 +97,7 @@ export function ProviderSettings({ workspace, compact }: { workspace: string; co
       try {
         const d = await config.describeConfig({ workspace });
         setDesc(d);
-        if (fresh) setChoice({ provider: d.provider, model: d.defaultModel, key: "" });
+        if (fresh) setChoice(savedChoice(d, d.provider));
         setError("");
       } catch (e) {
         setError(message(e));
@@ -104,12 +131,31 @@ export function ProviderSettings({ workspace, compact }: { workspace: string; co
 
   if (!desc) return <p className="muted">{error || t("desktop.checking")}</p>;
   const keyed = desc.providers.find((p) => p.name === choice.provider);
-  const dirty = choice.provider !== desc.provider || choice.model.trim() !== desc.defaultModel || choice.key.trim() !== "";
+  const other = authMethods[choice.provider];
+  const dirty = !sameChoice(choice, savedChoice(desc, desc.provider));
   const save = () =>
     dirty &&
     !busy &&
-    act(() => config.setProvider({ workspace, provider: choice.provider, defaultModel: choice.model.trim(), key: choice.key.trim() }), t("desktop.keys.provider_saved"), true);
+    act(
+      () =>
+        config.setProvider({
+          workspace,
+          provider: choice.provider,
+          defaultModel: choice.model.trim(),
+          key: choice.method === "api_key" ? choice.key.trim() : "",
+          auth: other ? { method: choice.method, projectId: choice.projectId.trim(), location: choice.location.trim(), profile: choice.profile.trim() } : undefined,
+        }),
+      t("desktop.keys.provider_saved"),
+      true,
+    );
   const onEnter = (e: KeyboardEvent) => e.key === "Enter" && save();
+  const set = (field: keyof Choice) => (e: { target: { value: string } }) => setChoice({ ...choice, [field]: e.target.value });
+  const text = (field: "projectId" | "location" | "profile", label: string, placeholder: string) => (
+    <label className="field" style={{ flex: 1 }}>
+      <span className="t-label">{t(label)}</span>
+      <input className="input mono" value={choice[field]} placeholder={t(placeholder)} spellCheck={false} disabled={busy} onChange={set(field)} onKeyDown={onEnter} />
+    </label>
+  );
   return (
     <div className="stack provider-settings" style={{ gap: 12 }}>
       <p className="t-body-sm muted">
@@ -118,7 +164,7 @@ export function ProviderSettings({ workspace, compact }: { workspace: string; co
       <div className={compact ? "stack" : "row wrap"} style={{ gap: 12 }}>
         <label className="field">
           <span className="t-label">{t("desktop.keys.provider")}</span>
-          <select className="select" value={choice.provider} disabled={busy} onChange={(e) => setChoice({ ...choice, provider: e.target.value, key: "" })}>
+          <select className="select" value={choice.provider} disabled={busy} onChange={(e) => setChoice(savedChoice(desc, e.target.value, choice.model))}>
             <option value="">{t(workspace ? "desktop.keys.use_global" : "desktop.keys.provider_default")}</option>
             {providers.map((p) => (
               <option key={p} value={p}>
@@ -134,11 +180,27 @@ export function ProviderSettings({ workspace, compact }: { workspace: string; co
             value={choice.model}
             placeholder={t(workspace ? "desktop.keys.use_global" : "desktop.keys.model_placeholder")}
             disabled={busy}
-            onChange={(e) => setChoice({ ...choice, model: e.target.value })}
+            onChange={set("model")}
             onKeyDown={onEnter}
           />
         </label>
-        {keyed && (
+        {keyed && other && (
+          <label className="field">
+            <span className="t-label">{t("desktop.keys.sign_in")}</span>
+            <select className="select" value={choice.method} disabled={busy} onChange={set("method")}>
+              <option value="api_key">{t("desktop.keys.auth.api_key")}</option>
+              <option value={other}>{t(`desktop.keys.auth.${other}`)}</option>
+            </select>
+          </label>
+        )}
+        {keyed && choice.method === "adc" && (
+          <>
+            {text("projectId", "desktop.keys.project", "desktop.keys.project_placeholder")}
+            {text("location", "desktop.keys.location", "desktop.keys.location_placeholder")}
+          </>
+        )}
+        {keyed && choice.method === "oauth" && text("profile", "desktop.keys.profile", "desktop.keys.profile_placeholder")}
+        {keyed && choice.method === "api_key" && (
           <label className="field" style={{ flex: 1 }}>
             <span className="t-label">{t("desktop.keys.key_label", { provider: providerNames[keyed.name] ?? keyed.name })}</span>
             <input
@@ -149,14 +211,15 @@ export function ProviderSettings({ workspace, compact }: { workspace: string; co
               value={choice.key}
               placeholder={t(hasKey(keyed) ? "desktop.keys.key_keep" : "desktop.keys.key_placeholder")}
               disabled={busy}
-              onChange={(e) => setChoice({ ...choice, key: e.target.value })}
+              onChange={set("key")}
               onKeyDown={onEnter}
             />
           </label>
         )}
       </div>
+      {keyed && choice.method !== "api_key" && <p className="t-body-sm muted">{t(`desktop.keys.${choice.method}_hint`)}</p>}
       <div className="row" style={{ justifyContent: "flex-end", gap: 8 }}>
-        <Button small disabled={!dirty || busy} onClick={() => setChoice({ provider: desc.provider, model: desc.defaultModel, key: "" })}>
+        <Button small disabled={!dirty || busy} onClick={() => setChoice(savedChoice(desc, desc.provider))}>
           {t("desktop.file.revert")}
         </Button>
         <Button small variant="filled" disabled={!dirty || busy} onClick={save}>
@@ -196,9 +259,10 @@ function ProviderRow({
   const [key, setKey] = useState("");
   const [baseURL, setBaseURL] = useState(p.baseUrl);
   useEffect(() => setBaseURL(p.baseUrl), [p.baseUrl]);
-  const source = p.keyMissing ? "missing" : sourceKeys[p.keySource];
-  const good = hasKey(p);
-  const insecure = p.keySource === KeySource.PLAIN || p.keySource === KeySource.OBFUSCATED;
+  const source = p.auth === "adc" || p.auth === "oauth" ? p.auth : p.keyMissing ? "missing" : sourceKeys[p.keySource];
+  const signsIn = p.auth === "adc" || p.auth === "oauth";
+  const good = signsIn || hasKey(p);
+  const insecure = !signsIn && (p.keySource === KeySource.PLAIN || p.keySource === KeySource.OBFUSCATED);
   const name = providerNames[p.name] ?? p.name;
 
   const save = async () => {
@@ -233,7 +297,13 @@ function ProviderRow({
             </span>
           )}
         </span>
-        <small className="muted">{t(`desktop.keys.source.${source}.detail`, { provider: name })}</small>
+        <small className="muted">
+          {t(`desktop.keys.source.${source}.detail`, {
+            provider: name,
+            project: p.projectId || t("desktop.keys.project_from_env"),
+            profile: p.profile || t("desktop.keys.profile_placeholder"),
+          })}
+        </small>
         {entering && (
           <span className="row" style={{ gap: 8, marginTop: 8 }}>
             <input

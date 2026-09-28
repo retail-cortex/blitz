@@ -67,6 +67,8 @@ type turn struct {
 // its active one (a worker run has its own). extra are further engine
 // options for a non-aside turn (a worker's agent and model).
 func (w *Workspace) run(ctx context.Context, sessionID string, t turn, on func(api.Event), st *session.Storage, extra ...runtime.ExecOption) (api.TurnResult, error) {
+	// A model that couldn't be built may work now (a sign-in since).
+	w.RetryModel(ctx)
 	ctx = tools.WithPromptID(ctx, uuid.NewString())
 	// The turn's plan state: the plan tools report the user's decision here.
 	gate := tools.NewPlanGate(t.Plan || t.planMode)

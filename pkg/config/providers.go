@@ -128,6 +128,13 @@ type ProviderInfo struct {
 	KeyMissing bool
 	BaseURL    string
 	Model      string
+	// Auth is how the provider signs in, as set in this scope ("" when not:
+	// an API key, or a workspace following the global setting), with its
+	// Vertex AI project and location (adc) or ant profile (oauth).
+	Auth      string
+	ProjectID string
+	Location  string
+	Profile   string
 }
 
 // ScopeInfo describes the settings in one scope (workspace "" is global).
@@ -163,6 +170,10 @@ func Describe(prefixDir, workspace string) (ScopeInfo, error) {
 		pi := ProviderInfo{Name: p}
 		pi.BaseURL, _ = lookup(raw, "llm", p, "base_url").(string)
 		pi.Model, _ = lookup(raw, "llm", p, "model").(string)
+		pi.Auth, _ = lookup(raw, "llm", p, "auth").(string)
+		pi.ProjectID, _ = lookup(raw, "llm", p, "project_id").(string)
+		pi.Location, _ = lookup(raw, "llm", p, "location").(string)
+		pi.Profile, _ = lookup(raw, "llm", p, "profile").(string)
 		key, _ := lookup(raw, "llm", p, "api_key").(string)
 		pi.KeySource = keySource(key)
 		if name, ok := secrets.ParseRef(key); ok {
@@ -332,9 +343,12 @@ var settableValues = map[string]bool{
 	"llm.provider":           true,
 	"blitz.default_model":    true,
 	"llm.gemini.model":       true,
+	"llm.gemini.auth":        true,
 	"llm.gemini.project_id":  true,
 	"llm.gemini.location":    true,
 	"llm.anthropic.model":    true,
+	"llm.anthropic.auth":     true,
+	"llm.anthropic.profile":  true,
 	"llm.anthropic.base_url": true,
 	"llm.openai.model":       true,
 	"llm.openai.base_url":    true,
@@ -355,6 +369,11 @@ func SetValue(prefixDir, workspace, key, value string) (string, error) {
 	if key == "llm.provider" && value != "" && !knownProvider(value) && value != "ollama" {
 		return "", fmt.Errorf("unknown provider %q (gemini, anthropic, openai or ollama)", value)
 	}
+	if provider, ok := strings.CutSuffix(strings.TrimPrefix(key, "llm."), ".auth"); ok {
+		if err := (ProviderAuth{Method: value}).check(provider); err != nil {
+			return "", err
+		}
+	}
 	i := strings.LastIndex(key, ".")
 	table, name := key[:i], key[i+1:]
 	path := strings.Split(key, ".")
@@ -374,14 +393,107 @@ func SetValue(prefixDir, workspace, key, value string) (string, error) {
 		})
 }
 
+// ProviderAuth is how a provider signs in: Method "api_key" ("" too), "adc"
+// (Gemini through Vertex AI with Application Default Credentials, in
+// ProjectID and Location) or "oauth" (Anthropic, with the `ant auth login`
+// profile named by Profile, else ant's active one). Empty fields are
+// removed, so the environment's or the global settings' apply.
+type ProviderAuth struct {
+	Method    string
+	ProjectID string
+	Location  string
+	Profile   string
+}
+
+// authMethods are the sign-in methods each provider takes besides an API key.
+var authMethods = map[string]string{"gemini": AuthADC, "anthropic": AuthOAuth}
+
+func (a ProviderAuth) check(provider string) error {
+	switch a.Method {
+	case "", AuthAPIKey:
+		return nil
+	case authMethods[provider]:
+		if strings.ContainsAny(a.Profile, `/\`) {
+			return fmt.Errorf("%q isn't a profile name", a.Profile)
+		}
+		return nil
+	}
+	if m := authMethods[provider]; m != "" {
+		return fmt.Errorf("%s signs in with api_key or %s, not %q", provider, m, a.Method)
+	}
+	return fmt.Errorf("%s signs in with an API key only, not %q", provider, a.Method)
+}
+
+// edits are the settings a ProviderAuth writes for provider ("" removes).
+func (a ProviderAuth) edits(provider string) []settingEdit {
+	table := "llm." + provider
+	method := a.Method
+	if method == AuthAPIKey {
+		method = ""
+	}
+	e := []settingEdit{{table, "auth", method}}
+	switch a.Method {
+	case AuthADC:
+		e = append(e, settingEdit{table, "project_id", a.ProjectID}, settingEdit{table, "location", a.Location})
+	case AuthOAuth:
+		e = append(e, settingEdit{table, "profile", a.Profile})
+	}
+	return e
+}
+
+// settingEdit sets [table] key = value in a settings file ("" removes it).
+type settingEdit struct{ table, key, value string }
+
+// editSettings applies edits to a scope's file in one write, checking each.
+func editSettings(prefixDir, workspace string, edits []settingEdit) (string, error) {
+	return editConfigFile(scopeDir(prefixDir, workspace),
+		func(doc string) string {
+			for _, e := range edits {
+				if e.value == "" {
+					doc = removeTOMLKey(doc, e.table, e.key)
+				} else {
+					doc = setTOMLKey(doc, e.table, e.key, strconv.Quote(e.value))
+				}
+			}
+			return doc
+		},
+		func(check map[string]any) error {
+			for _, e := range edits {
+				got := lookup(check, append(strings.Split(e.table, "."), e.key)...)
+				if (e.value == "" && got != nil) || (e.value != "" && got != e.value) {
+					return fmt.Errorf("could not set [%s] %s", e.table, e.key)
+				}
+			}
+			return nil
+		})
+}
+
+// SetAuth sets how provider signs in, in a scope. It returns the file
+// written.
+func SetAuth(prefixDir, workspace, provider string, a ProviderAuth) (string, error) {
+	if !knownProvider(provider) {
+		return "", fmt.Errorf("unknown provider %q (%s)", provider, strings.Join(KeyedProviders, ", "))
+	}
+	a.trim()
+	if err := a.check(provider); err != nil {
+		return "", err
+	}
+	return editSettings(prefixDir, workspace, a.edits(provider))
+}
+
+func (a *ProviderAuth) trim() {
+	a.Method, a.ProjectID, a.Location, a.Profile = strings.TrimSpace(a.Method), strings.TrimSpace(a.ProjectID), strings.TrimSpace(a.Location), strings.TrimSpace(a.Profile)
+}
+
 // ProviderChoice is what the provider form saves as one change: a scope's
 // llm.provider and blitz.default_model ("" removes either, so a workspace
-// follows the global setting again) and, unless Key is "", a new API key
-// for Provider.
+// follows the global setting again), how Provider signs in (Auth; nil
+// leaves it as it is) and, unless Key is "", a new API key for Provider.
 type ProviderChoice struct {
 	Provider string
 	Model    string
 	Key      string
+	Auth     *ProviderAuth
 }
 
 // SetProvider saves a ProviderChoice in a scope as one change: everything
@@ -392,41 +504,28 @@ func SetProvider(prefixDir, workspace string, c ProviderChoice) (string, error) 
 	if c.Provider != "" && !knownProvider(c.Provider) && c.Provider != "ollama" {
 		return "", fmt.Errorf("unknown provider %q (gemini, anthropic, openai or ollama)", c.Provider)
 	}
-	var ref string
-	if c.Key != "" {
-		if !knownProvider(c.Provider) {
-			return "", fmt.Errorf("choose a provider that takes an API key (%s) for the key", strings.Join(KeyedProviders, ", "))
+	if (c.Key != "" || c.Auth != nil) && !knownProvider(c.Provider) {
+		return "", fmt.Errorf("choose a provider that takes an API key (%s) for the key or sign-in", strings.Join(KeyedProviders, ", "))
+	}
+	edits := []settingEdit{{"llm", "provider", c.Provider}, {"blitz", "default_model", c.Model}}
+	if c.Auth != nil {
+		c.Auth.trim()
+		if err := c.Auth.check(c.Provider); err != nil {
+			return "", err
 		}
+		if c.Key != "" && c.Auth.Method != "" && c.Auth.Method != AuthAPIKey {
+			return "", fmt.Errorf("an API key is for signing in with api_key, not %s", c.Auth.Method)
+		}
+		edits = append(edits, c.Auth.edits(c.Provider)...)
+	}
+	if c.Key != "" {
 		name := secretName(prefixDir, workspace, c.Provider)
 		if err := secrets.Default(ConfigDir(prefixDir)).Set(name, c.Key); err != nil {
 			return "", err
 		}
-		ref = secrets.Ref(name)
+		edits = append(edits, settingEdit{"llm." + c.Provider, "api_key", secrets.Ref(name)})
 	}
-	set := func(doc, table, key, value string) string {
-		if value == "" {
-			return removeTOMLKey(doc, table, key)
-		}
-		return setTOMLKey(doc, table, key, strconv.Quote(value))
-	}
-	return editConfigFile(scopeDir(prefixDir, workspace),
-		func(doc string) string {
-			doc = set(doc, "llm", "provider", c.Provider)
-			doc = set(doc, "blitz", "default_model", c.Model)
-			if ref != "" {
-				doc = set(doc, "llm."+c.Provider, "api_key", ref)
-			}
-			return doc
-		},
-		func(check map[string]any) error {
-			if str(lookup(check, "llm", "provider")) != c.Provider || str(lookup(check, "blitz", "default_model")) != c.Model {
-				return errors.New("could not set the provider and default model")
-			}
-			if ref != "" && lookup(check, "llm", c.Provider, "api_key") != ref {
-				return fmt.Errorf("could not set [llm.%s] api_key", c.Provider)
-			}
-			return nil
-		})
+	return editSettings(prefixDir, workspace, edits)
 }
 
 // ReadSettingsFile returns a scope's settings file and its text ("" when it

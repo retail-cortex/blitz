@@ -75,6 +75,27 @@ message ProviderConfig {
   // As set in this scope ("" when not).
   string base_url = 4;
   string model = 5;
+  // How it signs in, as set in this scope: "" (an API key, or a workspace
+  // following the global setting), adc (Gemini) or oauth (Anthropic).
+  string auth = 6;
+  // adc: the Google Cloud project and location ("" when not set here).
+  string project_id = 7;
+  string location = 8;
+  // oauth: the `ant auth login` profile ("" for ant's active one).
+  string profile = 9;
+}
+
+// How a provider signs in.
+message ProviderAuth {
+  // api_key ("" too), adc (Gemini through Vertex AI with Application
+  // Default Credentials) or oauth (Anthropic, an `ant auth login` profile).
+  string method = 1;
+  // adc: the Google Cloud project and location ("" uses the service's
+  // GOOGLE_CLOUD_PROJECT and GOOGLE_CLOUD_LOCATION, or "global").
+  string project_id = 2;
+  string location = 3;
+  // oauth: the profile ("" uses ant's active one).
+  string profile = 4;
 }
 
 // Request message for ConfigService.DescribeConfig.
@@ -159,6 +180,8 @@ message SetProviderRequest {
   // A new API key for the provider, kept in the keychain ("" keeps the
   // current one).
   string key = 4;
+  // How the provider signs in (unset leaves it as it is).
+  ProviderAuth auth = 5;
 }
 
 // Response message for ConfigService.SetProvider.

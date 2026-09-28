@@ -60,17 +60,22 @@ type Options struct {
 
 // Workspace is one open project: everything a session needs.
 type Workspace struct {
-	cfg      *config.Config
-	agents   *agents.Registry
-	skills   *skills.Provider
-	tools    *tools.Registry
-	engine   *runtime.Engine
-	storage  *session.Storage
-	audit    *audit.Logger
-	memory   memory.Loaded
-	locales  *i18n.Bundle
-	modelErr error // set when the configured model failed to initialise
-	warn     func(string)
+	cfg     *config.Config
+	agents  *agents.Registry
+	skills  *skills.Provider
+	tools   *tools.Registry
+	engine  *runtime.Engine
+	storage *session.Storage
+	audit   *audit.Logger
+	memory  memory.Loaded
+	locales *i18n.Bundle
+	// modelErr is set when the configured model failed to initialise;
+	// modelMu guards it (the service reloads and retries concurrently).
+	modelErr error
+	modelMu  sync.Mutex
+	// rebuildMu serialises rebuilding the models.
+	rebuildMu sync.Mutex
+	warn      func(string)
 	// reply is the language the model replies in, per workspace.
 	reply *i18n.Localizer
 	lock  *workspaceLock
@@ -208,7 +213,7 @@ func Open(ctx context.Context, cfg *config.Config, o Options) (*Workspace, error
 
 	llm := o.Model
 	if llm == nil {
-		if llm, err = runtime.NewModel(ctx, cfg, ""); err != nil {
+		if llm, err = w.newModel(ctx, cfg, ""); err != nil {
 			w.modelErr = err
 		}
 		if llm == nil {
@@ -274,7 +279,11 @@ func (w *Workspace) Locales() *i18n.Bundle { return w.locales }
 
 // ModelErr is why the configured model failed to initialise (nil if it
 // didn't). The workspace then runs on a placeholder model.
-func (w *Workspace) ModelErr() error { return w.modelErr }
+func (w *Workspace) ModelErr() error {
+	w.modelMu.Lock()
+	defer w.modelMu.Unlock()
+	return w.modelErr
+}
 
 // Close kills background processes and MCP servers, flushes the audit log
 // and releases the workspace.

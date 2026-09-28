@@ -26,8 +26,8 @@ Every model is an ADK `model.LLM`. A factory builds one from a model reference f
 
 | Provider | Implementation | Credentials |
 |---|---|---|
-| `gemini` | ADK `gemini.NewModel` over `genai` | `api_key` (Gemini API backend when set); otherwise `project_id`/`location` (Vertex) |
-| `anthropic` | Native adapter over `anthropic-sdk-go` Beta Messages API | `api_key`, else SDK resolution (`ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`, `ant auth login` profile, workload identity); optional `base_url` |
+| `gemini` | ADK `gemini.NewModel` over `genai` | `auth = "adc"`: Vertex AI with Application Default Credentials (genai finds them: `GOOGLE_APPLICATION_CREDENTIALS`, gcloud's application-default login, the metadata server), project `project_id` else `GOOGLE_CLOUD_PROJECT` (required), location `location` else `GOOGLE_CLOUD_LOCATION` else `global`, the API key unused. Otherwise `api_key` (Gemini API backend when set), or genai's own environment (`GOOGLE_GENAI_USE_VERTEXAI`, `project_id`/`location`) |
+| `anthropic` | Native adapter over `anthropic-sdk-go` Beta Messages API | `auth = "oauth"`: the `ant auth login` (Anthropic Console) profile `profile`, else ant's (`ANTHROPIC_PROFILE`, the active profile, `default`), with the SDK's environment defaults off so no API key or token shadows it; a missing profile fails the model build. Otherwise `api_key`, else SDK resolution (`ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`, `ant auth login` profile, workload identity); optional `base_url` |
 | `openai` | ADK OpenAI model (Responses API) wrapped for images and text tool calls | `[llm.openai]` key and base URL |
 | `ollama` | Same as `openai` | Uses `[llm.openai]`; base URL defaults to `http://localhost:11434/v1` when unset or still the OpenAI default; key is always the placeholder `ollama` (never the OpenAI key) |
 

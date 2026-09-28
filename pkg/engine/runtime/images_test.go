@@ -153,7 +153,7 @@ func TestViewImageDisabled(t *testing.T) {
 
 func TestAnthropicImages(t *testing.T) {
 	f, opts := newFake(t, jsonReply(message("end_turn", `{"type":"text","text":"ok"}`)))
-	m := newAnthropicModel(config.AnthropicConfig{APIKey: "sk-ant-test"}, "claude-opus-5", opts...)
+	m := mustAnthropicModel(t, config.AnthropicConfig{APIKey: "sk-ant-test"}, "claude-opus-5", opts...)
 	pic := testPNG(t, 4, 4)
 	req := &model.LLMRequest{Contents: []*genai.Content{
 		{Role: genai.RoleUser, Parts: []*genai.Part{{InlineData: &genai.Blob{Data: pic, MIMEType: "image/png"}}, genai.NewPartFromText("what?")}},

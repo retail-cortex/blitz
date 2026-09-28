@@ -25,8 +25,8 @@ model = "claude-opus-5"
 
 The model comes from `llm.<provider>.model` unless `blitz.default_model` or `--model` overrides it. `--model anthropic/claude-sonnet-5` (or `/model` in a session) can switch provider.
 
-- **Gemini** takes a key, or Vertex AI credentials (`project_id` and `location`).
-- **Anthropic** streams, caches the system prompt, keeps thinking across tool calls, and falls back on server-side refusals (`llm.anthropic.fallbacks = "default"`, or `"off"`). Without `api_key` it uses `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`, or an `ant auth login` profile.
+- **Gemini** takes a key, or signs in with Google Cloud (below).
+- **Anthropic** streams, caches the system prompt, keeps thinking across tool calls, and falls back on server-side refusals (`llm.anthropic.fallbacks = "default"`, or `"off"`). It takes a key, or signs in with an Anthropic account (below). Without `api_key` it also uses `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`, or an `ant auth login` profile.
 - **OpenAI** covers every OpenAI-compatible API (OpenRouter, vLLM, …) through `base_url`.
 - **Ollama** runs local models.
 
@@ -44,6 +44,43 @@ blitz config remove-key openai
 Keys go to the macOS Keychain, the Secret Service on Linux (GNOME Keyring, KWallet), or, where neither is available, an owner-only `~/.blitz/secrets.toml`. The settings file only refers to the key (`api_key = "keychain:…"`). With `--workspace` (`-w`) these commands work on the current workspace's own settings.
 
 A key in the environment (`GEMINI_API_KEY`, `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`) works too, but the service started at login doesn't see your shell's environment; use the keychain for it.
+
+## Signing in without a key
+
+Gemini and Claude can use an account instead of an API key: the desktop app's **Sign in with**, `blitz config set-auth`, or `auth` in the settings. The sign-in belongs to the machine the Blitz service runs on, so sign in there.
+
+**Gemini with Google Cloud (Application Default Credentials).** Gemini runs on Vertex AI in your Google Cloud project, billed there.
+
+```bash
+gcloud auth application-default login
+blitz config set-auth gemini adc --project my-project      # --location, else global
+```
+
+```toml
+[llm.gemini]
+auth = "adc"
+project_id = "my-project"    # or GOOGLE_CLOUD_PROJECT
+location = "global"          # or GOOGLE_CLOUD_LOCATION; global when unset
+```
+
+The credentials are Google's usual ones: `GOOGLE_APPLICATION_CREDENTIALS` (a service account's key file), gcloud's application-default login, or a Google Cloud machine's own. The project needs the Vertex AI API enabled.
+
+**Claude with an Anthropic account (OAuth).** Claude uses an Anthropic Console sign-in from the `ant` command line tool, billed to the organization you pick when signing in. This is the Claude API's sign-in, not a Claude.ai subscription.
+
+```bash
+ant auth login                                              # --profile work for more than one
+blitz config set-auth anthropic oauth                       # --profile work, else ant's active profile
+```
+
+```toml
+[llm.anthropic]
+auth = "oauth"
+profile = "work"             # optional: else ANTHROPIC_PROFILE, ant's active profile, or "default"
+```
+
+Signing in after choosing the method is fine: Blitz tries the model again when you come back to the window, press **Check again** on the "model isn't available" note, or send a prompt. After signing in again as someone else, save the provider settings (or restart the service) so Blitz picks up the new credentials.
+
+With `oauth`, an `ANTHROPIC_API_KEY` or `api_key` is ignored, so a leftover key can't take the profile's place. `blitz config set-auth <provider> api_key` goes back to the key; `blitz config keys` shows how each provider signs in, and `blitz doctor` checks it.
 
 ## Editing in place
 

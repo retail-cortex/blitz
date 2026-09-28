@@ -16,6 +16,7 @@ package engine
 
 import (
 	"context"
+	"log/slog"
 	"maps"
 	"slices"
 	"strings"
@@ -258,10 +259,42 @@ func (w *Workspace) Set(ctx context.Context, key, value string) (string, error) 
 func (w *Workspace) ReloadProviders(ctx context.Context, cfg *config.Config) error {
 	w.cfg.LLM = cfg.LLM
 	w.cfg.Blitz.DefaultModel = cfg.Blitz.DefaultModel
+	return w.rebuildModels(ctx)
+}
+
+// RetryModel builds the models again when the configured one couldn't be
+// built: what it lacked may have appeared since, above all a sign-in made
+// outside Blitz (gcloud's Application Default Credentials, an `ant auth
+// login` profile), which no settings change announces. It does nothing
+// while the model works.
+func (w *Workspace) RetryModel(ctx context.Context) error {
+	if w.ModelErr() == nil {
+		return nil
+	}
+	return w.rebuildModels(ctx)
+}
+
+// rebuildModels builds the configured model, and each agent's pinned one,
+// with the providers' current settings, recording whether the configured
+// one works. A pin that can't be built keeps the model it had.
+func (w *Workspace) rebuildModels(ctx context.Context) error {
+	w.rebuildMu.Lock()
+	defer w.rebuildMu.Unlock()
 	llm, err := w.newModel(ctx, w.cfg, "")
 	if err == nil {
 		err = w.engine.SetModel(ctx, llm)
 	}
+	w.modelMu.Lock()
 	w.modelErr = err
+	w.modelMu.Unlock()
+	for agent, ref := range agentModelRefs(w.cfg, w.agents, func(string) {}) {
+		pin, perr := w.newModel(ctx, w.cfg, ref)
+		if perr == nil {
+			perr = w.engine.PinModel(ctx, agent, pin)
+		}
+		if perr != nil {
+			slog.WarnContext(ctx, "pinned model unavailable", "agent", agent, "model", ref, "error", perr)
+		}
+	}
 	return err
 }

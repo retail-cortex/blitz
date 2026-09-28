@@ -27,6 +27,7 @@ import (
 	"testing"
 	"time"
 
+	anthropicconfig "github.com/anthropics/anthropic-sdk-go/config"
 	"github.com/anthropics/anthropic-sdk-go/option"
 	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/engine/agents"
@@ -76,10 +77,17 @@ func jsonReply(body string) func(http.ResponseWriter) {
 
 func newFake(t *testing.T, responses ...func(http.ResponseWriter)) (*fakeAnthropic, []option.RequestOption) {
 	t.Helper()
+	f, opts := newFakeWithoutKey(t, responses...)
+	return f, append(opts, option.WithAPIKey("sk-ant-test"))
+}
+
+// newFakeWithoutKey is newFake whose options carry no API key.
+func newFakeWithoutKey(t *testing.T, responses ...func(http.ResponseWriter)) (*fakeAnthropic, []option.RequestOption) {
+	t.Helper()
 	f := &fakeAnthropic{responses: responses}
 	srv := httptest.NewServer(http.HandlerFunc(f.handler))
 	t.Cleanup(srv.Close)
-	return f, []option.RequestOption{option.WithBaseURL(srv.URL), option.WithMaxRetries(0), option.WithAPIKey("sk-ant-test"), option.WithRequestTimeout(10 * time.Second)}
+	return f, []option.RequestOption{option.WithBaseURL(srv.URL), option.WithMaxRetries(0), option.WithRequestTimeout(10 * time.Second)}
 }
 
 func message(stop string, content string) string {
@@ -187,7 +195,7 @@ func TestAnthropicRequestShape(t *testing.T) {
 		}
 	}
 	f, opts := newFake(t, jsonReply(message("end_turn", `{"type":"text","text":"a"}`)), jsonReply(message("end_turn", `{"type":"text","text":"b"}`)), jsonReply(message("end_turn", `{"type":"text","text":"c"}`)))
-	m := newAnthropicModel(config.AnthropicConfig{APIKey: "sk-ant-test"}, "claude-opus-5", opts...)
+	m := mustAnthropicModel(t, config.AnthropicConfig{APIKey: "sk-ant-test"}, "claude-opus-5", opts...)
 
 	_, err := collectResponses(t, m, req("claude-opus-5"), false)
 	require.NoError(t, err)
@@ -209,9 +217,54 @@ func TestAnthropicRequestShape(t *testing.T) {
 	assert.Nil(t, f.requests[1]["fallbacks"], "haiku request: %v", f.requests[1])
 
 	// Fallbacks off.
-	off := newAnthropicModel(config.AnthropicConfig{Fallbacks: "off"}, "claude-opus-5", opts...)
+	off := mustAnthropicModel(t, config.AnthropicConfig{Fallbacks: "off"}, "claude-opus-5", opts...)
 	collectResponses(t, off, req("claude-opus-5"), false)
 	assert.Nil(t, f.requests[2]["fallbacks"], "fallbacks should be omitted when off")
+}
+
+func mustAnthropicModel(t *testing.T, cfg config.AnthropicConfig, name string, opts ...option.RequestOption) *anthropicModel {
+	t.Helper()
+	m, err := newAnthropicModel(cfg, name, opts...)
+	require.NoError(t, err)
+	return m
+}
+
+// auth = "oauth" sends an `ant auth login` profile's token, never an API
+// key from the settings or the environment.
+func TestAnthropicOAuthProfile(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("ANTHROPIC_CONFIG_DIR", dir)
+	t.Setenv("ANTHROPIC_PROFILE", "")
+	t.Setenv("ANTHROPIC_API_KEY", "sk-ant-from-env")
+	expires := time.Now().Add(time.Hour)
+	for _, p := range []struct{ name, token string }{{"default", "tok-default"}, {"work", "tok-work"}} {
+		require.NoError(t, anthropicconfig.SaveProfile(dir, p.name, &anthropicconfig.Config{AuthenticationInfo: anthropicconfig.NewUserOAuthAuthentication("client")}))
+		require.NoError(t, anthropicconfig.WriteCredentials(anthropicconfig.ProfileCredentialsPath(dir, p.name), anthropicconfig.Credentials{AccessToken: p.token, RefreshToken: "refresh", ExpiresAt: &expires}))
+	}
+	req := &model.LLMRequest{Contents: []*genai.Content{userText("hi")}}
+
+	for _, tc := range []struct {
+		name    string
+		profile string
+		token   string
+	}{
+		{"the active profile", "", "tok-default"},
+		{"a named profile", "work", "tok-work"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f, opts := newFakeWithoutKey(t, jsonReply(message("end_turn", `{"type":"text","text":"ok"}`)))
+			m := mustAnthropicModel(t, config.AnthropicConfig{Auth: config.AuthOAuth, Profile: tc.profile, APIKey: "sk-ant-in-settings"}, "claude-opus-5", opts...)
+			_, err := collectResponses(t, m, req, false)
+			require.NoError(t, err)
+			assert.Equal(t, "Bearer "+tc.token, f.headers[0].Get("Authorization"))
+			assert.Empty(t, f.headers[0].Get("X-Api-Key"), "an API key was sent with the OAuth token")
+		})
+	}
+
+	_, err := newAnthropicModel(config.AnthropicConfig{Auth: config.AuthOAuth, Profile: "missing"}, "claude-opus-5")
+	assert.ErrorContains(t, err, "ant auth login")
+	_, err = newAnthropicModel(config.AnthropicConfig{Auth: "password"}, "claude-opus-5")
+	assert.ErrorContains(t, err, "unknown [llm.anthropic] auth")
 }
 
 func TestAnthropicResponseConversion(t *testing.T) {
@@ -220,7 +273,7 @@ func TestAnthropicResponseConversion(t *testing.T) {
 		jsonReply(message("refusal", `{"type":"text","text":"I can't"}`)),
 		jsonReply(message("max_tokens", `{"type":"text","text":"cut"}`)),
 	)
-	m := newAnthropicModel(config.AnthropicConfig{}, "claude-opus-5", opts...)
+	m := mustAnthropicModel(t, config.AnthropicConfig{}, "claude-opus-5", opts...)
 	req := &model.LLMRequest{Contents: []*genai.Content{userText("go")}}
 
 	out, err := collectResponses(t, m, req, false)
@@ -275,7 +328,7 @@ func TestAnthropicStreaming(t *testing.T) {
 		`{"type":"message_delta","delta":{"stop_reason":"tool_use","stop_sequence":null},"usage":{"output_tokens":42}}`,
 		`{"type":"message_stop"}`,
 	))
-	m := newAnthropicModel(config.AnthropicConfig{}, "claude-opus-5", opts...)
+	m := mustAnthropicModel(t, config.AnthropicConfig{}, "claude-opus-5", opts...)
 	out, err := collectResponses(t, m, &model.LLMRequest{Contents: []*genai.Content{userText("go")}}, true)
 	require.NoError(t, err)
 	require.Len(t, out, 3, "expected 2 partials + final, got %d: %+v", len(out), out)
@@ -302,7 +355,7 @@ func TestAnthropicErrors(t *testing.T) {
 		}
 	}
 	_, opts := newFake(t, status(401), status(429), status(529))
-	m := newAnthropicModel(config.AnthropicConfig{}, "claude-opus-5", opts...)
+	m := mustAnthropicModel(t, config.AnthropicConfig{}, "claude-opus-5", opts...)
 	req := &model.LLMRequest{Contents: []*genai.Content{userText("x")}}
 	for _, want := range []string{"authentication failed", "rate limited", "API error (529)"} {
 		t.Run(want, func(t *testing.T) {
@@ -354,7 +407,7 @@ func TestAnthropicEngineToolLoop(t *testing.T) {
 	reg, err := tools.NewRegistry(cfg, agentReg, skillProv)
 	require.NoError(t, err)
 	defer reg.Close()
-	llm := newAnthropicModel(cfg.LLM.Anthropic, "claude-opus-5", opts...)
+	llm := mustAnthropicModel(t, cfg.LLM.Anthropic, "claude-opus-5", opts...)
 	eng, err := NewEngine(context.Background(), cfg, agentReg, skillProv, reg, llm)
 	require.NoError(t, err)
 
@@ -421,7 +474,7 @@ func TestAnthropicReasoning(t *testing.T) {
 		replies = append(replies, jsonReply(message("end_turn", `{"type":"text","text":"a"}`)))
 	}
 	f, opts := newFake(t, replies...)
-	m := newAnthropicModel(config.AnthropicConfig{Fallbacks: "off"}, "claude-opus-5-5", opts...)
+	m := mustAnthropicModel(t, config.AnthropicConfig{Fallbacks: "off"}, "claude-opus-5-5", opts...)
 	for i, c := range cases {
 		ctx := context.Background()
 		if c.effort != "" {

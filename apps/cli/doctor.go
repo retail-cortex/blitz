@@ -15,6 +15,7 @@
 package main
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -101,6 +102,16 @@ func runDoctor(ctx context.Context, g *globalFlags, online bool) []check {
 	checkSkills(cfg, add)
 
 	switch key := apiKeyFor(cfg); {
+	case cfg.LLM.Provider == "gemini" && cfg.LLM.Gemini.UsesADC():
+		st, detail := checkADC(cfg.LLM.Gemini)
+		add("credentials", st, "%s", detail)
+	case cfg.LLM.Provider == "anthropic" && cfg.LLM.Anthropic.UsesOAuth():
+		dir, name := cfg.LLM.Anthropic.OAuthProfile()
+		if _, err := os.Stat(filepath.Join(dir, "credentials", name+".json")); err != nil {
+			add("credentials", statusFail, "no `ant auth login` profile %q in %s: sign in with `ant auth login`", name, dir)
+		} else {
+			add("credentials", statusOK, "Anthropic OAuth, `ant auth login` profile %q (use --online to confirm)", name)
+		}
 	case cfg.LLM.Provider == "anthropic" && key == "":
 		if os.Getenv("ANTHROPIC_AUTH_TOKEN") != "" {
 			add("credentials", statusOK, "ANTHROPIC_AUTH_TOKEN is set")
@@ -310,6 +321,30 @@ func printChecks(w io.Writer, checks []check) (failed int) {
 		}
 	}
 	return failed
+}
+
+// checkADC says whether Gemini on Vertex AI has a project and Application
+// Default Credentials: a key file, gcloud's login, or (unseen from here) a
+// Google Cloud machine's metadata server.
+func checkADC(g config.GeminiConfig) (checkStatus, string) {
+	project := cmp.Or(g.ProjectID, os.Getenv("GOOGLE_CLOUD_PROJECT"))
+	if project == "" {
+		return statusFail, "Google Cloud ADC needs a project: set [llm.gemini] project_id or GOOGLE_CLOUD_PROJECT"
+	}
+	where := fmt.Sprintf("Google Cloud ADC, project %s, location %s: ", project, cmp.Or(g.Location, os.Getenv("GOOGLE_CLOUD_LOCATION"), "global"))
+	if os.Getenv("GOOGLE_APPLICATION_CREDENTIALS") != "" {
+		return statusOK, where + "GOOGLE_APPLICATION_CREDENTIALS (use --online to confirm)"
+	}
+	gcloud := os.Getenv("CLOUDSDK_CONFIG")
+	if gcloud == "" {
+		if dir, err := os.UserConfigDir(); err == nil {
+			gcloud = filepath.Join(dir, "gcloud")
+		}
+	}
+	if _, err := os.Stat(filepath.Join(gcloud, "application_default_credentials.json")); err == nil {
+		return statusOK, where + "gcloud's application-default login (use --online to confirm)"
+	}
+	return statusWarn, where + "no credentials file; run `gcloud auth application-default login` unless this is a Google Cloud machine"
 }
 
 func apiKeyFor(cfg *config.Config) string {

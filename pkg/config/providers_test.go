@@ -199,6 +199,72 @@ func TestSetProvider(t *testing.T) {
 	}
 }
 
+// How a provider signs in: an API key, Google Cloud's ADC or an ant profile.
+func TestSetAuth(t *testing.T) {
+	keysEnv(t)
+	ws := t.TempDir()
+
+	for _, tc := range []struct {
+		name     string
+		provider string
+		auth     ProviderAuth
+		want     ProviderInfo
+		err      string
+	}{
+		{name: "Gemini with ADC", provider: "gemini", auth: ProviderAuth{Method: AuthADC, ProjectID: " my-project ", Location: "us-central1"},
+			want: ProviderInfo{Auth: AuthADC, ProjectID: "my-project", Location: "us-central1"}},
+		{name: "Gemini back to a key keeps the project", provider: "gemini", auth: ProviderAuth{Method: AuthAPIKey},
+			want: ProviderInfo{ProjectID: "my-project", Location: "us-central1"}},
+		{name: "Claude with ant's active profile", provider: "anthropic", auth: ProviderAuth{Method: AuthOAuth}, want: ProviderInfo{Auth: AuthOAuth}},
+		{name: "Claude with a named profile", provider: "anthropic", auth: ProviderAuth{Method: AuthOAuth, Profile: "work"}, want: ProviderInfo{Auth: AuthOAuth, Profile: "work"}},
+		{name: "OAuth isn't Gemini's", provider: "gemini", auth: ProviderAuth{Method: AuthOAuth}, err: "gemini signs in with api_key or adc"},
+		{name: "ADC isn't Claude's", provider: "anthropic", auth: ProviderAuth{Method: AuthADC}, err: "anthropic signs in with api_key or oauth"},
+		{name: "OpenAI takes a key only", provider: "openai", auth: ProviderAuth{Method: AuthOAuth}, err: "API key only"},
+		{name: "a path isn't a profile", provider: "anthropic", auth: ProviderAuth{Method: AuthOAuth, Profile: "../x"}, err: "isn't a profile name"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := SetAuth("", ws, tc.provider, tc.auth)
+			if tc.err != "" {
+				assert.ErrorContains(t, err, tc.err)
+				return
+			}
+			require.NoError(t, err)
+			p := source(t, ws, tc.provider)
+			assert.Equal(t, tc.want, ProviderInfo{Auth: p.Auth, ProjectID: p.ProjectID, Location: p.Location, Profile: p.Profile})
+		})
+	}
+
+	// The loaded settings say so too.
+	cfg, err := LoadWorkspace("", ws)
+	require.NoError(t, err)
+	assert.True(t, cfg.LLM.Anthropic.UsesOAuth())
+	assert.Equal(t, "work", cfg.LLM.Anthropic.Profile)
+	assert.False(t, cfg.LLM.Gemini.UsesADC())
+
+	// SetValue checks auth the same way.
+	_, err = SetValue("", ws, "llm.gemini.auth", "adc")
+	assert.NoError(t, err)
+	_, err = SetValue("", ws, "llm.gemini.auth", "oauth")
+	assert.Error(t, err)
+}
+
+// The provider form's sign-in is part of its one change.
+func TestSetProviderWithAuth(t *testing.T) {
+	_, store := keysEnv(t)
+	_, err := SetProvider("", "", ProviderChoice{Provider: "gemini", Model: "gemini-3.8-flash", Auth: &ProviderAuth{Method: AuthADC, ProjectID: "p"}})
+	require.NoError(t, err)
+	cfg, _ := Load("")
+	assert.True(t, cfg.LLM.Gemini.UsesADC())
+	assert.Equal(t, "p", cfg.LLM.Gemini.ProjectID)
+
+	_, err = SetProvider("", "", ProviderChoice{Provider: "gemini", Model: "m2", Key: "AIza", Auth: &ProviderAuth{Method: AuthADC}})
+	assert.ErrorContains(t, err, "an API key is for signing in with api_key")
+	info, _ := Describe("", "")
+	assert.Equal(t, "gemini-3.8-flash", info.DefaultModel, "a refused change was written")
+	_, err = store.Get("global/llm.gemini.api_key")
+	assert.ErrorIs(t, err, secrets.ErrNotFound, "a refused change stored its key")
+}
+
 func TestWriteSettingsFile(t *testing.T) {
 	keysEnv(t)
 	path, warnings, err := WriteSettingsFile("", "", "# mine\n[llm]\nprovider = \"openai\"\n[llm.openai]\napi_key = \"sk-plain\"\n[llm.typo]\nx = 1\n")

@@ -199,13 +199,28 @@ function notFound(what: string): never {
 }
 
 // The settings: per scope ("" global), the file and where each key is.
-const configs = new Map<string, { text: string; provider: string; model: string; keys: Record<string, KeySource> }>();
+/** How a provider signs in, in the fake: an API key unless set. */
+interface FakeAuth {
+  method: string;
+  projectId: string;
+  location: string;
+  profile: string;
+}
+
+const configs = new Map<string, { text: string; provider: string; model: string; keys: Record<string, KeySource>; auth: Record<string, FakeAuth> }>();
+
 function scopeConfig(workspace: string) {
   let c = configs.get(workspace);
   if (!c) {
     c = workspace
-      ? { text: "", provider: "", model: "", keys: { gemini: KeySource.INHERITED, anthropic: KeySource.INHERITED, openai: KeySource.NONE } }
-      : { text: '[llm]\nprovider = "gemini"\n\n[llm.gemini]\napi_key = "keychain:global/llm.gemini.api_key"\n\n[llm.anthropic]\napi_key = "sk-ant-plain"\n', provider: "gemini", model: "", keys: { gemini: KeySource.KEYCHAIN, anthropic: KeySource.PLAIN, openai: KeySource.NONE } };
+      ? { text: "", provider: "", model: "", keys: { gemini: KeySource.INHERITED, anthropic: KeySource.INHERITED, openai: KeySource.NONE }, auth: {} }
+      : {
+          text: '[llm]\nprovider = "gemini"\n\n[llm.gemini]\napi_key = "keychain:global/llm.gemini.api_key"\n\n[llm.anthropic]\napi_key = "sk-ant-plain"\n',
+          provider: "gemini",
+          model: "",
+          keys: { gemini: KeySource.KEYCHAIN, anthropic: KeySource.PLAIN, openai: KeySource.NONE },
+          auth: {},
+        };
     configs.set(workspace, c);
   }
   return c;
@@ -375,7 +390,10 @@ export function installFake() {
             provider: c.provider,
             defaultModel: c.model,
             secretStore: "macOS Keychain",
-            providers: Object.entries(c.keys).map(([name, keySource]) => ({ name, keySource, keyMissing: false, baseUrl: "", model: "" })),
+            providers: Object.entries(c.keys).map(([name, keySource]) => {
+              const a = c.auth[name];
+              return { name, keySource, keyMissing: false, baseUrl: "", model: "", auth: a?.method ?? "", projectId: a?.projectId ?? "", location: a?.location ?? "", profile: a?.profile ?? "" };
+            }),
           };
         },
         setApiKey: ({ workspace, provider }) => {
@@ -390,12 +408,15 @@ export function installFake() {
           scopeConfig(workspace).keys[provider] = workspace ? KeySource.INHERITED : KeySource.NONE;
           return change(workspace);
         },
-        setProvider: ({ workspace, provider, defaultModel, key }) => {
+        setProvider: ({ workspace, provider, defaultModel, key, auth }) => {
           if (key && !["gemini", "anthropic", "openai"].includes(provider)) throw new ConnectError(`${provider || "no provider"} takes no API key`, Code.InvalidArgument);
+          const method = auth?.method === "api_key" ? "" : (auth?.method ?? "");
+          if (method && method !== { gemini: "adc", anthropic: "oauth" }[provider]) throw new ConnectError(`${provider} doesn't sign in with ${method}`, Code.InvalidArgument);
           const c = scopeConfig(workspace);
           c.provider = provider;
           c.model = defaultModel;
           if (key) c.keys[provider] = KeySource.KEYCHAIN;
+          if (auth) c.auth[provider] = { method, projectId: auth.projectId, location: auth.location, profile: auth.profile };
           return change(workspace);
         },
         setConfigValue: ({ workspace, key, value }) => {

@@ -24,6 +24,7 @@ import (
 	"strings"
 
 	"github.com/anthropics/anthropic-sdk-go"
+	anthropicconfig "github.com/anthropics/anthropic-sdk-go/config"
 	"github.com/anthropics/anthropic-sdk-go/option"
 	"github.com/anthropics/anthropic-sdk-go/packages/param"
 	"github.com/anthropics/anthropic-sdk-go/shared/constant"
@@ -50,12 +51,26 @@ type anthropicModel struct {
 	fallbacks string // "default", "off", or a model ID
 }
 
-// newAnthropicModel builds the adapter. With no api_key the SDK resolves
-// credentials itself (ANTHROPIC_API_KEY, ANTHROPIC_AUTH_TOKEN, `ant auth
-// login` profiles, workload identity).
-func newAnthropicModel(cfg config.AnthropicConfig, name string, opts ...option.RequestOption) *anthropicModel {
-	if cfg.APIKey != "" {
-		opts = append(opts, option.WithAPIKey(cfg.APIKey))
+// newAnthropicModel builds the adapter. With auth = "oauth" it uses an `ant
+// auth login` profile (the one named, else ant's active one) and nothing
+// from the environment, so a stray ANTHROPIC_API_KEY can't take its place.
+// Otherwise, with no api_key the SDK resolves credentials itself
+// (ANTHROPIC_API_KEY, ANTHROPIC_AUTH_TOKEN, `ant auth login` profiles,
+// workload identity).
+func newAnthropicModel(cfg config.AnthropicConfig, name string, opts ...option.RequestOption) (*anthropicModel, error) {
+	switch cfg.Auth {
+	case "", config.AuthAPIKey:
+		if cfg.APIKey != "" {
+			opts = append(opts, option.WithAPIKey(cfg.APIKey))
+		}
+	case config.AuthOAuth:
+		profile, err := anthropicProfile(cfg)
+		if err != nil {
+			return nil, err
+		}
+		opts = append(opts, option.WithoutEnvironmentDefaults(), option.WithConfig(profile))
+	default:
+		return nil, fmt.Errorf("unknown [llm.anthropic] auth %q (api_key or oauth)", cfg.Auth)
 	}
 	if cfg.BaseURL != "" {
 		opts = append(opts, option.WithBaseURL(cfg.BaseURL))
@@ -67,7 +82,17 @@ func newAnthropicModel(cfg config.AnthropicConfig, name string, opts ...option.R
 	if fb == "" {
 		fb = "default"
 	}
-	return &anthropicModel{client: anthropic.NewClient(opts...), name: name, fallbacks: fb}
+	return &anthropicModel{client: anthropic.NewClient(opts...), name: name, fallbacks: fb}, nil
+}
+
+// anthropicProfile loads the `ant auth login` profile Claude signs in with.
+func anthropicProfile(cfg config.AnthropicConfig) (*anthropicconfig.Config, error) {
+	dir, name := cfg.OAuthProfile()
+	profile, err := anthropicconfig.LoadProfile(dir, name)
+	if err != nil {
+		return nil, fmt.Errorf("no Anthropic OAuth profile %q (sign in with `ant auth login`): %w", name, err)
+	}
+	return profile, nil
 }
 
 func (m *anthropicModel) Name() string { return m.name }

@@ -70,7 +70,10 @@ func (h configService) DescribeConfig(_ context.Context, r req[pb.DescribeConfig
 	}
 	res := &pb.DescribeConfigResponse{Path: info.Path, Provider: info.Provider, DefaultModel: info.DefaultModel, SecretStore: info.SecretStore}
 	for _, p := range info.Providers {
-		res.Providers = append(res.Providers, &pb.ProviderConfig{Name: p.Name, KeySource: keySources[p.KeySource], KeyMissing: p.KeyMissing, BaseUrl: p.BaseURL, Model: p.Model})
+		res.Providers = append(res.Providers, &pb.ProviderConfig{
+			Name: p.Name, KeySource: keySources[p.KeySource], KeyMissing: p.KeyMissing, BaseUrl: p.BaseURL, Model: p.Model,
+			Auth: p.Auth, ProjectId: p.ProjectID, Location: p.Location, Profile: p.Profile,
+		})
 	}
 	return ok(res)
 }
@@ -152,7 +155,11 @@ func (h configService) SetProvider(ctx context.Context, r req[pb.SetProviderRequ
 	if err != nil {
 		return nil, err
 	}
-	path, err := config.SetProvider(h.s.configDir, dir, config.ProviderChoice{Provider: r.Msg.Provider, Model: r.Msg.DefaultModel, Key: r.Msg.Key})
+	choice := config.ProviderChoice{Provider: r.Msg.Provider, Model: r.Msg.DefaultModel, Key: r.Msg.Key}
+	if a := r.Msg.Auth; a != nil {
+		choice.Auth = &config.ProviderAuth{Method: a.Method, ProjectID: a.ProjectId, Location: a.Location, Profile: a.Profile}
+	}
+	path, err := config.SetProvider(h.s.configDir, dir, choice)
 	if err != nil {
 		return nil, invalid(err)
 	}

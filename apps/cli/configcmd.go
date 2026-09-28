@@ -132,10 +132,16 @@ stall_timeout_seconds = 600 # fail a model request that sends nothing for this l
 
 [llm.gemini]
 # api_key = "..."           # or export GEMINI_API_KEY
+# auth = "adc"              # instead of a key: Vertex AI with Google Cloud's Application Default
+#                           # Credentials (gcloud auth application-default login)
+# project_id = "..."        # adc: or GOOGLE_CLOUD_PROJECT
+# location = "global"       # adc: or GOOGLE_CLOUD_LOCATION
 model = "gemini-3.8-flash"
 
 [llm.anthropic]
 # api_key   = "..."         # or ANTHROPIC_API_KEY, ANTHROPIC_AUTH_TOKEN, or an "ant auth login" profile
+# auth    = "oauth"         # instead of a key: an Anthropic Console sign-in (ant auth login)
+# profile = "..."           # oauth: the profile, else ant's active one
 model     = "claude-opus-5"
 fallbacks = "default"       # server-side refusal fallback: "default", a model ID, or "off"
 # base_url = "https://..."  # gateway/proxy
