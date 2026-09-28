@@ -23,6 +23,7 @@ go_library(
     srcs = [
         "configcmd.go",
         "configkeys.go",
+        "configperms.go",
         "doctor.go",
         "exitcode.go",
         "license.go",

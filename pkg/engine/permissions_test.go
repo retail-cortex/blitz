@@ -22,6 +22,7 @@ import (
 
 	"github.com/retail-cortex/blitz/pkg/api"
 	"github.com/retail-cortex/blitz/pkg/config"
+	"github.com/retail-cortex/blitz/pkg/engine/tools"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/genai"
@@ -30,17 +31,21 @@ import (
 func TestPermissionRulesLiveAndSaved(t *testing.T) {
 	create := &genai.Content{Role: genai.RoleModel, Parts: []*genai.Part{{FunctionCall: &genai.FunctionCall{Name: "create_file", Args: map[string]any{"path": "docs/a.md", "content": "x"}}}}}
 	search := &genai.Content{Role: genai.RoleModel, Parts: []*genai.Part{{FunctionCall: &genai.FunctionCall{Name: "list_agents", Args: map[string]any{}}}}}
-	w, _ := openTestWith(t, func(c *config.Config) { c.Permissions.Deny = []string{"shell(rm *)"} }, create, text("done"), search, text("done"))
+	off := false
+	w, _ := openTestWith(t, func(c *config.Config) {
+		c.Permissions.Deny = []string{"shell(rm *)"}
+		c.Permissions.ReadOnlyDefaults = &off
+	}, create, text("done"), search, text("done"))
 	cfgDir := config.ConfigDir("")
 	os.MkdirAll(cfgDir, 0o700)
-	os.WriteFile(filepath.Join(cfgDir, ".env.toml"), []byte("# mine\n[permissions]\ndeny = [\"shell(rm *)\"]\n"), 0o600)
+	os.WriteFile(filepath.Join(cfgDir, ".env.toml"), []byte("# mine\n[permissions]\nread_only_defaults = false\ndeny = [\"shell(rm *)\"]\n"), 0o600)
 
 	got := w.ListPermissionRules()
 	require.Len(t, got, 1, "rules %+v", got)
 	require.Equal(t, "shell(rm *)", got[0].Rule, "rules %+v", got)
-	require.Equal(t, "config", got[0].Source, "rules %+v", got)
+	require.Equal(t, "global", got[0].Source, "rules %+v", got)
 	// A session allow rule applies at once: no approver, yet the write runs.
-	res, err := w.AddPermissionRule("allow", "Edit(docs/**)", true)
+	res, err := w.AddPermissionRule("allow", "Edit(docs/**)", api.ScopeGlobal)
 	require.NoError(t, err, "add: %+v", res)
 	require.Equal(t, "write(docs/**)", res.Rule, "add: %+v %v", res, err)
 	require.NoError(t, res.Saved.Err, "add: %+v %v", res, err)
@@ -52,18 +57,44 @@ func TestPermissionRulesLiveAndSaved(t *testing.T) {
 	assert.Contains(t, string(data), `allow = ["write(docs/**)"]`, "config file:\n%s", data)
 	assert.Contains(t, string(data), "# mine", "config file:\n%s", data)
 	// Read rules must be saved and apply from the next start.
-	_, err = w.AddPermissionRule("deny", "read(secrets/**)", false)
+	_, err = w.AddPermissionRule("deny", "read(secrets/**)", api.ScopeSession)
 	assert.Error(t, err, "an unsaved read rule was accepted")
-	res, err = w.AddPermissionRule("deny", "read(secrets/**)", true)
+	res, err = w.AddPermissionRule("deny", "read(secrets/**)", api.ScopeGlobal)
 	assert.NoError(t, err, "saved read rule: %+v", res)
 	assert.True(t, res.NextStart, "saved read rule: %+v %v", res, err)
-	_, err = w.AddPermissionRule("deny", "what(x)", false)
+	_, err = w.AddPermissionRule("deny", "what(x)", api.ScopeSession)
 	assert.ErrorIs(t, err, api.ErrBadRule, "bad rule: %v", err)
 	// Remove, also from the file.
-	res, _ = w.RemovePermissionRule("write(docs/**)", true)
+	res, _ = w.RemovePermissionRule("write(docs/**)", api.ScopeGlobal)
 	assert.Equal(t, 1, res.Removed, "remove: %+v", res)
 	data, _ = os.ReadFile(filepath.Join(cfgDir, ".env.toml"))
 	assert.NotContains(t, string(data), "write(docs/**)", "rule still saved:\n%s", data)
+}
+
+// A rule saved for the workspace goes to its own settings, not the global
+// ones, applies at once, and is listed as the workspace's; the built-in
+// read-only rules are listed as built-in.
+func TestPermissionRuleSavedForTheWorkspace(t *testing.T) {
+	w, _ := openTestWith(t, nil)
+	res, err := w.AddPermissionRule("allow", "Bash(make)", api.ScopeWorkspace)
+	require.NoError(t, err)
+	require.NoError(t, res.Saved.Err)
+	assert.Contains(t, res.Saved.Path, filepath.Join(".blitz", "workspaces"), "saved to %s", res.Saved.Path)
+	global, _, _ := config.ScopePermissions("", "")
+	assert.Empty(t, global.Allow, "the global settings changed")
+
+	sources := map[string]string{}
+	for _, r := range w.ListPermissionRules() {
+		sources[r.Rule] = r.Source
+	}
+	assert.Equal(t, "workspace", sources["shell(make)"])
+	assert.Equal(t, "built-in", sources["shell(ls)"])
+	assert.Equal(t, tools.VerdictAutoApprove, w.tools.CommandPolicy().Evaluate("make build").Verdict, "the rule doesn't apply")
+
+	_, err = w.RemovePermissionRule("shell(make)", api.ScopeWorkspace)
+	require.NoError(t, err)
+	own, _, _ := config.ScopePermissions("", w.Dir())
+	assert.Empty(t, own.Allow)
 }
 
 // A deny rule naming a tool refuses the call before it runs.

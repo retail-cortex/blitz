@@ -42,6 +42,19 @@ service ConfigService {
   rpc SetProvider(SetProviderRequest) returns (SetProviderResponse);
   // Sets one of the forms' settings ("" removes it).
   rpc SetConfigValue(SetConfigValueRequest) returns (SetConfigValueResponse);
+  // A scope's permission rules: its own file's, the global ones a
+  // workspace adds to, and the built-in read-only rules.
+  rpc DescribePermissions(DescribePermissionsRequest) returns (DescribePermissionsResponse);
+  // Adds an allow, ask or deny rule to a scope's file, if it's valid.
+  rpc AddPermission(AddPermissionRequest) returns (AddPermissionResponse);
+  // Removes a rule from a scope's file (any effect).
+  rpc RemovePermission(RemovePermissionRequest) returns (RemovePermissionResponse);
+  // Checks a rule without saving it: its canonical form and how it
+  // matches, or why it's invalid; with a sample, whether it applies to it.
+  rpc CheckPermission(CheckPermissionRequest) returns (CheckPermissionResponse);
+  // Turns the built-in read-only rules on or off in a scope, or leaves a
+  // workspace to the global setting.
+  rpc SetReadOnlyDefaults(SetReadOnlyDefaultsRequest) returns (SetReadOnlyDefaultsResponse);
   // Returns a scope's settings file as text.
   rpc GetConfigFile(GetConfigFileRequest) returns (GetConfigFileResponse);
   // Replaces a scope's settings file, if it's valid.
@@ -212,4 +225,104 @@ message SaveConfigFileResponse {
   ConfigChange change = 1;
   // Unknown settings (likely typos) and keys written as plain text.
   repeated string warnings = 2;
+}
+
+// A rule in a settings file's [permissions].
+message PermissionEntry {
+  // allow, ask or deny.
+  string effect = 1;
+  // As written in the file.
+  string rule = 2;
+}
+
+// Request message for ConfigService.DescribePermissions.
+message DescribePermissionsRequest {
+  string workspace = 1;
+}
+
+// Response message for ConfigService.DescribePermissions.
+message DescribePermissionsResponse {
+  // The scope's settings file (it may not exist yet).
+  string path = 1;
+  // The rules the scope's own file sets.
+  repeated PermissionEntry rules = 2;
+  // For a workspace: the global rules, which apply there too.
+  repeated PermissionEntry inherited = 3;
+  // read_only_defaults as the scope's file sets it: "on", "off" or ""
+  // (not set: on globally, the global setting in a workspace).
+  string read_only_defaults = 4;
+  // Whether the built-in rules apply in the scope.
+  bool read_only_defaults_on = 5;
+  // The built-in rules: commands allowed without asking, and (described
+  // for people) the options with which they ask even so.
+  repeated string read_only_commands = 6;
+  repeated string read_only_guards = 7;
+}
+
+// Request message for ConfigService.AddPermission.
+message AddPermissionRequest {
+  string workspace = 1;
+  string effect = 2;
+  string rule = 3;
+}
+
+// Response message for ConfigService.AddPermission.
+message AddPermissionResponse {
+  ConfigChange change = 1;
+  // The rule in canonical form, as saved.
+  string rule = 2;
+}
+
+// Request message for ConfigService.RemovePermission.
+message RemovePermissionRequest {
+  string workspace = 1;
+  string rule = 2;
+}
+
+// Response message for ConfigService.RemovePermission.
+message RemovePermissionResponse {
+  ConfigChange change = 1;
+  // How many rules were removed.
+  int32 removed = 2;
+}
+
+// Request message for ConfigService.CheckPermission.
+message CheckPermissionRequest {
+  string effect = 1;
+  string rule = 2;
+  // A command (shell rules), path or name to try the rule on ("" for none).
+  string sample = 3;
+}
+
+// Response message for ConfigService.CheckPermission.
+message CheckPermissionResponse {
+  // Why the rule is invalid ("" when it's valid).
+  string error = 1;
+  // The rule in canonical form, its kind and pattern.
+  string rule = 2;
+  string kind = 3;
+  string pattern = 4;
+  // How the pattern matches: prefix (a command with any arguments), glob
+  // (* and ?), regex (re:), path or name.
+  string form = 5;
+  // Whether the sample was tried, and whether the rule applies to it (an
+  // allow rule to every command in it, an ask or deny rule to any).
+  bool tested = 6;
+  bool matches = 7;
+  // A file the sample command writes through a redirection: a matching
+  // allow rule still asks.
+  string redirect = 8;
+}
+
+// Request message for ConfigService.SetReadOnlyDefaults.
+message SetReadOnlyDefaultsRequest {
+  string workspace = 1;
+  // "on", "off", or "" to remove the setting (a workspace then follows
+  // the global one).
+  string value = 2;
+}
+
+// Response message for ConfigService.SetReadOnlyDefaults.
+message SetReadOnlyDefaultsResponse {
+  ConfigChange change = 1;
 }

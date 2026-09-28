@@ -15,6 +15,7 @@
 package config
 
 import (
+	"errors"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -299,4 +300,96 @@ func TestSecureAPIKey(t *testing.T) {
 	assert.Equal(t, "sk-plain", v, "stored %q", v)
 	_, err = SecureAPIKey("", "", "openai")
 	assert.Error(t, err, "moved a reference")
+}
+
+// fakeRuleCheck stands in for the rule parser (pkg/engine/tools): rules
+// must be kind(pattern), "bad" isn't a kind, and "Bash" is shell.
+func fakeRuleCheck(t *testing.T) {
+	t.Helper()
+	old := ValidatePermissionRule
+	t.Cleanup(func() { ValidatePermissionRule = old })
+	ValidatePermissionRule = func(_, rule string) (string, error) {
+		rule = strings.TrimSpace(rule)
+		if !strings.HasSuffix(rule, ")") || strings.HasPrefix(rule, "bad(") {
+			return "", errors.New("invalid permission rule " + rule)
+		}
+		return strings.Replace(rule, "Bash(", "shell(", 1), nil
+	}
+}
+
+// A workspace's permission rules add to the global ones; its
+// read_only_defaults, when set, wins.
+func TestPermissionsMerge(t *testing.T) {
+	keysEnv(t)
+	fakeRuleCheck(t)
+	ws := t.TempDir()
+	_, _, err := AddPermissionRule("", "", "allow", "shell(make)")
+	require.NoError(t, err)
+	_, _, err = AddPermissionRule("", "", "deny", "shell(rm)")
+	require.NoError(t, err)
+	_, canonical, err := AddPermissionRule("", ws, "allow", "Bash(go test *)")
+	require.NoError(t, err)
+	assert.Equal(t, "shell(go test *)", canonical)
+	off := false
+	_, err = SetReadOnlyDefaults("", ws, &off)
+	require.NoError(t, err)
+
+	cfg, err := LoadWorkspace("", ws)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"shell(make)", "shell(go test *)"}, cfg.Permissions.Allow)
+	assert.Equal(t, []string{"shell(rm)"}, cfg.Permissions.Deny)
+	assert.False(t, cfg.Permissions.DefaultsOn())
+	global, err := Load("")
+	require.NoError(t, err)
+	assert.Equal(t, []string{"shell(make)"}, global.Permissions.Allow, "the workspace's rules stay in the workspace")
+	assert.True(t, global.Permissions.DefaultsOn())
+
+	// Each scope's own file, for the forms.
+	own, _, err := ScopePermissions("", ws)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"shell(go test *)"}, own.Allow)
+	assert.Empty(t, own.Deny)
+
+	// Removing takes the rule as written or canonical, from that scope only.
+	_, n, err := RemovePermissionRule("", ws, "Bash(go test *)")
+	require.NoError(t, err)
+	assert.Equal(t, 1, n)
+	_, n, err = RemovePermissionRule("", ws, "shell(make)")
+	require.NoError(t, err)
+	assert.Equal(t, 0, n, "the global rule isn't the workspace's to remove")
+	_, err = SetReadOnlyDefaults("", ws, nil)
+	require.NoError(t, err)
+	cfg, _ = LoadWorkspace("", ws)
+	assert.Equal(t, []string{"shell(make)"}, cfg.Permissions.Allow)
+	assert.True(t, cfg.Permissions.DefaultsOn(), "the global setting again")
+}
+
+// Rules are checked before anything is saved: added one by one, or in the
+// settings file.
+func TestPermissionRulesCheckedBeforeSaving(t *testing.T) {
+	keysEnv(t)
+	fakeRuleCheck(t)
+	for _, tc := range []struct {
+		name string
+		save func() error
+	}{
+		{"one rule", func() error { _, _, err := AddPermissionRule("", "", "allow", "bad(x)"); return err }},
+		{"an effect", func() error { _, _, err := AddPermissionRule("", "", "maybe", "shell(x)"); return err }},
+		{"a list", func() error {
+			_, err := SavePermissionRules(ConfigDir(""), "deny", []string{"shell(ok)", "bad(x)"})
+			return err
+		}},
+		{"the settings file", func() error {
+			_, _, err := WriteSettingsFile("", "", "[permissions]\nallow = [\"shell(ls)\", \"bad(x)\"]\n")
+			return err
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Error(t, tc.save())
+			own, _, err := ScopePermissions("", "")
+			require.NoError(t, err)
+			assert.Empty(t, own.Allow, "something was saved")
+			assert.Empty(t, own.Deny, "something was saved")
+		})
+	}
 }

@@ -74,10 +74,11 @@ service WorkspaceService {
   // Returns the permission rules in force: deny, then ask, then allow.
   rpc ListPermissionRules(ListPermissionRulesRequest) returns (ListPermissionRulesResponse);
   // Adds an allow, ask or deny rule for the workspace and, with save, to
-  // the config file (BAD_RULE). Read rules must be saved and apply from
+  // a settings file: the global one or, with scope "workspace", the
+  // workspace's own (BAD_RULE). Read rules must be saved and apply from
   // the next start.
   rpc AddPermissionRule(AddPermissionRuleRequest) returns (AddPermissionRuleResponse);
-  // Removes a rule (any effect), and with save from the config file.
+  // Removes a rule (any effect), and with save from a settings file.
   rpc RemovePermissionRule(RemovePermissionRuleRequest) returns (RemovePermissionRuleResponse);
 
   // Returns the skills found, or those matching a query.
@@ -394,7 +395,8 @@ message PermissionRule {
   string effect = 1;
   // kind(pattern), e.g. shell(git push *), or a tool name.
   string rule = 2;
-  // config or session.
+  // Where it comes from: global or workspace (the settings file it's
+  // in), built-in (read_only_defaults), flag or session.
   string source = 3;
 }
 
@@ -414,6 +416,8 @@ message AddPermissionRuleRequest {
   string effect = 2;
   string rule = 3;
   bool save = 4;
+  // With save: "global" ("" too) or "workspace".
+  string scope = 5;
 }
 
 // Response message for WorkspaceService.AddPermissionRule.
@@ -430,6 +434,8 @@ message RemovePermissionRuleRequest {
   string workspace = 1;
   string rule = 2;
   bool save = 3;
+  // With save: "global" ("" too) or "workspace".
+  string scope = 4;
 }
 
 // Response message for WorkspaceService.RemovePermissionRule.

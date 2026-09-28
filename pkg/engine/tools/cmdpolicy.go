@@ -48,10 +48,18 @@ type CommandDecision struct {
 }
 
 // CommandPolicyConfig lists command patterns. A pattern is matched against a
-// simple command with its words joined by single spaces: "*" matches any
-// text, "?" one character, and a trailing " *" also matches the bare command
-// ("git *" matches "git" and "git status"). A command given by path also
-// matches by its base name ("/bin/rm -rf x" matches "rm *").
+// simple command with its words joined by single spaces:
+//
+//   - words alone name a command and any arguments: "ls" matches "ls" and
+//     "ls -la", "git log" matches "git log --oneline" (not "git logs");
+//   - with "*" (any text) or "?" (one character) the pattern is a glob over
+//     the whole command, and a trailing " *" also matches the bare command
+//     ("git * --output*" matches "git log --output=x");
+//   - "re:" starts a regular expression (RE2), which must match the whole
+//     command: "re:git (log|show)( .*)?".
+//
+// A command given by path also matches by its base name ("/bin/rm -rf x"
+// matches "rm").
 type CommandPolicyConfig struct {
 	Allow       []string // if non-empty, only matching commands may run
 	Deny        []string // never run; wins over Allow and AutoApprove
@@ -85,18 +93,52 @@ type cmdPattern struct {
 	re  *regexp.Regexp
 }
 
-// NewCommandPolicy compiles the configured patterns.
+// regexPrefix starts a command pattern that is a regular expression.
+const regexPrefix = "re:"
+
+// Command pattern forms, as CommandPatternForm reports them.
+const (
+	FormPrefix = "prefix" // words: the command with any arguments
+	FormGlob   = "glob"   // * and ?
+	FormRegex  = "regex"  // re:
+)
+
+// CommandPatternForm says how a command pattern matches.
+func CommandPatternForm(p string) string {
+	switch p = strings.TrimSpace(p); {
+	case strings.HasPrefix(p, regexPrefix):
+		return FormRegex
+	case strings.ContainsAny(p, "*?"):
+		return FormGlob
+	}
+	return FormPrefix
+}
+
 // compileCmdPatterns compiles command patterns (see CommandPolicyConfig).
 func compileCmdPatterns(list []string) ([]cmdPattern, error) {
 	var out []cmdPattern
 	for _, raw := range list {
+		if expr, ok := strings.CutPrefix(strings.TrimSpace(raw), regexPrefix); ok {
+			if strings.TrimSpace(expr) == "" {
+				return nil, fmt.Errorf("invalid command pattern %q: an empty regular expression", raw)
+			}
+			re, err := regexp.Compile("^(?:" + expr + ")$")
+			if err != nil {
+				return nil, fmt.Errorf("invalid command pattern %q: %w", raw, err)
+			}
+			out = append(out, cmdPattern{raw: raw, re: re})
+			continue
+		}
 		p := strings.Join(strings.Fields(raw), " ")
 		if p == "" {
 			continue
 		}
 		base, anyArgs := p, false
-		if strings.HasSuffix(p, " *") {
+		switch {
+		case strings.HasSuffix(p, " *"):
 			base, anyArgs = strings.TrimSuffix(p, " *"), true
+		case !strings.ContainsAny(p, "*?"):
+			anyArgs = true // "ls" is "ls" with any arguments
 		}
 		var sb strings.Builder
 		sb.WriteString("^")
@@ -185,6 +227,10 @@ type simpleCommand struct {
 	dyn         []bool // per word: depends on runtime expansion
 	unverified  string // non-empty if the command's identity can't be verified
 	transparent bool   // a wrapper whose inner command is evaluated separately
+	// redirect is set on the entry for a redirection that writes a file
+	// (> f, >> f, &> f, >| f, <> f), which isn't a command: no rule
+	// matches it, and it keeps allow rules from approving the script.
+	redirect string
 }
 
 func newSimpleCommand(words []string, dyn []bool) simpleCommand {
@@ -221,7 +267,9 @@ func (p *CommandPolicy) Evaluate(script string) CommandDecision {
 	cmds, parseErr := extractCommands(script, 0)
 	var rendered []string
 	for _, c := range cmds {
-		rendered = append(rendered, c.String())
+		if c.redirect == "" {
+			rendered = append(rendered, c.String())
+		}
 	}
 	d := CommandDecision{Verdict: VerdictNeedsApproval, Commands: rendered}
 	if p == nil {
@@ -247,6 +295,9 @@ func (p *CommandPolicy) Evaluate(script string) CommandDecision {
 
 	// Deny always wins, including for wrappers themselves.
 	for _, c := range cmds {
+		if c.redirect != "" {
+			continue
+		}
 		if pat, ok := matchAny(deny, c); ok {
 			return CommandDecision{Verdict: VerdictDeny, Reason: fmt.Sprintf("%q matches deny rule %q", c.String(), pat), Commands: rendered}
 		}
@@ -254,6 +305,9 @@ func (p *CommandPolicy) Evaluate(script string) CommandDecision {
 	// Then ask rules: any command they cover (or can't rule out) asks.
 	if len(ask) > 0 {
 		for _, c := range cmds {
+			if c.redirect != "" {
+				continue
+			}
 			if pat, ok := matchAny(ask, c); ok {
 				d.MustAsk, d.Reason = true, fmt.Sprintf("%q matches ask rule %q", c.String(), pat)
 				break
@@ -267,6 +321,14 @@ func (p *CommandPolicy) Evaluate(script string) CommandDecision {
 
 	autoOK := len(auto) > 0 && !d.MustAsk
 	for _, c := range cmds {
+		if c.redirect != "" {
+			// Writing a file isn't what a command rule approves.
+			if autoOK {
+				autoOK = false
+				d.Reason = fmt.Sprintf("it writes to %s through a redirection", c.redirect)
+			}
+			continue
+		}
 		if c.transparent {
 			continue
 		}
@@ -313,6 +375,14 @@ func extractCommands(script string, depth int) ([]simpleCommand, error) {
 	var cmds []simpleCommand
 	var walkErr error
 	syntax.Walk(file, func(n syntax.Node) bool {
+		if st, ok := n.(*syntax.Stmt); ok {
+			for _, r := range st.Redirs {
+				if target, ok := writtenFile(r); ok {
+					cmds = append(cmds, simpleCommand{words: []string{">", target}, redirect: target})
+				}
+			}
+			return true
+		}
 		call, ok := n.(*syntax.CallExpr)
 		if !ok || len(call.Args) == 0 {
 			return true
@@ -336,6 +406,32 @@ func extractCommands(script string, depth int) ([]simpleCommand, error) {
 		return true // keep walking into command substitutions etc.
 	})
 	return cmds, walkErr
+}
+
+// writtenFile returns the file a redirection writes, if it writes one:
+// not the null device or the standard streams, not a descriptor copy
+// (>&2), not an input.
+func writtenFile(r *syntax.Redirect) (string, bool) {
+	switch r.Op {
+	case syntax.RdrOut, syntax.AppOut, syntax.RdrInOut, syntax.RdrClob, syntax.RdrAll, syntax.RdrAllClob, syntax.AppAll, syntax.AppAllClob, syntax.DplOut:
+	default:
+		return "", false
+	}
+	if r.Word == nil {
+		return "", false
+	}
+	target, dyn := wordLiteral(r.Word)
+	if dyn {
+		return printWord(r.Word), true // computed: assume a file
+	}
+	if r.Op == syntax.DplOut && (target == "-" || strings.Trim(target, "0123456789") == "") {
+		return "", false // >&2, >&-
+	}
+	switch target {
+	case "/dev/null", "/dev/stdout", "/dev/stderr", "/dev/tty":
+		return "", false
+	}
+	return target, true
 }
 
 // interpreterEval lists builtins whose argument is code that can't be checked.

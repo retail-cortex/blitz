@@ -96,7 +96,7 @@ func TestCommandPolicyAllowList(t *testing.T) {
 	}
 
 	for cmd, why := range map[string]string{
-		"ls -la":               "not in the allow-list", // "ls" has no " *"
+		"lsof -i":              "not in the allow-list", // "ls" names ls, not lsof
 		"go build":             "not in the allow-list",
 		"git status; rm -rf x": "not in the allow-list",
 		"git push origin":      "deny rule", // deny beats allow
@@ -121,18 +121,18 @@ func TestCommandPolicyAllowList(t *testing.T) {
 func TestCommandPolicyAutoApprove(t *testing.T) {
 	p := mustPolicy(t, CommandPolicyConfig{AutoApprove: []string{"git status", "go test *", "ls *"}})
 
-	for _, cmd := range []string{"git status", "go test ./pkg/...", "ls -la && git status"} {
+	for _, cmd := range []string{"git status", "git status --porcelain", "go test ./pkg/...", "ls -la && git status"} {
 		t.Run(cmd, func(t *testing.T) {
 			d := p.Evaluate(cmd)
 			assert.Equal(t, VerdictAutoApprove, d.Verdict, "expected auto-approve for %q, got %v (%s)", cmd, d.Verdict, d.Reason)
 		})
 	}
 	for _, cmd := range []string{
-		"git status && rm x",     // one command not covered
-		"ls $DIR",                // runtime expansion never auto-approves
-		"ls $(cat list)",         // substitution
-		"eval ls",                // unverifiable
-		"git status --porcelain", // exact pattern
+		"git status && rm x", // one command not covered
+		"ls $DIR",            // runtime expansion never auto-approves
+		"ls $(cat list)",     // substitution
+		"eval ls",            // unverifiable
+		"git statuses",       // a different word
 	} {
 		t.Run(cmd, func(t *testing.T) {
 			d := p.Evaluate(cmd)
@@ -211,4 +211,75 @@ func TestNewCommandPolicySkipsBlankPatterns(t *testing.T) {
 	lines := p.Describe()
 	assert.NotEqual(t, 0, len(lines), "unexpected Describe %v", lines)
 	assert.Contains(t, lines[0], "ls", "unexpected Describe %v", lines)
+}
+
+// A pattern of words names a command with any arguments; * and ? make it a
+// glob; re: a regular expression over the whole command.
+func TestCommandPatternForms(t *testing.T) {
+	for _, tc := range []struct {
+		pattern string
+		form    string
+		match   []string
+		miss    []string
+	}{
+		{"ls", FormPrefix, []string{"ls", "ls -la", "/bin/ls -l"}, []string{"lsof", "lsd x"}},
+		{"git log", FormPrefix, []string{"git log", "git log --oneline -5"}, []string{"git logs", "git", "git status"}},
+		{"git * --output*", FormGlob, []string{"git log --output=x", "git diff HEAD --output x"}, []string{"git log", "git --output"}},
+		{"go test *", FormGlob, []string{"go test", "go test ./..."}, []string{"go testx", "go build"}},
+		{"re:git (log|show)( .*)?", FormRegex, []string{"git show HEAD", "git log"}, []string{"git status", "legit log", "git logs"}},
+	} {
+		t.Run(tc.pattern, func(t *testing.T) {
+			assert.Equal(t, tc.form, CommandPatternForm(tc.pattern))
+			p := mustPolicy(t, CommandPolicyConfig{AutoApprove: []string{tc.pattern}})
+			for _, cmd := range tc.match {
+				assert.Equal(t, VerdictAutoApprove, p.Evaluate(cmd).Verdict, "%q should match", cmd)
+			}
+			for _, cmd := range tc.miss {
+				assert.Equal(t, VerdictNeedsApproval, p.Evaluate(cmd).Verdict, "%q shouldn't match", cmd)
+			}
+		})
+	}
+	for _, bad := range []string{"re:(", "re:", "re:  "} {
+		_, err := NewCommandPolicy(CommandPolicyConfig{AutoApprove: []string{bad}})
+		assert.Error(t, err, "%q", bad)
+	}
+}
+
+// Writing a file through a redirection isn't what a command rule
+// approves: it asks. The null device, the standard streams and descriptor
+// copies aren't files.
+func TestCommandPolicyRedirects(t *testing.T) {
+	p := mustPolicy(t, CommandPolicyConfig{AutoApprove: []string{"ls", "cat", "echo", "bash"}})
+	for _, tc := range []struct {
+		cmd    string
+		writes string // "" when it should be approved
+	}{
+		{"ls > /dev/null", ""},
+		{"ls 2>&1", ""},
+		{"ls >&2", ""},
+		{"ls 2>/dev/null | cat", ""},
+		{"cat < in.txt", ""},
+		{"ls > out.txt", "out.txt"},
+		{"ls >> log.txt", "log.txt"},
+		{"ls &> all.txt", "all.txt"},
+		{"ls >| f", "f"},
+		{"cat a 2> errors.txt", "errors.txt"},
+		{"(ls) > f", "f"},
+		{`bash -c "ls > f"`, "f"},
+		{"echo x > $F", "$F"},
+	} {
+		t.Run(tc.cmd, func(t *testing.T) {
+			d := p.Evaluate(tc.cmd)
+			if tc.writes == "" {
+				assert.Equal(t, VerdictAutoApprove, d.Verdict, d.Reason)
+				return
+			}
+			assert.Equal(t, VerdictNeedsApproval, d.Verdict)
+			assert.Contains(t, d.Reason, "writes to "+tc.writes)
+			assert.NotContains(t, d.Commands, "> "+tc.writes, "a redirection isn't a command")
+		})
+	}
+	// Deny rules still see only commands.
+	deny := mustPolicy(t, CommandPolicyConfig{Deny: []string{"rm"}})
+	assert.NotEqual(t, VerdictDeny, deny.Evaluate("ls > rm").Verdict)
 }

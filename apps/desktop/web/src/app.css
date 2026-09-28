@@ -421,3 +421,11 @@ code.file-link:hover { text-decoration-color: currentColor; }
 
 /* The license texts: monospace, wrapped, scrolling inside the dialog. */
 .license-text { max-height: 60vh; overflow: auto; margin: 0; padding: 16px; border-radius: var(--md-shape-md); background: var(--md-surface-container-low); font-size: 12px; line-height: 18px; white-space: pre-wrap; overflow-wrap: anywhere; }
+
+/* A permission rule being added: effect and rule, a sample to try it on. */
+.rule-add { display: flex; flex-direction: column; gap: 12px; }
+.rule-add.compact { padding: 12px; }
+.rule-add-row { display: flex; gap: 8px; }
+.rule-add-row .input { flex: 1; min-width: 0; }
+.rule-matches { color: var(--md-tertiary); }
+.rule-misses { color: var(--md-on-surface-variant); }

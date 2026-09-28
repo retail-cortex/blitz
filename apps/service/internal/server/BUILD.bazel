@@ -34,6 +34,7 @@ go_library(
         "//pkg/api",
         "//pkg/config",
         "//pkg/engine",
+        "//pkg/engine/tools",
         "//pkg/engine/workers",
         "//pkg/images",
         "//proto/blitz/v1:blitzv1_go_proto",

@@ -36,7 +36,21 @@ ask   = ["shell(git push *)", "write(.github/**)"]
 deny  = ["shell(rm -rf *)", "read(secrets/**)", "mcp(github:delete_*)", "web_search"]
 ```
 
-Kinds: `shell(…)`, checked on every sub-command, through pipes, `bash -c` and wrappers; `write(…)`, `delete(…)` and `read(…)`, path globs relative to the workspace (`read` rules only deny); `web(host)`, `search(provider)`, `mcp(server:tool)`, `skill(name)`, `agent(name)`, or a bare tool name. Claude Code's spellings (`Bash(…)`, `Edit(…)`) work too. `/permissions` lists and changes the rules for the session (`--save` writes them to the settings file), and `--allow` and `--deny` add them for one run.
+A shell rule names a command with any arguments: `shell(ls)` covers `ls -la`, `shell(git log)` covers `git log --oneline` (but not `git logs`). With `*` or `?` it's a glob over the whole command (`shell(go test *)`, `shell(git * --force*)`), and `re:` starts a regular expression that must match the whole command (`shell(re:git (log|show)( .*)?)`). A command that writes a file through a redirection (`ls > out.txt`) always asks, whatever allows the command.
+
+Rules live in the global settings, and a workspace's own add to them: in the desktop app, **Settings › Permissions** for the global rules and the run settings panel's **Permission rules** for the workspace's, where a rule is checked as you type it and can be tried on a command before it's saved. From the command line:
+
+```bash
+blitz config permissions                                   # the rules, and the built-in ones
+blitz config permissions allow 'shell(make)' --workspace   # this workspace only
+blitz config permissions deny 'shell(git push --force)'
+blitz config permissions check 'shell(git log)' 'git log --oneline | head'
+blitz config permissions remove 'shell(make)' --workspace
+```
+
+**Built-in read-only rules.** Unless `[permissions] read_only_defaults = false` (or `blitz config permissions defaults off`), these run without asking: `ls`, `pwd`, `cat`, `head`, `tail`, `wc`, `stat`, `du`, `df`, `which`, `grep`, `rg`, `diff`, `git status`, `git log`, `git show`, `git diff`, `git blame` and `git rev-parse`. They still ask with `git … --output` or `--ext-diff` and `rg … --pre` (which write a file or run a program), and with a redirection to a file. A deny or ask rule of your own overrides any of them; a workspace can turn them on or off for itself.
+
+Kinds: `shell(…)`, checked on every sub-command, through pipes, `bash -c` and wrappers; `write(…)`, `delete(…)` and `read(…)`, path globs relative to the workspace (`read` rules only deny); `web(host)`, `search(provider)`, `mcp(server:tool)`, `skill(name)`, `agent(name)`, or a bare tool name. Claude Code's spellings (`Bash(…)`, `Edit(…)`) work too. `/permissions` lists and changes the rules for the session (`--save` writes them to the global settings, `--workspace` to the workspace's), and `--allow` and `--deny` add them for one run. Every rule is checked before it's saved, in the settings file too.
 
 ## File sandbox
 

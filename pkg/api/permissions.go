@@ -25,8 +25,22 @@ import (
 type PermissionRule struct {
 	Effect string // allow, ask or deny
 	Rule   string // kind(pattern), or a tool name
-	Source string // config, session
+	// Source: "global" or "workspace" (the settings file it's in),
+	// "built-in" (read_only_defaults), "flag" or "session".
+	Source string
 }
+
+// Scope is where a permission rule is saved: ScopeSession (nowhere: this
+// session only), ScopeGlobal (~/.blitz/.env.toml) or ScopeWorkspace (the
+// workspace's own settings, which add to the global ones).
+type Scope string
+
+// The scopes a permission rule can be saved in.
+const (
+	ScopeSession   Scope = ""
+	ScopeGlobal    Scope = "global"
+	ScopeWorkspace Scope = "workspace"
+)
 
 // PermissionChange is what AddPermissionRule or RemovePermissionRule did.
 type PermissionChange struct {

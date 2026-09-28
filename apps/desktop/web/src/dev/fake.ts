@@ -225,6 +225,16 @@ function scopeConfig(workspace: string) {
   }
   return c;
 }
+/** Each scope's permission rules, in the fake. */
+const permissions = new Map<string, { rules: { effect: string; rule: string }[]; defaults: string }>([["", { rules: [{ effect: "deny", rule: "shell(git push)" }, { effect: "allow", rule: "shell(go test *)" }], defaults: "" }]]);
+function scopePermissions(workspace: string) {
+  let p = permissions.get(workspace);
+  if (!p) {
+    p = { rules: [], defaults: "" };
+    permissions.set(workspace, p);
+  }
+  return p;
+}
 const configPath = (workspace: string) => (workspace ? `~/.blitz/workspaces/${workspace.split("/").pop()}-1a2b/.env.toml` : "~/.blitz/.env.toml");
 const change = (workspace: string) => ({ change: { path: configPath(workspace), modelError: "" } });
 
@@ -426,6 +436,48 @@ export function installFake() {
           return change(workspace);
         },
         getConfigFile: ({ workspace }) => ({ path: configPath(workspace), text: scopeConfig(workspace).text }),
+        describePermissions: ({ workspace }) => {
+          const p = scopePermissions(workspace);
+          const global = scopePermissions("");
+          const on = p.defaults === "" ? global.defaults !== "off" : p.defaults === "on";
+          return {
+            path: configPath(workspace),
+            rules: p.rules,
+            inherited: workspace ? global.rules : [],
+            readOnlyDefaults: p.defaults,
+            readOnlyDefaultsOn: on,
+            readOnlyCommands: ["ls", "pwd", "cat", "head", "tail", "wc", "stat", "du", "df", "which", "grep", "rg", "diff", "git status", "git log", "git show", "git diff", "git blame", "git rev-parse"],
+            readOnlyGuards: ["git … --output", "git … --ext-diff", "rg … --pre"],
+          };
+        },
+        checkPermission: ({ rule, sample }) => {
+          // A stand-in for the service's parser: kind(pattern), prefix matching.
+          const m = /^(shell|bash|write|delete|read|web|search|mcp|skill|agent)\((.+)\)$/i.exec(rule.trim());
+          if (!m) return { error: `invalid permission rule "${rule}": use kind(pattern) or a tool name` };
+          const kind = m[1].toLowerCase() === "bash" ? "shell" : m[1].toLowerCase();
+          const pattern = m[2].trim();
+          const form = kind !== "shell" ? (["read", "write", "delete"].includes(kind) ? "path" : "name") : pattern.startsWith("re:") ? "regex" : /[*?]/.test(pattern) ? "glob" : "prefix";
+          const tested = !!sample.trim();
+          const matches = tested && (form === "prefix" ? sample.trim() === pattern || sample.trim().startsWith(pattern + " ") : sample.includes(pattern.replace(/\*/g, "")));
+          const redirect = / >>? *([^ ]+)/.exec(sample)?.[1] ?? "";
+          return { rule: `${kind}(${pattern})`, kind, pattern, form, tested, matches, redirect };
+        },
+        addPermission: ({ workspace, effect, rule }) => {
+          const p = scopePermissions(workspace);
+          const canonical = rule.trim().replace(/^bash\(/i, "shell(");
+          if (!p.rules.some((r) => r.rule === canonical)) p.rules.push({ effect, rule: canonical });
+          return { ...change(workspace), rule: canonical };
+        },
+        removePermission: ({ workspace, rule }) => {
+          const p = scopePermissions(workspace);
+          const before = p.rules.length;
+          p.rules = p.rules.filter((r) => r.rule !== rule);
+          return { ...change(workspace), removed: before - p.rules.length };
+        },
+        setReadOnlyDefaults: ({ workspace, value }) => {
+          scopePermissions(workspace).defaults = value;
+          return change(workspace);
+        },
         saveConfigFile: ({ workspace, text }) => {
           if (text.includes("[[")) throw new ConnectError("line 1: expected a table", Code.InvalidArgument);
           scopeConfig(workspace).text = text;

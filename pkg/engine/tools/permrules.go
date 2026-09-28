@@ -58,6 +58,22 @@ const (
 
 var ruleKinds = []string{RuleShell, RuleRead, RuleWrite, RuleDelete, RuleWeb, RuleSearch, RuleMCP, RuleSkill, RuleAgent}
 
+// Rule sources, as PermissionRule.Source says.
+const (
+	SourceConfig  = "config"   // the settings files, global and the workspace's
+	SourceBuiltIn = "built-in" // [permissions] read_only_defaults
+	SourceFlag    = "flag"     // --allow, --deny
+	SourceSession = "session"  // added for this session
+)
+
+func init() {
+	// Settings are checked before they're saved.
+	config.ValidatePermissionRule = func(effect, rule string) (string, error) {
+		r, err := ParsePermissionRule(Effect(effect), rule, "")
+		return r.String(), err
+	}
+}
+
 // PermissionRule is one allow, ask or deny rule.
 type PermissionRule struct {
 	Effect  Effect
@@ -236,18 +252,109 @@ type PermissionRules struct {
 	rules []PermissionRule
 }
 
-// NewPermissionRules parses the configured rules; source labels them.
+// NewPermissionRules parses the configured rules; source labels them. With
+// read_only_defaults on, the built-in read-only commands are allowed and
+// their writing options ask (source SourceBuiltIn).
 func NewPermissionRules(cfg config.PermissionsConfig, source string) (*PermissionRules, error) {
 	pr := &PermissionRules{}
+	return pr, pr.addConfigured(cfg, source)
+}
+
+func (p *PermissionRules) addConfigured(cfg config.PermissionsConfig, source string) error {
 	var errs []error
 	for effect, list := range map[Effect][]string{EffectAllow: cfg.Allow, EffectAsk: cfg.Ask, EffectDeny: cfg.Deny} {
 		for _, text := range list {
-			if err := pr.Add(effect, text, source); err != nil {
+			if err := p.Add(effect, text, source); err != nil {
 				errs = append(errs, err)
 			}
 		}
 	}
-	return pr, errors.Join(errs...)
+	if cfg.DefaultsOn() {
+		for _, c := range config.ReadOnlyCommands {
+			errs = append(errs, p.Add(EffectAllow, RuleShell+"("+c+")", SourceBuiltIn))
+		}
+		for _, g := range config.ReadOnlyGuards {
+			errs = append(errs, p.Add(EffectAsk, RuleShell+"("+g+")", SourceBuiltIn))
+		}
+	}
+	return errors.Join(errs...)
+}
+
+// ReplaceConfigured puts cfg's rules, and the built-in ones it asks for,
+// in place of those from the settings: after the settings change while a
+// session runs. Session and flag rules stay. Read rules are blocked paths,
+// fixed when the workspace opens, so theirs apply from the next start.
+func (p *PermissionRules) ReplaceConfigured(cfg config.PermissionsConfig) error {
+	next := &PermissionRules{}
+	err := next.addConfigured(cfg, SourceConfig)
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.rules = slices.DeleteFunc(p.rules, func(r PermissionRule) bool { return r.Source == SourceConfig || r.Source == SourceBuiltIn })
+	p.rules = append(p.rules, next.rules...)
+	return err
+}
+
+// RuleCheck describes a rule without adding it: its canonical form, how
+// its pattern matches, and whether a sample matched.
+type RuleCheck struct {
+	Rule    string // canonical: kind(pattern), or a tool name
+	Kind    string
+	Pattern string
+	// Form: for shell rules FormPrefix, FormGlob or FormRegex; "path" for
+	// read, write and delete; "name" for the rest.
+	Form string
+	// Tested and Matches: whether the sample (a command, path or name)
+	// was checked, and whether the rule covers it (an allow rule every
+	// command in it, an ask or deny rule any).
+	Tested, Matches bool
+	// Redirect is a file the sample command writes through a redirection:
+	// an allow rule that matches it still asks.
+	Redirect string
+}
+
+// CheckPermissionRule parses a rule and, given a sample, says whether the
+// rule applies to it.
+func CheckPermissionRule(effect Effect, text, sample string) (RuleCheck, error) {
+	r, err := ParsePermissionRule(effect, text, "")
+	if err != nil {
+		return RuleCheck{}, err
+	}
+	c := RuleCheck{Rule: r.String(), Kind: r.Kind, Pattern: r.Pattern, Form: "name"}
+	switch r.Kind {
+	case RuleShell:
+		c.Form = CommandPatternForm(r.Pattern)
+	case RuleRead, RuleWrite, RuleDelete:
+		c.Form = "path"
+	}
+	if sample = strings.TrimSpace(sample); sample == "" {
+		return c, nil
+	}
+	c.Tested = true
+	if r.Kind != RuleShell {
+		c.Matches = r.matches(sample)
+		return c, nil
+	}
+	cmds, err := extractCommands(sample, 0)
+	if err != nil {
+		return c, fmt.Errorf("the sample isn't a command the shell can read: %w", err)
+	}
+	some, all := false, true
+	for _, cmd := range cmds {
+		if cmd.redirect != "" && c.Redirect == "" {
+			c.Redirect = cmd.redirect
+		}
+		if cmd.redirect != "" || cmd.transparent {
+			continue
+		}
+		_, ok := matchAny(r.cmd, cmd)
+		some = some || ok
+		all = all && ok
+	}
+	c.Matches = some
+	if r.Effect == EffectAllow {
+		c.Matches = some && all
+	}
+	return c, nil
 }
 
 // Add adds a rule (a duplicate is ignored).

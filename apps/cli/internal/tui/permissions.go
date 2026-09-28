@@ -28,15 +28,25 @@ import (
 // cmdPermissions lists, adds or removes permission rules:
 //
 //	/permissions
-//	/permissions allow|ask|deny <rule> [--save]
-//	/permissions remove <rule> [--save]
+//	/permissions allow|ask|deny <rule> [--save [--workspace]]
+//	/permissions remove <rule> [--save [--workspace]]
+//
+// --save saves to the global settings, or with --workspace (which implies
+// --save) to the workspace's own.
 func cmdPermissions(args []string, app *App) {
 	if len(args) == 0 {
 		listPermissions(app)
 		return
 	}
-	save := slices.Contains(args, "--save")
-	args = slices.DeleteFunc(slices.Clone(args), func(a string) bool { return a == "--save" })
+	scope := api.ScopeSession
+	switch {
+	case slices.Contains(args, "--workspace"):
+		scope = api.ScopeWorkspace
+	case slices.Contains(args, "--save"):
+		scope = api.ScopeGlobal
+	}
+	save := scope != api.ScopeSession
+	args = slices.DeleteFunc(slices.Clone(args), func(a string) bool { return a == "--save" || a == "--workspace" })
 	verb, rule := args[0], strings.TrimSpace(strings.Join(args[1:], " "))
 	if rule == "" {
 		fmt.Printf("%s%s%s\n", Yellow, i18n.T("perm.usage"), Reset)
@@ -44,7 +54,7 @@ func cmdPermissions(args []string, app *App) {
 	}
 	switch verb {
 	case "allow", "ask", "deny":
-		res, err := app.Workspace.AddPermissionRule(verb, rule, save)
+		res, err := app.Workspace.AddPermissionRule(verb, rule, scope)
 		switch {
 		case errors.Is(err, api.ErrBadRule):
 			fmt.Printf("%s✗ %s%s\n", Red, safe(err.Error()), Reset)
@@ -59,7 +69,7 @@ func cmdPermissions(args []string, app *App) {
 			printSaved(res.Saved)
 		}
 	case "remove", "rm":
-		res, _ := app.Workspace.RemovePermissionRule(rule, save)
+		res, _ := app.Workspace.RemovePermissionRule(rule, scope)
 		if res.Removed == 0 && !save {
 			fmt.Printf("%s%s%s\n", Yellow, i18n.T("perm.not_found", "rule", safe(res.Rule)), Reset)
 			return
@@ -76,18 +86,30 @@ func cmdPermissions(args []string, app *App) {
 func listPermissions(app *App) {
 	rules := app.Workspace.ListPermissionRules()
 	fmt.Printf("\n%s%s%s\n", Bold, i18n.T("perm.title"), Reset)
-	if len(rules) == 0 {
+	if !slices.ContainsFunc(rules, func(r api.PermissionRule) bool { return r.Source != "built-in" }) {
 		fmt.Printf("  %s%s%s\n", Dim, i18n.T("perm.none"), Reset)
 	}
-	for _, r := range rules {
-		color := Green
-		switch r.Effect {
+	color := func(effect string) string {
+		switch effect {
 		case "deny":
-			color = Red
+			return Red
 		case "ask":
-			color = Yellow
+			return Yellow
 		}
-		fmt.Printf("  %s%-5s%s %s  %s(%s)%s\n", color, r.Effect, Reset, safe(r.Rule), Dim, r.Source, Reset)
+		return Green
+	}
+	builtIn := map[string][]string{}
+	for _, r := range rules {
+		if r.Source == "built-in" { // one line each, below
+			builtIn[r.Effect] = append(builtIn[r.Effect], strings.TrimSuffix(strings.TrimPrefix(r.Rule, "shell("), ")"))
+			continue
+		}
+		fmt.Printf("  %s%-5s%s %s  %s(%s)%s\n", color(r.Effect), r.Effect, Reset, safe(r.Rule), Dim, r.Source, Reset)
+	}
+	for _, effect := range []string{"ask", "allow"} {
+		if list := builtIn[effect]; len(list) > 0 {
+			fmt.Printf("  %s%-5s%s %s\n", color(effect), effect, Reset, i18n.T("perm.builtin", "commands", safe(strings.Join(list, ", "))))
+		}
 	}
 	fmt.Printf("  %s%s%s\n\n", Dim, i18n.T("perm.hint", "mode", app.Workspace.Settings().PermissionMode), Reset)
 }

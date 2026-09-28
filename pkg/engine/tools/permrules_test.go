@@ -31,9 +31,98 @@ import (
 
 func rulesOf(t *testing.T, allow, ask, deny []string) *PermissionRules {
 	t.Helper()
-	r, err := NewPermissionRules(config.PermissionsConfig{Allow: allow, Ask: ask, Deny: deny}, "config")
+	off := false
+	r, err := NewPermissionRules(config.PermissionsConfig{Allow: allow, Ask: ask, Deny: deny, ReadOnlyDefaults: &off}, "config")
 	require.NoError(t, err)
 	return r
+}
+
+// With read_only_defaults on (the default), read-only commands run without
+// asking, their writing options ask, and redirections to files ask.
+func TestReadOnlyDefaults(t *testing.T) {
+	r, err := NewPermissionRules(config.PermissionsConfig{}, SourceConfig)
+	require.NoError(t, err)
+	p := mustPolicy(t, CommandPolicyConfig{})
+	p.SetRules(r)
+	for _, tc := range []struct {
+		cmd     string
+		verdict Verdict
+		mustAsk bool
+	}{
+		{"ls -la", VerdictAutoApprove, false},
+		{"git log --oneline -5 | head -3", VerdictAutoApprove, false},
+		{"grep -rn TODO pkg", VerdictAutoApprove, false},
+		{"git status && git diff", VerdictAutoApprove, false},
+		{"git push", VerdictNeedsApproval, false},
+		{"rm -rf x", VerdictNeedsApproval, false},
+		{"find . -delete", VerdictNeedsApproval, false},
+		{"cat a > b", VerdictNeedsApproval, false},
+		{"git log --output=log.txt", VerdictNeedsApproval, true},
+		{"git diff --ext-diff", VerdictNeedsApproval, true},
+		{"rg --pre ./x TODO", VerdictNeedsApproval, true},
+	} {
+		t.Run(tc.cmd, func(t *testing.T) {
+			d := p.Evaluate(tc.cmd)
+			assert.Equal(t, tc.verdict, d.Verdict, d.Reason)
+			assert.Equal(t, tc.mustAsk, d.MustAsk, d.Reason)
+		})
+	}
+	for _, rule := range r.List() {
+		assert.Equal(t, SourceBuiltIn, rule.Source, "%s", rule)
+	}
+
+	// Off: none of them.
+	off := false
+	none, err := NewPermissionRules(config.PermissionsConfig{ReadOnlyDefaults: &off}, SourceConfig)
+	require.NoError(t, err)
+	assert.Empty(t, none.List())
+}
+
+// Settings changed while a session runs replace the configured rules and
+// the built-in ones, not the session's.
+func TestReplaceConfigured(t *testing.T) {
+	r, err := NewPermissionRules(config.PermissionsConfig{Allow: []string{"shell(make)"}}, SourceConfig)
+	require.NoError(t, err)
+	require.NoError(t, r.Add(EffectDeny, "shell(rm)", SourceSession))
+	off := false
+	require.NoError(t, r.ReplaceConfigured(config.PermissionsConfig{Ask: []string{"shell(git push)"}, ReadOnlyDefaults: &off}))
+	var got []string
+	for _, x := range r.List() {
+		got = append(got, string(x.Effect)+" "+x.String()+" "+x.Source)
+	}
+	assert.Equal(t, []string{"deny shell(rm) session", "ask shell(git push) config"}, got)
+}
+
+// A rule is checked, and described, before it's saved.
+func TestCheckPermissionRule(t *testing.T) {
+	for _, tc := range []struct {
+		effect  Effect
+		rule    string
+		sample  string
+		want    RuleCheck
+		wantErr string
+	}{
+		{EffectAllow, "Bash(git log)", "", RuleCheck{Rule: "shell(git log)", Kind: RuleShell, Pattern: "git log", Form: FormPrefix}, ""},
+		{EffectAllow, "shell(git log)", "git log --oneline | head", RuleCheck{Rule: "shell(git log)", Kind: RuleShell, Pattern: "git log", Form: FormPrefix, Tested: true}, ""},
+		{EffectAllow, "shell(git)", "git log --oneline", RuleCheck{Rule: "shell(git)", Kind: RuleShell, Pattern: "git", Form: FormPrefix, Tested: true, Matches: true}, ""},
+		{EffectDeny, "shell(git push)", "git fetch && git push", RuleCheck{Rule: "shell(git push)", Kind: RuleShell, Pattern: "git push", Form: FormPrefix, Tested: true, Matches: true}, ""},
+		{EffectAllow, "shell(re:go (test|vet)( .*)?)", "go vet ./...", RuleCheck{Rule: "shell(re:go (test|vet)( .*)?)", Kind: RuleShell, Pattern: "re:go (test|vet)( .*)?", Form: FormRegex, Tested: true, Matches: true}, ""},
+		{EffectAllow, "shell(git log)", "git log > out.txt", RuleCheck{Rule: "shell(git log)", Kind: RuleShell, Pattern: "git log", Form: FormPrefix, Tested: true, Matches: true, Redirect: "out.txt"}, ""},
+		{EffectAllow, "write(docs/**)", "docs/a/b.md", RuleCheck{Rule: "write(docs/**)", Kind: RuleWrite, Pattern: "docs/**", Form: "path", Tested: true, Matches: true}, ""},
+		{EffectAllow, "shell(re:()", "", RuleCheck{}, "invalid"},
+		{EffectAllow, "shel(ls)", "", RuleCheck{}, "unknown kind"},
+		{EffectAllow, "read(x)", "", RuleCheck{}, "only deny"},
+	} {
+		t.Run(tc.rule+" "+tc.sample, func(t *testing.T) {
+			got, err := CheckPermissionRule(tc.effect, tc.rule, tc.sample)
+			if tc.wantErr != "" {
+				assert.ErrorContains(t, err, tc.wantErr)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tc.want, got)
+		})
+	}
 }
 
 func TestParsePermissionRule(t *testing.T) {

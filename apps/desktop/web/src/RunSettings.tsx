@@ -21,7 +21,6 @@ import {
   mdiChevronRight,
   mdiClose,
   mdiDeleteOutline,
-  mdiPlus,
   mdiTuneVariant,
 } from "@mdi/js";
 import { sessions, workspaces } from "./api";
@@ -30,9 +29,10 @@ import { language, t } from "./i18n";
 import type { Usage } from "./gen/blitz/v1/turn_pb";
 import type { AgentInfo, Approval, GetSettingsResponse, LocaleInfo, ModelSettingsInfo, PermissionRule } from "./gen/blitz/v1/workspace_pb";
 import { agencies, efforts, modes } from "./options";
+import { PermissionSettings } from "./PermissionSettings";
 import { ProviderSettings } from "./ProviderSettings";
 import { useApp } from "./state";
-import { Button, Field, Icon, IconButton, Switch, useSnackbar } from "./ui/controls";
+import { Button, Field, Icon, IconButton, useSnackbar } from "./ui/controls";
 
 function Section({ title, children, open: initial = true }: { title: string; children: ReactNode; open?: boolean }) {
   const [open, setOpen] = useState(initial);
@@ -230,8 +230,8 @@ export function RunSettings({ dir, settings, error, onChanged }: { dir: string; 
           </Field>
         </Section>
 
-        <Section title={t("desktop.rs.rules", { count: rules.length })} open={false}>
-          <Rules dir={dir} rules={rules} act={act} />
+        <Section title={t("desktop.rs.rules", { count: rules.filter((r) => r.source !== "built-in").length })} open={false}>
+          <PermissionSettings workspace={dir} compact onChanged={load} />
         </Section>
 
         <Section title={t("desktop.rs.approvals", { count: approvals.length })} open={false}>
@@ -371,51 +371,3 @@ function NumberSetting({
   );
 }
 
-function Rules({ dir, rules, act }: { dir: string; rules: PermissionRule[]; act: (f: () => Promise<unknown>, done?: string) => Promise<void> }) {
-  const [effect, setEffect] = useState("allow");
-  const [rule, setRule] = useState("");
-  const [save, setSave] = useState(false);
-  return (
-    <>
-      <p className="t-body-sm muted">
-        {t("desktop.rs.rules_help", { examples: "shell(git status), write(docs/**), web(github.com)" })}
-      </p>
-      <div className="list">
-        {rules.map((r) => (
-          <div key={`${r.effect}:${r.rule}`} className="rule">
-            <span className={`chip static effect-${r.effect}`}>{r.effect}</span>
-            <code className="ellipsis" title={r.rule}>
-              {r.rule}
-            </code>
-            <span className="t-body-sm muted">{r.source}</span>
-            <IconButton icon={mdiDeleteOutline} label={t("desktop.rs.remove")} small onClick={() => act(() => workspaces.removePermissionRule({ workspace: dir, rule: r.rule, save: r.source === "config" }), t("desktop.rs.rule_removed"))} />
-          </div>
-        ))}
-      </div>
-      <form
-        className="stack"
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (!rule.trim()) return;
-          act(() => workspaces.addPermissionRule({ workspace: dir, effect, rule: rule.trim(), save }), t("desktop.rs.rule_added")).then(() => setRule(""));
-        }}
-      >
-        <div className="row">
-          <select className="select rule-effect" value={effect} onChange={(e) => setEffect(e.target.value)} aria-label={t("desktop.rs.effect")}>
-            <option value="allow">{t("desktop.rs.effect.allow")}</option>
-            <option value="ask">{t("desktop.rs.effect.ask")}</option>
-            <option value="deny">{t("desktop.rs.effect.deny")}</option>
-          </select>
-          <input className="input mono" value={rule} onChange={(e) => setRule(e.target.value)} placeholder="shell(npm test)" aria-label={t("desktop.rs.rule")} />
-        </div>
-        <div className="row">
-          <Switch label={t("desktop.rs.save_config")} checked={save} onChange={setSave} />
-          <span className="t-body-sm muted spacer">{save ? t("desktop.rs.kept_config") : t("desktop.rs.for_session")}</span>
-          <Button small variant="tonal" icon={mdiPlus} type="submit" disabled={!rule.trim()}>
-            {t("desktop.add")}
-          </Button>
-        </div>
-      </form>
-    </>
-  );
-}

@@ -459,8 +459,8 @@ func (r *Remote) ListPermissionRules() []api.PermissionRule {
 
 // AddPermissionRule adds a rule with its effect (allow, ask or deny), for
 // the session or, with save, in the configuration (WorkspaceService.AddPermissionRule).
-func (r *Remote) AddPermissionRule(effect, rule string, save bool) (api.PermissionChange, error) {
-	res, err := r.workspaces.AddPermissionRule(context.Background(), connect.NewRequest(&pb.AddPermissionRuleRequest{Workspace: r.dir, Effect: effect, Rule: rule, Save: save}))
+func (r *Remote) AddPermissionRule(effect, rule string, save api.Scope) (api.PermissionChange, error) {
+	res, err := r.workspaces.AddPermissionRule(context.Background(), connect.NewRequest(&pb.AddPermissionRuleRequest{Workspace: r.dir, Effect: effect, Rule: rule, Save: save != api.ScopeSession, Scope: string(save)}))
 	if err != nil {
 		return api.PermissionChange{}, fromAPI(err)
 	}
@@ -469,8 +469,8 @@ func (r *Remote) AddPermissionRule(effect, rule string, save bool) (api.Permissi
 
 // RemovePermissionRule removes a rule, from the session or, with save, from
 // the configuration (WorkspaceService.RemovePermissionRule).
-func (r *Remote) RemovePermissionRule(rule string, save bool) (api.PermissionChange, error) {
-	res, err := r.workspaces.RemovePermissionRule(context.Background(), connect.NewRequest(&pb.RemovePermissionRuleRequest{Workspace: r.dir, Rule: rule, Save: save}))
+func (r *Remote) RemovePermissionRule(rule string, save api.Scope) (api.PermissionChange, error) {
+	res, err := r.workspaces.RemovePermissionRule(context.Background(), connect.NewRequest(&pb.RemovePermissionRuleRequest{Workspace: r.dir, Rule: rule, Save: save != api.ScopeSession, Scope: string(save)}))
 	if err != nil {
 		return api.PermissionChange{}, fromAPI(err)
 	}

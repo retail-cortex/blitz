@@ -117,3 +117,88 @@ func TestConfigService(t *testing.T) {
 	assert.NoError(t, err, "save: %v", saved)
 	assert.Len(t, saved.Msg.Warnings, 1, "save: %v %v", saved, err)
 }
+
+// Permission rules per scope: a workspace's add to the global ones, are
+// checked before saving, and apply at once to the open workspace.
+func TestConfigServicePermissions(t *testing.T) {
+	c, s := serve(t, nil, text("hi"))
+	srv := httptest.NewServer(s.Handler())
+	defer srv.Close()
+	cfg := pb.NewConfigServiceClient(http.DefaultClient, srv.URL)
+	ctx := context.Background()
+	dir := t.TempDir()
+	_, err := c.workspaces.ListAgents(ctx, connect.NewRequest(&pb.ListAgentsRequest{Workspace: dir}))
+	require.NoError(t, err, "opening the workspace")
+
+	_, err = cfg.AddPermission(ctx, connect.NewRequest(&pb.AddPermissionRequest{Effect: "deny", Rule: "shell(git push)"}))
+	require.NoError(t, err)
+	added, err := cfg.AddPermission(ctx, connect.NewRequest(&pb.AddPermissionRequest{Workspace: dir, Effect: "allow", Rule: "Bash(make)"}))
+	require.NoError(t, err)
+	assert.Equal(t, "shell(make)", added.Msg.Rule)
+
+	desc, err := cfg.DescribePermissions(ctx, connect.NewRequest(&pb.DescribePermissionsRequest{Workspace: dir}))
+	require.NoError(t, err)
+	assert.Equal(t, []string{"allow shell(make)"}, entryStrings(desc.Msg.Rules))
+	assert.Equal(t, []string{"deny shell(git push)"}, entryStrings(desc.Msg.Inherited))
+	assert.True(t, desc.Msg.ReadOnlyDefaultsOn)
+	assert.Contains(t, desc.Msg.ReadOnlyCommands, "git log")
+
+	// The open workspace has them already.
+	sources := func() map[string]string {
+		res, err := c.workspaces.ListPermissionRules(ctx, connect.NewRequest(&pb.ListPermissionRulesRequest{Workspace: dir}))
+		require.NoError(t, err)
+		out := map[string]string{}
+		for _, r := range res.Msg.Rules {
+			out[r.Rule] = r.Source
+		}
+		return out
+	}
+	got := sources()
+	assert.Equal(t, "workspace", got["shell(make)"])
+	assert.Equal(t, "global", got["shell(git push)"])
+	assert.Equal(t, "built-in", got["shell(ls)"])
+
+	// Checked, not saved.
+	check, err := cfg.CheckPermission(ctx, connect.NewRequest(&pb.CheckPermissionRequest{Effect: "allow", Rule: "shell(git log)", Sample: "git log --oneline"}))
+	require.NoError(t, err)
+	assert.Equal(t, "prefix", check.Msg.Form)
+	assert.True(t, check.Msg.Tested)
+	assert.True(t, check.Msg.Matches)
+	bad, err := cfg.CheckPermission(ctx, connect.NewRequest(&pb.CheckPermissionRequest{Effect: "allow", Rule: "shell(re:()"}))
+	require.NoError(t, err)
+	assert.Contains(t, bad.Msg.Error, "invalid")
+
+	// The built-in rules off for the workspace.
+	_, err = cfg.SetReadOnlyDefaults(ctx, connect.NewRequest(&pb.SetReadOnlyDefaultsRequest{Workspace: dir, Value: "off"}))
+	require.NoError(t, err)
+	desc, _ = cfg.DescribePermissions(ctx, connect.NewRequest(&pb.DescribePermissionsRequest{Workspace: dir}))
+	assert.Equal(t, "off", desc.Msg.ReadOnlyDefaults)
+	assert.False(t, desc.Msg.ReadOnlyDefaultsOn)
+	assert.NotContains(t, sources(), "shell(ls)")
+
+	removed, err := cfg.RemovePermission(ctx, connect.NewRequest(&pb.RemovePermissionRequest{Workspace: dir, Rule: "shell(make)"}))
+	require.NoError(t, err)
+	assert.Equal(t, int32(1), removed.Msg.Removed)
+	assert.NotContains(t, sources(), "shell(make)")
+
+	for _, call := range []func() error{
+		func() error {
+			_, err := cfg.AddPermission(ctx, connect.NewRequest(&pb.AddPermissionRequest{Effect: "allow", Rule: "nope(x)"}))
+			return err
+		},
+		func() error {
+			_, err := cfg.SetReadOnlyDefaults(ctx, connect.NewRequest(&pb.SetReadOnlyDefaultsRequest{Value: "maybe"}))
+			return err
+		},
+	} {
+		assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(call()))
+	}
+}
+
+func entryStrings(es []*pb.PermissionEntry) []string {
+	var out []string
+	for _, e := range es {
+		out = append(out, e.Effect+" "+e.Rule)
+	}
+	return out
+}

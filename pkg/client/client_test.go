@@ -309,16 +309,16 @@ func TestRemoteReasoningSettings(t *testing.T) {
 
 func TestRemotePermissionRules(t *testing.T) {
 	r := attach(t, nil)
-	res, err := r.AddPermissionRule("ask", "Bash(git push *)", false)
+	res, err := r.AddPermissionRule("ask", "Bash(git push *)", api.ScopeSession)
 	require.NoError(t, err, "add: %+v", res)
 	require.Equal(t, "shell(git push *)", res.Rule, "add: %+v %v", res, err)
-	got := r.ListPermissionRules()
+	got := slices.DeleteFunc(r.ListPermissionRules(), func(x api.PermissionRule) bool { return x.Source == "built-in" })
 	assert.Len(t, got, 1, "list %+v", got)
 	assert.Equal(t, "ask", got[0].Effect, "list %+v", got)
 	assert.Equal(t, "session", got[0].Source, "list %+v", got)
-	_, err = r.AddPermissionRule("deny", "nope(x)", false)
+	_, err = r.AddPermissionRule("deny", "nope(x)", api.ScopeSession)
 	assert.ErrorIs(t, err, api.ErrBadRule, "bad rule over the API: %v", err)
-	res, _ = r.RemovePermissionRule("shell(git push *)", false)
+	res, _ = r.RemovePermissionRule("shell(git push *)", api.ScopeSession)
 	assert.Equal(t, 1, res.Removed, "remove %+v", res)
 }
 

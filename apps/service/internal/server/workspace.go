@@ -211,7 +211,7 @@ func (h workspaceService) AddPermissionRule(ctx context.Context, r req[pb.AddPer
 	if err != nil {
 		return nil, err
 	}
-	res, err := w.AddPermissionRule(r.Msg.Effect, r.Msg.Rule, r.Msg.Save)
+	res, err := w.AddPermissionRule(r.Msg.Effect, r.Msg.Rule, saveScope(r.Msg.Save, r.Msg.Scope))
 	if err != nil {
 		return nil, toAPI(err)
 	}
@@ -223,7 +223,7 @@ func (h workspaceService) RemovePermissionRule(ctx context.Context, r req[pb.Rem
 	if err != nil {
 		return nil, err
 	}
-	res, err := w.RemovePermissionRule(r.Msg.Rule, r.Msg.Save)
+	res, err := w.RemovePermissionRule(r.Msg.Rule, saveScope(r.Msg.Save, r.Msg.Scope))
 	if err != nil {
 		return nil, toAPI(err)
 	}
@@ -519,4 +519,16 @@ func (h workspaceService) SearchWeb(ctx context.Context, r req[pb.SearchWebReque
 		out.Links = append(out.Links, &pb.Link{Title: l.Title, Url: l.URL})
 	}
 	return ok(out)
+}
+
+// saveScope is where a rule is saved: nowhere without save, else the
+// workspace's settings with scope "workspace", else the global ones.
+func saveScope(save bool, scope string) api.Scope {
+	switch {
+	case !save:
+		return api.ScopeSession
+	case scope == string(api.ScopeWorkspace):
+		return api.ScopeWorkspace
+	}
+	return api.ScopeGlobal
 }

@@ -71,8 +71,8 @@ type Backend interface {
 	Set(ctx context.Context, key, value string) (string, error)
 	SetPermissionMode(mode string) (string, error)
 	ListPermissionRules() []PermissionRule
-	AddPermissionRule(effect, rule string, save bool) (PermissionChange, error)
-	RemovePermissionRule(rule string, save bool) (PermissionChange, error)
+	AddPermissionRule(effect, rule string, save Scope) (PermissionChange, error)
+	RemovePermissionRule(rule string, save Scope) (PermissionChange, error)
 
 	// Skills, environments, MCP and tools.
 	ListSkills() []SkillInfo

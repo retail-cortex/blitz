@@ -91,3 +91,56 @@ func TestConfigKeyCommands(t *testing.T) {
 		assert.Error(t, err, "%s: no error", name)
 	}
 }
+
+// blitz config permissions: rules per scope, checked before saving, and the
+// built-in read-only rules.
+func TestConfigPermissionsCommands(t *testing.T) {
+	isolate(t)
+	run := func(args ...string) (string, error) {
+		t.Helper()
+		cmd := newRootCommand()
+		var out bytes.Buffer
+		cmd.SetOut(&out)
+		cmd.SetErr(&out)
+		cmd.SetArgs(args)
+		err := cmd.Execute()
+		return out.String(), err
+	}
+	_, err := run("config", "permissions", "deny", "shell(git push)")
+	require.NoError(t, err)
+	out, err := run("config", "permissions", "allow", "-w", "Bash(make)")
+	require.NoError(t, err, out)
+	assert.Contains(t, out, "allow shell(make)")
+
+	out, err = run("config", "permissions", "-w")
+	require.NoError(t, err)
+	assert.Regexp(t, `(?s)workspace \(.*allow shell\(make\).*global \(.*deny  shell\(git push\).*built-in \(read_only_defaults on`, out)
+	out, _ = run("config", "permissions")
+	assert.NotContains(t, out, "shell(make)", "the workspace's rule is only the workspace's")
+
+	out, err = run("config", "permissions", "check", "shell(git log)", "git log --oneline | head")
+	require.NoError(t, err)
+	assert.Contains(t, out, `the command "git log" with any arguments`)
+	assert.Contains(t, out, "doesn't match", "head isn't covered by shell(git log)")
+	out, err = run("config", "permissions", "check", "--effect", "deny", "shell(re:git (push|reset)( .*)?)", "git fetch && git push -f")
+	require.NoError(t, err)
+	assert.Contains(t, out, "matches")
+
+	_, err = run("config", "permissions", "defaults", "off", "-w")
+	require.NoError(t, err)
+	out, _ = run("config", "permissions", "-w")
+	assert.Contains(t, out, "built-in: off")
+	_, err = run("config", "permissions", "remove", "-w", "shell(make)")
+	require.NoError(t, err)
+
+	for name, args := range map[string][]string{
+		"a bad rule":        {"config", "permissions", "allow", "shel(ls)"},
+		"a bad regex":       {"config", "permissions", "deny", "shell(re:()"},
+		"read isn't allow":  {"config", "permissions", "allow", "read(x)"},
+		"nothing to remove": {"config", "permissions", "remove", "shell(nope)"},
+		"defaults maybe":    {"config", "permissions", "defaults", "maybe"},
+	} {
+		_, err := run(args...)
+		assert.Error(t, err, name)
+	}
+}

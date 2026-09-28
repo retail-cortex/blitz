@@ -16,9 +16,11 @@ package server
 
 import (
 	"context"
+	"fmt"
 
 	"connectrpc.com/connect"
 	"github.com/retail-cortex/blitz/pkg/config"
+	"github.com/retail-cortex/blitz/pkg/engine/tools"
 	pb "github.com/retail-cortex/blitz/proto/blitz/v1"
 )
 
@@ -93,6 +95,8 @@ func (h configService) changed(ctx context.Context, dir, path string) *pb.Config
 	for _, w := range ws {
 		cfg, err := config.LoadWorkspace(h.s.configDir, w.Dir())
 		if err == nil {
+			// Rules first: a model error mustn't hide a rule change.
+			w.ReloadPermissions(cfg)
 			err = w.ReloadProviders(ctx, cfg)
 		}
 		if dir != "" && err != nil {
@@ -164,6 +168,98 @@ func (h configService) SetProvider(ctx context.Context, r req[pb.SetProviderRequ
 		return nil, invalid(err)
 	}
 	return ok(&pb.SetProviderResponse{Change: h.changed(ctx, dir, path)})
+}
+
+func entries(p config.PermissionsConfig) []*pb.PermissionEntry {
+	var out []*pb.PermissionEntry
+	for _, e := range []struct {
+		effect string
+		rules  []string
+	}{{"deny", p.Deny}, {"ask", p.Ask}, {"allow", p.Allow}} {
+		for _, r := range e.rules {
+			out = append(out, &pb.PermissionEntry{Effect: e.effect, Rule: r})
+		}
+	}
+	return out
+}
+
+func (h configService) DescribePermissions(_ context.Context, r req[pb.DescribePermissionsRequest]) (*connect.Response[pb.DescribePermissionsResponse], error) {
+	dir, err := scope(r.Msg.Workspace)
+	if err != nil {
+		return nil, err
+	}
+	own, path, err := config.ScopePermissions(h.s.configDir, dir)
+	if err != nil {
+		return nil, invalid(err)
+	}
+	effective := own
+	res := &pb.DescribePermissionsResponse{Path: path, Rules: entries(own), ReadOnlyCommands: config.ReadOnlyCommands, ReadOnlyGuards: config.ReadOnlyGuardLabels}
+	if own.ReadOnlyDefaults != nil {
+		res.ReadOnlyDefaults = map[bool]string{true: "on", false: "off"}[*own.ReadOnlyDefaults]
+	}
+	if dir != "" {
+		global, _, err := config.ScopePermissions(h.s.configDir, "")
+		if err != nil {
+			return nil, invalid(err)
+		}
+		res.Inherited = entries(global)
+		effective = global.Merge(own)
+	}
+	res.ReadOnlyDefaultsOn = effective.DefaultsOn()
+	return ok(res)
+}
+
+func (h configService) AddPermission(ctx context.Context, r req[pb.AddPermissionRequest]) (*connect.Response[pb.AddPermissionResponse], error) {
+	dir, err := scope(r.Msg.Workspace)
+	if err != nil {
+		return nil, err
+	}
+	path, rule, err := config.AddPermissionRule(h.s.configDir, dir, r.Msg.Effect, r.Msg.Rule)
+	if err != nil {
+		return nil, invalid(err)
+	}
+	return ok(&pb.AddPermissionResponse{Change: h.changed(ctx, dir, path), Rule: rule})
+}
+
+func (h configService) RemovePermission(ctx context.Context, r req[pb.RemovePermissionRequest]) (*connect.Response[pb.RemovePermissionResponse], error) {
+	dir, err := scope(r.Msg.Workspace)
+	if err != nil {
+		return nil, err
+	}
+	path, n, err := config.RemovePermissionRule(h.s.configDir, dir, r.Msg.Rule)
+	if err != nil {
+		return nil, invalid(err)
+	}
+	return ok(&pb.RemovePermissionResponse{Change: h.changed(ctx, dir, path), Removed: int32(n)})
+}
+
+func (h configService) CheckPermission(_ context.Context, r req[pb.CheckPermissionRequest]) (*connect.Response[pb.CheckPermissionResponse], error) {
+	c, err := tools.CheckPermissionRule(tools.Effect(r.Msg.Effect), r.Msg.Rule, r.Msg.Sample)
+	if err != nil {
+		return ok(&pb.CheckPermissionResponse{Error: err.Error()})
+	}
+	return ok(&pb.CheckPermissionResponse{Rule: c.Rule, Kind: c.Kind, Pattern: c.Pattern, Form: c.Form, Tested: c.Tested, Matches: c.Matches, Redirect: c.Redirect})
+}
+
+func (h configService) SetReadOnlyDefaults(ctx context.Context, r req[pb.SetReadOnlyDefaultsRequest]) (*connect.Response[pb.SetReadOnlyDefaultsResponse], error) {
+	dir, err := scope(r.Msg.Workspace)
+	if err != nil {
+		return nil, err
+	}
+	var on *bool
+	switch r.Msg.Value {
+	case "on", "off":
+		v := r.Msg.Value == "on"
+		on = &v
+	case "":
+	default:
+		return nil, invalid(fmt.Errorf("read_only_defaults %q: on, off or \"\"", r.Msg.Value))
+	}
+	path, err := config.SetReadOnlyDefaults(h.s.configDir, dir, on)
+	if err != nil {
+		return nil, invalid(err)
+	}
+	return ok(&pb.SetReadOnlyDefaultsResponse{Change: h.changed(ctx, dir, path)})
 }
 
 func (h configService) GetConfigFile(_ context.Context, r req[pb.GetConfigFileRequest]) (*connect.Response[pb.GetConfigFileResponse], error) {

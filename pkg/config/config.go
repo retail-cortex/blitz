@@ -26,6 +26,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	anthropicconfig "github.com/anthropics/anthropic-sdk-go/config"
@@ -357,10 +358,55 @@ type ToolsConfig struct {
 // through; a deny rule refuses it in every mode. (Unlike
 // sandbox.commands.allow, which is an allow-list of the only commands
 // that may run, permissions.allow only skips the question.)
+//
+// A workspace's rules add to the global ones (Merge).
 type PermissionsConfig struct {
 	Allow []string `toml:"allow"`
 	Ask   []string `toml:"ask"`
 	Deny  []string `toml:"deny"`
+	// ReadOnlyDefaults allows ReadOnlyCommands without asking (with
+	// ReadOnlyGuards asking even so); nil means on. A workspace may set it
+	// either way.
+	ReadOnlyDefaults *bool `toml:"read_only_defaults"`
+}
+
+// ReadOnlyCommands are the commands that read and don't change anything,
+// with any arguments: allowed without asking unless read_only_defaults is
+// false. Commands that can write through an option (find -delete, sort -o,
+// tree -o, git branch -D) aren't among them; a redirection to a file
+// always asks.
+var ReadOnlyCommands = []string{
+	"ls", "pwd", "cat", "head", "tail", "wc", "stat", "du", "df", "which", "grep", "rg", "diff",
+	"git status", "git log", "git show", "git diff", "git blame", "git rev-parse",
+}
+
+// ReadOnlyGuards are the options with which ReadOnlyCommands write a file
+// or run another program: with read_only_defaults on, they ask even so.
+var ReadOnlyGuards = []string{"re:git .*--(output|ext-diff).*", "re:rg .*--pre.*"}
+
+// ReadOnlyGuardLabels say what ReadOnlyGuards cover, for people.
+var ReadOnlyGuardLabels = []string{"git … --output", "git … --ext-diff", "rg … --pre"}
+
+// DefaultsOn reports whether the built-in read-only rules apply.
+func (p PermissionsConfig) DefaultsOn() bool { return p.ReadOnlyDefaults == nil || *p.ReadOnlyDefaults }
+
+// Merge adds a workspace's rules to these, without repeats; the
+// workspace's read_only_defaults, if set, wins.
+func (p PermissionsConfig) Merge(ws PermissionsConfig) PermissionsConfig {
+	union := func(a, b []string) []string {
+		out := slices.Clone(a)
+		for _, r := range b {
+			if !slices.Contains(out, r) {
+				out = append(out, r)
+			}
+		}
+		return out
+	}
+	out := PermissionsConfig{Allow: union(p.Allow, ws.Allow), Ask: union(p.Ask, ws.Ask), Deny: union(p.Deny, ws.Deny), ReadOnlyDefaults: p.ReadOnlyDefaults}
+	if ws.ReadOnlyDefaults != nil {
+		out.ReadOnlyDefaults = ws.ReadOnlyDefaults
+	}
+	return out
 }
 
 // SandboxConfig bounds what tools may touch.

@@ -70,6 +70,10 @@ type Registry struct {
 // session runs (read rules only take effect at the next start).
 func (r *Registry) Rules() *PermissionRules { return r.rules }
 
+// CommandPolicy is the policy shell commands are checked against, with the
+// permission rules' shell patterns.
+func (r *Registry) CommandPolicy() *CommandPolicy { return r.policy }
+
 // ModeNote is why the configured permission mode wasn't used, or nil.
 func (r *Registry) ModeNote() error { return r.modeNote }
 

@@ -280,7 +280,7 @@ func runRoot(cmd *cobra.Command, o *rootOptions, args []string) (err error) {
 	}
 	for effect, rules := range map[string][]string{"allow": o.allowRules, "deny": o.denyRules} {
 		for _, rule := range rules {
-			if _, err := w.AddPermissionRule(effect, rule, false); err != nil {
+			if _, err := w.AddPermissionRule(effect, rule, api.ScopeSession); err != nil {
 				return withCode(exitUsage, fmt.Errorf("--%s %q: %w", effect, rule, err))
 			}
 		}

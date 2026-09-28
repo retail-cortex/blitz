@@ -82,9 +82,15 @@ func overlay(cfg *Config, prefixDir, workspace string) error {
 		return nil
 	}
 	path := filepath.Join(dir, ".env.toml")
+	// A list the workspace sets would replace the global one: its
+	// permission rules add to the global rules instead.
+	global := cfg.Permissions
+	cfg.Permissions = PermissionsConfig{}
 	if _, err := toml.DecodeFile(path, cfg); err != nil && !errors.Is(err, os.ErrNotExist) {
+		cfg.Permissions = global
 		return fmt.Errorf("the workspace's settings (%s): %w", path, err)
 	}
+	cfg.Permissions = global.Merge(cfg.Permissions)
 	return nil
 }
 
@@ -557,6 +563,9 @@ func WriteSettingsFile(prefixDir, workspace, text string) (string, []string, err
 	md, err := toml.Decode(text, &cfg)
 	if err != nil {
 		return "", nil, fmt.Errorf("not valid settings: %w", err)
+	}
+	if err := validRules(cfg.Permissions); err != nil {
+		return "", nil, fmt.Errorf("not saved: %w", err)
 	}
 	var warnings []string
 	for _, k := range md.Undecoded() {

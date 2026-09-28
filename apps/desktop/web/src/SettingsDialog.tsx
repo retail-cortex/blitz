@@ -22,6 +22,7 @@ import {
   mdiFileDocumentEditOutline,
   mdiFolderMultipleOutline,
   mdiKeyChainVariant,
+  mdiShieldCheckOutline,
   mdiInformationOutline,
   mdiMonitor,
   mdiPaletteOutline,
@@ -38,17 +39,19 @@ import { checkService, type ServiceCheck } from "./serviceVersion";
 import { languages, t } from "./i18n";
 import { workspaceColor } from "./palette";
 import { displayName, forgetWorkspace } from "./prefs";
+import { PermissionSettings } from "./PermissionSettings";
 import { ProviderSettings, SettingsFile } from "./ProviderSettings";
 import { useApp } from "./state";
 import type { ThemePref } from "./theme";
 import { Button, Chip, Dialog, Icon, IconButton, Segmented, Switch } from "./ui/controls";
 import { WorkspaceDialog } from "./WorkspaceDialog";
 
-type Section = "appearance" | "providers" | "file" | "workspaces" | "service" | "about";
+type Section = "appearance" | "providers" | "permissions" | "file" | "workspaces" | "service" | "about";
 
 const sectionIcons: Record<Section, string> = {
   appearance: mdiPaletteOutline,
   providers: mdiKeyChainVariant,
+  permissions: mdiShieldCheckOutline,
   file: mdiFileDocumentEditOutline,
   workspaces: mdiFolderMultipleOutline,
   service: mdiServerNetwork,
@@ -72,6 +75,7 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
         <div className="settings-pane">
           {section === "appearance" && <Appearance />}
           {section === "providers" && <ProviderSettings workspace="" />}
+          {section === "permissions" && <PermissionSettings workspace="" />}
           {section === "file" && <FileSection />}
           {section === "workspaces" && <Workspaces />}
           {section === "service" && <Service />}
