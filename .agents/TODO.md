@@ -37,31 +37,16 @@ Everything through 2026-09-29 is pushed to `main`, most of it with
    `<id>.jsonl` and the title and message count from it restores the
    chat. Only on that machine, and only if the owner still wants it.
 
-## P1: follow-ups from 2026-09-29
-
-4. **Small follow-ups (S each).**
-   - Fallback-model notices ("switched to the fallback model") only reach
-     the service's log: send them as turn `notice` events (api.Notice,
-     `TurnEvent.notice`, added for failed saves) so the desktop shows them.
-   - The tray's menu is English only: give it the i18n catalogs.
-   - The tray isn't packaged for Windows (the library supports it; the
-     start-at-login entry and a package are missing).
-   - `Settings › Logs` and the tray's **Open the logs** only read
-     `log.dir` of the global settings.
-   - Empty chats saved by versions before `5059c9d` stay on disk (hidden
-     from the list): a one-off cleanup could delete metadata files with no
-     messages and no history.
-
 ## P2: features and the rest
 
-5. **The attached CLI's background processes and `!cmd` audit (M).**
+4. **The attached CLI's background processes and `!cmd` audit (M).**
    Backlog BL-SVC-01, BL-SVC-02. Attached to the service, the CLI can't
    list or stop background processes (`Processes()` is nil) and doesn't
    audit `!cmd` (`AuditShell` does nothing). Add `ListProcesses`,
    `GetProcessOutput`, `KillProcess` and `AuditShell` to
    `WorkspaceService`, scoped to the session.
 
-6. **Faster Linux sandbox masking (M).** Backlog BL-SH-01. bubblewrap's
+5. **Faster Linux sandbox masking (M).** Backlog BL-SH-01. bubblewrap's
    masking walks the writable roots before every command (about 100 ms
    on a 10,000-file workspace, 3 s under `-race`), so CI runs parallel
    tests without the sandbox. Cache the mask per root (by mtime, or
@@ -70,7 +55,7 @@ Everything through 2026-09-29 is pushed to `main`, most of it with
 
 ## P3: large, needing a design first
 
-7. **Project configuration with a trust boundary (L).** Teams can't
+6. **Project configuration with a trust boundary (L).** Teams can't
    commit MCP servers, commands, permission presets or hooks to a
    repository. Add `.blitz/settings.toml` (and `.local.toml`) per the
    decisions in `spec_parity_027` §12 and §2.4: settings that only
@@ -80,7 +65,7 @@ Everything through 2026-09-29 is pushed to `main`, most of it with
    when it changes. Builds on the per-workspace settings and permission
    scopes that exist now.
 
-8. **Background sub-agents (L).** `invoke_agent` blocks the turn. Add
+7. **Background sub-agents (L).** `invoke_agent` blocks the turn. Add
    `background: true` returning a task ID (`spec_parity_027` §8.1),
    `list_tasks`, `task_output` and `stop_task`, and deliver completions
    as steer messages at the next tool cycle or prompt.
@@ -93,6 +78,10 @@ Everything through 2026-09-29 is pushed to `main`, most of it with
 - **Chromebooks:** if a colleague sees a blank window, set
   `WEBKIT_DISABLE_DMABUF_RENDERER=1` automatically on ChromeOS.
 - **A signed macOS release:** the Apple Developer ID is pending.
+- **The tray on Windows:** it needs what Windows lacks first: the service
+  installing there (a login item; REL-25 says it doesn't) and a Windows
+  package of the desktop app. The tray itself also needs a lock and
+  detaching that aren't Unix-only (`flock`, `Setsid`).
 - **Wails v3** (decided 2026-09-29: stay on v2). v3 was at `v3.0.0-beta.26`
   and the tray, its main draw, is done separately. Revisit when v3 has a
   stable release that has been out a while, or we need several windows or
@@ -110,6 +99,15 @@ TestWithoutPlanModeToolsRunNormally; `pkg/engine/tools` TestToolsSuite.
 Anything else failing is new. Check test logs for `goleak:` too.
 
 ## Done 2026-09-29
+- Fallback-model notices show in the conversation (turn `notice` events),
+  not only in the service's log.
+- The tray's menu in the desktop app's language (`tray.*` keys).
+- The tray's **Open the logs** opens the running service's log folder
+  (`ListLogDays`), not just the settings file's `log.dir`. Settings › Logs
+  already read the service's: one log per service, from the global
+  settings, is by design.
+- Empty chats from before `5059c9d` are deleted when a process opens its
+  first workspace (`session.Storage.RemoveEmpty`).
 
 - Full-width conversation and full screen (F11).
 - `@` mentions in the chat, with completion; the content goes with the prompt.
