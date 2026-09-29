@@ -17,6 +17,10 @@ blitz service uninstall
 
 The desktop app installs, restarts and stops it too, without the CLI. By hand: `blitzd [--socket PATH] [--config FILE]`. `blitzd --license` shows the license terms.
 
+### In the system tray
+
+`blitz-tray`, beside the desktop app (in the `.deb` and `Blitz.app`), shows the service in the system tray: coloured while it runs, grey when it doesn't, and a menu with **Start**, **Stop** and **Restart**, **Open Blitz** and **Open the logs**. Turn it on in the desktop app (Settings › Service › **Show in the system tray**) or with `blitz-tray --install`, which starts it now and at every login; `--uninstall` stops that. On GNOME the icon needs the AppIndicator extension, which Ubuntu has on by default; KDE and most other desktops show it as they are.
+
 A login item doesn't see your shell's environment, so keep API keys in the keychain (`blitz config set-key`) or in `~/.blitz/.env.toml`.
 
 ## The socket

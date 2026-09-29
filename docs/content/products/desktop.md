@@ -33,7 +33,7 @@ The Linux `.deb` runs in ChromeOS's Linux container (Crostini): `amd64` on Intel
 - **Run settings.** Agent, model, reasoning effort, generation settings, permission mode and rules, per workspace.
 - **Changes.** The session's diff beside the agent's summary.
 - **Workers.** The workspace's [workers](service.md#workers), their schedules and runs, and **New worker**, a form for each of a worker's settings and its workflow, saved as `.agents/workers/<name>/WORKER.md` once it's valid.
-- **Settings.** Providers and API keys (kept in the OS keychain), the settings file itself (highlighted, with **Validate**, which marks problems at their lines, and every setting described on hover and in a searchable list), the service's log (by day, level and text), appearance (System, Light or Dark) and the interface language (English, Spanish or Canadian French, from the same catalogs as the terminal). **About** shows the license and the third-party notices.
+- **Settings.** Providers and API keys (kept in the OS keychain), the settings file itself (highlighted, with **Validate**, which marks problems at their lines, and every setting described on hover and in a searchable list), the service's log (by day, level and text), the service in the system tray, appearance (System, Light or Dark) and the interface language (English, Spanish or Canadian French, from the same catalogs as the terminal). **About** shows the license and the third-party notices.
 
 The window keeps only its own settings, in `~/.blitz/desktop.json`: its theme, layout, and the workspaces it knows. Everything else lives in the service, so the REPL and the app see the same sessions.
 

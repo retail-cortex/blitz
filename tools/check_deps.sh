@@ -42,11 +42,13 @@ libs='kind("go_library", %s)'
 	empty "shared packages don't reach the apps" \
 		"$(printf "$libs" 'deps(kind("go_library", //pkg/...))') intersect //apps/..."
 	empty "the CLI doesn't reach the other apps" \
-		"$(printf "$libs" 'deps(kind("go_library", //apps/cli/...))') intersect (//apps/service/... + //apps/desktop/...)"
+		"$(printf "$libs" 'deps(kind("go_library", //apps/cli/...))') intersect (//apps/service/... + //apps/desktop/... + //apps/tray/...)"
 	empty "the service doesn't reach the other apps" \
-		"$(printf "$libs" 'deps(kind("go_library", //apps/service/...) except //apps/service/servicetest/...)') intersect (//apps/cli/... + //apps/desktop/...)"
+		"$(printf "$libs" 'deps(kind("go_library", //apps/service/...) except //apps/service/servicetest/...)') intersect (//apps/cli/... + //apps/desktop/... + //apps/tray/...)"
 	empty "the desktop app doesn't reach the other apps" \
-		"$(printf "$libs" 'deps(kind("go_library", //apps/desktop/...))') intersect (//apps/cli/... + //apps/service/...)"
+		"$(printf "$libs" 'deps(kind("go_library", //apps/desktop/...))') intersect (//apps/cli/... + //apps/service/... + //apps/tray/...)"
+	empty "the tray doesn't reach the other apps or the engine" \
+		"$(printf "$libs" 'deps(kind("go_library", //apps/tray/...))') intersect (//apps/cli/... + //apps/service/... + //apps/desktop/... + //pkg/engine/...)"
 	empty "no engine library is public" \
 		'attr(visibility, "//visibility:public", kind("go_library", //pkg/engine/...))'
 }

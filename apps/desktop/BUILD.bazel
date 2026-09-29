@@ -86,7 +86,10 @@ go_binary(
     name = "blitz-desktop_unsigned",
     # The service it installs and restarts, found in its runfiles under
     # bazel run (Blitz.app and the .deb put it beside the app instead).
-    data = ["//apps/service:blitzd"],
+    data = [
+        "//apps/service:blitzd",
+        "//apps/tray:blitz-tray",
+    ],
     embed = [":desktop_lib"],
     # Its own Mach-O UUID (build/macos.bzl).
     gc_linkopts = macho_uuid_linkopts("dev.blitz.desktop"),
@@ -115,7 +118,10 @@ go_test(
         "service_test.go",
     ],
     # A real blitzd, which TestStopServiceByPID starts and stops.
-    data = ["//apps/service:blitzd"],
+    data = [
+        "//apps/service:blitzd",
+        "//apps/tray:blitz-tray",
+    ],
     embed = [":desktop_lib"],
     deps = [
         "//apps/service/servicetest",

@@ -69,6 +69,11 @@ alias(
 )
 
 alias(
+    name = "tray",
+    actual = "//apps/tray:blitz-tray",
+)
+
+alias(
     name = "desktop",
     actual = "//apps/desktop:blitz-desktop",
 )

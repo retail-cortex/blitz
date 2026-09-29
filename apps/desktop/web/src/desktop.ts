@@ -32,6 +32,8 @@ export interface ServiceStatus {
   installed: boolean;
   socket: string;
   service: string; // the blitzd this app installs and restarts ("" if not found)
+  tray?: string; // the blitz-tray beside the app ("" if not found)
+  tray_installed?: boolean; // it starts at login
 }
 
 type Bound = {
@@ -39,6 +41,7 @@ type Bound = {
   ProgramExists(path: string): Promise<boolean>;
   ServiceStatus(): Promise<ServiceStatus>;
   InstallService(): Promise<void>;
+  SetTray(on: boolean): Promise<void>;
   StopService(pid: number): Promise<void>;
   RestartService(pid: number): Promise<void>;
   ChooseWorkspace(title: string): Promise<string>;
@@ -81,6 +84,9 @@ export async function serviceStatus(): Promise<ServiceStatus> {
 }
 /** Installs this app's blitzd as the login item and starts it. */
 export const installService = () => app().InstallService();
+
+/** Shows the service in the system tray at login and now, or stops that. */
+export const setTray = (on: boolean) => app().SetTray(on);
 /** Stops the running service: its login item, else process pid (0: unknown). */
 export const stopService = (pid: number) => app().StopService(pid);
 /** Stops the running service and starts the blitzd that goes with this app. */

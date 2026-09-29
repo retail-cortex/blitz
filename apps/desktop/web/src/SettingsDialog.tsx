@@ -35,7 +35,7 @@ import {
   mdiWeatherNight,
   mdiWhiteBalanceSunny,
 } from "@mdi/js";
-import { appVersion, installService, restartService, serviceStatus, stopService, type ServiceStatus } from "./desktop";
+import { appVersion, installService, restartService, serviceStatus, setTray, stopService, type ServiceStatus } from "./desktop";
 import { showLicense } from "./events";
 import { checkService, settleTimeout, type ServiceCheck, waitForService, withTimeout } from "./serviceVersion";
 import { languages, t } from "./i18n";
@@ -289,6 +289,25 @@ function Service() {
         >
           {status.installed ? t("desktop.service.reinstall") : t("desktop.service.install_short")}
         </Button>
+      </Setting>
+      <Setting title={t("desktop.service.tray")} detail={status.tray ? t("desktop.service.tray.detail") : t("desktop.service.tray.none")}>
+        <Switch
+          label={t("desktop.service.tray")}
+          checked={!!status.tray_installed}
+          disabled={!status.tray || busy}
+          onChange={async (on) => {
+            setBusy(true);
+            setError("");
+            try {
+              await setTray(on);
+            } catch (e) {
+              setError(String(e));
+            } finally {
+              await refresh();
+              setBusy(false);
+            }
+          }}
+        />
       </Setting>
       {version && (
         <Setting title={t("desktop.service.version")} detail={version.stale ? t(`desktop.service.stale.${version.stale}`, { service: version.info?.version ?? "?", app: version.app, path: version.info?.executable ?? "" }) : undefined}>

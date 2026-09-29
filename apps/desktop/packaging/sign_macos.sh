@@ -38,7 +38,7 @@ ditto "$src" "$app"
 chmod -R u+w "$app"
 chmod a-x "$app/Contents/Info.plist" "$app/Contents/Resources/iconfile.icns"
 
-for exe in blitz blitzd blitz-desktop; do
+for exe in blitz blitzd blitz-tray blitz-desktop; do
 	[ "$(lipo -archs "$app/Contents/MacOS/$exe" | tr ' ' '\n' | sort | xargs)" = "arm64 x86_64" ] ||
 		{ echo "$exe isn't universal" >&2; exit 1; }
 done
@@ -50,12 +50,14 @@ signed=""
 if [ -n "${DESKTOP_SIGN_IDENTITY:-}" ]; then
 	codesign --force --options runtime --timestamp --identifier dev.blitz.cli --sign "$DESKTOP_SIGN_IDENTITY" "$app/Contents/MacOS/blitz"
 	codesign --force --options runtime --timestamp --identifier dev.blitz.service --sign "$DESKTOP_SIGN_IDENTITY" "$app/Contents/MacOS/blitzd"
+	codesign --force --options runtime --timestamp --identifier dev.blitz.tray --sign "$DESKTOP_SIGN_IDENTITY" "$app/Contents/MacOS/blitz-tray"
 	codesign --force --options runtime --timestamp --sign "$DESKTOP_SIGN_IDENTITY" "$app"
 	signed=1
 else
 	echo "warning: DESKTOP_SIGN_IDENTITY isn't set: signing ad hoc, not notarising" >&2
 	codesign --force --identifier dev.blitz.cli --sign - "$app/Contents/MacOS/blitz"
 	codesign --force --identifier dev.blitz.service --sign - "$app/Contents/MacOS/blitzd"
+	codesign --force --identifier dev.blitz.tray --sign - "$app/Contents/MacOS/blitz-tray"
 	codesign --force --sign - "$app"
 fi
 codesign --verify --strict --deep --verbose=2 "$app"

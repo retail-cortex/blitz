@@ -73,6 +73,7 @@ iconutil -c icns -o $@ "$$set"
         ("blitz-desktop", "//apps/desktop:blitz-desktop"),
         ("blitz", "//apps/cli:blitz"),
         ("blitzd", "//apps/service:blitzd"),
+        ("blitz-tray", "//apps/tray:blitz-tray"),
     ]
 ]
 
@@ -103,6 +104,7 @@ copy_to_directory(
         ":universal_blitz",
         ":universal_blitz-desktop",
         ":universal_blitzd",
+        ":universal_blitz-tray",
     ],
     root_paths = ["apps/desktop/packaging/app"],
     target_compatible_with = _MACOS,
@@ -129,6 +131,7 @@ pkg_files(
         "//apps/cli:blitz",
         "//apps/desktop:blitz-desktop",
         "//apps/service:blitzd",
+        "//apps/tray:blitz-tray",
     ],
     attributes = pkg_attributes(mode = "0755"),
     prefix = "usr/lib/blitz-desktop",
@@ -204,7 +207,8 @@ pkg_deb(
     ],
     description = """Blitz desktop app
 A window onto the Blitz service: workspaces, chats with the agent,
-approvals, changes and workers. Includes the blitz command and blitzd,
+approvals, changes and workers. Includes the blitz command, blitz-tray (the service in the system
+tray) and blitzd,
 the service, which it installs and starts.""",
     homepage = "https://github.com/retail-cortex/blitz",
     maintainer = "Blitz <https://github.com/retail-cortex/blitz/issues>",

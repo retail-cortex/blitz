@@ -46,6 +46,7 @@ require (
 require (
 	cloud.google.com/go v0.123.0 // indirect
 	cloud.google.com/go/compute/metadata v0.9.0 // indirect
+	fyne.io/systray v1.12.2
 	git.sr.ht/~jackmordaunt/go-toast/v2 v2.0.3 // indirect
 	github.com/GoogleCloudPlatform/proto-gen-md-diagrams v0.0.0-20260825161644-7d6555ce1966 // indirect
 	github.com/alecthomas/chroma/v2 v2.20.0 // indirect

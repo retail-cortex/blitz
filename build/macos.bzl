@@ -70,7 +70,7 @@ def _signed_app_impl(ctx):
         outputs = [out],
         # The bundle's executable takes the bundle's identifier (Info.plist);
         # the programs beside it are signed first, with their own.
-        command = 'cp -RL "$1/" "$2" && chmod -R u+w "$2" && codesign --force --sign - --identifier dev.blitz.cli "$2/Contents/MacOS/blitz" && codesign --force --sign - --identifier dev.blitz.service "$2/Contents/MacOS/blitzd" && codesign --force --sign - "$2"',
+        command = 'cp -RL "$1/" "$2" && chmod -R u+w "$2" && codesign --force --sign - --identifier dev.blitz.cli "$2/Contents/MacOS/blitz" && codesign --force --sign - --identifier dev.blitz.service "$2/Contents/MacOS/blitzd" && codesign --force --sign - --identifier dev.blitz.tray "$2/Contents/MacOS/blitz-tray" && codesign --force --sign - "$2"',
         arguments = [ctx.file.app.path, out.path],
         mnemonic = "SignApp",
         progress_message = "Signing %{label}",

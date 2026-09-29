@@ -95,6 +95,7 @@ bazel test //...                          # every test: Go, the desktop page, th
 
 bazel run //:blitz -- doctor              # the CLI (arguments after --); built at bazel-bin/apps/cli/blitz
 bazel run //:blitzd                       # the service, in the foreground
+bazel run //:tray                         # the service in the system tray (Linux, macOS)
 bazel run //:desktop                      # the desktop app, with its own blitzd
 bazel run //:desktop-web                  # the desktop page in a browser, http://localhost:5173/?fake
 bazel run //:docs                         # the docs site, http://localhost:1313

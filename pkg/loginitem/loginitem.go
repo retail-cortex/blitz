@@ -146,6 +146,151 @@ func Stop() error {
 	return ErrUnsupported
 }
 
+// ErrNotInstalled: starting or restarting needs the login item.
+var ErrNotInstalled = errors.New("the Blitz service isn't installed to start at login")
+
+// Start starts the service the login item runs (after Stop, say).
+func Start() error {
+	if !Installed() {
+		return ErrNotInstalled
+	}
+	switch goruntime.GOOS {
+	case "darwin":
+		path, _ := Path()
+		_ = RunSystem("launchctl", "bootstrap", domain(), path) // loaded already is fine
+		return RunSystem("launchctl", "kickstart", domain()+"/"+Label)
+	case "linux":
+		return RunSystem("systemctl", "--user", "start", Unit)
+	}
+	return ErrUnsupported
+}
+
+// Restart stops the service the login item runs, if it runs, and starts
+// it again.
+func Restart() error {
+	if !Installed() {
+		return ErrNotInstalled
+	}
+	switch goruntime.GOOS {
+	case "darwin":
+		path, _ := Path()
+		_ = RunSystem("launchctl", "bootstrap", domain(), path)
+		return RunSystem("launchctl", "kickstart", "-k", domain()+"/"+Label)
+	case "linux":
+		return RunSystem("systemctl", "--user", "restart", Unit)
+	}
+	return ErrUnsupported
+}
+
+// TrayLabel is the tray's launchd agent (macOS); on Linux the tray starts
+// from an XDG autostart entry, as graphical programs do.
+const TrayLabel = "dev.blitz.tray"
+
+// TrayPath is where the tray's start-at-login entry is written.
+func TrayPath() (string, error) {
+	switch goruntime.GOOS {
+	case "darwin":
+		return config.ExpandHome("~/Library/LaunchAgents/" + TrayLabel + ".plist"), nil
+	case "linux":
+		return filepath.Join(xdgConfigHome(), "autostart", "blitz-tray.desktop"), nil
+	}
+	return "", ErrUnsupported
+}
+
+func xdgConfigHome() string {
+	if d := os.Getenv("XDG_CONFIG_HOME"); filepath.IsAbs(d) {
+		return d
+	}
+	return config.ExpandHome("~/.config")
+}
+
+// TrayInstalled reports whether the tray starts at login.
+func TrayInstalled() bool {
+	p, err := TrayPath()
+	if err != nil {
+		return false
+	}
+	_, err = os.Stat(p)
+	return err == nil
+}
+
+// InstallTray makes bin (blitz-tray, an absolute path) start at login. On
+// macOS launchd starts it now too; on Linux the caller starts it.
+func InstallTray(bin string) error {
+	path, err := TrayPath()
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	switch goruntime.GOOS {
+	case "darwin":
+		if err := os.WriteFile(path, []byte(trayPlist(bin)), 0o644); err != nil {
+			return err
+		}
+		_ = RunSystem("launchctl", "bootout", domain()+"/"+TrayLabel)
+		return RunSystem("launchctl", "bootstrap", domain(), path)
+	default: // linux
+		return os.WriteFile(path, []byte(trayDesktopEntry(bin)), 0o644)
+	}
+}
+
+// UninstallTray stops the tray starting at login (and on macOS, stops it).
+func UninstallTray() error {
+	path, err := TrayPath()
+	if err != nil {
+		return err
+	}
+	if goruntime.GOOS == "darwin" {
+		_ = RunSystem("launchctl", "bootout", domain()+"/"+TrayLabel)
+	}
+	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	return nil
+}
+
+// trayPlist runs the tray at login, in the graphical session.
+func trayPlist(bin string) string {
+	return `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>` + TrayLabel + `</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>` + html.EscapeString(bin) + `</string>
+	</array>
+	<key>RunAtLoad</key>
+	<true/>
+	<key>LimitLoadToSessionType</key>
+	<string>Aqua</string>
+	<key>ProcessType</key>
+	<string>Interactive</string>
+</dict>
+</plist>
+`
+}
+
+// trayDesktopEntry is the XDG autostart entry that runs bin at login.
+func trayDesktopEntry(bin string) string {
+	// Exec quoting: the argument in double quotes, with ", `, $ and \
+	// escaped by a backslash.
+	q := strings.NewReplacer(`\`, `\\`, `"`, `\"`, "`", "\\`", `$`, `\$`).Replace(bin)
+	return `[Desktop Entry]
+Type=Application
+Name=Blitz tray
+Comment=The Blitz service's state, with Start, Stop and Restart
+Exec="` + q + `"
+Icon=blitz-desktop
+Terminal=false
+NoDisplay=true
+X-GNOME-Autostart-enabled=true
+`
+}
+
 // launchdPlist is the launchd agent that runs bin (blitzd) and restarts it
 // if it exits with an error.
 func launchdPlist(bin, logFile string) string {

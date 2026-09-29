@@ -1,0 +1,80 @@
+# Copyright 2026 Retail Cortex
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@rules_go//go:def.bzl", "go_binary", "go_library")
+load("//build:macos.bzl", "macho_uuid_linkopts", "signed_binary")
+
+# The tray: Linux (StatusNotifierItem over D-Bus, pure Go) and macOS (cgo,
+# Cocoa). Windows would work with the library but isn't packaged.
+_TRAY_OS = select({
+    "@platforms//os:linux": [],
+    "@platforms//os:macos": [],
+    "//conditions:default": ["@platforms//:incompatible"],
+})
+
+go_library(
+    name = "tray_lib",
+    srcs = ["main.go"],
+    embedsrcs = [
+        "icons/running-44.png",
+        "icons/stopped-44.png",
+    ],
+    importpath = "github.com/retail-cortex/blitz/apps/tray",
+    target_compatible_with = _TRAY_OS,
+    visibility = ["//visibility:private"],
+    deps = [
+        "//apps/tray/internal/tray",
+        "//pkg/config",
+        "//pkg/loginitem",
+        "//pkg/socket",
+        "@io_fyne_systray//:systray",
+    ],
+)
+
+go_binary(
+    name = "blitz-tray_unsigned",
+    embed = [":tray_lib"],
+    gc_linkopts = macho_uuid_linkopts("dev.blitz.tray"),
+    target_compatible_with = _TRAY_OS,
+    visibility = ["//visibility:public"],
+    x_defs = {"main.version": "{STABLE_BLITZ_VERSION}"},
+)
+
+# Signed as dev.blitz.tray on macOS, as blitzd is (//build:macos.bzl).
+signed_binary(
+    name = "blitz-tray",
+    binary = ":blitz-tray_unsigned",
+    identifier = "dev.blitz.tray",
+    target_compatible_with = _TRAY_OS,
+    visibility = ["//visibility:public"],
+)
+
+# The tray for each Mac (cgo: Cocoa), for the universal Blitz.app.
+[
+    go_binary(
+        name = "blitz-tray_darwin_" + arch,
+        embed = [":tray_lib"],
+        gc_linkopts = macho_uuid_linkopts("dev.blitz.tray/darwin/" + arch),
+        goarch = arch,
+        goos = "darwin",
+        pure = "off",
+        target_compatible_with = ["@platforms//os:macos"],
+        visibility = ["//apps/desktop/packaging:__pkg__"],
+        x_defs = {"main.version": "{STABLE_BLITZ_VERSION}"},
+    )
+    for arch in [
+        "amd64",
+        "arm64",
+    ]
+]

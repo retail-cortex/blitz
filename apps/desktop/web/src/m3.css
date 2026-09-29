@@ -273,6 +273,7 @@ textarea.input { resize: vertical; min-height: 80px; }
 .switch input { display: block; appearance: none; margin: 0; width: 52px; height: 32px; border-radius: 16px; cursor: pointer;
   background: var(--md-surface-container-highest); border: 2px solid var(--md-outline); transition: background 0.15s; }
 .switch input:checked { background: var(--md-primary); border-color: var(--md-primary); }
+.switch input:disabled { opacity: 0.38; cursor: default; }
 .switch span { position: absolute; top: 8px; left: 8px; width: 16px; height: 16px; border-radius: 50%;
   background: var(--md-outline); pointer-events: none; transition: all 0.15s; }
 .switch input:checked + span { left: 24px; top: 4px; width: 24px; height: 24px; background: var(--md-on-primary); }

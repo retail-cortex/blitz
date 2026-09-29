@@ -41,7 +41,7 @@ means. Written 2026-09-28, reordered 2026-09-29; the backlog spec
 
 ## P2: features and the rest
 
-6. **The Blitz service in the system tray, on every OS (M–L).** An icon
+6. ✅ *Built and checked on Linux (it registers with GNOME's tray host; the menu is right for a running service); the macOS build, and the actions end to end, are for the manual test. Windows isn't packaged.* **The Blitz service in the system tray, on every OS (M–L).** An icon
     with the service's state and, on right click, **Start**, **Stop**,
     **Restart**, **Open Blitz** and **Logs** (Settings › Logs, done). Wails v2 has no
     tray API: it needs a small separate tray process (e.g. `fyne.io/systray`,

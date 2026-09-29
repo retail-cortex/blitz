@@ -15,6 +15,7 @@ A monorepo of independent apps over shared packages, one Go module. The rule: **
 | `apps/cli/internal/tui` | The REPL: commands, rendering, input, steering keys. Drives an `api.Backend` |
 | `apps/service` | `blitzd`, the per-user service: `internal/daemon` runs it, `internal/server` has the Connect handlers over `engine.Workspace` (translation only) and the approval/question broker. `servicetest` runs it inside other packages' tests |
 | `apps/desktop` | The desktop app (Wails v2, cgo), forwarding the page's API calls to the service socket; `web/` is its page (React + TypeScript, pnpm, the generated Connect client in `src/gen`), `packaging/` its icon, `Info.plist` and release script |
+| `apps/tray` | `blitz-tray`, the service in the system tray (fyne.io/systray: D-Bus StatusNotifierItem on Linux, Cocoa on macOS): `internal/tray` has its behaviour (the menu for a status, the actions), `main.go` draws it; shipped beside the app in the `.deb` and `Blitz.app` |
 | `pkg/api` | The contract between front ends and the engine: `Backend`, and the values, events and errors that cross it. Depends only on `config` and `images` |
 | `pkg/client` | `Backend` over the service's API |
 | `pkg/loginitem` | Starting the service at login and controlling it (launchd, systemd), for the CLI and the desktop app |

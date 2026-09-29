@@ -100,3 +100,72 @@ func TestFindService(t *testing.T) {
 	_, err = FindService()
 	assert.Error(t, err, "found a blitzd that isn't there")
 }
+
+// Start and Restart need the login item, and ask the system to start or
+// restart it.
+func TestStartRestart(t *testing.T) {
+	if goruntime.GOOS != "darwin" && goruntime.GOOS != "linux" {
+		t.Skip("login items are only supported on macOS and Linux")
+	}
+	t.Setenv("HOME", t.TempDir())
+	ran := record(t)
+	assert.ErrorIs(t, Start(), ErrNotInstalled)
+	assert.ErrorIs(t, Restart(), ErrNotInstalled)
+	assert.Empty(t, *ran, "ran without a login item")
+	require.NoError(t, Install("/opt/blitz/blitzd"))
+	for _, tc := range []struct {
+		name  string
+		f     func() error
+		linux string
+		mac   string
+	}{
+		{"start", Start, "systemctl --user start blitz.service", "launchctl kickstart gui/"},
+		{"restart", Restart, "systemctl --user restart blitz.service", "launchctl kickstart -k gui/"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			*ran = nil
+			require.NoError(t, tc.f())
+			last := (*ran)[len(*ran)-1]
+			if goruntime.GOOS == "linux" {
+				assert.Equal(t, tc.linux, last)
+			} else {
+				assert.True(t, strings.HasPrefix(last, tc.mac), "ran %q", *ran)
+			}
+		})
+	}
+}
+
+// The tray starts at login from its own entry, which runs the program
+// given, quoted as the format needs.
+func TestInstallTray(t *testing.T) {
+	if goruntime.GOOS != "darwin" && goruntime.GOOS != "linux" {
+		t.Skip("login items are only supported on macOS and Linux")
+	}
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("XDG_CONFIG_HOME", "")
+	record(t)
+	bin := `/opt/blitz "x" & $co/blitz-tray`
+	require.False(t, TrayInstalled())
+	require.NoError(t, InstallTray(bin))
+	require.True(t, TrayInstalled())
+	path, _ := TrayPath()
+	data, err := os.ReadFile(path)
+	require.NoError(t, err)
+	switch goruntime.GOOS {
+	case "linux":
+		assert.Equal(t, filepath.Join(os.Getenv("HOME"), ".config", "autostart", "blitz-tray.desktop"), path)
+		assert.Contains(t, string(data), `Exec="/opt/blitz \"x\" & \$co/blitz-tray"`)
+		assert.Contains(t, string(data), "[Desktop Entry]\nType=Application\n")
+	case "darwin":
+		assert.Contains(t, string(data), "<string>/opt/blitz &#34;x&#34; &amp; $co/blitz-tray</string>")
+	}
+	require.NoError(t, UninstallTray())
+	assert.False(t, TrayInstalled())
+	require.NoError(t, UninstallTray(), "uninstalling twice")
+
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(os.Getenv("HOME"), "cfg"))
+	if goruntime.GOOS == "linux" {
+		p, _ := TrayPath()
+		assert.Equal(t, filepath.Join(os.Getenv("HOME"), "cfg", "autostart", "blitz-tray.desktop"), p)
+	}
+}

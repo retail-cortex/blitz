@@ -20,7 +20,9 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -98,13 +100,62 @@ type ServiceStatus struct {
 	// Service is the blitzd this app installs and restarts ("" if none
 	// was found).
 	Service string `json:"service"`
+	// Tray is the blitz-tray beside this app ("" if none was found), and
+	// TrayInstalled whether it starts at login.
+	Tray          string `json:"tray"`
+	TrayInstalled bool   `json:"tray_installed"`
 }
 
 // ServiceStatus reports whether the service answers on its socket, whether
 // its login item is installed, and which blitzd this app would install.
 func (a *App) ServiceStatus() ServiceStatus {
 	bin, _ := findService()
-	return ServiceStatus{Running: socket.Running(a.socket), Installed: loginitem.Installed(), Socket: a.socket, Service: bin}
+	tray, _ := findTray()
+	return ServiceStatus{Running: socket.Running(a.socket), Installed: loginitem.Installed(), Socket: a.socket, Service: bin, Tray: tray, TrayInstalled: loginitem.TrayInstalled()}
+}
+
+// SetTray shows the service in the system tray, at every login and now
+// (blitz-tray --install), or stops it starting at login (--uninstall).
+func (a *App) SetTray(on bool) error {
+	tray, err := findTray()
+	if err != nil {
+		return err
+	}
+	flag := "--uninstall"
+	if on {
+		flag = "--install"
+	}
+	if out, err := exec.Command(tray, flag).CombinedOutput(); err != nil {
+		return fmt.Errorf("%s %s: %w: %s", tray, flag, err, strings.TrimSpace(string(out)))
+	}
+	return nil
+}
+
+// trayDirs are where findTray looks before PATH: beside the app, and in
+// its Bazel runfiles. Tests replace it.
+var trayDirs = func() []string {
+	var dirs []string
+	if d := loginitem.Beside(); d != "" {
+		dirs = append(dirs, d)
+	}
+	for _, root := range runfilesRoots() {
+		dirs = append(dirs, filepath.Join(root, "_main", "apps", "tray"))
+	}
+	return dirs
+}
+
+// findTray finds blitz-tray where findService finds blitzd.
+func findTray() (string, error) {
+	for _, d := range trayDirs() {
+		p := filepath.Join(d, "blitz-tray")
+		if info, err := os.Stat(p); err == nil && !info.IsDir() {
+			return filepath.EvalSymlinks(p)
+		}
+	}
+	if p, err := exec.LookPath("blitz-tray"); err == nil {
+		return filepath.EvalSymlinks(p)
+	}
+	return "", errors.New("blitz-tray isn't installed beside the app or on PATH")
 }
 
 // InstallService starts the service now and at every login, with the

@@ -179,6 +179,7 @@ jobs:
           if grep 'not found' ldd.txt; then exit 1; fi
           /usr/lib/blitz-desktop/blitz --version
           /usr/lib/blitz-desktop/blitzd --version
+          /usr/lib/blitz-desktop/blitz-tray --version
           test "$(readlink -f /usr/bin/blitz-desktop)" = /usr/lib/blitz-desktop/blitz-desktop
       - name: Sign and attach
         env:

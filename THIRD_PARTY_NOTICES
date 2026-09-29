@@ -17,6 +17,7 @@ Go modules linked into blitz, blitzd and the desktop app
   cloud.google.com/go/auth/oauth2adapt v0.2.8                    Apache-2.0
   cloud.google.com/go/compute/metadata v0.9.0                    Apache-2.0
   connectrpc.com/connect v1.21.0                                 Apache-2.0
+  fyne.io/systray v1.12.2                                        Apache-2.0
   git.sr.ht/~jackmordaunt/go-toast/v2 v2.0.3                     MIT
   github.com/BurntSushi/toml v1.6.0                              MIT
   github.com/alecthomas/chroma/v2 v2.20.0                        MIT
@@ -187,6 +188,11 @@ Licensed under the Apache License 2.0 (printed at the end).
 
 connectrpc.com/connect v1.21.0
 ------------------------------
+
+Licensed under the Apache License 2.0 (printed at the end).
+
+fyne.io/systray v1.12.2
+-----------------------
 
 Licensed under the Apache License 2.0 (printed at the end).
 
