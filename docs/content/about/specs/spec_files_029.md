@@ -73,7 +73,7 @@ Every request names its workspace (SVC-10) and a path relative to it.
 - **FIL-50** Diff (`@codemirror/merge`): unsaved against disk; the file against `HEAD`; the agent's changes this session (its checkpoints). Side by side or inline. The Changes view uses the same view.
 - **FIL-51** Revert one hunk of the agent's changes (a write of the file without that hunk, recorded as your edit, FIL-20).
 - **FIL-52** Find in files (⌘⇧F): the agent's grep over the workspace, results by file with the line, opening at the match.
-- **FIL-53** **Add to chat**: a file (from the tree, or dragged onto the composer) or the selected lines, as a reference the prompt expands (`@path:10-24`); **Ask about this file**, **Explain the selection**. Blocked files can't be added.
+- **FIL-53** ✅ *Files and folders done 2026-09-29.* **Add to context**: the file bar's **@** (Add to context) and **Start a conversation about this file** buttons, and the tree's right-click **Add file/folder to context** and **Start a conversation about this file/folder**, put `@path` (a folder as `path/`) at the end of the workspace's composer (once; `addToContext`, `appendMention`), or in a new session's; an image is also attached. The service expands them (WS-21a). Blocked files and folders don't offer them. *Still to do:* dragging onto the composer, and the selected lines (`@path:10-24`, **Explain the selection**).
 - **FIL-54** Tree badges for files the agent read or changed in the session; image previews; Markdown preview beside its source; **Reveal in Finder** (a desktop binding).
 
 ## 8. Phase 3 (outline)

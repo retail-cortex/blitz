@@ -20,7 +20,7 @@ means. Written 2026-09-28, reordered 2026-09-29; the backlog spec
    takes `@image` mentions). Done: `@` completes, and the model answers
    from the file without reading it first.
 
-3. **Add to context from the Files view (S).** The file bar: **Add to
+3. ✅ *Done (FIL-53).* **Add to context from the Files view (S).** The file bar: **Add to
    context** and **New conversation about this file** (icon buttons). The
    tree's right-click menu: **Add file to context**, **Add folder to
    context**, **Start a conversation about this file**. Adding puts a chip

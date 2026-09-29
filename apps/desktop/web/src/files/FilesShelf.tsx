@@ -32,7 +32,10 @@ import {
   mdiLockOutline,
   mdiRefresh,
   mdiRenameOutline,
+  mdiAt,
+  mdiMessagePlusOutline,
 } from "@mdi/js";
+import { addToContext } from "../events";
 import { files } from "../api";
 import { message } from "../errors";
 import { FileKind, type FileEntry } from "../gen/blitz/v1/file_pb";
@@ -197,6 +200,14 @@ export function FilesShelf({
       { label: t("desktop.files.new_file"), icon: mdiFilePlusOutline, onSelect: () => void startNew("file", folder) },
       { label: t("desktop.files.new_folder"), icon: mdiFolderPlusOutline, onSelect: () => void startNew("folder", folder) },
     );
+    if (e && e.agentRule !== "blocked") {
+      const path = isFolder(e) ? `${e.path}/` : e.path;
+      items.push(
+        "divider",
+        { label: t(isFolder(e) ? "desktop.files.add_folder_to_context" : "desktop.files.add_file_to_context"), icon: mdiAt, onSelect: () => addToContext({ dir, path }) },
+        { label: t(isFolder(e) ? "desktop.files.new_chat_about_folder" : "desktop.files.new_chat_about"), icon: mdiMessagePlusOutline, onSelect: () => addToContext({ dir, path, fresh: true }) },
+      );
+    }
     if (e) {
       items.push(
         "divider",

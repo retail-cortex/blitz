@@ -15,7 +15,8 @@
  */
 
 import { useEffect, useRef, useState } from "react";
-import { mdiAlertCircleOutline, mdiChevronRight, mdiClose, mdiContentSave, mdiLockOutline, mdiWrap } from "@mdi/js";
+import { mdiAlertCircleOutline, mdiAt, mdiChevronRight, mdiClose, mdiContentSave, mdiLockOutline, mdiMessagePlusOutline, mdiWrap } from "@mdi/js";
+import { addToContext } from "../events";
 import { EditorView } from "@codemirror/view";
 import { t, tn } from "../i18n";
 import { Button, Dialog, Icon, IconButton } from "../ui/controls";
@@ -124,6 +125,12 @@ export function EditorPane({ model, onReveal }: { model: EditorModel; onReveal: 
             <span className="chip static small" title={t(`desktop.files.rule.${tab.agentRule}.detail`)}>
               <Icon path={mdiLockOutline} size="sm" /> {t(`desktop.files.rule.${tab.agentRule}`)}
             </span>
+          )}
+          {tab.agentRule !== "blocked" && (
+            <>
+              <IconButton icon={mdiAt} label={t("desktop.files.add_to_context")} small onClick={() => addToContext({ dir: model.dir, path: tab.path })} />
+              <IconButton icon={mdiMessagePlusOutline} label={t("desktop.files.new_chat_about")} small onClick={() => addToContext({ dir: model.dir, path: tab.path, fresh: true })} />
+            </>
           )}
           <Button small variant={tab.dirty ? "tonal" : "text"} icon={mdiContentSave} disabled={!ready || !tab.dirty} onClick={() => model.save(tab.path)}>
             {t("desktop.files.save")}
