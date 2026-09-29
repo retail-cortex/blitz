@@ -39,14 +39,7 @@ Everything through 2026-09-29 is pushed to `main`, most of it with
 
 ## P2: features and the rest
 
-4. **The attached CLI's background processes and `!cmd` audit (M).**
-   Backlog BL-SVC-01, BL-SVC-02. Attached to the service, the CLI can't
-   list or stop background processes (`Processes()` is nil) and doesn't
-   audit `!cmd` (`AuditShell` does nothing). Add `ListProcesses`,
-   `GetProcessOutput`, `KillProcess` and `AuditShell` to
-   `WorkspaceService`, scoped to the session.
-
-5. **Faster Linux sandbox masking (M).** Backlog BL-SH-01. bubblewrap's
+4. **Faster Linux sandbox masking (M).** Backlog BL-SH-01. bubblewrap's
    masking walks the writable roots before every command (about 100 ms
    on a 10,000-file workspace, 3 s under `-race`), so CI runs parallel
    tests without the sandbox. Cache the mask per root (by mtime, or
@@ -55,7 +48,7 @@ Everything through 2026-09-29 is pushed to `main`, most of it with
 
 ## P3: large, needing a design first
 
-6. **Project configuration with a trust boundary (L).** Teams can't
+5. **Project configuration with a trust boundary (L).** Teams can't
    commit MCP servers, commands, permission presets or hooks to a
    repository. Add `.blitz/settings.toml` (and `.local.toml`) per the
    decisions in `spec_parity_027` §12 and §2.4: settings that only
@@ -65,7 +58,7 @@ Everything through 2026-09-29 is pushed to `main`, most of it with
    when it changes. Builds on the per-workspace settings and permission
    scopes that exist now.
 
-7. **Background sub-agents (L).** `invoke_agent` blocks the turn. Add
+6. **Background sub-agents (L).** `invoke_agent` blocks the turn. Add
    `background: true` returning a task ID (`spec_parity_027` §8.1),
    `list_tasks`, `task_output` and `stop_task`, and deliver completions
    as steer messages at the next tool cycle or prompt.
@@ -99,6 +92,9 @@ TestWithoutPlanModeToolsRunNormally; `pkg/engine/tools` TestToolsSuite.
 Anything else failing is new. Check test logs for `goleak:` too.
 
 ## Done 2026-09-29
+- The attached CLI's background processes and `!cmd` audit (BL-SVC-01–03):
+  `ListProcesses`, `GetProcessOutput`, `KillProcess`, `AuditShell`,
+  scoped to the sessions the client ran turns in.
 - Fallback-model notices show in the conversation (turn `notice` events),
   not only in the service's log.
 - The tray's menu in the desktop app's language (`tray.*` keys).
