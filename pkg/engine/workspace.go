@@ -22,6 +22,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -206,6 +207,13 @@ func Open(ctx context.Context, cfg *config.Config, o Options) (*Workspace, error
 		return nil, fmt.Errorf("failed to initialize session storage: %w", err)
 	}
 	w.storage.SetWorkspace(w.tools.Workspace().Dir())
+	removeEmptyChats.Do(func() {
+		if n, err := w.storage.RemoveEmpty(); err != nil {
+			slog.Warn("empty chats not removed", "error", err)
+		} else if n > 0 {
+			slog.Info("empty chats removed", "count", n)
+		}
+	})
 	events, err := session.NewPersistentService(config.ExpandHome(cfg.Session.StorageDir))
 	if err != nil {
 		w.Close()
@@ -252,6 +260,10 @@ func Open(ctx context.Context, cfg *config.Config, o Options) (*Workspace, error
 	opened = true
 	return w, nil
 }
+
+// removeEmptyChats clears the empty chats earlier versions saved, once per
+// process (the first workspace opened).
+var removeEmptyChats sync.Once
 
 // Config returns the workspace's configuration.
 func (w *Workspace) Config() *config.Config { return w.cfg }

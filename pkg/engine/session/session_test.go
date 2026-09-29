@@ -16,6 +16,7 @@ package session
 
 import (
 	"encoding/json"
+	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -423,4 +424,64 @@ func TestNewSessionsAreSavedWithTheirFirstMessage(t *testing.T) {
 	require.NoError(t, s.Rename("plans"))
 	list, _ = s.List()
 	assert.Len(t, list, 1, "a renamed chat with no messages is still empty: not listed")
+}
+
+func TestRemoveEmpty(t *testing.T) {
+	meta := func(id, title string, count int) string {
+		return fmt.Sprintf(`{"id":%q,"title":%q,"agent":"blitz","created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z","message_count":%d}`, id, title, count)
+	}
+	tests := []struct {
+		name     string
+		title    string
+		count    int
+		messages string // the transcript's content ("": none)
+		events   string // the history's content ("": none)
+		removed  bool
+	}{
+		{name: "empty", removed: true},
+		{name: "named", title: "plans"},
+		{name: "with messages", count: 1, messages: "{\"role\":\"user\",\"content\":\"hi\"}\n"},
+		{name: "transcript but no count", messages: "{\"role\":\"user\",\"content\":\"hi\"}\n"},
+		{name: "history only", events: "{}\n"},
+	}
+	for i, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			s, err := NewStorage(dir)
+			require.NoError(t, err)
+			id := fmt.Sprintf("session-20260101-000000-0000000%d", i)
+			require.NoError(t, os.WriteFile(filepath.Join(dir, id+".meta.json"), []byte(meta(id, tt.title, tt.count)), 0o600))
+			if tt.messages != "" {
+				require.NoError(t, os.WriteFile(filepath.Join(dir, id+".jsonl"), []byte(tt.messages), 0o600))
+			}
+			if tt.events != "" {
+				require.NoError(t, os.WriteFile(filepath.Join(dir, id+".events.jsonl"), []byte(tt.events), 0o600))
+			}
+
+			n, err := s.RemoveEmpty()
+			require.NoError(t, err)
+			_, statErr := os.Stat(filepath.Join(dir, id+".meta.json"))
+			if tt.removed {
+				assert.Equal(t, 1, n)
+				assert.True(t, os.IsNotExist(statErr), "the empty chat is still there")
+			} else {
+				assert.Zero(t, n)
+				assert.NoError(t, statErr, "a chat with something in it was removed")
+			}
+		})
+	}
+}
+
+func TestRemoveEmptyKeepsTheActiveSession(t *testing.T) {
+	dir := t.TempDir()
+	s, err := NewStorage(dir)
+	require.NoError(t, err)
+	rec, err := s.CreateSession("", "", "blitz")
+	require.NoError(t, err)
+	require.NoError(t, s.SetUsage(rec.ID, api.Usage{Input: 1})) // saves its metadata, still empty
+	n, err := s.RemoveEmpty()
+	require.NoError(t, err)
+	assert.Zero(t, n)
+	_, err = os.Stat(filepath.Join(dir, rec.ID+".meta.json"))
+	assert.NoError(t, err)
 }

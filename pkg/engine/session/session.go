@@ -563,6 +563,48 @@ func (s *Storage) List() ([]*SessionRecord, error) {
 	return sessions, nil
 }
 
+// RemoveEmpty deletes the empty chats earlier versions saved when a chat
+// was opened rather than with its first message: metadata with no title,
+// no messages, no transcript and no history. The active session and
+// named chats are kept. It returns how many it removed.
+func (s *Storage) RemoveEmpty() (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	entries, err := os.ReadDir(s.dir)
+	if err != nil {
+		return 0, err
+	}
+	n := 0
+	for _, entry := range entries {
+		name := entry.Name()
+		if entry.IsDir() || !strings.HasSuffix(name, metaSuffix) {
+			continue
+		}
+		rec, err := s.readMeta(strings.TrimSuffix(name, metaSuffix))
+		if err != nil || rec.MessageCount != 0 || rec.Title != "" || s.hasEvents(rec.ID) || s.hasMessages(rec.ID) {
+			continue
+		}
+		if s.active != nil && s.active.ID == rec.ID {
+			continue
+		}
+		if err := os.Remove(s.path(rec.ID, metaSuffix)); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return n, err
+		}
+		for _, suffix := range []string{messagesSuffix, eventsSuffix} { // empty, if there
+			_ = os.Remove(s.path(rec.ID, suffix))
+		}
+		n++
+	}
+	return n, nil
+}
+
+// hasMessages reports whether session id has a transcript with anything
+// in it.
+func (s *Storage) hasMessages(id string) bool {
+	info, err := os.Stat(s.path(id, messagesSuffix))
+	return err == nil && info.Size() > 0
+}
+
 // hasEvents reports whether session id has a conversation history file.
 func (s *Storage) hasEvents(id string) bool {
 	info, err := os.Stat(s.path(id, eventsSuffix))
