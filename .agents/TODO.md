@@ -46,7 +46,7 @@ means. Written 2026-09-28; the backlog spec
 
 ## P1: small, high-value improvements
 
-5. **Copy an agent's response, as text or Markdown (S).** A copy button
+5. ✅ *Done; to confirm in the app.* **Copy an agent's response, as text or Markdown (S).** A copy button
    on each answer in the conversation (`Conversation.tsx`, `EntryView`):
    **Copy** (the rendered text) and **Copy as Markdown** (the source), as
    other AI tools do; also for a whole turn. Done: both copy exactly what

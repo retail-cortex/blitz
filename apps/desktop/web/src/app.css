@@ -116,7 +116,9 @@
 .bubble-text { white-space: pre-wrap; overflow-wrap: anywhere; }
 .turn-user.steer .bubble { background: transparent; border: 1px dashed var(--md-outline); }
 .bubble-actions { display: flex; gap: 0; opacity: 0; transition: opacity 0.1s; }
-.turn-user:hover .bubble-actions, .bubble-actions:focus-within { opacity: 1; }
+.turn-user:hover .bubble-actions, .turn-model:hover .bubble-actions, .bubble-actions:focus-within { opacity: 1; }
+.answer-actions { margin-left: -6px; }
+.copying .code-head { display: none; }
 .turn-model { display: flex; flex-direction: column; gap: 4px; }
 .author { display: inline-flex; align-items: center; gap: 4px; font: 500 12px/16px var(--md-font); color: var(--md-tertiary); }
 .notice { font: 400 13px/18px var(--md-font); color: var(--md-on-surface-variant); }

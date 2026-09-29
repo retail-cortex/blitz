@@ -29,6 +29,8 @@ import {
   mdiClose,
   mdiConsole,
   mdiContentCopy,
+  mdiLanguageMarkdownOutline,
+  mdiTextBoxMultipleOutline,
   mdiDotsHorizontal,
   mdiFileDocumentOutline,
   mdiFileEditOutline,
@@ -65,7 +67,8 @@ import { notify, shouldNotify, type NotifyKind } from "./notify";
 import { efforts, effortIcon, modeOf, modes } from "./options";
 import { useApp } from "./state";
 import { useOpenPath } from "./files/links";
-import { applyEvent, assignPromptIndices, failed, fromMessages, parseDiff, summarizeArgs, tasksOf, type Entry, type UserEntry } from "./turns";
+import { applyEvent, assignPromptIndices, failed, fromMessages, parseDiff, summarizeArgs, tasksOf, turnAnswers, type Entry, type UserEntry } from "./turns";
+import { copyRendered, copyText } from "./clipboard";
 import { Button, Chip, Dialog, Icon, IconButton, Menu, useSnackbar } from "./ui/controls";
 
 type Pending = { kind: "approval"; req: ApprovalRequest } | { kind: "question"; q: Question };
@@ -613,6 +616,7 @@ export function Conversation({
   }, [dir]);
 
   const shown = prefs.show_thoughts ? entries : entries.filter((e) => e.kind !== "thought");
+  const answers = useMemo(() => turnAnswers(shown), [shown]);
   const empty = shown.length === 0 && !running;
   return (
     <div
@@ -654,7 +658,7 @@ export function Conversation({
             g.kind === "tools" ? (
               <ToolGroup key={g.at} tools={g.tools} />
             ) : (
-              <EntryView key={g.at} entry={g.entry} running={running} onRewind={rewind} onEdit={setDraft} />
+              <EntryView key={g.at} entry={g.entry} turn={answers.get(g.at)} running={running} onRewind={rewind} onEdit={setDraft} />
             ),
           )}
           {running && !pending && (
@@ -824,11 +828,14 @@ function EmptyState({ name, onPick }: { name: string; onPick: (t: string) => voi
 
 const EntryView = memo(function EntryView({
   entry,
+  turn,
   running,
   onRewind,
   onEdit,
 }: {
   entry: Entry;
+  /** The whole turn's answer, when it has more than one part. */
+  turn?: string;
   running: boolean;
   onRewind: (index: number, mode: string) => void;
   onEdit: (text: string) => void;
@@ -838,16 +845,7 @@ const EntryView = memo(function EntryView({
     case "user":
       return <UserBubble entry={entry} running={running} onRewind={onRewind} onEdit={onEdit} />;
     case "model":
-      return (
-        <div className="turn-model">
-          {entry.author && entry.author !== "blitz" && (
-            <span className="author">
-              <Icon path={mdiRobotOutline} size="sm" /> {entry.author}
-            </span>
-          )}
-          <Markdown text={entry.text} />
-        </div>
-      );
+      return <ModelAnswer entry={entry} turn={turn} />;
     case "thought":
       return <Thought text={entry.text} open={entry.open} />;
     case "tool":
@@ -862,6 +860,39 @@ const EntryView = memo(function EntryView({
       );
   }
 });
+
+/**
+ * Model text, with actions to copy it as shown or as its Markdown, and the
+ * whole turn's answer when it came in parts. They show once it's complete.
+ */
+function ModelAnswer({ entry, turn }: { entry: Extract<Entry, { kind: "model" }>; turn?: string }) {
+  const snack = useSnackbar();
+  const body = useRef<HTMLDivElement>(null);
+  const copy = (f: () => Promise<void>, done: string) =>
+    f().then(
+      () => snack(done),
+      (e) => snack(t("desktop.copy_failed", { error: message(e) }), { error: true }),
+    );
+  return (
+    <div className="turn-model">
+      {entry.author && entry.author !== "blitz" && (
+        <span className="author">
+          <Icon path={mdiRobotOutline} size="sm" /> {entry.author}
+        </span>
+      )}
+      <div ref={body}>
+        <Markdown text={entry.text} />
+      </div>
+      {!entry.open && entry.text.trim() && (
+        <div className="bubble-actions answer-actions">
+          <IconButton icon={mdiContentCopy} label={t("desktop.copy")} small onClick={() => body.current && copy(() => copyRendered(body.current!), t("desktop.copied"))} />
+          <IconButton icon={mdiLanguageMarkdownOutline} label={t("desktop.copy_markdown")} small onClick={() => copy(() => copyText(entry.text), t("desktop.copied_markdown"))} />
+          {turn && <IconButton icon={mdiTextBoxMultipleOutline} label={t("desktop.copy_turn")} small onClick={() => copy(() => copyText(turn), t("desktop.copied_turn"))} />}
+        </div>
+      )}
+    </div>
+  );
+}
 
 function UserBubble({ entry, running, onRewind, onEdit }: { entry: UserEntry; running: boolean; onRewind: (index: number, mode: string) => void; onEdit: (text: string) => void }) {
   const snack = useSnackbar();

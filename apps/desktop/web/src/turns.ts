@@ -42,6 +42,29 @@ export type Entry =
 
 const subKinds: Record<string, UserEntry["sub"]> = { steer: "steer", hook: "hook", plan: "plan" };
 
+/**
+ * For each answer in a turn with more than one, the turn's whole answer as
+ * Markdown: its model text, in order, keyed by the index of each part. A
+ * turn starts at a prompt; steering and hook messages are part of it.
+ */
+export function turnAnswers(entries: Entry[]): Map<number, string> {
+  const out = new Map<number, string>();
+  let parts: number[] = [];
+  const flush = () => {
+    if (parts.length > 1) {
+      const text = parts.map((i) => (entries[i] as { text: string }).text.trim()).join("\n\n");
+      for (const i of parts) out.set(i, text);
+    }
+    parts = [];
+  };
+  entries.forEach((e, i) => {
+    if (e.kind === "user" && (e.sub === undefined || e.sub === "aside")) flush();
+    else if (e.kind === "model" && e.text.trim()) parts.push(i);
+  });
+  flush();
+  return out;
+}
+
 /** The entries for a saved session's messages. */
 export function fromMessages(messages: Message[]): Entry[] {
   return messages.map((m, i): Entry => {

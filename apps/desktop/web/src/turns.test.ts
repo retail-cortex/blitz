@@ -18,7 +18,7 @@ import { create } from "@bufbuild/protobuf";
 import { describe, expect, it } from "vitest";
 import { TurnEventSchema, type TurnEvent } from "./gen/blitz/v1/turn_pb";
 import { MessageSchema } from "./gen/blitz/v1/session_pb";
-import { applyEvent, assignPromptIndices, failed, fromMessages, parseDiff, summarizeArgs, tasksOf, type Entry } from "./turns";
+import { applyEvent, assignPromptIndices, failed, fromMessages, parseDiff, summarizeArgs, tasksOf, turnAnswers, type Entry } from "./turns";
 
 const text = (t: string, opts: { partial?: boolean; repeat?: boolean; thought?: boolean } = {}): TurnEvent =>
   create(TurnEventSchema, { author: "blitz", kind: { case: "text", value: { text: t, ...opts } } });
@@ -119,5 +119,22 @@ describe("parseDiff", () => {
     expect(files[2].lines[0]).toEqual({ kind: "meta", text: "big.bin: too large to diff" });
     const deleted = parseDiff("--- a/gone.txt\n+++ /dev/null\n@@ -1 +0,0 @@\n-bye\n");
     expect(deleted[0].path).toBe("gone.txt");
+  });
+});
+
+describe("turnAnswers", () => {
+  const user = (text: string, sub?: "steer" | "aside"): Entry => ({ kind: "user", text, sub });
+  const model = (text: string): Entry => ({ kind: "model", text, author: "blitz", open: false });
+  const tool: Entry = { kind: "tool", id: "1", name: "read_file" };
+  it.each([
+    { name: "one answer per turn needs no whole-turn copy", entries: [user("a"), model("x"), user("b"), model("y")], want: {} },
+    {
+      name: "a turn's parts, around tools and steering, joined",
+      entries: [user("a"), model("first\n"), tool, user("more", "steer"), model("second"), model("  "), user("b"), model("z")],
+      want: { 1: "first\n\nsecond", 4: "first\n\nsecond" },
+    },
+    { name: "an aside starts its own turn", entries: [user("a"), model("x"), user("q", "aside"), model("y")], want: {} },
+  ])("$name", ({ entries, want }) => {
+    expect(Object.fromEntries(turnAnswers(entries))).toEqual(want);
   });
 });
