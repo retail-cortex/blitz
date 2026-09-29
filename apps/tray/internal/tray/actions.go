@@ -16,7 +16,6 @@ package tray
 
 import (
 	"errors"
-	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -26,6 +25,7 @@ import (
 	"time"
 
 	"github.com/retail-cortex/blitz/pkg/config"
+	"github.com/retail-cortex/blitz/pkg/i18n"
 	"github.com/retail-cortex/blitz/pkg/loginitem"
 )
 
@@ -63,7 +63,7 @@ func (a Actions) Start() error {
 		}
 	}
 	if !a.Wait(true, 15*time.Second) {
-		return errors.New("the service didn't start in 15 s: see Open the logs")
+		return errors.New(i18n.T("tray.error.not_started"))
 	}
 	return nil
 }
@@ -83,7 +83,7 @@ func (a Actions) Stop() error {
 		}
 	}
 	if !a.Wait(false, 15*time.Second) {
-		return errors.New("the service is still running after 15 s")
+		return errors.New(i18n.T("tray.error.still_running"))
 	}
 	return nil
 }
@@ -95,7 +95,7 @@ func (a Actions) Restart() error {
 			return err
 		}
 		if !a.Wait(true, 15*time.Second) {
-			return errors.New("the service didn't come back in 15 s: see Open the logs")
+			return errors.New(i18n.T("tray.error.not_back"))
 		}
 		return nil
 	}
@@ -122,7 +122,7 @@ func (a Actions) OpenApp() error {
 	if p, err := exec.LookPath(name); err == nil {
 		return a.Run(p)
 	}
-	return fmt.Errorf("%s isn't installed beside the tray or on PATH", name)
+	return errors.New(i18n.T("tray.error.no_app", "name", name))
 }
 
 // OpenLogs shows the logs folder in the file manager: the running

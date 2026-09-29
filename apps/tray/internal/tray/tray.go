@@ -19,10 +19,10 @@ package tray
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"connectrpc.com/connect"
+	"github.com/retail-cortex/blitz/pkg/i18n"
 	"github.com/retail-cortex/blitz/pkg/socket"
 	pb "github.com/retail-cortex/blitz/proto/blitz/v1"
 )
@@ -56,16 +56,16 @@ type Menu struct {
 // MenuFor is the menu for s: Start when the service is stopped, Stop and
 // Restart while it runs.
 func MenuFor(s Status) Menu {
-	m := Menu{Running: s.Running, Start: Item{Title: "Start the service"}, Stop: Item{Title: "Stop the service"}, Restart: Item{Title: "Restart the service"}}
+	m := Menu{Running: s.Running, Start: Item{Title: i18n.T("tray.start")}, Stop: Item{Title: i18n.T("tray.stop")}, Restart: Item{Title: i18n.T("tray.restart")}}
 	switch {
 	case s.Running && s.Version != "":
-		m.State = Item{Title: fmt.Sprintf("Blitz service: running (%s)", s.Version)}
+		m.State = Item{Title: i18n.T("tray.state.running_version", "version", s.Version)}
 	case s.Running:
-		m.State = Item{Title: "Blitz service: running"}
+		m.State = Item{Title: i18n.T("tray.state.running")}
 	case s.Installed:
-		m.State = Item{Title: "Blitz service: stopped"}
+		m.State = Item{Title: i18n.T("tray.state.stopped")}
 	default:
-		m.State = Item{Title: "Blitz service: not running"}
+		m.State = Item{Title: i18n.T("tray.state.not_running")}
 	}
 	m.Tooltip = m.State.Title
 	m.Start.Enabled = !s.Running

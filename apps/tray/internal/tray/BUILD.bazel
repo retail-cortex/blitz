@@ -18,6 +18,7 @@ go_library(
     name = "tray",
     srcs = [
         "actions.go",
+        "locale.go",
         "tray.go",
     ],
     importpath = "github.com/retail-cortex/blitz/apps/tray/internal/tray",
@@ -29,18 +30,24 @@ go_library(
     visibility = ["//apps/tray:__subpackages__"],
     deps = [
         "//pkg/config",
+        "//pkg/i18n",
         "//pkg/loginitem",
         "//pkg/socket",
         "//proto/blitz/v1:blitzv1_go_proto",
         "@com_connectrpc_connect//:connect",
+        "@org_golang_x_text//language",
     ],
 )
 
 go_test(
     name = "tray_test",
-    srcs = ["tray_test.go"],
+    srcs = [
+        "locale_test.go",
+        "tray_test.go",
+    ],
     embed = [":tray"],
     deps = [
+        "//pkg/i18n",
         "//pkg/loginitem",
         "//pkg/socket",
         "//proto/blitz/v1:blitzv1_go_proto",

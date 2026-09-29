@@ -38,6 +38,7 @@ import (
 	"fyne.io/systray"
 	"github.com/retail-cortex/blitz/apps/tray/internal/tray"
 	"github.com/retail-cortex/blitz/pkg/config"
+	"github.com/retail-cortex/blitz/pkg/i18n"
 	"github.com/retail-cortex/blitz/pkg/loginitem"
 	"github.com/retail-cortex/blitz/pkg/socket"
 )
@@ -144,18 +145,19 @@ func onReady() {
 		},
 	}
 
+	tray.SetupLocale()
 	systray.SetTitle("")
-	state := systray.AddMenuItem("Blitz service", "")
+	state := systray.AddMenuItem(i18n.T("tray.service"), "")
 	state.Disable()
 	systray.AddSeparator()
-	start := systray.AddMenuItem("Start the service", "")
-	stop := systray.AddMenuItem("Stop the service", "")
-	restart := systray.AddMenuItem("Restart the service", "")
+	start := systray.AddMenuItem(i18n.T("tray.start"), "")
+	stop := systray.AddMenuItem(i18n.T("tray.stop"), "")
+	restart := systray.AddMenuItem(i18n.T("tray.restart"), "")
 	systray.AddSeparator()
-	open := systray.AddMenuItem("Open Blitz", "")
-	logs := systray.AddMenuItem("Open the logs", "")
+	open := systray.AddMenuItem(i18n.T("tray.open_app"), "")
+	logs := systray.AddMenuItem(i18n.T("tray.open_logs"), "")
 	systray.AddSeparator()
-	quit := systray.AddMenuItem("Quit the tray", "The service keeps running")
+	quit := systray.AddMenuItem(i18n.T("tray.quit"), i18n.T("tray.quit_hint"))
 
 	show := func(m tray.Menu, note string) {
 		if m.Running {
@@ -204,7 +206,7 @@ func onReady() {
 			setBusy("")
 			if err != nil {
 				log.Printf("blitz-tray: %v", err)
-				setBusy("Couldn't: " + err.Error())
+				setBusy(i18n.T("tray.failed", "error", err.Error()))
 				refresh()
 				time.Sleep(5 * time.Second)
 				setBusy("")
@@ -216,11 +218,11 @@ func onReady() {
 		for {
 			select {
 			case <-start.ClickedCh:
-				do("Starting the service…", acts.Start)
+				do(i18n.T("tray.starting"), acts.Start)
 			case <-stop.ClickedCh:
-				do("Stopping the service…", acts.Stop)
+				do(i18n.T("tray.stopping"), acts.Stop)
 			case <-restart.ClickedCh:
-				do("Restarting the service…", acts.Restart)
+				do(i18n.T("tray.restarting"), acts.Restart)
 			case <-open.ClickedCh:
 				if err := acts.OpenApp(); err != nil {
 					do("", func() error { return err })

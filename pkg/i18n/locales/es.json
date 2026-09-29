@@ -1022,6 +1022,26 @@
     "desktop.switcher.others_working": "Blitz está trabajando en otro espacio de trabajo",
     "desktop.view.editor": "Editor",
     "desktop.palette.show_editor": "Mostrar el editor",
-    "desktop.chat.resize": "Cambiar el tamaño del chat"
+    "desktop.chat.resize": "Cambiar el tamaño del chat",
+    "tray.service": "Servicio de Blitz",
+    "tray.state.running_version": "Servicio de Blitz: en ejecución ({version})",
+    "tray.state.running": "Servicio de Blitz: en ejecución",
+    "tray.state.stopped": "Servicio de Blitz: detenido",
+    "tray.state.not_running": "Servicio de Blitz: no se está ejecutando",
+    "tray.start": "Iniciar el servicio",
+    "tray.stop": "Detener el servicio",
+    "tray.restart": "Reiniciar el servicio",
+    "tray.open_app": "Abrir Blitz",
+    "tray.open_logs": "Abrir los registros",
+    "tray.quit": "Cerrar la bandeja",
+    "tray.quit_hint": "El servicio sigue en ejecución",
+    "tray.starting": "Iniciando el servicio…",
+    "tray.stopping": "Deteniendo el servicio…",
+    "tray.restarting": "Reiniciando el servicio…",
+    "tray.failed": "No se pudo: {error}",
+    "tray.error.not_started": "El servicio no se inició en 15 s: consulta Abrir los registros",
+    "tray.error.not_back": "El servicio no volvió en 15 s: consulta Abrir los registros",
+    "tray.error.still_running": "El servicio sigue en ejecución después de 15 s",
+    "tray.error.no_app": "{name} no está instalado junto a la bandeja ni en el PATH"
   }
 }

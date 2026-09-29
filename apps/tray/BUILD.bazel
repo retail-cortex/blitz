@@ -36,6 +36,7 @@ go_library(
     deps = [
         "//apps/tray/internal/tray",
         "//pkg/config",
+        "//pkg/i18n",
         "//pkg/loginitem",
         "//pkg/socket",
         "@io_fyne_systray//:systray",

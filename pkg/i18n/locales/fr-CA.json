@@ -1022,6 +1022,26 @@
     "desktop.switcher.others_working": "Blitz travaille dans un autre espace de travail",
     "desktop.view.editor": "Éditeur",
     "desktop.palette.show_editor": "Afficher l'éditeur",
-    "desktop.chat.resize": "Redimensionner le clavardage"
+    "desktop.chat.resize": "Redimensionner le clavardage",
+    "tray.service": "Service Blitz",
+    "tray.state.running_version": "Service Blitz : en cours ({version})",
+    "tray.state.running": "Service Blitz : en cours",
+    "tray.state.stopped": "Service Blitz : arrêté",
+    "tray.state.not_running": "Service Blitz : pas démarré",
+    "tray.start": "Démarrer le service",
+    "tray.stop": "Arrêter le service",
+    "tray.restart": "Redémarrer le service",
+    "tray.open_app": "Ouvrir Blitz",
+    "tray.open_logs": "Ouvrir les journaux",
+    "tray.quit": "Quitter la zone de notification",
+    "tray.quit_hint": "Le service continue de fonctionner",
+    "tray.starting": "Démarrage du service…",
+    "tray.stopping": "Arrêt du service…",
+    "tray.restarting": "Redémarrage du service…",
+    "tray.failed": "Échec : {error}",
+    "tray.error.not_started": "Le service n’a pas démarré en 15 s : voir Ouvrir les journaux",
+    "tray.error.not_back": "Le service n’est pas revenu en 15 s : voir Ouvrir les journaux",
+    "tray.error.still_running": "Le service fonctionne encore après 15 s",
+    "tray.error.no_app": "{name} n’est pas installé à côté de la zone de notification ni dans le PATH"
   }
 }

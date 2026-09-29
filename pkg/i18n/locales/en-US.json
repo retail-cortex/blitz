@@ -1022,6 +1022,26 @@
     "desktop.switcher.others_working": "Blitz is working in another workspace",
     "desktop.view.editor": "Editor",
     "desktop.palette.show_editor": "Show the editor",
-    "desktop.chat.resize": "Resize the chat"
+    "desktop.chat.resize": "Resize the chat",
+    "tray.service": "Blitz service",
+    "tray.state.running_version": "Blitz service: running ({version})",
+    "tray.state.running": "Blitz service: running",
+    "tray.state.stopped": "Blitz service: stopped",
+    "tray.state.not_running": "Blitz service: not running",
+    "tray.start": "Start the service",
+    "tray.stop": "Stop the service",
+    "tray.restart": "Restart the service",
+    "tray.open_app": "Open Blitz",
+    "tray.open_logs": "Open the logs",
+    "tray.quit": "Quit the tray",
+    "tray.quit_hint": "The service keeps running",
+    "tray.starting": "Starting the service…",
+    "tray.stopping": "Stopping the service…",
+    "tray.restarting": "Restarting the service…",
+    "tray.failed": "Couldn't: {error}",
+    "tray.error.not_started": "The service didn't start in 15 s: see Open the logs",
+    "tray.error.not_back": "The service didn't come back in 15 s: see Open the logs",
+    "tray.error.still_running": "The service is still running after 15 s",
+    "tray.error.no_app": "{name} isn't installed beside the tray or on PATH"
   }
 }
