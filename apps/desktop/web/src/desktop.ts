@@ -166,7 +166,24 @@ export async function licenseText(which: LicenseText): Promise<string> {
   return app().License(which);
 }
 
-type WailsRuntime = { EventsOn(name: string, f: (...args: unknown[]) => void): () => void };
+type WailsRuntime = {
+  EventsOn(name: string, f: (...args: unknown[]) => void): () => void;
+  WindowIsFullscreen(): Promise<boolean>;
+  WindowFullscreen(): void;
+  WindowUnfullscreen(): void;
+};
+
+/** Makes the window full screen, or puts it back (in a browser: the page). */
+export async function toggleFullscreen(): Promise<void> {
+  const rt = (window as unknown as { runtime?: WailsRuntime }).runtime;
+  if (rt?.WindowIsFullscreen) {
+    if (await rt.WindowIsFullscreen()) rt.WindowUnfullscreen();
+    else rt.WindowFullscreen();
+    return;
+  }
+  if (document.fullscreenElement) await document.exitFullscreen();
+  else await document.documentElement.requestFullscreen();
+}
 
 /** Calls f with the workspace a clicked notification is about. */
 export function onNotificationOpen(f: (dir: string) => void): () => void {

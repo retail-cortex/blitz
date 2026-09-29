@@ -17,7 +17,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { mdiAlertOutline, mdiCogOutline, mdiFolderOpenOutline, mdiLightningBolt, mdiServerOff } from "@mdi/js";
 import { onServiceLost, workspaces as workspaceAPI } from "./api";
-import { appVersion, chooseWorkspace, type LicenseText, installService, onNotificationOpen, restartService, serviceStatus, type ServiceStatus } from "./desktop";
+import { appVersion, chooseWorkspace, type LicenseText, installService, onNotificationOpen, restartService, serviceStatus, type ServiceStatus, toggleFullscreen } from "./desktop";
 import { checkService, type ServiceCheck } from "./serviceVersion";
 import { CommandPalette } from "./CommandPalette";
 import { ErrorBoundary } from "./ErrorBoundary";
@@ -154,12 +154,16 @@ function Shell() {
   const version = useServiceVersion(service.state === "up");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
-  // Cmd/Ctrl+K opens the command palette.
+  // Cmd/Ctrl+K opens the command palette; F11 (and ⌃⌘F on macOS) makes
+  // the window full screen.
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
         setPaletteOpen((o) => !o);
+      } else if (e.key === "F11" || (e.metaKey && e.ctrlKey && e.key.toLowerCase() === "f")) {
+        e.preventDefault();
+        toggleFullscreen().catch(() => {});
       }
     };
     window.addEventListener("keydown", key);

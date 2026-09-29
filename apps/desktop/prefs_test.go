@@ -31,6 +31,7 @@ func TestPrefsDefaultsAndRoundTrip(t *testing.T) {
 	require.NoError(t, err, "defaults %+v", p)
 	require.Equal(t, "system", p.Theme, "defaults %+v %v", p, err)
 	require.Equal(t, "comfortable", p.Density, "defaults %+v %v", p, err)
+	require.Equal(t, "full", p.Width, "defaults %+v %v", p, err)
 	require.Equal(t, "on", p.Notifications, "defaults %+v %v", p, err)
 	require.Len(t, p.Workspaces, 0, "defaults %+v %v", p, err)
 	a, b := t.TempDir(), t.TempDir()

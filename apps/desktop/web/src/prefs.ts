@@ -48,6 +48,8 @@ export interface Prefs {
   show_hidden: boolean;
   /** The chat panel's width in pixels (0: a third of the window). */
   chat_width: number;
+  /** How wide the conversation runs: the whole panel, or a readable column. */
+  width: "full" | "readable";
 }
 
 /** The settings before any are saved. */
@@ -62,6 +64,7 @@ export const defaultPrefs: Prefs = {
   files: false,
   show_hidden: false,
   chat_width: 0,
+  width: "full",
 };
 
 const pick = <T extends string>(v: unknown, allowed: readonly T[], fallback: T): T => (allowed.includes(v as T) ? (v as T) : fallback);
@@ -94,6 +97,7 @@ export function normalizePrefs(raw: unknown): Prefs {
     language: typeof r.language === "string" && /^[A-Za-z]{2,3}(-[A-Za-z0-9]+)*$|^system$/.test(r.language) ? r.language : "system",
     files: r.files === true,
     show_hidden: r.show_hidden === true,
+    width: pick(r.width, ["full", "readable"] as const, "full"),
     chat_width: typeof r.chat_width === "number" && r.chat_width >= 0 && r.chat_width <= 10000 ? Math.round(r.chat_width) : 0,
   };
 }

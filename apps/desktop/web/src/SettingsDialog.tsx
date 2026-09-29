@@ -141,6 +141,17 @@ function Appearance() {
           ]}
         />
       </Setting>
+      <Setting title={t("desktop.settings.width")} detail={t("desktop.settings.width.detail")}>
+        <Segmented
+          label={t("desktop.settings.width")}
+          value={prefs.width}
+          onChange={(width) => update((p) => ({ ...p, width }))}
+          options={[
+            { value: "full", label: t("desktop.settings.width.full") },
+            { value: "readable", label: t("desktop.settings.width.readable") },
+          ]}
+        />
+      </Setting>
       <Setting title={t("desktop.settings.thinking")} detail={t("desktop.settings.thinking.detail")}>
         <Switch label={t("desktop.settings.thinking")} checked={prefs.show_thoughts} onChange={(show_thoughts) => update((p) => ({ ...p, show_thoughts }))} />
       </Setting>

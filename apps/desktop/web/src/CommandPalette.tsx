@@ -17,6 +17,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   mdiCalendarClock,
+  mdiFullscreen,
   mdiCodeBraces,
   mdiCogOutline,
   mdiConsoleLine,
@@ -39,6 +40,7 @@ import { displayName, openWorkspace, openWorkspaces, recentWorkspaces } from "./
 import { useApp } from "./state";
 import { t, tn } from "./i18n";
 import { Icon } from "./ui/controls";
+import { toggleFullscreen } from "./desktop";
 
 /**
  * Cmd/Ctrl+K: commands, workspaces, chats, views and settings, found by
@@ -94,6 +96,7 @@ export function CommandPalette({ onClose, onOpenWorkspace, onSettings }: { onClo
         { group: t("desktop.palette.group.view"), label: t("desktop.palette.show_editor"), icon: mdiCodeBraces, run: done(() => showView({ dir, view: "editor" })) },
         { group: t("desktop.palette.group.view"), label: t("desktop.palette.show_changes"), icon: mdiFileCompare, run: done(() => showView({ dir, view: "changes" })) },
         { group: t("desktop.palette.group.view"), label: t("desktop.palette.show_workers"), icon: mdiCalendarClock, run: done(() => showView({ dir, view: "workers" })) },
+        { group: t("desktop.palette.group.view"), label: t("desktop.palette.fullscreen"), detail: "F11", icon: mdiFullscreen, run: done(() => void toggleFullscreen().catch(() => {})) },
       );
       for (const c of chats) out.push({ group: t("desktop.palette.group.chats"), label: c.title, detail: c.detail, icon: mdiHistory, run: done(() => (showView({ dir, view: "chat" }), loadSession({ dir, id: c.id }))) });
     }

@@ -7,7 +7,7 @@ means. Written 2026-09-28, reordered 2026-09-29; the backlog spec
 
 ## P1: the desktop app, next
 
-1. **Full-width window (XS).** The conversation is capped by
+1. ✅ *Done.* **Full-width window (XS).** The conversation is capped by
    `.chat-column { max-width: var(--content-width) }`. Let it fill the
    window (full width by default, or an Appearance option). Done: a
    maximised or full-screen window uses its width.

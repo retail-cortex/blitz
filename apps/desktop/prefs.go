@@ -59,6 +59,9 @@ type Prefs struct {
 	// ChatWidth is the chat panel's width in pixels (0: a third of the
 	// window).
 	ChatWidth int `json:"chat_width,omitempty"`
+	// Width is how wide the conversation runs: "full" (the default, the
+	// whole panel) or "readable" (a column of about 860 px).
+	Width string `json:"width"`
 }
 
 // WorkspacePrefs is a workspace as the window shows it.
@@ -86,6 +89,9 @@ func (p *Prefs) normalize() {
 	}
 	if p.Density != "compact" {
 		p.Density = "comfortable"
+	}
+	if p.Width != "readable" {
+		p.Width = "full"
 	}
 	if p.Notifications != "off" {
 		p.Notifications = "on"

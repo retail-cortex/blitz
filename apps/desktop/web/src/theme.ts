@@ -35,11 +35,12 @@ export function systemIsDark(): boolean {
   return darkQuery()?.matches ?? false;
 }
 
-/** Applies the theme and density to the document. */
-export function applyTheme(theme: Theme, density: "comfortable" | "compact" = "comfortable") {
+/** Applies the theme, density and conversation width to the document. */
+export function applyTheme(theme: Theme, density: "comfortable" | "compact" = "comfortable", width: "full" | "readable" = "full") {
   const root = document.documentElement;
   root.dataset.theme = theme;
   root.dataset.density = density;
+  root.dataset.width = width;
 }
 
 /** Calls f whenever the system switches between light and dark. */

@@ -104,5 +104,8 @@ describe("normalizePrefs", () => {
   it("keeps the files settings when they're right", () => {
     expect(normalizePrefs({ files: true, show_hidden: true, chat_width: 612.4 })).toMatchObject({ files: true, show_hidden: true, chat_width: 612 });
     expect(normalizePrefs({ files: "yes", show_hidden: 1, chat_width: -5 })).toMatchObject({ files: false, show_hidden: false, chat_width: 0 });
+    expect(normalizePrefs({}).width).toBe("full");
+    expect(normalizePrefs({ width: "readable" }).width).toBe("readable");
+    expect(normalizePrefs({ width: "huge" }).width).toBe("full");
   });
 });

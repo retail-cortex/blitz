@@ -93,6 +93,9 @@
 /* Chat */
 .chat { display: flex; flex-direction: column; flex: 1; min-height: 0; }
 .chat-column { width: 100%; max-width: var(--content-width); margin: 0 auto; padding: 0 24px; }
+/* Full width (the default): the conversation uses the whole panel. */
+:root[data-width="full"] { --content-width: none; }
+:root[data-width="full"] .worker { max-width: none; }
 .session-bar { display: flex; align-items: center; gap: 8px; padding-top: 12px; padding-bottom: 4px; flex: none; }
 .session-title { display: inline-flex; align-items: center; gap: 6px; min-width: 0; padding: 4px 8px; margin-left: -8px; border: none; border-radius: var(--md-shape-sm); background: none; color: inherit; cursor: pointer; }
 .session-title:hover { background: var(--md-surface-container); }
