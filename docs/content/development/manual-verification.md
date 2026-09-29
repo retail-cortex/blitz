@@ -268,12 +268,14 @@ Set `fallback_models = ["anthropic/claude-sonnet-5"]` with a working Anthropic k
 
 ## 27. Per-agent models 💲
 
-- [ ] `/pin_model qa anthropic/claude-haiku-4-5`. **Expected:** "qa now runs on claude-haiku-4-5", "Saved in …/.env.toml"; the file has `[agent_models]` with that line and your comments intact.
+- [ ] `/pin_model qa anthropic/claude-haiku-4-5`. **Expected:** "qa now runs on claude-haiku-4-5", "Saved in ~/.blitz/workspaces/<name>-<hash>/.env.toml"; that file (not `~/.blitz/.env.toml`) has `[agent_models]` with that line and your comments intact.
 - [ ] `/agents`. **Expected:** 📌 claude-haiku-4-5 next to qa.
 - [ ] Ask the main agent to have qa review a file. **Expected:** it works; `/cost` includes Haiku-priced tokens. With telemetry on, qa's `generate_content` span names claude-haiku-4-5.
 - [ ] Restart. **Expected:** the pin is still there (`/pin_model` lists it). `blitz doctor` shows `pin qa`.
 - [ ] `/model anthropic/claude-sonnet-5`. **Expected:** the main agent switches provider.
-- [ ] `/unpin qa`. **Expected:** it runs on the configured model again; the line is gone from the config file.
+- [ ] `/unpin qa`. **Expected:** it runs on the configured model again; the line is gone from the workspace's file.
+- [ ] Pin qa in workspace A, then open workspace B. **Expected:** in B, qa runs on the configured model (or B's own pin); back in A, the pin is there.
+- [ ] Put `qa = "openai/gpt-5"` under `[agent_models]` in `~/.blitz/.env.toml`, then `/unpin qa` in A. **Expected:** A's file has `qa = ""`; A runs qa on the configured model, B on gpt-5.
 
 ## 28. Per-model settings 💲
 

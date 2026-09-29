@@ -85,7 +85,8 @@ func (w *Workspace) SetModel(ctx context.Context, ref string) (activePin string,
 	return "", nil
 }
 
-// PinModel runs agent on ref from now on and saves the pin in the config file.
+// PinModel runs agent on ref from now on and saves the pin in the
+// workspace's own settings (over any global pin).
 func (w *Workspace) PinModel(ctx context.Context, agent, ref string) (api.PinResult, error) {
 	if _, ok := w.agents.Get(agent); !ok {
 		return api.PinResult{}, &api.UnknownAgentError{Name: agent}
@@ -101,7 +102,7 @@ func (w *Workspace) PinModel(ctx context.Context, agent, ref string) (api.PinRes
 }
 
 // Unpin returns agent to the configured model, or to its own default_model
-// if it declares one, and removes the pin from the config file.
+// if it declares one, and removes the pin from the workspace's settings.
 func (w *Workspace) Unpin(ctx context.Context, agent string) (api.PinResult, error) {
 	spec, ok := w.agents.Get(agent)
 	if !ok {
@@ -121,17 +122,23 @@ func (w *Workspace) Unpin(ctx context.Context, agent string) (api.PinResult, err
 	return api.PinResult{Agent: agent, Model: m, Saved: w.saveAgentModel(agent, "")}, nil
 }
 
-// saveAgentModel records (or with ref "" removes) a pin in the config file.
+// saveAgentModel records (or with ref "" removes) a pin in the workspace's
+// own settings, which overlay the global ones: a pin is the workspace's.
+// Removing one the global settings also set records agent = "" there, so
+// the global pin doesn't come back when the workspace next opens.
 func (w *Workspace) saveAgentModel(agent, ref string) api.Saved {
-	if ref == "" {
-		delete(w.cfg.AgentModels, agent)
-	} else {
-		if w.cfg.AgentModels == nil {
-			w.cfg.AgentModels = map[string]string{}
-		}
-		w.cfg.AgentModels[agent] = ref
+	if w.cfg.AgentModels == nil {
+		w.cfg.AgentModels = map[string]string{}
 	}
-	path, err := config.SaveAgentModel(config.ConfigDir(""), agent, ref)
+	w.cfg.AgentModels[agent] = ref // "" is "not pinned here"
+	dir := config.WorkspaceSettingsDir("", w.Dir())
+	if ref != "" {
+		path, err := config.SaveAgentModel(dir, agent, ref)
+		return api.Saved{Path: path, Err: err}
+	}
+	global, _ := config.Load("")
+	masking := global != nil && global.AgentModels[agent] != ""
+	path, err := config.UnpinAgentModel(dir, agent, masking)
 	return api.Saved{Path: path, Err: err}
 }
 

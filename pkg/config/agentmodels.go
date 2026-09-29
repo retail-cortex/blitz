@@ -56,6 +56,31 @@ func SaveAgentModel(dir, agent, ref string) (string, error) {
 		})
 }
 
+// UnpinAgentModel removes agent's pin from [agent_models] in dir/.env.toml;
+// with masking, a workspace's settings instead record agent = "", so a
+// global pin for the agent doesn't apply there either.
+func UnpinAgentModel(dir, agent string, masking bool) (string, error) {
+	if agent == "" {
+		return "", errors.New("no agent name")
+	}
+	key := tomlKey(agent)
+	return editConfigFile(dir,
+		func(doc string) string {
+			if masking {
+				return setTOMLKey(doc, "agent_models", key, `""`)
+			}
+			return removeTOMLKey(doc, "agent_models", key)
+		},
+		func(check map[string]any) error {
+			pins, _ := check["agent_models"].(map[string]any)
+			got, present := pins[agent].(string)
+			if present != masking || got != "" {
+				return errors.New("could not update [agent_models]")
+			}
+			return nil
+		})
+}
+
 // removeTOMLKey deletes key's assignment from [table], if present.
 func removeTOMLKey(doc, table, key string) string {
 	lines := strings.Split(doc, "\n")

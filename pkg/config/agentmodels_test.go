@@ -21,6 +21,7 @@ import (
 	"testing"
 
 	"github.com/BurntSushi/toml"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -59,4 +60,32 @@ func TestSaveAgentModelPinsAndUnpins(t *testing.T) {
 	require.Equal(t, fs.FileMode(0o600), info.Mode().Perm(), "mode %v", info.Mode().Perm())
 	_, err = SaveAgentModel(dir, "nobody", "")
 	require.NoError(t, err, "unpinning an unpinned agent")
+}
+
+// A workspace's pins lay over the global ones agent by agent; unpinning
+// one the global settings pin masks it with "" rather than deleting it.
+func TestWorkspacePinsOverlayTheGlobalOnes(t *testing.T) {
+	root, ws := t.TempDir(), t.TempDir()
+	dir := WorkspaceSettingsDir(root, ws)
+	for agent, ref := range map[string]string{"qa": "openai/gpt-5", "helios": "gemini-3.8-flash", "planning-agent": "anthropic/claude-opus-5"} {
+		_, err := SaveAgentModel(root, agent, ref)
+		require.NoError(t, err)
+	}
+	_, err := SaveAgentModel(dir, "qa", "anthropic/claude-haiku-4-5")
+	require.NoError(t, err)
+	_, err = UnpinAgentModel(dir, "helios", true)
+	require.NoError(t, err)
+
+	cfg, err := LoadWorkspace(root, ws)
+	require.NoError(t, err)
+	assert.Equal(t, map[string]string{"qa": "anthropic/claude-haiku-4-5", "helios": "", "planning-agent": "anthropic/claude-opus-5"}, cfg.AgentModels)
+	global, err := Load(root)
+	require.NoError(t, err)
+	assert.Equal(t, "openai/gpt-5", global.AgentModels["qa"], "the global pin changed")
+
+	// Without a global pin to mask, unpinning removes the workspace's key.
+	path, err := UnpinAgentModel(dir, "qa", false)
+	require.NoError(t, err)
+	b, _ := os.ReadFile(path)
+	assert.NotContains(t, string(b), "qa", "unpinned key left:\n%s", b)
 }

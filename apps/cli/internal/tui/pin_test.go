@@ -49,6 +49,21 @@ func pinApp(t *testing.T, setup ...func(home string)) *App {
 	})
 }
 
+// workspacePins are the pins in force in app's workspace: the global ones
+// with the workspace's own over them.
+func workspacePins(t *testing.T, app *App) map[string]string {
+	t.Helper()
+	cfg, err := config.LoadWorkspace(filepath.Join(os.Getenv("HOME"), ".blitz"), local(app).Dir())
+	require.NoError(t, err)
+	out := map[string]string{}
+	for agent, ref := range cfg.AgentModels {
+		if ref != "" {
+			out[agent] = ref
+		}
+	}
+	return out
+}
+
 func TestPinModelAndUnpin(t *testing.T) {
 	app := pinApp(t)
 	ctx := context.Background()
@@ -59,7 +74,7 @@ func TestPinModelAndUnpin(t *testing.T) {
 	assert.Contains(t, run("/pin_model"), "No agent is pinned", "empty list")
 	out := run("/pin_model nobody anthropic/x")
 	assert.Contains(t, out, "Unknown agent", "unknown agent:\n%s", out)
-	assert.Len(t, savedConfig(t).AgentModels, 0, "unknown agent:\n%s", out)
+	assert.Len(t, workspacePins(t, app), 0, "unknown agent:\n%s", out)
 	assert.Contains(t, run("/pin_model qa"), "Usage: /pin_model", "usage")
 
 	out = run("/pin_model qa anthropic/claude-haiku-4-5")
@@ -68,8 +83,9 @@ func TestPinModelAndUnpin(t *testing.T) {
 	m, pinned := local(app).Engine().AgentModel("qa")
 	require.True(t, pinned, "engine pin: %s %v", m, pinned)
 	require.Equal(t, "claude-haiku-4-5", m, "engine pin: %s %v", m, pinned)
-	got := savedConfig(t).AgentModels
-	require.Len(t, got, 1, "saved = %v", got)
+	got := workspacePins(t, app)
+	require.Len(t, got, 1, "saved = %v\n%s", got, out)
+	assert.Empty(t, savedConfig(t).AgentModels, "the pin went to the global settings")
 	require.Equal(t, "anthropic/claude-haiku-4-5", got["qa"], "saved = %v", got)
 	list := run("/pin_model")
 	assert.Contains(t, list, "qa")
@@ -80,7 +96,7 @@ func TestPinModelAndUnpin(t *testing.T) {
 	_, pinned = local(app).Engine().AgentModel("qa")
 	require.False(t, pinned, "unpin:\n%s", out)
 	require.Contains(t, out, "qa now runs on gemini-3.8-flash", "unpin:\n%s", out)
-	got = savedConfig(t).AgentModels
+	got = workspacePins(t, app)
 	require.Len(t, got, 0, "unpin not saved: %v", got)
 }
 

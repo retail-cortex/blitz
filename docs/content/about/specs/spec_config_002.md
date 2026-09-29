@@ -84,7 +84,7 @@ Front ends change a few settings and persist them without rewriting the file.
 - **CFG-20** `editConfigFile(dir, edit, verify)` reads `<dir>/.env.toml` (missing = empty), applies a line-based edit, refuses the result if it is not valid TOML or fails `verify` (re-decoded value must equal the intended one), then writes atomically (temp file + rename) preserving the existing mode (new files 0600, dir 0700).
 - **CFG-21** Only the affected line changes: comments, ordering and encrypted values elsewhere are kept. Replacing a key preserves its trailing comment. A missing key is inserted after the table's last non-blank line; a missing table is appended.
 - **CFG-22** Keys are written bare when they match `[A-Za-z0-9_-]+`, else quoted.
-- **CFG-23** Editors: `SaveUILocale` (`[ui] locale`), `SaveAgentModel` (`[agent_models] <agent>`; empty ref removes the line), `SaveModelSettings` (`[model_settings."<model>"]`: set keys written, unset removed, table header dropped when only blanks/comments remain, avoiding a double blank line).
+- **CFG-23** Editors: `SaveUILocale` (`[ui] locale`), `SaveAgentModel` (`[agent_models] <agent>`; empty ref removes the line), `UnpinAgentModel` (removes the line, or with masking writes `<agent> = ""`, which a workspace file uses to mask a global pin; the overlay merges `[agent_models]` agent by agent), `SaveModelSettings` (`[model_settings."<model>"]`: set keys written, unset removed, table header dropped when only blanks/comments remain, avoiding a double blank line).
 - **CFG-24** Persisted edits always target the default config dir (`ConfigDir("")`), and the in-memory change applies even if saving fails (the failure is reported, not fatal).
 
 ## 5. Model settings values

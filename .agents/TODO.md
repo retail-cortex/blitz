@@ -32,7 +32,7 @@ means. Written 2026-09-28; the backlog spec
    the status polls until it settles (with a timeout and an error if it
    doesn't).
 
-4. ✅ *Done: `TestWorkspacesKeepTheirOwnSettings` (daemon). Open question: agent model pins (`/pin_model`) are saved in the global settings, so a pin made in one workspace applies to all of them when they next open (and not to those already open); `/locale` and `/model_settings` are global too, which suits them.* **Prove each workspace gets its own configuration (S).** Already the
+4. ✅ *Done: `TestWorkspacesKeepTheirOwnSettings` (daemon). Agent model pins (`/pin_model`, `/unpin`) are now the workspace's, over the global ones (`/unpin` masks a global pin with `agent = ""`); `/locale` and `/model_settings` stay global, which suits them.* **Prove each workspace gets its own configuration (S).** Already the
    design: the service opens each workspace as its own engine with
    `config.LoadWorkspace` (the global settings plus
    `~/.blitz/workspaces/<name>-<sha256 of the path>/.env.toml`), keyed by

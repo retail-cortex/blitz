@@ -20,6 +20,7 @@ import (
 	"testing"
 
 	"github.com/retail-cortex/blitz/pkg/api"
+	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -55,7 +56,24 @@ func TestAgentsAndModel(t *testing.T) {
 	assert.Equal(t, "claude-haiku-4-5", pin, "active pin = %q, %v", pin, err)
 }
 
-func TestPinAndUnpinSaveToTheConfigFile(t *testing.T) {
+// workspacePins are the pins in force in w's workspace: the global ones
+// with its own over them ("" there: not pinned).
+func workspacePins(t *testing.T, w *Workspace) map[string]string {
+	t.Helper()
+	cfg, err := config.LoadWorkspace("", w.Dir())
+	require.NoError(t, err)
+	out := map[string]string{}
+	for agent, ref := range cfg.AgentModels {
+		if ref != "" {
+			out[agent] = ref
+		}
+	}
+	return out
+}
+
+// A pin is the workspace's: saved in its own settings, not the global
+// ones. Unpinning an agent the global settings pin masks that pin there.
+func TestPinAndUnpinSaveToTheWorkspace(t *testing.T) {
 	w := openTest(t)
 	ctx := context.Background()
 	var unknown *api.UnknownAgentError
@@ -67,14 +85,25 @@ func TestPinAndUnpinSaveToTheConfigFile(t *testing.T) {
 	require.Equal(t, "claude-haiku-4-5", res.Model, "pin: %+v %v", res, err)
 	require.NoError(t, res.Saved.Err, "pin: %+v %v", res, err)
 	require.NotEqual(t, "", res.Saved.Path, "pin: %+v %v", res, err)
-	got := savedConfig(t).AgentModels["qa"]
+	got := workspacePins(t, w)["qa"]
 	assert.Equal(t, "anthropic/claude-haiku-4-5", got, "saved pin %q", got)
+	assert.Empty(t, savedConfig(t).AgentModels, "the pin went to the global settings")
 	a := w.ListAgents()[slices.IndexFunc(w.ListAgents(), func(a api.AgentInfo) bool { return a.Name == "qa" })]
 	assert.Equal(t, "claude-haiku-4-5", a.PinnedModel, "listed pin %q", a.PinnedModel)
 	res, err = w.Unpin(ctx, "qa")
 	require.NoError(t, err, "unpin")
 	require.Equal(t, "gemini-3.8-flash", res.Model, "unpin: %+v", res)
-	assert.Len(t, savedConfig(t).AgentModels, 0, "pin still saved")
+	assert.Empty(t, workspacePins(t, w), "pin still saved")
+
+	// A global pin applies here until the workspace unpins it, which
+	// leaves the global pin for the other workspaces.
+	_, err = config.SaveAgentModel(config.ConfigDir(""), "qa", "anthropic/claude-opus-5")
+	require.NoError(t, err)
+	assert.Equal(t, "anthropic/claude-opus-5", workspacePins(t, w)["qa"])
+	_, err = w.Unpin(ctx, "qa")
+	require.NoError(t, err)
+	assert.Empty(t, workspacePins(t, w), "the global pin still applies here")
+	assert.Equal(t, "anthropic/claude-opus-5", savedConfig(t).AgentModels["qa"], "the global pin went")
 }
 
 func TestUpdateModelSettings(t *testing.T) {

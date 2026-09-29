@@ -364,6 +364,9 @@ func agentModelRefs(cfg *config.Config, reg *agents.Registry, warn func(string))
 		}
 	}
 	for agent, ref := range cfg.AgentModels {
+		if ref == "" {
+			continue // unpinned in the workspace: its own default_model, or the configured model
+		}
 		if _, ok := reg.Get(agent); !ok {
 			warn(i18n.T("pin.unknown_agent", "agent", agent))
 			continue

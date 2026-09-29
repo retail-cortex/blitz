@@ -30,7 +30,7 @@ Agents can run on different models, for example a cheaper one for reviews:
 qa = "anthropic/claude-haiku-4-5"
 ```
 
-A pin wins over an agent's own `default_model`, and both win over the configured model. Pinned agents keep the fallback chain. `/pin_model` and `/unpin` change pins and save them.
+A pin wins over an agent's own `default_model`, and both win over the configured model. Pinned agents keep the fallback chain. `/pin_model` and `/unpin` change pins and save them in the workspace's own settings (`~/.blitz/workspaces/<name>-<hash>/.env.toml`), so each workspace keeps its own: a pin there wins over one in the global settings, and `/unpin` of an agent the global settings pin saves `agent = ""`, which masks the global pin in that workspace only. Pins in the global `.env.toml` apply to every workspace that doesn't set its own.
 
 ## Per-model settings
 

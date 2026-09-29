@@ -100,7 +100,7 @@ With `oauth`, an `ANTHROPIC_API_KEY` or `api_key` is ignored, so a leftover key 
 
 ## Editing in place
 
-Blitz changes its settings file a line at a time, keeping your comments: `/permissions … --save`, `/pin_model`, `/model_settings`, `/locale` and the desktop app's forms all write that way.
+Blitz changes its settings file a line at a time, keeping your comments: `/permissions … --save`, `/pin_model`, `/model_settings`, `/locale` and the desktop app's forms all write that way. `/pin_model` and `/unpin` write the workspace's settings; `/model_settings` and `/locale` the global ones.
 
 ## Files under ~/.blitz
 
