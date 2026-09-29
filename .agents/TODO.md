@@ -12,7 +12,7 @@ means. Written 2026-09-28, reordered 2026-09-29; the backlog spec
    window (full width by default, or an Appearance option). Done: a
    maximised or full-screen window uses its width.
 
-2. **`@` mentions in chat (M).** Typing `@` in the composer completes
+2. ✅ *Done (WS-21a, DSK-77a).* **`@` mentions in chat (M).** Typing `@` in the composer completes
    workspace files and folders (fuzzy, as Go to file does); a mentioned
    file goes to the model with the prompt (its content, up to a cap; above
    it, the path and a note to read it), a folder as its listing, an image

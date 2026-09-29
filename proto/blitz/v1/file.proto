@@ -156,6 +156,9 @@ message FindFilesRequest {
   string query = 2;
   // At most this many (default 50).
   int32 limit = 3;
+  // Also the folders the files are in, with a trailing slash (for @
+  // mentions).
+  bool folders = 4;
 }
 
 // Response message for FileService.FindFiles.

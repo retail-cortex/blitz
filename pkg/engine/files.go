@@ -508,9 +508,18 @@ type fileIndex struct {
 // FindFiles returns up to limit files whose path matches query, best
 // first. Hidden files are left out.
 func (w *Workspace) FindFiles(ctx context.Context, query string, limit int) ([]string, error) {
+	return w.FindPaths(ctx, query, limit, false)
+}
+
+// FindPaths is FindFiles, with folders also the folders the files are in
+// ("src/cart/", with a trailing slash), matched the same way.
+func (w *Workspace) FindPaths(ctx context.Context, query string, limit int, folders bool) ([]string, error) {
 	paths, err := w.allFiles(ctx)
 	if err != nil {
 		return nil, err
+	}
+	if folders {
+		paths = withFolders(paths)
 	}
 	if limit <= 0 {
 		limit = 50
@@ -539,6 +548,19 @@ func (w *Workspace) FindFiles(ctx context.Context, query string, limit int) ([]s
 		out[i] = h.p
 	}
 	return out, nil
+}
+
+// withFolders adds the folders of paths (each once, with a trailing slash).
+func withFolders(paths []string) []string {
+	seen := map[string]bool{}
+	out := slices.Clone(paths)
+	for _, p := range paths {
+		for d := path.Dir(p); d != "." && d != "/" && !seen[d]; d = path.Dir(d) {
+			seen[d] = true
+			out = append(out, d+"/")
+		}
+	}
+	return out
 }
 
 // allFiles lists the workspace's files that aren't hidden, kept for 5 seconds.

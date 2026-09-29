@@ -229,6 +229,16 @@ func TestFindFiles(t *testing.T) {
 	all, _ := w.FindFiles(context.Background(), "", 100)
 	assert.NotContains(t, all, ".hidden/x.go", "hidden files found: %v", all)
 	assert.NotContains(t, all, "key.pem", "hidden files found: %v", all)
+
+	// With folders: the folders of the files, matched alike.
+	got, _ = w.FindPaths(context.Background(), "cart", 10, true)
+	assert.Equal(t, "internal/cart/", got[0], "cart: %v", got)
+	assert.Contains(t, got, "internal/cart/discount.go", "cart: %v", got)
+	all, _ = w.FindPaths(context.Background(), "", 100, true)
+	assert.Contains(t, all, "internal/", "all: %v", all)
+	assert.NotContains(t, all, ".hidden/", "hidden folders found: %v", all)
+	files, _ := w.FindFiles(context.Background(), "cart", 10)
+	assert.NotContains(t, files, "internal/cart/", "FindFiles gave a folder: %v", files)
 }
 
 func TestUserPath(t *testing.T) {

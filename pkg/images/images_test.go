@@ -240,6 +240,22 @@ func TestMentions(t *testing.T) {
 	assert.Nil(t, Mentions("no mentions here"), "expected none")
 }
 
+func TestMentionedPaths(t *testing.T) {
+	for _, tc := range []struct {
+		text string
+		want []string
+	}{
+		{"", nil},
+		{"@main.go", []string{"main.go"}},
+		{`see @src/ and @"a b/c.md", then @main.go? @main.go!`, []string{"src/", "a b/c.md", "main.go"}},
+		{"me@example.com (@x.png)", nil},
+		{"(@x.png) @shot.png", []string{"shot.png"}},
+		{"a lone @ sign", nil},
+	} {
+		t.Run(tc.text, func(t *testing.T) { assert.Equal(t, tc.want, MentionedPaths(tc.text)) })
+	}
+}
+
 func TestReadClipboardIsReplaceable(t *testing.T) {
 	defer func(f func(context.Context) ([]byte, error)) { ReadClipboard = f }(ReadClipboard)
 	ReadClipboard = func(context.Context) ([]byte, error) { return nil, ErrNoClipboardImage }

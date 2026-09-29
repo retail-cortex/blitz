@@ -371,6 +371,7 @@ export function installFake() {
         listApprovals: () => ({ approvals: [{ key: "k1", kind: "write", subject: "internal/cart", always: false }] }),
         revokeApprovals: () => ({ revoked: 1 }),
         closeWorkspace: () => ({}),
+        loadImage: ({ path }) => ({ image: { id: `img-${path}`, name: path, mime: "image/png", width: 640, height: 480, size: 12345n } }),
         getServiceInfo: () => ({ version: "dev", executable: "" }),
         listLogDays: () => ({ days: ["2026-09-28", "2026-09-27"], dir: "~/.blitz/logs" }),
         readLog: ({ day, minLevel, text }) => {
@@ -572,14 +573,16 @@ export function installFake() {
           for (const p of [...fakeFiles.keys()]) if (p === path || p.startsWith(path + "/")) fakeFiles.delete(p);
           return {};
         },
-        findFiles: ({ query }) => {
+        findFiles: ({ query, folders, limit }) => {
           const q = query.toLowerCase().replace(/\s/g, "");
           const match = (p: string) => {
             let i = 0;
             for (const c of p.toLowerCase()) if (c === q[i]) i++;
             return i === q.length;
           };
-          return { paths: [...fakeFiles.keys()].filter((p) => !fakeHidden(p) && !p.split("/").some((x) => x.startsWith(".")) && match(p)).sort((a, b) => a.length - b.length) };
+          const all = [...fakeFiles.keys()].filter((p) => !fakeHidden(p) && !p.split("/").some((x) => x.startsWith(".")));
+          if (folders) for (const p of [...all]) for (let d = p.slice(0, p.lastIndexOf("/")); d; d = d.slice(0, Math.max(0, d.lastIndexOf("/")))) if (!all.includes(d + "/")) all.push(d + "/");
+          return { paths: all.filter(match).sort((a, b) => a.length - b.length).slice(0, limit || 50) };
         },
         statFiles: ({ paths }) => ({ versions: Object.fromEntries(paths.map((p) => [p, fakeFiles.has(p) ? fakeVersion(fakeFiles.get(p)!) : ""])) }),
       });

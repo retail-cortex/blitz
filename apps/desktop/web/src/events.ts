@@ -31,6 +31,21 @@ export function compose(detail: ComposeDetail) {
   window.dispatchEvent(new CustomEvent(composeEvent, { detail }));
 }
 
+/** The event that adds a file or folder to a workspace's next prompt. */
+export const addToContextEvent = "blitz:add-to-context";
+/** A file or folder for a workspace's next prompt. */
+export interface AddToContextDetail {
+  dir: string;
+  /** Relative to the workspace; a folder ends with a slash. */
+  path: string;
+  /** Start a new conversation about it first. */
+  fresh?: boolean;
+}
+/** Mentions a path in a workspace's composer (@path), in a new conversation with fresh. */
+export function addToContext(detail: AddToContextDetail) {
+  window.dispatchEvent(new CustomEvent(addToContextEvent, { detail }));
+}
+
 /** The event that switches a workspace's view. */
 export const viewEvent = "blitz:view";
 /** Which workspace, and which view to show ("chat" is always shown, beside the others). */

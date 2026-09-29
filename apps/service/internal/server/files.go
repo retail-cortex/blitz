@@ -130,7 +130,7 @@ func (h fileService) FindFiles(ctx context.Context, r req[pb.FindFilesRequest]) 
 	if err != nil {
 		return nil, err
 	}
-	paths, err := w.FindFiles(ctx, r.Msg.Query, int(r.Msg.Limit))
+	paths, err := w.FindPaths(ctx, r.Msg.Query, int(r.Msg.Limit), r.Msg.Folders)
 	if err != nil {
 		return nil, fileError(err)
 	}

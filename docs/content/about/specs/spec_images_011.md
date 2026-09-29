@@ -18,7 +18,7 @@ Users and the agent can put pictures in front of vision models. Images are valid
 
 ## 2. Sources
 
-- **IMG-01** `@path` or `@"path with spaces"` mentions in a prompt (at the start or after whitespace, so e-mail addresses don't count; trailing `.,;:!?)` trimmed); only image extensions (`.png .jpg .jpeg .gif .webp`) are taken, de-duplicated in order; other `@paths` are left for the model.
+- **IMG-01** `@path` or `@"path with spaces"` mentions in a prompt (at the start or after whitespace, so e-mail addresses don't count; trailing `.,;:!?)` trimmed); only image extensions (`.png .jpg .jpeg .gif .webp`) are taken, de-duplicated in order; other `@paths` are the workspace's: their content goes with the prompt ([spec_workspace_018](spec_workspace_018.md) WS-21a).
 - **IMG-02** `--image PATH` (repeatable; failure is a usage error), `/attach <path>` and `/attach clear`, `/paste` (clipboard: `osascript` on macOS, `wl-paste` or `xclip` on Linux, PowerShell on Windows; `ErrNoClipboardImage` otherwise). Queued attachments go with the next real prompt (not `/btw`).
 - **IMG-03** The `view_image` tool (args `path`): loads a workspace image and returns `path, image_uri, mime, width, height, resized, note`; the picture follows the tool result in the next request.
 - **IMG-04** Files are read **through the workspace sandbox**: blocked and out-of-workspace paths are refused. Identical images (same SHA-256) are attached once. The audit log records path and hash, not the picture.

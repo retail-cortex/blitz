@@ -556,6 +556,8 @@
     "desktop.help.palette": "Press **Cmd/Ctrl+K** for the command palette.",
     "desktop.help.title": "Commands",
     "desktop.images.off": "Images are turned off for this workspace ([images] enabled in the configuration).",
+    "desktop.mention.files": "Files and folders",
+    "desktop.mention.add": "to add",
     "desktop.keys.choose": "choose",
     "desktop.keys.close": "close",
     "desktop.keys.complete": "complete",

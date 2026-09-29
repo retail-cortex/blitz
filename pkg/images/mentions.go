@@ -27,13 +27,25 @@ var mentionRE = regexp.MustCompile(`(?:^|\s)@(?:"([^"]+)"|(\S+))`)
 // order and without duplicates. Other @paths are left for the model.
 func Mentions(prompt string) []string {
 	var out []string
+	for _, p := range MentionedPaths(prompt) {
+		if IsImagePath(p) {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+// MentionedPaths returns every @path in a prompt (images or not), in order
+// and without duplicates; trailing punctuation isn't part of a bare path.
+func MentionedPaths(prompt string) []string {
+	var out []string
 	seen := map[string]bool{}
 	for _, m := range mentionRE.FindAllStringSubmatch(prompt, -1) {
 		p := m[1]
 		if p == "" {
 			p = strings.TrimRight(m[2], ".,;:!?)")
 		}
-		if IsImagePath(p) && !seen[p] {
+		if p != "" && !seen[p] {
 			seen[p] = true
 			out = append(out, p)
 		}

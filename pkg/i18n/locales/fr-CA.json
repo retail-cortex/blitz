@@ -556,6 +556,8 @@
     "desktop.help.palette": "Appuyez sur **Cmd/Ctrl+K** pour la palette de commandes.",
     "desktop.help.title": "Commandes",
     "desktop.images.off": "Les images sont désactivées pour cet espace de travail ([images] enabled dans la configuration).",
+    "desktop.mention.files": "Fichiers et dossiers",
+    "desktop.mention.add": "pour ajouter",
     "desktop.keys.choose": "choisir",
     "desktop.keys.close": "fermer",
     "desktop.keys.complete": "compléter",

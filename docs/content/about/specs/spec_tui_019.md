@@ -73,7 +73,7 @@ The REPL is a thin front end over `api.Backend`: it reads input, dispatches slas
 
 ## 5. Turns
 
-- **TUI-30** Queued attachments (and `@image` mentions) are collected before a non-aside turn; a failure aborts the turn. Once accepted, attachment summaries print and the queue clears; plan/btw modes print a dim note.
+- **TUI-30** Queued attachments (and `@image` mentions; other `@paths`, which Tab completes, go to the agent as content, WS-21a) are collected before a non-aside turn; a failure aborts the turn. Once accepted, attachment summaries print and the queue clears; plan/btw modes print a dim note.
 - **TUI-31** Ctrl+C, or Esc on its own (read by the steering key watcher), during a turn cancels only that turn ("interrupted"); during an approval prompt (raw mode) it also cancels the turn. A blocked prompt prints "✗ prompt blocked: <reason>".
 - **TUI-32** Steering (macOS, Linux; TTY line editor): while a turn runs, typing or Ctrl+T opens a steer prompt pre-filled with what was typed; output is held back while typing and released afterwards (the spinner resumes only if it was showing). An empty message cancels. The message goes through `Backend.Steer` (hooks apply; a block is shown). Stopping the watcher at the end of the turn waits for an open steer prompt, so the message isn't lost.
 - **TUI-33** Leftover steer messages (sent after the model's last tool call) are sent as the next turn, marked accepted; if the turn was interrupted they are dropped with a notice.

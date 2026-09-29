@@ -37,6 +37,8 @@ import {
   mdiFormatListChecks,
   mdiHelpCircleOutline,
   mdiHistory,
+  mdiFolderOutline,
+  mdiImageOutline,
   mdiImagePlusOutline,
   mdiLightbulbOutline,
   mdiMagnify,
@@ -52,14 +54,16 @@ import {
   mdiWeb,
   mdiWrenchOutline,
 } from "@mdi/js";
-import { serviceLost, sessions, workspaces } from "./api";
+import { files, serviceLost, sessions, workspaces } from "./api";
 import { DiffView } from "./Changes";
 import { isUnavailable, message, reason } from "./errors";
 import type { SessionInfo } from "./gen/blitz/v1/session_pb";
 import { Decision, type ApprovalRequest, type Question, type Task, type Usage } from "./gen/blitz/v1/turn_pb";
 import type { GetSettingsResponse } from "./gen/blitz/v1/workspace_pb";
 import { allCommands, helpText, matchCommands, parseCommand, type CommandSpec } from "./commands";
-import { composeEvent, filesTouched, loadSessionEvent, showLicense, type ComposeDetail, type LoadSessionDetail } from "./events";
+import { addToContextEvent, composeEvent, filesTouched, loadSessionEvent, showLicense, type AddToContextDetail, type ComposeDetail, type LoadSessionDetail } from "./events";
+import { appendMention, insertMention, isImagePath, mentionAt } from "./mentions";
+import { fileIcon } from "./files/icons";
 import { describeImage, imageFiles, readyIds, rejectReason, uploading, type Attachment } from "./attachments";
 import { Markdown } from "./Markdown";
 import { language, t, tn, useLanguage } from "./i18n";
@@ -345,6 +349,19 @@ export function Conversation({
     },
     [dir, imagesOn, snack],
   );
+  // An image in the workspace (an @mention of one, or Add to context).
+  const addImagePath = useCallback(
+    (path: string) => {
+      if (!imagesOn) return;
+      const a: Attachment = { key: `${Date.now()}-${Math.random()}`, name: path.slice(path.lastIndexOf("/") + 1), url: "" };
+      setAttachments((list) => [...list, a]);
+      workspaces.loadImage({ workspace: dir, path }).then(
+        (res) => setAttachments((list) => list.map((x) => (x.key === a.key ? { ...x, id: res.image!.id, detail: describeImage(res.image!) } : x))),
+        (e) => setAttachments((list) => list.map((x) => (x.key === a.key ? { ...x, error: message(e) } : x))),
+      );
+    },
+    [dir, imagesOn],
+  );
   const removeAttachment = (key: string) =>
     setAttachments((list) => {
       const gone = list.find((a) => a.key === key);
@@ -603,6 +620,23 @@ export function Conversation({
   const executeRef = useRef(execute);
   executeRef.current = execute;
 
+  // The Files view adds a file or folder to the next prompt, or starts a
+  // conversation about it.
+  const addToContextRef = useRef<(d: AddToContextDetail) => void>(() => {});
+  addToContextRef.current = async (d) => {
+    if (d.fresh && !running) await newSession();
+    setDraft((draft) => appendMention(d.fresh ? "" : draft, d.path));
+    if (isImagePath(d.path)) addImagePath(d.path);
+  };
+  useEffect(() => {
+    const f = (e: Event) => {
+      const d = (e as CustomEvent<AddToContextDetail>).detail;
+      if (d.dir === dir) addToContextRef.current(d);
+    };
+    window.addEventListener(addToContextEvent, f);
+    return () => window.removeEventListener(addToContextEvent, f);
+  }, [dir]);
+
   // The command palette and other windows parts send text here.
   useEffect(() => {
     const f = (e: Event) => {
@@ -684,6 +718,7 @@ export function Conversation({
           commands={commands}
           attachments={attachments}
           onAddFiles={addFiles}
+          onAddImagePath={addImagePath}
           onRemoveAttachment={removeAttachment}
           imagesOn={imagesOn}
           draft={draft}
@@ -1191,6 +1226,7 @@ function Composer({
   commands,
   attachments,
   onAddFiles,
+  onAddImagePath,
   onRemoveAttachment,
   imagesOn,
   draft,
@@ -1207,6 +1243,7 @@ function Composer({
   commands: CommandSpec[];
   attachments: Attachment[];
   onAddFiles: (files: File[]) => void;
+  onAddImagePath: (path: string) => void;
   onRemoveAttachment: (key: string) => void;
   imagesOn: boolean;
   draft: string;
@@ -1231,6 +1268,35 @@ function Composer({
   const menuOpen = matches.length > 0 && dismissed !== draft;
   useEffect(() => setPick(0), [draft]);
   const complete = (c: CommandSpec) => setDraft(`/${c.name}${c.args ? " " : ""}`);
+  // Completing an @mention: the workspace's files and folders.
+  const [caret, setCaret] = useState(0);
+  const mention = menuOpen ? null : mentionAt(draft, caret);
+  const [found, setFound] = useState<{ query: string; paths: string[] }>({ query: "", paths: [] });
+  useEffect(() => {
+    if (!mention) return;
+    const query = mention.query;
+    let live = true;
+    const timer = setTimeout(() => {
+      files.findFiles({ workspace: dir, query, limit: 12, folders: true }).then(
+        (r) => live && setFound({ query, paths: r.paths }),
+        () => live && setFound({ query, paths: [] }),
+      );
+    }, 120);
+    return () => {
+      live = false;
+      clearTimeout(timer);
+    };
+  }, [mention?.query, dir]); // eslint-disable-line react-hooks/exhaustive-deps
+  const mentionOpen = !!mention && found.query === mention.query && found.paths.length > 0 && dismissed !== draft;
+  const choosePath = (path: string) => {
+    if (!mention) return;
+    const r = insertMention(draft, mention, path);
+    setDraft(r.text);
+    setCaret(r.caret);
+    requestAnimationFrame(() => ref.current?.setSelectionRange(r.caret, r.caret));
+    if (isImagePath(path)) onAddImagePath(path);
+  };
+  const trackCaret = (e: { currentTarget: HTMLTextAreaElement }) => setCaret(e.currentTarget.selectionStart ?? 0);
   // Grow with the text, up to a limit.
   useEffect(() => {
     const el = ref.current;
@@ -1292,11 +1358,34 @@ function Composer({
           </div>
         </div>
       )}
+      {mentionOpen && (
+        <div className="command-menu" role="listbox" aria-label={t("desktop.mention.files")}>
+          {found.paths.map((p, i) => (
+            <button
+              key={p}
+              role="option"
+              aria-selected={i === pick}
+              className={`command-option ${i === pick ? "on" : ""}`}
+              onMouseDown={(e) => {
+                e.preventDefault(); // keep the focus in the field
+                choosePath(p);
+              }}
+            >
+              <Icon path={p.endsWith("/") ? mdiFolderOutline : fileIcon(p.slice(p.lastIndexOf("/", p.length - 2) + 1))} size="sm" />
+              <span className="mono ellipsis">{p}</span>
+            </button>
+          ))}
+          <div className="command-hint t-body-sm muted">
+            <kbd>↑</kbd>
+            <kbd>↓</kbd> {t("desktop.keys.choose")} · <kbd>{t("desktop.keys.tab")}</kbd> {t("desktop.mention.add")} · <kbd>{t("desktop.keys.esc")}</kbd> {t("desktop.keys.close")}
+          </div>
+        </div>
+      )}
       {attachments.length > 0 && (
         <div className="attachments">
           {attachments.map((a) => (
             <div key={a.key} className={`attachment ${a.error ? "failed" : ""}`} title={a.error || `${a.name}${a.detail ? ` · ${a.detail}` : ""}`}>
-              <img src={a.url} alt="" />
+              {a.url ? <img src={a.url} alt="" /> : <Icon path={mdiImageOutline} />}
               <span className="attachment-text">
                 <span className="ellipsis">{a.name}</span>
                 <small className={a.error ? "error-text ellipsis" : "muted ellipsis"}>{a.error || a.detail || t("desktop.attach.uploading")}</small>
@@ -1310,7 +1399,11 @@ function Composer({
         ref={ref}
         value={draft}
         rows={1}
-        onChange={(e) => setDraft(e.target.value)}
+        onChange={(e) => {
+          setDraft(e.target.value);
+          trackCaret(e);
+        }}
+        onSelect={trackCaret}
         onPaste={(e) => {
           const files = imageFiles(e.clipboardData.files);
           if (files.length) {
@@ -1319,6 +1412,24 @@ function Composer({
           }
         }}
         onKeyDown={(e) => {
+          if (mentionOpen && !e.nativeEvent.isComposing) {
+            const n = found.paths.length;
+            if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+              e.preventDefault();
+              setPick((p) => (p + (e.key === "ArrowDown" ? 1 : n - 1)) % n);
+              return;
+            }
+            if (e.key === "Escape") {
+              e.preventDefault();
+              setDismissed(draft);
+              return;
+            }
+            if (e.key === "Tab" || (e.key === "Enter" && !e.shiftKey)) {
+              e.preventDefault();
+              choosePath(found.paths[Math.min(pick, n - 1)]);
+              return;
+            }
+          }
           if (menuOpen && !e.nativeEvent.isComposing) {
             const chosen = matches[Math.min(pick, matches.length - 1)];
             if (e.key === "ArrowDown" || e.key === "ArrowUp") {

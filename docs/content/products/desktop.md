@@ -29,7 +29,7 @@ The Linux `.deb` runs in ChromeOS's Linux container (Crostini): `amd64` on Intel
 - **Top bar.** The Blitz mark, a dropdown of workspaces (open, name, colour, describe, close), and Settings at the far right.
 - **Files.** The workspace as a tree with git status, hidden files toggled (hidden by default), ⌘P to go to a file. The shelf minimizes to a rail.
 - **Editor.** Syntax highlighting and completion. Saving won't overwrite a change made meanwhile by someone else, such as the agent, and the agent is told what you edited.
-- **Chat.** Markdown replies, the agent's task list, approvals and plans as cards, rewind or edit from any earlier prompt, and copy any answer as shown (with its formatting, for a rich editor) or as Markdown, or a whole turn's answer when it came in parts. When no file is open, the chat takes centre stage.
+- **Chat.** `@` to mention a file or folder (completed as you type), whose content goes with the prompt; Markdown replies, the agent's task list, approvals and plans as cards, rewind or edit from any earlier prompt, and copy any answer as shown (with its formatting, for a rich editor) or as Markdown, or a whole turn's answer when it came in parts. When no file is open, the chat takes centre stage.
 - **Run settings.** Agent, model, reasoning effort, generation settings, permission mode and rules, per workspace.
 - **Changes.** The session's diff beside the agent's summary.
 - **Workers.** The workspace's [workers](service.md#workers), their schedules and runs.

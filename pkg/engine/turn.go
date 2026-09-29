@@ -149,6 +149,7 @@ func (w *Workspace) run(ctx context.Context, sessionID string, t turn, on func(a
 		prompt = withUserEdits(prompt, w.takeUserEdits())
 	}
 	prompt = withHookContext(prompt, "prompt_submit", hookContext)
+	prompt = w.withMentions(prompt, t.Text)
 	var err error
 	if t.Aside {
 		err = w.engine.Aside(ctx, sessionID, prompt, handler)
