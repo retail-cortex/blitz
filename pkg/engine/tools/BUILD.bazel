@@ -21,6 +21,9 @@ go_library(
         "approval_store.go",
         "ask_user.go",
         "background.go",
+        "blockedscan.go",
+        "blockedscan_other.go",
+        "blockedscan_unix.go",
         "bwrap.go",
         "capped_buffer.go",
         "checkpoint.go",
@@ -114,6 +117,7 @@ go_test(
     srcs = [
         "approval_test.go",
         "approvals_checkpoints_test.go",
+        "blockedscan_test.go",
         "bwrap_test.go",
         "checkpoint_persist_test.go",
         "cmdpolicy_test.go",

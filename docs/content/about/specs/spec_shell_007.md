@@ -43,6 +43,7 @@ Args: `command`, `cwd?` (inside the workspace), `timeout_seconds?`, `background?
 - **SH-22** macOS: Seatbelt via `/usr/bin/sandbox-exec -p <profile>`. Profile: `(allow default)`, `(deny file-write*)`, allow writes to writable subpaths and `/dev/null|zero|tty|dtracehelper`, `/dev/ttys*`, `/dev/fd/*`; deny writes to read-only dirs; deny read/write to blocked regexes (last, so they win); without network `(deny network*)` except unix sockets. The profile is probed once with `/usr/bin/true`.
 - **SH-23** Linux: bubblewrap: `--die-with-parent --ro-bind / / --dev-bind /dev /dev`, `--bind` writable dirs, `--ro-bind` read-only dirs, blocked files masked with `/dev/null`, blocked dirs with an empty read-only tmpfs, `--unshare-net` without network. Probed once with `/bin/true` (needs unprivileged user namespaces; Ubuntu 24.04 AppArmor and Docker's seccomp profile block them).
 - **SH-24** Because bwrap masks paths not patterns, blocked name patterns are expanded before **every** sandboxed command by scanning the writable and read-only roots (max 50 000 entries, depth 12, skipping `.git`, `node_modules`, `vendor`, `target`, `__pycache__`); absolute patterns are globbed. A file created by a command that matches a blocked pattern is visible to that same command (macOS blocks it immediately).
+- **SH-24a** Each sandbox keeps its scan between commands (`blockedScan`): every directory walked is checked with one `lstat` (modification time, size, inode), and only those that changed are read and matched again; a directory read within 2 s of its modification time is read again next time (file systems keep coarse times). It walks in the same order and within the same limits as a full scan, so it masks the same existing paths (tested against the full walk). A command's start-up for a 50,000-entry workspace is about 1 ms after the first scan; CI's Linux job fails above 20 ms (`BenchmarkBlockedScan`), and the parallel-cap test runs with the sandbox on.
 - **SH-25** Other platforms have no OS sandbox (`auto` runs unsandboxed; `required` fails).
 - **SH-26** The same exec environment runs forged tools and stdio MCP servers ([spec_mcp_009](spec_mcp_009.md), [spec_agents_014](spec_agents_014.md)).
 
@@ -63,5 +64,3 @@ Args: `command`, `cwd?` (inside the workspace), `timeout_seconds?`, `background?
 - **SH-50** In the REPL, `!<command>` runs the user's own command in the workspace with the user's environment, outside the agent's sandbox, policy and approvals. The agent doesn't see it; the audit log records it (`user_shell`, exit code, start error).
 
 ## 8. Known gaps
-- Linux blocked-path scan costs ~0.1 s per command (3.4 s under `-race`); reuse/caching is an open task.
-- An attached CLI's process list and `!cmd` audit are not yet routed through the service.

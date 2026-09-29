@@ -124,6 +124,17 @@ jobs:
           bazel test //pkg/engine/tools:tools_test --nocache_test_results --test_output=all \
             --test_arg=-test.v --test_arg=-test.run=TestGVisor | tee gv.txt
           if grep -q -- '--- SKIP' gv.txt; then exit 1; fi
+      # A sandboxed command's start-up on Linux, once the first command has
+      # scanned a 50,000-entry workspace for blocked paths: at most 20 ms
+      # (BL-SH-01).
+      - name: Sandbox start-up stays fast
+        if: runner.os == 'Linux'
+        run: |
+          bazel test //pkg/engine/tools:tools_test --nocache_test_results --test_output=all \
+            --test_arg=-test.run='^$' --test_arg=-test.bench=BenchmarkBlockedScan \
+            --test_arg=-test.benchtime=20x | tee bench.txt
+          awk '/BenchmarkBlockedScan\/warm/ { found = 1; ms = $3 / 1e6; print "warm scan:", ms, "ms"; if (ms > 20) bad = 1 }
+               END { if (!found) { print "no warm scan result"; exit 1 } if (bad) exit 1 }' bench.txt
       # Apps depend on pkg/ only; front ends never on the engine.
       - name: Dependency rules
         run: bazel run //tools:check_deps

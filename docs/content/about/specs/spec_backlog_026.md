@@ -7,7 +7,7 @@ weight: 26
 
 | | |
 |---|---|
-| Status | **Partly implemented:** 20 of its 49 requirements done (counted 2026-09-29); the rest open. Forward-looking requirements, collected 2026-09-26 from the known-gaps sections of specs 001–025, the roadmap (`docs/content/about/roadmap.md`) (item gaps, the Antigravity review's candidates) and `.agents/NEXT_STEPS.md` |
+| Status | **Partly implemented:** 23 of its 49 requirements done (counted 2026-09-29); the rest open. Forward-looking requirements, collected 2026-09-26 from the known-gaps sections of specs 001–025, the roadmap (`docs/content/about/roadmap.md`) (item gaps, the Antigravity review's candidates) and `.agents/NEXT_STEPS.md` |
 | Depends on | Everything before it: each item extends the spec named in its **Extends** line |
 
 ## 1. Purpose
@@ -50,9 +50,9 @@ Suggested order (from NEXT_STEPS): run the manual checks (§9) first — their f
 
 ### 4.1 Faster Linux blocked-path masking — M
 **Extends** [spec_shell_007](spec_shell_007.md) SH-24. *Source: NEXT_STEPS 4.* Scanning the writable roots before every sandboxed command costs ~0.1 s (3.4 s under `-race`); CI's parallel-cap test runs unsandboxed because of it.
-- **BL-SH-01** Median sandbox start-up on Linux ≤ 20 ms for a workspace of 50 000 entries, measured by a benchmark in CI.
-- **BL-SH-02** No weaker masking than today for files that exist when the command starts: a reused scan is invalidated when a watched root changes (e.g. directory mtimes or inotify), and cache directories are excluded from name-pattern scans only for patterns that can't match there.
-- **BL-SH-03** The parallel-cap test runs with the sandbox on.
+- **BL-SH-01** ✅ *Done 2026-09-29 (SH-24a).* Median sandbox start-up on Linux ≤ 20 ms for a workspace of 50 000 entries, measured by a benchmark in CI.
+- **BL-SH-02** ✅ *Done 2026-09-29 (SH-24a; cache directories aren't excluded).* No weaker masking than today for files that exist when the command starts: a reused scan is invalidated when a watched root changes (e.g. directory mtimes or inotify), and cache directories are excluded from name-pattern scans only for patterns that can't match there.
+- **BL-SH-03** ✅ *Done 2026-09-29 (SH-24a).* The parallel-cap test runs with the sandbox on.
 
 ### 4.2 `--add-dir <path>` — S
 **Extends** [spec_filetools_006](spec_filetools_006.md), [spec_cli_020](spec_cli_020.md). *Source: Antigravity review, candidate 2.*

@@ -34,8 +34,9 @@ func nativeSandbox(spec OSSandboxSpec) (sandboxWrapper, error) {
 	if out, err := exec.Command(probe[0], probe[1:]...).CombinedOutput(); err != nil {
 		return nil, fmt.Errorf("bwrap probe failed (are user namespaces enabled?): %v: %s", err, out)
 	}
+	scan := newBlockedScan(spec) // kept between commands
 	return func(argv []string) []string {
-		files, dirs := expandBlocked(spec)
+		files, dirs := scan.expand()
 		return append(bwrapArgs(bwrap, spec, files, dirs), argv...)
 	}, nil
 }

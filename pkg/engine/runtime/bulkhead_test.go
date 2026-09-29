@@ -69,13 +69,15 @@ func parallelShellTurn(t *testing.T, maxParallel int) time.Duration {
 	for range 4 {
 		calls = append(calls, &genai.Part{FunctionCall: &genai.FunctionCall{Name: "run_shell_command", Args: map[string]any{"command": "sleep 0.3"}}})
 	}
-	// The OS sandbox is off: this measures scheduling, and on Linux each
-	// sandboxed command first scans for blocked paths, which under -race
-	// takes seconds and swamps the sleeps.
-	f := newEngineWith(t, fixtureOpts{cfg: func(c *config.Config) { c.Tools.MaxParallel = maxParallel; c.Sandbox.Shell = "off" }},
-		&genai.Content{Role: genai.RoleModel, Parts: calls}, textContent("done"))
-	// Bypass mode needs the OS sandbox, which is off here: approve instead.
+	// With the OS sandbox as configured by default: a first command scans
+	// for blocked paths (on Linux, seconds under -race); the sleeps after
+	// it reuse that scan, so the turn measures scheduling.
+	warmUp := &genai.Content{Role: genai.RoleModel, Parts: []*genai.Part{{FunctionCall: &genai.FunctionCall{Name: "run_shell_command", Args: map[string]any{"command": "true"}}}}}
+	f := newEngineWith(t, fixtureOpts{cfg: func(c *config.Config) { c.Tools.MaxParallel = maxParallel }},
+		warmUp, textContent("ready"), &genai.Content{Role: genai.RoleModel, Parts: calls}, textContent("done"))
 	f.tools.Hooks().SetApprover(func(context.Context, api.ApprovalRequest) (api.Decision, error) { return api.DecisionOnce, nil })
+	_, err := functionResponses(t, f.eng, "s", "warm up")
+	require.NoError(t, err)
 	start := time.Now()
 	got, err := functionResponses(t, f.eng, "s", "run four sleeps")
 	require.NoError(t, err)
