@@ -101,25 +101,31 @@ func runDoctor(ctx context.Context, g *globalFlags, online bool) []check {
 	add("config parse", statusOK, "provider %s, model %s, agent %s", cfg.LLM.Provider, cfg.ModelName(), cfg.Blitz.DefaultAgent)
 	checkSkills(cfg, add)
 
+	// Offline, credentials are only found, not tried; with --online the
+	// model request below tries them.
+	confirm := " (use --online to confirm)"
+	if online {
+		confirm = ""
+	}
 	switch key := apiKeyFor(cfg); {
 	case cfg.LLM.Provider == "gemini" && cfg.LLM.Gemini.UsesADC():
-		st, detail := checkADC("gemini", cfg.LLM.Gemini.ProjectID, cfg.LLM.Gemini.Location)
+		st, detail := checkADC("gemini", cfg.LLM.Gemini.ProjectID, cfg.LLM.Gemini.Location, confirm)
 		add("credentials", st, "%s", detail)
 	case cfg.LLM.Provider == "anthropic" && cfg.LLM.Anthropic.UsesADC():
-		st, detail := checkADC("anthropic", cfg.LLM.Anthropic.ProjectID, cfg.LLM.Anthropic.Location)
+		st, detail := checkADC("anthropic", cfg.LLM.Anthropic.ProjectID, cfg.LLM.Anthropic.Location, confirm)
 		add("credentials", st, "Claude on Vertex AI, %s", detail)
 	case cfg.LLM.Provider == "anthropic" && cfg.LLM.Anthropic.UsesOAuth():
 		dir, name := cfg.LLM.Anthropic.OAuthProfile()
 		if _, err := os.Stat(filepath.Join(dir, "credentials", name+".json")); err != nil {
 			add("credentials", statusFail, "no `ant auth login` profile %q in %s: sign in with `ant auth login`", name, dir)
 		} else {
-			add("credentials", statusOK, "Anthropic OAuth, `ant auth login` profile %q (use --online to confirm)", name)
+			add("credentials", statusOK, "Anthropic OAuth, `ant auth login` profile %q%s", name, confirm)
 		}
 	case cfg.LLM.Provider == "anthropic" && key == "":
 		if os.Getenv("ANTHROPIC_AUTH_TOKEN") != "" {
 			add("credentials", statusOK, "ANTHROPIC_AUTH_TOKEN is set")
 		} else {
-			add("credentials", statusWarn, "no api_key; relying on an `ant auth login` profile or workload identity (use --online to confirm)")
+			add("credentials", statusWarn, "no api_key; relying on an `ant auth login` profile or workload identity%s", confirm)
 		}
 	case cfg.LLM.Provider == "ollama":
 		add("credentials", statusOK, "ollama needs no API key (%s)", cfg.LLM.OpenAI.BaseURL)
@@ -328,15 +334,16 @@ func printChecks(w io.Writer, checks []check) (failed int) {
 
 // checkADC says whether provider on Vertex AI has a project and
 // Application Default Credentials: a key file, gcloud's login, or (unseen
-// from here) a Google Cloud machine's metadata server.
-func checkADC(provider, project, location string) (checkStatus, string) {
+// from here) a Google Cloud machine's metadata server. confirm ends a line
+// saying credentials were found (how to try them, or nothing).
+func checkADC(provider, project, location, confirm string) (checkStatus, string) {
 	project = cmp.Or(project, os.Getenv("GOOGLE_CLOUD_PROJECT"))
 	if project == "" {
 		return statusFail, fmt.Sprintf("Google Cloud ADC needs a project: set [llm.%s] project_id or GOOGLE_CLOUD_PROJECT", provider)
 	}
 	where := fmt.Sprintf("Google Cloud ADC, project %s, location %s: ", project, cmp.Or(location, os.Getenv("GOOGLE_CLOUD_LOCATION"), "global"))
 	if os.Getenv("GOOGLE_APPLICATION_CREDENTIALS") != "" {
-		return statusOK, where + "GOOGLE_APPLICATION_CREDENTIALS (use --online to confirm)"
+		return statusOK, where + "GOOGLE_APPLICATION_CREDENTIALS" + confirm
 	}
 	gcloud := os.Getenv("CLOUDSDK_CONFIG")
 	if gcloud == "" {
@@ -345,7 +352,7 @@ func checkADC(provider, project, location string) (checkStatus, string) {
 		}
 	}
 	if _, err := os.Stat(filepath.Join(gcloud, "application_default_credentials.json")); err == nil {
-		return statusOK, where + "gcloud's application-default login (use --online to confirm)"
+		return statusOK, where + "gcloud's application-default login" + confirm
 	}
 	return statusWarn, where + "no credentials file; run `gcloud auth application-default login` unless this is a Google Cloud machine"
 }

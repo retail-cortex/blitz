@@ -364,6 +364,27 @@ func TestDoctorSignInCheck(t *testing.T) {
 			require.NotNil(t, got, "doctor has no credentials check")
 			assert.Equal(t, tc.status, got.status, "%+v", got)
 			assert.Contains(t, got.detail, tc.detail)
+			if got.status == statusOK {
+				assert.Contains(t, got.detail, "(use --online to confirm)", "offline, found credentials aren't tried")
+			}
+		})
+	}
+}
+
+// With --online the model request tries the credentials, so the
+// credentials line doesn't suggest --online.
+func TestCheckADCOnline(t *testing.T) {
+	home := isolate(t)
+	t.Setenv("GOOGLE_CLOUD_LOCATION", "")
+	t.Setenv("GOOGLE_APPLICATION_CREDENTIALS", filepath.Join(home, "key.json"))
+	for _, tc := range []struct{ confirm, want string }{
+		{"", "Google Cloud ADC, project p, location global: GOOGLE_APPLICATION_CREDENTIALS"},
+		{" (use --online to confirm)", "Google Cloud ADC, project p, location global: GOOGLE_APPLICATION_CREDENTIALS (use --online to confirm)"},
+	} {
+		t.Run(tc.want, func(t *testing.T) {
+			st, detail := checkADC("gemini", "p", "", tc.confirm)
+			assert.Equal(t, statusOK, st)
+			assert.Equal(t, tc.want, detail)
 		})
 	}
 }

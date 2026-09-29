@@ -93,7 +93,7 @@ means. Written 2026-09-28; the backlog spec
     which shares the user's home). Done: an error the user saw can be
     found there in a few seconds.
 
-11. **`doctor --online` still says "use --online to confirm" (S).** The
+11. ✅ *Done.* **`doctor --online` still says "use --online to confirm" (S).** The
     credentials line says it even when `--online` is given.
 
 ## P2: features
