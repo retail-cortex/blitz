@@ -27,6 +27,7 @@ import (
 	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/engine"
 	"github.com/retail-cortex/blitz/pkg/engine/workers"
+	"github.com/retail-cortex/blitz/pkg/observability"
 	"github.com/retail-cortex/blitz/pkg/socket"
 )
 
@@ -86,7 +87,7 @@ func Run(ctx context.Context, o Options) error {
 		}
 		slog.Info("workspace opened", "workspace", dir)
 		return w, nil
-	}, server.WithScheduler(server.SchedulerConfig{Store: store, Runs: runs, MaxConcurrent: cfg.Workers.Policy.MaxConcurrent}), server.WithVersion(o.Version), server.WithConfigDir(o.Config))
+	}, server.WithScheduler(server.SchedulerConfig{Store: store, Runs: runs, MaxConcurrent: cfg.Workers.Policy.MaxConcurrent}), server.WithVersion(o.Version), server.WithConfigDir(o.Config), server.WithLogDir(logDir(cfg)))
 	defer s.Close()
 
 	l, err := socket.Listen(o.Socket)
@@ -100,4 +101,12 @@ func Run(ctx context.Context, o Options) error {
 	fmt.Fprintf(os.Stderr, "Blitz service listening on %s\n", o.Socket)
 	slog.Info("serve", "socket", o.Socket)
 	return server.Serve(ctx, l, s.Handler(), grace)
+}
+
+// logDir is where the service's diagnostic log is, "" when it's off.
+func logDir(cfg *config.Config) string {
+	if _, on, err := observability.ParseLevel(cfg.Log.Level); err != nil || !on {
+		return ""
+	}
+	return config.ExpandHome(cfg.Log.Dir)
 }

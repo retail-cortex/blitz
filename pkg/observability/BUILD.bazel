@@ -18,6 +18,7 @@ go_library(
     name = "observability",
     srcs = [
         "logfile.go",
+        "logread.go",
         "span.go",
         "telemetry.go",
     ],
@@ -44,11 +45,15 @@ go_library(
 
 go_test(
     name = "observability_test",
-    srcs = ["observability_test.go"],
+    srcs = [
+        "logread_test.go",
+        "observability_test.go",
+    ],
     embed = [":observability"],
     deps = [
         "//pkg/config",
         "//pkg/redact",
+        "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
         "@io_opentelemetry_go_otel//attribute",
         "@io_opentelemetry_go_otel_sdk//trace",

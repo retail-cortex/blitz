@@ -30,6 +30,7 @@ import {
   mdiPencilOutline,
   mdiScaleBalance,
   mdiServerNetwork,
+  mdiTextBoxSearchOutline,
   mdiAlertCircleOutline,
   mdiWeatherNight,
   mdiWhiteBalanceSunny,
@@ -41,6 +42,7 @@ import { languages, t } from "./i18n";
 import { workspaceColor } from "./palette";
 import { displayName, forgetWorkspace } from "./prefs";
 import { PermissionSettings } from "./PermissionSettings";
+import { LogViewer } from "./LogViewer";
 import { ProviderSettings } from "./ProviderSettings";
 import { SettingsFile } from "./settingsfile/SettingsFile";
 import { useApp } from "./state";
@@ -48,7 +50,7 @@ import type { ThemePref } from "./theme";
 import { Button, Chip, Dialog, Icon, IconButton, Segmented, Switch } from "./ui/controls";
 import { WorkspaceDialog } from "./WorkspaceDialog";
 
-type Section = "appearance" | "providers" | "permissions" | "file" | "workspaces" | "service" | "about";
+type Section = "appearance" | "providers" | "permissions" | "file" | "workspaces" | "service" | "logs" | "about";
 
 const sectionIcons: Record<Section, string> = {
   appearance: mdiPaletteOutline,
@@ -57,6 +59,7 @@ const sectionIcons: Record<Section, string> = {
   file: mdiFileDocumentEditOutline,
   workspaces: mdiFolderMultipleOutline,
   service: mdiServerNetwork,
+  logs: mdiTextBoxSearchOutline,
   about: mdiInformationOutline,
 };
 
@@ -81,6 +84,7 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
           {section === "file" && <FileSection />}
           {section === "workspaces" && <Workspaces />}
           {section === "service" && <Service />}
+          {section === "logs" && <LogViewer />}
           {section === "about" && <About />}
         </div>
       </div>

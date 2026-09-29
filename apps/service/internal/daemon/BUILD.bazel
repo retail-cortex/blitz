@@ -24,6 +24,7 @@ go_library(
         "//pkg/config",
         "//pkg/engine",
         "//pkg/engine/workers",
+        "//pkg/observability",
         "//pkg/socket",
     ],
 )

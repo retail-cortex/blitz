@@ -74,3 +74,48 @@ func TestReplaced(t *testing.T) {
 	require.NoError(t, os.Remove(exe))
 	assert.True(t, replaced(was, exe), "removed")
 }
+
+// The service reads its own log: the days there are, and a day's records
+// by level and text; with logging off there's none.
+func TestReadLog(t *testing.T) {
+	dir := t.TempDir()
+	log := `{"time":"2026-09-28T10:00:01Z","level":"INFO","msg":"workspace opened","workspace":"/p"}
+{"time":"2026-09-28T10:00:02Z","level":"ERROR","msg":"turn failed","error":"quota exceeded"}
+`
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "blitz-2026-09-28.jsonl"), []byte(log), 0o600))
+	ctx := context.Background()
+	for _, tc := range []struct {
+		name string
+		dir  string
+		days []string
+	}{
+		{"on", dir, []string{"2026-09-28"}},
+		{"off", "", nil},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s := New(nil, WithLogDir(tc.dir))
+			srv := httptest.NewServer(s.Handler())
+			defer srv.Close()
+			defer s.Close()
+			c := pb.NewWorkspaceServiceClient(http.DefaultClient, srv.URL)
+			days, err := c.ListLogDays(ctx, connect.NewRequest(&pb.ListLogDaysRequest{}))
+			require.NoError(t, err)
+			assert.Equal(t, tc.days, days.Msg.Days)
+			assert.Equal(t, tc.dir, days.Msg.Dir)
+			res, err := c.ReadLog(ctx, connect.NewRequest(&pb.ReadLogRequest{MinLevel: "warn"}))
+			require.NoError(t, err)
+			if tc.dir == "" {
+				assert.Empty(t, res.Msg.Entries)
+				return
+			}
+			require.Len(t, res.Msg.Entries, 1)
+			e := res.Msg.Entries[0]
+			assert.Equal(t, "turn failed", e.Message)
+			assert.Equal(t, "ERROR", e.Level)
+			assert.Equal(t, "quota exceeded", e.Attrs[0].Value)
+			assert.Equal(t, int32(1), res.Msg.Matched)
+			_, err = c.ReadLog(ctx, connect.NewRequest(&pb.ReadLogRequest{Day: "../etc"}))
+			assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+		})
+	}
+}

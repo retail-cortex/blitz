@@ -50,6 +50,7 @@ type Server struct {
 	configDir string      // the settings directory (--config; \"\" for ~/.blitz)
 	started   time.Time   // when New ran
 	program   os.FileInfo // the executable as it was then (nil if unknown)
+	logDir    string      // where the diagnostic log is written ("": off)
 	sched     *scheduler  // nil: workers aren't run
 	broker    *broker
 

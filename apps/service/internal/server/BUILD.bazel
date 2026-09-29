@@ -37,6 +37,7 @@ go_library(
         "//pkg/engine/tools",
         "//pkg/engine/workers",
         "//pkg/images",
+        "//pkg/observability",
         "//proto/blitz/v1:blitzv1_go_proto",
         "@com_connectrpc_connect//:connect",
         "@com_github_robfig_cron_v3//:cron",

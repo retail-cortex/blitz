@@ -372,6 +372,23 @@ export function installFake() {
         revokeApprovals: () => ({ revoked: 1 }),
         closeWorkspace: () => ({}),
         getServiceInfo: () => ({ version: "dev", executable: "" }),
+        listLogDays: () => ({ days: ["2026-09-28", "2026-09-27"], dir: "~/.blitz/logs" }),
+        readLog: ({ day, minLevel, text }) => {
+          const d = day || "2026-09-28";
+          const rank: Record<string, number> = { DEBUG: 0, INFO: 1, WARN: 2, ERROR: 3 };
+          const min = rank[(minLevel || "debug").toUpperCase()];
+          const all = [
+            { time: timestampFromDate(new Date(`${d}T09:14:02.120`)), level: "INFO", message: "start", attrs: [{ key: "version", value: "dev" }, { key: "provider", value: "gemini" }] },
+            { time: timestampFromDate(new Date(`${d}T09:14:09.803`)), level: "INFO", message: "workspace opened", attrs: [{ key: "workspace", value: "/home/me/blitz" }] },
+            { time: timestampFromDate(new Date(`${d}T09:20:41.017`)), level: "WARN", message: "model unavailable", attrs: [{ key: "workspace", value: "/home/me/blitz" }, { key: "error", value: "quota exceeded: Quota exceeded for aiplatform.googleapis.com/online_prediction_requests_per_base_model" }] },
+            { time: timestampFromDate(new Date(`${d}T09:21:03.500`)), level: "ERROR", message: "turn failed", attrs: [{ key: "error", value: "the model isn't available" }, { key: "attempt", value: "2" }] },
+          ];
+          const words = text.toLowerCase().split(/\s+/).filter(Boolean);
+          const entries = all
+            .filter((e) => rank[e.level] >= min && words.every((w) => `${e.level} ${e.message} ${e.attrs.map((a) => `${a.key}=${a.value}`).join(" ")}`.toLowerCase().includes(w)))
+            .reverse();
+          return { day: d, path: `~/.blitz/logs/blitz-${d}.jsonl`, entries, matched: entries.length };
+        },
         listWorkspaces: () => ({ workspaces: [...states.keys()] }),
         listCommands: () => ({
           commands: [

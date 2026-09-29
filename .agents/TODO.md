@@ -84,7 +84,7 @@ means. Written 2026-09-28; the backlog spec
    Opus 5.5 and Fable refuse. Map it to effort (or report it as
    unsupported) on those models.
 
-10. **A log viewer in Settings (M).** Blitz's logs are JSON lines in
+10. ✅ *Done (DSK-60, SVC-06a).* **A log viewer in Settings (M).** Blitz's logs are JSON lines in
     `~/.blitz/logs/blitz-<date>.jsonl`; today the only way to read them is
     a terminal. A Settings section (or a Service section tab): today's
     log, newest first, with level filters, search, the day to show, and

@@ -48,6 +48,7 @@ go_library(
     name = "desktop_lib",
     srcs = [
         "app.go",
+        "folder.go",
         "link_darwin.go",
         "main.go",
         "prefs.go",
@@ -107,6 +108,7 @@ go_binary(
 go_test(
     name = "desktop_test",
     srcs = [
+        "folder_test.go",
         "license_test.go",
         "prefs_test.go",
         "proxy_test.go",

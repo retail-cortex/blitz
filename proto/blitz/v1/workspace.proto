@@ -34,6 +34,11 @@ service WorkspaceService {
   // Describes the service itself, so a client can tell whether it's the
   // version it expects (older services don't have it: Unimplemented).
   rpc GetServiceInfo(GetServiceInfoRequest) returns (GetServiceInfoResponse);
+  // The days the service has a log for, newest first, and its log
+  // directory.
+  rpc ListLogDays(ListLogDaysRequest) returns (ListLogDaysResponse);
+  // A day's log records, newest first, filtered by level and text.
+  rpc ReadLog(ReadLogRequest) returns (ReadLogResponse);
   // Returns the workspaces the service has open.
   rpc ListWorkspaces(ListWorkspacesRequest) returns (ListWorkspacesResponse);
   // Closes a workspace: kills its background processes and MCP servers.
@@ -156,6 +161,57 @@ message GetServiceInfoResponse {
   // The program file has been replaced or removed since the service
   // started (a new build or package installed): it runs the old program.
   bool replaced = 5;
+}
+
+// Request message for WorkspaceService.ListLogDays.
+message ListLogDaysRequest {}
+
+// Response message for WorkspaceService.ListLogDays.
+message ListLogDaysResponse {
+  // YYYY-MM-DD, newest first.
+  repeated string days = 1;
+  // Where the log files are ("" when logging is off).
+  string dir = 2;
+}
+
+// Request message for WorkspaceService.ReadLog.
+message ReadLogRequest {
+  // YYYY-MM-DD; "" is the newest day.
+  string day = 1;
+  // debug, info, warn or error: that level and above ("" is all).
+  string min_level = 2;
+  // Records containing every word, in any field, ignoring case.
+  string text = 3;
+  // The most records returned (0: 500).
+  int32 limit = 4;
+}
+
+// A field of a log record.
+message LogAttr {
+  string key = 1;
+  // Strings as they are, other values as JSON.
+  string value = 2;
+}
+
+// A log record.
+message LogEntry {
+  google.protobuf.Timestamp time = 1;
+  // DEBUG, INFO, WARN or ERROR.
+  string level = 2;
+  string message = 3;
+  // The record's other fields, in order.
+  repeated LogAttr attrs = 4;
+}
+
+// Response message for WorkspaceService.ReadLog.
+message ReadLogResponse {
+  // The day read, and its file.
+  string day = 1;
+  string path = 2;
+  // Newest first.
+  repeated LogEntry entries = 3;
+  // How many records matched (more than entries when the limit cut them).
+  int32 matched = 4;
 }
 
 // Request message for WorkspaceService.ListWorkspaces.

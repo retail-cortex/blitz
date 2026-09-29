@@ -24,6 +24,7 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/retail-cortex/blitz/pkg/engine"
+	"github.com/retail-cortex/blitz/pkg/observability"
 	pb "github.com/retail-cortex/blitz/proto/blitz/v1"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -38,6 +39,40 @@ func ok[T any](msg *T) (*connect.Response[T], error) { return connect.NewRespons
 func (h workspaceService) GetServiceInfo(context.Context, req[pb.GetServiceInfoRequest]) (*connect.Response[pb.GetServiceInfoResponse], error) {
 	exe, _ := os.Executable()
 	return ok(&pb.GetServiceInfoResponse{Version: h.s.version, Executable: exe, Started: timestamppb.New(h.s.started), Pid: int32(os.Getpid()), Replaced: replaced(h.s.program, exe)})
+}
+
+// WithLogDir is the directory of the service's diagnostic log, which
+// ListLogDays and ReadLog read ("": none).
+func WithLogDir(dir string) Option { return func(s *Server) { s.logDir = dir } }
+
+func (h workspaceService) ListLogDays(context.Context, req[pb.ListLogDaysRequest]) (*connect.Response[pb.ListLogDaysResponse], error) {
+	if h.s.logDir == "" {
+		return ok(&pb.ListLogDaysResponse{})
+	}
+	days, err := observability.LogDays(h.s.logDir)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	return ok(&pb.ListLogDaysResponse{Days: days, Dir: h.s.logDir})
+}
+
+func (h workspaceService) ReadLog(_ context.Context, r req[pb.ReadLogRequest]) (*connect.Response[pb.ReadLogResponse], error) {
+	if h.s.logDir == "" {
+		return ok(&pb.ReadLogResponse{})
+	}
+	page, err := observability.ReadLog(h.s.logDir, observability.LogQuery{Day: r.Msg.Day, MinLevel: r.Msg.MinLevel, Text: r.Msg.Text, Limit: int(r.Msg.Limit)})
+	if err != nil {
+		return nil, invalid(err)
+	}
+	out := &pb.ReadLogResponse{Day: page.Day, Path: page.Path, Matched: int32(page.Matched)}
+	for _, e := range page.Entries {
+		entry := &pb.LogEntry{Time: timestamppb.New(e.Time), Level: e.Level, Message: e.Msg}
+		for _, a := range e.Attrs {
+			entry.Attrs = append(entry.Attrs, &pb.LogAttr{Key: a.Key, Value: a.Value})
+		}
+		out.Entries = append(out.Entries, entry)
+	}
+	return ok(out)
 }
 
 // programFile is the service's executable file, as it is now (nil if it
