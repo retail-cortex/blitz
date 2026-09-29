@@ -14,7 +14,7 @@ weight: 23
 
 ## 1. Purpose
 
-A workspace defines workers in `workers/<name>/WORKER.md`. The service runs enabled workers on their schedules, unattended, with exactly the permissions they declare (capped by host policy). Nothing runs until a person reviews and enables the exact content; editing disables it again.
+A workspace defines workers in `.agents/workers/<name>/WORKER.md` (or `workers/<name>/WORKER.md`). The service runs enabled workers on their schedules, unattended, with exactly the permissions they declare (capped by host policy). Nothing runs until a person reviews and enables the exact content; editing disables it again.
 
 ## 2. Definition (`WORKER.md`)
 
@@ -33,7 +33,8 @@ model: anthropic/claude-haiku-4-5     # optional: runs on this model
 Check for outdated Go modules and write reports/deps.md.
 ```
 
-- **WK-01** Worker roots: `[workers] paths` (default `workers`) relative to the workspace; a later root doesn't override an earlier worker of the same name. Directories without `WORKER.md` are ignored.
+- **WK-01** Worker roots: `[workers] paths` (default `.agents/workers`, then `workers`) relative to the workspace; a later root doesn't override an earlier worker of the same name. Directories without `WORKER.md` are ignored.
+- **WK-01a** `CreateWorker(spec)` writes a new worker from a form's fields (`api.WorkerSpec`: name, description, schedule, time zone, agent, model, permissions, limits, catch-up, workflow) in the first root: `workers.Render` writes the frontmatter with only the fields set (YAML, so text is quoted as needed) and the workflow. It is loaded from a temporary copy first, as the scheduler would read it, and an agent that isn't defined is a problem too: with problems nothing is written and they're returned. A name any root already has is `ErrWorkerExists` (`WORKER_EXISTS`). The new worker is `new` (disabled) until reviewed and enabled (WK-10).
 - **WK-02** The directory name is the worker's name: `^[a-z0-9][a-z0-9_-]{0,63}$`; a frontmatter `name` must match it. Only valid names are looked up (they become file names).
 - **WK-03** Frontmatter is decoded strictly (unknown keys are errors — a misspelling would silently change behaviour). A leading BOM and blank lines are tolerated; missing frontmatter delimiters are errors.
 - **WK-04** Invalid if: bad name, empty workflow body, unparseable schedule or time zone, bad permission, bad or non-positive `limits.timeout`, negative limits, unsupported `overlap`/`catch_up`, hashing failure. An invalid worker still loads with its problems listed.

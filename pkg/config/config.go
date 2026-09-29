@@ -260,7 +260,8 @@ type WorkersConfig struct {
 	// Enabled lets workers run.
 	Enabled bool `toml:"enabled"`
 	// Paths are the directories holding worker directories, relative to
-	// the workspace.
+	// the workspace; a name in an earlier one wins. New workers go in the
+	// first.
 	Paths []string `toml:"paths"`
 	// Policy caps what any worker may do and spend.
 	Policy WorkerPolicy `toml:"policy"`
@@ -555,7 +556,7 @@ func DefaultConfig() *Config {
 		},
 		Workers: WorkersConfig{
 			Enabled: true,
-			Paths:   []string{"workers"},
+			Paths:   []string{".agents/workers", "workers"},
 			Policy: WorkerPolicy{
 				Allow:             []string{"shell", "write", "delete", "web", "mcp"},
 				DefaultMaxTurns:   50,

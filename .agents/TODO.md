@@ -32,7 +32,7 @@ means. Written 2026-09-28, reordered 2026-09-29; the backlog spec
    viewed (WebKitGTK has no PDF viewer: pdf.js, a new dependency and
    notice). Done: each opens from the tree as a preview.
 
-5. **Creating workers (M).** A **New worker** dialog with a field for
+5. ✅ *Done (WK-01a, DSK-91a).* **Creating workers (M).** A **New worker** dialog with a field for
    each `WORKER.md` frontmatter setting and the prompt, checked before
    saving (a new `WorkerService.CreateWorker`). New workers go in
    `.agents/workers/<name>/WORKER.md`; that path is searched by default

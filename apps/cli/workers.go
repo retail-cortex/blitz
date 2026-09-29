@@ -76,8 +76,9 @@ func openWorkers(ctx context.Context, g *globalFlags) (ops workerOps, close func
 func newWorkersCommand(g *globalFlags) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "workers",
-		Short: "List, enable and run the workspace's workers (workers/<name>/WORKER.md)",
-		Long: `Workers are workflows a workspace defines in workers/<name>/WORKER.md and the
+		Short: "List, enable and run the workspace's workers (.agents/workers/<name>/WORKER.md)",
+		Long: `Workers are workflows a workspace defines in .agents/workers/<name>/WORKER.md
+(or workers/<name>/WORKER.md) and the
 Blitz service runs on their schedules, unattended. A worker runs only once
 enabled, pinned to the content you reviewed: editing it disables it until it is
 enabled again. It may do only what its permissions allow; anything else is
@@ -126,7 +127,7 @@ func workersList(cmd *cobra.Command, g *globalFlags) error {
 	}
 	out := cmd.OutOrStdout()
 	if len(list) == 0 {
-		fmt.Fprintln(out, "No workers: add workers/<name>/WORKER.md to the workspace.")
+		fmt.Fprintln(out, "No workers: add .agents/workers/<name>/WORKER.md to the workspace.")
 		return nil
 	}
 	for _, w := range list {

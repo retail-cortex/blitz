@@ -19,6 +19,7 @@ import { timestampDate } from "@bufbuild/protobuf/wkt";
 import {
   mdiAlertCircleOutline,
   mdiCalendarClock,
+  mdiCalendarPlus,
   mdiCheckCircleOutline,
   mdiCloseCircleOutline,
   mdiPauseCircleOutline,
@@ -32,6 +33,7 @@ import { message } from "./errors";
 import { language, t } from "./i18n";
 import { RunStatus, WorkerState, type Worker, type WorkerRun } from "./gen/blitz/v1/worker_pb";
 import { applyEvent, failed, summarizeArgs, type Entry } from "./turns";
+import { NewWorkerDialog } from "./NewWorkerDialog";
 import { Button, Chip, Icon, IconButton } from "./ui/controls";
 
 const stateKeys: Record<WorkerState, string> = {
@@ -62,6 +64,7 @@ export function Workers({ dir }: { dir: string }) {
   const [list, setList] = useState<Worker[]>([]);
   const [selected, setSelected] = useState("");
   const [error, setError] = useState("");
+  const [creating, setCreating] = useState(false);
 
   const refresh = useCallback(async () => {
     try {
@@ -82,10 +85,16 @@ export function Workers({ dir }: { dir: string }) {
       <aside className="split-side">
         <div className="row side-head">
           <span className="t-title-sm spacer">{t("desktop.workers.title")}</span>
+          <IconButton icon={mdiCalendarPlus} label={t("desktop.newworker.title")} small onClick={() => setCreating(true)} />
           <IconButton icon={mdiRefresh} label={t("desktop.refresh")} small onClick={refresh} />
         </div>
         {list.length === 0 && (
-          <p className="muted t-body-sm">{t("desktop.workers.none", { path: "workers/<name>/WORKER.md" })}</p>
+          <div className="stack" style={{ gap: 8 }}>
+            <p className="muted t-body-sm">{t("desktop.workers.none", { path: ".agents/workers/<name>/WORKER.md" })}</p>
+            <Button small variant="tonal" icon={mdiCalendarPlus} onClick={() => setCreating(true)}>
+              {t("desktop.newworker.title")}
+            </Button>
+          </div>
         )}
         <div className="list">
           {list.map((w) => (
@@ -106,6 +115,16 @@ export function Workers({ dir }: { dir: string }) {
           <div className="card error row">
             <Icon path={mdiAlertCircleOutline} /> {error}
           </div>
+        )}
+        {creating && (
+          <NewWorkerDialog
+            dir={dir}
+            onClose={() => setCreating(false)}
+            onCreated={(name) => {
+              setSelected(name);
+              refresh();
+            }}
+          />
         )}
         {worker ? <WorkerView dir={dir} worker={worker} onChange={refresh} key={worker.name + worker.hash} /> : list.length > 0 && <p className="muted">{t("desktop.workers.choose")}</p>}
       </section>

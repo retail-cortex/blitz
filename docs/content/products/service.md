@@ -50,7 +50,7 @@ Approvals and questions travel on the running turn's event stream: the client th
 
 ## Workers
 
-Workers are workflows a workspace defines in `workers/<name>/WORKER.md`, which the service runs on a schedule, unattended:
+Workers are workflows a workspace defines in `.agents/workers/<name>/WORKER.md` (or `workers/<name>/WORKER.md`), which the desktop app's **New worker** dialog writes for you and the service runs on a schedule, unattended:
 
 ```markdown
 ---

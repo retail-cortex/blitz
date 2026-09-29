@@ -207,3 +207,64 @@ func TestPermissions(t *testing.T) {
 		})
 	}
 }
+
+// What Render writes loads back as the same worker, with only the fields
+// set in its frontmatter.
+func TestRenderLoadsBack(t *testing.T) {
+	cases := []struct {
+		name string
+		spec api.WorkerSpec
+		not  []string // keys left out of the frontmatter
+	}{
+		{
+			name: "every field",
+			spec: api.WorkerSpec{
+				Name: "deps", Description: "Outdated modules", Schedule: "Weekdays at 9:30", Timezone: "Europe/Paris",
+				Agent: "qa", Model: "gemini-3.8-flash", Permissions: []string{"shell:go list -m -u all", " ", "write:reports/*"},
+				Limits: api.Limits{MaxTurns: 20, MaxCostUSD: 0.5, TimeoutRaw: "15m"}, CatchUp: "once", Prompt: "  Report outdated modules.\n\nIn reports/deps.md.  ",
+			},
+		},
+		{
+			name: "the least",
+			spec: api.WorkerSpec{Name: "tidy", Schedule: "@daily", Prompt: "Tidy up."},
+			not:  []string{"description", "timezone", "agent", "model", "permissions", "limits", "catch_up"},
+		},
+		{
+			name: "text that needs quoting",
+			spec: api.WorkerSpec{Name: "odd", Description: "a: b # c", Schedule: "0 6 * * *", Prompt: "---\nnot frontmatter"},
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			data := Render(c.spec)
+			fm, _, err := split(data)
+			require.NoError(t, err, "%s", data)
+			for _, k := range c.not {
+				assert.NotContains(t, string(fm), k+":", "empty %s written:\n%s", k, data)
+			}
+			dir := filepath.Join(t.TempDir(), c.spec.Name)
+			require.NoError(t, os.Mkdir(dir, 0o755))
+			require.NoError(t, os.WriteFile(filepath.Join(dir, FileName), data, 0o644))
+			w, err := Load(dir)
+			require.NoError(t, err, "%s", data)
+			assert.Equal(t, strings.TrimSpace(c.spec.Description), w.Description)
+			assert.Equal(t, strings.TrimSpace(c.spec.Prompt), w.Prompt)
+			assert.Equal(t, c.spec.Agent, w.Agent)
+			assert.Equal(t, c.spec.Model, w.Model)
+			assert.Equal(t, c.spec.Limits.MaxTurns, w.Limits.MaxTurns)
+			assert.Equal(t, c.spec.Limits.MaxCostUSD, w.Limits.MaxCostUSD)
+			assert.Equal(t, c.spec.Limits.TimeoutRaw, w.Limits.TimeoutRaw)
+			var perms []string
+			for _, p := range w.Permissions {
+				perms = append(perms, p.String())
+			}
+			var want []string
+			for _, p := range c.spec.Permissions {
+				if strings.TrimSpace(p) != "" {
+					want = append(want, p)
+				}
+			}
+			assert.Equal(t, want, perms)
+		})
+	}
+}

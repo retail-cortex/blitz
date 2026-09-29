@@ -239,6 +239,9 @@ const configPath = (workspace: string) => (workspace ? `~/.blitz/workspaces/${wo
 const change = (workspace: string) => ({ change: { path: configPath(workspace), modelError: "" } });
 
 // The workspace's files: a small Go project, some of it changed.
+// Workers made with the New worker dialog.
+const fakeCreatedWorkers: Record<string, unknown>[] = [];
+
 const fakeFiles = new Map<string, string>([
   ["go.mod", "module example.com/shop\n\ngo 1.27\n"],
   ["README.md", "# Shop\n\nA small shop server. Run it with `go run ./cmd/shop`.\n\n| Path | What |\n| --- | --- |\n| `/cart` | the cart |\n\n- [x] discounts\n- [ ] checkout\n"],
@@ -611,8 +614,15 @@ export function installFake() {
         statFiles: ({ paths }) => ({ versions: Object.fromEntries(paths.map((p) => [p, fakeFiles.has(p) ? fakeVersion(fakeFiles.get(p)!) : ""])) }),
       });
       service(WorkerService, {
+        createWorker: (r) => {
+          if (/^when/i.test(r.schedule)) return { problems: [`schedule "${r.schedule}": use a cron expression, a descriptor or plain text like "Daily at 6 AM"`] };
+          const w = { workspace: r.workspace, name: r.name, description: r.description, state: WorkerState.NEW, schedule: r.schedule, cron: "0 6 * * *", timezone: r.timezone, agent: r.agent, model: r.model, permissions: r.permissions, path: `${r.workspace}/.agents/workers/${r.name}/WORKER.md`, hash: "sha256:new", problems: [] };
+          fakeCreatedWorkers.push(w);
+          return { worker: w };
+        },
         listWorkers: () => ({
           workers: [
+            ...fakeCreatedWorkers,
             {
               name: "nightly-deps",
               description: "Checks for outdated dependencies every night and opens a summary.",

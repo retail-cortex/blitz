@@ -115,6 +115,26 @@ func (h workerService) ListWorkers(ctx context.Context, r req[pb.ListWorkersRequ
 	return ok(out)
 }
 
+func (h workerService) CreateWorker(ctx context.Context, r req[pb.CreateWorkerRequest]) (*connect.Response[pb.CreateWorkerResponse], error) {
+	w, err := h.s.workspace(ctx, r.Msg.Workspace)
+	if err != nil {
+		return nil, err
+	}
+	m := r.Msg
+	info, problems, err := w.CreateWorker(api.WorkerSpec{
+		Name: m.Name, Description: m.Description, Schedule: m.Schedule, Timezone: m.Timezone, Agent: m.Agent, Model: m.Model,
+		Permissions: m.Permissions, Limits: api.Limits{MaxTurns: int(m.MaxTurns), MaxCostUSD: m.MaxCostUsd, TimeoutRaw: m.Timeout},
+		CatchUp: m.CatchUp, Prompt: m.Prompt,
+	})
+	if err != nil {
+		return nil, toAPI(err)
+	}
+	if len(problems) > 0 {
+		return ok(&pb.CreateWorkerResponse{Problems: problems})
+	}
+	return ok(&pb.CreateWorkerResponse{Worker: workerMsg(info)})
+}
+
 func (h workerService) EnableWorker(ctx context.Context, r req[pb.EnableWorkerRequest]) (*connect.Response[pb.EnableWorkerResponse], error) {
 	sc := h.s.sched
 	if sc == nil {

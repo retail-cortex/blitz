@@ -162,6 +162,52 @@ func Load(dir string) (*Worker, error) {
 	return w, nil
 }
 
+// fileFrontmatter is frontmatter as Render writes it: set fields only.
+type fileFrontmatter struct {
+	Name        string      `yaml:"name"`
+	Description string      `yaml:"description,omitempty"`
+	Schedule    string      `yaml:"schedule"`
+	Timezone    string      `yaml:"timezone,omitempty"`
+	Agent       string      `yaml:"agent,omitempty"`
+	Model       string      `yaml:"model,omitempty"`
+	Permissions []string    `yaml:"permissions,omitempty"`
+	Limits      *fileLimits `yaml:"limits,omitempty"`
+	CatchUp     string      `yaml:"catch_up,omitempty"`
+}
+
+type fileLimits struct {
+	MaxTurns   int     `yaml:"max_turns,omitempty"`
+	MaxCostUSD float64 `yaml:"max_cost_usd,omitempty"`
+	Timeout    string  `yaml:"timeout,omitempty"`
+}
+
+// Render writes a worker's WORKER.md: its frontmatter (the fields set)
+// and its workflow.
+func Render(s api.WorkerSpec) []byte {
+	fm := fileFrontmatter{
+		Name: s.Name, Description: strings.TrimSpace(s.Description), Schedule: strings.TrimSpace(s.Schedule),
+		Timezone: strings.TrimSpace(s.Timezone), Agent: strings.TrimSpace(s.Agent), Model: strings.TrimSpace(s.Model),
+		CatchUp: s.CatchUp,
+	}
+	for _, p := range s.Permissions {
+		if p = strings.TrimSpace(p); p != "" {
+			fm.Permissions = append(fm.Permissions, p)
+		}
+	}
+	if l := (fileLimits{s.Limits.MaxTurns, s.Limits.MaxCostUSD, strings.TrimSpace(s.Limits.TimeoutRaw)}); l != (fileLimits{}) {
+		fm.Limits = &l
+	}
+	var b bytes.Buffer
+	b.WriteString("---\n")
+	enc := yaml.NewEncoder(&b)
+	enc.SetIndent(2)
+	_ = enc.Encode(fm) // plain strings and numbers: it can't fail
+	b.WriteString("---\n\n")
+	b.WriteString(strings.TrimSpace(s.Prompt))
+	b.WriteString("\n")
+	return b.Bytes()
+}
+
 // InvalidError lists what makes a WORKER.md unusable. Load still returns
 // what it could read, so a listing can show the worker and why.
 type InvalidError struct {

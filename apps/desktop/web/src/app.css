@@ -469,3 +469,10 @@ code.file-link:hover { text-decoration-color: currentColor; }
 .log-level.level-debug { color: var(--md-on-surface-variant); }
 .log-msg { overflow-wrap: anywhere; }
 .log-attr { font-size: 11.5px; }
+
+/* The New worker dialog: two fields a row, three for the limits. */
+.new-worker .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 16px; }
+.new-worker .triple { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px 16px; }
+.new-worker .field .input, .new-worker .field .select { width: 100%; }
+.new-worker-prompt { min-height: 140px; resize: vertical; font: inherit; }
+@media (max-width: 800px) { .new-worker .pair, .new-worker .triple { grid-template-columns: 1fr; } }

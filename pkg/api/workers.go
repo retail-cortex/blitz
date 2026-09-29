@@ -117,6 +117,23 @@ const (
 	StateInvalid State = "invalid"
 )
 
+// WorkerSpec is a new worker as a form describes it: WORKER.md's
+// frontmatter fields and its workflow (Prompt). Empty fields are left out
+// of the file.
+type WorkerSpec struct {
+	Name, Description  string
+	Schedule, Timezone string
+	Agent, Model       string
+	Permissions        []string // "kind:pattern"
+	Limits             Limits   // TimeoutRaw, not Timeout
+	CatchUp            string   // "", "none" or "once"
+	Prompt             string
+}
+
+// ErrWorkerExists reports creating a worker with a name the workspace
+// already has.
+var ErrWorkerExists = errors.New("a worker with that name exists")
+
 // ErrHashMismatch reports enabling a worker at a hash other than its
 // current one: the files changed after they were reviewed.
 var ErrHashMismatch = errors.New("the worker changed since it was reviewed")

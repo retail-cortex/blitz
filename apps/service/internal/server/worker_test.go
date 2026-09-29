@@ -196,3 +196,28 @@ func TestSchedulerWaitsOncePerWorkerAndStops(t *testing.T) {
 	assert.ErrorIs(t, err, errStopped, "waiting run after Close: %v", err)
 	assert.False(t, sc.track(), "a stopped scheduler started a run")
 }
+
+// A worker made from a form over the API: created when valid, its
+// problems when not, WORKER_EXISTS for a name taken.
+func TestCreateWorkerOverTheAPI(t *testing.T) {
+	c, _ := serveWorkers(t, time.Hour)
+	ctx := context.Background()
+	dir, _ := filepath.EvalSymlinks(t.TempDir())
+	req := &pb.CreateWorkerRequest{Workspace: dir, Name: "deps", Schedule: "Daily at 6 AM", MaxTurns: 10, Timeout: "20m", Prompt: "Write the report."}
+
+	res, err := c.CreateWorker(ctx, connect.NewRequest(req))
+	require.NoError(t, err)
+	require.Empty(t, res.Msg.Problems)
+	assert.Equal(t, filepath.Join(dir, ".agents", "workers", "deps", "WORKER.md"), res.Msg.Worker.GetPath())
+	assert.Equal(t, pb.WorkerState_WORKER_STATE_NEW, res.Msg.Worker.GetState())
+	assert.Equal(t, int32(10), res.Msg.Worker.GetLimits().GetMaxTurns())
+
+	_, err = c.CreateWorker(ctx, connect.NewRequest(req))
+	code, _ := errorReason(t, err)
+	assert.Equal(t, connect.CodeAlreadyExists, code)
+
+	bad, err := c.CreateWorker(ctx, connect.NewRequest(&pb.CreateWorkerRequest{Workspace: dir, Name: "x", Schedule: "whenever", Prompt: "p"}))
+	require.NoError(t, err)
+	assert.Nil(t, bad.Msg.Worker)
+	assert.NotEmpty(t, bad.Msg.Problems)
+}

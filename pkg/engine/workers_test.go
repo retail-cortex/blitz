@@ -229,3 +229,54 @@ func TestRunWorkerStopsAtItsTimeAndCostLimits(t *testing.T) {
 	assert.Equal(t, api.RunLimited, run.Status, "cost run %+v %v", run, err)
 	assert.Contains(t, run.Error, "cost limit", "cost run %+v %v", run, err)
 }
+
+// A worker made from a form goes in .agents/workers once it's valid, and
+// lists as new (disabled); an invalid one writes nothing.
+func TestCreateWorker(t *testing.T) {
+	w := openTest(t)
+	addWorker(t, w, "old", "---\nschedule: \"@daily\"\n---\nAn older worker, in workers/.\n")
+	good := api.WorkerSpec{Name: "deps", Description: "Outdated modules", Schedule: "Daily at 6 AM", Permissions: []string{"shell:go list -m -u all"}, Prompt: "Report outdated modules."}
+
+	info, problems, err := w.CreateWorker(good)
+	require.NoError(t, err)
+	require.Empty(t, problems)
+	assert.Equal(t, filepath.Join(w.Dir(), ".agents", "workers", "deps", workers.FileName), info.Path)
+	assert.Equal(t, api.StateNew, info.State, "a new worker waits to be reviewed")
+	assert.Equal(t, "0 6 * * *", info.Cron)
+	list, err := w.ListWorkers()
+	require.NoError(t, err)
+	names := []string{}
+	for _, x := range list {
+		names = append(names, x.Name)
+	}
+	assert.Equal(t, []string{"deps", "old"}, names, "both places are read")
+
+	for _, tc := range []struct {
+		name    string
+		spec    api.WorkerSpec
+		problem string
+		err     error
+	}{
+		{"taken", good, "", api.ErrWorkerExists},
+		{"taken in workers/", api.WorkerSpec{Name: "old", Schedule: "@daily", Prompt: "x"}, "", api.ErrWorkerExists},
+		{"bad name", api.WorkerSpec{Name: "My Worker", Schedule: "@daily", Prompt: "x"}, "lowercase", nil},
+		{"bad schedule", api.WorkerSpec{Name: "a", Schedule: "whenever", Prompt: "x"}, "whenever", nil},
+		{"no workflow", api.WorkerSpec{Name: "b", Schedule: "@daily"}, "workflow", nil},
+		{"bad permission", api.WorkerSpec{Name: "c", Schedule: "@daily", Permissions: []string{"root"}, Prompt: "x"}, "kind:pattern", nil},
+		{"bad timeout", api.WorkerSpec{Name: "d", Schedule: "@daily", Limits: api.Limits{TimeoutRaw: "soon"}, Prompt: "x"}, "timeout", nil},
+		{"unknown agent", api.WorkerSpec{Name: "e", Schedule: "@daily", Agent: "ghost", Prompt: "x"}, "ghost", nil},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, problems, err := w.CreateWorker(tc.spec)
+			if tc.err != nil {
+				assert.ErrorIs(t, err, tc.err)
+				return
+			}
+			require.NoError(t, err)
+			require.NotEmpty(t, problems)
+			assert.Contains(t, strings.Join(problems, "; "), tc.problem)
+			_, statErr := os.Stat(filepath.Join(w.Dir(), ".agents", "workers", tc.spec.Name))
+			assert.True(t, os.IsNotExist(statErr), "an invalid worker was written")
+		})
+	}
+}

@@ -21,9 +21,12 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io/fs"
 	"maps"
+	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -37,7 +40,8 @@ import (
 )
 
 // Workers: scheduled workflows the workspace defines in
-// workers/<name>/WORKER.md (ROADMAP item 24). Enabling one after reviewing
+// .agents/workers/<name>/WORKER.md or workers/<name>/WORKER.md (ROADMAP
+// item 24). Enabling one after reviewing
 // it pins its content hash; scanning alone never schedules anything.
 
 // defaultWorkerStore is where enabled workers are recorded.
@@ -107,6 +111,73 @@ func (w *Workspace) workerInfo(wk *workers.Worker, loadErr error, now time.Time)
 		}
 	}
 	return info
+}
+
+// CreateWorker writes a new worker, in the first of workers.paths
+// (.agents/workers/<name>/WORKER.md by default), once the file it makes
+// loads as a valid worker. Otherwise it writes nothing and returns why.
+// A new worker is disabled until it's reviewed and enabled.
+func (w *Workspace) CreateWorker(spec api.WorkerSpec) (api.WorkerInfo, []string, error) {
+	if !w.cfg.Workers.Enabled {
+		return api.WorkerInfo{}, nil, api.ErrWorkersDisabled
+	}
+	spec.Name = strings.TrimSpace(spec.Name)
+	if !workers.ValidName(spec.Name) {
+		return api.WorkerInfo{}, []string{fmt.Sprintf("name %q: lowercase letters, digits, - and _, up to 64", spec.Name)}, nil
+	}
+	if _, found := w.discoverWorkers()[spec.Name]; found {
+		return api.WorkerInfo{}, nil, fmt.Errorf("%w: %q", api.ErrWorkerExists, spec.Name)
+	}
+	roots := w.workerRoots()
+	if len(roots) == 0 {
+		return api.WorkerInfo{}, nil, fmt.Errorf("%w: workers.paths is empty", api.ErrWorkersDisabled)
+	}
+	data := workers.Render(spec)
+
+	// Checked as the scheduler would read it, before anything is written.
+	tmp, err := os.MkdirTemp("", "blitz-worker-")
+	if err != nil {
+		return api.WorkerInfo{}, nil, err
+	}
+	defer os.RemoveAll(tmp)
+	check := filepath.Join(tmp, spec.Name)
+	if err := os.Mkdir(check, 0o755); err != nil {
+		return api.WorkerInfo{}, nil, err
+	}
+	if err := os.WriteFile(filepath.Join(check, workers.FileName), data, 0o644); err != nil {
+		return api.WorkerInfo{}, nil, err
+	}
+	var problems []string
+	if _, err := workers.Load(check); err != nil {
+		var invalid *workers.InvalidError
+		if !errors.As(err, &invalid) {
+			return api.WorkerInfo{}, nil, err
+		}
+		problems = invalid.Problems
+	}
+	if spec.Agent != "" {
+		if _, ok := w.agents.Get(strings.TrimSpace(spec.Agent)); !ok {
+			problems = append(problems, fmt.Sprintf("agent %q isn't defined", spec.Agent))
+		}
+	}
+	if len(problems) > 0 {
+		return api.WorkerInfo{}, problems, nil
+	}
+
+	dir := filepath.Join(roots[0], spec.Name)
+	if err := os.MkdirAll(roots[0], 0o755); err != nil {
+		return api.WorkerInfo{}, nil, err
+	}
+	if err := os.Mkdir(dir, 0o755); errors.Is(err, fs.ErrExist) {
+		return api.WorkerInfo{}, nil, fmt.Errorf("%w: %s", api.ErrWorkerExists, dir)
+	} else if err != nil {
+		return api.WorkerInfo{}, nil, err
+	}
+	if err := os.WriteFile(filepath.Join(dir, workers.FileName), data, 0o644); err != nil {
+		return api.WorkerInfo{}, nil, err
+	}
+	wk, err := workers.Load(dir)
+	return w.workerInfo(wk, err, time.Now()), nil, nil
 }
 
 // ListWorkers returns the workspace's workers, by name.
