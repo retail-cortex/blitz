@@ -38,19 +38,6 @@ func validRule(effect, rule string) (string, error) {
 	return ValidatePermissionRule(effect, rule)
 }
 
-// validRules checks every rule in p, reporting each invalid one.
-func validRules(p PermissionsConfig) error {
-	var errs []error
-	for effect, list := range map[string][]string{"allow": p.Allow, "ask": p.Ask, "deny": p.Deny} {
-		for _, r := range list {
-			if _, err := validRule(effect, r); err != nil {
-				errs = append(errs, fmt.Errorf("[permissions] %s: %w", effect, err))
-			}
-		}
-	}
-	return errors.Join(errs...)
-}
-
 // ScopePermissions returns the [permissions] a scope's own settings file
 // sets (workspace "" is global; a workspace's add to the global ones), and
 // the file.

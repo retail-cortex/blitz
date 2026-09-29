@@ -103,8 +103,11 @@ export async function languageSupport(path: string): Promise<Extension> {
   }
 }
 
-/** A new editor state for a file's text, with its language (languageSupport). */
-export function fileState(text: string, lang: Extension, hooks: EditorHooks, wrap = false): EditorState {
+/**
+ * A new editor state for a file's text, with its language (languageSupport)
+ * and any extra extensions.
+ */
+export function fileState(text: string, lang: Extension, hooks: EditorHooks, wrap = false, extra: Extension = []): EditorState {
   const extensions: Extension[] = [
     lineNumbers(),
     highlightActiveLineGutter(),
@@ -138,6 +141,7 @@ export function fileState(text: string, lang: Extension, hooks: EditorHooks, wra
       indentWithTab,
     ]),
     lang,
+    extra,
     wrapping.of(wrap ? EditorView.lineWrapping : []),
     theme,
     EditorView.updateListener.of((u) => {

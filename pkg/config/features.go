@@ -27,16 +27,18 @@ type UIConfig struct {
 	// TerminalTitle shows the session's name in the terminal window title (TTY only).
 	TerminalTitle bool   `toml:"terminal_title"`
 	HistoryFile   string `toml:"history_file"` // REPL input history
-	HistorySize   int    `toml:"history_size"`
-	DiffLines     int    `toml:"diff_lines"`  // max diff lines shown in approval prompts
-	Theme         string `toml:"theme"`       // glamour style: auto, dark, light, notty
-	Locale        string `toml:"locale"`      // interface language, e.g. en-US, es, fr-CA
-	LocalesDir    string `toml:"locales_dir"` // extra translation catalogs (*.json)
+	// HistorySize is how many REPL inputs the history keeps.
+	HistorySize int    `toml:"history_size"`
+	DiffLines   int    `toml:"diff_lines"`  // max diff lines shown in approval prompts
+	Theme       string `toml:"theme"`       // glamour style: auto, dark, light, notty
+	Locale      string `toml:"locale"`      // interface language, e.g. en-US, es, fr-CA
+	LocalesDir  string `toml:"locales_dir"` // extra translation catalogs (*.json)
 }
 
 // ImagesConfig controls pictures sent to the model: @file.png mentions,
 // /attach, /paste, --image and the view_image tool.
 type ImagesConfig struct {
+	// Enabled lets images be sent to the model.
 	Enabled      bool   `toml:"enabled"`
 	Dir          string `toml:"dir"`           // where prepared images are kept (owner-only)
 	MaxDimension int    `toml:"max_dimension"` // longest edge sent to the model, in pixels
@@ -46,6 +48,8 @@ type ImagesConfig struct {
 
 // MemoryConfig controls project instruction files loaded into the prompt.
 type MemoryConfig struct {
+	// Enabled loads project instruction files (BLITZ.md, AGENTS.md) into the
+	// prompt.
 	Enabled  bool     `toml:"enabled"`
 	Files    []string `toml:"files"`     // names searched from the workspace up to the repo root
 	Global   string   `toml:"global"`    // user-wide instructions file
@@ -71,8 +75,12 @@ type ContextConfig struct {
 
 // ModelPrice is the cost per million tokens, in USD.
 type ModelPrice struct {
-	InputPerMTok       float64 `toml:"input_per_mtok"`
-	OutputPerMTok      float64 `toml:"output_per_mtok"`
+	// InputPerMTok is the price of a million input tokens.
+	InputPerMTok float64 `toml:"input_per_mtok"`
+	// OutputPerMTok is the price of a million output tokens.
+	OutputPerMTok float64 `toml:"output_per_mtok"`
+	// CachedInputPerMTok is the price of a million input tokens read from the
+	// prompt cache.
 	CachedInputPerMTok float64 `toml:"cached_input_per_mtok"`
 	// CacheWritePerMTok prices tokens written to the prompt cache (Anthropic
 	// bills these above the input rate); 0 means the input rate.
@@ -81,8 +89,10 @@ type ModelPrice struct {
 
 // AuditConfig controls the append-only audit log.
 type AuditConfig struct {
-	Enabled bool   `toml:"enabled"`
-	Dir     string `toml:"dir"`
+	// Enabled records every approval and tool action in the audit log.
+	Enabled bool `toml:"enabled"`
+	// Dir is where the audit log is kept (owner-only).
+	Dir string `toml:"dir"`
 }
 
 // LogConfig controls the diagnostic log (<dir>/blitz-YYYY-MM-DD.jsonl).
@@ -97,6 +107,7 @@ type LogConfig struct {
 // It is off by default; BLITZ_TELEMETRY=1 also turns it on. Standard
 // OTEL_EXPORTER_OTLP_* variables (headers, timeouts) apply.
 type TelemetryConfig struct {
+	// Enabled exports traces and logs over OTLP/HTTP.
 	Enabled bool `toml:"enabled"`
 	// Endpoint is the collector's base URL, e.g. http://localhost:4318.
 	// Empty uses OTEL_EXPORTER_OTLP_ENDPOINT, then the OTLP default.
@@ -109,6 +120,7 @@ type TelemetryConfig struct {
 
 // CheckpointConfig controls file snapshots used by /undo and /rewind.
 type CheckpointConfig struct {
+	// Enabled keeps file snapshots for /undo and /rewind.
 	Enabled  bool  `toml:"enabled"`
 	MaxBytes int64 `toml:"max_bytes"` // total snapshot size before the oldest turns are dropped
 	// Dir keeps checkpoints between runs, one directory per workspace ("":
@@ -122,10 +134,14 @@ type CheckpointConfig struct {
 // event on stdin. Exit code 2 blocks the action (stderr is the reason); any
 // other non-zero exit is reported and ignored unless FailClosed is set.
 type HookConfig struct {
-	Match          string `toml:"match"` // tool-name glob for tool hooks; empty matches all
-	Command        string `toml:"command"`
-	TimeoutSeconds int    `toml:"timeout_seconds"`
-	FailClosed     bool   `toml:"fail_closed"`
+	Match string `toml:"match"` // tool-name glob for tool hooks; empty matches all
+	// Command is run with bash; it gets the event as JSON on stdin.
+	Command string `toml:"command"`
+	// TimeoutSeconds stops the hook after this long (0: 30).
+	TimeoutSeconds int `toml:"timeout_seconds"`
+	// FailClosed blocks the action when the hook fails, not only on exit code
+	// 2.
+	FailClosed bool `toml:"fail_closed"`
 }
 
 // HooksConfig lists hooks per event.
@@ -172,14 +188,19 @@ func (h HooksConfig) All() []HookConfig {
 // MCPServerConfig describes a Model Context Protocol server. Exactly one of
 // Command (stdio) or URL (streamable HTTP) is set.
 type MCPServerConfig struct {
-	Name        string            `toml:"name"`
-	Command     string            `toml:"command"`
-	Args        []string          `toml:"args"`
-	Env         map[string]string `toml:"env"`
-	URL         string            `toml:"url"`
-	Tools       []string          `toml:"tools"`        // optional allow-list of tool names
-	AutoApprove bool              `toml:"auto_approve"` // skip approval for this server's tools
-	Sandbox     *bool             `toml:"sandbox"`      // run stdio servers in the OS sandbox (default true)
+	// Name identifies the server, in mcp(server:tool) rules and /mcp.
+	Name string `toml:"name"`
+	// Command starts a stdio server.
+	Command string `toml:"command"`
+	// Args are the command's arguments.
+	Args []string `toml:"args"`
+	// Env are environment variables for the command.
+	Env map[string]string `toml:"env"`
+	// URL is a streamable HTTP server's address.
+	URL         string   `toml:"url"`
+	Tools       []string `toml:"tools"`        // optional allow-list of tool names
+	AutoApprove bool     `toml:"auto_approve"` // skip approval for this server's tools
+	Sandbox     *bool    `toml:"sandbox"`      // run stdio servers in the OS sandbox (default true)
 	// Prefix namespaces the server's tools: prefix "gh" exposes create_issue
 	// as gh__create_issue, avoiding collisions with other servers and built-ins.
 	Prefix string `toml:"prefix"`
@@ -199,23 +220,30 @@ type MCPConfig struct {
 
 // WebConfig controls the web_fetch tool.
 type WebConfig struct {
-	Enabled        bool     `toml:"enabled"`
-	AllowDomains   []string `toml:"allow_domains"` // fetched without approval (globs like *.go.dev)
-	DenyDomains    []string `toml:"deny_domains"`
-	AllowPrivate   bool     `toml:"allow_private"` // permit localhost/private network targets
-	MaxBytes       int64    `toml:"max_bytes"`
-	TimeoutSeconds int      `toml:"timeout_seconds"`
+	// Enabled offers the web_fetch tool.
+	Enabled      bool     `toml:"enabled"`
+	AllowDomains []string `toml:"allow_domains"` // fetched without approval (globs like *.go.dev)
+	// DenyDomains are never fetched (globs).
+	DenyDomains  []string `toml:"deny_domains"`
+	AllowPrivate bool     `toml:"allow_private"` // permit localhost/private network targets
+	// MaxBytes is the most of a page web_fetch reads.
+	MaxBytes int64 `toml:"max_bytes"`
+	// TimeoutSeconds stops a fetch or search that takes longer.
+	TimeoutSeconds int `toml:"timeout_seconds"`
 	// SearchProvider enables web_search and /search web: "brave",
 	// "tavily", "searxng" (self-hosted, needs SearchURL), or "google"
 	// (Gemini's grounding with Google Search; uses the Gemini API key).
 	// Empty disables it.
 	SearchProvider string `toml:"search_provider"`
 	SearchAPIKey   string `toml:"search_api_key"` // or BRAVE_API_KEY / TAVILY_API_KEY / GEMINI_API_KEY
-	SearchURL      string `toml:"search_url"`
+	// SearchURL is a SearXNG instance's address, for search_provider
+	// "searxng".
+	SearchURL string `toml:"search_url"`
 	// SearchModel is the Gemini model that runs "google" searches
 	// (default: llm.gemini.model, else gemini-3.8-flash).
-	SearchModel      string `toml:"search_model"`
-	SearchMaxResults int    `toml:"search_max_results"`
+	SearchModel string `toml:"search_model"`
+	// SearchMaxResults is how many results a web search returns (0: 5).
+	SearchMaxResults int `toml:"search_max_results"`
 }
 
 // DefaultPricing holds estimated list prices for the default models, as of

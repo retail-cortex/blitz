@@ -116,6 +116,23 @@ func TestConfigService(t *testing.T) {
 	saved, err := cfg.SaveConfigFile(ctx, connect.NewRequest(&pb.SaveConfigFileRequest{Text: "[llm]\nprovider = \"gemini\"\nnope = 1\n"}))
 	assert.NoError(t, err, "save: %v", saved)
 	assert.Len(t, saved.Msg.Warnings, 1, "save: %v %v", saved, err)
+	assert.Equal(t, "line 3: unknown setting llm.nope", saved.Msg.Warnings[0])
+
+	// Checked without saving, each problem at its line.
+	checked, err := cfg.CheckConfigFile(ctx, connect.NewRequest(&pb.CheckConfigFileRequest{Text: "[permissions]\nallow = [\"shell(\"]\nnope = 1\n"}))
+	require.NoError(t, err)
+	require.Len(t, checked.Msg.Problems, 2, "problems: %v", checked.Msg.Problems)
+	assert.Equal(t, int32(2), checked.Msg.Problems[0].Line)
+	assert.True(t, checked.Msg.Problems[0].Error, "an invalid rule is an error")
+	assert.Equal(t, int32(3), checked.Msg.Problems[1].Line)
+	assert.False(t, checked.Msg.Problems[1].Error, "an unknown setting is a warning")
+	file, _ = cfg.GetConfigFile(ctx, connect.NewRequest(&pb.GetConfigFileRequest{}))
+	assert.NotContains(t, file.Msg.Text, "shell(", "checking saved the file")
+
+	ref, err := cfg.GetSettingsReference(ctx, connect.NewRequest(&pb.GetSettingsReferenceRequest{}))
+	require.NoError(t, err)
+	require.NotEmpty(t, ref.Msg.Settings)
+	assert.Equal(t, "blitz", ref.Msg.Settings[0].Key)
 }
 
 // Permission rules per scope: a workspace's add to the global ones, are

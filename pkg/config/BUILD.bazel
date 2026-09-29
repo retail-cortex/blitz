@@ -18,12 +18,19 @@ go_library(
     name = "config",
     srcs = [
         "agentmodels.go",
+        "check.go",
         "config.go",
         "features.go",
         "locale.go",
         "modelsettings.go",
         "permissions.go",
         "providers.go",
+        "reference.go",
+    ],
+    embedsrcs = [
+        "config.go",
+        "features.go",
+        "modelsettings.go",
     ],
     importpath = "github.com/retail-cortex/blitz/pkg/config",
     visibility = ["//visibility:public"],
@@ -39,11 +46,13 @@ go_test(
     name = "config_test",
     srcs = [
         "agentmodels_test.go",
+        "check_test.go",
         "config_test.go",
         "locale_test.go",
         "modelsettings_test.go",
         "pricing_test.go",
         "providers_test.go",
+        "reference_test.go",
     ],
     embed = [":config"],
     deps = [

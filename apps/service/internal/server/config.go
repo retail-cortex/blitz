@@ -285,3 +285,19 @@ func (h configService) SaveConfigFile(ctx context.Context, r req[pb.SaveConfigFi
 	}
 	return ok(&pb.SaveConfigFileResponse{Change: h.changed(ctx, dir, path), Warnings: warnings})
 }
+
+func (h configService) CheckConfigFile(_ context.Context, r req[pb.CheckConfigFileRequest]) (*connect.Response[pb.CheckConfigFileResponse], error) {
+	var out []*pb.ConfigProblem
+	for _, p := range config.CheckSettings(r.Msg.Text) {
+		out = append(out, &pb.ConfigProblem{Line: int32(p.Line), Column: int32(p.Col), Error: p.Error, Message: p.Message})
+	}
+	return ok(&pb.CheckConfigFileResponse{Problems: out})
+}
+
+func (h configService) GetSettingsReference(context.Context, req[pb.GetSettingsReferenceRequest]) (*connect.Response[pb.GetSettingsReferenceResponse], error) {
+	var out []*pb.SettingInfo
+	for _, s := range config.Reference() {
+		out = append(out, &pb.SettingInfo{Key: s.Key, Type: s.Type, Default: s.Default, Doc: s.Doc})
+	}
+	return ok(&pb.GetSettingsReferenceResponse{Settings: out})
+}

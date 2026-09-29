@@ -450,6 +450,7 @@ These touch your real keychain and settings: use a test key, or a throwaway `--c
 - [ ] Desktop, Settings › Providers & keys: each provider's status chip matches `blitz config keys`; **Set key** stores it, and a workspace whose model was unavailable ("The model isn't available…") clears the note without reopening; **Move to keychain** on a plain key; **Remove**. Base URLs and the default model save on leaving the field.
 - [ ] Desktop, run settings › API keys: "Global" for inherited keys; **Set key** gives the workspace its own; a provider chosen there applies to that workspace only.
 - [ ] Desktop, Settings › Settings file: the global file and a workspace's; a typo'd setting saves with a warning; `[llm` is refused with the parse error and nothing is written; ⌘S saves; **Revert** restores.
+- [ ] Settings › Settings file: TOML is highlighted. Type `temprature = 0.3` under `[blitz]` and `[llm` on another line, then **Validate**. **Expected:** both listed with their lines (the typo a warning, `[llm` an error), both lines marked, the cursor on the error; clicking a problem goes to its line; **Save** refuses while the error is there. Hover `provider` under `[llm]`: its type, default and description. **Every setting** lists them all; searching "timeout" narrows it.
 
 ## 41. Files: the shelf and the editor (spec_files_029, phase 1)
 

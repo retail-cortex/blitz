@@ -57,18 +57,20 @@ type Config struct {
 	// "kind(pattern)" (see tools.ParsePermissionRule).
 	Permissions PermissionsConfig `toml:"permissions"`
 
-	UI          UIConfig              `toml:"ui"`
-	Memory      MemoryConfig          `toml:"memory"`
-	Context     ContextConfig         `toml:"context"`
-	Audit       AuditConfig           `toml:"audit"`
-	Checkpoints CheckpointConfig      `toml:"checkpoints"`
-	Images      ImagesConfig          `toml:"images"`
-	Hooks       HooksConfig           `toml:"hooks"`
-	MCP         MCPConfig             `toml:"mcp"`
-	Web         WebConfig             `toml:"web"`
-	Log         LogConfig             `toml:"log"`
-	Telemetry   TelemetryConfig       `toml:"telemetry"`
-	Pricing     map[string]ModelPrice `toml:"pricing"`
+	UI          UIConfig         `toml:"ui"`
+	Memory      MemoryConfig     `toml:"memory"`
+	Context     ContextConfig    `toml:"context"`
+	Audit       AuditConfig      `toml:"audit"`
+	Checkpoints CheckpointConfig `toml:"checkpoints"`
+	Images      ImagesConfig     `toml:"images"`
+	Hooks       HooksConfig      `toml:"hooks"`
+	MCP         MCPConfig        `toml:"mcp"`
+	Web         WebConfig        `toml:"web"`
+	Log         LogConfig        `toml:"log"`
+	Telemetry   TelemetryConfig  `toml:"telemetry"`
+	// Pricing overrides or adds model prices, keyed by model name, for
+	// /cost and cost limits.
+	Pricing map[string]ModelPrice `toml:"pricing"`
 	// AgentModels pins agents to models: agent name -> "provider/model".
 	// A pin wins over the agent's own default_model; unpinned agents use
 	// the configured model. Set with /pin_model, removed with /unpin.
@@ -81,11 +83,20 @@ type Config struct {
 
 // BlitzConfig controls the core behaviour settings.
 type BlitzConfig struct {
-	DefaultAgent string  `toml:"default_agent"`
-	DefaultModel string  `toml:"default_model"`
-	AgencyLevel  string  `toml:"agency_level"`
-	Temperature  float64 `toml:"temperature"`
-	MaxTokens    int     `toml:"max_tokens"`
+	// DefaultAgent is the agent a session starts with.
+	DefaultAgent string `toml:"default_agent"`
+	// DefaultModel, when set, is the model to use instead of the provider's
+	// own (llm.<provider>.model); "provider/model" picks another provider.
+	DefaultModel string `toml:"default_model"`
+	// AgencyLevel is how far the agent goes before checking in: low, medium,
+	// high or extreme.
+	AgencyLevel string `toml:"agency_level"`
+	// Temperature is the sampling temperature, unless [model_settings] sets
+	// one for the model.
+	Temperature float64 `toml:"temperature"`
+	// MaxTokens caps the tokens in one model response, unless [model_settings]
+	// sets it for the model.
+	MaxTokens int `toml:"max_tokens"`
 	// AutoApprove is the older spelling of PermissionMode = "bypass".
 	AutoApprove bool `toml:"auto_approve"`
 	// PermissionMode is the starting permission mode: default,
@@ -104,7 +115,8 @@ type BlitzConfig struct {
 
 // LLMConfig holds provider configurations for LLM backends.
 type LLMConfig struct {
-	Provider string `toml:"provider"` // gemini, openai, anthropic, ollama
+	// Provider is the model provider: gemini, openai, anthropic or ollama.
+	Provider string `toml:"provider"`
 	// MaxRetries is how often a failed model request is retried (rate
 	// limits, overload, 5xx, connection errors), with exponential backoff
 	// that honours Retry-After. 0 disables retries.
@@ -138,8 +150,11 @@ const (
 
 // GeminiConfig holds settings for Google Gemini / Vertex AI.
 type GeminiConfig struct {
+	// APIKey is the Gemini API key (default: GEMINI_API_KEY). Keep it in the
+	// keychain: set it in the form or with blitz config set-key.
 	APIKey string `toml:"api_key"`
-	Model  string `toml:"model"`
+	// Model is the Gemini model to use.
+	Model string `toml:"model"`
 	// Auth is "api_key" ("" too: the Gemini API) or "adc": Vertex AI with
 	// Application Default Credentials (`gcloud auth application-default
 	// login`, or a service account), in ProjectID and Location.
@@ -156,9 +171,15 @@ func (g GeminiConfig) UsesADC() bool { return g.Auth == AuthADC }
 
 // OpenAIConfig holds settings for OpenAI, OpenRouter, or Ollama.
 type OpenAIConfig struct {
-	APIKey  string `toml:"api_key"`
+	// APIKey is the OpenAI or OpenRouter API key (default: OPENAI_API_KEY;
+	// Ollama needs none). Keep it in the keychain: set it in the form or with
+	// blitz config set-key.
+	APIKey string `toml:"api_key"`
+	// BaseURL is the API's address: OpenAI's, OpenRouter's or a local
+	// Ollama's.
 	BaseURL string `toml:"base_url"`
-	Model   string `toml:"model"`
+	// Model is the model to use.
+	Model string `toml:"model"`
 }
 
 // AnthropicConfig holds settings for Anthropic Claude.
@@ -177,8 +198,9 @@ type AnthropicConfig struct {
 	// come from GOOGLE_CLOUD_PROJECT and GOOGLE_CLOUD_LOCATION ("global").
 	ProjectID string `toml:"project_id"`
 	Location  string `toml:"location"`
-	Model     string `toml:"model"`
-	BaseURL   string `toml:"base_url"` // for gateways/proxies; empty uses the API default
+	// Model is the Claude model to use.
+	Model   string `toml:"model"`
+	BaseURL string `toml:"base_url"` // for gateways/proxies; empty uses the API default
 	// Fallbacks controls server-side refusal fallback on models that support
 	// it (claude-opus-5, claude-fable-5*): "default" routes by refusal
 	// category, a model ID pins one fallback model, "off" disables it.
@@ -223,8 +245,10 @@ func (c *Config) ModelName() string {
 
 // SkillsConfig controls Agent Skills discovery and paths.
 type SkillsConfig struct {
-	Enabled bool     `toml:"enabled"`
-	Paths   []string `toml:"paths"`
+	// Enabled loads Agent Skills.
+	Enabled bool `toml:"enabled"`
+	// Paths are the directories searched for skills (<name>/SKILL.md).
+	Paths []string `toml:"paths"`
 	// Policy caps what skills may ask for; a skill can make its own
 	// settings stricter but never looser.
 	Policy SkillPolicy `toml:"policy"`
@@ -233,6 +257,7 @@ type SkillsConfig struct {
 // WorkersConfig controls workers: scheduled workflows a workspace defines
 // in workers/<name>/WORKER.md (see pkg/engine/workers).
 type WorkersConfig struct {
+	// Enabled lets workers run.
 	Enabled bool `toml:"enabled"`
 	// Paths are the directories holding worker directories, relative to
 	// the workspace.
@@ -340,11 +365,19 @@ type PackagePolicy struct {
 
 // ToolsConfig configures shell execution, file operations, and permissions.
 type ToolsConfig struct {
-	ShellTimeoutSeconds int    `toml:"shell_timeout_seconds"`
-	MaxFileSizeBytes    int64  `toml:"max_file_size_bytes"`
-	WorkspaceDir        string `toml:"workspace_dir"`
-	AutoApproveCommands bool   `toml:"auto_approve_commands"`
-	UCToolsDir          string `toml:"uc_tools_dir"`
+	// ShellTimeoutSeconds stops a shell command that runs longer than this.
+	ShellTimeoutSeconds int `toml:"shell_timeout_seconds"`
+	// MaxFileSizeBytes is the largest file the file tools read or write.
+	MaxFileSizeBytes int64 `toml:"max_file_size_bytes"`
+	// WorkspaceDir is the workspace: the directory the tools work in (the
+	// --dir flag, else the current directory).
+	WorkspaceDir string `toml:"workspace_dir"`
+	// AutoApproveCommands runs shell commands without asking (the sandbox and
+	// deny rules still apply).
+	AutoApproveCommands bool `toml:"auto_approve_commands"`
+	// UCToolsDir is where the Universal Constructor (helios) keeps the tools
+	// it creates.
+	UCToolsDir string `toml:"uc_tools_dir"`
 	// ApprovalsFile stores "always allow" decisions.
 	ApprovalsFile string `toml:"approvals_file"`
 	// MaxParallel caps how many tool calls from one model response run at
@@ -361,9 +394,12 @@ type ToolsConfig struct {
 //
 // A workspace's rules add to the global ones (Merge).
 type PermissionsConfig struct {
+	// Allow rules let matching actions run without asking.
 	Allow []string `toml:"allow"`
-	Ask   []string `toml:"ask"`
-	Deny  []string `toml:"deny"`
+	// Ask rules make matching actions always ask.
+	Ask []string `toml:"ask"`
+	// Deny rules refuse matching actions in every mode.
+	Deny []string `toml:"deny"`
 	// ReadOnlyDefaults allows ReadOnlyCommands without asking (with
 	// ReadOnlyGuards asking even so); nil means on. A workspace may set it
 	// either way.
@@ -418,14 +454,25 @@ func (p PermissionsConfig) Merge(ws PermissionsConfig) PermissionsConfig {
 // ShellWritablePaths and temp/cache dirs, blocked paths can't be read, and
 // network access follows AllowNetwork.
 type SandboxConfig struct {
-	AllowedPaths       []string       `toml:"allowed_paths"`
-	ReadOnlyPaths      []string       `toml:"read_only_paths"`
-	BlockedPaths       []string       `toml:"blocked_paths"`
-	ShellWritablePaths []string       `toml:"shell_writable_paths"`
-	Shell              string         `toml:"shell"` // auto | required | off
-	AllowNetwork       bool           `toml:"allow_network"`
-	ScrubEnv           []string       `toml:"scrub_env"`
-	Commands           CommandsConfig `toml:"commands"`
+	// AllowedPaths are directories outside the workspace the file tools may
+	// read and write.
+	AllowedPaths []string `toml:"allowed_paths"`
+	// ReadOnlyPaths are directories outside the workspace the file tools may
+	// read.
+	ReadOnlyPaths []string `toml:"read_only_paths"`
+	// BlockedPaths (globs) are never read or written, by file tools or, in the
+	// OS sandbox, by commands: secrets by default.
+	BlockedPaths []string `toml:"blocked_paths"`
+	// ShellWritablePaths are directories sandboxed commands may also write
+	// (caches).
+	ShellWritablePaths []string `toml:"shell_writable_paths"`
+	Shell              string   `toml:"shell"` // auto | required | off
+	// AllowNetwork lets sandboxed commands use the network.
+	AllowNetwork bool `toml:"allow_network"`
+	// ScrubEnv are environment variables (globs) withheld from commands the
+	// model runs, so they can't read credentials.
+	ScrubEnv []string       `toml:"scrub_env"`
+	Commands CommandsConfig `toml:"commands"`
 }
 
 // CommandsConfig holds shell command patterns. Patterns match a whole simple
@@ -433,8 +480,11 @@ type SandboxConfig struct {
 // matches the bare command. Deny wins over Allow; if Allow is non-empty only
 // matching commands may run; AutoApprove skips the approval prompt.
 type CommandsConfig struct {
-	Allow       []string `toml:"allow"`
-	Deny        []string `toml:"deny"`
+	// Allow, when set, is the only commands that may run.
+	Allow []string `toml:"allow"`
+	// Deny are commands that never run, approved or not.
+	Deny []string `toml:"deny"`
+	// AutoApprove are commands that run without asking.
 	AutoApprove []string `toml:"auto_approve"`
 }
 
@@ -461,8 +511,10 @@ var DefaultDeniedCommands = []string{
 
 // SessionConfig configures persistence and session storage.
 type SessionConfig struct {
+	// StorageDir is where sessions are saved.
 	StorageDir string `toml:"storage_dir"`
-	AutoSave   bool   `toml:"auto_save"`
+	// AutoSave saves the session after every turn.
+	AutoSave bool `toml:"auto_save"`
 }
 
 // DefaultConfig returns a fully initialized Config with sensible production defaults.

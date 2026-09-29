@@ -356,7 +356,17 @@
 .provider-row:last-child { border-bottom: none; }
 .provider-row .field { max-width: 480px; }
 .provider-actions { margin-left: auto; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px; }
-.settings-text { min-height: 220px; font-size: 13px; line-height: 20px; tab-size: 2; }
+.settings-editor { height: 300px; border: 1px solid var(--md-outline-variant); border-radius: 8px; overflow: hidden; }
+.settings-editor .cm-editor { height: 100%; }
+.settings-problems .problem { display: flex; gap: 6px; align-items: flex-start; text-align: left; background: none; border: none; padding: 2px 0; color: inherit; font: inherit; cursor: pointer; }
+.settings-problems .problem:disabled { cursor: default; }
+.settings-problems .problem.error { color: var(--md-error); }
+.settings-problems .problem.warn .icon { color: var(--md-warning, #e8a33d); }
+.settings-reference summary { cursor: pointer; padding: 4px 0; }
+.settings-reference .input { width: 100%; margin: 8px 0; }
+.settings-reference dl { margin: 0; max-height: 320px; overflow: auto; }
+.settings-reference .ref-setting { display: block; padding: 6px 0; border-bottom: 1px solid var(--md-outline-variant); }
+.settings-reference dd { margin: 2px 0 0; }
 
 /* Files (spec_files_029): the shelf, the editor beside the conversation. */
 .files-shelf { width: 272px; flex: none; display: flex; flex-direction: column; min-height: 0; border-right: 1px solid var(--md-outline-variant); background: var(--md-surface-container-low); }

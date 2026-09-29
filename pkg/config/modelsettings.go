@@ -26,10 +26,15 @@ import (
 // [model_settings."<model>"]. Unset (nil) fields fall back to the global
 // blitz.temperature and max_tokens, or the provider's default.
 type ModelSettings struct {
+	// Temperature is the sampling temperature.
 	Temperature *float64 `toml:"temperature"`
-	MaxTokens   *int     `toml:"max_tokens"`
-	TopP        *float64 `toml:"top_p"`
-	Seed        *int     `toml:"seed"`
+	// MaxTokens caps the tokens in one response.
+	MaxTokens *int `toml:"max_tokens"`
+	// TopP is nucleus sampling: only the most likely tokens up to this
+	// probability.
+	TopP *float64 `toml:"top_p"`
+	// Seed makes sampling repeatable where the provider allows it.
+	Seed *int `toml:"seed"`
 	// ReasoningEffort is how hard the model thinks: minimal, low, medium,
 	// high or max (providers map it to their own levels).
 	ReasoningEffort *string `toml:"reasoning_effort"`

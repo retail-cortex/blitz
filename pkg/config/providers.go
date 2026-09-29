@@ -559,24 +559,12 @@ func ReadSettingsFile(prefixDir, workspace string) (string, string, error) {
 // file written and warnings: keys Blitz doesn't know (likely typos), and
 // API keys written in plain text.
 func WriteSettingsFile(prefixDir, workspace, text string) (string, []string, error) {
-	var cfg Config
-	md, err := toml.Decode(text, &cfg)
-	if err != nil {
-		return "", nil, fmt.Errorf("not valid settings: %w", err)
-	}
-	if err := validRules(cfg.Permissions); err != nil {
-		return "", nil, fmt.Errorf("not saved: %w", err)
-	}
 	var warnings []string
-	for _, k := range md.Undecoded() {
-		warnings = append(warnings, fmt.Sprintf("unknown setting %s", k))
-	}
-	for _, p := range KeyedProviders {
-		if md.IsDefined("llm", p, "api_key") {
-			if src := keySource(str(lookup(mustMap(text), "llm", p, "api_key"))); src == KeyPlain || src == KeyObfuscated {
-				warnings = append(warnings, fmt.Sprintf("the %s API key is in the file as %s text: set it in the form to keep it in the keychain", p, src))
-			}
+	for _, p := range CheckSettings(text) {
+		if p.Error {
+			return "", nil, fmt.Errorf("not saved: %s", p)
 		}
+		warnings = append(warnings, p.String())
 	}
 	path, err := editConfigFile(scopeDir(prefixDir, workspace), func(string) string { return text }, func(map[string]any) error { return nil })
 	return path, warnings, err

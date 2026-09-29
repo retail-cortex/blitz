@@ -59,6 +59,14 @@ service ConfigService {
   rpc GetConfigFile(GetConfigFileRequest) returns (GetConfigFileResponse);
   // Replaces a scope's settings file, if it's valid.
   rpc SaveConfigFile(SaveConfigFileRequest) returns (SaveConfigFileResponse);
+  // Checks a settings file's text without saving it: TOML errors, values
+  // of the wrong type and invalid permission rules, which stop it being
+  // saved; unknown settings and API keys written as plain text, which
+  // don't. Each at its line.
+  rpc CheckConfigFile(CheckConfigFileRequest) returns (CheckConfigFileResponse);
+  // Every setting a settings file can have, with its type, default and
+  // description (from the settings' doc comments).
+  rpc GetSettingsReference(GetSettingsReferenceRequest) returns (GetSettingsReferenceResponse);
 }
 
 // KeySource says where a provider's API key comes from.
@@ -225,6 +233,52 @@ message SaveConfigFileResponse {
   ConfigChange change = 1;
   // Unknown settings (likely typos) and keys written as plain text.
   repeated string warnings = 2;
+}
+
+// Request message for ConfigService.CheckConfigFile.
+message CheckConfigFileRequest {
+  // The settings file's text.
+  string text = 1;
+}
+
+// Something wrong with a settings file.
+message ConfigProblem {
+  // The line (from 1), or 0 for the file as a whole.
+  int32 line = 1;
+  // The column (from 1), when known.
+  int32 column = 2;
+  // An error stops the file being saved; a warning doesn't.
+  bool error = 3;
+  string message = 4;
+}
+
+// Response message for ConfigService.CheckConfigFile.
+message CheckConfigFileResponse {
+  // By line, errors first on a line; none when the file is fine.
+  repeated ConfigProblem problems = 1;
+}
+
+// Request message for ConfigService.GetSettingsReference.
+message GetSettingsReferenceRequest {}
+
+// One entry of the settings reference.
+message SettingInfo {
+  // The table ("llm") or setting ("llm.provider"). <name> stands for any
+  // name ("model_settings.<model>.temperature"); [] marks an array of
+  // tables ("hooks.pre_tool[].command").
+  string key = 1;
+  // table, array of tables, string, integer, number, boolean or list of
+  // strings.
+  string type = 2;
+  // The value when unset, as TOML ("" when there's none to show).
+  string default = 3;
+  // What it does.
+  string doc = 4;
+}
+
+// Response message for ConfigService.GetSettingsReference.
+message GetSettingsReferenceResponse {
+  repeated SettingInfo settings = 1;
 }
 
 // A rule in a settings file's [permissions].

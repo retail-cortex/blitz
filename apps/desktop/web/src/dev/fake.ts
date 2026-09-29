@@ -478,6 +478,26 @@ export function installFake() {
           scopePermissions(workspace).defaults = value;
           return change(workspace);
         },
+        checkConfigFile: ({ text }) => {
+          // A stand-in for the service's check: an unclosed table header is
+          // an error, a setting it doesn't know a warning.
+          const problems: { line: number; column: number; error: boolean; message: string }[] = [];
+          text.split("\n").forEach((l, i) => {
+            if (/^\s*\[[^\]]*$/.test(l)) problems.push({ line: i + 1, column: 1, error: true, message: "expected '.' or ']' to end table name" });
+            else if (/^\s*(temprature|modle)\s*=/.test(l)) problems.push({ line: i + 1, column: 1, error: false, message: `unknown setting ${l.split("=")[0].trim()}` });
+          });
+          return { problems };
+        },
+        getSettingsReference: () => ({
+          settings: [
+            { key: "blitz", type: "table", default: "", doc: "BlitzConfig controls the core behaviour settings." },
+            { key: "blitz.temperature", type: "number", default: "0.2", doc: "Temperature is the sampling temperature, unless [model_settings] sets one for the model." },
+            { key: "llm", type: "table", default: "", doc: "LLMConfig holds provider configurations for LLM backends." },
+            { key: "llm.provider", type: "string", default: '"gemini"', doc: "Provider is the model provider: gemini, openai, anthropic or ollama." },
+            { key: "llm.gemini.model", type: "string", default: '"gemini-3.8-flash"', doc: "Model is the Gemini model to use." },
+            { key: "model_settings.<model>.top_p", type: "number", default: "", doc: "TopP is nucleus sampling: only the most likely tokens up to this probability." },
+          ],
+        }),
         saveConfigFile: ({ workspace, text }) => {
           if (text.includes("[[")) throw new ConnectError("line 1: expected a table", Code.InvalidArgument);
           scopeConfig(workspace).text = text;

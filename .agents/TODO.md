@@ -52,7 +52,7 @@ means. Written 2026-09-28; the backlog spec
    other AI tools do; also for a whole turn. Done: both copy exactly what
    the user expects, with a snackbar; keyboard reachable.
 
-6. **The settings file editor: highlighting, a Validate button, and a
+6. ✅ *Done.* **The settings file editor: highlighting, a Validate button, and a
    reference (M).** Settings › Settings file is a plain text area. Use the
    editor the Files view already has (CodeMirror, `files/codemirror.ts`)
    with TOML highlighting; add **Validate**, which checks without saving
