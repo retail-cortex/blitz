@@ -6,6 +6,7 @@ require (
 	cloud.google.com/go/auth v0.23.2
 	cloud.google.com/go/auth/oauth2adapt v0.2.8
 	connectrpc.com/connect v1.21.0
+	fyne.io/systray v1.12.2
 	github.com/BurntSushi/toml v1.6.0
 	github.com/anthropics/anthropic-sdk-go v1.75.0
 	github.com/aymanbagabas/go-udiff v0.4.1
@@ -46,7 +47,6 @@ require (
 require (
 	cloud.google.com/go v0.123.0 // indirect
 	cloud.google.com/go/compute/metadata v0.9.0 // indirect
-	fyne.io/systray v1.12.2
 	git.sr.ht/~jackmordaunt/go-toast/v2 v2.0.3 // indirect
 	github.com/GoogleCloudPlatform/proto-gen-md-diagrams v0.0.0-20260825161644-7d6555ce1966 // indirect
 	github.com/alecthomas/chroma/v2 v2.20.0 // indirect

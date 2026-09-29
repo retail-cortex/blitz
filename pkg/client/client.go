@@ -49,6 +49,9 @@ type Remote struct {
 	mu      sync.Mutex
 	approve api.Approver
 	ask     api.UserPromptFunc
+	// ran are the sessions this client ran turns in: their background
+	// processes are the ones it accounts for when it exits.
+	ran []string
 }
 
 var _ api.Backend = (*Remote)(nil)
@@ -107,13 +110,6 @@ func (r *Remote) SetUI(approve api.Approver, ask api.UserPromptFunc) {
 	r.approve, r.ask = approve, ask
 }
 
-// Processes is nil: background processes belong to the service, and stay
-// when this client exits.
-func (r *Remote) Processes() api.Processes { return nil }
-
-// AuditShell does nothing: the command ran here, outside the service.
-func (r *Remote) AuditShell(string, int, error) {}
-
 // ImagesEnabled reports whether the workspace accepts images (its
 // [images] settings, from GetSettings).
 func (r *Remote) ImagesEnabled() bool { return r.getSettings().ImagesEnabled }
@@ -133,6 +129,7 @@ func (r *Remote) Run(ctx context.Context, sessionID string, t api.Turn, on func(
 	for _, img := range t.Images {
 		turn.ImageIds = append(turn.ImageIds, img.SHA256)
 	}
+	r.ranIn(sessionID)
 	stream, err := r.sessions.RunTurn(ctx, connect.NewRequest(&pb.RunTurnRequest{Workspace: r.dir, SessionId: sessionID, Turn: turn}))
 	if err != nil {
 		return api.TurnResult{}, fromAPI(err)

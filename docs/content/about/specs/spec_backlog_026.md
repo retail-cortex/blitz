@@ -7,7 +7,7 @@ weight: 26
 
 | | |
 |---|---|
-| Status | **Partly implemented:** 13 of its 49 requirements done (counted 2026-09-28); the rest open. Forward-looking requirements, collected 2026-09-26 from the known-gaps sections of specs 001–025, the roadmap (`docs/content/about/roadmap.md`) (item gaps, the Antigravity review's candidates) and `.agents/NEXT_STEPS.md` |
+| Status | **Partly implemented:** 20 of its 49 requirements done (counted 2026-09-29); the rest open. Forward-looking requirements, collected 2026-09-26 from the known-gaps sections of specs 001–025, the roadmap (`docs/content/about/roadmap.md`) (item gaps, the Antigravity review's candidates) and `.agents/NEXT_STEPS.md` |
 | Depends on | Everything before it: each item extends the spec named in its **Extends** line |
 
 ## 1. Purpose
@@ -71,9 +71,9 @@ Suggested order (from NEXT_STEPS): run the manual checks (§9) first — their f
 
 ### 5.1 Attached CLI: processes and `!cmd` audit — M
 **Extends** [spec_client_022](spec_client_022.md), [spec_service_021](spec_service_021.md). *Source: ROADMAP 8b, NEXT_STEPS 1.* Attached, `Processes()` is nil and `AuditShell` does nothing.
-- **BL-SVC-01** `WorkspaceService` gains `ListProcesses`, `GetProcessOutput`, `KillProcess`, and `AuditShell(command, exit_code, start_error)`; the client implements `Processes()` through them so the REPL's exit prompt (TUI-40) lists and kills the service's background processes started from this client's turns.
-- **BL-SVC-02** `!cmd` run by an attached CLI is recorded in the service workspace's audit log, as `user_shell`.
-- **BL-SVC-03** Background processes started in a turn record the session that started them; a client only lists its sessions' processes.
+- **BL-SVC-01** ✅ *Done 2026-09-29 (CL-04).* `WorkspaceService` gains `ListProcesses`, `GetProcessOutput`, `KillProcess`, and `AuditShell(command, exit_code, start_error)`; the client implements `Processes()` through them so the REPL's exit prompt (TUI-40) lists and kills the service's background processes started from this client's turns.
+- **BL-SVC-02** ✅ *Done 2026-09-29 (CL-04).* `!cmd` run by an attached CLI is recorded in the service workspace's audit log, as `user_shell`.
+- **BL-SVC-03** ✅ *Done 2026-09-29 (CL-04).* Background processes started in a turn record the session that started them; a client only lists its sessions' processes.
 
 ### 5.2 Steer messages at the end of a remote turn — S
 **Extends** [spec_client_022](spec_client_022.md) CL-05. Attached, `OnFinished` runs after the service already collected unread steer messages, so a message typed in that instant waits for the agent's next turn instead of being sent as the follow-up turn.

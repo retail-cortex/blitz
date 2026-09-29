@@ -15,6 +15,8 @@
 package engine
 
 import (
+	"fmt"
+	"slices"
 	"strconv"
 
 	"github.com/retail-cortex/blitz/pkg/api"
@@ -36,6 +38,39 @@ func (w *Workspace) SetUI(approve api.Approver, ask api.UserPromptFunc) {
 
 // Processes are the workspace's background processes.
 func (w *Workspace) Processes() api.Processes { return w.tools.Processes() }
+
+// ListProcesses are the background processes started in any of sessions'
+// turns, ordered by ID: a client's, which it accounts for when it exits.
+func (w *Workspace) ListProcesses(sessions []string) []api.ProcessInfo {
+	return w.tools.Processes().ListIn(sessions)
+}
+
+// ProcessOutput is the captured output and status of background process
+// id, when one of sessions started it (else api.ErrUnknownProcess).
+func (w *Workspace) ProcessOutput(sessions []string, id int) (string, api.ProcessInfo, error) {
+	if err := w.processIn(sessions, id); err != nil {
+		return "", api.ProcessInfo{}, err
+	}
+	return w.tools.Processes().Output(id)
+}
+
+// KillProcess stops background process id and its descendants, when one
+// of sessions started it (else api.ErrUnknownProcess).
+func (w *Workspace) KillProcess(sessions []string, id int) (api.ProcessInfo, error) {
+	if err := w.processIn(sessions, id); err != nil {
+		return api.ProcessInfo{}, err
+	}
+	return w.tools.Processes().Kill(id)
+}
+
+// processIn checks that one of sessions started background process id.
+func (w *Workspace) processIn(sessions []string, id int) error {
+	s, err := w.tools.Processes().SessionOf(id)
+	if err != nil || !slices.Contains(sessions, s) {
+		return fmt.Errorf("%w: %d", api.ErrUnknownProcess, id)
+	}
+	return nil
+}
 
 // AuditShell records a command the user ran directly.
 func (w *Workspace) AuditShell(command string, exitCode int, startErr error) {

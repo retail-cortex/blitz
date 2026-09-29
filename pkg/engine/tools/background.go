@@ -18,6 +18,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"sort"
 	"sync"
 	"time"
@@ -38,8 +39,10 @@ const (
 
 // BackgroundProcess is a command running (or finished) in the background.
 type BackgroundProcess struct {
-	ID        int
-	Command   string
+	ID      int
+	Command string
+	// Session is the session whose turn started it ("" outside one).
+	Session   string
 	StartTime time.Time
 
 	cmd    *guardedCmd
@@ -77,8 +80,9 @@ func NewProcessManager(maxRunning int, maxLifetime time.Duration) *ProcessManage
 	return &ProcessManager{procs: make(map[int]*BackgroundProcess), maxRunning: maxRunning, maxLifetime: maxLifetime}
 }
 
-// Start launches command in cwd as a background process.
-func (m *ProcessManager) Start(command, cwd string) (*BackgroundProcess, error) {
+// Start launches command in cwd as a background process for session (the
+// session whose turn asked for it; "" for none).
+func (m *ProcessManager) Start(session, command, cwd string) (*BackgroundProcess, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -116,6 +120,7 @@ func (m *ProcessManager) Start(command, cwd string) (*BackgroundProcess, error) 
 	bp := &BackgroundProcess{
 		ID:        m.next,
 		Command:   command,
+		Session:   session,
 		StartTime: time.Now(),
 		cmd:       cmd,
 		out:       out,
@@ -202,6 +207,27 @@ func (m *ProcessManager) Kill(id int) (api.ProcessInfo, error) {
 		return m.info(bp), fmt.Errorf("process %d did not exit after kill", id)
 	}
 	return m.info(bp), nil
+}
+
+// ListIn returns the tracked processes started for any of sessions,
+// ordered by ID.
+func (m *ProcessManager) ListIn(sessions []string) []api.ProcessInfo {
+	infos := make([]api.ProcessInfo, 0)
+	for _, p := range m.snapshot() {
+		if slices.Contains(sessions, p.Session) {
+			infos = append(infos, m.info(p))
+		}
+	}
+	return infos
+}
+
+// SessionOf is the session process id was started for.
+func (m *ProcessManager) SessionOf(id int) (string, error) {
+	bp, err := m.get(id)
+	if err != nil {
+		return "", err
+	}
+	return bp.Session, nil
 }
 
 // List returns all tracked processes ordered by ID.

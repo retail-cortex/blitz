@@ -355,6 +355,7 @@ Set `fallback_models = ["anthropic/claude-sonnet-5"]` with a working Anthropic k
 
 - [ ] `blitzd` in one terminal, `blitz` in a workspace in another. **Expected:** the REPL says it attached; a turn streams as usual; an approval prompt appears in the REPL and its answer is honoured; `/pin_model`, `/session save`, `/undo` work.
 - [ ] While attached, `blitz --local` in the same workspace. **Expected:** refused, naming the other owner (exit code 2).
+- [ ] 💲 Attached: ask the agent to run `sleep 300` in the background, then `/exit`. **Expected:** the exit prompt lists it; **w** waits (Ctrl+C gives up), **k** stops it (a second `blitz` attached to the workspace doesn't list it, before or after). `!ls`, then look in `~/.blitz/audit/audit-<today>.jsonl`: a `user_shell` entry for `ls` from the service.
 - [ ] Stop the service with Ctrl+C during a turn. **Expected:** the turn ends within about 10 s, the socket file is gone, and a new `blitz` in the workspace runs locally.
 - [ ] `blitz service install` on macOS, then log out and in. **Expected:** `blitz service status` says installed and answering; `~/.blitz/logs/service.log` shows it started. With a key only in the shell, install warns about it. `blitz service uninstall` removes it.
 - [ ] Same on Linux with systemd (`systemctl --user status blitz`).

@@ -1,0 +1,143 @@
+// Copyright 2026 Retail Cortex
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package client
+
+import (
+	"context"
+	"slices"
+	"time"
+
+	"connectrpc.com/connect"
+	"github.com/retail-cortex/blitz/pkg/api"
+	pb "github.com/retail-cortex/blitz/proto/blitz/v1"
+)
+
+// pollEvery is how often WaitAll asks whether the processes have finished.
+var pollEvery = 500 * time.Millisecond
+
+// callTimeout bounds the calls made while the client exits.
+const callTimeout = 10 * time.Second
+
+// ranIn notes that this client ran a turn in session id.
+func (r *Remote) ranIn(id string) {
+	if id == "" {
+		return
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if !slices.Contains(r.ran, id) {
+		r.ran = append(r.ran, id)
+	}
+}
+
+// sessionsRan are the sessions this client ran turns in.
+func (r *Remote) sessionsRan() []string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return slices.Clone(r.ran)
+}
+
+// Processes are the service's background processes started in this
+// client's turns (WorkspaceService.ListProcesses and KillProcess): the
+// ones to wait for or stop when it exits. Others' stay.
+func (r *Remote) Processes() api.Processes { return remoteProcesses{r} }
+
+// AuditShell records a command the user ran here directly in the
+// workspace's audit log (WorkspaceService.AuditShell).
+func (r *Remote) AuditShell(command string, exitCode int, startErr error) {
+	msg := &pb.AuditShellRequest{Workspace: r.dir, Command: command, ExitCode: int32(exitCode)}
+	if startErr != nil {
+		msg.StartError = startErr.Error()
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
+	defer cancel()
+	if _, err := r.workspaces.AuditShell(ctx, connect.NewRequest(msg)); err != nil {
+		r.failed("recording the command in the audit log", err)
+	}
+}
+
+// remoteProcesses is api.Processes over the service.
+type remoteProcesses struct{ r *Remote }
+
+// Running are the processes of this client's sessions still running.
+func (p remoteProcesses) Running() []api.ProcessInfo {
+	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
+	defer cancel()
+	running, err := p.running(ctx)
+	if err != nil {
+		p.r.failed("listing background processes", err)
+	}
+	return running
+}
+
+func (p remoteProcesses) running(ctx context.Context) ([]api.ProcessInfo, error) {
+	sessions := p.r.sessionsRan()
+	if len(sessions) == 0 {
+		return nil, nil
+	}
+	res, err := p.r.workspaces.ListProcesses(ctx, connect.NewRequest(&pb.ListProcessesRequest{Workspace: p.r.dir, SessionIds: sessions}))
+	if err != nil {
+		return nil, err
+	}
+	var out []api.ProcessInfo
+	for _, m := range res.Msg.Processes {
+		if m.Running {
+			out = append(out, processInfo(m))
+		}
+	}
+	return out, nil
+}
+
+// WaitAll waits until none of them runs, or ctx ends.
+func (p remoteProcesses) WaitAll(ctx context.Context) error {
+	for {
+		running, err := p.running(ctx)
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		if err != nil {
+			return fromAPI(err)
+		}
+		if len(running) == 0 {
+			return nil
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(pollEvery):
+		}
+	}
+}
+
+// Shutdown stops the ones still running.
+func (p remoteProcesses) Shutdown() {
+	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
+	defer cancel()
+	running, err := p.running(ctx)
+	if err != nil {
+		p.r.failed("listing background processes", err)
+		return
+	}
+	sessions := p.r.sessionsRan()
+	for _, proc := range running {
+		if _, err := p.r.workspaces.KillProcess(ctx, connect.NewRequest(&pb.KillProcessRequest{Workspace: p.r.dir, SessionIds: sessions, Id: int32(proc.ID)})); err != nil {
+			p.r.failed("stopping a background process", err)
+		}
+	}
+}
+
+func processInfo(m *pb.Process) api.ProcessInfo {
+	return api.ProcessInfo{ID: int(m.Id), Command: m.Command, Running: m.Running, ExitCode: int(m.ExitCode), RuntimeMs: m.RuntimeMs}
+}

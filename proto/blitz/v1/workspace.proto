@@ -123,6 +123,19 @@ service WorkspaceService {
   // Revokes approvals by key, or all of them.
   rpc RevokeApprovals(RevokeApprovalsRequest) returns (RevokeApprovalsResponse);
 
+  // Returns the background processes started in the given sessions' turns
+  // (a client's), finished ones too, ordered by ID.
+  rpc ListProcesses(ListProcessesRequest) returns (ListProcessesResponse);
+  // Returns a background process's captured output and status
+  // (UNKNOWN_PROCESS unless one of the given sessions started it).
+  rpc GetProcessOutput(GetProcessOutputRequest) returns (GetProcessOutputResponse);
+  // Stops a background process and its descendants (UNKNOWN_PROCESS unless
+  // one of the given sessions started it).
+  rpc KillProcess(KillProcessRequest) returns (KillProcessResponse);
+  // Records in the workspace's audit log a command the user ran directly
+  // in a client (!cmd), as user_shell.
+  rpc AuditShell(AuditShellRequest) returns (AuditShellResponse);
+
   // Reads an image from the workspace for a prompt (IMAGES_DISABLED).
   rpc LoadImage(LoadImageRequest) returns (LoadImageResponse);
   // Stores image data (e.g. pasted) for a prompt (IMAGES_DISABLED).
@@ -832,6 +845,71 @@ message RevokeApprovalsRequest {
 message RevokeApprovalsResponse {
   int32 revoked = 1;
 }
+
+// Process is a background process the agent started, and how it is.
+message Process {
+  // The workspace's number for it.
+  int32 id = 1;
+  string command = 2;
+  bool running = 3;
+  // Once it has finished.
+  int32 exit_code = 4;
+  // How long it has run, or ran.
+  int64 runtime_ms = 5;
+}
+
+// Request message for WorkspaceService.ListProcesses.
+message ListProcessesRequest {
+  string workspace = 1;
+  // The sessions whose processes to list.
+  repeated string session_ids = 2;
+}
+
+// Response message for WorkspaceService.ListProcesses.
+message ListProcessesResponse {
+  repeated Process processes = 1;
+}
+
+// Request message for WorkspaceService.GetProcessOutput.
+message GetProcessOutputRequest {
+  string workspace = 1;
+  // The sessions the asking client ran turns in.
+  repeated string session_ids = 2;
+  int32 id = 3;
+}
+
+// Response message for WorkspaceService.GetProcessOutput.
+message GetProcessOutputResponse {
+  // Its output and errors as captured (the first part, when long).
+  string output = 1;
+  Process process = 2;
+}
+
+// Request message for WorkspaceService.KillProcess.
+message KillProcessRequest {
+  string workspace = 1;
+  // The sessions the asking client ran turns in.
+  repeated string session_ids = 2;
+  int32 id = 3;
+}
+
+// Response message for WorkspaceService.KillProcess.
+message KillProcessResponse {
+  // How it is after the kill.
+  Process process = 1;
+}
+
+// Request message for WorkspaceService.AuditShell.
+message AuditShellRequest {
+  string workspace = 1;
+  string command = 2;
+  int32 exit_code = 3;
+  // Why it didn't start, if it didn't ("" when it ran).
+  string start_error = 4;
+}
+
+// Response message for WorkspaceService.AuditShell.
+message AuditShellResponse {}
 
 // Image is an image stored for a prompt.
 message Image {

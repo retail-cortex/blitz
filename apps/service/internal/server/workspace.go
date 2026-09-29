@@ -522,6 +522,55 @@ func (h workspaceService) RevokeApprovals(ctx context.Context, r req[pb.RevokeAp
 	return ok(&pb.RevokeApprovalsResponse{Revoked: int32(n)})
 }
 
+func (h workspaceService) ListProcesses(ctx context.Context, r req[pb.ListProcessesRequest]) (*connect.Response[pb.ListProcessesResponse], error) {
+	w, err := h.s.workspace(ctx, r.Msg.Workspace)
+	if err != nil {
+		return nil, err
+	}
+	out := &pb.ListProcessesResponse{}
+	for _, p := range w.ListProcesses(r.Msg.SessionIds) {
+		out.Processes = append(out.Processes, processMsg(p))
+	}
+	return ok(out)
+}
+
+func (h workspaceService) GetProcessOutput(ctx context.Context, r req[pb.GetProcessOutputRequest]) (*connect.Response[pb.GetProcessOutputResponse], error) {
+	w, err := h.s.workspace(ctx, r.Msg.Workspace)
+	if err != nil {
+		return nil, err
+	}
+	text, p, err := w.ProcessOutput(r.Msg.SessionIds, int(r.Msg.Id))
+	if err != nil {
+		return nil, toAPI(err)
+	}
+	return ok(&pb.GetProcessOutputResponse{Output: text, Process: processMsg(p)})
+}
+
+func (h workspaceService) KillProcess(ctx context.Context, r req[pb.KillProcessRequest]) (*connect.Response[pb.KillProcessResponse], error) {
+	w, err := h.s.workspace(ctx, r.Msg.Workspace)
+	if err != nil {
+		return nil, err
+	}
+	p, err := w.KillProcess(r.Msg.SessionIds, int(r.Msg.Id))
+	if err != nil {
+		return nil, toAPI(err)
+	}
+	return ok(&pb.KillProcessResponse{Process: processMsg(p)})
+}
+
+func (h workspaceService) AuditShell(ctx context.Context, r req[pb.AuditShellRequest]) (*connect.Response[pb.AuditShellResponse], error) {
+	w, err := h.s.workspace(ctx, r.Msg.Workspace)
+	if err != nil {
+		return nil, err
+	}
+	var startErr error
+	if r.Msg.StartError != "" {
+		startErr = errors.New(r.Msg.StartError)
+	}
+	w.AuditShell(r.Msg.Command, int(r.Msg.ExitCode), startErr)
+	return ok(&pb.AuditShellResponse{})
+}
+
 func (h workspaceService) LoadImage(ctx context.Context, r req[pb.LoadImageRequest]) (*connect.Response[pb.LoadImageResponse], error) {
 	w, err := h.s.workspace(ctx, r.Msg.Workspace)
 	if err != nil {

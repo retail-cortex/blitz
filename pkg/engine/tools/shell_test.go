@@ -148,10 +148,10 @@ func TestProcessManagerLimits(t *testing.T) {
 	pm := NewProcessManager(1, 500*time.Millisecond)
 	t.Cleanup(pm.Shutdown)
 
-	bp, err := pm.Start("sleep 30", dir)
+	bp, err := pm.Start("", "sleep 30", dir)
 	require.NoError(t, err)
 	// Negative: concurrency limit enforced.
-	_, limitErr := pm.Start("sleep 30", dir)
+	_, limitErr := pm.Start("", "sleep 30", dir)
 	assert.ErrorContains(t, limitErr, "too many", "the concurrency limit is enforced")
 	// Lifetime limit kills the process.
 	select {
@@ -160,13 +160,13 @@ func TestProcessManagerLimits(t *testing.T) {
 		t.Fatal("process outlived its max lifetime")
 	}
 	// Positive: slot is free again.
-	_, againErr := pm.Start("true", dir)
+	_, againErr := pm.Start("", "true", dir)
 	assert.NoError(t, againErr, "a start succeeds once the slot is free")
 
 	// Output is capped.
 	pm2 := NewProcessManager(0, 0)
 	t.Cleanup(pm2.Shutdown)
-	big, err := pm2.Start("head -c 2000000 /dev/zero | tr '\\0' 'b'", dir)
+	big, err := pm2.Start("", "head -c 2000000 /dev/zero | tr '\\0' 'b'", dir)
 	require.NoError(t, err)
 	<-big.done
 	out, info, _ := pm2.Output(big.ID)
@@ -175,7 +175,7 @@ func TestProcessManagerLimits(t *testing.T) {
 
 	// After shutdown new processes are refused.
 	pm2.Shutdown()
-	_, err = pm2.Start("true", dir)
+	_, err = pm2.Start("", "true", dir)
 	assert.Error(t, err, "expected start after shutdown to fail")
 }
 
@@ -184,7 +184,7 @@ func TestProcessManagerPrunesFinished(t *testing.T) {
 	pm := NewProcessManager(0, 0)
 	t.Cleanup(pm.Shutdown)
 	for i := 0; i < maxFinishedProcsRetained+5; i++ {
-		bp, err := pm.Start("true", dir)
+		bp, err := pm.Start("", "true", dir)
 		require.NoError(t, err)
 		<-bp.done
 	}

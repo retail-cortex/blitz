@@ -102,7 +102,7 @@ func TestRemoteOperationsAndTypedErrors(t *testing.T) {
 	assert.GreaterOrEqual(t, i, 0, "pin not listed")
 	assert.Equal(t, "claude-haiku-4-5", r.ListAgents()[i].PinnedModel, "pin not listed")
 	assert.True(t, r.ImagesEnabled(), "images %v, processes %v, sandbox %v", r.ImagesEnabled(), r.Processes(), r.SandboxSummary())
-	assert.Nil(t, r.Processes(), "images %v, processes %v, sandbox %v", r.ImagesEnabled(), r.Processes(), r.SandboxSummary())
+	assert.Empty(t, r.Processes().Running(), "images %v, processes %v, sandbox %v", r.ImagesEnabled(), r.Processes(), r.SandboxSummary())
 	assert.NotEqual(t, 0, len(r.SandboxSummary()), "images %v, processes %v, sandbox %v", r.ImagesEnabled(), r.Processes(), r.SandboxSummary())
 }
 

@@ -61,6 +61,7 @@ var sentinels = map[string]error{
 	"RUN_IN_PROGRESS":          api.ErrRunInProgress,
 	"WORKERS_DISABLED":         api.ErrWorkersDisabled,
 	"HASH_MISMATCH":            api.ErrHashMismatch,
+	"UNKNOWN_PROCESS":          api.ErrUnknownProcess,
 }
 
 // fromAPI turns a failed call's error into app's typed error for its

@@ -19,6 +19,7 @@ go_library(
     srcs = [
         "client.go",
         "convert.go",
+        "processes.go",
         "workers.go",
     ],
     importpath = "github.com/retail-cortex/blitz/pkg/client",
@@ -42,6 +43,7 @@ go_test(
         "client_test.go",
         "convert_test.go",
         "leak_test.go",
+        "processes_test.go",
     ],
     embed = [":client"],
     # Starts commands in the OS sandbox, which can't nest in Bazel's on
@@ -54,6 +56,7 @@ go_test(
         "//pkg/engine",
         "//pkg/engine/runtime",
         "//proto/blitz/v1:blitzv1_go_proto",
+        "@com_connectrpc_connect//:connect",
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
         "@org_golang_google_adk_v2//model",

@@ -132,7 +132,7 @@ func runShellCommand(ctx context.Context, cfg ShellConfig, input RunShellCommand
 		if cfg.Processes == nil {
 			return RunShellCommandOutput{Error: "background execution is not available"}
 		}
-		bp, err := cfg.Processes.Start(input.Command, cwd)
+		bp, err := cfg.Processes.Start(sessionOf(ctx), input.Command, cwd)
 		if err != nil {
 			return RunShellCommandOutput{Error: fmt.Sprintf("failed to start background command: %v", err)}
 		}
@@ -193,4 +193,13 @@ func runShellCommand(ctx context.Context, cfg ShellConfig, input RunShellCommand
 		}
 	}
 	return result
+}
+
+// sessionOf is the session a tool call runs in: an agent's context says;
+// "" for any other.
+func sessionOf(ctx context.Context) string {
+	if c, ok := ctx.(interface{ SessionID() string }); ok {
+		return c.SessionID()
+	}
+	return ""
 }

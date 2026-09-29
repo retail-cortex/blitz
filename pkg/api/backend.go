@@ -16,6 +16,7 @@ package api
 
 import (
 	"context"
+	"errors"
 
 	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/images"
@@ -123,6 +124,10 @@ type Processes interface {
 	WaitAll(ctx context.Context) error
 	Shutdown()
 }
+
+// ErrUnknownProcess: no background process with that ID was started for
+// the sessions asking.
+var ErrUnknownProcess = errors.New("no such background process")
 
 // ProcessInfo is a snapshot of a background process's status.
 type ProcessInfo struct {

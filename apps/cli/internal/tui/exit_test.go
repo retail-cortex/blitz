@@ -29,7 +29,7 @@ import (
 
 func startSleep(t *testing.T, pm *tools.ProcessManager, secs string) {
 	t.Helper()
-	_, err := pm.Start("sleep "+secs, t.TempDir())
+	_, err := pm.Start("", "sleep "+secs, t.TempDir())
 	require.NoError(t, err)
 }
 

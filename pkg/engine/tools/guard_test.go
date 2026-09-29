@@ -80,7 +80,7 @@ func TestForegroundStragglersKilled(t *testing.T) {
 func TestGuardKillsChildrenWhenParentKilled(t *testing.T) {
 	if os.Getenv("CP_GUARD_HELPER") == "1" {
 		pm := NewProcessManager(0, 0)
-		if _, err := pm.Start(fmt.Sprintf("sleep 60 & echo $! > %q; wait", os.Getenv("CP_GUARD_PIDFILE")), os.TempDir()); err != nil {
+		if _, err := pm.Start("", fmt.Sprintf("sleep 60 & echo $! > %q; wait", os.Getenv("CP_GUARD_PIDFILE")), os.TempDir()); err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(2)
 		}

@@ -197,3 +197,7 @@ func decision(d pb.Decision) api.Decision {
 	}
 	return api.DecisionDeny
 }
+
+func processMsg(p api.ProcessInfo) *pb.Process {
+	return &pb.Process{Id: int32(p.ID), Command: p.Command, Running: p.Running, ExitCode: int32(p.ExitCode), RuntimeMs: p.RuntimeMs}
+}

@@ -197,7 +197,7 @@ func TestRegistryCloseKillsBackgroundProcesses(t *testing.T) {
 	cfg.Tools.WorkspaceDir = t.TempDir()
 	reg, err := NewRegistry(cfg, nil, nil)
 	require.NoError(t, err)
-	bp, err := reg.Processes().Start("sleep 30", reg.Workspace().Dir())
+	bp, err := reg.Processes().Start("", "sleep 30", reg.Workspace().Dir())
 	require.NoError(t, err)
 	reg.Close()
 	select {
