@@ -15,7 +15,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { previewKind, previewOnly } from "./preview";
+import { previewKind, previewOnly } from "./previewKind";
 
 describe("previewKind", () => {
   it.each([

@@ -21,7 +21,7 @@ import { EditorView } from "@codemirror/view";
 import { t, tn } from "../i18n";
 import { Button, Dialog, Icon, IconButton, Segmented } from "../ui/controls";
 import { Preview } from "./Preview";
-import { previewKind, previewOnly } from "./preview";
+import { previewKind, previewOnly } from "./previewKind";
 import { goToLine, setWrap } from "./codemirror";
 import { fileIcon } from "./icons";
 import type { EditorModel, Tab } from "./useEditor";

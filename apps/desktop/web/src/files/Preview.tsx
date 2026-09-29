@@ -22,7 +22,7 @@ import { message } from "../errors";
 import { t } from "../i18n";
 import { Button, useSnackbar } from "../ui/controls";
 import { Markdown } from "../Markdown";
-import type { PreviewKind } from "./preview";
+import type { PreviewKind } from "./previewKind";
 
 const PdfView = lazy(() => import("./PdfView").then((m) => ({ default: m.PdfView })));
 
