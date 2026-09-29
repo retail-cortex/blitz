@@ -260,7 +260,7 @@ Use a real screenshot (e.g. a UI with visible text) saved in the workspace as `s
 
 Set `fallback_models = ["anthropic/claude-sonnet-5"]` with a working Anthropic key, and the primary on Gemini.
 - [ ] `blitz doctor --online`. **Expected:** `model` and `fallback 1` each initialised and responding.
-- [ ] Break the primary: an invalid `GEMINI_API_KEY`. Ask something. **Expected:** one notice "gemini-… is unavailable; answering with fallback claude-sonnet-5", then the answer. Ask again: no second notice and no delay from the primary.
+- [ ] Break the primary: an invalid `GEMINI_API_KEY`. Ask something. **Expected:** one notice "gemini-… is unavailable; answering with fallback claude-sonnet-5", then the answer. Ask again: no second notice and no delay from the primary. In the desktop app too: the notice shows in the conversation, not only in Settings › Logs.
 - [ ] `/cost`. **Expected:** priced at Claude's rates.
 - [ ] Fix the key, wait 15 s or more, and ask. **Expected:** "gemini-… is answering again".
 - [ ] `fallback_models = ["anthropic/no-such-model"]` with a broken primary. **Expected:** a clear "every model failed" error listing both reasons.

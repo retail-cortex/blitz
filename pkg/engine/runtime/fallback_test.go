@@ -28,6 +28,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/adk/v2/model"
+	"google.golang.org/adk/v2/session"
 	"google.golang.org/genai"
 )
 
@@ -256,6 +257,19 @@ func TestEngineNoticesFallbackOnceAndRecovery(t *testing.T) {
 	require.Len(t, notices, 2, "notices = %q", notices)
 	require.Contains(t, notices[0], "claude-sonnet-5", "notices = %q", notices)
 	require.Contains(t, notices[1], "answering again", "notices = %q", notices)
+}
+
+func TestEngineSendsFallbackNoticesToTheTurn(t *testing.T) {
+	primary, backup := &scripted{name: "gemini-3.8-flash", failing: true}, &scripted{name: "claude-sonnet-5"}
+	var engineNotices, turnNotices []string
+	f := newEngineWith(t, fixtureOpts{opts: []Option{WithNotice(func(s string) { engineNotices = append(engineNotices, s) })}})
+	chain, _ := chainOf(t, primary, backup)
+	require.NoError(t, f.eng.SetModel(context.Background(), chain))
+	ctx := WithTurnNotices(context.Background(), func(s string) { turnNotices = append(turnNotices, s) })
+	require.NoError(t, f.eng.Execute(ctx, "s", "hi", func(*session.Event) error { return nil }))
+	require.Len(t, turnNotices, 1, "turn notices = %q", turnNotices)
+	require.Contains(t, turnNotices[0], "claude-sonnet-5")
+	require.Empty(t, engineNotices, "the turn's notice also went to the engine's sink")
 }
 
 // Breakers are asked just before each attempt: when the primary answers a

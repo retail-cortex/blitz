@@ -70,6 +70,7 @@ var (
 type (
 	subagentDepthKey struct{}
 	runStateKey      struct{}
+	turnNoticeKey    struct{}
 )
 
 // runState is carried in the context of one Execute call.
@@ -133,6 +134,22 @@ func WithUsageStore(s UsageStore) Option { return func(e *Engine) { e.usageStore
 // WithNotice sets where the engine reports events the user should know
 // about, such as a fallback model taking over (default: nowhere).
 func WithNotice(f func(string)) Option { return func(e *Engine) { e.notice = f } }
+
+// WithTurnNotices sends the engine's notices during runs under ctx to f
+// (the turn's own events, so the conversation shows them) rather than to
+// the engine's WithNotice, which gets them outside a turn.
+func WithTurnNotices(ctx context.Context, f func(string)) context.Context {
+	return context.WithValue(ctx, turnNoticeKey{}, f)
+}
+
+// noticeTo is where a notice raised under ctx goes: the turn's sink, else
+// the engine's, else nowhere (nil).
+func (e *Engine) noticeTo(ctx context.Context) func(string) {
+	if f, _ := ctx.Value(turnNoticeKey{}).(func(string)); f != nil {
+		return f
+	}
+	return e.notice
+}
 
 // WithAgentModel runs agent on llm instead of the engine's model (a pin
 // from [agent_models] or the agent's own default_model).
@@ -508,7 +525,7 @@ func (e *Engine) afterModel(ctx agent.Context, resp *model.LLMResponse, respErr 
 	if resp == nil || resp.Partial {
 		return nil, nil
 	}
-	e.noteFallback(resp)
+	e.noteFallback(ctx, resp)
 	if resp.UsageMetadata == nil {
 		return nil, nil
 	}
@@ -545,7 +562,7 @@ func (e *Engine) afterModel(ctx agent.Context, resp *model.LLMResponse, respErr 
 
 // noteFallback tells the user when a fallback model starts answering and
 // when the primary is back, once per change rather than on every call.
-func (e *Engine) noteFallback(resp *model.LLMResponse) {
+func (e *Engine) noteFallback(ctx context.Context, resp *model.LLMResponse) {
 	primary, _ := resp.CustomMetadata[FallbackFromKey].(string)
 	served := ""
 	if primary != "" {
@@ -555,14 +572,16 @@ func (e *Engine) noteFallback(resp *model.LLMResponse) {
 	prev := e.fallbackBy
 	e.fallbackBy = served
 	e.fallbackMu.Unlock()
-	if served == prev || e.notice == nil {
+	notice := e.noticeTo(ctx)
+	if served == prev || notice == nil {
 		return
 	}
+	msg := i18n.T("model.fallback_recovered", "model", e.ModelName())
 	if served != "" {
-		e.notice(i18n.T("model.fallback", "primary", primary, "model", served))
-	} else {
-		e.notice(i18n.T("model.fallback_recovered", "model", e.ModelName()))
+		msg = i18n.T("model.fallback", "primary", primary, "model", served)
 	}
+	slog.InfoContext(ctx, msg)
+	notice(msg)
 }
 
 // beforeTool audits the call, gates MCP tools, and runs pre_tool hooks.
