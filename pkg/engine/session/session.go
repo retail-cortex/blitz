@@ -222,18 +222,44 @@ func (s *Storage) AddMessage(role, content string) error {
 func (s *Storage) Append(msg Message) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-
 	if s.active == nil {
 		return errors.New("no active session")
 	}
+	return s.appendLocked(s.active, msg)
+}
 
+// AppendTo adds msg (stamped now) to session id, active or not: a turn's
+// messages go to the session it runs in, whatever another client (or a
+// service that restarted since the session was opened) made active.
+func (s *Storage) AppendTo(id string, msg Message) error {
+	if err := ValidateID(id); err != nil {
+		return err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.active != nil && s.active.ID == id {
+		return s.appendLocked(s.active, msg)
+	}
+	rec, err := s.readMeta(id)
+	if errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("session '%s' not found", id)
+	}
+	if err != nil {
+		return err
+	}
+	return s.appendLocked(rec, msg)
+}
+
+// appendLocked writes msg to rec's transcript and its metadata. rec is the
+// active session (its messages kept in memory) or one read from disk
+// (MessageCount only).
+func (s *Storage) appendLocked(rec *SessionRecord, msg Message) error {
 	msg.Timestamp = time.Now()
-	role, content := msg.Role, msg.Content
 	line, err := json.Marshal(msg)
 	if err != nil {
 		return err
 	}
-	f, err := os.OpenFile(s.path(s.active.ID, messagesSuffix), os.O_WRONLY|os.O_CREATE|os.O_APPEND, filePerm)
+	f, err := os.OpenFile(s.path(rec.ID, messagesSuffix), os.O_WRONLY|os.O_CREATE|os.O_APPEND, filePerm)
 	if err != nil {
 		return err
 	}
@@ -244,14 +270,17 @@ func (s *Storage) Append(msg Message) error {
 	if err := f.Close(); err != nil {
 		return err
 	}
-
-	s.active.Messages = append(s.active.Messages, msg)
-	s.active.MessageCount = len(s.active.Messages)
-	if s.active.Title == "" && role == "user" {
-		s.active.Title = TitleFrom(content)
+	if rec == s.active {
+		rec.Messages = append(rec.Messages, msg)
+		rec.MessageCount = len(rec.Messages)
+	} else {
+		rec.MessageCount++
 	}
-	s.active.UpdatedAt = msg.Timestamp
-	return s.writeMeta(s.active)
+	if rec.Title == "" && msg.Role == "user" {
+		rec.Title = TitleFrom(msg.Content)
+	}
+	rec.UpdatedAt = msg.Timestamp
+	return s.writeMeta(rec)
 }
 
 // Truncate keeps the active session's first n messages and drops the

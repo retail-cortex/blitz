@@ -400,3 +400,51 @@ func TestUsageSurvivesARestart(t *testing.T) {
 	assert.Equal(t, int64(1500), after.LastPrompt)
 	assert.InDelta(t, before.CostUSD*2.5, after.CostUSD, 0.01, "cost goes on from the saved one")
 }
+
+// A turn's messages go to the session it runs in: after the service
+// restarts (the storage has no active session) and when another session
+// is active. Seen 2026-09-28: a conversation continued after a restart was
+// saved to the model's history but not its transcript.
+func TestTranscriptFollowsTheTurnsSession(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("MODENV_PREFIX", "")
+	cfg := config.DefaultConfig()
+	cfg.Tools.WorkspaceDir = t.TempDir()
+	cfg.Session.StorageDir = t.TempDir()
+	cfg.Tools.ApprovalsFile = filepath.Join(t.TempDir(), "a.json")
+	open := func(replies ...string) *Workspace {
+		var cs []*genai.Content
+		for _, r := range replies {
+			cs = append(cs, genai.NewContentFromText(r, genai.RoleModel))
+		}
+		c := *cfg
+		w, err := Open(context.Background(), &c, Options{Model: runtime.NewMockLLM("gemini-3.8-flash", cs...), NewModel: mockModels})
+		require.NoError(t, err)
+		return w
+	}
+	ctx := context.Background()
+
+	w := open()
+	sid := newSession(t, w).ID // the desktop shows this new chat
+	require.NoError(t, w.Close())
+
+	w2 := open("the tests prove little", "they don't cover errors") // the service restarted
+	defer w2.Close()
+	_, err := w2.Run(ctx, sid, api.Turn{Text: "Run the tests"}, ignore)
+	require.NoError(t, err)
+	other := newSession(t, w2).ID // another chat is now active
+	_, err = w2.Run(ctx, sid, api.Turn{Text: "What do they prove?"}, ignore)
+	require.NoError(t, err)
+
+	rec, err := w2.storage.Load(sid)
+	require.NoError(t, err)
+	var got []string
+	for _, m := range rec.Messages {
+		got = append(got, m.Role+": "+m.Content)
+	}
+	assert.Equal(t, []string{"user: Run the tests", "model: the tests prove little", "user: What do they prove?", "model: they don't cover errors"}, got)
+	assert.Equal(t, "Run the tests", rec.Title)
+	otherRec, err := w2.storage.Load(other)
+	require.NoError(t, err)
+	assert.Empty(t, otherRec.Messages, "messages went to the active session")
+}

@@ -58,7 +58,7 @@ Front ends use only `api.Backend` (implemented by `*Workspace` and by the servic
 - **WS-25** Aside turns go to `Engine.Aside` (no images, no checkpoint, no transcript, steer queue untouched). Other turns go to `Engine.Execute` with `WithMaxTurns`, one attachment per image, `WithPlanOnly` or `WithReadOnly(mode)`.
 - **WS-26** After the engine stops: `OnFinished` runs; usage `Before`/`After` are captured; the concatenated final (non-partial, non-thought) model text is `Output` and is recorded as the model message if non-empty; unread steer messages are returned in `Leftover`. A turn that fails part-way still returns what it produced.
 - **WS-27** `Steer(text)` runs `prompt_submit` hooks (refusal → `*BlockedError`), records the text as a user message, and queues it on the engine.
-- **WS-28** Transcript write failures warn but never fail the turn.
+- **WS-28** Transcript write failures warn but never fail the turn. Messages are written to the turn's session by ID (SES-16).
 
 ### 4.1 Events
 - **WS-30** Each ADK event becomes one `api.Event` per part, in order, with `Author`; exactly one of `Text{Text, Partial, Repeat, Thought}`, `ToolCall{ID, Name, Args, Partial}`, `ToolResult{ID, Name, Result}`.

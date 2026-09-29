@@ -347,3 +347,32 @@ func TestUsagePersists(t *testing.T) {
 	assert.False(t, ok)
 	assert.Error(t, s2.SetUsage("../escape", ua))
 }
+
+// AppendTo writes to the session named, active or not, and keeps its
+// metadata (count, title, time) current.
+func TestAppendToAnySession(t *testing.T) {
+	dir := t.TempDir()
+	s, _ := NewStorage(dir)
+	a, _ := s.CreateSession("", "", "blitz")
+	b, _ := s.CreateSession("", "", "blitz") // b is active
+	require.NoError(t, s.AppendTo(a.ID, Message{Role: "user", Content: "first question for a"}))
+	require.NoError(t, s.AppendTo(a.ID, Message{Role: "model", Content: "an answer"}))
+	require.NoError(t, s.AppendTo(b.ID, Message{Role: "user", Content: "for b"}))
+	assert.Len(t, s.Active().Messages, 1, "the active session's messages in memory")
+
+	s2, _ := NewStorage(dir) // no active session: a restarted service
+	require.NoError(t, s2.AppendTo(a.ID, Message{Role: "user", Content: "after the restart"}))
+	got, err := s2.Load(a.ID)
+	require.NoError(t, err)
+	var texts []string
+	for _, m := range got.Messages {
+		texts = append(texts, m.Content)
+	}
+	assert.Equal(t, []string{"first question for a", "an answer", "after the restart"}, texts)
+	assert.Equal(t, 3, got.MessageCount)
+	assert.Equal(t, "first question for a", got.Title)
+	assert.False(t, got.UpdatedAt.Before(got.Messages[2].Timestamp))
+
+	assert.ErrorContains(t, s2.AppendTo("session-20260101-000000-deadbeef", Message{Role: "user", Content: "x"}), "not found")
+	assert.Error(t, s2.AppendTo("../escape", Message{Role: "user", Content: "x"}))
+}

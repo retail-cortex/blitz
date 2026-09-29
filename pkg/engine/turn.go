@@ -92,6 +92,7 @@ func (w *Workspace) run(ctx context.Context, sessionID string, t turn, on func(a
 		prompt = runtime.PlanPrompt(prompt)
 	}
 	if !t.Aside {
+		w.activate(st, sessionID)
 		prompt := -1 // the prompt's index in the transcript, for /rewind
 		if a := st.Active(); a != nil {
 			prompt = a.MessageCount
@@ -100,7 +101,7 @@ func (w *Workspace) run(ctx context.Context, sessionID string, t turn, on func(a
 		if !t.Accepted {
 			// Where the conversation stood, so /rewind can cut it here.
 			events := w.engine.EventCount(ctx, sessionID)
-			w.appendIn(st, session.Message{Role: "user", Content: recorded + AttachmentNote(t.Images), Events: &events})
+			w.appendIn(st, sessionID, session.Message{Role: "user", Content: recorded + AttachmentNote(t.Images), Events: &events})
 		}
 		w.turnStarted(sessionID)
 		defer w.turnEnded(sessionID)
@@ -179,7 +180,7 @@ func (w *Workspace) run(ctx context.Context, sessionID string, t turn, on func(a
 			}
 			w.planApproved(mode)
 			goAhead := runtime.CarryOutPrompt(path)
-			w.appendIn(st, session.Message{Role: "user", Content: "(plan approved) " + goAhead, Kind: session.KindPlan})
+			w.appendIn(st, sessionID, session.Message{Role: "user", Content: "(plan approved) " + goAhead, Kind: session.KindPlan})
 			base = carryOut
 			r.paragraph()
 			err = w.engine.Execute(ctx, sessionID, goAhead, handler, carryOut...)
@@ -194,7 +195,7 @@ func (w *Workspace) run(ctx context.Context, sessionID string, t turn, on func(a
 			if reason == "" {
 				reason = "A stop hook asked you to continue."
 			}
-			w.appendIn(st, session.Message{Role: "user", Content: "(stop hook) " + reason, Kind: session.KindHook})
+			w.appendIn(st, sessionID, session.Message{Role: "user", Content: "(stop hook) " + reason, Kind: session.KindHook})
 			r.paragraph()
 			err = w.engine.Execute(ctx, sessionID, reason, handler, base...)
 		}
@@ -210,7 +211,7 @@ func (w *Workspace) run(ctx context.Context, sessionID string, t turn, on func(a
 
 	if !t.Aside {
 		if res.Output != "" {
-			w.recordIn(st, "model", res.Output)
+			w.recordIn(st, sessionID, "model", res.Output)
 		}
 		res.Leftover = w.engine.TakeSteers(sessionID)
 	}
@@ -225,7 +226,7 @@ func (w *Workspace) Steer(ctx context.Context, sessionID, text string) error {
 	if err != nil {
 		return err
 	}
-	w.appendIn(w.storage, session.Message{Role: "user", Content: text, Kind: session.KindSteer})
+	w.appendIn(w.storage, sessionID, session.Message{Role: "user", Content: text, Kind: session.KindSteer})
 	w.engine.Steer(sessionID, withHookContext(text, "prompt_submit", hookContext))
 	return nil
 }
@@ -267,15 +268,30 @@ func (w *Workspace) accept(ctx context.Context, sessionID, text string) (string,
 	return out.Context, nil
 }
 
-// recordIn adds a message to st's active session. A failure is reported,
-// not returned: the conversation goes on without it.
-func (w *Workspace) recordIn(st *session.Storage, role, text string) {
-	w.appendIn(st, session.Message{Role: role, Content: text})
+// activate makes session id st's active session when it isn't: a client
+// may run a turn in a session another client (or the service before a
+// restart) opened. Rewind points, renaming and the like act on the
+// active session. A session st doesn't have is left to the transcript
+// write to report.
+func (w *Workspace) activate(st *session.Storage, id string) {
+	if a := st.Active(); a != nil && a.ID == id {
+		return
+	}
+	if _, err := st.Load(id); err != nil {
+		slog.Debug("session not activated", "session", id, "error", err)
+	}
 }
 
-// appendIn adds m to st's active session.
-func (w *Workspace) appendIn(st *session.Storage, m session.Message) {
-	if err := st.Append(m); err != nil {
+// recordIn adds a message to session id in st. A failure is reported,
+// not returned: the conversation goes on without it.
+func (w *Workspace) recordIn(st *session.Storage, id, role, text string) {
+	w.appendIn(st, id, session.Message{Role: role, Content: text})
+}
+
+// appendIn adds m to session id in st (the session the turn runs in, not
+// whichever is active).
+func (w *Workspace) appendIn(st *session.Storage, id string, m session.Message) {
+	if err := st.AppendTo(id, m); err != nil {
 		slog.Warn("session save failed", "error", err)
 		w.warn(i18n.T("session.save_failed", "error", err))
 	}
