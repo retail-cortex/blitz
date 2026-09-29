@@ -41,6 +41,9 @@ type Actions struct {
 	Status func() Status
 	// Wait polls until the service is (or isn't) running, for up to d.
 	Wait func(running bool, d time.Duration) bool
+	// LogDir is where the running service says its log is ("" when it
+	// doesn't say); nil asks nobody. The settings file answers otherwise.
+	LogDir func() string
 }
 
 // Start starts the service: through its login item when it has one, else
@@ -122,9 +125,17 @@ func (a Actions) OpenApp() error {
 	return fmt.Errorf("%s isn't installed beside the tray or on PATH", name)
 }
 
-// OpenLogs shows the logs folder in the file manager.
+// OpenLogs shows the logs folder in the file manager: the running
+// service's, which may not be the settings file's (another --config, or
+// log.dir changed since it started).
 func (a Actions) OpenLogs() error {
-	dir := LogDir()
+	dir := ""
+	if a.LogDir != nil {
+		dir = a.LogDir()
+	}
+	if dir == "" {
+		dir = LogDir()
+	}
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return err
 	}
@@ -134,7 +145,8 @@ func (a Actions) OpenLogs() error {
 	return a.Run("xdg-open", dir)
 }
 
-// LogDir is where the service's logs are: log.dir of the global settings.
+// LogDir is where the service's logs go by the settings file: log.dir of
+// the global settings.
 func LogDir() string {
 	if cfg, err := config.Load(""); err == nil && cfg.Log.Dir != "" {
 		return config.ExpandHome(cfg.Log.Dir)

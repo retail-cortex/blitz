@@ -131,6 +131,7 @@ func onReady() {
 		Run:    tray.Detached,
 		Beside: loginitem.Beside(),
 		Status: status,
+		LogDir: func() string { return tray.ServiceLogDir(context.Background(), sock) },
 		Wait: func(running bool, d time.Duration) bool {
 			for end := time.Now().Add(d); ; time.Sleep(300 * time.Millisecond) {
 				if socket.Running(sock) == running {

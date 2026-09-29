@@ -62,6 +62,10 @@ type infoService struct {
 	pb.UnimplementedWorkspaceServiceHandler
 }
 
+func (infoService) ListLogDays(context.Context, *connect.Request[pb.ListLogDaysRequest]) (*connect.Response[pb.ListLogDaysResponse], error) {
+	return connect.NewResponse(&pb.ListLogDaysResponse{Dir: "/var/log/blitz"}), nil
+}
+
 func (infoService) GetServiceInfo(context.Context, *connect.Request[pb.GetServiceInfoRequest]) (*connect.Response[pb.GetServiceInfoResponse], error) {
 	return connect.NewResponse(&pb.GetServiceInfoResponse{Version: "1.4.0", Pid: 4242}), nil
 }
@@ -79,6 +83,8 @@ func TestProbe(t *testing.T) {
 	go srv.Serve(ln)
 	t.Cleanup(func() { srv.Close() })
 	assert.Equal(t, Status{Running: true, Installed: true, Version: "1.4.0", PID: 4242}, Probe(context.Background(), sock, installed))
+	assert.Equal(t, "/var/log/blitz", ServiceLogDir(context.Background(), sock))
+	assert.Empty(t, ServiceLogDir(context.Background(), filepath.Join(shortTemp(t), "none.sock")), "nothing listening")
 }
 
 // shortTemp is a temporary directory with a path short enough for a Unix
@@ -176,4 +182,37 @@ func TestOpenAppAndLogs(t *testing.T) {
 	require.NoError(t, err, "the logs folder is made if missing")
 	assert.True(t, info.IsDir())
 	assert.False(t, errors.Is(err, os.ErrNotExist))
+}
+
+func TestOpenLogsOpensTheServicesFolder(t *testing.T) {
+	opener := "xdg-open "
+	if goruntime.GOOS == "darwin" {
+		opener = "open "
+	}
+	cases := []struct {
+		name     string
+		says     bool // the service says where its log is
+		settings bool // the settings file's folder is opened
+	}{
+		{name: "the service's own", says: true},
+		{name: "the settings file's when the service doesn't say", settings: true},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			f, a := newFake(t)
+			said := filepath.Join(t.TempDir(), "svc-logs")
+			a.LogDir = func() string {
+				if c.says {
+					return said
+				}
+				return ""
+			}
+			want := said
+			if c.settings {
+				want = filepath.Join(os.Getenv("HOME"), ".blitz", "logs")
+			}
+			require.NoError(t, a.OpenLogs())
+			assert.Equal(t, []string{opener + want}, f.ran)
+		})
+	}
 }

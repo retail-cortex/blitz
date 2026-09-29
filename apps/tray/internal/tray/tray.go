@@ -89,3 +89,20 @@ func Probe(ctx context.Context, sock string, installed func() bool) Status {
 	}
 	return st
 }
+
+// ServiceLogDir is where the service at sock writes its log, as it says
+// (ListLogDays): the log.dir it started with. "" when it isn't running,
+// doesn't say, or has its log off.
+func ServiceLogDir(ctx context.Context, sock string) string {
+	if !socket.Running(sock) {
+		return ""
+	}
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	c := pb.NewWorkspaceServiceClient(socket.Client(sock), socket.BaseURL)
+	res, err := c.ListLogDays(ctx, connect.NewRequest(&pb.ListLogDaysRequest{}))
+	if err != nil {
+		return ""
+	}
+	return res.Msg.Dir
+}
