@@ -37,18 +37,9 @@ Everything through 2026-09-29 is pushed to `main`, most of it with
    `<id>.jsonl` and the title and message count from it restores the
    chat. Only on that machine, and only if the owner still wants it.
 
-## P2: features and the rest
-
-4. **Faster Linux sandbox masking (M).** Backlog BL-SH-01. bubblewrap's
-   masking walks the writable roots before every command (about 100 ms
-   on a 10,000-file workspace, 3 s under `-race`), so CI runs parallel
-   tests without the sandbox. Cache the mask per root (by mtime, or
-   inotify), skip known build and cache directories when the rules
-   allow, and turn the sandbox back on in CI's parallel tests.
-
 ## P3: large, needing a design first
 
-5. **Project configuration with a trust boundary (L).** Teams can't
+4. **Project configuration with a trust boundary (L).** Teams can't
    commit MCP servers, commands, permission presets or hooks to a
    repository. Add `.blitz/settings.toml` (and `.local.toml`) per the
    decisions in `spec_parity_027` §12 and §2.4: settings that only
@@ -58,7 +49,7 @@ Everything through 2026-09-29 is pushed to `main`, most of it with
    when it changes. Builds on the per-workspace settings and permission
    scopes that exist now.
 
-6. **Background sub-agents (L).** `invoke_agent` blocks the turn. Add
+5. **Background sub-agents (L).** `invoke_agent` blocks the turn. Add
    `background: true` returning a task ID (`spec_parity_027` §8.1),
    `list_tasks`, `task_output` and `stop_task`, and deliver completions
    as steer messages at the next tool cycle or prompt.
@@ -92,6 +83,10 @@ TestWithoutPlanModeToolsRunNormally; `pkg/engine/tools` TestToolsSuite.
 Anything else failing is new. Check test logs for `goleak:` too.
 
 ## Done 2026-09-29
+- Faster Linux sandbox masking (BL-SH-01–03): the blocked-path scan is kept
+  between commands and re-reads only changed directories (~1 ms for
+  50,000 entries, from ~220 ms on macOS); a CI benchmark step; the
+  parallel-cap test runs sandboxed. First Linux run is CI's.
 - The attached CLI's background processes and `!cmd` audit (BL-SVC-01–03):
   `ListProcesses`, `GetProcessOutput`, `KillProcess`, `AuditShell`,
   scoped to the sessions the client ran turns in.
