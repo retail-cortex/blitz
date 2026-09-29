@@ -180,7 +180,7 @@ func (w *Workspace) UpdateModelSettings(ref string, reset bool, changes []api.Se
 	info.Settings = s
 	out := api.ModelSettingsChange{ModelSettingsInfo: info}
 	for _, key := range config.ModelSettingKeys {
-		if _, set := s.Get(key); set && !runtime.SettingSupported(info.Provider, info.Model, key) {
+		if _, set := s.Get(key); set && !runtime.SettingApplies(info.Provider, info.Model, key, s) {
 			out.Unsupported = append(out.Unsupported, key)
 		}
 	}

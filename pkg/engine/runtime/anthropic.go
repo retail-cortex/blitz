@@ -212,6 +212,33 @@ func supportsThinking(model string) bool {
 	return strings.HasPrefix(model, "claude-")
 }
 
+// adaptiveThinking reports whether a model thinks adaptively and refuses a
+// thinking budget (budget_tokens): the current models (Opus 4.7 and later,
+// Sonnet 5, Fable), which also refuse sampling parameters.
+func adaptiveThinking(model string) bool {
+	return supportsThinking(model) && !supportsSampling(model)
+}
+
+// alwaysThinks reports whether a model refuses to have thinking turned off
+// (Opus 5.5, Fable).
+func alwaysThinks(model string) bool {
+	return strings.HasPrefix(model, "claude-opus-5-5") || strings.HasPrefix(model, "claude-fable")
+}
+
+// budgetEffort is the effort a thinking budget stands for, on models that
+// take an effort instead of a budget.
+func budgetEffort(budget int64) anthropic.BetaOutputConfigEffort {
+	switch {
+	case budget <= 4096:
+		return anthropic.BetaOutputConfigEffortLow
+	case budget <= 16384:
+		return anthropic.BetaOutputConfigEffortMedium
+	case budget <= 65536:
+		return anthropic.BetaOutputConfigEffortHigh
+	}
+	return anthropic.BetaOutputConfigEffortMax
+}
+
 // anthropicEfforts maps Blitz's efforts to Claude's (which have no minimal).
 var anthropicEfforts = map[string]anthropic.BetaOutputConfigEffort{
 	"minimal": anthropic.BetaOutputConfigEffortLow, "low": anthropic.BetaOutputConfigEffortLow,
@@ -241,14 +268,23 @@ func (m *anthropicModel) buildParams(req *model.LLMRequest, effort string) (anth
 			p.System = []anthropic.BetaTextBlockParam{{Text: sys, CacheControl: anthropic.NewBetaCacheControlEphemeralParam()}}
 		}
 		// Reasoning: the effort level, and a thinking budget (which must be
-		// below max_tokens, and rules out temperature).
+		// below max_tokens, and rules out temperature). Models that think
+		// adaptively take no budget: a budget turns adaptive thinking on,
+		// at the effort it stands for unless one is set.
 		if e, ok := anthropicEfforts[effort]; ok && supportsEffort(string(p.Model)) {
 			p.OutputConfig.Effort = e
 		}
 		if tc := cfg.ThinkingConfig; tc != nil && tc.ThinkingBudget != nil && supportsThinking(string(p.Model)) {
 			switch b := int64(*tc.ThinkingBudget); {
+			case b == 0 && alwaysThinks(string(p.Model)):
+				// Refused; the settings wrapper reports it unsupported.
 			case b == 0:
 				p.Thinking = anthropic.BetaThinkingConfigParamUnion{OfDisabled: &anthropic.BetaThinkingConfigDisabledParam{}}
+			case adaptiveThinking(string(p.Model)):
+				p.Thinking = anthropic.BetaThinkingConfigParamUnion{OfAdaptive: &anthropic.BetaThinkingConfigAdaptiveParam{}}
+				if p.OutputConfig.Effort == "" {
+					p.OutputConfig.Effort = budgetEffort(b)
+				}
 			case b > 0:
 				b = max(b, minThinkingBudget)
 				p.Thinking = anthropic.BetaThinkingConfigParamUnion{OfEnabled: &anthropic.BetaThinkingConfigEnabledParam{BudgetTokens: b}}

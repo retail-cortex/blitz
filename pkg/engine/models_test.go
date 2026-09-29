@@ -130,6 +130,15 @@ func TestUpdateModelSettings(t *testing.T) {
 	res, _ = w.UpdateModelSettings("gpt-5", true, nil)
 	assert.True(t, res.Settings.IsZero(), "reset: %+v", res)
 	assert.Len(t, w.AllModelSettings(), 0, "reset: %+v", res)
+
+	// Thinking can't be turned off on a model that always thinks; a budget
+	// is taken (as an effort).
+	res, err = w.UpdateModelSettings("anthropic/claude-opus-5-5", false, []api.Setting{{Key: "thinking_budget", Value: "0"}})
+	require.NoError(t, err)
+	assert.Equal(t, []string{"thinking_budget"}, res.Unsupported, "budget 0: %+v", res)
+	res, err = w.UpdateModelSettings("anthropic/claude-opus-5-5", false, []api.Setting{{Key: "thinking_budget", Value: "8000"}})
+	require.NoError(t, err)
+	assert.Empty(t, res.Unsupported, "budget 8000: %+v", res)
 }
 
 func TestSetChangesSettings(t *testing.T) {

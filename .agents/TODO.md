@@ -78,7 +78,7 @@ means. Written 2026-09-28; the backlog spec
    message and the quota to raise, in `doctor --online` (in full, not its
    first line), the "model isn't available" note and turn errors.
 
-9. **`thinking_budget` on current Claude models (S).** Backlog BL-ENG-21.
+9. ✅ *Done (MDL-73).* **`thinking_budget` on current Claude models (S).** Backlog BL-ENG-21.
    A budget above 0 sends `budget_tokens`, which Opus 4.7 and later,
    Sonnet 5 and Fable refuse (400); `0` sends thinking disabled, which
    Opus 5.5 and Fable refuse. Map it to effort (or report it as

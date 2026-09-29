@@ -39,7 +39,9 @@ type ModelSettings struct {
 	// high or max (providers map it to their own levels).
 	ReasoningEffort *string `toml:"reasoning_effort"`
 	// ThinkingBudget is the most tokens the model may spend thinking; 0
-	// turns thinking off where the model allows it.
+	// turns thinking off where the model allows it. Claude models that
+	// think adaptively (Opus 4.7 and later, Sonnet 5, Fable) take it as an
+	// effort level instead, unless reasoning_effort is set.
 	ThinkingBudget *int `toml:"thinking_budget"`
 }
 

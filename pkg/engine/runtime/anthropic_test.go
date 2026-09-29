@@ -513,7 +513,9 @@ func TestAnthropicEngineToolLoop(t *testing.T) {
 
 // Effort goes to output_config.effort on models that take it; a thinking
 // budget turns thinking on (at least 1024, below max_tokens, without a
-// temperature) or, at 0, off.
+// temperature) or, at 0, off. Models that think adaptively take no budget:
+// it turns adaptive thinking on at the effort it stands for (unless one is
+// set), and 0 isn't sent to those that always think.
 func TestAnthropicReasoning(t *testing.T) {
 	temp := float32(0.2)
 	req := func(name string, budget *int32) *model.LLMRequest {
@@ -533,7 +535,14 @@ func TestAnthropicReasoning(t *testing.T) {
 		temp     bool
 	}{
 		{"claude-opus-5-5", "max", nil, "max", "", 4096, false},
-		{"claude-opus-5-5", "minimal", genai.Ptr[int32](0), "low", `{"type":"disabled"}`, 4096, false},
+		{"claude-opus-5-5", "minimal", genai.Ptr[int32](0), "low", "", 4096, false},
+		{"claude-fable-5", "", genai.Ptr[int32](0), nil, "", 4096, false},
+		{"claude-sonnet-5", "", genai.Ptr[int32](0), nil, `{"type":"disabled"}`, 4096, false},
+		{"claude-opus-5-5", "", genai.Ptr[int32](8000), "medium", `{"type":"adaptive"}`, 4096, false},
+		{"claude-opus-5-5", "high", genai.Ptr[int32](2000), "high", `{"type":"adaptive"}`, 4096, false},
+		{"claude-fable-5", "", genai.Ptr[int32](2048), "low", `{"type":"adaptive"}`, 4096, false},
+		{"claude-sonnet-5", "", genai.Ptr[int32](100000), "max", `{"type":"adaptive"}`, 4096, false},
+		{"claude-opus-4-7", "", genai.Ptr[int32](30000), "high", `{"type":"adaptive"}`, 4096, false},
 		{"claude-haiku-4-5", "high", genai.Ptr[int32](100), nil, `{"budget_tokens":1024,"type":"enabled"}`, 4096, false},
 		{"claude-haiku-4-5", "", genai.Ptr[int32](8000), nil, `{"budget_tokens":8000,"type":"enabled"}`, 8000 + anthropicDefaultMaxTokens, false},
 		{"claude-haiku-4-5", "", nil, nil, "", 4096, true},

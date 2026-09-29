@@ -46,6 +46,8 @@ reasoning_effort = "high"   # minimal, low, medium, high or max
 thinking_budget = 16000     # 0 turns thinking off
 ```
 
+Current Claude models (Opus 4.7 and later, Sonnet 5, Fable) decide how much to think themselves and take no budget: on them `thinking_budget` turns thinking on at the effort it stands for (up to 4096 `low`, 16384 `medium`, 65536 `high`, beyond that `max`), unless `reasoning_effort` is set. Opus 5.5 and Fable always think, so `0` can't turn it off there; `/model_settings` says so.
+
 The key is the model name. Every model uses its own settings: the main model, pinned agents, and each fallback. `/model_settings gpt-5 temperature=0.3` changes them from the next model call and saves them. A setting the provider doesn't accept is left out of the request, and `/model_settings` warns.
 
 `/effort high` (or `--effort high`) sets the reasoning effort for every model call in the session, over each model's own; `/effort auto` goes back to them.

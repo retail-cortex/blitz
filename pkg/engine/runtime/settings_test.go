@@ -18,6 +18,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"iter"
 	"net/http"
@@ -136,6 +137,30 @@ func TestSettingSupported(t *testing.T) {
 	for _, c := range cases {
 		got := SettingSupported(c.provider, c.model, c.key)
 		assert.Equal(t, c.want, got, "%s %s %s = %v", c.provider, c.model, c.key, got)
+	}
+}
+
+// Thinking can't be turned off (thinking_budget 0) on models that always
+// think; any other budget applies.
+func TestSettingApplies(t *testing.T) {
+	budget := func(n int) config.ModelSettings { return config.ModelSettings{ThinkingBudget: &n} }
+	cases := []struct {
+		provider, model string
+		s               config.ModelSettings
+		want            bool
+	}{
+		{"anthropic", "claude-opus-5-5", budget(0), false},
+		{"anthropic", "claude-fable-5", budget(0), false},
+		{"anthropic", "claude-opus-5-5", budget(8000), true},
+		{"anthropic", "claude-sonnet-5", budget(0), true},
+		{"anthropic", "claude-haiku-4-5", budget(0), true},
+		{"anthropic", "claude-3-5-haiku", budget(2048), false},
+		{"gemini", "gemini-3.8-flash", budget(0), true},
+	}
+	for _, c := range cases {
+		t.Run(c.model+"/"+fmt.Sprint(*c.s.ThinkingBudget), func(t *testing.T) {
+			assert.Equal(t, c.want, SettingApplies(c.provider, c.model, "thinking_budget", c.s))
+		})
 	}
 }
 

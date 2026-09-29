@@ -107,6 +107,10 @@ func (m *settingsModel) apply(ctx context.Context, req *model.LLMRequest, s conf
 	}
 	effort := s.ReasoningEffort != nil && use("reasoning_effort")
 	budget := s.ThinkingBudget != nil && use("thinking_budget")
+	if budget && !SettingApplies(m.provider, m.inner.Name(), "thinking_budget", s) {
+		budget = false
+		dropped = append(dropped, "thinking_budget")
+	}
 	if effort && budget && m.provider == "gemini" {
 		// Gemini rejects a level and a budget together; the level wins.
 		budget = false
@@ -145,6 +149,19 @@ func effortFrom(ctx context.Context) string {
 var thinkingLevels = map[string]genai.ThinkingLevel{
 	"minimal": genai.ThinkingLevelMinimal, "low": genai.ThinkingLevelLow, "medium": genai.ThinkingLevelMedium,
 	"high": genai.ThinkingLevelHigh, "max": genai.ThinkingLevelHigh,
+}
+
+// SettingApplies reports whether a model accepts a setting with the value
+// s gives it: SettingSupported, and for thinking_budget 0 (thinking off),
+// a model that lets thinking be turned off.
+func SettingApplies(provider, modelName, key string, s config.ModelSettings) bool {
+	if !SettingSupported(provider, modelName, key) {
+		return false
+	}
+	if key == "thinking_budget" && provider == "anthropic" && s.ThinkingBudget != nil && *s.ThinkingBudget == 0 {
+		return !alwaysThinks(modelName)
+	}
+	return true
 }
 
 // SettingSupported reports whether a model of provider accepts a
