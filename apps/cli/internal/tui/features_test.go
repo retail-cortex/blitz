@@ -304,8 +304,10 @@ func TestSessionListScopedToWorkspace(t *testing.T) {
 	app := newFullApp(t)
 	local(app).Storage().SetWorkspace("/proj/other")
 	local(app).Storage().CreateSession("", "elsewhere", "blitz")
+	local(app).Storage().AddMessage("user", "hi") // saved with its first message
 	local(app).Storage().SetWorkspace("/proj/here")
 	local(app).Storage().CreateSession("", "local", "blitz")
+	local(app).Storage().AddMessage("user", "hi")
 
 	out := captureStdout(t, func() { HandleCommand(context.Background(), "/session list", app) })
 	assert.Contains(t, out, "local", "/session list should show only this workspace:\n%s", out)

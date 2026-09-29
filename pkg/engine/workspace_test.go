@@ -221,6 +221,9 @@ func TestOpenSessionSetsAuditContextAndMapsResumeErrors(t *testing.T) {
 	require.NoError(t, err, "new session: %+v %v", rec, resumed)
 	require.False(t, resumed, "new session: %+v %v %v", rec, resumed, err)
 	require.Equal(t, w.Engine().ActiveAgent(), rec.Agent, "new session: %+v %v %v", rec, resumed, err)
+	_, _, err = w.OpenSession(rec.ID, false)
+	assert.True(t, isResumeError(err), "a chat with no messages isn't saved: %v", err)
+	require.NoError(t, w.storage.AddMessage("user", "hi"))
 	got, resumed, err := w.OpenSession(rec.ID, false)
 	assert.NoError(t, err, "resume by id: %+v %v", got, resumed)
 	assert.True(t, resumed, "resume by id: %+v %v %v", got, resumed, err)
@@ -284,8 +287,10 @@ func TestSelectSessionScopedToWorkspace(t *testing.T) {
 	st, _ := session.NewStorage(t.TempDir())
 	st.SetWorkspace("/proj/one")
 	one, _, _ := selectSession(st, "", false, "one", "a")
+	require.NoError(t, st.AddMessage("user", "hi")) // saved with its first message
 	st.SetWorkspace("/proj/two")
 	two, _, _ := selectSession(st, "", false, "two", "a") // newest overall
+	require.NoError(t, st.AddMessage("user", "hi"))
 
 	st.SetWorkspace("/proj/one")
 	got, resumed, err := selectSession(st, "", true, "", "")
@@ -444,7 +449,7 @@ func TestTranscriptFollowsTheTurnsSession(t *testing.T) {
 	}
 	assert.Equal(t, []string{"user: Run the tests", "model: the tests prove little", "user: What do they prove?", "model: they don't cover errors"}, got)
 	assert.Equal(t, "Run the tests", rec.Title)
-	otherRec, err := w2.storage.Load(other)
-	require.NoError(t, err)
-	assert.Empty(t, otherRec.Messages, "messages went to the active session")
+	_, err = w2.storage.Load(other)
+	assert.Error(t, err, "messages went to the active session (an empty chat isn't saved)")
 }
+

@@ -53,6 +53,9 @@ func (s *Storage) FindName(name string) (*SessionRecord, error) {
 	return nil, nil
 }
 
+// errNothingToSave: a snapshot of a session with no conversation.
+var errNothingToSave = errors.New("the session has nothing to save yet")
+
 // Snapshot saves a named copy of session srcID: its transcript, metadata
 // and the model's event log, under a new ID. The source is left as it is
 // and stays active. An existing snapshot with the name is an ErrSnapshotNameTaken
@@ -71,12 +74,15 @@ func (s *Storage) Snapshot(srcID, name string, replace bool) (*SessionRecord, er
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.unsaved && s.active != nil && s.active.ID == srcID {
+		return nil, errNothingToSave // a new chat, not saved until its first message
+	}
 	src, err := s.readSourceLocked(srcID)
 	if err != nil {
 		return nil, err
 	}
 	if len(src.Messages) == 0 && !s.hasEventsLocked(srcID) {
-		return nil, errors.New("the session has nothing to save yet")
+		return nil, errNothingToSave
 	}
 	now := time.Now()
 	rec := &SessionRecord{

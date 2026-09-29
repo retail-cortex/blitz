@@ -193,12 +193,15 @@ func TestWorkspaceScopedSessions(t *testing.T) {
 	s, dir := newStorage(t)
 	s.SetWorkspace("/work/a")
 	a1, _ := s.CreateSession("", "a1", "x")
+	require.NoError(t, s.AddMessage("user", "hi")) // saved with its first message
 	time.Sleep(5 * time.Millisecond)
 	s.SetWorkspace("/work/b")
 	b1, _ := s.CreateSession("", "b1", "x")
+	require.NoError(t, s.AddMessage("user", "hi"))
 	time.Sleep(5 * time.Millisecond)
 	s.SetWorkspace("/work/a")
 	a2, _ := s.CreateSession("", "a2", "x")
+	require.NoError(t, s.AddMessage("user", "hi"))
 
 	assert.Equal(t, "/work/a", a1.Workspace, "workspace not recorded: %q %q", a1.Workspace, b1.Workspace)
 	assert.Equal(t, "/work/b", b1.Workspace, "workspace not recorded: %q %q", a1.Workspace, b1.Workspace)
@@ -223,6 +226,7 @@ func TestWorkspaceScopedSessions(t *testing.T) {
 func TestLegacySessionAdoptedOnResume(t *testing.T) {
 	s, dir := newStorage(t)
 	legacy, _ := s.CreateSession("", "old", "x") // no workspace set: legacy record
+	require.NoError(t, s.AddMessage("user", "hi"))
 	require.Equal(t, "", legacy.Workspace, "expected legacy session without workspace")
 	s2, _ := NewStorage(dir)
 	s2.SetWorkspace("/work/a")
@@ -245,7 +249,8 @@ func TestLastTurnPersistsForActiveAndOtherSessions(t *testing.T) {
 	s, err := NewStorage(dir)
 	require.NoError(t, err)
 	a, _ := s.CreateSession("a", "A", "blitz")
-	b, _ := s.CreateSession("b", "B", "blitz") // b is now active
+	require.NoError(t, s.AddMessage("user", "hi")) // saved with its first message
+	b, _ := s.CreateSession("b", "B", "blitz")     // b is now active
 
 	tp, n := s.LastTurn(a.ID)
 	require.Equal(t, "", tp, "new session has a last turn: %q %d", tp, n)
@@ -317,7 +322,8 @@ func TestUsagePersists(t *testing.T) {
 	s, err := NewStorage(dir)
 	require.NoError(t, err)
 	a, _ := s.CreateSession("a", "A", "blitz")
-	b, _ := s.CreateSession("b", "B", "blitz") // b is now active
+	require.NoError(t, s.AddMessage("user", "hi")) // saved with its first message
+	b, _ := s.CreateSession("b", "B", "blitz")     // b is now active
 	_, ok := s.Usage(a.ID)
 	assert.False(t, ok, "a new session has usage")
 
@@ -354,8 +360,8 @@ func TestAppendToAnySession(t *testing.T) {
 	dir := t.TempDir()
 	s, _ := NewStorage(dir)
 	a, _ := s.CreateSession("", "", "blitz")
-	b, _ := s.CreateSession("", "", "blitz") // b is active
-	require.NoError(t, s.AppendTo(a.ID, Message{Role: "user", Content: "first question for a"}))
+	require.NoError(t, s.AppendTo(a.ID, Message{Role: "user", Content: "first question for a"})) // saves a
+	b, _ := s.CreateSession("", "", "blitz")                                                     // b is active
 	require.NoError(t, s.AppendTo(a.ID, Message{Role: "model", Content: "an answer"}))
 	require.NoError(t, s.AppendTo(b.ID, Message{Role: "user", Content: "for b"}))
 	assert.Len(t, s.Active().Messages, 1, "the active session's messages in memory")
@@ -373,6 +379,48 @@ func TestAppendToAnySession(t *testing.T) {
 	assert.Equal(t, "first question for a", got.Title)
 	assert.False(t, got.UpdatedAt.Before(got.Messages[2].Timestamp))
 
-	assert.ErrorContains(t, s2.AppendTo("session-20260101-000000-deadbeef", Message{Role: "user", Content: "x"}), "not found")
+	// A session opened by a process since restarted, never saved: its first
+	// message saves it under the ID the client holds.
+	const lost = "session-20260101-000000-deadbeef"
+	require.NoError(t, s2.AppendTo(lost, Message{Role: "user", Content: "hello again"}))
+	rec, err := s2.Load(lost)
+	require.NoError(t, err)
+	assert.Equal(t, "hello again", rec.Title)
+	assert.Len(t, rec.Messages, 1)
 	assert.Error(t, s2.AppendTo("../escape", Message{Role: "user", Content: "x"}))
+}
+
+// A new chat is saved with its first message: until then it isn't on
+// disk, listed or loadable, and one replaced unused leaves nothing.
+// Chats saved empty by earlier versions aren't listed either.
+func TestNewSessionsAreSavedWithTheirFirstMessage(t *testing.T) {
+	dir := t.TempDir()
+	s, _ := NewStorage(dir)
+	unused, _ := s.CreateSession("", "", "blitz")
+	used, _ := s.CreateSession("", "", "blitz") // the unused one is dropped
+	assert.Equal(t, used.ID, s.Active().ID)
+	list, _ := s.List()
+	assert.Empty(t, list, "an empty chat listed")
+	_, err := s.Snapshot(used.ID, "early", false)
+	assert.ErrorContains(t, err, "nothing to save")
+
+	require.NoError(t, s.AddMessage("user", "the first prompt"))
+	list, _ = s.List()
+	require.Len(t, list, 1)
+	assert.Equal(t, used.ID, list[0].ID)
+	assert.Equal(t, "the first prompt", list[0].Title)
+	_, err = os.Stat(filepath.Join(dir, unused.ID+".meta.json"))
+	assert.True(t, os.IsNotExist(err), "the unused chat was written")
+
+	// An empty chat from an earlier version: on disk, not listed.
+	old := `{"id":"session-20260101-000000-0000beef","title":"","agent":"blitz","created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z","message_count":0}`
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "session-20260101-000000-0000beef.meta.json"), []byte(old), 0o600))
+	list, _ = s.List()
+	assert.Len(t, list, 1, "an old empty chat listed")
+
+	// Renaming a new chat saves it (the user named it).
+	s.CreateSession("", "", "blitz")
+	require.NoError(t, s.Rename("plans"))
+	list, _ = s.List()
+	assert.Len(t, list, 1, "a renamed chat with no messages is still empty: not listed")
 }

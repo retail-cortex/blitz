@@ -114,6 +114,10 @@ type Storage struct {
 	dir       string
 	active    *SessionRecord
 	workspace string
+	// unsaved: the active session hasn't been written yet. A new session
+	// is saved with its first message (or a rename), so chats never used
+	// leave nothing behind.
+	unsaved bool
 }
 
 // SetWorkspace records the workspace new sessions belong to.
@@ -185,7 +189,8 @@ func ValidateID(id string) error {
 }
 
 // CreateSession starts a new session and makes it active. With title ""
-// the session is named after its first prompt (see AddMessage).
+// the session is named after its first prompt (see AddMessage). It is
+// saved with its first message: until then it isn't listed or loadable.
 func (s *Storage) CreateSession(id, title, agent string) (*SessionRecord, error) {
 	if id == "" {
 		id = NewSessionID()
@@ -206,10 +211,7 @@ func (s *Storage) CreateSession(id, title, agent string) (*SessionRecord, error)
 		Workspace: s.workspace,
 		Messages:  []Message{},
 	}
-	if err := s.writeMeta(rec); err != nil {
-		return nil, err
-	}
-	s.active = rec
+	s.active, s.unsaved = rec, true
 	return rec, nil
 }
 
@@ -230,7 +232,8 @@ func (s *Storage) Append(msg Message) error {
 
 // AppendTo adds msg (stamped now) to session id, active or not: a turn's
 // messages go to the session it runs in, whatever another client (or a
-// service that restarted since the session was opened) made active.
+// service that restarted since the session was opened) made active. A
+// session with no metadata yet is created under id.
 func (s *Storage) AppendTo(id string, msg Message) error {
 	if err := ValidateID(id); err != nil {
 		return err
@@ -242,7 +245,10 @@ func (s *Storage) AppendTo(id string, msg Message) error {
 	}
 	rec, err := s.readMeta(id)
 	if errors.Is(err, os.ErrNotExist) {
-		return fmt.Errorf("session '%s' not found", id)
+		// Opened but never saved, by a process since restarted: the
+		// client still holds the ID, and its conversation starts here.
+		now := time.Now()
+		rec, err = &SessionRecord{ID: id, CreatedAt: now, UpdatedAt: now, Workspace: s.workspace}, nil
 	}
 	if err != nil {
 		return err
@@ -528,8 +534,11 @@ func (s *Storage) List() ([]*SessionRecord, error) {
 			continue
 		}
 		if rec, err := s.readMeta(strings.TrimSuffix(name, metaSuffix)); err == nil {
-			sessions = append(sessions, rec)
 			seen[rec.ID] = true
+			if rec.MessageCount == 0 && !s.hasEvents(rec.ID) {
+				continue // an empty chat, saved before chats were saved lazily
+			}
+			sessions = append(sessions, rec)
 		}
 	}
 	// Legacy single-file sessions from earlier versions.
@@ -552,6 +561,12 @@ func (s *Storage) List() ([]*SessionRecord, error) {
 		return sessions[i].UpdatedAt.After(sessions[j].UpdatedAt)
 	})
 	return sessions, nil
+}
+
+// hasEvents reports whether session id has a conversation history file.
+func (s *Storage) hasEvents(id string) bool {
+	info, err := os.Stat(s.path(id, eventsSuffix))
+	return err == nil && info.Size() > 0
 }
 
 // TranscriptPath is where session id's messages are kept (JSON lines),
@@ -650,6 +665,9 @@ func (s *Storage) writeMeta(rec *SessionRecord) error {
 	if err := os.Rename(tmpName, s.path(rec.ID, metaSuffix)); err != nil {
 		os.Remove(tmpName)
 		return err
+	}
+	if rec == s.active {
+		s.unsaved = false
 	}
 	return nil
 }
