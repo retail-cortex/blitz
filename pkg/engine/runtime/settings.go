@@ -68,7 +68,13 @@ func (m *settingsModel) GenerateContent(ctx context.Context, req *model.LLMReque
 			}
 		}
 	}
-	return m.inner.GenerateContent(ctx, req, stream)
+	return func(yield func(*model.LLMResponse, error) bool) {
+		for resp, err := range m.inner.GenerateContent(ctx, req, stream) {
+			if !yield(resp, asQuota(err)) {
+				return
+			}
+		}
+	}
 }
 
 // apply returns a copy of req with s applied; req itself is shared with

@@ -44,7 +44,8 @@ Every model is an ADK `model.LLM`. A factory builds one from a model reference f
 - **MDL-27** Streaming yields partial text deltas, then one aggregated final response (same shape as Gemini). Non-streaming yields one response.
 - **MDL-28** Stop reasons: `max_tokens` → MaxTokens; `refusal` → Safety with `ErrorCode=refusal` and the note "The model declined to continue this request. (<category>)" appended as text; else Stop. An empty final response gets one empty text part. `ModelVersion` = the model that served.
 - **MDL-29** Usage: prompt = input + cache reads + cache writes; cached = cache reads; cache writes reported via `CustomMetadata["cache_creation_input_tokens"]`.
-- **MDL-30** Errors: 401/403 → "authentication failed … check llm.anthropic.api_key or ANTHROPIC_API_KEY"; 429 → "rate limited"; other status → "API error (N)".
+- **MDL-30** Errors: 401/403 → "authentication failed … check llm.anthropic.api_key or ANTHROPIC_API_KEY"; 429 → "rate limited" (unless it's a quota, MDL-30a); other status → "API error (N)".
+- **MDL-30a** Quota: a refusal with Google's `RESOURCE_EXHAUSTED` — a genai `APIError` with that status (Gemini, on the API or Vertex AI), or a 429 whose body is a Google error (or a list of them, as Vertex AI sends) with that status (Claude on Vertex AI) — is a `*runtime.QuotaError`: "quota exceeded: <Google's message> (raise the quota in the Google Cloud console, IAM & Admin › Quotas, or wait for it to reset)", never "rate limited". Every provider model's errors pass through it (the settings wrapper), so turn errors, `doctor --online` and worker runs say so; `ModelErrorSummary` keeps a quota error whole, on one line, where it keeps only the first line of others. SDK retries still apply (a per-minute quota recovers).
 
 ### 3.2 OpenAI-compatible wrapper
 - **MDL-40** Never streams (text-encoded tool calls are only recognisable in complete responses).

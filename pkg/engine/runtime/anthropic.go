@@ -568,6 +568,9 @@ func anthropicError(err error) error {
 		case 401, 403:
 			return fmt.Errorf("anthropic: authentication failed (%d); check llm.anthropic.api_key or ANTHROPIC_API_KEY: %w", apiErr.StatusCode, err)
 		case 429:
+			if q := asQuota(err); q != err {
+				return fmt.Errorf("anthropic: %w", q)
+			}
 			return fmt.Errorf("anthropic: rate limited (429): %w", err)
 		default:
 			return fmt.Errorf("anthropic: API error (%d): %w", apiErr.StatusCode, err)

@@ -35,7 +35,7 @@ Suggested order (from NEXT_STEPS): run the manual checks (§9) first — their f
 
 ### 2.3 Signing in with Google Cloud and Anthropic accounts — S
 **Extends** [spec_models_015](spec_models_015.md) (Gemini and Claude on Vertex AI, `auth = "adc"`; Claude with `auth = "oauth"`). Found 2026-09-28 trying Claude Opus 5.5 on Vertex AI, which answered `429 RESOURCE_EXHAUSTED` (no quota yet for the project).
-- **BL-ENG-20** A quota error from Vertex AI (`429` with `RESOURCE_EXHAUSTED`, "Quota exceeded for …") is reported as quota, with Google's message and the quota to raise, not as "rate limited": in `blitz doctor --online` (the whole message, not its first line), the "model isn't available" note, and a turn's error.
+- **BL-ENG-20** ✅ *Done 2026-09-28 (MDL-30a).* A quota error from Vertex AI (`429` with `RESOURCE_EXHAUSTED`, "Quota exceeded for …") is reported as quota, with Google's message and the quota to raise, not as "rate limited": in `blitz doctor --online` (the whole message, not its first line), the "model isn't available" note, and a turn's error.
 - **BL-ENG-21** `thinking_budget` on current Claude models: a budget above 0 sends `budget_tokens`, which Claude Opus 4.7 and later, Claude Sonnet 5 and Fable reject (400); `0` sends thinking disabled, which Claude Opus 5.5 and Fable reject. On those models thinking stays adaptive and the setting maps to effort, or is reported as unsupported (MDL-72).
 - **BL-ENG-22** Claude on Vertex AI has no server-side refusal fallback (it's off there): use the SDK's client-side fallback middleware (`lib/betafallback`) with per-conversation state, so `fallbacks` works on Vertex AI too.
 

@@ -73,7 +73,7 @@ means. Written 2026-09-28; the backlog spec
    after install, or have the app offer to. Done: installing a new local
    build and reopening the app never talks to the old service silently.
 
-8. **Vertex AI quota errors say "quota" (S).** Backlog BL-ENG-20.
+8. ✅ *Done (MDL-30a).* **Vertex AI quota errors say "quota" (S).** Backlog BL-ENG-20.
    `429 RESOURCE_EXHAUSTED` reads as "rate limited"; show Google's
    message and the quota to raise, in `doctor --online` (in full, not its
    first line), the "model isn't available" note and turn errors.

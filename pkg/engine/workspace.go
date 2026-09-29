@@ -20,6 +20,7 @@ package engine
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -408,14 +409,18 @@ func SecretRedactor(cfg *config.Config) *redact.Redactor {
 	return redact.FromEnv(cfg.Sandbox.ScrubEnv, secrets...)
 }
 
-// ModelErrorSummary makes a model initialisation error safe and readable:
-// some SDK errors embed their whole client config, including the API key.
+// ModelErrorSummary makes a model error safe and readable: some SDK errors
+// embed their whole client config, including the API key, and most need
+// only their first line. A quota error is kept whole, on one line: Google's
+// message names the quota to raise.
 func ModelErrorSummary(err error, cfg *config.Config) string {
 	msg := err.Error()
 	if i := strings.Index(msg, "ClientConfig:"); i >= 0 {
 		msg = strings.TrimSpace(strings.TrimSuffix(strings.TrimSpace(msg[:i]), "."))
 	}
-	if i := strings.IndexByte(msg, '\n'); i >= 0 {
+	if q, ok := errors.AsType[*runtime.QuotaError](err); ok {
+		msg = strings.Join(strings.Fields(q.Error()), " ")
+	} else if i := strings.IndexByte(msg, '\n'); i >= 0 {
 		msg = msg[:i]
 	}
 	r := redact.FromEnv(cfg.Sandbox.ScrubEnv, cfg.LLM.Gemini.APIKey, cfg.LLM.OpenAI.APIKey, cfg.LLM.Anthropic.APIKey)

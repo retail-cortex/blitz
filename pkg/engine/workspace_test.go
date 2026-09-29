@@ -272,6 +272,12 @@ func TestModelErrorSummary(t *testing.T) {
 	assert.Equal(t, "api key is required", got, "summary = %q", got)
 	leak := ModelErrorSummary(errors.New("bad key AIzaSySECRETSECRETSECRETSECRETSECRET123"), cfg)
 	assert.NotContains(t, leak, "SECRET", "key leaked: %q", leak)
+
+	// A quota error is kept whole, on one line, whatever wraps it.
+	quota := fmt.Errorf("anthropic: %w", &runtime.QuotaError{Message: "Quota exceeded for aiplatform.googleapis.com/x.\nPlease submit a quota increase request."})
+	got = ModelErrorSummary(quota, cfg)
+	assert.Contains(t, got, "quota exceeded: Quota exceeded for aiplatform.googleapis.com/x. Please submit a quota increase request.", "summary = %q", got)
+	assert.NotContains(t, got, "\n")
 }
 
 func TestSelectSessionScopedToWorkspace(t *testing.T) {
