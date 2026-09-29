@@ -107,6 +107,25 @@ func (t *UsageTracker) RecordWrites(session, model string, m *genai.GenerateCont
 	return u
 }
 
+// Seed sets session's usage to u when it has none yet (usage saved before
+// a restart); it reports whether it did.
+func (t *UsageTracker) Seed(session string, u api.Usage) bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.sessions[session] != nil {
+		return false
+	}
+	t.sessions[session] = &u
+	return true
+}
+
+// Has reports whether session has usage in the tracker.
+func (t *UsageTracker) Has(session string) bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.sessions[session] != nil
+}
+
 // Session returns the usage recorded for session.
 func (t *UsageTracker) Session(session string) api.Usage {
 	t.mu.Lock()

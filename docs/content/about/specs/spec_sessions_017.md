@@ -31,6 +31,7 @@ A session is one conversation. Two stores persist it, both owner-only under `ses
 - **SES-12** Title: a new session is named after its first user prompt — first non-empty line, whitespace collapsed, max 60 runes ending "…". `/rename <name>` sets it (empty refused). Titles show in `/session list` and the terminal window title.
 - **SES-13** `List` returns metadata sorted by update time, newest first, without reading message bodies.
 - **SES-14** `last_turn` links traces across processes ([spec_engine_016](spec_engine_016.md) ENG-91).
+- **SES-15** `usage` keeps the session's usage so far (`api.Usage`: calls, input, cached and cache-write tokens, output, the last prompt's size, cost, whether every call was priced): the engine saves it after every model call and compaction (`runtime.WithUsageStore`, `Storage.SetUsage`) and restores it the first time a session's usage is asked for in a process (`Storage.Usage`, `UsageTracker.Seed`), so `/cost`, `/context` and the desktop's usage footer go on after a restart or `--resume`, and new calls add to it. A session the store doesn't have (a worker run's, kept in its own store) is left alone. A snapshot, or a session started from one, gets the source's context size only: what was spent is the source's.
 
 ## 4. ADK event log
 

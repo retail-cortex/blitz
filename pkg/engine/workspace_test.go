@@ -353,3 +353,50 @@ func TestSetupLocaleWarnsAndFallsBack(t *testing.T) {
 	assert.Contains(t, warnings[1], "not a language", "warnings = %q", warnings)
 	assert.Equal(t, "en-US", i18n.Current().Tag().String(), "fallback locale = %s", i18n.Current().Tag())
 }
+
+// A session's usage survives the workspace closing: reopened (a restart,
+// --resume), /cost and /context go on from where they were, and new calls
+// add to it.
+func TestUsageSurvivesARestart(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("MODENV_PREFIX", "")
+	cfg := config.DefaultConfig()
+	cfg.Tools.WorkspaceDir = t.TempDir()
+	cfg.Session.StorageDir = t.TempDir()
+	cfg.Tools.ApprovalsFile = filepath.Join(t.TempDir(), "a.json")
+	open := func(reply string, prompt int32) (*Workspace, *runtime.MockLLM) {
+		llm := runtime.NewMockLLM("gemini-3.8-flash", genai.NewContentFromText(reply, genai.RoleModel))
+		llm.Usage = &genai.GenerateContentResponseUsageMetadata{PromptTokenCount: prompt, CandidatesTokenCount: 50}
+		c := *cfg
+		w, err := Open(context.Background(), &c, Options{Model: llm, NewModel: mockModels})
+		require.NoError(t, err)
+		return w, llm
+	}
+	ctx := context.Background()
+
+	w, _ := open("first", 1000)
+	sid := newSession(t, w).ID
+	_, err := w.Run(ctx, sid, api.Turn{Text: "one"}, ignore)
+	require.NoError(t, err)
+	before := w.engine.Usage(sid)
+	require.Equal(t, 1, before.Calls)
+	require.NoError(t, w.Close())
+
+	w2, _ := open("second", 1500)
+	defer w2.Close()
+	got := w2.engine.Usage(sid)
+	assert.Equal(t, before, got, "usage after reopening")
+	_, _, err = w2.OpenSession(sid, false) // --resume
+	require.NoError(t, err)
+	info, err := w2.Context()
+	require.NoError(t, err)
+	assert.Equal(t, int64(1000), info.Tokens, "/context reports the last prompt, not 0")
+
+	_, err = w2.Run(ctx, sid, api.Turn{Text: "two"}, ignore)
+	require.NoError(t, err)
+	after := w2.engine.Usage(sid)
+	assert.Equal(t, 2, after.Calls, "new calls add to the saved usage")
+	assert.Equal(t, int64(2500), after.Input)
+	assert.Equal(t, int64(1500), after.LastPrompt)
+	assert.InDelta(t, before.CostUSD*2.5, after.CostUSD, 0.01, "cost goes on from the saved one")
+}

@@ -34,6 +34,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/retail-cortex/blitz/pkg/api"
 )
 
 // Session transcripts can contain secrets pasted by the user or echoed by
@@ -66,6 +68,9 @@ type SessionRecord struct {
 	// LastTurn identifies the trace of the most recent turn so the next one,
 	// even in a later process, can link to it. Empty with telemetry off.
 	LastTurn *TurnRef `json:"last_turn,omitempty"`
+	// Usage is the session's usage so far (calls, tokens, cost, the last
+	// prompt's size), kept after each model call so it survives a restart.
+	Usage *api.Usage `json:"usage,omitempty"`
 	// Name labels a snapshot saved with /session save; "" otherwise.
 	Name string `json:"name,omitempty"`
 	// From is the session this one was copied from: the saved session for
@@ -429,6 +434,49 @@ func (s *Storage) SetLastTurn(id, traceparent string, index int) error {
 		return err
 	}
 	rec.LastTurn = ref
+	return s.writeMeta(rec)
+}
+
+// Usage returns the usage saved for session id, and whether there is any.
+func (s *Storage) Usage(id string) (api.Usage, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	rec := s.active
+	if rec == nil || rec.ID != id {
+		if ValidateID(id) != nil {
+			return api.Usage{}, false
+		}
+		var err error
+		if rec, err = s.readMeta(id); err != nil {
+			return api.Usage{}, false
+		}
+	}
+	if rec.Usage == nil {
+		return api.Usage{}, false
+	}
+	return *rec.Usage, true
+}
+
+// SetUsage saves session id's usage so far in its metadata. A session
+// this store doesn't have (a worker run's, kept elsewhere) is left alone.
+func (s *Storage) SetUsage(id string, u api.Usage) error {
+	if err := ValidateID(id); err != nil {
+		return err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.active != nil && s.active.ID == id {
+		s.active.Usage = &u
+		return s.writeMeta(s.active)
+	}
+	rec, err := s.readMeta(id)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	rec.Usage = &u
 	return s.writeMeta(rec)
 }
 

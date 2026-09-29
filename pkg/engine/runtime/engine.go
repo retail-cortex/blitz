@@ -119,6 +119,17 @@ type TurnStore interface {
 // WithTurnStore chains turn spans per session through s.
 func WithTurnStore(s TurnStore) Option { return func(e *Engine) { e.turns = s } }
 
+// UsageStore keeps each session's usage between processes: the engine
+// saves it after every model call and restores it the first time a
+// session's usage is asked for. session.Storage implements it.
+type UsageStore interface {
+	Usage(sessionID string) (api.Usage, bool)
+	SetUsage(sessionID string, u api.Usage) error
+}
+
+// WithUsageStore keeps sessions' usage in s.
+func WithUsageStore(s UsageStore) Option { return func(e *Engine) { e.usageStore = s } }
+
 // WithNotice sets where the engine reports events the user should know
 // about, such as a fallback model taking over (default: nowhere).
 func WithNotice(f func(string)) Option { return func(e *Engine) { e.notice = f } }
@@ -152,7 +163,8 @@ type Engine struct {
 	memories  memory.Service
 
 	subagentSeq atomic.Int64
-	turns       TurnStore // nil: turns are not chained
+	turns       TurnStore  // nil: turns are not chained
+	usageStore  UsageStore // nil: usage lasts as long as the process
 
 	steerMu sync.Mutex
 	steers  map[string][]string // session ID -> messages sent mid-turn
@@ -356,7 +368,30 @@ func (e *Engine) modelForLocked(agent string) model.LLM {
 }
 
 // Usage returns the token usage and estimated cost recorded for a session.
-func (e *Engine) Usage(sessionID string) api.Usage { return e.usage.Session(sessionID) }
+func (e *Engine) Usage(sessionID string) api.Usage {
+	e.restoreUsage(sessionID)
+	return e.usage.Session(sessionID)
+}
+
+// restoreUsage seeds the tracker with sessionID's saved usage, once.
+func (e *Engine) restoreUsage(sessionID string) {
+	if e.usageStore == nil || e.usage.Has(sessionID) {
+		return
+	}
+	if u, ok := e.usageStore.Usage(sessionID); ok {
+		e.usage.Seed(sessionID, u)
+	}
+}
+
+// saveUsage keeps sessionID's usage so far in the store.
+func (e *Engine) saveUsage(ctx context.Context, sessionID string) {
+	if e.usageStore == nil {
+		return
+	}
+	if err := e.usageStore.SetUsage(sessionID, e.usage.Session(sessionID)); err != nil {
+		slog.WarnContext(ctx, "could not save the session's usage", "session", sessionID, "error", err)
+	}
+}
 
 // settingsName is the key a model's settings are kept under: its name as
 // the provider reports it, without a "provider/" prefix.
@@ -500,7 +535,11 @@ func (e *Engine) afterModel(ctx agent.Context, resp *model.LLMResponse, respErr 
 	case float64:
 		writes = int64(v)
 	}
+	e.restoreUsage(id)
 	e.usage.RecordWrites(id, served, resp.UsageMetadata, writes)
+	if st := stateFrom(ctx); st != nil {
+		e.saveUsage(ctx, id)
+	}
 	return nil, nil
 }
 
@@ -760,7 +799,7 @@ func (e *Engine) Execute(ctx context.Context, sessionID, prompt string, handler 
 		attribute.Bool("plan_only", st.planOnly),
 	)
 	defer e.recordTurn(ctx, sessionID, span, index)
-	before := e.usage.Session(sessionID)
+	before := e.Usage(sessionID)
 	err = drain(r.Run(ctx, "user", sessionID, userContent(prompt, st.attachments), rc), handler)
 	after := e.usage.Session(sessionID)
 	span.SetAttributes(

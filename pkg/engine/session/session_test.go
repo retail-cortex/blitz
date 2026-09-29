@@ -23,6 +23,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/retail-cortex/blitz/pkg/api"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -307,4 +308,42 @@ func TestMessageKindsAndTruncate(t *testing.T) {
 	if assert.Len(t, got.Messages, 4, "appending after truncating") {
 		assert.Equal(t, "third", got.Messages[3].Content)
 	}
+}
+
+// A session's usage is kept in its metadata, active or not, and read back
+// by a later process; a session the store doesn't have is left alone.
+func TestUsagePersists(t *testing.T) {
+	dir := t.TempDir()
+	s, err := NewStorage(dir)
+	require.NoError(t, err)
+	a, _ := s.CreateSession("a", "A", "blitz")
+	b, _ := s.CreateSession("b", "B", "blitz") // b is now active
+	_, ok := s.Usage(a.ID)
+	assert.False(t, ok, "a new session has usage")
+
+	ua := api.Usage{Calls: 3, Input: 1200, Cached: 400, CacheWrite: 100, Output: 300, LastPrompt: 700, CostUSD: 0.0123, Priced: true}
+	ub := api.Usage{Calls: 1, Input: 10, Output: 5, LastPrompt: 10}
+	require.NoError(t, s.SetUsage(a.ID, ua))
+	require.NoError(t, s.SetUsage(b.ID, ub))
+	require.NoError(t, s.AddMessage("user", "hi")) // rewrites b's metadata: the usage stays
+
+	s2, _ := NewStorage(dir) // a later process
+	for id, want := range map[string]api.Usage{a.ID: ua, b.ID: ub} {
+		t.Run(id, func(t *testing.T) {
+			got, ok := s2.Usage(id)
+			require.True(t, ok)
+			assert.Equal(t, want, got)
+		})
+	}
+	assert.NoError(t, s2.SetUsage("missing", ua), "another store's session")
+
+	// A snapshot has the conversation's size, not its cost.
+	snap, err := s2.Snapshot(b.ID, "saved", false)
+	require.NoError(t, err)
+	got, ok := s2.Usage(snap.ID)
+	require.True(t, ok)
+	assert.Equal(t, api.Usage{LastPrompt: 10, Priced: true}, got)
+	_, ok = s2.Usage("../escape")
+	assert.False(t, ok)
+	assert.Error(t, s2.SetUsage("../escape", ua))
 }

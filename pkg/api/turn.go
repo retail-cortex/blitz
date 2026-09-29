@@ -154,14 +154,14 @@ var ErrMaxTurns = errors.New("maximum turns reached")
 
 // Usage accumulates token counts and estimated cost.
 type Usage struct {
-	Calls      int
-	Input      int64 // prompt tokens, including cached
-	Cached     int64
-	CacheWrite int64 // prompt tokens written to the cache (part of Input)
-	Output     int64 // candidates + thinking tokens
-	LastPrompt int64 // prompt size of the latest call: the current context size
-	CostUSD    float64
-	Priced     bool // false if any call's model had no price
+	Calls      int     `json:"calls"`
+	Input      int64   `json:"input"` // prompt tokens, including cached
+	Cached     int64   `json:"cached"`
+	CacheWrite int64   `json:"cache_write"` // prompt tokens written to the cache (part of Input)
+	Output     int64   `json:"output"`      // candidates + thinking tokens
+	LastPrompt int64   `json:"last_prompt"` // prompt size of the latest call: the current context size
+	CostUSD    float64 `json:"cost_usd"`
+	Priced     bool    `json:"priced"` // false if any call's model had no price
 }
 
 // Add adds o's calls, tokens and cost to u; u stays priced only if both are.

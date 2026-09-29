@@ -52,7 +52,7 @@ means. Written 2026-09-28, reordered 2026-09-29; the backlog spec
     Done: the icon shows the service's state within seconds of a change
     and every menu action works on macOS and Ubuntu 24.04.
 
-7. **Usage that survives a restart (M).** Backlog BL-ENG-10, BL-ENG-11.
+7. ✅ *Done (SES-15). Cost limits were already right: they count each turn's own spending.* **Usage that survives a restart (M).** Backlog BL-ENG-10, BL-ENG-11.
     Token counts, context size and cost live only in memory, so
     `--resume`, a service restart or a worker run across restarts start
     at zero, and `--max-cost-usd` and compaction thresholds are wrong

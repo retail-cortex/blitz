@@ -209,6 +209,11 @@ func (s *Storage) copyLocked(src, rec *SessionRecord) (err error) {
 		return err
 	}
 	rec.MessageCount = len(src.Messages)
+	// The copy holds the same conversation, so the same context size; what
+	// was spent getting there is the source's.
+	if src.Usage != nil {
+		rec.Usage = &api.Usage{LastPrompt: src.Usage.LastPrompt, Priced: true}
+	}
 	return s.writeMeta(rec)
 }
 

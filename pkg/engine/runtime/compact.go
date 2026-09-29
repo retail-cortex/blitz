@@ -158,7 +158,9 @@ func (e *Engine) compact(ctx context.Context, sessionID, focus, reason string, a
 		// Recording an empty summary would delete the covered turns outright.
 		return CompactResult{}, errors.New("the summarizer returned no text; history left unchanged")
 	}
+	e.restoreUsage(sessionID)
 	e.usage.Record(sessionID, llm.Name(), res.Usage)
+	e.saveUsage(ctx, sessionID)
 
 	ev, err := compactionEvent(window, events, summary)
 	if err != nil {

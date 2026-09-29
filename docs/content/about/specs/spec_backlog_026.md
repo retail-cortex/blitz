@@ -30,8 +30,8 @@ Suggested order (from NEXT_STEPS): run the manual checks (§9) first — their f
 
 ### 2.2 Usage survives the process — S
 **Extends** [spec_engine_016](spec_engine_016.md) ENG-82. Usage lives in memory only, so after `--resume` (or a service restart) `/cost` and `/context` start at zero and a worker run's cost is known only while the service runs.
-- **BL-ENG-10** A session's cumulative usage (calls, tokens by kind, cost, priced flag, last prompt size) is stored in its metadata after each model call's turn and restored when the session is opened.
-- **BL-ENG-11** `/context` after resuming reports the last prompt's size, not 0.
+- **BL-ENG-10** ✅ *Done 2026-09-29 (SES-15).* A session's cumulative usage (calls, tokens by kind, cost, priced flag, last prompt size) is stored in its metadata after each model call's turn and restored when the session is opened.
+- **BL-ENG-11** ✅ *Done 2026-09-29 (SES-15).* `/context` after resuming reports the last prompt's size, not 0.
 
 ### 2.3 Signing in with Google Cloud and Anthropic accounts — S
 **Extends** [spec_models_015](spec_models_015.md) (Gemini and Claude on Vertex AI, `auth = "adc"`; Claude with `auth = "oauth"`). Found 2026-09-28 trying Claude Opus 5.5 on Vertex AI, which answered `429 RESOURCE_EXHAUSTED` (no quota yet for the project).

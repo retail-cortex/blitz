@@ -239,6 +239,7 @@ func Open(ctx context.Context, cfg *config.Config, o Options) (*Workspace, error
 		runtime.WithInstructions(w.instructions()),
 		runtime.WithStreaming(o.Streaming),
 		runtime.WithTurnStore(w.storage),
+		runtime.WithUsageStore(w.storage),
 		runtime.WithNotice(o.Warn),
 	)...)
 	if err != nil {
