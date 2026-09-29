@@ -2,105 +2,48 @@
 
 One list, in the order to work through it. Sizes: S (hours), M (a day or
 two), L (a week or more). Each item says where the work is and what "done"
-means. Written 2026-09-28; the backlog spec
+means. Written 2026-09-28, reordered 2026-09-29; the backlog spec
 (`docs/content/about/specs/spec_backlog_026.md`) keeps the long tail.
 
-## P0: broken, misleading, or unverified now
+## P1: the desktop app, next
 
-1. ✅ *Done 2026-09-28: run 36493663203, green on macOS and Linux (`db7e5fa` added a manual trigger).* **Run CI on everything pushed today (S).** Every commit since the
-   release candidate went up with `[skip ci]` or had its run cancelled:
-   the ADC/OAuth sign-in, Claude on Vertex AI, the permission rules, the
-   stream keepalive, the thought-signature fix. Only local tests (Linux)
-   have run them; the macOS build and tests haven't run at all, and the
-   macOS disk cache was evicted (the first run builds cold). Done: a green
-   run on macOS and Linux, and the docs site rebuilt (the safety and
-   configuration guides changed).
+1. **Full-width window (XS).** The conversation is capped by
+   `.chat-column { max-width: var(--content-width) }`. Let it fill the
+   window (full width by default, or an Appearance option). Done: a
+   maximised or full-screen window uses its width.
 
-2. ✅ *Done (`74b759f`).* **An unavailable model silently answers "Done." (S).** When the
-   configured model can't be built (no credentials, a bad setting), the
-   workspace runs turns on a placeholder model that replies "Done."
-   instead of failing (`pkg/engine/workspace.go`, `runtime.NewMockLLM`).
-   Seen 2026-09-28 with a Gemini setting the API refused. Done: a turn
-   with no working model fails with the model's error (after
-   `RetryModel`), in the desktop, the CLI and worker runs.
+2. **`@` mentions in chat (M).** Typing `@` in the composer completes
+   workspace files and folders (fuzzy, as Go to file does); a mentioned
+   file goes to the model with the prompt (its content, up to a cap; above
+   it, the path and a note to read it), a folder as its listing, an image
+   as an image. The same in the desktop and the CLI (which today only
+   takes `@image` mentions). Done: `@` completes, and the model answers
+   from the file without reading it first.
 
-3. ✅ *Done (`62fbb78`); to confirm in the app.* **Settings › Service hangs after reinstalling the service (S).** The
-   status doesn't refresh after **Reinstall**; it stays as it was until
-   the dialog is reopened. Likely the check runs once, before the new
-   service is up (`apps/desktop/web/src/SettingsDialog.tsx`, `Service`;
-   `desktop.ts` `installService`). Done: after install, restart or stop,
-   the status polls until it settles (with a timeout and an error if it
-   doesn't).
+3. **Add to context from the Files view (S).** The file bar: **Add to
+   context** and **New conversation about this file** (icon buttons). The
+   tree's right-click menu: **Add file to context**, **Add folder to
+   context**, **Start a conversation about this file**. Adding puts a chip
+   in the composer, as `@path` would (item 2); a new conversation opens a
+   new session with the file attached and the cursor in the prompt.
 
-4. ✅ *Done: `TestWorkspacesKeepTheirOwnSettings` (daemon). Agent model pins (`/pin_model`, `/unpin`) are now the workspace's, over the global ones (`/unpin` masks a global pin with `agent = ""`); `/locale` and `/model_settings` stay global, which suits them.* **Prove each workspace gets its own configuration (S).** Already the
-   design: the service opens each workspace as its own engine with
-   `config.LoadWorkspace` (the global settings plus
-   `~/.blitz/workspaces/<name>-<sha256 of the path>/.env.toml`), keyed by
-   the canonical path; sessions share one folder, tagged by workspace;
-   remembered approvals share one file, keyed by workspace and command.
-   What's missing is a test that proves it end to end, and a decision on
-   anything still shared. Done: a service test opening two workspaces with
-   different providers, models and permission rules, switching between
-   them, and checking each keeps its own; any leak found is fixed or
-   written down as intended.
+4. **Preview pane: Markdown, images, PDF (M).** Markdown rendered (a
+   Source / Preview toggle, the chat's renderer); images shown; PDFs
+   viewed (WebKitGTK has no PDF viewer: pdf.js, a new dependency and
+   notice). Done: each opens from the tree as a preview.
 
-## P1: small, high-value improvements
+5. **Creating workers (M).** A **New worker** dialog with a field for
+   each `WORKER.md` frontmatter setting and the prompt, checked before
+   saving (a new `WorkerService.CreateWorker`). New workers go in
+   `.agents/workers/<name>/WORKER.md`; that path is searched by default
+   beside `workers/`, which still works. Done: a worker made in the
+   dialog lists, runs and validates like a hand-written one.
 
-5. ✅ *Done; to confirm in the app.* **Copy an agent's response, as text or Markdown (S).** A copy button
-   on each answer in the conversation (`Conversation.tsx`, `EntryView`):
-   **Copy** (the rendered text) and **Copy as Markdown** (the source), as
-   other AI tools do; also for a whole turn. Done: both copy exactly what
-   the user expects, with a snackbar; keyboard reachable.
+## P2: features and the rest
 
-6. ✅ *Done.* **The settings file editor: highlighting, a Validate button, and a
-   reference (M).** Settings › Settings file is a plain text area. Use the
-   editor the Files view already has (CodeMirror, `files/codemirror.ts`)
-   with TOML highlighting; add **Validate**, which checks without saving
-   (a new `ConfigService.CheckConfigFile`: TOML errors with their line,
-   unknown settings, invalid permission rules, plain-text keys); and a
-   reference of every setting, with its type, default and meaning, as a
-   tooltip on hover and a searchable panel. The reference should be
-   generated from the config structs' doc comments, so it can't drift.
-   Done: errors are shown at their line before saving; every setting in
-   `pkg/config` is in the reference.
-
-7. ✅ *Done: the service reports a replaced program (any build, stamped or not), and the app offers to restart it; stamped dirty builds carry a hash of the changes. The `.deb` doesn't restart the service itself: a package upgrade would end turns in progress without asking.* **Local builds that say they're local, and installs that restart the
-   service (S).** A build with uncommitted changes reports the same
-   version as its commit, so the app's "service version differs" check
-   can't tell an old service from a new one (the cause of today's
-   "still broken after installing" confusion). Stamp `<commit>-dirty`
-   (`build/` stamping); have the `.deb` restart a running user service
-   after install, or have the app offer to. Done: installing a new local
-   build and reopening the app never talks to the old service silently.
-
-8. ✅ *Done (MDL-30a).* **Vertex AI quota errors say "quota" (S).** Backlog BL-ENG-20.
-   `429 RESOURCE_EXHAUSTED` reads as "rate limited"; show Google's
-   message and the quota to raise, in `doctor --online` (in full, not its
-   first line), the "model isn't available" note and turn errors.
-
-9. ✅ *Done (MDL-73).* **`thinking_budget` on current Claude models (S).** Backlog BL-ENG-21.
-   A budget above 0 sends `budget_tokens`, which Opus 4.7 and later,
-   Sonnet 5 and Fable refuse (400); `0` sends thinking disabled, which
-   Opus 5.5 and Fable refuse. Map it to effort (or report it as
-   unsupported) on those models.
-
-10. ✅ *Done (DSK-60, SVC-06a).* **A log viewer in Settings (M).** Blitz's logs are JSON lines in
-    `~/.blitz/logs/blitz-<date>.jsonl`; today the only way to read them is
-    a terminal. A Settings section (or a Service section tab): today's
-    log, newest first, with level filters, search, the day to show, and
-    **Open the folder**. Needs a way to read the service's logs (a new
-    `ServiceService.ReadLog`, or reading the files from the desktop side,
-    which shares the user's home). Done: an error the user saw can be
-    found there in a few seconds.
-
-11. ✅ *Done.* **`doctor --online` still says "use --online to confirm" (S).** The
-    credentials line says it even when `--online` is given.
-
-## P2: features
-
-12. **The Blitz service in the system tray, on every OS (M–L).** An icon
+6. **The Blitz service in the system tray, on every OS (M–L).** An icon
     with the service's state and, on right click, **Start**, **Stop**,
-    **Restart**, **Open Blitz** and **Logs** (item 10). Wails v2 has no
+    **Restart**, **Open Blitz** and **Logs** (Settings › Logs, done). Wails v2 has no
     tray API: it needs a small separate tray process (e.g. `fyne.io/systray`,
     which covers macOS, Windows and Linux) started at login beside the
     service, talking to it over the socket, or moving to Wails v3, which
@@ -109,7 +52,7 @@ means. Written 2026-09-28; the backlog spec
     Done: the icon shows the service's state within seconds of a change
     and every menu action works on macOS and Ubuntu 24.04.
 
-13. **Usage that survives a restart (M).** Backlog BL-ENG-10, BL-ENG-11.
+7. **Usage that survives a restart (M).** Backlog BL-ENG-10, BL-ENG-11.
     Token counts, context size and cost live only in memory, so
     `--resume`, a service restart or a worker run across restarts start
     at zero, and `--max-cost-usd` and compaction thresholds are wrong
@@ -117,14 +60,14 @@ means. Written 2026-09-28; the backlog spec
     after each model call (`session.Store`), restore it when a session
     opens, and record it in worker runs.
 
-14. **The attached CLI's background processes and `!cmd` audit (M).**
+8. **The attached CLI's background processes and `!cmd` audit (M).**
     Backlog BL-SVC-01, BL-SVC-02. Attached to the service, the CLI can't
     list or stop background processes (`Processes()` is nil) and doesn't
     audit `!cmd` (`AuditShell` does nothing). Add `ListProcesses`,
     `GetProcessOutput`, `KillProcess` and `AuditShell` to
     `WorkspaceService`, scoped to the session.
 
-15. **Faster Linux sandbox masking (M).** Backlog BL-SH-01. bubblewrap's
+9. **Faster Linux sandbox masking (M).** Backlog BL-SH-01. bubblewrap's
     masking walks the writable roots before every command (about 100 ms
     on a 10,000-file workspace, 3 s under `-race`), so CI runs parallel
     tests without the sandbox. Cache the mask per root (by mtime, or
@@ -133,7 +76,7 @@ means. Written 2026-09-28; the backlog spec
 
 ## P3: large, needing a design first
 
-16. **Project configuration with a trust boundary (L).** Teams can't
+10. **Project configuration with a trust boundary (L).** Teams can't
     commit MCP servers, commands, permission presets or hooks to a
     repository. Add `.blitz/settings.toml` (and `.local.toml`) per the
     decisions in `spec_parity_027` §12 and §2.4: settings that only
@@ -143,7 +86,7 @@ means. Written 2026-09-28; the backlog spec
     when it changes. Builds on the per-workspace settings and permission
     scopes that exist now.
 
-17. **Background sub-agents (L).** `invoke_agent` blocks the turn. Add
+11. **Background sub-agents (L).** `invoke_agent` blocks the turn. Add
     `background: true` returning a task ID (`spec_parity_027` §8.1),
     `list_tasks`, `task_output` and `stop_task`, and deliver completions
     as steer messages at the next tool cycle or prompt.
@@ -156,3 +99,18 @@ means. Written 2026-09-28; the backlog spec
 - **Chromebooks:** if a colleague sees a blank window, set
   `WEBKIT_DISABLE_DMABUF_RENDERER=1` automatically on ChromeOS.
 - **A signed macOS release:** the Apple Developer ID is pending.
+
+## Done 2026-09-28
+
+- Run CI on everything pushed today (S).
+- An unavailable model silently answers "Done." (S).
+- Settings › Service hangs after reinstalling the service (S).
+- Prove each workspace gets its own configuration (S).
+- Copy an agent's response, as text or Markdown (S).
+- The settings file editor: highlighting, a Validate button, and a reference (M).
+- Local builds that say they're local, and installs that restart the service (S).
+- Vertex AI quota errors say "quota" (S).
+- `thinking_budget` on current Claude models (S).
+- A log viewer in Settings (M).
+- `doctor --online` still says "use --online to confirm" (S).
+
