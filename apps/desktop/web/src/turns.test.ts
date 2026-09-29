@@ -34,6 +34,15 @@ const finished = (message = ""): TurnEvent =>
 const run = (events: TurnEvent[]) => events.reduce<Entry[]>(applyEvent, []);
 
 describe("applyEvent", () => {
+  it("shows a notice as one, closing the answer before it", () => {
+    const notice = (t: string, error: boolean): TurnEvent => create(TurnEventSchema, { kind: { case: "notice", value: { text: t, error } } });
+    const got = run([text("Hel", { partial: true }), notice("Couldn't save this message", true), notice("Using the fallback model", false)]);
+    expect(got).toEqual([
+      { kind: "model", text: "Hel", author: "blitz", open: false },
+      { kind: "notice", text: "Couldn't save this message", tone: "error" },
+      { kind: "notice", text: "Using the fallback model", tone: "info" },
+    ]);
+  });
   it("shows streamed text once", () => {
     const got = run([text("Hel", { partial: true }), text("lo", { partial: true }), text("Hello", { repeat: true }), text(" again")]);
     expect(got).toEqual([

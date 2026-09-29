@@ -230,7 +230,7 @@
     "repl.prompt_blocked": "Prompt bloqueado por un hook: {reason}",
     "repl.interrupted": "Interrumpido",
     "repl.error": "Error: {error}",
-    "session.save_failed": "No se pudo guardar la sesión: {error}",
+    "session.save_failed": "No se pudo guardar este mensaje en el chat ({error}): la conversación continúa, pero al reabrir el chat no aparecerá.",
     "usage.line": "{input} entrada · {output} salida · contexto {context}",
     "usage.cost": "{cost} (sesión {total})",
     "resume.starting": "Reanudando la sesión {id} ({messages})",

@@ -146,6 +146,8 @@ export function applyEvent(entries: Entry[], ev: TurnEvent): Entry[] {
       }
       return [...entries, { kind: "tool", id: r.id, name: r.name, result: r.result ?? {} }];
     }
+    case "notice":
+      return [...close(entries), { kind: "notice", text: k.value.text, tone: k.value.error ? "error" : "info" }];
     case "finished": {
       const err = k.value.error;
       const done = close(entries);

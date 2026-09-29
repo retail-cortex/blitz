@@ -84,7 +84,17 @@ message TurnEvent {
     TurnFinished finished = 8;
     // The agent's task list, whole, each time it changes.
     Tasks tasks = 9;
+    // Something the user should know about the turn that isn't the
+    // agent's output, such as a message that couldn't be saved.
+    Notice notice = 10;
   }
+}
+
+// A message from Blitz itself about a turn.
+message Notice {
+  string text = 1;
+  // Something went wrong (shown as an error), else information.
+  bool error = 2;
 }
 
 // Tasks is the agent's task list (the todo tool).

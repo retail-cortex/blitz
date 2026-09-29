@@ -184,6 +184,15 @@ func (p *Printer) Handle(ev api.Event) {
 		p.flushText()
 		fmt.Fprint(p.out, FormatTasks(ev.Tasks))
 		p.spin.Start(i18n.T("spinner.working"))
+	case ev.Notice != nil:
+		p.spin.Stop()
+		p.flushText()
+		color := Dim
+		if ev.Notice.Error {
+			color = Red
+		}
+		fmt.Fprintf(p.out, "%s%s%s\n", color, safe(ev.Notice.Text), Reset)
+		p.spin.Start(i18n.T("spinner.working"))
 	case ev.ToolCall != nil && ev.ToolCall.Name == "todo", ev.ToolResult != nil && ev.ToolResult.Name == "todo" && ev.ToolResult.Result["error"] == nil:
 		// Shown as the checklist (Tasks).
 	case ev.ToolCall != nil:

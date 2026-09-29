@@ -110,6 +110,16 @@ type Event struct {
 	// Tasks is the agent's task list, whole, each time it changes (the todo
 	// tool).
 	Tasks []Task
+	// Notice is something the user should know about the turn that isn't
+	// the agent's output, such as a message that couldn't be saved.
+	Notice *Notice
+}
+
+// Notice is a message from Blitz itself about a turn.
+type Notice struct {
+	Text string
+	// Error: something went wrong (shown as an error), else information.
+	Error bool
 }
 
 // Task is an item of the agent's task list.

@@ -52,6 +52,7 @@ go_test(
     srcs = [
         "broker_test.go",
         "config_test.go",
+        "convert_test.go",
         "files_test.go",
         "info_test.go",
         "leak_test.go",

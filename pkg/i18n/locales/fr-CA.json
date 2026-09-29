@@ -230,7 +230,7 @@
     "repl.prompt_blocked": "Requête bloquée par un hook : {reason}",
     "repl.interrupted": "Interrompu",
     "repl.error": "Erreur : {error}",
-    "session.save_failed": "Impossible d’enregistrer la session : {error}",
+    "session.save_failed": "Impossible d'enregistrer ce message dans la conversation ({error}) : elle continue, mais ne l'affichera pas une fois rouverte.",
     "usage.line": "{input} en entrée · {output} en sortie · contexte {context}",
     "usage.cost": "{cost} (session {total})",
     "resume.starting": "Reprise de la session {id} ({messages})",

@@ -453,3 +453,27 @@ func TestTranscriptFollowsTheTurnsSession(t *testing.T) {
 	assert.Error(t, err, "messages went to the active session (an empty chat isn't saved)")
 }
 
+// A message that can't be saved is reported in the turn, as a notice, and
+// the turn goes on.
+func TestFailedSaveIsANotice(t *testing.T) {
+	w, _ := openTestWith(t, nil, text("an answer"))
+	sid := newSession(t, w).ID
+	// The transcript can't be written (a directory where its file goes);
+	// the model's history can.
+	require.NoError(t, os.Mkdir(w.storage.TranscriptPath(sid), 0o700))
+	var notices []api.Notice
+	var answer string
+	_, err := w.Run(context.Background(), sid, api.Turn{Text: "hello"}, func(e api.Event) {
+		if e.Notice != nil {
+			notices = append(notices, *e.Notice)
+		}
+		if e.Text != nil {
+			answer += e.Text.Text
+		}
+	})
+	require.NoError(t, err, "the turn goes on")
+	assert.Contains(t, answer, "an answer")
+	require.NotEmpty(t, notices, "no notice for the failed save")
+	assert.True(t, notices[0].Error)
+	assert.Contains(t, notices[0].Text, "Couldn't save this message")
+}

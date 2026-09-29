@@ -230,7 +230,7 @@
     "repl.prompt_blocked": "Prompt blocked by hook: {reason}",
     "repl.interrupted": "Interrupted",
     "repl.error": "Error: {error}",
-    "session.save_failed": "Failed to save session: {error}",
+    "session.save_failed": "Couldn't save this message to the chat ({error}): the conversation goes on, but reopening the chat won't show it.",
     "usage.line": "{input} in · {output} out · context {context}",
     "usage.cost": "{cost} (session {total})",
     "resume.starting": "Resuming session {id} ({messages})",

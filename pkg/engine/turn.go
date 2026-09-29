@@ -101,7 +101,7 @@ func (w *Workspace) run(ctx context.Context, sessionID string, t turn, on func(a
 		if !t.Accepted {
 			// Where the conversation stood, so /rewind can cut it here.
 			events := w.engine.EventCount(ctx, sessionID)
-			w.appendIn(st, sessionID, session.Message{Role: "user", Content: recorded + AttachmentNote(t.Images), Events: &events})
+			w.appendIn(st, sessionID, on, session.Message{Role: "user", Content: recorded + AttachmentNote(t.Images), Events: &events})
 		}
 		w.turnStarted(sessionID)
 		defer w.turnEnded(sessionID)
@@ -180,7 +180,7 @@ func (w *Workspace) run(ctx context.Context, sessionID string, t turn, on func(a
 			}
 			w.planApproved(mode)
 			goAhead := runtime.CarryOutPrompt(path)
-			w.appendIn(st, sessionID, session.Message{Role: "user", Content: "(plan approved) " + goAhead, Kind: session.KindPlan})
+			w.appendIn(st, sessionID, on, session.Message{Role: "user", Content: "(plan approved) " + goAhead, Kind: session.KindPlan})
 			base = carryOut
 			r.paragraph()
 			err = w.engine.Execute(ctx, sessionID, goAhead, handler, carryOut...)
@@ -195,7 +195,7 @@ func (w *Workspace) run(ctx context.Context, sessionID string, t turn, on func(a
 			if reason == "" {
 				reason = "A stop hook asked you to continue."
 			}
-			w.appendIn(st, sessionID, session.Message{Role: "user", Content: "(stop hook) " + reason, Kind: session.KindHook})
+			w.appendIn(st, sessionID, on, session.Message{Role: "user", Content: "(stop hook) " + reason, Kind: session.KindHook})
 			r.paragraph()
 			err = w.engine.Execute(ctx, sessionID, reason, handler, base...)
 		}
@@ -211,7 +211,7 @@ func (w *Workspace) run(ctx context.Context, sessionID string, t turn, on func(a
 
 	if !t.Aside {
 		if res.Output != "" {
-			w.recordIn(st, sessionID, "model", res.Output)
+			w.recordIn(st, sessionID, on, "model", res.Output)
 		}
 		res.Leftover = w.engine.TakeSteers(sessionID)
 	}
@@ -226,7 +226,7 @@ func (w *Workspace) Steer(ctx context.Context, sessionID, text string) error {
 	if err != nil {
 		return err
 	}
-	w.appendIn(w.storage, sessionID, session.Message{Role: "user", Content: text, Kind: session.KindSteer})
+	w.appendIn(w.storage, sessionID, nil, session.Message{Role: "user", Content: text, Kind: session.KindSteer})
 	w.engine.Steer(sessionID, withHookContext(text, "prompt_submit", hookContext))
 	return nil
 }
@@ -284,16 +284,24 @@ func (w *Workspace) activate(st *session.Storage, id string) {
 
 // recordIn adds a message to session id in st. A failure is reported,
 // not returned: the conversation goes on without it.
-func (w *Workspace) recordIn(st *session.Storage, id, role, text string) {
-	w.appendIn(st, id, session.Message{Role: role, Content: text})
+func (w *Workspace) recordIn(st *session.Storage, id string, on func(api.Event), role, text string) {
+	w.appendIn(st, id, on, session.Message{Role: role, Content: text})
 }
 
 // appendIn adds m to session id in st (the session the turn runs in, not
-// whichever is active).
-func (w *Workspace) appendIn(st *session.Storage, id string, m session.Message) {
-	if err := st.AppendTo(id, m); err != nil {
-		slog.Warn("session save failed", "error", err)
-		w.warn(i18n.T("session.save_failed", "error", err))
+// whichever is active). A failure goes to the log and, during a turn, to
+// the user as a notice: the conversation goes on, but the chat won't show
+// the message when it's opened again.
+func (w *Workspace) appendIn(st *session.Storage, id string, on func(api.Event), m session.Message) {
+	err := st.AppendTo(id, m)
+	if err == nil {
+		return
+	}
+	slog.Warn("session save failed", "session", id, "error", err)
+	msg := i18n.T("session.save_failed", "error", err)
+	w.warn(msg)
+	if on != nil {
+		on(api.Event{Notice: &api.Notice{Text: msg, Error: true}})
 	}
 }
 
