@@ -34,6 +34,8 @@ service FileService {
   rpc ListDir(ListDirRequest) returns (ListDirResponse);
   // A file for the editor.
   rpc ReadFile(ReadFileRequest) returns (ReadFileResponse);
+  // An image or PDF's bytes, to show it.
+  rpc ReadPreview(ReadPreviewRequest) returns (ReadPreviewResponse);
   // Writes a file if it still has the version read (FILE_CHANGED if not).
   rpc WriteFile(WriteFileRequest) returns (WriteFileResponse);
   // Creates a folder, and any missing folders above it; it must not exist.
@@ -106,6 +108,21 @@ message ReadFileResponse {
   bool binary = 5;
   bool too_large = 6;
   string agent_rule = 7;
+}
+
+// Request message for FileService.ReadPreview.
+message ReadPreviewRequest {
+  string workspace = 1;
+  string path = 2;
+}
+
+// Response message for FileService.ReadPreview.
+message ReadPreviewResponse {
+  string path = 1;
+  // image/png, image/jpeg, image/gif, image/webp, image/svg+xml, image/bmp,
+  // image/x-icon or application/pdf.
+  string mime = 2;
+  bytes data = 3;
 }
 
 // Request message for FileService.WriteFile.

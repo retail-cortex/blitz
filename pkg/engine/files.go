@@ -235,6 +235,42 @@ func (w *Workspace) ReadFile(p string) (FileContent, error) {
 	return out, nil
 }
 
+// maxPreviewBytes is the largest image or PDF ReadPreview sends.
+const maxPreviewBytes = 32 << 20
+
+// previewTypes are the files ReadPreview shows, by extension.
+var previewTypes = map[string]string{
+	".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif", ".webp": "image/webp",
+	".svg": "image/svg+xml", ".bmp": "image/bmp", ".ico": "image/x-icon", ".pdf": "application/pdf",
+}
+
+// PreviewType is the media type the preview shows p as ("" when it has none).
+func PreviewType(p string) string { return previewTypes[strings.ToLower(path.Ext(p))] }
+
+// ErrNoPreview: ReadPreview shows only images and PDFs, up to 32 MB.
+var ErrNoPreview = errors.New("no preview")
+
+// ReadPreview returns an image or PDF's bytes and media type, for the
+// editor to show (FIL-54).
+func (w *Workspace) ReadPreview(p string) (string, []byte, error) {
+	rel, _, err := userPath(p)
+	if err != nil {
+		return "", nil, err
+	}
+	mime := PreviewType(p)
+	if mime == "" {
+		return "", nil, fmt.Errorf("%w for %s: not an image or a PDF", ErrNoPreview, p)
+	}
+	data, _, err := w.files().UserReadFile(rel, maxPreviewBytes)
+	if errors.Is(err, tools.ErrTooLarge) {
+		return "", nil, fmt.Errorf("%w for %s: over %d MB", ErrNoPreview, p, maxPreviewBytes>>20)
+	}
+	if err != nil {
+		return "", nil, err
+	}
+	return mime, data, nil
+}
+
 // isBinary: a NUL in the first 8 kB, or not UTF-8.
 func isBinary(data []byte) bool {
 	head := data

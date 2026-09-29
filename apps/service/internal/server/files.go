@@ -39,6 +39,8 @@ func fileError(err error) error {
 		return apiError(connect.CodeNotFound, "FILE_NOT_FOUND", err)
 	case errors.Is(err, fs.ErrExist):
 		return apiError(connect.CodeAlreadyExists, "FILE_EXISTS", err)
+	case errors.Is(err, engine.ErrNoPreview):
+		return apiError(connect.CodeInvalidArgument, "NO_PREVIEW", err)
 	}
 	return toAPI(err)
 }
@@ -78,6 +80,18 @@ func (h fileService) ReadFile(ctx context.Context, r req[pb.ReadFileRequest]) (*
 		return nil, fileError(err)
 	}
 	return ok(&pb.ReadFileResponse{Path: f.Path, Text: f.Text, Version: f.Version, Size: f.Size, Binary: f.Binary, TooLarge: f.TooLarge, AgentRule: f.AgentRule})
+}
+
+func (h fileService) ReadPreview(ctx context.Context, r req[pb.ReadPreviewRequest]) (*connect.Response[pb.ReadPreviewResponse], error) {
+	w, err := h.s.workspace(ctx, r.Msg.Workspace)
+	if err != nil {
+		return nil, err
+	}
+	mime, data, err := w.ReadPreview(r.Msg.Path)
+	if err != nil {
+		return nil, fileError(err)
+	}
+	return ok(&pb.ReadPreviewResponse{Path: r.Msg.Path, Mime: mime, Data: data})
 }
 
 func (h fileService) WriteFile(ctx context.Context, r req[pb.WriteFileRequest]) (*connect.Response[pb.WriteFileResponse], error) {

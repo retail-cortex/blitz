@@ -61,6 +61,7 @@ It keeps only its own settings (theme, layout, the workspaces it knows and how t
 | `ServiceStatus() → {running, installed, socket, service}` | `running`: the socket answers (1 s dial). `installed`: the login item file exists (`~/Library/LaunchAgents/dev.blitz.service.plist` on macOS, `~/.config/systemd/user/blitz.service` on Linux; always false elsewhere). `service`: the `blitzd` this app manages — beside its executable, in its Bazel runfiles, or on `PATH` — else `""`. |
 | `InstallService()` | Installs `service` as the login item and starts it now (`pkg/loginitem`), replacing a previous item. Fails if no `blitzd` is found. |
 | `StopService(pid)`, `RestartService(pid)` | Stop the running service (its login item, else process `pid`), and for restart install and start this app's `blitzd` (DSK-51a). |
+| `OpenDocument(path)` | Opens an image or PDF (by extension, a regular file) in the system's viewer; anything else is refused (FIL-54). |
 | `OpenFolder(dir)` | Shows an existing directory in the file manager (`open`, `xdg-open`); anything else is refused (the logs' folder, DSK-60). |
 | `Version()`, `ProgramExists(path)` | The app's version (DSK-01); whether a file exists (the running service's program, DSK-51a). |
 | `ChooseWorkspace(title) → dir` | Native directory dialog with the page's title (may create directories); `""` when cancelled. Logs what it returned, and after how long, on the app's terminal. |

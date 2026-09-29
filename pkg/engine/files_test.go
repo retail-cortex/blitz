@@ -256,3 +256,35 @@ func TestUserPath(t *testing.T) {
 		})
 	}
 }
+
+// Images and PDFs come as bytes with their media type, for the preview;
+// other files, and ones too big, don't.
+func TestReadPreview(t *testing.T) {
+	w := openTest(t)
+	write(t, w.Dir(), "img/logo.PNG", "\x89PNG data")
+	write(t, w.Dir(), "doc.pdf", "%PDF-1.7")
+	write(t, w.Dir(), "icon.svg", "<svg/>")
+	write(t, w.Dir(), "main.go", "package main")
+	for _, tc := range []struct {
+		path, mime, data string
+		err              error
+	}{
+		{"img/logo.PNG", "image/png", "\x89PNG data", nil},
+		{"doc.pdf", "application/pdf", "%PDF-1.7", nil},
+		{"icon.svg", "image/svg+xml", "<svg/>", nil},
+		{"main.go", "", "", ErrNoPreview},
+		{"none.png", "", "", fs.ErrNotExist},
+		{"../x.png", "", "", ErrBadPath},
+	} {
+		t.Run(tc.path, func(t *testing.T) {
+			mime, data, err := w.ReadPreview(tc.path)
+			if tc.err != nil {
+				assert.ErrorIs(t, err, tc.err)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tc.mime, mime)
+			assert.Equal(t, tc.data, string(data))
+		})
+	}
+}

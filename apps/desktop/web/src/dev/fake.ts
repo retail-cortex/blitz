@@ -241,7 +241,10 @@ const change = (workspace: string) => ({ change: { path: configPath(workspace), 
 // The workspace's files: a small Go project, some of it changed.
 const fakeFiles = new Map<string, string>([
   ["go.mod", "module example.com/shop\n\ngo 1.27\n"],
-  ["README.md", "# Shop\n\nA small shop server. Run it with `go run ./cmd/shop`.\n"],
+  ["README.md", "# Shop\n\nA small shop server. Run it with `go run ./cmd/shop`.\n\n| Path | What |\n| --- | --- |\n| `/cart` | the cart |\n\n- [x] discounts\n- [ ] checkout\n"],
+  ["docs/logo.svg", '<svg xmlns="http://www.w3.org/2000/svg" width="120" height="120"><circle cx="60" cy="60" r="50" fill="#1a73e8"/></svg>\n'],
+  ["docs/shot.png", "\u0000png"],
+  ["docs/spec.pdf", "\u0000pdf"],
   ["cmd/shop/main.go", 'package main\n\nimport (\n\t"log"\n\t"net/http"\n\n\t"example.com/shop/internal/cart"\n)\n\nfunc main() {\n\thttp.HandleFunc("/cart", cart.Handler)\n\tlog.Fatal(http.ListenAndServe(":8080", nil))\n}\n'],
   [
     "internal/cart/discount.go",
@@ -539,6 +542,27 @@ export function installFake() {
           });
           entries.sort((a, b) => (a.kind !== b.kind ? (a.kind === FileKind.FOLDER ? -1 : 1) : a.name.localeCompare(b.name)));
           return { entries: showHidden ? entries : entries.filter((e) => !e.hidden), repo: true };
+        },
+        readPreview: ({ path }) => {
+          if (!fakeFiles.has(path)) notFound(path);
+          if (path.endsWith(".pdf")) {
+            // A two-page PDF.
+            const page = (n: number) => `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 200] /Contents ${n} 0 R /Resources << /Font << /F1 5 0 R >> >> >>`;
+            const text = (s: string) => `<< /Length ${s.length} >>\nstream\n${s}\nendstream`;
+            const objs = ["<< /Type /Catalog /Pages 2 0 R >>", "<< /Type /Pages /Kids [3 0 R 6 0 R] /Count 2 >>", page(4), text("BT /F1 28 Tf 30 90 Td (Blitz spec, page 1) Tj ET"), "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>", page(7), text("BT /F1 28 Tf 30 90 Td (Page 2) Tj ET")];
+            let out = "%PDF-1.4\n";
+            const offs: number[] = [];
+            objs.forEach((o, i) => {
+              offs.push(out.length);
+              out += `${i + 1} 0 obj\n${o}\nendobj\n`;
+            });
+            const x = out.length;
+            out += `xref\n0 ${objs.length + 1}\n0000000000 65535 f \n${offs.map((o) => `${String(o).padStart(10, "0")} 00000 n \n`).join("")}trailer\n<< /Size ${objs.length + 1} /Root 1 0 R >>\nstartxref\n${x}\n%%EOF\n`;
+            return { path, mime: "application/pdf", data: new TextEncoder().encode(out) };
+          }
+          // A 2×2 PNG, whatever the file.
+          const png = Uint8Array.from(atob("iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAFklEQVR4nGP8z8DwnwEIGP8zMDAAAB0IAgBfJnXoAAAAAElFTkSuQmCC"), (c) => c.charCodeAt(0));
+          return { path, mime: "image/png", data: png };
         },
         readFile: ({ path }) => {
           const text = fakeFiles.get(path);

@@ -18,10 +18,13 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	goruntime "runtime"
+	"strings"
 )
 
-// openCommand opens a folder in the system's file manager.
+// openCommand opens a folder in the file manager, or a document in its
+// viewer.
 var openCommand = func(dir string) *exec.Cmd {
 	if goruntime.GOOS == "darwin" {
 		return exec.Command("open", dir)
@@ -44,5 +47,31 @@ func (a *App) OpenFolder(dir string) error {
 		return fmt.Errorf("opening %s: %w", dir, err)
 	}
 	go func() { _ = cmd.Wait() }() // reap it
+	return nil
+}
+
+// viewable are the documents OpenDocument opens: images and PDFs, which
+// the system shows in a viewer and never runs.
+var viewable = map[string]bool{".pdf": true, ".png": true, ".jpg": true, ".jpeg": true, ".gif": true, ".webp": true, ".bmp": true, ".ico": true, ".svg": true}
+
+// OpenDocument shows an image or PDF in the system's viewer (where the
+// window's own preview falls short). Other files are refused: the page
+// can't make it run one.
+func (a *App) OpenDocument(path string) error {
+	if !viewable[strings.ToLower(filepath.Ext(path))] {
+		return fmt.Errorf("not opening %s: only images and PDFs open", path)
+	}
+	fi, err := os.Stat(path)
+	if err != nil {
+		return err
+	}
+	if !fi.Mode().IsRegular() {
+		return fmt.Errorf("not opening %s: not a file", path)
+	}
+	cmd := openCommand(path)
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("opening %s: %w", path, err)
+	}
+	go func() { _ = cmd.Wait() }()
 	return nil
 }

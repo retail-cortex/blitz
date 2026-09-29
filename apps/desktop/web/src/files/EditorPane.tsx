@@ -19,7 +19,9 @@ import { mdiAlertCircleOutline, mdiAt, mdiChevronRight, mdiClose, mdiContentSave
 import { addToContext } from "../events";
 import { EditorView } from "@codemirror/view";
 import { t, tn } from "../i18n";
-import { Button, Dialog, Icon, IconButton } from "../ui/controls";
+import { Button, Dialog, Icon, IconButton, Segmented } from "../ui/controls";
+import { Preview } from "./Preview";
+import { previewKind, previewOnly } from "./preview";
 import { goToLine, setWrap } from "./codemirror";
 import { fileIcon } from "./icons";
 import type { EditorModel, Tab } from "./useEditor";
@@ -36,6 +38,18 @@ export function EditorPane({ model, onReveal }: { model: EditorModel; onReveal: 
   const [closing, setClosing] = useState<Tab | null>(null);
   const tab = model.tabs.find((x) => x.path === model.active);
   const ready = tab && !tab.loading && !tab.error && !tab.binary && !tab.tooLarge;
+  // Images and PDFs show as previews; Markdown and SVG can (the tabs
+  // showing theirs are in previewing).
+  const kind = tab ? previewKind(tab.path) : null;
+  const [previewing, setPreviewing] = useState<Set<string>>(new Set());
+  const showPreview = !!tab && !tab.loading && !tab.error && !!kind && (previewOnly(kind) || (ready && previewing.has(tab.path)));
+  const setPreview = (path: string, on: boolean) =>
+    setPreviewing((s) => {
+      const next = new Set(s);
+      if (on) next.add(path);
+      else next.delete(path);
+      return next;
+    });
 
   // One view, made once; every change is kept as its tab's state.
   useEffect(() => {
@@ -126,6 +140,18 @@ export function EditorPane({ model, onReveal }: { model: EditorModel; onReveal: 
               <Icon path={mdiLockOutline} size="sm" /> {t(`desktop.files.rule.${tab.agentRule}`)}
             </span>
           )}
+          {kind && !previewOnly(kind) && ready && (
+            <Segmented
+              small
+              label={t("desktop.files.view_as")}
+              value={previewing.has(tab.path) ? "preview" : "source"}
+              onChange={(v) => setPreview(tab.path, v === "preview")}
+              options={[
+                { value: "source", label: t("desktop.files.source") },
+                { value: "preview", label: t("desktop.files.preview") },
+              ]}
+            />
+          )}
           {tab.agentRule !== "blocked" && (
             <>
               <IconButton icon={mdiAt} label={t("desktop.files.add_to_context")} small onClick={() => addToContext({ dir: model.dir, path: tab.path })} />
@@ -139,11 +165,12 @@ export function EditorPane({ model, onReveal }: { model: EditorModel; onReveal: 
       )}
       {tab && <Bars tab={tab} model={model} />}
       <div className="editor-body">
-        <div className="editor-host" ref={host} hidden={!ready} />
+        <div className="editor-host" ref={host} hidden={!ready || showPreview} />
         {tab?.loading && <p className="editor-note muted">{t("desktop.checking")}</p>}
         {tab?.error && <p className="editor-note error-text">{tab.error}</p>}
-        {tab?.binary && <p className="editor-note muted">{t("desktop.files.binary", { size: formatSize(tab.size) })}</p>}
-        {tab?.tooLarge && <p className="editor-note muted">{t("desktop.files.too_large", { size: formatSize(tab.size) })}</p>}
+        {showPreview && tab && <Preview dir={model.dir} path={tab.path} kind={kind} text={ready ? model.state(tab.path)?.doc.toString() : undefined} />}
+        {!showPreview && tab?.binary && <p className="editor-note muted">{t("desktop.files.binary", { size: formatSize(tab.size) })}</p>}
+        {!showPreview && tab?.tooLarge && <p className="editor-note muted">{t("desktop.files.too_large", { size: formatSize(tab.size) })}</p>}
       </div>
       {closing && (
         <UnsavedDialog

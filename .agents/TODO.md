@@ -27,7 +27,7 @@ means. Written 2026-09-28, reordered 2026-09-29; the backlog spec
    in the composer, as `@path` would (item 2); a new conversation opens a
    new session with the file attached and the cursor in the prompt.
 
-4. **Preview pane: Markdown, images, PDF (M).** Markdown rendered (a
+4. ✅ *Done (FIL-54; pdf.js, which also renders in WebKitGTK).* **Preview pane: Markdown, images, PDF (M).** Markdown rendered (a
    Source / Preview toggle, the chat's renderer); images shown; PDFs
    viewed (WebKitGTK has no PDF viewer: pdf.js, a new dependency and
    notice). Done: each opens from the tree as a preview.

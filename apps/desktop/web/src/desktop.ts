@@ -46,6 +46,7 @@ type Bound = {
   SavePrefs(p: Prefs): Promise<Prefs>;
   OpenURL(url: string): Promise<void>;
   OpenFolder(dir: string): Promise<void>;
+  OpenDocument(path: string): Promise<void>;
   Notify(title: string, body: string, dir: string): Promise<void>;
   SetUnsaved(u: { message: string; quit: string; cancel: string }): Promise<void>;
   License(which: string): Promise<string>;
@@ -136,6 +137,9 @@ export async function openURL(url: string): Promise<void> {
 
 /** Shows a folder in the file manager (only in the app). */
 export const openFolder = (dir: string) => app().OpenFolder(dir);
+
+/** Opens an image or PDF in the system's viewer (only in the app). */
+export const openDocument = (path: string) => app().OpenDocument(path);
 
 /** Shows a system notification; a click brings the window to dir. */
 export async function notifyNative(title: string, body: string, dir: string): Promise<void> {

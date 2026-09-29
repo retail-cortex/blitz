@@ -58,3 +58,43 @@ func TestOpenFolder(t *testing.T) {
 		})
 	}
 }
+
+func TestOpenDocument(t *testing.T) {
+	var opened []string
+	orig := openCommand
+	openCommand = func(p string) *exec.Cmd {
+		opened = append(opened, p)
+		return exec.Command("true")
+	}
+	t.Cleanup(func() { openCommand = orig })
+
+	dir := t.TempDir()
+	for _, name := range []string{"spec.PDF", "run.sh", "evil.desktop"} {
+		require.NoError(t, os.WriteFile(filepath.Join(dir, name), []byte("x"), 0o755))
+	}
+	require.NoError(t, os.Mkdir(filepath.Join(dir, "dir.pdf"), 0o755))
+	a := &App{}
+	for _, tc := range []struct {
+		name string
+		ok   bool
+	}{
+		{"spec.PDF", true},
+		{"run.sh", false},
+		{"evil.desktop", false},
+		{"dir.pdf", false},
+		{"none.pdf", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			opened = nil
+			p := filepath.Join(dir, tc.name)
+			err := a.OpenDocument(p)
+			if tc.ok {
+				assert.NoError(t, err)
+				assert.Equal(t, []string{p}, opened)
+			} else {
+				assert.Error(t, err)
+				assert.Empty(t, opened)
+			}
+		})
+	}
+}
