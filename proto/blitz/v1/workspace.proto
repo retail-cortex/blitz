@@ -153,6 +153,9 @@ message GetServiceInfoResponse {
   // The service's process, so a client can stop one that isn't a login
   // item.
   int32 pid = 4;
+  // The program file has been replaced or removed since the service
+  // started (a new build or package installed): it runs the old program.
+  bool replaced = 5;
 }
 
 // Request message for WorkspaceService.ListWorkspaces.

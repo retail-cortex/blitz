@@ -26,6 +26,8 @@ export interface ServiceInfo {
   version: string;
   executable: string;
   pid: number;
+  /** Its program file was replaced or removed since it started. */
+  replaced?: boolean;
 }
 
 /** Why the service should be restarted, or "" when it's the expected one. */
@@ -33,12 +35,14 @@ export type Stale = "" | "old" | "mismatch" | "missing";
 
 /**
  * old: the service predates GetServiceInfo (info undefined); missing: its
- * program is gone; mismatch: another version than the app. Development
- * builds are all "dev" and match each other.
+ * program is gone or was replaced since it started (a new build or package
+ * installed: it runs the old one, whatever the versions say); mismatch:
+ * another version than the app. Development builds are all "dev" and
+ * match each other, so a replaced program is what tells them apart.
  */
 export function staleReason(appVersion: string, info: ServiceInfo | undefined, programThere: boolean): Stale {
   if (!info) return "old";
-  if (!programThere) return "missing";
+  if (!programThere || info.replaced) return "missing";
   if (info.version !== appVersion) return "mismatch";
   return "";
 }
@@ -47,7 +51,7 @@ export function staleReason(appVersion: string, info: ServiceInfo | undefined, p
 export async function serviceInfo(): Promise<ServiceInfo | undefined> {
   try {
     const res = await workspaces.getServiceInfo({});
-    return { version: res.version, executable: res.executable, pid: res.pid };
+    return { version: res.version, executable: res.executable, pid: res.pid, replaced: res.replaced };
   } catch (e) {
     if (e instanceof ConnectError && (e.code === Code.Unimplemented || e.code === Code.NotFound)) return undefined;
     throw e;

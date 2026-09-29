@@ -30,6 +30,10 @@ describe("staleReason", () => {
     expect(staleReason("1.4.0", info, false)).toBe("missing");
     expect(staleReason("1.5.0", info, false)).toBe("missing");
   });
+  it("flags a service whose program was replaced since it started, even at the same version", () => {
+    expect(staleReason("dev", { ...info, version: "dev", replaced: true }, true)).toBe("missing");
+    expect(staleReason("1.4.0", { ...info, replaced: true }, true)).toBe("missing");
+  });
   it("flags another version", () => {
     expect(staleReason("1.5.0", info, true)).toBe("mismatch");
     expect(staleReason("dev", info, true)).toBe("mismatch");

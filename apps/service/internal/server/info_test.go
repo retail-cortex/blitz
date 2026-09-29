@@ -19,6 +19,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -50,5 +51,26 @@ func TestGetServiceInfo(t *testing.T) {
 		assert.Equal(t, exe, res.Msg.Executable, "info = %v, want version %q, executable %q", res.Msg, tc.want, exe)
 		assert.Equal(t, os.Getpid(), int(res.Msg.Pid), "info = %v, want version %q, executable %q", res.Msg, tc.want, exe)
 		assert.LessOrEqual(t, time.Since(res.Msg.Started.AsTime()), time.Minute, "info = %v, want version %q, executable %q", res.Msg, tc.want, exe)
+		assert.False(t, res.Msg.Replaced, "the test binary counts as replaced")
 	}
+}
+
+// A program file replaced (a new package or build installed) or removed
+// since the service started means it runs the old program.
+func TestReplaced(t *testing.T) {
+	dir := t.TempDir()
+	exe := filepath.Join(dir, "blitzd")
+	require.NoError(t, os.WriteFile(exe, []byte("old"), 0o755))
+	was, err := os.Stat(exe)
+	require.NoError(t, err)
+
+	assert.False(t, replaced(nil, exe), "unknown")
+	assert.False(t, replaced(was, exe), "the same file")
+	// As dpkg and installers do: a new file renamed over the old one.
+	next := filepath.Join(dir, "blitzd.new")
+	require.NoError(t, os.WriteFile(next, []byte("new"), 0o755))
+	require.NoError(t, os.Rename(next, exe))
+	assert.True(t, replaced(was, exe), "a new file in its place")
+	require.NoError(t, os.Remove(exe))
+	assert.True(t, replaced(was, exe), "removed")
 }

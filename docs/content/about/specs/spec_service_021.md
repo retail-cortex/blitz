@@ -25,7 +25,7 @@ weight: 21
 - **SVC-02** `Listen`: create the directory 0700 **and chmod it** (no window where others could reach the socket), refuse if a service already answers (`ErrRunning` → exit 2), replace a stale socket, chmod the socket 0600. The socket is removed on exit.
 - **SVC-03** HTTP/1.1 and unencrypted HTTP/2 (for gRPC clients); read-header timeout 10 s. Clients use base URL `http://blitz` with a dialer to the socket.
 - **SVC-04** Shutdown on SIGINT/SIGTERM: stop accepting, wait up to 10 s for calls in progress, then close (turns still running are cut off); the scheduler stops its runs; all workspaces close.
-- **SVC-06** `GetServiceInfo` reports the service's version (the release, or `dev`), the program it runs from (`os.Executable` at start; the file may have been replaced or removed since), when it started and its process ID, so clients can tell a stale service (desktop DSK-51a). Services older than it answer `Unimplemented`.
+- **SVC-06** `GetServiceInfo` reports the service's version (the release, or `dev`), the program it runs from (`os.Executable` at start; the file may have been replaced or removed since), when it started, its process ID, and `replaced`: whether the program file is no longer the one it started from (another file in its place, as a package install or a new build leaves, or none; `os.SameFile` against the file at start), so clients can tell a stale service (desktop DSK-51a). Services older than it answer `Unimplemented`.
 - **SVC-05** Clients name their workspaces in each request. Request messages are limited to 32 MiB (an added image is the largest).
 
 ## 3. Workspaces in the service

@@ -64,7 +64,7 @@ means. Written 2026-09-28; the backlog spec
    Done: errors are shown at their line before saving; every setting in
    `pkg/config` is in the reference.
 
-7. **Local builds that say they're local, and installs that restart the
+7. ✅ *Done: the service reports a replaced program (any build, stamped or not), and the app offers to restart it; stamped dirty builds carry a hash of the changes. The `.deb` doesn't restart the service itself: a package upgrade would end turns in progress without asking.* **Local builds that say they're local, and installs that restart the
    service (S).** A build with uncommitted changes reports the same
    version as its commit, so the app's "service version differs" check
    can't tell an old service from a new one (the cause of today's

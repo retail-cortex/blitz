@@ -14,6 +14,15 @@
 # limitations under the License.
 
 # Build stamps, for builds with --stamp (--config=release): the version is
-# the git tag without its "v" (1.4.0), else the commit ("abc1234-dirty").
+# the git tag without its "v" (1.4.0), else the commit (abc1234). A tree
+# with uncommitted changes adds "-dirty" and a hash of the changes
+# (abc1234-dirty.5f3e2a1), so two local builds of one commit differ.
 v="$(git describe --tags --match 'v*' --always --dirty 2>/dev/null || echo dev)"
+case "$v" in
+*-dirty)
+  if command -v sha256sum >/dev/null; then hash="sha256sum"; else hash="shasum -a 256"; fi # macOS
+  sum="$({ git diff HEAD --binary; git ls-files --others --exclude-standard -z | xargs -0 -r $hash; } 2>/dev/null | $hash | cut -c1-7)"
+  v="$v.$sum"
+  ;;
+esac
 echo "STABLE_BLITZ_VERSION ${v#v}"

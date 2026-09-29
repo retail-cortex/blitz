@@ -23,6 +23,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"os"
 	"path/filepath"
 	"slices"
 	"sync"
@@ -45,10 +46,11 @@ type Opener func(ctx context.Context, dir string) (*engine.Workspace, error)
 // Server holds the open workspaces and serves the API.
 type Server struct {
 	open      Opener
-	version   string     // reported by GetServiceInfo
-	configDir string     // the settings directory (--config; \"\" for ~/.blitz)
-	started   time.Time  // when New ran
-	sched     *scheduler // nil: workers aren't run
+	version   string      // reported by GetServiceInfo
+	configDir string      // the settings directory (--config; \"\" for ~/.blitz)
+	started   time.Time   // when New ran
+	program   os.FileInfo // the executable as it was then (nil if unknown)
+	sched     *scheduler  // nil: workers aren't run
 	broker    *broker
 
 	mu         sync.Mutex
@@ -84,7 +86,7 @@ type workspace struct {
 
 // New returns a server that opens workspaces with open.
 func New(open Opener, opts ...Option) *Server {
-	s := &Server{open: open, version: "dev", started: time.Now(), broker: newBroker(), workspaces: map[string]*workspace{}, opening: map[string]*opening{}}
+	s := &Server{open: open, version: "dev", started: time.Now(), program: programFile(), broker: newBroker(), workspaces: map[string]*workspace{}, opening: map[string]*opening{}}
 	for _, o := range opts {
 		o(s)
 	}

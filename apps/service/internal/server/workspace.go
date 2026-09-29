@@ -37,7 +37,29 @@ func ok[T any](msg *T) (*connect.Response[T], error) { return connect.NewRespons
 
 func (h workspaceService) GetServiceInfo(context.Context, req[pb.GetServiceInfoRequest]) (*connect.Response[pb.GetServiceInfoResponse], error) {
 	exe, _ := os.Executable()
-	return ok(&pb.GetServiceInfoResponse{Version: h.s.version, Executable: exe, Started: timestamppb.New(h.s.started), Pid: int32(os.Getpid())})
+	return ok(&pb.GetServiceInfoResponse{Version: h.s.version, Executable: exe, Started: timestamppb.New(h.s.started), Pid: int32(os.Getpid()), Replaced: replaced(h.s.program, exe)})
+}
+
+// programFile is the service's executable file, as it is now (nil if it
+// can't be found).
+func programFile() os.FileInfo {
+	exe, err := os.Executable()
+	if err != nil {
+		return nil
+	}
+	fi, _ := os.Stat(exe)
+	return fi
+}
+
+// replaced reports whether the file at exe is no longer the program as it
+// was (was, from programFile): installing a package or a new build puts a
+// new file there, or removes it. Unknown (was nil) isn't replaced.
+func replaced(was os.FileInfo, exe string) bool {
+	if was == nil {
+		return false
+	}
+	now, err := os.Stat(exe)
+	return err != nil || !os.SameFile(was, now)
 }
 
 func (h workspaceService) ListWorkspaces(context.Context, req[pb.ListWorkspacesRequest]) (*connect.Response[pb.ListWorkspacesResponse], error) {
