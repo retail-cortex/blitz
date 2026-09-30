@@ -27,7 +27,7 @@
     "settings.mode": "Permissions",
     "mode.current": "Mode de permission : {mode}",
     "mode.set": "Mode de permission : {mode}",
-    "mode.usage": "Usage : /mode default|accept-edits|plan|dont-ask|bypass",
+    "mode.usage": "Usage : /mode default|accept-edits|auto|plan|dont-ask|bypass",
     "help.effort": "Afficher ou régler l'effort de réflexion du modèle pour cette session (auto : le réglage propre à chaque modèle)",
     "help.rewind": "Revenir à une requête précédente : ses fichiers, la conversation ou les deux (Échap Échap sur une requête vide)",
     "rewind.none": "Aucune requête où revenir pour l'instant.",
@@ -1135,6 +1135,10 @@
     "cd.failed": "Toujours dans {dir} : {error}",
     "cd.moved": "Maintenant dans {dir}; la session vous a suivi.",
     "cd.new": "Maintenant dans {dir}, dans une nouvelle session.",
-    "undo.moved": "Les modifications d’avant /cd sont dans {dir} : faites /cd là-bas pour les annuler."
+    "undo.moved": "Les modifications d’avant /cd sont dans {dir} : faites /cd là-bas pour les annuler.",
+    "mode.describe.auto": "un modèle réviseur décide de ce qui demanderait; les règles de demande vous consultent toujours",
+    "mode.auto_model_failed": "Le modèle réviseur du mode auto {model} n’est pas disponible ({error}); le modèle de la session révise à la place",
+    "desktop.mode.auto": "Auto",
+    "desktop.mode.auto.detail": "Un modèle réviseur décide de ce qui demanderait; les règles de demande vous consultent toujours"
   }
 }

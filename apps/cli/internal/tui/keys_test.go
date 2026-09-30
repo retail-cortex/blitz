@@ -244,7 +244,8 @@ func TestNextMode(t *testing.T) {
 		want   api.PermissionMode
 	}{
 		{api.ModeDefault, false, api.ModeAcceptEdits},
-		{api.ModeAcceptEdits, false, api.ModePlan},
+		{api.ModeAcceptEdits, false, api.ModeAuto},
+		{api.ModeAuto, false, api.ModePlan},
 		{api.ModePlan, false, api.ModeDefault},
 		{api.ModePlan, true, api.ModeBypass},
 		{api.ModeBypass, true, api.ModeDefault},

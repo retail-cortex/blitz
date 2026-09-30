@@ -51,6 +51,7 @@ type Hooks struct {
 	prompter api.UserPromptFunc
 	invoker  InvokeAgentFunc
 	tasks    TaskRunner
+	reviewer Reviewer
 	session  map[string]bool
 	store    *ApprovalStore
 	audit    *audit.Logger
@@ -115,6 +116,17 @@ func (h *Hooks) SetSubagentInvoker(i InvokeAgentFunc) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.invoker = i
+}
+
+// Reviewer decides, in the auto mode, what would otherwise ask the user:
+// allowed, or not with the reason.
+type Reviewer func(ctx context.Context, req api.ApprovalRequest) (allowed bool, reason string, err error)
+
+// SetReviewer supplies the auto mode's reviewer.
+func (h *Hooks) SetReviewer(r Reviewer) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.reviewer = r
 }
 
 // SetTaskRunner supplies what runs background tasks
@@ -353,7 +365,7 @@ func (h *Hooks) Approve(ctx context.Context, req api.ApprovalRequest) error {
 
 	// The user's permission_request hooks may answer instead of the user.
 	h.mu.RLock()
-	permHook, notify := h.permHook, h.notify
+	permHook, notify, reviewer := h.permHook, h.notify, h.reviewer
 	h.mu.RUnlock()
 	if permHook != nil {
 		switch out := permHook(ctx, req); out.Decision {
@@ -367,6 +379,22 @@ func (h *Hooks) Approve(ctx context.Context, req api.ApprovalRequest) error {
 				why = "a permission_request hook denied it"
 			}
 			return fmt.Errorf("%w: %s", ErrNotApproved, why)
+		}
+	}
+	// The auto mode: a reviewer model decides instead of the user, except
+	// for what an ask rule says the user must see.
+	if policy.Mode == api.ModeAuto && !mustAsk && reviewer != nil {
+		allowed, reason, err := reviewer(ctx, req)
+		switch {
+		case err != nil:
+			log.Log(audit.Entry{Kind: audit.KindApproval, Tool: req.Tool, Detail: req.Detail, Decision: "auto-error", Error: err.Error()})
+			// No verdict: the user decides, as in the default mode.
+		case allowed:
+			log.Log(audit.Entry{Kind: audit.KindApproval, Tool: req.Tool, Detail: req.Detail, Decision: "auto-allow: " + reason})
+			return nil
+		default:
+			log.Log(audit.Entry{Kind: audit.KindDenial, Tool: req.Tool, Detail: req.Detail, Decision: "auto-deny: " + reason})
+			return fmt.Errorf("%w: the auto mode's reviewer denied %s: %s", ErrNotApproved, req.Detail, reason)
 		}
 	}
 	if a, ok := taskAskerFrom(ctx); ok && a.Approve != nil {

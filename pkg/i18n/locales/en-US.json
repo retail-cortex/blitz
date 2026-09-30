@@ -27,7 +27,7 @@
     "settings.mode": "Permissions",
     "mode.current": "Permission mode: {mode}",
     "mode.set": "Permission mode: {mode}",
-    "mode.usage": "Usage: /mode default|accept-edits|plan|dont-ask|bypass",
+    "mode.usage": "Usage: /mode default|accept-edits|auto|plan|dont-ask|bypass",
     "help.effort": "Show or set how hard the model thinks, for this session (auto: each model's own setting)",
     "help.rewind": "Go back to an earlier prompt: its files, the conversation, or both (Esc Esc at an empty prompt)",
     "rewind.none": "No prompts to rewind to yet.",
@@ -1135,6 +1135,10 @@
     "cd.failed": "Stayed in {dir}: {error}",
     "cd.moved": "Now in {dir}; the session moved with you.",
     "cd.new": "Now in {dir}, in a new session.",
-    "undo.moved": "Changes made before /cd are in {dir}: /cd there to undo them."
+    "undo.moved": "Changes made before /cd are in {dir}: /cd there to undo them.",
+    "mode.describe.auto": "a reviewer model decides what would ask; ask rules still ask you",
+    "mode.auto_model_failed": "The auto mode's reviewer model {model} isn't available ({error}); the session's model reviews instead",
+    "desktop.mode.auto": "Auto",
+    "desktop.mode.auto.detail": "A reviewer model decides what would ask; ask rules still ask you"
   }
 }

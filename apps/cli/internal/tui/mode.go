@@ -92,7 +92,7 @@ func cmdEffort(ctx context.Context, args []string, app *App) {
 	fmt.Printf("%s%s%s\n", Green, i18n.T("effort.set", "effort", effort), Reset)
 }
 
-// nextMode is the mode Shift+Tab switches to: default, accept-edits, plan,
+// nextMode is the mode Shift+Tab switches to: default, accept-edits, auto, plan,
 // then bypass only when the session started in it (dont-ask is left for
 // /mode), then default again.
 func nextMode(current string, withBypass bool) string {
@@ -100,6 +100,8 @@ func nextMode(current string, withBypass bool) string {
 	case api.ModeDefault:
 		return string(api.ModeAcceptEdits)
 	case api.ModeAcceptEdits:
+		return string(api.ModeAuto)
+	case api.ModeAuto:
 		return string(api.ModePlan)
 	case api.ModePlan:
 		if withBypass {

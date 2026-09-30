@@ -482,7 +482,7 @@ func newCompleter(w api.Backend) *tui.Completer {
 	c.Command("undo", "--force")
 	c.Command("compact")
 	c.Command("set", "agency=")
-	c.Command("mode", "default", "accept-edits", "plan", "dont-ask", "bypass")
+	c.Command("mode", "default", "accept-edits", "auto", "plan", "dont-ask", "bypass")
 	c.Command("permissions", "allow", "ask", "deny", "remove")
 	c.Command("effort", "minimal", "low", "medium", "high", "max", "auto")
 	c.Command("rewind", "--force")

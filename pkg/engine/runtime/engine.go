@@ -180,10 +180,12 @@ type Engine struct {
 	tasks *taskManager
 	// projectTrusted: the project's agents may loosen the mode.
 	projectTrusted bool
-	agentReg       *agents.Registry
-	skillProv      *skills.Provider
-	toolReg        *tools.Registry
-	usage          *UsageTracker
+	// reviewModel reviews actions in the auto mode (nil: e.llm).
+	reviewModel model.LLM
+	agentReg    *agents.Registry
+	skillProv   *skills.Provider
+	toolReg     *tools.Registry
+	usage       *UsageTracker
 
 	// Shared across runner rebuilds so switching agent or model keeps history.
 	sessions  session.Service
@@ -270,6 +272,7 @@ func NewEngine(
 
 	toolReg.Hooks().SetSubagentInvoker(e.InvokeSubagent)
 	toolReg.Hooks().SetTaskRunner(e)
+	toolReg.Hooks().SetReviewer(e.review)
 	return e, nil
 }
 

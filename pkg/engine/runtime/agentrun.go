@@ -26,7 +26,7 @@ import (
 )
 
 // modeRank orders the permission modes from the strictest.
-var modeRank = map[api.PermissionMode]int{api.ModePlan: 0, api.ModeDontAsk: 1, api.ModeDefault: 2, api.ModeAcceptEdits: 3, api.ModeBypass: 4}
+var modeRank = map[api.PermissionMode]int{api.ModePlan: 0, api.ModeDontAsk: 1, api.ModeDefault: 2, api.ModeAcceptEdits: 3, api.ModeAuto: 3, api.ModeBypass: 4}
 
 // agentRun gives a sub-agent's run its agent's own permission mode and
 // model-call budget, from its frontmatter (spec_background_agents_032

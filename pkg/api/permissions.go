@@ -134,6 +134,10 @@ const (
 	// ModeDontAsk denies whatever would ask: only rules and saved
 	// approvals let actions through (for CI and scripts).
 	ModeDontAsk PermissionMode = "dont-ask"
+	// ModeAuto sends what would ask to a reviewer model instead, which
+	// allows or denies it with a reason; ask rules still ask the user
+	// (spec_parity_027 PAR-PERM-20).
+	ModeAuto PermissionMode = "auto"
 	// ModeBypass asks for nothing. Deny rules, blocked paths and the
 	// sandboxes still apply, and the registry allows it only while the
 	// OS sandbox is active.
@@ -142,7 +146,7 @@ const (
 
 // Modes are the permission modes in Shift+Tab order; bypass is last and
 // is only offered when the session started in it.
-var Modes = []PermissionMode{ModeDefault, ModeAcceptEdits, ModePlan, ModeDontAsk, ModeBypass}
+var Modes = []PermissionMode{ModeDefault, ModeAcceptEdits, ModeAuto, ModePlan, ModeDontAsk, ModeBypass}
 
 // ErrUnknownMode reports a name that isn't a permission mode.
 var ErrUnknownMode = errors.New("unknown permission mode")
@@ -163,10 +167,12 @@ func ParsePermissionMode(s string) (PermissionMode, error) {
 		return ModePlan, nil
 	case "dontask", "deny":
 		return ModeDontAsk, nil
+	case "auto":
+		return ModeAuto, nil
 	case "bypass", "bypasspermissions":
 		return ModeBypass, nil
 	}
-	return "", fmt.Errorf("%w %q (use default, accept-edits, plan, dont-ask or bypass)", ErrUnknownMode, s)
+	return "", fmt.Errorf("%w %q (use default, accept-edits, auto, plan, dont-ask or bypass)", ErrUnknownMode, s)
 }
 
 // ErrBadRule reports a rule that can't be parsed.

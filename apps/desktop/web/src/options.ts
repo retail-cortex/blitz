@@ -16,7 +16,7 @@
 
 // The choices the run settings offer, with what each means (translated
 // when asked for, so a language change shows at once).
-import { mdiBrain, mdiFileEditOutline, mdiHandBackRight, mdiLockOutline, mdiShieldCheckOutline, mdiShieldOffOutline } from "@mdi/js";
+import { mdiBrain, mdiFileEditOutline, mdiHandBackRight, mdiLockOutline, mdiRobotOutline, mdiShieldCheckOutline, mdiShieldOffOutline } from "@mdi/js";
 import { t } from "./i18n";
 
 /** A choice in a settings menu: its value, name, explanation and icon. */
@@ -30,6 +30,7 @@ export interface Option {
 const modeIcons: Record<string, string> = {
   default: mdiShieldCheckOutline,
   "accept-edits": mdiFileEditOutline,
+  auto: mdiRobotOutline,
   plan: mdiLockOutline,
   "dont-ask": mdiHandBackRight,
   bypass: mdiShieldOffOutline,

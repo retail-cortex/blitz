@@ -250,6 +250,13 @@ func Open(ctx context.Context, cfg *config.Config, o Options) (*Workspace, error
 		}
 	}
 	opts := []runtime.Option{runtime.WithSessionService(events), runtime.WithScopedRules(w.memory.Rules)}
+	if ref := cfg.Permissions.Auto.Model; ref != "" { // the auto mode's reviewer
+		if m, err := w.newModel(ctx, cfg, ref); err != nil {
+			o.Warn(i18n.T("mode.auto_model_failed", "model", ref, "error", ModelErrorSummary(err, cfg)))
+		} else {
+			opts = append(opts, runtime.WithReviewModel(m))
+		}
+	}
 	for agent, ref := range agentModelRefs(cfg, w.agents, o.Warn) {
 		m, err := w.newModel(ctx, cfg, ref)
 		if err != nil {

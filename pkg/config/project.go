@@ -174,7 +174,7 @@ type projectMCPServer struct {
 // the sandbox or skips approvals.
 var neverFromProject = []string{
 	"llm", "web", "telemetry", "log", "audit", "checkpoints", "session", "images.dir", "pricing",
-	"blitz.auto_approve", "blitz.permission_mode", "blitz.trust_workspace",
+	"blitz.auto_approve", "blitz.permission_mode", "blitz.trust_workspace", "permissions.auto",
 	"sandbox.shell", "sandbox.allow_network", "sandbox.allowed_paths", "sandbox.read_only_paths",
 	"sandbox.scrub_env", "sandbox.commands",
 	"tools.auto_approve_commands", "tools.approvals_file", "tools.uc_tools_dir", "tools.workspace_dir",

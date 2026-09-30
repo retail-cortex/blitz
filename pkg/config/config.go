@@ -430,6 +430,20 @@ type PermissionsConfig struct {
 	// ReadOnlyGuards asking even so); nil means on. A workspace may set it
 	// either way.
 	ReadOnlyDefaults *bool `toml:"read_only_defaults"`
+	// Auto configures the reviewer of the auto permission mode.
+	Auto AutoReviewConfig `toml:"auto"`
+}
+
+// AutoReviewConfig is the reviewer model of the auto permission mode: it
+// decides what would otherwise ask the user.
+type AutoReviewConfig struct {
+	// Model reviews the actions ("provider/model"); empty: the session's
+	// model. A small, fast model is enough.
+	Model string `toml:"model"`
+	// Environment tells the reviewer what to trust: repositories, hosts
+	// and paths the agent may use freely, and anything else it should
+	// know.
+	Environment string `toml:"environment"`
 }
 
 // ReadOnlyCommands are the commands that read and don't change anything,
@@ -464,9 +478,15 @@ func (p PermissionsConfig) Merge(ws PermissionsConfig) PermissionsConfig {
 		}
 		return out
 	}
-	out := PermissionsConfig{Allow: union(p.Allow, ws.Allow), Ask: union(p.Ask, ws.Ask), Deny: union(p.Deny, ws.Deny), ReadOnlyDefaults: p.ReadOnlyDefaults}
+	out := PermissionsConfig{Allow: union(p.Allow, ws.Allow), Ask: union(p.Ask, ws.Ask), Deny: union(p.Deny, ws.Deny), ReadOnlyDefaults: p.ReadOnlyDefaults, Auto: p.Auto}
 	if ws.ReadOnlyDefaults != nil {
 		out.ReadOnlyDefaults = ws.ReadOnlyDefaults
+	}
+	if ws.Auto.Model != "" {
+		out.Auto.Model = ws.Auto.Model
+	}
+	if ws.Auto.Environment != "" {
+		out.Auto.Environment = ws.Auto.Environment
 	}
 	return out
 }

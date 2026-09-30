@@ -32,7 +32,7 @@ func TestModeCommand(t *testing.T) {
 	out := captureStdout(t, func() { RunREPL(context.Background(), app) }) + prompts.String()
 	for _, want := range []string{
 		"Permission mode: default", "accept-edits", "make file changes in the workspace without asking",
-		"Permission mode: accept-edits", "Usage: /mode default|accept-edits|plan|dont-ask|bypass",
+		"Permission mode: accept-edits", "Usage: /mode default|accept-edits|auto|plan|dont-ask|bypass",
 		"[accept-edits]", // the prompt shows a mode other than default
 	} {
 		t.Run(want, func(t *testing.T) {
@@ -63,11 +63,11 @@ func TestCycleModeSkipsAnUnavailableBypass(t *testing.T) {
 	app, _ := newCommandApp(t, "")
 	app.Workspace.SetPermissionMode("default")
 	var seen []string
-	for range 4 {
+	for range 5 {
 		cycleMode(app, true)
 		seen = append(seen, app.Workspace.Settings().PermissionMode)
 	}
-	want := []string{"accept-edits", "plan"}
+	want := []string{"accept-edits", "auto", "plan"}
 	if _, err := app.Workspace.SetPermissionMode("bypass"); err == nil {
 		want = append(want, "bypass", "default") // this machine has the OS sandbox
 	} else {

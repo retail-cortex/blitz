@@ -16,6 +16,7 @@ package tools
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -365,4 +366,53 @@ func TestBackgroundRunsAtTheGate(t *testing.T) {
 		})
 	}
 	assert.True(t, isUnattended(Background(context.Background())), "questions to the user must be refused too")
+}
+
+// In the auto mode a reviewer decides what would ask; ask rules still ask
+// the user, and deny rules never reach the reviewer.
+func TestAutoModeAtTheGate(t *testing.T) {
+	write := func(p string) api.ApprovalRequest {
+		return api.ApprovalRequest{Tool: "create_file", Kind: api.ActionWrite, Detail: "Create " + p, Targets: []string{p}}
+	}
+	rules := rulesOf(t, nil, []string{"write(ci/**)"}, []string{"write(**/*.pem)"})
+	cases := []struct {
+		name     string
+		mode     api.PermissionMode
+		path     string
+		verdict  bool
+		err      error
+		allowed  bool
+		reviewed bool
+		asked    bool
+	}{
+		{name: "allowed by the reviewer", mode: api.ModeAuto, path: "src/a.go", verdict: true, allowed: true, reviewed: true},
+		{name: "denied by the reviewer", mode: api.ModeAuto, path: "src/a.go", reviewed: true},
+		{name: "the reviewer failed: the user decides", mode: api.ModeAuto, path: "src/a.go", err: errors.New("overloaded"), reviewed: true, asked: true, allowed: true},
+		{name: "an ask rule asks the user", mode: api.ModeAuto, path: "ci/deploy.yml", verdict: true, asked: true, allowed: true},
+		{name: "a deny rule", mode: api.ModeAuto, path: "k.pem", verdict: true},
+		{name: "not in the auto mode", mode: api.ModeDefault, path: "src/a.go", verdict: true, asked: true, allowed: true},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			h, reqs := approverHooks(true)
+			h.setMode(c.mode)
+			h.SetRules(rules)
+			reviewed := false
+			h.SetReviewer(func(context.Context, api.ApprovalRequest) (bool, string, error) {
+				reviewed = true
+				return c.verdict, "because", c.err
+			})
+			err := h.Approve(context.Background(), write(c.path))
+			assert.Equal(t, c.reviewed, reviewed, "reviewed")
+			assert.Equal(t, c.asked, len(*reqs) > 0, "asked the user")
+			if c.allowed {
+				assert.NoError(t, err)
+			} else {
+				assert.ErrorIs(t, err, ErrNotApproved)
+			}
+			if c.reviewed && !c.allowed {
+				assert.ErrorContains(t, err, "because")
+			}
+		})
+	}
 }
