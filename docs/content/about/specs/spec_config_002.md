@@ -53,7 +53,7 @@ One TOML file, `.env.toml`, loaded through `github.com/rrmcguinness/modenv` (hie
 | `[sandbox.commands]` | `allow`, `deny` (defaults below), `auto_approve` | | |
 | `[ui]` | `markdown` true, `spinner` true, `terminal_title` true, `history_file` `~/.blitz/history`, `history_size` 1000, `diff_lines` 120, `theme` `auto`, `locale` `en-US`, `locales_dir` `~/.blitz/locales` | | |
 | `[images]` | `enabled` true, `dir` `~/.blitz/images`, `max_dimension` 1568, `max_input_mb` 20, `retain_days` 30 | | |
-| `[memory]` | `enabled` true, `files` `["AGENTS.md","CLAUDE.md","GEMINI.md","BLITZ.md"]`, `local_files` `["CLAUDE.local.md","BLITZ.local.md"]`, `rule_dirs` `[".blitz/rules",".agents/rules",".claude/rules"]`, `global` `~/.blitz/BLITZ.md`, `global_rules` `~/.blitz/rules`, `max_bytes` 32 KiB | | see [spec_memory_012](spec_memory_012.md) |
+| `[memory]` | `enabled` true, `files` `["AGENTS.md","CLAUDE.md","GEMINI.md","BLITZ.md"]`, `local_files` `["CLAUDE.local.md","BLITZ.local.md"]`, `rule_dirs` `[".blitz/rules",".agents/rules",".claude/rules"]`, `global` `~/.blitz/BLITZ.md`, `global_rules` `~/.blitz/rules`, `max_bytes` 32 KiB, `auto` true (the agent's notes) | | see [spec_memory_012](spec_memory_012.md) |
 | `[context]` | `compaction` true, `token_threshold` 120000, `retain_events` 20 | | |
 | `[audit]` | `enabled` true, `dir` `~/.blitz/audit` | | |
 | `[log]` | `level` `info`, `dir` `~/.blitz/logs`, `retain_days` 14 | | |

@@ -7,7 +7,7 @@ weight: 27
 
 | | |
 |---|---|
-| Status | **Partly implemented:** 54 of its 99 requirements done and 1 in part (counted 2026-09-30); the rest open. A gap analysis of 2026-09-26, to be closed before new features are added. |
+| Status | **Partly implemented:** 56 of its 99 requirements done and 1 in part (counted 2026-09-30); the rest open. A gap analysis of 2026-09-26, to be closed before new features are added. |
 | Compared with | **Claude Code** (current docs at code.claude.com, September 2026: v2.1.28x); **Antigravity CLI** (`agy` 1.1–1.2, September 2026); **Antigravity** 2.0 (Google's agent-first IDE and Agent Manager) |
 | Depends on | Specs 001–025 (what Blitz does today) and [spec_backlog_026](spec_backlog_026.md) (Blitz's own gaps; overlapping items are referenced, not repeated) |
 
@@ -69,8 +69,8 @@ The threat is real: Claude Code's project settings have had CVE-2025-59536 (hook
 
 ### 3.2 Auto memory / knowledge — P1, M
 **CC** auto memory: notes Claude writes from corrections and preferences, loaded each session, reviewable with `/memory`. **AG** Knowledge items learned from past work. **Blitz today:** `/memory add` by the user only.
-- **PAR-MEM-10** A `remember` tool lets the agent save a short note (fact, preference or correction) to `~/.blitz/memory/<workspace-hash>/` as one Markdown file per note, with an index loaded into instructions (capped); `[memory] auto = true|false` (default on), notes never grant permissions, and secrets are redacted before saving.
-- **PAR-MEM-11** `/memory` lists, shows, edits (opens `$EDITOR`) and deletes notes; `blitz memory` does the same from the shell.
+- **PAR-MEM-10** ✅ *Done 2026-09-30 ([spec_memory_012](spec_memory_012.md) MEM-30..33). Notes load when a session starts or `/memory reload` runs, not in the turn that saved them (the agent knows what it just said), and the files are named by date rather than indexed: the newest go in first, up to 8,000 bytes.* A `remember` tool lets the agent save a short note (fact, preference or correction) to `~/.blitz/memory/<workspace-hash>/` as one Markdown file per note, with an index loaded into instructions (capped); `[memory] auto = true|false` (default on), notes never grant permissions, and secrets are redacted before saving.
+- **PAR-MEM-11** ✅ *Done 2026-09-30 ([spec_memory_012](spec_memory_012.md) MEM-34). `/memory notes` lists them in full and `/memory forget` deletes one (in the REPL and through `WorkspaceService.ListNotes`/`ForgetNote`); editing is `blitz memory edit`, since the file may be on the service's machine.* `/memory` lists, shows, edits (opens `$EDITOR`) and deletes notes; `blitz memory` does the same from the shell.
 
 ### 3.3 System prompt and output styles — P2, S
 **CC** `--append-system-prompt[-file]`, `--system-prompt`, output styles (`/output-style`: default, Concise, Explanatory, custom files). **Blitz today:** fixed agent prompts plus memory.

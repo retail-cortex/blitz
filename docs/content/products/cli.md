@@ -75,9 +75,10 @@ blitz --permission-mode dont-ask "…"    # refuse whatever would ask, instead o
 | `/checkpoints`, `/diff [git]` | Turns that changed files; everything tools changed in this session (or `git diff`) |
 | `/cost`, `/context` | Token usage, estimated cost, context size against the compaction threshold |
 | `/compact [focus]` | Summarize everything before the latest turn now |
-| `/memory [reload\|add <note>]`, `/init` | Project instructions; have the agent write `BLITZ.md` |
+| `/memory [reload\|add <note>\|notes\|forget <name>]`, `/init` | Project instructions and the agent's notes; have the agent write `BLITZ.md` |
 | `/approvals [revoke <n>\|clear]` | Remembered approval rules |
 | `/session list [--all]\|new\|load <id\|name>\|save <name>`, `/resume`, `/rename` | Sessions and snapshots, scoped to the workspace |
+| `blitz memory list\|show\|edit\|forget <name>` | The notes the agent saved in the workspace with its `remember` tool |
 | `blitz --worktree [name] [--ref r]`, `blitz worktrees list\|remove <name>\|prune` | Work in a new git worktree and branch (`.blitz/worktrees/<name>`, `blitz/<name>`), with `.worktreeinclude`'s files copied in; list and remove them |
 | `/cd [path]` | Move the session to another workspace: it opens from scratch (its settings, trust question, sandbox, MCP servers), background work is dealt with as at exit, and `--continue` there finds the session; earlier prompts can't be rewound or undone from the new one |
 | `/tasks [show\|stop <id>]` | Background tasks (`invoke_agent` in the background) |

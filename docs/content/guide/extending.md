@@ -13,6 +13,18 @@ A line can import another file with `@docs/style.md`: relative to the file, at m
 
 Rule files in `.blitz/rules/`, `.agents/rules/`, `.claude/rules/` and `~/.blitz/rules/` load too. One with frontmatter `paths: ["src/api/**/*.go"]` is given to the agent only when it first reads or edits a matching file. None of these files can grant permissions. `/memory` lists what's loaded; `/init` has the agent write `BLITZ.md`.
 
+### Notes the agent keeps
+
+The agent also keeps its own notes across sessions, with its `remember` tool: a fact about the project, how you like things done, or a mistake not to repeat. Each is a small Markdown file in `~/.blitz/memory/<workspace>-<hash>/`, with credentials masked before it's saved. They're added to the agent's instructions when a session starts (the newest first) as things it learned, never as permission to do anything.
+
+```text
+/memory notes                 # what it saved, newest first
+/memory forget 20260930-1412  # delete one (the start of its name will do)
+blitz memory list             # the same from the shell, plus show and edit ($EDITOR)
+```
+
+Set `[memory] auto = false` to turn them off.
+
 ## MCP servers
 
 ```toml
