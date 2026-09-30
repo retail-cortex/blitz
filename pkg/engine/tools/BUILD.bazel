@@ -149,6 +149,7 @@ go_test(
         "mcp_test.go",
         "mcpextra_test.go",
         "mode_test.go",
+        "nodeenv_test.go",
         "notebook_test.go",
         "ossandbox_test.go",
         "patch_test.go",
