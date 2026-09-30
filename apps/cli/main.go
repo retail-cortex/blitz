@@ -57,6 +57,9 @@ type rootOptions struct {
 	resume       string
 	cont         bool
 	outputFormat string
+	inputFormat  string
+	jsonSchema   string
+	noPersist    bool // --no-session-persistence
 	maxTurns     int
 	maxCostUSD   float64
 	timeout      time.Duration
@@ -143,6 +146,9 @@ func addRunFlags(f *pflag.FlagSet, o *rootOptions) {
 	f.Lookup("resume").NoOptDefVal = "latest"
 	f.BoolVarP(&o.cont, "continue", "C", false, "Continue the most recent session")
 	f.StringVar(&o.outputFormat, "output-format", formatText, "Output for one-shot runs: text, json, or stream-json")
+	f.StringVar(&o.inputFormat, "input-format", inputText, "Input: text, or stream-json (JSON lines on stdin: prompts, approval answers and question answers; needs --output-format stream-json)")
+	f.StringVar(&o.jsonSchema, "json-schema", "", "One-shot runs answer with JSON valid against this schema (a file, or inline JSON), as structured_result")
+	f.BoolVar(&o.noPersist, "no-session-persistence", false, "Don't keep the run's session (one-shot runs; the audit log is still written)")
 	f.IntVar(&o.maxTurns, "max-turns", 0, "Stop after this many model calls in a one-shot run (0 = unlimited)")
 	f.Float64Var(&o.maxCostUSD, "max-cost-usd", 0, "Stop a one-shot run once it has cost more than this, in USD (0 = unlimited)")
 	f.DurationVar(&o.timeout, "timeout", 0, "Stop a one-shot run after this long, e.g. 10m (0 = unlimited)")
@@ -215,15 +221,41 @@ func runRoot(cmd *cobra.Command, o *rootOptions, args []string) (err error) {
 		return withCode(exitUsage, errors.New("--max-cost-usd and --timeout must be >= 0"))
 	}
 
+	streamIn := false
+	switch o.inputFormat {
+	case inputText, "":
+	case inputStreamJSON:
+		if o.outputFormat != formatStreamJSON || o.interactive {
+			return withCode(exitUsage, errors.New("--input-format stream-json needs --output-format stream-json (and no -i)"))
+		}
+		streamIn = true
+	default:
+		return withCode(exitUsage, fmt.Errorf("invalid --input-format %q (use text or stream-json)", o.inputFormat))
+	}
+	var schema *answerSchema
+	if o.jsonSchema != "" {
+		var err error
+		if schema, err = loadSchema(o.jsonSchema); err != nil {
+			return withCode(exitUsage, fmt.Errorf("--json-schema: %w", err))
+		}
+	}
+
 	stdinTTY := tui.StdinIsTerminal()
-	prompt, stdinUsed, err := resolvePrompt(o.prompt, args, stdinTTY, o.interactive, os.Stdin)
+	// stream-json input keeps stdin for its lines.
+	prompt, stdinUsed, err := resolvePrompt(o.prompt, args, stdinTTY || streamIn, o.interactive, os.Stdin)
 	if err != nil {
 		return err
 	}
-	if o.requirePrompt && prompt == "" {
+	if o.requirePrompt && prompt == "" && !streamIn {
 		return withCode(exitUsage, errors.New("no prompt: give one as arguments, with -p, or on stdin"))
 	}
-	oneShot := prompt != "" && !o.interactive
+	oneShot := (prompt != "" || streamIn) && !o.interactive
+	if !oneShot && (schema != nil || o.noPersist) {
+		return withCode(exitUsage, errors.New("--json-schema and --no-session-persistence are for one-shot runs and require a prompt"))
+	}
+	if o.noPersist && (o.resume != "" || o.cont) {
+		return withCode(exitUsage, errors.New("--no-session-persistence starts a new session: not with --resume or --continue"))
+	}
 	if !oneShot && o.plan {
 		return withCode(exitUsage, errors.New("--plan requires a prompt (in a session, use /plan <goal>)"))
 	}
@@ -251,6 +283,15 @@ func runRoot(cmd *cobra.Command, o *rootOptions, args []string) (err error) {
 	cfg, err := loadConfig(&o.global)
 	if err != nil {
 		return err
+	}
+	if o.noPersist { // sessions in a folder removed at exit, in this process
+		tmp, err := os.MkdirTemp("", "blitz-sessions-")
+		if err != nil {
+			return err
+		}
+		defer os.RemoveAll(tmp)
+		cfg.Session.StorageDir = tmp
+		o.local = true
 	}
 
 	textMode := o.outputFormat == formatText
@@ -327,8 +368,9 @@ func runRoot(cmd *cobra.Command, o *rootOptions, args []string) (err error) {
 	// One input source for everything read from the terminal.
 	var input tui.Input
 	switch {
-	case stdinUsed:
-		// stdin carried the prompt; nothing can be answered interactively.
+	case stdinUsed, streamIn:
+		// stdin carried the prompt, or carries stream-json lines (their
+		// answers are set up with the run).
 	case stdinTTY && !oneShot:
 		completer = newCompleter(w)
 		ti, terr := tui.NewTerminalInput(tui.TerminalOptions{
@@ -376,13 +418,17 @@ func runRoot(cmd *cobra.Command, o *rootOptions, args []string) (err error) {
 		if model := w.Model().Name; o.maxCostUSD > 0 && !runtime.NewUsageTracker(cfg.Pricing).HasPrice(model) {
 			warnFn(i18n.T("startup.cost_unpriced", "model", model))
 		}
-		return runOneShot(ctx, w, oneShotOptions{
+		run := oneShotOptions{
 			prompt: prompt, sessionID: sess.ID, format: o.outputFormat, maxTurns: o.maxTurns, plan: o.plan,
 			maxCostUSD: o.maxCostUSD, timeout: o.timeout, sendPrompt: o.sendPrompt,
-			input: input, stdinTTY: stdinTTY && !stdinUsed, stdout: os.Stdout,
+			input: input, stdinTTY: stdinTTY && !stdinUsed && !streamIn, stdout: os.Stdout,
 			markdown: pretty && cfg.UI.Markdown, spinner: pretty && cfg.UI.Spinner, width: terminalWidth(),
-			usageLines: pretty, images: attached, theme: cfg.UI.Theme,
-		})
+			usageLines: pretty, images: attached, theme: cfg.UI.Theme, schema: schema,
+		}
+		if streamIn {
+			return runStreamInput(ctx, w, run, os.Stdin)
+		}
+		return runOneShot(ctx, w, run)
 	}
 
 	if resumed && sess.Workspace != "" && sess.Workspace != w.Dir() {

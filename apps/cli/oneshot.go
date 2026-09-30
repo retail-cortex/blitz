@@ -15,6 +15,7 @@
 package main
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -63,6 +64,8 @@ type runResult struct {
 	Usage      usageJSON      `json:"usage"`
 	CostUSD    *float64       `json:"cost_usd,omitempty"`
 	ToolCalls  []toolCallJSON `json:"tool_calls,omitempty"`
+	// Structured is the answer as JSON valid against --json-schema.
+	Structured json.RawMessage `json:"structured_result,omitempty"`
 }
 
 type oneShotOptions struct {
@@ -83,6 +86,11 @@ type oneShotOptions struct {
 	usageLines bool
 	images     []*images.Image
 	theme      string // Markdown theme
+	// schema is --json-schema: the answer must be JSON valid against it.
+	schema *answerSchema
+	// keepGoing: more turns follow (stream-json input), so background
+	// processes are left for the last.
+	keepGoing bool
 }
 
 // runOneShot executes a single prompt and exits. Background processes are
@@ -107,8 +115,12 @@ func runOneShot(ctx context.Context, w api.Backend, o oneShotOptions) error {
 	default:
 		handler = collectHandler(&calls)
 	}
+	send := o.sendPrompt
+	if o.schema != nil {
+		send = cmp.Or(send, o.prompt) + o.schema.instruction()
+	}
 	turn, runErr := w.Run(ctx, sid, api.Turn{
-		Text: o.prompt, Prompt: o.sendPrompt, Plan: o.plan, Images: o.images, MaxTurns: o.maxTurns, MaxCostUSD: o.maxCostUSD, Timeout: o.timeout,
+		Text: o.prompt, Prompt: send, Plan: o.plan, Images: o.images, MaxTurns: o.maxTurns, MaxCostUSD: o.maxCostUSD, Timeout: o.timeout,
 		OnAccepted: func() {
 			if printer != nil {
 				printer.Begin()
@@ -128,6 +140,34 @@ func runOneShot(ctx context.Context, w api.Backend, o oneShotOptions) error {
 	if ctx.Err() != nil && runErr != nil && !api.IsLimit(runErr) {
 		runErr = withCode(exitInterrupted, runErr)
 	}
+	var structured json.RawMessage
+	if o.schema != nil && runErr == nil {
+		var serr error
+		if structured, serr = o.schema.check(turn.Output); serr != nil {
+			// Once more, with what was wrong.
+			if printer != nil {
+				printer.Begin()
+			}
+			retry, err := w.Run(ctx, sid, api.Turn{
+				Text:   "(json-schema) the answer again, valid against the schema",
+				Prompt: "Your final answer isn't valid against the JSON schema: " + serr.Error() + "\nAnswer again with only the JSON value." + o.schema.instruction(),
+			}, handler)
+			if printer != nil {
+				printer.End()
+				fmt.Fprintln(out)
+			}
+			if err == nil {
+				turn.Output = retry.Output
+				structured, serr = o.schema.check(retry.Output)
+			}
+			switch {
+			case err != nil:
+				runErr = err
+			case serr != nil:
+				runErr = withCode(exitFailure, fmt.Errorf("the answer isn't valid against --json-schema: %w", serr))
+			}
+		}
+	}
 
 	usage, _ := w.SessionUsage() // sid is the active session
 	if o.format == formatText {
@@ -142,6 +182,7 @@ func runOneShot(ctx context.Context, w api.Backend, o oneShotOptions) error {
 			DurationMs: time.Since(start).Milliseconds(),
 			Usage:      usageJSON{InputTokens: usage.Input, CachedTokens: usage.Cached, OutputTokens: usage.Output, ModelCalls: usage.Calls},
 			ToolCalls:  calls,
+			Structured: structured,
 		}
 		if usage.Priced && usage.Calls > 0 {
 			cost := usage.CostUSD
@@ -153,7 +194,15 @@ func runOneShot(ctx context.Context, w api.Backend, o oneShotOptions) error {
 		res.ExitCode = exitCodeFor(runErr)
 		_ = json.NewEncoder(out).Encode(res)
 	}
+	if !o.keepGoing {
+		endRun(ctx, w, o)
+	}
+	return runErr
+}
 
+// endRun deals with background processes and tasks the run leaves: asked
+// about on a terminal in text mode, else stopped.
+func endRun(ctx context.Context, w api.Backend, o oneShotOptions) {
 	interrupts := make(chan os.Signal, 1)
 	signal.Notify(interrupts, os.Interrupt)
 	defer signal.Stop(interrupts)
@@ -161,7 +210,6 @@ func runOneShot(ctx context.Context, w api.Backend, o oneShotOptions) error {
 		CanPrompt: o.format == formatText && ctx.Err() == nil && o.stdinTTY && o.input != nil,
 		Tasks:     w,
 	})
-	return runErr
 }
 
 // streamJSONHandler writes one JSON line per event.

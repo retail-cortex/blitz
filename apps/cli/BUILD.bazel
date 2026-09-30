@@ -26,6 +26,7 @@ go_library(
         "configperms.go",
         "doctor.go",
         "exitcode.go",
+        "headless.go",
         "license.go",
         "main.go",
         "mcp.go",
@@ -61,6 +62,7 @@ go_library(
         "//pkg/socket",
         "//pkg/worktree",
         "@com_github_burntsushi_toml//:toml",
+        "@com_github_google_jsonschema_go//jsonschema",
         "@com_github_spf13_cobra//:cobra",
         "@com_github_spf13_pflag//:pflag",
         "@org_golang_google_adk_v2//model",
@@ -85,6 +87,7 @@ go_test(
     srcs = [
         "attach_test.go",
         "configkeys_test.go",
+        "headless_test.go",
         "images_test.go",
         "leak_test.go",
         "limits_test.go",
