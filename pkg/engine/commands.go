@@ -37,6 +37,9 @@ func (w *Workspace) commandDirs() []struct{ dir, source string } {
 	out := []struct{ dir, source string }{
 		{config.ExpandHome("~/.blitz/commands"), "user"},
 	}
+	for _, d := range w.cfg.PluginCommandDirs { // plugins' before the project's, which win
+		out = append(out, struct{ dir, source string }{d.Dir, "plugin " + d.Plugin})
+	}
 	for _, d := range []string{".blitz/commands", ".claude/commands", ".agents/workflows"} {
 		out = append(out, struct{ dir, source string }{filepath.Join(w.Dir(), filepath.FromSlash(d)), "project"})
 	}

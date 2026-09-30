@@ -67,8 +67,13 @@ type Config struct {
 	MCP         MCPConfig        `toml:"mcp"`
 	Web         WebConfig        `toml:"web"`
 	Browser     BrowserConfig    `toml:"browser"`
-	Log         LogConfig        `toml:"log"`
-	Telemetry   TelemetryConfig  `toml:"telemetry"`
+	Plugins     PluginsConfig    `toml:"plugins"`
+	// PluginAgentDirs and PluginCommandDirs are what loaded plugins add
+	// (package plugins; never read from a file).
+	PluginAgentDirs   []string        `toml:"-"`
+	PluginCommandDirs []PluginDir     `toml:"-"`
+	Log               LogConfig       `toml:"log"`
+	Telemetry         TelemetryConfig `toml:"telemetry"`
 	// Pricing overrides or adds model prices, keyed by model name, for
 	// /cost and cost limits.
 	Pricing map[string]ModelPrice `toml:"pricing"`

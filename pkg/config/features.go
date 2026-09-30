@@ -299,6 +299,23 @@ type BrowserConfig struct {
 	Height int `toml:"height"`
 }
 
+// PluginsConfig chooses plugins beyond those enabled in the store
+// (blitz plugin enable): Enable turns installed ones on (from the user, or
+// a trusted project), Disable off (the user, or any project).
+type PluginsConfig struct {
+	// Enable turns installed plugins on, by name.
+	Enable []string `toml:"enable"`
+	// Disable turns installed plugins off, by name; it wins over Enable.
+	Disable []string `toml:"disable"`
+	// Dirs are plugins loaded from directories for a run (--plugin-dir).
+	Dirs []string `toml:"-"`
+}
+
+// PluginDir is a plugin's command directory.
+type PluginDir struct {
+	Dir, Plugin string
+}
+
 // MCPConfig lists MCP servers.
 type MCPConfig struct {
 	Servers []MCPServerConfig `toml:"servers"`

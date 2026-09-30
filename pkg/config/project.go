@@ -70,6 +70,8 @@ const (
 	ProjectModel       = "model"        // the default model (B)
 	ProjectAgentModel  = "agent_model"  // an agent's model (B)
 	ProjectWorkerAllow = "worker_allow" // a permission kind workers may get (B)
+	ProjectPlugin      = "plugin"       // an installed plugin to enable (B)
+	ProjectPluginOff   = "plugin_off"   // an installed plugin to disable (A)
 	ProjectSetting     = "setting"      // any other key (ignored)
 )
 
@@ -150,8 +152,12 @@ type projectFile struct {
 		DefaultModel string `toml:"default_model" json:"default_model,omitempty"`
 	} `toml:"blitz" json:"blitz"`
 	AgentModels map[string]string `toml:"agent_models" json:"agent_models,omitempty"`
-	Hooks       HooksConfig       `toml:"hooks" json:"hooks"`
-	MCP         struct {
+	Plugins     struct {
+		Enable  []string `toml:"enable" json:"enable,omitempty"`
+		Disable []string `toml:"disable" json:"-"`
+	} `toml:"plugins" json:"plugins"`
+	Hooks HooksConfig `toml:"hooks" json:"hooks"`
+	MCP   struct {
 		Servers []projectMCPServer `toml:"servers" json:"servers,omitempty"`
 	} `toml:"mcp" json:"mcp"`
 	// Referenced are the workspace files the hooks and MCP servers name
@@ -357,6 +363,9 @@ func pendingItems(workspace string, pf *projectFile) []ProjectItem {
 	for _, r := range pf.Permissions.Allow {
 		add(ProjectAllow, "", r)
 	}
+	for _, name := range pf.Plugins.Enable {
+		add(ProjectPlugin, name, "")
+	}
 	for _, d := range pf.Sandbox.ShellWritablePaths {
 		add(ProjectWritable, "", d)
 	}
@@ -477,6 +486,10 @@ func (p *Project) ApplyTightening(cfg *Config) {
 			cfg.ProjectPermissions.Deny = appendNew(cfg.ProjectPermissions.Deny, r)
 			applied(ProjectDeny, "", r)
 		}
+		for _, name := range pf.Plugins.Disable {
+			cfg.Plugins.Disable = appendNew(cfg.Plugins.Disable, name)
+			applied(ProjectPluginOff, name, "")
+		}
 		for _, r := range pf.Permissions.Ask {
 			cfg.ProjectPermissions.Ask = appendNew(cfg.ProjectPermissions.Ask, r)
 			applied(ProjectAsk, "", r)
@@ -558,6 +571,9 @@ func (p *Project) ApplyTrusted(cfg *Config) {
 		}
 		for _, r := range pf.Permissions.Allow {
 			cfg.ProjectPermissions.Allow = appendNew(cfg.ProjectPermissions.Allow, r)
+		}
+		for _, name := range pf.Plugins.Enable {
+			cfg.Plugins.Enable = appendNew(cfg.Plugins.Enable, name)
 		}
 		for _, d := range pf.Sandbox.ShellWritablePaths {
 			if _, ok := inWorkspace(p.dir, d); !ok {

@@ -122,7 +122,7 @@ Exit codes: 0 success, 1 error, 2 usage, 3 --max-turns reached,
 	f.BoolVarP(&o.version, "version", "v", false, "Print Blitz version")
 	addRunFlags(f, o)
 
-	root.AddCommand(newExecCommand(o), newInitCommand(o), newDoctorCommand(&o.global), newConfigCommand(&o.global), newServeCommand(), newWorkersCommand(&o.global), newServiceCommand(), newLicenseCommand(), newTrustCommand(&o.global), newMCPCommand(&o.global), newWorktreesCommand(&o.global), newMemoryCommand(&o.global))
+	root.AddCommand(newExecCommand(o), newInitCommand(o), newDoctorCommand(&o.global), newConfigCommand(&o.global), newServeCommand(), newWorkersCommand(&o.global), newServiceCommand(), newLicenseCommand(), newTrustCommand(&o.global), newMCPCommand(&o.global), newWorktreesCommand(&o.global), newMemoryCommand(&o.global), newPluginCommand())
 	return root
 }
 
@@ -137,6 +137,7 @@ func addRunFlags(f *pflag.FlagSet, o *rootOptions) {
 	_ = f.MarkHidden("trust-workspace")
 	f.StringVarP(&o.global.worktree, "worktree", "w", "", "Start in a new git worktree (.blitz/worktrees/<name>, branch blitz/<name>); no name: one is made up")
 	f.Lookup("worktree").NoOptDefVal = "new"
+	f.StringArrayVar(&o.global.pluginDirs, "plugin-dir", nil, "Load the plugin in this directory for the run (repeatable; runs without the service)")
 	f.StringVar(&o.global.ref, "ref", "", "With --worktree: the commit or branch to start from (default HEAD)")
 	f.StringVarP(&o.resume, "resume", "r", "", "Resume a saved session by ID (no ID: the most recent), or start a new one from a snapshot by name")
 	f.Lookup("resume").NoOptDefVal = "latest"

@@ -37,6 +37,7 @@ import (
 	"github.com/retail-cortex/blitz/pkg/engine/skills"
 	"github.com/retail-cortex/blitz/pkg/engine/tools"
 	"github.com/retail-cortex/blitz/pkg/observability"
+	"github.com/retail-cortex/blitz/pkg/plugins"
 	"github.com/spf13/cobra"
 	"google.golang.org/adk/v2/model"
 	adksession "google.golang.org/adk/v2/session"
@@ -269,6 +270,21 @@ func runDoctor(ctx context.Context, g *globalFlags, online bool) []check {
 				add("browser", statusWarn, "%v (the browser tool can't run)", err)
 			} else {
 				add("browser", statusOK, "%s", path)
+			}
+		}
+
+		if list, err := plugins.Default().List(); err != nil {
+			add("plugins", statusFail, "%v", err)
+		} else {
+			for _, i := range list {
+				switch h, err := plugins.Hash(plugins.Default().PluginDir(i)); {
+				case err != nil || h != i.Hash:
+					add("plugin "+i.Name, statusWarn, "%s: its files changed since it was installed, so it isn't loaded (blitz plugin update %s)", i.Version, i.Name)
+				case !i.Enabled:
+					add("plugin "+i.Name, statusOK, "%s, disabled", i.Version)
+				default:
+					add("plugin "+i.Name, statusOK, "%s", i.Version)
+				}
 			}
 		}
 

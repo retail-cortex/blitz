@@ -143,7 +143,7 @@ type CommandInfo struct {
 	Name         string
 	Description  string
 	ArgumentHint string
-	Source       string // project, user, bundled, skill
+	Source       string // project, user, bundled, skill, or "plugin <name>"
 }
 
 // ErrUnknownCommand reports a slash command that doesn't exist.

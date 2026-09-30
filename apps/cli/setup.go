@@ -38,6 +38,8 @@ type globalFlags struct {
 	// worktree starts in a new git worktree of that name ("new": one
 	// named for the time), from ref (HEAD when "").
 	worktree, ref string
+	// pluginDirs are plugins loaded for this run (--plugin-dir; local).
+	pluginDirs []string
 }
 
 // loadConfig loads trusted configuration and applies flag overrides,
@@ -79,6 +81,7 @@ func loadConfig(f *globalFlags) (*config.Config, error) {
 	if dir != "" {
 		cfg.Tools.WorkspaceDir = dir
 	}
+	cfg.Plugins.Dirs = append(cfg.Plugins.Dirs, f.pluginDirs...)
 	return cfg, nil
 }
 
@@ -102,7 +105,7 @@ type backendOptions struct {
 // service, which reopens it with the answer.
 func openBackend(ctx context.Context, cfg *config.Config, o backendOptions, warn func(string)) (api.Backend, *i18n.Bundle, bool, error) {
 	sock := socket.DefaultSocket()
-	if !o.local && socket.Running(sock) {
+	if !o.local && len(cfg.Plugins.Dirs) == 0 && socket.Running(sock) { // --plugin-dir runs here
 		r, err := client.Attach(ctx, sock, cfg.Tools.WorkspaceDir, warn)
 		if err != nil {
 			return nil, nil, false, fmt.Errorf("attaching to the Blitz service at %s: %w (--local runs without it)", sock, err)

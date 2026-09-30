@@ -40,6 +40,7 @@ import (
 	"github.com/retail-cortex/blitz/pkg/engine/workers"
 	"github.com/retail-cortex/blitz/pkg/i18n"
 	"github.com/retail-cortex/blitz/pkg/images"
+	"github.com/retail-cortex/blitz/pkg/plugins"
 	"github.com/retail-cortex/blitz/pkg/redact"
 	"google.golang.org/adk/v2/model"
 )
@@ -66,6 +67,7 @@ type Options struct {
 
 // Workspace is one open project: everything a session needs.
 type Workspace struct {
+	plugins []plugins.Loaded
 	cfg     *config.Config
 	agents  *agents.Registry
 	skills  *skills.Provider
@@ -196,6 +198,7 @@ func Open(ctx context.Context, cfg *config.Config, o Options) (*Workspace, error
 		o.Warn(i18n.T("project.trust_workspace_deprecated"))
 	}
 	w.loadProject(cfg, o.TrustProject || cfg.Blitz.TrustWorkspace, o.Warn)
+	w.loadPlugins(cfg, o.Warn)
 
 	if w.tools, err = tools.NewRegistry(cfg, w.agents, w.skills); err != nil {
 		return nil, fmt.Errorf("failed to initialize tools: %w", err)
@@ -389,6 +392,26 @@ func (w *Workspace) LoadAttachments(paths []string, prompt string, warn func(str
 		add(img)
 	}
 	return out, nil
+}
+
+// loadPlugins adds the enabled plugins (after the project settings, which
+// may enable or disable some): their agents and skills now, their hooks,
+// MCP servers and commands through cfg.
+func (w *Workspace) loadPlugins(cfg *config.Config, warn func(string)) {
+	skillPaths := len(cfg.Skills.Paths)
+	var problems []string
+	w.plugins, problems = plugins.Apply(cfg, plugins.Default())
+	for _, p := range problems {
+		warn(p)
+	}
+	if err := w.agents.LoadExternalAgents(cfg.PluginAgentDirs...); err != nil {
+		warn(err.Error())
+	}
+	if cfg.Skills.Enabled && len(cfg.Skills.Paths) > skillPaths {
+		if err := w.skills.DiscoverExternal(cfg.Skills.Paths[skillPaths:]); err != nil {
+			warn(err.Error())
+		}
+	}
 }
 
 // instructions are the extra system instructions: project memory plus, for
