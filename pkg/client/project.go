@@ -1,0 +1,60 @@
+// Copyright 2026 Retail Cortex
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package client
+
+import (
+	"context"
+
+	"connectrpc.com/connect"
+	"github.com/retail-cortex/blitz/pkg/api"
+	pb "github.com/retail-cortex/blitz/proto/blitz/v1"
+)
+
+// ProjectSettings are the workspace's project settings in the service
+// (WorkspaceService.GetProjectSettings); on failure warn is told and they
+// are empty.
+func (r *Remote) ProjectSettings() api.ProjectSettings {
+	res, err := r.workspaces.GetProjectSettings(context.Background(), connect.NewRequest(&pb.GetProjectSettingsRequest{Workspace: r.dir}))
+	if err != nil {
+		r.failed("reading the project settings", err)
+		return api.ProjectSettings{State: api.TrustNone}
+	}
+	return projectSettings(res.Msg.Settings)
+}
+
+// TrustProject records the decision in the service, which reopens the
+// workspace with it unless a turn is running there
+// (WorkspaceService.TrustProject).
+func (r *Remote) TrustProject(hash string, trusted bool) error {
+	_, err := r.workspaces.TrustProject(context.Background(), connect.NewRequest(&pb.TrustProjectRequest{Workspace: r.dir, Hash: hash, Trusted: trusted}))
+	return fromAPI(err)
+}
+
+func projectSettings(m *pb.ProjectSettings) api.ProjectSettings {
+	if m == nil {
+		return api.ProjectSettings{State: api.TrustNone}
+	}
+	list := func(in []*pb.ProjectItem) []api.ProjectItem {
+		out := make([]api.ProjectItem, len(in))
+		for i, it := range in {
+			out[i] = api.ProjectItem{File: it.File, Kind: it.Kind, Key: it.Key, Value: it.Value, Reason: it.Reason}
+		}
+		return out
+	}
+	return api.ProjectSettings{
+		Files: m.Files, State: m.State, Hash: m.Hash, Loaded: m.Loaded,
+		Applied: list(m.Applied), Pending: list(m.Pending), Ignored: list(m.Ignored), Problems: m.Problems,
+	}
+}

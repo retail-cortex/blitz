@@ -141,30 +141,36 @@ func TestExpandHome(t *testing.T) {
 	}
 }
 
-func TestSearchPathsRespectTrust(t *testing.T) {
+// A project's agents and skills load as prompt text, with no trust
+// needed (their scripts need it: spec_project_config_031). Relative paths
+// resolve against the workspace, not the working directory.
+func TestSearchPathsResolveAgainstTheWorkspace(t *testing.T) {
 	home := isolateConfigEnv(t)
 	cfg := DefaultConfig()
 	cfg.Skills.Paths = []string{"~/.blitz/skills", "./skills", ".agents/skills", "/opt/skills"}
-
-	// Negative: untrusted workspace drops relative (workspace) paths.
-	got := cfg.SkillSearchPaths("/work")
-	want := []string{filepath.Join(home, ".blitz", "skills"), "/opt/skills"}
-	assert.Equal(t, strings.Join(want, ","), strings.Join(got, ","), "untrusted skill paths = %v, want %v", got, want)
-	agents := cfg.AgentSearchPaths("/work")
-	assert.Len(t, agents, 1, "untrusted agent paths = %v", agents)
-	assert.Equal(t, filepath.Join(home, ".blitz", "agents"), agents[0], "untrusted agent paths = %v", agents)
-
-	// Positive: trusted workspace includes them.
-	cfg.Blitz.TrustWorkspace = true
-	// Relative paths resolve against the workspace, not the working directory.
-	got = cfg.SkillSearchPaths("/work")
-	want = []string{filepath.Join(home, ".blitz", "skills"), "/work/skills", "/work/.agents/skills", "/opt/skills"}
-	assert.Equal(t, strings.Join(want, ","), strings.Join(got, ","), "trusted skill paths = %v, want %v", got, want)
-	agents = cfg.AgentSearchPaths("/work")
-	assert.Len(t, agents, 2, "trusted agent paths = %v", agents)
-	assert.Equal(t, "/work/agents", agents[1], "trusted agent paths = %v", agents)
-	agents = cfg.AgentSearchPaths("")
-	assert.Equal(t, "./agents", agents[1], "without a workspace, paths stay relative: %v", agents)
+	cases := []struct {
+		name      string
+		workspace string
+		skills    []string
+		agents    []string
+	}{
+		{
+			name: "in a workspace", workspace: "/work",
+			skills: []string{filepath.Join(home, ".blitz", "skills"), "/work/skills", "/work/.agents/skills", "/opt/skills"},
+			agents: []string{filepath.Join(home, ".blitz", "agents"), "/work/agents"},
+		},
+		{
+			name:   "without one, paths stay relative",
+			skills: []string{filepath.Join(home, ".blitz", "skills"), "./skills", ".agents/skills", "/opt/skills"},
+			agents: []string{filepath.Join(home, ".blitz", "agents"), "./agents"},
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			assert.Equal(t, c.skills, cfg.SkillSearchPaths(c.workspace))
+			assert.Equal(t, c.agents, cfg.AgentSearchPaths(c.workspace))
+		})
+	}
 }
 
 func TestSandboxDefaults(t *testing.T) {

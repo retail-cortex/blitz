@@ -201,3 +201,17 @@ func decision(d pb.Decision) api.Decision {
 func processMsg(p api.ProcessInfo) *pb.Process {
 	return &pb.Process{Id: int32(p.ID), Command: p.Command, Running: p.Running, ExitCode: int32(p.ExitCode), RuntimeMs: p.RuntimeMs}
 }
+
+func projectMsg(p api.ProjectSettings) *pb.ProjectSettings {
+	list := func(in []api.ProjectItem) []*pb.ProjectItem {
+		out := make([]*pb.ProjectItem, len(in))
+		for i, it := range in {
+			out[i] = &pb.ProjectItem{File: it.File, Kind: it.Kind, Key: it.Key, Value: it.Value, Reason: it.Reason}
+		}
+		return out
+	}
+	return &pb.ProjectSettings{
+		Files: p.Files, State: p.State, Hash: p.Hash, Loaded: p.Loaded,
+		Applied: list(p.Applied), Pending: list(p.Pending), Ignored: list(p.Ignored), Problems: p.Problems,
+	}
+}

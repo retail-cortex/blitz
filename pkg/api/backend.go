@@ -44,6 +44,13 @@ type Backend interface {
 	ImagesEnabled() bool
 	Close() error
 
+	// Project settings.
+	ProjectSettings() ProjectSettings
+	// TrustProject records trusting (or declining) the project settings
+	// whose hash is given (ErrProjectChanged if they have changed since).
+	// They load when the workspace next opens.
+	TrustProject(hash string, trusted bool) error
+
 	// Turns.
 	Run(ctx context.Context, sessionID string, t Turn, on func(Event)) (TurnResult, error)
 	Steer(ctx context.Context, sessionID, text string) error
@@ -124,6 +131,58 @@ type Processes interface {
 	WaitAll(ctx context.Context) error
 	Shutdown()
 }
+
+// ProjectSettings are what a workspace's project files
+// (.blitz/settings.toml, .blitz/settings.local.toml) say, and whether the
+// person trusts the part that needs it (spec_project_config_031).
+type ProjectSettings struct {
+	// Files are the project files found, relative to the workspace.
+	Files []string
+	// State is the trust decision for the content as it is now: none
+	// (nothing needs trust), new, changed, trusted or declined.
+	State string
+	// Hash identifies the content that needs trust; TrustProject takes it
+	// back.
+	Hash string
+	// Loaded: the settings that need trust are in force (trusted when the
+	// workspace opened, or for this run only).
+	Loaded bool
+	// Applied are the settings in force without trust: they only tighten.
+	Applied []ProjectItem
+	// Pending need trust: they run code or loosen a policy.
+	Pending []ProjectItem
+	// Ignored may not come from a project, or change nothing.
+	Ignored []ProjectItem
+	// Problems are files that couldn't be read.
+	Problems []string
+}
+
+// ProjectItem is one project setting. Kind is deny, ask, blocked_path,
+// limit, skill_policy, worker_limit (applied); hook, mcp, allow, writable,
+// model, agent_model, worker_allow, skill_scripts (needing trust); or
+// setting (another key).
+type ProjectItem struct {
+	File  string
+	Kind  string
+	Key   string // the hook's event, the server's, agent's or skill's name, or the setting
+	Value string // the rule, command, path, model or number
+	// Reason, for an ignored item: never, unknown, not_stricter, outside,
+	// provider or user_set.
+	Reason string
+}
+
+// The trust states of ProjectSettings.State.
+const (
+	TrustNone     = "none"
+	TrustNew      = "new"
+	TrustChanged  = "changed"
+	TrustTrusted  = "trusted"
+	TrustDeclined = "declined"
+)
+
+// ErrProjectChanged: the project settings changed since they were shown;
+// review them again.
+var ErrProjectChanged = errors.New("the project settings changed since they were shown")
 
 // ErrUnknownProcess: no background process with that ID was started for
 // the sessions asking.

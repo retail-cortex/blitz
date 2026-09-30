@@ -20,6 +20,7 @@ go_library(
         "client.go",
         "convert.go",
         "processes.go",
+        "project.go",
         "workers.go",
     ],
     importpath = "github.com/retail-cortex/blitz/pkg/client",

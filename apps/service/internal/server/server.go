@@ -346,6 +346,7 @@ func toAPI(err error) error {
 		{api.ErrHashMismatch, connect.CodeFailedPrecondition, "HASH_MISMATCH"},
 		{api.ErrWorkerExists, connect.CodeAlreadyExists, "WORKER_EXISTS"},
 		{api.ErrUnknownProcess, connect.CodeNotFound, "UNKNOWN_PROCESS"},
+		{api.ErrProjectChanged, connect.CodeFailedPrecondition, "PROJECT_CHANGED"},
 	} {
 		if errors.Is(err, m.target) {
 			return apiError(m.code, m.reason, err)

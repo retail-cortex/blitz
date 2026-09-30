@@ -17,6 +17,7 @@ package skills
 import (
 	"fmt"
 	"path"
+	"path/filepath"
 	"regexp"
 	"slices"
 	"strings"
@@ -72,6 +73,9 @@ func Evaluate(s *Skill, p config.SkillPolicy) Evaluation {
 		ev.Hash = h
 	} else if len(s.Scripts) > 0 {
 		block("content can't be hashed: %v", err)
+	}
+	if root := untrustedRoot(s, p.UntrustedRoots); root != "" {
+		block("it's the project's (%s), whose settings aren't trusted: blitz trust", root)
 	}
 	if len(p.TrustedHashes) > 0 && !slices.Contains(p.TrustedHashes, ev.Hash) {
 		block("its content (%s) isn't in skills.policy.trusted_hashes", orNone(ev.Hash))
@@ -209,4 +213,18 @@ func orNone(s string) string {
 		return "none"
 	}
 	return s
+}
+
+// untrustedRoot is the root in roots that skill s lies in, or "".
+func untrustedRoot(s *Skill, roots []string) string {
+	dir := s.HostDir()
+	if dir == "" {
+		return ""
+	}
+	for _, r := range roots {
+		if rel, err := filepath.Rel(r, dir); err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			return r
+		}
+	}
+	return ""
 }

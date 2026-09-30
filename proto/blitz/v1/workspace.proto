@@ -136,6 +136,14 @@ service WorkspaceService {
   // in a client (!cmd), as user_shell.
   rpc AuditShell(AuditShellRequest) returns (AuditShellResponse);
 
+  // Returns the workspace's project settings (.blitz/settings.toml) and
+  // the trust decision for the part that runs code or loosens a policy.
+  rpc GetProjectSettings(GetProjectSettingsRequest) returns (GetProjectSettingsResponse);
+  // Records trusting or declining the project settings with the hash
+  // shown (PROJECT_CHANGED if they have changed since), and reopens the
+  // workspace so they take effect, unless a turn is running in it.
+  rpc TrustProject(TrustProjectRequest) returns (TrustProjectResponse);
+
   // Reads an image from the workspace for a prompt (IMAGES_DISABLED).
   rpc LoadImage(LoadImageRequest) returns (LoadImageResponse);
   // Stores image data (e.g. pasted) for a prompt (IMAGES_DISABLED).
@@ -910,6 +918,70 @@ message AuditShellRequest {
 
 // Response message for WorkspaceService.AuditShell.
 message AuditShellResponse {}
+
+// ProjectItem is one setting from a project file.
+message ProjectItem {
+  // The file, relative to the workspace.
+  string file = 1;
+  // deny, ask, blocked_path, limit, skill_policy, worker_limit (applied);
+  // hook, mcp, allow, writable, model, agent_model, worker_allow,
+  // skill_scripts (needing trust); setting (another key).
+  string kind = 2;
+  // The hook's event, the server's, agent's or skill's name, or the key.
+  string key = 3;
+  // The rule, command, path, model or number.
+  string value = 4;
+  // Why it was ignored: never, unknown, not_stricter, outside, provider,
+  // user_set.
+  string reason = 5;
+}
+
+// ProjectSettings are what a workspace's project files say.
+message ProjectSettings {
+  // The files found, relative to the workspace.
+  repeated string files = 1;
+  // The trust decision for the content as it is now: none, new, changed,
+  // trusted, declined.
+  string state = 2;
+  // Identifies the content needing trust; TrustProject takes it back.
+  string hash = 3;
+  // The settings needing trust are in force.
+  bool loaded = 4;
+  // In force without trust: they only tighten.
+  repeated ProjectItem applied = 5;
+  // Needing trust: they run code or loosen a policy.
+  repeated ProjectItem pending = 6;
+  // Not taken from a project, or changing nothing.
+  repeated ProjectItem ignored = 7;
+  // Files that couldn't be read.
+  repeated string problems = 8;
+}
+
+// Request message for WorkspaceService.GetProjectSettings.
+message GetProjectSettingsRequest {
+  string workspace = 1;
+}
+
+// Response message for WorkspaceService.GetProjectSettings.
+message GetProjectSettingsResponse {
+  ProjectSettings settings = 1;
+}
+
+// Request message for WorkspaceService.TrustProject.
+message TrustProjectRequest {
+  string workspace = 1;
+  // The hash of the content shown.
+  string hash = 2;
+  // Trust it, or decline it.
+  bool trusted = 3;
+}
+
+// Response message for WorkspaceService.TrustProject.
+message TrustProjectResponse {
+  // The workspace was reopened with the decision; false when a turn was
+  // running in it: it applies the next time the workspace opens.
+  bool reopened = 1;
+}
 
 // Image is an image stored for a prompt.
 message Image {

@@ -1042,6 +1042,11 @@
     "tray.error.not_started": "El servicio no se inició en 15 s: consulta Abrir los registros",
     "tray.error.not_back": "El servicio no volvió en 15 s: consulta Abrir los registros",
     "tray.error.still_running": "El servicio sigue en ejecución después de 15 s",
-    "tray.error.no_app": "{name} no está instalado junto a la bandeja ni en el PATH"
+    "tray.error.no_app": "{name} no está instalado junto a la bandeja ni en el PATH",
+    "project.ignored_never": "{file}: un proyecto no puede definir {key} (las credenciales, los endpoints y aflojar el sandbox quedan en tu propia configuración); se ignora",
+    "project.ignored_unknown": "{file}: {key} no es una configuración de proyecto; se ignora",
+    "project.unreadable": "No se leyó la configuración del proyecto: {problem}",
+    "project.local_tracked": "{path} está en git: debería quedar como personal",
+    "project.trust_workspace_deprecated": "blitz.trust_workspace está obsoleto: confía en la configuración del proyecto en cada ejecución sin preguntar. Usa blitz trust"
   }
 }

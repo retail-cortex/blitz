@@ -1042,6 +1042,11 @@
     "tray.error.not_started": "Le service n’a pas démarré en 15 s : voir Ouvrir les journaux",
     "tray.error.not_back": "Le service n’est pas revenu en 15 s : voir Ouvrir les journaux",
     "tray.error.still_running": "Le service fonctionne encore après 15 s",
-    "tray.error.no_app": "{name} n’est pas installé à côté de la zone de notification ni dans le PATH"
+    "tray.error.no_app": "{name} n’est pas installé à côté de la zone de notification ni dans le PATH",
+    "project.ignored_never": "{file} : un projet ne peut pas définir {key} (les identifiants, les points de terminaison et l’assouplissement du bac à sable restent dans vos propres paramètres); ignoré",
+    "project.ignored_unknown": "{file} : {key} n’est pas un paramètre de projet; ignoré",
+    "project.unreadable": "Paramètres du projet non lus : {problem}",
+    "project.local_tracked": "{path} est suivi par git : il devrait rester personnel",
+    "project.trust_workspace_deprecated": "blitz.trust_workspace est obsolète : il fait confiance aux paramètres du projet à chaque exécution sans demander. Utilisez plutôt blitz trust"
   }
 }

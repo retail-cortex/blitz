@@ -79,6 +79,16 @@ type Config struct {
 	// (a "provider/" prefix is ignored). They win over the global
 	// temperature and max_tokens. Set with /model_settings.
 	ModelSettings map[string]ModelSettings `toml:"model_settings"`
+
+	// Dir is the settings directory this was loaded from ("" for none).
+	Dir string `toml:"-"`
+	// Project is what the workspace's project files say
+	// (.blitz/settings.toml), for LoadWorkspace; nil otherwise. Its tier
+	// A settings are applied; tier B only once trusted (ApplyTrusted).
+	Project *Project `toml:"-"`
+	// ProjectPermissions are the project files' rules, kept apart from
+	// the user's so they're listed as the project's.
+	ProjectPermissions PermissionsConfig `toml:"-"`
 }
 
 // BlitzConfig controls the core behaviour settings.
@@ -106,10 +116,10 @@ type BlitzConfig struct {
 	// anything: always (every prompt), agent-decides (it may choose to, with
 	// enter_plan_mode) or never (only in plan mode and /plan).
 	PlanReview string `toml:"plan_review"`
-	// TrustWorkspace allows agents and skills found inside the current
-	// workspace (./agents, ./skills, .agents/skills) to be loaded. Workspace
-	// content can inject prompts, so it is off by default and can only be
-	// enabled from trusted config or the --trust-workspace flag.
+	// TrustWorkspace is deprecated: it trusts the workspace's project
+	// settings (.blitz/settings.toml, its skills' scripts) as they are, for
+	// each run, without recording it. Use blitz trust instead. Only the
+	// user's own settings or --trust-workspace can set it.
 	TrustWorkspace bool `toml:"trust_workspace"`
 }
 
@@ -319,6 +329,9 @@ type SkillPolicy struct {
 	DenyTools []string `toml:"deny_tools"`
 	// Packages limits script dependencies.
 	Packages PackagePolicy `toml:"packages"`
+	// UntrustedRoots are directories whose skills' scripts don't run: the
+	// workspace, while its project settings aren't trusted.
+	UntrustedRoots []string `toml:"-"`
 }
 
 // Problems reports settings the policy can't honour as written.
@@ -650,6 +663,13 @@ func load(prefixDir, workspace string) (*Config, error) {
 	// Apply direct environment variable fallbacks if not populated
 	applyEnvOverrides(cfg)
 
+	cfg.Dir = dir
+	if workspace != "" {
+		if real, err := CanonicalWorkspace(workspace); err == nil {
+			cfg.Project = LoadProject(real)
+			cfg.Project.ApplyTightening(cfg)
+		}
+	}
 	return cfg, nil
 }
 
@@ -687,28 +707,25 @@ func IsWorkspaceRelative(p string) bool {
 }
 
 // SkillSearchPaths returns skill directories to scan, expanded, with
-// workspace-relative entries removed unless the workspace is trusted, and
-// otherwise resolved against workspace (the working directory if "").
+// workspace-relative entries resolved against workspace (the working
+// directory if ""). A project's skills load as prompt text; their scripts
+// run only once the project is trusted (spec_project_config_031).
 func (c *Config) SkillSearchPaths(workspace string) []string {
-	return filterTrusted(c.Skills.Paths, c.Blitz.TrustWorkspace, workspace)
+	return resolvePaths(c.Skills.Paths, workspace)
 }
 
 // AgentSearchPaths returns directories to scan for user-defined agents,
 // resolved like SkillSearchPaths.
 func (c *Config) AgentSearchPaths(workspace string) []string {
-	return filterTrusted([]string{"~/.blitz/agents", "./agents"}, c.Blitz.TrustWorkspace, workspace)
+	return resolvePaths([]string{"~/.blitz/agents", "./agents"}, workspace)
 }
 
-func filterTrusted(paths []string, trustWorkspace bool, workspace string) []string {
+func resolvePaths(paths []string, workspace string) []string {
 	out := make([]string, 0, len(paths))
 	for _, p := range paths {
-		rel := IsWorkspaceRelative(p)
-		switch {
-		case rel && !trustWorkspace:
-			continue
-		case rel && workspace != "":
+		if IsWorkspaceRelative(p) && workspace != "" {
 			out = append(out, filepath.Join(workspace, p))
-		default:
+		} else {
 			out = append(out, ExpandHome(p))
 		}
 	}

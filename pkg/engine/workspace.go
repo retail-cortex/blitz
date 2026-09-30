@@ -28,6 +28,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/retail-cortex/blitz/pkg/api"
 	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/engine/agents"
 	"github.com/retail-cortex/blitz/pkg/engine/audit"
@@ -58,6 +59,9 @@ type Options struct {
 	// NewModel builds models by name for /model, pins and agents' own
 	// models (nil: runtime.NewModel).
 	NewModel func(ctx context.Context, cfg *config.Config, name string) (model.LLM, error)
+	// TrustProject loads the project settings that need trust for this
+	// run, without recording a decision (--trust-project).
+	TrustProject bool
 }
 
 // Workspace is one open project: everything a session needs.
@@ -71,6 +75,8 @@ type Workspace struct {
 	audit   *audit.Logger
 	memory  memory.Loaded
 	locales *i18n.Bundle
+	// project are the project settings as the workspace opened.
+	project api.ProjectSettings
 	// modelErr is set when the configured model failed to initialise;
 	// modelMu guards it (the service reloads and retries concurrently).
 	modelErr error
@@ -181,6 +187,12 @@ func Open(ctx context.Context, cfg *config.Config, o Options) (*Workspace, error
 			o.Warn(p)
 		}
 	}
+
+	// Before the tools: they start the hooks and MCP servers.
+	if cfg.Blitz.TrustWorkspace {
+		o.Warn(i18n.T("project.trust_workspace_deprecated"))
+	}
+	w.loadProject(cfg, o.TrustProject || cfg.Blitz.TrustWorkspace, o.Warn)
 
 	if w.tools, err = tools.NewRegistry(cfg, w.agents, w.skills); err != nil {
 		return nil, fmt.Errorf("failed to initialize tools: %w", err)

@@ -61,6 +61,7 @@ var ruleKinds = []string{RuleShell, RuleRead, RuleWrite, RuleDelete, RuleWeb, Ru
 // Rule sources, as PermissionRule.Source says.
 const (
 	SourceConfig  = "config"   // the settings files, global and the workspace's
+	SourceProject = "project"  // the workspace's project files (.blitz/settings.toml)
 	SourceBuiltIn = "built-in" // [permissions] read_only_defaults
 	SourceFlag    = "flag"     // --allow, --deny
 	SourceSession = "session"  // added for this session
@@ -275,6 +276,17 @@ func (p *PermissionRules) addConfigured(cfg config.PermissionsConfig, source str
 		}
 		for _, g := range config.ReadOnlyGuards {
 			errs = append(errs, p.Add(EffectAsk, RuleShell+"("+g+")", SourceBuiltIn))
+		}
+	}
+	return errors.Join(errs...)
+}
+
+// addProject adds the project files' rules (SourceProject).
+func (p *PermissionRules) addProject(cfg config.PermissionsConfig) error {
+	var errs []error
+	for effect, list := range map[Effect][]string{EffectAllow: cfg.Allow, EffectAsk: cfg.Ask, EffectDeny: cfg.Deny} {
+		for _, text := range list {
+			errs = append(errs, p.Add(effect, text, SourceProject))
 		}
 	}
 	return errors.Join(errs...)

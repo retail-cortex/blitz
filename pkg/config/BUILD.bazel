@@ -24,8 +24,10 @@ go_library(
         "locale.go",
         "modelsettings.go",
         "permissions.go",
+        "project.go",
         "providers.go",
         "reference.go",
+        "trust.go",
     ],
     embedsrcs = [
         "config.go",
@@ -51,6 +53,7 @@ go_test(
         "locale_test.go",
         "modelsettings_test.go",
         "pricing_test.go",
+        "project_test.go",
         "providers_test.go",
         "reference_test.go",
     ],

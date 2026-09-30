@@ -638,3 +638,24 @@ func saveScope(save bool, scope string) api.Scope {
 	}
 	return api.ScopeGlobal
 }
+
+func (h workspaceService) GetProjectSettings(ctx context.Context, r req[pb.GetProjectSettingsRequest]) (*connect.Response[pb.GetProjectSettingsResponse], error) {
+	w, err := h.s.workspace(ctx, r.Msg.Workspace)
+	if err != nil {
+		return nil, err
+	}
+	return ok(&pb.GetProjectSettingsResponse{Settings: projectMsg(w.ProjectSettings())})
+}
+
+func (h workspaceService) TrustProject(ctx context.Context, r req[pb.TrustProjectRequest]) (*connect.Response[pb.TrustProjectResponse], error) {
+	w, err := h.s.workspace(ctx, r.Msg.Workspace)
+	if err != nil {
+		return nil, err
+	}
+	if err := w.TrustProject(r.Msg.Hash, r.Msg.Trusted); err != nil {
+		return nil, toAPI(err)
+	}
+	// Reopened on the next call, with the decision.
+	reopened := h.s.closeWorkspace(r.Msg.Workspace) == nil
+	return ok(&pb.TrustProjectResponse{Reopened: reopened})
+}

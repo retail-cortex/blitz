@@ -85,6 +85,9 @@ func NewRegistry(cfg *config.Config, agentReg *agents.Registry, skillProv *skill
 	if err != nil {
 		return nil, fmt.Errorf("[permissions]: %w", err)
 	}
+	if err := rules.addProject(cfg.ProjectPermissions); err != nil {
+		return nil, fmt.Errorf("the project's [permissions]: %w", err)
+	}
 	// deny read(...) rules are blocked paths: the file tools and the OS
 	// sandbox hide them from then on.
 	blocked := append(slices.Clone(sb.BlockedPaths), rules.Patterns(RuleRead, EffectDeny)...)
