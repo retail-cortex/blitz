@@ -32,11 +32,47 @@ interface Catalog {
 }
 
 const catalogs: Catalog[] = [enUS, es, frCA];
-const byTag = new Map(catalogs.map((c) => [c.meta.locale.toLowerCase(), c]));
+let byTag = new Map(catalogs.map((c) => [c.meta.locale.toLowerCase(), c]));
 const english = enUS as Catalog;
 
+const listLanguages = () => catalogs.map((c) => ({ tag: c.meta.locale, name: c.meta.name, english: c.meta.english_name || c.meta.name }));
+
 /** The languages the window can show, for the setting. */
-export const languages = catalogs.map((c) => ({ tag: c.meta.locale, name: c.meta.name, english: c.meta.english_name }));
+export let languages = listLanguages();
+
+// The terminal's language setting ([ui] locale), which System tries
+// before the system's own (BL-DSK-41).
+let settingsLanguage = "";
+let lastPref = "system";
+
+/**
+ * Takes the user's settings from the service: their [ui] locale, which
+ * System follows, and their own catalogs (~/.blitz/locales), which add
+ * languages or override the built-in translations, as in the terminal.
+ */
+export function applyUserLanguage(locale: string, userCatalogs: readonly string[]) {
+  for (const raw of userCatalogs) {
+    let c: Catalog;
+    try {
+      c = JSON.parse(raw) as Catalog;
+    } catch {
+      continue;
+    }
+    if (!c?.meta?.locale || !c.messages || typeof c.messages !== "object") continue;
+    const known = byTag.get(c.meta.locale.toLowerCase());
+    if (known) {
+      known.messages = { ...known.messages, ...c.messages };
+      if (c.meta.name) known.meta = { ...known.meta, name: c.meta.name };
+    } else {
+      catalogs.push({ meta: { locale: c.meta.locale, name: c.meta.name || c.meta.locale, english_name: c.meta.english_name || c.meta.locale }, messages: { ...c.messages } });
+    }
+  }
+  byTag = new Map(catalogs.map((c) => [c.meta.locale.toLowerCase(), c]));
+  languages = listLanguages();
+  settingsLanguage = locale;
+  current = "";
+  setLanguage(lastPref);
+}
 
 /** The pseudo-locale: English, accented and bracketed, to spot text that isn't in a catalog. */
 export const pseudoLocale = "en-XA";
@@ -70,9 +106,14 @@ let current = "en-US";
 let lookup = chain(current);
 const listeners = new Set<() => void>();
 
-/** Shows the window in tag's language ("system" follows the system). */
+/**
+ * Shows the window in tag's language ("system" follows the terminal's
+ * language setting when there is one, else the system's).
+ */
 export function setLanguage(pref: string) {
-  const next = resolveLanguage(pref, typeof navigator === "undefined" ? [] : navigator.languages ?? [navigator.language]);
+  lastPref = pref;
+  const system = typeof navigator === "undefined" ? [] : [...(navigator.languages ?? [navigator.language])];
+  const next = resolveLanguage(pref, settingsLanguage ? [settingsLanguage, ...system] : system);
   if (next === current) return;
   current = next;
   lookup = chain(next === pseudoLocale ? "en-US" : next);

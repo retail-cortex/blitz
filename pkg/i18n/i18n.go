@@ -126,6 +126,21 @@ func NewBundle(dirs ...string) (*Bundle, []error) {
 	return b, errs
 }
 
+// CheckCatalog reports why data isn't a catalog a Bundle would load.
+func CheckCatalog(data []byte) error {
+	var c Catalog
+	if err := json.Unmarshal(data, &c); err != nil {
+		return err
+	}
+	if _, err := language.Parse(c.Meta.Locale); err != nil {
+		return fmt.Errorf("invalid meta.locale %q: %w", c.Meta.Locale, err)
+	}
+	if len(c.Messages) == 0 {
+		return errors.New("catalog has no messages")
+	}
+	return nil
+}
+
 func (b *Bundle) add(data []byte, source string) error {
 	var c Catalog
 	if err := json.Unmarshal(data, &c); err != nil {

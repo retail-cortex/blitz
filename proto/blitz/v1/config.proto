@@ -67,6 +67,22 @@ service ConfigService {
   // Every setting a settings file can have, with its type, default and
   // description (from the settings' doc comments).
   rpc GetSettingsReference(GetSettingsReferenceRequest) returns (GetSettingsReferenceResponse);
+  // The interface language the user's settings name ([ui] locale; empty
+  // when they don't), and their own catalogs ([ui] locales_dir): the
+  // desktop app's System language follows them.
+  rpc GetInterfaceLanguage(GetInterfaceLanguageRequest) returns (GetInterfaceLanguageResponse);
+}
+
+// Request message for ConfigService.GetInterfaceLanguage.
+message GetInterfaceLanguageRequest {}
+
+// Response message for ConfigService.GetInterfaceLanguage.
+message GetInterfaceLanguageResponse {
+  // A language tag, or empty when the settings don't set one.
+  string locale = 1;
+  // The user's catalogs, each a catalog file's JSON (checked, as the
+  // terminal loads them).
+  repeated string catalogs = 2;
 }
 
 // KeySource says where a provider's API key comes from.

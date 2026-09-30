@@ -18,12 +18,12 @@ import { useCallback, useEffect, useState } from "react";
 import { InboxButton } from "./RunsInbox";
 import { watchWorkerFailures } from "./workerFailures";
 import { mdiAlertOutline, mdiCogOutline, mdiFolderOpenOutline, mdiLightningBolt, mdiServerOff } from "@mdi/js";
-import { onServiceLost, workspaces as workspaceAPI } from "./api";
+import { config as configAPI, onServiceLost, workspaces as workspaceAPI } from "./api";
 import { appVersion, chooseWorkspace, type LicenseText, installService, onDeepLink, onNotificationOpen, restartService, serviceStatus, type ServiceStatus, toggleFullscreen } from "./desktop";
 import { checkService, type ServiceCheck } from "./serviceVersion";
 import { CommandPalette } from "./CommandPalette";
 import { ErrorBoundary } from "./ErrorBoundary";
-import { t, useLanguage } from "./i18n";
+import { applyUserLanguage, t, useLanguage } from "./i18n";
 import { message, reason } from "./errors";
 import { compose, showLicenseEvent } from "./events";
 import { UnsavedDialog } from "./files/EditorPane";
@@ -153,6 +153,14 @@ function Shell() {
   const [confirmClose, setConfirmClose] = useState<string | null>(null);
   const snack = useSnackbar();
   const { service, error, check, setError } = useServiceStatus();
+  // The terminal's language setting and the user's catalogs (BL-DSK-41).
+  useEffect(() => {
+    if (service.state !== "up") return;
+    configAPI
+      .getInterfaceLanguage({})
+      .then((r) => applyUserLanguage(r.locale, r.catalogs))
+      .catch(() => {}); // an older service: the system's language
+  }, [service.state]);
   // The open workspaces' failed worker runs, for their badges (BL-WK-11).
   const seen = JSON.stringify(openWorkspaces(prefs).map((w) => [w.dir, w.workers_seen ?? 0]));
   useEffect(() => {

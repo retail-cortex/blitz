@@ -17,10 +17,15 @@ package server
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
 
 	"connectrpc.com/connect"
+	"github.com/BurntSushi/toml"
 	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/engine/tools"
+	"github.com/retail-cortex/blitz/pkg/i18n"
 	pb "github.com/retail-cortex/blitz/proto/blitz/v1"
 )
 
@@ -300,4 +305,45 @@ func (h configService) GetSettingsReference(context.Context, req[pb.GetSettingsR
 		out = append(out, &pb.SettingInfo{Key: s.Key, Type: s.Type, Default: s.Default, Doc: s.Doc})
 	}
 	return ok(&pb.GetSettingsReferenceResponse{Settings: out})
+}
+
+// userCatalogLimit bounds a user catalog sent to the page, and
+// userCatalogs how many are.
+const (
+	userCatalogLimit = 1 << 20
+	userCatalogs     = 20
+)
+
+// GetInterfaceLanguage gives the desktop app the terminal's language
+// setting and the user's catalogs (BL-DSK-41).
+func (h configService) GetInterfaceLanguage(_ context.Context, _ req[pb.GetInterfaceLanguageRequest]) (*connect.Response[pb.GetInterfaceLanguageResponse], error) {
+	cfg, err := config.Load(h.s.configDir)
+	if err != nil {
+		return nil, invalid(err)
+	}
+	res := &pb.GetInterfaceLanguageResponse{}
+	var set struct {
+		UI struct {
+			Locale *string `toml:"locale"`
+		} `toml:"ui"`
+	}
+	if _, err := toml.DecodeFile(filepath.Join(config.ConfigDir(h.s.configDir), ".env.toml"), &set); err == nil && set.UI.Locale != nil {
+		res.Locale = strings.TrimSpace(*set.UI.Locale)
+	}
+	dir := config.ExpandHome(cfg.UI.LocalesDir)
+	files, _ := os.ReadDir(dir)
+	for _, f := range files {
+		if len(res.Catalogs) == userCatalogs {
+			break
+		}
+		if f.IsDir() || !strings.HasSuffix(f.Name(), ".json") {
+			continue
+		}
+		data, err := os.ReadFile(filepath.Join(dir, f.Name()))
+		if err != nil || len(data) > userCatalogLimit || i18n.CheckCatalog(data) != nil {
+			continue // the terminal warns about it
+		}
+		res.Catalogs = append(res.Catalogs, string(data))
+	}
+	return ok(res)
 }

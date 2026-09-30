@@ -18,6 +18,8 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"connectrpc.com/connect"
@@ -218,4 +220,28 @@ func entryStrings(es []*pb.PermissionEntry) []string {
 		out = append(out, e.Effect+" "+e.Rule)
 	}
 	return out
+}
+
+// The desktop app's System language follows the terminal's setting, with
+// the user's catalogs (BL-DSK-41).
+func TestGetInterfaceLanguage(t *testing.T) {
+	_, s := serve(t, nil)
+	srv := httptest.NewServer(s.Handler())
+	t.Cleanup(srv.Close)
+	cc := pb.NewConfigServiceClient(http.DefaultClient, srv.URL)
+	res, err := cc.GetInterfaceLanguage(context.Background(), connect.NewRequest(&pb.GetInterfaceLanguageRequest{}))
+	require.NoError(t, err)
+	assert.Empty(t, res.Msg.Locale, "unset")
+	assert.Empty(t, res.Msg.Catalogs)
+
+	home := os.Getenv("HOME")
+	require.NoError(t, os.MkdirAll(filepath.Join(home, ".blitz", "locales"), 0o700))
+	require.NoError(t, os.WriteFile(filepath.Join(home, ".blitz", ".env.toml"), []byte("[ui]\nlocale = \"de\"\n"), 0o600))
+	de := `{"meta":{"locale":"de"},"messages":{"desktop.settings":"Einstellungen"}}`
+	require.NoError(t, os.WriteFile(filepath.Join(home, ".blitz", "locales", "de.json"), []byte(de), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(home, ".blitz", "locales", "broken.json"), []byte("{"), 0o600))
+	res, err = cc.GetInterfaceLanguage(context.Background(), connect.NewRequest(&pb.GetInterfaceLanguageRequest{}))
+	require.NoError(t, err)
+	assert.Equal(t, "de", res.Msg.Locale)
+	assert.Equal(t, []string{de}, res.Msg.Catalogs, "a broken catalog is left out")
 }

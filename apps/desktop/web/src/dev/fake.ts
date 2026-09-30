@@ -613,6 +613,7 @@ export function installFake() {
         }),
       });
       service(ConfigService, {
+        getInterfaceLanguage: () => ({ locale: "", catalogs: [] }),
         describeConfig: ({ workspace }) => {
           const c = scopeConfig(workspace);
           return {
