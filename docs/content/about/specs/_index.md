@@ -42,5 +42,6 @@ Files are named `spec_<name>_NNN.md`, where `NNN` is the order of execution: eac
 | 030 | [release readiness](spec_release_readiness_030.md) | Licensing, headers and notices; comments; specs, docs site, README, contributing and owners |
 | 031 | [project configuration](spec_project_config_031.md) | `.blitz/settings.toml` in a workspace: tiers of what applies at once, after hash-pinned trust, or never |
 | 032 | [background sub-agents](spec_background_agents_032.md) | `invoke_agent` in the background: tasks, their tools, results, the task view and approvals |
+| 033 | [plugins](spec_plugins_033.md) | Bundles of skills, commands, agents, hooks and MCP servers: installing, pinning by hash, marketplaces, importing Claude Code and Gemini CLI plugins |
 
 Background and history: [the roadmap](../roadmap.md), [where to pick up](../../development/next-steps.md), [development](../../development/_index.md).

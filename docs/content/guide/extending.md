@@ -130,3 +130,40 @@ Fix issue #$1: read it with `gh issue view $1`, find the cause, fix it and add a
 ```
 
 `/review`, `/security-review` (both read-only), `/simplify` and `/verify` are bundled, and every skill is a command too. Built-in commands win name clashes; `/help` lists the custom ones.
+
+## Plugins
+
+A plugin bundles skills, commands, agents, hooks and MCP servers in one directory with a `plugin.toml`:
+
+```text
+lint-kit/
+  plugin.toml          # name = "lint-kit", version = "1.2.0", description = "…"
+  skills/lint/SKILL.md
+  commands/fix-lint.md
+  agents/linter.md
+  hooks.toml           # [[post_tool]] … as [hooks]; ${BLITZ_PLUGIN_ROOT} is the plugin's folder
+  mcp.toml             # [[servers]] … as [mcp]
+```
+
+```sh
+blitz plugin install ./lint-kit                    # or a .zip, an https URL, a git repo, or a name from a marketplace
+blitz plugin list
+blitz plugin disable lint-kit                      # enable, remove, update [name]
+blitz plugin marketplace add https://example.com/marketplace.toml
+blitz plugin install lint-kit@acme
+blitz --plugin-dir ./lint-kit "try it"             # load one for a run, without installing
+blitz plugin import claude ~/src/some-claude-plugin    # or: import gemini <extension>
+```
+
+Installing shows everything the plugin adds, and hooks and MCP commands first, because they run code on your machine; it asks before going ahead (`--yes` skips the question). Blitz records a hash of the installed files and won't load a plugin whose files changed afterwards: `blitz plugin update` fetches it again. A marketplace lists each plugin with its hash, and a plugin that doesn't match isn't installed.
+
+Plugins you enable load in every workspace. A project can turn some off, or on once you trust its settings:
+
+```toml
+# .blitz/settings.toml
+[plugins]
+enable  = ["lint-kit"]   # needs trust
+disable = ["noisy-kit"]
+```
+
+The importers convert what maps from Claude Code plugins and Gemini CLI extensions (commands, skills, agents, hooks, MCP servers) and list what they couldn't. See the [plugins spec](../about/specs/spec_plugins_033.md).

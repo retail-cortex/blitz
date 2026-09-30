@@ -7,7 +7,7 @@ weight: 27
 
 | | |
 |---|---|
-| Status | **Partly implemented:** 63 of its 99 requirements done and 1 in part (counted 2026-09-30); the rest open. A gap analysis of 2026-09-26, to be closed before new features are added. |
+| Status | **Partly implemented:** 67 of its 99 requirements done and 1 in part (counted 2026-09-30); the rest open. A gap analysis of 2026-09-26, to be closed before new features are added. |
 | Compared with | **Claude Code** (current docs at code.claude.com, September 2026: v2.1.28x); **Antigravity CLI** (`agy` 1.1–1.2, September 2026); **Antigravity** 2.0 (Google's agent-first IDE and Agent Manager) |
 | Depends on | Specs 001–025 (what Blitz does today) and [spec_backlog_026](spec_backlog_026.md) (Blitz's own gaps; overlapping items are referenced, not repeated) |
 
@@ -165,10 +165,10 @@ Decision §12.2. **CC** `/cd <path>` (June 2026) moves the session to another di
 
 ### 7.2 Plugins — P1, L
 **CC** plugins bundling skills, agents, hooks, MCP servers, output styles; marketplaces (`marketplace.json`), `/plugin install|list|enable|disable`, `--plugin-dir`, dependencies, trust review. **AGY** plugins, `agy plugin import gemini`. **Blitz today:** none.
-- **PAR-PLG-01** A plugin is a directory (or `.zip`) with `plugin.toml` (name, version, description, components) holding any of `skills/`, `commands/`, `agents/`, `hooks.toml`, `mcp.toml`, `styles/`. Installed under `~/.blitz/plugins/<name>/<version>`, pinned by content hash (the worker/skill model), enabled per user or per workspace.
-- **PAR-PLG-02** `blitz plugin install <path|url|git>`, `list`, `enable`, `disable`, `remove`, `update`; installing shows exactly what the plugin adds (hooks and MCP commands run code) and needs confirmation; `--plugin-dir` loads one for a run.
-- **PAR-PLG-03** Marketplaces: a `marketplace.toml` index (URL or git repo) listing plugins with versions and hashes; `blitz plugin marketplace add <url>`.
-- **PAR-PLG-04** Importers: `blitz plugin import claude <dir>` and `import gemini` convert Claude Code / Gemini CLI configuration (commands, skills, agents, hooks, MCP servers) where the formats map, reporting what didn't.
+- **PAR-PLG-01** ✅ *Done 2026-09-30 ([spec_plugins_033](spec_plugins_033.md) PLG-01, -02, -20..23).* A plugin is a directory (or `.zip`) with `plugin.toml` (name, version, description, components) holding any of `skills/`, `commands/`, `agents/`, `hooks.toml`, `mcp.toml`, `styles/`. Installed under `~/.blitz/plugins/<name>/<version>`, pinned by content hash (the worker/skill model), enabled per user or per workspace.
+- **PAR-PLG-02** ✅ *Done 2026-09-30 ([spec_plugins_033](spec_plugins_033.md) PLG-10..12, -20).* `blitz plugin install <path|url|git>`, `list`, `enable`, `disable`, `remove`, `update`; installing shows exactly what the plugin adds (hooks and MCP commands run code) and needs confirmation; `--plugin-dir` loads one for a run.
+- **PAR-PLG-03** ✅ *Done 2026-09-30 ([spec_plugins_033](spec_plugins_033.md) PLG-30..32).* Marketplaces: a `marketplace.toml` index (URL or git repo) listing plugins with versions and hashes; `blitz plugin marketplace add <url>`.
+- **PAR-PLG-04** ✅ *Done 2026-09-30 ([spec_plugins_033](spec_plugins_033.md) PLG-40..42).* Importers: `blitz plugin import claude <dir>` and `import gemini` convert Claude Code / Gemini CLI configuration (commands, skills, agents, hooks, MCP servers) where the formats map, reporting what didn't.
 
 ## 8. Parallel work
 
