@@ -82,7 +82,7 @@ Suggested order (from NEXT_STEPS): run the manual checks (§9) first — their f
 ### 5.3 Worker run notifications — S
 **Extends** [spec_workers_023](spec_workers_023.md). Scheduled runs are unattended and silent; a failed or limited run is only visible with `blitz workers runs`.
 - **BL-WK-10** ✅ *Done 2026-09-30 ([spec_workers_023](spec_workers_023.md) WK-56).* Optional `[workers] notify` command (like a hook: JSON run record on stdin, outside the sandbox, trusted config) runs after every scheduled run whose status is in `notify_on` (default `failed`, `limited`).
-- **BL-WK-11** The desktop app shows a badge on a workspace tab with unseen failed runs.
+- **BL-WK-11** ✅ *Done 2026-09-30 ([spec_desktop_024](spec_desktop_024.md) DSK-80c): the dropdown's workspace row, since the app has no tabs.* The desktop app shows a badge on a workspace tab with unseen failed runs.
 
 ### 5.4 Session metadata written twice — S
 **Extends** [spec_workers_023](spec_workers_023.md), [spec_sessions_017](spec_sessions_017.md). *Source: ROADMAP 24c.* With telemetry on, the workspace's and the run's session storage may both write a run session's metadata (`last_turn`).
