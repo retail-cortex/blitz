@@ -1,0 +1,127 @@
+# Copyright 2026 Retail Cortex
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# Blitz in GitHub Actions (spec_parity_027 PAR-INT-01): answer "@blitz"
+# mentions in issues and pull requests, review pull requests, or turn an
+# issue into a pull request. See docs/content/guide/github-action.md.
+name: Blitz
+description: Run the Blitz coding agent on issues and pull requests
+branding:
+  icon: zap
+  color: yellow
+
+inputs:
+  mode:
+    description: "auto (answer a mention of the trigger phrase), review (review the pull request) or issue-to-pr (implement the issue in a pull request)"
+    default: auto
+  trigger-phrase:
+    description: What a comment must contain to start a run (auto mode)
+    default: "@blitz"
+  prompt:
+    description: A prompt to use instead of the one made from the event
+    default: ""
+  model:
+    description: The model, "provider/model" (default the provider's)
+    default: ""
+  gemini-api-key:
+    description: A Gemini API key (pass a secret)
+    default: ""
+  anthropic-api-key:
+    description: An Anthropic API key (pass a secret)
+    default: ""
+  openai-api-key:
+    description: An OpenAI API key (pass a secret)
+    default: ""
+  allow:
+    description: "Permission rules to allow, one per line, such as shell(go test ./...)"
+    default: ""
+  max-cost-usd:
+    description: Stop once the run has cost more than this
+    default: "2"
+  timeout:
+    description: Stop after this long
+    default: "20m"
+  max-turns:
+    description: Stop after this many model calls
+    default: "60"
+  version:
+    description: The Blitz release to use (default the latest)
+    default: ""
+  github-token:
+    description: The token to comment and open pull requests with
+    default: ${{ github.token }}
+
+outputs:
+  result:
+    description: The agent's answer
+    value: ${{ steps.run.outputs.result }}
+
+runs:
+  using: composite
+  steps:
+    - id: decide
+      shell: bash
+      env:
+        MODE: ${{ inputs.mode }}
+        TRIGGER: ${{ inputs.trigger-phrase }}
+      run: |
+        "$GITHUB_ACTION_PATH/blitz-action.sh" decide | tee -a "$GITHUB_OUTPUT"
+    - if: steps.decide.outputs.run == 'true'
+      uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+      with:
+        cosign-release: v2.6.1
+    - if: steps.decide.outputs.run == 'true'
+      shell: bash
+      env:
+        BLITZ_VERSION: ${{ inputs.version }}
+        BLITZ_REQUIRE_SIGNATURE: "1"
+        BLITZ_BIN: ${{ runner.temp }}/blitz-bin
+      run: |
+        sh "$GITHUB_ACTION_PATH/../release/install.sh"
+        echo "$BLITZ_BIN" >> "$GITHUB_PATH"
+    - if: steps.decide.outputs.run == 'true'
+      id: run
+      shell: bash
+      env:
+        MODE: ${{ inputs.mode }}
+        PROMPT: ${{ inputs.prompt }}
+        GEMINI_API_KEY: ${{ inputs.gemini-api-key }}
+        ANTHROPIC_API_KEY: ${{ inputs.anthropic-api-key }}
+        OPENAI_API_KEY: ${{ inputs.openai-api-key }}
+        ALLOW: ${{ inputs.allow }}
+        MODEL: ${{ inputs.model }}
+      run: |
+        git fetch --quiet --no-tags origin "+refs/heads/*:refs/remotes/origin/*" || true
+        prompt="$("$GITHUB_ACTION_PATH/blitz-action.sh" prompt)"
+        args=(exec --output-format json --no-session-persistence
+              --max-cost-usd "${{ inputs.max-cost-usd }}" --timeout "${{ inputs.timeout }}" --max-turns "${{ inputs.max-turns }}")
+        if [ "$MODE" = issue-to-pr ]; then args+=(--permission-mode accept-edits); else args+=(--permission-mode dont-ask); fi
+        [ -n "$MODEL" ] && args+=(--model "$MODEL")
+        while IFS= read -r rule; do [ -n "$rule" ] && args+=(--allow "$rule"); done <<< "$ALLOW"
+        if [ -z "$GEMINI_API_KEY$ANTHROPIC_API_KEY$OPENAI_API_KEY" ]; then echo "::error::Give the action a model API key"; exit 1; fi
+        [ -z "$GEMINI_API_KEY" ] && [ -n "$ANTHROPIC_API_KEY" ] && export LLM_PROVIDER=anthropic
+        [ -z "$GEMINI_API_KEY$ANTHROPIC_API_KEY" ] && export LLM_PROVIDER=openai
+        blitz "${args[@]}" "$prompt" < /dev/null > "$RUNNER_TEMP/blitz-result.json" || true
+        {
+          echo "result<<BLITZ_RESULT_EOF"
+          jq -r '.result // ""' "$RUNNER_TEMP/blitz-result.json"
+          echo "BLITZ_RESULT_EOF"
+        } >> "$GITHUB_OUTPUT"
+    - if: steps.decide.outputs.run == 'true'
+      shell: bash
+      env:
+        MODE: ${{ inputs.mode }}
+        GH_TOKEN: ${{ inputs.github-token }}
+      run: |
+        "$GITHUB_ACTION_PATH/blitz-action.sh" post "$RUNNER_TEMP/blitz-result.json"
