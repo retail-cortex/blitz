@@ -7,7 +7,7 @@ weight: 27
 
 | | |
 |---|---|
-| Status | **Partly implemented:** 45 of its 99 requirements done and 1 in part (counted 2026-09-30); the rest open. A gap analysis of 2026-09-26, to be closed before new features are added. |
+| Status | **Partly implemented:** 51 of its 99 requirements done and 1 in part (counted 2026-09-30); the rest open. A gap analysis of 2026-09-26, to be closed before new features are added. |
 | Compared with | **Claude Code** (current docs at code.claude.com, September 2026: v2.1.28x); **Antigravity CLI** (`agy` 1.1–1.2, September 2026); **Antigravity** 2.0 (Google's agent-first IDE and Agent Manager) |
 | Depends on | Specs 001–025 (what Blitz does today) and [spec_backlog_026](spec_backlog_026.md) (Blitz's own gaps; overlapping items are referenced, not repeated) |
 
@@ -135,12 +135,12 @@ Decision §12.2. **CC** `/cd <path>` (June 2026) moves the session to another di
 
 ### 5.4 MCP completeness — P1, M
 **CC** `claude mcp add/list/remove/get`, project `.mcp.json`, `--mcp-config`, OAuth (`claude mcp login`), resources (`ListMcpResources`, `ReadMcpResource`), prompts as slash commands, elicitation, tool search for large tool sets, SSE and HTTP transports. **AGY** `agy mcp add/remove/list/enable/disable`, `.agents/mcp_config.json`. **Blitz today:** stdio and streamable-HTTP servers from `[[mcp.servers]]` in config ([spec_mcp_009](spec_mcp_009.md)).
-- **PAR-MCP-01** `blitz mcp add <name> <command…|url> [--env K=V] [--header K:V] [--prefix p] [--agents a,b]`, `list`, `get`, `remove`, `enable`, `disable`, editing `~/.blitz/.env.toml` in place (CFG-20).
-- **PAR-MCP-02** Resources: tools `list_mcp_resources(server?)` and `read_mcp_resource(server, uri)` (read-only, allowed in plan mode, subject to the server's approval rules), and `@server:uri` mentions in prompts.
-- **PAR-MCP-03** Prompts: each server prompt is a slash command `/mcp__<server>__<prompt> [args]`, completed in the REPL.
-- **PAR-MCP-04** OAuth for HTTP servers: `blitz mcp login <name>` runs the authorization-code flow with PKCE via a local callback (or a pasted code over SSH), storing tokens in the OS keychain (file fallback, owner-only); tokens refresh automatically and are never shown to the model.
-- **PAR-MCP-05** Elicitation: a server's request for user input during a tool call is shown like `ask_user_question` (refused in unattended runs).
-- **PAR-MCP-06** Workspace MCP configuration (`.mcp.json` / `.agents/mcp_config.json`) follows the project-configuration trust rules (§2.4): servers that start a command need the workspace trusted.
+- **PAR-MCP-01** ✅ *Done 2026-09-30 ([spec_mcp_009](spec_mcp_009.md) MCP-03–04, MCP-34–38).* `blitz mcp add <name> <command…|url> [--env K=V] [--header K:V] [--prefix p] [--agents a,b]`, `list`, `get`, `remove`, `enable`, `disable`, editing `~/.blitz/.env.toml` in place (CFG-20).
+- **PAR-MCP-02** ✅ *Done 2026-09-30 ([spec_mcp_009](spec_mcp_009.md) MCP-03–04, MCP-34–38).* Resources: tools `list_mcp_resources(server?)` and `read_mcp_resource(server, uri)` (read-only, allowed in plan mode, subject to the server's approval rules), and `@server:uri` mentions in prompts.
+- **PAR-MCP-03** ✅ *Done 2026-09-30 ([spec_mcp_009](spec_mcp_009.md) MCP-03–04, MCP-34–38).* Prompts: each server prompt is a slash command `/mcp__<server>__<prompt> [args]`, completed in the REPL.
+- **PAR-MCP-04** ✅ *Done 2026-09-30 ([spec_mcp_009](spec_mcp_009.md) MCP-03–04, MCP-34–38).* OAuth for HTTP servers: `blitz mcp login <name>` runs the authorization-code flow with PKCE via a local callback (or a pasted code over SSH), storing tokens in the OS keychain (file fallback, owner-only); tokens refresh automatically and are never shown to the model.
+- **PAR-MCP-05** ✅ *Done 2026-09-30 ([spec_mcp_009](spec_mcp_009.md) MCP-03–04, MCP-34–38).* Elicitation: a server's request for user input during a tool call is shown like `ask_user_question` (refused in unattended runs).
+- **PAR-MCP-06** ✅ *Done 2026-09-30 ([spec_mcp_009](spec_mcp_009.md) MCP-03–04, MCP-34–38).* Workspace MCP configuration (`.mcp.json` / `.agents/mcp_config.json`) follows the project-configuration trust rules (§2.4): servers that start a command need the workspace trusted.
 
 ## 6. Hooks
 

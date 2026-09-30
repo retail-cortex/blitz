@@ -27,7 +27,27 @@ env     = { GITHUB_PERSONAL_ACCESS_TOKEN = "..." }
 # sandbox = true                    # stdio servers run in the OS sandbox
 # prefix = "gh"                     # expose tools as gh__create_issue
 # agents = ["blitz", "qa"]          # who gets these tools; default: the primary agent; "*": all
+# headers = { X-Team = "core" }     # sent to an HTTP server
+# disabled = true                   # keep it configured without starting it
 ```
+
+Or from the command line, which edits `~/.blitz/.env.toml` in place:
+
+```sh
+blitz mcp add github npx -y @modelcontextprotocol/server-github --env GITHUB_PERSONAL_ACCESS_TOKEN=...
+blitz mcp add docs https://mcp.example.com/mcp --header "X-Team: core"
+blitz mcp list | get <name> | remove <name> | enable <name> | disable <name>
+blitz mcp login docs    # sign in with OAuth, in a browser; blitz mcp logout docs forgets it
+```
+
+`blitz mcp login` registers Blitz with the server's authorization server, opens the sign-in page, and receives the answer on a local address; over SSH, open the printed address anywhere and paste the address the browser ends on. The tokens are kept in the OS keychain (or an owner-only file) and refreshed as they expire; the model never sees them.
+
+Besides tools, servers offer:
+- **resources**, which the agent lists and reads with `list_mcp_resources` and `read_mcp_resource` (allowed in plan mode, approved like the server's tools), and which you attach to a prompt with `@server:uri`;
+- **prompts**, each a slash command `/mcp__<server>__<prompt> [name=value …]` (arguments by name, or in order);
+- **questions** during a tool call (elicitation), which Blitz asks you as the agent's own questions; unattended runs decline them.
+
+A repository's `.mcp.json` (Claude Code's) and `.agents/mcp_config.json` (Antigravity's) are read as the project's MCP servers: like those of `.blitz/settings.toml`, they start only once you trust the project's settings.
 
 MCP tools need approval per server and tool unless `auto_approve = true`, and can't shadow built-in tools (`prefix` avoids clashes). Listing a server's tools times out after 30 seconds and each call after `timeout_seconds` (default 300). A stdio server that crashes is restarted on the next call. After two failures in a row a server is paused, its tools hidden from the model, for 15 seconds, doubling up to 5 minutes; then one trial call is let through.
 
