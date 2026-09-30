@@ -89,6 +89,8 @@ blitz --permission-mode dont-ask "…"    # refuse whatever would ask, instead o
 | `/pin_model`, `/unpin`, `/model_settings`, `/effort` | Per-agent models, per-model settings, reasoning effort ([models](../guide/models.md)) |
 | `/mode [name]`, `/permissions …` | Permission mode and rules ([safety](../guide/safety.md)) |
 | `/plan <goal>` | A plan for approval, without changing anything |
+| `/goal <condition>`, `/goal [clear]` | Keep the agent working until the condition holds, judged after each turn |
+| `/loop <interval> <prompt>`, `/loop [stop <n>]` | Send a prompt again every interval while the REPL stays open |
 | `/btw <question>` | A side question: answered with what the session knows, and not kept |
 | `/search web <terms>`, `/search session <terms>` | [Search](../guide/search.md) the web or this session |
 | `!<command>` | Run a command yourself, outside the agent's sandbox; the audit log records it |

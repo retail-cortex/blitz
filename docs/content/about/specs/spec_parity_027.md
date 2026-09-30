@@ -7,7 +7,7 @@ weight: 27
 
 | | |
 |---|---|
-| Status | **Partly implemented:** 67 of its 99 requirements done and 1 in part (counted 2026-09-30); the rest open. A gap analysis of 2026-09-26, to be closed before new features are added. |
+| Status | **Partly implemented:** 69 of its 99 requirements done and 1 in part (counted 2026-09-30); the rest open. A gap analysis of 2026-09-26, to be closed before new features are added. |
 | Compared with | **Claude Code** (current docs at code.claude.com, September 2026: v2.1.28x); **Antigravity CLI** (`agy` 1.1–1.2, September 2026); **Antigravity** 2.0 (Google's agent-first IDE and Agent Manager) |
 | Depends on | Specs 001–025 (what Blitz does today) and [spec_backlog_026](spec_backlog_026.md) (Blitz's own gaps; overlapping items are referenced, not repeated) |
 
@@ -100,8 +100,8 @@ The threat is real: Claude Code's project settings have had CVE-2025-59536 (hook
 
 ### 4.4 Goals and in-session loops — P1, S
 **CC** `/goal <condition>` (keep working until a condition holds, judged by a model), `/loop [interval] <prompt>` and in-session cron tools. **AGY** `/goal`, `/schedule`. **Blitz today:** agency levels; scheduled workers ([spec_workers_023](spec_workers_023.md)).
-- **PAR-SES-30** `/goal <condition>`: after each turn, a judge call checks the condition against the transcript; if unmet and not judged impossible, the agent continues automatically (bounded by `max_turns`/cost limits shown in the status); `/goal clear` stops.
-- **PAR-SES-31** `/loop <interval> <prompt>` re-runs a prompt in the session while it stays open (minimum 1 minute), `/loop` lists and `/loop stop <n>` stops; loops die with the session. Durable schedules remain workers.
+- **PAR-SES-30** ✅ *Done 2026-09-30 ([spec_sessions_017](spec_sessions_017.md) SES-19, [spec_tui_019](spec_tui_019.md) TUI-44). The desktop app has no `/goal` yet.* `/goal <condition>`: after each turn, a judge call checks the condition against the transcript; if unmet and not judged impossible, the agent continues automatically (bounded by `max_turns`/cost limits shown in the status); `/goal clear` stops.
+- **PAR-SES-31** ✅ *Done 2026-09-30 in the REPL ([spec_tui_019](spec_tui_019.md) TUI-45).* `/loop <interval> <prompt>` re-runs a prompt in the session while it stays open (minimum 1 minute), `/loop` lists and `/loop stop <n>` stops; loops die with the session. Durable schedules remain workers.
 
 ### 4.5 `/cd` — P1, M
 Decision §12.2. **CC** `/cd <path>` (June 2026) moves the session to another directory and asks to trust a new one. **Blitz today:** rejected; `blitz -d <dir>` at start.

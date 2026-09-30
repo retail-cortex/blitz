@@ -35,6 +35,7 @@ One TOML file, `.env.toml`, loaded through `github.com/rrmcguinness/modenv` (hie
 | | `temperature` / `max_tokens` | `0.2` / `8192` | global generation settings |
 | | `permission_mode` | `default` | `default\|accept-edits\|plan\|dont-ask\|bypass`; bypass needs the OS sandbox ([spec_approvals_005](spec_approvals_005.md) APR-14) |
 | | `auto_approve` | `false` | older spelling of `permission_mode = "bypass"` |
+| | `goal_max_continues` | 20 | how often a `/goal` sends the agent on before stopping ([spec_sessions_017](spec_sessions_017.md) SES-19) |
 | | `plan_review` | `agent-decides` | `always` (every prompt is planned for approval first), `agent-decides` (the agent may call `enter_plan_mode`), `never` ([spec_workspace_018](spec_workspace_018.md) WS-45) |
 | | `trust_workspace` | `false` | Deprecated: trusts the project's settings for each run (CFG-05) |
 | `[llm]` | `provider` | `gemini` | `gemini\|anthropic\|openai\|ollama` |
