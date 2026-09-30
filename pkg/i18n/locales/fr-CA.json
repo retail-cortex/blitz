@@ -1238,6 +1238,7 @@
     "desktop.inbox.state.done": "terminée",
     "desktop.inbox.state.failed": "échouée",
     "desktop.inbox.state.stopped": "arrêtée",
-    "desktop.approval.in_editor": "Voir dans l’éditeur"
+    "desktop.approval.in_editor": "Voir dans l’éditeur",
+    "cost.search": "Recherches web : {queries} requêtes, environ {cost} (en plus du coût des jetons)"
   }
 }

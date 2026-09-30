@@ -110,6 +110,19 @@ func (t *UsageTracker) RecordWrites(session, model string, m *genai.GenerateCont
 	return u
 }
 
+// RecordSearch adds web search queries, and what they cost, to session.
+func (t *UsageTracker) RecordSearch(session string, queries int, costUSD float64) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	s := t.sessions[session]
+	if s == nil {
+		s = &api.Usage{Priced: true}
+		t.sessions[session] = s
+	}
+	s.SearchQueries += queries
+	s.SearchCostUSD += costUSD
+}
+
 // Seed sets session's usage to u when it has none yet (usage saved before
 // a restart); it reports whether it did.
 func (t *UsageTracker) Seed(session string, u api.Usage) bool {

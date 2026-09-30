@@ -60,6 +60,7 @@ func usageMsg(u api.Usage) *pb.Usage {
 	return &pb.Usage{
 		Calls: int32(u.Calls), Input: u.Input, Cached: u.Cached, CacheWrite: u.CacheWrite, Output: u.Output,
 		LastPrompt: u.LastPrompt, CostUsd: u.CostUSD, Priced: u.Priced,
+		SearchQueries: int32(u.SearchQueries), SearchCostUsd: u.SearchCostUSD,
 	}
 }
 

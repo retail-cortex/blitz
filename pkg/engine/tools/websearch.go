@@ -74,6 +74,23 @@ const googleSearchModel = "gemini-3.8-flash"
 type webSearcher struct {
 	cfg    WebSearchConfig
 	client *http.Client
+	// billed, when set, hears how many queries a provider billed per
+	// query ran for a search (Google's grounding), with the search's
+	// context.
+	billed func(ctx context.Context, provider string, queries int)
+}
+
+// SetSearchBilling sets what hears of the queries a search provider bills
+// per query (Google's grounding): the session the search was for (its
+// tool call's, or the owner WithOwnerSession names), the provider and the
+// count. Nothing without a search provider.
+func (r *Registry) SetSearchBilling(f func(ctx context.Context, session, provider string, queries int)) {
+	if r.searcher == nil {
+		return
+	}
+	r.searcher.billed = func(ctx context.Context, provider string, queries int) {
+		f(ctx, sessionOf(ctx), provider, queries)
+	}
 }
 
 // NewWebSearchTool creates web_search for a configured provider.
@@ -199,7 +216,11 @@ func (s *webSearcher) run(ctx context.Context, q string, n int) WebSearchOutput 
 	case "searxng":
 		results, err = s.searxng(ctx, q)
 	case "google":
-		results, out.Answer, err = s.google(ctx, q)
+		var queries int
+		results, out.Answer, queries, err = s.google(ctx, q)
+		if queries > 0 && s.billed != nil {
+			s.billed(ctx, s.cfg.Provider, queries)
+		}
 	}
 	if err != nil {
 		return fail(err)
@@ -326,7 +347,7 @@ func (s *webSearcher) searxng(ctx context.Context, q string) ([]SearchResult, er
 // runs the queries and answers, and the grounding metadata lists the pages
 // it used. Those links are Google redirects, which web_fetch won't follow
 // to another host, so they are resolved to the pages they point to.
-func (s *webSearcher) google(ctx context.Context, q string) ([]SearchResult, string, error) {
+func (s *webSearcher) google(ctx context.Context, q string) ([]SearchResult, string, int, error) {
 	payload, _ := json.Marshal(map[string]any{
 		"contents": []any{map[string]any{"role": "user", "parts": []any{map[string]any{"text": q}}}},
 		"tools":    []any{map[string]any{"google_search": map[string]any{}}},
@@ -334,7 +355,7 @@ func (s *webSearcher) google(ctx context.Context, q string) ([]SearchResult, str
 	u := strings.TrimSuffix(s.cfg.BaseURL, "/") + "/models/" + url.PathEscape(s.cfg.Model) + ":generateContent"
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, u, bytes.NewReader(payload))
 	if err != nil {
-		return nil, "", err
+		return nil, "", 0, err
 	}
 	req.Header.Set("Content-Type", "application/json")
 	var body struct {
@@ -346,7 +367,9 @@ func (s *webSearcher) google(ctx context.Context, q string) ([]SearchResult, str
 				} `json:"parts"`
 			} `json:"content"`
 			GroundingMetadata struct {
-				GroundingChunks []struct {
+				// The queries Gemini ran, each billed.
+				WebSearchQueries []string `json:"webSearchQueries"`
+				GroundingChunks  []struct {
 					Web struct {
 						URI   string `json:"uri"`
 						Title string `json:"title"`
@@ -362,10 +385,10 @@ func (s *webSearcher) google(ctx context.Context, q string) ([]SearchResult, str
 		} `json:"candidates"`
 	}
 	if err := s.do(req, &body); err != nil {
-		return nil, "", err
+		return nil, "", 0, err
 	}
 	if len(body.Candidates) == 0 {
-		return nil, "", errors.New("google search: no answer")
+		return nil, "", 0, errors.New("google search: no answer")
 	}
 	c := body.Candidates[0]
 	var answer strings.Builder
@@ -392,7 +415,7 @@ func (s *webSearcher) google(ctx context.Context, q string) ([]SearchResult, str
 		out = append(out, SearchResult{Title: ch.Web.Title, URL: ch.Web.URI, Snippet: strings.Join(snippets[i], " … ")})
 	}
 	s.resolveRedirects(ctx, out)
-	return out, textutil.Ellipsize(strings.TrimSpace(answer.String()), 2000), nil
+	return out, textutil.Ellipsize(strings.TrimSpace(answer.String()), 2000), len(gm.WebSearchQueries), nil
 }
 
 // resolveRedirects replaces Google grounding redirect links with their

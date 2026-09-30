@@ -216,6 +216,10 @@ message Usage {
   double cost_usd = 7;
   // False if any call's model has no known price, so cost_usd is short.
   bool priced = 8;
+  // Web search queries a provider billed (Google's grounding), and their
+  // estimated price: not part of cost_usd.
+  int32 search_queries = 9;
+  double search_cost_usd = 10;
 }
 
 // TurnFinished ends a turn's events.

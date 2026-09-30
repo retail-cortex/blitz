@@ -17,6 +17,7 @@ package tools
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -67,8 +68,15 @@ func TestGoogleSearchUsesGroundingAndResolvesLinks(t *testing.T) {
 	var got captured
 	base := fakeGemini(t, &got)
 	s := searcher(t, WebSearchConfig{Provider: "google", APIKey: "gem-key", BaseURL: base, DenyDomains: []string{"*.evil.test"}})
-	out := s.search(context.Background(), allowAll(), WebSearchInput{Query: "go naming conventions"})
+	// The queries Gemini ran are billed, for the session searching.
+	var billed []string
+	r0 := &Registry{searcher: s}
+	r0.SetSearchBilling(func(_ context.Context, session, provider string, queries int) {
+		billed = append(billed, fmt.Sprintf("%s %s %d", session, provider, queries))
+	})
+	out := s.search(WithOwnerSession(context.Background(), "chat"), allowAll(), WebSearchInput{Query: "go naming conventions"})
 	require.Equal(t, "", out.Error, out.Error)
+	assert.Equal(t, []string{"chat google 1"}, billed)
 	assert.Equal(t, "POST", got.method, "request %+v", got)
 	assert.Equal(t, "/models/gemini-3.8-flash:generateContent", got.path, "request %+v", got)
 	assert.Equal(t, "gem-key", got.token, "request %+v", got)

@@ -212,3 +212,15 @@ func TestNotifier(t *testing.T) {
 		assert.False(t, Notifier{Mode: "both"}.longRunning(), "After 0 never notifies")
 	})
 }
+
+// /cost shows web searches on a line of their own (BL-WEB-01).
+func TestCostShowsSearches(t *testing.T) {
+	app := newFullApp(t)
+	app.Input = NewLineReader(strings.NewReader("make a file\n/exit\n"), io.Discard)
+	captureStdout(t, func() { assert.NoError(t, RunREPL(context.Background(), app)) })
+	s, ok := app.Workspace.ActiveSession()
+	require.True(t, ok)
+	local(app).Engine().RecordSearch(context.Background(), s.ID, 4, 0.056)
+	out := captureStdout(t, func() { cmdCost(app) })
+	assert.Contains(t, out, "Web searches: 4 queries, estimated $0.0560")
+}

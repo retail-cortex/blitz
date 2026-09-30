@@ -1238,6 +1238,7 @@
     "desktop.inbox.state.done": "done",
     "desktop.inbox.state.failed": "failed",
     "desktop.inbox.state.stopped": "stopped",
-    "desktop.approval.in_editor": "Show in the editor"
+    "desktop.approval.in_editor": "Show in the editor",
+    "cost.search": "Web searches: {queries} queries, estimated {cost} (not in the token cost)"
   }
 }

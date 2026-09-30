@@ -220,6 +220,13 @@ func Open(ctx context.Context, cfg *config.Config, o Options) (*Workspace, error
 	}
 	w.tools.SetWarn(o.Warn)
 	w.tools.Processes().Notice = w.processNotice
+	// Search queries a provider bills go in the session's /cost, apart from
+	// the tokens (BL-WEB-01).
+	w.tools.SetSearchBilling(func(ctx context.Context, session, provider string, queries int) {
+		if session != "" && w.engine != nil {
+			w.engine.RecordSearch(context.WithoutCancel(ctx), session, queries, float64(queries)*cfg.SearchPriceFor(provider))
+		}
+	})
 	if cfg.Memory.AutoOn() { // the remember tool (PAR-MEM-10), never keeping secrets
 		redactor := SecretRedactor(cfg)
 		w.tools.SetNoteSaver(func(_ context.Context, kind, text string) (string, error) {

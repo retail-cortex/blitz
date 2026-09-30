@@ -215,6 +215,9 @@ func (w *Workspace) SearchWeb(ctx context.Context, terms string) (api.WebSearch,
 	if !w.tools.CanFetch() {
 		return api.WebSearch{}, api.ErrNoFetch
 	}
+	if id, err := w.activeID(); err == nil {
+		ctx = tools.WithOwnerSession(ctx, id) // its queries count for the session
+	}
 	out, err := w.tools.WebSearch(ctx, terms, searchFetch)
 	if err != nil {
 		return api.WebSearch{}, err

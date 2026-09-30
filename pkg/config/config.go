@@ -82,6 +82,9 @@ type Config struct {
 	// Pricing overrides or adds model prices, keyed by model name, for
 	// /cost and cost limits.
 	Pricing map[string]ModelPrice `toml:"pricing"`
+	// SearchPricing prices web search providers' queries, keyed by
+	// provider ("google"), for /cost; DefaultSearchPricing fills the rest.
+	SearchPricing map[string]SearchPrice `toml:"search_pricing"`
 	// AgentModels pins agents to models: agent name -> "provider/model".
 	// A pin wins over the agent's own default_model; unpinned agents use
 	// the configured model. Set with /pin_model, removed with /unpin.

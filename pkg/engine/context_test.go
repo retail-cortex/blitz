@@ -113,3 +113,20 @@ func TestMemoryAndLocale(t *testing.T) {
 	list, _ := w.AvailableLocales()
 	assert.GreaterOrEqual(t, len(list), 3, "locales %v", list)
 }
+
+// Search queries count in the session's usage, apart from the tokens, and
+// are kept with it (BL-WEB-01).
+func TestSearchQueriesInUsage(t *testing.T) {
+	w, _ := openTestWith(t, nil)
+	sid := newSession(t, w).ID
+	w.engine.RecordSearch(context.Background(), sid, 2, 0.028)
+	w.engine.RecordSearch(context.Background(), sid, 1, 0.014)
+	u, err := w.SessionUsage()
+	require.NoError(t, err)
+	assert.Equal(t, 3, u.SearchQueries)
+	assert.InDelta(t, 0.042, u.SearchCostUSD, 1e-9)
+	assert.Zero(t, u.CostUSD, "search cost mixed into the token cost")
+	saved, ok := w.storage.Usage(sid)
+	require.True(t, ok)
+	assert.Equal(t, 3, saved.SearchQueries, "not saved with the session")
+}

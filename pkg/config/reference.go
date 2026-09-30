@@ -49,7 +49,7 @@ type Setting struct {
 }
 
 // mapNames are the placeholders for map keys, by the map's key.
-var mapNames = map[string]string{"agent_models": "<agent>", "model_settings": "<model>", "pricing": "<model>", "env": "<variable>"}
+var mapNames = map[string]string{"agent_models": "<agent>", "model_settings": "<model>", "pricing": "<model>", "search_pricing": "<provider>", "env": "<variable>"}
 
 // Reference is every setting a settings file can have, in the order of
 // the Config struct, with its type, default and description.

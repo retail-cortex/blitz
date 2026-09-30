@@ -432,6 +432,14 @@ func (e *Engine) restoreUsage(sessionID string) {
 	}
 }
 
+// RecordSearch adds a web search's billed queries, and their cost, to
+// sessionID's usage, and saves it (BL-WEB-01).
+func (e *Engine) RecordSearch(ctx context.Context, sessionID string, queries int, costUSD float64) {
+	e.restoreUsage(sessionID)
+	e.usage.RecordSearch(sessionID, queries, costUSD)
+	e.saveUsage(ctx, sessionID)
+}
+
 // saveUsage keeps sessionID's usage so far in the store.
 func (e *Engine) saveUsage(ctx context.Context, sessionID string) {
 	if e.usageStore == nil {

@@ -177,6 +177,9 @@ func cmdCost(app *App) {
 	} else {
 		fmt.Printf("  %s\n", i18n.T("cost.unknown", "model", strconv.Quote(app.Workspace.Model().Name)))
 	}
+	if u.SearchQueries > 0 { // billed apart from the tokens (BL-WEB-01)
+		fmt.Printf("  %s\n", i18n.T("cost.search", "queries", u.SearchQueries, "cost", fmt.Sprintf("$%.4f", u.SearchCostUSD)))
+	}
 	fmt.Println()
 }
 

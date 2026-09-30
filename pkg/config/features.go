@@ -111,6 +111,27 @@ type ModelPrice struct {
 	CacheWritePerMTok float64 `toml:"cache_write_per_mtok"`
 }
 
+// SearchPrice is what a search provider bills for its queries.
+type SearchPrice struct {
+	// Per1KQueries is the price of a thousand queries.
+	Per1KQueries float64 `toml:"per_1k_queries"`
+}
+
+// DefaultSearchPricing are the providers' published prices past their
+// free tiers: Google's grounding bills each search query Gemini runs.
+var DefaultSearchPricing = map[string]SearchPrice{
+	"google": {Per1KQueries: 14},
+}
+
+// SearchPriceFor is provider's price per query: the settings', else the
+// default, else 0 (not billed per query, or unknown).
+func (c *Config) SearchPriceFor(provider string) float64 {
+	if p, ok := c.SearchPricing[provider]; ok {
+		return p.Per1KQueries / 1000
+	}
+	return DefaultSearchPricing[provider].Per1KQueries / 1000
+}
+
 // AuditConfig controls the append-only audit log.
 type AuditConfig struct {
 	// Enabled records every approval and tool action in the audit log.

@@ -174,6 +174,7 @@ func usage(u *pb.Usage) api.Usage {
 	return api.Usage{
 		Calls: int(u.Calls), Input: u.Input, Cached: u.Cached, CacheWrite: u.CacheWrite, Output: u.Output,
 		LastPrompt: u.LastPrompt, CostUSD: u.CostUsd, Priced: u.Priced,
+		SearchQueries: int(u.SearchQueries), SearchCostUSD: u.SearchCostUsd,
 	}
 }
 

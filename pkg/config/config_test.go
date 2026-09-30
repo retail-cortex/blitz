@@ -239,3 +239,16 @@ func TestSkillPolicyProblems(t *testing.T) {
 		})
 	}
 }
+
+func TestSearchPriceFor(t *testing.T) {
+	c := &Config{SearchPricing: map[string]SearchPrice{"brave": {Per1KQueries: 5}}}
+	tests := []struct {
+		provider string
+		want     float64
+	}{{"google", 0.014}, {"brave", 0.005}, {"searxng", 0}}
+	for _, tt := range tests {
+		t.Run(tt.provider, func(t *testing.T) {
+			assert.InDelta(t, tt.want, c.SearchPriceFor(tt.provider), 1e-12)
+		})
+	}
+}
