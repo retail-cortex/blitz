@@ -164,6 +164,9 @@ func HandleCommand(ctx context.Context, input string, app *App) (bool, error) {
 	case "tasks":
 		cmdTasks(args, app)
 
+	case "cd":
+		cmdCd(ctx, args, app)
+
 	case "trust":
 		p := app.Workspace.ProjectSettings()
 		fmt.Println()
@@ -241,6 +244,7 @@ func printHelp(app *App) {
 		{"/paste", "help.paste"},
 		{"/locale [code]", "help.locale"},
 		{"/set [key=value], /show", "help.set"},
+		{"/cd [path]", "help.cd"},
 		{"/tasks [show|stop <id>]", "help.tasks"},
 		{"/trust", "help.trust"},
 		{"/license [full|third-party]", "help.license"},

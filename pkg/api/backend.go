@@ -75,6 +75,9 @@ type Backend interface {
 	LoadSession(ref string) (SessionInfo, bool, error)
 	SaveSnapshot(name string, force bool) (SessionInfo, error)
 	RenameSession(title string) (SessionInfo, error)
+	// MoveSession carries session id into this workspace from the one it
+	// was in, and makes it active (/cd).
+	MoveSession(id string) (SessionInfo, error)
 
 	// Agents, models and settings.
 	ListAgents() []AgentInfo

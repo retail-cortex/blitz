@@ -77,6 +77,9 @@ type Workspace struct {
 	locales *i18n.Bundle
 	// project are the project settings as the workspace opened.
 	project api.ProjectSettings
+	// moveNotes tell a session's next prompt that /cd moved it here
+	// (guarded by hookCtxMu).
+	moveNotes map[string]string
 	// modelErr is set when the configured model failed to initialise;
 	// modelMu guards it (the service reloads and retries concurrently).
 	modelErr error

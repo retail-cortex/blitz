@@ -1126,6 +1126,15 @@
     "desktop.task.ended": "Tarea en segundo plano {id} ({agent}): {state}",
     "desktop.task.continue_prompt": "La tarea en segundo plano {id} terminó: continúa con su resultado.",
     "desktop.settings.task_continue": "Continuar tras las tareas en segundo plano",
-    "desktop.settings.task_continue.detail": "Cuando una tarea en segundo plano termina sin nada en curso, el agente recibe un turno para actuar sobre su resultado. Desactivado: solo un aviso."
+    "desktop.settings.task_continue.detail": "Cuando una tarea en segundo plano termina sin nada en curso, el agente recibe un turno para actuar sobre su resultado. Desactivado: solo un aviso.",
+    "help.cd": "Mover la sesión a otro espacio de trabajo (sin ruta: dónde está)",
+    "cd.here": "Espacio de trabajo: {dir}",
+    "cd.unavailable": "/cd no está disponible aquí.",
+    "cd.not_dir": "{path} no es un directorio.",
+    "cd.same": "Ya estás en {dir}.",
+    "cd.failed": "Sigues en {dir}: {error}",
+    "cd.moved": "Ahora en {dir}; la sesión se movió contigo.",
+    "cd.new": "Ahora en {dir}, en una sesión nueva.",
+    "undo.moved": "Los cambios anteriores a /cd están en {dir}: haz /cd allí para deshacerlos."
   }
 }

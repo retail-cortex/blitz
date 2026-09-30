@@ -103,6 +103,18 @@ func (h sessionService) SaveSnapshot(ctx context.Context, r req[pb.SaveSnapshotR
 	return ok(&pb.SaveSnapshotResponse{Snapshot: sessionMsg(s)})
 }
 
+func (h sessionService) MoveSession(ctx context.Context, r req[pb.MoveSessionRequest]) (*connect.Response[pb.MoveSessionResponse], error) {
+	w, err := h.s.workspace(ctx, r.Msg.Workspace)
+	if err != nil {
+		return nil, err
+	}
+	s, err := w.MoveSession(r.Msg.SessionId)
+	if err != nil {
+		return nil, toAPI(err)
+	}
+	return ok(&pb.MoveSessionResponse{Session: sessionMsg(s)})
+}
+
 func (h sessionService) RenameSession(ctx context.Context, r req[pb.RenameSessionRequest]) (*connect.Response[pb.RenameSessionResponse], error) {
 	w, err := h.s.workspace(ctx, r.Msg.Workspace)
 	if err != nil {

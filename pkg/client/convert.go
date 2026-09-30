@@ -134,6 +134,7 @@ func session(s *pb.SessionInfo) api.SessionInfo {
 	}
 	out := api.SessionInfo{
 		ID: s.Id, Title: s.Title, Agent: s.Agent, Workspace: s.Workspace, Snapshot: s.Snapshot, From: s.From,
+		MovedFrom: s.MovedFrom, MovedAt: int(s.MovedAt),
 		MessageCount: int(s.MessageCount), Created: timeOf(s.Created), Updated: timeOf(s.Updated),
 	}
 	for _, m := range s.Messages {

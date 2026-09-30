@@ -76,6 +76,11 @@ type SessionRecord struct {
 	// From is the session this one was copied from: the saved session for
 	// a snapshot, the snapshot for a session started from one.
 	From string `json:"from,omitempty"`
+	// MovedFrom is the workspace the session was in before /cd moved it
+	// here, and MovedAt how many messages it had then: prompts before
+	// that were in the other workspace.
+	MovedFrom string `json:"moved_from,omitempty"`
+	MovedAt   int    `json:"moved_at,omitempty"`
 	// Messages is populated by Load and for the active session; List leaves it
 	// empty and reports MessageCount instead.
 	Messages []Message `json:"messages,omitempty"`
@@ -421,6 +426,26 @@ func (s *Storage) Load(id string) (*SessionRecord, error) {
 		}
 	}
 	s.active = rec
+	return rec, nil
+}
+
+// Move makes session id this storage's workspace's and active: /cd
+// carried it here from the workspace it was in, which it remembers with
+// the number of messages it had then (PAR-SES-40).
+func (s *Storage) Move(id string) (*SessionRecord, error) {
+	rec, err := s.Load(id)
+	if err != nil {
+		return nil, err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if rec.Workspace == s.workspace {
+		return rec, nil
+	}
+	rec.MovedFrom, rec.MovedAt, rec.Workspace = rec.Workspace, len(rec.Messages), s.workspace
+	if err := s.writeMeta(rec); err != nil {
+		return nil, err
+	}
 	return rec, nil
 }
 

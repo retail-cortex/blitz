@@ -260,13 +260,15 @@ func runRoot(cmd *cobra.Command, o *rootOptions, args []string) (err error) {
 
 	// With nobody to ask (a prompt, a pipe), project settings that need
 	// trust stay off, and a line says so.
-	var askTrust func(api.ProjectSettings) string
-	if stdinTTY && !oneShot && !stdinUsed {
-		askTrust = func(p api.ProjectSettings) string {
-			return tui.AskTrust(ctx, tui.NewLineReader(os.Stdin, os.Stdout), os.Stdout, cfg.Tools.WorkspaceDir, p)
+	askTrust := func(dir string) func(api.ProjectSettings) string {
+		if !stdinTTY || oneShot || stdinUsed {
+			return nil
+		}
+		return func(p api.ProjectSettings) string {
+			return tui.AskTrust(ctx, tui.NewLineReader(os.Stdin, os.Stdout), os.Stdout, dir, p)
 		}
 	}
-	w, locales, remote, err := openBackend(ctx, cfg, backendOptions{local: o.local, streaming: pretty, trustProject: o.global.trustProject, askTrust: askTrust}, warnFn)
+	w, locales, remote, err := openBackend(ctx, cfg, backendOptions{local: o.local, streaming: pretty, trustProject: o.global.trustProject, askTrust: askTrust(cfg.Tools.WorkspaceDir)}, warnFn)
 	if err != nil {
 		return err
 	}
@@ -312,16 +314,18 @@ func runRoot(cmd *cobra.Command, o *rootOptions, args []string) (err error) {
 		warnFn(i18n.T("startup.placeholder_model"))
 	}
 
+	var completer *tui.Completer
 	// One input source for everything read from the terminal.
 	var input tui.Input
 	switch {
 	case stdinUsed:
 		// stdin carried the prompt; nothing can be answered interactively.
 	case stdinTTY && !oneShot:
+		completer = newCompleter(w)
 		ti, terr := tui.NewTerminalInput(tui.TerminalOptions{
 			HistoryFile: config.ExpandHome(cfg.UI.HistoryFile),
 			HistorySize: cfg.UI.HistorySize,
-			Completer:   newCompleter(w),
+			Completer:   completer,
 		})
 		if terr != nil {
 			warnFn(i18n.T("startup.line_editor", "error", terr.Error()))
@@ -392,6 +396,31 @@ func runRoot(cmd *cobra.Command, o *rootOptions, args []string) (err error) {
 		Attachments:   attached,
 		TerminalTitle: pretty && cfg.UI.TerminalTitle,
 		DiffLines:     cfg.UI.DiffLines,
+		// /cd: the target opens as a workspace does at start (its
+		// settings, the trust question, the service when it runs); the
+		// REPL switches to it once the session has moved, and the old one
+		// closes.
+		Cd: func(ctx context.Context, dir string) (api.Backend, *i18n.Bundle, func(), error) {
+			g := o.global
+			g.dir = dir
+			next, err := loadConfig(&g)
+			if err != nil {
+				return nil, nil, nil, err
+			}
+			nb, loc, _, err := openBackend(ctx, next, backendOptions{local: o.local, streaming: pretty, trustProject: o.global.trustProject, askTrust: askTrust(next.Tools.WorkspaceDir)}, warnFn)
+			if err != nil {
+				return nil, nil, nil, err
+			}
+			if input != nil {
+				nb.SetUI(tui.NewApprover(input, next.UI.DiffLines), tui.NewUserPrompter(input))
+			}
+			return nb, loc, func() {
+				w, cfg = nb, next // what closes at exit, and prices the rest
+				if completer != nil {
+					completer.SetWorkspace(nb.Dir())
+				}
+			}, nil
+		},
 		Printer: tui.PrinterOptions{
 			Out: os.Stdout, Markdown: pretty && cfg.UI.Markdown, Theme: cfg.UI.Theme,
 			Width: terminalWidth(), Spinner: pretty && cfg.UI.Spinner,
@@ -438,7 +467,7 @@ func newCompleter(w api.Backend) *tui.Completer {
 	c := tui.NewCompleter(w.Dir())
 	for _, cmd := range []string{"help", "agents", "model", "skills", "session", "set", "clear", "sandbox", "exit", "quit",
 		"undo", "checkpoints", "diff", "cost", "context", "compact", "memory", "approvals", "mcp", "resume", "locale", "attach", "paste",
-		"tools", "plan", "show", "init", "mode", "permissions", "effort", "rewind", "pin_model", "unpin", "model_settings", "search", "btw", "rename", "envs", "tasks", "trust", "license"} {
+		"tools", "plan", "show", "init", "mode", "permissions", "effort", "rewind", "pin_model", "unpin", "model_settings", "search", "btw", "rename", "envs", "tasks", "cd", "trust", "license"} {
 		c.Command(cmd)
 	}
 	c.Command("skills", "list", "show", "search")

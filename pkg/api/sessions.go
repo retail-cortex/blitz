@@ -32,7 +32,11 @@ type SessionInfo struct {
 	Snapshot string
 	// From is the session this one was copied from: the saved session for a
 	// snapshot, the snapshot for a session started from one.
-	From         string
+	From string
+	// MovedFrom is the workspace /cd moved the session from, and MovedAt
+	// the number of messages it had then ("" and 0 if it never moved).
+	MovedFrom    string
+	MovedAt      int
 	MessageCount int
 	Created      time.Time
 	Updated      time.Time

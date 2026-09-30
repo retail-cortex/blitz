@@ -263,6 +263,13 @@ func NewCompleter(workspace string) *Completer {
 	return &Completer{commands: map[string][]string{}, dynamic: map[string]func() []string{}, workspace: workspace}
 }
 
+// SetWorkspace makes completions of paths relative to dir (after /cd).
+func (c *Completer) SetWorkspace(dir string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.workspace = dir
+}
+
 // Command registers a slash command (without "/") and static argument choices.
 func (c *Completer) Command(name string, args ...string) {
 	c.mu.Lock()

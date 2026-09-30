@@ -194,3 +194,42 @@ func TestRemoteTaskRequests(t *testing.T) {
 	assert.Empty(t, r.PendingTaskRequests())
 	assert.ErrorIs(t, r.AnswerTaskRequest(asked.RequestId, api.DecisionOnce, ""), api.ErrUnknownRequest, "answered twice")
 }
+
+// Attached, /cd moves the session to the target workspace in the service;
+// the old one stays open there for other clients (PAR-SES-43).
+func TestRemoteMoveSession(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("MODENV_PREFIX", "")
+	sessions := t.TempDir() // one store for every workspace, as ~/.blitz/sessions is
+	s := servicetest.New(func(ctx context.Context, dir string) (*engine.Workspace, error) {
+		cfg := config.DefaultConfig()
+		cfg.Tools.WorkspaceDir = dir
+		cfg.Session.StorageDir = sessions
+		return engine.Open(ctx, cfg, engine.Options{Model: runtime.NewMockLLM("gemini-3.8-flash")})
+	})
+	srv := httptest.NewServer(s.Handler())
+	t.Cleanup(func() { srv.Close(); s.Close() })
+	a, err := AttachHTTP(context.Background(), http.DefaultClient, srv.URL, t.TempDir(), nil)
+	require.NoError(t, err)
+	sess, _, err := a.OpenSession("", false)
+	require.NoError(t, err)
+	_, err = a.Run(context.Background(), sess.ID, api.Turn{Text: "hello"}, func(api.Event) {})
+	require.NoError(t, err)
+
+	b := &Remote{dir: t.TempDir(), sessions: a.sessions, workspaces: a.workspaces, warn: func(string) {}}
+	moved, err := b.MoveSession(sess.ID)
+	require.NoError(t, err)
+	assert.Equal(t, sess.ID, moved.ID)
+	real, _ := filepath.EvalSymlinks(a.dir)
+	assert.Equal(t, real, moved.MovedFrom)
+	assert.Equal(t, 2, moved.MovedAt)
+
+	here, err := b.ListSessions(false)
+	require.NoError(t, err)
+	assert.True(t, slices.ContainsFunc(here, func(s api.SessionInfo) bool { return s.ID == sess.ID }), "not listed in the new workspace")
+	there, err := a.ListSessions(false)
+	require.NoError(t, err)
+	assert.False(t, slices.ContainsFunc(there, func(s api.SessionInfo) bool { return s.ID == sess.ID }), "still listed in the old one")
+	_, err = a.Run(context.Background(), sess.ID, api.Turn{Text: "the old workspace still answers"}, func(api.Event) {})
+	assert.NoError(t, err, "the old workspace was closed in the service")
+}

@@ -68,7 +68,7 @@ func (w *Workspace) RewindPoints() ([]api.RewindPoint, error) {
 	}
 	var points []api.RewindPoint
 	for i, m := range active.Messages {
-		if m.IsPrompt() {
+		if m.IsPrompt() && i >= active.MovedAt { // earlier ones were in the workspace it moved from
 			points = append(points, api.RewindPoint{Index: i, Text: m.Content, Time: m.Timestamp, Conversation: m.Events != nil})
 		}
 	}
@@ -115,6 +115,9 @@ func (w *Workspace) Rewind(ctx context.Context, index int, mode api.RewindMode, 
 	}
 	if index < 0 || index >= len(active.Messages) || !active.Messages[index].IsPrompt() {
 		return api.RewindResult{}, fmt.Errorf("%w: %d", api.ErrNotRewindPoint, index)
+	}
+	if index < active.MovedAt {
+		return api.RewindResult{}, fmt.Errorf("%w: it was in %s, before /cd moved the session here; /cd back to rewind it", api.ErrNotRewindPoint, active.MovedFrom)
 	}
 	prompt := active.Messages[index]
 	res := api.RewindResult{Mode: mode, Prompt: DisplayPrompt(prompt.Content)}

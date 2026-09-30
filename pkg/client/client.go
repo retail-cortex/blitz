@@ -276,6 +276,17 @@ func (r *Remote) RenameSession(title string) (api.SessionInfo, error) {
 	return session(res.Msg.Session), nil
 }
 
+// MoveSession carries session id into this client's workspace in the
+// service and makes it active there (SessionService.MoveSession, /cd).
+func (r *Remote) MoveSession(id string) (api.SessionInfo, error) {
+	res, err := r.sessions.MoveSession(context.Background(), connect.NewRequest(&pb.MoveSessionRequest{Workspace: r.dir, SessionId: id}))
+	if err != nil {
+		return api.SessionInfo{}, fromAPI(err)
+	}
+	r.ranIn(id)
+	return session(res.Msg.Session), nil
+}
+
 // ListAgents lists the agents the workspace offers, marking the active one
 // (WorkspaceService.ListAgents) (on failure, warn is told and it returns nothing).
 func (r *Remote) ListAgents() []api.AgentInfo {

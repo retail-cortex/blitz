@@ -485,3 +485,35 @@ func TestRemoveEmptyKeepsTheActiveSession(t *testing.T) {
 	_, err = os.Stat(filepath.Join(dir, rec.ID+".meta.json"))
 	assert.NoError(t, err)
 }
+
+// /cd carries a session to another workspace: it is listed there, not in
+// the old one, and remembers where it came from.
+func TestMoveSession(t *testing.T) {
+	dir := t.TempDir()
+	a, _ := NewStorage(dir)
+	a.SetWorkspace("/work/a")
+	rec, err := a.CreateSession("", "", "blitz")
+	require.NoError(t, err)
+	require.NoError(t, a.AddMessage("user", "first"))
+	require.NoError(t, a.AddMessage("model", "ok"))
+
+	b, _ := NewStorage(dir)
+	b.SetWorkspace("/work/b")
+	moved, err := b.Move(rec.ID)
+	require.NoError(t, err)
+	assert.Equal(t, "/work/b", moved.Workspace)
+	assert.Equal(t, "/work/a", moved.MovedFrom)
+	assert.Equal(t, 2, moved.MovedAt)
+	assert.Equal(t, rec.ID, b.Active().ID)
+
+	inB, _ := b.ListWorkspace("/work/b")
+	inA, _ := a.ListWorkspace("/work/a")
+	assert.Len(t, inB, 1)
+	assert.Empty(t, inA)
+
+	again, err := b.Move(rec.ID) // already here: unchanged
+	require.NoError(t, err)
+	assert.Equal(t, "/work/a", again.MovedFrom)
+	_, err = b.Move("session-20260101-000000-0000dead")
+	assert.Error(t, err)
+}

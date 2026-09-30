@@ -47,6 +47,9 @@ service SessionService {
   rpc SaveSnapshot(SaveSnapshotRequest) returns (SaveSnapshotResponse);
   // Sets the active session's title.
   rpc RenameSession(RenameSessionRequest) returns (RenameSessionResponse);
+  // Carries a session into this workspace from the one it was in, and
+  // makes it active there (/cd).
+  rpc MoveSession(MoveSessionRequest) returns (MoveSessionResponse);
 
   // Runs one turn in a session and streams its events, ending with
   // TurnFinished. Cancelling the call interrupts the turn. While it runs,
@@ -94,6 +97,10 @@ message SessionInfo {
   google.protobuf.Timestamp updated = 9;
   // Filled in only where noted.
   repeated Message messages = 10;
+  // The workspace /cd moved the session from, and how many messages it
+  // had then: earlier prompts were there (empty and 0 if never moved).
+  string moved_from = 11;
+  int32 moved_at = 12;
 }
 
 // Message is one message in a transcript.
@@ -191,6 +198,18 @@ message RenameSessionRequest {
 
 // Response message for SessionService.RenameSession.
 message RenameSessionResponse {
+  SessionInfo session = 1;
+}
+
+// Request message for SessionService.MoveSession.
+message MoveSessionRequest {
+  // The workspace it moves to.
+  string workspace = 1;
+  string session_id = 2;
+}
+
+// Response message for SessionService.MoveSession.
+message MoveSessionResponse {
   SessionInfo session = 1;
 }
 

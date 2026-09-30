@@ -99,6 +99,10 @@ func cmdUndo(args []string, app *App) {
 	}
 	if err != nil {
 		fmt.Printf("%s✗ %v%s\n", Red, err, Reset)
+		// Changes made before /cd are in the other workspace's checkpoints.
+		if s, ok := app.Workspace.ActiveSession(); ok && s.MovedFrom != "" && strings.Contains(err.Error(), "nothing to undo") {
+			fmt.Printf("%s%s%s\n", Dim, i18n.T("undo.moved", "dir", s.MovedFrom), Reset)
+		}
 	}
 }
 

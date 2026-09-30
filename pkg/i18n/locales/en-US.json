@@ -1126,6 +1126,15 @@
     "desktop.task.ended": "Background {id} ({agent}): {state}",
     "desktop.task.continue_prompt": "Background task {id} has ended: carry on with its result.",
     "desktop.settings.task_continue": "Continue after background tasks",
-    "desktop.settings.task_continue.detail": "When a background task ends while nothing runs, the agent gets a turn to act on its result. Off: a notice only."
+    "desktop.settings.task_continue.detail": "When a background task ends while nothing runs, the agent gets a turn to act on its result. Off: a notice only.",
+    "help.cd": "Move the session to another workspace (without a path: where it is)",
+    "cd.here": "Workspace: {dir}",
+    "cd.unavailable": "/cd isn't available here.",
+    "cd.not_dir": "{path} is not a directory.",
+    "cd.same": "Already in {dir}.",
+    "cd.failed": "Stayed in {dir}: {error}",
+    "cd.moved": "Now in {dir}; the session moved with you.",
+    "cd.new": "Now in {dir}, in a new session.",
+    "undo.moved": "Changes made before /cd are in {dir}: /cd there to undo them."
   }
 }

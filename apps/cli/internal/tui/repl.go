@@ -56,6 +56,10 @@ type App struct {
 	// DiffLines caps the diff shown with a background task's approval
 	// request, as with the turn's own.
 	DiffLines int
+	// Cd opens the workspace in dir for /cd, asking about its project
+	// settings as at start; commit makes it the one the program closes at
+	// exit. Nil: /cd isn't available.
+	Cd func(ctx context.Context, dir string) (next api.Backend, locales *i18n.Bundle, commit func(), err error)
 	// announced are the background tasks whose end the REPL has shown.
 	announced map[string]bool
 	// Interrupts delivers Ctrl+C. If nil, RunREPL subscribes to os.Interrupt
@@ -252,7 +256,7 @@ func RunREPL(ctx context.Context, app *App) error {
 		}
 		return nil
 	}
-	exitPrompt := ExitPrompt{CanPrompt: true, AllowCancel: true, Tasks: app.Workspace}
+	exitPrompt := ExitPrompt{CanPrompt: true, AllowCancel: true, Tasks: app}
 	promptText := func() string {
 		return fmt.Sprintf("%s%s%s%s %s›%s ", Bold+Green, app.Workspace.ActiveAgent().Name, Reset, modeTag(app.Workspace.Settings().PermissionMode), Bold+Green, Reset)
 	}
@@ -288,7 +292,7 @@ func RunREPL(ctx context.Context, app *App) error {
 			// SIGTERM: no prompt; deferred cleanup kills background processes.
 			return goodbye()
 		case errors.Is(err, io.EOF):
-			ConfirmExit(ctx, app.Input, app.Workspace.Processes(), interrupts, ExitPrompt{Tasks: app.Workspace})
+			ConfirmExit(ctx, app.Input, app.Workspace.Processes(), interrupts, ExitPrompt{Tasks: app})
 			return goodbye()
 		case errors.Is(err, ErrRewindKey): // Esc Esc at an empty prompt
 			cmdRewind(ctx, nil, app)
@@ -555,3 +559,10 @@ func cancelOnSignal(parent context.Context, sigs <-chan os.Signal) (context.Cont
 		cancel()
 	}
 }
+
+// ListTasks and StopTask are the current workspace's (it changes with
+// /cd): App is the exit prompt's TaskControl.
+func (app *App) ListTasks() []api.TaskInfo { return app.Workspace.ListTasks() }
+
+// StopTask stops one of the current workspace's tasks.
+func (app *App) StopTask(id string) (api.TaskInfo, error) { return app.Workspace.StopTask(id) }

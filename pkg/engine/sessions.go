@@ -30,6 +30,7 @@ import (
 func sessionInfo(r *session.SessionRecord) api.SessionInfo {
 	info := api.SessionInfo{
 		ID: r.ID, Title: r.Title, Agent: r.Agent, Workspace: r.Workspace, Snapshot: r.Name, From: r.From,
+		MovedFrom: r.MovedFrom, MovedAt: r.MovedAt,
 		MessageCount: r.MessageCount, Created: r.CreatedAt, Updated: r.UpdatedAt,
 	}
 	for _, m := range r.Messages {
@@ -132,6 +133,40 @@ func (w *Workspace) LoadSession(ref string) (s api.SessionInfo, branched bool, e
 	}
 	w.switched(prev, r.ID, "load", "resume")
 	return sessionInfo(r), branched, nil
+}
+
+// MoveSession carries session id here from the workspace it was in and
+// makes it active (/cd, PAR-SES-40): --continue here finds it, rewind
+// stops at the move, and the agent's next prompt says the workspace
+// changed.
+func (w *Workspace) MoveSession(id string) (api.SessionInfo, error) {
+	prev := w.storage.Active()
+	rec, err := w.storage.Move(id)
+	if err != nil {
+		return api.SessionInfo{}, err
+	}
+	w.audit.SetContext(rec.ID, w.Dir())
+	if rec.MovedFrom != "" {
+		w.hookCtxMu.Lock()
+		if w.moveNotes == nil {
+			w.moveNotes = map[string]string{}
+		}
+		w.moveNotes[rec.ID] = "The workspace is now " + w.Dir() + ", moved from " + rec.MovedFrom +
+			". Paths and files mentioned earlier in this conversation were in the old workspace; this one's instructions replace its."
+		w.hookCtxMu.Unlock()
+	}
+	w.switched(prev, rec.ID, "cd", "resume")
+	return sessionInfo(rec), nil
+}
+
+// takeMoveNote removes and returns the note for session id's next prompt
+// about the workspace it moved to, if any.
+func (w *Workspace) takeMoveNote(id string) string {
+	w.hookCtxMu.Lock()
+	defer w.hookCtxMu.Unlock()
+	n := w.moveNotes[id]
+	delete(w.moveNotes, id)
+	return n
 }
 
 // SaveSnapshot saves a copy of the active session under name. Snapshots are
