@@ -53,6 +53,7 @@ type Server struct {
 	logDir    string      // where the diagnostic log is written ("": off)
 	sched     *scheduler  // nil: workers aren't run
 	broker    *broker
+	runs      runs // background runs
 
 	mu         sync.Mutex
 	workspaces map[string]*workspace // by canonical directory
@@ -113,6 +114,9 @@ func (s *Server) Close() error {
 	}
 	s.mu.Lock()
 	s.closed = true
+	s.mu.Unlock()
+	s.stopRuns()
+	s.mu.Lock()
 	open := s.workspaces
 	s.workspaces = map[string]*workspace{}
 	s.mu.Unlock()

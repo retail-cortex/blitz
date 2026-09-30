@@ -80,9 +80,24 @@ export interface LoadSessionDetail {
   dir: string;
   id: string;
 }
-/** Asks a workspace to load a session. */
+// Sessions for a workspace that isn't there yet (it's opening), loaded
+// when it mounts.
+const pendingLoads = new Map<string, string>();
+
+/**
+ * Asks a workspace to load a session. One for a workspace that isn't there
+ * yet waits for it.
+ */
 export function loadSession(detail: LoadSessionDetail) {
-  window.dispatchEvent(new CustomEvent(loadSessionEvent, { detail }));
+  const taken = !window.dispatchEvent(new CustomEvent(loadSessionEvent, { detail, cancelable: true }));
+  if (!taken) pendingLoads.set(detail.dir, detail.id);
+}
+
+/** The session waiting to be loaded in a workspace, once. */
+export function takePendingLoad(dir: string): string | undefined {
+  const id = pendingLoads.get(dir);
+  pendingLoads.delete(dir);
+  return id;
 }
 
 // The settings changed (a key, a provider, a settings file): workspaces

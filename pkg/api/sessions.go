@@ -78,3 +78,25 @@ func (e *ResumeError) Unwrap() error { return e.Err }
 // they would otherwise write the same sessions and checkpoints. The lock
 // goes with the process, so a crash never leaves a workspace locked.
 var ErrWorkspaceBusy = errors.New("the workspace is open elsewhere")
+
+// BackgroundRun is a turn the service runs with no client attached (blitz
+// --bg).
+type BackgroundRun struct {
+	ID        string // bg-1, bg-2, …
+	Workspace string
+	SessionID string
+	Prompt    string // its first line
+	// State is running, waiting (for an answer), done, failed or stopped.
+	State   string
+	Started time.Time
+	Ended   time.Time // zero while it runs
+	CostUSD float64
+	Waiting int // requests waiting for an answer
+	Error   string
+}
+
+// Active reports whether the run hasn't ended.
+func (r BackgroundRun) Active() bool { return r.State == "running" || r.State == "waiting" }
+
+// ErrUnknownRun: the service has no background run with that ID.
+var ErrUnknownRun = errors.New("no such background run")

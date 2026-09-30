@@ -22,7 +22,7 @@ import { create, type JsonObject, type MessageInitShape } from "@bufbuild/protob
 import { timestampFromDate } from "@bufbuild/protobuf/wkt";
 import { Code, ConnectError, createRouterTransport } from "@connectrpc/connect";
 import { setTransport } from "../api";
-import { MessageSchema, RunTurnResponseSchema, SessionInfoSchema, SessionService, type Message, type SessionInfo } from "../gen/blitz/v1/session_pb";
+import { BackgroundRunSchema, MessageSchema, RunTurnResponseSchema, SessionInfoSchema, SessionService, WatchBackgroundResponseSchema, type BackgroundRun, type Message, type SessionInfo } from "../gen/blitz/v1/session_pb";
 import { ActionKind, ErrorInfoSchema, UsageSchema, type Usage } from "../gen/blitz/v1/turn_pb";
 
 type Out = MessageInitShape<typeof RunTurnResponseSchema>;
@@ -332,6 +332,60 @@ const fakeGit: Record<string, string> = { "internal/cart/discount.go": "modified
 const fakeHidden = (p: string) => (p === ".env" ? "blocked" : p.startsWith("bin") ? "ignored" : p.split("/").pop()!.startsWith(".") ? "dot" : "");
 const fakeVersion = (text: string) => String(text.length) + ":" + [...text].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7).toString(16);
 
+// Background runs (blitz --bg), made on first use in the first workspace
+// open: one waits for an approval, one runs, one is done.
+let fakeRuns: BackgroundRun[] | undefined;
+const runStopped = new Set<string>();
+function backgroundRuns(): BackgroundRun[] {
+  if (fakeRuns) return fakeRuns;
+  const dir = [...states.keys()][0];
+  if (!dir) return []; // made once a workspace is open
+  const s = state(dir);
+  const ago = (min: number) => timestampFromDate(new Date(Date.now() - min * 60000));
+  const run = (id: string, prompt: string, st: string, started: number, extra: Partial<Pick<BackgroundRun, "waiting" | "costUsd" | "ended">> = {}) => {
+    const sess = create(SessionInfoSchema, { id: `session-${id}`, title: prompt, workspace: dir, created: ago(started), updated: now(), messages: [msg("user", prompt)] });
+    sess.messageCount = 1;
+    s.sessions.push(sess);
+    return Object.assign(create(BackgroundRunSchema, { id, workspace: dir, sessionId: sess.id, prompt, state: st, started: ago(started) }), extra);
+  };
+  fakeRuns = [
+    run("bg-3", "Deploy the staging build and check the health endpoint", "waiting", 4, { waiting: 1, costUsd: 0.21 }),
+    run("bg-2", "Upgrade the Go modules and fix what breaks", "running", 12, { costUsd: 0.48 }),
+    run("bg-1", "Write the release notes for 0.4", "done", 95, { ended: ago(80), costUsd: 0.07 }),
+  ];
+  return fakeRuns;
+}
+
+async function* watchRun(id: string): AsyncGenerator<MessageInitShape<typeof WatchBackgroundResponseSchema>> {
+  const r = backgroundRuns().find((x) => x.id === id);
+  if (!r) throw new ConnectError(`no background run ${id}`, Code.NotFound);
+  const s = state(r.workspace);
+  const ev = (kind: unknown) => ({ event: { author: "blitz", kind } }) as MessageInitShape<typeof WatchBackgroundResponseSchema>;
+  const ended = () => ev({ case: "finished", value: { output: "", before: s.usage, after: s.usage } });
+  if (r.state === "done") {
+    yield ev({ case: "text", value: { text: "The release notes are in docs/releases/0.4.md." } });
+    yield ended();
+    return;
+  }
+  yield ev({ case: "toolCall", value: { id: "b1", name: "run_shell_command", args: { command: "make build-staging" } } });
+  yield ev({ case: "toolResult", value: { id: "b1", name: "run_shell_command", result: { exit_code: 0, output: "built shop-staging" } } });
+  if (r.state === "waiting") {
+    const req = `${id}-req`;
+    const answer = new Promise<string>((res) => s.pending.set(req, res));
+    yield ev({ case: "approvalRequest", value: { requestId: req, tool: "run_shell_command", kind: ActionKind.COMMAND, detail: "kubectl rollout restart deploy/shop -n staging" } });
+    const a = await answer;
+    r.state = "running";
+    r.waiting = 0;
+    yield ev({ case: "text", value: { text: a === "deny" ? "Not deploying, then." : "Deployed; /healthz answers 200." } });
+    r.state = "done";
+    r.ended = now();
+    yield ended();
+    return;
+  }
+  while (!runStopped.has(id)) await sleep(200);
+  yield ev({ case: "finished", value: { output: "", before: s.usage, after: s.usage, error: create(ErrorInfoSchema, { reason: "CANCELLED", message: "stopped" }) } });
+}
+
 /** Replaces the service with the in-page fake (development: ?fake). */
 export function installFake() {
   setTransport(
@@ -345,6 +399,19 @@ export function installFake() {
           s.sessions.unshift(n);
           s.active = n.id;
           return { session: n };
+        },
+        listBackground: () => ({ runs: backgroundRuns() }),
+        watchBackground: ({ id }) => watchRun(id),
+        stopBackground: ({ id }) => {
+          const r = backgroundRuns().find((x) => x.id === id);
+          if (!r) throw new ConnectError(`no background run ${id}`, Code.NotFound);
+          if (r.state === "running" || r.state === "waiting") {
+            runStopped.add(id);
+            r.state = "stopped";
+            r.waiting = 0;
+            r.ended = now();
+          }
+          return { run: r };
         },
         loadSession: ({ workspace, ref }) => {
           const s = state(workspace);

@@ -15,6 +15,7 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
+import { InboxButton } from "./RunsInbox";
 import { mdiAlertOutline, mdiCogOutline, mdiFolderOpenOutline, mdiLightningBolt, mdiServerOff } from "@mdi/js";
 import { onServiceLost, workspaces as workspaceAPI } from "./api";
 import { appVersion, chooseWorkspace, type LicenseText, installService, onDeepLink, onNotificationOpen, restartService, serviceStatus, type ServiceStatus, toggleFullscreen } from "./desktop";
@@ -373,6 +374,7 @@ function Welcome({ onOpen, onEdit, onClose, onSettings }: { onOpen: () => void; 
         <WorkspaceSwitcher onOpen={onOpen} onClose={onClose} onEdit={onEdit} />
         <span className="spacer" />
         <div className="topbar-actions no-drag">
+          <InboxButton />
           <IconButton icon={mdiCogOutline} label={t("desktop.settings")} onClick={onSettings} />
         </div>
       </header>

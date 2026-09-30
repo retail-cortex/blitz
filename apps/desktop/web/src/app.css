@@ -483,3 +483,17 @@ code.file-link:hover { text-decoration-color: currentColor; }
 .new-worker .field .input, .new-worker .field .select { width: 100%; }
 .new-worker-prompt { min-height: 140px; resize: vertical; font: inherit; }
 @media (max-width: 800px) { .new-worker .pair, .new-worker .triple { grid-template-columns: 1fr; } }
+
+/* The inbox of background runs (RunsInbox.tsx). */
+.inbox-anchor { position: relative; display: inline-flex; }
+.inbox-badge { position: absolute; top: 2px; right: 0; pointer-events: none; background: var(--md-primary); color: var(--md-on-primary); }
+.inbox-badge.waiting { background: var(--md-error); color: var(--md-on-error); }
+.inbox-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.inbox-row { display: flex; align-items: center; gap: 12px; padding: 8px 4px; border-bottom: 1px solid var(--md-outline-variant); }
+.inbox-row:last-child { border-bottom: none; }
+.inbox-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.inbox-state { flex: none; min-width: 72px; padding: 2px 8px; border-radius: 8px; font: 500 12px/18px var(--md-font); text-align: center; background: var(--md-surface-container-high); color: var(--md-on-surface-variant); }
+.inbox-state.running { background: var(--md-primary-container); color: var(--md-on-primary-container); }
+.inbox-state.waiting { background: var(--md-warning-container); color: var(--md-on-warning-container); }
+.inbox-state.done { background: var(--md-tertiary-container); color: var(--md-on-tertiary-container); }
+.inbox-state.failed { background: var(--md-error-container); color: var(--md-on-error-container); }

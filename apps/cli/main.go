@@ -32,6 +32,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/retail-cortex/blitz/pkg/client"
 	"github.com/retail-cortex/blitz/pkg/socket"
 
 	"github.com/retail-cortex/blitz/pkg/api"
@@ -62,6 +63,8 @@ type rootOptions struct {
 	noPersist    bool   // --no-session-persistence
 	fork         bool   // --fork: continue a copy of the resumed session
 	name         string // --name: the new session's title
+	bg           bool   // --bg: start the prompt in the service and return
+	attachRun    string // blitz attach: the background run to follow first
 	// appendPrompt and appendPromptFile add to the agent's instructions
 	// for the run (--append-system-prompt[-file]).
 	appendPrompt, appendPromptFile string
@@ -130,7 +133,7 @@ Exit codes: 0 success, 1 error, 2 usage, 3 --max-turns reached,
 	f.BoolVarP(&o.version, "version", "v", false, "Print Blitz version")
 	addRunFlags(f, o)
 
-	root.AddCommand(newExecCommand(o), newInitCommand(o), newDoctorCommand(&o.global), newConfigCommand(&o.global), newServeCommand(), newWorkersCommand(&o.global), newServiceCommand(), newLicenseCommand(), newTrustCommand(&o.global), newMCPCommand(&o.global), newWorktreesCommand(&o.global), newMemoryCommand(&o.global), newPluginCommand(), newModelsCommand(&o.global), newUpdateCommand(), newSessionsCommand(&o.global))
+	root.AddCommand(newExecCommand(o), newInitCommand(o), newDoctorCommand(&o.global), newConfigCommand(&o.global), newServeCommand(), newWorkersCommand(&o.global), newServiceCommand(), newLicenseCommand(), newTrustCommand(&o.global), newMCPCommand(&o.global), newWorktreesCommand(&o.global), newMemoryCommand(&o.global), newPluginCommand(), newModelsCommand(&o.global), newUpdateCommand(), newSessionsCommand(&o.global), newAgentsCommand(), newAttachCommand(o), newLogsCommand(), newStopCommand())
 	return root
 }
 
@@ -162,6 +165,7 @@ func addRunFlags(f *pflag.FlagSet, o *rootOptions) {
 	f.Float64Var(&o.maxCostUSD, "max-cost-usd", 0, "Stop a one-shot run once it has cost more than this, in USD (0 = unlimited)")
 	f.DurationVar(&o.timeout, "timeout", 0, "Stop a one-shot run after this long, e.g. 10m (0 = unlimited)")
 	f.BoolVar(&o.plan, "plan", false, "One-shot plan: the agent may read and search but not edit or run commands")
+	f.BoolVar(&o.bg, "bg", false, "Start the prompt as a background run in the Blitz service and return ('blitz agents' lists them)")
 	f.BoolVar(&o.local, "local", false, "Run the workspace in this process even when the Blitz service is running")
 	f.StringArrayVar(&o.allowRules, "allow", nil, `Allow an action without asking, for this run: a rule such as "shell(go test *)" or "write(docs/**)" (repeatable)`)
 	f.StringArrayVar(&o.denyRules, "deny", nil, `Refuse an action, for this run: a rule such as "shell(git push *)" or "web(*.internal)" (repeatable)`)
@@ -271,6 +275,9 @@ func runRoot(cmd *cobra.Command, o *rootOptions, args []string) (err error) {
 	if o.noPersist && (o.resume != "" || o.cont) {
 		return withCode(exitUsage, errors.New("--no-session-persistence starts a new session: not with --resume or --continue"))
 	}
+	if o.bg && (prompt == "" || streamIn || o.interactive || o.local || o.resume != "" || o.cont || o.outputFormat != formatText) {
+		return withCode(exitUsage, errors.New("--bg starts a prompt in a new session of the service: it needs a prompt, and not -i, --local, --resume, --continue or --output-format"))
+	}
 	if !oneShot && o.plan {
 		return withCode(exitUsage, errors.New("--plan requires a prompt (in a session, use /plan <goal>)"))
 	}
@@ -298,6 +305,11 @@ func runRoot(cmd *cobra.Command, o *rootOptions, args []string) (err error) {
 	cfg, err := loadConfig(&o.global)
 	if err != nil {
 		return err
+	}
+	if o.bg {
+		return startBackground(ctx, cmd.OutOrStdout(), cfg, api.Turn{
+			Text: prompt, Plan: o.plan, MaxTurns: o.maxTurns, MaxCostUSD: o.maxCostUSD, Timeout: o.timeout,
+		})
 	}
 	appendPrompt := o.appendPrompt
 	if o.appendPromptFile != "" {
@@ -498,6 +510,8 @@ func runRoot(cmd *cobra.Command, o *rootOptions, args []string) (err error) {
 		ConfigDir:     o.global.config,
 		Notify:        notifier(cfg, pretty),
 		StatusLine:    statusLine(cfg, pretty),
+		Follow:        follower(w, o.attachRun),
+		FollowID:      o.attachRun,
 		// /cd: the target opens as a workspace does at start (its
 		// settings, the trust question, the service when it runs); the
 		// REPL switches to it once the session has moved, and the old one
@@ -670,4 +684,16 @@ func statusLine(cfg *config.Config, terminal bool) string {
 		return ""
 	}
 	return cfg.UI.StatusLine
+}
+
+// follower follows the background run id through w, attached to the
+// service (blitz attach); nil without one.
+func follower(w api.Backend, id string) func(context.Context, func(api.Event)) (api.TurnResult, error) {
+	r, ok := w.(*client.Remote)
+	if id == "" || !ok {
+		return nil
+	}
+	return func(ctx context.Context, on func(api.Event)) (api.TurnResult, error) {
+		return r.FollowBackground(ctx, id, on)
+	}
 }

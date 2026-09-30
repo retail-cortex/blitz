@@ -68,11 +68,13 @@ import {
   loadSessionEvent,
   showLicense,
   takePendingCompose,
+  takePendingLoad,
   type AddToContextDetail,
   type ComposeDetail,
   type LoadSessionDetail,
 } from "./events";
 import { appendMention, insertMention, isImagePath, mentionAt } from "./mentions";
+import { refreshRuns, runInSession } from "./backgroundRuns";
 import { fileIcon } from "./files/icons";
 import { describeImage, imageFiles, readyIds, rejectReason, uploading, type Attachment } from "./attachments";
 import { Markdown } from "./Markdown";
@@ -102,6 +104,8 @@ interface TurnOptions {
   images?: Attachment[];
   /** The prompt as shown, when it differs from the text sent. */
   shown?: string;
+  /** Follow this background run instead of sending text (blitz --bg). */
+  follow?: string;
 }
 
 /** One workspace's conversation: its sessions, the chat and the composer. */
@@ -159,6 +163,7 @@ export function Conversation({
   const [dragging, setDragging] = useState(false);
   const [forceRewind, setForceRewind] = useState<{ index: number; mode: string; error: string } | null>(null);
   const abort = useRef<AbortController | null>(null);
+  const following = useRef(""); // the background run the turn view follows
   const finished = useRef<Promise<void>>(Promise.resolve());
   const scroller = useRef<HTMLDivElement>(null);
   const stick = useRef(true);
@@ -207,7 +212,9 @@ export function Conversation({
   useEffect(() => {
     (async () => {
       try {
-        const active = (await sessions.getActiveSession({ workspace: dir })).session;
+        // A session asked for before the workspace opened (the inbox).
+        const waiting = takePendingLoad(dir);
+        const active = waiting ? (await sessions.loadSession({ workspace: dir, ref: waiting })).session : (await sessions.getActiveSession({ workspace: dir })).session;
         show(active ?? (await sessions.newSession({ workspace: dir })).session!);
         await refreshList();
       } catch (e) {
@@ -248,7 +255,7 @@ export function Conversation({
     async (text: string, opts: TurnOptions = {}) => {
       if (!session) return;
       const images = opts.images ?? [];
-      if (!opts.accepted)
+      if (!opts.accepted && !opts.follow)
         setEntries((e) => [
           ...e,
           {
@@ -265,11 +272,14 @@ export function Conversation({
       stick.current = true;
       const ctl = new AbortController();
       abort.current = ctl;
+      following.current = opts.follow ?? "";
       let done!: () => void;
       finished.current = new Promise((r) => (done = r));
       let leftover: string[] = [];
       try {
-        const stream = sessions.runTurn(
+        const stream = opts.follow
+          ? sessions.watchBackground({ id: opts.follow, follow: true }, { signal: ctl.signal })
+          : sessions.runTurn(
           {
             workspace: dir,
             sessionId: session.id,
@@ -313,7 +323,9 @@ export function Conversation({
         setRunning(false);
         setPending(null);
         abort.current = null;
+        following.current = "";
         done();
+        if (opts.follow) refreshRuns();
       }
       // Prompts learn their place in the transcript, for rewinding.
       try {
@@ -331,8 +343,11 @@ export function Conversation({
     [dir, session, refreshList, fail, onSettingsChanged, tell, name],
   );
 
+  // Stopping a followed background run stops the run, whose stream then
+  // ends; a turn's stream is cut.
   const stop = useCallback(async () => {
-    abort.current?.abort();
+    if (following.current) await sessions.stopBackground({ id: following.current }).catch(() => abort.current?.abort());
+    else abort.current?.abort();
     await finished.current;
   }, []);
   useEffect(() => {
@@ -413,6 +428,23 @@ export function Conversation({
   const latest = useRef({ running, run, continueOn: prefs.task_continue });
   latest.current = { running, run, continueOn: prefs.task_continue };
   const sessionId = session?.id;
+  // A background run going on in this session (blitz --bg, the inbox;
+  // spec_parity_027 PAR-PAR-20) shows as a turn from its start: its
+  // requests wait here, and Stop stops it.
+  useEffect(() => {
+    if (!sessionId) return;
+    let gone = false;
+    sessions
+      .listBackground({})
+      .then((r) => {
+        const bg = runInSession(r.runs, sessionId);
+        if (bg && !gone && !latest.current.running) latest.current.run("", { follow: bg.id });
+      })
+      .catch(() => {});
+    return () => {
+      gone = true;
+    };
+  }, [sessionId]);
   useEffect(() => {
     if (!sessionId) return;
     setTaskRequests([]);
@@ -691,7 +723,9 @@ export function Conversation({
   useEffect(() => {
     const f = (e: Event) => {
       const d = (e as CustomEvent<LoadSessionDetail>).detail;
-      if (d.dir === dir && !running) load(d.id);
+      if (d.dir !== dir) return;
+      e.preventDefault(); // taken
+      if (!running) load(d.id);
     };
     window.addEventListener(loadSessionEvent, f);
     return () => window.removeEventListener(loadSessionEvent, f);

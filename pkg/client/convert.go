@@ -66,6 +66,7 @@ var sentinels = map[string]error{
 	"UNKNOWN_PROCESS":          api.ErrUnknownProcess,
 	"PROJECT_CHANGED":          api.ErrProjectChanged,
 	"UNKNOWN_TASK":             api.ErrUnknownTask,
+	"UNKNOWN_RUN":              api.ErrUnknownRun,
 	"UNKNOWN_REQUEST":          api.ErrUnknownRequest,
 }
 

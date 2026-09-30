@@ -96,6 +96,14 @@ func (b *broker) answer(id string, r reply) error {
 	return nil
 }
 
+// waiting reports whether the request with the ID waits for an answer.
+func (b *broker) waiting(id string) bool {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	_, ok := b.pending[id]
+	return ok
+}
+
 // approve is the workspaces' api.Approver.
 func (b *broker) approve(ctx context.Context, req api.ApprovalRequest) (api.Decision, error) {
 	r, err := b.ask(ctx, func(id string) *pb.TurnEvent {

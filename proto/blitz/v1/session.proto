@@ -90,6 +90,24 @@ service SessionService {
   // conversation or both, or summarizes either side of it (SESSION_BUSY,
   // NOT_REWIND_POINT, CANT_REWIND_CONVERSATION, UNDO_CONFLICT unless force).
   rpc Rewind(RewindRequest) returns (RewindResponse);
+
+  // Background runs (blitz --bg, agents, attach, logs, stop): turns the
+  // service runs in sessions of their own, with no client attached. Their
+  // approval requests and questions wait until a client watching the run
+  // answers them with Approve and Answer.
+  //
+  // Starts a turn in a new session of the workspace, without making it the
+  // active one, and returns at once.
+  rpc StartBackground(StartBackgroundRequest) returns (StartBackgroundResponse);
+  // Returns the service's background runs in every workspace, newest
+  // first: those running or waiting, and the latest that ended.
+  rpc ListBackground(ListBackgroundRequest) returns (ListBackgroundResponse);
+  // Streams a background run's events so far (the requests still waiting
+  // among them) and, with follow, those to come, ending with TurnFinished
+  // once it has ended (UNKNOWN_RUN).
+  rpc WatchBackground(WatchBackgroundRequest) returns (stream WatchBackgroundResponse);
+  // Stops a background run (UNKNOWN_RUN).
+  rpc StopBackground(StopBackgroundRequest) returns (StopBackgroundResponse);
 }
 
 // SessionInfo describes a saved session.
@@ -427,4 +445,65 @@ message SearchSessionResponse {
   // How many passages matched.
   int32 found = 1;
   string prompt = 2;
+}
+
+// BackgroundRun is a turn the service runs with no client attached.
+message BackgroundRun {
+  // bg-1, bg-2, … for the service's lifetime.
+  string id = 1;
+  string workspace = 2;
+  string session_id = 3;
+  // The prompt's first line.
+  string prompt = 4;
+  // running, waiting (for an answer), done, failed or stopped.
+  string state = 5;
+  google.protobuf.Timestamp started = 6;
+  // Unset while it runs.
+  google.protobuf.Timestamp ended = 7;
+  double cost_usd = 8;
+  // Requests waiting for an answer.
+  int32 waiting = 9;
+  string error = 10;
+}
+
+// Request message for SessionService.StartBackground.
+message StartBackgroundRequest {
+  string workspace = 1;
+  Turn turn = 2;
+}
+
+// Response message for SessionService.StartBackground.
+message StartBackgroundResponse {
+  BackgroundRun run = 1;
+}
+
+// Request message for SessionService.ListBackground.
+message ListBackgroundRequest {}
+
+// Response message for SessionService.ListBackground.
+message ListBackgroundResponse {
+  repeated BackgroundRun runs = 1;
+}
+
+// Request message for SessionService.WatchBackground.
+message WatchBackgroundRequest {
+  string id = 1;
+  // Keep streaming until the run ends; otherwise stop after what has
+  // happened so far.
+  bool follow = 2;
+}
+
+// Response message for SessionService.WatchBackground.
+message WatchBackgroundResponse {
+  TurnEvent event = 1;
+}
+
+// Request message for SessionService.StopBackground.
+message StopBackgroundRequest {
+  string id = 1;
+}
+
+// Response message for SessionService.StopBackground.
+message StopBackgroundResponse {
+  BackgroundRun run = 1;
 }

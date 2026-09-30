@@ -17,6 +17,7 @@ load("@rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "server",
     srcs = [
+        "background.go",
         "broker.go",
         "config.go",
         "convert.go",
@@ -50,6 +51,7 @@ go_library(
 go_test(
     name = "server_test",
     srcs = [
+        "background_test.go",
         "broker_test.go",
         "config_test.go",
         "convert_test.go",

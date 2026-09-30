@@ -65,6 +65,33 @@ func (w *Workspace) Run(ctx context.Context, sessionID string, t api.Turn, on fu
 	return res, err
 }
 
+// RunDetached runs a turn in a new session of its own (blitz --bg): as a
+// worker's does, the session doesn't become the workspace's active one, so
+// the people working there aren't moved to it. started gets the session's
+// ID before the turn begins.
+func (w *Workspace) RunDetached(ctx context.Context, t api.Turn, started func(sessionID string), on func(api.Event)) (api.TurnResult, error) {
+	st, err := session.NewStorage(w.cfg.Session.StorageDir)
+	if err != nil {
+		return api.TurnResult{}, err
+	}
+	st.SetWorkspace(w.Dir())
+	rec, err := st.CreateSession(session.NewSessionID(), "", w.engine.ActiveAgent())
+	if err != nil {
+		return api.TurnResult{}, err
+	}
+	if started != nil {
+		started(rec.ID)
+	}
+	w.sessionStarted(rec.ID, "background")
+	planEvery := w.tools.Hooks().Mode() == api.ModePlan || w.cfg.Blitz.PlanReview == config.PlanReviewAlways
+	res, err := w.run(ctx, rec.ID, turn{Turn: t, planMode: planEvery && !t.Plan && t.ReadOnly == ""}, on, st)
+	observability.RecordTurn(ctx, w.engine.ActiveAgent(), turnOutcome(err))
+	return res, err
+}
+
+// UsageOf returns a session's usage, whichever is active.
+func (w *Workspace) UsageOf(sessionID string) api.Usage { return w.engine.Usage(sessionID) }
+
 // notifyUnit is what ui.notify_after counts; tests make it small.
 var notifyUnit = time.Second
 

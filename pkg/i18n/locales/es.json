@@ -1220,6 +1220,23 @@
     "theme.title": "Temas",
     "theme.hint": "/theme <nombre> cambia; --save lo conserva. ascii y notty muestran los diffs sin color.",
     "theme.unknown": "No hay tema {name}; uno de: {themes}",
-    "theme.set": "Tema: {name}"
+    "theme.set": "Tema: {name}",
+    "follow.start": "Siguiendo {id} desde el principio; Ctrl+C deja de seguirlo (sigue ejecutándose).",
+    "follow.stopped": "Dejaste de seguir {id}: sigue en el servicio ('blitz attach {id}' de nuevo).",
+    "follow.failed": "Siguiendo {id}: {error}",
+    "follow.done": "{id} terminó; estás en su sesión.",
+    "desktop.inbox.title": "Ejecuciones en segundo plano",
+    "desktop.inbox.running.one": "{count} ejecución en segundo plano en curso",
+    "desktop.inbox.running.other": "{count} ejecuciones en segundo plano en curso",
+    "desktop.inbox.waiting.one": "{count} ejecución en segundo plano te espera",
+    "desktop.inbox.waiting.other": "{count} ejecuciones en segundo plano te esperan",
+    "desktop.inbox.empty": "No hay ejecuciones en segundo plano. Inicia una desde una terminal con blitz --bg \"<prompt>\"; se ejecuta en el servicio y aparece aquí.",
+    "desktop.inbox.open": "Abrir",
+    "desktop.inbox.stop": "Detener",
+    "desktop.inbox.state.running": "en curso",
+    "desktop.inbox.state.waiting": "esperando ({count})",
+    "desktop.inbox.state.done": "terminada",
+    "desktop.inbox.state.failed": "fallida",
+    "desktop.inbox.state.stopped": "detenida"
   }
 }

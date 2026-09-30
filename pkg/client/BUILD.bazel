@@ -17,6 +17,7 @@ load("@rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "client",
     srcs = [
+        "background.go",
         "client.go",
         "convert.go",
         "processes.go",
@@ -41,6 +42,7 @@ go_library(
 go_test(
     name = "client_test",
     srcs = [
+        "background_test.go",
         "client_test.go",
         "convert_test.go",
         "leak_test.go",

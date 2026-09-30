@@ -59,6 +59,11 @@ type App struct {
 	Notify Notifier
 	// StatusLine is ui.status_line: "default", a command, or "" for none.
 	StatusLine string
+	// Follow, when set, shows a background run until it ends before the
+	// first prompt (blitz attach), answering what it asks; FollowID names
+	// it.
+	Follow   func(ctx context.Context, on func(api.Event)) (api.TurnResult, error)
+	FollowID string
 	// Printer configures output rendering.
 	Printer PrinterOptions
 	// Locales are the interface's translation catalogs (nil: the built-in
@@ -306,6 +311,10 @@ func RunREPL(ctx context.Context, app *App) error {
 		if app.hasNotices() { // a watched background process reported
 			runNotices(ctx, app, interrupts)
 			continue
+		}
+		if app.Follow != nil {
+			followRun(ctx, app, interrupts)
+			app.Follow = nil
 		}
 		printStatusLine(ctx, app)
 		prompt := promptText()

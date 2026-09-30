@@ -42,6 +42,13 @@ import (
 // with replies, and attaches to a new workspace in it.
 func attach(t *testing.T, mutate func(*config.Config), replies ...*genai.Content) *Remote {
 	t.Helper()
+	r, _ := attachURL(t, mutate, replies...)
+	return r
+}
+
+// attachURL is attach, also returning the service's URL.
+func attachURL(t *testing.T, mutate func(*config.Config), replies ...*genai.Content) (*Remote, string) {
+	t.Helper()
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("MODENV_PREFIX", "")
 	s := servicetest.New(func(ctx context.Context, dir string) (*engine.Workspace, error) {
@@ -68,7 +75,7 @@ func attach(t *testing.T, mutate func(*config.Config), replies ...*genai.Content
 	t.Cleanup(func() {
 		assert.LessOrEqual(t, len(warnings), 0, "warnings: %q", warnings)
 	})
-	return r
+	return r, srv.URL
 }
 
 func text(s string) *genai.Content { return genai.NewContentFromText(s, genai.RoleModel) }

@@ -1220,6 +1220,23 @@
     "theme.title": "Thèmes",
     "theme.hint": "/theme <nom> change; --save le garde. ascii et notty affichent les diffs sans couleur.",
     "theme.unknown": "Aucun thème {name}; l’un de : {themes}",
-    "theme.set": "Thème : {name}"
+    "theme.set": "Thème : {name}",
+    "follow.start": "Suivi de {id} depuis le début; Ctrl+C arrête le suivi (l’exécution continue).",
+    "follow.stopped": "Suivi de {id} arrêté : il continue dans le service ('blitz attach {id}' pour reprendre).",
+    "follow.failed": "Suivi de {id} : {error}",
+    "follow.done": "{id} est terminé; vous êtes dans sa session.",
+    "desktop.inbox.title": "Exécutions en arrière-plan",
+    "desktop.inbox.running.one": "{count} exécution en arrière-plan en cours",
+    "desktop.inbox.running.other": "{count} exécutions en arrière-plan en cours",
+    "desktop.inbox.waiting.one": "{count} exécution en arrière-plan vous attend",
+    "desktop.inbox.waiting.other": "{count} exécutions en arrière-plan vous attendent",
+    "desktop.inbox.empty": "Aucune exécution en arrière-plan. Lancez-en une depuis un terminal avec blitz --bg \"<invite>\"; elle s’exécute dans le service et s’affiche ici.",
+    "desktop.inbox.open": "Ouvrir",
+    "desktop.inbox.stop": "Arrêter",
+    "desktop.inbox.state.running": "en cours",
+    "desktop.inbox.state.waiting": "en attente ({count})",
+    "desktop.inbox.state.done": "terminée",
+    "desktop.inbox.state.failed": "échouée",
+    "desktop.inbox.state.stopped": "arrêtée"
   }
 }

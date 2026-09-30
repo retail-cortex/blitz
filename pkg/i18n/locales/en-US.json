@@ -1220,6 +1220,23 @@
     "theme.title": "Themes",
     "theme.hint": "/theme <name> switches; --save keeps it. ascii and notty show diffs without colour.",
     "theme.unknown": "No theme {name}; one of: {themes}",
-    "theme.set": "Theme: {name}"
+    "theme.set": "Theme: {name}",
+    "follow.start": "Following {id} from its start; Ctrl+C stops following (the run goes on).",
+    "follow.stopped": "Stopped following {id}: it goes on in the service ('blitz attach {id}' again).",
+    "follow.failed": "Following {id}: {error}",
+    "follow.done": "{id} has ended; you're in its session.",
+    "desktop.inbox.title": "Background runs",
+    "desktop.inbox.running.one": "{count} background run going",
+    "desktop.inbox.running.other": "{count} background runs going",
+    "desktop.inbox.waiting.one": "{count} background run waiting for you",
+    "desktop.inbox.waiting.other": "{count} background runs waiting for you",
+    "desktop.inbox.empty": "No background runs. Start one from a terminal with blitz --bg \"<prompt>\"; it runs in the service, and shows here.",
+    "desktop.inbox.open": "Open",
+    "desktop.inbox.stop": "Stop",
+    "desktop.inbox.state.running": "running",
+    "desktop.inbox.state.waiting": "waiting ({count})",
+    "desktop.inbox.state.done": "done",
+    "desktop.inbox.state.failed": "failed",
+    "desktop.inbox.state.stopped": "stopped"
   }
 }

@@ -15,6 +15,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { InboxButton } from "./RunsInbox";
 import { mdiCalendarClock, mdiCodeBraces, mdiCogOutline, mdiFileCompare, mdiFileSearchOutline, mdiFileTreeOutline, mdiTuneVariant } from "@mdi/js";
 import { workspaces } from "./api";
 import { Changes } from "./Changes";
@@ -224,6 +225,7 @@ export function Workspace({
         </div>
         <span className="spacer" />
         <div className="topbar-actions no-drag">
+          <InboxButton />
           <IconButton icon={mdiFileSearchOutline} label={t("desktop.files.go_to")} onClick={() => setGoTo(true)} />
           <IconButton icon={mdiTuneVariant} label={t("desktop.run_settings")} selected={prefs.run_settings} onClick={() => update((p) => ({ ...p, run_settings: !p.run_settings }))} />
           <IconButton icon={mdiCogOutline} label={t("desktop.settings")} onClick={onSettings} />

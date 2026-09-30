@@ -21,6 +21,7 @@ exports_files(["main.go"])
 go_library(
     name = "cli_lib",
     srcs = [
+        "agents.go",
         "configcmd.go",
         "configkeys.go",
         "configperms.go",
@@ -63,6 +64,7 @@ go_library(
         "//pkg/plugins",
         "//pkg/secrets",
         "//pkg/socket",
+        "//pkg/textutil",
         "//pkg/worktree",
         "@com_github_burntsushi_toml//:toml",
         "@com_github_google_jsonschema_go//jsonschema",
@@ -88,6 +90,7 @@ go_binary(
 go_test(
     name = "cli_test",
     srcs = [
+        "agents_test.go",
         "attach_test.go",
         "configkeys_test.go",
         "headless_test.go",
