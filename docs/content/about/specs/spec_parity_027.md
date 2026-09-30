@@ -7,7 +7,7 @@ weight: 27
 
 | | |
 |---|---|
-| Status | **Partly implemented:** 85 of its 99 requirements done and 1 in part (counted 2026-09-30); the rest open. A gap analysis of 2026-09-26, to be closed before new features are added. |
+| Status | **Partly implemented:** 88 of its 99 requirements done and 1 in part (counted 2026-09-30); the rest open. A gap analysis of 2026-09-26, to be closed before new features are added. |
 | Compared with | **Claude Code** (current docs at code.claude.com, September 2026: v2.1.28x); **Antigravity CLI** (`agy` 1.1–1.2, September 2026); **Antigravity** 2.0 (Google's agent-first IDE and Agent Manager) |
 | Depends on | Specs 001–025 (what Blitz does today) and [spec_backlog_026](spec_backlog_026.md) (Blitz's own gaps; overlapping items are referenced, not repeated) |
 
@@ -115,10 +115,10 @@ Decision §12.2. **CC** `/cd <path>` (June 2026) moves the session to another di
 ### 5.1 Missing built-in tools — P0/P1
 **CC** `Glob`, `NotebookEdit`, `LSP`, `Monitor`, `WebSearch`, `TodoWrite`, `AskUserQuestion` (multiple-choice). **Blitz today:** `list_files`, `grep`, file tools, shell, background processes, web, `ask_user_question` (free text + options).
 - **PAR-TOOL-01 (P0, S)** ✅ *Done 2026-09-26 (ROADMAP 25.1; now [spec_filetools_006](spec_filetools_006.md)).* `glob(pattern, path?)`: files matching `**` globs under the roots, blocked paths excluded, sorted by modification time, capped (default 200), with the same skip rules as `grep`.
-- **PAR-TOOL-02 (P1, S)** `notebook_edit(path, cell, action, source)`: replace, insert or delete a Jupyter cell (JSON-preserving), through the file sandbox, approvals, diffs and checkpoints; `read_file` renders notebooks as cells with outputs.
+- **PAR-TOOL-02 (P1, S)** ✅ *Done 2026-09-30 ([spec_filetools_006](spec_filetools_006.md) §6).* `notebook_edit(path, cell, action, source)`: replace, insert or delete a Jupyter cell (JSON-preserving), through the file sandbox, approvals, diffs and checkpoints; `read_file` renders notebooks as cells with outputs.
 - **PAR-TOOL-03 (P1, L)** Code intelligence: an `lsp` tool (definition, references, hover, workspace symbols, diagnostics) backed by language servers configured under `[lsp.<language>]` (e.g. `gopls`, `typescript-language-server`, `pyright`), started lazily in the OS sandbox; after each edit, new diagnostics for the edited file are appended to the tool result.
-- **PAR-TOOL-04 (P1, S)** Background output reaches the agent: `run_shell_command(background: true, notify: true)` delivers the process's exit (and optionally lines matching a pattern) to the agent as a steer-style message at its next tool result or as a new turn when idle (CC `Monitor`).
-- **PAR-TOOL-05 (P2, S)** `ask_user_question` supports multiple questions per call and multi-select options, rendered as a menu in the REPL and the app.
+- **PAR-TOOL-04 (P1, S)** ✅ *Done 2026-09-30 ([spec_shell_007](spec_shell_007.md) SH-42); the desktop app gives notices to the next prompt rather than starting a turn.* Background output reaches the agent: `run_shell_command(background: true, notify: true)` delivers the process's exit (and optionally lines matching a pattern) to the agent as a steer-style message at its next tool result or as a new turn when idle (CC `Monitor`).
+- **PAR-TOOL-05 (P2, S)** ✅ *Done 2026-09-30 ([spec_approvals_005](spec_approvals_005.md) APR-40a).* `ask_user_question` supports multiple questions per call and multi-select options, rendered as a menu in the REPL and the app.
 
 ### 5.2 Browser automation — P1, L
 **CC** Chrome integration (navigate, click, fill, read console, screenshots). **AG** browser subagent in a managed Chrome with recordings and screenshots, JavaScript execution policy, URL allowlist. **AGY** `/browser`. **Blitz today:** `web_fetch` (text only, no JavaScript).
