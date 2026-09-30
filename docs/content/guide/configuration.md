@@ -109,7 +109,7 @@ project_id = "my-project"    # or GOOGLE_CLOUD_PROJECT
 location = "global"          # or GOOGLE_CLOUD_LOCATION, us-east5, europe-west1, …
 ```
 
-On Vertex AI, Claude has no server-side refusal fallback: a refused request ends as refused (`fallbacks` doesn't apply).
+On Vertex AI, Claude has no server-side refusal fallback, so Blitz retries a refused request itself on the fallback: the model `fallbacks` names, or `claude-opus-4-8` for `"default"`. A conversation that fell back stays on the fallback. `fallbacks = "off"` turns it off.
 
 **Claude with an Anthropic account (OAuth).** Claude uses an Anthropic Console sign-in from the `ant` command line tool, billed to the organization you pick when signing in. This is the Claude API's sign-in, not a Claude.ai subscription.
 
