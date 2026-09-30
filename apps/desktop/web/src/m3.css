@@ -309,6 +309,8 @@ input[type="range"] { accent-color: var(--md-primary); width: 100%; }
   position: absolute; z-index: 30; min-width: 200px; max-width: 360px; max-height: 60vh; overflow-y: auto; padding: 8px 0;
   background: var(--md-surface-container); border-radius: var(--md-shape-xs); box-shadow: var(--md-elevation-2);
 }
+/* Menus float over the whole window, fixed where they open (Menu, ContextMenu). */
+.menu.floating { position: fixed; z-index: 1000; white-space: normal; }
 .menu.up { bottom: calc(100% + 4px); }
 .menu.down { top: calc(100% + 4px); }
 .menu.end { right: 0; }
@@ -345,7 +347,9 @@ input[type="range"] { accent-color: var(--md-primary); width: 100%; }
 
 /* Snackbar */
 .snackbar {
-  position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 60;
+  /* Bottom left, above the status bar: centred at the foot it covered the
+     composer, and at the top the chat's title and toolbars. */
+  position: fixed; left: 16px; bottom: 42px; z-index: 1100;
   display: flex; align-items: center; gap: 16px; min-width: 280px; max-width: 640px; padding: 4px 8px 4px 16px; min-height: 48px;
   background: var(--md-inverse-surface); color: var(--md-inverse-on-surface); border-radius: var(--md-shape-xs); box-shadow: var(--md-elevation-3);
   animation: fade 0.15s;

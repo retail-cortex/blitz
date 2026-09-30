@@ -73,7 +73,7 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
       <div className="settings">
         <div className="settings-nav list" role="tablist">
           {(Object.keys(sectionIcons) as Section[]).map((id) => (
-            <button key={id} role="tab" aria-selected={id === section} className={`list-item ${id === section ? "active" : ""}`} onClick={() => setSection(id)}>
+            <button key={id} role="tab" aria-selected={id === section} data-autofocus={id === section ? "" : undefined} className={`list-item ${id === section ? "active" : ""}`} onClick={() => setSection(id)}>
               <Icon path={sectionIcons[id]} />
               {t(`desktop.settings.${id}`)}
             </button>

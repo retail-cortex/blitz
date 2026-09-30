@@ -293,7 +293,7 @@ function Shell() {
           />
         ))}
       </main>
-      <StatusBar serviceUp={service.state === "up"} version={version.info?.version} onRunSettings={() => update((p) => ({ ...p, run_settings: true }))} />
+      <StatusBar serviceUp={service.state === "up"} version={version.info?.version} onRunSettings={() => update((p) => ({ ...p, run_settings: !p.run_settings }))} />
       {unsavedClose && (
         <UnsavedDialog
           names={[displayName(prefs.workspaces.find((w) => w.dir === unsavedClose) ?? { dir: unsavedClose })]}

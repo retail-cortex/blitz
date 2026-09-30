@@ -104,7 +104,7 @@
    dialogs, menus, and the panels that float over the chat or the editor
    in narrower windows. */
 :root[data-glass="on"] :is(.dialog, .menu) { background: var(--glass-strong); }
-@media (max-width: 1500px) {
+@media (max-width: 1280px) {
   :root[data-glass="on"] .run-settings { background: var(--glass-strong); border-left: 1px solid var(--glass-border); box-shadow: var(--glass-shadow); }
 }
 @media (max-width: 1100px) {
@@ -131,7 +131,7 @@
 :root[data-glass="on"] .status-bar { border-top: 1px solid var(--glass-border); box-shadow: var(--glass-edge); }
 :root[data-glass="on"] .workspace-center .editor-pane { background: transparent; -webkit-backdrop-filter: none; backdrop-filter: none; }
 /* The panes stay put when they float in narrower windows. */
-@media (max-width: 1500px) {
+@media (max-width: 1280px) {
   :root[data-glass="on"] .run-settings { top: 0; right: 8px; bottom: 8px; border-radius: var(--md-shape-lg); }
 }
 @media (max-width: 1100px) {

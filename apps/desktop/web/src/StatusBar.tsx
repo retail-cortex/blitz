@@ -28,10 +28,10 @@ import {
 import { workspaces } from "./api";
 import { inboxCounts, useRuns } from "./backgroundRuns";
 import { message, reason } from "./errors";
-import { configChanged, filesTouchedEvent, showView } from "./events";
+import { configChanged, filesTouchedEvent, showPending, showView } from "./events";
 import type { GetGitStatusResponse } from "./gen/blitz/v1/workspace_pb";
 import { t, tn } from "./i18n";
-import { modeOf, modes } from "./options";
+import { effortIcon, efforts, modeOf, modes } from "./options";
 import { workspaceColor } from "./palette";
 import { displayName } from "./prefs";
 import { InboxDialog } from "./RunsInbox";
@@ -69,7 +69,7 @@ export function StatusBar({ serviceUp, version, onRunSettings }: { serviceUp: bo
         </>
       )}
       <span className="spacer" />
-      {ws && <Activity running={!!activity[dir]?.running} waiting={!!activity[dir]?.waiting} />}
+      {ws && <Activity dir={dir} running={!!activity[dir]?.running} waiting={!!activity[dir]?.waiting} />}
       {serviceUp && <RunsItem />}
       {ws && <FailedItem dir={dir} />}
       {ws && serviceUp && <WorkspaceItems dir={dir} onRunSettings={onRunSettings} />}
@@ -115,12 +115,20 @@ function GitItem({ dir }: { dir: string }) {
   );
 }
 
-function Activity({ running, waiting }: { running: boolean; waiting: boolean }) {
+// A turn running, or waiting for the user: clicking the latter shows what it asks.
+function Activity({ dir, running, waiting }: { dir: string; running: boolean; waiting: boolean }) {
   if (!running && !waiting) return null;
+  if (waiting)
+    return (
+      <button className="sb-item sb-button sb-activity waiting" title={t("desktop.status.waiting_title")} onClick={() => showPending({ dir })}>
+        <Icon path={mdiAlertCircleOutline} size="sm" />
+        <span className="sb-low">{t("desktop.status.waiting")}</span>
+      </button>
+    );
   return (
-    <span className={`sb-item sb-activity ${waiting ? "waiting" : ""}`} role="status">
-      <Icon path={waiting ? mdiAlertCircleOutline : mdiLoading} size="sm" spin={!waiting} />
-      <span className="sb-low">{waiting ? t("desktop.status.waiting") : t("desktop.status.working")}</span>
+    <span className="sb-item sb-activity" role="status">
+      <Icon path={mdiLoading} size="sm" spin />
+      <span className="sb-low">{t("desktop.status.working")}</span>
     </span>
   );
 }
@@ -157,6 +165,7 @@ function FailedItem({ dir }: { dir: string }) {
 // The editor's cursor, the agent and model, the mode, context and cost:
 // what the workspace published.
 function WorkspaceItems({ dir, onRunSettings }: { dir: string; onRunSettings: () => void }) {
+  const { prefs } = useApp();
   const st = useWorkspaceStatus(dir);
   const snack = useSnackbar();
   const s = st.settings;
@@ -167,6 +176,15 @@ function WorkspaceItems({ dir, onRunSettings }: { dir: string; onRunSettings: ()
       configChanged({ dir });
     } catch (e) {
       snack(reason(e) === "BYPASS_NEEDS_SANDBOX" ? t("desktop.bypass_needs_sandbox") : message(e), { error: true });
+    }
+  };
+  const effort = efforts().find((e) => e.value === (s?.effort ?? "")) ?? efforts()[0];
+  const setEffort = async (value: string) => {
+    try {
+      await workspaces.setSetting({ workspace: dir, key: "effort", value: value || "auto" });
+      configChanged({ dir });
+    } catch (e) {
+      snack(message(e), { error: true });
     }
   };
   const total = st.total;
@@ -181,7 +199,7 @@ function WorkspaceItems({ dir, onRunSettings }: { dir: string; onRunSettings: ()
         </span>
       )}
       {s && (
-        <button className="sb-item sb-button sb-model" title={t("desktop.status.model_title", { agent: s.agent, model: s.model, provider: s.provider })} onClick={onRunSettings}>
+        <button className={`sb-item sb-button sb-model ${prefs.run_settings ? "on" : ""}`} aria-pressed={prefs.run_settings} data-toggles="run-settings" title={t("desktop.status.model_title", { agent: s.agent, model: s.model, provider: s.provider })} onClick={onRunSettings}>
           <Icon path={mdiRobotOutline} size="sm" />
           <span className="sb-low ellipsis">{s.agent}</span>
           <span className="ellipsis">{s.model}</span>
@@ -190,6 +208,7 @@ function WorkspaceItems({ dir, onRunSettings }: { dir: string; onRunSettings: ()
       {s && (
         <Menu
           placement="up end"
+          className="wide-menu"
           trigger={(p) => (
             <button className={`sb-item sb-button ${mode.value === "bypass" ? "sb-error" : mode.value !== "default" ? "sb-accent" : ""}`} title={mode.detail} {...p}>
               {mode.icon && <Icon path={mode.icon} size="sm" />}
@@ -197,6 +216,19 @@ function WorkspaceItems({ dir, onRunSettings }: { dir: string; onRunSettings: ()
             </button>
           )}
           items={[{ heading: t("desktop.composer.mode") }, ...modes().map((m) => ({ label: m.label, detail: m.detail, icon: m.icon, on: m.value === mode.value, onSelect: () => setMode(m.value) }))]}
+        />
+      )}
+      {s && (
+        <Menu
+          placement="up end"
+          className="wide-menu"
+          trigger={(p) => (
+            <button className={`sb-item sb-button ${effort.value ? "sb-accent" : ""}`} title={t("desktop.composer.effort_title")} {...p}>
+              <Icon path={effortIcon} size="sm" />
+              <span className="sb-low">{t("desktop.composer.effort_set", { effort: effort.label })}</span>
+            </button>
+          )}
+          items={[{ heading: t("desktop.composer.effort_heading") }, ...efforts().map((e) => ({ label: e.label, detail: e.detail, on: e.value === effort.value, onSelect: () => setEffort(e.value) }))]}
         />
       )}
       {total && total.calls > 0 && (

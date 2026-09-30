@@ -151,3 +151,11 @@ export const showLicenseEvent = "blitz:show-license";
 export function showLicense(detail: { which: "notice" | "full" | "third-party" }) {
   window.dispatchEvent(new CustomEvent(showLicenseEvent, { detail }));
 }
+
+/** The event that brings a workspace's waiting request (an approval, a question) into view. */
+export const showPendingEvent = "blitz:show-pending";
+
+/** Asks a workspace's conversation to show what waits for the user. */
+export function showPending(detail: { dir: string }) {
+  window.dispatchEvent(new CustomEvent(showPendingEvent, { detail }));
+}

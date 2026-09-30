@@ -41,6 +41,7 @@ import { message } from "../errors";
 import { FileKind, type FileEntry } from "../gen/blitz/v1/file_pb";
 import { t } from "../i18n";
 import { Button, ContextMenu, Dialog, Icon, IconButton, useSnackbar, type MenuEntry } from "../ui/controls";
+import { filesFloat, useFloatingDismiss } from "../ui/layout";
 import { ResizeHandle } from "../ui/ResizeHandle";
 import { fileIcon } from "./icons";
 import { ancestors, emptyTree, isFolder, joinPath, parentOf, rows, setExpanded, shownFolders, validName, withChildren, type Tree } from "./tree";
@@ -85,6 +86,9 @@ export function FilesShelf({
   onClose: () => void;
 }) {
   const snack = useSnackbar();
+  // Floating over the editor, a click outside or Escape minimizes it.
+  const shelf = useRef<HTMLElement>(null);
+  useFloatingDismiss(true, shelf, `(max-width: ${filesFloat}px)`, "files", onClose);
   const [tree, setTree] = useState<Tree>(emptyTree);
   const [selected, setSelected] = useState<string | null>(null);
   const [naming, setNaming] = useState<Naming | null>(null);
@@ -277,7 +281,7 @@ export function FilesShelf({
     ) : null;
 
   return (
-    <aside className="files-shelf" aria-label={t("desktop.files.title")} style={{ width }}>
+    <aside className="files-shelf" aria-label={t("desktop.files.title")} style={{ width }} ref={shelf}>
       <ResizeHandle width={width} edge="right" min={200} max={() => Math.min(560, window.innerWidth - 600)} label={t("desktop.files.resize")} onResize={onResize} />
       <div className="panel-head files-head">
         <span className="t-title-sm spacer">{t("desktop.files.title")}</span>

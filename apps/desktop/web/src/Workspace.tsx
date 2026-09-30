@@ -37,7 +37,7 @@ import { useApp } from "./state";
 import { publishStatus } from "./status";
 import { t } from "./i18n";
 import { IconButton, Segmented } from "./ui/controls";
-import { panelWidth, useWindowWidth } from "./ui/layout";
+import { filesFloat, panelWidth, runSettingsFloat, useWindowWidth } from "./ui/layout";
 import { ResizeHandle } from "./ui/ResizeHandle";
 import { Brand, WorkspaceSwitcher } from "./WorkspaceSwitcher";
 import { Workers } from "./Workers";
@@ -160,7 +160,7 @@ export function Workspace({
   const runWidth = panelWidth(prefs.run_settings_width, 420, 340, Math.min(720, win - 420));
   // The chat leaves the editor 360 px beside the panels that sit inline
   // (narrower windows float the run settings and the shelf over it).
-  const chatMax = (w: number) => w - (prefs.files && w > 1100 ? filesWidth : 56) - (prefs.run_settings && w > 1500 ? runWidth : 0) - 400;
+  const chatMax = (w: number) => w - (prefs.files && w > filesFloat ? filesWidth : 56) - (prefs.run_settings && w > runSettingsFloat ? runWidth : 0) - 400;
   const chatWidth = panelWidth(prefs.chat_width, Math.max(380, Math.min(520, Math.round(win * 0.32))), 320, chatMax(win));
   const chatCenter = view === "editor" && editor.tabs.length === 0;
   const revealInTree = (path: string) => {
@@ -191,7 +191,7 @@ export function Workspace({
         <div className="topbar-actions no-drag">
           <InboxButton />
           <IconButton icon={mdiFileSearchOutline} label={t("desktop.files.go_to")} onClick={() => setGoTo(true)} />
-          <IconButton icon={mdiTuneVariant} label={t("desktop.run_settings")} selected={prefs.run_settings} onClick={() => update((p) => ({ ...p, run_settings: !p.run_settings }))} />
+          <IconButton icon={mdiTuneVariant} label={t("desktop.run_settings")} data-toggles="run-settings" selected={prefs.run_settings} onClick={() => update((p) => ({ ...p, run_settings: !p.run_settings }))} />
           <IconButton icon={mdiCogOutline} label={t("desktop.settings")} onClick={onSettings} />
         </div>
       </header>
@@ -209,7 +209,7 @@ export function Workspace({
             onOpen={(p) => {
               open(p);
               // Narrow, the shelf floats over the editor: make way.
-              if (window.matchMedia("(max-width: 1100px)").matches) update((x) => ({ ...x, files: false }));
+              if (window.matchMedia(`(max-width: ${filesFloat}px)`).matches) update((x) => ({ ...x, files: false }));
             }}
             onMoved={editor.moved}
             onClose={() => update((p) => ({ ...p, files: false }))}

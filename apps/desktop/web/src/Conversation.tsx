@@ -70,6 +70,7 @@ import {
   filesTouched,
   loadSessionEvent,
   showLicense,
+  showPendingEvent,
   takePendingCompose,
   takePendingLoad,
   type AddToContextDetail,
@@ -83,13 +84,13 @@ import { describeImage, imageFiles, readyIds, rejectReason, uploading, type Atta
 import { Markdown } from "./Markdown";
 import { language, t, tn, useLanguage } from "./i18n";
 import { notify, shouldNotify, type NotifyKind } from "./notify";
-import { efforts, effortIcon, modeOf, modes } from "./options";
+import { efforts, effortIcon, modeOf } from "./options";
 import { useApp } from "./state";
 import { publishStatus } from "./status";
 import { useOpenPath } from "./files/links";
 import { applyEvent, assignPromptIndices, failed, fromMessages, parseDiff, summarizeArgs, tasksOf, turnAnswers, type Entry, type UserEntry } from "./turns";
 import { copyRendered, copyText } from "./clipboard";
-import { Button, Chip, Dialog, Icon, IconButton, Menu, useSnackbar } from "./ui/controls";
+import { Button, Dialog, Icon, IconButton, Menu, useSnackbar } from "./ui/controls";
 
 /** A background task's approval request or question, waiting for an answer. */
 type TaskRequest = { id: string; who: string; approval?: ApprovalRequest; question?: Question };
@@ -152,7 +153,6 @@ export function Conversation({
   useEffect(() => publishStatus(dir, { total, turn: turnUsage }), [dir, total, turnUsage]);
   const [error, setError] = useState("");
   const [draft, setDraft] = useState("");
-  const [plan, setPlan] = useState(false);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [customCommands, setCustomCommands] = useState<CommandSpec[]>([]);
   useEffect(() => {
@@ -250,6 +250,22 @@ export function Conversation({
     if (pending?.kind === "approval") tell("waiting", t("desktop.notify.approval", { name }), t("desktop.notify.approval_body", { tool: pending.req.tool, detail: pending.req.detail }));
     if (pending?.kind === "question") tell("waiting", t("desktop.notify.asks", { name }), pending.q.question.replace(/[#*`_>]/g, "").trim());
   }, [pending, name, tell]);
+  // What waits for the user is brought into view as it comes, and when the
+  // status bar's "Waiting for you" is clicked.
+  const pendingRef = useRef<HTMLDivElement>(null);
+  const showWaiting = useCallback(() => {
+    const el = pendingRef.current?.firstElementChild as HTMLElement | null;
+    el?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    el?.querySelector<HTMLElement>("button, textarea, input")?.focus({ preventScroll: true });
+  }, []);
+  useEffect(() => {
+    if (pending || taskRequests.length) requestAnimationFrame(() => pendingRef.current?.firstElementChild?.scrollIntoView({ block: "nearest" }));
+  }, [pending, taskRequests.length]);
+  useEffect(() => {
+    const f = (e: Event) => (e as CustomEvent<{ dir: string }>).detail.dir === dir && showWaiting();
+    window.addEventListener(showPendingEvent, f);
+    return () => window.removeEventListener(showPendingEvent, f);
+  }, [dir, showWaiting]);
 
   // Follow new output, unless the user scrolled up to read.
   useEffect(() => {
@@ -420,11 +436,9 @@ export function Conversation({
   const submit = async (text: string) => {
     if (parseCommand(text) && (await execute(text))) return;
     if (!running) {
-      const asPlan = plan;
-      setPlan(false);
       const images = attachments.filter((a) => a.id && !a.error);
       setAttachments([]);
-      return run(text, { plan: asPlan, images });
+      return run(text, { images });
     }
     // While a turn runs, a message steers it.
     try {
@@ -852,15 +866,17 @@ export function Conversation({
               <span className="muted">{t("desktop.working")}</span>
             </div>
           )}
-          {taskRequests.map((r) =>
-            r.approval ? (
-              <ApprovalCard key={r.id} who={r.who} req={r.approval} autoFocus={false} onDecide={(decision) => answerTask(r, { decision })} />
-            ) : (
-              <QuestionCard key={r.id} who={r.who} q={r.question!} autoFocus={false} onAnswer={(text) => answerTask(r, { text })} />
-            ),
-          )}
-          {pending?.kind === "approval" && <ApprovalCard req={pending.req} onDecide={decide} />}
-          {pending?.kind === "question" && <QuestionCard q={pending.q} onAnswer={answer} />}
+          <div className="pending" ref={pendingRef}>
+            {pending?.kind === "approval" && <ApprovalCard req={pending.req} onDecide={decide} />}
+            {pending?.kind === "question" && <QuestionCard q={pending.q} onAnswer={answer} />}
+            {taskRequests.map((r) =>
+              r.approval ? (
+                <ApprovalCard key={r.id} who={r.who} req={r.approval} autoFocus={false} onDecide={(decision) => answerTask(r, { decision })} />
+              ) : (
+                <QuestionCard key={r.id} who={r.who} q={r.question!} autoFocus={false} onAnswer={(text) => answerTask(r, { text })} />
+              ),
+            )}
+          </div>
           {error && (
             <div className="card error row">
               <Icon path={mdiAlertCircleOutline} />
@@ -882,13 +898,9 @@ export function Conversation({
           draft={draft}
           setDraft={setDraft}
           running={running}
-          settings={settings}
-          plan={plan}
-          setPlan={setPlan}
           dir={dir}
           onSubmit={submit}
           onStop={stop}
-          onSettingsChanged={onSettingsChanged}
         />
       </div>
       {forceRewind && (
@@ -975,6 +987,7 @@ function SessionBar({
       <span className="spacer" />
       <Menu
         placement="down end"
+        className="wide-menu"
         trigger={(p) => <IconButton icon={mdiHistory} label={t("desktop.chat.history")} disabled={running} {...p} />}
         items={
           list.length === 0
@@ -983,7 +996,7 @@ function SessionBar({
                 { heading: t("desktop.chat.list") },
                 ...list.map((s) => ({
                   label: s.snapshot ? `📸 ${s.snapshot}` : s.title || "(untitled)",
-                  detail: tn("desktop.messages", s.messageCount) + (s.updated ? ` · ${timestampDate(s.updated).toLocaleString(language())}` : ""),
+                  detail: tn("desktop.messages", s.messageCount) + (s.updated ? ` · ${timestampDate(s.updated).toLocaleString(language(), { dateStyle: "medium", timeStyle: "short" })}` : ""),
                   on: s.id === session?.id,
                   onSelect: () => onLoad(s.id),
                 })),
@@ -1489,13 +1502,9 @@ function Composer({
   draft,
   setDraft,
   running,
-  settings,
-  plan,
-  setPlan,
   dir,
   onSubmit,
   onStop,
-  onSettingsChanged,
 }: {
   commands: CommandSpec[];
   attachments: Attachment[];
@@ -1506,15 +1515,10 @@ function Composer({
   draft: string;
   setDraft: (t: string) => void;
   running: boolean;
-  settings?: GetSettingsResponse;
-  plan: boolean;
-  setPlan: (p: boolean) => void;
   dir: string;
   onSubmit: (t: string) => void;
   onStop: () => void;
-  onSettingsChanged: () => void;
 }) {
-  const snack = useSnackbar();
   const ref = useRef<HTMLTextAreaElement>(null);
   const picker = useRef<HTMLInputElement>(null);
   const busy = uploading(attachments);
@@ -1570,24 +1574,6 @@ function Composer({
     setDraft("");
     onSubmit(text);
   };
-  const setMode = async (mode: string) => {
-    try {
-      await workspaces.setPermissionMode({ workspace: dir, mode });
-      onSettingsChanged();
-    } catch (e) {
-      snack(reason(e) === "BYPASS_NEEDS_SANDBOX" ? t("desktop.bypass_needs_sandbox") : message(e), { error: true });
-    }
-  };
-  const setEffort = async (value: string) => {
-    try {
-      await workspaces.setSetting({ workspace: dir, key: "effort", value: value || "auto" });
-      onSettingsChanged();
-    } catch (e) {
-      snack(message(e), { error: true });
-    }
-  };
-  const mode = modeOf(settings?.permissionMode ?? "default");
-  const effort = efforts().find((e) => e.value === (settings?.effort ?? "")) ?? efforts()[0];
   return (
     <div className={`composer ${running ? "running" : ""}`}>
       {menuOpen && (
@@ -1711,7 +1697,7 @@ function Composer({
             send();
           }
         }}
-        placeholder={running ? t("desktop.composer.steer") : plan ? t("desktop.composer.plan") : t("desktop.composer.ask")}
+        placeholder={running ? t("desktop.composer.steer") : t("desktop.composer.ask")}
         aria-label={t("desktop.composer.message")}
       />
       <div className="composer-bar">
@@ -1731,32 +1717,9 @@ function Composer({
             />
           </>
         )}
-        <Menu
-          placement="up start"
-          trigger={(p) => (
-            <Chip icon={mode.icon} tone={mode.value === "bypass" ? "danger" : undefined} selected={mode.value !== "default" && mode.value !== "bypass"} title={mode.detail} {...p}>
-              {mode.label}
-            </Chip>
-          )}
-          items={[{ heading: t("desktop.composer.mode") }, ...modes().map((m) => ({ label: m.label, detail: m.detail, icon: m.icon, on: m.value === mode.value, onSelect: () => setMode(m.value) }))]}
-        />
-        <Menu
-          placement="up start"
-          trigger={(p) => (
-            <Chip icon={effortIcon} selected={!!effort.value} title={t("desktop.composer.effort_title")} {...p}>
-              {effort.value ? t("desktop.composer.effort_set", { effort: effort.label }) : t("desktop.composer.effort")}
-            </Chip>
-          )}
-          items={[{ heading: t("desktop.composer.effort_heading") }, ...efforts().map((e) => ({ label: e.label, detail: e.detail, on: e.value === effort.value, onSelect: () => setEffort(e.value) }))]}
-        />
-        {!running && (
-          <Chip icon={mdiClipboardCheckOutline} selected={plan} onClick={() => setPlan(!plan)} title={t("desktop.composer.plan_first_hint")}>
-            {t("desktop.composer.plan_first")}
-          </Chip>
-        )}
         <span className="spacer" />
         <span className="t-body-sm muted hint">
-          <kbd>{t("desktop.keys.enter")}</kbd> {t("desktop.keys.to_send")} · <kbd>{t("desktop.keys.shift")}</kbd>+<kbd>{t("desktop.keys.enter")}</kbd> {t("desktop.keys.new_line")}
+          <kbd>{t("desktop.keys.enter")}</kbd> {t("desktop.keys.to_send")} · <kbd>{t("desktop.keys.shift")}</kbd>+<kbd>{t("desktop.keys.enter")}</kbd> {t("desktop.keys.new_line")} · {t("desktop.composer.plan_hint")}
         </span>
         {running && <IconButton icon={mdiStop} label={t("desktop.stop")} variant="tonal" onClick={onStop} />}
         <IconButton icon={mdiArrowUp} label={busy ? t("desktop.uploading") : running ? t("desktop.steer") : t("desktop.send")} variant="filled" disabled={!draft.trim() || busy} onClick={send} />

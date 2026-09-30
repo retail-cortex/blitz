@@ -22,11 +22,14 @@ import {
   useContext,
   useEffect,
   useId,
+  useLayoutEffect,
   useRef,
   useState,
   type ButtonHTMLAttributes,
+  type CSSProperties,
   type ReactNode,
 } from "react";
+import { createPortal } from "react-dom";
 import { mdiClose } from "@mdi/js";
 import { t } from "../i18n";
 
@@ -149,11 +152,12 @@ export function Switch({ checked, onChange, label, disabled }: { checked: boolea
 }
 
 /** Closes on a click outside ref or on Escape. */
-export function useDismiss(open: boolean, ref: React.RefObject<HTMLElement | null>, close: () => void) {
+export function useDismiss(open: boolean, ref: React.RefObject<HTMLElement | null> | React.RefObject<HTMLElement | null>[], close: () => void) {
   useEffect(() => {
     if (!open) return;
+    const refs = Array.isArray(ref) ? ref : [ref];
     const down = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) close();
+      if (refs.some((r) => r.current) && !refs.some((r) => r.current?.contains(e.target as Node))) close();
     };
     const key = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
@@ -181,24 +185,87 @@ export interface MenuItem {
   onSelect: () => void;
 }
 
-/** A button that opens a menu of items (or dividers and labels). */
+/** A rectangle in the window, as getBoundingClientRect gives it. */
+export interface Box {
+  top: number;
+  bottom: number;
+  left: number;
+  right: number;
+}
+
+/**
+ * Where a menu opens beside its anchor (placement "up" or "down", "start"
+ * or "end"), fixed to the window: above or below it (the other side when
+ * that one has under 200 px and the other more), aligned with its start or
+ * end, and no taller than the room on its side.
+ */
+export function menuPosition(anchor: Box, placement: string, vw: number, vh: number): CSSProperties {
+  const above = anchor.top - 12;
+  const below = vh - anchor.bottom - 12;
+  let up = placement.includes("up");
+  if (up && above < 200 && below > above) up = false;
+  else if (!up && below < 200 && above > below) up = true;
+  const s: CSSProperties = up ? { bottom: vh - anchor.top + 4, maxHeight: Math.max(120, anchor.top - 12) } : { top: anchor.bottom + 4, maxHeight: Math.max(120, vh - anchor.bottom - 12) };
+  if (placement.includes("end")) s.right = vw - anchor.right;
+  else s.left = anchor.left;
+  return s;
+}
+
+/** How far to move a box so it's inside the window, with a margin. */
+export function nudge(box: Box, vw: number, vh: number, margin = 8): { x: number; y: number } {
+  const x = box.right > vw - margin ? vw - margin - box.right : 0;
+  const y = box.bottom > vh - margin ? vh - margin - box.bottom : 0;
+  return { x: box.left + x < margin ? margin - box.left : x, y: box.top + y < margin ? margin - box.top : y };
+}
+
+// A menu floating over the whole window (in document.body, so no panel
+// clips it or makes its position relative), moved inside the window once
+// its size is known.
+function FloatingMenu({ items, onPick, style, className = "", listRef }: { items: MenuEntry[]; onPick: () => void; style: CSSProperties; className?: string; listRef: React.RefObject<HTMLDivElement | null> }) {
+  useLayoutEffect(() => {
+    const el = listRef.current;
+    if (!el) return;
+    const { x, y } = nudge(el.getBoundingClientRect(), window.innerWidth, window.innerHeight);
+    if (x || y) el.style.transform = `translate(${x}px, ${y}px)`;
+    // Keys go to it: the chosen item, else the first.
+    (el.querySelector<HTMLElement>(".menu-item.on:not(:disabled)") ?? menuItems(el)[0])?.focus({ preventScroll: true });
+  }, [listRef]);
+  return createPortal(<MenuList className={`menu floating ${className}`} items={items} onPick={onPick} style={style} listRef={listRef} />, document.body);
+}
+
+/** A button that opens a menu of items (or dividers and labels); clicking it again closes it. */
 export function Menu({
   trigger,
   items,
   placement = "down start",
+  className,
 }: {
   trigger: (props: { onClick: () => void; "aria-expanded": boolean; "aria-haspopup": "menu" }) => ReactNode;
   items: MenuEntry[];
   placement?: string;
+  /** A class for the menu (its width, say). */
+  className?: string;
 }) {
-  const [open, setOpen] = useState(false);
+  const [at, setAt] = useState<CSSProperties | null>(null);
   const ref = useRef<HTMLSpanElement>(null);
-  const close = useCallback(() => setOpen(false), []);
-  useDismiss(open, ref, close);
+  const list = useRef<HTMLDivElement>(null);
+  // Closing gives the focus back to the button.
+  const close = useCallback(() => {
+    setAt(null);
+    ref.current?.querySelector<HTMLElement>("button, [tabindex]")?.focus({ preventScroll: true });
+  }, []);
+  useDismiss(!!at, [ref, list], close);
+  // Closed by the window changing size: its place would be wrong.
+  useEffect(() => {
+    if (!at) return;
+    window.addEventListener("resize", close);
+    return () => window.removeEventListener("resize", close);
+  }, [at, close]);
+  const toggle = () => setAt((cur) => (cur || !ref.current ? null : menuPosition(ref.current.getBoundingClientRect(), placement, window.innerWidth, window.innerHeight)));
   return (
     <span className="menu-anchor" ref={ref}>
-      {trigger({ onClick: () => setOpen((o) => !o), "aria-expanded": open, "aria-haspopup": "menu" })}
-      {open && <MenuList className={`menu ${placement}`} items={items} onPick={() => setOpen(false)} />}
+      {trigger({ onClick: toggle, "aria-expanded": !!at, "aria-haspopup": "menu" })}
+      {at && <FloatingMenu items={items} onPick={close} style={at} className={className} listRef={list} />}
     </span>
   );
 }
@@ -206,9 +273,25 @@ export function Menu({
 /** What a menu lists: items, dividers and headings. */
 export type MenuEntry = MenuItem | "divider" | { heading: string };
 
-function MenuList({ className, items, onPick, style }: { className: string; items: MenuEntry[]; onPick: () => void; style?: React.CSSProperties }) {
+/** A menu's items that can be chosen. */
+function menuItems(el: HTMLElement): HTMLElement[] {
+  return [...el.querySelectorAll<HTMLElement>('[role="menuitem"]:not(:disabled)')];
+}
+
+// Arrow keys move through a menu's items (wrapping), Home and End to its ends.
+function menuKeys(e: React.KeyboardEvent<HTMLDivElement>) {
+  const items = menuItems(e.currentTarget);
+  if (!items.length) return;
+  const at = items.indexOf(document.activeElement as HTMLElement);
+  const to = { ArrowDown: at + 1, ArrowUp: at < 0 ? items.length - 1 : at - 1, Home: 0, End: items.length - 1 }[e.key];
+  if (to === undefined) return;
+  e.preventDefault();
+  items[(to + items.length) % items.length].focus();
+}
+
+function MenuList({ className, items, onPick, style, listRef }: { className: string; items: MenuEntry[]; onPick: () => void; style?: React.CSSProperties; listRef?: React.RefObject<HTMLDivElement | null> }) {
   return (
-    <div className={className} role="menu" style={style}>
+    <div className={className} role="menu" style={style} ref={listRef} onKeyDown={menuKeys}>
       {items.map((it, i) =>
         it === "divider" ? (
           <div key={i} className="menu-divider" />
@@ -243,15 +326,16 @@ function MenuList({ className, items, onPick, style }: { className: string; item
 
 /** A menu at a point (a right click); a click elsewhere or Escape closes it. */
 export function ContextMenu({ x, y, items, onClose }: { x: number; y: number; items: MenuEntry[]; onClose: () => void }) {
-  const ref = useRef<HTMLSpanElement>(null);
-  useDismiss(true, ref, onClose);
-  // Kept inside the window.
-  const left = Math.min(x, window.innerWidth - 240);
-  const top = Math.min(y, window.innerHeight - 40 * items.length - 16);
-  return (
-    <span ref={ref}>
-      <MenuList className="menu context-menu" items={items} onPick={onClose} style={{ position: "fixed", left, top: Math.max(8, top) }} />
-    </span>
+  const list = useRef<HTMLDivElement>(null);
+  useDismiss(true, list, onClose);
+  // Kept inside the window once its size is known (FloatingMenu).
+  return <FloatingMenu items={items} onPick={onClose} style={{ left: x, top: y, maxHeight: window.innerHeight - 16 }} className="context-menu" listRef={list} />;
+}
+
+/** The elements Tab reaches inside el, in order. */
+function focusables(el: HTMLElement): HTMLElement[] {
+  return [...el.querySelectorAll<HTMLElement>('a[href], button, input, select, textarea, [tabindex]:not([tabindex="-1"])')].filter(
+    (x) => !x.hasAttribute("disabled") && x.tabIndex >= 0 && x.getClientRects().length > 0,
   );
 }
 
@@ -275,16 +359,41 @@ export function Dialog({
   children: ReactNode;
 }) {
   const ref = useRef<HTMLDivElement>(null);
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
   useEffect(() => {
-    // Escape closes it, unless something inside used the key (an editor's
-    // completion list, a menu).
-    const key = (e: KeyboardEvent) => e.key === "Escape" && !e.defaultPrevented && onClose();
+    // Only the topmost dialog answers keys (one can open over another).
+    const top = () => {
+      const all = document.querySelectorAll(".dialog");
+      return all[all.length - 1] === ref.current;
+    };
+    const key = (e: KeyboardEvent) => {
+      if (!top() || !ref.current) return;
+      // Escape closes it, unless something inside used the key (an
+      // editor's completion list, a menu).
+      if (e.key === "Escape" && !e.defaultPrevented) closeRef.current();
+      // Tab moves through everything inside it, buttons too (WebKit skips
+      // them by default), and stays inside; an editor may use Tab itself.
+      if (e.key === "Tab" && !e.defaultPrevented) {
+        const items = focusables(ref.current);
+        if (!items.length) return;
+        e.preventDefault();
+        const at = items.indexOf(document.activeElement as HTMLElement);
+        const next = at < 0 ? (e.shiftKey ? items.length - 1 : 0) : (at + (e.shiftKey ? -1 : 1) + items.length) % items.length;
+        items[next].focus();
+      }
+    };
     document.addEventListener("keydown", key);
-    // Focus the first field, else the dialog, so keys go to it.
-    const first = ref.current?.querySelector<HTMLElement>("input, textarea, select, [autofocus]");
+    // Focus what asks for it, else the first field, else the dialog, so
+    // keys go to it; give the focus back when it closes.
+    const before = document.activeElement as HTMLElement | null;
+    const first = ref.current?.querySelector<HTMLElement>("[data-autofocus]") ?? ref.current?.querySelector<HTMLElement>("input, textarea, select, [autofocus]");
     (first ?? ref.current)?.focus();
-    return () => document.removeEventListener("keydown", key);
-  }, [onClose]);
+    return () => {
+      document.removeEventListener("keydown", key);
+      if (before?.isConnected) before.focus({ preventScroll: true });
+    };
+  }, []);
   return (
     <div className="scrim" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div className={`dialog ${wide ? "wide" : ""} ${large ? "large" : ""}`} role="dialog" aria-modal="true" tabIndex={-1} ref={ref}>
