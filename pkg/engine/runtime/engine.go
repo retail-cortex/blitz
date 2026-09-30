@@ -725,6 +725,14 @@ func (e *Engine) afterTool(ctx agent.Context, t tool.Tool, args, result map[stri
 	if r := e.attachSteers(ctx, out, toolErr); r != nil {
 		out, changed = r, true
 	}
+	if d := e.toolReg.EditDiagnostics(ctx, t.Name(), args, out); len(d) > 0 {
+		out = maps.Clone(out)
+		if out == nil {
+			out = map[string]any{}
+		}
+		out["diagnostics"] = d
+		changed = true
+	}
 	if text, ok := e.hookContext.LoadAndDelete(id); ok && id != "" {
 		out = maps.Clone(out)
 		if out == nil {

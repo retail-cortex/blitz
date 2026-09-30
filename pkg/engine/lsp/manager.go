@@ -1,0 +1,560 @@
+// Copyright 2026 Retail Cortex
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package lsp
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"net/url"
+	"os"
+	"path/filepath"
+	"sort"
+	"strings"
+	"sync"
+	"time"
+	"unicode/utf16"
+)
+
+// Server is how to run a language's server, and which files it's for.
+type Server struct {
+	Language   string
+	Command    []string
+	Extensions []string // with the dot: .go
+}
+
+// ErrNoServer: no language server is configured for the file.
+var ErrNoServer = errors.New("no language server for this kind of file")
+
+// Manager starts language servers as files need them, one per language,
+// and keeps the files it asks about in sync with the disk.
+type Manager struct {
+	root    string
+	launch  Launcher
+	servers []Server
+
+	mu      sync.Mutex
+	running map[string]*server // by language
+	failed  map[string]error   // why a language's server couldn't start
+	closed  bool
+}
+
+// NewManager is a manager for the workspace root.
+func NewManager(root string, servers []Server, launch Launcher) *Manager {
+	return &Manager{root: root, launch: launch, servers: servers, running: map[string]*server{}, failed: map[string]error{}}
+}
+
+type server struct {
+	lang string
+	c    *conn
+
+	mu      sync.Mutex
+	text    map[string]string // what was sent, by URI
+	version map[string]int
+	diags   map[string]publishedDiags
+	changed chan struct{} // a diagnostics notification came
+}
+
+type publishedDiags struct {
+	at    time.Time
+	items []wireDiagnostic
+}
+
+// startTimeout bounds starting a server (initialize).
+const startTimeout = 60 * time.Second
+
+// For finds the server for path, starting it if need be.
+func (m *Manager) For(ctx context.Context, path string) (*server, error) {
+	ext := strings.ToLower(filepath.Ext(path))
+	var cfg *Server
+	for i := range m.servers {
+		for _, e := range m.servers[i].Extensions {
+			if strings.EqualFold(e, ext) {
+				cfg = &m.servers[i]
+			}
+		}
+	}
+	if cfg == nil {
+		return nil, fmt.Errorf("%w (%s)", ErrNoServer, ext)
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.closed {
+		return nil, errClosed
+	}
+	if s := m.running[cfg.Language]; s != nil {
+		select {
+		case <-s.c.done: // it died: start again
+		default:
+			return s, nil
+		}
+	}
+	if err := m.failed[cfg.Language]; err != nil {
+		return nil, err
+	}
+	s, err := m.start(ctx, *cfg)
+	if err != nil {
+		err = fmt.Errorf("starting the %s language server (%s): %w", cfg.Language, strings.Join(cfg.Command, " "), err)
+		m.failed[cfg.Language] = err
+		return nil, err
+	}
+	m.running[cfg.Language] = s
+	return s, nil
+}
+
+func (m *Manager) start(ctx context.Context, cfg Server) (*server, error) {
+	if len(cfg.Command) == 0 {
+		return nil, errors.New("no command")
+	}
+	proc, err := m.launch(context.Background(), cfg.Command) // lives past ctx
+	if err != nil {
+		return nil, err
+	}
+	s := &server{lang: cfg.Language, text: map[string]string{}, version: map[string]int{}, diags: map[string]publishedDiags{}, changed: make(chan struct{}, 1)}
+	s.c = newConn(proc, s.notified)
+	ictx, cancel := context.WithTimeout(ctx, startTimeout)
+	defer cancel()
+	root := fileURI(m.root)
+	err = s.c.call(ictx, "initialize", map[string]any{
+		"processId":        os.Getpid(),
+		"rootUri":          root,
+		"workspaceFolders": []any{map[string]any{"uri": root, "name": filepath.Base(m.root)}},
+		"capabilities": map[string]any{
+			"textDocument": map[string]any{
+				"synchronization":    map[string]any{"didSave": false},
+				"hover":              map[string]any{"contentFormat": []string{"markdown", "plaintext"}},
+				"definition":         map[string]any{"linkSupport": true},
+				"references":         map[string]any{},
+				"publishDiagnostics": map[string]any{"relatedInformation": false},
+			},
+			"workspace": map[string]any{"symbol": map[string]any{}, "configuration": true, "workspaceFolders": true},
+		},
+	}, nil)
+	if err != nil {
+		proc.Stop()
+		return nil, err
+	}
+	if err := s.c.send("initialized", map[string]any{}); err != nil {
+		proc.Stop()
+		return nil, err
+	}
+	return s, nil
+}
+
+func (s *server) notified(method string, params json.RawMessage) {
+	if method != "textDocument/publishDiagnostics" {
+		return
+	}
+	var p struct {
+		URI         string           `json:"uri"`
+		Diagnostics []wireDiagnostic `json:"diagnostics"`
+	}
+	if json.Unmarshal(params, &p) != nil {
+		return
+	}
+	s.mu.Lock()
+	s.diags[normalURI(p.URI)] = publishedDiags{at: time.Now(), items: p.Diagnostics}
+	s.mu.Unlock()
+	select {
+	case s.changed <- struct{}{}:
+	default:
+	}
+}
+
+// sync sends path's content as it is on disk: opened the first time,
+// changed after, nothing when it's the same. It returns the content.
+func (s *server) sync(path string) (string, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", err
+	}
+	text := string(data)
+	uri := fileURI(path)
+	s.mu.Lock()
+	prev, open := s.text[uri]
+	if open && prev == text {
+		s.mu.Unlock()
+		return text, nil
+	}
+	s.version[uri]++
+	v := s.version[uri]
+	s.text[uri] = text
+	delete(s.diags, uri) // stale
+	s.mu.Unlock()
+	if !open {
+		return text, s.c.send("textDocument/didOpen", map[string]any{"textDocument": map[string]any{
+			"uri": uri, "languageId": languageID(s.lang, path), "version": v, "text": text,
+		}})
+	}
+	return text, s.c.send("textDocument/didChange", map[string]any{
+		"textDocument":   map[string]any{"uri": uri, "version": v},
+		"contentChanges": []any{map[string]any{"text": text}},
+	})
+}
+
+// Location is a place in a file, for people: the path (relative to the
+// workspace when inside it), 1-based line and column, and the line.
+type Location struct {
+	Path   string `json:"path"`
+	Line   int    `json:"line"`
+	Column int    `json:"column"`
+	Text   string `json:"text,omitempty"`
+}
+
+// Diagnostic is a problem a server reports.
+type Diagnostic struct {
+	Line     int    `json:"line"`
+	Column   int    `json:"column"`
+	Severity string `json:"severity"`
+	Message  string `json:"message"`
+	Source   string `json:"source,omitempty"`
+}
+
+// Symbol is a workspace symbol.
+type Symbol struct {
+	Name      string   `json:"name"`
+	Kind      string   `json:"kind"`
+	Container string   `json:"container,omitempty"`
+	Location  Location `json:"location"`
+}
+
+type wirePosition struct {
+	Line      int `json:"line"`
+	Character int `json:"character"`
+}
+
+type wireRange struct {
+	Start wirePosition `json:"start"`
+	End   wirePosition `json:"end"`
+}
+
+type wireLocation struct {
+	URI         string     `json:"uri"`
+	Range       wireRange  `json:"range"`
+	TargetURI   string     `json:"targetUri"`
+	TargetRange *wireRange `json:"targetSelectionRange"`
+}
+
+type wireDiagnostic struct {
+	Range    wireRange `json:"range"`
+	Severity int       `json:"severity"`
+	Message  string    `json:"message"`
+	Source   string    `json:"source"`
+}
+
+// position is (1-based line, 1-based column in characters) in text as
+// LSP's (0-based line, UTF-16 offset).
+func position(text string, line, col int) (wirePosition, error) {
+	lines := strings.Split(text, "\n")
+	if line < 1 || line > len(lines) {
+		return wirePosition{}, fmt.Errorf("line %d: the file has %d", line, len(lines))
+	}
+	runes := []rune(strings.TrimSuffix(lines[line-1], "\r"))
+	if col < 1 {
+		col = 1
+	}
+	if col > len(runes)+1 {
+		col = len(runes) + 1
+	}
+	return wirePosition{Line: line - 1, Character: len(utf16.Encode(runes[:col-1]))}, nil
+}
+
+// readable turns a wire location into one for people.
+func (m *Manager) readable(uri string, pos wirePosition) Location {
+	path := uriPath(uri)
+	loc := Location{Path: path, Line: pos.Line + 1, Column: pos.Character + 1}
+	if rel, err := filepath.Rel(m.root, path); err == nil && !strings.HasPrefix(rel, "..") {
+		loc.Path = filepath.ToSlash(rel)
+	}
+	if data, err := os.ReadFile(path); err == nil {
+		lines := strings.Split(string(data), "\n")
+		if pos.Line < len(lines) {
+			line := strings.TrimSuffix(lines[pos.Line], "\r")
+			units := utf16.Encode([]rune(line))
+			if pos.Character <= len(units) {
+				loc.Column = len(utf16.Decode(units[:pos.Character])) + 1
+			}
+			loc.Text = strings.TrimSpace(line)
+			if len(loc.Text) > 200 {
+				loc.Text = loc.Text[:200] + "…"
+			}
+		}
+	}
+	return loc
+}
+
+// at prepares a request about path at (line, col).
+func (m *Manager) at(ctx context.Context, path string, line, col int) (*server, map[string]any, error) {
+	s, err := m.For(ctx, path)
+	if err != nil {
+		return nil, nil, err
+	}
+	text, err := s.sync(path)
+	if err != nil {
+		return nil, nil, err
+	}
+	pos, err := position(text, line, col)
+	if err != nil {
+		return nil, nil, err
+	}
+	return s, map[string]any{"textDocument": map[string]any{"uri": fileURI(path)}, "position": pos}, nil
+}
+
+// maxResults bounds the locations and symbols returned.
+const maxResults = 100
+
+// Definition is where the symbol at (line, col) of path is defined.
+func (m *Manager) Definition(ctx context.Context, path string, line, col int) ([]Location, error) {
+	s, params, err := m.at(ctx, path, line, col)
+	if err != nil {
+		return nil, err
+	}
+	var raw json.RawMessage
+	if err := s.c.call(ctx, "textDocument/definition", params, &raw); err != nil {
+		return nil, err
+	}
+	return m.locations(raw), nil
+}
+
+// References are where the symbol at (line, col) of path is used.
+func (m *Manager) References(ctx context.Context, path string, line, col int) ([]Location, error) {
+	s, params, err := m.at(ctx, path, line, col)
+	if err != nil {
+		return nil, err
+	}
+	params["context"] = map[string]any{"includeDeclaration": true}
+	var raw json.RawMessage
+	if err := s.c.call(ctx, "textDocument/references", params, &raw); err != nil {
+		return nil, err
+	}
+	return m.locations(raw), nil
+}
+
+func (m *Manager) locations(raw json.RawMessage) []Location {
+	var many []wireLocation
+	if json.Unmarshal(raw, &many) != nil {
+		var one wireLocation
+		if json.Unmarshal(raw, &one) != nil || (one.URI == "" && one.TargetURI == "") {
+			return nil
+		}
+		many = []wireLocation{one}
+	}
+	var out []Location
+	for _, l := range many {
+		uri, r := l.URI, l.Range
+		if l.TargetURI != "" { // a LocationLink
+			uri = l.TargetURI
+			if l.TargetRange != nil {
+				r = *l.TargetRange
+			}
+		}
+		out = append(out, m.readable(uri, r.Start))
+		if len(out) == maxResults {
+			break
+		}
+	}
+	return out
+}
+
+// Hover is what the server says about the symbol at (line, col).
+func (m *Manager) Hover(ctx context.Context, path string, line, col int) (string, error) {
+	s, params, err := m.at(ctx, path, line, col)
+	if err != nil {
+		return "", err
+	}
+	var h struct {
+		Contents json.RawMessage `json:"contents"`
+	}
+	if err := s.c.call(ctx, "textDocument/hover", params, &h); err != nil {
+		return "", err
+	}
+	return hoverText(h.Contents), nil
+}
+
+// hoverText reads MarkupContent, a MarkedString, or a list of them.
+func hoverText(raw json.RawMessage) string {
+	var s string
+	if json.Unmarshal(raw, &s) == nil {
+		return s
+	}
+	var mc struct {
+		Value string `json:"value"`
+	}
+	if json.Unmarshal(raw, &mc) == nil && mc.Value != "" {
+		return mc.Value
+	}
+	var list []json.RawMessage
+	if json.Unmarshal(raw, &list) == nil {
+		var parts []string
+		for _, item := range list {
+			if t := hoverText(item); t != "" {
+				parts = append(parts, t)
+			}
+		}
+		return strings.Join(parts, "\n\n")
+	}
+	return ""
+}
+
+var symbolKinds = []string{"", "file", "module", "namespace", "package", "class", "method", "property", "field", "constructor",
+	"enum", "interface", "function", "variable", "constant", "string", "number", "boolean", "array", "object", "key",
+	"null", "enum member", "struct", "event", "operator", "type parameter"}
+
+// Symbols are the workspace's symbols matching query, from the server for
+// files like path.
+func (m *Manager) Symbols(ctx context.Context, path, query string) ([]Symbol, error) {
+	s, err := m.For(ctx, path)
+	if err != nil {
+		return nil, err
+	}
+	var raw []struct {
+		Name      string       `json:"name"`
+		Kind      int          `json:"kind"`
+		Container string       `json:"containerName"`
+		Location  wireLocation `json:"location"`
+	}
+	if err := s.c.call(ctx, "workspace/symbol", map[string]any{"query": query}, &raw); err != nil {
+		return nil, err
+	}
+	var out []Symbol
+	for _, r := range raw {
+		kind := ""
+		if r.Kind > 0 && r.Kind < len(symbolKinds) {
+			kind = symbolKinds[r.Kind]
+		}
+		out = append(out, Symbol{Name: r.Name, Kind: kind, Container: r.Container, Location: m.readable(r.Location.URI, r.Location.Range.Start)})
+		if len(out) == maxResults {
+			break
+		}
+	}
+	return out, nil
+}
+
+var severities = []string{"", "error", "warning", "information", "hint"}
+
+// Diagnostics are the problems the server reports for path as it is on
+// disk, waiting up to wait for them.
+func (m *Manager) Diagnostics(ctx context.Context, path string, wait time.Duration) ([]Diagnostic, error) {
+	s, err := m.For(ctx, path)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := s.sync(path); err != nil {
+		return nil, err
+	}
+	uri := fileURI(path)
+	deadline := time.After(wait)
+	for {
+		s.mu.Lock()
+		d, ok := s.diags[uri]
+		s.mu.Unlock()
+		if ok {
+			out := make([]Diagnostic, 0, len(d.items))
+			for _, w := range d.items {
+				sev := "error"
+				if w.Severity > 0 && w.Severity < len(severities) {
+					sev = severities[w.Severity]
+				}
+				loc := m.readable(uri, w.Range.Start)
+				out = append(out, Diagnostic{Line: loc.Line, Column: loc.Column, Severity: sev, Message: w.Message, Source: w.Source})
+			}
+			sort.SliceStable(out, func(i, j int) bool { return out[i].Line < out[j].Line })
+			return out, nil
+		}
+		select {
+		case <-s.changed:
+		case <-deadline:
+			return nil, nil // nothing reported in time
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	}
+}
+
+// Running reports whether a server runs for files like path (edits then
+// report diagnostics without starting one).
+func (m *Manager) Running(path string) bool {
+	ext := strings.ToLower(filepath.Ext(path))
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, cfg := range m.servers {
+		for _, e := range cfg.Extensions {
+			if strings.EqualFold(e, ext) && m.running[cfg.Language] != nil {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// Close shuts the servers down.
+func (m *Manager) Close() {
+	m.mu.Lock()
+	servers := m.running
+	m.running = map[string]*server{}
+	m.closed = true
+	m.mu.Unlock()
+	for _, s := range servers {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		s.c.call(ctx, "shutdown", nil, nil)
+		s.c.send("exit", nil)
+		cancel()
+		s.c.proc.Stop()
+		select {
+		case <-s.c.done:
+		case <-time.After(2 * time.Second):
+		}
+	}
+}
+
+func fileURI(path string) string {
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		abs = path
+	}
+	return (&url.URL{Scheme: "file", Path: filepath.ToSlash(abs)}).String()
+}
+
+func normalURI(uri string) string { return fileURI(uriPath(uri)) }
+
+func uriPath(uri string) string {
+	u, err := url.Parse(uri)
+	if err != nil || u.Scheme != "file" {
+		return uri
+	}
+	return filepath.FromSlash(u.Path)
+}
+
+// languageID is LSP's name for a file's language.
+func languageID(lang, path string) string {
+	switch strings.ToLower(filepath.Ext(path)) {
+	case ".ts":
+		return "typescript"
+	case ".tsx":
+		return "typescriptreact"
+	case ".js", ".mjs", ".cjs":
+		return "javascript"
+	case ".jsx":
+		return "javascriptreact"
+	case ".py":
+		return "python"
+	case ".rs":
+		return "rust"
+	case ".go":
+		return "go"
+	}
+	return lang
+}

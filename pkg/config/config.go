@@ -69,6 +69,10 @@ type Config struct {
 	Browser     BrowserConfig    `toml:"browser"`
 	Plugins     PluginsConfig    `toml:"plugins"`
 	Network     NetworkConfig    `toml:"network"`
+	// LSP are the language servers the lsp tool uses, by language: the
+	// built-in ones (go, typescript, python, rust), changed or turned off,
+	// and others.
+	LSP map[string]LSPServerConfig `toml:"lsp"`
 	// PluginAgentDirs and PluginCommandDirs are what loaded plugins add
 	// (package plugins; never read from a file).
 	PluginAgentDirs   []string        `toml:"-"`

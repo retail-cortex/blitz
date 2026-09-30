@@ -38,6 +38,7 @@ import (
 	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/engine/agents"
 	"github.com/retail-cortex/blitz/pkg/engine/audit"
+	"github.com/retail-cortex/blitz/pkg/engine/lsp"
 	"github.com/retail-cortex/blitz/pkg/engine/skills"
 	"github.com/retail-cortex/blitz/pkg/images"
 	"google.golang.org/adk/v2/tool"
@@ -67,6 +68,7 @@ type Registry struct {
 	rules    *PermissionRules
 
 	browser *browserTool // nil: no browser tool
+	lsp     *lsp.Manager // language servers (nil: none configured)
 
 	notesMu sync.Mutex
 	notes   NoteSaver // nil: notes off
@@ -332,6 +334,13 @@ func NewRegistry(cfg *config.Config, agentReg *agents.Registry, skillProv *skill
 		}
 	}
 
+	if servers := lspServers(cfg); len(servers) > 0 {
+		r.lsp = lsp.NewManager(ws.Dir(), servers, lspLauncher(env))
+		if r.tools["lsp"], err = NewLSPTool(ws, r.lsp); err != nil {
+			r.Close()
+			return nil, fmt.Errorf("failed to create the lsp tool: %w", err)
+		}
+	}
 	r.tools["remember"], err = NewRememberTool(r)
 	if err != nil {
 		r.Close()
@@ -427,7 +436,31 @@ func (r *Registry) Close() error {
 	r.processes.Shutdown()
 	r.mcp.Close()
 	r.browser.close()
+	if r.lsp != nil {
+		r.lsp.Close()
+	}
 	return r.workspace.Close()
+}
+
+// editTools are the tools after which an edited file's diagnostics are
+// reported.
+var editTools = map[string]bool{"create_file": true, "replace_in_file": true, "edit": true, "delete_snippet": true, "notebook_edit": true}
+
+// EditDiagnostics are the problems a language server reports in the file
+// an edit tool call changed, when that language's server runs.
+func (r *Registry) EditDiagnostics(ctx context.Context, tool string, args, result map[string]any) []lsp.Diagnostic {
+	if !editTools[tool] || r.lsp == nil {
+		return nil
+	}
+	if msg, _ := result["error"].(string); msg != "" {
+		return nil
+	}
+	path, _ := args["path"].(string)
+	rel, err := r.workspace.Rel(path)
+	if err != nil {
+		return nil
+	}
+	return editDiagnostics(ctx, r.lsp, r.workspace, rel)
 }
 
 // GetToolsForAgent returns the subset of tools configured for a given agent.

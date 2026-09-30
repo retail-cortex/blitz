@@ -302,6 +302,51 @@ type BrowserConfig struct {
 	Height int `toml:"height"`
 }
 
+// LSPServerConfig is a language server: the command that runs it (over
+// stdio), and the file extensions it's for.
+type LSPServerConfig struct {
+	// Command and its arguments, e.g. ["gopls"] or
+	// ["typescript-language-server", "--stdio"].
+	Command []string `toml:"command"`
+	// Extensions are the files it serves, with the dot: [".go"].
+	Extensions []string `toml:"extensions"`
+	// Disabled turns a built-in server off.
+	Disabled bool `toml:"disabled"`
+}
+
+// DefaultLSPServers are the language servers used when installed.
+var DefaultLSPServers = map[string]LSPServerConfig{
+	"go":         {Command: []string{"gopls"}, Extensions: []string{".go"}},
+	"typescript": {Command: []string{"typescript-language-server", "--stdio"}, Extensions: []string{".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"}},
+	"python":     {Command: []string{"pyright-langserver", "--stdio"}, Extensions: []string{".py"}},
+	"rust":       {Command: []string{"rust-analyzer"}, Extensions: []string{".rs"}},
+}
+
+// LSPServers are the language servers in force: the built-in ones with
+// the settings' changes, then those the settings add (by language name).
+func (c *Config) LSPServers() map[string]LSPServerConfig {
+	out := map[string]LSPServerConfig{}
+	for lang, d := range DefaultLSPServers {
+		out[lang] = d
+	}
+	for lang, s := range c.LSP {
+		d := out[lang]
+		if len(s.Command) > 0 {
+			d.Command = s.Command
+		}
+		if len(s.Extensions) > 0 {
+			d.Extensions = s.Extensions
+		}
+		d.Disabled = s.Disabled
+		if d.Disabled || len(d.Command) == 0 || len(d.Extensions) == 0 {
+			delete(out, lang)
+			continue
+		}
+		out[lang] = d
+	}
+	return out
+}
+
 // NetworkConfig is how Blitz reaches the network. Proxies come from the
 // environment (HTTPS_PROXY, HTTP_PROXY, NO_PROXY).
 type NetworkConfig struct {

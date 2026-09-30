@@ -18,6 +18,7 @@ tools:
   - delete_snippet
   - delete_file
   - grep
+  - lsp
   - apply_patch
   - run_shell_command
   - manage_background_process

@@ -11,6 +11,7 @@ tools:
   - read_file
   - view_image
   - grep
+  - lsp
   - ask_user_question
   - list_agents
   - invoke_agent

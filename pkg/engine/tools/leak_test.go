@@ -19,6 +19,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/retail-cortex/blitz/pkg/engine/lsp/lsptest"
 	"go.uber.org/goleak"
 )
 
@@ -26,6 +27,7 @@ import (
 // their own: what Blitz keeps under ~/.blitz (checkpoints, approvals) must
 // not reach the real one.
 func TestMain(m *testing.M) {
+	lsptest.MaybeServe() // the lsp tests' fake language server
 	home, err := os.MkdirTemp("", "blitz-tools-home-")
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)

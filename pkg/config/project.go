@@ -185,7 +185,7 @@ type projectMCPServer struct {
 // set: credentials, endpoints, where logs go, and anything that loosens
 // the sandbox or skips approvals.
 var neverFromProject = []string{
-	"llm", "web", "browser", "network", "telemetry", "log", "audit", "checkpoints", "session", "images.dir", "pricing",
+	"llm", "web", "browser", "network", "lsp", "telemetry", "log", "audit", "checkpoints", "session", "images.dir", "pricing",
 	"blitz.auto_approve", "blitz.permission_mode", "blitz.trust_workspace", "permissions.auto",
 	"sandbox.shell", "sandbox.allow_network", "sandbox.allowed_paths", "sandbox.read_only_paths",
 	"sandbox.scrub_env", "sandbox.commands",
