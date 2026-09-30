@@ -62,6 +62,8 @@ interface State {
   settings: { agent: string; model: string; provider: string; effort: string; mode: string; agency: string; locale: string };
   pending: Map<string, (answer: string) => void>;
   usage: Usage;
+  // The project settings' trust state: the "shop" workspace has some.
+  projectTrust?: string;
 }
 
 const states = new Map<string, State>();
@@ -92,6 +94,28 @@ function state(dir: string): State {
 }
 
 const active = (s: State) => s.sessions.find((x) => x.id === s.active)!;
+
+// The shop workspace's .blitz/settings.toml: a deny rule, and a hook, an
+// MCP server and an allow rule waiting for trust (spec_project_config_031).
+function fakeProject(s: State) {
+  if (!s.sessions[0].workspace.endsWith("shop")) return { state: "none", files: [], applied: [], pending: [], ignored: [], problems: [] };
+  const trust = s.projectTrust ?? "new";
+  const f = ".blitz/settings.toml";
+  return {
+    files: [f],
+    state: trust,
+    hash: "sha256:fake",
+    loaded: trust === "trusted",
+    applied: [{ file: f, kind: "deny", value: "shell(rm -rf *)" }],
+    pending: [
+      { file: f, kind: "hook", key: "pre_tool", value: "./scripts/check.sh" },
+      { file: f, kind: "mcp", key: "db", value: "npx @acme/db-mcp" },
+      { file: f, kind: "allow", value: "shell(make test)" },
+    ],
+    ignored: [{ file: f, kind: "setting", key: "llm.openai.base_url", reason: "never" }],
+    problems: [],
+  };
+}
 
 let nextRequest = 0;
 
@@ -376,6 +400,11 @@ export function installFake() {
         removePermissionRule: ({ rule }) => ({ rule }),
         listApprovals: () => ({ approvals: [{ key: "k1", kind: "write", subject: "internal/cart", always: false }] }),
         revokeApprovals: () => ({ revoked: 1 }),
+        getProjectSettings: ({ workspace }) => ({ settings: fakeProject(state(workspace)) }),
+        trustProject: ({ workspace, trusted }) => {
+          state(workspace).projectTrust = trusted ? "trusted" : "declined";
+          return { reopened: true };
+        },
         closeWorkspace: () => ({}),
         loadImage: ({ path }) => ({ image: { id: `img-${path}`, name: path, mime: "image/png", width: 640, height: 480, size: 12345n } }),
         getServiceInfo: () => ({ version: "dev", executable: "" }),

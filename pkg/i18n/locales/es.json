@@ -1091,6 +1091,17 @@
     "project.notice_waiting.other": "Configuración del proyecto: {count} esperan tu confianza, sin cargar; {applied} aplicadas (/trust)",
     "project.trust_run_attached": "--trust-project solo se aplica a un espacio de trabajo abierto aquí (--local); para el del servicio, usa blitz trust",
     "project.revoked": "Confianza retirada: se te preguntará de nuevo la próxima vez que se abra el espacio de trabajo.",
-    "help.trust": "La configuración del proyecto del espacio de trabajo (.blitz/settings.toml) y confiar en ella"
+    "help.trust": "La configuración del proyecto del espacio de trabajo (.blitz/settings.toml) y confiar en ella",
+    "desktop.project.title": "Configuración del proyecto",
+    "desktop.project.intro": "La configuración del proyecto de este espacio de trabajo quiere hacer lo siguiente. Solo se aplica si confías en ella, y se te preguntará de nuevo si cambia:",
+    "desktop.project.trust": "Confiar",
+    "desktop.project.decline": "No confiar",
+    "desktop.project.trusted_now": "Configuración del proyecto de confianza: en vigor",
+    "desktop.project.trusted_later": "Configuración del proyecto de confianza: entra en vigor cuando termine el turno en curso y se vuelva a abrir el espacio de trabajo",
+    "desktop.project.declined": "Configuración del proyecto rechazada: queda desactivada hasta que cambie",
+    "desktop.project.bar.one": "Configuración del proyecto sin cargar: {count} ajuste espera tu confianza.",
+    "desktop.project.bar.other": "Configuración del proyecto sin cargar: {count} ajustes esperan tu confianza.",
+    "desktop.project.review": "Revisar",
+    "desktop.project.open": "Configuración del proyecto"
   }
 }

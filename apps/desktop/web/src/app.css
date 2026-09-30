@@ -446,6 +446,8 @@ code.file-link:hover { text-decoration-color: currentColor; }
 
 /* The license texts: monospace, wrapped, scrolling inside the dialog. */
 .license-text { max-height: 60vh; overflow: auto; margin: 0; padding: 16px; border-radius: var(--md-shape-md); background: var(--md-surface-container-low); font-size: 12px; line-height: 18px; white-space: pre-wrap; overflow-wrap: anywhere; }
+/* The project settings dialog's lists (ProjectDialog.tsx). */
+.project-items { margin: 4px 0 8px; padding-left: 20px; display: grid; gap: 4px; overflow-wrap: anywhere; }
 
 /* A permission rule being added: effect and rule, a sample to try it on. */
 .rule-add { display: flex; flex-direction: column; gap: 12px; }

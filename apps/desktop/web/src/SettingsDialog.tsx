@@ -23,6 +23,7 @@ import {
   mdiFolderMultipleOutline,
   mdiKeyChainVariant,
   mdiProgressClock,
+  mdiShieldAlertOutline,
   mdiShieldCheckOutline,
   mdiInformationOutline,
   mdiMonitor,
@@ -49,6 +50,7 @@ import { useApp } from "./state";
 import type { ThemePref } from "./theme";
 import { Button, Chip, Dialog, Icon, IconButton, Segmented, Switch } from "./ui/controls";
 import { WorkspaceDialog } from "./WorkspaceDialog";
+import { ProjectDialog } from "./ProjectDialog";
 
 type Section = "appearance" | "providers" | "permissions" | "file" | "workspaces" | "service" | "logs" | "about";
 
@@ -177,6 +179,7 @@ function FileSection() {
 function Workspaces() {
   const { prefs, update, theme } = useApp();
   const [editing, setEditing] = useState<string | null>(null);
+  const [project, setProject] = useState<string | null>(null);
   const ws = prefs.workspaces.find((w) => w.dir === editing);
   if (prefs.workspaces.length === 0) return <p className="muted">{t("desktop.settings.no_workspaces")}</p>;
   return (
@@ -198,11 +201,13 @@ function Workspaces() {
                 {t("desktop.forget")}
               </Button>
             )}
+            {w.open && <IconButton icon={mdiShieldAlertOutline} label={t("desktop.project.open")} small onClick={() => setProject(w.dir)} />}
             <IconButton icon={mdiPencilOutline} label={t("desktop.edit_details")} small onClick={() => setEditing(w.dir)} />
           </span>
         </div>
       ))}
       {ws && <WorkspaceDialog ws={ws} onClose={() => setEditing(null)} />}
+      {project && <ProjectDialog dir={project} onClose={() => setProject(null)} />}
     </div>
   );
 }

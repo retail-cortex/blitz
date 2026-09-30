@@ -98,6 +98,8 @@ export function Conversation({
   visible,
   settings,
   modelProblem,
+  projectWaiting = 0,
+  onReviewProject,
   onSettingsChanged,
   onOpenView,
 }: {
@@ -107,6 +109,9 @@ export function Conversation({
   visible: boolean;
   settings?: GetSettingsResponse;
   modelProblem: string;
+  /** Project settings off for want of trust. */
+  projectWaiting?: number;
+  onReviewProject?: () => void;
   onSettingsChanged: () => void;
   onOpenView: (v: "changes" | "workers") => void;
 }) {
@@ -684,6 +689,15 @@ export function Conversation({
               <span style={{ flex: 1 }}>{t("desktop.model_unavailable", { reason: modelProblem })}</span>
               <Button small onClick={onSettingsChanged}>
                 {t("desktop.model_check_again")}
+              </Button>
+            </div>
+          )}
+          {projectWaiting > 0 && (
+            <div className="card warn row">
+              <Icon path={mdiAlertCircleOutline} />
+              <span style={{ flex: 1 }}>{tn("desktop.project.bar", projectWaiting)}</span>
+              <Button small onClick={onReviewProject}>
+                {t("desktop.project.review")}
               </Button>
             </div>
           )}

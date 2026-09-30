@@ -1091,6 +1091,17 @@
     "project.notice_waiting.other": "Project settings: {count} waiting for your trust, not loaded; {applied} applied (/trust)",
     "project.trust_run_attached": "--trust-project only applies to a workspace opened here (--local); for the service's, use blitz trust",
     "project.revoked": "Trust removed: you'll be asked again when the workspace next opens.",
-    "help.trust": "The workspace's project settings (.blitz/settings.toml), and trusting them"
+    "help.trust": "The workspace's project settings (.blitz/settings.toml), and trusting them",
+    "desktop.project.title": "Project settings",
+    "desktop.project.intro": "This workspace's project settings want to do the following. They run only if you trust them, and you're asked again if they change:",
+    "desktop.project.trust": "Trust",
+    "desktop.project.decline": "Don't trust",
+    "desktop.project.trusted_now": "Project settings trusted: in force now",
+    "desktop.project.trusted_later": "Project settings trusted: in force once the turn running in this workspace ends and it opens again",
+    "desktop.project.declined": "Project settings declined: they stay off until they change",
+    "desktop.project.bar.one": "Project settings not loaded: {count} setting waits for your trust.",
+    "desktop.project.bar.other": "Project settings not loaded: {count} settings wait for your trust.",
+    "desktop.project.review": "Review",
+    "desktop.project.open": "Project settings"
   }
 }

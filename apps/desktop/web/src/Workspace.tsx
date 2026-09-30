@@ -27,9 +27,11 @@ import { FileLinksProvider } from "./files/links";
 import { reportUnsaved } from "./files/unsaved";
 import { useEditor } from "./files/useEditor";
 import { message } from "./errors";
-import type { GetSettingsResponse } from "./gen/blitz/v1/workspace_pb";
+import type { GetSettingsResponse, ProjectSettings } from "./gen/blitz/v1/workspace_pb";
 import { workspaceColor } from "./palette";
 import { displayName, type WorkspacePrefs } from "./prefs";
+import { needsDecision, waiting } from "./project";
+import { ProjectDialog } from "./ProjectDialog";
 import { RunSettings } from "./RunSettings";
 import { useApp } from "./state";
 import { t } from "./i18n";
@@ -66,14 +68,31 @@ export function Workspace({
   const [settings, setSettings] = useState<GetSettingsResponse>();
   const [modelProblem, setModelProblem] = useState("");
   const [settingsError, setSettingsError] = useState("");
+  const [project, setProject] = useState<ProjectSettings>();
+  const [reviewing, setReviewing] = useState(false);
+  // The project settings' content asked about as the workspace opened:
+  // asked once, not again at each refresh.
+  const asked = useRef("");
   const dir = ws.dir;
 
   const refreshSettings = useCallback(async () => {
     try {
-      const [s, m] = await Promise.all([workspaces.getSettings({ workspace: dir }), workspaces.getModel({ workspace: dir })]);
+      const [s, m, p] = await Promise.all([
+        workspaces.getSettings({ workspace: dir }),
+        workspaces.getModel({ workspace: dir }),
+        workspaces.getProjectSettings({ workspace: dir }).then(
+          (r) => r.settings,
+          () => undefined, // an older service
+        ),
+      ]);
       setSettings(s);
       setModelProblem(m.unavailable);
+      setProject(p);
       setSettingsError("");
+      if (p && needsDecision(p) && asked.current !== p.hash) {
+        asked.current = p.hash;
+        setReviewing(true);
+      }
     } catch (e) {
       setSettingsError(message(e));
     }
@@ -244,12 +263,23 @@ export function Workspace({
         <aside className={`chat-panel ${chatCenter ? "center" : ""}`} style={chatCenter ? undefined : { width: chatWidth }} aria-label={t("desktop.view.chat")}>
           {!chatCenter && <ResizeHandle width={chatWidth} onResize={(w) => update((p) => ({ ...p, chat_width: w }))} />}
           <FileLinksProvider dir={dir} refresh={touched}>
-            <Conversation dir={dir} name={name} visible={visible} settings={settings} modelProblem={modelProblem} onSettingsChanged={refreshSettings} onOpenView={setView} />
+            <Conversation
+              dir={dir}
+              name={name}
+              visible={visible}
+              settings={settings}
+              modelProblem={modelProblem}
+              projectWaiting={waiting(project)}
+              onReviewProject={() => setReviewing(true)}
+              onSettingsChanged={refreshSettings}
+              onOpenView={setView}
+            />
           </FileLinksProvider>
         </aside>
         {prefs.run_settings && <RunSettings dir={dir} settings={settings} error={settingsError} onChanged={refreshSettings} />}
       </div>
       {goTo && <GoToFile dir={dir} onOpen={open} onClose={() => setGoTo(false)} />}
+      {reviewing && visible && <ProjectDialog dir={dir} onClose={() => setReviewing(false)} onDecided={refreshSettings} />}
     </section>
   );
 }

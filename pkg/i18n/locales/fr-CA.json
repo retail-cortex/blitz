@@ -1091,6 +1091,17 @@
     "project.notice_waiting.other": "Paramètres du projet : {count} attendent votre confiance, non chargés; {applied} appliqués (/trust)",
     "project.trust_run_attached": "--trust-project ne s’applique qu’à un espace de travail ouvert ici (--local); pour celui du service, utilisez blitz trust",
     "project.revoked": "Confiance retirée : la question sera posée à la prochaine ouverture de l’espace de travail.",
-    "help.trust": "Les paramètres du projet de l’espace de travail (.blitz/settings.toml), et leur faire confiance"
+    "help.trust": "Les paramètres du projet de l’espace de travail (.blitz/settings.toml), et leur faire confiance",
+    "desktop.project.title": "Paramètres du projet",
+    "desktop.project.intro": "Les paramètres du projet de cet espace de travail veulent faire ce qui suit. Ils ne s’appliquent que si vous leur faites confiance, et la question reviendra s’ils changent :",
+    "desktop.project.trust": "Faire confiance",
+    "desktop.project.decline": "Refuser",
+    "desktop.project.trusted_now": "Paramètres du projet approuvés : en vigueur",
+    "desktop.project.trusted_later": "Paramètres du projet approuvés : en vigueur une fois le tour en cours terminé et l’espace de travail rouvert",
+    "desktop.project.declined": "Paramètres du projet refusés : ils restent désactivés jusqu’à leur modification",
+    "desktop.project.bar.one": "Paramètres du projet non chargés : {count} paramètre attend votre confiance.",
+    "desktop.project.bar.other": "Paramètres du projet non chargés : {count} paramètres attendent votre confiance.",
+    "desktop.project.review": "Examiner",
+    "desktop.project.open": "Paramètres du projet"
   }
 }

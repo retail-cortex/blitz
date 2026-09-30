@@ -45,6 +45,7 @@ go_test(
         "convert_test.go",
         "leak_test.go",
         "processes_test.go",
+        "project_test.go",
     ],
     embed = [":client"],
     # Starts commands in the OS sandbox, which can't nest in Bazel's on
