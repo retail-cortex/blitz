@@ -5,7 +5,7 @@ weight: 60
 
 Spec: [skills](../about/specs/spec_skills_013.md).
 
-Skills are `SKILL.md` files in `~/.blitz/skills` (and, with `--trust-workspace`, the project's `./skills` and `.agents/skills`). Their frontmatter takes the Agent Skills fields (`name`, `description`, `license`, `compatibility`, `allowed-tools`, `metadata`) and the fields of Castor's skill definition (`castor.skills.v1.SkillDefinition`), under their proto names:
+Skills are `SKILL.md` files in `~/.blitz/skills` and the project's `./skills` and `.agents/skills`; a project's skill runs its scripts only once you trust the project's settings ([Sharing settings with your team](../configuration/#sharing-settings-with-your-team)). Their frontmatter takes the Agent Skills fields (`name`, `description`, `license`, `compatibility`, `allowed-tools`, `metadata`) and the fields of Castor's skill definition (`castor.skills.v1.SkillDefinition`), under their proto names:
 
 ```yaml
 ---

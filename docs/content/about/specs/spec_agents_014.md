@@ -29,7 +29,7 @@ An agent is a persona: a system prompt, a tool list, an agency level and optiona
 
 ## 3. Registry
 
-- **AG-10** Built-in agents are embedded. External agents are loaded (recursively, `*.md`) from `~/.blitz/agents`, and `./agents` only with `trust_workspace`. External specs may add agents but **may not replace a built-in** (that would let a directory swap a trusted persona's prompt and tools); rejected or unparseable specs are reported, valid ones still load.
+- **AG-10** Built-in agents are embedded. External agents are loaded (recursively, `*.md`) from `~/.blitz/agents`, and the workspace's `./agents` (as prompt text, [spec_project_config_031](spec_project_config_031.md)). External specs may add agents but **may not replace a built-in** (that would let a directory swap a trusted persona's prompt and tools); rejected or unparseable specs are reported, valid ones still load.
 - **AG-11** `List` is sorted by name.
 
 | Built-in | Role | Agency |

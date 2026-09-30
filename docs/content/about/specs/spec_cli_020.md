@@ -42,7 +42,7 @@ Run flags (root and `exec`):
 | `-a/--agent NAME` | Agent to activate |
 | `-m/--model NAME` | Model (may be `provider/model`) |
 | `--agency low\|medium\|high\|extreme` | Agency level (lower-cased) |
-| `--trust-workspace` | Load agents/skills from the workspace |
+| `--trust-project` | Trust the workspace's project settings for this run, without recording it ([spec_project_config_031](spec_project_config_031.md)); `--trust-workspace` is a hidden alias |
 | `-r/--resume [ID\|NAME]` | Resume a session by ID; bare `-r` means `latest`; a snapshot name starts a new session from it |
 | `-C/--continue` | Continue this workspace's most recent non-snapshot session |
 | `--output-format text\|json\|stream-json` | One-shot output format (default `text`) |
@@ -71,7 +71,7 @@ Root only: `-i/--interactive` (REPL even with a prompt), `-v/--version` (prints 
 
 ### 4.2 Startup
 - **CLI-10** `--dir` is expanded (`~`), made absolute, and must be an existing directory, else usage error. The process working directory is never changed; the workspace is passed explicitly (`cfg.Tools.WorkspaceDir`).
-- **CLI-11** Flag overrides are applied after config load: `--model` → `blitz.default_model`, `--agent` → `blitz.default_agent`, `--agency` → `blitz.agency_level`, `--trust-workspace` → `blitz.trust_workspace`.
+- **CLI-11** Flag overrides are applied after config load: `--model` → `blitz.default_model`, `--agent` → `blitz.default_agent`, `--agency` → `blitz.agency_level`. `--trust-project` is passed to the workspace as it opens (with the service, it only warns: `blitz trust` records a decision there).
 - **CLI-12** The default `slog` logger discards output until the diagnostic log is installed, so warnings are not duplicated on stderr.
 - **CLI-13** Observability (log file, optional OTel) starts before the workspace opens and is flushed on exit; failures only disable the affected part and print a warning.
 - **CLI-14** Backend selection: unless `--local`, if the service socket answers, the CLI attaches to the service ([spec_client_022](spec_client_022.md)); in the REPL it prints a dim "attached" line. Otherwise the workspace opens in-process. `ErrWorkspaceBusy` in-process maps to a usage error ("another blitz has it open").

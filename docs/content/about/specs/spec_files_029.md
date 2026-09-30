@@ -79,7 +79,7 @@ Every request names its workspace (SVC-10) and a path relative to it.
 ## 8. Phase 3 (outline)
 
 - **FIL-60** `LanguageService`: the service runs a language server per workspace and language (gopls, typescript-language-server, pyright, rust-analyzer, and others by configuration) and answers `Complete`, `Hover`, `Definition`, `References` and a `Diagnostics` stream. The page's transport can't hold a two-way stream, so these are separate calls.
-- **FIL-61** Language servers run the project's code (build files, plugins), so they start only in trusted workspaces (`trust_workspace`), in the OS sandbox with the workspace writable.
+- **FIL-61** Language servers run the project's code (build files, plugins), so they start only in trusted workspaces (the project's settings trusted, [spec_project_config_031](spec_project_config_031.md)), in the OS sandbox with the workspace writable.
 - **FIL-62** A missing server: the window offers to install it. Blitz installs into `~/.blitz/tools` (never system-wide) with the language's own tool (`go install gopls@<pinned>`, npm for the TypeScript and Python servers, `rustup component add rust-analyzer`) or a release binary checked against its published checksum, in the OS sandbox with the network allowed, and says what it runs first. If the language's own tool is missing, it says how to get it.
 - **FIL-63** Problems inline and in a list, with **Ask Blitz to fix**. The agent gets tools over the same servers (definitions, references, diagnostics).
 

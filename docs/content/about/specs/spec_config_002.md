@@ -23,7 +23,7 @@ One TOML file, `.env.toml`, loaded through `github.com/rrmcguinness/modenv` (hie
 - **CFG-02** `Load` sets `MODENV_PREFIX` to the chosen directory and calls `modenv.Load` only when `<dir>/.env.toml` exists; otherwise defaults apply.
 - **CFG-03** Environment fallbacks are applied after the file: `LLM_PROVIDER`; `GEMINI_API_KEY` then `GOOGLE_API_KEY` (only if no Gemini key); `OPENAI_API_KEY` (if empty); `OPENAI_BASE_URL`, `OPENAI_MODEL` (override); `ANTHROPIC_API_KEY` (if empty); `BLITZ_MODEL`, `BLITZ_AGENT`, `BLITZ_AGENCY` (override); `BLITZ_LOG_LEVEL`; `BLITZ_TELEMETRY` (`1/true/yes/on` enables, `0/false/no/off` disables).
 - **CFG-04** `ExpandHome` expands only `~` and `~/…`; `~user` is left unchanged.
-- **CFG-05** Workspace-relative search paths (skills, agents) are dropped unless `blitz.trust_workspace` is true (config or `--trust-workspace`), and are otherwise resolved against the workspace, not the process CWD. Agent search paths are `~/.blitz/agents` and `./agents`.
+- **CFG-05** Workspace-relative search paths (skills, agents) are resolved against the workspace, not the process CWD; the project's agents and skills load as prompt text, and its skills' scripts run only once the project's settings are trusted ([spec_project_config_031](spec_project_config_031.md)). Agent search paths are `~/.blitz/agents` and `./agents`. `blitz.trust_workspace` (only from the user's own settings) is deprecated: it trusts the project's settings for each run without recording it.
 
 ## 3. Schema and defaults
 
@@ -36,7 +36,7 @@ One TOML file, `.env.toml`, loaded through `github.com/rrmcguinness/modenv` (hie
 | | `permission_mode` | `default` | `default\|accept-edits\|plan\|dont-ask\|bypass`; bypass needs the OS sandbox ([spec_approvals_005](spec_approvals_005.md) APR-14) |
 | | `auto_approve` | `false` | older spelling of `permission_mode = "bypass"` |
 | | `plan_review` | `agent-decides` | `always` (every prompt is planned for approval first), `agent-decides` (the agent may call `enter_plan_mode`), `never` ([spec_workspace_018](spec_workspace_018.md) WS-45) |
-| | `trust_workspace` | `false` | |
+| | `trust_workspace` | `false` | Deprecated: trusts the project's settings for each run (CFG-05) |
 | `[llm]` | `provider` | `gemini` | `gemini\|anthropic\|openai\|ollama` |
 | | `max_retries` | `3` | `0` disables |
 | | `stall_timeout_seconds` | `600` | |

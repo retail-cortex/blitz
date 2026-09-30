@@ -18,7 +18,7 @@ Skills are reusable instructions (`SKILL.md`) an agent loads on demand, optional
 
 ## 2. Discovery
 
-- **SK-01** Built-in skills are embedded (`code-review`, `git-workflow`, `testing-tdd`). External skills are `SKILL.md` files under `skills.paths`: `~/.blitz/skills`, and — only with `trust_workspace` — the project's `./skills` and `.agents/skills`.
+- **SK-01** Built-in skills are embedded (`code-review`, `git-workflow`, `testing-tdd`). External skills are `SKILL.md` files under `skills.paths`: `~/.blitz/skills`, and the project's `./skills` and `.agents/skills`, whose scripts run only once the project's settings are trusted ([spec_project_config_031](spec_project_config_031.md)).
 - **SK-02** External skills cannot replace built-ins (reported). Parse errors are reported (a typo must not make a skill vanish silently) while other skills still load. Neighbouring resource files are indexed.
 - **SK-03** `List` is sorted by name; `Search` matches name, description or tags.
 

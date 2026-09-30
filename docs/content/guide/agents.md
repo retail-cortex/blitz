@@ -19,7 +19,7 @@ Spec: [agents](../about/specs/spec_agents_014.md).
 
 `/agents` lists them and `/agent <name>` switches. The primary agent delegates to the others with `invoke_agent`, up to three levels deep.
 
-Your own agents are Markdown files with YAML frontmatter in `~/.blitz/agents` (and the project's `./agents`, with `--trust-workspace`): a name, a description, the system prompt, the tools it may use, and optionally its own model. Built-in agents can't be overridden.
+Your own agents are Markdown files with YAML frontmatter in `~/.blitz/agents` (and the project's `./agents`): a name, a description, the system prompt, the tools it may use, and optionally its own model. Built-in agents can't be overridden.
 
 ## Tools
 

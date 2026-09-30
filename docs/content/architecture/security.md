@@ -10,7 +10,7 @@ A coding agent runs model output as commands and edits on your machine. Blitz tr
 | Source | Trusted? | So |
 |---|---|---|
 | Your settings in `~/.blitz` | Yes | Hooks, MCP servers and policies come only from here |
-| The repository | No | A project's `.env.toml` is ignored; its agents and skills load only with `--trust-workspace`; its instruction files can't grant permissions |
+| The repository | No | A project's `.env.toml` is ignored. Its `.blitz/settings.toml` may only tighten until the person trusts its exact content (hash-pinned in `~/.blitz/trust.json`), and may never set credentials, endpoints or sandbox loosening; its agents and skills load as prompt text, their scripts only once trusted; its instruction files can't grant permissions (spec_project_config_031) |
 | The model's output | No | Every action goes through the rules, approvals and sandboxes below |
 | Fetched pages, tool output | No | Treated as data; `web_fetch` can't reach private addresses |
 
