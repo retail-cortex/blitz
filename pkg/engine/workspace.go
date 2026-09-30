@@ -201,6 +201,13 @@ func Open(ctx context.Context, cfg *config.Config, o Options) (*Workspace, error
 		return nil, fmt.Errorf("failed to initialize tools: %w", err)
 	}
 	w.tools.SetWarn(o.Warn)
+	if cfg.Memory.AutoOn() { // the remember tool (PAR-MEM-10), never keeping secrets
+		redactor := SecretRedactor(cfg)
+		w.tools.SetNoteSaver(func(_ context.Context, kind, text string) (string, error) {
+			n, err := memory.SaveNote(memory.NotesDir(w.Dir()), kind, redactor.String(text))
+			return n.Name, err
+		})
+	}
 	if note := w.tools.ModeNote(); note != nil {
 		o.Warn(i18n.T("mode.bypass_unavailable"))
 	}
@@ -375,7 +382,13 @@ func (w *Workspace) LoadAttachments(paths []string, prompt string, warn func(str
 // instructions are the extra system instructions: project memory plus, for
 // non-English locales, which language to reply in.
 func (w *Workspace) instructions() string {
-	return memory.Render(w.memory.Docs, len(w.memory.Rules) > 0) + i18n.ReplyInstruction(w.reply)
+	s := memory.Render(w.memory.Docs, len(w.memory.Rules) > 0)
+	if w.cfg.Memory.AutoOn() {
+		if notes, err := memory.Notes(memory.NotesDir(w.Dir())); err == nil {
+			s += memory.RenderNotes(notes)
+		}
+	}
+	return s + i18n.ReplyInstruction(w.reply)
 }
 
 // loadMemory reads instruction files and rules; imports of blocked paths

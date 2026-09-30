@@ -125,6 +125,7 @@ go_test(
         "mode_test.go",
         "models_test.go",
         "multi_test.go",
+        "notes_test.go",
         "permissions_test.go",
         "plan_test.go",
         "project_test.go",

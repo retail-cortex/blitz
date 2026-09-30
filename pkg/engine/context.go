@@ -16,6 +16,8 @@ package engine
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"net/url"
 	"path"
 	"strings"
@@ -94,6 +96,30 @@ func (w *Workspace) ReloadMemory(ctx context.Context) ([]string, error) {
 		paths = append(paths, r.Path+" ("+strings.Join(r.Paths, ", ")+")")
 	}
 	return paths, nil
+}
+
+// ListNotes are the notes the agent saved in this workspace with its
+// remember tool, newest first (spec_parity_027 PAR-MEM-11).
+func (w *Workspace) ListNotes() ([]api.Note, error) {
+	notes, err := memory.Notes(memory.NotesDir(w.Dir()))
+	if err != nil {
+		return nil, err
+	}
+	out := make([]api.Note, len(notes))
+	for i, n := range notes {
+		out[i] = api.Note{Name: n.Name, Kind: n.Kind, Text: n.Text, Time: n.Time, Path: n.Path}
+	}
+	return out, nil
+}
+
+// ForgetNote deletes the note name (or the only one whose name starts so);
+// the agent's instructions lose it at the next reload or session.
+func (w *Workspace) ForgetNote(name string) error {
+	err := memory.DeleteNote(memory.NotesDir(w.Dir()), name)
+	if errors.Is(err, memory.ErrNoNote) {
+		return fmt.Errorf("%w: %s", api.ErrNoNote, name)
+	}
+	return err
 }
 
 // AddMemory appends text to the last project instruction file (BLITZ.md

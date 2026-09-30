@@ -16,7 +16,10 @@ load("@rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "memory",
-    srcs = ["memory.go"],
+    srcs = [
+        "memory.go",
+        "notes.go",
+    ],
     importpath = "github.com/retail-cortex/blitz/pkg/engine/memory",
     visibility = [
         # The engine, the service, and the CLI's --local mode; the other
@@ -40,6 +43,7 @@ go_test(
     srcs = [
         "compat_test.go",
         "memory_test.go",
+        "notes_test.go",
     ],
     embed = [":memory"],
     deps = [

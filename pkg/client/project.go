@@ -58,3 +58,23 @@ func projectSettings(m *pb.ProjectSettings) api.ProjectSettings {
 		Applied: list(m.Applied), Pending: list(m.Pending), Ignored: list(m.Ignored), Problems: m.Problems,
 	}
 }
+
+// ListNotes are the notes the agent saved in the workspace
+// (WorkspaceService.ListNotes).
+func (r *Remote) ListNotes() ([]api.Note, error) {
+	res, err := r.workspaces.ListNotes(context.Background(), connect.NewRequest(&pb.ListNotesRequest{Workspace: r.dir}))
+	if err != nil {
+		return nil, fromAPI(err)
+	}
+	out := make([]api.Note, len(res.Msg.Notes))
+	for i, n := range res.Msg.Notes {
+		out[i] = api.Note{Name: n.Name, Kind: n.Kind, Text: n.Text, Time: n.Time.AsTime(), Path: n.Path}
+	}
+	return out, nil
+}
+
+// ForgetNote deletes one (WorkspaceService.ForgetNote).
+func (r *Remote) ForgetNote(name string) error {
+	_, err := r.workspaces.ForgetNote(context.Background(), connect.NewRequest(&pb.ForgetNoteRequest{Workspace: r.dir, Name: name}))
+	return fromAPI(err)
+}

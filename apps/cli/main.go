@@ -122,7 +122,7 @@ Exit codes: 0 success, 1 error, 2 usage, 3 --max-turns reached,
 	f.BoolVarP(&o.version, "version", "v", false, "Print Blitz version")
 	addRunFlags(f, o)
 
-	root.AddCommand(newExecCommand(o), newInitCommand(o), newDoctorCommand(&o.global), newConfigCommand(&o.global), newServeCommand(), newWorkersCommand(&o.global), newServiceCommand(), newLicenseCommand(), newTrustCommand(&o.global), newMCPCommand(&o.global), newWorktreesCommand(&o.global))
+	root.AddCommand(newExecCommand(o), newInitCommand(o), newDoctorCommand(&o.global), newConfigCommand(&o.global), newServeCommand(), newWorkersCommand(&o.global), newServiceCommand(), newLicenseCommand(), newTrustCommand(&o.global), newMCPCommand(&o.global), newWorktreesCommand(&o.global), newMemoryCommand(&o.global))
 	return root
 }
 
@@ -483,7 +483,7 @@ func newCompleter(w api.Backend) *tui.Completer {
 	c.Command("search", "web", "session")
 	c.Command("envs", "prune", "remove")
 	c.Command("license", "full", "third-party")
-	c.Command("memory", "show", "reload", "add")
+	c.Command("memory", "show", "reload", "add", "notes", "forget")
 	c.Command("approvals", "revoke", "clear")
 	c.Command("diff", "git")
 	c.Command("attach", "clear")

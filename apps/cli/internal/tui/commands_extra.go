@@ -225,6 +225,31 @@ func cmdMemory(ctx context.Context, args []string, app *App) {
 			return
 		}
 		fmt.Printf("%s✓ %s%s\n", Green, i18n.T("memory.added", "path", safe(path)), Reset)
+	case "notes":
+		notes, err := app.Workspace.ListNotes()
+		if err != nil {
+			fmt.Printf("%s✗ %v%s\n", Red, err, Reset)
+			return
+		}
+		if len(notes) == 0 {
+			fmt.Println(i18n.T("memory.no_notes"))
+			return
+		}
+		fmt.Printf("\n%s%s%s\n", Bold, i18n.T("memory.notes"), Reset)
+		for _, n := range notes {
+			fmt.Printf("  • %s %s(%s)%s %s\n", safe(n.Name), Dim, n.Kind, Reset, safe(strings.ReplaceAll(n.Text, "\n", " ")))
+		}
+		fmt.Println()
+	case "forget":
+		if len(args) != 2 {
+			fmt.Println(i18n.T("memory.usage"))
+			return
+		}
+		if err := app.Workspace.ForgetNote(args[1]); err != nil {
+			fmt.Printf("%s✗ %v%s\n", Red, err, Reset)
+			return
+		}
+		fmt.Printf("%s✓ %s%s\n", Green, i18n.T("memory.forgot", "name", safe(args[1])), Reset)
 	default:
 		fmt.Println(i18n.T("memory.usage"))
 	}

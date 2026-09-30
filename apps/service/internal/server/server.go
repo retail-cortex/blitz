@@ -326,6 +326,7 @@ func toAPI(err error) error {
 		{api.ErrCostLimit, connect.CodeResourceExhausted, "COST_LIMIT"},
 		{api.ErrTimeLimit, connect.CodeDeadlineExceeded, "TIME_LIMIT"},
 		{api.ErrSnapshotNameTaken, connect.CodeAlreadyExists, "SNAPSHOT_NAME_TAKEN"},
+		{api.ErrNoNote, connect.CodeNotFound, "NO_NOTE"},
 		{api.ErrBadModelRef, connect.CodeInvalidArgument, "BAD_MODEL_REF"},
 		{api.ErrInvalidAgency, connect.CodeInvalidArgument, "INVALID_AGENCY"},
 		{api.ErrUndoConflict, connect.CodeFailedPrecondition, "UNDO_CONFLICT"},

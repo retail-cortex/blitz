@@ -161,6 +161,12 @@ service WorkspaceService {
   // workspace so they take effect, unless a turn is running in it.
   rpc TrustProject(TrustProjectRequest) returns (TrustProjectResponse);
 
+  // Returns the notes the agent saved across sessions of the workspace
+  // with its remember tool, newest first.
+  rpc ListNotes(ListNotesRequest) returns (ListNotesResponse);
+  // Deletes one of those notes, by its name (NO_NOTE).
+  rpc ForgetNote(ForgetNoteRequest) returns (ForgetNoteResponse);
+
   // Reads an image from the workspace for a prompt (IMAGES_DISABLED).
   rpc LoadImage(LoadImageRequest) returns (LoadImageResponse);
   // Stores image data (e.g. pasted) for a prompt (IMAGES_DISABLED).
@@ -1091,6 +1097,38 @@ message GetProjectSettingsRequest {
 message GetProjectSettingsResponse {
   ProjectSettings settings = 1;
 }
+
+// Note is something the agent remembered across sessions of a workspace.
+message Note {
+  // Its name, to forget it.
+  string name = 1;
+  // fact, preference or correction.
+  string kind = 2;
+  string text = 3;
+  google.protobuf.Timestamp time = 4;
+  // Its file, on the service's machine.
+  string path = 5;
+}
+
+// Request message for WorkspaceService.ListNotes.
+message ListNotesRequest {
+  string workspace = 1;
+}
+
+// Response message for WorkspaceService.ListNotes.
+message ListNotesResponse {
+  repeated Note notes = 1;
+}
+
+// Request message for WorkspaceService.ForgetNote.
+message ForgetNoteRequest {
+  string workspace = 1;
+  // The note's name, or the start of it when only one note's starts so.
+  string name = 2;
+}
+
+// Response message for WorkspaceService.ForgetNote.
+message ForgetNoteResponse {}
 
 // Request message for WorkspaceService.TrustProject.
 message TrustProjectRequest {

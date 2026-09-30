@@ -30,6 +30,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/retail-cortex/blitz/pkg/api"
@@ -64,6 +65,9 @@ type Registry struct {
 	// (bypass without the OS sandbox); nil when it was.
 	modeNote error
 	rules    *PermissionRules
+
+	notesMu sync.Mutex
+	notes   NoteSaver // nil: notes off
 }
 
 // Rules are the permission rules in force; they can change while a
@@ -314,6 +318,11 @@ func NewRegistry(cfg *config.Config, agentReg *agents.Registry, skillProv *skill
 		}
 	}
 
+	r.tools["remember"], err = NewRememberTool(r)
+	if err != nil {
+		r.Close()
+		return nil, fmt.Errorf("failed to create the remember tool: %w", err)
+	}
 	resourceTools, err := NewMCPResourceTools(r)
 	if err != nil {
 		r.Close()

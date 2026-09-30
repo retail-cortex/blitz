@@ -62,7 +62,13 @@ type MemoryConfig struct {
 	// only to matching files. GlobalRules is the user's own rule directory.
 	RuleDirs    []string `toml:"rule_dirs"`
 	GlobalRules string   `toml:"global_rules"`
+	// Auto lets the agent save notes across sessions with its remember
+	// tool, loaded into its instructions (nil: on).
+	Auto *bool `toml:"auto"`
 }
+
+// AutoOn reports whether the agent keeps notes (memory.auto).
+func (m MemoryConfig) AutoOn() bool { return m.Auto == nil || *m.Auto }
 
 // ContextConfig controls conversation compaction.
 type ContextConfig struct {

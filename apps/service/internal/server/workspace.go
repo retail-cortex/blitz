@@ -660,6 +660,33 @@ func (h workspaceService) TrustProject(ctx context.Context, r req[pb.TrustProjec
 	return ok(&pb.TrustProjectResponse{Reopened: reopened})
 }
 
+func (h workspaceService) ListNotes(ctx context.Context, r req[pb.ListNotesRequest]) (*connect.Response[pb.ListNotesResponse], error) {
+	w, err := h.s.workspace(ctx, r.Msg.Workspace)
+	if err != nil {
+		return nil, err
+	}
+	notes, err := w.ListNotes()
+	if err != nil {
+		return nil, toAPI(err)
+	}
+	out := &pb.ListNotesResponse{}
+	for _, n := range notes {
+		out.Notes = append(out.Notes, &pb.Note{Name: n.Name, Kind: n.Kind, Text: n.Text, Time: timestamppb.New(n.Time), Path: n.Path})
+	}
+	return ok(out)
+}
+
+func (h workspaceService) ForgetNote(ctx context.Context, r req[pb.ForgetNoteRequest]) (*connect.Response[pb.ForgetNoteResponse], error) {
+	w, err := h.s.workspace(ctx, r.Msg.Workspace)
+	if err != nil {
+		return nil, err
+	}
+	if err := w.ForgetNote(r.Msg.Name); err != nil {
+		return nil, toAPI(err)
+	}
+	return ok(&pb.ForgetNoteResponse{})
+}
+
 func (h workspaceService) ListTasks(ctx context.Context, r req[pb.ListTasksRequest]) (*connect.Response[pb.ListTasksResponse], error) {
 	w, err := h.s.workspace(ctx, r.Msg.Workspace)
 	if err != nil {

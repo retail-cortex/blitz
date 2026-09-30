@@ -36,6 +36,7 @@ var planReadOnlyTools = map[string]bool{
 	"invoke_agent":          true,
 	"list_or_search_skills": true,
 	"list_mcp_resources":    true,
+	"remember":              true,
 	"read_mcp_resource":     true,
 	"list_tasks":            true,
 	"task_output":           true,

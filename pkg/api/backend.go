@@ -56,6 +56,11 @@ type Backend interface {
 	PendingTaskRequests() []TaskRequest
 	AnswerTaskRequest(id string, decision Decision, answer string) error
 
+	// Notes the agent saved across sessions (remember), newest first;
+	// ForgetNote deletes one.
+	ListNotes() ([]Note, error)
+	ForgetNote(name string) error
+
 	// Project settings.
 	ProjectSettings() ProjectSettings
 	// TrustProject records trusting (or declining) the project settings

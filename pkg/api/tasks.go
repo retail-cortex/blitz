@@ -99,3 +99,17 @@ type SessionEvent struct {
 
 // ErrUnknownRequest: no request with that ID is waiting.
 var ErrUnknownRequest = errors.New("no such request is waiting")
+
+// ErrNoNote is returned by ForgetNote when no note has the name.
+var ErrNoNote = errors.New("no such note")
+
+// Note is something the agent remembered across sessions of a workspace
+// with its remember tool: a fact, a preference or a correction.
+type Note struct {
+	Name string // to show or forget it
+	Kind string
+	Text string
+	Time time.Time
+	// Path is its file, to edit (on the machine that keeps it).
+	Path string
+}
