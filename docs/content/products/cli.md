@@ -79,6 +79,7 @@ Decisions are `once`, `session`, `always` or `deny`; a question is answered with
 - **Ctrl+C** or **Esc** cancels the running turn; at the prompt, Ctrl+C exits.
 - **Pickers**: `/resume`, `/agent` and `/model` without an argument, approvals and the agent's questions open a menu under the prompt. Arrow keys move, typing filters, Enter chooses.
 - **Shift+Tab** cycles the permission mode (`default` → `accept-edits` → `plan`). **Ctrl+G** opens the prompt in `$VISUAL` or `$EDITOR`. **Esc Esc** clears the line, or on an empty line opens `/rewind`.
+- **Notifications**: when a turn has run longer than `ui.notify_after` seconds (30), its end and any approval or question it waits on ring the bell and show a desktop notification. `ui.notify` picks `both`, `bell`, `desktop` or `off`.
 
 ### Commands
 
@@ -86,8 +87,11 @@ Decisions are `once`, `session`, `always` or `deny`; a question is answered with
 |---|---|
 | `/undo [--force]` | Revert the last turn's file changes (checkpoints are kept between runs) |
 | `/rewind [n [mode]] [--force]` | Go back to before an earlier prompt: its files, the conversation, or both, or summarize from or up to it |
-| `/checkpoints`, `/diff [git]` | Turns that changed files; everything tools changed in this session (or `git diff`) |
-| `/cost`, `/context` | Token usage, estimated cost, context size against the compaction threshold |
+| `/checkpoints`, `/diff [git]` | Turns that changed files; everything tools changed in this session, a file at a time (or `git diff`) |
+| `/cost`, `/context` | Token usage, estimated cost, context size against the compaction threshold and what it's made of |
+| `/status` | Version, workspace, session, agent, model, mode, sandbox, MCP servers, settings files |
+| `/config [key=value [--save]]`, `/set` | The session's settings; change one, and keep it with `--save` |
+| `/copy [n]` | Copy the last answer (or the nth from last) to the clipboard; OSC 52 over SSH |
 | `/compact [focus]` | Summarize everything before the latest turn now |
 | `/memory [reload\|add <note>\|notes\|forget <name>]`, `/init` | Project instructions and the agent's notes; have the agent write `BLITZ.md` |
 | `/approvals [revoke <n>\|clear]` | Remembered approval rules |
