@@ -161,6 +161,15 @@ func HandleCommand(ctx context.Context, input string, app *App) (bool, error) {
 		}
 		fmt.Println()
 
+	case "trust":
+		p := app.Workspace.ProjectSettings()
+		fmt.Println()
+		ShowProject(os.Stdout, p)
+		if len(p.Pending) > 0 && p.Hash != "" && app.Input != nil {
+			DecideTrust(ctx, app.Input, os.Stdout, app.Workspace, p)
+		}
+		fmt.Println()
+
 	case "license":
 		which := ""
 		if len(args) > 0 {
@@ -229,6 +238,7 @@ func printHelp(app *App) {
 		{"/paste", "help.paste"},
 		{"/locale [code]", "help.locale"},
 		{"/set [key=value], /show", "help.set"},
+		{"/trust", "help.trust"},
 		{"/license [full|third-party]", "help.license"},
 		{"/clear", "help.clear"},
 		{"/exit, /quit", "help.exit"},

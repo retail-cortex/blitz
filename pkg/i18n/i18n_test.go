@@ -71,6 +71,7 @@ func TestTranslationsKeepAnswerLetters(t *testing.T) {
 		"exit.choices":        {"[k", "[w"},
 		"exit.choices_cancel": {"[c"},
 		"approvals.none":      {"[s]", "[a]"},
+		"project.ask":         {"[t]", "[d]", "[s]"},
 	}
 	for _, m := range b.Available() {
 		t.Run(m.Name, func(t *testing.T) {

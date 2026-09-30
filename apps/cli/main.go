@@ -122,7 +122,7 @@ Exit codes: 0 success, 1 error, 2 usage, 3 --max-turns reached,
 	f.BoolVarP(&o.version, "version", "v", false, "Print Blitz version")
 	addRunFlags(f, o)
 
-	root.AddCommand(newExecCommand(o), newInitCommand(o), newDoctorCommand(&o.global), newConfigCommand(&o.global), newServeCommand(), newWorkersCommand(&o.global), newServiceCommand(), newLicenseCommand())
+	root.AddCommand(newExecCommand(o), newInitCommand(o), newDoctorCommand(&o.global), newConfigCommand(&o.global), newServeCommand(), newWorkersCommand(&o.global), newServiceCommand(), newLicenseCommand(), newTrustCommand(&o.global))
 	return root
 }
 
@@ -132,7 +132,9 @@ func addRunFlags(f *pflag.FlagSet, o *rootOptions) {
 	f.StringVarP(&o.global.agent, "agent", "a", "", "Agent to activate (blitz, helios, qa, ...)")
 	f.StringVarP(&o.global.model, "model", "m", "", "Model identifier to use")
 	f.StringVar(&o.global.agency, "agency", "", "Agency level (low, medium, high, extreme)")
-	f.BoolVar(&o.global.trustWorkspace, "trust-workspace", false, "Load agents and skills from the workspace (./agents, ./skills, .agents/skills)")
+	f.BoolVar(&o.global.trustProject, "trust-project", false, "Trust the workspace's project settings (.blitz/settings.toml) for this run, without recording it")
+	f.BoolVar(&o.global.trustProject, "trust-workspace", false, "Deprecated: --trust-project")
+	_ = f.MarkHidden("trust-workspace")
 	f.StringVarP(&o.resume, "resume", "r", "", "Resume a saved session by ID (no ID: the most recent), or start a new one from a snapshot by name")
 	f.Lookup("resume").NoOptDefVal = "latest"
 	f.BoolVarP(&o.cont, "continue", "C", false, "Continue the most recent session")
@@ -256,9 +258,24 @@ func runRoot(cmd *cobra.Command, o *rootOptions, args []string) (err error) {
 		}
 	}()
 
-	w, locales, remote, err := openBackend(ctx, cfg, o.local, pretty, warnFn)
+	// With nobody to ask (a prompt, a pipe), project settings that need
+	// trust stay off, and a line says so.
+	var askTrust func(api.ProjectSettings) string
+	if stdinTTY && !oneShot && !stdinUsed {
+		askTrust = func(p api.ProjectSettings) string {
+			return tui.AskTrust(ctx, tui.NewLineReader(os.Stdin, os.Stdout), os.Stdout, cfg.Tools.WorkspaceDir, p)
+		}
+	}
+	w, locales, remote, err := openBackend(ctx, cfg, backendOptions{local: o.local, streaming: pretty, trustProject: o.global.trustProject, askTrust: askTrust}, warnFn)
 	if err != nil {
 		return err
+	}
+	if notice := tui.ProjectNotice(w.ProjectSettings()); notice != "" {
+		if tui.NeedsTrustDecision(w.ProjectSettings()) || oneShot {
+			warnFn(notice)
+		} else {
+			fmt.Fprintf(os.Stderr, "%s%s%s\n", tui.Dim, notice, tui.Reset)
+		}
 	}
 	if remote && !oneShot {
 		fmt.Fprintf(os.Stderr, "%s%s%s\n", tui.Dim, i18n.T("startup.attached", "socket", socket.DefaultSocket()), tui.Reset)
@@ -420,7 +437,7 @@ func newCompleter(w api.Backend) *tui.Completer {
 	c := tui.NewCompleter(w.Dir())
 	for _, cmd := range []string{"help", "agents", "model", "skills", "session", "set", "clear", "sandbox", "exit", "quit",
 		"undo", "checkpoints", "diff", "cost", "context", "compact", "memory", "approvals", "mcp", "resume", "locale", "attach", "paste",
-		"tools", "plan", "show", "init", "mode", "permissions", "effort", "rewind", "pin_model", "unpin", "model_settings", "search", "btw", "rename", "envs", "license"} {
+		"tools", "plan", "show", "init", "mode", "permissions", "effort", "rewind", "pin_model", "unpin", "model_settings", "search", "btw", "rename", "envs", "trust", "license"} {
 		c.Command(cmd)
 	}
 	c.Command("skills", "list", "show", "search")

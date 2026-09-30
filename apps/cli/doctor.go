@@ -28,6 +28,7 @@ import (
 	"time"
 
 	"github.com/retail-cortex/blitz/apps/cli/internal/tui"
+	"github.com/retail-cortex/blitz/pkg/api"
 	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/engine"
 	"github.com/retail-cortex/blitz/pkg/engine/memory"
@@ -99,6 +100,7 @@ func runDoctor(ctx context.Context, g *globalFlags, online bool) []check {
 		return checks
 	}
 	add("config parse", statusOK, "provider %s, model %s, agent %s", cfg.LLM.Provider, cfg.ModelName(), cfg.Blitz.DefaultAgent)
+	checkProject(cfg, add)
 	checkSkills(cfg, add)
 
 	// Offline, credentials are only found, not tried; with --online the
@@ -484,5 +486,35 @@ func checkSkills(cfg *config.Config, add func(name string, st checkStatus, forma
 		add("script sandbox", statusOK, "%s (%s)", box.Name(), note)
 	default:
 		add("script sandbox", statusOK, "%s", box.Name())
+	}
+}
+
+// checkProject lists the workspace's project settings: what applies, what
+// waits for trust, and what a project may not set.
+func checkProject(cfg *config.Config, add func(string, checkStatus, string, ...any)) {
+	p, err := engine.ReviewProject(cfg)
+	if err != nil || len(p.Files) == 0 && len(p.Problems) == 0 && len(p.Pending) == 0 {
+		return
+	}
+	for _, prob := range p.Problems {
+		add("project settings", statusWarn, "%s", prob)
+	}
+	if len(p.Files) > 0 || len(p.Pending) > 0 {
+		st, trust := statusOK, "nothing needs trust"
+		switch p.State {
+		case api.TrustTrusted:
+			trust = "trusted"
+		case api.TrustDeclined:
+			trust = "declined, not loaded ('blitz trust' to review)"
+		case api.TrustNew, api.TrustChanged:
+			st = statusWarn
+			trust = p.State + ", not loaded ('blitz trust' to review)"
+		}
+		add("project settings", st, "%s: %d applied; %d need trust: %s", strings.Join(p.Files, ", "), len(p.Applied), len(p.Pending), trust)
+	}
+	for _, it := range p.Ignored {
+		if it.Reason == config.ReasonNever || it.Reason == config.ReasonUnknown {
+			add("project setting", statusWarn, "%s: %s ignored (%s)", it.File, it.Key, tui.ProjectReason(it.Reason))
+		}
 	}
 }

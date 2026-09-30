@@ -22,20 +22,19 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/retail-cortex/blitz/pkg/socket"
-
+	"github.com/retail-cortex/blitz/apps/cli/internal/tui"
 	"github.com/retail-cortex/blitz/pkg/api"
-
 	"github.com/retail-cortex/blitz/pkg/client"
 	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/engine"
 	"github.com/retail-cortex/blitz/pkg/i18n"
+	"github.com/retail-cortex/blitz/pkg/socket"
 )
 
 // globalFlags are shared by the root command and subcommands.
 type globalFlags struct {
 	config, dir, model, agent, agency string
-	trustWorkspace                    bool
+	trustProject                      bool
 }
 
 // loadConfig loads trusted configuration and applies flag overrides,
@@ -74,29 +73,60 @@ func loadConfig(f *globalFlags) (*config.Config, error) {
 	if f.agency != "" {
 		cfg.Blitz.AgencyLevel = strings.ToLower(f.agency)
 	}
-	if f.trustWorkspace {
-		cfg.Blitz.TrustWorkspace = true
-	}
 	if dir != "" {
 		cfg.Tools.WorkspaceDir = dir
 	}
 	return cfg, nil
 }
 
+// backendOptions are how openBackend opens the workspace.
+type backendOptions struct {
+	local, streaming bool
+	// trustProject trusts the project settings for this run
+	// (--trust-project), in a workspace opened here.
+	trustProject bool
+	// askTrust asks about project settings waiting for a decision and
+	// returns "trust", "decline" or "" (no answer); nil when nobody can
+	// be asked.
+	askTrust func(api.ProjectSettings) string
+}
+
 // openBackend attaches to the workspace in the Blitz service when one
 // is running (unless local), and otherwise opens it in this process. It
 // also returns the interface's translation catalogs, which are always this
-// process's, and whether it attached.
-func openBackend(ctx context.Context, cfg *config.Config, local, streaming bool, warn func(string)) (api.Backend, *i18n.Bundle, bool, error) {
+// process's, and whether it attached. Project settings waiting for trust
+// are asked about first: before the workspace opens here, or in the
+// service, which reopens it with the answer.
+func openBackend(ctx context.Context, cfg *config.Config, o backendOptions, warn func(string)) (api.Backend, *i18n.Bundle, bool, error) {
 	sock := socket.DefaultSocket()
-	if !local && socket.Running(sock) {
+	if !o.local && socket.Running(sock) {
 		r, err := client.Attach(ctx, sock, cfg.Tools.WorkspaceDir, warn)
 		if err != nil {
 			return nil, nil, false, fmt.Errorf("attaching to the Blitz service at %s: %w (--local runs without it)", sock, err)
 		}
-		return r, engine.SetupLocale(cfg, warn), true, nil
+		locales := engine.SetupLocale(cfg, warn)
+		if o.trustProject {
+			warn(i18n.T("project.trust_run_attached"))
+		}
+		if p := r.ProjectSettings(); o.askTrust != nil && tui.NeedsTrustDecision(p) {
+			if d := o.askTrust(p); d != "" {
+				if err := r.TrustProject(p.Hash, d == "trust"); err != nil {
+					warn(err.Error())
+				}
+			}
+		}
+		return r, locales, true, nil
 	}
-	w, err := engine.Open(ctx, cfg, engine.Options{Streaming: streaming, Warn: warn})
+	if o.askTrust != nil && !o.trustProject {
+		if p, err := engine.ReviewProject(cfg); err == nil && tui.NeedsTrustDecision(p) {
+			if d := o.askTrust(p); d != "" {
+				if err := engine.TrustProject(cfg, p.Hash, d == "trust"); err != nil {
+					warn(err.Error())
+				}
+			}
+		}
+	}
+	w, err := engine.Open(ctx, cfg, engine.Options{Streaming: o.streaming, Warn: warn, TrustProject: o.trustProject})
 	if errors.Is(err, api.ErrWorkspaceBusy) {
 		return nil, nil, false, withCode(exitUsage, fmt.Errorf("%w (another blitz has it open)", err))
 	}
