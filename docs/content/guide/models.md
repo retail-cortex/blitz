@@ -9,6 +9,29 @@ Spec: [models](../about/specs/spec_models_015.md).
 
 Model requests are retried on rate limits, overload, 5xx responses and dropped connections, with exponential backoff that honours `Retry-After` (`llm.max_retries`, default 3; `0` turns retries off). A request that sends nothing for `llm.stall_timeout_seconds` (default 600) fails instead of hanging the turn. A stream that fails partway through isn't retried, because its text has already been shown. At most `tools.max_parallel` (default 8) tool calls from one model response run at once.
 
+## Listing models
+
+`blitz models` asks each provider you've set up which models it offers, and shows the price Blitz knows for each; `blitz models anthropic` asks one.
+
+## Keys from a password manager
+
+Instead of a key in the settings, a command can print it: Blitz runs it when it needs the key and again after `api_key_ttl`, so a key your gateway rotates keeps working.
+
+```toml
+[llm.anthropic]
+api_key_command = "op read op://work/anthropic/api-key"
+api_key_ttl     = "15m"   # default 5m
+```
+
+## Proxies and company certificates
+
+Blitz uses `HTTPS_PROXY`, `HTTP_PROXY` and `NO_PROXY` for model APIs, MCP servers, web search and `web_fetch` (which still refuses private addresses: it checks where a host resolves before the proxy connects). If a proxy inspects TLS with the company's own certificate authority, trust it:
+
+```toml
+[network]
+ca_file = "~/certs/company-root.pem"
+```
+
 ## Fallback models
 
 If the model fails before answering (after its retries: an outage, a rate limit, bad credentials), the next one in `llm.fallback_models` answers instead:

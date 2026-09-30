@@ -42,9 +42,9 @@ One TOML file, `.env.toml`, loaded through `github.com/rrmcguinness/modenv` (hie
 | | `max_retries` | `3` | `0` disables |
 | | `stall_timeout_seconds` | `600` | |
 | | `fallback_models` | `[]` | `provider/model` or bare model |
-| `[llm.gemini]` | `api_key`, `model`, `auth` (`api_key` or `adc`), `project_id`, `location` | model `gemini-3.8-flash`; `auth` `api_key` | `adc`: [spec_models_015](spec_models_015.md) |
-| `[llm.openai]` | `api_key`, `base_url`, `model` | `https://api.openai.com/v1`, `gpt-4o` | shared by `ollama` |
-| `[llm.anthropic]` | `api_key`, `auth` (`api_key`, `oauth` or `adc`), `profile`, `project_id`, `location`, `model`, `base_url`, `fallbacks` | `claude-opus-5`, `default`; `auth` `api_key` | `oauth`, `adc`: [spec_models_015](spec_models_015.md) |
+| `[llm.gemini]` | `api_key`, `api_key_command`, `api_key_ttl` (5m), `model`, `auth` (`api_key` or `adc`), `project_id`, `location` | model `gemini-3.8-flash`; `auth` `api_key` | `adc`: [spec_models_015](spec_models_015.md) |
+| `[llm.openai]` | `api_key`, `api_key_command`, `api_key_ttl`, `base_url`, `model` | `https://api.openai.com/v1`, `gpt-4o` | shared by `ollama` |
+| `[llm.anthropic]` | `api_key`, `api_key_command`, `api_key_ttl`, `auth` (`api_key`, `oauth` or `adc`), `profile`, `project_id`, `location`, `model`, `base_url`, `fallbacks` | `claude-opus-5`, `default`; `auth` `api_key` | `oauth`, `adc`: [spec_models_015](spec_models_015.md) |
 | `[skills]` | `enabled`, `paths`, `[skills.policy]` | on; `~/.blitz/skills`, `./skills`, `.agents/skills` | see [spec_skills_013](spec_skills_013.md) |
 | `[workers]` | `enabled`, `paths`, `[workers.policy]` | on; `workers` | see [spec_workers_023](spec_workers_023.md) |
 | `[tools]` | `shell_timeout_seconds` 120, `max_file_size_bytes` 10 MiB, `workspace_dir` `.`, `auto_approve_commands` false, `uc_tools_dir`, `approvals_file` `~/.blitz/approvals.json`, `max_parallel` 8, `max_background_agents` 4, `background_agent_timeout` `30m`, `background_agent_max_turns` 50, `background_agent_max_cost_usd` 0 (none) ([spec_background_agents_032](spec_background_agents_032.md)) | | |
@@ -63,6 +63,7 @@ One TOML file, `.env.toml`, loaded through `github.com/rrmcguinness/modenv` (hie
 | `[web]` | `enabled` true, `allow_domains`, `deny_domains`, `allow_private` false, `max_bytes` 2 MiB, `timeout_seconds` 20, `search_provider`, `search_api_key`, `search_url`, `search_model`, `search_max_results` | | |
 | `[browser]` | `enabled` true, `path` (found), `visible` false, `allow_local` false, `allow_scripts` false, `width` 1280, `height` 800 | | never from a project; see [spec_web_008](spec_web_008.md) §5 |
 | `[plugins]` | `enable`, `disable` (installed plugins by name; disable wins) | | a project may disable, and enable once trusted; see [spec_plugins_033](spec_plugins_033.md) |
+| `[network]` | `ca_file` (PEM certificate authorities to trust besides the system's) | | proxies from `HTTPS_PROXY`/`NO_PROXY`; never from a project ([spec_models_015](spec_models_015.md) MDL-54) |
 | `[hooks]` | `pre_tool`, `post_tool`, `prompt_submit`, `session_start`, `session_end`, `stop`, `post_tool_failure`, `subagent_start`, `subagent_stop`, `pre_compact`, `post_compact`, `notification`, `permission_request` arrays of `{match, if, type, command, args, url, headers, allowed_env_vars, prompt, model, timeout_seconds, fail_closed}` | | [spec_hooks_010](spec_hooks_010.md) |
 | `[[mcp.servers]]` | `name, command, args, env, url, tools, auto_approve, sandbox, prefix, agents, timeout_seconds` | | |
 | `[pricing."<model>"]` | `input_per_mtok, output_per_mtok, cached_input_per_mtok, cache_write_per_mtok` | built-ins below | |
