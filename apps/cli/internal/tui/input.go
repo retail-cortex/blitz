@@ -234,6 +234,8 @@ func RenderDiff(diff string, maxLines int) (string, bool) {
 	var sb strings.Builder
 	for _, l := range lines {
 		switch {
+		case plainDiffs.Load():
+			sb.WriteString("   " + l + "\n")
 		case strings.HasPrefix(l, "+++"), strings.HasPrefix(l, "---"):
 			sb.WriteString("   " + Bold + l + Reset + "\n")
 		case strings.HasPrefix(l, "+"):

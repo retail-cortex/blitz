@@ -47,6 +47,10 @@ type UIConfig struct {
 	// mode, context, cost), a shell command that reads the session's state
 	// as JSON and prints the line, or "" for none.
 	StatusLine string `toml:"status_line"`
+	// Editor is how the prompt edits: emacs (the default) or vim.
+	Editor string `toml:"editor"`
+	// Keybindings is the file that rebinds the REPL's keys.
+	Keybindings string `toml:"keybindings"`
 }
 
 // ImagesConfig controls pictures sent to the model: @file.png mentions,
@@ -485,6 +489,8 @@ func applyFeatureDefaults(c *Config) {
 		LocalesDir:    filepath.Join(dir, "locales"),
 		NotifyAfter:   30,
 		Notify:        "both",
+		Editor:        "emacs",
+		Keybindings:   filepath.Join(dir, "keybindings.toml"),
 	}
 	c.Memory = MemoryConfig{
 		Enabled: true,

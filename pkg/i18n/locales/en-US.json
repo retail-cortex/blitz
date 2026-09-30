@@ -1215,6 +1215,11 @@
     "context.part.images": "Images",
     "context.part.summary": "Earlier conversation (summary)",
     "statusline.context": "context {tokens}",
-    "statusline.failed": "status line: {error}"
+    "statusline.failed": "status line: {error}",
+    "help.theme": "Show the themes for Markdown and diffs, or switch to one; --save keeps it",
+    "theme.title": "Themes",
+    "theme.hint": "/theme <name> switches; --save keeps it. ascii and notty show diffs without colour.",
+    "theme.unknown": "No theme {name}; one of: {themes}",
+    "theme.set": "Theme: {name}"
   }
 }

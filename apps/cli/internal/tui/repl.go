@@ -234,6 +234,7 @@ func (p *Printer) Handle(ev api.Event) {
 
 // RunREPL runs the interactive REPL prompt loop until /exit, EOF, or ctx is cancelled.
 func RunREPL(ctx context.Context, app *App) error {
+	applyTheme(app, app.Printer.Theme)
 	PrintBanner(app.Version, app.Workspace.ActiveAgent().Name, app.Workspace.Model().Name)
 	if sandbox := app.Workspace.SandboxSummary(); len(sandbox) > 0 {
 		fmt.Printf("%s%s%s\n", Dim, safe(sandbox[0]), Reset)

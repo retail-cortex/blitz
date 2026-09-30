@@ -399,10 +399,16 @@ func runRoot(cmd *cobra.Command, o *rootOptions, args []string) (err error) {
 		// answers are set up with the run).
 	case stdinTTY && !oneShot:
 		completer = newCompleter(w)
+		keys, kerr := tui.LoadKeyBindings(config.ExpandHome(cfg.UI.Keybindings))
+		if kerr != nil {
+			warnFn(kerr.Error())
+		}
 		ti, terr := tui.NewTerminalInput(tui.TerminalOptions{
 			HistoryFile: config.ExpandHome(cfg.UI.HistoryFile),
 			HistorySize: cfg.UI.HistorySize,
 			Completer:   completer,
+			Vim:         cfg.UI.Editor == "vim",
+			Keys:        &keys,
 		})
 		if terr != nil {
 			warnFn(i18n.T("startup.line_editor", "error", terr.Error()))
@@ -564,7 +570,7 @@ func newCompleter(w api.Backend) *tui.Completer {
 	c := tui.NewCompleter(w.Dir())
 	for _, cmd := range []string{"help", "agents", "model", "skills", "session", "set", "clear", "sandbox", "exit", "quit",
 		"undo", "checkpoints", "diff", "cost", "context", "compact", "memory", "approvals", "hooks", "goal", "loop", "style", "fork", "export", "mcp", "resume", "locale", "attach", "paste",
-		"tools", "plan", "show", "init", "mode", "permissions", "effort", "rewind", "pin_model", "unpin", "model_settings", "search", "btw", "rename", "envs", "tasks", "cd", "trust", "license", "status", "copy", "config"} {
+		"tools", "plan", "show", "init", "mode", "permissions", "effort", "rewind", "pin_model", "unpin", "model_settings", "search", "btw", "rename", "envs", "tasks", "cd", "trust", "license", "status", "copy", "config", "theme"} {
 		c.Command(cmd)
 	}
 	c.Command("skills", "list", "show", "search")

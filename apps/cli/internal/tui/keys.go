@@ -145,6 +145,9 @@ func (t *TerminalInput) filterKey(r rune) (rune, bool) {
 			t.stdin.push(injectSubmit)
 			ks.line = ""
 		case readEntry, readContinue:
+			if t.vim { // Esc is vim's: normal mode, not ours
+				return readline.CharEsc, true
+			}
 			now := time.Now()
 			if now.Sub(ks.lastEsc) < doubleEscWindow {
 				ks.lastEsc = time.Time{}
@@ -160,19 +163,30 @@ func (t *TerminalInput) filterKey(r rune) (rune, bool) {
 			ks.lastEsc = now
 		}
 		return r, false
-	case keyCtrlG:
+	case 0:
+		return r, true
+	case t.bindings.Editor:
 		if ks.kind == readAsk || ks.kind == readContinue {
 			return r, true
 		}
 		ks.action, ks.saved = actionEditor, ks.line
 		t.stdin.push(injectSubmit)
 		return r, false
-	case keyShiftTab:
+	case t.bindings.CycleMode:
 		if ks.kind == readEntry && t.promptKeys.CycleMode != nil {
 			if p := t.promptKeys.CycleMode(); p != "" {
 				t.rl.SetPrompt(p)
 			}
 		}
+		return r, false
+	}
+	if cmd, ok := t.bindings.Commands[r]; ok {
+		if ks.kind == readEntry && ks.line == "" {
+			t.stdin.push(cmd + "\r")
+		}
+		return r, false
+	}
+	if r == keyShiftTab { // unbound: not a character to insert
 		return r, false
 	}
 	return r, true

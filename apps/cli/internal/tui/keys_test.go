@@ -58,9 +58,14 @@ func (c *cprWriter) Write(p []byte) (int, error) {
 
 func newFakeTerminal(t *testing.T) *fakeTerminal {
 	t.Helper()
+	return newFakeTerminalWith(t, TerminalOptions{})
+}
+
+func newFakeTerminalWith(t *testing.T, o TerminalOptions) *fakeTerminal {
+	t.Helper()
 	r, w := io.Pipe()
 	out := &cprWriter{w: w, answered: make(chan struct{}, 16)}
-	in, err := newTerminalInput(TerminalOptions{}, &readline.Config{
+	in, err := newTerminalInput(o, &readline.Config{
 		Stdin:              r,
 		Stdout:             out,
 		Stderr:             out,

@@ -71,6 +71,8 @@ func handleExtraCommand(ctx context.Context, cmd string, args []string, app *App
 		cmdStatus(app)
 	case "copy":
 		cmdCopy(args, app)
+	case "theme":
+		cmdTheme(args, app)
 	case "resume":
 		if len(args) == 0 {
 			ref, picked, ok := resumeWithPicker(ctx, app)

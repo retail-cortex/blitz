@@ -44,6 +44,8 @@ type TerminalInput struct {
 	ks          *keyState   // the read in progress
 	promptKeys  PromptKeys
 	nextInput   string // the next entry's starting text
+	bindings    KeyBindings
+	vim         bool // vi editing: Esc is the editor's
 }
 
 // WatchKeys lets the user steer the running turn: typing (or Ctrl+T) calls
@@ -94,6 +96,11 @@ type TerminalOptions struct {
 	HistoryFile string
 	HistorySize int
 	Completer   readline.AutoCompleter
+	// Vim edits the line vi-style (ui.editor = "vim"): Esc for normal
+	// mode, so Esc Esc does nothing.
+	Vim bool
+	// Keys are the REPL's keys (nil: the defaults).
+	Keys *KeyBindings
 }
 
 // NewTerminalInput creates the line editor on stdin/stdout.
@@ -117,7 +124,10 @@ func newTerminalInput(o TerminalOptions, base *readline.Config) (*TerminalInput,
 	if in == nil {
 		in = os.Stdin
 	}
-	t := &TerminalInput{turn: make(chan struct{}, 1), stdin: &escReader{in: in}}
+	t := &TerminalInput{turn: make(chan struct{}, 1), stdin: &escReader{in: in}, bindings: DefaultKeyBindings(), vim: o.Vim}
+	if o.Keys != nil {
+		t.bindings = *o.Keys
+	}
 	t.edit = func(text string) (string, error) { return editText(text, os.Stdin, os.Stdout, os.Stderr) }
 	t.pickTerm = func() keyTerm { return newPickerKeys(int(os.Stdin.Fd())) }
 	cfg := *base
@@ -131,6 +141,7 @@ func newTerminalInput(o TerminalOptions, base *readline.Config) (*TerminalInput,
 	cfg.EOFPrompt = ""
 	cfg.FuncFilterInputRune = t.filterKey
 	cfg.Listener = t.listen
+	cfg.VimMode = o.Vim
 	rl, err := readline.NewFromConfig(&cfg)
 	if err != nil {
 		return nil, err

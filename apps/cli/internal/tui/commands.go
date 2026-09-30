@@ -218,6 +218,7 @@ func printHelp(app *App) {
 		{"/config [key=value [--save]], /set", "help.set"},
 		{"/status", "help.status"},
 		{"/copy [n]", "help.copy"},
+		{"/theme [name [--save]]", "help.theme"},
 		{"/cd [path]", "help.cd"},
 		{"/tasks [show|stop <id>]", "help.tasks"},
 		{"/trust", "help.trust"},

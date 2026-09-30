@@ -380,6 +380,8 @@ var settableValues = map[string]bool{
 	"ui.style":              true,
 	"ui.locale":             true,
 	"ui.notify":             true,
+	"ui.theme":              true,
+	"ui.editor":             true,
 }
 
 // SetValue sets one of the form's settings in a scope (value "" removes it,
