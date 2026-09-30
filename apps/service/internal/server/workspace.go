@@ -820,3 +820,15 @@ func (h workspaceService) ListTaskRequests(ctx context.Context, r req[pb.ListTas
 	}
 	return ok(out)
 }
+
+func (h workspaceService) GetGitStatus(ctx context.Context, r req[pb.GetGitStatusRequest]) (*connect.Response[pb.GetGitStatusResponse], error) {
+	w, err := h.s.workspace(ctx, r.Msg.Workspace)
+	if err != nil {
+		return nil, err
+	}
+	st, err := w.GitStatus(ctx)
+	if err != nil {
+		return nil, toAPI(err)
+	}
+	return ok(&pb.GetGitStatusResponse{Repo: st.Repo, Branch: st.Branch, Changed: int32(st.Changed)})
+}

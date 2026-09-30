@@ -34,6 +34,7 @@ import { waiting } from "./project";
 import { ProjectDialog } from "./ProjectDialog";
 import { RunSettings } from "./RunSettings";
 import { useApp } from "./state";
+import { publishStatus } from "./status";
 import { t } from "./i18n";
 import { IconButton, Segmented } from "./ui/controls";
 import { Brand, WorkspaceSwitcher } from "./WorkspaceSwitcher";
@@ -73,6 +74,7 @@ export function Workspace({
     if (visible && view === "workers") update((p) => ({ ...p, workspaces: p.workspaces.map((w) => (w.dir === dir ? { ...w, workers_seen: Date.now() } : w)) }));
   }, [visible, view, dir, update]);
   const failed = useWorkerFailures()[dir] ?? 0;
+  useEffect(() => publishStatus(dir, { settings }), [dir, settings]);
 
   // The command palette can switch the view.
   useEffect(() => {
@@ -209,7 +211,7 @@ export function Workspace({
         {/* With no file open, the chat takes the middle (center stage). */}
         {!chatCenter && (
           <div className="workspace-center">
-            {view === "editor" && <EditorPane model={editor} onReveal={revealInTree} />}
+            {view === "editor" && <EditorPane model={editor} onReveal={revealInTree} onCursor={(cursor) => publishStatus(dir, { cursor })} />}
             {view === "changes" && <Changes dir={dir} />}
             {view === "workers" && <Workers dir={dir} />}
           </div>

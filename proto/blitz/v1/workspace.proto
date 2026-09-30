@@ -65,6 +65,9 @@ service WorkspaceService {
   rpc UpdateModelSettings(UpdateModelSettingsRequest) returns (UpdateModelSettingsResponse);
   // Returns the agency level, plus model, agent and reply language.
   rpc GetSettings(GetSettingsRequest) returns (GetSettingsResponse);
+  // Returns the workspace's git branch and how many files differ from
+  // HEAD (repo false outside a repository), for the status bar.
+  rpc GetGitStatus(GetGitStatusRequest) returns (GetGitStatusResponse);
   // Changes a setting for the workspace: agency, or effort (a reasoning
   // effort, or "auto" to clear it) (UNKNOWN_SETTING, INVALID_AGENCY,
   // INVALID_SETTING).
@@ -1293,4 +1296,18 @@ message SearchWebResponse {
   // None: nothing worth handing over.
   repeated Link links = 2;
   string prompt = 3;
+}
+
+// Request message for WorkspaceService.GetGitStatus.
+message GetGitStatusRequest {
+  string workspace = 1;
+}
+
+// Response message for WorkspaceService.GetGitStatus.
+message GetGitStatusResponse {
+  bool repo = 1;
+  // The branch, or the short commit when detached.
+  string branch = 2;
+  // Files that differ from HEAD, untracked ones included.
+  int32 changed = 3;
 }

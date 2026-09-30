@@ -612,6 +612,7 @@ export function installFake() {
         },
         listCheckpoints: () => ({ checkpoints: [{ id: 2, label: "Fix the coupon rounding", time: now(), files: ["internal/cart/discount.go", "internal/cart/discount_test.go"] }] }),
         undo: () => ({ label: "Fix the coupon rounding", restored: ["internal/cart/discount.go"] }),
+        getGitStatus: () => ({ repo: true, branch: "fix/coupon-rounding", changed: 2 }),
         getDiff: ({ git }) => ({
           diff: git
             ? ""

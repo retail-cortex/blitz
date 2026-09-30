@@ -19,7 +19,9 @@ import (
 	"errors"
 	"fmt"
 	"os/exec"
+	"slices"
 	"strings"
+	"time"
 
 	"github.com/retail-cortex/blitz/pkg/api"
 
@@ -93,6 +95,38 @@ func (w *Workspace) GitDiff(ctx context.Context, color bool) (string, error) {
 	cmd.Dir = w.Dir()
 	out, err := cmd.CombinedOutput()
 	return string(out), err
+}
+
+// GitStatus reads the workspace's branch and changed files.
+func (w *Workspace) GitStatus(ctx context.Context) (api.GitStatus, error) {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	base := append([]string{"-c", "core.fsmonitor=false", "--no-optional-locks"}, noFilters(ctx, w.Dir())...)
+	git := func(args ...string) ([]byte, error) {
+		cmd := exec.CommandContext(ctx, "git", append(slices.Clone(base), args...)...)
+		cmd.Dir = w.Dir()
+		return cmd.Output()
+	}
+	out, err := git("rev-parse", "--abbrev-ref", "HEAD")
+	if err != nil {
+		return api.GitStatus{}, nil // not a repository, or no commit yet
+	}
+	st := api.GitStatus{Repo: true, Branch: strings.TrimSpace(string(out))}
+	if st.Branch == "HEAD" { // detached
+		if sha, err := git("rev-parse", "--short", "HEAD"); err == nil {
+			st.Branch = strings.TrimSpace(string(sha))
+		}
+	}
+	status, err := git("status", "--porcelain=v1", "-z", "--untracked-files=normal")
+	if err != nil {
+		return st, err
+	}
+	for _, rec := range strings.Split(string(status), "\x00") {
+		if len(rec) >= 3 && rec[2] == ' ' {
+			st.Changed++
+		}
+	}
+	return st, nil
 }
 
 // noFilters returns git options that blank every filter driver configured

@@ -111,6 +111,9 @@ func TestRemoteOperationsAndTypedErrors(t *testing.T) {
 	assert.True(t, r.ImagesEnabled(), "images %v, processes %v, sandbox %v", r.ImagesEnabled(), r.Processes(), r.SandboxSummary())
 	assert.Empty(t, r.Processes().Running(), "images %v, processes %v, sandbox %v", r.ImagesEnabled(), r.Processes(), r.SandboxSummary())
 	assert.NotEqual(t, 0, len(r.SandboxSummary()), "images %v, processes %v, sandbox %v", r.ImagesEnabled(), r.Processes(), r.SandboxSummary())
+	st, err := r.GitStatus(ctx)
+	require.NoError(t, err, "git status")
+	assert.False(t, st.Repo, "the test workspace isn't a repository: %+v", st)
 }
 
 func TestRemoteTurnWithApprovalAndQuestion(t *testing.T) {

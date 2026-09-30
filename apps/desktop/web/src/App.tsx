@@ -32,6 +32,8 @@ import { Brand, WorkspaceSwitcher } from "./WorkspaceSwitcher";
 import { unsavedIn } from "./files/unsaved";
 import { closeWorkspace, displayName, openWorkspace, openWorkspaces, recentWorkspaces } from "./prefs";
 import { SettingsDialog } from "./SettingsDialog";
+import { StatusBar } from "./StatusBar";
+import { forgetStatus } from "./status";
 import { AppStateProvider, useApp } from "./state";
 import { Button, Dialog, Icon, IconButton, SnackbarProvider, useSnackbar } from "./ui/controls";
 import { Workspace } from "./Workspace";
@@ -231,6 +233,7 @@ function Shell() {
   const doClose = useCallback(
     async (dir: string) => {
       update((p) => closeWorkspace(p, dir));
+      forgetStatus(dir);
       try {
         await workspaceAPI.closeWorkspace({ workspace: dir });
       } catch (e) {
@@ -287,6 +290,7 @@ function Shell() {
           />
         ))}
       </main>
+      <StatusBar serviceUp={service.state === "up"} version={version.info?.version} onRunSettings={() => update((p) => ({ ...p, run_settings: true }))} />
       {unsavedClose && (
         <UnsavedDialog
           names={[displayName(prefs.workspaces.find((w) => w.dir === unsavedClose) ?? { dir: unsavedClose })]}

@@ -832,6 +832,16 @@ func (r *Remote) GitDiff(ctx context.Context, color bool) (string, error) {
 	return res.Msg.Diff, nil
 }
 
+// GitStatus is the workspace's git branch and how many files differ from
+// HEAD (WorkspaceService.GetGitStatus).
+func (r *Remote) GitStatus(ctx context.Context) (api.GitStatus, error) {
+	res, err := r.workspaces.GetGitStatus(ctx, connect.NewRequest(&pb.GetGitStatusRequest{Workspace: r.dir}))
+	if err != nil {
+		return api.GitStatus{}, fromAPI(err)
+	}
+	return api.GitStatus{Repo: res.Msg.Repo, Branch: res.Msg.Branch, Changed: int(res.Msg.Changed)}, nil
+}
+
 // ListApprovals lists the standing approvals the user gave
 // (WorkspaceService.ListApprovals) (on failure, warn is told and it returns nothing).
 func (r *Remote) ListApprovals() []api.Approval {

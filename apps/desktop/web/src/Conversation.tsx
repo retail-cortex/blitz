@@ -85,6 +85,7 @@ import { language, t, tn, useLanguage } from "./i18n";
 import { notify, shouldNotify, type NotifyKind } from "./notify";
 import { efforts, effortIcon, modeOf, modes } from "./options";
 import { useApp } from "./state";
+import { publishStatus } from "./status";
 import { useOpenPath } from "./files/links";
 import { applyEvent, assignPromptIndices, failed, fromMessages, parseDiff, summarizeArgs, tasksOf, turnAnswers, type Entry, type UserEntry } from "./turns";
 import { copyRendered, copyText } from "./clipboard";
@@ -147,6 +148,8 @@ export function Conversation({
   const [taskRequests, setTaskRequests] = useState<TaskRequest[]>([]);
   const [turnUsage, setTurnUsage] = useState("");
   const [total, setTotal] = useState<Usage>();
+  // The status bar shows the session's usage, and the last turn's.
+  useEffect(() => publishStatus(dir, { total, turn: turnUsage }), [dir, total, turnUsage]);
   const [error, setError] = useState("");
   const [draft, setDraft] = useState("");
   const [plan, setPlan] = useState(false);
@@ -188,7 +191,9 @@ export function Conversation({
 
   const refreshTotal = useCallback(async () => {
     try {
-      setTotal((await sessions.getUsage({ workspace: dir })).usage);
+      const r = await sessions.getUsage({ workspace: dir });
+      setTotal(r.usage);
+      publishStatus(dir, { threshold: r.threshold, autoCompact: r.autoCompact });
     } catch {
       // the total is a nicety
     }
@@ -885,7 +890,6 @@ export function Conversation({
           onStop={stop}
           onSettingsChanged={onSettingsChanged}
         />
-        <UsageFooter turn={turnUsage} total={total} />
       </div>
       {forceRewind && (
         <Dialog
@@ -1759,15 +1763,6 @@ function Composer({
       </div>
     </div>
   );
-}
-
-function UsageFooter({ turn, total }: { turn: string; total?: Usage }) {
-  const parts = [turn];
-  if (total && total.calls > 0) {
-    parts.push(t("desktop.usage.session", { tokens: k(total.input + total.output) }) + (total.priced ? ` · $${total.costUsd.toFixed(4)}` : ""));
-  }
-  const line = parts.filter(Boolean).join("  ·  ");
-  return <div className="usage t-body-sm muted">{line || " "}</div>;
 }
 
 const k = (n: bigint) => (n >= 1_000_000n ? `${(Number(n) / 1e6).toFixed(1)}M` : n >= 1000n ? `${(Number(n) / 1000).toFixed(1)}k` : String(n));

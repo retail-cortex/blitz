@@ -22,7 +22,8 @@ import { t, tn } from "../i18n";
 import { Button, Dialog, Icon, IconButton, Segmented } from "../ui/controls";
 import { Preview } from "./Preview";
 import { previewKind, previewOnly } from "./previewKind";
-import { goToLine, setWrap } from "./codemirror";
+import type { Cursor } from "../status";
+import { goToLine, languageOf, setWrap } from "./codemirror";
 import { fileIcon } from "./icons";
 import type { EditorModel, Tab } from "./useEditor";
 
@@ -31,7 +32,7 @@ import type { EditorModel, Tab } from "./useEditor";
  * tabs, the active one's path, notes about it, and CodeMirror. One view
  * shows each tab's own state in turn.
  */
-export function EditorPane({ model, onReveal }: { model: EditorModel; onReveal: (path: string) => void }) {
+export function EditorPane({ model, onReveal, onCursor }: { model: EditorModel; onReveal: (path: string) => void; onCursor?: (c: Cursor | undefined) => void }) {
   const host = useRef<HTMLDivElement>(null);
   const view = useRef<EditorView | null>(null);
   const shown = useRef<string | null>(null);
@@ -51,6 +52,17 @@ export function EditorPane({ model, onReveal }: { model: EditorModel; onReveal: 
       return next;
     });
 
+  // Where the cursor is, for the status bar.
+  const cursorTo = useRef(onCursor);
+  cursorTo.current = onCursor;
+  const report = (v: EditorView) => {
+    const path = shown.current;
+    if (!path) return cursorTo.current?.(undefined);
+    const sel = v.state.selection.main;
+    const line = v.state.doc.lineAt(sel.head);
+    cursorTo.current?.({ line: line.number, column: sel.head - line.from + 1, selected: sel.to - sel.from, language: languageOf(path)?.name ?? "" });
+  };
+
   // One view, made once; every change is kept as its tab's state.
   useEffect(() => {
     const v = new EditorView({
@@ -58,10 +70,14 @@ export function EditorPane({ model, onReveal }: { model: EditorModel; onReveal: 
       dispatchTransactions: (trs, v) => {
         v.update(trs);
         if (shown.current) model.keepState(shown.current, v.state);
+        if (trs.some((tr) => tr.selection || tr.docChanged)) report(v);
       },
     });
     view.current = v;
-    return () => v.destroy();
+    return () => {
+      v.destroy();
+      cursorTo.current?.(undefined);
+    };
     // The model's functions read refs; the view lives as long as the pane.
   }, []);
 
@@ -78,6 +94,13 @@ export function EditorPane({ model, onReveal }: { model: EditorModel; onReveal: 
     setWrap(v, model.wrap);
     if (switched) v.focus();
   }, [state, tab, model.wrap]);
+
+  useEffect(() => {
+    const v = view.current;
+    if (v && ready && !showPreview && shown.current === tab?.path) report(v);
+    else cursorTo.current?.(undefined);
+    // report reads refs.
+  }, [state, ready, showPreview, tab?.path]);
 
   // Go to a line when asked (a link, Go to file).
   useEffect(() => {

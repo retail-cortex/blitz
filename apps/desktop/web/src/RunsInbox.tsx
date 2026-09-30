@@ -44,7 +44,8 @@ export function InboxButton() {
   );
 }
 
-function InboxDialog({ list, onClose }: { list: BackgroundRun[]; onClose: () => void }) {
+/** The background runs, to open or stop (the topbar's and the status bar's). */
+export function InboxDialog({ list, onClose }: { list: BackgroundRun[]; onClose: () => void }) {
   const { prefs, update } = useApp();
   const snack = useSnackbar();
   const now = new Date();

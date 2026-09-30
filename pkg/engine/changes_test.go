@@ -78,6 +78,59 @@ func TestGitDiffRunsNothingFromRepoConfig(t *testing.T) {
 	assert.LessOrEqual(t, len(got), 0, "git diff ran commands from the repository's config: %v", got)
 }
 
+// The status bar's git state: the branch (or short commit when detached)
+// and the changed files, without running what the repository's config
+// names; outside a repository, Repo is false.
+func TestGitStatus(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("no git")
+	}
+	w := openTest(t)
+	dir := w.Dir()
+	ctx := context.Background()
+	git := func(args ...string) {
+		t.Helper()
+		cmd := exec.Command("git", append([]string{"-c", "user.email=t@t", "-c", "user.name=t", "-c", "init.defaultBranch=main"}, args...)...)
+		cmd.Dir = dir
+		out, err := cmd.CombinedOutput()
+		require.NoError(t, err, "git %v: %v\n%s", args, err, out)
+	}
+	write := func(name, content string) {
+		t.Helper()
+		require.NoError(t, os.WriteFile(filepath.Join(dir, name), []byte(content), 0o644))
+	}
+
+	st, err := w.GitStatus(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, api.GitStatus{}, st, "not a repository")
+
+	git("init", "-q")
+	write("a.txt", "a\n")
+	write("b.txt", "b\n")
+	git("add", ".")
+	git("commit", "-qm", "init")
+	st, err = w.GitStatus(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, api.GitStatus{Repo: true, Branch: "main"}, st)
+
+	git("checkout", "-qb", "feature")
+	write(".gitattributes", "*.txt filter=evil\n")
+	git("config", "filter.evil.clean", "touch pwned-clean; cat")
+	git("config", "core.fsmonitor", "touch pwned-fsmonitor")
+	write("a.txt", "changed\n")
+	write("new.txt", "new\n")
+	st, err = w.GitStatus(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, api.GitStatus{Repo: true, Branch: "feature", Changed: 3}, st, "a.txt, new.txt and .gitattributes")
+	got, _ := filepath.Glob(filepath.Join(dir, "pwned-*"))
+	assert.Empty(t, got, "git status ran commands from the repository's config")
+
+	git("-c", "core.fsmonitor=false", "-c", "filter.evil.clean=", "checkout", "-q", "--detach")
+	st, err = w.GitStatus(ctx)
+	require.NoError(t, err)
+	assert.Regexp(t, `^[0-9a-f]{7,}$`, st.Branch, "a detached head shows its commit")
+}
+
 // Checkpoints outlive the process: after reopening the workspace and
 // resuming the session, /undo and /diff still work.
 func TestUndoAfterResume(t *testing.T) {
