@@ -51,8 +51,9 @@ export function panelWidth(saved: number, fallback: number, min: number, max: nu
 }
 
 /**
- * While a panel floats over the others (query, a media query, matches), a
- * click outside it or Escape closes it. Its own toggles (data-toggles=name)
+ * While a panel floats over the others (query, a media query, matches)
+ * and is shown (not in a hidden workspace), a click outside it or Escape
+ * closes it. Its own toggles (data-toggles=name)
  * are left to toggle it, and clicks in menus, dialogs and the snackbar
  * don't count.
  */
@@ -65,14 +66,17 @@ export function useFloatingDismiss(open: boolean, ref: React.RefObject<HTMLEleme
   useEffect(() => {
     if (!open) return;
     const media = window.matchMedia(query);
+    // Every open workspace has its own panel; only the one shown floats
+    // (a hidden workspace's would take a click in the shown one as outside).
+    const floating = () => media.matches && !!ref.current?.getClientRects().length;
     const down = (e: MouseEvent) => {
       const target = e.target as Element | null;
-      if (!media.matches || !target || ref.current?.contains(target)) return;
+      if (!floating() || !target || ref.current?.contains(target)) return;
       if (target.closest(`.menu, .scrim, .snackbar, [data-toggles~="${name}"]`)) return;
       closeRef.current();
     };
     const key = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && media.matches && !e.defaultPrevented && !document.querySelector(".scrim, .menu.floating")) closeRef.current();
+      if (e.key === "Escape" && floating() && !e.defaultPrevented && !document.querySelector(".scrim, .menu.floating")) closeRef.current();
     };
     document.addEventListener("mousedown", down);
     document.addEventListener("keydown", key);
