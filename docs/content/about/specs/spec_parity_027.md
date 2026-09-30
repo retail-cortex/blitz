@@ -7,7 +7,7 @@ weight: 27
 
 | | |
 |---|---|
-| Status | **Partly implemented:** 59 of its 99 requirements done and 1 in part (counted 2026-09-30); the rest open. A gap analysis of 2026-09-26, to be closed before new features are added. |
+| Status | **Partly implemented:** 63 of its 99 requirements done and 1 in part (counted 2026-09-30); the rest open. A gap analysis of 2026-09-26, to be closed before new features are added. |
 | Compared with | **Claude Code** (current docs at code.claude.com, September 2026: v2.1.28x); **Antigravity CLI** (`agy` 1.1–1.2, September 2026); **Antigravity** 2.0 (Google's agent-first IDE and Agent Manager) |
 | Depends on | Specs 001–025 (what Blitz does today) and [spec_backlog_026](spec_backlog_026.md) (Blitz's own gaps; overlapping items are referenced, not repeated) |
 
@@ -151,10 +151,10 @@ Decision §12.2. **CC** `/cd <path>` (June 2026) moves the session to another di
 - **PAR-HK-02** ✅ *Done (ROADMAP 25.7).* Hook input gains `prompt_id`, `transcript_path`, `permission_mode`, `agent`, `cwd`; `session_start` and `prompt_submit` stdout (plain text) is added to the agent's context.
 
 ### 6.2 Decisions and handler types — P1, M
-- **PAR-HK-10** JSON output: `decision` (`allow`/`deny`/`ask` for `pre_tool` and `permission_request`), `updated_args` (`pre_tool` may rewrite a tool's arguments, re-validated by the sandbox), `additional_context` (text given to the agent), `system_message` (shown to the user). A hook allow never overrides deny rules or the sandbox.
-- **PAR-HK-11** Handler types besides `command`: `http` (POST the event, same response format; headers with `$VAR` interpolation from an allowlist) and `prompt` (a model judges the event against a prompt and returns the decision).
-- **PAR-HK-12** `if = "<permission rule>"` filters tool hooks by arguments (e.g. `shell(git push *)`); `args = [...]` runs without a shell.
-- **PAR-HK-13** `/hooks` lists configured hooks by event with their source and recent failures.
+- **PAR-HK-10** ✅ *Done 2026-09-30 ([spec_hooks_010](spec_hooks_010.md) HK-60, -61).* JSON output: `decision` (`allow`/`deny`/`ask` for `pre_tool` and `permission_request`), `updated_args` (`pre_tool` may rewrite a tool's arguments, re-validated by the sandbox), `additional_context` (text given to the agent), `system_message` (shown to the user). A hook allow never overrides deny rules or the sandbox.
+- **PAR-HK-11** ✅ *Done 2026-09-30 ([spec_hooks_010](spec_hooks_010.md) HK-62, -63).* Handler types besides `command`: `http` (POST the event, same response format; headers with `$VAR` interpolation from an allowlist) and `prompt` (a model judges the event against a prompt and returns the decision).
+- **PAR-HK-12** ✅ *Done 2026-09-30 ([spec_hooks_010](spec_hooks_010.md) HK-64, -65).* `if = "<permission rule>"` filters tool hooks by arguments (e.g. `shell(git push *)`); `args = [...]` runs without a shell.
+- **PAR-HK-13** ✅ *Done 2026-09-30 ([spec_hooks_010](spec_hooks_010.md) HK-66; the desktop app has no hooks view yet).* `/hooks` lists configured hooks by event with their source and recent failures.
 
 ## 7. Skills, commands and plugins
 

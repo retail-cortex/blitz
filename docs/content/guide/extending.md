@@ -87,6 +87,30 @@ command = "grep -qv 'password' || { echo 'no secrets' >&2; exit 2; }"
 | `permission_request` | Answer an approval: `{"decision": "allow"}` or `"deny"` (deny rules still come first) |
 | `post_tool`, `post_tool_failure`, `session_end`, `subagent_start`, `subagent_stop`, `pre_compact`, `post_compact`, `notification` | Observe only. They run in the background, in order, and never delay the agent |
 
+A `pre_tool` hook can do more than block. Its JSON reply may carry `"decision": "allow"` (the call skips its approval question; deny and ask rules still apply), `"ask"` (you're asked first), `"updated_args"` (the call runs with these arguments instead), `"additional_context"` (given to the agent with the result) and, from any hook, `"system_message"` (shown to you).
+
+Hooks needn't be shell commands:
+
+```toml
+[[hooks.pre_tool]]                 # only for git push
+match   = "run_shell_command"
+if      = "shell(git push *)"
+args    = ["/usr/local/bin/check-branch"]   # run directly, no shell
+
+[[hooks.pre_tool]]                 # ask a policy service
+type    = "http"
+url     = "https://hooks.internal.example/blitz"
+headers = { Authorization = "Bearer $HOOK_TOKEN" }
+allowed_env_vars = ["HOOK_TOKEN"]
+
+[[hooks.pre_tool]]                 # or have a model judge
+match  = "run_shell_command"
+type   = "prompt"
+prompt = "Deny anything that deletes outside the workspace or touches production."
+```
+
+`/hooks` lists them all, where each came from, and their recent failures.
+
 Other failures warn unless `fail_closed = true`. Hooks come from your own trusted settings, so they run outside the OS sandbox with your environment; they're still killed with Blitz.
 
 ## Custom commands

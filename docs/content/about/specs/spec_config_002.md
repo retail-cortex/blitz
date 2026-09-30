@@ -61,7 +61,7 @@ One TOML file, `.env.toml`, loaded through `github.com/rrmcguinness/modenv` (hie
 | `[checkpoints]` | `enabled` true, `max_bytes` 64 MiB | | |
 | `[web]` | `enabled` true, `allow_domains`, `deny_domains`, `allow_private` false, `max_bytes` 2 MiB, `timeout_seconds` 20, `search_provider`, `search_api_key`, `search_url`, `search_model`, `search_max_results` | | |
 | `[browser]` | `enabled` true, `path` (found), `visible` false, `allow_local` false, `allow_scripts` false, `width` 1280, `height` 800 | | never from a project; see [spec_web_008](spec_web_008.md) §5 |
-| `[hooks]` | `pre_tool`, `post_tool`, `prompt_submit`, `session_start`, `session_end`, `stop`, `post_tool_failure`, `subagent_start`, `subagent_stop`, `pre_compact`, `post_compact`, `notification`, `permission_request` arrays of `{match, command, timeout_seconds, fail_closed}` | | [spec_hooks_010](spec_hooks_010.md) |
+| `[hooks]` | `pre_tool`, `post_tool`, `prompt_submit`, `session_start`, `session_end`, `stop`, `post_tool_failure`, `subagent_start`, `subagent_stop`, `pre_compact`, `post_compact`, `notification`, `permission_request` arrays of `{match, if, type, command, args, url, headers, allowed_env_vars, prompt, model, timeout_seconds, fail_closed}` | | [spec_hooks_010](spec_hooks_010.md) |
 | `[[mcp.servers]]` | `name, command, args, env, url, tools, auto_approve, sandbox, prefix, agents, timeout_seconds` | | |
 | `[pricing."<model>"]` | `input_per_mtok, output_per_mtok, cached_input_per_mtok, cache_write_per_mtok` | built-ins below | |
 | `[agent_models]` | `agent = "provider/model"` | | |
