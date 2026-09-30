@@ -81,7 +81,7 @@ Suggested order (from NEXT_STEPS): run the manual checks (§9) first — their f
 
 ### 5.3 Worker run notifications — S
 **Extends** [spec_workers_023](spec_workers_023.md). Scheduled runs are unattended and silent; a failed or limited run is only visible with `blitz workers runs`.
-- **BL-WK-10** Optional `[workers] notify` command (like a hook: JSON run record on stdin, outside the sandbox, trusted config) runs after every scheduled run whose status is in `notify_on` (default `failed`, `limited`).
+- **BL-WK-10** ✅ *Done 2026-09-30 ([spec_workers_023](spec_workers_023.md) WK-56).* Optional `[workers] notify` command (like a hook: JSON run record on stdin, outside the sandbox, trusted config) runs after every scheduled run whose status is in `notify_on` (default `failed`, `limited`).
 - **BL-WK-11** The desktop app shows a badge on a workspace tab with unseen failed runs.
 
 ### 5.4 Session metadata written twice — S

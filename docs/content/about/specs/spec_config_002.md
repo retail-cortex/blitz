@@ -48,7 +48,7 @@ One TOML file, `.env.toml`, loaded through `github.com/rrmcguinness/modenv` (hie
 | `[llm.bedrock]` | `region`, `profile`, `model` | | Claude on Amazon Bedrock ([spec_models_015](spec_models_015.md) §3) |
 | `[llm.azure]` | `resource`, `base_url`, `anthropic_base_url`, `api_key`, `auth` (`api_key` or `entra`), `model` | | OpenAI models and Claude on Azure ([spec_models_015](spec_models_015.md) §3) |
 | `[skills]` | `enabled`, `paths`, `[skills.policy]` | on; `~/.blitz/skills`, `./skills`, `.agents/skills` | see [spec_skills_013](spec_skills_013.md) |
-| `[workers]` | `enabled`, `paths`, `[workers.policy]` | on; `workers` | see [spec_workers_023](spec_workers_023.md) |
+| `[workers]` | `enabled`, `paths`, `notify`, `notify_on`, `[workers.policy]` | on; `workers`; none; `failed`, `limited` | see [spec_workers_023](spec_workers_023.md) |
 | `[tools]` | `shell_timeout_seconds` 120, `max_file_size_bytes` 10 MiB, `workspace_dir` `.`, `auto_approve_commands` false, `uc_tools_dir`, `approvals_file` `~/.blitz/approvals.json`, `max_parallel` 8, `max_background_agents` 4, `background_agent_timeout` `30m`, `background_agent_max_turns` 50, `background_agent_max_cost_usd` 0 (none) ([spec_background_agents_032](spec_background_agents_032.md)) | | |
 | `[session]` | `storage_dir` `~/.blitz/sessions`, `auto_save` true | | |
 | `[permissions]` | `allow`, `ask`, `deny` lists of rules; `read_only_defaults`; `[permissions.auto]` `model`, `environment` (the auto mode's reviewer, APR-14a) | `[]`; `true`; `""` | [spec_approvals_005](spec_approvals_005.md) APR-15; a workspace's lists add to the global ones (`PermissionsConfig.Merge`); not the same as `sandbox.commands.allow` (an allow-list) |

@@ -73,6 +73,7 @@ Check for outdated Go modules and write reports/deps.md.
 - `agent:` and `model:` run a worker as another agent or on another model, for its runs only.
 - `blitz workers` lists them. `blitz workers enable <name>` shows exactly what you're approving and enables that content; an edit disables it again.
 - `blitz workers run <name>` runs one now; `blitz workers runs <name>` shows its history, with the files each run changed. Each run is a session you can open with `/resume`. A run's changes aren't part of `/undo`: `blitz workers undo <run-id>` puts them back.
+- To hear of a scheduled run that failed or hit a limit, set `[workers] notify` to a command: it gets the run record as JSON on stdin (and `BLITZ_WORKER`, `BLITZ_RUN_STATUS`); `notify_on` picks the statuses (default `["failed", "limited"]`). For example `notify = 'osascript -e "display notification \"$BLITZ_WORKER $BLITZ_RUN_STATUS\" with title \"Blitz\""'`.
 - A worker may only do what its `permissions` allow (`shell:`, `write:`, `delete:`, `web:`, `mcp:`), capped by `[workers.policy]`. Anything else is refused and recorded, and it can't ask questions. Permission modes don't apply to workers.
 
 ## Shutting down
