@@ -112,6 +112,8 @@ Decisions are `once`, `session`, `always` or `deny`; a question is answered with
 | `/style [name]` | How the agent writes its answers: `default`, `concise`, `explanatory`, or yours in `~/.blitz/styles` |
 | `/session list [--all]\|new\|load <id\|name>\|save <name>`, `/resume`, `/rename` | Sessions and snapshots, scoped to the workspace |
 | `blitz plugin install\|list\|show\|enable\|disable\|remove\|update`, `blitz plugin marketplace add\|list\|remove`, `blitz plugin import claude\|gemini <dir>`, `--plugin-dir <dir>` | Plugins: skills, commands, agents, hooks and MCP servers in one bundle ([extending](../guide/extending.md#plugins)) |
+| `blitz --bg "<prompt>"` | Start the prompt as a background run in the Blitz service and return |
+| `blitz agents [--all]`, `blitz attach <id>`, `blitz logs <id> [-f]`, `blitz stop <id>` | The background runs in every workspace; follow one in the REPL, answering what it asks, then carry on in its session; show what it has done; stop it |
 | `blitz update [--check]` | Install the latest release over this one, its signature and checksum checked |
 | `blitz models [provider…]` | The models your providers offer, with the prices Blitz knows |
 | `blitz memory list\|show\|edit\|forget <name>` | The notes the agent saved in the workspace with its `remember` tool |

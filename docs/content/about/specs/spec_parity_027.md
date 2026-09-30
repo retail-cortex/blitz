@@ -186,7 +186,7 @@ Decision §12.2. **CC** `/cd <path>` (June 2026) moves the session to another di
 
 ### 8.3 Session manager — P2, M
 **CC** agent view (`claude agents`, `--bg`, `attach`, `logs`, `stop`), cross-session messaging. **AG** Agent Manager inbox. **Blitz today:** the service holds sessions but only one turn view per client.
-- **PAR-PAR-20** `blitz agents` lists every running and waiting turn in the service across workspaces (state, cost, waiting for approval); `blitz --bg "<prompt>"` starts a turn in the service and returns; `blitz attach <id>` attaches the REPL to it; `blitz logs <id>`, `blitz stop <id>`. The desktop app shows the same as an inbox.
+- **PAR-PAR-20** ✅ *Done 2026-09-30 ([spec_background_agents_032](spec_background_agents_032.md) §10, BGA-60–67; [spec_desktop_024](spec_desktop_024.md) DSK-80b): background runs, not every client's turns — `blitz agents` lists the runs `--bg` started; a turn a client runs stays that client's.* `blitz agents` lists every running and waiting turn in the service across workspaces (state, cost, waiting for approval); `blitz --bg "<prompt>"` starts a turn in the service and returns; `blitz attach <id>` attaches the REPL to it; `blitz logs <id>`, `blitz stop <id>`. The desktop app shows the same as an inbox.
 
 ## 9. Terminal experience
 

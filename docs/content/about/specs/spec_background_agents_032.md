@@ -93,6 +93,21 @@ The hard part: a task may need an approval while the person is doing something e
 
 Tests: the task manager's cap, lifetime, stop and close; delivery into a running turn and into the next prompt; usage charged to both the task and the session; nesting refused; what a background run may do without asking; requests answered, refused to another session, and ended by a stop; the service's stream, answers and scoping between clients; the REPL's list, notices, answers and exit prompt; agents' defaults, including a project's agent that may not loosen.
 
+## 10. Background runs (spec_parity_027 PAR-PAR-20)
+
+A task is a sub-agent inside a turn. A background run is a whole turn the service runs with no client attached, started from a terminal and picked up later from any client.
+
+- **BGA-60 Starting one.** `blitz --bg "<prompt>"` (the prompt as for a one-shot run; with `--plan`, `--max-turns`, `--max-cost-usd`, `--timeout`; not with `-i`, `--local`, `--resume`, `--continue` or `--output-format`) calls `SessionService.StartBackground` and prints the run's ID and session, and how to follow it. It needs the service (`errNeedsService` otherwise).
+- **BGA-61 Its session.** The run's turn goes in a new session of the workspace, made in a session storage of its own as a worker's is (`engine.RunDetached`), so the workspace's active session, and the clients working there, stay where they are. The run is `bg-<n>`, counted over the service's lifetime; its state is running, waiting (a request waits for an answer), done, failed or stopped.
+- **BGA-62 Its events and requests.** The run's events are kept (the latest 5,000) for anyone who watches it. Its approval requests and questions go through the service's broker like a turn's, on the run's own sink: they wait, with nobody attached, until a client answers them with `Approve` or `Answer`. The run's own limits and `stop` still end it.
+- **BGA-63 Watching.** `WatchBackground(id, follow)` streams the kept events from the start, leaving out requests already answered, and with `follow` those to come, ending with `TurnFinished`. `ListBackground` gives every workspace's runs, newest first (the running ones, and the latest 50 that ended), with cost and how many requests wait. `StopBackground` cancels one and waits for it to end. An unknown ID is `UNKNOWN_RUN` (`api.ErrUnknownRun`).
+- **BGA-64 The CLI.** `blitz agents [--all]` lists the runs going on (or all) as a table: ID, state (with the requests waiting), age, cost, workspace, prompt. `blitz logs <id> [-f]` prints a run's events so far (following it with `-f`) without answering anything. `blitz stop <id>` stops one and says where its session is.
+- **BGA-65 Attaching.** `blitz attach <id>` opens the REPL, attached to the service, in the run's workspace with its session resumed. While the run goes on the REPL follows it first (`App.Follow`, `Remote.FollowBackground`): its events print as a turn's do, and its requests are asked at the terminal. Ctrl+C stops following (the run goes on); once it ends, the session is loaded again and the prompt carries on in it. `--local` is refused.
+- **BGA-66 Lifetime.** Runs live in the service's memory: closing the service stops them (their sessions keep what they did). Closing a workspace is refused while a run works in it, as for any turn.
+- **BGA-67 The desktop app** shows the runs as an inbox ([spec_desktop_024](spec_desktop_024.md) DSK-80b).
+
+Tests: the service's runs (a waiting approval seen by a watcher and answered, the session not made active, the replay without answered requests, stop, close, the bounds); the client (start, find, logs, follow answering, unknown IDs); the CLI with the service and a fake model (`--bg`, `agents`, `logs`, `stop`, `attach` errors, the arguments `--bg` refuses); the REPL's following (to the end, failing, Ctrl+C); the page's helpers.
+
 ## 9. Decisions (2026-09-29) and gaps
 
 1. **Edits made in parallel are allowed.** A task's file edits join the latest turn's checkpoint, so `/undo` reverts them with it; separate checkpoint entries per task ("task-3 (qa)") weren't built. Worktree isolation (§8.2, PAR-PAR-11) comes later for tasks that should be kept apart.

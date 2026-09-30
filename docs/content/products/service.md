@@ -52,6 +52,10 @@ A workspace has one owner at a time, held with an OS file lock, so `blitz --loca
 
 Approvals and questions travel on the running turn's event stream: the client that started the turn answers them. An approval with no client to answer, such as from a worker, is refused.
 
+## Background runs
+
+`blitz --bg "<prompt>"` starts a turn in the service and returns. The run gets a session of its own and keeps going with no client attached; what it asks waits until someone answers. `blitz agents` lists the runs in every workspace, `blitz attach <id>` follows one in the REPL (answering its requests, then carrying on in its session), `blitz logs <id> -f` watches one, and `blitz stop <id>` stops it. The desktop app's inbox shows the same. Runs end when the service stops.
+
 ## Workers
 
 Workers are workflows a workspace defines in `.agents/workers/<name>/WORKER.md` (or `workers/<name>/WORKER.md`), which the desktop app's **New worker** dialog writes for you and the service runs on a schedule, unattended:
