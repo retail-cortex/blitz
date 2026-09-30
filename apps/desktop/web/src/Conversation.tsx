@@ -59,7 +59,7 @@ import { DiffView } from "./Changes";
 import { isUnavailable, message, reason } from "./errors";
 import type { SessionInfo } from "./gen/blitz/v1/session_pb";
 import { Decision, type ApprovalRequest, type Question, type Task, type Usage } from "./gen/blitz/v1/turn_pb";
-import type { GetSettingsResponse } from "./gen/blitz/v1/workspace_pb";
+import type { BackgroundTask, GetSettingsResponse } from "./gen/blitz/v1/workspace_pb";
 import { allCommands, helpText, matchCommands, parseCommand, type CommandSpec } from "./commands";
 import { addToContextEvent, composeEvent, filesTouched, loadSessionEvent, showLicense, type AddToContextDetail, type ComposeDetail, type LoadSessionDetail } from "./events";
 import { appendMention, insertMention, isImagePath, mentionAt } from "./mentions";
@@ -704,7 +704,12 @@ export function Conversation({
           {empty && <EmptyState name={name} onPick={(text) => setDraft(text)} />}
           {groupTools(shown).map((g) =>
             g.kind === "tools" ? (
-              <ToolGroup key={g.at} tools={g.tools} />
+              <div key={g.at}>
+                <ToolGroup tools={g.tools} />
+                {g.tools.map((x) =>
+                  x.name === "invoke_agent" && typeof x.result?.task_id === "string" ? <TaskCard key={x.result.task_id} dir={dir} sessionId={session?.id ?? ""} id={x.result.task_id} /> : null,
+                )}
+              </div>
             ) : (
               <EntryView key={g.at} entry={g.entry} turn={answers.get(g.at)} running={running} onRewind={rewind} onEdit={setDraft} />
             ),
@@ -1114,6 +1119,77 @@ function ToolRow({ name, args, result }: { name: string; args?: JsonObject; resu
         <div className="tool-body">
           {args && <JsonBlock label={t("desktop.tool.args")} value={args} />}
           {result && <JsonBlock label={t("desktop.tool.result")} value={result} />}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * A background task (invoke_agent with background: true): its agent,
+ * state, runtime and cost, followed until it ends, with Show (its latest
+ * events and result) and Stop (spec_background_agents_032 BGA-33).
+ */
+function TaskCard({ dir, sessionId, id }: { dir: string; sessionId: string; id: string }) {
+  const snack = useSnackbar();
+  const [task, setTask] = useState<BackgroundTask>();
+  const [events, setEvents] = useState<string[]>([]);
+  const [open, setOpen] = useState(false);
+  const [gone, setGone] = useState(false);
+  const load = useCallback(async () => {
+    try {
+      const r = await workspaces.getTask({ workspace: dir, sessionIds: [sessionId], id });
+      setTask(r.task);
+      setEvents(r.events);
+    } catch {
+      setGone(true); // the service restarted, or it's another client's
+    }
+  }, [dir, sessionId, id]);
+  useEffect(() => {
+    load();
+  }, [load]);
+  const runningNow = !task || task.state === "running";
+  useEffect(() => {
+    if (!runningNow || gone) return;
+    const timer = setInterval(load, 2000);
+    return () => clearInterval(timer);
+  }, [runningNow, gone, load]);
+  if (gone) return null;
+  const stop = async () => {
+    try {
+      const r = await workspaces.stopTask({ workspace: dir, sessionIds: [sessionId], id });
+      setTask(r.task);
+    } catch (e) {
+      snack(message(e));
+    }
+  };
+  const started = task?.started ? timestampDate(task.started).getTime() : Date.now();
+  const ended = task?.ended ? timestampDate(task.ended).getTime() : Date.now();
+  const seconds = Math.max(0, Math.round((ended - started) / 1000));
+  return (
+    <div className={`card task-card ${task?.state ?? "running"}`}>
+      <div className="row">
+        <Icon path={mdiRobotOutline} size="sm" />
+        <span className="ellipsis" style={{ flex: 1 }}>
+          <b>{task?.agent}</b> · {id} · {t(`tasks.state.${task?.state ?? "running"}`)} · {t("desktop.task.runtime", { seconds })}
+          {task?.usage?.costUsd ? ` · $${task.usage.costUsd.toFixed(2)}` : ""}
+        </span>
+        {runningNow && <Icon path={mdiProgressClock} size="sm" className="pulse" />}
+        <Button small onClick={() => setOpen((o) => !o)}>
+          {open ? t("desktop.task.hide") : t("desktop.task.show")}
+        </Button>
+        {runningNow && (
+          <Button small onClick={stop}>
+            {t("desktop.task.stop")}
+          </Button>
+        )}
+      </div>
+      {task?.prompt && <div className="muted ellipsis">{task.prompt}</div>}
+      {open && (
+        <div className="task-body">
+          {events.length > 0 && <pre className="json">{events.join("\n")}</pre>}
+          {task?.result && <Markdown text={task.result} />}
+          {task?.error && <p className="error-text">{task.error}</p>}
         </div>
       )}
     </div>

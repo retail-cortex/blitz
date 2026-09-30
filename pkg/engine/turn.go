@@ -149,6 +149,8 @@ func (w *Workspace) run(ctx context.Context, sessionID string, t turn, on func(a
 	// Context from the user's hooks goes to the agent with the prompt: a
 	// session_start hook's with the session's first real prompt.
 	if !t.Aside {
+		// Background tasks that ended since the agent last heard.
+		prompt = withHookContext(prompt, "background-tasks", strings.Join(w.engine.TakeTaskNotes(sessionID), "\n\n"))
 		prompt = withHookContext(prompt, "session_start", w.takeSessionContext(sessionID))
 		prompt = withUserEdits(prompt, w.takeUserEdits())
 	}

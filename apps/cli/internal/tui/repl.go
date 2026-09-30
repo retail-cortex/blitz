@@ -53,6 +53,8 @@ type App struct {
 	Attachments []*images.Image
 	// TerminalTitle shows the session's name in the terminal window title.
 	TerminalTitle bool
+	// announced are the background tasks whose end the REPL has shown.
+	announced map[string]bool
 	// Interrupts delivers Ctrl+C. If nil, RunREPL subscribes to os.Interrupt
 	// itself. At the prompt an interrupt starts exit (confirming if background
 	// processes run); during a turn it cancels only that turn.
@@ -247,7 +249,7 @@ func RunREPL(ctx context.Context, app *App) error {
 		}
 		return nil
 	}
-	exitPrompt := ExitPrompt{CanPrompt: true, AllowCancel: true}
+	exitPrompt := ExitPrompt{CanPrompt: true, AllowCancel: true, Tasks: app.Workspace}
 	promptText := func() string {
 		return fmt.Sprintf("%s%s%s%s %s›%s ", Bold+Green, app.Workspace.ActiveAgent().Name, Reset, modeTag(app.Workspace.Settings().PermissionMode), Bold+Green, Reset)
 	}
@@ -271,6 +273,7 @@ func RunREPL(ctx context.Context, app *App) error {
 				shownTitle = t
 			}
 		}
+		announceTasks(app)
 		prompt := promptText()
 		idleCtx, stopIdle := cancelOnSignal(ctx, interrupts)
 		line, err := app.Input.ReadInput(idleCtx, prompt)
@@ -281,7 +284,7 @@ func RunREPL(ctx context.Context, app *App) error {
 			// SIGTERM: no prompt; deferred cleanup kills background processes.
 			return goodbye()
 		case errors.Is(err, io.EOF):
-			ConfirmExit(ctx, app.Input, app.Workspace.Processes(), interrupts, ExitPrompt{})
+			ConfirmExit(ctx, app.Input, app.Workspace.Processes(), interrupts, ExitPrompt{Tasks: app.Workspace})
 			return goodbye()
 		case errors.Is(err, ErrRewindKey): // Esc Esc at an empty prompt
 			cmdRewind(ctx, nil, app)

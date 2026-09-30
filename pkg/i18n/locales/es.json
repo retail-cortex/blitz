@@ -1102,6 +1102,23 @@
     "desktop.project.bar.one": "Configuración del proyecto sin cargar: {count} ajuste espera tu confianza.",
     "desktop.project.bar.other": "Configuración del proyecto sin cargar: {count} ajustes esperan tu confianza.",
     "desktop.project.review": "Revisar",
-    "desktop.project.open": "Configuración del proyecto"
+    "desktop.project.open": "Configuración del proyecto",
+    "help.tasks": "Tareas en segundo plano (invoke_agent en segundo plano): listarlas, mostrar una o detener una",
+    "tasks.none": "No hay tareas en segundo plano.",
+    "tasks.title": "Tareas en segundo plano:",
+    "tasks.usage": "Usa /tasks, /tasks show <id> o /tasks stop <id>.",
+    "tasks.state.running": "en curso",
+    "tasks.state.done": "terminada",
+    "tasks.state.failed": "fallida",
+    "tasks.state.stopped": "detenida",
+    "tasks.ended": "La tarea {id} ({agent}) quedó {state} tras {took}: {summary}",
+    "exit.tasks_running.one": "{count} tarea en segundo plano sigue en curso:",
+    "exit.tasks_running.other": "{count} tareas en segundo plano siguen en curso:",
+    "exit.tasks_stopped.one": "Se detuvo {count} tarea en segundo plano.",
+    "exit.tasks_stopped.other": "Se detuvieron {count} tareas en segundo plano.",
+    "desktop.task.runtime": "{seconds} s",
+    "desktop.task.show": "Mostrar",
+    "desktop.task.hide": "Ocultar",
+    "desktop.task.stop": "Detener"
   }
 }

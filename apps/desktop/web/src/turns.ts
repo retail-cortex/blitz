@@ -68,6 +68,7 @@ export function turnAnswers(entries: Entry[]): Map<number, string> {
 /** The entries for a saved session's messages. */
 export function fromMessages(messages: Message[]): Entry[] {
   return messages.map((m, i): Entry => {
+    if (m.kind === "task") return { kind: "notice", text: m.text, tone: "info" }; // a background task that ended
     if (m.role !== "user") return { kind: "model", text: m.text, author: "", open: false };
     const sub = subKinds[m.kind];
     return sub ? { kind: "user", text: m.text, sub } : { kind: "user", text: m.text, index: i };

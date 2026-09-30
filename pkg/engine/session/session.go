@@ -101,6 +101,7 @@ const (
 	KindSteer = "steer"
 	KindHook  = "hook"
 	KindPlan  = "plan" // the approved plan's go-ahead
+	KindTask  = "task" // a background task that ended (the model's side)
 )
 
 // IsPrompt reports whether m is a prompt the user sent (a rewind point).

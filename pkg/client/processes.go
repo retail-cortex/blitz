@@ -141,3 +141,57 @@ func (p remoteProcesses) Shutdown() {
 func processInfo(m *pb.Process) api.ProcessInfo {
 	return api.ProcessInfo{ID: int(m.Id), Command: m.Command, Running: m.Running, ExitCode: int(m.ExitCode), RuntimeMs: m.RuntimeMs}
 }
+
+// ListTasks are the service's background tasks started in this client's
+// turns (WorkspaceService.ListTasks), oldest first.
+func (r *Remote) ListTasks() []api.TaskInfo {
+	sessions := r.sessionsRan()
+	if len(sessions) == 0 {
+		return nil
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
+	defer cancel()
+	res, err := r.workspaces.ListTasks(ctx, connect.NewRequest(&pb.ListTasksRequest{Workspace: r.dir, SessionIds: sessions}))
+	if err != nil {
+		r.failed("listing background tasks", err)
+		return nil
+	}
+	out := make([]api.TaskInfo, 0, len(res.Msg.Tasks))
+	for _, t := range res.Msg.Tasks {
+		out = append(out, taskInfo(t))
+	}
+	return out
+}
+
+// Task is one of this client's tasks with its latest events
+// (WorkspaceService.GetTask).
+func (r *Remote) Task(id string) (api.TaskInfo, []string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
+	defer cancel()
+	res, err := r.workspaces.GetTask(ctx, connect.NewRequest(&pb.GetTaskRequest{Workspace: r.dir, SessionIds: r.sessionsRan(), Id: id}))
+	if err != nil {
+		return api.TaskInfo{}, nil, fromAPI(err)
+	}
+	return taskInfo(res.Msg.Task), res.Msg.Events, nil
+}
+
+// StopTask stops one of this client's tasks (WorkspaceService.StopTask).
+func (r *Remote) StopTask(id string) (api.TaskInfo, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
+	defer cancel()
+	res, err := r.workspaces.StopTask(ctx, connect.NewRequest(&pb.StopTaskRequest{Workspace: r.dir, SessionIds: r.sessionsRan(), Id: id}))
+	if err != nil {
+		return api.TaskInfo{}, fromAPI(err)
+	}
+	return taskInfo(res.Msg.Task), nil
+}
+
+func taskInfo(m *pb.BackgroundTask) api.TaskInfo {
+	if m == nil {
+		return api.TaskInfo{}
+	}
+	return api.TaskInfo{
+		ID: m.Id, Agent: m.Agent, Prompt: m.Prompt, Session: m.SessionId, State: m.State,
+		Started: timeOf(m.Started), Ended: timeOf(m.Ended), Result: m.Result, Error: m.Error, Usage: usage(m.Usage),
+	}
+}

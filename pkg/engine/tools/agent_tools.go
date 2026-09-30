@@ -71,13 +71,18 @@ func NewListAgentsTool(registry *agents.Registry) (tool.Tool, error) {
 type InvokeAgentInput struct {
 	AgentName string `json:"agent_name" jsonschema:"The name of the agent to invoke (e.g. qa, helios, planning-agent)"`
 	Prompt    string `json:"prompt" jsonschema:"The specific task instruction for the delegated agent"`
+	// Background runs it beside this turn as a task.
+	Background bool `json:"background,omitempty" jsonschema:"Run the agent in the background as a task and return at once with its task_id; its result reaches you when it finishes (task_output reads it before). Nothing it would need to ask the user about runs. Use for independent work: reviews, research, long test runs"`
 }
 
 // InvokeAgentOutput holds result of invoking an agent.
 type InvokeAgentOutput struct {
 	AgentName string `json:"agent_name"`
 	Response  string `json:"response"`
-	Error     string `json:"error,omitempty"`
+	// TaskID and Status: a background task, started.
+	TaskID string `json:"task_id,omitempty"`
+	Status string `json:"status,omitempty"`
+	Error  string `json:"error,omitempty"`
 }
 
 // NewInvokeAgentTool creates an ADK tool for subagent delegation. The actual
@@ -97,6 +102,23 @@ func NewInvokeAgentTool(registry *agents.Registry, hooks *Hooks) (tool.Tool, err
 			}
 			if strings.TrimSpace(input.Prompt) == "" {
 				return fail("prompt must not be empty")
+			}
+			if input.Background {
+				runner := hooks.taskRunner()
+				switch {
+				case runner == nil:
+					return fail("background tasks are not available in this session")
+				case isUnattended(ctx):
+					return fail("background tasks can't be started from a background task or an unattended run; invoke the agent without background")
+				}
+				t, err := runner.StartTask(ctx, input.AgentName, input.Prompt)
+				if err != nil {
+					return fail(err.Error())
+				}
+				return InvokeAgentOutput{
+					AgentName: input.AgentName, TaskID: t.ID, Status: t.State,
+					Response: fmt.Sprintf("Started in the background as %s. Its result reaches you when it finishes; task_output reads it before.", t.ID),
+				}, nil
 			}
 			invoker := hooks.subagentInvoker()
 			if invoker == nil {

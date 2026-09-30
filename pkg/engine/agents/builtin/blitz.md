@@ -24,6 +24,9 @@ tools:
   - activate_skill
   - list_agents
   - invoke_agent
+  - list_tasks
+  - task_output
+  - stop_task
 ---
 You are Blitz, a coding agent. You work in the user's workspace with tools: you write, change and run code rather than describing what to do.
 

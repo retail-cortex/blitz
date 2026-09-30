@@ -58,6 +58,7 @@ go_library(
         "shell.go",
         "skills_tools.go",
         "skillscript.go",
+        "tasks.go",
         "todo.go",
         "universal_constructor.go",
         "userfs.go",

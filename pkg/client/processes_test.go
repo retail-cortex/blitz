@@ -19,8 +19,10 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"connectrpc.com/connect"
 	"github.com/retail-cortex/blitz/pkg/api"
@@ -88,4 +90,43 @@ func TestRemoteAuditShell(t *testing.T) {
 
 func killRequest(r *Remote, id int) *connect.Request[pb.KillProcessRequest] {
 	return connect.NewRequest(&pb.KillProcessRequest{Workspace: r.dir, SessionIds: r.sessionsRan(), Id: int32(id)})
+}
+
+// A client sees and stops the background tasks its own turns started in
+// the service, and no one else's; an ended task is in the transcript.
+func TestRemoteBackgroundTasks(t *testing.T) {
+	start := call("invoke_agent", map[string]any{"agent_name": "qa", "prompt": "review the cart", "background": true})
+	r := attach(t, func(c *config.Config) {
+		c.Blitz.AutoApprove = true
+		c.AgentModels = map[string]string{"qa": "gemini/qa-model"} // answers "Done." at once
+	}, start, text("started"))
+	assert.Empty(t, r.ListTasks(), "no turn yet")
+
+	sess, _, err := r.OpenSession("", false)
+	require.NoError(t, err)
+	_, err = r.Run(context.Background(), sess.ID, api.Turn{Text: "review in the background"}, func(api.Event) {})
+	require.NoError(t, err)
+	tasks := r.ListTasks()
+	require.Len(t, tasks, 1)
+	assert.Equal(t, "qa", tasks[0].Agent)
+
+	var got api.TaskInfo
+	require.Eventually(t, func() bool {
+		got, _, err = r.Task(tasks[0].ID)
+		return err == nil && got.State == api.TaskDone
+	}, 10*time.Second, 50*time.Millisecond, "the task didn't finish: %+v %v", got, err)
+	assert.Equal(t, "Done.", got.Result)
+
+	other := &Remote{dir: r.dir, sessions: r.sessions, workspaces: r.workspaces, warn: func(string) {}}
+	assert.Empty(t, other.ListTasks(), "another client's task listed")
+	_, _, err = other.Task(got.ID)
+	assert.ErrorIs(t, err, api.ErrUnknownTask)
+	_, err = other.StopTask(got.ID)
+	assert.ErrorIs(t, err, api.ErrUnknownTask)
+
+	info, _, err := r.LoadSession(sess.ID)
+	require.NoError(t, err)
+	i := slices.IndexFunc(info.Messages, func(m api.Message) bool { return m.Kind == "task" })
+	require.GreaterOrEqual(t, i, 0, "no task in the transcript: %+v", info.Messages)
+	assert.Contains(t, info.Messages[i].Text, got.ID+" (qa) finished")
 }

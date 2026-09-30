@@ -195,9 +195,24 @@ func runShellCommand(ctx context.Context, cfg ShellConfig, input RunShellCommand
 	return result
 }
 
-// sessionOf is the session a tool call runs in: an agent's context says;
-// "" for any other.
+type ownerSessionKey struct{}
+
+// WithOwnerSession makes session the one a sub-agent's tool calls count
+// for (their background processes and tasks): the session whose turn
+// started the sub-agent, not its own.
+func WithOwnerSession(ctx context.Context, session string) context.Context {
+	if session == "" {
+		return ctx
+	}
+	return context.WithValue(ctx, ownerSessionKey{}, session)
+}
+
+// sessionOf is the session a tool call counts for: the owner a sub-agent
+// was given, else the one an agent's context says; "" for any other.
 func sessionOf(ctx context.Context) string {
+	if s, ok := ctx.Value(ownerSessionKey{}).(string); ok {
+		return s
+	}
 	if c, ok := ctx.(interface{ SessionID() string }); ok {
 		return c.SessionID()
 	}

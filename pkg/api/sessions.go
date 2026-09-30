@@ -48,7 +48,7 @@ type Message struct {
 	Time time.Time
 	// Kind tells user messages apart: "" for a prompt (a rewind point),
 	// "steer", "hook" (a stop hook's request) or "plan" (an approved
-	// plan's go-ahead).
+	// plan's go-ahead); and "task" for a background task that ended.
 	Kind string
 }
 

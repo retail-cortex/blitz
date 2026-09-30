@@ -25,6 +25,7 @@ go_library(
         "models.go",
         "permissions.go",
         "sessions.go",
+        "tasks.go",
         "turn.go",
         "workers.go",
     ],

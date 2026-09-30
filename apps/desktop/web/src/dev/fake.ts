@@ -64,6 +64,8 @@ interface State {
   usage: Usage;
   // The project settings' trust state: the "shop" workspace has some.
   projectTrust?: string;
+  // Background tasks, by ID: they finish a few seconds after they start.
+  tasks: Map<string, { agent: string; prompt: string; sessionId: string; started: number; stopped?: number }>;
 }
 
 const states = new Map<string, State>();
@@ -86,6 +88,7 @@ function state(dir: string): State {
       active: first.id,
       settings: { agent: "blitz", model: "gemini-3.8-flash", provider: "gemini", effort: "", mode: "default", agency: "high", locale: "en-US" },
       pending: new Map(),
+      tasks: new Map(),
       usage: create(UsageSchema, { calls: 3, input: 18234n, output: 2210n, lastPrompt: 12876n, costUsd: 0.0123, priced: true }),
     };
     states.set(dir, s);
@@ -94,6 +97,27 @@ function state(dir: string): State {
 }
 
 const active = (s: State) => s.sessions.find((x) => x.id === s.active)!;
+
+// A background task as the service reports it: running for 8 s, then
+// done (or stopped).
+function fakeTask(s: State, id: string) {
+  const t = s.tasks.get(id)!;
+  const end = t.stopped ?? (Date.now() - t.started > 8000 ? t.started + 8000 : 0);
+  const state = t.stopped ? "stopped" : end ? "done" : "running";
+  const ms = (end || Date.now()) - t.started;
+  return {
+    id,
+    agent: t.agent,
+    prompt: t.prompt,
+    sessionId: t.sessionId,
+    state,
+    started: timestampFromDate(new Date(t.started)),
+    ended: end ? timestampFromDate(new Date(end)) : undefined,
+    result: state === "done" ? "No other rounding bugs: `SplitTotal` and `Refund` already work in cents." : "",
+    error: t.stopped ? "stopped" : "",
+    usage: create(UsageSchema, { calls: Math.ceil(ms / 2000), costUsd: 0.0009 * Math.ceil(ms / 2000), priced: true }),
+  };
+}
 
 // The shop workspace's .blitz/settings.toml: a deny rule, and a hook, an
 // MCP server and an allow rule waiting for trust (spec_project_config_031).
@@ -151,6 +175,10 @@ async function* runTurn(dir: string, text: string, plan: boolean): AsyncGenerato
   yield call("2", "grep", { pattern: "ApplyCoupon", path: "internal" });
   await sleep(200);
   yield result("2", "grep", { matches: 3 });
+  const taskId = `task-${s.tasks.size + 1}`;
+  s.tasks.set(taskId, { agent: "qa", prompt: "Review the cart package for other rounding bugs", sessionId: sess.id, started: Date.now() });
+  yield call("2b", "invoke_agent", { agent_name: "qa", prompt: "Review the cart package for other rounding bugs", background: true });
+  yield result("2b", "invoke_agent", { agent_name: "qa", task_id: taskId, status: "running", response: `Started in the background as ${taskId}.` });
   yield ev(tasks(1));
 
   if (plan || s.settings.mode === "plan") {
@@ -401,6 +429,21 @@ export function installFake() {
         listApprovals: () => ({ approvals: [{ key: "k1", kind: "write", subject: "internal/cart", always: false }] }),
         revokeApprovals: () => ({ revoked: 1 }),
         getProjectSettings: ({ workspace }) => ({ settings: fakeProject(state(workspace)) }),
+        listTasks: ({ workspace, sessionIds }) => ({
+          tasks: [...state(workspace).tasks.keys()].map((id) => fakeTask(state(workspace), id)).filter((t) => sessionIds.includes(t.sessionId)),
+        }),
+        getTask: ({ workspace, id }) => {
+          if (!state(workspace).tasks.has(id)) notFound(id);
+          const t = fakeTask(state(workspace), id);
+          const events = ["→ read_file {\"path\":\"internal/cart/cart.go\"}", "← read_file", "→ grep {\"pattern\":\"math.Round\"}", "← grep"];
+          return { task: t, events: t.state === "running" ? events.slice(0, 2) : events };
+        },
+        stopTask: ({ workspace, id }) => {
+          const t = state(workspace).tasks.get(id);
+          if (!t) notFound(id);
+          t.stopped ??= Date.now();
+          return { task: fakeTask(state(workspace), id) };
+        },
         trustProject: ({ workspace, trusted }) => {
           state(workspace).projectTrust = trusted ? "trusted" : "declined";
           return { reopened: true };

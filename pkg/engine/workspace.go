@@ -261,6 +261,7 @@ func Open(ctx context.Context, cfg *config.Config, o Options) (*Workspace, error
 		runtime.WithTurnStore(w.storage),
 		runtime.WithUsageStore(w.storage),
 		runtime.WithNotice(o.Warn),
+		runtime.WithTaskDone(w.taskEnded),
 	)...)
 	if err != nil {
 		w.Close()
@@ -317,6 +318,9 @@ func (w *Workspace) Close() error {
 		if a := w.storage.Active(); a != nil {
 			w.sessionEnded(a.ID, "exit") // queued before the hooks drain
 		}
+	}
+	if w.engine != nil {
+		w.engine.StopTasks() // before their tools close
 	}
 	if w.tools != nil {
 		err = w.tools.Close()

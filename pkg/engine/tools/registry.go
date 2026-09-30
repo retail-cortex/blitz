@@ -303,6 +303,17 @@ func NewRegistry(cfg *config.Config, agentReg *agents.Registry, skillProv *skill
 		}
 	}
 
+	if agentReg != nil {
+		taskTools, err := NewTaskTools(r.hooks)
+		if err != nil {
+			r.Close()
+			return nil, fmt.Errorf("failed to create the task tools: %w", err)
+		}
+		for _, t := range taskTools {
+			r.tools[t.Name()] = t
+		}
+	}
+
 	reserved := make([]string, 0, len(r.tools))
 	for name := range r.tools {
 		reserved = append(reserved, name)

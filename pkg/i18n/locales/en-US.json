@@ -1102,6 +1102,23 @@
     "desktop.project.bar.one": "Project settings not loaded: {count} setting waits for your trust.",
     "desktop.project.bar.other": "Project settings not loaded: {count} settings wait for your trust.",
     "desktop.project.review": "Review",
-    "desktop.project.open": "Project settings"
+    "desktop.project.open": "Project settings",
+    "help.tasks": "Background tasks (invoke_agent in the background): list them, show one, or stop one",
+    "tasks.none": "No background tasks.",
+    "tasks.title": "Background tasks:",
+    "tasks.usage": "Use /tasks, /tasks show <id> or /tasks stop <id>.",
+    "tasks.state.running": "running",
+    "tasks.state.done": "done",
+    "tasks.state.failed": "failed",
+    "tasks.state.stopped": "stopped",
+    "tasks.ended": "Background {id} ({agent}) {state} after {took}: {summary}",
+    "exit.tasks_running.one": "{count} background task still running:",
+    "exit.tasks_running.other": "{count} background tasks still running:",
+    "exit.tasks_stopped.one": "Stopped {count} background task.",
+    "exit.tasks_stopped.other": "Stopped {count} background tasks.",
+    "desktop.task.runtime": "{seconds} s",
+    "desktop.task.show": "Show",
+    "desktop.task.hide": "Hide",
+    "desktop.task.stop": "Stop"
   }
 }

@@ -136,6 +136,16 @@ service WorkspaceService {
   // in a client (!cmd), as user_shell.
   rpc AuditShell(AuditShellRequest) returns (AuditShellResponse);
 
+  // Returns the background tasks (invoke_agent with background: true)
+  // started in the given sessions' turns, oldest first.
+  rpc ListTasks(ListTasksRequest) returns (ListTasksResponse);
+  // Returns a background task with its latest events (UNKNOWN_TASK unless
+  // one of the given sessions started it).
+  rpc GetTask(GetTaskRequest) returns (GetTaskResponse);
+  // Stops a background task (UNKNOWN_TASK unless one of the given
+  // sessions started it).
+  rpc StopTask(StopTaskRequest) returns (StopTaskResponse);
+
   // Returns the workspace's project settings (.blitz/settings.toml) and
   // the trust decision for the part that runs code or loosens a policy.
   rpc GetProjectSettings(GetProjectSettingsRequest) returns (GetProjectSettingsResponse);
@@ -918,6 +928,69 @@ message AuditShellRequest {
 
 // Response message for WorkspaceService.AuditShell.
 message AuditShellResponse {}
+
+// BackgroundTask is a sub-agent running beside the turn that started it.
+message BackgroundTask {
+  // task-1, task-2, … in the workspace.
+  string id = 1;
+  string agent = 2;
+  // The first line of what it was asked.
+  string prompt = 3;
+  // The session whose turn started it.
+  string session_id = 4;
+  // running, done, failed or stopped.
+  string state = 5;
+  google.protobuf.Timestamp started = 6;
+  // Unset while it runs.
+  google.protobuf.Timestamp ended = 7;
+  // What it answered, when done.
+  string result = 8;
+  // Why it failed or stopped.
+  string error = 9;
+  // Its own tokens and cost (also counted in its session's).
+  Usage usage = 10;
+}
+
+// Request message for WorkspaceService.ListTasks.
+message ListTasksRequest {
+  string workspace = 1;
+  // The sessions whose tasks to list.
+  repeated string session_ids = 2;
+}
+
+// Response message for WorkspaceService.ListTasks.
+message ListTasksResponse {
+  repeated BackgroundTask tasks = 1;
+}
+
+// Request message for WorkspaceService.GetTask.
+message GetTaskRequest {
+  string workspace = 1;
+  // The sessions the asking client ran turns in.
+  repeated string session_ids = 2;
+  string id = 3;
+}
+
+// Response message for WorkspaceService.GetTask.
+message GetTaskResponse {
+  BackgroundTask task = 1;
+  // Its latest events, in words (the last 200).
+  repeated string events = 2;
+}
+
+// Request message for WorkspaceService.StopTask.
+message StopTaskRequest {
+  string workspace = 1;
+  // The sessions the asking client ran turns in.
+  repeated string session_ids = 2;
+  string id = 3;
+}
+
+// Response message for WorkspaceService.StopTask.
+message StopTaskResponse {
+  // How it is once stopped.
+  BackgroundTask task = 1;
+}
 
 // ProjectItem is one setting from a project file.
 message ProjectItem {

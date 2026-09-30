@@ -397,6 +397,18 @@ type ToolsConfig struct {
 	// MaxParallel caps how many tool calls from one model response run at
 	// once (0 = unlimited). Nested batches (sub-agents) get their own cap.
 	MaxParallel int `toml:"max_parallel"`
+	// MaxBackgroundAgents caps how many background tasks
+	// (invoke_agent with background: true) run at once in a workspace.
+	MaxBackgroundAgents int `toml:"max_background_agents"`
+	// BackgroundAgentTimeout stops a background task that runs longer
+	// (a Go duration such as "30m").
+	BackgroundAgentTimeout string `toml:"background_agent_timeout"`
+	// BackgroundAgentMaxTurns caps a background task's model calls, unless
+	// its agent sets max_turns.
+	BackgroundAgentMaxTurns int `toml:"background_agent_max_turns"`
+	// BackgroundAgentMaxCostUSD stops a background task that has cost more
+	// (0: no cap).
+	BackgroundAgentMaxCostUSD float64 `toml:"background_agent_max_cost_usd"`
 }
 
 // PermissionsConfig lists permission rules. Deny wins over ask, ask over
@@ -603,6 +615,10 @@ func DefaultConfig() *Config {
 			WorkspaceDir:        ".",
 			AutoApproveCommands: false,
 			MaxParallel:         8,
+
+			MaxBackgroundAgents:     4,
+			BackgroundAgentTimeout:  "30m",
+			BackgroundAgentMaxTurns: 50,
 		},
 		Session: SessionConfig{
 			StorageDir: filepath.Join(homeDir, ".blitz", "sessions"),

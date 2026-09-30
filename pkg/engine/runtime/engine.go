@@ -91,6 +91,9 @@ type runState struct {
 	// models names the model each agent of an overridden tree runs on, for
 	// pricing; nil when the run uses the engine's own tree.
 	models map[string]string
+	// taskID is the background task this run is ("" for a turn): its
+	// usage is counted for the task too.
+	taskID string
 }
 
 func stateFrom(ctx context.Context) *runState {
@@ -169,6 +172,7 @@ func WithInstructions(text string) Option { return func(e *Engine) { e.extraInst
 // It is safe for concurrent use.
 type Engine struct {
 	cfg       *config.Config
+	tasks     *taskManager
 	agentReg  *agents.Registry
 	skillProv *skills.Provider
 	toolReg   *tools.Registry
@@ -233,6 +237,7 @@ func NewEngine(
 		llm:       withImages(llm, toolReg.Images()),
 		active:    cfg.Blitz.DefaultAgent,
 		settings:  map[string]config.ModelSettings{},
+		tasks:     newTaskManager(),
 	}
 	// Sorted, so that when "gpt-5" and "openai/gpt-5" are both written the
 	// bare name wins every time.
@@ -257,6 +262,7 @@ func NewEngine(
 	}
 
 	toolReg.Hooks().SetSubagentInvoker(e.InvokeSubagent)
+	toolReg.Hooks().SetTaskRunner(e)
 	return e, nil
 }
 
@@ -554,6 +560,9 @@ func (e *Engine) afterModel(ctx agent.Context, resp *model.LLMResponse, respErr 
 	}
 	e.restoreUsage(id)
 	e.usage.RecordWrites(id, served, resp.UsageMetadata, writes)
+	if st := stateFrom(ctx); st != nil && st.taskID != "" {
+		e.usage.RecordWrites(st.taskID, served, resp.UsageMetadata, writes)
+	}
 	if st := stateFrom(ctx); st != nil {
 		e.saveUsage(ctx, id)
 	}
@@ -969,6 +978,9 @@ func (e *Engine) InvokeSubagent(ctx context.Context, agentName, prompt string) (
 	}
 
 	subCtx := withSettingsLookup(context.WithValue(ctx, subagentDepthKey{}, depth+1), e.lookupSettings)
+	// Its shells and tasks count for the session that started it.
+	subCtx = tools.WithOwnerSession(subCtx, e.sessionOf(ctx))
+	observe, _ := ctx.Value(subagentEventKey{}).(func(*session.Event))
 	sessionID := fmt.Sprintf("subagent-%s-%d", agentName, e.subagentSeq.Add(1))
 	hooks := e.toolReg.ScriptHooks()
 	hooks.Async(ctx, "subagent_start", agentName, tools.HookEvent{SessionID: e.sessionOf(ctx), Subagent: agentName, Prompt: prompt})
@@ -982,6 +994,9 @@ func (e *Engine) InvokeSubagent(ctx context.Context, agentName, prompt string) (
 	}()
 	err = drain(r.Run(subCtx, "user", sessionID, genai.NewContentFromText(prompt, genai.RoleUser), agent.RunConfig{}),
 		func(ev *session.Event) error {
+			if observe != nil {
+				observe(ev)
+			}
 			if ev.Author != agentName || ev.Partial || ev.Content == nil {
 				return nil
 			}

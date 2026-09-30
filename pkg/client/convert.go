@@ -63,6 +63,7 @@ var sentinels = map[string]error{
 	"HASH_MISMATCH":            api.ErrHashMismatch,
 	"UNKNOWN_PROCESS":          api.ErrUnknownProcess,
 	"PROJECT_CHANGED":          api.ErrProjectChanged,
+	"UNKNOWN_TASK":             api.ErrUnknownTask,
 }
 
 // fromAPI turns a failed call's error into app's typed error for its

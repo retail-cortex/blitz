@@ -1102,6 +1102,23 @@
     "desktop.project.bar.one": "Paramètres du projet non chargés : {count} paramètre attend votre confiance.",
     "desktop.project.bar.other": "Paramètres du projet non chargés : {count} paramètres attendent votre confiance.",
     "desktop.project.review": "Examiner",
-    "desktop.project.open": "Paramètres du projet"
+    "desktop.project.open": "Paramètres du projet",
+    "help.tasks": "Tâches en arrière-plan (invoke_agent en arrière-plan) : les lister, en afficher une ou en arrêter une",
+    "tasks.none": "Aucune tâche en arrière-plan.",
+    "tasks.title": "Tâches en arrière-plan :",
+    "tasks.usage": "Utilisez /tasks, /tasks show <id> ou /tasks stop <id>.",
+    "tasks.state.running": "en cours",
+    "tasks.state.done": "terminée",
+    "tasks.state.failed": "échouée",
+    "tasks.state.stopped": "arrêtée",
+    "tasks.ended": "La tâche {id} ({agent}) est {state} après {took} : {summary}",
+    "exit.tasks_running.one": "{count} tâche en arrière-plan toujours en cours :",
+    "exit.tasks_running.other": "{count} tâches en arrière-plan toujours en cours :",
+    "exit.tasks_stopped.one": "{count} tâche en arrière-plan arrêtée.",
+    "exit.tasks_stopped.other": "{count} tâches en arrière-plan arrêtées.",
+    "desktop.task.runtime": "{seconds} s",
+    "desktop.task.show": "Afficher",
+    "desktop.task.hide": "Masquer",
+    "desktop.task.stop": "Arrêter"
   }
 }

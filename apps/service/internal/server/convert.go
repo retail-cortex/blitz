@@ -215,3 +215,14 @@ func projectMsg(p api.ProjectSettings) *pb.ProjectSettings {
 		Applied: list(p.Applied), Pending: list(p.Pending), Ignored: list(p.Ignored), Problems: p.Problems,
 	}
 }
+
+func taskMsg(t api.TaskInfo) *pb.BackgroundTask {
+	m := &pb.BackgroundTask{
+		Id: t.ID, Agent: t.Agent, Prompt: t.Prompt, SessionId: t.Session, State: t.State,
+		Started: timestamppb.New(t.Started), Result: t.Result, Error: t.Error, Usage: usageMsg(t.Usage),
+	}
+	if !t.Ended.IsZero() {
+		m.Ended = timestamppb.New(t.Ended)
+	}
+	return m
+}

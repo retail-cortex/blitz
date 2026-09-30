@@ -330,3 +330,39 @@ func TestRulesAddRemove(t *testing.T) {
 	assert.Equal(t, 1, n, "remove: %d, left %+v", n, r.List())
 	assert.Len(t, r.List(), 0, "remove: %d, left %+v", n, r.List())
 }
+
+// A background task runs what the workspace's rules and mode allow, and
+// nobody is asked for the rest.
+func TestBackgroundRunsAtTheGate(t *testing.T) {
+	write := func(p string) api.ApprovalRequest {
+		return api.ApprovalRequest{Tool: "create_file", Kind: api.ActionWrite, Detail: "Create " + p, Key: "write:/ws", Targets: []string{p}}
+	}
+	rules := rulesOf(t, []string{"write(docs/**)"}, []string{"write(ci/**)"}, []string{"write(**/*.pem)"})
+	cases := []struct {
+		name    string
+		mode    api.PermissionMode
+		path    string
+		allowed bool
+	}{
+		{name: "an allow rule", mode: api.ModeDefault, path: "docs/a.md", allowed: true},
+		{name: "accept-edits", mode: api.ModeAcceptEdits, path: "src/a.go", allowed: true},
+		{name: "would ask", mode: api.ModeDefault, path: "src/a.go"},
+		{name: "an ask rule", mode: api.ModeAcceptEdits, path: "ci/deploy.yml"},
+		{name: "a deny rule", mode: api.ModeBypass, path: "k.pem"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			h, reqs := approverHooks(true)
+			h.setMode(c.mode)
+			h.SetRules(rules)
+			err := h.Approve(Background(context.Background()), write(c.path))
+			assert.Empty(t, *reqs, "the approver was asked")
+			if c.allowed {
+				assert.NoError(t, err)
+			} else {
+				assert.ErrorIs(t, err, ErrNotApproved)
+			}
+		})
+	}
+	assert.True(t, isUnattended(Background(context.Background())), "questions to the user must be refused too")
+}

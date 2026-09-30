@@ -327,6 +327,11 @@
 .command-hint { padding: 6px 12px 2px; }
 .notice.card { padding: 12px 16px; color: var(--md-on-surface); }
 .notice.card.error { color: var(--md-on-error-container); }
+/* A background task's card, under the tool call that started it (Conversation.tsx TaskCard). */
+.task-card { display: grid; gap: 6px; padding: 10px 14px; margin: 6px 0; }
+.task-card .row { gap: 8px; }
+.task-card.failed { color: var(--md-on-error-container); }
+.task-card .task-body { display: grid; gap: 8px; }
 
 /* Command palette */
 .palette-scrim { align-items: flex-start; padding-top: 12vh; }

@@ -50,6 +50,7 @@ type Hooks struct {
 	approver api.Approver
 	prompter api.UserPromptFunc
 	invoker  InvokeAgentFunc
+	tasks    TaskRunner
 	session  map[string]bool
 	store    *ApprovalStore
 	audit    *audit.Logger
@@ -114,6 +115,21 @@ func (h *Hooks) SetSubagentInvoker(i InvokeAgentFunc) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.invoker = i
+}
+
+// SetTaskRunner supplies what runs background tasks
+// (invoke_agent with background: true, list_tasks, task_output,
+// stop_task).
+func (h *Hooks) SetTaskRunner(r TaskRunner) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.tasks = r
+}
+
+func (h *Hooks) taskRunner() TaskRunner {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	return h.tasks
 }
 
 // SetStore attaches the persistent "always allow" rules.
@@ -194,10 +210,27 @@ func Unattended(ctx context.Context, decide api.Approver) context.Context {
 	return context.WithValue(ctx, unattendedKey{}, decide)
 }
 
-// isUnattended reports whether ctx is an unattended run.
+// isUnattended reports whether ctx is an unattended run, or a background
+// task: nobody can answer a question.
 func isUnattended(ctx context.Context) bool {
 	_, ok := ctx.Value(unattendedKey{}).(api.Approver)
-	return ok
+	return ok || IsBackground(ctx)
+}
+
+type backgroundKey struct{}
+
+// Background marks ctx as a background task's run: what the workspace's
+// rules and mode allow runs, and anything that would ask the person is
+// refused instead, since nobody is asked for it
+// (spec_background_agents_032 BGA-40).
+func Background(ctx context.Context) context.Context {
+	return context.WithValue(ctx, backgroundKey{}, true)
+}
+
+// IsBackground reports whether ctx is a background task's run.
+func IsBackground(ctx context.Context) bool {
+	v, _ := ctx.Value(backgroundKey{}).(bool)
+	return v
 }
 
 // Approve decides whether a tool call may proceed, and records the
@@ -302,6 +335,10 @@ func (h *Hooks) Approve(ctx context.Context, req api.ApprovalRequest) error {
 			}
 			return fmt.Errorf("%w: %s", ErrNotApproved, why)
 		}
+	}
+	if IsBackground(ctx) {
+		record("background-refused")
+		return fmt.Errorf("%w: %s needs approval, and nobody is asked for a task running in the background", ErrNotApproved, req.Detail)
 	}
 	if approver == nil {
 		record("no-approver")

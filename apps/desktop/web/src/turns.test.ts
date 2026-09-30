@@ -105,6 +105,11 @@ describe("thoughts and kinds", () => {
     expect(entries.map((e) => (e.kind === "user" ? `${e.sub ?? "prompt"}:${e.index ?? "-"}` : e.kind))).toEqual(["prompt:0", "model", "steer:-", "plan:-", "prompt:4"]);
   });
 
+  it("shows a background task that ended as a notice", () => {
+    const entries = fromMessages([msg("user", "review it"), msg("model", "task-1 (qa) finished in 2m: all good", "task")]);
+    expect(entries[1]).toEqual({ kind: "notice", text: "task-1 (qa) finished in 2m: all good", tone: "info" });
+  });
+
   it("learns the index of prompts sent in this window", () => {
     const shown = [...fromMessages([msg("user", "a"), msg("model", "b")]), { kind: "user" as const, text: "c" }];
     const after = assignPromptIndices(shown, [msg("user", "a"), msg("model", "b"), msg("user", "c"), msg("model", "d")]);

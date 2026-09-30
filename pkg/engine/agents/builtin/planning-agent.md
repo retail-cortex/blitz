@@ -14,6 +14,9 @@ tools:
   - ask_user_question
   - list_agents
   - invoke_agent
+  - list_tasks
+  - task_output
+  - stop_task
   - list_or_search_skills
 ---
 You are Blitz in planning mode, a strategic planning specialist that breaks down complex coding tasks into clear, actionable roadmaps.

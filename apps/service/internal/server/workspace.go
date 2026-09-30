@@ -659,3 +659,48 @@ func (h workspaceService) TrustProject(ctx context.Context, r req[pb.TrustProjec
 	reopened := h.s.closeWorkspace(r.Msg.Workspace) == nil
 	return ok(&pb.TrustProjectResponse{Reopened: reopened})
 }
+
+func (h workspaceService) ListTasks(ctx context.Context, r req[pb.ListTasksRequest]) (*connect.Response[pb.ListTasksResponse], error) {
+	w, err := h.s.workspace(ctx, r.Msg.Workspace)
+	if err != nil {
+		return nil, err
+	}
+	out := &pb.ListTasksResponse{}
+	for _, t := range w.ListTasksIn(r.Msg.SessionIds) {
+		out.Tasks = append(out.Tasks, taskMsg(t))
+	}
+	return ok(out)
+}
+
+func (h workspaceService) GetTask(ctx context.Context, r req[pb.GetTaskRequest]) (*connect.Response[pb.GetTaskResponse], error) {
+	w, err := h.s.workspace(ctx, r.Msg.Workspace)
+	if err != nil {
+		return nil, err
+	}
+	t, events, err := w.TaskIn(scopedSessions(r.Msg.SessionIds), r.Msg.Id)
+	if err != nil {
+		return nil, toAPI(err)
+	}
+	return ok(&pb.GetTaskResponse{Task: taskMsg(t), Events: events})
+}
+
+func (h workspaceService) StopTask(ctx context.Context, r req[pb.StopTaskRequest]) (*connect.Response[pb.StopTaskResponse], error) {
+	w, err := h.s.workspace(ctx, r.Msg.Workspace)
+	if err != nil {
+		return nil, err
+	}
+	t, err := w.StopTaskIn(scopedSessions(r.Msg.SessionIds), r.Msg.Id)
+	if err != nil {
+		return nil, toAPI(err)
+	}
+	return ok(&pb.StopTaskResponse{Task: taskMsg(t)})
+}
+
+// scopedSessions are the sessions a request names: none is none, never
+// every session.
+func scopedSessions(ids []string) []string {
+	if ids == nil {
+		return []string{}
+	}
+	return ids
+}

@@ -159,6 +159,7 @@ func runOneShot(ctx context.Context, w api.Backend, o oneShotOptions) error {
 	defer signal.Stop(interrupts)
 	tui.ConfirmExit(context.Background(), o.input, w.Processes(), interrupts, tui.ExitPrompt{
 		CanPrompt: o.format == formatText && ctx.Err() == nil && o.stdinTTY && o.input != nil,
+		Tasks:     w,
 	})
 	return runErr
 }

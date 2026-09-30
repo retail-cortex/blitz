@@ -347,6 +347,7 @@ func toAPI(err error) error {
 		{api.ErrWorkerExists, connect.CodeAlreadyExists, "WORKER_EXISTS"},
 		{api.ErrUnknownProcess, connect.CodeNotFound, "UNKNOWN_PROCESS"},
 		{api.ErrProjectChanged, connect.CodeFailedPrecondition, "PROJECT_CHANGED"},
+		{api.ErrUnknownTask, connect.CodeNotFound, "UNKNOWN_TASK"},
 	} {
 		if errors.Is(err, m.target) {
 			return apiError(m.code, m.reason, err)

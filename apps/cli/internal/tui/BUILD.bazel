@@ -44,6 +44,7 @@ go_library(
         "search.go",
         "skills.go",
         "spinner.go",
+        "tasks.go",
         "terminal.go",
     ],
     importpath = "github.com/retail-cortex/blitz/apps/cli/internal/tui",
@@ -104,6 +105,7 @@ go_test(
         "skills_test.go",
         "snapshot_test.go",
         "steer_test.go",
+        "tasks_test.go",
         "tui_test.go",
     ],
     # The untranslated-output lint reads these sources.

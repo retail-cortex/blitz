@@ -34,6 +34,7 @@ go_library(
         "project.go",
         "rewind.go",
         "sessions.go",
+        "tasks.go",
         "turn.go",
         "workers.go",
         "workspace.go",

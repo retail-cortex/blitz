@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/retail-cortex/blitz/pkg/api"
 	"github.com/retail-cortex/blitz/pkg/i18n"
@@ -32,28 +33,61 @@ type ExitPrompt struct {
 	CanPrompt bool
 	// AllowCancel offers "cancel" to return to the REPL instead of exiting.
 	AllowCancel bool
+	// Tasks are the background tasks to account for too (nil: none).
+	Tasks TaskControl
+}
+
+// TaskControl lists and stops background tasks: the workspace
+// (api.Backend).
+type TaskControl interface {
+	ListTasks() []api.TaskInfo
+	StopTask(id string) (api.TaskInfo, error)
+}
+
+// runningTasks are tc's tasks still running.
+func runningTasks(tc TaskControl) []api.TaskInfo {
+	if tc == nil {
+		return nil
+	}
+	var out []api.TaskInfo
+	for _, t := range tc.ListTasks() {
+		if t.State == api.TaskRunning {
+			out = append(out, t)
+		}
+	}
+	return out
 }
 
 // ConfirmExit decides whether Blitz may exit while background processes
-// are running. Nothing is left running either way: the user chooses to kill
+// or tasks are running. Nothing is left running either way: the user chooses to kill
 // them now or wait for them to finish, and a further Ctrl+C (or EOF) at the
 // prompt or while waiting force-quits, killing them. Returns false only when
 // the user cancels the exit.
 func ConfirmExit(ctx context.Context, in Input, pm api.Processes, interrupts <-chan os.Signal, opts ExitPrompt) bool {
-	if pm == nil {
+	var running []api.ProcessInfo
+	if pm != nil {
+		running = pm.Running()
+	}
+	tasks := runningTasks(opts.Tasks)
+	if len(running) == 0 && len(tasks) == 0 {
 		return true
 	}
-	running := pm.Running()
-	if len(running) == 0 {
-		return true
-	}
+	all := work{pm, opts.Tasks}
 
-	fmt.Printf("\n%s!  %s%s\n", Yellow+Bold, i18n.N("exit.running", len(running)), Reset)
-	for _, p := range running {
-		fmt.Printf("   [%d] %s %s(%ds)%s\n", p.ID, safe(textutil.Ellipsize(p.Command, 70)), Dim, p.RuntimeMs/1000, Reset)
+	if len(running) > 0 {
+		fmt.Printf("\n%s!  %s%s\n", Yellow+Bold, i18n.N("exit.running", len(running)), Reset)
+		for _, p := range running {
+			fmt.Printf("   [%d] %s %s(%ds)%s\n", p.ID, safe(textutil.Ellipsize(p.Command, 70)), Dim, p.RuntimeMs/1000, Reset)
+		}
+	}
+	if len(tasks) > 0 {
+		fmt.Printf("\n%s!  %s%s\n", Yellow+Bold, i18n.N("exit.tasks_running", len(tasks)), Reset)
+		for _, t := range tasks {
+			fmt.Printf("   [%s] %s: %s %s(%ds)%s\n", t.ID, safe(t.Agent), safe(textutil.Ellipsize(t.Prompt, 60)), Dim, int(t.Runtime().Seconds()), Reset)
+		}
 	}
 	if !opts.CanPrompt {
-		killAll(pm)
+		all.kill()
 		return true
 	}
 
@@ -66,22 +100,22 @@ func ConfirmExit(ctx context.Context, in Input, pm api.Processes, interrupts <-c
 	stopAsk()
 	if err != nil {
 		fmt.Printf("\n%s✗ %s%s\n", Red, i18n.T("exit.force_quit"), Reset)
-		killAll(pm)
+		all.kill()
 		return true
 	}
 
 	switch strings.ToLower(strings.TrimSpace(answer)) {
 	case "k", "kill":
-		killAll(pm)
+		all.kill()
 		return true
 	case "w", "wait":
 		fmt.Printf("%s%s%s\n", Cyan, i18n.T("exit.waiting"), Reset)
 		waitCtx, stopWait := cancelOnSignal(ctx, interrupts)
-		err := pm.WaitAll(waitCtx)
+		err := all.wait(waitCtx)
 		stopWait()
 		if err != nil {
 			fmt.Printf("\n%s✗ %s%s\n", Red, i18n.T("exit.force_quit"), Reset)
-			killAll(pm)
+			all.kill()
 		}
 		return true
 	default:
@@ -89,17 +123,52 @@ func ConfirmExit(ctx context.Context, in Input, pm api.Processes, interrupts <-c
 			fmt.Println("   " + i18n.T("exit.cancelled"))
 			return false
 		}
-		killAll(pm)
+		all.kill()
 		return true
 	}
 }
 
-func killAll(pm api.Processes) {
-	n := len(pm.Running())
-	pm.Shutdown()
-	if n > 0 {
-		fmt.Printf("%s%s%s\n", Yellow, i18n.N("exit.stopped", n), Reset)
+// work is what runs in the background: processes and tasks.
+type work struct {
+	pm    api.Processes
+	tasks TaskControl
+}
+
+// kill stops them all and says how many.
+func (w work) kill() {
+	if w.pm != nil {
+		n := len(w.pm.Running())
+		w.pm.Shutdown()
+		if n > 0 {
+			fmt.Printf("%s%s%s\n", Yellow, i18n.N("exit.stopped", n), Reset)
+		}
 	}
+	if running := runningTasks(w.tasks); len(running) > 0 {
+		for _, t := range running {
+			_, _ = w.tasks.StopTask(t.ID)
+		}
+		fmt.Printf("%s%s%s\n", Yellow, i18n.N("exit.tasks_stopped", len(running)), Reset)
+	}
+}
+
+// taskPoll is how often wait asks whether the tasks have ended.
+var taskPoll = 500 * time.Millisecond
+
+// wait waits until they have all ended, or ctx ends.
+func (w work) wait(ctx context.Context) error {
+	if w.pm != nil {
+		if err := w.pm.WaitAll(ctx); err != nil {
+			return err
+		}
+	}
+	for len(runningTasks(w.tasks)) > 0 {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(taskPoll):
+		}
+	}
+	return nil
 }
 
 // StdinIsTerminal reports whether stdin is interactive.

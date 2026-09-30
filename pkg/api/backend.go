@@ -44,6 +44,13 @@ type Backend interface {
 	ImagesEnabled() bool
 	Close() error
 
+	// Background tasks (invoke_agent with background: true) of the
+	// sessions this front end ran turns in, oldest first; Task adds its
+	// latest events, in words.
+	ListTasks() []TaskInfo
+	Task(id string) (TaskInfo, []string, error)
+	StopTask(id string) (TaskInfo, error)
+
 	// Project settings.
 	ProjectSettings() ProjectSettings
 	// TrustProject records trusting (or declining) the project settings

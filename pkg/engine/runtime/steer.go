@@ -54,17 +54,19 @@ func (e *Engine) TakeSteers(sessionID string) []string {
 	return msgs
 }
 
-// attachSteers returns result with queued messages added, or nil when there
-// are none. (Model callbacks can't add session events, so tool results are
-// the channel that reaches the model and the history.) Tools run by a
-// sub-agent, which has its own session, don't take the parent's messages.
+// attachSteers returns result with queued messages added, and notes about
+// background tasks that have ended, or nil when there are none. (Model
+// callbacks can't add session events, so tool results are the channel
+// that reaches the model and the history.) Tools run by a sub-agent,
+// which has its own session, don't take the parent's messages.
 func (e *Engine) attachSteers(ctx agent.Context, result map[string]any, toolErr error) map[string]any {
 	st := stateFrom(ctx)
 	if st == nil || ctx.SessionID() != st.sessionID {
 		return nil
 	}
 	msgs := e.TakeSteers(st.sessionID)
-	if len(msgs) == 0 {
+	notes := e.TakeTaskNotes(st.sessionID)
+	if len(msgs) == 0 && len(notes) == 0 {
 		return nil
 	}
 	out := maps.Clone(result)
@@ -74,10 +76,15 @@ func (e *Engine) attachSteers(ctx agent.Context, result map[string]any, toolErr 
 	if toolErr != nil { // returning a result replaces the error; keep it visible
 		out["error"] = toolErr.Error()
 	}
-	if len(msgs) == 1 {
+	switch len(msgs) {
+	case 0:
+	case 1:
 		out[SteerKey] = msgs[0]
-	} else {
+	default:
 		out[SteerKey] = msgs
+	}
+	if len(notes) > 0 {
+		out[TaskUpdatesKey] = notes
 	}
 	trace.SpanFromContext(ctx).AddEvent("steer", trace.WithAttributes(attribute.Int("messages", len(msgs))))
 	return out
