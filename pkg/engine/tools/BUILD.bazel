@@ -159,6 +159,7 @@ go_test(
         "uc_and_agent_tools_test.go",
         "usersearch_test.go",
         "web_test.go",
+        "webproxy_test.go",
         "websearch_test.go",
         "workspace_test.go",
     ],

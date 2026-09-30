@@ -68,6 +68,7 @@ type Config struct {
 	Web         WebConfig        `toml:"web"`
 	Browser     BrowserConfig    `toml:"browser"`
 	Plugins     PluginsConfig    `toml:"plugins"`
+	Network     NetworkConfig    `toml:"network"`
 	// PluginAgentDirs and PluginCommandDirs are what loaded plugins add
 	// (package plugins; never read from a file).
 	PluginAgentDirs   []string        `toml:"-"`
@@ -172,6 +173,11 @@ type GeminiConfig struct {
 	// APIKey is the Gemini API key (default: GEMINI_API_KEY). Keep it in the
 	// keychain: set it in the form or with blitz config set-key.
 	APIKey string `toml:"api_key"`
+	// APIKeyCommand, when APIKey is empty, is a command whose output is the
+	// key (a password manager, a gateway's rotating token), run when needed
+	// and kept for APIKeyTTL (a Go duration; default 5m).
+	APIKeyCommand string `toml:"api_key_command"`
+	APIKeyTTL     string `toml:"api_key_ttl"`
 	// Model is the Gemini model to use.
 	Model string `toml:"model"`
 	// Auth is "api_key" ("" too: the Gemini API) or "adc": Vertex AI with
@@ -194,6 +200,11 @@ type OpenAIConfig struct {
 	// Ollama needs none). Keep it in the keychain: set it in the form or with
 	// blitz config set-key.
 	APIKey string `toml:"api_key"`
+	// APIKeyCommand, when APIKey is empty, is a command whose output is the
+	// key (a password manager, a gateway's rotating token), run when needed
+	// and kept for APIKeyTTL (a Go duration; default 5m).
+	APIKeyCommand string `toml:"api_key_command"`
+	APIKeyTTL     string `toml:"api_key_ttl"`
 	// BaseURL is the API's address: OpenAI's, OpenRouter's or a local
 	// Ollama's.
 	BaseURL string `toml:"base_url"`
@@ -206,6 +217,11 @@ type AnthropicConfig struct {
 	// APIKey is optional: without it the SDK also accepts ANTHROPIC_AUTH_TOKEN
 	// and `ant auth login` profiles.
 	APIKey string `toml:"api_key"`
+	// APIKeyCommand, when APIKey is empty, is a command whose output is the
+	// key (a password manager, a gateway's rotating token), run when needed
+	// and kept for APIKeyTTL (a Go duration; default 5m).
+	APIKeyCommand string `toml:"api_key_command"`
+	APIKeyTTL     string `toml:"api_key_ttl"`
 	// Auth is "api_key" ("" too); "oauth": the `ant auth login` profile
 	// named by Profile (empty: ant's active profile); or "adc": Claude on
 	// Vertex AI with Application Default Credentials, in ProjectID and

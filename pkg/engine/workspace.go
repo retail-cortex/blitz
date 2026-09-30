@@ -177,6 +177,9 @@ func Open(ctx context.Context, cfg *config.Config, o Options) (*Workspace, error
 		}
 	}()
 
+	if err := SetupNetwork(cfg); err != nil {
+		o.Warn(err.Error())
+	}
 	if w.agents, err = agents.NewRegistry(); err != nil {
 		return nil, fmt.Errorf("failed to load agent registry: %w", err)
 	}

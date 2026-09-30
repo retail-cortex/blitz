@@ -16,6 +16,7 @@ package tools
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"io"
@@ -26,6 +27,7 @@ import (
 	"net/url"
 	"path"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -106,9 +108,29 @@ func newWebFetcher(cfg WebFetchConfig) *webFetcher {
 			return nil
 		},
 	}
+	// Through a proxy (HTTPS_PROXY and the like), the proxy connects, so the
+	// host is resolved and checked here first; the proxy's own address,
+	// often a private one, is let through.
+	var proxyAddrs sync.Map // host:port of proxies in use
 	transport := &http.Transport{
-		Proxy:                 nil, // a proxy would bypass the address check
-		DialContext:           dialer.DialContext,
+		Proxy: func(req *http.Request) (*url.URL, error) {
+			p, err := proxyFromEnv(req)
+			if err != nil || p == nil {
+				return nil, err
+			}
+			if err := f.checkResolved(req.Context(), req.URL.Hostname()); err != nil {
+				return nil, err
+			}
+			proxyAddrs.Store(canonicalAddr(p), true)
+			return p, nil
+		},
+		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+			if _, ok := proxyAddrs.Load(addr); ok {
+				return (&net.Dialer{Timeout: 10 * time.Second}).DialContext(ctx, network, addr)
+			}
+			return dialer.DialContext(ctx, network, addr)
+		},
+		TLSClientConfig:       defaultTLS(),
 		TLSHandshakeTimeout:   10 * time.Second,
 		ResponseHeaderTimeout: cfg.Timeout,
 		MaxIdleConns:          4,
@@ -134,6 +156,51 @@ func newWebFetcher(cfg WebFetchConfig) *webFetcher {
 		},
 	}
 	return f
+}
+
+// proxyFromEnv is the proxy for a request from the environment, and
+// lookupHost resolves a host; variables for tests.
+var (
+	proxyFromEnv = http.ProxyFromEnvironment
+	lookupHost   = func(ctx context.Context, host string) ([]netip.Addr, error) {
+		return net.DefaultResolver.LookupNetIP(ctx, "ip", host)
+	}
+)
+
+// canonicalAddr is a proxy URL's host:port.
+func canonicalAddr(u *url.URL) string {
+	port := u.Port()
+	if port == "" {
+		port = map[string]string{"http": "80", "https": "443", "socks5": "1080"}[u.Scheme]
+	}
+	return net.JoinHostPort(u.Hostname(), port)
+}
+
+// checkResolved refuses a host whose addresses aren't all public (unless
+// web.allow_private), for requests a proxy makes.
+func (f *webFetcher) checkResolved(ctx context.Context, host string) error {
+	if f.cfg.AllowPrivate {
+		return nil
+	}
+	addrs, err := lookupHost(ctx, host)
+	if err != nil {
+		return err
+	}
+	for _, a := range addrs {
+		if !publicAddr(a) {
+			return fmt.Errorf("%w: %s is %s, not a public address (set web.allow_private to permit)", ErrBlockedAddress, host, a)
+		}
+	}
+	return nil
+}
+
+// defaultTLS is the TLS settings of Go's default transport (with
+// [network] ca_file's authorities, once set up).
+func defaultTLS() *tls.Config {
+	if t, ok := http.DefaultTransport.(*http.Transport); ok && t.TLSClientConfig != nil {
+		return t.TLSClientConfig.Clone()
+	}
+	return nil
 }
 
 func (f *webFetcher) checkURL(u *url.URL) error {

@@ -22,6 +22,7 @@ import (
 	"errors"
 	"fmt"
 	"iter"
+	"net/http"
 	"strings"
 
 	"cloud.google.com/go/auth/oauth2adapt"
@@ -66,8 +67,22 @@ func newAnthropicModel(ctx context.Context, cfg config.AnthropicConfig, name str
 	fb := cmp.Or(cfg.Fallbacks, "default")
 	switch cfg.Auth {
 	case "", config.AuthAPIKey:
-		if cfg.APIKey != "" {
+		switch {
+		case cfg.APIKey != "":
 			opts = append(opts, option.WithAPIKey(cfg.APIKey))
+		case cfg.APIKeyCommand != "":
+			k, key, err := commandKeyNow(ctx, cfg.APIKeyCommand, cfg.APIKeyTTL)
+			if err != nil {
+				return nil, fmt.Errorf("[llm.anthropic] %w", err)
+			}
+			opts = append(opts, option.WithAPIKey(key), option.WithMiddleware(func(req *http.Request, next option.MiddlewareNext) (*http.Response, error) {
+				key, err := k.get(req.Context())
+				if err != nil {
+					return nil, err
+				}
+				req.Header.Set("X-Api-Key", key)
+				return next(req)
+			}))
 		}
 	case config.AuthOAuth:
 		profile, err := anthropicProfile(cfg)

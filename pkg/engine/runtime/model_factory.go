@@ -112,6 +112,30 @@ func openAICompatEndpoint(c config.OpenAIConfig, provider string) (apiKey, baseU
 	return apiKey, baseURL
 }
 
+// openAIKey is the openai or ollama provider's key, address and client
+// options: with api_key_command, each request carries the command's
+// current key.
+func openAIKey(ctx context.Context, c config.OpenAIConfig, provider string, pol retryPolicy) (string, string, []option.RequestOption, error) {
+	apiKey, baseURL := openAICompatEndpoint(c, provider)
+	opts := pol.openAIOptions()
+	if provider != "openai" || c.APIKey != "" || c.APIKeyCommand == "" {
+		return apiKey, baseURL, opts, nil
+	}
+	k, key, err := commandKeyNow(ctx, c.APIKeyCommand, c.APIKeyTTL)
+	if err != nil {
+		return "", "", nil, fmt.Errorf("[llm.openai] %w", err)
+	}
+	opts = append(opts, option.WithMiddleware(func(req *http.Request, next option.MiddlewareNext) (*http.Response, error) {
+		key, err := k.get(req.Context())
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Set("Authorization", "Bearer "+key)
+		return next(req)
+	}))
+	return key, baseURL, opts, nil
+}
+
 // newProviderModel builds one model of the given provider, applying its
 // [model_settings] on each call.
 func newProviderModel(ctx context.Context, cfg *config.Config, provider, modelName string) (model.LLM, error) {
@@ -145,8 +169,11 @@ func buildProviderModel(ctx context.Context, cfg *config.Config, provider, model
 		return gemini.NewModel(ctx, modelName, clientCfg)
 
 	case "openai", "ollama":
-		apiKey, baseURL := openAICompatEndpoint(cfg.LLM.OpenAI, provider)
-		return newOpenAIModel(ctx, modelName, apiKey, baseURL, pol.openAIOptions()...)
+		apiKey, baseURL, opts, err := openAIKey(ctx, cfg.LLM.OpenAI, provider, pol)
+		if err != nil {
+			return nil, err
+		}
+		return newOpenAIModel(ctx, modelName, apiKey, baseURL, opts...)
 
 	case "anthropic":
 		return newAnthropicModel(ctx, cfg.LLM.Anthropic, modelName, pol.anthropicOptions()...)
@@ -213,7 +240,15 @@ func geminiClientConfig(ctx context.Context, g config.GeminiConfig, pol retryPol
 	switch g.Auth {
 	case "", config.AuthAPIKey:
 		cc := pol.geminiConfig(g.APIKey)
-		if g.APIKey != "" {
+		if g.APIKey == "" && g.APIKeyCommand != "" {
+			k, key, err := commandKeyNow(ctx, g.APIKeyCommand, g.APIKeyTTL)
+			if err != nil {
+				return nil, fmt.Errorf("[llm.gemini] %w", err)
+			}
+			cc.APIKey = key
+			cc.HTTPClient = withKeyCommand(cc.HTTPClient, k, "x-goog-api-key", false)
+		}
+		if cc.APIKey != "" {
 			// The Gemini API refuses a project and location, which are
 			// Vertex AI's (left in the settings when switching from adc).
 			cc.Backend = genai.BackendGeminiAPI

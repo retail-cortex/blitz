@@ -185,7 +185,7 @@ type projectMCPServer struct {
 // set: credentials, endpoints, where logs go, and anything that loosens
 // the sandbox or skips approvals.
 var neverFromProject = []string{
-	"llm", "web", "browser", "telemetry", "log", "audit", "checkpoints", "session", "images.dir", "pricing",
+	"llm", "web", "browser", "network", "telemetry", "log", "audit", "checkpoints", "session", "images.dir", "pricing",
 	"blitz.auto_approve", "blitz.permission_mode", "blitz.trust_workspace", "permissions.auto",
 	"sandbox.shell", "sandbox.allow_network", "sandbox.allowed_paths", "sandbox.read_only_paths",
 	"sandbox.scrub_env", "sandbox.commands",
@@ -622,11 +622,11 @@ func (c *Config) providerReady(ref string) bool {
 	}
 	switch strings.ToLower(provider) {
 	case "gemini", "google":
-		return c.LLM.Gemini.APIKey != ""
+		return c.LLM.Gemini.APIKey != "" || c.LLM.Gemini.APIKeyCommand != ""
 	case "anthropic":
-		return c.LLM.Anthropic.APIKey != ""
+		return c.LLM.Anthropic.APIKey != "" || c.LLM.Anthropic.APIKeyCommand != ""
 	case "openai":
-		return c.LLM.OpenAI.APIKey != ""
+		return c.LLM.OpenAI.APIKey != "" || c.LLM.OpenAI.APIKeyCommand != ""
 	}
 	return false
 }

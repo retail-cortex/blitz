@@ -299,6 +299,14 @@ type BrowserConfig struct {
 	Height int `toml:"height"`
 }
 
+// NetworkConfig is how Blitz reaches the network. Proxies come from the
+// environment (HTTPS_PROXY, HTTP_PROXY, NO_PROXY).
+type NetworkConfig struct {
+	// CAFile is a PEM file of certificate authorities to trust besides the
+	// system's (a company's TLS-inspecting proxy).
+	CAFile string `toml:"ca_file"`
+}
+
 // PluginsConfig chooses plugins beyond those enabled in the store
 // (blitz plugin enable): Enable turns installed ones on (from the user, or
 // a trusted project), Disable off (the user, or any project).
