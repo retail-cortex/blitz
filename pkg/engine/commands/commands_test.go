@@ -71,7 +71,7 @@ func TestLoadNamespacesAndBundled(t *testing.T) {
 	for _, c := range Bundled() {
 		bundled[c.Name] = c
 	}
-	for _, name := range []string{"review", "security-review", "simplify", "verify"} {
+	for _, name := range []string{"review", "security-review", "simplify", "verify", "grill-me"} {
 		t.Run(name, func(t *testing.T) {
 			_, ok := bundled[name]
 			assert.True(t, ok, "bundled command %s missing", name)
@@ -79,4 +79,11 @@ func TestLoadNamespacesAndBundled(t *testing.T) {
 	}
 	assert.True(t, bundled["review"].Plan, "review should be read-only (plan), simplify shouldn't")
 	assert.False(t, bundled["simplify"].Plan, "review should be read-only (plan), simplify shouldn't")
+	// /grill-me <task> (BL-CLI-02): read-only, questions before any proposal.
+	grill := bundled["grill-me"]
+	assert.True(t, grill.Plan, "grill-me writes nothing")
+	prompt := grill.Expand("add rate limiting")
+	assert.Contains(t, prompt, "Task: add rate limiting")
+	assert.Contains(t, prompt, "ask_user_question")
+	assert.Contains(t, prompt, "Don't change any files.")
 }

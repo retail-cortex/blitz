@@ -22,6 +22,7 @@ go_library(
         "builtin/security-review.md",
         "builtin/simplify.md",
         "builtin/verify.md",
+        "builtin/grill-me.md",
     ],
     importpath = "github.com/retail-cortex/blitz/pkg/engine/commands",
     visibility = [
