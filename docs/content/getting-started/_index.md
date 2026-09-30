@@ -5,7 +5,17 @@ weight: 10
 
 ## Install
 
-Download the archive for your platform from the [releases](https://github.com/retail-cortex/blitz/releases). Each holds `blitz`, `blitzd`, the `blz` shortcut (a link to `blitz`, not on Windows), and the license files:
+On macOS or Linux, the install script puts `blitz`, `blitzd` and `blz` in `~/.local/bin`, after checking the archive against the release's signed checksums (the signature itself when [cosign](https://docs.sigstore.dev) is installed):
+
+```sh
+curl -fsSL https://github.com/retail-cortex/blitz/releases/latest/download/install.sh | sh
+```
+
+`BLITZ_BIN` picks another folder, `BLITZ_VERSION=v0.2.0` a release, and `BLITZ_REQUIRE_SIGNATURE=1` refuses to install without checking the signature. With Homebrew: `brew install retail-cortex/tap/blitz`.
+
+Later, `blitz update` installs the latest release over this one (`--check` only says whether there is one). It checks the release's signature with cosign, and its checksum; without cosign it asks for `--skip-signature`. A copy installed by Homebrew is updated with `brew upgrade blitz`.
+
+Or download the archive for your platform from the [releases](https://github.com/retail-cortex/blitz/releases). Each holds `blitz`, `blitzd`, the `blz` shortcut (a link to `blitz`, not on Windows), and the license files:
 
 | Platform | Archive |
 |---|---|
