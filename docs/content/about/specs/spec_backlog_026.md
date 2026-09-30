@@ -65,7 +65,7 @@ Suggested order (from NEXT_STEPS): run the manual checks (§9) first — their f
 
 ### 4.4 Web search cost — S
 **Extends** [spec_web_008](spec_web_008.md). Google grounding bills each search query Gemini runs; `/cost` doesn't count them.
-- **BL-WEB-01** The number of grounding search queries per `/search web` and `web_search` call is recorded, shown in `/cost` as a separate line with its estimated price (`[pricing.search."google"] per_1k_queries`, default the published rate after the free tier), and never mixed into token costs.
+- **BL-WEB-01** ✅ *Done 2026-09-30 ([spec_web_008](spec_web_008.md) WEB-15); the prices are `[search_pricing."google"]`, a table of their own, since `[pricing]` is keyed by model.* The number of grounding search queries per `/search web` and `web_search` call is recorded, shown in `/cost` as a separate line with its estimated price (`[pricing.search."google"] per_1k_queries`, default the published rate after the free tier), and never mixed into token costs.
 
 ## 5. Service and attached clients
 

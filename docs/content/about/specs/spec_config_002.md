@@ -70,6 +70,7 @@ One TOML file, `.env.toml`, loaded through `github.com/rrmcguinness/modenv` (hie
 | `[hooks]` | `pre_tool`, `post_tool`, `prompt_submit`, `session_start`, `session_end`, `stop`, `post_tool_failure`, `subagent_start`, `subagent_stop`, `pre_compact`, `post_compact`, `notification`, `permission_request` arrays of `{match, if, type, command, args, url, headers, allowed_env_vars, prompt, model, timeout_seconds, fail_closed}` | | [spec_hooks_010](spec_hooks_010.md) |
 | `[[mcp.servers]]` | `name, command, args, env, url, tools, auto_approve, sandbox, prefix, agents, timeout_seconds` | | |
 | `[pricing."<model>"]` | `input_per_mtok, output_per_mtok, cached_input_per_mtok, cache_write_per_mtok` | built-ins below | |
+| `[search_pricing."<provider>"]` | `per_1k_queries` | `google` 14 | [spec_web_008](spec_web_008.md) WEB-15; not from a project |
 | `[agent_models]` | `agent = "provider/model"` | | |
 | `[model_settings."<model>"]` | `temperature, max_tokens, top_p, seed, reasoning_effort, thinking_budget` | | `reasoning_effort`: `minimal\|low\|medium\|high\|max`; `thinking_budget` ≥ 0 |
 

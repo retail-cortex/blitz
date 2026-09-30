@@ -38,6 +38,7 @@ Args `query`, `max_results?` (default `web.search_max_results` or 5, max 20). Re
 - **WEB-12** The agent's query leaves the machine, so it needs approval (kind `network`, key `search:<provider>`, target = provider).
 - **WEB-13** Results: non-http(s) and denied domains dropped; titles ellipsized to 200; snippets HTML-stripped and ellipsized to 400; response body capped at 2 MiB. Errors: 401/403 "authentication failed", 429 "rate limited", other "HTTP n: <body…>".
 - **WEB-14** Refused without network access; empty query is an error.
+- **WEB-15** Google bills each search query Gemini runs for a grounded answer: the count (the grounding metadata's `webSearchQueries`) goes into the session's usage for `web_search` (the tool call's session, or its owner's) and `/search web` (the active session), priced by `[search_pricing."<provider>"] per_1k_queries` (default `google` $14 per 1,000, the published rate past the free tier) and saved with the session. `/cost` shows it on a line of its own ("Web searches: 3 queries, estimated $0.0420"); it is never part of the token cost (`Usage.SearchQueries`, `SearchCostUSD`; the service's `Usage.search_queries`, `search_cost_usd`). The Gemini tokens the grounded call itself uses aren't counted (BL-WEB-01).
 
 ## 4. User searches
 
