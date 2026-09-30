@@ -28,9 +28,11 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploghttp"
+	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
 	logglobal "go.opentelemetry.io/otel/log/global"
 	sdklog "go.opentelemetry.io/otel/sdk/log"
+	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
@@ -67,6 +69,7 @@ var contentKeys = map[attribute.Key]bool{
 type Telemetry struct {
 	tp *sdktrace.TracerProvider
 	lp *sdklog.LoggerProvider
+	mp *sdkmetric.MeterProvider // nil without a metric exporter
 }
 
 // StartTelemetry installs global trace and log providers exporting over
@@ -101,7 +104,17 @@ func StartTelemetry(ctx context.Context, cfg config.TelemetryConfig, version str
 	if err != nil {
 		return nil, err
 	}
-	return NewTelemetry(cfg, version, r, spanExp, logExp), nil
+	var metricOpts []otlpmetrichttp.Option
+	if ep := endpointFor(cfg.Endpoint, "METRICS"); ep != "" {
+		metricOpts = append(metricOpts, otlpmetrichttp.WithEndpointURL(ep+"/v1/metrics"))
+	}
+	metricExp, err := otlpmetrichttp.New(ctx, metricOpts...)
+	if err != nil {
+		return nil, err
+	}
+	t := NewTelemetry(cfg, version, r, spanExp, logExp)
+	t.StartMetrics(sdkmetric.NewPeriodicReader(metricExp, sdkmetric.WithInterval(metricInterval)))
+	return t, nil
 }
 
 // DefaultEndpoint is the OTLP/HTTP collector address from the OpenTelemetry
@@ -151,6 +164,22 @@ func NewTelemetry(cfg config.TelemetryConfig, version string, r *redact.Redactor
 	return t
 }
 
+// metricInterval is how often metrics are exported.
+const metricInterval = 30 * time.Second
+
+// StartMetrics installs the global meter provider, reading through reader
+// (a periodic OTLP export, or a manual reader in tests). Call it before
+// anything is recorded: instruments bind to the provider in place at
+// their first use.
+func (t *Telemetry) StartMetrics(reader sdkmetric.Reader) {
+	if t == nil {
+		return
+	}
+	res := resource.NewSchemaless(attribute.String("service.name", ServiceName))
+	t.mp = sdkmetric.NewMeterProvider(sdkmetric.WithResource(res), sdkmetric.WithReader(reader))
+	otel.SetMeterProvider(t.mp)
+}
+
 // LogHandler returns an slog handler that sends records to the collector,
 // or nil when telemetry is off.
 func (t *Telemetry) LogHandler() slog.Handler {
@@ -165,7 +194,11 @@ func (t *Telemetry) Flush(ctx context.Context) error {
 	if t == nil {
 		return nil
 	}
-	return errors.Join(t.tp.ForceFlush(ctx), t.lp.ForceFlush(ctx))
+	err := errors.Join(t.tp.ForceFlush(ctx), t.lp.ForceFlush(ctx))
+	if t.mp != nil {
+		err = errors.Join(err, t.mp.ForceFlush(ctx))
+	}
+	return err
 }
 
 // Shutdown flushes pending spans and logs, waiting at most a few seconds.
@@ -175,7 +208,11 @@ func (t *Telemetry) Shutdown(ctx context.Context) error {
 	}
 	ctx, cancel := context.WithTimeout(ctx, shutdownTimeout)
 	defer cancel()
-	return errors.Join(t.tp.Shutdown(ctx), t.lp.Shutdown(ctx))
+	err := errors.Join(t.tp.Shutdown(ctx), t.lp.Shutdown(ctx))
+	if t.mp != nil {
+		err = errors.Join(err, t.mp.Shutdown(ctx))
+	}
+	return err
 }
 
 // filterExporter removes (or, with capture on, masks secrets in) content

@@ -103,12 +103,14 @@ Go modules linked into blitz, blitzd and the desktop app
   go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.70.0 Apache-2.0
   go.opentelemetry.io/otel v1.46.0                               Apache-2.0
   go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploghttp v0.22.0 Apache-2.0
+  go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp v1.46.0 Apache-2.0
   go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.46.0      Apache-2.0
   go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp v1.46.0 Apache-2.0
   go.opentelemetry.io/otel/log v0.22.0                           Apache-2.0
   go.opentelemetry.io/otel/metric v1.46.0                        Apache-2.0
   go.opentelemetry.io/otel/sdk v1.46.0                           Apache-2.0
   go.opentelemetry.io/otel/sdk/log v0.22.0                       Apache-2.0
+  go.opentelemetry.io/otel/sdk/metric v1.46.0                    Apache-2.0
   go.opentelemetry.io/otel/trace v1.46.0                         Apache-2.0
   go.opentelemetry.io/proto/otlp v1.11.0                         Apache-2.0
   go.yaml.in/yaml/v4 v4.0.0-rc.2                                 Apache-2.0
@@ -2045,6 +2047,11 @@ go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploghttp v0.22.0
 
 Licensed under the Apache License 2.0 (printed at the end).
 
+go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp v1.46.0
+-------------------------------------------------------------------------
+
+Licensed under the Apache License 2.0 (printed at the end).
+
 go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.46.0
 ---------------------------------------------------------
 
@@ -2072,6 +2079,11 @@ Licensed under the Apache License 2.0 (printed at the end).
 
 go.opentelemetry.io/otel/sdk/log v0.22.0
 ----------------------------------------
+
+Licensed under the Apache License 2.0 (printed at the end).
+
+go.opentelemetry.io/otel/sdk/metric v1.46.0
+-------------------------------------------
 
 Licensed under the Apache License 2.0 (printed at the end).
 

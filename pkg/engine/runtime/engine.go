@@ -715,6 +715,7 @@ func (e *Engine) afterTool(ctx agent.Context, t tool.Tool, args, result map[stri
 	} else if msg, _ := result["error"].(string); msg != "" {
 		entry.Decision, entry.Error = "error", msg
 	}
+	observability.RecordToolCall(ctx, t.Name(), entry.Decision)
 	e.toolReg.Hooks().Audit().Log(entry)
 	out := result
 	changed := false

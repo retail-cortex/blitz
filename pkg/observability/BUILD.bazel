@@ -19,6 +19,7 @@ go_library(
     srcs = [
         "logfile.go",
         "logread.go",
+        "metrics.go",
         "span.go",
         "telemetry.go",
     ],
@@ -33,12 +34,15 @@ go_library(
         "@io_opentelemetry_go_otel//codes",
         "@io_opentelemetry_go_otel//propagation",
         "@io_opentelemetry_go_otel_exporters_otlp_otlplog_otlploghttp//:otlploghttp",
+        "@io_opentelemetry_go_otel_exporters_otlp_otlpmetric_otlpmetrichttp//:otlpmetrichttp",
         "@io_opentelemetry_go_otel_exporters_otlp_otlptrace_otlptracehttp//:otlptracehttp",
         "@io_opentelemetry_go_otel_log//global",
+        "@io_opentelemetry_go_otel_metric//:metric",
         "@io_opentelemetry_go_otel_sdk//resource",
         "@io_opentelemetry_go_otel_sdk//trace",
         "@io_opentelemetry_go_otel_sdk//trace/tracetest",
         "@io_opentelemetry_go_otel_sdk_log//:log",
+        "@io_opentelemetry_go_otel_sdk_metric//:metric",
         "@io_opentelemetry_go_otel_trace//:trace",
     ],
 )
@@ -47,6 +51,7 @@ go_test(
     name = "observability_test",
     srcs = [
         "logread_test.go",
+        "metrics_test.go",
         "observability_test.go",
     ],
     embed = [":observability"],
@@ -59,6 +64,8 @@ go_test(
         "@io_opentelemetry_go_otel_sdk//trace",
         "@io_opentelemetry_go_otel_sdk//trace/tracetest",
         "@io_opentelemetry_go_otel_sdk_log//:log",
+        "@io_opentelemetry_go_otel_sdk_metric//:metric",
+        "@io_opentelemetry_go_otel_sdk_metric//metricdata",
         "@io_opentelemetry_go_otel_trace//:trace",
     ],
 )

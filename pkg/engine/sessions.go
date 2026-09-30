@@ -23,6 +23,7 @@ import (
 
 	"github.com/retail-cortex/blitz/pkg/engine/session"
 	"github.com/retail-cortex/blitz/pkg/engine/tools"
+	"github.com/retail-cortex/blitz/pkg/observability"
 )
 
 // Saved sessions: listing, starting, resuming, snapshots and renaming.
@@ -96,6 +97,7 @@ func (w *Workspace) switched(prev *session.SessionRecord, id, endReason, startRe
 // sessionStarted runs session_start hooks and keeps what they give as
 // context for the session's next prompt.
 func (w *Workspace) sessionStarted(id, reason string) {
+	observability.RecordSession(context.Background(), reason)
 	out := w.tools.ScriptHooks().Run(context.Background(), "session_start", "", tools.HookEvent{SessionID: id, Reason: reason})
 	if out.Context == "" {
 		return

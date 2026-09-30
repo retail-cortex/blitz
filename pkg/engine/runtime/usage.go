@@ -15,12 +15,14 @@
 package runtime
 
 import (
+	"context"
 	"strings"
 	"sync"
 
 	"github.com/retail-cortex/blitz/pkg/api"
 
 	"github.com/retail-cortex/blitz/pkg/config"
+	"github.com/retail-cortex/blitz/pkg/observability"
 	"google.golang.org/genai"
 )
 
@@ -96,6 +98,7 @@ func (t *UsageTracker) Record(session, model string, m *genai.GenerateContentRes
 // RecordWrites is Record with a count of cache-write tokens.
 func (t *UsageTracker) RecordWrites(session, model string, m *genai.GenerateContentResponseUsageMetadata, cacheWrites int64) api.Usage {
 	u := t.Estimate(model, m, cacheWrites)
+	observability.RecordTokens(context.Background(), model, u.Input, u.Output, u.Cached, u.CostUSD, u.Priced)
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	s := t.sessions[session]

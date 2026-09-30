@@ -331,6 +331,7 @@ func (h *Hooks) Approve(ctx context.Context, req api.ApprovalRequest) error {
 			kind = audit.KindDenial
 		}
 		log.Log(audit.Entry{Kind: kind, Tool: req.Tool, Detail: req.Detail, Decision: decision})
+		observability.RecordApproval(ctx, string(req.Kind), decision)
 	}
 
 	switch {

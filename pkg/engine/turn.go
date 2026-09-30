@@ -32,6 +32,7 @@ import (
 	"github.com/retail-cortex/blitz/pkg/engine/tools"
 	"github.com/retail-cortex/blitz/pkg/i18n"
 	"github.com/retail-cortex/blitz/pkg/images"
+	"github.com/retail-cortex/blitz/pkg/observability"
 	"github.com/retail-cortex/blitz/pkg/textutil"
 	adksession "google.golang.org/adk/v2/session"
 )
@@ -52,7 +53,25 @@ func (w *Workspace) Run(ctx context.Context, sessionID string, t api.Turn, on fu
 	// Plan permission mode, and plan_review = always, plan every prompt
 	// first; side questions and read-only turns are read-only already.
 	planEvery := w.tools.Hooks().Mode() == api.ModePlan || w.cfg.Blitz.PlanReview == config.PlanReviewAlways
-	return w.run(ctx, sessionID, turn{Turn: t, planMode: planEvery && !t.Plan && !t.Aside && t.ReadOnly == ""}, on, w.storage, opts...)
+	res, err := w.run(ctx, sessionID, turn{Turn: t, planMode: planEvery && !t.Plan && !t.Aside && t.ReadOnly == ""}, on, w.storage, opts...)
+	observability.RecordTurn(ctx, w.engine.ActiveAgent(), turnOutcome(err))
+	return res, err
+}
+
+// turnOutcome names how a turn ended, for metrics.
+func turnOutcome(err error) string {
+	var blocked *api.BlockedError
+	switch {
+	case err == nil:
+		return "ok"
+	case errors.As(err, &blocked):
+		return "blocked"
+	case api.IsLimit(err):
+		return "limit"
+	case errors.Is(err, context.Canceled):
+		return "cancelled"
+	}
+	return "error"
 }
 
 // turn is a turn as the engine runs it.
