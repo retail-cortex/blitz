@@ -77,7 +77,7 @@ Suggested order (from NEXT_STEPS): run the manual checks (§9) first — their f
 
 ### 5.2 Steer messages at the end of a remote turn — S
 **Extends** [spec_client_022](spec_client_022.md) CL-05. Attached, `OnFinished` runs after the service already collected unread steer messages, so a message typed in that instant waits for the agent's next turn instead of being sent as the follow-up turn.
-- **BL-SVC-10** A steer message accepted after the service collected the leftovers is returned to the client (e.g. in `SteerResponse` as "too late: send as the next turn"), and the REPL and the app send it as the next turn, as they do locally.
+- **BL-SVC-10** ✅ *Done 2026-09-30 ([spec_engine_016](spec_engine_016.md) ENG-42), locally too.* A steer message accepted after the service collected the leftovers is returned to the client (e.g. in `SteerResponse` as "too late: send as the next turn"), and the REPL and the app send it as the next turn, as they do locally.
 
 ### 5.3 Worker run notifications — S
 **Extends** [spec_workers_023](spec_workers_023.md). Scheduled runs are unattended and silent; a failed or limited run is only visible with `blitz workers runs`.
