@@ -281,9 +281,10 @@ type AnthropicConfig struct {
 	// Model is the Claude model to use.
 	Model   string `toml:"model"`
 	BaseURL string `toml:"base_url"` // for gateways/proxies; empty uses the API default
-	// Fallbacks controls server-side refusal fallback on models that support
-	// it (claude-opus-5, claude-fable-5*): "default" routes by refusal
-	// category, a model ID pins one fallback model, "off" disables it.
+	// Fallbacks controls refusal fallback: server-side on models that
+	// support it (claude-opus-5, claude-fable-5*), where "default" routes
+	// by refusal category; client-side on Vertex AI, where "default" is
+	// claude-opus-4-8. A model ID pins one fallback model; "off" disables it.
 	Fallbacks string `toml:"fallbacks"`
 }
 

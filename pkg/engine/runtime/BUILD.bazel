@@ -73,6 +73,7 @@ go_library(
         "@com_github_anthropics_anthropic_sdk_go//bedrock",
         "@com_github_anthropics_anthropic_sdk_go//config",
         "@com_github_anthropics_anthropic_sdk_go//foundry",
+        "@com_github_anthropics_anthropic_sdk_go//lib/betafallback",
         "@com_github_anthropics_anthropic_sdk_go//option",
         "@com_github_anthropics_anthropic_sdk_go//packages/param",
         "@com_github_anthropics_anthropic_sdk_go//shared/constant",

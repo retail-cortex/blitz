@@ -24,16 +24,19 @@ import (
 	"iter"
 	"net/http"
 	"strings"
+	"sync"
 
 	"cloud.google.com/go/auth/oauth2adapt"
 	"github.com/anthropics/anthropic-sdk-go"
 	anthropicconfig "github.com/anthropics/anthropic-sdk-go/config"
+	"github.com/anthropics/anthropic-sdk-go/lib/betafallback"
 	"github.com/anthropics/anthropic-sdk-go/option"
 	"github.com/anthropics/anthropic-sdk-go/packages/param"
 	"github.com/anthropics/anthropic-sdk-go/shared/constant"
 	"github.com/anthropics/anthropic-sdk-go/vertex"
 	"github.com/retail-cortex/blitz/pkg/config"
 	"google.golang.org/adk/v2/model"
+	adksession "google.golang.org/adk/v2/session"
 	"google.golang.org/genai"
 )
 
@@ -53,18 +56,66 @@ type anthropicModel struct {
 	client    anthropic.Client
 	name      string
 	fallbacks string // "default", "off", or a model ID
+	// clientFallback: refusals are retried client-side (Vertex AI, which
+	// has no server-side fallback), each session keeping the model that
+	// accepted in its own state.
+	clientFallback bool
+	states         sync.Map // session ID → *betafallback.BetaFallbackState
+}
+
+// defaultClientFallback is the fallback for fallbacks = "default" where
+// it's done client-side: the Opus before Claude 5, which the server's
+// default chain also falls back to.
+const defaultClientFallback = "claude-opus-4-8"
+
+// clientFallbackChain is the client-side chain for a fallbacks setting on
+// model name: none when off, or when it would fall back to itself.
+func clientFallbackChain(fb, name string) []anthropic.BetaFallbackParam {
+	switch fb {
+	case "off":
+		return nil
+	case "default":
+		fb = defaultClientFallback
+	}
+	if fb == "" || fb == name {
+		return nil
+	}
+	return []anthropic.BetaFallbackParam{{Model: fb}}
+}
+
+// fallbackState is the client-side fallback state of ctx's session (the
+// ADK passes the invocation to the model), so a session that fell back
+// stays on the fallback, and other sessions don't.
+func (m *anthropicModel) fallbackState(ctx context.Context) option.RequestOption {
+	id := ""
+	if c, ok := ctx.(interface{ Session() adksession.Session }); ok && c.Session() != nil {
+		id = c.Session().ID()
+	}
+	st, _ := m.states.LoadOrStore(id, &betafallback.BetaFallbackState{})
+	return betafallback.WithBetaFallbackState(st.(*betafallback.BetaFallbackState))
+}
+
+// requestOptions are a call's options: the session's fallback state when
+// refusals are retried client-side.
+func (m *anthropicModel) requestOptions(ctx context.Context) []option.RequestOption {
+	if !m.clientFallback {
+		return nil
+	}
+	return []option.RequestOption{m.fallbackState(ctx)}
 }
 
 // newAnthropicModel builds the adapter. With auth = "oauth" it uses an `ant
 // auth login` profile (the one named, else ant's active one) and nothing
 // from the environment, so a stray ANTHROPIC_API_KEY can't take its place.
 // With auth = "adc" it runs on Vertex AI with Application Default
-// Credentials, where server-side refusal fallback doesn't exist (so it's
-// off). Otherwise, with no api_key the SDK resolves credentials itself
+// Credentials, where server-side refusal fallback doesn't exist: refusals
+// are retried client-side instead (the SDK's betafallback middleware, a
+// state per session). Otherwise, with no api_key the SDK resolves credentials itself
 // (ANTHROPIC_API_KEY, ANTHROPIC_AUTH_TOKEN, `ant auth login` profiles,
 // workload identity).
 func newAnthropicModel(ctx context.Context, cfg config.AnthropicConfig, name string, opts ...option.RequestOption) (*anthropicModel, error) {
 	fb := cmp.Or(cfg.Fallbacks, "default")
+	clientFB := false
 	switch cfg.Auth {
 	case "", config.AuthAPIKey:
 		switch {
@@ -95,6 +146,12 @@ func newAnthropicModel(ctx context.Context, cfg config.AnthropicConfig, name str
 		if err != nil {
 			return nil, err
 		}
+		// The fallback wraps Vertex's middleware, which moves the model
+		// from the body into the path: a retry's model must reach it.
+		if chain := clientFallbackChain(fb, cmp.Or(name, DefaultAnthropicModel)); chain != nil {
+			opts = append(opts, option.WithMiddleware(betafallback.BetaRefusalFallbackMiddleware(chain)))
+			clientFB = true
+		}
 		opts = append(opts, vertexOpts...)
 		fb = "off"
 	default:
@@ -106,7 +163,7 @@ func newAnthropicModel(ctx context.Context, cfg config.AnthropicConfig, name str
 	if name == "" {
 		name = DefaultAnthropicModel
 	}
-	return &anthropicModel{client: anthropic.NewClient(opts...), name: name, fallbacks: fb}, nil
+	return &anthropicModel{client: anthropic.NewClient(opts...), name: name, fallbacks: fb, clientFallback: clientFB}, nil
 }
 
 // claudeOnVertex are the client options for Claude on Vertex AI: the
@@ -153,7 +210,7 @@ func (m *anthropicModel) GenerateContent(ctx context.Context, req *model.LLMRequ
 			return
 		}
 		if !stream {
-			msg, err := m.client.Beta.Messages.New(ctx, params)
+			msg, err := m.client.Beta.Messages.New(ctx, params, m.requestOptions(ctx)...)
 			if err != nil {
 				yield(nil, anthropicError(err))
 				return
@@ -162,7 +219,7 @@ func (m *anthropicModel) GenerateContent(ctx context.Context, req *model.LLMRequ
 			return
 		}
 
-		s := m.client.Beta.Messages.NewStreaming(ctx, params)
+		s := m.client.Beta.Messages.NewStreaming(ctx, params, m.requestOptions(ctx)...)
 		defer s.Close()
 		var msg anthropic.BetaMessage
 		for s.Next() {

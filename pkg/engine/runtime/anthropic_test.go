@@ -337,6 +337,94 @@ func TestClaudeOnVertex(t *testing.T) {
 	}
 }
 
+// sessionCtx is a model call's context as the ADK makes it: it names the
+// session.
+type sessionCtx struct {
+	context.Context
+	id string
+}
+
+func (c sessionCtx) Session() session.Session { return fakeSession{id: c.id} }
+
+type fakeSession struct {
+	session.Session
+	id string
+}
+
+func (s fakeSession) ID() string { return s.id }
+
+// On Vertex AI a refusal is retried client-side on the fallback model
+// (BL-ENG-22), and the session that fell back stays on it.
+func TestClaudeOnVertexFallsBackClientSide(t *testing.T) {
+	t.Setenv("GOOGLE_CLOUD_PROJECT", "")
+	fakeADC(t, nil)
+	var paths []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		paths = append(paths, r.URL.Path)
+		w.Header().Set("Content-Type", "application/json")
+		if strings.Contains(r.URL.Path, "/models/claude-opus-5:") {
+			io.WriteString(w, `{"id":"msg_r","type":"message","role":"assistant","model":"claude-opus-5","content":[],"stop_reason":"refusal","stop_sequence":null,"stop_details":{"type":"refusal","category":null,"explanation":null,"fallback_credit_token":null,"recommended_model":null},"usage":{"input_tokens":1,"output_tokens":1}}`)
+			return
+		}
+		io.WriteString(w, message("end_turn", `{"type":"text","text":"answered"}`))
+	}))
+	defer srv.Close()
+	pol := retryPolicy{maxRetries: 0, stall: time.Minute}
+	tests := []struct {
+		name, fallbacks, want string
+	}{
+		{"default", "", "claude-opus-4-8"},
+		{"a model", "claude-sonnet-5-5", "claude-sonnet-5-5"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			paths = nil
+			cfg := config.AnthropicConfig{Auth: config.AuthADC, ProjectID: "p", BaseURL: srv.URL, Fallbacks: tt.fallbacks}
+			m := mustAnthropicModel(t, cfg, "claude-opus-5", pol.anthropicOptions()...)
+			req := &model.LLMRequest{Contents: []*genai.Content{userText("hi")}}
+			var text string
+			for resp, err := range m.GenerateContent(sessionCtx{context.Background(), "s1"}, req, false) {
+				require.NoError(t, err)
+				text += contentText(resp.Content)
+			}
+			assert.Equal(t, "answered", text)
+			require.Len(t, paths, 2)
+			assert.Contains(t, paths[1], "/models/"+tt.want+":")
+			// The session stays on the fallback; another starts on the primary.
+			for range m.GenerateContent(sessionCtx{context.Background(), "s1"}, req, false) {
+			}
+			assert.Contains(t, paths[2], "/models/"+tt.want+":")
+			for range m.GenerateContent(sessionCtx{context.Background(), "s2"}, req, false) {
+			}
+			assert.Contains(t, paths[3], "/models/claude-opus-5:")
+		})
+	}
+
+	m := mustAnthropicModel(t, config.AnthropicConfig{Auth: config.AuthADC, ProjectID: "p", BaseURL: srv.URL, Fallbacks: "off"}, "claude-opus-5", pol.anthropicOptions()...)
+	assert.False(t, m.clientFallback, "off")
+}
+
+func TestClientFallbackChain(t *testing.T) {
+	tests := []struct {
+		fb, name string
+		want     []string
+	}{
+		{"off", "claude-opus-5", nil},
+		{"default", "claude-opus-5", []string{"claude-opus-4-8"}},
+		{"default", "claude-opus-4-8", nil},
+		{"claude-sonnet-5-5", "claude-opus-5", []string{"claude-sonnet-5-5"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.fb+" "+tt.name, func(t *testing.T) {
+			var got []string
+			for _, f := range clientFallbackChain(tt.fb, tt.name) {
+				got = append(got, f.Model)
+			}
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
 func TestAnthropicResponseConversion(t *testing.T) {
 	_, opts := newFake(t,
 		jsonReply(message("tool_use", `{"type":"thinking","thinking":"hmm","signature":"sig-9"},{"type":"text","text":"Checking."},{"type":"tool_use","id":"toolu_1","name":"list_files","input":{"recursive":true}}`)),
