@@ -41,6 +41,7 @@ func TestProcessNotices(t *testing.T) {
 	w.turnsMu.Lock()
 	w.inTurn[s.ID]++
 	w.turnsMu.Unlock()
+	w.engine.OpenSteers(s.ID)
 	w.processNotice(s.ID, "Background process 3 (`test`) exited with code 1")
 	assert.Equal(t, []string{"(background process) Background process 3 (`test`) exited with code 1"}, w.engine.TakeSteers(s.ID), "during a turn: a steer")
 	assert.Empty(t, w.TakeProcessNotices(s.ID))

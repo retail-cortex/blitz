@@ -166,6 +166,8 @@ export function Conversation({
   const [forceRewind, setForceRewind] = useState<{ index: number; mode: string; error: string } | null>(null);
   const abort = useRef<AbortController | null>(null);
   const following = useRef(""); // the background run the turn view follows
+  const late = useRef<string[]>([]); // steer messages the turn was too late for
+  const latestRunning = useRef(false);
   const finished = useRef<Promise<void>>(Promise.resolve());
   const scroller = useRef<HTMLDivElement>(null);
   const stick = useRef(true);
@@ -268,6 +270,7 @@ export function Conversation({
           },
         ]);
       setRunning(true);
+      latestRunning.current = true;
       started.current = Date.now();
       setError("");
       setTurnUsage("");
@@ -340,6 +343,8 @@ export function Conversation({
       onSettingsChanged(); // an approved plan may have left plan mode
       // Steer messages sent after the agent's last tool call were never
       // read: they are the next turn (unless the turn was stopped).
+      leftover = [...leftover, ...late.current.splice(0)];
+      latestRunning.current = false;
       if (leftover.length > 0 && !ctl.signal.aborted) run(leftover.join("\n\n"), { accepted: true });
     },
     [dir, session, refreshList, fail, onSettingsChanged, tell, name],
@@ -420,7 +425,12 @@ export function Conversation({
       await sessions.steer({ workspace: dir, sessionId: session!.id, text });
       setEntries((e) => [...e, { kind: "user", text, sub: "steer" }]);
     } catch (e) {
-      fail(e);
+      // The turn ended as it was sent: it's recorded, and goes as the next
+      // turn, with the unread ones (BL-SVC-10).
+      if (reason(e) !== "STEER_TOO_LATE") return fail(e);
+      setEntries((x) => [...x, { kind: "user", text, sub: "steer" }]);
+      if (latestRunning.current) late.current.push(text);
+      else run(text, { accepted: true });
     }
   };
 

@@ -169,6 +169,10 @@ func (w *Workspace) run(ctx context.Context, sessionID string, t turn, on func(a
 		}
 		w.turnStarted(sessionID)
 		defer w.turnEnded(sessionID)
+		// Steer messages are taken from here until the leftovers are
+		// collected (or the turn ends otherwise).
+		w.engine.OpenSteers(sessionID)
+		defer w.engine.CloseSteers(sessionID)
 	}
 	// After recording: a front end may take steer messages from here on,
 	// and they must follow the prompt in the transcript.
@@ -294,7 +298,7 @@ func (w *Workspace) run(ctx context.Context, sessionID string, t turn, on func(a
 		if res.Output != "" {
 			w.recordIn(st, sessionID, on, "model", res.Output)
 		}
-		res.Leftover = w.engine.TakeSteers(sessionID)
+		res.Leftover = w.engine.CloseSteers(sessionID)
 	}
 	return res, err
 }
@@ -308,8 +312,9 @@ func (w *Workspace) Steer(ctx context.Context, sessionID, text string) error {
 		return err
 	}
 	w.appendIn(w.storage, sessionID, nil, session.Message{Role: "user", Content: text, Kind: session.KindSteer})
-	w.engine.Steer(sessionID, withHookContext(text, "prompt_submit", hookContext))
-	return nil
+	// Too late (the turn collected its unread messages, or none runs): the
+	// caller sends it as the next prompt, already recorded (BL-SVC-10).
+	return w.engine.Steer(sessionID, withHookContext(text, "prompt_submit", hookContext))
 }
 
 // maxStopContinues bounds how often stop hooks can make one prompt go on.

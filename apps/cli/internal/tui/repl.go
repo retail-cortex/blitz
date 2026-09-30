@@ -471,6 +471,15 @@ func runTurn(ctx context.Context, app *App, sessionID, line string, interrupts <
 		defer ih.SetInterruptHandler(nil)
 	}
 	stopSteering := func() {}
+	// Messages typed as the turn ended, too late for it: the next turn,
+	// with the unread ones (BL-SVC-10).
+	var late []string
+	var lateMu sync.Mutex
+	onLate := func(text string) {
+		lateMu.Lock()
+		defer lateMu.Unlock()
+		late = append(late, text)
+	}
 	started := time.Now()
 	turnStart.Store(started.UnixNano())
 	defer turnStart.Store(0)
@@ -493,7 +502,7 @@ func runTurn(ctx context.Context, app *App, sessionID, line string, interrupts <
 			fmt.Println()
 			printer.Begin()
 			if !o.aside {
-				stopSteering = watchSteering(turnCtx, app, sessionID, printer)
+				stopSteering = watchSteering(turnCtx, app, sessionID, printer, onLate)
 			}
 		},
 		// Waits for a message being typed, so it is sent rather than lost.
@@ -525,6 +534,9 @@ func runTurn(ctx context.Context, app *App, sessionID, line string, interrupts <
 	fmt.Println()
 
 	// Messages sent after the model's last tool call were never read.
+	lateMu.Lock()
+	res.Leftover = append(res.Leftover, late...)
+	lateMu.Unlock()
 	if len(res.Leftover) > 0 {
 		text := strings.Join(res.Leftover, "\n\n")
 		if turnInterrupted {
@@ -545,7 +557,10 @@ type steerInput interface {
 // watchSteering lets the user type a message while the turn runs. Output
 // is held back while they type. An accepted message is queued for the
 // agent, which reads it with its next tool result (see app.Workspace.Steer).
-func watchSteering(ctx context.Context, app *App, sessionID string, printer *Printer) (stop func()) {
+//
+// A message the turn can no longer take (it just ended) goes to late, for
+// the next turn.
+func watchSteering(ctx context.Context, app *App, sessionID string, printer *Printer, late func(string)) (stop func()) {
 	in, ok := app.Input.(steerInput)
 	if !ok {
 		return func() {}
@@ -563,9 +578,13 @@ func watchSteering(ctx context.Context, app *App, sessionID string, printer *Pri
 			return
 		}
 		var blocked *api.BlockedError
-		if err := app.Workspace.Steer(ctx, sessionID, text); errors.As(err, &blocked) {
+		err = app.Workspace.Steer(ctx, sessionID, text)
+		if errors.As(err, &blocked) {
 			fmt.Printf("%s✗ %s%s\n", Red, i18n.T("repl.prompt_blocked", "reason", safe(blocked.Reason)), Reset)
 			return
+		}
+		if errors.Is(err, api.ErrSteerTooLate) {
+			late(text)
 		}
 		fmt.Printf("%s%s%s\n", Dim, i18n.T("steer.queued"), Reset)
 	})

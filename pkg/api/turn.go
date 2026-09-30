@@ -212,3 +212,8 @@ func InitPrompt() string {
 // ErrImagesDisabled is returned when [images] enabled = false (or the image
 // store could not be created).
 var ErrImagesDisabled = errors.New("image support is disabled")
+
+// ErrSteerTooLate refuses a steer message when no turn in the session
+// takes it (none runs, or it already collected the unread ones): send it
+// as the next prompt. The transcript has it already.
+var ErrSteerTooLate = errors.New("the turn has ended: send it as the next prompt")

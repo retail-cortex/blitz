@@ -48,6 +48,7 @@ var sentinels = map[string]error{
 	"INVALID_AGENCY":           api.ErrInvalidAgency,
 	"UNDO_CONFLICT":            api.ErrUndoConflict,
 	"NOTHING_TO_UNDO":          api.ErrNothingToUndo,
+	"STEER_TOO_LATE":           api.ErrSteerTooLate,
 	"SESSION_BUSY":             api.ErrSessionBusy,
 	"NOT_REWIND_POINT":         api.ErrNotRewindPoint,
 	"CANT_REWIND_CONVERSATION": api.ErrCantRewindConversation,

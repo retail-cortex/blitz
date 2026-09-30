@@ -17,6 +17,8 @@ package runtime
 import (
 	"maps"
 
+	"github.com/retail-cortex/blitz/pkg/api"
+
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/adk/v2/agent"
@@ -32,16 +34,46 @@ const SteerKey = "message_from_user"
 // session history in the place it arrived. Messages still queued when the
 // turn ends (the model made no further tool calls) are returned by
 // TakeSteers for the caller to send as the next prompt.
-func (e *Engine) Steer(sessionID, text string) {
+//
+// A session takes messages only while its turn runs (OpenSteers until
+// CloseSteers); otherwise the message would wait for a turn nobody starts,
+// so Steer refuses it with api.ErrSteerTooLate and the caller sends it as
+// the next prompt.
+func (e *Engine) Steer(sessionID, text string) error {
 	if sessionID == "" {
 		sessionID = "default"
 	}
 	e.steerMu.Lock()
 	defer e.steerMu.Unlock()
+	if !e.steering[sessionID] {
+		return api.ErrSteerTooLate
+	}
 	if e.steers == nil {
 		e.steers = map[string][]string{}
 	}
 	e.steers[sessionID] = append(e.steers[sessionID], text)
+	return nil
+}
+
+// OpenSteers makes sessionID take steer messages: its turn has started.
+func (e *Engine) OpenSteers(sessionID string) {
+	e.steerMu.Lock()
+	defer e.steerMu.Unlock()
+	if e.steering == nil {
+		e.steering = map[string]bool{}
+	}
+	e.steering[sessionID] = true
+}
+
+// CloseSteers stops sessionID taking steer messages and returns those no
+// tool result carried (the turn's leftovers).
+func (e *Engine) CloseSteers(sessionID string) []string {
+	e.steerMu.Lock()
+	defer e.steerMu.Unlock()
+	delete(e.steering, sessionID)
+	msgs := e.steers[sessionID]
+	delete(e.steers, sessionID)
+	return msgs
 }
 
 // TakeSteers removes and returns the messages queued for sessionID that no

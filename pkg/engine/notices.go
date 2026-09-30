@@ -26,8 +26,7 @@ const maxNotices = 50
 
 // processNotice delivers a notice for session.
 func (w *Workspace) processNotice(session, text string) {
-	if session != "" && w.busy(session) {
-		w.engine.Steer(session, "(background process) "+text)
+	if session != "" && w.busy(session) && w.engine.Steer(session, "(background process) "+text) == nil {
 		return
 	}
 	w.noticeMu.Lock()

@@ -206,6 +206,9 @@ type Engine struct {
 
 	steerMu sync.Mutex
 	steers  map[string][]string // session ID -> messages sent mid-turn
+	// steering are the sessions whose turn takes steer messages: from its
+	// start until it collects the unread ones (CloseSteers).
+	steering map[string]bool
 
 	notice     func(string)
 	settingsMu sync.RWMutex

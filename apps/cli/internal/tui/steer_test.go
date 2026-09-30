@@ -293,3 +293,14 @@ func TestREPLSteerGoesThroughPromptHooks(t *testing.T) {
 	got := fmt.Sprint(userMessages(local(app).Storage()))
 	require.NotContains(t, got, "hunter2", "blocked message recorded: %s", got)
 }
+
+// A message typed once the turn has collected its unread ones is too late
+// for it: it's recorded, and handed back for the next turn (BL-SVC-10).
+func TestREPLSteerTooLateIsHandedBack(t *testing.T) {
+	app, _ := newSteerApp(t, "one more thing", nil)
+	var late []string
+	stop := watchSteering(context.Background(), app, local(app).Storage().Active().ID, NewPrinter(PrinterOptions{Out: io.Discard}), func(s string) { late = append(late, s) })
+	stop()
+	assert.Equal(t, []string{"one more thing"}, late)
+	assert.Equal(t, "[one more thing]", fmt.Sprint(userMessages(local(app).Storage())), "recorded once")
+}

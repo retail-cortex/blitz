@@ -20,6 +20,8 @@ import (
 	"iter"
 	"testing"
 
+	"github.com/retail-cortex/blitz/pkg/api"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/adk/v2/model"
 	"google.golang.org/adk/v2/session"
@@ -57,6 +59,7 @@ func steerIn(cs []*genai.Content) []string {
 
 func steered(t *testing.T, f engineFixture, onCall func(n int)) {
 	t.Helper()
+	f.eng.OpenSteers("s") // the workspace opens it as the turn starts
 	require.NoError(t, f.eng.SetModel(context.Background(), &hookedLLM{MockLLM: f.llm, onCall: onCall}))
 }
 
@@ -130,7 +133,8 @@ func TestSteerWithoutFurtherToolCallsIsLeftForTheCaller(t *testing.T) {
 
 func TestSteerIsScopedToItsSession(t *testing.T) {
 	f := newEngineWith(t, fixtureOpts{}, toolCall("list_files", map[string]any{}), textContent("a"))
-	f.eng.Steer("other", "not for you")
+	f.eng.OpenSteers("other")
+	require.NoError(t, f.eng.Steer("other", "not for you"))
 	_, err := collect(t, f.eng, "s", "go")
 	require.NoError(t, err)
 	got := steerIn(f.llm.Requests[1].Contents)
@@ -141,7 +145,8 @@ func TestSteerIsScopedToItsSession(t *testing.T) {
 
 func TestSubagentToolsDoNotTakeTheParentsSteer(t *testing.T) {
 	f := newEngineWith(t, fixtureOpts{})
-	f.eng.Steer("s", "for the main agent")
+	f.eng.OpenSteers("s")
+	require.NoError(t, f.eng.Steer("s", "for the main agent"))
 	// Run a sub-agent inside a run of session "s"; its tool call must not
 	// consume the message.
 	sub := NewMockLLM("sub", toolCall("list_files", map[string]any{}), textContent("sub done"))
@@ -152,4 +157,16 @@ func TestSubagentToolsDoNotTakeTheParentsSteer(t *testing.T) {
 	left := f.eng.TakeSteers("s")
 	require.Len(t, left, 1, "sub-agent took the parent's steer: left %v", left)
 	require.NotContains(t, fmt.Sprint(steerIn(sub.Requests[len(sub.Requests)-1].Contents)), "main agent", "steer reached the sub-agent")
+}
+
+// A session takes steer messages only while its turn runs: before it and
+// once it collected the unread ones, they're refused (BL-SVC-10).
+func TestSteerOnlyWhileTheTurnTakesThem(t *testing.T) {
+	f := newEngineWith(t, fixtureOpts{})
+	assert.ErrorIs(t, f.eng.Steer("s", "early"), api.ErrSteerTooLate)
+	f.eng.OpenSteers("s")
+	require.NoError(t, f.eng.Steer("s", "in time"))
+	assert.Equal(t, []string{"in time"}, f.eng.CloseSteers("s"))
+	assert.ErrorIs(t, f.eng.Steer("s", "late"), api.ErrSteerTooLate)
+	assert.Empty(t, f.eng.CloseSteers("s"))
 }

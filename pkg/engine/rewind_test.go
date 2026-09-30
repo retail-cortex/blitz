@@ -62,7 +62,8 @@ func notes(t *testing.T, cfg *config.Config) string {
 
 func TestRewindPoints(t *testing.T) {
 	w, _, _, id := rewindSession(t)
-	require.NoError(t, w.Steer(context.Background(), id, "a steer message"))
+	// No turn runs: it's too late for one, but recorded (BL-SVC-10).
+	require.ErrorIs(t, w.Steer(context.Background(), id, "a steer message"), api.ErrSteerTooLate)
 	points, err := w.RewindPoints()
 	require.NoError(t, err)
 	require.Len(t, points, 2, "points %+v", points)

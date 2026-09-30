@@ -271,7 +271,7 @@ func TestRemoteRewind(t *testing.T) {
 	require.Equal(t, api.RewindConversation, res.Mode, "rewind %+v %v", res, err)
 	a, _ := r.ActiveSession()
 	assert.Equal(t, 2, a.MessageCount, "messages after rewinding: %d", a.MessageCount)
-	require.NoError(t, r.Steer(context.Background(), sess.ID, "a steer message"))
+	require.ErrorIs(t, r.Steer(context.Background(), sess.ID, "a steer message"), api.ErrSteerTooLate, "no turn runs")
 	a, _ = r.ActiveSession()
 	assert.Len(t, a.Messages, 3, "message kinds over the API: %+v", a.Messages)
 	assert.Equal(t, "", a.Messages[0].Kind, "message kinds over the API: %+v", a.Messages)
