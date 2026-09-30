@@ -157,7 +157,48 @@ type LLMConfig struct {
 	Gemini    GeminiConfig    `toml:"gemini"`
 	OpenAI    OpenAIConfig    `toml:"openai"`
 	Anthropic AnthropicConfig `toml:"anthropic"`
+	Bedrock   BedrockConfig   `toml:"bedrock"`
+	Azure     AzureConfig     `toml:"azure"`
 }
+
+// BedrockConfig holds settings for Claude on Amazon Bedrock. Credentials
+// come from AWS's standard chain: the environment, the shared config and
+// credentials files (Profile), SSO, and the instance or task role; or a
+// Bedrock API key in AWS_BEARER_TOKEN_BEDROCK.
+type BedrockConfig struct {
+	// Region is the AWS region (default: AWS_REGION, then the profile's).
+	Region string `toml:"region"`
+	// Profile is the AWS profile to use (default: AWS_PROFILE, "default").
+	Profile string `toml:"profile"`
+	// Model is the Bedrock model or inference profile ID, e.g.
+	// us.anthropic.claude-sonnet-4-5-20250929-v1:0.
+	Model string `toml:"model"`
+}
+
+// AzureConfig holds settings for models on Azure: OpenAI models through
+// Azure OpenAI's v1 API, and Claude through Microsoft Foundry (a model
+// whose name starts with "claude"). Model is the deployment name.
+type AzureConfig struct {
+	// Resource is the Azure resource name: <resource>.openai.azure.com
+	// and <resource>.services.ai.azure.com.
+	Resource string `toml:"resource"`
+	// BaseURL replaces the address made from Resource for OpenAI models
+	// (it ends in /openai/v1/), and AnthropicBaseURL for Claude (it ends in
+	// /anthropic/).
+	BaseURL          string `toml:"base_url"`
+	AnthropicBaseURL string `toml:"anthropic_base_url"`
+	// APIKey is the resource's key (default: AZURE_OPENAI_API_KEY, or
+	// ANTHROPIC_FOUNDRY_API_KEY for Claude). Auth "entra" uses Entra ID
+	// instead: Azure's credential chain (environment, workload and managed
+	// identity, the Azure CLI's login).
+	APIKey string `toml:"api_key"`
+	Auth   string `toml:"auth"`
+	// Model is the deployment to use.
+	Model string `toml:"model"`
+}
+
+// AuthEntra is Azure's Entra ID sign-in.
+const AuthEntra = "entra"
 
 // How a provider authenticates: an API key (the default, also for ""),
 // Google Cloud's Application Default Credentials (Gemini through Vertex
@@ -271,8 +312,12 @@ func (c *Config) ModelName() string {
 	switch strings.ToLower(c.LLM.Provider) {
 	case "openai", "ollama":
 		return c.LLM.OpenAI.Model
-	case "anthropic":
+	case "anthropic", "vertex-anthropic":
 		return c.LLM.Anthropic.Model
+	case "bedrock":
+		return c.LLM.Bedrock.Model
+	case "azure":
+		return c.LLM.Azure.Model
 	default:
 		return c.LLM.Gemini.Model
 	}

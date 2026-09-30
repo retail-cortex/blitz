@@ -627,6 +627,10 @@ func (c *Config) providerReady(ref string) bool {
 		return c.LLM.Anthropic.APIKey != "" || c.LLM.Anthropic.APIKeyCommand != ""
 	case "openai":
 		return c.LLM.OpenAI.APIKey != "" || c.LLM.OpenAI.APIKeyCommand != ""
+	case "bedrock":
+		return c.LLM.Bedrock.Model != "" || c.LLM.Bedrock.Region != ""
+	case "azure":
+		return c.LLM.Azure.Resource != "" || c.LLM.Azure.BaseURL != "" || c.LLM.Azure.AnthropicBaseURL != ""
 	}
 	return false
 }

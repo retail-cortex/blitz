@@ -133,6 +133,15 @@ func runDoctor(ctx context.Context, g *globalFlags, online bool) []check {
 		}
 	case cfg.LLM.Provider == "ollama":
 		add("credentials", statusOK, "ollama needs no API key (%s)", cfg.LLM.OpenAI.BaseURL)
+	case cfg.LLM.Provider == "bedrock":
+		add("credentials", statusOK, "AWS's credential chain, region %q%s", cfg.LLM.Bedrock.Region, confirm)
+	case cfg.LLM.Provider == "azure":
+		add("credentials", statusOK, "Azure resource %q, auth %q%s", cfg.LLM.Azure.Resource, cmp.Or(cfg.LLM.Azure.Auth, "api_key"), confirm)
+	case cfg.LLM.Provider == "vertex-anthropic":
+		st, detail := checkADC("anthropic", cfg.LLM.Anthropic.ProjectID, cfg.LLM.Anthropic.Location, confirm)
+		add("credentials", st, "Claude on Vertex AI, %s", detail)
+	case key == "" && keyCommandFor(cfg) != "":
+		add("credentials", statusOK, "the key comes from api_key_command%s", confirm)
 	case key == "":
 		add("credentials", statusFail, "no API key for provider %q", cfg.LLM.Provider)
 	default:
@@ -385,6 +394,19 @@ func checkADC(provider, project, location, confirm string) (checkStatus, string)
 		return statusOK, where + "gcloud's application-default login" + confirm
 	}
 	return statusWarn, where + "no credentials file; run `gcloud auth application-default login` unless this is a Google Cloud machine"
+}
+
+// keyCommandFor is the provider's api_key_command.
+func keyCommandFor(cfg *config.Config) string {
+	switch cfg.LLM.Provider {
+	case "openai":
+		return cfg.LLM.OpenAI.APIKeyCommand
+	case "anthropic":
+		return cfg.LLM.Anthropic.APIKeyCommand
+	case "gemini", "":
+		return cfg.LLM.Gemini.APIKeyCommand
+	}
+	return ""
 }
 
 func apiKeyFor(cfg *config.Config) string {

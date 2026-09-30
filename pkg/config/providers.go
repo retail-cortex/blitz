@@ -42,6 +42,18 @@ import (
 // KeyedProviders are the providers that take an API key.
 var KeyedProviders = []string{"gemini", "anthropic", "openai"}
 
+// CloudProviders are the providers whose credentials come from their
+// cloud's chain: Claude on Bedrock and on Vertex AI, and models on Azure.
+var CloudProviders = []string{"bedrock", "azure", "vertex-anthropic"}
+
+// ValidProvider reports whether p is a provider Blitz can use.
+func ValidProvider(p string) bool {
+	return p == "ollama" || knownProvider(p) || slices.Contains(CloudProviders, p)
+}
+
+// providerList names the providers, for errors.
+const providerList = "gemini, anthropic, openai, ollama, bedrock, azure or vertex-anthropic"
+
 // keyEnv are the environment variables each provider's key can come from.
 var keyEnv = map[string][]string{
 	"gemini":    {"GEMINI_API_KEY", "GOOGLE_API_KEY"},
@@ -375,8 +387,8 @@ func SetValue(prefixDir, workspace, key, value string) (string, error) {
 		sort.Strings(keys)
 		return "", fmt.Errorf("%q isn't one of the settings set this way (%s); edit the file for the rest", key, strings.Join(keys, ", "))
 	}
-	if key == "llm.provider" && value != "" && !knownProvider(value) && value != "ollama" {
-		return "", fmt.Errorf("unknown provider %q (gemini, anthropic, openai or ollama)", value)
+	if key == "llm.provider" && value != "" && !ValidProvider(value) {
+		return "", fmt.Errorf("unknown provider %q (%s)", value, providerList)
 	}
 	if provider, ok := strings.CutSuffix(strings.TrimPrefix(key, "llm."), ".auth"); ok {
 		if err := (ProviderAuth{Method: value}).check(provider); err != nil {
@@ -512,8 +524,8 @@ type ProviderChoice struct {
 // the file is written once. It returns the file written.
 func SetProvider(prefixDir, workspace string, c ProviderChoice) (string, error) {
 	c.Model, c.Key = strings.TrimSpace(c.Model), strings.TrimSpace(c.Key)
-	if c.Provider != "" && !knownProvider(c.Provider) && c.Provider != "ollama" {
-		return "", fmt.Errorf("unknown provider %q (gemini, anthropic, openai or ollama)", c.Provider)
+	if c.Provider != "" && !ValidProvider(c.Provider) {
+		return "", fmt.Errorf("unknown provider %q (%s)", c.Provider, providerList)
 	}
 	if (c.Key != "" || c.Auth != nil) && !knownProvider(c.Provider) {
 		return "", fmt.Errorf("choose a provider that takes an API key (%s) for the key or sign-in", strings.Join(KeyedProviders, ", "))

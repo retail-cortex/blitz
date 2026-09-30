@@ -46,6 +46,9 @@ func newModelsCommand(g *globalFlags) *cobra.Command {
 					fmt.Fprintf(out, "  can't list its models: %v\n\n", pm.Err)
 					continue
 				}
+				if pm.Note != "" {
+					fmt.Fprintf(out, "  (%s)\n", pm.Note)
+				}
 				tw := tabwriter.NewWriter(out, 2, 4, 2, ' ', 0)
 				for _, m := range pm.Models {
 					price := "-"

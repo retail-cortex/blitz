@@ -34,6 +34,8 @@ type ProviderModels struct {
 	Provider string
 	Models   []ListedModel
 	Err      error
+	// Note says what the list is when it isn't the provider's own.
+	Note string
 }
 
 // ListedModel is one of them, with the price Blitz knows for it.
@@ -62,6 +64,12 @@ func ConfiguredProviders(cfg *config.Config) []string {
 	if strings.EqualFold(cfg.LLM.Provider, "ollama") {
 		out = append(out, "ollama")
 	}
+	if cfg.LLM.Bedrock.Model != "" || strings.EqualFold(cfg.LLM.Provider, "bedrock") {
+		out = append(out, "bedrock")
+	}
+	if cfg.LLM.Azure.Resource != "" || cfg.LLM.Azure.BaseURL != "" || cfg.LLM.Azure.AnthropicBaseURL != "" {
+		out = append(out, "azure")
+	}
 	return out
 }
 
@@ -82,6 +90,9 @@ func ListModels(ctx context.Context, cfg *config.Config, providers ...string) []
 			ids, err := listProvider(lctx, cfg, p)
 			sort.Strings(ids)
 			pm := ProviderModels{Provider: p, Err: err}
+			if p == "bedrock" || p == "azure" {
+				pm.Note = "the configured model: " + p + "'s console lists the others"
+			}
 			for _, id := range ids {
 				m := ListedModel{ID: id}
 				if price, ok := prices.price(id); ok {
@@ -131,6 +142,10 @@ func listProvider(ctx context.Context, cfg *config.Config, provider string) ([]s
 			ids = append(ids, pager.Current().ID)
 		}
 		return ids, pager.Err()
+	case "bedrock":
+		return nonEmpty(cfg.LLM.Bedrock.Model), nil
+	case "azure":
+		return nonEmpty(cfg.LLM.Azure.Model), nil
 	case "openai", "ollama":
 		key, base, opts, err := openAIKey(ctx, cfg.LLM.OpenAI, provider, pol)
 		if err != nil {
@@ -151,10 +166,17 @@ func listProvider(ctx context.Context, cfg *config.Config, provider string) ([]s
 	return nil, errUnknownProvider(provider)
 }
 
+func nonEmpty(s string) []string {
+	if s == "" {
+		return nil
+	}
+	return []string{s}
+}
+
 type errUnknownProvider string
 
 func (e errUnknownProvider) Error() string {
-	return "unknown provider " + string(e) + " (gemini, anthropic, openai or ollama)"
+	return "unknown provider " + string(e) + " (gemini, anthropic, openai, ollama, bedrock or azure)"
 }
 
 func contains(list []string, v string) bool {

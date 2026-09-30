@@ -75,7 +75,10 @@ func NewModelRef(ctx context.Context, cfg *config.Config, ref string) (model.LLM
 }
 
 // knownProviders are the provider prefixes recognised in model references.
-var knownProviders = map[string]bool{"gemini": true, "anthropic": true, "openai": true, "ollama": true}
+var knownProviders = map[string]bool{
+	"gemini": true, "anthropic": true, "openai": true, "ollama": true,
+	"bedrock": true, "azure": true, "vertex-anthropic": true,
+}
 
 // ParseModelRef splits "provider/model" into its parts. Without a known
 // provider prefix the whole reference is a model of defaultProvider, so
@@ -177,6 +180,17 @@ func buildProviderModel(ctx context.Context, cfg *config.Config, provider, model
 
 	case "anthropic":
 		return newAnthropicModel(ctx, cfg.LLM.Anthropic, modelName, pol.anthropicOptions()...)
+
+	case "vertex-anthropic": // Claude on Vertex AI: [llm.anthropic] with adc
+		a := cfg.LLM.Anthropic
+		a.Auth = config.AuthADC
+		return newAnthropicModel(ctx, a, modelName, pol.anthropicOptions()...)
+
+	case "bedrock":
+		return newBedrockModel(ctx, cfg.LLM.Bedrock, modelName, pol.anthropicOptions()...)
+
+	case "azure":
+		return newAzureModel(ctx, cfg.LLM.Azure, modelName, pol)
 
 	case "":
 		// If Gemini key is set and provider is empty, try gemini, else fallback to openai/ollama
