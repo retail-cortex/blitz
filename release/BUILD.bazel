@@ -95,7 +95,7 @@ filegroup(
     visibility = ["//:__pkg__"],
 )
 
-# The archives carry the license files.
+# The archives carry the programs, blz and the license files.
 sh_test(
     name = "contents_test",
     srcs = ["contents_test.sh"],

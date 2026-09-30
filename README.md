@@ -18,7 +18,7 @@ Blitz reads your workspace, makes the change, checks it, and gets out of the way
 
 ## Install
 
-Download the archive for your platform from the [releases](https://github.com/retail-cortex/blitz/releases): macOS (`darwin_arm64`, `darwin_amd64`), Linux (`linux_amd64`, `linux_arm64`) or Windows (`windows_amd64`). Each holds `blitz`, `blitzd`, the `blz` shortcut and the license files; put its folder on your `PATH`. The desktop app is `Blitz_<version>_macos_universal.dmg`, or `blitz-desktop_<version>_<arch>.deb` for Ubuntu 24.04, Debian 13 and later.
+Download the archive for your platform from the [releases](https://github.com/retail-cortex/blitz/releases): macOS (`darwin_arm64`, `darwin_amd64`), Linux (`linux_amd64`, `linux_arm64`) or Windows (`windows_amd64`). Each holds `blitz`, `blitzd`, the `blz` shortcut (a link to `blitz`; not on Windows) and the license files; put its folder on your `PATH`. The desktop app is `Blitz_<version>_macos_universal.dmg`, or `blitz-desktop_<version>_<arch>.deb` for Ubuntu 24.04, Debian 13 and later.
 
 Verify a download against this repository's release workflow:
 
