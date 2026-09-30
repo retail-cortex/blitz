@@ -660,6 +660,22 @@ func (h workspaceService) TrustProject(ctx context.Context, r req[pb.TrustProjec
 	return ok(&pb.TrustProjectResponse{Reopened: reopened})
 }
 
+func (h workspaceService) ListHooks(ctx context.Context, r req[pb.ListHooksRequest]) (*connect.Response[pb.ListHooksResponse], error) {
+	w, err := h.s.workspace(ctx, r.Msg.Workspace)
+	if err != nil {
+		return nil, err
+	}
+	out := &pb.ListHooksResponse{}
+	for _, k := range w.ListHooks() {
+		m := &pb.Hook{Event: k.Event, Type: k.Type, Match: k.Match, If: k.If, Runs: k.Runs, Source: k.Source, FailClosed: k.FailClosed}
+		for _, f := range k.Failures {
+			m.Failures = append(m.Failures, &pb.HookFailure{Time: timestamppb.New(f.Time), Error: f.Error})
+		}
+		out.Hooks = append(out.Hooks, m)
+	}
+	return ok(out)
+}
+
 func (h workspaceService) ListNotes(ctx context.Context, r req[pb.ListNotesRequest]) (*connect.Response[pb.ListNotesResponse], error) {
 	w, err := h.s.workspace(ctx, r.Msg.Workspace)
 	if err != nil {

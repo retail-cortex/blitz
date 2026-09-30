@@ -42,11 +42,11 @@ func TestScriptHookBlocking(t *testing.T) {
 		{Match: "delete_*", Command: `echo '{"decision":"block","reason":"deletes need review"}'`},
 		{Match: "", Command: "exit 0"},
 	}})
-	r := h.PreTool(ctx, "s", "run_shell_command", nil)
+	r := h.PreTool(ctx, "s", "run_shell_command", nil).blockReason()
 	assert.Equal(t, "no shell today", r, "exit 2 block reason = %q", r)
-	r = h.PreTool(ctx, "s", "delete_file", nil)
+	r = h.PreTool(ctx, "s", "delete_file", nil).blockReason()
 	assert.Equal(t, "deletes need review", r, "JSON block reason = %q", r)
-	r = h.PreTool(ctx, "s", "read_file", nil)
+	r = h.PreTool(ctx, "s", "read_file", nil).blockReason()
 	assert.Equal(t, "", r, "unexpected block %q", r)
 }
 
@@ -74,16 +74,16 @@ func TestScriptHookFailures(t *testing.T) {
 	ctx := context.Background()
 	// Fail-open: error is warned about, action proceeds.
 	h, warnings := newHooks(t, config.HooksConfig{PreTool: []config.HookConfig{{Command: "exit 1"}}})
-	r := h.PreTool(ctx, "s", "x", nil)
+	r := h.PreTool(ctx, "s", "x", nil).blockReason()
 	assert.Equal(t, "", r, "fail-open: reason=%q warnings=%v", r, *warnings)
 	assert.Len(t, *warnings, 1, "fail-open: reason=%q warnings=%v", r, *warnings)
 	// Fail-closed: error blocks.
 	h, _ = newHooks(t, config.HooksConfig{PreTool: []config.HookConfig{{Command: "exit 1", FailClosed: true}}})
-	r = h.PreTool(ctx, "s", "x", nil)
+	r = h.PreTool(ctx, "s", "x", nil).blockReason()
 	assert.Contains(t, r, "fail_closed", "fail-closed reason = %q", r)
 	// Timeout counts as a failure.
 	h, warnings = newHooks(t, config.HooksConfig{PreTool: []config.HookConfig{{Command: "sleep 10", TimeoutSeconds: 1}}})
-	r = h.PreTool(ctx, "s", "x", nil)
+	r = h.PreTool(ctx, "s", "x", nil).blockReason()
 	assert.Equal(t, "", r, "timeout: reason=%q warnings=%v", r, *warnings)
 	assert.Len(t, *warnings, 1, "timeout: reason=%q warnings=%v", r, *warnings)
 	assert.Contains(t, (*warnings)[0], "timed out", "timeout: reason=%q warnings=%v", r, *warnings)
@@ -96,6 +96,6 @@ func TestScriptHookFailures(t *testing.T) {
 		assert.Error(t, err, "expected error for %+v", bad)
 	}
 	var nilHooks *ScriptHooks
-	assert.Equal(t, "", nilHooks.PreTool(ctx, "", "x", nil), "nil hooks should be a no-op")
+	assert.Equal(t, "", nilHooks.PreTool(ctx, "", "x", nil).blockReason(), "nil hooks should be a no-op")
 	assert.True(t, nilHooks.Empty(), "nil hooks should be a no-op")
 }

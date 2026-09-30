@@ -228,6 +228,7 @@ func printHelp(app *App) {
 		{"/memory [reload|add <note>]", "help.memory"},
 		{"/init", "help.init"},
 		{"/approvals [revoke <n>|clear]", "help.approvals"},
+		{"/hooks", "help.hooks"},
 		{"/permissions [allow|ask|deny|remove <rule> [--save]]", "help.permissions"},
 		{"/mcp", "help.mcp"},
 		{"/tools", "help.tools"},

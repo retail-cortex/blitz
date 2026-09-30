@@ -17,6 +17,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -141,13 +142,65 @@ type CheckpointConfig struct {
 // other non-zero exit is reported and ignored unless FailClosed is set.
 type HookConfig struct {
 	Match string `toml:"match"` // tool-name glob for tool hooks; empty matches all
+	// If is a permission rule, "shell(git push *)" say: a tool hook runs
+	// only for calls it matches.
+	If string `toml:"if"`
+	// Type is how the hook runs: "command" (the default), "http" (the event
+	// is POSTed to URL) or "prompt" (a model judges it against Prompt).
+	Type string `toml:"type"`
 	// Command is run with bash; it gets the event as JSON on stdin.
 	Command string `toml:"command"`
+	// Args, instead of Command, run a program directly, without a shell.
+	Args []string `toml:"args"`
+	// URL is where an http hook POSTs the event.
+	URL string `toml:"url"`
+	// Headers go with an http hook's request; $VAR and ${VAR} are replaced
+	// by the variables AllowedEnvVars names (others stay as written).
+	Headers        map[string]string `toml:"headers"`
+	AllowedEnvVars []string          `toml:"allowed_env_vars"`
+	// Prompt is what a prompt hook asks the model to judge the event by.
+	Prompt string `toml:"prompt"`
+	// Model is the prompt hook's model ("provider/model"; empty: the
+	// auto mode's reviewer, else the main model).
+	Model string `toml:"model"`
 	// TimeoutSeconds stops the hook after this long (0: 30).
 	TimeoutSeconds int `toml:"timeout_seconds"`
 	// FailClosed blocks the action when the hook fails, not only on exit code
 	// 2.
 	FailClosed bool `toml:"fail_closed"`
+
+	// Source is the project file a hook came from ("": the user's own
+	// settings).
+	Source string `toml:"-" json:"-"`
+}
+
+// Hook types.
+const (
+	HookCommand = "command"
+	HookHTTP    = "http"
+	HookPrompt  = "prompt"
+)
+
+// Kind is the hook's type, "command" when unset.
+func (h HookConfig) Kind() string {
+	if h.Type == "" {
+		return HookCommand
+	}
+	return h.Type
+}
+
+// Describe is what the hook runs, for people.
+func (h HookConfig) Describe() string {
+	switch h.Kind() {
+	case HookHTTP:
+		return "POST " + h.URL
+	case HookPrompt:
+		return "prompt: " + h.Prompt
+	}
+	if len(h.Args) > 0 {
+		return strings.Join(h.Args, " ")
+	}
+	return h.Command
 }
 
 // HooksConfig lists hooks per event.

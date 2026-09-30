@@ -98,6 +98,10 @@ func (w *Workspace) ReloadMemory(ctx context.Context) ([]string, error) {
 	return paths, nil
 }
 
+// ListHooks are the configured hooks, with their sources and recent
+// failures (spec_parity_027 PAR-HK-13).
+func (w *Workspace) ListHooks() []api.HookInfo { return w.tools.ScriptHooks().List() }
+
 // ListNotes are the notes the agent saved in this workspace with its
 // remember tool, newest first (spec_parity_027 PAR-MEM-11).
 func (w *Workspace) ListNotes() ([]api.Note, error) {

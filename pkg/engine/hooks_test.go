@@ -182,3 +182,52 @@ func TestSubagentAndCompactionHooks(t *testing.T) {
 	assert.Equal(t, "keep decisions", pre[0]["prompt"], "compaction events %v %v", pre, post)
 	assert.Len(t, post, 1, "compaction events %v %v", pre, post)
 }
+
+// pre_tool hooks decide (spec_parity_027 PAR-HK-10): rewrite a call's
+// arguments and let it through its approval, add context for the agent,
+// put a call to the user, or deny it.
+func TestPreToolHookDecisions(t *testing.T) {
+	create := func(p string) *genai.Content {
+		return toolCall("create_file", map[string]any{"path": p, "content": "x"})
+	}
+	w, _ := openTestWith(t, func(c *config.Config) {
+		c.Hooks.PreTool = []config.HookConfig{
+			{Match: "create_file", If: "write(draft*)", Command: `echo '{"decision":"allow","updated_args":{"path":"final.txt","content":"x"},"additional_context":"moved to final.txt"}'`},
+			{Match: "create_file", If: "write(ask*)", Command: `echo '{"decision":"ask","reason":"check the name"}'`},
+			{Match: "create_file", If: "write(secret*)", Args: []string{"printf", `{"decision":"deny","reason":"no secrets"}`}},
+		}
+	}, create("draft.txt"), create("ask.txt"), create("secret.txt"), text("done"))
+	var asked []api.ApprovalRequest
+	w.SetUI(func(_ context.Context, r api.ApprovalRequest) (api.Decision, error) {
+		asked = append(asked, r)
+		return api.DecisionOnce, nil
+	}, nil)
+	s, _ := w.NewSession()
+	var results []map[string]any
+	_, err := w.Run(context.Background(), s.ID, api.Turn{Text: "make files"}, func(e api.Event) {
+		if e.ToolResult != nil {
+			results = append(results, e.ToolResult.Result)
+		}
+	})
+	require.NoError(t, err)
+	require.Len(t, results, 3)
+
+	_, err = os.Stat(filepath.Join(w.Dir(), "final.txt"))
+	assert.NoError(t, err, "the hook's arguments were used")
+	_, err = os.Stat(filepath.Join(w.Dir(), "draft.txt"))
+	assert.True(t, os.IsNotExist(err), "not the model's")
+	assert.Equal(t, "moved to final.txt", results[0]["hook_context"])
+
+	require.Len(t, asked, 1, "the allowed call wasn't asked about; the ask was, once (not again by create_file)")
+	assert.Contains(t, asked[0].Detail, "check the name")
+	assert.True(t, asked[0].MustAsk)
+	_, err = os.Stat(filepath.Join(w.Dir(), "ask.txt"))
+	assert.NoError(t, err)
+
+	assert.Contains(t, results[2]["error"], "blocked by pre_tool hook: no secrets")
+	var hooks []string
+	for _, h := range w.ListHooks() {
+		hooks = append(hooks, h.Event+" "+h.If+" "+h.Runs)
+	}
+	assert.Contains(t, hooks, `pre_tool write(secret*) printf {"decision":"deny","reason":"no secrets"}`)
+}

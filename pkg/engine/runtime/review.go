@@ -71,16 +71,26 @@ func (e *Engine) review(ctx context.Context, req api.ApprovalRequest) (bool, str
 		fmt.Fprintf(&b, "- the change:\n%s\n", textutil.Ellipsize(req.Diff, maxReviewDiff))
 	}
 
+	text, err := e.askModel(ctx, llm, reviewInstruction, b.String())
+	if err != nil {
+		return false, "", err
+	}
+	return parseVerdict(text)
+}
+
+// askModel has llm answer prompt under instruction, and counts its tokens
+// for the session.
+func (e *Engine) askModel(ctx context.Context, llm model.LLM, instruction, prompt string) (string, error) {
 	llmReq := &model.LLMRequest{
-		Contents: []*genai.Content{genai.NewContentFromText(b.String(), genai.RoleUser)},
-		Config:   &genai.GenerateContentConfig{SystemInstruction: genai.NewContentFromText(reviewInstruction, genai.RoleUser)},
+		Contents: []*genai.Content{genai.NewContentFromText(prompt, genai.RoleUser)},
+		Config:   &genai.GenerateContentConfig{SystemInstruction: genai.NewContentFromText(instruction, genai.RoleUser)},
 	}
 	var text strings.Builder
 	var usage *genai.GenerateContentResponseUsageMetadata
 	served := llm.Name()
 	for resp, err := range llm.GenerateContent(ctx, llmReq, false) {
 		if err != nil {
-			return false, "", err
+			return "", err
 		}
 		if resp.UsageMetadata != nil {
 			usage = resp.UsageMetadata
@@ -105,7 +115,48 @@ func (e *Engine) review(ctx context.Context, req api.ApprovalRequest) (bool, str
 		e.usage.RecordWrites(id, served, usage, 0)
 		e.saveUsage(ctx, id)
 	}
-	return parseVerdict(text.String())
+	return text.String(), nil
+}
+
+// hookInstruction tells a prompt hook's model its job.
+const hookInstruction = `You are a hook in an AI coding agent: you check an event (a tool call, a prompt, the end of a turn) against the user's criteria below, and decide.
+Answer with JSON only: {"decision": "allow", "deny", "ask" or "block", "reason": "one short sentence", "additional_context": "optional text for the agent"}.
+Use "block" or "deny" to stop what the criteria forbid, "ask" to have the user decide, and "allow" when the criteria allow it. When the criteria say nothing about the event, answer {"decision": ""}.`
+
+// WithHookModel makes llm the model of prompt hooks naming ref.
+func WithHookModel(ref string, llm model.LLM) Option {
+	return func(e *Engine) {
+		if e.hookModels == nil {
+			e.hookModels = map[string]model.LLM{}
+		}
+		e.hookModels[ref] = llm
+	}
+}
+
+// judgeHook is the prompt hooks' judge: the hook's model (else the auto
+// mode's reviewer, else the session's model) answers with a hook reply.
+func (e *Engine) judgeHook(ctx context.Context, ref, criteria string, event []byte) (string, error) {
+	e.mu.RLock()
+	llm := e.hookModels[ref]
+	if llm == nil {
+		llm = e.reviewModel
+	}
+	if llm == nil {
+		llm = e.llm
+	}
+	e.mu.RUnlock()
+	if llm == nil {
+		return "", errors.New("no model to judge the hook with")
+	}
+	text, err := e.askModel(ctx, llm, hookInstruction, fmt.Sprintf("The user's criteria:\n%s\n\nThe event (JSON):\n%s", criteria, textutil.Ellipsize(string(event), 16000)))
+	if err != nil {
+		return "", err
+	}
+	start, end := strings.Index(text, "{"), strings.LastIndex(text, "}")
+	if start < 0 || end < start {
+		return "", fmt.Errorf("the hook's model didn't answer JSON: %q", textutil.Ellipsize(text, 200))
+	}
+	return text[start : end+1], nil
 }
 
 // parseVerdict reads the reviewer's JSON answer, which may come in a code

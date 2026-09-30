@@ -56,6 +56,9 @@ type Backend interface {
 	PendingTaskRequests() []TaskRequest
 	AnswerTaskRequest(id string, decision Decision, answer string) error
 
+	// The configured hooks, by event, with recent failures (/hooks).
+	ListHooks() []HookInfo
+
 	// Notes the agent saved across sessions (remember), newest first;
 	// ForgetNote deletes one.
 	ListNotes() ([]Note, error)

@@ -23,6 +23,7 @@ package runtime
 import (
 	"cmp"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -42,6 +43,7 @@ import (
 	"github.com/retail-cortex/blitz/pkg/engine/tools"
 	"github.com/retail-cortex/blitz/pkg/i18n"
 	"github.com/retail-cortex/blitz/pkg/observability"
+	"github.com/retail-cortex/blitz/pkg/textutil"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/adk/v2/agent"
@@ -176,6 +178,12 @@ func WithInstructions(text string) Option { return func(e *Engine) { e.extraInst
 // Engine orchestrates the Google ADK execution lifecycle for Blitz.
 // It is safe for concurrent use.
 type Engine struct {
+	// hookContext is pre_tool hooks' additional_context, by tool call ID,
+	// until the result goes back.
+	hookContext sync.Map
+	// hookModels judge prompt hooks naming a model, by its reference.
+	hookModels map[string]model.LLM
+
 	cfg   *config.Config
 	tasks *taskManager
 	// projectTrusted: the project's agents may loosen the mode.
@@ -273,6 +281,14 @@ func NewEngine(
 	toolReg.Hooks().SetSubagentInvoker(e.InvokeSubagent)
 	toolReg.Hooks().SetTaskRunner(e)
 	toolReg.Hooks().SetReviewer(e.review)
+	if s := toolReg.ScriptHooks(); s != nil { // http and prompt hooks, and their messages
+		s.Judge = e.judgeHook
+		s.Notify = func(ctx context.Context, msg string) {
+			if n := e.noticeTo(ctx); n != nil {
+				n(msg)
+			}
+		}
+	}
 	return e, nil
 }
 
@@ -625,18 +641,73 @@ func (e *Engine) beforeTool(ctx agent.Context, t tool.Tool, args map[string]any)
 		log.Log(audit.Entry{Kind: audit.KindDenial, Tool: t.Name(), Decision: "rule-deny " + rule.String()})
 		return map[string]any{"error": fmt.Sprintf("denied by the permission rule deny %s", rule)}, nil
 	}
+	if r := e.preToolHooks(ctx, t, args); r != nil {
+		return r, nil
+	}
 	if err := e.toolReg.ApproveMCP(ctx, t.Name(), args); err != nil {
 		return map[string]any{"error": err.Error()}, nil
 	}
-	if reason := e.toolReg.ScriptHooks().PreTool(ctx, e.sessionOf(ctx), t.Name(), args); reason != "" {
-		return map[string]any{"error": "blocked by pre_tool hook: " + reason}, nil
-	}
 	return nil, nil
+}
+
+// preToolHooks runs pre_tool hooks (spec_parity_027 PAR-HK-10): a block or
+// deny stops the call; updated_args replace its arguments (checked against
+// the deny rules again; the tool still checks paths and the sandbox);
+// allow lets the call through its approvals, and ask puts it to the user
+// first; additional_context goes to the agent with the result.
+func (e *Engine) preToolHooks(ctx agent.Context, t tool.Tool, args map[string]any) map[string]any {
+	scripts := e.toolReg.ScriptHooks()
+	if !scripts.Has("pre_tool") {
+		return nil
+	}
+	out := scripts.PreTool(ctx, e.sessionOf(ctx), t.Name(), args)
+	if out.Blocked {
+		return map[string]any{"error": "blocked by pre_tool hook: " + out.Reason}
+	}
+	if out.UpdatedArgs != nil {
+		clear(args) // the same map the tool gets
+		maps.Copy(args, out.UpdatedArgs)
+		if rule := e.toolReg.Rules().ToolDenied(t.Name(), args); rule != nil {
+			return map[string]any{"error": fmt.Sprintf("denied by the permission rule deny %s", rule)}
+		}
+	}
+	hooks := e.toolReg.Hooks()
+	id := tools.CallID(ctx)
+	switch out.Decision {
+	case "ask":
+		why := out.Reason
+		if why == "" {
+			why = "a pre_tool hook asks"
+		}
+		if err := hooks.Approve(ctx, api.ApprovalRequest{
+			Tool: t.Name(), Kind: api.ActionCommand, Detail: fmt.Sprintf("%s %s (%s)", t.Name(), argsSummary(args), why), MustAsk: true,
+		}); err != nil {
+			return map[string]any{"error": err.Error()}
+		}
+		hooks.GrantCall(id)
+	case "allow":
+		hooks.GrantCall(id)
+	}
+	if out.Context != "" && id != "" {
+		e.hookContext.Store(id, out.Context)
+	}
+	return nil
+}
+
+// argsSummary is a call's arguments in brief, for a question.
+func argsSummary(args map[string]any) string {
+	b, err := json.Marshal(args)
+	if err != nil {
+		return ""
+	}
+	return textutil.Ellipsize(string(b), 300)
 }
 
 // afterTool runs post_tool hooks, audits the outcome, and attaches messages
 // the user sent while the turn was running (see Steer).
 func (e *Engine) afterTool(ctx agent.Context, t tool.Tool, args, result map[string]any, toolErr error) (map[string]any, error) {
+	id := tools.CallID(ctx)
+	e.toolReg.Hooks().EndCall(id)
 	e.toolReg.ScriptHooks().PostTool(ctx, e.sessionOf(ctx), t.Name(), args, result, toolErr)
 	entry := audit.Entry{Kind: audit.KindToolResult, Tool: t.Name(), Decision: "ok"}
 	if toolErr != nil {
@@ -652,6 +723,14 @@ func (e *Engine) afterTool(ctx agent.Context, t tool.Tool, args, result map[stri
 	}
 	if r := e.attachSteers(ctx, out, toolErr); r != nil {
 		out, changed = r, true
+	}
+	if text, ok := e.hookContext.LoadAndDelete(id); ok && id != "" {
+		out = maps.Clone(out)
+		if out == nil {
+			out = map[string]any{}
+		}
+		out["hook_context"] = text
+		changed = true
 	}
 	if changed {
 		return out, nil

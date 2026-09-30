@@ -78,3 +78,21 @@ func (r *Remote) ForgetNote(name string) error {
 	_, err := r.workspaces.ForgetNote(context.Background(), connect.NewRequest(&pb.ForgetNoteRequest{Workspace: r.dir, Name: name}))
 	return fromAPI(err)
 }
+
+// ListHooks are the workspace's hooks in the service
+// (WorkspaceService.ListHooks); on failure warn is told and there are none.
+func (r *Remote) ListHooks() []api.HookInfo {
+	res, err := r.workspaces.ListHooks(context.Background(), connect.NewRequest(&pb.ListHooksRequest{Workspace: r.dir}))
+	if err != nil {
+		r.failed("listing the hooks", err)
+		return nil
+	}
+	out := make([]api.HookInfo, len(res.Msg.Hooks))
+	for i, k := range res.Msg.Hooks {
+		out[i] = api.HookInfo{Event: k.Event, Type: k.Type, Match: k.Match, If: k.If, Runs: k.Runs, Source: k.Source, FailClosed: k.FailClosed}
+		for _, f := range k.Failures {
+			out[i].Failures = append(out[i].Failures, api.HookFailure{Time: f.Time.AsTime(), Error: f.Error})
+		}
+	}
+	return out
+}

@@ -295,13 +295,16 @@ func runDoctor(ctx context.Context, g *globalFlags, online bool) []check {
 
 	for _, h := range cfg.Hooks.All() {
 		first := strings.Fields(h.Command)
-		if len(first) > 0 && !strings.ContainsAny(first[0], "$;|&") {
+		if len(h.Args) > 0 {
+			first = h.Args
+		}
+		if h.Kind() == config.HookCommand && len(first) > 0 && !strings.ContainsAny(first[0], "$;|&") {
 			if _, err := exec.LookPath(first[0]); err != nil && !fileExists(first[0]) {
-				add("hook", statusWarn, "%q: %s not found", h.Command, first[0])
+				add("hook", statusWarn, "%q: %s not found", h.Describe(), first[0])
 				continue
 			}
 		}
-		add("hook", statusOK, "%s", h.Command)
+		add("hook", statusOK, "%s", h.Describe())
 	}
 
 	sessDir := config.ExpandHome(cfg.Session.StorageDir)

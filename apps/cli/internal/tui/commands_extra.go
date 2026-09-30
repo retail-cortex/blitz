@@ -50,6 +50,8 @@ func handleExtraCommand(ctx context.Context, cmd string, args []string, app *App
 		cmdMemory(ctx, args, app)
 	case "approvals":
 		cmdApprovals(args, app)
+	case "hooks":
+		cmdHooks(app)
 	case "mcp":
 		cmdMCP(app)
 	case "resume":
@@ -253,6 +255,43 @@ func cmdMemory(ctx context.Context, args []string, app *App) {
 	default:
 		fmt.Println(i18n.T("memory.usage"))
 	}
+}
+
+// cmdHooks lists the hooks by event, with where each came from and its
+// recent failures (spec_parity_027 PAR-HK-13).
+func cmdHooks(app *App) {
+	list := app.Workspace.ListHooks()
+	if len(list) == 0 {
+		fmt.Println(i18n.T("hooks.none"))
+		return
+	}
+	event := ""
+	for _, h := range list {
+		if h.Event != event {
+			event = h.Event
+			fmt.Printf("\n%s%s%s\n", Bold, h.Event, Reset)
+		}
+		var about []string
+		if h.Match != "" {
+			about = append(about, "match "+h.Match)
+		}
+		if h.If != "" {
+			about = append(about, "if "+h.If)
+		}
+		if h.FailClosed {
+			about = append(about, "fail_closed")
+		}
+		source := i18n.T("hooks.source_user")
+		if h.Source != "" {
+			source = h.Source
+		}
+		about = append(about, source)
+		fmt.Printf("  • %s %s(%s)%s\n", safe(h.Runs), Dim, safe(strings.Join(about, ", ")), Reset)
+		for _, f := range h.Failures {
+			fmt.Printf("    %s%s %s%s\n", Red, f.Time.Format("15:04:05"), safe(f.Error), Reset)
+		}
+	}
+	fmt.Println()
 }
 
 func cmdApprovals(args []string, app *App) {

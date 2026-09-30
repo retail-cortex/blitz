@@ -483,6 +483,7 @@ type Page struct {
 func (b *Browser) Navigate(ctx context.Context, u string) (Page, error) {
 	if pu, err := url.Parse(u); err == nil {
 		b.mu.Lock()
+		clear(b.allowNext)                            // an earlier one never used
 		b.allowNext[normalHost(pu.Hostname())] = true // the caller decided on it
 		b.mu.Unlock()
 	}
@@ -493,11 +494,6 @@ func (b *Browser) Navigate(ctx context.Context, u string) (Page, error) {
 	if err := b.conn.call(ctx, "Page.navigate", map[string]any{"url": u}, &res); err != nil {
 		return Page{}, err
 	}
-	defer func() { // used or not
-		b.mu.Lock()
-		clear(b.allowNext)
-		b.mu.Unlock()
-	}()
 	if res.ErrorText != "" {
 		p, _ := b.Page(ctx)
 		return p, fmt.Errorf("loading %s: %s", u, res.ErrorText)

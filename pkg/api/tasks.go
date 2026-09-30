@@ -113,3 +113,25 @@ type Note struct {
 	// Path is its file, to edit (on the machine that keeps it).
 	Path string
 }
+
+// HookInfo is a configured hook, for /hooks.
+type HookInfo struct {
+	Event string
+	// Type is command, http or prompt.
+	Type  string
+	Match string
+	If    string
+	// Runs is what it runs: the command, POST <url> or prompt: <text>.
+	Runs string
+	// Source is the project file it came from ("": the user's settings).
+	Source     string
+	FailClosed bool
+	// Failures are its latest failed runs since the workspace opened.
+	Failures []HookFailure
+}
+
+// HookFailure is one failed run of a hook.
+type HookFailure struct {
+	Time  time.Time
+	Error string
+}

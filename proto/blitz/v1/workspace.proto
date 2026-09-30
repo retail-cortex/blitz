@@ -161,6 +161,9 @@ service WorkspaceService {
   // workspace so they take effect, unless a turn is running in it.
   rpc TrustProject(TrustProjectRequest) returns (TrustProjectResponse);
 
+  // Returns the configured hooks, by event, with their recent failures.
+  rpc ListHooks(ListHooksRequest) returns (ListHooksResponse);
+
   // Returns the notes the agent saved across sessions of the workspace
   // with its remember tool, newest first.
   rpc ListNotes(ListNotesRequest) returns (ListNotesResponse);
@@ -1096,6 +1099,40 @@ message GetProjectSettingsRequest {
 // Response message for WorkspaceService.GetProjectSettings.
 message GetProjectSettingsResponse {
   ProjectSettings settings = 1;
+}
+
+// Hook is a configured hook.
+message Hook {
+  string event = 1;
+  // command, http or prompt.
+  string type = 2;
+  // The tool-name glob, for tool events.
+  string match = 3;
+  // The permission rule calls must match.
+  string if = 4;
+  // What it runs: the command, POST <url>, or prompt: <text>.
+  string runs = 5;
+  // The project file it came from; empty for the user's own settings.
+  string source = 6;
+  bool fail_closed = 7;
+  // Its latest failed runs since the workspace opened.
+  repeated HookFailure failures = 8;
+}
+
+// HookFailure is one failed run of a hook.
+message HookFailure {
+  google.protobuf.Timestamp time = 1;
+  string error = 2;
+}
+
+// Request message for WorkspaceService.ListHooks.
+message ListHooksRequest {
+  string workspace = 1;
+}
+
+// Response message for WorkspaceService.ListHooks.
+message ListHooksResponse {
+  repeated Hook hooks = 1;
 }
 
 // Note is something the agent remembered across sessions of a workspace.

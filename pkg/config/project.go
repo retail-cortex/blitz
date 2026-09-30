@@ -344,7 +344,7 @@ func pendingItems(workspace string, pf *projectFile) []ProjectItem {
 	sort.Strings(names)
 	for _, e := range names {
 		for _, h := range events[e] {
-			add(ProjectHook, e, h.Command)
+			add(ProjectHook, e, h.Describe())
 		}
 	}
 	for _, s := range pf.MCP.Servers {
@@ -404,7 +404,7 @@ func referencedFiles(workspace string, pf *projectFile) map[string]string {
 	var words []string
 	for _, hooks := range pf.Hooks.ByEvent() {
 		for _, h := range hooks {
-			words = append(words, strings.Fields(h.Command)...)
+			words = append(append(words, strings.Fields(h.Command)...), h.Args...)
 		}
 	}
 	for _, s := range pf.MCP.Servers {
@@ -545,7 +545,7 @@ func (p *Project) ApplyTrusted(cfg *Config) {
 	userModel := cfg.Blitz.DefaultModel
 	userPins := cfg.AgentModels
 	for _, pf := range p.trusted {
-		cfg.Hooks = appendHooks(cfg.Hooks, pf.Hooks)
+		cfg.Hooks = AppendHooks(cfg.Hooks, WithSource(pf.Hooks, pf.file))
 		for _, s := range pf.MCP.Servers {
 			if slices.ContainsFunc(cfg.MCP.Servers, func(u MCPServerConfig) bool { return u.Name == s.Name }) {
 				ignore(pf, ProjectMCP, s.Name, "", ReasonUserSet)
@@ -615,7 +615,25 @@ func (c *Config) providerReady(ref string) bool {
 	return false
 }
 
-func appendHooks(h, add HooksConfig) HooksConfig {
+// WithSource marks each of h's hooks as coming from file.
+func WithSource(h HooksConfig, file string) HooksConfig {
+	mark := func(list []HookConfig) []HookConfig {
+		out := slices.Clone(list)
+		for i := range out {
+			out[i].Source = file
+		}
+		return out
+	}
+	h.PreTool, h.PostTool, h.PromptSubmit = mark(h.PreTool), mark(h.PostTool), mark(h.PromptSubmit)
+	h.SessionStart, h.SessionEnd, h.Stop = mark(h.SessionStart), mark(h.SessionEnd), mark(h.Stop)
+	h.PostToolFailure, h.SubagentStart, h.SubagentStop = mark(h.PostToolFailure), mark(h.SubagentStart), mark(h.SubagentStop)
+	h.PreCompact, h.PostCompact = mark(h.PreCompact), mark(h.PostCompact)
+	h.Notification, h.PermissionRequest = mark(h.Notification), mark(h.PermissionRequest)
+	return h
+}
+
+// AppendHooks adds add's hooks after h's, event by event.
+func AppendHooks(h, add HooksConfig) HooksConfig {
 	h.PreTool = append(h.PreTool, add.PreTool...)
 	h.PostTool = append(h.PostTool, add.PostTool...)
 	h.PromptSubmit = append(h.PromptSubmit, add.PromptSubmit...)

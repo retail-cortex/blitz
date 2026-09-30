@@ -264,6 +264,18 @@ func Open(ctx context.Context, cfg *config.Config, o Options) (*Workspace, error
 			opts = append(opts, runtime.WithReviewModel(m))
 		}
 	}
+	built := map[string]bool{}
+	for _, h := range cfg.Hooks.All() { // prompt hooks naming their model
+		if h.Kind() != config.HookPrompt || h.Model == "" || built[h.Model] {
+			continue
+		}
+		built[h.Model] = true
+		if m, err := w.newModel(ctx, cfg, h.Model); err != nil {
+			o.Warn(i18n.T("hooks.model_failed", "model", h.Model, "error", ModelErrorSummary(err, cfg)))
+		} else {
+			opts = append(opts, runtime.WithHookModel(h.Model, m))
+		}
+	}
 	for agent, ref := range agentModelRefs(cfg, w.agents, o.Warn) {
 		m, err := w.newModel(ctx, cfg, ref)
 		if err != nil {

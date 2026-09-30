@@ -45,6 +45,7 @@ var ErrNotApproved = errors.New("action not approved")
 // Hooks holds callbacks injected by the host application (TUI, engine) and the
 // approval rules remembered for this session or persisted across sessions.
 type Hooks struct {
+	grants   callGrants // calls a pre_tool hook allowed
 	mu       sync.RWMutex
 	policy   Policy
 	approver api.Approver
@@ -339,6 +340,9 @@ func (h *Hooks) Approve(ctx context.Context, req api.ApprovalRequest) error {
 	case mustAsk:
 		// Straight to the question: modes, allow rules and remembered
 		// approvals don't apply.
+	case h.granted(ctx):
+		record("hook-allow") // a pre_tool hook allowed the call
+		return nil
 	case effect == EffectAllow:
 		record("rule-allow " + rule.String())
 		return nil
