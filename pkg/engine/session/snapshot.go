@@ -169,7 +169,7 @@ func (s *Storage) branch(srcID string) (*SessionRecord, error) {
 	}
 	rec.Messages = src.Messages
 	rec.MessageCount = len(src.Messages)
-	s.active = rec
+	s.setActiveLocked(rec)
 	return rec, nil
 }
 

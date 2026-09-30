@@ -217,7 +217,8 @@ func (s *Storage) CreateSession(id, title, agent string) (*SessionRecord, error)
 		Workspace: s.workspace,
 		Messages:  []Message{},
 	}
-	s.active, s.unsaved = rec, true
+	s.setActiveLocked(rec)
+	s.unsaved = true
 	return rec, nil
 }
 
@@ -425,7 +426,7 @@ func (s *Storage) Load(id string) (*SessionRecord, error) {
 			return nil, err
 		}
 	}
-	s.active = rec
+	s.setActiveLocked(rec)
 	return rec, nil
 }
 
@@ -456,10 +457,38 @@ type TurnRef struct {
 	Index       int    `json:"index"`
 }
 
+// owners maps a session ID to the storage that has it active in this
+// process. Only that storage writes the session's metadata: another asked
+// to (the workspace's, for a worker run's session) hands it over, so their
+// read-modify-writes of the file can't lose each other's (BL-WK-20).
+var owners sync.Map
+
+// setActiveLocked makes rec the active session, owned by s.
+func (s *Storage) setActiveLocked(rec *SessionRecord) {
+	if s.active != nil {
+		owners.CompareAndDelete(s.active.ID, s)
+	}
+	s.active = rec
+	if rec != nil {
+		owners.Store(rec.ID, s)
+	}
+}
+
+// ownerOf is the other storage that has session id active, or nil.
+func (s *Storage) ownerOf(id string) *Storage {
+	if o, ok := owners.Load(id); ok && o.(*Storage) != s {
+		return o.(*Storage)
+	}
+	return nil
+}
+
 // LastTurn returns the latest turn recorded for session id: from memory
 // for the active session, otherwise from its metadata file. It returns
 // ("", 0) when there is none.
 func (s *Storage) LastTurn(id string) (traceparent string, index int) {
+	if o := s.ownerOf(id); o != nil {
+		return o.LastTurn(id)
+	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	rec := s.active
@@ -483,6 +512,9 @@ func (s *Storage) SetLastTurn(id, traceparent string, index int) error {
 	if err := ValidateID(id); err != nil {
 		return err
 	}
+	if o := s.ownerOf(id); o != nil {
+		return o.SetLastTurn(id, traceparent, index)
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	ref := &TurnRef{Traceparent: traceparent, Index: index}
@@ -500,6 +532,9 @@ func (s *Storage) SetLastTurn(id, traceparent string, index int) error {
 
 // Usage returns the usage saved for session id, and whether there is any.
 func (s *Storage) Usage(id string) (api.Usage, bool) {
+	if o := s.ownerOf(id); o != nil {
+		return o.Usage(id)
+	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	rec := s.active
@@ -523,6 +558,9 @@ func (s *Storage) Usage(id string) (api.Usage, bool) {
 func (s *Storage) SetUsage(id string, u api.Usage) error {
 	if err := ValidateID(id); err != nil {
 		return err
+	}
+	if o := s.ownerOf(id); o != nil {
+		return o.SetUsage(id, u)
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
