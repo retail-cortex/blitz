@@ -19,11 +19,22 @@ In plan mode, with `/plan`, or when the agent chooses to plan first, it presents
 |---|---|
 | `default` | Reads; everything else asks |
 | `accept-edits` | File changes in the workspace too; commands still ask |
+| `auto` | A reviewer model decides what would ask you, with a reason; `ask` rules still ask you |
 | `plan` | Every prompt is planned; tools that change anything are refused |
 | `dont-ask` | Anything that would ask is refused instead (for CI and scripts) |
 | `bypass` | Everything; only while the OS sandbox is active, and deny rules, blocked paths and the sandboxes still apply |
 
-Choose one with `--permission-mode`, `[blitz] permission_mode`, or `/mode` in a session. Workers ignore the mode: they get exactly their own permissions.
+Choose one with `--permission-mode`, `[blitz] permission_mode`, or `/mode` in a session.
+
+In the `auto` mode the reviewer sees the action (and its diff), the last few messages and what you tell it about your environment, and answers allow or deny. A denial goes back to the agent with the reason, and every decision is in the audit log (`auto-allow`, `auto-deny`); its tokens count in `/cost`. When the reviewer can't answer, you're asked. A small, fast model is enough:
+
+```toml
+[permissions.auto]
+model = "gemini/gemini-3.8-flash"
+environment = "Our repositories are under github.com/acme; pushing branches is fine, pushing to main isn't. Hosts: *.acme.dev."
+```
+
+A project's `.blitz/settings.toml` can't set it. Workers ignore the mode: they get exactly their own permissions.
 
 ## Permission rules
 
