@@ -132,12 +132,17 @@ var workerStates = map[pb.WorkerState]api.State{
 }
 
 func workerInfo(w *pb.Worker) api.WorkerInfo {
-	return api.WorkerInfo{
+	out := api.WorkerInfo{
 		Workspace: w.Workspace, Name: w.Name, Description: w.Description, Path: w.Path, Hash: w.Hash,
 		State: workerStates[w.State], Schedule: w.Schedule, Cron: w.Cron, Timezone: w.Timezone, Next: timeOf(w.NextRun),
 		Agent: w.Agent, Model: w.Model, Permissions: w.Permissions, Problems: w.Problems,
 		Limits: api.Limits{MaxTurns: int(w.Limits.GetMaxTurns()), MaxCostUSD: w.Limits.GetMaxCostUsd(), Timeout: w.Limits.GetTimeout().AsDuration()},
 	}
+	if w.LastRun != nil {
+		r := workerRun(w.LastRun)
+		out.LastRun = &r
+	}
+	return out
 }
 
 var runStatuses = map[pb.RunStatus]api.RunStatus{

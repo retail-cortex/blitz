@@ -74,6 +74,9 @@ type WorkspacePrefs struct {
 	Description string `json:"description,omitempty"`
 	Color       string `json:"color,omitempty"` // one of the palette's names
 	Open        bool   `json:"open"`
+	// WorkersSeen is when (Unix milliseconds) the workspace's Workers view
+	// was last shown: failed runs since are badged.
+	WorkersSeen int64 `json:"workers_seen,omitempty"`
 }
 
 // languageTag is what the language setting may hold.

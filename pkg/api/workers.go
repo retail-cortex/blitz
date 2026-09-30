@@ -44,6 +44,8 @@ type WorkerInfo struct {
 	Limits      Limits
 	// Problems say why the worker is invalid, or what the policy changed.
 	Problems []string
+	// LastRun is its latest recorded run (nil: none yet).
+	LastRun *Run
 }
 
 // ErrUnknownWorker reports a worker name the workspace doesn't define.

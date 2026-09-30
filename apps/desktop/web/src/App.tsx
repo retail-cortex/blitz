@@ -16,6 +16,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { InboxButton } from "./RunsInbox";
+import { watchWorkerFailures } from "./workerFailures";
 import { mdiAlertOutline, mdiCogOutline, mdiFolderOpenOutline, mdiLightningBolt, mdiServerOff } from "@mdi/js";
 import { onServiceLost, workspaces as workspaceAPI } from "./api";
 import { appVersion, chooseWorkspace, type LicenseText, installService, onDeepLink, onNotificationOpen, restartService, serviceStatus, type ServiceStatus, toggleFullscreen } from "./desktop";
@@ -152,6 +153,11 @@ function Shell() {
   const [confirmClose, setConfirmClose] = useState<string | null>(null);
   const snack = useSnackbar();
   const { service, error, check, setError } = useServiceStatus();
+  // The open workspaces' failed worker runs, for their badges (BL-WK-11).
+  const seen = JSON.stringify(openWorkspaces(prefs).map((w) => [w.dir, w.workers_seen ?? 0]));
+  useEffect(() => {
+    if (service.state === "up") watchWorkerFailures(Object.fromEntries(JSON.parse(seen)));
+  }, [seen, service.state]);
   const version = useServiceVersion(service.state === "up");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);

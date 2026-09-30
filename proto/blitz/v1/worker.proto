@@ -97,6 +97,8 @@ message Worker {
   WorkerLimits limits = 14;
   // Why the worker is invalid, or what the policy removed.
   repeated string problems = 15;
+  // Its latest recorded run (unset: none yet).
+  WorkerRun last_run = 16;
 }
 
 // Request message for WorkerService.ListWorkers.

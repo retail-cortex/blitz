@@ -831,6 +831,8 @@ export function installFake() {
               limits: { maxTurns: 20, maxCostUsd: 0.5, timeout: { seconds: 900n } },
               hash: "9f2c41ab",
               path: "workers/nightly-deps/WORKER.md",
+              // Last night's run failed: the workspace is badged until its workers are seen.
+              lastRun: { id: "run-9", worker: "nightly-deps", status: RunStatus.FAILED, started: timestampFromDate(new Date(Date.now() - 8 * 3600e3)) },
             },
             { name: "weekly-report", state: WorkerState.NEW, schedule: "Mondays at 09:00", cron: "0 9 * * 1", timezone: "America/Chicago", hash: "11aa", limits: { maxTurns: 10, maxCostUsd: 0.2 } },
           ],

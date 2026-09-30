@@ -49,7 +49,12 @@ func workerState(s api.State) pb.WorkerState {
 }
 
 func workerMsg(i api.WorkerInfo) *pb.Worker {
+	var last *pb.WorkerRun
+	if i.LastRun != nil {
+		last = runMsg(*i.LastRun)
+	}
 	return &pb.Worker{
+		LastRun:   last,
 		Workspace: i.Workspace, Name: i.Name, Description: i.Description, Path: i.Path, Hash: i.Hash,
 		State: workerState(i.State), Schedule: i.Schedule, Cron: i.Cron, Timezone: i.Timezone, NextRun: timestamp(i.Next),
 		Agent: i.Agent, Model: i.Model, Permissions: i.Permissions,

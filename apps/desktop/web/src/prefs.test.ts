@@ -101,6 +101,12 @@ describe("normalizePrefs", () => {
     ]);
     expect(p.active).toBe("/a"); // /b is closed
   });
+  it("keeps when a workspace's workers were seen, when it's a time", () => {
+    const ws = (seen: unknown) => normalizePrefs({ workspaces: [{ dir: "/a", open: true, workers_seen: seen }] }).workspaces[0].workers_seen;
+    expect(ws(1700000000000)).toBe(1700000000000);
+    expect(ws("yesterday")).toBeUndefined();
+    expect(ws(-1)).toBeUndefined();
+  });
   it("keeps the files settings when they're right", () => {
     expect(normalizePrefs({ files: true, show_hidden: true, chat_width: 612.4 })).toMatchObject({ files: true, show_hidden: true, chat_width: 612 });
     expect(normalizePrefs({ files: "yes", show_hidden: 1, chat_width: -5 })).toMatchObject({ files: false, show_hidden: false, chat_width: 0 });

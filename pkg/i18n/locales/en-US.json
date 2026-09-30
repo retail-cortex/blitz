@@ -1239,6 +1239,9 @@
     "desktop.inbox.state.failed": "failed",
     "desktop.inbox.state.stopped": "stopped",
     "desktop.approval.in_editor": "Show in the editor",
-    "cost.search": "Web searches: {queries} queries, estimated {cost} (not in the token cost)"
+    "cost.search": "Web searches: {queries} queries, estimated {cost} (not in the token cost)",
+    "desktop.switcher.others_failed": "A worker failed in another workspace",
+    "desktop.switcher.failed_runs.one": "{count} worker failed",
+    "desktop.switcher.failed_runs.other": "{count} workers failed"
   }
 }

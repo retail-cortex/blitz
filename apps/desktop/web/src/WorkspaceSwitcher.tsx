@@ -19,7 +19,8 @@ import { mdiChevronDown, mdiClose, mdiDeleteOutline, mdiFolderOpenOutline, mdiLi
 import { workspaceColor } from "./palette";
 import { displayName, forgetWorkspace, openWorkspace, openWorkspaces, recentWorkspaces, type WorkspacePrefs } from "./prefs";
 import { useApp } from "./state";
-import { t } from "./i18n";
+import { useWorkerFailures } from "./workerFailures";
+import { t, tn } from "./i18n";
 import { Icon, IconButton, useDismiss } from "./ui/controls";
 
 /** The app's name and mark, at the left of the top bar. */
@@ -50,6 +51,8 @@ export function WorkspaceSwitcher({ onOpen, onClose, onEdit }: { onOpen: () => v
   const name = current ? displayName(current) : t("desktop.switcher.none");
   const othersWaiting = list.some((w) => w.dir !== prefs.active && activity[w.dir]?.waiting);
   const othersWorking = list.some((w) => w.dir !== prefs.active && activity[w.dir]?.running);
+  const failures = useWorkerFailures();
+  const othersFailed = list.some((w) => w.dir !== prefs.active && (failures[w.dir] ?? 0) > 0);
   const pick = (dir: string) => {
     setOpen(false);
     update((p) => openWorkspace(p, dir));
@@ -72,6 +75,8 @@ export function WorkspaceSwitcher({ onOpen, onClose, onEdit }: { onOpen: () => v
           </span>
         ) : othersWorking ? (
           <span className="dot pulse" title={t("desktop.switcher.others_working")} />
+        ) : othersFailed ? (
+          <span className="dot failed" title={t("desktop.switcher.others_failed")} />
         ) : null}
         <Icon path={mdiChevronDown} size="sm" />
       </button>
@@ -123,14 +128,15 @@ function Avatar({ w, color }: { w: WorkspacePrefs; color: string }) {
 function Row({ w, active, onPick, onEdit, onClose }: { w: WorkspacePrefs; active: boolean; onPick: () => void; onEdit: () => void; onClose: () => void }) {
   const { theme, activity } = useApp();
   const a = activity[w.dir];
+  const failed = useWorkerFailures()[w.dir] ?? 0;
   const name = displayName(w);
-  const status = a?.waiting ? t("desktop.switcher.waiting") : a?.running ? t("desktop.switcher.working") : "";
+  const status = a?.waiting ? t("desktop.switcher.waiting") : a?.running ? t("desktop.switcher.working") : failed > 0 ? tn("desktop.switcher.failed_runs", failed) : "";
   return (
     <div className={`switcher-row ${active ? "active" : ""}`}>
       <button role="menuitem" className="menu-item" aria-current={active ? "page" : undefined} onClick={onPick} title={w.dir}>
         <span className="avatar small" style={{ background: workspaceColor(w.color, theme) }}>
           {name.slice(0, 1).toUpperCase()}
-          {a?.waiting ? <span className="badge avatar-badge">!</span> : a?.running ? <span className="dot avatar-dot pulse" /> : null}
+          {a?.waiting ? <span className="badge avatar-badge">!</span> : a?.running ? <span className="dot avatar-dot pulse" /> : failed > 0 ? <span className="dot avatar-dot failed" /> : null}
         </span>
         <span>
           {name}

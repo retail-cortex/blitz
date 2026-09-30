@@ -16,6 +16,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useWorkspaceSettings } from "./workspaceSettings";
+import { useWorkerFailures } from "./workerFailures";
 import { InboxButton } from "./RunsInbox";
 import { mdiCalendarClock, mdiCodeBraces, mdiCogOutline, mdiFileCompare, mdiFileSearchOutline, mdiFileTreeOutline, mdiTuneVariant } from "@mdi/js";
 import { Changes } from "./Changes";
@@ -66,6 +67,12 @@ export function Workspace({
   const [view, setView] = useState<View>("editor");
   const dir = ws.dir;
   const { settings, modelProblem, settingsError, project, reviewing, setReviewing, refreshSettings } = useWorkspaceSettings(dir);
+
+  // Showing the workers sees their failed runs (BL-WK-11).
+  useEffect(() => {
+    if (visible && view === "workers") update((p) => ({ ...p, workspaces: p.workspaces.map((w) => (w.dir === dir ? { ...w, workers_seen: Date.now() } : w)) }));
+  }, [visible, view, dir, update]);
+  const failed = useWorkerFailures()[dir] ?? 0;
 
   // The command palette can switch the view.
   useEffect(() => {
@@ -164,7 +171,7 @@ export function Workspace({
             options={[
               { value: "editor", label: t("desktop.view.editor"), icon: mdiCodeBraces },
               { value: "changes", label: t("desktop.view.changes"), icon: mdiFileCompare },
-              { value: "workers", label: t("desktop.view.workers"), icon: mdiCalendarClock },
+              { value: "workers", label: failed > 0 ? `${t("desktop.view.workers")} (${failed})` : t("desktop.view.workers"), icon: mdiCalendarClock },
             ]}
           />
         </div>

@@ -29,6 +29,8 @@ export interface WorkspacePrefs {
   description?: string;
   color?: string;
   open: boolean;
+  /** When (ms since 1970) its Workers view was last shown: failed runs since are badged. */
+  workers_seen?: number;
 }
 
 /** The window's own settings (everything else belongs to the service). */
@@ -87,6 +89,7 @@ export function normalizePrefs(raw: unknown): Prefs {
       description: typeof w.description === "string" ? w.description : undefined,
       color: typeof w.color === "string" ? w.color : undefined,
       open: w.open === true,
+      workers_seen: typeof w.workers_seen === "number" && w.workers_seen > 0 ? w.workers_seen : undefined,
     }));
   const active = typeof r.active === "string" && workspaces.some((w) => w.open && w.dir === r.active) ? r.active : workspaces.find((w) => w.open)?.dir;
   return {

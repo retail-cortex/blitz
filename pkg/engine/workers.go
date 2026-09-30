@@ -193,7 +193,11 @@ func (w *Workspace) ListWorkers() ([]api.WorkerInfo, error) {
 	now := time.Now()
 	var out []api.WorkerInfo
 	for _, name := range slices.Sorted(maps.Keys(found)) {
-		out = append(out, w.workerInfo(found[name].Worker, found[name].Err, now))
+		info := w.workerInfo(found[name].Worker, found[name].Err, now)
+		if runs, err := w.runLog.List(w.Dir(), name, 1); err == nil && len(runs) > 0 {
+			info.LastRun = &runs[0]
+		}
+		out = append(out, info)
 	}
 	return out, nil
 }
