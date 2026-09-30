@@ -91,7 +91,7 @@ Suggested order (from NEXT_STEPS): run the manual checks (§9) first — their f
 ## 6. Skills
 
 **Extends** [spec_skills_013](spec_skills_013.md). *Source: NEXT_STEPS 5.*
-- **BL-SK-01 TypeScript scripts** (M): `language: typescript` runs with a pinned runtime (Node or Deno) inside the script sandbox; dependencies are installed into a per-requirement environment like Python's (SK-41), with the same approval and policy rules (`packages` gains an npm section).
+- **BL-SK-01 TypeScript scripts** (M): ✅ *Done 2026-09-30 ([spec_skills_013](spec_skills_013.md) SK-46) with the system Node (22.6+), not a downloaded one.* `language: typescript` runs with a pinned runtime (Node or Deno) inside the script sandbox; dependencies are installed into a per-requirement environment like Python's (SK-41), with the same approval and policy rules (`packages` gains an npm section).
 - **BL-SK-02 Scripts that write the workspace** (M): a skill may declare `writes_workspace: true`; its script then runs with the workspace writable, the run's changes are snapshotted into the turn's checkpoint first (so `/undo` reverts them), and it needs tier ≥ 3 approval showing the resulting diff before the changes are kept.
 - **BL-SK-03 `requires-python`** (S): a script's interpreter constraint is honoured with uv-managed interpreters when `uv` is present; otherwise the script is blocked with the reason.
 - **BL-SK-04 `storage_uri` and resources** (M): scripts from `storage_uri` are fetched through the web rules (approval per host), pinned by hash in the definition, and cached; Castor `resources` are listed by `activate_skill`.

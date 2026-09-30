@@ -55,7 +55,7 @@ A script sees only the variables the policy passes, and it's stopped at its time
 
 ## Running scripts
 
-`activate_skill` lists a skill's scripts and whether the policy lets each run; the agent runs them with `run_skill_script`. Python only, for now.
+`activate_skill` lists a skill's scripts and whether the policy lets each run; the agent runs them with `run_skill_script`. Scripts are Python (the system `python3`) or TypeScript (the system `node`, 22.6 or later, which runs TypeScript by stripping its types).
 
-- **Dependencies** go into an isolated environment in `~/.blitz/envs`, one per distinct set of requirements. It's built inside the sandbox, with the network on and writes allowed only to the environment and the package cache, using `uv` if it's installed (else `venv` and `pip`). You approve each install once, with the package list shown. The system Python is never touched. `/envs` lists environments; `/envs prune` removes the unused.
+- **Dependencies** go into an isolated environment in `~/.blitz/envs`, one per distinct set of requirements. It's built inside the sandbox, with the network on and writes allowed only to the environment and the package cache, using `uv` if it's installed (else `venv` and `pip`). You approve each install once, with the package list shown. The system Python is never touched. `/envs` lists environments; `/envs prune` removes the unused. TypeScript's npm packages go into `~/.blitz/node-envs` the same way, installed with `npm install --ignore-scripts` so no package's code runs at install; `[skills.policy.packages.npm]` sets the `registry`, `allow` and `deny` lists, and `require_exact` versions.
 - **Scripts read the workspace but never write it.** At tier 2 or above a script writes to its own `.blitz/skill-output/<skill>/<run>/` (`$SKILL_OUTPUT`). The agent reads the results there and makes any changes with the file tools, so diffs, approvals, checkpoints and `/undo` work as usual.

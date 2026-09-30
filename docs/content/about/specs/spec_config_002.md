@@ -83,7 +83,7 @@ Built-in lists:
 - **CFG-10** `Config.ModelName()` returns `blitz.default_model` if set, else the active provider's `model` (`openai` and `ollama` share `[llm.openai]`).
 - **CFG-11** Setting a list (e.g. `blocked_paths`, `commands.deny`) **replaces** the default list.
 - **CFG-13** Announced price changes are data, not reminders: `PriceChanges` lists `{model, from (UTC), price}`, and `DefaultPricingAt(t)` applies every change in effect at `t` (the latest per model) to a copy of `DefaultPricing`. `DefaultConfig` uses the prices in effect when the configuration loads, so a long-running service picks up a change at its next restart. `[pricing]` entries still override.
-- **CFG-12** `SkillPolicy.Problems()` reports: `min_hitl_tier` outside 0–3; unknown `sandbox`; unknown `network`; `network_allow` without `network = "allowlist"`; unknown languages (only `python`, `typescript`); negative `max_timeout_seconds`.
+- **CFG-12** `SkillPolicy.Problems()` reports: `min_hitl_tier` outside 0–3; unknown `sandbox`; unknown `network`; `network_allow` without `network = "allowlist"`; unknown languages (only `python`, `typescript`, both allowed by default); negative `max_timeout_seconds`.
 
 ## 4. Editing the file in place
 
