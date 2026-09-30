@@ -78,6 +78,7 @@ blitz --permission-mode dont-ask "…"    # refuse whatever would ask, instead o
 | `/memory [reload\|add <note>]`, `/init` | Project instructions; have the agent write `BLITZ.md` |
 | `/approvals [revoke <n>\|clear]` | Remembered approval rules |
 | `/session list [--all]\|new\|load <id\|name>\|save <name>`, `/resume`, `/rename` | Sessions and snapshots, scoped to the workspace |
+| `blitz --worktree [name] [--ref r]`, `blitz worktrees list\|remove <name>\|prune` | Work in a new git worktree and branch (`.blitz/worktrees/<name>`, `blitz/<name>`), with `.worktreeinclude`'s files copied in; list and remove them |
 | `/cd [path]` | Move the session to another workspace: it opens from scratch (its settings, trust question, sandbox, MCP servers), background work is dealt with as at exit, and `--continue` there finds the session; earlier prompts can't be rewound or undone from the new one |
 | `/tasks [show\|stop <id>]` | Background tasks (`invoke_agent` in the background) |
 | `/trust` | The workspace's project settings (`.blitz/settings.toml`), and trusting them |
