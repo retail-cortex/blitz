@@ -79,6 +79,15 @@ Decisions are `once`, `session`, `always` or `deny`; a question is answered with
 - **Ctrl+C** or **Esc** cancels the running turn; at the prompt, Ctrl+C exits.
 - **Pickers**: `/resume`, `/agent` and `/model` without an argument, approvals and the agent's questions open a menu under the prompt. Arrow keys move, typing filters, Enter chooses.
 - **Shift+Tab** cycles the permission mode (`default` → `accept-edits` → `plan`). **Ctrl+G** opens the prompt in `$VISUAL` or `$EDITOR`. **Esc Esc** clears the line, or on an empty line opens `/rewind`.
+- **Vim and keys**: `ui.editor = "vim"` edits the prompt vi-style. `~/.blitz/keybindings.toml` moves the REPL's keys and binds keys to commands:
+
+  ```toml
+  editor = "ctrl+e"        # instead of Ctrl+G
+  cycle_mode = "shift+tab"
+  [commands]
+  "ctrl+t" = "/tasks"      # at an empty prompt
+  ```
+
 - **Status line**: `ui.status_line = "default"` shows the model, mode, context and cost above each prompt; set it to a command instead and its first line of output is shown, with the session's state as JSON on its stdin (fields in [spec_tui_019](../about/specs/spec_tui_019.md) TUI-48).
 - **Notifications**: when a turn has run longer than `ui.notify_after` seconds (30), its end and any approval or question it waits on ring the bell and show a desktop notification. `ui.notify` picks `both`, `bell`, `desktop` or `off`.
 
@@ -92,6 +101,7 @@ Decisions are `once`, `session`, `always` or `deny`; a question is answered with
 | `/cost`, `/context` | Token usage, estimated cost, context size against the compaction threshold and what it's made of |
 | `/status` | Version, workspace, session, agent, model, mode, sandbox, MCP servers, settings files |
 | `/config [key=value [--save]]`, `/set` | The session's settings; change one, and keep it with `--save` |
+| `/theme [name [--save]]` | Markdown and diff colours: `auto`, `dark`, `light`, `dracula`, `tokyo-night`, `pink`, `ascii`, `notty` |
 | `/copy [n]` | Copy the last answer (or the nth from last) to the clipboard; OSC 52 over SSH |
 | `/compact [focus]` | Summarize everything before the latest turn now |
 | `/memory [reload\|add <note>\|notes\|forget <name>]`, `/init` | Project instructions and the agent's notes; have the agent write `BLITZ.md` |
