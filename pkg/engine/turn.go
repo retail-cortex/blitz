@@ -117,6 +117,9 @@ type turn struct {
 	// planMode: the workspace is in plan permission mode, so the turn is
 	// planned like Plan but the transcript records the text as typed.
 	planMode bool
+	// run is the worker run the turn is: its file changes are the run's
+	// own checkpoint (blitz workers undo), not the sessions' /undo.
+	run string
 }
 
 // run is Run recording the transcript in st, which holds the session as
@@ -153,7 +156,12 @@ func (w *Workspace) run(ctx context.Context, sessionID string, t turn, on func(a
 		if a := st.Active(); a != nil {
 			prompt = a.MessageCount
 		}
-		w.tools.Checkpoints().BeginTurn(sessionID, prompt, textutil.Ellipsize(strings.Join(strings.Fields(recorded), " "), 60))
+		label := textutil.Ellipsize(strings.Join(strings.Fields(recorded), " "), 60)
+		if t.run != "" {
+			w.tools.Checkpoints().BeginWorkerTurn(sessionID, t.run, label)
+		} else {
+			w.tools.Checkpoints().BeginTurn(sessionID, prompt, label)
+		}
 		if !t.Accepted {
 			// Where the conversation stood, so /rewind can cut it here.
 			events := w.engine.EventCount(ctx, sessionID)

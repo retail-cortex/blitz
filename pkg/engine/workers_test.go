@@ -153,6 +153,19 @@ func TestRunWorkerEnforcesPermissions(t *testing.T) {
 	assert.NoError(t, err, "recorded runs %+v", runs)
 	assert.Len(t, runs, 1, "recorded runs %+v %v", runs, err)
 	assert.Equal(t, run.ID, runs[0].ID, "recorded runs %+v %v", runs, err)
+	assert.Equal(t, []string{"reports/deps.md"}, runs[0].Files, "the run's files are recorded")
+
+	// Its change is its own: not the sessions' /undo, but the run's undo
+	// (BL-WK-01, BL-WK-02).
+	_, err = w.Undo(false)
+	assert.Error(t, err, "/undo reached the worker's change")
+	assert.FileExists(t, filepath.Join(w.Dir(), "reports", "deps.md"))
+	undone, err := w.UndoWorkerRun(run.ID, false)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"reports/deps.md"}, undone.Restored)
+	assert.NoFileExists(t, filepath.Join(w.Dir(), "reports", "deps.md"))
+	_, err = w.UndoWorkerRun(run.ID, false)
+	assert.ErrorIs(t, err, api.ErrNothingToUndo)
 }
 
 func TestRunWorkerStopsAtItsTurnLimit(t *testing.T) {

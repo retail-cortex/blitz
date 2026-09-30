@@ -86,3 +86,9 @@ func TestBackgroundRuns(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "done", stopped.State, "stopping an ended run leaves it as it ended")
 }
+
+func TestUndoWorkerRunOverTheService(t *testing.T) {
+	r, url := attachURL(t, nil)
+	_, err := AttachWorkersHTTP(http.DefaultClient, url, r.Dir()).UndoWorkerRun("run-x", false)
+	assert.ErrorIs(t, err, api.ErrNothingToUndo)
+}

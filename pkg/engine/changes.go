@@ -16,12 +16,15 @@ package engine
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"os/exec"
 	"strings"
 
 	"github.com/retail-cortex/blitz/pkg/api"
 
 	"github.com/retail-cortex/blitz/pkg/engine/audit"
+	"github.com/retail-cortex/blitz/pkg/engine/tools"
 )
 
 // Checkpoints of the agent's file changes, and the approvals it was given.
@@ -43,6 +46,20 @@ func (w *Workspace) Undo(force bool) (api.UndoResult, error) {
 	out := api.UndoResult{Label: res.Turn.Label, Restored: res.Restored}
 	if len(res.Restored) > 0 {
 		w.tools.Hooks().Audit().Log(audit.Entry{Kind: audit.KindUndo, Detail: strings.Join(res.Restored, ", ")})
+	}
+	return out, err
+}
+
+// UndoWorkerRun restores the files worker run runID changed, as they were
+// before it (BL-WK-02), with /undo's conflict rules.
+func (w *Workspace) UndoWorkerRun(runID string, force bool) (api.UndoResult, error) {
+	res, err := w.tools.Checkpoints().UndoRun(runID, force)
+	if errors.Is(err, tools.ErrNothingToUndo) {
+		return api.UndoResult{}, fmt.Errorf("%w: run %s changed no files that can still be restored", api.ErrNothingToUndo, runID)
+	}
+	out := api.UndoResult{Label: res.Turn.Label, Restored: res.Restored}
+	if len(res.Restored) > 0 {
+		w.tools.Hooks().Audit().Log(audit.Entry{Kind: audit.KindUndo, Detail: "worker run " + runID + ": " + strings.Join(res.Restored, ", ")})
 	}
 	return out, err
 }

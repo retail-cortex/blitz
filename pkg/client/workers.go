@@ -148,11 +148,20 @@ var runStatuses = map[pb.RunStatus]api.RunStatus{
 	pb.RunStatus_RUN_STATUS_SKIPPED:   api.RunSkipped,
 }
 
+// UndoWorkerRun restores the files a run changed (WorkerService.UndoWorkerRun).
+func (w *Workers) UndoWorkerRun(runID string, force bool) ([]string, error) {
+	res, err := w.c.UndoWorkerRun(context.Background(), connect.NewRequest(&pb.UndoWorkerRunRequest{Workspace: w.dir, RunId: runID, Force: force}))
+	if err != nil {
+		return nil, fromAPI(err)
+	}
+	return res.Msg.Restored, nil
+}
+
 func workerRun(r *pb.WorkerRun) api.Run {
 	out := api.Run{
 		ID: r.Id, Workspace: r.Workspace, Worker: r.Worker, Hash: r.Hash, Status: runStatuses[r.Status], Manual: r.Manual,
 		Started: timeOf(r.Started), Duration: r.GetDuration().AsDuration(), CostUSD: r.Usage.GetCostUsd(), Calls: int(r.Usage.GetCalls()),
-		SessionID: r.SessionId, Error: r.GetError().GetMessage(),
+		SessionID: r.SessionId, Error: r.GetError().GetMessage(), Files: r.Files,
 	}
 	for _, f := range r.Refusals {
 		out.Refusals = append(out.Refusals, api.Refusal{Tool: f.Tool, Kind: actionKind(f.Kind), Detail: f.Detail, Time: timeOf(f.Time)})

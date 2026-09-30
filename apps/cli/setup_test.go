@@ -43,3 +43,11 @@ func TestAddDir(t *testing.T) {
 		assert.ErrorContains(t, err, "--add-dir")
 	}
 }
+
+func TestWorkersUndoUnknownRun(t *testing.T) {
+	isolate(t)
+	t.Setenv("BLITZ_SOCKET", filepath.Join(t.TempDir(), "none.sock"))
+	out, err := runCLI(t, "-d", t.TempDir(), "workers", "undo", "20260930T000000-nope")
+	assert.Equal(t, exitUsage, exitCodeFor(err), "%v\n%s", err, out)
+	assert.ErrorContains(t, err, "nothing to undo")
+}

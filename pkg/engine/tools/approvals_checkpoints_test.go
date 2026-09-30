@@ -124,11 +124,11 @@ func TestCheckpointUndo(t *testing.T) {
 	os.Chmod(path, 0o755)
 
 	cp.Begin("turn 1")
-	ws.WriteFileAtomic("f.txt", []byte("v2\n"))
-	ws.WriteFileAtomic("f.txt", []byte("v3\n")) // same turn: original snapshot kept
-	ws.CreateExclusive("new.txt", []byte("n\n"))
+	ws.WriteFileAtomic(context.Background(), "f.txt", []byte("v2\n"))
+	ws.WriteFileAtomic(context.Background(), "f.txt", []byte("v3\n")) // same turn: original snapshot kept
+	ws.CreateExclusive(context.Background(), "new.txt", []byte("n\n"))
 	cp.Begin("turn 2")
-	ws.RemoveFile("new.txt")
+	ws.RemoveFile(context.Background(), "new.txt")
 
 	l := cp.List()
 	require.Len(t, l, 2, "unexpected checkpoints %+v", l)
@@ -164,7 +164,7 @@ func TestCheckpointUndoConflict(t *testing.T) {
 	path := filepath.Join(dir, "f.txt")
 	writeFile(t, path, "orig\n")
 	cp.Begin("edit")
-	ws.WriteFileAtomic("f.txt", []byte("tool edit\n"))
+	ws.WriteFileAtomic(context.Background(), "f.txt", []byte("tool edit\n"))
 	os.WriteFile(path, []byte("user edit after\n"), 0o644) // changed outside the tools
 
 	_, err := cp.Undo(false)
@@ -182,8 +182,8 @@ func TestCheckpointFailedWriteNotRecorded(t *testing.T) {
 	cp := NewCheckpoints(ws, 0)
 	os.Mkdir(filepath.Join(dir, "adir"), 0o755)
 	cp.Begin("t")
-	require.Error(t, ws.WriteFileAtomic("adir", []byte("x")), "expected write over directory to fail")
-	require.Error(t, ws.CreateExclusive("adir", []byte("x")), "expected create over directory to fail")
+	require.Error(t, ws.WriteFileAtomic(context.Background(), "adir", []byte("x")), "expected write over directory to fail")
+	require.Error(t, ws.CreateExclusive(context.Background(), "adir", []byte("x")), "expected create over directory to fail")
 	l := cp.List()
 	assert.Len(t, l, 0, "failed writes were recorded: %+v", l)
 	_, err := cp.Undo(false)
@@ -198,7 +198,7 @@ func TestCheckpointMemoryBudget(t *testing.T) {
 	for i, name := range []string{"a", "b", "c"} {
 		writeFile(t, filepath.Join(dir, name), strings.Repeat("x", 60))
 		cp.Begin(name)
-		ws.WriteFileAtomic(name, []byte{byte('0' + i)})
+		ws.WriteFileAtomic(context.Background(), name, []byte{byte('0' + i)})
 	}
 	l := cp.List()
 	assert.NotEqual(t, 0, len(l), "expected oldest turns dropped to fit budget, have %d", len(l))

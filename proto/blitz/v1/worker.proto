@@ -46,6 +46,9 @@ service WorkerService {
   rpc ListWorkerRuns(ListWorkerRunsRequest) returns (ListWorkerRunsResponse);
   // Returns one run.
   rpc GetWorkerRun(GetWorkerRunRequest) returns (GetWorkerRunResponse);
+  // Restores the files a run changed as they were before it, refusing
+  // (UNDO_CONFLICT) when one changed since, unless force (NOTHING_TO_UNDO).
+  rpc UndoWorkerRun(UndoWorkerRunRequest) returns (UndoWorkerRunResponse);
   // Streams a run's events: those already produced, then live ones until
   // it finishes.
   rpc WatchWorkerRun(WatchWorkerRunRequest) returns (stream WatchWorkerRunResponse);
@@ -202,6 +205,20 @@ message WorkerRun {
   repeated Refusal refusals = 11;
   // Why the run failed or stopped.
   ErrorInfo error = 12;
+  // The files the run changed (UndoWorkerRun restores them).
+  repeated string files = 13;
+}
+
+// Request message for WorkerService.UndoWorkerRun.
+message UndoWorkerRunRequest {
+  string workspace = 1;
+  string run_id = 2;
+  bool force = 3;
+}
+
+// Response message for WorkerService.UndoWorkerRun.
+message UndoWorkerRunResponse {
+  repeated string restored = 1;
 }
 
 // Request message for WorkerService.RunWorker.

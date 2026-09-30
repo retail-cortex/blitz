@@ -233,11 +233,18 @@ func WithOwnerSession(ctx context.Context, session string) context.Context {
 
 // sessionOf is the session a tool call counts for: the owner a sub-agent
 // was given, else the one an agent's context says; "" for any other.
-func sessionOf(ctx context.Context) string {
+func sessionOf(ctx context.Context) (id string) {
 	if s, ok := ctx.Value(ownerSessionKey{}).(string); ok {
 		return s
 	}
 	if c, ok := ctx.(interface{ SessionID() string }); ok {
+		// A tool context made outside an invocation (tests) has no session
+		// and panics when asked.
+		defer func() {
+			if recover() != nil {
+				id = ""
+			}
+		}()
 		return c.SessionID()
 	}
 	return ""

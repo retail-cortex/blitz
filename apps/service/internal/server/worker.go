@@ -78,7 +78,7 @@ func runMsg(r api.Run) *pb.WorkerRun {
 	out := &pb.WorkerRun{
 		Id: r.ID, Workspace: r.Workspace, Worker: r.Worker, Hash: r.Hash, Status: runStatus(r.Status), Manual: r.Manual,
 		Started: timestamp(r.Started), Duration: durationpb.New(r.Duration),
-		Usage: &pb.Usage{Calls: int32(r.Calls), CostUsd: r.CostUSD}, SessionId: r.SessionID,
+		Usage: &pb.Usage{Calls: int32(r.Calls), CostUsd: r.CostUSD}, SessionId: r.SessionID, Files: r.Files,
 	}
 	for _, f := range r.Refusals {
 		out.Refusals = append(out.Refusals, &pb.Refusal{Tool: f.Tool, Kind: actionKind(f.Kind), Detail: f.Detail, Time: timestamp(f.Time)})
@@ -206,6 +206,18 @@ func (h workerService) ListWorkerRuns(ctx context.Context, r req[pb.ListWorkerRu
 		out.Runs = append(out.Runs, runMsg(run))
 	}
 	return ok(out)
+}
+
+func (h workerService) UndoWorkerRun(ctx context.Context, r req[pb.UndoWorkerRunRequest]) (*connect.Response[pb.UndoWorkerRunResponse], error) {
+	w, err := h.s.workspace(ctx, r.Msg.Workspace)
+	if err != nil {
+		return nil, err
+	}
+	res, err := w.UndoWorkerRun(r.Msg.RunId, r.Msg.Force)
+	if err != nil && len(res.Restored) == 0 {
+		return nil, toAPI(err)
+	}
+	return ok(&pb.UndoWorkerRunResponse{Restored: res.Restored})
 }
 
 func (h workerService) GetWorkerRun(_ context.Context, r req[pb.GetWorkerRunRequest]) (*connect.Response[pb.GetWorkerRunResponse], error) {

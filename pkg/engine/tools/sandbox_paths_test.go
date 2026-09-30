@@ -115,7 +115,7 @@ func TestWorkspaceMultiRootAccess(t *testing.T) {
 	b, err := ws.ReadFile(notes)
 	assert.NoError(t, err, "read allowed root: %q", b)
 	assert.Equal(t, "shared notes\n", string(b), "read allowed root: %q %v", b, err)
-	assert.NoError(t, ws.WriteFileAtomic(filepath.Join(f.shared, "new.md"), []byte("x")), "write allowed root")
+	assert.NoError(t, ws.WriteFileAtomic(context.Background(), filepath.Join(f.shared, "new.md"), []byte("x")), "write allowed root")
 	// Display paths: workspace-relative inside, absolute outside.
 	got, _ := ws.Rel(filepath.Join(f.work, "main.go"))
 	assert.Equal(t, "main.go", got, "Rel inside workspace = %q", got)
@@ -130,13 +130,13 @@ func TestWorkspaceMultiRootAccess(t *testing.T) {
 	// nested inside the writable workspace.
 	for _, p := range []string{guide, filepath.Join(f.docs, "new.md"), "vendor-ro/lib.go"} {
 		t.Run(p, func(t *testing.T) {
-			err := ws.WriteFileAtomic(p, []byte("x"))
+			err := ws.WriteFileAtomic(context.Background(), p, []byte("x"))
 			assert.ErrorIs(t, err, ErrReadOnlyPath, "write %s: expected ErrReadOnlyPath, got %v", p, err)
 			_, err = ws.WritablePath(p)
 			assert.ErrorIs(t, err, ErrReadOnlyPath, "WritablePath %s: expected ErrReadOnlyPath, got %v", p, err)
 		})
 	}
-	err = ws.RemoveFile(guide)
+	err = ws.RemoveFile(context.Background(), guide)
 	assert.ErrorIs(t, err, ErrReadOnlyPath, "delete in read-only root: %v", err)
 
 	// Negative: paths outside every root.
@@ -152,12 +152,12 @@ func TestWorkspaceBlockedPaths(t *testing.T) {
 		t.Run(p, func(t *testing.T) {
 			_, err := ws.ReadFile(p)
 			assert.ErrorIs(t, err, ErrBlockedPath, "read %s: expected ErrBlockedPath, got %v", p, err)
-			err = ws.WriteFileAtomic(p, []byte("x"))
+			err = ws.WriteFileAtomic(context.Background(), p, []byte("x"))
 			assert.ErrorIs(t, err, ErrBlockedPath, "write %s: expected ErrBlockedPath, got %v", p, err)
 		})
 	}
 	// Creating a new blocked file is refused too.
-	assert.ErrorIs(t, ws.CreateExclusive("sub/.env", []byte("x")), ErrBlockedPath, "create blocked")
+	assert.ErrorIs(t, ws.CreateExclusive(context.Background(), "sub/.env", []byte("x")), ErrBlockedPath, "create blocked")
 
 	// A symlink with an innocent name pointing at a blocked file is refused.
 	require.NoError(t, os.Symlink(".env", filepath.Join(f.work, "innocent.txt")))

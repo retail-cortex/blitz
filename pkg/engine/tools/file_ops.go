@@ -306,9 +306,9 @@ func NewCreateFileTool(ws *Workspace, hooks *Hooks) (tool.Tool, error) {
 
 			data := []byte(input.Content)
 			if input.Overwrite {
-				err = ws.WriteFileAtomic(rel, data)
+				err = ws.WriteFileAtomic(ctx, rel, data)
 			} else {
-				err = ws.CreateExclusive(rel, data)
+				err = ws.CreateExclusive(ctx, rel, data)
 				if errors.Is(err, fs.ErrExist) {
 					return fail(fmt.Sprintf("file '%s' already exists; set overwrite=true to overwrite", input.Path))
 				}
@@ -372,7 +372,7 @@ func NewDeleteFileTool(ws *Workspace, hooks *Hooks) (tool.Tool, error) {
 					return DeleteFileOutput{Path: input.Path, Error: err.Error()}, nil
 				}
 			}
-			if err := ws.RemoveFile(rel); err != nil {
+			if err := ws.RemoveFile(ctx, rel); err != nil {
 				return DeleteFileOutput{Path: input.Path, Error: fmt.Sprintf("failed to delete: %v", err)}, nil
 			}
 			return DeleteFileOutput{Path: input.Path, Success: true}, nil

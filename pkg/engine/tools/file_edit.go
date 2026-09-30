@@ -89,7 +89,7 @@ func NewReplaceInFileTool(ws *Workspace, hooks *Hooks) (tool.Tool, error) {
 				return fail(err.Error())
 			}
 
-			if err := ws.WriteFileAtomic(rel, []byte(newContent)); err != nil {
+			if err := ws.WriteFileAtomic(ctx, rel, []byte(newContent)); err != nil {
 				return fail(fmt.Sprintf("failed to write updated file: %v", err))
 			}
 
@@ -151,7 +151,7 @@ func NewDeleteSnippetTool(ws *Workspace, hooks *Hooks) (tool.Tool, error) {
 			if err := ws.unchanged(rel, true, data); err != nil {
 				return fail(err.Error())
 			}
-			if err := ws.WriteFileAtomic(rel, []byte(newContent)); err != nil {
+			if err := ws.WriteFileAtomic(ctx, rel, []byte(newContent)); err != nil {
 				return fail(fmt.Sprintf("failed to save file: %v", err))
 			}
 			return DeleteSnippetOutput{Path: input.Path, Success: true}, nil

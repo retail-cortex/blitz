@@ -363,7 +363,7 @@ func NewNotebookEditTool(ws *Workspace, hooks *Hooks) (tool.Tool, error) {
 			if err := ws.unchanged(rel, true, data); err != nil {
 				return fail(err)
 			}
-			if err := ws.WriteFileAtomic(rel, updated); err != nil {
+			if err := ws.WriteFileAtomic(ctx, rel, updated); err != nil {
 				return fail(fmt.Errorf("failed to write the notebook: %w", err))
 			}
 			return NotebookEditOutput{Path: in.Path, Cell: cell, Cells: cells}, nil

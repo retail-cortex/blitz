@@ -58,7 +58,10 @@ type Turn struct {
 	// Session is the session the prompt belongs to, and Prompt the index of
 	// its message in the transcript (-1 when unknown), so a rewind can find
 	// the changes made from a prompt on.
-	Session string        `json:"session,omitempty"`
+	Session string `json:"session,omitempty"`
+	// Run is the worker run that made the turn: its changes are the run's
+	// own (blitz workers undo), not the interactive sessions' /undo.
+	Run     string        `json:"run,omitempty"`
 	Prompt  int           `json:"prompt"`
 	Label   string        `json:"label"`
 	Started time.Time     `json:"started"`
@@ -238,35 +241,45 @@ func (c *Checkpoints) BeginTurn(session string, prompt int, label string) {
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.beginLocked(session, prompt, label)
+	c.beginLocked(session, prompt, label, "")
 }
 
-func (c *Checkpoints) beginLocked(session string, prompt int, label string) *Turn {
-	// Reuse an empty current turn rather than stacking empty ones.
-	if n := len(c.turns); n > 0 && len(c.turns[n-1].Changes) == 0 {
+// BeginWorkerTurn starts the turn of worker run run, in its session: its
+// changes are kept apart from the interactive sessions' (BL-WK-01).
+func (c *Checkpoints) BeginWorkerTurn(session, run, label string) {
+	if c == nil {
+		return
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.beginLocked(session, -1, label, run)
+}
+
+func (c *Checkpoints) beginLocked(session string, prompt int, label, run string) *Turn {
+	// Reuse an empty current turn rather than stacking empty ones: the
+	// same session's (or one without), not a turn another session is in.
+	if n := len(c.turns); n > 0 && len(c.turns[n-1].Changes) == 0 && (c.turns[n-1].Session == session || c.turns[n-1].Session == "") {
 		t := c.turns[n-1]
-		t.Session, t.Prompt, t.Label, t.Started = session, prompt, label, time.Now()
+		t.Session, t.Prompt, t.Label, t.Run, t.Started = session, prompt, label, run, time.Now()
 		return t
 	}
 	c.nextID++
-	t := &Turn{ID: c.nextID, Session: session, Prompt: prompt, Label: label, Started: time.Now(), index: map[string]*fileChange{}}
+	t := &Turn{ID: c.nextID, Session: session, Run: run, Prompt: prompt, Label: label, Started: time.Now(), index: map[string]*fileChange{}}
 	c.turns = append(c.turns, t)
 	return t
 }
 
 // before is called by the workspace before it modifies abs, with its
 // current content. It reports whether a new entry was added for this turn.
-func (c *Checkpoints) before(abs, display string, st fileState, data []byte) bool {
+func (c *Checkpoints) before(session, abs, display string, st fileState, data []byte) bool {
 	if c == nil {
 		return false
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	var t *Turn
-	if n := len(c.turns); n > 0 {
-		t = c.turns[n-1]
-	} else {
-		t = c.beginLocked("", -1, "(no prompt)")
+	t := c.currentLocked(session)
+	if t == nil {
+		t = c.beginLocked(session, -1, "(no prompt)", "")
 	}
 	if _, seen := t.index[abs]; seen {
 		return false // keep the state from before the turn's first change
@@ -288,18 +301,34 @@ func (c *Checkpoints) before(abs, display string, st fileState, data []byte) boo
 	return true
 }
 
+// currentLocked is the turn a change by session goes to: session's latest,
+// so turns running at once (a worker's, an interactive one) keep their
+// own changes; the latest of all when session has none (or is "").
+func (c *Checkpoints) currentLocked(session string) *Turn {
+	if session != "" {
+		for i := len(c.turns) - 1; i >= 0; i-- {
+			if c.turns[i].Session == session {
+				return c.turns[i]
+			}
+		}
+	}
+	if n := len(c.turns); n > 0 {
+		return c.turns[n-1]
+	}
+	return nil
+}
+
 // discard drops the current turn's entry for abs after a failed change.
-func (c *Checkpoints) discard(abs string) {
+func (c *Checkpoints) discard(session, abs string) {
 	if c == nil {
 		return
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	n := len(c.turns)
-	if n == 0 {
+	t := c.currentLocked(session)
+	if t == nil {
 		return
 	}
-	t := c.turns[n-1]
 	ch := t.index[abs]
 	if ch == nil {
 		return
@@ -317,14 +346,14 @@ func (c *Checkpoints) discard(abs string) {
 }
 
 // after records the state the workspace left abs in.
-func (c *Checkpoints) after(abs string, data []byte, exists bool) {
+func (c *Checkpoints) after(session, abs string, data []byte, exists bool) {
 	if c == nil {
 		return
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if n := len(c.turns); n > 0 {
-		if ch := c.turns[n-1].index[abs]; ch != nil {
+	if t := c.currentLocked(session); t != nil {
+		if ch := t.index[abs]; ch != nil {
 			ch.AfterExists = exists
 			ch.AfterHash = hashOf(data)
 			c.saveLocked()
@@ -354,7 +383,7 @@ func (c *Checkpoints) List() []TurnSummary {
 	defer c.mu.Unlock()
 	var out []TurnSummary
 	for i := len(c.turns) - 1; i >= 0; i-- {
-		if len(c.turns[i].Changes) > 0 {
+		if len(c.turns[i].Changes) > 0 && c.turns[i].Run == "" {
 			out = append(out, summarize(c.turns[i]))
 		}
 	}
@@ -379,7 +408,7 @@ func (c *Checkpoints) Undo(force bool) (UndoResult, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	for i := len(c.turns) - 1; i >= 0; i-- {
-		if len(c.turns[i].Changes) > 0 {
+		if len(c.turns[i].Changes) > 0 && c.turns[i].Run == "" { // workers' have their own undo
 			t := c.turns[i]
 			res, applied, err := c.restoreLocked([]*Turn{t}, force, "/undo --force")
 			res.Turn = summarize(t)
@@ -413,6 +442,55 @@ func (c *Checkpoints) Rewind(session string, prompt int, force bool) (UndoResult
 		return UndoResult{}, ErrNothingToUndo
 	}
 	res, applied, err := c.restoreLocked(turns, force, "--force")
+	if applied {
+		c.removeLocked(turns)
+	}
+	return res, err
+}
+
+// RunFiles are the files worker run run changed, sorted.
+func (c *Checkpoints) RunFiles(run string) []string {
+	if c == nil {
+		return nil
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	seen := map[string]bool{}
+	var out []string
+	for _, t := range c.turns {
+		if t.Run != run {
+			continue
+		}
+		for _, ch := range t.Changes {
+			if !seen[ch.Display] {
+				seen[ch.Display] = true
+				out = append(out, ch.Display)
+			}
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
+// UndoRun restores the files worker run run changed, as they were before
+// it, refusing on conflicts as Undo does (BL-WK-02).
+func (c *Checkpoints) UndoRun(run string, force bool) (UndoResult, error) {
+	if c == nil {
+		return UndoResult{}, errors.New("checkpoints are disabled")
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	var turns []*Turn
+	for _, t := range c.turns {
+		if t.Run == run && len(t.Changes) > 0 {
+			turns = append(turns, t)
+		}
+	}
+	if len(turns) == 0 {
+		return UndoResult{}, ErrNothingToUndo
+	}
+	res, applied, err := c.restoreLocked(turns, force, "--force")
+	res.Turn = summarize(turns[len(turns)-1])
 	if applied {
 		c.removeLocked(turns)
 	}

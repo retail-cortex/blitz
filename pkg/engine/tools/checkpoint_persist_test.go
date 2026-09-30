@@ -15,6 +15,7 @@
 package tools
 
 import (
+	"context"
 	"encoding/json"
 	"io/fs"
 	"os"
@@ -54,9 +55,9 @@ func TestCheckpointsOutliveTheProcess(t *testing.T) {
 	writeFile(t, filepath.Join(dir, "f.txt"), "v1\n")
 	ws, cp := reopen(t, dir, store)
 	cp.BeginTurn("s1", 0, "first")
-	ws.WriteFileAtomic("f.txt", []byte("v2\n"))
+	ws.WriteFileAtomic(context.Background(), "f.txt", []byte("v2\n"))
 	cp.BeginTurn("s1", 2, "second")
-	ws.CreateExclusive("new.txt", []byte("n\n"))
+	ws.CreateExclusive(context.Background(), "new.txt", []byte("n\n"))
 
 	for _, p := range []string{store, filepath.Join(store, "index.json"), filepath.Join(store, "blobs")} {
 		t.Run(p, func(t *testing.T) {
@@ -107,14 +108,14 @@ func TestRewindRestoresEveryChangeFromAPrompt(t *testing.T) {
 	writeFile(t, filepath.Join(dir, "a.txt"), "a0\n")
 	writeFile(t, filepath.Join(dir, "b.txt"), "b0\n")
 	cp.BeginTurn("s", 0, "p0")
-	ws.WriteFileAtomic("a.txt", []byte("a1\n"))
+	ws.WriteFileAtomic(context.Background(), "a.txt", []byte("a1\n"))
 	cp.BeginTurn("s", 2, "p1")
-	ws.WriteFileAtomic("a.txt", []byte("a2\n"))
-	ws.CreateExclusive("c.txt", []byte("c\n"))
+	ws.WriteFileAtomic(context.Background(), "a.txt", []byte("a2\n"))
+	ws.CreateExclusive(context.Background(), "c.txt", []byte("c\n"))
 	cp.BeginTurn("other", 0, "elsewhere")
-	ws.WriteFileAtomic("b.txt", []byte("b1\n"))
+	ws.WriteFileAtomic(context.Background(), "b.txt", []byte("b1\n"))
 	cp.BeginTurn("s", 4, "p2")
-	ws.WriteFileAtomic("a.txt", []byte("a3\n"))
+	ws.WriteFileAtomic(context.Background(), "a.txt", []byte("a3\n"))
 
 	res, err := cp.Rewind("s", 2, false)
 	require.NoError(t, err)
@@ -140,9 +141,9 @@ func TestRewindChecksEveryFileFirst(t *testing.T) {
 	writeFile(t, filepath.Join(dir, "a.txt"), "a0\n")
 	writeFile(t, filepath.Join(dir, "b.txt"), "b0\n")
 	cp.BeginTurn("s", 0, "p0")
-	ws.WriteFileAtomic("a.txt", []byte("a1\n"))
+	ws.WriteFileAtomic(context.Background(), "a.txt", []byte("a1\n"))
 	cp.BeginTurn("s", 2, "p1")
-	ws.WriteFileAtomic("b.txt", []byte("b1\n"))
+	ws.WriteFileAtomic(context.Background(), "b.txt", []byte("b1\n"))
 	os.WriteFile(filepath.Join(dir, "b.txt"), []byte("mine\n"), 0o644)
 
 	_, err := cp.Rewind("s", 0, false)
@@ -163,12 +164,12 @@ func TestDetachAfterAConversationRewind(t *testing.T) {
 	cp := NewCheckpoints(ws, 0)
 	writeFile(t, filepath.Join(dir, "a.txt"), "a0\n")
 	cp.BeginTurn("s", 0, "p0")
-	ws.WriteFileAtomic("a.txt", []byte("a1\n"))
+	ws.WriteFileAtomic(context.Background(), "a.txt", []byte("a1\n"))
 	cp.BeginTurn("s", 2, "p1")
-	ws.WriteFileAtomic("a.txt", []byte("a2\n"))
+	ws.WriteFileAtomic(context.Background(), "a.txt", []byte("a2\n"))
 	cp.Detach("s", 2)
 	cp.BeginTurn("s", 2, "new p1")
-	ws.WriteFileAtomic("a.txt", []byte("a3\n"))
+	ws.WriteFileAtomic(context.Background(), "a.txt", []byte("a3\n"))
 
 	_, err := cp.Rewind("s", 2, false)
 	require.NoError(t, err)
@@ -186,9 +187,9 @@ func TestPersistedCheckpointsAgeOutAndSurviveDamage(t *testing.T) {
 	writeFile(t, filepath.Join(dir, "b.txt"), "b0\n")
 	ws, cp := reopen(t, dir, store)
 	cp.BeginTurn("s", 0, "old")
-	ws.WriteFileAtomic("a.txt", []byte("a1\n"))
+	ws.WriteFileAtomic(context.Background(), "a.txt", []byte("a1\n"))
 	cp.BeginTurn("s", 2, "new")
-	ws.WriteFileAtomic("b.txt", []byte("b1\n"))
+	ws.WriteFileAtomic(context.Background(), "b.txt", []byte("b1\n"))
 	ws.Close()
 
 	// Age the first turn past the limit.

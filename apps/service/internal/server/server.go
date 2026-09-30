@@ -335,6 +335,7 @@ func toAPI(err error) error {
 		{api.ErrBadModelRef, connect.CodeInvalidArgument, "BAD_MODEL_REF"},
 		{api.ErrInvalidAgency, connect.CodeInvalidArgument, "INVALID_AGENCY"},
 		{api.ErrUndoConflict, connect.CodeFailedPrecondition, "UNDO_CONFLICT"},
+		{api.ErrNothingToUndo, connect.CodeFailedPrecondition, "NOTHING_TO_UNDO"},
 		{api.ErrSessionBusy, connect.CodeFailedPrecondition, "SESSION_BUSY"},
 		{api.ErrNotRewindPoint, connect.CodeInvalidArgument, "NOT_REWIND_POINT"},
 		{api.ErrCantRewindConversation, connect.CodeFailedPrecondition, "CANT_REWIND_CONVERSATION"},

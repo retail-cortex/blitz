@@ -15,6 +15,7 @@
 package tools
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"regexp"
@@ -508,7 +509,7 @@ func NewApplyPatchTool(ws *Workspace, hooks *Hooks) (tool.Tool, error) {
 				}
 			}
 
-			if err := executePlan(ws, plan); err != nil {
+			if err := executePlan(ctx, ws, plan); err != nil {
 				return fail(err)
 			}
 			out := ApplyPatchOutput{Success: true}
@@ -574,7 +575,7 @@ func planPatch(ws *Workspace, patches []filePatch) ([]plannedChange, error) {
 	return plan, nil
 }
 
-func executePlan(ws *Workspace, plan []plannedChange) error {
+func executePlan(ctx context.Context, ws *Workspace, plan []plannedChange) error {
 	type undo struct {
 		path    string
 		content string
@@ -587,9 +588,9 @@ func executePlan(ws *Workspace, plan []plannedChange) error {
 			u := done[i]
 			var err error
 			if u.existed {
-				err = ws.WriteFileAtomic(u.path, []byte(u.content))
+				err = ws.WriteFileAtomic(ctx, u.path, []byte(u.content))
 			} else {
-				err = ws.RemoveFile(u.path)
+				err = ws.RemoveFile(ctx, u.path)
 			}
 			if err != nil {
 				errs = append(errs, err)
@@ -604,26 +605,26 @@ func executePlan(ws *Workspace, plan []plannedChange) error {
 	for _, c := range plan {
 		switch {
 		case c.deleteIt:
-			if err := ws.RemoveFile(c.path); err != nil {
+			if err := ws.RemoveFile(ctx, c.path); err != nil {
 				return rollback(fmt.Errorf("delete %s: %w", c.path, err))
 			}
 			done = append(done, undo{c.path, c.before, true})
 		case c.target != c.path:
-			if err := ws.CreateExclusive(c.target, []byte(c.after)); err != nil {
+			if err := ws.CreateExclusive(ctx, c.target, []byte(c.after)); err != nil {
 				return rollback(fmt.Errorf("write %s: %w", c.target, err))
 			}
 			done = append(done, undo{c.target, "", false})
-			if err := ws.RemoveFile(c.path); err != nil {
+			if err := ws.RemoveFile(ctx, c.path); err != nil {
 				return rollback(fmt.Errorf("remove %s: %w", c.path, err))
 			}
 			done = append(done, undo{c.path, c.before, true})
 		case !c.existed:
-			if err := ws.CreateExclusive(c.path, []byte(c.after)); err != nil {
+			if err := ws.CreateExclusive(ctx, c.path, []byte(c.after)); err != nil {
 				return rollback(fmt.Errorf("create %s: %w", c.path, err))
 			}
 			done = append(done, undo{c.path, "", false})
 		default:
-			if err := ws.WriteFileAtomic(c.path, []byte(c.after)); err != nil {
+			if err := ws.WriteFileAtomic(ctx, c.path, []byte(c.after)); err != nil {
 				return rollback(fmt.Errorf("write %s: %w", c.path, err))
 			}
 			done = append(done, undo{c.path, c.before, true})

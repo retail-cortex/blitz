@@ -15,6 +15,7 @@
 package tools
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
@@ -347,7 +348,7 @@ func (w *Workspace) ReadFileLimit(p string, limit int64) ([]byte, error) {
 }
 
 // CreateExclusive creates a new file, failing with fs.ErrExist if it exists.
-func (w *Workspace) CreateExclusive(p string, data []byte) error {
+func (w *Workspace) CreateExclusive(ctx context.Context, p string, data []byte) error {
 	loc, err := w.resolve(p, true)
 	if err != nil {
 		return err
@@ -359,10 +360,10 @@ func (w *Workspace) CreateExclusive(p string, data []byte) error {
 	if err := mkdirParent(r, loc.rel); err != nil {
 		return err
 	}
-	added := w.snapshot(loc)
+	added := w.snapshot(ctx, loc)
 	fail := func(err error) error {
 		if added {
-			w.checkpoints.discard(loc.abs())
+			w.checkpoints.discard(sessionOf(ctx), loc.abs())
 		}
 		return err
 	}
@@ -378,7 +379,7 @@ func (w *Workspace) CreateExclusive(p string, data []byte) error {
 	if err := f.Close(); err != nil {
 		return fail(err)
 	}
-	w.checkpoints.after(loc.abs(), data, true)
+	w.checkpoints.after(sessionOf(ctx), loc.abs(), data, true)
 	return nil
 }
 
@@ -386,7 +387,7 @@ func (w *Workspace) CreateExclusive(p string, data []byte) error {
 // or error never leaves a half-written file. An existing file's mode is kept.
 // If p is itself a symlink, the target is rewritten in place (through
 // os.Root, so it must stay inside the root) rather than replacing the link.
-func (w *Workspace) WriteFileAtomic(p string, data []byte) error {
+func (w *Workspace) WriteFileAtomic(ctx context.Context, p string, data []byte) error {
 	loc, err := w.resolve(p, true)
 	if err != nil {
 		return err
@@ -394,14 +395,14 @@ func (w *Workspace) WriteFileAtomic(p string, data []byte) error {
 	if loc.rel == "." {
 		return errors.New("path must name a file")
 	}
-	added := w.snapshot(loc)
+	added := w.snapshot(ctx, loc)
 	if err := w.writeAtomic(loc, data, nil); err != nil {
 		if added {
-			w.checkpoints.discard(loc.abs())
+			w.checkpoints.discard(sessionOf(ctx), loc.abs())
 		}
 		return err
 	}
-	w.checkpoints.after(loc.abs(), data, true)
+	w.checkpoints.after(sessionOf(ctx), loc.abs(), data, true)
 	return nil
 }
 
@@ -481,7 +482,7 @@ func writeInPlace(r *os.Root, rel string, data []byte) error {
 }
 
 // RemoveFile deletes a single non-directory entry.
-func (w *Workspace) RemoveFile(p string) error {
+func (w *Workspace) RemoveFile(ctx context.Context, p string) error {
 	loc, err := w.resolve(p, true)
 	if err != nil {
 		return err
@@ -496,21 +497,21 @@ func (w *Workspace) RemoveFile(p string) error {
 	if info.IsDir() {
 		return fmt.Errorf("%s is a directory; delete_file only removes files", p)
 	}
-	added := w.snapshot(loc)
+	added := w.snapshot(ctx, loc)
 	if err := loc.root.root.Remove(loc.rel); err != nil {
 		if added {
-			w.checkpoints.discard(loc.abs())
+			w.checkpoints.discard(sessionOf(ctx), loc.abs())
 		}
 		return err
 	}
-	w.checkpoints.after(loc.abs(), nil, false)
+	w.checkpoints.after(sessionOf(ctx), loc.abs(), nil, false)
 	return nil
 }
 
 // snapshot records loc's current state in the checkpoint store, reporting
 // whether it added a new entry (which the caller discards if the change fails).
 // Directories are never snapshotted; the operation on them fails anyway.
-func (w *Workspace) snapshot(loc location) bool {
+func (w *Workspace) snapshot(ctx context.Context, loc location) bool {
 	if w.checkpoints == nil {
 		return false
 	}
@@ -535,7 +536,7 @@ func (w *Workspace) snapshot(loc location) bool {
 			st.TooLarge = true
 		}
 	}
-	return w.checkpoints.before(loc.abs(), w.display(loc.abs()), st, data)
+	return w.checkpoints.before(sessionOf(ctx), loc.abs(), w.display(loc.abs()), st, data)
 }
 
 // restore puts abs back into state st, with content data, without

@@ -106,3 +106,6 @@ var (
 	// ErrUnknownRewindMode reports a mode that isn't one of RewindModes.
 	ErrUnknownRewindMode = errors.New("unknown rewind mode")
 )
+
+// ErrNothingToUndo: there are no changes left to restore.
+var ErrNothingToUndo = errors.New("nothing to undo")

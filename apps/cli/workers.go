@@ -42,10 +42,16 @@ type workerOps interface {
 	DisableWorker(name string) (api.WorkerInfo, error)
 	RunWorker(ctx context.Context, name string, on func(api.Event)) (api.Run, error)
 	WorkerRuns(name string, limit int) ([]api.Run, error)
+	UndoWorkerRun(runID string, force bool) ([]string, error)
 }
 
 // localWorkers runs workers in this process, when the service isn't running.
 type localWorkers struct{ *engine.Workspace }
+
+func (l localWorkers) UndoWorkerRun(runID string, force bool) ([]string, error) {
+	res, err := l.Workspace.UndoWorkerRun(runID, force)
+	return res.Restored, err
+}
 
 func (l localWorkers) RunWorker(ctx context.Context, name string, on func(api.Event)) (api.Run, error) {
 	return l.Workspace.RunWorker(ctx, name, engine.RunOptions{Manual: true, OnEvent: on})
@@ -102,6 +108,14 @@ refused and recorded.`,
 		RunE:  func(cmd *cobra.Command, args []string) error { return workersRuns(cmd, g, args[0], limit) },
 	}
 	runs.Flags().IntVarP(&limit, "limit", "n", 10, "How many runs to show")
+	var force bool
+	undo := &cobra.Command{
+		Use:   "undo <run-id>",
+		Short: "Put back the files a run changed, as they were before it",
+		Args:  cobra.ExactArgs(1),
+		RunE:  func(cmd *cobra.Command, args []string) error { return workersUndo(cmd, g, args[0], force) },
+	}
+	undo.Flags().BoolVarP(&force, "force", "f", false, "Overwrite files changed since the run")
 	cmd.AddCommand(
 		&cobra.Command{Use: "list", Short: "List the workspace's workers", Args: cobra.NoArgs,
 			RunE: func(cmd *cobra.Command, _ []string) error { return workersList(cmd, g) }},
@@ -111,8 +125,25 @@ refused and recorded.`,
 		&cobra.Command{Use: "run <name>", Short: "Run an enabled worker now and show what it does", Args: cobra.ExactArgs(1),
 			RunE: func(cmd *cobra.Command, args []string) error { return workersRun(cmd, g, args[0]) }},
 		runs,
+		undo,
 	)
 	return cmd
+}
+
+func workersUndo(cmd *cobra.Command, g *globalFlags, runID string, force bool) error {
+	ops, done, err := openWorkers(cmd.Context(), g)
+	if err != nil {
+		return err
+	}
+	defer done()
+	restored, err := ops.UndoWorkerRun(runID, force)
+	if len(restored) > 0 {
+		fmt.Fprintf(cmd.OutOrStdout(), "Restored %s.\n", strings.Join(restored, ", "))
+	}
+	if errors.Is(err, api.ErrUndoConflict) || errors.Is(err, api.ErrNothingToUndo) {
+		return withCode(exitUsage, err)
+	}
+	return err
 }
 
 func workersList(cmd *cobra.Command, g *globalFlags) error {
@@ -281,8 +312,11 @@ func printRun(out io.Writer, r api.Run) {
 	if r.Manual {
 		how = "manual"
 	}
-	fmt.Fprintf(out, "%s  %-9s %s, %s, $%.4f, %d model calls  session %s\n",
-		r.Started.Local().Format("2006-01-02 15:04"), r.Status, how, r.Duration.Round(time.Second), r.CostUSD, r.Calls, r.SessionID)
+	fmt.Fprintf(out, "%s  %-9s %s, %s, $%.4f, %d model calls  run %s  session %s\n",
+		r.Started.Local().Format("2006-01-02 15:04"), r.Status, how, r.Duration.Round(time.Second), r.CostUSD, r.Calls, r.ID, r.SessionID)
+	if len(r.Files) > 0 {
+		fmt.Fprintf(out, "    changed: %s ('blitz workers undo %s' puts them back)\n", strings.Join(r.Files, ", "), r.ID)
+	}
 	for _, f := range r.Refusals {
 		fmt.Fprintf(out, "    refused: %s (%s)\n", f.Detail, f.Tool)
 	}

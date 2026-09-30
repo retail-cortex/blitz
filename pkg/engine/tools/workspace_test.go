@@ -15,6 +15,7 @@
 package tools
 
 import (
+	"context"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -78,7 +79,7 @@ func TestWorkspaceSymlinkEscapeRejected(t *testing.T) {
 	require.NotContains(t, out["content"].(string), "top secret", "read_file followed a symlink out of the workspace: %v", out)
 
 	// Writes through the symlink must also fail and leave the target untouched.
-	require.Error(t, ws.WriteFileAtomic(filepath.Join("link", "secret.txt"), []byte("pwned")), "expected write through escaping symlink to fail")
+	require.Error(t, ws.WriteFileAtomic(context.Background(), filepath.Join("link", "secret.txt"), []byte("pwned")), "expected write through escaping symlink to fail")
 	b, _ := os.ReadFile(filepath.Join(outside, "secret.txt"))
 	require.Equal(t, "top secret", string(b), "outside file modified: %q", b)
 
@@ -122,7 +123,7 @@ func TestWorkspaceWriteFileAtomic(t *testing.T) {
 	require.NoError(t, os.Chmod(script, 0o755))
 
 	// Positive: content replaced, executable mode preserved, no temp files left.
-	require.NoError(t, ws.WriteFileAtomic("run.sh", []byte("#!/bin/sh\necho new\n")))
+	require.NoError(t, ws.WriteFileAtomic(context.Background(), "run.sh", []byte("#!/bin/sh\necho new\n")))
 	info, _ := os.Stat(script)
 	assert.Equal(t, fs.FileMode(0o755), info.Mode().Perm(), "expected mode 0755 preserved, got %v", info.Mode().Perm())
 	b, _ := os.ReadFile(script)
@@ -133,24 +134,24 @@ func TestWorkspaceWriteFileAtomic(t *testing.T) {
 	}
 
 	// Positive: new nested file gets created with parents.
-	require.NoError(t, ws.WriteFileAtomic(filepath.Join("a", "b", "c.txt"), []byte("x")))
+	require.NoError(t, ws.WriteFileAtomic(context.Background(), filepath.Join("a", "b", "c.txt"), []byte("x")))
 
 	// Negative: refusing to replace a directory.
-	assert.Error(t, ws.WriteFileAtomic("a", []byte("x")), "expected error writing over a directory")
+	assert.Error(t, ws.WriteFileAtomic(context.Background(), "a", []byte("x")), "expected error writing over a directory")
 }
 
 func TestWorkspaceCreateExclusiveAndRemove(t *testing.T) {
 	ws, dir := newTestWorkspace(t)
 
-	require.NoError(t, ws.CreateExclusive("new.txt", []byte("hi")), "CreateExclusive")
-	err := ws.CreateExclusive("new.txt", []byte("again"))
+	require.NoError(t, ws.CreateExclusive(context.Background(), "new.txt", []byte("hi")), "CreateExclusive")
+	err := ws.CreateExclusive(context.Background(), "new.txt", []byte("again"))
 	assert.ErrorIs(t, err, fs.ErrExist, "expected fs.ErrExist, got %v", err)
 
-	assert.NoError(t, ws.RemoveFile("new.txt"), "RemoveFile")
-	assert.Error(t, ws.RemoveFile("new.txt"), "expected error removing missing file")
+	assert.NoError(t, ws.RemoveFile(context.Background(), "new.txt"), "RemoveFile")
+	assert.Error(t, ws.RemoveFile(context.Background(), "new.txt"), "expected error removing missing file")
 	require.NoError(t, os.Mkdir(filepath.Join(dir, "sub"), 0o755))
-	assert.Error(t, ws.RemoveFile("sub"), "expected RemoveFile to refuse directories")
-	assert.Error(t, ws.RemoveFile("."), "expected RemoveFile to refuse the workspace root")
+	assert.Error(t, ws.RemoveFile(context.Background(), "sub"), "expected RemoveFile to refuse directories")
+	assert.Error(t, ws.RemoveFile(context.Background(), "."), "expected RemoveFile to refuse the workspace root")
 }
 
 func TestWorkspaceAbs(t *testing.T) {

@@ -96,6 +96,9 @@ type Run struct {
 	Calls     int           `json:"calls"`
 	SessionID string        `json:"session_id,omitempty"`
 	Refusals  []Refusal     `json:"refusals,omitempty"`
+	// Files are the files the run changed, which blitz workers undo
+	// restores.
+	Files []string `json:"files,omitempty"`
 	// Error is why the run failed or stopped.
 	Error string `json:"error,omitempty"`
 }

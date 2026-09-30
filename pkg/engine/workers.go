@@ -347,11 +347,12 @@ func (w *Workspace) RunWorker(ctx context.Context, name string, o RunOptions) (a
 		_, runErr = w.run(runCtx, rec.ID, turn{Turn: api.Turn{
 			Text: wk.Prompt, Prompt: fmt.Sprintf(unattendedPreamble, name) + wk.Prompt,
 			MaxTurns: eff.Limits.MaxTurns, MaxCostUSD: eff.Limits.MaxCostUSD, Timeout: eff.Limits.Timeout,
-		}}, on, st, opts...)
+		}, run: run.ID}, on, st, opts...)
 	}
 
 	u := w.engine.Usage(rec.ID)
 	run.Duration, run.CostUSD, run.Calls = time.Since(run.Started), u.CostUSD, u.Calls
+	run.Files = w.tools.Checkpoints().RunFiles(run.ID)
 	switch {
 	case runErr == nil:
 		run.Status = api.RunSucceeded
