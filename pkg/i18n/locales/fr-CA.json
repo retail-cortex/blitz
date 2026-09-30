@@ -1213,6 +1213,8 @@
     "context.part.tool_calls": "Appels d’outils",
     "context.part.tool_results": "Résultats d’outils",
     "context.part.images": "Images",
-    "context.part.summary": "Conversation antérieure (résumé)"
+    "context.part.summary": "Conversation antérieure (résumé)",
+    "statusline.context": "contexte {tokens}",
+    "statusline.failed": "ligne d’état : {error}"
   }
 }

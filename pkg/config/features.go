@@ -43,6 +43,10 @@ type UIConfig struct {
 	// Notify is how the terminal tells you: both (bell and desktop
 	// notification), bell, desktop or off.
 	Notify string `toml:"notify"`
+	// StatusLine is the line shown above each prompt: "default" (model,
+	// mode, context, cost), a shell command that reads the session's state
+	// as JSON and prints the line, or "" for none.
+	StatusLine string `toml:"status_line"`
 }
 
 // ImagesConfig controls pictures sent to the model: @file.png mentions,

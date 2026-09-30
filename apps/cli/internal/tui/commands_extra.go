@@ -179,7 +179,7 @@ func cmdCost(app *App) {
 }
 
 func cmdContext(app *App) {
-	c, err := app.Workspace.Context()
+	c, err := app.Workspace.Context(true)
 	if err != nil {
 		fmt.Println(i18n.T("session.none_active"))
 		return

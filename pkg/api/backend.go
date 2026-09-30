@@ -137,7 +137,9 @@ type Backend interface {
 
 	// Context, memory and language.
 	SessionUsage() (Usage, error)
-	Context() (ContextInfo, error)
+	// Context is how full the context is, with its breakdown by category
+	// when parts is set (which reads the session).
+	Context(parts bool) (ContextInfo, error)
 	Compact(ctx context.Context, focus string) (CompactResult, error)
 	MemoryFiles() []string
 	ReloadMemory(ctx context.Context) ([]string, error)

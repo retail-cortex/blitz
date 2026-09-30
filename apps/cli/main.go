@@ -491,6 +491,7 @@ func runRoot(cmd *cobra.Command, o *rootOptions, args []string) (err error) {
 		Attached:      remote,
 		ConfigDir:     o.global.config,
 		Notify:        notifier(cfg, pretty),
+		StatusLine:    statusLine(cfg, pretty),
 		// /cd: the target opens as a workspace does at start (its
 		// settings, the trust question, the service when it runs); the
 		// REPL switches to it once the session has moved, and the old one
@@ -655,4 +656,12 @@ func notifier(cfg *config.Config, terminal bool) tui.Notifier {
 		return tui.Notifier{Mode: "off"}
 	}
 	return tui.Notifier{After: time.Duration(cfg.UI.NotifyAfter) * time.Second, Mode: cfg.UI.Notify}
+}
+
+// statusLine is ui.status_line on a terminal ("" elsewhere).
+func statusLine(cfg *config.Config, terminal bool) string {
+	if !terminal {
+		return ""
+	}
+	return cfg.UI.StatusLine
 }

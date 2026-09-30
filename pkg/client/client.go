@@ -632,8 +632,8 @@ func (r *Remote) SessionUsage() (api.Usage, error) {
 
 // Context describes how full the active session's context is (from
 // SessionService.GetUsage).
-func (r *Remote) Context() (api.ContextInfo, error) {
-	res, err := r.sessions.GetUsage(context.Background(), connect.NewRequest(&pb.GetUsageRequest{Workspace: r.dir, Parts: true}))
+func (r *Remote) Context(parts bool) (api.ContextInfo, error) {
+	res, err := r.sessions.GetUsage(context.Background(), connect.NewRequest(&pb.GetUsageRequest{Workspace: r.dir, Parts: parts}))
 	if err != nil {
 		return api.ContextInfo{}, fromAPI(err)
 	}

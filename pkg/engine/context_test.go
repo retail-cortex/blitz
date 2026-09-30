@@ -55,7 +55,7 @@ func TestUsageContextAndSessionSearch(t *testing.T) {
 	llm.Usage = &genai.GenerateContentResponseUsageMetadata{PromptTokenCount: 100, CandidatesTokenCount: 10}
 	_, err := w.SessionUsage()
 	assert.ErrorIs(t, err, api.ErrNoActiveSession, "usage without a session: %v", err)
-	_, err = w.Context()
+	_, err = w.Context(false)
 	assert.ErrorIs(t, err, api.ErrNoActiveSession, "context without a session: %v", err)
 	sid := newSession(t, w).ID
 	_, err = w.Run(context.Background(), sid, api.Turn{Text: "remember pineapple"}, ignore)
@@ -64,7 +64,7 @@ func TestUsageContextAndSessionSearch(t *testing.T) {
 	assert.NoError(t, err, "usage %+v", u)
 	assert.Equal(t, 1, u.Calls, "usage %+v %v", u, err)
 	assert.Equal(t, int64(100), u.Input, "usage %+v %v", u, err)
-	c, err := w.Context()
+	c, err := w.Context(true)
 	assert.NoError(t, err, "context %+v", c)
 	assert.Equal(t, int64(100), c.Tokens, "context %+v %v", c, err)
 	var sum int64

@@ -52,12 +52,10 @@ func (w *Workspace) SessionUsage() (api.Usage, error) {
 	return w.engine.Usage(id), nil
 }
 
-// Context returns the active session's context size and compaction setting.
-func (w *Workspace) Context() (api.ContextInfo, error) { return w.ContextWith(true) }
-
-// ContextWith is Context, with its breakdown by category only when parts is
-// set (it reads the session's events).
-func (w *Workspace) ContextWith(parts bool) (api.ContextInfo, error) {
+// Context returns the active session's context size and compaction
+// setting, with its breakdown by category when parts is set (it reads the
+// session's events).
+func (w *Workspace) Context(parts bool) (api.ContextInfo, error) {
 	u, err := w.SessionUsage()
 	if err != nil {
 		return api.ContextInfo{}, err

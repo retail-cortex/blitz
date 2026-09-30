@@ -218,7 +218,7 @@ func (h sessionService) GetUsage(ctx context.Context, r req[pb.GetUsageRequest])
 	if err != nil {
 		return nil, toAPI(err)
 	}
-	c, err := w.ContextWith(r.Msg.Parts)
+	c, err := w.Context(r.Msg.Parts)
 	if err != nil {
 		return nil, toAPI(err)
 	}

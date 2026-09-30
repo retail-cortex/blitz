@@ -57,6 +57,8 @@ type App struct {
 	ConfigDir string
 	// Notify tells you when a long turn ends or waits for you.
 	Notify Notifier
+	// StatusLine is ui.status_line: "default", a command, or "" for none.
+	StatusLine string
 	// Printer configures output rendering.
 	Printer PrinterOptions
 	// Locales are the interface's translation catalogs (nil: the built-in
@@ -304,6 +306,7 @@ func RunREPL(ctx context.Context, app *App) error {
 			runNotices(ctx, app, interrupts)
 			continue
 		}
+		printStatusLine(ctx, app)
 		prompt := promptText()
 		idleCtx, stopIdle := cancelOnSignal(ctx, interrupts)
 		readCtx, stopLoopWait := app.loops.waitCtx(idleCtx)

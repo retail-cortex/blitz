@@ -393,7 +393,7 @@ func TestUsageSurvivesARestart(t *testing.T) {
 	assert.Equal(t, before, got, "usage after reopening")
 	_, _, err = w2.OpenSession(sid, false) // --resume
 	require.NoError(t, err)
-	info, err := w2.Context()
+	info, err := w2.Context(false)
 	require.NoError(t, err)
 	assert.Equal(t, int64(1000), info.Tokens, "/context reports the last prompt, not 0")
 
