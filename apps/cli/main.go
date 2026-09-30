@@ -148,6 +148,7 @@ func addRunFlags(f *pflag.FlagSet, o *rootOptions) {
 	_ = f.MarkHidden("trust-workspace")
 	f.StringVarP(&o.global.worktree, "worktree", "w", "", "Start in a new git worktree (.blitz/worktrees/<name>, branch blitz/<name>); no name: one is made up")
 	f.Lookup("worktree").NoOptDefVal = "new"
+	f.StringArrayVar(&o.global.addDirs, "add-dir", nil, "Let the agent read and write this directory too, for this run, as sandbox.allowed_paths does (repeatable; runs without the service)")
 	f.StringArrayVar(&o.global.pluginDirs, "plugin-dir", nil, "Load the plugin in this directory for the run (repeatable; runs without the service)")
 	f.StringVar(&o.global.ref, "ref", "", "With --worktree: the commit or branch to start from (default HEAD)")
 	f.StringVarP(&o.resume, "resume", "r", "", "Resume a saved session by ID (no ID: the most recent), or start a new one from a snapshot by name")
@@ -321,6 +322,9 @@ func runRoot(cmd *cobra.Command, o *rootOptions, args []string) (err error) {
 	}
 	if appendPrompt != "" {
 		o.local = true // the service's workspace has its own instructions
+	}
+	if len(o.global.addDirs) > 0 {
+		o.local = true // and its own sandbox
 	}
 	if o.noPersist { // sessions in a folder removed at exit, in this process
 		tmp, err := os.MkdirTemp("", "blitz-sessions-")

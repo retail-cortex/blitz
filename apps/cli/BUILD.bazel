@@ -105,6 +105,7 @@ go_test(
         "plugin_test.go",
         "service_test.go",
         "sessions_test.go",
+        "setup_test.go",
         "trust_test.go",
         "update_test.go",
         "workers_test.go",

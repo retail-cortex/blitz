@@ -40,6 +40,8 @@ type globalFlags struct {
 	worktree, ref string
 	// pluginDirs are plugins loaded for this run (--plugin-dir; local).
 	pluginDirs []string
+	// addDirs are more read-write roots for this run (--add-dir; local).
+	addDirs []string
 }
 
 // loadConfig loads trusted configuration and applies flag overrides,
@@ -82,6 +84,20 @@ func loadConfig(f *globalFlags) (*config.Config, error) {
 		cfg.Tools.WorkspaceDir = dir
 	}
 	cfg.Plugins.Dirs = append(cfg.Plugins.Dirs, f.pluginDirs...)
+	for _, d := range f.addDirs {
+		abs, err := filepath.Abs(config.ExpandHome(d))
+		if err == nil {
+			var info os.FileInfo
+			if info, err = os.Stat(abs); err == nil && !info.IsDir() {
+				err = fmt.Errorf("%s is not a directory", abs)
+			}
+		}
+		if err != nil {
+			return nil, withCode(exitUsage, fmt.Errorf("--add-dir: %w", err))
+		}
+		// As sandbox.allowed_paths: blocked_paths still apply inside it.
+		cfg.Sandbox.AllowedPaths = append(cfg.Sandbox.AllowedPaths, abs)
+	}
 	return cfg, nil
 }
 

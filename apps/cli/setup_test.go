@@ -1,0 +1,46 @@
+// Copyright 2026 Retail Cortex
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+
+package main
+
+import (
+	"os"
+	"path/filepath"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+// --add-dir adds read-write roots for the run, as sandbox.allowed_paths
+// does (BL-FS-01).
+func TestAddDir(t *testing.T) {
+	home := isolate(t)
+	extra := filepath.Join(home, "shared")
+	require.NoError(t, os.MkdirAll(extra, 0o755))
+	file := filepath.Join(home, "notes.txt")
+	require.NoError(t, os.WriteFile(file, nil, 0o644))
+
+	cfg, err := loadConfig(&globalFlags{dir: t.TempDir(), addDirs: []string{"~/shared"}})
+	require.NoError(t, err)
+	assert.Contains(t, cfg.Sandbox.AllowedPaths, extra)
+	assert.NotEmpty(t, cfg.Sandbox.BlockedPaths, "blocked paths still apply")
+
+	for _, bad := range []string{filepath.Join(home, "missing"), file} {
+		_, err := loadConfig(&globalFlags{addDirs: []string{bad}})
+		assert.Equal(t, exitUsage, exitCodeFor(err), "%s: %v", bad, err)
+		assert.ErrorContains(t, err, "--add-dir")
+	}
+}
