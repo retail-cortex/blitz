@@ -39,20 +39,12 @@ Everything through 2026-09-29 is pushed to `main`, most of it with
 
 ## P3: large, needing a design first
 
-4. **Project configuration with a trust boundary (L).** Teams can't
-   commit MCP servers, commands, permission presets or hooks to a
-   repository. Add `.blitz/settings.toml` (and `.local.toml`) per the
-   decisions in `spec_parity_027` §12 and §2.4: settings that only
-   tighten apply at once; anything that runs code (hooks, command MCP
-   servers, allow rules) needs a one-time confirmation recorded in
-   `~/.blitz/trust.json` by path and the file's SHA-256, asked again
-   when it changes. Builds on the per-workspace settings and permission
-   scopes that exist now.
-
-5. **Background sub-agents (L).** `invoke_agent` blocks the turn. Add
+4. **Background sub-agents (L).** `invoke_agent` blocks the turn. Add
    `background: true` returning a task ID (`spec_parity_027` §8.1),
    `list_tasks`, `task_output` and `stop_task`, and deliver completions
    as steer messages at the next tool cycle or prompt.
+   Design drafted for review: `docs/content/about/specs/spec_background_agents_032.md`
+   (not committed yet; the owner is reviewing it).
 
 ## Waiting on something
 
@@ -83,6 +75,11 @@ TestWithoutPlanModeToolsRunNormally; `pkg/engine/tools` TestToolsSuite.
 Anything else failing is new. Check test logs for `goleak:` too.
 
 ## Done 2026-09-29
+- Project configuration with a trust boundary (spec_project_config_031):
+  `.blitz/settings.toml` in three tiers, hash-pinned trust in
+  `~/.blitz/trust.json`, the REPL's question, `/trust`, `blitz trust`,
+  doctor, and the desktop dialog. Not yet run on Linux or checked by hand
+  (manual-verification: "Project settings").
 - Faster Linux sandbox masking (BL-SH-01–03): the blocked-path scan is kept
   between commands and re-reads only changed directories (~1 ms for
   50,000 entries, from ~220 ms on macOS); a CI benchmark step; the
