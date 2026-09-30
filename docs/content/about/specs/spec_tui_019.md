@@ -80,8 +80,9 @@ The REPL is a thin front end over `api.Backend`: it reads input, dispatches slas
 
 ## 6. Exit
 
-- **TUI-40** Ctrl+C or `/exit` at the prompt, or EOF: if background processes run, list them (`[id] command (Ns)`) and ask **k**ill / **w**ait / **c**ancel (cancel only in the REPL); another Ctrl+C or EOF force-quits and kills them; waiting can itself be interrupted (force-quit). Without a way to ask, they are killed. SIGTERM exits without prompting (cleanup kills processes).
-- **TUI-41** When attached to the service, `Processes()` is nil and no exit prompt is needed.
+- **TUI-40** Ctrl+C or `/exit` at the prompt, or EOF: if background processes or tasks run, list them (`[id] command (Ns)`, `[task-3] agent: prompt (Ns)`) and ask **k**ill / **w**ait / **c**ancel (cancel only in the REPL); another Ctrl+C or EOF force-quits and kills them; waiting can itself be interrupted (force-quit). Without a way to ask, they are killed. SIGTERM exits without prompting (cleanup kills processes).
+- **TUI-41** When attached to the service, the exit prompt covers the processes and tasks this client's turns started (CL-04); others' keep running.
+- **TUI-42** `/tasks` lists the session's background tasks (`[task-3] qa · running · 1m20s · $0.02 — prompt`), `/tasks show <id>` prints one's latest events and result, `/tasks stop <id>` stops it. At the prompt, a dim line says which tasks have ended since, and tasks' approval requests and questions are asked there, labelled ("qa · task-3 asks, from the background:"), so a turn's own questions are never interrupted ([spec_background_agents_032](spec_background_agents_032.md)).
 
 ## 7. Approver and questions
 - **TUI-50** Approval prompt: tool detail, coloured diff truncated to `ui.diff_lines` (`d` shows all), answers `y`/`yes`, `s`/`session`, `a`/`always`, `n`; anything other than an explicit yes-type answer denies. The rememberable scope is described by the request's key label.

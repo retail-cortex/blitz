@@ -51,7 +51,7 @@ An agent is a persona: a system prompt, a tool list, an agency level and optiona
 ## 5. Delegation tools
 
 - **AG-30** `list_agents(filter?)` → name, display name, description (substring filter).
-- **AG-31** `invoke_agent(agent_name, prompt)` → the sub-agent's final text (`response`) or `error`. The sub-agent runs in a fresh isolated session, gets the MCP servers offered to it, and nesting is capped at depth 3 ([spec_engine_016](spec_engine_016.md) ENG-70). In plan/read-only runs the sub-agent is equally restricted.
+- **AG-31** `invoke_agent(agent_name, prompt, background?)` → the sub-agent's final text (`response`) or `error`; with `background: true` (or the agent's own `background: true` when the call doesn't say) it returns at once with a `task_id` and the sub-agent runs as a task ([spec_background_agents_032](spec_background_agents_032.md)). An agent's frontmatter may also set `permission_mode` (its own mode through `invoke_agent`; a looser one than the workspace's only for built-in agents, the user's own and a trusted project's; bypass only in the OS sandbox) and `max_turns` (its own model-call budget). The sub-agent runs in a fresh isolated session, gets the MCP servers offered to it, and nesting is capped at depth 3 ([spec_engine_016](spec_engine_016.md) ENG-70). In plan/read-only runs the sub-agent is equally restricted.
 
 ## 6. Universal Constructor (`universal_constructor`)
 

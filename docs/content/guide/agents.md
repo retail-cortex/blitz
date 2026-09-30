@@ -21,6 +21,15 @@ Spec: [agents](../about/specs/spec_agents_014.md).
 
 Your own agents are Markdown files with YAML frontmatter in `~/.blitz/agents` (and the project's `./agents`): a name, a description, the system prompt, the tools it may use, and optionally its own model. Built-in agents can't be overridden.
 
+## Background tasks
+
+An agent can hand work to another agent in the background: `invoke_agent` with `background: true` starts the sub-agent as a task (`task-1`, `task-2`, …) and returns at once, so the main agent keeps working with you. When the task ends, the main agent hears about it with its next step, or before your next message, and can read the whole result with `task_output`; `list_tasks` and `stop_task` do the rest.
+
+- A task runs what your permission mode and rules allow. Anything it would ask about waits for you: the REPL asks at its prompt, labelled ("qa · task-3 asks"), and the desktop app shows the request beside the conversation (**Ctrl+J** jumps to the next).
+- `/tasks` lists them (`/tasks show <id>`, `/tasks stop <id>`); the desktop app shows a card under the call, with **Show** and **Stop**. Exiting offers to stop or wait for them.
+- Limits: `tools.max_background_agents` (4 at once), `tools.background_agent_timeout` (30 minutes), `tools.background_agent_max_turns` (50 model calls) and `tools.background_agent_max_cost_usd` (none). Their cost counts in the session's.
+- An agent's own file can set `background: true` (the default for `invoke_agent`), `max_turns` and `permission_mode` (for example `plan` for a reviewer that must not change anything). A project's agent may only tighten the mode until you trust the project.
+
 ## Tools
 
 | Tools | |

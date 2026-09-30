@@ -7,7 +7,7 @@ weight: 27
 
 | | |
 |---|---|
-| Status | **Partly implemented:** 35 of its 99 requirements done and 2 in part (counted 2026-09-29); the rest open. A gap analysis of 2026-09-26, to be closed before new features are added. |
+| Status | **Partly implemented:** 38 of its 99 requirements done and 2 in part (counted 2026-09-29); the rest open. A gap analysis of 2026-09-26, to be closed before new features are added. |
 | Compared with | **Claude Code** (current docs at code.claude.com, September 2026: v2.1.28x); **Antigravity CLI** (`agy` 1.1–1.2, September 2026); **Antigravity** 2.0 (Google's agent-first IDE and Agent Manager) |
 | Depends on | Specs 001–025 (what Blitz does today) and [spec_backlog_026](spec_backlog_026.md) (Blitz's own gaps; overlapping items are referenced, not repeated) |
 
@@ -174,9 +174,9 @@ Decision §12.2. **CC** `/cd <path>` (June 2026) moves the session to another di
 
 ### 8.1 Background sub-agents and task view — P1, M
 **CC** subagents run in the background by default, `/subtask`, `/tasks`, subagents with their own model/tools/permission mode. **AGY** parallel subagents with independent approval gates, Ctrl+J to jump to a pending one. **Blitz today:** `invoke_agent` runs a sub-agent synchronously inside the tool call (depth ≤ 3).
-- **PAR-PAR-01** `invoke_agent(..., background: true)` returns a task ID immediately; the sub-agent runs concurrently in its own session; its result reaches the parent at its next tool result (or as a new turn when idle). `list_tasks` / `task_output` / `stop_task` tools, and `/tasks` in the REPL (status, cost, pending approvals).
-- **PAR-PAR-02** Sub-agents' approval requests are labelled with the sub-agent and can be answered while the parent keeps working (Ctrl+J jumps to the next pending one).
-- **PAR-PAR-03** Agent frontmatter gains `permission_mode`, `max_turns` and `background` defaults.
+- **PAR-PAR-01** ✅ *Done 2026-09-29 ([spec_background_agents_032](spec_background_agents_032.md)).* `invoke_agent(..., background: true)` returns a task ID immediately; the sub-agent runs concurrently in its own session; its result reaches the parent at its next tool result (or as a new turn when idle). `list_tasks` / `task_output` / `stop_task` tools, and `/tasks` in the REPL (status, cost, pending approvals).
+- **PAR-PAR-02** ✅ *Done 2026-09-29 ([spec_background_agents_032](spec_background_agents_032.md)).* Sub-agents' approval requests are labelled with the sub-agent and can be answered while the parent keeps working (Ctrl+J jumps to the next pending one).
+- **PAR-PAR-03** ✅ *Done 2026-09-29 ([spec_background_agents_032](spec_background_agents_032.md)).* Agent frontmatter gains `permission_mode`, `max_turns` and `background` defaults.
 
 ### 8.2 Worktree isolation — P1, M
 **CC** `--worktree`, `EnterWorktree`/`ExitWorktree`, subagent isolation, `.worktreeinclude`. **AG** separate workspaces per parallel agent. **Blitz today:** none.
