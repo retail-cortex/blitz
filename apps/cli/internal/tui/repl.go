@@ -29,6 +29,7 @@ import (
 	"os/signal"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/retail-cortex/blitz/pkg/api"
 
@@ -42,9 +43,13 @@ type App struct {
 	// through it. It runs here or in the Blitz service.
 	Workspace api.Backend
 	// loops are /loop's prompts, sent again while the REPL stays open.
-	loops   loops
-	Version string
-	Input   Input
+	loops loops
+	// notices are background processes' reports taken while idle, to run
+	// a turn with.
+	notices   []string
+	noticesMu sync.Mutex
+	Version   string
+	Input     Input
 	// Printer configures output rendering.
 	Printer PrinterOptions
 	// Locales are the interface's translation catalogs (nil: the built-in
@@ -288,11 +293,17 @@ func RunREPL(ctx context.Context, app *App) error {
 			runLoop(ctx, app, l, interrupts)
 			continue
 		}
+		if app.hasNotices() { // a watched background process reported
+			runNotices(ctx, app, interrupts)
+			continue
+		}
 		prompt := promptText()
 		idleCtx, stopIdle := cancelOnSignal(ctx, interrupts)
 		readCtx, stopLoopWait := app.loops.waitCtx(idleCtx)
+		readCtx, stopNotices := watchNotices(readCtx, app)
 		line, err := app.Input.ReadInput(readCtx, prompt)
-		loopDue := errors.Is(context.Cause(readCtx), errLoopDue)
+		loopDue := errors.Is(context.Cause(readCtx), errLoopDue) || errors.Is(context.Cause(readCtx), errNoticeDue)
+		stopNotices()
 		stopLoopWait()
 		stopIdle()
 		if err != nil && loopDue && ctx.Err() == nil {
@@ -555,6 +566,65 @@ func humanTokens(n int64) string {
 	default:
 		return fmt.Sprintf("%d", n)
 	}
+}
+
+// errNoticeDue interrupts the prompt when a background process reported.
+var errNoticeDue = errors.New("a background process reported")
+
+// noticePoll is how often the idle prompt asks for process notices.
+var noticePoll = 2 * time.Second
+
+// watchNotices is ctx, cancelled with errNoticeDue once the active
+// session's watched processes have reported (kept in app.notices).
+func watchNotices(ctx context.Context, app *App) (context.Context, func()) {
+	cctx, cancel := context.WithCancelCause(ctx)
+	done := make(chan struct{})
+	go func() {
+		t := time.NewTicker(noticePoll)
+		defer t.Stop()
+		for {
+			select {
+			case <-done:
+				return
+			case <-cctx.Done():
+				return
+			case <-t.C:
+				active, ok := app.Workspace.ActiveSession()
+				if !ok {
+					continue
+				}
+				if n := app.Workspace.TakeProcessNotices(active.ID); len(n) > 0 {
+					app.noticesMu.Lock()
+					app.notices = append(app.notices, n...)
+					app.noticesMu.Unlock()
+					cancel(errNoticeDue)
+					return
+				}
+			}
+		}
+	}()
+	var once sync.Once
+	return cctx, func() { once.Do(func() { close(done) }); cancel(nil) }
+}
+
+func (app *App) hasNotices() bool {
+	app.noticesMu.Lock()
+	defer app.noticesMu.Unlock()
+	return len(app.notices) > 0
+}
+
+// runNotices runs a turn with what background processes reported.
+func runNotices(ctx context.Context, app *App, interrupts <-chan os.Signal) {
+	app.noticesMu.Lock()
+	notices := app.notices
+	app.notices = nil
+	app.noticesMu.Unlock()
+	active, ok := app.Workspace.ActiveSession()
+	if !ok || len(notices) == 0 {
+		return
+	}
+	fmt.Printf("%s%s%s\n", Dim, i18n.T("notice.running"), Reset)
+	runTurn(ctx, app, active.ID, "(background) "+strings.Join(notices, "\n\n"), interrupts, turnOptions{})
 }
 
 // runLoop sends a loop's prompt in the active session.

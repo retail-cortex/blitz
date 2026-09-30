@@ -44,7 +44,7 @@ func callTargets(tool string, args map[string]any) map[string][]string {
 		add(RuleShell, str("command"))
 	case "read_file", "list_files", "glob", "grep", "view_image":
 		add(RuleRead, str("path"))
-	case "create_file", "replace_in_file", "edit", "delete_snippet", "apply_patch":
+	case "create_file", "replace_in_file", "edit", "delete_snippet", "apply_patch", "notebook_edit":
 		add(RuleWrite, str("path"))
 	case "delete_file":
 		add(RuleDelete, str("path"))

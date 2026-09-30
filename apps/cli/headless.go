@@ -254,7 +254,7 @@ func (s *streamInput) approve(ctx context.Context, req api.ApprovalRequest) (api
 
 // question answers the agent's questions from stdin.
 func (s *streamInput) question(ctx context.Context, question string, options []string) (string, error) {
-	m, ok := s.ask(ctx, "question", map[string]any{"type": "question", "question": question, "options": options})
+	m, ok := s.ask(ctx, "question", map[string]any{"type": "question", "question": question, "options": options, "multi_select": api.IsMultiSelect(ctx)})
 	if !ok {
 		return "", errors.New("no answer: the input ended")
 	}

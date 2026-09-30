@@ -112,7 +112,7 @@ func (b *broker) approve(ctx context.Context, req api.ApprovalRequest) (api.Deci
 // question is the workspaces' api.UserPromptFunc.
 func (b *broker) question(ctx context.Context, question string, options []string) (string, error) {
 	r, err := b.ask(ctx, func(id string) *pb.TurnEvent {
-		return &pb.TurnEvent{Kind: &pb.TurnEvent_Question{Question: &pb.Question{RequestId: id, Question: question, Options: options}}}
+		return &pb.TurnEvent{Kind: &pb.TurnEvent_Question{Question: &pb.Question{RequestId: id, Question: question, Options: options, MultiSelect: api.IsMultiSelect(ctx)}}}
 	})
 	return r.text, err
 }

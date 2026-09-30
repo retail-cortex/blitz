@@ -62,6 +62,10 @@ type Backend interface {
 	Goal() (Goal, error)
 	ClearGoal() error
 
+	// TakeProcessNotices removes and returns what watched background
+	// processes reported while session was idle (the REPL starts a turn).
+	TakeProcessNotices(session string) []string
+
 	// The output styles, with the one in use (Set "style" changes it).
 	ListStyles() []StyleInfo
 

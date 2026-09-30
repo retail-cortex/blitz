@@ -210,6 +210,7 @@ func NewRegistry(cfg *config.Config, agentReg *agents.Registry, skillProv *skill
 		{[]string{"create_file"}, func() (tool.Tool, error) { return NewCreateFileTool(ws, r.hooks) }},
 		{[]string{"delete_file"}, func() (tool.Tool, error) { return NewDeleteFileTool(ws, r.hooks) }},
 		{[]string{"replace_in_file", "edit"}, func() (tool.Tool, error) { return NewReplaceInFileTool(ws, r.hooks) }},
+		{[]string{"notebook_edit"}, func() (tool.Tool, error) { return NewNotebookEditTool(ws, r.hooks) }},
 		{[]string{"delete_snippet"}, func() (tool.Tool, error) { return NewDeleteSnippetTool(ws, r.hooks) }},
 		{[]string{"apply_patch"}, func() (tool.Tool, error) { return NewApplyPatchTool(ws, r.hooks) }},
 		{[]string{"grep"}, func() (tool.Tool, error) { return NewGrepTool(ws) }},

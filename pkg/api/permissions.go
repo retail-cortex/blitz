@@ -116,8 +116,25 @@ func (d Decision) String() string {
 // Approver asks the user to decide on a sensitive action.
 type Approver func(ctx context.Context, req ApprovalRequest) (Decision, error)
 
-// UserPromptFunc asks the user a question and returns the answer.
+// UserPromptFunc asks the user a question and returns the answer. With
+// WithMultiSelect, the user may choose several options: the answer is
+// them, one per line.
 type UserPromptFunc func(ctx context.Context, question string, options []string) (string, error)
+
+type multiSelectKey struct{}
+
+// WithMultiSelect marks a question asked with ctx as taking several of its
+// options (ask_user_question's multi_select).
+func WithMultiSelect(ctx context.Context) context.Context {
+	return context.WithValue(ctx, multiSelectKey{}, true)
+}
+
+// IsMultiSelect reports whether a question asked with ctx takes several
+// options.
+func IsMultiSelect(ctx context.Context) bool {
+	v, _ := ctx.Value(multiSelectKey{}).(bool)
+	return v
+}
 
 // PermissionMode decides which actions run without asking.
 type PermissionMode string

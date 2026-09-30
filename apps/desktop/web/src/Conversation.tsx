@@ -1327,6 +1327,9 @@ function ApprovalCard({ req, onDecide, who, autoFocus = true }: { req: ApprovalR
 
 function QuestionCard({ q, onAnswer, who, autoFocus = true }: { q: Question; onAnswer: (a: string) => void; who?: string; autoFocus?: boolean }) {
   const [text, setText] = useState("");
+  // A multi-select question: the options chosen, sent together (one per line).
+  const [chosen, setChosen] = useState<string[]>([]);
+  const toggle = (o: string) => setChosen((c) => (c.includes(o) ? c.filter((x) => x !== o) : [...c, o]));
   // A plan review lists "carry it out" first: make that the primary choice.
   return (
     <div className={`card question ${who ? "task-request" : ""}`} role="alertdialog" aria-label={t("desktop.question.title")}>
@@ -1340,7 +1343,23 @@ function QuestionCard({ q, onAnswer, who, autoFocus = true }: { q: Question; onA
       <div className="question-text">
         <Markdown text={q.question} />
       </div>
-      {q.options.length > 0 && (
+      {q.options.length > 0 && q.multiSelect && (
+        <div className="stack" role="group" aria-label={t("desktop.question.choose_several")}>
+          <span className="t-label muted">{t("desktop.question.choose_several")}</span>
+          {q.options.map((o) => (
+            <label key={o} className="row check">
+              <input type="checkbox" checked={chosen.includes(o)} onChange={() => toggle(o)} />
+              <span>{o}</span>
+            </label>
+          ))}
+          <div className="row">
+            <Button variant="filled" disabled={chosen.length === 0} onClick={() => onAnswer(q.options.filter((o) => chosen.includes(o)).join("\n"))}>
+              {t("desktop.send")}
+            </Button>
+          </div>
+        </div>
+      )}
+      {q.options.length > 0 && !q.multiSelect && (
         <div className="row wrap">
           {q.options.map((o, i) => (
             <Button key={o} variant={i === 0 ? "filled" : "tonal"} onClick={() => onAnswer(o)}>

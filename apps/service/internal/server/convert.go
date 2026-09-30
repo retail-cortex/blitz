@@ -238,7 +238,7 @@ func taskRequestMsg(r api.TaskRequest) *pb.TaskEvent {
 			Agent: r.Agent, TaskId: r.TaskID,
 		}}}
 	}
-	return &pb.TaskEvent{Kind: &pb.TaskEvent_Question{Question: &pb.Question{RequestId: r.ID, Question: r.Question, Options: r.Options, Agent: r.Agent, TaskId: r.TaskID}}}
+	return &pb.TaskEvent{Kind: &pb.TaskEvent_Question{Question: &pb.Question{RequestId: r.ID, Question: r.Question, Options: r.Options, Agent: r.Agent, TaskId: r.TaskID, MultiSelect: r.MultiSelect}}}
 }
 
 func taskEventMsg(ev api.SessionEvent) *pb.TaskEvent {

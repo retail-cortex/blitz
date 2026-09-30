@@ -19,6 +19,7 @@ import (
 	"errors"
 	"fmt"
 	"os/exec"
+	"regexp"
 	"time"
 
 	"github.com/retail-cortex/blitz/pkg/api"
@@ -53,6 +54,10 @@ type RunShellCommandInput struct {
 	Cwd            string `json:"cwd,omitempty" jsonschema:"Optional working directory inside the workspace"`
 	TimeoutSeconds int    `json:"timeout_seconds,omitempty" jsonschema:"Timeout in seconds (default 120, max 1800)"`
 	Background     bool   `json:"background,omitempty" jsonschema:"Run asynchronously; inspect or stop it with manage_background_process"`
+	// Notify and NotifyPattern (background only) tell the agent about the
+	// process as it runs (spec_parity_027 PAR-TOOL-04).
+	Notify        bool   `json:"notify,omitempty" jsonschema:"Background only: tell you when the process exits (with its last output), during your turn or in a new one"`
+	NotifyPattern string `json:"notify_pattern,omitempty" jsonschema:"Background only: also tell you each output line matching this regular expression (up to 20), e.g. ERROR|listening on"`
 }
 
 // RunShellCommandOutput holds command execution results.
@@ -64,6 +69,14 @@ type RunShellCommandOutput struct {
 	ProcessID    int    `json:"process_id,omitempty"`
 	Truncated    bool   `json:"truncated,omitempty"`
 	Error        string `json:"error,omitempty"`
+}
+
+func backgroundStarted(id int, notify bool) string {
+	s := fmt.Sprintf("Process started in background with ID %d; use manage_background_process to read output or kill it", id)
+	if notify {
+		s += "; you'll be told when it exits (and about matching lines)"
+	}
+	return s
 }
 
 // NewRunShellCommandTool creates an ADK tool for running shell commands.
@@ -132,12 +145,23 @@ func runShellCommand(ctx context.Context, cfg ShellConfig, input RunShellCommand
 		if cfg.Processes == nil {
 			return RunShellCommandOutput{Error: "background execution is not available"}
 		}
-		bp, err := cfg.Processes.Start(sessionOf(ctx), input.Command, cwd)
+		var watch *Watch
+		if input.Notify || input.NotifyPattern != "" {
+			watch = &Watch{Exit: true}
+			if input.NotifyPattern != "" {
+				re, err := regexp.Compile(input.NotifyPattern)
+				if err != nil {
+					return RunShellCommandOutput{Error: fmt.Sprintf("notify_pattern: %v", err)}
+				}
+				watch.Lines = re
+			}
+		}
+		bp, err := cfg.Processes.StartWatched(sessionOf(ctx), input.Command, cwd, watch)
 		if err != nil {
 			return RunShellCommandOutput{Error: fmt.Sprintf("failed to start background command: %v", err)}
 		}
 		return RunShellCommandOutput{
-			Output:       fmt.Sprintf("Process started in background with ID %d; use manage_background_process to read output or kill it", bp.ID),
+			Output:       backgroundStarted(bp.ID, input.Notify || input.NotifyPattern != ""),
 			IsBackground: true,
 			ProcessID:    bp.ID,
 		}

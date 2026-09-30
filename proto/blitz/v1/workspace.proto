@@ -161,6 +161,10 @@ service WorkspaceService {
   // workspace so they take effect, unless a turn is running in it.
   rpc TrustProject(TrustProjectRequest) returns (TrustProjectResponse);
 
+  // Removes and returns what watched background processes (notify) of a
+  // session reported while no turn ran there.
+  rpc TakeProcessNotices(TakeProcessNoticesRequest) returns (TakeProcessNoticesResponse);
+
   // Returns the output styles, with the one in use (SetSetting "style"
   // changes it).
   rpc ListStyles(ListStylesRequest) returns (ListStylesResponse);
@@ -1105,6 +1109,17 @@ message GetProjectSettingsRequest {
 // Response message for WorkspaceService.GetProjectSettings.
 message GetProjectSettingsResponse {
   ProjectSettings settings = 1;
+}
+
+// Request message for WorkspaceService.TakeProcessNotices.
+message TakeProcessNoticesRequest {
+  string workspace = 1;
+  string session_id = 2;
+}
+
+// Response message for WorkspaceService.TakeProcessNotices.
+message TakeProcessNoticesResponse {
+  repeated string notices = 1;
 }
 
 // Style is an output style.

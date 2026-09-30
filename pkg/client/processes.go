@@ -221,7 +221,7 @@ func (r *Remote) PendingTaskRequests() []api.TaskRequest {
 			}})
 		case *pb.TaskEvent_Question:
 			q := k.Question
-			out = append(out, api.TaskRequest{ID: q.RequestId, TaskID: q.TaskId, Agent: q.Agent, Question: q.Question, Options: q.Options})
+			out = append(out, api.TaskRequest{ID: q.RequestId, TaskID: q.TaskId, Agent: q.Agent, Question: q.Question, Options: q.Options, MultiSelect: q.MultiSelect})
 		}
 	}
 	return out

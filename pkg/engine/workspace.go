@@ -70,9 +70,11 @@ type Options struct {
 
 // Workspace is one open project: everything a session needs.
 type Workspace struct {
-	plugins []plugins.Loaded
-	styleMu sync.Mutex
-	style   string // the output style ("": [ui] style, else none)
+	plugins  []plugins.Loaded
+	noticeMu sync.Mutex
+	notices  map[string][]string // background processes' notices waiting, by session
+	styleMu  sync.Mutex
+	style    string // the output style ("": [ui] style, else none)
 	// appendPrompt is added to the instructions for this run
 	// (--append-system-prompt).
 	appendPrompt string
@@ -217,6 +219,7 @@ func Open(ctx context.Context, cfg *config.Config, o Options) (*Workspace, error
 		return nil, fmt.Errorf("failed to initialize tools: %w", err)
 	}
 	w.tools.SetWarn(o.Warn)
+	w.tools.Processes().Notice = w.processNotice
 	if cfg.Memory.AutoOn() { // the remember tool (PAR-MEM-10), never keeping secrets
 		redactor := SecretRedactor(cfg)
 		w.tools.SetNoteSaver(func(_ context.Context, kind, text string) (string, error) {

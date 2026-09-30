@@ -82,6 +82,8 @@ type TaskRequest struct {
 	Approval *ApprovalRequest
 	Question string
 	Options  []string
+	// MultiSelect: several options may be chosen (one per line).
+	MultiSelect bool
 }
 
 // Label names who asks: "qa · task-3".

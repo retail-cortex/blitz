@@ -131,7 +131,11 @@ func answerTasks(ctx context.Context, app *App) {
 			}
 		} else {
 			var answer string
-			if answer, err = ask(ctx, r.Question, r.Options); err == nil {
+			qctx := ctx
+			if r.MultiSelect {
+				qctx = api.WithMultiSelect(ctx)
+			}
+			if answer, err = ask(qctx, r.Question, r.Options); err == nil {
 				err = app.Workspace.AnswerTaskRequest(r.ID, 0, answer)
 			}
 		}

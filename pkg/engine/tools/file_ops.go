@@ -57,6 +57,11 @@ func NewReadFileTool(ws *Workspace) (tool.Tool, error) {
 			Description: "Read contents of a file with line numbers and optional line slicing",
 		},
 		func(ctx agent.Context, input ReadFileInput) (ReadFileOutput, error) {
+			if strings.HasSuffix(strings.ToLower(input.Path), ".ipynb") && input.StartLine == 0 && input.EndLine == 0 {
+				if out, ok := readNotebook(ws, input.Path); ok {
+					return out, nil
+				}
+			}
 			out, err := readFileLines(ws, input)
 			if err != nil {
 				return ReadFileOutput{Path: input.Path, Error: fmt.Sprintf("failed to read file: %v", err)}, nil

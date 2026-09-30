@@ -15,13 +15,19 @@
 package tools
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"io"
+	"regexp"
 	"slices"
 	"sort"
+	"strings"
 	"sync"
 	"time"
+
+	"github.com/retail-cortex/blitz/pkg/textutil"
 
 	"github.com/retail-cortex/blitz/pkg/api"
 
@@ -60,6 +66,10 @@ type BackgroundProcess struct {
 // bounds their lifetime and captured output, and kills them on shutdown.
 // Processes are guarded (see ExecEnv) so none survive Blitz exiting.
 type ProcessManager struct {
+	// Notice receives what watched processes report: their exit and
+	// matching lines, for their session (nil: nothing is reported).
+	Notice func(session, text string)
+
 	mu          sync.Mutex
 	next        int
 	procs       map[int]*BackgroundProcess
@@ -80,9 +90,24 @@ func NewProcessManager(maxRunning int, maxLifetime time.Duration) *ProcessManage
 	return &ProcessManager{procs: make(map[int]*BackgroundProcess), maxRunning: maxRunning, maxLifetime: maxLifetime}
 }
 
+// Watch is what a background process reports as it runs.
+type Watch struct {
+	Exit  bool           // its exit, with its last output
+	Lines *regexp.Regexp // output lines matching this (maxWatchedLines)
+}
+
+// maxWatchedLines bounds the lines one process reports.
+const maxWatchedLines = 20
+
 // Start launches command in cwd as a background process for session (the
 // session whose turn asked for it; "" for none).
 func (m *ProcessManager) Start(session, command, cwd string) (*BackgroundProcess, error) {
+	return m.StartWatched(session, command, cwd, nil)
+}
+
+// StartWatched is Start with what the process reports as it runs (nil:
+// nothing).
+func (m *ProcessManager) StartWatched(session, command, cwd string, watch *Watch) (*BackgroundProcess, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -108,8 +133,18 @@ func (m *ProcessManager) Start(session, command, cwd string) (*BackgroundProcess
 	}
 	cmd.Dir = cwd
 	out := newCappedBuffer(backgroundOutputLimit)
-	cmd.Stdout = out
-	cmd.Stderr = out
+	var sink io.Writer = out
+	id := m.next + 1
+	var lines *lineWatcher
+	if watch != nil && watch.Lines != nil && m.Notice != nil {
+		notice := m.Notice
+		lines = &lineWatcher{re: watch.Lines, emit: func(line string) {
+			notice(session, fmt.Sprintf("Background process %d (`%s`) printed: %s", id, textutil.Ellipsize(command, 80), textutil.Ellipsize(line, 500)))
+		}}
+		sink = io.MultiWriter(out, lines)
+	}
+	cmd.Stdout = sink
+	cmd.Stderr = sink
 
 	if err := cmd.Start(); err != nil {
 		cancel()
@@ -136,8 +171,21 @@ func (m *ProcessManager) Start(session, command, cwd string) (*BackgroundProcess
 		bp.finished = true
 		bp.exitCode = cmd.ProcessState.ExitCode()
 		bp.endTime = time.Now()
+		code, took := bp.exitCode, bp.endTime.Sub(bp.StartTime).Round(time.Second)
+		notice := m.Notice
 		m.mu.Unlock()
 		close(bp.done)
+		if lines != nil {
+			lines.flush()
+		}
+		if watch != nil && watch.Exit && notice != nil {
+			tail := strings.TrimSpace(out.String())
+			if len(tail) > 1500 {
+				tail = "…" + tail[len(tail)-1500:]
+			}
+			notice(session, fmt.Sprintf("Background process %d (`%s`) exited with code %d after %s. Its last output:\n%s",
+				bp.ID, textutil.Ellipsize(command, 80), code, took, tail))
+		}
 	}()
 	return bp, nil
 }
@@ -335,4 +383,52 @@ func NewManageBackgroundTool(pm *ProcessManager) (tool.Tool, error) {
 			}
 		},
 	)
+}
+
+// lineWatcher reports output lines matching re, up to maxWatchedLines.
+type lineWatcher struct {
+	re   *regexp.Regexp
+	emit func(line string)
+
+	mu      sync.Mutex
+	partial []byte
+	sent    int
+}
+
+func (w *lineWatcher) Write(p []byte) (int, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.partial = append(w.partial, p...)
+	for {
+		i := bytes.IndexByte(w.partial, '\n')
+		if i < 0 {
+			break
+		}
+		w.check(string(w.partial[:i]))
+		w.partial = w.partial[i+1:]
+	}
+	if len(w.partial) > 64<<10 { // a very long line: check what's there
+		w.check(string(w.partial))
+		w.partial = nil
+	}
+	return len(p), nil
+}
+
+// flush checks the last line, without its newline.
+func (w *lineWatcher) flush() {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if len(w.partial) > 0 {
+		w.check(string(w.partial))
+		w.partial = nil
+	}
+}
+
+func (w *lineWatcher) check(line string) {
+	line = strings.TrimRight(line, "\r")
+	if w.sent >= maxWatchedLines || !w.re.MatchString(line) {
+		return
+	}
+	w.sent++
+	w.emit(line)
 }

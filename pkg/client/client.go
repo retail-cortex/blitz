@@ -187,6 +187,9 @@ func (r *Remote) answerApproval(ctx context.Context, approve api.Approver, req *
 func (r *Remote) answerQuestion(ctx context.Context, ask api.UserPromptFunc, q *pb.Question) {
 	answer := ""
 	if ask != nil {
+		if q.MultiSelect {
+			ctx = api.WithMultiSelect(ctx)
+		}
 		answer, _ = ask(ctx, q.Question, q.Options)
 	}
 	if _, err := r.sessions.Answer(ctx, connect.NewRequest(&pb.AnswerRequest{Workspace: r.dir, RequestId: q.RequestId, Answer: answer})); err != nil {

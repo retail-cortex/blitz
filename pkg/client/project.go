@@ -111,3 +111,13 @@ func (r *Remote) ListStyles() []api.StyleInfo {
 	}
 	return out
 }
+
+// TakeProcessNotices are what the session's watched processes reported
+// while it was idle (WorkspaceService.TakeProcessNotices).
+func (r *Remote) TakeProcessNotices(session string) []string {
+	res, err := r.workspaces.TakeProcessNotices(context.Background(), connect.NewRequest(&pb.TakeProcessNoticesRequest{Workspace: r.dir, SessionId: session}))
+	if err != nil {
+		return nil
+	}
+	return res.Msg.Notices
+}

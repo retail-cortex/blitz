@@ -660,6 +660,14 @@ func (h workspaceService) TrustProject(ctx context.Context, r req[pb.TrustProjec
 	return ok(&pb.TrustProjectResponse{Reopened: reopened})
 }
 
+func (h workspaceService) TakeProcessNotices(ctx context.Context, r req[pb.TakeProcessNoticesRequest]) (*connect.Response[pb.TakeProcessNoticesResponse], error) {
+	w, err := h.s.workspace(ctx, r.Msg.Workspace)
+	if err != nil {
+		return nil, err
+	}
+	return ok(&pb.TakeProcessNoticesResponse{Notices: w.TakeProcessNotices(r.Msg.SessionId)})
+}
+
 func (h workspaceService) ListStyles(ctx context.Context, r req[pb.ListStylesRequest]) (*connect.Response[pb.ListStylesResponse], error) {
 	w, err := h.s.workspace(ctx, r.Msg.Workspace)
 	if err != nil {

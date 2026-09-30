@@ -197,6 +197,8 @@ message Question {
   // Who asks, when it's a background task: its agent and ID.
   string agent = 4;
   string task_id = 5;
+  // Several options may be chosen: the answer is them, one per line.
+  bool multi_select = 6;
 }
 
 // Usage is the token usage and estimated cost of a session.

@@ -14,6 +14,7 @@ tools:
   - create_file
   - edit
   - replace_in_file
+  - notebook_edit
   - delete_snippet
   - delete_file
   - grep

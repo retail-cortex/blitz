@@ -170,6 +170,7 @@ func (w *Workspace) run(ctx context.Context, sessionID string, t turn, on func(a
 	if !t.Aside {
 		// Background tasks that ended since the agent last heard.
 		prompt = withHookContext(prompt, "background-tasks", strings.Join(w.engine.TakeTaskNotes(sessionID), "\n\n"))
+		prompt = withHookContext(prompt, "background-processes", strings.Join(w.TakeProcessNotices(sessionID), "\n\n"))
 		prompt = withHookContext(prompt, "workspace-changed", w.takeMoveNote(sessionID))
 		prompt = withHookContext(prompt, "session_start", w.takeSessionContext(sessionID))
 		prompt = withUserEdits(prompt, w.takeUserEdits())

@@ -152,6 +152,21 @@ async function* runTurn(dir: string, text: string, plan: boolean): AsyncGenerato
   const before = create(UsageSchema, s.usage);
   yield ev({ case: "accepted", value: {} }, "");
   await sleep(300);
+  if (/choose/i.test(text)) {
+    // A multi-select question (ask_user_question with multi_select).
+    const id = `q${++nextRequest}`;
+    const answer = new Promise<string>((r) => s.pending.set(id, r));
+    yield ev({
+      case: "question",
+      value: { requestId: id, question: "Which packages should I check for the rounding bug?", options: ["internal/cart", "internal/store", "cmd/shop"], multiSelect: true },
+    });
+    const a = await answer;
+    const text = `Checking ${a.split("\n").join(", ")}.`;
+    sess.messages.push(msg("model", text));
+    yield ev({ case: "text", value: { text } });
+    yield ev({ case: "finished", value: { before, after: s.usage } });
+    return;
+  }
   for (const part of ["The user wants the rounding fixed. ", "I'll read the discount code first, then ", "write a failing test."]) {
     yield ev({ case: "text", value: { text: part, partial: true, thought: true } });
     await sleep(120);

@@ -322,7 +322,7 @@ func (e *Engine) StartTask(ctx context.Context, agentName, prompt, isolation str
 			return r.decision, nil
 		},
 		Ask: func(ctx context.Context, question string, options []string) (string, error) {
-			r, err := e.askForTask(ctx, t, api.TaskRequest{Question: question, Options: options})
+			r, err := e.askForTask(ctx, t, api.TaskRequest{Question: question, Options: options, MultiSelect: api.IsMultiSelect(ctx)})
 			return r.text, err
 		},
 	})

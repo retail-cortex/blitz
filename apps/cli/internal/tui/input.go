@@ -19,6 +19,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -251,8 +252,35 @@ func RenderDiff(diff string, maxLines int) (string, bool) {
 	return sb.String(), cut
 }
 
+// chosenOptions reads a multi-select answer: numbers or text, separated by
+// commas, each a number or an option's text (case aside) naming an option,
+// or else kept as typed.
+func chosenOptions(answer string, options []string) []string {
+	var out []string
+	for part := range strings.SplitSeq(answer, ",") {
+		p := strings.TrimSpace(part)
+		if p == "" {
+			continue
+		}
+		if n, err := strconv.Atoi(p); err == nil && n >= 1 && n <= len(options) {
+			p = options[n-1]
+		} else {
+			for _, o := range options {
+				if strings.EqualFold(o, p) {
+					p = o
+				}
+			}
+		}
+		if !slices.Contains(out, p) {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
 // NewUserPrompter returns an api.UserPromptFunc backed by the terminal.
 // A numeric answer selects the matching option when options are offered.
+// For a multi-select question it takes several, separated by commas.
 func NewUserPrompter(in Input) api.UserPromptFunc {
 	return func(ctx context.Context, question string, options []string) (string, error) {
 		if ctx.Err() != nil {
@@ -262,6 +290,14 @@ func NewUserPrompter(in Input) api.UserPromptFunc {
 		fmt.Fprintf(&sb, "\n[%s]: %s\n", i18n.T("question.title"), textutil.SanitizeTerminal(question))
 		for i, opt := range options {
 			fmt.Fprintf(&sb, "   [%d] %s\n", i+1, textutil.SanitizeTerminal(opt))
+		}
+		if api.IsMultiSelect(ctx) && len(options) > 0 {
+			sb.WriteString(i18n.T("question.choose_several") + " ")
+			answer, err := in.Ask(ctx, sb.String())
+			if err != nil {
+				return "", err
+			}
+			return strings.Join(chosenOptions(answer, options), "\n"), nil
 		}
 		sb.WriteString(i18n.T("question.answer") + " ")
 
