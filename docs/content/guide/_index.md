@@ -17,3 +17,4 @@ How Blitz behaves, whichever program you drive it from. The CLI, the service and
 | [Images](images.md) | Attaching screenshots and pictures |
 | [Language](language.md) | The interface and reply languages |
 | [Logs and telemetry](telemetry.md) | The diagnostic log and OpenTelemetry |
+| [GitHub Action](github-action.md) | Blitz in GitHub Actions: answering mentions, reviewing pull requests, issues into pull requests |

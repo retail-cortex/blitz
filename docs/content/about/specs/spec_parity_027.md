@@ -7,7 +7,7 @@ weight: 27
 
 | | |
 |---|---|
-| Status | **Partly implemented:** 78 of its 99 requirements done and 1 in part (counted 2026-09-30); the rest open. A gap analysis of 2026-09-26, to be closed before new features are added. |
+| Status | **Partly implemented:** 79 of its 99 requirements done and 1 in part (counted 2026-09-30); the rest open. A gap analysis of 2026-09-26, to be closed before new features are added. |
 | Compared with | **Claude Code** (current docs at code.claude.com, September 2026: v2.1.28x); **Antigravity CLI** (`agy` 1.1–1.2, September 2026); **Antigravity** 2.0 (Google's agent-first IDE and Agent Manager) |
 | Depends on | Specs 001–025 (what Blitz does today) and [spec_backlog_026](spec_backlog_026.md) (Blitz's own gaps; overlapping items are referenced, not repeated) |
 
@@ -215,7 +215,7 @@ Decision §12.2. **CC** `/cd <path>` (June 2026) moves the session to another di
 
 ## 11. Integrations (local equivalents only)
 
-- **PAR-INT-01 (P1, M)** GitHub Action: `retail-cortex/blitz-action` runs `blitz exec` on `@blitz` mentions in issues and PRs and on configured events (review a PR, turn an issue into a PR), with a `dont-ask` permission mode, repository-scoped tokens and cost limits. **CC** GitHub Actions / GitLab CI.
+- **PAR-INT-01 (P1, M)** ✅ *Done 2026-09-30 as `retail-cortex/blitz/action` in this repository (`action/`; the [guide](../../guide/github-action.md)), not a separate repository yet.* GitHub Action: `retail-cortex/blitz-action` runs `blitz exec` on `@blitz` mentions in issues and PRs and on configured events (review a PR, turn an issue into a PR), with a `dont-ask` permission mode, repository-scoped tokens and cost limits. **CC** GitHub Actions / GitLab CI.
 - **PAR-INT-02 (P2, L)** Editor integration: a VS Code extension (and later JetBrains) that attaches to the service like the desktop app — conversation panel, approvals with native diff view, sending the current selection and open file as context, `@`-mentions. **CC** VS Code/JetBrains; **AG** is itself an IDE.
 - **PAR-INT-03 (P2, S)** Deep links: `blitz://open?dir=…&prompt=…` opens the desktop app (or a terminal) in a workspace with a prompt pre-filled, never sent without the user. **CC** deep links.
 
