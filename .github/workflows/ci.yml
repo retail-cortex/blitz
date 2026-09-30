@@ -118,6 +118,25 @@ jobs:
           bazel test //pkg/engine/tools:tools_test --nocache_test_results --test_output=all \
             --test_arg=-test.v --test_arg=-test.run=TestOSSandboxEnforcement | tee out.txt
           if grep -q -- '--- SKIP' out.txt; then exit 1; fi
+      # Skill scripts' environments for real (BL-SK-06): Python packages
+      # (uv), npm packages for TypeScript (Node 22), a uv-managed Python the
+      # system doesn't have. They need the network, so they're opt-in
+      # elsewhere; here they must not skip.
+      - name: Set up Node
+        if: runner.os == 'Linux'
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+      - name: Set up uv
+        if: runner.os == 'Linux'
+        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+      - name: Script environments
+        if: runner.os == 'Linux'
+        run: |
+          bazel test //pkg/engine/tools:tools_test --nocache_test_results --test_output=all \
+            --test_env=PATH="$PATH" --test_env=BLITZ_PYENV_TESTS=1 --test_env=BLITZ_UV_PYTHON=3.13 \
+            --test_arg=-test.v --test_arg=-test.run='InstallsPackages|TypeScript|RequiresPython' | tee envs.txt
+          if grep -q -- '--- SKIP' envs.txt; then exit 1; fi
       - name: gVisor script sandbox must not be skipped
         if: runner.os == 'Linux'
         run: |
