@@ -56,6 +56,12 @@ type Backend interface {
 	PendingTaskRequests() []TaskRequest
 	AnswerTaskRequest(id string, decision Decision, answer string) error
 
+	// The active session's goal: SetGoal sets it (the next turns work
+	// toward it), Goal returns it (ErrNoGoal), ClearGoal removes it.
+	SetGoal(condition string) (Goal, error)
+	Goal() (Goal, error)
+	ClearGoal() error
+
 	// The configured hooks, by event, with recent failures (/hooks).
 	ListHooks() []HookInfo
 

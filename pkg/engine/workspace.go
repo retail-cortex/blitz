@@ -68,6 +68,8 @@ type Options struct {
 // Workspace is one open project: everything a session needs.
 type Workspace struct {
 	plugins []plugins.Loaded
+	goalMu  sync.Mutex
+	goals   map[string]api.Goal // by session
 	cfg     *config.Config
 	agents  *agents.Registry
 	skills  *skills.Provider

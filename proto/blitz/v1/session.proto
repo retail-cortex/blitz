@@ -69,6 +69,13 @@ service SessionService {
   // Summarises the active session's older turns to shrink the model's
   // context (NOTHING_TO_COMPACT when it is too short).
   rpc Compact(CompactRequest) returns (CompactResponse);
+  // Gives the active session a goal: after each turn a model judges it,
+  // and the agent is sent on until it holds (/goal).
+  rpc SetGoal(SetGoalRequest) returns (SetGoalResponse);
+  // Returns the active session's goal (NO_GOAL).
+  rpc GetGoal(GetGoalRequest) returns (GetGoalResponse);
+  // Removes the active session's goal (NO_GOAL).
+  rpc ClearGoal(ClearGoalRequest) returns (ClearGoalResponse);
   // Looks for terms in the active session's transcript and returns the
   // prompt that asks the agent about the matches (run it as a turn).
   rpc SearchSession(SearchSessionRequest) returns (SearchSessionResponse);
@@ -269,6 +276,45 @@ message GetUsageResponse {
   int32 threshold = 3;
   int32 keep = 4;
 }
+
+// Goal is what a session works toward.
+message Goal {
+  string condition = 1;
+  // How often the agent was sent on, and the limit.
+  int32 continues = 2;
+  int32 max = 3;
+  // The judge's latest reason.
+  string last = 4;
+}
+
+// Request message for SessionService.SetGoal.
+message SetGoalRequest {
+  string workspace = 1;
+  string condition = 2;
+}
+
+// Response message for SessionService.SetGoal.
+message SetGoalResponse {
+  Goal goal = 1;
+}
+
+// Request message for SessionService.GetGoal.
+message GetGoalRequest {
+  string workspace = 1;
+}
+
+// Response message for SessionService.GetGoal.
+message GetGoalResponse {
+  Goal goal = 1;
+}
+
+// Request message for SessionService.ClearGoal.
+message ClearGoalRequest {
+  string workspace = 1;
+}
+
+// Response message for SessionService.ClearGoal.
+message ClearGoalResponse {}
 
 // Request message for SessionService.Compact.
 message CompactRequest {

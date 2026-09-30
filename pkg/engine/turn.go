@@ -205,6 +205,16 @@ func (w *Workspace) run(ctx context.Context, sessionID string, t turn, on func(a
 			r.paragraph()
 			err = w.engine.Execute(ctx, sessionID, reason, handler, base...)
 		}
+		// A goal sends the agent on until a judge says it holds.
+		for err == nil && ctx.Err() == nil {
+			next := w.goalStep(ctx, sessionID, on)
+			if next == "" {
+				break
+			}
+			w.appendIn(st, sessionID, on, session.Message{Role: "user", Content: "(goal) " + next, Kind: goalKind})
+			r.paragraph()
+			err = w.engine.Execute(ctx, sessionID, next, handler, base...)
+		}
 	}
 	if cause := context.Cause(ctx); err != nil && (errors.Is(cause, api.ErrCostLimit) || errors.Is(cause, api.ErrTimeLimit)) {
 		err = cause

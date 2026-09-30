@@ -185,6 +185,12 @@ func parseVerdict(s string) (bool, string, error) {
 // recentConversation is the end of the run's session, in words: the last
 // few prompts and answers, for the reviewer to see what was asked.
 func (e *Engine) recentConversation(ctx context.Context) string {
+	return e.recentConversationN(ctx, 6)
+}
+
+// recentConversationN is the last n prompts and answers of the run's
+// session.
+func (e *Engine) recentConversationN(ctx context.Context, n int) string {
 	st := stateFrom(ctx)
 	if st == nil || st.sessionID == "" {
 		return ""
@@ -209,8 +215,8 @@ func (e *Engine) recentConversation(ctx context.Context) string {
 			lines = append(lines, who+": "+textutil.Ellipsize(strings.TrimSpace(p.Text), 600))
 		}
 	}
-	if len(lines) > 6 {
-		lines = lines[len(lines)-6:]
+	if len(lines) > n {
+		lines = lines[len(lines)-n:]
 	}
 	return strings.Join(lines, "\n")
 }
@@ -220,4 +226,61 @@ func orNothing(s string) string {
 		return "(none given)"
 	}
 	return s
+}
+
+// goalInstruction tells the goal's judge its job.
+const goalInstruction = `You judge whether an AI coding agent has reached a goal the user set, from the end of its conversation with the user.
+Answer with JSON only: {"verdict": "met", "unmet" or "impossible", "reason": "one or two sentences", "next": "when unmet: what the agent should do next"}.
+Say "met" only when the conversation shows the goal holds (tests the goal names passed, the change is made); "impossible" when the agent can't reach it (it needs something only the user can give, or it contradicts itself); otherwise "unmet".`
+
+// GoalVerdict is the judge's answer about a goal.
+type GoalVerdict struct {
+	Met, Impossible bool
+	Reason, Next    string
+}
+
+// JudgeGoal has a model (the auto reviewer's, else the session's) decide
+// whether the session's conversation shows condition holds (spec_parity_027
+// PAR-SES-30).
+func (e *Engine) JudgeGoal(ctx context.Context, sessionID, condition string) (GoalVerdict, error) {
+	e.mu.RLock()
+	llm := e.reviewModel
+	if llm == nil {
+		llm = e.llm
+	}
+	e.mu.RUnlock()
+	if llm == nil {
+		return GoalVerdict{}, errors.New("no model to judge the goal with")
+	}
+	if st := stateFrom(ctx); st == nil || st.sessionID != sessionID { // for the conversation, and /cost
+		ctx = context.WithValue(ctx, runStateKey{}, &runState{sessionID: sessionID})
+	}
+	prompt := fmt.Sprintf("The goal:\n%s\n\nThe end of the conversation:\n%s\n", condition, orNothing(e.recentConversationN(ctx, 10)))
+	text, err := e.askModel(ctx, llm, goalInstruction, prompt)
+	if err != nil {
+		return GoalVerdict{}, err
+	}
+	start, end := strings.Index(text, "{"), strings.LastIndex(text, "}")
+	if start < 0 || end < start {
+		return GoalVerdict{}, fmt.Errorf("the judge's answer isn't JSON: %q", textutil.Ellipsize(text, 200))
+	}
+	var v struct {
+		Verdict string `json:"verdict"`
+		Reason  string `json:"reason"`
+		Next    string `json:"next"`
+	}
+	if err := json.Unmarshal([]byte(text[start:end+1]), &v); err != nil {
+		return GoalVerdict{}, fmt.Errorf("the judge's answer isn't JSON: %w", err)
+	}
+	out := GoalVerdict{Reason: strings.TrimSpace(v.Reason), Next: strings.TrimSpace(v.Next)}
+	switch strings.ToLower(strings.TrimSpace(v.Verdict)) {
+	case "met":
+		out.Met = true
+	case "impossible":
+		out.Impossible = true
+	case "unmet":
+	default:
+		return GoalVerdict{}, fmt.Errorf("the judge answered %q, not met, unmet or impossible", v.Verdict)
+	}
+	return out, nil
 }

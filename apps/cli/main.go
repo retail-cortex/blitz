@@ -475,7 +475,7 @@ func resolvePrompt(flag string, args []string, stdinTTY, interactive bool, stdin
 func newCompleter(w api.Backend) *tui.Completer {
 	c := tui.NewCompleter(w.Dir())
 	for _, cmd := range []string{"help", "agents", "model", "skills", "session", "set", "clear", "sandbox", "exit", "quit",
-		"undo", "checkpoints", "diff", "cost", "context", "compact", "memory", "approvals", "hooks", "mcp", "resume", "locale", "attach", "paste",
+		"undo", "checkpoints", "diff", "cost", "context", "compact", "memory", "approvals", "hooks", "goal", "loop", "mcp", "resume", "locale", "attach", "paste",
 		"tools", "plan", "show", "init", "mode", "permissions", "effort", "rewind", "pin_model", "unpin", "model_settings", "search", "btw", "rename", "envs", "tasks", "cd", "trust", "license"} {
 		c.Command(cmd)
 	}
@@ -486,6 +486,8 @@ func newCompleter(w api.Backend) *tui.Completer {
 	c.Command("license", "full", "third-party")
 	c.Command("memory", "show", "reload", "add", "notes", "forget")
 	c.Command("approvals", "revoke", "clear")
+	c.Command("goal", "clear")
+	c.Command("loop", "stop")
 	c.Command("diff", "git")
 	c.Command("attach", "clear")
 	c.Command("undo", "--force")

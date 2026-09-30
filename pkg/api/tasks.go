@@ -135,3 +135,15 @@ type HookFailure struct {
 	Time  time.Time
 	Error string
 }
+
+// Goal is what a session works toward until a judge says it holds (/goal).
+type Goal struct {
+	Condition string
+	// Continues is how often the agent was sent on; Max the limit.
+	Continues, Max int
+	// Last is the judge's latest reason.
+	Last string
+}
+
+// ErrNoGoal is returned when the session has no goal.
+var ErrNoGoal = errors.New("no goal set")

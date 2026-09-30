@@ -52,6 +52,10 @@ func handleExtraCommand(ctx context.Context, cmd string, args []string, app *App
 		cmdApprovals(args, app)
 	case "hooks":
 		cmdHooks(app)
+	case "goal":
+		cmdGoal(args, app)
+	case "loop":
+		cmdLoop(args, app)
 	case "mcp":
 		cmdMCP(app)
 	case "resume":

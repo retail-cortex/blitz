@@ -41,8 +41,10 @@ type App struct {
 	// Workspace is the program behind the REPL: every command and turn goes
 	// through it. It runs here or in the Blitz service.
 	Workspace api.Backend
-	Version   string
-	Input     Input
+	// loops are /loop's prompts, sent again while the REPL stays open.
+	loops   loops
+	Version string
+	Input   Input
 	// Printer configures output rendering.
 	Printer PrinterOptions
 	// Locales are the interface's translation catalogs (nil: the built-in
@@ -282,10 +284,21 @@ func RunREPL(ctx context.Context, app *App) error {
 		}
 		announceTasks(app)
 		answerTasks(ctx, app)
+		if l := app.loops.takeDue(); l != nil { // it came due during a turn
+			runLoop(ctx, app, l, interrupts)
+			continue
+		}
 		prompt := promptText()
 		idleCtx, stopIdle := cancelOnSignal(ctx, interrupts)
-		line, err := app.Input.ReadInput(idleCtx, prompt)
+		readCtx, stopLoopWait := app.loops.waitCtx(idleCtx)
+		line, err := app.Input.ReadInput(readCtx, prompt)
+		loopDue := errors.Is(context.Cause(readCtx), errLoopDue)
+		stopLoopWait()
 		stopIdle()
+		if err != nil && loopDue && ctx.Err() == nil {
+			fmt.Println()
+			continue // the loop runs at the top
+		}
 		switch {
 		case err == nil:
 		case ctx.Err() != nil:
@@ -335,6 +348,12 @@ func RunREPL(ctx context.Context, app *App) error {
 			// The new BLITZ.md applies from the next prompt.
 			cmdMemory(ctx, []string{"reload"}, app)
 			continue
+		}
+		if rest, ok := strings.CutPrefix(line, "/goal"); ok && (rest == "" || rest[0] == ' ') {
+			if cond := strings.TrimSpace(rest); cond != "" && cond != "clear" {
+				startGoal(ctx, app, line, cond, interrupts)
+				continue
+			}
 		}
 		if rest, ok := strings.CutPrefix(line, "/search"); ok && (rest == "" || rest[0] == ' ') {
 			active, ok := app.Workspace.ActiveSession()
@@ -536,6 +555,51 @@ func humanTokens(n int64) string {
 	default:
 		return fmt.Sprintf("%d", n)
 	}
+}
+
+// runLoop sends a loop's prompt in the active session.
+func runLoop(ctx context.Context, app *App, l *sessionLoop, interrupts <-chan os.Signal) {
+	active, ok := app.Workspace.ActiveSession()
+	if !ok {
+		return
+	}
+	fmt.Printf("%s%s%s\n", Dim, i18n.T("loop.running", "n", l.n, "prompt", safe(l.prompt)), Reset)
+	runTurn(ctx, app, active.ID, l.prompt, interrupts, turnOptions{command: strings.HasPrefix(l.prompt, "/")})
+}
+
+// startGoal sets the session's goal and starts working toward it: after
+// each turn a judge decides whether the agent goes on.
+func startGoal(ctx context.Context, app *App, line, cond string, interrupts <-chan os.Signal) {
+	active, ok := app.Workspace.ActiveSession()
+	if !ok {
+		fmt.Printf("%s✗ %s%s\n", Red, i18n.T("session.none_active"), Reset)
+		return
+	}
+	g, err := app.Workspace.SetGoal(cond)
+	if err != nil {
+		fmt.Printf("%s✗ %v%s\n", Red, err, Reset)
+		return
+	}
+	fmt.Printf("%s%s%s\n", Dim, i18n.T("goal.set", "max", g.Max), Reset)
+	runTurn(ctx, app, active.ID, line, interrupts, turnOptions{prompt: "Work toward this goal, and keep going until it holds: " + cond})
+}
+
+// cmdGoal is /goal and /goal clear (a condition starts a turn: startGoal).
+func cmdGoal(args []string, app *App) {
+	if len(args) == 1 && args[0] == "clear" {
+		if err := app.Workspace.ClearGoal(); err != nil {
+			fmt.Println(i18n.T("goal.none"))
+			return
+		}
+		fmt.Printf("%s✓ %s%s\n", Green, i18n.T("goal.cleared"), Reset)
+		return
+	}
+	g, err := app.Workspace.Goal()
+	if err != nil {
+		fmt.Println(i18n.T("goal.none"))
+		return
+	}
+	fmt.Println(i18n.T("goal.show", "condition", safe(g.Condition), "n", g.Continues, "max", g.Max))
 }
 
 // cancelOnSignal returns a context cancelled when parent is done or a signal

@@ -127,6 +127,9 @@ type BlitzConfig struct {
 	// each run, without recording it. Use blitz trust instead. Only the
 	// user's own settings or --trust-workspace can set it.
 	TrustWorkspace bool `toml:"trust_workspace"`
+	// GoalMaxContinues caps how often a /goal sends the agent on before it
+	// stops to ask.
+	GoalMaxContinues int `toml:"goal_max_continues"`
 }
 
 // LLMConfig holds provider configurations for LLM backends.
@@ -585,6 +588,8 @@ func DefaultConfig() *Config {
 			MaxTokens:    8192,
 			AutoApprove:  false,
 			PlanReview:   PlanReviewAgent,
+
+			GoalMaxContinues: 20,
 		},
 		LLM: LLMConfig{
 			Provider:            "gemini",

@@ -629,6 +629,37 @@ func (r *Remote) Compact(ctx context.Context, focus string) (api.CompactResult, 
 	return api.CompactResult{EventsCompacted: int(res.Msg.EventsCompacted), SummaryChars: int(res.Msg.SummaryChars), Before: usage(res.Msg.Before), After: usage(res.Msg.After)}, nil
 }
 
+// SetGoal gives the active session a goal (SessionService.SetGoal).
+func (r *Remote) SetGoal(condition string) (api.Goal, error) {
+	res, err := r.sessions.SetGoal(context.Background(), connect.NewRequest(&pb.SetGoalRequest{Workspace: r.dir, Condition: condition}))
+	if err != nil {
+		return api.Goal{}, fromAPI(err)
+	}
+	return goal(res.Msg.Goal), nil
+}
+
+// Goal is the active session's goal (SessionService.GetGoal).
+func (r *Remote) Goal() (api.Goal, error) {
+	res, err := r.sessions.GetGoal(context.Background(), connect.NewRequest(&pb.GetGoalRequest{Workspace: r.dir}))
+	if err != nil {
+		return api.Goal{}, fromAPI(err)
+	}
+	return goal(res.Msg.Goal), nil
+}
+
+// ClearGoal removes it (SessionService.ClearGoal).
+func (r *Remote) ClearGoal() error {
+	_, err := r.sessions.ClearGoal(context.Background(), connect.NewRequest(&pb.ClearGoalRequest{Workspace: r.dir}))
+	return fromAPI(err)
+}
+
+func goal(m *pb.Goal) api.Goal {
+	if m == nil {
+		return api.Goal{}
+	}
+	return api.Goal{Condition: m.Condition, Continues: int(m.Continues), Max: int(m.Max), Last: m.Last}
+}
+
 // RewindPoints lists the active session's prompts.
 func (r *Remote) RewindPoints() ([]api.RewindPoint, error) {
 	res, err := r.sessions.ListRewindPoints(context.Background(), connect.NewRequest(&pb.ListRewindPointsRequest{Workspace: r.dir}))

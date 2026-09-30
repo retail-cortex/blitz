@@ -229,6 +229,8 @@ func printHelp(app *App) {
 		{"/init", "help.init"},
 		{"/approvals [revoke <n>|clear]", "help.approvals"},
 		{"/hooks", "help.hooks"},
+		{"/goal [<condition>|clear]", "help.goal"},
+		{"/loop [<interval> <prompt>|stop <n>]", "help.loop"},
 		{"/permissions [allow|ask|deny|remove <rule> [--save]]", "help.permissions"},
 		{"/mcp", "help.mcp"},
 		{"/tools", "help.tools"},

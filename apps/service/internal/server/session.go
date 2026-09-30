@@ -213,6 +213,45 @@ func (h sessionService) Compact(ctx context.Context, r req[pb.CompactRequest]) (
 	return ok(&pb.CompactResponse{EventsCompacted: int32(res.EventsCompacted), SummaryChars: int32(res.SummaryChars), Before: usageMsg(res.Before), After: usageMsg(res.After)})
 }
 
+func goalMsg(g api.Goal) *pb.Goal {
+	return &pb.Goal{Condition: g.Condition, Continues: int32(g.Continues), Max: int32(g.Max), Last: g.Last}
+}
+
+func (h sessionService) SetGoal(ctx context.Context, r req[pb.SetGoalRequest]) (*connect.Response[pb.SetGoalResponse], error) {
+	w, err := h.s.workspace(ctx, r.Msg.Workspace)
+	if err != nil {
+		return nil, err
+	}
+	g, err := w.SetGoal(r.Msg.Condition)
+	if err != nil {
+		return nil, toAPI(err)
+	}
+	return ok(&pb.SetGoalResponse{Goal: goalMsg(g)})
+}
+
+func (h sessionService) GetGoal(ctx context.Context, r req[pb.GetGoalRequest]) (*connect.Response[pb.GetGoalResponse], error) {
+	w, err := h.s.workspace(ctx, r.Msg.Workspace)
+	if err != nil {
+		return nil, err
+	}
+	g, err := w.Goal()
+	if err != nil {
+		return nil, toAPI(err)
+	}
+	return ok(&pb.GetGoalResponse{Goal: goalMsg(g)})
+}
+
+func (h sessionService) ClearGoal(ctx context.Context, r req[pb.ClearGoalRequest]) (*connect.Response[pb.ClearGoalResponse], error) {
+	w, err := h.s.workspace(ctx, r.Msg.Workspace)
+	if err != nil {
+		return nil, err
+	}
+	if err := w.ClearGoal(); err != nil {
+		return nil, toAPI(err)
+	}
+	return ok(&pb.ClearGoalResponse{})
+}
+
 func (h sessionService) SearchSession(ctx context.Context, r req[pb.SearchSessionRequest]) (*connect.Response[pb.SearchSessionResponse], error) {
 	w, err := h.s.workspace(ctx, r.Msg.Workspace)
 	if err != nil {

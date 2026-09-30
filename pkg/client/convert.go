@@ -43,6 +43,7 @@ var sentinels = map[string]error{
 	"TIME_LIMIT":               api.ErrTimeLimit,
 	"SNAPSHOT_NAME_TAKEN":      api.ErrSnapshotNameTaken,
 	"NO_NOTE":                  api.ErrNoNote,
+	"NO_GOAL":                  api.ErrNoGoal,
 	"BAD_MODEL_REF":            api.ErrBadModelRef,
 	"INVALID_AGENCY":           api.ErrInvalidAgency,
 	"UNDO_CONFLICT":            api.ErrUndoConflict,
