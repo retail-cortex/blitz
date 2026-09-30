@@ -47,6 +47,14 @@ func NewAskUserQuestionTool(hooks *Hooks) (tool.Tool, error) {
 			if input.Question == "" {
 				return AskUserQuestionOutput{Error: "question cannot be empty"}, nil
 			}
+			if a, ok := taskAskerFrom(ctx); ok && a.Ask != nil { // a background task's
+				hooks.Notify(ctx, "question", input.Question)
+				answer, err := a.Ask(ctx, input.Question, input.Options)
+				if err != nil {
+					return AskUserQuestionOutput{Error: fmt.Sprintf("no answer: %v; decide yourself and say what you assumed", err)}, nil
+				}
+				return AskUserQuestionOutput{Answer: answer}, nil
+			}
 			if isUnattended(ctx) {
 				return AskUserQuestionOutput{Error: "this run is unattended: no one can answer; decide yourself and say what you assumed"}, nil
 			}

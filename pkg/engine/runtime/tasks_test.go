@@ -177,3 +177,74 @@ func TestTaskNoteReachesTheRunningTurn(t *testing.T) {
 	require.Len(t, updates, 1)
 	assert.True(t, strings.HasPrefix(updates[0], "task-1 (qa) finished"))
 }
+
+// A task's approval requests and questions wait for its session's people,
+// who hear of them through Watch; the task goes on once answered.
+func TestTaskAsksItsSession(t *testing.T) {
+	cases := []struct {
+		name   string
+		call   *genai.FunctionCall
+		answer func(e *Engine, r api.TaskRequest) error
+		state  string
+	}{
+		{
+			name: "an approval, allowed",
+			call: &genai.FunctionCall{Name: "create_file", Args: map[string]any{"path": "made.txt", "content": "hi\n"}},
+			answer: func(e *Engine, r api.TaskRequest) error {
+				return e.AnswerRequest([]string{"s"}, r.ID, api.DecisionOnce, "")
+			},
+			state: api.TaskDone,
+		},
+		{
+			name: "a question, answered",
+			call: &genai.FunctionCall{Name: "ask_user_question", Args: map[string]any{"question": "Tabs or spaces?"}},
+			answer: func(e *Engine, r api.TaskRequest) error {
+				return e.AnswerRequest([]string{"s"}, r.ID, 0, "tabs")
+			},
+			state: api.TaskDone,
+		},
+		{
+			name:   "stopped while it waits",
+			call:   &genai.FunctionCall{Name: "create_file", Args: map[string]any{"path": "made.txt", "content": "hi\n"}},
+			answer: func(e *Engine, r api.TaskRequest) error { _, err := e.StopTask([]string{"s"}, r.TaskID); return err },
+			state:  api.TaskStopped,
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			sub := NewMockLLM("qa-model", &genai.Content{Role: genai.RoleModel, Parts: []*genai.Part{{FunctionCall: c.call}}}, textContent("finished"))
+			f, ctx, _ := taskEngine(t, sub, func(cfg *config.Config) { cfg.Blitz.AutoApprove = false })
+			watchCtx, stop := context.WithCancel(context.Background())
+			defer stop()
+			events := f.eng.Watch(watchCtx, []string{"s"})
+			_, err := f.eng.StartTask(ctx, "qa", "make a file")
+			require.NoError(t, err)
+
+			var req api.TaskRequest
+			waiting := false
+			for req.ID == "" || !waiting {
+				select {
+				case ev := <-events:
+					if ev.Request != nil {
+						req = *ev.Request
+					}
+					if ev.Task != nil && ev.Task.State == api.TaskWaiting {
+						waiting = true
+					}
+				case <-time.After(10 * time.Second):
+					t.Fatal("the task didn't ask")
+				}
+			}
+			assert.Equal(t, "qa · task-1", req.Label())
+			assert.Equal(t, []api.TaskRequest{req}, f.eng.PendingRequests([]string{"s"}))
+			assert.Empty(t, f.eng.PendingRequests([]string{"other"}))
+			assert.ErrorIs(t, f.eng.AnswerRequest([]string{"other"}, req.ID, api.DecisionOnce, ""), api.ErrUnknownRequest)
+
+			require.NoError(t, c.answer(f.eng, req))
+			got, _, err := f.eng.WaitTask(ctx, []string{"s"}, "task-1", 10*time.Second)
+			require.NoError(t, err)
+			assert.Equal(t, c.state, got.State, "%+v", got)
+			assert.Empty(t, f.eng.PendingRequests(nil), "a request still waits")
+		})
+	}
+}

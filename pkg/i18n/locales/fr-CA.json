@@ -1119,6 +1119,13 @@
     "desktop.task.runtime": "{seconds} s",
     "desktop.task.show": "Afficher",
     "desktop.task.hide": "Masquer",
-    "desktop.task.stop": "Arrêter"
+    "desktop.task.stop": "Arrêter",
+    "tasks.state.waiting": "en attente de vous",
+    "tasks.asks": "{who} demande, depuis l’arrière-plan :",
+    "desktop.task.asks": "{who} demande, depuis l’arrière-plan",
+    "desktop.task.ended": "Tâche en arrière-plan {id} ({agent}) : {state}",
+    "desktop.task.continue_prompt": "La tâche en arrière-plan {id} est terminée : poursuivez avec son résultat.",
+    "desktop.settings.task_continue": "Continuer après les tâches en arrière-plan",
+    "desktop.settings.task_continue.detail": "Quand une tâche en arrière-plan se termine alors que rien ne tourne, l’agent reçoit un tour pour agir sur son résultat. Désactivé : un avis seulement."
   }
 }

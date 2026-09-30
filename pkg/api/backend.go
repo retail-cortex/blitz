@@ -50,6 +50,11 @@ type Backend interface {
 	ListTasks() []TaskInfo
 	Task(id string) (TaskInfo, []string, error)
 	StopTask(id string) (TaskInfo, error)
+	// PendingTaskRequests are their approval requests and questions
+	// waiting for an answer; AnswerTaskRequest answers one (a decision
+	// for an approval, text for a question).
+	PendingTaskRequests() []TaskRequest
+	AnswerTaskRequest(id string, decision Decision, answer string) error
 
 	// Project settings.
 	ProjectSettings() ProjectSettings

@@ -75,6 +75,9 @@ import { applyEvent, assignPromptIndices, failed, fromMessages, parseDiff, summa
 import { copyRendered, copyText } from "./clipboard";
 import { Button, Chip, Dialog, Icon, IconButton, Menu, useSnackbar } from "./ui/controls";
 
+/** A background task's approval request or question, waiting for an answer. */
+type TaskRequest = { id: string; who: string; approval?: ApprovalRequest; question?: Question };
+
 type Pending = { kind: "approval"; req: ApprovalRequest } | { kind: "question"; q: Question };
 
 /** How a turn is sent (see Turn in the API). */
@@ -123,6 +126,8 @@ export function Conversation({
   const [tasks, setTasks] = useState<Task[]>([]);
   const [running, setRunning] = useState(false);
   const [pending, setPending] = useState<Pending | null>(null);
+  // Background tasks' approval requests and questions, waiting.
+  const [taskRequests, setTaskRequests] = useState<TaskRequest[]>([]);
   const [turnUsage, setTurnUsage] = useState("");
   const [total, setTotal] = useState<Usage>();
   const [error, setError] = useState("");
@@ -391,6 +396,65 @@ export function Conversation({
       fail(e);
     }
   };
+
+  // Background tasks of this session, followed while it's open
+  // (spec_background_agents_032 BGA-41): their requests wait here, and
+  // one that ends while nothing runs says so, and may start a turn.
+  const latest = useRef({ running, run, continueOn: prefs.task_continue });
+  latest.current = { running, run, continueOn: prefs.task_continue };
+  const sessionId = session?.id;
+  useEffect(() => {
+    if (!sessionId) return;
+    setTaskRequests([]);
+    const ctl = new AbortController();
+    (async () => {
+      while (!ctl.signal.aborted) {
+        try {
+          for await (const res of workspaces.watchTasks({ workspace: dir, sessionIds: [sessionId] }, { signal: ctl.signal })) {
+            const k = res.event?.kind;
+            if (k?.case === "approvalRequest" || k?.case === "question") {
+              const r: TaskRequest = k.case === "approvalRequest" ? { id: k.value.requestId, who: `${k.value.agent} · ${k.value.taskId}`, approval: k.value } : { id: k.value.requestId, who: `${k.value.agent} · ${k.value.taskId}`, question: k.value };
+              setTaskRequests((list) => (list.some((x) => x.id === r.id) ? list : [...list, r]));
+            } else if (k?.case === "resolved") {
+              setTaskRequests((list) => list.filter((x) => x.id !== k.value));
+            } else if (k?.case === "task" && ["done", "failed", "stopped"].includes(k.value.state)) {
+              const task = k.value;
+              setEntries((e) => [...e, { kind: "notice", text: t("desktop.task.ended", { id: task.id, agent: task.agent, state: t(`tasks.state.${task.state}`) }), tone: task.state === "failed" ? "error" : "info" }]);
+              const { running: busy, run: go, continueOn } = latest.current;
+              if (continueOn && !busy) go(t("desktop.task.continue_prompt", { id: task.id }));
+            }
+          }
+        } catch {
+          // The service went away, or the stream broke: follow again soon.
+        }
+        if (!ctl.signal.aborted) await new Promise((r) => setTimeout(r, 3000));
+      }
+    })();
+    return () => ctl.abort();
+  }, [dir, sessionId]);
+
+  const answerTask = async (r: TaskRequest, reply: { decision?: Decision; text?: string }) => {
+    setTaskRequests((list) => list.filter((x) => x.id !== r.id));
+    const call = reply.text !== undefined ? sessions.answer({ workspace: dir, requestId: r.id, answer: reply.text }) : sessions.approve({ workspace: dir, requestId: r.id, decision: reply.decision! });
+    await call.catch(fail);
+  };
+
+  // Ctrl+J: the next background task's request.
+  useEffect(() => {
+    if (!visible) return;
+    const key = (e: KeyboardEvent) => {
+      if (!e.ctrlKey || e.metaKey || e.key.toLowerCase() !== "j") return;
+      const cards = [...(scroller.current?.querySelectorAll<HTMLElement>(".task-request") ?? [])];
+      if (!cards.length) return;
+      e.preventDefault();
+      const at = cards.findIndex((c) => c.contains(document.activeElement));
+      const next = cards[(at + 1) % cards.length];
+      next.scrollIntoView({ block: "center" });
+      next.querySelector<HTMLElement>("button, input")?.focus();
+    };
+    document.addEventListener("keydown", key);
+    return () => document.removeEventListener("keydown", key);
+  }, [visible]);
 
   const decide = async (decision: Decision) => {
     if (pending?.kind !== "approval") return;
@@ -719,6 +783,13 @@ export function Conversation({
               <Icon path={mdiProgressClock} className="pulse" />
               <span className="muted">{t("desktop.working")}</span>
             </div>
+          )}
+          {taskRequests.map((r) =>
+            r.approval ? (
+              <ApprovalCard key={r.id} who={r.who} req={r.approval} autoFocus={false} onDecide={(decision) => answerTask(r, { decision })} />
+            ) : (
+              <QuestionCard key={r.id} who={r.who} q={r.question!} autoFocus={false} onAnswer={(text) => answerTask(r, { text })} />
+            ),
           )}
           {pending?.kind === "approval" && <ApprovalCard req={pending.req} onDecide={decide} />}
           {pending?.kind === "question" && <QuestionCard q={pending.q} onAnswer={answer} />}
@@ -1148,7 +1219,7 @@ function TaskCard({ dir, sessionId, id }: { dir: string; sessionId: string; id: 
   useEffect(() => {
     load();
   }, [load]);
-  const runningNow = !task || task.state === "running";
+  const runningNow = !task || task.state === "running" || task.state === "waiting";
   useEffect(() => {
     if (!runningNow || gone) return;
     const timer = setInterval(load, 2000);
@@ -1207,13 +1278,14 @@ function JsonBlock({ label, value }: { label: string; value: JsonObject }) {
   );
 }
 
-function ApprovalCard({ req, onDecide }: { req: ApprovalRequest; onDecide: (d: Decision) => void }) {
+function ApprovalCard({ req, onDecide, who, autoFocus = true }: { req: ApprovalRequest; onDecide: (d: Decision) => void; who?: string; autoFocus?: boolean }) {
   const files = req.diff ? parseDiff(req.diff) : [];
   return (
-    <div className="card approval" role="alertdialog" aria-label={t("desktop.approval.label")}>
+    <div className={`card approval ${who ? "task-request" : ""}`} role="alertdialog" aria-label={t("desktop.approval.label")}>
       <div className="row">
         <Icon path={mdiShieldAlertOutline} size="lg" />
         <div className="stack" style={{ gap: 2 }}>
+          {who && <span className="t-label muted">{t("desktop.task.asks", { who })}</span>}
           <span className="t-title">{t("desktop.approval.title")}</span>
           <span className="muted">
             {t("desktop.approval.wants", { tool: req.tool, detail: req.detail })}
@@ -1222,7 +1294,7 @@ function ApprovalCard({ req, onDecide }: { req: ApprovalRequest; onDecide: (d: D
       </div>
       {files.length > 0 && <DiffView files={files} compact />}
       <div className="row wrap">
-        <Button variant="filled" onClick={() => onDecide(Decision.ONCE)} autoFocus>
+        <Button variant="filled" onClick={() => onDecide(Decision.ONCE)} autoFocus={autoFocus}>
           {t("desktop.approval.once")}
         </Button>
         {req.scopeLabel && (
@@ -1239,14 +1311,17 @@ function ApprovalCard({ req, onDecide }: { req: ApprovalRequest; onDecide: (d: D
   );
 }
 
-function QuestionCard({ q, onAnswer }: { q: Question; onAnswer: (a: string) => void }) {
+function QuestionCard({ q, onAnswer, who, autoFocus = true }: { q: Question; onAnswer: (a: string) => void; who?: string; autoFocus?: boolean }) {
   const [text, setText] = useState("");
   // A plan review lists "carry it out" first: make that the primary choice.
   return (
-    <div className="card question" role="alertdialog" aria-label={t("desktop.question.title")}>
+    <div className={`card question ${who ? "task-request" : ""}`} role="alertdialog" aria-label={t("desktop.question.title")}>
       <div className="row">
         <Icon path={mdiHelpCircleOutline} size="lg" />
-        <span className="t-title">{t("desktop.question.title")}</span>
+        <div className="stack" style={{ gap: 2 }}>
+          {who && <span className="t-label muted">{t("desktop.task.asks", { who })}</span>}
+          <span className="t-title">{t("desktop.question.title")}</span>
+        </div>
       </div>
       <div className="question-text">
         <Markdown text={q.question} />
@@ -1267,7 +1342,7 @@ function QuestionCard({ q, onAnswer }: { q: Question; onAnswer: (a: string) => v
           if (text.trim()) onAnswer(text.trim());
         }}
       >
-        <input className="input" value={text} onChange={(e) => setText(e.target.value)} placeholder={q.options.length ? t("desktop.question.other") : t("desktop.question.answer")} autoFocus={q.options.length === 0} />
+        <input className="input" value={text} onChange={(e) => setText(e.target.value)} placeholder={q.options.length ? t("desktop.question.other") : t("desktop.question.answer")} autoFocus={autoFocus && q.options.length === 0} />
         <Button variant="text" type="submit" disabled={!text.trim()}>
           {t("desktop.send")}
         </Button>

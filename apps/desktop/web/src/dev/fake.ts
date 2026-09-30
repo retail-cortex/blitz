@@ -65,7 +65,7 @@ interface State {
   // The project settings' trust state: the "shop" workspace has some.
   projectTrust?: string;
   // Background tasks, by ID: they finish a few seconds after they start.
-  tasks: Map<string, { agent: string; prompt: string; sessionId: string; started: number; stopped?: number }>;
+  tasks: Map<string, { agent: string; prompt: string; sessionId: string; started: number; stopped?: number; answered?: number }>;
 }
 
 const states = new Map<string, State>();
@@ -98,12 +98,12 @@ function state(dir: string): State {
 
 const active = (s: State) => s.sessions.find((x) => x.id === s.active)!;
 
-// A background task as the service reports it: running for 8 s, then
-// done (or stopped).
+// A background task as the service reports it: after 3 s it asks to run
+// the tests and waits; 3 s after the answer it's done (or stopped).
 function fakeTask(s: State, id: string) {
   const t = s.tasks.get(id)!;
-  const end = t.stopped ?? (Date.now() - t.started > 8000 ? t.started + 8000 : 0);
-  const state = t.stopped ? "stopped" : end ? "done" : "running";
+  const end = t.stopped ?? (t.answered && Date.now() - t.answered > 3000 ? t.answered + 3000 : 0);
+  const state = t.stopped ? "stopped" : end ? "done" : !t.answered && Date.now() - t.started > 3000 ? "waiting" : "running";
   const ms = (end || Date.now()) - t.started;
   return {
     id,
@@ -351,6 +351,8 @@ export function installFake() {
           return {};
         },
         approve: ({ workspace, requestId, decision }) => {
+          const task = state(workspace).tasks.get(requestId.replace(/-req$/, ""));
+          if (task) task.answered = Date.now();
           state(workspace).pending.get(requestId)?.(decision === 4 ? "deny" : "allow");
           return {};
         },
@@ -437,6 +439,38 @@ export function installFake() {
           const t = fakeTask(state(workspace), id);
           const events = ["→ read_file {\"path\":\"internal/cart/cart.go\"}", "← read_file", "→ grep {\"pattern\":\"math.Round\"}", "← grep"];
           return { task: t, events: t.state === "running" ? events.slice(0, 2) : events };
+        },
+        watchTasks: async function* ({ workspace, sessionIds }, ctx) {
+          yield { event: { kind: { case: "ready", value: true } } };
+          const asked = new Set<string>();
+          const ended = new Set<string>();
+          while (!ctx.signal.aborted) {
+            await sleep(500);
+            const s = state(workspace);
+            for (const id of s.tasks.keys()) {
+              const t = fakeTask(s, id);
+              if (!sessionIds.includes(t.sessionId)) continue;
+              if (t.state === "waiting" && !asked.has(id)) {
+                asked.add(id);
+                yield {
+                  event: {
+                    kind: {
+                      case: "approvalRequest",
+                      value: { requestId: `${id}-req`, tool: "run_shell_command", kind: ActionKind.COMMAND, detail: "go test ./internal/cart/...", scopeLabel: "this exact command in this workspace", agent: t.agent, taskId: id },
+                    },
+                  },
+                };
+              }
+              if (asked.has(id) && t.state !== "waiting" && !ended.has(`${id}-req`)) {
+                ended.add(`${id}-req`);
+                yield { event: { kind: { case: "resolved", value: `${id}-req` } } };
+              }
+              if (["done", "stopped"].includes(t.state) && !ended.has(id)) {
+                ended.add(id);
+                yield { event: { kind: { case: "task", value: t } } };
+              }
+            }
+          }
         },
         stopTask: ({ workspace, id }) => {
           const t = state(workspace).tasks.get(id);

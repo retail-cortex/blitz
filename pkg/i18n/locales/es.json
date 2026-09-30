@@ -1119,6 +1119,13 @@
     "desktop.task.runtime": "{seconds} s",
     "desktop.task.show": "Mostrar",
     "desktop.task.hide": "Ocultar",
-    "desktop.task.stop": "Detener"
+    "desktop.task.stop": "Detener",
+    "tasks.state.waiting": "esperándote",
+    "tasks.asks": "{who} pregunta, desde segundo plano:",
+    "desktop.task.asks": "{who} pregunta, desde segundo plano",
+    "desktop.task.ended": "Tarea en segundo plano {id} ({agent}): {state}",
+    "desktop.task.continue_prompt": "La tarea en segundo plano {id} terminó: continúa con su resultado.",
+    "desktop.settings.task_continue": "Continuar tras las tareas en segundo plano",
+    "desktop.settings.task_continue.detail": "Cuando una tarea en segundo plano termina sin nada en curso, el agente recibe un turno para actuar sobre su resultado. Desactivado: solo un aviso."
   }
 }

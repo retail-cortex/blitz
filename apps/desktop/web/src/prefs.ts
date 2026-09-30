@@ -50,6 +50,8 @@ export interface Prefs {
   chat_width: number;
   /** How wide the conversation runs: the whole panel, or a readable column. */
   width: "full" | "readable";
+  /** A background task that ends while nothing runs starts a turn about it. */
+  task_continue: boolean;
 }
 
 /** The settings before any are saved. */
@@ -64,6 +66,7 @@ export const defaultPrefs: Prefs = {
   files: false,
   show_hidden: false,
   chat_width: 0,
+  task_continue: false,
   width: "full",
 };
 
@@ -98,6 +101,7 @@ export function normalizePrefs(raw: unknown): Prefs {
     files: r.files === true,
     show_hidden: r.show_hidden === true,
     width: pick(r.width, ["full", "readable"] as const, "full"),
+    task_continue: r.task_continue === true,
     chat_width: typeof r.chat_width === "number" && r.chat_width >= 0 && r.chat_width <= 10000 ? Math.round(r.chat_width) : 0,
   };
 }

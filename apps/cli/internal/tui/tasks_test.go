@@ -137,3 +137,34 @@ func TestExitAccountsForTasks(t *testing.T) {
 	}
 	assert.True(t, ConfirmExit(context.Background(), input(""), nil, nil, ExitPrompt{Tasks: &taskBackend{}}), "nothing running: exits at once")
 }
+
+// requestBackend has background tasks' requests waiting, and records the
+// answers.
+type requestBackend struct {
+	taskBackend
+	pending []api.TaskRequest
+	answers map[string]string
+}
+
+func (b *requestBackend) PendingTaskRequests() []api.TaskRequest { return b.pending }
+
+func (b *requestBackend) AnswerTaskRequest(id string, d api.Decision, answer string) error {
+	if answer == "" {
+		answer = d.String()
+	}
+	b.answers[id] = answer
+	return nil
+}
+
+func TestAnswerTasksAtThePrompt(t *testing.T) {
+	b := &requestBackend{answers: map[string]string{}, pending: []api.TaskRequest{
+		{ID: "task-1-0001", TaskID: "task-1", Agent: "qa", Approval: &api.ApprovalRequest{Tool: "run_shell_command", Kind: api.ActionCommand, Detail: "go test ./..."}},
+		{ID: "task-2-0002", TaskID: "task-2", Agent: "docs", Question: "Tabs or spaces?", Options: []string{"tabs", "spaces"}},
+	}}
+	app := &App{Workspace: b, Input: input("y\ntabs\n")}
+	out := captureStdout(t, func() { answerTasks(context.Background(), app) })
+	assert.Contains(t, out, "qa · task-1 asks, from the background")
+	assert.Contains(t, out, "docs · task-2 asks")
+	assert.Equal(t, "tabs", b.answers["task-2-0002"])
+	assert.NotEqual(t, api.DecisionDeny.String(), b.answers["task-1-0001"], "approved: %v", b.answers)
+}

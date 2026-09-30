@@ -391,6 +391,7 @@ func runRoot(cmd *cobra.Command, o *rootOptions, args []string) (err error) {
 		Input:         input,
 		Attachments:   attached,
 		TerminalTitle: pretty && cfg.UI.TerminalTitle,
+		DiffLines:     cfg.UI.DiffLines,
 		Printer: tui.PrinterOptions{
 			Out: os.Stdout, Markdown: pretty && cfg.UI.Markdown, Theme: cfg.UI.Theme,
 			Width: terminalWidth(), Spinner: pretty && cfg.UI.Spinner,

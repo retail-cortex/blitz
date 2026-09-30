@@ -41,6 +41,10 @@ type TaskInfo struct {
 	Usage Usage `json:"usage"`
 }
 
+// Active reports whether it hasn't ended: running, or waiting for an
+// answer.
+func (t TaskInfo) Active() bool { return t.State == TaskRunning || t.State == TaskWaiting }
+
 // Runtime is how long it has run, or ran.
 func (t TaskInfo) Runtime() time.Duration {
 	end := t.Ended
@@ -53,6 +57,7 @@ func (t TaskInfo) Runtime() time.Duration {
 // The states of a task.
 const (
 	TaskRunning = "running"
+	TaskWaiting = "waiting" // for an answer to its approval request or question
 	TaskDone    = "done"
 	TaskFailed  = "failed"
 	TaskStopped = "stopped"
@@ -60,3 +65,33 @@ const (
 
 // ErrUnknownTask: no task with that ID was started in the sessions asking.
 var ErrUnknownTask = errors.New("no such task")
+
+// TaskRequest is a background task's approval request or question,
+// waiting for one of its session's people to answer
+// (spec_background_agents_032 BGA-41).
+type TaskRequest struct {
+	ID      string // answered with AnswerTaskRequest
+	TaskID  string
+	Agent   string
+	Session string
+	// Approval, or else Question and its suggested Options.
+	Approval *ApprovalRequest
+	Question string
+	Options  []string
+}
+
+// Label names who asks: "qa · task-3".
+func (r TaskRequest) Label() string { return r.Agent + " · " + r.TaskID }
+
+// SessionEvent is something that happened to a session's background
+// tasks outside its turns: one of Task (started, waiting, running again,
+// ended), Request (waiting for an answer), or Resolved (the ID of a
+// request that no longer waits: answered, or its task ended).
+type SessionEvent struct {
+	Task     *TaskInfo
+	Request  *TaskRequest
+	Resolved string
+}
+
+// ErrUnknownRequest: no request with that ID is waiting.
+var ErrUnknownRequest = errors.New("no such request is waiting")

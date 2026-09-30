@@ -160,6 +160,9 @@ function Appearance() {
       <Setting title={t("desktop.settings.notifications")} detail={t("desktop.settings.notifications.detail")}>
         <Switch label={t("desktop.settings.notifications")} checked={prefs.notifications === "on"} onChange={(on) => update((p) => ({ ...p, notifications: on ? "on" : "off" }))} />
       </Setting>
+      <Setting title={t("desktop.settings.task_continue")} detail={t("desktop.settings.task_continue.detail")}>
+        <Switch label={t("desktop.settings.task_continue")} checked={prefs.task_continue} onChange={(task_continue) => update((p) => ({ ...p, task_continue }))} />
+      </Setting>
       <Setting title={t("desktop.settings.panel")} detail={t("desktop.settings.panel.detail")}>
         <Switch label={t("desktop.settings.panel")} checked={prefs.run_settings} onChange={(run_settings) => update((p) => ({ ...p, run_settings }))} />
       </Setting>

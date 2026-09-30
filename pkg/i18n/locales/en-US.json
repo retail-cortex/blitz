@@ -1119,6 +1119,13 @@
     "desktop.task.runtime": "{seconds} s",
     "desktop.task.show": "Show",
     "desktop.task.hide": "Hide",
-    "desktop.task.stop": "Stop"
+    "desktop.task.stop": "Stop",
+    "tasks.state.waiting": "waiting for you",
+    "tasks.asks": "{who} asks, from the background:",
+    "desktop.task.asks": "{who} asks, from the background",
+    "desktop.task.ended": "Background {id} ({agent}): {state}",
+    "desktop.task.continue_prompt": "Background task {id} has ended: carry on with its result.",
+    "desktop.settings.task_continue": "Continue after background tasks",
+    "desktop.settings.task_continue.detail": "When a background task ends while nothing runs, the agent gets a turn to act on its result. Off: a notice only."
   }
 }

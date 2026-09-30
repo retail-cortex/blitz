@@ -129,7 +129,7 @@ func NewTaskTools(hooks *Hooks) ([]tool.Tool, error) {
 				return TaskOutputOutput{Error: err.Error()}, nil
 			}
 			out := TaskOutputOutput{TaskSummary: taskSummary(t, true)}
-			if t.State == api.TaskRunning {
+			if t.Active() {
 				out.RecentEvents = events[max(0, len(events)-20):]
 			}
 			return out, nil

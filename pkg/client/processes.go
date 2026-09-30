@@ -195,3 +195,47 @@ func taskInfo(m *pb.BackgroundTask) api.TaskInfo {
 		Started: timeOf(m.Started), Ended: timeOf(m.Ended), Result: m.Result, Error: m.Error, Usage: usage(m.Usage),
 	}
 }
+
+// PendingTaskRequests are the approval requests and questions of this
+// client's tasks waiting for an answer (WorkspaceService.ListTaskRequests).
+func (r *Remote) PendingTaskRequests() []api.TaskRequest {
+	sessions := r.sessionsRan()
+	if len(sessions) == 0 {
+		return nil
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
+	defer cancel()
+	res, err := r.workspaces.ListTaskRequests(ctx, connect.NewRequest(&pb.ListTaskRequestsRequest{Workspace: r.dir, SessionIds: sessions}))
+	if err != nil {
+		r.failed("listing background tasks' requests", err)
+		return nil
+	}
+	var out []api.TaskRequest
+	for _, ev := range res.Msg.Requests {
+		switch k := ev.Kind.(type) {
+		case *pb.TaskEvent_ApprovalRequest:
+			a := k.ApprovalRequest
+			out = append(out, api.TaskRequest{ID: a.RequestId, TaskID: a.TaskId, Agent: a.Agent, Approval: &api.ApprovalRequest{
+				Tool: a.Tool, Kind: actionKind(a.Kind), Detail: a.Detail, Diff: a.Diff, KeyLabel: a.ScopeLabel,
+			}})
+		case *pb.TaskEvent_Question:
+			q := k.Question
+			out = append(out, api.TaskRequest{ID: q.RequestId, TaskID: q.TaskId, Agent: q.Agent, Question: q.Question, Options: q.Options})
+		}
+	}
+	return out
+}
+
+// AnswerTaskRequest answers one of them (SessionService.Answer for a
+// question, when answer is set; else Approve).
+func (r *Remote) AnswerTaskRequest(id string, decision api.Decision, answer string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
+	defer cancel()
+	var err error
+	if answer != "" {
+		_, err = r.sessions.Answer(ctx, connect.NewRequest(&pb.AnswerRequest{Workspace: r.dir, RequestId: id, Answer: answer}))
+	} else {
+		_, err = r.sessions.Approve(ctx, connect.NewRequest(&pb.ApproveRequest{Workspace: r.dir, RequestId: id, Decision: decisionMsg(decision)}))
+	}
+	return fromAPI(err)
+}

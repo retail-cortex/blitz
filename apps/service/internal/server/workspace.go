@@ -704,3 +704,46 @@ func scopedSessions(ids []string) []string {
 	}
 	return ids
 }
+
+func (h workspaceService) WatchTasks(ctx context.Context, r req[pb.WatchTasksRequest], stream *connect.ServerStream[pb.WatchTasksResponse]) error {
+	w, err := h.s.workspace(ctx, r.Msg.Workspace)
+	if err != nil {
+		return err
+	}
+	sessions := scopedSessions(r.Msg.SessionIds)
+	events := w.WatchTasks(ctx, sessions) // before the snapshot: nothing is missed between
+	send := func(ev *pb.TaskEvent) error { return stream.Send(&pb.WatchTasksResponse{Event: ev}) }
+	for _, t := range w.ListTasksIn(sessions) {
+		if t.Active() {
+			if err := send(&pb.TaskEvent{Kind: &pb.TaskEvent_Task{Task: taskMsg(t)}}); err != nil {
+				return err
+			}
+		}
+	}
+	for _, rq := range w.PendingTaskRequestsIn(sessions) {
+		if err := send(taskRequestMsg(rq)); err != nil {
+			return err
+		}
+	}
+	if err := send(&pb.TaskEvent{Kind: &pb.TaskEvent_Ready{Ready: true}}); err != nil {
+		return err
+	}
+	for ev := range events {
+		if err := send(taskEventMsg(ev)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (h workspaceService) ListTaskRequests(ctx context.Context, r req[pb.ListTaskRequestsRequest]) (*connect.Response[pb.ListTaskRequestsResponse], error) {
+	w, err := h.s.workspace(ctx, r.Msg.Workspace)
+	if err != nil {
+		return nil, err
+	}
+	out := &pb.ListTaskRequestsResponse{}
+	for _, rq := range w.PendingTaskRequestsIn(scopedSessions(r.Msg.SessionIds)) {
+		out.Requests = append(out.Requests, taskRequestMsg(rq))
+	}
+	return ok(out)
+}

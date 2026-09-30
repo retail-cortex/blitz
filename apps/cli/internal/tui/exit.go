@@ -51,7 +51,7 @@ func runningTasks(tc TaskControl) []api.TaskInfo {
 	}
 	var out []api.TaskInfo
 	for _, t := range tc.ListTasks() {
-		if t.State == api.TaskRunning {
+		if t.Active() {
 			out = append(out, t)
 		}
 	}

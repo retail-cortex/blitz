@@ -226,3 +226,25 @@ func taskMsg(t api.TaskInfo) *pb.BackgroundTask {
 	}
 	return m
 }
+
+// taskRequestMsg is a task's approval request or question, as a turn's
+// are, with who asks.
+func taskRequestMsg(r api.TaskRequest) *pb.TaskEvent {
+	if a := r.Approval; a != nil {
+		return &pb.TaskEvent{Kind: &pb.TaskEvent_ApprovalRequest{ApprovalRequest: &pb.ApprovalRequest{
+			RequestId: r.ID, Tool: a.Tool, Kind: actionKind(a.Kind), Detail: a.Detail, Diff: a.Diff, ScopeLabel: a.KeyLabel,
+			Agent: r.Agent, TaskId: r.TaskID,
+		}}}
+	}
+	return &pb.TaskEvent{Kind: &pb.TaskEvent_Question{Question: &pb.Question{RequestId: r.ID, Question: r.Question, Options: r.Options, Agent: r.Agent, TaskId: r.TaskID}}}
+}
+
+func taskEventMsg(ev api.SessionEvent) *pb.TaskEvent {
+	switch {
+	case ev.Task != nil:
+		return &pb.TaskEvent{Kind: &pb.TaskEvent_Task{Task: taskMsg(*ev.Task)}}
+	case ev.Request != nil:
+		return taskRequestMsg(*ev.Request)
+	}
+	return &pb.TaskEvent{Kind: &pb.TaskEvent_Resolved{Resolved: ev.Resolved}}
+}

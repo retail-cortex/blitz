@@ -59,3 +59,26 @@ func (w *Workspace) StopTaskIn(sessions []string, id string) (api.TaskInfo, erro
 func (w *Workspace) taskEnded(t api.TaskInfo) {
 	w.appendIn(w.storage, t.Session, nil, session.Message{Role: "model", Kind: session.KindTask, Content: runtime.TaskNote(t)})
 }
+
+// PendingTaskRequests are the background tasks' approval requests and
+// questions waiting for an answer.
+func (w *Workspace) PendingTaskRequests() []api.TaskRequest { return w.engine.PendingRequests(nil) }
+
+// AnswerTaskRequest answers one: decision for an approval, answer for a
+// question.
+func (w *Workspace) AnswerTaskRequest(id string, decision api.Decision, answer string) error {
+	return w.engine.AnswerRequest(nil, id, decision, answer)
+}
+
+// PendingTaskRequestsIn are those of sessions' tasks.
+func (w *Workspace) PendingTaskRequestsIn(sessions []string) []api.TaskRequest {
+	if sessions == nil {
+		sessions = []string{}
+	}
+	return w.engine.PendingRequests(sessions)
+}
+
+// WatchTasks sends the events of sessions' tasks until ctx ends.
+func (w *Workspace) WatchTasks(ctx context.Context, sessions []string) <-chan api.SessionEvent {
+	return w.engine.Watch(ctx, sessions)
+}

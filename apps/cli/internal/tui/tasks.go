@@ -15,6 +15,7 @@
 package tui
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"time"
@@ -96,7 +97,7 @@ func announceTasks(app *App) {
 		app.announced = map[string]bool{}
 	}
 	for _, t := range tasks {
-		if t.State == api.TaskRunning || app.announced[t.ID] {
+		if t.Active() || app.announced[t.ID] {
 			continue
 		}
 		app.announced[t.ID] = true
@@ -105,5 +106,35 @@ func announceTasks(app *App) {
 			summary, _, _ = strings.Cut(t.Result, "\n")
 		}
 		fmt.Printf("%s%s%s\n", Dim, safe(i18n.T("tasks.ended", "id", t.ID, "agent", t.Agent, "state", i18n.T("tasks.state."+t.State), "took", t.Runtime().Round(time.Second).String(), "summary", textutil.Ellipsize(summary, 100))), Reset)
+	}
+}
+
+// answerTasks asks, at the prompt, the approval requests and questions
+// background tasks are waiting on, each labelled with who asks, so a
+// turn's own questions are never interrupted (BGA-41). Unanswered ones
+// (Ctrl+C) stay waiting; /tasks shows them.
+func answerTasks(ctx context.Context, app *App) {
+	if app.Input == nil {
+		return
+	}
+	approve, ask := NewApprover(app.Input, app.DiffLines), NewUserPrompter(app.Input)
+	for _, r := range app.Workspace.PendingTaskRequests() {
+		fmt.Printf("\n%s%s%s\n", Cyan+Bold, safe(i18n.T("tasks.asks", "who", r.Label())), Reset)
+		var err error
+		if r.Approval != nil {
+			var d api.Decision
+			if d, err = approve(ctx, *r.Approval); err == nil {
+				err = app.Workspace.AnswerTaskRequest(r.ID, d, "")
+			}
+		} else {
+			var answer string
+			if answer, err = ask(ctx, r.Question, r.Options); err == nil {
+				err = app.Workspace.AnswerTaskRequest(r.ID, 0, answer)
+			}
+		}
+		if err != nil {
+			fmt.Printf("%s%s%s\n", Dim, safe(err.Error()), Reset)
+			return
+		}
 	}
 }

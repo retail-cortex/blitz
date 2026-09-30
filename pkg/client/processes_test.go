@@ -17,6 +17,8 @@ package client
 import (
 	"context"
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"slices"
@@ -25,11 +27,15 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
+	"github.com/retail-cortex/blitz/apps/service/servicetest"
 	"github.com/retail-cortex/blitz/pkg/api"
 	"github.com/retail-cortex/blitz/pkg/config"
+	"github.com/retail-cortex/blitz/pkg/engine"
+	"github.com/retail-cortex/blitz/pkg/engine/runtime"
 	pb "github.com/retail-cortex/blitz/proto/blitz/v1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/adk/v2/model"
 )
 
 // A client accounts for the background processes its own turns started in
@@ -129,4 +135,62 @@ func TestRemoteBackgroundTasks(t *testing.T) {
 	i := slices.IndexFunc(info.Messages, func(m api.Message) bool { return m.Kind == "task" })
 	require.GreaterOrEqual(t, i, 0, "no task in the transcript: %+v", info.Messages)
 	assert.Contains(t, info.Messages[i].Text, got.ID+" (qa) finished")
+}
+
+// A background task's approval request reaches its client through
+// WatchTasks and ListTaskRequests, and the ordinary Approve answers it.
+func TestRemoteTaskRequests(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("MODENV_PREFIX", "")
+	start := call("invoke_agent", map[string]any{"agent_name": "qa", "prompt": "make a file", "background": true})
+	create := call("create_file", map[string]any{"path": "made.txt", "content": "hi\n"})
+	s := servicetest.New(func(ctx context.Context, dir string) (*engine.Workspace, error) {
+		cfg := config.DefaultConfig()
+		cfg.Tools.WorkspaceDir = dir
+		cfg.Session.StorageDir = t.TempDir()
+		cfg.AgentModels = map[string]string{"qa": "gemini/qa-model"}
+		return engine.Open(ctx, cfg, engine.Options{
+			Model: runtime.NewMockLLM("gemini-3.8-flash", start, text("started")),
+			NewModel: func(_ context.Context, _ *config.Config, ref string) (model.LLM, error) {
+				return runtime.NewMockLLM("qa-model", create, text("made it")), nil
+			},
+		})
+	})
+	srv := httptest.NewServer(s.Handler())
+	t.Cleanup(func() { srv.Close(); s.Close() })
+	r, err := AttachHTTP(context.Background(), http.DefaultClient, srv.URL, t.TempDir(), nil)
+	require.NoError(t, err)
+	sess, _, err := r.OpenSession("", false)
+	require.NoError(t, err)
+
+	watchCtx, stop := context.WithTimeout(context.Background(), 15*time.Second)
+	defer stop()
+	stream, err := r.workspaces.WatchTasks(watchCtx, connect.NewRequest(&pb.WatchTasksRequest{Workspace: r.dir, SessionIds: []string{sess.ID}}))
+	require.NoError(t, err)
+	defer stream.Close()
+	require.True(t, stream.Receive(), "no ready: %v", stream.Err())
+	require.True(t, stream.Msg().Event.GetReady())
+
+	_, err = r.Run(context.Background(), sess.ID, api.Turn{Text: "go"}, func(api.Event) {})
+	require.NoError(t, err)
+	var asked *pb.ApprovalRequest
+	for asked == nil && stream.Receive() {
+		if a := stream.Msg().Event.GetApprovalRequest(); a != nil {
+			asked = a
+		}
+	}
+	require.NotNil(t, asked, "no request streamed: %v", stream.Err())
+	assert.Equal(t, "qa", asked.Agent)
+	assert.Equal(t, "task-1", asked.TaskId)
+	pending := r.PendingTaskRequests()
+	require.Len(t, pending, 1)
+	assert.Equal(t, asked.RequestId, pending[0].ID)
+
+	require.NoError(t, r.AnswerTaskRequest(asked.RequestId, api.DecisionOnce, ""))
+	require.Eventually(t, func() bool {
+		got, _, err := r.Task("task-1")
+		return err == nil && got.State == api.TaskDone
+	}, 10*time.Second, 50*time.Millisecond)
+	assert.Empty(t, r.PendingTaskRequests())
+	assert.ErrorIs(t, r.AnswerTaskRequest(asked.RequestId, api.DecisionOnce, ""), api.ErrUnknownRequest, "answered twice")
 }

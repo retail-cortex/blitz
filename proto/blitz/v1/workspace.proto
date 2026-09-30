@@ -145,6 +145,13 @@ service WorkspaceService {
   // Stops a background task (UNKNOWN_TASK unless one of the given
   // sessions started it).
   rpc StopTask(StopTaskRequest) returns (StopTaskResponse);
+  // Streams what happens to the given sessions' background tasks outside
+  // turns: first their active tasks and waiting requests, then ready,
+  // then each change. Requests are answered with SessionService.Approve and Answer.
+  rpc WatchTasks(WatchTasksRequest) returns (stream WatchTasksResponse);
+  // Returns the given sessions' tasks' approval requests and questions
+  // waiting for an answer.
+  rpc ListTaskRequests(ListTaskRequestsRequest) returns (ListTaskRequestsResponse);
 
   // Returns the workspace's project settings (.blitz/settings.toml) and
   // the trust decision for the part that runs code or loosens a policy.
@@ -984,6 +991,48 @@ message StopTaskRequest {
   // The sessions the asking client ran turns in.
   repeated string session_ids = 2;
   string id = 3;
+}
+
+// TaskEvent is something that happened to a background task outside a
+// turn.
+message TaskEvent {
+  oneof kind {
+    // Started, waiting for an answer, running again, or ended.
+    BackgroundTask task = 1;
+    // Waits for Approve.
+    ApprovalRequest approval_request = 2;
+    // Waits for Answer.
+    Question question = 3;
+    // A request that no longer waits (answered, or its task ended).
+    string resolved = 4;
+    // Sent once, after the active tasks and waiting requests: changes
+    // follow.
+    bool ready = 5;
+  }
+}
+
+// Request message for WorkspaceService.WatchTasks.
+message WatchTasksRequest {
+  string workspace = 1;
+  // The sessions whose tasks to follow.
+  repeated string session_ids = 2;
+}
+
+// Response message for WorkspaceService.WatchTasks.
+message WatchTasksResponse {
+  TaskEvent event = 1;
+}
+
+// Request message for WorkspaceService.ListTaskRequests.
+message ListTaskRequestsRequest {
+  string workspace = 1;
+  repeated string session_ids = 2;
+}
+
+// Response message for WorkspaceService.ListTaskRequests.
+message ListTaskRequestsResponse {
+  // Each an approval_request or a question.
+  repeated TaskEvent requests = 1;
 }
 
 // Response message for WorkspaceService.StopTask.

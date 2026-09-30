@@ -210,21 +210,38 @@ func (h sessionService) SearchSession(ctx context.Context, r req[pb.SearchSessio
 	return ok(&pb.SearchSessionResponse{Found: int32(found), Prompt: prompt})
 }
 
-func (h sessionService) Approve(_ context.Context, r req[pb.ApproveRequest]) (*connect.Response[pb.ApproveResponse], error) {
+func (h sessionService) Approve(ctx context.Context, r req[pb.ApproveRequest]) (*connect.Response[pb.ApproveResponse], error) {
 	if r.Msg.Decision == pb.Decision_DECISION_UNSPECIFIED {
 		return nil, apiError(connect.CodeInvalidArgument, "INVALID_DECISION", errors.New("decision is required"))
 	}
-	if err := h.s.broker.answer(r.Msg.RequestId, reply{decision: decision(r.Msg.Decision)}); err != nil {
+	if err := h.answer(ctx, r.Msg.Workspace, r.Msg.RequestId, reply{decision: decision(r.Msg.Decision)}); err != nil {
 		return nil, err
 	}
 	return ok(&pb.ApproveResponse{})
 }
 
-func (h sessionService) Answer(_ context.Context, r req[pb.AnswerRequest]) (*connect.Response[pb.AnswerResponse], error) {
-	if err := h.s.broker.answer(r.Msg.RequestId, reply{text: r.Msg.Answer}); err != nil {
+func (h sessionService) Answer(ctx context.Context, r req[pb.AnswerRequest]) (*connect.Response[pb.AnswerResponse], error) {
+	if err := h.answer(ctx, r.Msg.Workspace, r.Msg.RequestId, reply{text: r.Msg.Answer}); err != nil {
 		return nil, err
 	}
 	return ok(&pb.AnswerResponse{})
+}
+
+// answer delivers a reply to a running turn's request, or else to one of
+// the workspace's background tasks' requests.
+func (h sessionService) answer(ctx context.Context, workspace, id string, rep reply) error {
+	err := h.s.broker.answer(id, rep)
+	if err == nil || workspace == "" {
+		return err
+	}
+	w, werr := h.s.workspace(ctx, workspace)
+	if werr != nil {
+		return err
+	}
+	if terr := w.AnswerTaskRequest(id, rep.decision, rep.text); terr == nil {
+		return nil
+	}
+	return err
 }
 
 func (h sessionService) ListRewindPoints(ctx context.Context, r req[pb.ListRewindPointsRequest]) (*connect.Response[pb.ListRewindPointsResponse], error) {

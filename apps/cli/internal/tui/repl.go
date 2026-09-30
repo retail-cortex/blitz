@@ -53,6 +53,9 @@ type App struct {
 	Attachments []*images.Image
 	// TerminalTitle shows the session's name in the terminal window title.
 	TerminalTitle bool
+	// DiffLines caps the diff shown with a background task's approval
+	// request, as with the turn's own.
+	DiffLines int
 	// announced are the background tasks whose end the REPL has shown.
 	announced map[string]bool
 	// Interrupts delivers Ctrl+C. If nil, RunREPL subscribes to os.Interrupt
@@ -274,6 +277,7 @@ func RunREPL(ctx context.Context, app *App) error {
 			}
 		}
 		announceTasks(app)
+		answerTasks(ctx, app)
 		prompt := promptText()
 		idleCtx, stopIdle := cancelOnSignal(ctx, interrupts)
 		line, err := app.Input.ReadInput(idleCtx, prompt)

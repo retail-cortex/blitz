@@ -169,6 +169,10 @@ message ApprovalRequest {
   // What "for this session" and "always" would cover, for people
   // ("this exact command in this workspace").
   string scope_label = 6;
+  // Who asks, when it's a background task: its agent and ID (empty for
+  // the turn's own agent).
+  string agent = 7;
+  string task_id = 8;
 }
 
 // Decision answers an ApprovalRequest.
@@ -190,6 +194,9 @@ message Question {
   string question = 2;
   // Suggested answers; the user may also answer freely.
   repeated string options = 3;
+  // Who asks, when it's a background task: its agent and ID.
+  string agent = 4;
+  string task_id = 5;
 }
 
 // Usage is the token usage and estimated cost of a session.

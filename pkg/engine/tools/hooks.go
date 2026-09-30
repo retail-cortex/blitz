@@ -233,6 +233,27 @@ func IsBackground(ctx context.Context) bool {
 	return v
 }
 
+// TaskAsker is who a background task's approval requests and questions go
+// to: its session's people, whenever one of them answers
+// (spec_background_agents_032 BGA-41).
+type TaskAsker struct {
+	Approve api.Approver
+	Ask     api.UserPromptFunc
+}
+
+type taskAskerKey struct{}
+
+// WithTaskAsker routes ctx's approval requests and questions to a,
+// instead of the workspace's approver (a background task's run).
+func WithTaskAsker(ctx context.Context, a TaskAsker) context.Context {
+	return context.WithValue(ctx, taskAskerKey{}, a)
+}
+
+func taskAskerFrom(ctx context.Context) (TaskAsker, bool) {
+	a, ok := ctx.Value(taskAskerKey{}).(TaskAsker)
+	return a, ok
+}
+
 // Approve decides whether a tool call may proceed, and records the
 // decision in the audit log. A deny rule refuses it in any mode. An
 // unattended run (a worker) decides by its own permissions and can't ask
@@ -336,7 +357,9 @@ func (h *Hooks) Approve(ctx context.Context, req api.ApprovalRequest) error {
 			return fmt.Errorf("%w: %s", ErrNotApproved, why)
 		}
 	}
-	if IsBackground(ctx) {
+	if a, ok := taskAskerFrom(ctx); ok && a.Approve != nil {
+		approver = a.Approve // its session's people, whenever they answer
+	} else if IsBackground(ctx) {
 		record("background-refused")
 		return fmt.Errorf("%w: %s needs approval, and nobody is asked for a task running in the background", ErrNotApproved, req.Detail)
 	}
