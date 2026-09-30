@@ -89,6 +89,7 @@ go_test(
         "envs_test.go",
         "exit_test.go",
         "features_test.go",
+        "fork_test.go",
         "i18n_lint_test.go",
         "init_test.go",
         "keys_test.go",

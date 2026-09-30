@@ -59,7 +59,9 @@ type rootOptions struct {
 	outputFormat string
 	inputFormat  string
 	jsonSchema   string
-	noPersist    bool // --no-session-persistence
+	noPersist    bool   // --no-session-persistence
+	fork         bool   // --fork: continue a copy of the resumed session
+	name         string // --name: the new session's title
 	// appendPrompt and appendPromptFile add to the agent's instructions
 	// for the run (--append-system-prompt[-file]).
 	appendPrompt, appendPromptFile string
@@ -128,7 +130,7 @@ Exit codes: 0 success, 1 error, 2 usage, 3 --max-turns reached,
 	f.BoolVarP(&o.version, "version", "v", false, "Print Blitz version")
 	addRunFlags(f, o)
 
-	root.AddCommand(newExecCommand(o), newInitCommand(o), newDoctorCommand(&o.global), newConfigCommand(&o.global), newServeCommand(), newWorkersCommand(&o.global), newServiceCommand(), newLicenseCommand(), newTrustCommand(&o.global), newMCPCommand(&o.global), newWorktreesCommand(&o.global), newMemoryCommand(&o.global), newPluginCommand(), newModelsCommand(&o.global), newUpdateCommand())
+	root.AddCommand(newExecCommand(o), newInitCommand(o), newDoctorCommand(&o.global), newConfigCommand(&o.global), newServeCommand(), newWorkersCommand(&o.global), newServiceCommand(), newLicenseCommand(), newTrustCommand(&o.global), newMCPCommand(&o.global), newWorktreesCommand(&o.global), newMemoryCommand(&o.global), newPluginCommand(), newModelsCommand(&o.global), newUpdateCommand(), newSessionsCommand(&o.global))
 	return root
 }
 
@@ -153,6 +155,8 @@ func addRunFlags(f *pflag.FlagSet, o *rootOptions) {
 	f.StringVar(&o.jsonSchema, "json-schema", "", "One-shot runs answer with JSON valid against this schema (a file, or inline JSON), as structured_result")
 	f.StringVar(&o.appendPrompt, "append-system-prompt", "", "Add this to the agent's instructions for the run (runs without the service)")
 	f.StringVar(&o.appendPromptFile, "append-system-prompt-file", "", "Add this file's text to the agent's instructions for the run (runs without the service)")
+	f.BoolVar(&o.fork, "fork", false, "With --resume or --continue: continue in a copy of the session, leaving it as it was")
+	f.StringVar(&o.name, "name", "", "Name the new session")
 	f.BoolVar(&o.noPersist, "no-session-persistence", false, "Don't keep the run's session (one-shot runs; the audit log is still written)")
 	f.IntVar(&o.maxTurns, "max-turns", 0, "Stop after this many model calls in a one-shot run (0 = unlimited)")
 	f.Float64Var(&o.maxCostUSD, "max-cost-usd", 0, "Stop a one-shot run once it has cost more than this, in USD (0 = unlimited)")
@@ -257,6 +261,12 @@ func runRoot(cmd *cobra.Command, o *rootOptions, args []string) (err error) {
 	oneShot := (prompt != "" || streamIn) && !o.interactive
 	if !oneShot && (schema != nil || o.noPersist) {
 		return withCode(exitUsage, errors.New("--json-schema and --no-session-persistence are for one-shot runs and require a prompt"))
+	}
+	if o.fork && o.resume == "" && !o.cont {
+		return withCode(exitUsage, errors.New("--fork copies the session --resume or --continue picks"))
+	}
+	if o.name != "" && (o.resume != "" || o.cont) && !o.fork {
+		return withCode(exitUsage, errors.New("--name names a new session: not with --resume or --continue (unless --fork)"))
 	}
 	if o.noPersist && (o.resume != "" || o.cont) {
 		return withCode(exitUsage, errors.New("--no-session-persistence starts a new session: not with --resume or --continue"))
@@ -429,6 +439,16 @@ func runRoot(cmd *cobra.Command, o *rootOptions, args []string) (err error) {
 		}
 		return err
 	}
+	if o.fork && resumed {
+		if sess, err = w.ForkSession(ctx, 0); err != nil {
+			return fmt.Errorf("--fork: %w", err)
+		}
+	}
+	if o.name != "" {
+		if sess, err = w.RenameSession(o.name); err != nil {
+			return withCode(exitUsage, fmt.Errorf("--name: %w", err))
+		}
+	}
 
 	if oneShot {
 		if model := w.Model().Name; o.maxCostUSD > 0 && !runtime.NewUsageTracker(cfg.Pricing).HasPrice(model) {
@@ -537,7 +557,7 @@ func resolvePrompt(flag string, args []string, stdinTTY, interactive bool, stdin
 func newCompleter(w api.Backend) *tui.Completer {
 	c := tui.NewCompleter(w.Dir())
 	for _, cmd := range []string{"help", "agents", "model", "skills", "session", "set", "clear", "sandbox", "exit", "quit",
-		"undo", "checkpoints", "diff", "cost", "context", "compact", "memory", "approvals", "hooks", "goal", "loop", "style", "mcp", "resume", "locale", "attach", "paste",
+		"undo", "checkpoints", "diff", "cost", "context", "compact", "memory", "approvals", "hooks", "goal", "loop", "style", "fork", "export", "mcp", "resume", "locale", "attach", "paste",
 		"tools", "plan", "show", "init", "mode", "permissions", "effort", "rewind", "pin_model", "unpin", "model_settings", "search", "btw", "rename", "envs", "tasks", "cd", "trust", "license"} {
 		c.Command(cmd)
 	}

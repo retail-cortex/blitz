@@ -137,6 +137,17 @@ func (s *Storage) snapshotFor(ref string) (string, error) {
 	return "", nil
 }
 
+// Fork copies session srcID to a new, unnamed session (From set) and makes
+// it active, for /fork to cut.
+func (s *Storage) Fork(srcID string) (*SessionRecord, error) { return s.branch(srcID) }
+
+// Get reads a session with its messages without making it active.
+func (s *Storage) Get(id string) (*SessionRecord, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.readSourceLocked(id)
+}
+
 // branch copies session srcID to a new, unnamed session and makes it active.
 func (s *Storage) branch(srcID string) (*SessionRecord, error) {
 	s.mu.Lock()

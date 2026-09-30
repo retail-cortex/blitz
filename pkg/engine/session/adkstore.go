@@ -21,6 +21,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"sync"
@@ -216,4 +217,32 @@ func (p *PersistentService) replayLocked(ctx context.Context, s adksession.Sessi
 		}
 	}
 	return sc.Err()
+}
+
+// ReadEvents reads session id's stored event log from dir, for exports
+// (nil when it has none).
+func ReadEvents(dir, id string) ([]*adksession.Event, error) {
+	if err := ValidateID(id); err != nil {
+		return nil, err
+	}
+	f, err := os.Open(filepath.Join(dir, id+eventsSuffix))
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	var out []*adksession.Event
+	dec := json.NewDecoder(f)
+	for {
+		ev := new(adksession.Event)
+		if err := dec.Decode(ev); err != nil {
+			if errors.Is(err, io.EOF) {
+				return out, nil
+			}
+			return out, fmt.Errorf("event %d: %w", len(out)+1, err)
+		}
+		out = append(out, ev)
+	}
 }

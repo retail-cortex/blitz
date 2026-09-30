@@ -230,6 +230,8 @@ func printHelp(app *App) {
 		{"/approvals [revoke <n>|clear]", "help.approvals"},
 		{"/hooks", "help.hooks"},
 		{"/style [name]", "help.style"},
+		{"/fork [n]", "help.fork"},
+		{"/export [file]", "help.export"},
 		{"/goal [<condition>|clear]", "help.goal"},
 		{"/loop [<interval> <prompt>|stop <n>]", "help.loop"},
 		{"/permissions [allow|ask|deny|remove <rule> [--save]]", "help.permissions"},

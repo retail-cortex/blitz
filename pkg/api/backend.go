@@ -92,6 +92,12 @@ type Backend interface {
 	LoadSession(ref string) (SessionInfo, bool, error)
 	SaveSnapshot(name string, force bool) (SessionInfo, error)
 	RenameSession(title string) (SessionInfo, error)
+	// ForkSession starts a copy of the active session up to and including
+	// prompt turn (1 the first; 0 all of it) and makes it active (/fork).
+	ForkSession(ctx context.Context, turn int) (SessionInfo, error)
+	// ExportSession is a session (the active one when "") as Markdown,
+	// secrets masked (/export).
+	ExportSession(id string) (string, error)
 	// MoveSession carries session id into this workspace from the one it
 	// was in, and makes it active (/cd).
 	MoveSession(id string) (SessionInfo, error)

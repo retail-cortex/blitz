@@ -1,0 +1,98 @@
+// Copyright 2026 Retail Cortex
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+
+package engine
+
+import (
+	"context"
+	"testing"
+
+	"github.com/retail-cortex/blitz/pkg/api"
+	"github.com/retail-cortex/blitz/pkg/config"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+// /fork copies the session up to a turn; the source stays as it was.
+func TestForkSession(t *testing.T) {
+	w, llm := openTestWith(t, nil, text("one"), text("two"), text("three"), text("after the fork"))
+	ctx := context.Background()
+	s, _ := w.NewSession()
+	for _, p := range []string{"first", "second", "third"} {
+		_, err := w.Run(ctx, s.ID, api.Turn{Text: p}, func(api.Event) {})
+		require.NoError(t, err)
+	}
+	src, err := w.storage.Get(s.ID)
+	require.NoError(t, err)
+	require.Len(t, src.Messages, 6)
+	srcEvents := w.engine.EventCount(ctx, s.ID)
+
+	fork, err := w.ForkSession(ctx, 1)
+	require.NoError(t, err)
+	assert.NotEqual(t, s.ID, fork.ID)
+	active, _ := w.ActiveSession()
+	assert.Equal(t, fork.ID, active.ID, "the fork is active")
+	assert.Equal(t, 2, fork.MessageCount, "the first prompt and its answer")
+	assert.Less(t, w.engine.EventCount(ctx, fork.ID), srcEvents)
+
+	// The fork goes on from turn 1: the model sees only it.
+	_, err = w.Run(ctx, fork.ID, api.Turn{Text: "new direction"}, func(api.Event) {})
+	require.NoError(t, err)
+	last := userTextAt(llm.Requests[len(llm.Requests)-1].Contents)
+	assert.Contains(t, last, "new direction")
+	all := llm.Requests[len(llm.Requests)-1].Contents
+	joined := ""
+	for _, c := range all {
+		for _, p := range c.Parts {
+			joined += p.Text + " "
+		}
+	}
+	assert.Contains(t, joined, "first")
+	assert.NotContains(t, joined, "second", "cut at turn 1")
+
+	again, err := w.storage.Get(s.ID)
+	require.NoError(t, err)
+	assert.Len(t, again.Messages, 6, "the source is unchanged")
+	assert.Equal(t, srcEvents, w.engine.EventCount(ctx, s.ID))
+
+	whole, err := w.ForkSession(ctx, 0)
+	require.NoError(t, err)
+	assert.Equal(t, 4, whole.MessageCount, "all of the fork it copied")
+	_, err = w.ForkSession(ctx, -1)
+	assert.ErrorIs(t, err, api.ErrNotRewindPoint)
+}
+
+// /export writes prompts, answers and tool calls, secrets masked.
+func TestExportSession(t *testing.T) {
+	const secret = "sk-secret-0123456789abcdef"
+	w, _ := openTestWith(t, func(c *config.Config) { c.LLM.OpenAI.APIKey = secret },
+		toolCall("list_files", map[string]any{"path": "."}), text("Nothing there; the key "+secret+" is safe."))
+	ctx := context.Background()
+	s, _ := w.NewSession()
+	_, err := w.RenameSession("Look around")
+	require.NoError(t, err)
+	_, err = w.Run(ctx, s.ID, api.Turn{Text: "what's here?"}, func(api.Event) {})
+	require.NoError(t, err)
+
+	md, err := w.ExportSession("")
+	require.NoError(t, err)
+	for _, want := range []string{"# Look around", "## You", "what's here?", "- `list_files` {\"path\":\".\"}", "  - → ", "## blitz", "Nothing there"} {
+		assert.Contains(t, md, want)
+	}
+	assert.NotContains(t, md, secret)
+
+	_, err = ExportSession(w.cfg, "no-such-session")
+	assert.Error(t, err)
+}

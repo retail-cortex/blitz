@@ -127,6 +127,30 @@ func (h sessionService) RenameSession(ctx context.Context, r req[pb.RenameSessio
 	return ok(&pb.RenameSessionResponse{Session: sessionMsg(s)})
 }
 
+func (h sessionService) ForkSession(ctx context.Context, r req[pb.ForkSessionRequest]) (*connect.Response[pb.ForkSessionResponse], error) {
+	w, err := h.s.workspace(ctx, r.Msg.Workspace)
+	if err != nil {
+		return nil, err
+	}
+	s, err := w.ForkSession(ctx, int(r.Msg.Turn))
+	if err != nil {
+		return nil, toAPI(err)
+	}
+	return ok(&pb.ForkSessionResponse{Session: sessionMsg(s)})
+}
+
+func (h sessionService) ExportSession(ctx context.Context, r req[pb.ExportSessionRequest]) (*connect.Response[pb.ExportSessionResponse], error) {
+	w, err := h.s.workspace(ctx, r.Msg.Workspace)
+	if err != nil {
+		return nil, err
+	}
+	md, err := w.ExportSession(r.Msg.SessionId)
+	if err != nil {
+		return nil, toAPI(err)
+	}
+	return ok(&pb.ExportSessionResponse{Markdown: md})
+}
+
 // RunTurn runs a turn and streams its events. Events are sent from one
 // goroutine at a time (the send lock), since the agent and approval
 // requests can produce them concurrently.

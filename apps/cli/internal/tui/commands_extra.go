@@ -18,6 +18,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -56,6 +59,10 @@ func handleExtraCommand(ctx context.Context, cmd string, args []string, app *App
 		cmdGoal(args, app)
 	case "style":
 		cmdStyle(ctx, args, app)
+	case "fork":
+		cmdFork(ctx, args, app)
+	case "export":
+		cmdExport(args, app)
 	case "loop":
 		cmdLoop(args, app)
 	case "mcp":
@@ -261,6 +268,66 @@ func cmdMemory(ctx context.Context, args []string, app *App) {
 	default:
 		fmt.Println(i18n.T("memory.usage"))
 	}
+}
+
+// cmdFork starts a copy of the session up to a prompt turn (PAR-SES-10).
+func cmdFork(ctx context.Context, args []string, app *App) {
+	turn := 0
+	if len(args) == 1 {
+		n, err := strconv.Atoi(strings.TrimPrefix(args[0], "#"))
+		if err != nil || n < 1 {
+			fmt.Println(i18n.T("fork.usage"))
+			return
+		}
+		turn = n
+	} else if len(args) > 1 {
+		fmt.Println(i18n.T("fork.usage"))
+		return
+	}
+	s, err := app.Workspace.ForkSession(ctx, turn)
+	if err != nil {
+		fmt.Printf("%s✗ %v%s\n", Red, err, Reset)
+		return
+	}
+	fmt.Printf("%s✓ %s%s\n", Green, i18n.T("fork.done", "id", s.ID, "messages", s.MessageCount), Reset)
+}
+
+// cmdExport writes the session as Markdown (PAR-SES-11): to the file
+// given (relative to the workspace), else to one named for the session.
+func cmdExport(args []string, app *App) {
+	md, err := app.Workspace.ExportSession("")
+	if err != nil {
+		fmt.Printf("%s✗ %v%s\n", Red, err, Reset)
+		return
+	}
+	name := ""
+	if len(args) > 0 {
+		name = strings.Join(args, " ")
+	} else {
+		active, _ := app.Workspace.ActiveSession()
+		name = exportName(active.Title, active.ID)
+	}
+	path := name
+	if !filepath.IsAbs(path) {
+		path = filepath.Join(app.Workspace.Dir(), path)
+	}
+	if err := os.WriteFile(path, []byte(md), 0o644); err != nil {
+		fmt.Printf("%s✗ %v%s\n", Red, err, Reset)
+		return
+	}
+	fmt.Printf("%s✓ %s%s\n", Green, i18n.T("export.done", "path", safe(path)), Reset)
+}
+
+// exportName is a file name for a session's export.
+func exportName(title, id string) string {
+	slug := strings.Trim(regexp.MustCompile(`[^a-z0-9]+`).ReplaceAllString(strings.ToLower(title), "-"), "-")
+	if slug == "" {
+		slug = "session-" + id
+	}
+	if len(slug) > 50 {
+		slug = strings.Trim(slug[:50], "-")
+	}
+	return slug + ".md"
 }
 
 // cmdStyle lists the output styles, or uses one (PAR-MEM-21).

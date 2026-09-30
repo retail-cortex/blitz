@@ -276,6 +276,24 @@ func (r *Remote) RenameSession(title string) (api.SessionInfo, error) {
 	return session(res.Msg.Session), nil
 }
 
+// ForkSession starts a copy of the active session (SessionService.ForkSession).
+func (r *Remote) ForkSession(ctx context.Context, turn int) (api.SessionInfo, error) {
+	res, err := r.sessions.ForkSession(ctx, connect.NewRequest(&pb.ForkSessionRequest{Workspace: r.dir, Turn: int32(turn)}))
+	if err != nil {
+		return api.SessionInfo{}, fromAPI(err)
+	}
+	return session(res.Msg.Session), nil
+}
+
+// ExportSession is a session as Markdown (SessionService.ExportSession).
+func (r *Remote) ExportSession(id string) (string, error) {
+	res, err := r.sessions.ExportSession(context.Background(), connect.NewRequest(&pb.ExportSessionRequest{Workspace: r.dir, SessionId: id}))
+	if err != nil {
+		return "", fromAPI(err)
+	}
+	return res.Msg.Markdown, nil
+}
+
 // MoveSession carries session id into this client's workspace in the
 // service and makes it active there (SessionService.MoveSession, /cd).
 func (r *Remote) MoveSession(id string) (api.SessionInfo, error) {

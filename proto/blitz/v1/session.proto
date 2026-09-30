@@ -47,6 +47,11 @@ service SessionService {
   rpc SaveSnapshot(SaveSnapshotRequest) returns (SaveSnapshotResponse);
   // Sets the active session's title.
   rpc RenameSession(RenameSessionRequest) returns (RenameSessionResponse);
+  // Starts a copy of the active session up to and including a prompt turn,
+  // in the transcript and the event log, and makes it active (/fork).
+  rpc ForkSession(ForkSessionRequest) returns (ForkSessionResponse);
+  // Returns a session as Markdown, secrets masked (/export).
+  rpc ExportSession(ExportSessionRequest) returns (ExportSessionResponse);
   // Carries a session into this workspace from the one it was in, and
   // makes it active there (/cd).
   rpc MoveSession(MoveSessionRequest) returns (MoveSessionResponse);
@@ -206,6 +211,30 @@ message RenameSessionRequest {
 // Response message for SessionService.RenameSession.
 message RenameSessionResponse {
   SessionInfo session = 1;
+}
+
+// Request message for SessionService.ForkSession.
+message ForkSessionRequest {
+  string workspace = 1;
+  // The last prompt turn to keep: 1 the first; 0 all of them.
+  int32 turn = 2;
+}
+
+// Response message for SessionService.ForkSession.
+message ForkSessionResponse {
+  SessionInfo session = 1;
+}
+
+// Request message for SessionService.ExportSession.
+message ExportSessionRequest {
+  string workspace = 1;
+  // The session; empty for the active one.
+  string session_id = 2;
+}
+
+// Response message for SessionService.ExportSession.
+message ExportSessionResponse {
+  string markdown = 1;
 }
 
 // Request message for SessionService.MoveSession.

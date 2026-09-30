@@ -43,6 +43,7 @@ go_test(
     name = "session_test",
     srcs = [
         "adkstore_test.go",
+        "fork_test.go",
         "leak_test.go",
         "search_test.go",
         "session_test.go",
