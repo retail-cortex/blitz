@@ -18,6 +18,7 @@ blitz --resume session-2026…            # resume a session (-r: this directory
 blitz --resume=before-refactor          # start a new session from a snapshot
 blitz --plan "add rate limiting"        # a plan only: reads and searches, no edits or commands
 blitz --image ui.png "why is this misaligned?"   # attach images (@ui.png in the prompt works too)
+blitz --add-dir ../shared-lib           # let the agent work in another directory too, for this run
 ```
 
 When the [service](service.md) is running, `blitz` attaches to it and says so; `--local` runs the workspace in its own process instead. A workspace held by the service can't also be opened with `--local`.

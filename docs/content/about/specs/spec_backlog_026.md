@@ -56,7 +56,7 @@ Suggested order (from NEXT_STEPS): run the manual checks (§9) first — their f
 
 ### 4.2 `--add-dir <path>` — S
 **Extends** [spec_filetools_006](spec_filetools_006.md), [spec_cli_020](spec_cli_020.md). *Source: Antigravity review, candidate 2.*
-- **BL-FS-01** `--add-dir PATH` (repeatable, startup only) adds an existing directory as an extra read-write root for this run, exactly like `sandbox.allowed_paths` (file roots and OS sandbox writable dirs), and `/sandbox` lists it. It can't widen `blocked_paths`. Not persisted.
+- **BL-FS-01** ✅ *Done 2026-09-30 ([spec_filetools_006](spec_filetools_006.md) FS-01a).* `--add-dir PATH` (repeatable, startup only) adds an existing directory as an extra read-write root for this run, exactly like `sandbox.allowed_paths` (file roots and OS sandbox writable dirs), and `/sandbox` lists it. It can't widen `blocked_paths`. Not persisted.
 
 ### 4.3 Workers' edits join `/undo` — S
 **Extends** [spec_workers_023](spec_workers_023.md), [spec_filetools_006](spec_filetools_006.md). *Source: ROADMAP 24c.* A worker's file changes go into the workspace's shared checkpoint stack, so `/undo` in an interactive session can revert a worker's edits (or be blocked by them) without saying so.

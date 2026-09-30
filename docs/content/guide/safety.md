@@ -65,7 +65,7 @@ Kinds: `shell(…)`, checked on every sub-command, through pipes, `bash -c` and 
 
 ## File sandbox
 
-File tools reach only the workspace, plus `sandbox.allowed_paths` (read-write) and `sandbox.read_only_paths`, enforced with Go's `os.Root`: no `..` or symlink escapes. `sandbox.blocked_paths` (by default `.env` files, keys, `~/.ssh`, cloud credentials and more) are never readable or writable, including through symlinks, `grep` and `list_files`.
+File tools reach only the workspace, plus `sandbox.allowed_paths` (read-write; `--add-dir <dir>` adds one for a run) and `sandbox.read_only_paths`, enforced with Go's `os.Root`: no `..` or symlink escapes. `sandbox.blocked_paths` (by default `.env` files, keys, `~/.ssh`, cloud credentials and more) are never readable or writable, including through symlinks, `grep` and `list_files`.
 
 ## Command policy
 
