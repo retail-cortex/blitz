@@ -39,7 +39,7 @@ import { compose, goToFile, loadSession, showView } from "./events";
 import { displayName, openWorkspace, openWorkspaces, recentWorkspaces } from "./prefs";
 import { useApp } from "./state";
 import { t, tn } from "./i18n";
-import { Icon } from "./ui/controls";
+import { Icon, useModal } from "./ui/controls";
 import { toggleFullscreen } from "./desktop";
 
 /**
@@ -56,6 +56,9 @@ export function CommandPalette({ onClose, onOpenWorkspace, onSettings }: { onClo
   const [chats, setChats] = useState<{ id: string; title: string; detail: string }[]>([]);
   const input = useRef<HTMLInputElement>(null);
   const list = useRef<HTMLDivElement>(null);
+  // Escape, the focus kept inside and given back: as in a dialog.
+  const box = useRef<HTMLDivElement>(null);
+  useModal(box, onClose);
 
   useEffect(() => {
     input.current?.focus();
@@ -122,7 +125,7 @@ export function CommandPalette({ onClose, onOpenWorkspace, onSettings }: { onClo
   let lastGroup = "";
   return (
     <div className="scrim palette-scrim" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="palette" role="dialog" aria-modal="true" aria-label={t("desktop.palette.label")}>
+      <div className="palette" role="dialog" aria-modal="true" aria-label={t("desktop.palette.label")} ref={box}>
         <div className="palette-search">
           <Icon path={mdiMagnify} />
           <input
@@ -132,8 +135,7 @@ export function CommandPalette({ onClose, onOpenWorkspace, onSettings }: { onClo
             aria-label={t("desktop.search")}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === "Escape") onClose();
-              else if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+              if (e.key === "ArrowDown" || e.key === "ArrowUp") {
                 e.preventDefault();
                 if (shown.length) setPick((p) => (p + (e.key === "ArrowDown" ? 1 : shown.length - 1)) % shown.length);
               } else if (e.key === "Enter") {

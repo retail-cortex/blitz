@@ -14,14 +14,13 @@
  * limitations under the License.
  */
 
-import { useCallback, useRef, useState } from "react";
 import { mdiChevronDown, mdiClose, mdiDeleteOutline, mdiFolderOpenOutline, mdiLightningBolt, mdiPencilOutline } from "@mdi/js";
 import { workspaceColor } from "./palette";
 import { displayName, forgetWorkspace, openWorkspace, openWorkspaces, recentWorkspaces, type WorkspacePrefs } from "./prefs";
 import { useApp } from "./state";
 import { useWorkerFailures } from "./workerFailures";
 import { t, tn } from "./i18n";
-import { Icon, IconButton, useDismiss } from "./ui/controls";
+import { FloatingLayer, Icon, IconButton, useAnchoredMenu } from "./ui/controls";
 
 /** The app's name and mark, at the left of the top bar. */
 export function Brand() {
@@ -41,10 +40,8 @@ export function Brand() {
  */
 export function WorkspaceSwitcher({ onOpen, onClose, onEdit }: { onOpen: () => void; onClose: (dir: string) => void; onEdit: (dir: string) => void }) {
   const { prefs, update, theme, activity } = useApp();
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-  const close = useCallback(() => setOpen(false), []);
-  useDismiss(open, ref, close);
+  // Its menu floats over the window, like every menu (useAnchoredMenu).
+  const { at, toggle, close, ref, layer } = useAnchoredMenu<HTMLDivElement>("down start");
   const list = openWorkspaces(prefs);
   const recent = recentWorkspaces(prefs);
   const current = list.find((w) => w.dir === prefs.active);
@@ -54,7 +51,7 @@ export function WorkspaceSwitcher({ onOpen, onClose, onEdit }: { onOpen: () => v
   const failures = useWorkerFailures();
   const othersFailed = list.some((w) => w.dir !== prefs.active && (failures[w.dir] ?? 0) > 0);
   const pick = (dir: string) => {
-    setOpen(false);
+    close();
     update((p) => openWorkspace(p, dir));
   };
 
@@ -63,9 +60,9 @@ export function WorkspaceSwitcher({ onOpen, onClose, onEdit }: { onOpen: () => v
       <button
         className="switcher-button"
         aria-haspopup="menu"
-        aria-expanded={open}
+        aria-expanded={!!at}
         title={current ? `${name}\n${current.description || current.dir}` : undefined}
-        onClick={() => setOpen((o) => !o)}
+        onClick={toggle}
       >
         {current && <Avatar w={current} color={workspaceColor(current.color, theme)} />}
         <span className="t-title-sm ellipsis">{name}</span>
@@ -80,11 +77,11 @@ export function WorkspaceSwitcher({ onOpen, onClose, onEdit }: { onOpen: () => v
         ) : null}
         <Icon path={mdiChevronDown} size="sm" />
       </button>
-      {open && (
-        <div className="menu switcher-menu" role="menu" aria-label={t("desktop.switcher.label")}>
+      {at && (
+        <FloatingLayer style={at} className="switcher-menu" layerRef={layer} label={t("desktop.switcher.label")}>
           {list.length > 0 && <div className="menu-label">{t("desktop.switcher.label")}</div>}
           {list.map((w) => (
-            <Row key={w.dir} w={w} active={w.dir === prefs.active} onPick={() => pick(w.dir)} onEdit={() => (setOpen(false), onEdit(w.dir))} onClose={() => (setOpen(false), onClose(w.dir))} />
+            <Row key={w.dir} w={w} active={w.dir === prefs.active} onPick={() => pick(w.dir)} onEdit={() => (close(), onEdit(w.dir))} onClose={() => (close(), onClose(w.dir))} />
           ))}
           {recent.length > 0 && (
             <>
@@ -107,11 +104,11 @@ export function WorkspaceSwitcher({ onOpen, onClose, onEdit }: { onOpen: () => v
             </>
           )}
           <div className="menu-divider" />
-          <button role="menuitem" className="menu-item" onClick={() => (setOpen(false), onOpen())}>
+          <button role="menuitem" className="menu-item" onClick={() => (close(), onOpen())}>
             <Icon path={mdiFolderOpenOutline} />
             <span>{t("desktop.switcher.open")}…</span>
           </button>
-        </div>
+        </FloatingLayer>
       )}
     </div>
   );
@@ -133,7 +130,7 @@ function Row({ w, active, onPick, onEdit, onClose }: { w: WorkspacePrefs; active
   const status = a?.waiting ? t("desktop.switcher.waiting") : a?.running ? t("desktop.switcher.working") : failed > 0 ? tn("desktop.switcher.failed_runs", failed) : "";
   return (
     <div className={`switcher-row ${active ? "active" : ""}`}>
-      <button role="menuitem" className="menu-item" aria-current={active ? "page" : undefined} onClick={onPick} title={w.dir}>
+      <button role="menuitem" className={`menu-item ${active ? "on" : ""}`} aria-current={active ? "page" : undefined} onClick={onPick} title={w.dir}>
         <span className="avatar small" style={{ background: workspaceColor(w.color, theme) }}>
           {name.slice(0, 1).toUpperCase()}
           {a?.waiting ? <span className="badge avatar-badge">!</span> : a?.running ? <span className="dot avatar-dot pulse" /> : failed > 0 ? <span className="dot avatar-dot failed" /> : null}

@@ -19,7 +19,7 @@ import { mdiFileSearchOutline } from "@mdi/js";
 import { files } from "../api";
 import { message } from "../errors";
 import { t } from "../i18n";
-import { Icon } from "../ui/controls";
+import { Icon, useModal } from "../ui/controls";
 import { fileIcon } from "./icons";
 import { splitLine } from "./paths";
 import { nameOf, parentOf } from "./tree";
@@ -36,7 +36,9 @@ export function GoToFile({ dir, onOpen, onClose }: { dir: string; onOpen: (path:
   const input = useRef<HTMLInputElement>(null);
   const { query, line, column } = splitLine(text);
 
-  useEffect(() => input.current?.focus(), []);
+  // Escape, the focus kept inside and given back: as in a dialog.
+  const box = useRef<HTMLDivElement>(null);
+  useModal(box, onClose);
   useEffect(() => {
     let live = true;
     const timer = setTimeout(() => {
@@ -64,7 +66,7 @@ export function GoToFile({ dir, onOpen, onClose }: { dir: string; onOpen: (path:
 
   return (
     <div className="scrim palette-scrim" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="palette" role="dialog" aria-label={t("desktop.files.go_to")}>
+      <div className="palette" role="dialog" aria-modal="true" aria-label={t("desktop.files.go_to")} ref={box}>
         <div className="palette-search">
           <Icon path={mdiFileSearchOutline} />
           <input
@@ -78,7 +80,6 @@ export function GoToFile({ dir, onOpen, onClose }: { dir: string; onOpen: (path:
               if (e.key === "ArrowDown") setIndex((i) => Math.min(i + 1, paths.length - 1));
               else if (e.key === "ArrowUp") setIndex((i) => Math.max(i - 1, 0));
               else if (e.key === "Enter") pick(paths[index]);
-              else if (e.key === "Escape") onClose();
               else return;
               e.preventDefault();
             }}

@@ -306,15 +306,11 @@ input[type="range"] { accent-color: var(--md-primary); width: 100%; }
 /* Menus */
 .menu-anchor { position: relative; display: inline-flex; }
 .menu {
-  position: absolute; z-index: 30; min-width: 200px; max-width: 360px; max-height: 60vh; overflow-y: auto; padding: 8px 0;
+  z-index: 30; min-width: 200px; max-width: 360px; max-height: 60vh; overflow-y: auto; padding: 8px 0;
   background: var(--md-surface-container); border-radius: var(--md-shape-xs); box-shadow: var(--md-elevation-2);
 }
 /* Menus float over the whole window, fixed where they open (Menu, ContextMenu). */
 .menu.floating { position: fixed; z-index: 1000; white-space: normal; }
-.menu.up { bottom: calc(100% + 4px); }
-.menu.down { top: calc(100% + 4px); }
-.menu.end { right: 0; }
-.menu.start { left: 0; }
 .menu-item {
   position: relative; display: flex; align-items: flex-start; gap: 12px; width: 100%; min-height: 44px; padding: 10px 16px;
   border: none; background: transparent; color: var(--md-on-surface); font: 400 14px/20px var(--md-font); text-align: left; cursor: pointer;

@@ -111,7 +111,7 @@
 .switcher-button:hover { background: var(--md-surface-container); }
 .switcher-button[aria-expanded="true"] { background: var(--md-secondary-container); color: var(--md-on-secondary-container); border-color: transparent; }
 .avatar.small { width: 26px; height: 26px; border-radius: 8px; font-size: 13px; }
-.switcher-menu { top: calc(100% + 6px); left: 0; width: 360px; max-width: calc(100vw - 32px); max-height: 70vh; }
+.switcher-menu { width: 360px; max-width: calc(100vw - 32px); }
 .switcher-row { position: relative; display: flex; align-items: center; }
 .switcher-row .menu-item { flex: 1; min-width: 0; padding-right: 76px; }
 .switcher-row .menu-item > span:last-child { min-width: 0; }
@@ -386,7 +386,7 @@ body.resizing iframe, body.resizing .cm-editor { pointer-events: none; }
 .bubble-images img { max-width: 180px; max-height: 140px; border-radius: var(--md-shape-md); object-fit: cover; }
 
 /* Command completion (above the composer) */
-.command-menu { position: absolute; left: 0; right: 0; bottom: calc(100% + 8px); z-index: 30; max-height: 360px; overflow-y: auto; padding: 6px;
+.command-menu { position: absolute; left: 0; right: 0; bottom: calc(100% + 8px); z-index: 30; max-height: min(360px, 45vh); overflow-y: auto; padding: 6px;
   background: var(--md-surface-container-high); border-radius: var(--md-shape-lg); box-shadow: var(--md-elevation-2); }
 .command-option { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 36px; padding: 6px 12px; border: none; border-radius: var(--md-shape-sm);
   background: none; color: var(--md-on-surface); font: inherit; text-align: left; cursor: pointer; }
