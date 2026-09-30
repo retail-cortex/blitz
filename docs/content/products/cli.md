@@ -126,6 +126,7 @@ Decisions are `once`, `session`, `always` or `deny`; a question is answered with
 | `/pin_model`, `/unpin`, `/model_settings`, `/effort` | Per-agent models, per-model settings, reasoning effort ([models](../guide/models.md)) |
 | `/mode [name]`, `/permissions …` | Permission mode and rules ([safety](../guide/safety.md)) |
 | `/plan <goal>` | A plan for approval, without changing anything |
+| `/grill-me <task>` | The agent asks you clarifying questions first, then proposes an approach; it changes nothing |
 | `/goal <condition>`, `/goal [clear]` | Keep the agent working until the condition holds, judged after each turn |
 | `/loop <interval> <prompt>`, `/loop [stop <n>]` | Send a prompt again every interval while the REPL stays open |
 | `/btw <question>` | A side question: answered with what the session knows, and not kept |

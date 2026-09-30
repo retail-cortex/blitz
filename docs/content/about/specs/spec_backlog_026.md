@@ -133,7 +133,7 @@ Suggested order (from NEXT_STEPS): run the manual checks (§9) first — their f
 ### 8.1 Candidates from the Antigravity review
 **Extends** [spec_tui_019](spec_tui_019.md), [spec_cli_020](spec_cli_020.md).
 - **BL-CLI-01 `/copy`** ✅ *Done 2026-09-30 (PAR-UI-04).* (S): copies the last reply to the clipboard (`pbcopy`, `wl-copy`, `xclip`, `clip.exe`), falling back to OSC 52 (works over SSH); says which was used.
-- **BL-CLI-02 `/grill-me <task>`** (S): a prompt mode like `/plan` in which the agent must ask clarifying questions (`ask_user_question`) before proposing anything, and writes nothing; the transcript records `/grill-me <task>`.
+- **BL-CLI-02 `/grill-me <task>`** (S): ✅ *Done 2026-09-30: a bundled command ([spec_skills_013](spec_skills_013.md) SK-82), so the desktop app and headless runs have it too.* a prompt mode like `/plan` in which the agent must ask clarifying questions (`ask_user_question`) before proposing anything, and writes nothing; the transcript records `/grill-me <task>`.
 
 ### 8.2 `blz` in release archives — S
 **Extends** [spec_release_025](spec_release_025.md). *Source: NEXT_STEPS decisions.*
