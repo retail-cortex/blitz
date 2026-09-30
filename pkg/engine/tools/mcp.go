@@ -19,6 +19,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"os"
 	"sort"
 	"strings"
@@ -30,6 +31,8 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/engine/breaker"
+	"github.com/retail-cortex/blitz/pkg/mcpauth"
+	"github.com/retail-cortex/blitz/pkg/secrets"
 	"google.golang.org/adk/v2/agent"
 	"google.golang.org/adk/v2/model"
 	"google.golang.org/adk/v2/tool"
@@ -46,6 +49,8 @@ type MCPManager struct {
 	owner    map[string]*mcpServer // tool name -> server
 	reserved map[string]bool       // built-in tool names MCP tools may not shadow
 	Warn     func(string)
+	// Ask puts a server's elicitation to whoever the tool call's run asks.
+	Ask func(ctx context.Context, question string, options []string) (string, error)
 }
 
 type mcpServer struct {
@@ -55,6 +60,11 @@ type mcpServer struct {
 	conns     *closingTransport // nil for toolsets built by the caller
 	transport *stdioTransport   // stdio servers only
 	health    *breaker.Breaker
+
+	sessionMu sync.Mutex
+	session   *mcp.ClientSession // the live session, as the client last used it
+	callMu    sync.Mutex
+	call      context.Context // the tool call in progress, for elicitation
 }
 
 const (
@@ -203,6 +213,9 @@ func NewMCPManager(cfgs []config.MCPServerConfig, env *ExecEnv, reserved []strin
 		if (c.Command == "") == (c.URL == "") {
 			return nil, fmt.Errorf("mcp server %q: set exactly one of command or url", c.Name)
 		}
+		if c.Disabled { // blitz mcp disable
+			continue
+		}
 
 		srv := &mcpServer{cfg: c, health: breaker.New(mcpFailThreshold)}
 		if len(c.Tools) > 0 {
@@ -242,9 +255,17 @@ func NewMCPManager(cfgs []config.MCPServerConfig, env *ExecEnv, reserved []strin
 			srv.transport = &stdioTransport{build: build}
 			srv.conns = &closingTransport{inner: srv.transport}
 		} else {
-			srv.conns = &closingTransport{inner: &mcp.StreamableClientTransport{Endpoint: c.URL}}
+			// Signed in with blitz mcp login: its token, refreshed as it
+			// expires; otherwise a server that asks is told to sign in.
+			oauth := mcpauth.NeedsLogin(c.Name)
+			store := secrets.Default(config.ConfigDir(""))
+			if rec, err := mcpauth.Load(store, c.Name); err == nil {
+				oauth = mcpauth.Handler(store, c.Name, rec)
+			}
+			srv.conns = &closingTransport{inner: &mcp.StreamableClientTransport{Endpoint: c.URL, HTTPClient: withHeaders(c.Headers), OAuthHandler: oauth}}
 		}
 		tsCfg.Transport = srv.conns
+		tsCfg.Client = m.mcpClient(srv)
 		ts, err := mcptoolset.New(tsCfg)
 		if err != nil {
 			return nil, fmt.Errorf("mcp server %q: %w", c.Name, err)
@@ -460,6 +481,15 @@ func (p *managedTool) Run(ctx agent.Context, args any) (map[string]any, error) {
 	}
 	cctx, cancel := context.WithTimeout(ctx, p.srv.callTimeout())
 	defer cancel()
+	p.srv.callMu.Lock()
+	prev := p.srv.call
+	p.srv.call = ctx
+	p.srv.callMu.Unlock()
+	defer func() {
+		p.srv.callMu.Lock()
+		p.srv.call = prev
+		p.srv.callMu.Unlock()
+	}()
 	res, err := p.inner.Run(toolWith{ctx, cctx}, args)
 	switch {
 	case err == nil:
@@ -562,4 +592,27 @@ func (r *Registry) ApproveMCP(ctx context.Context, toolName string, args map[str
 		}
 	}
 	return r.hooks.Approve(ctx, req)
+}
+
+// withHeaders is an HTTP client that sends headers with every request
+// (nil: the default client).
+func withHeaders(headers map[string]string) *http.Client {
+	if len(headers) == 0 {
+		return nil
+	}
+	return &http.Client{Transport: headerTransport{headers: headers, base: http.DefaultTransport}}
+}
+
+// headerTransport adds a server's configured headers to its requests.
+type headerTransport struct {
+	headers map[string]string
+	base    http.RoundTripper
+}
+
+func (t headerTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	req = req.Clone(req.Context())
+	for k, v := range t.headers {
+		req.Header.Set(k, v)
+	}
+	return t.base.RoundTrip(req)
 }

@@ -47,6 +47,11 @@ import (
 // order they apply.
 var ProjectFiles = []string{".blitz/settings.toml", ".blitz/settings.local.toml"}
 
+// MCPProjectFiles are the MCP server lists other tools keep in a
+// repository, read as the project's MCP servers (PAR-MCP-06): Claude
+// Code's and Antigravity's.
+var MCPProjectFiles = []string{".mcp.json", ".agents/mcp_config.json"}
+
 // maxProjectFileSize bounds a project settings file.
 const maxProjectFileSize = 256 << 10
 
@@ -163,6 +168,7 @@ type projectMCPServer struct {
 	Args           []string          `toml:"args" json:"args,omitempty"`
 	Env            map[string]string `toml:"env" json:"env,omitempty"`
 	URL            string            `toml:"url" json:"url,omitempty"`
+	Headers        map[string]string `toml:"headers" json:"headers,omitempty"`
 	Tools          []string          `toml:"tools" json:"tools,omitempty"`
 	Prefix         string            `toml:"prefix" json:"prefix,omitempty"`
 	Agents         []string          `toml:"agents" json:"agents,omitempty"`
@@ -203,7 +209,82 @@ func LoadProject(workspace string) *Project {
 		p.trusted = append(p.trusted, *pf)
 		p.Pending = append(p.Pending, pendingItems(workspace, pf)...)
 	}
+	for _, name := range MCPProjectFiles {
+		pf, err := readMCPJSON(workspace, name)
+		switch {
+		case errors.Is(err, os.ErrNotExist):
+			continue
+		case err != nil:
+			p.Problems = append(p.Problems, fmt.Sprintf("%s: %v", name, err))
+			continue
+		}
+		p.Files = append(p.Files, name)
+		pf.Referenced = referencedFiles(workspace, pf)
+		p.trusted = append(p.trusted, *pf)
+		p.Pending = append(p.Pending, pendingItems(workspace, pf)...)
+	}
 	return p
+}
+
+// readMCPJSON reads an MCP server list in the shape Claude Code and
+// Antigravity write: {"mcpServers": {"name": {"command", "args", "env"}
+// or {"url"/"httpUrl"/"serverUrl", "headers"}}}. Its servers need trust
+// like any project MCP server.
+func readMCPJSON(workspace, name string) (*projectFile, error) {
+	path := filepath.Join(workspace, name)
+	info, err := os.Lstat(path)
+	if err != nil {
+		return nil, err
+	}
+	if !info.Mode().IsRegular() {
+		return nil, errors.New("not a regular file (a link is not followed)")
+	}
+	if info.Size() > maxProjectFileSize {
+		return nil, fmt.Errorf("larger than %d KB", maxProjectFileSize>>10)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	var doc struct {
+		MCPServers map[string]struct {
+			Command   string            `json:"command"`
+			Args      []string          `json:"args"`
+			Env       map[string]string `json:"env"`
+			URL       string            `json:"url"`
+			HTTPURL   string            `json:"httpUrl"`
+			ServerURL string            `json:"serverUrl"`
+			Headers   map[string]string `json:"headers"`
+		} `json:"mcpServers"`
+	}
+	if err := json.Unmarshal(data, &doc); err != nil {
+		return nil, err
+	}
+	pf := &projectFile{file: name}
+	for _, n := range sortedKeysOf(doc.MCPServers) {
+		s := doc.MCPServers[n]
+		url := s.URL
+		if url == "" {
+			url = s.HTTPURL
+		}
+		if url == "" {
+			url = s.ServerURL
+		}
+		if (s.Command == "") == (url == "") {
+			continue // neither, or both: not a server Blitz can start
+		}
+		pf.MCP.Servers = append(pf.MCP.Servers, projectMCPServer{Name: n, Command: s.Command, Args: s.Args, Env: s.Env, URL: url, Headers: s.Headers})
+	}
+	return pf, nil
+}
+
+func sortedKeysOf[V any](m map[string]V) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
 }
 
 // readProjectFile decodes one project file: a regular file (not a link),
@@ -471,7 +552,7 @@ func (p *Project) ApplyTrusted(cfg *Config) {
 				continue
 			}
 			cfg.MCP.Servers = append(cfg.MCP.Servers, MCPServerConfig{
-				Name: s.Name, Command: s.Command, Args: s.Args, Env: s.Env, URL: s.URL, Tools: s.Tools,
+				Name: s.Name, Command: s.Command, Args: s.Args, Env: s.Env, URL: s.URL, Headers: s.Headers, Tools: s.Tools,
 				Prefix: s.Prefix, Agents: s.Agents, TimeoutSeconds: s.TimeoutSeconds,
 			})
 		}

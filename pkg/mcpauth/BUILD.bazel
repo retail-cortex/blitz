@@ -1,0 +1,27 @@
+load("@rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "mcpauth",
+    srcs = ["mcpauth.go"],
+    importpath = "github.com/retail-cortex/blitz/pkg/mcpauth",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/secrets",
+        "@com_github_modelcontextprotocol_go_sdk//auth",
+        "@com_github_modelcontextprotocol_go_sdk//mcp",
+        "@com_github_modelcontextprotocol_go_sdk//oauthex",
+        "@org_golang_x_oauth2//:oauth2",
+    ],
+)
+
+go_test(
+    name = "mcpauth_test",
+    srcs = ["mcpauth_test.go"],
+    embed = [":mcpauth"],
+    deps = [
+        "//pkg/secrets",
+        "@com_github_modelcontextprotocol_go_sdk//mcp",
+        "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//require",
+    ],
+)

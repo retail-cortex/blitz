@@ -16,6 +16,7 @@ package engine
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -24,6 +25,7 @@ import (
 	"strings"
 
 	"github.com/retail-cortex/blitz/pkg/images"
+	"github.com/retail-cortex/blitz/pkg/textutil"
 )
 
 // What a prompt's @mentions may add to it.
@@ -40,13 +42,27 @@ const (
 // front ends' (they attach them); paths that don't exist, or that the
 // workspace doesn't let the agent read (outside it, blocked), are left as
 // written. The transcript keeps the text as typed.
-func (w *Workspace) withMentions(prompt, text string) string {
+func (w *Workspace) withMentions(ctx context.Context, prompt, text string) string {
 	ws := w.tools.Workspace()
 	var b strings.Builder
 	n, total := 0, 0
 	for _, p := range images.MentionedPaths(text) {
 		if n == mentionMaxFiles || total >= mentionMaxTotal {
 			break
+		}
+		// @server:uri names an MCP server's resource (PAR-MCP-02).
+		if content, ok, err := w.tools.MCP().ResourceMention(ctx, p); ok {
+			block := fmt.Sprintf("<resource name=%q>\n", p)
+			if err != nil {
+				block += "(couldn't be read: " + err.Error() + ")\n"
+			} else {
+				block += textutil.Ellipsize(content, min(mentionMaxBytes, mentionMaxTotal-total)) + "\n"
+			}
+			block += "</resource>\n"
+			b.WriteString(block)
+			n++
+			total += len(block)
+			continue
 		}
 		if images.IsImagePath(p) {
 			continue

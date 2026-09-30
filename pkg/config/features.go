@@ -197,7 +197,12 @@ type MCPServerConfig struct {
 	// Env are environment variables for the command.
 	Env map[string]string `toml:"env"`
 	// URL is a streamable HTTP server's address.
-	URL         string   `toml:"url"`
+	URL string `toml:"url"`
+	// Headers are sent with every request to an HTTP server.
+	Headers map[string]string `toml:"headers"`
+	// Disabled keeps the server configured without starting it
+	// (blitz mcp disable).
+	Disabled    bool     `toml:"disabled"`
 	Tools       []string `toml:"tools"`        // optional allow-list of tool names
 	AutoApprove bool     `toml:"auto_approve"` // skip approval for this server's tools
 	Sandbox     *bool    `toml:"sandbox"`      // run stdio servers in the OS sandbox (default true)

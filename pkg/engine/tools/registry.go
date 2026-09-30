@@ -314,6 +314,15 @@ func NewRegistry(cfg *config.Config, agentReg *agents.Registry, skillProv *skill
 		}
 	}
 
+	resourceTools, err := NewMCPResourceTools(r)
+	if err != nil {
+		r.Close()
+		return nil, fmt.Errorf("failed to create the MCP resource tools: %w", err)
+	}
+	for _, t := range resourceTools {
+		r.tools[t.Name()] = t
+	}
+
 	reserved := make([]string, 0, len(r.tools))
 	for name := range r.tools {
 		reserved = append(reserved, name)
@@ -322,6 +331,7 @@ func NewRegistry(cfg *config.Config, agentReg *agents.Registry, skillProv *skill
 		r.Close()
 		return nil, err
 	}
+	r.mcp.Ask = r.hooks.askUser
 	// Hooks are the user's own trusted scripts from config: they keep the
 	// process guard but run outside the OS sandbox with the full environment.
 	if r.scripts, err = NewScriptHooks(cfg.Hooks, &ExecEnv{}, ws.Dir(), nil); err != nil {

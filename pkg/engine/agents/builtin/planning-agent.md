@@ -15,6 +15,8 @@ tools:
   - list_agents
   - invoke_agent
   - list_tasks
+  - list_mcp_resources
+  - read_mcp_resource
   - task_output
   - stop_task
   - list_or_search_skills

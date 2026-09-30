@@ -19,8 +19,10 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/retail-cortex/blitz/pkg/api"
 
@@ -83,6 +85,14 @@ func (w *Workspace) ListCommands() []api.CommandInfo {
 	for _, c := range byName {
 		out = append(out, api.CommandInfo{Name: c.Name, Description: c.Description, ArgumentHint: c.ArgumentHint, Source: c.Source})
 	}
+	// MCP servers' prompts, as /mcp__<server>__<prompt> (PAR-MCP-03).
+	for _, p := range w.tools.MCP().Prompts(context.Background(), mcpPromptWait) {
+		hint := ""
+		for _, a := range p.Arguments {
+			hint += " " + a + "="
+		}
+		out = append(out, api.CommandInfo{Name: p.Command(), Description: p.Description, ArgumentHint: strings.TrimSpace(hint), Source: "mcp:" + p.Server})
+	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	return out
 }
@@ -93,6 +103,14 @@ func (w *Workspace) expandCommand(ctx context.Context, t *api.Turn) ([]runtime.E
 	line := strings.TrimPrefix(strings.TrimSpace(t.Text), "/")
 	name, args, _ := strings.Cut(line, " ")
 	name = strings.ToLower(name)
+	if strings.HasPrefix(name, "mcp__") {
+		prompt, err := w.mcpPrompt(ctx, name, args)
+		if err != nil {
+			return nil, err
+		}
+		t.Prompt = prompt
+		return nil, nil
+	}
 	byName, _ := w.commands()
 	c, ok := byName[name]
 	if !ok {
@@ -120,4 +138,40 @@ func (w *Workspace) expandCommand(ctx context.Context, t *api.Turn) ([]runtime.E
 		opts = append(opts, runtime.WithAllowedTools(c.AllowedTools))
 	}
 	return opts, nil
+}
+
+// mcpPromptWait bounds how long listing commands waits for each MCP
+// server's prompts.
+const mcpPromptWait = 5 * time.Second
+
+// mcpPrompt runs the MCP prompt /mcp__<server>__<prompt> names, with args
+// given as name=value, or in the prompt's order.
+func (w *Workspace) mcpPrompt(ctx context.Context, command, args string) (string, error) {
+	for _, p := range w.tools.MCP().Prompts(ctx, mcpPromptWait) {
+		if !strings.EqualFold(p.Command(), command) {
+			continue
+		}
+		values := map[string]string{}
+		next := 0
+		for _, word := range strings.Fields(args) {
+			if k, v, ok := strings.Cut(word, "="); ok && slices.Contains(p.Arguments, k) {
+				values[k] = v
+				continue
+			}
+			for next < len(p.Arguments) && values[p.Arguments[next]] != "" {
+				next++
+			}
+			if next == len(p.Arguments) {
+				return "", fmt.Errorf("/%s takes %d arguments: %s", command, len(p.Arguments), strings.Join(p.Arguments, ", "))
+			}
+			values[p.Arguments[next]] = word
+		}
+		for _, r := range p.Required {
+			if values[r] == "" {
+				return "", fmt.Errorf("/%s needs %s=", command, r)
+			}
+		}
+		return w.tools.MCP().GetPrompt(ctx, p.Server, p.Name, values)
+	}
+	return "", fmt.Errorf("%w: /%s", api.ErrUnknownCommand, command)
 }

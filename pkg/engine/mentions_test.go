@@ -67,7 +67,7 @@ func TestWithMentions(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			got := w.withMentions("PROMPT", c.text)
+			got := w.withMentions(context.Background(), "PROMPT", c.text)
 			require.True(t, strings.HasPrefix(got, "PROMPT"), "the prompt comes first:\n%s", got)
 			for _, s := range c.want {
 				assert.Contains(t, got, s)
@@ -78,7 +78,7 @@ func TestWithMentions(t *testing.T) {
 			assert.LessOrEqual(t, strings.Count(got, `<file path="main.go">`), 1)
 		})
 	}
-	big := w.withMentions("", "@big.txt")
+	big := w.withMentions(context.Background(), "", "@big.txt")
 	assert.Less(t, len(big), mentionMaxBytes+1024, "a big file isn't sent whole")
 	assert.True(t, strings.Contains(big, "line of text\n… (the first"), "cut at a line:\n%s", big[len(big)-200:])
 }

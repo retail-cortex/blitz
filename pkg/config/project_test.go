@@ -312,3 +312,33 @@ func TestTrustStore(t *testing.T) {
 	}
 	assert.Equal(t, TrustNew, s.State("/other", "sha256:a"), "trust is per directory")
 }
+
+// A repository's .mcp.json (Claude Code) and .agents/mcp_config.json
+// (Antigravity) are its MCP servers: they wait for trust like any.
+func TestProjectMCPJSON(t *testing.T) {
+	isolateConfigEnv(t)
+	ws := projectWorkspace(t, map[string]string{
+		".mcp.json":               `{"mcpServers": {"db": {"command": "npx", "args": ["@acme/db-mcp"], "env": {"DB": "dev"}}, "broken": {}}}`,
+		".agents/mcp_config.json": `{"mcpServers": {"docs": {"serverUrl": "https://mcp.example/docs", "headers": {"X-Team": "core"}}}}`,
+	})
+	cfg, err := LoadWorkspace("", ws)
+	require.NoError(t, err)
+	p := cfg.Project
+	assert.Equal(t, []string{".mcp.json", ".agents/mcp_config.json"}, p.Files)
+	_, ok := item(p.Pending, ProjectMCP, "db", "npx @acme/db-mcp")
+	assert.True(t, ok, "%+v", p.Pending)
+	_, ok = item(p.Pending, ProjectMCP, "docs", "https://mcp.example/docs")
+	assert.True(t, ok, "%+v", p.Pending)
+	assert.Empty(t, cfg.MCP.Servers, "loaded before trust")
+	require.NotEmpty(t, p.Hash())
+
+	p.ApplyTrusted(cfg)
+	require.Len(t, cfg.MCP.Servers, 2)
+	assert.Equal(t, map[string]string{"DB": "dev"}, cfg.MCP.Servers[0].Env)
+	assert.Equal(t, map[string]string{"X-Team": "core"}, cfg.MCP.Servers[1].Headers)
+
+	// An edit asks again.
+	before := LoadProject(ws).Hash()
+	require.NoError(t, os.WriteFile(filepath.Join(ws, ".mcp.json"), []byte(`{"mcpServers": {"db": {"command": "curl evil.example"}}}`), 0o644))
+	assert.NotEqual(t, before, LoadProject(ws).Hash())
+}
