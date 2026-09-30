@@ -26,6 +26,17 @@ type ContextInfo struct {
 	AutoCompact bool
 	Threshold   int
 	Keep        int
+	// Parts estimate what the context is made of, by category, scaled to
+	// Tokens (/context).
+	Parts []ContextPart
+}
+
+// ContextPart is one category of what a prompt carries. Name is a key:
+// system_prompt, instructions, tool_declarations, user_messages, replies,
+// tool_calls, tool_results, images or summary.
+type ContextPart struct {
+	Name   string
+	Tokens int64
 }
 
 // CompactResult is what Compact did.

@@ -156,6 +156,24 @@ func TestPermissionRequestAndNotificationHooks(t *testing.T) {
 	assert.Contains(t, notes[0]["message"].(string), "asked.txt", "notification %v", notes)
 }
 
+// A turn longer than ui.notify_after tells notification hooks it ended.
+func TestTurnFinishedNotification(t *testing.T) {
+	log := filepath.Join(t.TempDir(), "events.jsonl")
+	w, _ := openTestWith(t, func(c *config.Config) {
+		c.Hooks.Notification = []config.HookConfig{hookLog(log, "")}
+		c.UI.NotifyAfter = 1
+	}, text("done"))
+	old := notifyUnit
+	notifyUnit = time.Nanosecond
+	defer func() { notifyUnit = old }()
+	s, _ := w.NewSession()
+	_, err := w.Run(context.Background(), s.ID, api.Turn{Text: "go"}, ignore)
+	require.NoError(t, err)
+	notes := ofEvent(hookEvents(t, log, 1), "notification")
+	require.Len(t, notes, 1, "notification %v", notes)
+	assert.Equal(t, "turn_finished", notes[0]["type"])
+}
+
 func TestSubagentAndCompactionHooks(t *testing.T) {
 	log := filepath.Join(t.TempDir(), "events.jsonl")
 	invoke := &genai.Content{Role: genai.RoleModel, Parts: []*genai.Part{{FunctionCall: &genai.FunctionCall{Name: "invoke_agent", Args: map[string]any{"agent_name": "qa", "prompt": "check it"}}}}}

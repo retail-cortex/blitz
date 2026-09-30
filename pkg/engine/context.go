@@ -53,13 +53,22 @@ func (w *Workspace) SessionUsage() (api.Usage, error) {
 }
 
 // Context returns the active session's context size and compaction setting.
-func (w *Workspace) Context() (api.ContextInfo, error) {
+func (w *Workspace) Context() (api.ContextInfo, error) { return w.ContextWith(true) }
+
+// ContextWith is Context, with its breakdown by category only when parts is
+// set (it reads the session's events).
+func (w *Workspace) ContextWith(parts bool) (api.ContextInfo, error) {
 	u, err := w.SessionUsage()
 	if err != nil {
 		return api.ContextInfo{}, err
 	}
 	c := w.cfg.Context
-	return api.ContextInfo{Tokens: u.LastPrompt, AutoCompact: c.Compaction && c.TokenThreshold > 0, Threshold: c.TokenThreshold, Keep: c.RetainEvents}, nil
+	info := api.ContextInfo{Tokens: u.LastPrompt, AutoCompact: c.Compaction && c.TokenThreshold > 0, Threshold: c.TokenThreshold, Keep: c.RetainEvents}
+	if parts {
+		id, _ := w.activeID()
+		info.Parts = w.engine.ContextParts(context.Background(), id, u.LastPrompt)
+	}
+	return info, nil
 }
 
 // Compact summarises the active session's older turns, keeping the latest,

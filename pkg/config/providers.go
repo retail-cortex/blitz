@@ -373,6 +373,13 @@ var settableValues = map[string]bool{
 	"llm.anthropic.base_url":   true,
 	"llm.openai.model":         true,
 	"llm.openai.base_url":      true,
+	// What /config --save keeps.
+	"blitz.default_agent":   true,
+	"blitz.agency_level":    true,
+	"blitz.permission_mode": true,
+	"ui.style":              true,
+	"ui.locale":             true,
+	"ui.notify":             true,
 }
 
 // SetValue sets one of the form's settings in a scope (value "" removes it,

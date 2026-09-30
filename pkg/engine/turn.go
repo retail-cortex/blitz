@@ -21,6 +21,7 @@ import (
 	"log/slog"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/retail-cortex/blitz/pkg/api"
 
@@ -53,10 +54,19 @@ func (w *Workspace) Run(ctx context.Context, sessionID string, t api.Turn, on fu
 	// Plan permission mode, and plan_review = always, plan every prompt
 	// first; side questions and read-only turns are read-only already.
 	planEvery := w.tools.Hooks().Mode() == api.ModePlan || w.cfg.Blitz.PlanReview == config.PlanReviewAlways
+	start := time.Now()
 	res, err := w.run(ctx, sessionID, turn{Turn: t, planMode: planEvery && !t.Plan && !t.Aside && t.ReadOnly == ""}, on, w.storage, opts...)
 	observability.RecordTurn(ctx, w.engine.ActiveAgent(), turnOutcome(err))
+	// A long turn's end is worth telling you about (spec_parity_027
+	// PAR-UI-03): notification hooks hear of it.
+	if after := w.cfg.UI.NotifyAfter; after > 0 && time.Since(start) >= time.Duration(after)*notifyUnit && !errors.Is(err, context.Canceled) {
+		w.tools.Hooks().Notify(context.WithoutCancel(ctx), "turn_finished", i18n.T("notify.turn_finished", "seconds", int(time.Since(start).Seconds())))
+	}
 	return res, err
 }
+
+// notifyUnit is what ui.notify_after counts; tests make it small.
+var notifyUnit = time.Second
 
 // turnOutcome names how a turn ended, for metrics.
 func turnOutcome(err error) string {

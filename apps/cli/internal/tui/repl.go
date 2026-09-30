@@ -50,6 +50,13 @@ type App struct {
 	noticesMu sync.Mutex
 	Version   string
 	Input     Input
+	// Attached: the workspace runs in the Blitz service (/status).
+	Attached bool
+	// ConfigDir is where the user's settings live ("" for the default),
+	// for /config --save.
+	ConfigDir string
+	// Notify tells you when a long turn ends or waits for you.
+	Notify Notifier
 	// Printer configures output rendering.
 	Printer PrinterOptions
 	// Locales are the interface's translation catalogs (nil: the built-in
@@ -451,6 +458,9 @@ func runTurn(ctx context.Context, app *App, sessionID, line string, interrupts <
 		defer ih.SetInterruptHandler(nil)
 	}
 	stopSteering := func() {}
+	started := time.Now()
+	turnStart.Store(started.UnixNano())
+	defer turnStart.Store(0)
 	res, streamErr := app.Workspace.Run(turnCtx, sessionID, api.Turn{
 		Text: line, Prompt: o.prompt, Plan: o.plan, ReadOnly: o.readOnly, Aside: o.aside, Accepted: o.accepted,
 		Images: attached, FetchGrants: o.grants, Command: o.command,
@@ -485,6 +495,9 @@ func runTurn(ctx context.Context, app *App, sessionID, line string, interrupts <
 	printer.End()
 	turnInterrupted := turnCtx.Err() != nil
 	stopTurn()
+	if !turnInterrupted && app.Notify.longRunning() {
+		app.Notify.Send(i18n.T("notify.turn_finished", "seconds", int(time.Since(started).Seconds())))
+	}
 	switch {
 	case streamErr != nil && turnInterrupted:
 		fmt.Printf("\n%s%s%s\n", Yellow, i18n.T("repl.interrupted"), Reset)

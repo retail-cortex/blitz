@@ -633,11 +633,16 @@ func (r *Remote) SessionUsage() (api.Usage, error) {
 // Context describes how full the active session's context is (from
 // SessionService.GetUsage).
 func (r *Remote) Context() (api.ContextInfo, error) {
-	u, err := r.usage()
+	res, err := r.sessions.GetUsage(context.Background(), connect.NewRequest(&pb.GetUsageRequest{Workspace: r.dir, Parts: true}))
 	if err != nil {
-		return api.ContextInfo{}, err
+		return api.ContextInfo{}, fromAPI(err)
 	}
-	return api.ContextInfo{Tokens: u.Usage.GetLastPrompt(), AutoCompact: u.AutoCompact, Threshold: int(u.Threshold), Keep: int(u.Keep)}, nil
+	u := res.Msg
+	info := api.ContextInfo{Tokens: u.Usage.GetLastPrompt(), AutoCompact: u.AutoCompact, Threshold: int(u.Threshold), Keep: int(u.Keep)}
+	for _, p := range u.Parts {
+		info.Parts = append(info.Parts, api.ContextPart{Name: p.Name, Tokens: p.Tokens})
+	}
+	return info, nil
 }
 
 // Compact summarizes the session's older events to free context, focusing

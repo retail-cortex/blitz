@@ -419,7 +419,8 @@ func runRoot(cmd *cobra.Command, o *rootOptions, args []string) (err error) {
 		input = tui.NewLineReader(os.Stdin, promptOut)
 	}
 	if input != nil {
-		w.SetUI(tui.NewApprover(input, cfg.UI.DiffLines), tui.NewUserPrompter(input))
+		n := notifier(cfg, pretty)
+		w.SetUI(n.Approving(tui.NewApprover(input, cfg.UI.DiffLines)), n.Asking(tui.NewUserPrompter(input)))
 	}
 
 	attachPrompt := ""
@@ -487,6 +488,9 @@ func runRoot(cmd *cobra.Command, o *rootOptions, args []string) (err error) {
 		Attachments:   attached,
 		TerminalTitle: pretty && cfg.UI.TerminalTitle,
 		DiffLines:     cfg.UI.DiffLines,
+		Attached:      remote,
+		ConfigDir:     o.global.config,
+		Notify:        notifier(cfg, pretty),
 		// /cd: the target opens as a workspace does at start (its
 		// settings, the trust question, the service when it runs); the
 		// REPL switches to it once the session has moved, and the old one
@@ -503,7 +507,8 @@ func runRoot(cmd *cobra.Command, o *rootOptions, args []string) (err error) {
 				return nil, nil, nil, err
 			}
 			if input != nil {
-				nb.SetUI(tui.NewApprover(input, next.UI.DiffLines), tui.NewUserPrompter(input))
+				n := notifier(next, pretty)
+				nb.SetUI(n.Approving(tui.NewApprover(input, next.UI.DiffLines)), n.Asking(tui.NewUserPrompter(input)))
 			}
 			return nb, loc, func() {
 				w, cfg = nb, next // what closes at exit, and prices the rest
@@ -558,7 +563,7 @@ func newCompleter(w api.Backend) *tui.Completer {
 	c := tui.NewCompleter(w.Dir())
 	for _, cmd := range []string{"help", "agents", "model", "skills", "session", "set", "clear", "sandbox", "exit", "quit",
 		"undo", "checkpoints", "diff", "cost", "context", "compact", "memory", "approvals", "hooks", "goal", "loop", "style", "fork", "export", "mcp", "resume", "locale", "attach", "paste",
-		"tools", "plan", "show", "init", "mode", "permissions", "effort", "rewind", "pin_model", "unpin", "model_settings", "search", "btw", "rename", "envs", "tasks", "cd", "trust", "license"} {
+		"tools", "plan", "show", "init", "mode", "permissions", "effort", "rewind", "pin_model", "unpin", "model_settings", "search", "btw", "rename", "envs", "tasks", "cd", "trust", "license", "status", "copy", "config"} {
 		c.Command(cmd)
 	}
 	c.Command("skills", "list", "show", "search")
@@ -641,4 +646,13 @@ func newCompleter(w api.Backend) *tui.Completer {
 		return ids
 	})
 	return c
+}
+
+// notifier is how the REPL tells you a long turn ended or waits
+// (ui.notify_after, ui.notify); only on a terminal.
+func notifier(cfg *config.Config, terminal bool) tui.Notifier {
+	if !terminal {
+		return tui.Notifier{Mode: "off"}
+	}
+	return tui.Notifier{After: time.Duration(cfg.UI.NotifyAfter) * time.Second, Mode: cfg.UI.Notify}
 }

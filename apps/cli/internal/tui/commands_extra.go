@@ -67,6 +67,10 @@ func handleExtraCommand(ctx context.Context, cmd string, args []string, app *App
 		cmdLoop(args, app)
 	case "mcp":
 		cmdMCP(app)
+	case "status":
+		cmdStatus(app)
+	case "copy":
+		cmdCopy(args, app)
 	case "resume":
 		if len(args) == 0 {
 			ref, picked, ok := resumeWithPicker(ctx, app)
@@ -152,8 +156,7 @@ func cmdDiff(ctx context.Context, args []string, app *App) {
 		fmt.Println(i18n.T("diff.none"))
 		return
 	}
-	out, _ := RenderDiff(d, 0)
-	fmt.Print("\n" + out + "\n")
+	browseDiff(ctx, d, app)
 }
 
 func cmdCost(app *App) {
@@ -189,6 +192,7 @@ func cmdContext(app *App) {
 		fmt.Println("  " + i18n.T("context.auto_off"))
 		fmt.Println()
 	}
+	printContextParts(c)
 }
 
 func cmdCompact(ctx context.Context, args []string, app *App) {

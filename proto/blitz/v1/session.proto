@@ -294,6 +294,8 @@ message AnswerResponse {}
 // Request message for SessionService.GetUsage.
 message GetUsageRequest {
   string workspace = 1;
+  // Also estimate what the context is made of (parts).
+  bool parts = 2;
 }
 
 // Response message for SessionService.GetUsage.
@@ -304,6 +306,17 @@ message GetUsageResponse {
   bool auto_compact = 2;
   int32 threshold = 3;
   int32 keep = 4;
+  // What the context is made of, estimated by category, when asked for.
+  repeated ContextPart parts = 5;
+}
+
+// ContextPart is one category of what a prompt carries.
+message ContextPart {
+  // system prompt, instructions and notes, tool declarations, your
+  // messages, replies, tool calls, tool results, images, earlier
+  // conversation (summary).
+  string name = 1;
+  int64 tokens = 2;
 }
 
 // Goal is what a session works toward.

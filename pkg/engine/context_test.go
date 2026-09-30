@@ -67,6 +67,16 @@ func TestUsageContextAndSessionSearch(t *testing.T) {
 	c, err := w.Context()
 	assert.NoError(t, err, "context %+v", c)
 	assert.Equal(t, int64(100), c.Tokens, "context %+v %v", c, err)
+	var sum int64
+	names := map[string]bool{}
+	for _, p := range c.Parts {
+		sum += p.Tokens
+		names[p.Name] = true
+	}
+	assert.InDelta(t, 100, sum, float64(len(c.Parts)), "the parts add up to the total: %+v", c.Parts)
+	for _, want := range []string{"system_prompt", "tool_declarations", "user_messages", "replies"} {
+		assert.True(t, names[want], "no %s in %+v", want, c.Parts)
+	}
 	found, prompt := w.SearchSession("pineapple")
 	assert.NotEqual(t, 0, found, "session search: %d %q", found, prompt)
 	assert.Contains(t, prompt, "pineapple", "session search: %d %q", found, prompt)

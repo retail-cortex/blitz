@@ -21,8 +21,6 @@ import (
 	"os"
 	"strings"
 
-	"github.com/retail-cortex/blitz/pkg/api"
-
 	"github.com/retail-cortex/blitz/pkg/i18n"
 )
 
@@ -107,40 +105,8 @@ func HandleCommand(ctx context.Context, input string, app *App) (bool, error) {
 	case "session":
 		handleSessionCommand(args, app)
 
-	case "set":
-		if len(args) == 0 {
-			st := app.Workspace.Settings()
-			fmt.Printf("\n%s%s:%s\n", Bold, i18n.T("settings.title"), Reset)
-			fmt.Printf("  %-14s %s\n", i18n.T("settings.agency")+":", st.Agency)
-			fmt.Printf("  %-14s %s\n", i18n.T("settings.model")+":", i18n.T("settings.model_value", "model", st.Model.Name, "provider", st.Model.Provider))
-			fmt.Printf("  %-14s %s\n", i18n.T("settings.agent")+":", st.Agent)
-			fmt.Printf("  %-14s %s\n", i18n.T("settings.locale")+":", st.Locale)
-			fmt.Printf("  %-14s %s\n", i18n.T("settings.mode")+":", st.PermissionMode)
-			effort := st.Effort
-			if effort == "" {
-				effort = i18n.T("effort.auto")
-			}
-			fmt.Printf("  %-14s %s\n\n", i18n.T("settings.effort")+":", effort)
-			return true, nil
-		}
-		kv := strings.SplitN(strings.Join(args, " "), "=", 2)
-		if len(kv) != 2 {
-			fmt.Printf("%s%s%s\n", Yellow, i18n.T("set.usage"), Reset)
-			return true, nil
-		}
-		v := strings.TrimSpace(kv[1])
-		k, err := app.Workspace.Set(ctx, kv[0], v)
-		var unknown *api.UnknownSettingError
-		switch {
-		case errors.Is(err, api.ErrInvalidAgency):
-			fmt.Printf("%s%s%s\n", Yellow, i18n.T("set.agency_invalid"), Reset)
-		case errors.As(err, &unknown):
-			fmt.Printf("%s%s%s\n", Yellow, i18n.T("set.unknown", "key", safe(unknown.Key)), Reset)
-		case err != nil:
-			fmt.Printf("%s✗ %s%s\n", Red, i18n.T("set.failed", "error", err), Reset)
-		default:
-			fmt.Printf("%s %s%s\n", Green, i18n.T("set.updated", "key", k, "value", safe(v)), Reset)
-		}
+	case "set", "config":
+		cmdConfig(ctx, args, app)
 
 	case "mode":
 		cmdMode(args, app)
@@ -249,7 +215,9 @@ func printHelp(app *App) {
 		{"/attach [path|clear]", "help.attach"},
 		{"/paste", "help.paste"},
 		{"/locale [code]", "help.locale"},
-		{"/set [key=value], /show", "help.set"},
+		{"/config [key=value [--save]], /set", "help.set"},
+		{"/status", "help.status"},
+		{"/copy [n]", "help.copy"},
 		{"/cd [path]", "help.cd"},
 		{"/tasks [show|stop <id>]", "help.tasks"},
 		{"/trust", "help.trust"},

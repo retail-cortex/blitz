@@ -218,11 +218,15 @@ func (h sessionService) GetUsage(ctx context.Context, r req[pb.GetUsageRequest])
 	if err != nil {
 		return nil, toAPI(err)
 	}
-	c, err := w.Context()
+	c, err := w.ContextWith(r.Msg.Parts)
 	if err != nil {
 		return nil, toAPI(err)
 	}
-	return ok(&pb.GetUsageResponse{Usage: usageMsg(u), AutoCompact: c.AutoCompact, Threshold: int32(c.Threshold), Keep: int32(c.Keep)})
+	res := &pb.GetUsageResponse{Usage: usageMsg(u), AutoCompact: c.AutoCompact, Threshold: int32(c.Threshold), Keep: int32(c.Keep)}
+	for _, p := range c.Parts {
+		res.Parts = append(res.Parts, &pb.ContextPart{Name: p.Name, Tokens: p.Tokens})
+	}
+	return ok(res)
 }
 
 func (h sessionService) Compact(ctx context.Context, r req[pb.CompactRequest]) (*connect.Response[pb.CompactResponse], error) {

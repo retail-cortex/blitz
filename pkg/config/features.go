@@ -37,6 +37,12 @@ type UIConfig struct {
 	Theme       string `toml:"theme"`       // glamour style: auto, dark, light, notty
 	Locale      string `toml:"locale"`      // interface language, e.g. en-US, es, fr-CA
 	LocalesDir  string `toml:"locales_dir"` // extra translation catalogs (*.json)
+	// NotifyAfter: a turn that runs longer than this many seconds tells you
+	// when it ends, or when an approval or question waits (0: never).
+	NotifyAfter int `toml:"notify_after"`
+	// Notify is how the terminal tells you: both (bell and desktop
+	// notification), bell, desktop or off.
+	Notify string `toml:"notify"`
 }
 
 // ImagesConfig controls pictures sent to the model: @file.png mentions,
@@ -473,6 +479,8 @@ func applyFeatureDefaults(c *Config) {
 		Theme:         "auto",
 		Locale:        "en-US",
 		LocalesDir:    filepath.Join(dir, "locales"),
+		NotifyAfter:   30,
+		Notify:        "both",
 	}
 	c.Memory = MemoryConfig{
 		Enabled: true,
