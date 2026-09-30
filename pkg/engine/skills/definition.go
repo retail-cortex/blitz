@@ -27,8 +27,8 @@ import (
 // in github.com/retail-cortex/castor, commit 1ce880f5), using the proto
 // field names as YAML keys in SKILL.md frontmatter. Castor publishes only
 // the .proto source, so they are written out here rather than imported.
-// Resources, scenarios and the registry-only fields (references, examples,
-// compiled schemas) aren't read yet.
+// Scenarios and the registry-only fields (references, examples, compiled
+// schemas) aren't read yet.
 
 // AuthorDetails is a skill contributor.
 type AuthorDetails struct {
@@ -177,6 +177,9 @@ type ScriptDefinition struct {
 	Dependencies         []string          `yaml:"dependencies,omitempty"`
 	TimeoutSeconds       int               `yaml:"timeout_seconds,omitempty"`
 	EnvironmentVariables map[string]string `yaml:"environment_variables,omitempty"`
+	// StorageSHA256 pins a storage_uri script's content: the hex SHA-256
+	// it must have (Blitz's field; Castor's proto has none).
+	StorageSHA256 string `yaml:"storage_sha256,omitempty"`
 	// RequiresPython is the Python a script needs (">=3.11"); without it,
 	// the script's PEP 723 metadata may say (BL-SK-03).
 	RequiresPython string `yaml:"requires_python,omitempty"`
@@ -190,7 +193,60 @@ type CompiledReference struct {
 	HITLTier   HITLTier `yaml:"hitl_tier,omitempty"`
 }
 
+// StorageURL is where a storage_uri is fetched: https as it is, gs://
+// through Cloud Storage's public endpoint.
+func StorageURL(uri string) (string, error) {
+	switch {
+	case strings.HasPrefix(uri, "https://"):
+		return uri, nil
+	case strings.HasPrefix(uri, "gs://"):
+		rest := strings.TrimPrefix(uri, "gs://")
+		if bucket, object, ok := strings.Cut(rest, "/"); ok && bucket != "" && object != "" {
+			return "https://storage.googleapis.com/" + bucket + "/" + object, nil
+		}
+	}
+	return "", fmt.Errorf("storage_uri %q must be https:// or gs://bucket/object", uri)
+}
+
+// ResourceRequirement is Castor's context asset (castor.skills.v1).
+type ResourceRequirement struct {
+	ID             string                  `yaml:"id,omitempty"`
+	Name           string                  `yaml:"name,omitempty"`
+	Description    string                  `yaml:"description,omitempty"`
+	Category       string                  `yaml:"category,omitempty"` // RESOURCE_CATEGORY_DOCUMENT_TEXT, or document_text
+	MimeType       string                  `yaml:"mime_type,omitempty"`
+	Storage        *ResourceStorage        `yaml:"storage,omitempty"`
+	InlineContent  string                  `yaml:"inline_content,omitempty"`
+	Interpretation *ResourceInterpretation `yaml:"interpretation,omitempty"`
+	// AutoInjectContext: the interpretation goes with the instructions.
+	AutoInjectContext bool `yaml:"auto_inject_context,omitempty"`
+}
+
+// ResourceStorage is where a resource lives.
+type ResourceStorage struct {
+	GCSURI             string `yaml:"gcs_uri,omitempty"`
+	PublicURL          string `yaml:"public_url,omitempty"`
+	GeminiFilesAPIName string `yaml:"gemini_files_api_name,omitempty"`
+	GeminiFilesAPIURI  string `yaml:"gemini_files_api_uri,omitempty"`
+	SizeBytes          int64  `yaml:"size_bytes,omitempty"`
+	MimeType           string `yaml:"mime_type,omitempty"`
+	SHA256Hash         string `yaml:"sha256_hash,omitempty"`
+}
+
+// ResourceInterpretation is text a resource was turned into.
+type ResourceInterpretation struct {
+	InterpretedText string   `yaml:"interpreted_text,omitempty"`
+	Summary         string   `yaml:"summary,omitempty"`
+	KeyEntities     []string `yaml:"key_entities,omitempty"`
+}
+
+// CategoryName is a resource category's short form ("document_text").
+func (r ResourceRequirement) CategoryName() string {
+	return strings.TrimPrefix(strings.ToLower(r.Category), "resource_category_")
+}
+
 var (
+	sha256RE     = regexp.MustCompile(`^[0-9a-f]{64}$`)
 	envNameRE    = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 	scriptNameRE = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`)
 )
@@ -228,7 +284,12 @@ func (m *SkillMetadata) Validate() []string {
 			probs = append(probs, label+": relative_path must stay inside the skill's directory")
 		}
 		if s.StorageURI != "" {
-			probs = append(probs, label+": storage_uri isn't supported yet")
+			if _, err := StorageURL(s.StorageURI); err != nil {
+				probs = append(probs, label+": "+err.Error())
+			}
+			if !sha256RE.MatchString(strings.ToLower(s.StorageSHA256)) {
+				probs = append(probs, label+": storage_uri needs storage_sha256, the script's SHA-256 in hex, to pin it")
+			}
 		}
 		if s.Language == LanguageUnspecified {
 			probs = append(probs, label+": needs a language")

@@ -20,6 +20,7 @@ import (
 
 	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/engine/skills"
+	"github.com/retail-cortex/blitz/pkg/textutil"
 	"google.golang.org/adk/v2/agent"
 	"google.golang.org/adk/v2/tool"
 	"google.golang.org/adk/v2/tool/functiontool"
@@ -94,10 +95,58 @@ type ActivateSkillOutput struct {
 	Resources    []string `json:"resources"`
 	// Scripts can be run with run_skill_script, when allowed.
 	Scripts []SkillScriptInfo `json:"scripts,omitempty"`
+	// Assets are the skill's declared resources (Castor's): what each is,
+	// where it lives, and text it was turned into.
+	Assets []SkillAsset `json:"assets,omitempty"`
 	// WritesWorkspace: the scripts change the workspace's files, in a copy;
 	// the user approves what they changed before it's kept.
 	WritesWorkspace bool   `json:"writes_workspace,omitempty"`
 	Error           string `json:"error,omitempty"`
+}
+
+// SkillAsset is one of a skill's declared resources, for the model.
+type SkillAsset struct {
+	ID          string `json:"id,omitempty"`
+	Name        string `json:"name,omitempty"`
+	Description string `json:"description,omitempty"`
+	Category    string `json:"category,omitempty"`
+	MimeType    string `json:"mime_type,omitempty"`
+	// URL is where to fetch it (web_fetch), when it has one.
+	URL       string `json:"url,omitempty"`
+	SizeBytes int64  `json:"size_bytes,omitempty"`
+	// Content is its inline text; Summary and Text what it was interpreted
+	// as (Text only when the skill asks it to go with the instructions).
+	Content string `json:"content,omitempty"`
+	Summary string `json:"summary,omitempty"`
+	Text    string `json:"text,omitempty"`
+}
+
+// assetTextLimit bounds a resource's text in activate_skill's answer.
+const assetTextLimit = 16 << 10
+
+// skillAssets lists a skill's declared resources.
+func skillAssets(skill *skills.Skill) []SkillAsset {
+	var out []SkillAsset
+	for _, r := range skill.ResourceRequirements {
+		a := SkillAsset{ID: r.ID, Name: r.Name, Description: r.Description, Category: r.CategoryName(), MimeType: r.MimeType,
+			Content: textutil.Ellipsize(r.InlineContent, assetTextLimit)}
+		if st := r.Storage; st != nil {
+			a.SizeBytes = st.SizeBytes
+			a.MimeType = cmpOr(a.MimeType, st.MimeType)
+			a.URL = st.PublicURL
+			if a.URL == "" && st.GCSURI != "" {
+				a.URL, _ = skills.StorageURL(st.GCSURI)
+			}
+		}
+		if in := r.Interpretation; in != nil {
+			a.Summary = textutil.Ellipsize(in.Summary, assetTextLimit)
+			if r.AutoInjectContext {
+				a.Text = textutil.Ellipsize(in.InterpretedText, assetTextLimit)
+			}
+		}
+		out = append(out, a)
+	}
+	return out
 }
 
 // SkillScriptInfo describes one of a skill's scripts for the model.
@@ -140,6 +189,7 @@ func NewActivateSkillTool(provider *skills.Provider, policy *config.SkillPolicy)
 				Resources:    skill.Resources,
 			}
 			out.WritesWorkspace = skill.ExecutionHints != nil && skill.ExecutionHints.WritesWorkspace
+			out.Assets = skillAssets(skill)
 			if len(skill.Scripts) > 0 {
 				ev := skills.Evaluate(skill, *policy)
 				for i, sc := range skill.Scripts {

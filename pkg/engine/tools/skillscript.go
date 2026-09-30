@@ -54,7 +54,9 @@ type SkillScripts struct {
 	ws       *Workspace
 	hooks    *Hooks
 	envs     *PyEnvs
-	nodes    *NodeEnvs // TypeScript scripts' npm environments
+	nodes    *NodeEnvs   // TypeScript scripts' npm environments
+	web      *webFetcher // storage_uri scripts' fetches (nil: web off)
+	cacheDir string      // storage_uri scripts' cache ("": ~/.blitz/skill-cache)
 	boxCfg   ScriptBoxConfig
 
 	boxOnce sync.Once
@@ -146,6 +148,15 @@ func (s *SkillScripts) Run(ctx context.Context, in RunSkillScriptInput) (out Run
 		return fail("%v", err)
 	}
 	out.Sandbox = box.Name()
+	// A script from storage_uri: fetched (or from the cache), checked
+	// against its pinned hash, then run as inline code would be.
+	if sc.StorageURI != "" {
+		src, err := s.remoteScript(ctx, skill, sc)
+		if err != nil {
+			return fail("%v", err)
+		}
+		sc.InlineCode, sc.StorageURI = string(src), ""
+	}
 	var python string // the script's runtime: python3 (or a managed Python), or node
 	if ts {
 		python, err = SystemNode()

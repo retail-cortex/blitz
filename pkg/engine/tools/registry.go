@@ -294,6 +294,12 @@ func NewRegistry(cfg *config.Config, agentReg *agents.Registry, skillProv *skill
 		r.skillScripts = NewSkillScripts(skillProv, cfg.Skills.Policy, ws, r.hooks,
 			NewPyEnvs("", cfg.Skills.Policy.Packages),
 			ScriptBoxConfig{Mode: cfg.Skills.Policy.Sandbox, Blocked: ws.Blocked()})
+		if cfg.Web.Enabled {
+			r.skillScripts.SetWeb(WebFetchConfig{
+				AllowDomains: cfg.Web.AllowDomains, DenyDomains: cfg.Web.DenyDomains, AllowPrivate: cfg.Web.AllowPrivate,
+				AllowNetwork: sb.AllowNetwork, Timeout: time.Duration(cfg.Web.TimeoutSeconds) * time.Second, Rules: rules,
+			})
+		}
 		entries = append(entries, entry{[]string{"run_skill_script"}, func() (tool.Tool, error) { return NewRunSkillScriptTool(r.skillScripts) }})
 	}
 	if skillProv != nil {

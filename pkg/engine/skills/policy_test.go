@@ -204,3 +204,31 @@ func TestNPMDependencies(t *testing.T) {
 		})
 	}
 }
+
+func TestStorageURIDefinitions(t *testing.T) {
+	pin := strings.Repeat("a", 64)
+	tests := []struct {
+		name, script, want string
+	}{
+		{"pinned https", "storage_uri: https://example.com/s.py\n    storage_sha256: " + pin, ""},
+		{"pinned gs", "storage_uri: gs://bucket/dir/s.py\n    storage_sha256: " + pin, ""},
+		{"not pinned", "storage_uri: https://example.com/s.py", "needs storage_sha256"},
+		{"bad pin", "storage_uri: https://example.com/s.py\n    storage_sha256: abc", "needs storage_sha256"},
+		{"http", "storage_uri: http://example.com/s.py\n    storage_sha256: " + pin, "must be https:// or gs://"},
+		{"gs without object", "storage_uri: gs://bucket\n    storage_sha256: " + pin, "must be https:// or gs://"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := skillFrom(t, "---\nname: r\nscripts:\n  - name: s\n    language: python\n    "+tt.script+"\n---\n")
+			probs := strings.Join(s.Problems, "; ")
+			if tt.want == "" {
+				assert.Empty(t, probs)
+			} else {
+				assert.Contains(t, probs, tt.want)
+			}
+		})
+	}
+	u, err := StorageURL("gs://bucket/dir/s.py")
+	require.NoError(t, err)
+	assert.Equal(t, "https://storage.googleapis.com/bucket/dir/s.py", u)
+}

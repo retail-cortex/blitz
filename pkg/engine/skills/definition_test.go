@@ -152,7 +152,7 @@ tool_requirements:
 		`script "a": name is used twice`,
 		`needs exactly one of inline_code, storage_uri or relative_path`,
 		`may only use letters`,
-		`storage_uri isn't supported yet`,
+		`storage_uri needs storage_sha256`,
 		`script "c": needs a language`,
 		`timeout_seconds can't be negative`,
 		`invalid environment variable name "BAD-NAME"`,

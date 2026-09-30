@@ -59,9 +59,12 @@ type SkillMetadata struct {
 	ExecutionHints     *ExecutionHints    `yaml:"execution_hints,omitempty"`
 	CompiledReference  *CompiledReference `yaml:"compiled_reference,omitempty"`
 	Scripts            []ScriptDefinition `yaml:"scripts,omitempty"`
-	SkillID            string             `yaml:"skill_id,omitempty"`
-	URI                string             `yaml:"uri,omitempty"`
-	SourceURI          string             `yaml:"source_uri,omitempty"`
+	// ResourceRequirements are Castor's resources: context assets the
+	// skill uses, listed by activate_skill.
+	ResourceRequirements []ResourceRequirement `yaml:"resources,omitempty"`
+	SkillID              string                `yaml:"skill_id,omitempty"`
+	URI                  string                `yaml:"uri,omitempty"`
+	SourceURI            string                `yaml:"source_uri,omitempty"`
 }
 
 // Skill represents an Agent Skill specification.
