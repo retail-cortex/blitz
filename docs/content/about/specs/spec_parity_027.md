@@ -7,7 +7,7 @@ weight: 27
 
 | | |
 |---|---|
-| Status | **Partly implemented:** 82 of its 99 requirements done and 1 in part (counted 2026-09-30); the rest open. A gap analysis of 2026-09-26, to be closed before new features are added. |
+| Status | **Partly implemented:** 85 of its 99 requirements done and 1 in part (counted 2026-09-30); the rest open. A gap analysis of 2026-09-26, to be closed before new features are added. |
 | Compared with | **Claude Code** (current docs at code.claude.com, September 2026: v2.1.28x); **Antigravity CLI** (`agy` 1.1–1.2, September 2026); **Antigravity** 2.0 (Google's agent-first IDE and Agent Manager) |
 | Depends on | Specs 001–025 (what Blitz does today) and [spec_backlog_026](spec_backlog_026.md) (Blitz's own gaps; overlapping items are referenced, not repeated) |
 
@@ -87,9 +87,9 @@ The threat is real: Claude Code's project settings have had CVE-2025-59536 (hook
 
 ### 4.2 Branching, export and naming — P1, S
 **CC** `/branch`, `--fork-session`, `/export`, `--name`, `/resume` picker with search, `--from-pr`. **AGY** `/fork`, `/export`. **Blitz today:** snapshots, `/rename`, `/resume <id|name>`.
-- **PAR-SES-10** `/fork [n]` — see [spec_backlog_026](spec_backlog_026.md) BL-SES-01; also `--fork` with `--resume`/`--continue` to continue in a copy.
-- **PAR-SES-11** `/export [file]` writes the transcript as Markdown (prompts, replies, tool calls with summarised arguments and results, timestamps), secrets redacted; `blitz sessions export <id>` from the shell.
-- **PAR-SES-12** `--name <title>` names a new session; `/resume` with no argument opens an interactive picker (arrow keys, type-to-filter over titles and first prompts) listing this workspace's sessions.
+- **PAR-SES-10** ✅ *Done 2026-09-30 ([spec_sessions_017](spec_sessions_017.md) SES-20).* `/fork [n]` — see [spec_backlog_026](spec_backlog_026.md) BL-SES-01; also `--fork` with `--resume`/`--continue` to continue in a copy.
+- **PAR-SES-11** ✅ *Done 2026-09-30 ([spec_sessions_017](spec_sessions_017.md) SES-21).* `/export [file]` writes the transcript as Markdown (prompts, replies, tool calls with summarised arguments and results, timestamps), secrets redacted; `blitz sessions export <id>` from the shell.
+- **PAR-SES-12** ✅ *Done 2026-09-30 ([spec_sessions_017](spec_sessions_017.md) SES-22; the picker was already there).* `--name <title>` names a new session; `/resume` with no argument opens an interactive picker (arrow keys, type-to-filter over titles and first prompts) listing this workspace's sessions.
 
 ### 4.3 Plans and task lists as reviewable artifacts — P0, M
 **CC** `EnterPlanMode`/`ExitPlanMode` (the agent presents a plan for approval, then executes), `TodoWrite`/task list shown live. **AG/AGY** Task List, Implementation Plan and Walkthrough artifacts, commentable mid-run; artifact review policy. **Blitz today:** `/plan` returns a plan as text and stops.

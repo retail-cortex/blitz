@@ -43,8 +43,8 @@ Suggested order (from NEXT_STEPS): run the manual checks (§9) first — their f
 
 ### 3.1 `/fork [n]` — M
 **Extends** [spec_sessions_017](spec_sessions_017.md). *Source: Antigravity review, candidate 4.* Snapshots branch only from the current point.
-- **BL-SES-01** `/fork [n]` starts a new session copied from this one up to and including user turn `n` (default: the previous turn), in both stores (transcript and ADK event log), with `from` set; the source is unchanged. Compaction events whose range reaches past the cut are dropped from the copy.
-- **BL-SES-02** `/session list` shows the fork; `SessionService` gains a `ForkSession` RPC.
+- **BL-SES-01** ✅ *Done 2026-09-30 ([spec_sessions_017](spec_sessions_017.md) SES-20).* `/fork [n]` starts a new session copied from this one up to and including user turn `n` (default: the previous turn), in both stores (transcript and ADK event log), with `from` set; the source is unchanged. Compaction events whose range reaches past the cut are dropped from the copy.
+- **BL-SES-02** ✅ *Done 2026-09-30: `/session list` shows the copy; `ForkSession` RPC.* `/session list` shows the fork; `SessionService` gains a `ForkSession` RPC.
 
 ## 4. Tools and sandbox
 

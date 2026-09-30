@@ -49,6 +49,8 @@ Run flags (root and `exec`):
 | `--input-format text\|stream-json` | stream-json: stdin carries JSON lines driving the session (CLI-07); needs `--output-format stream-json` |
 | `--json-schema FILE\|JSON` | The answer must be JSON valid against the schema (CLI-08) |
 | `--no-session-persistence` | Keep nothing of the run's session (CLI-09) |
+| `--fork` | With `--resume`/`--continue`: continue in a copy ([spec_sessions_017](spec_sessions_017.md) SES-20) |
+| `--name TITLE` | Name the new session |
 | `--append-system-prompt TEXT`, `--append-system-prompt-file PATH` | Add to the agent's instructions for the run, locally ([spec_memory_012](spec_memory_012.md) MEM-41) |
 | `--max-turns N` | Cap model calls in a one-shot run (0 = unlimited) |
 | `--max-cost-usd N` | Stop a one-shot run once it has cost more than N USD (0 = unlimited; needs a priced model, else a warning) |
