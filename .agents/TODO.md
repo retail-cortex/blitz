@@ -37,15 +37,6 @@ Everything through 2026-09-29 is pushed to `main`, most of it with
    `<id>.jsonl` and the title and message count from it restores the
    chat. Only on that machine, and only if the owner still wants it.
 
-## P3: large, needing a design first
-
-4. **Background sub-agents (L).** `invoke_agent` blocks the turn. Add
-   `background: true` returning a task ID (`spec_parity_027` §8.1),
-   `list_tasks`, `task_output` and `stop_task`, and deliver completions
-   as steer messages at the next tool cycle or prompt.
-   Design drafted for review: `docs/content/about/specs/spec_background_agents_032.md`
-   (not committed yet; the owner is reviewing it).
-
 ## Waiting on something
 
 - **Claude on Vertex AI, live** (backlog BL-VER-04): needs Claude Opus
@@ -75,6 +66,12 @@ TestWithoutPlanModeToolsRunNormally; `pkg/engine/tools` TestToolsSuite.
 Anything else failing is new. Check test logs for `goleak:` too.
 
 ## Done 2026-09-29
+- Background sub-agents (spec_background_agents_032): tasks, their tools,
+  results at the next step or prompt, requests asked of the session's
+  people (REPL prompt, desktop cards, Ctrl+J), WatchTasks, agent
+  frontmatter defaults. Not yet run on Linux or checked by hand
+  (manual-verification: "Background tasks"). Gap: a task's edits join the
+  latest turn's checkpoint rather than their own.
 - Project configuration with a trust boundary (spec_project_config_031):
   `.blitz/settings.toml` in three tiers, hash-pinned trust in
   `~/.blitz/trust.json`, the REPL's question, `/trust`, `blitz trust`,
