@@ -95,4 +95,4 @@ Before a file tool changes a file, Blitz keeps a copy, grouped by prompt, so `/u
 
 ## Web
 
-`web_fetch` only reaches public addresses, checked after DNS resolution and on every redirect: no `localhost`, private ranges or cloud metadata. It needs approval per host unless the host is in `web.allow_domains`, and caps the response size. The agent's `web_search` asks before each query leaves your machine.
+`web_fetch` only reaches public addresses, checked after DNS resolution and on every redirect: no `localhost`, private ranges or cloud metadata. It needs approval per host unless the host is in `web.allow_domains`, and caps the response size. The agent's `web_search` asks before each query leaves your machine. The `browser` tool follows the same rules for every site it opens, and all its traffic goes through Blitz, which refuses local and private addresses unless `browser.allow_local` is set ([the browser](search.md#the-browser)).

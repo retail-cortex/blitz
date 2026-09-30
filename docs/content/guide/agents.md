@@ -39,6 +39,7 @@ An agent can hand work to another agent in the background: `invoke_agent` with `
 | `create_file`, `replace_in_file` (`edit`), `delete_snippet`, `apply_patch`, `delete_file` | Changing it; `apply_patch` takes a unified diff or `*** Begin Patch`, atomically, across files |
 | `run_shell_command`, `manage_background_process` | Commands, in the OS sandbox |
 | `web_fetch`, `web_search` | The web ([search](search.md)) |
+| `browser` | A real browser: pages that need JavaScript, and your own web app ([search](search.md#the-browser)) |
 | `view_image` | An image in the workspace ([images](images.md)) |
 | `ask_user_question`, `todo`, `enter_plan_mode`, `exit_plan_mode` | Asking you, the task list, and plans |
 | `list_or_search_skills`, `activate_skill`, `run_skill_script` | [Skills](skills.md) |

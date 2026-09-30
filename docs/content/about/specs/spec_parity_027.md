@@ -7,7 +7,7 @@ weight: 27
 
 | | |
 |---|---|
-| Status | **Partly implemented:** 56 of its 99 requirements done and 1 in part (counted 2026-09-30); the rest open. A gap analysis of 2026-09-26, to be closed before new features are added. |
+| Status | **Partly implemented:** 59 of its 99 requirements done and 1 in part (counted 2026-09-30); the rest open. A gap analysis of 2026-09-26, to be closed before new features are added. |
 | Compared with | **Claude Code** (current docs at code.claude.com, September 2026: v2.1.28x); **Antigravity CLI** (`agy` 1.1–1.2, September 2026); **Antigravity** 2.0 (Google's agent-first IDE and Agent Manager) |
 | Depends on | Specs 001–025 (what Blitz does today) and [spec_backlog_026](spec_backlog_026.md) (Blitz's own gaps; overlapping items are referenced, not repeated) |
 
@@ -122,9 +122,9 @@ Decision §12.2. **CC** `/cd <path>` (June 2026) moves the session to another di
 
 ### 5.2 Browser automation — P1, L
 **CC** Chrome integration (navigate, click, fill, read console, screenshots). **AG** browser subagent in a managed Chrome with recordings and screenshots, JavaScript execution policy, URL allowlist. **AGY** `/browser`. **Blitz today:** `web_fetch` (text only, no JavaScript).
-- **PAR-TOOL-10** A `browser` tool set (open, navigate, click, type, select, read page text/DOM, run script, screenshot, read console) driving a headless or visible Chromium through the Chrome DevTools Protocol, in its own profile, never the user's.
-- **PAR-TOOL-11** Every navigation goes through the web rules (approval per host unless allowed, SSRF checks, `deny_domains`; `localhost` allowed only with `[browser] allow_local = true`, for testing the user's own app); running page scripts needs its own approval unless allowed.
-- **PAR-TOOL-12** Screenshots are images the model sees (via the image store); a session can record a short video or screenshot series as a walkthrough artifact.
+- **PAR-TOOL-10** ✅ *Done 2026-09-30 ([spec_web_008](spec_web_008.md) WEB-30, -31): one `browser` tool with an `action`, over a small DevTools client of our own (no chromedp).* A `browser` tool set (open, navigate, click, type, select, read page text/DOM, run script, screenshot, read console) driving a headless or visible Chromium through the Chrome DevTools Protocol, in its own profile, never the user's.
+- **PAR-TOOL-11** ✅ *Done 2026-09-30 ([spec_web_008](spec_web_008.md) WEB-32..35): all traffic through a filtering proxy; the page's own navigations to another host are asked about during an action.* Every navigation goes through the web rules (approval per host unless allowed, SSRF checks, `deny_domains`; `localhost` allowed only with `[browser] allow_local = true`, for testing the user's own app); running page scripts needs its own approval unless allowed.
+- **PAR-TOOL-12** ✅ *Done 2026-09-30 ([spec_web_008](spec_web_008.md) WEB-36, -37) with screenshot series (no video).* Screenshots are images the model sees (via the image store); a session can record a short video or screenshot series as a walkthrough artifact.
 
 ### 5.3 Headless and scripting — P0/P1
 **CC** `--output-format stream-json` plus `--input-format stream-json`, `--json-schema`, `--max-budget-usd`, `--include-partial-messages`, `--permission-prompt-tool`, `--no-session-persistence`. **AGY** `--json-schema`, `--print-timeout`. **Blitz today:** text / json / stream-json output, `--max-turns`, `--plan`.

@@ -34,3 +34,18 @@ Both are read-only turns: the agent can read, fetch and search, but edits, comma
 - Readability is judged from the URL: a page that turns out to be a PDF, or needs JavaScript, comes back empty or as an error.
 - Session search is literal: no stemming or meaning-based search (`retries` doesn't find `retry`). It covers the current session only, and the transcript holds prompts and replies, not tool output.
 - With Google, results are the pages Gemini chose to cite, often fewer than ten; Google's redirect links are resolved to the real pages. Only a Gemini API key works; Vertex AI credentials aren't supported for search.
+
+## The browser
+
+For pages that need JavaScript or clicking through, and to check a web app you're building, the agent has a `browser` tool: it drives Chrome, Chromium, Edge or Brave (whichever is installed; `blitz doctor` says which, `browser.path` picks one) in a throwaway profile, never yours, headless unless `browser.visible = true`. It can open pages, click, type, choose options, read the text or HTML, read the console, take screenshots it then looks at, and record a walkthrough: a screenshot after each step, saved in `~/.blitz/walkthroughs/`.
+
+It follows the same rules as `web_fetch`: each new site asks first (approving one covers both tools), `web.allow_domains` doesn't ask, and `web.deny_domains` and `deny web(…)` rules are never reached. Everything the browser loads, scripts and WebSockets included, goes through Blitz, which refuses your machine's and network's own addresses. To test an app on `localhost`, allow them:
+
+```toml
+[browser]
+allow_local = true     # localhost and private addresses; cloud metadata never
+# allow_scripts = true # run the agent's page scripts without asking
+# visible = true       # watch it work
+```
+
+Running a script the agent wrote in a page asks first unless `allow_scripts` is set. Set `[browser] enabled = false` to turn the tool off.
