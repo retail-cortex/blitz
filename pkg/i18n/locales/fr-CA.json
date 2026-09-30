@@ -373,6 +373,7 @@
     "envs.remove_failed": "Impossible de supprimer {key} : {error}",
     "envs.usage": "Utilisation : /envs [prune | remove <clé>]",
     "desktop.about.body": "Une fenêtre sur le service Blitz de cet ordinateur. Vos espaces de travail, sessions et travailleurs vivent dans le service; cette fenêtre ne garde que ses propres paramètres, dans {file}.",
+    "desktop.link_opened": "{dir} ouvert depuis un lien : la requête est prête à être vérifiée et envoyée.",
     "desktop.about.license": "Licence Apache 2.0.",
     "desktop.license.title": "Licences",
     "desktop.license.notice": "Avis",

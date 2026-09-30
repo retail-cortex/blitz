@@ -46,6 +46,8 @@ type App struct {
 
 	unsavedMu sync.Mutex
 	unsaved   Unsaved // the editor's unsaved changes (unsaved.go)
+
+	links links // blitz:// links (deeplink.go)
 }
 
 func (a *App) startup(ctx context.Context) {

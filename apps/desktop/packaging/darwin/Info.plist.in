@@ -24,5 +24,16 @@
 	<true/>
 	<key>NSHumanReadableCopyright</key>
 	<string>Copyright 2026 Ryan McGuinness. Apache License 2.0.</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>Blitz link</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>blitz</string>
+			</array>
+		</dict>
+	</array>
 </dict>
 </plist>

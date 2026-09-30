@@ -17,13 +17,13 @@
 import { useCallback, useEffect, useState } from "react";
 import { mdiAlertOutline, mdiCogOutline, mdiFolderOpenOutline, mdiLightningBolt, mdiServerOff } from "@mdi/js";
 import { onServiceLost, workspaces as workspaceAPI } from "./api";
-import { appVersion, chooseWorkspace, type LicenseText, installService, onNotificationOpen, restartService, serviceStatus, type ServiceStatus, toggleFullscreen } from "./desktop";
+import { appVersion, chooseWorkspace, type LicenseText, installService, onDeepLink, onNotificationOpen, restartService, serviceStatus, type ServiceStatus, toggleFullscreen } from "./desktop";
 import { checkService, type ServiceCheck } from "./serviceVersion";
 import { CommandPalette } from "./CommandPalette";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { t, useLanguage } from "./i18n";
 import { message, reason } from "./errors";
-import { showLicenseEvent } from "./events";
+import { compose, showLicenseEvent } from "./events";
 import { UnsavedDialog } from "./files/EditorPane";
 import { LicenseDialog } from "./LicenseDialog";
 import { Brand, WorkspaceSwitcher } from "./WorkspaceSwitcher";
@@ -197,6 +197,16 @@ function Shell() {
   }, []);
   // A click on a notification shows its workspace.
   useEffect(() => onNotificationOpen((dir) => update((p) => openWorkspace(p, dir))), [update]);
+  // A blitz://open link opens its folder with the prompt filled in, not sent.
+  useEffect(
+    () =>
+      onDeepLink((link) => {
+        update((p) => openWorkspace(p, link.dir));
+        if (link.prompt) compose({ dir: link.dir, text: link.prompt });
+        snack(t("desktop.link_opened", { dir: displayName({ dir: link.dir, name: "" }) }));
+      }),
+    [update, snack],
+  );
 
   const open = useCallback(async () => {
     const dir = await chooseWorkspace().catch((e) => (snack(String(e), { error: true }), ""));

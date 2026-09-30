@@ -61,7 +61,17 @@ import type { SessionInfo } from "./gen/blitz/v1/session_pb";
 import { Decision, type ApprovalRequest, type Question, type Task, type Usage } from "./gen/blitz/v1/turn_pb";
 import type { BackgroundTask, GetSettingsResponse } from "./gen/blitz/v1/workspace_pb";
 import { allCommands, helpText, matchCommands, parseCommand, type CommandSpec } from "./commands";
-import { addToContextEvent, composeEvent, filesTouched, loadSessionEvent, showLicense, type AddToContextDetail, type ComposeDetail, type LoadSessionDetail } from "./events";
+import {
+  addToContextEvent,
+  composeEvent,
+  filesTouched,
+  loadSessionEvent,
+  showLicense,
+  takePendingCompose,
+  type AddToContextDetail,
+  type ComposeDetail,
+  type LoadSessionDetail,
+} from "./events";
 import { appendMention, insertMention, isImagePath, mentionAt } from "./mentions";
 import { fileIcon } from "./files/icons";
 import { describeImage, imageFiles, readyIds, rejectReason, uploading, type Attachment } from "./attachments";
@@ -711,9 +721,12 @@ export function Conversation({
     const f = (e: Event) => {
       const d = (e as CustomEvent<ComposeDetail>).detail;
       if (d.dir !== dir) return;
+      e.preventDefault(); // taken
       if (d.run) executeRef.current(d.text);
       else setDraft(d.text);
     };
+    const waiting = takePendingCompose(dir);
+    if (waiting) setDraft(waiting.text);
     window.addEventListener(composeEvent, f);
     return () => window.removeEventListener(composeEvent, f);
   }, [dir]);

@@ -26,9 +26,24 @@ export interface ComposeDetail {
   /** Run it at once (a command without arguments) instead of filling the composer. */
   run?: boolean;
 }
-/** Asks a workspace's composer to take text (or run a command). */
+// Text for a composer that isn't there yet (its workspace is opening),
+// taken when it mounts.
+const pendingCompose = new Map<string, ComposeDetail>();
+
+/**
+ * Asks a workspace's composer to take text (or run a command). Text for a
+ * workspace whose composer isn't there yet waits for it.
+ */
 export function compose(detail: ComposeDetail) {
-  window.dispatchEvent(new CustomEvent(composeEvent, { detail }));
+  const taken = !window.dispatchEvent(new CustomEvent(composeEvent, { detail, cancelable: true }));
+  if (!taken && !detail.run) pendingCompose.set(detail.dir, detail);
+}
+
+/** The text waiting for a workspace's composer, once. */
+export function takePendingCompose(dir: string): ComposeDetail | undefined {
+  const d = pendingCompose.get(dir);
+  pendingCompose.delete(dir);
+  return d;
 }
 
 /** The event that adds a file or folder to a workspace's next prompt. */

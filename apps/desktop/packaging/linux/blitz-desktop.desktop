@@ -2,7 +2,8 @@
 Type=Application
 Name=Blitz
 Comment=A coding agent for your projects
-Exec=blitz-desktop
+Exec=blitz-desktop %u
+MimeType=x-scheme-handler/blitz;
 Icon=blitz-desktop
 Terminal=false
 Categories=Development;

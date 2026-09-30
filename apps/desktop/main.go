@@ -20,6 +20,7 @@ package main
 import (
 	"embed"
 	"log"
+	"os"
 
 	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/socket"
@@ -27,6 +28,7 @@ import (
 	"github.com/wailsapp/wails/v2/pkg/options"
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
 	"github.com/wailsapp/wails/v2/pkg/options/mac"
+	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 // dist is the page, built from web/.
@@ -39,6 +41,10 @@ var version = "dev"
 
 func main() {
 	app := &App{socket: socket.DefaultSocket(), prefs: &prefsStore{path: config.ExpandHome("~/.blitz/desktop.json")}}
+	app.links.emit = showLink
+	for _, l := range linkArgs(os.Args[1:]) { // Linux: opened with a link
+		app.links.receive(l)
+	}
 	err := wails.Run(&options.App{
 		Title:     "Blitz",
 		Width:     1280,
@@ -50,6 +56,20 @@ func main() {
 		Mac: &mac.Options{
 			TitleBar:             mac.TitleBarHiddenInset(),
 			WebviewIsTransparent: false,
+			OnUrlOpen:            app.links.receive,
+		},
+		// One app: a second start (a link, on Linux) goes to the first.
+		SingleInstanceLock: &options.SingleInstanceLock{
+			UniqueId: "dev.blitz.desktop",
+			OnSecondInstanceLaunch: func(d options.SecondInstanceData) {
+				for _, l := range linkArgs(d.Args) {
+					app.links.receive(l)
+				}
+				if app.ctx != nil {
+					runtime.WindowUnminimise(app.ctx)
+					runtime.WindowShow(app.ctx)
+				}
+			},
 		},
 		AssetServer: &assetserver.Options{
 			Assets:  dist,

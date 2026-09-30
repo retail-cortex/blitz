@@ -53,7 +53,14 @@ type Bound = {
   Notify(title: string, body: string, dir: string): Promise<void>;
   SetUnsaved(u: { message: string; quit: string; cancel: string }): Promise<void>;
   License(which: string): Promise<string>;
+  PendingLinks(): Promise<DeepLink[] | null>;
 };
+
+/** A blitz://open link: a folder to open, with a prompt to fill in. */
+export interface DeepLink {
+  dir: string;
+  prompt: string;
+}
 
 function bound(): Bound | undefined {
   return (window as unknown as { go?: { main?: { App?: Bound } } }).go?.main?.App;
@@ -193,6 +200,23 @@ export async function toggleFullscreen(): Promise<void> {
   }
   if (document.fullscreenElement) await document.exitFullscreen();
   else await document.documentElement.requestFullscreen();
+}
+
+/**
+ * Calls f with each blitz://open link: those the app was opened with, then
+ * each as it comes.
+ */
+export function onDeepLink(f: (link: DeepLink) => void): () => void {
+  const rt = (window as unknown as { runtime?: WailsRuntime }).runtime;
+  if (!inApp() || !rt?.EventsOn) return () => {};
+  const off = rt.EventsOn("deeplink:open", (link) => {
+    if (link && typeof link === "object" && typeof (link as DeepLink).dir === "string") f(link as DeepLink);
+  });
+  app()
+    .PendingLinks()
+    .then((links) => (links ?? []).forEach(f))
+    .catch(() => {});
+  return off;
 }
 
 /** Calls f with the workspace a clicked notification is about. */
