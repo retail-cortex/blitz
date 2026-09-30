@@ -115,3 +115,111 @@ export function searchSettings(ref: SettingRef[], query: string): SettingRef[] {
     return words.every((w) => hay.includes(w));
   });
 }
+
+/** A completion the settings file offers at the cursor. */
+export interface SettingCompletion {
+  /** What's shown and, with apply, what's inserted. */
+  label: string;
+  apply: string;
+  kind: "table" | "key" | "value";
+  /** The setting it names (for its type, default and description). */
+  setting?: SettingRef;
+}
+
+/** What to complete, and from where in the line (an offset from 0). */
+export interface SettingCompletions {
+  from: number;
+  options: SettingCompletion[];
+}
+
+// The parts of a reference key, without the marks of arrays of tables.
+const refParts = (key: string) => key.replace(/\[\]/g, "").split(".");
+// A reference part matches a key's part: equal, or a <name> placeholder.
+const partMatches = (want: string, part: string) => (want.startsWith("<") && want.endsWith(">")) || want === part;
+const isTable = (s: SettingRef) => s.type === "table" || s.type === "array of tables";
+// A key part as TOML writes it: bare when it can be, else quoted.
+const tomlPart = (p: string) => (/^[A-Za-z0-9_-]+$/.test(p) ? p : JSON.stringify(p));
+
+/** The table the given line (from 1) is in: the last header above it. */
+export function tableAt(text: string, line: number): string[] {
+  const lines = text.split("\n");
+  for (let i = Math.min(line, lines.length) - 1; i >= 0; i--) {
+    const h = header.exec(lines[i]);
+    if (h && i < line - 1) return splitKey(h[3]);
+  }
+  return [];
+}
+
+/**
+ * What the settings file can complete where the cursor is, given the text
+ * before it on its line (before) and its line number (from 1):
+ *
+ * - in a table's header, the tables, and the named ones' names typed so far;
+ * - at the start of a line, the current table's settings, not yet set;
+ * - after `key =`, the setting's values: true and false, or its default.
+ *
+ * Null when there's nothing to offer (a comment, a string being typed).
+ */
+export function settingsCompletions(text: string, line: number, before: string, ref: SettingRef[]): SettingCompletions | null {
+  if (before.includes("#")) return null;
+  const inHeader = /^(\s*\[\[?\s*)([^\]]*)$/.exec(before);
+  if (inHeader) {
+    const typed = inHeader[2];
+    const tables = ref.filter((s) => isTable(s) && !s.key.includes("<"));
+    const options = tables.map((s) => {
+      const name = s.key.replace(/\[\]$/, "");
+      const array = s.type === "array of tables";
+      return { label: name, apply: name, kind: "table" as const, setting: s, array };
+    });
+    // Only the kind of header being typed: [x] for tables, [[x]] for arrays.
+    const double = before.trimStart().startsWith("[[");
+    return {
+      from: inHeader[1].length,
+      options: options.filter((o) => o.array === double && o.label.startsWith(typed.trim())).map(({ array: _, ...o }) => o),
+    };
+  }
+  const value = /^(\s*)((?:"(?:[^"\\]|\\.)*"|'[^']*'|[^=#"'])+?)\s*=\s*("?)([\w.-]*)$/.exec(before);
+  if (value) {
+    const table = tableAt(text, line);
+    const s = findSetting(ref, [...table, ...splitKey(value[2])]);
+    if (!s || isTable(s)) return null;
+    const quote = value[3];
+    const from = before.length - value[4].length - quote.length;
+    let values: string[] = [];
+    if (s.type === "boolean") values = ["true", "false"];
+    else if (s.default) values = [s.default];
+    const options = values.filter((v) => v.replace(/^"/, "").startsWith(value[4]) && v !== quote + value[4]).map((v) => ({ label: v, apply: v, kind: "value" as const, setting: s }));
+    return options.length ? { from, options } : null;
+  }
+  const key = /^(\s*)([A-Za-z0-9_-]*)$/.exec(before);
+  if (!key) return null;
+  const table = tableAt(text, line);
+  const set = new Set(setKeys(text, table));
+  const options = ref
+    .filter((s) => !isTable(s))
+    .filter((s) => {
+      const parts = refParts(s.key);
+      return parts.length === table.length + 1 && table.every((p, i) => partMatches(parts[i], p));
+    })
+    .map((s) => refParts(s.key).at(-1)!)
+    .filter((name, i, all) => !name.startsWith("<") && all.indexOf(name) === i && !set.has(name) && name.startsWith(key[2]))
+    .map((name) => ({ label: name, apply: `${tomlPart(name)} = `, kind: "key" as const, setting: findSetting(ref, [...table, name]) }));
+  return { from: key[1].length, options };
+}
+
+// The keys already set in a table (its own lines, not its subtables').
+function setKeys(text: string, table: string[]): string[] {
+  const out: string[] = [];
+  const lines = text.split("\n");
+  let current: string[] = [];
+  for (const l of lines) {
+    const h = header.exec(l);
+    if (h) {
+      current = splitKey(h[3]);
+      continue;
+    }
+    const a = assignment.exec(l);
+    if (a && current.length === table.length && current.every((p, i) => p === table[i])) out.push(...splitKey(a[2]).slice(0, 1));
+  }
+  return out;
+}

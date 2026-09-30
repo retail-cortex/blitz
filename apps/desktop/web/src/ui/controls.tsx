@@ -262,6 +262,7 @@ export function Dialog({
   onClose,
   footer,
   wide,
+  large,
   children,
 }: {
   title: ReactNode;
@@ -269,11 +270,15 @@ export function Dialog({
   onClose: () => void;
   footer?: ReactNode;
   wide?: boolean;
+  /** Most of the window (Settings). */
+  large?: boolean;
   children: ReactNode;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    const key = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    // Escape closes it, unless something inside used the key (an editor's
+    // completion list, a menu).
+    const key = (e: KeyboardEvent) => e.key === "Escape" && !e.defaultPrevented && onClose();
     document.addEventListener("keydown", key);
     // Focus the first field, else the dialog, so keys go to it.
     const first = ref.current?.querySelector<HTMLElement>("input, textarea, select, [autofocus]");
@@ -282,7 +287,7 @@ export function Dialog({
   }, [onClose]);
   return (
     <div className="scrim" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className={`dialog ${wide ? "wide" : ""}`} role="dialog" aria-modal="true" tabIndex={-1} ref={ref}>
+      <div className={`dialog ${wide ? "wide" : ""} ${large ? "large" : ""}`} role="dialog" aria-modal="true" tabIndex={-1} ref={ref}>
         <header>
           {icon && <Icon path={icon} size="lg" className="muted" />}
           <h2 className="t-headline">{title}</h2>

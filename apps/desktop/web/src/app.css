@@ -391,14 +391,19 @@
 .provider-choice .pair.even { grid-template-columns: 1fr 1fr; }
 .provider-choice.compact { padding: 12px; }
 .provider-choice.compact .pair { grid-template-columns: 1fr; }
-.provider-choice .single { max-width: 480px; }
+.provider-choice .single { max-width: 640px; }
 .provider-choice .field .select, .provider-choice .field .input { width: 100%; }
 .provider-choice .seg { align-self: flex-start; }
-.provider-row { padding: 12px 0; border-bottom: 1px solid var(--md-outline-variant); }
-.provider-row:last-child { border-bottom: none; }
-.provider-row .field { max-width: 480px; }
-.provider-actions { margin-left: auto; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px; }
-.settings-editor { height: 300px; border: 1px solid var(--md-outline-variant); border-radius: 8px; overflow: hidden; }
+.key-status { display: flex; flex-direction: column; gap: 4px; max-width: 640px; padding: 10px 12px; border-radius: var(--md-shape-sm, 8px); background: color-mix(in srgb, var(--md-on-surface) 4%, transparent); }
+.settings-edit { display: grid; grid-template-columns: minmax(0, 1fr) 260px; gap: 12px; }
+.settings-editor { height: max(300px, calc(85vh - 420px)); border: 1px solid var(--md-outline-variant); border-radius: 8px; overflow: hidden; }
+.settings-help {
+  display: flex; flex-direction: column; gap: 6px; padding: 12px; border-radius: 8px; overflow: auto;
+  background: color-mix(in srgb, var(--md-primary) 6%, transparent); border: 1px solid var(--md-outline-variant);
+}
+.settings-help code { font-family: var(--md-mono); overflow-wrap: anywhere; }
+.settings-help p { margin: 0; line-height: 1.5; }
+@media (max-width: 900px) { .settings-edit { grid-template-columns: 1fr; } .settings-help { max-height: 140px; } }
 .settings-editor .cm-editor { height: 100%; }
 .settings-problems .problem { display: flex; gap: 6px; align-items: flex-start; text-align: left; background: none; border: none; padding: 2px 0; color: inherit; font: inherit; cursor: pointer; }
 .settings-problems .problem:disabled { cursor: default; }

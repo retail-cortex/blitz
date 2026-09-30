@@ -15,7 +15,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { findSetting, keyAt, searchSettings, splitKey, type SettingRef } from "./toml";
+import { findSetting, keyAt, searchSettings, settingsCompletions, splitKey, tableAt, type SettingRef } from "./toml";
 
 const file = `# settings
 [llm]
@@ -99,5 +99,48 @@ describe("searchSettings", () => {
     ["nothing", 0],
   ])("%s", (q, n) => {
     expect(searchSettings(ref, q)).toHaveLength(n);
+  });
+});
+
+describe("tableAt", () => {
+  it.each([
+    [1, []],
+    [3, ["llm"]],
+    [8, ["llm", "gemini"]],
+    [10, ["model_settings", "gpt-5.1"]],
+    [17, ["hooks", "pre_tool"]],
+  ])("line %i", (line, want) => expect(tableAt(file, line)).toEqual(want));
+});
+
+describe("settingsCompletions", () => {
+  const more: SettingRef[] = [
+    ...ref,
+    { key: "llm.max_retries", type: "integer", default: "3", doc: "Retries." },
+    { key: "llm.stream", type: "boolean", default: "true", doc: "Streams." },
+    { key: "ui", type: "table", default: "", doc: "The interface." },
+  ];
+  const labels = (text: string, line: number, before: string) => settingsCompletions(text, line, before, more)?.options.map((o) => o.label);
+  const doc = "[llm]\nprovider = \"x\"\n\n[[hooks.pre_tool]]\n\n";
+  it.each([
+    { name: "tables in a header", line: 3, before: "[", want: ["llm", "ui"] },
+    { name: "tables typed so far", line: 3, before: "[ l", want: ["llm"] },
+    { name: "arrays of tables in [[", line: 3, before: "[[h", want: ["hooks.pre_tool"] },
+    { name: "the table's keys not set yet", line: 3, before: "", want: ["max_retries", "stream"] },
+    { name: "keys typed so far", line: 3, before: "  st", want: ["stream"] },
+    { name: "an array of tables' keys", line: 5, before: "", want: ["command"] },
+    { name: "booleans", line: 3, before: "stream = ", want: ["true", "false"] },
+    { name: "a value typed so far", line: 3, before: "stream = f", want: ["false"] },
+    { name: "the default", line: 3, before: "max_retries =", want: ["3"] },
+    { name: "a quoted default", line: 3, before: 'provider = "g', want: ['"gemini"'] },
+    { name: "nothing in a comment", line: 3, before: "# st", want: undefined },
+    { name: "nothing for an unknown key", line: 3, before: "nope = ", want: undefined },
+  ])("$name", ({ line, before, want }) => expect(labels(doc, line, before)).toEqual(want));
+
+  it("inserts what TOML needs, from where the word starts", () => {
+    const c = settingsCompletions(doc, 3, "  st", more)!;
+    expect(c.from).toBe(2);
+    expect(c.options[0].apply).toBe("stream = ");
+    expect(c.options[0].setting?.doc).toBe("Streams.");
+    expect(settingsCompletions(doc, 3, 'provider = "g', more)!.from).toBe(11);
   });
 });

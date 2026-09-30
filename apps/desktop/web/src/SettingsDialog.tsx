@@ -69,7 +69,7 @@ const sectionIcons: Record<Section, string> = {
 export function SettingsDialog({ onClose }: { onClose: () => void }) {
   const [section, setSection] = useState<Section>("appearance");
   return (
-    <Dialog title={t("desktop.settings")} icon={mdiCogOutline} onClose={onClose} wide footer={<Button onClick={onClose}>{t("desktop.done")}</Button>}>
+    <Dialog title={t("desktop.settings")} icon={mdiCogOutline} onClose={onClose} large footer={<Button onClick={onClose}>{t("desktop.done")}</Button>}>
       <div className="settings">
         <div className="settings-nav list" role="tablist">
           {(Object.keys(sectionIcons) as Section[]).map((id) => (

@@ -171,13 +171,16 @@ function Shell() {
   const version = useServiceVersion(service.state === "up");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
-  // Cmd/Ctrl+K opens the command palette; F11 (and ⌃⌘F on macOS) makes
-  // the window full screen.
+  // Cmd/Ctrl+K opens the command palette, Cmd/Ctrl+, the settings; F11
+  // (and ⌃⌘F on macOS) makes the window full screen.
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
         setPaletteOpen((o) => !o);
+      } else if ((e.metaKey || e.ctrlKey) && e.key === ",") {
+        e.preventDefault();
+        setSettingsOpen(true);
       } else if (e.key === "F11" || (e.metaKey && e.ctrlKey && e.key.toLowerCase() === "f")) {
         e.preventDefault();
         toggleFullscreen().catch(() => {});

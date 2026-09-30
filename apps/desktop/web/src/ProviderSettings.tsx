@@ -64,6 +64,12 @@ interface Choice {
   profile: string;
 }
 
+/**
+ * The provider the scope uses: its own, else, globally, Gemini (the
+ * default); a workspace with none follows the global settings ("").
+ */
+export const effectiveProvider = (provider: string, workspace: string) => provider || (workspace ? "" : "gemini");
+
 /** The choice as saved in the scope, for provider. */
 function savedChoice(d: DescribeConfigResponse, provider: string, model = d.defaultModel): Choice {
   const p = d.providers.find((x) => x.name === provider);
@@ -80,10 +86,12 @@ const sameChoice = (a: Choice, b: Choice) =>
   a.profile.trim() === b.profile;
 
 /**
- * A scope's providers and API keys: the global settings (workspace "") or
- * one workspace's own, which override the global ones. The provider, its
- * default model and its key are one change, saved together; below, each
- * provider's key. Keys go to the OS keychain; the page never sees them.
+ * A scope's provider and its sign-in: the global settings (workspace "")
+ * or one workspace's own, which override the global ones. The provider,
+ * its default model and its key or sign-in are one change, saved together;
+ * the chosen provider's form also says where its key comes from, and can
+ * secure, remove or point it elsewhere (base URL). Keys go to the OS
+ * keychain; the page never sees them.
  */
 export function ProviderSettings({ workspace, compact }: { workspace: string; compact?: boolean }) {
   const snack = useSnackbar();
@@ -99,7 +107,7 @@ export function ProviderSettings({ workspace, compact }: { workspace: string; co
       try {
         const d = await config.describeConfig({ workspace });
         setDesc(d);
-        if (fresh) setChoice(savedChoice(d, d.provider));
+        if (fresh) setChoice(savedChoice(d, effectiveProvider(d.provider, workspace)));
         setError("");
       } catch (e) {
         setError(message(e));
@@ -134,7 +142,8 @@ export function ProviderSettings({ workspace, compact }: { workspace: string; co
   if (!desc) return <p className="muted">{error || t("desktop.checking")}</p>;
   const keyed = desc.providers.find((p) => p.name === choice.provider);
   const others = authMethods[choice.provider] ?? [];
-  const dirty = !sameChoice(choice, savedChoice(desc, desc.provider));
+  const saved = savedChoice(desc, effectiveProvider(desc.provider, workspace));
+  const dirty = !sameChoice(choice, saved);
   const save = () =>
     dirty &&
     !busy &&
@@ -168,7 +177,7 @@ export function ProviderSettings({ workspace, compact }: { workspace: string; co
           <label className="field">
             <span className="t-label">{t("desktop.keys.provider")}</span>
             <select className="select" value={choice.provider} disabled={busy} onChange={(e) => setChoice(savedChoice(desc, e.target.value, choice.model))}>
-              <option value="">{t(workspace ? "desktop.keys.use_global" : "desktop.keys.provider_default")}</option>
+              {workspace && <option value="">{t("desktop.keys.use_global")}</option>}
               {providers.map((p) => (
                 <option key={p} value={p}>
                   {providerNames[p]}
@@ -234,8 +243,10 @@ export function ProviderSettings({ workspace, compact }: { workspace: string; co
           </label>
         )}
         {keyed && choice.method !== "api_key" && <p className="t-body-sm muted">{t(`desktop.keys.${choice.method}_hint`, { provider: modelNames[choice.provider] ?? choice.provider })}</p>}
+        {keyed && choice.method === "api_key" && <KeyStatus workspace={workspace} p={keyed} busy={busy} act={act} />}
+        {keyed && !compact && keyed.name !== "gemini" && <BaseURL workspace={workspace} p={keyed} busy={busy} act={act} />}
         <div className="row" style={{ justifyContent: "flex-end", gap: 8 }}>
-          <Button small disabled={!dirty || busy} onClick={() => setChoice(savedChoice(desc, desc.provider))}>
+          <Button small disabled={!dirty || busy} onClick={() => setChoice(saved)}>
             {t("desktop.file.revert")}
           </Button>
           <Button small variant="filled" disabled={!dirty || busy} onClick={save}>
@@ -249,123 +260,60 @@ export function ProviderSettings({ workspace, compact }: { workspace: string; co
           <span>{t("desktop.keys.model_error", { reason: modelError })}</span>
         </p>
       )}
-      <div className="provider-list">
-        {desc.providers.map((p) => (
-          <ProviderRow key={p.name} workspace={workspace} p={p} busy={busy} compact={compact} act={act} />
-        ))}
-      </div>
       {error && <p className="error-text">{error}</p>}
     </div>
   );
 }
 
-function ProviderRow({
-  workspace,
-  p,
-  busy,
-  compact,
-  act,
-}: {
-  workspace: string;
-  p: ProviderConfig;
-  busy: boolean;
-  compact?: boolean;
-  act: (f: () => Promise<{ change?: ConfigChange }>, done?: string) => Promise<boolean>;
-}) {
-  const [entering, setEntering] = useState(false);
-  const [key, setKey] = useState("");
+type Act = (f: () => Promise<{ change?: ConfigChange }>, done?: string) => Promise<boolean>;
+
+// Where the chosen provider's key comes from, and what can be done about
+// it: secure one written in the file, or remove it.
+function KeyStatus({ workspace, p, busy, act }: { workspace: string; p: ProviderConfig; busy: boolean; act: Act }) {
+  const source = p.keyMissing ? "missing" : sourceKeys[p.keySource];
+  const good = hasKey(p);
+  const insecure = p.keySource === KeySource.PLAIN || p.keySource === KeySource.OBFUSCATED;
+  const name = providerNames[p.name] ?? p.name;
+  return (
+    <div className="key-status">
+      <span className="row wrap" style={{ gap: 8 }}>
+        <Icon path={mdiKeyOutline} size="sm" />
+        <Chip className="static" icon={good ? (insecure ? mdiAlertCircleOutline : mdiCheckCircleOutline) : undefined} tone={p.keyMissing || insecure ? "danger" : undefined} selected={good && !insecure}>
+          {t(`desktop.keys.source.${source}`)}
+        </Chip>
+        <span className="spacer" />
+        {insecure && (
+          <Button small variant="tonal" disabled={busy} onClick={() => act(() => config.secureApiKey({ workspace, provider: p.name }), t("desktop.keys.secured", { provider: name }))}>
+            {t("desktop.keys.secure")}
+          </Button>
+        )}
+        {inFile(p) && (
+          <Button small danger disabled={busy} onClick={() => act(() => config.removeApiKey({ workspace, provider: p.name }), t("desktop.keys.removed", { provider: name }))}>
+            {t("desktop.keys.remove")}
+          </Button>
+        )}
+      </span>
+      <small className="muted">{t(`desktop.keys.source.${source}.detail`, { provider: name, project: p.projectId || t("desktop.keys.project_from_env"), profile: p.profile || t("desktop.keys.profile_placeholder") })}</small>
+    </div>
+  );
+}
+
+// The provider's address, for a proxy or a compatible server.
+function BaseURL({ workspace, p, busy, act }: { workspace: string; p: ProviderConfig; busy: boolean; act: Act }) {
   const [baseURL, setBaseURL] = useState(p.baseUrl);
   useEffect(() => setBaseURL(p.baseUrl), [p.baseUrl]);
-  const source = p.auth === "adc" || p.auth === "oauth" ? p.auth : p.keyMissing ? "missing" : sourceKeys[p.keySource];
-  const signsIn = p.auth === "adc" || p.auth === "oauth";
-  const good = signsIn || hasKey(p);
-  const insecure = !signsIn && (p.keySource === KeySource.PLAIN || p.keySource === KeySource.OBFUSCATED);
-  const name = providerNames[p.name] ?? p.name;
-
-  const save = async () => {
-    const k = key;
-    setKey("");
-    if (await act(() => config.setApiKey({ workspace, provider: p.name, key: k }), t("desktop.keys.saved", { provider: name }))) setEntering(false);
-  };
   return (
-    <div className="provider-row">
-      <div className="stack" style={{ gap: 2 }}>
-        <span className="row wrap" style={{ gap: 8 }}>
-          <Icon path={mdiKeyOutline} size="sm" />
-          <span className="t-title-sm">{name}</span>
-          <Chip className="static" icon={good ? (insecure ? mdiAlertCircleOutline : mdiCheckCircleOutline) : undefined} tone={p.keyMissing || insecure ? "danger" : undefined} selected={good && !insecure}>
-            {t(`desktop.keys.source.${source}`)}
-          </Chip>
-          {!entering && (
-            <span className="provider-actions">
-              {insecure && (
-                <Button small variant="tonal" disabled={busy} onClick={() => act(() => config.secureApiKey({ workspace, provider: p.name }), t("desktop.keys.secured", { provider: name }))}>
-                  {t("desktop.keys.secure")}
-                </Button>
-              )}
-              <Button small variant={good ? undefined : "tonal"} disabled={busy} onClick={() => setEntering(true)}>
-                {t(good && p.keySource !== KeySource.INHERITED && p.keySource !== KeySource.ENVIRONMENT ? "desktop.keys.replace" : "desktop.keys.set")}
-              </Button>
-              {inFile(p) && (
-                <Button small danger disabled={busy} onClick={() => act(() => config.removeApiKey({ workspace, provider: p.name }), t("desktop.keys.removed", { provider: name }))}>
-                  {t("desktop.keys.remove")}
-                </Button>
-              )}
-            </span>
-          )}
-        </span>
-        <small className="muted">
-          {t(`desktop.keys.source.${source}.detail`, {
-            provider: name,
-            project: p.projectId || t("desktop.keys.project_from_env"),
-            profile: p.profile || t("desktop.keys.profile_placeholder"),
-          })}
-        </small>
-        {entering && (
-          <span className="row" style={{ gap: 8, marginTop: 8 }}>
-            <input
-              className="input mono"
-              type="password"
-              autoFocus
-              autoComplete="off"
-              spellCheck={false}
-              aria-label={t("desktop.keys.key_label", { provider: name })}
-              placeholder={t("desktop.keys.key_placeholder")}
-              value={key}
-              onChange={(e) => setKey(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && key.trim()) save();
-                if (e.key === "Escape") {
-                  e.stopPropagation();
-                  setEntering(false);
-                  setKey("");
-                }
-              }}
-              style={{ flex: 1 }}
-            />
-            <Button small variant="filled" disabled={busy || !key.trim()} onClick={save}>
-              {t("desktop.keys.save")}
-            </Button>
-            <Button small onClick={() => (setEntering(false), setKey(""))}>
-              {t("desktop.cancel")}
-            </Button>
-          </span>
-        )}
-        {!compact && p.name !== "gemini" && (
-          <label className="field" style={{ marginTop: 8 }}>
-            <span className="t-label">{t("desktop.keys.base_url")}</span>
-            <input
-              className="input mono"
-              value={baseURL}
-              placeholder={t(workspace ? "desktop.keys.use_global" : "desktop.keys.base_url_placeholder")}
-              disabled={busy}
-              onChange={(e) => setBaseURL(e.target.value)}
-              onBlur={() => baseURL !== p.baseUrl && act(() => config.setConfigValue({ workspace, key: `llm.${p.name}.base_url`, value: baseURL.trim() }))}
-              onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
-            />
-          </label>
-        )}
-      </div>
-    </div>
+    <label className="field single">
+      <span className="t-label">{t("desktop.keys.base_url")}</span>
+      <input
+        className="input mono"
+        value={baseURL}
+        placeholder={t(workspace ? "desktop.keys.use_global" : "desktop.keys.base_url_placeholder")}
+        disabled={busy}
+        onChange={(e) => setBaseURL(e.target.value)}
+        onBlur={() => baseURL !== p.baseUrl && act(() => config.setConfigValue({ workspace, key: `llm.${p.name}.base_url`, value: baseURL.trim() }))}
+        onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
+      />
+    </label>
   );
 }

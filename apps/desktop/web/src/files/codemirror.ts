@@ -105,9 +105,9 @@ export async function languageSupport(path: string): Promise<Extension> {
 
 /**
  * A new editor state for a file's text, with its language (languageSupport)
- * and any extra extensions.
+ * and any extra extensions; words completes words from the file too.
  */
-export function fileState(text: string, lang: Extension, hooks: EditorHooks, wrap = false, extra: Extension = []): EditorState {
+export function fileState(text: string, lang: Extension, hooks: EditorHooks, wrap = false, extra: Extension = [], words = true): EditorState {
   const extensions: Extension[] = [
     lineNumbers(),
     highlightActiveLineGutter(),
@@ -124,7 +124,7 @@ export function fileState(text: string, lang: Extension, hooks: EditorHooks, wra
     closeBrackets(),
     autocompletion({ activateOnTyping: true }),
     // Words from the file, beside what the language itself offers.
-    EditorState.languageData.of(() => [{ autocomplete: completeAnyWord }]),
+    words ? EditorState.languageData.of(() => [{ autocomplete: completeAnyWord }]) : [],
     rectangularSelection(),
     crosshairCursor(),
     highlightActiveLine(),

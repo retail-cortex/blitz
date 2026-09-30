@@ -28,10 +28,12 @@ import { settingsExtensions, setProblems, type LineProblem } from "./editor";
 import { searchSettings, type SettingRef } from "./toml";
 
 /**
- * A settings file, for what the forms don't cover: TOML with highlighting,
+ * A settings file, for what the forms don't cover: TOML with highlighting
+ * and completion from the settings reference (tables, keys, values),
  * checked with Validate (and before saving) and its problems marked on
- * their lines; hovering a setting shows the reference, which the panel
- * below lists and searches.
+ * their lines and in the gutter. The panel beside it describes the
+ * setting at the cursor; hovering a setting shows the same, and the
+ * reference below lists and searches them all.
  */
 export function SettingsFile({ scopes }: { scopes: { dir: string; name: string }[] }) {
   const snack = useSnackbar();
@@ -49,6 +51,8 @@ export function SettingsFile({ scopes }: { scopes: { dir: string; name: string }
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [query, setQuery] = useState("");
+  // The setting at the cursor, described beside the editor.
+  const [current, setCurrent] = useState<SettingRef>();
   const saveRef = useRef<() => void>(() => {});
 
   useEffect(() => {
@@ -66,9 +70,9 @@ export function SettingsFile({ scopes }: { scopes: { dir: string; name: string }
     const lang = await languageSupport("settings.toml");
     const labels = { type: t("desktop.file.type"), default: t("desktop.file.default") };
     const state = fileState(doc, lang, { save: () => saveRef.current(), changed: (s: EditorState) => setText(s.doc.toString()) }, true, [
-      settingsExtensions(() => reference.current, labels),
+      settingsExtensions(() => reference.current, labels, setCurrent),
       placeholder(t("desktop.file.empty")),
-    ]);
+    ], false);
     if (!view.current) view.current = new EditorView({ parent: host.current!, state });
     else view.current.setState(state);
     setText(doc);
@@ -155,7 +159,23 @@ export function SettingsFile({ scopes }: { scopes: { dir: string; name: string }
       </div>
       <code className="t-body-sm muted ellipsis">{path}</code>
       {error && <p className="error-text">{error}</p>}
-      <div className="settings-editor" ref={host} aria-label={t("desktop.file.text")} />
+      <div className="settings-edit">
+        <div className="settings-editor" ref={host} aria-label={t("desktop.file.text")} />
+        <aside className="settings-help" aria-live="polite" aria-label={t("desktop.file.help")}>
+          {current ? (
+            <>
+              <code className="t-title-sm">{current.key}</code>
+              <span className="t-body-sm muted">
+                {current.type}
+                {current.default && ` · ${t("desktop.file.default")}: ${current.default}`}
+              </span>
+              <p className="t-body-sm">{current.doc}</p>
+            </>
+          ) : (
+            <p className="t-body-sm muted">{t("desktop.file.help_empty")}</p>
+          )}
+        </aside>
+      </div>
       {problems !== undefined &&
         (problems.length === 0 ? (
           <p className="row t-body-sm" style={{ gap: 6 }}>
