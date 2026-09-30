@@ -66,6 +66,7 @@ One TOML file, `.env.toml`, loaded through `github.com/rrmcguinness/modenv` (hie
 | `[browser]` | `enabled` true, `path` (found), `visible` false, `allow_local` false, `allow_scripts` false, `width` 1280, `height` 800 | | never from a project; see [spec_web_008](spec_web_008.md) §5 |
 | `[plugins]` | `enable`, `disable` (installed plugins by name; disable wins) | | a project may disable, and enable once trusted; see [spec_plugins_033](spec_plugins_033.md) |
 | `[network]` | `ca_file` (PEM certificate authorities to trust besides the system's) | | proxies from `HTTPS_PROXY`/`NO_PROXY`; never from a project ([spec_models_015](spec_models_015.md) MDL-54) |
+| `[lsp.<language>]` | `command`, `extensions`, `disabled` | built in: go, typescript, python, rust | never from a project ([spec_filetools_006](spec_filetools_006.md) FS-61) |
 | `[hooks]` | `pre_tool`, `post_tool`, `prompt_submit`, `session_start`, `session_end`, `stop`, `post_tool_failure`, `subagent_start`, `subagent_stop`, `pre_compact`, `post_compact`, `notification`, `permission_request` arrays of `{match, if, type, command, args, url, headers, allowed_env_vars, prompt, model, timeout_seconds, fail_closed}` | | [spec_hooks_010](spec_hooks_010.md) |
 | `[[mcp.servers]]` | `name, command, args, env, url, tools, auto_approve, sandbox, prefix, agents, timeout_seconds` | | |
 | `[pricing."<model>"]` | `input_per_mtok, output_per_mtok, cached_input_per_mtok, cache_write_per_mtok` | built-ins below | |

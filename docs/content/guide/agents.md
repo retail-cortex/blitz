@@ -36,7 +36,8 @@ An agent can hand work to another agent in the background: `invoke_agent` with `
 | Tools | |
 |---|---|
 | `read_file`, `list_files`, `glob`, `grep` | Reading and searching the workspace |
-| `create_file`, `replace_in_file` (`edit`), `delete_snippet`, `apply_patch`, `delete_file` | Changing it; `apply_patch` takes a unified diff or `*** Begin Patch`, atomically, across files |
+| `create_file`, `replace_in_file` (`edit`), `delete_snippet`, `apply_patch`, `delete_file`, `notebook_edit` | Changing it; `apply_patch` takes a unified diff or `*** Begin Patch`, atomically, across files; `notebook_edit` a Jupyter cell |
+| `lsp` | Code intelligence from the language's server (gopls, typescript-language-server, pyright, rust-analyzer, or `[lsp.<language>]`): definitions, references, hover, symbols, diagnostics |
 | `run_shell_command`, `manage_background_process` | Commands, in the OS sandbox |
 | `web_fetch`, `web_search` | The web ([search](search.md)) |
 | `browser` | A real browser: pages that need JavaScript, and your own web app ([search](search.md#the-browser)) |
