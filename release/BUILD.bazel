@@ -102,3 +102,23 @@ sh_test(
     args = ["$(locations :archives)"],
     data = [":archives"],
 )
+
+# The install script (curl … | sh), attached to each release.
+exports_files([
+    "homebrew_formula.sh",
+    "install.sh",
+])
+
+sh_test(
+    name = "install_test",
+    srcs = ["install_test.sh"],
+    args = ["$(location install.sh)"],
+    data = ["install.sh"],
+)
+
+sh_test(
+    name = "homebrew_formula_test",
+    srcs = ["homebrew_formula_test.sh"],
+    args = ["$(location homebrew_formula.sh)"],
+    data = ["homebrew_formula.sh"],
+)
