@@ -79,6 +79,7 @@ Decisions are `once`, `session`, `always` or `deny`; a question is answered with
 - **Ctrl+C** or **Esc** cancels the running turn; at the prompt, Ctrl+C exits.
 - **Pickers**: `/resume`, `/agent` and `/model` without an argument, approvals and the agent's questions open a menu under the prompt. Arrow keys move, typing filters, Enter chooses.
 - **Shift+Tab** cycles the permission mode (`default` → `accept-edits` → `plan`). **Ctrl+G** opens the prompt in `$VISUAL` or `$EDITOR`. **Esc Esc** clears the line, or on an empty line opens `/rewind`.
+- **Status line**: `ui.status_line = "default"` shows the model, mode, context and cost above each prompt; set it to a command instead and its first line of output is shown, with the session's state as JSON on its stdin (fields in [spec_tui_019](../about/specs/spec_tui_019.md) TUI-48).
 - **Notifications**: when a turn has run longer than `ui.notify_after` seconds (30), its end and any approval or question it waits on ring the bell and show a desktop notification. `ui.notify` picks `both`, `bell`, `desktop` or `off`.
 
 ### Commands
