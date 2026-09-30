@@ -117,6 +117,10 @@ type ExecutionHints struct {
 	CustomHints           map[string]string `yaml:"custom_hints,omitempty"`
 	HITLTier              HITLTier          `yaml:"hitl_tier,omitempty"`
 	AllowHITLBypass       bool              `yaml:"allow_hitl_bypass,omitempty"`
+	// WritesWorkspace: the skill's scripts change the workspace's files.
+	// They run in a copy of it, and what they changed is kept only once
+	// approved, diff shown, as tier 3 asks (BL-SK-02).
+	WritesWorkspace bool `yaml:"writes_workspace,omitempty"`
 }
 
 // NeedsNetwork reports whether the skill's scripts declare that they need

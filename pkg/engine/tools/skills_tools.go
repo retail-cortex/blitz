@@ -94,7 +94,10 @@ type ActivateSkillOutput struct {
 	Resources    []string `json:"resources"`
 	// Scripts can be run with run_skill_script, when allowed.
 	Scripts []SkillScriptInfo `json:"scripts,omitempty"`
-	Error   string            `json:"error,omitempty"`
+	// WritesWorkspace: the scripts change the workspace's files, in a copy;
+	// the user approves what they changed before it's kept.
+	WritesWorkspace bool   `json:"writes_workspace,omitempty"`
+	Error           string `json:"error,omitempty"`
 }
 
 // SkillScriptInfo describes one of a skill's scripts for the model.
@@ -136,6 +139,7 @@ func NewActivateSkillTool(provider *skills.Provider, policy *config.SkillPolicy)
 				Instructions: skill.Content,
 				Resources:    skill.Resources,
 			}
+			out.WritesWorkspace = skill.ExecutionHints != nil && skill.ExecutionHints.WritesWorkspace
 			if len(skill.Scripts) > 0 {
 				ev := skills.Evaluate(skill, *policy)
 				for i, sc := range skill.Scripts {

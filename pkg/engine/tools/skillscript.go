@@ -94,7 +94,10 @@ type RunSkillScriptOutput struct {
 	Tier      string   `json:"tier,omitempty"`
 	OutputDir string   `json:"output_dir,omitempty"` // workspace-relative; read results with read_file
 	Files     []string `json:"output_files,omitempty"`
-	Error     string   `json:"error,omitempty"`
+	// Changed are the workspace files a writes_workspace script changed,
+	// kept once approved.
+	Changed []string `json:"changed_files,omitempty"`
+	Error   string   `json:"error,omitempty"`
 }
 
 // NewRunSkillScriptTool creates run_skill_script.
@@ -232,6 +235,18 @@ func (s *SkillScripts) Run(ctx context.Context, in RunSkillScriptInput) (out Run
 		out.OutputDir, _ = filepath.Rel(s.ws.Dir(), dir)
 		env = append(env, "SKILL_OUTPUT="+dir)
 	}
+	// A skill that writes the workspace works in a copy of it; what it
+	// changed is kept only once approved (BL-SK-02).
+	runDir := s.ws.Dir()
+	var cp *wsCopy
+	if skill.ExecutionHints != nil && skill.ExecutionHints.WritesWorkspace {
+		if cp, err = copyWorkspace(s.ws); err != nil {
+			return fail("%v", err)
+		}
+		defer cp.remove()
+		runDir = cp.dir
+		writable = append(writable, cp.dir)
+	}
 	for _, name := range ev.Env {
 		if v, ok := os.LookupEnv(name); ok {
 			env = append(env, name+"="+v)
@@ -263,7 +278,7 @@ func (s *SkillScripts) Run(ctx context.Context, in RunSkillScriptInput) (out Run
 
 	stdout, stderr := newCappedBuffer(scriptOutputLimit), newCappedBuffer(scriptOutputLimit)
 	res, err := box.Run(ctx, ScriptRequest{
-		Argv: argv, Dir: s.ws.Dir(), Env: env, Network: ev.Network,
+		Argv: argv, Dir: runDir, Env: env, Network: ev.Network,
 		ReadOnly: readOnly, Writable: writable, Stdout: stdout, Stderr: stderr,
 		Timeout: time.Duration(verdict.TimeoutSeconds) * time.Second,
 	})
@@ -275,10 +290,34 @@ func (s *SkillScripts) Run(ctx context.Context, in RunSkillScriptInput) (out Run
 	if res.TimedOut {
 		out.Error = fmt.Sprintf("stopped after %ds (timeout)", verdict.TimeoutSeconds)
 	}
-	for _, w := range writable {
-		out.Files = listFiles(s.ws.Dir(), w, scriptOutputFiles)
+	if out.OutputDir != "" {
+		out.Files = listFiles(s.ws.Dir(), filepath.Join(s.ws.Dir(), out.OutputDir), scriptOutputFiles)
+	}
+	if cp != nil {
+		s.keepWorkspaceChanges(ctx, cp, skill.Name, &out)
 	}
 	return out
+}
+
+// keepWorkspaceChanges offers what a writes_workspace script changed in
+// its copy, once it succeeded.
+func (s *SkillScripts) keepWorkspaceChanges(ctx context.Context, cp *wsCopy, skill string, out *RunSkillScriptOutput) {
+	changes, err := cp.changes()
+	switch {
+	case err != nil:
+		out.Error = fmt.Sprintf("reading the script's changes: %v", err)
+		return
+	case len(changes) == 0:
+		return
+	case out.ExitCode != 0 || out.TimedOut:
+		out.Error = strings.TrimSpace(out.Error + "; the script failed, so its changes to the workspace weren't kept")
+		return
+	}
+	written, err := cp.keepChanges(ctx, s.ws, s.hooks, skill, changes)
+	out.Changed = written
+	if err != nil {
+		out.Error = fmt.Sprintf("the script's changes weren't kept: %v", err)
+	}
 }
 
 func (s *SkillScripts) audit(detail, decision string) {
