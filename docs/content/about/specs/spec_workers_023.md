@@ -72,7 +72,8 @@ Check for outdated Go modules and write reports/deps.md.
 - **WK-51** Concurrency: `max_concurrent` slots across workspaces. A manual run fails at once with `TOO_MANY_RUNS` when all are busy; a scheduled run waits, but a worker already waiting isn't queued again (a worker that falls behind runs once, not once per missed tick).
 - **WK-52** `catch_up: once`: when a worker is first registered and a scheduled time passed since its last run, it runs once as soon as possible.
 - **WK-53** Live runs keep their events so `WatchWorkerRun` replays them, then streams live ones until the run finishes; events aren't kept afterwards. Stopping the scheduler cancels all runs and waits for them.
+- **WK-54** A run's file changes are its own checkpoint (BL-WK-01): its turn is a worker turn (`Checkpoints.BeginWorkerTurn`, the run's ID on it), which `/checkpoints` and `/undo` in interactive sessions leave out, and changes go to their own session's turn even while an interactive turn runs (FS-60a). The run record lists the files it changed (`files`; `blitz workers runs` shows them with the run's ID).
+- **WK-55** `blitz workers undo <run-id> [--force]` (`WorkerService.UndoWorkerRun`, `Workspace.UndoWorkerRun`) restores those files as they were before the run, with `/undo`'s conflict rules (FS-63): a file changed since blocks it unless forced; `NOTHING_TO_UNDO` when nothing is left (undone already, or trimmed from the store). It's audited (BL-WK-02).
 
 ## 8. Known gaps
-- Workers' edits don't join `/undo` checkpoints.
 - `service install` is needed for workers to keep schedules across logins; API keys must be in `~/.blitz/.env.toml`.

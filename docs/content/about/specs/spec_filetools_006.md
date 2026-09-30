@@ -83,6 +83,7 @@ All tools return errors in an `error` field of the result (never a Go error), so
 ## 8. Checkpoints and undo
 
 - **FS-60** A checkpoint (turn) begins with each prompt ([spec_workspace_018](spec_workspace_018.md) WS-22); an empty current turn is reused rather than stacking empty ones. Changes outside any turn go into "(no prompt)".
+- **FS-60a** A change goes to the latest turn of the session making it (the tool call's session, or its owner's for sub-agents and tasks; `Workspace.WriteFileAtomic`, `CreateExclusive` and `RemoveFile` take the call's context), so turns running at once keep their own changes; with no session, or none of its turns, the latest turn takes it. An empty turn is reused only by the same session. Worker runs' turns are their own (spec_workers_023 WK-54).
 - **FS-61** For each file, the state before the turn's **first** change is kept (content, existence, mode; symlinks record the target's mode), plus a hash of what the tool left.
 - **FS-62** Memory budget `checkpoints.max_bytes` (default 64 MiB): oldest turns are dropped, always keeping the latest. Files larger than the max file size are marked too-large (not restorable).
 - **FS-63** `Undo(force)` reverts the latest turn with changes, in reverse order. Without force it refuses when a file no longer matches what the tool wrote (`ErrUndoConflict`, listing files, "use /undo --force") or when a file was too large to snapshot. Restores are atomic writes with the original mode; files that did not exist are removed. The turn is removed; restored paths are sorted.

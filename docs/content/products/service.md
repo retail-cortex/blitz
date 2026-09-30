@@ -72,7 +72,7 @@ Check for outdated Go modules and write reports/deps.md.
 
 - `agent:` and `model:` run a worker as another agent or on another model, for its runs only.
 - `blitz workers` lists them. `blitz workers enable <name>` shows exactly what you're approving and enables that content; an edit disables it again.
-- `blitz workers run <name>` runs one now; `blitz workers runs <name>` shows its history. Each run is a session you can open with `/resume`.
+- `blitz workers run <name>` runs one now; `blitz workers runs <name>` shows its history, with the files each run changed. Each run is a session you can open with `/resume`. A run's changes aren't part of `/undo`: `blitz workers undo <run-id>` puts them back.
 - A worker may only do what its `permissions` allow (`shell:`, `write:`, `delete:`, `web:`, `mcp:`), capped by `[workers.policy]`. Anything else is refused and recorded, and it can't ask questions. Permission modes don't apply to workers.
 
 ## Shutting down

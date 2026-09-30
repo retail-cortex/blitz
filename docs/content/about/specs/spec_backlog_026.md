@@ -60,8 +60,8 @@ Suggested order (from NEXT_STEPS): run the manual checks (§9) first — their f
 
 ### 4.3 Workers' edits join `/undo` — S
 **Extends** [spec_workers_023](spec_workers_023.md), [spec_filetools_006](spec_filetools_006.md). *Source: ROADMAP 24c.* A worker's file changes go into the workspace's shared checkpoint stack, so `/undo` in an interactive session can revert a worker's edits (or be blocked by them) without saying so.
-- **BL-WK-01** Each worker run gets its own checkpoint stack; `/checkpoints` and `/undo` in interactive sessions don't see it.
-- **BL-WK-02** A run's changed files are recorded in its run record (`files`), and `blitz workers undo <run-id>` restores them with the same conflict rules as `/undo` (FS-63).
+- **BL-WK-01** ✅ *Done 2026-09-30 ([spec_workers_023](spec_workers_023.md) WK-54).* Each worker run gets its own checkpoint stack; `/checkpoints` and `/undo` in interactive sessions don't see it.
+- **BL-WK-02** ✅ *Done 2026-09-30 (WK-55).* A run's changed files are recorded in its run record (`files`), and `blitz workers undo <run-id>` restores them with the same conflict rules as `/undo` (FS-63).
 
 ### 4.4 Web search cost — S
 **Extends** [spec_web_008](spec_web_008.md). Google grounding bills each search query Gemini runs; `/cost` doesn't count them.
