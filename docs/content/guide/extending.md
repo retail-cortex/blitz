@@ -25,6 +25,12 @@ blitz memory list             # the same from the shell, plus show and edit ($ED
 
 Set `[memory] auto = false` to turn them off.
 
+### Output styles
+
+A style changes how the agent writes its answers, not what it may do: `concise` keeps them short, `explanatory` explains its choices and the codebase as it works. `/style` lists them and `/style concise` switches (the desktop app has it in its run settings); `[ui] style = "concise"` makes it the default. Add your own as Markdown in `~/.blitz/styles/<name>.md`, with an optional `description` in frontmatter.
+
+For one run, `--append-system-prompt "…"` or `--append-system-prompt-file notes.md` adds to the agent's instructions.
+
 ## MCP servers
 
 ```toml

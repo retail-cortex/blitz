@@ -92,6 +92,7 @@ Decisions are `once`, `session`, `always` or `deny`; a question is answered with
 | `/memory [reload\|add <note>\|notes\|forget <name>]`, `/init` | Project instructions and the agent's notes; have the agent write `BLITZ.md` |
 | `/approvals [revoke <n>\|clear]` | Remembered approval rules |
 | `/hooks` | The hooks, where they come from, and their recent failures |
+| `/style [name]` | How the agent writes its answers: `default`, `concise`, `explanatory`, or yours in `~/.blitz/styles` |
 | `/session list [--all]\|new\|load <id\|name>\|save <name>`, `/resume`, `/rename` | Sessions and snapshots, scoped to the workspace |
 | `blitz plugin install\|list\|show\|enable\|disable\|remove\|update`, `blitz plugin marketplace add\|list\|remove`, `blitz plugin import claude\|gemini <dir>`, `--plugin-dir <dir>` | Plugins: skills, commands, agents, hooks and MCP servers in one bundle ([extending](../guide/extending.md#plugins)) |
 | `blitz update [--check]` | Install the latest release over this one, its signature and checksum checked |

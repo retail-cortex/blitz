@@ -7,7 +7,7 @@ weight: 27
 
 | | |
 |---|---|
-| Status | **Partly implemented:** 80 of its 99 requirements done and 1 in part (counted 2026-09-30); the rest open. A gap analysis of 2026-09-26, to be closed before new features are added. |
+| Status | **Partly implemented:** 82 of its 99 requirements done and 1 in part (counted 2026-09-30); the rest open. A gap analysis of 2026-09-26, to be closed before new features are added. |
 | Compared with | **Claude Code** (current docs at code.claude.com, September 2026: v2.1.28x); **Antigravity CLI** (`agy` 1.1–1.2, September 2026); **Antigravity** 2.0 (Google's agent-first IDE and Agent Manager) |
 | Depends on | Specs 001–025 (what Blitz does today) and [spec_backlog_026](spec_backlog_026.md) (Blitz's own gaps; overlapping items are referenced, not repeated) |
 
@@ -74,8 +74,8 @@ The threat is real: Claude Code's project settings have had CVE-2025-59536 (hook
 
 ### 3.3 System prompt and output styles — P2, S
 **CC** `--append-system-prompt[-file]`, `--system-prompt`, output styles (`/output-style`: default, Concise, Explanatory, custom files). **Blitz today:** fixed agent prompts plus memory.
-- **PAR-MEM-20** `--append-system-prompt TEXT` / `--append-system-prompt-file PATH` for one run.
-- **PAR-MEM-21** Output styles: Markdown files in `~/.blitz/styles/` (and built-ins `default`, `concise`, `explanatory`) appended to the active agent's instructions; `/style <name>`, `[ui] style`.
+- **PAR-MEM-20** ✅ *Done 2026-09-30 ([spec_memory_012](spec_memory_012.md) MEM-41).* `--append-system-prompt TEXT` / `--append-system-prompt-file PATH` for one run.
+- **PAR-MEM-21** ✅ *Done 2026-09-30 ([spec_memory_012](spec_memory_012.md) MEM-40), in the REPL and the desktop app's run settings.* Output styles: Markdown files in `~/.blitz/styles/` (and built-ins `default`, `concise`, `explanatory`) appended to the active agent's instructions; `/style <name>`, `[ui] style`.
 
 ## 4. Sessions, checkpoints and planning
 
