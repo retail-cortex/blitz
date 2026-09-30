@@ -956,6 +956,9 @@ message BackgroundTask {
   string error = 9;
   // Its own tokens and cost (also counted in its session's).
   Usage usage = 10;
+  // Its own git worktree and branch, when it ran isolated in one.
+  string worktree = 11;
+  string branch = 12;
 }
 
 // Request message for WorkspaceService.ListTasks.

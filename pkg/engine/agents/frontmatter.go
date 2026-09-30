@@ -42,6 +42,9 @@ type AgentMetadata struct {
 	// Background makes invoke_agent run it in the background unless the
 	// call says otherwise.
 	Background bool `yaml:"background,omitempty"`
+	// Isolation "worktree" runs it, in the background, in its own git
+	// worktree and branch.
+	Isolation string `yaml:"isolation,omitempty"`
 }
 
 // AgentSpec represents a parsed agent specification with frontmatter and markdown body.
@@ -84,6 +87,9 @@ func ParseMarkdownSpec(content []byte) (*AgentSpec, error) {
 	}
 	if meta.MaxTurns < 0 {
 		return nil, fmt.Errorf("max_turns must not be negative")
+	}
+	if meta.Isolation != "" && meta.Isolation != "worktree" {
+		return nil, fmt.Errorf("isolation: %q (only worktree)", meta.Isolation)
 	}
 
 	return &AgentSpec{

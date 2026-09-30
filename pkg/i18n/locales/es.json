@@ -1139,6 +1139,7 @@
     "mode.describe.auto": "un modelo revisor decide lo que preguntaría; las reglas de consulta te siguen preguntando",
     "mode.auto_model_failed": "El modelo revisor del modo auto {model} no está disponible ({error}); revisa el modelo de la sesión",
     "desktop.mode.auto": "Auto",
-    "desktop.mode.auto.detail": "Un modelo revisor decide lo que preguntaría; las reglas de consulta te siguen preguntando"
+    "desktop.mode.auto.detail": "Un modelo revisor decide lo que preguntaría; las reglas de consulta te siguen preguntando",
+    "tasks.worktree": "En el worktree {path}, en la rama {branch}"
   }
 }

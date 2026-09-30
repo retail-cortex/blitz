@@ -19,6 +19,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -26,8 +27,10 @@ import (
 	"time"
 
 	"github.com/retail-cortex/blitz/pkg/api"
+	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/engine/tools"
 	"github.com/retail-cortex/blitz/pkg/textutil"
+	"github.com/retail-cortex/blitz/pkg/worktree"
 	"google.golang.org/adk/v2/session"
 )
 
@@ -54,6 +57,7 @@ const (
 type (
 	taskKey          struct{}
 	subagentEventKey struct{}
+	isolatedToolsKey struct{}
 )
 
 // task is one background task.
@@ -227,7 +231,7 @@ func (e *Engine) askForTask(ctx context.Context, t *task, req api.TaskRequest) (
 
 // StartTask starts agentName on prompt in the background, for the session
 // whose run ctx is, and returns at once.
-func (e *Engine) StartTask(ctx context.Context, agentName, prompt string) (api.TaskInfo, error) {
+func (e *Engine) StartTask(ctx context.Context, agentName, prompt, isolation string) (api.TaskInfo, error) {
 	st := stateFrom(ctx)
 	if st == nil || st.sessionID == "" {
 		return api.TaskInfo{}, errors.New("background tasks need a session")
@@ -272,6 +276,24 @@ func (e *Engine) StartTask(ctx context.Context, agentName, prompt string) (api.T
 	t := &task{info: api.TaskInfo{ID: id, Agent: agentName, Prompt: textutil.Ellipsize(first, 200), Session: st.sessionID, State: api.TaskRunning, Started: time.Now()}, done: make(chan struct{})}
 	m.tasks[id] = t
 	m.pruneLocked(st.sessionID)
+	m.mu.Unlock()
+
+	// A task isolated in a worktree gets its own tools there.
+	var isolated *tools.Registry
+	if isolation == "worktree" {
+		reg, w, err := e.worktreeTools(id)
+		if err != nil {
+			m.mu.Lock()
+			delete(m.tasks, id)
+			m.mu.Unlock()
+			return api.TaskInfo{}, fmt.Errorf("its worktree: %w", err)
+		}
+		isolated = reg
+		m.mu.Lock()
+		t.info.Worktree, t.info.Branch = w.Path, w.Branch
+		m.mu.Unlock()
+	}
+	m.mu.Lock()
 	started := t.info
 	m.publishLocked(st.sessionID, api.SessionEvent{Task: &started})
 	m.mu.Unlock()
@@ -288,6 +310,9 @@ func (e *Engine) StartTask(ctx context.Context, agentName, prompt string) (api.T
 	runCtx = context.WithValue(runCtx, turnNoticeKey{}, (func(string))(nil))
 	runCtx = context.WithValue(runCtx, subagentEventKey{}, func(ev *session.Event) { e.taskEvent(t, ev) })
 	runCtx = tools.Background(runCtx)
+	if isolated != nil {
+		runCtx = context.WithValue(runCtx, isolatedToolsKey{}, isolated)
+	}
 	runCtx = tools.WithTaskAsker(runCtx, tools.TaskAsker{
 		Approve: func(ctx context.Context, req api.ApprovalRequest) (api.Decision, error) {
 			r, err := e.askForTask(ctx, t, api.TaskRequest{Approval: &req})
@@ -304,6 +329,9 @@ func (e *Engine) StartTask(ctx context.Context, agentName, prompt string) (api.T
 
 	go func() {
 		defer stopTimer()
+		if isolated != nil {
+			defer isolated.Close()
+		}
 		result, err := e.InvokeSubagent(runCtx, agentName, prompt)
 		e.endTask(runCtx, t, result, err)
 	}()
@@ -379,13 +407,17 @@ func (e *Engine) endTask(ctx context.Context, t *task, result string, err error)
 // TaskNote is what the main agent is told when task t has ended.
 func TaskNote(t api.TaskInfo) string {
 	took := t.Runtime().Round(time.Second)
+	where := ""
+	if t.Worktree != "" {
+		where = fmt.Sprintf("\nIts changes are in the worktree %s, on the branch %s: review them, merge the branch, then blitz worktrees remove %s.", t.Worktree, t.Branch, filepath.Base(t.Worktree))
+	}
 	switch t.State {
 	case api.TaskDone:
-		return fmt.Sprintf("%s (%s) finished in %s: %s\n(task_output %s has all of it.)", t.ID, t.Agent, took, textutil.Ellipsize(t.Result, maxNoteResult), t.ID)
+		return fmt.Sprintf("%s (%s) finished in %s: %s\n(task_output %s has all of it.)", t.ID, t.Agent, took, textutil.Ellipsize(t.Result, maxNoteResult), t.ID) + where
 	case api.TaskStopped:
-		return fmt.Sprintf("%s (%s) was stopped after %s.", t.ID, t.Agent, took)
+		return fmt.Sprintf("%s (%s) was stopped after %s.", t.ID, t.Agent, took) + where
 	}
-	return fmt.Sprintf("%s (%s) failed after %s: %s", t.ID, t.Agent, took, t.Error)
+	return fmt.Sprintf("%s (%s) failed after %s: %s", t.ID, t.Agent, took, t.Error) + where
 }
 
 // TakeTaskNotes removes and returns the notes about ended tasks waiting
@@ -516,4 +548,25 @@ func (m *taskManager) pruneLocked(session string) {
 	for _, t := range ended[:len(ended)-maxTasksRetained] {
 		delete(m.tasks, t.info.ID)
 	}
+}
+
+// worktreeTools makes task id's worktree and a tools registry rooted in
+// it: its files, sandbox and checkpoints are the worktree's. It shares the
+// workspace's settings, but not its MCP servers or hooks, which the
+// workspace's own run already provides.
+func (e *Engine) worktreeTools(id string) (*tools.Registry, worktree.Worktree, error) {
+	w, err := worktree.Create(e.toolReg.Workspace().Dir(), worktree.NewName(id+"-"), "")
+	if err != nil {
+		return nil, worktree.Worktree{}, err
+	}
+	cfg := *e.cfg
+	cfg.Tools.WorkspaceDir = w.Path
+	cfg.MCP.Servers = nil
+	cfg.Hooks = config.HooksConfig{}
+	reg, err := tools.NewRegistry(&cfg, e.agentReg, e.skillProv)
+	if err != nil {
+		return nil, w, err
+	}
+	_ = reg.SetPermissionMode(e.toolReg.Hooks().Mode())
+	return reg, w, nil
 }

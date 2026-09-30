@@ -221,6 +221,7 @@ func taskMsg(t api.TaskInfo) *pb.BackgroundTask {
 	m := &pb.BackgroundTask{
 		Id: t.ID, Agent: t.Agent, Prompt: t.Prompt, SessionId: t.Session, State: t.State,
 		Started: timestamppb.New(t.Started), Result: t.Result, Error: t.Error, Usage: usageMsg(t.Usage),
+		Worktree: t.Worktree, Branch: t.Branch,
 	}
 	if !t.Ended.IsZero() {
 		m.Ended = timestamppb.New(t.Ended)

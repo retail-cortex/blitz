@@ -64,6 +64,7 @@ go_library(
         "//pkg/images",
         "//pkg/observability",
         "//pkg/textutil",
+        "//pkg/worktree",
         "@com_github_anthropics_anthropic_sdk_go//:anthropic-sdk-go",
         "@com_github_anthropics_anthropic_sdk_go//config",
         "@com_github_anthropics_anthropic_sdk_go//option",

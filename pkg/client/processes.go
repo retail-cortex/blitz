@@ -193,6 +193,7 @@ func taskInfo(m *pb.BackgroundTask) api.TaskInfo {
 	return api.TaskInfo{
 		ID: m.Id, Agent: m.Agent, Prompt: m.Prompt, Session: m.SessionId, State: m.State,
 		Started: timeOf(m.Started), Ended: timeOf(m.Ended), Result: m.Result, Error: m.Error, Usage: usage(m.Usage),
+		Worktree: m.Worktree, Branch: m.Branch,
 	}
 }
 

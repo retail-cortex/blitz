@@ -34,6 +34,7 @@ go_library(
         "setup.go",
         "trust.go",
         "workers.go",
+        "worktrees.go",
     ],
     importpath = "github.com/retail-cortex/blitz/apps/cli",
     visibility = ["//visibility:private"],
@@ -54,6 +55,7 @@ go_library(
         "//pkg/observability",
         "//pkg/secrets",
         "//pkg/socket",
+        "//pkg/worktree",
         "@com_github_burntsushi_toml//:toml",
         "@com_github_spf13_cobra//:cobra",
         "@com_github_spf13_pflag//:pflag",
@@ -88,6 +90,7 @@ go_test(
         "service_test.go",
         "trust_test.go",
         "workers_test.go",
+        "worktrees_test.go",
     ],
     embed = [":cli_lib"],
     # Starts commands in the OS sandbox, which can't nest in Bazel's on

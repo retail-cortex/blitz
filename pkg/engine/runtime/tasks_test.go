@@ -18,6 +18,7 @@ import (
 	"context"
 	"iter"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -73,7 +74,7 @@ func taskEngine(t *testing.T, sub model.LLM, cfg func(*config.Config), replies .
 func TestTaskRunsInTheBackground(t *testing.T) {
 	sub := newGated()
 	f, ctx, ended := taskEngine(t, sub, nil)
-	started, err := f.eng.StartTask(ctx, "qa", "review the cart\nin detail")
+	started, err := f.eng.StartTask(ctx, "qa", "review the cart\nin detail", "")
 	require.NoError(t, err)
 	assert.Equal(t, "task-1", started.ID)
 	assert.Equal(t, api.TaskRunning, started.State)
@@ -131,7 +132,7 @@ func TestTasksEnd(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			f, ctx, _ := taskEngine(t, newGated(), c.cfg) // never answers
-			_, err := f.eng.StartTask(ctx, "qa", "review")
+			_, err := f.eng.StartTask(ctx, "qa", "review", "")
 			require.NoError(t, err)
 			if c.act != nil {
 				require.NoError(t, c.act(f.eng))
@@ -149,15 +150,15 @@ func TestTasksEnd(t *testing.T) {
 
 func TestTaskLimits(t *testing.T) {
 	f, ctx, _ := taskEngine(t, newGated(), func(c *config.Config) { c.Tools.MaxBackgroundAgents = 1 })
-	_, err := f.eng.StartTask(ctx, "qa", "one")
+	_, err := f.eng.StartTask(ctx, "qa", "one", "")
 	require.NoError(t, err)
-	_, err = f.eng.StartTask(ctx, "qa", "two")
+	_, err = f.eng.StartTask(ctx, "qa", "two", "")
 	assert.ErrorContains(t, err, "max_background_agents")
-	_, err = f.eng.StartTask(ctx, "nobody", "x")
+	_, err = f.eng.StartTask(ctx, "nobody", "x", "")
 	assert.ErrorContains(t, err, "not found")
-	_, err = f.eng.StartTask(context.WithValue(ctx, taskKey{}, "task-1"), "qa", "nested")
+	_, err = f.eng.StartTask(context.WithValue(ctx, taskKey{}, "task-1"), "qa", "nested", "")
 	assert.ErrorContains(t, err, "can't start background tasks")
-	_, err = f.eng.StartTask(context.Background(), "qa", "no session")
+	_, err = f.eng.StartTask(context.Background(), "qa", "no session", "")
 	assert.Error(t, err)
 }
 
@@ -166,7 +167,7 @@ func TestTaskNoteReachesTheRunningTurn(t *testing.T) {
 	sub := newGated()
 	call := &genai.Content{Role: genai.RoleModel, Parts: []*genai.Part{{FunctionCall: &genai.FunctionCall{Name: "list_files", Args: map[string]any{}}}}}
 	f, ctx, _ := taskEngine(t, sub, nil, call, textContent("ok"))
-	_, err := f.eng.StartTask(ctx, "qa", "review")
+	_, err := f.eng.StartTask(ctx, "qa", "review", "")
 	require.NoError(t, err)
 	sub.open()
 	_, _, err = f.eng.WaitTask(ctx, []string{"s"}, "task-1", 10*time.Second)
@@ -219,7 +220,7 @@ func TestTaskAsksItsSession(t *testing.T) {
 			watchCtx, stop := context.WithCancel(context.Background())
 			defer stop()
 			events := f.eng.Watch(watchCtx, []string{"s"})
-			_, err := f.eng.StartTask(ctx, "qa", "make a file")
+			_, err := f.eng.StartTask(ctx, "qa", "make a file", "")
 			require.NoError(t, err)
 
 			var req api.TaskRequest
@@ -324,4 +325,45 @@ func TestAgentBackgroundByDefault(t *testing.T) {
 			assert.Equal(t, c.task, isTask, "%v", got["invoke_agent"])
 		})
 	}
+}
+
+// A task isolated in a worktree changes the worktree's files, not the
+// workspace's, and says where its branch is.
+func TestTaskInItsOwnWorktree(t *testing.T) {
+	create := &genai.Content{Role: genai.RoleModel, Parts: []*genai.Part{{FunctionCall: &genai.FunctionCall{Name: "create_file", Args: map[string]any{"path": "made.txt", "content": "hi\n"}}}}}
+	sub := NewMockLLM("sub", create, textContent("made it"))
+	f, ctx, _ := taskEngine(t, sub, func(c *config.Config) {
+		c.Blitz.AutoApprove = false
+		c.Permissions.Allow = []string{"write(**)"}
+		ws := c.Tools.WorkspaceDir
+		for _, args := range [][]string{{"init", "-q"}, {"commit", "-q", "--allow-empty", "-m", "first"}} {
+			cmd := exec.Command("git", append([]string{"-c", "user.name=t", "-c", "user.email=t@example.com"}, args...)...)
+			cmd.Dir = ws
+			out, err := cmd.CombinedOutput()
+			require.NoError(t, err, "%s", out)
+		}
+	})
+	started, err := f.eng.StartTask(ctx, "qa", "make a file", "worktree")
+	require.NoError(t, err)
+	require.NotEmpty(t, started.Worktree)
+	assert.True(t, strings.HasPrefix(started.Branch, "blitz/task-1-"))
+
+	done, _, err := f.eng.WaitTask(ctx, []string{"s"}, started.ID, 10*time.Second)
+	require.NoError(t, err)
+	require.Equal(t, api.TaskDone, done.State, "%+v", done)
+	_, err = os.Stat(filepath.Join(started.Worktree, "made.txt"))
+	assert.NoError(t, err, "not made in the worktree")
+	_, err = os.Stat(filepath.Join(f.cfg.Tools.WorkspaceDir, "made.txt"))
+	assert.True(t, os.IsNotExist(err), "made in the workspace itself")
+	assert.Contains(t, TaskNote(done), "on the branch "+started.Branch)
+
+	_, err = f.eng.StartTask(ctx, "qa", "x", "worktree")
+	require.NoError(t, err, "a second isolated task")
+}
+
+func TestTaskWorktreeNeedsARepository(t *testing.T) {
+	f, ctx, _ := taskEngine(t, newGated(), nil)
+	_, err := f.eng.StartTask(ctx, "qa", "x", "worktree")
+	assert.ErrorContains(t, err, "not in a git repository")
+	assert.Empty(t, f.eng.ListTasks(nil), "a task left behind")
 }

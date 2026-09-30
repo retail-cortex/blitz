@@ -35,6 +35,9 @@ import (
 type globalFlags struct {
 	config, dir, model, agent, agency string
 	trustProject                      bool
+	// worktree starts in a new git worktree of that name ("new": one
+	// named for the time), from ref (HEAD when "").
+	worktree, ref string
 }
 
 // loadConfig loads trusted configuration and applies flag overrides,

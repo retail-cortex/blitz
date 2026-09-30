@@ -74,6 +74,9 @@ func cmdTasks(args []string, app *App) {
 		return
 	}
 	fmt.Printf("\n%s%s%s\n", Bold, safe(TaskLine(t)), Reset)
+	if t.Worktree != "" {
+		fmt.Printf("  %s%s%s\n", Dim, safe(i18n.T("tasks.worktree", "path", t.Worktree, "branch", t.Branch)), Reset)
+	}
 	for _, e := range events {
 		fmt.Printf("  %s%s%s\n", Dim, safe(e), Reset)
 	}

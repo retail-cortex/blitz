@@ -504,7 +504,13 @@ func (e *Engine) generateConfig() *genai.GenerateContentConfig {
 
 // newLLMAgent builds spec's agent running on llm.
 func (e *Engine) newLLMAgent(spec *agents.AgentSpec, llm model.LLM, instruction string, subAgents []agent.Agent, toolsets []tool.Toolset, extra ...tool.Tool) (agent.Agent, error) {
-	list := e.toolReg.GetToolsForAgent(spec.Tools)
+	return e.newLLMAgentWith(e.toolReg, spec, llm, instruction, subAgents, toolsets, extra...)
+}
+
+// newLLMAgentWith is newLLMAgent with the tools of reg: a task isolated in
+// a worktree works on its files.
+func (e *Engine) newLLMAgentWith(reg *tools.Registry, spec *agents.AgentSpec, llm model.LLM, instruction string, subAgents []agent.Agent, toolsets []tool.Toolset, extra ...tool.Tool) (agent.Agent, error) {
+	list := reg.GetToolsForAgent(spec.Tools)
 	for _, t := range extra {
 		if !slices.ContainsFunc(list, func(x tool.Tool) bool { return x.Name() == t.Name() }) {
 			list = append(list, t)
@@ -976,7 +982,11 @@ func (e *Engine) InvokeSubagent(ctx context.Context, agentName, prompt string) (
 	if st := stateFrom(ctx); st != nil && st.model != nil { // a run with its own model
 		llm = e.modelInTreeLocked(spec.Name, cmp.Or(st.agent, e.active), withImages(st.model, e.toolReg.Images()))
 	}
-	sub, err := e.newLLMAgent(spec, llm, e.subInstruction(spec), nil, e.toolReg.MCP().ToolsetsFor(agentName, false))
+	reg := e.toolReg
+	if r, ok := ctx.Value(isolatedToolsKey{}).(*tools.Registry); ok { // a task in its own worktree
+		reg = r
+	}
+	sub, err := e.newLLMAgentWith(reg, spec, llm, e.subInstruction(spec), nil, e.toolReg.MCP().ToolsetsFor(agentName, false))
 	e.mu.RUnlock()
 	if err != nil {
 		return "", fmt.Errorf("failed to build sub-agent %s: %w", agentName, err)

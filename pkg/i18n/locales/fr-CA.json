@@ -1139,6 +1139,7 @@
     "mode.describe.auto": "un modèle réviseur décide de ce qui demanderait; les règles de demande vous consultent toujours",
     "mode.auto_model_failed": "Le modèle réviseur du mode auto {model} n’est pas disponible ({error}); le modèle de la session révise à la place",
     "desktop.mode.auto": "Auto",
-    "desktop.mode.auto.detail": "Un modèle réviseur décide de ce qui demanderait; les règles de demande vous consultent toujours"
+    "desktop.mode.auto.detail": "Un modèle réviseur décide de ce qui demanderait; les règles de demande vous consultent toujours",
+    "tasks.worktree": "Dans le worktree {path}, sur la branche {branch}"
   }
 }

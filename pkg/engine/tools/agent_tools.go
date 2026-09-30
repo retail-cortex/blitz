@@ -16,6 +16,7 @@ package tools
 
 import (
 	"fmt"
+	"github.com/retail-cortex/blitz/pkg/api"
 	"strings"
 
 	"github.com/retail-cortex/blitz/pkg/engine/agents"
@@ -72,7 +73,9 @@ type InvokeAgentInput struct {
 	AgentName string `json:"agent_name" jsonschema:"The name of the agent to invoke (e.g. qa, helios, planning-agent)"`
 	Prompt    string `json:"prompt" jsonschema:"The specific task instruction for the delegated agent"`
 	// Background runs it beside this turn as a task.
-	Background *bool `json:"background,omitempty" jsonschema:"Run the agent in the background as a task and return at once with its task_id; its result reaches you when it finishes (task_output reads it before). Nothing it would need to ask the user about runs. Use for independent work: reviews, research, long test runs"`
+	// Isolation runs a background task in its own git worktree.
+	Isolation  string `json:"isolation,omitempty" jsonschema:"worktree: run the background task in its own git worktree and branch, so its changes don't touch the user's checkout and can be reviewed and merged"`
+	Background *bool  `json:"background,omitempty" jsonschema:"Run the agent in the background as a task and return at once with its task_id; its result reaches you when it finishes (task_output reads it before). Nothing it would need to ask the user about runs. Use for independent work: reviews, research, long test runs"`
 }
 
 // InvokeAgentOutput holds result of invoking an agent.
@@ -108,6 +111,16 @@ func NewInvokeAgentTool(registry *agents.Registry, hooks *Hooks) (tool.Tool, err
 			if input.Background != nil {
 				background = *input.Background
 			}
+			isolation := spec.Isolation
+			if input.Isolation != "" {
+				isolation = input.Isolation
+			}
+			if isolation != "" && isolation != "worktree" {
+				return fail(fmt.Sprintf("isolation %q: only worktree", isolation))
+			}
+			if isolation != "" && !background {
+				return fail("isolation needs background: true")
+			}
 			if background {
 				runner := hooks.taskRunner()
 				switch {
@@ -116,13 +129,13 @@ func NewInvokeAgentTool(registry *agents.Registry, hooks *Hooks) (tool.Tool, err
 				case isUnattended(ctx):
 					return fail("background tasks can't be started from a background task or an unattended run; invoke the agent without background")
 				}
-				t, err := runner.StartTask(ctx, input.AgentName, input.Prompt)
+				t, err := runner.StartTask(ctx, input.AgentName, input.Prompt, isolation)
 				if err != nil {
 					return fail(err.Error())
 				}
 				return InvokeAgentOutput{
 					AgentName: input.AgentName, TaskID: t.ID, Status: t.State,
-					Response: fmt.Sprintf("Started in the background as %s. Its result reaches you when it finishes; task_output reads it before.", t.ID),
+					Response: startedText(t),
 				}, nil
 			}
 			invoker := hooks.subagentInvoker()
@@ -136,4 +149,13 @@ func NewInvokeAgentTool(registry *agents.Registry, hooks *Hooks) (tool.Tool, err
 			return InvokeAgentOutput{AgentName: input.AgentName, Response: res}, nil
 		},
 	)
+}
+
+// startedText tells the agent a task started, and where it works.
+func startedText(t api.TaskInfo) string {
+	s := fmt.Sprintf("Started in the background as %s. Its result reaches you when it finishes; task_output reads it before.", t.ID)
+	if t.Worktree != "" {
+		s += fmt.Sprintf(" It works in its own worktree, %s, on the branch %s.", t.Worktree, t.Branch)
+	}
+	return s
 }

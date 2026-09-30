@@ -122,7 +122,7 @@ Exit codes: 0 success, 1 error, 2 usage, 3 --max-turns reached,
 	f.BoolVarP(&o.version, "version", "v", false, "Print Blitz version")
 	addRunFlags(f, o)
 
-	root.AddCommand(newExecCommand(o), newInitCommand(o), newDoctorCommand(&o.global), newConfigCommand(&o.global), newServeCommand(), newWorkersCommand(&o.global), newServiceCommand(), newLicenseCommand(), newTrustCommand(&o.global), newMCPCommand(&o.global))
+	root.AddCommand(newExecCommand(o), newInitCommand(o), newDoctorCommand(&o.global), newConfigCommand(&o.global), newServeCommand(), newWorkersCommand(&o.global), newServiceCommand(), newLicenseCommand(), newTrustCommand(&o.global), newMCPCommand(&o.global), newWorktreesCommand(&o.global))
 	return root
 }
 
@@ -135,6 +135,9 @@ func addRunFlags(f *pflag.FlagSet, o *rootOptions) {
 	f.BoolVar(&o.global.trustProject, "trust-project", false, "Trust the workspace's project settings (.blitz/settings.toml) for this run, without recording it")
 	f.BoolVar(&o.global.trustProject, "trust-workspace", false, "Deprecated: --trust-project")
 	_ = f.MarkHidden("trust-workspace")
+	f.StringVarP(&o.global.worktree, "worktree", "w", "", "Start in a new git worktree (.blitz/worktrees/<name>, branch blitz/<name>); no name: one is made up")
+	f.Lookup("worktree").NoOptDefVal = "new"
+	f.StringVar(&o.global.ref, "ref", "", "With --worktree: the commit or branch to start from (default HEAD)")
 	f.StringVarP(&o.resume, "resume", "r", "", "Resume a saved session by ID (no ID: the most recent), or start a new one from a snapshot by name")
 	f.Lookup("resume").NoOptDefVal = "latest"
 	f.BoolVarP(&o.cont, "continue", "C", false, "Continue the most recent session")
@@ -239,6 +242,11 @@ func runRoot(cmd *cobra.Command, o *rootOptions, args []string) (err error) {
 	ctx, stop := signal.NotifyContext(context.Background(), sigs...)
 	defer stop()
 
+	if o.global.worktree != "" {
+		if err := enterWorktree(&o.global); err != nil {
+			return err
+		}
+	}
 	cfg, err := loadConfig(&o.global)
 	if err != nil {
 		return err

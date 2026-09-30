@@ -39,6 +39,10 @@ type TaskInfo struct {
 	Error string `json:"error,omitempty"`
 	// Usage is its own tokens and cost (also counted in its session's).
 	Usage Usage `json:"usage"`
+	// Worktree and Branch: it ran in its own git worktree, on this branch,
+	// for its changes to be reviewed and merged.
+	Worktree string `json:"worktree,omitempty"`
+	Branch   string `json:"branch,omitempty"`
 }
 
 // Active reports whether it hasn't ended: running, or waiting for an

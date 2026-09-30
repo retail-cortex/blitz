@@ -1256,6 +1256,7 @@ function TaskCard({ dir, sessionId, id }: { dir: string; sessionId: string; id: 
         )}
       </div>
       {task?.prompt && <div className="muted ellipsis">{task.prompt}</div>}
+      {task?.branch && <div className="muted ellipsis mono">{t("tasks.worktree", { path: task.worktree, branch: task.branch })}</div>}
       {open && (
         <div className="task-body">
           {events.length > 0 && <pre className="json">{events.join("\n")}</pre>}

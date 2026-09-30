@@ -30,7 +30,9 @@ import (
 // background: true (spec_background_agents_032). The engine supplies it;
 // every call names the sessions whose tasks it may see.
 type TaskRunner interface {
-	StartTask(ctx context.Context, agent, prompt string) (api.TaskInfo, error)
+	// StartTask starts one; isolation "worktree" gives it its own git
+	// worktree and branch.
+	StartTask(ctx context.Context, agent, prompt, isolation string) (api.TaskInfo, error)
 	ListTasks(sessions []string) []api.TaskInfo
 	// WaitTask returns the task with its latest events, once it has
 	// finished or wait has passed (0: at once).

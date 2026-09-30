@@ -1139,6 +1139,7 @@
     "mode.describe.auto": "a reviewer model decides what would ask; ask rules still ask you",
     "mode.auto_model_failed": "The auto mode's reviewer model {model} isn't available ({error}); the session's model reviews instead",
     "desktop.mode.auto": "Auto",
-    "desktop.mode.auto.detail": "A reviewer model decides what would ask; ask rules still ask you"
+    "desktop.mode.auto.detail": "A reviewer model decides what would ask; ask rules still ask you",
+    "tasks.worktree": "In the worktree {path}, on the branch {branch}"
   }
 }
