@@ -1242,6 +1242,8 @@
     "cost.search": "Recherches web : {queries} requêtes, environ {cost} (en plus du coût des jetons)",
     "desktop.switcher.others_failed": "Un worker a échoué dans un autre espace de travail",
     "desktop.switcher.failed_runs.one": "{count} worker a échoué",
-    "desktop.switcher.failed_runs.other": "{count} workers ont échoué"
+    "desktop.switcher.failed_runs.other": "{count} workers ont échoué",
+    "desktop.worker.changed": "Modifiés : {files}",
+    "desktop.worker.open_session": "Ouvrir sa conversation"
   }
 }

@@ -22,6 +22,7 @@ import {
   mdiCalendarPlus,
   mdiCheckCircleOutline,
   mdiCloseCircleOutline,
+  mdiMessageTextOutline,
   mdiPauseCircleOutline,
   mdiPlay,
   mdiProgressClock,
@@ -30,6 +31,7 @@ import {
 } from "@mdi/js";
 import { workers } from "./api";
 import { message } from "./errors";
+import { loadSession } from "./events";
 import { language, t } from "./i18n";
 import { RunStatus, WorkerState, type Worker, type WorkerRun } from "./gen/blitz/v1/worker_pb";
 import { applyEvent, failed, summarizeArgs, type Entry } from "./turns";
@@ -59,6 +61,9 @@ const runLabel = (s: RunStatus) => (runKeys[s] ? t(`desktop.run.${runKeys[s]}`) 
 const runIcon = (s: RunStatus) =>
   s === RunStatus.SUCCEEDED ? mdiCheckCircleOutline : s === RunStatus.RUNNING ? mdiProgressClock : s === RunStatus.SKIPPED ? mdiPauseCircleOutline : mdiCloseCircleOutline;
 
+/** How often the open Workers view asks for the workers again. */
+const workersPollMs = 5000;
+
 /** A workspace's workers: review and enable them, run them, see their runs. */
 export function Workers({ dir }: { dir: string }) {
   const [list, setList] = useState<Worker[]>([]);
@@ -75,8 +80,12 @@ export function Workers({ dir }: { dir: string }) {
       setError(message(e));
     }
   }, [dir]);
+  // WORKER.md files edited elsewhere show up: the list is asked for again
+  // while the view is open (BL-DSK-50).
   useEffect(() => {
     refresh();
+    const timer = setInterval(refresh, workersPollMs);
+    return () => clearInterval(timer);
   }, [refresh]);
 
   const worker = list.find((w) => w.name === selected);
@@ -277,6 +286,14 @@ function WorkerView({ dir, worker, onChange }: { dir: string; worker: Worker; on
                 </span>
               ))}
               {r.error && <span className="t-body-sm error-text">{r.error.message}</span>}
+              {r.files.length > 0 && <span className="t-body-sm muted">{t("desktop.worker.changed", { files: r.files.join(", ") })}</span>}
+              {r.sessionId && (
+                <span>
+                  <Button small icon={mdiMessageTextOutline} onClick={() => loadSession({ dir, id: r.sessionId })}>
+                    {t("desktop.worker.open_session")}
+                  </Button>
+                </span>
+              )}
             </div>
           </div>
         ))}

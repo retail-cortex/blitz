@@ -415,6 +415,12 @@ export function installFake() {
         },
         loadSession: ({ workspace, ref }) => {
           const s = state(workspace);
+          if (ref.startsWith("worker-") && !s.sessions.some((x) => x.id === ref)) {
+            // A worker run's session: its report.
+            const run = create(SessionInfoSchema, { id: ref, title: "⏰ nightly-deps", workspace, created: now(), updated: now(), messages: [msg("user", "Check for outdated dependencies."), msg("model", "Two modules are behind: golang.org/x/net and google.golang.org/grpc. The report is in reports/deps.md.")] });
+            run.messageCount = 2;
+            s.sessions.push(run);
+          }
           if (!s.sessions.some((x) => x.id === ref)) notFound(ref);
           s.active = ref;
           return { session: active(s) };
@@ -840,7 +846,7 @@ export function installFake() {
         }),
         listWorkerRuns: () => ({
           runs: [
-            { id: "r2", status: RunStatus.SUCCEEDED, started: now(), manual: false, sessionId: "worker-nightly-2", usage: { costUsd: 0.0041, priced: true } },
+            { id: "r2", status: RunStatus.SUCCEEDED, started: now(), manual: false, sessionId: "worker-nightly-2", usage: { costUsd: 0.0041, priced: true }, files: ["reports/deps.md"] },
             { id: "r1", status: RunStatus.FAILED, started: now(), manual: true, sessionId: "worker-nightly-1", error: { reason: "RUN_FAILED", message: "the run reached its cost limit" } },
           ],
         }),
