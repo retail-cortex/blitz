@@ -137,7 +137,7 @@ Suggested order (from NEXT_STEPS): run the manual checks (§9) first — their f
 
 ### 8.2 `blz` in release archives — S
 **Extends** [spec_release_025](spec_release_025.md). *Source: NEXT_STEPS decisions.*
-- **BL-REL-01** Unix release archives contain `blz` as a symlink to `blitz` (Windows: `blz.exe` is not shipped); the README's install steps say so.
+- **BL-REL-01** ✅ *Done 2026-09-30: the archives had it (`release/BUILD.bazel`, `pkg_mklink`), as do the install script and the Homebrew formula; `//release:contents_test` now checks it, and the README says Windows has none.* Unix release archives contain `blz` as a symlink to `blitz` (Windows: `blz.exe` is not shipped); the README's install steps say so.
 
 ### 8.3 `blz refactor` — design first
 **Extends** [spec_cli_020](spec_cli_020.md). *Source: NEXT_STEPS decisions.* Proposed, not designed. Before implementation, its spec must say what it adds over `blitz exec` (e.g. a plan-then-apply flow across files with one approval and `--dry-run` output), its flags, exit codes and output formats.
