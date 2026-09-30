@@ -51,6 +51,17 @@ scripts:
   - name: ts
     language: typescript
     inline_code: "console.log(1)"
+  - name: typed
+    language: typescript
+    relative_path: scripts/typed.ts
+  - name: typed-entry
+    language: typescript
+    relative_path: scripts/typed.ts
+    entry_point: main
+  - name: ts-pkgs
+    language: typescript
+    inline_code: "import isOdd from 'is-odd'; console.log('odd', isOdd(3))"
+    dependencies: ["is-odd@3.0.1"]
   - name: needs-pkgs
     language: python
     inline_code: "import six"
@@ -80,6 +91,27 @@ if __name__ == "__main__":
     pass
 `
 
+const typedTS = `import { readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { twice } from "./helper.ts";
+
+const readme: string = readFileSync("README.md", "utf8").trim();
+console.log("args", JSON.stringify(process.argv.slice(2)), "readme", readme, "twice", twice(21));
+try {
+  writeFileSync("README.md", "overwritten");
+  console.log("workspace write: ALLOWED");
+} catch {
+  console.log("workspace write: refused");
+}
+const out: string | undefined = process.env.SKILL_OUTPUT;
+if (out) writeFileSync(join(out, "result.txt"), "done");
+
+export function main(): number {
+  console.log("entry point");
+  return 3;
+}
+`
+
 type scriptFixture struct {
 	ws     string
 	runner *SkillScripts
@@ -97,6 +129,8 @@ func newScriptFixture(t *testing.T, tier string, approve bool, edit func(*config
 	}
 	os.WriteFile(filepath.Join(dir, "SKILL.md"), []byte(doc), 0o644)
 	os.WriteFile(filepath.Join(dir, "scripts", "work.py"), []byte(workPy), 0o644)
+	os.WriteFile(filepath.Join(dir, "scripts", "typed.ts"), []byte(typedTS), 0o644)
+	os.WriteFile(filepath.Join(dir, "scripts", "helper.ts"), []byte("export const twice = (n: number): number => n * 2;\n"), 0o644)
 	prov, _ := skills.NewProvider()
 	require.NoError(t, prov.DiscoverExternal([]string{skillsDir}))
 
@@ -168,7 +202,7 @@ func TestRunSkillScriptTier3AsksEveryTime(t *testing.T) {
 }
 
 func TestRunSkillScriptRefusals(t *testing.T) {
-	f := newScriptFixture(t, "", false, nil)
+	f := newScriptFixture(t, "", false, func(p *config.SkillPolicy) { p.Languages = []string{"python"} })
 	for script, want := range map[string]string{
 		"ts":      `language "typescript" isn't in skills.policy.languages`,
 		"missing": `has no script "missing"`,
@@ -200,19 +234,23 @@ func TestRunSkillScriptTimeout(t *testing.T) {
 
 func TestActivateSkillListsScripts(t *testing.T) {
 	f := newScriptFixture(t, "", true, nil)
-	p := config.DefaultConfig().Skills.Policy
 	skill, _ := f.runner.provider.Get("demo")
-	ev := skills.Evaluate(skill, p)
-	allowed, blocked := 0, 0
-	for _, v := range ev.Scripts {
-		if v.Allowed {
-			allowed++
-		} else {
-			blocked++
+	count := func(p config.SkillPolicy) (allowed, blocked int) {
+		for _, v := range skills.Evaluate(skill, p).Scripts {
+			if v.Allowed {
+				allowed++
+			} else {
+				blocked++
+			}
 		}
+		return allowed, blocked
 	}
-	require.Equal(t, 5, allowed, "allowed %d, blocked %d", allowed, blocked)
-	require.Equal(t, 1, blocked, "allowed %d, blocked %d", allowed, blocked)
+	allowed, blocked := count(config.DefaultConfig().Skills.Policy)
+	assert.Equal(t, [2]int{9, 0}, [2]int{allowed, blocked}, "default policy")
+	pyOnly := config.DefaultConfig().Skills.Policy
+	pyOnly.Languages = []string{"python"}
+	allowed, blocked = count(pyOnly)
+	assert.Equal(t, [2]int{5, 4}, [2]int{allowed, blocked}, "python only: the TypeScript scripts are blocked")
 }
 
 // The whole path with packages: approval, build, and a run that imports
@@ -234,4 +272,61 @@ func TestRunSkillScriptInstallsPackages(t *testing.T) {
 	require.Len(t, envs, 1, "envs: %+v", envs)
 	require.Equal(t, "demo", envs[0].Skills[0], "envs: %+v", envs)
 	t.Logf("sandbox %s", out.Sandbox)
+}
+
+// TypeScript scripts run on node, types stripped, sandboxed like Python's
+// (BL-SK-01).
+func TestRunTypeScriptScript(t *testing.T) {
+	if _, err := SystemNode(); err != nil {
+		t.Skip(err)
+	}
+	f := newScriptFixture(t, "TIER_2_AUDITED_WRITE", true, nil)
+	out := f.runner.Run(context.Background(), RunSkillScriptInput{Skill: "demo", Script: "typed", Args: []string{"a b"}})
+	require.Equal(t, "", out.Error, "%+v", out)
+	require.Equal(t, 0, out.ExitCode, "%+v", out)
+	assert.Contains(t, out.Stdout, `args ["a b"] readme original twice 42`)
+	assert.Contains(t, out.Stdout, "workspace write: refused")
+	require.Len(t, out.Files, 1, "%+v", out)
+	b, _ := os.ReadFile(filepath.Join(f.ws, out.Files[0]))
+	assert.Equal(t, "done", string(b))
+
+	entry := f.runner.Run(context.Background(), RunSkillScriptInput{Skill: "demo", Script: "typed-entry"})
+	require.Equal(t, "", entry.Error, "%+v", entry)
+	assert.Equal(t, 3, entry.ExitCode, "the entry point's return is the exit code: %+v", entry)
+	assert.Contains(t, entry.Stdout, "entry point")
+
+	inline := f.runner.Run(context.Background(), RunSkillScriptInput{Skill: "demo", Script: "ts"})
+	require.Equal(t, 0, inline.ExitCode, "%+v", inline)
+	assert.Equal(t, "1\n", inline.Stdout)
+}
+
+func TestTypeScriptPackages(t *testing.T) {
+	if _, err := SystemNode(); err != nil {
+		t.Skip(err)
+	}
+	f := newScriptFixture(t, "", false, nil)
+	out := f.runner.Run(context.Background(), RunSkillScriptInput{Skill: "demo", Script: "ts-pkgs"})
+	require.Contains(t, out.Error, "not approved", "%+v", out)
+	require.Len(t, *f.reqs, 1)
+	r := (*f.reqs)[0]
+	assert.True(t, strings.HasPrefix(r.Key, "nodeenv:"), "%+v", r)
+	assert.Contains(t, r.Detail, "npm install --ignore-scripts")
+	assert.Contains(t, r.Detail, "is-odd@3.0.1")
+	if os.Getenv("BLITZ_PYENV_TESTS") != "1" {
+		t.Skip("set BLITZ_PYENV_TESTS=1 to install for real (needs the network)")
+	}
+	g := newScriptFixture(t, "", true, nil)
+	out = g.runner.Run(context.Background(), RunSkillScriptInput{Skill: "demo", Script: "ts-pkgs"})
+	require.Equal(t, "", out.Error, "%+v", out)
+	assert.Equal(t, "odd true\n", out.Stdout)
+}
+
+func TestNodeVersion(t *testing.T) {
+	for in, want := range map[string][3]int{"v22.16.0\n": {22, 16, 0}, "v24.1.3": {24, 1, 3}} {
+		got, ok := nodeVersion(in)
+		assert.True(t, ok, in)
+		assert.Equal(t, want, got)
+	}
+	_, ok := nodeVersion("node 22")
+	assert.False(t, ok)
 }

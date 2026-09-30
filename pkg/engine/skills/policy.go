@@ -128,8 +128,12 @@ func Evaluate(s *Skill, p config.SkillPolicy) Evaluation {
 		if p.MaxTimeoutSeconds > 0 && (v.TimeoutSeconds == 0 || v.TimeoutSeconds > p.MaxTimeoutSeconds) {
 			v.TimeoutSeconds = p.MaxTimeoutSeconds
 		}
+		check := checkDependency
+		if sc.Language == LanguageTypeScript {
+			check = checkNPMDependency
+		}
 		for _, dep := range sc.Dependencies {
-			if r := checkDependency(dep, p.Packages); r != "" {
+			if r := check(dep, p.Packages); r != "" {
 				v.Reasons = append(v.Reasons, r)
 			}
 		}
@@ -174,6 +178,33 @@ func checkDependency(dep string, p config.PackagePolicy) string {
 	}
 	if p.RequireHashes && !exactPin(m[3]) {
 		return fmt.Sprintf("dependency %q must be pinned with == (skills.policy.packages.require_hashes)", dep)
+	}
+	return ""
+}
+
+// npmSpecRE is a plain npm dependency: a (possibly scoped) name and an
+// optional version or range. Tarballs, git, file and alias specs are not.
+var npmSpecRE = regexp.MustCompile(`^((?:@[a-z0-9][a-z0-9._-]*/)?[a-z0-9][a-z0-9._-]*)(?:@([0-9A-Za-z.^~<>=|*+\s-]+))?$`)
+
+// exactVersionRE is one exact semver version.
+var exactVersionRE = regexp.MustCompile(`^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$`)
+
+// checkNPMDependency is checkDependency for a TypeScript script's npm
+// packages, under [skills.policy.packages.npm] (BL-SK-01).
+func checkNPMDependency(dep string, p config.PackagePolicy) string {
+	m := npmSpecRE.FindStringSubmatch(strings.TrimSpace(dep))
+	if m == nil {
+		return fmt.Sprintf("dependency %q isn't a plain npm package (name or name@version; tarballs, git and file specs aren't allowed)", dep)
+	}
+	name := m[1]
+	if g := matchAny(p.NPM.Deny, name); g != "" {
+		return fmt.Sprintf("dependency %s is denied by skills.policy.packages.npm.deny (%s)", name, g)
+	}
+	if len(p.NPM.Allow) > 0 && matchAny(p.NPM.Allow, name) == "" {
+		return fmt.Sprintf("dependency %s isn't in skills.policy.packages.npm.allow", name)
+	}
+	if p.NPM.RequireExact && !exactVersionRE.MatchString(strings.TrimSpace(m[2])) {
+		return fmt.Sprintf("dependency %q must name an exact version, name@1.2.3 (skills.policy.packages.npm.require_exact)", dep)
 	}
 	return ""
 }

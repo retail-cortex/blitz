@@ -42,6 +42,7 @@ go_library(
         "mcp.go",
         "mcpextra.go",
         "mode.go",
+        "nodeenv.go",
         "notebook.go",
         "ossandbox.go",
         "ossandbox_darwin.go",

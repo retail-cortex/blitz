@@ -458,6 +458,19 @@ type PackagePolicy struct {
 	RequireHashes bool     `toml:"require_hashes"`
 	Allow         []string `toml:"allow"` // package names (globs); empty allows any not denied
 	Deny          []string `toml:"deny"`  // package names (globs)
+	// NPM limits TypeScript scripts' packages ([skills.policy.packages.npm]).
+	NPM NPMPolicy `toml:"npm"`
+}
+
+// NPMPolicy limits the npm packages TypeScript skill scripts may install.
+// Installs never run packages' install scripts.
+type NPMPolicy struct {
+	Registry string `toml:"registry"` // npm registry URL
+	// RequireExact requires every dependency to name an exact version
+	// (name@1.2.3).
+	RequireExact bool     `toml:"require_exact"`
+	Allow        []string `toml:"allow"` // package names (globs, @scope/* too); empty allows any not denied
+	Deny         []string `toml:"deny"`  // package names (globs)
 }
 
 // ToolsConfig configures shell execution, file operations, and permissions.
@@ -708,11 +721,11 @@ func DefaultConfig() *Config {
 			},
 			Policy: SkillPolicy{
 				MinHITLTier:       2,
-				Languages:         []string{"python"},
+				Languages:         []string{"python", "typescript"},
 				Sandbox:           "auto",
 				Network:           "none",
 				MaxTimeoutSeconds: 300,
-				Packages:          PackagePolicy{Index: "https://pypi.org/simple", WheelsOnly: true},
+				Packages:          PackagePolicy{Index: "https://pypi.org/simple", WheelsOnly: true, NPM: NPMPolicy{Registry: "https://registry.npmjs.org"}},
 			},
 		},
 		Tools: ToolsConfig{

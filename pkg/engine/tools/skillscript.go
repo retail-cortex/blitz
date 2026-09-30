@@ -54,6 +54,7 @@ type SkillScripts struct {
 	ws       *Workspace
 	hooks    *Hooks
 	envs     *PyEnvs
+	nodes    *NodeEnvs // TypeScript scripts' npm environments
 	boxCfg   ScriptBoxConfig
 
 	boxOnce sync.Once
@@ -63,7 +64,7 @@ type SkillScripts struct {
 
 // NewSkillScripts sets up script runs for the skills of provider.
 func NewSkillScripts(provider *skills.Provider, policy config.SkillPolicy, ws *Workspace, hooks *Hooks, envs *PyEnvs, boxCfg ScriptBoxConfig) *SkillScripts {
-	return &SkillScripts{provider: provider, policy: policy, ws: ws, hooks: hooks, envs: envs, boxCfg: boxCfg}
+	return &SkillScripts{provider: provider, policy: policy, ws: ws, hooks: hooks, envs: envs, nodes: NewNodeEnvs("", policy.Packages.NPM), boxCfg: boxCfg}
 }
 
 // Box returns the script sandbox, set up on first use (a gVisor test run
@@ -131,8 +132,9 @@ func (s *SkillScripts) Run(ctx context.Context, in RunSkillScriptInput) (out Run
 	if !verdict.Allowed {
 		return fail("skills.policy doesn't allow this script: %s", strings.Join(verdict.Reasons, "; "))
 	}
-	if sc.Language != skills.LanguagePython {
-		return fail("%s scripts aren't supported yet", sc.Language)
+	ts := sc.Language == skills.LanguageTypeScript
+	if sc.Language != skills.LanguagePython && !ts {
+		return fail("%s scripts aren't supported", sc.Language)
 	}
 	out.Tier = ev.Tier.String()
 
@@ -141,7 +143,11 @@ func (s *SkillScripts) Run(ctx context.Context, in RunSkillScriptInput) (out Run
 		return fail("%v", err)
 	}
 	out.Sandbox = box.Name()
-	python, err := SystemPython()
+	runtimeFind := SystemPython
+	if ts {
+		runtimeFind = SystemNode
+	}
+	python, err := runtimeFind() // the script's runtime: python3, or node
 	if err != nil {
 		return fail("%v", err)
 	}
@@ -161,7 +167,25 @@ func (s *SkillScripts) Run(ctx context.Context, in RunSkillScriptInput) (out Run
 
 	interp := python
 	readOnly := append([]string{s.ws.Dir()}, MountsFor(python)...)
-	if len(sc.Dependencies) > 0 {
+	var nodeModules string
+	if ts && len(sc.Dependencies) > 0 {
+		env, ready := s.nodes.Lookup(python, sc.Dependencies)
+		if !ready {
+			if err := s.hooks.Approve(ctx, api.ApprovalRequest{
+				Tool: "run_skill_script", Kind: api.ActionNetwork,
+				Detail: fmt.Sprintf("Install packages for skill %s into an isolated environment (%s): %s", skill.Name, box.Name(), s.nodes.InstallCommand(sc.Dependencies)),
+				Key:    "nodeenv:" + env.Key, KeyLabel: "installing exactly these packages",
+			}); err != nil {
+				return fail("%v", err)
+			}
+		}
+		if env, err = s.nodes.Ensure(ctx, box, python, skill.Name, sc.Dependencies); err != nil {
+			return fail("setting up the environment: %v", err)
+		}
+		nodeModules = env.Modules()
+		readOnly = append(readOnly, env.Dir)
+	}
+	if !ts && len(sc.Dependencies) > 0 {
 		env, ready := s.envs.Lookup(python, sc.Dependencies)
 		if !ready {
 			// Installing reaches the network and runs installers: approved on
@@ -181,7 +205,13 @@ func (s *SkillScripts) Run(ctx context.Context, in RunSkillScriptInput) (out Run
 		readOnly = append(readOnly, env.Dir)
 	}
 
-	scriptPath, scriptDir, cleanup, err := materializeScript(skill, sc)
+	materialize := materializeScript
+	if ts {
+		materialize = func(skill *skills.Skill, sc skills.ScriptDefinition) (string, string, func(), error) {
+			return materializeTypeScript(skill, sc, nodeModules)
+		}
+	}
+	scriptPath, scriptDir, cleanup, err := materialize(skill, sc)
 	if err != nil {
 		return fail("%v", err)
 	}
@@ -189,7 +219,10 @@ func (s *SkillScripts) Run(ctx context.Context, in RunSkillScriptInput) (out Run
 	readOnly = append(readOnly, scriptDir)
 
 	var writable []string
-	env := []string{"PYTHONDONTWRITEBYTECODE=1", "PYTHONNOUSERSITE=1", "SKILL_DIR=" + scriptDir}
+	env := []string{"SKILL_DIR=" + scriptDir}
+	if !ts {
+		env = append(env, "PYTHONDONTWRITEBYTECODE=1", "PYTHONNOUSERSITE=1")
+	}
 	if ev.Tier >= skills.Tier2AuditedWrite || ev.Bypass {
 		dir := filepath.Join(s.ws.Dir(), SkillOutputDir, skill.Name, fmt.Sprintf("%s-%s", sc.Name, time.Now().Format("20060102-150405.000")))
 		if err := os.MkdirAll(dir, 0o700); err != nil {
@@ -209,7 +242,17 @@ func (s *SkillScripts) Run(ctx context.Context, in RunSkillScriptInput) (out Run
 	}
 
 	argv := []string{interp, scriptPath}
-	if sc.EntryPoint != "" {
+	switch {
+	case ts && sc.EntryPoint != "":
+		// Import the module and call the named export; a number it returns
+		// (or resolves to) is the exit code.
+		argv = append(append([]string{interp}, nodeFlags...), "--input-type=module", "-e",
+			"const {pathToFileURL}=await import('node:url'); const m=await import(pathToFileURL(process.argv[1]).href); const r=await m["+pyQuote(sc.EntryPoint)+"](); process.exit(typeof r==='number'?r:0)",
+			scriptPath)
+	case ts:
+		argv = append(append([]string{interp}, nodeFlags...), scriptPath)
+	}
+	if !ts && sc.EntryPoint != "" {
 		// Call the named function, with the script's module run under a
 		// name other than __main__.
 		argv = []string{interp, "-c",
@@ -266,6 +309,46 @@ func materializeScript(skill *skills.Skill, sc skills.ScriptDefinition) (path, d
 		}
 	default:
 		err = errors.New("the script has no source")
+	}
+	if err != nil {
+		cleanup()
+		return "", "", func() {}, err
+	}
+	if c, err := filepath.EvalSymlinks(tmp); err == nil { // macOS: /var -> /private/var
+		path = filepath.Join(c, strings.TrimPrefix(path, tmp))
+		tmp = c
+	}
+	return path, tmp, cleanup, nil
+}
+
+// nodeFlags run a TypeScript script: its types stripped (Node 22.6+), and
+// no warning about the feature.
+var nodeFlags = []string{"--experimental-strip-types", "--no-warnings"}
+
+// materializeTypeScript copies a TypeScript script (and, on disk, its
+// skill's files, so it can import its neighbours) into a temporary
+// directory, beside a node_modules link to its packages' environment,
+// where node looks for them.
+func materializeTypeScript(skill *skills.Skill, sc skills.ScriptDefinition, nodeModules string) (path, dir string, cleanup func(), err error) {
+	tmp, err := os.MkdirTemp("", "blitz-skill-*")
+	if err != nil {
+		return "", "", func() {}, err
+	}
+	cleanup = func() { os.RemoveAll(tmp) }
+	switch {
+	case sc.InlineCode != "":
+		path = filepath.Join(tmp, sc.Name+".ts")
+		err = os.WriteFile(path, []byte(sc.InlineCode), 0o600)
+	case sc.RelativePath != "":
+		if err = skill.CopyTo(tmp); err == nil {
+			path = filepath.Join(tmp, filepath.FromSlash(sc.RelativePath))
+		}
+	default:
+		err = errors.New("the script has no source")
+	}
+	if err == nil && nodeModules != "" {
+		_ = os.RemoveAll(filepath.Join(tmp, "node_modules")) // a copied one mustn't win
+		err = os.Symlink(nodeModules, filepath.Join(tmp, "node_modules"))
 	}
 	if err != nil {
 		cleanup()

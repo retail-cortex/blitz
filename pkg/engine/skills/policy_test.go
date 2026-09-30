@@ -100,6 +100,10 @@ func TestNetworkEnvAndTimeout(t *testing.T) {
 func TestLanguagesToolsAndHashes(t *testing.T) {
 	ts := skillFrom(t, "---\nname: t\nscripts:\n  - name: run\n    language: typescript\n    inline_code: x\n---\n")
 	v := Evaluate(ts, defaultPolicy()).Scripts[0]
+	require.True(t, v.Allowed, "typescript runs by default: %+v", v)
+	pyOnly := defaultPolicy()
+	pyOnly.Languages = []string{"python"}
+	v = Evaluate(ts, pyOnly).Scripts[0]
 	require.False(t, v.Allowed, "typescript: %+v", v)
 	require.Contains(t, v.Reasons[0], `language "typescript"`, "typescript: %+v", v)
 
@@ -157,6 +161,46 @@ func TestDependencies(t *testing.T) {
 	for dep, ok := range map[string]bool{"requests==2.32.3": true, "requests>=2": false, "requests==2.*": false, "rich": false} {
 		t.Run(dep, func(t *testing.T) {
 			assert.Equal(t, ok, (checkDependency(dep, p) == ""), "require_hashes %q: %q", dep, checkDependency(dep, p))
+		})
+	}
+}
+
+// A TypeScript script's dependencies are npm packages, under
+// [skills.policy.packages.npm] (BL-SK-01).
+func TestNPMDependencies(t *testing.T) {
+	base := config.DefaultConfig().Skills.Policy.Packages
+	exact := base
+	exact.NPM.RequireExact = true
+	allow := base
+	allow.NPM.Allow = []string{"@acme/*", "zod"}
+	allow.NPM.Deny = []string{"@acme/secret"}
+	tests := []struct {
+		dep    string
+		policy config.PackagePolicy
+		want   string // "" allowed, else part of the reason
+	}{
+		{"zod", base, ""},
+		{"zod@3.23.8", base, ""},
+		{"@types/node@^22", base, ""},
+		{"lodash@>=4 <5", base, ""},
+		{"https://evil.test/x.tgz", base, "isn't a plain npm package"},
+		{"git+ssh://git@github.com/x/y", base, "isn't a plain npm package"},
+		{"file:../x", base, "isn't a plain npm package"},
+		{"alias@npm:zod", base, "isn't a plain npm package"},
+		{"zod@^3", exact, "exact version"},
+		{"zod@3.23.8", exact, ""},
+		{"@acme/tools", allow, ""},
+		{"@acme/secret", allow, "denied"},
+		{"left-pad", allow, "isn't in skills.policy.packages.npm.allow"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.dep, func(t *testing.T) {
+			got := checkNPMDependency(tt.dep, tt.policy)
+			if tt.want == "" {
+				assert.Empty(t, got)
+			} else {
+				assert.Contains(t, got, tt.want)
+			}
 		})
 	}
 }
