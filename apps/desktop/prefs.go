@@ -59,6 +59,10 @@ type Prefs struct {
 	// ChatWidth is the chat panel's width in pixels (0: a third of the
 	// window).
 	ChatWidth int `json:"chat_width,omitempty"`
+	// FilesWidth and RunSettingsWidth are the Files shelf's and the run
+	// settings panel's widths in pixels (0: their defaults).
+	FilesWidth       int `json:"files_width,omitempty"`
+	RunSettingsWidth int `json:"run_settings_width,omitempty"`
 	// Width is how wide the conversation runs: "full" (the default, the
 	// whole panel) or "readable" (a column of about 860 px).
 	Width string `json:"width"`
@@ -110,8 +114,10 @@ func (p *Prefs) normalize() {
 	if !languageTag.MatchString(p.Language) {
 		p.Language = "system"
 	}
-	if p.ChatWidth < 0 || p.ChatWidth > 10000 {
-		p.ChatWidth = 0
+	for _, w := range []*int{&p.ChatWidth, &p.FilesWidth, &p.RunSettingsWidth} {
+		if *w < 0 || *w > 10000 {
+			*w = 0
+		}
 	}
 	seen := map[string]bool{}
 	var open, closed []WorkspacePrefs

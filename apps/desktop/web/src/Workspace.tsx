@@ -37,6 +37,8 @@ import { useApp } from "./state";
 import { publishStatus } from "./status";
 import { t } from "./i18n";
 import { IconButton, Segmented } from "./ui/controls";
+import { panelWidth, useWindowWidth } from "./ui/layout";
+import { ResizeHandle } from "./ui/ResizeHandle";
 import { Brand, WorkspaceSwitcher } from "./WorkspaceSwitcher";
 import { Workers } from "./Workers";
 
@@ -151,7 +153,15 @@ export function Workspace({
   useEffect(() => reportUnsaved(dir, editor.dirtyCount), [dir, editor.dirtyCount]);
   useEffect(() => () => reportUnsaved(dir, 0), [dir]);
 
-  const chatWidth = prefs.chat_width || Math.max(380, Math.min(520, Math.round(window.innerWidth * 0.32)));
+  // Panel widths follow the window (resized, or moved to another display):
+  // a width saved on a larger display is kept to what fits this one.
+  const win = useWindowWidth();
+  const filesWidth = panelWidth(prefs.files_width, 272, 200, Math.min(560, win - 600));
+  const runWidth = panelWidth(prefs.run_settings_width, 420, 340, Math.min(720, win - 420));
+  // The chat leaves the editor 360 px beside the panels that sit inline
+  // (narrower windows float the run settings and the shelf over it).
+  const chatMax = (w: number) => w - (prefs.files && w > 1100 ? filesWidth : 56) - (prefs.run_settings && w > 1500 ? runWidth : 0) - 400;
+  const chatWidth = panelWidth(prefs.chat_width, Math.max(380, Math.min(520, Math.round(win * 0.32))), 320, chatMax(win));
   const chatCenter = view === "editor" && editor.tabs.length === 0;
   const revealInTree = (path: string) => {
     if (!prefs.files) update((p) => ({ ...p, files: true }));
@@ -189,6 +199,8 @@ export function Workspace({
         {prefs.files ? (
           <FilesShelf
             dir={dir}
+            width={filesWidth}
+            onResize={(w) => update((p) => ({ ...p, files_width: w }))}
             showHidden={prefs.show_hidden}
             onToggleHidden={() => update((p) => ({ ...p, show_hidden: !p.show_hidden }))}
             active={view === "editor" ? editor.active : null}
@@ -217,7 +229,16 @@ export function Workspace({
           </div>
         )}
         <aside className={`chat-panel ${chatCenter ? "center" : ""}`} style={chatCenter ? undefined : { width: chatWidth }} aria-label={t("desktop.view.chat")}>
-          {!chatCenter && <ResizeHandle width={chatWidth} onResize={(w) => update((p) => ({ ...p, chat_width: w }))} />}
+          {!chatCenter && (
+            <ResizeHandle
+              width={chatWidth}
+              edge="left"
+              min={320}
+              max={() => chatMax(window.innerWidth)}
+              label={t("desktop.chat.resize")}
+              onResize={(w) => update((p) => ({ ...p, chat_width: w }))}
+            />
+          )}
           <FileLinksProvider dir={dir} refresh={touched}>
             <Conversation
               dir={dir}
@@ -232,33 +253,10 @@ export function Workspace({
             />
           </FileLinksProvider>
         </aside>
-        {prefs.run_settings && <RunSettings dir={dir} settings={settings} error={settingsError} onChanged={refreshSettings} />}
+        {prefs.run_settings && <RunSettings dir={dir} settings={settings} error={settingsError} onChanged={refreshSettings} width={runWidth} onResize={(w) => update((p) => ({ ...p, run_settings_width: w }))} />}
       </div>
       {goTo && <GoToFile dir={dir} onOpen={open} onClose={() => setGoTo(false)} />}
       {reviewing && visible && <ProjectDialog dir={dir} onClose={() => setReviewing(false)} onDecided={refreshSettings} />}
     </section>
   );
-}
-
-// The chat panel's left edge: dragging it sets the panel's width, kept
-// when let go.
-function ResizeHandle({ width, onResize }: { width: number; onResize: (w: number) => void }) {
-  const drag = (e: React.PointerEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    const panel = e.currentTarget.parentElement!;
-    const right = panel.getBoundingClientRect().right;
-    let w = width;
-    const move = (ev: PointerEvent) => {
-      w = Math.round(Math.min(Math.max(right - ev.clientX, 320), window.innerWidth - 520));
-      panel.style.width = `${w}px`;
-    };
-    const up = () => {
-      window.removeEventListener("pointermove", move);
-      window.removeEventListener("pointerup", up);
-      onResize(w);
-    };
-    window.addEventListener("pointermove", move);
-    window.addEventListener("pointerup", up);
-  };
-  return <div className="panel-resize" onPointerDown={drag} role="separator" aria-orientation="vertical" aria-label={t("desktop.chat.resize")} />;
 }

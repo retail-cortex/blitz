@@ -67,6 +67,8 @@
 
 .banner { display: flex; align-items: center; gap: 12px; padding: 10px 16px; background: var(--md-warning-container); color: var(--md-on-warning-container); }
 .banner .progress { max-width: 160px; }
+/* A banner above the top bar sits where the macOS window buttons are. */
+.main > .banner { padding-left: 84px; }
 
 .avatar {
   position: relative; display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; flex: none;
@@ -121,7 +123,10 @@
 .workspace-center { flex: 1; min-width: 0; display: flex; flex-direction: column; min-height: 0; }
 .chat-panel { position: relative; flex: none; display: flex; flex-direction: column; min-width: 320px; min-height: 0; border-left: 1px solid var(--md-outline-variant); background: var(--md-surface); }
 .panel-resize { position: absolute; left: -3px; top: 0; bottom: 0; width: 6px; cursor: col-resize; z-index: 5; }
-.panel-resize:hover { background: color-mix(in srgb, var(--md-primary) 30%, transparent); }
+.panel-resize:hover, body.resizing .panel-resize { background: color-mix(in srgb, var(--md-primary) 30%, transparent); }
+.panel-resize.right { left: auto; right: -3px; }
+body.resizing { cursor: col-resize; -webkit-user-select: none; user-select: none; }
+body.resizing iframe, body.resizing .cm-editor { pointer-events: none; }
 .files-rail { flex: none; width: 48px; display: flex; flex-direction: column; align-items: center; gap: 4px; padding-top: 8px; border-right: 1px solid var(--md-outline-variant); background: var(--md-surface-container-low); }
 .chat-panel.center { flex: 1; min-width: 0; border-left: none; }
 
@@ -278,12 +283,33 @@
 .live-text { white-space: pre-wrap; }
 
 /* Run settings panel */
-.run-settings { width: var(--panel-width); flex: none; display: flex; flex-direction: column; min-height: 0; border-left: 1px solid var(--md-outline-variant); background: var(--md-surface-container-low); }
+.run-settings { position: relative; width: var(--panel-width); flex: none; display: flex; flex-direction: column; min-height: 0; border-left: 1px solid var(--md-outline-variant); background: var(--md-surface-container-low); }
 .panel-head { display: flex; align-items: center; gap: 10px; padding: 14px 12px 10px 20px; }
-.panel-scroll { flex: 1; overflow-y: auto; padding: 0 12px 24px 20px; }
-.panel-section { border-bottom: 1px solid var(--md-outline-variant); }
-.panel-section-head { display: flex; align-items: center; justify-content: space-between; width: 100%; padding: 14px 0; border: none; background: none; color: inherit; cursor: pointer; }
-.panel-section-body { display: flex; flex-direction: column; gap: 16px; padding-bottom: 20px; }
+.panel-scroll { flex: 1; overflow-y: auto; padding: 4px 14px 24px; }
+/* The run settings' sections: cards, each with its icon, title, scope and
+   (folded) a summary; fields two to a row where there's room. */
+.panel-section {
+  margin-bottom: 10px; border: 1px solid var(--md-outline-variant); border-radius: var(--md-shape-md);
+  background: color-mix(in srgb, var(--md-on-surface) 3%, transparent);
+}
+.panel-section.open { background: color-mix(in srgb, var(--md-on-surface) 5%, transparent); }
+.panel-section-head {
+  display: flex; align-items: center; gap: 10px; width: 100%; padding: 12px 14px; text-align: left;
+  border: none; background: none; color: inherit; cursor: pointer; border-radius: inherit;
+}
+.panel-section-head:hover { background: color-mix(in srgb, var(--md-on-surface) 5%, transparent); }
+.panel-section-head:focus-visible { outline: 2px solid var(--md-primary); outline-offset: -2px; }
+.panel-section-icon { color: var(--md-primary); flex: none; }
+.panel-section-title { display: flex; flex-direction: column; flex: 1; min-width: 0; gap: 2px; }
+.panel-section.open .panel-section-head { border-bottom: 1px solid var(--md-outline-variant); border-radius: var(--md-shape-md) var(--md-shape-md) 0 0; }
+.scope-chip {
+  flex: none; padding: 2px 8px; border-radius: 999px; white-space: nowrap;
+  color: var(--md-on-surface-variant); border: 1px solid var(--md-outline-variant);
+}
+.panel-section-body { display: flex; flex-direction: column; gap: 16px; padding: 14px; }
+.panel-section-body.pairs { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 16px 14px; align-items: start; }
+.panel-section-body.pairs > :not(.field) { grid-column: 1 / -1; }
+.panel-section-body .select, .panel-section-body .input:not(.slider-value) { width: 100%; }
 .slider-value { width: 76px; min-height: 32px; padding: 4px 8px; text-align: right; }
 .rule { display: flex; align-items: center; gap: 8px; min-height: 36px; }
 .rule code { flex: 1; font-size: 12px; }
@@ -416,7 +442,7 @@
 .settings-reference dd { margin: 2px 0 0; }
 
 /* Files (spec_files_029): the shelf, the editor beside the conversation. */
-.files-shelf { width: 272px; flex: none; display: flex; flex-direction: column; min-height: 0; border-right: 1px solid var(--md-outline-variant); background: var(--md-surface-container-low); }
+.files-shelf { position: relative; width: 272px; flex: none; display: flex; flex-direction: column; min-height: 0; border-right: 1px solid var(--md-outline-variant); background: var(--md-surface-container-low); }
 .files-head { padding: 10px 6px 6px 16px; gap: 0; }
 .files-tree { flex: 1; overflow: auto; padding: 0 6px 24px; outline: none; }
 .files-note { padding: 8px 12px; }

@@ -41,6 +41,7 @@ import { message } from "../errors";
 import { FileKind, type FileEntry } from "../gen/blitz/v1/file_pb";
 import { t } from "../i18n";
 import { Button, ContextMenu, Dialog, Icon, IconButton, useSnackbar, type MenuEntry } from "../ui/controls";
+import { ResizeHandle } from "../ui/ResizeHandle";
 import { fileIcon } from "./icons";
 import { ancestors, emptyTree, isFolder, joinPath, parentOf, rows, setExpanded, shownFolders, validName, withChildren, type Tree } from "./tree";
 
@@ -64,8 +65,13 @@ export function FilesShelf({
   onOpen,
   onMoved,
   onClose,
+  width,
+  onResize,
 }: {
   dir: string;
+  /** Its width in pixels; dragging its edge sets another. */
+  width: number;
+  onResize: (w: number) => void;
   showHidden: boolean;
   onToggleHidden: () => void;
   /** The file the editor shows. */
@@ -271,7 +277,8 @@ export function FilesShelf({
     ) : null;
 
   return (
-    <aside className="files-shelf" aria-label={t("desktop.files.title")}>
+    <aside className="files-shelf" aria-label={t("desktop.files.title")} style={{ width }}>
+      <ResizeHandle width={width} edge="right" min={200} max={() => Math.min(560, window.innerWidth - 600)} label={t("desktop.files.resize")} onResize={onResize} />
       <div className="panel-head files-head">
         <span className="t-title-sm spacer">{t("desktop.files.title")}</span>
         <IconButton icon={mdiFilePlusOutline} label={t("desktop.files.new_file")} small onClick={() => void startNew("file")} />

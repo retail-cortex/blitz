@@ -43,7 +43,7 @@ func TestPrefsDefaultsAndRoundTrip(t *testing.T) {
 		{Dir: "relative/dir", Open: true}, // not a directory the service can open
 	}
 	p.Active = b // closed: can't be active
-	p.Files, p.ShowHidden, p.ChatWidth = true, true, -3
+	p.Files, p.ShowHidden, p.ChatWidth, p.FilesWidth, p.RunSettingsWidth = true, true, -3, 99999, 480
 	saved, err := s.save(p)
 	require.NoError(t, err)
 	require.Len(t, saved.Workspaces, 2, "normalized %+v", saved)
@@ -53,6 +53,8 @@ func TestPrefsDefaultsAndRoundTrip(t *testing.T) {
 	require.True(t, saved.Files, "normalized %+v", saved)
 	require.True(t, saved.ShowHidden, "normalized %+v", saved)
 	require.Equal(t, 0, saved.ChatWidth, "normalized %+v", saved)
+	require.Equal(t, 0, saved.FilesWidth, "normalized %+v", saved)
+	require.Equal(t, 480, saved.RunSettingsWidth, "normalized %+v", saved)
 	info, err := os.Stat(s.path)
 	require.NoError(t, err, "file mode %v", info)
 	require.Equal(t, fs.FileMode(0o600), info.Mode().Perm(), "file mode %v %v", info, err)

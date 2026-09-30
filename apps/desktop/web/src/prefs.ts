@@ -50,6 +50,9 @@ export interface Prefs {
   show_hidden: boolean;
   /** The chat panel's width in pixels (0: a third of the window). */
   chat_width: number;
+  /** The Files shelf's and the run settings panel's widths in pixels (0: their defaults). */
+  files_width: number;
+  run_settings_width: number;
   /** How wide the conversation runs: the whole panel, or a readable column. */
   width: "full" | "readable";
   /** A background task that ends while nothing runs starts a turn about it. */
@@ -70,10 +73,15 @@ export const defaultPrefs: Prefs = {
   files: false,
   show_hidden: false,
   chat_width: 0,
+  files_width: 0,
+  run_settings_width: 0,
   task_continue: false,
   width: "full",
   transparency: "on",
 };
+
+// A saved width: whole pixels, 0 when unset or unlikely.
+const pixels = (v: unknown) => (typeof v === "number" && v >= 0 && v <= 10000 ? Math.round(v) : 0);
 
 const pick = <T extends string>(v: unknown, allowed: readonly T[], fallback: T): T => (allowed.includes(v as T) ? (v as T) : fallback);
 
@@ -109,7 +117,9 @@ export function normalizePrefs(raw: unknown): Prefs {
     width: pick(r.width, ["full", "readable"] as const, "full"),
     task_continue: r.task_continue === true,
     transparency: pick(r.transparency, ["on", "off"] as const, "on"),
-    chat_width: typeof r.chat_width === "number" && r.chat_width >= 0 && r.chat_width <= 10000 ? Math.round(r.chat_width) : 0,
+    chat_width: pixels(r.chat_width),
+    files_width: pixels(r.files_width),
+    run_settings_width: pixels(r.run_settings_width),
   };
 }
 

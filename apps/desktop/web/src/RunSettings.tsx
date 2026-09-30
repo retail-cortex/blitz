@@ -18,11 +18,19 @@ import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { useOnConfigChanged } from "./workspaceSettings";
 import {
   mdiAlertCircleOutline,
+  mdiBrain,
   mdiChevronDown,
   mdiChevronRight,
   mdiClose,
   mdiDeleteOutline,
+  mdiKeyOutline,
+  mdiRobotOutline,
+  mdiShieldCheckOutline,
+  mdiShieldKeyOutline,
+  mdiSineWave,
+  mdiTextBoxOutline,
   mdiTuneVariant,
+  mdiTune,
 } from "@mdi/js";
 import { sessions, workspaces } from "./api";
 import { message, reason } from "./errors";
@@ -34,16 +42,43 @@ import { PermissionSettings } from "./PermissionSettings";
 import { ProviderSettings } from "./ProviderSettings";
 import { useApp } from "./state";
 import { Button, Field, Icon, IconButton, useSnackbar } from "./ui/controls";
+import { ResizeHandle } from "./ui/ResizeHandle";
 
-function Section({ title, children, open: initial = true }: { title: string; children: ReactNode; open?: boolean }) {
+/**
+ * One of the panel's sections, a card: its icon and title, where what it
+ * sets is kept (scope), and folded, a summary of what's set. pairs lays
+ * its fields out two to a row when the panel is wide enough.
+ */
+function Section({
+  icon,
+  title,
+  scope,
+  summary,
+  pairs,
+  children,
+  open: initial = true,
+}: {
+  icon: string;
+  title: string;
+  scope?: string;
+  summary?: string;
+  pairs?: boolean;
+  children: ReactNode;
+  open?: boolean;
+}) {
   const [open, setOpen] = useState(initial);
   return (
-    <section className="panel-section">
+    <section className={`panel-section ${open ? "open" : ""}`}>
       <button className="panel-section-head" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
-        <span className="t-title-sm">{title}</span>
+        <Icon path={icon} size="sm" className="panel-section-icon" />
+        <span className="panel-section-title">
+          <span className="t-title-sm">{title}</span>
+          {!open && summary && <span className="t-body-sm muted ellipsis">{summary}</span>}
+        </span>
+        {scope && <span className="scope-chip t-label-sm">{scope}</span>}
         <Icon path={open ? mdiChevronDown : mdiChevronRight} size="sm" />
       </button>
-      {open && <div className="panel-section-body">{children}</div>}
+      {open && <div className={`panel-section-body ${pairs ? "pairs" : ""}`}>{children}</div>}
     </section>
   );
 }
@@ -52,7 +87,22 @@ function Section({ title, children, open: initial = true }: { title: string; chi
  * The workspace's run settings, beside the conversation: agent and model,
  * how hard it thinks, generation settings, permissions, and context.
  */
-export function RunSettings({ dir, settings, error, onChanged }: { dir: string; settings?: GetSettingsResponse; error: string; onChanged: () => void }) {
+export function RunSettings({
+  dir,
+  settings,
+  error,
+  onChanged,
+  width,
+  onResize,
+}: {
+  dir: string;
+  settings?: GetSettingsResponse;
+  error: string;
+  onChanged: () => void;
+  /** Its width in pixels; dragging its edge sets another. */
+  width: number;
+  onResize: (w: number) => void;
+}) {
   const { update } = useApp();
   const snack = useSnackbar();
   const [agents, setAgents] = useState<AgentInfo[]>([]);
@@ -122,7 +172,8 @@ export function RunSettings({ dir, settings, error, onChanged }: { dir: string; 
 
   const s = modelInfo?.settings;
   return (
-    <aside className="run-settings" aria-label={t("desktop.run_settings")}>
+    <aside className="run-settings" aria-label={t("desktop.run_settings")} style={{ width }}>
+      <ResizeHandle width={width} edge="left" min={340} max={() => Math.min(720, window.innerWidth - 420)} label={t("desktop.rs.resize")} onResize={onResize} />
       <div className="panel-head">
         <Icon path={mdiTuneVariant} />
         <span className="t-title">{t("desktop.run_settings")}</span>
@@ -135,7 +186,7 @@ export function RunSettings({ dir, settings, error, onChanged }: { dir: string; 
         </div>
       )}
       <div className="panel-scroll">
-        <Section title={t("desktop.rs.agent_model")}>
+        <Section icon={mdiRobotOutline} title={t("desktop.rs.agent_model")} summary={settings ? `${settings.agent} · ${settings.model}` : undefined}>
           <Field label={t("desktop.rs.agent")}>
             {(id) => (
               <select id={id} className="select" value={settings?.agent ?? ""} onChange={(e) => act(() => workspaces.setAgent({ workspace: dir, name: e.target.value }), t("desktop.rs.agent_switched"))}>
@@ -170,11 +221,11 @@ export function RunSettings({ dir, settings, error, onChanged }: { dir: string; 
           </Field>
         </Section>
 
-        <Section title={t("desktop.rs.keys")} open={false}>
+        <Section icon={mdiKeyOutline} title={t("desktop.rs.keys")} scope={t("desktop.rs.scope.workspace")} summary={settings?.provider} open={false}>
           <ProviderSettings workspace={dir} compact />
         </Section>
 
-        <Section title={t("desktop.rs.thinking")}>
+        <Section icon={mdiBrain} title={t("desktop.rs.thinking")} summary={efforts().find((e) => e.value === (settings?.effort ?? ""))?.label} pairs>
           <Field label={t("desktop.rs.effort")} supporting={t("desktop.rs.effort_help")}>
             {(id) => (
               <select id={id} className="select" value={settings?.effort ?? ""} onChange={(e) => act(() => workspaces.setSetting({ workspace: dir, key: "effort", value: e.target.value || "auto" }))}>
@@ -189,7 +240,12 @@ export function RunSettings({ dir, settings, error, onChanged }: { dir: string; 
           <NumberSetting label={t("desktop.rs.budget")} help={t("desktop.rs.budget_help")} value={s?.thinkingBudget} min={0} step={1024} onCommit={(v) => setModelSetting("thinking_budget", v)} />
         </Section>
 
-        <Section title={settings?.model ? t("desktop.rs.generation_for", { model: settings.model }) : t("desktop.rs.generation")}>
+        <Section
+          icon={mdiSineWave}
+          title={settings?.model ? t("desktop.rs.generation_for", { model: settings.model }) : t("desktop.rs.generation")}
+          scope={t("desktop.rs.scope.model")}
+          summary={[s?.temperature !== undefined && `${t("desktop.rs.temperature")} ${s.temperature}`, s?.topP !== undefined && `${t("desktop.rs.top_p")} ${s.topP}`].filter(Boolean).join(" · ") || t("desktop.rs.defaults")}
+        >
           <SliderSetting label={t("desktop.rs.temperature")} value={s?.temperature} fallback={modelInfo?.globalTemperature} min={0} max={2} step={0.05} onCommit={(v) => setModelSetting("temperature", v)} />
           <SliderSetting label={t("desktop.rs.top_p")} value={s?.topP} fallback={1} min={0.01} max={1} step={0.01} onCommit={(v) => setModelSetting("top_p", v)} />
           <NumberSetting label={t("desktop.rs.max_tokens")} value={s?.maxTokens} placeholder={modelInfo?.globalMaxTokens ? String(modelInfo.globalMaxTokens) : ""} min={1} step={256} onCommit={(v) => setModelSetting("max_tokens", v)} />
@@ -199,7 +255,12 @@ export function RunSettings({ dir, settings, error, onChanged }: { dir: string; 
           </Button>
         </Section>
 
-        <Section title={t("desktop.rs.behaviour")}>
+        <Section
+          icon={mdiTune}
+          title={t("desktop.rs.behaviour")}
+          summary={[modes().find((m) => m.value === (settings?.permissionMode ?? "default"))?.label, agencies().find((a) => a.value === settings?.agency)?.label].filter(Boolean).join(" · ")}
+          pairs
+        >
           <Field label={t("desktop.rs.mode")} supporting={modes().find((m) => m.value === settings?.permissionMode)?.detail}>
             {(id) => (
               <select id={id} className="select" value={settings?.permissionMode ?? "default"} onChange={(e) => act(() => workspaces.setPermissionMode({ workspace: dir, mode: e.target.value }))}>
@@ -247,11 +308,11 @@ export function RunSettings({ dir, settings, error, onChanged }: { dir: string; 
           </Field>
         </Section>
 
-        <Section title={t("desktop.rs.rules", { count: rules.filter((r) => r.source !== "built-in").length })} open={false}>
+        <Section icon={mdiShieldCheckOutline} title={t("desktop.rs.rules", { count: rules.filter((r) => r.source !== "built-in").length })} scope={t("desktop.rs.scope.workspace")} open={false}>
           <PermissionSettings workspace={dir} compact onChanged={load} />
         </Section>
 
-        <Section title={t("desktop.rs.approvals", { count: approvals.length })} open={false}>
+        <Section icon={mdiShieldKeyOutline} title={t("desktop.rs.approvals", { count: approvals.length })} open={false}>
           {approvals.length === 0 && <p className="t-body-sm muted">{t("desktop.rs.approvals_none")}</p>}
           <div className="list">
             {approvals.map((a) => (
@@ -272,7 +333,13 @@ export function RunSettings({ dir, settings, error, onChanged }: { dir: string; 
           )}
         </Section>
 
-        <Section title={t("desktop.rs.context")} open={false}>
+        <Section
+          icon={mdiTextBoxOutline}
+          title={t("desktop.rs.context")}
+          scope={t("desktop.rs.scope.session")}
+          summary={usage && usage.calls > 0 ? t("desktop.rs.tokens", { count: Number(usage.lastPrompt).toLocaleString(language()) }) : undefined}
+          open={false}
+        >
           {usage && usage.calls > 0 ? (
             <dl className="facts">
               <dt>{t("desktop.rs.context_now")}</dt>
