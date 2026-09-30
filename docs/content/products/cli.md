@@ -32,7 +32,21 @@ blitz --output-format stream-json "…"   # one JSON object per event, then the 
 blitz --max-turns 20 "…"                # cap the model calls
 blitz --max-cost-usd 0.50 --timeout 15m "…"   # cap the cost and the wall-clock time
 blitz --permission-mode dont-ask "…"    # refuse whatever would ask, instead of waiting
+blitz --output-format json --json-schema person.json "Who wrote this repo?"   # structured_result: JSON valid against the schema
+blitz --no-session-persistence "…"      # leave no session behind
 ```
+
+Another program can drive a whole session over pipes: with `--input-format stream-json --output-format stream-json`, each stdin line is a prompt or an answer, and approvals and questions come out as lines to answer:
+
+```text
+→ {"type": "user", "text": "add a test for parse()"}
+← {"type": "approval_request", "id": "approval-1", "tool": "create_file", "detail": "…", …}
+→ {"type": "approval", "id": "approval-1", "decision": "once"}
+← {"type": "result", "result": "Added parse_test.go …", …}
+→ {"type": "user", "text": "now run it"}
+```
+
+Decisions are `once`, `session`, `always` or `deny`; a question is answered with `{"type": "answer", "id": …, "answer": "…"}`. When stdin closes, Blitz finishes the queued prompts and exits.
 
 | Exit code | Meaning |
 |---|---|

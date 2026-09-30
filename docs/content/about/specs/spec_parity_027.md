@@ -7,7 +7,7 @@ weight: 27
 
 | | |
 |---|---|
-| Status | **Partly implemented:** 69 of its 99 requirements done and 1 in part (counted 2026-09-30); the rest open. A gap analysis of 2026-09-26, to be closed before new features are added. |
+| Status | **Partly implemented:** 72 of its 99 requirements done and 1 in part (counted 2026-09-30); the rest open. A gap analysis of 2026-09-26, to be closed before new features are added. |
 | Compared with | **Claude Code** (current docs at code.claude.com, September 2026: v2.1.28x); **Antigravity CLI** (`agy` 1.1–1.2, September 2026); **Antigravity** 2.0 (Google's agent-first IDE and Agent Manager) |
 | Depends on | Specs 001–025 (what Blitz does today) and [spec_backlog_026](spec_backlog_026.md) (Blitz's own gaps; overlapping items are referenced, not repeated) |
 
@@ -129,9 +129,9 @@ Decision §12.2. **CC** `/cd <path>` (June 2026) moves the session to another di
 ### 5.3 Headless and scripting — P0/P1
 **CC** `--output-format stream-json` plus `--input-format stream-json`, `--json-schema`, `--max-budget-usd`, `--include-partial-messages`, `--permission-prompt-tool`, `--no-session-persistence`. **AGY** `--json-schema`, `--print-timeout`. **Blitz today:** text / json / stream-json output, `--max-turns`, `--plan`.
 - **PAR-CLI-01 (P0, S)** ✅ *Done 2026-09-26 (ROADMAP 25.2; now [spec_cli_020](spec_cli_020.md) CLI-06 and [spec_workspace_018](spec_workspace_018.md) WS-29).* `--max-cost-usd N` stops a one-shot run when its cost passes N (exit 3, like `--max-turns`), and `--timeout <duration>` stops it after a wall-clock limit (exit 3).
-- **PAR-CLI-02 (P1, M)** `--json-schema <file|json>`: the final answer must be JSON valid against the schema; the model is asked for it (native structured output where the provider supports it), the result is validated and retried once with the validation error, and it appears as `structured_result` in json output (exit 1 if still invalid).
-- **PAR-CLI-03 (P1, M)** `--input-format stream-json`: stdin carries a stream of user messages, approval answers and question answers as JSON lines, so another program can drive a multi-turn session and answer approvals without a terminal.
-- **PAR-CLI-04 (P2, S)** `--no-session-persistence` runs without saving the session or the audit context (the audit log itself is still written).
+- **PAR-CLI-02 (P1, M)** ✅ *Done 2026-09-30 ([spec_cli_020](spec_cli_020.md) CLI-08), by prompting and validating (native structured output would turn off tools).* `--json-schema <file|json>`: the final answer must be JSON valid against the schema; the model is asked for it (native structured output where the provider supports it), the result is validated and retried once with the validation error, and it appears as `structured_result` in json output (exit 1 if still invalid).
+- **PAR-CLI-03 (P1, M)** ✅ *Done 2026-09-30 ([spec_cli_020](spec_cli_020.md) CLI-07).* `--input-format stream-json`: stdin carries a stream of user messages, approval answers and question answers as JSON lines, so another program can drive a multi-turn session and answer approvals without a terminal.
+- **PAR-CLI-04 (P2, S)** ✅ *Done 2026-09-30 ([spec_cli_020](spec_cli_020.md) CLI-09).* `--no-session-persistence` runs without saving the session or the audit context (the audit log itself is still written).
 
 ### 5.4 MCP completeness — P1, M
 **CC** `claude mcp add/list/remove/get`, project `.mcp.json`, `--mcp-config`, OAuth (`claude mcp login`), resources (`ListMcpResources`, `ReadMcpResource`), prompts as slash commands, elicitation, tool search for large tool sets, SSE and HTTP transports. **AGY** `agy mcp add/remove/list/enable/disable`, `.agents/mcp_config.json`. **Blitz today:** stdio and streamable-HTTP servers from `[[mcp.servers]]` in config ([spec_mcp_009](spec_mcp_009.md)).

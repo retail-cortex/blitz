@@ -46,6 +46,9 @@ Run flags (root and `exec`):
 | `-r/--resume [ID\|NAME]` | Resume a session by ID; bare `-r` means `latest`; a snapshot name starts a new session from it |
 | `-C/--continue` | Continue this workspace's most recent non-snapshot session |
 | `--output-format text\|json\|stream-json` | One-shot output format (default `text`) |
+| `--input-format text\|stream-json` | stream-json: stdin carries JSON lines driving the session (CLI-07); needs `--output-format stream-json` |
+| `--json-schema FILE\|JSON` | The answer must be JSON valid against the schema (CLI-08) |
+| `--no-session-persistence` | Keep nothing of the run's session (CLI-09) |
 | `--max-turns N` | Cap model calls in a one-shot run (0 = unlimited) |
 | `--max-cost-usd N` | Stop a one-shot run once it has cost more than N USD (0 = unlimited; needs a priced model, else a warning) |
 | `--timeout D` | Stop a one-shot run after D (e.g. `15m`; 0 = unlimited) |
@@ -102,6 +105,10 @@ Root only: `-i/--interactive` (REPL even with a prompt), `-v/--version` (prints 
 | 130 | interrupted | `errors.Is(err, context.Canceled)` |
 
 - **CLI-30** Errors are printed once to stderr via the localized `repl.error` message; usage is silenced. Flag errors append "Run '<cmd> --help' for usage." `doctor`, `--help` and CLI errors are English by policy (see [spec_i18n_004](spec_i18n_004.md)).
+
+- **CLI-07** `--input-format stream-json` (PAR-CLI-03): a one-shot run (the prompt argument is optional) reads JSON lines from stdin: `{"type": "user", "text": …}` runs a turn (in order, one at a time, after the prompt argument's), `{"type": "approval", "id": …, "decision": "once|session|always|deny"}` answers an `approval_request` line (`id`, `tool`, `kind`, `detail`, `diff`, `targets`, `key_label`, `must_ask`), and `{"type": "answer", "id": …, "answer": …}` answers a `question` line (`id`, `question`, `options`). Each turn writes its events and its `result` line as stream-json output does. A line that isn't JSON, has an unknown type, or answers nothing waiting gets an `error` line; the run goes on. When stdin ends, the queued turns finish, requests still waiting are denied, background processes are stopped, and the run exits with the last turn's error code. `--image` and `blitz init`'s prompt apply to the first turn only.
+- **CLI-08** `--json-schema` (PAR-CLI-02) takes a schema (draft 2020-12 or 07) inline or from a file; an invalid one is a usage error. The prompt sent (not the transcript's) asks for a single JSON value valid against it; the answer's JSON (all of it, a fenced block, or the outermost braces or brackets) is validated. If it fails, one more turn in the session gives the error and asks again. The valid value is `structured_result` in json and stream-json results; still invalid, the run fails (exit 1, the error in the result). Providers' native structured output isn't used: it would turn off tools for Gemini.
+- **CLI-09** `--no-session-persistence` (PAR-CLI-04) keeps the run's sessions in a temporary folder removed at exit, and runs locally (not in the service); the audit log is written as usual. With `--resume` or `--continue`, or without a prompt, it's a usage error, as is `--json-schema` without one.
 
 ## 5. Tab completion (REPL)
 - **CLI-40** The completer registers every slash command and fixed sub-arguments (`skills list|show|search`, `session list|new|load|save`, `search web|session`, `envs prune|remove`, `memory show|reload|add`, `approvals revoke|clear`, `diff git`, `attach clear`, `undo --force`, `set agency=`).
