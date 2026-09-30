@@ -96,7 +96,7 @@ Suggested order (from NEXT_STEPS): run the manual checks (§9) first — their f
 - **BL-SK-03 `requires-python`** (S): ✅ *Done 2026-09-30 ([spec_skills_013](spec_skills_013.md) SK-48); installing an interpreter asks first.* a script's interpreter constraint is honoured with uv-managed interpreters when `uv` is present; otherwise the script is blocked with the reason.
 - **BL-SK-04 `storage_uri` and resources** (M): ✅ *Done 2026-09-30 ([spec_skills_013](spec_skills_013.md) SK-49, SK-34); the pin is `storage_sha256`, Blitz's field.* scripts from `storage_uri` are fetched through the web rules (approval per host), pinned by hash in the definition, and cached; Castor `resources` are listed by `activate_skill`.
 - **BL-SK-05 Network field** (S, needs Castor): replace `custom_hints.network` with a proto field once Castor adds one; keep reading the hint.
-- **BL-SK-06 Real installs in CI** (S): CI runs the opt-in environment tests (`BLITZ_PYENV_TESTS=1`) on Linux.
+- **BL-SK-06 Real installs in CI** (S): ✅ *Done 2026-09-30: `.github/workflows/ci.yml`'s Linux build runs them (Python packages, npm packages, a uv-managed Python) and fails if they skip.* CI runs the opt-in environment tests (`BLITZ_PYENV_TESTS=1`) on Linux.
 
 ## 7. Desktop app
 

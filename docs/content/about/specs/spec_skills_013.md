@@ -75,6 +75,8 @@ Skills are reusable instructions (`SKILL.md`) an agent loads on demand, optional
 ## 8. Environments (`/envs`)
 - **SK-60** `/envs` lists key, packages, skills that used it, size, last use, ready; `/envs remove <key>`; `/envs prune` removes incomplete environments and those no policy-allowed script needs.
 
+CI's Linux build runs the tests that install for real, which need the network (`BLITZ_PYENV_TESTS=1`, `BLITZ_UV_PYTHON`), with Node 22 and uv set up, and fails if any skips (BL-SK-06).
+
 ## 9. Diagnostics
 - **SK-70** `/skills list|show <name>|search <q>`; `show` gives scripts, dependencies, tier, what the policy allows, and the content hash (for `trusted_hashes`). `doctor` reports unparseable skills, blocked scripts and the script sandbox.
 
