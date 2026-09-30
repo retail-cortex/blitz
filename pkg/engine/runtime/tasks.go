@@ -250,6 +250,9 @@ func (e *Engine) StartTask(ctx context.Context, agentName, prompt string) (api.T
 	if maxTurns <= 0 {
 		maxTurns = 50
 	}
+	if spec, _ := e.agentReg.Get(agentName); spec != nil && spec.MaxTurns > 0 {
+		maxTurns = spec.MaxTurns // its own budget, as in the foreground
+	}
 
 	m := e.tasks
 	m.mu.Lock()

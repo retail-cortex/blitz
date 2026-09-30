@@ -17,6 +17,8 @@ package runtime
 import (
 	"context"
 	"iter"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -245,6 +247,81 @@ func TestTaskAsksItsSession(t *testing.T) {
 			require.NoError(t, err)
 			assert.Equal(t, c.state, got.State, "%+v", got)
 			assert.Empty(t, f.eng.PendingRequests(nil), "a request still waits")
+		})
+	}
+}
+
+// agentFile writes an agent with frontmatter front into dir and loads it.
+func agentFile(t *testing.T, e *Engine, dir, name, front string) {
+	t.Helper()
+	require.NoError(t, os.MkdirAll(dir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, name+".md"), []byte("---\nname: "+name+"\ndescription: test\ntools: [create_file, list_files]\n"+front+"\n---\nDo it."), 0o644))
+	require.NoError(t, e.agentReg.LoadExternalAgents(dir))
+}
+
+// An agent's frontmatter sets its own mode and budget through invoke_agent.
+func TestAgentRunDefaults(t *testing.T) {
+	create := &genai.Content{Role: genai.RoleModel, Parts: []*genai.Part{{FunctionCall: &genai.FunctionCall{Name: "create_file", Args: map[string]any{"path": "made.txt", "content": "hi\n"}}}}}
+	list := &genai.Content{Role: genai.RoleModel, Parts: []*genai.Part{{FunctionCall: &genai.FunctionCall{Name: "list_files", Args: map[string]any{}}}}}
+	cases := []struct {
+		name    string
+		front   string
+		inside  bool // the project's own agent
+		replies []*genai.Content
+		created bool
+		err     error
+	}{
+		{name: "accept-edits, the user's agent", front: "permission_mode: accept-edits", replies: []*genai.Content{create, textContent("ok")}, created: true},
+		{name: "accept-edits, an untrusted project's agent", front: "permission_mode: accept-edits", inside: true, replies: []*genai.Content{create, textContent("ok")}},
+		{name: "plan", front: "permission_mode: plan", replies: []*genai.Content{create, textContent("ok")}},
+		{name: "its own budget", front: "max_turns: 2", replies: []*genai.Content{list, list, list, list}, err: api.ErrMaxTurns},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			sub := NewMockLLM("sub", c.replies...)
+			f := newEngineWith(t, fixtureOpts{
+				cfg:  func(cfg *config.Config) { cfg.Blitz.AutoApprove = false },
+				opts: []Option{WithAgentModel("worker", sub)},
+			})
+			dir := t.TempDir()
+			if c.inside {
+				dir = filepath.Join(f.cfg.Tools.WorkspaceDir, "agents")
+			}
+			agentFile(t, f.eng, dir, "worker", c.front)
+			ctx := context.WithValue(context.Background(), runStateKey{}, &runState{sessionID: "s", maxTurns: 50})
+			_, err := f.eng.InvokeSubagent(ctx, "worker", "make a file")
+			if c.err != nil {
+				assert.ErrorIs(t, err, c.err)
+				return
+			}
+			require.NoError(t, err)
+			_, statErr := os.Stat(filepath.Join(f.cfg.Tools.WorkspaceDir, "made.txt"))
+			assert.Equal(t, c.created, statErr == nil, "made.txt created: %v", statErr == nil)
+		})
+	}
+}
+
+// An agent whose frontmatter says background: true runs in the
+// background unless the call says otherwise.
+func TestAgentBackgroundByDefault(t *testing.T) {
+	cases := []struct {
+		name string
+		args map[string]any
+		task bool
+	}{
+		{name: "the agent's default", args: map[string]any{"agent_name": "worker", "prompt": "review"}, task: true},
+		{name: "the call says no", args: map[string]any{"agent_name": "worker", "prompt": "review", "background": false}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			invoke := &genai.Content{Role: genai.RoleModel, Parts: []*genai.Part{{FunctionCall: &genai.FunctionCall{Name: "invoke_agent", Args: c.args}}}}
+			f := newEngineWith(t, fixtureOpts{opts: []Option{WithAgentModel("worker", NewMockLLM("sub"))}}, invoke, textContent("ok"))
+			t.Cleanup(f.eng.StopTasks)
+			agentFile(t, f.eng, t.TempDir(), "worker", "background: true")
+			got, err := functionResponses(t, f.eng, "s", "go")
+			require.NoError(t, err)
+			_, isTask := got["invoke_agent"]["task_id"]
+			assert.Equal(t, c.task, isTask, "%v", got["invoke_agent"])
 		})
 	}
 }

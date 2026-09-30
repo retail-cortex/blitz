@@ -77,3 +77,28 @@ func checkSubstr(s, substr string) bool {
 	}
 	return false
 }
+
+func TestAgentRunDefaults(t *testing.T) {
+	cases := []struct {
+		name    string
+		front   string
+		want    AgentMetadata
+		problem string
+	}{
+		{name: "none", front: "name: a", want: AgentMetadata{Name: "a"}},
+		{name: "all", front: "name: a\npermission_mode: accept-edits\nmax_turns: 12\nbackground: true", want: AgentMetadata{Name: "a", PermissionMode: "accept-edits", MaxTurns: 12, Background: true}},
+		{name: "an unknown mode", front: "name: a\npermission_mode: yolo", problem: "permission_mode"},
+		{name: "negative turns", front: "name: a\nmax_turns: -1", problem: "max_turns"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			spec, err := ParseMarkdownSpec([]byte("---\n" + c.front + "\n---\nprompt"))
+			if c.problem != "" {
+				assert.ErrorContains(t, err, c.problem)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, c.want, spec.AgentMetadata)
+		})
+	}
+}

@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/retail-cortex/blitz/pkg/api"
 	"gopkg.in/yaml.v3"
 )
 
@@ -30,12 +31,25 @@ type AgentMetadata struct {
 	Tools        []string `yaml:"tools"`
 	DefaultModel string   `yaml:"default_model,omitempty"`
 	AgencyLevel  string   `yaml:"agency_level,omitempty"`
+	// PermissionMode is the mode it runs in through invoke_agent: default,
+	// plan, accept-edits, dont-ask or bypass ("": the workspace's). A
+	// project's agent may only tighten until the project is trusted, and
+	// bypass needs the OS sandbox.
+	PermissionMode string `yaml:"permission_mode,omitempty"`
+	// MaxTurns caps its model calls through invoke_agent (0: the caller's
+	// budget, or a background task's).
+	MaxTurns int `yaml:"max_turns,omitempty"`
+	// Background makes invoke_agent run it in the background unless the
+	// call says otherwise.
+	Background bool `yaml:"background,omitempty"`
 }
 
 // AgentSpec represents a parsed agent specification with frontmatter and markdown body.
 type AgentSpec struct {
 	AgentMetadata
 	SystemPrompt string
+	// Path is the file it came from ("" for a built-in agent).
+	Path string
 }
 
 // ParseMarkdownSpec parses a markdown file containing YAML frontmatter.
@@ -62,6 +76,14 @@ func ParseMarkdownSpec(content []byte) (*AgentSpec, error) {
 
 	if meta.Name == "" {
 		return nil, fmt.Errorf("agent spec must declare a 'name' in frontmatter")
+	}
+	if meta.PermissionMode != "" {
+		if _, err := api.ParsePermissionMode(meta.PermissionMode); err != nil {
+			return nil, fmt.Errorf("permission_mode: %w", err)
+		}
+	}
+	if meta.MaxTurns < 0 {
+		return nil, fmt.Errorf("max_turns must not be negative")
 	}
 
 	return &AgentSpec{

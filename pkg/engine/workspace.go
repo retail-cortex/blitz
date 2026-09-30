@@ -262,6 +262,7 @@ func Open(ctx context.Context, cfg *config.Config, o Options) (*Workspace, error
 		runtime.WithUsageStore(w.storage),
 		runtime.WithNotice(o.Warn),
 		runtime.WithTaskDone(w.taskEnded),
+		runtime.WithProjectTrusted(w.project.Loaded),
 	)...)
 	if err != nil {
 		w.Close()

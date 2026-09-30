@@ -118,6 +118,7 @@ func (r *Registry) LoadExternalAgents(dirs ...string) error {
 				errs = append(errs, fmt.Errorf("%s: agent name %q is reserved by a built-in agent", path, spec.Name))
 				return nil
 			}
+			spec.Path = path
 			r.agents[spec.Name] = spec
 			return nil
 		})

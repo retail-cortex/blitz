@@ -134,6 +134,11 @@ type UsageStore interface {
 // WithUsageStore keeps sessions' usage in s.
 func WithUsageStore(s UsageStore) Option { return func(e *Engine) { e.usageStore = s } }
 
+// WithProjectTrusted says whether the workspace's project settings are
+// trusted: until they are, the project's own agents may only tighten the
+// permission mode (spec_background_agents_032 BGA-50).
+func WithProjectTrusted(trusted bool) Option { return func(e *Engine) { e.projectTrusted = trusted } }
+
 // WithNotice sets where the engine reports events the user should know
 // about, such as a fallback model taking over (default: nowhere).
 func WithNotice(f func(string)) Option { return func(e *Engine) { e.notice = f } }
@@ -171,12 +176,14 @@ func WithInstructions(text string) Option { return func(e *Engine) { e.extraInst
 // Engine orchestrates the Google ADK execution lifecycle for Blitz.
 // It is safe for concurrent use.
 type Engine struct {
-	cfg       *config.Config
-	tasks     *taskManager
-	agentReg  *agents.Registry
-	skillProv *skills.Provider
-	toolReg   *tools.Registry
-	usage     *UsageTracker
+	cfg   *config.Config
+	tasks *taskManager
+	// projectTrusted: the project's agents may loosen the mode.
+	projectTrusted bool
+	agentReg       *agents.Registry
+	skillProv      *skills.Provider
+	toolReg        *tools.Registry
+	usage          *UsageTracker
 
 	// Shared across runner rebuilds so switching agent or model keeps history.
 	sessions  session.Service
@@ -978,6 +985,7 @@ func (e *Engine) InvokeSubagent(ctx context.Context, agentName, prompt string) (
 	}
 
 	subCtx := withSettingsLookup(context.WithValue(ctx, subagentDepthKey{}, depth+1), e.lookupSettings)
+	subCtx = e.agentRun(subCtx, spec)
 	// Its shells and tasks count for the session that started it.
 	subCtx = tools.WithOwnerSession(subCtx, e.sessionOf(ctx))
 	observe, _ := ctx.Value(subagentEventKey{}).(func(*session.Event))

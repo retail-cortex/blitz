@@ -32,6 +32,7 @@ go_library(
         "//pkg/engine:__subpackages__",
     ],
     deps = [
+        "//pkg/api",
         "//pkg/config",
         "//pkg/engine/agents/builtin",
         "@in_gopkg_yaml_v3//:yaml_v3",

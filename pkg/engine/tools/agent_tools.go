@@ -72,7 +72,7 @@ type InvokeAgentInput struct {
 	AgentName string `json:"agent_name" jsonschema:"The name of the agent to invoke (e.g. qa, helios, planning-agent)"`
 	Prompt    string `json:"prompt" jsonschema:"The specific task instruction for the delegated agent"`
 	// Background runs it beside this turn as a task.
-	Background bool `json:"background,omitempty" jsonschema:"Run the agent in the background as a task and return at once with its task_id; its result reaches you when it finishes (task_output reads it before). Nothing it would need to ask the user about runs. Use for independent work: reviews, research, long test runs"`
+	Background *bool `json:"background,omitempty" jsonschema:"Run the agent in the background as a task and return at once with its task_id; its result reaches you when it finishes (task_output reads it before). Nothing it would need to ask the user about runs. Use for independent work: reviews, research, long test runs"`
 }
 
 // InvokeAgentOutput holds result of invoking an agent.
@@ -97,13 +97,18 @@ func NewInvokeAgentTool(registry *agents.Registry, hooks *Hooks) (tool.Tool, err
 			fail := func(msg string) (InvokeAgentOutput, error) {
 				return InvokeAgentOutput{AgentName: input.AgentName, Error: msg}, nil
 			}
-			if _, ok := registry.Get(input.AgentName); !ok {
+			spec, ok := registry.Get(input.AgentName)
+			if !ok {
 				return fail(fmt.Sprintf("agent '%s' is not registered; use list_agents to inspect available agents", input.AgentName))
 			}
 			if strings.TrimSpace(input.Prompt) == "" {
 				return fail("prompt must not be empty")
 			}
-			if input.Background {
+			background := spec.Background // the agent's default
+			if input.Background != nil {
+				background = *input.Background
+			}
+			if background {
 				runner := hooks.taskRunner()
 				switch {
 				case runner == nil:

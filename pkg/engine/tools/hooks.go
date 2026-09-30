@@ -241,6 +241,15 @@ type TaskAsker struct {
 	Ask     api.UserPromptFunc
 }
 
+type modeKey struct{}
+
+// WithMode runs ctx's actions in permission mode m instead of the
+// workspace's (an agent's own permission_mode). The caller checks that
+// bypass may be used.
+func WithMode(ctx context.Context, m api.PermissionMode) context.Context {
+	return context.WithValue(ctx, modeKey{}, m)
+}
+
 type taskAskerKey struct{}
 
 // WithTaskAsker routes ctx's approval requests and questions to a,
@@ -297,6 +306,9 @@ func (h *Hooks) Approve(ctx context.Context, req api.ApprovalRequest) error {
 	}
 	h.mu.RLock()
 	policy, approver, store, log := h.policy, h.approver, h.store, h.audit
+	if m, ok := ctx.Value(modeKey{}).(api.PermissionMode); ok {
+		policy.Mode = m
+	}
 	remembered := req.Key != "" && h.session[req.Key]
 	h.mu.RUnlock()
 
