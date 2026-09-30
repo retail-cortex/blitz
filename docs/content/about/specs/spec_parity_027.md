@@ -7,7 +7,7 @@ weight: 27
 
 | | |
 |---|---|
-| Status | **Partly implemented:** 38 of its 99 requirements done and 2 in part (counted 2026-09-29); the rest open. A gap analysis of 2026-09-26, to be closed before new features are added. |
+| Status | **Partly implemented:** 42 of its 99 requirements done and 2 in part (counted 2026-09-30); the rest open. A gap analysis of 2026-09-26, to be closed before new features are added. |
 | Compared with | **Claude Code** (current docs at code.claude.com, September 2026: v2.1.28x); **Antigravity CLI** (`agy` 1.1–1.2, September 2026); **Antigravity** 2.0 (Google's agent-first IDE and Agent Manager) |
 | Depends on | Specs 001–025 (what Blitz does today) and [spec_backlog_026](spec_backlog_026.md) (Blitz's own gaps; overlapping items are referenced, not repeated) |
 
@@ -105,10 +105,10 @@ The threat is real: Claude Code's project settings have had CVE-2025-59536 (hook
 
 ### 4.5 `/cd` — P1, M
 Decision §12.2. **CC** `/cd <path>` (June 2026) moves the session to another directory and asks to trust a new one. **Blitz today:** rejected; `blitz -d <dir>` at start.
-- **PAR-SES-40** `/cd <path>` (and `CdSession` in the API) closes the current workspace and opens the target from scratch through `engine.Open` — new workspace lock, file roots, blocked paths, OS sandbox profile, memory, MCP servers and project configuration (§2.4, including its trust prompt) — then moves the active session to the new workspace so `--continue` there finds it. Nothing of the old boundary is reused or patched.
-- **PAR-SES-41** Before leaving, running background processes are handled as at exit (TUI-40: kill, wait or cancel the move); a target already open elsewhere (`ErrWorkspaceBusy`) refuses the move and leaves the session where it was.
-- **PAR-SES-42** Checkpoints taken in the old workspace can't be undone or rewound from the new one (`/undo` says to `/cd` back); the new workspace's instruction files are added to the conversation as a message rather than rebuilding earlier context.
-- **PAR-SES-43** Attached to the service, `/cd` switches the client to the target workspace in the service; the old workspace stays open there for other clients.
+- **PAR-SES-40** ✅ *Done 2026-09-30 ([spec_tui_019](spec_tui_019.md) TUI-43, [spec_sessions_017](spec_sessions_017.md) SES-18).* `/cd <path>` (and `CdSession` in the API) closes the current workspace and opens the target from scratch through `engine.Open` — new workspace lock, file roots, blocked paths, OS sandbox profile, memory, MCP servers and project configuration (§2.4, including its trust prompt) — then moves the active session to the new workspace so `--continue` there finds it. Nothing of the old boundary is reused or patched.
+- **PAR-SES-41** ✅ *Done 2026-09-30 ([spec_tui_019](spec_tui_019.md) TUI-43, [spec_sessions_017](spec_sessions_017.md) SES-18).* Before leaving, running background processes are handled as at exit (TUI-40: kill, wait or cancel the move); a target already open elsewhere (`ErrWorkspaceBusy`) refuses the move and leaves the session where it was.
+- **PAR-SES-42** ✅ *Done 2026-09-30 ([spec_tui_019](spec_tui_019.md) TUI-43, [spec_sessions_017](spec_sessions_017.md) SES-18).* Checkpoints taken in the old workspace can't be undone or rewound from the new one (`/undo` says to `/cd` back); the new workspace's instruction files are added to the conversation as a message rather than rebuilding earlier context.
+- **PAR-SES-43** ✅ *Done 2026-09-30 ([spec_tui_019](spec_tui_019.md) TUI-43, [spec_sessions_017](spec_sessions_017.md) SES-18).* Attached to the service, `/cd` switches the client to the target workspace in the service; the old workspace stays open there for other clients.
 
 ## 5. Tools
 

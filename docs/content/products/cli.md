@@ -78,6 +78,9 @@ blitz --permission-mode dont-ask "…"    # refuse whatever would ask, instead o
 | `/memory [reload\|add <note>]`, `/init` | Project instructions; have the agent write `BLITZ.md` |
 | `/approvals [revoke <n>\|clear]` | Remembered approval rules |
 | `/session list [--all]\|new\|load <id\|name>\|save <name>`, `/resume`, `/rename` | Sessions and snapshots, scoped to the workspace |
+| `/cd [path]` | Move the session to another workspace: it opens from scratch (its settings, trust question, sandbox, MCP servers), background work is dealt with as at exit, and `--continue` there finds the session; earlier prompts can't be rewound or undone from the new one |
+| `/tasks [show\|stop <id>]` | Background tasks (`invoke_agent` in the background) |
+| `/trust` | The workspace's project settings (`.blitz/settings.toml`), and trusting them |
 | `/agents`, `/agent <name>`, `/model <name>` | Agents and models; `/model anthropic/claude-sonnet-5` can switch provider |
 | `/pin_model`, `/unpin`, `/model_settings`, `/effort` | Per-agent models, per-model settings, reasoning effort ([models](../guide/models.md)) |
 | `/mode [name]`, `/permissions …` | Permission mode and rules ([safety](../guide/safety.md)) |
