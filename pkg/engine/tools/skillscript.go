@@ -146,11 +146,12 @@ func (s *SkillScripts) Run(ctx context.Context, in RunSkillScriptInput) (out Run
 		return fail("%v", err)
 	}
 	out.Sandbox = box.Name()
-	runtimeFind := SystemPython
+	var python string // the script's runtime: python3 (or a managed Python), or node
 	if ts {
-		runtimeFind = SystemNode
+		python, err = SystemNode()
+	} else {
+		python, err = s.pythonFor(ctx, box, skill.Name, requiresPython(skill, sc))
 	}
-	python, err := runtimeFind() // the script's runtime: python3, or node
 	if err != nil {
 		return fail("%v", err)
 	}
@@ -358,6 +359,23 @@ func materializeScript(skill *skills.Skill, sc skills.ScriptDefinition) (path, d
 		tmp = c
 	}
 	return path, tmp, cleanup, nil
+}
+
+// requiresPython is the Python a script needs: its definition's
+// requires_python, else its PEP 723 metadata's ("" when neither says).
+func requiresPython(skill *skills.Skill, sc skills.ScriptDefinition) string {
+	if sc.RequiresPython != "" {
+		return sc.RequiresPython
+	}
+	src := sc.InlineCode
+	if src == "" && sc.RelativePath != "" {
+		b, err := skill.ReadScript(sc.RelativePath)
+		if err != nil {
+			return ""
+		}
+		src = string(b)
+	}
+	return scriptRequiresPython(src)
 }
 
 // nodeFlags run a TypeScript script: its types stripped (Node 22.6+), and

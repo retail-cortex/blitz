@@ -177,6 +177,9 @@ type ScriptDefinition struct {
 	Dependencies         []string          `yaml:"dependencies,omitempty"`
 	TimeoutSeconds       int               `yaml:"timeout_seconds,omitempty"`
 	EnvironmentVariables map[string]string `yaml:"environment_variables,omitempty"`
+	// RequiresPython is the Python a script needs (">=3.11"); without it,
+	// the script's PEP 723 metadata may say (BL-SK-03).
+	RequiresPython string `yaml:"requires_python,omitempty"`
 }
 
 // CompiledReference is Castor's pointer to a registered, hashed skill.

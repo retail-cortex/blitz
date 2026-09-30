@@ -27,6 +27,7 @@ import (
 	"io"
 	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 
@@ -199,6 +200,22 @@ func (s *Skill) ScriptPath(rel string) (string, error) {
 		return "", fmt.Errorf("%q isn't a regular file", rel)
 	}
 	return filepath.Join(s.hostDir, filepath.FromSlash(rel)), nil
+}
+
+// ReadScript returns a script's source shipped in the skill (relative_path):
+// from its directory, or from the embedded files of a built-in skill.
+func (s *Skill) ReadScript(rel string) ([]byte, error) {
+	if s.hostDir != "" {
+		p, err := s.ScriptPath(rel)
+		if err != nil {
+			return nil, err
+		}
+		return os.ReadFile(p)
+	}
+	if s.fsys == nil || !inBundle(rel) {
+		return nil, fmt.Errorf("%q isn't in the skill", rel)
+	}
+	return fs.ReadFile(s.fsys, path.Join(s.root, rel))
 }
 
 // CopyTo writes the skill's files into dir (for built-in skills, whose
