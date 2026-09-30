@@ -13,6 +13,7 @@
 # limitations under the License.
 
 load("@gazelle//:def.bzl", "gazelle")
+load("@npm//:defs.bzl", "npm_link_all_packages")
 
 # gazelle:prefix github.com/retail-cortex/blitz
 # Protos have hand-written rules (proto/blitz/v1): the Connect code is
@@ -22,6 +23,10 @@ load("@gazelle//:def.bzl", "gazelle")
 # Not Go, or not this module.
 # gazelle:exclude apps/desktop/web
 # gazelle:exclude apps/desktop/packaging
+# gazelle:exclude apps/vscode
+
+# The npm packages' store, for the page and the extension (pnpm-lock.yaml).
+npm_link_all_packages(name = "node_modules")
 
 # `bazel run //:gazelle` writes the Go rules; run it after adding a package
 # or an import.
@@ -38,6 +43,7 @@ exports_files(
     ],
     visibility = [
         "//apps/desktop/packaging:__pkg__",
+        "//apps/vscode:__pkg__",
         "//pkg/legal:__pkg__",
         "//proto/blitz/v1:__pkg__",
         "//release:__pkg__",

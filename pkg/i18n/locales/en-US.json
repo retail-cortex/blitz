@@ -1237,6 +1237,7 @@
     "desktop.inbox.state.waiting": "waiting ({count})",
     "desktop.inbox.state.done": "done",
     "desktop.inbox.state.failed": "failed",
-    "desktop.inbox.state.stopped": "stopped"
+    "desktop.inbox.state.stopped": "stopped",
+    "desktop.approval.in_editor": "Show in the editor"
   }
 }

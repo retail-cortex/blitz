@@ -25,6 +25,8 @@ export interface ComposeDetail {
   text: string;
   /** Run it at once (a command without arguments) instead of filling the composer. */
   run?: boolean;
+  /** Add it after what's typed (a paragraph apart) instead of replacing it. */
+  append?: boolean;
 }
 // Text for a composer that isn't there yet (its workspace is opening),
 // taken when it mounts.

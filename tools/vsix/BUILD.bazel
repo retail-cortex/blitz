@@ -12,5 +12,27 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# No dependency runs install scripts (rules_js requires saying so).
-onlyBuiltDependencies: []
+load("@rules_go//go:def.bzl", "go_binary", "go_library", "go_test")
+
+go_library(
+    name = "vsix_lib",
+    srcs = ["main.go"],
+    importpath = "github.com/retail-cortex/blitz/tools/vsix",
+    visibility = ["//visibility:private"],
+)
+
+go_binary(
+    name = "vsix",
+    embed = [":vsix_lib"],
+    visibility = ["//visibility:public"],
+)
+
+go_test(
+    name = "vsix_test",
+    srcs = ["main_test.go"],
+    embed = [":vsix_lib"],
+    deps = [
+        "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//require",
+    ],
+)

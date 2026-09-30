@@ -20,6 +20,7 @@
 // window.go at run time. In a plain browser (development) they fall back
 // to stand-ins: settings in localStorage, links in a new tab.
 import { workspaces } from "./api";
+import { editorConfig, toEditor } from "./host";
 import { t } from "./i18n";
 import { defaultPrefs, normalizePrefs, type Prefs } from "./prefs";
 
@@ -157,6 +158,8 @@ export const openDocument = (path: string) => app().OpenDocument(path);
 /** Shows a system notification; a click brings the window to dir. */
 export async function notifyNative(title: string, body: string, dir: string): Promise<void> {
   if (inApp()) return app().Notify(title, body, dir);
+  // Inside an editor: the editor's own.
+  if (editorConfig()) return toEditor({ type: "notify", title, body });
   // A browser (development): the web's own notifications.
   if (typeof Notification === "undefined") return;
   if (Notification.permission === "default") await Notification.requestPermission();

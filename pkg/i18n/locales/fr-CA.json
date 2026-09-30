@@ -1237,6 +1237,7 @@
     "desktop.inbox.state.waiting": "en attente ({count})",
     "desktop.inbox.state.done": "terminée",
     "desktop.inbox.state.failed": "échouée",
-    "desktop.inbox.state.stopped": "arrêtée"
+    "desktop.inbox.state.stopped": "arrêtée",
+    "desktop.approval.in_editor": "Voir dans l’éditeur"
   }
 }

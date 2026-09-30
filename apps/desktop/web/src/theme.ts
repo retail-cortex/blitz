@@ -18,6 +18,9 @@
 // "system" (the default), applied as html[data-theme] and kept in step
 // with the system's setting as it changes.
 
+import { editorConfig, editorIsDark, onEditorThemeChange } from "./host";
+
+/** The user's choice of theme: the system's, light or dark. */
 export type ThemePref = "system" | "light" | "dark";
 /** The theme in effect (the preference can also be "system"). */
 export type Theme = "light" | "dark";
@@ -30,8 +33,9 @@ export function resolveTheme(pref: ThemePref, systemDark: boolean): Theme {
 
 const darkQuery = () => window.matchMedia?.("(prefers-color-scheme: dark)");
 
-/** Whether the system is in dark mode now. */
+/** Whether the system (inside an editor, the editor) is in dark mode now. */
 export function systemIsDark(): boolean {
+  if (editorConfig()) return editorIsDark();
   return darkQuery()?.matches ?? false;
 }
 
@@ -45,6 +49,7 @@ export function applyTheme(theme: Theme, density: "comfortable" | "compact" = "c
 
 /** Calls f whenever the system switches between light and dark. */
 export function onSystemThemeChange(f: (dark: boolean) => void): () => void {
+  if (editorConfig()) return onEditorThemeChange(f);
   const q = darkQuery();
   if (!q) return () => {};
   const listener = (e: MediaQueryListEvent) => f(e.matches);

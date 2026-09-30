@@ -69,6 +69,9 @@ jobs:
             cp "$f" "$out"
             syft scan "file:$out" -o "spdx-json=$out.sbom.json"
           done
+          # The VS Code extension (apps/vscode), at the release's version.
+          bazel build --config=release --action_env=VSIX_VERSION="$version" //apps/vscode:vsix
+          cp "$(bazel cquery --config=release --action_env=VSIX_VERSION="$version" --output=files //apps/vscode:vsix)" "dist/blitz_${version}_vscode.vsix"
           (cd dist && sha256sum blitz_* > checksums.txt)
           cosign sign-blob --yes --bundle dist/checksums.txt.sigstore.json dist/checksums.txt
           # The install script (curl …/releases/latest/download/install.sh | sh),

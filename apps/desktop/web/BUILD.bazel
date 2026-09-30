@@ -21,7 +21,6 @@ load("@npm//apps/desktop/web:vite/package_json.bzl", vite_bin = "bin")
 load("@npm//apps/desktop/web:vitest/package_json.bzl", vitest_bin = "bin")
 load("//build:es_proto.bzl", "es_proto_library")
 
-exports_files(["pnpm-lock.yaml", "pnpm-workspace.yaml"])
 
 npm_link_all_packages(name = "node_modules")
 
@@ -65,7 +64,10 @@ vite_bin.vite(
     # Vite resolves index.html to its real path, which Bazel's sandbox
     # symlinks outside the sandbox; outside it, the copy is a real file.
     tags = ["no-sandbox"],
-    visibility = ["//apps/desktop:__pkg__"],
+    visibility = [
+        "//apps/desktop:__pkg__",
+        "//apps/vscode:__pkg__",
+    ],
 )
 
 vitest_bin.vitest_test(

@@ -53,8 +53,10 @@ import {
   mdiUndoVariant,
   mdiWeb,
   mdiWrenchOutline,
+  mdiFileCompare,
 } from "@mdi/js";
 import { files, serviceLost, sessions, workspaces } from "./api";
+import { editorConfig, toEditor } from "./host";
 import { DiffView } from "./Changes";
 import { isUnavailable, message, reason } from "./errors";
 import type { SessionInfo } from "./gen/blitz/v1/session_pb";
@@ -757,6 +759,7 @@ export function Conversation({
       if (d.dir !== dir) return;
       e.preventDefault(); // taken
       if (d.run) executeRef.current(d.text);
+      else if (d.append) setDraft((draft) => (draft.trim() ? `${draft.trimEnd()}\n\n${d.text}` : d.text));
       else setDraft(d.text);
     };
     const waiting = takePendingCompose(dir);
@@ -1342,6 +1345,11 @@ function ApprovalCard({ req, onDecide, who, autoFocus = true }: { req: ApprovalR
       </div>
       {files.length > 0 && <DiffView files={files} compact />}
       <div className="row wrap">
+        {files.length > 0 && editorConfig() && (
+          <Button variant="outlined" icon={mdiFileCompare} onClick={() => toEditor({ type: "diff", diff: req.diff, title: req.detail })}>
+            {t("desktop.approval.in_editor")}
+          </Button>
+        )}
         <Button variant="filled" onClick={() => onDecide(Decision.ONCE)} autoFocus={autoFocus}>
           {t("desktop.approval.once")}
         </Button>

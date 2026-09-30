@@ -26,6 +26,7 @@ import { SessionService } from "./gen/blitz/v1/session_pb";
 import { WorkerService } from "./gen/blitz/v1/worker_pb";
 import { WorkspaceService } from "./gen/blitz/v1/workspace_pb";
 import { isUnavailable } from "./errors";
+import { editorConfig } from "./host";
 
 type Listener = () => void;
 const lost = new Set<Listener>();
@@ -50,9 +51,15 @@ const watchAvailability: Interceptor = (next) => async (req) => {
   }
 };
 
-// The page talks to its own origin (tests import this without a window).
-const origin = typeof window === "undefined" ? "http://localhost" : window.location.origin;
-let transport: Transport = createConnectTransport({ baseUrl: origin, interceptors: [watchAvailability] });
+// The page talks to its own origin (tests import this without a window),
+// or inside an editor to the extension's proxy, with its token.
+const editor = editorConfig();
+const origin = editor?.api ?? (typeof window === "undefined" ? "http://localhost" : window.location.origin);
+const withToken: Interceptor = (next) => (req) => {
+  req.header.set("x-blitz-token", editor!.token);
+  return next(req);
+};
+let transport: Transport = createConnectTransport({ baseUrl: origin, interceptors: editor ? [withToken, watchAvailability] : [watchAvailability] });
 
 /** Replaces the transport (development: the fake service). */
 export function setTransport(t: Transport) {

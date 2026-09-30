@@ -1,0 +1,103 @@
+{
+  "name": "blitz-vscode",
+  "displayName": "Blitz",
+  "description": "Blitz, the coding agent, in VS Code: the conversation beside your code, approvals in the editor's diff view, and your selection or file as context.",
+  "publisher": "retail-cortex",
+  "version": "0.1.0",
+  "license": "Apache-2.0",
+  "private": true,
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/retail-cortex/blitz"
+  },
+  "engines": {
+    "vscode": "^1.95.0"
+  },
+  "categories": [
+    "AI",
+    "Other"
+  ],
+  "main": "./dist/extension.js",
+  "activationEvents": [],
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "blitz",
+          "title": "Blitz",
+          "icon": "media/blitz.svg"
+        }
+      ]
+    },
+    "views": {
+      "blitz": [
+        {
+          "type": "webview",
+          "id": "blitz.chat",
+          "name": "Chat"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "blitz.addSelection",
+        "title": "Add Selection to Chat",
+        "category": "Blitz"
+      },
+      {
+        "command": "blitz.addFile",
+        "title": "Add File to Chat",
+        "category": "Blitz"
+      },
+      {
+        "command": "blitz.focus",
+        "title": "Open Chat",
+        "category": "Blitz"
+      }
+    ],
+    "menus": {
+      "editor/context": [
+        {
+          "command": "blitz.addSelection",
+          "when": "editorHasSelection",
+          "group": "blitz"
+        },
+        {
+          "command": "blitz.addFile",
+          "when": "!editorHasSelection",
+          "group": "blitz"
+        }
+      ],
+      "explorer/context": [
+        {
+          "command": "blitz.addFile",
+          "group": "blitz"
+        }
+      ]
+    },
+    "keybindings": [
+      {
+        "command": "blitz.addSelection",
+        "key": "ctrl+alt+b",
+        "mac": "cmd+alt+b",
+        "when": "editorTextFocus"
+      }
+    ],
+    "configuration": {
+      "title": "Blitz",
+      "properties": {
+        "blitz.socket": {
+          "type": "string",
+          "default": "",
+          "description": "The Blitz service's socket. Empty: $BLITZ_SOCKET, else ~/.blitz/run/blitz.sock."
+        }
+      }
+    }
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.4",
+    "@types/vscode": "1.95.0",
+    "typescript": "5.9.3",
+    "vitest": "5.0.2"
+  }
+}

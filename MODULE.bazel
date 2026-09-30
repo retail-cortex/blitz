@@ -87,21 +87,26 @@ buf = use_extension("@rules_buf//buf:extensions.bzl", "buf")
 buf.toolchains(version = "v1.73.0")
 use_repo(buf, "rules_buf_toolchains")
 
-# The desktop page: Node, and its npm packages from pnpm's lockfile.
+# The desktop page and the VS Code extension: Node, and their npm packages
+# from pnpm's lockfile (one workspace, at the root).
 node = use_extension("@rules_nodejs//nodejs:extensions.bzl", "node")
 node.toolchain(node_version = "22.16.0")
 
 npm = use_extension("@aspect_rules_js//npm:extensions.bzl", "npm")
 npm.npm_translate_lock(
     name = "npm",
-    data = ["//apps/desktop/web:pnpm-workspace.yaml"],
-    pnpm_lock = "//apps/desktop/web:pnpm-lock.yaml",
+    data = [
+        "//:package.json",
+        "//:pnpm-workspace.yaml",
+    ],
+    pnpm_lock = "//:pnpm-lock.yaml",
     verify_node_modules_ignored = "//:.bazelignore",
 )
 use_repo(npm, "npm")
 
 # pnpm itself, for upkeep of the page's packages without a host pnpm:
 #   bazel run -- @pnpm//:pnpm --dir "$PWD/apps/desktop/web" add <package>
+#   bazel run -- @pnpm//:pnpm --dir "$PWD" install --lockfile-only
 pnpm = use_extension("@aspect_rules_js//npm:extensions.bzl", "pnpm")
 pnpm.pnpm(
     name = "pnpm",

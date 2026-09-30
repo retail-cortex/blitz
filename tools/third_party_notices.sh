@@ -42,5 +42,5 @@ check=()
 [ "${1:-}" = "--check" ] && check=(--check)
 bazel run "${q[@]}" //tools/notices -- \
 	--go-repos="$tmp/repos" --go-mod="$PWD/go.mod" --goroot="$goroot" --apache="$PWD/LICENSE" \
-	--npm-lock="$PWD/apps/desktop/web/pnpm-lock.yaml" --npm-store="$bin/apps/desktop/web/node_modules/.aspect_rules_js" \
+	--npm-lock="$PWD/pnpm-lock.yaml" --npm-store="$bin/node_modules/.aspect_rules_js" \
 	--out="$PWD/THIRD_PARTY_NOTICES" "${check[@]}"

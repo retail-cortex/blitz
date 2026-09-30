@@ -1,0 +1,89 @@
+# Copyright 2026 Retail Cortex
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# The VS Code extension (spec_parity_027 PAR-INT-02): TypeScript compiled
+# to CommonJS, with the desktop app's page in media/page, packed as a
+# .vsix:
+#   bazel build //apps/vscode:vsix   (then code --install-extension bazel-bin/apps/vscode/blitz.vsix)
+
+load("@bazel_lib//lib:copy_to_bin.bzl", "copy_to_bin")
+load("@npm//:defs.bzl", "npm_link_all_packages")
+load("@npm//apps/vscode:typescript/package_json.bzl", tsc_bin = "bin")
+load("@npm//apps/vscode:vitest/package_json.bzl", vitest_bin = "bin")
+
+npm_link_all_packages(name = "node_modules")
+
+copy_to_bin(
+    name = "srcs",
+    srcs = glob(["src/**"]) + [
+        "package.json",
+        "tsconfig.build.json",
+        "tsconfig.json",
+    ],
+)
+
+_inputs = [
+    ":srcs",
+    ":node_modules",
+]
+
+# dist/*.js, the extension's code.
+tsc_bin.tsc(
+    name = "dist",
+    srcs = _inputs,
+    args = ["-p", "tsconfig.build.json"],
+    chdir = package_name(),
+    out_dirs = ["dist"],
+)
+
+tsc_bin.tsc_test(
+    name = "typecheck",
+    args = ["--noEmit"],
+    chdir = package_name(),
+    data = _inputs,
+)
+
+vitest_bin.vitest_test(
+    name = "test",
+    args = ["run"],
+    chdir = package_name(),
+    data = _inputs,
+)
+
+# The .vsix VS Code installs. Releases stamp their version:
+#   bazel build --action_env=VSIX_VERSION=1.2.3 //apps/vscode:vsix
+genrule(
+    name = "vsix",
+    srcs = [
+        "package.json",
+        "README.md",
+        "media/blitz.svg",
+        ":dist",
+        "//:LICENSE",
+        "//apps/desktop/web:page",
+    ],
+    outs = ["blitz.vsix"],
+    cmd = " ".join([
+        "$(execpath //tools/vsix)",
+        "--package $(execpath package.json)",
+        "--out $@",
+        "--version \"$${VSIX_VERSION:-}\"",
+        "--add extension/dist=$(execpath :dist)",
+        "--add extension/media/page=$(execpath //apps/desktop/web:page)",
+        "--add extension/media/blitz.svg=$(execpath media/blitz.svg)",
+        "--add extension/README.md=$(execpath README.md)",
+        "--add extension/LICENSE.txt=$(execpath //:LICENSE)",
+    ]),
+    tools = ["//tools/vsix"],
+)

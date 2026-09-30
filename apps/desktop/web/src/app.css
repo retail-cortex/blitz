@@ -497,3 +497,7 @@ code.file-link:hover { text-decoration-color: currentColor; }
 .inbox-state.waiting { background: var(--md-warning-container); color: var(--md-on-warning-container); }
 .inbox-state.done { background: var(--md-tertiary-container); color: var(--md-on-tertiary-container); }
 .inbox-state.failed { background: var(--md-error-container); color: var(--md-on-error-container); }
+
+/* Inside an editor (EditorPanel.tsx): the chat fills the panel. */
+.editor-panel { display: flex; flex-direction: column; height: 100vh; min-height: 0; background: var(--md-surface); }
+.editor-panel-loading { padding: 16px; }

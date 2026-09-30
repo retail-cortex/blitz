@@ -15,23 +15,21 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useWorkspaceSettings } from "./workspaceSettings";
 import { InboxButton } from "./RunsInbox";
 import { mdiCalendarClock, mdiCodeBraces, mdiCogOutline, mdiFileCompare, mdiFileSearchOutline, mdiFileTreeOutline, mdiTuneVariant } from "@mdi/js";
-import { workspaces } from "./api";
 import { Changes } from "./Changes";
 import { Conversation } from "./Conversation";
-import { configChangedEvent, filesTouchedEvent, goToFileEvent, openFileEvent, viewEvent, type ConfigChangedDetail, type OpenFileDetail, type ViewDetail } from "./events";
+import { filesTouchedEvent, goToFileEvent, openFileEvent, viewEvent, type OpenFileDetail, type ViewDetail } from "./events";
 import { EditorPane } from "./files/EditorPane";
 import { FilesShelf } from "./files/FilesShelf";
 import { GoToFile } from "./files/GoToFile";
 import { FileLinksProvider } from "./files/links";
 import { reportUnsaved } from "./files/unsaved";
 import { useEditor } from "./files/useEditor";
-import { message } from "./errors";
-import type { GetSettingsResponse, ProjectSettings } from "./gen/blitz/v1/workspace_pb";
 import { workspaceColor } from "./palette";
 import { displayName, type WorkspacePrefs } from "./prefs";
-import { needsDecision, waiting } from "./project";
+import { waiting } from "./project";
 import { ProjectDialog } from "./ProjectDialog";
 import { RunSettings } from "./RunSettings";
 import { useApp } from "./state";
@@ -66,61 +64,8 @@ export function Workspace({
 }) {
   const { prefs, update, theme } = useApp();
   const [view, setView] = useState<View>("editor");
-  const [settings, setSettings] = useState<GetSettingsResponse>();
-  const [modelProblem, setModelProblem] = useState("");
-  const [settingsError, setSettingsError] = useState("");
-  const [project, setProject] = useState<ProjectSettings>();
-  const [reviewing, setReviewing] = useState(false);
-  // The project settings' content asked about as the workspace opened:
-  // asked once, not again at each refresh.
-  const asked = useRef("");
   const dir = ws.dir;
-
-  const refreshSettings = useCallback(async () => {
-    try {
-      const [s, m, p] = await Promise.all([
-        workspaces.getSettings({ workspace: dir }),
-        workspaces.getModel({ workspace: dir }),
-        workspaces.getProjectSettings({ workspace: dir }).then(
-          (r) => r.settings,
-          () => undefined, // an older service
-        ),
-      ]);
-      setSettings(s);
-      setModelProblem(m.unavailable);
-      setProject(p);
-      setSettingsError("");
-      if (p && needsDecision(p) && asked.current !== p.hash) {
-        asked.current = p.hash;
-        setReviewing(true);
-      }
-    } catch (e) {
-      setSettingsError(message(e));
-    }
-  }, [dir]);
-  useEffect(() => {
-    refreshSettings();
-  }, [refreshSettings]);
-
-  // Keys and providers set in the settings: is the model usable now?
-  useEffect(() => {
-    const f = (e: Event) => {
-      const d = (e as CustomEvent<ConfigChangedDetail>).detail;
-      if (d.dir === "" || d.dir === dir) refreshSettings();
-    };
-    window.addEventListener(configChangedEvent, f);
-    return () => window.removeEventListener(configChangedEvent, f);
-  }, [dir, refreshSettings]);
-
-  // A model unavailable for want of a sign-in made outside the app (gcloud,
-  // ant auth login) works once it's made: coming back to the window asks
-  // again, and the service tries the model again when asked.
-  useEffect(() => {
-    if (!modelProblem) return;
-    const f = () => refreshSettings();
-    window.addEventListener("focus", f);
-    return () => window.removeEventListener("focus", f);
-  }, [modelProblem, refreshSettings]);
+  const { settings, modelProblem, settingsError, project, reviewing, setReviewing, refreshSettings } = useWorkspaceSettings(dir);
 
   // The command palette can switch the view.
   useEffect(() => {

@@ -24,6 +24,9 @@ const outDir = process.env.BLITZ_PAGE_OUT ?? "dist";
 
 export default defineConfig({
   plugins: [react()],
+  // Relative asset paths: the VS Code extension serves the page from a
+  // folder of its own (apps/vscode), the desktop app from its root.
+  base: "./",
   // The app loads its page from its own binary, so one bundle is fine.
   build: { outDir, emptyOutDir: true, chunkSizeWarningLimit: 1024 },
   // In development (plain browser), API calls go to the service's socket,

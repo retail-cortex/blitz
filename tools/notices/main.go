@@ -48,7 +48,7 @@ func main() {
 		gomod    = flag.String("go-mod", "go.mod", "the repository's go.mod, for module versions")
 		goroot   = flag.String("goroot", "", "the Go SDK, for the standard library's license")
 		apache   = flag.String("apache", "LICENSE", "the Apache License 2.0 text, printed once at the end")
-		lock     = flag.String("npm-lock", "", "the page's pnpm-lock.yaml")
+		lock     = flag.String("npm-lock", "", "the pnpm-lock.yaml (the page's packages are what ships)")
 		store    = flag.String("npm-store", "", "rules_js's package store (node_modules/.aspect_rules_js)")
 		out      = flag.String("out", "THIRD_PARTY_NOTICES", "the file to write")
 		checkOld = flag.Bool("check", false, "fail if the file differs from what would be written, instead of writing it")
@@ -198,7 +198,7 @@ func npmPackages(lock, store string) ([]component, []string) {
 	}
 	seen := map[string]bool{}
 	var queue []string
-	for name, d := range lf.Importers["."].Dependencies {
+	for name, d := range lf.Importers["apps/desktop/web"].Dependencies {
 		queue = append(queue, name+"@"+d.Version)
 	}
 	for len(queue) > 0 {
