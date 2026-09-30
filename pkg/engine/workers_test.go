@@ -16,6 +16,7 @@ package engine
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -292,4 +293,37 @@ func TestCreateWorker(t *testing.T) {
 			assert.True(t, os.IsNotExist(statErr), "an invalid worker was written")
 		})
 	}
+}
+
+// [workers] notify hears of scheduled runs whose status it names, with the
+// run record on stdin; manual runs and other statuses don't reach it
+// (BL-WK-10).
+func TestWorkerRunNotify(t *testing.T) {
+	out := filepath.Join(t.TempDir(), "notified")
+	w, _ := openTestWith(t, func(c *config.Config) {
+		c.Workers.Notify = `cat > "` + out + `"; echo "$BLITZ_WORKER $BLITZ_RUN_STATUS" >> "` + out + `"`
+		c.Workers.NotifyOn = []string{"succeeded"}
+	}, text("done"), text("again"))
+	addWorker(t, w, "deps", "---\nschedule: daily at 6 AM\n---\nCheck.\n")
+	enable(t, w, "deps")
+
+	_, err := w.RunWorker(context.Background(), "deps", RunOptions{Manual: true})
+	require.NoError(t, err)
+	assert.NoFileExists(t, out, "a manual run notified")
+
+	run, err := w.RunWorker(context.Background(), "deps", RunOptions{})
+	require.NoError(t, err)
+	b, err := os.ReadFile(out)
+	require.NoError(t, err)
+	record, status, _ := strings.Cut(strings.TrimSpace(string(b)), "\n")
+	var got api.Run
+	require.NoError(t, json.Unmarshal([]byte(record), &got), "stdin %q", record)
+	assert.Equal(t, run.ID, got.ID)
+	assert.Equal(t, "deps succeeded", status)
+
+	// Not a status it names: nothing.
+	require.NoError(t, os.Remove(out))
+	w.cfg.Workers.NotifyOn = []string{"failed"}
+	w.notifyRun(api.Run{Worker: "deps", Status: api.RunSucceeded})
+	assert.NoFileExists(t, out)
 }

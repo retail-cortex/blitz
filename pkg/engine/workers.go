@@ -15,15 +15,18 @@
 package engine
 
 import (
+	"bytes"
 	"cmp"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
 	"maps"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -31,6 +34,7 @@ import (
 	"time"
 
 	"github.com/retail-cortex/blitz/pkg/api"
+	"github.com/retail-cortex/blitz/pkg/textutil"
 
 	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/engine/runtime"
@@ -282,6 +286,7 @@ func (w *Workspace) RunWorker(ctx context.Context, name string, o RunOptions) (a
 			Manual: o.Manual, Started: time.Now(), Error: api.ErrRunInProgress.Error()}
 		if !o.Manual { // a scheduled run that couldn't happen is worth a record
 			w.runLog.Append(skipped)
+			w.notifyRun(skipped)
 		}
 		return skipped, api.ErrRunInProgress
 	}
@@ -366,7 +371,38 @@ func (w *Workspace) RunWorker(ctx context.Context, name string, o RunOptions) (a
 	if err := w.runLog.Append(run); err != nil {
 		w.warn("recording the worker run: " + err.Error())
 	}
+	if !o.Manual {
+		w.notifyRun(run)
+	}
 	return run, nil
+}
+
+// notifyTimeout bounds a [workers] notify command.
+var notifyTimeout = 30 * time.Second
+
+// notifyRun runs [workers] notify after a scheduled run whose status is in
+// notify_on (BL-WK-10): the run record as JSON on stdin, BLITZ_WORKER and
+// BLITZ_RUN_STATUS in its environment, in the workspace, outside the
+// sandbox (it is the user's own command). A failure is a warning.
+func (w *Workspace) notifyRun(run api.Run) {
+	cmd := strings.TrimSpace(w.cfg.Workers.Notify)
+	if cmd == "" || !slices.Contains(w.cfg.Workers.NotifyOn, string(run.Status)) {
+		return
+	}
+	record, err := json.Marshal(run)
+	if err != nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), notifyTimeout)
+	defer cancel()
+	c := exec.CommandContext(ctx, "/bin/sh", "-c", cmd)
+	c.Dir = w.Dir()
+	c.Stdin = bytes.NewReader(append(record, '\n'))
+	c.Env = append(os.Environ(), "BLITZ_WORKER="+run.Worker, "BLITZ_RUN_STATUS="+string(run.Status))
+	c.WaitDelay = time.Second
+	if out, err := c.CombinedOutput(); err != nil {
+		w.warn(fmt.Sprintf("workers.notify for %s: %v %s", run.Worker, err, textutil.Ellipsize(strings.TrimSpace(string(out)), 200)))
+	}
 }
 
 // WorkerRuns returns a worker's recorded runs, newest first.

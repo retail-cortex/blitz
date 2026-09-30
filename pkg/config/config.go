@@ -353,6 +353,11 @@ type WorkersConfig struct {
 	Paths []string `toml:"paths"`
 	// Policy caps what any worker may do and spend.
 	Policy WorkerPolicy `toml:"policy"`
+	// Notify is a command run after each scheduled run whose status is in
+	// NotifyOn, with the run record as JSON on stdin: outside the sandbox,
+	// like a hook, so only the user's settings may set it.
+	Notify   string   `toml:"notify"`
+	NotifyOn []string `toml:"notify_on"`
 }
 
 // WorkerPolicy is the host's limit on workers. A worker asks for
@@ -680,8 +685,9 @@ func DefaultConfig() *Config {
 			},
 		},
 		Workers: WorkersConfig{
-			Enabled: true,
-			Paths:   []string{".agents/workers", "workers"},
+			Enabled:  true,
+			Paths:    []string{".agents/workers", "workers"},
+			NotifyOn: []string{"failed", "limited"},
 			Policy: WorkerPolicy{
 				Allow:             []string{"shell", "write", "delete", "web", "mcp"},
 				DefaultMaxTurns:   50,

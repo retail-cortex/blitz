@@ -193,7 +193,7 @@ var neverFromProject = []string{
 	"mcp.servers.auto_approve", "mcp.servers.sandbox",
 	"skills.policy.trusted_hashes", "skills.policy.allow_hitl_bypass", "skills.policy.network",
 	"skills.policy.network_allow", "skills.policy.env_passthrough", "skills.policy.sandbox",
-	"workers.policy.max_concurrent", "workers.paths", "skills.paths",
+	"workers.policy.max_concurrent", "workers.paths", "workers.notify", "workers.notify_on", "skills.paths",
 }
 
 // LoadProject reads workspace's project files. A file that can't be read
