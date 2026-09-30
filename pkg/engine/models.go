@@ -211,6 +211,7 @@ func (w *Workspace) Settings() api.Settings {
 		Model:  w.Model(), Agent: w.engine.ActiveAgent(), Locale: w.reply.Tag().String(),
 		PermissionMode: string(w.tools.Hooks().Mode()),
 		Effort:         w.engine.Effort(),
+		Style:          w.styleName(),
 	}
 }
 
@@ -246,6 +247,8 @@ func (w *Workspace) Set(ctx context.Context, key, value string) (string, error) 
 		}
 		w.engine.SetEffort(effort)
 		return "effort", nil
+	case "style", "output_style":
+		return "style", w.setStyle(ctx, value)
 	case "agency", "agency_level":
 		switch strings.ToLower(value) {
 		case "low", "medium", "high", "extreme":

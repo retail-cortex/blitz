@@ -161,6 +161,10 @@ service WorkspaceService {
   // workspace so they take effect, unless a turn is running in it.
   rpc TrustProject(TrustProjectRequest) returns (TrustProjectResponse);
 
+  // Returns the output styles, with the one in use (SetSetting "style"
+  // changes it).
+  rpc ListStyles(ListStylesRequest) returns (ListStylesResponse);
+
   // Returns the configured hooks, by event, with their recent failures.
   rpc ListHooks(ListHooksRequest) returns (ListHooksResponse);
 
@@ -459,6 +463,8 @@ message GetSettingsResponse {
   string permission_mode = 9;
   // The session's reasoning effort (minimal … max), empty when unset.
   string effort = 10;
+  // The output style in use ("default": none).
+  string style = 11;
 }
 
 // Request message for WorkspaceService.SetPermissionMode.
@@ -1099,6 +1105,25 @@ message GetProjectSettingsRequest {
 // Response message for WorkspaceService.GetProjectSettings.
 message GetProjectSettingsResponse {
   ProjectSettings settings = 1;
+}
+
+// Style is an output style.
+message Style {
+  string name = 1;
+  string description = 2;
+  // "built-in", or the style's file.
+  string source = 3;
+  bool active = 4;
+}
+
+// Request message for WorkspaceService.ListStyles.
+message ListStylesRequest {
+  string workspace = 1;
+}
+
+// Response message for WorkspaceService.ListStyles.
+message ListStylesResponse {
+  repeated Style styles = 1;
 }
 
 // Hook is a configured hook.

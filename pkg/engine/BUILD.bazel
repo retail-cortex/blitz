@@ -36,10 +36,15 @@ go_library(
         "project.go",
         "rewind.go",
         "sessions.go",
+        "styles.go",
         "tasks.go",
         "turn.go",
         "workers.go",
         "workspace.go",
+    ],
+    embedsrcs = [
+        "styles/concise.md",
+        "styles/explanatory.md",
     ],
     importpath = "github.com/retail-cortex/blitz/pkg/engine",
     visibility = [
@@ -71,6 +76,7 @@ go_library(
         "//pkg/redact",
         "//pkg/textutil",
         "@com_github_google_uuid//:uuid",
+        "@in_gopkg_yaml_v3//:yaml_v3",
         "@org_golang_google_adk_v2//model",
         "@org_golang_google_adk_v2//session",
     ] + select({
@@ -137,6 +143,7 @@ go_test(
         "project_test.go",
         "rewind_test.go",
         "sessions_test.go",
+        "styles_test.go",
         "turn_test.go",
         "workers_test.go",
         "workspace_test.go",

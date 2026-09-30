@@ -60,16 +60,19 @@ type rootOptions struct {
 	inputFormat  string
 	jsonSchema   string
 	noPersist    bool // --no-session-persistence
-	maxTurns     int
-	maxCostUSD   float64
-	timeout      time.Duration
-	plan         bool
-	images       []string
-	local        bool
-	mode         string // --permission-mode
-	effort       string // --effort
-	allowRules   []string
-	denyRules    []string
+	// appendPrompt and appendPromptFile add to the agent's instructions
+	// for the run (--append-system-prompt[-file]).
+	appendPrompt, appendPromptFile string
+	maxTurns                       int
+	maxCostUSD                     float64
+	timeout                        time.Duration
+	plan                           bool
+	images                         []string
+	local                          bool
+	mode                           string // --permission-mode
+	effort                         string // --effort
+	allowRules                     []string
+	denyRules                      []string
 	// requirePrompt: a run without a prompt is a usage error (exec),
 	// rather than the interactive session.
 	requirePrompt bool
@@ -148,6 +151,8 @@ func addRunFlags(f *pflag.FlagSet, o *rootOptions) {
 	f.StringVar(&o.outputFormat, "output-format", formatText, "Output for one-shot runs: text, json, or stream-json")
 	f.StringVar(&o.inputFormat, "input-format", inputText, "Input: text, or stream-json (JSON lines on stdin: prompts, approval answers and question answers; needs --output-format stream-json)")
 	f.StringVar(&o.jsonSchema, "json-schema", "", "One-shot runs answer with JSON valid against this schema (a file, or inline JSON), as structured_result")
+	f.StringVar(&o.appendPrompt, "append-system-prompt", "", "Add this to the agent's instructions for the run (runs without the service)")
+	f.StringVar(&o.appendPromptFile, "append-system-prompt-file", "", "Add this file's text to the agent's instructions for the run (runs without the service)")
 	f.BoolVar(&o.noPersist, "no-session-persistence", false, "Don't keep the run's session (one-shot runs; the audit log is still written)")
 	f.IntVar(&o.maxTurns, "max-turns", 0, "Stop after this many model calls in a one-shot run (0 = unlimited)")
 	f.Float64Var(&o.maxCostUSD, "max-cost-usd", 0, "Stop a one-shot run once it has cost more than this, in USD (0 = unlimited)")
@@ -284,6 +289,17 @@ func runRoot(cmd *cobra.Command, o *rootOptions, args []string) (err error) {
 	if err != nil {
 		return err
 	}
+	appendPrompt := o.appendPrompt
+	if o.appendPromptFile != "" {
+		data, err := os.ReadFile(config.ExpandHome(o.appendPromptFile))
+		if err != nil {
+			return withCode(exitUsage, fmt.Errorf("--append-system-prompt-file: %w", err))
+		}
+		appendPrompt = strings.TrimSpace(appendPrompt + "\n\n" + string(data))
+	}
+	if appendPrompt != "" {
+		o.local = true // the service's workspace has its own instructions
+	}
 	if o.noPersist { // sessions in a folder removed at exit, in this process
 		tmp, err := os.MkdirTemp("", "blitz-sessions-")
 		if err != nil {
@@ -318,7 +334,7 @@ func runRoot(cmd *cobra.Command, o *rootOptions, args []string) (err error) {
 			return tui.AskTrust(ctx, tui.NewLineReader(os.Stdin, os.Stdout), os.Stdout, dir, p)
 		}
 	}
-	w, locales, remote, err := openBackend(ctx, cfg, backendOptions{local: o.local, streaming: pretty, trustProject: o.global.trustProject, askTrust: askTrust(cfg.Tools.WorkspaceDir)}, warnFn)
+	w, locales, remote, err := openBackend(ctx, cfg, backendOptions{local: o.local, streaming: pretty, trustProject: o.global.trustProject, appendPrompt: appendPrompt, askTrust: askTrust(cfg.Tools.WorkspaceDir)}, warnFn)
 	if err != nil {
 		return err
 	}
@@ -462,7 +478,7 @@ func runRoot(cmd *cobra.Command, o *rootOptions, args []string) (err error) {
 			if err != nil {
 				return nil, nil, nil, err
 			}
-			nb, loc, _, err := openBackend(ctx, next, backendOptions{local: o.local, streaming: pretty, trustProject: o.global.trustProject, askTrust: askTrust(next.Tools.WorkspaceDir)}, warnFn)
+			nb, loc, _, err := openBackend(ctx, next, backendOptions{local: o.local, streaming: pretty, trustProject: o.global.trustProject, appendPrompt: appendPrompt, askTrust: askTrust(next.Tools.WorkspaceDir)}, warnFn)
 			if err != nil {
 				return nil, nil, nil, err
 			}
@@ -521,7 +537,7 @@ func resolvePrompt(flag string, args []string, stdinTTY, interactive bool, stdin
 func newCompleter(w api.Backend) *tui.Completer {
 	c := tui.NewCompleter(w.Dir())
 	for _, cmd := range []string{"help", "agents", "model", "skills", "session", "set", "clear", "sandbox", "exit", "quit",
-		"undo", "checkpoints", "diff", "cost", "context", "compact", "memory", "approvals", "hooks", "goal", "loop", "mcp", "resume", "locale", "attach", "paste",
+		"undo", "checkpoints", "diff", "cost", "context", "compact", "memory", "approvals", "hooks", "goal", "loop", "style", "mcp", "resume", "locale", "attach", "paste",
 		"tools", "plan", "show", "init", "mode", "permissions", "effort", "rewind", "pin_model", "unpin", "model_settings", "search", "btw", "rename", "envs", "tasks", "cd", "trust", "license"} {
 		c.Command(cmd)
 	}

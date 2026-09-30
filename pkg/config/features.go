@@ -23,8 +23,11 @@ import (
 
 // UIConfig controls terminal presentation.
 type UIConfig struct {
-	Markdown bool `toml:"markdown"` // render model output as Markdown (TTY only)
-	Spinner  bool `toml:"spinner"`  // show progress while waiting (TTY only)
+	// Style is the output style sessions start with: default, concise,
+	// explanatory, or one in ~/.blitz/styles.
+	Style    string `toml:"style"`
+	Markdown bool   `toml:"markdown"` // render model output as Markdown (TTY only)
+	Spinner  bool   `toml:"spinner"`  // show progress while waiting (TTY only)
 	// TerminalTitle shows the session's name in the terminal window title (TTY only).
 	TerminalTitle bool   `toml:"terminal_title"`
 	HistoryFile   string `toml:"history_file"` // REPL input history

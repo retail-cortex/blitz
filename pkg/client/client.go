@@ -417,7 +417,7 @@ func (r *Remote) getSettings() settings {
 	return settings{Settings: api.Settings{
 		Agency: m.Agency,
 		Model:  api.ModelInfo{Name: m.Model, Provider: m.Provider}, Agent: m.Agent, Locale: m.Locale,
-		PermissionMode: m.PermissionMode, Effort: m.Effort,
+		PermissionMode: m.PermissionMode, Effort: m.Effort, Style: m.Style,
 	}, ImagesEnabled: m.ImagesEnabled}
 }
 

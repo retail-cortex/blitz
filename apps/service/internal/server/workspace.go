@@ -235,7 +235,7 @@ func (h workspaceService) GetSettings(ctx context.Context, r req[pb.GetSettingsR
 	return ok(&pb.GetSettingsResponse{
 		Agency: st.Agency,
 		Model:  st.Model.Name, Provider: st.Model.Provider, Agent: st.Agent, Locale: st.Locale,
-		ImagesEnabled: w.ImagesEnabled(), PermissionMode: st.PermissionMode, Effort: st.Effort,
+		ImagesEnabled: w.ImagesEnabled(), PermissionMode: st.PermissionMode, Effort: st.Effort, Style: st.Style,
 	})
 }
 
@@ -658,6 +658,18 @@ func (h workspaceService) TrustProject(ctx context.Context, r req[pb.TrustProjec
 	// Reopened on the next call, with the decision.
 	reopened := h.s.closeWorkspace(r.Msg.Workspace) == nil
 	return ok(&pb.TrustProjectResponse{Reopened: reopened})
+}
+
+func (h workspaceService) ListStyles(ctx context.Context, r req[pb.ListStylesRequest]) (*connect.Response[pb.ListStylesResponse], error) {
+	w, err := h.s.workspace(ctx, r.Msg.Workspace)
+	if err != nil {
+		return nil, err
+	}
+	out := &pb.ListStylesResponse{}
+	for _, s := range w.ListStyles() {
+		out.Styles = append(out.Styles, &pb.Style{Name: s.Name, Description: s.Description, Source: s.Source, Active: s.Active})
+	}
+	return ok(out)
 }
 
 func (h workspaceService) ListHooks(ctx context.Context, r req[pb.ListHooksRequest]) (*connect.Response[pb.ListHooksResponse], error) {

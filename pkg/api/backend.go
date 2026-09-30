@@ -62,6 +62,9 @@ type Backend interface {
 	Goal() (Goal, error)
 	ClearGoal() error
 
+	// The output styles, with the one in use (Set "style" changes it).
+	ListStyles() []StyleInfo
+
 	// The configured hooks, by event, with recent failures (/hooks).
 	ListHooks() []HookInfo
 

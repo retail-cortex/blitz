@@ -91,6 +91,8 @@ type backendOptions struct {
 	// trustProject trusts the project settings for this run
 	// (--trust-project), in a workspace opened here.
 	trustProject bool
+	// appendPrompt is added to the agent's instructions (a local run).
+	appendPrompt string
 	// askTrust asks about project settings waiting for a decision and
 	// returns "trust", "decline" or "" (no answer); nil when nobody can
 	// be asked.
@@ -132,7 +134,7 @@ func openBackend(ctx context.Context, cfg *config.Config, o backendOptions, warn
 			}
 		}
 	}
-	w, err := engine.Open(ctx, cfg, engine.Options{Streaming: o.streaming, Warn: warn, TrustProject: o.trustProject})
+	w, err := engine.Open(ctx, cfg, engine.Options{Streaming: o.streaming, Warn: warn, TrustProject: o.trustProject, AppendSystemPrompt: o.appendPrompt})
 	if errors.Is(err, api.ErrWorkspaceBusy) {
 		return nil, nil, false, withCode(exitUsage, fmt.Errorf("%w (another blitz has it open)", err))
 	}

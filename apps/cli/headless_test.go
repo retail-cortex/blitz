@@ -205,6 +205,7 @@ func TestHeadlessFlags(t *testing.T) {
 		"bad schema":                  {"--json-schema", `{"type": 7}`, "hi"},
 		"schema without a prompt":     {"--json-schema", personSchema, "-i"},
 		"no persistence and continue": {"--no-session-persistence", "--continue", "hi"},
+		"a missing prompt file":       {"--append-system-prompt-file", "/no/such/file", "hi"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			_, err := runCLI(t, args...)

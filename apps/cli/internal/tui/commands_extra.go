@@ -54,6 +54,8 @@ func handleExtraCommand(ctx context.Context, cmd string, args []string, app *App
 		cmdHooks(app)
 	case "goal":
 		cmdGoal(args, app)
+	case "style":
+		cmdStyle(ctx, args, app)
 	case "loop":
 		cmdLoop(args, app)
 	case "mcp":
@@ -259,6 +261,27 @@ func cmdMemory(ctx context.Context, args []string, app *App) {
 	default:
 		fmt.Println(i18n.T("memory.usage"))
 	}
+}
+
+// cmdStyle lists the output styles, or uses one (PAR-MEM-21).
+func cmdStyle(ctx context.Context, args []string, app *App) {
+	if len(args) == 1 {
+		if _, err := app.Workspace.Set(ctx, "style", args[0]); err != nil {
+			fmt.Printf("%s✗ %v%s\n", Red, err, Reset)
+			return
+		}
+		fmt.Printf("%s✓ %s%s\n", Green, i18n.T("style.set", "name", args[0]), Reset)
+		return
+	}
+	fmt.Printf("\n%s%s%s\n", Bold, i18n.T("style.list"), Reset)
+	for _, s := range app.Workspace.ListStyles() {
+		mark := "  "
+		if s.Active {
+			mark = Green + "● " + Reset
+		}
+		fmt.Printf("%s%s %s%s%s\n", mark, s.Name, Dim, safe(s.Description), Reset)
+	}
+	fmt.Println()
 }
 
 // cmdHooks lists the hooks by event, with where each came from and its

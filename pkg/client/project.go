@@ -96,3 +96,18 @@ func (r *Remote) ListHooks() []api.HookInfo {
 	}
 	return out
 }
+
+// ListStyles are the output styles (WorkspaceService.ListStyles); on
+// failure warn is told and there are none.
+func (r *Remote) ListStyles() []api.StyleInfo {
+	res, err := r.workspaces.ListStyles(context.Background(), connect.NewRequest(&pb.ListStylesRequest{Workspace: r.dir}))
+	if err != nil {
+		r.failed("listing the output styles", err)
+		return nil
+	}
+	out := make([]api.StyleInfo, len(res.Msg.Styles))
+	for i, s := range res.Msg.Styles {
+		out[i] = api.StyleInfo{Name: s.Name, Description: s.Description, Source: s.Source, Active: s.Active}
+	}
+	return out
+}

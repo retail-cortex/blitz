@@ -106,6 +106,16 @@ type Settings struct {
 	// Effort is the session's reasoning effort ("" when each model uses its
 	// own reasoning_effort or its default).
 	Effort string
+	// Style is the output style in use ("default": none).
+	Style string
+}
+
+// StyleInfo is an output style (/style).
+type StyleInfo struct {
+	Name, Description string
+	// Source is "built-in" or the style's file.
+	Source string
+	Active bool
 }
 
 // UnknownSettingError reports a key /set doesn't know.

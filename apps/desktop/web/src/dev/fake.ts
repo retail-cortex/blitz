@@ -59,7 +59,7 @@ The discount code lives in [\`internal/cart/discount.go\`](https://github.com/ex
 interface State {
   sessions: SessionInfo[];
   active: string;
-  settings: { agent: string; model: string; provider: string; effort: string; mode: string; agency: string; locale: string };
+  settings: { agent: string; model: string; provider: string; effort: string; mode: string; agency: string; locale: string; style: string };
   pending: Map<string, (answer: string) => void>;
   usage: Usage;
   // The project settings' trust state: the "shop" workspace has some.
@@ -86,7 +86,7 @@ function state(dir: string): State {
     s = {
       sessions: [first, other],
       active: first.id,
-      settings: { agent: "blitz", model: "gemini-3.8-flash", provider: "gemini", effort: "", mode: "default", agency: "high", locale: "en-US" },
+      settings: { agent: "blitz", model: "gemini-3.8-flash", provider: "gemini", effort: "", mode: "default", agency: "high", locale: "en-US", style: "default" },
       pending: new Map(),
       tasks: new Map(),
       usage: create(UsageSchema, { calls: 3, input: 18234n, output: 2210n, lastPrompt: 12876n, costUsd: 0.0123, priced: true }),
@@ -378,7 +378,7 @@ export function installFake() {
       service(WorkspaceService, {
         getSettings: ({ workspace }) => {
           const s = state(workspace).settings;
-          return { agent: s.agent, model: s.model, provider: s.provider, effort: s.effort, permissionMode: s.mode, agency: s.agency, locale: s.locale, imagesEnabled: true };
+          return { agent: s.agent, model: s.model, provider: s.provider, effort: s.effort, permissionMode: s.mode, agency: s.agency, locale: s.locale, style: s.style, imagesEnabled: true };
         },
         getModel: ({ workspace }) => ({ name: state(workspace).settings.model, provider: state(workspace).settings.provider, unavailable: "" }),
         setModel: ({ workspace, ref }) => {
@@ -401,6 +401,7 @@ export function installFake() {
           const s = state(workspace).settings;
           if (key === "effort") s.effort = value === "auto" ? "" : value;
           if (key === "agency") s.agency = value;
+          if (key === "style") s.style = value;
           return { key };
         },
         setPermissionMode: ({ workspace, mode }) => {
@@ -417,6 +418,13 @@ export function installFake() {
             ? { model: { model: ref.split("/").pop(), provider: "gemini", settings: { temperature: 0.3 }, globalTemperature: 0.2, globalMaxTokens: 8192 } }
             : { all: { "gpt-5": { temperature: 1 }, "claude-opus-5-5": { reasoningEffort: "high" } } },
         updateModelSettings: ({ ref }) => ({ model: { model: ref, settings: {} }, unsupported: [] }),
+        listStyles: ({ workspace }) => ({
+          styles: [
+            { name: "concise", description: "Short answers; details only when asked", source: "built-in" },
+            { name: "default", description: "No style: the agent's own way of answering", source: "built-in" },
+            { name: "explanatory", description: "Explains choices and the codebase as it works, to learn from", source: "built-in" },
+          ].map((st) => ({ ...st, active: st.name === state(workspace).settings.style })),
+        }),
         listLocales: () => ({ locales: [{ tag: "en-US", name: "English" }, { tag: "es", name: "Español" }, { tag: "fr-CA", name: "Français (Canada)" }] }),
         setLocale: ({ input }) => ({ tag: input }),
         listPermissionRules: () => ({

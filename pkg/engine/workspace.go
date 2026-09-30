@@ -49,6 +49,9 @@ import (
 type Options struct {
 	// Streaming asks the model for partial responses as they are generated.
 	Streaming bool
+	// AppendSystemPrompt is added to the agent's instructions for this run
+	// (--append-system-prompt).
+	AppendSystemPrompt string
 	// Warn receives problems that don't stop the workspace from opening.
 	Warn func(string)
 	// Model replaces the model built from the configuration (tests use a
@@ -68,17 +71,22 @@ type Options struct {
 // Workspace is one open project: everything a session needs.
 type Workspace struct {
 	plugins []plugins.Loaded
-	goalMu  sync.Mutex
-	goals   map[string]api.Goal // by session
-	cfg     *config.Config
-	agents  *agents.Registry
-	skills  *skills.Provider
-	tools   *tools.Registry
-	engine  *runtime.Engine
-	storage *session.Storage
-	audit   *audit.Logger
-	memory  memory.Loaded
-	locales *i18n.Bundle
+	styleMu sync.Mutex
+	style   string // the output style ("": [ui] style, else none)
+	// appendPrompt is added to the instructions for this run
+	// (--append-system-prompt).
+	appendPrompt string
+	goalMu       sync.Mutex
+	goals        map[string]api.Goal // by session
+	cfg          *config.Config
+	agents       *agents.Registry
+	skills       *skills.Provider
+	tools        *tools.Registry
+	engine       *runtime.Engine
+	storage      *session.Storage
+	audit        *audit.Logger
+	memory       memory.Loaded
+	locales      *i18n.Bundle
 	// project are the project settings as the workspace opened.
 	project api.ProjectSettings
 	// moveNotes tell a session's next prompt that /cd moved it here
@@ -259,6 +267,14 @@ func Open(ctx context.Context, cfg *config.Config, o Options) (*Workspace, error
 	}
 
 	w.loadMemory()
+	w.appendPrompt = o.AppendSystemPrompt
+	if cfg.UI.Style != "" {
+		if _, ok := allStyles()[strings.ToLower(cfg.UI.Style)]; ok {
+			w.style = strings.ToLower(cfg.UI.Style)
+		} else {
+			o.Warn(fmt.Sprintf("ui.style %q: no such output style (default, concise, explanatory, or ~/.blitz/styles/<name>.md)", cfg.UI.Style))
+		}
+	}
 	for _, d := range w.memory.Docs {
 		if d.Local && memory.TrackedByGit(d.Path) {
 			o.Warn(i18n.T("memory.local_tracked", "path", d.Path))
@@ -427,6 +443,10 @@ func (w *Workspace) instructions() string {
 		if notes, err := memory.Notes(memory.NotesDir(w.Dir())); err == nil {
 			s += memory.RenderNotes(notes)
 		}
+	}
+	s += w.styleText()
+	if p := strings.TrimSpace(w.appendPrompt); p != "" {
+		s += "\n\n" + p
 	}
 	return s + i18n.ReplyInstruction(w.reply)
 }

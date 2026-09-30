@@ -27,7 +27,7 @@ import { sessions, workspaces } from "./api";
 import { message, reason } from "./errors";
 import { language, t } from "./i18n";
 import type { Usage } from "./gen/blitz/v1/turn_pb";
-import type { AgentInfo, Approval, GetSettingsResponse, LocaleInfo, ModelSettingsInfo, PermissionRule } from "./gen/blitz/v1/workspace_pb";
+import type { AgentInfo, Approval, GetSettingsResponse, LocaleInfo, ModelSettingsInfo, PermissionRule, Style } from "./gen/blitz/v1/workspace_pb";
 import { agencies, efforts, modes } from "./options";
 import { PermissionSettings } from "./PermissionSettings";
 import { ProviderSettings } from "./ProviderSettings";
@@ -58,6 +58,7 @@ export function RunSettings({ dir, settings, error, onChanged }: { dir: string; 
   const [models, setModels] = useState<string[]>([]);
   const [modelInfo, setModelInfo] = useState<ModelSettingsInfo>();
   const [locales, setLocales] = useState<LocaleInfo[]>([]);
+  const [styles, setStyles] = useState<Style[]>([]);
   const [rules, setRules] = useState<PermissionRule[]>([]);
   const [approvals, setApprovals] = useState<Approval[]>([]);
   const [usage, setUsage] = useState<Usage>();
@@ -66,14 +67,16 @@ export function RunSettings({ dir, settings, error, onChanged }: { dir: string; 
   const model = settings ? (settings.provider ? `${settings.provider}/${settings.model}` : settings.model) : "";
   const load = useCallback(async () => {
     try {
-      const [a, all, l, r, ap, u] = await Promise.all([
+      const [a, all, l, r, ap, u, st] = await Promise.all([
         workspaces.listAgents({ workspace: dir }),
         workspaces.getModelSettings({ workspace: dir }),
         workspaces.listLocales({ workspace: dir }),
         workspaces.listPermissionRules({ workspace: dir }),
         workspaces.listApprovals({ workspace: dir }),
         sessions.getUsage({ workspace: dir }).catch(() => undefined),
+        workspaces.listStyles({ workspace: dir }).catch(() => undefined),
       ]);
+      setStyles(st?.styles ?? []);
       setAgents(a.agents);
       setModels([...new Set([...a.agents.map((x) => x.pinnedModel).filter(Boolean), ...Object.keys(all.all)])]);
       setLocales(l.locales);
@@ -211,6 +214,17 @@ export function RunSettings({ dir, settings, error, onChanged }: { dir: string; 
                 {agencies().map((a) => (
                   <option key={a.value} value={a.value}>
                     {a.label}
+                  </option>
+                ))}
+              </select>
+            )}
+          </Field>
+          <Field label={t("desktop.rs.style")} supporting={styles.find((s) => s.name === (settings?.style || "default"))?.description}>
+            {(id) => (
+              <select id={id} className="select" value={settings?.style || "default"} onChange={(e) => act(() => workspaces.setSetting({ workspace: dir, key: "style", value: e.target.value }))}>
+                {styles.map((s) => (
+                  <option key={s.name} value={s.name}>
+                    {s.name.charAt(0).toUpperCase() + s.name.slice(1)}
                   </option>
                 ))}
               </select>
