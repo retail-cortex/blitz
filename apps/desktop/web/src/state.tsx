@@ -67,7 +67,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   const theme = resolveTheme(prefs.theme, systemDark);
   // Before the screen is painted, so no text shows in the wrong language.
   useLayoutEffect(() => setLanguage(prefs.language), [prefs.language]);
-  useEffect(() => applyTheme(theme, prefs.density, prefs.width), [theme, prefs.density, prefs.width]);
+  useEffect(() => applyTheme(theme, prefs.density, prefs.width, prefs.transparency), [theme, prefs.density, prefs.width, prefs.transparency]);
 
   // Saves run one after another, so the file ends with the latest.
   const update = useCallback((f: (p: Prefs) => Prefs) => {

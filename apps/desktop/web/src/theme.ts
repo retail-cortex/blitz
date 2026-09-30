@@ -40,11 +40,27 @@ export function systemIsDark(): boolean {
 }
 
 /** Applies the theme, density and conversation width to the document. */
-export function applyTheme(theme: Theme, density: "comfortable" | "compact" = "comfortable", width: "full" | "readable" = "full") {
+export function applyTheme(theme: Theme, density: "comfortable" | "compact" = "comfortable", width: "full" | "readable" = "full", transparency: "on" | "off" = "on") {
   const root = document.documentElement;
   root.dataset.theme = theme;
   root.dataset.density = density;
   root.dataset.width = width;
+  root.dataset.glass = transparency === "on" && !reducedTransparency() ? "on" : "off";
+  // In the macOS app the window itself is translucent: the desktop shows
+  // through instead of the page's backdrop.
+  if (nativeGlass()) root.dataset.nativeGlass = "";
+  else delete root.dataset.nativeGlass;
+}
+
+/** Whether the system asks for less transparency. */
+export function reducedTransparency(): boolean {
+  return typeof window !== "undefined" && !!window.matchMedia?.("(prefers-reduced-transparency: reduce)").matches;
+}
+
+/** Whether the window is macOS's translucent one (the desktop app). */
+function nativeGlass(): boolean {
+  if (typeof window === "undefined" || typeof navigator === "undefined") return false;
+  return "go" in window && /Mac/.test(navigator.userAgent);
 }
 
 /** Calls f whenever the system switches between light and dark. */

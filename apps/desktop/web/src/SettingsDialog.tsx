@@ -143,6 +143,9 @@ function Appearance() {
           ]}
         />
       </Setting>
+      <Setting title={t("desktop.settings.transparency")} detail={t("desktop.settings.transparency.detail")}>
+        <Switch label={t("desktop.settings.transparency")} checked={prefs.transparency === "on"} onChange={(on) => update((p) => ({ ...p, transparency: on ? "on" : "off" }))} />
+      </Setting>
       <Setting title={t("desktop.settings.width")} detail={t("desktop.settings.width.detail")}>
         <Segmented
           label={t("desktop.settings.width")}

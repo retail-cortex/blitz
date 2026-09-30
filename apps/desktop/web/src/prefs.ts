@@ -54,6 +54,8 @@ export interface Prefs {
   width: "full" | "readable";
   /** A background task that ends while nothing runs starts a turn about it. */
   task_continue: boolean;
+  /** Glass: translucent, blurred surfaces ("off": solid ones). */
+  transparency: "on" | "off";
 }
 
 /** The settings before any are saved. */
@@ -70,6 +72,7 @@ export const defaultPrefs: Prefs = {
   chat_width: 0,
   task_continue: false,
   width: "full",
+  transparency: "on",
 };
 
 const pick = <T extends string>(v: unknown, allowed: readonly T[], fallback: T): T => (allowed.includes(v as T) ? (v as T) : fallback);
@@ -105,6 +108,7 @@ export function normalizePrefs(raw: unknown): Prefs {
     show_hidden: r.show_hidden === true,
     width: pick(r.width, ["full", "readable"] as const, "full"),
     task_continue: r.task_continue === true,
+    transparency: pick(r.transparency, ["on", "off"] as const, "on"),
     chat_width: typeof r.chat_width === "number" && r.chat_width >= 0 && r.chat_width <= 10000 ? Math.round(r.chat_width) : 0,
   };
 }

@@ -65,6 +65,8 @@ type Prefs struct {
 	// TaskContinue: a background task that ends while nothing runs
 	// starts a turn about it.
 	TaskContinue bool `json:"task_continue"`
+	// Transparency is "on" (the default: glass surfaces) or "off".
+	Transparency string `json:"transparency"`
 }
 
 // WorkspacePrefs is a workspace as the window shows it.
@@ -101,6 +103,9 @@ func (p *Prefs) normalize() {
 	}
 	if p.Notifications != "off" {
 		p.Notifications = "on"
+	}
+	if p.Transparency != "off" {
+		p.Transparency = "on"
 	}
 	if !languageTag.MatchString(p.Language) {
 		p.Language = "system"

@@ -1244,6 +1244,8 @@
     "desktop.switcher.failed_runs.one": "{count} worker failed",
     "desktop.switcher.failed_runs.other": "{count} workers failed",
     "desktop.worker.changed": "Changed: {files}",
-    "desktop.worker.open_session": "Open its conversation"
+    "desktop.worker.open_session": "Open its conversation",
+    "desktop.settings.transparency": "Transparency",
+    "desktop.settings.transparency.detail": "Glass surfaces that let the desktop and the window behind them show through, blurred. Off: solid surfaces (also when the system asks for reduced transparency)."
   }
 }

@@ -1244,6 +1244,8 @@
     "desktop.switcher.failed_runs.one": "{count} worker falló",
     "desktop.switcher.failed_runs.other": "{count} workers fallaron",
     "desktop.worker.changed": "Cambió: {files}",
-    "desktop.worker.open_session": "Abrir su conversación"
+    "desktop.worker.open_session": "Abrir su conversación",
+    "desktop.settings.transparency": "Transparencia",
+    "desktop.settings.transparency.detail": "Superficies de vidrio que dejan ver, difuminado, el escritorio y lo que hay detrás. Desactivada: superficies opacas (también cuando el sistema pide reducir la transparencia)."
   }
 }

@@ -1,0 +1,112 @@
+/**
+ * Copyright 2026 Retail Cortex
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+/*
+ * Glass: the window's surfaces are translucent layers over a soft
+ * backdrop (the desktop itself, on macOS), blurred where they overlap.
+ * It works through the tokens: with html[data-glass="on"] the surface
+ * roles become translucent, and the structural layers (top bar, panels,
+ * editor, menus, dialogs, composer, status bar) blur what's behind them.
+ * html[data-glass="off"] (the Appearance setting, or the system's
+ * "reduce transparency") keeps the solid Material surfaces.
+ */
+:root {
+  --glass-blur: 24px;
+  --glass-saturate: 170%;
+  --backdrop:
+    radial-gradient(60vmax 50vmax at 8% 0%, #c9dcff 0%, transparent 60%),
+    radial-gradient(55vmax 45vmax at 100% 20%, #e6dcff 0%, transparent 60%),
+    radial-gradient(60vmax 50vmax at 40% 110%, #cdeede 0%, transparent 60%),
+    #eef2f8;
+}
+:root[data-theme="dark"] {
+  --backdrop:
+    radial-gradient(60vmax 50vmax at 8% 0%, #1b2d5e 0%, transparent 60%),
+    radial-gradient(55vmax 45vmax at 100% 20%, #33205a 0%, transparent 60%),
+    radial-gradient(60vmax 50vmax at 40% 110%, #0f3a36 0%, transparent 60%),
+    #0b0e15;
+}
+
+:root[data-glass="on"] {
+  --md-surface: rgb(255 255 255 / 0.58);
+  --md-surface-dim: rgb(236 240 246 / 0.6);
+  --md-surface-container-lowest: rgb(255 255 255 / 0.7);
+  --md-surface-container-low: rgb(255 255 255 / 0.5);
+  --md-surface-container: rgb(246 249 253 / 0.62);
+  --md-surface-container-high: rgb(238 243 250 / 0.72);
+  --md-surface-container-highest: rgb(226 232 240 / 0.8);
+  --md-outline-variant: rgb(120 132 150 / 0.28);
+  --md-code-bg: rgb(240 244 249 / 0.7);
+  --md-scrim: rgb(20 26 38 / 0.18);
+  --glass-strong: rgb(250 252 255 / 0.95);
+  --glass-border: rgb(255 255 255 / 0.65);
+  --glass-edge: inset 0 1px 0 rgb(255 255 255 / 0.7);
+  --glass-shadow: 0 8px 32px rgb(31 38 70 / 0.12), 0 1px 2px rgb(31 38 70 / 0.08);
+}
+:root[data-glass="on"][data-theme="dark"] {
+  --md-surface: rgb(22 25 32 / 0.55);
+  --md-surface-dim: rgb(18 20 26 / 0.6);
+  --md-surface-container-lowest: rgb(12 14 19 / 0.62);
+  --md-surface-container-low: rgb(34 38 48 / 0.5);
+  --md-surface-container: rgb(38 42 53 / 0.6);
+  --md-surface-container-high: rgb(48 53 66 / 0.7);
+  --md-surface-container-highest: rgb(60 66 80 / 0.78);
+  --md-outline-variant: rgb(200 210 230 / 0.14);
+  --md-code-bg: rgb(12 14 19 / 0.55);
+  --md-scrim: rgb(0 0 0 / 0.28);
+  --glass-strong: rgb(30 34 44 / 0.95);
+  --glass-border: rgb(255 255 255 / 0.1);
+  --glass-edge: inset 0 1px 0 rgb(255 255 255 / 0.07);
+  --glass-shadow: 0 8px 32px rgb(0 0 0 / 0.35), 0 1px 2px rgb(0 0 0 / 0.3);
+}
+
+/* The backdrop, and the shell letting it through. */
+:root[data-glass="on"] body { background: var(--backdrop); background-attachment: fixed; }
+:root[data-glass="on"][data-native-glass] body { background: transparent; }
+:root[data-glass="on"] .shell,
+:root[data-glass="on"] .main,
+:root[data-glass="on"] .editor-panel { background: transparent; }
+
+/* The layers that blur what's behind them. */
+:root[data-glass="on"] :is(.topbar, .files-shelf, .files-rail, .chat-panel, .run-settings, .editor-pane, .status-bar, .welcome-bar) {
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  background: var(--md-surface);
+}
+:root[data-glass="on"] :is(.menu, .dialog, .composer, .snackbar, .toast) {
+  -webkit-backdrop-filter: blur(calc(var(--glass-blur) * 1.25)) saturate(var(--glass-saturate));
+  backdrop-filter: blur(calc(var(--glass-blur) * 1.25)) saturate(var(--glass-saturate));
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow), var(--glass-edge);
+}
+:root[data-glass="on"] :is(.card, .tool, .run, .bubble, .diff-file) { border: 1px solid var(--glass-border); box-shadow: var(--glass-edge); }
+
+/* A dialog blurs the whole window behind it. */
+:root[data-glass="on"] .scrim {
+  -webkit-backdrop-filter: blur(14px) saturate(140%);
+  backdrop-filter: blur(14px) saturate(140%);
+}
+
+/* What floats over other text stays readable even where nothing blurs:
+   dialogs, menus, and the panels that float over the chat or the editor
+   in narrower windows. */
+:root[data-glass="on"] :is(.dialog, .menu) { background: var(--glass-strong); }
+@media (max-width: 1500px) {
+  :root[data-glass="on"] .run-settings { background: var(--glass-strong); border-left: 1px solid var(--glass-border); box-shadow: var(--glass-shadow); }
+}
+@media (max-width: 1100px) {
+  :root[data-glass="on"] .files-shelf { background: var(--glass-strong); border-right: 1px solid var(--glass-border); box-shadow: var(--glass-shadow); }
+}

@@ -51,11 +51,15 @@ func main() {
 		Height:    820,
 		MinWidth:  720,
 		MinHeight: 480,
-		// The page draws the whole window, title bar area included, in the
-		// theme's own colours (it may differ from the system's).
+		// The page draws the whole window, title bar area included. The
+		// window is translucent (the desktop shows through, blurred) and
+		// the page's glass surfaces sit on it; with transparency off in
+		// the app's settings the page draws solid surfaces over it.
+		BackgroundColour: &options.RGBA{R: 0, G: 0, B: 0, A: 0},
 		Mac: &mac.Options{
 			TitleBar:             mac.TitleBarHiddenInset(),
-			WebviewIsTransparent: false,
+			WebviewIsTransparent: true,
+			WindowIsTranslucent:  true,
 			OnUrlOpen:            app.links.receive,
 		},
 		// One app: a second start (a link, on Linux) goes to the first.

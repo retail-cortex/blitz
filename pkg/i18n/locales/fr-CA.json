@@ -1244,6 +1244,8 @@
     "desktop.switcher.failed_runs.one": "{count} worker a échoué",
     "desktop.switcher.failed_runs.other": "{count} workers ont échoué",
     "desktop.worker.changed": "Modifiés : {files}",
-    "desktop.worker.open_session": "Ouvrir sa conversation"
+    "desktop.worker.open_session": "Ouvrir sa conversation",
+    "desktop.settings.transparency": "Transparence",
+    "desktop.settings.transparency.detail": "Des surfaces de verre qui laissent voir, flouté, le bureau et ce qui est derrière. Désactivée : surfaces opaques (aussi quand le système demande de réduire la transparence)."
   }
 }
