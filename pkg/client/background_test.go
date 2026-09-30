@@ -17,11 +17,15 @@ package client
 import (
 	"context"
 	"net/http"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
+	"connectrpc.com/connect"
 	"github.com/retail-cortex/blitz/pkg/api"
 	"github.com/retail-cortex/blitz/pkg/config"
+	pb "github.com/retail-cortex/blitz/proto/blitz/v1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -91,4 +95,31 @@ func TestUndoWorkerRunOverTheService(t *testing.T) {
 	r, url := attachURL(t, nil)
 	_, err := AttachWorkersHTTP(http.DefaultClient, url, r.Dir()).UndoWorkerRun("run-x", false)
 	assert.ErrorIs(t, err, api.ErrNothingToUndo)
+}
+
+// A settings file edited by anyone reaches watching clients, so their views
+// of the rules refresh (the engine has applied it already).
+func TestSettingsChangedReachesWatchers(t *testing.T) {
+	r, _ := attachURL(t, nil)
+	sess, _, err := r.OpenSession("", false)
+	require.NoError(t, err)
+	ctx, stop := context.WithTimeout(context.Background(), 15*time.Second)
+	defer stop()
+	stream, err := r.workspaces.WatchTasks(ctx, connect.NewRequest(&pb.WatchTasksRequest{Workspace: r.dir, SessionIds: []string{sess.ID}}))
+	require.NoError(t, err)
+	defer stream.Close()
+	require.True(t, stream.Receive(), "no ready: %v", stream.Err())
+	require.True(t, stream.Msg().Event.GetReady())
+
+	file := filepath.Join(config.ConfigDir(""), ".env.toml")
+	require.NoError(t, os.MkdirAll(filepath.Dir(file), 0o700))
+	require.NoError(t, os.WriteFile(file, []byte("[permissions]\ndeny = [\"write(secret/**)\"]\n"), 0o600))
+	require.True(t, stream.Receive(), "no event: %v", stream.Err())
+	assert.True(t, stream.Msg().Event.GetSettingsChanged())
+	rules := r.ListPermissionRules()
+	found := false
+	for _, rule := range rules {
+		found = found || rule.Rule == "write(secret/**)"
+	}
+	assert.True(t, found, "the rule isn't in force: %+v", rules)
 }

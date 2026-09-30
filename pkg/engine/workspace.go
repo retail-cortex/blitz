@@ -70,11 +70,17 @@ type Options struct {
 
 // Workspace is one open project: everything a session needs.
 type Workspace struct {
-	plugins  []plugins.Loaded
-	noticeMu sync.Mutex
-	notices  map[string][]string // background processes' notices waiting, by session
-	styleMu  sync.Mutex
-	style    string // the output style ("": [ui] style, else none)
+	// settingsWatch keeps the permission rules in step with their files;
+	// settingsListeners hear of a change.
+	settingsWatch     *settingsWatch
+	settingsMu        sync.Mutex
+	settingsListeners map[int]func()
+	settingsNext      int
+	plugins           []plugins.Loaded
+	noticeMu          sync.Mutex
+	notices           map[string][]string // background processes' notices waiting, by session
+	styleMu           sync.Mutex
+	style             string // the output style ("": [ui] style, else none)
 	// appendPrompt is added to the instructions for this run
 	// (--append-system-prompt).
 	appendPrompt string
@@ -334,6 +340,7 @@ func Open(ctx context.Context, cfg *config.Config, o Options) (*Workspace, error
 	w.tools.ScriptHooks().Info = func(_ context.Context, session string) tools.HookInfo {
 		return tools.HookInfo{TranscriptPath: w.storage.TranscriptPath(session), PermissionMode: string(w.tools.Hooks().Mode()), Agent: w.engine.ActiveAgent()}
 	}
+	w.settingsWatch = w.watchSettings()
 	opened = true
 	return w, nil
 }
@@ -383,6 +390,7 @@ func (w *Workspace) Close() error {
 			w.sessionEnded(a.ID, "exit") // queued before the hooks drain
 		}
 	}
+	w.settingsWatch.close()
 	if w.engine != nil {
 		w.engine.StopTasks() // before their tools close
 	}

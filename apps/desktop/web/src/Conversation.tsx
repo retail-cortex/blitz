@@ -66,6 +66,7 @@ import { allCommands, helpText, matchCommands, parseCommand, type CommandSpec } 
 import {
   addToContextEvent,
   composeEvent,
+  configChanged,
   filesTouched,
   loadSessionEvent,
   showLicense,
@@ -469,6 +470,8 @@ export function Conversation({
             if (k?.case === "approvalRequest" || k?.case === "question") {
               const r: TaskRequest = k.case === "approvalRequest" ? { id: k.value.requestId, who: `${k.value.agent} · ${k.value.taskId}`, approval: k.value } : { id: k.value.requestId, who: `${k.value.agent} · ${k.value.taskId}`, question: k.value };
               setTaskRequests((list) => (list.some((x) => x.id === r.id) ? list : [...list, r]));
+            } else if (k?.case === "settingsChanged") {
+              configChanged({ dir }); // rules or approvals changed on disk: views refresh
             } else if (k?.case === "resolved") {
               setTaskRequests((list) => list.filter((x) => x.id !== k.value));
             } else if (k?.case === "task" && ["done", "failed", "stopped"].includes(k.value.state)) {

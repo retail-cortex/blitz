@@ -15,6 +15,7 @@
  */
 
 import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useOnConfigChanged } from "./workspaceSettings";
 import {
   mdiAlertCircleOutline,
   mdiChevronDown,
@@ -90,6 +91,8 @@ export function RunSettings({ dir, settings, error, onChanged }: { dir: string; 
   useEffect(() => {
     load();
   }, [load]);
+  // Rules and approvals changed elsewhere (the settings, a terminal, a file).
+  useOnConfigChanged(dir, load);
   useEffect(() => {
     setModelRef(model);
     if (!settings?.model) return;

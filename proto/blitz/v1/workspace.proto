@@ -1030,6 +1030,9 @@ message TaskEvent {
     // Sent once, after the active tasks and waiting requests: changes
     // follow.
     bool ready = 5;
+    // The workspace's permission rules or remembered approvals changed
+    // (their files were edited, by anyone): views of them should refresh.
+    bool settings_changed = 6;
   }
 }
 

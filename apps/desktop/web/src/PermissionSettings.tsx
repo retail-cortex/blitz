@@ -15,6 +15,7 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
+import { useOnConfigChanged } from "./workspaceSettings";
 import { mdiDeleteOutline, mdiPlus } from "@mdi/js";
 import { config, workspaces } from "./api";
 import { message } from "./errors";
@@ -65,6 +66,7 @@ export function PermissionSettings({ workspace, compact, onChanged }: { workspac
   useEffect(() => {
     load();
   }, [load]);
+  useOnConfigChanged(workspace, load);
 
   // The rule is checked as it's typed (and tried on the sample).
   useEffect(() => {

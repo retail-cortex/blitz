@@ -120,6 +120,6 @@ func (w *Workspace) reloadSavedPermissions() {
 // ones from the settings: after a settings change while a session runs.
 // Session and flag rules stay; read rules apply from the next start.
 func (w *Workspace) ReloadPermissions(cfg *config.Config) error {
-	w.cfg.Permissions = cfg.Permissions
-	return w.tools.Rules().ReplaceConfigured(cfg.Permissions)
+	w.cfg.Permissions, w.cfg.ProjectPermissions = cfg.Permissions, cfg.ProjectPermissions
+	return errors.Join(w.tools.Rules().ReplaceConfigured(cfg.Permissions), w.tools.Rules().ReplaceProject(cfg.ProjectPermissions))
 }

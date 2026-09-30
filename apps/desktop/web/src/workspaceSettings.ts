@@ -84,3 +84,21 @@ export function useWorkspaceSettings(dir: string) {
 
   return { settings, modelProblem, settingsError, project, reviewing, setReviewing, refreshSettings };
 }
+
+/**
+ * Calls f when settings change for dir (or the global ones, which reach
+ * every workspace): edited here, or on disk by anyone (the service's
+ * settings_changed).
+ */
+export function useOnConfigChanged(dir: string, f: () => void) {
+  const latest = useRef(f);
+  latest.current = f;
+  useEffect(() => {
+    const on = (e: Event) => {
+      const d = (e as CustomEvent<ConfigChangedDetail>).detail;
+      if (d.dir === "" || dir === "" || d.dir === dir) latest.current();
+    };
+    window.addEventListener(configChangedEvent, on);
+    return () => window.removeEventListener(configChangedEvent, on);
+  }, [dir]);
+}

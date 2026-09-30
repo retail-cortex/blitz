@@ -306,6 +306,18 @@ func (p *PermissionRules) ReplaceConfigured(cfg config.PermissionsConfig) error 
 	return err
 }
 
+// ReplaceProject puts cfg's rules in place of the project files' (their
+// deny and ask rules, which only tighten), after a project file changed.
+func (p *PermissionRules) ReplaceProject(cfg config.PermissionsConfig) error {
+	next := &PermissionRules{}
+	err := next.addProject(cfg)
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.rules = slices.DeleteFunc(p.rules, func(r PermissionRule) bool { return r.Source == SourceProject })
+	p.rules = append(p.rules, next.rules...)
+	return err
+}
+
 // RuleCheck describes a rule without adding it: its canonical form, how
 // its pattern matches, and whether a sample matched.
 type RuleCheck struct {

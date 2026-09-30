@@ -66,6 +66,30 @@ func OpenApprovalStore(path string) (*ApprovalStore, error) {
 	return s, nil
 }
 
+// Reload reads the file again: another process (the service, a terminal)
+// may have remembered or forgotten an approval. A missing file is empty.
+func (s *ApprovalStore) Reload() error {
+	if s == nil {
+		return nil
+	}
+	fresh, err := OpenApprovalStore(s.path)
+	if err != nil {
+		return err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.rules = fresh.rules
+	return nil
+}
+
+// Path is the store's file.
+func (s *ApprovalStore) Path() string {
+	if s == nil {
+		return ""
+	}
+	return s.path
+}
+
 // Has reports whether key is allowed. A nil store has no rules.
 func (s *ApprovalStore) Has(key string) bool {
 	if s == nil {

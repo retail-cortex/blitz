@@ -791,12 +791,22 @@ func (h workspaceService) WatchTasks(ctx context.Context, r req[pb.WatchTasksReq
 	if err := send(&pb.TaskEvent{Kind: &pb.TaskEvent_Ready{Ready: true}}); err != nil {
 		return err
 	}
-	for ev := range events {
-		if err := send(taskEventMsg(ev)); err != nil {
-			return err
+	settings := w.SettingsChanges(ctx)
+	for {
+		select {
+		case ev, ok := <-events:
+			if !ok {
+				return nil
+			}
+			if err := send(taskEventMsg(ev)); err != nil {
+				return err
+			}
+		case <-settings:
+			if err := send(&pb.TaskEvent{Kind: &pb.TaskEvent_SettingsChanged{SettingsChanged: true}}); err != nil {
+				return err
+			}
 		}
 	}
-	return nil
 }
 
 func (h workspaceService) ListTaskRequests(ctx context.Context, r req[pb.ListTaskRequestsRequest]) (*connect.Response[pb.ListTaskRequestsResponse], error) {
