@@ -9,6 +9,27 @@ Spec: [models](../about/specs/spec_models_015.md).
 
 Model requests are retried on rate limits, overload, 5xx responses and dropped connections, with exponential backoff that honours `Retry-After` (`llm.max_retries`, default 3; `0` turns retries off). A request that sends nothing for `llm.stall_timeout_seconds` (default 600) fails instead of hanging the turn. A stream that fails partway through isn't retried, because its text has already been shown. At most `tools.max_parallel` (default 8) tool calls from one model response run at once.
 
+## Models on your cloud
+
+Claude runs on Amazon Bedrock and Google Cloud's Vertex AI, and OpenAI's models and Claude on Azure, each with the cloud's own sign-in:
+
+```toml
+[llm]
+provider = "bedrock"            # AWS credentials as the AWS CLI finds them, or AWS_BEARER_TOKEN_BEDROCK
+[llm.bedrock]
+region = "us-east-1"
+model  = "us.anthropic.claude-sonnet-4-5-20250929-v1:0"
+
+# provider = "azure"            # api_key, or auth = "entra" for az login and managed identities
+# [llm.azure]
+# resource = "my-foundry"
+# model    = "gpt-5"            # the deployment; one named claude-… goes through Foundry's Anthropic API
+
+# provider = "vertex-anthropic" # Claude on Vertex AI: [llm.anthropic] project_id and location, gcloud's login
+```
+
+A model reference can name them too, for fallbacks or pinned agents: `bedrock/us.anthropic.claude-haiku-4-5-20251001-v1:0`, `azure/gpt-5-mini`. The desktop app's provider settings don't offer them yet: set them in the settings file.
+
 ## Listing models
 
 `blitz models` asks each provider you've set up which models it offers, and shows the price Blitz knows for each; `blitz models anthropic` asks one.

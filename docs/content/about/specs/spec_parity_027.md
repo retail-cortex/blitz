@@ -7,7 +7,7 @@ weight: 27
 
 | | |
 |---|---|
-| Status | **Partly implemented:** 77 of its 99 requirements done and 1 in part (counted 2026-09-30); the rest open. A gap analysis of 2026-09-26, to be closed before new features are added. |
+| Status | **Partly implemented:** 78 of its 99 requirements done and 1 in part (counted 2026-09-30); the rest open. A gap analysis of 2026-09-26, to be closed before new features are added. |
 | Compared with | **Claude Code** (current docs at code.claude.com, September 2026: v2.1.28x); **Antigravity CLI** (`agy` 1.1–1.2, September 2026); **Antigravity** 2.0 (Google's agent-first IDE and Agent Manager) |
 | Depends on | Specs 001–025 (what Blitz does today) and [spec_backlog_026](spec_backlog_026.md) (Blitz's own gaps; overlapping items are referenced, not repeated) |
 
@@ -206,7 +206,7 @@ Decision §12.2. **CC** `/cd <path>` (June 2026) moves the session to another di
 ## 10. Models, providers and installation
 
 - **PAR-MOD-01 (P0, S)** ✅ *Done 2026-09-26 (ROADMAP 25.8; now [spec_models_015](spec_models_015.md) MDL-73/74).* `/effort low|medium|high|max` and `--effort` — the per-model reasoning settings of [spec_backlog_026](spec_backlog_026.md) BL-ENG-01, with a session-level shortcut. **CC, AGY.**
-- **PAR-MOD-02 (P1, M)** Claude on Amazon Bedrock and on Google Cloud (Vertex/Agent Platform), and Azure/Microsoft Foundry for OpenAI and Claude models, as providers (`bedrock`, `vertex-anthropic`, `azure`), with their standard credential chains. **CC.**
+- **PAR-MOD-02 (P1, M)** ✅ *Done 2026-09-30 ([spec_models_015](spec_models_015.md) §3), with the AWS and Azure SDKs; the desktop app's provider settings don't offer them yet.* Claude on Amazon Bedrock and on Google Cloud (Vertex/Agent Platform), and Azure/Microsoft Foundry for OpenAI and Claude models, as providers (`bedrock`, `vertex-anthropic`, `azure`), with their standard credential chains. **CC.**
 - **PAR-MOD-03 (P1, S)** ✅ *Done 2026-09-30 ([spec_models_015](spec_models_015.md) MDL-56).* `blitz models` lists the models each configured provider offers (from the provider's list API where one exists), with pricing known to Blitz. **AGY** `agy models`.
 - **PAR-MOD-04 (P1, S)** ✅ *Done 2026-09-30 ([spec_models_015](spec_models_015.md) MDL-55).* `llm.<provider>.api_key_command`: a command whose output is the key, run when needed and cached for `api_key_ttl`, for keys kept in password managers or rotated by a gateway. **CC** `apiKeyHelper`.
 - **PAR-MOD-05 (P1, S)** ✅ *Done 2026-09-30 ([spec_models_015](spec_models_015.md) MDL-54); the browser tool doesn't use an upstream proxy.* Proxies: model and web clients honour `HTTPS_PROXY`/`NO_PROXY` and `[network] ca_file` (custom CA); `web_fetch` keeps refusing private addresses and, through a proxy, checks the resolved host before connecting. **CC** enterprise network configuration.

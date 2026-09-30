@@ -38,13 +38,15 @@ One TOML file, `.env.toml`, loaded through `github.com/rrmcguinness/modenv` (hie
 | | `goal_max_continues` | 20 | how often a `/goal` sends the agent on before stopping ([spec_sessions_017](spec_sessions_017.md) SES-19) |
 | | `plan_review` | `agent-decides` | `always` (every prompt is planned for approval first), `agent-decides` (the agent may call `enter_plan_mode`), `never` ([spec_workspace_018](spec_workspace_018.md) WS-45) |
 | | `trust_workspace` | `false` | Deprecated: trusts the project's settings for each run (CFG-05) |
-| `[llm]` | `provider` | `gemini` | `gemini\|anthropic\|openai\|ollama` |
+| `[llm]` | `provider` | `gemini` | `gemini\|anthropic\|openai\|ollama\|bedrock\|azure\|vertex-anthropic` |
 | | `max_retries` | `3` | `0` disables |
 | | `stall_timeout_seconds` | `600` | |
 | | `fallback_models` | `[]` | `provider/model` or bare model |
 | `[llm.gemini]` | `api_key`, `api_key_command`, `api_key_ttl` (5m), `model`, `auth` (`api_key` or `adc`), `project_id`, `location` | model `gemini-3.8-flash`; `auth` `api_key` | `adc`: [spec_models_015](spec_models_015.md) |
 | `[llm.openai]` | `api_key`, `api_key_command`, `api_key_ttl`, `base_url`, `model` | `https://api.openai.com/v1`, `gpt-4o` | shared by `ollama` |
 | `[llm.anthropic]` | `api_key`, `api_key_command`, `api_key_ttl`, `auth` (`api_key`, `oauth` or `adc`), `profile`, `project_id`, `location`, `model`, `base_url`, `fallbacks` | `claude-opus-5`, `default`; `auth` `api_key` | `oauth`, `adc`: [spec_models_015](spec_models_015.md) |
+| `[llm.bedrock]` | `region`, `profile`, `model` | | Claude on Amazon Bedrock ([spec_models_015](spec_models_015.md) §3) |
+| `[llm.azure]` | `resource`, `base_url`, `anthropic_base_url`, `api_key`, `auth` (`api_key` or `entra`), `model` | | OpenAI models and Claude on Azure ([spec_models_015](spec_models_015.md) §3) |
 | `[skills]` | `enabled`, `paths`, `[skills.policy]` | on; `~/.blitz/skills`, `./skills`, `.agents/skills` | see [spec_skills_013](spec_skills_013.md) |
 | `[workers]` | `enabled`, `paths`, `[workers.policy]` | on; `workers` | see [spec_workers_023](spec_workers_023.md) |
 | `[tools]` | `shell_timeout_seconds` 120, `max_file_size_bytes` 10 MiB, `workspace_dir` `.`, `auto_approve_commands` false, `uc_tools_dir`, `approvals_file` `~/.blitz/approvals.json`, `max_parallel` 8, `max_background_agents` 4, `background_agent_timeout` `30m`, `background_agent_max_turns` 50, `background_agent_max_cost_usd` 0 (none) ([spec_background_agents_032](spec_background_agents_032.md)) | | |
