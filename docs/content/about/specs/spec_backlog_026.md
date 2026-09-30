@@ -122,7 +122,7 @@ Suggested order (from NEXT_STEPS): run the manual checks (§9) first — their f
 - **BL-DSK-41** ✅ *Done 2026-09-30 ([spec_desktop_024](spec_desktop_024.md) DSK-78h).* The window's **System** language follows the terminal's `[ui] locale` when one is set, and user catalogs in `~/.blitz/locales` load too (the service would serve them: the desktop module can't read the configuration itself).
 
 ### 7.6 Workers view — S
-- **BL-DSK-50** The workers list refreshes when `WORKER.md` files change (polling `ListWorkers`, or a watch RPC); a run's session opens in the conversation view with one click.
+- **BL-DSK-50** ✅ *Done 2026-09-30 ([spec_desktop_024](spec_desktop_024.md) DSK-80d), by polling.* The workers list refreshes when `WORKER.md` files change (polling `ListWorkers`, or a watch RPC); a run's session opens in the conversation view with one click.
 
 ### 7.7 Releasing the app — M
 - **BL-DSK-60** ✅ *Done 2026-09-27 ([spec_release_025](spec_release_025.md) REL-20–24): signed and notarised once the Apple secrets are set, ad hoc until then.* A macOS release job builds a universal `Blitz.app`, signs it with a Developer ID, notarises and staples it, and attaches a `.dmg` to the release; the app's version is the release tag's.
