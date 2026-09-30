@@ -5,6 +5,7 @@ description: "General coding agent: reads, changes, runs and verifies code"
 agency_level: "high"
 tools:
   - web_fetch
+  - browser
   - web_search
   - read_file
   - view_image

@@ -1,0 +1,46 @@
+# Copyright 2026 Retail Cortex
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "browser",
+    srcs = [
+        "browser.go",
+        "cdp.go",
+        "proxy.go",
+    ],
+    importpath = "github.com/retail-cortex/blitz/pkg/engine/browser",
+    visibility = [
+        # The engine's browser tool, and blitz doctor.
+        "//apps/cli:__pkg__",
+        "//pkg/engine:__subpackages__",
+    ],
+    deps = ["@com_github_gorilla_websocket//:websocket"],
+)
+
+go_test(
+    name = "browser_test",
+    srcs = [
+        "browser_test.go",
+        "fake_test.go",
+    ],
+    embed = [":browser"],
+    deps = [
+        "//pkg/engine/browser/browsertest",
+        "@com_github_gorilla_websocket//:websocket",
+        "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//require",
+    ],
+)

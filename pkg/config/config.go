@@ -66,6 +66,7 @@ type Config struct {
 	Hooks       HooksConfig      `toml:"hooks"`
 	MCP         MCPConfig        `toml:"mcp"`
 	Web         WebConfig        `toml:"web"`
+	Browser     BrowserConfig    `toml:"browser"`
 	Log         LogConfig        `toml:"log"`
 	Telemetry   TelemetryConfig  `toml:"telemetry"`
 	// Pricing overrides or adds model prices, keyed by model name, for

@@ -31,6 +31,7 @@ import (
 	"github.com/retail-cortex/blitz/pkg/api"
 	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/engine"
+	"github.com/retail-cortex/blitz/pkg/engine/browser"
 	"github.com/retail-cortex/blitz/pkg/engine/memory"
 	"github.com/retail-cortex/blitz/pkg/engine/runtime"
 	"github.com/retail-cortex/blitz/pkg/engine/skills"
@@ -260,6 +261,14 @@ func runDoctor(ctx context.Context, g *globalFlags, online bool) []check {
 				add("web search", statusFail, "%s: %v", reg.SearchProvider(), err)
 			} else {
 				add("web search", statusOK, "%s: %d results", reg.SearchProvider(), len(out.Results))
+			}
+		}
+
+		if cfg.Web.Enabled && cfg.Browser.Enabled {
+			if path, err := browser.Find(cfg.Browser.Path); err != nil {
+				add("browser", statusWarn, "%v (the browser tool can't run)", err)
+			} else {
+				add("browser", statusOK, "%s", path)
 			}
 		}
 

@@ -216,29 +216,8 @@ func (f *webFetcher) fetch(ctx context.Context, hooks *Hooks, raw string) WebFet
 	if err := f.checkURL(u); err != nil {
 		return fail(err)
 	}
-	host := strings.ToLower(u.Hostname())
-	effect, rule := f.cfg.Rules.Decide(RuleWeb, []string{host})
-	if effect == EffectDeny {
-		return fail(fmt.Errorf("%s is denied by the permission rule deny %s", host, rule))
-	}
-	switch {
-	case effect == EffectAsk:
-		if err := hooks.Approve(ctx, api.ApprovalRequest{
-			Tool: "web_fetch", Kind: api.ActionNetwork, Detail: "GET " + u.String(),
-			Key: "web:" + host, KeyLabel: "requests to " + host, Targets: []string{host}, MustAsk: true,
-		}); err != nil {
-			return fail(err)
-		}
-	case matchDomain(f.cfg.AllowDomains, host):
-	case fetchGranted(ctx, u):
-		hooks.Audit().Log(audit.Entry{Kind: audit.KindApproval, Tool: "web_fetch", Detail: "GET " + u.String(), Decision: "user-selected"})
-	default:
-		if err := hooks.Approve(ctx, api.ApprovalRequest{
-			Tool: "web_fetch", Kind: api.ActionNetwork, Detail: "GET " + u.String(),
-			Key: "web:" + host, KeyLabel: "requests to " + host, Targets: []string{host},
-		}); err != nil {
-			return fail(err)
-		}
+	if err := approveWeb(ctx, hooks, f.cfg, "web_fetch", "GET "+u.String(), u); err != nil {
+		return fail(err)
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
@@ -286,6 +265,33 @@ func (f *webFetcher) fetch(ctx context.Context, hooks *Hooks, raw string) WebFet
 		out.Error = fmt.Sprintf("HTTP %d", resp.StatusCode)
 	}
 	return out
+}
+
+// approveWeb decides a request to u's host by the web rules: a deny rule
+// refuses, an ask rule always asks, web.allow_domains and URLs the user
+// chose go ahead, and anything else is approved per host (the key web:host,
+// shared by web_fetch and the browser).
+func approveWeb(ctx context.Context, hooks *Hooks, cfg WebFetchConfig, toolName, detail string, u *url.URL) error {
+	host := strings.ToLower(u.Hostname())
+	effect, rule := cfg.Rules.Decide(RuleWeb, []string{host})
+	if effect == EffectDeny {
+		return fmt.Errorf("%s is denied by the permission rule deny %s", host, rule)
+	}
+	req := api.ApprovalRequest{
+		Tool: toolName, Kind: api.ActionNetwork, Detail: detail,
+		Key: "web:" + host, KeyLabel: "requests to " + host, Targets: []string{host},
+	}
+	switch {
+	case effect == EffectAsk:
+		req.MustAsk = true
+		return hooks.Approve(ctx, req)
+	case matchDomain(cfg.AllowDomains, host):
+		return nil
+	case fetchGranted(ctx, u):
+		hooks.Audit().Log(audit.Entry{Kind: audit.KindApproval, Tool: toolName, Detail: detail, Decision: "user-selected"})
+		return nil
+	}
+	return hooks.Approve(ctx, req)
 }
 
 // htmlToText extracts readable text from HTML: scripts and styles are

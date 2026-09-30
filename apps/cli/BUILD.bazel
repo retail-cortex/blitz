@@ -45,6 +45,7 @@ go_library(
         "//pkg/client",
         "//pkg/config",
         "//pkg/engine",
+        "//pkg/engine/browser",
         "//pkg/engine/memory",
         "//pkg/engine/runtime",
         "//pkg/engine/skills",

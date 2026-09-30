@@ -224,6 +224,28 @@ type MCPServerConfig struct {
 	TimeoutSeconds int `toml:"timeout_seconds"`
 }
 
+// BrowserConfig controls the browser tool (spec_parity_027 §5.2): a
+// Chromium-family browser the agent drives, in its own profile, reaching
+// what the web rules allow.
+type BrowserConfig struct {
+	// Enabled offers the browser tool (with web.enabled and network
+	// access).
+	Enabled bool `toml:"enabled"`
+	// Path is the browser to run; empty finds Chrome, Chromium, Edge or
+	// Brave.
+	Path string `toml:"path"`
+	// Visible shows the browser's window instead of running headless.
+	Visible bool `toml:"visible"`
+	// AllowLocal lets it reach localhost and private addresses, to test
+	// the user's own app.
+	AllowLocal bool `toml:"allow_local"`
+	// AllowScripts runs the agent's page scripts without asking.
+	AllowScripts bool `toml:"allow_scripts"`
+	// Width and Height are the viewport (1280×800).
+	Width  int `toml:"width"`
+	Height int `toml:"height"`
+}
+
 // MCPConfig lists MCP servers.
 type MCPConfig struct {
 	Servers []MCPServerConfig `toml:"servers"`
@@ -345,6 +367,7 @@ func applyFeatureDefaults(c *Config) {
 	c.Checkpoints = CheckpointConfig{Enabled: true, MaxBytes: 64 * 1024 * 1024, Dir: "~/.blitz/checkpoints", MaxAgeDays: 30}
 	c.Images = ImagesConfig{Enabled: true, Dir: filepath.Join(dir, "images"), MaxDimension: 1568, MaxInputMB: 20, RetainDays: 30}
 	c.Web = WebConfig{Enabled: true, MaxBytes: 2 * 1024 * 1024, TimeoutSeconds: 20}
+	c.Browser = BrowserConfig{Enabled: true, Width: 1280, Height: 800}
 	// Prices in effect when the configuration loads: a service running
 	// across a price change picks the new price up at its next restart.
 	c.Pricing = DefaultPricingAt(time.Now())

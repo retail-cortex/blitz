@@ -66,6 +66,8 @@ type Registry struct {
 	modeNote error
 	rules    *PermissionRules
 
+	browser *browserTool // nil: no browser tool
+
 	notesMu sync.Mutex
 	notes   NoteSaver // nil: notes off
 }
@@ -252,6 +254,17 @@ func NewRegistry(cfg *config.Config, agentReg *agents.Registry, skillProv *skill
 		}})
 	}
 	r.fetch = cfg.Web.Enabled
+	if cfg.Web.Enabled && cfg.Browser.Enabled {
+		timeout := time.Duration(cfg.Web.TimeoutSeconds) * time.Second
+		if timeout < 30*time.Second {
+			timeout = 30 * time.Second // a page with scripts takes longer than a fetch
+		}
+		r.browser = newBrowserTool(r, cfg.Browser, WebFetchConfig{
+			AllowDomains: cfg.Web.AllowDomains, DenyDomains: cfg.Web.DenyDomains,
+			AllowNetwork: sb.AllowNetwork, Rules: rules,
+		}, timeout, config.ExpandHome("~/.blitz/walkthroughs"))
+		entries = append(entries, entry{[]string{"browser"}, func() (tool.Tool, error) { return NewBrowserTool(r.browser) }})
+	}
 	if cfg.Web.Enabled && cfg.Web.SearchProvider != "" {
 		sc := WebSearchConfig{
 			Provider:     cfg.Web.SearchProvider,
@@ -412,6 +425,7 @@ func (r *Registry) Close() error {
 	r.scripts.Close() // let queued post_tool hooks finish first
 	r.processes.Shutdown()
 	r.mcp.Close()
+	r.browser.close()
 	return r.workspace.Close()
 }
 
