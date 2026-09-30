@@ -86,7 +86,7 @@ Suggested order (from NEXT_STEPS): run the manual checks (§9) first — their f
 
 ### 5.4 Session metadata written twice — S
 **Extends** [spec_workers_023](spec_workers_023.md), [spec_sessions_017](spec_sessions_017.md). *Source: ROADMAP 24c.* With telemetry on, the workspace's and the run's session storage may both write a run session's metadata (`last_turn`).
-- **BL-WK-20** Only the storage that owns a session writes its metadata; a test with telemetry on runs a worker while the workspace records turns and checks the run session's metadata is intact.
+- **BL-WK-20** ✅ *Done 2026-09-30 ([spec_sessions_017](spec_sessions_017.md) SES-49); the test drives two storages directly.* Only the storage that owns a session writes its metadata; a test with telemetry on runs a worker while the workspace records turns and checks the run session's metadata is intact.
 
 ## 6. Skills
 
