@@ -7,7 +7,7 @@ weight: 27
 
 | | |
 |---|---|
-| Status | **Partly implemented:** 75 of its 99 requirements done and 1 in part (counted 2026-09-30); the rest open. A gap analysis of 2026-09-26, to be closed before new features are added. |
+| Status | **Partly implemented:** 76 of its 99 requirements done and 1 in part (counted 2026-09-30); the rest open. A gap analysis of 2026-09-26, to be closed before new features are added. |
 | Compared with | **Claude Code** (current docs at code.claude.com, September 2026: v2.1.28x); **Antigravity CLI** (`agy` 1.1–1.2, September 2026); **Antigravity** 2.0 (Google's agent-first IDE and Agent Manager) |
 | Depends on | Specs 001–025 (what Blitz does today) and [spec_backlog_026](spec_backlog_026.md) (Blitz's own gaps; overlapping items are referenced, not repeated) |
 
@@ -211,7 +211,7 @@ Decision §12.2. **CC** `/cd <path>` (June 2026) moves the session to another di
 - **PAR-MOD-04 (P1, S)** ✅ *Done 2026-09-30 ([spec_models_015](spec_models_015.md) MDL-55).* `llm.<provider>.api_key_command`: a command whose output is the key, run when needed and cached for `api_key_ttl`, for keys kept in password managers or rotated by a gateway. **CC** `apiKeyHelper`.
 - **PAR-MOD-05 (P1, S)** ✅ *Done 2026-09-30 ([spec_models_015](spec_models_015.md) MDL-54); the browser tool doesn't use an upstream proxy.* Proxies: model and web clients honour `HTTPS_PROXY`/`NO_PROXY` and `[network] ca_file` (custom CA); `web_fetch` keeps refusing private addresses and, through a proxy, checks the resolved host before connecting. **CC** enterprise network configuration.
 - **PAR-MOD-06 (P1, S)** Installation and updates: an install script (checksum- and cosign-verified), a Homebrew tap, and `blitz update` (checks the latest release, verifies its signature, replaces the binary). **CC, AGY.**
-- **PAR-MOD-07 (P2, S)** OpenTelemetry metrics (sessions, turns, tokens, cost, tool calls, approvals, by model and agent) alongside traces and logs. **CC.**
+- **PAR-MOD-07 (P2, S)** ✅ *Done 2026-09-30 ([spec_observability_003](spec_observability_003.md) OTEL-07).* OpenTelemetry metrics (sessions, turns, tokens, cost, tool calls, approvals, by model and agent) alongside traces and logs. **CC.**
 
 ## 11. Integrations (local equivalents only)
 
