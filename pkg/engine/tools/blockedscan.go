@@ -15,6 +15,7 @@
 package tools
 
 import (
+	"context"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -93,9 +94,18 @@ func newBlockedScan(spec OSSandboxSpec) *blockedScan {
 
 // expand is the blocked files and directories that exist now, sorted.
 func (s *blockedScan) expand() (files, dirs []string) {
+	files, dirs, _ = s.expandCtx(context.Background())
+	return files, dirs
+}
+
+// expandCtx is expand, stopping with ctx's error when ctx ends: a cold
+// scan reads up to blockedScanMaxEntries entries, which can take seconds,
+// and a turn's time limit or cancellation shouldn't wait for it. What was
+// read stays cached for the next scan.
+func (s *blockedScan) expandCtx(ctx context.Context) (files, dirs []string, err error) {
 	m := s.spec.Blocked
 	if m == nil || len(m.rules) == 0 {
-		return nil, nil
+		return nil, nil, ctx.Err()
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -126,7 +136,7 @@ func (s *blockedScan) expand() (files, dirs []string) {
 		}
 	}
 
-	w := &blockedWalk{scan: s, add: add, visited: map[string]bool{}}
+	w := &blockedWalk{scan: s, add: add, visited: map[string]bool{}, ctx: ctx}
 	for _, root := range append(append([]string(nil), s.spec.WritableDirs...), s.spec.ReadOnlyDirs...) {
 		info, err := os.Lstat(root)
 		if err != nil {
@@ -139,6 +149,9 @@ func (s *blockedScan) expand() (files, dirs []string) {
 			break
 		}
 	}
+	if w.err != nil {
+		return nil, nil, w.err // and nothing forgotten: the walk didn't finish
+	}
 	// Directories not walked this time (removed, or now past the limits)
 	// are forgotten.
 	for p := range s.dirs {
@@ -148,7 +161,7 @@ func (s *blockedScan) expand() (files, dirs []string) {
 	}
 	sort.Strings(files)
 	sort.Strings(dirs)
-	return files, dirs
+	return files, dirs, nil
 }
 
 // blockedWalk is one walk of the roots.
@@ -157,7 +170,13 @@ type blockedWalk struct {
 	add     func(path string, isDir bool)
 	visited map[string]bool
 	count   int // entries walked, roots included
+	ctx     context.Context
+	err     error // ctx's, once it ended
 }
+
+// cancelCheck is how many entries the walk reads between checks of its
+// context.
+const cancelCheck = 256
 
 // dir walks directory path, depth levels below its root, as
 // filepath.WalkDir would: entries in name order, skipping the directories
@@ -169,6 +188,11 @@ func (w *blockedWalk) dir(path string, depth int) bool {
 	for _, e := range w.scan.entries(path) {
 		if w.count++; w.count > blockedScanMaxEntries {
 			return true
+		}
+		if w.count%cancelCheck == 0 {
+			if w.err = w.ctx.Err(); w.err != nil {
+				return true
+			}
 		}
 		switch {
 		case e.isDir && (blockedScanSkip[e.name] || depth+1 > blockedScanMaxDepth):

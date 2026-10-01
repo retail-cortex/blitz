@@ -15,6 +15,7 @@
 package tools
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -48,12 +49,14 @@ type OSSandbox struct {
 	mode   ShellSandboxMode
 	active bool
 	reason string // why it is inactive
-	wrapFn func(argv []string) []string
+	wrapFn sandboxWrapper
 	spec   OSSandboxSpec
 }
 
-// sandboxWrapper rewrites a command's argv to run it sandboxed.
-type sandboxWrapper = func(argv []string) []string
+// sandboxWrapper rewrites a command's argv to run it sandboxed. Getting
+// ready may take a while (Linux scans for blocked paths): it stops with
+// ctx's error when ctx ends first, and the command doesn't start.
+type sandboxWrapper = func(ctx context.Context, argv []string) ([]string, error)
 
 // platformSandbox returns a wrapper that sandboxes commands, or an error if
 // this platform can't. Replaced in tests.
@@ -61,8 +64,8 @@ var platformSandbox = nativeSandbox
 
 // prefixWrapper returns a wrapper that prepends a fixed argv prefix.
 func prefixWrapper(prefix ...string) sandboxWrapper {
-	return func(argv []string) []string {
-		return append(append([]string(nil), prefix...), argv...)
+	return func(_ context.Context, argv []string) ([]string, error) {
+		return append(append([]string(nil), prefix...), argv...), nil
 	}
 }
 
@@ -114,10 +117,17 @@ func (s *OSSandbox) Status() string {
 }
 
 func (s *OSSandbox) wrap(argv []string) []string {
+	out, _ := s.wrapCtx(context.Background(), argv) // never cancelled, so no error
+	return out
+}
+
+// wrapCtx is argv sandboxed, or ctx's error if ctx ends while the sandbox
+// gets ready for it.
+func (s *OSSandbox) wrapCtx(ctx context.Context, argv []string) ([]string, error) {
 	if !s.Active() {
-		return argv
+		return argv, nil
 	}
-	return s.wrapFn(argv)
+	return s.wrapFn(ctx, argv)
 }
 
 // DefaultShellWritableDirs returns scratch locations commands commonly need:

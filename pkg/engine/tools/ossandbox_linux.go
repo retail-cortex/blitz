@@ -17,6 +17,7 @@
 package tools
 
 import (
+	"context"
 	"fmt"
 	"os/exec"
 )
@@ -35,8 +36,11 @@ func nativeSandbox(spec OSSandboxSpec) (sandboxWrapper, error) {
 		return nil, fmt.Errorf("bwrap probe failed (are user namespaces enabled?): %v: %s", err, out)
 	}
 	scan := newBlockedScan(spec) // kept between commands
-	return func(argv []string) []string {
-		files, dirs := scan.expand()
-		return append(bwrapArgs(bwrap, spec, files, dirs), argv...)
+	return func(ctx context.Context, argv []string) ([]string, error) {
+		files, dirs, err := scan.expandCtx(ctx) // a cold scan can take seconds
+		if err != nil {
+			return nil, err
+		}
+		return append(bwrapArgs(bwrap, spec, files, dirs), argv...), nil
 	}, nil
 }

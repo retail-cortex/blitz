@@ -189,6 +189,7 @@ go_test(
         "pyversion_test.go",
         "registry_cov_test.go",
         "remember_test.go",
+        "sandbox_cancel_test.go",
         "sandbox_paths_test.go",
         "scriptbox_cov_test.go",
         "scriptbox_gvisor_linux_cov_test.go",

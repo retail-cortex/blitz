@@ -142,5 +142,7 @@ func TestSystemNodeVersions(t *testing.T) {
 	t.Setenv("PATH", bin)
 	got, err := npmCLI(filepath.Join(t.TempDir(), "bin", "node"))
 	require.NoError(t, err)
-	assert.Equal(t, cli, got)
+	want, _ := filepath.EvalSymlinks(cli) // macOS: /var is a link
+	got, _ = filepath.EvalSymlinks(got)
+	assert.Equal(t, want, got)
 }

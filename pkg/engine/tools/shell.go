@@ -181,7 +181,15 @@ func runShellCommand(ctx context.Context, cfg ShellConfig, input RunShellCommand
 	defer cancel()
 
 	cmd, err := cfg.Exec.command(cmdCtx, []string{"bash", "-c", input.Command})
-	if err != nil {
+	switch {
+	case err == nil:
+	// The time limit or a cancellation while the sandbox got ready: as if
+	// it had stopped the command, which never started.
+	case errors.Is(cmdCtx.Err(), context.DeadlineExceeded) && ctx.Err() == nil:
+		return RunShellCommandOutput{ExitCode: -1, Error: fmt.Sprintf("command timed out after %s", timeout), DurationMs: time.Since(start).Milliseconds()}
+	case ctx.Err() != nil:
+		return RunShellCommandOutput{ExitCode: -1, Error: "command cancelled", DurationMs: time.Since(start).Milliseconds()}
+	default:
 		return RunShellCommandOutput{Error: fmt.Sprintf("failed to prepare command: %v", err)}
 	}
 	cmd.Dir = cwd

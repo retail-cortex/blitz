@@ -133,7 +133,10 @@ type guardedCmd struct {
 // command prepares argv to run under ctx. A nil ExecEnv runs unsandboxed.
 func (e *ExecEnv) command(ctx context.Context, argv []string) (*guardedCmd, error) {
 	if e != nil {
-		argv = e.Sandbox.wrap(argv)
+		var err error
+		if argv, err = e.Sandbox.wrapCtx(ctx, argv); err != nil {
+			return nil, err // ended while the sandbox got ready: nothing started
+		}
 	}
 	wrapped, childEnd, release, err := guardArgv(argv)
 	if err != nil {
