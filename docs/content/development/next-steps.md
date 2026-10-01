@@ -21,7 +21,7 @@ Written 2026-09-24 at commit `7e211697` on `main`; updated 2026-09-25, 2026-09-2
 4. `sign_macos.sh`: `hdiutil create` is deprecated in favour of `diskutil image`.
 5. The owner may enable **private vulnerability reporting** (Settings › Security); `docs/CONTRIBUTING.md` already points reporters there.
 6. proto-gen-md-diagrams (the owner maintains it): upstream fixes for escaping comments, skipping the license header and optional front matter would let `docs/api_pages.sh` go. The owner is checking the repository's state first.
-7. Coverage: the lowest packages on Linux are `pkg/loginitem` 42.8%, `pkg/client` 46.8%, `apps/desktop` 47.3%, `pkg/secrets` 52.3%.
+7. Coverage: 94.9% of the Go code on Linux (floor 94%); the page's TypeScript 17% of lines and branches, its components untested. The lowest Go packages are `pkg/loginitem` 76.9% and `apps/desktop` 80.4%, whose rest is macOS and Windows code and the Wails window runtime.
 
 ## State
 

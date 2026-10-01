@@ -51,7 +51,7 @@ Args: `command`, `cwd?` (inside the workspace), `timeout_seconds?`, `background?
 
 - **SH-30** Children start in their own process group (Unix); cancellation kills the whole group with `SIGKILL`, so grandchildren (`sleep &`) can't outlive a timeout or hold pipes open.
 - **SH-31** Parent-death guard: every command is wrapped by `bash -c '( read -r -u 3 _ ; kill -KILL 0 ) … & exec 3<&- ; exec "$@"'` with a pipe's read end as fd 3; Blitz holds the write end. EOF — Blitz closing it after the command exits, or Blitz dying for any reason — kills the group. Not available on non-Unix platforms.
-- **SH-32** Environment variables matching `sandbox.scrub_env` globs (case-insensitive) are removed from children. Commands run in the workspace root unless they set a directory.
+- **SH-32** Environment variables matching `sandbox.scrub_env` globs (case-insensitive) are removed from children. When a provider signs in with Google's ADC (`auth = "adc"`), each child gets a copy of the ADC file (`GOOGLE_APPLICATION_CREDENTIALS`, else gcloud's `application_default_credentials.json` in `$CLOUDSDK_CONFIG` or `~/.config/gcloud`), read as it starts, owner-only in its own directory under the user cache directory (`blitz/credentials`), with `GOOGLE_APPLICATION_CREDENTIALS` naming it; the copy is removed when the child ends, and copies over a day old (left by a crash) when a workspace opens. The blocked paths are unchanged. Without the file (a Google Cloud machine's own credentials) nothing is copied. Commands run in the workspace root unless they set a directory.
 
 ## 6. Background processes
 

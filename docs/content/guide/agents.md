@@ -28,7 +28,7 @@ An agent can hand work to another agent in the background: `invoke_agent` with `
 - A task runs what your permission mode and rules allow. Anything it would ask about waits for you: the REPL asks at its prompt, labelled ("qa · task-3 asks"), and the desktop app shows the request beside the conversation (**Ctrl+J** jumps to the next).
 - `/tasks` lists them (`/tasks show <id>`, `/tasks stop <id>`); the desktop app shows a card under the call, with **Show** and **Stop**. Exiting offers to stop or wait for them.
 - Limits: `tools.max_background_agents` (4 at once), `tools.background_agent_timeout` (30 minutes), `tools.background_agent_max_turns` (50 model calls) and `tools.background_agent_max_cost_usd` (none). Their cost counts in the session's.
-- `isolation: "worktree"` gives a background task its own git worktree and branch, so its changes stay out of your checkout until you merge them; `blitz worktrees list` shows them. You can start a whole session in one too: `blitz --worktree [name]`.
+- `isolation: "worktree"` gives a background task its own git worktree and branch, so its changes stay out of your checkout until you merge them; `blitz worktrees list` shows them. You can start a whole session in one too: `blitz --worktree[=name]`.
 - An agent's own file can set `background: true` (the default for `invoke_agent`), `max_turns` and `permission_mode` (for example `plan` for a reviewer that must not change anything). A project's agent may only tighten the mode until you trust the project.
 
 ## Tools

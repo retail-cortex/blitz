@@ -1,5 +1,13 @@
 # Blitz ⚡
 
+[![CI](https://github.com/retail-cortex/blitz/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/retail-cortex/blitz/actions/workflows/ci.yml?query=branch%3Amain)
+[![Docs](https://github.com/retail-cortex/blitz/actions/workflows/docs.yml/badge.svg)](https://github.com/retail-cortex/blitz/actions/workflows/docs.yml)
+[![Coverage](https://img.shields.io/badge/coverage-%E2%89%A594%25-brightgreen)](https://retail-cortex.github.io/blitz/about/coverage/)
+[![Latest release](https://img.shields.io/github/v/release/retail-cortex/blitz?include_prereleases&sort=semver)](https://github.com/retail-cortex/blitz/releases)
+[![Go version](https://img.shields.io/github/go-mod/go-version/retail-cortex/blitz)](go.mod)
+[![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
+[![Documentation](https://img.shields.io/badge/docs-retail--cortex.github.io%2Fblitz-blue)](https://retail-cortex.github.io/blitz/)
+
 > **The zero-gimmick, high-performance Go coding agent.**
 
 Blitz reads your workspace, makes the change, checks it, and gets out of the way: no persona, no filler, no chatter. It's written in Go on Google's Agent Development Kit and runs Gemini, Claude, OpenAI-compatible or Ollama models.

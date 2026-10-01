@@ -83,7 +83,7 @@ Background processes never outlive Blitz. Exiting with processes running asks wh
 
 ## Secrets
 
-Child processes don't inherit credential variables (`sandbox.scrub_env`: `*_API_KEY`, `*_SECRET` and more). The audit log, the diagnostic log and telemetry mask secrets. Sessions, history, approvals and audit files are owner-only.
+Child processes don't inherit credential variables (`sandbox.scrub_env`: `*_API_KEY`, `*_SECRET` and more). When Blitz signs in with Google Cloud ADC, the agent's commands can use that sign-in too: each gets its own copy of the credentials file, named by `GOOGLE_APPLICATION_CREDENTIALS` and removed when the command ends, while `~/.config/gcloud` itself (gcloud's own login included) stays hidden. The audit log, the diagnostic log and telemetry mask secrets. Sessions, history, approvals and audit files are owner-only.
 
 ## Checkpoints and undo
 

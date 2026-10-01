@@ -118,7 +118,7 @@ Decisions are `once`, `session`, `always` or `deny`; a question is answered with
 | `blitz update [--check]` | Install the latest release over this one, its signature and checksum checked |
 | `blitz models [provider…]` | The models your providers offer, with the prices Blitz knows |
 | `blitz memory list\|show\|edit\|forget <name>` | The notes the agent saved in the workspace with its `remember` tool |
-| `blitz --worktree [name] [--ref r]`, `blitz worktrees list\|remove <name>\|prune` | Work in a new git worktree and branch (`.blitz/worktrees/<name>`, `blitz/<name>`), with `.worktreeinclude`'s files copied in; list and remove them |
+| `blitz --worktree[=name] [--ref r]` (the name after `=`: a word after a space is the prompt), `blitz worktrees list\|remove <name>\|prune` | Work in a new git worktree and branch (`.blitz/worktrees/<name>`, `blitz/<name>`), with `.worktreeinclude`'s files copied in; list and remove them |
 | `/cd [path]` | Move the session to another workspace: it opens from scratch (its settings, trust question, sandbox, MCP servers), background work is dealt with as at exit, and `--continue` there finds the session; earlier prompts can't be rewound or undone from the new one |
 | `/tasks [show\|stop <id>]` | Background tasks (`invoke_agent` in the background) |
 | `/trust` | The workspace's project settings (`.blitz/settings.toml`), and trusting them |

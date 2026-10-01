@@ -54,6 +54,7 @@ tools/third_party_notices.sh    # regenerate THIRD_PARTY_NOTICES after changing 
 bazel run //tools/specs         # the specs' index and the paths they name
 bazel run //:docs               # this site at http://localhost:1313
 tools/coverage.sh               # test coverage of apps/ and pkg/; fails below tools/coverage/floor.txt
+bazel test //apps/desktop/web:coverage   # the desktop page's line and branch coverage; fails below vite.config.ts's thresholds
 bazel run //tools/codeowners    # .github/CODEOWNERS from OWNERS.txt
 bazel run //:desktop            # the desktop app (it finds its blitzd in the runfiles)
 bazel run //:desktop-web        # the desktop page in a browser (?fake: no service needed)
