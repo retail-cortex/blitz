@@ -43,6 +43,9 @@ import (
 	"github.com/retail-cortex/blitz/pkg/socket"
 )
 
+// The icons: a white bolt, filled while the service runs and outlined
+// while it's stopped (icons/*.svg). macOS takes them as templates and
+// tints them to suit the menu bar; Linux shows them as they are.
 var (
 	//go:embed icons/running-44.png
 	runningIcon []byte
@@ -161,9 +164,9 @@ func onReady() {
 
 	show := func(m tray.Menu, note string) {
 		if m.Running {
-			systray.SetIcon(runningIcon)
+			systray.SetTemplateIcon(runningIcon, runningIcon)
 		} else {
-			systray.SetIcon(stoppedIcon)
+			systray.SetTemplateIcon(stoppedIcon, stoppedIcon)
 		}
 		title := m.State.Title
 		if note != "" {

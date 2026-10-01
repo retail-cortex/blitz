@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-1 -1 26 26" width="44" height="44">
+  <!-- The tray's icon while the service runs: the brand's bolt
+       (docs/static/brand.svg) in white on nothing, so it sits with the
+       other menu bar and panel icons (macOS draws it as a template).
+       running-44.png is rendered from it
+       (inkscape running.svg -w 44 -h 44 -o running-44.png). -->
+  <path fill="#ffffff" d="M11 15H6L13 1V9H18L11 23V15Z"/>
+</svg>

@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-1 -1 26 26" width="44" height="44">
+  <!-- The tray's icon while the service is stopped: the running bolt
+       (running.svg) as an outline. stopped-44.png is rendered from it
+       (inkscape stopped.svg -w 44 -h 44 -o stopped-44.png). -->
+  <path fill="none" stroke="#ffffff" stroke-width="1.6" stroke-linejoin="round" d="M11 15H6L13 1V9H18L11 23V15Z"/>
+</svg>
