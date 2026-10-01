@@ -74,7 +74,9 @@ func TestNewModelAcceptsAProviderQualifiedName(t *testing.T) {
 	sm, ok := m.(*settingsModel)
 	require.True(t, ok, "got %T", m)
 	require.Equal(t, "claude-sonnet-5", m.Name())
-	require.IsType(t, &anthropicModel{}, sm.inner, "wraps the Anthropic model")
+	capped, ok := sm.inner.(*outputCapModel)
+	require.True(t, ok, "the settings wrap the output cap: got %T", sm.inner)
+	require.IsType(t, &anthropicModel{}, capped.inner, "which wraps the Anthropic model")
 	// The configured default model can name its provider too.
 	cfg.Blitz.DefaultModel = "anthropic/claude-haiku-4-5"
 	m, err = NewModel(context.Background(), cfg, "")
