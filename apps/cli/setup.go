@@ -126,6 +126,9 @@ func openBackend(ctx context.Context, cfg *config.Config, o backendOptions, warn
 	if !o.local && len(cfg.Plugins.Dirs) == 0 && socket.Running(sock) { // --plugin-dir runs here
 		r, err := client.Attach(ctx, sock, cfg.Tools.WorkspaceDir, warn)
 		if err != nil {
+			if errors.Is(err, api.ErrSandboxUnavailable) { // --local would need it too
+				return nil, nil, false, fmt.Errorf("attaching to the Blitz service at %s: %w", sock, err)
+			}
 			return nil, nil, false, fmt.Errorf("attaching to the Blitz service at %s: %w (--local runs without it)", sock, err)
 		}
 		locales := engine.SetupLocale(cfg, warn)

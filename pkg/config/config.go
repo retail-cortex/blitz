@@ -639,13 +639,34 @@ type SandboxConfig struct {
 	// ShellWritablePaths are directories sandboxed commands may also write
 	// (caches).
 	ShellWritablePaths []string `toml:"shell_writable_paths"`
-	Shell              string   `toml:"shell"` // auto | required | off
+	// Shell is auto, required or off: whether commands the model runs go
+	// through the OS sandbox. "required" refuses to run them without it;
+	// "auto" runs them unsandboxed then. Unset, it's "required" on Linux,
+	// where a stock system often has no sandbox (DefaultShellMode).
+	Shell string `toml:"shell"`
 	// AllowNetwork lets sandboxed commands use the network.
 	AllowNetwork bool `toml:"allow_network"`
 	// ScrubEnv are environment variables (globs) withheld from commands the
 	// model runs, so they can't read credentials.
-	ScrubEnv []string       `toml:"scrub_env"`
+	ScrubEnv []string `toml:"scrub_env"`
+	// ShareADC gives commands the model runs a copy of Google's ADC
+	// sign-in when a provider signs in with it (auth = "adc"), for code
+	// that calls Google Cloud. Off, they can't reach it: ~/.config/gcloud
+	// is blocked and GOOGLE_APPLICATION_CREDENTIALS withheld. A project
+	// can't turn it on.
+	ShareADC bool           `toml:"share_adc"`
 	Commands CommandsConfig `toml:"commands"`
+}
+
+// DefaultShellMode is sandbox.shell when the settings don't set it:
+// "required" on Linux, where a stock system often can't run the sandbox
+// (Ubuntu restricts the user namespaces bubblewrap needs) and "auto" would
+// run commands unsandboxed with only a note in doctor; "auto" elsewhere.
+func DefaultShellMode() string {
+	if runtime.GOOS == "linux" {
+		return "required"
+	}
+	return "auto"
 }
 
 // CommandsConfig holds shell command patterns. Patterns match a whole simple
@@ -804,6 +825,7 @@ func Load(prefixDir string) (*Config, error) { return load(prefixDir, "") }
 // (LoadWorkspace), and keychain references resolved.
 func load(prefixDir, workspace string) (*Config, error) {
 	cfg := DefaultConfig()
+	cfg.Sandbox.Shell = DefaultShellMode() // the settings may say otherwise
 
 	dir := ConfigDir(prefixDir)
 	if dir == "" {
@@ -931,6 +953,10 @@ func applyEnvOverrides(cfg *Config) {
 	}
 	if level := os.Getenv("BLITZ_LOG_LEVEL"); level != "" {
 		cfg.Log.Level = strings.ToLower(level)
+	}
+	// The sandbox mode, over the settings (a container without one, say).
+	if mode := os.Getenv("BLITZ_SANDBOX_SHELL"); mode != "" {
+		cfg.Sandbox.Shell = mode
 	}
 	switch strings.ToLower(os.Getenv("BLITZ_TELEMETRY")) {
 	case "1", "true", "yes", "on":

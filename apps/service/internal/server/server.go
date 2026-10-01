@@ -186,6 +186,9 @@ func (s *Server) openWorkspace(key string, op *opening) {
 	case errors.Is(err, api.ErrWorkspaceBusy):
 		op.err = apiError(connect.CodeFailedPrecondition, "WORKSPACE_BUSY", err, "workspace", key)
 		return
+	case errors.Is(err, api.ErrSandboxUnavailable):
+		op.err = apiError(connect.CodeFailedPrecondition, "SANDBOX_UNAVAILABLE", err, "workspace", key)
+		return
 	case err != nil:
 		op.err = apiError(connect.CodeFailedPrecondition, "OPEN_FAILED", err, "workspace", key)
 		return

@@ -198,6 +198,7 @@ func TestSandboxDefaults(t *testing.T) {
 }
 
 func TestSandboxConfigFromToml(t *testing.T) {
+	t.Setenv("BLITZ_SANDBOX_SHELL", "") // the tests' own, over the file
 	isolateConfigEnv(t)
 	dir := t.TempDir()
 	toml := `

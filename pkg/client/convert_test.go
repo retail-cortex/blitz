@@ -60,6 +60,9 @@ func TestErrorsFromTheService(t *testing.T) {
 		"WORKER_EXISTS": func(t *testing.T, err error) {
 			assert.ErrorIs(t, err, api.ErrWorkerExists)
 		},
+		"SANDBOX_UNAVAILABLE": func(t *testing.T, err error) {
+			assert.ErrorIs(t, err, api.ErrSandboxUnavailable)
+		},
 		"WORKER_INVALID": func(t *testing.T, err error) {
 			assert.ErrorIs(t, err, api.ErrWorkerInvalid)
 			assert.EqualError(t, err, "the message", "the service's message, with the problems")

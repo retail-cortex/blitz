@@ -28,6 +28,12 @@ common:linux --@rules_go//go/config:tags=webkit2_41
 # without it.
 test --test_env=RUNSC_PATH
 
+# Settings loaded in tests default to sandbox.shell = "required" on Linux
+# (config.DefaultShellMode), which a machine without the OS sandbox can't
+# meet: tests run in "auto", sandboxed wherever it works (CI makes sure it
+# does). Tests of the default clear it.
+test --test_env=BLITZ_SANDBOX_SHELL=auto
+
 # Aspect's rulesets report usage unless told not to.
 common --repo_env=ASPECT_TOOLS_TELEMETRY=off
 

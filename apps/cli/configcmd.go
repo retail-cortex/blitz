@@ -166,7 +166,7 @@ max_parallel = 8   # tool calls from one model response that run at once
 # read_only_paths = ["~/docs"]           # extra read-only roots
 # blocked_paths   = [".env", "*.pem", "~/.ssh"]   # replaces the defaults
 # shell_writable_paths = ["~/.npm", "~/.cargo"]   # caches the shell may write
-shell         = "auto"      # auto | required | off  (OS sandbox for shell commands)
+# shell       = "required"  # auto | required | off  (OS sandbox for shell commands; unset: required on Linux)
 allow_network = true
 
 [sandbox.commands]

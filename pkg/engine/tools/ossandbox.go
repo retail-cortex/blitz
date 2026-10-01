@@ -17,6 +17,7 @@ package tools
 import (
 	"context"
 	"fmt"
+	"github.com/retail-cortex/blitz/pkg/api"
 	"os"
 	"path/filepath"
 	"strings"
@@ -88,7 +89,7 @@ func NewOSSandbox(spec OSSandboxSpec) (*OSSandbox, error) {
 	wrap, err := platformSandbox(spec)
 	if err != nil {
 		if spec.Mode == SandboxRequired {
-			return nil, fmt.Errorf("sandbox.shell is \"required\" but the OS sandbox is unavailable: %w", err)
+			return nil, fmt.Errorf("sandbox.shell is \"required\" but %w: %v. %s", api.ErrSandboxUnavailable, err, sandboxHint)
 		}
 		s.reason = err.Error()
 		return s, nil

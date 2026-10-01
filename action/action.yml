@@ -58,6 +58,9 @@ inputs:
   version:
     description: The Blitz release to use (default the latest)
     default: ""
+  sandbox:
+    description: The OS sandbox for the agent's commands, sandbox.shell (required, auto or off); Windows has none, so needs auto
+    default: "required"
   github-token:
     description: The token to comment and open pull requests with
     default: ${{ github.token }}
@@ -90,6 +93,15 @@ runs:
       run: |
         sh "$GITHUB_ACTION_PATH/../release/install.sh"
         echo "$BLITZ_BIN" >> "$GITHUB_PATH"
+    # The agent works on text anyone can write (issues, comments): its
+    # commands run in bubblewrap, which needs unprivileged user namespaces,
+    # restricted on Ubuntu 24.04 by AppArmor. Hosted runners have sudo; on
+    # one without, a required sandbox fails the run and says why.
+    - if: steps.decide.outputs.run == 'true' && runner.os == 'Linux' && inputs.sandbox != 'off'
+      shell: bash
+      run: |
+        command -v bwrap >/dev/null || sudo apt-get install -y bubblewrap || true
+        sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 >/dev/null 2>&1 || true
     - if: steps.decide.outputs.run == 'true'
       id: run
       shell: bash
@@ -101,6 +113,7 @@ runs:
         OPENAI_API_KEY: ${{ inputs.openai-api-key }}
         ALLOW: ${{ inputs.allow }}
         MODEL: ${{ inputs.model }}
+        BLITZ_SANDBOX_SHELL: ${{ inputs.sandbox }}
       run: |
         git fetch --quiet --no-tags origin "+refs/heads/*:refs/remotes/origin/*" || true
         prompt="$("$GITHUB_ACTION_PATH/blitz-action.sh" prompt)"

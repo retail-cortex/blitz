@@ -99,6 +99,13 @@ func NewRegistry(cfg *config.Config, agentReg *agents.Registry, skillProv *skill
 	// deny read(...) rules are blocked paths: the file tools and the OS
 	// sandbox hide them from then on.
 	blocked := append(slices.Clone(sb.BlockedPaths), rules.Patterns(RuleRead, EffectDeny)...)
+	// The ant command's sign-in (~/.config/anthropic) is Blitz's own when
+	// Claude signs in with it, and only then readable by what the model runs.
+	if !cfg.LLM.Anthropic.UsesOAuth() {
+		if dir, _ := cfg.LLM.Anthropic.OAuthProfile(); dir != "" {
+			blocked = append(blocked, dir)
+		}
+	}
 	ws, err := OpenWorkspace(WorkspaceOptions{
 		Dir:           cfg.Tools.WorkspaceDir,
 		AllowedPaths:  sb.AllowedPaths,
@@ -139,9 +146,10 @@ func NewRegistry(cfg *config.Config, agentReg *agents.Registry, skillProv *skill
 		return nil, err
 	}
 	env := &ExecEnv{Sandbox: osb, ScrubEnv: sb.ScrubEnv, Dir: ws.Dir()}
-	// Signed in with Google's ADC: the model's commands get a copy of it
-	// (gcloud's directory stays blocked, and the variable scrubbed).
-	if cfg.UsesADC() {
+	// Signed in with Google's ADC, and sharing it (sandbox.share_adc): the
+	// model's commands get a copy of it (gcloud's directory stays blocked,
+	// and the variable scrubbed).
+	if cfg.UsesADC() && sb.ShareADC {
 		env.Credentials = []Credential{{Env: "GOOGLE_APPLICATION_CREDENTIALS", Path: config.ADCFile}}
 		go sweepCredentials()
 	}

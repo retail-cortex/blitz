@@ -199,6 +199,7 @@ go_test(
         "scripthooks_test.go",
         "shell_cov_test.go",
         "shell_test.go",
+        "signin_test.go",
         "skillremote_cov_test.go",
         "skillremote_test.go",
         "skills_tools_cov_test.go",

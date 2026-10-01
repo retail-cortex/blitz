@@ -17,6 +17,7 @@
 package tools
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"os/exec"
@@ -32,7 +33,11 @@ func nativeSandbox(spec OSSandboxSpec) (sandboxWrapper, error) {
 	}
 	profile := seatbeltProfile(spec)
 	if out, err := exec.Command(sandboxExec, "-p", profile, "/usr/bin/true").CombinedOutput(); err != nil {
-		return nil, fmt.Errorf("sandbox-exec probe failed: %v: %s", err, out)
+		return nil, fmt.Errorf("sandbox-exec probe failed: %v: %s", err, bytes.TrimSpace(out))
 	}
 	return prefixWrapper(sandboxExec, "-p", profile), nil
 }
+
+// sandboxHint says how to do without the sandbox when it's required and
+// unavailable.
+const sandboxHint = "Set sandbox.shell = \"auto\" in ~/.blitz/.env.toml to run commands unsandboxed"

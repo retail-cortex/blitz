@@ -188,7 +188,7 @@ var neverFromProject = []string{
 	"llm", "web", "browser", "network", "lsp", "telemetry", "log", "audit", "checkpoints", "session", "images.dir", "pricing", "search_pricing", "ui.status_line",
 	"blitz.auto_approve", "blitz.permission_mode", "blitz.trust_workspace", "permissions.auto",
 	"sandbox.shell", "sandbox.allow_network", "sandbox.allowed_paths", "sandbox.read_only_paths",
-	"sandbox.scrub_env", "sandbox.commands",
+	"sandbox.scrub_env", "sandbox.commands", "sandbox.share_adc",
 	"tools.auto_approve_commands", "tools.approvals_file", "tools.uc_tools_dir", "tools.workspace_dir",
 	"mcp.servers.auto_approve", "mcp.servers.sandbox",
 	"skills.policy.trusted_hashes", "skills.policy.allow_hitl_bypass", "skills.policy.network",

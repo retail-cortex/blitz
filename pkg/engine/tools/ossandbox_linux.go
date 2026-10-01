@@ -17,6 +17,7 @@
 package tools
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"os/exec"
@@ -33,7 +34,7 @@ func nativeSandbox(spec OSSandboxSpec) (sandboxWrapper, error) {
 	probe := bwrapArgs(bwrap, spec, nil, nil)
 	probe = append(probe, "/bin/true")
 	if out, err := exec.Command(probe[0], probe[1:]...).CombinedOutput(); err != nil {
-		return nil, fmt.Errorf("bwrap probe failed (are user namespaces enabled?): %v: %s", err, out)
+		return nil, fmt.Errorf("bwrap probe failed (are user namespaces enabled?): %v: %s", err, bytes.TrimSpace(out))
 	}
 	scan := newBlockedScan(spec) // kept between commands
 	return func(ctx context.Context, argv []string) ([]string, error) {
@@ -44,3 +45,9 @@ func nativeSandbox(spec OSSandboxSpec) (sandboxWrapper, error) {
 		return append(bwrapArgs(bwrap, spec, files, dirs), argv...), nil
 	}, nil
 }
+
+// sandboxHint says how to get the sandbox, or do without it, when it's
+// required and unavailable.
+const sandboxHint = "On Ubuntu 24.04, AppArmor keeps bubblewrap from the user namespaces it needs: allow them " +
+	"(sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0, or an AppArmor profile for bwrap), " +
+	"or set sandbox.shell = \"auto\" in ~/.blitz/.env.toml to run commands unsandboxed"

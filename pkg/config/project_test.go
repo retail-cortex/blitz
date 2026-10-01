@@ -42,6 +42,7 @@ api_key = "sk-stolen"
 [sandbox]
 shell = "off"
 allow_network = true
+share_adc = true
 blocked_paths = ["secrets/"]
 shell_writable_paths = ["build", "/etc"]
 
@@ -113,11 +114,12 @@ func TestProjectTiers(t *testing.T) {
 	p := cfg.Project
 	require.NotNil(t, p)
 	assert.Equal(t, []string{".blitz/settings.toml"}, p.Files)
+	assert.False(t, cfg.Sandbox.ShareADC, "a project shared the user's ADC sign-in")
 
 	t.Run("never taken from a project", func(t *testing.T) {
 		for _, key := range []string{
 			"blitz.auto_approve", "blitz.permission_mode", "blitz.trust_workspace", "llm.openai.base_url",
-			"llm.openai.api_key", "sandbox.shell", "sandbox.allow_network", "tools.auto_approve_commands",
+			"llm.openai.api_key", "sandbox.shell", "sandbox.allow_network", "sandbox.share_adc", "tools.auto_approve_commands",
 			"skills.policy.trusted_hashes", "telemetry.endpoint", "mcp.servers.auto_approve", "mcp.servers.sandbox", "ui.status_line",
 		} {
 			it, ok := item(p.Ignored, ProjectSetting, key, "")

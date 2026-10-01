@@ -17,6 +17,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	goruntime "runtime"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -132,4 +133,33 @@ func TestPermissionsMergeAuto(t *testing.T) {
 	got := user.Merge(PermissionsConfig{Auto: AutoReviewConfig{Model: "w", Environment: "we"}})
 	assert.Equal(t, AutoReviewConfig{Model: "w", Environment: "we"}, got.Auto)
 	assert.Equal(t, user.Auto, user.Merge(PermissionsConfig{}).Auto)
+}
+
+// sandbox.shell, unset, is "required" on Linux and "auto" elsewhere; the
+// settings and then BLITZ_SANDBOX_SHELL say otherwise.
+func TestShellModeDefault(t *testing.T) {
+	isolateConfigEnv(t)
+	want := "auto"
+	if goruntime.GOOS == "linux" {
+		want = "required"
+	}
+	assert.Equal(t, want, DefaultShellMode())
+	assert.Equal(t, "auto", DefaultConfig().Sandbox.Shell, "the code's own default (tests, embedders) stays auto")
+	tests := []struct {
+		name, settings, env, want string
+	}{
+		{name: "unset", want: want},
+		{name: "set in the settings", settings: "[sandbox]\nshell = \"auto\"\n", want: "auto"},
+		{name: "the variable over the settings", settings: "[sandbox]\nshell = \"auto\"\n", env: "off", want: "off"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("BLITZ_SANDBOX_SHELL", tt.env)
+			dir := t.TempDir()
+			require.NoError(t, os.WriteFile(filepath.Join(dir, ".env.toml"), []byte(tt.settings), 0o600))
+			cfg, err := Load(dir)
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, cfg.Sandbox.Shell)
+		})
+	}
 }

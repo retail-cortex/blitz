@@ -168,6 +168,10 @@ var Modes = []PermissionMode{ModeDefault, ModeAcceptEdits, ModeAuto, ModePlan, M
 // ErrUnknownMode reports a name that isn't a permission mode.
 var ErrUnknownMode = errors.New("unknown permission mode")
 
+// ErrSandboxUnavailable: sandbox.shell is "required" and the OS sandbox
+// can't run here, so the workspace doesn't open.
+var ErrSandboxUnavailable = errors.New("the OS sandbox is unavailable")
+
 // ErrBypassNeedsSandbox refuses bypass mode without an active OS sandbox.
 var ErrBypassNeedsSandbox = errors.New("bypass mode needs the OS sandbox (sandbox.shell), which isn't active")
 

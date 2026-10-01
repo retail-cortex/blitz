@@ -25,3 +25,7 @@ import (
 func nativeSandbox(spec OSSandboxSpec) (sandboxWrapper, error) {
 	return nil, fmt.Errorf("no OS sandbox implementation for %s", runtime.GOOS)
 }
+
+// sandboxHint says how to do without the sandbox when it's required and
+// unavailable.
+const sandboxHint = "Set sandbox.shell = \"auto\" in the settings to run commands unsandboxed"
