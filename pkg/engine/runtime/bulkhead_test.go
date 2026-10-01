@@ -67,7 +67,7 @@ func parallelShellTurn(t *testing.T, maxParallel int) time.Duration {
 	t.Helper()
 	var calls []*genai.Part
 	for range 4 {
-		calls = append(calls, &genai.Part{FunctionCall: &genai.FunctionCall{Name: "run_shell_command", Args: map[string]any{"command": "sleep 0.3"}}})
+		calls = append(calls, &genai.Part{FunctionCall: &genai.FunctionCall{Name: "run_shell_command", Args: map[string]any{"command": "sleep 1"}}})
 	}
 	// With the OS sandbox as configured by default: a first command scans
 	// for blocked paths (on Linux, seconds under -race); the sleeps after
@@ -87,12 +87,13 @@ func parallelShellTurn(t *testing.T, maxParallel int) time.Duration {
 	return time.Since(start)
 }
 
-// One at a time, four 0.3 s sleeps take at least 1.2 s; unlimited, they
-// overlap. The second is measured against the first, not a fixed bound: a
-// loaded machine slows both (a fixed 1.1 s failed on one, at 8 s).
+// One at a time, four 1 s sleeps take at least 4 s; unlimited, they
+// overlap, saving about 3 s. The second run is measured against the first,
+// not a fixed bound, and the sleeps are long enough that a loaded machine's
+// slower starts (seconds, under the race detector) don't hide the saving.
 func TestEngineCapsParallelToolCalls(t *testing.T) {
 	serial := parallelShellTurn(t, 1)
-	require.GreaterOrEqual(t, serial, 1100*time.Millisecond, "max_parallel=1 ran 4×0.3s sleeps in %v; they overlapped", serial)
+	require.GreaterOrEqual(t, serial, 3900*time.Millisecond, "max_parallel=1 ran 4×1s sleeps in %v; they overlapped", serial)
 	parallel := parallelShellTurn(t, 0)
-	require.LessOrEqual(t, parallel, serial-600*time.Millisecond, "unlimited took %v, one at a time %v; calls did not run in parallel", parallel, serial)
+	require.LessOrEqual(t, parallel, serial-2*time.Second, "unlimited took %v, one at a time %v; calls did not run in parallel", parallel, serial)
 }
