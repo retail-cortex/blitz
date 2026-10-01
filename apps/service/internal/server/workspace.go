@@ -830,5 +830,24 @@ func (h workspaceService) GetGitStatus(ctx context.Context, r req[pb.GetGitStatu
 	if err != nil {
 		return nil, toAPI(err)
 	}
-	return ok(&pb.GetGitStatusResponse{Repo: st.Repo, Branch: st.Branch, Changed: int32(st.Changed)})
+	return ok(gitStatusMsg(st))
+}
+
+func (h workspaceService) InitGitRepo(ctx context.Context, r req[pb.InitGitRepoRequest]) (*connect.Response[pb.InitGitRepoResponse], error) {
+	w, err := h.s.workspace(ctx, r.Msg.Workspace)
+	if err != nil {
+		return nil, err
+	}
+	st, err := w.GitInit(ctx)
+	switch {
+	case errors.Is(err, engine.ErrNoGit):
+		return nil, apiError(connect.CodeFailedPrecondition, "NO_GIT", err)
+	case err != nil:
+		return nil, apiError(connect.CodeFailedPrecondition, "GIT_FAILED", err)
+	}
+	return ok(&pb.InitGitRepoResponse{Status: gitStatusMsg(st)})
+}
+
+func gitStatusMsg(st api.GitStatus) *pb.GetGitStatusResponse {
+	return &pb.GetGitStatusResponse{Git: st.Git, Repo: st.Repo, Branch: st.Branch, Changed: int32(st.Changed)}
 }

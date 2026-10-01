@@ -66,8 +66,14 @@ service WorkspaceService {
   // Returns the agency level, plus model, agent and reply language.
   rpc GetSettings(GetSettingsRequest) returns (GetSettingsResponse);
   // Returns the workspace's git branch and how many files differ from
-  // HEAD (repo false outside a repository), for the status bar.
+  // HEAD (repo false outside a repository; one with no commit yet is a
+  // repository), and whether git is installed, for the status bar and
+  // Changes.
   rpc GetGitStatus(GetGitStatusRequest) returns (GetGitStatusResponse);
+  // Makes the workspace a git repository (git init) unless it's in one
+  // already, and returns its git status (NO_GIT without git on the
+  // service's PATH, GIT_FAILED).
+  rpc InitGitRepo(InitGitRepoRequest) returns (InitGitRepoResponse);
   // Changes a setting for the workspace: agency, or effort (a reasoning
   // effort, or "auto" to clear it) (UNKNOWN_SETTING, INVALID_AGENCY,
   // INVALID_SETTING).
@@ -1310,4 +1316,17 @@ message GetGitStatusResponse {
   string branch = 2;
   // Files that differ from HEAD, untracked ones included.
   int32 changed = 3;
+  // Git is on the service's PATH (else repo is false).
+  bool git = 4;
+}
+
+// Request message for WorkspaceService.InitGitRepo.
+message InitGitRepoRequest {
+  string workspace = 1;
+}
+
+// Response message for WorkspaceService.InitGitRepo.
+message InitGitRepoResponse {
+  // The repository's git status, after git init.
+  GetGitStatusResponse status = 1;
 }

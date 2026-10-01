@@ -262,6 +262,11 @@ body.resizing iframe, body.resizing .cm-editor { pointer-events: none; }
 .changes-body { display: flex; flex: 1; min-height: 0; }
 .changes-side { width: 320px; flex: none; overflow-y: auto; padding: 16px 12px 16px 16px; display: flex; flex-direction: column; gap: 4px; border-right: 1px solid var(--md-outline-variant); }
 .changes-main { flex: 1; min-width: 0; overflow: auto; padding: 16px 20px; }
+/* Git's view outside a repository: says so, and offers git init. */
+.changes-empty { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 24px; text-align: center; }
+.changes-empty .icon { color: var(--md-on-surface-variant); }
+.changes-empty p { margin: 0; max-width: 460px; }
+.changes-empty .btn { margin-top: 8px; }
 .side-label { padding: 12px 4px 4px; }
 .walkthrough { max-height: 30vh; overflow-y: auto; margin-bottom: 16px; font-size: 13px; }
 .walkthrough summary { cursor: pointer; margin-bottom: 8px; list-style: none; }

@@ -99,6 +99,9 @@ func (w *Workspace) GitDiff(ctx context.Context, color bool) (string, error) {
 
 // GitStatus reads the workspace's branch and changed files.
 func (w *Workspace) GitStatus(ctx context.Context) (api.GitStatus, error) {
+	if _, err := exec.LookPath("git"); err != nil {
+		return api.GitStatus{}, nil
+	}
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 	base := append([]string{"-c", "core.fsmonitor=false", "--no-optional-locks"}, noFilters(ctx, w.Dir())...)
@@ -107,15 +110,16 @@ func (w *Workspace) GitStatus(ctx context.Context) (api.GitStatus, error) {
 		cmd.Dir = w.Dir()
 		return cmd.Output()
 	}
-	out, err := git("rev-parse", "--abbrev-ref", "HEAD")
-	if err != nil {
-		return api.GitStatus{}, nil // not a repository, or no commit yet
+	st := api.GitStatus{Git: true}
+	if out, err := git("rev-parse", "--is-inside-work-tree"); err != nil || strings.TrimSpace(string(out)) != "true" {
+		return st, nil // not a repository
 	}
-	st := api.GitStatus{Repo: true, Branch: strings.TrimSpace(string(out))}
-	if st.Branch == "HEAD" { // detached
-		if sha, err := git("rev-parse", "--short", "HEAD"); err == nil {
-			st.Branch = strings.TrimSpace(string(sha))
-		}
+	st.Repo = true
+	// The branch, also before its first commit; else detached.
+	if out, err := git("symbolic-ref", "--short", "-q", "HEAD"); err == nil {
+		st.Branch = strings.TrimSpace(string(out))
+	} else if sha, err := git("rev-parse", "--short", "HEAD"); err == nil {
+		st.Branch = strings.TrimSpace(string(sha))
 	}
 	status, err := git("status", "--porcelain=v1", "-z", "--untracked-files=normal")
 	if err != nil {
@@ -127,6 +131,29 @@ func (w *Workspace) GitStatus(ctx context.Context) (api.GitStatus, error) {
 		}
 	}
 	return st, nil
+}
+
+// ErrNoGit is GitInit's error without git on PATH.
+var ErrNoGit = errors.New("git isn't installed: it isn't on the Blitz service's PATH")
+
+// GitInit makes the workspace a git repository (git init), unless it's in
+// one already, and returns its git status.
+func (w *Workspace) GitInit(ctx context.Context) (api.GitStatus, error) {
+	st, err := w.GitStatus(ctx)
+	switch {
+	case err != nil:
+		return st, err
+	case !st.Git:
+		return st, ErrNoGit
+	case st.Repo:
+		return st, nil
+	}
+	cmd := exec.CommandContext(ctx, "git", "init", "-q")
+	cmd.Dir = w.Dir()
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return st, fmt.Errorf("git init: %w: %s", err, strings.TrimSpace(string(out)))
+	}
+	return w.GitStatus(ctx)
 }
 
 // noFilters returns git options that blank every filter driver configured

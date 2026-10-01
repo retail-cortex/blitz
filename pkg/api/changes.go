@@ -29,9 +29,11 @@ type Checkpoint struct {
 
 // GitStatus is the workspace's git state for the status bar: its branch
 // (or short commit, detached) and how many files differ from HEAD,
-// untracked ones included. Repo is false outside a repository. Git runs
-// read-only, with no filters or fsmonitor.
+// untracked ones included. Git is false when git isn't on the service's
+// PATH, Repo outside a repository (a repository with no commit yet is
+// one). Git runs read-only, with no filters or fsmonitor.
 type GitStatus struct {
+	Git     bool
 	Repo    bool
 	Branch  string
 	Changed int

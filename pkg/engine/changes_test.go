@@ -102,16 +102,19 @@ func TestGitStatus(t *testing.T) {
 
 	st, err := w.GitStatus(ctx)
 	require.NoError(t, err)
-	assert.Equal(t, api.GitStatus{}, st, "not a repository")
+	assert.Equal(t, api.GitStatus{Git: true}, st, "not a repository")
 
 	git("init", "-q")
 	write("a.txt", "a\n")
+	st, err = w.GitStatus(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, api.GitStatus{Git: true, Repo: true, Branch: "main", Changed: 1}, st, "no commit yet: a.txt")
 	write("b.txt", "b\n")
 	git("add", ".")
 	git("commit", "-qm", "init")
 	st, err = w.GitStatus(ctx)
 	require.NoError(t, err)
-	assert.Equal(t, api.GitStatus{Repo: true, Branch: "main"}, st)
+	assert.Equal(t, api.GitStatus{Git: true, Repo: true, Branch: "main"}, st)
 
 	git("checkout", "-qb", "feature")
 	write(".gitattributes", "*.txt filter=evil\n")
@@ -121,7 +124,7 @@ func TestGitStatus(t *testing.T) {
 	write("new.txt", "new\n")
 	st, err = w.GitStatus(ctx)
 	require.NoError(t, err)
-	assert.Equal(t, api.GitStatus{Repo: true, Branch: "feature", Changed: 3}, st, "a.txt, new.txt and .gitattributes")
+	assert.Equal(t, api.GitStatus{Git: true, Repo: true, Branch: "feature", Changed: 3}, st, "a.txt, new.txt and .gitattributes")
 	got, _ := filepath.Glob(filepath.Join(dir, "pwned-*"))
 	assert.Empty(t, got, "git status ran commands from the repository's config")
 
@@ -129,6 +132,34 @@ func TestGitStatus(t *testing.T) {
 	st, err = w.GitStatus(ctx)
 	require.NoError(t, err)
 	assert.Regexp(t, `^[0-9a-f]{7,}$`, st.Branch, "a detached head shows its commit")
+}
+
+// GitInit makes a folder a repository once; in one already, or without
+// git, it changes nothing.
+func TestGitInit(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("no git")
+	}
+	ctx := context.Background()
+	t.Run("a folder", func(t *testing.T) {
+		w := openTest(t)
+		st, err := w.GitInit(ctx)
+		require.NoError(t, err)
+		assert.True(t, st.Repo)
+		assert.NotEmpty(t, st.Branch)
+		assert.DirExists(t, filepath.Join(w.Dir(), ".git"))
+		again, err := w.GitInit(ctx)
+		require.NoError(t, err)
+		assert.Equal(t, st, again)
+	})
+	t.Run("no git", func(t *testing.T) {
+		w := openTest(t)
+		t.Setenv("PATH", t.TempDir())
+		st, err := w.GitInit(ctx)
+		assert.ErrorIs(t, err, ErrNoGit)
+		assert.Equal(t, api.GitStatus{}, st)
+		assert.NoDirExists(t, filepath.Join(w.Dir(), ".git"))
+	})
 }
 
 // Checkpoints outlive the process: after reopening the workspace and

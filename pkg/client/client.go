@@ -839,7 +839,7 @@ func (r *Remote) GitStatus(ctx context.Context) (api.GitStatus, error) {
 	if err != nil {
 		return api.GitStatus{}, fromAPI(err)
 	}
-	return api.GitStatus{Repo: res.Msg.Repo, Branch: res.Msg.Branch, Changed: int(res.Msg.Changed)}, nil
+	return api.GitStatus{Git: res.Msg.Git, Repo: res.Msg.Repo, Branch: res.Msg.Branch, Changed: int(res.Msg.Changed)}, nil
 }
 
 // ListApprovals lists the standing approvals the user gave

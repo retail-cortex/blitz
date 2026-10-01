@@ -58,6 +58,7 @@ go_test(
         "config_test.go",
         "convert_test.go",
         "files_test.go",
+        "git_test.go",
         "info_test.go",
         "leak_test.go",
         "listen_test.go",

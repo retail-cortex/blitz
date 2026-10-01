@@ -16,11 +16,12 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { timestampDate } from "@bufbuild/protobuf/wkt";
-import { mdiAlertCircleOutline, mdiFileCompare, mdiRefresh, mdiSourceBranch, mdiTextBoxOutline, mdiUndoVariant } from "@mdi/js";
+import { mdiAlertCircleOutline, mdiFileCompare, mdiRefresh, mdiSourceBranch, mdiSourceBranchPlus, mdiTextBoxOutline, mdiUndoVariant } from "@mdi/js";
 import { sessions, workspaces } from "./api";
 import { message, reason } from "./errors";
 import { language, t, tn } from "./i18n";
-import type { Checkpoint } from "./gen/blitz/v1/workspace_pb";
+import type { Checkpoint, GetGitStatusResponse } from "./gen/blitz/v1/workspace_pb";
+import { filesTouched } from "./events";
 import { languageFor } from "./highlight";
 import { Markdown } from "./Markdown";
 import { parseDiff, type FileDiff } from "./turns";
@@ -77,12 +78,17 @@ export function Changes({ dir }: { dir: string }) {
   const [checkpoints, setCheckpoints] = useState<Checkpoint[]>([]);
   const [error, setError] = useState("");
   const [conflict, setConflict] = useState("");
+  // Git's view: whether the folder is a repository, and git installed.
+  const [git, setGit] = useState<GetGitStatusResponse>();
+  const [initing, setIniting] = useState(false);
 
   const refresh = useCallback(async () => {
     setError("");
     try {
+      const g = source === "git" ? await workspaces.getGitStatus({ workspace: dir }) : undefined;
+      setGit(g);
       const [d, s, c] = await Promise.all([
-        workspaces.getDiff({ workspace: dir, git: source === "git" }),
+        g && !g.repo ? { diff: "" } : workspaces.getDiff({ workspace: dir, git: source === "git" }),
         sessions.getActiveSession({ workspace: dir }),
         workspaces.listCheckpoints({ workspace: dir }),
       ]);
@@ -112,6 +118,21 @@ export function Changes({ dir }: { dir: string }) {
     }
   };
 
+  const initRepo = async () => {
+    setIniting(true);
+    try {
+      const res = await workspaces.initGitRepo({ workspace: dir });
+      snack(t("desktop.changes.repo_made", { branch: res.status?.branch ?? "" }));
+      filesTouched({ dir }); // the status bar shows the branch
+      await refresh();
+    } catch (e) {
+      snack(message(e), { error: true });
+    } finally {
+      setIniting(false);
+    }
+  };
+
+  const notRepo = source === "git" && git && !git.repo;
   const file = files?.find((f) => f.path === selected);
   const totals = (files ?? []).reduce((t, f) => ({ added: t.added + f.added, removed: t.removed + f.removed }), { added: 0, removed: 0 });
   return (
@@ -143,52 +164,69 @@ export function Changes({ dir }: { dir: string }) {
           <Icon path={mdiAlertCircleOutline} /> {error}
         </div>
       )}
-      <div className="changes-body">
-        <aside className="changes-side">
-          <div className="t-label muted side-label">{t("desktop.changes.files")}</div>
-          {files?.length === 0 && <p className="muted t-body-sm">{source === "session" ? t("desktop.changes.none_session") : t("desktop.changes.none_git")}</p>}
-          <div className="list">
-            {files?.map((f) => (
-              <button key={f.path} className={`list-item file-item ${f.path === selected ? "active" : ""}`} onClick={() => setSelected(f.path)} title={f.path}>
-                <span className="lines">
-                  <span className="ellipsis mono">{f.path.split("/").pop()}</span>
-                  <small className="ellipsis">{f.path}</small>
-                </span>
-                <span className="trailing t-body-sm">
-                  <span className="add-count">+{f.added}</span>
-                  <span className="del-count">−{f.removed}</span>
-                </span>
-              </button>
-            ))}
-          </div>
-          {source === "session" && checkpoints.length > 0 && (
+      {notRepo ? (
+        <div className="changes-empty">
+          <Icon path={mdiSourceBranch} size="lg" />
+          <p className="t-title">{t("desktop.changes.not_repo")}</p>
+          {git.git ? (
             <>
-              <div className="t-label muted side-label">{t("desktop.changes.turns")}</div>
-              <ul className="timeline">
-                {checkpoints.map((c) => (
-                  <li key={c.id}>
-                    <span className="ellipsis">{c.label}</span>
-                    <small className="muted">
-                      {c.time && timestampDate(c.time).toLocaleTimeString(language())} · {tn("desktop.changes.count", c.files.length)}
-                    </small>
-                  </li>
-                ))}
-              </ul>
+              <p className="muted">{t("desktop.changes.not_repo.detail")}</p>
+              <Button variant="filled" icon={mdiSourceBranchPlus} disabled={initing} onClick={initRepo}>
+                {t("desktop.changes.init_repo")}
+              </Button>
             </>
+          ) : (
+            <p className="muted">{t("desktop.changes.no_git")}</p>
           )}
-        </aside>
-        <div className="changes-main">
-          {summary && source === "session" && files && files.length > 0 && (
-            <details className="card walkthrough" open>
-              <summary className="row t-title-sm">
-                <Icon path={mdiTextBoxOutline} size="sm" /> {t("desktop.changes.summary")}
-              </summary>
-              <Markdown text={summary} />
-            </details>
-          )}
-          {file ? <DiffView files={[file]} /> : files === null ? <p className="muted">{t("desktop.loading")}</p> : null}
         </div>
-      </div>
+      ) : (
+        <div className="changes-body">
+          <aside className="changes-side">
+            <div className="t-label muted side-label">{t("desktop.changes.files")}</div>
+            {files?.length === 0 && <p className="muted t-body-sm">{source === "session" ? t("desktop.changes.none_session") : t("desktop.changes.none_git")}</p>}
+            <div className="list">
+              {files?.map((f) => (
+                <button key={f.path} className={`list-item file-item ${f.path === selected ? "active" : ""}`} onClick={() => setSelected(f.path)} title={f.path}>
+                  <span className="lines">
+                    <span className="ellipsis mono">{f.path.split("/").pop()}</span>
+                    <small className="ellipsis">{f.path}</small>
+                  </span>
+                  <span className="trailing t-body-sm">
+                    <span className="add-count">+{f.added}</span>
+                    <span className="del-count">−{f.removed}</span>
+                  </span>
+                </button>
+              ))}
+            </div>
+            {source === "session" && checkpoints.length > 0 && (
+              <>
+                <div className="t-label muted side-label">{t("desktop.changes.turns")}</div>
+                <ul className="timeline">
+                  {checkpoints.map((c) => (
+                    <li key={c.id}>
+                      <span className="ellipsis">{c.label}</span>
+                      <small className="muted">
+                        {c.time && timestampDate(c.time).toLocaleTimeString(language())} · {tn("desktop.changes.count", c.files.length)}
+                      </small>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
+          </aside>
+          <div className="changes-main">
+            {summary && source === "session" && files && files.length > 0 && (
+              <details className="card walkthrough" open>
+                <summary className="row t-title-sm">
+                  <Icon path={mdiTextBoxOutline} size="sm" /> {t("desktop.changes.summary")}
+                </summary>
+                <Markdown text={summary} />
+              </details>
+            )}
+            {file ? <DiffView files={[file]} /> : files === null ? <p className="muted">{t("desktop.loading")}</p> : null}
+          </div>
+        </div>
+      )}
       {conflict && (
         <Dialog
           title={t("desktop.conflict.title")}

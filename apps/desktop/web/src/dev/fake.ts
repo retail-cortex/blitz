@@ -31,6 +31,9 @@ import { ConfigService, KeySource } from "../gen/blitz/v1/config_pb";
 import { FileKind, FileService } from "../gen/blitz/v1/file_pb";
 import { WorkspaceService } from "../gen/blitz/v1/workspace_pb";
 
+// Whether the fake workspace is a git repository (?norepo: not yet).
+let fakeRepo = !new URLSearchParams(location.search).has("norepo");
+
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const now = () => timestampFromDate(new Date());
 
@@ -612,7 +615,12 @@ export function installFake() {
         },
         listCheckpoints: () => ({ checkpoints: [{ id: 2, label: "Fix the coupon rounding", time: now(), files: ["internal/cart/discount.go", "internal/cart/discount_test.go"] }] }),
         undo: () => ({ label: "Fix the coupon rounding", restored: ["internal/cart/discount.go"] }),
-        getGitStatus: () => ({ repo: true, branch: "fix/coupon-rounding", changed: 2 }),
+        // ?fake&norepo: a folder that isn't a repository yet.
+        getGitStatus: () => (fakeRepo ? { git: true, repo: true, branch: "fix/coupon-rounding", changed: 2 } : { git: true, repo: false }),
+        initGitRepo: () => {
+          fakeRepo = true;
+          return { status: { git: true, repo: true, branch: "main", changed: 0 } };
+        },
         getDiff: ({ git }) => ({
           diff: git
             ? ""
