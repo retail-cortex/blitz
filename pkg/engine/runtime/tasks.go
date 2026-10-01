@@ -223,8 +223,10 @@ func (e *Engine) askForTask(ctx context.Context, t *task, req api.TaskRequest) (
 		t.info.State = api.TaskRunning
 	}
 	m.publishLocked(t.info.Session, api.SessionEvent{Resolved: req.ID})
-	info = t.info
-	m.publishLocked(t.info.Session, api.SessionEvent{Task: &info})
+	// A copy of its own: the event published above points at info, which
+	// subscribers may still be reading (a data race when it was reused).
+	after := t.info
+	m.publishLocked(t.info.Session, api.SessionEvent{Task: &after})
 	m.mu.Unlock()
 	return reply, err
 }
