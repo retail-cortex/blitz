@@ -252,3 +252,31 @@ func TestSearchPriceFor(t *testing.T) {
 		})
 	}
 }
+
+// The ADC file is Google's: GOOGLE_APPLICATION_CREDENTIALS, else gcloud's
+// login in $CLOUDSDK_CONFIG or ~/.config/gcloud; none without the file.
+func TestADCFile(t *testing.T) {
+	home := t.TempDir()
+	gcloud := filepath.Join(home, ".config", "gcloud")
+	require.NoError(t, os.MkdirAll(gcloud, 0o700))
+	login := filepath.Join(gcloud, "application_default_credentials.json")
+	require.NoError(t, os.WriteFile(login, []byte("{}"), 0o600))
+	other := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(other, "application_default_credentials.json"), []byte("{}"), 0o600))
+	tests := []struct {
+		name, env, cloudsdk, home, want string
+	}{
+		{"the variable", "/keys/sa.json", "", home, "/keys/sa.json"},
+		{"gcloud's login", "", "", home, login},
+		{"CLOUDSDK_CONFIG", "", other, home, filepath.Join(other, "application_default_credentials.json")},
+		{"none", "", "", t.TempDir(), ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("GOOGLE_APPLICATION_CREDENTIALS", tt.env)
+			t.Setenv("CLOUDSDK_CONFIG", tt.cloudsdk)
+			t.Setenv("HOME", tt.home)
+			assert.Equal(t, tt.want, ADCFile())
+		})
+	}
+}

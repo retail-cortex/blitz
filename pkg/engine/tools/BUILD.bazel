@@ -140,6 +140,7 @@ go_test(
         "checkpoint_persist_test.go",
         "checkpoint_runs_test.go",
         "cmdpolicy_test.go",
+        "credentials_test.go",
         "edit_race_test.go",
         "file_tools_test.go",
         "glob_test.go",

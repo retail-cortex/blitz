@@ -26,6 +26,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 
@@ -241,6 +242,36 @@ type GeminiConfig struct {
 // UsesADC reports whether Gemini authenticates with Application Default
 // Credentials, through Vertex AI.
 func (g GeminiConfig) UsesADC() bool { return g.Auth == AuthADC }
+
+// UsesADC reports whether a provider signs in with Google's Application
+// Default Credentials.
+func (c *Config) UsesADC() bool { return c.LLM.Gemini.UsesADC() || c.LLM.Anthropic.UsesADC() }
+
+// ADCFile is the Application Default Credentials file Google's libraries
+// read: GOOGLE_APPLICATION_CREDENTIALS, else gcloud's application-default
+// login in its configuration directory ($CLOUDSDK_CONFIG, else
+// ~/.config/gcloud, %APPDATA%\gcloud on Windows). It's "" when there's no
+// such file, as on a Google Cloud machine, which has its own.
+func ADCFile() string {
+	if p := os.Getenv("GOOGLE_APPLICATION_CREDENTIALS"); p != "" {
+		return p
+	}
+	dir := os.Getenv("CLOUDSDK_CONFIG")
+	if dir == "" && runtime.GOOS == "windows" {
+		dir = filepath.Join(os.Getenv("APPDATA"), "gcloud")
+	} else if dir == "" {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return ""
+		}
+		dir = filepath.Join(home, ".config", "gcloud")
+	}
+	p := filepath.Join(dir, "application_default_credentials.json")
+	if info, err := os.Stat(p); err != nil || info.IsDir() {
+		return ""
+	}
+	return p
+}
 
 // OpenAIConfig holds settings for OpenAI, OpenRouter, or Ollama.
 type OpenAIConfig struct {

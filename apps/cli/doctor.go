@@ -384,13 +384,7 @@ func checkADC(provider, project, location, confirm string) (checkStatus, string)
 	if os.Getenv("GOOGLE_APPLICATION_CREDENTIALS") != "" {
 		return statusOK, where + "GOOGLE_APPLICATION_CREDENTIALS" + confirm
 	}
-	gcloud := os.Getenv("CLOUDSDK_CONFIG")
-	if gcloud == "" {
-		if dir, err := os.UserConfigDir(); err == nil {
-			gcloud = filepath.Join(dir, "gcloud")
-		}
-	}
-	if _, err := os.Stat(filepath.Join(gcloud, "application_default_credentials.json")); err == nil {
+	if config.ADCFile() != "" {
 		return statusOK, where + "gcloud's application-default login" + confirm
 	}
 	return statusWarn, where + "no credentials file; run `gcloud auth application-default login` unless this is a Google Cloud machine"

@@ -139,6 +139,12 @@ func NewRegistry(cfg *config.Config, agentReg *agents.Registry, skillProv *skill
 		return nil, err
 	}
 	env := &ExecEnv{Sandbox: osb, ScrubEnv: sb.ScrubEnv, Dir: ws.Dir()}
+	// Signed in with Google's ADC: the model's commands get a copy of it
+	// (gcloud's directory stays blocked, and the variable scrubbed).
+	if cfg.UsesADC() {
+		env.Credentials = []Credential{{Env: "GOOGLE_APPLICATION_CREDENTIALS", Path: config.ADCFile}}
+		go sweepCredentials()
+	}
 
 	// The starting permission mode: [blitz] permission_mode, or bypass for
 	// the older auto_approve = true. Bypass needs the OS sandbox; without
