@@ -107,7 +107,7 @@ func TestConfirmExitForceQuit(t *testing.T) {
 	case ok := <-done:
 		assert.True(t, ok, "Ctrl+C at prompt should kill and exit")
 		assert.Len(t, pm.Running(), 0, "Ctrl+C at prompt should kill and exit")
-	case <-time.After(5 * time.Second):
+	case <-time.After(30 * time.Second): // the whole suite under race and coverage is slow
 		t.Fatal("Ctrl+C at prompt did not force quit")
 	}
 
@@ -145,6 +145,9 @@ func TestREPLCtrlCAtPromptWithBackgroundProcess(t *testing.T) {
 	pm := local(app).Tools().Processes()
 	startSleep(t, pm, "30")
 	pr, pw := io.Pipe()
+	// Closed however the test ends: a failure below left the REPL reading
+	// the pipe for ever, and the test hung until Bazel's timeout, silently.
+	t.Cleanup(func() { pw.Close() })
 	app.Input = NewLineReader(pr, io.Discard)
 	sigs := make(chan os.Signal, 1)
 	app.Interrupts = sigs
@@ -162,9 +165,8 @@ func TestREPLCtrlCAtPromptWithBackgroundProcess(t *testing.T) {
 	go pw.Write([]byte("k\n"))
 	select {
 	case <-done:
-	case <-time.After(5 * time.Second):
+	case <-time.After(30 * time.Second): // the whole suite under race and coverage is slow
 		t.Fatal("REPL did not exit after choosing kill")
 	}
-	pw.Close()
 	assert.Len(t, pm.Running(), 0, "background process survived")
 }

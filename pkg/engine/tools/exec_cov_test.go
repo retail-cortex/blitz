@@ -45,10 +45,12 @@ func signedIn(t *testing.T, env string) Credential {
 // The copies go in the user's cache directory by default; without one,
 // there's nowhere for them.
 func TestCredentialsDirDefault(t *testing.T) {
-	t.Setenv("XDG_CACHE_HOME", "/cache")
+	t.Setenv("XDG_CACHE_HOME", "/cache") // Linux's; macOS has ~/Library/Caches
+	cache, err := os.UserCacheDir()
+	require.NoError(t, err)
 	dir, err := credentialsDir()
 	require.NoError(t, err)
-	assert.Equal(t, filepath.Join("/cache", "blitz", "credentials"), dir)
+	assert.Equal(t, filepath.Join(cache, "blitz", "credentials"), dir)
 
 	t.Setenv("XDG_CACHE_HOME", "")
 	t.Setenv("HOME", "")

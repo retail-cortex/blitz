@@ -325,6 +325,10 @@ func (p *promptKeysInput) SetPromptKeys(k PromptKeys) { p.keys = k }
 // that can't be set leaves it.
 func TestREPLPromptKeysCycleTheMode(t *testing.T) {
 	app, s := stubApp(t, "")
+	// From default, whatever the fixture's mode: with an OS sandbox (CI)
+	// auto_approve is bypass, and the next mode would be default again.
+	_, err := s.Backend.SetPermissionMode(string(api.ModeDefault))
+	require.NoError(t, err)
 	in := &promptKeysInput{}
 	var prompts []string
 	failing := false

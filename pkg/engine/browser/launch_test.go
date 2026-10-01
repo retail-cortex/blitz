@@ -31,6 +31,7 @@ import (
 	"github.com/retail-cortex/blitz/pkg/engine/browser/browsertest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	goruntime "runtime"
 )
 
 // fakeChrome is an executable standing in for the browser: a shell script
@@ -142,6 +143,9 @@ func TestLaunchFails(t *testing.T) {
 
 // Find looks for the browsers it knows on the PATH.
 func TestFindOnPath(t *testing.T) {
+	if goruntime.GOOS == "darwin" {
+		t.Skip("macOS looks in /Applications first, where a browser may be installed")
+	}
 	dir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "chromium"), []byte("#!/bin/sh\n"), 0o755))
 	t.Setenv("PATH", dir)

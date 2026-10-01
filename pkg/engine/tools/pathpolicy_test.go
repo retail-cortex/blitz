@@ -27,7 +27,10 @@ import (
 // relative paths at each root, and absolute ones under both their given and
 // symlink-resolved spellings; empty patterns are ignored.
 func TestPathMatcherPatterns(t *testing.T) {
-	dir := t.TempDir()
+	// Resolved, as the paths matched are: on macOS /var is a link, and its
+	// unresolved spelling of "real" is neither the given one nor the real one.
+	dir, err := filepath.EvalSymlinks(t.TempDir())
+	require.NoError(t, err)
 	real := filepath.Join(dir, "real")
 	require.NoError(t, os.Mkdir(real, 0o755))
 	link := filepath.Join(dir, "link")

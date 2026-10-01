@@ -219,6 +219,9 @@ func TestPageWithoutAPager(t *testing.T) {
 
 // notifyCommand uses notify-send on Linux when it's installed.
 func TestNotifyCommandOnLinux(t *testing.T) {
+	if goruntime.GOOS != "linux" {
+		t.Skip("macOS uses osascript, Windows nothing")
+	}
 	bin := t.TempDir()
 	t.Setenv("PATH", bin)
 	assert.Nil(t, notifyCommand("Blitz", "done"), "no notify-send")

@@ -125,7 +125,9 @@ func TestSystemNodeVersions(t *testing.T) {
 				return
 			}
 			require.NoError(t, err)
-			assert.Equal(t, filepath.Join(bin, "node"), got)
+			want, _ := filepath.EvalSymlinks(filepath.Join(bin, "node")) // macOS: /var is a link
+			got, _ = filepath.EvalSymlinks(got)
+			assert.Equal(t, want, got)
 		})
 	}
 
