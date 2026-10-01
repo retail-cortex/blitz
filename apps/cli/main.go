@@ -215,6 +215,12 @@ func runRoot(cmd *cobra.Command, o *rootOptions, args []string) (err error) {
 		fmt.Printf("Blitz Go (Google ADK) version %s\n", version)
 		return nil
 	}
+	// --resume's value is optional, so "--resume <id>" parses as --resume
+	// alone with the ID as the prompt's first word: a session ID there is
+	// the value (snapshot names can't look like one).
+	if o.resume == "latest" && len(args) > 0 && strings.HasPrefix(args[0], "session-") {
+		o.resume, args = args[0], args[1:]
+	}
 	switch o.outputFormat {
 	case formatText, formatJSON, formatStreamJSON:
 	default:

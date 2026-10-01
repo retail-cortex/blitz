@@ -214,9 +214,6 @@ func newAttachCommand(o *rootOptions) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if o.local {
-				return withCode(exitUsage, errors.New("attach works in the service: not with --local"))
-			}
 			run, err := client.AttachBackground(sock).Find(cmd.Context(), args[0])
 			if errors.Is(err, api.ErrUnknownRun) {
 				return withCode(exitUsage, err)

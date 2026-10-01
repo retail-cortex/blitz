@@ -20,6 +20,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/retail-cortex/blitz/pkg/config/configtest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/genai"
@@ -30,7 +31,7 @@ import (
 func TestInitWritesAndLoadsBlitzMD(t *testing.T) {
 	write := &genai.Content{Role: genai.RoleModel, Parts: []*genai.Part{{FunctionCall: &genai.FunctionCall{
 		Name: "create_file", Args: map[string]any{"path": "BLITZ.md", "content": "Run tests with `make check`."}}}}}
-	app, llm := newCommandApp(t, "/init\nhello\n/exit\n", write, genai.NewContentFromText("wrote BLITZ.md", genai.RoleModel), genai.NewContentFromText("hi", genai.RoleModel))
+	app, llm := newCommandAppWith(t, configtest.RunTools, "/init\nhello\n/exit\n", write, genai.NewContentFromText("wrote BLITZ.md", genai.RoleModel), genai.NewContentFromText("hi", genai.RoleModel))
 	out := captureStdout(t, func() { RunREPL(context.Background(), app) })
 
 	first := requestTextAt(llm, 0)

@@ -15,10 +15,15 @@
 package main
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
+	"github.com/retail-cortex/blitz/pkg/mcpauth"
+	"github.com/retail-cortex/blitz/pkg/secrets"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/oauth2"
 )
 
 func TestMCPCommand(t *testing.T) {
@@ -54,5 +59,68 @@ func TestMCPCommand(t *testing.T) {
 		for _, want := range s.says {
 			assert.Contains(t, out, want, "%v", s.args)
 		}
+	}
+}
+
+// blitz mcp: a server's prefix, agents and short secrets, signing out, and
+// what can't be signed in to.
+func TestMCPCommandDetails(t *testing.T) {
+	isolate(t)
+	store := &secrets.Memory{}
+	secrets.SetDefault(store)
+	steps := []struct {
+		args []string
+		says []string
+		err  string
+	}{
+		{args: []string{"mcp", "add", "x", "https://mcp.example/x", "--header", "nocolon"}, err: "--header"},
+		{args: []string{"mcp", "add", "tools", "srv", "--prefix", "t", "--agents", "qa,helios", "--env", "K=ab"}, says: []string{`Added MCP server "tools"`}},
+		{args: []string{"mcp", "get", "tools"}, says: []string{"prefix:   t", "agents:   qa, helios", "env:      K=****"}},
+		{args: []string{"mcp", "get", "ghost"}, err: "no MCP server"},
+		{args: []string{"mcp", "login", "ghost"}, err: "no MCP server"},
+		{args: []string{"mcp", "login", "tools"}, err: "only http servers sign in"},
+		{args: []string{"mcp", "logout", "tools"}, says: []string{"Signed out of tools."}},
+	}
+	for _, s := range steps {
+		out, err := runCLIWithInput(t, "", s.args...)
+		if s.err != "" {
+			require.Error(t, err, "%v: %s", s.args, out)
+			assert.Contains(t, err.Error()+out, s.err, "%v", s.args)
+			continue
+		}
+		require.NoError(t, err, "%v: %s", s.args, out)
+		for _, want := range s.says {
+			assert.Contains(t, out, want, "%v", s.args)
+		}
+	}
+
+	// A stored sign-in is listed.
+	require.NoError(t, mcpauth.Save(store, "docs", &mcpauth.Record{Token: &oauth2.Token{AccessToken: "a"}}))
+	_, err := runCLI(t, "mcp", "add", "docs", "https://mcp.example/docs")
+	require.NoError(t, err)
+	out, err := runCLI(t, "mcp", "list")
+	require.NoError(t, err)
+	assert.Contains(t, out, "docs (signed in)\thttps://mcp.example/docs")
+}
+
+// Signing in to a server that needs no OAuth says so.
+func TestMCPLoginWithoutOAuth(t *testing.T) {
+	isolate(t)
+	secrets.SetDefault(&secrets.Memory{})
+	_, err := runCLI(t, "mcp", "add", "live", mcpTestServer(t, "echo"))
+	require.NoError(t, err)
+	_, err = runCLIWithInput(t, "", "mcp", "login", "live")
+	assert.ErrorContains(t, err, "it needs no OAuth")
+}
+
+// Settings that don't parse fail every mcp command that reads them.
+func TestMCPBrokenSettings(t *testing.T) {
+	home := isolate(t)
+	require.NoError(t, os.MkdirAll(filepath.Join(home, ".blitz"), 0o700))
+	require.NoError(t, os.WriteFile(filepath.Join(home, ".blitz", ".env.toml"), []byte("[mcp\n"), 0o600))
+	for _, args := range [][]string{{"mcp", "list"}, {"mcp", "get", "x"}, {"mcp", "remove", "x"}} {
+		_, err := runCLI(t, args...)
+		assert.Error(t, err, "%v", args)
+		assert.NotEqual(t, exitUsage, exitCodeFor(err), "%v: not a usage error", args)
 	}
 }

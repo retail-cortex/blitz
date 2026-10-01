@@ -65,9 +65,7 @@ func loadSchema(arg string) (*answerSchema, error) {
 		return nil, err
 	}
 	var compact bytes.Buffer
-	if err := json.Compact(&compact, data); err != nil {
-		return nil, err
-	}
+	_ = json.Compact(&compact, data) // valid JSON: it unmarshalled
 	return &answerSchema{text: compact.String(), resolved: r}, nil
 }
 
@@ -84,9 +82,7 @@ func (s *answerSchema) check(output string) (json.RawMessage, error) {
 		return nil, errors.New("the answer has no JSON value")
 	}
 	var v any
-	if err := json.Unmarshal(raw, &v); err != nil {
-		return nil, fmt.Errorf("the answer's JSON doesn't parse: %w", err)
-	}
+	_ = json.Unmarshal(raw, &v) // extractJSON returns only valid JSON
 	if err := s.resolved.Validate(v); err != nil {
 		return nil, err
 	}

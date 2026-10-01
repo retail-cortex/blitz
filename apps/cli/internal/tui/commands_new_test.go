@@ -32,12 +32,21 @@ import (
 
 func newCommandApp(t *testing.T, input string, replies ...*genai.Content) (*App, *runtime.MockLLM) {
 	t.Helper()
+	return newCommandAppWith(t, nil, input, replies...)
+}
+
+// newCommandAppWith is newCommandApp with the configuration changed first.
+func newCommandAppWith(t *testing.T, mutate func(*config.Config), input string, replies ...*genai.Content) (*App, *runtime.MockLLM) {
+	t.Helper()
 	isolateHome(t)
 	cfg := config.DefaultConfig()
 	cfg.Tools.WorkspaceDir = t.TempDir()
 	cfg.Images.Dir = t.TempDir()
 	cfg.Audit.Enabled = false
 	cfg.Blitz.AutoApprove = true
+	if mutate != nil {
+		mutate(cfg)
+	}
 	llm := runtime.NewMockLLM("gemini-3.8-flash", replies...)
 	app := openApp(t, cfg, llm)
 	app.Input = NewLineReader(strings.NewReader(input), io.Discard)

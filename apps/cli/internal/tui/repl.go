@@ -624,8 +624,9 @@ var noticePoll = 2 * time.Second
 func watchNotices(ctx context.Context, app *App) (context.Context, func()) {
 	cctx, cancel := context.WithCancelCause(ctx)
 	done := make(chan struct{})
+	poll := noticePoll // read here: the goroutine may start after a test changes it
 	go func() {
-		t := time.NewTicker(noticePoll)
+		t := time.NewTicker(poll)
 		defer t.Stop()
 		for {
 			select {

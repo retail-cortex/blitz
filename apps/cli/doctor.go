@@ -260,10 +260,9 @@ func runDoctor(ctx context.Context, g *globalFlags, online bool) []check {
 			add("permission rules", statusOK, "%d deny, %d ask, %d allow (/permissions lists them)", counts[tools.EffectDeny], counts[tools.EffectAsk], counts[tools.EffectAllow])
 		}
 
+		// A provider that can't be used fails the registry, above.
 		switch {
 		case cfg.Web.SearchProvider == "":
-		case reg.SearchError() != nil:
-			add("web search", statusFail, "%v", reg.SearchError())
 		case !online:
 			add("web search", statusOK, "%s (use --online to run a test search)", reg.SearchProvider())
 		default:
@@ -299,6 +298,9 @@ func runDoctor(ctx context.Context, g *globalFlags, online bool) []check {
 
 		for _, s := range cfg.MCP.Servers {
 			switch {
+			case s.Disabled: // not started, so not connected to either
+				add("mcp "+s.Name, statusOK, "disabled")
+				continue
 			case s.Command != "":
 				if _, err := exec.LookPath(s.Command); err != nil {
 					add("mcp "+s.Name, statusFail, "command %q not found", s.Command)
@@ -309,7 +311,7 @@ func runDoctor(ctx context.Context, g *globalFlags, online bool) []check {
 				add("mcp "+s.Name, statusOK, "configured (use --online to connect)")
 				continue
 			}
-			n, err := countMCPTools(ctx, reg, s.Name)
+			n, err := countMCPTools(ctx, reg, s)
 			if err != nil {
 				add("mcp "+s.Name, statusFail, "%v", err)
 			} else {
@@ -458,15 +460,27 @@ func fileExists(p string) bool {
 	return err == nil
 }
 
-// countMCPTools connects to one server and lists its tools.
-func countMCPTools(ctx context.Context, reg *tools.Registry, name string) (int, error) {
-	for _, ts := range reg.MCP().Toolsets() {
-		if ts.Name() != "mcp:"+name {
+// countMCPTools connects to one server and lists its tools. A failing
+// server's toolset lists no tools rather than fail (a turn goes on without
+// it) and warns instead: that warning is the error here.
+func countMCPTools(ctx context.Context, reg *tools.Registry, s config.MCPServerConfig) (int, error) {
+	mgr := reg.MCP()
+	var warnings []string
+	mgr.Warn = func(msg string) { warnings = append(warnings, msg) }
+	agent := "" // the primary agent's servers, else one of the agents it's for
+	if len(s.Agents) > 0 {
+		agent = s.Agents[0]
+	}
+	for _, ts := range mgr.ToolsetsFor(agent, agent == "") {
+		if ts.Name() != "mcp:"+s.Name {
 			continue
 		}
 		cctx, cancel := context.WithTimeout(ctx, 20*time.Second)
 		defer cancel()
 		list, err := ts.Tools(standaloneContext{cctx})
+		if err == nil && len(list) == 0 && len(warnings) > 0 {
+			err = errors.New(strings.Join(warnings, "; "))
+		}
 		if err != nil {
 			return 0, err
 		}

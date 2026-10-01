@@ -15,6 +15,9 @@
 package main
 
 import (
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/retail-cortex/blitz/pkg/engine/memory"
@@ -55,4 +58,26 @@ func TestMemoryCommand(t *testing.T) {
 	out, err = runCLI(t, "memory", "list", "--dir", ws)
 	require.NoError(t, err)
 	assert.Contains(t, out, "No notes")
+}
+
+// Long first lines are cut; without --dir the notes are the current
+// directory's; a broken notes folder fails the commands.
+func TestMemoryCommandEdges(t *testing.T) {
+	isolate(t)
+	ws := t.TempDir()
+	t.Chdir(ws)
+	long := strings.Repeat("word ", 30)
+	_, err := memory.SaveNote(memory.NotesDir(ws), memory.NotePreference, long)
+	require.NoError(t, err)
+	out, err := runCLI(t, "memory", "list")
+	require.NoError(t, err)
+	assert.Contains(t, out, "…")
+
+	broken := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Dir(memory.NotesDir(broken)), 0o755))
+	require.NoError(t, os.WriteFile(memory.NotesDir(broken), nil, 0o644)) // a file where the folder goes
+	for _, args := range [][]string{{"memory", "list"}, {"memory", "show", "x"}, {"memory", "edit", "x"}, {"memory", "forget", "x"}} {
+		_, err := runCLI(t, append(args, "--dir", broken)...)
+		assert.Error(t, err, "%v", args)
+	}
 }

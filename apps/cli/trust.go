@@ -76,9 +76,6 @@ func newTrustCommand(g *globalFlags) *cobra.Command {
 // projectTruster is the running service's workspace, which reopens it
 // with a decision, or else the settings on disk.
 func projectTruster(ctx context.Context, cfg *config.Config) (tui.ProjectTruster, error) {
-	if ctx == nil {
-		ctx = context.Background()
-	}
 	if sock := socket.DefaultSocket(); socket.Running(sock) {
 		return client.Attach(ctx, sock, cfg.Tools.WorkspaceDir, nil)
 	}

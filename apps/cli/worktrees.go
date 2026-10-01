@@ -25,7 +25,7 @@ import (
 )
 
 // enterWorktree makes the run's workspace a new git worktree
-// (--worktree [name], --ref) of the repository --dir (or the working
+// (--worktree[=name], --ref) of the repository --dir (or the working
 // directory) is in (spec_parity_027 PAR-PAR-10). The workspace lock and
 // checkpoints are the worktree's own.
 func enterWorktree(g *globalFlags) error {
@@ -70,7 +70,7 @@ func newWorktreesCommand(g *globalFlags) *cobra.Command {
 			}
 			out := cmd.OutOrStdout()
 			if len(all) == 0 {
-				fmt.Fprintln(out, "No worktrees. Start one with: blitz --worktree [name]")
+				fmt.Fprintln(out, "No worktrees. Start one with: blitz --worktree[=name]")
 				return nil
 			}
 			for _, w := range all {

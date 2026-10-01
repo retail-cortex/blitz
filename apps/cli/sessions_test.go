@@ -62,3 +62,16 @@ func TestForkAndNameFlags(t *testing.T) {
 		})
 	}
 }
+
+// export needs a workspace and somewhere to write.
+func TestSessionsExportErrors(t *testing.T) {
+	isolate(t)
+	store, err := session.NewStorage(config.DefaultConfig().Session.StorageDir)
+	require.NoError(t, err)
+	rec, err := store.CreateSession("", "t", "blitz")
+	require.NoError(t, err)
+	_, err = runCLI(t, "-d", filepath.Join(t.TempDir(), "missing"), "sessions", "export", rec.ID)
+	assert.Equal(t, exitUsage, exitCodeFor(err))
+	_, err = runCLI(t, "sessions", "export", rec.ID, "-o", filepath.Join(t.TempDir(), "no", "such", "file.md"))
+	assert.Error(t, err)
+}

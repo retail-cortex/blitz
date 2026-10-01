@@ -51,3 +51,30 @@ func TestWorkersUndoUnknownRun(t *testing.T) {
 	assert.Equal(t, exitUsage, exitCodeFor(err), "%v\n%s", err, out)
 	assert.ErrorContains(t, err, "nothing to undo")
 }
+
+// The run's flags override the settings: model, agent and agency; settings
+// that don't parse fail.
+func TestLoadConfigOverrides(t *testing.T) {
+	home := isolate(t)
+	cfg, err := loadConfig(&globalFlags{model: "gemini-3.8-pro", agent: "qa", agency: "HIGH"})
+	require.NoError(t, err)
+	assert.Equal(t, "gemini-3.8-pro", cfg.Blitz.DefaultModel)
+	assert.Equal(t, "qa", cfg.Blitz.DefaultAgent)
+	assert.Equal(t, "high", cfg.Blitz.AgencyLevel)
+
+	require.NoError(t, os.MkdirAll(filepath.Join(home, ".blitz"), 0o700))
+	require.NoError(t, os.WriteFile(filepath.Join(home, ".blitz", ".env.toml"), []byte("[blitz\n"), 0o600))
+	_, err = loadConfig(&globalFlags{})
+	assert.ErrorContains(t, err, "failed to load configuration")
+}
+
+// A workspace that can't open here is the run's error.
+func TestOpenBackendFails(t *testing.T) {
+	home := isolate(t)
+	t.Setenv("BLITZ_SOCKET", filepath.Join(t.TempDir(), "none.sock"))
+	require.NoError(t, os.MkdirAll(filepath.Join(home, ".blitz"), 0o700))
+	require.NoError(t, os.WriteFile(filepath.Join(home, ".blitz", ".env.toml"), []byte("[permissions]\nallow = [\"nonsense(\"]\n"), 0o600))
+	stdio(t, "")
+	_, err := runCLI(t, "-d", t.TempDir(), "hi")
+	assert.ErrorContains(t, err, "[permissions]")
+}

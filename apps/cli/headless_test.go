@@ -27,7 +27,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/retail-cortex/blitz/pkg/api"
 	"github.com/retail-cortex/blitz/pkg/config"
+	"github.com/retail-cortex/blitz/pkg/config/configtest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/genai"
@@ -213,4 +215,118 @@ func TestHeadlessFlags(t *testing.T) {
 			assert.True(t, strings.Contains(err.Error(), "--") || err != nil)
 		})
 	}
+}
+
+// The stream-json protocol's own errors, each decision an approval can
+// carry, and what an approval or question gets once the input ends or the
+// run is cancelled.
+func TestStreamInputProtocol(t *testing.T) {
+	inR, inW := io.Pipe()
+	outR, outW := io.Pipe()
+	s := newStreamInput(inR, json.NewEncoder(outW))
+	lines := newLineReader(t, outR)
+	send := func(line string) { fmt.Fprintln(inW, line) }
+
+	send("")
+	send("not json")
+	assert.Contains(t, lines.next("error")["error"], "not a JSON line")
+	send(`{"type": "user", "text": "  "}`)
+	assert.Contains(t, lines.next("error")["error"], "a user message needs text")
+	send(`{"type": "answer", "id": "question-99", "answer": "x"}`)
+	assert.Contains(t, lines.next("error")["error"], `nothing is waiting for "question-99"`)
+
+	ctx := context.Background()
+	for decision, want := range map[string]api.Decision{"yes": api.DecisionOnce, "session": api.DecisionSession, "always": api.DecisionAlways, "no": api.DecisionDeny} {
+		t.Run(decision, func(t *testing.T) {
+			got := make(chan api.Decision, 1)
+			go func() {
+				d, _ := s.approve(ctx, api.ApprovalRequest{Tool: "run_shell_command"})
+				got <- d
+			}()
+			req := lines.next("approval_request")
+			send(fmt.Sprintf(`{"type": "approval", "id": %q, "decision": %q}`, req["id"], decision))
+			assert.Equal(t, want, <-got)
+		})
+	}
+
+	// Cancelled while waiting: denied.
+	cctx, cancel := context.WithCancel(ctx)
+	got := make(chan api.Decision, 1)
+	go func() {
+		d, _ := s.approve(cctx, api.ApprovalRequest{Tool: "x"})
+		got <- d
+	}()
+	lines.next("approval_request")
+	cancel()
+	assert.Equal(t, api.DecisionDeny, <-got)
+
+	// The input ends while a question waits, and after.
+	answered := make(chan error, 1)
+	go func() {
+		_, err := s.question(ctx, "Which?", []string{"a"})
+		answered <- err
+	}()
+	lines.next("question")
+	inW.Close()
+	assert.ErrorContains(t, <-answered, "the input ended")
+	_, err := s.question(ctx, "Again?", nil)
+	assert.ErrorContains(t, err, "the input ended")
+	d, err := s.approve(ctx, api.ApprovalRequest{})
+	assert.NoError(t, err)
+	assert.Equal(t, api.DecisionDeny, d)
+	outW.Close()
+}
+
+// A prompt given with stream-json input runs first; a failing turn is the
+// run's error; cancelling ends the stream.
+func TestStreamInputPromptAndCancel(t *testing.T) {
+	e := testEnv(t, loopReplies(3)...)
+	sess, _ := e.Storage().CreateSession("", "t", "blitz")
+	inR, inW := io.Pipe()
+	var out bytes.Buffer
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() {
+		done <- runStreamInput(ctx, e, oneShotOptions{prompt: "first", sessionID: sess.ID, format: formatStreamJSON, stdout: &out, maxTurns: 1}, inR)
+	}()
+	time.Sleep(100 * time.Millisecond)
+	cancel()
+	select {
+	case err := <-done:
+		assert.ErrorIs(t, err, api.ErrMaxTurns, "the failed first turn")
+	case <-time.After(10 * time.Second):
+		t.Fatal("cancelling didn't end the stream")
+	}
+	inW.Close()
+}
+
+// In text mode a schema's retry prints like the first answer, with the
+// usage line.
+func TestOneShotJSONSchemaText(t *testing.T) {
+	schema, err := loadSchema(personSchema)
+	require.NoError(t, err)
+	text := func(s string) *genai.Content { return genai.NewContentFromText(s, genai.RoleModel) }
+	e := testEnv(t, text(`{"name": "Ada"}`), text(`{"name": "Ada", "age": 36}`))
+	sess, _ := e.Storage().CreateSession("", "t", "blitz")
+	var out bytes.Buffer
+	err = runOneShot(context.Background(), e, oneShotOptions{prompt: "who?", sessionID: sess.ID, format: formatText, stdout: &out, schema: schema, usageLines: true})
+	require.NoError(t, err)
+	assert.Contains(t, out.String(), `"age": 36`)
+
+}
+
+// A run cancelled from outside exits as interrupted.
+func TestOneShotInterrupted(t *testing.T) {
+	e := testEnvWith(t, configtest.RunTools, toolCall("run_shell_command", map[string]any{"command": "sleep 5"}))
+	sess, _ := e.Storage().CreateSession("", "t", "blitz")
+	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
+	defer cancel()
+	err := runOneShot(ctx, e, oneShotOptions{prompt: "wait", sessionID: sess.ID, format: formatJSON, stdout: &bytes.Buffer{}})
+	assert.Equal(t, exitInterrupted, exitCodeFor(err), "%v", err)
+}
+
+// A schema whose reference goes nowhere doesn't load.
+func TestLoadSchemaBadReference(t *testing.T) {
+	_, err := loadSchema(`{"$ref": "#/definitions/nowhere"}`)
+	assert.Error(t, err)
 }

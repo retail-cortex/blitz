@@ -17,6 +17,7 @@ package main
 import (
 	"bytes"
 	"encoding/xml"
+	"errors"
 	"io"
 	"io/fs"
 	"os"
@@ -92,4 +93,84 @@ func TestKeysOnlyInEnvironment(t *testing.T) {
 	assert.Len(t, got, 1, "shell-only key: %v", got)
 	assert.Equal(t, "OPENAI_API_KEY", got[0], "shell-only key: %v", got)
 	assert.Equal(t, "sk-test-only-in-shell", os.Getenv("OPENAI_API_KEY"), "the environment wasn't restored")
+}
+
+// fakeSystem records the system commands the login item runs, failing
+// with err.
+func fakeSystem(t *testing.T, err error) *[]string {
+	t.Helper()
+	var ran []string
+	old := loginitem.RunSystem
+	loginitem.RunSystem = func(name string, args ...string) error {
+		ran = append(ran, name+" "+strings.Join(args, " "))
+		return err
+	}
+	t.Cleanup(func() { loginitem.RunSystem = old })
+	return &ran
+}
+
+// blitzdOnPath puts a blitzd script running body on PATH (alone).
+func blitzdOnPath(t *testing.T, body string) {
+	t.Helper()
+	bin := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(bin, "blitzd"), []byte("#!/bin/sh\n"+body+"\n"), 0o755))
+	t.Setenv("PATH", bin)
+}
+
+// blitz service install, status and uninstall, as commands: keys only in
+// the shell are named, and a failure to start it is an error.
+func TestServiceCommands(t *testing.T) {
+	if goruntime.GOOS != "darwin" && goruntime.GOOS != "linux" {
+		t.Skip("login items are only supported on macOS and Linux")
+	}
+	isolate(t)
+	t.Setenv("BLITZ_SOCKET", filepath.Join(t.TempDir(), "none.sock"))
+	t.Setenv("GEMINI_API_KEY", "AIza-shell-only")
+	t.Setenv("ANTHROPIC_API_KEY", "sk-ant-shell-only")
+
+	t.Setenv("PATH", t.TempDir())
+	_, err := runCLI(t, "service", "install")
+	assert.Equal(t, exitUsage, exitCodeFor(err), "no blitzd: %v", err)
+
+	blitzdOnPath(t, "exit 0")
+	fakeSystem(t, nil)
+	out, err := runCLI(t, "service", "install")
+	require.NoError(t, err, out)
+	assert.Contains(t, out, "GEMINI_API_KEY, ANTHROPIC_API_KEY are only in your shell's environment")
+	assert.Contains(t, out, "put them in")
+	out, err = runCLI(t, "service", "status")
+	require.NoError(t, err)
+	assert.Contains(t, out, "service:    not running")
+	out, err = runCLI(t, "service", "uninstall")
+	require.NoError(t, err)
+	assert.Contains(t, out, "no longer starts at login")
+
+	fakeSystem(t, errors.New("systemctl failed"))
+	_, err = runCLI(t, "service", "install")
+	assert.ErrorContains(t, err, "systemctl failed")
+}
+
+// A settings file that doesn't load names no keys.
+func TestKeysOnlyInEnvironmentBrokenSettings(t *testing.T) {
+	home := isolate(t)
+	require.NoError(t, os.MkdirAll(filepath.Join(home, ".blitz"), 0o700))
+	require.NoError(t, os.WriteFile(filepath.Join(home, ".blitz", ".env.toml"), []byte("[llm\n"), 0o600))
+	t.Setenv("OPENAI_API_KEY", "sk-x")
+	assert.Empty(t, keysOnlyInEnvironment())
+	assert.Equal(t, "sk-x", os.Getenv("OPENAI_API_KEY"), "the environment wasn't restored")
+}
+
+// blitz serve runs blitzd with its arguments and exits as it does.
+func TestServeRunsBlitzd(t *testing.T) {
+	isolate(t)
+	blitzdOnPath(t, `[ "$1" = "--ok" ] && exit 0; exit 3`)
+	_, err := runCLI(t, "serve", "--ok")
+	assert.NoError(t, err)
+	_, err = runCLI(t, "serve")
+	assert.Equal(t, 3, exitCodeFor(err), "%v", err)
+	assert.ErrorContains(t, err, "blitzd")
+
+	t.Setenv("PATH", t.TempDir())
+	_, err = runCLI(t, "serve")
+	assert.Equal(t, exitUsage, exitCodeFor(err), "%v", err)
 }

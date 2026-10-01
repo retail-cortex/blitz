@@ -16,6 +16,7 @@ package main
 
 import (
 	"archive/tar"
+	"archive/zip"
 	"bytes"
 	"compress/gzip"
 	"crypto/sha256"
@@ -163,4 +164,253 @@ func TestUpdateRefuses(t *testing.T) {
 	executable = func() (string, error) { return "/opt/homebrew/Cellar/blitz/0.1.0/bin/blitz", nil }
 	_, err = runCLI(t, "update", "--skip-signature")
 	assert.ErrorContains(t, err, "Homebrew")
+}
+
+// cosignScript makes lookCosign find a cosign that exits with code.
+func cosignScript(t *testing.T, code int) {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "cosign")
+	require.NoError(t, os.WriteFile(path, []byte(fmt.Sprintf("#!/bin/sh\necho checked >&2\nexit %d\n", code)), 0o755))
+	lookCosign = func() (string, error) { return path, nil }
+}
+
+// With cosign installed, the checksums' signature decides: a good one
+// installs, a bad one installs nothing.
+func TestUpdateChecksTheSignature(t *testing.T) {
+	isolate(t)
+	fakeRelease(t, false)
+	dir := installed(t)
+	version = "0.1.0"
+
+	cosignScript(t, 1)
+	_, err := runCLI(t, "update")
+	assert.ErrorContains(t, err, "signature doesn't verify")
+	data, _ := os.ReadFile(filepath.Join(dir, "blitz"))
+	assert.Equal(t, "old blitz", string(data), "nothing was installed")
+
+	cosignScript(t, 0)
+	out, err := runCLI(t, "update")
+	require.NoError(t, err, out)
+	assert.Contains(t, out, "The checksums are signed by Blitz's release workflow.")
+	assert.Contains(t, out, "Updated to Blitz v9.9.9")
+}
+
+// --check and --version, and the ways finding or fetching a release fails.
+func TestUpdateReleaseLookups(t *testing.T) {
+	isolate(t)
+	fakeRelease(t, false)
+	installed(t)
+
+	t.Run("latest already", func(t *testing.T) {
+		version = "9.9.9"
+		out, err := runCLI(t, "update", "--check")
+		require.NoError(t, err)
+		assert.Contains(t, out, "Blitz 9.9.9 is the latest release.")
+	})
+	t.Run("named release without v", func(t *testing.T) {
+		version = "dev"
+		out, err := runCLI(t, "update", "--version", "9.9.9", "--skip-signature")
+		require.NoError(t, err, out)
+		assert.Contains(t, out, "Updated to Blitz v9.9.9")
+	})
+	t.Run("named release missing", func(t *testing.T) {
+		version = "0.1.0"
+		_, err := runCLI(t, "update", "--version", "v1.2.3", "--skip-signature")
+		assert.ErrorContains(t, err, "downloading blitz_1.2.3")
+		assert.ErrorContains(t, err, "HTTP 404")
+	})
+	t.Run("executable unknown", func(t *testing.T) {
+		old := executable
+		t.Cleanup(func() { executable = old })
+		executable = func() (string, error) { return "", errors.New("no executable") }
+		_, err := runCLI(t, "update", "--version", "v9.9.9")
+		assert.ErrorContains(t, err, "no executable")
+	})
+	t.Run("system package", func(t *testing.T) {
+		old := executable
+		t.Cleanup(func() { executable = old })
+		executable = func() (string, error) { return "/usr/bin/blitz", nil }
+		_, err := runCLI(t, "update", "--version", "v9.9.9")
+		assert.Equal(t, exitUsage, exitCodeFor(err))
+		assert.ErrorContains(t, err, "your system's package manager")
+	})
+	for name, body := range map[string]string{"no tag": `{}`, "not JSON": `<html>`} {
+		t.Run(name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { fmt.Fprint(w, body) }))
+			t.Cleanup(srv.Close)
+			releasesAPI = srv.URL
+			_, err := runCLI(t, "update", "--check")
+			assert.ErrorContains(t, err, "no release tag in the answer")
+		})
+	}
+	t.Run("API error", func(t *testing.T) {
+		srv := httptest.NewServer(http.NotFoundHandler())
+		t.Cleanup(srv.Close)
+		releasesAPI = srv.URL
+		_, err := runCLI(t, "update", "--check")
+		assert.ErrorContains(t, err, "finding the latest release: HTTP 404")
+	})
+	t.Run("API unreachable", func(t *testing.T) {
+		releasesAPI = "http://127.0.0.1:1"
+		_, err := runCLI(t, "update", "--check")
+		assert.ErrorContains(t, err, "finding the latest release")
+	})
+	t.Run("bad URL", func(t *testing.T) {
+		releasesAPI = "http://bad host"
+		_, err := runCLI(t, "update", "--check")
+		assert.ErrorContains(t, err, "finding the latest release")
+	})
+}
+
+// An archive without one of the installed programs installs neither.
+func TestUpdateArchiveWithoutTheService(t *testing.T) {
+	isolate(t)
+	fakeRelease(t, false)
+	dir := installed(t)
+	version = "0.1.0"
+	var archive bytes.Buffer
+	gz := gzip.NewWriter(&archive)
+	tw := tar.NewWriter(gz)
+	tw.WriteHeader(&tar.Header{Name: "d/", Mode: 0o755, Typeflag: tar.TypeDir})
+	tw.WriteHeader(&tar.Header{Name: "d/blitz", Mode: 0o755, Size: 3, Typeflag: tar.TypeReg})
+	tw.Write([]byte("new"))
+	tw.Close()
+	gz.Close()
+	serveArchive(t, archive.Bytes())
+	// The programs are replaced in map order: try it both ways round.
+	for range 8 {
+		_, err := runCLI(t, "update", "--skip-signature")
+		assert.ErrorContains(t, err, "the archive has no blitzd")
+		for _, p := range []string{"blitz", "blitzd"} {
+			data, _ := os.ReadFile(filepath.Join(dir, p))
+			assert.Equal(t, "old "+p, string(data), "neither program is replaced")
+		}
+	}
+}
+
+// checkSum needs the file's line in checksums.txt.
+func TestCheckSum(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "a.tar.gz")
+	require.NoError(t, os.WriteFile(file, []byte("x"), 0o644))
+	sums := filepath.Join(dir, "checksums.txt")
+	require.NoError(t, os.WriteFile(sums, []byte("abc  other.tar.gz\nmalformed\n"), 0o644))
+	assert.ErrorContains(t, checkSum(sums, file), "a.tar.gz isn't in checksums.txt")
+	assert.Error(t, checkSum(filepath.Join(dir, "missing.txt"), file), "no checksums file")
+	require.NoError(t, os.WriteFile(sums, []byte("abc  missing.tar.gz\n"), 0o644))
+	assert.Error(t, checkSum(sums, filepath.Join(dir, "missing.tar.gz")), "no archive")
+}
+
+// extractPrograms reads Windows' zip archives as well as tarballs, and
+// refuses what isn't an archive.
+func TestExtractPrograms(t *testing.T) {
+	dir := t.TempDir()
+	archive := filepath.Join(dir, "blitz.zip")
+	f, err := os.Create(archive)
+	require.NoError(t, err)
+	zw := zip.NewWriter(f)
+	_, err = zw.Create("blitz_x/")
+	require.NoError(t, err)
+	for _, p := range []string{"blitz_x/" + programName("blitz"), "blitz_x/" + programName("blitzd"), "blitz_x/README.md"} {
+		w, err := zw.Create(p)
+		require.NoError(t, err)
+		fmt.Fprint(w, "new "+filepath.Base(p))
+	}
+	require.NoError(t, zw.Close())
+	require.NoError(t, f.Close())
+	out := t.TempDir()
+	files, err := extractPrograms(archive, out)
+	require.NoError(t, err)
+	assert.Len(t, files, 2)
+	data, err := os.ReadFile(files["blitzd"])
+	require.NoError(t, err)
+	assert.Equal(t, "new "+programName("blitzd"), string(data))
+
+	for name, content := range map[string]string{"bad.zip": "not a zip", "bad.tar.gz": "not gzip"} {
+		t.Run(name, func(t *testing.T) {
+			p := filepath.Join(dir, name)
+			require.NoError(t, os.WriteFile(p, []byte(content), 0o644))
+			_, err := extractPrograms(p, out)
+			assert.Error(t, err)
+		})
+	}
+	t.Run("missing", func(t *testing.T) {
+		_, err := extractPrograms(filepath.Join(dir, "none.tar.gz"), out)
+		assert.Error(t, err)
+	})
+	t.Run("truncated tar", func(t *testing.T) {
+		var buf bytes.Buffer
+		gz := gzip.NewWriter(&buf)
+		gz.Write([]byte("this is not a tar header but long enough to be read as one, almost"))
+		gz.Close()
+		p := filepath.Join(dir, "trunc.tar.gz")
+		require.NoError(t, os.WriteFile(p, buf.Bytes(), 0o644))
+		_, err := extractPrograms(p, out)
+		assert.Error(t, err)
+	})
+	t.Run("unwritable", func(t *testing.T) {
+		_, err := extractPrograms(archive, filepath.Join(dir, "no", "such"))
+		assert.Error(t, err)
+	})
+}
+
+// replaceFile fails cleanly when it can't read or place the new file.
+func TestReplaceFile(t *testing.T) {
+	dir := t.TempDir()
+	assert.Error(t, replaceFile(filepath.Join(dir, "missing"), filepath.Join(dir, "dst")))
+	src := filepath.Join(dir, "src")
+	require.NoError(t, os.WriteFile(src, []byte("x"), 0o644))
+	assert.Error(t, replaceFile(src, filepath.Join(dir, "no", "dst")), "no folder to stage in")
+	// A directory in the way: staging works, the rename doesn't.
+	busy := filepath.Join(dir, "busy")
+	require.NoError(t, os.MkdirAll(filepath.Join(busy, "child"), 0o755))
+	assert.Error(t, replaceFile(src, busy))
+	assert.NoFileExists(t, busy+".new", "the staged file is removed")
+}
+
+// serveArchive serves archive as v9.9.9's for this machine, with its
+// checksum.
+func serveArchive(t *testing.T, archive []byte) {
+	t.Helper()
+	name := fmt.Sprintf("blitz_9.9.9_%s_%s.tar.gz", goruntime.GOOS, goruntime.GOARCH)
+	sum := sha256.Sum256(archive)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch filepath.Base(r.URL.Path) {
+		case name:
+			w.Write(archive)
+		case "checksums.txt":
+			fmt.Fprintf(w, "%s *%s\n", hex.EncodeToString(sum[:]), name)
+		default:
+			fmt.Fprint(w, "{}")
+		}
+	}))
+	t.Cleanup(srv.Close)
+	releasesDownload = srv.URL
+}
+
+// What fails while installing leaves the installation as it was: an
+// archive that isn't one, a download that doesn't connect, a folder that
+// can't be written.
+func TestUpdateInstallFailures(t *testing.T) {
+	isolate(t)
+	fakeRelease(t, false)
+	dir := installed(t)
+	version = "0.1.0"
+	working := releasesDownload
+
+	serveArchive(t, []byte("not an archive"))
+	_, err := runCLI(t, "update", "--skip-signature")
+	assert.ErrorContains(t, err, "gzip")
+
+	releasesDownload = "http://127.0.0.1:1"
+	_, err = runCLI(t, "update", "--skip-signature")
+	assert.ErrorContains(t, err, "downloading ")
+
+	releasesDownload = working
+	require.NoError(t, os.Chmod(dir, 0o555))
+	t.Cleanup(func() { os.Chmod(dir, 0o755) })
+	_, err = runCLI(t, "update", "--skip-signature")
+	assert.ErrorContains(t, err, "replacing ")
+	data, _ := os.ReadFile(filepath.Join(dir, "blitz"))
+	assert.Equal(t, "old blitz", string(data))
 }

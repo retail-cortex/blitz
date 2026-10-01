@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/retail-cortex/blitz/pkg/api"
+	"github.com/retail-cortex/blitz/pkg/config/configtest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/genai"
@@ -83,7 +84,7 @@ func TestOneShotStopsAtItsCostLimit(t *testing.T) {
 }
 
 func TestOneShotStopsAtItsTimeout(t *testing.T) {
-	e := testEnv(t, toolCall("run_shell_command", map[string]any{"command": "sleep 5"}), toolCall("run_shell_command", map[string]any{"command": "sleep 5"}))
+	e := testEnvWith(t, configtest.RunTools, toolCall("run_shell_command", map[string]any{"command": "sleep 5"}), toolCall("run_shell_command", map[string]any{"command": "sleep 5"}))
 	sess, _ := e.Storage().CreateSession("", "t", "blitz")
 	start := time.Now()
 	err := runOneShot(context.Background(), e, oneShotOptions{prompt: "wait", sessionID: sess.ID, format: formatJSON, timeout: 300 * time.Millisecond, stdout: &bytes.Buffer{}})

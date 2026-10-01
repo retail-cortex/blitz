@@ -83,3 +83,25 @@ func TestOpenBackendAsksAboutTheProject(t *testing.T) {
 		})
 	}
 }
+
+// trust with no directory is the current one's; a --dir that isn't there
+// is a usage error; and a decision made here is kept.
+func TestTrustCommandEdges(t *testing.T) {
+	isolate(t)
+	t.Setenv("BLITZ_SOCKET", filepath.Join(t.TempDir(), "none.sock"))
+	ws := projectDir(t)
+	t.Chdir(ws)
+	out, err := runCLI(t, "trust")
+	require.NoError(t, err)
+	assert.Contains(t, out, "deny rule web(*)")
+	_, err = runCLI(t, "trust", filepath.Join(t.TempDir(), "missing"))
+	assert.Equal(t, exitUsage, exitCodeFor(err))
+
+	cfg := mustConfig(t, ws)
+	l := localProject{cfg}
+	assert.Equal(t, ws, l.Dir())
+	p := l.ProjectSettings()
+	require.NoError(t, l.TrustProject(p.Hash, true))
+	assert.Equal(t, api.TrustTrusted, l.ProjectSettings().State)
+
+}

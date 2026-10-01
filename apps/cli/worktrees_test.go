@@ -60,3 +60,38 @@ func TestWorktreeFlagsAndCommand(t *testing.T) {
 	_, err = runCLI(t, "worktrees", "prune", "--dir", repo)
 	require.NoError(t, err)
 }
+
+// worktrees list marks worktrees with changes and those whose folder is
+// gone; outside a repository it's a usage error; --worktree outside one
+// too, and in the current directory without --dir.
+func TestWorktreesListStates(t *testing.T) {
+	isolate(t)
+	repo := gitRepo(t)
+	for _, name := range []string{"dirty", "gone"} {
+		require.NoError(t, enterWorktree(&globalFlags{dir: repo, worktree: name}))
+	}
+	tracked := filepath.Join(repo, ".blitz", "worktrees", "dirty", "f.txt")
+	require.NoError(t, os.WriteFile(tracked, []byte("x"), 0o644))
+	for _, args := range [][]string{{"add", "f.txt"}} {
+		cmd := exec.Command("git", args...)
+		cmd.Dir = filepath.Dir(tracked)
+		out, err := cmd.CombinedOutput()
+		require.NoError(t, err, "%s", out)
+	}
+	require.NoError(t, os.RemoveAll(filepath.Join(repo, ".blitz", "worktrees", "gone")))
+	t.Chdir(repo)
+	out, err := runCLI(t, "worktrees", "list")
+	require.NoError(t, err)
+	assert.Contains(t, out, "(changes not committed)")
+	assert.Contains(t, out, "(folder gone: blitz worktrees prune)")
+	_, err = runCLI(t, "worktrees", "remove", "dirty")
+	assert.Error(t, err, "changes not committed need --force")
+
+	_, err = runCLI(t, "worktrees", "list", "--dir", t.TempDir())
+	assert.Equal(t, exitUsage, exitCodeFor(err))
+	_, err = runCLI(t, "worktrees", "prune", "--dir", t.TempDir())
+	assert.Error(t, err)
+
+	require.NoError(t, enterWorktree(&globalFlags{worktree: "here"}), "the current directory's repository")
+	assert.Error(t, enterWorktree(&globalFlags{dir: repo, worktree: "here"}), "the name is taken")
+}

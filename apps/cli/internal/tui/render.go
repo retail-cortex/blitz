@@ -51,32 +51,9 @@ func PrintBanner(version, agent, model string) {
 	fmt.Printf("%s%s%s\n\n", Dim, i18n.T("banner.hint", "help", "/help", "key", "Ctrl+C"), Reset)
 }
 
-// FormatDiff highlights diff additions in green and deletions in red.
-func FormatDiff(diffText string) string {
-	lines := strings.Split(diffText, "\n")
-	var sb strings.Builder
-
-	for _, line := range lines {
-		if strings.HasPrefix(line, "+") && !strings.HasPrefix(line, "+++") {
-			sb.WriteString(Green + line + Reset + "\n")
-		} else if strings.HasPrefix(line, "-") && !strings.HasPrefix(line, "---") {
-			sb.WriteString(Red + line + Reset + "\n")
-		} else if strings.HasPrefix(line, "@@") {
-			sb.WriteString(Cyan + line + Reset + "\n")
-		} else {
-			sb.WriteString(line + "\n")
-		}
-	}
-
-	return sb.String()
-}
-
 // safe prepares untrusted text (model output, tool args/results) for the
 // terminal by removing control sequences.
 func safe(s string) string { return textutil.SanitizeTerminal(s) }
-
-// PrintModelText writes streamed model text with control sequences removed.
-func PrintModelText(text string) { fmt.Print(safe(text)) }
 
 // FormatToolCall renders an invocation badge for a tool.
 func FormatToolCall(toolName string, args map[string]any) string {
@@ -91,11 +68,6 @@ func FormatToolCall(toolName string, args map[string]any) string {
 	}
 	sb.WriteByte('\n')
 	return sb.String()
-}
-
-// PrintToolCall prints FormatToolCall.
-func PrintToolCall(toolName string, args map[string]any) {
-	fmt.Print(FormatToolCall(toolName, args))
 }
 
 // FormatToolResult renders a completed tool badge.
@@ -113,11 +85,6 @@ func FormatToolResult(toolName string, success bool, summary string) string {
 		return fmt.Sprintf("%s%s [%s]:%s %s\n", color, icon, toolName, Reset, textutil.Ellipsize(summary, 80))
 	}
 	return fmt.Sprintf("%s%s [%s] %s%s\n", color, icon, toolName, i18n.T("tool.done"), Reset)
-}
-
-// PrintToolResult prints FormatToolResult.
-func PrintToolResult(toolName string, success bool, summary string) {
-	fmt.Print(FormatToolResult(toolName, success, summary))
 }
 
 // SummarizeToolResponse picks a short summary from a function response and

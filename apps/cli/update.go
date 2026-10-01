@@ -195,12 +195,14 @@ func installRelease(ctx context.Context, out io.Writer, tag, exe string, skipSig
 	if daemon := filepath.Join(dir, programName("blitzd")); fileExists(daemon) {
 		targets["blitzd"] = daemon
 	}
-	for prog, dst := range targets {
-		src, ok := files[prog]
-		if !ok {
+	// Both programs or neither: a blitz newer than its blitzd won't do.
+	for prog := range targets {
+		if _, ok := files[prog]; !ok {
 			return fmt.Errorf("the archive has no %s", prog)
 		}
-		if err := replaceFile(src, dst); err != nil {
+	}
+	for prog, dst := range targets {
+		if err := replaceFile(files[prog], dst); err != nil {
 			return fmt.Errorf("replacing %s: %w", dst, err)
 		}
 	}

@@ -27,6 +27,7 @@ import (
 
 	"github.com/retail-cortex/blitz/pkg/api"
 	"github.com/retail-cortex/blitz/pkg/config"
+	"github.com/retail-cortex/blitz/pkg/config/configtest"
 	"github.com/retail-cortex/blitz/pkg/engine/runtime"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -165,7 +166,7 @@ func newFullApp(t *testing.T) *App {
 	cfg.Tools.WorkspaceDir = t.TempDir()
 	cfg.Tools.ApprovalsFile = filepath.Join(t.TempDir(), "approvals.json")
 	cfg.Images.Dir = t.TempDir()
-	cfg.Blitz.AutoApprove = true
+	configtest.RunTools(cfg) // its turn creates a file
 	llm := runtime.NewMockLLM("gemini-3.8-flash",
 		&genai.Content{Role: genai.RoleModel, Parts: []*genai.Part{{FunctionCall: &genai.FunctionCall{Name: "create_file", Args: map[string]any{"path": "made.txt", "content": "by tool\n"}}}}},
 		genai.NewContentFromText("created", genai.RoleModel))

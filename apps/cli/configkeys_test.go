@@ -16,6 +16,8 @@ package main
 
 import (
 	"bytes"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -143,4 +145,101 @@ func TestConfigPermissionsCommands(t *testing.T) {
 		_, err := run(args...)
 		assert.Error(t, err, name)
 	}
+}
+
+// --workspace needs a workspace: with a --dir that isn't there, every
+// key and permissions command is a usage error.
+func TestConfigWorkspaceScopeErrors(t *testing.T) {
+	isolate(t)
+	missing := filepath.Join(t.TempDir(), "missing")
+	for _, args := range [][]string{
+		{"config", "keys", "-w"}, {"config", "set-key", "-w", "openai"}, {"config", "remove-key", "-w", "openai"},
+		{"config", "secure-key", "-w", "openai"}, {"config", "set-auth", "-w", "gemini", "adc"},
+		{"config", "permissions", "-w"}, {"config", "permissions", "allow", "-w", "shell(ls)"},
+		{"config", "permissions", "remove", "-w", "shell(ls)"}, {"config", "permissions", "defaults", "-w", "on"},
+		{"config", "show"},
+	} {
+		t.Run(strings.Join(args, " "), func(t *testing.T) {
+			_, err := runCLIWithInput(t, "sk-x\n", append([]string{"-d", missing}, args...)...)
+			assert.Equal(t, exitUsage, exitCodeFor(err), "%v", err)
+		})
+	}
+}
+
+// Settings that don't parse fail the commands that edit or describe them.
+func TestConfigBrokenSettings(t *testing.T) {
+	home := isolate(t)
+	secrets.SetDefault(&secrets.Memory{})
+	require.NoError(t, os.MkdirAll(filepath.Join(home, ".blitz"), 0o700))
+	require.NoError(t, os.WriteFile(filepath.Join(home, ".blitz", ".env.toml"), []byte("[llm\n"), 0o600))
+	for _, args := range [][]string{
+		{"config", "keys"}, {"config", "set-key", "openai"}, {"config", "remove-key", "openai"}, {"config", "secure-key", "openai"},
+		{"config", "permissions"}, {"config", "permissions", "remove", "shell(ls)"}, {"config", "permissions", "defaults", "on"},
+	} {
+		t.Run(strings.Join(args, " "), func(t *testing.T) {
+			_, err := runCLIWithInput(t, "sk-x\n", args...)
+			assert.Error(t, err)
+		})
+	}
+}
+
+// Keys written in the settings file are flagged to move, and secure-key
+// moves them; a key the store lost is flagged to set again.
+func TestConfigKeySources(t *testing.T) {
+	home := isolate(t)
+	store := &secrets.Memory{}
+	secrets.SetDefault(store)
+	require.NoError(t, os.MkdirAll(filepath.Join(home, ".blitz"), 0o700))
+	require.NoError(t, os.WriteFile(filepath.Join(home, ".blitz", ".env.toml"), []byte("[llm.openai]\napi_key = \"sk-plain-1234567890\"\n"), 0o600))
+	out, err := runCLI(t, "config", "keys")
+	require.NoError(t, err)
+	assert.Contains(t, out, "(move it: blitz config secure-key openai)")
+	out, err = runCLI(t, "config", "secure-key", "openai")
+	require.NoError(t, err, out)
+	assert.Contains(t, out, "Updated ")
+	out, _ = runCLI(t, "config", "keys")
+	assert.Contains(t, out, "openai     keychain")
+
+	require.NoError(t, store.Delete("global/llm.openai.api_key"))
+	out, _ = runCLI(t, "config", "keys")
+	assert.Contains(t, out, "(missing from the store: set it again)")
+
+	// show masks MCP servers' environment values too.
+	_, err = runCLI(t, "mcp", "add", "db", "dbserver", "--env", "TOKEN=supersecretvalue")
+	require.NoError(t, err)
+	out, err = runCLI(t, "config", "show")
+	require.NoError(t, err)
+	assert.NotContains(t, out, "supersecretvalue")
+	assert.Contains(t, out, "sup…alue")
+}
+
+// permissions check describes each form of rule, and says when an allowed
+// command still asks because it redirects into a file.
+func TestConfigPermissionsCheckForms(t *testing.T) {
+	isolate(t)
+	for _, tt := range []struct {
+		args []string
+		want string
+	}{
+		{[]string{"shell(go test *)", "go test ./..."}, `commands matching "go test *" (* is any text)`},
+		{[]string{"write(docs/**)"}, `paths matching "docs/**", and what's under them`},
+		{[]string{"web(example.com)"}, `web "example.com"`},
+		{[]string{"shell(echo)", "echo hi > out.txt"}, "but it writes out.txt through a redirection, so it still asks"},
+	} {
+		t.Run(tt.args[0], func(t *testing.T) {
+			out, err := runCLI(t, append([]string{"config", "permissions", "check"}, tt.args...)...)
+			require.NoError(t, err)
+			assert.Contains(t, out, tt.want)
+		})
+	}
+	_, err := runCLI(t, "config", "permissions", "check", "shel(ls)")
+	assert.Equal(t, exitUsage, exitCodeFor(err))
+
+	out, err := runCLI(t, "config", "permissions", "defaults", "inherit", "-w")
+	require.NoError(t, err)
+	assert.Contains(t, out, "Updated ")
+	out, err = runCLI(t, "config", "permissions")
+	require.NoError(t, err)
+	assert.Contains(t, out, "global (")
+	assert.Contains(t, out, "  none")
 }
