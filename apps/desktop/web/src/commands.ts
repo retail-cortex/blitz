@@ -64,11 +64,12 @@ export function parseCommand(line: string): { name: string; args: string } | und
 }
 
 /**
- * The commands offered while the user types "/prefix" (no space yet):
- * prefix matches first, then the rest containing it.
+ * The commands offered while the user types "/prefix" (no space yet;
+ * leading whitespace allowed, as parseCommand trims it): prefix matches
+ * first, then the rest containing it.
  */
 export function matchCommands(draft: string, all: CommandSpec[]): CommandSpec[] {
-  const m = /^\/(\S*)$/.exec(draft);
+  const m = /^\s*\/(\S*)$/.exec(draft);
   if (!m) return [];
   const q = m[1].toLowerCase();
   const starts = all.filter((c) => c.name.startsWith(q));

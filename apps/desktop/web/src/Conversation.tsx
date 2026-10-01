@@ -1525,9 +1525,15 @@ function Composer({
   // Completing a command's name as it's typed.
   const matches = matchCommands(draft, commands);
   const [pick, setPick] = useState(0);
+  // The draft Escape closed the menus on: forgotten once the draft
+  // changes, so the same text typed again (a "/" in an emptied box) opens
+  // them again.
   const [dismissed, setDismissed] = useState("");
   const menuOpen = matches.length > 0 && dismissed !== draft;
-  useEffect(() => setPick(0), [draft]);
+  useEffect(() => {
+    setPick(0);
+    setDismissed((d) => (d === draft ? d : ""));
+  }, [draft]);
   const complete = (c: CommandSpec) => setDraft(`/${c.name}${c.args ? " " : ""}`);
   // Completing an @mention: the workspace's files and folders.
   const [caret, setCaret] = useState(0);
@@ -1686,7 +1692,7 @@ function Composer({
               return;
             }
             // Tab completes; Enter completes too, unless the name is already whole.
-            if (e.key === "Tab" || (e.key === "Enter" && !e.shiftKey && draft !== `/${chosen.name}`)) {
+            if (e.key === "Tab" || (e.key === "Enter" && !e.shiftKey && draft.trim() !== `/${chosen.name}`)) {
               e.preventDefault();
               complete(chosen);
               return;

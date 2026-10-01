@@ -42,6 +42,9 @@ describe("commands", () => {
     expect(matchCommands("/cost now", all)).toEqual([]); // past the name
     expect(matchCommands("hello", all)).toEqual([]);
     expect(matchCommands("/", all)).toHaveLength(12);
+    expect(matchCommands("  /co", all).map((c) => c.name)).toEqual(["cost", "context", "compact"]); // a stray space
+    expect(matchCommands("\n/", all)).toHaveLength(12); // a stray new line
+    expect(matchCommands("text\n/", all)).toEqual([]); // not the whole message
   });
 
   it("lets built-ins win and lists everything in /help", () => {

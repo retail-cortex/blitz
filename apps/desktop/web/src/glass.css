@@ -102,8 +102,10 @@
 
 /* What floats over other text stays readable even where nothing blurs:
    dialogs, menus, and the panels that float over the chat or the editor
-   in narrower windows. */
+   in narrower windows. The composer's "/" and "@" menu can't blur: it
+   sits inside the composer, whose own blur is the only backdrop it sees. */
 :root[data-glass="on"] :is(.dialog, .menu) { background: var(--glass-strong); }
+:root[data-glass="on"] .command-menu { background: var(--glass-strong); border: 1px solid var(--glass-border); box-shadow: var(--glass-shadow), var(--glass-edge); }
 @media (max-width: 1280px) {
   :root[data-glass="on"] .run-settings { background: var(--glass-strong); border-left: 1px solid var(--glass-border); box-shadow: var(--glass-shadow); }
 }
