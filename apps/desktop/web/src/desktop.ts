@@ -37,12 +37,27 @@ export interface ServiceStatus {
   tray_installed?: boolean; // it starts at login
 }
 
+/** Where the blitz command is: the one that comes with the app, and the one a terminal runs. */
+export interface CLIStatus {
+  cli: string; // the blitz beside the app ("" if not found)
+  on_path: string; // the blitz on the user's PATH ("" if none)
+  installed: boolean; // on_path is the app's
+}
+
+/** What installing the CLI did: the link, and the startup file it added its directory to PATH in ("" if none). */
+export interface CLIInstall {
+  link: string;
+  profile: string;
+}
+
 type Bound = {
   Version(): Promise<string>;
   ProgramExists(path: string): Promise<boolean>;
   ServiceStatus(): Promise<ServiceStatus>;
   InstallService(): Promise<void>;
   SetTray(on: boolean): Promise<void>;
+  CLIStatus(): Promise<CLIStatus>;
+  InstallCLI(): Promise<CLIInstall>;
   StopService(pid: number): Promise<void>;
   RestartService(pid: number): Promise<void>;
   ChooseWorkspace(title: string): Promise<string>;
@@ -95,6 +110,10 @@ export const installService = () => app().InstallService();
 
 /** Shows the service in the system tray at login and now, or stops that. */
 export const setTray = (on: boolean) => app().SetTray(on);
+/** Where the blitz command is (undefined in a browser, which can't install it). */
+export const cliStatus = async () => (inApp() ? app().CLIStatus() : undefined);
+/** Puts the app's blitz on the user's PATH (a no-op when one is there already). */
+export const installCLI = () => app().InstallCLI();
 /** Stops the running service: its login item, else process pid (0: unknown). */
 export const stopService = (pid: number) => app().StopService(pid);
 /** Stops the running service and starts the blitzd that goes with this app. */

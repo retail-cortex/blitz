@@ -48,6 +48,7 @@ go_library(
     name = "desktop_lib",
     srcs = [
         "app.go",
+        "cli.go",
         "deeplink.go",
         "folder.go",
         "link_darwin.go",
@@ -85,9 +86,11 @@ go_library(
 
 go_binary(
     name = "blitz-desktop_unsigned",
-    # The service it installs and restarts, found in its runfiles under
-    # bazel run (Blitz.app and the .deb put it beside the app instead).
+    # The service it installs and restarts, the tray and the CLI it links
+    # onto PATH, found in its runfiles under bazel run (Blitz.app and the
+    # .deb put them beside the app instead).
     data = [
+        "//apps/cli:blitz",
         "//apps/service:blitzd",
         "//apps/tray:blitz-tray",
     ],
@@ -112,6 +115,7 @@ go_binary(
 go_test(
     name = "desktop_test",
     srcs = [
+        "cli_test.go",
         "deeplink_test.go",
         "folder_test.go",
         "license_test.go",

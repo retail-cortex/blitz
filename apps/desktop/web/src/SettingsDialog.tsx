@@ -36,7 +36,7 @@ import {
   mdiWeatherNight,
   mdiWhiteBalanceSunny,
 } from "@mdi/js";
-import { appVersion, installService, restartService, serviceStatus, setTray, stopService, type ServiceStatus } from "./desktop";
+import { appVersion, cliStatus, installCLI, installService, restartService, serviceStatus, setTray, stopService, type CLIStatus, type ServiceStatus } from "./desktop";
 import { showLicense } from "./events";
 import { checkService, settleTimeout, type ServiceCheck, waitForService, withTimeout } from "./serviceVersion";
 import { languages, t } from "./i18n";
@@ -320,6 +320,7 @@ function Service() {
           }}
         />
       </Setting>
+      <CommandLine />
       {version && (
         <Setting title={t("desktop.service.version")} detail={version.stale ? t(`desktop.service.stale.${version.stale}`, { service: version.info?.version ?? "?", app: version.app, path: version.info?.executable ?? "" }) : undefined}>
           <span className={version.stale ? "error-text" : "muted"}>
@@ -335,6 +336,57 @@ function Service() {
       </Setting>
       {error && <p className="error-text">{error}</p>}
     </div>
+  );
+}
+
+/**
+ * The blitz command: whether a terminal finds it, and Install, which links
+ * the app's onto the user's PATH when no blitz is there. Not in a browser.
+ */
+function CommandLine() {
+  const [status, setStatus] = useState<CLIStatus | undefined | null>(null); // null: checking
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState("");
+  const [error, setError] = useState("");
+  useEffect(() => {
+    cliStatus().then(setStatus, (e) => setError(String(e)));
+  }, []);
+  if (status === undefined) return null;
+  const install = async () => {
+    setBusy(true);
+    setError("");
+    try {
+      const done = await installCLI();
+      setNote(done.profile ? t("desktop.cli.installed_profile", { link: done.link, profile: done.profile }) : t("desktop.cli.installed", { link: done.link }));
+      setStatus(await cliStatus());
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+  const detail =
+    status === null
+      ? t("desktop.checking")
+      : !status.cli
+        ? t("desktop.cli.none")
+        : status.installed
+          ? t("desktop.cli.on_path", { path: status.on_path })
+          : status.on_path
+            ? t("desktop.cli.other", { path: status.on_path })
+            : t("desktop.cli.detail");
+  return (
+    <>
+      <Setting title={t("desktop.cli")} detail={detail}>
+        {status && status.cli && !status.on_path && (
+          <Button small variant="tonal" disabled={busy} onClick={install}>
+            {t("desktop.service.install_short")}
+          </Button>
+        )}
+      </Setting>
+      {note && <p className="muted">{note}</p>}
+      {error && <p className="error-text">{error}</p>}
+    </>
   );
 }
 
