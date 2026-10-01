@@ -41,6 +41,7 @@ go_library(
 
 go_test(
     name = "agents_test",
+    size = "small",
     srcs = [
         "frontmatter_test.go",
         "manager_test.go",

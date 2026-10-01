@@ -238,10 +238,15 @@ func TestExecEnvRunsInItsDir(t *testing.T) {
 	t.Chdir(t.TempDir())
 	cmd, err := (&ExecEnv{Dir: dir}).command(context.Background(), []string{"pwd", "-P"})
 	require.NoError(t, err)
-	out, err := cmd.Output()
+	// The guarded command's Run, not exec.Cmd's Output: that would leave
+	// the guard unreachable, and its pipe, closed when collected, kills the
+	// command (seen as "signal: killed" once tests ran in shards).
+	var out strings.Builder
+	cmd.Stdout = &out
+	err = cmd.Run()
 	want, _ := filepath.EvalSymlinks(dir)
-	assert.NoError(t, err, "ran in %q (%v), want %q", out, err, want)
-	assert.Equal(t, want, strings.TrimSpace(string(out)), "ran in %q (%v), want %q", out, err, want)
+	assert.NoError(t, err, "ran in %q (%v), want %q", out.String(), err, want)
+	assert.Equal(t, want, strings.TrimSpace(out.String()), "ran in %q (%v), want %q", out.String(), err, want)
 }
 
 // Relative extra roots are relative to the workspace, wherever the process is.

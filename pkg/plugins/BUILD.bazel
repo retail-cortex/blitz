@@ -34,6 +34,7 @@ go_library(
 
 go_test(
     name = "plugins_test",
+    size = "small",
     srcs = [
         "importer_test.go",
         "plugins_test.go",

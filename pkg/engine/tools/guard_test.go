@@ -91,6 +91,7 @@ func TestGuardKillsChildrenWhenParentKilled(t *testing.T) {
 	pidFile := filepath.Join(t.TempDir(), "child.pid")
 	helper := exec.Command(os.Args[0], "-test.run=^TestGuardKillsChildrenWhenParentKilled$", "-test.v")
 	helper.Env = append(os.Environ(), "CP_GUARD_HELPER=1", "CP_GUARD_PIDFILE="+pidFile)
+	helper.Env = append(helper.Env, oneShard...)
 	require.NoError(t, helper.Start())
 	childPid := readPid(t, pidFile)
 	require.True(t, pidAlive(childPid), "background child not running")

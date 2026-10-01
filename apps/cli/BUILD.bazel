@@ -89,6 +89,7 @@ go_binary(
 
 go_test(
     name = "cli_test",
+    size = "small",
     srcs = [
         "agents_test.go",
         "attach_test.go",
@@ -114,6 +115,7 @@ go_test(
         "worktrees_test.go",
     ],
     embed = [":cli_lib"],
+    shard_count = 6,
     # Starts commands in the OS sandbox, which can't nest in Bazel's on
     # macOS.
     tags = ["no-sandbox"],

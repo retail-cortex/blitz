@@ -44,6 +44,7 @@ go_library(
 
 go_test(
     name = "legal_test",
+    size = "small",
     srcs = ["legal_test.go"],
     embed = [":legal"],
     deps = ["@com_github_stretchr_testify//assert"],

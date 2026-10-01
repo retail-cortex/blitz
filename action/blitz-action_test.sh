@@ -33,7 +33,9 @@ fail() { echo "FAIL: $*"; exit 1; }
 event() { printf '%s' "$1" > "$work/event.json"; export GITHUB_EVENT_PATH="$work/event.json"; }
 expect() { # mode, want (run=…), event
   event "$3"
-  got="$(MODE="$1" bash "$script" decide | head -1)"
+  # sed reads to the end: head would exit after a line, and decide's next
+  # write would then die of SIGPIPE, failing the test under pipefail.
+  got="$(MODE="$1" bash "$script" decide | sed -n 1p)"
   [ "$got" = "$2" ] || fail "$1 on $3: $got, want $2"
 }
 

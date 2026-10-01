@@ -30,6 +30,7 @@ go_binary(
 
 go_test(
     name = "notices_test",
+    size = "small",
     srcs = ["main_test.go"],
     embed = [":notices_lib"],
     deps = [

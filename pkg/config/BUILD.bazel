@@ -47,6 +47,7 @@ go_library(
 
 go_test(
     name = "config_test",
+    size = "small",
     srcs = [
         "agentmodels_test.go",
         "check_test.go",

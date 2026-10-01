@@ -98,6 +98,7 @@ filegroup(
 # The archives carry the programs, blz and the license files.
 sh_test(
     name = "contents_test",
+    size = "small",
     srcs = ["contents_test.sh"],
     args = ["$(locations :archives)"],
     data = [":archives"],
@@ -111,6 +112,7 @@ exports_files([
 
 sh_test(
     name = "install_test",
+    size = "small",
     srcs = ["install_test.sh"],
     args = ["$(location install.sh)"],
     data = ["install.sh"],
@@ -118,6 +120,7 @@ sh_test(
 
 sh_test(
     name = "homebrew_formula_test",
+    size = "small",
     srcs = ["homebrew_formula_test.sh"],
     args = ["$(location homebrew_formula.sh)"],
     data = ["homebrew_formula.sh"],

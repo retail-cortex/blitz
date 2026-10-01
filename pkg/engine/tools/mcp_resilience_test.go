@@ -82,6 +82,12 @@ func TestUnhealthyServerIsSkippedUntilCooldown(t *testing.T) {
 	require.Contains(t, last, "available again", "no recovery notice: %q", warnings)
 }
 
+// oneShard is the environment for running this test binary again as a
+// helper process: under Bazel's sharding (shard_count) the child would
+// otherwise inherit its parent's shard and skip the helper test unless
+// that test happens to fall in the same shard.
+var oneShard = []string{"TEST_TOTAL_SHARDS=1", "TEST_SHARD_INDEX=0"}
+
 // TestMCPHelperServer is not a test: run with BLITZ_MCP_HELPER=1 it is
 // a stdio MCP server for the tests below, so they exercise real processes.
 func TestMCPHelperServer(t *testing.T) {
@@ -113,7 +119,7 @@ func helperServer(t *testing.T, timeoutSeconds int) (*MCPManager, map[string]run
 		Name:           "helper",
 		Command:        os.Args[0],
 		Args:           []string{"-test.run=^TestMCPHelperServer$"},
-		Env:            map[string]string{"BLITZ_MCP_HELPER": "1"},
+		Env:            map[string]string{"BLITZ_MCP_HELPER": "1", "TEST_TOTAL_SHARDS": "1", "TEST_SHARD_INDEX": "0"}, // as oneShard
 		TimeoutSeconds: timeoutSeconds,
 	}}, nil, nil)
 	require.NoError(t, err)

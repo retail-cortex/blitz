@@ -30,6 +30,7 @@ go_library(
 
 go_test(
     name = "mcpauth_test",
+    size = "small",
     srcs = ["mcpauth_test.go"],
     embed = [":mcpauth"],
     deps = [

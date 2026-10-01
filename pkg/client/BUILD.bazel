@@ -41,6 +41,7 @@ go_library(
 
 go_test(
     name = "client_test",
+    size = "small",
     srcs = [
         "background_test.go",
         "client_test.go",
@@ -52,6 +53,7 @@ go_test(
         "workers_test.go",
     ],
     embed = [":client"],
+    shard_count = 2,
     # Starts commands in the OS sandbox, which can't nest in Bazel's on
     # macOS.
     tags = ["no-sandbox"],

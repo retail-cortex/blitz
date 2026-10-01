@@ -17,6 +17,7 @@ load("@rules_shell//shell:sh_test.bzl", "sh_test")
 # The GitHub Action (action.yml); its logic is blitz-action.sh.
 sh_test(
     name = "blitz_action_test",
+    size = "small",
     srcs = ["blitz-action_test.sh"],
     args = ["$(location blitz-action.sh)"],
     data = ["blitz-action.sh"],

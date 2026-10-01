@@ -125,6 +125,7 @@ go_library(
 
 go_test(
     name = "engine_test",
+    size = "small",
     srcs = [
         "backend_test.go",
         "changes_test.go",
@@ -157,6 +158,7 @@ go_test(
         "workspace_test.go",
     ],
     embed = [":engine"],
+    shard_count = 6,
     deps = [
         "//pkg/api",
         "//pkg/config",

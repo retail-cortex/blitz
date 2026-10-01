@@ -26,6 +26,7 @@ go_library(
 
 go_test(
     name = "lsp_test",
+    size = "small",
     srcs = [
         "lsp_test.go",
         "manager_test.go",

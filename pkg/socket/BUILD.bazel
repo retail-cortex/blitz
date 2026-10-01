@@ -24,6 +24,7 @@ go_library(
 
 go_test(
     name = "socket_test",
+    size = "small",
     srcs = ["socket_test.go"],
     embed = [":socket"],
     deps = [

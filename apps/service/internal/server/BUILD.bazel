@@ -52,6 +52,7 @@ go_library(
 
 go_test(
     name = "server_test",
+    size = "small",
     srcs = [
         "background_test.go",
         "broker_test.go",
@@ -68,6 +69,7 @@ go_test(
         "worker_test.go",
     ],
     embed = [":server"],
+    shard_count = 4,
     deps = [
         "//pkg/api",
         "//pkg/config",

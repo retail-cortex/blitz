@@ -23,6 +23,7 @@ go_library(
 
 go_test(
     name = "worktree_test",
+    size = "small",
     srcs = ["worktree_test.go"],
     embed = [":worktree"],
     deps = [

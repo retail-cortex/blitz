@@ -27,6 +27,7 @@ go_library(
 
 go_test(
     name = "doccomment_test",
+    size = "small",
     srcs = ["doccomment_test.go"],
     data = glob(["testdata/**"]),
     deps = [

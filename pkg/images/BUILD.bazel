@@ -33,11 +33,13 @@ go_library(
 
 go_test(
     name = "images_test",
+    size = "small",
     srcs = [
         "clipboard_test.go",
         "images_test.go",
     ],
     embed = [":images"],
+    shard_count = 3,
     deps = [
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",

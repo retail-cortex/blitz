@@ -45,6 +45,7 @@ go_library(
 
 go_test(
     name = "workers_test",
+    size = "small",
     srcs = [
         "leak_test.go",
         "runs_test.go",

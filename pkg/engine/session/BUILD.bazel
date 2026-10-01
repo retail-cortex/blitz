@@ -41,6 +41,7 @@ go_library(
 
 go_test(
     name = "session_test",
+    size = "small",
     srcs = [
         "adkstore_test.go",
         "fork_test.go",

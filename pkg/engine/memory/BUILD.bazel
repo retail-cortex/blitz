@@ -40,6 +40,7 @@ go_library(
 
 go_test(
     name = "memory_test",
+    size = "small",
     srcs = [
         "compat_test.go",
         "memory_more_test.go",

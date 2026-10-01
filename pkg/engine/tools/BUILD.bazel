@@ -130,6 +130,7 @@ go_library(
 
 go_test(
     name = "tools_test",
+    size = "small",
     srcs = [
         "agent_tools_test.go",
         "approval_store_cov_test.go",
@@ -220,6 +221,7 @@ go_test(
         "workspace_test.go",
     ],
     embed = [":tools"],
+    shard_count = 8,
     # Starts commands in the OS sandbox, which can't nest in Bazel's on
     # macOS.
     tags = ["no-sandbox"],

@@ -49,6 +49,7 @@ tsc_bin.tsc(
 
 tsc_bin.tsc_test(
     name = "typecheck",
+    size = "small",
     args = ["--noEmit"],
     chdir = package_name(),
     data = _inputs,
@@ -56,6 +57,7 @@ tsc_bin.tsc_test(
 
 vitest_bin.vitest_test(
     name = "test",
+    size = "small",
     args = ["run"],
     chdir = package_name(),
     data = _inputs,

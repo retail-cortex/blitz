@@ -109,6 +109,7 @@ go_library(
 
 go_test(
     name = "runtime_test",
+    size = "small",
     srcs = [
         "anthropic_test.go",
         "aside_test.go",
@@ -142,6 +143,7 @@ go_test(
         "telemetry_test.go",
     ],
     embed = [":runtime"],
+    shard_count = 6,
     # Starts commands in the OS sandbox, which can't nest in Bazel's on
     # macOS.
     tags = ["no-sandbox"],

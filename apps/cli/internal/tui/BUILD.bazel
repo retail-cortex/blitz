@@ -86,6 +86,7 @@ go_library(
 
 go_test(
     name = "tui_test",
+    size = "small",
     srcs = [
         "attach_test.go",
         "btw_test.go",
@@ -137,6 +138,7 @@ go_test(
     # The untranslated-output lint reads these sources.
     data = glob(["*.go"]) + ["//apps/cli:main.go"],  # keep
     embed = [":tui"],
+    shard_count = 6,
     # Starts commands in the OS sandbox, which can't nest in Bazel's on
     # macOS.
     tags = ["no-sandbox"],

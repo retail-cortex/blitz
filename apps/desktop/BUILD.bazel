@@ -114,6 +114,7 @@ go_binary(
 
 go_test(
     name = "desktop_test",
+    size = "small",
     srcs = [
         "app_test.go",
         "cli_test.go",

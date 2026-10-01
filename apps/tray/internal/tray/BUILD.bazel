@@ -41,6 +41,7 @@ go_library(
 
 go_test(
     name = "tray_test",
+    size = "small",
     srcs = [
         "actions_test.go",
         "locale_test.go",

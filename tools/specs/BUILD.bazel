@@ -29,6 +29,7 @@ go_binary(
 
 go_test(
     name = "specs_test",
+    size = "small",
     srcs = ["main_test.go"],
     embed = [":specs_lib"],
     deps = [

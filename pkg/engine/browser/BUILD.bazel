@@ -32,12 +32,14 @@ go_library(
 
 go_test(
     name = "browser_test",
+    size = "small",
     srcs = [
         "browser_test.go",
         "fake_test.go",
         "launch_test.go",
     ],
     embed = [":browser"],
+    shard_count = 3,
     deps = [
         "//pkg/engine/browser/browsertest",
         "@com_github_gorilla_websocket//:websocket",

@@ -40,6 +40,7 @@ go_binary(
 
 go_test(
     name = "service_test",
+    size = "small",
     srcs = ["main_test.go"],
     embed = [":service_lib"],
     deps = [

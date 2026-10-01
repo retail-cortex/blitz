@@ -29,6 +29,7 @@ go_binary(
 
 go_test(
     name = "coverage_test",
+    size = "small",
     srcs = ["main_test.go"],
     embed = [":coverage_lib"],
     deps = [
