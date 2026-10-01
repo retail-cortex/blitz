@@ -7,7 +7,7 @@ Written 2026-09-24 at commit `7e211697` on `main`; updated 2026-09-25, 2026-09-2
 
 ## Resume here (2026-10-01)
 
-**CI**: green on `8c31870` (run `36841190165`: Linux, macOS, reproducible). The run on `904a46a` failed on a data race the race detector caught once in `TestRemoteTaskRequests` (a published task event pointed at a variable then reused, `pkg/engine/runtime/tasks.go`); fixed in the commit after this page's update. Check the latest with `gh run list --branch main --workflow ci --limit 3` and `gh run view <id> --log-failed`. Since 2026-09-30:
+**CI**: green on `8c31870` (run `36841190165`: Linux, macOS, reproducible). The run on `904a46a` failed on a data race the race detector caught once in `TestRemoteTaskRequests` (a published task event pointed at a variable then reused, `pkg/engine/runtime/tasks.go`); fixed in `8017779`. The run on that failed on macOS: a test hung because the REPL's prompt-time Ctrl+C watcher, stopped as a turn started, could still take the Ctrl+C meant for the turn (`cancelOnSignal` now waits for its watcher to go); fixed in the commit after this line. Check the latest with `gh run list --branch main --workflow ci --limit 3` and `gh run view <id> --log-failed`. Since 2026-09-30:
 
 - **Coverage** went from 76.5% to 94.9% of the Go code on Linux, with the floor at 94%, and the page's TypeScript is measured (17% of lines and branches; floor in `vite.config.ts`). The work found and fixed about twenty bugs, logged in the commits and, for the security ones, in the [security log](../about/security-log.md).
 - **Tests** pass without an OS sandbox (`configtest.RunTools`, `BLITZ_SANDBOX_SHELL=auto` in `.bazelrc`), with test sizes that fit and the big Go suites in shards.
@@ -22,7 +22,7 @@ Written 2026-09-24 at commit `7e211697` on `main`; updated 2026-09-25, 2026-09-2
 2. Pin the Linux jobs to `ubuntu-24.04` before GitHub moves `ubuntu-latest` to Ubuntu 26 (2026-10-19).
 3. The security log's open items, SEC-2026-O1 (`fix-apparmor` piping the profile to root) first.
 4. Tests for the page's components (its coverage is 17%), and Go branch coverage (gobco), suggested but not set up.
-5. Smaller: `blitz workers runs <unknown>` says "hasn't run yet" rather than that there's no such worker; `TestEngineCapsParallelToolCalls` (four 0.3 s sleeps within 1.1 s) failed once on a loaded machine.
+5. Smaller: `blitz workers runs <unknown>` says "hasn't run yet" rather than that there's no such worker; `TestEngineCapsParallelToolCalls` now compares the unlimited run with the one-at-a-time run instead of a fixed 1.1 s, which failed on a loaded machine.
 
 **Picking this up on another machine.** Everything is in the repository; nothing lives only on the machine it was done on.
 
