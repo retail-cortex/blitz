@@ -7,20 +7,31 @@ Written 2026-09-24 at commit `7e211697` on `main`; updated 2026-09-25, 2026-09-2
 
 ## Resume here (2026-10-01)
 
-**`main` is green in CI** (run `36841190165` on `8c31870`: Linux, macOS and the reproducible job); the run on `904a46a` was in progress when this was written. Since 2026-09-30:
+**CI**: green on `8c31870` (run `36841190165`: Linux, macOS, reproducible). The run on `904a46a` failed on a data race the race detector caught once in `TestRemoteTaskRequests` (a published task event pointed at a variable then reused, `pkg/engine/runtime/tasks.go`); fixed in the commit after this page's update. Check the latest with `gh run list --branch main --workflow ci --limit 3` and `gh run view <id> --log-failed`. Since 2026-09-30:
 
 - **Coverage** went from 76.5% to 94.9% of the Go code on Linux, with the floor at 94%, and the page's TypeScript is measured (17% of lines and branches; floor in `vite.config.ts`). The work found and fixed about twenty bugs, logged in the commits and, for the security ones, in the [security log](../about/security-log.md).
 - **Tests** pass without an OS sandbox (`configtest.RunTools`, `BLITZ_SANDBOX_SHELL=auto` in `.bazelrc`), with test sizes that fit and the big Go suites in shards.
 - **Security**: the sandbox is required on Linux, `blitz security fix-apparmor` and the desktop's **Allow bubblewrap** lift AppArmor's restriction for bwrap alone, ADC is shared with commands only on request, the `ant` sign-in is hidden, and a sandbox escape through the ADC copies' sweep is fixed (SEC-2026-08).
 - **Desktop**: the `.deb` depends on `bubblewrap`; install the `blitz` command from Settings, make a folder a git repository from Changes, a readable "/" menu, a white tray bolt, no maximum window size.
 
+**Tested by the owner** (2026-10-01): the Linux sandbox checks (*a, b and c* in their note: `blitz security fix-apparmor`, the desktop's notice and **Allow bubblewrap**, against a real AppArmor) on an Ubuntu instance.
+
 **Next, in order:**
 
-1. On Ubuntu 24.04 with the AppArmor restriction on: `blitz security fix-apparmor`, then the desktop's notice and **Allow bubblewrap** (manual verification, *The sandbox required on Linux* and *Fixing it*). Neither has run against a real AppArmor yet.
+1. The same on a Chromebook (ChromeOS's Linux container, Debian): whether bubblewrap runs there at all (`blitz security`), and the `.deb` install (manual verification, *The sandbox required on Linux* and *Fixing it*; [Chromebooks](../products/desktop.md)).
 2. Pin the Linux jobs to `ubuntu-24.04` before GitHub moves `ubuntu-latest` to Ubuntu 26 (2026-10-19).
 3. The security log's open items, SEC-2026-O1 (`fix-apparmor` piping the profile to root) first.
 4. Tests for the page's components (its coverage is 17%), and Go branch coverage (gobco), suggested but not set up.
 5. Smaller: `blitz workers runs <unknown>` says "hasn't run yet" rather than that there's no such worker; `TestEngineCapsParallelToolCalls` (four 0.3 s sleeps within 1.1 s) failed once on a loaded machine.
+
+**Picking this up on another machine.** Everything is in the repository; nothing lives only on the machine it was done on.
+
+- Clone `git@github.com:retail-cortex/blitz.git`, then follow [building](building.md): Bazelisk as `bazel`, and on Linux `git bubblewrap pkg-config libgtk-3-dev libwebkit2gtk-4.1-dev`. On Ubuntu 24.04, `blitz security fix-apparmor` (or the `sysctl` there, for the gVisor tests too) lets the sandbox tests run; without it they skip, and everything else passes (`BLITZ_SANDBOX_SHELL=auto` in `.bazelrc`).
+- `gh auth login` to read CI's logs (`gh run view <id> --log-failed`): the API won't give them anonymously.
+- Commits since 2026-09-30 are unsigned (the owner's GPG key couldn't be unlocked from the agent's shell); `commit.gpgsign` is unchanged.
+- A local `.deb` is version `0.0.0`: install it with `sudo apt install --reinstall ./blitz-desktop_amd64.deb`.
+- Before a commit: `tools/check_format.sh`, and `tools/coverage.sh --config=race` as CI runs it (floor 94%); the page has its own floor (`bazel test //apps/desktop/web:coverage`). Docs-only commits carry `[skip ci]`, and go before the code commit when pushed together, since CI runs on the last commit only.
+- Security problems go in the [security log](../about/security-log.md).
 
 ## Earlier: 2026-09-27, end of day
 
