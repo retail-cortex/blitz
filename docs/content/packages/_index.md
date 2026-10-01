@@ -18,6 +18,7 @@ The packages under `pkg/` are shared by the apps. Each is a Go package in the on
 | [`observability`](observability.md) | Shared | The diagnostic log and OpenTelemetry |
 | [`redact`](redact.md) | Shared | Masking secrets before they're written |
 | [`legal`](legal.md) | Shared | The license texts every program shows |
+| [`sandboxsetup`](sandboxsetup.md) | Shared | Whether Linux's sandbox runs, and an AppArmor profile that lets it |
 | [`loginitem`](loginitem.md) | Shared | Starting the service at login |
 | [`textutil`](textutil.md) | Shared | Small string helpers |
 

@@ -62,6 +62,7 @@ Decisions are `once`, `session`, `always` or `deny`; a question is answered with
 
 | Command | |
 |---|---|
+| `blitz security`, `blitz security fix-apparmor` | Whether the OS sandbox for the agent's commands works here; on Linux, where AppArmor stops bubblewrap, install an AppArmor profile that lets bwrap alone through (asks for your password with sudo) |
 | `blitz doctor [--online]` | Checks the settings, credentials, sandbox, MCP servers, hooks and skills; `--online` also calls each model and a test search |
 | `blitz config init\|show\|path` | Writes, shows or locates the settings file |
 | `blitz config set-key\|keys\|secure-key\|remove-key` | API keys in the OS keychain ([configuration](../guide/configuration.md)) |
