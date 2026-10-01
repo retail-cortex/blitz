@@ -1048,7 +1048,12 @@ func (e *Engine) recordTurn(ctx context.Context, sessionID string, span trace.Sp
 	}
 }
 
+// drain runs a turn's events through handler. A turn whose last model
+// reply stopped at the output limit ends with ErrOutputLimit: the reply,
+// or the tool call it was writing, was cut off, and without a word the
+// turn would seem to have done nothing.
 func drain(events func(yield func(*session.Event, error) bool), handler EventHandler) error {
+	cut := false
 	for ev, err := range events {
 		if err != nil {
 			if errors.Is(err, api.ErrMaxTurns) {
@@ -1056,11 +1061,19 @@ func drain(events func(yield func(*session.Event, error) bool), handler EventHan
 			}
 			return fmt.Errorf("agent execution error: %w", err)
 		}
+		if ev != nil && !ev.Partial && ev.Author != "user" {
+			// The last model reply decides: a tool's result after a cut-off
+			// one (the call was whole) clears it.
+			cut = ev.FinishReason == genai.FinishReasonMaxTokens
+		}
 		if handler != nil && ev != nil {
 			if hErr := handler(ev); hErr != nil {
 				return hErr
 			}
 		}
+	}
+	if cut {
+		return api.ErrOutputLimit
 	}
 	return nil
 }

@@ -127,6 +127,7 @@ go_test(
         "leak_test.go",
         "mcp_agents_test.go",
         "model_factory_test.go",
+        "outputlimit_test.go",
         "pin_test.go",
         "plan_test.go",
         "prompts_test.go",

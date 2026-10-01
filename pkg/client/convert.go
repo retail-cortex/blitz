@@ -63,6 +63,7 @@ var sentinels = map[string]error{
 	"UNKNOWN_WORKER":           api.ErrUnknownWorker,
 	"WORKER_EXISTS":            api.ErrWorkerExists,
 	"SANDBOX_UNAVAILABLE":      api.ErrSandboxUnavailable,
+	"OUTPUT_LIMIT":             api.ErrOutputLimit,
 	"WORKER_INVALID":           api.ErrWorkerInvalid,
 	"WORKER_DISABLED":          api.ErrWorkerNotEnabled,
 	"RUN_IN_PROGRESS":          api.ErrRunInProgress,

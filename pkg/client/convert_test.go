@@ -60,6 +60,9 @@ func TestErrorsFromTheService(t *testing.T) {
 		"WORKER_EXISTS": func(t *testing.T, err error) {
 			assert.ErrorIs(t, err, api.ErrWorkerExists)
 		},
+		"OUTPUT_LIMIT": func(t *testing.T, err error) {
+			assert.ErrorIs(t, err, api.ErrOutputLimit)
+		},
 		"SANDBOX_UNAVAILABLE": func(t *testing.T, err error) {
 			assert.ErrorIs(t, err, api.ErrSandboxUnavailable)
 		},

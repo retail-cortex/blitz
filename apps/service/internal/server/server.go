@@ -350,6 +350,7 @@ func toAPI(err error) error {
 		{api.ErrNoFetch, connect.CodeFailedPrecondition, "NO_FETCH"},
 		{api.ErrNoSearch, connect.CodeFailedPrecondition, "NO_SEARCH"},
 		{api.ErrNothingToCompact, connect.CodeFailedPrecondition, "NOTHING_TO_COMPACT"},
+		{api.ErrOutputLimit, connect.CodeResourceExhausted, "OUTPUT_LIMIT"},
 		{api.ErrUnknownWorker, connect.CodeNotFound, "UNKNOWN_WORKER"},
 		{api.ErrWorkerNotEnabled, connect.CodeFailedPrecondition, "WORKER_DISABLED"},
 		{api.ErrRunInProgress, connect.CodeFailedPrecondition, "RUN_IN_PROGRESS"},

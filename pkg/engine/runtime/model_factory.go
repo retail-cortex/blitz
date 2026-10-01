@@ -309,6 +309,9 @@ type MockLLM struct {
 	// CustomMetadata.
 	ServedBy string
 	Metadata map[string]any
+	// FinishReasons, if set, are the responses' finish reasons, in order
+	// (MAX_TOKENS: a reply cut off at the output limit).
+	FinishReasons []genai.FinishReason
 }
 
 // Calls returns the number of GenerateContent calls so far.
@@ -359,6 +362,9 @@ func (m *MockLLM) GenerateContent(ctx context.Context, req *model.LLMRequest, st
 			UsageMetadata:  m.Usage,
 			ModelVersion:   m.ServedBy,
 			CustomMetadata: m.Metadata,
+		}
+		if idx < len(m.FinishReasons) {
+			resp.FinishReason = m.FinishReasons[idx]
 		}
 		yield(resp, nil)
 	}

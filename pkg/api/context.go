@@ -90,6 +90,11 @@ func (s WebSearch) URLs() []string {
 // ErrNothingToCompact is returned when a session is too short to compact.
 var ErrNothingToCompact = errors.New("nothing to compact yet")
 
+// ErrOutputLimit: the model's reply stopped at its output limit
+// (max_tokens) before it was done, so the turn ended without it: a tool
+// call cut short is dropped, which looks like nothing happened.
+var ErrOutputLimit = errors.New("the model's reply hit its output limit (max_tokens) and was cut off: raise max_tokens for this model (Run settings › Generation, or max_tokens in [model_settings]) and ask again")
+
 // ErrNoSearch is returned by Registry.WebSearch when no search provider is
 // configured (web.search_provider), or it can't be used.
 var ErrNoSearch = errors.New("web search is not set up")
