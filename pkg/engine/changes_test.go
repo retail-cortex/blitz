@@ -192,3 +192,55 @@ func TestUndoAfterResume(t *testing.T) {
 	_, err = os.Stat(filepath.Join(cfg.Tools.WorkspaceDir, "notes.txt"))
 	assert.ErrorIs(t, err, fs.ErrNotExist, "notes.txt is still there")
 }
+
+// Approvals are listed (this session's, then saved ones, with what they
+// cover), revoked by key, and cleared.
+func TestApprovals(t *testing.T) {
+	w, _ := openTestWith(t, nil, toolCall("create_file", map[string]any{"path": "a.txt", "content": "a"}), text("done"))
+	w.SetUI(func(context.Context, api.ApprovalRequest) (api.Decision, error) { return api.DecisionSession, nil }, nil)
+	_, err := w.Run(context.Background(), newSession(t, w).ID, api.Turn{Text: "write"}, ignore)
+	require.NoError(t, err)
+	store := w.Tools().Hooks().Store()
+	require.NoError(t, store.Add("cmd:/src\x00make test", "make test"))
+	require.NoError(t, store.Add("uc-run:go\x00vet", ""))
+	require.NoError(t, store.Add("plain", ""))
+
+	list := w.ListApprovals()
+	require.Len(t, list, 4)
+	session := list[0]
+	assert.False(t, session.Always, "the session's approval: %+v", session)
+	assert.NotEmpty(t, session.Kind, "the session's approval: %+v", session)
+	saved := map[string]api.Approval{}
+	for _, a := range list[1:] {
+		assert.True(t, a.Always, "%+v", a)
+		saved[a.Key] = a
+	}
+	cmd := saved["cmd:/src\x00make test"]
+	assert.Equal(t, []string{"cmd", "/src", "make test"}, []string{cmd.Kind, cmd.Dir, cmd.Subject})
+	assert.Equal(t, "go vet", saved["uc-run:go\x00vet"].Subject)
+	assert.Equal(t, api.Approval{Key: "plain", Subject: "plain", Always: true, Added: saved["plain"].Added}, saved["plain"])
+
+	assert.Equal(t, 1, w.RevokeApprovals("plain"))
+	assert.Len(t, w.ListApprovals(), 3)
+	assert.Equal(t, 3, w.ClearApprovals())
+	assert.Empty(t, w.ListApprovals())
+}
+
+// The diff can be colored; with no active session there is no session
+// diff.
+func TestGitDiffColorAndNoSessionDiff(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("no git")
+	}
+	w := openTest(t)
+	assert.Equal(t, "", w.SessionDiff(), "no active session")
+	gitIn(t, w.Dir(), "init", "-q")
+	write(t, w.Dir(), "a.txt", "one\n")
+	gitIn(t, w.Dir(), "add", ".")
+	gitIn(t, w.Dir(), "commit", "-qm", "init")
+	write(t, w.Dir(), "a.txt", "two\n")
+	diff, err := w.GitDiff(context.Background(), true)
+	require.NoError(t, err)
+	assert.Contains(t, diff, "\x1b[", "colored")
+	assert.Contains(t, diff, "two")
+}

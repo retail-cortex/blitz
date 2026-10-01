@@ -35,11 +35,42 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
+// inProcess runs lsptest.Serve in this process, over OS pipes (buffered,
+// as a real server's stdio is).
+func inProcess(context.Context, []string) (lsp.Process, error) {
+	serverIn, clientOut, err := os.Pipe()
+	if err != nil {
+		return nil, err
+	}
+	clientIn, serverOut, err := os.Pipe()
+	if err != nil {
+		return nil, err
+	}
+	go func() { lsptest.Serve(serverIn, serverOut); serverOut.Close(); serverIn.Close() }()
+	return &pipeProcess{in: clientOut, out: clientIn}, nil
+}
+
+type pipeProcess struct {
+	in, out *os.File
+}
+
+func (p *pipeProcess) Stdin() io.WriteCloser { return p.in }
+func (p *pipeProcess) Stdout() io.ReadCloser { return p.out }
+func (p *pipeProcess) Stop()                 { p.in.Close(); p.out.Close() }
+
+// The manager against the fake server, started as a process and in this
+// one.
 func TestManager(t *testing.T) {
+	for name, launch := range map[string]lsp.Launcher{"process": lsptest.Launcher(), "in process": inProcess} {
+		t.Run(name, func(t *testing.T) { testManager(t, launch) })
+	}
+}
+
+func testManager(t *testing.T, launch lsp.Launcher) {
 	dir, _ := filepath.EvalSymlinks(t.TempDir())
 	src := filepath.Join(dir, "main.go")
 	require.NoError(t, os.WriteFile(src, []byte("package main\nfunc Foo() {}\n\nvar _ = Foo\n"), 0o644))
-	m := lsp.NewManager(dir, []lsp.Server{{Language: "go", Command: []string{"fake"}, Extensions: []string{".go"}}}, lsptest.Launcher())
+	m := lsp.NewManager(dir, []lsp.Server{{Language: "go", Command: []string{"fake"}, Extensions: []string{".go"}}}, launch)
 	defer m.Close()
 	ctx := context.Background()
 

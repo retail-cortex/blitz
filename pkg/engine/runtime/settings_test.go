@@ -317,3 +317,9 @@ func TestSessionEffortOverridesModelSettings(t *testing.T) {
 	got = level()
 	require.Equal(t, genai.ThinkingLevel(""), got, "after clearing: %q", got)
 }
+
+// Settings for providers Blitz doesn't map are passed on as written.
+func TestSettingSupportedUnknownProvider(t *testing.T) {
+	assert.True(t, SettingSupported("bedrock", "x", "seed"))
+	assert.False(t, SettingSupported("gemini", "models/gemini-2.5-pro", "reasoning_effort"))
+}

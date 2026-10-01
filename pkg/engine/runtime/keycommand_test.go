@@ -122,3 +122,32 @@ func TestKeyCommandProviders(t *testing.T) {
 	_, err := listProvider(context.Background(), cfg, "carrier-pigeon")
 	assert.ErrorContains(t, err, "unknown provider")
 }
+
+// The key transport puts the command's key in the named header, as a
+// bearer token when asked, and fails the request when the command does.
+func TestKeyTransport(t *testing.T) {
+	var got []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got = append(got, r.Header.Get("X-Key")+"|"+r.Header.Get("Authorization"))
+	}))
+	defer srv.Close()
+	k, err := keyFromCommand("echo transport-key", "")
+	require.NoError(t, err)
+
+	for _, bearer := range []bool{false, true} {
+		header := "X-Key"
+		if bearer {
+			header = "Authorization"
+		}
+		c := withKeyCommand(&http.Client{}, k, header, bearer)
+		resp, err := c.Get(srv.URL)
+		require.NoError(t, err)
+		resp.Body.Close()
+	}
+	assert.Equal(t, []string{"transport-key|", "|Bearer transport-key"}, got)
+
+	bad, err := keyFromCommand("exit 1", "")
+	require.NoError(t, err)
+	_, err = withKeyCommand(srv.Client(), bad, "X-Key", false).Get(srv.URL)
+	assert.ErrorContains(t, err, "api_key_command failed")
+}

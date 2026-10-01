@@ -87,3 +87,43 @@ func TestLoadNamespacesAndBundled(t *testing.T) {
 	assert.Contains(t, prompt, "ask_user_question")
 	assert.Contains(t, prompt, "Don't change any files.")
 }
+
+// TestParseEdgeCases checks frontmatter and description corner cases.
+func TestParseEdgeCases(t *testing.T) {
+	_, err := Parse("b", "user", "", []byte("---\ndescription: [unclosed\n---\nx"))
+	assert.ErrorContains(t, err, "frontmatter", "malformed YAML")
+
+	_, err = Parse("b", "user", "", []byte("---\ndescription: x\n---"))
+	assert.ErrorContains(t, err, "no prompt", "nothing after the closing line")
+
+	c, err := Parse("b", "user", "", []byte("---\nallowed-tools: [Read, \" \", Bash(git *), 3]\n---\n#"))
+	require.NoError(t, err)
+	assert.Equal(t, []string{"Read", "Bash(git *)"}, c.AllowedTools, "a YAML list keeps the non-blank strings")
+	assert.Empty(t, c.Description, "a heading with no text gives no description")
+
+	long := strings.Repeat("a", 100)
+	c, err = Parse("b", "user", "", []byte(long))
+	require.NoError(t, err)
+	assert.Equal(t, strings.Repeat("a", 79)+"…", c.Description, "a long first line is shortened")
+}
+
+// TestLoadReportsBadFiles checks that unreadable and malformed command files
+// are reported while the rest load.
+func TestLoadReportsBadFiles(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "good.md"), []byte("Do it."), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "empty.md"), []byte("---\n---\n"), 0o644))
+	require.NoError(t, os.Symlink(filepath.Join(dir, "gone.md"), filepath.Join(dir, "dangling.md")))
+	locked := filepath.Join(dir, "locked")
+	require.NoError(t, os.Mkdir(locked, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(locked, "x.md"), []byte("x"), 0o644))
+	require.NoError(t, os.Chmod(locked, 0o000))
+	t.Cleanup(func() { _ = os.Chmod(locked, 0o755) })
+
+	list, err := Load(dir, "project")
+	require.Len(t, list, 1)
+	assert.Equal(t, "good", list[0].Name)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "empty.md", "the malformed file is named")
+	assert.Contains(t, err.Error(), "dangling.md", "the unreadable file is reported")
+}

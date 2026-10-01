@@ -81,3 +81,47 @@ do it
 	assert.Equal(t, 2*time.Hour, eff.Limits.Timeout, "limits %+v", eff.Limits)
 	assert.Len(t, eff.Notes, 3, "notes %q", eff.Notes)
 }
+
+// TestApplyPolicyDefaultsAndCostCap checks that a worker without limits
+// gets the policy's defaults and that its cost is capped.
+func TestApplyPolicyDefaultsAndCostCap(t *testing.T) {
+	p := config.DefaultConfig().Workers.Policy
+	p.DefaultMaxTurns, p.DefaultTimeout = 7, "3m"
+	eff := Apply(&Worker{}, p)
+	assert.Equal(t, 7, eff.Limits.MaxTurns)
+	assert.Equal(t, 3*time.Minute, eff.Limits.Timeout)
+
+	p.MaxCostUSD = 1
+	eff = Apply(&Worker{Limits: api.Limits{MaxCostUSD: 5}}, p)
+	assert.InDelta(t, 1.0, eff.Limits.MaxCostUSD, 1e-9)
+	assert.Contains(t, eff.Notes, "max_cost_usd 5.00 capped at 1.00")
+}
+
+// TestStoreFileErrors checks a store that can't be read, parsed or saved.
+func TestStoreFileErrors(t *testing.T) {
+	dir := t.TempDir()
+	_, err := OpenStore(dir)
+	assert.Error(t, err, "the store is a directory")
+
+	bad := filepath.Join(dir, "bad.json")
+	require.NoError(t, os.WriteFile(bad, []byte("{"), 0o600))
+	_, err = OpenStore(bad)
+	assert.ErrorContains(t, err, "bad.json")
+
+	later := filepath.Join(dir, "later")
+	s, err := OpenStore(filepath.Join(later, "workers.json"))
+	require.NoError(t, err, "a store that doesn't exist yet is empty")
+	require.NoError(t, os.WriteFile(later, nil, 0o600))
+	assert.Error(t, s.Disable("/ws", "deps"), "the store's directory can't be created")
+
+	ro := filepath.Join(dir, "ro")
+	require.NoError(t, os.Mkdir(ro, 0o500))
+	t.Cleanup(func() { _ = os.Chmod(ro, 0o755) })
+	s, err = OpenStore(filepath.Join(ro, "workers.json"))
+	require.NoError(t, err)
+	err = s.Disable("/ws", "deps")
+	if err == nil {
+		t.Skip("running with privileges that ignore file modes")
+	}
+	assert.Error(t, err, "the store's directory is read-only")
+}

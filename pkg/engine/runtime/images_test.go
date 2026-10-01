@@ -291,3 +291,21 @@ func TestImageInstructionInSystemPrompt(t *testing.T) {
 	runTurns(t, off.eng, "s", "hi")
 	assert.NotContains(t, systemText(off.llm), "You can see images", "no image guidance when images are disabled")
 }
+
+// withImages leaves no model alone and never wraps twice; the OpenAI
+// image helpers pass through what has no images and reject a body that
+// isn't JSON.
+func TestImageWrappersEdgeCases(t *testing.T) {
+	assert.Nil(t, withImages(nil, nil))
+	inner := NewMockLLM("m")
+	once := withImages(inner, nil)
+	twice := withImages(once, nil)
+	assert.Same(t, inner, twice.(*imageModel).inner, "rewrapping unwraps first")
+
+	ctx := context.Background()
+	gotCtx, gotReq := replaceImagesWithMarkers(ctx, nil)
+	assert.Equal(t, ctx, gotCtx)
+	assert.Nil(t, gotReq)
+	_, err := rewriteImageMarkers([]byte("not json"), openAIImages{})
+	assert.Error(t, err)
+}

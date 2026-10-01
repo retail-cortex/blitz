@@ -47,6 +47,7 @@ go_test(
     name = "workers_test",
     srcs = [
         "leak_test.go",
+        "runs_test.go",
         "state_test.go",
         "workers_test.go",
     ],

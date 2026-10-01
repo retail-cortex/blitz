@@ -19,6 +19,7 @@ import (
 	"testing"
 
 	"github.com/retail-cortex/blitz/pkg/api"
+	"github.com/retail-cortex/blitz/pkg/engine/session"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -72,4 +73,18 @@ func TestSessionOperations(t *testing.T) {
 	assert.NoError(t, err, "list: %d sessions,", len(list))
 	assert.Len(t, list, 3, "list: %d sessions, %v", len(list), err)
 	assert.Nil(t, list[0].Messages, "list: %d sessions, %v", len(list), err)
+}
+
+// Every workspace's sessions can be listed; with none active there is no
+// active session.
+func TestListAllSessions(t *testing.T) {
+	w := openTest(t)
+	_, ok := w.ActiveSession()
+	assert.False(t, ok)
+	s := newSession(t, w)
+	require.NoError(t, w.storage.Append(session.Message{Role: "user", Content: "hi"})) // empty sessions aren't listed
+	all, err := w.ListSessions(true)
+	require.NoError(t, err)
+	require.Len(t, all, 1)
+	assert.Equal(t, s.ID, all[0].ID)
 }

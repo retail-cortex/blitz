@@ -21,6 +21,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/retail-cortex/blitz/pkg/config/configtest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -69,7 +70,7 @@ func TestPlanModeCoversSubagents(t *testing.T) {
 }
 
 func TestWithoutPlanModeToolsRunNormally(t *testing.T) {
-	f := newEngineWith(t, fixtureOpts{},
+	f := newEngineWith(t, fixtureOpts{cfg: configtest.RunTools},
 		toolCall("create_file", map[string]any{"path": "new.txt", "content": "x"}),
 		textContent("done"))
 	_, err := functionResponses(t, f.eng, "s", "add a file")

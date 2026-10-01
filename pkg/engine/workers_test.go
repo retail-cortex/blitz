@@ -26,6 +26,7 @@ import (
 
 	"github.com/retail-cortex/blitz/pkg/api"
 	"github.com/retail-cortex/blitz/pkg/config"
+	"github.com/retail-cortex/blitz/pkg/config/configtest"
 	"github.com/retail-cortex/blitz/pkg/engine/workers"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -114,7 +115,7 @@ func TestRunWorkerEnforcesPermissions(t *testing.T) {
 	}
 	ask := &genai.Content{Role: genai.RoleModel, Parts: []*genai.Part{{FunctionCall: &genai.FunctionCall{Name: "ask_user_question", Args: map[string]any{"question": "ok?"}}}}}
 	// auto_approve is on for people; it must not widen what a worker may do.
-	w, llm := openTestWith(t, func(c *config.Config) { c.Blitz.AutoApprove = true },
+	w, llm := openTestWith(t, configtest.RunTools,
 		create("reports/deps.md"), create("main.go"), ask, text("Wrote the report."))
 	addWorker(t, w, "deps", "---\nschedule: daily at 6 AM\npermissions: [\"write:reports/\"]\n---\nWrite reports/deps.md.\n")
 	user := newSession(t, w)
@@ -326,4 +327,71 @@ func TestWorkerRunNotify(t *testing.T) {
 	w.cfg.Workers.NotifyOn = []string{"failed"}
 	w.notifyRun(api.Run{Worker: "deps", Status: api.RunSucceeded})
 	assert.NoFileExists(t, out)
+}
+
+// With workers turned off, none can be created, disabled or run.
+func TestWorkersOffRefuseEverything(t *testing.T) {
+	w, _ := openTestWith(t, func(c *config.Config) { c.Workers.Enabled = false })
+	_, _, err := w.CreateWorker(api.WorkerSpec{Name: "a", Schedule: "@daily", Prompt: "x"})
+	assert.ErrorIs(t, err, api.ErrWorkersDisabled)
+	_, err = w.DisableWorker("a")
+	assert.ErrorIs(t, err, api.ErrWorkersDisabled)
+	_, err = w.RunWorker(context.Background(), "a", RunOptions{})
+	assert.ErrorIs(t, err, api.ErrWorkersDisabled)
+}
+
+// With no worker folders configured, a new worker has nowhere to go.
+func TestCreateWorkerNeedsAFolder(t *testing.T) {
+	w, _ := openTestWith(t, func(c *config.Config) { c.Workers.Paths = nil })
+	_, _, err := w.CreateWorker(api.WorkerSpec{Name: "a", Schedule: "@daily", Prompt: "x"})
+	assert.ErrorIs(t, err, api.ErrWorkersDisabled)
+	assert.ErrorContains(t, err, "workers.paths is empty")
+}
+
+// A worker folder that can't be read is a warning; the others are still
+// listed.
+func TestUnreadableWorkerFolderWarns(t *testing.T) {
+	w := openTest(t)
+	var warnings []string
+	w.warn = func(s string) { warnings = append(warnings, s) }
+	write(t, w.Dir(), "workers", "not a folder")
+	list, err := w.ListWorkers()
+	require.NoError(t, err)
+	assert.Empty(t, list)
+	assert.NotEmpty(t, warnings)
+}
+
+// A scheduled run while the worker is still running is skipped and
+// recorded; a manual one is refused without a record.
+func TestRunWorkerSkipsWhileRunning(t *testing.T) {
+	w := openTest(t)
+	addWorker(t, w, "deps", "---\nschedule: daily at 6 AM\n---\nCheck.\n")
+	enable(t, w, "deps")
+	w.runsMu.Lock()
+	w.running["deps"] = true
+	w.runsMu.Unlock()
+
+	run, err := w.RunWorker(context.Background(), "deps", RunOptions{})
+	assert.ErrorIs(t, err, api.ErrRunInProgress)
+	assert.Equal(t, api.RunSkipped, run.Status)
+	_, err = w.RunWorker(context.Background(), "deps", RunOptions{Manual: true})
+	assert.ErrorIs(t, err, api.ErrRunInProgress)
+	runs, err := w.WorkerRuns("deps", 10)
+	require.NoError(t, err)
+	require.Len(t, runs, 1, "only the scheduled run is recorded")
+	assert.Equal(t, run.ID, runs[0].ID)
+}
+
+// A notify command that fails is a warning naming the worker.
+func TestWorkerNotifyFailureWarns(t *testing.T) {
+	w, _ := openTestWith(t, func(c *config.Config) {
+		c.Workers.Notify = "echo nope; exit 3"
+		c.Workers.NotifyOn = []string{"succeeded"}
+	})
+	var warnings []string
+	w.warn = func(s string) { warnings = append(warnings, s) }
+	w.notifyRun(api.Run{Worker: "deps", Status: api.RunSucceeded})
+	require.Len(t, warnings, 1)
+	assert.Contains(t, warnings[0], "workers.notify for deps")
+	assert.Contains(t, warnings[0], "nope")
 }

@@ -29,6 +29,7 @@ go_test(
     srcs = [
         "lsp_test.go",
         "manager_test.go",
+        "server_test.go",
     ],
     embed = [":lsp"],
     deps = [

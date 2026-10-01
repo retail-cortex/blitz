@@ -112,3 +112,116 @@ func TestPersistentServiceEdgeCases(t *testing.T) {
 	assert.Len(t, got, 1, "torn log replay: %v", got)
 	assert.Equal(t, "ok", got[0], "torn log replay: %v", got)
 }
+
+// TestPersistentServiceTruncate checks that Truncate keeps the first
+// events on disk and in memory, skipping lines replay would skip, and
+// refuses to keep more events than there are.
+func TestPersistentServiceTruncate(t *testing.T) {
+	dir := t.TempDir()
+	ctx := context.Background()
+	svc, err := NewPersistentService(dir)
+	require.NoError(t, err)
+	created, err := svc.Create(ctx, &adksession.CreateRequest{AppName: "app", UserID: "u", SessionID: "s1"})
+	require.NoError(t, err)
+	for _, text := range []string{"one", "two", "three"} {
+		appendText(t, svc, created.Session, "user", "user", text, false)
+	}
+	path := filepath.Join(dir, "s1"+eventsSuffix)
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, filePerm)
+	require.NoError(t, err)
+	_, err = f.WriteString("\nnot json\n")
+	require.NoError(t, err)
+	require.NoError(t, f.Close())
+
+	assert.ErrorContains(t, svc.Truncate(ctx, "app", "u", "s1", 4), "fewer than 4")
+	require.NoError(t, svc.Truncate(ctx, "app", "u", "s1", 2))
+	assert.Equal(t, []string{"one", "two"}, eventTexts(t, svc, "s1"), "in memory")
+	svc2, err := NewPersistentService(dir)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"one", "two"}, eventTexts(t, svc2, "s1"), "on disk")
+
+	require.NoError(t, svc.Truncate(ctx, "app", "u", "new", 0), "a session with no log yet")
+	assert.Error(t, svc.Truncate(ctx, "app", "u", "../x", 0), "an unsafe ID")
+	require.NoError(t, os.Mkdir(filepath.Join(dir, "d"+eventsSuffix), dirPerm))
+	assert.Error(t, svc.Truncate(ctx, "app", "u", "d", 0), "a log that can't be read")
+}
+
+// TestPersistentServiceErrors checks the service's failures: a directory
+// that can't be created, unsafe IDs, logs that can't be read or written.
+func TestPersistentServiceErrors(t *testing.T) {
+	ctx := context.Background()
+	base := t.TempDir()
+	file := filepath.Join(base, "file")
+	require.NoError(t, os.WriteFile(file, nil, filePerm))
+	_, err := NewPersistentService(filepath.Join(file, "sub"))
+	assert.Error(t, err, "the directory can't be created under a file")
+
+	dir := t.TempDir()
+	svc, err := NewPersistentService(dir)
+	require.NoError(t, err)
+
+	created, err := svc.Create(ctx, &adksession.CreateRequest{AppName: "app", UserID: "u", SessionID: "s1"})
+	require.NoError(t, err)
+	_, err = svc.Create(ctx, &adksession.CreateRequest{AppName: "app", UserID: "u", SessionID: "s1"})
+	assert.Error(t, err, "the ID is in use")
+
+	list, err := svc.List(ctx, &adksession.ListRequest{AppName: "app", UserID: "u"})
+	require.NoError(t, err)
+	assert.Len(t, list.Sessions, 1)
+
+	require.NoError(t, os.Mkdir(filepath.Join(dir, "s1"+eventsSuffix), dirPerm))
+	ev := adksession.NewEvent(ctx, "inv-1")
+	ev.Author = "user"
+	assert.Error(t, svc.AppendEvent(ctx, created.Session, ev), "the log can't be opened")
+
+	require.NoError(t, os.Mkdir(filepath.Join(dir, "s2"+eventsSuffix), dirPerm))
+	_, err = svc.Create(ctx, &adksession.CreateRequest{AppName: "app", UserID: "u", SessionID: "s2"})
+	assert.Error(t, err, "the log can't be replayed")
+	_, err = svc.Get(ctx, &adksession.GetRequest{AppName: "app", UserID: "u", SessionID: "s2"})
+	assert.Error(t, err, "a failed Create leaves no session without its history")
+	fresh, err := NewPersistentService(dir)
+	require.NoError(t, err)
+	for i := range 2 {
+		_, err = fresh.Get(ctx, &adksession.GetRequest{AppName: "app", UserID: "u", SessionID: "s2"})
+		assert.Error(t, err, "Get %d: the log can't be replayed", i)
+	}
+
+	bad, err := svc.Create(ctx, &adksession.CreateRequest{AppName: "app", UserID: "u", SessionID: "../bad"})
+	if err == nil {
+		assert.Error(t, svc.AppendEvent(ctx, bad.Session, ev), "an unsafe ID isn't a file name")
+	}
+}
+
+// TestReadEvents checks reading a stored log for export.
+func TestReadEvents(t *testing.T) {
+	dir := t.TempDir()
+	ctx := context.Background()
+	svc, err := NewPersistentService(dir)
+	require.NoError(t, err)
+	created, err := svc.Create(ctx, &adksession.CreateRequest{AppName: "app", UserID: "u", SessionID: "s1"})
+	require.NoError(t, err)
+	appendText(t, svc, created.Session, "user", "user", "hello", false)
+
+	evs, err := ReadEvents(dir, "s1")
+	require.NoError(t, err)
+	require.Len(t, evs, 1)
+	assert.Equal(t, "hello", evs[0].Content.Parts[0].Text)
+
+	evs, err = ReadEvents(dir, "none")
+	require.NoError(t, err)
+	assert.Nil(t, evs, "no log")
+	_, err = ReadEvents(dir, "../x")
+	assert.Error(t, err, "an unsafe ID")
+
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "torn"+eventsSuffix), []byte("{\"id\":\"e1\"}\n{bad"), filePerm))
+	evs, err = ReadEvents(dir, "torn")
+	assert.Error(t, err)
+	assert.Len(t, evs, 1, "what was read before the bad line")
+
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "locked"+eventsSuffix), nil, 0o000))
+	if _, err := os.ReadFile(filepath.Join(dir, "locked"+eventsSuffix)); err == nil {
+		t.Skip("running with privileges that ignore file modes")
+	}
+	_, err = ReadEvents(dir, "locked")
+	assert.Error(t, err, "a log that can't be opened")
+}

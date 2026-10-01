@@ -121,3 +121,21 @@ func TestGoalContinuationIsRecorded(t *testing.T) {
 	_, err = w.SetGoal(" ")
 	assert.Error(t, err)
 }
+
+// Goals belong to the active session: without one there are none; a goal
+// is cleared once; the default limit applies when none is set.
+func TestGoalsNeedASession(t *testing.T) {
+	w, _ := openTestWith(t, func(c *config.Config) { c.Blitz.GoalMaxContinues = 0 })
+	_, err := w.SetGoal("tests pass")
+	assert.ErrorIs(t, err, api.ErrNoActiveSession)
+	_, err = w.Goal()
+	assert.ErrorIs(t, err, api.ErrNoActiveSession)
+	assert.ErrorIs(t, w.ClearGoal(), api.ErrNoActiveSession)
+
+	newSession(t, w)
+	g, err := w.SetGoal("tests pass")
+	require.NoError(t, err)
+	assert.Equal(t, 20, g.Max)
+	require.NoError(t, w.ClearGoal())
+	assert.ErrorIs(t, w.ClearGoal(), api.ErrNoGoal)
+}

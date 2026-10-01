@@ -174,3 +174,19 @@ func TestBedrockModel(t *testing.T) {
 	assert.Equal(t, []string{"bedrock", "us.anthropic.claude-y"}, []string{p, name})
 	assert.Contains(t, ConfiguredProviders(cfg), "bedrock")
 }
+
+// Credentials that can't be found fail the model's build: an AWS profile
+// that doesn't exist, or no Entra ID credential chain at all.
+func TestCloudCredentialFailures(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("AWS_CONFIG_FILE", filepath.Join(dir, "config"))
+	t.Setenv("AWS_SHARED_CREDENTIALS_FILE", filepath.Join(dir, "credentials"))
+	_, err := newBedrockModel(context.Background(), config.BedrockConfig{Model: "us.anthropic.claude-x", Region: "us-east-1", Profile: "nobody"}, "")
+	assert.ErrorContains(t, err, "AWS configuration")
+
+	old := azureCredential
+	t.Cleanup(func() { azureCredential = old })
+	azureCredential = func() (azcore.TokenCredential, error) { return nil, errors.New("no chain") }
+	_, err = newAzureModel(context.Background(), config.AzureConfig{Model: "claude-x", Resource: "r", Auth: "entra"}, "", policyFrom(config.LLMConfig{}))
+	assert.ErrorContains(t, err, "finding Entra ID credentials")
+}

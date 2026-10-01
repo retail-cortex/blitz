@@ -35,6 +35,7 @@ go_test(
     srcs = [
         "browser_test.go",
         "fake_test.go",
+        "launch_test.go",
     ],
     embed = [":browser"],
     deps = [

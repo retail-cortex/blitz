@@ -17,6 +17,7 @@ package engine
 import (
 	"context"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -195,4 +196,56 @@ func TestDeclinedProject(t *testing.T) {
 	defer w.Close()
 	assert.Equal(t, api.TrustDeclined, w.ProjectSettings().State)
 	assert.False(t, w.ProjectSettings().Loaded)
+}
+
+// What the project files ask that isn't a setting, files that can't be
+// read, and personal settings committed to git are reported as the
+// workspace opens; opened through a link, the project's skills are
+// untrusted under both paths.
+func TestProjectProblemsAreReported(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("no git")
+	}
+	ws := projectWorkspace(t)
+	write(t, ws, ".blitz/settings.local.toml", "made_up_key = 1\n")
+	write(t, ws, ".mcp.json", "{")
+	gitIn(t, ws, "init", "-q")
+	gitIn(t, ws, "add", ".blitz/settings.local.toml")
+	link := filepath.Join(t.TempDir(), "link")
+	require.NoError(t, os.Symlink(ws, link))
+
+	cfg, err := config.LoadWorkspace("", link)
+	require.NoError(t, err)
+	cfg.Tools.WorkspaceDir = link
+	cfg.Session.StorageDir = t.TempDir()
+	cfg.Tools.ApprovalsFile = filepath.Join(t.TempDir(), "a.json")
+	w, warnings, err := openWarn(t, cfg, Options{Model: runtime.NewMockLLM("m")})
+	require.NoError(t, err)
+	all := strings.Join(warnings, "\n")
+	assert.Contains(t, all, "made_up_key isn't a project setting")
+	assert.Contains(t, all, "Project settings not read: .mcp.json")
+	assert.Contains(t, all, "is tracked by git")
+	real, err := filepath.EvalSymlinks(ws)
+	require.NoError(t, err)
+	assert.Contains(t, w.cfg.Skills.Policy.UntrustedRoots, real)
+}
+
+// Forgetting a decision asks again; without a settings directory the
+// default one is used.
+func TestForgetProjectTrust(t *testing.T) {
+	ws := projectWorkspace(t)
+	w := openProject(t, ws, Options{})
+	defer w.Close()
+	hash := w.ProjectSettings().Hash
+	require.NoError(t, w.TrustProject(hash, true))
+	require.Equal(t, api.TrustTrusted, w.ProjectSettings().State)
+	require.NoError(t, ForgetProjectTrust(w.cfg))
+	assert.Equal(t, api.TrustNew, w.ProjectSettings().State)
+
+	cfg := &config.Config{Tools: config.ToolsConfig{WorkspaceDir: ws}}
+	require.NoError(t, ForgetProjectTrust(cfg))
+	assert.Error(t, ForgetProjectTrust(&config.Config{Tools: config.ToolsConfig{WorkspaceDir: filepath.Join(ws, "missing")}}))
+	p, err := ReviewProject(&config.Config{Tools: config.ToolsConfig{WorkspaceDir: ws}})
+	require.NoError(t, err)
+	assert.Equal(t, api.TrustNone, p.State, "no project files loaded")
 }

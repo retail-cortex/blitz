@@ -42,6 +42,7 @@ go_test(
     name = "memory_test",
     srcs = [
         "compat_test.go",
+        "memory_more_test.go",
         "memory_test.go",
         "notes_test.go",
     ],

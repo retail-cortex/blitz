@@ -102,3 +102,41 @@ func TestCustomCommands(t *testing.T) {
 	_, err = run("/nope")
 	assert.ErrorIs(t, err, api.ErrUnknownCommand, "unknown command: %v", err)
 }
+
+// A command's frontmatter picks the agent and model of its turn; an
+// unknown agent or a model that can't be built is an error naming it.
+func TestCommandAgentAndModel(t *testing.T) {
+	w := openTest(t)
+	writeCommand(t, w.Dir(), ".blitz/commands/qa.md", "---\nagent: qa\nmodel: gemini-3.8-pro\n---\nTest $1.")
+	writeCommand(t, w.Dir(), ".blitz/commands/ghost.md", "---\nagent: ghost\n---\nBoo.")
+	writeCommand(t, w.Dir(), ".blitz/commands/broken.md", "---\nmodel: broken\n---\nx")
+	ctx := context.Background()
+
+	turn := &api.Turn{Text: "/qa cart"}
+	opts, err := w.expandCommand(ctx, turn)
+	require.NoError(t, err)
+	assert.Equal(t, "Test cart.", turn.Prompt)
+	assert.Len(t, opts, 2, "the agent and the model")
+
+	_, err = w.expandCommand(ctx, &api.Turn{Text: "/ghost"})
+	var unknown *api.UnknownAgentError
+	assert.ErrorAs(t, err, &unknown)
+	_, err = w.expandCommand(ctx, &api.Turn{Text: "/broken"})
+	assert.ErrorContains(t, err, `/broken: model "broken": no such model`)
+}
+
+// A skill whose name isn't a valid command, or that a bundled command
+// already has, isn't a command.
+func TestSkillsAsCommandsSkipClashes(t *testing.T) {
+	w := openTest(t)
+	dir := t.TempDir()
+	for name, desc := range map[string]string{"review": "a skill named like a bundled command", "Bad_Name!": "invalid"} {
+		writeCommand(t, dir, name+"/SKILL.md", "---\nname: "+name+"\ndescription: "+desc+"\n---\nDo it.")
+	}
+	require.NoError(t, w.Skills().DiscoverExternal([]string{dir}))
+	byName, err := w.commands()
+	require.NoError(t, err)
+	assert.Equal(t, "bundled", byName["review"].Source)
+	_, ok := byName["bad_name!"]
+	assert.False(t, ok, "an invalid name became a command")
+}

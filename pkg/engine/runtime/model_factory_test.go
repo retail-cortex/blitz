@@ -20,6 +20,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -133,4 +134,140 @@ func TestGeminiADCSignsRequests(t *testing.T) {
 	fakeADC(t, errors.New("could not find default credentials"))
 	_, err = geminiClientConfig(context.Background(), config.GeminiConfig{Auth: config.AuthADC, ProjectID: "p"}, pol)
 	assert.ErrorContains(t, err, "gcloud auth application-default login")
+}
+
+// buildProviderModel picks the provider's API, or, with none named, the
+// first provider with credentials (Ollama on this machine when there are
+// none).
+func TestBuildProviderModel(t *testing.T) {
+	fakeADC(t, nil)
+	t.Setenv("GOOGLE_CLOUD_PROJECT", "p")
+	for _, tc := range []struct {
+		name     string
+		provider string
+		model    string
+		cfg      func(*config.Config)
+		want     string // providerOf the model
+		wantName string
+		err      string
+	}{
+		{name: "gemini", provider: "gemini", model: "gemini-x", cfg: func(c *config.Config) { c.LLM.Gemini.APIKey = "AIza" }, want: "gemini"},
+		{name: "gemini bad auth", provider: "gemini", cfg: func(c *config.Config) { c.LLM.Gemini.Auth = "magic" }, err: "unknown [llm.gemini] auth"},
+		{name: "openai key command fails", provider: "openai", cfg: func(c *config.Config) { c.LLM.OpenAI = config.OpenAIConfig{APIKeyCommand: "exit 1"} }, err: "[llm.openai] api_key_command failed"},
+		{name: "claude on vertex", provider: "vertex-anthropic", model: "claude-x", want: "anthropic"},
+		{name: "azure without a model", provider: "azure", err: "[llm.azure] model"},
+		{name: "none: gemini key", model: "gemini-x", cfg: func(c *config.Config) { c.LLM.Gemini.APIKey = "AIza" }, want: "gemini"},
+		{
+			name: "none: anthropic key, its model", model: "ignored",
+			cfg: func(c *config.Config) {
+				c.LLM.Gemini.APIKey, c.Blitz.DefaultModel = "", ""
+				c.LLM.Anthropic.APIKey, c.LLM.Anthropic.Model = "sk-ant", "claude-y"
+			},
+			want: "anthropic", wantName: "claude-y",
+		},
+		{name: "none: openai address", model: "gpt-x", cfg: func(c *config.Config) { c.LLM.OpenAI.BaseURL = "http://127.0.0.1:1/v1" }, want: "openai"},
+		{name: "none: ollama", model: "llama", want: "openai"},
+		{name: "unknown with a gemini key", provider: "mystery", model: "gemini-x", cfg: func(c *config.Config) { c.LLM.Gemini.APIKey = "AIza" }, want: "gemini"},
+		{name: "unknown", provider: "mystery", err: "unsupported or unconfigured LLM provider"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := config.DefaultConfig()
+			cfg.LLM.Gemini, cfg.LLM.Anthropic, cfg.LLM.OpenAI = config.GeminiConfig{}, config.AnthropicConfig{}, config.OpenAIConfig{}
+			if tc.cfg != nil {
+				tc.cfg(cfg)
+			}
+			m, err := buildProviderModel(context.Background(), cfg, tc.provider, tc.model)
+			if tc.err != "" {
+				assert.ErrorContains(t, err, tc.err)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tc.want, providerOf(m))
+			if tc.wantName != "" {
+				assert.Equal(t, tc.wantName, m.Name())
+			}
+		})
+	}
+}
+
+// A fallback model that can't be built is skipped, and NewModelRef builds
+// one reference on its own.
+func TestNewModelSkipsUnavailableFallbacks(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.LLM.Provider = "openai"
+	cfg.LLM.OpenAI = config.OpenAIConfig{APIKey: "sk", BaseURL: "http://127.0.0.1:1/v1"}
+	cfg.LLM.FallbackModels = []string{"gemini/gemini-x", "openai/gpt-backup"}
+	cfg.LLM.Gemini = config.GeminiConfig{Auth: "magic"}
+	m, err := NewModel(context.Background(), cfg, "openai/gpt-x")
+	require.NoError(t, err)
+	fb, ok := m.(*fallbackModel)
+	require.True(t, ok, "a chain of models: %T", m)
+	assert.Len(t, fb.chain, 2, "the primary and the openai backup, without gemini")
+
+	ref, err := NewModelRef(context.Background(), cfg, "gpt-y")
+	require.NoError(t, err)
+	assert.Equal(t, "gpt-y", ref.Name())
+}
+
+// Which providers count as configured.
+func TestConfiguredProviders(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.LLM = config.LLMConfig{Provider: "ollama"}
+	cfg.LLM.Gemini.APIKeyCommand = "echo k"
+	cfg.LLM.Azure.Resource = "r"
+	assert.Equal(t, []string{"gemini", "ollama", "azure"}, ConfiguredProviders(cfg))
+}
+
+// Each provider's listing: Gemini's API (models that generate content),
+// the one configured Azure deployment, and failures reported per provider.
+func TestListModelsProviders(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if !strings.Contains(r.URL.Path, "/models") {
+			http.NotFound(w, r)
+			return
+		}
+		io.WriteString(w, `{"models":[
+			{"name":"models/gemini-x","supportedGenerationMethods":["generateContent"]},
+			{"name":"models/embedder","supportedGenerationMethods":["embedContent"]},
+			{"name":"models/plain"}]}`)
+	}))
+	defer srv.Close()
+	t.Setenv("GOOGLE_GEMINI_BASE_URL", srv.URL)
+
+	cfg := config.DefaultConfig()
+	cfg.LLM = config.LLMConfig{}
+	cfg.LLM.Gemini.APIKeyCommand = "echo gem-key"
+	cfg.LLM.Azure.Model = "gpt-deploy"
+	cfg.Pricing = map[string]config.ModelPrice{"gemini-x": {InputPerMTok: 1}}
+	got := ListModels(context.Background(), cfg, "gemini", "azure", "bedrock")
+	require.Len(t, got, 3)
+	require.NoError(t, got[0].Err)
+	var ids []string
+	for _, m := range got[0].Models {
+		ids = append(ids, m.ID)
+	}
+	assert.Equal(t, []string{"gemini-x", "plain"}, ids)
+	assert.NotNil(t, got[0].Models[0].Price, "gemini-x has a price")
+	assert.Equal(t, "gpt-deploy", got[1].Models[0].ID)
+	assert.Contains(t, got[1].Note, "azure's console")
+	assert.Empty(t, got[2].Models, "no bedrock model configured")
+
+	for _, tc := range []struct {
+		name, provider string
+		cfg            func(*config.LLMConfig)
+	}{
+		{name: "gemini", provider: "gemini", cfg: func(c *config.LLMConfig) { c.Gemini.Auth = "magic" }},
+		{name: "gemini key command", provider: "gemini", cfg: func(c *config.LLMConfig) { c.Gemini.APIKeyCommand = "exit 1" }},
+		{name: "openai", provider: "openai", cfg: func(c *config.LLMConfig) { c.OpenAI.APIKeyCommand = "exit 1" }},
+		{name: "anthropic", provider: "anthropic", cfg: func(c *config.LLMConfig) { c.Anthropic.Auth = "magic" }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			c := config.DefaultConfig()
+			c.LLM = config.LLMConfig{}
+			tc.cfg(&c.LLM)
+			_, err := listProvider(context.Background(), c, tc.provider)
+			assert.Error(t, err)
+		})
+	}
 }

@@ -75,6 +75,8 @@ func (p *PersistentService) Create(ctx context.Context, req *adksession.CreateRe
 		return nil, err
 	}
 	if err := p.replayLocked(ctx, resp.Session); err != nil {
+		// Not left half-loaded: a later Get would find it without its history.
+		_ = p.inner.Delete(ctx, &adksession.DeleteRequest{AppName: req.AppName, UserID: req.UserID, SessionID: resp.Session.ID()})
 		return nil, err
 	}
 	return resp, nil
@@ -94,6 +96,7 @@ func (p *PersistentService) Get(ctx context.Context, req *adksession.GetRequest)
 			return nil, cerr
 		}
 		if rerr := p.replayLocked(ctx, created.Session); rerr != nil {
+			_ = p.inner.Delete(ctx, &adksession.DeleteRequest{AppName: req.AppName, UserID: req.UserID, SessionID: req.SessionID})
 			p.mu.Unlock()
 			return nil, rerr
 		}

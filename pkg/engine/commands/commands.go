@@ -191,10 +191,7 @@ func Bundled() []Command {
 	entries, _ := fs.ReadDir(builtinFS, "builtin")
 	var out []Command
 	for _, e := range entries {
-		data, err := builtinFS.ReadFile("builtin/" + e.Name())
-		if err != nil {
-			continue
-		}
+		data, _ := builtinFS.ReadFile("builtin/" + e.Name()) // a failed read parses as an empty command and is skipped
 		if c, err := Parse(strings.TrimSuffix(e.Name(), ".md"), "bundled", "", data); err == nil {
 			out = append(out, c)
 		}
@@ -208,7 +205,8 @@ func Bundled() []Command {
 func Load(dir, source string) ([]Command, error) {
 	var out []Command
 	var errs []error
-	err := filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {
+	// The callback never fails, so neither does the walk.
+	_ = filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
 			if p == dir && errors.Is(err, fs.ErrNotExist) {
 				return fs.SkipAll
@@ -238,9 +236,6 @@ func Load(dir, source string) ([]Command, error) {
 		out = append(out, c)
 		return nil
 	})
-	if err != nil {
-		errs = append(errs, err)
-	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	return out, errors.Join(errs...)
 }

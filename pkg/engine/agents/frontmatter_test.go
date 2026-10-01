@@ -102,3 +102,43 @@ func TestAgentRunDefaults(t *testing.T) {
 		})
 	}
 }
+
+// TestParseMarkdownSpecRejects checks that each malformed spec is refused
+// with an error naming the problem.
+func TestParseMarkdownSpecRejects(t *testing.T) {
+	cases := map[string]struct{ spec, want string }{
+		"no closing delimiter": {"---\nname: x\n", "closing"},
+		"bad yaml":             {"---\nname: [x\n---\nbody", "YAML"},
+		"no name":              {"---\ndescription: x\n---\nbody", "name"},
+		"bad permission mode":  {"---\nname: x\npermission_mode: wild\n---\nbody", "permission_mode"},
+		"negative max turns":   {"---\nname: x\nmax_turns: -1\n---\nbody", "max_turns"},
+		"bad isolation":        {"---\nname: x\nisolation: vm\n---\nbody", "isolation"},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			_, err := ParseMarkdownSpec([]byte(tc.spec))
+			assert.ErrorContains(t, err, tc.want)
+		})
+	}
+}
+
+// TestInterpolatePromptLevels checks each agency level's instructions,
+// with "" meaning high.
+func TestInterpolatePromptLevels(t *testing.T) {
+	spec := &AgentSpec{SystemPrompt: "{agency_instructions}|{{agency_instructions}}"}
+	cases := map[string]string{
+		"low":     "LOW agency",
+		"Medium":  "MEDIUM agency",
+		"extreme": "EXTREME agency",
+		"high":    "Complete the requested task autonomously",
+		"":        "Complete the requested task autonomously",
+		"unknown": "Complete the requested task autonomously",
+	}
+	for level, want := range cases {
+		t.Run(level, func(t *testing.T) {
+			got := spec.InterpolatePrompt(level)
+			assert.Contains(t, got, want)
+			assert.NotContains(t, got, "agency_instructions", "both placeholder forms are filled")
+		})
+	}
+}

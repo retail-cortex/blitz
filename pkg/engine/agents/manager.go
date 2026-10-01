@@ -98,7 +98,8 @@ func (r *Registry) LoadExternalAgents(dirs ...string) error {
 			continue
 		}
 
-		err := filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
+		// The callback never fails, so neither does the walk.
+		_ = filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
 			if err != nil || d.IsDir() || !strings.HasSuffix(d.Name(), ".md") {
 				return nil
 			}
@@ -122,9 +123,6 @@ func (r *Registry) LoadExternalAgents(dirs ...string) error {
 			r.agents[spec.Name] = spec
 			return nil
 		})
-		if err != nil {
-			errs = append(errs, err)
-		}
 	}
 
 	return errors.Join(errs...)

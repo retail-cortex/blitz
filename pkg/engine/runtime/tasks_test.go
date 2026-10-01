@@ -16,6 +16,7 @@ package runtime
 
 import (
 	"context"
+	"fmt"
 	"iter"
 	"os"
 	"os/exec"
@@ -30,6 +31,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/adk/v2/model"
+	"google.golang.org/adk/v2/session"
 	"google.golang.org/genai"
 )
 
@@ -366,4 +368,68 @@ func TestTaskWorktreeNeedsARepository(t *testing.T) {
 	_, err := f.eng.StartTask(ctx, "qa", "x", "worktree")
 	assert.ErrorContains(t, err, "not in a git repository")
 	assert.Empty(t, f.eng.ListTasks(nil), "a task left behind")
+}
+
+// A task's events read as lines (calls, results with their errors, the
+// first line of text), keep only the latest, and stop the task once it
+// costs more than allowed.
+func TestTaskEventLines(t *testing.T) {
+	f := newEngineWith(t, fixtureOpts{cfg: func(c *config.Config) {
+		c.Tools.BackgroundAgentMaxCostUSD = 0.01
+		c.Pricing = map[string]config.ModelPrice{"m": {InputPerMTok: 1_000_000}}
+	}})
+	var cause error
+	tk := &task{info: api.TaskInfo{ID: "task-9"}, cancel: func(err error) { cause = err }}
+	f.eng.taskEvent(tk, &session.Event{LLMResponse: model.LLMResponse{Partial: true, Content: textContent("partial")}})
+	assert.Empty(t, tk.events, "partial events aren't recorded")
+	f.eng.taskEvent(tk, &session.Event{LLMResponse: model.LLMResponse{Content: &genai.Content{Parts: []*genai.Part{
+		{FunctionCall: &genai.FunctionCall{Name: "grep", Args: map[string]any{"q": "x"}}},
+		{FunctionResponse: &genai.FunctionResponse{Name: "grep", Response: map[string]any{"error": "bad pattern"}}},
+		{Text: "thinking", Thought: true},
+		{Text: "\n  found it\nmore"},
+	}}}})
+	assert.Equal(t, []string{`→ grep {"q":"x"}`, "← grep: bad pattern", "found it"}, tk.events)
+	assert.NoError(t, cause, "under the cost limit")
+
+	for range maxTaskEvents {
+		f.eng.taskEvent(tk, &session.Event{LLMResponse: model.LLMResponse{Content: textContent("line")}})
+	}
+	assert.Len(t, tk.events, maxTaskEvents)
+
+	f.eng.usage.Record("task-9", "m", &genai.GenerateContentResponseUsageMetadata{PromptTokenCount: 10})
+	f.eng.taskEvent(tk, &session.Event{LLMResponse: model.LLMResponse{Content: textContent("costly")}})
+	assert.ErrorContains(t, cause, "cost limit")
+}
+
+// Only the latest ended tasks of a session are kept; running ones stay.
+func TestTaskPruning(t *testing.T) {
+	m := newTaskManager()
+	for i := 1; i <= maxTasksRetained+3; i++ {
+		id := fmt.Sprintf("task-%d", i)
+		m.tasks[id] = &task{info: api.TaskInfo{ID: id, Session: "s", State: api.TaskDone}}
+	}
+	m.tasks["task-1"].info.State = api.TaskRunning
+	m.tasks["other"] = &task{info: api.TaskInfo{ID: "other", Session: "x", State: api.TaskDone}}
+	m.pruneLocked("s")
+	assert.Len(t, m.tasks, maxTasksRetained+2)
+	assert.Contains(t, m.tasks, "task-1", "running")
+	assert.NotContains(t, m.tasks, "task-2", "oldest ended")
+	assert.NotContains(t, m.tasks, "task-3")
+	assert.Contains(t, m.tasks, "task-5")
+	assert.Equal(t, 0, taskNumber("other"))
+}
+
+// Waiting on a running task returns when the wait is over, and stopping an
+// unknown task fails.
+func TestWaitTaskTimesOut(t *testing.T) {
+	sub := newGated()
+	f, ctx, _ := taskEngine(t, sub, nil)
+	_, err := f.eng.StartTask(ctx, "qa", "review", "")
+	require.NoError(t, err)
+	info, _, err := f.eng.WaitTask(ctx, []string{"s"}, "task-1", 10*time.Millisecond)
+	require.NoError(t, err)
+	assert.Equal(t, api.TaskRunning, info.State)
+	_, err = f.eng.StopTask([]string{"s"}, "task-404")
+	assert.ErrorIs(t, err, api.ErrUnknownTask)
+	sub.open()
 }

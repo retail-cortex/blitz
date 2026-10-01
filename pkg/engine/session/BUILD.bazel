@@ -49,6 +49,7 @@ go_test(
         "search_test.go",
         "session_test.go",
         "snapshot_test.go",
+        "storage_errors_test.go",
         "title_test.go",
     ],
     embed = [":session"],

@@ -63,3 +63,18 @@ func TestLoadExternalAgentsExpandsHome(t *testing.T) {
 	_, ok := reg.Get("home-agent")
 	assert.True(t, ok, "expected ~ to expand to HOME")
 }
+
+// TestLoadExternalAgentsReportsUnreadable checks that a spec that can't be
+// read is reported and doesn't stop the others loading.
+func TestLoadExternalAgentsReportsUnreadable(t *testing.T) {
+	reg, err := NewRegistry()
+	require.NoError(t, err)
+	dir := t.TempDir()
+	writeAgent(t, dir, "ok.md", "ok-agent", "OK")
+	require.NoError(t, os.Symlink(filepath.Join(dir, "gone"), filepath.Join(dir, "dangling.md")))
+
+	err = reg.LoadExternalAgents(dir)
+	assert.ErrorContains(t, err, "dangling.md")
+	_, ok := reg.Get("ok-agent")
+	assert.True(t, ok, "the readable spec still loads")
+}

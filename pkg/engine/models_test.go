@@ -16,6 +16,8 @@ package engine
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"slices"
 	"testing"
 
@@ -173,4 +175,24 @@ func TestSetEffort(t *testing.T) {
 	_, err = w.Set(ctx, "effort", "auto")
 	assert.NoError(t, err, "auto: %v %q", err, w.Settings().Effort)
 	assert.Equal(t, "", w.Settings().Effort, "auto: %v %q", err, w.Settings().Effort)
+}
+
+// Unpinning an agent with a default model of its own goes back to that
+// model; one that can't be built is an error, as is an unknown agent.
+func TestUnpinToTheAgentsDefaultModel(t *testing.T) {
+	w := openTest(t)
+	ctx := context.Background()
+	dir := t.TempDir()
+	for name, ref := range map[string]string{"scout": "gemini-3.8-pro", "wreck": "broken"} {
+		require.NoError(t, os.WriteFile(filepath.Join(dir, name+".md"), []byte("---\nname: "+name+"\ndescription: test agent\ndefault_model: "+ref+"\ntools: [read_file]\n---\nLook.\n"), 0o644))
+	}
+	require.NoError(t, w.agents.LoadExternalAgents(dir))
+	res, err := w.Unpin(ctx, "scout")
+	require.NoError(t, err)
+	assert.Equal(t, "gemini-3.8-pro", res.Model)
+	_, err = w.Unpin(ctx, "wreck")
+	assert.ErrorContains(t, err, "no such model")
+	var unknown *api.UnknownAgentError
+	_, err = w.Unpin(ctx, "nobody")
+	assert.ErrorAs(t, err, &unknown)
 }

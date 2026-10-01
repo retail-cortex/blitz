@@ -753,6 +753,9 @@ func (e *Engine) afterTool(ctx agent.Context, t tool.Tool, args, result map[stri
 		changed = true
 	}
 	if changed {
+		if toolErr != nil { // returning a result replaces the error; keep it visible
+			out["error"] = toolErr.Error()
+		}
 		return out, nil
 	}
 	return nil, nil

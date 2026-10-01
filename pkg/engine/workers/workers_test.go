@@ -50,6 +50,8 @@ func TestParseSchedule(t *testing.T) {
 		"every 2 days":              "0 0 */2 * *",
 		"daily at 12 am":            "0 0 * * *",
 		"Every Sunday at 7:15 a.m.": "15 7 * * 0",
+		"weekly":                    "@weekly",
+		"every month":               "@monthly",
 	} {
 		t.Run(text, func(t *testing.T) {
 			s, err := ParseSchedule(text, "")
@@ -57,7 +59,7 @@ func TestParseSchedule(t *testing.T) {
 			assert.Equal(t, want, s.Cron, "%q: cron %q, %v; want %q", text, s.Cron, err, want)
 		})
 	}
-	for _, text := range []string{"", "sometimes", "every blue moon", "daily at 25:00", "daily at 13 pm", "every funday at 9", "* * *"} {
+	for _, text := range []string{"", "sometimes", "every blue moon", "daily at 25:00", "daily at 13 pm", "every funday at 9", "* * *", "every 0 minutes", "0 99 * * *", "daily at teatime", "daily at 13 am"} {
 		t.Run(text, func(t *testing.T) {
 			_, err := ParseSchedule(text, "")
 			assert.Error(t, err, "%q was accepted", text)
@@ -267,4 +269,82 @@ func TestRenderLoadsBack(t *testing.T) {
 			assert.Equal(t, want, perms)
 		})
 	}
+}
+
+// TestLoadReportsEveryProblem checks the remaining problems Load reports,
+// each named in the error's message.
+func TestLoadReportsEveryProblem(t *testing.T) {
+	root := t.TempDir()
+	for name, tc := range map[string]struct{ content, want string }{
+		"negative":   {"---\nschedule: hourly\nlimits: {max_turns: -1}\n---\ndo it\n", "can't be negative"},
+		"overlap":    {"---\nschedule: hourly\noverlap: queue\n---\ndo it\n", "overlap \"queue\""},
+		"catch-up":   {"---\nschedule: hourly\ncatch_up: always\n---\ndo it\n", "catch_up \"always\""},
+		"unclosed":   {"---\nschedule: hourly\n", "ends the frontmatter"},
+		"no-newline": {"---\nschedule: hourly\n---", "workflow"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, err := Load(writeWorker(t, root, name, tc.content))
+			assert.ErrorContains(t, err, tc.want)
+		})
+	}
+
+	w, err := Load(writeWorker(t, root, "explicit", "---\nschedule: hourly\noverlap: skip\ncatch_up: once\n---\ndo it\n"))
+	require.NoError(t, err)
+	assert.Equal(t, "skip", w.Overlap)
+	assert.Equal(t, "once", w.CatchUp)
+
+	_, err = Load(filepath.Join(root, "missing"))
+	assert.ErrorIs(t, err, os.ErrNotExist)
+}
+
+// TestLoadReportsUnhashableDirectories checks that a worker whose files
+// can't be read is invalid.
+func TestLoadReportsUnhashableDirectories(t *testing.T) {
+	for name, mode := range map[string]string{"file": "secret.md", "dir": "private"} {
+		t.Run(name, func(t *testing.T) {
+			dir := writeWorker(t, t.TempDir(), "deps", valid)
+			p := filepath.Join(dir, mode)
+			if name == "dir" {
+				require.NoError(t, os.Mkdir(p, 0o755))
+			} else {
+				require.NoError(t, os.WriteFile(p, []byte("x"), 0o644))
+			}
+			require.NoError(t, os.Chmod(p, 0o000))
+			t.Cleanup(func() { _ = os.Chmod(p, 0o755) })
+			if _, err := os.ReadDir(p); err == nil && name == "dir" {
+				t.Skip("running with privileges that ignore file modes")
+			}
+			_, err := Load(dir)
+			assert.ErrorContains(t, err, "hashing")
+		})
+	}
+}
+
+// TestDiscoverReportsUnreadable checks that a root that isn't a directory
+// and a WORKER.md that can't be read are errors, and loose files ignored.
+func TestDiscoverReportsUnreadable(t *testing.T) {
+	root := t.TempDir()
+	writeWorker(t, root, "deps", valid)
+	require.NoError(t, os.WriteFile(filepath.Join(root, "README.md"), nil, 0o644))
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "odd", FileName), 0o755))
+	file := filepath.Join(root, "README.md")
+
+	list, err := Discover(root, file)
+	require.Len(t, list, 1)
+	assert.Equal(t, "deps", list[0].Worker.Name)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "odd", "the unreadable WORKER.md")
+	assert.Contains(t, err.Error(), "README.md", "the root that isn't a directory")
+}
+
+// TestInvalidErrorMessage checks the error names the file and each problem.
+func TestInvalidErrorMessage(t *testing.T) {
+	err := &InvalidError{Path: "w/WORKER.md", Problems: []string{"a", "b"}}
+	assert.Equal(t, "w/WORKER.md: a; b", err.Error())
+}
+
+// TestParsePermissionRejectsBadGlobs checks a malformed pattern is refused.
+func TestParsePermissionRejectsBadGlobs(t *testing.T) {
+	_, err := ParsePermission("write:reports/[")
+	assert.Error(t, err)
 }

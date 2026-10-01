@@ -667,3 +667,110 @@ func TestAnthropicReasoning(t *testing.T) {
 		assert.Equal(t, c.temp, hasTemp, "%s effort=%q budget=%v: effort %v thinking %s max_tokens %v temperature %v", c.model, c.effort, c.budget, effort, thinking, r["max_tokens"], hasTemp)
 	}
 }
+
+// Responses the adapter maps specially: redacted thinking keeps its data,
+// a refusal says so with its category, and an empty reply still has a part.
+func TestAnthropicResponseShapes(t *testing.T) {
+	refusal := `{"id":"msg_r","type":"message","role":"assistant","model":"claude-opus-5","content":[],
+		"stop_reason":"refusal","stop_details":{"type":"refusal","category":"cyber","explanation":"no"},"stop_sequence":null,
+		"usage":{"input_tokens":1,"output_tokens":1}}`
+	_, opts := newFake(t,
+		jsonReply(message("end_turn", `{"type":"redacted_thinking","data":"opaque"},{"type":"text","text":""}`)),
+		jsonReply(refusal),
+	)
+	m := mustAnthropicModel(t, config.AnthropicConfig{Fallbacks: "off"}, "claude-opus-5", opts...)
+	req := &model.LLMRequest{Contents: []*genai.Content{userText("hi")}}
+
+	out, err := collectResponses(t, m, req, false)
+	require.NoError(t, err)
+	parts := out[0].Content.Parts
+	require.Len(t, parts, 1)
+	assert.True(t, parts[0].Thought)
+	assert.Equal(t, redactedPrefix+"opaque", string(parts[0].ThoughtSignature))
+
+	out, err = collectResponses(t, m, req, false)
+	require.NoError(t, err)
+	assert.Equal(t, genai.FinishReasonSafety, out[0].FinishReason)
+	assert.Equal(t, "refusal", out[0].ErrorCode)
+	assert.Contains(t, out[0].ErrorMessage, "(cyber)")
+}
+
+// A named fallback model goes in the request with its beta; requests that
+// can't be converted fail before they're sent.
+func TestAnthropicRequestFallbacksAndErrors(t *testing.T) {
+	f, opts := newFake(t, jsonReply(message("end_turn", `{"type":"text","text":"ok"}`)))
+	m := mustAnthropicModel(t, config.AnthropicConfig{Fallbacks: "claude-opus-4-8"}, "claude-opus-5", opts...)
+	_, err := collectResponses(t, m, &model.LLMRequest{Contents: []*genai.Content{userText("hi")}}, false)
+	require.NoError(t, err)
+	assert.Equal(t, []any{map[string]any{"model": "claude-opus-4-8"}}, f.requests[0]["fallbacks"])
+
+	badTool := &genai.GenerateContentConfig{Tools: []*genai.Tool{{FunctionDeclarations: []*genai.FunctionDeclaration{{Name: "t", ParametersJsonSchema: "not an object"}}}}}
+	_, err = collectResponses(t, m, &model.LLMRequest{Contents: []*genai.Content{userText("hi")}, Config: badTool}, false)
+	assert.ErrorContains(t, err, "tool t")
+	_, err = collectResponses(t, m, &model.LLMRequest{Contents: []*genai.Content{textContent("I start")}}, false)
+	assert.ErrorContains(t, err, "must start with a user message")
+	assert.Len(t, f.requests, 1, "nothing more was sent")
+}
+
+// A streaming consumer may stop after the first piece of text, and a
+// stream that fails reports the API's error.
+func TestAnthropicStreamingStopsAndFails(t *testing.T) {
+	start := `{"type":"message_start","message":{"id":"msg_s","type":"message","role":"assistant","model":"claude-opus-5","content":[],"stop_reason":null,"stop_sequence":null,"usage":{"input_tokens":10,"output_tokens":1}}}`
+	_, opts := newFake(t,
+		sseReply(start, `{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}`,
+			`{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Hel"}}`,
+			`{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"lo"}}`),
+		sseReply(start, `{"type":"error","error":{"type":"overloaded_error","message":"busy"}}`),
+	)
+	m := mustAnthropicModel(t, config.AnthropicConfig{Fallbacks: "off"}, "claude-opus-5", opts...)
+	req := &model.LLMRequest{Contents: []*genai.Content{userText("hi")}}
+	n := 0
+	for resp, err := range m.GenerateContent(context.Background(), req, true) {
+		require.NoError(t, err)
+		assert.True(t, resp.Partial)
+		n++
+		break
+	}
+	assert.Equal(t, 1, n)
+
+	_, err := collectResponses(t, m, req, true)
+	assert.ErrorContains(t, err, "anthropic")
+}
+
+// The adapter's conversions on their own.
+func TestAnthropicConversions(t *testing.T) {
+	t.Run("schema", func(t *testing.T) {
+		assert.Nil(t, genaiSchemaToJSON(nil))
+		got := genaiSchemaToJSON(&genai.Schema{Type: genai.TypeString, Format: "date", Enum: []string{"a"}, Nullable: genai.Ptr(true)})
+		assert.Equal(t, map[string]any{"type": []string{"string", "null"}, "format": "date", "enum": []string{"a"}}, got)
+		_, err := declarationSchema(&genai.FunctionDeclaration{ParametersJsonSchema: func() {}})
+		assert.Error(t, err, "a schema that can't be encoded")
+	})
+	t.Run("tools", func(t *testing.T) {
+		got, err := convertTools([]*genai.Tool{nil, {FunctionDeclarations: []*genai.FunctionDeclaration{nil, {Name: "t"}}}})
+		require.NoError(t, err)
+		assert.Len(t, got, 1)
+	})
+	t.Run("contents", func(t *testing.T) {
+		got, err := convertContents([]*genai.Content{nil, {Role: genai.RoleUser, Parts: []*genai.Part{nil, {Text: "unsigned", Thought: true}}}, userText("hi")})
+		require.NoError(t, err)
+		assert.Len(t, got, 1, "nil and empty contents are skipped")
+	})
+	t.Run("tool result", func(t *testing.T) {
+		b, err := json.Marshal(toolResult(&genai.FunctionResponse{ID: "x", Response: map[string]any{"f": func() {}}}))
+		require.NoError(t, err)
+		assert.Contains(t, string(b), "unsupported type", "the encoding error goes to the model")
+	})
+	t.Run("errors and effort", func(t *testing.T) {
+		assert.EqualError(t, anthropicError(errors.New("boom")), "anthropic: boom")
+		assert.True(t, supportsEffort("claude-opus-4-6-20260101"))
+		assert.False(t, supportsEffort("claude-haiku-4-5"))
+	})
+	t.Run("defaults and key command", func(t *testing.T) {
+		m, err := newAnthropicModel(context.Background(), config.AnthropicConfig{APIKey: "k"}, "")
+		require.NoError(t, err)
+		assert.Equal(t, DefaultAnthropicModel, m.Name())
+		_, err = newAnthropicModel(context.Background(), config.AnthropicConfig{APIKeyCommand: "exit 4"}, "")
+		assert.ErrorContains(t, err, "[llm.anthropic]")
+	})
+}

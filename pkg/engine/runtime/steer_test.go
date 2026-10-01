@@ -170,3 +170,10 @@ func TestSteerOnlyWhileTheTurnTakesThem(t *testing.T) {
 	assert.ErrorIs(t, f.eng.Steer("s", "late"), api.ErrSteerTooLate)
 	assert.Empty(t, f.eng.CloseSteers("s"))
 }
+
+// A message for no session goes to "default", which takes none outside a
+// turn.
+func TestSteerDefaultSession(t *testing.T) {
+	f := newEngine(t)
+	assert.ErrorIs(t, f.eng.Steer("", "hi"), api.ErrSteerTooLate)
+}

@@ -126,6 +126,7 @@ go_library(
 go_test(
     name = "engine_test",
     srcs = [
+        "backend_test.go",
         "changes_test.go",
         "commands_test.go",
         "context_test.go",
@@ -135,6 +136,7 @@ go_test(
         "goals_test.go",
         "hooks_test.go",
         "leak_test.go",
+        "mcp_test.go",
         "mentions_test.go",
         "mode_test.go",
         "models_test.go",
@@ -158,13 +160,16 @@ go_test(
     deps = [
         "//pkg/api",
         "//pkg/config",
+        "//pkg/config/configtest",
         "//pkg/engine/agents",
         "//pkg/engine/runtime",
         "//pkg/engine/session",
         "//pkg/engine/tools",
         "//pkg/engine/workers",
         "//pkg/i18n",
+        "//pkg/images",
         "//pkg/plugins",
+        "@com_github_modelcontextprotocol_go_sdk//mcp",
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
         "@org_golang_google_adk_v2//model",

@@ -16,6 +16,7 @@ package runtime
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -261,4 +262,40 @@ func TestEnginePricesServedModelAndCacheWrites(t *testing.T) {
 	u = g.eng.Usage("s")
 	assert.True(t, u.Priced, "prefix-priced served model: %+v", u)
 	assert.LessOrEqual(t, abs(u.CostUSD-want), 1e-9, "prefix-priced served model: %+v", u)
+}
+
+// memUsage is an in-memory UsageStore.
+type memUsage struct {
+	saved map[string]api.Usage
+	err   error
+}
+
+func (m *memUsage) Usage(id string) (api.Usage, bool) { u, ok := m.saved[id]; return u, ok }
+func (m *memUsage) SetUsage(id string, u api.Usage) error {
+	if m.err != nil {
+		return m.err
+	}
+	m.saved[id] = u
+	return nil
+}
+
+// A session's usage comes back from the store after a restart, and web
+// searches add to it.
+func TestUsageStoreAndSearches(t *testing.T) {
+	store := &memUsage{saved: map[string]api.Usage{"s": {Calls: 3, Input: 100, Priced: true}}}
+	f := newEngineWith(t, fixtureOpts{opts: []Option{WithUsageStore(store)}})
+	f.eng.RecordSearch(context.Background(), "s", 2, 0.01)
+	u := f.eng.Usage("s")
+	assert.Equal(t, 3, u.Calls, "the saved usage was restored")
+	assert.Equal(t, 2, u.SearchQueries)
+	assert.InDelta(t, 0.01, u.SearchCostUSD, 1e-9)
+	assert.Equal(t, 2, store.saved["s"].SearchQueries, "the searches were saved")
+
+	assert.False(t, f.eng.usage.Seed("s", api.Usage{Calls: 9}), "a session with usage isn't reseeded")
+	f.eng.RecordSearch(context.Background(), "new", 1, 0)
+	assert.Equal(t, 1, f.eng.Usage("new").SearchQueries, "a search starts a session's usage")
+
+	store.err = errors.New("disk full")
+	f.eng.RecordSearch(context.Background(), "s", 1, 0) // logged, not fatal
+	assert.Equal(t, 3, f.eng.Usage("s").SearchQueries)
 }

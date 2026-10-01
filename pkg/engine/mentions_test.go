@@ -16,12 +16,14 @@ package engine
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/retail-cortex/blitz/pkg/api"
+	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -96,4 +98,33 @@ func TestMentionsReachTheAgent(t *testing.T) {
 	assert.Contains(t, sent, "what does @main.go do?")
 	assert.Contains(t, sent, `<file path="main.go">`+"\npackage main // prints hi\n</file>")
 	assert.Equal(t, []string{"user: what does @main.go do?", "model: it prints hi"}, transcript(t, w))
+}
+
+// At most mentionMaxFiles mentions are read; a folder lists at most
+// mentionMaxEntries entries, blocked ones left out; a file that can't be
+// read is left as written.
+func TestMentionLimits(t *testing.T) {
+	w, _ := openTestWith(t, func(c *config.Config) { c.Sandbox.BlockedPaths = []string{"*.pem"} })
+	var text []string
+	for i := range mentionMaxFiles + 1 {
+		name := fmt.Sprintf("f%02d.txt", i)
+		write(t, w.Dir(), name, "x")
+		text = append(text, "@"+name)
+	}
+	got := w.withMentions(context.Background(), "", strings.Join(text, " "))
+	assert.Equal(t, mentionMaxFiles, strings.Count(got, "<file path="))
+
+	for i := range mentionMaxEntries + 2 {
+		write(t, w.Dir(), fmt.Sprintf("many/e%03d", i), "")
+	}
+	write(t, w.Dir(), "many/key.pem", "secret")
+	got = w.withMentions(context.Background(), "", "@many")
+	assert.Contains(t, got, "… and 2 more")
+	assert.NotContains(t, got, "key.pem")
+
+	if os.Getuid() != 0 {
+		write(t, w.Dir(), "locked.txt", "no")
+		require.NoError(t, os.Chmod(filepath.Join(w.Dir(), "locked.txt"), 0))
+		assert.Equal(t, "P", w.withMentions(context.Background(), "P", "@locked.txt"))
+	}
 }

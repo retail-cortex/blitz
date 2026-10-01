@@ -16,11 +16,16 @@ package engine
 
 import (
 	"context"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/retail-cortex/blitz/pkg/api"
+	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/engine/tools"
 	"github.com/retail-cortex/blitz/pkg/i18n"
 	"github.com/stretchr/testify/assert"
@@ -129,4 +134,78 @@ func TestSearchQueriesInUsage(t *testing.T) {
 	saved, ok := w.storage.Usage(sid)
 	require.True(t, ok)
 	assert.Equal(t, 3, saved.SearchQueries, "not saved with the session")
+}
+
+// /search web asks the configured provider and turns the results it can
+// read into the agent's prompt; with no results there is nothing to send,
+// and without web access nothing is searched.
+func TestSearchWeb(t *testing.T) {
+	results := `{"results":[{"title":"Go","url":"https://go.dev/doc","content":"docs"},{"title":"PDF","url":"https://x.example/a.pdf"}]}`
+	srv := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
+		switch r.URL.Query().Get("q") {
+		case "nothing":
+			fmt.Fprint(rw, `{"results":[]}`)
+		case "broken":
+			http.Error(rw, "down", http.StatusInternalServerError)
+		default:
+			fmt.Fprint(rw, results)
+		}
+	}))
+	t.Cleanup(srv.Close)
+	w, _ := openTestWith(t, func(c *config.Config) {
+		c.Web.Enabled, c.Web.AllowPrivate = true, true
+		c.Web.SearchProvider, c.Web.SearchURL = "searxng", srv.URL
+	})
+	newSession(t, w)
+	p, err := w.SearchProvider()
+	require.NoError(t, err)
+	assert.Equal(t, "searxng", p)
+	ctx := context.Background()
+	res, err := w.SearchWeb(ctx, "golang")
+	require.NoError(t, err)
+	assert.Equal(t, []api.Link{{Title: "Go", URL: "https://go.dev/doc"}}, res.Links, "the PDF can't be read")
+	assert.Contains(t, res.Prompt, "https://go.dev/doc")
+	res, err = w.SearchWeb(ctx, "nothing")
+	require.NoError(t, err)
+	assert.Equal(t, api.WebSearch{}, res)
+	_, err = w.SearchWeb(ctx, "broken")
+	assert.ErrorContains(t, err, "HTTP 500")
+
+	off, _ := openTestWith(t, func(c *config.Config) { c.Web.Enabled = false })
+	_, err = off.SearchProvider()
+	assert.ErrorIs(t, err, api.ErrNoFetch)
+	_, err = off.SearchWeb(ctx, "golang")
+	assert.ErrorIs(t, err, api.ErrNoFetch)
+}
+
+// Path-scoped rules are listed with their paths when memory is reloaded.
+func TestReloadMemoryListsScopedRules(t *testing.T) {
+	w := openTest(t)
+	assert.Equal(t, w.cfg.Memory.Files, w.MemoryFiles())
+	write(t, w.Dir(), ".blitz/rules/go.md", "---\npaths: [\"**/*.go\"]\n---\nUse gofmt.\n")
+	paths, err := w.ReloadMemory(context.Background())
+	require.NoError(t, err)
+	require.Len(t, paths, 1)
+	assert.Contains(t, paths[0], "go.md (**/*.go)")
+}
+
+// Compacting needs an active session.
+func TestCompactNeedsASession(t *testing.T) {
+	w := openTest(t)
+	_, err := w.Compact(context.Background(), "")
+	assert.ErrorIs(t, err, api.ErrNoActiveSession)
+}
+
+// The sandbox summary and image loading pass through to the tools.
+func TestSandboxSummaryAndLoadImage(t *testing.T) {
+	w := openTest(t)
+	assert.NotEmpty(t, w.SandboxSummary())
+	writePNG(t, filepath.Join(w.Dir(), "a.png"))
+	img, err := w.LoadImage("a.png")
+	require.NoError(t, err)
+	assert.Equal(t, "a.png", img.Name)
+	_, err = w.LoadImage("missing.png")
+	assert.Error(t, err)
+	_, err = os.Stat(filepath.Join(w.Dir(), "a.png"))
+	assert.NoError(t, err)
 }

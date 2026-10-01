@@ -132,8 +132,15 @@ func TestProxy(t *testing.T) {
 	}
 }
 
+// fakeReply is an answer that sends events before its result.
+type fakeReply struct {
+	events []map[string]any
+	result any
+}
+
 // fakeDevTools is a DevTools endpoint answering from a table, and sending
-// an event on request.
+// an event on request (Test.emit): Test.silent is never answered and
+// Test.hangUp closes the connection.
 func fakeDevTools(t *testing.T, answer func(method string, params json.RawMessage) (any, string)) string {
 	t.Helper()
 	up := websocket.Upgrader{}
@@ -152,13 +159,32 @@ func fakeDevTools(t *testing.T, answer func(method string, params json.RawMessag
 			if ws.ReadJSON(&m) != nil {
 				return
 			}
-			if m.Method == "Test.emit" {
-				ws.WriteJSON(map[string]any{"method": "Test.event", "params": map[string]any{"n": 1}})
+			switch m.Method {
+			case "Test.emit": // the event in params, or Test.event
+				ev := map[string]any{"method": "Test.event", "params": map[string]any{"n": 1}}
+				var e struct {
+					Method string          `json:"method"`
+					Params json.RawMessage `json:"params"`
+				}
+				if json.Unmarshal(m.Params, &e) == nil && e.Method != "" {
+					ev = map[string]any{"method": e.Method, "params": e.Params}
+				}
+				ws.WriteJSON(ev)
+			case "Test.silent": // never answered
+				continue
+			case "Test.hangUp": // the browser goes away
+				return
 			}
 			result, errText := answer(m.Method, m.Params)
 			if errText != "" {
 				ws.WriteJSON(map[string]any{"id": m.ID, "error": map[string]any{"code": -32000, "message": errText}})
 				continue
+			}
+			if fr, ok := result.(fakeReply); ok {
+				for _, ev := range fr.events {
+					ws.WriteJSON(ev)
+				}
+				result = fr.result
 			}
 			ws.WriteJSON(map[string]any{"id": m.ID, "result": result})
 		}
@@ -349,4 +375,361 @@ func TestChromeRefusesLocal(t *testing.T) {
 	p, _ := b.Navigate(ctx, site.URL)
 	assert.NotEqual(t, "Secret", p.Title)
 	assert.Contains(t, fmt.Sprint(b.Refused()), "not a public address")
+}
+
+// A call fails when its params can't be sent, when its context ends before
+// the reply, and when the browser goes away while it waits.
+func TestConnFailures(t *testing.T) {
+	ws := fakeDevTools(t, func(string, json.RawMessage) (any, string) { return map[string]any{}, "" })
+	ctx := context.Background()
+	c, err := dial(ctx, ws)
+	require.NoError(t, err)
+	defer c.close()
+
+	bad, err := dial(ctx, ws)
+	require.NoError(t, err)
+	defer bad.close()
+	assert.Error(t, bad.call(ctx, "Echo", map[string]any{"x": make(chan int)}, nil), "params that aren't JSON")
+
+	tctx, cancel := context.WithTimeout(ctx, 50*time.Millisecond)
+	defer cancel()
+	assert.ErrorIs(t, c.call(tctx, "Test.silent", nil, nil), context.DeadlineExceeded)
+
+	waiting := make(chan error, 1)
+	go func() { waiting <- c.call(ctx, "Test.silent", nil, nil) }()
+	require.Eventually(t, func() bool {
+		c.mu.Lock()
+		defer c.mu.Unlock()
+		return len(c.pending) == 1
+	}, 5*time.Second, 5*time.Millisecond)
+	assert.ErrorIs(t, c.call(ctx, "Test.hangUp", nil, nil), errClosed)
+	select {
+	case err := <-waiting:
+		assert.ErrorIs(t, err, errClosed, "a call waiting when the browser left")
+	case <-time.After(5 * time.Second):
+		t.Fatal("the waiting call never ended")
+	}
+}
+
+// evalResult is Runtime.evaluate's answer for a value.
+func evalResult(v any) map[string]any {
+	typ := "string"
+	switch v.(type) {
+	case bool:
+		typ = "boolean"
+	case float64:
+		typ = "number"
+	case nil:
+		typ = "object"
+	}
+	return map[string]any{"result": map[string]any{"type": typ, "value": v}}
+}
+
+// attachFake attaches to a fakeDevTools answering what answer doesn't
+// (a nil result and no error) with an empty result.
+func attachFake(t *testing.T, opts Options, answer func(method string, params json.RawMessage) (any, string)) *Browser {
+	t.Helper()
+	ws := fakeDevTools(t, func(method string, params json.RawMessage) (any, string) {
+		if r, e := answer(method, params); r != nil || e != "" {
+			return r, e
+		}
+		return map[string]any{}, ""
+	})
+	b, err := Attach(context.Background(), ws, opts)
+	require.NoError(t, err)
+	t.Cleanup(func() { b.Close() })
+	return b
+}
+
+// expression is Runtime.evaluate's script.
+func expression(params json.RawMessage) string {
+	var p struct {
+		Expression string `json:"expression"`
+	}
+	json.Unmarshal(params, &p)
+	return p.Expression
+}
+
+// Attach fails when any step of setting up the page does.
+func TestAttachSetupFails(t *testing.T) {
+	for _, method := range []string{"Page.enable", "Page.getFrameTree", "Emulation.setDeviceMetricsOverride", "Fetch.enable"} {
+		t.Run(method, func(t *testing.T) {
+			ws := fakeDevTools(t, func(m string, _ json.RawMessage) (any, string) {
+				if m == method {
+					return nil, "boom"
+				}
+				return map[string]any{}, ""
+			})
+			_, err := Attach(context.Background(), ws, Options{})
+			assert.ErrorContains(t, err, method+": boom")
+		})
+	}
+}
+
+// Each action reports the browser's failure, or what it found instead of
+// the element it wanted.
+func TestBrowserActionErrors(t *testing.T) {
+	ctx := context.Background()
+	for _, tt := range []struct {
+		name    string
+		fail    string // the method that fails
+		eval    any    // what scripts evaluate to
+		run     func(b *Browser) error
+		wantErr string
+	}{
+		{"navigate", "Page.navigate", nil, func(b *Browser) error { _, err := b.Navigate(ctx, "https://a.example/"); return err }, "Page.navigate: boom"},
+		{"back", "Runtime.evaluate", nil, func(b *Browser) error { _, err := b.Back(ctx); return err }, "Runtime.evaluate: boom"},
+		{"click finding", "Runtime.evaluate", nil, func(b *Browser) error { return b.Click(ctx, "#a") }, "boom"},
+		{"click pressing", "Input.dispatchMouseEvent", `{"x":1,"y":2}`, func(b *Browser) error { return b.Click(ctx, "#a") }, "Input.dispatchMouseEvent: boom"},
+		{"type finding", "Runtime.evaluate", nil, func(b *Browser) error { return b.Type(ctx, "#a", "x", false, false) }, "boom"},
+		{"type inserting", "Input.insertText", true, func(b *Browser) error { return b.Type(ctx, "#a", "x", false, false) }, "Input.insertText: boom"},
+		{"type submitting", "Input.dispatchKeyEvent", true, func(b *Browser) error { return b.Type(ctx, "#a", "x", false, true) }, "Input.dispatchKeyEvent: boom"},
+		{"select finding", "Runtime.evaluate", nil, func(b *Browser) error { return b.Select(ctx, "#a", "x") }, "boom"},
+		{"select not a select", "", "not a select", func(b *Browser) error { return b.Select(ctx, "#a", "x") }, `"#a" is not a select`},
+		{"text", "Runtime.evaluate", nil, func(b *Browser) error { _, _, err := b.Text(ctx, "#a", 0); return err }, "boom"},
+		{"html", "Runtime.evaluate", nil, func(b *Browser) error { _, _, err := b.HTML(ctx, "", 0); return err }, "boom"},
+		{"html nothing", "", nil, func(b *Browser) error { _, _, err := b.HTML(ctx, "#a", 0); return err }, `no element matches "#a"`},
+		{"screenshot", "Page.captureScreenshot", nil, func(b *Browser) error { _, err := b.Screenshot(ctx, false); return err }, "Page.captureScreenshot: boom"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			b := attachFake(t, Options{}, func(method string, _ json.RawMessage) (any, string) {
+				switch method {
+				case tt.fail:
+					return nil, "boom"
+				case "Runtime.evaluate":
+					return evalResult(tt.eval), ""
+				}
+				return nil, ""
+			})
+			assert.ErrorContains(t, tt.run(b), tt.wantErr)
+		})
+	}
+}
+
+// A page that fails to load is an error, with where the browser is.
+func TestNavigateErrorText(t *testing.T) {
+	b := attachFake(t, Options{}, func(method string, _ json.RawMessage) (any, string) {
+		switch method {
+		case "Page.navigate":
+			return map[string]any{"errorText": "net::ERR_BLOCKED_BY_CLIENT"}, ""
+		case "Runtime.evaluate":
+			return evalResult(`{"url":"chrome-error://chromewebdata/","title":"blocked"}`), ""
+		}
+		return nil, ""
+	})
+	p, err := b.Navigate(context.Background(), "https://a.example/")
+	assert.ErrorContains(t, err, "loading https://a.example/: net::ERR_BLOCKED_BY_CLIENT")
+	assert.Equal(t, "blocked", p.Title)
+}
+
+// Navigate waits for the load event, or for the committed page to be
+// complete, or for its timeout or context to end; and collects the
+// console on the way.
+func TestNavigateWaits(t *testing.T) {
+	page := evalResult(`{"url":"https://a.example/","title":"A"}`)
+	console := []map[string]any{
+		{"method": "Runtime.consoleAPICalled", "params": map[string]any{"type": "log", "args": []any{map[string]any{"type": "object", "description": "HTMLDivElement"}, map[string]any{"type": "object", "value": map[string]any{"k": 1}}}}},
+		{"method": "Runtime.consoleAPICalled", "params": "not an event"},
+		{"method": "Runtime.exceptionThrown", "params": map[string]any{"exceptionDetails": map[string]any{"text": "Uncaught", "exception": map[string]any{"description": "TypeError: x"}}}},
+		{"method": "Log.entryAdded", "params": map[string]any{"entry": map[string]any{"level": "warning", "text": "blocked", "url": "https://a.example/x.js"}}},
+		{"method": "Fetch.requestPaused", "params": "not an event"},
+		{"method": "Page.frameNavigated", "params": map[string]any{"frame": map[string]any{"id": "sub", "parentId": "main"}}},
+	}
+	committed := map[string]any{"method": "Page.frameNavigated", "params": map[string]any{"frame": map[string]any{"id": "main"}}}
+	for _, tt := range []struct {
+		name     string
+		events   []map[string]any
+		ready    string
+		timeout  time.Duration
+		ctx      time.Duration
+		wantErr  error
+		wantLogs []ConsoleLine
+	}{
+		{name: "committed and complete", events: append(append([]map[string]any{}, console...), committed), ready: "complete", timeout: 5 * time.Second,
+			wantLogs: []ConsoleLine{{"log", `HTMLDivElement {"k":1}`}, {"error", "Uncaught TypeError: x"}, {"warning", "blocked https://a.example/x.js"}}},
+		{name: "nothing comes", timeout: 150 * time.Millisecond},
+		{name: "still loading", events: []map[string]any{committed}, ready: "loading", timeout: 300 * time.Millisecond},
+		{name: "context ends", timeout: 5 * time.Second, ctx: 150 * time.Millisecond, wantErr: context.DeadlineExceeded},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			b := attachFake(t, Options{Timeout: tt.timeout}, func(method string, params json.RawMessage) (any, string) {
+				switch method {
+				case "Page.navigate":
+					return fakeReply{events: tt.events, result: map[string]any{}}, ""
+				case "Runtime.evaluate":
+					if strings.Contains(expression(params), "readyState") {
+						return evalResult(tt.ready), ""
+					}
+					return page, ""
+				}
+				return nil, ""
+			})
+			ctx := context.Background()
+			if tt.ctx > 0 {
+				var cancel context.CancelFunc
+				ctx, cancel = context.WithTimeout(ctx, tt.ctx)
+				defer cancel()
+			}
+			p, err := b.Navigate(ctx, "https://a.example/")
+			if tt.wantErr != nil {
+				assert.ErrorIs(t, err, tt.wantErr)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, "A", p.Title)
+			assert.Equal(t, tt.wantLogs, b.Console())
+		})
+	}
+}
+
+// What a script evaluates to, as text: an exception's text when it has no
+// description, an object's description when it has no value.
+func TestEvalResults(t *testing.T) {
+	for _, tt := range []struct {
+		name    string
+		answer  map[string]any
+		want    string
+		wantErr string
+	}{
+		{"description", map[string]any{"result": map[string]any{"type": "function", "description": "function f() {}"}}, "function f() {}", ""},
+		{"exception text", map[string]any{"result": map[string]any{"type": "object"}, "exceptionDetails": map[string]any{"text": "Uncaught SyntaxError"}}, "", "Uncaught SyntaxError"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			b := attachFake(t, Options{}, func(method string, _ json.RawMessage) (any, string) {
+				if method == "Runtime.evaluate" {
+					return tt.answer, ""
+				}
+				return nil, ""
+			})
+			v, err := b.Eval(context.Background(), "f")
+			if tt.wantErr != "" {
+				assert.EqualError(t, err, tt.wantErr)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, v)
+		})
+	}
+}
+
+// A cancelled script isn't sent, and doesn't wait for a navigation.
+func TestEvalCancelled(t *testing.T) {
+	b := attachFake(t, Options{}, func(string, json.RawMessage) (any, string) { return nil, "" })
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	_, err := b.Eval(ctx, "1")
+	assert.ErrorIs(t, err, context.Canceled)
+}
+
+// A main-frame load that isn't http or https isn't put to Navigation.
+func TestNavigationOtherSchemes(t *testing.T) {
+	decided := make(chan string, 1)
+	asked := make(chan string, 1)
+	b := attachFake(t, Options{Navigation: func(u *url.URL) error { asked <- u.String(); return errors.New("no") }},
+		func(method string, params json.RawMessage) (any, string) {
+			if method == "Fetch.continueRequest" || method == "Fetch.failRequest" {
+				decided <- method
+			}
+			return nil, ""
+		})
+	require.NoError(t, b.conn.call(context.Background(), "Test.emit", map[string]any{"method": "Fetch.requestPaused",
+		"params": map[string]any{"requestId": "r1", "frameId": "", "request": map[string]any{"url": "data:text/html,hi"}}}, nil))
+	select {
+	case m := <-decided:
+		assert.Equal(t, "Fetch.continueRequest", m)
+	case <-time.After(5 * time.Second):
+		t.Fatal("the load wasn't decided")
+	}
+	assert.Empty(t, asked)
+}
+
+// The console keeps its last messages, skipping empty ones; what was
+// refused is said once and only so many times; signals don't block.
+func TestBrowserBookkeeping(t *testing.T) {
+	b := newBrowser(Options{})
+	b.addConsole("log", "")
+	for i := range maxConsole + 5 {
+		b.addConsole("log", fmt.Sprint(i))
+	}
+	c := b.Console()
+	require.Len(t, c, maxConsole)
+	assert.Equal(t, "5", c[0].Text, "the oldest are dropped")
+
+	for i := range 30 {
+		b.noteRefused(fmt.Sprintf("h%d.example", i), errors.New("no"))
+		b.noteRefused(fmt.Sprintf("h%d.example", i), errors.New("no"))
+	}
+	r := b.Refused()
+	assert.Len(t, r, 20)
+	assert.Equal(t, "h0.example: no", r[0])
+
+	for range cap(b.loads) + 2 {
+		signal(b.loads)
+	}
+	assert.Len(t, b.loads, cap(b.loads))
+	b.fresh()
+	assert.Empty(t, b.loads)
+}
+
+// The tail of what the browser said: its last few lines, of the last few
+// kilobytes.
+func TestTailBuffer(t *testing.T) {
+	var tb tailBuffer
+	n, err := tb.Write([]byte(strings.Repeat("x", 5000)))
+	require.NoError(t, err)
+	assert.Equal(t, 5000, n)
+	assert.Len(t, tb.buf, 4096)
+	tb.Write([]byte("\none\ntwo\nthree\nfour\n"))
+	assert.Equal(t, "two | three | four", tb.tail())
+}
+
+// The proxy refuses what isn't a proxied http request or a CONNECT to a
+// host and port, and a tunnel carries what the client sent with its
+// CONNECT.
+func TestProxyRequests(t *testing.T) {
+	echo, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	defer echo.Close()
+	go func() {
+		for {
+			c, err := echo.Accept()
+			if err != nil {
+				return
+			}
+			go func() { io.Copy(c, c); c.Close() }()
+		}
+	}()
+	p, err := startProxy(func(netip.Addr) bool { return true }, func(string) error { return nil }, func(string, error) {})
+	require.NoError(t, err)
+	defer p.close()
+
+	for _, tt := range []struct {
+		name, request, want string
+	}{
+		{"not proxied", "GET /x HTTP/1.1\r\nHost: a.example\r\n\r\n", "HTTP/1.1 400 Bad Request\r\n"},
+		{"connect without a port", "CONNECT a.example HTTP/1.1\r\nHost: a.example\r\n\r\n", "HTTP/1.1 400 Bad Request\r\n"},
+		{"tunnel", "CONNECT " + echo.Addr().String() + " HTTP/1.1\r\nHost: " + echo.Addr().String() + "\r\n\r\nping", "HTTP/1.1 200 Connection Established\r\n"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			raw, err := net.Dial("tcp", p.addr())
+			require.NoError(t, err)
+			defer raw.Close()
+			raw.SetDeadline(time.Now().Add(5 * time.Second))
+			_, err = io.WriteString(raw, tt.request)
+			require.NoError(t, err)
+			r := bufio.NewReader(raw)
+			line, err := r.ReadString('\n')
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, line)
+			if tt.name != "tunnel" {
+				return
+			}
+			_, err = r.ReadString('\n') // the blank line ending the reply
+			require.NoError(t, err)
+			got := make([]byte, 4)
+			_, err = io.ReadFull(r, got)
+			require.NoError(t, err)
+			assert.Equal(t, "ping", string(got), "sent with the CONNECT, echoed back")
+		})
+	}
 }

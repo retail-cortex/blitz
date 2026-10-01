@@ -98,3 +98,31 @@ func TestNilLoggerIsNoOp(t *testing.T) {
 	_, err := Open(filepath.Join(file, "sub"), nil)
 	assert.Error(t, err, "expected error for unwritable dir")
 }
+
+// TestLogSkipsBadEntries checks that an entry that can't be encoded or a
+// directory that can't be written is skipped without failing the caller.
+func TestLogSkipsBadEntries(t *testing.T) {
+	dir := t.TempDir()
+	l, err := Open(dir, nil)
+	require.NoError(t, err)
+	day := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
+	l.now = func() time.Time { return day }
+
+	l.Log(Entry{Kind: KindToolCall, Args: map[string]any{"ch": make(chan int)}})
+	assert.NoFileExists(t, filepath.Join(dir, "audit-2026-01-01.jsonl"), "an unencodable entry opens no file")
+
+	require.NoError(t, os.RemoveAll(dir))
+	l.Log(Entry{Kind: KindPrompt})
+	assert.Nil(t, l.f, "a failed rotation leaves no open file")
+	assert.NoError(t, l.Close(), "closing without an open file")
+}
+
+// TestCloseClosesTheFile checks that Close releases the open day file.
+func TestCloseClosesTheFile(t *testing.T) {
+	l, err := Open(t.TempDir(), nil)
+	require.NoError(t, err)
+	l.Log(Entry{Kind: KindPrompt})
+	require.NotNil(t, l.f)
+	assert.NoError(t, l.Close())
+	assert.Nil(t, l.f)
+}

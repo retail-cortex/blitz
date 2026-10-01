@@ -46,6 +46,7 @@ go_test(
         "definition_test.go",
         "policy_test.go",
         "provider_test.go",
+        "skill_test.go",
     ],
     embed = [":skills"],
     deps = [

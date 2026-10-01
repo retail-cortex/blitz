@@ -16,12 +16,17 @@ package engine
 
 import (
 	"context"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/retail-cortex/blitz/pkg/api"
 	"github.com/retail-cortex/blitz/pkg/config"
+	"github.com/retail-cortex/blitz/pkg/engine/session"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	adksession "google.golang.org/adk/v2/session"
+	"google.golang.org/genai"
 )
 
 // /fork copies the session up to a turn; the source stays as it was.
@@ -94,4 +99,88 @@ func TestExportSession(t *testing.T) {
 
 	_, err = ExportSession(w.cfg, "no-such-session")
 	assert.Error(t, err)
+}
+
+// Forking needs an active session that isn't running a turn, and a cut
+// point the conversation's log knows.
+func TestForkSessionRefusals(t *testing.T) {
+	w := openTest(t)
+	ctx := context.Background()
+	_, err := w.ForkSession(ctx, 0)
+	assert.ErrorIs(t, err, api.ErrNoActiveSession)
+	_, err = w.ExportSession("")
+	assert.ErrorIs(t, err, api.ErrNoActiveSession)
+
+	s := newSession(t, w)
+	for _, m := range []session.Message{{Role: "user", Content: "one"}, {Role: "model", Content: "a"}, {Role: "user", Content: "two"}} {
+		require.NoError(t, w.storage.Append(m)) // no event counts: an older version's
+	}
+	_, err = w.ForkSession(ctx, 1)
+	assert.ErrorIs(t, err, api.ErrCantRewindConversation)
+	w.turnStarted(s.ID)
+	_, err = w.ForkSession(ctx, 0)
+	assert.ErrorIs(t, err, api.ErrSessionBusy)
+	w.turnEnded(s.ID)
+}
+
+// A session with no event log (an older version's) is exported from its
+// transcript; an untitled one is named by its ID, and a copy says what it
+// was copied from.
+func TestExportSessionFromTheTranscript(t *testing.T) {
+	w := openTest(t)
+	s := newSession(t, w)
+	for _, m := range []session.Message{
+		{Role: "model", Content: "hi"},
+	} {
+		require.NoError(t, w.storage.Append(m))
+	}
+	md, err := w.ExportSession(s.ID)
+	require.NoError(t, err)
+	assert.Contains(t, md, "# Session "+s.ID)
+	assert.Contains(t, md, "## Blitz")
+	require.NoError(t, w.storage.Append(session.Message{Role: "user", Content: "go on", Kind: session.KindHook}))
+	require.NoError(t, w.storage.Append(session.Message{Role: "user", Content: "hello"}))
+	md, err = w.ExportSession(s.ID)
+	require.NoError(t, err)
+	assert.Contains(t, md, "## You (hook)")
+	assert.Contains(t, md, "## You · ")
+	copied, err := w.storage.Fork(s.ID)
+	require.NoError(t, err)
+	md, err = ExportSession(w.cfg, copied.ID)
+	require.NoError(t, err)
+	assert.Contains(t, md, "copied from `"+s.ID+"`")
+}
+
+// The event log is written as the conversation: compactions noted, tool
+// results in brief, thoughts and empty events left out, one heading per
+// speaker in a row.
+func TestWriteEvents(t *testing.T) {
+	at := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
+	ev := func(author string, parts ...*genai.Part) *adksession.Event {
+		e := adksession.NewEvent(context.Background(), "inv")
+		e.Author, e.Timestamp, e.Content = author, at, &genai.Content{Parts: parts}
+		return e
+	}
+	compacted := adksession.NewEvent(context.Background(), "inv")
+	compacted.Actions.Compaction = &adksession.EventCompaction{}
+	empty := adksession.NewEvent(context.Background(), "inv")
+	var b strings.Builder
+	writeEvents(&b, []*adksession.Event{
+		compacted, empty,
+		ev("user", &genai.Part{Text: "list"}),
+		ev("blitz", &genai.Part{Text: "thinking", Thought: true}),
+		ev("blitz", &genai.Part{FunctionResponse: &genai.FunctionResponse{Name: "ls", Response: map[string]any{"files": []string{"a"}}}}),
+		ev("blitz", &genai.Part{Text: "one file"}),
+		ev("blitz", &genai.Part{Text: "that's all"}),
+	})
+	got := b.String()
+	assert.Contains(t, got, "summarised")
+	assert.Contains(t, got, `  - → {"files":["a"]}`)
+	assert.NotContains(t, got, "thinking")
+	assert.Equal(t, 1, strings.Count(got, "## blitz"), "one heading for consecutive replies: %s", got)
+
+	b.Reset()
+	writeMessages(&b, []session.Message{{Role: "user", Kind: "x", Content: "note"}, {Role: "user", Content: "q"}})
+	assert.Equal(t, "\n## You (x)\n\nnote\n\n## You\n\nq\n", b.String(), "no time when there is none")
+	assert.Equal(t, "note", cmpKind(""))
 }

@@ -111,3 +111,16 @@ func TestToolDenyRuleInTheEngine(t *testing.T) {
 	msg, _ := result["error"].(string)
 	assert.Contains(t, msg, "deny list_agents", "list_agents wasn't refused: %v", result)
 }
+
+// A rule that can't be saved still applies for the session, and says why
+// it wasn't saved.
+func TestPermissionRuleKeptWhenSavingFails(t *testing.T) {
+	w := openTest(t)
+	rules, _ := w.settingsFiles()
+	writeSettings(t, rules[1], "[permissions\n") // the workspace's settings no longer parse
+	res, err := w.AddPermissionRule("deny", "write(secret/**)", api.ScopeWorkspace)
+	require.NoError(t, err)
+	assert.Error(t, res.Saved.Err)
+	e, _ := w.tools.Rules().Decide(tools.RuleWrite, []string{"secret/a"})
+	assert.Equal(t, tools.EffectDeny, e)
+}

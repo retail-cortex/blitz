@@ -16,6 +16,7 @@ package engine
 
 import (
 	"context"
+	"fmt"
 	"io/fs"
 	"os"
 	"os/exec"
@@ -287,4 +288,133 @@ func TestReadPreview(t *testing.T) {
 			assert.Equal(t, tc.data, string(data))
 		})
 	}
+}
+
+// A save refused for a file changed or deleted since it was opened says
+// which.
+func TestFileChangedErrorMessage(t *testing.T) {
+	assert.Equal(t, "a.txt was deleted since it was opened", (&FileChangedError{Path: "a.txt"}).Error())
+	assert.Equal(t, "a.txt was changed since it was opened", (&FileChangedError{Path: "a.txt", Current: "v2"}).Error())
+}
+
+// Paths outside the workspace are refused by every file operation; a
+// folder that isn't there can't be listed.
+func TestFileOperationsRefuseBadPaths(t *testing.T) {
+	w := openTest(t)
+	ctx := context.Background()
+	_, err := w.ListDir(ctx, "../x", false)
+	assert.ErrorIs(t, err, ErrBadPath)
+	_, err = w.ListDir(ctx, "missing", false)
+	assert.ErrorIs(t, err, fs.ErrNotExist)
+	assert.ErrorIs(t, w.CreateFolder("../x"), ErrBadPath)
+	assert.ErrorIs(t, w.RenameFile(ctx, "../x", "y"), ErrBadPath)
+	write(t, w.Dir(), "y", "y")
+	assert.ErrorIs(t, w.RenameFile(ctx, "y", "../x"), ErrBadPath)
+	assert.ErrorIs(t, w.DeleteFile(ctx, "../x"), ErrBadPath)
+	assert.Empty(t, w.StatFiles([]string{"../x"}))
+}
+
+// Outside a repository, a folder lists without git states; a link to a
+// folder in the workspace lists as a folder, one to a file as a link.
+func TestListDirLinksWithoutGit(t *testing.T) {
+	w := openTest(t)
+	write(t, w.Dir(), "real/a.txt", "a")
+	require.NoError(t, os.Symlink("real", filepath.Join(w.Dir(), "linkdir")))
+	require.NoError(t, os.Symlink("real/a.txt", filepath.Join(w.Dir(), "linkfile")))
+	l, err := w.ListDir(context.Background(), "", false)
+	require.NoError(t, err)
+	assert.False(t, l.Repo)
+	assert.Equal(t, KindFolder, entry(t, l, "linkdir").Kind)
+	assert.Equal(t, KindSymlink, entry(t, l, "linkfile").Kind)
+}
+
+// A folder with more entries than are shown is cut short, and says so.
+func TestListDirTruncates(t *testing.T) {
+	w := openTest(t)
+	dir := filepath.Join(w.Dir(), "many")
+	require.NoError(t, os.MkdirAll(dir, 0o755))
+	for i := range maxListed + 1 {
+		f, err := os.Create(filepath.Join(dir, fmt.Sprintf("f%05d", i)))
+		require.NoError(t, err)
+		f.Close()
+	}
+	l, err := w.ListDir(context.Background(), "many", false)
+	require.NoError(t, err)
+	assert.True(t, l.Truncated)
+	assert.Len(t, l.Entries, maxListed)
+}
+
+// tools.max_file_size_bytes lowers the editor's limit; a file over it
+// comes without its text, and its version is its size and time.
+func TestReadFileHonoursTheSizeLimit(t *testing.T) {
+	w, _ := openTestWith(t, func(c *config.Config) { c.Tools.MaxFileSizeBytes = 4 })
+	write(t, w.Dir(), "a.txt", "too long")
+	f, err := w.ReadFile("a.txt")
+	require.NoError(t, err)
+	assert.True(t, f.TooLarge)
+	big := filepath.Join(w.Dir(), "big.bin")
+	require.NoError(t, os.WriteFile(big, nil, 0o644))
+	require.NoError(t, os.Truncate(big, maxPreviewBytes+1))
+	assert.Regexp(t, `^size:\d+:\d+$`, w.StatFiles([]string{"big.bin"})["big.bin"])
+	require.NoError(t, os.Rename(big, filepath.Join(w.Dir(), "big.png")))
+	_, _, err = w.ReadPreview("big.png")
+	assert.ErrorIs(t, err, ErrNoPreview)
+	assert.ErrorContains(t, err, "over 32 MB")
+}
+
+// Binary detection looks at the first 8 kB only.
+func TestIsBinary(t *testing.T) {
+	text := []byte(strings.Repeat("a", 9000))
+	assert.False(t, isBinary(text))
+	assert.True(t, isBinary(append([]byte("\x00"), text...)))
+	assert.False(t, isBinary(append(text, 0)), "a NUL past 8 kB")
+}
+
+// The note about the user's edits is taken out of the prompt shown; an
+// unterminated one is left.
+func TestDisplayPrompt(t *testing.T) {
+	assert.Equal(t, "go on", DisplayPrompt(withUserEdits("go on", "a.go (created)")))
+	assert.Equal(t, "go on", DisplayPrompt("go on"))
+	assert.Equal(t, "go on\n\n<user-edits>x", DisplayPrompt("go on\n\n<user-edits>x"))
+	assert.Equal(t, "go on", withUserEdits("go on", ""))
+}
+
+// Each porcelain status has its name.
+func TestGitState(t *testing.T) {
+	for xy, want := range map[string]string{
+		"??": "untracked", "UU": "conflicted", "AA": "conflicted", "DD": "conflicted",
+		"R ": "renamed", " R": "renamed", "A ": "added", "D ": "deleted", " D": "deleted", " M": "modified",
+	} {
+		t.Run(xy, func(t *testing.T) { assert.Equal(t, want, gitState(xy)) })
+	}
+}
+
+// In a repository, finding files asks git, which also lists renamed
+// files once; files deleted from disk but still in the index, and hidden
+// ones, aren't found. A limit of 0 means the default, and results stop at
+// the limit.
+func TestFindFilesInARepository(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("no git")
+	}
+	w := openTest(t)
+	dir, ctx := w.Dir(), context.Background()
+	gitIn(t, dir, "init", "-q")
+	for _, p := range []string{"a1.go", "a2.go", "a3.go", "gone.go", ".cfg/x.go", "old.go"} {
+		write(t, dir, p, "package a\n")
+	}
+	gitIn(t, dir, "add", ".")
+	gitIn(t, dir, "commit", "-qm", "first")
+	require.NoError(t, os.Remove(filepath.Join(dir, "gone.go")))
+	gitIn(t, dir, "mv", "old.go", "new.go")
+
+	all, err := w.FindPaths(ctx, "", 0, false)
+	require.NoError(t, err)
+	assert.ElementsMatch(t, []string{"a1.go", "a2.go", "a3.go", "new.go"}, all)
+	got, err := w.FindPaths(ctx, "a", 2, false)
+	require.NoError(t, err)
+	assert.Len(t, got, 2)
+	l, err := w.ListDir(ctx, "", false)
+	require.NoError(t, err)
+	assert.Equal(t, "renamed", entry(t, l, "new.go").Git)
 }

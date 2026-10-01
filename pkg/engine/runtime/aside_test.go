@@ -101,3 +101,29 @@ func TestAsideOnANewSession(t *testing.T) {
 	require.NoError(t, f.eng.Aside(context.Background(), "fresh", "hi?", func(*session.Event) error { return nil }))
 	require.Equal(t, 1, f.llm.Calls(), "%d calls", f.llm.Calls())
 }
+
+// A side question streams like a turn when the engine streams, and works
+// on a session with no turns yet.
+func TestAsideStreamsOnANewSession(t *testing.T) {
+	f := newEngineWith(t, fixtureOpts{opts: []Option{WithStreaming(true)}}, textContent("an aside"))
+	var got strings.Builder
+	err := f.eng.Aside(context.Background(), "new", "btw?", func(ev *session.Event) error {
+		if ev.Content != nil && !ev.Partial {
+			for _, p := range ev.Content.Parts {
+				got.WriteString(p.Text)
+			}
+		}
+		return nil
+	})
+	require.NoError(t, err)
+	require.Contains(t, got.String(), "an aside")
+}
+
+// copySession fails when the copy's ID is taken.
+func TestCopySessionTakenID(t *testing.T) {
+	ctx := context.Background()
+	dst := session.InMemoryService()
+	_, err := dst.Create(ctx, &session.CreateRequest{AppName: appName, UserID: "user", SessionID: "taken"})
+	require.NoError(t, err)
+	require.Error(t, copySession(ctx, session.InMemoryService(), dst, "s", "taken"))
+}

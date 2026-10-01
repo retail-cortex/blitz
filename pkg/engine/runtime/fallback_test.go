@@ -288,3 +288,10 @@ func TestUnusedBackupTrialIsNotReserved(t *testing.T) {
 	text, _, _, err := call(t, f, context.Background())
 	require.Equal(t, "from b", text, "backup not used after the primary failed again: %q %v", text, err)
 }
+
+// A chain of one model is that model, and no model gets no settings.
+func TestSingleModelChain(t *testing.T) {
+	m := NewMockLLM("only")
+	assert.Same(t, m, newFallbackModel([]model.LLM{m}))
+	assert.Nil(t, withModelSettings(nil, "gemini"))
+}

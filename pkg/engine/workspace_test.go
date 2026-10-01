@@ -23,6 +23,7 @@ import (
 	"image/png"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -476,4 +477,117 @@ func TestFailedSaveIsANotice(t *testing.T) {
 	require.NotEmpty(t, notices, "no notice for the failed save")
 	assert.True(t, notices[0].Error)
 	assert.Contains(t, notices[0].Text, "Couldn't save this message")
+}
+
+// openWarn opens a workspace on cfg and returns what it warned about.
+func openWarn(t *testing.T, cfg *config.Config, o Options) (*Workspace, []string, error) {
+	t.Helper()
+	var warnings []string
+	o.Warn = func(s string) { warnings = append(warnings, s) }
+	if o.NewModel == nil {
+		o.NewModel = mockModels
+	}
+	w, err := Open(context.Background(), cfg, o)
+	if err == nil {
+		t.Cleanup(func() { w.Close() })
+	}
+	return w, warnings, err
+}
+
+// Settings that can't be honoured are warnings, and the workspace opens
+// without them.
+func TestOpenWarnings(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		mutate func(t *testing.T, c *config.Config)
+		want   string
+		check  func(t *testing.T, w *Workspace)
+	}{
+		{name: "an unknown style", mutate: func(_ *testing.T, c *config.Config) { c.UI.Style = "pirate" }, want: `ui.style "pirate"`},
+		{name: "a known style", mutate: func(_ *testing.T, c *config.Config) { c.UI.Style = "Concise" },
+			check: func(t *testing.T, w *Workspace) { assert.Equal(t, "concise", w.style) }},
+		{name: "trust_workspace", mutate: func(_ *testing.T, c *config.Config) { c.Blitz.TrustWorkspace = true }, want: "trust_workspace is deprecated"},
+		{name: "the auto reviewer's model", mutate: func(_ *testing.T, c *config.Config) { c.Permissions.Auto.Model = "broken" }, want: "reviewer model broken"},
+		{name: "a working auto reviewer", mutate: func(_ *testing.T, c *config.Config) { c.Permissions.Auto.Model = "gemini-3.8-pro" }},
+		{name: "a prompt hook's model", mutate: func(_ *testing.T, c *config.Config) {
+			c.Hooks.Stop = []config.HookConfig{{Type: config.HookPrompt, Prompt: "done?", Model: "broken"}, {Type: config.HookPrompt, Prompt: "again?", Model: "broken"}}
+			c.Hooks.PreTool = []config.HookConfig{{Type: config.HookPrompt, Prompt: "ok?", Model: "gemini-3.8-pro"}}
+		}, want: "prompt hooks' model broken"},
+		{name: "a pin for an unknown agent", mutate: func(_ *testing.T, c *config.Config) {
+			c.AgentModels = map[string]string{"ghost": "gemini-3.8-pro", "qa": ""}
+		}, want: "Unknown agent: ghost"},
+		{name: "a broken pin", mutate: func(_ *testing.T, c *config.Config) { c.AgentModels = map[string]string{"qa": "broken"} }, want: "broken"},
+		{name: "a skills policy problem", mutate: func(_ *testing.T, c *config.Config) { c.Skills.Policy.Sandbox = "chroot" }, want: "skills.policy.sandbox"},
+		{name: "an audit log that can't be opened", mutate: func(t *testing.T, c *config.Config) {
+			file := filepath.Join(t.TempDir(), "file")
+			require.NoError(t, os.WriteFile(file, nil, 0o644))
+			c.Audit.Enabled, c.Audit.Dir = true, filepath.Join(file, "audit")
+		}, want: "audit log disabled"},
+		{name: "old images are pruned", mutate: func(_ *testing.T, c *config.Config) { c.Images.Enabled, c.Images.RetainDays = true, 1 }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := isolatedConfig(t)
+			tc.mutate(t, cfg)
+			w, warnings, err := openWarn(t, cfg, Options{Model: runtime.NewMockLLM("m")})
+			require.NoError(t, err)
+			if tc.want != "" {
+				assert.Contains(t, strings.Join(warnings, "\n"), tc.want)
+			}
+			if tc.check != nil {
+				tc.check(t, w)
+			}
+		})
+	}
+}
+
+// A workspace that can't be opened says why and leaves it unlocked.
+func TestOpenFailures(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		mutate func(t *testing.T, c *config.Config)
+		want   string
+	}{
+		{name: "no such folder", mutate: func(t *testing.T, c *config.Config) { c.Tools.WorkspaceDir = filepath.Join(t.TempDir(), "gone") }, want: "invalid workspace directory"},
+		{name: "session storage under a file", mutate: func(t *testing.T, c *config.Config) {
+			file := filepath.Join(t.TempDir(), "file")
+			require.NoError(t, os.WriteFile(file, nil, 0o644))
+			c.Session.StorageDir = filepath.Join(file, "sessions")
+		}, want: "session storage"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := isolatedConfig(t)
+			tc.mutate(t, cfg)
+			_, _, err := openWarn(t, cfg, Options{Model: runtime.NewMockLLM("m")})
+			assert.ErrorContains(t, err, tc.want)
+			if _, statErr := os.Stat(cfg.Tools.WorkspaceDir); statErr == nil {
+				w, _, err := openWarn(t, isolatedCopy(cfg), Options{Model: runtime.NewMockLLM("m")})
+				require.NoError(t, err, "the lock was released")
+				w.Close()
+			}
+		})
+	}
+}
+
+// isolatedCopy is cfg with its own session storage, for opening again.
+func isolatedCopy(cfg *config.Config) *config.Config {
+	c := *cfg
+	c.Session.StorageDir = filepath.Join(filepath.Dir(cfg.Tools.ApprovalsFile), "sessions")
+	return &c
+}
+
+// Without a model of its own, the workspace builds the configured one; one
+// that can't be built leaves a placeholder and the reason.
+func TestOpenBuildsTheConfiguredModel(t *testing.T) {
+	cfg := isolatedConfig(t)
+	w, _, err := openWarn(t, cfg, Options{NewModel: func(context.Context, *config.Config, string) (model.LLM, error) {
+		return nil, errors.New("no credentials")
+	}})
+	require.NoError(t, err)
+	assert.ErrorContains(t, w.ModelErr(), "no credentials")
+	assert.Same(t, w.cfg, w.Config())
+	assert.NotNil(t, w.Agents())
+	assert.NotNil(t, w.Engine())
+	assert.NotNil(t, w.Storage())
+	assert.NotNil(t, w.Audit(), "on by default")
+	assert.NotNil(t, w.Locales())
 }

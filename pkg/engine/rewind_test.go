@@ -24,6 +24,7 @@ import (
 	"github.com/retail-cortex/blitz/pkg/api"
 	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/engine/runtime"
+	"github.com/retail-cortex/blitz/pkg/engine/session"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/genai"
@@ -182,4 +183,67 @@ func TestRewindAfterResume(t *testing.T) {
 	s, _, err := w3.OpenSession(id, false)
 	require.NoError(t, err, "reopened: %d messages,", s.MessageCount)
 	require.Equal(t, 2, s.MessageCount, "reopened: %d messages, %v", s.MessageCount, err)
+}
+
+// Rewinding needs an active session; Busy reports a running turn.
+func TestRewindNeedsASession(t *testing.T) {
+	w := openTest(t)
+	_, err := w.RewindPoints()
+	assert.ErrorIs(t, err, api.ErrNoActiveSession)
+	_, err = w.Rewind(context.Background(), 0, api.RewindBoth, false)
+	assert.ErrorIs(t, err, api.ErrNoActiveSession)
+	assert.False(t, w.Busy())
+	w.turnStarted("s")
+	assert.True(t, w.Busy())
+	w.turnEnded("s")
+}
+
+// Summarising from or up to a prompt compacts that part of the
+// conversation, leaving files and the transcript alone.
+func TestRewindSummarize(t *testing.T) {
+	for _, mode := range []api.RewindMode{api.RewindSummarizeFrom, api.RewindSummarizeUpTo} {
+		t.Run(string(mode), func(t *testing.T) {
+			w, cfg, _, _ := rewindSession(t, text("a summary"))
+			res, err := w.Rewind(context.Background(), 2, mode, false)
+			require.NoError(t, err)
+			assert.Positive(t, res.Compacted.EventsCompacted)
+			assert.Equal(t, "v2\n", notes(t, cfg))
+			a, _ := w.ActiveSession()
+			assert.Equal(t, 4, a.MessageCount)
+		})
+	}
+}
+
+// A prompt recorded without its place in the event log (an older
+// version's) can't have its conversation rewound or summarised.
+func TestRewindWithoutEventCounts(t *testing.T) {
+	w := openTest(t)
+	newSession(t, w)
+	require.NoError(t, w.storage.Append(session.Message{Role: "user", Content: "old"}))
+	for _, mode := range []api.RewindMode{api.RewindConversation, api.RewindSummarizeFrom} {
+		_, err := w.Rewind(context.Background(), 0, mode, false)
+		assert.ErrorIs(t, err, api.ErrCantRewindConversation, "%s", mode)
+	}
+}
+
+// A session /cd moved here can't be rewound to before the move.
+func TestMovedSessionRewindsOnlyHere(t *testing.T) {
+	w := openTest(t)
+	other, err := session.NewStorage(w.cfg.Session.StorageDir)
+	require.NoError(t, err)
+	other.SetWorkspace(t.TempDir())
+	rec, err := other.CreateSession(session.NewSessionID(), "elsewhere", "blitz")
+	require.NoError(t, err)
+	require.NoError(t, other.Append(session.Message{Role: "user", Content: "there"}))
+
+	moved, err := w.MoveSession(rec.ID)
+	require.NoError(t, err)
+	assert.Equal(t, w.Dir(), moved.Workspace)
+	assert.Contains(t, w.moveNotes[rec.ID], "moved from")
+	_, err = w.Rewind(context.Background(), 0, api.RewindCode, false)
+	assert.ErrorIs(t, err, api.ErrNotRewindPoint)
+	assert.ErrorContains(t, err, "before /cd moved the session here")
+
+	_, err = w.MoveSession("no-such-session")
+	assert.Error(t, err)
 }

@@ -19,6 +19,8 @@ import (
 	"iter"
 	"os"
 	"path/filepath"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -134,4 +136,48 @@ func TestRunningTurnObeysANewRule(t *testing.T) {
 	require.NoError(t, err)
 	assert.FileExists(t, filepath.Join(w.Dir(), "before.txt"))
 	assert.NoFileExists(t, filepath.Join(w.Dir(), "after.txt"), "the new deny rule didn't reach the running turn")
+}
+
+// SettingsChanges hears of a change until its context ends; settings or
+// approvals that no longer parse are warnings.
+func TestSettingsChangesChannelAndBrokenFiles(t *testing.T) {
+	fastSettings(t)
+	var mu sync.Mutex
+	var warnings []string
+	cfg := isolatedConfig(t)
+	w, err := Open(context.Background(), cfg, Options{Model: runtime.NewMockLLM("m"), Warn: func(s string) {
+		mu.Lock()
+		defer mu.Unlock()
+		warnings = append(warnings, s)
+	}})
+	require.NoError(t, err)
+	t.Cleanup(func() { w.Close() })
+	warned := func(prefix string) func() bool {
+		return func() bool {
+			mu.Lock()
+			defer mu.Unlock()
+			for _, s := range warnings {
+				if strings.HasPrefix(s, prefix) {
+					return true
+				}
+			}
+			return false
+		}
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	ch := w.SettingsChanges(ctx)
+	rules, approvals := w.settingsFiles()
+
+	writeSettings(t, rules[1], "[permissions\n")
+	require.Eventually(t, warned("reloading the permission rules"), 5*time.Second, 10*time.Millisecond)
+	select {
+	case <-ch:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the channel didn't hear of the change")
+	}
+	writeSettings(t, approvals, "{not json")
+	require.Eventually(t, warned("approvals:"), 5*time.Second, 10*time.Millisecond)
+	cancel()
+	var nilWatch *settingsWatch
+	nilWatch.close() // a workspace that never started watching
 }

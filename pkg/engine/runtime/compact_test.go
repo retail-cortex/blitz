@@ -18,12 +18,14 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/retail-cortex/blitz/pkg/api"
 	"github.com/retail-cortex/blitz/pkg/config"
 	cpsession "github.com/retail-cortex/blitz/pkg/engine/session"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/adk/v2/session"
 	"google.golang.org/genai"
 )
 
@@ -157,4 +159,67 @@ func TestCompactRollsEarlierSummary(t *testing.T) {
 	assert.Contains(t, got, "t3", "recent turns missing: %s", got)
 	assert.Contains(t, got, "t4", "recent turns missing: %s", got)
 	_ = genai.RoleUser
+}
+
+// ev is a session event at second sec of a fixed day.
+func ev(id, author string, sec int, text string) *session.Event {
+	e := &session.Event{ID: id, InvocationID: "inv-" + id, Author: author, Timestamp: time.Date(2026, 1, 1, 0, 0, sec, 0, time.UTC)}
+	e.LLMResponse.Content = genai.NewContentFromText(text, genai.RoleUser)
+	return e
+}
+
+// The compaction helpers on hand-built events: an event inside the
+// window's time span but not in it is listed as excluded (unless an earlier
+// summary covers it), excluded events stay in the transcript, empty
+// summaries are dropped, and a clock behind the conversation is refused.
+func TestCompactionHelpers(t *testing.T) {
+	a, b, c, d := ev("a", "user", 1, "A"), ev("b", "model", 2, "B"), ev("c", "user", 3, "C"), ev("d", "model", 4, "D")
+	earlier := &session.EventCompaction{StartTimestamp: a.Timestamp, EndTimestamp: a.Timestamp, CompactedContent: genai.NewContentFromText("S0", genai.RoleModel)}
+	rolled := ev("r", "user", 5, "")
+	rolled.Actions.Compaction = earlier
+
+	got, err := compactionEvent([]*session.Event{d, rolled, b}, []*session.Event{a, b, c, d, rolled}, textContent("S1"))
+	require.NoError(t, err)
+	excl := got.Actions.Compaction.ExcludedEvents
+	require.Len(t, excl, 1, "c is in the span and not summarized; a is covered by the earlier summary: %+v", excl)
+	assert.Equal(t, "inv-c", excl[0].InvocationID)
+	assert.Equal(t, b.Timestamp, got.Actions.Compaction.StartTimestamp)
+
+	future := ev("f", "user", 0, "F")
+	future.Timestamp = time.Now().Add(time.Hour)
+	_, err = compactionEvent([]*session.Event{future}, []*session.Event{future}, textContent("S"))
+	assert.ErrorContains(t, err, "clock is behind")
+
+	summary := ev("s", "user", 6, "")
+	summary.Actions.Compaction = &session.EventCompaction{StartTimestamp: a.Timestamp, EndTimestamp: c.Timestamp, CompactedContent: genai.NewContentFromText("S2", genai.RoleModel),
+		ExcludedEvents: []session.EventRef{{InvocationID: "inv-b", Timestamp: b.Timestamp}}}
+	empty := ev("e", "user", 7, "")
+	empty.Actions.Compaction = &session.EventCompaction{}
+	var texts []string
+	for _, e := range transcriptEvents([]*session.Event{a, b, c, d, summary, empty}) {
+		for _, p := range e.Content.Parts {
+			texts = append(texts, p.Text)
+		}
+	}
+	assert.Equal(t, []string{"B", "D", "[Summary of earlier conversation]\n", "S2"}, texts)
+
+	assert.False(t, hasUncompacted([]*session.Event{summary, empty}))
+	assert.Nil(t, proseOnly(nil))
+	assert.Nil(t, proseOnly(&genai.Content{Parts: []*genai.Part{{Text: "x", Thought: true}}}))
+	tool := ev("t", "user", 8, "")
+	tool.Content = &genai.Content{Parts: []*genai.Part{{FunctionResponse: &genai.FunctionResponse{Name: "x"}}}}
+	assert.False(t, isUserTurnStart(tool), "a tool response isn't a prompt")
+}
+
+// Keeping fewer than one turn keeps one, and a summarizer that only thinks
+// leaves the history alone.
+func TestCompactKeepsAtLeastOneTurnAndNeedsProse(t *testing.T) {
+	thinking := &genai.Content{Role: genai.RoleModel, Parts: []*genai.Part{{Text: "pondering", Thought: true}}}
+	f := newEngineWith(t, fixtureOpts{}, textContent("r1"), textContent("r2"), thinking, textContent("SUMMARY"))
+	runTurns(t, f.eng, "s", "q1", "q2")
+	_, err := f.eng.Compact(context.Background(), "s", "", 0)
+	require.Error(t, err, "a summary of thoughts only")
+	res, err := f.eng.Compact(context.Background(), "s", "", 0)
+	require.NoError(t, err)
+	assert.Equal(t, 1, res.TurnsKept)
 }

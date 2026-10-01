@@ -16,12 +16,15 @@ package engine
 
 import (
 	"context"
+	"errors"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/retail-cortex/blitz/pkg/api"
 	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/engine/runtime"
+	"github.com/retail-cortex/blitz/pkg/images"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/adk/v2/model"
@@ -190,4 +193,68 @@ func TestPromptIsRecordedBeforeSteering(t *testing.T) {
 	assert.GreaterOrEqual(t, len(got), 2, "transcript %q", got)
 	assert.Equal(t, "user: reformat", got[0], "transcript %q", got)
 	assert.Equal(t, "user: use tabs", got[1], "transcript %q", got)
+}
+
+// A detached turn runs in a session of its own, which doesn't become the
+// workspace's active one.
+func TestRunDetached(t *testing.T) {
+	w, llm := openTestWith(t, nil, text("checked"))
+	llm.Usage = &genai.GenerateContentResponseUsageMetadata{PromptTokenCount: 10, CandidatesTokenCount: 1}
+	var started string
+	res, err := w.RunDetached(context.Background(), api.Turn{Text: "check"}, func(id string) { started = id }, ignore)
+	require.NoError(t, err)
+	assert.Equal(t, "checked", res.Output)
+	require.NotEmpty(t, started)
+	_, active := w.ActiveSession()
+	assert.False(t, active, "the detached session became active")
+	rec, err := w.storage.Get(started)
+	require.NoError(t, err)
+	assert.Len(t, rec.Messages, 2)
+	assert.Equal(t, 1, w.UsageOf(started).Calls)
+}
+
+// How a turn ended, for metrics.
+func TestTurnOutcome(t *testing.T) {
+	for want, err := range map[string]error{
+		"ok":        nil,
+		"blocked":   &api.BlockedError{Reason: "no"},
+		"limit":     api.ErrMaxTurns,
+		"cancelled": context.Canceled,
+		"error":     errors.New("boom"),
+	} {
+		t.Run(want, func(t *testing.T) { assert.Equal(t, want, turnOutcome(err)) })
+	}
+}
+
+// Images go to the model with the prompt, and the transcript names them.
+func TestRunWithImagesAndFetchGrants(t *testing.T) {
+	w, llm := openTestWith(t, nil, text("a red square"))
+	writePNG(t, filepath.Join(w.Dir(), "shot.png"))
+	img, err := w.LoadImage("shot.png")
+	require.NoError(t, err)
+	_, err = w.Run(context.Background(), newSession(t, w).ID, api.Turn{Text: "what is it?", Images: []*images.Image{img}, FetchGrants: []string{"https://go.dev/"}}, ignore)
+	require.NoError(t, err)
+	var inline int
+	for _, c := range llm.Requests[0].Contents {
+		for _, p := range c.Parts {
+			if p.InlineData != nil {
+				inline++
+			}
+		}
+	}
+	assert.Equal(t, 1, inline, "the image was sent")
+	assert.Equal(t, "\n[images: shot.png]", AttachmentNote([]*images.Image{img}))
+	assert.Equal(t, "", AttachmentNote(nil))
+}
+
+// A stop hook that asks to go on without saying why gets a default
+// reason.
+func TestStopHookWithoutAReason(t *testing.T) {
+	w, llm := openTestWith(t, func(c *config.Config) {
+		c.Hooks.Stop = []config.HookConfig{{Command: `input=$(cat); case "$input" in *'"stop_hook_active":true'*) ;; *) echo '{"continue": true}';; esac`}}
+	}, text("done"), text("really done"))
+	_, err := w.Run(context.Background(), newSession(t, w).ID, api.Turn{Text: "go"}, ignore)
+	require.NoError(t, err)
+	require.Equal(t, 2, llm.Calls())
+	assert.Equal(t, "A stop hook asked you to continue.", userTextAt(llm.Requests[1].Contents))
 }
