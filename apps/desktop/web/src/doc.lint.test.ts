@@ -57,7 +57,8 @@ function undocumented(file: string): string[] {
 }
 
 describe("the page's code", () => {
+  // It parses every source file: past Vitest's 5 s on a loaded machine.
   it("documents what it exports", () => {
     expect(sources(dir).flatMap(undocumented)).toEqual([]);
-  });
+  }, 30_000);
 });

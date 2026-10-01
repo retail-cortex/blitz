@@ -15,6 +15,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { SandboxNotice } from "./SandboxNotice";
 import { useWorkspaceSettings } from "./workspaceSettings";
 import { useWorkerFailures } from "./workerFailures";
 import { InboxButton } from "./RunsInbox";
@@ -69,7 +70,7 @@ export function Workspace({
   const { prefs, update, theme } = useApp();
   const [view, setView] = useState<View>("editor");
   const dir = ws.dir;
-  const { settings, modelProblem, settingsError, project, reviewing, setReviewing, refreshSettings } = useWorkspaceSettings(dir);
+  const { settings, modelProblem, settingsError, settingsReason, project, reviewing, setReviewing, refreshSettings } = useWorkspaceSettings(dir);
 
   // Showing the workers sees their failed runs (BL-WK-11).
   useEffect(() => {
@@ -195,6 +196,7 @@ export function Workspace({
           <IconButton icon={mdiCogOutline} label={t("desktop.settings")} onClick={onSettings} />
         </div>
       </header>
+      {settingsReason === "SANDBOX_UNAVAILABLE" && <SandboxNotice error={settingsError} onFixed={refreshSettings} />}
       <div className="workspace-body">
         {prefs.files ? (
           <FilesShelf

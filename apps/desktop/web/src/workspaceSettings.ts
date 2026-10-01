@@ -20,7 +20,7 @@
 // and the editor's panel share it.
 import { useCallback, useEffect, useRef, useState } from "react";
 import { workspaces } from "./api";
-import { message } from "./errors";
+import { message, reason } from "./errors";
 import { configChangedEvent, type ConfigChangedDetail } from "./events";
 import type { GetSettingsResponse, ProjectSettings } from "./gen/blitz/v1/workspace_pb";
 import { needsDecision } from "./project";
@@ -30,6 +30,8 @@ export function useWorkspaceSettings(dir: string) {
   const [settings, setSettings] = useState<GetSettingsResponse>();
   const [modelProblem, setModelProblem] = useState("");
   const [settingsError, setSettingsError] = useState("");
+  // Its reason (SANDBOX_UNAVAILABLE: the workspace didn't open for want of the sandbox).
+  const [settingsReason, setSettingsReason] = useState("");
   const [project, setProject] = useState<ProjectSettings>();
   const [reviewing, setReviewing] = useState(false);
   // The project settings' content asked about as the workspace opened:
@@ -50,12 +52,14 @@ export function useWorkspaceSettings(dir: string) {
       setModelProblem(m.unavailable);
       setProject(p);
       setSettingsError("");
+      setSettingsReason("");
       if (p && needsDecision(p) && asked.current !== p.hash) {
         asked.current = p.hash;
         setReviewing(true);
       }
     } catch (e) {
       setSettingsError(message(e));
+      setSettingsReason(reason(e));
     }
   }, [dir]);
   useEffect(() => {
@@ -82,7 +86,7 @@ export function useWorkspaceSettings(dir: string) {
     return () => window.removeEventListener("focus", f);
   }, [modelProblem, refreshSettings]);
 
-  return { settings, modelProblem, settingsError, project, reviewing, setReviewing, refreshSettings };
+  return { settings, modelProblem, settingsError, settingsReason, project, reviewing, setReviewing, refreshSettings };
 }
 
 /**

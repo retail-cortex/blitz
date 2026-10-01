@@ -98,12 +98,15 @@ function usedKeys(): string[] {
   return [...keys];
 }
 
+// These parse every source file: past Vitest's 5 s on a loaded machine.
+const parsesEverything = 30_000;
+
 describe("the page's text", () => {
   it("comes from the catalogs", () => {
     expect(sources(dir).flatMap(problems)).toEqual([]);
-  });
+  }, parsesEverything);
   it("uses keys that exist in the English catalog", () => {
     const messages = (enUS as { messages: Record<string, string> }).messages;
     expect(usedKeys().filter((k) => !(k in messages))).toEqual([]);
-  });
+  }, parsesEverything);
 });

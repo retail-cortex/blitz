@@ -36,7 +36,8 @@ import {
   mdiWeatherNight,
   mdiWhiteBalanceSunny,
 } from "@mdi/js";
-import { appVersion, cliStatus, fixSandbox, installCLI, installService, restartService, sandboxStatus, serviceStatus, setTray, stopService, type CLIStatus, type SandboxFix, type SandboxStatus, type ServiceStatus } from "./desktop";
+import { appVersion, cliStatus, installCLI, installService, restartService, serviceStatus, setTray, stopService, type CLIStatus, type ServiceStatus } from "./desktop";
+import { SandboxFixResult, sandboxDetail, useSandboxFix } from "./SandboxNotice";
 import { showLicense } from "./events";
 import { checkService, settleTimeout, type ServiceCheck, waitForService, withTimeout } from "./serviceVersion";
 import { languages, t } from "./i18n";
@@ -346,42 +347,17 @@ function Service() {
  * for bwrap alone with the system's password dialog. Not shown elsewhere.
  */
 function OSSandbox() {
-  const [status, setStatus] = useState<SandboxStatus | undefined | null>(null); // null: checking
-  const [busy, setBusy] = useState(false);
-  const [fix, setFix] = useState<SandboxFix | null>(null);
-  useEffect(() => {
-    sandboxStatus().then(setStatus, () => setStatus(undefined));
-  }, []);
+  const { status, phase, fix, restartError, allow } = useSandboxFix();
   if (status === undefined || status?.state === "unsupported") return null;
-  const allow = async () => {
-    setBusy(true);
-    try {
-      const done = await fixSandbox();
-      setFix(done);
-      setStatus(done.status);
-    } finally {
-      setBusy(false);
-    }
-  };
-  const detail =
-    status === null
-      ? t("desktop.checking")
-      : status.state === "ready"
-        ? t("desktop.sandbox.ready", { bwrap: status.bwrap ?? "" })
-        : status.state === "no_bwrap"
-          ? t("desktop.sandbox.no_bwrap")
-          : status.state === "restricted"
-            ? t("desktop.sandbox.restricted", { detail: status.detail ?? "" })
-            : t("desktop.sandbox.broken", { detail: status.detail ?? "" });
   return (
     <>
-      <Setting title={t("desktop.sandbox")} detail={detail}>
+      <Setting title={t("desktop.sandbox")} detail={sandboxDetail(status)}>
         {status?.state === "ready" ? (
           <Chip className="static" icon={mdiCheckCircleOutline} selected>
             {t("desktop.sandbox.on")}
           </Chip>
         ) : status?.state === "restricted" ? (
-          <Button small variant="tonal" disabled={busy} onClick={allow}>
+          <Button small variant="tonal" disabled={phase === "fixing" || phase === "restarting"} onClick={allow}>
             {t("desktop.sandbox.allow")}
           </Button>
         ) : status ? (
@@ -390,17 +366,7 @@ function OSSandbox() {
           </Chip>
         ) : null}
       </Setting>
-      {fix && !fix.error && <p className="muted">{t("desktop.sandbox.fixed")}</p>}
-      {fix?.error && (
-        <div className="stack">
-          <p className="error-text">{t("desktop.sandbox.failed", { error: fix.error })}</p>
-          {fix.commands && (
-            <div className="code-block">
-              <pre className="mono t-body-sm">{fix.commands}</pre>
-            </div>
-          )}
-        </div>
-      )}
+      <SandboxFixResult phase={phase} fix={fix} restartError={restartError} />
     </>
   );
 }
