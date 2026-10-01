@@ -128,3 +128,62 @@ func TestToolMatches(t *testing.T) {
 		})
 	}
 }
+
+// What doesn't convert is reported: unreadable hooks and MCP files, a
+// matcher with no Blitz tool, skills without SKILL.md, agents without
+// frontmatter; an agent without a name takes its file's.
+func TestImportClaudeEdges(t *testing.T) {
+	src := files(t, t.TempDir(), map[string]string{
+		".claude-plugin/plugin.json": `{"name": "edge"}`,
+		"hooks/hooks.json":           `{not json`,
+		".mcp.json":                  `{not json`,
+		"skills/notes/readme.md":     "no SKILL.md",
+		"agents/plain.md":            "no frontmatter",
+		"agents/unclosed.md":         "---\nname: x\n",
+		"agents/nameless.md":         "---\ndescription: d\ntools: [Read, \"\", Grep]\n---\nBody\n",
+	})
+	out := filepath.Join(t.TempDir(), "edge")
+	r, err := ImportClaude(src, out)
+	require.NoError(t, err)
+	assert.Equal(t, "0.0.0", r.Plugin.Version)
+	skipped := strings.Join(r.Skipped, "\n")
+	for _, want := range []string{"hooks/hooks.json:", ".mcp.json:", "agent plain: no frontmatter", "agent unclosed: no frontmatter"} {
+		assert.Contains(t, skipped, want)
+	}
+	agent := read(t, filepath.Join(out, "agents", "nameless.md"))
+	assert.Contains(t, agent, "name: nameless")
+	assert.Contains(t, agent, "- read_file\n    - grep")
+	assert.NoDirExists(t, filepath.Join(out, "skills", "notes"))
+
+	src = files(t, t.TempDir(), map[string]string{
+		".claude-plugin/plugin.json": `{"name": "nope"}`,
+		"hooks/hooks.json":           `{"hooks": {"PreToolUse": [{"matcher": "Frobnicate", "hooks": [{"command": "x"}]}]}}`,
+	})
+	r, err = ImportClaude(src, filepath.Join(t.TempDir(), "nope"))
+	require.NoError(t, err)
+	assert.Contains(t, strings.Join(r.Skipped, "\n"), "no Blitz tool for Frobnicate")
+
+	_, err = ImportClaude(files(t, t.TempDir(), map[string]string{".claude-plugin/plugin.json": `{"name": "!!!"}`}), filepath.Join(t.TempDir(), "x"))
+	assert.ErrorContains(t, err, "can't be a Blitz plugin's")
+	_, err = ImportGemini(files(t, t.TempDir(), map[string]string{"gemini-extension.json": `{"name": ""}`}), filepath.Join(t.TempDir(), "x"))
+	assert.ErrorContains(t, err, "can't be a Blitz plugin's")
+}
+
+// An import into a place it can't write fails, and so does writeTOML.
+func TestImportCantWrite(t *testing.T) {
+	blocked := t.TempDir()
+	file := filepath.Join(blocked, "file")
+	require.NoError(t, os.WriteFile(file, nil, 0o644))
+	_, err := ImportClaude(files(t, t.TempDir(), map[string]string{".claude-plugin/plugin.json": `{"name": "a"}`}), filepath.Join(file, "out"))
+	assert.Error(t, err)
+	_, err = ImportGemini(files(t, t.TempDir(), map[string]string{"gemini-extension.json": `{"name": "g"}`}), filepath.Join(file, "out"))
+	assert.Error(t, err)
+
+	assert.Error(t, writeTOML(filepath.Join(file, "x.toml"), map[string]string{}), "the parent can't be made")
+}
+
+// rootVarsMap keeps a missing map missing and fills the root in values.
+func TestRootVarsMap(t *testing.T) {
+	assert.Nil(t, rootVarsMap(nil))
+	assert.Equal(t, map[string]string{"A": RootVar + "/x"}, rootVarsMap(map[string]string{"A": "${CLAUDE_PLUGIN_ROOT}/x"}))
+}

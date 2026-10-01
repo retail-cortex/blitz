@@ -120,6 +120,7 @@ func TestSafeURL(t *testing.T) {
 		"/relative/path":            false,
 		"data:text/html,<script>":   false,
 		" https://example.com/ok  ": true,
+		"http://[::1":               false,
 	} {
 		t.Run(link, func(t *testing.T) {
 			got := safeURL(link)

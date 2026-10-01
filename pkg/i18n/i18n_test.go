@@ -224,3 +224,94 @@ func TestCurrentDefaultsToEnglish(t *testing.T) {
 	assert.Equal(t, "Salida cancelada.", T("exit.cancelled"), "SetCurrent not applied")
 	assert.Equal(t, "1 mensaje", N("session.messages", 1), "SetCurrent not applied")
 }
+
+// CheckCatalog accepts what a Bundle loads and says why it refuses the rest.
+func TestCheckCatalog(t *testing.T) {
+	cases := map[string]struct {
+		data string
+		want string // "" means accepted
+	}{
+		"valid":       {data: `{"meta":{"locale":"de"},"messages":{"a":"b"}}`},
+		"not JSON":    {data: `{`, want: "unexpected end"},
+		"bad locale":  {data: `{"meta":{"locale":"???"},"messages":{"a":"b"}}`, want: "invalid meta.locale"},
+		"no messages": {data: `{"meta":{"locale":"de"},"messages":{}}`, want: "no messages"},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			err := CheckCatalog([]byte(tc.data))
+			if tc.want == "" {
+				assert.NoError(t, err)
+			} else {
+				assert.ErrorContains(t, err, tc.want)
+			}
+		})
+	}
+}
+
+// An external catalog without messages is refused; one for a shipped
+// language may rename it.
+func TestExternalCatalogNames(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "empty.json"), []byte(`{"meta":{"locale":"de"},"messages":{}}`), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "es.json"), []byte(`{"meta":{"locale":"es","name":"Castellano","english_name":"Castilian"},"messages":{"recap.blitz":"perrito"}}`), 0o600))
+	b, errs := NewBundle(dir)
+	require.Len(t, errs, 1)
+	assert.ErrorContains(t, errs[0], "no messages")
+	c, ok := b.Catalog("es")
+	require.True(t, ok)
+	assert.Equal(t, "Castellano", c.Meta.Name)
+	assert.Equal(t, "Castilian", c.Meta.EnglishName)
+	assert.Equal(t, "Castellano", b.Localizer(language.Spanish).NativeName())
+}
+
+// NativeName prefers the catalog's own name, then CLDR's, then the English
+// name.
+func TestNativeName(t *testing.T) {
+	b := mustBundle(t)
+	assert.Equal(t, "日本語", b.Localizer(language.Japanese).NativeName(), "CLDR's name without a catalog")
+	l := b.Localizer(language.MustParse("en-XA"))
+	assert.Equal(t, l.LanguageName(), l.NativeName(), "no native name: the English one")
+}
+
+// A bad tag has no catalog; Problems and Missing report a missing catalog
+// and the keys a partial one lacks.
+func TestCatalogQueries(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "it.json"), []byte(`{"meta":{"locale":"it"},"messages":{"exit.cancelled":"Uscita annullata.","question.one":"Un'altra risposta…"}}`), 0o600))
+	b := mustBundle(t, dir)
+	_, ok := b.Catalog("not a tag!")
+	assert.False(t, ok)
+	assert.Equal(t, []string{"no catalog for xx"}, b.Problems("xx"))
+	assert.Nil(t, b.Missing("xx"))
+	assert.Empty(t, b.Problems("it"), "a plural form English lacks is compared with its .other")
+	missing := b.Missing("it")
+	assert.Contains(t, missing, "exit.force_quit")
+	assert.NotContains(t, missing, "exit.cancelled")
+}
+
+// Plural forms follow the language's rules, and a key with only .other
+// uses it for every count.
+func TestPluralCategory(t *testing.T) {
+	cases := []struct {
+		tag  string
+		n    int
+		want string
+	}{
+		{"ja", 1, "other"},
+		{"fr", 0, "one"},
+		{"fr", 2, "other"},
+		{"pt-BR", 0, "one"},
+		{"pt-PT", 0, "other"},
+		{"pt-PT", 1, "one"},
+		{"pt", 2, "other"},
+		{"en", 1, "one"},
+		{"en", 0, "other"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.tag, func(t *testing.T) {
+			assert.Equal(t, tc.want, pluralCategory(language.MustParse(tc.tag), tc.n), "n=%d", tc.n)
+		})
+	}
+	l := mustBundle(t).Localizer(language.English)
+	assert.Equal(t, "Another answer…", l.N("question", 1), "no .one: .other")
+}

@@ -40,6 +40,7 @@ func TestTruncateUTF8(t *testing.T) {
 }
 
 func TestEllipsize(t *testing.T) {
+	assert.Equal(t, "ab", Ellipsize("abcdef", 2), "no room for the dots: plain truncation")
 	assert.Equal(t, "short", Ellipsize("short", 10), "expected unchanged, got")
 	got := Ellipsize("🐶🐶🐶🐶🐶", 10)
 	assert.True(t, utf8.ValidString(got), "bad ellipsized value %q", got)

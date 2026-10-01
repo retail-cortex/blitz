@@ -50,9 +50,11 @@ go_library(
 go_test(
     name = "observability_test",
     srcs = [
+        "logfile_test.go",
         "logread_test.go",
         "metrics_test.go",
         "observability_test.go",
+        "span_test.go",
     ],
     embed = [":observability"],
     deps = [
@@ -60,6 +62,7 @@ go_test(
         "//pkg/redact",
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
+        "@io_opentelemetry_go_otel//:otel",
         "@io_opentelemetry_go_otel//attribute",
         "@io_opentelemetry_go_otel_sdk//trace",
         "@io_opentelemetry_go_otel_sdk//trace/tracetest",
@@ -67,5 +70,6 @@ go_test(
         "@io_opentelemetry_go_otel_sdk_metric//:metric",
         "@io_opentelemetry_go_otel_sdk_metric//metricdata",
         "@io_opentelemetry_go_otel_trace//:trace",
+        "@io_opentelemetry_go_otel_trace//noop",
     ],
 )

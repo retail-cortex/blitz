@@ -16,10 +16,12 @@ package loginitem
 
 import (
 	"encoding/xml"
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
 	goruntime "runtime"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -168,4 +170,119 @@ func TestInstallTray(t *testing.T) {
 		p, _ := TrayPath()
 		assert.Equal(t, filepath.Join(os.Getenv("HOME"), "cfg", "autostart", "blitz-tray.desktop"), p)
 	}
+}
+
+// wellFormed fails the test unless data is well-formed XML.
+func wellFormed(t *testing.T, data string) {
+	t.Helper()
+	dec := xml.NewDecoder(strings.NewReader(data))
+	for {
+		_, err := dec.Token()
+		if err == io.EOF {
+			return
+		}
+		require.NoError(t, err, "plist isn't well-formed:\n%s", data)
+	}
+}
+
+// The launchd plists are well-formed, with the program and log file escaped;
+// they're built on every OS, so they're checked on every OS.
+func TestPlists(t *testing.T) {
+	bin := `/opt/a & "b"/blitzd`
+	svc := launchdPlist(bin, "/logs/<x>.log")
+	wellFormed(t, svc)
+	assert.Contains(t, svc, "<string>"+Label+"</string>")
+	assert.Contains(t, svc, "<string>/opt/a &amp; &#34;b&#34;/blitzd</string>")
+	assert.Contains(t, svc, "<string>/logs/&lt;x&gt;.log</string>")
+	assert.Contains(t, svc, "<key>SuccessfulExit</key>", "restarted after a failure")
+
+	tray := trayPlist(bin)
+	wellFormed(t, tray)
+	assert.Contains(t, tray, "<string>"+TrayLabel+"</string>")
+	assert.Contains(t, tray, "<string>/opt/a &amp; &#34;b&#34;/blitzd</string>")
+}
+
+// The log file is under ~/.blitz, and launchd's domain is the user's GUI
+// session.
+func TestLogFileAndDomain(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	assert.Equal(t, filepath.Join(home, ".blitz", "logs", "service.log"), LogFile())
+	assert.Equal(t, "gui/"+strconv.Itoa(os.Getuid()), domain())
+}
+
+// RunSystem runs the command, and reports a failure with its output.
+func TestRunSystem(t *testing.T) {
+	if goruntime.GOOS == "windows" {
+		t.Skip("uses sh")
+	}
+	require.NoError(t, RunSystem("sh", "-c", "exit 0"))
+	err := RunSystem("sh", "-c", "echo boom; exit 3")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "sh -c echo boom; exit 3")
+	assert.Contains(t, err.Error(), ": boom")
+}
+
+// Install stops at the first system command that fails, and reports it;
+// Stop, Start and Restart report the system's error too.
+func TestInstallFailures(t *testing.T) {
+	if goruntime.GOOS != "linux" {
+		t.Skip("the systemd steps")
+	}
+	t.Setenv("HOME", t.TempDir())
+	for _, failing := range []string{"daemon-reload", "enable", "restart"} {
+		t.Run(failing, func(t *testing.T) {
+			var ran []string
+			old := RunSystem
+			RunSystem = func(name string, args ...string) error {
+				ran = append(ran, strings.Join(args, " "))
+				if strings.Contains(strings.Join(args, " "), failing) {
+					return errors.New("failed: " + failing)
+				}
+				return nil
+			}
+			t.Cleanup(func() { RunSystem = old })
+			assert.EqualError(t, Install("/b/blitzd"), "failed: "+failing)
+			assert.Contains(t, ran[len(ran)-1], failing, "nothing runs after the failure")
+		})
+	}
+}
+
+// Installing and uninstalling report an entry they can't write or remove.
+func TestInstallFileErrors(t *testing.T) {
+	if goruntime.GOOS != "linux" {
+		t.Skip("the systemd paths")
+	}
+	record(t)
+	t.Setenv("XDG_CONFIG_HOME", "")
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	// Files where the entries' directories should be.
+	require.NoError(t, os.MkdirAll(filepath.Join(home, ".config", "systemd"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(home, ".config", "systemd", "user"), nil, 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(home, ".config", "autostart"), nil, 0o644))
+	assert.Error(t, Install("/b/blitzd"), "the unit's directory can't be made")
+	assert.Error(t, InstallTray("/b/blitz-tray"), "the autostart directory can't be made")
+
+	home = t.TempDir()
+	t.Setenv("HOME", home)
+	path, err := Path()
+	require.NoError(t, err)
+	// A directory, not empty, where the unit should be.
+	require.NoError(t, os.MkdirAll(filepath.Join(path, "x"), 0o755))
+	assert.Error(t, Install("/b/blitzd"), "the unit can't be written")
+	assert.Error(t, Uninstall(), "the unit can't be removed")
+	tray, err := TrayPath()
+	require.NoError(t, err)
+	require.NoError(t, os.MkdirAll(filepath.Join(tray, "x"), 0o755))
+	assert.Error(t, UninstallTray(), "the tray's entry can't be removed")
+}
+
+// Beside is the test binary's own directory.
+func TestBeside(t *testing.T) {
+	exe, err := os.Executable()
+	require.NoError(t, err)
+	exe, err = filepath.EvalSymlinks(exe)
+	require.NoError(t, err)
+	assert.Equal(t, filepath.Dir(exe), Beside())
 }

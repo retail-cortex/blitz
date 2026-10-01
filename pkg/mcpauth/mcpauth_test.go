@@ -17,6 +17,8 @@ package mcpauth
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -29,6 +31,7 @@ import (
 	"github.com/retail-cortex/blitz/pkg/secrets"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/oauth2"
 )
 
 // oauthServers are an authorization server and an MCP server that wants
@@ -158,4 +161,165 @@ func TestParsePasted(t *testing.T) {
 	assert.Equal(t, "abc", res.Code)
 	assert.Equal(t, "xyz", res.State)
 	assert.Nil(t, parsePasted("just-a-code"))
+}
+
+// failing is a secret store whose operations fail with err.
+type failing struct{ err error }
+
+func (f failing) Kind() string               { return "failing" }
+func (f failing) Get(string) (string, error) { return "", f.err }
+func (f failing) Set(string, string) error   { return f.err }
+func (f failing) Delete(string) error        { return f.err }
+
+// The store's own failures are reported; a missing or unreadable sign-in
+// is ErrNotSignedIn, and forgetting one that's gone is fine.
+func TestStoreErrors(t *testing.T) {
+	boom := errors.New("keychain locked")
+	_, err := Load(failing{boom}, "docs")
+	assert.ErrorIs(t, err, boom)
+	assert.ErrorIs(t, Forget(failing{boom}, "docs"), boom)
+	assert.NoError(t, Forget(failing{secrets.ErrNotFound}, "docs"))
+
+	store := &secrets.Memory{}
+	for name, v := range map[string]string{"not JSON": "{", "no token": `{"client_id":"x"}`} {
+		t.Run(name, func(t *testing.T) {
+			require.NoError(t, store.Set(secretName("docs"), v))
+			_, err := Load(store, "docs")
+			assert.ErrorIs(t, err, ErrNotSignedIn)
+		})
+	}
+}
+
+// A refresh that fails is reported, and nothing is saved.
+func TestRefreshFails(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, `{"error":"invalid_grant"}`, http.StatusBadRequest)
+	}))
+	defer ts.Close()
+	store := &secrets.Memory{}
+	rec := &Record{ClientID: "c", TokenURL: ts.URL, Token: &oauth2.Token{AccessToken: "old", RefreshToken: "r", Expiry: time.Now().Add(-time.Hour)}}
+	src, err := Handler(store, "docs", rec).TokenSource(context.Background())
+	require.NoError(t, err)
+	_, err = src.Token()
+	assert.Error(t, err)
+	_, err = Load(store, "docs")
+	assert.ErrorIs(t, err, ErrNotSignedIn, "nothing saved")
+}
+
+// Authorize closes the response it's given and asks for blitz mcp login.
+func TestAuthorizeClosesBody(t *testing.T) {
+	body := &closeRecorder{Reader: strings.NewReader("x")}
+	err := NeedsLogin("docs").Authorize(context.Background(), nil, &http.Response{Body: body})
+	assert.ErrorContains(t, err, "needs signing in again")
+	assert.True(t, body.closed)
+}
+
+type closeRecorder struct {
+	io.Reader
+	closed bool
+}
+
+func (c *closeRecorder) Close() error { c.closed = true; return nil }
+
+// authorizeRedirect asks the authorization server for a code, as a browser
+// would, and returns the callback address it redirects to (not followed).
+func authorizeRedirect(t *testing.T, authURL string) string {
+	c := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	resp, err := c.Get(authURL)
+	if err != nil {
+		t.Error(err)
+		return ""
+	}
+	resp.Body.Close()
+	return resp.Header.Get("Location")
+}
+
+// get fetches u and returns its status.
+func get(t *testing.T, u string) int {
+	resp, err := http.Get(u)
+	if err != nil {
+		t.Error(err)
+		return 0
+	}
+	resp.Body.Close()
+	return resp.StatusCode
+}
+
+// The code can be pasted (the address the browser ended on); what isn't
+// an address with a code is ignored. The local callback refuses other
+// paths and a redirect without a code.
+func TestLoginPasted(t *testing.T) {
+	mcpURL, _ := oauthServers(t)
+	store := &secrets.Memory{}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	pasted := make(chan string, 2)
+	show := func(u string) {
+		loc := authorizeRedirect(t, u)
+		cb, err := url.Parse(loc)
+		assert.NoError(t, err) // not require: this runs on the client's goroutine
+		other := *cb
+		other.Path, other.RawQuery = "/elsewhere", ""
+		assert.Equal(t, http.StatusNotFound, get(t, other.String()))
+		noCode := *cb
+		noCode.RawQuery = "error=access_denied"
+		assert.Equal(t, http.StatusBadRequest, get(t, noCode.String()))
+		pasted <- "the-code-alone"
+		pasted <- loc
+	}
+	require.NoError(t, Login(ctx, store, "docs", mcpURL, show, pasted))
+	rec, err := Load(store, "docs")
+	require.NoError(t, err)
+	assert.Equal(t, "token-1", rec.Token.AccessToken)
+}
+
+// With nothing to paste from, the callback still works, and a second
+// callback is ignored.
+func TestLoginClosedPasteTwoCallbacks(t *testing.T) {
+	mcpURL, _ := oauthServers(t)
+	store := &secrets.Memory{}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	pasted := make(chan string)
+	close(pasted)
+	show := func(u string) {
+		loc := authorizeRedirect(t, u)
+		assert.Equal(t, http.StatusOK, get(t, loc))
+		assert.Equal(t, http.StatusOK, get(t, loc), "the second is answered, and dropped")
+	}
+	require.NoError(t, Login(ctx, store, "docs", mcpURL, show, pasted))
+}
+
+// Login fails when the sign-in is abandoned, can't be saved, the server
+// can't be reached, or the server needs no sign-in.
+func TestLoginFailures(t *testing.T) {
+	t.Run("abandoned", func(t *testing.T) {
+		mcpURL, _ := oauthServers(t)
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		err := Login(ctx, &secrets.Memory{}, "docs", mcpURL, func(string) { cancel() }, nil)
+		assert.Error(t, err)
+	})
+	t.Run("not saved", func(t *testing.T) {
+		mcpURL, _ := oauthServers(t)
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		browse := func(u string) { get(t, authorizeRedirect(t, u)) }
+		err := Login(ctx, failing{errors.New("locked")}, "docs", mcpURL, browse, nil)
+		assert.ErrorContains(t, err, "saving the sign-in")
+	})
+	t.Run("unreachable", func(t *testing.T) {
+		ts := httptest.NewServer(http.NotFoundHandler())
+		u := ts.URL
+		ts.Close()
+		err := Login(context.Background(), &secrets.Memory{}, "docs", u+"/mcp", func(string) {}, nil)
+		assert.Error(t, err)
+	})
+	t.Run("no OAuth", func(t *testing.T) {
+		srv := mcp.NewServer(&mcp.Implementation{Name: "test", Version: "1"}, nil)
+		ts := httptest.NewServer(mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return srv }, nil))
+		defer ts.Close()
+		err := Login(context.Background(), &secrets.Memory{}, "docs", ts.URL, func(string) {}, nil)
+		assert.ErrorContains(t, err, "needs no OAuth")
+	})
 }

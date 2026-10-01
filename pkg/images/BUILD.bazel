@@ -33,7 +33,10 @@ go_library(
 
 go_test(
     name = "images_test",
-    srcs = ["images_test.go"],
+    srcs = [
+        "clipboard_test.go",
+        "images_test.go",
+    ],
     embed = [":images"],
     deps = [
         "@com_github_stretchr_testify//assert",

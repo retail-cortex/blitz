@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-load("@rules_go//go:def.bzl", "go_library")
+load("@rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "api",
@@ -34,5 +34,15 @@ go_library(
     deps = [
         "//pkg/config",
         "//pkg/images",
+    ],
+)
+
+go_test(
+    name = "api_test",
+    srcs = ["api_test.go"],
+    embed = [":api"],
+    deps = [
+        "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//require",
     ],
 )

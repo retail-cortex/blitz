@@ -23,6 +23,7 @@ import (
 	"testing"
 
 	"github.com/retail-cortex/blitz/pkg/secrets"
+	"github.com/rrmcguinness/modenv/pkg/modenv"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -392,4 +393,104 @@ func TestPermissionRulesCheckedBeforeSaving(t *testing.T) {
 			assert.Empty(t, own.Deny, "something was saved")
 		})
 	}
+}
+
+// brokenStore is a secret store that can't be used.
+type brokenStore struct{}
+
+func (brokenStore) Kind() string               { return "broken" }
+func (brokenStore) Get(string) (string, error) { return "", errors.New("locked") }
+func (brokenStore) Set(string, string) error   { return errors.New("locked") }
+func (brokenStore) Delete(string) error        { return errors.New("locked") }
+
+// writeSettings writes the global settings file.
+func writeSettings(t *testing.T, text string) string {
+	t.Helper()
+	dir := ConfigDir("")
+	require.NoError(t, os.MkdirAll(dir, 0o700))
+	path := filepath.Join(dir, ".env.toml")
+	require.NoError(t, os.WriteFile(path, []byte(text), 0o600))
+	return path
+}
+
+// Keys: unknown providers and empty keys are refused, and the store's
+// failures are reported.
+func TestAPIKeyErrors(t *testing.T) {
+	keysEnv(t)
+	for name, f := range map[string]func() (string, error){
+		"set":    func() (string, error) { return SetAPIKey("", "", "ollama", "k") },
+		"secure": func() (string, error) { return SecureAPIKey("", "", "ollama") },
+		"remove": func() (string, error) { return RemoveAPIKey("", "", "ollama") },
+		"auth":   func() (string, error) { return SetAuth("", "", "ollama", ProviderAuth{}) },
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, err := f()
+			assert.ErrorContains(t, err, `"ollama"`)
+		})
+	}
+	_, err := SetAPIKey("", "", "openai", "  ")
+	assert.ErrorContains(t, err, "empty")
+
+	writeSettings(t, "[llm.openai]\napi_key = \"xor:zz\"\n")
+	_, err = SecureAPIKey("", "", "openai")
+	assert.ErrorContains(t, err, "obfuscated")
+
+	writeSettings(t, "[llm.openai]\napi_key = \"keychain:global/llm.openai.api_key\"\n")
+	secrets.SetDefault(brokenStore{})
+	_, err = SetAPIKey("", "", "openai", "k")
+	assert.ErrorContains(t, err, "locked")
+	_, err = RemoveAPIKey("", "", "openai")
+	assert.ErrorContains(t, err, "locked")
+	_, err = SetProvider("", "", ProviderChoice{Provider: "openai", Key: "k"})
+	assert.ErrorContains(t, err, "locked")
+	cfg, err := Load("")
+	require.NoError(t, err)
+	assert.Empty(t, cfg.LLM.OpenAI.APIKey, "a secret that can't be read leaves the key empty")
+
+	_, err = SetProvider("", "", ProviderChoice{Provider: "gemini", Auth: &ProviderAuth{Method: "telepathy"}})
+	assert.ErrorContains(t, err, "telepathy")
+}
+
+// A settings file that isn't TOML is reported by everything that reads it.
+func TestBadSettingsFile(t *testing.T) {
+	keysEnv(t)
+	writeSettings(t, "not = = toml")
+	_, err := Describe("", "")
+	assert.Error(t, err)
+	_, err = SecureAPIKey("", "", "openai")
+	assert.Error(t, err)
+	_, err = RemoveAPIKey("", "", "openai")
+	assert.Error(t, err)
+	writeSettings(t, "")
+
+	ws := t.TempDir()
+	dir := WorkspaceSettingsDir("", ws)
+	require.NoError(t, os.MkdirAll(dir, 0o700))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, ".env.toml"), []byte("[[x"), 0o600))
+	_, err = LoadWorkspace("", ws)
+	assert.ErrorContains(t, err, "the workspace's settings")
+
+	require.NoError(t, os.Remove(filepath.Join(dir, ".env.toml")))
+	require.NoError(t, os.Mkdir(filepath.Join(dir, ".env.toml"), 0o700))
+	_, _, err = ReadSettingsFile("", ws)
+	assert.Error(t, err, "the settings file is a directory")
+}
+
+// Without a home there's no settings directory; an obfuscated key is
+// decoded when loaded and reported as such.
+func TestSettingsWithoutHomeAndObfuscated(t *testing.T) {
+	keysEnv(t)
+	writeSettings(t, "[llm.openai]\napi_key = \""+modenv.EncryptSecret("sk-xor")+"\"\n")
+	assert.Equal(t, KeyObfuscated, source(t, "", "openai").KeySource)
+	cfg, err := Load("")
+	require.NoError(t, err)
+	assert.Equal(t, "sk-xor", cfg.LLM.OpenAI.APIKey)
+
+	t.Setenv("HOME", "")
+	t.Setenv("MODENV_PREFIX", "") // Load set it
+	assert.Empty(t, WorkspaceSettingsDir("", t.TempDir()))
+	_, err = Describe("", "")
+	assert.ErrorContains(t, err, "no settings directory")
+	_, _, err = ReadSettingsFile("", "")
+	assert.ErrorContains(t, err, "no settings directory")
 }

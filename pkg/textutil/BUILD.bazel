@@ -26,7 +26,10 @@ go_library(
 
 go_test(
     name = "textutil_test",
-    srcs = ["textutil_test.go"],
+    srcs = [
+        "glob_test.go",
+        "textutil_test.go",
+    ],
     embed = [":textutil"],
     deps = ["@com_github_stretchr_testify//assert"],
 )

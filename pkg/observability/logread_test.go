@@ -93,3 +93,32 @@ func TestReadLog(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, empty.Entries)
 }
+
+// A directory that can't be listed, and a log that can't be read, are
+// reported; lines that aren't JSON objects are skipped.
+func TestReadLogErrors(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "file")
+	require.NoError(t, os.WriteFile(file, nil, 0o600))
+	_, err := LogDays(file)
+	assert.Error(t, err)
+	_, err = ReadLog(file, LogQuery{})
+	assert.Error(t, err)
+
+	require.NoError(t, os.Mkdir(filepath.Join(dir, "blitz-2026-09-28.jsonl"), 0o700))
+	_, err = ReadLog(dir, LogQuery{Day: "2026-09-28"})
+	assert.Error(t, err, "the log is a directory")
+
+	writeLog(t, dir, "2026-09-29", "[1]\n{1:2}\n"+`{"time":"2026-09-29T10:00:00Z","level":"INFO","msg":"ok"}`+"\n")
+	page, err := ReadLog(dir, LogQuery{Day: "2026-09-29"})
+	require.NoError(t, err)
+	require.Len(t, page.Entries, 1)
+	assert.Equal(t, "ok", page.Entries[0].Msg)
+
+	if os.Geteuid() != 0 { // root reads anything
+		p := filepath.Join(dir, "blitz-2026-09-30.jsonl")
+		require.NoError(t, os.WriteFile(p, nil, 0))
+		_, err = ReadLog(dir, LogQuery{Day: "2026-09-30"})
+		assert.Error(t, err, "a log it can't open")
+	}
+}

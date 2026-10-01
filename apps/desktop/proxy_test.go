@@ -209,3 +209,14 @@ func TestEmptyMessage(t *testing.T) {
 		})
 	}
 }
+
+// A stream cut in the middle of a message ends with an error, not a
+// partial message.
+func TestKeepaliveCutMessage(t *testing.T) {
+	m := frame(0, `{"event":"long"}`)
+	empty, ok := emptyMessage("application/connect+json")
+	require.True(t, ok)
+	got, err := io.ReadAll(newKeepalive(io.NopCloser(bytes.NewReader(m[:9])), time.Hour, empty))
+	assert.ErrorIs(t, err, io.ErrUnexpectedEOF)
+	assert.Empty(t, got)
+}

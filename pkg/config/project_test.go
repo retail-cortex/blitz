@@ -18,6 +18,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -342,4 +343,129 @@ func TestProjectMCPJSON(t *testing.T) {
 	before := LoadProject(ws).Hash()
 	require.NoError(t, os.WriteFile(filepath.Join(ws, ".mcp.json"), []byte(`{"mcpServers": {"db": {"command": "curl evil.example"}}}`), 0o644))
 	assert.NotEqual(t, before, LoadProject(ws).Hash())
+}
+
+// writeProject writes the workspace's files.
+func writeProject(t *testing.T, ws string, files map[string]string) {
+	t.Helper()
+	for name, text := range files {
+		p := filepath.Join(ws, filepath.FromSlash(name))
+		require.NoError(t, os.MkdirAll(filepath.Dir(p), 0o755))
+		require.NoError(t, os.WriteFile(p, []byte(text), 0o644))
+	}
+}
+
+// MCP JSON files that are links, too large or not JSON are problems, not
+// errors.
+func TestProjectMCPJSONProblems(t *testing.T) {
+	ws := t.TempDir()
+	writeProject(t, ws, map[string]string{
+		"real.json":               `{"mcpServers": {}}`,
+		".agents/mcp_config.json": `{"mcpServers": `,
+	})
+	require.NoError(t, os.Symlink(filepath.Join(ws, "real.json"), filepath.Join(ws, ".mcp.json")))
+	p := LoadProject(ws)
+	require.Len(t, p.Problems, 2)
+	assert.Contains(t, p.Problems[0], "not a regular file")
+	assert.Contains(t, p.Problems[1], ".agents/mcp_config.json")
+
+	big := t.TempDir()
+	writeProject(t, big, map[string]string{".mcp.json": `{"mcpServers": {}}` + strings.Repeat(" ", maxProjectFileSize)})
+	p = LoadProject(big)
+	require.Len(t, p.Problems, 1)
+	assert.Contains(t, p.Problems[0], "larger than")
+}
+
+// Plugins to enable and permission kinds for workers wait for trust.
+func TestProjectPendingPluginsAndWorkers(t *testing.T) {
+	ws := t.TempDir()
+	writeProject(t, ws, map[string]string{".blitz/settings.toml": "[plugins]\nenable = [\"lint-kit\"]\n[workers.policy]\nallow = [\"shell\"]\n"})
+	p := LoadProject(ws)
+	var kinds []string
+	for _, it := range p.Pending {
+		kinds = append(kinds, it.Kind)
+	}
+	assert.Contains(t, kinds, ProjectPlugin)
+	assert.Contains(t, kinds, ProjectWorkerAllow)
+	cfg := DefaultConfig()
+	p.ApplyTrusted(cfg)
+	assert.Contains(t, cfg.Plugins.Enable, "lint-kit")
+	assert.Contains(t, cfg.Workers.Policy.Allow, "shell")
+}
+
+// Tightening that isn't stricter is reported as ignored; stricter limits,
+// denied skill tools and a lower worker cost apply.
+func TestProjectTighteningNotStricter(t *testing.T) {
+	ws := t.TempDir()
+	writeProject(t, ws, map[string]string{".blitz/settings.toml": "[skills.policy]\nmin_hitl_tier = 1\ndeny_tools = [\"web_fetch\"]\n[workers.policy]\nmax_cost_usd = 5.0\n"})
+	cfg := DefaultConfig()
+	cfg.Skills.Policy.MinHITLTier = 2
+	cfg.Workers.Policy.MaxCostUSD = 1
+	p := LoadProject(ws)
+	p.ApplyTightening(cfg)
+	assert.Equal(t, 2, cfg.Skills.Policy.MinHITLTier)
+	assert.Contains(t, cfg.Skills.Policy.DenyTools, "web_fetch")
+	assert.Equal(t, 1.0, cfg.Workers.Policy.MaxCostUSD)
+	var reasons []string
+	for _, it := range p.Ignored {
+		if it.Reason == ReasonNotStricter {
+			reasons = append(reasons, it.Key)
+		}
+	}
+	assert.ElementsMatch(t, []string{"skills.policy.min_hitl_tier", "workers.policy.max_cost_usd"}, reasons)
+
+	cfg = DefaultConfig()
+	cfg.Workers.Policy.MaxCostUSD = 10
+	LoadProject(ws).ApplyTightening(cfg)
+	assert.Equal(t, 5.0, cfg.Workers.Policy.MaxCostUSD, "lower: applied")
+}
+
+// Trusted models need a provider the user has set up; the user's own
+// choices win, and agent models start a map when there was none.
+func TestProjectTrustedModels(t *testing.T) {
+	ws := t.TempDir()
+	writeProject(t, ws, map[string]string{".blitz/settings.toml": "[blitz]\ndefault_model = \"azure/x\"\n[agent_models]\nqa = \"openai/gpt\"\nreview = \"bedrock/claude\"\n"})
+	cfg := DefaultConfig()
+	cfg.LLM.Provider = "gemini"
+	cfg.LLM.OpenAI.APIKey = "sk"
+	cfg.AgentModels = nil
+	p := LoadProject(ws)
+	p.ApplyTrusted(cfg)
+	assert.Empty(t, cfg.Blitz.DefaultModel, "azure isn't set up")
+	assert.Equal(t, map[string]string{"qa": "openai/gpt"}, cfg.AgentModels)
+	var ignored []string
+	for _, it := range p.Ignored {
+		if it.Reason == ReasonProvider {
+			ignored = append(ignored, it.Value)
+		}
+	}
+	assert.ElementsMatch(t, []string{"azure/x", "bedrock/claude"}, ignored)
+}
+
+// A provider is ready when it's the one configured or has its key (or,
+// for Bedrock and Azure, its settings).
+func TestProviderReady(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.LLM.Provider = "gemini"
+	cfg.LLM.Gemini.APIKey, cfg.LLM.Anthropic.APIKey, cfg.LLM.OpenAI.APIKey = "", "", ""
+	cfg.LLM.Bedrock.Model, cfg.LLM.Bedrock.Region = "", ""
+	cfg.LLM.Azure.Resource, cfg.LLM.Azure.BaseURL, cfg.LLM.Azure.AnthropicBaseURL = "", "", ""
+	for ref, want := range map[string]bool{
+		"model-only": true, "gemini/x": true, "google/x": false, "anthropic/x": false,
+		"openai/x": false, "bedrock/x": false, "azure/x": false, "mystery/x": false,
+	} {
+		t.Run(ref, func(t *testing.T) {
+			assert.Equal(t, want, cfg.providerReady(ref))
+		})
+	}
+	cfg.LLM.Provider = "openai"
+	cfg.LLM.Gemini.APIKeyCommand = "pass gemini"
+	cfg.LLM.Anthropic.APIKey = "k"
+	cfg.LLM.OpenAI.APIKeyCommand = "x"
+	cfg.LLM.Bedrock.Region = "us-east-1"
+	cfg.LLM.Azure.BaseURL = "https://x"
+	for _, ref := range []string{"google/x", "anthropic/x", "bedrock/x", "azure/x"} {
+		assert.True(t, cfg.providerReady(ref), ref)
+	}
+	assert.Equal(t, []string{"a"}, appendNew([]string{"a"}, "a"))
 }

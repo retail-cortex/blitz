@@ -262,3 +262,67 @@ func TestReadClipboardIsReplaceable(t *testing.T) {
 	_, err := ReadClipboard(context.Background())
 	assert.ErrorIs(t, err, ErrNoClipboardImage, "%v", err)
 }
+
+// Summary uses the data's size, or Size when the data is elsewhere.
+func TestSummary(t *testing.T) {
+	img := &Image{Name: "a.png", Width: 2, Height: 3, Data: make([]byte, 2048)}
+	assert.Equal(t, "a.png 2×3, 2 KB", img.Summary())
+	img = &Image{Name: "b.png", Width: 2, Height: 3, Size: 3 << 20}
+	assert.Equal(t, "b.png 2×3, 3.0 MB", img.Summary())
+}
+
+// A file that looks like a PNG but whose header is broken is refused.
+func TestPrepareBrokenHeader(t *testing.T) {
+	data := append([]byte("\x89PNG\r\n\x1a\n"), make([]byte, 16)...)
+	_, err := Prepare("bad.png", data, Options{})
+	assert.ErrorContains(t, err, "unreadable image")
+}
+
+// The store refuses a missing directory, a directory it can't make, and
+// images it can't name; Prune with no age, or over a missing directory.
+func TestStoreErrors(t *testing.T) {
+	_, err := OpenStore("")
+	assert.Error(t, err, "no directory")
+	file := filepath.Join(t.TempDir(), "file")
+	require.NoError(t, os.WriteFile(file, nil, 0o600))
+	_, err = OpenStore(filepath.Join(file, "images"))
+	assert.Error(t, err, "a file where the directory should be")
+
+	dir := filepath.Join(t.TempDir(), "images")
+	s, err := OpenStore(dir)
+	require.NoError(t, err)
+	assert.Equal(t, dir, s.Dir())
+	assert.Error(t, s.Put(&Image{MIME: "image/bmp", SHA256: strings.Repeat("a", 64)}), "unsupported type")
+	assert.Error(t, s.Put(&Image{MIME: "image/png", SHA256: "../x"}), "not a hash")
+
+	n, err := s.Prune(0)
+	assert.NoError(t, err)
+	assert.Zero(t, n, "no age: nothing pruned")
+
+	// A directory where an image should be can't be read.
+	sha := strings.Repeat("b", 64)
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, sha+".png", "x"), 0o700))
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, sha+".jpg", "x"), 0o700))
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, sha+".gif", "x"), 0o700))
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, sha+".webp", "x"), 0o700))
+	_, _, err = s.Get(URIScheme + sha)
+	assert.Error(t, err)
+	assert.NotErrorIs(t, err, os.ErrNotExist)
+
+	require.NoError(t, os.RemoveAll(dir))
+	_, err = s.Prune(time.Hour)
+	assert.Error(t, err, "the directory is gone")
+	img, err := Prepare("a.png", pngBytes(t, 4, 4), Options{})
+	require.NoError(t, err)
+	assert.Error(t, s.Put(img), "the directory is gone")
+}
+
+// Expand skips nil contents, and names an unnamed missing image "image".
+func TestExpandNilAndUnnamed(t *testing.T) {
+	missing := &Image{MIME: "image/png", SHA256: strings.Repeat("1", 64)}
+	in := []*genai.Content{nil, {Role: genai.RoleUser, Parts: []*genai.Part{Part(missing)}}}
+	assert.True(t, HasRefs(in))
+	out := Expand(in, nil)
+	assert.Nil(t, out[0])
+	assert.Equal(t, "[image is no longer available]", out[1].Parts[0].Text)
+}

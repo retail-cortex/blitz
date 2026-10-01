@@ -98,10 +98,13 @@ func SetDefault(s Store) {
 
 type keychain struct{}
 
+// security is the Keychain's command-line tool (a variable for tests).
+var security = "/usr/bin/security"
+
 func (keychain) Kind() string { return "macOS Keychain" }
 
 func (keychain) Get(name string) (string, error) {
-	out, err := exec.Command("/usr/bin/security", "find-generic-password", "-s", Service, "-a", name, "-w").Output()
+	out, err := exec.Command(security, "find-generic-password", "-s", Service, "-a", name, "-w").Output()
 	if err != nil {
 		var exit *exec.ExitError
 		if errors.As(err, &exit) && exit.ExitCode() == 44 { // errSecItemNotFound
@@ -115,7 +118,7 @@ func (keychain) Get(name string) (string, error) {
 // Set writes through `security -i`, the command on stdin: the secret
 // never appears in a process's arguments. -X takes it hex-encoded.
 func (keychain) Set(name, value string) error {
-	cmd := exec.Command("/usr/bin/security", "-i")
+	cmd := exec.Command(security, "-i")
 	cmd.Stdin = strings.NewReader(fmt.Sprintf("add-generic-password -U -s %s -a %s -l %s -X %s\n",
 		quote(Service), quote(name), quote("Blitz: "+name), hex.EncodeToString([]byte(value))))
 	var out bytes.Buffer
@@ -127,7 +130,7 @@ func (keychain) Set(name, value string) error {
 }
 
 func (keychain) Delete(name string) error {
-	err := exec.Command("/usr/bin/security", "delete-generic-password", "-s", Service, "-a", name).Run()
+	err := exec.Command(security, "delete-generic-password", "-s", Service, "-a", name).Run()
 	var exit *exec.ExitError
 	if errors.As(err, &exit) && exit.ExitCode() == 44 {
 		return nil // already gone

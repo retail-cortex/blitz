@@ -37,6 +37,7 @@ go_test(
     srcs = [
         "importer_test.go",
         "plugins_test.go",
+        "store_test.go",
     ],
     embed = [":plugins"],
     deps = [

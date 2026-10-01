@@ -15,6 +15,8 @@
 package tray
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/retail-cortex/blitz/pkg/i18n"
@@ -78,4 +80,31 @@ func TestEnvLanguages(t *testing.T) {
 func TestParseAppleLanguages(t *testing.T) {
 	assert.Equal(t, []string{"en-CA", "fr", "es-419"}, parseAppleLanguages("(\n    \"en-CA\",\n    fr,\n    \"es-419\"\n)\n"))
 	assert.Empty(t, parseAppleLanguages(""))
+}
+
+// A language that isn't one is skipped.
+func TestLanguageSkipsUnknown(t *testing.T) {
+	b, _ := i18n.NewBundle()
+	assert.Equal(t, "es", Language(b, nil, []string{"!!!", "es"}).String())
+}
+
+// SetupLocale reads the app's language from ~/.blitz/desktop.json and
+// catalogs from ui.locales_dir.
+func TestSetupLocale(t *testing.T) {
+	old := i18n.Current()
+	t.Cleanup(func() { i18n.SetCurrent(old) })
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("MODENV_PREFIX", "")
+	require.NoError(t, os.MkdirAll(filepath.Join(home, ".blitz", "locales"), 0o700))
+	require.NoError(t, os.WriteFile(filepath.Join(home, ".blitz", ".env.toml"), []byte("[ui]\nlocales_dir = \"~/.blitz/locales\"\n"), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(home, ".blitz", "desktop.json"), []byte(`{"language":"es"}`), 0o600))
+	SetupLocale()
+	assert.Equal(t, "es", i18n.Current().Tag().String())
+}
+
+// The system's languages come from the environment (and macOS's list).
+func TestSystemLanguages(t *testing.T) {
+	t.Setenv("LANGUAGE", "fr_CA:es")
+	assert.Contains(t, SystemLanguages(), "fr_CA")
 }
