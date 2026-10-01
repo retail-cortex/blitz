@@ -39,6 +39,10 @@ var dist embed.FS
 // version is set when a release is built (the git tag).
 var version = "dev"
 
+// maxWindowSize is the window's largest width and height: more than any
+// screen (8K is 7680 wide).
+const maxWindowSize = 16384
+
 func main() {
 	app := &App{socket: socket.DefaultSocket(), prefs: &prefsStore{path: config.ExpandHome("~/.blitz/desktop.json")}}
 	app.links.emit = showLink
@@ -51,6 +55,12 @@ func main() {
 		Height:    820,
 		MinWidth:  720,
 		MinHeight: 480,
+		// No maximum, in effect. Left at 0, Wails caps a Linux window at
+		// the monitor it guesses it's on as it opens, which on Wayland
+		// (where GDK doesn't know) can be another one: maximised on a
+		// larger second screen, the window stopped at the laptop's size.
+		MaxWidth:  maxWindowSize,
+		MaxHeight: maxWindowSize,
 		// The page draws the whole window, title bar area included. The
 		// window is translucent (the desktop shows through, blurred) and
 		// the page's glass surfaces sit on it; with transparency off in
