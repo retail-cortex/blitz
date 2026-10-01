@@ -8,6 +8,7 @@ Blitz is a coding agent built for speed and focus: terse output, plain status ma
 | | |
 |---|---|
 | [Performance](performance.md) | Startup, memory, size, and the design choices behind them |
+| [Security log](security-log.md) | Security problems found and fixed, and the known gaps |
 | [Roadmap](roadmap.md) | What was built, in order, and why |
 | [Specifications](specs/_index.md) | Every requirement, numbered and traced to code and tests |
 | [History](history.md) | The port from Python, and how the two compared |

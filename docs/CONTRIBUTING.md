@@ -6,7 +6,7 @@ Thanks for helping. This page is how to get a change into Blitz: setting up, the
 
 - **Bugs**: open an issue with what you ran, what happened and what you expected, and the output of `blitz doctor`. `doctor`, `--help` and CLI errors stay in English so they can be shared.
 - **Features**: open an issue first. Blitz closes the gaps it already knows about before adding features (the [backlog](content/about/specs/spec_backlog_026.md) and the [parity gaps](content/about/specs/spec_parity_027.md)), and every feature is specified before it's built: a new requirement in the spec it extends, or a new spec.
-- **Security problems**: don't open a public issue. Report them privately through the repository's **Security** tab (**Report a vulnerability**).
+- **Security problems**: don't open a public issue. Report them privately through the repository's **Security** tab (**Report a vulnerability**). Fixed problems, and known gaps, are recorded in the [security log](https://retail-cortex.github.io/blitz/about/security-log/) (`docs/content/about/security-log.md`); a fix adds its entry.
 
 ## Set up
 

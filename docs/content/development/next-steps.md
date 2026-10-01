@@ -5,7 +5,25 @@ weight: 20
 
 Written 2026-09-24 at commit `7e211697` on `main`; updated 2026-09-25, 2026-09-26 and 2026-09-27. On 2026-09-26 the code moved to `github.com/retail-cortex/blitz` with a fresh history (initial commit `53f8c53`): the commit hashes below, and the `python-final` and `v0.1.0` tags, exist only in the former repository, `rmcguinness/code_puppy`. Read this first when resuming. [the roadmap](../about/roadmap.md) has the detail behind each finished item, and [Manual verification](manual-verification.md) has the checks that need a person.
 
-## Resume here (2026-09-27, end of day)
+## Resume here (2026-10-01)
+
+**`main` is green in CI** (run `36841190165` on `8c31870`: Linux, macOS and the reproducible job); the run on `904a46a` was in progress when this was written. Since 2026-09-30:
+
+- **Coverage** went from 76.5% to 94.9% of the Go code on Linux, with the floor at 94%, and the page's TypeScript is measured (17% of lines and branches; floor in `vite.config.ts`). The work found and fixed about twenty bugs, logged in the commits and, for the security ones, in the [security log](../about/security-log.md).
+- **Tests** pass without an OS sandbox (`configtest.RunTools`, `BLITZ_SANDBOX_SHELL=auto` in `.bazelrc`), with test sizes that fit and the big Go suites in shards.
+- **Security**: the sandbox is required on Linux, `blitz security fix-apparmor` and the desktop's **Allow bubblewrap** lift AppArmor's restriction for bwrap alone, ADC is shared with commands only on request, the `ant` sign-in is hidden, and a sandbox escape through the ADC copies' sweep is fixed (SEC-2026-08).
+- **Desktop**: install the `blitz` command from Settings, make a folder a git repository from Changes, a readable "/" menu, a white tray bolt, no maximum window size.
+
+**Next, in order:**
+
+1. On Ubuntu 24.04 with the AppArmor restriction on: `blitz security fix-apparmor`, then the desktop's notice and **Allow bubblewrap** (manual verification, *The sandbox required on Linux* and *Fixing it*). Neither has run against a real AppArmor yet.
+2. The `.deb` should depend on `bubblewrap` (or recommend it) now that Linux requires the sandbox; today the install notes ask for it.
+3. Pin the Linux jobs to `ubuntu-24.04` before GitHub moves `ubuntu-latest` to Ubuntu 26 (2026-10-19).
+4. The security log's open items, SEC-2026-O1 (`fix-apparmor` piping the profile to root) first.
+5. Tests for the page's components (its coverage is 17%), and Go branch coverage (gobco), suggested but not set up.
+6. Smaller: `blitz workers runs <unknown>` says "hasn't run yet" rather than that there's no such worker; `TestEngineCapsParallelToolCalls` (four 0.3 s sleeps within 1.1 s) failed once on a loaded machine.
+
+## Earlier: 2026-09-27, end of day
 
 **The first release candidate, `v0.1.0-rc.1`, is ready to tag but blocked on GitHub billing.**
 
@@ -21,7 +39,7 @@ Written 2026-09-24 at commit `7e211697` on `main`; updated 2026-09-25, 2026-09-2
 4. `sign_macos.sh`: `hdiutil create` is deprecated in favour of `diskutil image`.
 5. The owner may enable **private vulnerability reporting** (Settings › Security); `docs/CONTRIBUTING.md` already points reporters there.
 6. proto-gen-md-diagrams (the owner maintains it): upstream fixes for escaping comments, skipping the license header and optional front matter would let `docs/api_pages.sh` go. The owner is checking the repository's state first.
-7. Coverage: 94.9% of the Go code on Linux (floor 94%); the page's TypeScript 17% of lines and branches, its components untested. The lowest Go packages are `pkg/loginitem` 76.9% and `apps/desktop` 80.4%, whose rest is macOS and Windows code and the Wails window runtime.
+7. Coverage: see *Resume here (2026-10-01)* above.
 
 ## State
 

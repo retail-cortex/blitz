@@ -54,7 +54,7 @@ blitz doctor                    # checks the settings, credentials, sandbox, MCP
 
 `llm.provider` picks the provider: `gemini` (the default), `anthropic`, `openai` or `ollama`. A key can also come from the environment (`GEMINI_API_KEY`, `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`). Settings are read only from `~/.blitz`, never from the project, so a cloned repository can't redirect your key or turn off approvals. [Configuration](../guide/configuration.md) has the details.
 
-On Linux, install `bubblewrap` for the shell sandbox; `blitz doctor` says whether it works.
+**On Linux, the shell sandbox is required.** Install bubblewrap (`sudo apt install bubblewrap`) and run `blitz security`: it says whether bubblewrap runs. On Ubuntu 24.04 and later, AppArmor restricts the user namespaces it needs; `blitz security fix-apparmor` (or **Allow bubblewrap** in the desktop app) installs an AppArmor profile that lets bwrap alone have them, asking for your password once. Until the sandbox works, workspaces don't open; to run the agent's commands unsandboxed instead, set `[sandbox] shell = "auto"` in `~/.blitz/.env.toml`.
 
 ## First run
 

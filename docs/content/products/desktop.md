@@ -13,6 +13,8 @@ Blitz's desktop app is a window onto the [service](service.md), laid out like an
 
 From source: `bazel build //apps/desktop/packaging:Blitz.app` (macOS) or `:deb` (Linux); see [building](../development/building.md).
 
+**On Linux, the shell sandbox is required.** Install bubblewrap (`sudo apt install bubblewrap`) and the app's Settings › Service says whether bubblewrap runs. On Ubuntu 24.04 and later, AppArmor restricts the user namespaces it needs; `blitz security fix-apparmor` (or **Allow bubblewrap** in the desktop app) installs an AppArmor profile that lets bwrap alone have them, asking for your password once. Until the sandbox works, workspaces don't open; to run the agent's commands unsandboxed instead, set `[sandbox] shell = "auto"` in `~/.blitz/.env.toml`. A workspace that didn't open for want of it shows the same button above it, and the service restarts once it's fixed.
+
 ### Chromebooks (ChromeOS's Linux development environment)
 
 The Linux `.deb` runs in ChromeOS's Linux container (Crostini): `amd64` on Intel Chromebooks such as the Pixelbook, `arm64` on ARM ones. It hasn't been tested there yet; reports are welcome.
