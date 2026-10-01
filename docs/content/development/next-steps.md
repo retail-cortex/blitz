@@ -12,16 +12,15 @@ Written 2026-09-24 at commit `7e211697` on `main`; updated 2026-09-25, 2026-09-2
 - **Coverage** went from 76.5% to 94.9% of the Go code on Linux, with the floor at 94%, and the page's TypeScript is measured (17% of lines and branches; floor in `vite.config.ts`). The work found and fixed about twenty bugs, logged in the commits and, for the security ones, in the [security log](../about/security-log.md).
 - **Tests** pass without an OS sandbox (`configtest.RunTools`, `BLITZ_SANDBOX_SHELL=auto` in `.bazelrc`), with test sizes that fit and the big Go suites in shards.
 - **Security**: the sandbox is required on Linux, `blitz security fix-apparmor` and the desktop's **Allow bubblewrap** lift AppArmor's restriction for bwrap alone, ADC is shared with commands only on request, the `ant` sign-in is hidden, and a sandbox escape through the ADC copies' sweep is fixed (SEC-2026-08).
-- **Desktop**: install the `blitz` command from Settings, make a folder a git repository from Changes, a readable "/" menu, a white tray bolt, no maximum window size.
+- **Desktop**: the `.deb` depends on `bubblewrap`; install the `blitz` command from Settings, make a folder a git repository from Changes, a readable "/" menu, a white tray bolt, no maximum window size.
 
 **Next, in order:**
 
 1. On Ubuntu 24.04 with the AppArmor restriction on: `blitz security fix-apparmor`, then the desktop's notice and **Allow bubblewrap** (manual verification, *The sandbox required on Linux* and *Fixing it*). Neither has run against a real AppArmor yet.
-2. The `.deb` should depend on `bubblewrap` (or recommend it) now that Linux requires the sandbox; today the install notes ask for it.
-3. Pin the Linux jobs to `ubuntu-24.04` before GitHub moves `ubuntu-latest` to Ubuntu 26 (2026-10-19).
-4. The security log's open items, SEC-2026-O1 (`fix-apparmor` piping the profile to root) first.
-5. Tests for the page's components (its coverage is 17%), and Go branch coverage (gobco), suggested but not set up.
-6. Smaller: `blitz workers runs <unknown>` says "hasn't run yet" rather than that there's no such worker; `TestEngineCapsParallelToolCalls` (four 0.3 s sleeps within 1.1 s) failed once on a loaded machine.
+2. Pin the Linux jobs to `ubuntu-24.04` before GitHub moves `ubuntu-latest` to Ubuntu 26 (2026-10-19).
+3. The security log's open items, SEC-2026-O1 (`fix-apparmor` piping the profile to root) first.
+4. Tests for the page's components (its coverage is 17%), and Go branch coverage (gobco), suggested but not set up.
+5. Smaller: `blitz workers runs <unknown>` says "hasn't run yet" rather than that there's no such worker; `TestEngineCapsParallelToolCalls` (four 0.3 s sleeps within 1.1 s) failed once on a loaded machine.
 
 ## Earlier: 2026-09-27, end of day
 

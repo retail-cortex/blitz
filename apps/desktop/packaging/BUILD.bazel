@@ -200,8 +200,11 @@ pkg_deb(
     }),
     data = ":deb_data",
     # 2.40 is the first WebKitGTK that hands the app a request's body
-    # (the webkit2_41 web view, apps/desktop/BUILD.bazel).
+    # (the webkit2_41 web view, apps/desktop/BUILD.bazel). bubblewrap is
+    # the sandbox for the agent's commands, which Linux requires
+    # (sandbox.shell defaults to "required" there).
     depends = [
+        "bubblewrap",
         "libgtk-3-0t64 | libgtk-3-0",
         "libwebkit2gtk-4.1-0 (>= 2.40)",
     ],
