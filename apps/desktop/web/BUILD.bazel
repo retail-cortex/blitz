@@ -77,6 +77,24 @@ vitest_bin.vitest_test(
     data = _inputs,
 )
 
+# The same tests with coverage of the page's lines and branches, failing
+# below the thresholds in vite.config.ts.
+vitest_bin.vitest_test(
+    name = "coverage",
+    args = [
+        "run",
+        "--coverage",
+    ],
+    chdir = package_name(),
+    data = _inputs,
+    # As for the page: Vite resolves the sources to their real paths, which
+    # the sandbox's symlinks lead outside of, and coverage then matches none.
+    # Nor the launcher's file system patches, which keep paths in the
+    # runfiles tree while V8 reports the real ones.
+    patch_node_fs = False,
+    tags = ["no-sandbox"],
+)
+
 tsc_bin.tsc_test(
     name = "typecheck",
     args = ["--noEmit"],
