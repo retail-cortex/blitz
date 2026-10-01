@@ -18,9 +18,11 @@ import (
 	"context"
 	"io"
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestUsageErrors(t *testing.T) {
@@ -57,4 +59,14 @@ func TestLicense(t *testing.T) {
 	}
 	code := run(context.Background(), []string{"--license=bogus"})
 	assert.Equal(t, exitUsage, code, "--license=bogus: exit %d", code)
+}
+
+// A service that can't start exits with 1.
+func TestFailureExitCode(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("MODENV_PREFIX", "")
+	conf := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(conf, ".env.toml"), []byte("[blitz\n"), 0o600))
+	code := run(context.Background(), []string{"--config", conf, "--socket", filepath.Join(t.TempDir(), "s.sock")})
+	assert.Equal(t, exitFailure, code, "blitzd with bad settings: exit %d", code)
 }

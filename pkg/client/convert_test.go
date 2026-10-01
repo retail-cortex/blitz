@@ -29,3 +29,84 @@ func TestNoticeFromTheService(t *testing.T) {
 	require.True(t, ok)
 	assert.Equal(t, &api.Notice{Text: "Couldn't save this message", Error: true}, got.Notice)
 }
+
+// Each typed error the service reports comes back as api's error, with
+// its data; an unknown reason keeps the service's message.
+func TestErrorsFromTheService(t *testing.T) {
+	for reason, check := range map[string]func(*testing.T, error){
+		"UNKNOWN_AGENT": func(t *testing.T, err error) {
+			var e *api.UnknownAgentError
+			require.ErrorAs(t, err, &e)
+			assert.Equal(t, "v", e.Name)
+		},
+		"RESUME_FAILED": func(t *testing.T, err error) {
+			var e *api.ResumeError
+			assert.ErrorAs(t, err, &e)
+		},
+		"UNKNOWN_SETTING": func(t *testing.T, err error) {
+			var e *api.UnknownSettingError
+			require.ErrorAs(t, err, &e)
+			assert.Equal(t, "v", e.Key)
+		},
+		"PROMPT_BLOCKED": func(t *testing.T, err error) {
+			var e *api.BlockedError
+			require.ErrorAs(t, err, &e)
+			assert.Equal(t, "v", e.Reason)
+		},
+		"UNKNOWN_RUN": func(t *testing.T, err error) {
+			assert.ErrorIs(t, err, api.ErrUnknownRun)
+			assert.EqualError(t, err, "the message", "the service's message")
+		},
+		"SOMETHING_NEW": func(t *testing.T, err error) {
+			assert.EqualError(t, err, "the message")
+		},
+	} {
+		t.Run(reason, func(t *testing.T) {
+			err := errorFromInfo(&pb.ErrorInfo{Reason: reason, Message: "the message", Metadata: map[string]string{"name": "v", "key": "v", "reason": "v"}})
+			check(t, err)
+		})
+	}
+	assert.NoError(t, errorFromInfo(nil))
+}
+
+// Messages the service leaves out convert to zero values, and every
+// field it sends arrives.
+func TestConversions(t *testing.T) {
+	assert.Equal(t, api.SessionInfo{}, session(nil))
+	assert.Equal(t, api.Usage{}, usage(nil))
+	assert.Equal(t, api.ModelSettingsInfo{}, modelSettingsInfo(nil))
+	assert.Equal(t, api.TaskInfo{}, taskInfo(nil))
+	assert.Equal(t, api.ProjectSettings{State: api.TrustNone}, projectSettings(nil))
+	assert.EqualError(t, saved(&pb.Saved{Path: "p", Error: "read-only"}).Err, "read-only")
+
+	sk := skill(&pb.SkillInfo{Name: "s", Tools: []*pb.SkillTool{{Name: "t"}}, Scripts: []*pb.SkillScript{{Name: "run.py", Language: "python"}}})
+	require.Len(t, sk.Tools, 1)
+	require.Len(t, sk.Scripts, 1)
+	assert.Equal(t, "python", sk.Scripts[0].Language)
+
+	_, ok := event(&pb.TurnEvent{Kind: &pb.TurnEvent_Accepted{Accepted: &pb.Accepted{}}})
+	assert.False(t, ok, "not a model event")
+
+	for k, want := range map[pb.ActionKind]api.ActionKind{
+		pb.ActionKind_ACTION_KIND_COMMAND:     api.ActionCommand,
+		pb.ActionKind_ACTION_KIND_WRITE:       api.ActionWrite,
+		pb.ActionKind_ACTION_KIND_DELETE:      api.ActionDelete,
+		pb.ActionKind_ACTION_KIND_NETWORK:     api.ActionNetwork,
+		pb.ActionKind_ACTION_KIND_MCP:         api.ActionMCP,
+		pb.ActionKind_ACTION_KIND_UNSPECIFIED: "",
+	} {
+		t.Run(k.String(), func(t *testing.T) {
+			assert.Equal(t, want, actionKind(k))
+		})
+	}
+	for d, want := range map[api.Decision]pb.Decision{
+		api.DecisionOnce:    pb.Decision_DECISION_ONCE,
+		api.DecisionSession: pb.Decision_DECISION_SESSION,
+		api.DecisionAlways:  pb.Decision_DECISION_ALWAYS,
+		api.DecisionDeny:    pb.Decision_DECISION_DENY,
+	} {
+		t.Run(d.String(), func(t *testing.T) {
+			assert.Equal(t, want, decisionMsg(d))
+		})
+	}
+}

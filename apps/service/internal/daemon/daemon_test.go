@@ -223,3 +223,81 @@ func TestWorkspacesKeepTheirOwnSettings(t *testing.T) {
 	assert.Equal(t, 3, count(one))
 	assert.Equal(t, 2, count(two))
 }
+
+// The service doesn't start without its configuration or its record of
+// workers, and listens on the default socket ($BLITZ_SOCKET) when given
+// none.
+func TestRunFailsWithoutItsFiles(t *testing.T) {
+	for name, tc := range map[string]struct {
+		settings, workers string
+		want              string
+	}{
+		"bad settings":       {settings: "[blitz\n", want: "failed to load configuration"},
+		"bad workers record": {workers: "{", want: "workers.json"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			home := t.TempDir()
+			t.Setenv("HOME", home)
+			t.Setenv("MODENV_PREFIX", "")
+			sock := filepath.Join(t.TempDir(), "s.sock")
+			t.Setenv("BLITZ_SOCKET", sock)
+			dir := filepath.Join(home, ".blitz")
+			require.NoError(t, os.MkdirAll(dir, 0o700))
+			if tc.settings != "" {
+				require.NoError(t, os.WriteFile(filepath.Join(dir, ".env.toml"), []byte(tc.settings), 0o600))
+			}
+			if tc.workers != "" {
+				require.NoError(t, os.WriteFile(filepath.Join(dir, "workers.json"), []byte(tc.workers), 0o600))
+			}
+			err := Run(context.Background(), Options{})
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), tc.want)
+			assert.NoFileExists(t, sock, "it listened")
+		})
+	}
+}
+
+// A workspace whose own settings don't load fails to open, as
+// OPEN_FAILED; the service goes on serving the others.
+func TestWorkspaceWithBadSettings(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("MODENV_PREFIX", "")
+	for _, k := range []string{"GEMINI_API_KEY", "GOOGLE_API_KEY", "OPENAI_API_KEY", "ANTHROPIC_API_KEY", "LLM_PROVIDER"} {
+		t.Setenv(k, "")
+	}
+	t.Chdir(t.TempDir())
+	ws := t.TempDir()
+	settings := config.WorkspaceSettingsDir("", ws)
+	require.NoError(t, os.MkdirAll(settings, 0o700))
+	require.NoError(t, os.WriteFile(filepath.Join(settings, ".env.toml"), []byte("[blitz\n"), 0o600))
+	dir, err := os.MkdirTemp("/tmp", "bd") // socket paths must be short
+	require.NoError(t, err)
+	t.Cleanup(func() { os.RemoveAll(dir) })
+	sock := filepath.Join(dir, "s.sock")
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- Run(ctx, Options{Socket: sock}) }()
+	t.Cleanup(func() { cancel(); <-done })
+	require.Eventually(t, func() bool { return socket.Running(sock) }, 10*time.Second, 20*time.Millisecond, "service didn't start")
+
+	c := pb.NewWorkspaceServiceClient(socket.Client(sock), socket.BaseURL)
+	_, err = c.ListAgents(context.Background(), connect.NewRequest(&pb.ListAgentsRequest{Workspace: ws}))
+	var ce *connect.Error
+	require.ErrorAs(t, err, &ce)
+	assert.Equal(t, connect.CodeFailedPrecondition, ce.Code())
+	_, err = c.ListAgents(context.Background(), connect.NewRequest(&pb.ListAgentsRequest{Workspace: t.TempDir()}))
+	assert.NoError(t, err, "another workspace")
+}
+
+// The diagnostic log's folder is the configured one, or none when logging
+// is off.
+func TestLogDir(t *testing.T) {
+	t.Setenv("HOME", "/home/u")
+	for level, want := range map[string]string{"info": "/home/u/logs", "off": "", "nonsense": ""} {
+		t.Run(level, func(t *testing.T) {
+			cfg := config.DefaultConfig()
+			cfg.Log.Level, cfg.Log.Dir = level, "~/logs"
+			assert.Equal(t, want, logDir(cfg))
+		})
+	}
+}

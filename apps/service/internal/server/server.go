@@ -33,6 +33,7 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/retail-cortex/blitz/pkg/engine"
+	"github.com/retail-cortex/blitz/pkg/engine/tools"
 	"github.com/retail-cortex/blitz/pkg/engine/workers"
 	"github.com/retail-cortex/blitz/pkg/images"
 	pb "github.com/retail-cortex/blitz/proto/blitz/v1"
@@ -336,6 +337,8 @@ func toAPI(err error) error {
 		{api.ErrInvalidAgency, connect.CodeInvalidArgument, "INVALID_AGENCY"},
 		{api.ErrUndoConflict, connect.CodeFailedPrecondition, "UNDO_CONFLICT"},
 		{api.ErrNothingToUndo, connect.CodeFailedPrecondition, "NOTHING_TO_UNDO"},
+		// Workspace.Undo returns the checkpoints' own error for it.
+		{tools.ErrNothingToUndo, connect.CodeFailedPrecondition, "NOTHING_TO_UNDO"},
 		{api.ErrSteerTooLate, connect.CodeFailedPrecondition, "STEER_TOO_LATE"},
 		{api.ErrSessionBusy, connect.CodeFailedPrecondition, "SESSION_BUSY"},
 		{api.ErrNotRewindPoint, connect.CodeInvalidArgument, "NOT_REWIND_POINT"},

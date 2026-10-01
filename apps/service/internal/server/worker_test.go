@@ -39,6 +39,13 @@ import (
 // with replies, and returns a worker client for it.
 func serveWorkers(t *testing.T, rescan time.Duration, replies ...*genai.Content) (pb.WorkerServiceClient, *Server) {
 	t.Helper()
+	return serveScheduler(t, rescan, true, replies...)
+}
+
+// serveScheduler is serveWorkers, starting the scheduler only with start
+// (a test that drives it by hand doesn't want its rescans).
+func serveScheduler(t *testing.T, rescan time.Duration, start bool, replies ...*genai.Content) (pb.WorkerServiceClient, *Server) {
+	t.Helper()
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("MODENV_PREFIX", "")
 	store, err := workers.OpenStore(filepath.Join(t.TempDir(), "workers.json"))
@@ -51,7 +58,9 @@ func serveWorkers(t *testing.T, rescan time.Duration, replies ...*genai.Content)
 	}, WithScheduler(SchedulerConfig{Store: store, Runs: workers.OpenRunLog(filepath.Join(os.Getenv("HOME"), ".blitz", "worker-runs")), MaxConcurrent: 2, Rescan: rescan}))
 	srv := httptest.NewServer(s.Handler())
 	ctx, cancel := context.WithCancel(context.Background())
-	s.StartScheduler(ctx)
+	if start {
+		s.StartScheduler(ctx)
+	}
 	t.Cleanup(func() { cancel(); srv.Close(); s.Close() })
 	return pb.NewWorkerServiceClient(http.DefaultClient, srv.URL), s
 }
@@ -220,4 +229,46 @@ func TestCreateWorkerOverTheAPI(t *testing.T) {
 	require.NoError(t, err)
 	assert.Nil(t, bad.Msg.Worker)
 	assert.NotEmpty(t, bad.Msg.Problems)
+}
+
+// A run's changes are undone over the API, once; a run that isn't going
+// can't be watched; and an unknown worker can't be disabled.
+func TestWorkerRunsUndoneOverTheAPI(t *testing.T) {
+	create := call("create_file", map[string]any{"path": "reports/r.md", "content": "report\n"})
+	c, _ := serveWorkers(t, time.Hour, create, text("Wrote it."))
+	ctx := context.Background()
+	dir, _ := filepath.EvalSymlinks(t.TempDir())
+	addWorker(t, dir, "report", "---\nschedule: Daily at 6 AM\npermissions: [\"write:reports/\"]\n---\nWrite reports/r.md.\n")
+	list, err := c.ListWorkers(ctx, connect.NewRequest(&pb.ListWorkersRequest{Workspace: dir}))
+	require.NoError(t, err)
+	_, err = c.EnableWorker(ctx, connect.NewRequest(&pb.EnableWorkerRequest{Workspace: dir, Name: "report", Hash: list.Msg.Workers[0].Hash}))
+	require.NoError(t, err)
+
+	started, err := c.RunWorker(ctx, connect.NewRequest(&pb.RunWorkerRequest{Workspace: dir, Name: "report"}))
+	require.NoError(t, err)
+	id := started.Msg.Run.Id
+	var run *pb.WorkerRun
+	require.Eventually(t, func() bool {
+		got, err := c.GetWorkerRun(ctx, connect.NewRequest(&pb.GetWorkerRunRequest{RunId: id}))
+		if err == nil {
+			run = got.Msg.Run
+		}
+		return err == nil && run.Status != pb.RunStatus_RUN_STATUS_RUNNING
+	}, 10*time.Second, 20*time.Millisecond)
+	require.Equal(t, pb.RunStatus_RUN_STATUS_SUCCEEDED, run.Status, "run %v", run)
+	assert.FileExists(t, filepath.Join(dir, "reports", "r.md"))
+
+	undone, err := c.UndoWorkerRun(ctx, connect.NewRequest(&pb.UndoWorkerRunRequest{Workspace: dir, RunId: id}))
+	require.NoError(t, err)
+	assert.Equal(t, []string{"reports/r.md"}, undone.Msg.Restored)
+	assert.NoFileExists(t, filepath.Join(dir, "reports", "r.md"))
+	_, err = c.UndoWorkerRun(ctx, connect.NewRequest(&pb.UndoWorkerRunRequest{Workspace: dir, RunId: id}))
+	_, info := errorReason(t, err)
+	assert.Equal(t, "NOTHING_TO_UNDO", info.Reason, "undone twice")
+
+	_, info = errorReason(t, streamErr(c.WatchWorkerRun(ctx, connect.NewRequest(&pb.WatchWorkerRunRequest{RunId: id}))))
+	assert.Equal(t, "RUN_NOT_RUNNING", info.Reason)
+	_, err = c.DisableWorker(ctx, connect.NewRequest(&pb.DisableWorkerRequest{Workspace: dir, Name: "nope"}))
+	_, info = errorReason(t, err)
+	assert.Equal(t, "UNKNOWN_WORKER", info.Reason)
 }

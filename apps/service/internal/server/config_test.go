@@ -245,3 +245,67 @@ func TestGetInterfaceLanguage(t *testing.T) {
 	assert.Equal(t, "de", res.Msg.Locale)
 	assert.Equal(t, []string{de}, res.Msg.Catalogs, "a broken catalog is left out")
 }
+
+// API keys over the API: a plain key in the settings file is moved to the
+// keychain, then removed; keys for providers that take none, and moves
+// with nothing to move, are invalid. The global permissions are described
+// on their own.
+func TestApiKeysOverTheAPI(t *testing.T) {
+	_, s := serve(t, nil)
+	secrets.SetDefault(&secrets.Memory{})
+	srv := httptest.NewServer(s.Handler())
+	defer srv.Close()
+	cfg := pb.NewConfigServiceClient(http.DefaultClient, srv.URL)
+	ctx := context.Background()
+
+	_, err := cfg.SaveConfigFile(ctx, connect.NewRequest(&pb.SaveConfigFileRequest{Text: "[llm.openai]\napi_key = \"sk-plain\"\n\n[permissions]\nread_only_defaults = false\n"}))
+	require.NoError(t, err)
+	moved, err := cfg.SecureApiKey(ctx, connect.NewRequest(&pb.SecureApiKeyRequest{Provider: "openai"}))
+	require.NoError(t, err)
+	assert.NotEmpty(t, moved.Msg.Change.Path)
+	file, err := cfg.GetConfigFile(ctx, connect.NewRequest(&pb.GetConfigFileRequest{}))
+	require.NoError(t, err)
+	assert.NotContains(t, file.Msg.Text, "sk-plain", "the key stayed in the file")
+	_, err = cfg.RemoveApiKey(ctx, connect.NewRequest(&pb.RemoveApiKeyRequest{Provider: "openai"}))
+	require.NoError(t, err)
+	file, _ = cfg.GetConfigFile(ctx, connect.NewRequest(&pb.GetConfigFileRequest{}))
+	assert.NotContains(t, file.Msg.Text, "api_key", "the key is still set")
+	set, err := cfg.SetConfigValue(ctx, connect.NewRequest(&pb.SetConfigValueRequest{Key: "blitz.default_model", Value: "gpt-5"}))
+	require.NoError(t, err)
+	assert.Empty(t, set.Msg.Change.ModelError, "a global change reports no model error")
+
+	desc, err := cfg.DescribePermissions(ctx, connect.NewRequest(&pb.DescribePermissionsRequest{}))
+	require.NoError(t, err)
+	assert.Equal(t, "off", desc.Msg.ReadOnlyDefaults)
+	assert.Empty(t, desc.Msg.Inherited, "the global scope inherits nothing")
+
+	for name, call := range map[string]func() error{
+		"secure with nothing to move": func() error { return unary(cfg.SecureApiKey, &pb.SecureApiKeyRequest{Provider: "openai"}) },
+		"secure for no provider":      func() error { return unary(cfg.SecureApiKey, &pb.SecureApiKeyRequest{Provider: "nope"}) },
+		"remove for no provider":      func() error { return unary(cfg.RemoveApiKey, &pb.RemoveApiKeyRequest{Provider: "nope"}) },
+		"set for no provider":         func() error { return unary(cfg.SetApiKey, &pb.SetApiKeyRequest{Provider: "nope", Key: "k"}) },
+	} {
+		t.Run(name, func(t *testing.T) {
+			assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(call()))
+		})
+	}
+}
+
+// A server given a settings directory describes that one.
+func TestConfigDir(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("MODENV_PREFIX", "")
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, ".env.toml"), []byte("[ui]\nlocale = \"fr-CA\"\n"), 0o600))
+	s := New(nil, WithConfigDir(dir))
+	srv := httptest.NewServer(s.Handler())
+	defer srv.Close()
+	defer s.Close()
+	cfg := pb.NewConfigServiceClient(http.DefaultClient, srv.URL)
+	file, err := cfg.GetConfigFile(context.Background(), connect.NewRequest(&pb.GetConfigFileRequest{}))
+	require.NoError(t, err)
+	assert.Equal(t, dir, filepath.Dir(file.Msg.Path))
+	lang, err := cfg.GetInterfaceLanguage(context.Background(), connect.NewRequest(&pb.GetInterfaceLanguageRequest{}))
+	require.NoError(t, err)
+	assert.Equal(t, "fr-CA", lang.Msg.Locale)
+}

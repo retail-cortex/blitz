@@ -30,6 +30,7 @@ import (
 	"github.com/retail-cortex/blitz/apps/service/servicetest"
 	"github.com/retail-cortex/blitz/pkg/api"
 	"github.com/retail-cortex/blitz/pkg/config"
+	"github.com/retail-cortex/blitz/pkg/config/configtest"
 	"github.com/retail-cortex/blitz/pkg/engine"
 	"github.com/retail-cortex/blitz/pkg/engine/runtime"
 	"github.com/stretchr/testify/assert"
@@ -212,12 +213,12 @@ func TestRemoteTurnLimits(t *testing.T) {
 	for i := range loop {
 		loop[i] = call("list_files", map[string]any{})
 	}
-	r := attach(t, func(c *config.Config) { c.Blitz.AutoApprove = true }, loop...)
+	r := attach(t, configtest.RunTools, loop...)
 	sess, _, err := r.OpenSession("", false)
 	require.NoError(t, err)
 	_, err = r.Run(context.Background(), sess.ID, api.Turn{Text: "loop", MaxTurns: 2}, func(api.Event) {})
 	assert.ErrorIs(t, err, api.ErrMaxTurns, "max turns over the API: %v", err)
-	r2 := attach(t, func(c *config.Config) { c.Blitz.AutoApprove = true }, call("run_shell_command", map[string]any{"command": "sleep 5"}))
+	r2 := attach(t, configtest.RunTools, call("run_shell_command", map[string]any{"command": "sleep 5"}))
 	sess2, _, _ := r2.OpenSession("", false)
 	start := time.Now()
 	_, err = r2.Run(context.Background(), sess2.ID, api.Turn{Text: "wait", Timeout: 300 * time.Millisecond}, func(api.Event) {})

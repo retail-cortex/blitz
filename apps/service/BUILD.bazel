@@ -42,7 +42,10 @@ go_test(
     name = "service_test",
     srcs = ["main_test.go"],
     embed = [":service_lib"],
-    deps = ["@com_github_stretchr_testify//assert"],
+    deps = [
+        "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//require",
+    ],
 )
 
 # blitzd for each released platform (//release), pure Go.

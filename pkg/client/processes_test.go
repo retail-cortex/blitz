@@ -30,6 +30,7 @@ import (
 	"github.com/retail-cortex/blitz/apps/service/servicetest"
 	"github.com/retail-cortex/blitz/pkg/api"
 	"github.com/retail-cortex/blitz/pkg/config"
+	"github.com/retail-cortex/blitz/pkg/config/configtest"
 	"github.com/retail-cortex/blitz/pkg/engine"
 	"github.com/retail-cortex/blitz/pkg/engine/runtime"
 	pb "github.com/retail-cortex/blitz/proto/blitz/v1"
@@ -42,7 +43,7 @@ import (
 // the service, and no one else's.
 func TestRemoteBackgroundProcesses(t *testing.T) {
 	start := call("run_shell_command", map[string]any{"command": "sleep 30", "background": true})
-	r := attach(t, func(c *config.Config) { c.Blitz.AutoApprove = true }, start, text("started"))
+	r := attach(t, configtest.RunTools, start, text("started"))
 	pm := r.Processes()
 	require.NotNil(t, pm)
 	assert.Empty(t, pm.Running(), "no turn yet")
@@ -103,7 +104,7 @@ func killRequest(r *Remote, id int) *connect.Request[pb.KillProcessRequest] {
 func TestRemoteBackgroundTasks(t *testing.T) {
 	start := call("invoke_agent", map[string]any{"agent_name": "qa", "prompt": "review the cart", "background": true})
 	r := attach(t, func(c *config.Config) {
-		c.Blitz.AutoApprove = true
+		configtest.RunTools(c)
 		c.AgentModels = map[string]string{"qa": "gemini/qa-model"} // answers "Done." at once
 	}, start, text("started"))
 	assert.Empty(t, r.ListTasks(), "no turn yet")

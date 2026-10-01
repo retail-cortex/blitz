@@ -15,7 +15,11 @@
 package server
 
 import (
+	"bytes"
 	"context"
+	"errors"
+	"image"
+	"image/png"
 	"io/fs"
 	"net/http"
 	"net/http/httptest"
@@ -91,3 +95,54 @@ func TestFileService(t *testing.T) {
 	_, err = os.Stat(filepath.Join(dir, "lib"))
 	assert.ErrorIs(t, err, fs.ErrNotExist, "not deleted")
 }
+
+// Previews of images over the API, NO_PREVIEW for other files, and the
+// file operations' failures as their reasons.
+func TestFilePreviewsAndFailures(t *testing.T) {
+	_, s := serve(t, nil)
+	srv := httptest.NewServer(s.Handler())
+	defer srv.Close()
+	files := pb.NewFileServiceClient(http.DefaultClient, srv.URL)
+	ctx := context.Background()
+	dir := t.TempDir()
+	var buf bytes.Buffer
+	require.NoError(t, png.Encode(&buf, image.NewRGBA(image.Rect(0, 0, 2, 2))))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "a.png"), buf.Bytes(), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "a.txt"), []byte("text"), 0o644))
+
+	p, err := files.ReadPreview(ctx, connect.NewRequest(&pb.ReadPreviewRequest{Workspace: dir, Path: "a.png"}))
+	require.NoError(t, err)
+	assert.Equal(t, "image/png", p.Msg.Mime)
+	assert.Equal(t, buf.Bytes(), p.Msg.Data)
+	_, err = files.CreateFolder(ctx, connect.NewRequest(&pb.CreateFolderRequest{Workspace: dir, Path: "new"}))
+	require.NoError(t, err)
+	assert.DirExists(t, filepath.Join(dir, "new"))
+
+	for name, tc := range map[string]struct {
+		call   func() error
+		reason string
+	}{
+		"preview of text": {func() error {
+			return unary(files.ReadPreview, &pb.ReadPreviewRequest{Workspace: dir, Path: "a.txt"})
+		}, "NO_PREVIEW"},
+		"list a missing folder": {func() error {
+			return unary(files.ListDir, &pb.ListDirRequest{Workspace: dir, Path: "nope"})
+		}, "FILE_NOT_FOUND"},
+		"rename a missing file": {func() error {
+			return unary(files.RenameFile, &pb.RenameFileRequest{Workspace: dir, From: "nope", To: "b"})
+		}, "FILE_NOT_FOUND"},
+		"delete outside": {func() error {
+			return unary(files.DeleteFile, &pb.DeleteFileRequest{Workspace: dir, Path: "../x"})
+		}, "BAD_PATH"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, info := errorReason(t, tc.call())
+			assert.Equal(t, tc.reason, info.Reason)
+		})
+	}
+	assert.Equal(t, "INTERNAL", errorInfo(errors.New("disk on fire")).Reason, "an error with no reason of its own")
+	assert.Equal(t, "INTERNAL", reasonOf(fileError(errors.New("disk on fire"))))
+}
+
+// reasonOf is an API error's reason.
+func reasonOf(err error) string { return errorInfo(err).GetReason() }
