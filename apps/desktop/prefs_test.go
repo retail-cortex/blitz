@@ -19,7 +19,9 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -91,6 +93,30 @@ func TestPrefsKeepOpenWorkspacesFirstAndBoundRecent(t *testing.T) {
 	require.Len(t, p.Workspaces, maxRecent+1, "%d workspaces, first %s, theme %s, active %s", len(p.Workspaces), p.Workspaces[0].Dir, p.Theme, p.Active)
 	require.Equal(t, "system", p.Theme, "%d workspaces, first %s, theme %s, active %s", len(p.Workspaces), p.Workspaces[0].Dir, p.Theme, p.Active)
 	require.Equal(t, "/open", p.Active, "%d workspaces, first %s, theme %s, active %s", len(p.Workspaces), p.Workspaces[0].Dir, p.Theme, p.Active)
+}
+
+// Each theme's Markdown CSS is kept as written, up to the cap, and never
+// cut inside a character.
+func TestPrefsMarkdownCSS(t *testing.T) {
+	cases := []struct {
+		name, in string
+		want     int
+	}{
+		{"empty", "", 0},
+		{"short", ".markdown { --doc-accent: teal; }", 33},
+		{"at the cap", strings.Repeat("a", maxMarkdownCSS), maxMarkdownCSS},
+		{"over the cap", strings.Repeat("a", maxMarkdownCSS+10), maxMarkdownCSS},
+		{"a character across the cap", strings.Repeat("a", maxMarkdownCSS-1) + "é", maxMarkdownCSS - 1},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			p := Prefs{MarkdownCSSLight: c.in, MarkdownCSSDark: c.in}
+			p.normalize()
+			assert.Len(t, p.MarkdownCSSLight, c.want)
+			assert.Len(t, p.MarkdownCSSDark, c.want)
+			assert.True(t, utf8.ValidString(p.MarkdownCSSLight))
+		})
+	}
 }
 
 func TestDamagedPrefsAreSetAside(t *testing.T) {

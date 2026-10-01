@@ -59,7 +59,13 @@ export interface Prefs {
   task_continue: boolean;
   /** Glass: translucent, blurred surfaces ("off": solid ones). */
   transparency: "on" | "off";
+  /** The user's CSS for Markdown previews in each theme, over the defaults (FIL-57). */
+  markdown_css_light: string;
+  markdown_css_dark: string;
 }
+
+/** The most Markdown CSS kept for a theme, in UTF-16 units (the Go side caps bytes). */
+export const maxMarkdownCSS = 64 * 1024;
 
 /** The settings before any are saved. */
 export const defaultPrefs: Prefs = {
@@ -78,7 +84,12 @@ export const defaultPrefs: Prefs = {
   task_continue: false,
   width: "full",
   transparency: "on",
+  markdown_css_light: "",
+  markdown_css_dark: "",
 };
+
+// Saved CSS: a string, no longer than the cap.
+const css = (v: unknown) => (typeof v === "string" ? v.slice(0, maxMarkdownCSS) : "");
 
 // A saved width: whole pixels, 0 when unset or unlikely.
 const pixels = (v: unknown) => (typeof v === "number" && v >= 0 && v <= 10000 ? Math.round(v) : 0);
@@ -120,6 +131,8 @@ export function normalizePrefs(raw: unknown): Prefs {
     chat_width: pixels(r.chat_width),
     files_width: pixels(r.files_width),
     run_settings_width: pixels(r.run_settings_width),
+    markdown_css_light: css(r.markdown_css_light),
+    markdown_css_dark: css(r.markdown_css_dark),
   };
 }
 

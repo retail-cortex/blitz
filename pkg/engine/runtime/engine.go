@@ -546,7 +546,7 @@ func (e *Engine) newLLMAgentWith(reg *tools.Registry, spec *agents.AgentSpec, ll
 	return llmagent.New(llmagent.Config{
 		Name:                  spec.Name,
 		Description:           spec.Description,
-		Instruction:           instruction + e.imageInstruction(spec) + e.extraInstructions,
+		Instruction:           instruction + e.imageInstruction(spec) + diagramInstruction + e.extraInstructions,
 		Model:                 llm,
 		Tools:                 list,
 		Toolsets:              toolsets,
@@ -781,6 +781,10 @@ func (e *Engine) imageInstruction(spec *agents.AgentSpec) string {
 	}
 	return text
 }
+
+// diagramInstruction asks for diagrams as Mermaid, which the desktop app
+// and the docs render, instead of ASCII boxes and arrows, which they can't.
+const diagramInstruction = "\n\n## Diagrams\nWhen Markdown you write (files, plans, docs, replies) needs a diagram, draw it as a fenced ```mermaid block in valid Mermaid syntax (flowchart, sequenceDiagram, classDiagram, stateDiagram-v2, erDiagram, gantt). Never draw boxes and arrows in ASCII. Quote node labels that hold punctuation, such as A[\"parse (v2)\"]. Directory trees and tables stay as plain text and Markdown tables."
 
 func (e *Engine) subInstruction(spec *agents.AgentSpec) string {
 	return spec.InterpolatePrompt(spec.AgencyLevel)

@@ -22,7 +22,7 @@ import { InboxButton } from "./RunsInbox";
 import { mdiCalendarClock, mdiCodeBraces, mdiCogOutline, mdiFileCompare, mdiFileSearchOutline, mdiFileTreeOutline, mdiTuneVariant } from "@mdi/js";
 import { Changes } from "./Changes";
 import { Conversation } from "./Conversation";
-import { filesTouchedEvent, goToFileEvent, openFileEvent, viewEvent, type OpenFileDetail, type ViewDetail } from "./events";
+import { filesTouchedEvent, goToFileEvent, openFileEvent, revealInTreeEvent, viewEvent, type OpenFileDetail, type ViewDetail } from "./events";
 import { EditorPane } from "./files/EditorPane";
 import { FilesShelf } from "./files/FilesShelf";
 import { GoToFile } from "./files/GoToFile";
@@ -110,6 +110,10 @@ export function Workspace({
       if (d.dir === dir) open(d.path, d.line, d.column);
     };
     const onGoTo = (e: Event) => (e as CustomEvent<{ dir: string }>).detail.dir === dir && setGoTo(true);
+    const onReveal = (e: Event) => {
+      const d = (e as CustomEvent<{ dir: string; path: string }>).detail;
+      if (d.dir === dir) revealRef.current(d.path);
+    };
     // A tool ran or a turn ended: look again soon (tools come in bursts).
     let timer: ReturnType<typeof setTimeout> | undefined;
     const onTouched = (e: Event) => {
@@ -119,11 +123,13 @@ export function Workspace({
     };
     window.addEventListener(openFileEvent, onOpen);
     window.addEventListener(goToFileEvent, onGoTo);
+    window.addEventListener(revealInTreeEvent, onReveal);
     window.addEventListener(filesTouchedEvent, onTouched);
     return () => {
       clearTimeout(timer);
       window.removeEventListener(openFileEvent, onOpen);
       window.removeEventListener(goToFileEvent, onGoTo);
+      window.removeEventListener(revealInTreeEvent, onReveal);
       window.removeEventListener(filesTouchedEvent, onTouched);
     };
   }, [dir, open]);
@@ -168,6 +174,8 @@ export function Workspace({
     if (!prefs.files) update((p) => ({ ...p, files: true }));
     setReveal({ path });
   };
+  const revealRef = useRef(revealInTree);
+  revealRef.current = revealInTree;
 
   const name = displayName(ws);
   return (

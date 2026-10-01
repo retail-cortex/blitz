@@ -15,19 +15,26 @@
 package main
 
 import (
+	"context"
 	"fmt"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
 	goruntime "runtime"
 	"strings"
+	"sync"
+	"time"
 )
 
 // openCommand opens a folder in the file manager, or a document in its
 // viewer.
 var openCommand = func(dir string) *exec.Cmd {
-	if goruntime.GOOS == "darwin" {
+	switch goruntime.GOOS {
+	case "darwin":
 		return exec.Command("open", dir)
+	case "windows":
+		return exec.Command("explorer", dir)
 	}
 	return exec.Command("xdg-open", dir)
 }
@@ -74,4 +81,108 @@ func (a *App) OpenDocument(path string) error {
 	}
 	go func() { _ = cmd.Wait() }()
 	return nil
+}
+
+// revealCommand shows path selected in its folder, in the file manager of
+// goos. Linux has none that all file managers answer, so it asks over
+// D-Bus (org.freedesktop.FileManager1, which Dolphin, Files, Nemo, Caja
+// and Thunar implement) and waits for the answer.
+func revealCommand(ctx context.Context, goos, path string) *exec.Cmd {
+	switch goos {
+	case "darwin":
+		return exec.CommandContext(ctx, "open", "-R", path)
+	case "windows":
+		return exec.CommandContext(ctx, "explorer", "/select,", path)
+	}
+	// dbus-send splits arrays at commas.
+	uri := strings.ReplaceAll((&url.URL{Scheme: "file", Path: path}).String(), ",", "%2C")
+	return exec.CommandContext(ctx, "dbus-send", "--session", "--print-reply", "--dest=org.freedesktop.FileManager1",
+		"/org/freedesktop/FileManager1", "org.freedesktop.FileManager1.ShowItems", "array:string:"+uri, "string:")
+}
+
+// reveal runs a reveal command: macOS's and Windows's in the background,
+// Linux's to its answer (it fails without a file manager on the bus).
+var reveal = func(path string) error {
+	if goruntime.GOOS != "linux" {
+		cmd := revealCommand(context.Background(), goruntime.GOOS, path)
+		if err := cmd.Start(); err != nil {
+			return err
+		}
+		go func() { _ = cmd.Wait() }()
+		return nil
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	return revealCommand(ctx, "linux", path).Run()
+}
+
+// RevealPath shows a file or folder selected in the system's file manager
+// (Finder, Explorer, Dolphin, …); where that can't be asked, it opens the
+// folder the path is in. Nothing is run: the path must exist, and it is
+// only shown.
+func (a *App) RevealPath(path string) error {
+	if !filepath.IsAbs(path) {
+		return fmt.Errorf("not showing %s: not an absolute path", path)
+	}
+	path = filepath.Clean(path)
+	if _, err := os.Lstat(path); err != nil {
+		return err
+	}
+	if err := reveal(path); err == nil {
+		return nil
+	}
+	return a.OpenFolder(filepath.Dir(path))
+}
+
+// fileManagers names Linux file managers by their desktop file.
+var fileManagers = map[string]string{
+	"org.kde.dolphin":     "Dolphin",
+	"dolphin":             "Dolphin",
+	"org.gnome.nautilus":  "Files",
+	"nautilus":            "Files",
+	"nemo":                "Nemo",
+	"caja":                "Caja",
+	"org.xfce.thunar":     "Thunar",
+	"thunar":              "Thunar",
+	"pcmanfm":             "PCManFM",
+	"pcmanfm-qt":          "PCManFM",
+	"io.elementary.files": "Files",
+}
+
+// fileManagerName is what the file manager of goos is called, given the
+// desktop file Linux opens folders with (xdg-mime's answer); "" when it
+// isn't one we know (the page says "file manager").
+func fileManagerName(goos, desktopFile string) string {
+	switch goos {
+	case "darwin":
+		return "Finder"
+	case "windows":
+		return "File Explorer"
+	}
+	id := strings.ToLower(strings.TrimSuffix(strings.TrimSpace(desktopFile), ".desktop"))
+	return fileManagers[id]
+}
+
+// folderHandler asks which desktop file opens folders (Linux).
+var folderHandler = func() string {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, "xdg-mime", "query", "default", "inode/directory").Output()
+	if err != nil {
+		return ""
+	}
+	return string(out)
+}
+
+var fileManager = sync.OnceValue(func() string {
+	if goruntime.GOOS != "linux" {
+		return fileManagerName(goruntime.GOOS, "")
+	}
+	return fileManagerName("linux", folderHandler())
+})
+
+// FileManager is the name of the system's file manager, for "Show in …"
+// ("" when it has none we know by name).
+func (a *App) FileManager() string {
+	return fileManager()
 }

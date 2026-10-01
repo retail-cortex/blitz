@@ -292,6 +292,16 @@ func TestImageInstructionInSystemPrompt(t *testing.T) {
 	assert.NotContains(t, systemText(off.llm), "You can see images", "no image guidance when images are disabled")
 }
 
+// Every agent is told to draw diagrams in Mermaid, not ASCII.
+func TestDiagramInstructionInSystemPrompt(t *testing.T) {
+	f := newEngineWith(t, fixtureOpts{}, textContent("ok"))
+	runTurns(t, f.eng, "s", "hi")
+	sys := systemText(f.llm)
+	assert.Contains(t, sys, "## Diagrams", "diagram guidance missing:\n%s", sys)
+	assert.Contains(t, sys, "```mermaid", "diagram guidance missing:\n%s", sys)
+	assert.Contains(t, sys, "Never draw boxes and arrows in ASCII", "diagram guidance missing:\n%s", sys)
+}
+
 // withImages leaves no model alone and never wraps twice; the OpenAI
 // image helpers pass through what has no images and reject a body that
 // isn't JSON.

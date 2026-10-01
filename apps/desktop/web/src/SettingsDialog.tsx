@@ -26,6 +26,7 @@ import {
   mdiShieldAlertOutline,
   mdiShieldCheckOutline,
   mdiInformationOutline,
+  mdiLanguageMarkdownOutline,
   mdiMonitor,
   mdiPaletteOutline,
   mdiPencilOutline,
@@ -47,16 +48,18 @@ import { PermissionSettings } from "./PermissionSettings";
 import { LogViewer } from "./LogViewer";
 import { ProviderSettings } from "./ProviderSettings";
 import { SettingsFile } from "./settingsfile/SettingsFile";
+import { DocumentSettings } from "./files/DocumentSettings";
 import { useApp } from "./state";
 import type { ThemePref } from "./theme";
 import { Button, Chip, Dialog, Icon, IconButton, Segmented, Switch } from "./ui/controls";
 import { WorkspaceDialog } from "./WorkspaceDialog";
 import { ProjectDialog } from "./ProjectDialog";
 
-type Section = "appearance" | "providers" | "permissions" | "file" | "workspaces" | "service" | "logs" | "about";
+type Section = "appearance" | "documents" | "providers" | "permissions" | "file" | "workspaces" | "service" | "logs" | "about";
 
 const sectionIcons: Record<Section, string> = {
   appearance: mdiPaletteOutline,
+  documents: mdiLanguageMarkdownOutline,
   providers: mdiKeyChainVariant,
   permissions: mdiShieldCheckOutline,
   file: mdiFileDocumentEditOutline,
@@ -82,6 +85,7 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
         </div>
         <div className="settings-pane">
           {section === "appearance" && <Appearance />}
+          {section === "documents" && <DocumentSettings />}
           {section === "providers" && <ProviderSettings workspace="" />}
           {section === "permissions" && <PermissionSettings workspace="" />}
           {section === "file" && <FileSection />}

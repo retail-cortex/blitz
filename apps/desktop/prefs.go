@@ -71,7 +71,16 @@ type Prefs struct {
 	TaskContinue bool `json:"task_continue"`
 	// Transparency is "on" (the default: glass surfaces) or "off".
 	Transparency string `json:"transparency"`
+	// MarkdownCSSLight and MarkdownCSSDark are the user's CSS for Markdown
+	// previews in each theme, over the defaults (at most maxMarkdownCSS
+	// bytes each).
+	MarkdownCSSLight string `json:"markdown_css_light,omitempty"`
+	MarkdownCSSDark  string `json:"markdown_css_dark,omitempty"`
 }
+
+// maxMarkdownCSS caps each theme's Markdown CSS: a stylesheet, not a
+// place to keep files.
+const maxMarkdownCSS = 64 << 10
 
 // WorkspacePrefs is a workspace as the window shows it.
 type WorkspacePrefs struct {
@@ -110,6 +119,11 @@ func (p *Prefs) normalize() {
 	}
 	if p.Transparency != "off" {
 		p.Transparency = "on"
+	}
+	for _, css := range []*string{&p.MarkdownCSSLight, &p.MarkdownCSSDark} {
+		if len(*css) > maxMarkdownCSS {
+			*css = strings.ToValidUTF8((*css)[:maxMarkdownCSS], "")
+		}
 	}
 	if !languageTag.MatchString(p.Language) {
 		p.Language = "system"

@@ -21,7 +21,7 @@ import { EditorView } from "@codemirror/view";
 import { t, tn } from "../i18n";
 import { Button, Dialog, Icon, IconButton, Segmented } from "../ui/controls";
 import { Preview } from "./Preview";
-import { previewKind, previewOnly } from "./previewKind";
+import { defaultView, previewKind, previewOnly, type View } from "./previewKind";
 import type { Cursor } from "../status";
 import { goToLine, languageOf, setWrap } from "./codemirror";
 import { fileIcon } from "./icons";
@@ -39,18 +39,42 @@ export function EditorPane({ model, onReveal, onCursor }: { model: EditorModel; 
   const [closing, setClosing] = useState<Tab | null>(null);
   const tab = model.tabs.find((x) => x.path === model.active);
   const ready = tab && !tab.loading && !tab.error && !tab.binary && !tab.tooLarge;
-  // Images and PDFs show as previews; Markdown and SVG can (the tabs
-  // showing theirs are in previewing).
+  // Images and PDFs show as previews; Markdown and SVG can, and Markdown
+  // does when it opens (FIL-54). views keeps each tab's choice.
   const kind = tab ? previewKind(tab.path) : null;
-  const [previewing, setPreviewing] = useState<Set<string>>(new Set());
-  const showPreview = !!tab && !tab.loading && !tab.error && !!kind && (previewOnly(kind) || (ready && previewing.has(tab.path)));
-  const setPreview = (path: string, on: boolean) =>
-    setPreviewing((s) => {
-      const next = new Set(s);
-      if (on) next.add(path);
-      else next.delete(path);
-      return next;
-    });
+  const [views, setViews] = useState<ReadonlyMap<string, View>>(new Map());
+  const atLine = !!tab && model.target?.path === tab.path && !!model.target.line;
+  const shownAs = tab && (atLine ? "source" : (views.get(tab.path) ?? defaultView(kind, { atLine, empty: tab.size === 0 })));
+  const showPreview = !!tab && !tab.loading && !tab.error && !!kind && (previewOnly(kind) || (ready && shownAs === "preview"));
+  const setView = (path: string, v: View) => setViews((m) => (m.get(path) === v ? m : new Map(m).set(path, v)));
+
+  // Keep the view a tab opened in (a jump to a line shows its source), and
+  // forget closed tabs'.
+  useEffect(() => {
+    if (tab && ready && kind && !previewOnly(kind) && shownAs && views.get(tab.path) !== shownAs) setView(tab.path, shownAs);
+  }, [tab, ready, kind, shownAs, views]);
+  useEffect(() => {
+    if ([...views.keys()].some((p) => !model.tabs.some((x) => x.path === p))) setViews((m) => new Map([...m].filter(([p]) => model.tabs.some((x) => x.path === p))));
+  }, [model.tabs, views]);
+
+  // ⌘⇧V / Ctrl+Shift+V: switch between the source and the preview, while
+  // the pane is shown and has the focus (or nothing has: a click in the
+  // preview); elsewhere, such as the composer, it still pastes plain text.
+  const pane = useRef<HTMLElement>(null);
+  const canToggle = !!tab && !!kind && !previewOnly(kind) && ready;
+  useEffect(() => {
+    if (!canToggle || !tab) return;
+    const key = (e: KeyboardEvent) => {
+      const p = pane.current;
+      const focused = !!p && (p.contains(document.activeElement) || document.activeElement === document.body);
+      if (focused && p.offsetParent !== null && (e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === "v") {
+        e.preventDefault();
+        setView(tab.path, shownAs === "preview" ? "source" : "preview");
+      }
+    };
+    window.addEventListener("keydown", key, true);
+    return () => window.removeEventListener("keydown", key, true);
+  }, [canToggle, tab, shownAs]);
 
   // Where the cursor is, for the status bar.
   const cursorTo = useRef(onCursor);
@@ -117,7 +141,7 @@ export function EditorPane({ model, onReveal, onCursor }: { model: EditorModel; 
   const closeTab = (x: Tab) => (x.dirty ? setClosing(x) : model.close(x.path));
 
   return (
-    <section className="editor-pane" aria-label={t("desktop.files.editor")}>
+    <section className="editor-pane" ref={pane} aria-label={t("desktop.files.editor")}>
       <div className="editor-tabs" role="tablist">
         {model.tabs.map((x) => (
           <div
@@ -163,16 +187,24 @@ export function EditorPane({ model, onReveal, onCursor }: { model: EditorModel; 
               <Icon path={mdiLockOutline} size="sm" /> {t(`desktop.files.rule.${tab.agentRule}`)}
             </span>
           )}
-          {kind && !previewOnly(kind) && ready && (
-            <Segmented
+          {canToggle && (
+            <Segmented<View>
               small
               label={t("desktop.files.view_as")}
-              value={previewing.has(tab.path) ? "preview" : "source"}
-              onChange={(v) => setPreview(tab.path, v === "preview")}
-              options={[
-                { value: "source", label: t("desktop.files.source") },
-                { value: "preview", label: t("desktop.files.preview") },
-              ]}
+              value={shownAs ?? "source"}
+              onChange={(v) => setView(tab.path, v)}
+              options={
+                // The view a file opens in comes first: Markdown's preview.
+                kind === "markdown"
+                  ? [
+                      { value: "preview", label: t("desktop.files.preview") },
+                      { value: "source", label: t("desktop.files.source") },
+                    ]
+                  : [
+                      { value: "source", label: t("desktop.files.source") },
+                      { value: "preview", label: t("desktop.files.preview") },
+                    ]
+              }
             />
           )}
           {tab.agentRule !== "blocked" && (

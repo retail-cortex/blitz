@@ -21,6 +21,8 @@ Spec: [agents](../about/specs/spec_agents_014.md).
 
 Your own agents are Markdown files with YAML frontmatter in `~/.blitz/agents` (and the project's `./agents`): a name, a description, the system prompt, the tools it may use, and optionally its own model. Built-in agents can't be overridden.
 
+Every agent, built-in or your own, is told to draw diagrams in Markdown as ```` ```mermaid ```` blocks rather than ASCII art; the desktop app and the docs draw them.
+
 ## Background tasks
 
 An agent can hand work to another agent in the background: `invoke_agent` with `background: true` starts the sub-agent as a task (`task-1`, `task-2`, …) and returns at once, so the main agent keeps working with you. When the task ends, the main agent hears about it with its next step, or before your next message, and can read the whole result with `task_output`; `list_tasks` and `stop_task` do the rest.

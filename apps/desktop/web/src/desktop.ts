@@ -83,6 +83,8 @@ type Bound = {
   OpenURL(url: string): Promise<void>;
   OpenFolder(dir: string): Promise<void>;
   OpenDocument(path: string): Promise<void>;
+  RevealPath(path: string): Promise<void>;
+  FileManager(): Promise<string>;
   Notify(title: string, body: string, dir: string): Promise<void>;
   SetUnsaved(u: { message: string; quit: string; cancel: string }): Promise<void>;
   License(which: string): Promise<string>;
@@ -194,6 +196,17 @@ export const openFolder = (dir: string) => app().OpenFolder(dir);
 
 /** Opens an image or PDF in the system's viewer (only in the app). */
 export const openDocument = (path: string) => app().OpenDocument(path);
+
+/** Shows a file or folder selected in the system's file manager (only in the app). */
+export const revealPath = (path: string) => app().RevealPath(path);
+
+let fileManagerName: Promise<string> | undefined;
+/** The system file manager's name (Finder, Dolphin, …; "" when unknown), or null outside the app. */
+export function fileManager(): Promise<string | null> {
+  if (!inApp()) return Promise.resolve(null);
+  fileManagerName ??= app().FileManager().catch(() => "");
+  return fileManagerName;
+}
 
 /** Shows a system notification; a click brings the window to dir. */
 export async function notifyNative(title: string, body: string, dir: string): Promise<void> {

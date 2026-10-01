@@ -36,3 +36,16 @@ export function previewKind(path: string): PreviewKind {
 
 /** Whether a kind shows only as a preview (it has no text to edit). */
 export const previewOnly = (k: PreviewKind) => k === "image" || k === "pdf";
+
+/** How a file with a preview shows: as its text, or rendered. */
+export type View = "source" | "preview";
+
+/**
+ * How a file shows when it opens: Markdown rendered, unless it opened at a
+ * line (a search hit, a link to one) or is empty (a new file, to write);
+ * an SVG as its source; images and PDFs only as previews.
+ */
+export function defaultView(k: PreviewKind, opened: { atLine: boolean; empty: boolean }): View {
+  if (previewOnly(k)) return "preview";
+  return k === "markdown" && !opened.atLine && !opened.empty ? "preview" : "source";
+}

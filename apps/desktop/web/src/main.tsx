@@ -22,6 +22,7 @@ import { editorConfig } from "./host";
 import "./m3.css";
 import "./app.css";
 import "./glass.css";
+import "./files/document.css";
 
 async function start() {
   // A development build can talk to a fake service (?fake), for working on

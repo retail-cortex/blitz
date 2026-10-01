@@ -1298,6 +1298,23 @@
     "desktop.worker.changed": "Cambió: {files}",
     "desktop.worker.open_session": "Abrir su conversación",
     "desktop.settings.transparency": "Transparencia",
-    "desktop.settings.transparency.detail": "Superficies de vidrio que dejan ver, difuminado, el escritorio y lo que hay detrás. Desactivada: superficies opacas (también cuando el sistema pide reducir la transparencia)."
+    "desktop.settings.transparency.detail": "Superficies de vidrio que dejan ver, difuminado, el escritorio y lo que hay detrás. Desactivada: superficies opacas (también cuando el sistema pide reducir la transparencia).",
+    "desktop.mermaid.error": "No se pudo dibujar: {error}",
+    "desktop.mermaid.diagram": "Diagrama",
+    "desktop.mermaid.show_diagram": "Mostrar diagrama",
+    "desktop.mermaid.source": "Mostrar código fuente",
+    "desktop.markdown.missing": "{path} no está en el espacio de trabajo",
+    "desktop.markdown.outside": "{href} está fuera del espacio de trabajo",
+    "desktop.markdown.anchor": "Enlace a esta sección",
+    "desktop.settings.documents": "Documentos",
+    "desktop.settings.doc_css.detail": "CSS para las vistas previas de Markdown, sobre el predeterminado, para cada tema. Define las variables --doc-* de la plantilla o aplica estilos a .preview-markdown .markdown.",
+    "desktop.settings.doc_css.theme": "Tema que editar",
+    "desktop.settings.doc_css.reset": "Restablecer",
+    "desktop.settings.doc_css.editor": "CSS del tema {theme}",
+    "desktop.settings.doc_css.sample": "Ejemplo",
+    "desktop.settings.doc_css.sample_other": "Ejemplo (en el tema de la ventana, {theme})",
+    "desktop.settings.doc_css.sample_text": "# Notas de la versión\n\nBlitz **2.0** muestra tu [documentación](https://example.com) como documentos.\n\n## Novedades\n\n- Diagramas a partir de bloques `mermaid`\n- [x] Las vistas previas se abren primero\n\n> Las citas destacan del texto.\n\n| Ajuste | Predeterminado |\n| --- | --- |\n| Ancho | 760px |\n| Tamaño | 15px |\n\n```go\nfunc main() { fmt.Println(\"hola\") }\n```\n\n```mermaid\nflowchart LR\n  A[Escribir] --> B[Previsualizar] --> C[Compartir]\n```\n",
+    "desktop.files.reveal_in": "Mostrar en {name}",
+    "desktop.files.reveal_in_file_manager": "Mostrar en el gestor de archivos"
   }
 }

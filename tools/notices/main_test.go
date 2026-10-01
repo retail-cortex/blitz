@@ -30,6 +30,7 @@ func TestIdentify(t *testing.T) {
 		"Redistribution and use in source and binary forms ... Neither the name of Google": "BSD-3-Clause",
 		"Redistribution and use in source and binary forms, with or without":               "BSD-2-Clause",
 		"Permission to use, copy, modify, and/or distribute this software for any purpose": "ISC",
+		"This is free and unencumbered software released into the public domain.":          "Unlicense",
 		"Mozilla Public License Version 2.0":                                               "MPL-2.0",
 		"GNU GENERAL PUBLIC LICENSE Version 3":                                             "",
 		"All rights reserved.":                                                             "",

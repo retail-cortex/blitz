@@ -15,7 +15,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { previewKind, previewOnly } from "./previewKind";
+import { defaultView, previewKind, previewOnly } from "./previewKind";
 
 describe("previewKind", () => {
   it.each([
@@ -32,5 +32,19 @@ describe("previewKind", () => {
   ])("%s", (path, want) => expect(previewKind(path)).toBe(want));
   it("images and PDFs show only as previews", () => {
     expect([previewOnly("image"), previewOnly("pdf"), previewOnly("markdown"), previewOnly(null)]).toEqual([true, true, false, false]);
+  });
+});
+
+describe("defaultView", () => {
+  it.each<[string, Parameters<typeof defaultView>[0], boolean, boolean, string]>([
+    ["markdown opens rendered", "markdown", false, false, "preview"],
+    ["markdown at a line opens its source", "markdown", true, false, "source"],
+    ["an empty markdown file opens its source", "markdown", false, true, "source"],
+    ["svg opens its source", "svg", false, false, "source"],
+    ["images only preview", "image", true, true, "preview"],
+    ["pdfs only preview", "pdf", false, false, "preview"],
+    ["other files are source", null, false, false, "source"],
+  ])("%s", (_name, kind, atLine, empty, want) => {
+    expect(defaultView(kind, { atLine, empty })).toBe(want);
   });
 });

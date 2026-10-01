@@ -1298,6 +1298,23 @@
     "desktop.worker.changed": "Changed: {files}",
     "desktop.worker.open_session": "Open its conversation",
     "desktop.settings.transparency": "Transparency",
-    "desktop.settings.transparency.detail": "Glass surfaces that let the desktop and the window behind them show through, blurred. Off: solid surfaces (also when the system asks for reduced transparency)."
+    "desktop.settings.transparency.detail": "Glass surfaces that let the desktop and the window behind them show through, blurred. Off: solid surfaces (also when the system asks for reduced transparency).",
+    "desktop.mermaid.error": "Not drawn: {error}",
+    "desktop.mermaid.diagram": "Diagram",
+    "desktop.mermaid.show_diagram": "Show diagram",
+    "desktop.mermaid.source": "Show source",
+    "desktop.markdown.missing": "{path} isn't in the workspace",
+    "desktop.markdown.outside": "{href} is outside the workspace",
+    "desktop.markdown.anchor": "Link to this section",
+    "desktop.settings.documents": "Documents",
+    "desktop.settings.doc_css.detail": "CSS for Markdown previews, over the defaults, for each theme. Set the --doc-* variables in the template, or style .preview-markdown .markdown directly.",
+    "desktop.settings.doc_css.theme": "Theme to edit",
+    "desktop.settings.doc_css.reset": "Reset",
+    "desktop.settings.doc_css.editor": "CSS for the {theme} theme",
+    "desktop.settings.doc_css.sample": "Sample",
+    "desktop.settings.doc_css.sample_other": "Sample (in the window's theme, {theme})",
+    "desktop.settings.doc_css.sample_text": "# Release notes\n\nBlitz **2.0** reads your [docs](https://example.com) as documents.\n\n## What's new\n\n- Diagrams from `mermaid` blocks\n- [x] Previews open first\n\n> Quotes stand out from the text.\n\n| Setting | Default |\n| --- | --- |\n| Measure | 760px |\n| Size | 15px |\n\n```go\nfunc main() { fmt.Println(\"hi\") }\n```\n\n```mermaid\nflowchart LR\n  A[Write] --> B[Preview] --> C[Share]\n```\n",
+    "desktop.files.reveal_in": "Show in {name}",
+    "desktop.files.reveal_in_file_manager": "Show in file manager"
   }
 }

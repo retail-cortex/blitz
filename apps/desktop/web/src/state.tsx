@@ -21,6 +21,7 @@ import { createContext, useCallback, useContext, useEffect, useLayoutEffect, use
 import { getPrefs, savePrefs } from "./desktop";
 import { setLanguage } from "./i18n";
 import { defaultPrefs, type Prefs } from "./prefs";
+import { applyDocCss, docCssFor } from "./files/docCss";
 import { applyTheme, onSystemThemeChange, resolveTheme, systemIsDark, type Theme } from "./theme";
 
 /** What a workspace is doing: a turn running, or waiting for the user. */
@@ -68,6 +69,9 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   // Before the screen is painted, so no text shows in the wrong language.
   useLayoutEffect(() => setLanguage(prefs.language), [prefs.language]);
   useEffect(() => applyTheme(theme, prefs.density, prefs.width, prefs.transparency), [theme, prefs.density, prefs.width, prefs.transparency]);
+  // The user's CSS for Markdown previews, the theme in effect's.
+  const docCss = docCssFor(prefs, theme);
+  useEffect(() => applyDocCss(docCss), [docCss]);
 
   // Saves run one after another, so the file ends with the latest.
   const update = useCallback((f: (p: Prefs) => Prefs) => {

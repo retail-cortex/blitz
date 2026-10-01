@@ -15,7 +15,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { normalizePrefs, baseName, closeWorkspace, defaultPrefs, displayName, editWorkspace, forgetWorkspace, moveWorkspace, openWorkspace, type Prefs } from "./prefs";
+import { normalizePrefs, maxMarkdownCSS, baseName, closeWorkspace, defaultPrefs, displayName, editWorkspace, forgetWorkspace, moveWorkspace, openWorkspace, type Prefs } from "./prefs";
 import { resolveTheme } from "./theme";
 import { workspaceColor } from "./palette";
 
@@ -114,5 +114,18 @@ describe("normalizePrefs", () => {
     expect(normalizePrefs({}).width).toBe("full");
     expect(normalizePrefs({ width: "readable" }).width).toBe("readable");
     expect(normalizePrefs({ width: "huge" }).width).toBe("full");
+  });
+});
+
+describe("markdown css", () => {
+  it.each<[string, unknown, string]>([
+    ["missing", undefined, ""],
+    ["not a string", 42, ""],
+    ["kept", ".markdown { --doc-accent: teal; }", ".markdown { --doc-accent: teal; }"],
+    ["capped", "a".repeat(maxMarkdownCSS + 5), "a".repeat(maxMarkdownCSS)],
+  ])("%s", (_name, v, want) => {
+    const p = normalizePrefs({ markdown_css_light: v, markdown_css_dark: v });
+    expect(p.markdown_css_light).toBe(want);
+    expect(p.markdown_css_dark).toBe(want);
   });
 });

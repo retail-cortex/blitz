@@ -35,6 +35,7 @@ import {
   mdiAt,
   mdiMessagePlusOutline,
 } from "@mdi/js";
+import { fileManager, revealPath } from "../desktop";
 import { addToContext } from "../events";
 import { files } from "../api";
 import { message } from "../errors";
@@ -199,6 +200,17 @@ export function FilesShelf({
     }
   };
 
+  // Show in Finder / Dolphin / …, in the app only.
+  const [manager, setManager] = useState<string | null>(null);
+  useEffect(() => {
+    void fileManager().then(setManager);
+  }, []);
+  const revealItem = (p: string): MenuEntry => ({
+    label: manager ? t("desktop.files.reveal_in", { name: manager }) : t("desktop.files.reveal_in_file_manager"),
+    icon: mdiFolderOpenOutline,
+    onSelect: () => void revealPath(absolute(p)).catch((err) => snack(message(err), { error: true })),
+  });
+
   const copy = (text: string) => navigator.clipboard?.writeText(text).then(() => snack(t("desktop.files.copied")));
   const absolute = (p: string) => (p ? `${dir.replace(/\/+$/, "")}/${p}` : dir);
 
@@ -227,6 +239,10 @@ export function FilesShelf({
         { label: t("desktop.files.copy_path"), icon: mdiContentCopy, onSelect: () => void copy(absolute(e.path)) },
         { label: t("desktop.files.copy_relative"), icon: mdiLinkVariant, onSelect: () => void copy(e.path) },
       );
+    }
+    if (manager !== null) {
+      if (!e) items.push("divider");
+      items.push(revealItem(e?.path ?? ""));
     }
     return items;
   };

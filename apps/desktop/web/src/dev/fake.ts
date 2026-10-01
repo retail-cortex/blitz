@@ -314,7 +314,11 @@ const fakeCreatedWorkers: Record<string, unknown>[] = [];
 
 const fakeFiles = new Map<string, string>([
   ["go.mod", "module example.com/shop\n\ngo 1.27\n"],
-  ["README.md", "# Shop\n\nA small shop server. Run it with `go run ./cmd/shop`.\n\n| Path | What |\n| --- | --- |\n| `/cart` | the cart |\n\n- [x] discounts\n- [ ] checkout\n"],
+  [
+    "README.md",
+    "# Shop\n\nA small shop server. Run it with `go run ./cmd/shop`. See [the design](docs/design.md#requests), [main.go](cmd/shop/main.go#L10), [the cart package](internal/cart/) and [Usage](#usage).\n\n## Usage\n\n| Path | What |\n| --- | --- |\n| `/cart` | the cart |\n\n- [x] discounts\n- [ ] checkout\n\n```mermaid\nflowchart LR\n  client[Browser] --> cart[\"/cart handler\"] --> store[(SQLite)]\n```\n",
+  ],
+  ["docs/design.md", "# Design\n\nBack to [the README](../README.md).\n\n## Requests\n\n```mermaid\nsequenceDiagram\n  Browser->>Shop: POST /cart\n  Shop->>Store: ListItems\n  Store-->>Shop: items\n  Shop-->>Browser: total\n```\n\n> Coupons apply once, rounded in cents.\n"],
   ["docs/logo.svg", '<svg xmlns="http://www.w3.org/2000/svg" width="120" height="120"><circle cx="60" cy="60" r="50" fill="#1a73e8"/></svg>\n'],
   ["docs/shot.png", "\u0000png"],
   ["docs/spec.pdf", "\u0000pdf"],

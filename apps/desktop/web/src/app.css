@@ -241,6 +241,9 @@ body.resizing iframe, body.resizing .cm-editor { pointer-events: none; }
 .markdown th, .markdown td { border: 1px solid var(--md-outline-variant); padding: 6px 10px; text-align: left; }
 .markdown th { background: var(--md-surface-container); font-weight: 500; }
 .markdown input[type="checkbox"] { accent-color: var(--md-primary); }
+.mermaid-diagram { display: flex; justify-content: center; padding: 12px; overflow-x: auto; }
+.mermaid-diagram svg { max-width: 100%; height: auto; }
+.mermaid-error { margin: -0.4em 0 0.8em; }
 
 /* Diffs */
 .diff { display: flex; flex-direction: column; gap: 12px; }
@@ -448,6 +451,11 @@ body.resizing iframe, body.resizing .cm-editor { pointer-events: none; }
 .settings-help p { margin: 0; line-height: 1.5; }
 @media (max-width: 900px) { .settings-edit { grid-template-columns: 1fr; } .settings-help { max-height: 140px; } }
 .settings-editor .cm-editor { height: 100%; }
+/* Settings → Documents: a theme's CSS, and a sample it styles. */
+.doc-settings { gap: 10px; }
+.doc-settings .doc-css-editor { height: 220px; }
+.doc-sample { max-height: 320px; border: 1px solid var(--md-outline-variant); border-radius: var(--md-shape-md); }
+.doc-sample .markdown { --doc-padding: 20px 24px; }
 .settings-problems .problem { display: flex; gap: 6px; align-items: flex-start; text-align: left; background: none; border: none; padding: 2px 0; color: inherit; font: inherit; cursor: pointer; }
 .settings-problems .problem:disabled { cursor: default; }
 .settings-problems .problem.error { color: var(--md-error); }
@@ -510,7 +518,6 @@ body.resizing iframe, body.resizing .cm-editor { pointer-events: none; }
 .editor-note { padding: 24px; }
 /* Previews (FIL-54): Markdown rendered, images on a checkerboard, PDFs. */
 .preview { flex: 1; min-height: 0; overflow: auto; }
-.preview-markdown { padding: 20px 28px; max-width: 900px; }
 .preview-image { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 16px;
   background: repeating-conic-gradient(var(--md-surface-container) 0% 25%, var(--md-surface) 0% 50%) 50% / 20px 20px; }
 .preview-image img { max-width: 100%; max-height: calc(100% - 32px); object-fit: contain; box-shadow: var(--md-elevation-1); }

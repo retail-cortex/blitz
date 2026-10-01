@@ -14,14 +14,15 @@
  * limitations under the License.
  */
 
-import { lazy, Suspense, useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { mdiOpenInNew } from "@mdi/js";
 import { files } from "../api";
 import { inApp, openDocument } from "../desktop";
 import { message } from "../errors";
 import { t } from "../i18n";
 import { Button, useSnackbar } from "../ui/controls";
-import { Markdown } from "../Markdown";
+import { takeAnchor } from "../events";
+import { Markdown, MarkdownDocProvider, scrollToHeading } from "../Markdown";
 import type { PreviewKind } from "./previewKind";
 
 const PdfView = lazy(() => import("./PdfView").then((m) => ({ default: m.PdfView })));
@@ -32,15 +33,27 @@ const PdfView = lazy(() => import("./PdfView").then((m) => ({ default: m.PdfView
  * from the file's bytes (ReadPreview), PDFs drawn with pdf.js.
  */
 export function Preview({ dir, path, kind, text }: { dir: string; path: string; kind: PreviewKind; text?: string }) {
-  if (kind === "markdown") {
-    return (
-      <div className="preview preview-markdown">
-        <Markdown text={text ?? ""} />
-      </div>
-    );
-  }
+  if (kind === "markdown") return <MarkdownPreview dir={dir} path={path} text={text ?? ""} />;
   if (kind === "svg") return <SvgPreview text={text ?? ""} name={path} />;
   return <FilePreview dir={dir} path={path} kind={kind} />;
+}
+
+// A Markdown file as a document (document.css), whose relative links start
+// at its folder; opened from a link to one of its headings, it scrolls there.
+function MarkdownPreview({ dir, path, text }: { dir: string; path: string; text: string }) {
+  const box = useRef<HTMLDivElement>(null);
+  const doc = useMemo(() => ({ dir, path }), [dir, path]);
+  useEffect(() => {
+    const anchor = takeAnchor(dir, path);
+    if (anchor) requestAnimationFrame(() => scrollToHeading(box.current?.querySelector(".markdown > *") ?? null, anchor));
+  }, [dir, path]);
+  return (
+    <div className="preview preview-markdown" ref={box}>
+      <MarkdownDocProvider value={doc}>
+        <Markdown text={text} />
+      </MarkdownDocProvider>
+    </div>
+  );
 }
 
 function SvgPreview({ text, name }: { text: string; name: string }) {

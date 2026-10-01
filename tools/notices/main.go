@@ -443,6 +443,8 @@ func identify(text string) string {
 	case strings.Contains(t, "Permission to use, copy, modify, and/or distribute this software for any purpose"),
 		strings.Contains(t, "Permission to use, copy, modify, and distribute this software for any purpose"):
 		return "ISC"
+	case strings.Contains(t, "This is free and unencumbered software released into the public domain"):
+		return "Unlicense"
 	case strings.Contains(t, "Redistribution and use in source and binary forms"):
 		if strings.Contains(t, "Neither the name") || strings.Contains(t, "names of its contributors") {
 			return "BSD-3-Clause"

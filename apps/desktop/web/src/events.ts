@@ -131,6 +131,31 @@ export function openFile(detail: OpenFileDetail) {
   window.dispatchEvent(new CustomEvent(openFileEvent, { detail }));
 }
 
+// Headings to scroll to when a Markdown file's preview shows (a link to
+// another document's #section), by workspace and path; taken once.
+const pendingAnchors = new Map<string, string>();
+
+/** Opens a Markdown file at a heading (its id), shown in its preview. */
+export function openFileAt(detail: OpenFileDetail, anchor: string) {
+  pendingAnchors.set(`${detail.dir}\0${detail.path}`, anchor);
+  openFile(detail);
+}
+
+/** The heading a file's preview should scroll to, once. */
+export function takeAnchor(dir: string, path: string): string | undefined {
+  const key = `${dir}\0${path}`;
+  const a = pendingAnchors.get(key);
+  pendingAnchors.delete(key);
+  return a;
+}
+
+/** The event that shows a path in a workspace's file tree. */
+export const revealInTreeEvent = "blitz:reveal-in-tree";
+/** Asks a workspace to show a file or folder in its tree. */
+export function revealInTree(detail: { dir: string; path: string }) {
+  window.dispatchEvent(new CustomEvent(revealInTreeEvent, { detail }));
+}
+
 /** The event that opens Go to file. */
 export const goToFileEvent = "blitz:go-to-file";
 /** Asks a workspace to open Go to file. */

@@ -22,7 +22,8 @@ import { files } from "../api";
 import { openFile } from "../events";
 import { parseFileRef, type FileRef } from "./paths";
 
-interface FileLinks {
+/** A workspace and the files in it, for the paths in its conversation. */
+export interface FileLinks {
   dir: string;
   known: ReadonlySet<string>;
 }
@@ -46,6 +47,11 @@ export function FileLinksProvider({ dir, refresh, children }: { dir: string; ref
     );
   }, [dir, refresh]);
   return <Context.Provider value={{ dir, known }}>{children}</Context.Provider>;
+}
+
+/** The workspace whose conversation this is and the files it has, if any. */
+export function useFileLinks(): FileLinks | null {
+  return useContext(Context);
 }
 
 /** The workspace file text names, if it names one that exists. */
