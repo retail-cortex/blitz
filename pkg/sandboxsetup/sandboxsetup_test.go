@@ -37,7 +37,9 @@ type fakeSystem struct {
 
 func newFakeSystem(t *testing.T, restriction string, withParser, withBwrap bool, elevations ...string) *fakeSystem {
 	t.Helper()
-	f := &fakeSystem{dir: t.TempDir()}
+	dir, err := filepath.EvalSymlinks(t.TempDir()) // macOS: /var is a link, and Check resolves bwrap's path
+	require.NoError(t, err)
+	f := &fakeSystem{dir: dir}
 	bin := filepath.Join(f.dir, "bin")
 	require.NoError(t, os.MkdirAll(bin, 0o755))
 	if withBwrap {
