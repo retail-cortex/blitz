@@ -119,7 +119,7 @@ default_agent = "blitz"
 # default_model = "gemini-3.8-flash"  # overrides llm.<provider>.model for every provider
 agency_level  = "high"      # low | medium | high | extreme
 temperature   = 0.2
-max_tokens    = 8192
+max_tokens    = 65536
 permission_mode = "default" # default | accept-edits | plan | dont-ask | bypass (bypass needs the OS sandbox)
 auto_approve  = false       # older spelling of permission_mode = "bypass"
 plan_review = "agent-decides" # always | agent-decides | never: when the agent plans for approval first

@@ -506,7 +506,7 @@ export function installFake() {
         },
         getModelSettings: ({ ref }) =>
           ref
-            ? { model: { model: ref.split("/").pop(), provider: "gemini", settings: { temperature: 0.3 }, globalTemperature: 0.2, globalMaxTokens: 8192 } }
+            ? { model: { model: ref.split("/").pop(), provider: "gemini", settings: { temperature: 0.3 }, globalTemperature: 0.2, globalMaxTokens: 65536 } }
             : { all: { "gpt-5": { temperature: 1 }, "claude-opus-5-5": { reasoningEffort: "high" } } },
         updateModelSettings: ({ ref }) => ({ model: { model: ref, settings: {} }, unsupported: [] }),
         listStyles: ({ workspace }) => ({

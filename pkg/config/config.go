@@ -724,7 +724,7 @@ func DefaultConfig() *Config {
 			DefaultModel: "", // empty: use llm.<provider>.model
 			AgencyLevel:  string(AgencyHigh),
 			Temperature:  0.2,
-			MaxTokens:    8192,
+			MaxTokens:    65536, // thinking counts against it (Gemini); 8192 cut off long files
 			AutoApprove:  false,
 			PlanReview:   PlanReviewAgent,
 

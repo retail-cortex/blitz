@@ -282,7 +282,7 @@ Set `fallback_models = ["anthropic/claude-sonnet-5"]` with a working Anthropic k
 - [ ] `/model_settings`. **Expected:** "No model has settings of its own…".
 - [ ] `/model_settings gemini-3.8-flash temperature=0.1 seed=7`. **Expected:** "gemini-3.8-flash now uses temperature=0.1 seed=7", "Saved in …/.env.toml"; the file has `[model_settings."gemini-3.8-flash"]` with both lines and your comments intact.
 - [ ] Ask the same short question twice. **Expected:** it works; the answers are close to identical. With `BLITZ_LOG_LEVEL=debug` nothing is logged about dropped settings.
-- [ ] `/model_settings gemini-3.8-flash`. **Expected:** temperature 0.1, seed 7, max_tokens "(global: 8192)", top_p "(provider default)".
+- [ ] `/model_settings gemini-3.8-flash`. **Expected:** temperature 0.1, seed 7, max_tokens "(global: 65536)", top_p "(provider default)".
 - [ ] `/model_settings anthropic/claude-sonnet-5 temperature=0.5`. **Expected:** a warning that anthropic doesn't accept temperature for claude-sonnet-5. `/model anthropic/claude-sonnet-5` and ask something: it answers (no 400 error).
 - [ ] With an OpenAI key: `/model_settings openai/gpt-5 seed=1`, `/model openai/gpt-5`, ask something. **Expected:** a warning when setting; the answer works (the seed isn't sent).
 - [ ] `/model_settings gemini-3.8-flash temperature=5`. **Expected:** "Nothing changed: temperature must be a number in [0, 2]".
