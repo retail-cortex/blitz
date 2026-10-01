@@ -17,6 +17,7 @@ package tools
 import (
 	"context"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -147,4 +148,35 @@ func TestGrepTool(t *testing.T) {
 	assert.Equal(t, float64(1), out["total_matches"].(float64), "expected 1 match, got %v", out)
 	out = runTool(t, rt, map[string]any{"query": "(", "is_regex": true})
 	assert.NotEqual(t, "", errOf(out), "expected tool-level error for invalid regex")
+}
+
+// TestGrepFileEdges finds a match on a last line without a newline, stops
+// at max within one file, and skips unreadable and oversized files.
+func TestGrepFileEdges(t *testing.T) {
+	ws, dir := newTestWorkspace(t)
+	writeFile(t, filepath.Join(dir, "a.txt"), "no\nhit at the end")
+	writeFile(t, filepath.Join(dir, "b.txt"), "hit\nhit\nhit\n")
+	writeFile(t, filepath.Join(dir, "huge.txt"), "hit\n"+strings.Repeat("x", grepMaxFileSize))
+	writeFile(t, filepath.Join(dir, "locked.txt"), "hit\n")
+	if os.Geteuid() != 0 {
+		require.NoError(t, os.Chmod(filepath.Join(dir, "locked.txt"), 0o000))
+	}
+
+	m := grepMatches(t, ws, GrepInput{Query: "hit", Path: "a.txt"})
+	require.Len(t, m, 1)
+	assert.Equal(t, 2, m[0].LineNumber)
+	assert.Equal(t, "hit at the end", m[0].Content)
+
+	m = grepMatches(t, ws, GrepInput{Query: "hit", Path: "b.txt", MaxMatches: 2})
+	assert.Len(t, m, 2, "max applies within a file")
+
+	m = grepMatches(t, ws, GrepInput{Query: "hit"})
+	files := map[string]bool{}
+	for _, x := range m {
+		files[x.File] = true
+	}
+	assert.False(t, files["huge.txt"], "files over the size limit are skipped")
+	if os.Geteuid() != 0 {
+		assert.False(t, files["locked.txt"], "unreadable files are skipped")
+	}
 }

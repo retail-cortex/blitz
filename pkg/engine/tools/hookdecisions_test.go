@@ -100,6 +100,7 @@ func TestHookIf(t *testing.T) {
 		{"skill(pdf)", "activate_skill", map[string]any{"skill_name": "pdf"}, true},
 		{"agent(qa)", "invoke_agent", map[string]any{"agent_name": "qa"}, true},
 		{"web_search", "web_search", nil, true},
+		{"shell(echo *)", "run_shell_command", map[string]any{"command": "echo 'unterminated"}, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.rule+" "+tt.tool, func(t *testing.T) {
@@ -204,6 +205,8 @@ func TestCallGrants(t *testing.T) {
 		return api.ApprovalRequest{Tool: "create_file", Kind: api.ActionWrite, Detail: p, Targets: []string{p}}
 	}
 	assert.Error(t, hooks.Approve(ctx, write("a.txt")), "not granted: the user says no")
+	hooks.GrantCall("")
+	assert.Error(t, hooks.Approve(callCtx{context.Background(), ""}, write("a.txt")), "an empty call ID is never granted")
 	hooks.GrantCall("call-1")
 	assert.NoError(t, hooks.Approve(ctx, write("a.txt")), "granted")
 	assert.Error(t, hooks.Approve(callCtx{context.Background(), "call-2"}, write("a.txt")), "another call")
@@ -211,6 +214,6 @@ func TestCallGrants(t *testing.T) {
 	assert.Error(t, hooks.Approve(ctx, write("go.lock")), "an ask rule still asks")
 	hooks.EndCall("call-1")
 	assert.Error(t, hooks.Approve(ctx, write("a.txt")))
-	assert.Len(t, *reqs, 4, "asked: before the grant, the other call, the ask rule, after it ended")
+	assert.Len(t, *reqs, 5, "asked: before the grant, the empty ID, the other call, the ask rule, after it ended")
 	assert.Equal(t, "", CallID(context.Background()))
 }

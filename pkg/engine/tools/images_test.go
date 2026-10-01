@@ -23,6 +23,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/retail-cortex/blitz/pkg/api"
 	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/engine/audit"
 	"github.com/stretchr/testify/assert"
@@ -62,4 +63,78 @@ func TestLoadImageAuditsHashNotBytes(t *testing.T) {
 	_, err = reg.LoadImage("huge.png")
 	assert.Error(t, err, "size limit")
 	assert.Contains(t, err.Error(), "limit", "size limit: %v", err)
+}
+
+// imageRegistry is a registry with images in their own store, and a PNG.
+func imageRegistry(t *testing.T, enabled bool) (*Registry, []byte) {
+	t.Helper()
+	cfg := config.DefaultConfig()
+	cfg.Tools.WorkspaceDir = t.TempDir()
+	cfg.Tools.ApprovalsFile = ""
+	cfg.Images.Enabled = enabled
+	cfg.Images.Dir = filepath.Join(t.TempDir(), "images")
+	reg, err := NewRegistry(cfg, nil, nil)
+	require.NoError(t, err)
+	t.Cleanup(func() { reg.Close() })
+	var buf bytes.Buffer
+	require.NoError(t, png.Encode(&buf, image.NewRGBA(image.Rect(0, 0, 8, 4))))
+	writeFile(t, filepath.Join(reg.Workspace().Dir(), "pic.png"), buf.String())
+	return reg, buf.Bytes()
+}
+
+// view_image describes the image it loads, or says why it can't.
+func TestViewImageTool(t *testing.T) {
+	reg, _ := imageRegistry(t, true)
+	rt := toolOf(t)(NewViewImageTool(reg))
+	writeFile(t, filepath.Join(reg.Workspace().Dir(), "notes.png"), "not a picture")
+	tests := []struct {
+		name    string
+		path    string
+		wantErr string
+	}{
+		{"an image", "pic.png", ""},
+		{"not an image", "notes.png", "cannot view image"},
+		{"missing", "gone.png", "cannot view image"},
+		{"outside the workspace", "/etc/hosts", "cannot view image"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			out := runTool(t, rt, map[string]any{"path": tt.path})
+			if tt.wantErr != "" {
+				assert.Contains(t, errOf(out), tt.wantErr)
+				return
+			}
+			assert.Empty(t, errOf(out))
+			assert.Equal(t, "image/png", out["mime_type"])
+			assert.EqualValues(t, 8, out["width"])
+			assert.EqualValues(t, 4, out["height"])
+			assert.NotEmpty(t, out["image_uri"])
+		})
+	}
+}
+
+// Clipboard images are stored like files; a store that can't be written
+// fails the image.
+func TestAddImage(t *testing.T) {
+	reg, data := imageRegistry(t, true)
+	img, err := reg.AddImage("clipboard", data)
+	require.NoError(t, err)
+	assert.Equal(t, 8, img.Width)
+	assert.NotNil(t, reg.Images())
+	_, err = reg.AddImage("clipboard", []byte("not a picture"))
+	assert.Error(t, err)
+
+	require.NoError(t, os.RemoveAll(reg.Images().Dir()))
+	_, err = reg.AddImage("clipboard", append(data, 0)) // not stored yet
+	assert.ErrorContains(t, err, "store image")
+}
+
+// With images off, nothing is loaded or added.
+func TestImagesDisabled(t *testing.T) {
+	reg, data := imageRegistry(t, false)
+	assert.Nil(t, reg.Images())
+	_, err := reg.LoadImage("pic.png")
+	assert.ErrorIs(t, err, api.ErrImagesDisabled)
+	_, err = reg.AddImage("clipboard", data)
+	assert.ErrorIs(t, err, api.ErrImagesDisabled)
 }

@@ -24,6 +24,7 @@ import (
 
 	"github.com/retail-cortex/blitz/pkg/api"
 	"github.com/retail-cortex/blitz/pkg/config"
+	"github.com/retail-cortex/blitz/pkg/config/configtest"
 	"github.com/retail-cortex/blitz/pkg/engine/agents"
 	"github.com/retail-cortex/blitz/pkg/engine/skills"
 	"github.com/stretchr/testify/assert"
@@ -127,7 +128,7 @@ func TestToolsSuite(t *testing.T) {
 	cfg.Tools.WorkspaceDir = tmpDir
 	cfg.Tools.UCToolsDir = filepath.Join(tmpDir, "uc")
 	cfg.Tools.AutoApproveCommands = true
-	cfg.Blitz.AutoApprove = true
+	configtest.RunTools(cfg)
 
 	agentReg, err := agents.NewRegistry()
 	require.NoError(t, err, "failed to create agent registry")

@@ -105,6 +105,7 @@ func TestBypassNeedsTheSandbox(t *testing.T) {
 		assert.ErrorIs(t, r.ModeNote(), api.ErrBypassNeedsSandbox, "without a sandbox: mode %s, note %v", r.Hooks().Mode(), r.ModeNote())
 		err = r.SetPermissionMode(api.ModeBypass)
 		assert.ErrorIs(t, err, api.ErrBypassNeedsSandbox, "SetPermissionMode(bypass) without a sandbox: %v", err)
+		assert.Error(t, r.SetPermissionMode("yolo"), "an unknown mode was set")
 		err = r.SetPermissionMode(api.ModeAcceptEdits)
 		assert.NoError(t, err, "accept-edits: %v %s", err, r.Hooks().Mode())
 		assert.Equal(t, api.ModeAcceptEdits, r.Hooks().Mode(), "accept-edits: %v %s", err, r.Hooks().Mode())

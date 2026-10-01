@@ -17,6 +17,7 @@ package tools
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -140,4 +141,31 @@ func TestFetchGrantsSkipApprovalForExactlyThoseURLs(t *testing.T) {
 	// Without the grant in the context, the picked URL asks too.
 	out = f.fetch(context.Background(), h, srv.URL+"/picked")
 	require.Contains(t, out.Error, "not approved", "no grant: %+v", out)
+}
+
+// The user's search reports a provider that can't be used and a failed
+// search as errors, and the registry's accessors say what's configured.
+func TestRegistryWebSearchErrors(t *testing.T) {
+	broken := errors.New("no key")
+	r := &Registry{hooks: NewHooks(Policy{}), searchErr: broken}
+	_, err := r.WebSearch(context.Background(), "x", 5)
+	assert.ErrorIs(t, err, api.ErrNoSearch)
+	assert.ErrorContains(t, err, "no key")
+	assert.Equal(t, broken, r.SearchError())
+	assert.Equal(t, "", r.SearchProvider(), "no searcher, no provider")
+	assert.False(t, r.CanFetch())
+
+	var got captured
+	r = &Registry{hooks: NewHooks(Policy{}), fetch: true}
+	r.searcher = searcher(t, WebSearchConfig{Provider: "searxng", BaseURL: searchServer(t, `oops`, 500, &got)})
+	out, err := r.WebSearch(context.Background(), "q", 5)
+	require.Error(t, err)
+	assert.Equal(t, out.Error, err.Error(), "the output's error is the returned one")
+	assert.True(t, r.CanFetch())
+}
+
+// A URL that doesn't parse is its own grant key.
+func TestGrantKeyUnparsable(t *testing.T) {
+	assert.Equal(t, "http://[::1", grantKey("http://[::1"))
+	assert.Equal(t, "https://a.example/p", grantKey("https://a.example/p#frag"))
 }

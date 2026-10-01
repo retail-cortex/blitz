@@ -156,11 +156,8 @@ func compileCmdPatterns(list []string) ([]cmdPattern, error) {
 			sb.WriteString("( .*)?")
 		}
 		sb.WriteString("$")
-		re, err := regexp.Compile(sb.String())
-		if err != nil {
-			return nil, fmt.Errorf("invalid command pattern %q: %w", raw, err)
-		}
-		out = append(out, cmdPattern{raw: raw, re: re})
+		// Quoted but for the wildcards: always compiles.
+		out = append(out, cmdPattern{raw: raw, re: regexp.MustCompile(sb.String())})
 	}
 	return out, nil
 }

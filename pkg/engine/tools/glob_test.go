@@ -125,3 +125,43 @@ func TestExpandBraces(t *testing.T) {
 	_, err = expandBraces(strings.Repeat("{a,b}", 7))
 	assert.Error(t, err, "expected a cap on alternatives")
 }
+
+// TestGlobTool runs the tool: matches come back, a bad pattern is an error
+// in the output.
+func TestGlobTool(t *testing.T) {
+	ws, _ := globTree(t)
+	rt := toolOf(t)(NewGlobTool(ws))
+	out := runTool(t, rt, map[string]any{"pattern": "*.md"})
+	assert.Equal(t, []any{"README.md"}, out["files"])
+	out = runTool(t, rt, map[string]any{"pattern": "{a,b}{c"})
+	assert.Contains(t, errOf(out), "unmatched {", "an unmatched brace in an alternative")
+	assert.Equal(t, []any{}, out["files"])
+}
+
+// TestGlobDotWildcardsCaseAndCancel names dot directories by a wildcard
+// segment, ignores case where the file system does, orders ties by path,
+// and stops when cancelled.
+func TestGlobDotWildcardsCaseAndCancel(t *testing.T) {
+	ws, dir := globTree(t)
+	out := globFiles(t, ws, GlobInput{Pattern: ".git*/**/*.yml"})
+	assert.Equal(t, []string{".github/workflows/ci.yml"}, out.Files)
+
+	mt := time.Now().Add(-time.Hour)
+	for _, f := range []string{"b.same", "a.same"} {
+		writeFile(t, filepath.Join(dir, f), "x")
+		require.NoError(t, os.Chtimes(filepath.Join(dir, f), mt, mt))
+	}
+	out = globFiles(t, ws, GlobInput{Pattern: "*.same"})
+	assert.Equal(t, []string{"a.same", "b.same"}, out.Files, "equal times sort by path")
+
+	old := caseInsensitiveFS
+	caseInsensitiveFS = true
+	t.Cleanup(func() { caseInsensitiveFS = old })
+	out = globFiles(t, ws, GlobInput{Pattern: "readme.MD"})
+	assert.Equal(t, []string{"README.md"}, out.Files)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	_, err := globWorkspace(ctx, ws, GlobInput{Pattern: "*"})
+	assert.ErrorContains(t, err, "context canceled")
+}

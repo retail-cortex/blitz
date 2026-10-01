@@ -72,6 +72,11 @@ func (m *MCPManager) sessionOf(ctx context.Context, s *mcpServer) (*mcp.ClientSe
 	lctx, cancel := context.WithTimeout(ctx, mcpListTimeout)
 	defer cancel()
 	if _, err := s.toolset.Tools(readonlyWith{ctx: lctx}); err != nil { // connects
+		// The failed connect's session was noted as it sent initialize:
+		// forget it, or every later call would use it and fail.
+		s.sessionMu.Lock()
+		s.session = nil
+		s.sessionMu.Unlock()
 		m.recordFailure(ctx, s, err)
 		return nil, err
 	}

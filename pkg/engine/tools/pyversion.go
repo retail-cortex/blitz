@@ -18,6 +18,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
@@ -254,6 +255,13 @@ func uvInstall(ctx context.Context, box ScriptBox, uv, spec string) error {
 		return fmt.Errorf("uv cache dir: %w", err)
 	}
 	cache := strings.TrimSpace(string(cacheOut))
+	// Before uv's first install neither exists, and the box can only run in
+	// and mount directories that do.
+	for _, d := range []string{pyDir, cache} {
+		if err := os.MkdirAll(d, 0o700); err != nil {
+			return err
+		}
+	}
 	ctx, cancel := context.WithTimeout(ctx, pyEnvBuildLimit)
 	defer cancel()
 	var out bytes.Buffer

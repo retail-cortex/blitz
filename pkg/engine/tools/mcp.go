@@ -249,9 +249,15 @@ func NewMCPManager(cfgs []config.MCPServerConfig, env *ExecEnv, reserved []strin
 				cmd.Env = base
 				return cmd, nil
 			}
-			if _, err := build(); err != nil { // validate the sandbox wrapping up front
+			probe, err := build() // validate the sandbox wrapping up front
+			if err != nil {
 				return nil, fmt.Errorf("mcp server %q: %w", c.Name, err)
 			}
+			// Never started: drop its guard pipe (and any credential copies).
+			if probe.childEnd != nil {
+				probe.childEnd.Close()
+			}
+			probe.Release()
 			srv.transport = &stdioTransport{build: build}
 			srv.conns = &closingTransport{inner: srv.transport}
 		} else {

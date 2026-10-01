@@ -175,23 +175,16 @@ func (r *PermissionRule) compile() error {
 		g := filepath.ToSlash(config.ExpandHome(r.Pattern))
 		g = strings.TrimPrefix(strings.TrimSuffix(g, "/"), "./")
 		// A directory pattern covers what's under it.
-		re, err := regexp.Compile(anchor("^" + textutil.GlobToRegex(g) + "(/.*)?$"))
-		if err != nil {
-			return err
-		}
-		r.re = []*regexp.Regexp{re}
+		// GlobToRegex quotes everything but its wildcards: it always compiles.
+		r.re = []*regexp.Regexp{regexp.MustCompile(anchor("^" + textutil.GlobToRegex(g) + "(/.*)?$"))}
 	default: // web, search, mcp, skill, agent
 		g := strings.ToLower(r.Pattern)
 		exprs := []string{"^" + nameGlob(g) + "$"}
 		if r.Kind == RuleWeb && strings.HasPrefix(g, "*.") {
 			exprs = append(exprs, "^"+regexp.QuoteMeta(g[2:])+"$")
 		}
-		for _, e := range exprs {
-			re, err := regexp.Compile(e)
-			if err != nil {
-				return err
-			}
-			r.re = append(r.re, re)
+		for _, e := range exprs { // quoted but for the wildcards: always compiles
+			r.re = append(r.re, regexp.MustCompile(e))
 		}
 	}
 	return nil

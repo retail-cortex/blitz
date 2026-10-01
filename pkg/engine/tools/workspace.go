@@ -528,6 +528,7 @@ func (w *Workspace) snapshot(ctx context.Context, loc location) bool {
 		if info.Mode()&fs.ModeSymlink != 0 {
 			if real, err := r.Stat(loc.rel); err == nil {
 				st.Mode = real.Mode().Perm()
+				info = real // the size limit applies to the target, not the link
 			}
 		}
 		if info.Size() > w.maxFileSize {

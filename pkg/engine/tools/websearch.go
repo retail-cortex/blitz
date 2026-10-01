@@ -93,15 +93,6 @@ func (r *Registry) SetSearchBilling(f func(ctx context.Context, session, provide
 	}
 }
 
-// NewWebSearchTool creates web_search for a configured provider.
-func NewWebSearchTool(cfg WebSearchConfig, hooks *Hooks) (tool.Tool, error) {
-	s, err := newWebSearcher(cfg)
-	if err != nil {
-		return nil, err
-	}
-	return newWebSearchTool(s, hooks)
-}
-
 func newWebSearchTool(s *webSearcher, hooks *Hooks) (tool.Tool, error) {
 	return functiontool.New(
 		functiontool.Config{
