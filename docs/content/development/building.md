@@ -72,7 +72,7 @@ tools/check_format.sh                   # formatting, BUILD files and license he
 bazel run //tools:check_deps            # the dependency rules between apps and packages
 ```
 
-Some tests need more than the build: the gVisor tests need `runsc` (`RUNSC_PATH`), and the sandbox tests on Linux need bubblewrap and user namespaces. They skip without them locally; CI fails if they're skipped. Everything else passes without a working sandbox: tests that need the agent's tools to run without asking use `configtest.RunTools` (`pkg/config/configtest`), allow rules that work where bypass mode, which needs the sandbox, falls back to asking.
+Some tests need more than the build: the gVisor tests need `runsc` (`RUNSC_PATH`), and the sandbox tests on Linux need bubblewrap and user namespaces. They skip without them locally; CI fails if they're skipped. Everything else passes without a working sandbox (the tests run with `BLITZ_SANDBOX_SHELL=auto`, set in `.bazelrc`, since settings default to `required` on Linux): tests that need the agent's tools to run without asking use `configtest.RunTools` (`pkg/config/configtest`), allow rules that work where bypass mode, which needs the sandbox, falls back to asking.
 
 ## Release builds
 

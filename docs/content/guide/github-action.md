@@ -99,6 +99,7 @@ In `issue-to-pr` mode the agent may edit files (`accept-edits`); commands need `
 | `allow` | | permission rules to allow, one per line |
 | `max-cost-usd`, `timeout`, `max-turns` | `2`, `20m`, `60` | the run stops at the first it reaches |
 | `version` | the latest | the Blitz release to install |
+| `sandbox` | `required` | the OS sandbox for the agent's commands (`sandbox.shell`): on Linux runners the action installs bubblewrap and lifts Ubuntu's restriction on user namespaces; `auto` runs commands unsandboxed where that can't work (Windows has no sandbox, so needs it) |
 | `github-token` | `github.token` | to comment and open pull requests |
 
 The answer is also the action's `result` output. Nothing of the session is kept (`--no-session-persistence`), and project settings that need trust (`.blitz/settings.toml` hooks and MCP servers) stay off.

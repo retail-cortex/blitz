@@ -73,9 +73,9 @@ Every shell command is parsed and each sub-command checked: pipes, `$(…)`, `ba
 
 ## OS sandbox
 
-`sandbox.shell` is `auto`, `required` or `off`. Shell commands, forged tools and stdio MCP servers run under Seatbelt on macOS or bubblewrap on Linux: writes go only to the writable roots, temporary and cache directories and `shell_writable_paths`; blocked paths are unreadable; the network is off when `allow_network = false`. `required` refuses to start without the sandbox.
+`sandbox.shell` is `required`, `auto` or `off`; unset, it's `required` on Linux and `auto` elsewhere (`BLITZ_SANDBOX_SHELL` overrides the settings). Shell commands, forged tools and stdio MCP servers run under Seatbelt on macOS or bubblewrap on Linux: writes go only to the writable roots, temporary and cache directories and `shell_writable_paths`; blocked paths are unreadable; the network is off when `allow_network = false`. `required` refuses to run commands without the sandbox: the workspace doesn't open, and the error (`SANDBOX_UNAVAILABLE` from the service, the desktop's and the CLI's message, a failed check in `blitz doctor`) says how to fix it or opt out.
 
-On Linux, install `bubblewrap` and allow unprivileged user namespaces. Ubuntu 24.04 restricts them through AppArmor, and Docker's default seccomp profile blocks them; in `auto` mode Blitz then runs commands unsandboxed, and `/sandbox` or `blitz doctor` says why. bubblewrap can only hide paths that exist when a command starts, so a blocked file that a command creates is visible to that same command; macOS blocks it at once.
+On Linux, install `bubblewrap` and allow unprivileged user namespaces. Ubuntu 24.04 restricts them through AppArmor (`sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0`, or an AppArmor profile for bwrap), and Docker's default seccomp profile blocks them. Until then Blitz won't run commands on Linux; to run them unsandboxed instead, set `[sandbox] shell = "auto"` in `~/.blitz/.env.toml` (`/sandbox` and `blitz doctor` then say why it's off). Settings files that `blitz config init` wrote before this change say `shell = "auto"` themselves, and keep it. bubblewrap can only hide paths that exist when a command starts, so a blocked file that a command creates is visible to that same command; macOS blocks it at once.
 
 ## Background processes
 
@@ -83,7 +83,7 @@ Background processes never outlive Blitz. Exiting with processes running asks wh
 
 ## Secrets
 
-Child processes don't inherit credential variables (`sandbox.scrub_env`: `*_API_KEY`, `*_SECRET` and more). When Blitz signs in with Google Cloud ADC, the agent's commands can use that sign-in too: each gets its own copy of the credentials file, named by `GOOGLE_APPLICATION_CREDENTIALS` and removed when the command ends, while `~/.config/gcloud` itself (gcloud's own login included) stays hidden. The audit log, the diagnostic log and telemetry mask secrets. Sessions, history, approvals and audit files are owner-only.
+Child processes don't inherit credential variables (`sandbox.scrub_env`: `*_API_KEY`, `*_SECRET` and more). Blitz's sign-ins stay its own: `~/.config/gcloud` is blocked, and so is the `ant` command's directory (`~/.config/anthropic`) unless Claude signs in with it. With `[sandbox] share_adc = true` (your settings only; a project can't set it) and a provider on Google Cloud ADC, the agent's commands get that sign-in: each its own copy of the credentials file, named by `GOOGLE_APPLICATION_CREDENTIALS` and removed when the command ends, so code that calls Google Cloud works from them. The copy holds a refresh token, which a command with the network could send anywhere: turn it on only for workspaces you trust. The audit log, the diagnostic log and telemetry mask secrets. Sessions, history, approvals and audit files are owner-only.
 
 ## Checkpoints and undo
 

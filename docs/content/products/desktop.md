@@ -18,7 +18,7 @@ From source: `bazel build //apps/desktop/packaging:Blitz.app` (macOS) or `:deb` 
 The Linux `.deb` runs in ChromeOS's Linux container (Crostini): `amd64` on Intel Chromebooks such as the Pixelbook, `arm64` on ARM ones. It hasn't been tested there yet; reports are welcome.
 
 - **Debian version.** The container is Debian 12 or 13 (`cat /etc/debian_version`). The app needs WebKitGTK 4.1 at 2.40 or later, which current Debian 12 has; the package refuses an older one. A Chromebook past its last ChromeOS update keeps its container's Debian updates, but may never move to a newer Debian.
-- **Install.** `sudo apt install ./blitz-desktop_<version>_amd64.deb bubblewrap`. bubblewrap is the shell sandbox; gVisor is unlikely to run in the container, and in `auto` mode Blitz uses bubblewrap instead (`blitz doctor` says which).
+- **Install.** `sudo apt install ./blitz-desktop_<version>_amd64.deb bubblewrap`. bubblewrap is the shell sandbox, which Blitz requires on Linux: `blitz doctor` says whether it works in the container, and if it can't, `[sandbox] shell = "auto"` in `~/.blitz/.env.toml` runs commands without it. gVisor is unlikely to run there; skill scripts use bubblewrap instead.
 - **A blank or garbled window.** Some Chromebooks can't pass WebKitGTK's rendering through the VM: start the app with `WEBKIT_DISABLE_DMABUF_RENDERER=1 blitz-desktop`.
 - **Projects.** Linux sees its home directory and the folders shared with it in the Files app (under `/mnt/chromeos/`); open workspaces from there.
 - **Keys.** The container has no keyring, so API keys are kept in `~/.blitz/secrets.toml`, readable only by you.

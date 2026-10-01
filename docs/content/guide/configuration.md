@@ -93,7 +93,7 @@ project_id = "my-project"    # or GOOGLE_CLOUD_PROJECT
 location = "global"          # or GOOGLE_CLOUD_LOCATION; global when unset
 ```
 
-The credentials are Google's usual ones: `GOOGLE_APPLICATION_CREDENTIALS` (a service account's key file), gcloud's application-default login, or a Google Cloud machine's own. The project needs the Vertex AI API enabled. The agent's commands get the same credentials, so code that calls Google Cloud works from them too ([secrets](safety.md#secrets)).
+The credentials are Google's usual ones: `GOOGLE_APPLICATION_CREDENTIALS` (a service account's key file), gcloud's application-default login, or a Google Cloud machine's own. The project needs the Vertex AI API enabled. The agent's commands don't get them unless you set `[sandbox] share_adc = true` ([secrets](safety.md#secrets)).
 
 **Claude on Vertex AI (Google Cloud ADC).** Claude runs in your Google Cloud project, billed there, with the same sign-in as Gemini's. Enable the Claude models you use in Vertex AI's Model Garden first; model names stay the same (`claude-opus-5`).
 
