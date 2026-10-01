@@ -24,6 +24,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/retail-cortex/blitz/pkg/config"
 )
 
 // ExecEnv builds every process Blitz runs on the model's behalf: shell
@@ -53,14 +55,31 @@ type Credential struct {
 }
 
 // credentialsDir holds the copies, one directory per process, removed
-// when it ends. It's in the user's cache directory, which sandboxed
-// commands can read. Tests replace it.
+// when it ends: beside the service's socket, which sandboxed commands can
+// read but not write. Not the cache directory, which they can write: a
+// command could put a link there, and Blitz, unsandboxed, would follow it
+// (privateDir checks). Tests replace it.
 var credentialsDir = func() (string, error) {
-	cache, err := os.UserCacheDir()
-	if err != nil {
-		return "", err
+	return config.ExpandHome("~/.blitz/run/credentials"), nil
+}
+
+// privateDir makes dir (0700) if it isn't there, and checks that it's a
+// real directory only its owner can enter, not a link put in its place.
+func privateDir(dir string) error {
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return err
 	}
-	return filepath.Join(cache, "blitz", "credentials"), nil
+	info, err := os.Lstat(dir)
+	if err != nil {
+		return err
+	}
+	if !info.IsDir() {
+		return fmt.Errorf("%s isn't a directory (%v): not copying credentials into it", dir, info.Mode().Type())
+	}
+	if perm := info.Mode().Perm(); perm&0o077 != 0 {
+		return fmt.Errorf("%s is open to others (%v): not copying credentials into it", dir, perm)
+	}
+	return nil
 }
 
 // staleCredentials is how long a copy left by a process that outlived
@@ -91,7 +110,7 @@ func (e *ExecEnv) copyCredentials() ([]string, func(), error) {
 			if err != nil {
 				return nil, remove, err
 			}
-			if err := os.MkdirAll(root, 0o700); err != nil {
+			if err := privateDir(root); err != nil {
 				return nil, remove, err
 			}
 			if dir, err = os.MkdirTemp(root, "run-"); err != nil {
@@ -108,14 +127,22 @@ func (e *ExecEnv) copyCredentials() ([]string, func(), error) {
 	return env, remove, nil
 }
 
-// sweepCredentials removes copies older than staleCredentials.
+// sweepCredentials removes copies older than staleCredentials: only its
+// own run-* directories, and nothing behind a link where the directory
+// should be (Lstat; RemoveAll doesn't follow links inside).
 func sweepCredentials() {
 	root, err := credentialsDir()
 	if err != nil {
 		return
 	}
+	if info, err := os.Lstat(root); err != nil || !info.IsDir() {
+		return
+	}
 	entries, _ := os.ReadDir(root)
 	for _, d := range entries {
+		if !strings.HasPrefix(d.Name(), "run-") || !d.IsDir() {
+			continue
+		}
 		if info, err := d.Info(); err == nil && time.Since(info.ModTime()) > staleCredentials {
 			os.RemoveAll(filepath.Join(root, d.Name()))
 		}

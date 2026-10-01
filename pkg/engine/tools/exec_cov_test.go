@@ -45,17 +45,11 @@ func signedIn(t *testing.T, env string) Credential {
 // The copies go in the user's cache directory by default; without one,
 // there's nowhere for them.
 func TestCredentialsDirDefault(t *testing.T) {
-	t.Setenv("XDG_CACHE_HOME", "/cache") // Linux's; macOS has ~/Library/Caches
-	cache, err := os.UserCacheDir()
-	require.NoError(t, err)
+	home := t.TempDir()
+	t.Setenv("HOME", home)
 	dir, err := credentialsDir()
 	require.NoError(t, err)
-	assert.Equal(t, filepath.Join(cache, "blitz", "credentials"), dir)
-
-	t.Setenv("XDG_CACHE_HOME", "")
-	t.Setenv("HOME", "")
-	_, err = credentialsDir()
-	assert.Error(t, err, "no cache directory without a home")
+	assert.Equal(t, filepath.Join(home, ".blitz", "run", "credentials"), dir, "beside the socket, not in the cache sandboxed commands write")
 }
 
 // A command whose credentials can't be copied doesn't start, and says why;
@@ -71,7 +65,7 @@ func TestCredentialCopyFailures(t *testing.T) {
 		env      string
 		needPerm bool
 	}{
-		{"no cache directory", failCredentialsDir, "GOOGLE_APPLICATION_CREDENTIALS", false},
+		{"no directory for them", failCredentialsDir, "GOOGLE_APPLICATION_CREDENTIALS", false},
 		{"the directory can't be made", func(t *testing.T) { setCredentialsDir(t, filepath.Join(file, "sub")) }, "GOOGLE_APPLICATION_CREDENTIALS", false},
 		{"no room for a run's directory", func(t *testing.T) { setCredentialsDir(t, readOnly) }, "GOOGLE_APPLICATION_CREDENTIALS", true},
 		{"the copy can't be written", func(t *testing.T) { setCredentialsDir(t, t.TempDir()) }, "NESTED/NAME", false},

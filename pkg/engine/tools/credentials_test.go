@@ -85,3 +85,62 @@ func TestSweepCredentials(t *testing.T) {
 	assert.NoDirExists(t, filepath.Join(root, "run-old"))
 	assert.DirExists(t, filepath.Join(root, "run-new"))
 }
+
+// A link where the copies' directory should be (a command could make one
+// where it can write) stops the command, and nothing is copied through it;
+// so does a directory others can enter.
+func TestCredentialsDirMustBePrivate(t *testing.T) {
+	src := filepath.Join(t.TempDir(), "adc.json")
+	require.NoError(t, os.WriteFile(src, []byte("{}"), 0o600))
+	target := t.TempDir()
+	open := filepath.Join(t.TempDir(), "open")
+	require.NoError(t, os.Mkdir(open, 0o755))
+	require.NoError(t, os.Chmod(open, 0o755)) // past the umask
+	link := filepath.Join(t.TempDir(), "credentials")
+	require.NoError(t, os.Symlink(target, link))
+	for name, dir := range map[string]string{"a link": link, "open to others": open} {
+		t.Run(name, func(t *testing.T) {
+			setCredentialsDir(t, dir)
+			e := &ExecEnv{Credentials: []Credential{{Env: "GOOGLE_APPLICATION_CREDENTIALS", Path: func() string { return src }}}}
+			cmd, err := e.command(context.Background(), []string{"true"})
+			assert.Nil(t, cmd)
+			assert.ErrorContains(t, err, "not copying credentials into it")
+			left, _ := os.ReadDir(target)
+			assert.Empty(t, left, "copied through the link")
+		})
+	}
+}
+
+// The sweep removes only its own old run-* directories, and nothing behind
+// a link put where its directory should be.
+func TestSweepCredentialsStaysInItsDirectory(t *testing.T) {
+	old := time.Now().Add(-48 * time.Hour)
+	victim := t.TempDir()
+	keep := filepath.Join(victim, "Documents")
+	require.NoError(t, os.Mkdir(keep, 0o755))
+	require.NoError(t, os.Chtimes(keep, old, old))
+	link := filepath.Join(t.TempDir(), "credentials")
+	require.NoError(t, os.Symlink(victim, link))
+	setCredentialsDir(t, link)
+	sweepCredentials()
+	assert.DirExists(t, keep, "the sweep followed a link")
+
+	root := filepath.Join(t.TempDir(), "credentials")
+	require.NoError(t, os.Mkdir(root, 0o700))
+	for _, name := range []string{"run-old", "notes", "run-file"} {
+		p := filepath.Join(root, name)
+		if name == "run-file" {
+			require.NoError(t, os.WriteFile(p, nil, 0o600))
+		} else {
+			require.NoError(t, os.Mkdir(p, 0o700))
+		}
+		require.NoError(t, os.Chtimes(p, old, old))
+	}
+	require.NoError(t, os.Symlink(victim, filepath.Join(root, "run-link")))
+	setCredentialsDir(t, root)
+	sweepCredentials()
+	assert.NoDirExists(t, filepath.Join(root, "run-old"))
+	assert.DirExists(t, filepath.Join(root, "notes"), "not one of its own")
+	assert.FileExists(t, filepath.Join(root, "run-file"), "not a run's directory")
+	assert.DirExists(t, keep)
+}
