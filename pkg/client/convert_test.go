@@ -57,6 +57,13 @@ func TestErrorsFromTheService(t *testing.T) {
 			assert.ErrorIs(t, err, api.ErrUnknownRun)
 			assert.EqualError(t, err, "the message", "the service's message")
 		},
+		"WORKER_EXISTS": func(t *testing.T, err error) {
+			assert.ErrorIs(t, err, api.ErrWorkerExists)
+		},
+		"WORKER_INVALID": func(t *testing.T, err error) {
+			assert.ErrorIs(t, err, api.ErrWorkerInvalid)
+			assert.EqualError(t, err, "the message", "the service's message, with the problems")
+		},
 		"SOMETHING_NEW": func(t *testing.T, err error) {
 			assert.EqualError(t, err, "the message")
 		},

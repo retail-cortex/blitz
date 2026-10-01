@@ -220,6 +220,10 @@ func (e *InvalidError) Error() string {
 	return fmt.Sprintf("%s: %s", e.Path, strings.Join(e.Problems, "; "))
 }
 
+// Is makes errors.Is(err, api.ErrWorkerInvalid) true, as it is for the
+// error a client gets back from the service.
+func (e *InvalidError) Is(target error) bool { return target == api.ErrWorkerInvalid }
+
 // split separates the frontmatter between "---" lines from the body.
 func split(data []byte) (fm, body []byte, err error) {
 	s := bytes.TrimLeft(bytes.TrimPrefix(data, []byte{0xEF, 0xBB, 0xBF}), " \t\r\n") // a byte-order mark, then blank lines

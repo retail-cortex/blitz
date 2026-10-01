@@ -33,7 +33,8 @@ service WorkerService {
   rpc ListWorkers(ListWorkersRequest) returns (ListWorkersResponse);
   // Writes a new worker's WORKER.md (in the first of workers.paths,
   // .agents/workers by default) from a form, once it would load as valid;
-  // otherwise writes nothing and says why. It starts disabled.
+  // otherwise writes nothing and says why (WORKER_INVALID; WORKER_EXISTS
+  // for a name the workspace has). It starts disabled.
   rpc CreateWorker(CreateWorkerRequest) returns (CreateWorkerResponse);
   // Enables a worker at the content hash the caller reviewed
   // (HASH_MISMATCH if the file changed since).

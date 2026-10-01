@@ -139,6 +139,10 @@ type WorkerSpec struct {
 // already has.
 var ErrWorkerExists = errors.New("a worker with that name exists")
 
+// ErrWorkerInvalid reports a WORKER.md that can't be used (the engine's
+// workers.InvalidError, which lists why, matches it with errors.Is).
+var ErrWorkerInvalid = errors.New("the worker's definition isn't valid")
+
 // ErrHashMismatch reports enabling a worker at a hash other than its
 // current one: the files changed after they were reviewed.
 var ErrHashMismatch = errors.New("the worker changed since it was reviewed")

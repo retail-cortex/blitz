@@ -298,7 +298,7 @@ func NewEngine(
 // SetActiveAgent switches the primary active agent persona and rebuilds the agent tree.
 func (e *Engine) SetActiveAgent(ctx context.Context, agentName string) error {
 	if _, ok := e.agentReg.Get(agentName); !ok {
-		return fmt.Errorf("agent '%s' not found", agentName)
+		return &api.UnknownAgentError{Name: agentName}
 	}
 	e.mu.Lock()
 	defer e.mu.Unlock()
@@ -375,7 +375,7 @@ func (e *Engine) PinModel(ctx context.Context, agent string, llm model.LLM) erro
 		return errors.New("model must not be nil")
 	}
 	if _, ok := e.agentReg.Get(agent); !ok {
-		return fmt.Errorf("agent '%s' not found", agent)
+		return &api.UnknownAgentError{Name: agent}
 	}
 	e.mu.Lock()
 	defer e.mu.Unlock()
@@ -1076,7 +1076,7 @@ func (e *Engine) InvokeSubagent(ctx context.Context, agentName, prompt string) (
 	}
 	spec, ok := e.agentReg.Get(agentName)
 	if !ok {
-		return "", fmt.Errorf("agent '%s' not found", agentName)
+		return "", &api.UnknownAgentError{Name: agentName}
 	}
 
 	e.mu.RLock()

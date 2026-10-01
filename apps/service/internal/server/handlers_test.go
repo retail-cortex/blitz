@@ -454,6 +454,17 @@ func TestChangesOverTheAPI(t *testing.T) {
 
 // A background process started by a turn is listed, read and killed for
 // the sessions that name it, and UNKNOWN_PROCESS for any other.
+// Choosing an agent that doesn't exist is UNKNOWN_AGENT, naming it, not
+// an internal error.
+func TestUnknownAgentOverTheAPI(t *testing.T) {
+	c, _ := serveEvery(t, nil)
+	_, err := c.workspaces.SetAgent(context.Background(), connect.NewRequest(&pb.SetAgentRequest{Workspace: t.TempDir(), Name: "ghost"}))
+	code, info := errorReason(t, err)
+	assert.Equal(t, connect.CodeNotFound, code)
+	assert.Equal(t, "UNKNOWN_AGENT", info.Reason)
+	assert.Equal(t, "ghost", info.Metadata["name"])
+}
+
 func TestProcessesOverTheAPI(t *testing.T) {
 	start := call("run_shell_command", map[string]any{"command": "echo started; sleep 30", "background": true})
 	c, _ := serveEvery(t, func(cfg *config.Config) { cfg.Blitz.AutoApprove = false }, start, text("started"))

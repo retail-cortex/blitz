@@ -48,7 +48,7 @@ service WorkspaceService {
 
   // Returns every agent and which is active.
   rpc ListAgents(ListAgentsRequest) returns (ListAgentsResponse);
-  // Makes an agent the active one.
+  // Makes an agent the active one (UNKNOWN_AGENT).
   rpc SetAgent(SetAgentRequest) returns (SetAgentResponse);
   // Returns the model the active agent runs on.
   rpc GetModel(GetModelRequest) returns (GetModelResponse);
@@ -123,7 +123,7 @@ service WorkspaceService {
   // Returns the turns that changed files, newest first.
   rpc ListCheckpoints(ListCheckpointsRequest) returns (ListCheckpointsResponse);
   // Restores the files the latest turn with changes modified
-  // (UNDO_CONFLICT unless force).
+  // (UNDO_CONFLICT unless force; NOTHING_TO_UNDO when none are left).
   rpc Undo(UndoRequest) returns (UndoResponse);
   // Returns a diff of the agent's changes this session, or git's.
   rpc GetDiff(GetDiffRequest) returns (GetDiffResponse);

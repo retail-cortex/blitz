@@ -157,7 +157,9 @@ func TestTaskLimits(t *testing.T) {
 	_, err = f.eng.StartTask(ctx, "qa", "two", "")
 	assert.ErrorContains(t, err, "max_background_agents")
 	_, err = f.eng.StartTask(ctx, "nobody", "x", "")
-	assert.ErrorContains(t, err, "not found")
+	var unknown *api.UnknownAgentError
+	require.ErrorAs(t, err, &unknown)
+	assert.Equal(t, "nobody", unknown.Name)
 	_, err = f.eng.StartTask(context.WithValue(ctx, taskKey{}, "task-1"), "qa", "nested", "")
 	assert.ErrorContains(t, err, "can't start background tasks")
 	_, err = f.eng.StartTask(context.Background(), "qa", "no session", "")

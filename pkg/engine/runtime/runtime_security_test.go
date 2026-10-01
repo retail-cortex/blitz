@@ -20,6 +20,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/retail-cortex/blitz/pkg/api"
 	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/engine/agents"
 	"github.com/retail-cortex/blitz/pkg/engine/skills"
@@ -140,6 +141,24 @@ func TestEngineSetActiveAgentUnknownKeepsPrevious(t *testing.T) {
 	f := newEngine(t)
 	assert.Error(t, f.eng.SetActiveAgent(context.Background(), "ghost"), "expected error for unknown agent")
 	assert.Equal(t, "blitz", f.eng.ActiveAgent(), "active agent changed to %q", f.eng.ActiveAgent())
+}
+
+// A name that isn't an agent is an UnknownAgentError wherever one is
+// given, which the service reports as UNKNOWN_AGENT.
+func TestUnknownAgentNames(t *testing.T) {
+	f := newEngine(t)
+	ctx := context.Background()
+	for name, call := range map[string]func() error{
+		"SetActiveAgent": func() error { return f.eng.SetActiveAgent(ctx, "ghost") },
+		"PinModel":       func() error { return f.eng.PinModel(ctx, "ghost", f.llm) },
+		"InvokeSubagent": func() error { _, err := f.eng.InvokeSubagent(ctx, "ghost", "hi"); return err },
+	} {
+		t.Run(name, func(t *testing.T) {
+			var unknown *api.UnknownAgentError
+			require.ErrorAs(t, call(), &unknown)
+			assert.Equal(t, "ghost", unknown.Name)
+		})
+	}
 }
 
 func TestEngineAppliesGenerationConfig(t *testing.T) {

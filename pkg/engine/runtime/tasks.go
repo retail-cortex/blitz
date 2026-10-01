@@ -240,7 +240,7 @@ func (e *Engine) StartTask(ctx context.Context, agentName, prompt, isolation str
 		return api.TaskInfo{}, errors.New("a background task can't start background tasks")
 	}
 	if _, ok := e.agentReg.Get(agentName); !ok {
-		return api.TaskInfo{}, fmt.Errorf("agent '%s' not found", agentName)
+		return api.TaskInfo{}, &api.UnknownAgentError{Name: agentName}
 	}
 	limit := e.cfg.Tools.MaxBackgroundAgents
 	if limit <= 0 {

@@ -45,6 +45,9 @@ func (w *Workspace) ListCheckpoints() []api.Checkpoint {
 // rest wasn't.
 func (w *Workspace) Undo(force bool) (api.UndoResult, error) {
 	res, err := w.tools.Checkpoints().Undo(force)
+	if errors.Is(err, tools.ErrNothingToUndo) {
+		return api.UndoResult{}, api.ErrNothingToUndo // the API's, which the service maps
+	}
 	out := api.UndoResult{Label: res.Turn.Label, Restored: res.Restored}
 	if len(res.Restored) > 0 {
 		w.tools.Hooks().Audit().Log(audit.Entry{Kind: audit.KindUndo, Detail: strings.Join(res.Restored, ", ")})

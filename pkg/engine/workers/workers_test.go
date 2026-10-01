@@ -16,6 +16,7 @@ package workers
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -337,10 +338,13 @@ func TestDiscoverReportsUnreadable(t *testing.T) {
 	assert.Contains(t, err.Error(), "README.md", "the root that isn't a directory")
 }
 
-// TestInvalidErrorMessage checks the error names the file and each problem.
+// TestInvalidErrorMessage checks the error names the file and each problem,
+// and is api.ErrWorkerInvalid to errors.Is, as a client sees it.
 func TestInvalidErrorMessage(t *testing.T) {
 	err := &InvalidError{Path: "w/WORKER.md", Problems: []string{"a", "b"}}
 	assert.Equal(t, "w/WORKER.md: a; b", err.Error())
+	assert.ErrorIs(t, fmt.Errorf("loading: %w", err), api.ErrWorkerInvalid)
+	assert.NotErrorIs(t, err, api.ErrWorkerExists)
 }
 
 // TestParsePermissionRejectsBadGlobs checks a malformed pattern is refused.
