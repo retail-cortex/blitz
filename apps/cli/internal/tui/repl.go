@@ -721,11 +721,16 @@ func cmdGoal(args []string, app *App) {
 // cancelOnSignal returns a context cancelled when parent is done or a signal
 // arrives on sigs. Call stop (safe to call more than once, e.g. from an
 // interrupt handler and again at the end of a turn) to cancel the context
-// and release the watcher goroutine.
+// and release the watcher goroutine. stop returns once the watcher has
+// gone, so it can't take a signal meant for the next one: the prompt's
+// watcher, stopped as a turn starts, could otherwise swallow the Ctrl+C
+// that should stop the turn (select picks at random among ready cases).
 func cancelOnSignal(parent context.Context, sigs <-chan os.Signal) (context.Context, context.CancelFunc) {
 	ctx, cancel := context.WithCancel(parent)
 	done := make(chan struct{})
+	gone := make(chan struct{})
 	go func() {
+		defer close(gone)
 		select {
 		case <-sigs:
 			cancel()
@@ -735,7 +740,10 @@ func cancelOnSignal(parent context.Context, sigs <-chan os.Signal) (context.Cont
 	}()
 	var once sync.Once
 	return ctx, func() {
-		once.Do(func() { close(done) })
+		once.Do(func() {
+			close(done)
+			<-gone
+		})
 		cancel()
 	}
 }

@@ -126,6 +126,7 @@ go_test(
         "rewind_more_test.go",
         "rewind_test.go",
         "search_test.go",
+        "signal_test.go",
         "skills_test.go",
         "snapshot_test.go",
         "status_test.go",

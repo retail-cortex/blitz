@@ -87,9 +87,12 @@ func parallelShellTurn(t *testing.T, maxParallel int) time.Duration {
 	return time.Since(start)
 }
 
+// One at a time, four 0.3 s sleeps take at least 1.2 s; unlimited, they
+// overlap. The second is measured against the first, not a fixed bound: a
+// loaded machine slows both (a fixed 1.1 s failed on one, at 8 s).
 func TestEngineCapsParallelToolCalls(t *testing.T) {
-	d := parallelShellTurn(t, 1)
-	require.GreaterOrEqual(t, d, 1100*time.Millisecond, "max_parallel=1 ran 4×0.3s sleeps in %v; they overlapped", d)
-	d = parallelShellTurn(t, 0)
-	require.LessOrEqual(t, d, 1100*time.Millisecond, "unlimited took %v; calls did not run in parallel", d)
+	serial := parallelShellTurn(t, 1)
+	require.GreaterOrEqual(t, serial, 1100*time.Millisecond, "max_parallel=1 ran 4×0.3s sleeps in %v; they overlapped", serial)
+	parallel := parallelShellTurn(t, 0)
+	require.LessOrEqual(t, parallel, serial-600*time.Millisecond, "unlimited took %v, one at a time %v; calls did not run in parallel", parallel, serial)
 }
