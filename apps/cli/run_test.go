@@ -84,13 +84,9 @@ func TestRunOneShotWithRunFlags(t *testing.T) {
 // open.
 func TestRunFlagErrors(t *testing.T) {
 	ws := runEnv(t)
-	// No OS sandbox, wherever the tests run: bypass needs one, and CI has it.
-	settings := filepath.Join(os.Getenv("HOME"), ".blitz", ".env.toml")
-	f, err := os.OpenFile(settings, os.O_APPEND|os.O_WRONLY, 0o600)
-	require.NoError(t, err)
-	_, err = f.WriteString("\n[sandbox]\nshell = \"off\"\n")
-	require.NoError(t, err)
-	require.NoError(t, f.Close())
+	// No OS sandbox, wherever the tests run: bypass needs one, and CI has
+	// it. The variable, as it overrides the settings.
+	t.Setenv("BLITZ_SANDBOX_SHELL", "off")
 	for name, args := range map[string][]string{
 		"bad allow rule":        {"--allow", "nonsense(x", "hi"},
 		"missing prompt file":   {"--append-system-prompt-file", filepath.Join(ws, "missing.md"), "hi"},

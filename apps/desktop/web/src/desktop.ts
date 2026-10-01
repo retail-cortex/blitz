@@ -50,6 +50,21 @@ export interface CLIInstall {
   profile: string;
 }
 
+/** Whether the OS sandbox for the agent's commands works here (Linux; "unsupported" elsewhere). */
+export interface SandboxStatus {
+  state: "unsupported" | "ready" | "no_bwrap" | "restricted" | "broken";
+  bwrap?: string;
+  detail?: string;
+  profile?: string;
+}
+
+/** What fixing the sandbox did: its state after, and if it failed, why and the commands to run by hand. */
+export interface SandboxFix {
+  status: SandboxStatus;
+  error?: string;
+  commands?: string;
+}
+
 type Bound = {
   Version(): Promise<string>;
   ProgramExists(path: string): Promise<boolean>;
@@ -57,6 +72,8 @@ type Bound = {
   InstallService(): Promise<void>;
   SetTray(on: boolean): Promise<void>;
   CLIStatus(): Promise<CLIStatus>;
+  SandboxStatus(): Promise<SandboxStatus>;
+  FixSandbox(): Promise<SandboxFix>;
   InstallCLI(): Promise<CLIInstall>;
   StopService(pid: number): Promise<void>;
   RestartService(pid: number): Promise<void>;
@@ -110,6 +127,10 @@ export const installService = () => app().InstallService();
 
 /** Shows the service in the system tray at login and now, or stops that. */
 export const setTray = (on: boolean) => app().SetTray(on);
+/** The OS sandbox's state (undefined in a browser). */
+export const sandboxStatus = async () => (inApp() ? app().SandboxStatus() : undefined);
+/** Lets bubblewrap past AppArmor's restriction, with the system's password dialog. */
+export const fixSandbox = () => app().FixSandbox();
 /** Where the blitz command is (undefined in a browser, which can't install it). */
 export const cliStatus = async () => (inApp() ? app().CLIStatus() : undefined);
 /** Puts the app's blitz on the user's PATH (a no-op when one is there already). */

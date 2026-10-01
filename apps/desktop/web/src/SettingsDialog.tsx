@@ -36,7 +36,7 @@ import {
   mdiWeatherNight,
   mdiWhiteBalanceSunny,
 } from "@mdi/js";
-import { appVersion, cliStatus, installCLI, installService, restartService, serviceStatus, setTray, stopService, type CLIStatus, type ServiceStatus } from "./desktop";
+import { appVersion, cliStatus, fixSandbox, installCLI, installService, restartService, sandboxStatus, serviceStatus, setTray, stopService, type CLIStatus, type SandboxFix, type SandboxStatus, type ServiceStatus } from "./desktop";
 import { showLicense } from "./events";
 import { checkService, settleTimeout, type ServiceCheck, waitForService, withTimeout } from "./serviceVersion";
 import { languages, t } from "./i18n";
@@ -321,6 +321,7 @@ function Service() {
         />
       </Setting>
       <CommandLine />
+      <OSSandbox />
       {version && (
         <Setting title={t("desktop.service.version")} detail={version.stale ? t(`desktop.service.stale.${version.stale}`, { service: version.info?.version ?? "?", app: version.app, path: version.info?.executable ?? "" }) : undefined}>
           <span className={version.stale ? "error-text" : "muted"}>
@@ -336,6 +337,71 @@ function Service() {
       </Setting>
       {error && <p className="error-text">{error}</p>}
     </div>
+  );
+}
+
+/**
+ * The OS sandbox for the agent's commands (Linux): whether bubblewrap runs,
+ * and Allow when AppArmor's restriction stops it, which installs a profile
+ * for bwrap alone with the system's password dialog. Not shown elsewhere.
+ */
+function OSSandbox() {
+  const [status, setStatus] = useState<SandboxStatus | undefined | null>(null); // null: checking
+  const [busy, setBusy] = useState(false);
+  const [fix, setFix] = useState<SandboxFix | null>(null);
+  useEffect(() => {
+    sandboxStatus().then(setStatus, () => setStatus(undefined));
+  }, []);
+  if (status === undefined || status?.state === "unsupported") return null;
+  const allow = async () => {
+    setBusy(true);
+    try {
+      const done = await fixSandbox();
+      setFix(done);
+      setStatus(done.status);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const detail =
+    status === null
+      ? t("desktop.checking")
+      : status.state === "ready"
+        ? t("desktop.sandbox.ready", { bwrap: status.bwrap ?? "" })
+        : status.state === "no_bwrap"
+          ? t("desktop.sandbox.no_bwrap")
+          : status.state === "restricted"
+            ? t("desktop.sandbox.restricted", { detail: status.detail ?? "" })
+            : t("desktop.sandbox.broken", { detail: status.detail ?? "" });
+  return (
+    <>
+      <Setting title={t("desktop.sandbox")} detail={detail}>
+        {status?.state === "ready" ? (
+          <Chip className="static" icon={mdiCheckCircleOutline} selected>
+            {t("desktop.sandbox.on")}
+          </Chip>
+        ) : status?.state === "restricted" ? (
+          <Button small variant="tonal" disabled={busy} onClick={allow}>
+            {t("desktop.sandbox.allow")}
+          </Button>
+        ) : status ? (
+          <Chip className="static" icon={mdiAlertCircleOutline} tone="danger">
+            {t("desktop.sandbox.off")}
+          </Chip>
+        ) : null}
+      </Setting>
+      {fix && !fix.error && <p className="muted">{t("desktop.sandbox.fixed")}</p>}
+      {fix?.error && (
+        <div className="stack">
+          <p className="error-text">{t("desktop.sandbox.failed", { error: fix.error })}</p>
+          {fix.commands && (
+            <div className="code-block">
+              <pre className="mono t-body-sm">{fix.commands}</pre>
+            </div>
+          )}
+        </div>
+      )}
+    </>
   );
 }
 

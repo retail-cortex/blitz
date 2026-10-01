@@ -48,6 +48,6 @@ func nativeSandbox(spec OSSandboxSpec) (sandboxWrapper, error) {
 
 // sandboxHint says how to get the sandbox, or do without it, when it's
 // required and unavailable.
-const sandboxHint = "On Ubuntu 24.04, AppArmor keeps bubblewrap from the user namespaces it needs: allow them " +
-	"(sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0, or an AppArmor profile for bwrap), " +
+const sandboxHint = "On Ubuntu 24.04 and later, AppArmor keeps bubblewrap from the user namespaces it needs: " +
+	"blitz security fix-apparmor (or the desktop app's Settings > Service) lets bwrap alone have them, " +
 	"or set sandbox.shell = \"auto\" in ~/.blitz/.env.toml to run commands unsandboxed"

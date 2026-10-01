@@ -55,6 +55,7 @@ go_library(
         "main.go",
         "prefs.go",
         "proxy.go",
+        "sandbox.go",
         "unsaved.go",
     ],
     cdeps = [":embedded_info_plist"],  # keep
@@ -75,6 +76,7 @@ go_library(
         "//pkg/config",
         "//pkg/legal",
         "//pkg/loginitem",
+        "//pkg/sandboxsetup",
         "//pkg/socket",
         "@com_github_wailsapp_wails_v2//:wails",
         "@com_github_wailsapp_wails_v2//pkg/options",
@@ -123,6 +125,7 @@ go_test(
         "license_test.go",
         "prefs_test.go",
         "proxy_test.go",
+        "sandbox_test.go",
         "service_test.go",
     ],
     # A real blitzd, which TestStopServiceByPID starts and stops.
