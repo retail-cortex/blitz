@@ -115,6 +115,11 @@ func (c *conn) read() {
 // call sends method with params and decodes its result into out (when
 // not nil).
 func (c *conn) call(ctx context.Context, method string, params, out any) error {
+	// Cancelled already: nothing is sent, so a cancelled click or
+	// navigation never reaches the browser.
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	ch := make(chan reply, 1)
 	c.mu.Lock()
 	if c.err != nil {
