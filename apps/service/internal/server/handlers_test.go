@@ -24,6 +24,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"testing"
 	"time"
 
@@ -122,6 +123,7 @@ func TestEveryHandlerRefusesARelativeWorkspace(t *testing.T) {
 		"SaveSnapshot":     func() error { return unary(s.SaveSnapshot, &pb.SaveSnapshotRequest{Workspace: ws}) },
 		"MoveSession":      func() error { return unary(s.MoveSession, &pb.MoveSessionRequest{Workspace: ws}) },
 		"RenameSession":    func() error { return unary(s.RenameSession, &pb.RenameSessionRequest{Workspace: ws}) },
+		"DeleteSession":    func() error { return unary(s.DeleteSession, &pb.DeleteSessionRequest{Workspace: ws}) },
 		"ForkSession":      func() error { return unary(s.ForkSession, &pb.ForkSessionRequest{Workspace: ws}) },
 		"ExportSession":    func() error { return unary(s.ExportSession, &pb.ExportSessionRequest{Workspace: ws}) },
 		"Steer":            func() error { return unary(s.Steer, &pb.SteerRequest{Workspace: ws}) },
@@ -197,11 +199,24 @@ func TestEveryHandlerRefusesARelativeWorkspace(t *testing.T) {
 
 		"ListWorkers":    func() error { return unary(wk.ListWorkers, &pb.ListWorkersRequest{Workspace: ws}) },
 		"CreateWorker":   func() error { return unary(wk.CreateWorker, &pb.CreateWorkerRequest{Workspace: ws}) },
+		"GetWorkerSpec":  func() error { return unary(wk.GetWorkerSpec, &pb.GetWorkerSpecRequest{Workspace: ws}) },
+		"UpdateWorker":   func() error { return unary(wk.UpdateWorker, &pb.UpdateWorkerRequest{Workspace: ws}) },
 		"EnableWorker":   func() error { return unary(wk.EnableWorker, &pb.EnableWorkerRequest{Workspace: ws}) },
 		"DisableWorker":  func() error { return unary(wk.DisableWorker, &pb.DisableWorkerRequest{Workspace: ws}) },
+		"DeleteWorker":   func() error { return unary(wk.DeleteWorker, &pb.DeleteWorkerRequest{Workspace: ws}) },
 		"RunWorker":      func() error { return unary(wk.RunWorker, &pb.RunWorkerRequest{Workspace: ws}) },
 		"ListWorkerRuns": func() error { return unary(wk.ListWorkerRuns, &pb.ListWorkerRunsRequest{Workspace: ws}) },
 		"UndoWorkerRun":  func() error { return unary(wk.UndoWorkerRun, &pb.UndoWorkerRunRequest{Workspace: ws}) },
+
+		"ListAgentFiles": func() error {
+			return unary(w.ListAgentFiles, &pb.ListAgentFilesRequest{Workspace: ws, Scope: pb.AgentScope_AGENT_SCOPE_WORKSPACE})
+		},
+		"SaveAgentFile": func() error {
+			return unary(w.SaveAgentFile, &pb.SaveAgentFileRequest{Workspace: ws, Scope: pb.AgentScope_AGENT_SCOPE_WORKSPACE})
+		},
+		"DeleteAgentFile": func() error {
+			return unary(w.DeleteAgentFile, &pb.DeleteAgentFileRequest{Workspace: ws, Scope: pb.AgentScope_AGENT_SCOPE_WORKSPACE})
+		},
 
 		"ListDir":      func() error { return unary(f.ListDir, &pb.ListDirRequest{Workspace: ws}) },
 		"ReadFile":     func() error { return unary(f.ReadFile, &pb.ReadFileRequest{Workspace: ws}) },
@@ -210,8 +225,11 @@ func TestEveryHandlerRefusesARelativeWorkspace(t *testing.T) {
 		"CreateFolder": func() error { return unary(f.CreateFolder, &pb.CreateFolderRequest{Workspace: ws}) },
 		"RenameFile":   func() error { return unary(f.RenameFile, &pb.RenameFileRequest{Workspace: ws}) },
 		"DeleteFile":   func() error { return unary(f.DeleteFile, &pb.DeleteFileRequest{Workspace: ws}) },
-		"FindFiles":    func() error { return unary(f.FindFiles, &pb.FindFilesRequest{Workspace: ws}) },
-		"StatFiles":    func() error { return unary(f.StatFiles, &pb.StatFilesRequest{Workspace: ws}) },
+		"GitFileAction": func() error {
+			return unary(f.GitFileAction, &pb.GitFileActionRequest{Workspace: ws, Path: "x", Action: pb.GitAction_GIT_ACTION_STAGE})
+		},
+		"FindFiles": func() error { return unary(f.FindFiles, &pb.FindFilesRequest{Workspace: ws}) },
+		"StatFiles": func() error { return unary(f.StatFiles, &pb.StatFilesRequest{Workspace: ws}) },
 	} {
 		t.Run(name, func(t *testing.T) {
 			code, info := errorReason(t, call())
@@ -374,6 +392,20 @@ func TestSessionHandlers(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, opened.Msg.Resumed)
 
+	// Deleting: not the active session, nor one open in another workspace
+	// (the one moved away); a past one, once.
+	assert.Equal(t, "SESSION_OPEN", reason(t, unary(s.DeleteSession, &pb.DeleteSessionRequest{Workspace: dir, SessionId: opened.Msg.Session.Id})))
+	assert.Equal(t, "SESSION_OPEN", reason(t, unary(s.DeleteSession, &pb.DeleteSessionRequest{Workspace: dir, SessionId: id})))
+	_, err = s.NewSession(ctx, connect.NewRequest(&pb.NewSessionRequest{Workspace: dir}))
+	require.NoError(t, err)
+	require.NoError(t, unary(s.DeleteSession, &pb.DeleteSessionRequest{Workspace: dir, SessionId: forked.Msg.Session.Id}))
+	list, err = s.ListSessions(ctx, connect.NewRequest(&pb.ListSessionsRequest{Workspace: dir, All: true}))
+	require.NoError(t, err)
+	for _, l := range list.Msg.Sessions {
+		assert.NotEqual(t, forked.Msg.Session.Id, l.Id, "the deleted session is still listed")
+	}
+	assert.Equal(t, "SESSION_NOT_FOUND", reason(t, unary(s.DeleteSession, &pb.DeleteSessionRequest{Workspace: dir, SessionId: forked.Msg.Session.Id})))
+
 	// Replies: a decision is required, and an unknown request is refused,
 	// in a workspace or none.
 	assert.Equal(t, "INVALID_DECISION", reason(t, unary(s.Approve, &pb.ApproveRequest{Workspace: dir, RequestId: "r"})))
@@ -518,6 +550,71 @@ func searxng(t *testing.T) string {
 
 // The workspace handlers answer from the workspace, and their documented
 // failures arrive as reasons.
+// The agent editors save, list and delete agent files in each scope, and
+// a workspace offers its new agent at once.
+func TestAgentFilesOverTheAPI(t *testing.T) {
+	c, _ := serveEvery(t, nil) // with a home of its own
+	home := os.Getenv("HOME")
+	w := c.workspaces
+	ctx := context.Background()
+	dir := t.TempDir()
+	const ws, user = pb.AgentScope_AGENT_SCOPE_WORKSPACE, pb.AgentScope_AGENT_SCOPE_USER
+
+	quote := &pb.AgentDefinition{Name: "quote", Description: "Quotes", Tools: []string{"read_file"}, Temperature: new(0.4), MaxTokens: new(int32(512)), Prompt: "You write quotes."}
+	saved, err := w.SaveAgentFile(ctx, connect.NewRequest(&pb.SaveAgentFileRequest{Workspace: dir, Scope: ws, Agent: quote}))
+	require.NoError(t, err)
+	require.Empty(t, saved.Msg.Problems)
+	real, err := filepath.EvalSymlinks(dir)
+	require.NoError(t, err)
+	assert.Equal(t, filepath.Join(real, ".agents", "agents", "quote.md"), saved.Msg.File.Path)
+
+	agentsNow, err := w.ListAgents(ctx, connect.NewRequest(&pb.ListAgentsRequest{Workspace: dir}))
+	require.NoError(t, err)
+	assert.True(t, slices.ContainsFunc(agentsNow.Msg.Agents, func(a *pb.AgentInfo) bool { return a.Name == "quote" }), "offered at once")
+
+	listed, err := w.ListAgentFiles(ctx, connect.NewRequest(&pb.ListAgentFilesRequest{Workspace: dir, Scope: ws}))
+	require.NoError(t, err)
+	require.Len(t, listed.Msg.Files, 1)
+	got := listed.Msg.Files[0].Agent
+	assert.Equal(t, 0.4, got.GetTemperature())
+	assert.Equal(t, int32(512), got.GetMaxTokens())
+	assert.Nil(t, got.TopP, "unset stays unset")
+
+	bad, err := w.SaveAgentFile(ctx, connect.NewRequest(&pb.SaveAgentFileRequest{Workspace: dir, Scope: ws, Agent: &pb.AgentDefinition{Name: "blitz", Description: "d"}}))
+	require.NoError(t, err)
+	assert.NotEmpty(t, bad.Msg.Problems, "a built-in's name")
+	assert.Nil(t, bad.Msg.File)
+
+	// The user's agents need no workspace.
+	_, err = w.SaveAgentFile(ctx, connect.NewRequest(&pb.SaveAgentFileRequest{Scope: user, Agent: &pb.AgentDefinition{Name: "mine", Description: "Mine"}}))
+	require.NoError(t, err)
+	mine, err := w.ListAgentFiles(ctx, connect.NewRequest(&pb.ListAgentFilesRequest{Scope: user}))
+	require.NoError(t, err)
+	assert.Equal(t, filepath.Join(home, ".blitz", "agents"), mine.Msg.Dir)
+	require.Len(t, mine.Msg.Files, 1)
+
+	_, err = w.DeleteAgentFile(ctx, connect.NewRequest(&pb.DeleteAgentFileRequest{Workspace: dir, Scope: ws, Name: "quote"}))
+	require.NoError(t, err)
+	code, info := errorReason(t, unary(w.DeleteAgentFile, &pb.DeleteAgentFileRequest{Workspace: dir, Scope: ws, Name: "quote"}))
+	assert.Equal(t, connect.CodeNotFound, code)
+	assert.Equal(t, "UNKNOWN_AGENT", info.Reason)
+	assert.Error(t, unary(w.ListAgentFiles, &pb.ListAgentFilesRequest{}), "a scope is required")
+
+	broken := filepath.Join(mine.Msg.Dir, "broken.md")
+	require.NoError(t, os.WriteFile(broken, []byte("not an agent"), 0o644))
+	_, err = w.DeleteAgentFile(ctx, connect.NewRequest(&pb.DeleteAgentFileRequest{Scope: user, Path: broken}))
+	require.NoError(t, err, "a file that names no agent goes by its path")
+	assert.NoFileExists(t, broken)
+	assert.Error(t, unary(w.DeleteAgentFile, &pb.DeleteAgentFileRequest{Scope: user, Path: filepath.Join(dir, "x.md")}), "only the scope's files")
+
+	all, err := w.ListTools(ctx, connect.NewRequest(&pb.ListToolsRequest{Workspace: dir, All: true}))
+	require.NoError(t, err)
+	active, err := w.ListTools(ctx, connect.NewRequest(&pb.ListToolsRequest{Workspace: dir}))
+	require.NoError(t, err)
+	assert.GreaterOrEqual(t, len(all.Msg.Tools), len(active.Msg.Tools))
+	assert.True(t, slices.ContainsFunc(all.Msg.Tools, func(t *pb.ToolInfo) bool { return t.Name == "universal_constructor" }), "tools the active agent lacks")
+}
+
 func TestWorkspaceHandlers(t *testing.T) {
 	search := searxng(t)
 	c, _ := serveEvery(t, func(cfg *config.Config) {

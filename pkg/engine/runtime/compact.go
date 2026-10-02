@@ -196,6 +196,12 @@ func (e *Engine) EventCount(ctx context.Context, sessionID string) int {
 	return len(finalEvents(got.Session))
 }
 
+// ForgetSession drops a session's event log, in memory and on disk, once
+// the session is deleted. A session this process never loaded is fine.
+func (e *Engine) ForgetSession(ctx context.Context, sessionID string) {
+	_ = e.sessions.Delete(ctx, &session.DeleteRequest{AppName: appName, UserID: "user", SessionID: sessionID})
+}
+
 // truncater is a session service that can drop the end of a session's log
 // in place (session.PersistentService).
 type truncater interface {

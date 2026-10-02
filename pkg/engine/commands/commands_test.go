@@ -15,6 +15,7 @@
 package commands
 
 import (
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -71,12 +72,15 @@ func TestLoadNamespacesAndBundled(t *testing.T) {
 	for _, c := range Bundled() {
 		bundled[c.Name] = c
 	}
-	for _, name := range []string{"review", "security-review", "simplify", "verify", "grill-me"} {
+	files, _ := fs.ReadDir(builtinFS, "builtin")
+	assert.Len(t, bundled, len(files), "every bundled file parses: one that doesn't is skipped without a word")
+	for _, name := range []string{"review", "security-review", "simplify", "verify", "grill-me", "setup"} {
 		t.Run(name, func(t *testing.T) {
 			_, ok := bundled[name]
 			assert.True(t, ok, "bundled command %s missing", name)
 		})
 	}
+	assert.Equal(t, "project-setup", bundled["setup"].Agent, "/setup runs the setup agent")
 	assert.True(t, bundled["review"].Plan, "review should be read-only (plan), simplify shouldn't")
 	assert.False(t, bundled["simplify"].Plan, "review should be read-only (plan), simplify shouldn't")
 	// /grill-me <task> (BL-CLI-02): read-only, questions before any proposal.

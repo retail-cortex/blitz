@@ -27,6 +27,8 @@ export interface ComposeDetail {
   run?: boolean;
   /** Add it after what's typed (a paragraph apart) instead of replacing it. */
   append?: boolean;
+  /** With run: in a new chat, not the one shown. */
+  fresh?: boolean;
 }
 // Text for a composer that isn't there yet (its workspace is opening),
 // taken when it mounts.
@@ -39,6 +41,15 @@ const pendingCompose = new Map<string, ComposeDetail>();
 export function compose(detail: ComposeDetail) {
   const taken = !window.dispatchEvent(new CustomEvent(composeEvent, { detail, cancelable: true }));
   if (!taken && !detail.run) pendingCompose.set(detail.dir, detail);
+}
+
+/** The guided setup's command: it interviews the user and writes the agent harness. */
+export const setupCommand = "/setup";
+
+/** Runs the guided setup in a new chat in a workspace, showing the chat. */
+export function startSetup(dir: string) {
+  showView({ dir, view: "chat" });
+  compose({ dir, text: setupCommand, run: true, fresh: true });
 }
 
 /** The text waiting for a workspace's composer, once. */
@@ -63,9 +74,9 @@ export function addToContext(detail: AddToContextDetail) {
   window.dispatchEvent(new CustomEvent(addToContextEvent, { detail }));
 }
 
-/** The event that switches a workspace's view. */
+/** The event that asks a workspace for a view: the editor, or the changes or the workers opened over it. */
 export const viewEvent = "blitz:view";
-/** Which workspace, and which view to show ("chat" is always shown, beside the others). */
+/** Which workspace, and which view to show ("chat" and "editor" close what's over the editor). */
 export interface ViewDetail {
   dir: string;
   view: "chat" | "editor" | "changes" | "workers";

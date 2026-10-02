@@ -14,19 +14,21 @@
  * limitations under the License.
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { timestampDate } from "@bufbuild/protobuf/wkt";
 import {
   mdiAlertCircleOutline,
   mdiCalendarClock,
+  mdiCalendarEdit,
   mdiCalendarPlus,
   mdiCheckCircleOutline,
   mdiCloseCircleOutline,
+  mdiDeleteOutline,
   mdiMessageTextOutline,
   mdiPauseCircleOutline,
+  mdiPencilOutline,
   mdiPlay,
   mdiProgressClock,
-  mdiRefresh,
   mdiShieldCheckOutline,
 } from "@mdi/js";
 import { workers } from "./api";
@@ -35,8 +37,10 @@ import { loadSession } from "./events";
 import { language, t } from "./i18n";
 import { RunStatus, WorkerState, type Worker, type WorkerRun } from "./gen/blitz/v1/worker_pb";
 import { applyEvent, failed, summarizeArgs, type Entry } from "./turns";
-import { NewWorkerDialog } from "./NewWorkerDialog";
-import { Button, Chip, Icon, IconButton } from "./ui/controls";
+import { WorkerEditor } from "./WorkerEditor";
+import { savePauses } from "./workerForm";
+import { Button, Chip, Dialog, Icon, useSnackbar } from "./ui/controls";
+import type { ItemIntent } from "./intent";
 
 const stateKeys: Record<WorkerState, string> = {
   [WorkerState.UNSPECIFIED]: "",
@@ -46,7 +50,8 @@ const stateKeys: Record<WorkerState, string> = {
   [WorkerState.CHANGED]: "changed",
   [WorkerState.INVALID]: "invalid",
 };
-const stateLabel = (s: WorkerState) => (stateKeys[s] ? t(`desktop.worker.state.${stateKeys[s]}`) : "?");
+/** A worker's state, in words (New, Enabled, Changed…). */
+export const workerStateLabel = (s: WorkerState) => (stateKeys[s] ? t(`desktop.worker.state.${stateKeys[s]}`) : "?");
 
 const runKeys: Record<RunStatus, string> = {
   [RunStatus.UNSPECIFIED]: "",
@@ -61,87 +66,179 @@ const runLabel = (s: RunStatus) => (runKeys[s] ? t(`desktop.run.${runKeys[s]}`) 
 const runIcon = (s: RunStatus) =>
   s === RunStatus.SUCCEEDED ? mdiCheckCircleOutline : s === RunStatus.RUNNING ? mdiProgressClock : s === RunStatus.SKIPPED ? mdiPauseCircleOutline : mdiCloseCircleOutline;
 
-/** How often the open Workers view asks for the workers again. */
+/** How often an open worker dialog asks for the workers again. */
 const workersPollMs = 5000;
 
-/** A workspace's workers: review and enable them, run them, see their runs. */
-export function Workers({ dir }: { dir: string }) {
-  const [list, setList] = useState<Worker[]>([]);
-  const [selected, setSelected] = useState("");
+/** Whether a worker's latest run failed or hit a limit. */
+const lastFailed = (w: Worker) => w.lastRun?.status === RunStatus.FAILED || w.lastRun?.status === RunStatus.LIMITED;
+
+/**
+ * A worker, over the editor, from the top bar's Workers menu (intent): a
+ * read view (what it does and may do, its runs; Run, Enable or Disable,
+ * Edit, Delete) and an edit view (its form, its buttons in the footer),
+ * switching in place in one dialog; a new worker starts on the form, and
+ * saving shows it. Cancel goes back to the read view; the close button
+ * closes the dialog. Deleting asks first.
+ * Without a name (the status bar's failed runs) it shows the first worker
+ * whose last run failed, else the first.
+ */
+export function WorkerModal({ dir, intent, onClose }: { dir: string; intent: ItemIntent; onClose: () => void }) {
+  const snack = useSnackbar();
+  const [list, setList] = useState<Worker[] | null>(null);
+  const [name, setName] = useState(intent.id);
+  const [mode, setMode] = useState<"read" | "edit" | "new">(intent.kind === "new" ? "new" : intent.kind === "edit" ? "edit" : "read");
+  const [deleting, setDeleting] = useState(intent.kind === "delete");
+  // A run or disable the menu asked for, for the read view to do once.
+  const [request, setRequest] = useState<"run" | "disable" | undefined>(intent.kind === "run" || intent.kind === "disable" ? intent.kind : undefined);
   const [error, setError] = useState("");
-  const [creating, setCreating] = useState(false);
+  // The dialog's footer, where the edit view puts its buttons.
+  const [footer, setFooter] = useState<HTMLDivElement | null>(null);
 
   const refresh = useCallback(async () => {
     try {
-      const ws = (await workers.listWorkers({ workspace: dir })).workers;
-      setList(ws);
-      setSelected((cur) => cur || ws[0]?.name || "");
+      setList((await workers.listWorkers({ workspace: dir })).workers);
+      setError("");
     } catch (e) {
       setError(message(e));
     }
   }, [dir]);
-  // WORKER.md files edited elsewhere show up: the list is asked for again
-  // while the view is open (BL-DSK-50).
+  // WORKER.md files edited elsewhere show up (BL-DSK-50).
   useEffect(() => {
-    refresh();
+    void refresh();
     const timer = setInterval(refresh, workersPollMs);
     return () => clearInterval(timer);
   }, [refresh]);
+  useEffect(() => {
+    if (!name && list?.length) setName((list.find(lastFailed) ?? list[0]).name);
+  }, [list, name]);
 
-  const worker = list.find((w) => w.name === selected);
+  const worker = list?.find((w) => w.name === name);
+  const remove = async () => {
+    setDeleting(false);
+    try {
+      await workers.deleteWorker({ workspace: dir, name });
+      snack(t("desktop.workers.deleted", { name }));
+      onClose();
+    } catch (e) {
+      snack(message(e), { error: true });
+      if (intent.kind === "delete") onClose();
+    }
+  };
+  const confirm = deleting && (
+    <Dialog
+      title={t("desktop.workers.delete_title", { name })}
+      icon={mdiDeleteOutline}
+      onClose={() => (intent.kind === "delete" ? onClose() : setDeleting(false))}
+      footer={
+        <>
+          <Button onClick={() => (intent.kind === "delete" ? onClose() : setDeleting(false))}>{t("desktop.cancel")}</Button>
+          <Button variant="filled" danger onClick={() => void remove()}>
+            {t("desktop.workers.delete")}
+          </Button>
+        </>
+      }
+    >
+      <p>{t("desktop.workers.delete_body", { name })}</p>
+    </Dialog>
+  );
+  // Deleting from the menu asks, and nothing else.
+  if (intent.kind === "delete") return confirm || null;
+
+  const toRead = () => {
+    setMode("read");
+    void refresh();
+  };
+  // One dialog, its view switching in place: the read view, or the form
+  // (editing this worker, or a new one).
+  const title = mode === "new" ? t("desktop.newworker.title") : mode === "edit" ? t("desktop.editworker.title", { name }) : worker?.name || t("desktop.view.workers");
   return (
-    <div className="split">
-      <aside className="split-side">
-        <div className="row side-head">
-          <span className="t-title-sm spacer">{t("desktop.workers.title")}</span>
-          <IconButton icon={mdiCalendarPlus} label={t("desktop.newworker.title")} small onClick={() => setCreating(true)} />
-          <IconButton icon={mdiRefresh} label={t("desktop.refresh")} small onClick={refresh} />
-        </div>
-        {list.length === 0 && (
-          <div className="stack" style={{ gap: 8 }}>
-            <p className="muted t-body-sm">{t("desktop.workers.none", { path: ".agents/workers/<name>/WORKER.md" })}</p>
-            <Button small variant="tonal" icon={mdiCalendarPlus} onClick={() => setCreating(true)}>
-              {t("desktop.newworker.title")}
-            </Button>
-          </div>
-        )}
-        <div className="list">
-          {list.map((w) => (
-            <button key={w.name} className={`list-item ${w.name === selected ? "active" : ""}`} onClick={() => setSelected(w.name)}>
-              <Icon path={mdiCalendarClock} />
-              <span className="lines">
-                <span className="ellipsis">{w.name}</span>
-                <small className="ellipsis">
-                  {stateLabel(w.state)} · {w.schedule}
-                </small>
-              </span>
-            </button>
-          ))}
-        </div>
-      </aside>
-      <section className="split-main">
+    <>
+      <Dialog
+        title={title}
+        icon={mode === "new" ? mdiCalendarPlus : mode === "edit" ? mdiCalendarEdit : mdiCalendarClock}
+        wide
+        className="worker-dialog"
+        closeButton
+        headerActions={mode === "read" && worker && <WorkerChip state={worker.state} />}
+        footer={mode === "read" ? undefined : <div className="dialog-actions" ref={setFooter} />}
+        onClose={onClose}
+      >
         {error && (
           <div className="card error row">
             <Icon path={mdiAlertCircleOutline} /> {error}
           </div>
         )}
-        {creating && (
-          <NewWorkerDialog
+        {mode === "new" && (
+          <WorkerEditor
+            key="new"
             dir={dir}
-            onClose={() => setCreating(false)}
-            onCreated={(name) => {
-              setSelected(name);
-              refresh();
+            footer={footer}
+            onCancel={onClose}
+            onSaved={(n) => {
+              setName(n);
+              toRead();
             }}
           />
         )}
-        {worker ? <WorkerView dir={dir} worker={worker} onChange={refresh} key={worker.name + worker.hash} /> : list.length > 0 && <p className="muted">{t("desktop.workers.choose")}</p>}
-      </section>
-    </div>
+        {mode === "edit" && worker && <WorkerEditor key={`edit-${worker.name}`} dir={dir} edit={{ name: worker.name, path: worker.path, pauses: savePauses(worker.state) }} footer={footer} onCancel={toRead} onSaved={toRead} />}
+        {mode === "read" && list?.length === 0 && (
+          <div className="stack" style={{ gap: 12 }}>
+            <p className="muted">{t("desktop.workers.none", { path: ".agents/workers/<name>/WORKER.md" })}</p>
+            <Button variant="tonal" icon={mdiCalendarPlus} onClick={() => setMode("new")}>
+              {t("desktop.newworker.title")}
+            </Button>
+          </div>
+        )}
+        {mode === "read" && worker && (
+          <WorkerView
+            dir={dir}
+            worker={worker}
+            onChange={refresh}
+            onEdit={() => setMode("edit")}
+            onDelete={() => setDeleting(true)}
+            request={request}
+            onRequestDone={() => setRequest(undefined)}
+            onLeave={onClose}
+            key={worker.name + worker.hash}
+          />
+        )}
+        {mode === "read" && list && list.length > 0 && name && !worker && <p className="muted">{t("desktop.workers.gone", { name })}</p>}
+      </Dialog>
+      {confirm}
+    </>
   );
 }
 
-function WorkerView({ dir, worker, onChange }: { dir: string; worker: Worker; onChange: () => void }) {
+/** A worker's state as a chip (Enabled tinted, Changed a warning, Invalid an error). */
+function WorkerChip({ state }: { state: WorkerState }) {
+  return (
+    <Chip className="static" selected={state === WorkerState.ENABLED} tone={state === WorkerState.INVALID ? "danger" : state === WorkerState.CHANGED ? "warn" : undefined}>
+      {workerStateLabel(state)}
+    </Chip>
+  );
+}
+
+function WorkerView({
+  dir,
+  worker,
+  onChange,
+  onEdit,
+  onDelete,
+  request,
+  onRequestDone,
+  onLeave,
+}: {
+  dir: string;
+  worker: Worker;
+  onChange: () => void;
+  onEdit: () => void;
+  onDelete: () => void;
+  /** A run or disable the Workers menu asked for, done once (onRequestDone). */
+  request?: "run" | "disable";
+  onRequestDone: () => void;
+  /** Called when it sends the user elsewhere (a run's conversation). */
+  onLeave: () => void;
+}) {
   const [runs, setRuns] = useState<WorkerRun[]>([]);
   const [live, setLive] = useState<Entry[] | null>(null);
   const [error, setError] = useState("");
@@ -180,16 +277,18 @@ function WorkerView({ dir, worker, onChange }: { dir: string; worker: Worker; on
       await refreshRuns();
     });
 
+  const requested = useRef({ runNow, disable, onRequestDone });
+  requested.current = { runNow, disable, onRequestDone };
+  useEffect(() => {
+    if (!request) return;
+    requested.current.onRequestDone();
+    void (request === "run" ? requested.current.runNow() : requested.current.disable());
+  }, [request]);
+
   const limits = worker.limits;
   const enabled = worker.state === WorkerState.ENABLED;
   return (
     <div className="worker">
-      <div className="row">
-        <h2 className="t-headline spacer">{worker.name}</h2>
-        <Chip className="static" selected={enabled} tone={worker.state === WorkerState.INVALID ? "danger" : worker.state === WorkerState.CHANGED ? "warn" : undefined}>
-          {stateLabel(worker.state)}
-        </Chip>
-      </div>
       {worker.description && <p className="muted">{worker.description}</p>}
       <div className="card outlined">
         <dl className="facts">
@@ -247,6 +346,12 @@ function WorkerView({ dir, worker, onChange }: { dir: string; worker: Worker; on
             {t("desktop.worker.disable")}
           </Button>
         )}
+        <Button variant={worker.state === WorkerState.INVALID ? "filled" : "outlined"} icon={mdiPencilOutline} onClick={onEdit} title={worker.path}>
+          {t("desktop.worker.edit")}
+        </Button>
+        <Button danger icon={mdiDeleteOutline} onClick={onDelete}>
+          {t("desktop.workers.delete")}
+        </Button>
       </div>
       {error && <p className="error-text">{error}</p>}
       {live && (
@@ -289,7 +394,7 @@ function WorkerView({ dir, worker, onChange }: { dir: string; worker: Worker; on
               {r.files.length > 0 && <span className="t-body-sm muted">{t("desktop.worker.changed", { files: r.files.join(", ") })}</span>}
               {r.sessionId && (
                 <span>
-                  <Button small icon={mdiMessageTextOutline} onClick={() => loadSession({ dir, id: r.sessionId })}>
+                  <Button small icon={mdiMessageTextOutline} onClick={() => (loadSession({ dir, id: r.sessionId }), onLeave())}>
                     {t("desktop.worker.open_session")}
                   </Button>
                 </span>

@@ -30,13 +30,13 @@ import {
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
-import { mdiClose } from "@mdi/js";
+import { mdiClose, mdiMagnify } from "@mdi/js";
 import { t } from "../i18n";
 
 /** A Material Design icon, given its SVG path (from @mdi/js). */
-export function Icon({ path, size, spin, className = "" }: { path: string; size?: "sm" | "lg"; spin?: boolean; className?: string }) {
+export function Icon({ path, size, spin, className = "", style }: { path: string; size?: "sm" | "lg"; spin?: boolean; className?: string; style?: CSSProperties }) {
   return (
-    <svg className={`icon ${size ?? ""} ${spin ? "spin" : ""} ${className}`} viewBox="0 0 24 24" aria-hidden="true">
+    <svg className={`icon ${size ?? ""} ${spin ? "spin" : ""} ${className}`} style={style} viewBox="0 0 24 24" aria-hidden="true">
       <path d={path} />
     </svg>
   );
@@ -103,7 +103,10 @@ export function Chip({
   );
 }
 
-/** A segmented button: one of a few options, as radio buttons. */
+/**
+ * A segmented button: one of a few options, as radio buttons. Each option
+ * is named by its label, even where its text is hidden (icons only).
+ */
 export function Segmented<T extends string>({
   value,
   options,
@@ -120,12 +123,31 @@ export function Segmented<T extends string>({
   return (
     <div className={`seg ${small ? "small" : ""}`} role="radiogroup" aria-label={label}>
       {options.map((o) => (
-        <button key={o.value} type="button" role="radio" aria-checked={o.value === value} className={o.value === value ? "on" : ""} onClick={() => onChange(o.value)}>
+        <button key={o.value} type="button" role="radio" aria-checked={o.value === value} aria-label={o.label} className={o.value === value ? "on" : ""} onClick={() => onChange(o.value)}>
           {o.icon && <Icon path={o.icon} size="sm" />}
           <span className="seg-label">{o.label}</span>
         </button>
       ))}
     </div>
+  );
+}
+
+const mac = typeof navigator !== "undefined" && /Mac/i.test(navigator.platform);
+
+/**
+ * The top bar's search: an M3 search bar that opens the command palette
+ * (files, chats, commands…), with its key; an icon in narrow windows.
+ */
+export function ToolbarSearch({ onClick }: { onClick: () => void }) {
+  return (
+    <button type="button" className="toolbar-search" aria-label={t("desktop.search_hint")} title={t("desktop.search_hint")} aria-keyshortcuts={mac ? "Meta+K" : "Control+K"} onClick={onClick}>
+      <Icon path={mdiMagnify} />
+      <span className="toolbar-search-text ellipsis">{t("desktop.search_hint")}</span>
+      <kbd className="toolbar-search-key">
+        {mac ? "⌘" : t("desktop.keys.ctrl")}
+        {mac ? "" : " "}K
+      </kbd>
+    </button>
   );
 }
 
@@ -179,10 +201,27 @@ export interface MenuItem {
   label: string;
   detail?: string;
   icon?: string;
+  /** The icon's colour (a workspace's), instead of the menu's. */
+  iconColor?: string;
   on?: boolean;
   danger?: boolean;
   disabled?: boolean;
   onSelect: () => void;
+  /**
+   * Buttons at the end of the row, shown on hover or focus (Run, Edit,
+   * Delete, say). Delete or Backspace on the item presses the one that
+   * removes.
+   */
+  actions?: MenuAction[];
+}
+
+/** A button on a menu item's row. */
+export interface MenuAction {
+  icon: string;
+  label: string;
+  onSelect: () => void;
+  /** It removes the item: Delete or Backspace on the item presses it. */
+  removes?: boolean;
 }
 
 /** A rectangle in the window, as getBoundingClientRect gives it. */
@@ -326,27 +365,55 @@ function MenuItems({ items, onPick }: { items: MenuEntry[]; onPick: () => void }
             {it.heading}
           </div>
         ) : (
-          <button
-            key={i}
-            type="button"
-            role="menuitem"
-            className={`menu-item ${it.on ? "on" : ""}`}
-            disabled={it.disabled}
-            style={it.danger ? { color: "var(--md-error)" } : undefined}
-            onClick={() => {
-              onPick();
-              it.onSelect();
-            }}
-          >
-            {it.icon && <Icon path={it.icon} />}
-            <span>
-              {it.label}
-              {it.detail && <small>{it.detail}</small>}
-            </span>
-          </button>
+          <MenuRow key={i} it={it} onPick={onPick} />
         ),
       )}
     </>
+  );
+}
+
+function MenuRow({ it, onPick }: { it: MenuItem; onPick: () => void }) {
+  const actions = it.actions ?? [];
+  const press = (a: MenuAction) => {
+    onPick();
+    a.onSelect();
+  };
+  const remover = actions.find((a) => a.removes);
+  const item = (
+    <button
+      type="button"
+      role="menuitem"
+      className={`menu-item ${it.on ? "on" : ""}`}
+      disabled={it.disabled}
+      style={it.danger ? { color: "var(--md-error)" } : undefined}
+      onClick={() => {
+        onPick();
+        it.onSelect();
+      }}
+      onKeyDown={(e) => {
+        if (remover && (e.key === "Delete" || e.key === "Backspace")) {
+          e.preventDefault();
+          press(remover);
+        }
+      }}
+    >
+      {it.icon && <Icon path={it.icon} style={it.iconColor ? { color: it.iconColor } : undefined} />}
+      <span>
+        {it.label}
+        {it.detail && <small>{it.detail}</small>}
+      </span>
+    </button>
+  );
+  if (actions.length === 0) return item;
+  return (
+    <div className="menu-row" style={{ ["--actions" as string]: actions.length }}>
+      {item}
+      <span className="menu-row-action">
+        {actions.map((a) => (
+          <IconButton key={a.label} icon={a.icon} label={a.label} small onClick={() => press(a)} />
+        ))}
+      </span>
+    </div>
   );
 }
 
@@ -416,6 +483,9 @@ export function Dialog({
   footer,
   wide,
   large,
+  className = "",
+  headerActions,
+  closeButton,
   children,
 }: {
   title: ReactNode;
@@ -425,16 +495,24 @@ export function Dialog({
   wide?: boolean;
   /** Most of the window (Settings). */
   large?: boolean;
+  /** A class for the dialog (what's in it, laid out its own way). */
+  className?: string;
+  /** Beside the title, at the right (a chip, buttons). */
+  headerActions?: ReactNode;
+  /** A close button at the header's right: for dialogs that are views. */
+  closeButton?: boolean;
   children: ReactNode;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   useModal(ref, onClose);
   return (
     <div className="scrim" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className={`dialog ${wide ? "wide" : ""} ${large ? "large" : ""}`} role="dialog" aria-modal="true" tabIndex={-1} ref={ref}>
+      <div className={`dialog ${wide ? "wide" : ""} ${large ? "large" : ""} ${className}`} role="dialog" aria-modal="true" tabIndex={-1} ref={ref}>
         <header>
           {icon && <Icon path={icon} size="lg" className="muted" />}
-          <h2 className="t-headline">{title}</h2>
+          <h2 className="t-headline spacer">{title}</h2>
+          {headerActions}
+          {closeButton && <IconButton icon={mdiClose} label={t("desktop.close")} onClick={onClose} />}
         </header>
         <div className="body">{children}</div>
         {footer && <footer>{footer}</footer>}

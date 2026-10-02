@@ -103,6 +103,20 @@ func (s *Store) Disable(dir, name string) error {
 	return s.set(dir, name, e)
 }
 
+// Forget drops what the store knows of the named worker (it was deleted).
+func (s *Store) Forget(dir, name string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, ok := s.workspaces[dir][name]; !ok {
+		return nil
+	}
+	delete(s.workspaces[dir], name)
+	if len(s.workspaces[dir]) == 0 {
+		delete(s.workspaces, dir)
+	}
+	return s.saveLocked()
+}
+
 // Workspaces are the directories with at least one enabled worker, which
 // the service watches even when no client has them open.
 func (s *Store) Workspaces() []string {

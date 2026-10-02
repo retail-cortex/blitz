@@ -517,3 +517,96 @@ func TestMoveSession(t *testing.T) {
 	_, err = b.Move("session-20260101-000000-0000dead")
 	assert.Error(t, err)
 }
+
+func TestDelete(t *testing.T) {
+	tests := []struct {
+		name string
+		// setup saves sessions in s and returns the ID to delete.
+		setup func(t *testing.T, s *Storage) string
+		err   error // nil: deleted
+	}{
+		{
+			name: "a past session",
+			setup: func(t *testing.T, s *Storage) string {
+				old, err := s.CreateSession("", "old", "blitz")
+				require.NoError(t, err)
+				require.NoError(t, s.AddMessage("user", "hi"))
+				require.NoError(t, os.WriteFile(s.path(old.ID, eventsSuffix), []byte("{}\n"), 0o600))
+				_, err = s.CreateSession("", "", "blitz")
+				require.NoError(t, err)
+				return old.ID
+			},
+		},
+		{
+			name: "a snapshot",
+			setup: func(t *testing.T, s *Storage) string {
+				_, err := s.CreateSession("", "", "blitz")
+				require.NoError(t, err)
+				require.NoError(t, s.AddMessage("user", "hi"))
+				snap, err := s.Snapshot(s.Active().ID, "keep", false)
+				require.NoError(t, err)
+				return snap.ID
+			},
+		},
+		{
+			name: "a legacy session",
+			setup: func(t *testing.T, s *Storage) string {
+				id := "legacy-deleted"
+				require.NoError(t, os.WriteFile(s.path(id, legacySuffix), []byte(`{"id":"legacy-deleted","messages":[{"role":"user","content":"hi"}]}`), 0o600))
+				return id
+			},
+		},
+		{
+			name: "the active session",
+			setup: func(t *testing.T, s *Storage) string {
+				rec, err := s.CreateSession("", "", "blitz")
+				require.NoError(t, err)
+				require.NoError(t, s.AddMessage("user", "hi"))
+				return rec.ID
+			},
+			err: api.ErrSessionOpen,
+		},
+		{
+			name: "open in another storage",
+			setup: func(t *testing.T, s *Storage) string {
+				other, err := NewStorage(s.dir)
+				require.NoError(t, err)
+				rec, err := other.CreateSession("", "", "blitz")
+				require.NoError(t, err)
+				require.NoError(t, other.AddMessage("user", "hi"))
+				t.Cleanup(func() { other.setActiveLocked(nil) })
+				return rec.ID
+			},
+			err: api.ErrSessionOpen,
+		},
+		{name: "unknown", setup: func(*testing.T, *Storage) string { return "session-none" }, err: api.ErrSessionNotFound},
+		{name: "not an ID", setup: func(*testing.T, *Storage) string { return "../escape" }, err: api.ErrSessionNotFound},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s, err := NewStorage(t.TempDir())
+			require.NoError(t, err)
+			t.Cleanup(func() { s.setActiveLocked(nil) })
+			id := tt.setup(t, s)
+			before, err := s.List()
+			require.NoError(t, err)
+
+			err = s.Delete(id)
+			after, lerr := s.List()
+			require.NoError(t, lerr)
+			if tt.err != nil {
+				assert.ErrorIs(t, err, tt.err)
+				assert.Len(t, after, len(before), "nothing is deleted")
+				return
+			}
+			require.NoError(t, err)
+			assert.Len(t, after, len(before)-1)
+			for _, r := range after {
+				assert.NotEqual(t, id, r.ID)
+			}
+			for _, suffix := range []string{metaSuffix, messagesSuffix, eventsSuffix, legacySuffix} {
+				assert.NoFileExists(t, s.path(id, suffix))
+			}
+		})
+	}
+}

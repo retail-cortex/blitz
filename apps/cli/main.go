@@ -81,9 +81,9 @@ type rootOptions struct {
 	// requirePrompt: a run without a prompt is a usage error (exec),
 	// rather than the interactive session.
 	requirePrompt bool
-	// sendPrompt, if set, is sent to the agent instead of the prompt,
-	// which the transcript records (blitz init records "/init").
-	sendPrompt string
+	// command: the prompt is a slash command, expanded by the engine
+	// (blitz init runs /setup).
+	command bool
 }
 
 func main() {
@@ -175,17 +175,18 @@ func addRunFlags(f *pflag.FlagSet, o *rootOptions) {
 	f.StringArrayVar(&o.images, "image", nil, "Attach an image to the first prompt (repeatable); @file.png in a prompt also works")
 }
 
-// newInitCommand is `blitz init`: the agent writes or updates BLITZ.md, as
-// /init does in a session.
+// newInitCommand is `blitz init`: the guided setup of the project's agent
+// harness (/setup), as /init does in a session; unattended, the agent
+// writes what the files show and lists its assumptions.
 func newInitCommand(root *rootOptions) *cobra.Command {
 	o := &rootOptions{requirePrompt: true, outputFormat: formatText}
 	return &cobra.Command{
 		Use:   "init",
-		Short: "Have the agent write or update BLITZ.md, the project's instructions",
+		Short: "Set up the project's agent harness: .agents/AGENT.md, the files importing it, skills and agents (/setup)",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			o.global = root.global // persistent flags (--dir, --config)
-			o.prompt, o.sendPrompt = "/init", api.InitPrompt()
+			o.prompt, o.command = "/setup", true
 			return runRoot(cmd, o, nil)
 		},
 	}
@@ -485,7 +486,7 @@ func runRoot(cmd *cobra.Command, o *rootOptions, args []string) (err error) {
 		}
 		run := oneShotOptions{
 			prompt: prompt, sessionID: sess.ID, format: o.outputFormat, maxTurns: o.maxTurns, plan: o.plan,
-			maxCostUSD: o.maxCostUSD, timeout: o.timeout, sendPrompt: o.sendPrompt,
+			maxCostUSD: o.maxCostUSD, timeout: o.timeout, command: o.command,
 			input: input, stdinTTY: stdinTTY && !stdinUsed && !streamIn, stdout: os.Stdout,
 			markdown: pretty && cfg.UI.Markdown, spinner: pretty && cfg.UI.Spinner, width: terminalWidth(),
 			usageLines: pretty, images: attached, theme: cfg.UI.Theme, schema: schema,

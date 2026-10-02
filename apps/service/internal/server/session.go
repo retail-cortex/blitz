@@ -127,6 +127,17 @@ func (h sessionService) RenameSession(ctx context.Context, r req[pb.RenameSessio
 	return ok(&pb.RenameSessionResponse{Session: sessionMsg(s)})
 }
 
+func (h sessionService) DeleteSession(ctx context.Context, r req[pb.DeleteSessionRequest]) (*connect.Response[pb.DeleteSessionResponse], error) {
+	w, err := h.s.workspace(ctx, r.Msg.Workspace)
+	if err != nil {
+		return nil, err
+	}
+	if err := w.DeleteSession(ctx, r.Msg.SessionId); err != nil {
+		return nil, toAPI(err)
+	}
+	return ok(&pb.DeleteSessionResponse{})
+}
+
 func (h sessionService) ForkSession(ctx context.Context, r req[pb.ForkSessionRequest]) (*connect.Response[pb.ForkSessionResponse], error) {
 	w, err := h.s.workspace(ctx, r.Msg.Workspace)
 	if err != nil {

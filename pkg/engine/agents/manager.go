@@ -20,6 +20,8 @@
 package agents
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -38,6 +40,10 @@ type Registry struct {
 	mu      sync.RWMutex
 	agents  map[string]*AgentSpec
 	builtin map[string]bool
+	// dirs are the external folders loaded, in order; stamp is what they
+	// held then (see Refresh).
+	dirs  []string
+	stamp string
 }
 
 // NewRegistry creates a new Registry and loads built-in embedded agent specs.
@@ -86,11 +92,50 @@ func (r *Registry) loadEmbeddedAgents() error {
 // A leading "~" is expanded. External specs may add new agents but may not
 // replace built-in ones, since that would let a directory silently swap the
 // system prompt and tool list of a trusted persona. Rejected or unparsable
-// specs are reported in the returned (joined) error; valid ones are still loaded.
+// specs are reported in the returned (joined) error; valid ones are still
+// loaded. The directories are remembered for Refresh.
 func (r *Registry) LoadExternalAgents(dirs ...string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	for _, dir := range dirs {
+		r.dirs = append(r.dirs, config.ExpandHome(dir))
+	}
+	r.stamp = stamp(r.dirs)
+	return errors.Join(r.load(r.agents, dirs)...)
+}
 
+// Refresh loads the external agents again if a file in their directories
+// was added, changed or removed since they were last loaded, and reports
+// whether it did. An agent whose file is gone is gone.
+func (r *Registry) Refresh() (bool, error) {
+	r.mu.RLock()
+	dirs, was := r.dirs, r.stamp
+	r.mu.RUnlock()
+	now := stamp(dirs)
+	if now == was {
+		return false, nil
+	}
+	agents := make(map[string]*AgentSpec, len(r.agents))
+	r.mu.RLock()
+	for name, spec := range r.agents {
+		if r.builtin[name] {
+			agents[name] = spec
+		}
+	}
+	r.mu.RUnlock()
+	errs := r.load(agents, dirs)
+	r.mu.Lock()
+	r.agents, r.stamp = agents, now
+	r.mu.Unlock()
+	return true, errors.Join(errs...)
+}
+
+// IsBuiltin reports whether name is a built-in agent's.
+func (r *Registry) IsBuiltin(name string) bool { return r.builtin[name] }
+
+// load adds the agents in dirs to into (later directories win), returning
+// what couldn't be loaded. r.builtin is fixed once the registry is made.
+func (r *Registry) load(into map[string]*AgentSpec, dirs []string) []error {
 	var errs []error
 	for _, dir := range dirs {
 		dir = config.ExpandHome(dir)
@@ -120,12 +165,31 @@ func (r *Registry) LoadExternalAgents(dirs ...string) error {
 				return nil
 			}
 			spec.Path = path
-			r.agents[spec.Name] = spec
+			into[spec.Name] = spec
 			return nil
 		})
 	}
+	return errs
+}
 
-	return errors.Join(errs...)
+// stamp sums up the agent files in dirs (their paths, sizes and times), so
+// a change to any of them changes it.
+func stamp(dirs []string) string {
+	h := sha256.New()
+	for _, dir := range dirs {
+		_ = filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
+			if err != nil || d.IsDir() || !strings.HasSuffix(d.Name(), ".md") {
+				return nil
+			}
+			if info, err := os.Stat(path); err == nil {
+				fmt.Fprintf(h, "%s\x00%d\x00%d\n", path, info.Size(), info.ModTime().UnixNano())
+			} else {
+				fmt.Fprintf(h, "%s\x00?\n", path)
+			}
+			return nil
+		})
+	}
+	return hex.EncodeToString(h.Sum(nil))
 }
 
 // Get retrieves an agent spec by name.

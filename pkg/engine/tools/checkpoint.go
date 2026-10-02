@@ -472,6 +472,27 @@ func (c *Checkpoints) RunFiles(run string) []string {
 	return out
 }
 
+// Created returns the files session's latest turn created: absent before
+// it, there after (absolute paths, in the order they were made).
+func (c *Checkpoints) Created(session string) []string {
+	if c == nil {
+		return nil
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	t := c.currentLocked(session)
+	if t == nil || (session != "" && t.Session != session) {
+		return nil
+	}
+	var out []string
+	for _, ch := range t.Changes {
+		if !ch.Before.Exists && ch.AfterExists {
+			out = append(out, ch.Abs)
+		}
+	}
+	return out
+}
+
 // UndoRun restores the files worker run run changed, as they were before
 // it, refusing on conflicts as Undo does (BL-WK-02).
 func (c *Checkpoints) UndoRun(run string, force bool) (UndoResult, error) {

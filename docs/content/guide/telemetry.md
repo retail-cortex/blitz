@@ -7,7 +7,7 @@ Spec: [observability](../about/specs/spec_observability_003.md).
 
 ## Diagnostic log
 
-`~/.blitz/logs/blitz-YYYY-MM-DD.jsonl` (owner-only, secrets masked, kept `log.retain_days`, 14 by default) records warnings, failed turns and errors, with trace IDs when telemetry is on. `log.level` (or `BLITZ_LOG_LEVEL`) is `debug`, `info`, `warn`, `error` or `off`. A background goroutine writes it, so logging never waits on the disk.
+`~/.blitz/logs/blitz-YYYY-MM-DD.jsonl` (owner-only, secrets masked, kept `log.retain_days`, 14 by default) records warnings, failed turns and errors, with trace IDs when telemetry is on. `log.level` (or `BLITZ_LOG_LEVEL`) is `debug`, `info`, `warn`, `error` or `off`. A background goroutine writes it, so logging never waits on the disk. The desktop app reads it in **Settings › Logs**, where a past day's log can be deleted (today's is still being written).
 
 The [audit log](safety.md#audit-log) is separate: a record of what the agent did, not of Blitz's own health.
 

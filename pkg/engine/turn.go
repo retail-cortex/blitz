@@ -56,6 +56,12 @@ func (w *Workspace) Run(ctx context.Context, sessionID string, t api.Turn, on fu
 	planEvery := w.tools.Hooks().Mode() == api.ModePlan || w.cfg.Blitz.PlanReview == config.PlanReviewAlways
 	start := time.Now()
 	res, err := w.run(ctx, sessionID, turn{Turn: t, planMode: planEvery && !t.Plan && !t.Aside && t.ReadOnly == ""}, on, w.storage, opts...)
+	if t.Command && isSetup(t.Text) {
+		// The instructions it wrote apply from the next prompt.
+		if _, rerr := w.ReloadMemory(context.WithoutCancel(ctx)); rerr != nil {
+			w.warn(rerr.Error())
+		}
+	}
 	observability.RecordTurn(ctx, w.engine.ActiveAgent(), turnOutcome(err))
 	// A long turn's end is worth telling you about (spec_parity_027
 	// PAR-UI-03): notification hooks hear of it.
@@ -63,6 +69,12 @@ func (w *Workspace) Run(ctx context.Context, sessionID string, t api.Turn, on fu
 		w.tools.Hooks().Notify(context.WithoutCancel(ctx), "turn_finished", i18n.T("notify.turn_finished", "seconds", int(time.Since(start).Seconds())))
 	}
 	return res, err
+}
+
+// isSetup reports whether a command turn's text runs /setup.
+func isSetup(text string) bool {
+	name, _, _ := strings.Cut(strings.TrimPrefix(strings.TrimSpace(text), "/"), " ")
+	return strings.EqualFold(name, "setup")
 }
 
 // RunDetached runs a turn in a new session of its own (blitz --bg): as a
@@ -126,8 +138,10 @@ type turn struct {
 // its active one (a worker run has its own). extra are further engine
 // options for a non-aside turn (a worker's agent and model).
 func (w *Workspace) run(ctx context.Context, sessionID string, t turn, on func(api.Event), st *session.Storage, extra ...runtime.ExecOption) (api.TurnResult, error) {
-	// A model that couldn't be built may work now (a sign-in since).
+	// A model that couldn't be built may work now (a sign-in since), and
+	// agent files may have changed.
 	w.RetryModel(ctx)
+	w.RefreshAgents(ctx)
 	ctx = tools.WithPromptID(ctx, uuid.NewString())
 	// The turn's plan state: the plan tools report the user's decision here.
 	gate := tools.NewPlanGate(t.Plan || t.planMode)
@@ -287,6 +301,11 @@ func (w *Workspace) run(ctx context.Context, sessionID string, t turn, on func(a
 	}
 	if cause := context.Cause(ctx); err != nil && (errors.Is(cause, api.ErrCostLimit) || errors.Is(cause, api.ErrTimeLimit)) {
 		err = cause
+	}
+	if !t.Aside {
+		// The files the agent created go to git, in one batch, while the
+		// turn can still say so.
+		w.stageCreated(ctx, sessionID, on)
 	}
 	if t.OnFinished != nil {
 		t.OnFinished()

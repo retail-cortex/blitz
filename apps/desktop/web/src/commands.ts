@@ -127,3 +127,19 @@ export function filterPalette(items: PaletteItem[], query: string): PaletteItem[
   };
   return hits.map((it, i) => ({ it, i, t: tier(it) })).sort((a, b) => a.t - b.t || a.i - b.i).map((x) => x.it);
 }
+
+/** Whether the palette looks for files as well: a query that isn't a command. */
+export function searchesFiles(query: string): boolean {
+  const q = query.trim();
+  return q !== "" && !q.startsWith("/");
+}
+
+/**
+ * What the palette shows for a query: the files found for it first (as
+ * FindFiles ranked them, not filtered again: it matches loosely), then
+ * the other items that match. A command query ("/…") shows no files.
+ */
+export function paletteResults(files: PaletteItem[], items: PaletteItem[], query: string): PaletteItem[] {
+  const rest = filterPalette(items, query);
+  return searchesFiles(query) ? [...files, ...rest] : rest;
+}

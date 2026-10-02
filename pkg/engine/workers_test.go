@@ -341,6 +341,62 @@ func TestWorkersOffRefuseEverything(t *testing.T) {
 }
 
 // With no worker folders configured, a new worker has nowhere to go.
+// Editing a worker: its file as written comes back with its hash; a save
+// rewrites it only at that hash and only valid, keeps the name, and
+// suspends an enabled worker until it's enabled again.
+func TestUpdateWorker(t *testing.T) {
+	w := openTest(t)
+	created, _, err := w.CreateWorker(api.WorkerSpec{Name: "deps", Schedule: "Daily at 6 AM", Permissions: []string{"shell:go list -m -u all"}, Limits: api.Limits{TimeoutRaw: "20m"}, Prompt: "Report outdated modules."})
+	require.NoError(t, err)
+	_, err = w.EnableWorker("deps", created.Hash)
+	require.NoError(t, err)
+
+	spec, hash, err := w.GetWorkerSpec("deps")
+	require.NoError(t, err)
+	assert.Equal(t, created.Hash, hash)
+	assert.Equal(t, "Daily at 6 AM", spec.Schedule, "as written, not as understood")
+	assert.Equal(t, "20m", spec.Limits.TimeoutRaw)
+	assert.Equal(t, "Report outdated modules.", spec.Prompt)
+
+	spec.Schedule, spec.Prompt = "Weekdays at 9:30", "Report outdated modules, grouped by severity."
+	info, problems, err := w.UpdateWorker(spec, hash)
+	require.NoError(t, err)
+	require.Empty(t, problems)
+	assert.Equal(t, "30 9 * * 1-5", info.Cron)
+	assert.Equal(t, api.StateChanged, info.State, "an edit suspends the worker until it's enabled again")
+	assert.NotEqual(t, hash, info.Hash)
+
+	_, _, err = w.UpdateWorker(spec, hash)
+	assert.ErrorIs(t, err, api.ErrHashMismatch, "a stale hash: the file changed since it was read")
+
+	bad := spec
+	bad.Schedule = "whenever"
+	_, problems, err = w.UpdateWorker(bad, info.Hash)
+	require.NoError(t, err)
+	assert.NotEmpty(t, problems)
+	again, _, err := w.GetWorkerSpec("deps")
+	require.NoError(t, err)
+	assert.Equal(t, "Weekdays at 9:30", again.Schedule, "nothing written")
+
+	_, _, err = w.UpdateWorker(api.WorkerSpec{Name: "ghost", Schedule: "@daily", Prompt: "x"}, "h")
+	assert.ErrorIs(t, err, api.ErrUnknownWorker)
+
+	// A file that doesn't even parse can be read into the form and fixed.
+	addWorker(t, w, "broken", "no frontmatter at all\n")
+	broken, brokenHash, err := w.GetWorkerSpec("broken")
+	require.NoError(t, err)
+	assert.Equal(t, "no frontmatter at all", broken.Prompt)
+	broken.Schedule = "@daily"
+	fixed, problems, err := w.UpdateWorker(broken, brokenHash)
+	require.NoError(t, err)
+	require.Empty(t, problems)
+	assert.Equal(t, api.StateNew, fixed.State)
+	assert.Equal(t, filepath.Join(w.Dir(), "workers", "broken", workers.FileName), fixed.Path, "edited where it is")
+	entries, err := os.ReadDir(filepath.Join(w.Dir(), "workers"))
+	require.NoError(t, err)
+	assert.Len(t, entries, 1, "no temporary file left behind")
+}
+
 func TestCreateWorkerNeedsAFolder(t *testing.T) {
 	w, _ := openTestWith(t, func(c *config.Config) { c.Workers.Paths = nil })
 	_, _, err := w.CreateWorker(api.WorkerSpec{Name: "a", Schedule: "@daily", Prompt: "x"})

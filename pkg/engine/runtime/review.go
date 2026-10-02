@@ -81,30 +81,9 @@ func (e *Engine) review(ctx context.Context, req api.ApprovalRequest) (bool, str
 // askModel has llm answer prompt under instruction, and counts its tokens
 // for the session.
 func (e *Engine) askModel(ctx context.Context, llm model.LLM, instruction, prompt string) (string, error) {
-	llmReq := &model.LLMRequest{
-		Contents: []*genai.Content{genai.NewContentFromText(prompt, genai.RoleUser)},
-		Config:   &genai.GenerateContentConfig{SystemInstruction: genai.NewContentFromText(instruction, genai.RoleUser)},
-	}
-	var text strings.Builder
-	var usage *genai.GenerateContentResponseUsageMetadata
-	served := llm.Name()
-	for resp, err := range llm.GenerateContent(ctx, llmReq, false) {
-		if err != nil {
-			return "", err
-		}
-		if resp.UsageMetadata != nil {
-			usage = resp.UsageMetadata
-		}
-		if resp.ModelVersion != "" {
-			served = resp.ModelVersion
-		}
-		if resp.Content != nil {
-			for _, p := range resp.Content.Parts {
-				if !p.Thought {
-					text.WriteString(p.Text)
-				}
-			}
-		}
+	text, served, usage, err := Ask(ctx, llm, instruction, prompt)
+	if err != nil {
+		return "", err
 	}
 	if usage != nil { // priced in the session's /cost
 		id := "default"
@@ -115,7 +94,38 @@ func (e *Engine) askModel(ctx context.Context, llm model.LLM, instruction, promp
 		e.usage.RecordWrites(id, served, usage, 0)
 		e.saveUsage(ctx, id)
 	}
-	return text.String(), nil
+	return text, nil
+}
+
+// Ask has llm answer prompt under instruction, outside any session (no
+// tools, no history): its text without thoughts, the model that served
+// it, and the tokens it took.
+func Ask(ctx context.Context, llm model.LLM, instruction, prompt string) (text, served string, usage *genai.GenerateContentResponseUsageMetadata, err error) {
+	llmReq := &model.LLMRequest{
+		Contents: []*genai.Content{genai.NewContentFromText(prompt, genai.RoleUser)},
+		Config:   &genai.GenerateContentConfig{SystemInstruction: genai.NewContentFromText(instruction, genai.RoleUser)},
+	}
+	var b strings.Builder
+	served = llm.Name()
+	for resp, err := range llm.GenerateContent(ctx, llmReq, false) {
+		if err != nil {
+			return "", "", nil, err
+		}
+		if resp.UsageMetadata != nil {
+			usage = resp.UsageMetadata
+		}
+		if resp.ModelVersion != "" {
+			served = resp.ModelVersion
+		}
+		if resp.Content != nil {
+			for _, p := range resp.Content.Parts {
+				if !p.Thought {
+					b.WriteString(p.Text)
+				}
+			}
+		}
+	}
+	return b.String(), served, usage, nil
 }
 
 // hookInstruction tells a prompt hook's model its job.

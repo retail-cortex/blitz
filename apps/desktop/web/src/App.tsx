@@ -15,9 +15,8 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
-import { InboxButton } from "./RunsInbox";
 import { watchWorkerFailures } from "./workerFailures";
-import { mdiAlertOutline, mdiCogOutline, mdiFolderOpenOutline, mdiLightningBolt, mdiServerOff } from "@mdi/js";
+import { mdiAlertOutline, mdiFolderOpenOutline, mdiLightningBolt, mdiServerOff } from "@mdi/js";
 import { config as configAPI, onServiceLost, workspaces as workspaceAPI } from "./api";
 import { appVersion, chooseWorkspace, type LicenseText, installService, onDeepLink, onNotificationOpen, restartService, serviceStatus, type ServiceStatus, toggleFullscreen } from "./desktop";
 import { checkService, type ServiceCheck } from "./serviceVersion";
@@ -25,19 +24,19 @@ import { CommandPalette } from "./CommandPalette";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { applyUserLanguage, t, useLanguage } from "./i18n";
 import { message, reason } from "./errors";
-import { compose, showLicenseEvent } from "./events";
+import { compose, goToFileEvent, showLicenseEvent } from "./events";
 import { UnsavedDialog } from "./files/EditorPane";
 import { LicenseDialog } from "./LicenseDialog";
-import { Brand, WorkspaceSwitcher } from "./WorkspaceSwitcher";
+import { Brand, MenuBar } from "./MenuBar";
 import { unsavedIn } from "./files/unsaved";
 import { closeWorkspace, displayName, openWorkspace, openWorkspaces, recentWorkspaces } from "./prefs";
-import { SettingsDialog } from "./SettingsDialog";
+import { SettingsDialog, type Section } from "./SettingsDialog";
 import { StatusBar } from "./StatusBar";
+import { ComposerDock, focusComposerEvent, isFocusComposerKey } from "./composerDock";
 import { forgetStatus } from "./status";
 import { AppStateProvider, useApp } from "./state";
-import { Button, Dialog, Icon, IconButton, SnackbarProvider, useSnackbar } from "./ui/controls";
+import { Button, Dialog, Icon, SnackbarProvider, useSnackbar } from "./ui/controls";
 import { Workspace } from "./Workspace";
-import { WorkspaceDialog } from "./WorkspaceDialog";
 
 /**
  * The window: its preferences and service check, then the workspaces (or
@@ -169,27 +168,43 @@ function Shell() {
     if (service.state === "up") watchWorkerFailures(Object.fromEntries(JSON.parse(seen)));
   }, [seen, service.state]);
   const version = useServiceVersion(service.state === "up");
-  const [settingsOpen, setSettingsOpen] = useState(false);
+  // The Settings dialog, open on a section, and for the settings file a
+  // workspace's (null: closed).
+  const [settingsAt, setSettingsAt] = useState<{ section: Section; scope?: string } | null>(null);
+  const openSettings = useCallback((section: Section, scope?: string) => setSettingsAt({ section, scope }), []);
   const [paletteOpen, setPaletteOpen] = useState(false);
-  // Cmd/Ctrl+K opens the command palette, Cmd/Ctrl+, the settings; F11
-  // (and ⌃⌘F on macOS) makes the window full screen.
+  // Cmd/Ctrl+K opens the command palette, and Cmd/Ctrl+P (Go to file) the
+  // same, files first; Cmd/Ctrl+, the settings; F11 (and ⌃⌘F on macOS)
+  // makes the window full screen.
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
         setPaletteOpen((o) => !o);
+      } else if ((e.metaKey || e.ctrlKey) && !e.shiftKey && e.key.toLowerCase() === "p") {
+        e.preventDefault();
+        setPaletteOpen(true);
       } else if ((e.metaKey || e.ctrlKey) && e.key === ",") {
         e.preventDefault();
-        setSettingsOpen(true);
+        setSettingsAt({ section: "appearance" });
+      } else if (isFocusComposerKey(e)) {
+        e.preventDefault();
+        window.dispatchEvent(new Event(focusComposerEvent));
       } else if (e.key === "F11" || (e.metaKey && e.ctrlKey && e.key.toLowerCase() === "f")) {
         e.preventDefault();
         toggleFullscreen().catch(() => {});
       }
     };
+    const goTo = () => setPaletteOpen(true);
     window.addEventListener("keydown", key);
-    return () => window.removeEventListener("keydown", key);
+    window.addEventListener(goToFileEvent, goTo);
+    return () => {
+      window.removeEventListener("keydown", key);
+      window.removeEventListener(goToFileEvent, goTo);
+    };
   }, []);
-  const [editing, setEditing] = useState<string | null>(null);
+  // The pinned composer's bar, once it's rendered.
+  const [dockEl, setDockEl] = useState<HTMLDivElement | null>(null);
   // Bumped when the service comes back, so workspaces reload what they show.
   const [generation, setGeneration] = useState(0);
   const [wasLost, setWasLost] = useState(false);
@@ -268,7 +283,7 @@ function Shell() {
   if (service.state === "down") return <ServiceDown status={service.status} onStarted={check} error={error} setError={setError} />;
 
   const open_ = openWorkspaces(prefs);
-  const editingWs = prefs.workspaces.find((w) => w.dir === editing);
+  const pinned = prefs.composer === "pinned" && open_.length > 0;
   return (
     <div className="shell">
       <main className="main">
@@ -280,20 +295,24 @@ function Shell() {
           </div>
         )}
         {service.state === "up" && version.stale && <StaleService state={version} check={version.check} />}
-        {open_.length === 0 && <Welcome onOpen={open} onEdit={setEditing} onClose={close} onSettings={() => setSettingsOpen(true)} />}
-        {open_.map((w) => (
-          <Workspace
-            key={`${w.dir}#${generation}`}
-            ws={w}
-            visible={w.dir === prefs.active}
-            onOpenWorkspace={open}
-            onEditWorkspace={setEditing}
-            onCloseWorkspace={close}
-            onSettings={() => setSettingsOpen(true)}
-          />
-        ))}
+        {open_.length === 0 && <Welcome onOpen={open} onClose={close} onSettings={openSettings} onSearch={() => setPaletteOpen(true)} />}
+        <ComposerDock.Provider value={pinned ? dockEl : null}>
+          {open_.map((w) => (
+            <Workspace
+              key={`${w.dir}#${generation}`}
+              ws={w}
+              visible={w.dir === prefs.active}
+              onOpenWorkspace={open}
+              onCloseWorkspace={close}
+              onSettings={openSettings}
+              onSearch={() => setPaletteOpen(true)}
+            />
+          ))}
+        </ComposerDock.Provider>
       </main>
-      <StatusBar serviceUp={service.state === "up"} version={version.info?.version} onRunSettings={() => update((p) => ({ ...p, run_settings: !p.run_settings }))} />
+      {/* The pinned composer's bar, across every panel. */}
+      {pinned && <div className="composer-dock" ref={setDockEl} />}
+      <StatusBar serviceUp={service.state === "up"} version={version.info?.version} onWorkspaceSettings={(dir) => openSettings("workspaces", dir)} />
       {unsavedClose && (
         <UnsavedDialog
           names={[displayName(prefs.workspaces.find((w) => w.dir === unsavedClose) ?? { dir: unsavedClose })]}
@@ -306,9 +325,9 @@ function Shell() {
           onCancel={() => setUnsavedClose(null)}
         />
       )}
-      {settingsOpen && <SettingsDialog onClose={() => setSettingsOpen(false)} />}
+      {settingsAt && <SettingsDialog initial={settingsAt.section} scope={settingsAt.scope} onClose={() => setSettingsAt(null)} />}
       {license && <LicenseDialog initial={license} onClose={() => setLicense(null)} />}
-      {paletteOpen && <CommandPalette onClose={() => setPaletteOpen(false)} onOpenWorkspace={open} onSettings={() => setSettingsOpen(true)} />}
+      {paletteOpen && <CommandPalette onClose={() => setPaletteOpen(false)} onOpenWorkspace={open} onSettings={(section = "appearance", scope) => openSettings(section, scope)} />}
       {confirmClose && (
         <Dialog
           title={t("desktop.app.stop_close.title")}
@@ -335,7 +354,6 @@ function Shell() {
           <p className="muted">{t("desktop.app.stop_close.body", { name: displayName(prefs.workspaces.find((w) => w.dir === confirmClose) ?? { dir: confirmClose }) })}</p>
         </Dialog>
       )}
-      {editingWs && <WorkspaceDialog ws={editingWs} onClose={() => setEditing(null)} onCloseWorkspace={editingWs.open ? () => (setEditing(null), close(editingWs.dir)) : undefined} />}
     </div>
   );
 }
@@ -385,19 +403,16 @@ function ServiceDown({ status, onStarted, error, setError }: { status: ServiceSt
   );
 }
 
-function Welcome({ onOpen, onEdit, onClose, onSettings }: { onOpen: () => void; onEdit: (dir: string) => void; onClose: (dir: string) => void; onSettings: () => void }) {
+function Welcome({ onOpen, onClose, onSettings, onSearch }: { onOpen: () => void; onClose: (dir: string) => void; onSettings: (section: Section, scope?: string) => void; onSearch: () => void }) {
   const { prefs, update } = useApp();
   const recent = recentWorkspaces(prefs).slice(0, 6);
   return (
     <div className="welcome">
       <header className="topbar drag-region welcome-bar">
-        <Brand />
-        <WorkspaceSwitcher onOpen={onOpen} onClose={onClose} onEdit={onEdit} />
-        <span className="spacer" />
-        <div className="topbar-actions no-drag">
-          <InboxButton />
-          <IconButton icon={mdiCogOutline} label={t("desktop.settings")} onClick={onSettings} />
+        <div className="topbar-lead">
+          <Brand />
         </div>
+        <MenuBar onSearch={onSearch} onSettings={onSettings} onOpenWorkspace={onOpen} onCloseWorkspace={onClose} />
       </header>
       <div className="welcome-body">
         <h1 className="t-display">{t("desktop.welcome.title")}</h1>

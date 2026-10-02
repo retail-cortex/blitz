@@ -53,7 +53,8 @@ type Server struct {
 	logDir    string      // where the diagnostic log is written ("": off)
 	sched     *scheduler  // nil: workers aren't run
 	broker    *broker
-	runs      runs // background runs
+	runs      runs       // background runs
+	models    modelLists // providers' models, for ListModels
 
 	mu         sync.Mutex
 	workspaces map[string]*workspace // by canonical directory
@@ -341,6 +342,8 @@ func toAPI(err error) error {
 		{api.ErrNothingToUndo, connect.CodeFailedPrecondition, "NOTHING_TO_UNDO"},
 		{api.ErrSteerTooLate, connect.CodeFailedPrecondition, "STEER_TOO_LATE"},
 		{api.ErrSessionBusy, connect.CodeFailedPrecondition, "SESSION_BUSY"},
+		{api.ErrSessionOpen, connect.CodeFailedPrecondition, "SESSION_OPEN"},
+		{api.ErrSessionNotFound, connect.CodeNotFound, "SESSION_NOT_FOUND"},
 		{api.ErrNotRewindPoint, connect.CodeInvalidArgument, "NOT_REWIND_POINT"},
 		{api.ErrCantRewindConversation, connect.CodeFailedPrecondition, "CANT_REWIND_CONVERSATION"},
 		{api.ErrUnknownRewindMode, connect.CodeInvalidArgument, "UNKNOWN_REWIND_MODE"},

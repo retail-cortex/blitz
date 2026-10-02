@@ -25,6 +25,7 @@ go_library(
         "planning-agent.md",
         "qa.md",
         "web-retriever.md",
+        "project-setup.md",
     ],
     importpath = "github.com/retail-cortex/blitz/pkg/engine/agents/builtin",
     visibility = [

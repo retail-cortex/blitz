@@ -16,13 +16,13 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  mdiAutoFix,
   mdiCalendarClock,
   mdiFullscreen,
   mdiCodeBraces,
   mdiCogOutline,
   mdiConsoleLine,
   mdiFileCompare,
-  mdiFileSearchOutline,
   mdiFileTreeOutline,
   mdiFolderOpenOutline,
   mdiFolderOutline,
@@ -33,27 +33,34 @@ import {
   mdiWeatherNight,
   mdiWhiteBalanceSunny,
 } from "@mdi/js";
-import { sessions, workspaces } from "./api";
-import { allCommands, filterPalette, type CommandSpec, type PaletteItem } from "./commands";
-import { compose, goToFile, loadSession, showView } from "./events";
+import { files, sessions, workspaces } from "./api";
+import { allCommands, paletteResults, searchesFiles, type CommandSpec, type PaletteItem } from "./commands";
+import { compose, loadSession, openFile, showView, startSetup } from "./events";
+import { fileIcon } from "./files/icons";
+import { splitLine } from "./files/paths";
+import { nameOf, parentOf } from "./files/tree";
 import { displayName, openWorkspace, openWorkspaces, recentWorkspaces } from "./prefs";
 import { useApp } from "./state";
+import type { Section } from "./SettingsDialog";
 import { t, tn } from "./i18n";
 import { Icon, useModal } from "./ui/controls";
 import { toggleFullscreen } from "./desktop";
 
 /**
- * Cmd/Ctrl+K: commands, workspaces, chats, views and settings, found by
- * typing. A command without arguments runs at once; one with arguments
- * goes into the composer to finish.
+ * Cmd/Ctrl+K, Cmd/Ctrl+P or the top bar's search: the workspace's files
+ * (FindFiles as you type; "name:12" opens at line 12), commands,
+ * workspaces, chats, views and settings, found by typing. A command
+ * without arguments runs at once; one with arguments goes into the
+ * composer to finish.
  */
-export function CommandPalette({ onClose, onOpenWorkspace, onSettings }: { onClose: () => void; onOpenWorkspace: () => void; onSettings: () => void }) {
+export function CommandPalette({ onClose, onOpenWorkspace, onSettings }: { onClose: () => void; onOpenWorkspace: () => void; onSettings: (section?: Section, scope?: string) => void }) {
   const { prefs, update } = useApp();
   const dir = prefs.active;
   const [query, setQuery] = useState("");
   const [pick, setPick] = useState(0);
   const [custom, setCustom] = useState<CommandSpec[]>([]);
   const [chats, setChats] = useState<{ id: string; title: string; detail: string }[]>([]);
+  const [found, setFound] = useState<string[]>([]);
   const input = useRef<HTMLInputElement>(null);
   const list = useRef<HTMLDivElement>(null);
   // Escape, the focus kept inside and given back: as in a dialog.
@@ -72,6 +79,41 @@ export function CommandPalette({ onClose, onOpenWorkspace, onSettings }: { onClo
       .then((r) => setChats(r.sessions.slice(0, 30).map((s) => ({ id: s.id, title: s.snapshot ? `📸 ${s.snapshot}` : s.title || t("desktop.untitled"), detail: tn("desktop.messages", s.messageCount) }))))
       .catch(() => {});
   }, [dir]);
+
+  // The workspace's files for what's typed, once typing pauses.
+  const { query: fileQuery, line, column } = splitLine(query);
+  const wantFiles = !!dir && searchesFiles(query);
+  useEffect(() => {
+    if (!wantFiles) {
+      setFound([]);
+      return;
+    }
+    let live = true;
+    const timer = setTimeout(() => {
+      files.findFiles({ workspace: dir, query: fileQuery, limit: 8 }).then(
+        (r) => live && setFound(r.paths),
+        () => live && setFound([]),
+      );
+    }, 60);
+    return () => {
+      live = false;
+      clearTimeout(timer);
+    };
+  }, [dir, fileQuery, wantFiles]);
+  const fileItems = useMemo<PaletteItem[]>(
+    () =>
+      found.map((path) => ({
+        group: t("desktop.palette.group.files"),
+        label: nameOf(path),
+        detail: parentOf(path),
+        icon: fileIcon(nameOf(path)),
+        run: () => {
+          onClose();
+          if (dir) openFile({ dir, path, line, column });
+        },
+      })),
+    [found, dir, line, column, onClose],
+  );
 
   const items = useMemo<PaletteItem[]>(() => {
     const done = (f: () => void) => () => {
@@ -94,11 +136,11 @@ export function CommandPalette({ onClose, onOpenWorkspace, onSettings }: { onClo
         });
       }
       out.push(
-        { group: t("desktop.palette.group.view"), label: t("desktop.files.go_to"), detail: "⌘P", icon: mdiFileSearchOutline, run: done(() => goToFile({ dir })) },
+        { group: t("desktop.palette.group.view"), label: t("desktop.setup.title"), icon: mdiAutoFix, run: done(() => startSetup(dir)) },
         { group: t("desktop.palette.group.view"), label: prefs.files ? t("desktop.files.hide") : t("desktop.files.show"), icon: mdiFileTreeOutline, run: done(() => update((p) => ({ ...p, files: !p.files }))) },
         { group: t("desktop.palette.group.view"), label: t("desktop.palette.show_editor"), icon: mdiCodeBraces, run: done(() => showView({ dir, view: "editor" })) },
         { group: t("desktop.palette.group.view"), label: t("desktop.palette.show_changes"), icon: mdiFileCompare, run: done(() => showView({ dir, view: "changes" })) },
-        { group: t("desktop.palette.group.view"), label: t("desktop.palette.show_workers"), icon: mdiCalendarClock, run: done(() => showView({ dir, view: "workers" })) },
+        ...(prefs.advanced ? [{ group: t("desktop.palette.group.view"), label: t("desktop.palette.show_workers"), icon: mdiCalendarClock, run: done(() => showView({ dir, view: "workers" })) }] : []),
         { group: t("desktop.palette.group.view"), label: t("desktop.palette.fullscreen"), detail: "F11", icon: mdiFullscreen, run: done(() => void toggleFullscreen().catch(() => {})) },
       );
       for (const c of chats) out.push({ group: t("desktop.palette.group.chats"), label: c.title, detail: c.detail, icon: mdiHistory, run: done(() => (showView({ dir, view: "chat" }), loadSession({ dir, id: c.id }))) });
@@ -109,16 +151,16 @@ export function CommandPalette({ onClose, onOpenWorkspace, onSettings }: { onClo
       out.push({ group: t("desktop.palette.group.workspaces"), label: t("desktop.palette.reopen", { name: displayName(w) }), detail: w.dir, icon: mdiFolderOutline, run: done(() => update((p) => openWorkspace(p, w.dir))) });
     out.push(
       { group: t("desktop.palette.group.workspaces"), label: t("desktop.palette.open_workspace"), icon: mdiFolderOpenOutline, run: done(onOpenWorkspace) },
-      { group: t("desktop.palette.group.settings"), label: t("desktop.settings"), icon: mdiCogOutline, run: done(onSettings) },
+      { group: t("desktop.palette.group.settings"), label: t("desktop.settings"), icon: mdiCogOutline, run: done(() => onSettings()) },
       { group: t("desktop.palette.group.settings"), label: t("desktop.palette.theme_system"), icon: mdiMonitor, run: done(() => update((p) => ({ ...p, theme: "system" }))) },
       { group: t("desktop.palette.group.settings"), label: t("desktop.palette.theme_light"), icon: mdiWhiteBalanceSunny, run: done(() => update((p) => ({ ...p, theme: "light" }))) },
       { group: t("desktop.palette.group.settings"), label: t("desktop.palette.theme_dark"), icon: mdiWeatherNight, run: done(() => update((p) => ({ ...p, theme: "dark" }))) },
-      { group: t("desktop.palette.group.settings"), label: prefs.run_settings ? t("desktop.palette.hide_panel") : t("desktop.palette.show_panel"), icon: mdiTuneVariant, run: done(() => update((p) => ({ ...p, run_settings: !p.run_settings }))) },
+      ...(dir ? [{ group: t("desktop.palette.group.settings"), label: t("desktop.run_settings"), detail: displayName(openWorkspaces(prefs).find((w) => w.dir === dir) ?? { dir }), icon: mdiTuneVariant, run: done(() => onSettings("workspaces", dir)) }] : []),
     );
     return out;
   }, [dir, custom, chats, prefs, update, onClose, onOpenWorkspace, onSettings]);
 
-  const shown = filterPalette(items, query);
+  const shown = paletteResults(fileItems, items, query);
   useEffect(() => setPick(0), [query]);
   useEffect(() => list.current?.querySelector(".palette-item.on")?.scrollIntoView({ block: "nearest" }), [pick]);
 

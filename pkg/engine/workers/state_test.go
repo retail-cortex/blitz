@@ -62,6 +62,23 @@ func TestStoreStatesAndPersistence(t *testing.T) {
 	assert.Equal(t, api.StateInvalid, got, "invalid: %s", got)
 }
 
+// A deleted worker is forgotten: it's new again if it comes back, and a
+// workspace with no workers left isn't listed.
+func TestStoreForget(t *testing.T) {
+	w, _ := Load(writeWorker(t, t.TempDir(), "deps", valid))
+	path := filepath.Join(t.TempDir(), "workers.json")
+	s, err := OpenStore(path)
+	require.NoError(t, err)
+	require.NoError(t, s.Enable("/work", w, w.Hash))
+	require.NoError(t, s.Forget("/work", "deps"))
+	assert.Equal(t, api.StateNew, s.State("/work", w, nil))
+	assert.Empty(t, s.Workspaces())
+	again, err := OpenStore(path)
+	require.NoError(t, err)
+	assert.Equal(t, api.StateNew, again.State("/work", w, nil), "forgotten on disk too")
+	assert.NoError(t, s.Forget("/work", "never-known"))
+}
+
 func TestApplyPolicy(t *testing.T) {
 	w, err := Load(writeWorker(t, t.TempDir(), "deps", `---
 schedule: hourly

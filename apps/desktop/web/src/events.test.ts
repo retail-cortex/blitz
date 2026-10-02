@@ -15,11 +15,30 @@
  */
 
 import { beforeAll, describe, expect, it, vi } from "vitest";
-import { compose, composeEvent, takePendingCompose, type ComposeDetail } from "./events";
+import { compose, composeEvent, startSetup, takePendingCompose, viewEvent, type ComposeDetail, type ViewDetail } from "./events";
 
 // Tests run without a DOM: the window is an event target.
 beforeAll(() => {
   vi.stubGlobal("window", new EventTarget());
+});
+
+describe("startSetup", () => {
+  it("shows the chat, then runs /setup there in a new chat", () => {
+    const seen: string[] = [];
+    const view = (e: Event) => seen.push(`view ${(e as CustomEvent<ViewDetail>).detail.view}`);
+    const run = (e: Event) => {
+      const d = (e as CustomEvent<ComposeDetail>).detail;
+      seen.push(`${d.text} run=${d.run} fresh=${d.fresh}`);
+      e.preventDefault();
+    };
+    window.addEventListener(viewEvent, view);
+    window.addEventListener(composeEvent, run);
+    startSetup("/s");
+    window.removeEventListener(viewEvent, view);
+    window.removeEventListener(composeEvent, run);
+    expect(seen).toEqual(["view chat", "/setup run=true fresh=true"]);
+    expect(takePendingCompose("/s")).toBeUndefined();
+  });
 });
 
 describe("compose", () => {

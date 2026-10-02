@@ -36,11 +36,22 @@ service WorkerService {
   // otherwise writes nothing and says why (WORKER_INVALID; WORKER_EXISTS
   // for a name the workspace has). It starts disabled.
   rpc CreateWorker(CreateWorkerRequest) returns (CreateWorkerResponse);
+  // Returns a worker's WORKER.md as written (not as the policy caps it),
+  // for editing, with its current hash; it needn't be valid (UNKNOWN_WORKER).
+  rpc GetWorkerSpec(GetWorkerSpecRequest) returns (GetWorkerSpecResponse);
+  // Rewrites a worker's WORKER.md from a form, if it still has the hash the
+  // caller edited (HASH_MISMATCH) and the result would load as valid;
+  // otherwise writes nothing and says why. Its name can't change. An
+  // enabled worker is suspended (changed) until it's enabled again.
+  rpc UpdateWorker(UpdateWorkerRequest) returns (UpdateWorkerResponse);
   // Enables a worker at the content hash the caller reviewed
   // (HASH_MISMATCH if the file changed since).
   rpc EnableWorker(EnableWorkerRequest) returns (EnableWorkerResponse);
   // Disables a worker.
   rpc DisableWorker(DisableWorkerRequest) returns (DisableWorkerResponse);
+  // Deletes a worker: its directory and whether it was enabled; its past
+  // runs stay. Refused while it runs (RUN_IN_PROGRESS); UNKNOWN_WORKER.
+  rpc DeleteWorker(DeleteWorkerRequest) returns (DeleteWorkerResponse);
   // Starts a run now, outside the schedule (WORKER_DISABLED, RUN_IN_PROGRESS).
   rpc RunWorker(RunWorkerRequest) returns (RunWorkerResponse);
   // Returns a worker's runs, newest first.
@@ -138,6 +149,59 @@ message CreateWorkerRequest {
   string prompt = 13;
 }
 
+// WorkerDefinition is a WORKER.md as written: its frontmatter fields and
+// the workflow. Empty fields are left out of the file.
+message WorkerDefinition {
+  // The worker's directory; fixed once created.
+  string name = 1;
+  string description = 2;
+  // A cron expression, a descriptor, or plain text ("Weekdays at 9:30").
+  string schedule = 3;
+  // An IANA time zone; "" is the service machine's.
+  string timezone = 4;
+  string agent = 5;
+  string model = 6;
+  // "kind:pattern", kind shell, write, delete, web or mcp.
+  repeated string permissions = 7;
+  int32 max_turns = 8;
+  double max_cost_usd = 9;
+  // A duration like "20m".
+  string timeout = 10;
+  // "", "none" or "once".
+  string catch_up = 11;
+  // The workflow: WORKER.md's body.
+  string prompt = 12;
+}
+
+// Request message for WorkerService.GetWorkerSpec.
+message GetWorkerSpecRequest {
+  string workspace = 1;
+  string name = 2;
+}
+
+// Response message for WorkerService.GetWorkerSpec.
+message GetWorkerSpecResponse {
+  WorkerDefinition worker = 1;
+  // The hash UpdateWorker must be given.
+  string hash = 2;
+}
+
+// Request message for WorkerService.UpdateWorker.
+message UpdateWorkerRequest {
+  string workspace = 1;
+  // The hash GetWorkerSpec returned: the content being replaced.
+  string hash = 2;
+  WorkerDefinition worker = 3;
+}
+
+// Response message for WorkerService.UpdateWorker.
+message UpdateWorkerResponse {
+  // The worker as saved; unset when problems stopped it.
+  Worker worker = 1;
+  // Why it wasn't saved (nothing was written).
+  repeated string problems = 2;
+}
+
 // Response message for WorkerService.CreateWorker.
 message CreateWorkerResponse {
   // The new worker; unset when problems stopped it.
@@ -169,6 +233,15 @@ message DisableWorkerRequest {
 message DisableWorkerResponse {
   Worker worker = 1;
 }
+
+// Request message for WorkerService.DeleteWorker.
+message DeleteWorkerRequest {
+  string workspace = 1;
+  string name = 2;
+}
+
+// Response message for WorkerService.DeleteWorker.
+message DeleteWorkerResponse {}
 
 // RunStatus is where a run stands.
 enum RunStatus {

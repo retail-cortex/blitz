@@ -108,6 +108,15 @@ export function shownFolders(tree: Tree): string[] {
   return out;
 }
 
+/**
+ * Where moving path into the folder into puts it, or null when it can't go
+ * there: onto itself, under itself, or the folder it's already in.
+ */
+export function moveTarget(path: string, into: string): string | null {
+  if (!path || into === path || into.startsWith(path + "/") || parentOf(path) === into) return null;
+  return joinPath(into, nameOf(path));
+}
+
 /** The folders that must be open to show path. */
 export function ancestors(path: string): string[] {
   const parts = path.split("/");

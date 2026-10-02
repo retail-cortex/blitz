@@ -14,7 +14,8 @@
  * limitations under the License.
  */
 
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { timestampDate } from "@bufbuild/protobuf/wkt";
 import type { JsonObject } from "@bufbuild/protobuf";
 import {
@@ -23,6 +24,7 @@ import {
   mdiCheck,
   mdiCheckboxBlankOutline,
   mdiCheckboxMarked,
+  mdiDeleteOutline,
   mdiChevronDown,
   mdiChevronRight,
   mdiClipboardCheckOutline,
@@ -40,7 +42,6 @@ import {
   mdiFolderOutline,
   mdiImageOutline,
   mdiImagePlusOutline,
-  mdiLightbulbOutline,
   mdiMagnify,
   mdiMessageReplyTextOutline,
   mdiPencilOutline,
@@ -54,6 +55,7 @@ import {
   mdiWeb,
   mdiWrenchOutline,
   mdiFileCompare,
+  mdiKeyboardOutline,
 } from "@mdi/js";
 import { files, serviceLost, sessions, workspaces } from "./api";
 import { editorConfig, toEditor } from "./host";
@@ -61,11 +63,12 @@ import { DiffView } from "./Changes";
 import { isUnavailable, message, reason } from "./errors";
 import type { SessionInfo } from "./gen/blitz/v1/session_pb";
 import { Decision, type ApprovalRequest, type Question, type Task, type Usage } from "./gen/blitz/v1/turn_pb";
-import type { BackgroundTask, GetSettingsResponse } from "./gen/blitz/v1/workspace_pb";
+import type { BackgroundTask, GetSettingsResponse, GetSuggestionsResponse } from "./gen/blitz/v1/workspace_pb";
 import { allCommands, helpText, matchCommands, parseCommand, type CommandSpec } from "./commands";
 import {
   addToContextEvent,
   composeEvent,
+  setupCommand,
   configChanged,
   filesTouched,
   loadSessionEvent,
@@ -78,6 +81,8 @@ import {
   type LoadSessionDetail,
 } from "./events";
 import { appendMention, insertMention, isImagePath, mentionAt } from "./mentions";
+import { pollMs, shouldPoll, welcomeTiles, type TileAction } from "./suggestions";
+import { ComposerDock, focusComposerEvent } from "./composerDock";
 import { refreshRuns, runInSession } from "./backgroundRuns";
 import { fileIcon } from "./files/icons";
 import { describeImage, imageFiles, readyIds, rejectReason, uploading, type Attachment } from "./attachments";
@@ -85,10 +90,10 @@ import { Markdown } from "./Markdown";
 import { language, t, tn, useLanguage } from "./i18n";
 import { notify, shouldNotify, type NotifyKind } from "./notify";
 import { efforts, effortIcon, modeOf } from "./options";
-import { useApp } from "./state";
+import { useAdvanced, useApp } from "./state";
 import { publishStatus } from "./status";
 import { useOpenPath } from "./files/links";
-import { applyEvent, assignPromptIndices, failed, fromMessages, parseDiff, summarizeArgs, tasksOf, turnAnswers, type Entry, type UserEntry } from "./turns";
+import { applyEvent, assignPromptIndices, failed, fromMessages, parseDiff, summarizeArgs, tasksOf, turnAnswers, type Entry, type UserEntry, groupTools, latestTurn, type ToolEntry } from "./turns";
 import { copyRendered, copyText } from "./clipboard";
 import { Button, Dialog, Icon, IconButton, Menu, useSnackbar } from "./ui/controls";
 
@@ -137,6 +142,15 @@ export function Conversation({
   onSettingsChanged: () => void;
   onOpenView: (v: "changes" | "workers") => void;
 }) {
+  // The pinned bar the composer renders into (composerDock.ts), and ⌘L.
+  const dockEl = useContext(ComposerDock);
+  const dockRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!visible) return;
+    const focus = () => dockRef.current?.querySelector("textarea")?.focus();
+    window.addEventListener(focusComposerEvent, focus);
+    return () => window.removeEventListener(focusComposerEvent, focus);
+  }, [visible]);
   const { prefs, setActivity, registerStop } = useApp();
   const snack = useSnackbar();
   const [list, setList] = useState<SessionInfo[]>([]);
@@ -167,6 +181,7 @@ export function Conversation({
   }, [dir]);
   const commands = useMemo(() => allCommands(customCommands), [customCommands]);
   const [dragging, setDragging] = useState(false);
+  const [deleting, setDeleting] = useState<SessionInfo | null>(null);
   const [forceRewind, setForceRewind] = useState<{ index: number; mode: string; error: string } | null>(null);
   const abort = useRef<AbortController | null>(null);
   const following = useRef(""); // the background run the turn view follows
@@ -562,6 +577,16 @@ export function Conversation({
       fail(e);
     }
   };
+  const remove = async (s: SessionInfo) => {
+    setDeleting(null);
+    try {
+      await sessions.deleteSession({ workspace: dir, sessionId: s.id });
+      snack(t("desktop.chat.deleted", { title: chatTitle(s) }));
+      await refreshList();
+    } catch (e) {
+      snack(message(e), { error: true });
+    }
+  };
   const rename = async (title: string) => {
     try {
       setSession((await sessions.renameSession({ workspace: dir, title })).session);
@@ -784,13 +809,35 @@ export function Conversation({
     return () => window.removeEventListener(addToContextEvent, f);
   }, [dir]);
 
+  // A command to run in a new chat (the setup), once that chat is shown.
+  const runFresh = useRef<string | null>(null);
+  const startFreshRef = useRef<(text: string) => void>(() => {});
+  startFreshRef.current = async (text) => {
+    if (running) return say(t("desktop.cmd.wait", { name: parseCommand(text)?.name ?? text }), "error");
+    try {
+      const s = (await sessions.newSession({ workspace: dir })).session!;
+      runFresh.current = text;
+      show(s);
+      await refreshList();
+    } catch (e) {
+      fail(e);
+    }
+  };
+  useEffect(() => {
+    const text = runFresh.current;
+    if (!session || text === null) return;
+    runFresh.current = null;
+    void executeRef.current(text); // the new chat's own execute, by now
+  }, [session]);
+
   // The command palette and other windows parts send text here.
   useEffect(() => {
     const f = (e: Event) => {
       const d = (e as CustomEvent<ComposeDetail>).detail;
       if (d.dir !== dir) return;
       e.preventDefault(); // taken
-      if (d.run) executeRef.current(d.text);
+      if (d.run && d.fresh) startFreshRef.current(d.text);
+      else if (d.run) executeRef.current(d.text);
       else if (d.append) setDraft((draft) => (draft.trim() ? `${draft.trimEnd()}\n\n${d.text}` : d.text));
       else setDraft(d.text);
     };
@@ -803,6 +850,31 @@ export function Conversation({
   const shown = prefs.show_thoughts ? entries : entries.filter((e) => e.kind !== "thought");
   const answers = useMemo(() => turnAnswers(shown), [shown]);
   const empty = shown.length === 0 && !running;
+  // The task list and composer: under the conversation, or in the window's
+  // pinned bar (composerDock.ts) while this workspace is shown.
+  const dock = (
+    <div className="chat-column dock" ref={dockRef}>
+      {tasks.length > 0 && <TaskList tasks={tasks} onDismiss={running ? undefined : () => setTasks([])} />}
+      <Composer
+        commands={commands}
+        attachments={attachments}
+        onAddFiles={addFiles}
+        onAddImagePath={addImagePath}
+        onRemoveAttachment={removeAttachment}
+        imagesOn={imagesOn}
+        draft={draft}
+        setDraft={setDraft}
+        running={running}
+        dir={dir}
+        onSubmit={submit}
+        onStop={stop}
+      />
+    </div>
+  );
+
+  // Where the latest turn starts: its tool groups stay open while it runs.
+  const turnStart = latestTurn(shown);
+
   return (
     <div
       className={`chat ${dragging ? "dragging" : ""}`}
@@ -826,7 +898,7 @@ export function Conversation({
           <span className="t-title">{t("desktop.drop")}</span>
         </div>
       )}
-      <SessionBar session={session} list={list} running={running} onNew={newSession} onLoad={load} onRename={rename} />
+      <SessionBar session={session} list={list} running={running} onNew={newSession} onLoad={load} onRename={rename} onDelete={setDeleting} />
       <div className="chat-scroll" ref={scroller} onScroll={onScroll}>
         <div className="chat-column">
           {modelProblem && (
@@ -847,11 +919,11 @@ export function Conversation({
               </Button>
             </div>
           )}
-          {empty && <EmptyState name={name} onPick={(text) => setDraft(text)} />}
+          {empty && <EmptyState dir={dir} name={name} onDraft={setDraft} onSend={(text) => void submit(text)} onOpen={(id) => void load(id)} />}
           {groupTools(shown).map((g) =>
             g.kind === "tools" ? (
               <div key={g.at}>
-                <ToolGroup tools={g.tools} />
+                <ToolGroup tools={g.tools} live={running && g.at >= turnStart} />
                 {g.tools.map((x) =>
                   x.name === "invoke_agent" && typeof x.result?.task_id === "string" ? <TaskCard key={x.result.task_id} dir={dir} sessionId={session?.id ?? ""} id={x.result.task_id} /> : null,
                 )}
@@ -886,23 +958,24 @@ export function Conversation({
           )}
         </div>
       </div>
-      <div className="chat-column dock">
-        {tasks.length > 0 && <TaskList tasks={tasks} onDismiss={running ? undefined : () => setTasks([])} />}
-        <Composer
-          commands={commands}
-          attachments={attachments}
-          onAddFiles={addFiles}
-          onAddImagePath={addImagePath}
-          onRemoveAttachment={removeAttachment}
-          imagesOn={imagesOn}
-          draft={draft}
-          setDraft={setDraft}
-          running={running}
-          dir={dir}
-          onSubmit={submit}
-          onStop={stop}
-        />
-      </div>
+      {dockEl && visible ? createPortal(dock, dockEl) : dock}
+      {deleting && (
+        <Dialog
+          title={t("desktop.chat.delete_title", { title: chatTitle(deleting) })}
+          icon={mdiDeleteOutline}
+          onClose={() => setDeleting(null)}
+          footer={
+            <>
+              <Button onClick={() => setDeleting(null)}>{t("desktop.cancel")}</Button>
+              <Button variant="filled" danger onClick={() => void remove(deleting)}>
+                {t("desktop.chat.delete")}
+              </Button>
+            </>
+          }
+        >
+          <p>{t("desktop.chat.delete_body")}</p>
+        </Dialog>
+      )}
       {forceRewind && (
         <Dialog
           title={t("desktop.conflict.title")}
@@ -933,6 +1006,11 @@ export function Conversation({
   );
 }
 
+/** How a chat is named in History: a snapshot by its name, else its title. */
+function chatTitle(s: SessionInfo): string {
+  return s.snapshot ? `📸 ${s.snapshot}` : s.title || t("desktop.untitled");
+}
+
 function SessionBar({
   session,
   list,
@@ -940,6 +1018,7 @@ function SessionBar({
   onNew,
   onLoad,
   onRename,
+  onDelete,
 }: {
   session?: SessionInfo;
   list: SessionInfo[];
@@ -947,6 +1026,7 @@ function SessionBar({
   onNew: () => void;
   onLoad: (id: string) => void;
   onRename: (t: string) => void;
+  onDelete: (s: SessionInfo) => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [title, setTitle] = useState("");
@@ -995,10 +1075,12 @@ function SessionBar({
             : [
                 { heading: t("desktop.chat.list") },
                 ...list.map((s) => ({
-                  label: s.snapshot ? `📸 ${s.snapshot}` : s.title || "(untitled)",
+                  label: chatTitle(s),
                   detail: tn("desktop.messages", s.messageCount) + (s.updated ? ` · ${timestampDate(s.updated).toLocaleString(language(), { dateStyle: "medium", timeStyle: "short" })}` : ""),
                   on: s.id === session?.id,
                   onSelect: () => onLoad(s.id),
+                  // The chat in view can't be deleted: start or load another first.
+                  actions: s.id === session?.id ? undefined : [{ icon: mdiDeleteOutline, label: t("desktop.chat.delete"), removes: true, onSelect: () => onDelete(s) }],
                 })),
               ]
         }
@@ -1008,25 +1090,62 @@ function SessionBar({
   );
 }
 
-const suggestions = [
-  { icon: mdiMagnify, key: "explain" },
-  { icon: mdiWrenchOutline, key: "bug" },
-  { icon: mdiFormatListChecks, key: "tests" },
-  { icon: mdiLightbulbOutline, key: "improve" },
-];
-
-function EmptyState({ name, onPick }: { name: string; onPick: (t: string) => void }) {
+/**
+ * The welcome screen: the workspace's suggestions (GetSuggestions), asked
+ * for again while a model writes ideas from the recent conversations, or
+ * the canned tiles when there are none.
+ */
+function EmptyState({ dir, name, onDraft, onSend, onOpen }: { dir: string; name: string; onDraft: (t: string) => void; onSend: (t: string) => void; onOpen: (id: string) => void }) {
+  const [res, setRes] = useState<{ r?: GetSuggestionsResponse; learning: boolean } | null>(null);
+  useEffect(() => {
+    let attempts = 0;
+    let timer = 0;
+    let gone = false;
+    const ask = async () => {
+      let r: GetSuggestionsResponse | undefined;
+      try {
+        r = await workspaces.getSuggestions({ workspace: dir });
+      } catch {
+        // the canned tiles, or what came before, will do
+        if (!gone) setRes((was) => ({ r: was?.r, learning: false }));
+        return;
+      }
+      if (gone) return;
+      const again = shouldPoll(r, attempts);
+      setRes({ r, learning: again });
+      if (again) {
+        attempts++;
+        timer = window.setTimeout(ask, pollMs);
+      }
+    };
+    setRes(null);
+    void ask();
+    return () => {
+      gone = true;
+      window.clearTimeout(timer);
+    };
+  }, [dir]);
+  const choose = (a: TileAction) => {
+    if (a.type === "setup") onSend(setupCommand);
+    else if (a.type === "session") onOpen(a.id);
+    else if (a.type === "send") onSend(a.prompt);
+    else onDraft(a.text);
+  };
   return (
     <div className="empty">
       <h2 className="t-display gradient-text">{t("desktop.empty.title", { name })}</h2>
-      <div className="suggestions">
-        {suggestions.map((s) => (
-          <button key={s.key} className="suggestion" onClick={() => onPick(t(`desktop.suggest.${s.key}`))}>
-            <Icon path={s.icon} />
-            <span>{t(`desktop.suggest.${s.key}`)}</span>
-          </button>
-        ))}
-      </div>
+      {res && (
+        <div className="suggestions">
+          {welcomeTiles(res.r).map((s) => (
+            <button key={s.key} className={`suggestion ${s.highlight ? "highlight" : ""}`} title={s.detail} onClick={() => choose(s.action)}>
+              <Icon path={s.icon} />
+              <span>{s.text}</span>
+              {s.highlight && s.detail && <span className="t-body-sm suggestion-detail">{s.detail}</span>}
+            </button>
+          ))}
+        </div>
+      )}
+      {res?.learning && <p className="t-body-sm muted suggestions-learning">{t("desktop.suggest.learning")}</p>}
     </div>
   );
 }
@@ -1071,6 +1190,7 @@ const EntryView = memo(function EntryView({
  * whole turn's answer when it came in parts. They show once it's complete.
  */
 function ModelAnswer({ entry, turn }: { entry: Extract<Entry, { kind: "model" }>; turn?: string }) {
+  const advanced = useAdvanced(); // copy as Markdown and the whole turn: advanced
   const snack = useSnackbar();
   const body = useRef<HTMLDivElement>(null);
   const copy = (f: () => Promise<void>, done: string) =>
@@ -1091,8 +1211,8 @@ function ModelAnswer({ entry, turn }: { entry: Extract<Entry, { kind: "model" }>
       {!entry.open && entry.text.trim() && (
         <div className="bubble-actions answer-actions">
           <IconButton icon={mdiContentCopy} label={t("desktop.copy")} small onClick={() => body.current && copy(() => copyRendered(body.current!), t("desktop.copied"))} />
-          <IconButton icon={mdiLanguageMarkdownOutline} label={t("desktop.copy_markdown")} small onClick={() => copy(() => copyText(entry.text), t("desktop.copied_markdown"))} />
-          {turn && <IconButton icon={mdiTextBoxMultipleOutline} label={t("desktop.copy_turn")} small onClick={() => copy(() => copyText(turn), t("desktop.copied_turn"))} />}
+          {advanced && <IconButton icon={mdiLanguageMarkdownOutline} label={t("desktop.copy_markdown")} small onClick={() => copy(() => copyText(entry.text), t("desktop.copied_markdown"))} />}
+          {advanced && turn && <IconButton icon={mdiTextBoxMultipleOutline} label={t("desktop.copy_turn")} small onClick={() => copy(() => copyText(turn), t("desktop.copied_turn"))} />}
         </div>
       )}
     </div>
@@ -1101,6 +1221,8 @@ function ModelAnswer({ entry, turn }: { entry: Extract<Entry, { kind: "model" }>
 
 function UserBubble({ entry, running, onRewind, onEdit }: { entry: UserEntry; running: boolean; onRewind: (index: number, mode: string) => void; onEdit: (text: string) => void }) {
   const snack = useSnackbar();
+  // The rewind menu's finer choices are advanced; Edit goes back as it says.
+  const advanced = useAdvanced();
   if (entry.sub === "hook" || entry.sub === "plan") {
     return (
       <div className="notice info row">
@@ -1117,6 +1239,7 @@ function UserBubble({ entry, running, onRewind, onEdit }: { entry: UserEntry; ru
         {canRewind && (
           <>
             <IconButton icon={mdiPencilOutline} label={t("desktop.prompt.edit")} small onClick={() => onRewind(entry.index!, "both")} />
+            {advanced && (
             <Menu
               placement="down end"
               trigger={(p) => <IconButton icon={mdiDotsHorizontal} label={t("desktop.prompt.rewind")} small {...p} />}
@@ -1132,6 +1255,7 @@ function UserBubble({ entry, running, onRewind, onEdit }: { entry: UserEntry; ru
                 { label: t("desktop.rewind.copy"), icon: mdiContentCopy, onSelect: () => onEdit(entry.text) },
               ]}
             />
+            )}
           </>
         )}
       </div>
@@ -1182,47 +1306,39 @@ function toolIcon(name: string): string {
   return mdiWrenchOutline;
 }
 
-type ToolEntry = Extract<Entry, { kind: "tool" }>;
-type Item = { kind: "entry"; at: number; entry: Entry } | { kind: "tools"; at: number; tools: ToolEntry[] };
-
-/** Groups runs of two or more tool calls, so an answer isn't buried in them. */
-function groupTools(entries: Entry[]): Item[] {
-  const out: Item[] = [];
-  entries.forEach((e, i) => {
-    const last = out[out.length - 1];
-    if (e.kind === "tool" && last?.kind === "tools") last.tools.push(e);
-    else if (e.kind === "tool" && entries[i + 1]?.kind === "tool") out.push({ kind: "tools", at: i, tools: [e] });
-    else out.push({ kind: "entry", at: i, entry: e });
-  });
-  return out;
-}
-
-/** A run of tool calls: open while they run (or when one failed), folded after. */
-function ToolGroup({ tools }: { tools: ToolEntry[] }) {
+/**
+ * A run of tool calls. One call is just its row; from two, a head says how
+ * many, open while the turn runs (or when one failed) and folded after.
+ * Either way the rows stay mounted as calls arrive, so nothing redraws.
+ */
+function ToolGroup({ tools, live }: { tools: ToolEntry[]; live: boolean }) {
   const busy = tools.some((x) => x.result === undefined);
   const failures = tools.filter((x) => failed(x.result)).length;
   const [open, setOpen] = useState<boolean | null>(null);
-  const shown = open ?? (busy || failures > 0);
+  const single = tools.length === 1;
+  const shown = single || (open ?? (live || busy || failures > 0));
   return (
-    <div className={`tool-group ${shown ? "open" : ""}`}>
-      <button className="tool-group-head" onClick={() => setOpen(!shown)} aria-expanded={shown}>
-        <span className="tool-icons">
-          {[...new Set(tools.map((x) => toolIcon(x.name)))].slice(0, 4).map((p) => (
-            <Icon key={p} path={p} size="sm" />
-          ))}
-        </span>
-        <span>
-          {tn("desktop.tools.used", tools.length)}
-          {failures > 0 ? t("desktop.tools.failed", { count: failures }) : ""}
-        </span>
-        {busy && <Icon path={mdiProgressClock} size="sm" className="pulse" />}
-        <span className="spacer" />
-        <Icon path={shown ? mdiChevronDown : mdiChevronRight} size="sm" />
-      </button>
+    <div className={`tool-group ${shown ? "open" : ""} ${single ? "single" : ""}`}>
+      {!single && (
+        <button className="tool-group-head" onClick={() => setOpen(!shown)} aria-expanded={shown}>
+          <span className="tool-icons">
+            {[...new Set(tools.map((x) => toolIcon(x.name)))].slice(0, 4).map((p) => (
+              <Icon key={p} path={p} size="sm" />
+            ))}
+          </span>
+          <span>
+            {tn("desktop.tools.used", tools.length)}
+            {failures > 0 ? t("desktop.tools.failed", { count: failures }) : ""}
+          </span>
+          {busy && <Icon path={mdiProgressClock} size="sm" className="pulse" />}
+          <span className="spacer" />
+          <Icon path={shown ? mdiChevronDown : mdiChevronRight} size="sm" />
+        </button>
+      )}
       {shown && (
         <div className="tool-group-body">
           {tools.map((x, i) => (
-            <ToolRow key={i} name={x.name} args={x.args} result={x.result} />
+            <ToolRow key={x.id || i} name={x.name} args={x.args} result={x.result} />
           ))}
         </div>
       )}
@@ -1231,13 +1347,17 @@ function ToolGroup({ tools }: { tools: ToolEntry[] }) {
 }
 
 function ToolRow({ name, args, result }: { name: string; args?: JsonObject; result?: JsonObject }) {
-  const [open, setOpen] = useState(false);
+  // A tool's arguments and result open with advanced settings; simple mode
+  // shows what it did and on which file.
+  const advanced = useAdvanced();
+  const [opened, setOpen] = useState(false);
+  const open = advanced && opened;
   const openPath = useOpenPath();
   const bad = failed(result);
   const status = result === undefined ? <Icon path={mdiProgressClock} size="sm" className="pulse" /> : bad ? <Icon path={mdiClose} size="sm" /> : <Icon path={mdiCheck} size="sm" />;
   return (
     <div className={`tool ${bad ? "failed" : ""} ${open ? "open" : ""}`}>
-      <button className="tool-head" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
+      <button className="tool-head" onClick={() => advanced && setOpen((o) => !o)} aria-expanded={advanced ? open : undefined}>
         <Icon path={toolIcon(name)} size="sm" />
         <code>{name}</code>
         {openPath && typeof args?.path === "string" && args.path ? (
@@ -1361,6 +1481,7 @@ function JsonBlock({ label, value }: { label: string; value: JsonObject }) {
 
 function ApprovalCard({ req, onDecide, who, autoFocus = true }: { req: ApprovalRequest; onDecide: (d: Decision) => void; who?: string; autoFocus?: boolean }) {
   const files = req.diff ? parseDiff(req.diff) : [];
+  const advanced = useAdvanced(); // Always allow: advanced
   return (
     <div className={`card approval ${who ? "task-request" : ""}`} role="alertdialog" aria-label={t("desktop.approval.label")}>
       <div className="row">
@@ -1388,7 +1509,7 @@ function ApprovalCard({ req, onDecide, who, autoFocus = true }: { req: ApprovalR
             {t("desktop.approval.session", { scope: req.scopeLabel })}
           </Button>
         )}
-        {req.scopeLabel && <Button onClick={() => onDecide(Decision.ALWAYS)}>{t("desktop.approval.always", { scope: req.scopeLabel })}</Button>}
+        {advanced && req.scopeLabel && <Button onClick={() => onDecide(Decision.ALWAYS)}>{t("desktop.approval.always", { scope: req.scopeLabel })}</Button>}
         <Button variant="outlined" danger onClick={() => onDecide(Decision.DENY)}>
           {t("desktop.approval.deny")}
         </Button>
@@ -1489,6 +1610,17 @@ function TaskList({ tasks, onDismiss }: { tasks: Task[]; onDismiss?: () => void 
         </ul>
       )}
     </div>
+  );
+}
+
+// The composer's keys, as a keyboard icon whose tooltip lists them (on
+// hover, and on focus for the keyboard).
+function KeyHint() {
+  const text = `${t("desktop.keys.enter")} ${t("desktop.keys.to_send")} · ${t("desktop.keys.shift")}+${t("desktop.keys.enter")} ${t("desktop.keys.new_line")} · ${t("desktop.composer.plan_hint")}`;
+  return (
+    <span className="key-hint" tabIndex={0} role="note" aria-label={text} data-tip={text}>
+      <Icon path={mdiKeyboardOutline} size="sm" />
+    </span>
   );
 }
 
@@ -1644,6 +1776,10 @@ function Composer({
           ))}
         </div>
       )}
+      {/* The prompt mark: shown only when pinned (composerDock.ts). */}
+      <span className="composer-mark" aria-hidden="true">
+        ›
+      </span>
       <textarea
         ref={ref}
         value={draft}
@@ -1724,9 +1860,7 @@ function Composer({
           </>
         )}
         <span className="spacer" />
-        <span className="t-body-sm muted hint">
-          <kbd>{t("desktop.keys.enter")}</kbd> {t("desktop.keys.to_send")} · <kbd>{t("desktop.keys.shift")}</kbd>+<kbd>{t("desktop.keys.enter")}</kbd> {t("desktop.keys.new_line")} · {t("desktop.composer.plan_hint")}
-        </span>
+        <KeyHint />
         {running && <IconButton icon={mdiStop} label={t("desktop.stop")} variant="tonal" onClick={onStop} />}
         <IconButton icon={mdiArrowUp} label={busy ? t("desktop.uploading") : running ? t("desktop.steer") : t("desktop.send")} variant="filled" disabled={!draft.trim() || busy} onClick={send} />
       </div>

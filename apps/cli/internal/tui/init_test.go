@@ -26,8 +26,8 @@ import (
 	"google.golang.org/genai"
 )
 
-// /init sends the instructions-writing prompt, records "/init", and loads
-// the BLITZ.md the agent wrote before the next prompt.
+// /init runs the guided setup (/setup, recorded as such) and loads the
+// instructions the agent wrote before the next prompt.
 func TestInitWritesAndLoadsBlitzMD(t *testing.T) {
 	write := &genai.Content{Role: genai.RoleModel, Parts: []*genai.Part{{FunctionCall: &genai.FunctionCall{
 		Name: "create_file", Args: map[string]any{"path": "BLITZ.md", "content": "Run tests with `make check`."}}}}}
@@ -35,7 +35,7 @@ func TestInitWritesAndLoadsBlitzMD(t *testing.T) {
 	out := captureStdout(t, func() { RunREPL(context.Background(), app) })
 
 	first := requestTextAt(llm, 0)
-	require.Contains(t, first, "write BLITZ.md at the workspace root", "the init prompt wasn't sent:\n%s", first)
+	require.Contains(t, first, "Set up this workspace's agent harness", "the setup prompt wasn't sent:\n%s", first)
 	assert.Contains(t, out, filepath.Join(local(app).Dir(), "BLITZ.md"), "memory wasn't reloaded after /init:\n%s", out)
 	// Memory is part of the system instruction, not the conversation.
 	var system strings.Builder
@@ -51,5 +51,5 @@ func TestInitWritesAndLoadsBlitzMD(t *testing.T) {
 		recorded = append(recorded, m.Content)
 	}
 	assert.NotEqual(t, 0, len(recorded), "transcript %q", recorded)
-	assert.Equal(t, "/init", recorded[0], "transcript %q", recorded)
+	assert.Equal(t, "/setup", recorded[0], "transcript %q", recorded)
 }

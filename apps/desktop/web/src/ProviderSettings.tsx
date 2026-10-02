@@ -21,7 +21,11 @@ import { message } from "./errors";
 import { configChanged } from "./events";
 import { KeySource, type ConfigChange, type DescribeConfigResponse, type ProviderConfig } from "./gen/blitz/v1/config_pb";
 import { t } from "./i18n";
+import { checkModelRef } from "./models";
+import { ModelInput, refreshModelCatalog, useModelCatalog } from "./ModelInput";
 import { Button, Chip, Icon, Segmented, useSnackbar } from "./ui/controls";
+import { useAdvanced } from "./state";
+import { showsSignIn } from "./simpleMode";
 
 /** Providers llm.provider can name; the first three take API keys. */
 const providers = ["gemini", "anthropic", "openai", "ollama"];
@@ -95,11 +99,13 @@ const sameChoice = (a: Choice, b: Choice) =>
  */
 export function ProviderSettings({ workspace, compact }: { workspace: string; compact?: boolean }) {
   const snack = useSnackbar();
+  const advanced = useAdvanced();
   const [desc, setDesc] = useState<DescribeConfigResponse>();
   const [error, setError] = useState("");
   const [modelError, setModelError] = useState("");
   const [busy, setBusy] = useState(false);
   const [choice, setChoice] = useState<Choice>({ provider: "", model: "", method: "api_key", key: "", projectId: "", location: "", profile: "" });
+  const catalog = useModelCatalog(workspace);
 
   // Reads the scope; fresh also starts the choice over from what's saved.
   const load = useCallback(
@@ -128,6 +134,7 @@ export function ProviderSettings({ workspace, compact }: { workspace: string; co
       const { change } = await f();
       setModelError(change?.modelError ?? "");
       if (done && !change?.modelError) snack(done);
+      refreshModelCatalog(workspace); // a new provider or key lists other models
       configChanged({ dir: workspace });
       await load(fresh);
       return true;
@@ -144,15 +151,17 @@ export function ProviderSettings({ workspace, compact }: { workspace: string; co
   const others = authMethods[choice.provider] ?? [];
   const saved = savedChoice(desc, effectiveProvider(desc.provider, workspace));
   const dirty = !sameChoice(choice, saved);
+  const modelCheck = checkModelRef(choice.model, catalog, choice.provider || desc.provider);
   const save = () =>
     dirty &&
     !busy &&
+    !modelCheck.error &&
     act(
       () =>
         config.setProvider({
           workspace,
           provider: choice.provider,
-          defaultModel: choice.model.trim(),
+          defaultModel: modelCheck.value,
           key: choice.method === "api_key" ? choice.key.trim() : "",
           auth: others.length ? { method: choice.method, projectId: choice.projectId.trim(), location: choice.location.trim(), profile: choice.profile.trim() } : undefined,
         }),
@@ -167,6 +176,10 @@ export function ProviderSettings({ workspace, compact }: { workspace: string; co
       <input className="input mono" value={choice[field]} placeholder={t(placeholder)} spellCheck={false} disabled={busy} onChange={set(field)} onKeyDown={onEnter} />
     </label>
   );
+  // Simple mode signs in with an API key: the other ways (Google Cloud, an
+  // Anthropic account) and the base URL show with advanced settings, and
+  // whenever the provider already signs in another way.
+  const signIn = showsSignIn(advanced, choice.method);
   return (
     <div className="stack provider-settings" style={{ gap: 12 }}>
       <p className="t-body-sm muted">
@@ -187,17 +200,18 @@ export function ProviderSettings({ workspace, compact }: { workspace: string; co
           </label>
           <label className="field">
             <span className="t-label">{t("desktop.keys.default_model")}</span>
-            <input
-              className="input mono"
+            <ModelInput
               value={choice.model}
+              onChange={(model) => setChoice((c) => ({ ...c, model }))}
+              catalog={catalog}
+              provider={choice.provider || desc.provider}
               placeholder={t(workspace ? "desktop.keys.use_global" : "desktop.keys.model_placeholder")}
               disabled={busy}
-              onChange={set("model")}
               onKeyDown={onEnter}
             />
           </label>
         </div>
-        {keyed && others.length > 0 && (
+        {keyed && others.length > 0 && signIn && (
           <div className="field">
             <span className="t-label">{t("desktop.keys.sign_in")}</span>
             {compact ? (
@@ -244,12 +258,12 @@ export function ProviderSettings({ workspace, compact }: { workspace: string; co
         )}
         {keyed && choice.method !== "api_key" && <p className="t-body-sm muted">{t(`desktop.keys.${choice.method}_hint`, { provider: modelNames[choice.provider] ?? choice.provider })}</p>}
         {keyed && choice.method === "api_key" && <KeyStatus workspace={workspace} p={keyed} busy={busy} act={act} />}
-        {keyed && !compact && keyed.name !== "gemini" && <BaseURL workspace={workspace} p={keyed} busy={busy} act={act} />}
+        {keyed && !compact && advanced && keyed.name !== "gemini" && <BaseURL workspace={workspace} p={keyed} busy={busy} act={act} />}
         <div className="row" style={{ justifyContent: "flex-end", gap: 8 }}>
           <Button small disabled={!dirty || busy} onClick={() => setChoice(saved)}>
             {t("desktop.file.revert")}
           </Button>
-          <Button small variant="filled" disabled={!dirty || busy} onClick={save}>
+          <Button small variant="filled" disabled={!dirty || busy || !!modelCheck.error} onClick={save}>
             {t("desktop.keys.save")}
           </Button>
         </div>

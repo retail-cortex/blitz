@@ -35,9 +35,10 @@ func TestPrefsDefaultsAndRoundTrip(t *testing.T) {
 	require.Equal(t, "comfortable", p.Density, "defaults %+v %v", p, err)
 	require.Equal(t, "full", p.Width, "defaults %+v %v", p, err)
 	require.Equal(t, "on", p.Notifications, "defaults %+v %v", p, err)
+	require.Equal(t, "pinned", p.Composer, "defaults %+v %v", p, err)
 	require.Len(t, p.Workspaces, 0, "defaults %+v %v", p, err)
 	a, b := t.TempDir(), t.TempDir()
-	p.Theme = "dark"
+	p.Theme, p.Composer, p.Advanced = "dark", "panel", true
 	p.Workspaces = []WorkspacePrefs{
 		{Dir: a + "/", Name: "  Shop  ", Color: "teal", Open: true},
 		{Dir: b, Description: "old", Open: false},
@@ -45,7 +46,7 @@ func TestPrefsDefaultsAndRoundTrip(t *testing.T) {
 		{Dir: "relative/dir", Open: true}, // not a directory the service can open
 	}
 	p.Active = b // closed: can't be active
-	p.Files, p.ShowHidden, p.ChatWidth, p.FilesWidth, p.RunSettingsWidth = true, true, -3, 99999, 480
+	p.Files, p.ShowHidden, p.ChatWidth, p.FilesWidth = true, true, -3, 99999
 	saved, err := s.save(p)
 	require.NoError(t, err)
 	require.Len(t, saved.Workspaces, 2, "normalized %+v", saved)
@@ -53,10 +54,11 @@ func TestPrefsDefaultsAndRoundTrip(t *testing.T) {
 	require.Equal(t, "Shop", saved.Workspaces[0].Name, "normalized %+v", saved)
 	require.Equal(t, a, saved.Active, "normalized %+v", saved)
 	require.True(t, saved.Files, "normalized %+v", saved)
+	require.Equal(t, "panel", saved.Composer, "normalized %+v", saved)
+	require.True(t, saved.Advanced, "normalized %+v", saved)
 	require.True(t, saved.ShowHidden, "normalized %+v", saved)
 	require.Equal(t, 0, saved.ChatWidth, "normalized %+v", saved)
 	require.Equal(t, 0, saved.FilesWidth, "normalized %+v", saved)
-	require.Equal(t, 480, saved.RunSettingsWidth, "normalized %+v", saved)
 	info, err := os.Stat(s.path)
 	require.NoError(t, err, "file mode %v", info)
 	require.Equal(t, fs.FileMode(0o600), info.Mode().Perm(), "file mode %v %v", info, err)

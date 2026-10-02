@@ -33,15 +33,16 @@ import { searchSettings, type SettingRef } from "./toml";
  * checked with Validate (and before saving) and its problems marked on
  * their lines and in the gutter. The panel beside it describes the
  * setting at the cursor; hovering a setting shows the same, and the
- * reference below lists and searches them all.
+ * reference below lists and searches them all. initial is the scope it
+ * starts on ("" the global file).
  */
-export function SettingsFile({ scopes }: { scopes: { dir: string; name: string }[] }) {
+export function SettingsFile({ scopes, initial = "" }: { scopes: { dir: string; name: string }[]; initial?: string }) {
   const snack = useSnackbar();
   const host = useRef<HTMLDivElement>(null);
   const view = useRef<EditorView | null>(null);
   const reference = useRef<SettingRef[]>([]);
   const [ref, setRef] = useState<SettingRef[]>([]);
-  const [workspace, setWorkspace] = useState("");
+  const [workspace, setWorkspace] = useState(initial);
   const [path, setPath] = useState("");
   const [text, setText] = useState("");
   const [saved, setSaved] = useState("");

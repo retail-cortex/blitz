@@ -106,7 +106,7 @@ Decisions are `once`, `session`, `always` or `deny`; a question is answered with
 | `/theme [name [--save]]` | Markdown and diff colours: `auto`, `dark`, `light`, `dracula`, `tokyo-night`, `pink`, `ascii`, `notty` |
 | `/copy [n]` | Copy the last answer (or the nth from last) to the clipboard; OSC 52 over SSH |
 | `/compact [focus]` | Summarize everything before the latest turn now |
-| `/memory [reload\|add <note>\|notes\|forget <name>]`, `/init` | Project instructions and the agent's notes; have the agent write `BLITZ.md` |
+| `/memory [reload\|add <note>\|notes\|forget <name>]`, `/init` | Project instructions and the agent's notes; `/init` runs `/setup` |
 | `/approvals [revoke <n>\|clear]` | Remembered approval rules |
 | `/hooks` | The hooks, where they come from, and their recent failures |
 | `/fork [n]` | Continue in a copy of the session, up to prompt `n` |
@@ -128,6 +128,7 @@ Decisions are `once`, `session`, `always` or `deny`; a question is answered with
 | `/mode [name]`, `/permissions …` | Permission mode and rules ([safety](../guide/safety.md)) |
 | `/plan <goal>` | A plan for approval, without changing anything |
 | `/grill-me <task>` | The agent asks you clarifying questions first, then proposes an approach; it changes nothing |
+| `/setup [focus]` | Set up the project's agent harness: the setup agent asks about the project, makes it a git repository with a `.gitignore` for its stack, writes `.agents/AGENT.md`, makes `AGENTS.md`, `CLAUDE.md`, `GEMINI.md` and `BLITZ.md` import it, and offers skills and agents to add (also `/init`, `blitz init`) |
 | `/goal <condition>`, `/goal [clear]` | Keep the agent working until the condition holds, judged after each turn |
 | `/loop <interval> <prompt>`, `/loop [stop <n>]` | Send a prompt again every interval while the REPL stays open |
 | `/btw <question>` | A side question: answered with what the session knows, and not kept |

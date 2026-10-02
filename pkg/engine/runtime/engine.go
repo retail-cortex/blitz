@@ -547,7 +547,7 @@ func (e *Engine) newLLMAgentWith(reg *tools.Registry, spec *agents.AgentSpec, ll
 		Name:                  spec.Name,
 		Description:           spec.Description,
 		Instruction:           instruction + e.imageInstruction(spec) + diagramInstruction + e.extraInstructions,
-		Model:                 llm,
+		Model:                 withAgentSettings(llm, spec),
 		Tools:                 list,
 		Toolsets:              toolsets,
 		SubAgents:             subAgents,

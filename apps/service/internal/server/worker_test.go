@@ -231,6 +231,69 @@ func TestCreateWorkerOverTheAPI(t *testing.T) {
 	assert.NotEmpty(t, bad.Msg.Problems)
 }
 
+// A worker edited over the API: read as written with its hash, saved at
+// that hash (suspending it if enabled), refused at a stale one.
+func TestUpdateWorkerOverTheAPI(t *testing.T) {
+	c, _ := serveWorkers(t, time.Hour)
+	ctx := context.Background()
+	dir, _ := filepath.EvalSymlinks(t.TempDir())
+	created, err := c.CreateWorker(ctx, connect.NewRequest(&pb.CreateWorkerRequest{Workspace: dir, Name: "deps", Schedule: "Daily at 6 AM", Timeout: "20m", Prompt: "Write the report."}))
+	require.NoError(t, err)
+	_, err = c.EnableWorker(ctx, connect.NewRequest(&pb.EnableWorkerRequest{Workspace: dir, Name: "deps", Hash: created.Msg.Worker.Hash}))
+	require.NoError(t, err)
+
+	got, err := c.GetWorkerSpec(ctx, connect.NewRequest(&pb.GetWorkerSpecRequest{Workspace: dir, Name: "deps"}))
+	require.NoError(t, err)
+	assert.Equal(t, created.Msg.Worker.Hash, got.Msg.Hash)
+	assert.Equal(t, "20m", got.Msg.Worker.Timeout)
+	def := got.Msg.Worker
+	def.Prompt = "Write the report, shorter."
+
+	saved, err := c.UpdateWorker(ctx, connect.NewRequest(&pb.UpdateWorkerRequest{Workspace: dir, Hash: got.Msg.Hash, Worker: def}))
+	require.NoError(t, err)
+	require.Empty(t, saved.Msg.Problems)
+	assert.Equal(t, pb.WorkerState_WORKER_STATE_CHANGED, saved.Msg.Worker.GetState())
+
+	_, err = c.UpdateWorker(ctx, connect.NewRequest(&pb.UpdateWorkerRequest{Workspace: dir, Hash: got.Msg.Hash, Worker: def}))
+	code, info := errorReason(t, err)
+	assert.Equal(t, connect.CodeFailedPrecondition, code)
+	assert.Equal(t, "HASH_MISMATCH", info.Reason)
+
+	def.Schedule = "whenever"
+	bad, err := c.UpdateWorker(ctx, connect.NewRequest(&pb.UpdateWorkerRequest{Workspace: dir, Hash: saved.Msg.Worker.Hash, Worker: def}))
+	require.NoError(t, err)
+	assert.Nil(t, bad.Msg.Worker)
+	assert.NotEmpty(t, bad.Msg.Problems)
+
+	_, err = c.GetWorkerSpec(ctx, connect.NewRequest(&pb.GetWorkerSpecRequest{Workspace: dir, Name: "ghost"}))
+	code, info = errorReason(t, err)
+	assert.Equal(t, connect.CodeNotFound, code)
+	assert.Equal(t, "UNKNOWN_WORKER", info.Reason)
+	assert.Error(t, unary(c.UpdateWorker, &pb.UpdateWorkerRequest{Workspace: dir}), "a worker is required")
+}
+
+// A worker is deleted over the API: its folder goes and it's no longer
+// listed; deleting it again is UNKNOWN_WORKER.
+func TestDeleteWorkerOverTheAPI(t *testing.T) {
+	c, _ := serveWorkers(t, time.Hour)
+	ctx := context.Background()
+	dir, _ := filepath.EvalSymlinks(t.TempDir())
+	created, err := c.CreateWorker(ctx, connect.NewRequest(&pb.CreateWorkerRequest{Workspace: dir, Name: "deps", Schedule: "Daily at 6 AM", Prompt: "Write the report."}))
+	require.NoError(t, err)
+	_, err = c.EnableWorker(ctx, connect.NewRequest(&pb.EnableWorkerRequest{Workspace: dir, Name: "deps", Hash: created.Msg.Worker.Hash}))
+	require.NoError(t, err)
+
+	require.NoError(t, unary(c.DeleteWorker, &pb.DeleteWorkerRequest{Workspace: dir, Name: "deps"}))
+	assert.NoDirExists(t, filepath.Join(dir, ".agents", "workers", "deps"))
+	list, err := c.ListWorkers(ctx, connect.NewRequest(&pb.ListWorkersRequest{Workspace: dir}))
+	require.NoError(t, err)
+	assert.Empty(t, list.Msg.Workers)
+
+	code, info := errorReason(t, unary(c.DeleteWorker, &pb.DeleteWorkerRequest{Workspace: dir, Name: "deps"}))
+	assert.Equal(t, connect.CodeNotFound, code)
+	assert.Equal(t, "UNKNOWN_WORKER", info.Reason)
+}
+
 // A run's changes are undone over the API, once; a run that isn't going
 // can't be watched; and an unknown worker can't be disabled.
 func TestWorkerRunsUndoneOverTheAPI(t *testing.T) {

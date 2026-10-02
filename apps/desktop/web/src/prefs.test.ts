@@ -85,16 +85,17 @@ describe("normalizePrefs", () => {
     expect(normalizePrefs({ theme: "dark", workspaces: null }).workspaces).toEqual([]);
     expect(normalizePrefs(null)).toEqual({ ...defaultPrefs, active: undefined });
     expect(normalizePrefs({ notifications: "sometimes" }).notifications).toBe("on");
+    expect(normalizePrefs({}).composer).toBe("pinned"); // pinned by default
+    expect(normalizePrefs({ composer: "floating" }).composer).toBe("pinned");
+    expect(normalizePrefs({ composer: "panel" }).composer).toBe("panel");
     const p = normalizePrefs({
       theme: "sepia",
       density: 3,
-      run_settings: "yes",
       workspaces: [{ dir: "/a", open: true, name: 7 }, { dir: "" }, "nonsense", { dir: "/b", color: "teal" }],
       active: "/b",
     });
     expect(p.theme).toBe("system");
     expect(p.density).toBe("comfortable");
-    expect(p.run_settings).toBe(false);
     expect(p.workspaces).toEqual([
       { dir: "/a", open: true, name: undefined, description: undefined, color: undefined },
       { dir: "/b", open: false, name: undefined, description: undefined, color: "teal" },
@@ -110,8 +111,12 @@ describe("normalizePrefs", () => {
   it("keeps the files settings when they're right", () => {
     expect(normalizePrefs({ files: true, show_hidden: true, chat_width: 612.4 })).toMatchObject({ files: true, show_hidden: true, chat_width: 612 });
     expect(normalizePrefs({ files: "yes", show_hidden: 1, chat_width: -5 })).toMatchObject({ files: false, show_hidden: false, chat_width: 0 });
-    expect(normalizePrefs({ files_width: 300.6, run_settings_width: 20000 })).toMatchObject({ files_width: 301, run_settings_width: 0 });
+    expect(normalizePrefs({ files_width: 300.6 })).toMatchObject({ files_width: 301 });
+    expect(normalizePrefs({ files_width: 20000 })).toMatchObject({ files_width: 0 });
     expect(normalizePrefs({}).width).toBe("full");
+    expect(normalizePrefs({}).advanced).toBe(false); // simple until asked
+    expect(normalizePrefs({ advanced: true }).advanced).toBe(true);
+    expect(normalizePrefs({ advanced: "yes" }).advanced).toBe(false);
     expect(normalizePrefs({ width: "readable" }).width).toBe("readable");
     expect(normalizePrefs({ width: "huge" }).width).toBe("full");
   });

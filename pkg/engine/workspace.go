@@ -104,9 +104,20 @@ type Workspace struct {
 	// modelMu guards it (the service reloads and retries concurrently).
 	modelErr error
 	modelMu  sync.Mutex
-	// rebuildMu serialises rebuilding the models.
+	// rebuildMu serialises rebuilding the models (and the agents, whose
+	// default_model is one); agentRefs are the models agents were last
+	// pinned to by default_model or [agent_models].
 	rebuildMu sync.Mutex
-	warn      func(string)
+	agentRefs map[string]string
+	// bgCtx ends when the workspace closes; bg counts the work it bounds
+	// (writing suggestions), which Close waits for.
+	bgCtx  context.Context
+	bgStop context.CancelFunc
+	bg     sync.WaitGroup
+	// ideasRunning: suggestions are being written (guarded by ideasMu).
+	ideasMu      sync.Mutex
+	ideasRunning bool
+	warn         func(string)
 	// reply is the language the model replies in, per workspace.
 	reply *i18n.Localizer
 	lock  *workspaceLock
@@ -316,7 +327,8 @@ func Open(ctx context.Context, cfg *config.Config, o Options) (*Workspace, error
 			opts = append(opts, runtime.WithHookModel(h.Model, m))
 		}
 	}
-	for agent, ref := range agentModelRefs(cfg, w.agents, o.Warn) {
+	w.agentRefs = agentModelRefs(cfg, w.agents, o.Warn)
+	for agent, ref := range w.agentRefs {
 		m, err := w.newModel(ctx, cfg, ref)
 		if err != nil {
 			o.Warn(i18n.T("pin.load_failed", "agent", agent, "model", ref, "error", ModelErrorSummary(err, cfg)))
@@ -341,6 +353,7 @@ func Open(ctx context.Context, cfg *config.Config, o Options) (*Workspace, error
 		return tools.HookInfo{TranscriptPath: w.storage.TranscriptPath(session), PermissionMode: string(w.tools.Hooks().Mode()), Agent: w.engine.ActiveAgent()}
 	}
 	w.settingsWatch = w.watchSettings()
+	w.bgCtx, w.bgStop = context.WithCancel(context.Background())
 	opened = true
 	return w, nil
 }
@@ -391,6 +404,10 @@ func (w *Workspace) Close() error {
 		}
 	}
 	w.settingsWatch.close()
+	if w.bgStop != nil {
+		w.bgStop()
+		w.bg.Wait()
+	}
 	if w.engine != nil {
 		w.engine.StopTasks() // before their tools close
 	}

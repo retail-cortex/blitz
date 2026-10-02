@@ -51,6 +51,10 @@ type Config struct {
 	LLM     LLMConfig     `toml:"llm"`
 	Skills  SkillsConfig  `toml:"skills"`
 	Workers WorkersConfig `toml:"workers"`
+	// Suggestions shape the desktop app's welcome tiles.
+	Suggestions SuggestionsConfig `toml:"suggestions"`
+	// Git is what Blitz does with git in a workspace that's a repository.
+	Git     GitConfig     `toml:"git"`
 	Tools   ToolsConfig   `toml:"tools"`
 	Session SessionConfig `toml:"session"`
 	Sandbox SandboxConfig `toml:"sandbox"`
@@ -371,6 +375,29 @@ type SkillsConfig struct {
 	// Policy caps what skills may ask for; a skill can make its own
 	// settings stricter but never looser.
 	Policy SkillPolicy `toml:"policy"`
+}
+
+// GitConfig is what Blitz does with git in a workspace that's a repository.
+type GitConfig struct {
+	// AutoAdd adds the files the agent creates in a turn to git (git add)
+	// when the turn ends, in one batch: not the files it changes, which
+	// were there before, nor files git ignores or temporary ones (*.tmp,
+	// *.swp, tmp/ and the like).
+	AutoAdd bool `toml:"auto_add"`
+}
+
+// SuggestionsConfig shapes the welcome tiles a new chat shows: tiles from
+// the workspace's state (the latest chat, uncommitted changes, a failed
+// worker, setup when it has no agent instructions), and ideas a model
+// writes from the recent conversations.
+type SuggestionsConfig struct {
+	// Ideas lets a model write up to three tiles from the workspace's
+	// recent conversations. They're kept, and written again only after a
+	// conversation changes.
+	Ideas bool `toml:"ideas"`
+	// Model writes the ideas ("provider/model"; empty: the auto mode's
+	// reviewer, else the main model).
+	Model string `toml:"model"`
 }
 
 // WorkersConfig controls workers: scheduled workflows a workspace defines
@@ -749,6 +776,8 @@ func DefaultConfig() *Config {
 				Fallbacks: "default",
 			},
 		},
+		Suggestions: SuggestionsConfig{Ideas: true},
+		Git:         GitConfig{AutoAdd: true},
 		Workers: WorkersConfig{
 			Enabled:  true,
 			Paths:    []string{".agents/workers", "workers"},
@@ -902,10 +931,16 @@ func (c *Config) SkillSearchPaths(workspace string) []string {
 	return resolvePaths(c.Skills.Paths, workspace)
 }
 
+// UserAgentsDir holds the user's own agents, for every workspace.
+const UserAgentsDir = "~/.blitz/agents"
+
+// ProjectAgentsDir holds a workspace's agents, relative to it.
+const ProjectAgentsDir = ".agents/agents"
+
 // AgentSearchPaths returns directories to scan for user-defined agents,
-// resolved like SkillSearchPaths.
+// resolved like SkillSearchPaths: the user's, then the workspace's.
 func (c *Config) AgentSearchPaths(workspace string) []string {
-	return resolvePaths([]string{"~/.blitz/agents", "./agents"}, workspace)
+	return resolvePaths([]string{UserAgentsDir, ProjectAgentsDir}, workspace)
 }
 
 func resolvePaths(paths []string, workspace string) []string {

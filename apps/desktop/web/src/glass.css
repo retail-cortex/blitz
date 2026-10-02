@@ -27,10 +27,10 @@
   --glass-blur: 24px;
   --glass-saturate: 170%;
   --backdrop:
-    radial-gradient(60vmax 50vmax at 8% 0%, #c9dcff 0%, transparent 60%),
-    radial-gradient(55vmax 45vmax at 100% 20%, #e6dcff 0%, transparent 60%),
-    radial-gradient(60vmax 50vmax at 40% 110%, #cdeede 0%, transparent 60%),
-    #eef2f8;
+    radial-gradient(60vmax 50vmax at 8% 0%, #bcd2fb 0%, transparent 60%),
+    radial-gradient(55vmax 45vmax at 100% 20%, #ddd0fb 0%, transparent 60%),
+    radial-gradient(60vmax 50vmax at 40% 110%, #c2e6d4 0%, transparent 60%),
+    #e3e8f1;
 }
 :root[data-theme="dark"] {
   --backdrop:
@@ -40,21 +40,24 @@
     #0b0e15;
 }
 
+/* Light glass is frosted, not clear: pale panes over a pale backdrop
+   barely separate, so they're mostly opaque, with edges and shadows that
+   show on white (the backdrop a step deeper so the panes lift off it). */
 :root[data-glass="on"] {
-  --md-surface: rgb(255 255 255 / 0.58);
-  --md-surface-dim: rgb(236 240 246 / 0.6);
-  --md-surface-container-lowest: rgb(255 255 255 / 0.7);
-  --md-surface-container-low: rgb(255 255 255 / 0.5);
-  --md-surface-container: rgb(246 249 253 / 0.62);
-  --md-surface-container-high: rgb(238 243 250 / 0.72);
-  --md-surface-container-highest: rgb(226 232 240 / 0.8);
-  --md-outline-variant: rgb(120 132 150 / 0.28);
-  --md-code-bg: rgb(240 244 249 / 0.7);
-  --md-scrim: rgb(20 26 38 / 0.18);
-  --glass-strong: rgb(250 252 255 / 0.95);
-  --glass-border: rgb(255 255 255 / 0.65);
+  --md-surface: rgb(255 255 255 / 0.82);
+  --md-surface-dim: rgb(236 240 246 / 0.82);
+  --md-surface-container-lowest: rgb(255 255 255 / 0.9);
+  --md-surface-container-low: rgb(255 255 255 / 0.78);
+  --md-surface-container: rgb(246 249 253 / 0.86);
+  --md-surface-container-high: rgb(238 243 250 / 0.9);
+  --md-surface-container-highest: rgb(226 232 240 / 0.93);
+  --md-outline-variant: rgb(120 132 150 / 0.45);
+  --md-code-bg: rgb(240 244 249 / 0.88);
+  --md-scrim: rgb(20 26 38 / 0.26);
+  --glass-strong: rgb(250 252 255 / 0.96);
+  --glass-border: rgb(110 122 145 / 0.28);
   --glass-edge: inset 0 1px 0 rgb(255 255 255 / 0.7);
-  --glass-shadow: 0 8px 32px rgb(31 38 70 / 0.12), 0 1px 2px rgb(31 38 70 / 0.08);
+  --glass-shadow: 0 8px 28px rgb(31 38 70 / 0.14), 0 1px 3px rgb(31 38 70 / 0.1);
 }
 :root[data-glass="on"][data-theme="dark"] {
   --md-surface: rgb(22 25 32 / 0.55);
@@ -81,7 +84,7 @@
 :root[data-glass="on"] .editor-panel { background: transparent; }
 
 /* The layers that blur what's behind them. */
-:root[data-glass="on"] :is(.topbar, .files-shelf, .files-rail, .chat-panel, .run-settings, .editor-pane, .status-bar, .welcome-bar) {
+:root[data-glass="on"] :is(.topbar, .files-shelf, .files-rail, .chat-panel, .editor-pane, .status-bar, .welcome-bar) {
   -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
   backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
   background: var(--md-surface);
@@ -106,9 +109,6 @@
    sits inside the composer, whose own blur is the only backdrop it sees. */
 :root[data-glass="on"] :is(.dialog, .menu) { background: var(--glass-strong); }
 :root[data-glass="on"] .command-menu { background: var(--glass-strong); border: 1px solid var(--glass-border); box-shadow: var(--glass-shadow), var(--glass-edge); }
-@media (max-width: 1280px) {
-  :root[data-glass="on"] .run-settings { background: var(--glass-strong); border-left: 1px solid var(--glass-border); box-shadow: var(--glass-shadow); }
-}
 @media (max-width: 1100px) {
   :root[data-glass="on"] .files-shelf { background: var(--glass-strong); border-right: 1px solid var(--glass-border); box-shadow: var(--glass-shadow); }
 }
@@ -117,8 +117,10 @@
    apart, with the backdrop (or the desktop) showing between them; the top
    bar sits on the backdrop itself. */
 :root[data-glass="on"] .topbar { background: transparent; border-bottom: none; -webkit-backdrop-filter: none; backdrop-filter: none; }
+/* The search bar on the backdrop: a pane of its own, as the panes are. */
+:root[data-glass="on"] .toolbar-search { background: var(--glass-strong); border: 1px solid var(--glass-border); box-shadow: var(--glass-edge); }
 :root[data-glass="on"] .workspace-body { gap: 8px; padding: 0 8px 8px; }
-:root[data-glass="on"] :is(.files-shelf, .files-rail, .workspace-center, .chat-panel, .run-settings) {
+:root[data-glass="on"] :is(.files-shelf, .files-rail, .workspace-center, .chat-panel) {
   border: 1px solid var(--glass-border);
   border-radius: var(--md-shape-lg);
   box-shadow: var(--glass-shadow), var(--glass-edge);
@@ -129,13 +131,23 @@
   backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
   background: var(--md-surface);
 }
+/* The pinned chat input (composerDock.ts) is one more pane, under the
+   others and apart from the status bar, with their gap, corners and glass.
+   Not clipped: the / and @ menus and the keys' tooltip open above it. */
+:root[data-glass="on"] .composer-dock {
+  margin: 0 8px 8px; border: 1px solid var(--glass-border); border-radius: var(--md-shape-lg);
+  box-shadow: var(--glass-shadow), var(--glass-edge); background: var(--md-surface);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+}
+:root[data-glass="on"] .composer-dock .composer { -webkit-backdrop-filter: none; backdrop-filter: none; border: none; box-shadow: none; }
+/* The ring (app.css) is the inputs' border under glass too. */
+:root[data-glass="on"] :is(.composer, .composer-dock) { border-color: transparent; }
+:root[data-glass="on"] .composer:not(.composer-dock .composer):focus-within, :root[data-glass="on"] .composer-dock:focus-within { box-shadow: var(--glass-shadow), var(--glass-edge), 0 0 18px -6px var(--ring-b); }
 /* The status bar is a strip of glass along the foot, under the panes. */
 :root[data-glass="on"] .status-bar { border-top: 1px solid var(--glass-border); box-shadow: var(--glass-edge); }
 :root[data-glass="on"] .workspace-center .editor-pane { background: transparent; -webkit-backdrop-filter: none; backdrop-filter: none; }
 /* The panes stay put when they float in narrower windows. */
-@media (max-width: 1280px) {
-  :root[data-glass="on"] .run-settings { top: 0; right: 8px; bottom: 8px; border-radius: var(--md-shape-lg); }
-}
 @media (max-width: 1100px) {
   :root[data-glass="on"] .files-shelf { top: 0; left: 8px; bottom: 8px; border-radius: var(--md-shape-lg); }
 }

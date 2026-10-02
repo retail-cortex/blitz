@@ -41,6 +41,8 @@ func fileError(err error) error {
 		return apiError(connect.CodeAlreadyExists, "FILE_EXISTS", err)
 	case errors.Is(err, engine.ErrNoPreview):
 		return apiError(connect.CodeInvalidArgument, "NO_PREVIEW", err)
+	case errors.Is(err, engine.ErrNotARepository):
+		return apiError(connect.CodeFailedPrecondition, "NOT_A_REPOSITORY", err)
 	}
 	return toAPI(err)
 }
@@ -137,6 +139,28 @@ func (h fileService) DeleteFile(ctx context.Context, r req[pb.DeleteFileRequest]
 		return nil, fileError(err)
 	}
 	return ok(&pb.DeleteFileResponse{})
+}
+
+var gitActions = map[pb.GitAction]engine.GitAction{
+	pb.GitAction_GIT_ACTION_STAGE:   engine.GitStage,
+	pb.GitAction_GIT_ACTION_UNSTAGE: engine.GitUnstage,
+	pb.GitAction_GIT_ACTION_DISCARD: engine.GitDiscard,
+	pb.GitAction_GIT_ACTION_IGNORE:  engine.GitIgnore,
+}
+
+func (h fileService) GitFileAction(ctx context.Context, r req[pb.GitFileActionRequest]) (*connect.Response[pb.GitFileActionResponse], error) {
+	w, err := h.s.workspace(ctx, r.Msg.Workspace)
+	if err != nil {
+		return nil, err
+	}
+	action, known := gitActions[r.Msg.Action]
+	if !known {
+		return nil, invalid(errors.New("action is required"))
+	}
+	if err := w.GitFileAction(ctx, r.Msg.Path, action); err != nil {
+		return nil, fileError(err)
+	}
+	return ok(&pb.GitFileActionResponse{})
 }
 
 func (h fileService) FindFiles(ctx context.Context, r req[pb.FindFilesRequest]) (*connect.Response[pb.FindFilesResponse], error) {

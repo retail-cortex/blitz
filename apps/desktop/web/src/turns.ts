@@ -65,6 +65,37 @@ export function turnAnswers(entries: Entry[]): Map<number, string> {
   return out;
 }
 
+/** A tool call, as an entry. */
+export type ToolEntry = Extract<Entry, { kind: "tool" }>;
+
+/** An item of the conversation as drawn: an entry, or a run of tool calls. */
+export type Item = { kind: "entry"; at: number; entry: Entry } | { kind: "tools"; at: number; tools: ToolEntry[] };
+
+/**
+ * Puts each run of tool calls, one or more, in one item keyed by its first
+ * call's index: as calls arrive the item only grows, so what's drawn for it
+ * is never replaced (a lone call becoming a group used to remount it).
+ */
+export function groupTools(entries: Entry[]): Item[] {
+  const out: Item[] = [];
+  entries.forEach((e, i) => {
+    const last = out[out.length - 1];
+    if (e.kind === "tool" && last?.kind === "tools" && last.at + last.tools.length === i) last.tools.push(e);
+    else if (e.kind === "tool") out.push({ kind: "tools", at: i, tools: [e] });
+    else out.push({ kind: "entry", at: i, entry: e });
+  });
+  return out;
+}
+
+/** The index of the latest turn's prompt (steering and hooks are part of a turn); 0 without one. */
+export function latestTurn(entries: Entry[]): number {
+  for (let i = entries.length - 1; i >= 0; i--) {
+    const e = entries[i];
+    if (e.kind === "user" && (e.sub === undefined || e.sub === "aside")) return i;
+  }
+  return 0;
+}
+
 /** The entries for a saved session's messages. */
 export function fromMessages(messages: Message[]): Entry[] {
   return messages.map((m, i): Entry => {

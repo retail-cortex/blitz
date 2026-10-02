@@ -19,7 +19,22 @@ Spec: [agents](../about/specs/spec_agents_014.md).
 
 `/agents` lists them and `/agent <name>` switches. The primary agent delegates to the others with `invoke_agent`, up to three levels deep.
 
-Your own agents are Markdown files with YAML frontmatter in `~/.blitz/agents` (and the project's `./agents`): a name, a description, the system prompt, the tools it may use, and optionally its own model. Built-in agents can't be overridden.
+Your own agents are Markdown files with YAML frontmatter in `~/.blitz/agents` (for every workspace) and the project's `.agents/agents`: a name, a description, the system prompt, the tools it may use, and optionally its own model. Built-in agents can't be overridden. Adding, editing or deleting a file applies from the next prompt, without a restart.
+
+```markdown
+---
+name: quote-writer
+display_name: Quote Writer
+description: Picks and writes a daily quote
+tools: [read_file, create_file]
+default_model: anthropic/claude-sonnet-5   # optional
+temperature: 0.9                           # optional model settings, for this agent only
+effort: low
+---
+You are Quote Writer. Each time you run, choose a quote that…
+```
+
+An agent's own `temperature`, `top_p`, `max_tokens`, `effort` and `thinking_budget` apply only when it runs, over the model's settings and the session's effort. The desktop app edits these files: the **Agents** view lists the project's, and **Settings › Agents** your own.
 
 Every agent, built-in or your own, is told to draw diagrams in Markdown as ```` ```mermaid ```` blocks rather than ASCII art; the desktop app and the docs draw them.
 

@@ -17,12 +17,14 @@ load("@rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "server",
     srcs = [
+        "agents.go",
         "background.go",
         "broker.go",
         "config.go",
         "convert.go",
         "files.go",
         "listen.go",
+        "models.go",
         "scheduler.go",
         "server.go",
         "session.go",
@@ -35,6 +37,8 @@ go_library(
         "//pkg/api",
         "//pkg/config",
         "//pkg/engine",
+        "//pkg/engine/agents",
+        "//pkg/engine/runtime",
         "//pkg/engine/tools",
         "//pkg/engine/workers",
         "//pkg/i18n",

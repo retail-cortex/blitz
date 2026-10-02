@@ -121,6 +121,42 @@ func TestLoadWorker(t *testing.T) {
 	assert.NotEqual(t, before, w2.Hash, "adding a file didn't change the hash")
 }
 
+func TestReadSpec(t *testing.T) {
+	cases := []struct {
+		name, content string
+		want          func(*testing.T, api.WorkerSpec)
+	}{
+		{"valid, as written", valid, func(t *testing.T, s api.WorkerSpec) {
+			assert.Equal(t, "America/Chicago", s.Timezone)
+			assert.Len(t, s.Permissions, 2)
+			assert.Equal(t, "20m", s.Limits.TimeoutRaw)
+			assert.True(t, strings.HasPrefix(s.Prompt, "Check for outdated"))
+		}},
+		{"an unknown key is ignored", "---\nschedule: \"@daily\"\nsurprise: 1\n---\ndo it\n", func(t *testing.T, s api.WorkerSpec) {
+			assert.Equal(t, "@daily", s.Schedule)
+			assert.Equal(t, "do it", s.Prompt)
+		}},
+		{"no frontmatter: all of it is the workflow", "just text\n", func(t *testing.T, s api.WorkerSpec) {
+			assert.Empty(t, s.Schedule)
+			assert.Equal(t, "just text", s.Prompt)
+		}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			dir := writeWorker(t, t.TempDir(), "deps", c.content)
+			spec, hash, err := ReadSpec(dir)
+			require.NoError(t, err)
+			assert.Equal(t, "deps", spec.Name)
+			want, err := HashDir(dir)
+			require.NoError(t, err)
+			assert.Equal(t, want, hash)
+			c.want(t, spec)
+		})
+	}
+	_, _, err := ReadSpec(t.TempDir())
+	assert.Error(t, err, "no WORKER.md")
+}
+
 func TestLoadRejectsBadWorkers(t *testing.T) {
 	root := t.TempDir()
 	for name, content := range map[string]string{

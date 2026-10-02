@@ -63,6 +63,13 @@ var ErrNoActiveSession = errors.New("no active session")
 // ErrSnapshotNameTaken is returned by Snapshot when another snapshot has the name.
 var ErrSnapshotNameTaken = errors.New("a snapshot with this name already exists")
 
+// ErrSessionOpen is returned when deleting a session that is open: the
+// active one, or one a background run uses.
+var ErrSessionOpen = errors.New("the session is open: switch to another first")
+
+// ErrSessionNotFound reports a session ID with no saved session.
+var ErrSessionNotFound = errors.New("no such session")
+
 // ResumeError reports a session that can't be resumed: none is saved for
 // this workspace, or no session has the given ID or snapshot name.
 type ResumeError struct{ Err error }

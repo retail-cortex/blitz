@@ -23,6 +23,8 @@ import (
 	"iter"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"sync"
 	"testing"
 
@@ -316,6 +318,46 @@ func TestSessionEffortOverridesModelSettings(t *testing.T) {
 	f.eng.SetEffort("")
 	got = level()
 	require.Equal(t, genai.ThinkingLevel(""), got, "after clearing: %q", got)
+}
+
+// An agent's own model settings (its frontmatter's) win over the model's
+// and the session's effort, as the main agent and as a sub-agent, and only
+// for that agent.
+func TestAgentModelSettingsWin(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "tuned.md"), []byte("---\nname: tuned\ndescription: d\ntools: []\ntemperature: 0.2\neffort: minimal\n---\nprompt\n"), 0o644))
+	main := &recorder{name: "gemini-3.8-flash"}
+	sub := &recorder{name: "gemini-3.8-pro"}
+	f := newEngineWith(t, fixtureOpts{
+		agentDir: dir,
+		cfg: func(c *config.Config) {
+			c.ModelSettings = map[string]config.ModelSettings{"gemini-3.8-flash": {Temperature: ptr(0.9), TopP: ptr(0.5)}}
+		},
+		opts: []Option{WithAgentModel("tuned", withModelSettings(sub, "gemini"))},
+	})
+	require.NoError(t, f.eng.SetModel(context.Background(), withModelSettings(main, "gemini")))
+	f.eng.SetEffort("high")
+
+	_, err := f.eng.InvokeSubagent(context.Background(), "tuned", "go")
+	require.NoError(t, err)
+	got := sub.last(t)
+	assert.Equal(t, float32(0.2), *got.Temperature)
+	assert.Equal(t, genai.ThinkingLevelMinimal, got.ThinkingConfig.ThinkingLevel, "the agent's effort over the session's")
+
+	require.NoError(t, f.eng.SetActiveAgent(context.Background(), "blitz"))
+	_, err = collect(t, f.eng, "s", "hi")
+	require.NoError(t, err)
+	got = main.last(t)
+	assert.Equal(t, float32(0.9), *got.Temperature, "another agent keeps the model's settings")
+	assert.Equal(t, genai.ThinkingLevelHigh, got.ThinkingConfig.ThinkingLevel)
+
+	require.NoError(t, f.eng.Unpin(context.Background(), "tuned"))
+	require.NoError(t, f.eng.SetActiveAgent(context.Background(), "tuned"))
+	_, err = collect(t, f.eng, "s2", "hi")
+	require.NoError(t, err)
+	got = main.last(t)
+	assert.Equal(t, float32(0.2), *got.Temperature, "as the main agent, on the shared model")
+	assert.Equal(t, float32(0.5), *got.TopP, "settings it doesn't set stay the model's")
 }
 
 // Settings for providers Blitz doesn't map are passed on as written.

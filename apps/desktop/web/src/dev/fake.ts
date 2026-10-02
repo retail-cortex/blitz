@@ -28,8 +28,8 @@ import { ActionKind, ErrorInfoSchema, UsageSchema, type Usage } from "../gen/bli
 type Out = MessageInitShape<typeof RunTurnResponseSchema>;
 import { RunStatus, WorkerService, WorkerState } from "../gen/blitz/v1/worker_pb";
 import { ConfigService, KeySource } from "../gen/blitz/v1/config_pb";
-import { FileKind, FileService } from "../gen/blitz/v1/file_pb";
-import { WorkspaceService } from "../gen/blitz/v1/workspace_pb";
+import { FileKind, FileService, GitAction } from "../gen/blitz/v1/file_pb";
+import { AgentFileSchema, AgentScope, SuggestionKind, SuggestionSchema, WorkspaceService, type AgentDefinition } from "../gen/blitz/v1/workspace_pb";
 
 // Whether the fake workspace is a git repository (?norepo: not yet).
 let fakeRepo = !new URLSearchParams(location.search).has("norepo");
@@ -72,6 +72,58 @@ interface State {
 }
 
 const states = new Map<string, State>();
+
+// Agent files, by folder: the user's (~/.blitz/agents) and each
+// workspace's (.agents/agents); one doesn't parse.
+const fakeAgentFiles = new Map<string, Map<string, MessageInitShape<typeof AgentFileSchema>>>();
+const builtinAgents = ["blitz", "qa", "planning-agent", "helios", "web-retriever", "model-judge", "agent-creator"];
+function agentFolder(workspace: string, scope: AgentScope): string {
+  const dir = scope === AgentScope.USER ? "/Users/x/.blitz/agents" : `${workspace.replace(/\/+$/, "")}/.agents/agents`;
+  if (!fakeAgentFiles.has(dir)) {
+    const files = new Map<string, MessageInitShape<typeof AgentFileSchema>>();
+    if (scope === AgentScope.USER) {
+      files.set(`${dir}/writer.md`, {
+        path: `${dir}/writer.md`,
+        agent: { name: "writer", displayName: "Writer", description: "Drafts and edits prose: docs, release notes, emails", tools: ["read_file", "create_file", "edit"], agencyLevel: "medium", temperature: 0.8, prompt: "You are Writer. Write plainly.\n\n{agency_instructions}" },
+      });
+    } else {
+      files.set(`${dir}/reviewer.md`, {
+        path: `${dir}/reviewer.md`,
+        agent: {
+          name: "reviewer",
+          displayName: "Code reviewer",
+          description: "Reviews a diff for bugs, tests and readability",
+          tools: ["read_file", "grep", "glob", "run_shell_command"],
+          defaultModel: "anthropic/claude-sonnet-5",
+          permissionMode: "plan",
+          maxTurns: 30,
+          effort: "high",
+          maxTokens: 16384,
+          prompt: "You are the reviewer. Read the change, run the tests, and report what is wrong, most serious first.\n\n{agency_instructions}",
+        },
+      });
+      files.set(`${dir}/half-done.md`, { path: `${dir}/half-done.md`, problem: "failed to parse YAML frontmatter: yaml: line 3: mapping values are not allowed in this context" });
+    }
+    fakeAgentFiles.set(dir, files);
+  }
+  return dir;
+}
+function saveAgent(workspace: string, scope: AgentScope, previous: string, a: AgentDefinition) {
+  const dir = agentFolder(workspace, scope);
+  const files = fakeAgentFiles.get(dir)!;
+  const problems: string[] = [];
+  if (!/^[a-z0-9][a-z0-9_-]*$/.test(a.name)) problems.push(`name ${JSON.stringify(a.name)}: lowercase letters, digits, - and _`);
+  if (builtinAgents.includes(a.name)) problems.push(`agent name ${JSON.stringify(a.name)} is reserved by a built-in agent`);
+  if (a.name !== previous && [...files.values()].some((f) => f.agent?.name === a.name)) problems.push(`an agent named ${JSON.stringify(a.name)} already exists in ${dir}`);
+  if (problems.length) return { problems };
+  for (const [p, f] of files) if (previous && f.agent?.name === previous) files.delete(p);
+  const file = { path: `${dir}/${a.name}.md`, agent: a };
+  files.set(file.path, file);
+  return { file };
+}
+
+// The days the fake service has a log for (DeleteLogDay removes them).
+let fakeLogDays = ["2026-09-28", "2026-09-27"];
 
 function state(dir: string): State {
   let s = states.get(dir);
@@ -142,6 +194,25 @@ function fakeProject(s: State) {
     ignored: [{ file: f, kind: "setting", key: "llm.openai.base_url", reason: "never" }],
     problems: [],
   };
+}
+
+// The welcome tiles (GetSuggestions): ideas are "being written" for the
+// first 4 s after a workspace first asks; ?noharness offers the setup.
+const suggestionsAsked = new Map<string, number>();
+function fakeSuggestions(dir: string) {
+  if (!suggestionsAsked.has(dir)) suggestionsAsked.set(dir, Date.now());
+  const pending = Date.now() - suggestionsAsked.get(dir)! < 4000;
+  const last = state(dir).sessions.find((x) => x.messages.length > 0);
+  const out: MessageInitShape<typeof SuggestionSchema>[] = [];
+  if (last) out.push({ kind: SuggestionKind.CONTINUE, title: last.title, sessionId: last.id });
+  out.push({ kind: SuggestionKind.CHANGES, count: Object.keys(fakeGit).length });
+  if (!pending) {
+    out.push(
+      { kind: SuggestionKind.IDEA, title: "Add tests for the coupon rounding fix", prompt: "Add table-driven tests for ApplyCoupon's rounding, including the cases from the last bug." },
+      { kind: SuggestionKind.IDEA, title: "Wire the discount rules into checkout", prompt: "Use the discount rules in internal/cart from the checkout handler, and test it." },
+    );
+  }
+  return { suggestions: out, harnessMissing: new URLSearchParams(location.search).has("noharness"), pending };
 }
 
 let nextRequest = 0;
@@ -310,7 +381,47 @@ const change = (workspace: string) => ({ change: { path: configPath(workspace), 
 
 // The workspace's files: a small Go project, some of it changed.
 // Workers made with the New worker dialog.
-const fakeCreatedWorkers: Record<string, unknown>[] = [];
+// The workspace's workers, and each one's WORKER.md as written (spec).
+type FakeWorker = Record<string, unknown> & { name: string; hash: string; state: WorkerState; path: string; spec: Record<string, unknown> & { schedule: string } };
+const fakeSpec = (name: string, o: Record<string, unknown> = {}) => ({ name, description: "", schedule: "", timezone: "", agent: "", model: "", permissions: [] as string[], maxTurns: 0, maxCostUsd: 0, timeout: "", catchUp: "", prompt: "", ...o });
+const fakeWorkers: FakeWorker[] = [
+  {
+    name: "nightly-deps",
+    description: "Checks for outdated dependencies every night and opens a summary.",
+    state: WorkerState.ENABLED,
+    schedule: "every day at 02:00",
+    cron: "0 2 * * *",
+    timezone: "America/Chicago",
+    nextRun: timestampFromDate(new Date(Date.now() + 5 * 3600e3)),
+    permissions: ["shell(go list -m -u all)"],
+    limits: { maxTurns: 20, maxCostUsd: 0.5, timeout: { seconds: 900n } },
+    hash: "9f2c41ab",
+    path: "workers/nightly-deps/WORKER.md",
+    // Last night's run failed: the workspace is badged until its workers are seen.
+    lastRun: { id: "run-9", worker: "nightly-deps", status: RunStatus.FAILED, started: timestampFromDate(new Date(Date.now() - 8 * 3600e3)) },
+    spec: fakeSpec("nightly-deps", {
+      description: "Checks for outdated dependencies every night and opens a summary.",
+      schedule: "every day at 02:00",
+      timezone: "America/Chicago",
+      permissions: ["shell:go list -m -u all", "write:reports/*"],
+      maxTurns: 20,
+      maxCostUsd: 0.5,
+      timeout: "15m",
+      prompt: "List outdated Go modules with `go list -m -u all` and write reports/deps.md.",
+    }),
+  },
+  { name: "weekly-report", state: WorkerState.NEW, schedule: "Mondays at 09:00", cron: "0 9 * * 1", timezone: "America/Chicago", hash: "11aa", path: "workers/weekly-report/WORKER.md", limits: { maxTurns: 10, maxCostUsd: 0.2 }, spec: fakeSpec("weekly-report", { schedule: "Mondays at 09:00", timezone: "America/Chicago", maxTurns: 10, maxCostUsd: 0.2, prompt: "Summarize last week's commits in reports/week.md." }) },
+  {
+    name: "broken-digest",
+    state: WorkerState.INVALID,
+    schedule: "whenever",
+    timezone: "",
+    hash: "77bb",
+    path: "workers/broken-digest/WORKER.md",
+    problems: ['schedule "whenever": use a cron expression, a descriptor or plain text like "Daily at 6 AM"'],
+    spec: fakeSpec("broken-digest", { schedule: "whenever", prompt: "Write a digest of open issues." }),
+  },
+];
 
 const fakeFiles = new Map<string, string>([
   ["go.mod", "module example.com/shop\n\ngo 1.27\n"],
@@ -432,6 +543,13 @@ export function installFake() {
           s.active = ref;
           return { session: active(s) };
         },
+        deleteSession: ({ workspace, sessionId }) => {
+          const s = state(workspace);
+          if (sessionId === s.active) throw new ConnectError("the session is open: switch to another first", Code.FailedPrecondition);
+          if (!s.sessions.some((x) => x.id === sessionId)) throw new ConnectError("no such session", Code.NotFound);
+          s.sessions = s.sessions.filter((x) => x.id !== sessionId);
+          return {};
+        },
         renameSession: ({ workspace, title }) => {
           const sess = active(state(workspace));
           sess.title = title;
@@ -490,6 +608,27 @@ export function installFake() {
         }),
         setAgent: ({ workspace, name }) => {
           state(workspace).settings.agent = name;
+          return {};
+        },
+        listAgentFiles: ({ workspace, scope }) => {
+          const dir = agentFolder(workspace, scope);
+          return { dir, files: [...fakeAgentFiles.get(dir)!.values()].sort((a, b) => (a.path ?? "").localeCompare(b.path ?? "")) };
+        },
+        saveAgentFile: ({ workspace, scope, previousName, agent }) => saveAgent(workspace, scope, previousName, agent!),
+        // The active agent's tools, or with all every tool an agent can be given.
+        listTools: ({ workspace, all }) => {
+          const mine = ["list_files", "glob", "read_file", "view_image", "grep", "create_file", "edit", "replace_in_file", "delete_snippet", "run_shell_command", "manage_background_process", "ask_user_question", "invoke_agent", "list_agents", "todo_write"];
+          const more = ["web_fetch", "web_search", "notebook_edit", "browser_navigate", "browser_screenshot", "lsp_definition", "lsp_references"];
+          return {
+            agent: all ? "" : state(workspace).settings.agent,
+            tools: (all ? [...mine, ...more] : mine).map((name) => ({ name, description: name.replace(/_/g, " "), planAllowed: !/create|edit|replace|delete|shell|notebook/.test(name) })),
+          };
+        },
+        deleteAgentFile: ({ workspace, scope, name, path: byPath }) => {
+          const files = fakeAgentFiles.get(agentFolder(workspace, scope))!;
+          const path = byPath ? (files.has(byPath) ? byPath : undefined) : [...files].find(([, f]) => f.agent?.name === name)?.[0];
+          if (!path) throw new ConnectError(`no agent ${name || byPath}`, Code.NotFound);
+          files.delete(path);
           return {};
         },
         setSetting: ({ workspace, key, value }) => {
@@ -588,7 +727,11 @@ export function installFake() {
         closeWorkspace: () => ({}),
         loadImage: ({ path }) => ({ image: { id: `img-${path}`, name: path, mime: "image/png", width: 640, height: 480, size: 12345n } }),
         getServiceInfo: () => ({ version: "dev", executable: "" }),
-        listLogDays: () => ({ days: ["2026-09-28", "2026-09-27"], dir: "~/.blitz/logs" }),
+        listLogDays: () => ({ days: [...fakeLogDays], dir: "~/.blitz/logs" }),
+        deleteLogDay: ({ day }) => {
+          fakeLogDays = fakeLogDays.filter((d) => d !== day);
+          return {};
+        },
         readLog: ({ day, minLevel, text }) => {
           const d = day || "2026-09-28";
           const rank: Record<string, number> = { DEBUG: 0, INFO: 1, WARN: 2, ERROR: 3 };
@@ -606,8 +749,13 @@ export function installFake() {
           return { day: d, path: `~/.blitz/logs/blitz-${d}.jsonl`, entries, matched: entries.length };
         },
         listWorkspaces: () => ({ workspaces: [...states.keys()] }),
+        getSuggestions: async ({ workspace }) => {
+          await sleep(150);
+          return fakeSuggestions(workspace);
+        },
         listCommands: () => ({
           commands: [
+            { name: "setup", description: "Set up the agent harness: .agents/AGENT.md, skills and agents", source: "bundled" },
             { name: "review", description: "Review the uncommitted changes for bugs", argumentHint: "[branch | files]", source: "bundled" },
             { name: "db:migrate", description: "Write a database migration", argumentHint: "<name>", source: "project" },
           ],
@@ -633,6 +781,13 @@ export function installFake() {
       });
       service(ConfigService, {
         getInterfaceLanguage: () => ({ locale: "", catalogs: [] }),
+        listModels: () => ({
+          defaultProvider: "gemini",
+          providers: [
+            { provider: "gemini", ids: ["gemini-3.5-flash-lite", "gemini-3.8-flash", "gemini-3.8-pro"] },
+            { provider: "anthropic", error: "no API key" },
+          ],
+        }),
         describeConfig: ({ workspace }) => {
           const c = scopeConfig(workspace);
           return {
@@ -815,6 +970,14 @@ export function installFake() {
           }
           return {};
         },
+        gitFileAction: ({ path, action }) => {
+          // Recorded for checks in a browser; a discard drops the path's
+          // changes, an ignore appends to .gitignore.
+          ((window as unknown as { __gitActions?: unknown[] }).__gitActions ??= []).push({ path, action });
+          if (action === GitAction.DISCARD) for (const g of Object.keys(fakeGit)) if (g === path || g.startsWith(path + "/")) delete fakeGit[g];
+          if (action === GitAction.IGNORE) fakeFiles.set(".gitignore", (fakeFiles.get(".gitignore") ?? "") + `/${path}${fakeFiles.has(path) ? "" : "/"}\n`);
+          return {};
+        },
         deleteFile: ({ path }) => {
           for (const p of [...fakeFiles.keys()]) if (p === path || p.startsWith(path + "/")) fakeFiles.delete(p);
           return {};
@@ -835,31 +998,54 @@ export function installFake() {
       service(WorkerService, {
         createWorker: (r) => {
           if (/^when/i.test(r.schedule)) return { problems: [`schedule "${r.schedule}": use a cron expression, a descriptor or plain text like "Daily at 6 AM"`] };
-          const w = { workspace: r.workspace, name: r.name, description: r.description, state: WorkerState.NEW, schedule: r.schedule, cron: "0 6 * * *", timezone: r.timezone, agent: r.agent, model: r.model, permissions: r.permissions, path: `${r.workspace}/.agents/workers/${r.name}/WORKER.md`, hash: "sha256:new", problems: [] };
-          fakeCreatedWorkers.push(w);
+          if (fakeWorkers.some((w) => w.name === r.name)) throw new ConnectError(`a worker named ${r.name} exists`, Code.AlreadyExists);
+          const { workspace, ...spec } = r;
+          const w: FakeWorker = { workspace, name: r.name, description: r.description, state: WorkerState.NEW, schedule: r.schedule, cron: "0 6 * * *", timezone: r.timezone, agent: r.agent, model: r.model, permissions: r.permissions, path: `${workspace}/.agents/workers/${r.name}/WORKER.md`, hash: "sha256:new", problems: [], spec };
+          fakeWorkers.unshift(w);
           return { worker: w };
         },
-        listWorkers: () => ({
-          workers: [
-            ...fakeCreatedWorkers,
-            {
-              name: "nightly-deps",
-              description: "Checks for outdated dependencies every night and opens a summary.",
-              state: WorkerState.ENABLED,
-              schedule: "every day at 02:00",
-              cron: "0 2 * * *",
-              timezone: "America/Chicago",
-              nextRun: timestampFromDate(new Date(Date.now() + 5 * 3600e3)),
-              permissions: ["shell(go list -m -u all)"],
-              limits: { maxTurns: 20, maxCostUsd: 0.5, timeout: { seconds: 900n } },
-              hash: "9f2c41ab",
-              path: "workers/nightly-deps/WORKER.md",
-              // Last night's run failed: the workspace is badged until its workers are seen.
-              lastRun: { id: "run-9", worker: "nightly-deps", status: RunStatus.FAILED, started: timestampFromDate(new Date(Date.now() - 8 * 3600e3)) },
-            },
-            { name: "weekly-report", state: WorkerState.NEW, schedule: "Mondays at 09:00", cron: "0 9 * * 1", timezone: "America/Chicago", hash: "11aa", limits: { maxTurns: 10, maxCostUsd: 0.2 } },
-          ],
-        }),
+        listWorkers: () => ({ workers: fakeWorkers }),
+        deleteWorker: ({ name }) => {
+          const i = fakeWorkers.findIndex((x) => x.name === name);
+          if (i < 0) throw new ConnectError(`no such worker: ${name}`, Code.NotFound);
+          fakeWorkers.splice(i, 1);
+          return {};
+        },
+        // The file as written; an edit changes the hash, and suspends an enabled worker.
+        getWorkerSpec: ({ name }) => {
+          const w = fakeWorkers.find((x) => x.name === name);
+          if (!w) throw new ConnectError(`no worker ${name}`, Code.NotFound);
+          return { worker: w.spec, hash: w.hash };
+        },
+        updateWorker: ({ hash, worker }) => {
+          const w = fakeWorkers.find((x) => x.name === worker?.name);
+          if (!w || !worker) throw new ConnectError(`no worker ${worker?.name}`, Code.NotFound);
+          if (hash !== w.hash) {
+            const err = new ConnectError(`${w.path} changed since it was loaded`, Code.FailedPrecondition);
+            err.details.push({ desc: ErrorInfoSchema, value: { reason: "HASH_MISMATCH", metadata: {} } });
+            throw err;
+          }
+          if (/^when/i.test(worker.schedule)) return { problems: [`schedule "${worker.schedule}": use a cron expression, a descriptor or plain text like "Daily at 6 AM"`] };
+          w.spec = { ...worker };
+          Object.assign(w, { description: worker.description, schedule: worker.schedule, timezone: worker.timezone, agent: worker.agent, model: worker.model, permissions: worker.permissions, problems: [] });
+          w.hash = `sha256:${fakeVersion(JSON.stringify(worker))}`;
+          w.state = w.state === WorkerState.ENABLED ? WorkerState.CHANGED : w.state === WorkerState.INVALID ? WorkerState.NEW : w.state;
+          return { worker: w };
+        },
+        enableWorker: ({ name, hash }) => {
+          const w = fakeWorkers.find((x) => x.name === name)!;
+          if (hash !== w.hash) throw new ConnectError("the worker changed since it was reviewed", Code.FailedPrecondition);
+          w.state = WorkerState.ENABLED;
+          return { worker: w };
+        },
+        disableWorker: ({ name }) => {
+          const w = fakeWorkers.find((x) => x.name === name)!;
+          w.state = WorkerState.DISABLED;
+          return { worker: w };
+        },
+        // A run that's over as soon as it's watched.
+        runWorker: ({ name }) => ({ run: { id: `run-${name}-${Date.now()}`, status: RunStatus.RUNNING, started: now(), manual: true } }),
+        async *watchWorkerRun() {},
         listWorkerRuns: () => ({
           runs: [
             { id: "r2", status: RunStatus.SUCCEEDED, started: now(), manual: false, sessionId: "worker-nightly-2", usage: { costUsd: 0.0041, priced: true }, files: ["reports/deps.md"] },

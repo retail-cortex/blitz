@@ -122,6 +122,44 @@ func TestReadLog(t *testing.T) {
 	}
 }
 
+// A past day's log can be deleted; today's is being written, and with
+// logging off there's none.
+func TestDeleteLogDay(t *testing.T) {
+	dir := t.TempDir()
+	today := time.Now().Format(time.DateOnly)
+	for _, d := range []string{"2026-09-27", today} {
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "blitz-"+d+".jsonl"), nil, 0o600))
+	}
+	for _, tc := range []struct {
+		name, dir, day, reason string // reason "": deleted
+	}{
+		{"a past day", dir, "2026-09-27", ""},
+		{"again", dir, "2026-09-27", "LOG_NOT_FOUND"},
+		{"today", dir, today, "LOG_IN_USE"},
+		{"not a day", dir, "../etc", ""},
+		{"logging off", "", "2026-09-27", "LOG_NOT_FOUND"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s := New(nil, WithLogDir(tc.dir))
+			srv := httptest.NewServer(s.Handler())
+			defer srv.Close()
+			defer s.Close()
+			c := pb.NewWorkspaceServiceClient(http.DefaultClient, srv.URL)
+			_, err := c.DeleteLogDay(context.Background(), connect.NewRequest(&pb.DeleteLogDayRequest{Day: tc.day}))
+			switch {
+			case tc.name == "not a day":
+				assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+			case tc.reason == "":
+				require.NoError(t, err)
+				assert.NoFileExists(t, filepath.Join(dir, "blitz-"+tc.day+".jsonl"))
+			default:
+				assert.Equal(t, tc.reason, reason(t, err))
+			}
+		})
+	}
+	assert.FileExists(t, filepath.Join(dir, "blitz-"+today+".jsonl"))
+}
+
 // A log folder that can't be read fails ListLogDays as INTERNAL.
 func TestListLogDaysFails(t *testing.T) {
 	file := filepath.Join(t.TempDir(), "not-a-folder")

@@ -375,8 +375,9 @@ func RunREPL(ctx context.Context, app *App) error {
 				fmt.Printf("%s✗ %s%s\n", Red, i18n.T("session.none_active"), Reset)
 				continue
 			}
-			runTurn(ctx, app, active.ID, line, interrupts, turnOptions{prompt: api.InitPrompt()})
-			// The new BLITZ.md applies from the next prompt.
+			// The guided setup: .agents/AGENT.md and the files importing it.
+			runTurn(ctx, app, active.ID, "/setup", interrupts, turnOptions{command: true})
+			// The new instructions apply from the next prompt.
 			cmdMemory(ctx, []string{"reload"}, app)
 			continue
 		}

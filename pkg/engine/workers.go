@@ -137,35 +137,9 @@ func (w *Workspace) CreateWorker(spec api.WorkerSpec) (api.WorkerInfo, []string,
 		return api.WorkerInfo{}, nil, fmt.Errorf("%w: workers.paths is empty", api.ErrWorkersDisabled)
 	}
 	data := workers.Render(spec)
-
-	// Checked as the scheduler would read it, before anything is written.
-	tmp, err := os.MkdirTemp("", "blitz-worker-")
-	if err != nil {
-		return api.WorkerInfo{}, nil, err
-	}
-	defer os.RemoveAll(tmp)
-	check := filepath.Join(tmp, spec.Name)
-	if err := os.Mkdir(check, 0o755); err != nil {
-		return api.WorkerInfo{}, nil, err
-	}
-	if err := os.WriteFile(filepath.Join(check, workers.FileName), data, 0o644); err != nil {
-		return api.WorkerInfo{}, nil, err
-	}
-	var problems []string
-	if _, err := workers.Load(check); err != nil {
-		var invalid *workers.InvalidError
-		if !errors.As(err, &invalid) {
-			return api.WorkerInfo{}, nil, err
-		}
-		problems = invalid.Problems
-	}
-	if spec.Agent != "" {
-		if _, ok := w.agents.Get(strings.TrimSpace(spec.Agent)); !ok {
-			problems = append(problems, fmt.Sprintf("agent %q isn't defined", spec.Agent))
-		}
-	}
-	if len(problems) > 0 {
-		return api.WorkerInfo{}, problems, nil
+	problems, err := w.checkWorker(spec, data)
+	if err != nil || len(problems) > 0 {
+		return api.WorkerInfo{}, problems, err
 	}
 
 	dir := filepath.Join(roots[0], spec.Name)
@@ -184,8 +158,121 @@ func (w *Workspace) CreateWorker(spec api.WorkerSpec) (api.WorkerInfo, []string,
 	return w.workerInfo(wk, err, time.Now()), nil, nil
 }
 
+// checkWorker returns what keeps data, spec's WORKER.md, from loading as a
+// valid worker, checked as the scheduler would read it, before anything is
+// written.
+func (w *Workspace) checkWorker(spec api.WorkerSpec, data []byte) ([]string, error) {
+	tmp, err := os.MkdirTemp("", "blitz-worker-")
+	if err != nil {
+		return nil, err
+	}
+	defer os.RemoveAll(tmp)
+	check := filepath.Join(tmp, spec.Name)
+	if err := os.Mkdir(check, 0o755); err != nil {
+		return nil, err
+	}
+	if err := os.WriteFile(filepath.Join(check, workers.FileName), data, 0o644); err != nil {
+		return nil, err
+	}
+	var problems []string
+	if _, err := workers.Load(check); err != nil {
+		var invalid *workers.InvalidError
+		if !errors.As(err, &invalid) {
+			return nil, err
+		}
+		problems = invalid.Problems
+	}
+	if spec.Agent != "" {
+		if _, ok := w.agents.Get(strings.TrimSpace(spec.Agent)); !ok {
+			problems = append(problems, fmt.Sprintf("agent %q isn't defined", spec.Agent))
+		}
+	}
+	return problems, nil
+}
+
+// workerDir is the directory of the worker name, valid or not: the first
+// of workers.paths holding name/WORKER.md.
+func (w *Workspace) workerDir(name string) (string, error) {
+	if !w.cfg.Workers.Enabled {
+		return "", api.ErrWorkersDisabled
+	}
+	if workers.ValidName(name) {
+		for _, root := range w.workerRoots() {
+			dir := filepath.Join(root, name)
+			if info, err := os.Stat(filepath.Join(dir, workers.FileName)); err == nil && info.Mode().IsRegular() {
+				return dir, nil
+			}
+		}
+	}
+	return "", fmt.Errorf("%w: %q", api.ErrUnknownWorker, name)
+}
+
+// GetWorkerSpec returns a worker's WORKER.md as written, for editing, and
+// the hash UpdateWorker needs. The worker needn't be valid.
+func (w *Workspace) GetWorkerSpec(name string) (api.WorkerSpec, string, error) {
+	dir, err := w.workerDir(name)
+	if err != nil {
+		return api.WorkerSpec{}, "", err
+	}
+	return workers.ReadSpec(dir)
+}
+
+// UpdateWorker rewrites a worker's WORKER.md from spec, if its files still
+// have hash (api.ErrHashMismatch otherwise: they changed since they were
+// read) and the result loads as a valid worker; otherwise it writes
+// nothing and returns why. The name, its directory, can't change. The new
+// content has a new hash, so an enabled worker is suspended until it's
+// enabled again, as after any edit.
+func (w *Workspace) UpdateWorker(spec api.WorkerSpec, hash string) (api.WorkerInfo, []string, error) {
+	spec.Name = strings.TrimSpace(spec.Name)
+	dir, err := w.workerDir(spec.Name)
+	if err != nil {
+		return api.WorkerInfo{}, nil, err
+	}
+	if now, err := workers.HashDir(dir); err != nil {
+		return api.WorkerInfo{}, nil, err
+	} else if now != hash {
+		return api.WorkerInfo{}, nil, fmt.Errorf("%w: edited %s, now %s", api.ErrHashMismatch, hash, now)
+	}
+	data := workers.Render(spec)
+	problems, err := w.checkWorker(spec, data)
+	if err != nil || len(problems) > 0 {
+		return api.WorkerInfo{}, problems, err
+	}
+	// The temporary file goes beside the worker's directory, never in its hash.
+	if err := writeFileAtomic(filepath.Dir(dir), filepath.Join(dir, workers.FileName), data); err != nil {
+		return api.WorkerInfo{}, nil, err
+	}
+	wk, err := workers.Load(dir)
+	return w.workerInfo(wk, err, time.Now()), nil, nil
+}
+
+// writeFileAtomic replaces path through a temporary dot file in tmpDir
+// (on the same file system), renamed over it, so a reader never sees half
+// a file.
+func writeFileAtomic(tmpDir, path string, data []byte) error {
+	tmp, err := os.CreateTemp(tmpDir, ".blitz-*.tmp")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(tmp.Name())
+	if _, err := tmp.Write(data); err != nil {
+		tmp.Close()
+		return err
+	}
+	if err := tmp.Chmod(0o644); err != nil {
+		tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	return os.Rename(tmp.Name(), path)
+}
+
 // ListWorkers returns the workspace's workers, by name.
 func (w *Workspace) ListWorkers() ([]api.WorkerInfo, error) {
+	w.RefreshAgents(context.Background()) // a worker's agent may be new
 	if !w.cfg.Workers.Enabled {
 		return nil, api.ErrWorkersDisabled
 	}
@@ -237,6 +324,20 @@ func (w *Workspace) EnableWorker(name, hash string) (api.WorkerInfo, error) {
 	return w.workerInfo(wk, nil, time.Now()), nil
 }
 
+// DeleteWorker deletes a worker: its directory (WORKER.md and anything
+// beside it) and whether it was enabled. Its past runs stay in the run
+// log. The caller makes sure it isn't running.
+func (w *Workspace) DeleteWorker(name string) error {
+	dir, err := w.workerDir(name)
+	if err != nil {
+		return err
+	}
+	if err := os.RemoveAll(dir); err != nil {
+		return err
+	}
+	return w.workerStore.Forget(w.Dir(), name)
+}
+
 // DisableWorker stops a worker from running.
 func (w *Workspace) DisableWorker(name string) (api.WorkerInfo, error) {
 	wk, loadErr, err := w.worker(name)
@@ -276,6 +377,7 @@ type RunOptions struct {
 // limits, recorded in the run log. The worker must be enabled; a
 // scheduled run of one that isn't is recorded as skipped.
 func (w *Workspace) RunWorker(ctx context.Context, name string, o RunOptions) (api.Run, error) {
+	w.RefreshAgents(ctx)
 	wk, loadErr, err := w.worker(name)
 	if err != nil {
 		return api.Run{}, err

@@ -15,29 +15,80 @@
  */
 
 import { useEffect, useRef, useState } from "react";
-import { mdiAlertCircleOutline, mdiCalendarPlus } from "@mdi/js";
+import { createPortal } from "react-dom";
+import { mdiAlertCircleOutline, mdiRefresh } from "@mdi/js";
 import { workers, workspaces } from "./api";
-import { message } from "./errors";
+import { message, reason } from "./errors";
 import { t } from "./i18n";
+import { ModelInput, useModelCatalog } from "./ModelInput";
 import { Button, Dialog, Icon, Segmented, useSnackbar } from "./ui/controls";
-import { emptyWorkerForm, missing, validWorkerName, workerName, workerRequest, type WorkerForm } from "./workerForm";
+import { canSave, edited, emptyWorkerForm, footerNote, formFromWorker, validWorkerName, workerName, workerRequest, type WorkerForm } from "./workerForm";
 
 // An example of the permissions field (syntax, not prose).
 const permissionsExample = ["shell:go test ./...", "write:reports/*"].join("\n");
 
+/** The worker a dialog edits: its name, its WORKER.md, and whether saving pauses it. */
+export interface WorkerEdit {
+  name: string;
+  path: string;
+  pauses: boolean;
+}
+
 /**
- * A form for a new worker: a field for each of WORKER.md's frontmatter
- * settings and the workflow. The service checks it as the scheduler would
- * read it before writing .agents/workers/<name>/WORKER.md, and says what's
- * wrong otherwise. The new worker waits to be reviewed and enabled.
+ * A worker's form, new or existing (edit), in the worker dialog's edit
+ * view: a field for each of
+ * WORKER.md's frontmatter settings and the workflow. The service checks it
+ * as the scheduler would read it before writing
+ * .agents/workers/<name>/WORKER.md, and says what's wrong otherwise. A new
+ * worker waits to be reviewed and enabled; an edited one keeps its name,
+ * is saved only over the file as it was loaded, and an enabled one waits
+ * to be enabled again. Its buttons (Cancel, Save or Create) go in footer,
+ * the dialog's footer, when given.
  */
-export function NewWorkerDialog({ dir, onClose, onCreated }: { dir: string; onClose: () => void; onCreated: (name: string) => void }) {
+export function WorkerEditor({
+  dir,
+  edit,
+  footer,
+  onCancel,
+  onSaved,
+}: {
+  dir: string;
+  edit?: WorkerEdit;
+  footer: HTMLElement | null;
+  onCancel: () => void;
+  onSaved: (name: string) => void;
+}) {
   const snack = useSnackbar();
-  const [f, setF] = useState<WorkerForm>({ ...emptyWorkerForm, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone ?? "" });
-  const [named, setNamed] = useState(false); // the name was typed, not made from the description
+  const [f, setF] = useState<WorkerForm>({ ...emptyWorkerForm, name: edit?.name ?? "", timezone: edit ? "" : (Intl.DateTimeFormat().resolvedOptions().timeZone ?? "") });
+  const [named, setNamed] = useState(!!edit); // the name was typed (or is fixed), not made from the description
   const [agents, setAgents] = useState<string[]>([]);
+  const catalog = useModelCatalog(dir);
   const [problems, setProblems] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
+  // Editing: the file as loaded (its hash, and the form it made), and
+  // whether it changed on disk since.
+  const [hash, setHash] = useState("");
+  const [loaded, setLoaded] = useState<WorkerForm | null>(null);
+  const [stale, setStale] = useState(false);
+  const [confirmReload, setConfirmReload] = useState(false);
+  const load = async () => {
+    if (!edit) return;
+    try {
+      const r = await workers.getWorkerSpec({ workspace: dir, name: edit.name });
+      const form = formFromWorker(r.worker!);
+      setF(form);
+      setLoaded(form);
+      setHash(r.hash);
+      setStale(false);
+      setProblems([]);
+    } catch (e) {
+      setProblems([message(e)]);
+    }
+  };
+  useEffect(() => {
+    void load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once per worker
+  }, [dir, edit?.name]);
   // The problems are at the end of a long form: show them.
   const alert = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -50,27 +101,31 @@ export function NewWorkerDialog({ dir, onClose, onCreated }: { dir: string; onCl
     );
   }, [dir]);
   const set = <K extends keyof WorkerForm>(k: K, v: WorkerForm[K]) => setF((x) => ({ ...x, [k]: v }));
-  const lack = missing(f);
+  const note = footerNote(f, edit);
 
-  const create = async () => {
-    if (lack || busy) return;
+  const save = async () => {
+    if (!canSave(f, { busy, editing: !!edit, loaded: !!loaded, stale })) return;
     setBusy(true);
     setProblems([]);
     try {
-      const res = await workers.createWorker({ workspace: dir, ...workerRequest(f) });
+      const res = edit
+        ? await workers.updateWorker({ workspace: dir, hash, worker: workerRequest(f) })
+        : await workers.createWorker({ workspace: dir, ...workerRequest(f) });
       if (res.problems.length) {
         setProblems(res.problems);
         return;
       }
-      snack(t("desktop.newworker.created", { name: f.name.trim() }));
-      onCreated(f.name.trim());
-      onClose();
+      snack(edit ? t(edit.pauses ? "desktop.editworker.saved_paused" : "desktop.editworker.saved", { name: f.name.trim() }) : t("desktop.newworker.created", { name: f.name.trim() }));
+      onSaved(f.name.trim());
     } catch (e) {
-      setProblems([message(e)]);
+      if (edit && reason(e) === "HASH_MISMATCH") setStale(true);
+      else setProblems([message(e)]);
     } finally {
       setBusy(false);
     }
   };
+  // Reloading the file from disk drops the form's edits: asked first when there are some.
+  const reload = () => (edited(f, loaded) ? setConfirmReload(true) : void load());
 
   const field = (key: keyof WorkerForm, props: { hint?: string; placeholder?: string; mono?: boolean; type?: string }) => (
     <label className="field">
@@ -86,23 +141,27 @@ export function NewWorkerDialog({ dir, onClose, onCreated }: { dir: string; onCl
       {props.hint && <span className="t-body-sm muted">{props.hint}</span>}
     </label>
   );
+  const actions = (
+    <>
+      <span className="t-body-sm muted spacer">{t(note.key, { path: note.path })}</span>
+      <Button onClick={onCancel}>{t("desktop.cancel")}</Button>
+      <Button variant="filled" disabled={!canSave(f, { busy, editing: !!edit, loaded: !!loaded, stale })} onClick={save}>
+        {edit ? t("desktop.editworker.save") : t("desktop.newworker.create")}
+      </Button>
+    </>
+  );
   return (
-    <Dialog
-      title={t("desktop.newworker.title")}
-      icon={mdiCalendarPlus}
-      onClose={onClose}
-      wide
-      footer={
-        <>
-          <span className="t-body-sm muted spacer">{lack ? t(`desktop.newworker.needs.${lack}`) : t("desktop.newworker.where", { path: `.agents/workers/${f.name.trim()}/WORKER.md` })}</span>
-          <Button onClick={onClose}>{t("desktop.cancel")}</Button>
-          <Button variant="filled" disabled={!!lack || busy} onClick={create}>
-            {t("desktop.newworker.create")}
-          </Button>
-        </>
-      }
-    >
+    <>
       <div className="stack new-worker" style={{ gap: 14 }}>
+        {stale && (
+          <div className="card error row" role="alert" style={{ gap: 8 }}>
+            <Icon path={mdiAlertCircleOutline} size="sm" />
+            <span className="spacer t-body-sm">{t("desktop.editworker.stale", { path: edit?.path ?? "" })}</span>
+            <Button small icon={mdiRefresh} onClick={reload}>
+              {t("desktop.editworker.reload")}
+            </Button>
+          </div>
+        )}
         <div className="pair">
           <label className="field">
             <span className="t-label">{t("desktop.newworker.description")}</span>
@@ -119,13 +178,14 @@ export function NewWorkerDialog({ dir, onClose, onCreated }: { dir: string; onCl
               className="input mono"
               value={f.name}
               spellCheck={false}
+              readOnly={!!edit}
               aria-invalid={!!f.name && !validWorkerName(f.name.trim())}
               onChange={(e) => {
                 setNamed(true);
                 set("name", e.target.value);
               }}
             />
-            <span className={`t-body-sm ${f.name && !validWorkerName(f.name.trim()) ? "error-text" : "muted"}`}>{t("desktop.newworker.name_hint")}</span>
+            <span className={`t-body-sm ${f.name && !validWorkerName(f.name.trim()) ? "error-text" : "muted"}`}>{t(edit ? "desktop.editworker.name_fixed" : "desktop.newworker.name_hint")}</span>
           </label>
         </div>
         <div className="pair">
@@ -144,7 +204,10 @@ export function NewWorkerDialog({ dir, onClose, onCreated }: { dir: string; onCl
               ))}
             </select>
           </label>
-          {field("model", { placeholder: t("desktop.newworker.model_placeholder"), mono: true })}
+          <label className="field">
+            <span className="t-label">{t("desktop.newworker.model")}</span>
+            <ModelInput value={f.model} onChange={(v) => set("model", v)} catalog={catalog} placeholder={t("desktop.newworker.model_placeholder")} />
+          </label>
         </div>
         <label className="field">
           <span className="t-label">{t("desktop.newworker.prompt")}</span>
@@ -174,6 +237,29 @@ export function NewWorkerDialog({ dir, onClose, onCreated }: { dir: string; onCl
           />
           <span className="t-body-sm muted">{t("desktop.newworker.catchup_hint")}</span>
         </div>
+        {confirmReload && (
+          <Dialog
+            title={t("desktop.editworker.reload_title")}
+            onClose={() => setConfirmReload(false)}
+            footer={
+              <>
+                <Button onClick={() => setConfirmReload(false)}>{t("desktop.cancel")}</Button>
+                <Button
+                  variant="filled"
+                  danger
+                  onClick={() => {
+                    setConfirmReload(false);
+                    void load();
+                  }}
+                >
+                  {t("desktop.editworker.reload_discard")}
+                </Button>
+              </>
+            }
+          >
+            <p>{t("desktop.editworker.reload_body")}</p>
+          </Dialog>
+        )}
         {problems.length > 0 && (
           <div ref={alert} className="card error stack" role="alert" style={{ gap: 4 }}>
             {problems.map((p) => (
@@ -184,6 +270,7 @@ export function NewWorkerDialog({ dir, onClose, onCreated }: { dir: string; onCl
           </div>
         )}
       </div>
-    </Dialog>
+      {footer ? createPortal(actions, footer) : <div className="row worker-editor-actions">{actions}</div>}
+    </>
   );
 }

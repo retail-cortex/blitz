@@ -250,11 +250,24 @@ a { color: var(--md-primary); }
 .seg button:first-child { border-left: none; }
 .seg button.on { background: var(--md-secondary-container); color: var(--md-on-secondary-container); }
 .seg.small button { height: 32px; padding: 0 12px; }
+/* An M3 search bar that opens a search (the top bar's: the palette). */
+.toolbar-search {
+  position: relative; display: inline-flex; align-items: center; gap: 10px; width: clamp(180px, 24vw, 360px); height: 40px; padding: 0 8px 0 14px;
+  border: none; border-radius: var(--md-shape-full); background: var(--md-surface-container-high); color: var(--md-on-surface-variant);
+  font: 400 14px/20px var(--md-font); text-align: left; cursor: text;
+}
+.toolbar-search::after { content: ""; position: absolute; inset: 0; border-radius: inherit; background: currentColor; opacity: 0; transition: opacity 0.15s; pointer-events: none; }
+.toolbar-search:hover::after { opacity: 0.08; }
+.toolbar-search:focus-visible { outline: 2px solid var(--md-primary); outline-offset: 2px; }
+.toolbar-search-text { flex: 1; min-width: 0; }
+.toolbar-search-key { flex: none; background: var(--md-surface-container-highest); color: var(--md-on-surface-variant); }
 
 /* Text fields (outlined) */
 .field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
-.field > label { font: 500 12px/16px var(--md-font); color: var(--md-on-surface-variant); }
+/* A field's label: the same whether it's a <label> (Field) or a span in one. */
+.field > label, .field > .t-label { font: 500 12px/16px var(--md-font); letter-spacing: 0.5px; color: var(--md-on-surface-variant); }
 .field .supporting { font: 400 12px/16px var(--md-font); color: var(--md-on-surface-variant); }
+.field .supporting.error-text { color: var(--md-error); }
 .input, .select, textarea.input {
   width: 100%; min-height: 40px; padding: 8px 12px;
   border: 1px solid var(--md-outline); border-radius: var(--md-shape-xs);
@@ -320,6 +333,21 @@ input[type="range"] { accent-color: var(--md-primary); width: 100%; }
 .menu-item.on { background: color-mix(in srgb, var(--md-secondary-container) 60%, transparent); }
 .menu-divider { height: 1px; margin: 8px 0; background: var(--md-outline-variant); }
 .menu-label { padding: 8px 16px 4px; font: 500 12px/16px var(--md-font); color: var(--md-on-surface-variant); }
+/* An item with buttons at its end (MenuItem.actions), shown on hover or focus. */
+.menu-row { position: relative; display: flex; align-items: center; }
+.menu-row .menu-item { flex: 1; min-width: 0; padding-right: calc(16px + var(--actions, 1) * 34px); }
+.menu-row .menu-item > span:last-child { min-width: 0; }
+.menu-row-action { position: absolute; right: 8px; display: flex; gap: 2px; opacity: 0; }
+.menu-row:hover .menu-row-action, .menu-row:focus-within .menu-row-action { opacity: 1; }
+/* A right-click menu is dense, like the system's: short rows, small icons,
+   and a key hint (F2) on the right of its row rather than under it. */
+.context-menu { padding: 4px 0; }
+.context-menu .menu-item { align-items: center; gap: 8px; min-height: 28px; padding: 4px 12px; font-size: 13px; line-height: 18px; }
+.context-menu .menu-item .icon { width: 16px; height: 16px; }
+.context-menu .menu-item > span { display: flex; flex: 1; align-items: baseline; gap: 16px; }
+.context-menu .menu-item small { margin-left: auto; }
+.context-menu .menu-divider { margin: 4px 0; }
+.context-menu .menu-label { padding: 6px 12px 2px; font-size: 11px; line-height: 14px; }
 
 /* Dialogs */
 /* A dialog blurs the window behind it (unless the system asks for less). */

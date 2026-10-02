@@ -19,7 +19,7 @@ import { describe, expect, it } from "vitest";
 import { FileEntrySchema, FileKind } from "../gen/blitz/v1/file_pb";
 import { detectIndent } from "./indent";
 import { parseFileRef, splitLine } from "./paths";
-import { ancestors, emptyTree, parentOf, rows, setExpanded, shownFolders, validName, withChildren } from "./tree";
+import { ancestors, emptyTree, moveTarget, parentOf, rows, setExpanded, shownFolders, validName, withChildren } from "./tree";
 
 const folder = (path: string) => create(FileEntrySchema, { path, name: path.split("/").pop(), kind: FileKind.FOLDER });
 const file = (path: string) => create(FileEntrySchema, { path, name: path.split("/").pop(), kind: FileKind.FILE });
@@ -51,6 +51,18 @@ describe("the tree", () => {
     expect(ancestors("a/b/c.go")).toEqual(["a", "a/b"]);
     expect(["x.go", ".env"].every(validName)).toBe(true);
     expect(["", " ", ".", "..", "a/b", "a\\b"].some(validName)).toBe(false);
+  });
+  it.each([
+    ["into a folder", "go.mod", "internal", "internal/go.mod"],
+    ["out to the workspace", "internal/doc.go", "", "doc.go"],
+    ["a folder into another", "internal/cart", "cmd", "cmd/cart"],
+    ["into a folder with a name it starts with", "internal", "internal-old", "internal-old/internal"],
+    ["onto itself", "internal", "internal", null],
+    ["under itself", "internal", "internal/cart", null],
+    ["where it already is", "internal/doc.go", "internal", null],
+    ["the workspace", "", "cmd", null],
+  ])("moves %s", (_, path, into, want) => {
+    expect(moveTarget(path, into)).toBe(want);
   });
 });
 

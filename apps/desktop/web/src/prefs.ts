@@ -38,9 +38,10 @@ export interface Prefs {
   theme: ThemePref;
   workspaces: WorkspacePrefs[];
   active?: string;
-  run_settings: boolean;
   show_thoughts: boolean;
   density: "comfortable" | "compact";
+  /** Where the chat input sits: under the conversation, or pinned across the window's foot. */
+  composer: "panel" | "pinned";
   notifications: "on" | "off";
   /** The window's language: "system" (the default) or a catalog's tag. */
   language: string;
@@ -50,13 +51,14 @@ export interface Prefs {
   show_hidden: boolean;
   /** The chat panel's width in pixels (0: a third of the window). */
   chat_width: number;
-  /** The Files shelf's and the run settings panel's widths in pixels (0: their defaults). */
+  /** The Files shelf's width in pixels (0: its default). */
   files_width: number;
-  run_settings_width: number;
   /** How wide the conversation runs: the whole panel, or a readable column. */
   width: "full" | "readable";
   /** A background task that ends while nothing runs starts a turn about it. */
   task_continue: boolean;
+  /** Advanced settings shown (simpleMode.ts); off, novices see what they need. */
+  advanced: boolean;
   /** Glass: translucent, blurred surfaces ("off": solid ones). */
   transparency: "on" | "off";
   /** The user's CSS for Markdown previews in each theme, over the defaults (FIL-57). */
@@ -71,17 +73,17 @@ export const maxMarkdownCSS = 64 * 1024;
 export const defaultPrefs: Prefs = {
   theme: "system",
   workspaces: [],
-  run_settings: false,
   show_thoughts: false,
   density: "comfortable",
+  composer: "pinned",
   notifications: "on",
   language: "system",
   files: false,
   show_hidden: false,
   chat_width: 0,
   files_width: 0,
-  run_settings_width: 0,
   task_continue: false,
+  advanced: false,
   width: "full",
   transparency: "on",
   markdown_css_light: "",
@@ -118,19 +120,19 @@ export function normalizePrefs(raw: unknown): Prefs {
     theme: pick(r.theme, ["system", "light", "dark"] as const, "system"),
     workspaces,
     active,
-    run_settings: r.run_settings === true,
     show_thoughts: r.show_thoughts === true,
     density: pick(r.density, ["comfortable", "compact"] as const, "comfortable"),
+    composer: pick(r.composer, ["panel", "pinned"] as const, "pinned"),
     notifications: pick(r.notifications, ["on", "off"] as const, "on"),
     language: typeof r.language === "string" && /^[A-Za-z]{2,3}(-[A-Za-z0-9]+)*$|^system$/.test(r.language) ? r.language : "system",
     files: r.files === true,
     show_hidden: r.show_hidden === true,
     width: pick(r.width, ["full", "readable"] as const, "full"),
     task_continue: r.task_continue === true,
+    advanced: r.advanced === true,
     transparency: pick(r.transparency, ["on", "off"] as const, "on"),
     chat_width: pixels(r.chat_width),
     files_width: pixels(r.files_width),
-    run_settings_width: pixels(r.run_settings_width),
     markdown_css_light: css(r.markdown_css_light),
     markdown_css_dark: css(r.markdown_css_dark),
   };

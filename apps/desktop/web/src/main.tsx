@@ -19,6 +19,7 @@ import { createRoot } from "react-dom/client";
 import { App } from "./App";
 import { EditorPanel } from "./EditorPanel";
 import { editorConfig } from "./host";
+import { installQuietInputs } from "./ui/inputs";
 import "./m3.css";
 import "./app.css";
 import "./glass.css";
@@ -31,6 +32,7 @@ async function start() {
     const { installFake } = await import("./dev/fake");
     installFake();
   }
+  installQuietInputs(); // no system capitals or corrections in names, paths, models
   createRoot(document.getElementById("root")!).render(
     <StrictMode>
       {editorConfig() ? <EditorPanel /> : <App />}

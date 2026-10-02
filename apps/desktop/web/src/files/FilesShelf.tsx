@@ -15,6 +15,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   mdiChevronDown,
   mdiChevronRight,
@@ -34,20 +35,40 @@ import {
   mdiRenameOutline,
   mdiAt,
   mdiMessagePlusOutline,
+  mdiMinusBoxOutline,
+  mdiPlusBoxOutline,
+  mdiSourceBranch,
+  mdiUndoVariant,
 } from "@mdi/js";
 import { fileManager, revealPath } from "../desktop";
 import { addToContext } from "../events";
 import { files } from "../api";
 import { message } from "../errors";
-import { FileKind, type FileEntry } from "../gen/blitz/v1/file_pb";
+import { FileKind, GitAction, type FileEntry } from "../gen/blitz/v1/file_pb";
+import { gitActions, gitKeys } from "./gitMenu";
 import { t } from "../i18n";
 import { Button, ContextMenu, Dialog, Icon, IconButton, useSnackbar, type MenuEntry } from "../ui/controls";
 import { filesFloat, useFloatingDismiss } from "../ui/layout";
 import { ResizeHandle } from "../ui/ResizeHandle";
 import { fileIcon } from "./icons";
-import { ancestors, emptyTree, isFolder, joinPath, parentOf, rows, setExpanded, shownFolders, validName, withChildren, type Tree } from "./tree";
+import { ancestors, emptyTree, isFolder, joinPath, moveTarget, parentOf, rows, setExpanded, shownFolders, validName, withChildren, type Tree } from "./tree";
+import { useAdvanced } from "../state";
+
+const gitIcons: Record<GitAction, string> = {
+  [GitAction.UNSPECIFIED]: mdiSourceBranch,
+  [GitAction.STAGE]: mdiPlusBoxOutline,
+  [GitAction.UNSTAGE]: mdiMinusBoxOutline,
+  [GitAction.DISCARD]: mdiUndoVariant,
+  [GitAction.IGNORE]: mdiEyeOffOutline,
+};
 
 const gitLetters: Record<string, string> = { modified: "M", added: "A", deleted: "D", renamed: "R", untracked: "U", conflicted: "!" };
+
+/** The drag data type of a path dragged in the tree. */
+const dragType = "application/x-blitz-path";
+
+/** How long a drag rests on a closed folder before it opens. */
+const dragOpenMs = 600;
 
 /** Something being named in the tree: a new file or folder, or a rename. */
 type Naming = { kind: "file" | "folder"; dir: string } | { kind: "rename"; path: string };
@@ -66,6 +87,7 @@ export function FilesShelf({
   reveal,
   onOpen,
   onMoved,
+  onChanged,
   onClose,
   width,
   onResize,
@@ -84,8 +106,12 @@ export function FilesShelf({
   reveal: { path: string } | null;
   onOpen: (path: string) => void;
   onMoved: (from: string, to: string | null) => void;
+  /** Files changed on disk outside the editor (a git action): list again, reload open tabs. */
+  onChanged: () => void;
   onClose: () => void;
-}) {
+}) {  // Simple mode: no refresh, collapse, hidden files, git actions or relative paths.
+  const advanced = useAdvanced();
+
   const snack = useSnackbar();
   // Floating over the editor, a click outside or Escape minimizes it.
   const shelf = useRef<HTMLElement>(null);
@@ -95,6 +121,9 @@ export function FilesShelf({
   const [naming, setNaming] = useState<Naming | null>(null);
   const [menu, setMenu] = useState<{ x: number; y: number; entry: FileEntry | null } | null>(null);
   const [deleting, setDeleting] = useState<FileEntry | null>(null);
+  const [discarding, setDiscarding] = useState<FileEntry | null>(null);
+  // The workspace is a git repository (from its listing): git actions are offered.
+  const [repo, setRepo] = useState(false);
   const [error, setError] = useState("");
   const list = useRef<HTMLDivElement>(null);
   const treeRef = useRef(tree);
@@ -104,6 +133,7 @@ export function FilesShelf({
     async (folder: string) => {
       const res = await files.listDir({ workspace: dir, path: folder, showHidden });
       setTree((tr) => withChildren(tr, folder, res.entries));
+      if (folder === "") setRepo(res.repo);
     },
     [dir, showHidden],
   );
@@ -163,6 +193,10 @@ export function FilesShelf({
     setNaming({ kind, dir: folder });
   };
 
+  // Gives the keyboard back to a row once it's drawn (after naming, the
+  // field it replaced had it).
+  const focusRow = (path: string) => requestAnimationFrame(() => list.current?.querySelector<HTMLElement>(`[data-path="${CSS.escape(path)}"]`)?.focus());
+
   const finishNaming = async (name: string) => {
     const n = naming;
     setNaming(null);
@@ -175,6 +209,7 @@ export function FilesShelf({
         onMoved(n.path, to);
         await load(parentOf(n.path));
         setSelected(to);
+        focusRow(to);
         return;
       }
       const path = joinPath(n.dir, name.trim());
@@ -183,6 +218,7 @@ export function FilesShelf({
       await load(n.dir);
       setSelected(path);
       if (n.kind === "file") onOpen(path);
+      else focusRow(path);
     } catch (e) {
       snack(message(e), { error: true });
     }
@@ -193,8 +229,85 @@ export function FilesShelf({
     try {
       await files.deleteFile({ workspace: dir, path: e.path });
       onMoved(e.path, null);
+      setSelected((s) => (s === e.path || s?.startsWith(e.path + "/") ? null : s));
       await load(parentOf(e.path));
       snack(t("desktop.files.deleted", { name: e.name }));
+    } catch (err) {
+      snack(message(err), { error: true });
+    }
+  };
+
+  // Dragging an entry onto a folder (or a file in it) moves it there; onto
+  // the tree's background, to the workspace. A closed folder opens when
+  // the drag rests on it.
+  const dragging = useRef<string | null>(null);
+  const [dropInto, setDropInto] = useState<string | null>(null);
+  const openTimer = useRef<{ path: string; id: number } | null>(null);
+  const stopOpenTimer = () => {
+    if (openTimer.current) window.clearTimeout(openTimer.current.id);
+    openTimer.current = null;
+  };
+  useEffect(() => stopOpenTimer, []);
+
+  // The folder a drag over el would drop into: the row's folder, or its
+  // file's, or the workspace off the rows.
+  const folderAt = (el: EventTarget) => {
+    const path = el instanceof Element ? el.closest<HTMLElement>("[data-path]")?.dataset.path : undefined;
+    if (path === undefined) return "";
+    const e = findEntry(tree, path);
+    return e && isFolder(e) ? e.path : parentOf(path);
+  };
+
+  const endDrag = () => {
+    dragging.current = null;
+    setDropInto(null);
+    stopOpenTimer();
+  };
+
+  const onDragOver = (ev: React.DragEvent) => {
+    const from = dragging.current;
+    if (!from || !ev.dataTransfer.types.includes(dragType)) return;
+    const into = folderAt(ev.target);
+    if (moveTarget(from, into) === null) {
+      setDropInto(null);
+      stopOpenTimer();
+      return;
+    }
+    ev.preventDefault();
+    ev.dataTransfer.dropEffect = "move";
+    setDropInto(into);
+    if (into && !tree.expanded.has(into) && openTimer.current?.path !== into) {
+      stopOpenTimer();
+      const e = findEntry(tree, into);
+      if (e) openTimer.current = { path: into, id: window.setTimeout(() => void toggle(e, true), dragOpenMs) };
+    }
+  };
+
+  const onDrop = async (ev: React.DragEvent) => {
+    const from = dragging.current;
+    const into = folderAt(ev.target);
+    endDrag();
+    const to = from === null ? null : moveTarget(from, into);
+    if (from === null || to === null) return;
+    ev.preventDefault();
+    try {
+      await files.renameFile({ workspace: dir, from, to });
+      onMoved(from, to);
+      await load(parentOf(from));
+      if (into) setTree((tr) => setExpanded(tr, into, true));
+      await load(into);
+      setSelected(to);
+    } catch (e) {
+      snack(message(e), { error: true });
+    }
+  };
+
+  // A git action on an entry; the tree and open tabs are refreshed after.
+  const runGit = async (e: FileEntry, action: GitAction) => {
+    try {
+      await files.gitFileAction({ workspace: dir, path: e.path, action });
+      snack(t(gitKeys[action].done, { name: e.name }));
+      onChanged();
     } catch (err) {
       snack(message(err), { error: true });
     }
@@ -235,10 +348,24 @@ export function FilesShelf({
         "divider",
         { label: t("desktop.files.rename"), icon: mdiRenameOutline, detail: "F2", onSelect: () => setNaming({ kind: "rename", path: e.path }) },
         { label: t("desktop.files.delete"), icon: mdiDeleteOutline, danger: true, onSelect: () => setDeleting(e) },
+      );
+      const git = gitActions({ folder: isFolder(e), git: e.git }, repo);
+      if (advanced && git.length > 0) {
+        items.push("divider", { heading: t("desktop.files.git.heading") });
+        for (const a of git) {
+          items.push({
+            label: t(gitKeys[a].item),
+            icon: gitIcons[a],
+            danger: a === GitAction.DISCARD,
+            onSelect: () => (a === GitAction.DISCARD ? setDiscarding(e) : void runGit(e, a)),
+          });
+        }
+      }
+      items.push(
         "divider",
         { label: t("desktop.files.copy_path"), icon: mdiContentCopy, onSelect: () => void copy(absolute(e.path)) },
-        { label: t("desktop.files.copy_relative"), icon: mdiLinkVariant, onSelect: () => void copy(e.path) },
       );
+      if (advanced) items.push({ label: t("desktop.files.copy_relative"), icon: mdiLinkVariant, onSelect: () => void copy(e.path) });
     }
     if (manager !== null) {
       if (!e) items.push("divider");
@@ -250,7 +377,8 @@ export function FilesShelf({
   const shown = rows(tree);
 
   // Arrows move, Right and Left open and close folders, Enter opens, F2
-  // renames, Delete deletes.
+  // renames, Delete deletes, Escape clears the selection (so new files go
+  // in the workspace).
   const onKey = (ev: React.KeyboardEvent) => {
     if (naming) return;
     const i = shown.findIndex((r) => r.entry.path === selected);
@@ -285,6 +413,10 @@ export function FilesShelf({
       case "Backspace":
         if (row && (ev.key === "Delete" || ev.metaKey)) setDeleting(row);
         break;
+      case "Escape":
+        if (!selected) return; // the floating shelf's Escape minimizes it
+        setSelected(null);
+        break;
       default:
         return;
     }
@@ -303,16 +435,32 @@ export function FilesShelf({
         <span className="t-title-sm spacer">{t("desktop.files.title")}</span>
         <IconButton icon={mdiFilePlusOutline} label={t("desktop.files.new_file")} small onClick={() => void startNew("file")} />
         <IconButton icon={mdiFolderPlusOutline} label={t("desktop.files.new_folder")} small onClick={() => void startNew("folder")} />
-        <IconButton icon={mdiRefresh} label={t("desktop.files.refresh")} small onClick={() => void reloadAll()} />
-        <IconButton icon={mdiCollapseAllOutline} label={t("desktop.files.collapse")} small onClick={() => setTree((tr) => ({ ...tr, expanded: new Set() }))} />
-        <IconButton icon={showHidden ? mdiEyeOutline : mdiEyeOffOutline} label={t("desktop.files.show_hidden")} small selected={showHidden} onClick={onToggleHidden} />
+        {advanced && (
+          <>
+            <IconButton icon={mdiRefresh} label={t("desktop.files.refresh")} small onClick={() => void reloadAll()} />
+            <IconButton icon={mdiCollapseAllOutline} label={t("desktop.files.collapse")} small onClick={() => setTree((tr) => ({ ...tr, expanded: new Set() }))} />
+            <IconButton icon={showHidden ? mdiEyeOutline : mdiEyeOffOutline} label={t("desktop.files.show_hidden")} small selected={showHidden} onClick={onToggleHidden} />
+          </>
+        )}
         <IconButton icon={mdiChevronDoubleLeft} label={t("desktop.files.hide")} small onClick={onClose} />
       </div>
       <div
-        className="files-tree"
+        className={`files-tree ${dropInto === "" ? "drop-target" : ""}`}
         role="tree"
         ref={list}
         onKeyDown={onKey}
+        // A click on the background clears the selection.
+        onClick={(e) => {
+          if (e.target === e.currentTarget) setSelected(null);
+        }}
+        onDragOver={onDragOver}
+        onDragLeave={(e) => {
+          if (!e.currentTarget.contains(e.relatedTarget as Node | null)) {
+            setDropInto(null);
+            stopOpenTimer();
+          }
+        }}
+        onDrop={(e) => void onDrop(e)}
         onContextMenu={(e) => {
           if (e.target === e.currentTarget) {
             e.preventDefault();
@@ -335,10 +483,17 @@ export function FilesShelf({
                   aria-expanded={isFolder(e) ? open : undefined}
                   aria-selected={e.path === selected}
                   data-path={e.path}
-                  className={`tree-row ${e.path === selected ? "selected" : ""} ${e.path === active ? "active" : ""} ${e.hidden ? "hidden-entry" : ""} git-${e.git || "clean"}`}
+                  className={`tree-row ${e.path === selected ? "selected" : ""} ${e.path === active ? "active" : ""} ${e.path === dropInto ? "drop-target" : ""} ${e.hidden ? "hidden-entry" : ""} git-${e.git || "clean"}`}
                   style={{ paddingLeft: 8 + depth * 14 }}
                   title={e.agentRule ? `${e.path}\n${t(`desktop.files.rule.${e.agentRule}.detail`)}` : e.path}
                   tabIndex={e.path === selected || (!selected && shown[0]?.entry.path === e.path) ? 0 : -1}
+                  draggable
+                  onDragStart={(ev) => {
+                    dragging.current = e.path;
+                    ev.dataTransfer.setData(dragType, e.path);
+                    ev.dataTransfer.effectAllowed = "move";
+                  }}
+                  onDragEnd={endDrag}
                   onClick={() => {
                     setSelected(e.path);
                     if (isFolder(e)) void toggle(e);
@@ -365,23 +520,54 @@ export function FilesShelf({
         {shown.length === 0 && !error && !naming && <p className="muted t-body-sm files-note">{t("desktop.files.empty")}</p>}
       </div>
       {menu && <ContextMenu x={menu.x} y={menu.y} items={menuItems(menu.entry)} onClose={() => setMenu(null)} />}
-      {deleting && (
-        <Dialog
-          title={t("desktop.files.delete_title", { name: deleting.name })}
-          icon={mdiDeleteOutline}
-          onClose={() => setDeleting(null)}
-          footer={
-            <>
-              <Button onClick={() => setDeleting(null)}>{t("desktop.cancel")}</Button>
-              <Button variant="filled" danger onClick={() => void remove(deleting)}>
-                {t("desktop.files.delete")}
-              </Button>
-            </>
-          }
-        >
-          <p>{t(isFolder(deleting) ? "desktop.files.delete_folder_body" : "desktop.files.delete_body", { path: deleting.path })}</p>
-        </Dialog>
-      )}
+      {/* At the page's level: the shelf's glass blur would otherwise be the
+          frame its dialogs centre in. */}
+      {discarding &&
+        createPortal(
+          <Dialog
+            title={t("desktop.files.git.discard_title", { name: discarding.name })}
+            icon={mdiUndoVariant}
+            onClose={() => setDiscarding(null)}
+            footer={
+              <>
+                <Button onClick={() => setDiscarding(null)}>{t("desktop.cancel")}</Button>
+                <Button
+                  variant="filled"
+                  danger
+                  onClick={() => {
+                    const e = discarding;
+                    setDiscarding(null);
+                    void runGit(e, GitAction.DISCARD);
+                  }}
+                >
+                  {t("desktop.files.git.discard_confirm")}
+                </Button>
+              </>
+            }
+          >
+            <p>{t(isFolder(discarding) ? "desktop.files.git.discard_folder_body" : "desktop.files.git.discard_body", { path: discarding.path })}</p>
+          </Dialog>,
+          document.body,
+        )}
+      {deleting &&
+        createPortal(
+          <Dialog
+            title={t("desktop.files.delete_title", { name: deleting.name })}
+            icon={mdiDeleteOutline}
+            onClose={() => setDeleting(null)}
+            footer={
+              <>
+                <Button onClick={() => setDeleting(null)}>{t("desktop.cancel")}</Button>
+                <Button variant="filled" danger onClick={() => void remove(deleting)}>
+                  {t("desktop.files.delete")}
+                </Button>
+              </>
+            }
+          >
+            <p>{t(isFolder(deleting) ? "desktop.files.delete_folder_body" : "desktop.files.delete_body", { path: deleting.path })}</p>
+          </Dialog>,
+          document.body,
+        )}
     </aside>
   );
 }

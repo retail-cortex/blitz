@@ -73,6 +73,8 @@ func abs(f float64) float64 {
 type fixtureOpts struct {
 	cfg  func(*config.Config)
 	opts []Option
+	// agentDir holds agents to load besides the built-in ones.
+	agentDir string
 }
 
 func newEngineWith(t *testing.T, fo fixtureOpts, responses ...*genai.Content) engineFixture {
@@ -87,6 +89,9 @@ func newEngineWith(t *testing.T, fo fixtureOpts, responses ...*genai.Content) en
 		fo.cfg(cfg)
 	}
 	agentReg, _ := agents.NewRegistry()
+	if fo.agentDir != "" {
+		require.NoError(t, agentReg.LoadExternalAgents(fo.agentDir))
+	}
 	skillProv, _ := skills.NewProvider()
 	toolReg, err := tools.NewRegistry(cfg, agentReg, skillProv)
 	require.NoError(t, err)

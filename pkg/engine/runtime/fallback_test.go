@@ -196,6 +196,10 @@ func TestParseModelRef(t *testing.T) {
 		{"openai/anthropic/claude-3", "openai", "openai", "anthropic/claude-3"}, // OpenRouter, explicit
 		{"ollama/qwen2.5-coder:7b", "gemini", "ollama", "qwen2.5-coder:7b"},
 		{"anthropic/", "gemini", "gemini", "anthropic/"},
+		{"Gemini-3.8-flash", "gemini", "gemini", "gemini-3.8-flash"}, // capitals typed in a setting
+		{"anthropic/Claude-Sonnet-5", "gemini", "anthropic", "claude-sonnet-5"},
+		{"ollama/MyModel:Latest", "gemini", "ollama", "MyModel:Latest"}, // tags keep their case
+		{"openai/Qwen/Qwen3-Coder", "gemini", "openai", "Qwen/Qwen3-Coder"},
 	}
 	for _, c := range cases {
 		p, n := ParseModelRef(c.ref, c.def)

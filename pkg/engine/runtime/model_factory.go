@@ -86,11 +86,21 @@ var knownProviders = map[string]bool{
 // the provider spelled out: "openai/anthropic/claude-…".
 func ParseModelRef(ref, defaultProvider string) (provider, name string) {
 	ref = strings.TrimSpace(ref)
+	provider, name = strings.ToLower(defaultProvider), ref
 	if p, rest, ok := strings.Cut(ref, "/"); ok && knownProviders[strings.ToLower(p)] && rest != "" {
-		return strings.ToLower(p), rest
+		provider, name = strings.ToLower(p), rest
 	}
-	return strings.ToLower(defaultProvider), ref
+	if lowercaseNames[provider] {
+		name = strings.ToLower(name) // "Gemini-3.8-flash" is a 400 from the API
+	}
+	return provider, name
 }
+
+// lowercaseNames are the providers whose model names are always lowercase,
+// so a name typed with capitals is lowered rather than refused. Others
+// (Ollama tags, OpenAI-compatible servers, Azure deployments, Bedrock IDs)
+// may differ by case and are kept as written.
+var lowercaseNames = map[string]bool{"gemini": true, "anthropic": true, "vertex-anthropic": true}
 
 const (
 	defaultOpenAIBaseURL = "https://api.openai.com/v1"
