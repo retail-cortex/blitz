@@ -54,6 +54,7 @@ import {
   mdiWeb,
   mdiWrenchOutline,
   mdiFileCompare,
+  mdiKeyboardOutline,
 } from "@mdi/js";
 import { files, serviceLost, sessions, workspaces } from "./api";
 import { editorConfig, toEditor } from "./host";
@@ -1564,6 +1565,17 @@ function TaskList({ tasks, onDismiss }: { tasks: Task[]; onDismiss?: () => void 
   );
 }
 
+// The composer's keys, as a keyboard icon whose tooltip lists them (on
+// hover, and on focus for the keyboard).
+function KeyHint() {
+  const text = `${t("desktop.keys.enter")} ${t("desktop.keys.to_send")} · ${t("desktop.keys.shift")}+${t("desktop.keys.enter")} ${t("desktop.keys.new_line")} · ${t("desktop.composer.plan_hint")}`;
+  return (
+    <span className="key-hint" tabIndex={0} role="note" aria-label={text} data-tip={text}>
+      <Icon path={mdiKeyboardOutline} size="sm" />
+    </span>
+  );
+}
+
 function Composer({
   commands,
   attachments,
@@ -1800,9 +1812,7 @@ function Composer({
           </>
         )}
         <span className="spacer" />
-        <span className="t-body-sm muted hint">
-          <kbd>{t("desktop.keys.enter")}</kbd> {t("desktop.keys.to_send")} · <kbd>{t("desktop.keys.shift")}</kbd>+<kbd>{t("desktop.keys.enter")}</kbd> {t("desktop.keys.new_line")} · {t("desktop.composer.plan_hint")}
-        </span>
+        <KeyHint />
         {running && <IconButton icon={mdiStop} label={t("desktop.stop")} variant="tonal" onClick={onStop} />}
         <IconButton icon={mdiArrowUp} label={busy ? t("desktop.uploading") : running ? t("desktop.steer") : t("desktop.send")} variant="filled" disabled={!draft.trim() || busy} onClick={send} />
       </div>

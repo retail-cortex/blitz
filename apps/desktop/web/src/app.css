@@ -240,21 +240,27 @@ body.resizing iframe, body.resizing .cm-editor { pointer-events: none; }
 .composer-dock .composer textarea { grid-area: text; min-height: 30px; max-height: 33vh; max-width: 1100px; padding: 4px 0; font-size: 14px; }
 .composer-dock .command-menu { right: auto; width: min(760px, calc(100vw - 32px)); }
 .composer-dock .attachments { grid-area: att; padding: 2px 0 6px; }
-.composer-dock .composer-bar { grid-area: bar; flex-wrap: nowrap; gap: 4px; padding-bottom: 1px; }
+.composer-dock .composer-bar { grid-area: bar; flex-wrap: nowrap; gap: 2px; }
+/* One height for the text's line and the buttons, so a single line and the icons share a centre. */
+.composer-dock .composer-bar .icon-btn, .composer-dock .key-hint { width: 30px; height: 30px; }
 .composer-dock .composer-bar .icon-btn.filled, .composer-dock .composer-bar .icon-btn.tonal { background: none; color: var(--md-primary); }
 .composer-dock .composer-bar .icon-btn:disabled { color: var(--md-on-surface-variant); opacity: 0.5; }
-/* The key hints only while the input is focused and empty. */
-.composer-dock .composer .hint { display: none; }
-.composer-dock .composer:focus-within:has(textarea:placeholder-shown) .hint { display: inline; }
 /* Background tasks: a flat row above the input, not a card. */
 .composer-dock .tasks { border: none; border-bottom: 1px solid var(--md-outline-variant); border-radius: 0; background: transparent; box-shadow: none; padding: 6px 14px; }
 .composer.running { border-color: color-mix(in srgb, var(--md-primary) 40%, transparent); }
 .composer textarea { border: none; outline: none; resize: none; background: transparent; color: var(--md-on-surface); font: 400 15px/22px var(--md-font); padding: 4px 0; min-height: 30px; max-height: 280px; }
 .composer textarea::placeholder { color: var(--md-on-surface-variant); }
 .composer-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.composer .hint { white-space: nowrap; }
-.composer { container-type: inline-size; }
-@container (max-width: 560px) { .composer .hint { display: none; } }
+/* The composer's keys: an icon, its tooltip listing them (KeyHint). */
+.key-hint { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: var(--md-shape-full, 999px); color: var(--md-on-surface-variant); cursor: help; outline: none; }
+.key-hint:hover, .key-hint:focus-visible { background: color-mix(in srgb, var(--md-on-surface) 8%, transparent); }
+.key-hint:focus-visible { box-shadow: 0 0 0 2px var(--md-primary); }
+.key-hint::after {
+  content: attr(data-tip); position: absolute; right: 0; bottom: calc(100% + 8px); z-index: 40; white-space: nowrap; pointer-events: none;
+  padding: 6px 10px; border-radius: var(--md-shape-xs); background: var(--md-inverse-surface); color: var(--md-inverse-on-surface); font: 400 12px/16px var(--md-font);
+  opacity: 0; transform: translateY(2px); transition: opacity 0.12s, transform 0.12s;
+}
+.key-hint:hover::after, .key-hint:focus-visible::after { opacity: 1; transform: none; transition-delay: 0.15s; }
 
 /* Markdown */
 .markdown { overflow-wrap: anywhere; line-height: 1.6; }
