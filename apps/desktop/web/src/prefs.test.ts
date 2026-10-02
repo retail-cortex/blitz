@@ -85,6 +85,8 @@ describe("normalizePrefs", () => {
     expect(normalizePrefs({ theme: "dark", workspaces: null }).workspaces).toEqual([]);
     expect(normalizePrefs(null)).toEqual({ ...defaultPrefs, active: undefined });
     expect(normalizePrefs({ notifications: "sometimes" }).notifications).toBe("on");
+    expect(normalizePrefs({ composer: "floating" }).composer).toBe("panel");
+    expect(normalizePrefs({ composer: "pinned" }).composer).toBe("pinned");
     const p = normalizePrefs({
       theme: "sepia",
       density: 3,

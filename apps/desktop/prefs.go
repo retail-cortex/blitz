@@ -45,6 +45,9 @@ type Prefs struct {
 	ShowThoughts bool `json:"show_thoughts"`
 	// Density is "comfortable" (the default) or "compact".
 	Density string `json:"density"`
+	// Composer is where the chat input sits: "panel" (the default, under
+	// the conversation) or "pinned" (across the window's foot).
+	Composer string `json:"composer"`
 	// Notifications is "on" (the default: when the agent finishes or waits
 	// while the window is elsewhere) or "off".
 	Notifications string `json:"notifications"`
@@ -110,6 +113,9 @@ func (p *Prefs) normalize() {
 	}
 	if p.Density != "compact" {
 		p.Density = "comfortable"
+	}
+	if p.Composer != "pinned" {
+		p.Composer = "panel"
 	}
 	if p.Width != "readable" {
 		p.Width = "full"

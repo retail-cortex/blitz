@@ -217,6 +217,11 @@ body.resizing iframe, body.resizing .cm-editor { pointer-events: none; }
 
 .composer { position: relative; display: flex; flex-direction: column; gap: 4px; padding: 12px 12px 8px 20px; border-radius: var(--md-shape-xl); background: var(--md-surface-container); border: 1px solid transparent; transition: border-color 0.15s; }
 .composer:focus-within { border-color: var(--md-outline); }
+/* The pinned composer (composerDock.ts): a band across the window's foot,
+   above the status bar, on every view; the input keeps a readable width. */
+.composer-dock { flex: none; display: flex; justify-content: center; padding: 8px 16px 0; background: var(--md-surface-container-low); border-top: 1px solid var(--md-outline-variant); }
+.composer-dock .chat-column.dock { max-width: min(960px, 100%); padding: 0 0 8px; }
+.composer-dock .composer { background: var(--md-surface-container-high); }
 .composer.running { border-color: color-mix(in srgb, var(--md-primary) 40%, transparent); }
 .composer textarea { border: none; outline: none; resize: none; background: transparent; color: var(--md-on-surface); font: 400 15px/22px var(--md-font); padding: 4px 0; min-height: 30px; max-height: 280px; }
 .composer textarea::placeholder { color: var(--md-on-surface-variant); }

@@ -35,9 +35,10 @@ func TestPrefsDefaultsAndRoundTrip(t *testing.T) {
 	require.Equal(t, "comfortable", p.Density, "defaults %+v %v", p, err)
 	require.Equal(t, "full", p.Width, "defaults %+v %v", p, err)
 	require.Equal(t, "on", p.Notifications, "defaults %+v %v", p, err)
+	require.Equal(t, "panel", p.Composer, "defaults %+v %v", p, err)
 	require.Len(t, p.Workspaces, 0, "defaults %+v %v", p, err)
 	a, b := t.TempDir(), t.TempDir()
-	p.Theme = "dark"
+	p.Theme, p.Composer = "dark", "pinned"
 	p.Workspaces = []WorkspacePrefs{
 		{Dir: a + "/", Name: "  Shop  ", Color: "teal", Open: true},
 		{Dir: b, Description: "old", Open: false},
@@ -53,6 +54,7 @@ func TestPrefsDefaultsAndRoundTrip(t *testing.T) {
 	require.Equal(t, "Shop", saved.Workspaces[0].Name, "normalized %+v", saved)
 	require.Equal(t, a, saved.Active, "normalized %+v", saved)
 	require.True(t, saved.Files, "normalized %+v", saved)
+	require.Equal(t, "pinned", saved.Composer, "normalized %+v", saved)
 	require.True(t, saved.ShowHidden, "normalized %+v", saved)
 	require.Equal(t, 0, saved.ChatWidth, "normalized %+v", saved)
 	require.Equal(t, 0, saved.FilesWidth, "normalized %+v", saved)

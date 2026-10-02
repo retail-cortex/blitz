@@ -14,7 +14,8 @@
  * limitations under the License.
  */
 
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { timestampDate } from "@bufbuild/protobuf/wkt";
 import type { JsonObject } from "@bufbuild/protobuf";
 import {
@@ -79,6 +80,7 @@ import {
 } from "./events";
 import { appendMention, insertMention, isImagePath, mentionAt } from "./mentions";
 import { pollMs, shouldPoll, welcomeTiles, type TileAction } from "./suggestions";
+import { ComposerDock, focusComposerEvent } from "./composerDock";
 import { refreshRuns, runInSession } from "./backgroundRuns";
 import { fileIcon } from "./files/icons";
 import { describeImage, imageFiles, readyIds, rejectReason, uploading, type Attachment } from "./attachments";
@@ -138,6 +140,15 @@ export function Conversation({
   onSettingsChanged: () => void;
   onOpenView: (v: "changes" | "workers") => void;
 }) {
+  // The pinned bar the composer renders into (composerDock.ts), and ⌘L.
+  const dockEl = useContext(ComposerDock);
+  const dockRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!visible) return;
+    const focus = () => dockRef.current?.querySelector("textarea")?.focus();
+    window.addEventListener(focusComposerEvent, focus);
+    return () => window.removeEventListener(focusComposerEvent, focus);
+  }, [visible]);
   const { prefs, setActivity, registerStop } = useApp();
   const snack = useSnackbar();
   const [list, setList] = useState<SessionInfo[]>([]);
@@ -826,6 +837,28 @@ export function Conversation({
   const shown = prefs.show_thoughts ? entries : entries.filter((e) => e.kind !== "thought");
   const answers = useMemo(() => turnAnswers(shown), [shown]);
   const empty = shown.length === 0 && !running;
+  // The task list and composer: under the conversation, or in the window's
+  // pinned bar (composerDock.ts) while this workspace is shown.
+  const dock = (
+    <div className="chat-column dock" ref={dockRef}>
+      {tasks.length > 0 && <TaskList tasks={tasks} onDismiss={running ? undefined : () => setTasks([])} />}
+      <Composer
+        commands={commands}
+        attachments={attachments}
+        onAddFiles={addFiles}
+        onAddImagePath={addImagePath}
+        onRemoveAttachment={removeAttachment}
+        imagesOn={imagesOn}
+        draft={draft}
+        setDraft={setDraft}
+        running={running}
+        dir={dir}
+        onSubmit={submit}
+        onStop={stop}
+      />
+    </div>
+  );
+
   // Where the latest turn starts: its tool groups stay open while it runs.
   const turnStart = latestTurn(shown);
 
@@ -912,23 +945,7 @@ export function Conversation({
           )}
         </div>
       </div>
-      <div className="chat-column dock">
-        {tasks.length > 0 && <TaskList tasks={tasks} onDismiss={running ? undefined : () => setTasks([])} />}
-        <Composer
-          commands={commands}
-          attachments={attachments}
-          onAddFiles={addFiles}
-          onAddImagePath={addImagePath}
-          onRemoveAttachment={removeAttachment}
-          imagesOn={imagesOn}
-          draft={draft}
-          setDraft={setDraft}
-          running={running}
-          dir={dir}
-          onSubmit={submit}
-          onStop={stop}
-        />
-      </div>
+      {dockEl && visible ? createPortal(dock, dockEl) : dock}
       {forceRewind && (
         <Dialog
           title={t("desktop.conflict.title")}

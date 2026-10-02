@@ -33,6 +33,7 @@ import { unsavedIn } from "./files/unsaved";
 import { closeWorkspace, displayName, openWorkspace, openWorkspaces, recentWorkspaces } from "./prefs";
 import { SettingsDialog } from "./SettingsDialog";
 import { StatusBar } from "./StatusBar";
+import { ComposerDock, focusComposerEvent, isFocusComposerKey } from "./composerDock";
 import { forgetStatus } from "./status";
 import { AppStateProvider, useApp } from "./state";
 import { Button, Dialog, Icon, IconButton, SnackbarProvider, useSnackbar } from "./ui/controls";
@@ -181,6 +182,9 @@ function Shell() {
       } else if ((e.metaKey || e.ctrlKey) && e.key === ",") {
         e.preventDefault();
         setSettingsOpen(true);
+      } else if (isFocusComposerKey(e)) {
+        e.preventDefault();
+        window.dispatchEvent(new Event(focusComposerEvent));
       } else if (e.key === "F11" || (e.metaKey && e.ctrlKey && e.key.toLowerCase() === "f")) {
         e.preventDefault();
         toggleFullscreen().catch(() => {});
@@ -190,6 +194,8 @@ function Shell() {
     return () => window.removeEventListener("keydown", key);
   }, []);
   const [editing, setEditing] = useState<string | null>(null);
+  // The pinned composer's bar, once it's rendered.
+  const [dockEl, setDockEl] = useState<HTMLDivElement | null>(null);
   // Bumped when the service comes back, so workspaces reload what they show.
   const [generation, setGeneration] = useState(0);
   const [wasLost, setWasLost] = useState(false);
@@ -268,6 +274,7 @@ function Shell() {
   if (service.state === "down") return <ServiceDown status={service.status} onStarted={check} error={error} setError={setError} />;
 
   const open_ = openWorkspaces(prefs);
+  const pinned = prefs.composer === "pinned" && open_.length > 0;
   const editingWs = prefs.workspaces.find((w) => w.dir === editing);
   return (
     <div className="shell">
@@ -281,18 +288,22 @@ function Shell() {
         )}
         {service.state === "up" && version.stale && <StaleService state={version} check={version.check} />}
         {open_.length === 0 && <Welcome onOpen={open} onEdit={setEditing} onClose={close} onSettings={() => setSettingsOpen(true)} />}
-        {open_.map((w) => (
-          <Workspace
-            key={`${w.dir}#${generation}`}
-            ws={w}
-            visible={w.dir === prefs.active}
-            onOpenWorkspace={open}
-            onEditWorkspace={setEditing}
-            onCloseWorkspace={close}
-            onSettings={() => setSettingsOpen(true)}
-          />
-        ))}
+        <ComposerDock.Provider value={pinned ? dockEl : null}>
+          {open_.map((w) => (
+            <Workspace
+              key={`${w.dir}#${generation}`}
+              ws={w}
+              visible={w.dir === prefs.active}
+              onOpenWorkspace={open}
+              onEditWorkspace={setEditing}
+              onCloseWorkspace={close}
+              onSettings={() => setSettingsOpen(true)}
+            />
+          ))}
+        </ComposerDock.Provider>
       </main>
+      {/* The pinned composer's bar, across every panel. */}
+      {pinned && <div className="composer-dock" ref={setDockEl} />}
       <StatusBar serviceUp={service.state === "up"} version={version.info?.version} onRunSettings={() => update((p) => ({ ...p, run_settings: !p.run_settings }))} />
       {unsavedClose && (
         <UnsavedDialog

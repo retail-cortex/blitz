@@ -41,6 +41,8 @@ export interface Prefs {
   run_settings: boolean;
   show_thoughts: boolean;
   density: "comfortable" | "compact";
+  /** Where the chat input sits: under the conversation, or pinned across the window's foot. */
+  composer: "panel" | "pinned";
   notifications: "on" | "off";
   /** The window's language: "system" (the default) or a catalog's tag. */
   language: string;
@@ -74,6 +76,7 @@ export const defaultPrefs: Prefs = {
   run_settings: false,
   show_thoughts: false,
   density: "comfortable",
+  composer: "panel",
   notifications: "on",
   language: "system",
   files: false,
@@ -121,6 +124,7 @@ export function normalizePrefs(raw: unknown): Prefs {
     run_settings: r.run_settings === true,
     show_thoughts: r.show_thoughts === true,
     density: pick(r.density, ["comfortable", "compact"] as const, "comfortable"),
+    composer: pick(r.composer, ["panel", "pinned"] as const, "panel"),
     notifications: pick(r.notifications, ["on", "off"] as const, "on"),
     language: typeof r.language === "string" && /^[A-Za-z]{2,3}(-[A-Za-z0-9]+)*$|^system$/.test(r.language) ? r.language : "system",
     files: r.files === true,

@@ -150,6 +150,17 @@ function Appearance() {
           ))}
         </select>
       </Setting>
+      <Setting title={t("desktop.settings.composer")} detail={t("desktop.settings.composer.detail")}>
+        <Segmented
+          label={t("desktop.settings.composer")}
+          value={prefs.composer}
+          onChange={(composer) => update((p) => ({ ...p, composer }))}
+          options={[
+            { value: "panel", label: t("desktop.settings.composer.panel") },
+            { value: "pinned", label: t("desktop.settings.composer.pinned") },
+          ]}
+        />
+      </Setting>
       <Setting title={t("desktop.settings.density")} detail={t("desktop.settings.density.detail")}>
         <Segmented
           label={t("desktop.settings.density")}
