@@ -217,11 +217,37 @@ body.resizing iframe, body.resizing .cm-editor { pointer-events: none; }
 
 .composer { position: relative; display: flex; flex-direction: column; gap: 4px; padding: 12px 12px 8px 20px; border-radius: var(--md-shape-xl); background: var(--md-surface-container); border: 1px solid transparent; transition: border-color 0.15s; }
 .composer:focus-within { border-color: var(--md-outline); }
-/* The pinned composer (composerDock.ts): a band across the window's foot,
-   above the status bar, on every view; the input keeps a readable width. */
-.composer-dock { flex: none; display: flex; justify-content: center; padding: 8px 16px 0; background: var(--md-surface-container-low); border-top: 1px solid var(--md-outline-variant); }
-.composer-dock .chat-column.dock { max-width: min(960px, 100%); padding: 0 0 8px; }
-.composer-dock .composer { background: var(--md-surface-container-high); }
+.composer-mark { display: none; }
+/* The pinned composer (composerDock.ts): part of the window's frame, like
+   the status bar under it, not a card. Flush and square, one line at rest,
+   growing upward; focus and a running turn show on its top edge. */
+.composer-dock { position: relative; flex: none; display: flex; background: var(--md-surface-container); border-top: 1px solid var(--md-outline-variant); transition: border-color 0.15s, box-shadow 0.15s; }
+.composer-dock:focus-within { border-top-color: var(--md-primary); box-shadow: inset 0 1px 0 var(--md-primary); }
+.composer-dock:has(.composer.running)::before {
+  content: ""; position: absolute; left: 0; right: 0; top: -1px; height: 2px; pointer-events: none;
+  background: linear-gradient(90deg, transparent, var(--md-primary), transparent) no-repeat; background-size: 30% 100%;
+  animation: dock-running 1.6s ease-in-out infinite;
+}
+@keyframes dock-running { from { background-position: -40% 0; } to { background-position: 140% 0; } }
+@media (prefers-reduced-motion: reduce) { .composer-dock:has(.composer.running)::before { animation: none; background-size: 100% 100%; opacity: 0.6; } }
+.composer-dock .chat-column.dock { max-width: none; margin: 0; padding: 0; gap: 0; background: transparent; }
+.composer-dock .composer {
+  display: grid; grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "att att att" "mark text bar"; align-items: end; column-gap: 10px;
+  padding: 6px 12px 6px 14px; border: none; border-radius: 0; background: transparent; box-shadow: none;
+}
+.composer-dock .composer.running { border: none; }
+.composer-dock .composer-mark { display: block; grid-area: mark; align-self: start; padding-top: 4px; color: var(--md-primary); font: 600 18px/22px var(--md-mono); user-select: none; }
+.composer-dock .composer textarea { grid-area: text; min-height: 30px; max-height: 33vh; max-width: 1100px; padding: 4px 0; font-size: 14px; }
+.composer-dock .command-menu { right: auto; width: min(760px, calc(100vw - 32px)); }
+.composer-dock .attachments { grid-area: att; padding: 2px 0 6px; }
+.composer-dock .composer-bar { grid-area: bar; flex-wrap: nowrap; gap: 4px; padding-bottom: 1px; }
+.composer-dock .composer-bar .icon-btn.filled, .composer-dock .composer-bar .icon-btn.tonal { background: none; color: var(--md-primary); }
+.composer-dock .composer-bar .icon-btn:disabled { color: var(--md-on-surface-variant); opacity: 0.5; }
+/* The key hints only while the input is focused and empty. */
+.composer-dock .composer .hint { display: none; }
+.composer-dock .composer:focus-within:has(textarea:placeholder-shown) .hint { display: inline; }
+/* Background tasks: a flat row above the input, not a card. */
+.composer-dock .tasks { border: none; border-bottom: 1px solid var(--md-outline-variant); border-radius: 0; background: transparent; box-shadow: none; padding: 6px 14px; }
 .composer.running { border-color: color-mix(in srgb, var(--md-primary) 40%, transparent); }
 .composer textarea { border: none; outline: none; resize: none; background: transparent; color: var(--md-on-surface); font: 400 15px/22px var(--md-font); padding: 4px 0; min-height: 30px; max-height: 280px; }
 .composer textarea::placeholder { color: var(--md-on-surface-variant); }

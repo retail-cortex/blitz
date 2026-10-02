@@ -1716,6 +1716,10 @@ function Composer({
           ))}
         </div>
       )}
+      {/* The prompt mark: shown only when pinned (composerDock.ts). */}
+      <span className="composer-mark" aria-hidden="true">
+        ›
+      </span>
       <textarea
         ref={ref}
         value={draft}
