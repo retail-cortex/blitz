@@ -140,18 +140,18 @@
 }
 :root[data-glass="on"] .composer-dock:has(.composer.running)::before { display: none; } /* the ring says it */
 :root[data-glass="on"] .composer-dock .composer { -webkit-backdrop-filter: none; backdrop-filter: none; border: none; box-shadow: none; }
-/* Its border is a ring of deep and light blue turning around it, slowly at
+/* Its border is a wheel of colour (blue, hot pink, purple, teal) turning around it, slowly at
    rest and faster while the agent works: a gradient on a pseudo-element
    masked to the border's width (the pane's own glass stays inside). The
    angle is a registered property so it animates; where @property isn't
    supported the ring is still drawn, just still. */
 @property --ring-angle { syntax: "<angle>"; initial-value: 0deg; inherits: false; }
-:root { --ring-deep: #1d4ed8; --ring-light: #93c5fd; }
-:root[data-theme="dark"] { --ring-deep: #1e40af; --ring-light: #7dd3fc; }
+:root { --ring-blue: #2563eb; --ring-pink: #ec4899; --ring-purple: #8b5cf6; --ring-teal: #14b8a6; }
+:root[data-theme="dark"] { --ring-blue: #3b82f6; --ring-pink: #f472b6; --ring-purple: #a78bfa; --ring-teal: #2dd4bf; }
 :root[data-glass="on"] .composer-dock { border-color: transparent; }
 :root[data-glass="on"] .composer-dock::after {
   content: ""; position: absolute; inset: -1px; border-radius: inherit; padding: 1.5px; pointer-events: none;
-  background: conic-gradient(from var(--ring-angle), var(--ring-deep), var(--ring-light), var(--ring-deep) 50%, var(--ring-light) 75%, var(--ring-deep));
+  background: conic-gradient(from var(--ring-angle), var(--ring-blue), var(--ring-pink), var(--ring-purple), var(--ring-teal), var(--ring-blue));
   -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
   -webkit-mask-composite: xor;
   mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
@@ -160,7 +160,7 @@
 }
 :root[data-glass="on"] .composer-dock:focus-within::after { opacity: 1; }
 :root[data-glass="on"] .composer-dock:has(.composer.running)::after { opacity: 1; animation-duration: 2.5s; }
-:root[data-glass="on"] .composer-dock:focus-within { border-color: transparent; box-shadow: var(--glass-shadow), var(--glass-edge), 0 0 18px -6px var(--ring-light); }
+:root[data-glass="on"] .composer-dock:focus-within { border-color: transparent; box-shadow: var(--glass-shadow), var(--glass-edge), 0 0 18px -6px var(--ring-purple); }
 @keyframes ring-turn { to { --ring-angle: 360deg; } }
 @media (prefers-reduced-motion: reduce) { :root[data-glass="on"] .composer-dock::after { animation: none; } }
 /* The status bar is a strip of glass along the foot, under the panes. */
