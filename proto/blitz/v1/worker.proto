@@ -49,6 +49,9 @@ service WorkerService {
   rpc EnableWorker(EnableWorkerRequest) returns (EnableWorkerResponse);
   // Disables a worker.
   rpc DisableWorker(DisableWorkerRequest) returns (DisableWorkerResponse);
+  // Deletes a worker: its directory and whether it was enabled; its past
+  // runs stay. Refused while it runs (RUN_IN_PROGRESS); UNKNOWN_WORKER.
+  rpc DeleteWorker(DeleteWorkerRequest) returns (DeleteWorkerResponse);
   // Starts a run now, outside the schedule (WORKER_DISABLED, RUN_IN_PROGRESS).
   rpc RunWorker(RunWorkerRequest) returns (RunWorkerResponse);
   // Returns a worker's runs, newest first.
@@ -230,6 +233,15 @@ message DisableWorkerRequest {
 message DisableWorkerResponse {
   Worker worker = 1;
 }
+
+// Request message for WorkerService.DeleteWorker.
+message DeleteWorkerRequest {
+  string workspace = 1;
+  string name = 2;
+}
+
+// Response message for WorkerService.DeleteWorker.
+message DeleteWorkerResponse {}
 
 // RunStatus is where a run stands.
 enum RunStatus {

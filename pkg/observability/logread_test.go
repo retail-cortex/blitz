@@ -18,6 +18,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -120,5 +121,42 @@ func TestReadLogErrors(t *testing.T) {
 		require.NoError(t, os.WriteFile(p, nil, 0))
 		_, err = ReadLog(dir, LogQuery{Day: "2026-09-30"})
 		assert.Error(t, err, "a log it can't open")
+	}
+}
+
+func TestDeleteLogDay(t *testing.T) {
+	now := time.Date(2026, 9, 28, 12, 0, 0, 0, time.Local)
+	cases := []struct {
+		name string
+		day  string
+		err  error // nil: deleted
+	}{
+		{"a past day", "2026-09-27", nil},
+		{"today's is being written", "2026-09-28", ErrLogInUse},
+		{"a later day", "2026-09-29", ErrLogInUse},
+		{"a day with no log", "2026-01-01", ErrNoLogDay},
+		{"not a day", "../x", ErrBadLogDay},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			dir := t.TempDir()
+			for _, d := range []string{"2026-09-27", "2026-09-28", "2026-09-29"} {
+				writeLog(t, dir, d, "")
+			}
+			err := DeleteLogDay(dir, c.day, now)
+			if c.err != nil {
+				assert.ErrorIs(t, err, c.err)
+			} else {
+				assert.NoError(t, err)
+			}
+			days, err := LogDays(dir)
+			require.NoError(t, err)
+			if c.err == nil {
+				assert.NotContains(t, days, c.day)
+				assert.Len(t, days, 2)
+			} else {
+				assert.Len(t, days, 3, "nothing else is deleted")
+			}
+		})
 	}
 }

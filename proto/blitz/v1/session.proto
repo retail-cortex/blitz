@@ -47,6 +47,11 @@ service SessionService {
   rpc SaveSnapshot(SaveSnapshotRequest) returns (SaveSnapshotResponse);
   // Sets the active session's title.
   rpc RenameSession(RenameSessionRequest) returns (RenameSessionResponse);
+  // Deletes a saved session or snapshot, by ID (another workspace's too):
+  // its transcript and history. The workspace's active session, or one a
+  // background run uses, is refused (SESSION_OPEN); an unknown ID is
+  // SESSION_NOT_FOUND.
+  rpc DeleteSession(DeleteSessionRequest) returns (DeleteSessionResponse);
   // Starts a copy of the active session up to and including a prompt turn,
   // in the transcript and the event log, and makes it active (/fork).
   rpc ForkSession(ForkSessionRequest) returns (ForkSessionResponse);
@@ -230,6 +235,15 @@ message RenameSessionRequest {
 message RenameSessionResponse {
   SessionInfo session = 1;
 }
+
+// Request message for SessionService.DeleteSession.
+message DeleteSessionRequest {
+  string workspace = 1;
+  string session_id = 2;
+}
+
+// Response message for SessionService.DeleteSession.
+message DeleteSessionResponse {}
 
 // Request message for SessionService.ForkSession.
 message ForkSessionRequest {

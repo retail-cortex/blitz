@@ -662,6 +662,34 @@ func (s *Storage) RemoveEmpty() (int, error) {
 	return n, nil
 }
 
+// Delete removes saved session id (a snapshot too): its metadata,
+// transcript and event log. The session open here, or in another storage
+// of this process (a workspace's, a background run's), is refused with
+// api.ErrSessionOpen; an unknown one is api.ErrSessionNotFound. Sessions
+// copied from it keep their own files.
+func (s *Storage) Delete(id string) error {
+	if err := ValidateID(id); err != nil {
+		return fmt.Errorf("%w: %w", api.ErrSessionNotFound, err)
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if (s.active != nil && s.active.ID == id) || s.ownerOf(id) != nil {
+		return api.ErrSessionOpen
+	}
+	_, metaErr := os.Stat(s.path(id, metaSuffix))
+	_, legacyErr := os.Stat(s.path(id, legacySuffix))
+	if errors.Is(metaErr, os.ErrNotExist) && errors.Is(legacyErr, os.ErrNotExist) {
+		return fmt.Errorf("%w: %s", api.ErrSessionNotFound, id)
+	}
+	// Metadata first, so it stops being listed even if a later removal fails.
+	for _, suffix := range []string{metaSuffix, messagesSuffix, eventsSuffix, legacySuffix} {
+		if err := os.Remove(s.path(id, suffix)); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
+	}
+	return nil
+}
+
 // hasMessages reports whether session id has a transcript with anything
 // in it.
 func (s *Storage) hasMessages(id string) bool {

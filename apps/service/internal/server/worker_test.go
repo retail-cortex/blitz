@@ -272,6 +272,28 @@ func TestUpdateWorkerOverTheAPI(t *testing.T) {
 	assert.Error(t, unary(c.UpdateWorker, &pb.UpdateWorkerRequest{Workspace: dir}), "a worker is required")
 }
 
+// A worker is deleted over the API: its folder goes and it's no longer
+// listed; deleting it again is UNKNOWN_WORKER.
+func TestDeleteWorkerOverTheAPI(t *testing.T) {
+	c, _ := serveWorkers(t, time.Hour)
+	ctx := context.Background()
+	dir, _ := filepath.EvalSymlinks(t.TempDir())
+	created, err := c.CreateWorker(ctx, connect.NewRequest(&pb.CreateWorkerRequest{Workspace: dir, Name: "deps", Schedule: "Daily at 6 AM", Prompt: "Write the report."}))
+	require.NoError(t, err)
+	_, err = c.EnableWorker(ctx, connect.NewRequest(&pb.EnableWorkerRequest{Workspace: dir, Name: "deps", Hash: created.Msg.Worker.Hash}))
+	require.NoError(t, err)
+
+	require.NoError(t, unary(c.DeleteWorker, &pb.DeleteWorkerRequest{Workspace: dir, Name: "deps"}))
+	assert.NoDirExists(t, filepath.Join(dir, ".agents", "workers", "deps"))
+	list, err := c.ListWorkers(ctx, connect.NewRequest(&pb.ListWorkersRequest{Workspace: dir}))
+	require.NoError(t, err)
+	assert.Empty(t, list.Msg.Workers)
+
+	code, info := errorReason(t, unary(c.DeleteWorker, &pb.DeleteWorkerRequest{Workspace: dir, Name: "deps"}))
+	assert.Equal(t, connect.CodeNotFound, code)
+	assert.Equal(t, "UNKNOWN_WORKER", info.Reason)
+}
+
 // A run's changes are undone over the API, once; a run that isn't going
 // can't be watched; and an unknown worker can't be disabled.
 func TestWorkerRunsUndoneOverTheAPI(t *testing.T) {

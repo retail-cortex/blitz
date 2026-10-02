@@ -87,6 +87,31 @@ func LogDays(dir string) ([]string, error) {
 	return days, nil
 }
 
+// ErrLogInUse is returned when deleting the log being written: today's.
+var ErrLogInUse = errors.New("today's log is still being written")
+
+// ErrNoLogDay reports a day dir has no log for.
+var ErrNoLogDay = errors.New("no log for that day")
+
+// ErrBadLogDay reports a day that isn't a date (YYYY-MM-DD).
+var ErrBadLogDay = errors.New("not a log day: use YYYY-MM-DD")
+
+// DeleteLogDay deletes day's log (YYYY-MM-DD) in dir. Today's, by now's
+// date, is the one being written and is refused (ErrLogInUse).
+func DeleteLogDay(dir, day string, now time.Time) error {
+	if _, err := time.Parse(time.DateOnly, day); err != nil {
+		return fmt.Errorf("%w: %q", ErrBadLogDay, day)
+	}
+	if day >= now.Format(time.DateOnly) {
+		return ErrLogInUse
+	}
+	err := os.Remove(filepath.Join(dir, logPrefix+day+logSuffix))
+	if errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("%w: %s", ErrNoLogDay, day)
+	}
+	return err
+}
+
 var levelRank = map[string]slog.Level{"DEBUG": slog.LevelDebug, "INFO": slog.LevelInfo, "WARN": slog.LevelWarn, "ERROR": slog.LevelError}
 
 // ReadLog reads the records of a day's log in dir that match q, newest

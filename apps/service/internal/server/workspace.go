@@ -19,6 +19,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/retail-cortex/blitz/pkg/api"
 
@@ -73,6 +74,23 @@ func (h workspaceService) ReadLog(_ context.Context, r req[pb.ReadLogRequest]) (
 		out.Entries = append(out.Entries, entry)
 	}
 	return ok(out)
+}
+
+func (h workspaceService) DeleteLogDay(_ context.Context, r req[pb.DeleteLogDayRequest]) (*connect.Response[pb.DeleteLogDayResponse], error) {
+	if h.s.logDir == "" {
+		return nil, apiError(connect.CodeNotFound, "LOG_NOT_FOUND", observability.ErrNoLogDay, "day", r.Msg.Day)
+	}
+	switch err := observability.DeleteLogDay(h.s.logDir, r.Msg.Day, time.Now()); {
+	case errors.Is(err, observability.ErrLogInUse):
+		return nil, apiError(connect.CodeFailedPrecondition, "LOG_IN_USE", err, "day", r.Msg.Day)
+	case errors.Is(err, observability.ErrNoLogDay):
+		return nil, apiError(connect.CodeNotFound, "LOG_NOT_FOUND", err, "day", r.Msg.Day)
+	case errors.Is(err, observability.ErrBadLogDay):
+		return nil, invalid(err)
+	case err != nil:
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	return ok(&pb.DeleteLogDayResponse{})
 }
 
 // programFile is the service's executable file, as it is now (nil if it

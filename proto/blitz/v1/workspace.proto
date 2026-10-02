@@ -39,6 +39,9 @@ service WorkspaceService {
   rpc ListLogDays(ListLogDaysRequest) returns (ListLogDaysResponse);
   // A day's log records, newest first, filtered by level and text.
   rpc ReadLog(ReadLogRequest) returns (ReadLogResponse);
+  // Deletes a past day's log. Today's is being written: LOG_IN_USE; a day
+  // with no log is LOG_NOT_FOUND.
+  rpc DeleteLogDay(DeleteLogDayRequest) returns (DeleteLogDayResponse);
   // Returns the workspaces the service has open.
   rpc ListWorkspaces(ListWorkspacesRequest) returns (ListWorkspacesResponse);
   // Closes a workspace: kills its background processes and MCP servers.
@@ -290,6 +293,15 @@ message ReadLogResponse {
   // How many records matched (more than entries when the limit cut them).
   int32 matched = 4;
 }
+
+// Request message for WorkspaceService.DeleteLogDay.
+message DeleteLogDayRequest {
+  // YYYY-MM-DD.
+  string day = 1;
+}
+
+// Response message for WorkspaceService.DeleteLogDay.
+message DeleteLogDayResponse {}
 
 // Request message for WorkspaceService.ListWorkspaces.
 message ListWorkspacesRequest {}

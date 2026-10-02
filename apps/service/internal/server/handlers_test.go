@@ -123,6 +123,7 @@ func TestEveryHandlerRefusesARelativeWorkspace(t *testing.T) {
 		"SaveSnapshot":     func() error { return unary(s.SaveSnapshot, &pb.SaveSnapshotRequest{Workspace: ws}) },
 		"MoveSession":      func() error { return unary(s.MoveSession, &pb.MoveSessionRequest{Workspace: ws}) },
 		"RenameSession":    func() error { return unary(s.RenameSession, &pb.RenameSessionRequest{Workspace: ws}) },
+		"DeleteSession":    func() error { return unary(s.DeleteSession, &pb.DeleteSessionRequest{Workspace: ws}) },
 		"ForkSession":      func() error { return unary(s.ForkSession, &pb.ForkSessionRequest{Workspace: ws}) },
 		"ExportSession":    func() error { return unary(s.ExportSession, &pb.ExportSessionRequest{Workspace: ws}) },
 		"Steer":            func() error { return unary(s.Steer, &pb.SteerRequest{Workspace: ws}) },
@@ -202,6 +203,7 @@ func TestEveryHandlerRefusesARelativeWorkspace(t *testing.T) {
 		"UpdateWorker":   func() error { return unary(wk.UpdateWorker, &pb.UpdateWorkerRequest{Workspace: ws}) },
 		"EnableWorker":   func() error { return unary(wk.EnableWorker, &pb.EnableWorkerRequest{Workspace: ws}) },
 		"DisableWorker":  func() error { return unary(wk.DisableWorker, &pb.DisableWorkerRequest{Workspace: ws}) },
+		"DeleteWorker":   func() error { return unary(wk.DeleteWorker, &pb.DeleteWorkerRequest{Workspace: ws}) },
 		"RunWorker":      func() error { return unary(wk.RunWorker, &pb.RunWorkerRequest{Workspace: ws}) },
 		"ListWorkerRuns": func() error { return unary(wk.ListWorkerRuns, &pb.ListWorkerRunsRequest{Workspace: ws}) },
 		"UndoWorkerRun":  func() error { return unary(wk.UndoWorkerRun, &pb.UndoWorkerRunRequest{Workspace: ws}) },
@@ -389,6 +391,20 @@ func TestSessionHandlers(t *testing.T) {
 	opened, err := s.OpenSession(ctx, connect.NewRequest(&pb.OpenSessionRequest{Workspace: dir, ContinueLatest: true}))
 	require.NoError(t, err)
 	assert.True(t, opened.Msg.Resumed)
+
+	// Deleting: not the active session, nor one open in another workspace
+	// (the one moved away); a past one, once.
+	assert.Equal(t, "SESSION_OPEN", reason(t, unary(s.DeleteSession, &pb.DeleteSessionRequest{Workspace: dir, SessionId: opened.Msg.Session.Id})))
+	assert.Equal(t, "SESSION_OPEN", reason(t, unary(s.DeleteSession, &pb.DeleteSessionRequest{Workspace: dir, SessionId: id})))
+	_, err = s.NewSession(ctx, connect.NewRequest(&pb.NewSessionRequest{Workspace: dir}))
+	require.NoError(t, err)
+	require.NoError(t, unary(s.DeleteSession, &pb.DeleteSessionRequest{Workspace: dir, SessionId: forked.Msg.Session.Id}))
+	list, err = s.ListSessions(ctx, connect.NewRequest(&pb.ListSessionsRequest{Workspace: dir, All: true}))
+	require.NoError(t, err)
+	for _, l := range list.Msg.Sessions {
+		assert.NotEqual(t, forked.Msg.Session.Id, l.Id, "the deleted session is still listed")
+	}
+	assert.Equal(t, "SESSION_NOT_FOUND", reason(t, unary(s.DeleteSession, &pb.DeleteSessionRequest{Workspace: dir, SessionId: forked.Msg.Session.Id})))
 
 	// Replies: a decision is required, and an unknown request is refused,
 	// in a workspace or none.

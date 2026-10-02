@@ -223,6 +223,23 @@ func (h workerService) DisableWorker(ctx context.Context, r req[pb.DisableWorker
 	return ok(&pb.DisableWorkerResponse{Worker: workerMsg(info)})
 }
 
+func (h workerService) DeleteWorker(ctx context.Context, r req[pb.DeleteWorkerRequest]) (*connect.Response[pb.DeleteWorkerResponse], error) {
+	w, err := h.s.workspace(ctx, r.Msg.Workspace)
+	if err != nil {
+		return nil, err
+	}
+	if sc := h.s.sched; sc != nil && len(sc.liveRuns(w.Dir(), r.Msg.Name)) > 0 {
+		return nil, toAPI(api.ErrRunInProgress)
+	}
+	if err := w.DeleteWorker(r.Msg.Name); err != nil {
+		return nil, toAPI(err)
+	}
+	if sc := h.s.sched; sc != nil {
+		sc.rescan(ctx)
+	}
+	return ok(&pb.DeleteWorkerResponse{})
+}
+
 func (h workerService) RunWorker(ctx context.Context, r req[pb.RunWorkerRequest]) (*connect.Response[pb.RunWorkerResponse], error) {
 	sc := h.s.sched
 	if sc == nil {

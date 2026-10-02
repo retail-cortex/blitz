@@ -324,6 +324,20 @@ func (w *Workspace) EnableWorker(name, hash string) (api.WorkerInfo, error) {
 	return w.workerInfo(wk, nil, time.Now()), nil
 }
 
+// DeleteWorker deletes a worker: its directory (WORKER.md and anything
+// beside it) and whether it was enabled. Its past runs stay in the run
+// log. The caller makes sure it isn't running.
+func (w *Workspace) DeleteWorker(name string) error {
+	dir, err := w.workerDir(name)
+	if err != nil {
+		return err
+	}
+	if err := os.RemoveAll(dir); err != nil {
+		return err
+	}
+	return w.workerStore.Forget(w.Dir(), name)
+}
+
 // DisableWorker stops a worker from running.
 func (w *Workspace) DisableWorker(name string) (api.WorkerInfo, error) {
 	wk, loadErr, err := w.worker(name)

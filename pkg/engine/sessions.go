@@ -197,6 +197,17 @@ func (w *Workspace) RenameSession(title string) (api.SessionInfo, error) {
 	return s, nil
 }
 
+// DeleteSession deletes saved session id, which may be another
+// workspace's: its transcript and history. The active session, or one a
+// background run uses, is refused (api.ErrSessionOpen).
+func (w *Workspace) DeleteSession(ctx context.Context, id string) error {
+	if err := w.storage.Delete(id); err != nil {
+		return err
+	}
+	w.engine.ForgetSession(ctx, id)
+	return nil
+}
+
 // OpenSession picks the session to use and points the audit log at it: the
 // session resume names (an ID, or a snapshot to start a new session from),
 // the most recent one in this workspace when cont is set or resume is
