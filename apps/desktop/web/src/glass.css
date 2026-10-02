@@ -129,6 +129,18 @@
   backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
   background: var(--md-surface);
 }
+/* The pinned chat input (composerDock.ts) is one more pane, under the
+   others and apart from the status bar, with their gap, corners and glass.
+   Not clipped: the / and @ menus and the keys' tooltip open above it. */
+:root[data-glass="on"] .composer-dock {
+  margin: 0 8px 8px; border: 1px solid var(--glass-border); border-radius: var(--md-shape-lg);
+  box-shadow: var(--glass-shadow), var(--glass-edge); background: var(--md-surface);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+}
+:root[data-glass="on"] .composer-dock:focus-within { border-color: color-mix(in srgb, var(--md-primary) 55%, transparent); box-shadow: var(--glass-shadow), var(--glass-edge), 0 0 0 1px color-mix(in srgb, var(--md-primary) 35%, transparent); }
+:root[data-glass="on"] .composer-dock:has(.composer.running)::before { left: var(--md-shape-lg); right: var(--md-shape-lg); }
+:root[data-glass="on"] .composer-dock .composer { -webkit-backdrop-filter: none; backdrop-filter: none; border: none; box-shadow: none; }
 /* The status bar is a strip of glass along the foot, under the panes. */
 :root[data-glass="on"] .status-bar { border-top: 1px solid var(--glass-border); box-shadow: var(--glass-edge); }
 :root[data-glass="on"] .workspace-center .editor-pane { background: transparent; -webkit-backdrop-filter: none; backdrop-filter: none; }
