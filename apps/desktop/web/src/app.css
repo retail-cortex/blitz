@@ -232,8 +232,8 @@ body.resizing iframe, body.resizing .cm-editor { pointer-events: none; }
 @media (prefers-reduced-motion: reduce) { .composer-dock:has(.composer.running)::before { animation: none; background-size: 100% 100%; opacity: 0.6; } }
 .composer-dock .chat-column.dock { max-width: none; margin: 0; padding: 0; gap: 0; background: transparent; }
 .composer-dock .composer {
-  display: grid; grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "att att att" "mark text bar"; align-items: end; column-gap: 10px;
-  padding: 6px 12px 6px 14px; border: none; border-radius: 0; background: transparent; box-shadow: none;
+  display: grid; grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "att att att" "mark text bar"; align-items: end; column-gap: 10px; row-gap: 0;
+  padding: 12px 12px 12px 16px; border: none; border-radius: 0; background: transparent; box-shadow: none;
 }
 .composer-dock .composer.running { border: none; }
 .composer-dock .composer-mark { display: block; grid-area: mark; align-self: start; padding-top: 4px; color: var(--md-primary); font: 600 18px/22px var(--md-mono); user-select: none; }
