@@ -188,6 +188,9 @@ body.resizing iframe, body.resizing .cm-editor { pointer-events: none; }
 .tool-group-head:hover { background: var(--md-surface-container-low); }
 .tool-icons { display: inline-flex; gap: 2px; color: var(--md-primary); }
 .tool-group-body { display: flex; flex-direction: column; gap: 4px; padding: 0 8px 8px; }
+/* One call is just its row: no head, no frame. */
+.tool-group.single { border: none; }
+.tool-group.single .tool-group-body { padding: 0; }
 .tool.open { background: var(--md-surface-container); }
 .tool-head { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 36px; padding: 6px 12px; border: none; background: none; color: var(--md-on-surface-variant); font: 400 13px/18px var(--md-font); cursor: pointer; text-align: left; border-radius: inherit; }
 .tool-head code { color: var(--md-on-surface); font-size: 12px; }

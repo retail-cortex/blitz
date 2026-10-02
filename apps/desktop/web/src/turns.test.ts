@@ -18,7 +18,7 @@ import { create } from "@bufbuild/protobuf";
 import { describe, expect, it } from "vitest";
 import { TurnEventSchema, type TurnEvent } from "./gen/blitz/v1/turn_pb";
 import { MessageSchema } from "./gen/blitz/v1/session_pb";
-import { applyEvent, assignPromptIndices, failed, fromMessages, parseDiff, summarizeArgs, tasksOf, turnAnswers, type Entry } from "./turns";
+import { applyEvent, assignPromptIndices, failed, fromMessages, groupTools, latestTurn, parseDiff, summarizeArgs, tasksOf, turnAnswers, type Entry } from "./turns";
 
 const text = (t: string, opts: { partial?: boolean; repeat?: boolean; thought?: boolean } = {}): TurnEvent =>
   create(TurnEventSchema, { author: "blitz", kind: { case: "text", value: { text: t, ...opts } } });
@@ -150,5 +150,39 @@ describe("turnAnswers", () => {
     { name: "an aside starts its own turn", entries: [user("a"), model("x"), user("q", "aside"), model("y")], want: {} },
   ])("$name", ({ entries, want }) => {
     expect(Object.fromEntries(turnAnswers(entries))).toEqual(want);
+  });
+});
+
+describe("tool runs", () => {
+  const user = (text: string, sub?: "steer" | "aside"): Entry => ({ kind: "user", text, sub });
+  const model = (text: string): Entry => ({ kind: "model", text, author: "blitz", open: false });
+  const tool = (id: string): Entry => ({ kind: "tool", id, name: "read_file" });
+  const shape = (entries: Entry[]) => groupTools(entries).map((g) => (g.kind === "tools" ? `${g.at}:${g.tools.map((x) => x.id).join("+")}` : `${g.at}:${g.entry.kind}`));
+
+  it.each([
+    ["a lone call is a run", [user("go"), tool("a")], ["0:user", "1:a"]],
+    ["calls in a row are one run", [user("go"), tool("a"), tool("b"), tool("c")], ["0:user", "1:a+b+c"]],
+    ["text between calls splits runs", [tool("a"), model("so"), tool("b"), tool("c")], ["0:a", "1:model", "2:b+c"]],
+  ])("%s", (_, entries, want) => {
+    expect(shape(entries)).toEqual(want);
+  });
+
+  it("keeps a run's key as calls arrive, so it isn't redrawn", () => {
+    const entries = [user("go"), tool("a")];
+    const before = groupTools(entries)[1];
+    entries.push(tool("b"));
+    const after = groupTools(entries)[1];
+    expect(before.kind).toBe("tools");
+    expect(after.kind).toBe("tools");
+    expect(after.at).toBe(before.at);
+  });
+
+  it.each([
+    ["no prompt yet", [model("hi")], 0],
+    ["the last prompt", [user("one"), model("a"), user("two"), tool("a")], 2],
+    ["steering is part of the turn", [user("one"), tool("a"), user("faster", "steer"), tool("b")], 0],
+    ["an aside starts one", [user("one"), user("why?", "aside")], 1],
+  ])("the latest turn: %s", (_, entries, want) => {
+    expect(latestTurn(entries)).toBe(want);
   });
 });

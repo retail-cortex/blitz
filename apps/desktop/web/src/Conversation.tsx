@@ -89,7 +89,7 @@ import { efforts, effortIcon, modeOf } from "./options";
 import { useApp } from "./state";
 import { publishStatus } from "./status";
 import { useOpenPath } from "./files/links";
-import { applyEvent, assignPromptIndices, failed, fromMessages, parseDiff, summarizeArgs, tasksOf, turnAnswers, type Entry, type UserEntry } from "./turns";
+import { applyEvent, assignPromptIndices, failed, fromMessages, parseDiff, summarizeArgs, tasksOf, turnAnswers, type Entry, type UserEntry, groupTools, latestTurn, type ToolEntry } from "./turns";
 import { copyRendered, copyText } from "./clipboard";
 import { Button, Dialog, Icon, IconButton, Menu, useSnackbar } from "./ui/controls";
 
@@ -826,6 +826,9 @@ export function Conversation({
   const shown = prefs.show_thoughts ? entries : entries.filter((e) => e.kind !== "thought");
   const answers = useMemo(() => turnAnswers(shown), [shown]);
   const empty = shown.length === 0 && !running;
+  // Where the latest turn starts: its tool groups stay open while it runs.
+  const turnStart = latestTurn(shown);
+
   return (
     <div
       className={`chat ${dragging ? "dragging" : ""}`}
@@ -874,7 +877,7 @@ export function Conversation({
           {groupTools(shown).map((g) =>
             g.kind === "tools" ? (
               <div key={g.at}>
-                <ToolGroup tools={g.tools} />
+                <ToolGroup tools={g.tools} live={running && g.at >= turnStart} />
                 {g.tools.map((x) =>
                   x.name === "invoke_agent" && typeof x.result?.task_id === "string" ? <TaskCard key={x.result.task_id} dir={dir} sessionId={session?.id ?? ""} id={x.result.task_id} /> : null,
                 )}
@@ -1242,47 +1245,39 @@ function toolIcon(name: string): string {
   return mdiWrenchOutline;
 }
 
-type ToolEntry = Extract<Entry, { kind: "tool" }>;
-type Item = { kind: "entry"; at: number; entry: Entry } | { kind: "tools"; at: number; tools: ToolEntry[] };
-
-/** Groups runs of two or more tool calls, so an answer isn't buried in them. */
-function groupTools(entries: Entry[]): Item[] {
-  const out: Item[] = [];
-  entries.forEach((e, i) => {
-    const last = out[out.length - 1];
-    if (e.kind === "tool" && last?.kind === "tools") last.tools.push(e);
-    else if (e.kind === "tool" && entries[i + 1]?.kind === "tool") out.push({ kind: "tools", at: i, tools: [e] });
-    else out.push({ kind: "entry", at: i, entry: e });
-  });
-  return out;
-}
-
-/** A run of tool calls: open while they run (or when one failed), folded after. */
-function ToolGroup({ tools }: { tools: ToolEntry[] }) {
+/**
+ * A run of tool calls. One call is just its row; from two, a head says how
+ * many, open while the turn runs (or when one failed) and folded after.
+ * Either way the rows stay mounted as calls arrive, so nothing redraws.
+ */
+function ToolGroup({ tools, live }: { tools: ToolEntry[]; live: boolean }) {
   const busy = tools.some((x) => x.result === undefined);
   const failures = tools.filter((x) => failed(x.result)).length;
   const [open, setOpen] = useState<boolean | null>(null);
-  const shown = open ?? (busy || failures > 0);
+  const single = tools.length === 1;
+  const shown = single || (open ?? (live || busy || failures > 0));
   return (
-    <div className={`tool-group ${shown ? "open" : ""}`}>
-      <button className="tool-group-head" onClick={() => setOpen(!shown)} aria-expanded={shown}>
-        <span className="tool-icons">
-          {[...new Set(tools.map((x) => toolIcon(x.name)))].slice(0, 4).map((p) => (
-            <Icon key={p} path={p} size="sm" />
-          ))}
-        </span>
-        <span>
-          {tn("desktop.tools.used", tools.length)}
-          {failures > 0 ? t("desktop.tools.failed", { count: failures }) : ""}
-        </span>
-        {busy && <Icon path={mdiProgressClock} size="sm" className="pulse" />}
-        <span className="spacer" />
-        <Icon path={shown ? mdiChevronDown : mdiChevronRight} size="sm" />
-      </button>
+    <div className={`tool-group ${shown ? "open" : ""} ${single ? "single" : ""}`}>
+      {!single && (
+        <button className="tool-group-head" onClick={() => setOpen(!shown)} aria-expanded={shown}>
+          <span className="tool-icons">
+            {[...new Set(tools.map((x) => toolIcon(x.name)))].slice(0, 4).map((p) => (
+              <Icon key={p} path={p} size="sm" />
+            ))}
+          </span>
+          <span>
+            {tn("desktop.tools.used", tools.length)}
+            {failures > 0 ? t("desktop.tools.failed", { count: failures }) : ""}
+          </span>
+          {busy && <Icon path={mdiProgressClock} size="sm" className="pulse" />}
+          <span className="spacer" />
+          <Icon path={shown ? mdiChevronDown : mdiChevronRight} size="sm" />
+        </button>
+      )}
       {shown && (
         <div className="tool-group-body">
           {tools.map((x, i) => (
-            <ToolRow key={i} name={x.name} args={x.args} result={x.result} />
+            <ToolRow key={x.id || i} name={x.name} args={x.args} result={x.result} />
           ))}
         </div>
       )}
