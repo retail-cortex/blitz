@@ -270,7 +270,7 @@ func runStreamInput(ctx context.Context, w api.Backend, o oneShotOptions, in io.
 		if err := runOneShot(ctx, w, o); err != nil {
 			last = err
 		}
-		o.images, o.sendPrompt = nil, "" // the first prompt's only
+		o.images, o.command = nil, false // the first prompt's only
 	}
 	if o.prompt != "" {
 		run(o.prompt)

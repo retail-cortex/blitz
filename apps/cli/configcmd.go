@@ -123,7 +123,7 @@ max_tokens    = 65536
 permission_mode = "default" # default | accept-edits | plan | dont-ask | bypass (bypass needs the OS sandbox)
 auto_approve  = false       # older spelling of permission_mode = "bypass"
 plan_review = "agent-decides" # always | agent-decides | never: when the agent plans for approval first
-trust_workspace = false     # load ./agents and ./skills from the project
+trust_workspace = false     # deprecated: trust the project's settings for each run
 
 [llm]
 provider = "gemini"         # gemini | anthropic | openai | ollama

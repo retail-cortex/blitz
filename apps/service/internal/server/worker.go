@@ -140,6 +140,55 @@ func (h workerService) CreateWorker(ctx context.Context, r req[pb.CreateWorkerRe
 	return ok(&pb.CreateWorkerResponse{Worker: workerMsg(info)})
 }
 
+func (h workerService) GetWorkerSpec(ctx context.Context, r req[pb.GetWorkerSpecRequest]) (*connect.Response[pb.GetWorkerSpecResponse], error) {
+	w, err := h.s.workspace(ctx, r.Msg.Workspace)
+	if err != nil {
+		return nil, err
+	}
+	spec, hash, err := w.GetWorkerSpec(r.Msg.Name)
+	if err != nil {
+		return nil, toAPI(err)
+	}
+	return ok(&pb.GetWorkerSpecResponse{Worker: workerDefinition(spec), Hash: hash})
+}
+
+func (h workerService) UpdateWorker(ctx context.Context, r req[pb.UpdateWorkerRequest]) (*connect.Response[pb.UpdateWorkerResponse], error) {
+	w, err := h.s.workspace(ctx, r.Msg.Workspace)
+	if err != nil {
+		return nil, err
+	}
+	if r.Msg.Worker == nil {
+		return nil, invalid(errors.New("worker is required"))
+	}
+	info, problems, err := w.UpdateWorker(workerSpec(r.Msg.Worker), r.Msg.Hash)
+	if err != nil {
+		return nil, toAPI(err)
+	}
+	if len(problems) > 0 {
+		return ok(&pb.UpdateWorkerResponse{Problems: problems})
+	}
+	if sc := h.s.sched; sc != nil {
+		sc.rescan(ctx) // an enabled worker edited is suspended at once
+	}
+	return ok(&pb.UpdateWorkerResponse{Worker: workerMsg(info)})
+}
+
+func workerDefinition(s api.WorkerSpec) *pb.WorkerDefinition {
+	return &pb.WorkerDefinition{
+		Name: s.Name, Description: s.Description, Schedule: s.Schedule, Timezone: s.Timezone, Agent: s.Agent, Model: s.Model,
+		Permissions: s.Permissions, MaxTurns: int32(s.Limits.MaxTurns), MaxCostUsd: s.Limits.MaxCostUSD, Timeout: s.Limits.TimeoutRaw,
+		CatchUp: s.CatchUp, Prompt: s.Prompt,
+	}
+}
+
+func workerSpec(d *pb.WorkerDefinition) api.WorkerSpec {
+	return api.WorkerSpec{
+		Name: d.Name, Description: d.Description, Schedule: d.Schedule, Timezone: d.Timezone, Agent: d.Agent, Model: d.Model,
+		Permissions: d.Permissions, Limits: api.Limits{MaxTurns: int(d.MaxTurns), MaxCostUSD: d.MaxCostUsd, TimeoutRaw: d.Timeout},
+		CatchUp: d.CatchUp, Prompt: d.Prompt,
+	}
+}
+
 func (h workerService) EnableWorker(ctx context.Context, r req[pb.EnableWorkerRequest]) (*connect.Response[pb.EnableWorkerResponse], error) {
 	sc := h.s.sched
 	if sc == nil {

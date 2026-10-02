@@ -157,12 +157,12 @@ func TestSearchPathsResolveAgainstTheWorkspace(t *testing.T) {
 		{
 			name: "in a workspace", workspace: "/work",
 			skills: []string{filepath.Join(home, ".blitz", "skills"), "/work/skills", "/work/.agents/skills", "/opt/skills"},
-			agents: []string{filepath.Join(home, ".blitz", "agents"), "/work/agents"},
+			agents: []string{filepath.Join(home, ".blitz", "agents"), "/work/.agents/agents"},
 		},
 		{
 			name:   "without one, paths stay relative",
 			skills: []string{filepath.Join(home, ".blitz", "skills"), "./skills", ".agents/skills", "/opt/skills"},
-			agents: []string{filepath.Join(home, ".blitz", "agents"), "./agents"},
+			agents: []string{filepath.Join(home, ".blitz", "agents"), ".agents/agents"},
 		},
 	}
 	for _, c := range cases {

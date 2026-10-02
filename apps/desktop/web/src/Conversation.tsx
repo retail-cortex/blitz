@@ -40,7 +40,6 @@ import {
   mdiFolderOutline,
   mdiImageOutline,
   mdiImagePlusOutline,
-  mdiLightbulbOutline,
   mdiMagnify,
   mdiMessageReplyTextOutline,
   mdiPencilOutline,
@@ -61,11 +60,12 @@ import { DiffView } from "./Changes";
 import { isUnavailable, message, reason } from "./errors";
 import type { SessionInfo } from "./gen/blitz/v1/session_pb";
 import { Decision, type ApprovalRequest, type Question, type Task, type Usage } from "./gen/blitz/v1/turn_pb";
-import type { BackgroundTask, GetSettingsResponse } from "./gen/blitz/v1/workspace_pb";
+import type { BackgroundTask, GetSettingsResponse, GetSuggestionsResponse } from "./gen/blitz/v1/workspace_pb";
 import { allCommands, helpText, matchCommands, parseCommand, type CommandSpec } from "./commands";
 import {
   addToContextEvent,
   composeEvent,
+  setupCommand,
   configChanged,
   filesTouched,
   loadSessionEvent,
@@ -78,6 +78,7 @@ import {
   type LoadSessionDetail,
 } from "./events";
 import { appendMention, insertMention, isImagePath, mentionAt } from "./mentions";
+import { pollMs, shouldPoll, welcomeTiles, type TileAction } from "./suggestions";
 import { refreshRuns, runInSession } from "./backgroundRuns";
 import { fileIcon } from "./files/icons";
 import { describeImage, imageFiles, readyIds, rejectReason, uploading, type Attachment } from "./attachments";
@@ -784,13 +785,35 @@ export function Conversation({
     return () => window.removeEventListener(addToContextEvent, f);
   }, [dir]);
 
+  // A command to run in a new chat (the setup), once that chat is shown.
+  const runFresh = useRef<string | null>(null);
+  const startFreshRef = useRef<(text: string) => void>(() => {});
+  startFreshRef.current = async (text) => {
+    if (running) return say(t("desktop.cmd.wait", { name: parseCommand(text)?.name ?? text }), "error");
+    try {
+      const s = (await sessions.newSession({ workspace: dir })).session!;
+      runFresh.current = text;
+      show(s);
+      await refreshList();
+    } catch (e) {
+      fail(e);
+    }
+  };
+  useEffect(() => {
+    const text = runFresh.current;
+    if (!session || text === null) return;
+    runFresh.current = null;
+    void executeRef.current(text); // the new chat's own execute, by now
+  }, [session]);
+
   // The command palette and other windows parts send text here.
   useEffect(() => {
     const f = (e: Event) => {
       const d = (e as CustomEvent<ComposeDetail>).detail;
       if (d.dir !== dir) return;
       e.preventDefault(); // taken
-      if (d.run) executeRef.current(d.text);
+      if (d.run && d.fresh) startFreshRef.current(d.text);
+      else if (d.run) executeRef.current(d.text);
       else if (d.append) setDraft((draft) => (draft.trim() ? `${draft.trimEnd()}\n\n${d.text}` : d.text));
       else setDraft(d.text);
     };
@@ -847,7 +870,7 @@ export function Conversation({
               </Button>
             </div>
           )}
-          {empty && <EmptyState name={name} onPick={(text) => setDraft(text)} />}
+          {empty && <EmptyState dir={dir} name={name} onDraft={setDraft} onSend={(text) => void submit(text)} onOpen={(id) => void load(id)} />}
           {groupTools(shown).map((g) =>
             g.kind === "tools" ? (
               <div key={g.at}>
@@ -1008,25 +1031,62 @@ function SessionBar({
   );
 }
 
-const suggestions = [
-  { icon: mdiMagnify, key: "explain" },
-  { icon: mdiWrenchOutline, key: "bug" },
-  { icon: mdiFormatListChecks, key: "tests" },
-  { icon: mdiLightbulbOutline, key: "improve" },
-];
-
-function EmptyState({ name, onPick }: { name: string; onPick: (t: string) => void }) {
+/**
+ * The welcome screen: the workspace's suggestions (GetSuggestions), asked
+ * for again while a model writes ideas from the recent conversations, or
+ * the canned tiles when there are none.
+ */
+function EmptyState({ dir, name, onDraft, onSend, onOpen }: { dir: string; name: string; onDraft: (t: string) => void; onSend: (t: string) => void; onOpen: (id: string) => void }) {
+  const [res, setRes] = useState<{ r?: GetSuggestionsResponse; learning: boolean } | null>(null);
+  useEffect(() => {
+    let attempts = 0;
+    let timer = 0;
+    let gone = false;
+    const ask = async () => {
+      let r: GetSuggestionsResponse | undefined;
+      try {
+        r = await workspaces.getSuggestions({ workspace: dir });
+      } catch {
+        // the canned tiles, or what came before, will do
+        if (!gone) setRes((was) => ({ r: was?.r, learning: false }));
+        return;
+      }
+      if (gone) return;
+      const again = shouldPoll(r, attempts);
+      setRes({ r, learning: again });
+      if (again) {
+        attempts++;
+        timer = window.setTimeout(ask, pollMs);
+      }
+    };
+    setRes(null);
+    void ask();
+    return () => {
+      gone = true;
+      window.clearTimeout(timer);
+    };
+  }, [dir]);
+  const choose = (a: TileAction) => {
+    if (a.type === "setup") onSend(setupCommand);
+    else if (a.type === "session") onOpen(a.id);
+    else if (a.type === "send") onSend(a.prompt);
+    else onDraft(a.text);
+  };
   return (
     <div className="empty">
       <h2 className="t-display gradient-text">{t("desktop.empty.title", { name })}</h2>
-      <div className="suggestions">
-        {suggestions.map((s) => (
-          <button key={s.key} className="suggestion" onClick={() => onPick(t(`desktop.suggest.${s.key}`))}>
-            <Icon path={s.icon} />
-            <span>{t(`desktop.suggest.${s.key}`)}</span>
-          </button>
-        ))}
-      </div>
+      {res && (
+        <div className="suggestions">
+          {welcomeTiles(res.r).map((s) => (
+            <button key={s.key} className={`suggestion ${s.highlight ? "highlight" : ""}`} title={s.detail} onClick={() => choose(s.action)}>
+              <Icon path={s.icon} />
+              <span>{s.text}</span>
+              {s.highlight && s.detail && <span className="t-body-sm suggestion-detail">{s.detail}</span>}
+            </button>
+          ))}
+        </div>
+      )}
+      {res?.learning && <p className="t-body-sm muted suggestions-learning">{t("desktop.suggest.learning")}</p>}
     </div>
   );
 }

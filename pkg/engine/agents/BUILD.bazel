@@ -17,6 +17,7 @@ load("@rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "agents",
     srcs = [
+        "files.go",
         "frontmatter.go",
         "manager.go",
     ],
@@ -43,11 +44,13 @@ go_test(
     name = "agents_test",
     size = "small",
     srcs = [
+        "files_test.go",
         "frontmatter_test.go",
         "manager_test.go",
     ],
     embed = [":agents"],
     deps = [
+        "//pkg/api",
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
     ],

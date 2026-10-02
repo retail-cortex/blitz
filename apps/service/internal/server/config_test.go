@@ -16,13 +16,17 @@ package server
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"connectrpc.com/connect"
+	"github.com/retail-cortex/blitz/pkg/config"
+	"github.com/retail-cortex/blitz/pkg/engine/runtime"
 	"github.com/retail-cortex/blitz/pkg/secrets"
 	pb "github.com/retail-cortex/blitz/proto/blitz/v1"
 	"github.com/stretchr/testify/assert"
@@ -308,4 +312,53 @@ func TestConfigDir(t *testing.T) {
 	lang, err := cfg.GetInterfaceLanguage(context.Background(), connect.NewRequest(&pb.GetInterfaceLanguageRequest{}))
 	require.NoError(t, err)
 	assert.Equal(t, "fr-CA", lang.Msg.Locale)
+}
+
+// ListModels gives each configured provider's models, kept for a while
+// (less when one failed), and forgotten when the settings change.
+func TestListModelsOverTheAPI(t *testing.T) {
+	_, s := serve(t, nil)
+	secrets.SetDefault(&secrets.Memory{})
+	srv := httptest.NewServer(s.Handler())
+	t.Cleanup(srv.Close)
+	cc := pb.NewConfigServiceClient(http.DefaultClient, srv.URL)
+	ctx := context.Background()
+	calls := 0
+	failing := true
+	was := listModels
+	t.Cleanup(func() { listModels = was })
+	listModels = func(_ context.Context, _ *config.Config, _ ...string) []runtime.ProviderModels {
+		calls++
+		out := []runtime.ProviderModels{{Provider: "gemini", Models: []runtime.ListedModel{{ID: "gemini-3.8-flash"}, {ID: "gemini-3.8-pro"}}}}
+		if failing {
+			out = append(out, runtime.ProviderModels{Provider: "anthropic", Err: errors.New("no key")})
+		}
+		return out
+	}
+
+	res, err := cc.ListModels(ctx, connect.NewRequest(&pb.ListModelsRequest{}))
+	require.NoError(t, err)
+	require.Len(t, res.Msg.Providers, 2)
+	assert.Equal(t, []string{"gemini-3.8-flash", "gemini-3.8-pro"}, res.Msg.Providers[0].Ids)
+	assert.Equal(t, "no key", res.Msg.Providers[1].Error)
+	assert.NotEmpty(t, res.Msg.DefaultProvider)
+
+	_, err = cc.ListModels(ctx, connect.NewRequest(&pb.ListModelsRequest{}))
+	require.NoError(t, err)
+	assert.Equal(t, 1, calls, "kept")
+
+	// A failed provider's listing is kept for less; a settings change drops it.
+	s.models.mu.Lock()
+	assert.WithinDuration(t, time.Now().Add(modelsRetry), s.models.byID[""].expires, 5*time.Second)
+	s.models.mu.Unlock()
+	failing = false
+	_, err = cc.SetApiKey(ctx, connect.NewRequest(&pb.SetApiKeyRequest{Provider: "anthropic", Key: "sk-ant-x"}))
+	require.NoError(t, err)
+	res, err = cc.ListModels(ctx, connect.NewRequest(&pb.ListModelsRequest{}))
+	require.NoError(t, err)
+	assert.Equal(t, 2, calls, "listed again after the key was set")
+	assert.Len(t, res.Msg.Providers, 1)
+
+	_, err = cc.ListModels(ctx, connect.NewRequest(&pb.ListModelsRequest{Workspace: "relative"}))
+	assert.Error(t, err, "a workspace must be absolute")
 }

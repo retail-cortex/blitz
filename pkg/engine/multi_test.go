@@ -41,11 +41,11 @@ func TestTwoWorkspacesInOneProcess(t *testing.T) {
 	open := func(agent string) *Workspace {
 		t.Helper()
 		dir := t.TempDir()
-		os.MkdirAll(filepath.Join(dir, "agents"), 0o700)
-		os.WriteFile(filepath.Join(dir, "agents", agent+".md"), []byte("---\nname: "+agent+"\ndisplay_name: "+agent+"\ndescription: d\ntools: []\n---\nprompt\n"), 0o600)
+		os.MkdirAll(filepath.Join(dir, ".agents", "agents"), 0o700)
+		os.WriteFile(filepath.Join(dir, ".agents", "agents", agent+".md"), []byte("---\nname: "+agent+"\ndisplay_name: "+agent+"\ndescription: d\ntools: []\n---\nprompt\n"), 0o600)
 		cfg := config.DefaultConfig()
 		cfg.Tools.WorkspaceDir = dir
-		cfg.Blitz.TrustWorkspace = true // so ./agents is read
+		cfg.Blitz.TrustWorkspace = true // so .agents/agents is read
 		cfg.Session.StorageDir = t.TempDir()
 		w, err := Open(context.Background(), cfg, Options{Model: runtime.NewMockLLM("m"), NewModel: mockModels})
 		require.NoError(t, err)
@@ -57,10 +57,10 @@ func TestTwoWorkspacesInOneProcess(t *testing.T) {
 	has := func(w *Workspace, name string) bool {
 		return slices.ContainsFunc(w.ListAgents(), func(x api.AgentInfo) bool { return x.Name == name })
 	}
-	assert.True(t, has(a, "alpha"), "each workspace should read its own ./agents: a=%v b=%v", has(a, "alpha"), has(b, "beta"))
-	assert.False(t, has(a, "beta"), "each workspace should read its own ./agents: a=%v b=%v", has(a, "alpha"), has(b, "beta"))
-	assert.True(t, has(b, "beta"), "each workspace should read its own ./agents: a=%v b=%v", has(a, "alpha"), has(b, "beta"))
-	assert.False(t, has(b, "alpha"), "each workspace should read its own ./agents: a=%v b=%v", has(a, "alpha"), has(b, "beta"))
+	assert.True(t, has(a, "alpha"), "each workspace should read its own .agents/agents: a=%v b=%v", has(a, "alpha"), has(b, "beta"))
+	assert.False(t, has(a, "beta"), "each workspace should read its own .agents/agents: a=%v b=%v", has(a, "alpha"), has(b, "beta"))
+	assert.True(t, has(b, "beta"), "each workspace should read its own .agents/agents: a=%v b=%v", has(a, "alpha"), has(b, "beta"))
+	assert.False(t, has(b, "alpha"), "each workspace should read its own .agents/agents: a=%v b=%v", has(a, "alpha"), has(b, "beta"))
 	require.NotEqual(t, b.Dir(), a.Dir(), "same directory")
 
 	// Reply languages are per workspace.

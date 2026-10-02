@@ -188,6 +188,16 @@ func (w *Workspace) ActiveAgentTools() api.AgentTools {
 	return out
 }
 
+// AllTools describes every tool an agent can be given, by name.
+func (w *Workspace) AllTools() []api.ToolInfo {
+	var out []api.ToolInfo
+	for _, t := range w.tools.GetAllTools() {
+		out = append(out, api.ToolInfo{Name: t.Name(), Description: t.Description(), PlanAllowed: runtime.PlanAllows(t.Name())})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+	return out
+}
+
 // mcpOfferedTo mirrors the MCP manager's rule for the primary agent: no
 // agents list means the primary agent only; "*" means every agent.
 func mcpOfferedTo(agents []string, active string) bool {

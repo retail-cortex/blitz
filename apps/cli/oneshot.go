@@ -15,7 +15,6 @@
 package main
 
 import (
-	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -73,7 +72,7 @@ type oneShotOptions struct {
 	sessionID  string
 	format     string
 	maxTurns   int
-	sendPrompt string        // sent instead of prompt, which is recorded
+	command    bool          // prompt is a slash command (blitz init: /setup)
 	maxCostUSD float64       // --max-cost-usd (0: unlimited)
 	timeout    time.Duration // --timeout (0: unlimited)
 	plan       bool          // --plan: read-only tools, answer with a plan
@@ -115,12 +114,12 @@ func runOneShot(ctx context.Context, w api.Backend, o oneShotOptions) error {
 	default:
 		handler = collectHandler(&calls)
 	}
-	send := o.sendPrompt
+	var send string
 	if o.schema != nil {
-		send = cmp.Or(send, o.prompt) + o.schema.instruction()
+		send = o.prompt + o.schema.instruction()
 	}
 	turn, runErr := w.Run(ctx, sid, api.Turn{
-		Text: o.prompt, Prompt: send, Plan: o.plan, Images: o.images, MaxTurns: o.maxTurns, MaxCostUSD: o.maxCostUSD, Timeout: o.timeout,
+		Text: o.prompt, Prompt: send, Command: o.command, Plan: o.plan, Images: o.images, MaxTurns: o.maxTurns, MaxCostUSD: o.maxCostUSD, Timeout: o.timeout,
 		OnAccepted: func() {
 			if printer != nil {
 				printer.Begin()

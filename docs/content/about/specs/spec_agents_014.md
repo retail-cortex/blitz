@@ -8,8 +8,8 @@ weight: 14
 | | |
 |---|---|
 | Status | Implemented. Reverse-engineered from `53f8c53` (2026-09-24) and kept with the code since; its paths and names checked 2026-09-27 (`//tools/specs`). |
-| Source | `pkg/engine/agents/{manager,frontmatter}.go`, `pkg/engine/agents/builtin/*.md`; `pkg/engine/tools/{agent_tools,universal_constructor}.go` |
-| Tests | `pkg/engine/agents/*_test.go`; `pkg/engine/tools/uc_and_agent_tools_test.go`; `pkg/engine/runtime/pin_test.go` |
+| Source | `pkg/engine/agents/{manager,frontmatter,files}.go`, `pkg/engine/agents/builtin/*.md`; `pkg/engine/agentfiles.go`; `pkg/engine/runtime/settings.go`; `pkg/engine/tools/{agent_tools,universal_constructor}.go`; `apps/service/internal/server/agents.go`; `apps/desktop/web/src/{Agents,AgentEditor}.tsx` |
+| Tests | `pkg/engine/agents/*_test.go`; `pkg/engine/agentfiles_test.go`; `pkg/engine/tools/uc_and_agent_tools_test.go`; `pkg/engine/runtime/{pin,settings}_test.go`; `apps/service/internal/server/handlers_test.go` |
 | Depends on | [spec_config_002](spec_config_002.md), [spec_shell_007](spec_shell_007.md), [spec_approvals_005](spec_approvals_005.md) |
 | Used by | [spec_engine_016](spec_engine_016.md) |
 
@@ -19,7 +19,7 @@ An agent is a persona: a system prompt, a tool list, an agency level and optiona
 
 ## 2. Agent definitions
 
-- **AG-01** File format: `---` YAML frontmatter `---` then the system prompt. Frontmatter: `name` (required), `display_name`, `description`, `tools` (registry tool names, aliases allowed), `default_model` (`provider/model`), `agency_level`.
+- **AG-01** File format: `---` YAML frontmatter `---` then the system prompt. Frontmatter: `name` (required), `display_name`, `description`, `tools` (registry tool names, aliases allowed), `default_model` (`provider/model`), `agency_level`, and the model settings of AG-21.
 - **AG-02** Prompts may contain `{agency_instructions}` or `{{agency_instructions}}`, replaced by the rules for the level (empty = high):
   - **low** — one step at a time; after each meaningful unit, stop, summarise and ask; no consequential or irreversible action without explicit approval.
   - **medium** — do routine, clearly requested work; check in at major milestones or before consequential changes.
@@ -29,8 +29,10 @@ An agent is a persona: a system prompt, a tool list, an agency level and optiona
 
 ## 3. Registry
 
-- **AG-10** Built-in agents are embedded. External agents are loaded (recursively, `*.md`) from `~/.blitz/agents`, and the workspace's `./agents` (as prompt text, [spec_project_config_031](spec_project_config_031.md)). External specs may add agents but **may not replace a built-in** (that would let a directory swap a trusted persona's prompt and tools); rejected or unparseable specs are reported, valid ones still load.
+- **AG-10** Built-in agents are embedded. External agents are loaded (recursively, `*.md`) from `~/.blitz/agents` (`config.UserAgentsDir`), then the workspace's `.agents/agents` (`config.ProjectAgentsDir`, as prompt text, [spec_project_config_031](spec_project_config_031.md); a later folder wins a name), then enabled plugins' `agents/`. *2026-10-01:* the workspace folder moved from `./agents` to `.agents/agents`, beside `.agents/workers` and `.agents/skills`; `./agents` is no longer read. External specs may add agents but **may not replace a built-in** (that would let a directory swap a trusted persona's prompt and tools); rejected or unparseable specs are reported, valid ones still load.
 - **AG-11** `List` is sorted by name.
+- **AG-13** *2026-10-01.* Agents reload without reopening the workspace. The registry keeps the folders it loaded and a stamp of their `*.md` files (path, size, modification time); `Registry.Refresh` reloads them when the stamp changes, keeping the built-ins. `Workspace.RefreshAgents` runs it before each turn and worker run and when agents or workers are listed or an agent is switched: an added file's agent is offered, an edited one's prompt, tools, settings and `default_model` apply from the next turn (models pinned or unpinned to match), and a removed one is gone (the active agent falls back to `blitz`). Files that don't load are warnings.
+- **AG-14** *2026-10-01.* Agent files are written by the editors through `WorkspaceService.ListAgentFiles`, `SaveAgentFile` and `DeleteAgentFile`, per scope: `AGENT_SCOPE_WORKSPACE` (the workspace's `.agents/agents`) or `AGENT_SCOPE_USER` (`~/.blitz/agents`, needing no workspace). Listing returns every file with what it defines or why it doesn't load (unparseable, a built-in's name). Saving checks the name (`^[a-z0-9][a-z0-9_-]{0,63}$`, not a built-in's, not another file's in the folder), a description, the agency level and the model settings, and returns problems with nothing written; it writes `<name>.md` atomically (an edit keeps the agent's file whatever it's called, a rename moves it to the new name's file), and the workspace named reloads at once. Writing a file drops YAML comments and keys Blitz doesn't know.
 
 | Built-in | Role | Agency |
 |---|---|---|
@@ -41,11 +43,13 @@ An agent is a persona: a system prompt, a tool list, an agency level and optiona
 | `planning-agent` | Requirement decomposition, roadmaps, verification gates (read-only tools + `invoke_agent`) | medium |
 | `agent-creator` | Creates and validates agent specs and skills | high |
 | `model-judge` | Compares model responses | medium |
+| `project-setup` | Sets up a workspace's agent harness: interviews, `.agents/AGENT.md`, the instruction files importing it, skills and agents (`/setup`, [spec_memory_012](spec_memory_012.md) MEM-22) | medium |
 
 - **AG-12** Built-in prompts are persona-free and terse (no mascot, plain status marks).
 
 ## 4. Models per agent
 
+- **AG-21** *2026-10-01.* An agent's frontmatter may set `temperature` (0–2), `top_p` (above 0, at most 1), `max_tokens` (at least 1), `effort` (minimal, low, medium, high, max; `xhigh` reads as max) and `thinking_budget` (0 or more). They apply to that agent's model calls only, as the main agent or a sub-agent, over the model's own `[model_settings]` and the session's effort; settings it leaves unset stay the model's. Settings the provider can't take are dropped as for `[model_settings]` (spec_engine_016). The model is wrapped when the agent is built (`withAgentSettings`), and the settings travel in the call's context to the model's settings wrapper.
 - **AG-20** An agent runs on (highest first): an `[agent_models]` pin, its own `default_model`, the configured model. Pinned agents keep the fallback chain behaviour of their own model and are priced by it. `/pin_model <agent> <model>` and `/unpin <agent>` change pins live and in the config file ([spec_workspace_018](spec_workspace_018.md) WS-41). `doctor` checks each pin.
 
 ## 5. Delegation tools

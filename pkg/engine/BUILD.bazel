@@ -17,6 +17,7 @@ load("@rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "engine",
     srcs = [
+        "agentfiles.go",
         "backend.go",
         "changes.go",
         "commands.go",
@@ -40,6 +41,7 @@ go_library(
         "sessions.go",
         "settingswatch.go",
         "styles.go",
+        "suggestions.go",
         "tasks.go",
         "turn.go",
         "workers.go",
@@ -127,6 +129,7 @@ go_test(
     name = "engine_test",
     size = "small",
     srcs = [
+        "agentfiles_test.go",
         "backend_test.go",
         "changes_test.go",
         "commands_test.go",
@@ -153,6 +156,7 @@ go_test(
         "sessions_test.go",
         "settingswatch_test.go",
         "styles_test.go",
+        "suggestions_test.go",
         "turn_test.go",
         "workers_test.go",
         "workspace_test.go",

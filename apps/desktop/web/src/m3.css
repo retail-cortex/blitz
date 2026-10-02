@@ -255,6 +255,7 @@ a { color: var(--md-primary); }
 .field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .field > label { font: 500 12px/16px var(--md-font); color: var(--md-on-surface-variant); }
 .field .supporting { font: 400 12px/16px var(--md-font); color: var(--md-on-surface-variant); }
+.field .supporting.error-text { color: var(--md-error); }
 .input, .select, textarea.input {
   width: 100%; min-height: 40px; padding: 8px 12px;
   border: 1px solid var(--md-outline); border-radius: var(--md-shape-xs);

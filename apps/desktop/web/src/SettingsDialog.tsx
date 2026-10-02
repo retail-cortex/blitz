@@ -23,6 +23,7 @@ import {
   mdiFolderMultipleOutline,
   mdiKeyChainVariant,
   mdiProgressClock,
+  mdiRobotOutline,
   mdiShieldAlertOutline,
   mdiShieldCheckOutline,
   mdiInformationOutline,
@@ -45,6 +46,8 @@ import { languages, t } from "./i18n";
 import { workspaceColor } from "./palette";
 import { displayName, forgetWorkspace } from "./prefs";
 import { PermissionSettings } from "./PermissionSettings";
+import { AgentEditor } from "./AgentEditor";
+import { AgentScope } from "./gen/blitz/v1/workspace_pb";
 import { LogViewer } from "./LogViewer";
 import { ProviderSettings } from "./ProviderSettings";
 import { SettingsFile } from "./settingsfile/SettingsFile";
@@ -55,13 +58,14 @@ import { Button, Chip, Dialog, Icon, IconButton, Segmented, Switch } from "./ui/
 import { WorkspaceDialog } from "./WorkspaceDialog";
 import { ProjectDialog } from "./ProjectDialog";
 
-type Section = "appearance" | "documents" | "providers" | "permissions" | "file" | "workspaces" | "service" | "logs" | "about";
+type Section = "appearance" | "documents" | "providers" | "permissions" | "agents" | "file" | "workspaces" | "service" | "logs" | "about";
 
 const sectionIcons: Record<Section, string> = {
   appearance: mdiPaletteOutline,
   documents: mdiLanguageMarkdownOutline,
   providers: mdiKeyChainVariant,
   permissions: mdiShieldCheckOutline,
+  agents: mdiRobotOutline,
   file: mdiFileDocumentEditOutline,
   workspaces: mdiFolderMultipleOutline,
   service: mdiServerNetwork,
@@ -88,6 +92,7 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
           {section === "documents" && <DocumentSettings />}
           {section === "providers" && <ProviderSettings workspace="" />}
           {section === "permissions" && <PermissionSettings workspace="" />}
+          {section === "agents" && <UserAgents />}
           {section === "file" && <FileSection />}
           {section === "workspaces" && <Workspaces />}
           {section === "service" && <Service />}
@@ -97,6 +102,14 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
       </div>
     </Dialog>
   );
+}
+
+// The user's agents (~/.blitz/agents), offered the tools and models of
+// the workspace shown, if one is.
+function UserAgents() {
+  const { prefs } = useApp();
+  const active = prefs.workspaces.find((w) => w.dir === prefs.active && w.open)?.dir ?? "";
+  return <AgentEditor workspace="" scope={AgentScope.USER} context={active} />;
 }
 
 function Setting({ title, detail, children }: { title: string; detail?: string; children: React.ReactNode }) {

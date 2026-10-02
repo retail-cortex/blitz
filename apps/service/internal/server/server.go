@@ -53,7 +53,8 @@ type Server struct {
 	logDir    string      // where the diagnostic log is written ("": off)
 	sched     *scheduler  // nil: workers aren't run
 	broker    *broker
-	runs      runs // background runs
+	runs      runs       // background runs
+	models    modelLists // providers' models, for ListModels
 
 	mu         sync.Mutex
 	workspaces map[string]*workspace // by canonical directory

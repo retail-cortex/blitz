@@ -162,6 +162,40 @@ func Load(dir string) (*Worker, error) {
 	return w, nil
 }
 
+// ReadSpec reads the worker in dir as written, for editing: its
+// frontmatter as given (not as the policy caps it), and the hash of its
+// files, which an edit must still match. It reads what it can of a file
+// that isn't valid: unknown keys are ignored, and a file whose frontmatter
+// can't be read at all comes back whole as the workflow.
+func ReadSpec(dir string) (api.WorkerSpec, string, error) {
+	data, err := os.ReadFile(filepath.Join(dir, FileName))
+	if err != nil {
+		return api.WorkerSpec{}, "", err
+	}
+	hash, err := hashDir(dir)
+	if err != nil {
+		return api.WorkerSpec{}, "", err
+	}
+	spec := api.WorkerSpec{Name: filepath.Base(dir)}
+	fm, body, err := split(data)
+	var f frontmatter
+	if err == nil {
+		err = yaml.Unmarshal(fm, &f)
+	}
+	if err != nil {
+		spec.Prompt = strings.TrimSpace(string(data))
+		return spec, hash, nil
+	}
+	spec.Description, spec.Schedule, spec.Timezone = f.Description, f.Schedule, f.Timezone
+	spec.Agent, spec.Model, spec.Permissions, spec.CatchUp = f.Agent, f.Model, f.Permissions, f.CatchUp
+	spec.Limits = api.Limits{MaxTurns: f.Limits.MaxTurns, MaxCostUSD: f.Limits.MaxCostUSD, TimeoutRaw: f.Limits.TimeoutRaw}
+	spec.Prompt = strings.TrimSpace(string(body))
+	return spec, hash, nil
+}
+
+// HashDir is the hash Load gives the worker in dir.
+func HashDir(dir string) (string, error) { return hashDir(dir) }
+
 // fileFrontmatter is frontmatter as Render writes it: set fields only.
 type fileFrontmatter struct {
 	Name        string      `yaml:"name"`

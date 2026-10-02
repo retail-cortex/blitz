@@ -45,9 +45,15 @@ import { Button, ContextMenu, Dialog, Icon, IconButton, useSnackbar, type MenuEn
 import { filesFloat, useFloatingDismiss } from "../ui/layout";
 import { ResizeHandle } from "../ui/ResizeHandle";
 import { fileIcon } from "./icons";
-import { ancestors, emptyTree, isFolder, joinPath, parentOf, rows, setExpanded, shownFolders, validName, withChildren, type Tree } from "./tree";
+import { ancestors, emptyTree, isFolder, joinPath, moveTarget, parentOf, rows, setExpanded, shownFolders, validName, withChildren, type Tree } from "./tree";
 
 const gitLetters: Record<string, string> = { modified: "M", added: "A", deleted: "D", renamed: "R", untracked: "U", conflicted: "!" };
+
+/** The drag data type of a path dragged in the tree. */
+const dragType = "application/x-blitz-path";
+
+/** How long a drag rests on a closed folder before it opens. */
+const dragOpenMs = 600;
 
 /** Something being named in the tree: a new file or folder, or a rename. */
 type Naming = { kind: "file" | "folder"; dir: string } | { kind: "rename"; path: string };
@@ -163,6 +169,10 @@ export function FilesShelf({
     setNaming({ kind, dir: folder });
   };
 
+  // Gives the keyboard back to a row once it's drawn (after naming, the
+  // field it replaced had it).
+  const focusRow = (path: string) => requestAnimationFrame(() => list.current?.querySelector<HTMLElement>(`[data-path="${CSS.escape(path)}"]`)?.focus());
+
   const finishNaming = async (name: string) => {
     const n = naming;
     setNaming(null);
@@ -175,6 +185,7 @@ export function FilesShelf({
         onMoved(n.path, to);
         await load(parentOf(n.path));
         setSelected(to);
+        focusRow(to);
         return;
       }
       const path = joinPath(n.dir, name.trim());
@@ -183,6 +194,7 @@ export function FilesShelf({
       await load(n.dir);
       setSelected(path);
       if (n.kind === "file") onOpen(path);
+      else focusRow(path);
     } catch (e) {
       snack(message(e), { error: true });
     }
@@ -193,10 +205,76 @@ export function FilesShelf({
     try {
       await files.deleteFile({ workspace: dir, path: e.path });
       onMoved(e.path, null);
+      setSelected((s) => (s === e.path || s?.startsWith(e.path + "/") ? null : s));
       await load(parentOf(e.path));
       snack(t("desktop.files.deleted", { name: e.name }));
     } catch (err) {
       snack(message(err), { error: true });
+    }
+  };
+
+  // Dragging an entry onto a folder (or a file in it) moves it there; onto
+  // the tree's background, to the workspace. A closed folder opens when
+  // the drag rests on it.
+  const dragging = useRef<string | null>(null);
+  const [dropInto, setDropInto] = useState<string | null>(null);
+  const openTimer = useRef<{ path: string; id: number } | null>(null);
+  const stopOpenTimer = () => {
+    if (openTimer.current) window.clearTimeout(openTimer.current.id);
+    openTimer.current = null;
+  };
+  useEffect(() => stopOpenTimer, []);
+
+  // The folder a drag over el would drop into: the row's folder, or its
+  // file's, or the workspace off the rows.
+  const folderAt = (el: EventTarget) => {
+    const path = el instanceof Element ? el.closest<HTMLElement>("[data-path]")?.dataset.path : undefined;
+    if (path === undefined) return "";
+    const e = findEntry(tree, path);
+    return e && isFolder(e) ? e.path : parentOf(path);
+  };
+
+  const endDrag = () => {
+    dragging.current = null;
+    setDropInto(null);
+    stopOpenTimer();
+  };
+
+  const onDragOver = (ev: React.DragEvent) => {
+    const from = dragging.current;
+    if (!from || !ev.dataTransfer.types.includes(dragType)) return;
+    const into = folderAt(ev.target);
+    if (moveTarget(from, into) === null) {
+      setDropInto(null);
+      stopOpenTimer();
+      return;
+    }
+    ev.preventDefault();
+    ev.dataTransfer.dropEffect = "move";
+    setDropInto(into);
+    if (into && !tree.expanded.has(into) && openTimer.current?.path !== into) {
+      stopOpenTimer();
+      const e = findEntry(tree, into);
+      if (e) openTimer.current = { path: into, id: window.setTimeout(() => void toggle(e, true), dragOpenMs) };
+    }
+  };
+
+  const onDrop = async (ev: React.DragEvent) => {
+    const from = dragging.current;
+    const into = folderAt(ev.target);
+    endDrag();
+    const to = from === null ? null : moveTarget(from, into);
+    if (from === null || to === null) return;
+    ev.preventDefault();
+    try {
+      await files.renameFile({ workspace: dir, from, to });
+      onMoved(from, to);
+      await load(parentOf(from));
+      if (into) setTree((tr) => setExpanded(tr, into, true));
+      await load(into);
+      setSelected(to);
+    } catch (e) {
+      snack(message(e), { error: true });
     }
   };
 
@@ -250,7 +328,8 @@ export function FilesShelf({
   const shown = rows(tree);
 
   // Arrows move, Right and Left open and close folders, Enter opens, F2
-  // renames, Delete deletes.
+  // renames, Delete deletes, Escape clears the selection (so new files go
+  // in the workspace).
   const onKey = (ev: React.KeyboardEvent) => {
     if (naming) return;
     const i = shown.findIndex((r) => r.entry.path === selected);
@@ -285,6 +364,10 @@ export function FilesShelf({
       case "Backspace":
         if (row && (ev.key === "Delete" || ev.metaKey)) setDeleting(row);
         break;
+      case "Escape":
+        if (!selected) return; // the floating shelf's Escape minimizes it
+        setSelected(null);
+        break;
       default:
         return;
     }
@@ -309,10 +392,22 @@ export function FilesShelf({
         <IconButton icon={mdiChevronDoubleLeft} label={t("desktop.files.hide")} small onClick={onClose} />
       </div>
       <div
-        className="files-tree"
+        className={`files-tree ${dropInto === "" ? "drop-target" : ""}`}
         role="tree"
         ref={list}
         onKeyDown={onKey}
+        // A click on the background clears the selection.
+        onClick={(e) => {
+          if (e.target === e.currentTarget) setSelected(null);
+        }}
+        onDragOver={onDragOver}
+        onDragLeave={(e) => {
+          if (!e.currentTarget.contains(e.relatedTarget as Node | null)) {
+            setDropInto(null);
+            stopOpenTimer();
+          }
+        }}
+        onDrop={(e) => void onDrop(e)}
         onContextMenu={(e) => {
           if (e.target === e.currentTarget) {
             e.preventDefault();
@@ -335,10 +430,17 @@ export function FilesShelf({
                   aria-expanded={isFolder(e) ? open : undefined}
                   aria-selected={e.path === selected}
                   data-path={e.path}
-                  className={`tree-row ${e.path === selected ? "selected" : ""} ${e.path === active ? "active" : ""} ${e.hidden ? "hidden-entry" : ""} git-${e.git || "clean"}`}
+                  className={`tree-row ${e.path === selected ? "selected" : ""} ${e.path === active ? "active" : ""} ${e.path === dropInto ? "drop-target" : ""} ${e.hidden ? "hidden-entry" : ""} git-${e.git || "clean"}`}
                   style={{ paddingLeft: 8 + depth * 14 }}
                   title={e.agentRule ? `${e.path}\n${t(`desktop.files.rule.${e.agentRule}.detail`)}` : e.path}
                   tabIndex={e.path === selected || (!selected && shown[0]?.entry.path === e.path) ? 0 : -1}
+                  draggable
+                  onDragStart={(ev) => {
+                    dragging.current = e.path;
+                    ev.dataTransfer.setData(dragType, e.path);
+                    ev.dataTransfer.effectAllowed = "move";
+                  }}
+                  onDragEnd={endDrag}
                   onClick={() => {
                     setSelected(e.path);
                     if (isFolder(e)) void toggle(e);

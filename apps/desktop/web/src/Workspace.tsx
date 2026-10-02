@@ -19,10 +19,10 @@ import { SandboxNotice } from "./SandboxNotice";
 import { useWorkspaceSettings } from "./workspaceSettings";
 import { useWorkerFailures } from "./workerFailures";
 import { InboxButton } from "./RunsInbox";
-import { mdiCalendarClock, mdiCodeBraces, mdiCogOutline, mdiFileCompare, mdiFileSearchOutline, mdiFileTreeOutline, mdiTuneVariant } from "@mdi/js";
+import { mdiAutoFix, mdiCalendarClock, mdiCodeBraces, mdiCogOutline, mdiFileCompare, mdiFileSearchOutline, mdiFileTreeOutline, mdiRobotOutline, mdiTuneVariant } from "@mdi/js";
 import { Changes } from "./Changes";
 import { Conversation } from "./Conversation";
-import { filesTouchedEvent, goToFileEvent, openFileEvent, revealInTreeEvent, viewEvent, type OpenFileDetail, type ViewDetail } from "./events";
+import { filesTouchedEvent, goToFileEvent, openFileEvent, revealInTreeEvent, startSetup, viewEvent, type OpenFileDetail, type ViewDetail } from "./events";
 import { EditorPane } from "./files/EditorPane";
 import { FilesShelf } from "./files/FilesShelf";
 import { GoToFile } from "./files/GoToFile";
@@ -42,13 +42,14 @@ import { filesFloat, panelWidth, runSettingsFloat, useWindowWidth } from "./ui/l
 import { ResizeHandle } from "./ui/ResizeHandle";
 import { Brand, WorkspaceSwitcher } from "./WorkspaceSwitcher";
 import { Workers } from "./Workers";
+import { Agents } from "./Agents";
 
-type View = "editor" | "changes" | "workers";
+type View = "editor" | "changes" | "agents" | "workers";
 
 /**
  * One open workspace, laid out like an IDE: the top bar (the workspace
  * dropdown, the view, actions, settings), the Files shelf on the left, the
- * editor (or the Changes or Workers view) in the middle, the chat on the
+ * editor (or the Changes, Agents or Workers view) in the middle, the chat on the
  * right, and the run settings panel beside it. Kept mounted while another
  * is shown, so a turn keeps streaming.
  */
@@ -192,6 +193,7 @@ export function Workspace({
             options={[
               { value: "editor", label: t("desktop.view.editor"), icon: mdiCodeBraces },
               { value: "changes", label: t("desktop.view.changes"), icon: mdiFileCompare },
+              { value: "agents", label: t("desktop.view.agents"), icon: mdiRobotOutline },
               { value: "workers", label: failed > 0 ? `${t("desktop.view.workers")} (${failed})` : t("desktop.view.workers"), icon: mdiCalendarClock },
             ]}
           />
@@ -199,6 +201,7 @@ export function Workspace({
         <span className="spacer" />
         <div className="topbar-actions no-drag">
           <InboxButton />
+          <IconButton icon={mdiAutoFix} label={t("desktop.setup.title")} onClick={() => startSetup(dir)} />
           <IconButton icon={mdiFileSearchOutline} label={t("desktop.files.go_to")} onClick={() => setGoTo(true)} />
           <IconButton icon={mdiTuneVariant} label={t("desktop.run_settings")} data-toggles="run-settings" selected={prefs.run_settings} onClick={() => update((p) => ({ ...p, run_settings: !p.run_settings }))} />
           <IconButton icon={mdiCogOutline} label={t("desktop.settings")} onClick={onSettings} />
@@ -235,6 +238,7 @@ export function Workspace({
           <div className="workspace-center">
             {view === "editor" && <EditorPane model={editor} onReveal={revealInTree} onCursor={(cursor) => publishStatus(dir, { cursor })} />}
             {view === "changes" && <Changes dir={dir} />}
+            {view === "agents" && <Agents dir={dir} />}
             {view === "workers" && <Workers dir={dir} />}
           </div>
         )}

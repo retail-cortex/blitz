@@ -32,7 +32,7 @@ command = "npx"
 args = ["@acme/db-mcp"]
 ```
 
-- **At once**, because they only tighten: deny and ask rules, blocked paths, lower limits (`tools.max_parallel`, `tools.shell_timeout_seconds`, `tools.max_file_size_bytes`), a higher `skills.policy.min_hitl_tier`, `skills.policy.deny_tools`, and lower worker limits. The project's agents (`./agents`) and skills (`./skills`, `.agents/skills`) load as prompt text too.
+- **At once**, because they only tighten: deny and ask rules, blocked paths, lower limits (`tools.max_parallel`, `tools.shell_timeout_seconds`, `tools.max_file_size_bytes`), a higher `skills.policy.min_hitl_tier`, `skills.policy.deny_tools`, and lower worker limits. The project's agents (`.agents/agents`) and skills (`./skills`, `.agents/skills`) load as prompt text too.
 - **After you trust them**, because they run code or loosen a policy: hooks, MCP servers (always sandboxed, never auto-approved), allow rules, `sandbox.shell_writable_paths` inside the workspace, `blitz.default_model` and `[agent_models]` (only providers you've set up), more `workers.policy.allow` kinds, and the scripts of the project's skills.
 - **Never**: API keys, base URLs and other endpoints, telemetry, where logs and audit files go, bypass and auto-approval, turning the sandbox off or opening the network. Blitz ignores them and says which file and key.
 

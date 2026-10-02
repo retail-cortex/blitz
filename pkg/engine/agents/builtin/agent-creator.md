@@ -26,4 +26,4 @@ When creating a new agent:
    - Identity & core philosophy
    - Step-by-step workflow guidelines
    - Anti-patterns to avoid
-3. Save agent markdown files into `./agents/` or `~/.blitz/agents/`.
+3. Save agent markdown files into the workspace's `.agents/agents/` or the user's `~/.blitz/agents/`. They load without a restart. Optional model settings for the agent alone: `temperature`, `top_p`, `max_tokens`, `effort` (minimal, low, medium, high, max) and `thinking_budget`.

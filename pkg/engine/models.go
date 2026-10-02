@@ -33,6 +33,7 @@ import (
 
 // ListAgents returns every agent, in registry order.
 func (w *Workspace) ListAgents() []api.AgentInfo {
+	w.RefreshAgents(context.Background())
 	var out []api.AgentInfo
 	for _, a := range w.agents.List() {
 		out = append(out, w.agentInfo(a.Name))
@@ -45,6 +46,7 @@ func (w *Workspace) ActiveAgent() api.AgentInfo { return w.agentInfo(w.engine.Ac
 
 // SetAgent makes name the active agent.
 func (w *Workspace) SetAgent(ctx context.Context, name string) (api.AgentInfo, error) {
+	w.RefreshAgents(ctx)
 	if err := w.engine.SetActiveAgent(ctx, name); err != nil {
 		return api.AgentInfo{}, err
 	}
@@ -300,7 +302,8 @@ func (w *Workspace) rebuildModels(ctx context.Context) error {
 	w.modelMu.Lock()
 	w.modelErr = err
 	w.modelMu.Unlock()
-	for agent, ref := range agentModelRefs(w.cfg, w.agents, func(string) {}) {
+	w.agentRefs = agentModelRefs(w.cfg, w.agents, func(string) {})
+	for agent, ref := range w.agentRefs {
 		pin, perr := w.newModel(ctx, w.cfg, ref)
 		if perr == nil {
 			perr = w.engine.PinModel(ctx, agent, pin)

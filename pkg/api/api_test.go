@@ -68,11 +68,6 @@ func TestUsageAdd(t *testing.T) {
 	assert.False(t, u.Priced, "an unpriced call makes the total unpriced")
 }
 
-// TestInitPrompt checks the /init prompt names the file it asks for.
-func TestInitPrompt(t *testing.T) {
-	assert.Contains(t, InitPrompt(), "BLITZ.md")
-}
-
 // TestDecisionString checks each decision's name.
 func TestDecisionString(t *testing.T) {
 	for d, want := range map[Decision]string{DecisionDeny: "deny", DecisionOnce: "once", DecisionSession: "session", DecisionAlways: "always", Decision(9): "deny"} {

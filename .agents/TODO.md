@@ -37,6 +37,24 @@ Everything through 2026-09-29 is pushed to `main`, most of it with
    `<id>.jsonl` and the title and message count from it restores the
    chat. Only on that machine, and only if the owner still wants it.
 
+## Queued
+
+- **Playwright end-to-end tests for the desktop page (M).** Decided
+  2026-10-01, deferred until the usability pass settles the UI, so the
+  fake service (`dev/fake.ts`) isn't rewritten twice. Playwright, for its
+  WebKit (the web view on macOS and Linux) and Chromium (WebView2 on
+  Windows). Two tiers: `?fake` for every flow, on every push; a few smoke
+  tests against a throwaway keyless `blitzd` (`BLITZ_SOCKET`, `HOME` in a
+  short `/tmp` dir), which catch the fake drifting from the service. A
+  `//apps/desktop/web:e2e` target (tagged `requires-network`/`manual`:
+  Playwright downloads its browsers) and a CI step on Linux and macOS
+  after `bazel test //...`. First flows: the file tree (deselect, drag and
+  drop), the agent editor (create, problems, advanced settings, delete a
+  broken file, Settings › Agents), worker editing (save pauses, stale-file
+  reload, fixing an invalid worker). Out of reach: the Wails shell (native
+  dialogs, notifications, deep links, the tray, `window.go.*`). Done: both
+  tiers green in CI on Linux and macOS.
+
 ## Waiting on something
 
 - **Claude on Vertex AI, live** (backlog BL-VER-04): needs Claude Opus

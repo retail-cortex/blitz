@@ -21,6 +21,7 @@ import (
 	"strings"
 
 	"github.com/retail-cortex/blitz/pkg/config"
+	"github.com/retail-cortex/blitz/pkg/engine/agents"
 	"google.golang.org/adk/v2/model"
 	"google.golang.org/genai"
 )
@@ -58,14 +59,20 @@ func (m *settingsModel) GenerateContent(ctx context.Context, req *model.LLMReque
 	if m.provider == "gemini" {
 		req = attachLoneSignatures(req)
 	}
-	if lookup, _ := ctx.Value(modelSettingsKey{}).(settingsLookup); lookup != nil && req != nil {
-		if s, ok := lookup(m.inner.Name()); ok {
-			req = m.apply(ctx, req, s)
-			if s.ReasoningEffort != nil && SettingSupported(m.provider, m.inner.Name(), "reasoning_effort") {
-				// The exact level, for adapters with more levels than genai's
-				// (Anthropic's max).
-				ctx = context.WithValue(ctx, effortKey{}, *s.ReasoningEffort)
-			}
+	var s config.ModelSettings
+	var ok bool
+	if lookup, _ := ctx.Value(modelSettingsKey{}).(settingsLookup); lookup != nil {
+		s, ok = lookup(m.inner.Name())
+	}
+	if own, has := ctx.Value(agentSettingsKey{}).(config.ModelSettings); has { // the agent's own win
+		s, ok = overlay(s, own), true
+	}
+	if ok && req != nil {
+		req = m.apply(ctx, req, s)
+		if s.ReasoningEffort != nil && SettingSupported(m.provider, m.inner.Name(), "reasoning_effort") {
+			// The exact level, for adapters with more levels than genai's
+			// (Anthropic's max).
+			ctx = context.WithValue(ctx, effortKey{}, *s.ReasoningEffort)
 		}
 	}
 	return func(yield func(*model.LLMResponse, error) bool) {
@@ -134,6 +141,55 @@ func (m *settingsModel) apply(ctx context.Context, req *model.LLMRequest, s conf
 	}
 	cp.Config = &gc
 	return &cp
+}
+
+// agentSettingsKey carries, in a model call's context, the model settings
+// of the agent making it (its frontmatter's), which win over the model's
+// own and the session's effort.
+type agentSettingsKey struct{}
+
+// agentSettingsModel calls its model with an agent's own model settings.
+type agentSettingsModel struct {
+	inner    model.LLM
+	settings config.ModelSettings
+}
+
+// withAgentSettings runs m with spec's model settings, if it sets any.
+func withAgentSettings(m model.LLM, spec *agents.AgentSpec) model.LLM {
+	s, ok := spec.ModelSettings()
+	if !ok || m == nil {
+		return m
+	}
+	return &agentSettingsModel{inner: m, settings: s}
+}
+
+func (m *agentSettingsModel) Name() string { return m.inner.Name() }
+
+func (m *agentSettingsModel) GenerateContent(ctx context.Context, req *model.LLMRequest, stream bool) iter.Seq2[*model.LLMResponse, error] {
+	return m.inner.GenerateContent(context.WithValue(ctx, agentSettingsKey{}, m.settings), req, stream)
+}
+
+// overlay returns base with every setting top sets replaced.
+func overlay(base, top config.ModelSettings) config.ModelSettings {
+	if top.Temperature != nil {
+		base.Temperature = top.Temperature
+	}
+	if top.TopP != nil {
+		base.TopP = top.TopP
+	}
+	if top.MaxTokens != nil {
+		base.MaxTokens = top.MaxTokens
+	}
+	if top.Seed != nil {
+		base.Seed = top.Seed
+	}
+	if top.ReasoningEffort != nil {
+		base.ReasoningEffort = top.ReasoningEffort
+	}
+	if top.ThinkingBudget != nil {
+		base.ThinkingBudget = top.ThinkingBudget
+	}
+	return base
 }
 
 // effortKey carries the exact reasoning effort in a request's context.

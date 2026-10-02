@@ -155,6 +155,12 @@ body.resizing iframe, body.resizing .cm-editor { pointer-events: none; }
 }
 .suggestion .icon { color: var(--md-primary); }
 .suggestion:hover { background: var(--md-surface-container-high); }
+/* The setup, when the workspace has no agent instructions: first, and set apart. */
+.suggestion.highlight { background: var(--md-primary-container); color: var(--md-on-primary-container); }
+.suggestion.highlight .icon { color: var(--md-on-primary-container); }
+.suggestion.highlight:hover { background: color-mix(in srgb, var(--md-primary-container) 88%, var(--md-on-primary-container)); }
+.suggestion-detail { opacity: 0.8; }
+.suggestions-learning { margin: -20px 0 0; }
 
 .turn-user { display: flex; justify-content: flex-end; align-items: flex-start; gap: 4px; }
 .bubble { max-width: min(85%, 640px); padding: 12px 18px; border-radius: 20px 20px 4px 20px; background: var(--md-surface-container-high); display: flex; flex-direction: column; gap: 4px; }
@@ -476,6 +482,8 @@ body.resizing iframe, body.resizing .cm-editor { pointer-events: none; }
 .tree-row:focus-visible { outline: 2px solid var(--md-primary); outline-offset: -2px; }
 .tree-row.selected { background: color-mix(in srgb, var(--md-on-surface) 8%, transparent); }
 .tree-row.active { background: var(--md-secondary-container); color: var(--md-on-secondary-container); }
+/* Where a dragged entry would move to: a folder's row, or the whole tree for the workspace. */
+.tree-row.drop-target, .files-tree.drop-target { background: color-mix(in srgb, var(--md-primary) 12%, transparent); outline: 1px solid var(--md-primary); outline-offset: -1px; }
 .tree-row.hidden-entry .tree-name, .tree-row.hidden-entry .tree-icon { opacity: 0.55; }
 .tree-twisty { width: 18px; flex: none; display: inline-flex; color: var(--md-on-surface-variant); }
 .tree-icon { flex: none; color: var(--md-on-surface-variant); }
@@ -573,6 +581,30 @@ code.file-link:hover { text-decoration-color: currentColor; }
 .new-worker .triple { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px 16px; }
 .new-worker .field .input, .new-worker .field .select { width: 100%; }
 .new-worker-prompt { min-height: 140px; resize: vertical; font: inherit; }
+
+/* The agent editor (the Agents view, Settings › Agents). */
+.agent-dir { margin: 0 4px 0 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.agent-form .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 16px; }
+.agent-form .field .input, .agent-form .field .select { width: 100%; }
+.agent-form .field .input.slider-value { width: 76px; }
+.agent-switches { gap: 10px; }
+.agent-tools { border: 1px solid var(--md-outline-variant); border-radius: var(--md-shape-md); padding: 8px 12px 12px; margin: 0; gap: 10px; }
+.agent-tools legend { padding: 0 4px; color: var(--md-on-surface-variant); }
+.agent-tool-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 2px 12px; }
+.agent-tool { display: flex; align-items: center; gap: 8px; min-width: 0; padding: 3px 0; cursor: pointer; font-size: 13px; }
+.agent-tool input { accent-color: var(--md-primary); flex: none; }
+.agent-prompt { min-height: 220px; resize: vertical; font-size: 13px; line-height: 1.5; }
+.agent-advanced-toggle { width: 100%; border: none; background: none; cursor: pointer; font: inherit; padding: 0; margin: 4px 2px 0; }
+.agent-advanced-toggle:hover .t-label { color: var(--md-on-surface); }
+.agent-advanced-toggle:focus-visible { outline: 2px solid var(--md-primary); outline-offset: 2px; border-radius: var(--md-shape-xs); }
+.agent-advanced input[type="range"].unset { opacity: 0.45; }
+.agent-actions { gap: 8px; padding-top: 4px; }
+.agent-where { min-width: 0; text-align: right; }
+/* In Settings: a framed split, as tall as the pane allows. */
+.agent-editor-user { height: min(640px, calc(100vh - 300px)); border: 1px solid var(--md-outline-variant); border-radius: var(--md-shape-md); overflow: hidden; }
+.agent-editor-user .split-side { width: 230px; }
+.agent-editor-user .split-main { padding: 18px 20px; }
+@media (max-width: 900px) { .agent-form .pair { grid-template-columns: 1fr; } }
 @media (max-width: 800px) { .new-worker .pair, .new-worker .triple { grid-template-columns: 1fr; } }
 
 /* The inbox of background runs (RunsInbox.tsx). */
@@ -603,3 +635,6 @@ code.file-link:hover { text-decoration-color: currentColor; }
   .changes-side { width: auto; max-height: 38%; border-right: none; border-bottom: 1px solid var(--md-outline-variant); padding: 12px 16px; }
   .changes-main { padding: 12px 16px; }
 }
+/* A field's warning: worth knowing, not blocking (an error is .error-text). */
+.warn-text, .field .supporting.warn-text { color: var(--md-warning, #8a6100); }
+:root[data-theme="dark"] .warn-text, :root[data-theme="dark"] .field .supporting.warn-text { color: var(--md-warning, #f0c060); }

@@ -30,7 +30,7 @@ This design lets a repository carry settings in three tiers:
   - instruction files (`AGENTS.md`, `CLAUDE.md`, `GEMINI.md`, `BLITZ.md`) and rule directories;
   - slash commands (`.blitz/commands`, `.claude/commands`, `.agents/workflows`);
   - worker definitions, which are hash-pinned (WK-30).
-- **Read from the repository only with `blitz.trust_workspace` or `--trust-workspace`:** agents (`./agents`) and skills (`./skills`, `.agents/skills`). Attached to the service, `--trust-workspace` is lost (`client.Attach` sends only the directory).
+- **Read from the repository only with `blitz.trust_workspace` or `--trust-workspace`:** agents (`.agents/agents`; `./agents` until 2026-10-01) and skills (`./skills`, `.agents/skills`). Attached to the service, `--trust-workspace` is lost (`client.Attach` sends only the directory).
 - **Nothing asks the user outside a turn.** The service's broker only asks during a running turn. The closest pattern is the worker review: list the item with its hash, then enable that hash; the service refuses a hash that has changed (`HASH_MISMATCH`).
 
 ## 3. Files
@@ -43,7 +43,7 @@ This design lets a repository carry settings in three tiers:
 
 | Tier | Keys | Applied |
 |---|---|---|
-| **A: informs or tightens** | `permissions.deny`, `permissions.ask`; `sandbox.blocked_paths` (additions); `tools.max_parallel`, `tools.shell_timeout_seconds`, `tools.max_file_size_bytes`, `skills.policy.max_timeout_seconds`, `workers.policy.max_turns`, `workers.policy.max_cost_usd`, each only when lower; `skills.policy.min_hitl_tier` only when higher; `skills.policy.deny_tools` (additions); `plugins.disable` (installed plugins off, [spec_plugins_033](spec_plugins_033.md)); agent definitions and skills as prompt text (`./agents`, `./skills`, `.agents/skills`) | At once, with no question |
+| **A: informs or tightens** | `permissions.deny`, `permissions.ask`; `sandbox.blocked_paths` (additions); `tools.max_parallel`, `tools.shell_timeout_seconds`, `tools.max_file_size_bytes`, `skills.policy.max_timeout_seconds`, `workers.policy.max_turns`, `workers.policy.max_cost_usd`, each only when lower; `skills.policy.min_hitl_tier` only when higher; `skills.policy.deny_tools` (additions); `plugins.disable` (installed plugins off, [spec_plugins_033](spec_plugins_033.md)); agent definitions and skills as prompt text (`.agents/agents`, `./skills`, `.agents/skills`) | At once, with no question |
 | **B: runs code or loosens** | `[[hooks.*]]`; `[[mcp.servers]]` (command and HTTP, without `auto_approve` or `sandbox`); `permissions.allow`; `sandbox.shell_writable_paths`; `blitz.default_model` and `[agent_models]`; `workers.policy.allow` (added kinds); `plugins.enable` (installed plugins on); scripts of the project's skills (`run_skill_script`) | Only after trust (§5) |
 | **C: never** | Everything else. With the reason "never from a project": `[llm]` (keys, endpoints, providers), `[web]`, `[browser]`, `[telemetry]`, `[log]`, `[audit]`, `[checkpoints]`, `[session]`, `images.dir`, `[pricing]`, `ui.status_line`, `blitz.auto_approve`, `blitz.permission_mode`, `blitz.trust_workspace`, `[permissions.auto]`, `sandbox.shell`, `sandbox.share_adc`, `sandbox.allow_network`, `sandbox.allowed_paths`, `sandbox.read_only_paths`, `sandbox.scrub_env`, `sandbox.commands`, `tools.auto_approve_commands` and the tools' directories, `mcp.servers.auto_approve`, `mcp.servers.sandbox`, the looser `[skills.policy]` keys, `workers.policy.max_concurrent`, `workers.paths`, `skills.paths`; any other key as "not a project setting" | Ignored, with a warning |
 
@@ -98,7 +98,7 @@ This design lets a repository carry settings in three tiers:
 
 ## 8. What changed for existing users
 
-- **Agents and skills.** `./agents` and `./skills` load as prompt text without `trust_workspace` (tier A), because PAR-CFG-02 says agent definitions and skills as prompt text load without asking. Their scripts need trust (tier B): until then `skills.Evaluate` blocks them ("it's the project's (…), whose settings aren't trusted: blitz trust").
+- **Agents and skills.** `.agents/agents` and `./skills` load as prompt text without `trust_workspace` (tier A), because PAR-CFG-02 says agent definitions and skills as prompt text load without asking. Their scripts need trust (tier B): until then `skills.Evaluate` blocks them ("it's the project's (…), whose settings aren't trusted: blitz trust").
 - **`blitz.trust_workspace`.** Deprecated, with a warning at open. Set in the user's own settings, it trusts the project's content for each run without recording anything (like `--trust-project`); a project can't set it.
 - **Commands and instructions.** They already loaded without trust and stay that way (tier A).
 

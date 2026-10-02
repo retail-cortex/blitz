@@ -16,6 +16,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  mdiAutoFix,
   mdiCalendarClock,
   mdiFullscreen,
   mdiCodeBraces,
@@ -35,7 +36,7 @@ import {
 } from "@mdi/js";
 import { sessions, workspaces } from "./api";
 import { allCommands, filterPalette, type CommandSpec, type PaletteItem } from "./commands";
-import { compose, goToFile, loadSession, showView } from "./events";
+import { compose, goToFile, loadSession, showView, startSetup } from "./events";
 import { displayName, openWorkspace, openWorkspaces, recentWorkspaces } from "./prefs";
 import { useApp } from "./state";
 import { t, tn } from "./i18n";
@@ -95,6 +96,7 @@ export function CommandPalette({ onClose, onOpenWorkspace, onSettings }: { onClo
       }
       out.push(
         { group: t("desktop.palette.group.view"), label: t("desktop.files.go_to"), detail: "⌘P", icon: mdiFileSearchOutline, run: done(() => goToFile({ dir })) },
+        { group: t("desktop.palette.group.view"), label: t("desktop.setup.title"), icon: mdiAutoFix, run: done(() => startSetup(dir)) },
         { group: t("desktop.palette.group.view"), label: prefs.files ? t("desktop.files.hide") : t("desktop.files.show"), icon: mdiFileTreeOutline, run: done(() => update((p) => ({ ...p, files: !p.files }))) },
         { group: t("desktop.palette.group.view"), label: t("desktop.palette.show_editor"), icon: mdiCodeBraces, run: done(() => showView({ dir, view: "editor" })) },
         { group: t("desktop.palette.group.view"), label: t("desktop.palette.show_changes"), icon: mdiFileCompare, run: done(() => showView({ dir, view: "changes" })) },

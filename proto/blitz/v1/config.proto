@@ -29,6 +29,9 @@ service ConfigService {
   // What a scope sets: providers and where their keys come from (never the
   // keys themselves).
   rpc DescribeConfig(DescribeConfigRequest) returns (DescribeConfigResponse);
+  // The models each configured provider offers, from its API (kept for a
+  // few minutes), so forms can suggest and check model names.
+  rpc ListModels(ListModelsRequest) returns (ListModelsResponse);
   // Stores a provider's API key in the keychain and refers to it.
   rpc SetApiKey(SetApiKeyRequest) returns (SetApiKeyResponse);
   // Moves a provider's API key written in the scope's file (as plain text
@@ -290,6 +293,31 @@ message SettingInfo {
   string default = 3;
   // What it does.
   string doc = 4;
+}
+
+// Request message for ConfigService.ListModels.
+message ListModelsRequest {
+  // The workspace whose settings name the providers; "" for the user's.
+  string workspace = 1;
+}
+
+// ProviderModels are one provider's models.
+message ProviderModels {
+  string provider = 1;
+  // Model IDs as the provider names them ("gemini-3.8-flash"), sorted.
+  repeated string ids = 2;
+  // Why they couldn't be listed ("" when they were).
+  string error = 3;
+  // What the list is when it isn't the provider's own (Bedrock, Azure:
+  // the configured model only).
+  string note = 4;
+}
+
+// Response message for ConfigService.ListModels.
+message ListModelsResponse {
+  repeated ProviderModels providers = 1;
+  // The provider a name without "provider/" belongs to.
+  string default_provider = 2;
 }
 
 // Response message for ConfigService.GetSettingsReference.

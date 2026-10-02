@@ -24,6 +24,7 @@ import {
   mdiCloseCircleOutline,
   mdiMessageTextOutline,
   mdiPauseCircleOutline,
+  mdiPencilOutline,
   mdiPlay,
   mdiProgressClock,
   mdiRefresh,
@@ -35,7 +36,8 @@ import { loadSession } from "./events";
 import { language, t } from "./i18n";
 import { RunStatus, WorkerState, type Worker, type WorkerRun } from "./gen/blitz/v1/worker_pb";
 import { applyEvent, failed, summarizeArgs, type Entry } from "./turns";
-import { NewWorkerDialog } from "./NewWorkerDialog";
+import { WorkerDialog, type WorkerEdit } from "./WorkerDialog";
+import { savePauses } from "./workerForm";
 import { Button, Chip, Icon, IconButton } from "./ui/controls";
 
 const stateKeys: Record<WorkerState, string> = {
@@ -70,6 +72,7 @@ export function Workers({ dir }: { dir: string }) {
   const [selected, setSelected] = useState("");
   const [error, setError] = useState("");
   const [creating, setCreating] = useState(false);
+  const [editing, setEditing] = useState<WorkerEdit | null>(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -125,23 +128,31 @@ export function Workers({ dir }: { dir: string }) {
             <Icon path={mdiAlertCircleOutline} /> {error}
           </div>
         )}
-        {creating && (
-          <NewWorkerDialog
+        {(creating || editing) && (
+          <WorkerDialog
             dir={dir}
-            onClose={() => setCreating(false)}
-            onCreated={(name) => {
+            edit={editing ?? undefined}
+            onClose={() => {
+              setCreating(false);
+              setEditing(null);
+            }}
+            onSaved={(name) => {
               setSelected(name);
               refresh();
             }}
           />
         )}
-        {worker ? <WorkerView dir={dir} worker={worker} onChange={refresh} key={worker.name + worker.hash} /> : list.length > 0 && <p className="muted">{t("desktop.workers.choose")}</p>}
+        {worker ? (
+          <WorkerView dir={dir} worker={worker} onChange={refresh} onEdit={() => setEditing({ name: worker.name, path: worker.path, pauses: savePauses(worker.state) })} key={worker.name + worker.hash} />
+        ) : (
+          list.length > 0 && <p className="muted">{t("desktop.workers.choose")}</p>
+        )}
       </section>
     </div>
   );
 }
 
-function WorkerView({ dir, worker, onChange }: { dir: string; worker: Worker; onChange: () => void }) {
+function WorkerView({ dir, worker, onChange, onEdit }: { dir: string; worker: Worker; onChange: () => void; onEdit: () => void }) {
   const [runs, setRuns] = useState<WorkerRun[]>([]);
   const [live, setLive] = useState<Entry[] | null>(null);
   const [error, setError] = useState("");
@@ -247,6 +258,9 @@ function WorkerView({ dir, worker, onChange }: { dir: string; worker: Worker; on
             {t("desktop.worker.disable")}
           </Button>
         )}
+        <Button variant={worker.state === WorkerState.INVALID ? "filled" : "outlined"} icon={mdiPencilOutline} onClick={onEdit} title={worker.path}>
+          {t("desktop.worker.edit")}
+        </Button>
       </div>
       {error && <p className="error-text">{error}</p>}
       {live && (

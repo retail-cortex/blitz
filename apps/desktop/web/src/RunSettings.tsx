@@ -37,6 +37,8 @@ import { message, reason } from "./errors";
 import { language, t } from "./i18n";
 import type { Usage } from "./gen/blitz/v1/turn_pb";
 import type { AgentInfo, Approval, GetSettingsResponse, LocaleInfo, ModelSettingsInfo, PermissionRule, Style } from "./gen/blitz/v1/workspace_pb";
+import { checkModelRef } from "./models";
+import { ModelInput, useModelCatalog } from "./ModelInput";
 import { agencies, efforts, modes } from "./options";
 import { PermissionSettings } from "./PermissionSettings";
 import { ProviderSettings } from "./ProviderSettings";
@@ -142,6 +144,7 @@ export function RunSettings({
   const [approvals, setApprovals] = useState<Approval[]>([]);
   const [usage, setUsage] = useState<Usage>();
   const [modelRef, setModelRef] = useState("");
+  const catalog = useModelCatalog(dir);
 
   const model = settings ? (settings.provider ? `${settings.provider}/${settings.model}` : settings.model) : "";
   const load = useCallback(async () => {
@@ -231,24 +234,19 @@ export function RunSettings({
               </select>
             )}
           </Field>
-          <Field label={t("desktop.rs.model")} supporting={t("desktop.rs.model_help")}>
+          <Field label={t("desktop.rs.model")}>
             {(id) => (
-              <>
-                <input
-                  id={id}
-                  className="input mono"
-                  list={`${id}-models`}
-                  value={modelRef}
-                  onChange={(e) => setModelRef(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
-                  onBlur={() => modelRef.trim() && modelRef.trim() !== model && act(() => workspaces.setModel({ workspace: dir, ref: modelRef.trim() }), t("desktop.rs.model_set", { model: modelRef.trim() }))}
-                />
-                <datalist id={`${id}-models`}>
-                  {[model, ...models].filter(Boolean).map((m) => (
-                    <option key={m} value={m} />
-                  ))}
-                </datalist>
-              </>
+              <ModelInput
+                id={id}
+                value={modelRef}
+                onChange={setModelRef}
+                catalog={catalog}
+                provider={settings?.provider}
+                extras={[model, ...models]}
+                hint={t("desktop.rs.model_help")}
+                onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
+                onCommit={(ref) => ref && ref !== model && !checkModelRef(ref, catalog, settings?.provider).error && act(() => workspaces.setModel({ workspace: dir, ref }), t("desktop.rs.model_set", { model: ref }))}
+              />
             )}
           </Field>
         </Section>

@@ -89,6 +89,7 @@ func (h configService) DescribeConfig(_ context.Context, r req[pb.DescribeConfig
 // them for the global settings) and reports the scope's model error.
 func (h configService) changed(ctx context.Context, dir, path string) *pb.ConfigChange {
 	change := &pb.ConfigChange{Path: path}
+	h.s.models.forget() // keys or providers may differ now
 	h.s.mu.Lock()
 	var ws []*workspace
 	for d, w := range h.s.workspaces {

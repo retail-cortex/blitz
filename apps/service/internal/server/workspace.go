@@ -395,6 +395,13 @@ func (h workspaceService) ListTools(ctx context.Context, r req[pb.ListToolsReque
 	if err != nil {
 		return nil, err
 	}
+	if r.Msg.All {
+		out := &pb.ListToolsResponse{}
+		for _, t := range w.AllTools() {
+			out.Tools = append(out.Tools, &pb.ToolInfo{Name: t.Name, Description: t.Description, PlanAllowed: t.PlanAllowed})
+		}
+		return ok(out)
+	}
 	at := w.ActiveAgentTools()
 	out := &pb.ListToolsResponse{Agent: at.Agent}
 	for _, t := range at.Tools {

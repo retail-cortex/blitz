@@ -50,6 +50,19 @@ service WorkspaceService {
   rpc ListAgents(ListAgentsRequest) returns (ListAgentsResponse);
   // Makes an agent the active one (UNKNOWN_AGENT).
   rpc SetAgent(SetAgentRequest) returns (SetAgentResponse);
+  // Returns what the welcome screen suggests for the workspace: tiles from
+  // its state at once, and up to three a model wrote from the recent
+  // conversations (cached; pending while new ones are being written), and
+  // whether it has no agent instructions yet, so setup (/setup) is offered.
+  rpc GetSuggestions(GetSuggestionsRequest) returns (GetSuggestionsResponse);
+  // Lists the agent files of a scope: the workspace's (.agents/agents) or
+  // the user's (~/.blitz/agents), with why a file doesn't load.
+  rpc ListAgentFiles(ListAgentFilesRequest) returns (ListAgentFilesResponse);
+  // Writes an agent's file, a new one or in place of previous_name's; what
+  // is wrong with it comes back as problems, with nothing written.
+  rpc SaveAgentFile(SaveAgentFileRequest) returns (SaveAgentFileResponse);
+  // Deletes an agent's file (UNKNOWN_AGENT).
+  rpc DeleteAgentFile(DeleteAgentFileRequest) returns (DeleteAgentFileResponse);
   // Returns the model the active agent runs on.
   rpc GetModel(GetModelRequest) returns (GetModelResponse);
   // Switches every unpinned agent to a model.
@@ -335,6 +348,143 @@ message SetAgentRequest {
 message SetAgentResponse {
   AgentInfo agent = 1;
 }
+
+// SuggestionKind is what a welcome tile does. The state kinds carry data
+// for the front end to word in its own language; IDEA carries text.
+enum SuggestionKind {
+  SUGGESTION_KIND_UNSPECIFIED = 0;
+  // No agent instructions yet: run /setup in a new chat.
+  SUGGESTION_KIND_SETUP = 1;
+  // Pick up the latest conversation: open session_id (title is its title).
+  SUGGESTION_KIND_CONTINUE = 2;
+  // Uncommitted changes (count files): review them and propose a commit.
+  SUGGESTION_KIND_CHANGES = 3;
+  // A worker's latest run failed or hit a limit (worker, detail: why).
+  SUGGESTION_KIND_WORKER_FAILED = 4;
+  // A model's suggestion from the recent conversations: title on the tile,
+  // prompt sent when it's chosen.
+  SUGGESTION_KIND_IDEA = 5;
+}
+
+// Suggestion is one welcome tile.
+message Suggestion {
+  SuggestionKind kind = 1;
+  string title = 2;
+  string prompt = 3;
+  string session_id = 4;
+  string worker = 5;
+  int32 count = 6;
+  string detail = 7;
+}
+
+// Request message for WorkspaceService.GetSuggestions.
+message GetSuggestionsRequest {
+  string workspace = 1;
+}
+
+// Response message for WorkspaceService.GetSuggestions.
+message GetSuggestionsResponse {
+  // State tiles first, then ideas; empty: the front end's own defaults.
+  repeated Suggestion suggestions = 1;
+  // No .agents/AGENT.md, AGENTS.md, CLAUDE.md, GEMINI.md or BLITZ.md.
+  bool harness_missing = 2;
+  // Ideas are being written from newer conversations: ask again shortly.
+  bool pending = 3;
+}
+
+// AgentScope is where an agent's file is kept.
+enum AgentScope {
+  AGENT_SCOPE_UNSPECIFIED = 0;
+  // The workspace's .agents/agents.
+  AGENT_SCOPE_WORKSPACE = 1;
+  // The user's ~/.blitz/agents, for every workspace.
+  AGENT_SCOPE_USER = 2;
+}
+
+// AgentDefinition is an agent's file: its frontmatter and its prompt.
+message AgentDefinition {
+  // Lowercase letters, digits, - and _.
+  string name = 1;
+  string display_name = 2;
+  string description = 3;
+  // The tools it may use, by name.
+  repeated string tools = 4;
+  // The model it runs on ("provider/" optional); empty: the configured one.
+  string default_model = 5;
+  // low, medium, high or extreme; empty: high.
+  string agency_level = 6;
+  // Its permission mode through invoke_agent; empty: the workspace's.
+  string permission_mode = 7;
+  // Its model calls through invoke_agent (0: the caller's budget).
+  int32 max_turns = 8;
+  bool background = 9;
+  // "" or "worktree".
+  string isolation = 10;
+  // The model settings this agent runs with, over the model's own; unset
+  // leaves the model's.
+  optional double temperature = 11;
+  optional double top_p = 12;
+  optional int32 max_tokens = 13;
+  // minimal, low, medium, high or max; empty: the model's.
+  string effort = 14;
+  optional int32 thinking_budget = 15;
+  // The system prompt: the file's body.
+  string prompt = 16;
+}
+
+// AgentFile is one agent file of a scope.
+message AgentFile {
+  string path = 1;
+  // What the file defines; unset when it doesn't parse.
+  AgentDefinition agent = 2;
+  // Why it doesn't load ("" when it does).
+  string problem = 3;
+}
+
+// Request message for WorkspaceService.ListAgentFiles.
+message ListAgentFilesRequest {
+  // Required for AGENT_SCOPE_WORKSPACE.
+  string workspace = 1;
+  AgentScope scope = 2;
+}
+
+// Response message for WorkspaceService.ListAgentFiles.
+message ListAgentFilesResponse {
+  // By file name.
+  repeated AgentFile files = 1;
+  // The scope's folder.
+  string dir = 2;
+}
+
+// Request message for WorkspaceService.SaveAgentFile.
+message SaveAgentFileRequest {
+  string workspace = 1;
+  AgentScope scope = 2;
+  // The agent it replaces (a rename); empty for a new agent.
+  string previous_name = 3;
+  AgentDefinition agent = 4;
+}
+
+// Response message for WorkspaceService.SaveAgentFile.
+message SaveAgentFileResponse {
+  // The file written, unless there were problems.
+  AgentFile file = 1;
+  repeated string problems = 2;
+}
+
+// Request message for WorkspaceService.DeleteAgentFile.
+message DeleteAgentFileRequest {
+  string workspace = 1;
+  AgentScope scope = 2;
+  // The agent whose file goes.
+  string name = 3;
+  // Or the file itself, which must be one of the scope's (for a file that
+  // doesn't parse, so names no agent).
+  string path = 4;
+}
+
+// Response message for WorkspaceService.DeleteAgentFile.
+message DeleteAgentFileResponse {}
 
 // Request message for WorkspaceService.GetModel.
 message GetModelRequest {
@@ -744,6 +894,9 @@ message MCPOffer {
 // Request message for WorkspaceService.ListTools.
 message ListToolsRequest {
   string workspace = 1;
+  // Every tool an agent can be given (for the agent editors), not only the
+  // active agent's; agent and mcp are left empty.
+  bool all = 2;
 }
 
 // Response message for WorkspaceService.ListTools.
