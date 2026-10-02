@@ -75,6 +75,7 @@
   position: relative; display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; flex: none;
   border-radius: 10px; color: var(--md-surface); font: 500 14px/1 var(--md-font-display);
 }
+.avatar.small { width: 28px; height: 28px; border-radius: 8px; font-size: 13px; flex: none; }
 .avatar-badge { position: absolute; top: -5px; right: -6px; }
 .avatar-dot { position: absolute; bottom: -2px; right: -2px; width: 10px; height: 10px; background: var(--md-tertiary); border: 2px solid var(--md-surface-container); }
 .item-main { display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0; align-self: stretch; padding: 0; border: none; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
@@ -97,29 +98,38 @@
 /* Workspace */
 .workspace { display: flex; flex-direction: column; flex: 1; min-height: 0; }
 .workspace[hidden] { display: none; }
-.topbar { display: flex; align-items: center; gap: 12px; height: var(--topbar-height); padding: 0 12px 0 84px; /* macOS window buttons */ flex: none; border-bottom: 1px solid var(--md-outline-variant); background: var(--md-surface-container-low); }
-.topbar-actions { display: flex; align-items: center; gap: 4px; }
+.topbar { display: flex; align-items: center; height: var(--topbar-height); padding: 0 12px 0 0; flex: none; background: var(--md-surface-container-low); }
+/* The brand, over the Files shelf (after macOS's window buttons); the
+   menus start where it ends: the center panel's left edge (its width is
+   set from the panel's place, Workspace.tsx). */
+.topbar-lead { flex: none; display: flex; align-items: center; min-width: 120px; padding-left: 84px; box-sizing: border-box; }
+.topbar-lead.narrow .brand-name { display: none; }
+.welcome-bar .topbar-lead { padding-right: 20px; }
+.this-workspace { gap: 12px; }
+
+/* The menu bar: Editor, then menus (Changes, Agents, Workers, Workspaces,
+   Help); the search and Settings at the right. */
+.menubar { flex: 1; min-width: 0; display: flex; align-items: center; gap: 2px; }
+.menubar-item {
+  position: relative; display: inline-flex; align-items: center; gap: 4px; flex: none; height: 36px; padding: 0 10px;
+  border: none; border-radius: var(--md-shape-full); background: transparent; color: var(--md-on-surface-variant);
+  font: 500 14px/20px var(--md-font); white-space: nowrap; cursor: pointer;
+}
+.menubar-item::after { content: ""; position: absolute; inset: 0; border-radius: inherit; background: currentColor; opacity: 0; transition: opacity 0.15s; pointer-events: none; }
+.menubar-item:hover::after { opacity: 0.08; }
+.menubar-item:focus-visible { outline: 2px solid var(--md-primary); outline-offset: 1px; }
+.menubar-item[aria-expanded="true"] { color: var(--md-on-surface); background: var(--md-surface-container-highest); }
+.menubar-chevron { margin-right: -4px; opacity: 0.7; }
+.menubar-badge { margin-left: 2px; background: var(--md-primary); color: var(--md-on-primary); }
+.menubar-badge.waiting { background: var(--md-error); color: var(--md-on-error); }
+.menubar-dot { flex: none; width: 7px; height: 7px; margin-left: 2px; border-radius: 50%; background: var(--md-error); }
+.menubar .toolbar-search { margin: 0 4px 0 8px; flex: 0 1 auto; min-width: 40px; }
+.menubar-menu { min-width: 260px; max-width: min(420px, calc(100vw - 32px)); }
 .title-edit { opacity: 0; color: var(--md-on-surface-variant); transition: opacity 0.1s; }
 .session-title:hover .title-edit { opacity: 1; }
 
-/* The app's name, then a little room before the workspace dropdown. */
-.brand { display: flex; align-items: center; gap: 6px; flex: none; margin-right: 12px; font: 500 20px/28px var(--md-font-display); }
-
-/* The workspace dropdown. */
-.switcher { position: relative; min-width: 0; }
-.switcher-button { display: flex; align-items: center; gap: 8px; max-width: 320px; height: 40px; padding: 0 10px 0 6px; border: 1px solid var(--md-outline-variant); border-radius: var(--md-shape-md); background: var(--md-surface); color: var(--md-on-surface); cursor: pointer; }
-.switcher-button:hover { background: var(--md-surface-container); }
-.switcher-button[aria-expanded="true"] { background: var(--md-secondary-container); color: var(--md-on-secondary-container); border-color: transparent; }
-.avatar.small { width: 26px; height: 26px; border-radius: 8px; font-size: 13px; }
-.switcher-menu { width: 360px; max-width: calc(100vw - 32px); }
-.switcher-row { position: relative; display: flex; align-items: center; }
-.switcher-row .menu-item { flex: 1; min-width: 0; padding-right: 76px; }
-.switcher-row .menu-item > span:last-child { min-width: 0; }
-.switcher-row.active .menu-item { background: var(--md-secondary-container); color: var(--md-on-secondary-container); }
-.switcher-actions { position: absolute; right: 8px; display: flex; gap: 2px; opacity: 0; }
-.switcher-row:hover .switcher-actions, .switcher-row:focus-within .switcher-actions { opacity: 1; }
-.switcher .badge { flex: none; }
-.switcher .dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--md-tertiary); }
+/* The app's mark and name. */
+.brand { display: flex; align-items: center; gap: 6px; flex: none; font: 500 20px/28px var(--md-font-display); }
 .workspace-body { position: relative; display: flex; flex: 1; min-height: 0; }
 .workspace-center { flex: 1; min-width: 0; display: flex; flex-direction: column; min-height: 0; }
 .chat-panel { position: relative; flex: none; display: flex; flex-direction: column; min-width: 320px; min-height: 0; border-left: 1px solid var(--md-outline-variant); background: var(--md-surface); }
@@ -215,27 +225,44 @@ body.resizing iframe, body.resizing .cm-editor { pointer-events: none; }
 .task-items li.in_progress { font-weight: 500; }
 .task-items li.in_progress .icon { color: var(--md-primary); }
 
-.composer { position: relative; display: flex; flex-direction: column; gap: 4px; padding: 12px 12px 8px 20px; border-radius: var(--md-shape-xl); background: var(--md-surface-container); border: 1px solid transparent; transition: border-color 0.15s; }
-.composer:focus-within { border-color: var(--md-outline); }
+.composer { position: relative; display: flex; flex-direction: column; gap: 4px; padding: 12px 12px 8px 20px; border-radius: var(--md-shape-xl); background: var(--md-surface-container); border: 1px solid transparent; transition: box-shadow 0.2s; }
 .composer-mark { display: none; }
+
+/* The chat input's border, in or out of the conversation (pinned, the dock
+   carries it): the welcome title's gradient (its primary to its tertiary,
+   .gradient-text) as a ring turning around it, slowly at rest and faster
+   while the agent works, brighter with a soft glow when focused. A
+   gradient on a pseudo-element masked to the border's width; the angle is
+   a registered property so it animates (where @property isn't supported
+   the ring is drawn, still). Dark: light blue to green; light: deep blue
+   to deep green, each theme's own title colours. */
+@property --ring-angle { syntax: "<angle>"; initial-value: 0deg; inherits: false; }
+:root { --ring-a: var(--md-primary); --ring-b: var(--md-tertiary); --ring-mid: color-mix(in oklab, var(--ring-a), var(--ring-b)); }
+:is(.composer, .composer-dock)::after {
+  content: ""; position: absolute; inset: -1px; border-radius: inherit; padding: 1.5px; pointer-events: none;
+  background: conic-gradient(from var(--ring-angle), var(--ring-a), var(--ring-mid), var(--ring-b), var(--ring-mid), var(--ring-a));
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+  opacity: 0.75; transition: opacity 0.2s;
+  animation: ring-turn 8s linear infinite;
+}
+.composer-dock .composer::after { display: none; } /* pinned: the dock's ring */
+:is(.composer, .composer-dock):focus-within::after { opacity: 1; }
+.composer.running::after, .composer-dock:has(.composer.running)::after { opacity: 1; animation-duration: 2.5s; }
+.composer:not(.composer-dock .composer):focus-within, .composer-dock:focus-within { box-shadow: 0 0 18px -6px var(--ring-b); }
+@keyframes ring-turn { to { --ring-angle: 360deg; } }
+@media (prefers-reduced-motion: reduce) { :is(.composer, .composer-dock)::after { animation: none; } }
 /* The pinned composer (composerDock.ts): part of the window's frame, like
    the status bar under it, not a card. Flush and square, one line at rest,
-   growing upward; focus and a running turn show on its top edge. */
-.composer-dock { position: relative; flex: none; display: flex; background: var(--md-surface-container); border-top: 1px solid var(--md-outline-variant); transition: border-color 0.15s, box-shadow 0.15s; }
-.composer-dock:focus-within { border-top-color: var(--md-primary); box-shadow: inset 0 1px 0 var(--md-primary); }
-.composer-dock:has(.composer.running)::before {
-  content: ""; position: absolute; left: 0; right: 0; top: -1px; height: 2px; pointer-events: none;
-  background: linear-gradient(90deg, transparent, var(--md-primary), transparent) no-repeat; background-size: 30% 100%;
-  animation: dock-running 1.6s ease-in-out infinite;
-}
-@keyframes dock-running { from { background-position: -40% 0; } to { background-position: 140% 0; } }
-@media (prefers-reduced-motion: reduce) { .composer-dock:has(.composer.running)::before { animation: none; background-size: 100% 100%; opacity: 0.6; } }
+   growing upward; the ring (above) is its border, focus and a running turn
+   show on it. */
+.composer-dock { position: relative; flex: none; display: flex; background: var(--md-surface-container); border-top: 1px solid transparent; transition: box-shadow 0.2s; }
 .composer-dock .chat-column.dock { max-width: none; margin: 0; padding: 0; gap: 0; background: transparent; }
 .composer-dock .composer {
   display: grid; grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "att att att" "mark text bar"; align-items: end; column-gap: 10px; row-gap: 0;
   padding: 12px 12px 12px 16px; border: none; border-radius: 0; background: transparent; box-shadow: none;
 }
-.composer-dock .composer.running { border: none; }
 .composer-dock .composer-mark { display: block; grid-area: mark; align-self: start; padding-top: 4px; color: var(--md-primary); font: 600 18px/22px var(--md-mono); user-select: none; }
 .composer-dock .composer textarea { grid-area: text; min-height: 30px; max-height: 33vh; max-width: 1100px; padding: 4px 0; font-size: 14px; }
 .composer-dock .command-menu { right: auto; width: min(760px, calc(100vw - 32px)); }
@@ -247,7 +274,6 @@ body.resizing iframe, body.resizing .cm-editor { pointer-events: none; }
 .composer-dock .composer-bar .icon-btn:disabled { color: var(--md-on-surface-variant); opacity: 0.5; }
 /* Background tasks: a flat row above the input, not a card. */
 .composer-dock .tasks { border: none; border-bottom: 1px solid var(--md-outline-variant); border-radius: 0; background: transparent; box-shadow: none; padding: 6px 14px; }
-.composer.running { border-color: color-mix(in srgb, var(--md-primary) 40%, transparent); }
 .composer textarea { border: none; outline: none; resize: none; background: transparent; color: var(--md-on-surface); font: 400 15px/22px var(--md-font); padding: 4px 0; min-height: 30px; max-height: 280px; }
 .composer textarea::placeholder { color: var(--md-on-surface-variant); }
 .composer-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
@@ -343,9 +369,11 @@ body.resizing iframe, body.resizing .cm-editor { pointer-events: none; }
 .live-text { white-space: pre-wrap; }
 
 /* Run settings panel */
-.run-settings { position: relative; width: var(--panel-width); flex: none; display: flex; flex-direction: column; min-height: 0; border-left: 1px solid var(--md-outline-variant); background: var(--md-surface-container-low); }
 .panel-head { display: flex; align-items: center; gap: 10px; padding: 14px 12px 10px 20px; }
 .panel-scroll { flex: 1; overflow-y: auto; padding: 4px 14px 24px; }
+/* The same form in Settings › Workspaces: the settings pane scrolls it. */
+.ws-settings-embedded .panel-scroll { overflow: visible; padding: 0; }
+.ws-settings-embedded > .card.error { margin-bottom: 12px; }
 /* The run settings' sections: cards, each with its icon, title, scope and
    (folded) a summary; fields two to a row where there's room. */
 .panel-section {
@@ -400,18 +428,19 @@ body.resizing iframe, body.resizing .cm-editor { pointer-events: none; }
 :root[data-density="compact"] .bubble { padding: 8px 14px; }
 :root[data-density="compact"] .list-item { min-height: 40px; }
 
-/* Narrower windows: the run settings float over the chat; the view
-   switcher keeps its icons. */
-@media (max-width: 1280px) {
-  .run-settings { position: absolute; top: 0; right: 0; bottom: 0; z-index: 20; box-shadow: var(--md-elevation-3); }
-}
+/* Narrower windows: the top bar's search folds to its icon, and then its
+   menus lose their chevrons. */
 @media (max-width: 1100px) {
-  .topbar .seg-label { display: none; }
+  /* The search bar folds to its icon. */
+  .toolbar-search { width: 40px; padding: 0; justify-content: center; }
+  .toolbar-search-text, .toolbar-search-key { display: none; }
   .changes-side { width: 240px; }
   .split-side { width: 240px; }
 }
 @media (max-width: 800px) {
-  .chat-column { padding: 0 16px; }
+  .chat-column { padding-inline: 16px; }
+  .menubar-item { padding: 0 8px; }
+  .menubar-chevron { display: none; }
 }
 .crash-details { max-width: 560px; max-height: 200px; text-align: left; }
 
@@ -586,7 +615,8 @@ code.file-link:hover { text-decoration-color: currentColor; }
 
 /* The chat as a side panel: a smaller greeting (center stage keeps the full one). */
 .chat-panel:not(.center) .empty .t-display { font-size: 30px; line-height: 38px; }
-.chat-panel:not(.center) .chat-column { padding: 0 20px; }
+/* Only the sides: the session bar is a chat column too, with its own top and bottom. */
+.chat-panel:not(.center) .chat-column { padding-inline: 20px; }
 
 /* The license texts: monospace, wrapped, scrolling inside the dialog. */
 .license-text { max-height: 60vh; overflow: auto; margin: 0; padding: 16px; border-radius: var(--md-shape-md); background: var(--md-surface-container-low); font-size: 12px; line-height: 18px; white-space: pre-wrap; overflow-wrap: anywhere; }
@@ -627,13 +657,15 @@ code.file-link:hover { text-decoration-color: currentColor; }
 .agent-form .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 16px; }
 .agent-form .field .input, .agent-form .field .select { width: 100%; }
 .agent-form .field .input.slider-value { width: 76px; }
-.agent-switches { gap: 10px; }
+.agent-switch { gap: 10px; align-self: flex-start; cursor: pointer; }
+.agent-isolation { gap: 8px 12px; }
+.agent-subhead { margin: 6px 0 -8px; }
 .agent-tools { border: 1px solid var(--md-outline-variant); border-radius: var(--md-shape-md); padding: 8px 12px 12px; margin: 0; gap: 10px; }
 .agent-tools legend { padding: 0 4px; color: var(--md-on-surface-variant); }
 .agent-tool-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 2px 12px; }
 .agent-tool { display: flex; align-items: center; gap: 8px; min-width: 0; padding: 3px 0; cursor: pointer; font-size: 13px; }
 .agent-tool input { accent-color: var(--md-primary); flex: none; }
-.agent-prompt { min-height: 220px; resize: vertical; font-size: 13px; line-height: 1.5; }
+.agent-prompt { min-height: 140px; resize: vertical; font: inherit; line-height: 1.5; }
 .agent-advanced-toggle { width: 100%; border: none; background: none; cursor: pointer; font: inherit; padding: 0; margin: 4px 2px 0; }
 .agent-advanced-toggle:hover .t-label { color: var(--md-on-surface); }
 .agent-advanced-toggle:focus-visible { outline: 2px solid var(--md-primary); outline-offset: 2px; border-radius: var(--md-shape-xs); }
@@ -641,16 +673,39 @@ code.file-link:hover { text-decoration-color: currentColor; }
 .agent-actions { gap: 8px; padding-top: 4px; }
 .agent-where { min-width: 0; text-align: right; }
 /* In Settings: a framed split, as tall as the pane allows. */
+/* What the menus open over the editor: the changes and an agent fill a
+   large dialog edge to edge; a worker reads as a wide one. */
+.changes-dialog .body { padding: 0; gap: 0; border-top: 1px solid var(--md-outline-variant); }
+.changes-dialog .changes { flex: 1; min-height: 0; }
+.worker-dialog .worker { max-width: none; }
+/* An agent's form reads as the worker's: the dialog's padding and scroll,
+   its buttons in the footer. */
+.agent-dialog .agent-editor, .agent-dialog .split, .agent-dialog .split-main { display: block; overflow: visible; padding: 0; }
+.agent-dialog .agent-form { max-width: none; gap: 14px; padding-bottom: 8px; }
+/* A form's buttons in its dialog's footer (the worker's, the agent's). */
+.dialog-actions { display: flex; flex: 1; align-items: center; gap: 8px; min-width: 0; }
 .agent-editor-user { height: min(640px, calc(100vh - 300px)); border: 1px solid var(--md-outline-variant); border-radius: var(--md-shape-md); overflow: hidden; }
 .agent-editor-user .split-side { width: 230px; }
 .agent-editor-user .split-main { padding: 18px 20px; }
-@media (max-width: 900px) { .agent-form .pair { grid-template-columns: 1fr; } }
+/* The editor answers to its pane, not the window: in a narrow pane (the
+   Agents view beside a wide chat, Settings on a small screen) the list
+   goes above the form, and then the form's pairs become one column. */
+.agent-editor { display: flex; flex: 1; min-width: 0; min-height: 0; container: agent-editor / inline-size; }
+.agent-editor > .split { min-width: 0; }
+.agent-editor .split-main { container: agent-form / inline-size; }
+@container agent-editor (max-width: 720px) {
+  .agent-editor-user .split { flex-direction: column; }
+  .agent-editor-user .split-side { width: auto; max-height: 34%; flex: none; border-right: none; border-bottom: 1px solid var(--md-outline-variant); }
+  .agent-editor-user .split-main { padding: 12px 16px; }
+}
+@container agent-form (max-width: 480px) {
+  .agent-form .pair { grid-template-columns: 1fr; }
+  .agent-tool-grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
+  .agent-where { flex-basis: 100%; text-align: left; }
+}
 @media (max-width: 800px) { .new-worker .pair, .new-worker .triple { grid-template-columns: 1fr; } }
 
 /* The inbox of background runs (RunsInbox.tsx). */
-.inbox-anchor { position: relative; display: inline-flex; }
-.inbox-badge { position: absolute; top: 2px; right: 0; pointer-events: none; background: var(--md-primary); color: var(--md-on-primary); }
-.inbox-badge.waiting { background: var(--md-error); color: var(--md-on-error); }
 .inbox-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
 .inbox-row { display: flex; align-items: center; gap: 12px; padding: 8px 4px; border-bottom: 1px solid var(--md-outline-variant); }
 .inbox-row:last-child { border-bottom: none; }
@@ -664,9 +719,6 @@ code.file-link:hover { text-decoration-color: currentColor; }
 /* Inside an editor (EditorPanel.tsx): the chat fills the panel. */
 .editor-panel { display: flex; flex-direction: column; height: 100vh; min-height: 0; background: var(--md-surface); }
 .editor-panel-loading { padding: 16px; }
-
-/* A workspace whose workers failed since their view was shown (BL-WK-11). */
-.switcher .dot.failed, .avatar-dot.failed { background: var(--md-error); }
 
 /* A narrow Changes pane (beside a wide chat) lists the files and turns
    above the diff instead of beside it. */

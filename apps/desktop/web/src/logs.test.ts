@@ -15,7 +15,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { logTime } from "./logs";
+import { canDelete, logTime } from "./logs";
 
 describe("logTime", () => {
   it.each([
@@ -23,5 +23,19 @@ describe("logTime", () => {
     [new Date(2026, 8, 28, 23, 59, 59, 999), "23:59:59.999"],
   ])("%s", (d, want) => {
     expect(logTime(d)).toBe(want);
+  });
+});
+
+describe("canDelete", () => {
+  const now = new Date(2026, 8, 28, 0, 30);
+  it.each([
+    ["2026-09-27", true],
+    ["2025-12-31", true],
+    ["2026-09-28", false], // today's is being written
+    ["2026-09-29", false],
+    ["", false], // the newest
+    ["27/09/2026", false],
+  ])("%s", (day, want) => {
+    expect(canDelete(day, now)).toBe(want);
   });
 });

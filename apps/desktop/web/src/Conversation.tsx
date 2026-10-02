@@ -24,6 +24,7 @@ import {
   mdiCheck,
   mdiCheckboxBlankOutline,
   mdiCheckboxMarked,
+  mdiDeleteOutline,
   mdiChevronDown,
   mdiChevronRight,
   mdiClipboardCheckOutline,
@@ -89,7 +90,7 @@ import { Markdown } from "./Markdown";
 import { language, t, tn, useLanguage } from "./i18n";
 import { notify, shouldNotify, type NotifyKind } from "./notify";
 import { efforts, effortIcon, modeOf } from "./options";
-import { useApp } from "./state";
+import { useAdvanced, useApp } from "./state";
 import { publishStatus } from "./status";
 import { useOpenPath } from "./files/links";
 import { applyEvent, assignPromptIndices, failed, fromMessages, parseDiff, summarizeArgs, tasksOf, turnAnswers, type Entry, type UserEntry, groupTools, latestTurn, type ToolEntry } from "./turns";
@@ -180,6 +181,7 @@ export function Conversation({
   }, [dir]);
   const commands = useMemo(() => allCommands(customCommands), [customCommands]);
   const [dragging, setDragging] = useState(false);
+  const [deleting, setDeleting] = useState<SessionInfo | null>(null);
   const [forceRewind, setForceRewind] = useState<{ index: number; mode: string; error: string } | null>(null);
   const abort = useRef<AbortController | null>(null);
   const following = useRef(""); // the background run the turn view follows
@@ -575,6 +577,16 @@ export function Conversation({
       fail(e);
     }
   };
+  const remove = async (s: SessionInfo) => {
+    setDeleting(null);
+    try {
+      await sessions.deleteSession({ workspace: dir, sessionId: s.id });
+      snack(t("desktop.chat.deleted", { title: chatTitle(s) }));
+      await refreshList();
+    } catch (e) {
+      snack(message(e), { error: true });
+    }
+  };
   const rename = async (title: string) => {
     try {
       setSession((await sessions.renameSession({ workspace: dir, title })).session);
@@ -886,7 +898,7 @@ export function Conversation({
           <span className="t-title">{t("desktop.drop")}</span>
         </div>
       )}
-      <SessionBar session={session} list={list} running={running} onNew={newSession} onLoad={load} onRename={rename} />
+      <SessionBar session={session} list={list} running={running} onNew={newSession} onLoad={load} onRename={rename} onDelete={setDeleting} />
       <div className="chat-scroll" ref={scroller} onScroll={onScroll}>
         <div className="chat-column">
           {modelProblem && (
@@ -947,6 +959,23 @@ export function Conversation({
         </div>
       </div>
       {dockEl && visible ? createPortal(dock, dockEl) : dock}
+      {deleting && (
+        <Dialog
+          title={t("desktop.chat.delete_title", { title: chatTitle(deleting) })}
+          icon={mdiDeleteOutline}
+          onClose={() => setDeleting(null)}
+          footer={
+            <>
+              <Button onClick={() => setDeleting(null)}>{t("desktop.cancel")}</Button>
+              <Button variant="filled" danger onClick={() => void remove(deleting)}>
+                {t("desktop.chat.delete")}
+              </Button>
+            </>
+          }
+        >
+          <p>{t("desktop.chat.delete_body")}</p>
+        </Dialog>
+      )}
       {forceRewind && (
         <Dialog
           title={t("desktop.conflict.title")}
@@ -977,6 +1006,11 @@ export function Conversation({
   );
 }
 
+/** How a chat is named in History: a snapshot by its name, else its title. */
+function chatTitle(s: SessionInfo): string {
+  return s.snapshot ? `📸 ${s.snapshot}` : s.title || t("desktop.untitled");
+}
+
 function SessionBar({
   session,
   list,
@@ -984,6 +1018,7 @@ function SessionBar({
   onNew,
   onLoad,
   onRename,
+  onDelete,
 }: {
   session?: SessionInfo;
   list: SessionInfo[];
@@ -991,6 +1026,7 @@ function SessionBar({
   onNew: () => void;
   onLoad: (id: string) => void;
   onRename: (t: string) => void;
+  onDelete: (s: SessionInfo) => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [title, setTitle] = useState("");
@@ -1039,10 +1075,12 @@ function SessionBar({
             : [
                 { heading: t("desktop.chat.list") },
                 ...list.map((s) => ({
-                  label: s.snapshot ? `📸 ${s.snapshot}` : s.title || "(untitled)",
+                  label: chatTitle(s),
                   detail: tn("desktop.messages", s.messageCount) + (s.updated ? ` · ${timestampDate(s.updated).toLocaleString(language(), { dateStyle: "medium", timeStyle: "short" })}` : ""),
                   on: s.id === session?.id,
                   onSelect: () => onLoad(s.id),
+                  // The chat in view can't be deleted: start or load another first.
+                  actions: s.id === session?.id ? undefined : [{ icon: mdiDeleteOutline, label: t("desktop.chat.delete"), removes: true, onSelect: () => onDelete(s) }],
                 })),
               ]
         }
@@ -1152,6 +1190,7 @@ const EntryView = memo(function EntryView({
  * whole turn's answer when it came in parts. They show once it's complete.
  */
 function ModelAnswer({ entry, turn }: { entry: Extract<Entry, { kind: "model" }>; turn?: string }) {
+  const advanced = useAdvanced(); // copy as Markdown and the whole turn: advanced
   const snack = useSnackbar();
   const body = useRef<HTMLDivElement>(null);
   const copy = (f: () => Promise<void>, done: string) =>
@@ -1172,8 +1211,8 @@ function ModelAnswer({ entry, turn }: { entry: Extract<Entry, { kind: "model" }>
       {!entry.open && entry.text.trim() && (
         <div className="bubble-actions answer-actions">
           <IconButton icon={mdiContentCopy} label={t("desktop.copy")} small onClick={() => body.current && copy(() => copyRendered(body.current!), t("desktop.copied"))} />
-          <IconButton icon={mdiLanguageMarkdownOutline} label={t("desktop.copy_markdown")} small onClick={() => copy(() => copyText(entry.text), t("desktop.copied_markdown"))} />
-          {turn && <IconButton icon={mdiTextBoxMultipleOutline} label={t("desktop.copy_turn")} small onClick={() => copy(() => copyText(turn), t("desktop.copied_turn"))} />}
+          {advanced && <IconButton icon={mdiLanguageMarkdownOutline} label={t("desktop.copy_markdown")} small onClick={() => copy(() => copyText(entry.text), t("desktop.copied_markdown"))} />}
+          {advanced && turn && <IconButton icon={mdiTextBoxMultipleOutline} label={t("desktop.copy_turn")} small onClick={() => copy(() => copyText(turn), t("desktop.copied_turn"))} />}
         </div>
       )}
     </div>
@@ -1182,6 +1221,8 @@ function ModelAnswer({ entry, turn }: { entry: Extract<Entry, { kind: "model" }>
 
 function UserBubble({ entry, running, onRewind, onEdit }: { entry: UserEntry; running: boolean; onRewind: (index: number, mode: string) => void; onEdit: (text: string) => void }) {
   const snack = useSnackbar();
+  // The rewind menu's finer choices are advanced; Edit goes back as it says.
+  const advanced = useAdvanced();
   if (entry.sub === "hook" || entry.sub === "plan") {
     return (
       <div className="notice info row">
@@ -1198,6 +1239,7 @@ function UserBubble({ entry, running, onRewind, onEdit }: { entry: UserEntry; ru
         {canRewind && (
           <>
             <IconButton icon={mdiPencilOutline} label={t("desktop.prompt.edit")} small onClick={() => onRewind(entry.index!, "both")} />
+            {advanced && (
             <Menu
               placement="down end"
               trigger={(p) => <IconButton icon={mdiDotsHorizontal} label={t("desktop.prompt.rewind")} small {...p} />}
@@ -1213,6 +1255,7 @@ function UserBubble({ entry, running, onRewind, onEdit }: { entry: UserEntry; ru
                 { label: t("desktop.rewind.copy"), icon: mdiContentCopy, onSelect: () => onEdit(entry.text) },
               ]}
             />
+            )}
           </>
         )}
       </div>
@@ -1304,13 +1347,17 @@ function ToolGroup({ tools, live }: { tools: ToolEntry[]; live: boolean }) {
 }
 
 function ToolRow({ name, args, result }: { name: string; args?: JsonObject; result?: JsonObject }) {
-  const [open, setOpen] = useState(false);
+  // A tool's arguments and result open with advanced settings; simple mode
+  // shows what it did and on which file.
+  const advanced = useAdvanced();
+  const [opened, setOpen] = useState(false);
+  const open = advanced && opened;
   const openPath = useOpenPath();
   const bad = failed(result);
   const status = result === undefined ? <Icon path={mdiProgressClock} size="sm" className="pulse" /> : bad ? <Icon path={mdiClose} size="sm" /> : <Icon path={mdiCheck} size="sm" />;
   return (
     <div className={`tool ${bad ? "failed" : ""} ${open ? "open" : ""}`}>
-      <button className="tool-head" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
+      <button className="tool-head" onClick={() => advanced && setOpen((o) => !o)} aria-expanded={advanced ? open : undefined}>
         <Icon path={toolIcon(name)} size="sm" />
         <code>{name}</code>
         {openPath && typeof args?.path === "string" && args.path ? (
@@ -1434,6 +1481,7 @@ function JsonBlock({ label, value }: { label: string; value: JsonObject }) {
 
 function ApprovalCard({ req, onDecide, who, autoFocus = true }: { req: ApprovalRequest; onDecide: (d: Decision) => void; who?: string; autoFocus?: boolean }) {
   const files = req.diff ? parseDiff(req.diff) : [];
+  const advanced = useAdvanced(); // Always allow: advanced
   return (
     <div className={`card approval ${who ? "task-request" : ""}`} role="alertdialog" aria-label={t("desktop.approval.label")}>
       <div className="row">
@@ -1461,7 +1509,7 @@ function ApprovalCard({ req, onDecide, who, autoFocus = true }: { req: ApprovalR
             {t("desktop.approval.session", { scope: req.scopeLabel })}
           </Button>
         )}
-        {req.scopeLabel && <Button onClick={() => onDecide(Decision.ALWAYS)}>{t("desktop.approval.always", { scope: req.scopeLabel })}</Button>}
+        {advanced && req.scopeLabel && <Button onClick={() => onDecide(Decision.ALWAYS)}>{t("desktop.approval.always", { scope: req.scopeLabel })}</Button>}
         <Button variant="outlined" danger onClick={() => onDecide(Decision.DENY)}>
           {t("desktop.approval.deny")}
         </Button>

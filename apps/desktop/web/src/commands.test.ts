@@ -15,7 +15,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { allCommands, builtins, filterPalette, helpText, matchCommands, parseCommand, type CommandSpec } from "./commands";
+import { allCommands, builtins, filterPalette, helpText, matchCommands, paletteResults, parseCommand, searchesFiles, type CommandSpec } from "./commands";
 
 const custom: CommandSpec[] = [
   { name: "review", description: "Review changes", source: "bundled" },
@@ -78,5 +78,37 @@ describe("filterPalette", () => {
     // A label match beats a description match, whatever the group order.
     const withView = [{ group: "Commands", label: "/review", detail: "Review the uncommitted changes", run: noop }, { group: "View", label: "Show the changes", run: noop }];
     expect(filterPalette(withView, "changes").map((i) => i.label)).toEqual(["Show the changes", "/review"]);
+  });
+});
+
+describe("paletteResults", () => {
+  const noop = () => {};
+  const files = [
+    { group: "Files", label: "discount.go", detail: "internal/cart", run: noop },
+    { group: "Files", label: "discount_test.go", detail: "internal/cart", run: noop },
+  ];
+  const items = [
+    { group: "Commands", label: "/diff", detail: "Show the changes", run: noop },
+    { group: "Chats", label: "Fix the discount rounding", run: noop },
+    { group: "Settings", label: "Dark theme", run: noop },
+  ];
+  it.each([
+    { name: "files first, then what matches", query: "disc", want: ["discount.go", "discount_test.go", "Fix the discount rounding"] },
+    { name: "files aren't filtered again", query: "dsc", want: ["discount.go", "discount_test.go"] },
+    { name: "a command shows no files", query: "/di", want: ["/diff"] },
+    { name: "nothing typed: no files", query: "  ", want: ["/diff", "Fix the discount rounding", "Dark theme"] },
+  ])("$name", ({ query, want }) => {
+    expect(paletteResults(files, items, query).map((i) => i.label)).toEqual(want);
+  });
+
+  it.each([
+    ["cart", true],
+    ["discount.go:12", true],
+    ["", false],
+    ["   ", false],
+    ["/compact", false],
+    [" /cost", false],
+  ])("searches files for %j: %s", (query, want) => {
+    expect(searchesFiles(query)).toBe(want);
   });
 });

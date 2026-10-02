@@ -145,9 +145,14 @@ export function sameForm(a: AgentForm, b: AgentForm): boolean {
   return JSON.stringify(a) === JSON.stringify(b);
 }
 
-/** How many of the advanced model settings the form sets. */
+/**
+ * How many of the Advanced section's settings the form sets: the model,
+ * agency, mode, max turns, isolation, tools and the model settings. The
+ * file name, always set, isn't counted.
+ */
 export function advancedCount(f: AgentForm): number {
-  return [f.effort, f.thinkingBudget, f.temperature, f.topP, f.maxTokens].filter((v) => v.trim() !== "").length;
+  const set = [f.defaultModel, f.agencyLevel, f.permissionMode, f.maxTurns, f.isolation, f.effort, f.thinkingBudget, f.temperature, f.topP, f.maxTokens].filter((v) => v.trim() !== "").length;
+  return set + (f.tools.length > 0 ? 1 : 0);
 }
 
 /** The tools to show boxes for: those offered and those chosen, sorted. */

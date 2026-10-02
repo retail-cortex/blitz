@@ -15,7 +15,8 @@
  */
 
 import { useEffect, useRef, useState } from "react";
-import { mdiAlertCircleOutline, mdiCalendarEdit, mdiCalendarPlus, mdiRefresh } from "@mdi/js";
+import { createPortal } from "react-dom";
+import { mdiAlertCircleOutline, mdiRefresh } from "@mdi/js";
 import { workers, workspaces } from "./api";
 import { message, reason } from "./errors";
 import { t } from "./i18n";
@@ -34,15 +35,29 @@ export interface WorkerEdit {
 }
 
 /**
- * A form for a worker, new or existing (edit): a field for each of
+ * A worker's form, new or existing (edit), in the worker dialog's edit
+ * view: a field for each of
  * WORKER.md's frontmatter settings and the workflow. The service checks it
  * as the scheduler would read it before writing
  * .agents/workers/<name>/WORKER.md, and says what's wrong otherwise. A new
  * worker waits to be reviewed and enabled; an edited one keeps its name,
  * is saved only over the file as it was loaded, and an enabled one waits
- * to be enabled again.
+ * to be enabled again. Its buttons (Cancel, Save or Create) go in footer,
+ * the dialog's footer, when given.
  */
-export function WorkerDialog({ dir, edit, onClose, onSaved }: { dir: string; edit?: WorkerEdit; onClose: () => void; onSaved: (name: string) => void }) {
+export function WorkerEditor({
+  dir,
+  edit,
+  footer,
+  onCancel,
+  onSaved,
+}: {
+  dir: string;
+  edit?: WorkerEdit;
+  footer: HTMLElement | null;
+  onCancel: () => void;
+  onSaved: (name: string) => void;
+}) {
   const snack = useSnackbar();
   const [f, setF] = useState<WorkerForm>({ ...emptyWorkerForm, name: edit?.name ?? "", timezone: edit ? "" : (Intl.DateTimeFormat().resolvedOptions().timeZone ?? "") });
   const [named, setNamed] = useState(!!edit); // the name was typed (or is fixed), not made from the description
@@ -102,7 +117,6 @@ export function WorkerDialog({ dir, edit, onClose, onSaved }: { dir: string; edi
       }
       snack(edit ? t(edit.pauses ? "desktop.editworker.saved_paused" : "desktop.editworker.saved", { name: f.name.trim() }) : t("desktop.newworker.created", { name: f.name.trim() }));
       onSaved(f.name.trim());
-      onClose();
     } catch (e) {
       if (edit && reason(e) === "HASH_MISMATCH") setStale(true);
       else setProblems([message(e)]);
@@ -127,22 +141,17 @@ export function WorkerDialog({ dir, edit, onClose, onSaved }: { dir: string; edi
       {props.hint && <span className="t-body-sm muted">{props.hint}</span>}
     </label>
   );
+  const actions = (
+    <>
+      <span className="t-body-sm muted spacer">{t(note.key, { path: note.path })}</span>
+      <Button onClick={onCancel}>{t("desktop.cancel")}</Button>
+      <Button variant="filled" disabled={!canSave(f, { busy, editing: !!edit, loaded: !!loaded, stale })} onClick={save}>
+        {edit ? t("desktop.editworker.save") : t("desktop.newworker.create")}
+      </Button>
+    </>
+  );
   return (
-    <Dialog
-      title={edit ? t("desktop.editworker.title", { name: edit.name }) : t("desktop.newworker.title")}
-      icon={edit ? mdiCalendarEdit : mdiCalendarPlus}
-      onClose={onClose}
-      wide
-      footer={
-        <>
-          <span className="t-body-sm muted spacer">{t(note.key, { path: note.path })}</span>
-          <Button onClick={onClose}>{t("desktop.cancel")}</Button>
-          <Button variant="filled" disabled={!canSave(f, { busy, editing: !!edit, loaded: !!loaded, stale })} onClick={save}>
-            {edit ? t("desktop.editworker.save") : t("desktop.newworker.create")}
-          </Button>
-        </>
-      }
-    >
+    <>
       <div className="stack new-worker" style={{ gap: 14 }}>
         {stale && (
           <div className="card error row" role="alert" style={{ gap: 8 }}>
@@ -261,6 +270,7 @@ export function WorkerDialog({ dir, edit, onClose, onSaved }: { dir: string; edi
           </div>
         )}
       </div>
-    </Dialog>
+      {footer ? createPortal(actions, footer) : <div className="row worker-editor-actions">{actions}</div>}
+    </>
   );
 }

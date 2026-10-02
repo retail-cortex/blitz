@@ -39,14 +39,12 @@ type Prefs struct {
 	Workspaces []WorkspacePrefs `json:"workspaces"`
 	// Active is the directory of the workspace in view.
 	Active string `json:"active,omitempty"`
-	// RunSettings shows the run settings panel beside the conversation.
-	RunSettings bool `json:"run_settings"`
 	// ShowThoughts shows the model's thinking, collapsed.
 	ShowThoughts bool `json:"show_thoughts"`
 	// Density is "comfortable" (the default) or "compact".
 	Density string `json:"density"`
-	// Composer is where the chat input sits: "panel" (the default, under
-	// the conversation) or "pinned" (across the window's foot).
+	// Composer is where the chat input sits: "pinned" (the default, across
+	// the window's foot) or "panel" (under the conversation).
 	Composer string `json:"composer"`
 	// Notifications is "on" (the default: when the agent finishes or waits
 	// while the window is elsewhere) or "off".
@@ -62,16 +60,17 @@ type Prefs struct {
 	// ChatWidth is the chat panel's width in pixels (0: a third of the
 	// window).
 	ChatWidth int `json:"chat_width,omitempty"`
-	// FilesWidth and RunSettingsWidth are the Files shelf's and the run
-	// settings panel's widths in pixels (0: their defaults).
-	FilesWidth       int `json:"files_width,omitempty"`
-	RunSettingsWidth int `json:"run_settings_width,omitempty"`
+	// FilesWidth is the Files shelf's width in pixels (0: its default).
+	FilesWidth int `json:"files_width,omitempty"`
 	// Width is how wide the conversation runs: "full" (the default, the
 	// whole panel) or "readable" (a column of about 860 px).
 	Width string `json:"width"`
 	// TaskContinue: a background task that ends while nothing runs
 	// starts a turn about it.
 	TaskContinue bool `json:"task_continue"`
+	// Advanced shows the advanced settings throughout the window; off (the
+	// default) it shows what a newcomer needs.
+	Advanced bool `json:"advanced"`
 	// Transparency is "on" (the default: glass surfaces) or "off".
 	Transparency string `json:"transparency"`
 	// MarkdownCSSLight and MarkdownCSSDark are the user's CSS for Markdown
@@ -114,8 +113,8 @@ func (p *Prefs) normalize() {
 	if p.Density != "compact" {
 		p.Density = "comfortable"
 	}
-	if p.Composer != "pinned" {
-		p.Composer = "panel"
+	if p.Composer != "panel" {
+		p.Composer = "pinned"
 	}
 	if p.Width != "readable" {
 		p.Width = "full"
@@ -134,7 +133,7 @@ func (p *Prefs) normalize() {
 	if !languageTag.MatchString(p.Language) {
 		p.Language = "system"
 	}
-	for _, w := range []*int{&p.ChatWidth, &p.FilesWidth, &p.RunSettingsWidth} {
+	for _, w := range []*int{&p.ChatWidth, &p.FilesWidth} {
 		if *w < 0 || *w > 10000 {
 			*w = 0
 		}

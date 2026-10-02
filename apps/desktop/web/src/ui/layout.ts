@@ -87,7 +87,5 @@ export function useFloatingDismiss(open: boolean, ref: React.RefObject<HTMLEleme
   }, [open, ref, query, name]);
 }
 
-/** Below this width the run settings float over the chat. */
-export const runSettingsFloat = 1280;
 /** Below this width the Files shelf floats over the editor. */
 export const filesFloat = 1100;

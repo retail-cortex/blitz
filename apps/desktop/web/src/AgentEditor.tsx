@@ -14,7 +14,8 @@
  * limitations under the License.
  */
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { mdiAlertCircleOutline, mdiChevronDown, mdiChevronRight, mdiClose, mdiContentSaveOutline, mdiDeleteOutline, mdiPlus, mdiRefresh, mdiRobotOutline, mdiUndoVariant } from "@mdi/js";
 import { workspaces } from "./api";
 import { message } from "./errors";
@@ -25,6 +26,7 @@ import { addTools, advancedCount, agentFromForm, agentPath, deleteTarget, emptyA
 import { agencies, efforts, modes } from "./options";
 import { Button, Dialog, Field, Icon, IconButton, Segmented, Switch, useSnackbar } from "./ui/controls";
 import { workerName } from "./workerForm";
+import type { ItemIntent } from "./intent";
 
 /** How often the open editor asks for the agent files again. */
 const agentsPollMs = 5000;
@@ -34,13 +36,28 @@ type Open = { path: string } | { path: "" } | null;
 
 /**
  * The agents of one scope, the workspace's (.agents/agents) or the user's
- * (~/.blitz/agents): a list of their files, and a form for each of an
- * agent file's settings, its prompt and the model settings it runs with.
+ * (~/.blitz/agents), and a form for each of an agent file's settings,
+ * its prompt and the model settings it runs with. The user's are listed
+ * beside the form; the workspace's are in the top bar's Agents menu,
+ * which opens one in a dialog (intent, dialog).
  * context is the workspace asked for the tools and models to offer (the
  * user's agents have none of their own; "" offers none, and tools are
  * typed).
  */
-export function AgentEditor({ workspace, scope, context = workspace }: { workspace: string; scope: AgentScope; context?: string }) {
+export function AgentEditor({
+  workspace,
+  scope,
+  context = workspace,
+  intent,
+  dialog,
+}: {
+  workspace: string;
+  scope: AgentScope;
+  context?: string;
+  intent?: ItemIntent;
+  /** Shown as a dialog over the window (the Agents menu's); closing asks first when there are unsaved edits. */
+  dialog?: { onClose: () => void };
+}) {
   const snack = useSnackbar();
   const [files, setFiles] = useState<AgentFile[]>([]);
   const [dir, setDir] = useState("");
@@ -53,6 +70,8 @@ export function AgentEditor({ workspace, scope, context = workspace }: { workspa
   const [problems, setProblems] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  // The dialog's footer, where the form's buttons go when it's a dialog.
+  const [footer, setFooter] = useState<HTMLDivElement | null>(null);
   // A switch waiting for the user to drop unsaved edits.
   const [pending, setPending] = useState<(() => void) | null>(null);
   const [tools, setTools] = useState<string[]>([]);
@@ -111,7 +130,7 @@ export function AgentEditor({ workspace, scope, context = workspace }: { workspa
   // Runs go, asking first when there are unsaved edits.
   const leave = (go: () => void) => (dirty ? setPending(() => go) : go());
 
-  const show = (f: AgentFile) =>
+  const show = (f: AgentFile, then?: () => void) =>
     leave(() => {
       const loaded = f.agent ? formFromAgent(f.agent) : emptyAgentForm;
       setOpen({ path: f.path });
@@ -119,6 +138,7 @@ export function AgentEditor({ workspace, scope, context = workspace }: { workspa
       setBase(loaded);
       setNamed(true);
       setProblems([]);
+      then?.();
     });
 
   const startNew = () =>
@@ -129,6 +149,29 @@ export function AgentEditor({ workspace, scope, context = workspace }: { workspa
       setNamed(false);
       setProblems([]);
     });
+
+  // The workspace's agents are listed in the top bar's Agents menu, which
+  // opens one in a dialog (intent); the user's (Settings › Agents) keep
+  // their list beside the form.
+  const listed = scope === AgentScope.USER;
+
+  // What the top bar's Agents menu asked for: a new agent, or one to edit
+  // or delete, once the list has it.
+  const handled = useRef(0);
+  const act = useRef({ show, startNew });
+  act.current = { show, startNew };
+  useEffect(() => {
+    if (!intent || intent.n === handled.current) return;
+    if (intent.kind === "new") {
+      handled.current = intent.n;
+      act.current.startNew();
+      return;
+    }
+    const f = files.find((x) => x.path === intent.id);
+    if (!f) return;
+    handled.current = intent.n;
+    act.current.show(f, intent.kind === "delete" ? () => setDeleting(true) : undefined);
+  }, [intent, files]);
 
   const file = open?.path ? files.find((f) => f.path === open.path) : undefined;
   // The agent the open file defines (a rename replaces it).
@@ -165,6 +208,7 @@ export function AgentEditor({ workspace, scope, context = workspace }: { workspa
       await workspaces.deleteAgentFile({ workspace, scope, ...deleteTarget(file?.path ?? "", previous) });
       snack(t("desktop.agents.deleted", { name: previous || fileName(file?.path ?? "") }));
       setOpen(null);
+      if (dialog) return dialog.onClose();
       await refresh();
     } catch (e) {
       snack(message(e), { error: true });
@@ -172,10 +216,37 @@ export function AgentEditor({ workspace, scope, context = workspace }: { workspa
   };
 
   const where = agentPath(dir, form.name);
+  // Where it's saved, Delete, Revert or Cancel, and Save: in the dialog's
+  // footer (as the worker form's), else below the form.
+  const actions = (path: string) => (
+    <>
+      <span className="t-body-sm muted spacer ellipsis agent-where" title={where}>
+        {where && t("desktop.agents.where", { path: where })}
+      </span>
+      {previous && (
+        <Button danger icon={mdiDeleteOutline} onClick={() => setDeleting(true)}>
+          {t("desktop.agents.delete")}
+        </Button>
+      )}
+      {dirty && path !== "" && (
+        <Button icon={mdiUndoVariant} onClick={() => setForm(base)}>
+          {t("desktop.agents.revert")}
+        </Button>
+      )}
+      {path === "" && (
+        <Button onClick={() => (dialog ? dialog.onClose() : setOpen(null))}>{t("desktop.cancel")}</Button>
+      )}
+      <Button variant="filled" icon={mdiContentSaveOutline} disabled={busy || invalid.length > 0 || (!dirty && path !== "")} onClick={() => void save()}>
+        {t("desktop.agents.save")}
+      </Button>
+    </>
+  );
   const fieldError = (k: AgentField) => (invalid.includes(k) && (k !== "name" || form.name) && (k !== "description" || form.description || form.name) ? t(`desktop.agents.invalid.${k}`) : undefined);
 
-  return (
-    <div className={`split agent-editor ${scope === AgentScope.USER ? "agent-editor-user" : ""}`}>
+  const body = (
+    <div className={`agent-editor ${listed ? "agent-editor-user" : ""}`}>
+      <div className="split">
+      {listed && (
       <aside className="split-side">
         <div className="row side-head">
           <span className="t-title-sm spacer">{t(scope === AgentScope.USER ? "desktop.agents.user_title" : "desktop.agents.workspace_title")}</span>
@@ -224,8 +295,22 @@ export function AgentEditor({ workspace, scope, context = workspace }: { workspa
           })}
         </div>
       </aside>
+      )}
       <section className="split-main">
-        {open === null && files.length > 0 && <p className="muted">{t("desktop.agents.choose")}</p>}
+        {!listed && error && (
+          <div className="card error row small-card">
+            <Icon path={mdiAlertCircleOutline} size="sm" /> {error}
+          </div>
+        )}
+        {!listed && files.length === 0 && open === null && !error && (
+          <div className="stack agents-empty" style={{ gap: 12 }}>
+            <p className="muted">{t("desktop.agents.none")}</p>
+            <Button variant="tonal" icon={mdiPlus} onClick={startNew}>
+              {t("desktop.agents.new")}
+            </Button>
+          </div>
+        )}
+        {listed && open === null && files.length > 0 && <p className="muted">{t("desktop.agents.choose")}</p>}
         {open !== null && file?.problem && !file.agent && (
           <div className="worker">
             <h2 className="t-headline">{fileName(file.path)}</h2>
@@ -245,10 +330,12 @@ export function AgentEditor({ workspace, scope, context = workspace }: { workspa
         )}
         {open !== null && !(file?.problem && !file.agent) && (
           <div className="worker agent-form">
-            <div className="row">
-              <h2 className="t-headline spacer ellipsis">{form.displayName.trim() || form.name.trim() || t("desktop.agents.new")}</h2>
-              {dirty && <span className="t-body-sm muted">{t("desktop.agents.unsaved")}</span>}
-            </div>
+            {!dialog && (
+              <div className="row">
+                <h2 className="t-headline spacer ellipsis">{form.displayName.trim() || form.name.trim() || t("desktop.agents.new")}</h2>
+                {dirty && <span className="t-body-sm muted">{t("desktop.agents.unsaved")}</span>}
+              </div>
+            )}
             {file?.problem && (
               <div className="card error row small-card">
                 <Icon path={mdiAlertCircleOutline} size="sm" /> {file.problem}
@@ -266,6 +353,18 @@ export function AgentEditor({ workspace, scope, context = workspace }: { workspa
                   />
                 )}
               </Field>
+              <Field label={t("desktop.agents.description")} supporting={t("desktop.agents.description_hint")} error={fieldError("description")}>
+                {(id) => <input id={id} className="input" value={form.description} onChange={(e) => set("description", e.target.value)} />}
+              </Field>
+            </div>
+            <Field label={t("desktop.agents.prompt")} supporting={t("desktop.agents.prompt_hint", { placeholder: "{agency_instructions}" })}>
+              {(id) => <textarea id={id} className="input agent-prompt" value={form.prompt} rows={8} spellCheck={false} placeholder={t("desktop.agents.prompt_placeholder")} onChange={(e) => set("prompt", e.target.value)} />}
+            </Field>
+            <label className="row agent-switch">
+              <Switch checked={form.background} label={t("desktop.agents.background")} onChange={(v) => set("background", v)} />
+              <span className="t-label">{t("desktop.agents.background")}</span>
+            </label>
+            <Advanced form={form} set={set} fieldError={fieldError}>
               <Field label={t("desktop.agents.name")} supporting={t("desktop.agents.name_hint")} error={fieldError("name")}>
                 {(id) => (
                   <input
@@ -281,75 +380,65 @@ export function AgentEditor({ workspace, scope, context = workspace }: { workspa
                   />
                 )}
               </Field>
-            </div>
-            <Field label={t("desktop.agents.description")} supporting={t("desktop.agents.description_hint")} error={fieldError("description")}>
-              {(id) => <input id={id} className="input" value={form.description} onChange={(e) => set("description", e.target.value)} />}
-            </Field>
-            <div className="pair">
-              <Field label={t("desktop.rs.model")}>
-                {(id) => (
-                  <ModelInput
-                    id={id}
-                    value={form.defaultModel}
-                    onChange={(v) => set("defaultModel", v)}
-                    catalog={catalog}
-                    extras={models}
-                    placeholder={t("desktop.agents.model_placeholder")}
-                    hint={t("desktop.agents.model_hint")}
-                  />
-                )}
-              </Field>
-              <Field label={t("desktop.rs.agency")} supporting={agencies().find((a) => a.value === (form.agencyLevel || "high"))?.detail}>
-                {(id) => (
-                  <select id={id} className="select" value={form.agencyLevel} onChange={(e) => set("agencyLevel", e.target.value)}>
-                    <option value="">{t("desktop.agents.agency_default")}</option>
-                    {agencies().map((a) => (
-                      <option key={a.value} value={a.value}>
-                        {a.label}
-                      </option>
-                    ))}
-                  </select>
-                )}
-              </Field>
-            </div>
-            <div className="pair">
-              <Field label={t("desktop.rs.mode")} supporting={form.permissionMode ? modes().find((m) => m.value === form.permissionMode)?.detail : t("desktop.agents.mode_hint")}>
-                {(id) => (
-                  <select id={id} className="select" value={form.permissionMode} onChange={(e) => set("permissionMode", e.target.value)}>
-                    <option value="">{t("desktop.agents.mode_default")}</option>
-                    {modes().map((m) => (
-                      <option key={m.value} value={m.value}>
-                        {m.label}
-                      </option>
-                    ))}
-                  </select>
-                )}
-              </Field>
-              <Field label={t("desktop.agents.max_turns")} supporting={t("desktop.agents.max_turns_hint")} error={fieldError("maxTurns")}>
-                {(id) => <input id={id} className="input" type="number" min={0} step={1} value={form.maxTurns} placeholder={t("desktop.agents.max_turns_placeholder")} onChange={(e) => set("maxTurns", e.target.value)} />}
-              </Field>
-            </div>
-            <div className="row wrap agent-switches">
-              <Switch checked={form.background} label={t("desktop.agents.background")} onChange={(v) => set("background", v)} />
-              <span className="t-label">{t("desktop.agents.background")}</span>
-              <span className="spacer" />
-              <span className="t-label">{t("desktop.agents.isolation")}</span>
-              <Segmented
-                small
-                label={t("desktop.agents.isolation")}
-                value={form.isolation || "none"}
-                onChange={(v) => set("isolation", v === "worktree" ? "worktree" : "")}
-                options={[
-                  { value: "none", label: t("desktop.agents.isolation_none") },
-                  { value: "worktree", label: t("desktop.agents.isolation_worktree") },
-                ]}
-              />
-            </div>
-            <ToolPicker offered={tools} chosen={form.tools} onChange={(v) => set("tools", v)} />
-            <Field label={t("desktop.agents.prompt")} supporting={t("desktop.agents.prompt_hint", { placeholder: "{agency_instructions}" })}>
-              {(id) => <textarea id={id} className="input mono agent-prompt" value={form.prompt} rows={14} spellCheck={false} placeholder={t("desktop.agents.prompt_placeholder")} onChange={(e) => set("prompt", e.target.value)} />}
-            </Field>
-            <Advanced form={form} set={set} fieldError={fieldError} />
+              <div className="pair">
+                <Field label={t("desktop.rs.model")}>
+                  {(id) => (
+                    <ModelInput
+                      id={id}
+                      value={form.defaultModel}
+                      onChange={(v) => set("defaultModel", v)}
+                      catalog={catalog}
+                      extras={models}
+                      placeholder={t("desktop.agents.model_placeholder")}
+                      hint={t("desktop.agents.model_hint")}
+                    />
+                  )}
+                </Field>
+                <Field label={t("desktop.rs.agency")} supporting={agencies().find((a) => a.value === (form.agencyLevel || "high"))?.detail}>
+                  {(id) => (
+                    <select id={id} className="select" value={form.agencyLevel} onChange={(e) => set("agencyLevel", e.target.value)}>
+                      <option value="">{t("desktop.agents.agency_default")}</option>
+                      {agencies().map((a) => (
+                        <option key={a.value} value={a.value}>
+                          {a.label}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </Field>
+              </div>
+              <div className="pair">
+                <Field label={t("desktop.rs.mode")} supporting={form.permissionMode ? modes().find((m) => m.value === form.permissionMode)?.detail : t("desktop.agents.mode_hint")}>
+                  {(id) => (
+                    <select id={id} className="select" value={form.permissionMode} onChange={(e) => set("permissionMode", e.target.value)}>
+                      <option value="">{t("desktop.agents.mode_default")}</option>
+                      {modes().map((m) => (
+                        <option key={m.value} value={m.value}>
+                          {m.label}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </Field>
+                <Field label={t("desktop.agents.max_turns")} supporting={t("desktop.agents.max_turns_hint")} error={fieldError("maxTurns")}>
+                  {(id) => <input id={id} className="input" type="number" min={0} step={1} value={form.maxTurns} placeholder={t("desktop.agents.max_turns_placeholder")} onChange={(e) => set("maxTurns", e.target.value)} />}
+                </Field>
+              </div>
+              <div className="row wrap agent-isolation">
+                <span className="t-label spacer">{t("desktop.agents.isolation")}</span>
+                <Segmented
+                  small
+                  label={t("desktop.agents.isolation")}
+                  value={form.isolation || "none"}
+                  onChange={(v) => set("isolation", v === "worktree" ? "worktree" : "")}
+                  options={[
+                    { value: "none", label: t("desktop.agents.isolation_none") },
+                    { value: "worktree", label: t("desktop.agents.isolation_worktree") },
+                  ]}
+                />
+              </div>
+              <ToolPicker offered={tools} chosen={form.tools} onChange={(v) => set("tools", v)} />
+            </Advanced>
             {problems.length > 0 && (
               <div className="card error stack" role="alert" style={{ gap: 4 }}>
                 {problems.map((p) => (
@@ -359,33 +448,13 @@ export function AgentEditor({ workspace, scope, context = workspace }: { workspa
                 ))}
               </div>
             )}
-            <div className="row wrap agent-actions">
-              <Button variant="filled" icon={mdiContentSaveOutline} disabled={busy || invalid.length > 0 || (!dirty && open.path !== "")} onClick={() => void save()}>
-                {t("desktop.agents.save")}
-              </Button>
-              {dirty && open.path !== "" && (
-                <Button icon={mdiUndoVariant} onClick={() => setForm(base)}>
-                  {t("desktop.agents.revert")}
-                </Button>
-              )}
-              {open.path === "" && (
-                <Button icon={mdiClose} onClick={() => setOpen(null)}>
-                  {t("desktop.cancel")}
-                </Button>
-              )}
-              {previous && (
-                <Button danger icon={mdiDeleteOutline} onClick={() => setDeleting(true)}>
-                  {t("desktop.agents.delete")}
-                </Button>
-              )}
-              <span className="t-body-sm muted spacer ellipsis agent-where" title={where}>
-                {where && t("desktop.agents.where", { path: where })}
-              </span>
-            </div>
+            {dialog ? footer && createPortal(actions(open.path), footer) : <div className="row wrap agent-actions">{actions(open.path)}</div>}
           </div>
         )}
       </section>
-      {deleting && (
+      </div>
+      {deleting &&
+        createPortal(
         <Dialog
           title={t("desktop.agents.delete_title", { name: previous || fileName(file?.path ?? "") })}
           icon={mdiDeleteOutline}
@@ -400,9 +469,11 @@ export function AgentEditor({ workspace, scope, context = workspace }: { workspa
           }
         >
           <p>{t("desktop.agents.delete_body", { path: file?.path ?? "" })}</p>
-        </Dialog>
-      )}
-      {pending && (
+        </Dialog>,
+          document.body,
+        )}
+      {pending &&
+        createPortal(
         <Dialog
           title={t("desktop.agents.discard_title")}
           icon={mdiUndoVariant}
@@ -425,9 +496,26 @@ export function AgentEditor({ workspace, scope, context = workspace }: { workspa
           }
         >
           <p>{t("desktop.agents.discard_body", { name: form.name.trim() || t("desktop.agents.unnamed") })}</p>
-        </Dialog>
-      )}
+        </Dialog>,
+          document.body,
+        )}
     </div>
+  );
+  if (!dialog) return body;
+  const title = open?.path === "" && !form.displayName.trim() && !form.name.trim() ? t("desktop.agents.new") : form.displayName.trim() || form.name.trim() || fileName(file?.path ?? "");
+  return (
+    <Dialog
+      title={title}
+      icon={mdiRobotOutline}
+      wide
+      className="agent-dialog"
+      footer={<div className="dialog-actions" ref={setFooter} />}
+      closeButton
+      headerActions={dirty && <span className="t-body-sm muted">{t("desktop.agents.unsaved")}</span>}
+      onClose={() => leave(dialog.onClose)}
+    >
+      {body}
+    </Dialog>
   );
 }
 
@@ -480,18 +568,29 @@ function ToolPicker({ offered, chosen, onChange }: { offered: string[]; chosen: 
   );
 }
 
-/** The model settings the agent runs with, over its model's own; folded until opened. */
+/**
+ * Everything beyond the name, description, instructions and background:
+ * children (the file name, model, agency, mode, max turns, isolation and
+ * tools), then the model settings the agent runs with, over its model's
+ * own. Folded until opened; it opens itself when a field in it is wrong.
+ */
 function Advanced({
   form,
   set,
   fieldError,
+  children,
 }: {
   form: AgentForm;
   set: <K extends keyof AgentForm>(k: K, v: AgentForm[K]) => void;
   fieldError: (k: AgentField) => string | undefined;
+  children: ReactNode;
 }) {
   const count = advancedCount(form);
-  const [open, setOpen] = useState(count > 0);
+  const [open, setOpen] = useState(false);
+  const wrong = (["name", "defaultModel", "maxTurns", "temperature", "topP", "maxTokens", "thinkingBudget"] as const).some((k) => fieldError(k));
+  useEffect(() => {
+    if (wrong) setOpen(true);
+  }, [wrong]);
   const number = (k: "thinkingBudget" | "maxTokens", label: string, help: string, min: number, step: number) => (
     <Field label={label} supporting={help} error={fieldError(k)}>
       {(id) => <input id={id} className="input" type="number" min={min} step={step} value={form[k]} placeholder={t("desktop.agents.from_model")} onChange={(e) => set(k, e.target.value)} />}
@@ -506,6 +605,9 @@ function Advanced({
       {open && (
         <div className="stack" style={{ gap: 14 }}>
           <p className="t-body-sm muted">{t("desktop.agents.advanced_hint")}</p>
+          {children}
+          <h3 className="t-title-sm agent-subhead">{t("desktop.agents.model_settings")}</h3>
+          <p className="t-body-sm muted">{t("desktop.agents.model_settings_hint")}</p>
           <div className="pair">
             <Field label={t("desktop.rs.effort")} supporting={form.effort ? efforts().find((e) => e.value === form.effort)?.detail : t("desktop.agents.effort_hint")}>
               {(id) => (

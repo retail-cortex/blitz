@@ -24,12 +24,13 @@ import {
   mdiLoading,
   mdiRobotOutline,
   mdiSourceBranch,
+  mdiTuneVariant,
 } from "@mdi/js";
 import { workspaces } from "./api";
 import { inboxCounts, useRuns } from "./backgroundRuns";
 import { message, reason } from "./errors";
 import { configChanged, filesTouchedEvent, showPending, showView } from "./events";
-import type { GetGitStatusResponse } from "./gen/blitz/v1/workspace_pb";
+import type { AgentInfo, GetGitStatusResponse } from "./gen/blitz/v1/workspace_pb";
 import { t, tn } from "./i18n";
 import { effortIcon, efforts, modeOf, modes } from "./options";
 import { workspaceColor } from "./palette";
@@ -49,7 +50,7 @@ const gitPollMs = 10_000;
  * agent, model, permission mode, context and cost, with the editor's
  * cursor when a file is shown. Items open what they describe.
  */
-export function StatusBar({ serviceUp, version, onRunSettings }: { serviceUp: boolean; version?: string; onRunSettings: () => void }) {
+export function StatusBar({ serviceUp, version, onWorkspaceSettings }: { serviceUp: boolean; version?: string; onWorkspaceSettings: (dir: string) => void }) {
   const { prefs, activity, theme } = useApp();
   const ws = prefs.workspaces.find((w) => w.dir === prefs.active && w.open);
   const dir = ws?.dir ?? "";
@@ -72,7 +73,7 @@ export function StatusBar({ serviceUp, version, onRunSettings }: { serviceUp: bo
       {ws && <Activity dir={dir} running={!!activity[dir]?.running} waiting={!!activity[dir]?.waiting} />}
       {serviceUp && <RunsItem />}
       {ws && <FailedItem dir={dir} />}
-      {ws && serviceUp && <WorkspaceItems dir={dir} onRunSettings={onRunSettings} />}
+      {ws && serviceUp && <WorkspaceItems dir={dir} onWorkspaceSettings={() => onWorkspaceSettings(dir)} />}
     </footer>
   );
 }
@@ -162,10 +163,10 @@ function FailedItem({ dir }: { dir: string }) {
   );
 }
 
-// The editor's cursor, the agent and model, the mode, context and cost:
-// what the workspace published.
-function WorkspaceItems({ dir, onRunSettings }: { dir: string; onRunSettings: () => void }) {
-  const { prefs } = useApp();
+// The editor's cursor, the agent and model (a menu of the agents, to
+// switch the one working on the conversation), the mode, context and
+// cost: what the workspace published.
+function WorkspaceItems({ dir, onWorkspaceSettings }: { dir: string; onWorkspaceSettings: () => void }) {
   const st = useWorkspaceStatus(dir);
   const snack = useSnackbar();
   const s = st.settings;
@@ -187,6 +188,23 @@ function WorkspaceItems({ dir, onRunSettings }: { dir: string; onRunSettings: ()
       snack(message(e), { error: true });
     }
   };
+  // The agent working on the conversation: /agent's list, switched from
+  // the next turn on (SetAgent), the history kept.
+  const [agents, setAgents] = useState<AgentInfo[]>([]);
+  const loadAgents = () =>
+    workspaces.listAgents({ workspace: dir }).then(
+      (r) => setAgents(r.agents),
+      () => {},
+    );
+  const setAgent = async (name: string, shown: string) => {
+    try {
+      const r = await workspaces.setAgent({ workspace: dir, name });
+      configChanged({ dir });
+      snack(t("desktop.agents.switched", { name: r.agent?.displayName || shown }));
+    } catch (e) {
+      snack(message(e), { error: true });
+    }
+  };
   const total = st.total;
   const share = total ? contextShare(total.lastPrompt, st.threshold) : undefined;
   const c = st.cursor;
@@ -199,11 +217,34 @@ function WorkspaceItems({ dir, onRunSettings }: { dir: string; onRunSettings: ()
         </span>
       )}
       {s && (
-        <button className={`sb-item sb-button sb-model ${prefs.run_settings ? "on" : ""}`} aria-pressed={prefs.run_settings} data-toggles="run-settings" title={t("desktop.status.model_title", { agent: s.agent, model: s.model, provider: s.provider })} onClick={onRunSettings}>
-          <Icon path={mdiRobotOutline} size="sm" />
-          <span className="sb-low ellipsis">{s.agent}</span>
-          <span className="ellipsis">{s.model}</span>
-        </button>
+        <Menu
+          placement="up end"
+          className="wide-menu"
+          trigger={(p) => (
+            <button
+              className="sb-item sb-button sb-model"
+              title={t("desktop.status.model_title", { agent: s.agent, model: s.model, provider: s.provider })}
+              {...p}
+              onClick={() => (loadAgents(), p.onClick())}
+            >
+              <Icon path={mdiRobotOutline} size="sm" />
+              <span className="sb-low ellipsis">{s.agent}</span>
+              <span className="ellipsis">{s.model}</span>
+            </button>
+          )}
+          items={[
+            { heading: t("desktop.status.agent_heading") },
+            ...agents.map((a) => ({
+              label: a.displayName || a.name,
+              detail: [a.description, a.pinnedModel && t("desktop.status.agent_pinned", { model: a.pinnedModel })].filter(Boolean).join(" · "),
+              icon: mdiRobotOutline,
+              on: a.active,
+              onSelect: () => void setAgent(a.name, a.displayName || a.name),
+            })),
+            "divider",
+            { label: `${t("desktop.run_settings")}…`, icon: mdiTuneVariant, onSelect: onWorkspaceSettings },
+          ]}
+        />
       )}
       {s && (
         <Menu

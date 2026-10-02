@@ -24,6 +24,8 @@ import { t } from "./i18n";
 import { checkModelRef } from "./models";
 import { ModelInput, refreshModelCatalog, useModelCatalog } from "./ModelInput";
 import { Button, Chip, Icon, Segmented, useSnackbar } from "./ui/controls";
+import { useAdvanced } from "./state";
+import { showsSignIn } from "./simpleMode";
 
 /** Providers llm.provider can name; the first three take API keys. */
 const providers = ["gemini", "anthropic", "openai", "ollama"];
@@ -97,6 +99,7 @@ const sameChoice = (a: Choice, b: Choice) =>
  */
 export function ProviderSettings({ workspace, compact }: { workspace: string; compact?: boolean }) {
   const snack = useSnackbar();
+  const advanced = useAdvanced();
   const [desc, setDesc] = useState<DescribeConfigResponse>();
   const [error, setError] = useState("");
   const [modelError, setModelError] = useState("");
@@ -173,6 +176,10 @@ export function ProviderSettings({ workspace, compact }: { workspace: string; co
       <input className="input mono" value={choice[field]} placeholder={t(placeholder)} spellCheck={false} disabled={busy} onChange={set(field)} onKeyDown={onEnter} />
     </label>
   );
+  // Simple mode signs in with an API key: the other ways (Google Cloud, an
+  // Anthropic account) and the base URL show with advanced settings, and
+  // whenever the provider already signs in another way.
+  const signIn = showsSignIn(advanced, choice.method);
   return (
     <div className="stack provider-settings" style={{ gap: 12 }}>
       <p className="t-body-sm muted">
@@ -204,7 +211,7 @@ export function ProviderSettings({ workspace, compact }: { workspace: string; co
             />
           </label>
         </div>
-        {keyed && others.length > 0 && (
+        {keyed && others.length > 0 && signIn && (
           <div className="field">
             <span className="t-label">{t("desktop.keys.sign_in")}</span>
             {compact ? (
@@ -251,7 +258,7 @@ export function ProviderSettings({ workspace, compact }: { workspace: string; co
         )}
         {keyed && choice.method !== "api_key" && <p className="t-body-sm muted">{t(`desktop.keys.${choice.method}_hint`, { provider: modelNames[choice.provider] ?? choice.provider })}</p>}
         {keyed && choice.method === "api_key" && <KeyStatus workspace={workspace} p={keyed} busy={busy} act={act} />}
-        {keyed && !compact && keyed.name !== "gemini" && <BaseURL workspace={workspace} p={keyed} busy={busy} act={act} />}
+        {keyed && !compact && advanced && keyed.name !== "gemini" && <BaseURL workspace={workspace} p={keyed} busy={busy} act={act} />}
         <div className="row" style={{ justifyContent: "flex-end", gap: 8 }}>
           <Button small disabled={!dirty || busy} onClick={() => setChoice(saved)}>
             {t("desktop.file.revert")}

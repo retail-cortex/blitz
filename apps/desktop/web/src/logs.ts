@@ -21,3 +21,12 @@ export function logTime(d: Date): string {
   const p = (n: number, w = 2) => String(n).padStart(w, "0");
   return `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}.${p(d.getMilliseconds(), 3)}`;
 }
+
+/**
+ * Whether day's log (YYYY-MM-DD) can be deleted: a day before now's.
+ * Today's is the one the service is writing, and "" is the newest.
+ */
+export function canDelete(day: string, now: Date): boolean {
+  const p = (n: number) => String(n).padStart(2, "0");
+  return /^\d{4}-\d{2}-\d{2}$/.test(day) && day < `${now.getFullYear()}-${p(now.getMonth() + 1)}-${p(now.getDate())}`;
+}

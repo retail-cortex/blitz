@@ -14,14 +14,22 @@
  * limitations under the License.
  */
 
-import { AgentEditor } from "./AgentEditor";
-import { AgentScope } from "./gen/blitz/v1/workspace_pb";
+// What the top bar's menus ask a view to do with one of its items.
 
 /**
- * A workspace's own agents (.agents/agents): the Agents view in the
- * middle of the window. The user's agents, for every workspace, are in
- * Settings › Agents.
+ * Add an item, show, edit or remove one (asking first), or for a worker
+ * run or disable it, by its id: an agent's file path, a worker's name. n
+ * tells requests apart, so the same one asked twice is done twice.
  */
-export function Agents({ dir }: { dir: string }) {
-  return <AgentEditor workspace={dir} scope={AgentScope.WORKSPACE} />;
+export interface ItemIntent {
+  kind: "new" | "show" | "edit" | "delete" | "run" | "disable";
+  id: string;
+  n: number;
+}
+
+let counter = 0;
+
+/** A new request to a view. */
+export function intent(kind: ItemIntent["kind"], id = ""): ItemIntent {
+  return { kind, id, n: ++counter };
 }

@@ -106,3 +106,8 @@ export function useApp(): AppState {
   if (!s) throw new Error("useApp outside AppStateProvider");
   return s;
 }
+
+/** Whether advanced settings are shown (Settings › Appearance; simpleMode.ts). */
+export function useAdvanced(): boolean {
+  return useApp().prefs.advanced;
+}

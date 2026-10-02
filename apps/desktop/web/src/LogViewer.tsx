@@ -15,21 +15,22 @@
  */
 
 import { useEffect, useState } from "react";
-import { mdiFolderOpenOutline, mdiRefresh } from "@mdi/js";
+import { createPortal } from "react-dom";
+import { mdiDeleteOutline, mdiFolderOpenOutline, mdiRefresh } from "@mdi/js";
 import { timestampDate } from "@bufbuild/protobuf/wkt";
 import { workspaces } from "./api";
 import { inApp, openFolder } from "./desktop";
 import { message } from "./errors";
 import type { LogEntry, ReadLogResponse } from "./gen/blitz/v1/workspace_pb";
 import { t } from "./i18n";
-import { logTime } from "./logs";
-import { Button, IconButton, Segmented, useSnackbar } from "./ui/controls";
+import { canDelete, logTime } from "./logs";
+import { Button, Dialog, IconButton, Segmented, useSnackbar } from "./ui/controls";
 
 type Level = "" | "info" | "warn" | "error";
 
 /**
  * The service's log (Settings › Logs): a day's records, newest first, by
- * level and text, and the folder they're in. What an error the user saw
+ * level and text, and the folder they're in; a past day's can be deleted. What an error the user saw
  * said, and around it, in a few seconds.
  */
 export function LogViewer() {
@@ -44,6 +45,19 @@ export function LogViewer() {
   const [error, setError] = useState("");
   const [loaded, setLoaded] = useState(false);
   const [tick, setTick] = useState(0);
+  const [deleting, setDeleting] = useState("");
+
+  const remove = async (d: string) => {
+    setDeleting("");
+    try {
+      await workspaces.deleteLogDay({ day: d });
+      snack(t("desktop.logs.deleted", { day: d }));
+      setDay("");
+      setTick((n) => n + 1);
+    } catch (e) {
+      snack(message(e), { error: true });
+    }
+  };
 
   useEffect(() => {
     workspaces.listLogDays({}).then(
@@ -99,6 +113,7 @@ export function LogViewer() {
         <Segmented small value={level} options={levels} onChange={setLevel} label={t("desktop.logs.level")} />
         <input className="input spacer" type="search" value={text} onChange={(e) => setText(e.target.value)} placeholder={t("desktop.logs.search")} aria-label={t("desktop.logs.search")} />
         <IconButton icon={mdiRefresh} label={t("desktop.logs.refresh")} onClick={() => setTick((n) => n + 1)} />
+        {canDelete(day, new Date()) && <IconButton icon={mdiDeleteOutline} label={t("desktop.logs.delete", { day })} onClick={() => setDeleting(day)} />}
         {inApp() && dir && (
           <Button small icon={mdiFolderOpenOutline} onClick={() => openFolder(dir).catch((e) => snack(message(e), { error: true }))}>
             {t("desktop.logs.open_folder")}
@@ -106,6 +121,25 @@ export function LogViewer() {
         )}
       </div>
       {error && <p className="error-text">{error}</p>}
+      {deleting &&
+        createPortal(
+        <Dialog
+          title={t("desktop.logs.delete_title", { day: deleting })}
+          icon={mdiDeleteOutline}
+          onClose={() => setDeleting("")}
+          footer={
+            <>
+              <Button onClick={() => setDeleting("")}>{t("desktop.cancel")}</Button>
+              <Button variant="filled" danger onClick={() => void remove(deleting)}>
+                {t("desktop.logs.delete_confirm")}
+              </Button>
+            </>
+          }
+        >
+          <p>{t("desktop.logs.delete_body")}</p>
+        </Dialog>,
+          document.body,
+        )}
       {page && (
         <>
           <code className="t-body-sm muted ellipsis" title={page.path}>

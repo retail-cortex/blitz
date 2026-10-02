@@ -49,7 +49,7 @@ deny  = ["shell(rm -rf *)", "read(secrets/**)", "mcp(github:delete_*)", "web_sea
 
 A shell rule names a command with any arguments: `shell(ls)` covers `ls -la`, `shell(git log)` covers `git log --oneline` (but not `git logs`). With `*` or `?` it's a glob over the whole command (`shell(go test *)`, `shell(git * --force*)`), and `re:` starts a regular expression that must match the whole command (`shell(re:git (log|show)( .*)?)`). A command that writes a file through a redirection (`ls > out.txt`) always asks, whatever allows the command.
 
-Rules live in the global settings, and a workspace's own add to them: in the desktop app, **Settings › Permissions** for the global rules and the run settings panel's **Permission rules** for the workspace's, where a rule is checked as you type it and can be tried on a command before it's saved. From the command line:
+Rules live in the global settings, and a workspace's own add to them: in the desktop app, **Settings › Permissions** for the global rules and **Settings › Workspaces** › a workspace's **Permission rules** for its own, where a rule is checked as you type it and can be tried on a command before it's saved. From the command line:
 
 ```bash
 blitz config permissions                                   # the rules, and the built-in ones

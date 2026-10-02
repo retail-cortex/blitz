@@ -122,6 +122,9 @@ function saveAgent(workspace: string, scope: AgentScope, previous: string, a: Ag
   return { file };
 }
 
+// The days the fake service has a log for (DeleteLogDay removes them).
+let fakeLogDays = ["2026-09-28", "2026-09-27"];
+
 function state(dir: string): State {
   let s = states.get(dir);
   if (!s) {
@@ -540,6 +543,13 @@ export function installFake() {
           s.active = ref;
           return { session: active(s) };
         },
+        deleteSession: ({ workspace, sessionId }) => {
+          const s = state(workspace);
+          if (sessionId === s.active) throw new ConnectError("the session is open: switch to another first", Code.FailedPrecondition);
+          if (!s.sessions.some((x) => x.id === sessionId)) throw new ConnectError("no such session", Code.NotFound);
+          s.sessions = s.sessions.filter((x) => x.id !== sessionId);
+          return {};
+        },
         renameSession: ({ workspace, title }) => {
           const sess = active(state(workspace));
           sess.title = title;
@@ -717,7 +727,11 @@ export function installFake() {
         closeWorkspace: () => ({}),
         loadImage: ({ path }) => ({ image: { id: `img-${path}`, name: path, mime: "image/png", width: 640, height: 480, size: 12345n } }),
         getServiceInfo: () => ({ version: "dev", executable: "" }),
-        listLogDays: () => ({ days: ["2026-09-28", "2026-09-27"], dir: "~/.blitz/logs" }),
+        listLogDays: () => ({ days: [...fakeLogDays], dir: "~/.blitz/logs" }),
+        deleteLogDay: ({ day }) => {
+          fakeLogDays = fakeLogDays.filter((d) => d !== day);
+          return {};
+        },
         readLog: ({ day, minLevel, text }) => {
           const d = day || "2026-09-28";
           const rank: Record<string, number> = { DEBUG: 0, INFO: 1, WARN: 2, ERROR: 3 };
@@ -991,6 +1005,12 @@ export function installFake() {
           return { worker: w };
         },
         listWorkers: () => ({ workers: fakeWorkers }),
+        deleteWorker: ({ name }) => {
+          const i = fakeWorkers.findIndex((x) => x.name === name);
+          if (i < 0) throw new ConnectError(`no such worker: ${name}`, Code.NotFound);
+          fakeWorkers.splice(i, 1);
+          return {};
+        },
         // The file as written; an edit changes the hash, and suspends an enabled worker.
         getWorkerSpec: ({ name }) => {
           const w = fakeWorkers.find((x) => x.name === name);
@@ -1018,6 +1038,14 @@ export function installFake() {
           w.state = WorkerState.ENABLED;
           return { worker: w };
         },
+        disableWorker: ({ name }) => {
+          const w = fakeWorkers.find((x) => x.name === name)!;
+          w.state = WorkerState.DISABLED;
+          return { worker: w };
+        },
+        // A run that's over as soon as it's watched.
+        runWorker: ({ name }) => ({ run: { id: `run-${name}-${Date.now()}`, status: RunStatus.RUNNING, started: now(), manual: true } }),
+        async *watchWorkerRun() {},
         listWorkerRuns: () => ({
           runs: [
             { id: "r2", status: RunStatus.SUCCEEDED, started: now(), manual: false, sessionId: "worker-nightly-2", usage: { costUsd: 0.0041, priced: true }, files: ["reports/deps.md"] },

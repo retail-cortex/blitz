@@ -74,9 +74,9 @@ export function addToContext(detail: AddToContextDetail) {
   window.dispatchEvent(new CustomEvent(addToContextEvent, { detail }));
 }
 
-/** The event that switches a workspace's view. */
+/** The event that asks a workspace for a view: the editor, or the changes or the workers opened over it. */
 export const viewEvent = "blitz:view";
-/** Which workspace, and which view to show ("chat" is always shown, beside the others). */
+/** Which workspace, and which view to show ("chat" and "editor" close what's over the editor). */
 export interface ViewDetail {
   dir: string;
   view: "chat" | "editor" | "changes" | "workers";

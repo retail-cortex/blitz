@@ -24,7 +24,8 @@ import {
   mdiKeyChainVariant,
   mdiProgressClock,
   mdiRobotOutline,
-  mdiShieldAlertOutline,
+  mdiArrowLeft,
+  mdiFolderOpenOutline,
   mdiShieldCheckOutline,
   mdiInformationOutline,
   mdiLanguageMarkdownOutline,
@@ -40,11 +41,11 @@ import {
 } from "@mdi/js";
 import { appVersion, cliStatus, installCLI, installService, restartService, serviceStatus, setTray, stopService, type CLIStatus, type ServiceStatus } from "./desktop";
 import { SandboxFixResult, sandboxDetail, useSandboxFix } from "./SandboxNotice";
-import { showLicense } from "./events";
+import { configChanged, showLicense } from "./events";
 import { checkService, settleTimeout, type ServiceCheck, waitForService, withTimeout } from "./serviceVersion";
 import { languages, t } from "./i18n";
 import { workspaceColor } from "./palette";
-import { displayName, forgetWorkspace } from "./prefs";
+import { displayName, editWorkspace, forgetWorkspace, openWorkspace, type WorkspacePrefs } from "./prefs";
 import { PermissionSettings } from "./PermissionSettings";
 import { AgentEditor } from "./AgentEditor";
 import { AgentScope } from "./gen/blitz/v1/workspace_pb";
@@ -52,13 +53,15 @@ import { LogViewer } from "./LogViewer";
 import { ProviderSettings } from "./ProviderSettings";
 import { SettingsFile } from "./settingsfile/SettingsFile";
 import { DocumentSettings } from "./files/DocumentSettings";
-import { useApp } from "./state";
+import { useAdvanced, useApp } from "./state";
+import { sectionShown, settingsSections, type SectionId } from "./simpleMode";
 import type { ThemePref } from "./theme";
 import { Button, Chip, Dialog, Icon, IconButton, Segmented, Switch } from "./ui/controls";
-import { WorkspaceDialog } from "./WorkspaceDialog";
-import { ProjectDialog } from "./ProjectDialog";
+import { LookFields, WorkspaceSettingsForm } from "./WorkspaceSettingsForm";
+import { useWorkspaceSettings } from "./workspaceSettings";
 
-type Section = "appearance" | "documents" | "providers" | "permissions" | "agents" | "file" | "workspaces" | "service" | "logs" | "about";
+/** A section of the Settings dialog (simpleMode.ts lists them, and which a newcomer sees). */
+export type Section = SectionId;
 
 const sectionIcons: Record<Section, string> = {
   appearance: mdiPaletteOutline,
@@ -73,14 +76,25 @@ const sectionIcons: Record<Section, string> = {
   about: mdiInformationOutline,
 };
 
-/** The window's settings. The agent's settings are per workspace, in its run settings panel. */
-export function SettingsDialog({ onClose }: { onClose: () => void }) {
-  const [section, setSection] = useState<Section>("appearance");
+/**
+ * The window's settings, opening on a section (initial) and, for
+ * Workspaces and the settings file, on a workspace (scope): a workspace's
+ * own settings are in Workspaces (its pencil in the Workspaces menu, and
+ * the status bar's model, open them there).
+ */
+export function SettingsDialog({ onClose, initial = "appearance", scope: initialScope = "" }: { onClose: () => void; initial?: Section; scope?: string }) {
+  const advanced = useAdvanced();
+  const [asked, setSection] = useState<Section>(initial);
+  const [scope, setScope] = useState(initialScope);
+  // Simple mode shows what a newcomer needs (settingsSections); a section
+  // hidden when advanced is turned off falls back to Appearance.
+  const sections = settingsSections(advanced);
+  const section = sectionShown(asked, advanced);
   return (
     <Dialog title={t("desktop.settings")} icon={mdiCogOutline} onClose={onClose} large footer={<Button onClick={onClose}>{t("desktop.done")}</Button>}>
       <div className="settings">
         <div className="settings-nav list" role="tablist">
-          {(Object.keys(sectionIcons) as Section[]).map((id) => (
+          {sections.map((id) => (
             <button key={id} role="tab" aria-selected={id === section} data-autofocus={id === section ? "" : undefined} className={`list-item ${id === section ? "active" : ""}`} onClick={() => setSection(id)}>
               <Icon path={sectionIcons[id]} />
               {t(`desktop.settings.${id}`)}
@@ -93,8 +107,16 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
           {section === "providers" && <ProviderSettings workspace="" />}
           {section === "permissions" && <PermissionSettings workspace="" />}
           {section === "agents" && <UserAgents />}
-          {section === "file" && <FileSection />}
-          {section === "workspaces" && <Workspaces />}
+          {section === "file" && <FileSection scope={scope} />}
+          {section === "workspaces" && (
+            <Workspaces
+              initial={initial === "workspaces" ? initialScope : ""}
+              onSettingsFile={(dir) => {
+                setScope(dir);
+                setSection("file");
+              }}
+            />
+          )}
           {section === "service" && <Service />}
           {section === "logs" && <LogViewer />}
           {section === "about" && <About />}
@@ -124,10 +146,16 @@ function Setting({ title, detail, children }: { title: string; detail?: string; 
   );
 }
 
+// The window's look and behaviour. Simple mode shows the switch for
+// advanced settings, theme, language and notifications; the rest have
+// sensible defaults and show with advanced settings.
 function Appearance() {
   const { prefs, update } = useApp();
   return (
     <div className="stack" style={{ gap: 0 }}>
+      <Setting title={t("desktop.settings.advanced")} detail={t("desktop.settings.advanced.detail")}>
+        <Switch label={t("desktop.settings.advanced")} checked={prefs.advanced} onChange={(advanced) => update((p) => ({ ...p, advanced }))} />
+      </Setting>
       <Setting title={t("desktop.settings.theme")} detail={t("desktop.settings.theme.detail")}>
         <Segmented<ThemePref>
           label={t("desktop.settings.theme")}
@@ -150,72 +178,76 @@ function Appearance() {
           ))}
         </select>
       </Setting>
-      <Setting title={t("desktop.settings.composer")} detail={t("desktop.settings.composer.detail")}>
-        <Segmented
-          label={t("desktop.settings.composer")}
-          value={prefs.composer}
-          onChange={(composer) => update((p) => ({ ...p, composer }))}
-          options={[
-            { value: "panel", label: t("desktop.settings.composer.panel") },
-            { value: "pinned", label: t("desktop.settings.composer.pinned") },
-          ]}
-        />
-      </Setting>
-      <Setting title={t("desktop.settings.density")} detail={t("desktop.settings.density.detail")}>
-        <Segmented
-          label={t("desktop.settings.density")}
-          value={prefs.density}
-          onChange={(density) => update((p) => ({ ...p, density }))}
-          options={[
-            { value: "comfortable", label: t("desktop.settings.density.comfortable") },
-            { value: "compact", label: t("desktop.settings.density.compact") },
-          ]}
-        />
-      </Setting>
-      <Setting title={t("desktop.settings.transparency")} detail={t("desktop.settings.transparency.detail")}>
-        <Switch label={t("desktop.settings.transparency")} checked={prefs.transparency === "on"} onChange={(on) => update((p) => ({ ...p, transparency: on ? "on" : "off" }))} />
-      </Setting>
-      <Setting title={t("desktop.settings.width")} detail={t("desktop.settings.width.detail")}>
-        <Segmented
-          label={t("desktop.settings.width")}
-          value={prefs.width}
-          onChange={(width) => update((p) => ({ ...p, width }))}
-          options={[
-            { value: "full", label: t("desktop.settings.width.full") },
-            { value: "readable", label: t("desktop.settings.width.readable") },
-          ]}
-        />
-      </Setting>
-      <Setting title={t("desktop.settings.thinking")} detail={t("desktop.settings.thinking.detail")}>
-        <Switch label={t("desktop.settings.thinking")} checked={prefs.show_thoughts} onChange={(show_thoughts) => update((p) => ({ ...p, show_thoughts }))} />
-      </Setting>
       <Setting title={t("desktop.settings.notifications")} detail={t("desktop.settings.notifications.detail")}>
         <Switch label={t("desktop.settings.notifications")} checked={prefs.notifications === "on"} onChange={(on) => update((p) => ({ ...p, notifications: on ? "on" : "off" }))} />
       </Setting>
-      <Setting title={t("desktop.settings.task_continue")} detail={t("desktop.settings.task_continue.detail")}>
-        <Switch label={t("desktop.settings.task_continue")} checked={prefs.task_continue} onChange={(task_continue) => update((p) => ({ ...p, task_continue }))} />
-      </Setting>
-      <Setting title={t("desktop.settings.panel")} detail={t("desktop.settings.panel.detail")}>
-        <Switch label={t("desktop.settings.panel")} checked={prefs.run_settings} onChange={(run_settings) => update((p) => ({ ...p, run_settings }))} />
-      </Setting>
-      <p className="t-body-sm muted" style={{ marginTop: 16 }}>
-        <Icon path={mdiBrain} size="sm" /> {t("desktop.settings.per_workspace")}
-      </p>
+      {prefs.advanced && (
+        <>
+        <Setting title={t("desktop.settings.composer")} detail={t("desktop.settings.composer.detail")}>
+          <Segmented
+            label={t("desktop.settings.composer")}
+            value={prefs.composer}
+            onChange={(composer) => update((p) => ({ ...p, composer }))}
+            options={[
+              { value: "pinned", label: t("desktop.settings.composer.pinned") },
+              { value: "panel", label: t("desktop.settings.composer.panel") },
+            ]}
+          />
+        </Setting>
+        <Setting title={t("desktop.settings.density")} detail={t("desktop.settings.density.detail")}>
+          <Segmented
+            label={t("desktop.settings.density")}
+            value={prefs.density}
+            onChange={(density) => update((p) => ({ ...p, density }))}
+            options={[
+              { value: "comfortable", label: t("desktop.settings.density.comfortable") },
+              { value: "compact", label: t("desktop.settings.density.compact") },
+            ]}
+          />
+        </Setting>
+        <Setting title={t("desktop.settings.transparency")} detail={t("desktop.settings.transparency.detail")}>
+          <Switch label={t("desktop.settings.transparency")} checked={prefs.transparency === "on"} onChange={(on) => update((p) => ({ ...p, transparency: on ? "on" : "off" }))} />
+        </Setting>
+        <Setting title={t("desktop.settings.width")} detail={t("desktop.settings.width.detail")}>
+          <Segmented
+            label={t("desktop.settings.width")}
+            value={prefs.width}
+            onChange={(width) => update((p) => ({ ...p, width }))}
+            options={[
+              { value: "full", label: t("desktop.settings.width.full") },
+              { value: "readable", label: t("desktop.settings.width.readable") },
+            ]}
+          />
+        </Setting>
+        <Setting title={t("desktop.settings.thinking")} detail={t("desktop.settings.thinking.detail")}>
+          <Switch label={t("desktop.settings.thinking")} checked={prefs.show_thoughts} onChange={(show_thoughts) => update((p) => ({ ...p, show_thoughts }))} />
+        </Setting>
+        <Setting title={t("desktop.settings.task_continue")} detail={t("desktop.settings.task_continue.detail")}>
+          <Switch label={t("desktop.settings.task_continue")} checked={prefs.task_continue} onChange={(task_continue) => update((p) => ({ ...p, task_continue }))} />
+        </Setting>
+        <p className="t-body-sm muted" style={{ marginTop: 16 }}>
+          <Icon path={mdiBrain} size="sm" /> {t("desktop.settings.per_workspace")}
+        </p>
+        </>
+      )}
     </div>
   );
 }
 
 // The settings file of the global scope or of an open or known workspace.
-function FileSection() {
+function FileSection({ scope }: { scope: string }) {
   const { prefs } = useApp();
-  return <SettingsFile scopes={prefs.workspaces.map((w) => ({ dir: w.dir, name: displayName(w) }))} />;
+  return <SettingsFile scopes={prefs.workspaces.map((w) => ({ dir: w.dir, name: displayName(w) }))} initial={scope} />;
 }
 
-function Workspaces() {
+// The workspaces the window knows. The pencil opens one's settings here
+// (the Workspaces menu's and the status bar's open them on one): for an
+// open workspace every setting; for a closed one how it's shown, and Open.
+function Workspaces({ initial, onSettingsFile }: { initial: string; onSettingsFile: (dir: string) => void }) {
   const { prefs, update, theme } = useApp();
-  const [editing, setEditing] = useState<string | null>(null);
-  const [project, setProject] = useState<string | null>(null);
+  const [editing, setEditing] = useState<string | null>(initial || null);
   const ws = prefs.workspaces.find((w) => w.dir === editing);
+  if (ws) return <WorkspaceEdit ws={ws} onBack={() => setEditing(null)} onSettingsFile={onSettingsFile} />;
   if (prefs.workspaces.length === 0) return <p className="muted">{t("desktop.settings.no_workspaces")}</p>;
   return (
     <div className="list">
@@ -236,13 +268,61 @@ function Workspaces() {
                 {t("desktop.forget")}
               </Button>
             )}
-            {w.open && <IconButton icon={mdiShieldAlertOutline} label={t("desktop.project.open")} small onClick={() => setProject(w.dir)} />}
-            <IconButton icon={mdiPencilOutline} label={t("desktop.edit_details")} small onClick={() => setEditing(w.dir)} />
+            <IconButton icon={mdiPencilOutline} label={t("desktop.menu.workspaces.edit", { name: displayName(w) })} small onClick={() => setEditing(w.dir)} />
           </span>
         </div>
       ))}
-      {ws && <WorkspaceDialog ws={ws} onClose={() => setEditing(null)} />}
-      {project && <ProjectDialog dir={project} onClose={() => setProject(null)} />}
+    </div>
+  );
+}
+
+function WorkspaceEdit({ ws, onBack, onSettingsFile }: { ws: WorkspacePrefs; onBack: () => void; onSettingsFile: (dir: string) => void }) {
+  const { update, theme } = useApp();
+  return (
+    <div className="stack ws-edit" style={{ gap: 12 }}>
+      <div className="row" style={{ gap: 12 }}>
+        <IconButton icon={mdiArrowLeft} label={t("desktop.settings.back_to_workspaces")} onClick={onBack} />
+        <span className="avatar" style={{ background: workspaceColor(ws.color, theme) }}>
+          {displayName(ws).slice(0, 1).toUpperCase()}
+        </span>
+        <span className="stack spacer" style={{ gap: 2, minWidth: 0 }}>
+          <span className="t-title ellipsis">{displayName(ws)}</span>
+          <small className="ellipsis mono muted">{ws.dir}</small>
+        </span>
+      </div>
+      {ws.open ? (
+        <OpenWorkspaceSettings dir={ws.dir} onSettingsFile={() => onSettingsFile(ws.dir)} />
+      ) : (
+        <div className="stack" style={{ gap: 16 }}>
+          <LookFields ws={ws} onSave={(look) => update((p) => editWorkspace(p, ws.dir, look))} />
+          <div className="card row" style={{ gap: 12 }}>
+            <span className="spacer t-body-sm">{t("desktop.settings.closed_workspace")}</span>
+            <Button small variant="tonal" icon={mdiFolderOpenOutline} onClick={() => update((p) => openWorkspace(p, ws.dir))}>
+              {t("desktop.settings.open_workspace")}
+            </Button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// An open workspace's settings; what changes here is told to the window
+// (configChanged), so the status bar and the chat see it.
+function OpenWorkspaceSettings({ dir, onSettingsFile }: { dir: string; onSettingsFile: () => void }) {
+  const { settings, settingsError, refreshSettings } = useWorkspaceSettings(dir);
+  return (
+    <div className="ws-settings-embedded">
+      <WorkspaceSettingsForm
+        dir={dir}
+        settings={settings}
+        error={settingsError}
+        onChanged={() => {
+          void refreshSettings();
+          configChanged({ dir });
+        }}
+        onSettingsFile={onSettingsFile}
+      />
     </div>
   );
 }

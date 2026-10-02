@@ -52,6 +52,7 @@ import { filesFloat, useFloatingDismiss } from "../ui/layout";
 import { ResizeHandle } from "../ui/ResizeHandle";
 import { fileIcon } from "./icons";
 import { ancestors, emptyTree, isFolder, joinPath, moveTarget, parentOf, rows, setExpanded, shownFolders, validName, withChildren, type Tree } from "./tree";
+import { useAdvanced } from "../state";
 
 const gitIcons: Record<GitAction, string> = {
   [GitAction.UNSPECIFIED]: mdiSourceBranch,
@@ -108,7 +109,9 @@ export function FilesShelf({
   /** Files changed on disk outside the editor (a git action): list again, reload open tabs. */
   onChanged: () => void;
   onClose: () => void;
-}) {
+}) {  // Simple mode: no refresh, collapse, hidden files, git actions or relative paths.
+  const advanced = useAdvanced();
+
   const snack = useSnackbar();
   // Floating over the editor, a click outside or Escape minimizes it.
   const shelf = useRef<HTMLElement>(null);
@@ -347,7 +350,7 @@ export function FilesShelf({
         { label: t("desktop.files.delete"), icon: mdiDeleteOutline, danger: true, onSelect: () => setDeleting(e) },
       );
       const git = gitActions({ folder: isFolder(e), git: e.git }, repo);
-      if (git.length > 0) {
+      if (advanced && git.length > 0) {
         items.push("divider", { heading: t("desktop.files.git.heading") });
         for (const a of git) {
           items.push({
@@ -361,8 +364,8 @@ export function FilesShelf({
       items.push(
         "divider",
         { label: t("desktop.files.copy_path"), icon: mdiContentCopy, onSelect: () => void copy(absolute(e.path)) },
-        { label: t("desktop.files.copy_relative"), icon: mdiLinkVariant, onSelect: () => void copy(e.path) },
       );
+      if (advanced) items.push({ label: t("desktop.files.copy_relative"), icon: mdiLinkVariant, onSelect: () => void copy(e.path) });
     }
     if (manager !== null) {
       if (!e) items.push("divider");
@@ -432,9 +435,13 @@ export function FilesShelf({
         <span className="t-title-sm spacer">{t("desktop.files.title")}</span>
         <IconButton icon={mdiFilePlusOutline} label={t("desktop.files.new_file")} small onClick={() => void startNew("file")} />
         <IconButton icon={mdiFolderPlusOutline} label={t("desktop.files.new_folder")} small onClick={() => void startNew("folder")} />
-        <IconButton icon={mdiRefresh} label={t("desktop.files.refresh")} small onClick={() => void reloadAll()} />
-        <IconButton icon={mdiCollapseAllOutline} label={t("desktop.files.collapse")} small onClick={() => setTree((tr) => ({ ...tr, expanded: new Set() }))} />
-        <IconButton icon={showHidden ? mdiEyeOutline : mdiEyeOffOutline} label={t("desktop.files.show_hidden")} small selected={showHidden} onClick={onToggleHidden} />
+        {advanced && (
+          <>
+            <IconButton icon={mdiRefresh} label={t("desktop.files.refresh")} small onClick={() => void reloadAll()} />
+            <IconButton icon={mdiCollapseAllOutline} label={t("desktop.files.collapse")} small onClick={() => setTree((tr) => ({ ...tr, expanded: new Set() }))} />
+            <IconButton icon={showHidden ? mdiEyeOutline : mdiEyeOffOutline} label={t("desktop.files.show_hidden")} small selected={showHidden} onClick={onToggleHidden} />
+          </>
+        )}
         <IconButton icon={mdiChevronDoubleLeft} label={t("desktop.files.hide")} small onClick={onClose} />
       </div>
       <div

@@ -14,18 +14,15 @@
  * limitations under the License.
  */
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { SandboxNotice } from "./SandboxNotice";
 import { useWorkspaceSettings } from "./workspaceSettings";
-import { useWorkerFailures } from "./workerFailures";
-import { InboxButton } from "./RunsInbox";
-import { mdiAutoFix, mdiCalendarClock, mdiCodeBraces, mdiCogOutline, mdiFileCompare, mdiFileSearchOutline, mdiFileTreeOutline, mdiRobotOutline, mdiTuneVariant } from "@mdi/js";
-import { Changes } from "./Changes";
+import { mdiMagnify, mdiFileTreeOutline } from "@mdi/js";
+import { ChangesDialog, type ChangesSource } from "./Changes";
 import { Conversation } from "./Conversation";
-import { filesTouchedEvent, goToFileEvent, openFileEvent, revealInTreeEvent, startSetup, viewEvent, type OpenFileDetail, type ViewDetail } from "./events";
+import { filesTouchedEvent, goToFile, openFileEvent, revealInTreeEvent, viewEvent, type OpenFileDetail, type ViewDetail } from "./events";
 import { EditorPane } from "./files/EditorPane";
 import { FilesShelf } from "./files/FilesShelf";
-import { GoToFile } from "./files/GoToFile";
 import { FileLinksProvider } from "./files/links";
 import { reportUnsaved } from "./files/unsaved";
 import { useEditor } from "./files/useEditor";
@@ -33,23 +30,25 @@ import { workspaceColor } from "./palette";
 import { displayName, type WorkspacePrefs } from "./prefs";
 import { waiting } from "./project";
 import { ProjectDialog } from "./ProjectDialog";
-import { RunSettings } from "./RunSettings";
 import { useApp } from "./state";
 import { publishStatus } from "./status";
 import { t } from "./i18n";
-import { IconButton, Segmented } from "./ui/controls";
-import { filesFloat, panelWidth, runSettingsFloat, useWindowWidth } from "./ui/layout";
+import { IconButton } from "./ui/controls";
+import { filesFloat, panelWidth, useWindowWidth } from "./ui/layout";
 import { ResizeHandle } from "./ui/ResizeHandle";
-import { Brand, WorkspaceSwitcher } from "./WorkspaceSwitcher";
-import { Workers } from "./Workers";
-import { Agents } from "./Agents";
-
-type View = "editor" | "changes" | "agents" | "workers";
+import { Brand, MenuBar } from "./MenuBar";
+import { intent as newIntent, type ItemIntent } from "./intent";
+import type { Section } from "./SettingsDialog";
+import { WorkerModal } from "./Workers";
+import { AgentEditor } from "./AgentEditor";
+import { AgentScope } from "./gen/blitz/v1/workspace_pb";
 
 /**
- * One open workspace, laid out like an IDE: the top bar (the workspace
- * dropdown, the view, actions, settings), the Files shelf on the left, the
- * editor (or the Changes, Agents or Workers view) in the middle, the chat on the
+ * One open workspace, laid out like an IDE: the top bar (the brand over
+ * the Files shelf, then the menus from the center panel's left edge), the
+ * Files shelf on the left, the
+ * editor in the middle (Changes, an agent or a worker open over it, in a
+ * dialog, from the menus), the chat on the
  * right, and the run settings panel beside it. Kept mounted while another
  * is shown, so a turn keeps streaming.
  */
@@ -57,43 +56,51 @@ export function Workspace({
   ws,
   visible,
   onOpenWorkspace,
-  onEditWorkspace,
   onCloseWorkspace,
   onSettings,
+  onSearch,
 }: {
   ws: WorkspacePrefs;
   visible: boolean;
   onOpenWorkspace: () => void;
-  onEditWorkspace: (dir: string) => void;
   onCloseWorkspace: (dir: string) => void;
-  onSettings: () => void;
+  /** Opens the Settings dialog on a section (for the settings file, this workspace's). */
+  onSettings: (section: Section, scope?: string) => void;
+  /** Opens the command palette (the top bar's search). */
+  onSearch: () => void;
 }) {
   const { prefs, update, theme } = useApp();
-  const [view, setView] = useState<View>("editor");
+  // What's open over the editor: the changes (this session's or git's),
+  // an agent or a worker, as the menus asked.
+  const [modal, setModal] = useState<{ kind: "changes"; source: ChangesSource } | { kind: "agent" | "worker"; intent: ItemIntent } | null>(null);
   const dir = ws.dir;
   const { settings, modelProblem, settingsError, settingsReason, project, reviewing, setReviewing, refreshSettings } = useWorkspaceSettings(dir);
 
-  // Showing the workers sees their failed runs (BL-WK-11).
+  // Showing a worker sees the workers' failed runs (BL-WK-11).
+  const seeWorkers = useCallback(() => update((p) => ({ ...p, workspaces: p.workspaces.map((w) => (w.dir === dir ? { ...w, workers_seen: Date.now() } : w)) })), [dir, update]);
   useEffect(() => {
-    if (visible && view === "workers") update((p) => ({ ...p, workspaces: p.workspaces.map((w) => (w.dir === dir ? { ...w, workers_seen: Date.now() } : w)) }));
-  }, [visible, view, dir, update]);
-  const failed = useWorkerFailures()[dir] ?? 0;
+    if (visible && modal?.kind === "worker") seeWorkers();
+  }, [visible, modal, seeWorkers]);
   useEffect(() => publishStatus(dir, { settings }), [dir, settings]);
 
-  // The command palette can switch the view.
+  // The command palette, the status bar and the chat ask for a view: the
+  // editor (what's over it closes), or the changes or workers over it.
+  const showView = useCallback((v: ViewDetail["view"]) => {
+    if (v === "changes") setModal({ kind: "changes", source: "session" });
+    else if (v === "workers") setModal({ kind: "worker", intent: newIntent("show") });
+    else setModal(null);
+  }, []);
   useEffect(() => {
     const f = (e: Event) => {
       const d = (e as CustomEvent<ViewDetail>).detail;
-      // The chat is always shown, beside the editor.
-      if (d.dir === dir && d.view !== "chat") setView(d.view);
+      if (d.dir === dir) showView(d.view);
     };
     window.addEventListener(viewEvent, f);
     return () => window.removeEventListener(viewEvent, f);
-  }, [dir]);
+  }, [dir, showView]);
 
   // Files (spec_files_029): the shelf, the editor, Go to file.
   const editor = useEditor(dir);
-  const [goTo, setGoTo] = useState(false);
   const [reveal, setReveal] = useState<{ path: string } | null>(null);
   const [touched, setTouched] = useState(0);
   const editorRef = useRef(editor);
@@ -102,7 +109,7 @@ export function Workspace({
 
   const open = useCallback((path: string, line?: number, column?: number) => {
     editorRef.current.open(path, line, column);
-    setView("editor");
+    setModal(null);
   }, []);
 
   useEffect(() => {
@@ -110,7 +117,6 @@ export function Workspace({
       const d = (e as CustomEvent<OpenFileDetail>).detail;
       if (d.dir === dir) open(d.path, d.line, d.column);
     };
-    const onGoTo = (e: Event) => (e as CustomEvent<{ dir: string }>).detail.dir === dir && setGoTo(true);
     const onReveal = (e: Event) => {
       const d = (e as CustomEvent<{ dir: string; path: string }>).detail;
       if (d.dir === dir) revealRef.current(d.path);
@@ -123,13 +129,11 @@ export function Workspace({
       timer = setTimeout(() => setTouched((n) => n + 1), 300);
     };
     window.addEventListener(openFileEvent, onOpen);
-    window.addEventListener(goToFileEvent, onGoTo);
     window.addEventListener(revealInTreeEvent, onReveal);
     window.addEventListener(filesTouchedEvent, onTouched);
     return () => {
       clearTimeout(timer);
       window.removeEventListener(openFileEvent, onOpen);
-      window.removeEventListener(goToFileEvent, onGoTo);
       window.removeEventListener(revealInTreeEvent, onReveal);
       window.removeEventListener(filesTouchedEvent, onTouched);
     };
@@ -145,18 +149,6 @@ export function Workspace({
     if (touched) void editorRef.current.check();
   }, [touched]);
 
-  // ⌘P: Go to file.
-  useEffect(() => {
-    if (!visible) return;
-    const key = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && !e.shiftKey && e.key.toLowerCase() === "p") {
-        e.preventDefault();
-        setGoTo(true);
-      }
-    };
-    window.addEventListener("keydown", key);
-    return () => window.removeEventListener("keydown", key);
-  }, [visible]);
 
   useEffect(() => reportUnsaved(dir, editor.dirtyCount), [dir, editor.dirtyCount]);
   useEffect(() => () => reportUnsaved(dir, 0), [dir]);
@@ -165,12 +157,11 @@ export function Workspace({
   // a width saved on a larger display is kept to what fits this one.
   const win = useWindowWidth();
   const filesWidth = panelWidth(prefs.files_width, 272, 200, Math.min(560, win - 600));
-  const runWidth = panelWidth(prefs.run_settings_width, 420, 340, Math.min(720, win - 420));
-  // The chat leaves the editor 360 px beside the panels that sit inline
-  // (narrower windows float the run settings and the shelf over it).
-  const chatMax = (w: number) => w - (prefs.files && w > filesFloat ? filesWidth : 56) - (prefs.run_settings && w > runSettingsFloat ? runWidth : 0) - 400;
+  // The chat leaves the editor 400 px beside the shelf when it sits inline
+  // (narrower windows float the shelf over the editor).
+  const chatMax = (w: number) => w - (prefs.files && w > filesFloat ? filesWidth : 56) - 400;
   const chatWidth = panelWidth(prefs.chat_width, Math.max(380, Math.min(520, Math.round(win * 0.32))), 320, chatMax(win));
-  const chatCenter = view === "editor" && editor.tabs.length === 0;
+  const chatCenter = editor.tabs.length === 0;
   const revealInTree = (path: string) => {
     if (!prefs.files) update((p) => ({ ...p, files: true }));
     setReveal({ path });
@@ -178,37 +169,45 @@ export function Workspace({
   const revealRef = useRef(revealInTree);
   revealRef.current = revealInTree;
 
+  // The menus start at the center panel's left edge (the editor's, or the
+  // chat's at center stage), following the Files shelf as it opens,
+  // closes or is resized; the brand takes the room before it.
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const [lead, setLead] = useState(0);
+  useLayoutEffect(() => {
+    const body = bodyRef.current;
+    if (!body || !visible) return;
+    const measure = () => {
+      const center = body.querySelector<HTMLElement>(":scope > .workspace-center, :scope > .chat-panel.center");
+      if (center) setLead(Math.round(center.getBoundingClientRect().left));
+    };
+    measure();
+    const seen = new ResizeObserver(measure);
+    seen.observe(body);
+    for (const el of Array.from(body.children)) seen.observe(el);
+    return () => seen.disconnect();
+  }, [visible, chatCenter, prefs.files]);
+
   const name = displayName(ws);
   return (
     <section className="workspace" hidden={!visible} aria-label={name} style={{ ["--ws-color" as string]: workspaceColor(ws.color, theme) }}>
       <header className="topbar drag-region">
-        <Brand />
-        <WorkspaceSwitcher onOpen={onOpenWorkspace} onClose={onCloseWorkspace} onEdit={onEditWorkspace} />
-        <div className="no-drag">
-          <Segmented<View>
-            label={t("desktop.ws.view")}
-            small
-            value={view}
-            onChange={setView}
-            options={[
-              { value: "editor", label: t("desktop.view.editor"), icon: mdiCodeBraces },
-              { value: "changes", label: t("desktop.view.changes"), icon: mdiFileCompare },
-              { value: "agents", label: t("desktop.view.agents"), icon: mdiRobotOutline },
-              { value: "workers", label: failed > 0 ? `${t("desktop.view.workers")} (${failed})` : t("desktop.view.workers"), icon: mdiCalendarClock },
-            ]}
-          />
+        <div className={`topbar-lead ${lead > 0 && lead < 180 ? "narrow" : ""}`} style={lead > 0 ? { width: lead } : undefined}>
+          <Brand />
         </div>
-        <span className="spacer" />
-        <div className="topbar-actions no-drag">
-          <InboxButton />
-          <IconButton icon={mdiAutoFix} label={t("desktop.setup.title")} onClick={() => startSetup(dir)} />
-          <IconButton icon={mdiFileSearchOutline} label={t("desktop.files.go_to")} onClick={() => setGoTo(true)} />
-          <IconButton icon={mdiTuneVariant} label={t("desktop.run_settings")} data-toggles="run-settings" selected={prefs.run_settings} onClick={() => update((p) => ({ ...p, run_settings: !p.run_settings }))} />
-          <IconButton icon={mdiCogOutline} label={t("desktop.settings")} onClick={onSettings} />
-        </div>
+        <MenuBar
+          dir={dir}
+          onChanges={(source) => setModal({ kind: "changes", source })}
+          onAgent={(intent) => setModal({ kind: "agent", intent })}
+          onWorker={(intent) => setModal({ kind: "worker", intent })}
+          onSearch={onSearch}
+          onSettings={onSettings}
+          onOpenWorkspace={onOpenWorkspace}
+          onCloseWorkspace={onCloseWorkspace}
+        />
       </header>
       {settingsReason === "SANDBOX_UNAVAILABLE" && <SandboxNotice error={settingsError} onFixed={refreshSettings} />}
-      <div className="workspace-body">
+      <div className="workspace-body" ref={bodyRef}>
         {prefs.files ? (
           <FilesShelf
             dir={dir}
@@ -216,7 +215,7 @@ export function Workspace({
             onResize={(w) => update((p) => ({ ...p, files_width: w }))}
             showHidden={prefs.show_hidden}
             onToggleHidden={() => update((p) => ({ ...p, show_hidden: !p.show_hidden }))}
-            active={view === "editor" ? editor.active : null}
+            active={editor.active}
             refresh={touched}
             reveal={reveal}
             onOpen={(p) => {
@@ -231,16 +230,13 @@ export function Workspace({
         ) : (
           <nav className="files-rail" aria-label={t("desktop.files.title")}>
             <IconButton icon={mdiFileTreeOutline} label={t("desktop.files.show")} onClick={() => update((p) => ({ ...p, files: true }))} />
-            <IconButton icon={mdiFileSearchOutline} label={t("desktop.files.go_to")} onClick={() => setGoTo(true)} />
+            <IconButton icon={mdiMagnify} label={t("desktop.files.go_to")} onClick={() => goToFile({ dir })} />
           </nav>
         )}
         {/* With no file open, the chat takes the middle (center stage). */}
         {!chatCenter && (
           <div className="workspace-center">
-            {view === "editor" && <EditorPane model={editor} onReveal={revealInTree} onCursor={(cursor) => publishStatus(dir, { cursor })} />}
-            {view === "changes" && <Changes dir={dir} />}
-            {view === "agents" && <Agents dir={dir} />}
-            {view === "workers" && <Workers dir={dir} />}
+            <EditorPane model={editor} onReveal={revealInTree} onCursor={(cursor) => publishStatus(dir, { cursor })} />
           </div>
         )}
         <aside className={`chat-panel ${chatCenter ? "center" : ""}`} style={chatCenter ? undefined : { width: chatWidth }} aria-label={t("desktop.view.chat")}>
@@ -264,13 +260,14 @@ export function Workspace({
               projectWaiting={waiting(project)}
               onReviewProject={() => setReviewing(true)}
               onSettingsChanged={refreshSettings}
-              onOpenView={setView}
+              onOpenView={showView}
             />
           </FileLinksProvider>
         </aside>
-        {prefs.run_settings && <RunSettings dir={dir} settings={settings} error={settingsError} onChanged={refreshSettings} width={runWidth} onResize={(w) => update((p) => ({ ...p, run_settings_width: w }))} />}
       </div>
-      {goTo && <GoToFile dir={dir} onOpen={open} onClose={() => setGoTo(false)} />}
+      {visible && modal?.kind === "changes" && <ChangesDialog dir={dir} initial={modal.source} onClose={() => setModal(null)} />}
+      {visible && modal?.kind === "agent" && <AgentEditor key={modal.intent.n} workspace={dir} scope={AgentScope.WORKSPACE} intent={modal.intent} dialog={{ onClose: () => setModal(null) }} />}
+      {visible && modal?.kind === "worker" && <WorkerModal key={modal.intent.n} dir={dir} intent={modal.intent} onClose={() => setModal(null)} />}
       {reviewing && visible && <ProjectDialog dir={dir} onClose={() => setReviewing(false)} onDecided={refreshSettings} />}
     </section>
   );

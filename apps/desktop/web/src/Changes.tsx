@@ -27,6 +27,7 @@ import { Markdown } from "./Markdown";
 import { parseDiff, type FileDiff } from "./turns";
 import { highlight } from "./highlight";
 import { Button, Dialog, Icon, IconButton, Segmented, useSnackbar } from "./ui/controls";
+import { useAdvanced } from "./state";
 
 const lang = (path: string) => languageFor(path);
 
@@ -62,16 +63,20 @@ export function DiffView({ files, compact }: { files: FileDiff[]; compact?: bool
   );
 }
 
-type Source = "session" | "git";
+/** What the Changes view shows: this session's changes, or git's. */
+export type ChangesSource = "session" | "git";
+type Source = ChangesSource;
 
 /**
  * What the agent changed in this session, file by file, beside its latest
  * summary of the work (its walkthrough), with the turns that changed
- * files and undo.
+ * files and undo; or git's changes. Which one is the workspace's
+ * (source), chosen here or from the top bar's Changes menu.
  */
-export function Changes({ dir }: { dir: string }) {
+export function Changes({ dir, source, onSource: setSource }: { dir: string; source: Source; onSource: (s: Source) => void }) {
   const snack = useSnackbar();
-  const [source, setSource] = useState<Source>("session");
+  // Simple mode: this session's changes only; git's and Refresh are advanced.
+  const advanced = useAdvanced();
   const [files, setFiles] = useState<FileDiff[] | null>(null);
   const [selected, setSelected] = useState("");
   const [summary, setSummary] = useState("");
@@ -138,6 +143,7 @@ export function Changes({ dir }: { dir: string }) {
   return (
     <div className="changes">
       <div className="changes-toolbar">
+        {advanced && (
         <Segmented<Source>
           label={t("desktop.changes.shown")}
           small
@@ -148,13 +154,14 @@ export function Changes({ dir }: { dir: string }) {
             { value: "git", label: t("desktop.changes.git"), icon: mdiSourceBranch },
           ]}
         />
+        )}
         {files && files.length > 0 && (
           <span className="t-body-sm muted">
             {tn("desktop.changes.count", files.length)} · <span className="add-count">+{totals.added}</span> <span className="del-count">−{totals.removed}</span>
           </span>
         )}
         <span className="spacer" />
-        <IconButton icon={mdiRefresh} label={t("desktop.refresh")} onClick={refresh} />
+        {advanced && <IconButton icon={mdiRefresh} label={t("desktop.refresh")} onClick={refresh} />}
         <Button variant="tonal" small icon={mdiUndoVariant} disabled={checkpoints.length === 0} onClick={() => undo()}>
           {t("desktop.changes.undo_last")}
         </Button>
@@ -252,5 +259,19 @@ export function Changes({ dir }: { dir: string }) {
         </Dialog>
       )}
     </div>
+  );
+}
+
+/**
+ * The workspace's changes over the editor (the top bar's Changes menu, the
+ * status bar's changed files, a turn's summary): this session's or git's,
+ * starting on initial.
+ */
+export function ChangesDialog({ dir, initial, onClose }: { dir: string; initial: Source; onClose: () => void }) {
+  const [source, setSource] = useState<Source>(initial);
+  return (
+    <Dialog title={t("desktop.view.changes")} icon={mdiFileCompare} large className="changes-dialog" closeButton onClose={onClose}>
+      <Changes dir={dir} source={source} onSource={setSource} />
+    </Dialog>
   );
 }

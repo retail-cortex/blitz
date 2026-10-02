@@ -91,10 +91,23 @@ describe("the agent form", () => {
     const f = formFromAgent(def);
     expect(f.temperature).toBe("0");
     expect(f.thinkingBudget).toBe("0");
-    expect(advancedCount(f)).toBe(5);
+    expect(advancedCount(f)).toBe(11);
     expect(agentFromForm(f)).toEqual(def);
     expect(sameForm(f, formFromAgent(def))).toBe(true);
     expect(sameForm(f, { ...f, prompt: "Other." })).toBe(false);
+  });
+
+  it.each([
+    ["the model", { defaultModel: "gemini/gemini-3.8-flash" }, 1],
+    ["agency and mode", { agencyLevel: "low", permissionMode: "plan" }, 2],
+    ["max turns", { maxTurns: "5" }, 1],
+    ["isolation", { isolation: "worktree" as const }, 1],
+    ["tools, however many", { tools: ["grep", "read_file"] }, 1],
+    ["a model setting", { temperature: "0.2" }, 1],
+    ["blank text", { maxTurns: "  " }, 0],
+    ["not the file name, display name or prompt", { name: "x", displayName: "X", prompt: "Hi.", background: true }, 0],
+  ])("counts %s in Advanced", (_, change, want) => {
+    expect(advancedCount({ ...emptyAgentForm, ...change })).toBe(want);
   });
 
   it("counts no advanced settings on a blank form", () => {

@@ -26,6 +26,7 @@ import type { Cursor } from "../status";
 import { goToLine, languageOf, setWrap } from "./codemirror";
 import { fileIcon } from "./icons";
 import type { EditorModel, Tab } from "./useEditor";
+import { useAdvanced } from "../state";
 
 /**
  * The editor beside the conversation (spec_files_029 §6): the open files'
@@ -33,6 +34,7 @@ import type { EditorModel, Tab } from "./useEditor";
  * shows each tab's own state in turn.
  */
 export function EditorPane({ model, onReveal, onCursor }: { model: EditorModel; onReveal: (path: string) => void; onCursor?: (c: Cursor | undefined) => void }) {
+  const advanced = useAdvanced(); // the wrap toggle is advanced
   const host = useRef<HTMLDivElement>(null);
   const view = useRef<EditorView | null>(null);
   const shown = useRef<string | null>(null);
@@ -168,7 +170,7 @@ export function EditorPane({ model, onReveal, onCursor }: { model: EditorModel; 
           </div>
         ))}
         <span className="spacer" />
-        <IconButton icon={mdiWrap} label={t("desktop.files.wrap")} small selected={model.wrap} onClick={() => model.setWrap(!model.wrap)} />
+        {advanced && <IconButton icon={mdiWrap} label={t("desktop.files.wrap")} small selected={model.wrap} onClick={() => model.setWrap(!model.wrap)} />}
       </div>
       {tab && (
         <div className="editor-head">

@@ -16,35 +16,17 @@
 
 import { timestampDate } from "@bufbuild/protobuf/wkt";
 import { mdiInboxOutline } from "@mdi/js";
-import { useState } from "react";
 import { sessions } from "./api";
 import { message } from "./errors";
 import { loadSession } from "./events";
 import type { BackgroundRun } from "./gen/blitz/v1/session_pb";
-import { t, tn } from "./i18n";
-import { inboxCounts, isActive, refreshRuns, runAge, useRuns } from "./backgroundRuns";
+import { t } from "./i18n";
+import { isActive, refreshRuns, runAge } from "./backgroundRuns";
 import { displayName, openWorkspace } from "./prefs";
 import { useApp } from "./state";
-import { Button, Dialog, IconButton, useSnackbar } from "./ui/controls";
+import { Button, Dialog, useSnackbar } from "./ui/controls";
 
-/** The topbar's inbox: the background runs, with how many go on. */
-export function InboxButton() {
-  const list = useRuns();
-  const [open, setOpen] = useState(false);
-  const { active, waiting } = inboxCounts(list);
-  const label = waiting > 0 ? tn("desktop.inbox.waiting", waiting) : active > 0 ? tn("desktop.inbox.running", active) : t("desktop.inbox.title");
-  return (
-    <>
-      <span className="inbox-anchor">
-        <IconButton icon={mdiInboxOutline} label={label} onClick={() => setOpen(true)} />
-        {active > 0 && <span className={`badge inbox-badge ${waiting > 0 ? "waiting" : ""}`}>{waiting || active}</span>}
-      </span>
-      {open && <InboxDialog list={list} onClose={() => setOpen(false)} />}
-    </>
-  );
-}
-
-/** The background runs, to open or stop (the topbar's and the status bar's). */
+/** The background runs, to open or stop (the Workers menu's and the status bar's). */
 export function InboxDialog({ list, onClose }: { list: BackgroundRun[]; onClose: () => void }) {
   const { prefs, update } = useApp();
   const snack = useSnackbar();

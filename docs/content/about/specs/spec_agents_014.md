@@ -8,7 +8,7 @@ weight: 14
 | | |
 |---|---|
 | Status | Implemented. Reverse-engineered from `53f8c53` (2026-09-24) and kept with the code since; its paths and names checked 2026-09-27 (`//tools/specs`). |
-| Source | `pkg/engine/agents/{manager,frontmatter,files}.go`, `pkg/engine/agents/builtin/*.md`; `pkg/engine/agentfiles.go`; `pkg/engine/runtime/settings.go`; `pkg/engine/tools/{agent_tools,universal_constructor}.go`; `apps/service/internal/server/agents.go`; `apps/desktop/web/src/{Agents,AgentEditor}.tsx` |
+| Source | `pkg/engine/agents/{manager,frontmatter,files}.go`, `pkg/engine/agents/builtin/*.md`; `pkg/engine/agentfiles.go`; `pkg/engine/runtime/settings.go`; `pkg/engine/tools/{agent_tools,universal_constructor}.go`; `apps/service/internal/server/agents.go`; `apps/desktop/web/src/AgentEditor.tsx` |
 | Tests | `pkg/engine/agents/*_test.go`; `pkg/engine/agentfiles_test.go`; `pkg/engine/tools/uc_and_agent_tools_test.go`; `pkg/engine/runtime/{pin,settings}_test.go`; `apps/service/internal/server/handlers_test.go` |
 | Depends on | [spec_config_002](spec_config_002.md), [spec_shell_007](spec_shell_007.md), [spec_approvals_005](spec_approvals_005.md) |
 | Used by | [spec_engine_016](spec_engine_016.md) |
