@@ -140,18 +140,22 @@
 }
 :root[data-glass="on"] .composer-dock:has(.composer.running)::before { display: none; } /* the ring says it */
 :root[data-glass="on"] .composer-dock .composer { -webkit-backdrop-filter: none; backdrop-filter: none; border: none; box-shadow: none; }
-/* Its border is a wheel of colour (blue, hot pink, purple, teal) turning around it, slowly at
+/* Its border is a wheel of colour (blue, purple, rose, teal) turning around it, slowly at
    rest and faster while the agent works: a gradient on a pseudo-element
    masked to the border's width (the pane's own glass stays inside). The
    angle is a registered property so it animates; where @property isn't
    supported the ring is still drawn, just still. */
 @property --ring-angle { syntax: "<angle>"; initial-value: 0deg; inherits: false; }
-:root { --ring-blue: #2563eb; --ring-pink: #ec4899; --ring-purple: #8b5cf6; --ring-teal: #14b8a6; }
-:root[data-theme="dark"] { --ring-blue: #3b82f6; --ring-pink: #f472b6; --ring-purple: #a78bfa; --ring-teal: #2dd4bf; }
+/* From the theme: the backdrop's blue, violet and teal glows, the primary
+   colour and the highlighter's keyword and type colours, with a rose for
+   warmth. Light: deep enough to stand out on pale glass (3:1 and more);
+   dark: the dark UI's pastel-bright tones, like light catching the glass. */
+:root { --ring-blue: #0b57d0; --ring-purple: #7b4fd6; --ring-pink: #d0407e; --ring-teal: #00838f; }
+:root[data-theme="dark"] { --ring-blue: #8ab4f8; --ring-purple: #c58af9; --ring-pink: #f48fb1; --ring-teal: #6fd7df; }
 :root[data-glass="on"] .composer-dock { border-color: transparent; }
 :root[data-glass="on"] .composer-dock::after {
   content: ""; position: absolute; inset: -1px; border-radius: inherit; padding: 1.5px; pointer-events: none;
-  background: conic-gradient(from var(--ring-angle), var(--ring-blue), var(--ring-pink), var(--ring-purple), var(--ring-teal), var(--ring-blue));
+  background: conic-gradient(from var(--ring-angle), var(--ring-blue), var(--ring-purple), var(--ring-pink), var(--ring-teal), var(--ring-blue));
   -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
   -webkit-mask-composite: xor;
   mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
