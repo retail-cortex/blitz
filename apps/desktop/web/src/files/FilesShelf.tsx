@@ -15,6 +15,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   mdiChevronDown,
   mdiChevronRight,
@@ -34,18 +35,31 @@ import {
   mdiRenameOutline,
   mdiAt,
   mdiMessagePlusOutline,
+  mdiMinusBoxOutline,
+  mdiPlusBoxOutline,
+  mdiSourceBranch,
+  mdiUndoVariant,
 } from "@mdi/js";
 import { fileManager, revealPath } from "../desktop";
 import { addToContext } from "../events";
 import { files } from "../api";
 import { message } from "../errors";
-import { FileKind, type FileEntry } from "../gen/blitz/v1/file_pb";
+import { FileKind, GitAction, type FileEntry } from "../gen/blitz/v1/file_pb";
+import { gitActions, gitKeys } from "./gitMenu";
 import { t } from "../i18n";
 import { Button, ContextMenu, Dialog, Icon, IconButton, useSnackbar, type MenuEntry } from "../ui/controls";
 import { filesFloat, useFloatingDismiss } from "../ui/layout";
 import { ResizeHandle } from "../ui/ResizeHandle";
 import { fileIcon } from "./icons";
 import { ancestors, emptyTree, isFolder, joinPath, moveTarget, parentOf, rows, setExpanded, shownFolders, validName, withChildren, type Tree } from "./tree";
+
+const gitIcons: Record<GitAction, string> = {
+  [GitAction.UNSPECIFIED]: mdiSourceBranch,
+  [GitAction.STAGE]: mdiPlusBoxOutline,
+  [GitAction.UNSTAGE]: mdiMinusBoxOutline,
+  [GitAction.DISCARD]: mdiUndoVariant,
+  [GitAction.IGNORE]: mdiEyeOffOutline,
+};
 
 const gitLetters: Record<string, string> = { modified: "M", added: "A", deleted: "D", renamed: "R", untracked: "U", conflicted: "!" };
 
@@ -72,6 +86,7 @@ export function FilesShelf({
   reveal,
   onOpen,
   onMoved,
+  onChanged,
   onClose,
   width,
   onResize,
@@ -90,6 +105,8 @@ export function FilesShelf({
   reveal: { path: string } | null;
   onOpen: (path: string) => void;
   onMoved: (from: string, to: string | null) => void;
+  /** Files changed on disk outside the editor (a git action): list again, reload open tabs. */
+  onChanged: () => void;
   onClose: () => void;
 }) {
   const snack = useSnackbar();
@@ -101,6 +118,9 @@ export function FilesShelf({
   const [naming, setNaming] = useState<Naming | null>(null);
   const [menu, setMenu] = useState<{ x: number; y: number; entry: FileEntry | null } | null>(null);
   const [deleting, setDeleting] = useState<FileEntry | null>(null);
+  const [discarding, setDiscarding] = useState<FileEntry | null>(null);
+  // The workspace is a git repository (from its listing): git actions are offered.
+  const [repo, setRepo] = useState(false);
   const [error, setError] = useState("");
   const list = useRef<HTMLDivElement>(null);
   const treeRef = useRef(tree);
@@ -110,6 +130,7 @@ export function FilesShelf({
     async (folder: string) => {
       const res = await files.listDir({ workspace: dir, path: folder, showHidden });
       setTree((tr) => withChildren(tr, folder, res.entries));
+      if (folder === "") setRepo(res.repo);
     },
     [dir, showHidden],
   );
@@ -278,6 +299,17 @@ export function FilesShelf({
     }
   };
 
+  // A git action on an entry; the tree and open tabs are refreshed after.
+  const runGit = async (e: FileEntry, action: GitAction) => {
+    try {
+      await files.gitFileAction({ workspace: dir, path: e.path, action });
+      snack(t(gitKeys[action].done, { name: e.name }));
+      onChanged();
+    } catch (err) {
+      snack(message(err), { error: true });
+    }
+  };
+
   // Show in Finder / Dolphin / …, in the app only.
   const [manager, setManager] = useState<string | null>(null);
   useEffect(() => {
@@ -313,6 +345,20 @@ export function FilesShelf({
         "divider",
         { label: t("desktop.files.rename"), icon: mdiRenameOutline, detail: "F2", onSelect: () => setNaming({ kind: "rename", path: e.path }) },
         { label: t("desktop.files.delete"), icon: mdiDeleteOutline, danger: true, onSelect: () => setDeleting(e) },
+      );
+      const git = gitActions({ folder: isFolder(e), git: e.git }, repo);
+      if (git.length > 0) {
+        items.push("divider", { heading: t("desktop.files.git.heading") });
+        for (const a of git) {
+          items.push({
+            label: t(gitKeys[a].item),
+            icon: gitIcons[a],
+            danger: a === GitAction.DISCARD,
+            onSelect: () => (a === GitAction.DISCARD ? setDiscarding(e) : void runGit(e, a)),
+          });
+        }
+      }
+      items.push(
         "divider",
         { label: t("desktop.files.copy_path"), icon: mdiContentCopy, onSelect: () => void copy(absolute(e.path)) },
         { label: t("desktop.files.copy_relative"), icon: mdiLinkVariant, onSelect: () => void copy(e.path) },
@@ -467,23 +513,54 @@ export function FilesShelf({
         {shown.length === 0 && !error && !naming && <p className="muted t-body-sm files-note">{t("desktop.files.empty")}</p>}
       </div>
       {menu && <ContextMenu x={menu.x} y={menu.y} items={menuItems(menu.entry)} onClose={() => setMenu(null)} />}
-      {deleting && (
-        <Dialog
-          title={t("desktop.files.delete_title", { name: deleting.name })}
-          icon={mdiDeleteOutline}
-          onClose={() => setDeleting(null)}
-          footer={
-            <>
-              <Button onClick={() => setDeleting(null)}>{t("desktop.cancel")}</Button>
-              <Button variant="filled" danger onClick={() => void remove(deleting)}>
-                {t("desktop.files.delete")}
-              </Button>
-            </>
-          }
-        >
-          <p>{t(isFolder(deleting) ? "desktop.files.delete_folder_body" : "desktop.files.delete_body", { path: deleting.path })}</p>
-        </Dialog>
-      )}
+      {/* At the page's level: the shelf's glass blur would otherwise be the
+          frame its dialogs centre in. */}
+      {discarding &&
+        createPortal(
+          <Dialog
+            title={t("desktop.files.git.discard_title", { name: discarding.name })}
+            icon={mdiUndoVariant}
+            onClose={() => setDiscarding(null)}
+            footer={
+              <>
+                <Button onClick={() => setDiscarding(null)}>{t("desktop.cancel")}</Button>
+                <Button
+                  variant="filled"
+                  danger
+                  onClick={() => {
+                    const e = discarding;
+                    setDiscarding(null);
+                    void runGit(e, GitAction.DISCARD);
+                  }}
+                >
+                  {t("desktop.files.git.discard_confirm")}
+                </Button>
+              </>
+            }
+          >
+            <p>{t(isFolder(discarding) ? "desktop.files.git.discard_folder_body" : "desktop.files.git.discard_body", { path: discarding.path })}</p>
+          </Dialog>,
+          document.body,
+        )}
+      {deleting &&
+        createPortal(
+          <Dialog
+            title={t("desktop.files.delete_title", { name: deleting.name })}
+            icon={mdiDeleteOutline}
+            onClose={() => setDeleting(null)}
+            footer={
+              <>
+                <Button onClick={() => setDeleting(null)}>{t("desktop.cancel")}</Button>
+                <Button variant="filled" danger onClick={() => void remove(deleting)}>
+                  {t("desktop.files.delete")}
+                </Button>
+              </>
+            }
+          >
+            <p>{t(isFolder(deleting) ? "desktop.files.delete_folder_body" : "desktop.files.delete_body", { path: deleting.path })}</p>
+          </Dialog>,
+          document.body,
+        )}
     </aside>
   );
 }

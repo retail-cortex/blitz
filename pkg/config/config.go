@@ -53,9 +53,11 @@ type Config struct {
 	Workers WorkersConfig `toml:"workers"`
 	// Suggestions shape the desktop app's welcome tiles.
 	Suggestions SuggestionsConfig `toml:"suggestions"`
-	Tools       ToolsConfig       `toml:"tools"`
-	Session     SessionConfig     `toml:"session"`
-	Sandbox     SandboxConfig     `toml:"sandbox"`
+	// Git is what Blitz does with git in a workspace that's a repository.
+	Git     GitConfig     `toml:"git"`
+	Tools   ToolsConfig   `toml:"tools"`
+	Session SessionConfig `toml:"session"`
+	Sandbox SandboxConfig `toml:"sandbox"`
 	// Permissions are allow, ask and deny rules for actions, as
 	// "kind(pattern)" (see tools.ParsePermissionRule).
 	Permissions PermissionsConfig `toml:"permissions"`
@@ -373,6 +375,15 @@ type SkillsConfig struct {
 	// Policy caps what skills may ask for; a skill can make its own
 	// settings stricter but never looser.
 	Policy SkillPolicy `toml:"policy"`
+}
+
+// GitConfig is what Blitz does with git in a workspace that's a repository.
+type GitConfig struct {
+	// AutoAdd adds the files the agent creates in a turn to git (git add)
+	// when the turn ends, in one batch: not the files it changes, which
+	// were there before, nor files git ignores or temporary ones (*.tmp,
+	// *.swp, tmp/ and the like).
+	AutoAdd bool `toml:"auto_add"`
 }
 
 // SuggestionsConfig shapes the welcome tiles a new chat shows: tiles from
@@ -766,6 +777,7 @@ func DefaultConfig() *Config {
 			},
 		},
 		Suggestions: SuggestionsConfig{Ideas: true},
+		Git:         GitConfig{AutoAdd: true},
 		Workers: WorkersConfig{
 			Enabled:  true,
 			Paths:    []string{".agents/workers", "workers"},

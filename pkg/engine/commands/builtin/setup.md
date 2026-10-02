@@ -1,6 +1,6 @@
 ---
-description: "Set up this workspace's agent harness: .agents/AGENT.md, the instruction files that import it, skills and agents"
+description: "Set up this workspace's agent harness: a git repository and .gitignore, .agents/AGENT.md, the instruction files that import it, skills and agents"
 argument-hint: "[what to focus on]"
 agent: project-setup
 ---
-Set up this workspace's agent harness, following your steps: survey, interview me, write .agents/AGENT.md, point AGENTS.md, CLAUDE.md, GEMINI.md and BLITZ.md at it, then propose skills and agents for me to choose. $ARGUMENTS
+Set up this workspace's agent harness, following your steps: survey, interview me, make it a git repository with a fitting .gitignore, write .agents/AGENT.md, point AGENTS.md, CLAUDE.md, GEMINI.md and BLITZ.md at it, then propose skills and agents for me to choose. $ARGUMENTS

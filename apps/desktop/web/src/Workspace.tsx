@@ -225,6 +225,7 @@ export function Workspace({
               if (window.matchMedia(`(max-width: ${filesFloat}px)`).matches) update((x) => ({ ...x, files: false }));
             }}
             onMoved={editor.moved}
+            onChanged={() => setTouched((n) => n + 1)}
             onClose={() => update((p) => ({ ...p, files: false }))}
           />
         ) : (

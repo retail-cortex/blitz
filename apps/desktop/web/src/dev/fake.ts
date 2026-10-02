@@ -28,7 +28,7 @@ import { ActionKind, ErrorInfoSchema, UsageSchema, type Usage } from "../gen/bli
 type Out = MessageInitShape<typeof RunTurnResponseSchema>;
 import { RunStatus, WorkerService, WorkerState } from "../gen/blitz/v1/worker_pb";
 import { ConfigService, KeySource } from "../gen/blitz/v1/config_pb";
-import { FileKind, FileService } from "../gen/blitz/v1/file_pb";
+import { FileKind, FileService, GitAction } from "../gen/blitz/v1/file_pb";
 import { AgentFileSchema, AgentScope, SuggestionKind, SuggestionSchema, WorkspaceService, type AgentDefinition } from "../gen/blitz/v1/workspace_pb";
 
 // Whether the fake workspace is a git repository (?norepo: not yet).
@@ -954,6 +954,14 @@ export function installFake() {
               fakeFiles.set(to + p.slice(from.length), v);
             }
           }
+          return {};
+        },
+        gitFileAction: ({ path, action }) => {
+          // Recorded for checks in a browser; a discard drops the path's
+          // changes, an ignore appends to .gitignore.
+          ((window as unknown as { __gitActions?: unknown[] }).__gitActions ??= []).push({ path, action });
+          if (action === GitAction.DISCARD) for (const g of Object.keys(fakeGit)) if (g === path || g.startsWith(path + "/")) delete fakeGit[g];
+          if (action === GitAction.IGNORE) fakeFiles.set(".gitignore", (fakeFiles.get(".gitignore") ?? "") + `/${path}${fakeFiles.has(path) ? "" : "/"}\n`);
           return {};
         },
         deleteFile: ({ path }) => {

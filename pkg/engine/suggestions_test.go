@@ -212,7 +212,7 @@ func TestSetupCommandReloadsInstructions(t *testing.T) {
 	claude := toolCall("create_file", map[string]any{"path": "CLAUDE.md", "content": "@.agents/AGENT.md\n"})
 	w, llm := openTestWith(t, func(c *config.Config) { c.Blitz.PermissionMode = "accept-edits" }, agentMD, claude, text("set up"), text("hi"))
 	ctx := context.Background()
-	assert.Contains(t, w.ListCommands(), api.CommandInfo{Name: "setup", Description: "Set up this workspace's agent harness: .agents/AGENT.md, the instruction files that import it, skills and agents", ArgumentHint: "[what to focus on]", Source: "bundled"})
+	assert.Contains(t, w.ListCommands(), api.CommandInfo{Name: "setup", Description: "Set up this workspace's agent harness: a git repository and .gitignore, .agents/AGENT.md, the instruction files that import it, skills and agents", ArgumentHint: "[what to focus on]", Source: "bundled"})
 	sess, err := w.NewSession()
 	require.NoError(t, err)
 	_, err = w.Run(ctx, sess.ID, api.Turn{Text: "/setup", Command: true}, func(api.Event) {})

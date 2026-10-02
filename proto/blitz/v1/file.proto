@@ -44,6 +44,11 @@ service FileService {
   rpc RenameFile(RenameFileRequest) returns (RenameFileResponse);
   // Deletes a file, or a folder with everything in it.
   rpc DeleteFile(DeleteFileRequest) returns (DeleteFileResponse);
+  // Runs a git action on a file or folder of the workspace: stage it,
+  // unstage it, discard its changes (back to the last commit), or add it to
+  // the workspace's .gitignore. Git runs with the repository's filter
+  // drivers and fsmonitor switched off. NOT_A_REPOSITORY outside one.
+  rpc GitFileAction(GitFileActionRequest) returns (GitFileActionResponse);
   // Files whose path matches a query, best first (Go to file).
   rpc FindFiles(FindFilesRequest) returns (FindFilesResponse);
   // Files' current versions, to notice changes made elsewhere.
@@ -166,6 +171,30 @@ message DeleteFileRequest {
 
 // Response message for FileService.DeleteFile.
 message DeleteFileResponse {}
+
+// GitAction is what GitFileAction does.
+enum GitAction {
+  GIT_ACTION_UNSPECIFIED = 0;
+  // git add: the file, or everything changed under the folder.
+  GIT_ACTION_STAGE = 1;
+  // git restore --staged: out of the index, the working copy kept.
+  GIT_ACTION_UNSTAGE = 2;
+  // git restore --staged --worktree --source=HEAD: back to the last commit.
+  GIT_ACTION_DISCARD = 3;
+  // A line for it ("/path", "/folder/") in the workspace's .gitignore.
+  GIT_ACTION_IGNORE = 4;
+}
+
+// Request message for FileService.GitFileAction.
+message GitFileActionRequest {
+  string workspace = 1;
+  // Workspace-relative, with "/".
+  string path = 2;
+  GitAction action = 3;
+}
+
+// Response message for FileService.GitFileAction.
+message GitFileActionResponse {}
 
 // Request message for FileService.FindFiles.
 message FindFilesRequest {

@@ -302,6 +302,11 @@ func (w *Workspace) run(ctx context.Context, sessionID string, t turn, on func(a
 	if cause := context.Cause(ctx); err != nil && (errors.Is(cause, api.ErrCostLimit) || errors.Is(cause, api.ErrTimeLimit)) {
 		err = cause
 	}
+	if !t.Aside {
+		// The files the agent created go to git, in one batch, while the
+		// turn can still say so.
+		w.stageCreated(ctx, sessionID, on)
+	}
 	if t.OnFinished != nil {
 		t.OnFinished()
 	}
