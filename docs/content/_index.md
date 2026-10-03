@@ -34,6 +34,6 @@ All three run the same engine, so a session started in the terminal can be picke
 
 ## Where to go next
 
-- New to Blitz: [Getting started](getting-started/_index.md).
+- New to Blitz: [Getting started](getting-started/_index.md), then a [tutorial](tutorials/_index.md) from an empty folder to working software.
 - Using it: [the products](products/_index.md) and the [guide](guide/_index.md).
 - Changing it: [architecture](architecture/_index.md), [shared packages](packages/_index.md) and [development](development/_index.md).

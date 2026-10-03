@@ -55,6 +55,7 @@ The owner's review (2026-09-27) found the project not ready to release: the old 
 - **RR-31** Layout of `docs/`: `BUILD.bazel` (`hugo_site` `//docs:site`, `hugo_serve` `//docs:serve`), `hugo.yaml`, `layouts/` (a link render hook: a relative link to a Markdown file resolves to its page, so the files read the same on GitHub and on the site, and a link to a missing page fails the build, which is the link check), `static/` (the Blitz mark), and `content/`. Diagrams are Mermaid code blocks, rendered by Geekdoc's code-block hook:
   - `_index.md`: what Blitz is, in a page;
   - `getting-started/`: install, verifying a download, configuring, the first run;
+  - `tutorials/`: whole pieces of work from an empty folder, step by step (since 2026-10-02: a software developer's, and a machine learning student's);
   - `products/`: a page per program: the CLI and its REPL, the service and its workers, the desktop app;
   - `guide/`: what applies to every program: configuration, safety, models, agents and tools, extending, skills, search, images, language, logs and telemetry;
   - `architecture/`: the layers and their dependency rules, the engine, the service API, sandboxing and trust, the build, and the API reference (`architecture/api/`, generated from `proto/blitz/v1` by proto-gen-md-diagrams at build time: `//docs:api`, a page per proto with Mermaid class diagrams);
