@@ -41,8 +41,8 @@ type CommandDecision struct {
 	Verdict  Verdict
 	Reason   string   // why it was denied or not auto-approved
 	Commands []string // every simple command found, as evaluated
-	// MustAsk: a permission ask rule matched (or couldn't be ruled out), so
-	// the user is asked even in a mode or with a saved approval that would
+	// MustAsk means a permission ask rule matched (or couldn't be ruled out),
+	// so the user is asked even in a mode or with a saved approval that would
 	// let the command through.
 	MustAsk bool
 }

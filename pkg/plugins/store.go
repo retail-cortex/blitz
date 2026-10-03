@@ -57,7 +57,7 @@ func Default() *Store { return &Store{Dir: config.ExpandHome("~/.blitz/plugins")
 // PluginDir is where an installed plugin's files are.
 func (s *Store) PluginDir(i Installed) string { return filepath.Join(s.Dir, i.Name, i.Version) }
 
-// ErrNotInstalled: no plugin of that name is installed.
+// ErrNotInstalled means no plugin of that name is installed.
 var ErrNotInstalled = errors.New("no such plugin installed")
 
 // List is the installed plugins, by name.
@@ -73,25 +73,38 @@ func (s *Store) List() ([]Installed, error) {
 }
 
 func (s *Store) save(list []Installed) error {
+	return s.writeFile(indexFile, func(w io.Writer) error {
+		fmt.Fprintln(w, "# Blitz's installed plugins; change them with blitz plugin.")
+		return toml.NewEncoder(w).Encode(struct {
+			Plugins []Installed `toml:"plugins"`
+		}{list})
+	})
+}
+
+// writeFile replaces name in the store with what write writes, through
+// a synced temporary file, so a crash leaves the old file or the new.
+func (s *Store) writeFile(name string, write func(io.Writer) error) error {
 	if err := os.MkdirAll(s.Dir, 0o700); err != nil {
 		return err
 	}
-	tmp := filepath.Join(s.Dir, indexFile+".tmp")
-	f, err := os.OpenFile(tmp, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
+	f, err := os.CreateTemp(s.Dir, name+".*.tmp")
 	if err != nil {
 		return err
 	}
-	fmt.Fprintln(f, "# Blitz's installed plugins; change them with blitz plugin.")
-	err = toml.NewEncoder(f).Encode(struct {
-		Plugins []Installed `toml:"plugins"`
-	}{list})
+	err = write(f)
+	if err == nil {
+		err = f.Sync()
+	}
 	if cerr := f.Close(); err == nil {
 		err = cerr
 	}
-	if err != nil {
-		return err
+	if err == nil {
+		err = os.Rename(f.Name(), filepath.Join(s.Dir, name))
 	}
-	return os.Rename(tmp, filepath.Join(s.Dir, indexFile))
+	if err != nil {
+		os.Remove(f.Name())
+	}
+	return err
 }
 
 // Get is the installed plugin name.
@@ -302,8 +315,8 @@ func (s *Store) Install(st *Staged) (Installed, error) {
 		os.RemoveAll(staging)
 		return Installed{}, err
 	}
-	os.RemoveAll(dst)
-	if err := os.Rename(staging, dst); err != nil {
+	if err := swapIn(staging, dst); err != nil {
+		os.RemoveAll(staging)
 		return Installed{}, err
 	}
 	for j, old := range list {
@@ -317,6 +330,31 @@ func (s *Store) Install(st *Staged) (Installed, error) {
 		}
 	}
 	return i, s.save(append(list, i))
+}
+
+// swapIn renames staging to dst, moving any old dst aside first and
+// putting it back if the rename fails, so dst is never half-deleted.
+func swapIn(staging, dst string) error {
+	old := dst + ".old"
+	if err := os.RemoveAll(old); err != nil {
+		return err
+	}
+	had := true
+	if err := os.Rename(dst, old); errors.Is(err, os.ErrNotExist) {
+		had = false
+	} else if err != nil {
+		return err
+	}
+	if err := os.Rename(staging, dst); err != nil {
+		if had {
+			os.Rename(old, dst)
+		}
+		return err
+	}
+	if had {
+		os.RemoveAll(old)
+	}
+	return nil
 }
 
 // SetEnabled turns an installed plugin on or off for every workspace.

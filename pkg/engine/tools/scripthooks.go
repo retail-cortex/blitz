@@ -111,7 +111,8 @@ type Outcome struct {
 	// Decision is "allow", "deny" or "ask" from {"decision": …}
 	// (permission_request, pre_tool).
 	Decision string
-	// Continue: a stop hook asks the agent to keep going (Reason says why).
+	// Continue means a stop hook asks the agent to keep going (Reason says
+	// why).
 	Continue bool
 	// Context is text for the agent: plain stdout on session_start and
 	// prompt_submit, or additional_context.
@@ -677,9 +678,12 @@ func (s *ScriptHooks) post(ctx context.Context, h config.HookConfig, payload []b
 		return "", err
 	}
 	defer resp.Body.Close()
-	body, _ := io.ReadAll(io.LimitReader(resp.Body, 64*1024))
+	body, readErr := io.ReadAll(io.LimitReader(resp.Body, 64*1024))
 	if resp.StatusCode < 200 || resp.StatusCode > 299 {
 		return "", fmt.Errorf("HTTP %d: %s", resp.StatusCode, textutil.Ellipsize(strings.TrimSpace(string(body)), 200))
+	}
+	if readErr != nil { // a reply cut short isn't an answer
+		return "", fmt.Errorf("reading the reply: %w", readErr)
 	}
 	return string(body), nil
 }

@@ -159,7 +159,7 @@ func (w *Workers) UndoWorkerRun(runID string, force bool) ([]string, error) {
 	if err != nil {
 		return nil, fromAPI(err)
 	}
-	return res.Msg.Restored, nil
+	return res.Msg.Restored, errorFromInfo(res.Msg.Error)
 }
 
 func workerRun(r *pb.WorkerRun) api.Run {

@@ -7,7 +7,7 @@ Specs: [memory](../about/specs/spec_memory_012.md), [MCP](../about/specs/spec_mc
 
 ## Project memory
 
-`AGENTS.md`, `CLAUDE.md`, `GEMINI.md` and `BLITZ.md`, from the repository root down to the workspace, plus `~/.blitz/BLITZ.md`, are added to the agents' instructions, so a repository set up for another agent works unchanged. A file with the same content under two names loads once. `BLITZ.local.md` and `CLAUDE.local.md` are personal, and Blitz warns if git tracks them. `/setup` (also `/init`, `blitz init`, and the desktop app's wand) makes the folder a git repository with a `.gitignore` for its stack, if you agree, and sets a project up the recommended way: one `.agents/AGENT.md`, with each of those four files a single `@.agents/AGENT.md` line, so Blitz, Claude Code, Gemini CLI and Codex all read the same instructions.
+`AGENTS.md`, `CLAUDE.md`, `GEMINI.md` and `BLITZ.md`, from the repository root down to the workspace, plus `~/.blitz/BLITZ.md`, are added to the agents' instructions, so a repository set up for another agent works unchanged. A file with the same content under two names loads once. `BLITZ.local.md` and `CLAUDE.local.md` are personal, and Blitz warns if git tracks them. `/setup` (also `/init`, `blitz init`, and the desktop app's wand) makes the folder a git repository with a `.gitignore` for its stack, if you agree, and sets a project up the recommended way: one `.agents/AGENTS.md`, with each of those four files a single `@.agents/AGENTS.md` line, so Blitz, Claude Code, Gemini CLI and Codex all read the same instructions.
 
 A line can import another file with `@docs/style.md`: relative to the file, at most five deep, never from outside the repository (or `~/.blitz` for your own files), and never a blocked path.
 

@@ -156,8 +156,14 @@ type Backend interface {
 	SessionDiff() string
 	GitDiff(ctx context.Context, color bool) (string, error)
 	ListApprovals() []Approval
-	RevokeApprovals(keys ...string) int
-	ClearApprovals() int
+
+	// Workspace search (spec_search_035).
+	Search(ctx context.Context, q SearchQuery) (SearchResult, error)
+	SearchStatus() SearchStatus
+	// Reindex starts a scan of the workspace for search and returns at once.
+	Reindex() error
+	RevokeApprovals(keys ...string) (int, error)
+	ClearApprovals() (int, error)
 
 	// Images and search.
 	LoadImage(path string) (*images.Image, error)
@@ -188,7 +194,7 @@ type ProjectSettings struct {
 	// Hash identifies the content that needs trust; TrustProject takes it
 	// back.
 	Hash string
-	// Loaded: the settings that need trust are in force (trusted when the
+	// Loaded means the settings that need trust are in force (trusted when the
 	// workspace opened, or for this run only).
 	Loaded bool
 	// Applied are the settings in force without trust: they only tighten.
@@ -224,12 +230,12 @@ const (
 	TrustDeclined = "declined"
 )
 
-// ErrProjectChanged: the project settings changed since they were shown;
-// review them again.
+// ErrProjectChanged means the project settings changed since they were
+// shown; review them again.
 var ErrProjectChanged = errors.New("the project settings changed since they were shown")
 
-// ErrUnknownProcess: no background process with that ID was started for
-// the sessions asking.
+// ErrUnknownProcess means no background process with that ID was started
+// for the sessions asking.
 var ErrUnknownProcess = errors.New("no such background process")
 
 // ProcessInfo is a snapshot of a background process's status.

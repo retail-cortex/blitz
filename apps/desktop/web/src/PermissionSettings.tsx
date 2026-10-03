@@ -16,14 +16,14 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useOnConfigChanged } from "./workspaceSettings";
-import { mdiDeleteOutline, mdiPlus } from "@mdi/js";
+import { mdiAlertCircleOutline, mdiDeleteOutline, mdiPlus } from "@mdi/js";
 import { config, workspaces } from "./api";
 import { message } from "./errors";
 import { configChanged } from "./events";
 import type { CheckPermissionResponse, DescribePermissionsResponse, PermissionEntry } from "./gen/blitz/v1/config_pb";
 import type { PermissionRule } from "./gen/blitz/v1/workspace_pb";
 import { t } from "./i18n";
-import { Button, IconButton, Switch, useSnackbar } from "./ui/controls";
+import { Button, Icon, IconButton, Switch, useSnackbar } from "./ui/controls";
 
 const effects = ["allow", "ask", "deny"];
 
@@ -44,6 +44,7 @@ export function PermissionSettings({ workspace, compact, onChanged }: { workspac
   const snack = useSnackbar();
   const [desc, setDesc] = useState<DescribePermissionsResponse>();
   const [session, setSession] = useState<PermissionRule[]>([]);
+  const [problem, setProblem] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [effect, setEffect] = useState("allow");
@@ -55,8 +56,9 @@ export function PermissionSettings({ workspace, compact, onChanged }: { workspac
     try {
       setDesc(await config.describePermissions({ workspace }));
       if (workspace) {
-        const all = (await workspaces.listPermissionRules({ workspace })).rules;
-        setSession(all.filter((r) => r.source === "session" || r.source === "flag"));
+        const res = await workspaces.listPermissionRules({ workspace });
+        setSession(res.rules.filter((r) => r.source === "session" || r.source === "flag"));
+        setProblem(res.problem);
       }
       setError("");
     } catch (e) {
@@ -130,6 +132,12 @@ export function PermissionSettings({ workspace, compact, onChanged }: { workspac
     <div className="stack permission-settings" style={{ gap: 12 }}>
       <p className="t-body-sm muted">{t(workspace ? "desktop.perm.intro_workspace" : "desktop.perm.intro")}</p>
 
+      {problem && (
+        <p className="card warn row t-body-sm" role="alert">
+          <Icon path={mdiAlertCircleOutline} size="sm" />
+          <span>{t("desktop.perm.problem", { reason: problem })}</span>
+        </p>
+      )}
       {desc.rules.length ? list(desc.rules, true) : <p className="t-body-sm muted">{t("desktop.perm.none")}</p>}
 
       <section className={`card rule-add ${compact ? "compact" : ""}`}>

@@ -187,7 +187,7 @@ type Engine struct {
 
 	cfg   *config.Config
 	tasks *taskManager
-	// projectTrusted: the project's agents may loosen the mode.
+	// projectTrusted means the project's agents may loosen the mode.
 	projectTrusted bool
 	// reviewModel reviews actions in the auto mode (nil: e.llm).
 	reviewModel model.LLM

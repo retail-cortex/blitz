@@ -211,6 +211,7 @@ func TestRunDetached(t *testing.T) {
 	require.NoError(t, err)
 	assert.Len(t, rec.Messages, 2)
 	assert.Equal(t, 1, w.UsageOf(started).Calls)
+	assert.NoError(t, w.DeleteSession(context.Background(), started), "still held by the run's storage")
 }
 
 // How a turn ended, for metrics.

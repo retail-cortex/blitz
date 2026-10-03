@@ -275,7 +275,12 @@ func (e *Engine) StartTask(ctx context.Context, agentName, prompt, isolation str
 	m.next++
 	id := "task-" + strconv.Itoa(m.next)
 	first, _, _ := strings.Cut(strings.TrimSpace(prompt), "\n")
-	t := &task{info: api.TaskInfo{ID: id, Agent: agentName, Prompt: textutil.Ellipsize(first, 200), Session: st.sessionID, State: api.TaskRunning, Started: time.Now()}, done: make(chan struct{})}
+	// Detached from the turn: it keeps running when the turn ends. Its
+	// cancel is set before the task is listed, so stopping it while its
+	// worktree is made works.
+	runCtx, cancel := context.WithCancelCause(context.WithoutCancel(ctx))
+	runCtx, stopTimer := context.WithTimeoutCause(runCtx, timeout, fmt.Errorf("its time limit (%s, tools.background_agent_timeout)", timeout))
+	t := &task{info: api.TaskInfo{ID: id, Agent: agentName, Prompt: textutil.Ellipsize(first, 200), Session: st.sessionID, State: api.TaskRunning, Started: time.Now()}, done: make(chan struct{}), cancel: cancel}
 	m.tasks[id] = t
 	m.pruneLocked(st.sessionID)
 	m.mu.Unlock()
@@ -285,6 +290,8 @@ func (e *Engine) StartTask(ctx context.Context, agentName, prompt, isolation str
 	if isolation == "worktree" {
 		reg, w, err := e.worktreeTools(id)
 		if err != nil {
+			stopTimer()
+			cancel(err)
 			m.mu.Lock()
 			delete(m.tasks, id)
 			m.mu.Unlock()
@@ -300,12 +307,8 @@ func (e *Engine) StartTask(ctx context.Context, agentName, prompt, isolation str
 	m.publishLocked(st.sessionID, api.SessionEvent{Task: &started})
 	m.mu.Unlock()
 
-	// Detached from the turn: it keeps running when the turn ends. Its own
-	// run state charges its session and has its own budget; nobody is
-	// asked anything; the turn's notices aren't its.
-	runCtx, cancel := context.WithCancelCause(context.WithoutCancel(ctx))
-	runCtx, stopTimer := context.WithTimeoutCause(runCtx, timeout, fmt.Errorf("its time limit (%s, tools.background_agent_timeout)", timeout))
-	t.cancel = cancel
+	// Its own run state charges its session and has its own budget;
+	// nobody is asked anything; the turn's notices aren't its.
 	own := &runState{sessionID: st.sessionID, maxTurns: maxTurns, taskID: id, agent: st.agent, model: st.model, models: st.models}
 	runCtx = context.WithValue(runCtx, runStateKey{}, own)
 	runCtx = context.WithValue(runCtx, taskKey{}, id)
@@ -567,6 +570,9 @@ func (e *Engine) worktreeTools(id string) (*tools.Registry, worktree.Worktree, e
 	cfg.Hooks = config.HooksConfig{}
 	reg, err := tools.NewRegistry(&cfg, e.agentReg, e.skillProv)
 	if err != nil {
+		if _, rerr := worktree.Remove(e.toolReg.Workspace().Dir(), w.Name, true); rerr != nil {
+			err = errors.Join(err, fmt.Errorf("removing worktree %s: %w", w.Name, rerr))
+		}
 		return nil, w, err
 	}
 	_ = reg.SetPermissionMode(e.toolReg.Hooks().Mode())

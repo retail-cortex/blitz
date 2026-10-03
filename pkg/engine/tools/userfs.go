@@ -31,7 +31,8 @@ import (
 // the user's files) and not checkpointed as the agent's turns are. Paths
 // are relative to the workspace, with either separator.
 
-// ErrGitDir: the repository's .git directory is never read or written.
+// ErrGitDir means the path is in the repository's .git directory, which is
+// never read or written.
 var ErrGitDir = errors.New("the .git directory can't be opened here")
 
 // UserPath cleans a workspace-relative path from the user ("" is the
@@ -110,7 +111,7 @@ func (w *Workspace) UserReadFile(rel string, limit int64) ([]byte, fs.FileInfo, 
 	return data, info, nil
 }
 
-// ErrTooLarge: the file is over the size the caller reads.
+// ErrTooLarge means the file is over the size the caller reads.
 var ErrTooLarge = errors.New("file too large")
 
 // UserWriteFile replaces rel with data atomically (its mode kept), or

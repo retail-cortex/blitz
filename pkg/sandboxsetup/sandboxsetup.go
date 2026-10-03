@@ -38,17 +38,17 @@ type State string
 
 // The states.
 const (
-	// Unsupported: not Linux, whose sandbox (Seatbelt on macOS) needs no
-	// set-up, or which has none.
+	// Unsupported means the OS isn't Linux: its sandbox (Seatbelt on macOS)
+	// needs no set-up, or it has none.
 	Unsupported State = "unsupported"
-	// Ready: bubblewrap runs.
+	// Ready means bubblewrap runs.
 	Ready State = "ready"
-	// NoBwrap: bubblewrap isn't installed.
+	// NoBwrap means bubblewrap isn't installed.
 	NoBwrap State = "no_bwrap"
-	// Restricted: AppArmor's restriction on unprivileged user namespaces
+	// Restricted means AppArmor's restriction on unprivileged user namespaces
 	// stops bubblewrap, and Fix can lift it for bwrap alone.
 	Restricted State = "restricted"
-	// Broken: bubblewrap fails for another reason (a container's seccomp
+	// Broken means bubblewrap fails for another reason (a container's seccomp
 	// profile, a kernel without user namespaces) that Fix can't help.
 	Broken State = "broken"
 )
@@ -160,10 +160,10 @@ type Elevation struct {
 	Graphical bool
 }
 
-// ErrNoElevation: neither sudo nor pkexec is installed.
+// ErrNoElevation means neither sudo nor pkexec is installed.
 var ErrNoElevation = errors.New("neither sudo nor pkexec is installed")
 
-// ErrCantFix: the sandbox's problem isn't one Fix can help.
+// ErrCantFix means the sandbox's problem isn't one Fix can help.
 var ErrCantFix = errors.New("not something an AppArmor profile fixes")
 
 // install is the privileged step: copy the profile into place, readable by

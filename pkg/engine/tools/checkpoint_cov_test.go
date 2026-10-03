@@ -245,3 +245,37 @@ func TestCheckpointStoreNotWritable(t *testing.T) {
 	_, err := c.Undo(false)
 	assert.ErrorContains(t, err, "a.txt", "a change without its snapshot isn't undoable")
 }
+
+// An undo that restores some files but not others keeps the changes it
+// couldn't undo, so a later undo can.
+func TestCheckpointsPartialUndoKeepsTheFailures(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root ignores directory permissions")
+	}
+	ws, dir := newTestWorkspace(t)
+	cp := NewCheckpoints(ws, 0)
+	ro := filepath.Join(dir, "ro")
+	require.NoError(t, os.Mkdir(ro, 0o755))
+	writeFile(t, filepath.Join(ro, "a.txt"), "a1")
+	writeFile(t, filepath.Join(dir, "b.txt"), "b1")
+	cp.Begin("t")
+	ctx := context.Background()
+	require.NoError(t, ws.WriteFileAtomic(ctx, "ro/a.txt", []byte("a2")))
+	require.NoError(t, ws.WriteFileAtomic(ctx, "b.txt", []byte("b2")))
+	require.NoError(t, os.Chmod(ro, 0o500)) // a.txt can't be replaced
+	t.Cleanup(func() { os.Chmod(ro, 0o755) })
+
+	res, err := cp.Undo(false)
+	require.Error(t, err)
+	assert.Equal(t, []string{"b.txt"}, res.Restored)
+	l := cp.List()
+	require.Len(t, l, 1, "the turn is kept for what failed")
+	assert.Equal(t, []string{filepath.Join("ro", "a.txt")}, l[0].Files)
+
+	require.NoError(t, os.Chmod(ro, 0o755))
+	res, err = cp.Undo(false)
+	require.NoError(t, err)
+	assert.Equal(t, []string{filepath.Join("ro", "a.txt")}, res.Restored)
+	assert.Equal(t, "a1", readString(t, filepath.Join(ro, "a.txt")))
+	assert.Empty(t, cp.List())
+}

@@ -16,6 +16,7 @@ package tools
 
 import (
 	"context"
+	"errors"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -257,4 +258,31 @@ func TestResolveExistingPrefix(t *testing.T) {
 	got, err := resolveExistingPrefix(filepath.Join(dir, "a", "b"))
 	require.NoError(t, err)
 	assert.Equal(t, filepath.Join(real, "a", "b"), got)
+}
+
+// TestWorkspaceInPlaceWriteFailureKeepsSnapshot checks a write through a
+// symlink that fails after truncating the target keeps its checkpoint, so
+// /undo can put the target back.
+func TestWorkspaceInPlaceWriteFailureKeepsSnapshot(t *testing.T) {
+	ws, dir := newTestWorkspace(t)
+	cp := NewCheckpoints(ws, 0)
+	target := filepath.Join(dir, "target")
+	writeFile(t, target, "original")
+	require.NoError(t, os.Symlink("target", filepath.Join(dir, "link")))
+	orig := inPlaceWrite
+	inPlaceWrite = func(f *os.File, b []byte) (int, error) {
+		n, _ := f.Write(b[:1])
+		return n, errors.New("disk full")
+	}
+	t.Cleanup(func() { inPlaceWrite = orig })
+
+	cp.Begin("t")
+	err := ws.WriteFileAtomic(context.Background(), "link", []byte("new content"))
+	require.ErrorIs(t, err, errPartialWrite)
+	inPlaceWrite = orig
+	assert.Equal(t, "n", readString(t, target), "the target was cut short")
+	res, err := cp.Undo(false)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"link"}, res.Restored)
+	assert.Equal(t, "original", readString(t, target))
 }

@@ -83,6 +83,10 @@ func editConfigFile(dir string, edit func(doc string) string, verify func(map[st
 		tmp.Close()
 		return "", err
 	}
+	if err := tmp.Sync(); err != nil {
+		tmp.Close()
+		return "", err
+	}
 	if err := tmp.Close(); err != nil {
 		return "", err
 	}

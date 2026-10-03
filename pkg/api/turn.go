@@ -29,21 +29,20 @@ type Turn struct {
 	// Prompt, if set, is sent to the agent instead of Text (e.g. /search
 	// sends the fetched results, and the transcript records the command).
 	Prompt string
-	// Plan: Text is a goal to plan for. Tools that change anything are
-	// refused for the whole turn, and the transcript
-	// records "/plan <Text>".
+	// Plan means Text is a goal to plan for. Tools that change anything are
+	// refused for the whole turn, and the transcript records "/plan <Text>".
 	Plan bool
 	// ReadOnly names a mode that refuses the same tools as plan mode.
 	ReadOnly string
-	// Aside: a /btw question, answered in a throwaway copy of the session
-	// and recorded nowhere. It takes no images, starts no checkpoint and
-	// leaves queued steer messages alone.
+	// Aside means Text is a /btw question, answered in a throwaway copy of the
+	// session and recorded nowhere. It takes no images, starts no checkpoint
+	// and leaves queued steer messages alone.
 	Aside bool
-	// Accepted: Text already passed prompt_submit hooks and was recorded (a
-	// steer message that arrived too late to be read mid-turn).
+	// Accepted means Text already passed prompt_submit hooks and was recorded
+	// (a steer message that arrived too late to be read mid-turn).
 	Accepted bool
-	// Command: Text is a custom slash command ("/name args"), expanded into
-	// its prompt with its agent, model, tools and plan mode; the
+	// Command means Text is a custom slash command ("/name args"), expanded
+	// into its prompt with its agent, model, tools and plan mode; the
 	// transcript records Text.
 	Command bool
 	// Images are sent with the prompt.
@@ -118,7 +117,8 @@ type Event struct {
 // Notice is a message from Blitz itself about a turn.
 type Notice struct {
 	Text string
-	// Error: something went wrong (shown as an error), else information.
+	// Error marks something that went wrong (shown as an error); otherwise
+	// it's information.
 	Error bool
 }
 
@@ -147,7 +147,7 @@ type ToolCall struct {
 	ID   string // matches the ToolResult
 	Name string
 	Args map[string]any
-	// Partial: the call arrived in a streamed chunk, and the final event
+	// Partial means the call arrived in a streamed chunk, and the final event
 	// repeats it.
 	Partial bool
 }

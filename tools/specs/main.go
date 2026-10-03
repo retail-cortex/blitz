@@ -118,14 +118,15 @@ func missingPaths(text string) []string {
 	return out
 }
 
-// example: the text just before a path introduces it as an example.
+// example reports whether the text just before a path introduces it as an
+// example.
 func example(before string) bool {
 	tail := strings.ToLower(before[max(0, len(before)-24):])
 	return strings.Contains(tail, "e.g.") || strings.Contains(tail, "example")
 }
 
-// repoPath: p names something in the repository (not a label, a URL, a
-// home path or a pattern of names).
+// repoPath reports whether p names something in the repository (not a
+// label, a URL, a home path or a pattern of names).
 func repoPath(p string) bool {
 	if rootFiles[p] {
 		return true
@@ -141,7 +142,8 @@ func repoPath(p string) bool {
 	return false
 }
 
-// exists: the path, a glob of it, or each alternative of {a,b} exists.
+// exists reports whether the path, a glob of it, or each alternative of
+// {a,b} exists.
 func exists(p string) bool {
 	if i := strings.Index(p, "{"); i >= 0 {
 		if j := strings.Index(p[i:], "}"); j > 0 {

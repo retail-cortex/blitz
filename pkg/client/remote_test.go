@@ -118,6 +118,10 @@ func TestRemoteCallsFailWithoutTheService(t *testing.T) {
 		"WaitAll":              func() error { return r.Processes().WaitAll(ctx) },
 		"StartBackground":      func() error { _, err := r.StartBackground(ctx, api.Turn{Text: "x", Timeout: time.Minute}); return err },
 		"FollowBackground":     func() error { _, err := r.FollowBackground(ctx, "bg-1", func(api.Event) {}); return err },
+		"RevokeApprovals":      func() error { _, err := r.RevokeApprovals("k"); return err },
+		"Search":               func() error { _, err := r.Search(ctx, api.SearchQuery{Text: "x"}); return err },
+		"Reindex":              r.Reindex,
+		"ClearApprovals":       func() error { _, err := r.ClearApprovals(); return err },
 	} {
 		t.Run(name, func(t *testing.T) {
 			assert.Error(t, call())
@@ -153,8 +157,7 @@ func TestRemoteCallsWarnWithoutTheService(t *testing.T) {
 		"ListCheckpoints":     func() any { return r.ListCheckpoints() },
 		"SessionDiff":         func() any { return r.SessionDiff() },
 		"ListApprovals":       func() any { return r.ListApprovals() },
-		"RevokeApprovals":     func() any { return r.RevokeApprovals("k") },
-		"ClearApprovals":      func() any { return r.ClearApprovals() },
+		"SearchStatus":        func() any { return r.SearchStatus().Items },
 		"SearchSession":       func() any { n, _ := r.SearchSession("x"); return n },
 		"ProjectSettings":     func() any { return r.ProjectSettings().Hash },
 		"ListHooks":           func() any { return r.ListHooks() },
@@ -318,8 +321,20 @@ func TestRemoteBackendCalls(t *testing.T) {
 		assert.Contains(t, r.SessionDiff(), "made.txt")
 		approvals := r.ListApprovals()
 		require.NotEmpty(t, approvals, "approved for good")
-		assert.Equal(t, 1, r.RevokeApprovals(approvals[0].Key))
-		assert.Zero(t, r.ClearApprovals(), "none left")
+		require.Eventually(t, func() bool { s := r.SearchStatus(); return !s.LastScan.IsZero() && !s.Scanning }, 20*time.Second, 20*time.Millisecond)
+		found, err := r.Search(ctx, api.SearchQuery{Text: "hi", Sources: []string{api.SearchFiles}})
+		require.NoError(t, err)
+		require.NotEmpty(t, found.Hits, "made.txt, which the turn wrote")
+		assert.Equal(t, "made.txt", found.Hits[0].Ref)
+		require.NoError(t, r.Reindex())
+		_, err = r.Search(ctx, api.SearchQuery{Text: "x", Sources: []string{"email"}})
+		assert.ErrorIs(t, err, api.ErrUnknownSearchSource)
+		n, err := r.RevokeApprovals(approvals[0].Key)
+		require.NoError(t, err)
+		assert.Equal(t, 1, n)
+		n, err = r.ClearApprovals()
+		require.NoError(t, err)
+		assert.Zero(t, n, "none left")
 		undone, err := r.Undo(false)
 		require.NoError(t, err)
 		assert.Equal(t, []string{"made.txt"}, undone.Restored)

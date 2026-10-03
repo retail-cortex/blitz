@@ -39,7 +39,8 @@ const (
 	Unit = "blitz.service"
 )
 
-// ErrUnsupported: login items exist only on macOS and Linux.
+// ErrUnsupported means login items aren't available: they exist only on
+// macOS and Linux.
 var ErrUnsupported = fmt.Errorf("starting the service at login isn't supported on %s: run blitzd yourself", goruntime.GOOS)
 
 // RunSystem runs a system command (launchctl, systemctl); tests replace it.
@@ -146,7 +147,8 @@ func Stop() error {
 	return ErrUnsupported
 }
 
-// ErrNotInstalled: starting or restarting needs the login item.
+// ErrNotInstalled means the login item isn't installed, and starting or
+// restarting needs it.
 var ErrNotInstalled = errors.New("the Blitz service isn't installed to start at login")
 
 // Start starts the service the login item runs (after Stop, say).

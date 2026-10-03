@@ -38,9 +38,13 @@ import (
 // readable only by the owner. Identical files are stored once; a PDF's
 // text, once read, is kept beside it (<sha>.pdf.txt).
 type Store struct {
-	dir   string
-	pages sync.Map // a PDF's SHA-256 -> its page count
+	dir    string
+	pages  sync.Map // a PDF's SHA-256 -> its page count
+	failed sync.Map // a PDF's SHA-256 -> why its text couldn't be read
 }
+
+// pdfText reads a PDF's text; tests replace it.
+var pdfText = pdftext.Text
 
 var shaRE = regexp.MustCompile(`^[0-9a-f]{64}$`)
 
@@ -174,7 +178,8 @@ const MaxDocumentText = 300_000
 const textHeader = "blitz-pdftext pages="
 
 // Text is a stored PDF's text (see pdftext.Text) and page count, read once
-// and then kept beside the PDF.
+// and then kept beside the PDF. A PDF whose text couldn't be read (it timed
+// out, or is unreadable) isn't tried again by this process.
 func (s *Store) Text(ctx context.Context, uri string) (string, int, error) {
 	sha, ok := strings.CutPrefix(uri, URIScheme)
 	if !ok || !shaRE.MatchString(sha) {
@@ -188,6 +193,9 @@ func (s *Store) Text(ctx context.Context, uri string) (string, int, error) {
 			}
 		}
 	}
+	if err, ok := s.failed.Load(sha); ok {
+		return "", 0, err.(error)
+	}
 	data, mime, err := s.Get(uri)
 	if err != nil {
 		return "", 0, err
@@ -195,8 +203,11 @@ func (s *Store) Text(ctx context.Context, uri string) (string, int, error) {
 	if mime != pdftext.MIME {
 		return "", 0, fmt.Errorf("%s is not a PDF", sha[:12])
 	}
-	text, pages, err := pdftext.Text(ctx, data, 0)
+	text, pages, err := pdfText(ctx, data, 0)
 	if err != nil {
+		if ctx.Err() == nil { // not the caller giving up: it would fail again
+			s.failed.Store(sha, err)
+		}
 		return "", 0, err
 	}
 	s.writeFile(cache, []byte(fmt.Sprintf("%s%d\n%s", textHeader, pages, text))) // best effort: read again next time
@@ -249,6 +260,10 @@ func (s *Store) writeFile(final string, data []byte) error {
 	}
 	defer os.Remove(tmp.Name())
 	if _, err := tmp.Write(data); err != nil {
+		tmp.Close()
+		return err
+	}
+	if err := tmp.Sync(); err != nil {
 		tmp.Close()
 		return err
 	}

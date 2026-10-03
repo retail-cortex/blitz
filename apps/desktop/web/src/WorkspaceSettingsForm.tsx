@@ -26,6 +26,7 @@ import {
   mdiFileCogOutline,
   mdiFolderOutline,
   mdiKeyOutline,
+  mdiMagnify,
   mdiRobotOutline,
   mdiShieldAlertOutline,
   mdiShieldCheckOutline,
@@ -38,11 +39,12 @@ import { config, sessions, workspaces } from "./api";
 import { message, reason } from "./errors";
 import { language, t, tn } from "./i18n";
 import type { Usage } from "./gen/blitz/v1/turn_pb";
-import type { AgentInfo, Approval, GetSettingsResponse, LocaleInfo, ModelSettingsInfo, PermissionRule, ProjectSettings, Style } from "./gen/blitz/v1/workspace_pb";
+import type { AgentInfo, Approval, GetSettingsResponse, LocaleInfo, ModelSettingsInfo, PermissionRule, ProjectSettings, SearchStatus, Style } from "./gen/blitz/v1/workspace_pb";
 import { checkModelRef } from "./models";
 import { ModelInput, useModelCatalog } from "./ModelInput";
 import { agencies, efforts, modes } from "./options";
 import { PermissionSettings } from "./PermissionSettings";
+import { SearchSettings } from "./SearchSettings";
 import { ProviderSettings } from "./ProviderSettings";
 import { useApp } from "./state";
 import { lookOf, WorkspaceFields, type WorkspaceLook } from "./WorkspaceFields";
@@ -156,6 +158,10 @@ export function WorkspaceSettingsForm({
   const [locales, setLocales] = useState<LocaleInfo[]>([]);
   const [styles, setStyles] = useState<Style[]>([]);
   const [rules, setRules] = useState<PermissionRule[]>([]);
+  const [searchStatus, setSearchStatus] = useState<SearchStatus>();
+  const loadSearch = useCallback(() => {
+    workspaces.getSearchStatus({ workspace: dir }).then((r) => setSearchStatus(r.status), () => {});
+  }, [dir]);
   const [approvals, setApprovals] = useState<Approval[]>([]);
   const [usage, setUsage] = useState<Usage>();
   const [modelRef, setModelRef] = useState("");
@@ -182,15 +188,22 @@ export function WorkspaceSettingsForm({
       setApprovals(ap.approvals);
       setUsage(u?.usage);
       // Asides: the panel works without them.
+      loadSearch();
       workspaces.getProjectSettings({ workspace: dir }).then((r) => setProjectSettings(r.settings), () => {});
       config.getConfigFile({ workspace: dir }).then((f) => setFilePath(f.path), () => {});
     } catch (e) {
       snack(message(e), { error: true });
     }
-  }, [dir, snack]);
+  }, [dir, snack, loadSearch]);
   useEffect(() => {
     load();
   }, [load]);
+  // The index's status, asked again every two seconds while it scans.
+  useEffect(() => {
+    if (!searchStatus?.scanning && (searchStatus?.lastScan || !searchStatus?.enabled)) return;
+    const timer = setTimeout(loadSearch, 2000);
+    return () => clearTimeout(timer);
+  }, [searchStatus, loadSearch]);
   // Rules and approvals changed elsewhere (the settings, a terminal, a file).
   useOnConfigChanged(dir, load);
   useEffect(() => setSpeechRef(settings?.speechModel ?? ""), [settings?.speechModel]);
@@ -213,6 +226,14 @@ export function WorkspaceSettingsForm({
       snack(reason(e) === "BYPASS_NEEDS_SANDBOX" ? t("desktop.bypass_needs_sandbox") : message(e), { error: true });
     }
   };
+
+  // Revoked for this session either way; an error says which stay saved.
+  const revoke = (which: { keys: string[] } | { all: true }, done: string) =>
+    act(async () => {
+      const r = await workspaces.revokeApprovals({ workspace: dir, ...which });
+      if (r.error) snack(t("desktop.rs.still_saved", { reason: r.error.message }), { error: true });
+      else snack(done);
+    });
 
   const setModelSetting = (key: string, value: string) =>
     act(async () => {
@@ -394,6 +415,22 @@ export function WorkspaceSettingsForm({
               </Button>
             </Section>
 
+            <Section
+              id="search"
+              icon={mdiMagnify}
+              title={t("desktop.rs.search")}
+              scope={t("desktop.rs.scope.workspace")}
+              summary={
+                !searchStatus?.settings
+                  ? undefined
+                  : !searchStatus.settings.enabled
+                    ? t("desktop.rs.search.summary_off")
+                    : [t("desktop.rs.search.summary_on"), searchStatus.settings.embeddingModel && t("desktop.rs.search.meaning"), searchStatus.settings.enrich && t("desktop.rs.search.enrich")].filter(Boolean).join(" · ")
+              }
+            >
+              <SearchSettings workspace={dir} status={searchStatus} onChanged={loadSearch} />
+            </Section>
+
             <Section id="keys" icon={mdiKeyOutline} title={t("desktop.rs.keys")} scope={t("desktop.rs.scope.workspace")} summary={settings?.provider}>
               <ProviderSettings workspace={dir} compact />
             </Section>
@@ -412,12 +449,12 @@ export function WorkspaceSettingsForm({
                       {a.subject}
                     </code>
                     <span className="t-body-sm muted">{a.always ? t("desktop.rs.always") : t("desktop.rs.session")}</span>
-                    <IconButton icon={mdiDeleteOutline} label={t("desktop.rs.revoke")} small onClick={() => act(() => workspaces.revokeApprovals({ workspace: dir, keys: [a.key] }), t("desktop.rs.revoked"))} />
+                    <IconButton icon={mdiDeleteOutline} label={t("desktop.rs.revoke")} small onClick={() => revoke({ keys: [a.key] }, t("desktop.rs.revoked"))} />
                   </div>
                 ))}
               </div>
               {approvals.length > 1 && (
-                <Button small danger onClick={() => act(() => workspaces.revokeApprovals({ workspace: dir, all: true }), t("desktop.rs.revoked_all"))}>
+                <Button small danger onClick={() => revoke({ all: true }, t("desktop.rs.revoked_all"))}>
                   {t("desktop.rs.revoke_all")}
                 </Button>
               )}

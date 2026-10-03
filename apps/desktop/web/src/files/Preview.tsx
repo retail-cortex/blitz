@@ -25,6 +25,9 @@ import { takeAnchor } from "../events";
 import { Markdown, MarkdownDocProvider, scrollToHeading } from "../Markdown";
 import { playsVideo, type PreviewKind } from "./previewKind";
 
+import { showFound } from "./find";
+import { TableView } from "./TableView";
+
 const PdfView = lazy(() => import("./PdfView").then((m) => ({ default: m.PdfView })));
 
 /**
@@ -33,21 +36,48 @@ const PdfView = lazy(() => import("./PdfView").then((m) => ({ default: m.PdfView
  * sound from the file's bytes (ReadPreview), PDFs drawn with pdf.js and
  * sound in the system's player.
  */
-export function Preview({ dir, path, kind, text }: { dir: string; path: string; kind: PreviewKind; text?: string }) {
-  if (kind === "markdown") return <MarkdownPreview dir={dir} path={path} text={text ?? ""} />;
+export function Preview({ dir, path, kind, text, line, find, onFound }: { dir: string; path: string; kind: PreviewKind; text?: string; line?: number; find?: Found; onFound?: () => void }) {
+  if (kind === "markdown") return <MarkdownPreview dir={dir} path={path} text={text ?? ""} find={find} onFound={onFound} />;
+  if (kind === "table") return <TableView dir={dir} path={path} line={line} />;
   if (kind === "svg") return <SvgPreview text={text ?? ""} name={path} />;
   return <FilePreview dir={dir} path={path} kind={kind} />;
 }
 
+/** A search hit to show: the source line it's at and the words to mark. */
+export interface Found {
+  line: number;
+  terms: string[];
+}
+
 // A Markdown file as a document (document.css), whose relative links start
-// at its folder; opened from a link to one of its headings, it scrolls there.
-function MarkdownPreview({ dir, path, text }: { dir: string; path: string; text: string }) {
+// at its folder; opened from a link to one of its headings, it scrolls
+// there; opened from a search hit, it shows the hit's line with the words
+// marked, until it closes or its text changes.
+function MarkdownPreview({ dir, path, text, find, onFound }: { dir: string; path: string; text: string; find?: Found; onFound?: () => void }) {
   const box = useRef<HTMLDivElement>(null);
   const doc = useMemo(() => ({ dir, path }), [dir, path]);
   useEffect(() => {
     const anchor = takeAnchor(dir, path);
     if (anchor) requestAnimationFrame(() => scrollToHeading(box.current?.querySelector(".markdown > *") ?? null, anchor));
   }, [dir, path]);
+  const [found, setFound] = useState<Found>();
+  useEffect(() => {
+    if (find) setFound(find);
+  }, [find]);
+  const foundRef = useRef(onFound);
+  foundRef.current = onFound;
+  useEffect(() => {
+    if (!found || !text) return;
+    let clear = () => {};
+    const frame = requestAnimationFrame(() => {
+      if (box.current) clear = showFound(box.current, found.line, found.terms);
+      foundRef.current?.();
+    });
+    return () => {
+      cancelAnimationFrame(frame);
+      clear();
+    };
+  }, [found, text]);
   return (
     <div className="preview preview-markdown" ref={box}>
       <MarkdownDocProvider value={doc}>

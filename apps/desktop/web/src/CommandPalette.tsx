@@ -35,13 +35,15 @@ import {
 } from "@mdi/js";
 import { files, sessions, workspaces } from "./api";
 import { allCommands, paletteResults, searchesFiles, type CommandSpec, type PaletteItem } from "./commands";
-import { compose, loadSession, openFile, showView, startSetup } from "./events";
+import { compose, findInFile, loadSession, openFile, searchWorkspace, showView, startSetup } from "./events";
+import { findTerms, hitTarget, queryTerms } from "./search";
 import { fileIcon } from "./files/icons";
 import { splitLine } from "./files/paths";
 import { nameOf, parentOf } from "./files/tree";
 import { displayName, openWorkspace, openWorkspaces, recentWorkspaces } from "./prefs";
 import { useApp } from "./state";
 import type { Section } from "./SettingsDialog";
+import type { SearchHit } from "./gen/blitz/v1/workspace_pb";
 import { t, tn } from "./i18n";
 import { Icon, useModal } from "./ui/controls";
 import { toggleFullscreen } from "./desktop";
@@ -61,6 +63,7 @@ export function CommandPalette({ onClose, onOpenWorkspace, onSettings }: { onClo
   const [custom, setCustom] = useState<CommandSpec[]>([]);
   const [chats, setChats] = useState<{ id: string; title: string; detail: string }[]>([]);
   const [found, setFound] = useState<string[]>([]);
+  const [passages, setPassages] = useState<SearchHit[]>([]);
   const input = useRef<HTMLInputElement>(null);
   const list = useRef<HTMLDivElement>(null);
   // Escape, the focus kept inside and given back: as in a dialog.
@@ -100,6 +103,50 @@ export function CommandPalette({ onClose, onOpenWorkspace, onSettings }: { onClo
       clearTimeout(timer);
     };
   }, [dir, fileQuery, wantFiles]);
+  // What workspace search finds for what's typed (its file contents,
+  // PDFs, chats and notes), once typing pauses; nothing while it's off.
+  useEffect(() => {
+    if (!wantFiles || queryTerms(query).every((w) => w.length < 2)) {
+      setPassages([]);
+      return;
+    }
+    let live = true;
+    const timer = setTimeout(() => {
+      workspaces.searchWorkspace({ workspace: dir, query, limit: 6, hidden: prefs.show_hidden }).then(
+        (r) => live && setPassages(r.hits),
+        () => live && setPassages([]),
+      );
+    }, 150);
+    return () => {
+      live = false;
+      clearTimeout(timer);
+    };
+  }, [dir, query, wantFiles, prefs.show_hidden]);
+  const textItems = useMemo<PaletteItem[]>(() => {
+    if (!dir || !queryTerms(query).length) return [];
+    const group = t("desktop.palette.group.text");
+    const out: PaletteItem[] = passages.map((h) => {
+      const to = hitTarget(h);
+      const line = h.snippet.split("\n").find((l) => queryTerms(query).some((w) => l.toLowerCase().includes(w))) ?? h.snippet.split("\n")[0] ?? "";
+      return {
+        group,
+        label: h.source === "chats" ? h.title : to.kind === "file" && to.line ? `${h.ref}:${to.line}` : h.ref,
+        detail: line.trim(),
+        icon: h.source === "chats" ? mdiHistory : fileIcon(nameOf(h.ref)),
+        run: () => {
+          onClose();
+          if (to.kind === "chat") {
+            showView({ dir, view: "chat" });
+            loadSession({ dir, id: to.id });
+          } else if (to.kind === "file") {
+            openFile({ dir, path: to.path, line: to.line, find: findTerms(query) });
+          }
+        },
+      };
+    });
+    out.push({ group, label: t("desktop.palette.search_for", { query: query.trim() }), detail: "⇧⌘F", icon: mdiMagnify, run: () => (onClose(), searchWorkspace(query.trim())) });
+    return out;
+  }, [passages, dir, query, onClose]);
   const fileItems = useMemo<PaletteItem[]>(
     () =>
       found.map((path) => ({
@@ -136,6 +183,8 @@ export function CommandPalette({ onClose, onOpenWorkspace, onSettings }: { onClo
         });
       }
       out.push(
+        { group: t("desktop.palette.group.view"), label: t("desktop.search.open"), detail: "⇧⌘F", icon: mdiMagnify, run: done(searchWorkspace) },
+        { group: t("desktop.palette.group.view"), label: t("desktop.files.find"), detail: "⌘F", icon: mdiMagnify, run: done(() => (showView({ dir, view: "editor" }), findInFile({ dir }))) },
         { group: t("desktop.palette.group.view"), label: t("desktop.setup.title"), icon: mdiAutoFix, run: done(() => startSetup(dir)) },
         { group: t("desktop.palette.group.view"), label: prefs.files ? t("desktop.files.hide") : t("desktop.files.show"), icon: mdiFileTreeOutline, run: done(() => update((p) => ({ ...p, files: !p.files }))) },
         { group: t("desktop.palette.group.view"), label: t("desktop.palette.show_editor"), icon: mdiCodeBraces, run: done(() => showView({ dir, view: "editor" })) },
@@ -160,7 +209,7 @@ export function CommandPalette({ onClose, onOpenWorkspace, onSettings }: { onClo
     return out;
   }, [dir, custom, chats, prefs, update, onClose, onOpenWorkspace, onSettings]);
 
-  const shown = paletteResults(fileItems, items, query);
+  const shown = paletteResults(fileItems, items, query, textItems);
   useEffect(() => setPick(0), [query]);
   useEffect(() => list.current?.querySelector(".palette-item.on")?.scrollIntoView({ block: "nearest" }), [pick]);
 

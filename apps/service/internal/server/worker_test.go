@@ -335,3 +335,42 @@ func TestWorkerRunsUndoneOverTheAPI(t *testing.T) {
 	_, info = errorReason(t, err)
 	assert.Equal(t, "UNKNOWN_WORKER", info.Reason)
 }
+
+// A run's undo that restores some files reports why the rest weren't, so
+// `blitz workers undo` fails through the service as it does locally.
+func TestPartialWorkerRunUndoReportsTheError(t *testing.T) {
+	createA := call("create_file", map[string]any{"path": "reports/a/r.md", "content": "a\n"})
+	createB := call("create_file", map[string]any{"path": "reports/b/r.md", "content": "b\n"})
+	c, _ := serveWorkers(t, time.Hour, createA, createB, text("Wrote them."))
+	ctx := context.Background()
+	dir, _ := filepath.EvalSymlinks(t.TempDir())
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "reports", "a"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "reports", "b"), 0o755))
+	addWorker(t, dir, "report", "---\nschedule: Daily at 6 AM\npermissions: [\"write:reports/\"]\n---\nWrite the reports.\n")
+	list, err := c.ListWorkers(ctx, connect.NewRequest(&pb.ListWorkersRequest{Workspace: dir}))
+	require.NoError(t, err)
+	_, err = c.EnableWorker(ctx, connect.NewRequest(&pb.EnableWorkerRequest{Workspace: dir, Name: "report", Hash: list.Msg.Workers[0].Hash}))
+	require.NoError(t, err)
+	started, err := c.RunWorker(ctx, connect.NewRequest(&pb.RunWorkerRequest{Workspace: dir, Name: "report"}))
+	require.NoError(t, err)
+	id := started.Msg.Run.Id
+	var run *pb.WorkerRun
+	require.Eventually(t, func() bool {
+		got, err := c.GetWorkerRun(ctx, connect.NewRequest(&pb.GetWorkerRunRequest{RunId: id}))
+		if err == nil {
+			run = got.Msg.Run
+		}
+		return err == nil && run.Status != pb.RunStatus_RUN_STATUS_RUNNING
+	}, 10*time.Second, 20*time.Millisecond)
+	require.Equal(t, pb.RunStatus_RUN_STATUS_SUCCEEDED, run.Status, "run %v", run)
+
+	// reports/b/r.md can't be removed.
+	locked := filepath.Join(dir, "reports", "b")
+	require.NoError(t, os.Chmod(locked, 0o500))
+	t.Cleanup(func() { os.Chmod(locked, 0o755) })
+	undone, err := c.UndoWorkerRun(ctx, connect.NewRequest(&pb.UndoWorkerRunRequest{Workspace: dir, RunId: id}))
+	require.NoError(t, err)
+	assert.Equal(t, []string{"reports/a/r.md"}, undone.Msg.Restored)
+	require.NotNil(t, undone.Msg.Error, "the file that wasn't restored")
+	assert.Contains(t, undone.Msg.Error.Message, "reports/b/r.md")
+}

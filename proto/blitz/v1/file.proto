@@ -55,6 +55,10 @@ service FileService {
   rpc FindFiles(FindFilesRequest) returns (FindFilesResponse);
   // Files' current versions, to notice changes made elsewhere.
   rpc StatFiles(StatFilesRequest) returns (StatFilesResponse);
+  // A page of a CSV or TSV file's rows, searched, filtered by column and
+  // sorted, streamed so a file of any size can be read (NOT_A_TABLE,
+  // BAD_FILTER, BAD_PATH, FILE_NOT_FOUND).
+  rpc ReadTable(ReadTableRequest) returns (ReadTableResponse);
 }
 
 // What a folder entry is.
@@ -239,4 +243,61 @@ message StatFilesRequest {
 message StatFilesResponse {
   // Path to version; "" for a file that's gone.
   map<string, string> versions = 1;
+}
+
+// Request message for FileService.ReadTable.
+message ReadTableRequest {
+  string workspace = 1;
+  string path = 2;
+  // Rows with this in a cell, ignoring case ("": all).
+  string search = 3;
+  // Each column's filter: a comparison (">5", "<=0", "=north", "!=x"), a
+  // range ("10..20"), "empty", "!empty", else text the cell contains.
+  repeated ColumnFilter filters = 4;
+  // The column to sort by, 1-based; 0: file order.
+  int32 sort_column = 5;
+  bool descending = 6;
+  int32 offset = 7;
+  // 0: 100.
+  int32 limit = 8;
+}
+
+// ColumnFilter is a filter on one column (0-based).
+message ColumnFilter {
+  int32 column = 1;
+  string expr = 2;
+}
+
+// TableColumn is a table's column, as its first rows show it.
+message TableColumn {
+  string name = 1;
+  // number, date, text or empty.
+  string kind = 2;
+  // Empty cells in the rows profiled.
+  int32 empty = 3;
+  // A number column's range in the rows profiled.
+  double min = 4;
+  double max = 5;
+  // What it holds, as a model described it (search.enrich), if it has.
+  string intent = 6;
+}
+
+// TableRow is a row of a table, numbered from 1 (the header not counted).
+message TableRow {
+  int32 number = 1;
+  repeated string cells = 2;
+}
+
+// Response message for FileService.ReadTable.
+message ReadTableResponse {
+  repeated TableColumn columns = 1;
+  repeated TableRow rows = 2;
+  // Rows that matched, and rows in all.
+  int32 matched = 3;
+  int32 total = 4;
+  // False when a sort was asked for but too many rows matched (more than
+  // 200,000): the rows are in file order; filter first.
+  bool sorted = 5;
+  // The file is Latin-1 (Windows-1252), decoded.
+  bool latin1 = 6;
 }

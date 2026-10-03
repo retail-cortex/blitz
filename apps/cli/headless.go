@@ -150,6 +150,7 @@ type streamInput struct {
 	seq     int
 	waiting map[string]chan inMessage
 	closed  bool
+	err     error // why the input stopped early (a line over 4 MiB, a failed read); set before prompts closes
 }
 
 func newStreamInput(in io.Reader, out *json.Encoder) *streamInput {
@@ -191,6 +192,10 @@ func (s *streamInput) read(in io.Reader) {
 		default:
 			s.out.Encode(map[string]any{"type": "error", "error": fmt.Sprintf("unknown message type %q (user, approval or answer)", m.Type)})
 		}
+	}
+	if err := sc.Err(); err != nil {
+		s.out.Encode(map[string]any{"type": "error", "error": "reading the input: " + err.Error()})
+		s.err = fmt.Errorf("reading the input: %w", err)
 	}
 	s.mu.Lock()
 	s.closed = true
@@ -280,6 +285,9 @@ func runStreamInput(ctx context.Context, w api.Backend, o oneShotOptions, in io.
 		case p, ok := <-s.prompts:
 			if !ok {
 				o.keepGoing = false
+				if s.err != nil { // the input didn't end cleanly: the run fails
+					last = errors.Join(last, s.err)
+				}
 				return finishStream(ctx, w, o, last)
 			}
 			run(p)

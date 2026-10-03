@@ -24,6 +24,9 @@ load("@npm//:defs.bzl", "npm_link_all_packages")
 # gazelle:exclude apps/desktop/web
 # gazelle:exclude apps/desktop/packaging
 # gazelle:exclude apps/vscode
+# An IDE's own Bazel aspects (Build Server Protocol), which Bazel still
+# loads from the tree.
+# gazelle:exclude .bazelbsp
 
 # The npm packages' store, for the page and the extension (pnpm-lock.yaml).
 npm_link_all_packages(name = "node_modules")

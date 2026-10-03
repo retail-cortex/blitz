@@ -156,3 +156,17 @@ func TestSafeURL(t *testing.T) {
 		})
 	}
 }
+
+// A damaged file that can't be set aside says so.
+func TestDamagedPrefsNotSetAside(t *testing.T) {
+	dir := t.TempDir()
+	s := &prefsStore{path: filepath.Join(dir, "desktop.json")}
+	require.NoError(t, os.WriteFile(s.path, []byte("{not json"), 0o600))
+	require.NoError(t, os.Chmod(dir, 0o500))
+	t.Cleanup(func() { os.Chmod(dir, 0o700) })
+	p, err := s.load()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "couldn't be set aside")
+	assert.ErrorIs(t, err, fs.ErrPermission)
+	assert.Equal(t, "system", p.Theme, "the defaults")
+}

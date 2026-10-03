@@ -10,6 +10,7 @@ tools:
   - glob
   - read_file
   - grep
+  - search_workspace
   - create_file
   - replace_in_file
   - run_shell_command

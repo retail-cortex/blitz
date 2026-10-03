@@ -8,6 +8,7 @@ tools:
   - glob
   - read_file
   - grep
+  - search_workspace
   - create_file
   - ask_user_question
   - list_agents

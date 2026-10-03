@@ -69,14 +69,14 @@ func run(pass *analysis.Pass) (any, error) {
 	return nil, nil
 }
 
-// hasDoc: the comment has text, not only directives such as //go:embed
-// (which CommentGroup.Text leaves out, as the doc tools do).
+// hasDoc reports whether the comment has text, not only directives such as
+// //go:embed (which CommentGroup.Text leaves out, as the doc tools do).
 func hasDoc(cg *ast.CommentGroup) bool {
 	return cg != nil && strings.TrimSpace(cg.Text()) != ""
 }
 
-// exportedFunc: an exported function, or an exported method of an
-// exported type.
+// exportedFunc reports whether d is an exported function, or an exported
+// method of an exported type.
 func exportedFunc(d *ast.FuncDecl) bool {
 	if !d.Name.IsExported() {
 		return false

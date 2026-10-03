@@ -182,6 +182,33 @@ func TestImportCantWrite(t *testing.T) {
 	assert.Error(t, writeTOML(filepath.Join(file, "x.toml"), map[string]string{}), "the parent can't be made")
 }
 
+// What an import can't read or copy is reported, and a half-copied skill
+// is removed.
+func TestImportClaudeUnreadable(t *testing.T) {
+	if os.Getuid() == 0 {
+		t.Skip("root reads everything")
+	}
+	src := files(t, t.TempDir(), map[string]string{
+		".claude-plugin/plugin.json": `{"name": "locked"}`,
+		"commands/secret.md":         "---\ndescription: d\n---\nx\n",
+		"agents/hidden.md":           "---\nname: hidden\n---\nx\n",
+		"skills/half/SKILL.md":       "---\nname: half\ndescription: d\n---\nx\n",
+		"skills/half/z.txt":          "unreadable",
+	})
+	for _, p := range []string{"commands/secret.md", "agents/hidden.md", "skills/half/z.txt"} {
+		require.NoError(t, os.Chmod(filepath.Join(src, p), 0o000))
+	}
+	out := filepath.Join(t.TempDir(), "locked")
+	r, err := ImportClaude(src, out)
+	require.NoError(t, err)
+	assert.Empty(t, r.Added)
+	skipped := strings.Join(r.Skipped, "\n")
+	for _, want := range []string{"command secret: ", "agent hidden: ", "skill half: "} {
+		assert.Contains(t, skipped, want)
+	}
+	assert.NoDirExists(t, filepath.Join(out, "skills", "half"), "no half-copied skill")
+}
+
 // rootVarsMap keeps a missing map missing and fills the root in values.
 func TestRootVarsMap(t *testing.T) {
 	assert.Nil(t, rootVarsMap(nil))

@@ -21,10 +21,11 @@ import { config as configAPI, onServiceLost, workspaces as workspaceAPI } from "
 import { appVersion, chooseWorkspace, type LicenseText, installService, onDeepLink, onNotificationOpen, restartService, serviceStatus, type ServiceStatus, toggleFullscreen } from "./desktop";
 import { checkService, type ServiceCheck } from "./serviceVersion";
 import { CommandPalette } from "./CommandPalette";
+import { SearchDialog } from "./SearchDialog";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { applyUserLanguage, t, useLanguage } from "./i18n";
 import { message, reason } from "./errors";
-import { compose, goToFileEvent, showLicenseEvent } from "./events";
+import { compose, goToFileEvent, searchWorkspaceEvent, showLicenseEvent } from "./events";
 import { UnsavedDialog } from "./files/EditorPane";
 import { LicenseDialog } from "./LicenseDialog";
 import { Brand, MenuBar } from "./MenuBar";
@@ -173,12 +174,17 @@ function Shell() {
   const [settingsAt, setSettingsAt] = useState<{ section: Section; scope?: string } | null>(null);
   const openSettings = useCallback((section: Section, scope?: string) => setSettingsAt({ section, scope }), []);
   const [paletteOpen, setPaletteOpen] = useState(false);
+  // Workspace search, open with the query it starts with (null: closed).
+  const [searchOpen, setSearchOpen] = useState<string | null>(null);
   // Cmd/Ctrl+K opens the command palette, and Cmd/Ctrl+P (Go to file) the
   // same, files first; Cmd/Ctrl+, the settings; F11 (and ⌃⌘F on macOS)
   // makes the window full screen.
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === "f") {
+        e.preventDefault();
+        setSearchOpen("");
+      } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
         setPaletteOpen((o) => !o);
       } else if ((e.metaKey || e.ctrlKey) && !e.shiftKey && e.key.toLowerCase() === "p") {
@@ -196,11 +202,14 @@ function Shell() {
       }
     };
     const goTo = () => setPaletteOpen(true);
+    const search = (e: Event) => setSearchOpen((e as CustomEvent<{ query?: string }>).detail?.query ?? "");
     window.addEventListener("keydown", key);
     window.addEventListener(goToFileEvent, goTo);
+    window.addEventListener(searchWorkspaceEvent, search);
     return () => {
       window.removeEventListener("keydown", key);
       window.removeEventListener(goToFileEvent, goTo);
+      window.removeEventListener(searchWorkspaceEvent, search);
     };
   }, []);
   // The pinned composer's bar, once it's rendered.
@@ -327,6 +336,7 @@ function Shell() {
       )}
       {settingsAt && <SettingsDialog initial={settingsAt.section} scope={settingsAt.scope} onClose={() => setSettingsAt(null)} />}
       {license && <LicenseDialog initial={license} onClose={() => setLicense(null)} />}
+      {searchOpen !== null && prefs.active && <SearchDialog dir={prefs.active} initialQuery={searchOpen} onClose={() => setSearchOpen(null)} />}
       {paletteOpen && <CommandPalette onClose={() => setPaletteOpen(false)} onOpenWorkspace={open} onSettings={(section = "appearance", scope) => openSettings(section, scope)} />}
       {confirmClose && (
         <Dialog

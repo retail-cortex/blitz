@@ -442,6 +442,34 @@ func approveAll(t *testing.T, c every, dir, prompt string) string {
 	return s.Msg.Session.Id
 }
 
+// Approvals revoked whose file can't be written are revoked for now and
+// reported as APPROVALS_STILL_SAVED, with the count.
+func TestRevokeApprovalsStillSaved(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root ignores permissions")
+	}
+	create := call("create_file", map[string]any{"path": "made.txt", "content": "hi\n"})
+	approvalsDir := t.TempDir()
+	c, _ := serveEvery(t, func(cfg *config.Config) {
+		cfg.Blitz.AutoApprove = false
+		cfg.Tools.ApprovalsFile = filepath.Join(approvalsDir, "approvals.json")
+	}, create, text("made"))
+	w := c.workspaces
+	ctx := context.Background()
+	dir := t.TempDir()
+
+	approveAll(t, c, dir, "make a file")
+	require.NoError(t, os.Chmod(approvalsDir, 0o500))
+	t.Cleanup(func() { os.Chmod(approvalsDir, 0o700) })
+
+	res, err := w.RevokeApprovals(ctx, connect.NewRequest(&pb.RevokeApprovalsRequest{Workspace: dir, All: true}))
+	require.NoError(t, err)
+	assert.Positive(t, res.Msg.Revoked)
+	require.NotNil(t, res.Msg.Error)
+	assert.Equal(t, "APPROVALS_STILL_SAVED", res.Msg.Error.Reason)
+	assert.Contains(t, res.Msg.Error.Message, "come back at the next start")
+}
+
 // A turn's file changes over the API: checkpoints, the session's diff,
 // standing approvals, and undoing them, with UNDO_CONFLICT when a file
 // changed since and NOTHING_TO_UNDO reported once there's nothing left.
@@ -910,4 +938,93 @@ func TestWatchingBackgroundTasks(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "done", stopped.Msg.Task.State)
 	assert.Equal(t, "UNKNOWN_TASK", reason(t, unary(w.GetTask, &pb.GetTaskRequest{Workspace: dir, Id: "task-1"})), "no sessions named: none, not every one")
+}
+
+// Workspace search over the API: the status says what's indexed, a search
+// finds the file with its line, Reindex scans again, and failures arrive
+// as reasons.
+func TestSearchOverTheAPI(t *testing.T) {
+	c, _ := serve(t, nil)
+	w := c.workspaces
+	ctx := context.Background()
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "hangar.md"), []byte("# Hangar\n\nThe zeppelin docks here.\n"), 0o644))
+
+	var status *pb.SearchStatus
+	require.Eventually(t, func() bool {
+		res, err := w.GetSearchStatus(ctx, connect.NewRequest(&pb.GetSearchStatusRequest{Workspace: dir}))
+		require.NoError(t, err)
+		status = res.Msg.Status
+		return status.LastScan != nil && !status.Scanning
+	}, 20*time.Second, 20*time.Millisecond)
+	assert.True(t, status.Enabled)
+	assert.Equal(t, int32(1), status.Items["files"])
+
+	res, err := w.SearchWorkspace(ctx, connect.NewRequest(&pb.SearchWorkspaceRequest{Workspace: dir, Query: "zeppelin"}))
+	require.NoError(t, err)
+	require.Len(t, res.Msg.Hits, 1)
+	hit := res.Msg.Hits[0]
+	assert.Equal(t, "hangar.md", hit.Ref)
+	assert.Equal(t, int32(3), hit.Line)
+	assert.Contains(t, hit.Snippet, "The zeppelin docks here.")
+	assert.Equal(t, []string{"files", "documents"}, res.Msg.Sources)
+
+	_, err = w.Reindex(ctx, connect.NewRequest(&pb.ReindexRequest{Workspace: dir}))
+	require.NoError(t, err)
+
+	for name, tc := range map[string]struct {
+		req    *pb.SearchWorkspaceRequest
+		code   connect.Code
+		reason string
+	}{
+		"unknown source":  {&pb.SearchWorkspaceRequest{Workspace: dir, Query: "x", Sources: []string{"email"}}, connect.CodeInvalidArgument, "UNKNOWN_SEARCH_SOURCE"},
+		"nothing to find": {&pb.SearchWorkspaceRequest{Workspace: dir, Query: " "}, connect.CodeInvalidArgument, "EMPTY_SEARCH"},
+		"no embeddings":   {&pb.SearchWorkspaceRequest{Workspace: dir, Query: "x", Mode: "semantic"}, connect.CodeFailedPrecondition, "NO_EMBEDDINGS"},
+		"unknown mode":    {&pb.SearchWorkspaceRequest{Workspace: dir, Query: "x", Mode: "psychic"}, connect.CodeInvalidArgument, "UNKNOWN_SEARCH_MODE"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, err := w.SearchWorkspace(ctx, connect.NewRequest(tc.req))
+			code, info := errorReason(t, err)
+			assert.Equal(t, tc.code, code)
+			assert.Equal(t, tc.reason, info.Reason)
+		})
+	}
+}
+
+// With search off, searching and reindexing say so.
+func TestSearchDisabledOverTheAPI(t *testing.T) {
+	c, _ := serve(t, func(cfg *config.Config) { cfg.Search.Enabled = false })
+	ctx := context.Background()
+	dir := t.TempDir()
+	_, err := c.workspaces.SearchWorkspace(ctx, connect.NewRequest(&pb.SearchWorkspaceRequest{Workspace: dir, Query: "x"}))
+	_, info := errorReason(t, err)
+	assert.Equal(t, "SEARCH_DISABLED", info.Reason)
+	_, err = c.workspaces.Reindex(ctx, connect.NewRequest(&pb.ReindexRequest{Workspace: dir}))
+	_, info = errorReason(t, err)
+	assert.Equal(t, "SEARCH_DISABLED", info.Reason)
+	st, err := c.workspaces.GetSearchStatus(ctx, connect.NewRequest(&pb.GetSearchStatusRequest{Workspace: dir}))
+	require.NoError(t, err)
+	assert.False(t, st.Msg.Status.Enabled)
+}
+
+// The search calls refuse a workspace that isn't one.
+func TestSearchInvalidWorkspace(t *testing.T) {
+	c, _ := serve(t, nil)
+	ctx := context.Background()
+	for name, call := range map[string]func() error{
+		"search": func() error {
+			_, err := c.workspaces.SearchWorkspace(ctx, connect.NewRequest(&pb.SearchWorkspaceRequest{Workspace: "relative/dir", Query: "x"}))
+			return err
+		},
+		"status": func() error {
+			_, err := c.workspaces.GetSearchStatus(ctx, connect.NewRequest(&pb.GetSearchStatusRequest{Workspace: "relative/dir"}))
+			return err
+		},
+		"reindex": func() error {
+			_, err := c.workspaces.Reindex(ctx, connect.NewRequest(&pb.ReindexRequest{Workspace: "relative/dir"}))
+			return err
+		},
+	} {
+		assert.Error(t, call(), name)
+	}
 }

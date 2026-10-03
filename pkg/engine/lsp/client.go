@@ -53,7 +53,15 @@ type conn struct {
 	notify  func(method string, params json.RawMessage)
 	closed  error
 	done    chan struct{}
+	// replies holds answers to the server's requests, written in order
+	// off the reader: a server blocked writing to us while its stdin is
+	// full would otherwise never be read again.
+	replies chan any
 }
+
+// maxReplies bounds the answers waiting to be written; past it a server
+// that won't read gets none.
+const maxReplies = 64
 
 type response struct {
 	Result json.RawMessage
@@ -72,13 +80,26 @@ type rpcMessage struct {
 	} `json:"error,omitempty"`
 }
 
-// errClosed: the server went away.
+// errClosed means the server went away.
 var errClosed = errors.New("the language server stopped")
 
 func newConn(p Process, notify func(string, json.RawMessage)) *conn {
-	c := &conn{proc: p, pending: map[int64]chan response{}, notify: notify, done: make(chan struct{})}
+	c := &conn{proc: p, pending: map[int64]chan response{}, notify: notify, done: make(chan struct{}), replies: make(chan any, maxReplies)}
 	go c.read()
+	go c.answer()
 	return c
+}
+
+// answer writes the replies to the server's requests until it goes away.
+func (c *conn) answer() {
+	for {
+		select {
+		case r := <-c.replies:
+			c.write(r)
+		case <-c.done:
+			return
+		}
+	}
 }
 
 func (c *conn) read() {
@@ -126,13 +147,17 @@ func (c *conn) read() {
 }
 
 // reply answers requests servers make of their client: configuration
-// (none), and the rest with null.
+// (none), and the rest with null. It queues the answer for answer to
+// write, never blocking the reader.
 func (c *conn) reply(id json.RawMessage, method string) {
 	var result any
 	if method == "workspace/configuration" {
 		result = []any{}
 	}
-	c.write(map[string]any{"jsonrpc": "2.0", "id": id, "result": result})
+	select {
+	case c.replies <- map[string]any{"jsonrpc": "2.0", "id": id, "result": result}:
+	default:
+	}
 }
 
 func readMessage(r *bufio.Reader) ([]byte, error) {
@@ -175,6 +200,20 @@ func (c *conn) write(v any) error {
 	return err
 }
 
+// writeCtx is write, given up when ctx ends: a server that stopped reading
+// its input can't hold the caller. The write itself ends when the
+// process is stopped, which closes that input.
+func (c *conn) writeCtx(ctx context.Context, v any) error {
+	done := make(chan error, 1)
+	go func() { done <- c.write(v) }()
+	select {
+	case err := <-done:
+		return err
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
 // call sends a request and decodes its result into out (nil: ignored).
 func (c *conn) call(ctx context.Context, method string, params, out any) error {
 	ch := make(chan response, 1)
@@ -187,7 +226,7 @@ func (c *conn) call(ctx context.Context, method string, params, out any) error {
 	id := c.next
 	c.pending[id] = ch
 	c.mu.Unlock()
-	if err := c.write(map[string]any{"jsonrpc": "2.0", "id": id, "method": method, "params": params}); err != nil {
+	if err := c.writeCtx(ctx, map[string]any{"jsonrpc": "2.0", "id": id, "method": method, "params": params}); err != nil {
 		c.mu.Lock()
 		delete(c.pending, id)
 		c.mu.Unlock()
@@ -206,7 +245,9 @@ func (c *conn) call(ctx context.Context, method string, params, out any) error {
 		c.mu.Lock()
 		delete(c.pending, id)
 		c.mu.Unlock()
-		c.write(map[string]any{"jsonrpc": "2.0", "method": "$/cancelRequest", "params": map[string]any{"id": id}})
+		// Not waited for: a server that stopped reading would hold the
+		// caller (and Close) for good.
+		go c.write(map[string]any{"jsonrpc": "2.0", "method": "$/cancelRequest", "params": map[string]any{"id": id}})
 		return ctx.Err()
 	}
 }

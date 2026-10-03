@@ -220,10 +220,42 @@ func TestApprovals(t *testing.T) {
 	assert.Equal(t, "go vet", saved["uc-run:go\x00vet"].Subject)
 	assert.Equal(t, api.Approval{Key: "plain", Subject: "plain", Always: true, Added: saved["plain"].Added}, saved["plain"])
 
-	assert.Equal(t, 1, w.RevokeApprovals("plain"))
+	n, err := w.RevokeApprovals("plain")
+	require.NoError(t, err)
+	assert.Equal(t, 1, n)
 	assert.Len(t, w.ListApprovals(), 3)
-	assert.Equal(t, 3, w.ClearApprovals())
+	n, err = w.ClearApprovals()
+	require.NoError(t, err)
+	assert.Equal(t, 3, n)
 	assert.Empty(t, w.ListApprovals())
+}
+
+// A saved approval that can't be removed from its file is an error naming
+// it: it's gone for this session but would come back at the next start.
+func TestRevokeApprovalSaveFails(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root ignores permissions")
+	}
+	w := openTest(t)
+	store := w.Tools().Hooks().Store()
+	require.NoError(t, store.Add("plain", ""))
+	require.NoError(t, store.Add("web:example.com", ""))
+	dir := filepath.Dir(store.Path())
+	require.NoError(t, os.Chmod(dir, 0o500))
+	t.Cleanup(func() { os.Chmod(dir, 0o700) })
+
+	for name, revoke := range map[string]func() (int, error){
+		"by key": func() (int, error) { return w.RevokeApprovals("plain") },
+		"all":    w.ClearApprovals,
+	} {
+		t.Run(name, func(t *testing.T) {
+			n, err := revoke()
+			require.ErrorIs(t, err, api.ErrApprovalsStillSaved)
+			assert.Positive(t, n)
+			assert.Contains(t, err.Error(), "plain")
+			assert.True(t, store.Has("plain"), "still in the file")
+		})
+	}
 }
 
 // The diff can be colored; with no active session there is no session

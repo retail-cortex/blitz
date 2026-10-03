@@ -144,22 +144,39 @@ func (s *fileSink) run() {
 
 func (s *fileSink) reportDropped() {
 	if n := s.dropped.Swap(0); n > 0 {
-		s.write(fmt.Appendf(nil, `{"time":%q,"level":"WARN","msg":"log queue full; records dropped","count":%d}`+"\n",
-			s.now().Format(time.RFC3339Nano), n))
+		if !s.write(fmt.Appendf(nil, `{"time":%q,"level":"WARN","msg":"log records dropped","count":%d}`+"\n",
+			s.now().Format(time.RFC3339Nano), n)) {
+			s.dropped.Add(n - 1) // the report was counted as one
+		}
 	}
 }
 
-func (s *fileSink) write(line []byte) {
+// write reports whether line was written; one that wasn't is counted as
+// dropped (logging must never break the session).
+func (s *fileSink) write(line []byte) bool {
 	if err := s.rotate(); err != nil {
-		return // logging must never break the session
+		s.dropped.Add(1)
+		return false
 	}
-	_, _ = s.w.Write(line)
+	if _, err := s.w.Write(line); err != nil {
+		s.dropped.Add(1)
+		s.dropFile()
+		return false
+	}
+	return true
 }
 
 func (s *fileSink) flush() {
-	if s.w != nil {
-		_ = s.w.Flush()
+	if s.w != nil && s.w.Flush() != nil {
+		s.dropFile()
 	}
+}
+
+// dropFile closes a file that failed (a full disk, say): a bufio.Writer
+// keeps its first error, so the next line opens the file again.
+func (s *fileSink) dropFile() {
+	_ = s.f.Close()
+	s.f, s.w = nil, nil
 }
 
 func (s *fileSink) closeFile() {

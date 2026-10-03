@@ -107,15 +107,15 @@ export function Workspace({
   editorRef.current = editor;
   const showsFiles = prefs.files || editor.tabs.length > 0;
 
-  const open = useCallback((path: string, line?: number, column?: number) => {
-    editorRef.current.open(path, line, column);
+  const open = useCallback((path: string, line?: number, column?: number, find?: string[]) => {
+    editorRef.current.open(path, line, column, find);
     setModal(null);
   }, []);
 
   useEffect(() => {
     const onOpen = (e: Event) => {
       const d = (e as CustomEvent<OpenFileDetail>).detail;
-      if (d.dir === dir) open(d.path, d.line, d.column);
+      if (d.dir === dir) open(d.path, d.line, d.column, d.find);
     };
     const onReveal = (e: Event) => {
       const d = (e as CustomEvent<{ dir: string; path: string }>).detail;

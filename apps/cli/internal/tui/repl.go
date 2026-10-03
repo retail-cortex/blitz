@@ -50,7 +50,7 @@ type App struct {
 	noticesMu sync.Mutex
 	Version   string
 	Input     Input
-	// Attached: the workspace runs in the Blitz service (/status).
+	// Attached means the workspace runs in the Blitz service (/status).
 	Attached bool
 	// ConfigDir is where the user's settings live ("" for the default),
 	// for /config --save.
@@ -375,7 +375,7 @@ func RunREPL(ctx context.Context, app *App) error {
 				fmt.Printf("%s✗ %s%s\n", Red, i18n.T("session.none_active"), Reset)
 				continue
 			}
-			// The guided setup: .agents/AGENT.md and the files importing it.
+			// The guided setup: .agents/AGENTS.md and the files importing it.
 			runTurn(ctx, app, active.ID, "/setup", interrupts, turnOptions{command: true})
 			// The new instructions apply from the next prompt.
 			cmdMemory(ctx, []string{"reload"}, app)
@@ -433,10 +433,10 @@ func RunREPL(ctx context.Context, app *App) error {
 
 // turnOptions change how runTurn treats its prompt.
 type turnOptions struct {
-	// accepted: the prompt already passed prompt_submit hooks and was
+	// accepted means the prompt already passed prompt_submit hooks and was
 	// recorded (a steer message that arrived too late to be read mid-turn).
 	accepted bool
-	// plan: the prompt is a goal to plan for; tools that change anything
+	// plan means the prompt is a goal to plan for; tools that change anything
 	// are refused for the whole turn (see runtime.WithPlanOnly).
 	plan bool
 	// prompt, if set, is sent to the agent instead of the line, which is
@@ -445,10 +445,10 @@ type turnOptions struct {
 	// readOnly names a mode that refuses the same tools as plan mode
 	// (see runtime.WithReadOnly).
 	readOnly string
-	// aside: a /btw question, answered in a throwaway copy of the session
-	// (runtime.Engine.Aside) and recorded nowhere.
+	// aside means the prompt is a /btw question, answered in a throwaway copy
+	// of the session (runtime.Engine.Aside) and recorded nowhere.
 	aside bool
-	// command: the line is a custom slash command, expanded by the
+	// command means the line is a custom slash command, expanded by the
 	// workspace.
 	command bool
 	// grants are URLs the agent may fetch without asking (/search web).

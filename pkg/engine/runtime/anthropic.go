@@ -57,7 +57,7 @@ type anthropicModel struct {
 	client    anthropic.Client
 	name      string
 	fallbacks string // "default", "off", or a model ID
-	// clientFallback: refusals are retried client-side (Vertex AI, which
+	// clientFallback means refusals are retried client-side (Vertex AI, which
 	// has no server-side fallback), each session keeping the model that
 	// accepted in its own state.
 	clientFallback bool

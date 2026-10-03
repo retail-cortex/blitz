@@ -44,7 +44,7 @@ const BranchPrefix = "blitz/"
 // new worktree.
 const IncludeFile = ".worktreeinclude"
 
-// ErrNotRepo: the directory isn't in a git repository.
+// ErrNotRepo means the directory isn't in a git repository.
 var ErrNotRepo = errors.New("not in a git repository")
 
 // Worktree is one of Blitz's worktrees.
@@ -52,7 +52,8 @@ type Worktree struct {
 	Name   string
 	Path   string
 	Branch string
-	// Missing: git knows it, but its directory is gone (prune removes it).
+	// Missing means git knows it, but its directory is gone (prune removes
+	// it).
 	Missing bool
 }
 
@@ -108,7 +109,11 @@ func Create(dir, name, ref string) (Worktree, error) {
 	if _, err := os.Stat(w.Path); err == nil {
 		return Worktree{}, fmt.Errorf("worktree %q exists already (%s)", name, w.Path)
 	}
-	excludeWorktrees(root)
+	// Before git adds it: git writes beside the exclude file, so one that
+	// can't be written fails the worktree anyway.
+	if err := excludeWorktrees(root); err != nil {
+		return Worktree{}, fmt.Errorf("keeping %s out of git status: %w", Dir, err)
+	}
 	if _, err := git(root, "worktree", "add", "-b", w.Branch, w.Path, ref); err != nil {
 		return Worktree{}, err
 	}
@@ -200,30 +205,38 @@ func Dirty(w Worktree) bool {
 }
 
 // excludeWorktrees keeps .blitz/worktrees out of the repository's status.
-func excludeWorktrees(root string) {
+func excludeWorktrees(root string) error {
 	out, err := git(root, "rev-parse", "--git-path", "info/exclude")
 	if err != nil {
-		return
+		return err
 	}
 	path := strings.TrimSpace(out)
 	if !filepath.IsAbs(path) {
 		path = filepath.Join(root, path)
 	}
-	data, _ := os.ReadFile(path)
+	data, err := os.ReadFile(path)
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
 	line := "/" + Dir + "/"
 	if strings.Contains(string(data), line) {
-		return
+		return nil
 	}
-	os.MkdirAll(filepath.Dir(path), 0o755)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
 	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
 	if err != nil {
-		return
+		return err
 	}
-	defer f.Close()
 	if len(data) > 0 && !strings.HasSuffix(string(data), "\n") {
-		f.WriteString("\n")
+		line = "\n" + line
 	}
-	f.WriteString(line + "\n")
+	_, err = f.WriteString(line + "\n")
+	if cerr := f.Close(); err == nil {
+		err = cerr
+	}
+	return err
 }
 
 // copyIncluded copies the files matching .worktreeinclude's patterns from

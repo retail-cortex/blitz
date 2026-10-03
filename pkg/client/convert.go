@@ -15,6 +15,7 @@
 package client
 
 import (
+	"context"
 	"errors"
 	"time"
 
@@ -74,10 +75,18 @@ var sentinels = map[string]error{
 	"UNKNOWN_TASK":             api.ErrUnknownTask,
 	"UNKNOWN_RUN":              api.ErrUnknownRun,
 	"UNKNOWN_REQUEST":          api.ErrUnknownRequest,
+	"APPROVALS_STILL_SAVED":    api.ErrApprovalsStillSaved,
+	"SEARCH_DISABLED":          api.ErrSearchDisabled,
+	"UNKNOWN_SEARCH_SOURCE":    api.ErrUnknownSearchSource,
+	"EMPTY_SEARCH":             api.ErrEmptySearch,
+	"NO_EMBEDDINGS":            api.ErrNoEmbeddings,
+	"UNKNOWN_SEARCH_MODE":      api.ErrUnknownSearchMode,
 }
 
 // fromAPI turns a failed call's error into app's typed error for its
-// reason, or an error with the service's message.
+// reason, or an error with the service's message. A call cancelled or
+// out of time stays context.Canceled or context.DeadlineExceeded, so
+// an interrupted run exits as one.
 func fromAPI(err error) error {
 	if err == nil {
 		return nil
@@ -92,6 +101,12 @@ func fromAPI(err error) error {
 				return errorFromInfo(info)
 			}
 		}
+	}
+	switch ce.Code() {
+	case connect.CodeCanceled:
+		return context.Canceled
+	case connect.CodeDeadlineExceeded:
+		return context.DeadlineExceeded
 	}
 	return errors.New(ce.Message())
 }

@@ -31,7 +31,7 @@ It speaks the API in `proto/blitz/v1` over [Connect](https://connectrpc.com): gR
 
 ```bash
 curl --unix-socket ~/.blitz/run/blitz.sock -H 'Content-Type: application/json' \
-  -d '{"workspace": "/path/to/project"}' http://localhost/blitz.v1.WorkspaceService/GetModel
+  -d '{"workspace": "/path/to/folder"}' http://localhost/blitz.v1.WorkspaceService/GetModel
 ```
 
 | Service | What it does |

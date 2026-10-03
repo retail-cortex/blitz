@@ -212,21 +212,32 @@ func (w *Workspace) ListApprovals() []api.Approval {
 }
 
 // RevokeApprovals removes approvals by key, for this session and from the
-// saved ones, and returns how many keys it was given.
-func (w *Workspace) RevokeApprovals(keys ...string) int {
+// saved ones, and returns how many keys it was given. Saved ones that
+// couldn't be removed from the file are an ErrApprovalsStillSaved naming
+// them: they're gone for now but come back at the next start.
+func (w *Workspace) RevokeApprovals(keys ...string) (int, error) {
 	hooks := w.tools.Hooks()
 	store := hooks.Store()
+	var kept []string
+	var cause error
 	for _, k := range keys {
 		hooks.RevokeSession(k)
 		if store != nil {
-			store.Remove(k)
+			if _, err := store.Remove(k); err != nil {
+				kept = append(kept, parseApproval(k).Subject)
+				cause = err
+			}
 		}
 	}
-	return len(keys)
+	if kept != nil {
+		return len(keys), fmt.Errorf("%s: %w (%v)", strings.Join(kept, ", "), api.ErrApprovalsStillSaved, cause)
+	}
+	return len(keys), nil
 }
 
-// ClearApprovals revokes every approval and returns how many there were.
-func (w *Workspace) ClearApprovals() int {
+// ClearApprovals revokes every approval and returns how many there were,
+// with RevokeApprovals' error.
+func (w *Workspace) ClearApprovals() (int, error) {
 	var keys []string
 	for _, a := range w.ListApprovals() {
 		keys = append(keys, a.Key)

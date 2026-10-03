@@ -52,7 +52,7 @@ type RememberOutput struct {
 	Error string `json:"error,omitempty"`
 }
 
-// errMemoryOff: notes are turned off (memory.auto = false).
+// errMemoryOff means notes are turned off (memory.auto = false).
 var errMemoryOff = errors.New("notes are turned off in this workspace (memory.auto = false)")
 
 // NewRememberTool is remember: the agent keeps a note for later sessions.

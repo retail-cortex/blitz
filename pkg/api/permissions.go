@@ -25,7 +25,7 @@ import (
 type PermissionRule struct {
 	Effect string // allow, ask or deny
 	Rule   string // kind(pattern), or a tool name
-	// Source: "global" or "workspace" (the settings file it's in),
+	// Source is "global" or "workspace" (the settings file it's in),
 	// "built-in" (read_only_defaults), "flag" or "session".
 	Source string
 }
@@ -46,7 +46,7 @@ const (
 type PermissionChange struct {
 	Rule    string // canonical form
 	Removed int    // RemovePermissionRule: how many rules went
-	// NextStart: the rule is saved but only applies from the next start
+	// NextStart means the rule is saved but only applies from the next start
 	// (read rules become blocked paths, which are fixed at start).
 	NextStart bool
 	Saved     Saved // empty unless saving was asked for
@@ -82,9 +82,9 @@ type ApprovalRequest struct {
 	// provider, or the MCP tool as "server:tool". Empty when nothing can
 	// match, which such policies refuse.
 	Targets []string
-	// MustAsk: an ask rule covers the action, so the user is asked even
-	// when a mode, an allow rule or a remembered approval would let it
-	// through (and refused where nobody can be asked).
+	// MustAsk means an ask rule covers the action, so the user is asked even
+	// when a mode, an allow rule or a remembered approval would let it through
+	// (and refused where nobody can be asked).
 	MustAsk bool
 }
 
@@ -168,8 +168,8 @@ var Modes = []PermissionMode{ModeDefault, ModeAcceptEdits, ModeAuto, ModePlan, M
 // ErrUnknownMode reports a name that isn't a permission mode.
 var ErrUnknownMode = errors.New("unknown permission mode")
 
-// ErrSandboxUnavailable: sandbox.shell is "required" and the OS sandbox
-// can't run here, so the workspace doesn't open.
+// ErrSandboxUnavailable means sandbox.shell is "required" and the OS
+// sandbox can't run here, so the workspace doesn't open.
 var ErrSandboxUnavailable = errors.New("the OS sandbox is unavailable")
 
 // ErrBypassNeedsSandbox refuses bypass mode without an active OS sandbox.

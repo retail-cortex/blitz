@@ -79,7 +79,7 @@ describe("welcome tiles", () => {
     const got = welcomeTiles(res(init));
     expect(got.map((x) => x.action.type)).toEqual(["setup", "send"]);
     expect(got[0].highlight).toBe(true);
-    expect(got[0].detail).toContain(".agents/AGENT.md");
+    expect(got[0].detail).toContain(".agents/AGENTS.md");
   });
 
   it("the setup alone comes with the canned tiles, at most four", () => {

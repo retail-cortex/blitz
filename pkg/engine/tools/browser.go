@@ -35,8 +35,9 @@ import (
 	"google.golang.org/adk/v2/tool/functiontool"
 )
 
-// browserIdle closes a browser nobody has used for this long.
-const browserIdle = 15 * time.Minute
+// browserIdle closes a browser nobody has used for this long; tests
+// shorten it.
+var browserIdle = 15 * time.Minute
 
 // BrowserInput is what the browser tool takes.
 type BrowserInput struct {
@@ -79,11 +80,15 @@ type browserTool struct {
 	// dir is where walkthroughs are saved.
 	dir string
 
-	mu    sync.Mutex // one action at a time
-	b     *browser.Browser
-	idle  *time.Timer
-	rec   string // the walkthrough being recorded, or ""
-	frame int
+	mu   sync.Mutex // one action at a time
+	b    *browser.Browser
+	idle *time.Timer
+	// idleGen is the current idle timer's: one that fired as an action
+	// began (too late to stop) sees a newer one and leaves the browser.
+	idleGen int
+	rec     string // the walkthrough being recorded, or ""
+	frame   int
+	missed  int // the walkthrough's steps whose frame wasn't saved
 
 	// launch starts a browser (browser.Launch; replaced in tests).
 	launch func(context.Context, browser.Options) (*browser.Browser, error)
@@ -132,6 +137,9 @@ func (bt *browserTool) run(ctx context.Context, in BrowserInput) (out BrowserOut
 			return fail(errors.New("not recording"))
 		}
 		out.Recording, out.Frames = bt.rec, bt.frames()
+		if bt.missed > 0 {
+			out.Note = fmt.Sprintf("The walkthrough is incomplete: screenshots of steps weren't saved (%d missing).", bt.missed)
+		}
 		bt.rec = ""
 		return out
 	}
@@ -202,7 +210,7 @@ func (bt *browserTool) run(ctx context.Context, in BrowserInput) (out BrowserOut
 			break
 		}
 		name := time.Now().Format("20060102-150405")
-		bt.rec, bt.frame = filepath.Join(bt.dir, name), 0
+		bt.rec, bt.frame, bt.missed = filepath.Join(bt.dir, name), 0, 0
 		if err = os.MkdirAll(bt.rec, 0o700); err != nil {
 			bt.rec = ""
 			break
@@ -227,7 +235,10 @@ func (bt *browserTool) run(ctx context.Context, in BrowserInput) (out BrowserOut
 		out.Note = strings.TrimSpace(out.Note + " Some requests were refused by the web rules; navigate to a site explicitly to ask for it.")
 	}
 	if bt.rec != "" && changes(action) && out.Error == "" {
-		bt.saveFrame(actx, b, action)
+		if err := bt.saveFrame(actx, b, action); err != nil {
+			bt.missed++
+			out.Note = strings.TrimSpace(out.Note + " This step's walkthrough screenshot wasn't saved: " + err.Error())
+		}
 	}
 	return out
 }
@@ -340,10 +351,14 @@ func (bt *browserTool) browser(ctx context.Context) (*browser.Browser, error) {
 	if bt.idle != nil {
 		bt.idle.Stop()
 	}
+	bt.idleGen++
+	gen := bt.idleGen
 	bt.idle = time.AfterFunc(browserIdle, func() {
 		bt.mu.Lock()
 		defer bt.mu.Unlock()
-		bt.closeLocked()
+		if bt.idleGen == gen {
+			bt.closeLocked()
+		}
 	})
 	if bt.b != nil {
 		return bt.b, nil
@@ -385,14 +400,14 @@ func (bt *browserTool) screenshot(ctx context.Context, b *browser.Browser, full 
 
 var frameName = regexp.MustCompile(`[^a-z]+`)
 
-func (bt *browserTool) saveFrame(ctx context.Context, b *browser.Browser, action string) {
+func (bt *browserTool) saveFrame(ctx context.Context, b *browser.Browser, action string) error {
 	data, err := b.Screenshot(ctx, false)
 	if err != nil {
-		return
+		return err
 	}
 	bt.frame++
 	name := fmt.Sprintf("%03d-%s.png", bt.frame, frameName.ReplaceAllString(action, "-"))
-	os.WriteFile(filepath.Join(bt.rec, name), data, 0o600)
+	return os.WriteFile(filepath.Join(bt.rec, name), data, 0o600)
 }
 
 func (bt *browserTool) frames() []string {

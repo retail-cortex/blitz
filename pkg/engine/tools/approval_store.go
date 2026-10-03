@@ -116,23 +116,38 @@ func (s *ApprovalStore) Rules() []ApprovalRule {
 	return out
 }
 
-// Add persists a rule.
+// Add persists a rule; it takes effect only once saved.
 func (s *ApprovalStore) Add(key, label string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	prev, had := s.rules[key]
 	s.rules[key] = ApprovalRule{Key: key, Label: label, Added: time.Now().UTC()}
-	return s.saveLocked()
+	if err := s.saveLocked(); err != nil {
+		if had {
+			s.rules[key] = prev
+		} else {
+			delete(s.rules, key)
+		}
+		return err
+	}
+	return nil
 }
 
-// Remove deletes a rule; it reports whether it existed.
+// Remove deletes a rule; it reports whether it existed. The rule stays
+// when saving fails.
 func (s *ApprovalStore) Remove(key string) (bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if _, ok := s.rules[key]; !ok {
+	r, ok := s.rules[key]
+	if !ok {
 		return false, nil
 	}
 	delete(s.rules, key)
-	return true, s.saveLocked()
+	if err := s.saveLocked(); err != nil {
+		s.rules[key] = r
+		return true, err
+	}
+	return true, nil
 }
 
 func (s *ApprovalStore) saveLocked() error {
@@ -153,6 +168,11 @@ func (s *ApprovalStore) saveLocked() error {
 		return err
 	}
 	if _, err := tmp.Write(data); err != nil {
+		tmp.Close()
+		os.Remove(tmp.Name())
+		return err
+	}
+	if err := tmp.Sync(); err != nil {
 		tmp.Close()
 		os.Remove(tmp.Name())
 		return err

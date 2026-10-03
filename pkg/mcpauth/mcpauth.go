@@ -38,7 +38,7 @@ import (
 	"golang.org/x/oauth2"
 )
 
-// ErrNotSignedIn: no sign-in is stored for the server.
+// ErrNotSignedIn means no sign-in is stored for the server.
 var ErrNotSignedIn = errors.New("not signed in")
 
 // Record is what a server's sign-in keeps: the client Blitz registered,

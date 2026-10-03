@@ -18,15 +18,16 @@ package api
 type SuggestionKind string
 
 const (
-	// SuggestSetup: the workspace has no agent instructions; run /setup.
+	// SuggestSetup suggests /setup: the workspace has no agent instructions.
 	SuggestSetup SuggestionKind = "setup"
-	// SuggestContinue: pick up the latest conversation (SessionID, Title).
+	// SuggestContinue suggests picking up the latest conversation (SessionID,
+	// Title).
 	SuggestContinue SuggestionKind = "continue"
-	// SuggestChanges: review the Count uncommitted changes.
+	// SuggestChanges suggests reviewing the Count uncommitted changes.
 	SuggestChanges SuggestionKind = "changes"
-	// SuggestWorkerFailed: the Worker's latest run failed (Detail: why).
+	// SuggestWorkerFailed says the Worker's latest run failed (Detail: why).
 	SuggestWorkerFailed SuggestionKind = "worker_failed"
-	// SuggestIdea: a model's idea from the recent conversations (Title on
+	// SuggestIdea is a model's idea from the recent conversations (Title on
 	// the tile, Prompt sent).
 	SuggestIdea SuggestionKind = "idea"
 )
@@ -45,10 +46,11 @@ type Suggestion struct {
 
 // Suggestions are a workspace's welcome tiles.
 type Suggestions struct {
-	// Tiles: state tiles first, then ideas.
+	// Tiles are the state tiles first, then ideas.
 	Tiles []Suggestion
-	// HarnessMissing: no .agents/AGENT.md or root instruction file.
+	// HarnessMissing means there's no .agents/AGENTS.md or root instruction
+	// file.
 	HarnessMissing bool
-	// Pending: ideas are being written from newer conversations.
+	// Pending means ideas are being written from newer conversations.
 	Pending bool
 }

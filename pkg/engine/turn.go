@@ -87,6 +87,7 @@ func (w *Workspace) RunDetached(ctx context.Context, t api.Turn, started func(se
 		return api.TurnResult{}, err
 	}
 	st.SetWorkspace(w.Dir())
+	defer st.Release()
 	rec, err := st.CreateSession(session.NewSessionID(), "", w.engine.ActiveAgent())
 	if err != nil {
 		return api.TurnResult{}, err
@@ -126,7 +127,7 @@ func turnOutcome(err error) string {
 // turn is a turn as the engine runs it.
 type turn struct {
 	api.Turn
-	// planMode: the workspace is in plan permission mode, so the turn is
+	// planMode means the workspace is in plan permission mode, so the turn is
 	// planned like Plan but the transcript records the text as typed.
 	planMode bool
 	// run is the worker run the turn is: its file changes are the run's

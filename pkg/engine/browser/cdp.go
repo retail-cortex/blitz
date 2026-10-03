@@ -59,7 +59,7 @@ type message struct {
 	} `json:"error,omitempty"`
 }
 
-// errClosed: the browser went away.
+// errClosed means the browser went away.
 var errClosed = errors.New("the browser closed")
 
 func dial(ctx context.Context, wsURL string) (*conn, error) {

@@ -16,6 +16,7 @@ package tui
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -498,4 +499,29 @@ func TestLocaleSwitchesTheInterface(t *testing.T) {
 	out := runCmd(t, app, "/locale es")
 	assert.Contains(t, out, "/cfg/.env.toml")
 	assert.Equal(t, "es", i18n.Current().Tag().String())
+}
+
+// /approvals says how many went, then which stay saved or why none could
+// be revoked.
+func TestPrintRevoked(t *testing.T) {
+	for name, tc := range map[string]struct {
+		n        int
+		err      error
+		want     []string
+		wantNone string
+	}{
+		"all gone":    {n: 2, want: []string{"Revoked 2 rules."}, wantNone: "✗"},
+		"still saved": {n: 1, err: fmt.Errorf("git status: %w (denied)", api.ErrApprovalsStillSaved), want: []string{"Revoked 1 rule.", "Revoked for this session only: git status: still saved"}},
+		"failed":      {err: errors.New("the service is gone"), want: []string{"Couldn't revoke approvals: the service is gone"}, wantNone: "✓"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			out := captureStdout(t, func() { printRevoked(tc.n, tc.err) })
+			for _, w := range tc.want {
+				assert.Contains(t, out, w)
+			}
+			if tc.wantNone != "" {
+				assert.NotContains(t, out, tc.wantNone)
+			}
+		})
+	}
 }

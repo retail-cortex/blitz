@@ -101,6 +101,12 @@ describe("paletteResults", () => {
     expect(paletteResults(files, items, query).map((i) => i.label)).toEqual(want);
   });
 
+  it("passages come after the files, before the rest; never for a command", () => {
+    const text = [{ group: "In the workspace", label: "internal/cart/cart.go:42", detail: "discount applied per line", run: noop }];
+    expect(paletteResults(files, items, "disc", text).map((i) => i.label)).toEqual(["discount.go", "discount_test.go", "internal/cart/cart.go:42", "Fix the discount rounding"]);
+    expect(paletteResults(files, items, "/di", text).map((i) => i.label)).toEqual(["/diff"]);
+  });
+
   it.each([
     ["cart", true],
     ["discount.go:12", true],

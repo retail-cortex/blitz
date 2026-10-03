@@ -37,8 +37,8 @@ type UIConfig struct {
 	Theme       string `toml:"theme"`       // glamour style: auto, dark, light, notty
 	Locale      string `toml:"locale"`      // interface language, e.g. en-US, es, fr-CA
 	LocalesDir  string `toml:"locales_dir"` // extra translation catalogs (*.json)
-	// NotifyAfter: a turn that runs longer than this many seconds tells you
-	// when it ends, or when an approval or question waits (0: never).
+	// NotifyAfter makes a turn that runs longer than this many seconds tell
+	// you when it ends, or when an approval or question waits (0: never).
 	NotifyAfter int `toml:"notify_after"`
 	// Notify is how the terminal tells you: both (bell and desktop
 	// notification), bell, desktop or off.
@@ -69,6 +69,41 @@ type PDFConfig struct {
 	// PageSize is a4, letter, or auto (the default): Letter where the
 	// locale's country uses it (LC_PAPER, LANG), A4 elsewhere.
 	PageSize string `toml:"page_size"`
+}
+
+// SearchConfig is workspace search: an index of the workspace's files,
+// the text of its PDFs and notebooks, its chats and its notes, kept in
+// ~/.blitz/workspaces and brought up to date as they change.
+type SearchConfig struct {
+	// Enabled keeps the index (on by default). Off, search finds nothing.
+	Enabled bool `toml:"enabled"`
+	// Sources are what a search looks in when it names none: files,
+	// documents (PDFs and notebooks), chats and notes. The default is
+	// files and documents.
+	Sources []string `toml:"sources"`
+	// EmbeddingModel turns on semantic search: "provider/model", a Gemini
+	// ("gemini/text-embedding-004"), OpenAI ("openai/text-embedding-3-small")
+	// or Ollama ("ollama/nomic-embed-text") embedding model. Every indexed
+	// chunk is sent to that provider, once, and each query; empty (the
+	// default) keeps search local. A project's settings can't set it.
+	EmbeddingModel string `toml:"embedding_model"`
+	// Enrich has a model write a summary and tags for each file and
+	// document, in the background after indexing, so search finds files by
+	// what they're about. Off by default: each file it describes is sent
+	// to that model, once per change. A project's settings can't set it.
+	Enrich bool `toml:"enrich"`
+	// EnrichModel is the model that describes files ("provider/model");
+	// empty uses suggestions.model, else the auto mode's model, else the
+	// default model.
+	EnrichModel string `toml:"enrich_model"`
+	// EnrichDailyLimit is how many files may be described a day, per
+	// workspace (default 200).
+	EnrichDailyLimit int `toml:"enrich_daily_limit"`
+	// IncludeIgnored indexes the text files git ignores too (data files,
+	// local notes), still skipping dependency, build and cache folders
+	// (node_modules, vendor, build, dist, target, virtual environments).
+	// They're hidden: shown only when hidden files are.
+	IncludeIgnored bool `toml:"include_ignored"`
 }
 
 // AudioConfig is spoken audio: the generate_audio tool reads text aloud
@@ -567,6 +602,7 @@ func applyFeatureDefaults(c *Config) {
 	c.Checkpoints = CheckpointConfig{Enabled: true, MaxBytes: 64 * 1024 * 1024, Dir: "~/.blitz/checkpoints", MaxAgeDays: 30}
 	c.Images = ImagesConfig{Enabled: true, Dir: filepath.Join(dir, "images"), MaxDimension: 1568, MaxInputMB: 20, RetainDays: 30}
 	c.PDF = PDFConfig{PageSize: "auto"}
+	c.Search = SearchConfig{Enabled: true, Sources: []string{"files", "documents"}, EnrichDailyLimit: 200}
 	c.Audio = AudioConfig{MaxChars: 9_000}
 	c.Web = WebConfig{Enabled: true, MaxBytes: 2 * 1024 * 1024, TimeoutSeconds: 20}
 	c.Browser = BrowserConfig{Enabled: true, Width: 1280, Height: 800}

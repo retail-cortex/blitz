@@ -135,11 +135,12 @@ export function searchesFiles(query: string): boolean {
 }
 
 /**
- * What the palette shows for a query: the files found for it first (as
- * FindFiles ranked them, not filtered again: it matches loosely), then
- * the other items that match. A command query ("/…") shows no files.
+ * What the palette shows for a query: the files whose names match first
+ * (as FindFiles ranked them, not filtered again: it matches loosely), then
+ * the passages workspace search found (as it ranked them), then the other
+ * items that match. A command query ("/…") shows neither.
  */
-export function paletteResults(files: PaletteItem[], items: PaletteItem[], query: string): PaletteItem[] {
+export function paletteResults(files: PaletteItem[], items: PaletteItem[], query: string, text: PaletteItem[] = []): PaletteItem[] {
   const rest = filterPalette(items, query);
-  return searchesFiles(query) ? [...files, ...rest] : rest;
+  return searchesFiles(query) ? [...files, ...text, ...rest] : rest;
 }

@@ -101,19 +101,14 @@ func (l *links) receive(raw string) {
 	l.emit(l.ctx, link)
 }
 
-// started is when the page listens.
-func (l *links) started(ctx context.Context) {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	l.ctx = ctx
-}
-
-// take is the links that came before the page listened.
-func (l *links) take() []DeepLink {
+// start is when the page listens: it returns the links that came before,
+// and later ones go to the page. One step, so no link falls between.
+func (l *links) start(ctx context.Context) []DeepLink {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	out := l.pending
 	l.pending = nil
+	l.ctx = ctx
 	return out
 }
 
@@ -127,9 +122,7 @@ func showLink(ctx context.Context, link DeepLink) {
 // PendingLinks are the links that came before the page listened; from
 // now on they go to it as they come (deeplink:open).
 func (a *App) PendingLinks() []DeepLink {
-	out := a.links.take()
-	a.links.started(a.ctx)
-	return out
+	return a.links.start(a.ctx)
 }
 
 // linkArgs are the blitz:// links among a command line's arguments.

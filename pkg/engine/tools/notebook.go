@@ -82,8 +82,10 @@ func (nb *notebook) encode() ([]byte, error) {
 
 // needsIDs reports whether cells carry ids (nbformat 4.5 and later).
 func (nb *notebook) needsIDs() bool {
-	major, _ := nb.doc["nbformat"].(json.Number).Int64()
-	minor, _ := nb.doc["nbformat_minor"].(json.Number).Int64()
+	n, _ := nb.doc["nbformat"].(json.Number) // missing or not a number: 0
+	m, _ := nb.doc["nbformat_minor"].(json.Number)
+	major, _ := n.Int64()
+	minor, _ := m.Int64()
 	return major > 4 || major == 4 && minor >= 5
 }
 
@@ -159,6 +161,16 @@ func newCellID() string {
 }
 
 // render is the notebook as its cells with their outputs, for read_file.
+// NotebookText is a Jupyter notebook's cells as text, as read_file shows
+// them, each headed "## Cell N [kind]" (workspace search indexes it).
+func NotebookText(data []byte) (string, error) {
+	nb, err := parseNotebook(data)
+	if err != nil {
+		return "", err
+	}
+	return nb.render(), nil
+}
+
 func (nb *notebook) render() string {
 	var b strings.Builder
 	lang := nb.language()

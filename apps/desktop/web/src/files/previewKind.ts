@@ -22,7 +22,7 @@
  * beside the source; image, pdf and audio show only as a preview (audio as
  * a player); null has none.
  */
-export type PreviewKind = "markdown" | "svg" | "image" | "pdf" | "audio" | "video" | null;
+export type PreviewKind = "markdown" | "svg" | "image" | "pdf" | "audio" | "video" | "table" | null;
 
 /** The preview a file has, by its name. */
 export function previewKind(path: string): PreviewKind {
@@ -30,6 +30,7 @@ export function previewKind(path: string): PreviewKind {
   if (path.lastIndexOf(".") <= path.lastIndexOf("/")) return null;
   if (["md", "markdown", "mdx"].includes(ext)) return "markdown";
   if (ext === "svg") return "svg";
+  if (["csv", "tsv", "tab"].includes(ext)) return "table";
   if (["png", "jpg", "jpeg", "gif", "webp", "bmp", "ico"].includes(ext)) return "image";
   if (ext === "pdf") return "pdf";
   if (["wav", "mp3", "m4a", "aac", "ogg", "oga", "opus", "flac", "weba"].includes(ext)) return "audio";
@@ -49,9 +50,11 @@ export type View = "source" | "preview";
 /**
  * How a file shows when it opens: Markdown rendered, unless it opened at a
  * line (a search hit, a link to one) or is empty (a new file, to write);
- * an SVG as its source; images and PDFs only as previews.
+ * a table as a table (at a line, that row's page); an SVG as its source;
+ * images and PDFs only as previews.
  */
 export function defaultView(k: PreviewKind, opened: { atLine: boolean; empty: boolean }): View {
   if (previewOnly(k)) return "preview";
+  if (k === "table") return opened.empty ? "source" : "preview"; // a table opens at a line's row
   return k === "markdown" && !opened.atLine && !opened.empty ? "preview" : "source";
 }

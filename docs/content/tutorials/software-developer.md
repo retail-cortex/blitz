@@ -43,21 +43,21 @@ The wizard surveys the folder first and changes nothing until it has asked you. 
 Then it:
 
 1. offers to make the folder a git repository, with a `.gitignore` for the stack;
-2. writes **`.agents/AGENT.md`**: what the project is, the exact build, test and run commands, the layout, conventions, boundaries and gotchas, in under 200 lines;
-3. points `AGENTS.md`, `CLAUDE.md`, `GEMINI.md` and `BLITZ.md` at it (each holds just `@.agents/AGENT.md`), so every coding agent you use reads the same instructions;
+2. writes **`.agents/AGENTS.md`**: what the project is, the exact build, test and run commands, the layout, conventions, boundaries and gotchas, in under 200 lines;
+3. points `AGENTS.md`, `CLAUDE.md`, `GEMINI.md` and `BLITZ.md` at it (each holds just `@.agents/AGENTS.md`), so every coding agent you use reads the same instructions;
 4. proposes skills and agents for you to pick (the next two steps).
 
 ```text
 linkr/
 ├── .agents/
-│   ├── AGENT.md          # the project, for every agent
+│   ├── AGENTS.md         # the project, for every agent
 │   ├── skills/           # step 3
 │   └── agents/           # step 4
-├── AGENTS.md  CLAUDE.md  GEMINI.md  BLITZ.md   # each: @.agents/AGENT.md
+├── AGENTS.md  CLAUDE.md  GEMINI.md  BLITZ.md   # each: @.agents/AGENTS.md
 └── .gitignore
 ```
 
-Read `AGENT.md` and fix anything the wizard got wrong; it's yours, and short, accurate instructions beat long ones. Then make the first commit. Later, `/memory add <note>` adds a line the agent should always know, and `/memory` shows what's loaded. More in [Extending](../guide/extending.md).
+Read `.agents/AGENTS.md` and fix anything the wizard got wrong; it's yours, and short, accurate instructions beat long ones. Then make the first commit. Later, `/memory add <note>` adds a line the agent should always know, and `/memory` shows what's loaded. More in [Extending](../guide/extending.md).
 
 ## 3. Create your skills
 
@@ -101,7 +101,7 @@ permission_mode: plan
 agency_level: medium
 ---
 You review changes in linkr. Read the diff (`git diff`), the spec it implements
-and .agents/AGENT.md. Report, most serious first: requirements not met, bugs,
+and .agents/AGENTS.md. Report, most serious first: requirements not met, bugs,
 missing tests, and departures from the conventions. Quote file and line.
 Never edit files.
 
@@ -147,7 +147,7 @@ The agent drafts the plan and asks you to approve it. Read it as you would a col
 - No custom codes yet.
 ```
 
-Add a line to `.agents/AGENT.md` so every agent follows the habit: "Specs are in `docs/specs/`; every change implements or updates a numbered requirement there."
+Add a line to `.agents/AGENTS.md` so every agent follows the habit: "Specs are in `docs/specs/`; every change implements or updates a numbered requirement there."
 
 ## 6. Build your software
 

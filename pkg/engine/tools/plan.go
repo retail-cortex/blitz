@@ -204,6 +204,10 @@ func savePlan(ws *Workspace, session, plan string) (string, error) {
 		if cerr := f.Close(); err == nil {
 			err = cerr
 		}
-		return filepath.ToSlash(filepath.Join(".blitz", "plans", name)), err
+		if err != nil {
+			os.Remove(f.Name()) // no half-written plan to point at
+			return "", err
+		}
+		return filepath.ToSlash(filepath.Join(".blitz", "plans", name)), nil
 	}
 }

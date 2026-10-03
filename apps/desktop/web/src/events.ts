@@ -136,10 +136,20 @@ export interface OpenFileDetail {
   path: string;
   line?: number;
   column?: number;
+  /** Words a search found there: a Markdown file shows its preview, at
+   * the line, with them marked. */
+  find?: string[];
 }
 /** Asks a workspace to open a file in its editor. */
 export function openFile(detail: OpenFileDetail) {
   window.dispatchEvent(new CustomEvent(openFileEvent, { detail }));
+}
+
+/** The event that opens Find in file in a workspace's editor. */
+export const findInFileEvent = "blitz:find-in-file";
+/** Asks a workspace's editor to find in the file it shows. */
+export function findInFile(detail: { dir: string }) {
+  window.dispatchEvent(new CustomEvent(findInFileEvent, { detail }));
 }
 
 // Headings to scroll to when a Markdown file's preview shows (a link to
@@ -172,6 +182,13 @@ export const goToFileEvent = "blitz:go-to-file";
 /** Asks a workspace to open Go to file. */
 export function goToFile(detail: { dir: string }) {
   window.dispatchEvent(new CustomEvent(goToFileEvent, { detail }));
+}
+
+/** The event that opens workspace search. */
+export const searchWorkspaceEvent = "blitz:search-workspace";
+/** Opens workspace search on the active workspace, with query typed. */
+export function searchWorkspace(query = "") {
+  window.dispatchEvent(new CustomEvent(searchWorkspaceEvent, { detail: { query } }));
 }
 
 /** The event that says a workspace's files may have changed. */

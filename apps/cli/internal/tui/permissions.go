@@ -69,7 +69,11 @@ func cmdPermissions(args []string, app *App) {
 			printSaved(res.Saved)
 		}
 	case "remove", "rm":
-		res, _ := app.Workspace.RemovePermissionRule(rule, scope)
+		res, err := app.Workspace.RemovePermissionRule(rule, scope)
+		if err != nil {
+			fmt.Printf("%s✗ %s%s\n", Red, i18n.T("perm.failed", "error", safe(err.Error())), Reset)
+			return
+		}
 		if res.Removed == 0 && !save {
 			fmt.Printf("%s%s%s\n", Yellow, i18n.T("perm.not_found", "rule", safe(res.Rule)), Reset)
 			return

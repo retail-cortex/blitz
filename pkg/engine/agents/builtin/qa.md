@@ -11,6 +11,7 @@ tools:
   - view_document
   - view_media
   - grep
+  - search_workspace
   - create_file
   - edit
   - replace_in_file

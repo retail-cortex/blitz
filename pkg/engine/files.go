@@ -74,7 +74,7 @@ type FileEntry struct {
 type DirListing struct {
 	Entries   []FileEntry
 	Truncated bool
-	// Repo: the workspace is in a git repository.
+	// Repo means the workspace is in a git repository.
 	Repo bool
 }
 
@@ -89,8 +89,9 @@ type FileContent struct {
 	AgentRule string
 }
 
-// FileChangedError: a write's version doesn't match the file's (it was
-// changed since it was read, or it exists when it was expected not to).
+// FileChangedError reports that a write's version doesn't match the file's
+// (it was changed since it was read, or it exists when it was expected not
+// to).
 type FileChangedError struct {
 	Path string
 	// Current is the file's version now ("" when it doesn't exist).
@@ -119,7 +120,7 @@ func FileVersion(data []byte) string {
 
 func (w *Workspace) files() *tools.Workspace { return w.tools.Workspace() }
 
-// ErrBadPath: a path outside the workspace, or in .git.
+// ErrBadPath means the path is outside the workspace, or in .git.
 var ErrBadPath = errors.New("not a path in the workspace")
 
 // userPath checks a path from the user; it returns the OS form and the
@@ -250,7 +251,8 @@ var previewTypes = map[string]string{
 // PreviewType is the media type the preview shows p as ("" when it has none).
 func PreviewType(p string) string { return previewTypes[strings.ToLower(path.Ext(p))] }
 
-// ErrNoPreview: ReadPreview shows only images, PDFs and sound, up to 32 MB.
+// ErrNoPreview means the file has no preview: ReadPreview shows only
+// images, PDFs and sound, up to 32 MB.
 var ErrNoPreview = errors.New("no preview")
 
 // ReadPreview returns an image, PDF or sound file's bytes and media type,
@@ -274,7 +276,8 @@ func (w *Workspace) ReadPreview(p string) (string, []byte, error) {
 	return mime, data, nil
 }
 
-// isBinary: a NUL in the first 8 kB, or not UTF-8.
+// isBinary reports whether data has a NUL in the first 8 kB, or isn't
+// UTF-8.
 func isBinary(data []byte) bool {
 	head := data
 	if len(head) > 8192 {
@@ -613,6 +616,22 @@ func (w *Workspace) allFiles(ctx context.Context) ([]string, error) {
 	if time.Since(w.index.at) < 5*time.Second && w.index.paths != nil {
 		return w.index.paths, nil
 	}
+	paths, err := w.listFiles(ctx, false)
+	if err != nil {
+		return nil, err
+	}
+	w.index.paths, w.index.at = paths, time.Now()
+	return paths, nil
+}
+
+// listFiles lists the workspace's files as they are now: git's that
+// aren't ignored (all files outside a repository), without blocked paths.
+// Without dots, files in dot folders and dotfiles are left out too (Go to
+// file); with them only .git and .blitz are (search: .agents, .github and
+// .gitignore are worth finding; .blitz holds plans, searched as notes, and
+// worktrees, whole checkouts). Search's scans call it directly, so they
+// don't fill allFiles' cache with a list from before a file was made.
+func (w *Workspace) listFiles(ctx context.Context, dots bool) ([]string, error) {
 	var paths []string
 	if out, err := w.git(ctx, nil, "ls-files", "--cached", "--others", "--exclude-standard", "--deduplicate", "-z"); err == nil {
 		for _, p := range strings.Split(string(out), "\x00") {
@@ -622,15 +641,18 @@ func (w *Workspace) allFiles(ctx context.Context) ([]string, error) {
 		}
 	} else {
 		var werr error
-		paths, werr = w.walkFiles()
+		paths, werr = w.walkFiles(dots)
 		if werr != nil {
 			return nil, werr
 		}
 	}
 	fsys := w.files()
 	paths = slices.DeleteFunc(paths, func(p string) bool {
-		for _, seg := range strings.Split(p, "/") {
-			if strings.HasPrefix(seg, ".") {
+		for i, seg := range strings.Split(p, "/") {
+			if !strings.HasPrefix(seg, ".") {
+				continue
+			}
+			if !dots || seg == ".git" || (i == 0 && seg == ".blitz") {
 				return true
 			}
 		}
@@ -639,12 +661,12 @@ func (w *Workspace) allFiles(ctx context.Context) ([]string, error) {
 		}
 		return fsys.AgentRule(filepath.FromSlash(p)) == "blocked"
 	})
-	w.index.paths, w.index.at = paths, time.Now()
 	return paths, nil
 }
 
-// walkFiles lists the files outside a repository, skipping dot folders.
-func (w *Workspace) walkFiles() ([]string, error) {
+// walkFiles lists the files outside a repository, skipping dot folders
+// (with dots, only .git and the top .blitz).
+func (w *Workspace) walkFiles(dots bool) ([]string, error) {
 	var paths []string
 	root, err := os.OpenRoot(w.Dir())
 	if err != nil {
@@ -656,7 +678,8 @@ func (w *Workspace) walkFiles() ([]string, error) {
 			return nil
 		}
 		if d.IsDir() {
-			if p != "." && strings.HasPrefix(d.Name(), ".") {
+			name := d.Name()
+			if p != "." && strings.HasPrefix(name, ".") && (!dots || name == ".git" || p == ".blitz") {
 				return fs.SkipDir
 			}
 			return nil

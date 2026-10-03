@@ -29,6 +29,7 @@ var planReadOnlyTools = map[string]bool{
 	"list_files":            true,
 	"glob":                  true,
 	"grep":                  true,
+	"search_workspace":      true,
 	"lsp":                   true,
 	"view_image":            true,
 	"view_document":         true,

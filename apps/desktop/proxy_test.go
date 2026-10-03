@@ -220,3 +220,41 @@ func TestKeepaliveCutMessage(t *testing.T) {
 	assert.ErrorIs(t, err, io.ErrUnexpectedEOF)
 	assert.Empty(t, got)
 }
+
+// endless repeats one message forever, as a busy stream does.
+type endless struct {
+	msg []byte
+	at  int
+}
+
+func (e *endless) Read(p []byte) (int, error) {
+	n := 0
+	for n < len(p) {
+		c := copy(p[n:], e.msg[e.at:])
+		n += c
+		e.at = (e.at + c) % len(e.msg)
+	}
+	return n, nil
+}
+
+// Closing a stream nobody reads any more ends its reading goroutine, which
+// would otherwise wait forever to hand over the next message.
+func TestKeepaliveCloseEndsTheReader(t *testing.T) {
+	empty, ok := emptyMessage("application/connect+json")
+	require.True(t, ok)
+	k := newKeepalive(io.NopCloser(&endless{msg: frame(0, `{"event":1}`)}), time.Hour, empty)
+	require.NoError(t, k.Close())
+	ended := false
+	for range 100 { // a message already on its way may still come
+		select {
+		case _, ok := <-k.messages:
+			ended = !ok
+		case <-time.After(5 * time.Second):
+			t.Fatal("the reader neither ended nor sent")
+		}
+		if ended {
+			break
+		}
+	}
+	assert.True(t, ended, "the reader kept sending after Close")
+}

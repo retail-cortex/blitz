@@ -317,7 +317,7 @@ type RuleCheck struct {
 	Rule    string // canonical: kind(pattern), or a tool name
 	Kind    string
 	Pattern string
-	// Form: for shell rules FormPrefix, FormGlob or FormRegex; "path" for
+	// Form is FormPrefix, FormGlob or FormRegex for shell rules; "path" for
 	// read, write and delete; "name" for the rest.
 	Form string
 	// Tested and Matches: whether the sample (a command, path or name)

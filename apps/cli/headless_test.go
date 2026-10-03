@@ -330,3 +330,45 @@ func TestLoadSchemaBadReference(t *testing.T) {
 	_, err := loadSchema(`{"$ref": "#/definitions/nowhere"}`)
 	assert.Error(t, err)
 }
+
+// Input that can't be read to its end (a line over the 4 MiB limit) is an
+// error line and fails the run, rather than passing for the input's end.
+func TestStreamInputTooLongALine(t *testing.T) {
+	e := testEnv(t)
+	sess, _ := e.Storage().CreateSession("", "t", "blitz")
+	in := strings.NewReader(`{"type": "user", "text": "` + strings.Repeat("x", 5<<20) + `"}` + "\n")
+	var out bytes.Buffer
+	err := runStreamInput(context.Background(), e, oneShotOptions{sessionID: sess.ID, format: formatStreamJSON, stdout: &out}, in)
+	require.ErrorIs(t, err, bufio.ErrTooLong)
+	assert.Contains(t, out.String(), "reading the input")
+}
+
+// turnRecorder is a backend that notes each turn it runs.
+type turnRecorder struct {
+	api.Backend
+	turns []api.Turn
+}
+
+func (r *turnRecorder) Run(ctx context.Context, sessionID string, t api.Turn, on func(api.Event)) (api.TurnResult, error) {
+	r.turns = append(r.turns, t)
+	return r.Backend.Run(ctx, sessionID, t, on)
+}
+
+// The schema's retry turn runs under the run's own limits and mode.
+func TestOneShotJSONSchemaRetryKeepsTheLimits(t *testing.T) {
+	schema, err := loadSchema(personSchema)
+	require.NoError(t, err)
+	text := func(s string) *genai.Content { return genai.NewContentFromText(s, genai.RoleModel) }
+	e := testEnv(t, text(`{"name": "Ada"}`), text(`{"name": "Ada", "age": 36}`))
+	sess, _ := e.Storage().CreateSession("", "t", "blitz")
+	r := &turnRecorder{Backend: e}
+	o := oneShotOptions{prompt: "who?", sessionID: sess.ID, format: formatJSON, stdout: &bytes.Buffer{}, schema: schema,
+		plan: true, maxTurns: 7, maxCostUSD: 1.5, timeout: time.Minute}
+	require.NoError(t, runOneShot(context.Background(), r, o))
+	require.Len(t, r.turns, 2, "the answer and its retry")
+	retry := r.turns[1]
+	assert.True(t, retry.Plan, "plan mode")
+	assert.Equal(t, 7, retry.MaxTurns)
+	assert.Equal(t, 1.5, retry.MaxCostUSD)
+	assert.Equal(t, time.Minute, retry.Timeout)
+}

@@ -40,8 +40,8 @@ type SkillInfo struct {
 	// allows it.
 	Tier   string
 	Bypass bool
-	// Network: the scripts may use the network. NeedsNetwork: the skill
-	// asks for it (granted or not).
+	// Network means the scripts may use the network. NeedsNetwork means the
+	// skill asks for it (granted or not).
 	Network      bool
 	NeedsNetwork bool
 	// Env are the host environment variables passed to the scripts;
@@ -118,7 +118,7 @@ type MCPServer struct {
 type ToolInfo struct {
 	Name        string
 	Description string
-	// PlanAllowed: the tool stays available in plan mode, which refuses
+	// PlanAllowed means the tool stays available in plan mode, which refuses
 	// tools that change anything.
 	PlanAllowed bool
 }

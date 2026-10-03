@@ -18,7 +18,11 @@ import (
 	"context"
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -199,6 +203,118 @@ func TestDerivedContexts(t *testing.T) {
 			assert.True(t, ok)
 			assert.Equal(t, want, got)
 			assert.Equal(t, "v", c.Value(key{}))
+		})
+	}
+}
+
+// A stdio transport closed while a server starts stops it rather than
+// keeping it (and reads its process only once started: run with -race), and
+// refuses to start more.
+func TestStdioTransportClosedWhileConnecting(t *testing.T) {
+	for i := range 20 {
+		tr := &stdioTransport{build: func() (*guardedCmd, error) {
+			return (*ExecEnv)(nil).command(context.Background(), []string{"cat"})
+		}}
+		done := make(chan error, 1)
+		go func() {
+			conn, err := tr.Connect(context.Background())
+			if err == nil {
+				conn.Close()
+			}
+			done <- err
+		}()
+		if i%2 == 0 {
+			time.Sleep(time.Millisecond)
+		}
+		tr.Close()
+		if err := <-done; err != nil {
+			assert.ErrorIs(t, err, errMCPClosed, "round %d", i)
+		}
+		tr.mu.Lock()
+		assert.Nil(t, tr.cur, "round %d: a server kept after Close", i)
+		tr.mu.Unlock()
+		_, err := tr.Connect(context.Background())
+		assert.ErrorIs(t, err, errMCPClosed, "round %d", i)
+	}
+}
+
+// A server replaced by a reconnect is killed and reaped, though its old
+// connection is never closed (the ADK's reconnect doesn't): no zombie.
+func TestStdioTransportReapsReplacedServers(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("no zombies to look for")
+	}
+	tr := &stdioTransport{build: func() (*guardedCmd, error) {
+		return (*ExecEnv)(nil).command(context.Background(), []string{"cat"})
+	}}
+	t.Cleanup(tr.Close)
+	first, err := tr.Connect(context.Background())
+	require.NoError(t, err)
+	t.Cleanup(func() { first.Close() })
+	tr.mu.Lock()
+	pid := tr.cur.cmd.Process.Pid
+	tr.mu.Unlock()
+
+	second, err := tr.Connect(context.Background())
+	require.NoError(t, err)
+	t.Cleanup(func() { second.Close() })
+	require.Eventually(t, func() bool {
+		out, _ := exec.Command("ps", "-o", "stat=", "-p", strconv.Itoa(pid)).Output()
+		return strings.TrimSpace(string(out)) == ""
+	}, 5*time.Second, 20*time.Millisecond, "the replaced server is left a zombie")
+}
+
+// Closing a connection ends its server: at once when it exits on EOF,
+// after SIGTERM and then SIGKILL when it ignores both.
+func TestStdioTransportCloseEndsTheServer(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX shell and signals")
+	}
+	old := mcpTerminateWait
+	mcpTerminateWait = 100 * time.Millisecond
+	t.Cleanup(func() { mcpTerminateWait = old })
+	for name, argv := range map[string][]string{
+		"exits on EOF":   {"cat"},
+		"ignores it all": {"sh", "-c", `trap "" TERM; while :; do sleep 1; done`},
+	} {
+		t.Run(name, func(t *testing.T) {
+			tr := &stdioTransport{build: func() (*guardedCmd, error) {
+				return (*ExecEnv)(nil).command(context.Background(), argv)
+			}}
+			t.Cleanup(tr.Close)
+			conn, err := tr.Connect(context.Background())
+			require.NoError(t, err)
+			tr.mu.Lock()
+			p := tr.cur
+			tr.mu.Unlock()
+
+			assert.NoError(t, conn.Close())
+			select {
+			case <-p.done:
+			case <-time.After(5 * time.Second):
+				t.Fatal("the server is still running")
+			}
+		})
+	}
+}
+
+// A server that can't be built or started is an error, and leaves no
+// process or pipe behind.
+func TestStdioTransportCantStart(t *testing.T) {
+	for name, build := range map[string]func() (*guardedCmd, error){
+		"not built": func() (*guardedCmd, error) { return nil, errors.New("no sandbox") },
+		"not started": func() (*guardedCmd, error) {
+			return &guardedCmd{Cmd: exec.Command(filepath.Join(t.TempDir(), "missing")), release: func() {}}, nil
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			tr := &stdioTransport{build: build}
+			t.Cleanup(tr.Close)
+			_, err := tr.Connect(context.Background())
+			assert.Error(t, err)
+			tr.mu.Lock()
+			assert.Nil(t, tr.cur)
+			tr.mu.Unlock()
 		})
 	}
 }

@@ -44,7 +44,7 @@ import (
 
 // harnessFiles are the files that give a workspace agent instructions;
 // without any, setup (/setup) is suggested.
-var harnessFiles = []string{".agents/AGENT.md", "AGENTS.md", "CLAUDE.md", "GEMINI.md", "BLITZ.md"}
+var harnessFiles = []string{".agents/AGENTS.md", "AGENTS.md", "CLAUDE.md", "GEMINI.md", "BLITZ.md"}
 
 const (
 	// ideaSessions is how many recent conversations the ideas come from.
@@ -58,7 +58,7 @@ const (
 )
 
 // HarnessMissing reports whether the workspace has no agent instructions:
-// none of .agents/AGENT.md, AGENTS.md, CLAUDE.md, GEMINI.md or BLITZ.md.
+// none of .agents/AGENTS.md, AGENTS.md, CLAUDE.md, GEMINI.md or BLITZ.md.
 func (w *Workspace) HarnessMissing() bool {
 	for _, f := range harnessFiles {
 		if info, err := os.Stat(filepath.Join(w.Dir(), filepath.FromSlash(f))); err == nil && info.Mode().IsRegular() {
@@ -235,11 +235,11 @@ func (w *Workspace) askIdeas(ctx context.Context, recent []*session.SessionRecor
 	var b strings.Builder
 	b.WriteString("Recent conversations in this workspace, newest first:\n")
 	for _, rec := range recent {
-		full, err := w.storage.Load(rec.ID)
+		full, err := w.storage.Get(rec.ID) // not Load: that would make it the open session
 		if err != nil {
 			continue
 		}
-		fmt.Fprintf(&b, "\n## %s (%s, %d messages)\n", cmp.Or(full.Title, "untitled"), full.UpdatedAt.Format("2006-01-02"), full.MessageCount)
+		fmt.Fprintf(&b, "\n## %s (%s, %d messages)\n", cmp.Or(full.Title, "untitled"), full.UpdatedAt.Format("2006-01-02"), len(full.Messages))
 		var prompts []string
 		lastReply := ""
 		for _, m := range full.Messages {

@@ -70,7 +70,8 @@ func ParseSchedule(text, tz string) (Schedule, error) {
 	return Schedule{Text: text, Cron: expr, Location: loc, sched: sched}, nil
 }
 
-// looksLikeCron: a descriptor, or five fields of cron characters.
+// looksLikeCron reports whether s is a descriptor, or five fields of cron
+// characters.
 func looksLikeCron(s string) bool {
 	if strings.HasPrefix(s, "@") {
 		return true

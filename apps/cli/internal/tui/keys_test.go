@@ -21,6 +21,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -34,15 +35,78 @@ import (
 // editor as one read, as a keypress does from a terminal.
 type fakeTerminal struct {
 	in  *TerminalInput
-	w   *io.PipeWriter
+	w   *keyPipe
 	out *cprWriter
+}
+
+// keyPipe is the fake terminal's keyboard: each write is one read, and
+// like a terminal it can be polled, so reads can be cancelled.
+type keyPipe struct {
+	ch      chan []byte
+	pending []byte // read by ready, not yet by Read
+
+	mu     sync.Mutex
+	closed bool
+}
+
+func newKeyPipe() *keyPipe { return &keyPipe{ch: make(chan []byte, 64)} }
+
+func (k *keyPipe) Write(p []byte) (int, error) {
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	if k.closed {
+		return 0, io.ErrClosedPipe
+	}
+	k.ch <- append([]byte(nil), p...)
+	return len(p), nil
+}
+
+func (k *keyPipe) Close() error {
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	if !k.closed {
+		k.closed = true
+		close(k.ch)
+	}
+	return nil
+}
+
+func (k *keyPipe) ready(timeout time.Duration) (bool, error) {
+	if k.pending != nil {
+		return true, nil
+	}
+	select {
+	case b, ok := <-k.ch:
+		if !ok {
+			return true, nil // Read reports the end
+		}
+		k.pending = b
+		return true, nil
+	case <-time.After(timeout):
+		return false, nil
+	}
+}
+
+func (k *keyPipe) Read(p []byte) (int, error) {
+	if k.pending == nil {
+		b, ok := <-k.ch
+		if !ok {
+			return 0, io.EOF
+		}
+		k.pending = b
+	}
+	n := copy(p, k.pending)
+	if k.pending = k.pending[n:]; len(k.pending) == 0 {
+		k.pending = nil
+	}
+	return n, nil
 }
 
 // cprWriter is the fake terminal's screen. It answers the editor's cursor
 // position queries, as a terminal does.
 type cprWriter struct {
 	syncBuffer
-	w        *io.PipeWriter
+	w        *keyPipe
 	answered chan struct{} // one per query answered
 }
 
@@ -63,10 +127,10 @@ func newFakeTerminal(t *testing.T) *fakeTerminal {
 
 func newFakeTerminalWith(t *testing.T, o TerminalOptions) *fakeTerminal {
 	t.Helper()
-	r, w := io.Pipe()
+	w := newKeyPipe()
 	out := &cprWriter{w: w, answered: make(chan struct{}, 16)}
 	in, err := newTerminalInput(o, &readline.Config{
-		Stdin:              r,
+		Stdin:              w,
 		Stdout:             out,
 		Stderr:             out,
 		FuncIsTerminal:     func() bool { return true },
@@ -271,4 +335,36 @@ func TestCtrlGEditsAPrefilledLine(t *testing.T) {
 	require.NoError(t, err, "line %q err %v, editor got %q", line, err, got)
 	require.Equal(t, "edited", line, "line %q err %v, editor got %q", line, err, got)
 	require.Equal(t, "fix it", got, "line %q err %v, editor got %q", line, err, got)
+}
+
+// A cancelled read (a /loop coming due cancels the idle prompt) ends the
+// read but not the editor: the next read still works.
+func TestCancelledReadLeavesTheEditor(t *testing.T) {
+	cases := map[string]struct {
+		typed []string
+		read  func(in *TerminalInput, ctx context.Context) (string, error)
+	}{
+		"idle prompt":    {read: func(in *TerminalInput, ctx context.Context) (string, error) { return in.ReadInput(ctx, "> ") }},
+		"typed entry":    {typed: []string{"draft"}, read: func(in *TerminalInput, ctx context.Context) (string, error) { return in.ReadInput(ctx, "> ") }},
+		"history search": {typed: []string{"\x12"}, read: func(in *TerminalInput, ctx context.Context) (string, error) { return in.ReadInput(ctx, "> ") }},
+		"question":       {read: func(in *TerminalInput, ctx context.Context) (string, error) { return in.Ask(ctx, "? ") }},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			f := newFakeTerminal(t)
+			f.in.SetInterruptHandler(func() { t.Error("cancelling the read ran the interrupt handler") })
+			ctx, cancel := context.WithCancel(context.Background())
+			if tc.typed != nil {
+				f.keys(t, tc.typed...)
+			}
+			time.AfterFunc(200*time.Millisecond, cancel)
+			_, err := within(t, func() (string, error) { return tc.read(f.in, ctx) })
+			require.ErrorIs(t, err, context.Canceled)
+
+			f.keys(t, "next\r")
+			line, err := within(t, func() (string, error) { return f.in.ReadInput(context.Background(), "> ") })
+			require.NoError(t, err, "the read after a cancelled one")
+			assert.Equal(t, "next", line)
+		})
+	}
 }

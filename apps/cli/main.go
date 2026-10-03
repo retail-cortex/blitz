@@ -42,6 +42,7 @@ import (
 	"github.com/retail-cortex/blitz/pkg/engine"
 	"github.com/retail-cortex/blitz/pkg/engine/runtime"
 	"github.com/retail-cortex/blitz/pkg/i18n"
+	"github.com/retail-cortex/blitz/pkg/pdftext"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )
@@ -78,15 +79,18 @@ type rootOptions struct {
 	effort                         string // --effort
 	allowRules                     []string
 	denyRules                      []string
-	// requirePrompt: a run without a prompt is a usage error (exec),
+	// requirePrompt means a run without a prompt is a usage error (exec),
 	// rather than the interactive session.
 	requirePrompt bool
-	// command: the prompt is a slash command, expanded by the engine
+	// command means the prompt is a slash command, expanded by the engine
 	// (blitz init runs /setup).
 	command bool
 }
 
 func main() {
+	// A PDF's text is read in a child: this program, run again.
+	pdftext.MaybeServe()
+	pdftext.UseHelper()
 	// Until engine.StartObservability installs the log file, slog's default would
 	// print to stderr and duplicate the terminal warnings.
 	slog.SetDefault(slog.New(slog.DiscardHandler))
@@ -133,7 +137,7 @@ Exit codes: 0 success, 1 error, 2 usage, 3 --max-turns reached,
 	f.BoolVarP(&o.version, "version", "v", false, "Print Blitz version")
 	addRunFlags(f, o)
 
-	root.AddCommand(newExecCommand(o), newInitCommand(o), newDoctorCommand(&o.global), newConfigCommand(&o.global), newServeCommand(), newWorkersCommand(&o.global), newServiceCommand(), newLicenseCommand(), newTrustCommand(&o.global), newMCPCommand(&o.global), newWorktreesCommand(&o.global), newMemoryCommand(&o.global), newPluginCommand(), newModelsCommand(&o.global), newUpdateCommand(), newSessionsCommand(&o.global), newAgentsCommand(), newAttachCommand(o), newLogsCommand(), newStopCommand(), newSecurityCommand())
+	root.AddCommand(newExecCommand(o), newInitCommand(o), newDoctorCommand(&o.global), newConfigCommand(&o.global), newServeCommand(), newWorkersCommand(&o.global), newServiceCommand(), newLicenseCommand(), newTrustCommand(&o.global), newMCPCommand(&o.global), newWorktreesCommand(&o.global), newMemoryCommand(&o.global), newPluginCommand(), newModelsCommand(&o.global), newUpdateCommand(), newSessionsCommand(&o.global), newAgentsCommand(), newAttachCommand(o), newLogsCommand(), newStopCommand(), newSecurityCommand(), newSearchCommand(&o.global))
 	return root
 }
 
@@ -182,7 +186,7 @@ func newInitCommand(root *rootOptions) *cobra.Command {
 	o := &rootOptions{requirePrompt: true, outputFormat: formatText}
 	return &cobra.Command{
 		Use:   "init",
-		Short: "Set up the project's agent harness: .agents/AGENT.md, the files importing it, skills and agents (/setup)",
+		Short: "Set up the project's agent harness: .agents/AGENTS.md, the files importing it, skills and agents (/setup)",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			o.global = root.global // persistent flags (--dir, --config)

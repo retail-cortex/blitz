@@ -364,7 +364,7 @@ const unattendedPreamble = "You are running unattended as the scheduled worker %
 // A run of the same worker still going makes this ErrRunInProgress.
 // RunOptions configure RunWorker.
 type RunOptions struct {
-	// Manual: started on request rather than by the schedule.
+	// Manual means the run started on request rather than by the schedule.
 	Manual bool
 	// OnStart receives the run's record as it starts (its ID and session).
 	OnStart func(api.Run)
@@ -410,12 +410,13 @@ func (w *Workspace) RunWorker(ctx context.Context, name string, o RunOptions) (a
 
 	st, err := session.NewStorage(w.cfg.Session.StorageDir)
 	if err != nil {
-		return run, err
+		return w.runFailed(run, o, err), err
 	}
+	defer st.Release()
 	st.SetWorkspace(w.Dir())
 	rec, err := st.CreateSession(session.NewSessionID(), fmt.Sprintf("⏰ %s %s", name, run.Started.Format("2006-01-02 15:04")), agent)
 	if err != nil {
-		return run, err
+		return w.runFailed(run, o, err), err
 	}
 	run.SessionID = rec.ID
 	if o.OnStart != nil {
@@ -481,6 +482,19 @@ func (w *Workspace) RunWorker(ctx context.Context, name string, o RunOptions) (a
 		w.notifyRun(run)
 	}
 	return run, nil
+}
+
+// runFailed records run as failed with err before it started, and tells
+// of it as a finished run is.
+func (w *Workspace) runFailed(run api.Run, o RunOptions, err error) api.Run {
+	run.Status, run.Error, run.Duration = api.RunFailed, err.Error(), time.Since(run.Started)
+	if err := w.runLog.Append(run); err != nil {
+		w.warn("recording the worker run: " + err.Error())
+	}
+	if !o.Manual {
+		w.notifyRun(run)
+	}
+	return run
 }
 
 // notifyTimeout bounds a [workers] notify command.

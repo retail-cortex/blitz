@@ -14,12 +14,14 @@
  * limitations under the License.
  */
 
-import { useEffect, useRef, useState } from "react";
-import { mdiAlertCircleOutline, mdiAt, mdiChevronRight, mdiClose, mdiContentSave, mdiFilePdfBox, mdiLockOutline, mdiMessagePlusOutline, mdiWrap } from "@mdi/js";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { openSearchPanel } from "@codemirror/search";
+import { mdiAlertCircleOutline, mdiAt, mdiChevronRight, mdiClose, mdiContentSave, mdiFilePdfBox, mdiLockOutline, mdiMagnify, mdiMessagePlusOutline, mdiWrap } from "@mdi/js";
 import { files } from "../api";
 import { inApp, printPDF } from "../desktop";
 import { message } from "../errors";
-import { addToContext, openFile } from "../events";
+import { addToContext, findInFileEvent, openFile } from "../events";
+import { FindBar } from "./FindBar";
 import { EditorView } from "@codemirror/view";
 import { t, tn } from "../i18n";
 import { Button, Dialog, Icon, IconButton, Segmented, useSnackbar } from "../ui/controls";
@@ -51,8 +53,15 @@ export function EditorPane({ model, onReveal, onCursor }: { model: EditorModel; 
   const kind = tab ? previewKind(tab.path) : null;
   const [views, setViews] = useState<ReadonlyMap<string, View>>(new Map());
   const atLine = !!tab && model.target?.path === tab.path && !!model.target.line;
-  const shownAs = tab && (atLine ? "source" : (views.get(tab.path) ?? defaultView(kind, { atLine, empty: tab.size === 0 })));
-  const showPreview = !!tab && !tab.loading && !tab.error && !!kind && (previewOnly(kind) || (ready && shownAs === "preview"));
+  // A search hit in Markdown shows in the preview, its words marked.
+  const found = useMemo(
+    () => (atLine && kind === "markdown" && model.target?.find?.length ? { line: model.target.line ?? 0, terms: model.target.find } : undefined),
+    [atLine, kind, model.target],
+  );
+  const shownAs = tab && (found ? "preview" : atLine && kind !== "table" ? "source" : (views.get(tab.path) ?? defaultView(kind, { atLine, empty: tab.size === 0 })));
+  // A table too large for the editor, or not UTF-8, still shows as a table.
+  const tableOnly = !!tab && kind === "table" && (tab.tooLarge || tab.binary);
+  const showPreview = !!tab && !tab.loading && !tab.error && !!kind && (previewOnly(kind) || tableOnly || (ready && shownAs === "preview"));
   const setView = (path: string, v: View) => setViews((m) => (m.get(path) === v ? m : new Map(m).set(path, v)));
 
   // Keep the view a tab opened in (a jump to a line shows its source), and
@@ -112,6 +121,37 @@ export function EditorPane({ model, onReveal, onCursor }: { model: EditorModel; 
       snack(t("desktop.files.export_failed", { error: message(e) }), { error: true });
     }
   };
+  // Find in file (FIL-72): Cmd/Ctrl+F, the toolbar, or the palette; the
+  // preview's find bar, or CodeMirror's in the source.
+  const previewText = showPreview && ready && tab ? model.state(tab.path)?.doc.toString() : undefined;
+  const findsPreview = showPreview && kind === "markdown" && previewText !== undefined;
+  const findsSource = !!ready && !showPreview;
+  const [finding, setFinding] = useState(0); // 0: closed; each ask, one more
+  useEffect(() => setFinding(0), [tab?.path, showPreview]);
+  const startFind = useCallback(() => {
+    if (findsPreview) setFinding((n) => n + 1);
+    else if (findsSource && view.current) openSearchPanel(view.current);
+  }, [findsPreview, findsSource]);
+  const findBox = useCallback(() => pane.current?.querySelector<HTMLElement>(".preview-markdown .markdown") ?? null, []);
+  useEffect(() => {
+    const onFind = (e: Event) => (e as CustomEvent<{ dir: string }>).detail.dir === model.dir && startFind();
+    const key = (e: KeyboardEvent) => {
+      const p = pane.current;
+      const focused = !!p && (p.contains(document.activeElement) || document.activeElement === document.body);
+      const inSource = !!document.activeElement?.closest(".cm-editor"); // CodeMirror's own keys
+      if (focused && !inSource && p.offsetParent !== null && (e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "f" && (findsPreview || findsSource)) {
+        e.preventDefault();
+        startFind();
+      }
+    };
+    window.addEventListener(findInFileEvent, onFind);
+    window.addEventListener("keydown", key, true);
+    return () => {
+      window.removeEventListener(findInFileEvent, onFind);
+      window.removeEventListener("keydown", key, true);
+    };
+  }, [model.dir, startFind, findsPreview, findsSource]);
+
   useEffect(() => {
     if (!canToggle || !tab) return;
     const key = (e: KeyboardEvent) => {
@@ -179,10 +219,10 @@ export function EditorPane({ model, onReveal, onCursor }: { model: EditorModel; 
   // Go to a line when asked (a link, Go to file).
   useEffect(() => {
     const v = view.current;
-    if (!v || !state || model.target?.path !== tab?.path || !model.target?.line) return;
+    if (!v || !state || model.target?.path !== tab?.path || !model.target?.line || found) return;
     goToLine(v, model.target.line, model.target.column);
     model.clearTarget();
-  }, [state, tab?.path, model]);
+  }, [state, tab?.path, model, found]);
 
   useEffect(() => {
     if (view.current && state) setWrap(view.current, model.wrap);
@@ -257,6 +297,7 @@ export function EditorPane({ model, onReveal, onCursor }: { model: EditorModel; 
               }
             />
           )}
+          {(findsPreview || findsSource) && <IconButton icon={mdiMagnify} label={t("desktop.files.find")} small selected={finding > 0} onClick={startFind} />}
           {kind === "markdown" && ready && inApp() && (
             <IconButton icon={mdiFilePdfBox} label={t("desktop.files.export_pdf")} small disabled={exporting} onClick={() => void startExport()} />
           )}
@@ -272,11 +313,12 @@ export function EditorPane({ model, onReveal, onCursor }: { model: EditorModel; 
         </div>
       )}
       {tab && <Bars tab={tab} model={model} />}
+      {finding > 0 && findsPreview && <FindBar box={findBox} text={previewText ?? ""} focus={finding} onClose={() => setFinding(0)} />}
       <div className="editor-body">
         <div className="editor-host" ref={host} hidden={!ready || showPreview} />
         {tab?.loading && <p className="editor-note muted">{t("desktop.checking")}</p>}
         {tab?.error && <p className="editor-note error-text">{tab.error}</p>}
-        {showPreview && tab && <Preview dir={model.dir} path={tab.path} kind={kind} text={ready ? model.state(tab.path)?.doc.toString() : undefined} />}
+        {showPreview && tab && <Preview dir={model.dir} path={tab.path} kind={kind} text={previewText} line={atLine ? model.target?.line : undefined} find={found} onFound={model.clearTarget} />}
         {!showPreview && tab?.binary && <p className="editor-note muted">{t("desktop.files.binary", { size: formatSize(tab.size) })}</p>}
         {!showPreview && tab?.tooLarge && <p className="editor-note muted">{t("desktop.files.too_large", { size: formatSize(tab.size) })}</p>}
       </div>

@@ -377,6 +377,7 @@ func (w *Workspace) CreateExclusive(ctx context.Context, p string, data []byte) 
 		return fail(err)
 	}
 	if err := f.Close(); err != nil {
+		_ = r.Remove(loc.rel)
 		return fail(err)
 	}
 	w.checkpoints.after(sessionOf(ctx), loc.abs(), data, true)
@@ -397,7 +398,11 @@ func (w *Workspace) WriteFileAtomic(ctx context.Context, p string, data []byte) 
 	}
 	added := w.snapshot(ctx, loc)
 	if err := w.writeAtomic(loc, data, nil); err != nil {
-		if added {
+		if errors.Is(err, errPartialWrite) {
+			// The file changed: keep its snapshot so /undo can put it back.
+			now, rerr := loc.root.root.ReadFile(loc.rel)
+			w.checkpoints.after(sessionOf(ctx), loc.abs(), now, rerr == nil)
+		} else if added {
 			w.checkpoints.discard(sessionOf(ctx), loc.abs())
 		}
 		return err
@@ -462,6 +467,13 @@ func (w *Workspace) writeAtomic(loc location, data []byte, modeOverride *fs.File
 	return nil
 }
 
+// errPartialWrite marks an in-place write that failed after truncating the
+// file.
+var errPartialWrite = errors.New("the file was left partly written")
+
+// inPlaceWrite writes an in-place write's data; tests replace it.
+var inPlaceWrite = (*os.File).Write
+
 func writeInPlace(r *os.Root, rel string, data []byte) error {
 	info, err := r.Stat(rel)
 	if err != nil {
@@ -474,11 +486,14 @@ func writeInPlace(r *os.Root, rel string, data []byte) error {
 	if err != nil {
 		return err
 	}
-	if _, err := f.Write(data); err != nil {
+	if _, err := inPlaceWrite(f, data); err != nil {
 		f.Close()
-		return err
+		return fmt.Errorf("%w: %w", errPartialWrite, err)
 	}
-	return f.Close()
+	if err := f.Close(); err != nil {
+		return fmt.Errorf("%w: %w", errPartialWrite, err)
+	}
+	return nil
 }
 
 // RemoveFile deletes a single non-directory entry.

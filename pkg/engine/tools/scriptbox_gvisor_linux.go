@@ -22,6 +22,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -178,7 +179,12 @@ func (b *gvisorBox) Run(ctx context.Context, req ScriptRequest) (ScriptResult, e
 	defer func() {
 		cctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), gvisorCloseTimeout)
 		defer cancel()
-		_ = sb.Close(cctx)
+		if err := sb.Close(cctx); err != nil {
+			slog.Warn("gVisor sandbox didn't close; removing it by force", "id", id, "error", err)
+			fctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), gvisorCloseTimeout)
+			defer cancel()
+			b.remove(fctx, id)
+		}
 	}()
 
 	runCtx, cancel := withOptionalTimeout(ctx, req.Timeout)
@@ -224,10 +230,15 @@ func (b *gvisorBox) sweep(ctx context.Context) {
 		if !ok || processAlive(pid) {
 			continue
 		}
-		_ = exec.CommandContext(ctx, b.runsc, "--root", b.stateDir, "kill", id, "SIGKILL").Run()
-		_ = exec.CommandContext(ctx, b.runsc, "--root", b.stateDir, "delete", "--force", id).Run()
-		_ = os.RemoveAll(filepath.Join(b.bundles, id))
+		b.remove(ctx, id)
 	}
+}
+
+// remove kills and deletes sandbox id and its bundle.
+func (b *gvisorBox) remove(ctx context.Context, id string) {
+	_ = exec.CommandContext(ctx, b.runsc, "--root", b.stateDir, "kill", id, "SIGKILL").Run()
+	_ = exec.CommandContext(ctx, b.runsc, "--root", b.stateDir, "delete", "--force", id).Run()
+	_ = os.RemoveAll(filepath.Join(b.bundles, id))
 }
 
 // sandboxOwner returns the Blitz process ID in a sandbox name

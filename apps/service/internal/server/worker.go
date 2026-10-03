@@ -285,10 +285,11 @@ func (h workerService) UndoWorkerRun(ctx context.Context, r req[pb.UndoWorkerRun
 		return nil, err
 	}
 	res, err := w.UndoWorkerRun(r.Msg.RunId, r.Msg.Force)
+	// Anything restored is reported, with why the rest wasn't.
 	if err != nil && len(res.Restored) == 0 {
 		return nil, toAPI(err)
 	}
-	return ok(&pb.UndoWorkerRunResponse{Restored: res.Restored})
+	return ok(&pb.UndoWorkerRunResponse{Restored: res.Restored, Error: errorInfo(err)})
 }
 
 func (h workerService) GetWorkerRun(_ context.Context, r req[pb.GetWorkerRunRequest]) (*connect.Response[pb.GetWorkerRunResponse], error) {

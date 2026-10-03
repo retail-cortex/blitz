@@ -365,6 +365,42 @@ func TestTaskInItsOwnWorktree(t *testing.T) {
 	require.NoError(t, err, "a second isolated task")
 }
 
+// A task stopped while its worktree is still being made (a slow
+// post-checkout hook) ends stopped, rather than panicking on a missing
+// cancel.
+func TestTaskStoppedWhileItsWorktreeIsMade(t *testing.T) {
+	marker := filepath.Join(t.TempDir(), "checking-out")
+	f, ctx, _ := taskEngine(t, newGated(), func(c *config.Config) {
+		ws := c.Tools.WorkspaceDir
+		for _, args := range [][]string{{"init", "-q"}, {"commit", "-q", "--allow-empty", "-m", "first"}} {
+			cmd := exec.Command("git", append([]string{"-c", "user.name=t", "-c", "user.email=t@example.com"}, args...)...)
+			cmd.Dir = ws
+			out, err := cmd.CombinedOutput()
+			require.NoError(t, err, "%s", out)
+		}
+		hook := "#!/bin/sh\ntouch '" + marker + "'\nsleep 1\n"
+		require.NoError(t, os.WriteFile(filepath.Join(ws, ".git", "hooks", "post-checkout"), []byte(hook), 0o755))
+	})
+	type result struct {
+		info api.TaskInfo
+		err  error
+	}
+	started := make(chan result, 1)
+	go func() {
+		info, err := f.eng.StartTask(ctx, "qa", "x", "worktree")
+		started <- result{info, err}
+	}()
+	require.Eventually(t, func() bool { _, err := os.Stat(marker); return err == nil }, 10*time.Second, 10*time.Millisecond)
+	_, err := f.eng.StopTask([]string{"s"}, "task-1")
+	require.NoError(t, err)
+
+	r := <-started
+	require.NoError(t, r.err)
+	done, _, err := f.eng.WaitTask(ctx, []string{"s"}, r.info.ID, 10*time.Second)
+	require.NoError(t, err)
+	assert.NotEqual(t, api.TaskRunning, done.State, "%+v", done)
+}
+
 func TestTaskWorktreeNeedsARepository(t *testing.T) {
 	f, ctx, _ := taskEngine(t, newGated(), nil)
 	_, err := f.eng.StartTask(ctx, "qa", "x", "worktree")

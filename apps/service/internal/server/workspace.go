@@ -277,6 +277,9 @@ func (h workspaceService) ListPermissionRules(ctx context.Context, r req[pb.List
 		return nil, err
 	}
 	res := &pb.ListPermissionRulesResponse{}
+	if err := w.PermissionsProblem(); err != nil {
+		res.Problem = err.Error()
+	}
 	for _, x := range w.ListPermissionRules() {
 		res.Rules = append(res.Rules, &pb.PermissionRule{Effect: x.Effect, Rule: x.Rule, Source: x.Source})
 	}
@@ -540,13 +543,13 @@ func (h workspaceService) RevokeApprovals(ctx context.Context, r req[pb.RevokeAp
 	if err != nil {
 		return nil, err
 	}
-	n := 0
+	var n int
 	if r.Msg.All {
-		n = w.ClearApprovals()
+		n, err = w.ClearApprovals()
 	} else {
-		n = w.RevokeApprovals(r.Msg.Keys...)
+		n, err = w.RevokeApprovals(r.Msg.Keys...)
 	}
-	return ok(&pb.RevokeApprovalsResponse{Revoked: int32(n)})
+	return ok(&pb.RevokeApprovalsResponse{Revoked: int32(n), Error: errorInfo(err)})
 }
 
 func (h workspaceService) ListProcesses(ctx context.Context, r req[pb.ListProcessesRequest]) (*connect.Response[pb.ListProcessesResponse], error) {
@@ -652,6 +655,52 @@ func (h workspaceService) SearchWeb(ctx context.Context, r req[pb.SearchWebReque
 		out.Links = append(out.Links, &pb.Link{Title: l.Title, Url: l.URL})
 	}
 	return ok(out)
+}
+
+func (h workspaceService) SearchWorkspace(ctx context.Context, r req[pb.SearchWorkspaceRequest]) (*connect.Response[pb.SearchWorkspaceResponse], error) {
+	w, err := h.s.workspace(ctx, r.Msg.Workspace)
+	if err != nil {
+		return nil, err
+	}
+	res, err := w.Search(ctx, api.SearchQuery{Text: r.Msg.Query, Sources: r.Msg.Sources, Limit: int(r.Msg.Limit), Mode: r.Msg.Mode, Hidden: r.Msg.Hidden})
+	if err != nil {
+		return nil, toAPI(err)
+	}
+	out := &pb.SearchWorkspaceResponse{Sources: res.Sources}
+	for _, h := range res.Hits {
+		out.Hits = append(out.Hits, &pb.SearchHit{Source: h.Source, Ref: h.Ref, Title: h.Title, Line: int32(h.Line), Section: h.Section, Snippet: h.Snippet, Score: h.Score, Summary: h.Summary, Tags: h.Tags})
+	}
+	return ok(out)
+}
+
+func (h workspaceService) GetSearchStatus(ctx context.Context, r req[pb.GetSearchStatusRequest]) (*connect.Response[pb.GetSearchStatusResponse], error) {
+	w, err := h.s.workspace(ctx, r.Msg.Workspace)
+	if err != nil {
+		return nil, err
+	}
+	s := w.SearchStatus()
+	st := &pb.SearchStatus{Enabled: s.Enabled, Scanning: s.Scanning, Unreadable: int32(s.Unreadable), Error: s.Error, Items: map[string]int32{},
+		EmbeddingModel: s.EmbeddingModel, Embedded: int32(s.Embedded), EmbedError: s.EmbedError, Enriched: int32(s.Enriched), EnrichError: s.EnrichError,
+		Problem: s.Problem, Settings: &pb.SearchSettings{Enabled: s.Settings.Enabled, Sources: s.Settings.Sources, EmbeddingModel: s.Settings.EmbeddingModel,
+			Enrich: s.Settings.Enrich, EnrichModel: s.Settings.EnrichModel, EnrichDailyLimit: int32(s.Settings.EnrichDailyLimit), IncludeIgnored: s.Settings.IncludeIgnored}}
+	for k, v := range s.Items {
+		st.Items[k] = int32(v)
+	}
+	if !s.LastScan.IsZero() {
+		st.LastScan = timestamppb.New(s.LastScan)
+	}
+	return ok(&pb.GetSearchStatusResponse{Status: st})
+}
+
+func (h workspaceService) Reindex(ctx context.Context, r req[pb.ReindexRequest]) (*connect.Response[pb.ReindexResponse], error) {
+	w, err := h.s.workspace(ctx, r.Msg.Workspace)
+	if err != nil {
+		return nil, err
+	}
+	if err := w.Reindex(); err != nil {
+		return nil, toAPI(err)
+	}
+	return ok(&pb.ReindexResponse{})
 }
 
 // saveScope is where a rule is saved: nowhere without save, else the

@@ -16,6 +16,7 @@ package tools
 
 import (
 	"bytes"
+	"context"
 	"image"
 	"image/png"
 	"io/fs"
@@ -170,4 +171,77 @@ func TestHumanSize(t *testing.T) {
 	assert.Equal(t, "512 B", humanSize(512))
 	assert.Equal(t, "2 KB", humanSize(2048))
 	assert.Equal(t, "1.5 MB", humanSize(3<<19))
+}
+
+// A PDF too large to read is still an existing file: refused without
+// overwrite, replaced with it.
+func TestExportPDFOverLargeExistingFile(t *testing.T) {
+	cases := map[string]struct {
+		overwrite bool
+		wantErr   string
+	}{
+		"refused":     {wantErr: "already exists"},
+		"overwritten": {overwrite: true},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			dir := t.TempDir()
+			big := bytes.Repeat([]byte("x"), 200)
+			writeFile(t, filepath.Join(dir, "s.pdf"), string(big))
+			ws, err := OpenWorkspace(WorkspaceOptions{Dir: dir, MaxFileSize: 100})
+			require.NoError(t, err)
+			t.Cleanup(func() { ws.Close() })
+			h, reqs := approverHooks(true)
+
+			out := runTool(t, toolOf(t)(NewExportPDFTool(ws, h, "")), map[string]any{"markdown": "# S", "output": "s.pdf", "overwrite": tc.overwrite})
+			data, rerr := os.ReadFile(filepath.Join(dir, "s.pdf"))
+			require.NoError(t, rerr)
+			if tc.wantErr != "" {
+				assert.Contains(t, errOf(out), tc.wantErr)
+				assert.Equal(t, big, data, "the file was replaced")
+				return
+			}
+			require.Empty(t, errOf(out))
+			require.Len(t, *reqs, 1)
+			assert.Contains(t, (*reqs)[0].Detail, "Overwrite s.pdf")
+			assert.True(t, pdftext.IsPDF(data))
+		})
+	}
+}
+
+// An existing PDF too large to compare is checked by its size and time:
+// one changed while the approval waited isn't overwritten. A path whose
+// existence can't be checked is refused.
+func TestExportPDFRefusals(t *testing.T) {
+	t.Run("changed during approval", func(t *testing.T) {
+		dir := t.TempDir()
+		path := filepath.Join(dir, "s.pdf")
+		writeFile(t, path, strings.Repeat("x", 200))
+		ws, err := OpenWorkspace(WorkspaceOptions{Dir: dir, MaxFileSize: 100})
+		require.NoError(t, err)
+		t.Cleanup(func() { ws.Close() })
+		h := NewHooks(Policy{})
+		h.SetApprover(func(context.Context, api.ApprovalRequest) (api.Decision, error) {
+			writeFile(t, path, strings.Repeat("y", 300)) // edited meanwhile
+			return api.DecisionOnce, nil
+		})
+
+		out := runTool(t, toolOf(t)(NewExportPDFTool(ws, h, "")), map[string]any{"markdown": "# S", "output": "s.pdf", "overwrite": true})
+		assert.Contains(t, errOf(out), "changed")
+		data, err := os.ReadFile(path)
+		require.NoError(t, err)
+		assert.Equal(t, strings.Repeat("y", 300), string(data), "the edit is kept")
+	})
+	t.Run("can't be checked", func(t *testing.T) {
+		dir := t.TempDir()
+		writeFile(t, filepath.Join(dir, "notes.txt"), "a file, not a folder")
+		ws, err := OpenWorkspace(WorkspaceOptions{Dir: dir})
+		require.NoError(t, err)
+		t.Cleanup(func() { ws.Close() })
+		h, reqs := approverHooks(true)
+
+		out := runTool(t, toolOf(t)(NewExportPDFTool(ws, h, "")), map[string]any{"markdown": "# S", "output": "notes.txt/s.pdf"})
+		assert.NotEmpty(t, errOf(out))
+		assert.Empty(t, *reqs, "nothing asked")
+	})
 }

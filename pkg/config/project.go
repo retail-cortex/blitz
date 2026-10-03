@@ -194,7 +194,7 @@ var neverFromProject = []string{
 	"skills.policy.trusted_hashes", "skills.policy.allow_hitl_bypass", "skills.policy.network",
 	"skills.policy.network_allow", "skills.policy.env_passthrough", "skills.policy.sandbox",
 	"workers.policy.max_concurrent", "workers.paths", "workers.notify", "workers.notify_on", "skills.paths",
-	"suggestions.model",
+	"suggestions.model", "search.embedding_model", "search.enrich", "search.enrich_model", "search.enrich_daily_limit",
 }
 
 // LoadProject reads workspace's project files. A file that can't be read

@@ -34,10 +34,10 @@ const (
 
 var blockedScanSkip = map[string]bool{".git": true, "node_modules": true, "vendor": true, "target": true, "__pycache__": true}
 
-// racyWindow: a directory whose modification time is this close to when
-// it was read may change again without its time changing (file systems
-// keep coarse times), so it is read again next time, as git treats "racy"
-// index entries.
+// racyWindow is how close to when it was read a directory's modification
+// time can be and still change again without the time changing (file
+// systems keep coarse times); such a directory is read again next time, as
+// git treats "racy" index entries.
 const racyWindow = 2 * time.Second
 
 // expandBlocked resolves blocked-path patterns to concrete existing paths,

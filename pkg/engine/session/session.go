@@ -120,9 +120,9 @@ type Storage struct {
 	dir       string
 	active    *SessionRecord
 	workspace string
-	// unsaved: the active session hasn't been written yet. A new session
-	// is saved with its first message (or a rename), so chats never used
-	// leave nothing behind.
+	// unsaved means the active session hasn't been written yet. A new session
+	// is saved with its first message (or a rename), so chats never used leave
+	// nothing behind.
 	unsaved bool
 }
 
@@ -432,21 +432,26 @@ func (s *Storage) Load(id string) (*SessionRecord, error) {
 
 // Move makes session id this storage's workspace's and active: /cd
 // carried it here from the workspace it was in, which it remembers with
-// the number of messages it had then (PAR-SES-40).
+// the number of messages it had then (PAR-SES-40). It becomes active only
+// once the move is saved.
 func (s *Storage) Move(id string) (*SessionRecord, error) {
-	rec, err := s.Load(id)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	rec, err := s.readSourceLocked(id)
 	if err != nil {
 		return nil, err
 	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if rec.Workspace == s.workspace {
-		return rec, nil
+	rec.MessageCount = len(rec.Messages)
+	if rec.Workspace != s.workspace {
+		if rec.Workspace != "" { // else adopted, as Load does
+			rec.MovedFrom, rec.MovedAt = rec.Workspace, len(rec.Messages)
+		}
+		rec.Workspace = s.workspace
+		if err := s.writeMeta(rec); err != nil {
+			return nil, err
+		}
 	}
-	rec.MovedFrom, rec.MovedAt, rec.Workspace = rec.Workspace, len(rec.Messages), s.workspace
-	if err := s.writeMeta(rec); err != nil {
-		return nil, err
-	}
+	s.setActiveLocked(rec)
 	return rec, nil
 }
 
@@ -472,6 +477,15 @@ func (s *Storage) setActiveLocked(rec *SessionRecord) {
 	if rec != nil {
 		owners.Store(rec.ID, s)
 	}
+}
+
+// Release lets go of the active session, so other storages of this
+// process write it, and delete it, themselves again: for a storage made
+// for one run, when the run ends.
+func (s *Storage) Release() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.setActiveLocked(nil)
 }
 
 // ownerOf is the other storage that has session id active, or nil.

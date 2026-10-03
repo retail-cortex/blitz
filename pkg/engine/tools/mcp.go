@@ -24,6 +24,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/retail-cortex/blitz/pkg/api"
@@ -87,44 +88,147 @@ func (s *mcpServer) callTimeout() time.Duration {
 // stdioTransport starts a new server process on every Connect. The SDK's
 // CommandTransport wraps a single exec.Cmd, which can only be started once,
 // so after a server crash the ADK's automatic reconnect could never succeed.
-// Each process is guarded (dies with Blitz); the previous one is killed
-// when a new one starts.
+// Each process is guarded (dies with Blitz) and reaped as soon as it ends
+// (mcpProc); the previous one is killed when a new one starts.
 type stdioTransport struct {
 	build func() (*guardedCmd, error)
 
-	mu  sync.Mutex
-	cur *guardedCmd
+	mu     sync.Mutex
+	cur    *mcpProc
+	closed bool
 }
 
 func (t *stdioTransport) Connect(ctx context.Context) (mcp.Connection, error) {
-	cmd, err := t.build()
+	t.mu.Lock()
+	prev := t.cur
+	t.cur = nil
+	t.mu.Unlock()
+	prev.kill()
+
+	p, err := startMCPProc(t.build)
 	if err != nil {
+		return nil, err
+	}
+	conn, err := (&mcp.IOTransport{Reader: p.stdout, Writer: p}).Connect(ctx)
+	if err != nil {
+		p.kill()
 		return nil, err
 	}
 	t.mu.Lock()
-	prev := t.cur
-	t.cur = cmd
+	if t.closed { // closed while it started
+		t.mu.Unlock()
+		p.kill()
+		conn.Close()
+		return nil, errMCPClosed
+	}
+	t.cur = p
 	t.mu.Unlock()
-	stopProcess(prev)
-
-	conn, err := (&mcp.CommandTransport{Command: cmd.Cmd}).Connect(ctx)
-	if cmd.childEnd != nil {
-		cmd.childEnd.Close() // the child holds its end; see guardedCmd.Start
-	}
-	if err != nil {
-		cmd.Release()
-		return nil, err
-	}
 	return conn, nil
 }
 
-// Close kills the current server process.
+// Close kills the current server process and refuses new ones.
 func (t *stdioTransport) Close() {
 	t.mu.Lock()
 	cur := t.cur
-	t.cur = nil
+	t.cur, t.closed = nil, true
 	t.mu.Unlock()
-	stopProcess(cur)
+	cur.kill()
+}
+
+// mcpTerminateWait is how long closing a server waits for it to exit,
+// after closing its input and again after SIGTERM, before killing it (the
+// SDK's CommandTransport waits as long).
+var mcpTerminateWait = 5 * time.Second
+
+// mcpProc is a stdio server process that Blitz owns: it's waited for from
+// the start, so it's reaped whenever it ends, whether or not its
+// connection is ever closed. The SDK talks to it over its pipes; closing
+// the connection closes its input, then signals, then kills it.
+type mcpProc struct {
+	cmd    *guardedCmd
+	stdin  *os.File      // our end of its input
+	stdout *os.File      // our end of its output
+	done   chan struct{} // closed once it's reaped
+}
+
+// startMCPProc builds and starts a server. Its pipes are plain os.Pipes,
+// not exec's, so Wait doesn't close the output while the SDK reads it.
+func startMCPProc(build func() (*guardedCmd, error)) (*mcpProc, error) {
+	cmd, err := build()
+	if err != nil {
+		return nil, err
+	}
+	inR, inW, err := os.Pipe()
+	if err != nil {
+		cmd.abandon()
+		return nil, err
+	}
+	outR, outW, err := os.Pipe()
+	if err != nil {
+		inR.Close()
+		inW.Close()
+		cmd.abandon()
+		return nil, err
+	}
+	cmd.Stdin, cmd.Stdout = inR, outW
+	err = cmd.Start() // releases its guard if it fails
+	inR.Close()       // the child holds its ends
+	outW.Close()
+	if err != nil {
+		inW.Close()
+		outR.Close()
+		return nil, err
+	}
+	p := &mcpProc{cmd: cmd, stdin: inW, stdout: outR, done: make(chan struct{})}
+	go func() {
+		_ = cmd.Wait() // and releases the guard, killing what it left
+		close(p.done)
+	}()
+	return p, nil
+}
+
+// Write sends to the server's input.
+func (p *mcpProc) Write(b []byte) (int, error) { return p.stdin.Write(b) }
+
+// Close ends the server as the MCP spec asks: its input closed, then
+// SIGTERM, then SIGKILL to its process group, waiting a while after each.
+func (p *mcpProc) Close() error {
+	p.stdin.Close()
+	if p.waitDone() {
+		return nil
+	}
+	if p.cmd.Process.Signal(syscall.SIGTERM) == nil && p.waitDone() {
+		return nil
+	}
+	p.kill()
+	if p.waitDone() {
+		return nil
+	}
+	return errors.New("the mcp server didn't exit")
+}
+
+// waitDone reports whether the server ended within mcpTerminateWait.
+func (p *mcpProc) waitDone() bool {
+	select {
+	case <-p.done:
+		return true
+	case <-time.After(mcpTerminateWait):
+		return false
+	}
+}
+
+// kill kills the server's process group, unless it's reaped already (its
+// pid may be someone else's by then). Safe on nil.
+func (p *mcpProc) kill() {
+	if p == nil {
+		return
+	}
+	select {
+	case <-p.done:
+	default:
+		_ = killProcessGroup(p.cmd.Cmd)
+		p.stdin.Close()
+	}
 }
 
 // closingTransport remembers the connections it makes, so closing it ends
@@ -183,13 +287,6 @@ func (c *closingConn) Close() error {
 	delete(c.owner.conns, c)
 	c.owner.mu.Unlock()
 	return c.Connection.Close()
-}
-
-func stopProcess(cmd *guardedCmd) {
-	if cmd != nil && cmd.Process != nil {
-		_ = killProcessGroup(cmd.Cmd)
-		cmd.Release()
-	}
 }
 
 // NewMCPManager validates configs and prepares toolsets. Servers connect
@@ -253,11 +350,7 @@ func NewMCPManager(cfgs []config.MCPServerConfig, env *ExecEnv, reserved []strin
 			if err != nil {
 				return nil, fmt.Errorf("mcp server %q: %w", c.Name, err)
 			}
-			// Never started: drop its guard pipe (and any credential copies).
-			if probe.childEnd != nil {
-				probe.childEnd.Close()
-			}
-			probe.Release()
+			probe.abandon() // never started: drop its guard pipe (and any credential copies)
 			srv.transport = &stdioTransport{build: build}
 			srv.conns = &closingTransport{inner: srv.transport}
 		} else {

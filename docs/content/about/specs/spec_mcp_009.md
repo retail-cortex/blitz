@@ -26,7 +26,7 @@ Model Context Protocol servers extend agents with external tools, over stdio (a 
 ## 3. Lifecycle
 
 - **MCP-10** Servers connect lazily when their tools are first listed (before a model call).
-- **MCP-11** Stdio servers run through the exec environment: process guard, scrubbed environment plus the server's `env`, and the OS sandbox unless disabled. A new process is started on every (re)connect and the previous one is killed, so a crashed server is restarted on the next call.
+- **MCP-11** Stdio servers run through the exec environment: process guard, scrubbed environment plus the server's `env`, and the OS sandbox unless disabled. A new process is started on every (re)connect and the previous one is killed, so a crashed server is restarted on the next call. *2026-10-03:* Blitz owns each process (its pipes to the SDK's `IOTransport`) and waits for it from the start, so a killed or crashed one is reaped at once, its connection closed or not; closing a connection closes the server's input, then sends SIGTERM, then kills its process group, waiting 5 s after each.
 - **MCP-12** All sessions (HTTP included) are tracked and closed when the workspace closes; stdio processes are stopped.
 
 ## 4. Tool exposure
