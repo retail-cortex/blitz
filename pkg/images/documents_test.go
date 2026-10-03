@@ -94,7 +94,7 @@ func TestStoreText(t *testing.T) {
 	assert.Contains(t, text, "--- Page 2 ---\nMomentum")
 
 	// Read once, then from the cache beside the PDF.
-	cache := filepath.Join(dir, doc.SHA256+".txt")
+	cache := filepath.Join(dir, doc.SHA256+".pdf.txt")
 	require.FileExists(t, cache)
 	require.NoError(t, os.WriteFile(cache, []byte(textHeader+"7\ncached"), 0o600))
 	text, pages, err = s.Text(context.Background(), doc.URI())
@@ -123,16 +123,16 @@ func TestExpandDocuments(t *testing.T) {
 	var asked []int
 	tests := []struct {
 		name   string
-		native DocumentPolicy
+		native MediaPolicy
 		want   func(t *testing.T, p *genai.Part)
 	}{
-		{"read as it is", func(size, pages int) bool { asked = []int{size, pages}; return true }, func(t *testing.T, p *genai.Part) {
+		{"read as it is", func(_ string, size int64, pages int) Route { asked = []int{int(size), pages}; return RouteInline }, func(t *testing.T, p *genai.Part) {
 			require.NotNil(t, p.InlineData)
 			assert.Equal(t, pdftext.MIME, p.InlineData.MIMEType)
 			assert.Equal(t, doc.Data, p.InlineData.Data)
 			assert.Equal(t, []int{len(doc.Data), 1}, asked)
 		}},
-		{"too big for the model", func(size, pages int) bool { return false }, func(t *testing.T, p *genai.Part) {
+		{"too big for the model", func(string, int64, int) Route { return RouteText }, func(t *testing.T, p *genai.Part) {
 			assert.Contains(t, p.Text, `<document name="paper.pdf" pages="1">`)
 			assert.Contains(t, p.Text, "Attention is all you need")
 		}},
@@ -142,7 +142,8 @@ func TestExpandDocuments(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			out := Expand([]*genai.Content{user, tool}, s, tc.native)
+			out, err := Expand(context.Background(), []*genai.Content{user, tool}, s, tc.native, nil)
+			require.NoError(t, err)
 			tc.want(t, out[0].Parts[0])
 			assert.Equal(t, "summarise", out[0].Parts[1].Text)
 			require.Len(t, out[1].Parts, 2, "the document follows the tool result")
@@ -159,7 +160,8 @@ func TestExpandDocumentTextFails(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, s.Put(doc))
 	require.NoError(t, os.WriteFile(filepath.Join(s.Dir(), doc.SHA256+".pdf"), []byte("%PDF-broken"), 0o600))
-	out := Expand([]*genai.Content{{Role: genai.RoleUser, Parts: []*genai.Part{Part(doc)}}}, s, nil)
+	out, err := Expand(context.Background(), []*genai.Content{{Role: genai.RoleUser, Parts: []*genai.Part{Part(doc)}}}, s, nil, nil)
+	require.NoError(t, err)
 	assert.Contains(t, out[0].Parts[0].Text, "[bad.pdf: its text couldn't be read")
 }
 
@@ -170,7 +172,7 @@ func TestDocumentTextCut(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, s.Put(doc))
 	long := strings.Repeat("é", MaxDocumentText+10)
-	require.NoError(t, os.WriteFile(filepath.Join(s.Dir(), doc.SHA256+".txt"), []byte(textHeader+"1\n"+long), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(s.Dir(), doc.SHA256+".pdf.txt"), []byte(textHeader+"1\n"+long), 0o600))
 	p := s.documentText(doc.URI(), "")
 	assert.Contains(t, p.Text, `name="document.pdf"`)
 	assert.Contains(t, p.Text, "[the text is cut short at 300000 characters]")

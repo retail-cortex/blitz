@@ -91,7 +91,7 @@ func (s *scopedRules) take(session string, paths []string) []*memory.Rule {
 func toolPaths(workspace, tool string, args map[string]any) []string {
 	var raw []string
 	switch tool {
-	case "read_file", "create_file", "replace_in_file", "edit", "delete_snippet", "delete_file", "view_image", "view_document", "notebook_edit":
+	case "read_file", "create_file", "replace_in_file", "edit", "delete_snippet", "delete_file", "view_image", "view_document", "view_media", "notebook_edit":
 		if p, ok := args["path"].(string); ok && p != "" {
 			raw = append(raw, p)
 		}

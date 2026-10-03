@@ -23,7 +23,7 @@ import { t } from "../i18n";
 import { Button, useSnackbar } from "../ui/controls";
 import { takeAnchor } from "../events";
 import { Markdown, MarkdownDocProvider, scrollToHeading } from "../Markdown";
-import type { PreviewKind } from "./previewKind";
+import { playsVideo, type PreviewKind } from "./previewKind";
 
 const PdfView = lazy(() => import("./PdfView").then((m) => ({ default: m.PdfView })));
 
@@ -84,6 +84,7 @@ function FilePreview({ dir, path, kind }: { dir: string; path: string; kind: Pre
     let made = "";
     setURL("");
     setError("");
+    if (kind === "video" && !playsVideo(path)) return; // the system's player plays it
     files.readPreview({ workspace: dir, path }).then(
       (r) => {
         if (!live) return;
@@ -103,8 +104,22 @@ function FilePreview({ dir, path, kind }: { dir: string; path: string; kind: Pre
       {t("desktop.files.open_viewer")}
     </Button>
   );
+  if (kind === "video" && !playsVideo(path))
+    return (
+      <div className="preview preview-audio">
+        <p className="editor-note muted">{t("desktop.files.no_player")}</p>
+        {external}
+      </div>
+    );
   if (error) return <p className="editor-note error-text">{error}</p>;
   if (!url) return <p className="editor-note muted">{t("desktop.checking")}</p>;
+  if (kind === "video")
+    return (
+      <div className="preview preview-video">
+        <video controls src={url} aria-label={path} />
+        {external}
+      </div>
+    );
   if (kind === "audio")
     return (
       <div className="preview preview-audio">

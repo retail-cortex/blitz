@@ -140,7 +140,7 @@ func TestPaste(t *testing.T) {
 	assert.Len(t, app.Attachments, 0, "empty clipboard: %s", out)
 	images.ReadClipboard = func(context.Context) ([]byte, error) { return []byte("plain text"), nil }
 	out = captureStdout(t, func() { HandleCommand(ctx, "/paste", app) })
-	assert.Contains(t, out, "not a PNG", "non-image clipboard: %s", out)
+	assert.Contains(t, out, "not a file Blitz can attach", "non-image clipboard: %s", out)
 	images.ReadClipboard = func(context.Context) ([]byte, error) { return pngOf(t, 20, 10), nil }
 	out = captureStdout(t, func() { HandleCommand(ctx, "/paste", app) })
 	require.Len(t, app.Attachments, 1, "paste: %s", out)

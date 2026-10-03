@@ -65,10 +65,10 @@ export function appendMention(draft: string, path: string): string {
 
 /** Whether a path is an image the model can be sent (as pkg/images's IsImagePath). */
 export function isImagePath(path: string): boolean {
-  return /\.(png|jpe?g|gif|webp)$/i.test(path);
+  return /\.(png|jpe?g|gif|webp|bmp|heic|heif)$/i.test(path);
 }
 
-/** Whether a path is attached rather than inlined: an image or a PDF (pkg/images's IsAttachablePath). */
+/** Whether a path is attached rather than inlined: an image, a PDF, audio or video (pkg/images's IsAttachablePath). */
 export function isAttachablePath(path: string): boolean {
-  return isImagePath(path) || /\.pdf$/i.test(path);
+  return isImagePath(path) || /\.(pdf|mp3|wav|aac|flac|ogg|oga|opus|m4a|weba|mp4|m4v|mov|mpe?g|webm|avi|wmv|flv|3gp)$/i.test(path);
 }

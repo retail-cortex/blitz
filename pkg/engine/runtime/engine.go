@@ -42,6 +42,7 @@ import (
 	"github.com/retail-cortex/blitz/pkg/engine/skills"
 	"github.com/retail-cortex/blitz/pkg/engine/tools"
 	"github.com/retail-cortex/blitz/pkg/i18n"
+	"github.com/retail-cortex/blitz/pkg/images"
 	"github.com/retail-cortex/blitz/pkg/observability"
 	"github.com/retail-cortex/blitz/pkg/textutil"
 	"go.opentelemetry.io/otel/attribute"
@@ -168,7 +169,7 @@ func WithAgentModel(agent string, llm model.LLM) Option {
 		if e.agentModels == nil {
 			e.agentModels = map[string]model.LLM{}
 		}
-		e.agentModels[agent] = withImages(llm, e.toolReg.Images())
+		e.agentModels[agent] = withImages(llm, e.media)
 	}
 }
 
@@ -194,6 +195,7 @@ type Engine struct {
 	skillProv   *skills.Provider
 	toolReg     *tools.Registry
 	usage       *UsageTracker
+	media       *mediaSource // stored attachments, and the uploader
 
 	// Shared across runner rebuilds so switching agent or model keeps history.
 	sessions  session.Service
@@ -254,7 +256,7 @@ func NewEngine(
 		sessions:  session.InMemoryService(),
 		artifacts: artifact.InMemoryService(),
 		memories:  memory.InMemoryService(),
-		llm:       withImages(llm, toolReg.Images()),
+		media:     &mediaSource{store: toolReg.Images()},
 		active:    cfg.Blitz.DefaultAgent,
 		settings:  map[string]config.ModelSettings{},
 		tasks:     newTaskManager(),
@@ -274,6 +276,7 @@ func NewEngine(
 		o(e)
 	}
 
+	e.llm = withImages(llm, e.media)
 	e.mu.Lock()
 	err := e.rebuildLocked()
 	e.mu.Unlock()
@@ -339,12 +342,28 @@ func (e *Engine) SetModel(ctx context.Context, llm model.LLM) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	prev := e.llm
-	e.llm = withImages(llm, e.toolReg.Images())
+	e.llm = withImages(llm, e.media)
 	if err := e.rebuildLocked(); err != nil {
 		e.llm = prev
 		return err
 	}
 	return nil
+}
+
+// SetUploader gives the models a way to send files too large to go
+// inline (Gemini's Files API); nil for none.
+func (e *Engine) SetUploader(up images.Uploader) {
+	e.media.mu.Lock()
+	defer e.media.mu.Unlock()
+	e.media.up = up
+}
+
+// AcceptedMedia is what agent's model takes as attachments ("": the
+// active agent's), for refusing others at upload (spec_images_011).
+func (e *Engine) AcceptedMedia(agent string) []Accept {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	return acceptedFor(e.modelForLocked(cmp.Or(agent, e.active)), e.media.uploader() != nil)
 }
 
 // ActiveAgent returns the name of the currently active agent persona.
@@ -383,7 +402,7 @@ func (e *Engine) PinModel(ctx context.Context, agent string, llm model.LLM) erro
 	if e.agentModels == nil {
 		e.agentModels = map[string]model.LLM{}
 	}
-	e.agentModels[agent] = withImages(llm, e.toolReg.Images())
+	e.agentModels[agent] = withImages(llm, e.media)
 	if err := e.rebuildLocked(); err != nil {
 		if had {
 			e.agentModels[agent] = prev
@@ -788,6 +807,9 @@ func (e *Engine) imageInstruction(spec *agents.AgentSpec) string {
 	if slices.Contains(spec.Tools, "view_image") {
 		text += " To look at an image file in the workspace, call view_image with its path; the picture follows the tool result."
 	}
+	if slices.Contains(spec.Tools, "view_media") {
+		text += " If your model takes audio or video, view_media gives you a recording or a video in the workspace."
+	}
 	if slices.Contains(spec.Tools, "view_document") {
 		text += " To read a PDF in the workspace (a paper, slides), call view_document with its path; the document follows the tool result."
 	}
@@ -994,7 +1016,7 @@ func (e *Engine) runnerFor(st *runState) (*runner.Runner, string, string, error)
 	active := cmp.Or(st.agent, e.active)
 	var override model.LLM
 	if st.model != nil {
-		override = withImages(st.model, e.toolReg.Images())
+		override = withImages(st.model, e.media)
 	}
 	t, err := e.buildTreeLocked(active, override)
 	if err != nil {
@@ -1111,7 +1133,7 @@ func (e *Engine) InvokeSubagent(ctx context.Context, agentName, prompt string) (
 	e.mu.RLock()
 	llm := e.modelForLocked(spec.Name)
 	if st := stateFrom(ctx); st != nil && st.model != nil { // a run with its own model
-		llm = e.modelInTreeLocked(spec.Name, cmp.Or(st.agent, e.active), withImages(st.model, e.toolReg.Images()))
+		llm = e.modelInTreeLocked(spec.Name, cmp.Or(st.agent, e.active), withImages(st.model, e.media))
 	}
 	reg := e.toolReg
 	if r, ok := ctx.Value(isolatedToolsKey{}).(*tools.Registry); ok { // a task in its own worktree

@@ -42,7 +42,7 @@ func callTargets(tool string, args map[string]any) map[string][]string {
 	switch tool {
 	case "run_shell_command":
 		add(RuleShell, str("command"))
-	case "read_file", "list_files", "glob", "grep", "view_image", "view_document":
+	case "read_file", "list_files", "glob", "grep", "view_image", "view_document", "view_media":
 		add(RuleRead, str("path"))
 	case "create_file", "replace_in_file", "edit", "delete_snippet", "apply_patch", "notebook_edit":
 		add(RuleWrite, str("path"))

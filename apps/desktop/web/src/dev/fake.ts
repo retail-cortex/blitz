@@ -423,6 +423,22 @@ const fakeWorkers: FakeWorker[] = [
   },
 ];
 
+// What a model of provider takes, as the service says (runtime.AcceptedMedia).
+function fakeAccepted(provider: string) {
+  const media = (kind: string, types: [string, string[]][], maxBytes: number) => ({ kind, mimeTypes: types.map(([m]) => m), extensions: types.flatMap(([, e]) => e), maxBytes: BigInt(maxBytes) });
+  const images = media("image", [["image/png", [".png"]], ["image/jpeg", [".jpg", ".jpeg"]], ["image/gif", [".gif"]], ["image/webp", [".webp"]], ["image/bmp", [".bmp"]]], 20 << 20);
+  const pdf = media("document", [["application/pdf", [".pdf"]]], 32 << 20);
+  const text = media("text", [["text/plain", [".txt", ".md", ".csv", ".json"]]], 1 << 20);
+  if (provider !== "gemini") return [images, pdf, text];
+  return [
+    images,
+    pdf,
+    text,
+    media("audio", [["audio/mpeg", [".mp3"]], ["audio/wav", [".wav"]], ["audio/mp4", [".m4a"]]], 2 ** 31),
+    media("video", [["video/mp4", [".mp4"]], ["video/quicktime", [".mov"]], ["video/webm", [".webm"]]], 2 ** 31),
+  ];
+}
+
 const fakeFiles = new Map<string, string>([
   ["go.mod", "module example.com/shop\n\ngo 1.27\n"],
   [
@@ -592,7 +608,7 @@ export function installFake() {
       service(WorkspaceService, {
         getSettings: ({ workspace }) => {
           const s = state(workspace).settings;
-          return { agent: s.agent, model: s.model, provider: s.provider, effort: s.effort, permissionMode: s.mode, agency: s.agency, locale: s.locale, style: s.style, imagesEnabled: true, speechModel: s.speechModel ?? "" };
+          return { agent: s.agent, model: s.model, provider: s.provider, effort: s.effort, permissionMode: s.mode, agency: s.agency, locale: s.locale, style: s.style, imagesEnabled: true, speechModel: s.speechModel ?? "", acceptedMedia: fakeAccepted(s.provider) };
         },
         getModel: ({ workspace }) => ({ name: state(workspace).settings.model, provider: state(workspace).settings.provider, unavailable: "" }),
         setModel: ({ workspace, ref }) => {

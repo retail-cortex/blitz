@@ -244,6 +244,7 @@ var previewTypes = map[string]string{
 	".svg": "image/svg+xml", ".bmp": "image/bmp", ".ico": "image/x-icon", ".pdf": "application/pdf",
 	".wav": "audio/wav", ".mp3": "audio/mpeg", ".m4a": "audio/mp4", ".aac": "audio/aac",
 	".ogg": "audio/ogg", ".opus": "audio/ogg", ".flac": "audio/flac",
+	".mp4": "video/mp4", ".m4v": "video/mp4", ".mov": "video/quicktime", ".webm": "video/webm",
 }
 
 // PreviewType is the media type the preview shows p as ("" when it has none).

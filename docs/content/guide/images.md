@@ -1,15 +1,32 @@
 ---
-title: Images, PDFs and audio
+title: Attachments, PDFs and audio
 weight: 80
 ---
 
-Specs: [images and documents](../about/specs/spec_images_011.md), [file tools](../about/specs/spec_filetools_006.md) (`export_pdf`, `generate_audio`), [models](../about/specs/spec_models_015.md) (speech).
+Specs: [attachments](../about/specs/spec_images_011.md), [file tools](../about/specs/spec_filetools_006.md) (`export_pdf`, `generate_audio`), [models](../about/specs/spec_models_015.md) (speech).
+
+## What you can attach
+
+Images, PDFs, text files, audio and video, as far as the model takes them:
+
+| | Images | PDFs | Text | Audio and video |
+|---|---|---|---|---|
+| Gemini | PNG, JPEG, WebP, GIF, BMP, HEIC, HEIF | read as they are | yes | MP3, WAV, AAC, FLAC, Ogg, Opus, M4A; MP4, MOV, MPEG, WebM, AVI, WMV, FLV, 3GP |
+| Claude | PNG, JPEG, WebP, GIF, BMP | read as they are | yes | no |
+| OpenAI, Ollama and others | PNG, JPEG, WebP, GIF, BMP | as their text | yes | no |
+
+- **Only what the model takes.** The desktop app's attach button offers only the types the current agent's model takes, and paste, drop, `@mentions` and `/attach` refuse others with the reason ("claude-sonnet-5 can't take talk.mov"). Switch agent or model, and the list follows.
+- **Text files** (notes, CSV, JSON, code; up to 1 MB) go to every model as text.
+- **GIF and BMP** become PNG, which every provider takes.
+- **Audio and video** go to Gemini. Up to 14 MB goes in the request; larger files, up to 2 GB from the workspace, go through Gemini's Files API, where Google keeps them for 48 hours, and Blitz uploads them again after that. With Gemini on Vertex AI there's no Files API, so 14 MB is the limit. A file dropped into the desktop app can be up to 30 MB; put a larger one in the workspace and attach it from there (`@talk.mp4`). The agent opens recordings and videos in the workspace with `view_media`.
+- **Switching models** keeps a conversation's files: a model that can't take one gets a note saying so (PDFs and text, their text).
+- The desktop app plays sound, and MP4, MOV and WebM video, when you open one; other video opens in the system's player.
 
 ## Images
 
 Mention an image in a prompt (`what's wrong with @screenshots/login.png?`, or `@"with spaces.png"`), queue one with `/attach <path>`, paste a screenshot with `/paste`, or pass `--image` on the command line. The model also has a `view_image` tool for images it finds in the workspace. In the desktop app, attach or paste into the chat.
 
-PNG, JPEG, GIF and WebP work with Gemini, Anthropic and OpenAI-compatible models; for Ollama, pick a vision model.
+For Ollama, pick a vision model.
 
 - Files are read through the workspace sandbox: blocked paths and anything outside the workspace are refused.
 - Pictures larger than `[images] max_dimension` (1568 px) or 3.75 MB are scaled down and re-encoded. Headers are checked before decoding, so oversized "decompression bomb" files are rejected.

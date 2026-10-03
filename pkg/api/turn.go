@@ -199,6 +199,10 @@ func (u *Usage) Add(o Usage) {
 // store could not be created).
 var ErrImagesDisabled = errors.New("image support is disabled")
 
+// ErrUnsupportedMedia refuses an attachment the model can't take (its
+// type, or its size); the error wrapping it names the file and the model.
+var ErrUnsupportedMedia = errors.New("the model can't take this file")
+
 // ErrSteerTooLate refuses a steer message when no turn in the session
 // takes it (none runs, or it already collected the unread ones): send it
 // as the next prompt. The transcript has it already.

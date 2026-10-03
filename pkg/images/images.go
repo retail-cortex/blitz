@@ -37,11 +37,12 @@ import (
 	_ "image/gif" // registers the GIF decoder
 	"image/jpeg"
 	"image/png"
-	"net/http"
 	"path"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/retail-cortex/blitz/pkg/pdftext"
+	_ "golang.org/x/image/bmp" // registers the BMP decoder
 	xdraw "golang.org/x/image/draw"
 	_ "golang.org/x/image/webp" // registers the WebP decoder
 )
@@ -93,6 +94,12 @@ type Image struct {
 	Size int
 	// Pages is a PDF's page count; 0 for a picture.
 	Pages int
+	// Kind is what sort of attachment it is ("" for an image prepared
+	// before kinds existed).
+	Kind Kind
+	// Seconds is the length of audio or video, when its header gives it
+	// cheaply; 0 otherwise.
+	Seconds float64
 }
 
 // IsDocument reports whether img is a PDF rather than a picture.
@@ -107,8 +114,16 @@ func (img *Image) Summary() string {
 	if n == 0 {
 		n = img.Size
 	}
-	if img.IsDocument() {
+	switch {
+	case img.IsDocument():
 		return fmt.Sprintf("%s %s, %s", img.Name, pagesLabel(img.Pages), humanBytes(n))
+	case img.Kind == KindAudio || img.Kind == KindVideo:
+		if img.Seconds > 0 {
+			return fmt.Sprintf("%s %s, %s", img.Name, clock(img.Seconds), humanBytes(n))
+		}
+		return fmt.Sprintf("%s %s", img.Name, humanBytes(n))
+	case img.Kind == KindText || img.Width == 0:
+		return fmt.Sprintf("%s %s", img.Name, humanBytes(n))
 	}
 	return fmt.Sprintf("%s %d×%d, %s", img.Name, img.Width, img.Height, humanBytes(n))
 }
@@ -120,38 +135,66 @@ func pagesLabel(n int) string {
 	return fmt.Sprintf("%d pages", n)
 }
 
-// ErrNotImage is returned for data that isn't a supported image or a PDF.
-var ErrNotImage = errors.New("not a PNG, JPEG, GIF or WebP image, or a PDF")
-
-var supported = map[string]bool{"image/png": true, "image/jpeg": true, "image/gif": true, "image/webp": true}
-
-// IsImagePath reports whether a file name has a supported image extension.
-func IsImagePath(p string) bool {
-	switch strings.ToLower(path.Ext(strings.ReplaceAll(p, `\`, "/"))) {
-	case ".png", ".jpg", ".jpeg", ".gif", ".webp":
-		return true
+// clock is a length as m:ss (or h:mm:ss).
+func clock(seconds float64) string {
+	s := int(seconds + 0.5)
+	if s >= 3600 {
+		return fmt.Sprintf("%d:%02d:%02d", s/3600, s/60%60, s%60)
 	}
-	return false
+	return fmt.Sprintf("%d:%02d", s/60, s%60)
 }
 
-// IsAttachablePath reports whether a file name is one an @mention attaches
-// rather than inlines: a picture or a PDF.
-func IsAttachablePath(p string) bool { return IsImagePath(p) || pdftext.IsPDFPath(p) }
+// ErrNotImage is returned for data that isn't a type Blitz attaches.
+var ErrNotImage = errors.New("not a file Blitz can attach (an image, a PDF, a text file, audio or video)")
 
-// Prepare validates data and scales it down when it is larger than the
-// limits allow. The format is detected from the bytes, never the name. A
-// PDF (up to MaxDocumentBytes) is kept as it is, once it's known readable.
+// decodable are the images decoded, checked and, when too big, scaled.
+var decodable = map[string]bool{"image/png": true, "image/jpeg": true, "image/gif": true, "image/webp": true, "image/bmp": true}
+
+// IsImagePath reports whether a file name has a supported image extension.
+func IsImagePath(p string) bool { return KindOf(TypeForName(p)) == KindImage }
+
+// Prepare validates data for the model, by its type (detected from the
+// bytes, the name breaking ties: Detect). Images are checked and scaled
+// down when larger than the limits allow, GIF and BMP made PNG (which
+// every provider takes); HEIC and HEIF are kept as they are. A PDF (up
+// to MaxDocumentBytes) is kept once it's known readable; text (up to
+// MaxTextBytes), audio and video (up to the input limit; larger ones come
+// from files, PrepareStream) as they are.
 func Prepare(name string, data []byte, o Options) (*Image, error) {
-	if pdftext.IsPDF(data) {
+	mime := Detect(name, data[:min(len(data), 4096)])
+	switch KindOf(mime) {
+	case KindDocument:
 		return prepareDocument(name, data)
+	case KindText:
+		if len(data) > MaxTextBytes {
+			return nil, fmt.Errorf("%s is %s; the limit for a text file is %s", name, humanBytes(len(data)), humanBytes(MaxTextBytes))
+		}
+		if !looksLikeText(data) || !utf8.Valid(data) {
+			return nil, fmt.Errorf("%s: %w", name, ErrNotImage)
+		}
+		return kept(name, data, mime, KindText), nil
+	case KindAudio, KindVideo:
+		o = o.withDefaults()
+		if int64(len(data)) > max(o.MaxInput, MaxDocumentBytes) {
+			return nil, fmt.Errorf("%s is %s; attach a file this large from the workspace", name, humanBytes(len(data)))
+		}
+		img := kept(name, data, mime, KindOf(mime))
+		img.Seconds = Duration(mime, data)
+		return img, nil
+	case KindImage:
+		if !decodable[mime] { // HEIC, HEIF
+			o = o.withDefaults()
+			if int64(len(data)) > o.MaxInput {
+				return nil, fmt.Errorf("%s is %s; the limit is %s", name, humanBytes(len(data)), humanBytes(int(o.MaxInput)))
+			}
+			return kept(name, data, mime, KindImage), nil
+		}
+	default:
+		return nil, fmt.Errorf("%s: %w", name, ErrNotImage)
 	}
 	o = o.withDefaults()
 	if int64(len(data)) > o.MaxInput {
 		return nil, fmt.Errorf("%s is %s; the limit is %s", name, humanBytes(len(data)), humanBytes(int(o.MaxInput)))
-	}
-	mime := http.DetectContentType(data)
-	if !supported[mime] {
-		return nil, fmt.Errorf("%s: %w", name, ErrNotImage)
 	}
 	cfg, _, err := image.DecodeConfig(bytes.NewReader(data))
 	if err != nil {
@@ -166,10 +209,11 @@ func Prepare(name string, data []byte, o Options) (*Image, error) {
 	if err != nil {
 		return nil, fmt.Errorf("%s: unreadable image: %w", name, err)
 	}
-	img := &Image{Name: path.Base(strings.ReplaceAll(name, `\`, "/")), Data: data, MIME: mime,
+	img := &Image{Name: path.Base(strings.ReplaceAll(name, `\`, "/")), Data: data, MIME: mime, Kind: KindImage,
 		Width: cfg.Width, Height: cfg.Height, OriginalBytes: len(data)}
 
-	if cfg.Width > o.MaxDimension || cfg.Height > o.MaxDimension || len(data) > MaxEncodedBytes {
+	// GIF (Gemini doesn't take it) and BMP (Claude doesn't) become PNG.
+	if cfg.Width > o.MaxDimension || cfg.Height > o.MaxDimension || len(data) > MaxEncodedBytes || mime == "image/gif" || mime == "image/bmp" {
 		if err := img.shrink(src, o.MaxDimension); err != nil {
 			return nil, fmt.Errorf("%s: %w", name, err)
 		}
@@ -188,8 +232,15 @@ func prepareDocument(name string, data []byte) (*Image, error) {
 		return nil, fmt.Errorf("%s: %w", name, err)
 	}
 	sum := sha256.Sum256(data)
-	return &Image{Name: path.Base(strings.ReplaceAll(name, `\`, "/")), Data: data, MIME: pdftext.MIME,
+	return &Image{Name: path.Base(strings.ReplaceAll(name, `\`, "/")), Data: data, MIME: pdftext.MIME, Kind: KindDocument,
 		Pages: pages, SHA256: hex.EncodeToString(sum[:]), OriginalBytes: len(data)}, nil
+}
+
+// kept is data attached as it is.
+func kept(name string, data []byte, mime string, kind Kind) *Image {
+	sum := sha256.Sum256(data)
+	return &Image{Name: path.Base(strings.ReplaceAll(name, `\`, "/")), Data: data, MIME: mime, Kind: kind,
+		SHA256: hex.EncodeToString(sum[:]), OriginalBytes: len(data)}
 }
 
 // shrink scales the image to fit maxDim and re-encodes it: PNG for
@@ -210,7 +261,7 @@ func (img *Image) shrink(src image.Image, maxDim int) error {
 	}
 
 	var buf bytes.Buffer
-	if img.MIME == "image/png" || img.MIME == "image/gif" {
+	if img.MIME == "image/png" || img.MIME == "image/gif" || img.MIME == "image/bmp" {
 		if err := png.Encode(&buf, src); err != nil {
 			return err
 		}

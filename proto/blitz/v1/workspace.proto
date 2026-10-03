@@ -646,6 +646,21 @@ message GetSettingsResponse {
   string speech_model = 12;
   // Why the speech model can't be used ("" when it can, or there's none).
   string speech_error = 13;
+  // What the active agent's model takes as attachments, for the front ends
+  // to offer only those (LoadImage and AddImage refuse others,
+  // UNSUPPORTED_MEDIA).
+  repeated AcceptedMedia accepted_media = 14;
+}
+
+// AcceptedMedia is a kind of attachment a model takes.
+message AcceptedMedia {
+  // image, document (PDF), text, audio or video.
+  string kind = 1;
+  repeated string mime_types = 2;
+  // The file name extensions of those types, with their dot.
+  repeated string extensions = 3;
+  // The largest file the model takes.
+  int64 max_bytes = 4;
 }
 
 // Request message for WorkspaceService.SetPermissionMode.
@@ -1420,6 +1435,10 @@ message Image {
   bool resized = 7;
   // A PDF's page count (mime_type application/pdf); 0 for a picture.
   int32 pages = 8;
+  // image, document, text, audio or video.
+  string kind = 9;
+  // The length of audio or video, when its header gives it; 0 otherwise.
+  double seconds = 10;
 }
 
 // Request message for WorkspaceService.LoadImage.

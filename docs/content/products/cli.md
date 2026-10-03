@@ -134,7 +134,7 @@ Decisions are `once`, `session`, `always` or `deny`; a question is answered with
 | `/btw <question>` | A side question: answered with what the session knows, and not kept |
 | `/search web <terms>`, `/search session <terms>` | [Search](../guide/search.md) the web or this session |
 | `!<command>` | Run a command yourself, outside the agent's sandbox; the audit log records it |
-| `/attach [path\|clear]`, `/paste` | Queue an [image](../guide/images.md) for the next message |
+| `/attach [path\|clear]`, `/paste` | Queue an [attachment](../guide/images.md) (an image, a PDF, a text file, audio or video, as the model takes them) for the next message |
 | `/sandbox`, `/mcp`, `/tools`, `/skills …`, `/envs …` | The active policy, MCP servers, the agent's tools, skills and their Python environments |
 | `/locale [code]` | The [interface language](../guide/language.md) |
 | `/license`, `/help`, `/exit` | |

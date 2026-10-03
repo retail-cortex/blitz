@@ -14,54 +14,89 @@
  * limitations under the License.
  */
 
-// Images and PDFs attached to the next prompt: pasted, dropped or chosen,
-// uploaded to the service at once (AddImage), sent with the turn by ID.
+// Files attached to the next prompt: pasted, dropped or chosen, uploaded
+// to the service at once (AddImage), sent with the turn by ID. Which files
+// can be is the active agent's model's to say (GetSettings
+// accepted_media): the picker, paste and drop offer only those.
 import { language, t, tn } from "./i18n";
 
-/** The largest image the window uploads (the service may scale it down). */
-export const maxImageBytes = 20 << 20;
-
-/** The largest PDF the window uploads: what fits a service request. */
-export const maxDocumentBytes = 30 << 20;
+/** The largest file the window uploads: what fits a service request (larger ones attach from the workspace). */
+export const maxUploadBytes = 30 << 20;
 
 const pdf = "application/pdf";
 
+/** A kind of attachment the model takes (the service's AcceptedMedia). */
+export interface Accepted {
+  kind: string;
+  mimeTypes: string[];
+  extensions: string[];
+  maxBytes: bigint | number;
+}
+
 /**
- * An image or PDF attached to the next prompt: shown at once from a local
- * URL, uploaded to the service in the background.
+ * A file attached to the next prompt: shown at once from a local URL (an
+ * image's thumbnail), uploaded to the service in the background.
  */
 export interface Attachment {
   key: string; // local, for the list
   name: string;
   url: string; // a local object URL, for an image's thumbnail ("" for none)
+  kind?: string; // image, document, text, audio or video
   document?: boolean; // a PDF
   id?: string; // the service's ID once uploaded
   detail?: string; // size and dimensions, once uploaded
   error?: string;
 }
 
-/** Whether a file is a PDF, by its type or (dropped from some apps) its name. */
-export const isDocument = (f: Pick<File, "type" | "name">) => f.type === pdf || (!f.type && /\.pdf$/i.test(f.name));
+const extOf = (name: string) => {
+  const i = name.lastIndexOf(".");
+  return i < 0 ? "" : name.slice(i).toLowerCase();
+};
 
-/** The image and PDF files among files (paste and drop carry other kinds too). */
-export function attachableFiles(files: Iterable<File> | ArrayLike<File> | null | undefined): File[] {
-  return Array.from(files ?? []).filter((f) => f.type.startsWith("image/") || isDocument(f));
+/** The kind the model takes a file as, by its name, else its type; undefined when it doesn't take it. */
+export function acceptedAs(list: Accepted[], f: Pick<File, "type" | "name">): Accepted | undefined {
+  const ext = extOf(f.name);
+  return (ext && list.find((a) => a.extensions.includes(ext))) || list.find((a) => f.type && a.mimeTypes.includes(f.type));
 }
 
-/** Why a file can't be attached ("" if it can). */
-export function rejectReason(f: Pick<File, "type" | "size" | "name">): string {
-  if (isDocument(f)) return f.size > maxDocumentBytes ? t("desktop.attach.too_large", { name: f.name, size: maxDocumentBytes >> 20 }) : "";
-  if (!f.type.startsWith("image/")) return t("desktop.attach.not_image", { name: f.name });
-  if (f.size > maxImageBytes) return t("desktop.attach.too_large", { name: f.name, size: maxImageBytes >> 20 });
+/** Whether a file is a PDF, by its type or its name. */
+export const isDocument = (f: Pick<File, "type" | "name">) => f.type === pdf || /\.pdf$/i.test(f.name);
+
+/** The file picker's accept list: every extension and type the model takes. */
+export function acceptAttribute(list: Accepted[]): string {
+  return [...new Set(list.flatMap((a) => [...a.extensions, ...a.mimeTypes]))].join(",");
+}
+
+/** The files among files the model takes (paste and drop carry others too). */
+export function attachableFiles(files: Iterable<File> | ArrayLike<File> | null | undefined, list: Accepted[]): File[] {
+  return Array.from(files ?? []).filter((f) => !!acceptedAs(list, f));
+}
+
+/** Why a file can't be attached ("" if it can): a type the model doesn't take, or too large. */
+export function rejectReason(f: Pick<File, "type" | "size" | "name">, list: Accepted[], model: string): string {
+  const a = acceptedAs(list, f);
+  if (!a) return t("desktop.attach.unsupported", { name: f.name, model: model || "this model" });
+  const limit = Math.min(Number(a.maxBytes), maxUploadBytes);
+  if (f.size > limit) return f.size > maxUploadBytes && Number(a.maxBytes) > maxUploadBytes ? t("desktop.attach.from_workspace", { name: f.name }) : t("desktop.attach.too_large", { name: f.name, size: Math.round(limit / (1 << 20)) });
   return "";
 }
 
-/** A short description of an uploaded image or PDF. */
-export function describeImage(i: { width: number; height: number; size: bigint | number; resized: boolean; mimeType?: string; pages?: number }): string {
+/** m:ss (or h:mm:ss) for a length in seconds. */
+export function clock(seconds: number): string {
+  const s = Math.round(seconds);
+  const mm = String(Math.floor(s / 60) % 60).padStart(s >= 3600 ? 2 : 1, "0");
+  const ss = String(s % 60).padStart(2, "0");
+  return s >= 3600 ? `${Math.floor(s / 3600)}:${mm}:${ss}` : `${mm}:${ss}`;
+}
+
+/** A short description of an uploaded file: dimensions, pages or length, and size. */
+export function describeImage(i: { width: number; height: number; size: bigint | number; resized: boolean; mimeType?: string; pages?: number; kind?: string; seconds?: number }): string {
   const bytes = Number(i.size);
   const fmt = (n: number, digits: number) => n.toLocaleString(language(), { minimumFractionDigits: digits, maximumFractionDigits: digits });
   const size = bytes >= 1 << 20 ? t("desktop.attach.mb", { size: fmt(bytes / (1 << 20), 1) }) : t("desktop.attach.kb", { size: fmt(Math.max(1, Math.round(bytes / 1024)), 0) });
   if (i.mimeType === pdf) return `${tn("desktop.attach.pages", i.pages ?? 0)} · ${size}`;
+  if (i.kind === "audio" || i.kind === "video") return i.seconds ? `${clock(i.seconds)} · ${size}` : size;
+  if (i.kind === "text" || !i.width) return size;
   return `${i.width}×${i.height} · ${size}${i.resized ? ` · ${t("desktop.attach.scaled")}` : ""}`;
 }
 

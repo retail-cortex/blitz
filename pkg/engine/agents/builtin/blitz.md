@@ -10,6 +10,7 @@ tools:
   - read_file
   - view_image
   - view_document
+  - view_media
   - list_files
   - glob
   - create_file

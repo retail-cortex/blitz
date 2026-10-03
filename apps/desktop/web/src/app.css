@@ -601,6 +601,8 @@ body.resizing iframe, body.resizing .cm-editor { pointer-events: none; }
 .preview-image img { max-width: 100%; max-height: calc(100% - 32px); object-fit: contain; box-shadow: var(--md-elevation-1); }
 .preview-audio { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 24px; height: 100%; }
 .preview-audio audio { width: min(520px, 100%); }
+.preview-video { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 16px; height: 100%; }
+.preview-video video { max-width: 100%; max-height: calc(100% - 48px); background: #000; border-radius: var(--md-shape-md); }
 .preview-pdf { background: var(--md-surface-container); padding: 16px; }
 .pdf-pages { display: flex; flex-direction: column; align-items: center; gap: 12px; }
 .pdf-pages canvas { background: #fff; box-shadow: var(--md-elevation-1); }

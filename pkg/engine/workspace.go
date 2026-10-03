@@ -351,6 +351,8 @@ func Open(ctx context.Context, cfg *config.Config, o Options) (*Workspace, error
 		w.Close()
 		return nil, fmt.Errorf("failed to initialize engine: %w", err)
 	}
+	w.setupUploader(ctx, o.Warn)
+	w.tools.SetMediaCheck(w.checkMedia)
 	w.tools.ScriptHooks().Info = func(_ context.Context, session string) tools.HookInfo {
 		return tools.HookInfo{TranscriptPath: w.storage.TranscriptPath(session), PermissionMode: string(w.tools.Hooks().Mode()), Agent: w.engine.ActiveAgent()}
 	}
