@@ -15,6 +15,7 @@
 package tools
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -29,8 +30,9 @@ import (
 
 // ExportPDFInput defines arguments for export_pdf.
 type ExportPDFInput struct {
-	Path      string `json:"path" jsonschema:"The Markdown file to export (.md or .markdown)"`
-	Output    string `json:"output,omitempty" jsonschema:"Where to write the PDF; default the same name with .pdf"`
+	Path      string `json:"path,omitempty" jsonschema:"The Markdown file to export (.md or .markdown); or give markdown instead"`
+	Markdown  string `json:"markdown,omitempty" jsonschema:"Markdown to typeset directly, for a PDF of something that isn't a file (a summary of the conversation); needs output. Don't write a .md file first."`
+	Output    string `json:"output,omitempty" jsonschema:"Where to write the PDF; default the file's name with .pdf (required with markdown)"`
 	Overwrite bool   `json:"overwrite,omitempty" jsonschema:"Replace the PDF if it already exists"`
 }
 
@@ -48,9 +50,9 @@ type ExportPDFOutput struct {
 const maxPDFImage = 20 << 20
 
 // ExportPDFOutputPath is where export_pdf writes: output, or path with
-// its extension replaced by .pdf.
+// its extension replaced by .pdf ("" with neither).
 func ExportPDFOutputPath(p, output string) string {
-	if output != "" {
+	if output != "" || p == "" {
 		return output
 	}
 	return strings.TrimSuffix(p, path.Ext(p)) + ".pdf"
@@ -65,25 +67,39 @@ func isMarkdownPath(p string) bool {
 }
 
 // NewExportPDFTool typesets a Markdown file as a PDF beside it (or at
-// output), through the same checks, approval and checkpoint as
-// create_file. pageSize is a [pdf] page_size setting.
+// output), or Markdown given directly as a PDF at output, so a PDF of
+// something that isn't a file (a summary of the conversation) leaves no
+// Markdown file behind. It goes through the same checks, approval and
+// checkpoint as create_file. pageSize is a [pdf] page_size setting.
 func NewExportPDFTool(ws *Workspace, hooks *Hooks, pageSize string) (tool.Tool, error) {
 	return functiontool.New(
 		functiontool.Config{
 			Name: "export_pdf",
-			Description: "Export a Markdown file as a PDF to print or share: headings (with an outline), lists, tables, highlighted code and the images it links in the workspace. " +
+			Description: "Make a PDF to print or share from Markdown: headings (with an outline), lists, tables, highlighted code and the images it links in the workspace. " +
+				"Give path to export an existing Markdown file, or markdown (with output) for a PDF of anything else, such as a summary of the conversation: then don't write a Markdown file first, only the PDF is wanted. " +
 				"Raw HTML isn't drawn and Mermaid diagrams print as their code.",
 		},
 		func(ctx agent.Context, input ExportPDFInput) (ExportPDFOutput, error) {
 			fail := func(msg string) (ExportPDFOutput, error) {
 				return ExportPDFOutput{Path: input.Path, Error: msg}, nil
 			}
-			src, err := ws.Rel(input.Path)
-			if err != nil {
-				return fail(err.Error())
+			var src string // the Markdown file, "" for markdown given
+			switch {
+			case input.Path != "" && input.Markdown != "":
+				return fail("give path or markdown, not both")
+			case input.Path == "" && input.Markdown == "":
+				return fail("give path (a Markdown file) or markdown")
+			case input.Markdown != "" && input.Output == "":
+				return fail("output is needed with markdown: where to write the PDF")
 			}
-			if !isMarkdownPath(src) {
-				return fail("export_pdf takes a Markdown file (.md or .markdown)")
+			if input.Path != "" {
+				var err error
+				if src, err = ws.Rel(input.Path); err != nil {
+					return fail(err.Error())
+				}
+				if !isMarkdownPath(src) {
+					return fail("export_pdf takes a Markdown file (.md or .markdown)")
+				}
 			}
 			out := ExportPDFOutputPath(input.Path, input.Output)
 			if !strings.EqualFold(path.Ext(out), ".pdf") {
@@ -93,14 +109,18 @@ func NewExportPDFTool(ws *Workspace, hooks *Hooks, pageSize string) (tool.Tool, 
 			if err != nil {
 				return fail(err.Error())
 			}
-			data, err := ws.ReadFile(src)
-			if err != nil {
-				return fail(fmt.Sprintf("failed to read %s: %v", input.Path, err))
+			data := []byte(input.Markdown)
+			if src != "" {
+				if data, err = ws.ReadFile(src); err != nil {
+					return fail(fmt.Sprintf("failed to read %s: %v", input.Path, err))
+				}
 			}
 			if err := mdpdf.CheckText(data); err != nil {
-				return fail(fmt.Sprintf("%s: %v", input.Path, err))
+				return fail(fmt.Sprintf("%s: %v", cmp.Or(input.Path, "markdown"), err))
 			}
-			dir := path.Dir(src)
+			// Images are relative to the Markdown file, or to the PDF for
+			// markdown given.
+			dir := path.Dir(cmp.Or(src, rel))
 			res, err := mdpdf.Render(data, mdpdf.Options{
 				PageSize: mdpdf.PageSizeFor(pageSize),
 				// Images are read as the file tools read: inside the
@@ -114,7 +134,7 @@ func NewExportPDFTool(ws *Workspace, hooks *Hooks, pageSize string) (tool.Tool, 
 				},
 			})
 			if err != nil {
-				return fail(fmt.Sprintf("failed to typeset %s: %v", input.Path, err))
+				return fail(fmt.Sprintf("failed to typeset %s: %v", cmp.Or(input.Path, "the markdown"), err))
 			}
 
 			unlock, err := ws.lockPaths(ctx, rel)
@@ -131,7 +151,11 @@ func NewExportPDFTool(ws *Workspace, hooks *Hooks, pageSize string) (tool.Tool, 
 				}
 				verb = "Overwrite"
 			}
-			detail := fmt.Sprintf("%s %s from %s (%d pages, %s)", verb, rel, src, res.Pages, humanSize(len(res.PDF)))
+			from := ""
+			if src != "" {
+				from = " from " + src
+			}
+			detail := fmt.Sprintf("%s %s%s (%d pages, %s)", verb, rel, from, res.Pages, humanSize(len(res.PDF)))
 			if err := hooks.Approve(ctx, writeApproval(ws, "export_pdf", detail, "", rel)); err != nil {
 				return fail(err.Error())
 			}

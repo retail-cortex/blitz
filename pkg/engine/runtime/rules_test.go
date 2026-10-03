@@ -98,6 +98,7 @@ func TestToolPaths(t *testing.T) {
 		{"export_pdf", map[string]any{"path": "notes/w1.md"}, []string{"notes/w1.md", "notes/w1.pdf"}},
 		{"export_pdf", map[string]any{"path": "w1.md", "output": "out/w1.pdf"}, []string{"w1.md", "out/w1.pdf"}},
 		{"generate_audio", map[string]any{"text_path": "s.md", "path": "audio/o.wav"}, []string{"s.md", "audio/o.wav"}},
+		{"export_pdf", map[string]any{"markdown": "# x", "output": "summary.pdf"}, []string{"summary.pdf"}},
 		{"list_files", map[string]any{"path": "."}, nil},
 	}
 	for _, tc := range tests {

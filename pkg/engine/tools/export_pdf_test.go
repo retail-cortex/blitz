@@ -18,8 +18,10 @@ import (
 	"bytes"
 	"image"
 	"image/png"
+	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/retail-cortex/blitz/pkg/api"
@@ -67,6 +69,12 @@ func TestExportPDF(t *testing.T) {
 		{name: "overwrite", files: map[string]string{"a.md": "x", "a.pdf": "old"},
 			args: map[string]any{"path": "a.md", "overwrite": true}, wantOut: "a.pdf"},
 		{name: "a file outside the workspace", args: map[string]any{"path": "../a.md"}, wantErr: "outside"},
+		{name: "markdown given, no file left behind", args: map[string]any{"markdown": "# Summary\n\nWe fixed it.", "output": "summary.pdf"}, wantOut: "summary.pdf"},
+		{name: "markdown given, images beside the PDF", files: map[string]string{"out/c.png": "PNG"},
+			args: map[string]any{"markdown": "![chart](c.png)", "output": "out/s.pdf"}, wantOut: "out/s.pdf", images: 1},
+		{name: "markdown without output", args: map[string]any{"markdown": "x"}, wantErr: "output is needed"},
+		{name: "path and markdown", files: map[string]string{"a.md": "x"}, args: map[string]any{"path": "a.md", "markdown": "y", "output": "b.pdf"}, wantErr: "not both"},
+		{name: "neither", args: map[string]any{"output": "b.pdf"}, wantErr: "give path"},
 		{name: "outside the workspace", files: map[string]string{"a.md": "x"},
 			args: map[string]any{"path": "a.md", "output": "../a.pdf"}, wantErr: "outside"},
 	}
@@ -99,6 +107,16 @@ func TestExportPDF(t *testing.T) {
 			assert.EqualValues(t, len(data), out["bytes"])
 			assert.EqualValues(t, 1, out["pages"])
 			assert.Equal(t, tc.images, bytes.Count(data, []byte("/Subtype /Image")))
+			if _, given := tc.args["markdown"]; given {
+				var mds []string
+				filepath.WalkDir(dir, func(p string, d fs.DirEntry, _ error) error {
+					if strings.HasSuffix(p, ".md") {
+						mds = append(mds, p)
+					}
+					return nil
+				})
+				assert.Empty(t, mds, "only the PDF is written")
+			}
 		})
 	}
 }
@@ -138,6 +156,8 @@ func TestExportPDFOutputPath(t *testing.T) {
 		{"a.markdown", "", "a.pdf"},
 		{"a.md", "x/b.pdf", "x/b.pdf"},
 		{"README", "", "README.pdf"},
+		{"", "s.pdf", "s.pdf"},
+		{"", "", ""},
 	}
 	for _, tc := range tests {
 		t.Run(tc.path, func(t *testing.T) {

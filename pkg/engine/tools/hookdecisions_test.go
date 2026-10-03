@@ -100,6 +100,7 @@ func TestHookIf(t *testing.T) {
 		{"write(audio/*)", "generate_audio", map[string]any{"text": "x", "path": "audio/o.wav"}, true},
 		{"read(*.md)", "generate_audio", map[string]any{"text_path": "s.md", "path": "o.wav"}, true},
 		{"write(*.md)", "export_pdf", map[string]any{"path": "notes.md"}, false},
+		{"write(*.pdf)", "export_pdf", map[string]any{"markdown": "# x", "output": "summary.pdf"}, true},
 		{"read(*.env)", "grep", map[string]any{"path": "prod.env"}, true},
 		{"web(*.example.com)", "web_fetch", map[string]any{"url": "https://api.example.com/v1"}, true},
 		{"web(*.example.com)", "browser", map[string]any{"action": "read"}, false},

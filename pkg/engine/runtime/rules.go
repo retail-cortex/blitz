@@ -101,10 +101,13 @@ func toolPaths(workspace, tool string, args map[string]any) []string {
 				raw = append(raw, p)
 			}
 		}
-	case "export_pdf":
-		if p, ok := args["path"].(string); ok && p != "" {
-			out, _ := args["output"].(string)
-			raw = append(raw, p, tools.ExportPDFOutputPath(p, out))
+	case "export_pdf": // path, or markdown given
+		p, _ := args["path"].(string)
+		out, _ := args["output"].(string)
+		for _, f := range []string{p, tools.ExportPDFOutputPath(p, out)} {
+			if f != "" {
+				raw = append(raw, f)
+			}
 		}
 	case "apply_patch":
 		patch, _ := args["patch"].(string)

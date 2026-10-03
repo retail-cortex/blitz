@@ -49,7 +49,7 @@ func callTargets(tool string, args map[string]any) map[string][]string {
 	case "generate_audio":
 		add(RuleRead, str("text_path"))
 		add(RuleWrite, str("path"))
-	case "export_pdf":
+	case "export_pdf": // path, or markdown given
 		add(RuleRead, str("path"))
 		add(RuleWrite, ExportPDFOutputPath(str("path"), str("output")))
 	case "delete_file":
