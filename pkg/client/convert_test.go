@@ -15,7 +15,11 @@
 package client
 
 import (
+	"context"
+	"errors"
 	"testing"
+
+	"connectrpc.com/connect"
 
 	"github.com/retail-cortex/blitz/pkg/api"
 	pb "github.com/retail-cortex/blitz/proto/blitz/v1"
@@ -63,6 +67,13 @@ func TestErrorsFromTheService(t *testing.T) {
 		"OUTPUT_LIMIT": func(t *testing.T, err error) {
 			assert.ErrorIs(t, err, api.ErrOutputLimit)
 		},
+		"NO_EMBEDDINGS": func(t *testing.T, err error) {
+			assert.ErrorIs(t, err, api.ErrNoEmbeddings)
+		},
+		"APPROVALS_STILL_SAVED": func(t *testing.T, err error) {
+			assert.ErrorIs(t, err, api.ErrApprovalsStillSaved)
+			assert.EqualError(t, err, "the message")
+		},
 		"SANDBOX_UNAVAILABLE": func(t *testing.T, err error) {
 			assert.ErrorIs(t, err, api.ErrSandboxUnavailable)
 		},
@@ -80,6 +91,28 @@ func TestErrorsFromTheService(t *testing.T) {
 		})
 	}
 	assert.NoError(t, errorFromInfo(nil))
+}
+
+// A cancelled or timed-out call keeps its context error, so the CLI
+// exits as interrupted; other codes keep the service's message.
+func TestErrorsByCode(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		err  error
+		want error
+	}{
+		{"cancelled here", connect.NewError(connect.CodeCanceled, context.Canceled), context.Canceled},
+		{"cancelled by the service", connect.NewError(connect.CodeCanceled, errors.New("stopped")), context.Canceled},
+		{"out of time", connect.NewError(connect.CodeDeadlineExceeded, context.DeadlineExceeded), context.DeadlineExceeded},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.ErrorIs(t, fromAPI(tc.err), tc.want)
+		})
+	}
+	assert.EqualError(t, fromAPI(connect.NewError(connect.CodeInternal, errors.New("broke"))), "broke")
+	assert.NoError(t, fromAPI(nil))
+	plain := errors.New("not connect")
+	assert.Same(t, plain, fromAPI(plain))
 }
 
 // Messages the service leaves out convert to zero values, and every

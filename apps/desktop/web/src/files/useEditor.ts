@@ -48,6 +48,8 @@ export interface Target {
   path: string;
   line?: number;
   column?: number;
+  /** Words a search found at the line, to mark in the preview. */
+  find?: string[];
 }
 
 /**
@@ -65,7 +67,7 @@ export interface EditorModel {
   state: (path: string) => EditorState | undefined;
   keepState: (path: string, s: EditorState) => void;
   clearTarget: () => void;
-  open: (path: string, line?: number, column?: number) => void;
+  open: (path: string, line?: number, column?: number, find?: string[]) => void;
   activate: (path: string) => void;
   close: (path: string) => void;
   save: (path: string, overwrite?: boolean) => Promise<boolean>;
@@ -127,9 +129,9 @@ export function useEditor(dir: string): EditorModel {
   );
 
   const open = useCallback(
-    (path: string, line?: number, column?: number) => {
+    (path: string, line?: number, column?: number, find?: string[]) => {
       setActive(path);
-      setTarget(line ? { path, line, column } : null);
+      setTarget(line ? { path, line, column, find } : null);
       if (tabsRef.current.some((t) => t.path === path)) return;
       setTabs((ts) => [...ts, { path, name: nameOf(path), loading: true, version: "", size: 0, binary: false, tooLarge: false, agentRule: "", dirty: false }]);
       void load(path);

@@ -27,6 +27,7 @@ import (
 
 	"github.com/retail-cortex/blitz/apps/service/internal/daemon"
 	"github.com/retail-cortex/blitz/pkg/legal"
+	"github.com/retail-cortex/blitz/pkg/pdftext"
 	"github.com/retail-cortex/blitz/pkg/socket"
 	"github.com/spf13/cobra"
 )
@@ -42,6 +43,9 @@ const (
 )
 
 func main() {
+	// A PDF's text is read in a child: this program, run again.
+	pdftext.MaybeServe()
+	pdftext.UseHelper()
 	os.Exit(run(context.Background(), os.Args[1:]))
 }
 

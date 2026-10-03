@@ -295,6 +295,8 @@ message UndoWorkerRunRequest {
 // Response message for WorkerService.UndoWorkerRun.
 message UndoWorkerRunResponse {
   repeated string restored = 1;
+  // Why the rest wasn't restored, after a partial restore.
+  ErrorInfo error = 2;
 }
 
 // Request message for WorkerService.RunWorker.

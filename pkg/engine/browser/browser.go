@@ -54,7 +54,7 @@ type Options struct {
 	Timeout time.Duration
 }
 
-// ErrNoBrowser: no Chromium-family browser was found.
+// ErrNoBrowser means no Chromium-family browser was found.
 var ErrNoBrowser = errors.New("no Chrome, Chromium, Edge or Brave found: install one or set browser.path")
 
 // Find is the browser to run: path when set, else the first one installed.
@@ -393,7 +393,11 @@ func (b *Browser) decideNavigation(id, frame, raw string) {
 		}
 	}
 	if err != nil {
-		b.noteRefused(u.Hostname(), err)
+		host := raw // unparsable: u is nil
+		if u != nil {
+			host = u.Hostname()
+		}
+		b.noteRefused(host, err)
 		b.conn.call(ctx, "Fetch.failRequest", map[string]any{"requestId": id, "errorReason": "BlockedByClient"}, nil)
 		return
 	}

@@ -108,3 +108,23 @@ func TestFileSinkCantOpen(t *testing.T) {
 	_, err = s.Write([]byte("after close\n"))
 	assert.NoError(t, err, "writes after close are ignored")
 }
+
+// A file that fails (a full disk) is opened again for the next line, and
+// the lost one is counted.
+func TestFileSinkRecoversFromWriteError(t *testing.T) {
+	dir := t.TempDir()
+	s := &fileSink{dir: dir, now: time.Now}
+	require.True(t, s.write([]byte("{\"n\":1}\n")))
+	s.flush()
+	require.NoError(t, s.f.Close()) // fails underneath the buffer
+	assert.False(t, s.write(make([]byte, 64*1024)), "a line larger than the buffer is written through and fails")
+	assert.Equal(t, int64(1), s.dropped.Load())
+	require.True(t, s.write([]byte("{\"n\":2}\n")), "the file is opened again")
+	s.reportDropped()
+	s.closeFile()
+
+	lines := readLines(t, dir)
+	require.Len(t, lines, 3)
+	assert.Equal(t, float64(2), lines[1]["n"])
+	assert.Equal(t, float64(1), lines[2]["count"])
+}

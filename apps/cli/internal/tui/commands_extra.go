@@ -397,10 +397,24 @@ func cmdHooks(app *App) {
 	fmt.Println()
 }
 
+// printRevoked says how many approvals went and, in red, which stay
+// saved (back at the next start) or why none could be revoked.
+func printRevoked(n int, err error) {
+	switch {
+	case err == nil:
+		fmt.Printf("%s✓ %s%s\n", Green, i18n.N("approvals.revoked", n), Reset)
+	case errors.Is(err, api.ErrApprovalsStillSaved):
+		fmt.Printf("%s✓ %s%s\n", Green, i18n.N("approvals.revoked", n), Reset)
+		fmt.Printf("%s✗ %s%s\n", Red, i18n.T("approvals.still_saved", "error", safe(err.Error())), Reset)
+	default:
+		fmt.Printf("%s✗ %s%s\n", Red, i18n.T("approvals.failed", "error", safe(err.Error())), Reset)
+	}
+}
+
 func cmdApprovals(args []string, app *App) {
 	list := app.Workspace.ListApprovals()
 	if len(args) >= 1 && args[0] == "clear" {
-		fmt.Printf("%s✓ %s%s\n", Green, i18n.N("approvals.revoked", app.Workspace.ClearApprovals()), Reset)
+		printRevoked(app.Workspace.ClearApprovals())
 		return
 	}
 	if len(args) >= 1 && args[0] == "revoke" {
@@ -409,7 +423,7 @@ func cmdApprovals(args []string, app *App) {
 			fmt.Println(i18n.T("approvals.revoke_usage"))
 			return
 		}
-		fmt.Printf("%s✓ %s%s\n", Green, i18n.N("approvals.revoked", app.Workspace.RevokeApprovals(list[n-1].Key)), Reset)
+		printRevoked(app.Workspace.RevokeApprovals(list[n-1].Key))
 		return
 	}
 

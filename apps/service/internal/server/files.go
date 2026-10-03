@@ -41,6 +41,10 @@ func fileError(err error) error {
 		return apiError(connect.CodeAlreadyExists, "FILE_EXISTS", err)
 	case errors.Is(err, engine.ErrNoPreview):
 		return apiError(connect.CodeInvalidArgument, "NO_PREVIEW", err)
+	case errors.Is(err, engine.ErrNotTable):
+		return apiError(connect.CodeInvalidArgument, "NOT_A_TABLE", err)
+	case errors.Is(err, engine.ErrBadTableFilter):
+		return apiError(connect.CodeInvalidArgument, "BAD_FILTER", err)
 	case errors.Is(err, engine.ErrNotARepository):
 		return apiError(connect.CodeFailedPrecondition, "NOT_A_REPOSITORY", err)
 	}
@@ -185,6 +189,29 @@ func (h fileService) FindFiles(ctx context.Context, r req[pb.FindFilesRequest]) 
 		return nil, fileError(err)
 	}
 	return ok(&pb.FindFilesResponse{Paths: paths})
+}
+
+func (h fileService) ReadTable(ctx context.Context, r req[pb.ReadTableRequest]) (*connect.Response[pb.ReadTableResponse], error) {
+	w, err := h.s.workspace(ctx, r.Msg.Workspace)
+	if err != nil {
+		return nil, err
+	}
+	q := engine.TableQuery{Path: r.Msg.Path, Search: r.Msg.Search, SortColumn: int(r.Msg.SortColumn), Desc: r.Msg.Descending, Offset: int(r.Msg.Offset), Limit: int(r.Msg.Limit), Filters: map[int]string{}}
+	for _, f := range r.Msg.Filters {
+		q.Filters[int(f.Column)] = f.Expr
+	}
+	page, err := w.ReadTable(ctx, q)
+	if err != nil {
+		return nil, fileError(err)
+	}
+	out := &pb.ReadTableResponse{Matched: int32(page.Matched), Total: int32(page.Total), Sorted: page.Sorted, Latin1: page.Latin1}
+	for _, c := range page.Columns {
+		out.Columns = append(out.Columns, &pb.TableColumn{Name: c.Name, Kind: c.Kind, Empty: int32(c.Empty), Min: c.Min, Max: c.Max, Intent: c.Intent})
+	}
+	for _, row := range page.Rows {
+		out.Rows = append(out.Rows, &pb.TableRow{Number: int32(row.Number), Cells: row.Cells})
+	}
+	return ok(out)
 }
 
 func (h fileService) StatFiles(ctx context.Context, r req[pb.StatFilesRequest]) (*connect.Response[pb.StatFilesResponse], error) {

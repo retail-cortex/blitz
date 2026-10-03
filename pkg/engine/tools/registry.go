@@ -76,6 +76,9 @@ type Registry struct {
 
 	notesMu sync.Mutex
 	notes   NoteSaver // nil: notes off
+	// workspaceSearch searches the workspace (nil: search off); notesMu
+	// guards it.
+	workspaceSearch Searcher
 }
 
 // Rules are the permission rules in force; they can change while a
@@ -383,6 +386,9 @@ func NewRegistry(cfg *config.Config, agentReg *agents.Registry, skillProv *skill
 			r.Close()
 			return nil, fmt.Errorf("failed to create the lsp tool: %w", err)
 		}
+	}
+	if r.tools["search_workspace"], err = NewSearchWorkspaceTool(r); err != nil {
+		return nil, fmt.Errorf("failed to create the search_workspace tool: %w", err)
 	}
 	r.tools["remember"], err = NewRememberTool(r)
 	if err != nil {

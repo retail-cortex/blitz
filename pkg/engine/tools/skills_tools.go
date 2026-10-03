@@ -98,8 +98,8 @@ type ActivateSkillOutput struct {
 	// Assets are the skill's declared resources (Castor's): what each is,
 	// where it lives, and text it was turned into.
 	Assets []SkillAsset `json:"assets,omitempty"`
-	// WritesWorkspace: the scripts change the workspace's files, in a copy;
-	// the user approves what they changed before it's kept.
+	// WritesWorkspace means the scripts change the workspace's files, in a
+	// copy; the user approves what they changed before it's kept.
 	WritesWorkspace bool   `json:"writes_workspace,omitempty"`
 	Error           string `json:"error,omitempty"`
 }

@@ -44,6 +44,7 @@ func (w *Workspace) turnEnded(session string) {
 	if w.inTurn[session]--; w.inTurn[session] <= 0 {
 		delete(w.inTurn, session)
 	}
+	w.kickSearch() // what the turn changed, for search
 }
 
 // Busy reports whether a turn is running in any of the workspace's

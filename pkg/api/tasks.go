@@ -67,7 +67,8 @@ const (
 	TaskStopped = "stopped"
 )
 
-// ErrUnknownTask: no task with that ID was started in the sessions asking.
+// ErrUnknownTask means no task with that ID was started in the sessions
+// asking.
 var ErrUnknownTask = errors.New("no such task")
 
 // TaskRequest is a background task's approval request or question,
@@ -82,7 +83,7 @@ type TaskRequest struct {
 	Approval *ApprovalRequest
 	Question string
 	Options  []string
-	// MultiSelect: several options may be chosen (one per line).
+	// MultiSelect means several options may be chosen (one per line).
 	MultiSelect bool
 }
 
@@ -99,7 +100,7 @@ type SessionEvent struct {
 	Resolved string
 }
 
-// ErrUnknownRequest: no request with that ID is waiting.
+// ErrUnknownRequest means no request with that ID is waiting.
 var ErrUnknownRequest = errors.New("no such request is waiting")
 
 // ErrNoNote is returned by ForgetNote when no note has the name.

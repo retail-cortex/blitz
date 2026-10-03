@@ -105,5 +105,5 @@ type BackgroundRun struct {
 // Active reports whether the run hasn't ended.
 func (r BackgroundRun) Active() bool { return r.State == "running" || r.State == "waiting" }
 
-// ErrUnknownRun: the service has no background run with that ID.
+// ErrUnknownRun means the service has no background run with that ID.
 var ErrUnknownRun = errors.New("no such background run")

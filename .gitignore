@@ -1,15 +1,73 @@
-# A developer's own environment (direnv) and editor swap files.
+# A developer's own environment (direnv, dotenv) and Claude Code settings.
 .envrc
-*.swp
-*.swo
+.env
+.env.*
+.claude/settings.local.json
 
 # Bazel's links to its outputs, and a developer's own Bazel settings.
 /bazel-*
 /user.bazelrc
 
+# Editors and IDEs: JetBrains (GoLand, WebStorm), VS Code, Zed, Sublime
+# Text, Vim and Emacs.
+/.idea/
+*.iml
+.vscode/
+*.code-workspace
+.zed/
+*.sublime-project
+*.sublime-workspace
+*.swp
+*.swo
+*~
+\#*\#
+.\#*
+
+# The IDEs' Bazel plugins (Build Server Protocol) and their Bazel output.
+/.bazelbsp/
+/.bsp/
+/.ijwb/
+/.aswb/
+
+# Operating systems: macOS, Windows and Linux.
+.DS_Store
+._*
+.AppleDouble
+.LSOverride
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+.directory
+.Trash-*
+.nfs*
+
+# Go, when run outside Bazel: test binaries, profiles, coverage and a
+# developer's own workspace.
+*.test
+*.prof
+*.pprof
+coverage.out
+go.work
+go.work.sum
+
+# C and Objective-C (the desktop app's cgo), when built by hand.
+*.o
+*.a
+*.dSYM/
+
 # node_modules that pnpm makes when run on the page directly; Bazel keeps
-# its own (and .bazelignore hides this one from it).
+# its own (and .bazelignore hides this one from it). TypeScript's
+# incremental build info and the package managers' logs, likewise.
 node_modules/
+*.tsbuildinfo
+npm-debug.log*
+pnpm-debug.log*
+
+# What hugo server and hugo build leave in the docs site.
+/docs/public/
+/docs/resources/_gen/
+.hugo_build.lock
 
 # The coverage summary tools/coverage.sh writes for the docs site; CI
 # makes its own.

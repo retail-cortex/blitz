@@ -36,7 +36,7 @@ type Server struct {
 	Extensions []string // with the dot: .go
 }
 
-// ErrNoServer: no language server is configured for the file.
+// ErrNoServer means no language server is configured for the file.
 var ErrNoServer = errors.New("no language server for this kind of file")
 
 // Manager starts language servers as files need them, one per language,
@@ -46,15 +46,40 @@ type Manager struct {
 	launch  Launcher
 	servers []Server
 
+	// life ends the servers' starts when the manager closes.
+	life    context.Context
+	end     context.CancelFunc
 	mu      sync.Mutex
-	running map[string]*server // by language
-	failed  map[string]error   // why a language's server couldn't start
+	running map[string]*server   // by language
+	start   map[string]*starting // starts under way, by language
+	failed  map[string]failure   // why a language's server couldn't start
 	closed  bool
 }
 
+// starting is a server's start, which every caller for its language waits
+// on: s or err once done is closed.
+type starting struct {
+	done chan struct{}
+	s    *server
+	err  error
+}
+
+// failure is a start that failed, and when: it's tried again after
+// failedRetry.
+type failure struct {
+	err error
+	at  time.Time
+}
+
+// failedRetry is how long a server that couldn't start isn't tried again
+// (a fixed install or a flaky start recovers without reopening).
+var failedRetry = time.Minute
+
 // NewManager is a manager for the workspace root.
 func NewManager(root string, servers []Server, launch Launcher) *Manager {
-	return &Manager{root: root, launch: launch, servers: servers, running: map[string]*server{}, failed: map[string]error{}}
+	life, end := context.WithCancel(context.Background())
+	return &Manager{root: root, launch: launch, servers: servers, life: life, end: end,
+		running: map[string]*server{}, start: map[string]*starting{}, failed: map[string]failure{}}
 }
 
 type server struct {
@@ -76,7 +101,9 @@ type publishedDiags struct {
 // startTimeout bounds starting a server (initialize).
 const startTimeout = 60 * time.Second
 
-// For finds the server for path, starting it if need be.
+// For finds the server for path, starting it if need be. A start runs on
+// its own (startTimeout, or until Close), not on ctx: callers wait for it,
+// each giving up with its own ctx, and other languages go on meanwhile.
 func (m *Manager) For(ctx context.Context, path string) (*server, error) {
 	ext := strings.ToLower(filepath.Ext(path))
 	var cfg *Server
@@ -91,31 +118,66 @@ func (m *Manager) For(ctx context.Context, path string) (*server, error) {
 		return nil, fmt.Errorf("%w (%s)", ErrNoServer, ext)
 	}
 	m.mu.Lock()
-	defer m.mu.Unlock()
 	if m.closed {
+		m.mu.Unlock()
 		return nil, errClosed
 	}
 	if s := m.running[cfg.Language]; s != nil {
 		select {
 		case <-s.c.done: // it died: start again
 		default:
+			m.mu.Unlock()
 			return s, nil
 		}
 	}
-	if err := m.failed[cfg.Language]; err != nil {
-		return nil, err
+	if f, ok := m.failed[cfg.Language]; ok {
+		if time.Since(f.at) < failedRetry {
+			m.mu.Unlock()
+			return nil, f.err
+		}
+		delete(m.failed, cfg.Language)
 	}
-	s, err := m.start(ctx, *cfg)
-	if err != nil {
-		err = fmt.Errorf("starting the %s language server (%s): %w", cfg.Language, strings.Join(cfg.Command, " "), err)
-		m.failed[cfg.Language] = err
-		return nil, err
+	st := m.start[cfg.Language]
+	if st == nil {
+		st = &starting{done: make(chan struct{})}
+		m.start[cfg.Language] = st
+		go m.startFor(*cfg, st)
 	}
-	m.running[cfg.Language] = s
-	return s, nil
+	m.mu.Unlock()
+	select {
+	case <-st.done:
+		return st.s, st.err
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
 }
 
-func (m *Manager) start(ctx context.Context, cfg Server) (*server, error) {
+// startFor starts cfg's server for st and records how it went. A server
+// that started after Close is shut down at once.
+func (m *Manager) startFor(cfg Server, st *starting) {
+	s, err := m.startServer(m.life, cfg)
+	if err != nil {
+		err = fmt.Errorf("starting the %s language server (%s): %w", cfg.Language, strings.Join(cfg.Command, " "), err)
+	}
+	m.mu.Lock()
+	delete(m.start, cfg.Language)
+	switch {
+	case m.closed:
+		if s != nil {
+			defer s.shutdown()
+		}
+		s, err = nil, errClosed
+	case err != nil:
+		m.failed[cfg.Language] = failure{err: err, at: time.Now()}
+	default:
+		m.running[cfg.Language] = s
+	}
+	st.s, st.err = s, err
+	close(st.done)
+	m.mu.Unlock()
+}
+
+func (m *Manager) startServer(ctx context.Context, cfg Server) (*server, error) {
 	if len(cfg.Command) == 0 {
 		return nil, errors.New("no command")
 	}
@@ -500,23 +562,37 @@ func (m *Manager) Running(path string) bool {
 	return false
 }
 
-// Close shuts the servers down.
+// Close shuts the servers down, and ends the starts under way, waiting
+// for them.
 func (m *Manager) Close() {
 	m.mu.Lock()
 	servers := m.running
 	m.running = map[string]*server{}
 	m.closed = true
+	starts := make([]*starting, 0, len(m.start))
+	for _, st := range m.start {
+		starts = append(starts, st)
+	}
 	m.mu.Unlock()
+	m.end()
+	for _, st := range starts {
+		<-st.done
+	}
 	for _, s := range servers {
-		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-		s.c.call(ctx, "shutdown", nil, nil)
-		s.c.send("exit", nil)
-		cancel()
-		s.c.proc.Stop()
-		select {
-		case <-s.c.done:
-		case <-time.After(2 * time.Second):
-		}
+		s.shutdown()
+	}
+}
+
+// shutdown asks the server to exit, then stops its process.
+func (s *server) shutdown() {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	s.c.call(ctx, "shutdown", nil, nil)
+	s.c.send("exit", nil)
+	cancel()
+	s.c.proc.Stop()
+	select {
+	case <-s.c.done:
+	case <-time.After(2 * time.Second):
 	}
 }
 

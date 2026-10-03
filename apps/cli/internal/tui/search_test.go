@@ -90,7 +90,7 @@ func TestSearchWebHandsFiveReadableLinksToTheAgent(t *testing.T) {
 	}
 	out := captureStdout(t, func() { RunREPL(context.Background(), app) })
 
-	assert.Contains(t, out, "Usage: /search web <terms>", "usage:\n%s", out)
+	assert.Contains(t, out, "/search web <terms>", "usage:\n%s", out)
 	assert.Contains(t, out, "Searching searxng for golang errors", "results shown:\n%s", out)
 	assert.Contains(t, out, "5. Page /five", "results shown:\n%s", out)
 	assert.NotContains(t, out, "manual.pdf", "results shown:\n%s", out)

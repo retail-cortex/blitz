@@ -29,6 +29,6 @@ flowchart LR
     end
 ```
 
-A workspace (a project directory) has one owner at a time: the service, or one CLI running `--local`. When the service holds it, the terminal and the desktop app share its sessions, approvals and settings, and a session started in one can be continued in the other.
+A workspace (a folder opened in Blitz) has one owner at a time: the service, or one CLI running `--local`. When the service holds it, the terminal and the desktop app share its sessions, approvals and settings, and a session started in one can be continued in the other.
 
 The CLI and the service ship together in each [release archive](../getting-started/_index.md#install); the desktop app is its own package, and carries its own copies of both.

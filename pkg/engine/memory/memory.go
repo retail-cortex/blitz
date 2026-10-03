@@ -466,7 +466,9 @@ func Append(workspace, file, text string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	defer f.Close()
-	_, err = f.WriteString(prefix + "- " + text + "\n")
-	return path, err
+	if _, err := f.WriteString(prefix + "- " + text + "\n"); err != nil {
+		f.Close()
+		return path, err
+	}
+	return path, f.Close()
 }

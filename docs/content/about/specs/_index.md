@@ -44,5 +44,6 @@ Files are named `spec_<name>_NNN.md`, where `NNN` is the order of execution: eac
 | 032 | [background sub-agents](spec_background_agents_032.md) | `invoke_agent` in the background: tasks, their tools, results, the task view and approvals |
 | 033 | [plugins](spec_plugins_033.md) | Bundles of skills, commands, agents, hooks and MCP servers: installing, pinning by hash, marketplaces, importing Claude Code and Gemini CLI plugins |
 | 034 | [vscode](spec_vscode_034.md) | The VS Code extension: the desktop app's chat in a view, attached to the service through a local proxy, approvals in the diff view, the selection and files as context |
+| 035 | [search](spec_search_035.md) | Workspace search: an index of the files, PDFs and notebooks, chats and notes, kept up by scans, searched by words (FTS5, BM25) from the desktop app, the CLI and the agent |
 
 Background and history: [the roadmap](../roadmap.md), [where to pick up](../../development/next-steps.md), [development](../../development/_index.md).

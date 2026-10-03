@@ -66,6 +66,7 @@ go_library(
         "scriptbox_gvisor_linux.go",
         "scriptbox_gvisor_other.go",
         "scripthooks.go",
+        "search.go",
         "shell.go",
         "skillremote.go",
         "skills_tools.go",

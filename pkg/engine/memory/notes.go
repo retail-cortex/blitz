@@ -71,10 +71,11 @@ func NotesDir(workspace string) string {
 	return filepath.Join(config.ExpandHome("~/.blitz/memory"), name+"-"+hex.EncodeToString(sum[:4]))
 }
 
-// ErrUnknownKind: a note kind that isn't fact, preference or correction.
+// ErrUnknownKind means a note kind that isn't fact, preference or
+// correction.
 var ErrUnknownKind = errors.New("a note is a fact, a preference or a correction")
 
-// ErrNoNote: no note has the name (or several start with it).
+// ErrNoNote means no note has the name (or several start with it).
 var ErrNoNote = errors.New("no such note")
 
 // SaveNote keeps text as a note of kind in dir and returns it.
@@ -96,13 +97,39 @@ func SaveNote(dir, kind, text string) (Note, error) {
 	}
 	now := time.Now()
 	slug := regexp.MustCompile(`[^a-z0-9]+`).ReplaceAllString(strings.ToLower(firstWords(text, 6)), "-")
-	name := now.Format("20060102-150405") + "-" + strings.Trim(slug, "-")
-	path := filepath.Join(dir, name+".md")
+	base := now.Format("20060102-150405") + "-" + strings.Trim(slug, "-")
 	body := fmt.Sprintf("---\nkind: %s\nsaved: %s\n---\n%s\n", kind, now.Format(time.RFC3339), text)
-	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+	name, path, err := writeNewNote(dir, base, body)
+	if err != nil {
 		return Note{}, err
 	}
 	return Note{Name: name, Kind: kind, Text: text, Time: now, Path: path}, nil
+}
+
+// writeNewNote writes body to a note file named base, or base-2, base-3,
+// … when that's taken (another note with the same words that second),
+// and returns its name and path.
+func writeNewNote(dir, base, body string) (name, path string, err error) {
+	for n := 1; ; n++ {
+		name = base
+		if n > 1 {
+			name = fmt.Sprintf("%s-%d", base, n)
+		}
+		path = filepath.Join(dir, name+".md")
+		f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+		if errors.Is(err, os.ErrExist) {
+			continue
+		}
+		if err != nil {
+			return "", "", err
+		}
+		if _, err := f.WriteString(body); err != nil {
+			f.Close()
+			os.Remove(path)
+			return "", "", err
+		}
+		return name, path, f.Close()
+	}
 }
 
 // Notes are dir's notes, newest first.

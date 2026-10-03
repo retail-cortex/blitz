@@ -150,6 +150,7 @@ func TestStorageReadOnlyDirectory(t *testing.T) {
 
 	_, err = b.Move(rec.ID)
 	assert.Error(t, err, "the move can't be saved")
+	assert.Nil(t, b.Active(), "made active though not moved")
 	_, err = b.Load(orphan.ID)
 	assert.Error(t, err, "the adoption can't be saved")
 

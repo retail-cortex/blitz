@@ -65,8 +65,8 @@ type Prefs struct {
 	// Width is how wide the conversation runs: "full" (the default, the
 	// whole panel) or "readable" (a column of about 860 px).
 	Width string `json:"width"`
-	// TaskContinue: a background task that ends while nothing runs
-	// starts a turn about it.
+	// TaskContinue means a background task that ends while nothing runs starts
+	// a turn about it.
 	TaskContinue bool `json:"task_continue"`
 	// Advanced shows the advanced settings throughout the window; off (the
 	// default) it shows what a newcomer needs.
@@ -184,9 +184,11 @@ func (s *prefsStore) load() (Prefs, error) {
 		return defaults(), err
 	default:
 		if jerr := json.Unmarshal(data, &p); jerr != nil {
-			os.Rename(s.path, s.path+".damaged")
 			p = Prefs{}
 			err = fmt.Errorf("the desktop settings were unreadable and were set aside: %w", jerr)
+			if rerr := os.Rename(s.path, s.path+".damaged"); rerr != nil {
+				err = fmt.Errorf("the desktop settings were unreadable (%w) and couldn't be set aside: %w", jerr, rerr)
+			}
 		}
 	}
 	p.normalize()

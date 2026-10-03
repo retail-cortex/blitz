@@ -118,6 +118,27 @@ func TestSuggestions(t *testing.T) {
 	assert.Equal(t, []api.SuggestionKind{api.SuggestContinue}, kinds(w.Suggestions(ctx)), "ideas off")
 }
 
+// Reading the recent conversations for ideas leaves the open session alone.
+func TestSuggestionsKeepActiveSession(t *testing.T) {
+	w, _ := openTestWith(t, nil, text("answer"))
+	ctx := context.Background()
+	w.newModel = func(context.Context, *config.Config, string) (model.LLM, error) {
+		return runtime.NewMockLLM("ideas", text("[]")), nil
+	}
+	old, err := w.NewSession()
+	require.NoError(t, err)
+	_, err = w.Run(ctx, old.ID, api.Turn{Text: "fix the coupon rounding"}, func(api.Event) {})
+	require.NoError(t, err)
+	open, err := w.NewSession()
+	require.NoError(t, err)
+
+	require.True(t, w.Suggestions(ctx).Pending)
+	waitIdeas(t, w)
+	active, ok := w.ActiveSession()
+	require.True(t, ok)
+	assert.Equal(t, open.ID, active.ID)
+}
+
 // A failed attempt isn't repeated for the same conversations until an hour
 // has passed; the model is [suggestions] model, else the reviewer's.
 func TestSuggestionsFailure(t *testing.T) {
@@ -208,11 +229,11 @@ func TestTail(t *testing.T) {
 // /setup runs the setup agent, and what it wrote applies from the next
 // prompt without reloading by hand.
 func TestSetupCommandReloadsInstructions(t *testing.T) {
-	agentMD := toolCall("create_file", map[string]any{"path": ".agents/AGENT.md", "content": "Run tests with `make check`."})
-	claude := toolCall("create_file", map[string]any{"path": "CLAUDE.md", "content": "@.agents/AGENT.md\n"})
+	agentMD := toolCall("create_file", map[string]any{"path": ".agents/AGENTS.md", "content": "Run tests with `make check`."})
+	claude := toolCall("create_file", map[string]any{"path": "CLAUDE.md", "content": "@.agents/AGENTS.md\n"})
 	w, llm := openTestWith(t, func(c *config.Config) { c.Blitz.PermissionMode = "accept-edits" }, agentMD, claude, text("set up"), text("hi"))
 	ctx := context.Background()
-	assert.Contains(t, w.ListCommands(), api.CommandInfo{Name: "setup", Description: "Set up this workspace's agent harness: a git repository and .gitignore, .agents/AGENT.md, the instruction files that import it, skills and agents", ArgumentHint: "[what to focus on]", Source: "bundled"})
+	assert.Contains(t, w.ListCommands(), api.CommandInfo{Name: "setup", Description: "Set up this workspace's agent harness: a git repository and .gitignore, .agents/AGENTS.md, the instruction files that import it, skills and agents", ArgumentHint: "[what to focus on]", Source: "bundled"})
 	sess, err := w.NewSession()
 	require.NoError(t, err)
 	_, err = w.Run(ctx, sess.ID, api.Turn{Text: "/setup", Command: true}, func(api.Event) {})
@@ -234,7 +255,7 @@ func TestSetupCommandReloadsInstructions(t *testing.T) {
 	for _, p := range last.Config.SystemInstruction.Parts {
 		system.WriteString(p.Text)
 	}
-	assert.Contains(t, system.String(), "Run tests with `make check`.", "the imported AGENT.md is in the next prompt's instructions")
+	assert.Contains(t, system.String(), "Run tests with `make check`.", "the imported .agents/AGENTS.md is in the next prompt's instructions")
 	assert.Equal(t, 1, strings.Count(system.String(), "Run tests with"), "imported once")
 	assert.True(t, isSetup("/setup focus on tests"))
 	assert.False(t, isSetup("/setups"))

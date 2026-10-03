@@ -51,6 +51,10 @@ const (
 // doubleEscWindow is how soon a second Esc must follow the first.
 const doubleEscWindow = 600 * time.Millisecond
 
+// pollInterval is how often a read waiting for the terminal checks whether
+// it was cancelled.
+const pollInterval = 50 * time.Millisecond
+
 // escReader is the line editor's stdin. A read that returns just an Esc
 // byte is a keypress (a terminal sends escape sequences in one write), so it
 // becomes keyEsc. Handlers can also inject bytes, which are read before
@@ -58,20 +62,44 @@ const doubleEscWindow = 600 * time.Millisecond
 // bytes are the next input.
 type escReader struct {
 	in io.Reader
+	// ready waits up to a timeout for input, so a read can be cancelled
+	// without closing the editor; nil: reads block.
+	ready func(timeout time.Duration) (bool, error)
 
 	mu     sync.Mutex
 	inject []byte
+	// While cancelling, the editor gets one Ctrl+C at a time (armed) until
+	// the read ends: one more each time the last reached filterKey, so none
+	// is left over for the next read.
+	cancelling, armed bool
 }
 
 func (r *escReader) Read(p []byte) (int, error) {
-	r.mu.Lock()
-	if len(r.inject) > 0 {
-		n := copy(p, r.inject)
-		r.inject = r.inject[n:]
+	for {
+		r.mu.Lock()
+		if r.armed {
+			r.armed = false
+			r.mu.Unlock()
+			return copy(p, injectInterrupt), nil
+		}
+		if len(r.inject) > 0 {
+			n := copy(p, r.inject)
+			r.inject = r.inject[n:]
+			r.mu.Unlock()
+			return n, nil
+		}
 		r.mu.Unlock()
-		return n, nil
+		if r.ready == nil {
+			break
+		}
+		ok, err := r.ready(pollInterval)
+		if err != nil {
+			return 0, err
+		}
+		if ok {
+			break
+		}
 	}
-	r.mu.Unlock()
 	n, err := r.in.Read(p)
 	if n == 1 && p[0] == 0x1b && len(p) >= 3 {
 		n = copy(p, string(keyEsc))
@@ -83,6 +111,28 @@ func (r *escReader) push(s string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.inject = append(r.inject, s...)
+}
+
+// cancel makes the read in progress end with Ctrl+C.
+func (r *escReader) cancel() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.cancelling, r.armed = true, true
+}
+
+// interrupted notes that the editor got a Ctrl+C: while cancelling, the
+// next read gets another, in case that one only left search or completion.
+func (r *escReader) interrupted() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.armed = r.cancelling
+}
+
+// endCancel stops cancelling once the read has ended.
+func (r *escReader) endCancel() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.cancelling, r.armed = false, false
 }
 
 // PromptKeys are what REPL-only keys do at the main prompt.
@@ -127,6 +177,9 @@ type keyState struct {
 // filterKey handles the REPL's keys before the line editor sees them. It
 // runs on the reading goroutine; false drops the key.
 func (t *TerminalInput) filterKey(r rune) (rune, bool) {
+	if r == readline.CharInterrupt {
+		t.stdin.interrupted()
+	}
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	ks := t.ks

@@ -47,7 +47,7 @@ type proxy struct {
 	conns map[net.Conn]struct{}
 }
 
-// ErrBlockedAddress: the browser tried to reach an address that isn't
+// ErrBlockedAddress means the browser tried to reach an address that isn't
 // public.
 var ErrBlockedAddress = errors.New("not a public address")
 

@@ -34,6 +34,8 @@ describe("previewKind", () => {
     ["Makefile", null],
     ["v1.2/notes", null],
     [".md", "markdown"],
+    ["data/bottle.CSV", "table"],
+    ["scores.tsv", "table"],
   ])("%s", (path, want) => expect(previewKind(path)).toBe(want));
   it("images, PDFs and sound show only as previews", () => {
     expect([previewOnly("image"), previewOnly("pdf"), previewOnly("audio"), previewOnly("markdown"), previewOnly(null)]).toEqual([true, true, true, false, false]);
@@ -50,6 +52,9 @@ describe("defaultView", () => {
     ["pdfs only preview", "pdf", false, false, "preview"],
     ["sound only plays", "audio", false, false, "preview"],
     ["other files are source", null, false, false, "source"],
+    ["a table opens as a table", "table", false, false, "preview"],
+    ["a table at a line opens as a table, at that row", "table", true, false, "preview"],
+    ["an empty table opens its source", "table", false, true, "source"],
   ])("%s", (_name, kind, atLine, empty, want) => {
     expect(defaultView(kind, { atLine, empty })).toBe(want);
   });

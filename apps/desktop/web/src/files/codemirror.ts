@@ -21,7 +21,7 @@ import { autocompletion, closeBrackets, closeBracketsKeymap, completeAnyWord, co
 import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
 import { bracketMatching, foldGutter, foldKeymap, HighlightStyle, indentOnInput, indentUnit, LanguageDescription, syntaxHighlighting } from "@codemirror/language";
 import { languages } from "@codemirror/language-data";
-import { gotoLine, highlightSelectionMatches, searchKeymap } from "@codemirror/search";
+import { gotoLine, highlightSelectionMatches, search, searchKeymap } from "@codemirror/search";
 import { Compartment, EditorSelection, EditorState, type Extension } from "@codemirror/state";
 import {
   crosshairCursor,
@@ -37,6 +37,7 @@ import {
 } from "@codemirror/view";
 import { tags } from "@lezer/highlight";
 import { detectIndent } from "./indent";
+import { t } from "../i18n";
 
 // The conversation's code colours (app.css --hl-*), so both read alike.
 const highlightStyle = HighlightStyle.define([
@@ -68,11 +69,39 @@ const theme = EditorView.theme({
   ".cm-activeLineGutter": { backgroundColor: "transparent", color: "var(--md-on-surface)" },
   ".cm-selectionMatch": { backgroundColor: "color-mix(in srgb, var(--md-tertiary) 18%, transparent)" },
   ".cm-matchingBracket": { backgroundColor: "color-mix(in srgb, var(--md-primary) 18%, transparent)", outline: "none" },
-  ".cm-searchMatch": { backgroundColor: "color-mix(in srgb, var(--md-warning, #e8a33d) 35%, transparent)" },
+  ".cm-searchMatch": { backgroundColor: "var(--md-tertiary-container)", color: "var(--md-on-tertiary-container)" },
   ".cm-panels": { backgroundColor: "var(--md-surface-container)", color: "var(--md-on-surface)" },
   ".cm-panels.cm-panels-top": { borderBottom: "1px solid var(--md-outline-variant)" },
   ".cm-panels.cm-panels-bottom": { borderTop: "1px solid var(--md-outline-variant)" },
   ".cm-panel input, .cm-panel button": { font: "inherit" },
+  // Find (FIL-72), as the preview's find bar looks.
+  ".cm-panel.cm-search": { padding: "6px 30px 6px 14px", display: "flex", flexWrap: "wrap", alignItems: "center", gap: "6px" },
+  ".cm-panel.cm-search br": { flexBasis: "100%", height: 0 },
+  ".cm-panel.cm-search .cm-textfield": {
+    margin: 0,
+    width: "240px",
+    color: "var(--md-on-surface)",
+    backgroundColor: "var(--md-surface)",
+    border: "1px solid var(--md-outline-variant)",
+    borderRadius: "6px",
+    padding: "4px 8px",
+    outline: "none",
+  },
+  ".cm-panel.cm-search .cm-textfield:focus": { borderColor: "var(--md-primary)" },
+  ".cm-panel.cm-search .cm-button": {
+    margin: 0,
+    backgroundImage: "none",
+    backgroundColor: "transparent",
+    color: "var(--md-primary)",
+    border: "1px solid var(--md-outline-variant)",
+    borderRadius: "999px",
+    padding: "2px 12px",
+    fontSize: "12px",
+  },
+  ".cm-panel.cm-search .cm-button:hover": { backgroundColor: "color-mix(in srgb, var(--md-primary) 8%, transparent)" },
+  ".cm-panel.cm-search label": { display: "inline-flex", alignItems: "center", gap: "4px", fontSize: "12px", color: "var(--md-on-surface-variant)", margin: 0 },
+  ".cm-panel.cm-search [name=close]": { top: "8px", right: "10px", fontSize: "18px", color: "var(--md-on-surface-variant)" },
+  ".cm-searchMatch.cm-searchMatch-selected": { backgroundColor: "var(--md-tertiary)", color: "var(--md-on-tertiary)" },
   ".cm-tooltip": { backgroundColor: "var(--md-surface-container-high)", color: "var(--md-on-surface)", border: "1px solid var(--md-outline-variant)", borderRadius: "8px" },
   ".cm-tooltip-autocomplete > ul > li[aria-selected]": { backgroundColor: "var(--md-secondary-container)", color: "var(--md-on-secondary-container)" },
   ".cm-foldPlaceholder": { backgroundColor: "var(--md-surface-container-high)", border: "none", color: "var(--md-on-surface-variant)" },
@@ -129,6 +158,8 @@ export function fileState(text: string, lang: Extension, hooks: EditorHooks, wra
     crosshairCursor(),
     highlightActiveLine(),
     highlightSelectionMatches(),
+    search({ top: true }),
+    EditorState.phrases.of(findPhrases()),
     keymap.of([
       { key: "Mod-s", preventDefault: true, run: () => (hooks.save(), true) },
       { key: "Ctrl-g", run: gotoLine },
@@ -163,4 +194,21 @@ export function goToLine(view: EditorView, line: number, column = 1) {
   const pos = Math.min(l.from + Math.max(0, column - 1), l.to);
   view.dispatch({ selection: EditorSelection.cursor(pos), effects: EditorView.scrollIntoView(pos, { y: "center" }) });
   view.focus();
+}
+
+// CodeMirror's find panel's words, from the catalogs.
+function findPhrases(): Record<string, string> {
+  return {
+    Find: t("desktop.files.cm.find"),
+    Replace: t("desktop.files.cm.replace"),
+    next: t("desktop.files.cm.next"),
+    previous: t("desktop.files.cm.previous"),
+    all: t("desktop.files.cm.all"),
+    "match case": t("desktop.files.cm.match_case"),
+    regexp: t("desktop.files.cm.regexp"),
+    "by word": t("desktop.files.cm.by_word"),
+    replace: t("desktop.files.cm.replace_one"),
+    "replace all": t("desktop.files.cm.replace_all"),
+    close: t("desktop.files.cm.close"),
+  };
 }

@@ -178,6 +178,19 @@ func TestConfigServicePermissions(t *testing.T) {
 	}
 	got := sources()
 	assert.Equal(t, "workspace", got["shell(make)"])
+
+	// Rules left out at a reload are reported with the rules.
+	w, err := s.workspace(ctx, dir)
+	require.NoError(t, err)
+	broken := *w.Config()
+	broken.Permissions.Deny = []string{"shell(re:[)"}
+	require.Error(t, w.ReloadPermissions(&broken))
+	listed, err := c.workspaces.ListPermissionRules(ctx, connect.NewRequest(&pb.ListPermissionRulesRequest{Workspace: dir}))
+	require.NoError(t, err)
+	assert.Contains(t, listed.Msg.Problem, "re:[")
+	fixed := *w.Config()
+	fixed.Permissions.Deny = nil
+	require.NoError(t, w.ReloadPermissions(&fixed))
 	assert.Equal(t, "global", got["shell(git push)"])
 	assert.Equal(t, "built-in", got["shell(ls)"])
 
@@ -361,4 +374,40 @@ func TestListModelsOverTheAPI(t *testing.T) {
 
 	_, err = cc.ListModels(ctx, connect.NewRequest(&pb.ListModelsRequest{Workspace: "relative"}))
 	assert.Error(t, err, "a workspace must be absolute")
+}
+
+// A workspace's search settings, set through the config service, apply at
+// once: search off, then back on with other default sources; the status
+// shows the settings either way.
+func TestSearchSettingsApplyAtOnce(t *testing.T) {
+	c, s := serve(t, nil)
+	srv := httptest.NewServer(s.Handler())
+	defer srv.Close()
+	cfg := pb.NewConfigServiceClient(http.DefaultClient, srv.URL)
+	ctx := context.Background()
+	dir := t.TempDir()
+	status := func() *pb.SearchStatus {
+		res, err := c.workspaces.GetSearchStatus(ctx, connect.NewRequest(&pb.GetSearchStatusRequest{Workspace: dir}))
+		require.NoError(t, err)
+		return res.Msg.Status
+	}
+	require.True(t, status().Enabled)
+	assert.Equal(t, []string{"files", "documents"}, status().Settings.Sources)
+
+	_, err := cfg.SetConfigValue(ctx, connect.NewRequest(&pb.SetConfigValueRequest{Workspace: dir, Key: "search.enabled", Value: "false"}))
+	require.NoError(t, err)
+	st := status()
+	assert.False(t, st.Enabled, "off at once")
+	assert.False(t, st.Settings.Enabled)
+
+	_, err = cfg.SetConfigValue(ctx, connect.NewRequest(&pb.SetConfigValueRequest{Workspace: dir, Key: "search.enabled", Value: ""}))
+	require.NoError(t, err)
+	_, err = cfg.SetConfigValue(ctx, connect.NewRequest(&pb.SetConfigValueRequest{Workspace: dir, Key: "search.sources", Value: "notes,chats"}))
+	require.NoError(t, err)
+	st = status()
+	assert.True(t, st.Enabled, "on again")
+	assert.Equal(t, []string{"notes", "chats"}, st.Settings.Sources)
+
+	_, err = cfg.SetConfigValue(ctx, connect.NewRequest(&pb.SetConfigValueRequest{Workspace: dir, Key: "search.sources", Value: "email"}))
+	assert.Error(t, err, "not a source")
 }

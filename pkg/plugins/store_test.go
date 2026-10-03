@@ -17,6 +17,8 @@ package plugins
 import (
 	"archive/zip"
 	"context"
+	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -335,4 +337,99 @@ func TestMarketplaceSources(t *testing.T) {
 	require.NoError(t, os.RemoveAll(local))
 	_, _, err = store.FromMarketplace(ctx, "kit@local")
 	assert.ErrorContains(t, err, "marketplace local")
+}
+
+// swapIn puts the staged copy in place, and keeps the old one whole when
+// it can't.
+func TestSwapIn(t *testing.T) {
+	cases := map[string]struct {
+		old, staged bool
+		wantErr     bool
+		want        string
+	}{
+		"new":            {staged: true, want: "new"},
+		"replaces":       {old: true, staged: true, want: "new"},
+		"restores":       {old: true, wantErr: true, want: "old"},
+		"nothing at all": {wantErr: true},
+	}
+	for name, c := range cases {
+		t.Run(name, func(t *testing.T) {
+			dir := t.TempDir()
+			dst, staging := filepath.Join(dir, "p"), filepath.Join(dir, "p.new")
+			for path, on := range map[string]bool{dst: c.old, staging: c.staged} {
+				if on {
+					require.NoError(t, os.MkdirAll(path, 0o700))
+					content := "old"
+					if path == staging {
+						content = "new"
+					}
+					require.NoError(t, os.WriteFile(filepath.Join(path, "f"), []byte(content), 0o600))
+				}
+			}
+			err := swapIn(staging, dst)
+			if c.wantErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+			if c.want != "" {
+				b, err := os.ReadFile(filepath.Join(dst, "f"))
+				require.NoError(t, err)
+				assert.Equal(t, c.want, string(b))
+			}
+			assert.NoDirExists(t, dst+".old", "the old copy is gone or back in place")
+		})
+	}
+}
+
+// swapIn changes nothing when the old copy can't be moved aside, or a
+// stale one from before can't be cleared.
+func TestSwapInRefuses(t *testing.T) {
+	if os.Getuid() == 0 {
+		t.Skip("root ignores permissions")
+	}
+	cases := map[string]func(t *testing.T, dir, dst string){
+		"old copy can't move": func(t *testing.T, dir, _ string) {
+			require.NoError(t, os.Chmod(dir, 0o500))
+		},
+		"stale copy can't be cleared": func(t *testing.T, _, dst string) {
+			require.NoError(t, os.MkdirAll(dst+".old", 0o700))
+			require.NoError(t, os.WriteFile(filepath.Join(dst+".old", "f"), nil, 0o600))
+			require.NoError(t, os.Chmod(dst+".old", 0o500))
+		},
+	}
+	for name, setup := range cases {
+		t.Run(name, func(t *testing.T) {
+			dir := t.TempDir()
+			dst, staging := filepath.Join(dir, "p"), filepath.Join(dir, "p.new")
+			for path, content := range map[string]string{dst: "old", staging: "new"} {
+				require.NoError(t, os.MkdirAll(path, 0o700))
+				require.NoError(t, os.WriteFile(filepath.Join(path, "f"), []byte(content), 0o600))
+			}
+			setup(t, dir, dst)
+			t.Cleanup(func() { os.Chmod(dir, 0o700); os.Chmod(dst+".old", 0o700) })
+
+			assert.Error(t, swapIn(staging, dst))
+			b, err := os.ReadFile(filepath.Join(dst, "f"))
+			require.NoError(t, err)
+			assert.Equal(t, "old", string(b), "the installed copy is untouched")
+		})
+	}
+}
+
+// writeFile leaves the old file and no temporary behind when writing fails.
+func TestStoreWriteFile(t *testing.T) {
+	store := &Store{Dir: t.TempDir()}
+	require.NoError(t, store.saveMarkets([]Known{{Name: "a", URL: "https://a"}}))
+	err := store.writeFile(marketsFile, func(w io.Writer) error {
+		io.WriteString(w, "half")
+		return errors.New("disk full")
+	})
+	assert.Error(t, err)
+	list, err := store.Marketplaces()
+	require.NoError(t, err)
+	assert.Equal(t, []Known{{Name: "a", URL: "https://a"}}, list)
+	entries, err := os.ReadDir(store.Dir)
+	require.NoError(t, err)
+	assert.Len(t, entries, 1, "no temporary file left")
 }

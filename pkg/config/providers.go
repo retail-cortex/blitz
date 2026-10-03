@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"slices"
 	"sort"
@@ -143,7 +144,7 @@ const (
 type ProviderInfo struct {
 	Name      string
 	KeySource KeySource
-	// KeyMissing: the file names a stored secret that isn't there.
+	// KeyMissing means the file names a stored secret that isn't there.
 	KeyMissing bool
 	BaseURL    string
 	Model      string
@@ -291,11 +292,12 @@ func SetAPIKey(prefixDir, workspace, provider, key string) (string, error) {
 		return "", errors.New("the key is empty")
 	}
 	name := secretName(prefixDir, workspace, provider)
-	if err := secrets.Default(ConfigDir(prefixDir)).Set(name, key); err != nil {
+	undo, err := storeSecret(prefixDir, name, key)
+	if err != nil {
 		return "", err
 	}
 	ref := secrets.Ref(name)
-	return editConfigFile(scopeDir(prefixDir, workspace),
+	path, err := editConfigFile(scopeDir(prefixDir, workspace),
 		func(doc string) string { return setTOMLKey(doc, "llm."+provider, "api_key", strconv.Quote(ref)) },
 		func(check map[string]any) error {
 			if lookup(check, "llm", provider, "api_key") != ref {
@@ -303,6 +305,27 @@ func SetAPIKey(prefixDir, workspace, provider, key string) (string, error) {
 			}
 			return nil
 		})
+	if err != nil {
+		undo()
+	}
+	return path, err
+}
+
+// storeSecret stores value under name, and returns how to put back what
+// was there (or nothing) if the settings file can't then be written.
+func storeSecret(prefixDir, name, value string) (undo func(), err error) {
+	store := secrets.Default(ConfigDir(prefixDir))
+	old, getErr := store.Get(name)
+	if err := store.Set(name, value); err != nil {
+		return nil, err
+	}
+	return func() {
+		if getErr == nil {
+			store.Set(name, old)
+		} else if errors.Is(getErr, secrets.ErrNotFound) {
+			store.Delete(name)
+		}
+	}, nil
 }
 
 // SecureAPIKey moves a provider's key written in the scope's file (plain
@@ -341,12 +364,7 @@ func RemoveAPIKey(prefixDir, workspace, provider string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if name, ok := secrets.ParseRef(str(lookup(raw, "llm", provider, "api_key"))); ok {
-		if err := secrets.Default(ConfigDir(prefixDir)).Delete(name); err != nil {
-			return "", err
-		}
-	}
-	return editConfigFile(dir,
+	path, err := editConfigFile(dir,
 		func(doc string) string { return removeTOMLKey(doc, "llm."+provider, "api_key") },
 		func(check map[string]any) error {
 			if lookup(check, "llm", provider, "api_key") != nil {
@@ -354,6 +372,17 @@ func RemoveAPIKey(prefixDir, workspace, provider string) (string, error) {
 			}
 			return nil
 		})
+	if err != nil {
+		return "", err
+	}
+	// The file first: a secret left behind is harmless, a reference to
+	// one that's gone isn't.
+	if name, ok := secrets.ParseRef(str(lookup(raw, "llm", provider, "api_key"))); ok {
+		if err := secrets.Default(ConfigDir(prefixDir)).Delete(name); err != nil {
+			return path, err
+		}
+	}
+	return path, nil
 }
 
 // settableValues are the settings the forms change (SetValue); the rest is
@@ -384,15 +413,73 @@ var settableValues = map[string]bool{
 	"ui.notify":             true,
 	"ui.theme":              true,
 	"ui.editor":             true,
+	// Workspace search, from its panel in the desktop app.
+	"search.embedding_model": true,
+	"search.enrich_model":    true,
+}
+
+// typedValues are settings the form sets that aren't strings: by key,
+// "bool", "int" (0 or more) or "sources" (a comma-separated list of
+// search sources).
+var typedValues = map[string]string{
+	"search.enabled":            "bool",
+	"search.enrich":             "bool",
+	"search.enrich_daily_limit": "int",
+	"search.include_ignored":    "bool",
+	"search.sources":            "sources",
+}
+
+// SearchSourceNames are the sources workspace search knows.
+var SearchSourceNames = []string{"files", "documents", "chats", "notes"}
+
+// typedValue is value as TOML for a key of kind, and as the file then
+// reads back, or why it isn't one.
+func typedValue(kind, key, value string) (string, any, error) {
+	switch kind {
+	case "bool":
+		b, err := strconv.ParseBool(value)
+		if err != nil {
+			return "", nil, fmt.Errorf("%s is true or false, not %q", key, value)
+		}
+		return strconv.FormatBool(b), b, nil
+	case "int":
+		n, err := strconv.Atoi(value)
+		if err != nil || n < 0 {
+			return "", nil, fmt.Errorf("%s is a whole number, 0 or more, not %q", key, value)
+		}
+		return strconv.Itoa(n), int64(n), nil
+	case "sources":
+		var quoted []string
+		var back []any
+		for _, s := range strings.Split(value, ",") {
+			s = strings.TrimSpace(s)
+			if s == "" {
+				continue
+			}
+			if !slices.Contains(SearchSourceNames, s) {
+				return "", nil, fmt.Errorf("%q isn't a search source (%s)", s, strings.Join(SearchSourceNames, ", "))
+			}
+			quoted, back = append(quoted, strconv.Quote(s)), append(back, s)
+		}
+		if len(quoted) == 0 {
+			return "", nil, fmt.Errorf("%s needs at least one source", key)
+		}
+		return "[" + strings.Join(quoted, ", ") + "]", back, nil
+	}
+	return "", nil, fmt.Errorf("%s: unknown kind %q", key, kind)
 }
 
 // SetValue sets one of the form's settings in a scope (value "" removes it,
 // so a workspace follows the global setting again). It returns the file
 // written.
 func SetValue(prefixDir, workspace, key, value string) (string, error) {
-	if !settableValues[key] {
-		keys := make([]string, 0, len(settableValues))
+	kind := typedValues[key]
+	if !settableValues[key] && kind == "" {
+		keys := make([]string, 0, len(settableValues)+len(typedValues))
 		for k := range settableValues {
+			keys = append(keys, k)
+		}
+		for k := range typedValues {
 			keys = append(keys, k)
 		}
 		sort.Strings(keys)
@@ -406,6 +493,13 @@ func SetValue(prefixDir, workspace, key, value string) (string, error) {
 			return "", err
 		}
 	}
+	literal, want := strconv.Quote(value), any(value)
+	if kind != "" && value != "" {
+		var err error
+		if literal, want, err = typedValue(kind, key, value); err != nil {
+			return "", err
+		}
+	}
 	i := strings.LastIndex(key, ".")
 	table, name := key[:i], key[i+1:]
 	path := strings.Split(key, ".")
@@ -414,11 +508,11 @@ func SetValue(prefixDir, workspace, key, value string) (string, error) {
 			if value == "" {
 				return removeTOMLKey(doc, table, name)
 			}
-			return setTOMLKey(doc, table, name, strconv.Quote(value))
+			return setTOMLKey(doc, table, name, literal)
 		},
 		func(check map[string]any) error {
 			got := lookup(check, path...)
-			if (value == "" && got != nil) || (value != "" && got != value) {
+			if (value == "" && got != nil) || (value != "" && !reflect.DeepEqual(got, want)) {
 				return fmt.Errorf("could not set %s", key)
 			}
 			return nil
@@ -552,14 +646,20 @@ func SetProvider(prefixDir, workspace string, c ProviderChoice) (string, error) 
 		}
 		edits = append(edits, c.Auth.edits(c.Provider)...)
 	}
+	undo := func() {}
 	if c.Key != "" {
 		name := secretName(prefixDir, workspace, c.Provider)
-		if err := secrets.Default(ConfigDir(prefixDir)).Set(name, c.Key); err != nil {
+		var err error
+		if undo, err = storeSecret(prefixDir, name, c.Key); err != nil {
 			return "", err
 		}
 		edits = append(edits, settingEdit{"llm." + c.Provider, "api_key", secrets.Ref(name)})
 	}
-	return editSettings(prefixDir, workspace, edits)
+	path, err := editSettings(prefixDir, workspace, edits)
+	if err != nil {
+		undo()
+	}
+	return path, err
 }
 
 // ReadSettingsFile returns a scope's settings file and its text ("" when it

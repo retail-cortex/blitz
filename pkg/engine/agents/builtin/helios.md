@@ -12,6 +12,7 @@ tools:
   - view_document
   - view_media
   - grep
+  - search_workspace
   - create_file
   - replace_in_file
   - delete_snippet

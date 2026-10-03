@@ -18,6 +18,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -72,20 +73,11 @@ func (s *Store) Marketplaces() ([]Known, error) {
 }
 
 func (s *Store) saveMarkets(list []Known) error {
-	if err := os.MkdirAll(s.Dir, 0o700); err != nil {
-		return err
-	}
-	f, err := os.OpenFile(filepath.Join(s.Dir, marketsFile), os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
-	if err != nil {
-		return err
-	}
-	err = toml.NewEncoder(f).Encode(struct {
-		Marketplaces []Known `toml:"marketplaces"`
-	}{list})
-	if cerr := f.Close(); err == nil {
-		err = cerr
-	}
-	return err
+	return s.writeFile(marketsFile, func(w io.Writer) error {
+		return toml.NewEncoder(w).Encode(struct {
+			Marketplaces []Known `toml:"marketplaces"`
+		}{list})
+	})
 }
 
 // AddMarketplace fetches the index at url (a marketplace.toml over https,

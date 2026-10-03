@@ -23,6 +23,7 @@ go_library(
     deps = [
         "//apps/service/internal/daemon",
         "//pkg/legal",
+        "//pkg/pdftext",
         "//pkg/socket",
         "@com_github_spf13_cobra//:cobra",
     ],

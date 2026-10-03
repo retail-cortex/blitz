@@ -124,17 +124,48 @@ func TestExcludeWorktrees(t *testing.T) {
 	dir := repo(t)
 	exclude := filepath.Join(dir, ".git", "info", "exclude")
 	require.NoError(t, os.WriteFile(exclude, []byte("*.log"), 0o644))
-	excludeWorktrees(dir)
-	excludeWorktrees(dir)
+	require.NoError(t, excludeWorktrees(dir))
+	require.NoError(t, excludeWorktrees(dir))
 	data, err := os.ReadFile(exclude)
 	require.NoError(t, err)
 	assert.Equal(t, "*.log\n/.blitz/worktrees/\n", string(data))
 
-	// An exclude file that can't be written is left alone.
+	// An exclude file that can't be written is reported, and no worktree
+	// is made.
 	require.NoError(t, os.Remove(exclude))
 	require.NoError(t, os.Mkdir(exclude, 0o755))
-	excludeWorktrees(dir)
+	assert.Error(t, excludeWorktrees(dir))
 	assert.DirExists(t, exclude)
+	w, err := Create(dir, "z", "")
+	assert.ErrorContains(t, err, "keeping .blitz/worktrees out of git status")
+	assert.NoDirExists(t, filepath.Join(dir, Dir, "z"))
+	assert.Empty(t, w.Path)
+}
+
+// An exclude file that's missing and can't be made is reported.
+func TestExcludeWorktreesUnwritable(t *testing.T) {
+	if os.Getuid() == 0 {
+		t.Skip("root ignores permissions")
+	}
+	cases := map[string]func(gitDir string) string{
+		"no info folder, .git read-only": func(gitDir string) string {
+			require.NoError(t, os.RemoveAll(filepath.Join(gitDir, "info")))
+			return gitDir
+		},
+		"info folder read-only": func(gitDir string) string {
+			require.NoError(t, os.Remove(filepath.Join(gitDir, "info", "exclude")))
+			return filepath.Join(gitDir, "info")
+		},
+	}
+	for name, setup := range cases {
+		t.Run(name, func(t *testing.T) {
+			dir := repo(t)
+			locked := setup(filepath.Join(dir, ".git"))
+			require.NoError(t, os.Chmod(locked, 0o500))
+			t.Cleanup(func() { os.Chmod(locked, 0o755) })
+			assert.Error(t, excludeWorktrees(dir))
+		})
+	}
 }
 
 // copyIncluded copies regular files inside the repository only, and

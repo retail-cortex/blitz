@@ -13,6 +13,7 @@ tools:
   - view_document
   - view_media
   - grep
+  - search_workspace
   - lsp
   - ask_user_question
   - list_agents

@@ -124,8 +124,9 @@ func NewCheckpoints(ws *Workspace, maxBytes int64) *Checkpoints {
 }
 
 // OpenCheckpoints attaches a checkpoint store to ws, loading what an
-// earlier process persisted in o.Dir. A damaged index is set aside and the
-// store starts empty (the error says so).
+// earlier process persisted in o.Dir. When the index can't be loaded
+// (unreadable, from a newer Blitz, or damaged, which is set aside), the
+// store starts empty in memory and leaves o.Dir alone (the error says so).
 func OpenCheckpoints(ws *Workspace, o CheckpointOptions) (*Checkpoints, error) {
 	if o.MaxBytes <= 0 {
 		o.MaxBytes = 64 << 20
@@ -144,13 +145,18 @@ func OpenCheckpoints(ws *Workspace, o CheckpointOptions) (*Checkpoints, error) {
 	os.Chmod(o.Dir, 0o700)
 	c.blobs = diskBlobs(filepath.Join(o.Dir, "blobs"))
 	c.index = filepath.Join(o.Dir, "index.json")
-	err := c.load()
+	if err := c.load(); err != nil {
+		// Leave the store on disk as it is (its blobs, a newer index): this
+		// process's checkpoints last only as long as it does.
+		c.blobs, c.index = &memBlobs{m: map[string][]byte{}}, ""
+		return c, err
+	}
 	c.mu.Lock()
 	c.collect = true // blobs a crash left without an index entry
 	c.trimLocked()
 	c.saveLocked()
 	c.mu.Unlock()
-	return c, err
+	return c, nil
 }
 
 // checkpointIndex is the persisted form of a store.
@@ -169,9 +175,12 @@ func (c *Checkpoints) load() error {
 		return fmt.Errorf("checkpoints: %w", err)
 	}
 	var idx checkpointIndex
-	if err := json.Unmarshal(data, &idx); err != nil || idx.Version != 1 {
+	if err := json.Unmarshal(data, &idx); err != nil || idx.Version < 1 {
 		os.Rename(c.index, c.index+".damaged")
 		return fmt.Errorf("checkpoints: unreadable index set aside (%v)", err)
+	}
+	if idx.Version > 1 {
+		return fmt.Errorf("checkpoints: index version %d is newer than this Blitz reads", idx.Version)
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -410,10 +419,10 @@ func (c *Checkpoints) Undo(force bool) (UndoResult, error) {
 	for i := len(c.turns) - 1; i >= 0; i-- {
 		if len(c.turns[i].Changes) > 0 && c.turns[i].Run == "" { // workers' have their own undo
 			t := c.turns[i]
-			res, applied, err := c.restoreLocked([]*Turn{t}, force, "/undo --force")
+			res, failed, applied, err := c.restoreLocked([]*Turn{t}, force, "/undo --force")
 			res.Turn = summarize(t)
 			if applied {
-				c.removeLocked([]*Turn{t})
+				c.removeLocked([]*Turn{t}, failed)
 			}
 			return res, err
 		}
@@ -441,9 +450,9 @@ func (c *Checkpoints) Rewind(session string, prompt int, force bool) (UndoResult
 	if len(turns) == 0 {
 		return UndoResult{}, ErrNothingToUndo
 	}
-	res, applied, err := c.restoreLocked(turns, force, "--force")
+	res, failed, applied, err := c.restoreLocked(turns, force, "--force")
 	if applied {
-		c.removeLocked(turns)
+		c.removeLocked(turns, failed)
 	}
 	return res, err
 }
@@ -510,10 +519,10 @@ func (c *Checkpoints) UndoRun(run string, force bool) (UndoResult, error) {
 	if len(turns) == 0 {
 		return UndoResult{}, ErrNothingToUndo
 	}
-	res, applied, err := c.restoreLocked(turns, force, "--force")
+	res, failed, applied, err := c.restoreLocked(turns, force, "--force")
 	res.Turn = summarize(turns[len(turns)-1])
 	if applied {
-		c.removeLocked(turns)
+		c.removeLocked(turns, failed)
 	}
 	return res, err
 }
@@ -542,8 +551,9 @@ func (c *Checkpoints) Detach(session string, prompt int) {
 // restoreLocked puts every file turns changed back as it was before the
 // earliest of them, checking first that each is still as the latest left it.
 // applied reports whether it got past the checks and restored (the turns
-// are then done with, even if some files failed).
-func (c *Checkpoints) restoreLocked(turns []*Turn, force bool, forceHint string) (res UndoResult, applied bool, err error) {
+// are then done with, but for the files in failed, whose snapshots couldn't
+// be written back: a later undo can try them again).
+func (c *Checkpoints) restoreLocked(turns []*Turn, force bool, forceHint string) (res UndoResult, failed map[string]bool, applied bool, err error) {
 	type plan struct {
 		display string
 		abs     string
@@ -577,12 +587,13 @@ func (c *Checkpoints) restoreLocked(turns []*Turn, force bool, forceHint string)
 		}
 	}
 	if len(unrestorable) > 0 && !force {
-		return UndoResult{}, false, fmt.Errorf("cannot restore files larger than the snapshot limit: %s (use %s to restore the rest)", strings.Join(unrestorable, ", "), forceHint)
+		return UndoResult{}, nil, false, fmt.Errorf("cannot restore files larger than the snapshot limit: %s (use %s to restore the rest)", strings.Join(unrestorable, ", "), forceHint)
 	}
 	if len(conflicts) > 0 && !force {
-		return UndoResult{}, false, fmt.Errorf("%w: %s (use %s to overwrite)", api.ErrUndoConflict, strings.Join(conflicts, ", "), forceHint)
+		return UndoResult{}, nil, false, fmt.Errorf("%w: %s (use %s to overwrite)", api.ErrUndoConflict, strings.Join(conflicts, ", "), forceHint)
 	}
 	var errs []error
+	failed = map[string]bool{}
 	for i := len(order) - 1; i >= 0; i-- {
 		p := byFile[order[i]]
 		if p.target.TooLarge {
@@ -593,28 +604,37 @@ func (c *Checkpoints) restoreLocked(turns []*Turn, force bool, forceHint string)
 			var err error
 			if data, err = c.blobs.get(p.target.Hash); err != nil {
 				errs = append(errs, fmt.Errorf("%s: snapshot: %w", p.display, err))
-				continue
+				continue // gone or damaged: no later undo can do better
 			}
 		}
 		if err := c.ws.restore(p.abs, p.target, data); err != nil {
 			errs = append(errs, fmt.Errorf("%s: %w", p.display, err))
+			failed[p.abs] = true
 			continue
 		}
 		res.Restored = append(res.Restored, p.display)
 	}
 	sort.Strings(res.Restored)
-	return res, true, errors.Join(errs...)
+	return res, failed, true, errors.Join(errs...)
 }
 
-// removeLocked drops turns (after restoring them) and saves.
-func (c *Checkpoints) removeLocked(drop []*Turn) {
+// removeLocked drops turns (after restoring them) and saves, keeping the
+// changes to the files in failed so a later undo can try them again.
+func (c *Checkpoints) removeLocked(drop []*Turn, failed map[string]bool) {
 	gone := map[*Turn]bool{}
 	c.collect = true
 	for _, t := range drop {
-		gone[t] = true
+		var kept []*fileChange
 		for _, ch := range t.Changes {
+			if failed[ch.Abs] {
+				kept = append(kept, ch)
+				continue
+			}
+			delete(t.index, ch.Abs)
 			c.bytes -= ch.Before.Size
 		}
+		t.Changes = kept
+		gone[t] = len(kept) == 0
 	}
 	kept := c.turns[:0]
 	for _, t := range c.turns {
@@ -776,6 +796,10 @@ func writePrivate(path string, data []byte) error {
 		return err
 	}
 	if err := tmp.Chmod(0o600); err != nil {
+		tmp.Close()
+		return err
+	}
+	if err := tmp.Sync(); err != nil {
 		tmp.Close()
 		return err
 	}

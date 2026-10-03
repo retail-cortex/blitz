@@ -37,6 +37,43 @@ let fakeRepo = !new URLSearchParams(location.search).has("norepo");
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const now = () => timestampFromDate(new Date());
 
+// Each workspace's [search] settings, as SetConfigValue left them.
+const fakeSearchSettings = new Map<string, { enabled: boolean; sources: string[]; embeddingModel: string; enrich: boolean; enrichModel: string; enrichDailyLimit: number; includeIgnored: boolean }>();
+function searchSettingsOf(dir: string) {
+  let s = fakeSearchSettings.get(dir);
+  if (!s) fakeSearchSettings.set(dir, (s = { enabled: true, sources: ["files", "documents"], embeddingModel: "gemini/text-embedding-004", enrich: true, enrichModel: "", enrichDailyLimit: 200, includeIgnored: false }));
+  return s;
+}
+
+// A long document the search finds a passage deep in, for the preview's
+// marks (files/find.ts).
+const fakePricing = [
+  "# Pricing",
+  "",
+  "How prices, discounts and taxes work, for support staff. Totals are rounded once, at the end.",
+  "",
+  ...Array.from({ length: 24 }, (_, i) => [`## Discount rule ${i + 1}`, "", `A coupon of kind ${i + 1} takes its percentage off the items it names, never off shipping.`, ""]).flat(),
+  "## Rounding",
+  "",
+  "The cart total is rounded half to even, per line.",
+  "",
+  "## Taxes",
+  "",
+  "Taxes are added after discounts.",
+  "",
+].join("\n");
+const pricingRounding = fakePricing.split("\n").indexOf("## Rounding") + 1;
+
+// What the fake workspace's search finds (SearchWorkspace), by source.
+const fakeSearchCorpus = [
+  { source: "files", ref: "internal/cart/cart.go", title: "internal/cart/cart.go", line: 42, section: "", snippet: "// Total rounds each line to cents before summing.\nfunc (c *Cart) Total() Money {\n\treturn c.sum(math.Round)", score: 0.9, summary: "The shopping cart: lines, totals and rounding to cents.", tags: ["checkout", "money", "rounding"] },
+  { source: "files", ref: "internal/cart/cart_test.go", title: "internal/cart/cart_test.go", line: 18, section: "", snippet: "func TestCartTotalRounds(t *testing.T) {\n\tc := New()\n\tc.Add(Item{Price: 0.105, Qty: 3})", score: 0.7 },
+  { source: "files", ref: "docs/pricing.md", title: "docs/pricing.md", line: pricingRounding, section: "", snippet: "## Rounding\n\nThe cart total is rounded half to even, per line.", score: 0.6, summary: "How prices, discounts and rounding work, for support staff.", tags: ["pricing", "discounts", "rounding"] },
+  { source: "documents", ref: "specs/payments.pdf", title: "specs/payments.pdf", line: 88, section: "page 4", snippet: "Totals must be rounded per line item, not on the sum,\nto match the invoice.", score: 0.5 },
+  { source: "chats", ref: "session-2", title: "Fix the cart rounding bug", line: 3, section: "", snippet: "The cart total is off by a cent when three items are rounded.", score: 0.4 },
+  { source: "notes", ref: ".blitz/plans/session-2-1.md", title: ".blitz/plans/session-2-1.md", line: 1, section: "", snippet: "Plan: round each cart line before summing; add a test.", score: 0.3 },
+];
+
 const msg = (role: string, text: string, kind = ""): Message => create(MessageSchema, { role, text, kind, time: now() });
 
 const intro = `Here's how **shop** is organised:
@@ -439,8 +476,13 @@ function fakeAccepted(provider: string) {
   ];
 }
 
+// A sales table for the table viewer (ReadTable reads it below).
+const fakeSales = ["region,product,units,price,date", ...Array.from({ length: 240 }, (_, i) => `${["north", "south", "east", "west"][i % 4]},${["coupon", "cart", "gift card"][i % 3]},${(i * 7) % 50},${((i * 13) % 997) / 10},2026-0${1 + (i % 9)}-1${i % 10}`)].join("\n") + "\n";
+
 const fakeFiles = new Map<string, string>([
   ["go.mod", "module example.com/shop\n\ngo 1.27\n"],
+  ["data/sales.csv", fakeSales],
+  ["docs/pricing.md", fakePricing],
   [
     "README.md",
     "# Shop\n\nA small shop server. Run it with `go run ./cmd/shop`. See [the design](docs/design.md#requests), [main.go](cmd/shop/main.go#L10), [the cart package](internal/cart/) and [Usage](#usage).\n\n## Usage\n\n| Path | What |\n| --- | --- |\n| `/cart` | the cart |\n\n- [x] discounts\n- [ ] checkout\n\n```mermaid\nflowchart LR\n  client[Browser] --> cart[\"/cart handler\"] --> store[(SQLite)]\n```\n",
@@ -689,6 +731,33 @@ export function installFake() {
         removePermissionRule: ({ rule }) => ({ rule }),
         listApprovals: () => ({ approvals: [{ key: "k1", kind: "write", subject: "internal/cart", always: false }] }),
         revokeApprovals: () => ({ revoked: 1 }),
+        searchWorkspace: ({ query, sources }) => {
+          const words = query.toLowerCase().split(/\s+/).filter(Boolean);
+          const want = sources.length ? sources : ["files", "documents"];
+          return { sources: want, hits: fakeSearchCorpus.filter((h) => want.includes(h.source) && words.every((w) => `${h.ref} ${h.title} ${h.snippet}`.toLowerCase().includes(w))) };
+        },
+        getSearchStatus: ({ workspace }) => {
+          const settings = searchSettingsOf(workspace);
+          const on = settings.enabled;
+          return {
+            status: {
+              enabled: on,
+              items: (on ? { files: 42, documents: 3, chats: 7, notes: 2 } : {}) as Record<string, number>,
+              scanning: false,
+              lastScan: on ? now() : undefined,
+              unreadable: on ? 1 : 0,
+              error: "",
+              embeddingModel: on ? settings.embeddingModel : "",
+              embedded: on && settings.embeddingModel ? 318 : 0,
+              embedError: "",
+              enriched: on && settings.enrich ? 37 : 0,
+              enrichError: "",
+              problem: "",
+              settings,
+            },
+          };
+        },
+        reindex: () => ({}),
         getProjectSettings: ({ workspace }) => ({ settings: fakeProject(state(workspace)) }),
         listTasks: ({ workspace, sessionIds }) => ({
           tasks: [...state(workspace).tasks.keys()].map((id) => fakeTask(state(workspace), id)).filter((t) => sessionIds.includes(t.sessionId)),
@@ -772,7 +841,7 @@ export function installFake() {
         },
         listCommands: () => ({
           commands: [
-            { name: "setup", description: "Set up the agent harness: .agents/AGENT.md, skills and agents", source: "bundled" },
+            { name: "setup", description: "Set up the agent harness: .agents/AGENTS.md, skills and agents", source: "bundled" },
             { name: "review", description: "Review the uncommitted changes for bugs", argumentHint: "[branch | files]", source: "bundled" },
             { name: "db:migrate", description: "Write a database migration", argumentHint: "<name>", source: "project" },
           ],
@@ -846,6 +915,16 @@ export function installFake() {
           if (key === "llm.provider") c.provider = value;
           if (key === "blitz.default_model") c.model = value;
           if (key === "audio.model" && workspace) state(workspace).settings.speechModel = value;
+          if (key.startsWith("search.") && workspace) {
+            const s = searchSettingsOf(workspace);
+            if (key === "search.enabled") s.enabled = value !== "false";
+            if (key === "search.sources") s.sources = value ? value.split(",") : ["files", "documents"];
+            if (key === "search.embedding_model") s.embeddingModel = value;
+            if (key === "search.enrich") s.enrich = value === "true";
+            if (key === "search.enrich_model") s.enrichModel = value;
+            if (key === "search.enrich_daily_limit") s.enrichDailyLimit = Number(value) || 200;
+            if (key === "search.include_ignored") s.includeIgnored = value === "true";
+          }
           return change(workspace);
         },
         getConfigFile: ({ workspace }) => ({ path: configPath(workspace), text: scopeConfig(workspace).text }),
@@ -1033,6 +1112,37 @@ export function installFake() {
           const all = [...fakeFiles.keys()].filter((p) => !fakeHidden(p) && !p.split("/").some((x) => x.startsWith(".")));
           if (folders) for (const p of [...all]) for (let d = p.slice(0, p.lastIndexOf("/")); d; d = d.slice(0, Math.max(0, d.lastIndexOf("/")))) if (!all.includes(d + "/")) all.push(d + "/");
           return { paths: all.filter(match).sort((a, b) => a.length - b.length).slice(0, limit || 50) };
+        },
+        readTable: ({ path, search, filters, sortColumn, descending, offset, limit }) => {
+          const [head, ...lines] = (fakeFiles.get(path) ?? "").trim().split("\n");
+          if (!head) notFound(path);
+          const names = head.split(",");
+          const intents: Record<string, string> = { units: "units sold", price: "unit price, USD" };
+          let rows = lines.map((l, i) => ({ number: i + 1, cells: l.split(",") }));
+          const q = search.trim().toLowerCase();
+          if (q) rows = rows.filter((r) => r.cells.some((c) => c.toLowerCase().includes(q)));
+          for (const f of filters) {
+            const m = /^(>=|<=|>|<)\s*(-?[\d.]+)$/.exec(f.expr);
+            rows = rows.filter((r) => {
+              const v = r.cells[f.column] ?? "";
+              if (!m) return v.toLowerCase().includes(f.expr.toLowerCase());
+              const n = Number(v), x = Number(m[2]);
+              return { ">": n > x, ">=": n >= x, "<": n < x, "<=": n <= x }[m[1] as ">" | ">=" | "<" | "<="];
+            });
+          }
+          if (sortColumn > 0) {
+            const c = sortColumn - 1;
+            rows = [...rows].sort((a, b) => (Number.isNaN(Number(a.cells[c])) ? a.cells[c].localeCompare(b.cells[c]) : Number(a.cells[c]) - Number(b.cells[c])) * (descending ? -1 : 1));
+          }
+          const numeric = (i: number) => lines.every((l) => !Number.isNaN(Number(l.split(",")[i])));
+          return {
+            columns: names.map((n, i) => ({ name: n, kind: n === "date" ? "date" : numeric(i) ? "number" : "text", empty: 0, min: 0, max: 0, intent: intents[n] ?? "" })),
+            rows: rows.slice(offset, offset + (limit || 100)),
+            matched: rows.length,
+            total: lines.length,
+            sorted: sortColumn > 0,
+            latin1: false,
+          };
         },
         statFiles: ({ paths }) => ({ versions: Object.fromEntries(paths.map((p) => [p, fakeFiles.has(p) ? fakeVersion(fakeFiles.get(p)!) : ""])) }),
       });

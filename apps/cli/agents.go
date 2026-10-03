@@ -40,7 +40,8 @@ import (
 // the service and returns; blitz agents lists them, and attach, logs and
 // stop work with one.
 
-// errNeedsService: background runs live in the Blitz service.
+// errNeedsService means the Blitz service isn't running: background runs
+// live in it.
 var errNeedsService = errors.New("background runs need the Blitz service: start it with 'blitz service install' (or run blitzd)")
 
 // serviceSocket is the running service's socket, or errNeedsService.

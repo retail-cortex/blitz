@@ -226,3 +226,64 @@ func TestPersistedCheckpointsAgeOutAndSurviveDamage(t *testing.T) {
 	_, err = os.Stat(path + ".damaged")
 	assert.NoError(t, err, "the damaged index wasn't kept aside")
 }
+
+// An index that can't be loaded leaves the store on disk alone: no blob is
+// collected and the index isn't overwritten, even after later changes.
+func TestCheckpointsKeepAStoreTheyCannotLoad(t *testing.T) {
+	cases := map[string]struct {
+		spoil    func(t *testing.T, index string)
+		setAside bool
+	}{
+		"unreadable": {spoil: func(t *testing.T, index string) {
+			require.NoError(t, os.Chmod(index, 0))
+			t.Cleanup(func() { os.Chmod(index, 0o600) })
+		}},
+		"newer version": {spoil: func(t *testing.T, index string) {
+			data, err := os.ReadFile(index)
+			require.NoError(t, err)
+			writeFile(t, index, strings.Replace(string(data), `"version":1`, `"version":2`, 1))
+		}},
+		"damaged": {spoil: func(t *testing.T, index string) { writeFile(t, index, "{nope") }, setAside: true},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			if name == "unreadable" && os.Geteuid() == 0 {
+				t.Skip("root reads any file")
+			}
+			dir, store := t.TempDir(), filepath.Join(t.TempDir(), "cp")
+			writeFile(t, filepath.Join(dir, "f.txt"), "v1")
+			ws, cp := reopen(t, dir, store)
+			cp.Begin("t")
+			require.NoError(t, ws.WriteFileAtomic(context.Background(), "f.txt", []byte("v2")))
+			index := filepath.Join(store, "index.json")
+			before := readString(t, index)
+			tc.spoil(t, index)
+			want := readString(t, index)
+			if want == "<missing>" { // unreadable
+				want = before
+			}
+
+			ws2, err := NewWorkspace(dir, 0)
+			require.NoError(t, err)
+			t.Cleanup(func() { ws2.Close() })
+			cp2, err := OpenCheckpoints(ws2, CheckpointOptions{Dir: store})
+			require.Error(t, err)
+			assert.Empty(t, cp2.List())
+			cp2.Begin("later")
+			require.NoError(t, ws2.WriteFileAtomic(context.Background(), "f.txt", []byte("v3")))
+			_, err = cp2.Undo(false)
+			require.NoError(t, err, "this process's changes are still undone, in memory")
+
+			blobs, err := os.ReadDir(filepath.Join(store, "blobs"))
+			require.NoError(t, err)
+			assert.Len(t, blobs, 1, "the earlier turn's snapshot was collected")
+			if tc.setAside {
+				assert.Equal(t, want, readString(t, index+".damaged"))
+				assert.NoFileExists(t, index, "a new index was written over the set-aside store")
+			} else {
+				require.NoError(t, os.Chmod(index, 0o600))
+				assert.Equal(t, want, readString(t, index), "the index was overwritten")
+			}
+		})
+	}
+}

@@ -37,11 +37,16 @@ type searchTurn struct {
 // prepareSearch handles "/search web|session <terms>": it runs the search,
 // shows what was found, and returns the turn to run, or ok=false when
 // there is nothing to hand to the agent (usage, errors, no results).
+// Anything else searches the workspace (workspaceSearch), with no turn.
 func prepareSearch(ctx context.Context, app *App, args string, interrupts <-chan os.Signal) (searchTurn, bool) {
 	sub, terms, _ := strings.Cut(strings.TrimSpace(args), " ")
 	terms = strings.TrimSpace(terms)
-	if terms == "" || (sub != "web" && sub != "session") {
+	switch {
+	case sub == "" || (terms == "" && (sub == "web" || sub == "session" || WorkspaceSearchSources[sub] != nil)):
 		fmt.Printf("%s%s%s\n", Yellow, i18n.T("search.usage"), Reset)
+		return searchTurn{}, false
+	case sub != "web" && sub != "session":
+		workspaceSearch(ctx, app, sub, terms, interrupts)
 		return searchTurn{}, false
 	}
 	recorded := "/search " + sub + " " + terms

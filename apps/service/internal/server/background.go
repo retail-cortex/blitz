@@ -119,10 +119,11 @@ func (r *bgRun) info(b *broker) *pb.BackgroundRun {
 
 // start runs t in a new session of w, in the background.
 func (s *Server) startRun(w *workspace, t api.Turn) (*bgRun, error) {
+	// Checked and added in one step: a run Close's stopRuns misses would
+	// never be cancelled.
 	s.mu.Lock()
-	closed := s.closed
-	s.mu.Unlock()
-	if closed {
+	if s.closed {
+		s.mu.Unlock()
 		return nil, apiError(connect.CodeUnavailable, "SHUTTING_DOWN", errServerClosed)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
@@ -136,6 +137,7 @@ func (s *Server) startRun(w *workspace, t api.Turn) (*bgRun, error) {
 	s.runs.list = append(s.runs.list, r)
 	s.runs.prune()
 	s.runs.mu.Unlock()
+	s.mu.Unlock()
 
 	started := make(chan struct{})
 	go func() {

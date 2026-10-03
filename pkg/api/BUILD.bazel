@@ -24,6 +24,7 @@ go_library(
         "extensions.go",
         "models.go",
         "permissions.go",
+        "search.go",
         "sessions.go",
         "suggestions.go",
         "tasks.go",

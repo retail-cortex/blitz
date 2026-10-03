@@ -215,6 +215,15 @@ service WorkspaceService {
   // to the agent (NO_FETCH, NO_SEARCH): run it as a turn with fetch_grants
   // set to the links' URLs.
   rpc SearchWeb(SearchWebRequest) returns (SearchWebResponse);
+  // Searches the workspace's index: its files, the text of its PDFs and
+  // notebooks, its chats and notes (SEARCH_DISABLED, UNKNOWN_SEARCH_SOURCE;
+  // spec_search_035).
+  rpc SearchWorkspace(SearchWorkspaceRequest) returns (SearchWorkspaceResponse);
+  // Says how the workspace's search index is.
+  rpc GetSearchStatus(GetSearchStatusRequest) returns (GetSearchStatusResponse);
+  // Starts a scan of the workspace for search and returns at once
+  // (SEARCH_DISABLED).
+  rpc Reindex(ReindexRequest) returns (ReindexResponse);
 }
 
 // Saved reports where a change was written in the config file. The change
@@ -399,7 +408,7 @@ message GetSuggestionsRequest {
 message GetSuggestionsResponse {
   // State tiles first, then ideas; empty: the front end's own defaults.
   repeated Suggestion suggestions = 1;
-  // No .agents/AGENT.md, AGENTS.md, CLAUDE.md, GEMINI.md or BLITZ.md.
+  // No .agents/AGENTS.md, AGENTS.md, CLAUDE.md, GEMINI.md or BLITZ.md.
   bool harness_missing = 2;
   // Ideas are being written from newer conversations: ask again shortly.
   bool pending = 3;
@@ -716,6 +725,9 @@ message ListPermissionRulesRequest {
 // Response message for WorkspaceService.ListPermissionRules.
 message ListPermissionRulesResponse {
   repeated PermissionRule rules = 1;
+  // Why some of the settings' rules were left out when they last changed
+  // (not enforced until fixed; the workspace won't open with them).
+  string problem = 2;
 }
 
 // Request message for WorkspaceService.AddPermissionRule.
@@ -1083,6 +1095,9 @@ message RevokeApprovalsRequest {
 // Response message for WorkspaceService.RevokeApprovals.
 message RevokeApprovalsResponse {
   int32 revoked = 1;
+  // Saved approvals that couldn't be removed from the file
+  // (APPROVALS_STILL_SAVED): revoked for now, back at the next start.
+  ErrorInfo error = 2;
 }
 
 // Process is a background process the agent started, and how it is.
@@ -1495,6 +1510,110 @@ message SearchWebResponse {
   repeated Link links = 2;
   string prompt = 3;
 }
+
+// Request message for WorkspaceService.SearchWorkspace.
+message SearchWorkspaceRequest {
+  string workspace = 1;
+  // Words and "quoted phrases".
+  string query = 2;
+  // files, documents, chats, notes; none: the search.sources setting.
+  repeated string sources = 3;
+  // 0: 20.
+  int32 limit = 4;
+  // keyword, semantic or hybrid; "": hybrid with an embedding model, else
+  // keyword (NO_EMBEDDINGS, UNKNOWN_SEARCH_MODE).
+  string mode = 5;
+  // Include hidden items: dotfiles, files git ignores (the desktop app
+  // asks for them when it shows hidden files).
+  bool hidden = 6;
+}
+
+// SearchHit is one item workspace search found.
+message SearchHit {
+  // files, documents, chats or notes.
+  string source = 1;
+  // A path relative to the workspace (files, documents, plans), a
+  // session's ID (chats) or a note's name.
+  string ref = 2;
+  string title = 3;
+  // The passage's line in the item's text (1-based).
+  int32 line = 4;
+  // What the passage is in: a PDF's page, a notebook's cell.
+  string section = 5;
+  // The lines around the match.
+  string snippet = 6;
+  double score = 7;
+  // What a model wrote of the item (search.enrich), if it has.
+  string summary = 8;
+  repeated string tags = 9;
+}
+
+// Response message for WorkspaceService.SearchWorkspace.
+message SearchWorkspaceResponse {
+  // Best first, one per item.
+  repeated SearchHit hits = 1;
+  // The sources searched.
+  repeated string sources = 2;
+}
+
+// Request message for WorkspaceService.GetSearchStatus.
+message GetSearchStatusRequest {
+  string workspace = 1;
+}
+
+// SearchStatus is how a workspace's search index is.
+message SearchStatus {
+  // Search is on (search.enabled).
+  bool enabled = 1;
+  // Items indexed, by source.
+  map<string, int32> items = 2;
+  // A scan is running.
+  bool scanning = 3;
+  // When the last scan finished.
+  google.protobuf.Timestamp last_scan = 4;
+  // Items that couldn't be read.
+  int32 unreadable = 5;
+  string error = 6;
+  // Semantic search's embedding model ("": off).
+  string embedding_model = 7;
+  // Chunks with vectors.
+  int32 embedded = 8;
+  // Why embedding stopped (the next scan tries again).
+  string embed_error = 9;
+  // Items with a summary (search.enrich), and why describing stopped.
+  int32 enriched = 10;
+  string enrich_error = 11;
+  // The [search] settings followed, even with search off.
+  SearchSettings settings = 12;
+  // What kept them from applying in full (an embedding model or describer
+  // that couldn't be built, an index that couldn't open).
+  string problem = 13;
+}
+
+// SearchSettings are a workspace's [search] settings (set with
+// ConfigService.SetConfigValue: search.enabled, search.sources, …).
+message SearchSettings {
+  bool enabled = 1;
+  repeated string sources = 2;
+  string embedding_model = 3;
+  bool enrich = 4;
+  string enrich_model = 5;
+  int32 enrich_daily_limit = 6;
+  bool include_ignored = 7;
+}
+
+// Response message for WorkspaceService.GetSearchStatus.
+message GetSearchStatusResponse {
+  SearchStatus status = 1;
+}
+
+// Request message for WorkspaceService.Reindex.
+message ReindexRequest {
+  string workspace = 1;
+}
+
+// Response message for WorkspaceService.Reindex.
+message ReindexResponse {}
 
 // Request message for WorkspaceService.GetGitStatus.
 message GetGitStatusRequest {

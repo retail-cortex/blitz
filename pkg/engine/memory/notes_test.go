@@ -65,6 +65,24 @@ func TestSaveNote(t *testing.T) {
 	}
 }
 
+// Notes with the same first words in the same second are kept apart.
+func TestSaveNoteNameTaken(t *testing.T) {
+	dir := t.TempDir()
+	var names []string
+	for _, body := range []string{"one", "two", "three"} {
+		name, path, err := writeNewNote(dir, "20260101-000000-same-words", body)
+		require.NoError(t, err)
+		got, err := os.ReadFile(path)
+		require.NoError(t, err)
+		assert.Equal(t, body, string(got))
+		names = append(names, name)
+	}
+	assert.Equal(t, []string{"20260101-000000-same-words", "20260101-000000-same-words-2", "20260101-000000-same-words-3"}, names)
+
+	_, _, err := writeNewNote(filepath.Join(dir, "missing"), "x", "y")
+	assert.Error(t, err)
+}
+
 func TestFindForgetAndRenderNotes(t *testing.T) {
 	dir := t.TempDir()
 	write := func(name, body string) {

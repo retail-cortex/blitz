@@ -102,6 +102,7 @@ func StartTelemetry(ctx context.Context, cfg config.TelemetryConfig, version str
 	}
 	logExp, err := otlploghttp.New(ctx, logOpts...)
 	if err != nil {
+		_ = spanExp.Shutdown(ctx)
 		return nil, err
 	}
 	var metricOpts []otlpmetrichttp.Option
@@ -110,6 +111,8 @@ func StartTelemetry(ctx context.Context, cfg config.TelemetryConfig, version str
 	}
 	metricExp, err := otlpmetrichttp.New(ctx, metricOpts...)
 	if err != nil {
+		_ = spanExp.Shutdown(ctx)
+		_ = logExp.Shutdown(ctx)
 		return nil, err
 	}
 	t := NewTelemetry(cfg, version, r, spanExp, logExp)

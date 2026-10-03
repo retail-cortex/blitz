@@ -165,3 +165,18 @@ func TestFlushAfterCloseOrCancel(t *testing.T) {
 	h.Close()
 	assert.NoError(t, h.flush(context.Background()))
 }
+
+// TestHTTPHookReplyCutShort checks a reply that ends before its length is a
+// failure, so a fail_closed hook blocks rather than letting the tool run.
+func TestHTTPHookReplyCutShort(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Length", "100")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"decision":`))
+	}))
+	t.Cleanup(srv.Close)
+	h, _ := newHooks(t, config.HooksConfig{PreTool: []config.HookConfig{{Type: "http", URL: srv.URL, FailClosed: true}}})
+	out := h.PreTool(context.Background(), "s", "grep", nil)
+	assert.True(t, out.Blocked, "a fail_closed hook whose reply was cut short")
+	assert.Contains(t, out.Reason, "fail_closed")
+}

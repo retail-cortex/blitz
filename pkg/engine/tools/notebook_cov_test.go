@@ -151,3 +151,25 @@ func TestNotebookEditFailures(t *testing.T) {
 		assert.Contains(t, errOf(out), "failed to write the notebook")
 	})
 }
+
+// A notebook whose nbformat is missing or not a number is read as an old
+// one (cells without ids), not a panic.
+func TestNotebookNeedsIDsOddFormat(t *testing.T) {
+	cases := map[string]struct {
+		doc  string
+		want bool
+	}{
+		"missing":    {`{"cells": []}`, false},
+		"a string":   {`{"cells": [], "nbformat": "4", "nbformat_minor": "5"}`, false},
+		"4.5":        {`{"cells": [], "nbformat": 4, "nbformat_minor": 5}`, true},
+		"4.4":        {`{"cells": [], "nbformat": 4, "nbformat_minor": 4}`, false},
+		"no minor 5": {`{"cells": [], "nbformat": 5}`, true},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			nb, err := parseNotebook([]byte(tc.doc))
+			require.NoError(t, err)
+			assert.Equal(t, tc.want, nb.needsIDs())
+		})
+	}
+}

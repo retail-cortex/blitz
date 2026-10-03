@@ -23,8 +23,10 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/ergochat/readline"
+	"golang.org/x/term"
 )
 
 // TerminalInput is an Input backed by a line editor: arrow-key editing,
@@ -124,7 +126,7 @@ func newTerminalInput(o TerminalOptions, base *readline.Config) (*TerminalInput,
 	if in == nil {
 		in = os.Stdin
 	}
-	t := &TerminalInput{turn: make(chan struct{}, 1), stdin: &escReader{in: in}, bindings: DefaultKeyBindings(), vim: o.Vim}
+	t := &TerminalInput{turn: make(chan struct{}, 1), stdin: &escReader{in: in, ready: readyFunc(in)}, bindings: DefaultKeyBindings(), vim: o.Vim}
 	if o.Keys != nil {
 		t.bindings = *o.Keys
 	}
@@ -148,6 +150,25 @@ func newTerminalInput(o TerminalOptions, base *readline.Config) (*TerminalInput,
 	}
 	t.rl = rl
 	return t, nil
+}
+
+// readyFunc returns how to wait for input on in without reading it, or nil
+// when in can't be polled.
+func readyFunc(in io.Reader) func(time.Duration) (bool, error) {
+	if p, ok := in.(interface {
+		ready(time.Duration) (bool, error)
+	}); ok {
+		return p.ready
+	}
+	f, ok := in.(*os.File)
+	if !ok || !term.IsTerminal(int(f.Fd())) {
+		return nil
+	}
+	k := newTTYKeys(int(f.Fd()))
+	if _, err := k.ready(0); err != nil {
+		return nil
+	}
+	return k.ready
 }
 
 // Close restores the terminal.
@@ -208,10 +229,25 @@ func (t *TerminalInput) readLine(ctx context.Context, text string, kind readKind
 		t.rl.DisableHistory()
 		defer t.rl.EnableHistory()
 	}
-	// The editor can't abandon a read; closing it is the only way to unblock,
-	// which is fine because cancellation here means the process is exiting.
-	stop := context.AfterFunc(ctx, func() { t.rl.Close() })
-	defer stop()
+	// Cancelling ends the read with Ctrl+C, leaving the editor for the next
+	// one (a /loop coming due cancels the idle prompt). Without a pollable
+	// terminal a read can't be abandoned; closing the editor is the only way.
+	if t.stdin.ready != nil {
+		cancelled := make(chan struct{})
+		stop := context.AfterFunc(ctx, func() {
+			t.stdin.cancel()
+			close(cancelled)
+		})
+		defer func() {
+			if !stop() {
+				<-cancelled
+				t.stdin.endCancel()
+			}
+		}()
+	} else {
+		stop := context.AfterFunc(ctx, func() { t.rl.Close() })
+		defer stop()
+	}
 	defer func() {
 		t.mu.Lock()
 		t.ks = nil
@@ -237,11 +273,11 @@ func (t *TerminalInput) readLine(ctx context.Context, text string, kind readKind
 			line, err = t.rl.ReadLine()
 		}
 		switch {
+		case err != nil && ctx.Err() != nil:
+			return "", ctx.Err()
 		case errors.Is(err, readline.ErrInterrupt):
 			t.interrupt()
 			return "", context.Canceled // Ctrl+C: same meaning as SIGINT at the prompt
-		case err != nil && ctx.Err() != nil:
-			return "", ctx.Err()
 		}
 		t.mu.Lock()
 		act, saved := ks.action, ks.saved

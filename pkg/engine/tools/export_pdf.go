@@ -143,13 +143,21 @@ func NewExportPDFTool(ws *Workspace, hooks *Hooks, pageSize string) (tool.Tool, 
 			}
 			defer unlock()
 			verb := "Create"
-			existing, readErr := ws.ReadFile(rel)
-			existed := readErr == nil
+			// Whether it exists is decided by Stat: a PDF too large to read
+			// is still there.
+			info, statErr := ws.Stat(rel)
+			existed := statErr == nil
+			if statErr != nil && !errors.Is(statErr, fs.ErrNotExist) {
+				return fail(fmt.Sprintf("failed to check %s: %v", rel, statErr))
+			}
+			var existing []byte
+			var readErr error
 			if existed {
 				if !input.Overwrite {
 					return fail(fmt.Sprintf("file '%s' already exists; set overwrite=true to replace it", out))
 				}
 				verb = "Overwrite"
+				existing, readErr = ws.ReadFile(rel)
 			}
 			from := ""
 			if src != "" {
@@ -160,7 +168,12 @@ func NewExportPDFTool(ws *Workspace, hooks *Hooks, pageSize string) (tool.Tool, 
 				return fail(err.Error())
 			}
 			if existed {
-				if err := ws.unchanged(rel, existed, existing); err != nil {
+				if readErr == nil {
+					err = ws.unchanged(rel, existed, existing)
+				} else if now, serr := ws.Stat(rel); serr != nil || now.Size() != info.Size() || !now.ModTime().Equal(info.ModTime()) {
+					err = fmt.Errorf("%s %w", rel, errChangedDuringApproval) // too large to compare: its size and time
+				}
+				if err != nil {
 					return fail(err.Error())
 				}
 				err = ws.WriteFileAtomic(ctx, rel, res.PDF)

@@ -66,9 +66,10 @@ Decisions are `once`, `session`, `always` or `deny`; a question is answered with
 | `blitz doctor [--online]` | Checks the settings, credentials, sandbox, MCP servers, hooks and skills; `--online` also calls each model and a test search |
 | `blitz config init\|show\|path` | Writes, shows or locates the settings file |
 | `blitz config set-key\|keys\|secure-key\|remove-key` | API keys in the OS keychain ([configuration](../guide/configuration.md)) |
+| `blitz search <terms>` | [Searches the workspace](../guide/search.md#workspace-search): files, PDFs and notebooks, chats, notes (`--in`, `--json`, `--status`, `--reindex`) |
 | `blitz workers …` | Lists, enables, runs and shows the history of [workers](service.md#workers) |
 | `blitz service install\|uninstall\|status` | Starts the service at login, or stops doing so |
-| `blitz init` | Has the agent write or update the project's `BLITZ.md` |
+| `blitz init` | Runs `/setup` unattended: sets up the project for agents (`.agents/AGENTS.md` and the files that import it) |
 | `blitz license [full\|third-party]` | The NOTICE, the Apache License, or the notices of the software Blitz includes |
 | `blitz completion bash\|zsh\|fish\|powershell` | Shell completion |
 
@@ -128,10 +129,11 @@ Decisions are `once`, `session`, `always` or `deny`; a question is answered with
 | `/mode [name]`, `/permissions …` | Permission mode and rules ([safety](../guide/safety.md)) |
 | `/plan <goal>` | A plan for approval, without changing anything |
 | `/grill-me <task>` | The agent asks you clarifying questions first, then proposes an approach; it changes nothing |
-| `/setup [focus]` | Set up the project's agent harness: the setup agent asks about the project, makes it a git repository with a `.gitignore` for its stack, writes `.agents/AGENT.md`, makes `AGENTS.md`, `CLAUDE.md`, `GEMINI.md` and `BLITZ.md` import it, and offers skills and agents to add (also `/init`, `blitz init`) |
+| `/setup [focus]` | Set up the project's agent harness: the setup agent asks about the project, makes it a git repository with a `.gitignore` for its stack, writes `.agents/AGENTS.md`, makes `AGENTS.md`, `CLAUDE.md`, `GEMINI.md` and `BLITZ.md` import it, and offers skills and agents to add (also `/init`, `blitz init`) |
 | `/goal <condition>`, `/goal [clear]` | Keep the agent working until the condition holds, judged after each turn |
 | `/loop <interval> <prompt>`, `/loop [stop <n>]` | Send a prompt again every interval while the REPL stays open |
 | `/btw <question>` | A side question: answered with what the session knows, and not kept |
+| `/search <terms>`, `/search files\|documents\|chats\|notes\|all <terms>`, `/search status\|reindex` | [Search the workspace](../guide/search.md#workspace-search) |
 | `/search web <terms>`, `/search session <terms>` | [Search](../guide/search.md) the web or this session |
 | `!<command>` | Run a command yourself, outside the agent's sandbox; the audit log records it |
 | `/attach [path\|clear]`, `/paste` | Queue an [attachment](../guide/images.md) (an image, a PDF, a text file, audio or video, as the model takes them) for the next message |

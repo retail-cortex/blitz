@@ -321,6 +321,7 @@ func TestWorkerRunNotify(t *testing.T) {
 	require.NoError(t, json.Unmarshal([]byte(record), &got), "stdin %q", record)
 	assert.Equal(t, run.ID, got.ID)
 	assert.Equal(t, "deps succeeded", status)
+	assert.NoError(t, w.DeleteSession(context.Background(), run.SessionID), "still held by the run's storage")
 
 	// Not a status it names: nothing.
 	require.NoError(t, os.Remove(out))
@@ -436,6 +437,32 @@ func TestRunWorkerSkipsWhileRunning(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, runs, 1, "only the scheduled run is recorded")
 	assert.Equal(t, run.ID, runs[0].ID)
+}
+
+// A run whose session can't be made is a failed run, recorded and told of.
+func TestRunWorkerWithoutSession(t *testing.T) {
+	out := filepath.Join(t.TempDir(), "notified")
+	w, _ := openTestWith(t, func(c *config.Config) {
+		c.Workers.Notify = `echo "$BLITZ_RUN_STATUS" > "` + out + `"`
+		c.Workers.NotifyOn = []string{"failed"}
+	})
+	addWorker(t, w, "deps", "---\nschedule: daily at 6 AM\n---\nCheck.\n")
+	enable(t, w, "deps")
+	notDir := filepath.Join(t.TempDir(), "file")
+	require.NoError(t, os.WriteFile(notDir, nil, 0o644))
+	w.cfg.Session.StorageDir = filepath.Join(notDir, "sessions")
+
+	run, err := w.RunWorker(context.Background(), "deps", RunOptions{})
+	require.Error(t, err)
+	assert.Equal(t, api.RunFailed, run.Status)
+	assert.Equal(t, err.Error(), run.Error)
+	runs, err := w.WorkerRuns("deps", 10)
+	require.NoError(t, err)
+	require.Len(t, runs, 1)
+	assert.Equal(t, api.RunFailed, runs[0].Status)
+	b, err := os.ReadFile(out)
+	require.NoError(t, err)
+	assert.Equal(t, "failed\n", string(b))
 }
 
 // A notify command that fails is a warning naming the worker.

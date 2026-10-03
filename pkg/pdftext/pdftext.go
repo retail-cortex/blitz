@@ -15,16 +15,25 @@
 // Package pdftext reads PDF files: whether data is one, its page count and
 // its text, page by page (spec_images_011). Models that can't read a PDF
 // get its text; read_file shows it. Reading is defensive: the parser's
-// panics become errors and a deadline bounds a pathological file.
+// panics become errors and a deadline bounds a pathological file. In the
+// programs (UseHelper), the text is read in a child process that's killed
+// at the deadline, so a page the parser loops on, a crash or a blow-up
+// ends with it.
 package pdftext
 
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"os"
+	"os/exec"
 	"regexp"
+	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/ledongthuc/pdf"
@@ -35,6 +44,16 @@ const MIME = "application/pdf"
 
 // Timeout bounds reading one file's text.
 const Timeout = 20 * time.Second
+
+// timeout is Timeout; tests shorten it.
+var timeout = Timeout
+
+// helperEnv, set in a child's environment, makes MaybeServe read a PDF
+// from stdin; its value is maxChars.
+const helperEnv = "BLITZ_PDFTEXT_HELPER"
+
+// helperExe is the program Text runs as its helper ("": read in-process).
+var helperExe atomic.Value // string
 
 // ErrNotPDF is returned for data that isn't a PDF.
 var ErrNotPDF = errors.New("not a PDF")
@@ -87,15 +106,110 @@ func Pages(data []byte) (n int, err error) {
 	return n, nil
 }
 
+// UseHelper makes Text read in a child process: this program, run again
+// with helperEnv set, which MaybeServe answers. A program calls both,
+// MaybeServe first, at the start of main. Without it (tests, libraries)
+// Text reads in-process.
+func UseHelper() {
+	if exe, err := os.Executable(); err == nil {
+		helperExe.Store(exe)
+	}
+}
+
+// MaybeServe answers as the helper and exits, when this process was
+// started as one; otherwise it returns at once.
+func MaybeServe() {
+	v, ok := os.LookupEnv(helperEnv)
+	if !ok {
+		return
+	}
+	maxChars, _ := strconv.Atoi(v)
+	os.Exit(serve(os.Stdin, os.Stdout, maxChars))
+}
+
+// helperResult is the helper's answer, as JSON on its stdout.
+type helperResult struct {
+	Text  string `json:"text"`
+	Pages int    `json:"pages"`
+	Error string `json:"error,omitempty"`
+}
+
+// serve reads a PDF from in and writes its text to out as a helperResult.
+func serve(in io.Reader, out io.Writer, maxChars int) int {
+	var res helperResult
+	data, err := io.ReadAll(in)
+	if err == nil {
+		res.Text, res.Pages, err = textHere(context.Background(), data, maxChars)
+	}
+	if err != nil {
+		res.Error = err.Error()
+	}
+	if json.NewEncoder(out).Encode(res) != nil {
+		return 1
+	}
+	return 0
+}
+
 // Text is a PDF's text, each page headed "--- Page N ---", and its page
 // count. A scanned page has no text to give. maxChars (> 0) cuts the text
 // short with a note saying so.
 func Text(ctx context.Context, data []byte, maxChars int) (string, int, error) {
+	if !IsPDF(data) {
+		return "", 0, ErrNotPDF
+	}
+	if exe, _ := helperExe.Load().(string); exe != "" {
+		return textInHelper(ctx, exe, data, maxChars)
+	}
+	return textHere(ctx, data, maxChars)
+}
+
+// textInHelper reads data's text in a child process (exe as the helper),
+// killed when ctx ends or at the timeout.
+func textInHelper(ctx context.Context, exe string, data []byte, maxChars int) (string, int, error) {
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, exe)
+	cmd.Env = append(os.Environ(), helperEnv+"="+strconv.Itoa(maxChars))
+	cmd.Stdin = bytes.NewReader(data)
+	var out, stderr bytes.Buffer
+	cmd.Stdout, cmd.Stderr = &out, &stderr
+	cmd.WaitDelay = time.Second
+	err := cmd.Run()
+	if ctx.Err() != nil {
+		return "", 0, fmt.Errorf("reading the PDF's text: %w", ctx.Err())
+	}
+	var res helperResult
+	if err == nil {
+		err = json.Unmarshal(out.Bytes(), &res)
+	}
+	if err != nil {
+		if msg := strings.TrimSpace(stderr.String()); msg != "" {
+			err = fmt.Errorf("%w: %s", err, lastLine(msg))
+		}
+		return "", 0, fmt.Errorf("reading the PDF's text: %w", err)
+	}
+	if res.Error != "" {
+		return "", 0, errors.New(res.Error)
+	}
+	return res.Text, res.Pages, nil
+}
+
+// lastLine is s's last line, cut to 200 bytes.
+func lastLine(s string) string {
+	if i := strings.LastIndexByte(s, '\n'); i >= 0 {
+		s = s[i+1:]
+	}
+	return s[:min(len(s), 200)]
+}
+
+// textHere is Text in this process: its parser can't be stopped mid-page,
+// so a page it loops on keeps a goroutine busy after the deadline.
+func textHere(ctx context.Context, data []byte, maxChars int) (string, int, error) {
 	r, err := open(data)
 	if err != nil {
 		return "", 0, err
 	}
-	ctx, cancel := context.WithTimeout(ctx, Timeout)
+	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	type result struct {
 		text  string

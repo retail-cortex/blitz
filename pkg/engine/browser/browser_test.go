@@ -643,6 +643,30 @@ func TestNavigationOtherSchemes(t *testing.T) {
 	assert.Empty(t, asked)
 }
 
+// A load whose URL Go can't parse (an invalid escape Chrome keeps) is
+// refused, not a crash.
+func TestNavigationUnparsableURL(t *testing.T) {
+	decided := make(chan string, 1)
+	b := attachFake(t, Options{Navigation: func(*url.URL) error { return nil }},
+		func(method string, params json.RawMessage) (any, string) {
+			if method == "Fetch.continueRequest" || method == "Fetch.failRequest" {
+				decided <- method
+			}
+			return nil, ""
+		})
+	require.NoError(t, b.conn.call(context.Background(), "Test.emit", map[string]any{"method": "Fetch.requestPaused",
+		"params": map[string]any{"requestId": "r1", "frameId": "", "request": map[string]any{"url": "http://x.example/a%zz"}}}, nil))
+	select {
+	case m := <-decided:
+		assert.Equal(t, "Fetch.failRequest", m)
+	case <-time.After(5 * time.Second):
+		t.Fatal("the load wasn't decided")
+	}
+	refused := b.Refused()
+	require.Len(t, refused, 1)
+	assert.Contains(t, refused[0], "http://x.example/a%zz")
+}
+
 // The console keeps its last messages, skipping empty ones; what was
 // refused is said once and only so many times; signals don't block.
 func TestBrowserBookkeeping(t *testing.T) {

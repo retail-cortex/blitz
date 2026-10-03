@@ -70,9 +70,11 @@ func (l *RunLog) Append(r api.Run) error {
 	if err != nil {
 		return err
 	}
-	defer f.Close()
-	_, err = f.Write(append(data, '\n'))
-	return err
+	if _, err := f.Write(append(data, '\n')); err != nil {
+		f.Close()
+		return err
+	}
+	return f.Close()
 }
 
 // List returns a worker's runs, newest first, at most limit (0: all).

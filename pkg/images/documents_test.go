@@ -110,6 +110,45 @@ func TestStoreText(t *testing.T) {
 	assert.ErrorContains(t, err, "invalid image reference")
 }
 
+// A PDF whose text couldn't be read isn't read again, unless it was the
+// caller that gave up.
+func TestStoreTextFailureRemembered(t *testing.T) {
+	tests := []struct {
+		name      string
+		cancelled bool
+		wantCalls int
+	}{
+		{"timed out", false, 1},
+		{"caller cancelled", true, 2},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			calls := 0
+			orig := pdfText
+			t.Cleanup(func() { pdfText = orig })
+			pdfText = func(context.Context, []byte, int) (string, int, error) {
+				calls++
+				return "", 0, context.DeadlineExceeded
+			}
+			s, err := OpenStore(t.TempDir())
+			require.NoError(t, err)
+			doc, err := Prepare("slow.pdf", pdfBytes(t, "x"), Options{})
+			require.NoError(t, err)
+			require.NoError(t, s.Put(doc))
+			ctx, cancel := context.WithCancel(context.Background())
+			if tc.cancelled {
+				cancel()
+			}
+			defer cancel()
+			for range 2 {
+				_, _, err = s.Text(ctx, doc.URI())
+				assert.ErrorIs(t, err, context.DeadlineExceeded)
+			}
+			assert.Equal(t, tc.wantCalls, calls)
+		})
+	}
+}
+
 func TestExpandDocuments(t *testing.T) {
 	s, err := OpenStore(t.TempDir())
 	require.NoError(t, err)

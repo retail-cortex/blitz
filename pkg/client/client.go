@@ -858,25 +858,26 @@ func (r *Remote) ListApprovals() []api.Approval {
 	return out
 }
 
-func (r *Remote) revoke(req *pb.RevokeApprovalsRequest) int {
+func (r *Remote) revoke(req *pb.RevokeApprovalsRequest) (int, error) {
 	req.Workspace = r.dir
 	res, err := r.workspaces.RevokeApprovals(context.Background(), connect.NewRequest(req))
 	if err != nil {
-		r.failed("revoking approvals", err)
-		return 0
+		return 0, fromAPI(err)
 	}
-	return int(res.Msg.Revoked)
+	return int(res.Msg.Revoked), errorFromInfo(res.Msg.Error)
 }
 
 // RevokeApprovals revokes the approvals with keys and returns how many
-// went (WorkspaceService.RevokeApprovals).
-func (r *Remote) RevokeApprovals(keys ...string) int {
+// went, and which stay saved (WorkspaceService.RevokeApprovals).
+func (r *Remote) RevokeApprovals(keys ...string) (int, error) {
 	return r.revoke(&pb.RevokeApprovalsRequest{Keys: keys})
 }
 
 // ClearApprovals revokes every standing approval and returns how many
-// went (WorkspaceService.RevokeApprovals).
-func (r *Remote) ClearApprovals() int { return r.revoke(&pb.RevokeApprovalsRequest{All: true}) }
+// went, and which stay saved (WorkspaceService.RevokeApprovals).
+func (r *Remote) ClearApprovals() (int, error) {
+	return r.revoke(&pb.RevokeApprovalsRequest{All: true})
+}
 
 // LoadImage prepares the image at path (in the workspace) for a prompt
 // (WorkspaceService.LoadImage).
@@ -950,6 +951,45 @@ func (r *Remote) SearchWeb(ctx context.Context, terms string) (api.WebSearch, er
 		out.Links = append(out.Links, api.Link{Title: l.Title, URL: l.Url})
 	}
 	return out, nil
+}
+
+// Search searches the workspace's index (WorkspaceService.SearchWorkspace).
+func (r *Remote) Search(ctx context.Context, q api.SearchQuery) (api.SearchResult, error) {
+	res, err := r.workspaces.SearchWorkspace(ctx, connect.NewRequest(&pb.SearchWorkspaceRequest{Workspace: r.dir, Query: q.Text, Sources: q.Sources, Limit: int32(q.Limit), Mode: q.Mode, Hidden: q.Hidden}))
+	if err != nil {
+		return api.SearchResult{}, fromAPI(err)
+	}
+	out := api.SearchResult{Sources: res.Msg.Sources}
+	for _, h := range res.Msg.Hits {
+		out.Hits = append(out.Hits, api.SearchHit{Source: h.Source, Ref: h.Ref, Title: h.Title, Line: int(h.Line), Section: h.Section, Snippet: h.Snippet, Score: h.Score, Summary: h.Summary, Tags: h.Tags})
+	}
+	return out, nil
+}
+
+// SearchStatus is how the workspace's search index is
+// (WorkspaceService.GetSearchStatus); on failure, warn is told and it's
+// the zero status.
+func (r *Remote) SearchStatus() api.SearchStatus {
+	res, err := r.workspaces.GetSearchStatus(context.Background(), connect.NewRequest(&pb.GetSearchStatusRequest{Workspace: r.dir}))
+	if err != nil {
+		r.failed("reading the search index's status", err)
+		return api.SearchStatus{}
+	}
+	s := res.Msg.Status
+	out := api.SearchStatus{Enabled: s.GetEnabled(), Scanning: s.GetScanning(), LastScan: timeOf(s.GetLastScan()), Unreadable: int(s.GetUnreadable()), Error: s.GetError(), Items: map[string]int{},
+		EmbeddingModel: s.GetEmbeddingModel(), Embedded: int(s.GetEmbedded()), EmbedError: s.GetEmbedError(), Enriched: int(s.GetEnriched()), EnrichError: s.GetEnrichError(),
+		Problem: s.GetProblem(), Settings: api.SearchSettings{Enabled: s.GetSettings().GetEnabled(), Sources: s.GetSettings().GetSources(), EmbeddingModel: s.GetSettings().GetEmbeddingModel(),
+			Enrich: s.GetSettings().GetEnrich(), EnrichModel: s.GetSettings().GetEnrichModel(), EnrichDailyLimit: int(s.GetSettings().GetEnrichDailyLimit()), IncludeIgnored: s.GetSettings().GetIncludeIgnored()}}
+	for k, v := range s.GetItems() {
+		out.Items[k] = int(v)
+	}
+	return out
+}
+
+// Reindex starts a scan for search (WorkspaceService.Reindex).
+func (r *Remote) Reindex() error {
+	_, err := r.workspaces.Reindex(context.Background(), connect.NewRequest(&pb.ReindexRequest{Workspace: r.dir}))
+	return fromAPI(err)
 }
 
 // SearchSession searches the session's history for terms and returns the

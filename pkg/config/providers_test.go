@@ -451,6 +451,50 @@ func TestAPIKeyErrors(t *testing.T) {
 	assert.ErrorContains(t, err, "telepathy")
 }
 
+// A settings file that can't be written leaves the stored key as it was,
+// so the file never refers to a secret that's gone or changed.
+func TestAPIKeyFileUnwritable(t *testing.T) {
+	if os.Getuid() == 0 {
+		t.Skip("root writes everything")
+	}
+	const name = "global/llm.openai.api_key"
+	tests := []struct {
+		name   string
+		before string // the stored key, "" for none
+		change func() (string, error)
+	}{
+		{"remove", "sk-old", func() (string, error) { return RemoveAPIKey("", "", "openai") }},
+		{"set over a key", "sk-old", func() (string, error) { return SetAPIKey("", "", "openai", "sk-new") }},
+		{"set a new key", "", func() (string, error) { return SetAPIKey("", "", "openai", "sk-new") }},
+		{"provider", "sk-old", func() (string, error) {
+			return SetProvider("", "", ProviderChoice{Provider: "openai", Key: "sk-new"})
+		}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			home, store := keysEnv(t)
+			if tc.before != "" {
+				_, err := SetAPIKey("", "", "openai", tc.before)
+				require.NoError(t, err)
+			}
+			dir := filepath.Join(home, ".blitz")
+			require.NoError(t, os.MkdirAll(dir, 0o700))
+			require.NoError(t, os.Chmod(dir, 0o500))
+			t.Cleanup(func() { os.Chmod(dir, 0o700) })
+
+			_, err := tc.change()
+			assert.Error(t, err)
+			got, err := store.Get(name)
+			if tc.before == "" {
+				assert.ErrorIs(t, err, secrets.ErrNotFound)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tc.before, got)
+		})
+	}
+}
+
 // A settings file that isn't TOML is reported by everything that reads it.
 func TestBadSettingsFile(t *testing.T) {
 	keysEnv(t)
@@ -493,4 +537,41 @@ func TestSettingsWithoutHomeAndObfuscated(t *testing.T) {
 	assert.ErrorContains(t, err, "no settings directory")
 	_, _, err = ReadSettingsFile("", "")
 	assert.ErrorContains(t, err, "no settings directory")
+}
+
+// A workspace's search settings are set with their types (true, 200, a
+// list), refused when they aren't one, and removed with "".
+func TestSetSearchValues(t *testing.T) {
+	keysEnv(t)
+	ws := t.TempDir()
+	for key, value := range map[string]string{
+		"search.enabled":            "false",
+		"search.sources":            "files, chats",
+		"search.embedding_model":    "ollama/nomic-embed-text",
+		"search.enrich":             "true",
+		"search.enrich_model":       "gemini/gemini-3.8-flash",
+		"search.enrich_daily_limit": "50",
+	} {
+		_, err := SetValue("", ws, key, value)
+		require.NoError(t, err, key)
+	}
+	cfg, err := LoadWorkspace("", ws)
+	require.NoError(t, err)
+	assert.Equal(t, SearchConfig{Enabled: false, Sources: []string{"files", "chats"}, EmbeddingModel: "ollama/nomic-embed-text", Enrich: true, EnrichModel: "gemini/gemini-3.8-flash", EnrichDailyLimit: 50}, cfg.Search)
+
+	for _, bad := range [][2]string{
+		{"search.enabled", "maybe"},
+		{"search.enrich_daily_limit", "-1"},
+		{"search.enrich_daily_limit", "lots"},
+		{"search.sources", "files, email"},
+		{"search.sources", " , "},
+	} {
+		_, err := SetValue("", ws, bad[0], bad[1])
+		assert.Error(t, err, "%s = %q", bad[0], bad[1])
+	}
+	_, err = SetValue("", ws, "search.enabled", "")
+	require.NoError(t, err)
+	cfg, err = LoadWorkspace("", ws)
+	require.NoError(t, err)
+	assert.True(t, cfg.Search.Enabled, "back to the default")
 }

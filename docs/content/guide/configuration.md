@@ -11,7 +11,7 @@ Blitz reads one TOML file, `~/.blitz/.env.toml`, or the directory in `$MODENV_PR
 
 A `.env.toml` inside a project is **ignored** unless you pass `--config .`: a cloned repository must not be able to redirect your API key or turn off approvals.
 
-Each workspace can have its own settings, kept in `~/.blitz/workspaces/<name>-<hash>/.env.toml` (never in the project) and laid over the global ones, so a project can use its own key, provider or model. The desktop app edits both in **Settings**: forms for providers and keys, and the settings file itself.
+Each workspace can have its own settings, kept in `~/.blitz/workspaces/<name>-<hash>/.env.toml` (never in the folder itself) and laid over the global ones, so a workspace can use its own key, provider or model. The desktop app edits both in **Settings**: forms for providers and keys, and the settings file itself.
 
 ## Sharing settings with your team
 
@@ -36,7 +36,7 @@ args = ["@acme/db-mcp"]
 - **After you trust them**, because they run code or loosen a policy: hooks, MCP servers (always sandboxed, never auto-approved), allow rules, `sandbox.shell_writable_paths` inside the workspace, `blitz.default_model` and `[agent_models]` (only providers you've set up), more `workers.policy.allow` kinds, and the scripts of the project's skills.
 - **Never**: API keys, base URLs and other endpoints, telemetry, where logs and audit files go, bypass and auto-approval, turning the sandbox off or opening the network. Blitz ignores them and says which file and key.
 
-When a workspace's settings need trust, the REPL lists what they would do and asks **[t]rust, [d]on't trust, [s]how the files**; the desktop app shows the same in a dialog. Your answer is kept in `~/.blitz/trust.json` for that exact content: if the settings change, or a script their hooks or MCP servers run, or a project skill's scripts, Blitz asks again. Until then those settings stay off, and the rest applies.
+When a project's settings (`.blitz/settings.toml`) need trust, the REPL lists what they would do and asks **[t]rust, [d]on't trust, [s]how the files**; the desktop app shows the same in a dialog. Your answer is kept in `~/.blitz/trust.json` for that exact content: if the settings change, or a script their hooks or MCP servers run, or a project skill's scripts, Blitz asks again. Until then those settings stay off, and the rest applies.
 
 - `/trust` (REPL), `blitz trust [dir]` and Settings › Workspaces › **Project settings** show what applies, what waits and what was ignored, and change the decision; `blitz trust --revoke` forgets it.
 - With nobody to ask (`blitz exec`, a pipe), settings that need trust stay off; `--trust-project` trusts them for that run only.

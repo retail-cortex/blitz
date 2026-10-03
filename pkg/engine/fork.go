@@ -64,9 +64,11 @@ func (w *Workspace) ForkSession(ctx context.Context, turn int) (api.SessionInfo,
 	}
 	if keepEvents >= 0 {
 		if err := w.engine.TruncateSession(ctx, rec.ID, keepEvents); err != nil {
+			w.unfork(ctx, active.ID, rec.ID)
 			return api.SessionInfo{}, fmt.Errorf("fork the conversation: %w", err)
 		}
 		if err := w.storage.Truncate(keepMessages); err != nil {
+			w.unfork(ctx, active.ID, rec.ID)
 			return api.SessionInfo{}, fmt.Errorf("fork the transcript: %w", err)
 		}
 	}
@@ -74,6 +76,20 @@ func (w *Workspace) ForkSession(ctx context.Context, turn int) (api.SessionInfo,
 	w.switched(active, rec.ID, "fork", "fork")
 	info, _ := w.ActiveSession()
 	return info, nil
+}
+
+// unfork deletes fork, which couldn't be cut, and makes its source src
+// active again. What it can't undo is a warning.
+func (w *Workspace) unfork(ctx context.Context, src, fork string) {
+	if _, err := w.storage.Load(src); err != nil {
+		w.warn("returning to the forked session: " + err.Error())
+		return
+	}
+	if err := w.storage.Delete(fork); err != nil {
+		w.warn("deleting the unfinished fork: " + err.Error())
+		return
+	}
+	w.engine.ForgetSession(ctx, fork)
 }
 
 // ExportSession is session id (the active one when "") as Markdown.

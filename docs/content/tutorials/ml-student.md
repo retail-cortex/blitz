@@ -41,7 +41,7 @@ Tell it about the course, how you work and what's off limits. For this workspace
 
 > This is my research and study workspace for CSCE 478/878 Machine Learning: decision trees, ANNs, Bayesian classifiers, genetic algorithms, k-NN, SVMs, ensembles, deep learning, clustering and RL. Four exams (45%), auto-graded labs in R (21%), readings (19%) and a project. I write notes in Markdown with LaTeX and Mermaid, labs in R, experiments in R or Python. Help me with active recall and exam prep. Follow the course's academic integrity and AI policies.
 
-From that, it wrote `.agents/AGENT.md`, with every coding agent's file pointing at it (here `BLITZ.md` holds `@.agents/AGENT.md`). The parts that matter:
+From that, it wrote `.agents/AGENTS.md`, with every coding agent's file pointing at it (here `BLITZ.md` holds `@.agents/AGENTS.md`). The parts that matter:
 
 ```markdown
 ## Commands

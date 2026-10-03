@@ -124,3 +124,43 @@ func TestPermissionRuleKeptWhenSavingFails(t *testing.T) {
 	e, _ := w.tools.Rules().Decide(tools.RuleWrite, []string{"secret/a"})
 	assert.Equal(t, tools.EffectDeny, e)
 }
+
+// A rule saved but not read back (the workspace's settings no longer
+// parse) applies for the session, with a warning.
+func TestPermissionRuleSavedButNotReloaded(t *testing.T) {
+	w := openTest(t)
+	var warnings []string
+	w.warn = func(s string) { warnings = append(warnings, s) }
+	rules, _ := w.settingsFiles()
+	writeSettings(t, rules[1], "[permissions\n")
+	res, err := w.AddPermissionRule("deny", "write(secret/**)", api.ScopeGlobal)
+	require.NoError(t, err)
+	require.NoError(t, res.Saved.Err)
+	e, _ := w.tools.Rules().Decide(tools.RuleWrite, []string{"secret/a"})
+	assert.Equal(t, tools.EffectDeny, e)
+	require.Len(t, warnings, 1)
+	assert.Contains(t, warnings[0], "reading the saved permission rules again")
+}
+
+// A reload with a rule that can't be read keeps the rest, and says why
+// until a reload applies them all.
+func TestPermissionsProblem(t *testing.T) {
+	w := openTest(t)
+	require.NoError(t, w.PermissionsProblem())
+
+	bad := *w.Config()
+	bad.Permissions.Deny = []string{"shell(rm *)", "shell(re:[)"}
+	assert.Error(t, w.ReloadPermissions(&bad))
+	require.Error(t, w.PermissionsProblem())
+	assert.Contains(t, w.PermissionsProblem().Error(), "re:[")
+	var rules []string
+	for _, r := range w.ListPermissionRules() {
+		rules = append(rules, r.Effect+" "+r.Rule)
+	}
+	assert.Contains(t, rules, "deny shell(rm *)", "the good rule applies")
+
+	good := *w.Config()
+	good.Permissions.Deny = []string{"shell(rm *)"}
+	require.NoError(t, w.ReloadPermissions(&good))
+	assert.NoError(t, w.PermissionsProblem())
+}

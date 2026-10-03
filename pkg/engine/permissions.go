@@ -72,8 +72,10 @@ func (w *Workspace) AddPermissionRule(effect, rule string, save api.Scope) (api.
 		// failed is it this session's.
 		out.Saved.Path, _, out.Saved.Err = config.AddPermissionRule("", w.scopeDir(save), effect, out.Rule)
 		if out.Saved.Err == nil {
-			w.reloadSavedPermissions()
-			return out, nil
+			if err := w.reloadSavedPermissions(); err == nil {
+				return out, nil
+			}
+			// Saved, but not read back: it's this session's until then.
 		}
 	}
 	if r.Kind != tools.RuleRead {
@@ -94,7 +96,7 @@ func (w *Workspace) RemovePermissionRule(rule string, save api.Scope) (api.Permi
 	out.Removed = w.tools.Rules().Remove(rule, "")
 	if save != api.ScopeSession {
 		out.Saved.Path, _, out.Saved.Err = config.RemovePermissionRule("", w.scopeDir(save), out.Rule)
-		w.reloadSavedPermissions()
+		_ = w.reloadSavedPermissions() // the rule is gone already; it warns
 	}
 	return out, nil
 }
@@ -109,17 +111,39 @@ func (w *Workspace) scopeDir(s api.Scope) string {
 }
 
 // reloadSavedPermissions reads the saved rules again after a change here.
-func (w *Workspace) reloadSavedPermissions() {
-	if cfg, err := config.LoadWorkspace("", w.Dir()); err == nil {
-		w.ReloadPermissions(cfg)
+// What it couldn't read or apply is a warning, and its error.
+func (w *Workspace) reloadSavedPermissions() error {
+	cfg, err := config.LoadWorkspace("", w.Dir())
+	if err == nil {
+		err = w.ReloadPermissions(cfg)
 	}
+	if err != nil {
+		w.warn("reading the saved permission rules again: " + err.Error())
+	}
+	return err
 }
 
 // ReloadPermissions applies cfg's [permissions] (global and the
 // workspace's, and the built-in read-only rules if on) in place of the
 // ones from the settings: after a settings change while a session runs.
 // Session and flag rules stay; read rules apply from the next start.
+// Rules that can't be read are left out, and PermissionsProblem says why
+// until a reload applies them all.
 func (w *Workspace) ReloadPermissions(cfg *config.Config) error {
 	w.cfg.Permissions, w.cfg.ProjectPermissions = cfg.Permissions, cfg.ProjectPermissions
-	return errors.Join(w.tools.Rules().ReplaceConfigured(cfg.Permissions), w.tools.Rules().ReplaceProject(cfg.ProjectPermissions))
+	err := errors.Join(w.tools.Rules().ReplaceConfigured(cfg.Permissions), w.tools.Rules().ReplaceProject(cfg.ProjectPermissions))
+	w.permMu.Lock()
+	w.permProblem = err
+	w.permMu.Unlock()
+	return err
+}
+
+// PermissionsProblem is why some of the settings' permission rules were
+// left out at the last reload, or nil when all apply. Until they're fixed
+// those rules aren't enforced, and the workspace won't open with them at
+// the next start.
+func (w *Workspace) PermissionsProblem() error {
+	w.permMu.Lock()
+	defer w.permMu.Unlock()
+	return w.permProblem
 }

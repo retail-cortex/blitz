@@ -169,8 +169,38 @@ func TestConnFailures(t *testing.T) {
 	}
 }
 
-// A server that can't start is reported, and not started again; one that
-// died is.
+// The server's requests are answered without holding up the reader: a
+// server that doesn't read its stdin until it's done writing is still
+// heard, and answered once it reads.
+func TestConnRepliesOffReader(t *testing.T) {
+	serverIn, clientOut := io.Pipe()
+	clientIn, serverOut := io.Pipe()
+	p := &pipeProcess{toServer: clientOut, fromServer: clientIn}
+	notes := make(chan string, 1)
+	newConn(p, func(method string, _ json.RawMessage) { notes <- method })
+	defer p.Stop()
+
+	go func() {
+		for _, m := range []string{
+			`{"jsonrpc":"2.0","id":7,"method":"workspace/configuration"}`,
+			`{"jsonrpc":"2.0","method":"window/hello"}`,
+		} {
+			fmt.Fprintf(serverOut, "Content-Length: %d\r\n\r\n%s", len(m), m)
+		}
+	}()
+	select {
+	case m := <-notes:
+		assert.Equal(t, "window/hello", m)
+	case <-time.After(5 * time.Second):
+		t.Fatal("the reader is stuck answering")
+	}
+	body, err := readMessage(bufio.NewReader(serverIn))
+	require.NoError(t, err)
+	assert.JSONEq(t, `{"jsonrpc":"2.0","id":7,"result":[]}`, string(body))
+}
+
+// A server that can't start is reported, and not started again for a
+// while; one that died is started again.
 func TestManagerStarting(t *testing.T) {
 	t.Run("no command", func(t *testing.T) {
 		m := NewManager(t.TempDir(), []Server{{Language: "go", Extensions: []string{".go"}}}, nil)
@@ -194,6 +224,43 @@ func TestManagerStarting(t *testing.T) {
 			assert.Equal(t, 1, f.launched())
 		})
 	}
+	t.Run("caller gave up", func(t *testing.T) {
+		gate := make(chan struct{})
+		m, f, src := newFakeManager(t, func(f *fakeServer, method string, _ json.RawMessage) (any, string) {
+			if method == "initialize" && f.launched() == 1 {
+				<-gate
+			}
+			return map[string]any{}, ""
+		})
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		time.AfterFunc(50*time.Millisecond, func() { close(gate) })
+		_, err := m.For(ctx, src)
+		assert.ErrorIs(t, err, context.Canceled)
+		_, err = m.For(context.Background(), src)
+		require.NoError(t, err, "the start carried on for the next caller")
+		assert.Equal(t, 1, f.launched())
+	})
+	t.Run("tried again after a while", func(t *testing.T) {
+		old := failedRetry
+		failedRetry = 50 * time.Millisecond
+		t.Cleanup(func() { failedRetry = old })
+		m, f, src := newFakeManager(t, func(f *fakeServer, _ string, _ json.RawMessage) (any, string) {
+			if f.launched() == 1 {
+				return nil, "not today"
+			}
+			return map[string]any{}, ""
+		})
+		_, err := m.For(context.Background(), src)
+		require.ErrorContains(t, err, "not today")
+		_, again := m.For(context.Background(), src)
+		assert.Equal(t, err, again, "remembered at first")
+		require.Eventually(t, func() bool {
+			_, err := m.For(context.Background(), src)
+			return err == nil
+		}, 5*time.Second, 20*time.Millisecond)
+		assert.Equal(t, 2, f.launched())
+	})
 	t.Run("died", func(t *testing.T) {
 		m, f, src := newFakeManager(t, nil)
 		s, err := m.For(context.Background(), src)
@@ -211,6 +278,52 @@ func TestManagerStarting(t *testing.T) {
 		_, err := m.For(context.Background(), src)
 		assert.ErrorIs(t, err, errClosed)
 	})
+}
+
+// A server stuck in initialize holds up only its own language: another
+// starts meanwhile, a caller for it gives up with its own context, and
+// Close ends the start without waiting out its timeout.
+func TestManagerSlowStart(t *testing.T) {
+	dir, err := filepath.EvalSymlinks(t.TempDir())
+	require.NoError(t, err)
+	gate := make(chan struct{})
+	t.Cleanup(func() { close(gate) })
+	stuck := &fakeServer{answer: func(_ *fakeServer, method string, _ json.RawMessage) (any, string) {
+		if method == "initialize" {
+			<-gate
+		}
+		return map[string]any{}, ""
+	}}
+	quick := &fakeServer{}
+	launchStuck, launchQuick := stuck.launcher(), quick.launcher()
+	m := NewManager(dir, []Server{
+		{Language: "go", Command: []string{"stuck"}, Extensions: []string{".go"}},
+		{Language: "python", Command: []string{"quick"}, Extensions: []string{".py"}},
+	}, func(ctx context.Context, argv []string) (Process, error) {
+		if argv[0] == "stuck" {
+			return launchStuck(ctx, argv)
+		}
+		return launchQuick(ctx, argv)
+	})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	_, err = m.For(ctx, filepath.Join(dir, "a.go"))
+	assert.ErrorIs(t, err, context.DeadlineExceeded, "the caller gave up")
+
+	py, err := m.For(context.Background(), filepath.Join(dir, "a.py"))
+	require.NoError(t, err, "another language isn't held up")
+	assert.NotNil(t, py)
+
+	closed := make(chan struct{})
+	go func() { m.Close(); close(closed) }()
+	select {
+	case <-closed:
+	case <-time.After(5 * time.Second):
+		t.Fatal("Close waited for the stuck start")
+	}
+	_, err = m.For(context.Background(), filepath.Join(dir, "a.go"))
+	assert.ErrorIs(t, err, errClosed)
 }
 
 // Each request reports the server's error, and a file that can't be read.

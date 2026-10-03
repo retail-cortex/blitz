@@ -29,8 +29,9 @@ import (
 // model answered; its value is the name of the model that failed first.
 const FallbackFromKey = "blitz_fallback_from"
 
-// modelFailThreshold: SDK retries have already run by the time a call
-// fails, so one failure is enough to prefer the next model for a while.
+// modelFailThreshold is one failure: SDK retries have already run by the
+// time a call fails, so one is enough to prefer the next model for a
+// while.
 const modelFailThreshold = 1
 
 // fallbackModel tries models in order (llm.fallback_models). A model that

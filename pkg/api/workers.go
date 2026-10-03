@@ -69,9 +69,10 @@ const (
 	RunRunning   RunStatus = "running"
 	RunSucceeded RunStatus = "succeeded"
 	RunFailed    RunStatus = "failed"
-	// RunLimited: stopped at a limit (turns, cost or time).
+	// RunLimited means the run stopped at a limit (turns, cost or time).
 	RunLimited RunStatus = "limited"
-	// RunSkipped: not started, because the previous run was still going.
+	// RunSkipped means the run wasn't started, because the previous one was
+	// still going.
 	RunSkipped RunStatus = "skipped"
 )
 
@@ -90,7 +91,7 @@ type Run struct {
 	Worker    string    `json:"worker"`
 	Hash      string    `json:"hash"`
 	Status    RunStatus `json:"status"`
-	// Manual: started on request, not by the schedule.
+	// Manual means the run started on request, not by the schedule.
 	Manual    bool          `json:"manual,omitempty"`
 	Started   time.Time     `json:"started"`
 	Duration  time.Duration `json:"duration"`
@@ -109,16 +110,17 @@ type Run struct {
 type State string
 
 const (
-	// StateNew: found but never enabled.
+	// StateNew is a worker found but never enabled.
 	StateNew State = "new"
-	// StateEnabled: enabled at its current hash; it runs on schedule.
+	// StateEnabled is a worker enabled at its current hash; it runs on
+	// schedule.
 	StateEnabled State = "enabled"
-	// StateDisabled: turned off.
+	// StateDisabled is a worker turned off.
 	StateDisabled State = "disabled"
-	// StateChanged: enabled at an older hash; the files changed since, so
-	// it doesn't run until re-enabled.
+	// StateChanged is a worker enabled at an older hash; the files changed
+	// since, so it doesn't run until re-enabled.
 	StateChanged State = "changed"
-	// StateInvalid: WORKER.md can't be used.
+	// StateInvalid is a worker whose WORKER.md can't be used.
 	StateInvalid State = "invalid"
 )
 

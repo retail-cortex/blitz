@@ -22,6 +22,7 @@ tools:
   - delete_snippet
   - delete_file
   - grep
+  - search_workspace
   - lsp
   - apply_patch
   - run_shell_command

@@ -354,18 +354,59 @@ func TestExtractPrograms(t *testing.T) {
 	})
 }
 
-// replaceFile fails cleanly when it can't read or place the new file.
-func TestReplaceFile(t *testing.T) {
+// replaceFiles fails cleanly when it can't read or place a new file, and
+// then leaves every destination as it was: both programs or neither.
+func TestReplaceFiles(t *testing.T) {
+	for name, tc := range map[string]struct {
+		pairs func(dir string) [][2]string
+	}{
+		"a missing source": {pairs: func(dir string) [][2]string {
+			return [][2]string{{filepath.Join(dir, "src"), filepath.Join(dir, "blitzd")}, {filepath.Join(dir, "missing"), filepath.Join(dir, "blitz")}}
+		}},
+		"no folder to stage in": {pairs: func(dir string) [][2]string {
+			return [][2]string{{filepath.Join(dir, "src"), filepath.Join(dir, "blitzd")}, {filepath.Join(dir, "src"), filepath.Join(dir, "no", "blitz")}}
+		}},
+		// A folder in the way: staging works, the second program can't be
+		// placed after the first was.
+		"the second rename fails": {pairs: func(dir string) [][2]string {
+			return [][2]string{{filepath.Join(dir, "src"), filepath.Join(dir, "blitzd")}, {filepath.Join(dir, "src"), filepath.Join(dir, "busy")}}
+		}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			dir := t.TempDir()
+			require.NoError(t, os.WriteFile(filepath.Join(dir, "src"), []byte("new"), 0o644))
+			require.NoError(t, os.WriteFile(filepath.Join(dir, "blitzd"), []byte("old blitzd"), 0o755))
+			require.NoError(t, os.MkdirAll(filepath.Join(dir, "busy", "child"), 0o755))
+			assert.Error(t, replaceFiles(tc.pairs(dir)))
+			data, err := os.ReadFile(filepath.Join(dir, "blitzd"))
+			require.NoError(t, err)
+			assert.Equal(t, "old blitzd", string(data), "the first program is put back")
+			for _, left := range []string{"blitzd.new", "blitzd.old", "busy.new", "blitz.new"} {
+				assert.NoFileExists(t, filepath.Join(dir, left))
+			}
+		})
+	}
+}
+
+// replaceFiles puts every new file in place, and leaves nothing beside.
+func TestReplaceFilesReplacesAll(t *testing.T) {
 	dir := t.TempDir()
-	assert.Error(t, replaceFile(filepath.Join(dir, "missing"), filepath.Join(dir, "dst")))
-	src := filepath.Join(dir, "src")
-	require.NoError(t, os.WriteFile(src, []byte("x"), 0o644))
-	assert.Error(t, replaceFile(src, filepath.Join(dir, "no", "dst")), "no folder to stage in")
-	// A directory in the way: staging works, the rename doesn't.
-	busy := filepath.Join(dir, "busy")
-	require.NoError(t, os.MkdirAll(filepath.Join(busy, "child"), 0o755))
-	assert.Error(t, replaceFile(src, busy))
-	assert.NoFileExists(t, busy+".new", "the staged file is removed")
+	for _, f := range []string{"blitz", "blitzd"} {
+		require.NoError(t, os.WriteFile(filepath.Join(dir, f+".src"), []byte("new "+f), 0o644))
+		require.NoError(t, os.WriteFile(filepath.Join(dir, f), []byte("old "+f), 0o755))
+	}
+	require.NoError(t, replaceFiles([][2]string{
+		{filepath.Join(dir, "blitzd.src"), filepath.Join(dir, "blitzd")},
+		{filepath.Join(dir, "blitz.src"), filepath.Join(dir, "blitz")},
+		{filepath.Join(dir, "blitz.src"), filepath.Join(dir, "fresh")},
+	}))
+	for f, want := range map[string]string{"blitz": "new blitz", "blitzd": "new blitzd", "fresh": "new blitz"} {
+		data, err := os.ReadFile(filepath.Join(dir, f))
+		require.NoError(t, err)
+		assert.Equal(t, want, string(data))
+		assert.NoFileExists(t, filepath.Join(dir, f+".old"))
+		assert.NoFileExists(t, filepath.Join(dir, f+".new"))
+	}
 }
 
 // serveArchive serves archive as v9.9.9's for this machine, with its

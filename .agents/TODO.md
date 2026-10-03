@@ -39,6 +39,15 @@ Everything through 2026-09-29 is pushed to `main`, most of it with
 
 ## Queued
 
+### Error-handling follow-ups (done 2026-10-03)
+
+All five done on the `search-index` branch, each with tests and its spec:
+revoking approvals reports what stayed saved (WS-62), MCP stdio servers
+always reaped (MCP-11), language servers start without holding the
+manager (FS-61), dropped permission rules shown with the rules
+(`ListPermissionRulesResponse.problem`, DSK-85, SVC), PDF text in a
+helper process (IMG-52).
+
 - **Playwright end-to-end tests for the desktop page (M).** Decided
   2026-10-01, deferred until the usability pass settles the UI, so the
   fake service (`dev/fake.ts`) isn't rewritten twice. Playwright, for its

@@ -104,3 +104,24 @@ func TestApprovalStoreErrors(t *testing.T) {
 		assert.Error(t, s.Add("k", "l"))
 	})
 }
+
+// TestApprovalStoreSaveFails checks a rule that can't be saved is neither
+// added nor removed in memory: the store says what the file says.
+func TestApprovalStoreSaveFails(t *testing.T) {
+	dir := t.TempDir()
+	s, err := OpenApprovalStore(filepath.Join(dir, "approvals.json"))
+	require.NoError(t, err)
+	require.NoError(t, s.Add("kept", "K"))
+	require.NoError(t, os.Chmod(dir, 0o500)) // no temp file can be made
+	t.Cleanup(func() { os.Chmod(dir, 0o700) })
+
+	assert.Error(t, s.Add("new", "N"))
+	assert.False(t, s.Has("new"), "a rule that wasn't saved")
+	assert.Error(t, s.Add("kept", "changed"))
+	require.Len(t, s.Rules(), 1)
+	assert.Equal(t, "K", s.Rules()[0].Label, "a change that wasn't saved")
+	ok, err := s.Remove("kept")
+	assert.Error(t, err)
+	assert.True(t, ok)
+	assert.True(t, s.Has("kept"), "a removal that wasn't saved")
+}

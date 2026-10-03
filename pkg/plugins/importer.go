@@ -240,7 +240,9 @@ func ImportGemini(src, out string) (*Report, error) {
 			r.Skipped = append(r.Skipped, "command "+rel+": !{…} and @{…} are kept as text (Blitz doesn't run them)")
 		}
 		md := "---\ndescription: " + yamlString(c.Description) + "\n---\n" + body + "\n"
-		if err := write(filepath.Join(out, CommandsDir, name+".md"), md); err == nil {
+		if err := write(filepath.Join(out, CommandsDir, name+".md"), md); err != nil {
+			r.Skipped = append(r.Skipped, "command "+rel+": "+err.Error())
+		} else {
 			r.Added = append(r.Added, "command: /"+name)
 		}
 		return nil
@@ -281,13 +283,16 @@ func (r *Report) finish() error {
 // copyDir copies src/from/*.md to out/to, rewriting each with fix.
 func (r *Report) copyDir(src, from, to string, fix func(string) string) {
 	for _, name := range mdNames(filepath.Join(src, from)) {
+		kind := strings.TrimSuffix(to, "s")
 		data, err := os.ReadFile(filepath.Join(src, from, name+".md"))
+		if err == nil {
+			err = write(filepath.Join(r.Out, to, name+".md"), fix(string(data)))
+		}
 		if err != nil {
+			r.Skipped = append(r.Skipped, kind+" "+name+": "+err.Error())
 			continue
 		}
-		if err := write(filepath.Join(r.Out, to, name+".md"), fix(string(data))); err == nil {
-			r.Added = append(r.Added, strings.TrimSuffix(to, "s")+": "+name)
-		}
+		r.Added = append(r.Added, kind+": "+name)
 	}
 }
 
@@ -298,9 +303,13 @@ func (r *Report) copySkills(src string) {
 		if !e.IsDir() || !exists(filepath.Join(dir, "SKILL.md")) {
 			continue
 		}
-		if err := copyTree(dir, filepath.Join(r.Out, SkillsDir, e.Name())); err == nil {
-			r.Added = append(r.Added, "skill: "+e.Name())
+		dst := filepath.Join(r.Out, SkillsDir, e.Name())
+		if err := copyTree(dir, dst); err != nil {
+			os.RemoveAll(dst) // no half-copied skill
+			r.Skipped = append(r.Skipped, "skill "+e.Name()+": "+err.Error())
+			continue
 		}
+		r.Added = append(r.Added, "skill: "+e.Name())
 	}
 }
 
@@ -310,6 +319,7 @@ func (r *Report) convertAgents(dir string) {
 	for _, name := range mdNames(dir) {
 		data, err := os.ReadFile(filepath.Join(dir, name+".md"))
 		if err != nil {
+			r.Skipped = append(r.Skipped, "agent "+name+": "+err.Error())
 			continue
 		}
 		head, body, ok := splitFrontmatter(data)
@@ -342,9 +352,11 @@ func (r *Report) convertAgents(dir string) {
 			r.Skipped = append(r.Skipped, fmt.Sprintf("agent %s: model %q (pin one with /pin_model)", name, m))
 		}
 		out, _ := yaml.Marshal(meta)
-		if err := write(filepath.Join(r.Out, AgentsDir, name+".md"), "---\n"+string(out)+"---\n"+rootVars(string(body))); err == nil {
-			r.Added = append(r.Added, "agent: "+name)
+		if err := write(filepath.Join(r.Out, AgentsDir, name+".md"), "---\n"+string(out)+"---\n"+rootVars(string(body))); err != nil {
+			r.Skipped = append(r.Skipped, "agent "+name+": "+err.Error())
+			continue
 		}
+		r.Added = append(r.Added, "agent: "+name)
 	}
 }
 

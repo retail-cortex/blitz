@@ -63,10 +63,13 @@ func lspLauncher(env *ExecEnv) lsp.Launcher {
 		}
 		stdin, err := cmd.StdinPipe()
 		if err != nil {
+			cmd.abandon()
 			return nil, err
 		}
 		stdout, err := cmd.StdoutPipe()
 		if err != nil {
+			stdin.Close()
+			cmd.abandon()
 			return nil, err
 		}
 		cmd.Stderr = io.Discard

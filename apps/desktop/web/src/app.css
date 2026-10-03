@@ -735,3 +735,52 @@ code.file-link:hover { text-decoration-color: currentColor; }
 /* A field's warning: worth knowing, not blocking (an error is .error-text). */
 .warn-text, .field .supporting.warn-text { color: var(--md-warning, #8a6100); }
 :root[data-theme="dark"] .warn-text, :root[data-theme="dark"] .field .supporting.warn-text { color: var(--md-warning, #f0c060); }
+
+/* Workspace search (SearchDialog): source chips, hits with their passage. */
+.search-dialog { width: min(760px, calc(100vw - 48px)); }
+.search-sources { display: flex; flex-wrap: wrap; gap: 8px; padding: 8px 20px; border-bottom: 1px solid var(--md-outline-variant); }
+.search-hit { display: flex; flex-direction: column; align-items: stretch; gap: 4px; width: 100%; padding: 8px 12px; border: none; border-radius: var(--md-shape-md);
+  background: none; color: var(--md-on-surface); text-align: left; cursor: pointer; font: inherit; }
+.search-hit[aria-disabled="true"] { cursor: default; }
+.search-hit.on { background: var(--md-secondary-container); color: var(--md-on-secondary-container); }
+.search-hit-head { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.search-hit-head .icon { color: var(--md-on-surface-variant); flex: none; }
+.search-hit-head .ellipsis { flex: 1; min-width: 0; }
+.search-hit-head .detail { flex: none; }
+.search-snippet { margin: 0 0 0 36px; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 4.5em; overflow: hidden; color: var(--md-on-surface-variant); font-family: var(--md-mono); }
+.search-snippet mark { background: var(--md-tertiary-container); color: var(--md-on-tertiary-container); border-radius: 2px; }
+.search-foot { display: flex; align-items: center; gap: 8px; }
+.search-foot .ellipsis { flex: 1; }
+.search-about { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px; margin-left: 36px; color: var(--md-on-surface); }
+.search-summary { margin-right: 4px; }
+.search-tag { padding: 0 8px; border-radius: 999px; background: var(--md-surface-container-high, var(--md-secondary-container)); color: var(--md-on-surface-variant); font-size: 12px; line-height: 20px; }
+
+/* The table viewer (TableView): a bar, then a grid whose header stays. */
+.table-view { display: flex; flex-direction: column; min-height: 0; height: 100%; padding: 0; }
+.table-bar { display: flex; align-items: center; gap: 12px; padding: 8px 12px; border-bottom: 1px solid var(--md-outline-variant); flex-wrap: wrap; }
+.table-search { display: flex; align-items: center; gap: 6px; flex: 1; min-width: 180px; }
+.table-search .input { flex: 1; }
+.table-pages { display: flex; align-items: center; gap: 4px; margin-left: auto; }
+.table-badge { margin-left: 8px; }
+.table-note { padding: 4px 12px; margin: 0; }
+.table-scroll { flex: 1; overflow: auto; min-height: 0; }
+.table-grid { border-collapse: separate; border-spacing: 0; font-size: 13px; }
+.table-grid th, .table-grid td { padding: 4px 10px; border-bottom: 1px solid var(--md-outline-variant); border-right: 1px solid var(--md-outline-variant); white-space: nowrap; max-width: 320px; overflow: hidden; text-overflow: ellipsis; text-align: left; }
+.table-grid th { position: sticky; top: 0; z-index: 1; background: var(--md-surface-container, var(--md-surface)); vertical-align: top; min-width: 110px; }
+.table-grid td.num, .table-grid th.num { text-align: right; }
+.table-head { display: flex; align-items: center; gap: 4px; width: 100%; padding: 0; border: none; background: none; color: var(--md-on-surface); font: 600 13px/20px var(--md-font); cursor: pointer; }
+.table-kind { display: block; max-width: 300px; }
+.table-filter { width: 100%; margin-top: 4px; padding: 2px 6px; font-size: 12px; min-height: 0; height: 26px; }
+.table-rownum { position: sticky; left: 0; background: var(--md-surface-container, var(--md-surface)); text-align: right; min-width: 56px !important; }
+.table-grid tr.focus td { background: var(--md-secondary-container); color: var(--md-on-secondary-container); }
+.table-grid tbody tr:hover td { background: var(--md-surface-container-high, var(--md-secondary-container)); }
+
+/* A search hit, and Find in file's matches, in a document's preview (files/find.ts). */
+::highlight(search-found), ::highlight(file-found) { background-color: var(--md-tertiary-container); color: var(--md-on-tertiary-container); }
+::highlight(search-found-current), ::highlight(file-found-current) { background-color: var(--md-tertiary); color: var(--md-on-tertiary); }
+
+/* Find in file, over a document's preview (files/FindBar.tsx). */
+.find-bar { display: flex; align-items: center; gap: 6px; padding: 4px 8px 4px 14px; border-bottom: 1px solid var(--md-outline-variant); background: var(--md-surface-container); }
+.find-bar input { flex: 1; min-width: 0; max-width: 360px; font: inherit; color: var(--md-on-surface); background: var(--md-surface); border: 1px solid var(--md-outline-variant); border-radius: 6px; padding: 4px 8px; outline: none; }
+.find-bar input:focus { border-color: var(--md-primary); }
+.find-bar .find-count { min-width: 80px; font-size: 12px; }

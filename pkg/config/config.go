@@ -69,6 +69,7 @@ type Config struct {
 	Checkpoints CheckpointConfig `toml:"checkpoints"`
 	Images      ImagesConfig     `toml:"images"`
 	PDF         PDFConfig        `toml:"pdf"`
+	Search      SearchConfig     `toml:"search"`
 	Audio       AudioConfig      `toml:"audio"`
 	Hooks       HooksConfig      `toml:"hooks"`
 	MCP         MCPConfig        `toml:"mcp"`

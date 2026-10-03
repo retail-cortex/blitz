@@ -19,6 +19,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -153,17 +154,14 @@ func ReadLog(dir string, q LogQuery) (LogPage, error) {
 	}
 	defer f.Close()
 	var all []LogEntry
-	sc := bufio.NewScanner(f)
-	sc.Buffer(make([]byte, 64*1024), 4*1024*1024)
-	for sc.Scan() {
-		line := sc.Text()
+	err = eachLine(bufio.NewReaderSize(f, 64*1024), maxLogLine, func(line string) {
 		e, ok := parseRecord(line)
 		if !ok || levelRank[e.Level] < min || !containsAll(strings.ToLower(line), words) {
-			continue
+			return
 		}
 		all = append(all, e)
-	}
-	if err := sc.Err(); err != nil {
+	})
+	if err != nil {
 		return page, err
 	}
 	page.Matched = len(all)
@@ -171,6 +169,35 @@ func ReadLog(dir string, q LogQuery) (LogPage, error) {
 		page.Entries = append(page.Entries, all[i])
 	}
 	return page, nil
+}
+
+// maxLogLine is the longest record ReadLog reads; a longer one is skipped.
+const maxLogLine = 4 * 1024 * 1024
+
+// eachLine calls fn with each line of r (without its line ending), skipping
+// lines longer than max rather than giving up on the rest.
+func eachLine(r *bufio.Reader, max int, fn func(string)) error {
+	var line []byte
+	long := false
+	for {
+		chunk, err := r.ReadSlice('\n')
+		if long = long || len(line)+len(chunk) > max; !long {
+			line = append(line, chunk...)
+		}
+		if errors.Is(err, bufio.ErrBufferFull) {
+			continue
+		}
+		if !long && len(line) > 0 {
+			fn(strings.TrimRight(string(line), "\r\n"))
+		}
+		line, long = line[:0], false
+		if errors.Is(err, io.EOF) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+	}
 }
 
 func containsAll(s string, words []string) bool {

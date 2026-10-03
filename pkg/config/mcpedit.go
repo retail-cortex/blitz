@@ -29,7 +29,7 @@ import (
 // entries of the global settings file in place, keeping everything else as
 // written, comments included (spec_parity_027 PAR-MCP-01).
 
-// ErrNoMCPServer: no [[mcp.servers]] entry has that name.
+// ErrNoMCPServer means no [[mcp.servers]] entry has that name.
 var ErrNoMCPServer = errors.New("no MCP server by that name")
 
 // AddMCPServer appends s as a [[mcp.servers]] entry of the global settings

@@ -121,7 +121,7 @@ function InlineCode({ text }: { text: string }) {
 }
 
 // The text in a heading (react-markdown's hast node), for its id.
-type Hast = { type: string; value?: string; children?: Hast[] };
+type Hast = { type: string; value?: string; children?: Hast[]; properties?: Record<string, unknown>; position?: { start: { line: number } } };
 function textOf(n: Hast | undefined): string {
   if (!n) return "";
   if (n.type === "text") return n.value ?? "";
@@ -167,7 +167,7 @@ function headings(): Components {
     ({ node, children }: { node?: unknown; children?: ReactNode }) => {
       const id = next(textOf(node as Hast));
       return (
-        <Tag data-anchor={id}>
+        <Tag data-anchor={id} data-line={(node as Hast | undefined)?.position?.start.line}>
           {children}
           <a className="heading-anchor" href={`#${id}`} aria-label={t("desktop.markdown.anchor")} onClick={(e) => (e.preventDefault(), scrollToHeading(e.currentTarget, id))}>
             #
@@ -178,13 +178,24 @@ function headings(): Components {
   return { h1: heading("h1"), h2: heading("h2"), h3: heading("h3"), h4: heading("h4"), h5: heading("h5"), h6: heading("h6") };
 }
 
+// A document's elements keep the source line each starts at (data-line),
+// so a search hit can show where its line is in the preview.
+function sourceLines() {
+  const mark = (n: Hast) => {
+    if (n.type === "element" && n.position) n.properties = { ...n.properties, dataLine: n.position.start.line };
+    n.children?.forEach(mark);
+  };
+  return (tree: Hast) => mark(tree);
+}
+const docPlugins = [sourceLines];
+
 /** Markdown rendered (see the file's header for what it never does). */
 export const Markdown = memo(function Markdown({ text }: { text: string }) {
   useLanguage();
   const doc = useContext(DocContext);
   return (
     <div className="markdown">
-      <ReactMarkdown remarkPlugins={[remarkGfm]} components={doc ? { ...components, ...headings() } : components} skipHtml>
+      <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={doc ? docPlugins : undefined} components={doc ? { ...components, ...headings() } : components} skipHtml>
         {text}
       </ReactMarkdown>
     </div>

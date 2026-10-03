@@ -158,3 +158,43 @@ func TestFilePreviewsAndFailures(t *testing.T) {
 
 // reasonOf is an API error's reason.
 func reasonOf(err error) string { return errorInfo(err).GetReason() }
+
+// A table file over the API: a page with its columns, filtered and
+// sorted; what isn't a table, and a filter that can't be read, arrive as
+// reasons.
+func TestReadTableOverTheAPI(t *testing.T) {
+	_, s := serve(t, nil)
+	srv := httptest.NewServer(s.Handler())
+	defer srv.Close()
+	files := pb.NewFileServiceClient(http.DefaultClient, srv.URL)
+	ctx := context.Background()
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "bottle.csv"), []byte("Sta_ID,Depthm\nA,0\nB,30\nC,10\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "notes.md"), []byte("# x\n"), 0o644))
+
+	res, err := files.ReadTable(ctx, connect.NewRequest(&pb.ReadTableRequest{Workspace: dir, Path: "bottle.csv", SortColumn: 2, Descending: true,
+		Filters: []*pb.ColumnFilter{{Column: 1, Expr: ">0"}}}))
+	require.NoError(t, err)
+	require.Len(t, res.Msg.Columns, 2)
+	assert.Equal(t, "number", res.Msg.Columns[1].Kind)
+	require.Len(t, res.Msg.Rows, 2)
+	assert.Equal(t, []string{"B", "30"}, res.Msg.Rows[0].Cells)
+	assert.Equal(t, int32(2), res.Msg.Rows[0].Number)
+	assert.Equal(t, int32(2), res.Msg.Matched)
+	assert.Equal(t, int32(3), res.Msg.Total)
+	assert.True(t, res.Msg.Sorted)
+
+	for name, tc := range map[string]struct {
+		req    *pb.ReadTableRequest
+		reason string
+	}{
+		"not a table": {&pb.ReadTableRequest{Workspace: dir, Path: "notes.md"}, "NOT_A_TABLE"},
+		"bad filter":  {&pb.ReadTableRequest{Workspace: dir, Path: "bottle.csv", Filters: []*pb.ColumnFilter{{Column: 1, Expr: ">deep"}}}, "BAD_FILTER"},
+		"missing":     {&pb.ReadTableRequest{Workspace: dir, Path: "none.csv"}, "FILE_NOT_FOUND"},
+	} {
+		_, err := files.ReadTable(ctx, connect.NewRequest(tc.req))
+		assert.Equal(t, tc.reason, reasonOf(err), name)
+	}
+	_, err = files.ReadTable(ctx, connect.NewRequest(&pb.ReadTableRequest{Workspace: "relative", Path: "bottle.csv"}))
+	assert.Error(t, err)
+}

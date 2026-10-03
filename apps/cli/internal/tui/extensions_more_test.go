@@ -108,6 +108,12 @@ func TestExtensionCommandOutputs(t *testing.T) {
 			},
 			line: "/permissions remove shell(ls) --save", want: []string{"Removed shell(ls)", "/cfg/.env.toml"},
 		},
+		"rule removal fails": {
+			setup: func(s *stubBackend) {
+				s.removePermission = func(string, api.Scope) (api.PermissionChange, error) { return api.PermissionChange{}, errBoom }
+			},
+			line: "/permissions remove shell(ls)", want: []string{"Couldn't change the rules: boom"},
+		},
 		"unknown verb": {line: "/permissions grant shell(ls)", want: []string{"Usage: /permissions"}},
 		"settings for a bad model": {
 			setup: func(s *stubBackend) {

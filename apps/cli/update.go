@@ -196,17 +196,18 @@ func installRelease(ctx context.Context, out io.Writer, tag, exe string, skipSig
 		targets["blitzd"] = daemon
 	}
 	// Both programs or neither: a blitz newer than its blitzd won't do.
-	for prog := range targets {
+	var pairs [][2]string
+	for _, prog := range []string{"blitzd", "blitz"} {
+		dst, ok := targets[prog]
+		if !ok {
+			continue
+		}
 		if _, ok := files[prog]; !ok {
 			return fmt.Errorf("the archive has no %s", prog)
 		}
+		pairs = append(pairs, [2]string{files[prog], dst})
 	}
-	for prog, dst := range targets {
-		if err := replaceFile(files[prog], dst); err != nil {
-			return fmt.Errorf("replacing %s: %w", dst, err)
-		}
-	}
-	return nil
+	return replaceFiles(pairs)
 }
 
 func fetchFile(ctx context.Context, url, to string) error {
@@ -339,31 +340,87 @@ func extractPrograms(archive, dir string) (map[string]string, error) {
 	return out, nil
 }
 
-// replaceFile puts src at dst: beside it first, then renamed over it (a
-// running program's file can be replaced so; on Windows it's moved aside
-// first).
-func replaceFile(src, dst string) error {
-	data, err := os.ReadFile(src)
-	if err != nil {
-		return err
-	}
-	staged := dst + ".new"
-	if err := os.WriteFile(staged, data, 0o755); err != nil {
-		return err
-	}
-	if goruntime.GOOS == "windows" {
-		old := dst + ".old"
-		os.Remove(old)
-		if err := os.Rename(dst, old); err != nil && !errors.Is(err, os.ErrNotExist) {
-			os.Remove(staged)
+// replaceFiles puts each source over its destination ({src, dst} pairs),
+// all of them or none: every new file is staged beside its destination
+// first, then renamed over it (a running program's file can be replaced
+// so). The old files are kept until all are in place, and put back if one
+// can't be.
+func replaceFiles(pairs [][2]string) (err error) {
+	var staged []string
+	defer func() {
+		for _, s := range staged {
+			os.Remove(s) // only left on failure
+		}
+	}()
+	for _, p := range pairs {
+		data, err := os.ReadFile(p[0])
+		if err != nil {
 			return err
 		}
+		s := p[1] + ".new"
+		if err := os.WriteFile(s, data, 0o755); err != nil {
+			return fmt.Errorf("replacing %s: %w", p[1], err)
+		}
+		staged = append(staged, s)
 	}
-	if err := os.Rename(staged, dst); err != nil {
-		os.Remove(staged)
-		return err
+	type placed struct {
+		dst string
+		old bool // dst existed: its file is at dst.old
 	}
+	var done []placed
+	defer func() {
+		for i := len(done) - 1; i >= 0; i-- {
+			d := done[i]
+			switch {
+			case err == nil && d.old:
+				os.Remove(d.dst + ".old") // fails on Windows while it runs; the next update removes it
+			case err != nil && d.old:
+				os.Rename(d.dst+".old", d.dst)
+			case err != nil:
+				os.Remove(d.dst)
+			}
+		}
+	}()
+	for i, p := range pairs {
+		dst := p[1]
+		old, err := keepOld(dst)
+		if err != nil {
+			return fmt.Errorf("replacing %s: %w", dst, err)
+		}
+		if err := os.Rename(staged[i], dst); err != nil {
+			if old {
+				os.Rename(dst+".old", dst)
+			}
+			return fmt.Errorf("replacing %s: %w", dst, err)
+		}
+		done = append(done, placed{dst, old})
+	}
+	staged = nil
 	return nil
+}
+
+// keepOld keeps dst's file at dst.old until the update is done, and
+// reports whether there was one. Elsewhere than Windows it's a second
+// link, so dst never goes missing; on Windows, where a running program's
+// file can't be replaced, it's moved aside.
+func keepOld(dst string) (bool, error) {
+	old := dst + ".old"
+	switch fi, err := os.Stat(dst); {
+	case errors.Is(err, os.ErrNotExist):
+		return false, nil
+	case err != nil:
+		return false, err
+	case fi.IsDir():
+		return false, fmt.Errorf("%s is a folder", dst)
+	}
+	os.Remove(old)
+	if goruntime.GOOS != "windows" && os.Link(dst, old) == nil {
+		return true, nil
+	}
+	if err := os.Rename(dst, old); err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 // compareVersions compares two versions (v1.2.3, v1.2.3-rc.1): negative

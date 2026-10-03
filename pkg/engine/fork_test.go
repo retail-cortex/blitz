@@ -121,6 +121,21 @@ func TestForkSessionRefusals(t *testing.T) {
 	_, err = w.ForkSession(ctx, 0)
 	assert.ErrorIs(t, err, api.ErrSessionBusy)
 	w.turnEnded(s.ID)
+
+	// A cut the event log can't make leaves no fork behind, and the
+	// source active.
+	missing := 99
+	require.NoError(t, w.storage.Append(session.Message{Role: "user", Content: "three", Events: &missing}))
+	before, err := w.storage.List()
+	require.NoError(t, err)
+	_, err = w.ForkSession(ctx, 2)
+	assert.ErrorContains(t, err, "fork the conversation")
+	active, ok := w.ActiveSession()
+	require.True(t, ok)
+	assert.Equal(t, s.ID, active.ID)
+	after, err := w.storage.List()
+	require.NoError(t, err)
+	assert.Len(t, after, len(before))
 }
 
 // A session with no event log (an older version's) is exported from its

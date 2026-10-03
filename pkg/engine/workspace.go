@@ -69,7 +69,7 @@ type Options struct {
 	TrustProject bool
 }
 
-// Workspace is one open project: everything a session needs.
+// Workspace is a folder opened in Blitz: everything a session needs.
 type Workspace struct {
 	// settingsWatch keeps the permission rules in step with their files;
 	// settingsListeners hear of a change.
@@ -77,11 +77,14 @@ type Workspace struct {
 	settingsMu        sync.Mutex
 	settingsListeners map[int]func()
 	settingsNext      int
-	plugins           []plugins.Loaded
-	noticeMu          sync.Mutex
-	notices           map[string][]string // background processes' notices waiting, by session
-	styleMu           sync.Mutex
-	style             string // the output style ("": [ui] style, else none)
+	// permProblem is why rules were left out at the last reload.
+	permMu      sync.Mutex
+	permProblem error
+	plugins     []plugins.Loaded
+	noticeMu    sync.Mutex
+	notices     map[string][]string // background processes' notices waiting, by session
+	styleMu     sync.Mutex
+	style       string // the output style ("": [ui] style, else none)
 	// appendPrompt is added to the instructions for this run
 	// (--append-system-prompt).
 	appendPrompt string
@@ -115,6 +118,13 @@ type Workspace struct {
 	bgCtx  context.Context
 	bgStop context.CancelFunc
 	bg     sync.WaitGroup
+	// search is the workspace's open index (nil: off); searchSettings are
+	// the [search] settings it follows, searchProblem why they don't apply
+	// in full. searchMu guards the three.
+	searchMu       sync.Mutex
+	search         *searchState
+	searchSettings config.SearchConfig
+	searchProblem  string
 	// ideasRunning: suggestions are being written (guarded by ideasMu).
 	ideasMu      sync.Mutex
 	ideasRunning bool
@@ -358,6 +368,8 @@ func Open(ctx context.Context, cfg *config.Config, o Options) (*Workspace, error
 	}
 	w.settingsWatch = w.watchSettings()
 	w.bgCtx, w.bgStop = context.WithCancel(context.Background())
+	w.tools.SetSearcher(w.Search)
+	w.openSearch(ctx)
 	opened = true
 	return w, nil
 }
@@ -412,6 +424,7 @@ func (w *Workspace) Close() error {
 		w.bgStop()
 		w.bg.Wait()
 	}
+	w.closeSearch()
 	if w.engine != nil {
 		w.engine.StopTasks() // before their tools close
 	}

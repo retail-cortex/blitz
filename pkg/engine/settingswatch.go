@@ -173,4 +173,5 @@ func (w *Workspace) reloadRules() {
 	if err := w.ReloadPermissions(cfg); err != nil {
 		w.warn("reloading the permission rules: " + err.Error())
 	}
+	w.ReloadSearch(cfg)
 }

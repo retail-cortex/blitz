@@ -17,6 +17,7 @@ package server
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -102,7 +103,10 @@ func (h configService) changed(ctx context.Context, dir, path string) *pb.Config
 		cfg, err := config.LoadWorkspace(h.s.configDir, w.Dir())
 		if err == nil {
 			// Rules first: a model error mustn't hide a rule change.
-			w.ReloadPermissions(cfg)
+			if perr := w.ReloadPermissions(cfg); perr != nil {
+				slog.Warn("permission rules not reloaded", "workspace", w.Dir(), "error", perr)
+			}
+			w.ReloadSearch(cfg)
 			err = w.ReloadProviders(ctx, cfg)
 		}
 		if dir != "" && err != nil {

@@ -57,8 +57,8 @@ type Approval struct {
 	Subject string
 	// Dir is the workspace a command approval is limited to ("" if any).
 	Dir string
-	// Always: saved for future sessions (Added says when); otherwise it
-	// lasts until this process exits.
+	// Always means the approval is saved for future sessions (Added says
+	// when); otherwise it lasts until this process exits.
 	Always bool
 	Added  time.Time
 }
@@ -119,5 +119,10 @@ var (
 	ErrUnknownRewindMode = errors.New("unknown rewind mode")
 )
 
-// ErrNothingToUndo: there are no changes left to restore.
+// ErrNothingToUndo means there are no changes left to restore.
 var ErrNothingToUndo = errors.New("nothing to undo")
+
+// ErrApprovalsStillSaved means approvals were revoked for this session
+// but couldn't be removed from the saved file, so they come back at the
+// next start. The error wrapping it names them.
+var ErrApprovalsStillSaved = errors.New("still saved, so they come back at the next start")

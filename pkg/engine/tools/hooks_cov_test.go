@@ -52,15 +52,20 @@ func TestHooksSessionRulesAndStore(t *testing.T) {
 }
 
 // TestHooksAlwaysSaveFails checks an "always" answer whose rule can't be
-// saved reports the failure.
+// saved still allows the action, for the session, and the store doesn't
+// claim a rule it couldn't save.
 func TestHooksAlwaysSaveFails(t *testing.T) {
-	h, _ := decisionHooks(api.DecisionAlways)
+	h, reqs := decisionHooks(api.DecisionAlways)
 	parent := filepath.Join(t.TempDir(), "later-a-file")
 	store, err := OpenApprovalStore(filepath.Join(parent, "a.json"))
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(parent, nil, 0o600)) // saving can't make the directory
 	h.SetStore(store)
-	assert.ErrorContains(t, h.Approve(context.Background(), cmdReq("k")), "saving the rule failed")
+	require.NoError(t, h.Approve(context.Background(), cmdReq("k")), "the user approved it")
+	assert.False(t, store.Has("k"), "a rule that wasn't saved")
+	assert.Empty(t, store.Rules())
+	require.NoError(t, h.Approve(context.Background(), cmdReq("k")))
+	assert.Len(t, *reqs, 1, "remembered for the session")
 }
 
 // TestHooksNotify checks notification hooks fire for Notify and when the

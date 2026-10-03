@@ -27,7 +27,7 @@ import (
 // themes are the Markdown styles /theme offers (glamour's standard ones).
 var themes = []string{"auto", "dark", "light", "dracula", "tokyo-night", "pink", "ascii", "notty"}
 
-// plainDiffs: the theme has no colours, so diffs have none either.
+// plainDiffs means the theme has no colours, so diffs have none either.
 var plainDiffs atomic.Bool
 
 // applyTheme makes name the theme of the REPL's Markdown and diffs.

@@ -18,6 +18,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"sort"
 	"sync"
 
@@ -443,7 +444,9 @@ func (h *Hooks) Approve(ctx context.Context, req api.ApprovalRequest) error {
 		h.mu.Unlock()
 		if decision == api.DecisionAlways && store != nil {
 			if err := store.Add(req.Key, req.KeyLabel); err != nil {
-				return fmt.Errorf("approved, but saving the rule failed: %w", err)
+				// The user approved: allow it (for the session), but say the
+				// rule won't outlive it.
+				slog.WarnContext(ctx, "approved, but saving the rule failed; it lasts only this session", "rule", req.Key, "error", err)
 			}
 		}
 		return nil

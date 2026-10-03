@@ -42,7 +42,7 @@ const Service = "dev.blitz"
 // RefPrefix marks a settings value that names a stored secret.
 const RefPrefix = "keychain:"
 
-// ErrNotFound: no secret is stored under the name.
+// ErrNotFound means no secret is stored under the name.
 var ErrNotFound = errors.New("no such secret")
 
 // Store keeps secrets by name.
@@ -236,6 +236,10 @@ func (f *FileStore) write(m map[string]string) error {
 		return err
 	}
 	if _, err := tmp.WriteString(b.String()); err != nil {
+		tmp.Close()
+		return err
+	}
+	if err := tmp.Sync(); err != nil {
 		tmp.Close()
 		return err
 	}

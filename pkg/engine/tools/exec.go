@@ -233,6 +233,15 @@ func (g *guardedCmd) Run() error {
 	return g.Wait()
 }
 
+// abandon drops a command that won't be started: its guard pipe, both
+// ends, and what Release releases.
+func (g *guardedCmd) abandon() {
+	if g.childEnd != nil {
+		g.childEnd.Close()
+	}
+	g.Release()
+}
+
 // Release closes the guard pipe; safe to call more than once.
 func (g *guardedCmd) Release() { g.once.Do(g.release) }
 

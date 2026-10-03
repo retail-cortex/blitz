@@ -87,7 +87,7 @@ type oneShotOptions struct {
 	theme      string // Markdown theme
 	// schema is --json-schema: the answer must be JSON valid against it.
 	schema *answerSchema
-	// keepGoing: more turns follow (stream-json input), so background
+	// keepGoing means more turns follow (stream-json input), so background
 	// processes are left for the last.
 	keepGoing bool
 }
@@ -150,6 +150,7 @@ func runOneShot(ctx context.Context, w api.Backend, o oneShotOptions) error {
 			retry, err := w.Run(ctx, sid, api.Turn{
 				Text:   "(json-schema) the answer again, valid against the schema",
 				Prompt: "Your final answer isn't valid against the JSON schema: " + serr.Error() + "\nAnswer again with only the JSON value." + o.schema.instruction(),
+				Plan:   o.plan, MaxTurns: o.maxTurns, MaxCostUSD: o.maxCostUSD, Timeout: o.timeout,
 			}, handler)
 			if printer != nil {
 				printer.End()

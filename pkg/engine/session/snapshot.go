@@ -53,7 +53,7 @@ func (s *Storage) FindName(name string) (*SessionRecord, error) {
 	return nil, nil
 }
 
-// errNothingToSave: a snapshot of a session with no conversation.
+// errNothingToSave means the session has no conversation to snapshot yet.
 var errNothingToSave = errors.New("the session has nothing to save yet")
 
 // Snapshot saves a named copy of session srcID: its transcript, metadata

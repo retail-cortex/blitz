@@ -21,6 +21,7 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/retail-cortex/blitz/pkg/socket"
@@ -96,6 +97,8 @@ type keepalive struct {
 	src      io.ReadCloser
 	messages chan []byte // whole messages read from src
 	err      error       // src's error, once messages is closed
+	closed   chan struct{}
+	once     sync.Once
 	empty    []byte
 	interval time.Duration
 	pending  []byte
@@ -103,7 +106,7 @@ type keepalive struct {
 }
 
 func newKeepalive(src io.ReadCloser, interval time.Duration, empty []byte) *keepalive {
-	k := &keepalive{src: src, messages: make(chan []byte), empty: empty, interval: interval}
+	k := &keepalive{src: src, messages: make(chan []byte), closed: make(chan struct{}), empty: empty, interval: interval}
 	go k.readMessages()
 	return k
 }
@@ -124,7 +127,11 @@ func (k *keepalive) readMessages() {
 			k.err = err
 			return
 		}
-		k.messages <- msg
+		select {
+		case k.messages <- msg:
+		case <-k.closed: // nobody will read it
+			return
+		}
 	}
 }
 
@@ -152,4 +159,8 @@ func (k *keepalive) Read(p []byte) (int, error) {
 	return n, nil
 }
 
-func (k *keepalive) Close() error { return k.src.Close() }
+// Close closes src and lets the reading goroutine end.
+func (k *keepalive) Close() error {
+	k.once.Do(func() { close(k.closed) })
+	return k.src.Close()
+}

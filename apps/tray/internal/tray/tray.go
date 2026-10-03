@@ -29,9 +29,9 @@ import (
 
 // Status is the service as the tray sees it.
 type Status struct {
-	// Running: the service answers on its socket.
+	// Running means the service answers on its socket.
 	Running bool
-	// Installed: it starts at login (a launchd agent or systemd unit).
+	// Installed means it starts at login (a launchd agent or systemd unit).
 	Installed bool
 	// Version and PID are what the running service says (GetServiceInfo).
 	Version string

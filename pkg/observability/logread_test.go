@@ -15,8 +15,10 @@
 package observability
 
 import (
+	"bufio"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -93,6 +95,39 @@ func TestReadLog(t *testing.T) {
 	empty, err := ReadLog(filepath.Join(dir, "none"), LogQuery{})
 	require.NoError(t, err)
 	assert.Empty(t, empty.Entries)
+}
+
+// A line too long to read is skipped, and the rest of the day still read.
+func TestReadLogSkipsOverlongLine(t *testing.T) {
+	dir := t.TempDir()
+	huge := `{"time":"2026-09-28T10:00:00Z","level":"INFO","msg":"huge","x":"` + strings.Repeat("a", maxLogLine) + `"}`
+	writeLog(t, dir, "2026-09-28", huge+"\n"+`{"time":"2026-09-28T10:00:01Z","level":"INFO","msg":"after"}`+"\n")
+	page, err := ReadLog(dir, LogQuery{})
+	require.NoError(t, err)
+	require.Len(t, page.Entries, 1)
+	assert.Equal(t, "after", page.Entries[0].Msg)
+}
+
+// eachLine gives each line without its ending, skipping the overlong.
+func TestEachLine(t *testing.T) {
+	cases := map[string]struct {
+		in   string
+		want []string
+	}{
+		"lines":               {"a\nbb\r\n", []string{"a", "bb"}},
+		"no final newline":    {"a\nbb", []string{"a", "bb"}},
+		"overlong skipped":    {"a\n" + strings.Repeat("x", 40) + "\nb\n", []string{"a", "b"}},
+		"overlong at the end": {"a\n" + strings.Repeat("x", 40), []string{"a"}},
+		"empty":               {"", nil},
+	}
+	for name, c := range cases {
+		t.Run(name, func(t *testing.T) {
+			var got []string
+			err := eachLine(bufio.NewReaderSize(strings.NewReader(c.in), 16), 20, func(l string) { got = append(got, l) })
+			require.NoError(t, err)
+			assert.Equal(t, c.want, got)
+		})
+	}
 }
 
 // A directory that can't be listed, and a log that can't be read, are
