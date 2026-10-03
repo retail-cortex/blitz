@@ -20,6 +20,7 @@ import (
 	"github.com/retail-cortex/blitz/pkg/api"
 
 	"github.com/retail-cortex/blitz/pkg/config"
+	"github.com/retail-cortex/blitz/pkg/engine/runtime"
 	"github.com/retail-cortex/blitz/pkg/images"
 	pb "github.com/retail-cortex/blitz/proto/blitz/v1"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -127,10 +128,26 @@ func skillMsgs(list []api.SkillInfo) []*pb.SkillInfo {
 	return out
 }
 
+// acceptedMediaMsg is what a model takes, with each type's extensions.
+func acceptedMediaMsg(list []runtime.Accept) []*pb.AcceptedMedia {
+	var out []*pb.AcceptedMedia
+	for _, a := range list {
+		m := &pb.AcceptedMedia{Kind: string(a.Kind), MimeTypes: a.MIMEs, MaxBytes: a.MaxBytes}
+		for _, mime := range a.MIMEs {
+			if t, ok := images.MediaOf(mime); ok {
+				m.Extensions = append(m.Extensions, t.Exts...)
+			}
+		}
+		out = append(out, m)
+	}
+	return out
+}
+
 func imageMsg(img *images.Image) *pb.Image {
 	return &pb.Image{
 		Id: img.SHA256, Name: img.Name, MimeType: img.MIME, Width: int32(img.Width), Height: int32(img.Height),
-		Size: int64(len(img.Data)), Resized: img.Resized, Pages: int32(img.Pages),
+		Size: int64(max(len(img.Data), img.Size)), Resized: img.Resized, Pages: int32(img.Pages),
+		Kind: string(img.Kind), Seconds: img.Seconds,
 	}
 }
 

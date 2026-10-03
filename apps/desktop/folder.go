@@ -57,16 +57,19 @@ func (a *App) OpenFolder(dir string) error {
 	return nil
 }
 
-// viewable are the documents OpenDocument opens: images and PDFs, which
-// the system shows in a viewer and never runs.
-var viewable = map[string]bool{".pdf": true, ".png": true, ".jpg": true, ".jpeg": true, ".gif": true, ".webp": true, ".bmp": true, ".ico": true, ".svg": true}
+// viewable are the documents OpenDocument opens: images, PDFs, sound and
+// video, which the system shows or plays in a viewer and never runs.
+var viewable = map[string]bool{".pdf": true, ".png": true, ".jpg": true, ".jpeg": true, ".gif": true, ".webp": true, ".bmp": true, ".ico": true, ".svg": true,
+	".heic": true, ".heif": true,
+	".mp3": true, ".wav": true, ".m4a": true, ".aac": true, ".ogg": true, ".oga": true, ".opus": true, ".flac": true, ".weba": true,
+	".mp4": true, ".m4v": true, ".mov": true, ".webm": true, ".avi": true, ".wmv": true, ".flv": true, ".mpeg": true, ".mpg": true, ".3gp": true}
 
-// OpenDocument shows an image or PDF in the system's viewer (where the
+// OpenDocument shows an image, PDF, sound or video in the system's viewer (where the
 // window's own preview falls short). Other files are refused: the page
 // can't make it run one.
 func (a *App) OpenDocument(path string) error {
 	if !viewable[strings.ToLower(filepath.Ext(path))] {
-		return fmt.Errorf("not opening %s: only images and PDFs open", path)
+		return fmt.Errorf("not opening %s: only images, PDFs, sound and video open", path)
 	}
 	fi, err := os.Stat(path)
 	if err != nil {

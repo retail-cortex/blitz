@@ -135,7 +135,7 @@ func TestViewImageTool(t *testing.T) {
 	assert.NotNil(t, tool.Parts[1].InlineData, "image should follow the tool result: %+v", tool.Parts)
 
 	// In the order the mock issues the calls.
-	for _, c := range []struct{ prompt, want string }{{"now the text file", "not a PNG"}, {"and outside", "outside"}, {"blocked one", "blocked"}} {
+	for _, c := range []struct{ prompt, want string }{{"now the text file", "isn't a picture"}, {"and outside", "outside"}, {"blocked one", "blocked"}} {
 		prompt, want := c.prompt, c.want
 		res, _ := functionResponses(t, f.eng, "s", prompt)
 		msg := fmt.Sprint(res["view_image"]["error"])
@@ -281,7 +281,7 @@ func TestGeminiDeveloperAPIAcceptsImages(t *testing.T) {
 	store, _ := images.OpenStore(t.TempDir())
 	img, _ := images.Prepare("clipboard-120000.png", testPNG(t, 8, 8), images.Options{})
 	store.Put(img)
-	m := withImages(llm, store)
+	m := withImages(llm, &mediaSource{store: store})
 
 	req := &model.LLMRequest{Contents: []*genai.Content{
 		{Role: genai.RoleUser, Parts: []*genai.Part{images.Part(img), genai.NewPartFromText("what is this?")}},
@@ -368,36 +368,61 @@ func (m namedModel) GenerateContent(context.Context, *model.LLMRequest, bool) it
 	return func(func(*model.LLMResponse, error) bool) {}
 }
 
-func TestDocumentPolicy(t *testing.T) {
+func TestMediaPolicy(t *testing.T) {
 	gemini := withModelSettings(namedModel{"gemini-3-pro"}, "gemini")
 	claude := withModelSettings(namedModel{"claude-sonnet-5"}, "anthropic")
 	gpt := withModelSettings(namedModel{"gpt-5"}, "openai")
-	type doc struct{ size, pages int }
+	type file struct {
+		mime  string
+		size  int64
+		pages int
+		want  images.Route
+	}
+	const mb = 1 << 20
 	tests := []struct {
-		name  string
-		model model.LLM
-		yes   []doc
-		no    []doc
+		name   string
+		model  model.LLM
+		upload bool
+		files  []file
 	}{
-		{"gemini", gemini, []doc{{1 << 20, 500}}, []doc{{15 << 20, 1}, {1, 1001}}},
-		{"claude", withImages(claude, nil), []doc{{20 << 20, 100}}, []doc{{23 << 20, 1}, {1, 101}}},
-		{"chain of readers", newFallbackModel([]model.LLM{gemini, claude}), []doc{{1 << 20, 100}}, []doc{{1, 101}}},
+		{"gemini, with the Files API", gemini, true, []file{
+			{"application/pdf", mb, 500, images.RouteInline}, {"application/pdf", 15 * mb, 1, images.RouteText}, {"application/pdf", 1, 1001, images.RouteText},
+			{"video/mp4", 10 * mb, 0, images.RouteInline}, {"video/mp4", 100 * mb, 0, images.RouteUpload}, {"audio/mpeg", 3 * mb, 0, images.RouteInline},
+			{"image/heic", mb, 0, images.RouteInline}, {"text/plain", 10, 0, images.RouteText},
+		}},
+		{"gemini on Vertex AI", gemini, false, []file{{"video/mp4", 100 * mb, 0, images.RouteNote}, {"video/mp4", mb, 0, images.RouteInline}}},
+		{"claude", withImages(claude, nil), true, []file{
+			{"application/pdf", 20 * mb, 100, images.RouteInline}, {"application/pdf", 23 * mb, 1, images.RouteText}, {"application/pdf", 1, 101, images.RouteText},
+			{"video/mp4", mb, 0, images.RouteNote}, {"image/heic", mb, 0, images.RouteNote}, {"image/png", mb, 0, images.RouteInline},
+		}},
+		{"openai", gpt, true, []file{{"application/pdf", mb, 1, images.RouteText}, {"audio/wav", mb, 0, images.RouteNote}, {"image/webp", mb, 0, images.RouteInline}}},
+		{"chain of readers", newFallbackModel([]model.LLM{gemini, claude}), true, []file{{"application/pdf", mb, 100, images.RouteInline}, {"application/pdf", 1, 101, images.RouteText}, {"video/mp4", 1, 0, images.RouteNote}}},
+		{"chain with a non-reader", newFallbackModel([]model.LLM{gemini, gpt}), true, []file{{"application/pdf", 1, 1, images.RouteText}, {"image/png", 1, 0, images.RouteInline}}},
+		{"unwrapped", namedModel{"x"}, true, []file{{"application/pdf", 1, 1, images.RouteText}, {"image/png", 1, 0, images.RouteInline}, {"video/mp4", 1, 0, images.RouteNote}}},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			p := documentPolicy(tc.model)
-			require.NotNil(t, p)
-			for _, d := range tc.yes {
-				assert.True(t, p(d.size, d.pages), "%+v", d)
-			}
-			for _, d := range tc.no {
-				assert.False(t, p(d.size, d.pages), "%+v", d)
+			p := mediaPolicy(acceptedFor(tc.model, tc.upload))
+			for _, f := range tc.files {
+				assert.Equal(t, f.want, p(f.mime, f.size, f.pages), "%+v", f)
 			}
 		})
 	}
-	for name, m := range map[string]model.LLM{
-		"openai": gpt, "chain with a non-reader": newFallbackModel([]model.LLM{gemini, gpt}), "unwrapped": namedModel{"x"},
-	} {
-		t.Run(name, func(t *testing.T) { assert.Nil(t, documentPolicy(m)) })
+}
+
+func TestAcceptedMediaKinds(t *testing.T) {
+	kinds := func(list []Accept) []images.Kind {
+		var out []images.Kind
+		for _, a := range list {
+			out = append(out, a.Kind)
+		}
+		return out
 	}
+	assert.Equal(t, []images.Kind{images.KindImage, images.KindDocument, images.KindText, images.KindAudio, images.KindVideo}, kinds(AcceptedMedia("gemini", "gemini-3-pro", true)))
+	assert.Equal(t, []images.Kind{images.KindImage, images.KindDocument, images.KindText}, kinds(AcceptedMedia("anthropic", "claude-opus-5", true)))
+	assert.Equal(t, []images.Kind{images.KindImage, images.KindDocument, images.KindText}, kinds(AcceptedMedia("ollama", "llama4", true)))
+	video, _ := accepts(AcceptedMedia("gemini", "g", true), "video/mp4")
+	assert.EqualValues(t, images.MaxMediaBytes, video.MaxBytes)
+	video, _ = accepts(AcceptedMedia("gemini", "g", false), "video/mp4")
+	assert.EqualValues(t, geminiInline, video.MaxBytes, "no Files API: the inline limit")
 }

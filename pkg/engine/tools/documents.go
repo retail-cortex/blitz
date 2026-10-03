@@ -136,7 +136,7 @@ func NewViewDocumentTool(r *Registry) (tool.Tool, error) {
 		func(ctx agent.Context, input ViewDocumentInput) (ViewDocumentOutput, error) {
 			doc, err := r.LoadImage(input.Path)
 			if err == nil && !doc.IsDocument() {
-				err = fmt.Errorf("%s is a picture: use view_image", input.Path)
+				err = fmt.Errorf("%s isn't a PDF: use view_image, view_media or read_file", input.Path)
 			}
 			if err != nil {
 				return ViewDocumentOutput{Path: input.Path, Error: fmt.Sprintf("cannot view document: %v", err)}, nil
@@ -144,6 +144,48 @@ func NewViewDocumentTool(r *Registry) (tool.Tool, error) {
 			return ViewDocumentOutput{
 				Path: input.Path, ImageURI: doc.URI(), Pages: doc.Pages, Bytes: len(doc.Data),
 				Note: "The document follows this result.",
+			}, nil
+		},
+	)
+}
+
+// ViewMediaInput defines arguments for view_media.
+type ViewMediaInput struct {
+	Path string `json:"path" jsonschema:"The absolute or workspace-relative path of an audio or video file"`
+}
+
+// ViewMediaOutput describes the audio or video; the file itself follows
+// the result.
+type ViewMediaOutput struct {
+	Path     string  `json:"path"`
+	ImageURI string  `json:"image_uri,omitempty"`
+	MIME     string  `json:"mime_type,omitempty"`
+	Seconds  float64 `json:"seconds,omitempty"`
+	Bytes    int     `json:"bytes,omitempty"`
+	Note     string  `json:"note,omitempty"`
+	Error    string  `json:"error,omitempty"`
+}
+
+// NewViewMediaTool lets a model that takes audio or video (Gemini) listen
+// to or watch a file in the workspace: a lecture, a recording, a screen
+// capture of a bug. Others are told it can't.
+func NewViewMediaTool(r *Registry) (tool.Tool, error) {
+	return functiontool.New(
+		functiontool.Config{
+			Name:        "view_media",
+			Description: "Listen to an audio file or watch a video in the workspace (MP3, WAV, M4A, FLAC, Ogg; MP4, MOV, WebM, AVI and more), if your model takes them. The file is given to you right after this tool's result.",
+		},
+		func(ctx agent.Context, input ViewMediaInput) (ViewMediaOutput, error) {
+			m, err := r.LoadImage(input.Path)
+			if err == nil && m.Kind != images.KindAudio && m.Kind != images.KindVideo {
+				err = fmt.Errorf("%s isn't audio or video: use view_image, view_document or read_file", input.Path)
+			}
+			if err != nil {
+				return ViewMediaOutput{Path: input.Path, Error: fmt.Sprintf("cannot open it: %v", err)}, nil
+			}
+			return ViewMediaOutput{
+				Path: input.Path, ImageURI: m.URI(), MIME: m.MIME, Seconds: m.Seconds, Bytes: max(len(m.Data), m.Size),
+				Note: "The file follows this result.",
 			}, nil
 		},
 	)

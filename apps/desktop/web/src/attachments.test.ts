@@ -15,27 +15,39 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { attachableFiles, describeImage, isDocument, maxDocumentBytes, maxImageBytes, readyIds, rejectReason, uploading, type Attachment } from "./attachments";
+import { acceptAttribute, acceptedAs, attachableFiles, clock, describeImage, isDocument, maxUploadBytes, readyIds, rejectReason, uploading, type Accepted, type Attachment } from "./attachments";
+
+// What the service reports for a Claude model, and for Gemini.
+const claude: Accepted[] = [
+  { kind: "image", mimeTypes: ["image/png", "image/jpeg"], extensions: [".png", ".jpg", ".jpeg"], maxBytes: 20 << 20 },
+  { kind: "document", mimeTypes: ["application/pdf"], extensions: [".pdf"], maxBytes: 32 << 20 },
+  { kind: "text", mimeTypes: ["text/plain"], extensions: [".txt", ".md", ".csv"], maxBytes: 1 << 20 },
+];
+const gemini: Accepted[] = [...claude, { kind: "video", mimeTypes: ["video/mp4", "video/quicktime"], extensions: [".mp4", ".mov"], maxBytes: 2 ** 31 }];
 
 describe("attachments", () => {
-  it("accepts images up to the limit", () => {
-    expect(rejectReason({ type: "image/png", size: 10, name: "a.png" })).toBe("");
-    expect(rejectReason({ type: "text/plain", size: 10, name: "a.txt" })).toMatch("isn't an image");
-    expect(rejectReason({ type: "image/png", size: maxImageBytes + 1, name: "big.png" })).toMatch("larger than 20 MB");
+  it("accepts what the model takes, by name or type", () => {
+    expect(acceptedAs(claude, { type: "image/png", name: "a.png" })?.kind).toBe("image");
+    expect(acceptedAs(claude, { type: "", name: "notes.MD" })?.kind).toBe("text");
+    expect(acceptedAs(claude, { type: "image/jpeg", name: "pasted" })?.kind).toBe("image");
+    expect(acceptedAs(claude, { type: "video/mp4", name: "clip.mp4" })).toBeUndefined();
+    expect(acceptedAs(gemini, { type: "video/mp4", name: "clip.mp4" })?.kind).toBe("video");
   });
-  it("accepts PDFs up to their own limit", () => {
-    expect(rejectReason({ type: "application/pdf", size: maxImageBytes + 1, name: "paper.pdf" })).toBe("");
-    expect(rejectReason({ type: "", size: 10, name: "dropped.PDF" })).toBe("");
-    expect(rejectReason({ type: "application/pdf", size: maxDocumentBytes + 1, name: "book.pdf" })).toMatch("larger than 30 MB");
-    expect(isDocument({ type: "text/plain", name: "a.pdf" })).toBe(false);
+  it("says why a file can't be attached", () => {
+    expect(rejectReason({ type: "image/png", size: 10, name: "a.png" }, claude, "claude-sonnet-5")).toBe("");
+    expect(rejectReason({ type: "video/mp4", size: 10, name: "clip.mp4" }, claude, "claude-sonnet-5")).toBe("claude-sonnet-5 can't take clip.mp4");
+    expect(rejectReason({ type: "image/png", size: (20 << 20) + 1, name: "big.png" }, claude, "m")).toMatch("larger than 20 MB");
+    expect(rejectReason({ type: "video/mp4", size: maxUploadBytes + 1, name: "talk.mp4" }, gemini, "m")).toMatch("put it in the workspace");
+    expect(rejectReason({ type: "text/plain", size: (1 << 20) + 1, name: "log.txt" }, claude, "m")).toMatch("larger than 1 MB");
   });
-  it("keeps the images and PDFs among files", () => {
+  it("builds the picker's accept list and filters files", () => {
+    expect(acceptAttribute(claude)).toBe(".png,.jpg,.jpeg,image/png,image/jpeg,.pdf,application/pdf,.txt,.md,.csv,text/plain");
     const f = (name: string, type: string) => new File(["x"], name, { type });
-    const kept = attachableFiles([f("a.png", "image/png"), f("b.pdf", "application/pdf"), f("c.txt", "text/plain")]);
-    expect(kept.map((x) => x.name)).toEqual(["a.png", "b.pdf"]);
-    expect(attachableFiles(null)).toEqual([]);
+    expect(attachableFiles([f("a.png", "image/png"), f("b.mp4", "video/mp4"), f("c.md", "")], claude).map((x) => x.name)).toEqual(["a.png", "c.md"]);
+    expect(attachableFiles(null, claude)).toEqual([]);
+    expect(isDocument({ type: "", name: "dropped.PDF" })).toBe(true);
   });
-  it("sends only uploaded images and waits for the rest", () => {
+  it("sends only uploaded files and waits for the rest", () => {
     const list: Attachment[] = [
       { key: "1", name: "a", url: "u1", id: "x" },
       { key: "2", name: "b", url: "u2" },
@@ -45,10 +57,16 @@ describe("attachments", () => {
     expect(uploading(list)).toBe(true);
     expect(uploading([list[0], list[2]])).toBe(false);
   });
-  it("describes an uploaded image", () => {
+  it("describes an uploaded file", () => {
     expect(describeImage({ width: 1280, height: 720, size: 2n * 1024n * 1024n, resized: true })).toBe("1280×720 · 2.0 MB · scaled down");
     expect(describeImage({ width: 10, height: 10, size: 100, resized: false })).toBe("10×10 · 1 KB");
     expect(describeImage({ width: 0, height: 0, size: 3n << 20n, resized: false, mimeType: "application/pdf", pages: 12 })).toBe("12 pages · 3.0 MB");
     expect(describeImage({ width: 0, height: 0, size: 2048, resized: false, mimeType: "application/pdf", pages: 1 })).toBe("1 page · 2 KB");
+    expect(describeImage({ width: 0, height: 0, size: 5 << 20, resized: false, kind: "audio", seconds: 192 })).toBe("3:12 · 5.0 MB");
+    expect(describeImage({ width: 0, height: 0, size: 2048, resized: false, kind: "video" })).toBe("2 KB");
+    expect(describeImage({ width: 0, height: 0, size: 2048, resized: false, kind: "text" })).toBe("2 KB");
+  });
+  it("formats a length", () => {
+    expect([clock(5), clock(192), clock(3725)]).toEqual(["0:05", "3:12", "1:02:05"]);
   });
 });

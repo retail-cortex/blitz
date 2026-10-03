@@ -17,37 +17,67 @@ package runtime
 import (
 	"context"
 	"iter"
+	"sync"
 
 	"github.com/retail-cortex/blitz/pkg/images"
 	"google.golang.org/adk/v2/model"
 	"google.golang.org/genai"
 )
 
-// imageModel expands stored-image references in each request into the
-// image bytes, so conversation history (and session files) only ever hold
-// the references. A PDF goes as it is to a model that reads PDFs, as its
-// text to others (documentPolicy), so switching models mid-session is safe.
-type imageModel struct {
-	inner model.LLM
+// mediaSource is where stored files come from, and how large ones go up
+// to the provider (set once the workspace has built its uploader).
+type mediaSource struct {
 	store *images.Store
+	mu    sync.RWMutex
+	up    images.Uploader
 }
 
-func withImages(llm model.LLM, store *images.Store) model.LLM {
+func (s *mediaSource) uploader() images.Uploader {
+	if s == nil {
+		return nil
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.up
+}
+
+func (s *mediaSource) storeOf() *images.Store {
+	if s == nil {
+		return nil
+	}
+	return s.store
+}
+
+// imageModel expands stored-file references in each request into what the
+// model takes (acceptedFor, mediaPolicy): bytes, text, a note, or a file
+// uploaded to the provider. Conversation history (and session files) only
+// ever hold the references, so switching models mid-session is safe.
+type imageModel struct {
+	inner model.LLM
+	media *mediaSource
+}
+
+func withImages(llm model.LLM, media *mediaSource) model.LLM {
 	if llm == nil {
 		return nil
 	}
 	if m, ok := llm.(*imageModel); ok {
 		llm = m.inner
 	}
-	return &imageModel{inner: llm, store: store}
+	return &imageModel{inner: llm, media: media}
 }
 
 func (m *imageModel) Name() string { return m.inner.Name() }
 
 func (m *imageModel) GenerateContent(ctx context.Context, req *model.LLMRequest, stream bool) iter.Seq2[*model.LLMResponse, error] {
 	if req != nil && images.HasRefs(req.Contents) {
+		up := m.media.uploader()
+		contents, err := images.Expand(ctx, req.Contents, m.media.storeOf(), mediaPolicy(acceptedFor(m.inner, up != nil)), up)
+		if err != nil {
+			return func(yield func(*model.LLMResponse, error) bool) { yield(nil, err) }
+		}
 		cp := *req
-		cp.Contents = images.Expand(req.Contents, m.store, documentPolicy(m.inner))
+		cp.Contents = contents
 		req = &cp
 	}
 	return m.inner.GenerateContent(ctx, req, stream)

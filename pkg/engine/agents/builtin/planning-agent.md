@@ -11,6 +11,7 @@ tools:
   - read_file
   - view_image
   - view_document
+  - view_media
   - grep
   - lsp
   - ask_user_question

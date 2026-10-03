@@ -282,6 +282,7 @@ func (w *Workspace) ReloadProviders(ctx context.Context, cfg *config.Config) err
 	w.cfg.Blitz.DefaultModel = cfg.Blitz.DefaultModel
 	w.cfg.Audio = cfg.Audio
 	w.setupSpeaker(ctx, func(string) {}) // before the rebuild, which lists generate_audio once there's a speaker
+	w.setupUploader(ctx, func(string) {})
 	return w.rebuildModels(ctx)
 }
 

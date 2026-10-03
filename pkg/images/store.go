@@ -17,8 +17,11 @@ package images
 import (
 	"cmp"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -33,7 +36,7 @@ import (
 
 // Store keeps prepared images and PDFs on disk, named by their SHA-256,
 // readable only by the owner. Identical files are stored once; a PDF's
-// text, once read, is kept beside it (<sha>.txt).
+// text, once read, is kept beside it (<sha>.pdf.txt).
 type Store struct {
 	dir   string
 	pages sync.Map // a PDF's SHA-256 -> its page count
@@ -41,7 +44,16 @@ type Store struct {
 
 var shaRE = regexp.MustCompile(`^[0-9a-f]{64}$`)
 
-var extByMIME = map[string]string{"image/png": ".png", "image/jpeg": ".jpg", "image/gif": ".gif", "image/webp": ".webp", pdftext.MIME: ".pdf"}
+// extByMIME names stored files by type: every attachable type's usual
+// extension, ".txt" for text.
+var extByMIME = func() map[string]string {
+	out := map[string]string{}
+	for _, m := range Media {
+		out[m.MIME] = m.Exts[0]
+	}
+	out["text/plain"] = ".txt"
+	return out
+}()
 
 // OpenStore creates dir (mode 700) if needed.
 func OpenStore(dir string) (*Store, error) {
@@ -67,7 +79,7 @@ func (s *Store) Put(img *Image) error {
 	final := filepath.Join(s.dir, img.SHA256+ext)
 	if _, err := os.Stat(final); err == nil {
 		now := time.Now()
-		os.Chtimes(filepath.Join(s.dir, img.SHA256+".txt"), now, now) // a PDF's text, if read
+		os.Chtimes(filepath.Join(s.dir, img.SHA256+".pdf.txt"), now, now) // a PDF's text, if read
 		return os.Chtimes(final, now, now)
 	}
 	return s.writeFile(final, img.Data)
@@ -91,6 +103,69 @@ func (s *Store) Get(uri string) ([]byte, string, error) {
 	return nil, "", fmt.Errorf("image %s: %w", sha[:12], os.ErrNotExist)
 }
 
+// PutFile stores an audio or video file as it is, streamed (it may be as
+// large as MaxMediaBytes), and returns it without its data (Size set):
+// its type comes from its first bytes and its name (Detect), its length
+// from its header when that's cheap.
+func (s *Store) PutFile(name string, f io.ReaderAt, size int64) (*Image, error) {
+	if size > MaxMediaBytes {
+		return nil, fmt.Errorf("%s is %s; the limit is %s", name, humanBytes(int(min(size, 1<<40))), humanBytes(MaxMediaBytes))
+	}
+	head := make([]byte, min(size, 1<<20))
+	if _, err := f.ReadAt(head, 0); err != nil && err != io.EOF {
+		return nil, err
+	}
+	mime := Detect(name, head[:min(len(head), 4096)])
+	kind := KindOf(mime)
+	if kind != KindAudio && kind != KindVideo {
+		return nil, fmt.Errorf("%s: not audio or video", name)
+	}
+	seconds := Duration(mime, head)
+	if seconds == 0 && size > int64(len(head)) { // the movie header is often at the end
+		tail := make([]byte, min(size, 1<<20))
+		if _, err := f.ReadAt(tail, size-int64(len(tail))); err == nil || err == io.EOF {
+			seconds = Duration(mime, tail)
+		}
+	}
+	tmp, err := os.CreateTemp(s.dir, ".img-*")
+	if err != nil {
+		return nil, err
+	}
+	defer os.Remove(tmp.Name())
+	h := sha256.New()
+	if _, err := io.Copy(io.MultiWriter(tmp, h), io.NewSectionReader(f, 0, size)); err != nil {
+		tmp.Close()
+		return nil, err
+	}
+	if err := tmp.Close(); err != nil {
+		return nil, err
+	}
+	img := &Image{Name: filepath.Base(name), MIME: mime, Kind: kind, SHA256: hex.EncodeToString(h.Sum(nil)),
+		Size: int(size), OriginalBytes: int(size), Seconds: seconds}
+	final := filepath.Join(s.dir, img.SHA256+extByMIME[mime])
+	if _, err := os.Stat(final); err == nil {
+		now := time.Now()
+		return img, os.Chtimes(final, now, now)
+	}
+	return img, os.Rename(tmp.Name(), final)
+}
+
+// Path is a stored file's path, media type and size, by its URI: for
+// sending a large one without reading it all.
+func (s *Store) Path(uri string) (string, string, int64, error) {
+	sha, ok := strings.CutPrefix(uri, URIScheme)
+	if s == nil || !ok || !shaRE.MatchString(sha) {
+		return "", "", 0, fmt.Errorf("invalid image reference %q", uri)
+	}
+	for mime, ext := range extByMIME {
+		p := filepath.Join(s.dir, sha+ext)
+		if info, err := os.Stat(p); err == nil {
+			return p, mime, info.Size(), nil
+		}
+	}
+	return "", "", 0, fmt.Errorf("file %s: %w", sha[:12], os.ErrNotExist)
+}
+
 // MaxDocumentText caps the text a model that can't read PDFs gets for one
 // (about 75,000 tokens).
 const MaxDocumentText = 300_000
@@ -105,7 +180,7 @@ func (s *Store) Text(ctx context.Context, uri string) (string, int, error) {
 	if !ok || !shaRE.MatchString(sha) {
 		return "", 0, fmt.Errorf("invalid image reference %q", uri)
 	}
-	cache := filepath.Join(s.dir, sha+".txt")
+	cache := filepath.Join(s.dir, sha+".pdf.txt")
 	if b, err := os.ReadFile(cache); err == nil {
 		if head, text, ok := strings.Cut(string(b), "\n"); ok {
 			if n, err := strconv.Atoi(strings.TrimPrefix(head, textHeader)); err == nil && strings.HasPrefix(head, textHeader) {
@@ -195,7 +270,7 @@ func (s *Store) Prune(maxAge time.Duration) (int, error) {
 	cutoff := time.Now().Add(-maxAge)
 	n := 0
 	for _, e := range entries {
-		base := strings.TrimSuffix(e.Name(), filepath.Ext(e.Name()))
+		base, _, _ := strings.Cut(e.Name(), ".") // <sha>.png, <sha>.txt, <sha>.gemini.json
 		if e.IsDir() || !shaRE.MatchString(base) {
 			continue
 		}
@@ -229,9 +304,29 @@ func toolImageRef(p *genai.Part) (string, bool) {
 	return uri, ok && strings.HasPrefix(uri, URIScheme)
 }
 
-// DocumentPolicy decides whether a model gets a PDF of size bytes and
-// pages pages as it is (true) or as its text.
-type DocumentPolicy func(size, pages int) bool
+// Route is how a stored file goes to the model about to answer.
+type Route int
+
+// The routes.
+const (
+	// RouteInline sends the bytes in the request.
+	RouteInline Route = iota
+	// RouteText sends text instead: a PDF's text, a text file's content.
+	RouteText
+	// RouteNote sends a note that the model can't take the file.
+	RouteNote
+	// RouteUpload sends a reference to the file in the provider's own
+	// store (Gemini's Files API), uploading it first.
+	RouteUpload
+)
+
+// MediaPolicy routes a stored file of type mime, size bytes and (a PDF)
+// pages for the model about to answer.
+type MediaPolicy func(mime string, size int64, pages int) Route
+
+// Uploader puts a stored file (path, of type mime, named by its SHA-256)
+// in the provider's own store and returns its reference there.
+type Uploader func(ctx context.Context, path, mime, sha string) (*genai.FileData, error)
 
 // HasRefs reports whether any content refers to a stored image.
 func HasRefs(contents []*genai.Content) bool {
@@ -248,15 +343,18 @@ func HasRefs(contents []*genai.Content) bool {
 	return false
 }
 
-// Expand returns contents with stored-image references replaced by the
-// image bytes (and tool-result images appended after their result). A PDF
-// goes as it is where native allows (nil: never), else as its text in a
-// <document> block. Inputs are never modified: they are usually the
+// Expand returns contents with stored-file references replaced by what
+// the model about to answer takes, as route says (nil: Inline for images,
+// Text for PDFs and text files, Note for audio and video): the bytes; a
+// PDF's text in a <document> block or a text file's in a <file> block; a
+// note; or a reference to the file uploaded with up. A tool result's file
+// follows the result. Inputs are never modified: they are usually the
 // session's own events. A missing file, or a nil store, becomes a short
-// note instead so the request still works.
-func Expand(contents []*genai.Content, s *Store, native DocumentPolicy) []*genai.Content {
+// note instead so the request still works; an upload that fails is an
+// error.
+func Expand(ctx context.Context, contents []*genai.Content, s *Store, route MediaPolicy, up Uploader) ([]*genai.Content, error) {
 	if !HasRefs(contents) {
-		return contents
+		return contents, nil
 	}
 	out := make([]*genai.Content, len(contents))
 	for i, c := range contents {
@@ -267,16 +365,24 @@ func Expand(contents []*genai.Content, s *Store, native DocumentPolicy) []*genai
 		changed := false
 		parts := make([]*genai.Part, 0, len(c.Parts)+1)
 		for _, p := range c.Parts {
-			switch uri, isTool := toolImageRef(p); {
+			uri, isTool := toolImageRef(p)
+			var name string
+			switch {
 			case isRef(p):
-				parts = append(parts, s.load(p.FileData.FileURI, p.FileData.DisplayName, native))
-				changed = true
+				uri, name = p.FileData.FileURI, p.FileData.DisplayName
 			case isTool:
-				parts = append(parts, p, s.load(uri, toolFileName(p.FunctionResponse), native))
-				changed = true
+				name = toolFileName(p.FunctionResponse)
+				parts = append(parts, p)
 			default:
 				parts = append(parts, p)
+				continue
 			}
+			part, err := s.load(ctx, uri, name, route, up)
+			if err != nil {
+				return nil, err
+			}
+			parts = append(parts, part)
+			changed = true
 		}
 		if changed {
 			cp := *c
@@ -284,26 +390,81 @@ func Expand(contents []*genai.Content, s *Store, native DocumentPolicy) []*genai
 			out[i] = &cp
 		}
 	}
-	return out
+	return out, nil
 }
 
-func (s *Store) load(uri, name string, native DocumentPolicy) *genai.Part {
-	if s != nil {
-		if data, mime, err := s.Get(uri); err == nil {
-			if mime == pdftext.MIME {
-				sha := strings.TrimPrefix(uri, URIScheme)
-				if native == nil || !native(len(data), s.pageCount(sha, data)) {
-					return s.documentText(uri, name)
-				}
-			}
-			// No DisplayName: the Gemini Developer API rejects it.
-			return &genai.Part{InlineData: &genai.Blob{Data: data, MIMEType: mime}}
+// defaultRoute is the route without a policy: images inline, PDFs and
+// text as text, other media as a note.
+func defaultRoute(mime string, size int64, pages int) Route {
+	switch KindOf(mime) {
+	case KindImage, "":
+		return RouteInline
+	case KindDocument, KindText:
+		return RouteText
+	}
+	return RouteNote
+}
+
+func (s *Store) load(ctx context.Context, uri, name string, route MediaPolicy, up Uploader) (*genai.Part, error) {
+	if route == nil {
+		route = defaultRoute
+	}
+	gone := func() (*genai.Part, error) {
+		return genai.NewPartFromText(fmt.Sprintf("[%s is no longer available]", cmp.Or(name, "image"))), nil
+	}
+	if s == nil {
+		return gone()
+	}
+	path, mime, size, err := s.Path(uri)
+	if err != nil {
+		return gone()
+	}
+	sha := strings.TrimPrefix(uri, URIScheme)
+	pages := 0
+	if mime == pdftext.MIME {
+		if data, _, err := s.Get(uri); err == nil {
+			pages = s.pageCount(sha, data)
 		}
 	}
-	if name == "" {
-		name = "image"
+	r := route(mime, size, pages)
+	if r == RouteUpload && up == nil {
+		r = RouteNote
 	}
-	return genai.NewPartFromText(fmt.Sprintf("[%s is no longer available]", name))
+	switch r {
+	case RouteText:
+		switch KindOf(mime) {
+		case KindDocument:
+			return s.documentText(uri, name), nil
+		case KindText:
+			data, err := os.ReadFile(path)
+			if err != nil {
+				return gone()
+			}
+			return genai.NewPartFromText(fmt.Sprintf("<file name=%q>\n%s\n</file>", cmp.Or(name, "file.txt"), strings.ToValidUTF8(string(data), "\uFFFD"))), nil
+		}
+		return note(name, mime), nil
+	case RouteNote:
+		return note(name, mime), nil
+	case RouteUpload:
+		fd, err := up(ctx, path, mime, sha)
+		if err != nil {
+			return nil, fmt.Errorf("sending %s: %w", cmp.Or(name, "a file"), err)
+		}
+		return &genai.Part{FileData: fd}, nil
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return gone()
+	}
+	// No DisplayName: the Gemini Developer API rejects it.
+	return &genai.Part{InlineData: &genai.Blob{Data: data, MIMEType: mime}}, nil
+}
+
+// note says a model can't take a file.
+func note(name, mime string) *genai.Part {
+	kind := KindOf(mime)
+	what := map[Kind]string{KindImage: "this image type", KindAudio: "audio", KindVideo: "video"}[kind]
+	return genai.NewPartFromText(fmt.Sprintf("[%s: this model can't take %s]", cmp.Or(name, "a file"), cmp.Or(what, mime)))
 }
 
 // toolFileName names a tool result's file: the base of its path, else the

@@ -69,7 +69,10 @@ type Registry struct {
 
 	browser *browserTool // nil: no browser tool
 	speech  *speech      // generate_audio's speech model (SetSpeaker)
-	lsp     *lsp.Manager // language servers (nil: none configured)
+
+	mediaMu    sync.RWMutex
+	mediaCheck MediaCheck   // nil: every supported type
+	lsp        *lsp.Manager // language servers (nil: none configured)
 
 	notesMu sync.Mutex
 	notes   NoteSaver // nil: notes off
@@ -251,6 +254,12 @@ func NewRegistry(cfg *config.Config, agentReg *agents.Registry, skillProv *skill
 				return nil, nil
 			}
 			return NewViewImageTool(r)
+		}},
+		{[]string{"view_media"}, func() (tool.Tool, error) {
+			if r.images == nil {
+				return nil, nil
+			}
+			return NewViewMediaTool(r)
 		}},
 		{[]string{"view_document"}, func() (tool.Tool, error) {
 			if r.images == nil {

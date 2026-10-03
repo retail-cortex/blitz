@@ -40,7 +40,9 @@ import {
   mdiHelpCircleOutline,
   mdiHistory,
   mdiFolderOutline,
+  mdiFileMusicOutline,
   mdiFilePdfBox,
+  mdiFileVideoOutline,
   mdiImageOutline,
   mdiVolumeHigh,
   mdiImagePlusOutline,
@@ -87,7 +89,7 @@ import { pollMs, shouldPoll, welcomeTiles, type TileAction } from "./suggestions
 import { ComposerDock, focusComposerEvent } from "./composerDock";
 import { refreshRuns, runInSession } from "./backgroundRuns";
 import { fileIcon } from "./files/icons";
-import { attachableFiles, describeImage, isDocument, readyIds, rejectReason, uploading, type Attachment } from "./attachments";
+import { acceptAttribute, acceptedAs, describeImage, isDocument, readyIds, rejectReason, uploading, type Accepted, type Attachment } from "./attachments";
 import { Markdown } from "./Markdown";
 import { language, t, tn, useLanguage } from "./i18n";
 import { notify, shouldNotify, type NotifyKind } from "./notify";
@@ -403,6 +405,8 @@ export function Conversation({
 
   // Images for the next prompt: each uploads as soon as it's added.
   const imagesOn = settings?.imagesEnabled ?? true;
+  // What the active agent's model takes (GetSettings accepted_media).
+  const accepted: Accepted[] = settings?.acceptedMedia ?? [];
   const addFiles = useCallback(
     (files: File[]) => {
       if (!imagesOn) {
@@ -410,13 +414,14 @@ export function Conversation({
         return;
       }
       for (const f of files) {
-        const why = rejectReason(f);
+        const why = rejectReason(f, accepted, settings?.model ?? "");
         if (why) {
           snack(why, { error: true });
           continue;
         }
         const doc = isDocument(f);
-        const a: Attachment = { key: `${Date.now()}-${Math.random()}`, name: f.name || "pasted image", url: doc ? "" : URL.createObjectURL(f), document: doc };
+        const kind = acceptedAs(accepted, f)?.kind ?? "image";
+        const a: Attachment = { key: `${Date.now()}-${Math.random()}`, name: f.name || "pasted image", url: kind === "image" ? URL.createObjectURL(f) : "", document: doc, kind };
         setAttachments((list) => [...list, a]);
         (async () => {
           try {
@@ -429,20 +434,21 @@ export function Conversation({
         })();
       }
     },
-    [dir, imagesOn, snack],
+    [dir, imagesOn, snack, accepted, settings?.model],
   );
   // An image or PDF in the workspace (an @mention of one, or Add to context).
   const addImagePath = useCallback(
     (path: string) => {
       if (!imagesOn) return;
-      const a: Attachment = { key: `${Date.now()}-${Math.random()}`, name: path.slice(path.lastIndexOf("/") + 1), url: "", document: /\.pdf$/i.test(path) };
+      const name = path.slice(path.lastIndexOf("/") + 1);
+      const a: Attachment = { key: `${Date.now()}-${Math.random()}`, name, url: "", document: /\.pdf$/i.test(path), kind: acceptedAs(accepted, { name, type: "" })?.kind };
       setAttachments((list) => [...list, a]);
       workspaces.loadImage({ workspace: dir, path }).then(
         (res) => setAttachments((list) => list.map((x) => (x.key === a.key ? { ...x, id: res.image!.id, detail: describeImage(res.image!) } : x))),
         (e) => setAttachments((list) => list.map((x) => (x.key === a.key ? { ...x, error: message(e) } : x))),
       );
     },
-    [dir, imagesOn],
+    [dir, imagesOn, accepted],
   );
   const removeAttachment = (key: string) =>
     setAttachments((list) => {
@@ -865,6 +871,7 @@ export function Conversation({
         onAddImagePath={addImagePath}
         onRemoveAttachment={removeAttachment}
         imagesOn={imagesOn}
+        accept={acceptAttribute(accepted)}
         draft={draft}
         setDraft={setDraft}
         running={running}
@@ -892,7 +899,7 @@ export function Conversation({
       onDrop={(e) => {
         e.preventDefault();
         setDragging(false);
-        addFiles(attachableFiles(e.dataTransfer.files));
+        addFiles(Array.from(e.dataTransfer.files));
       }}
     >
       {dragging && (
@@ -1272,7 +1279,7 @@ function UserBubble({ entry, running, onRewind, onEdit }: { entry: UserEntry; ru
                 <img key={img.url} src={img.url} alt={img.name} title={img.name} />
               ) : (
                 <span key={`${i}-${img.name}`} className="bubble-doc t-body-sm" title={img.name}>
-                  <Icon path={/\.pdf$/i.test(img.name) ? mdiFilePdfBox : mdiImageOutline} size="sm" />
+                  <Icon path={kindIcon(kindOfName(img.name))} size="sm" />
                   <span className="ellipsis">{img.name}</span>
                 </span>
               ),
@@ -1303,9 +1310,24 @@ function Thought({ text, open }: { text: string; open: boolean }) {
   );
 }
 
+/** An attachment's icon by its kind. */
+function kindIcon(kind: string): string {
+  return { document: mdiFilePdfBox, text: mdiFileDocumentOutline, audio: mdiFileMusicOutline, video: mdiFileVideoOutline }[kind] ?? mdiImageOutline;
+}
+
+/** A sent attachment's kind, by its name (a sent prompt keeps only names). */
+function kindOfName(name: string): string {
+  if (/\.pdf$/i.test(name)) return "document";
+  if (/\.(mp3|wav|aac|flac|ogg|oga|opus|m4a|weba)$/i.test(name)) return "audio";
+  if (/\.(mp4|m4v|mov|mpe?g|webm|avi|wmv|flv|3gp)$/i.test(name)) return "video";
+  if (/\.(png|jpe?g|gif|webp|bmp|heic|heif)$/i.test(name)) return "image";
+  return "text";
+}
+
 function toolIcon(name: string): string {
   if (name === "export_pdf") return mdiFilePdfBox;
   if (name === "generate_audio") return mdiVolumeHigh;
+  if (name === "view_media") return mdiFileVideoOutline;
   if (/^(read_file|list_files|view_image|view_document)$/.test(name)) return mdiFileDocumentOutline;
   if (/^(glob|grep|list_or_search_skills)$/.test(name)) return mdiMagnify;
   if (/(create|replace|delete|edit|patch|notebook)/.test(name)) return mdiFileEditOutline;
@@ -1643,6 +1665,7 @@ function Composer({
   onAddImagePath,
   onRemoveAttachment,
   imagesOn,
+  accept,
   draft,
   setDraft,
   running,
@@ -1656,6 +1679,7 @@ function Composer({
   onAddImagePath: (path: string) => void;
   onRemoveAttachment: (key: string) => void;
   imagesOn: boolean;
+  accept: string; // the file picker's: what the model takes
   draft: string;
   setDraft: (t: string) => void;
   running: boolean;
@@ -1778,7 +1802,7 @@ function Composer({
         <div className="attachments">
           {attachments.map((a) => (
             <div key={a.key} className={`attachment ${a.error ? "failed" : ""}`} title={a.error || `${a.name}${a.detail ? ` · ${a.detail}` : ""}`}>
-              {a.url ? <img src={a.url} alt="" /> : <Icon path={a.document ? mdiFilePdfBox : mdiImageOutline} />}
+              {a.url ? <img src={a.url} alt="" /> : <Icon path={kindIcon(a.kind ?? (a.document ? "document" : "image"))} />}
               <span className="attachment-text">
                 <span className="ellipsis">{a.name}</span>
                 <small className={a.error ? "error-text ellipsis" : "muted ellipsis"}>{a.error || a.detail || t("desktop.attach.uploading")}</small>
@@ -1802,7 +1826,7 @@ function Composer({
         }}
         onSelect={trackCaret}
         onPaste={(e) => {
-          const files = attachableFiles(e.clipboardData.files);
+          const files = Array.from(e.clipboardData.files);
           if (files.length) {
             e.preventDefault();
             onAddFiles(files);
@@ -1861,11 +1885,11 @@ function Composer({
             <input
               ref={picker}
               type="file"
-              accept="image/*,application/pdf"
+              accept={accept}
               multiple
               hidden
               onChange={(e) => {
-                onAddFiles(attachableFiles(e.target.files));
+                onAddFiles(Array.from(e.target.files ?? []));
                 e.target.value = "";
               }}
             />

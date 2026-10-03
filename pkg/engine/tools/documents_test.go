@@ -123,7 +123,7 @@ func TestViewDocument(t *testing.T) {
 	assert.Equal(t, "application/pdf", store.MIME(uri))
 	assert.Equal(t, 2, store.Pages(uri))
 
-	for path, want := range map[string]string{"shot.png": "is a picture: use view_image", "missing.pdf": "cannot view document", "../x.pdf": "cannot view document"} {
+	for path, want := range map[string]string{"shot.png": "isn't a PDF", "missing.pdf": "cannot view document", "../x.pdf": "cannot view document"} {
 		t.Run(path, func(t *testing.T) {
 			assert.Contains(t, errOf(runTool(t, rt, map[string]any{"path": path})), want)
 		})

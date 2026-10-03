@@ -20,7 +20,6 @@ import (
 
 	"github.com/retail-cortex/blitz/pkg/api"
 	"github.com/retail-cortex/blitz/pkg/images"
-	"github.com/retail-cortex/blitz/pkg/pdftext"
 	"google.golang.org/adk/v2/session"
 	"google.golang.org/genai"
 )
@@ -31,6 +30,11 @@ import (
 const (
 	imageTokens        = 1500
 	documentPageTokens = 1500
+	// Audio and video by size, for want of their length: Gemini reads 32
+	// tokens a second of audio (about 16 KB of MP3) and about 300 of video
+	// (about 1 MB).
+	audioTokensPerMB = 2000
+	videoTokensPerMB = 300
 )
 
 // ContextParts estimates what a session's next prompt is made of
@@ -46,7 +50,7 @@ func (e *Engine) ContextParts(ctx context.Context, sessionID string, total int64
 	extra := e.extraInstructions
 	e.mu.RUnlock()
 	chars := map[string]int{}
-	order := []string{"system_prompt", "instructions", "tool_declarations", "user_messages", "replies", "tool_calls", "tool_results", "images", "documents", "summary"}
+	order := []string{"system_prompt", "instructions", "tool_declarations", "user_messages", "replies", "tool_calls", "tool_results", "images", "documents", "media", "summary"}
 	if ok {
 		chars["system_prompt"] = len(spec.InterpolatePrompt(e.cfg.Blitz.AgencyLevel))
 		for _, t := range e.toolReg.GetToolsForAgent(spec.Tools) {
@@ -60,10 +64,19 @@ func (e *Engine) ContextParts(ctx context.Context, sessionID string, total int64
 	}
 	chars["instructions"] = len(extra)
 	pictures, pages := 0, 0
+	var media int64
 	attached := func(uri, mime string) {
-		if mime == pdftext.MIME {
+		_, _, size, _ := e.toolReg.Images().Path(uri)
+		switch images.KindOf(mime) {
+		case images.KindDocument:
 			pages += max(1, e.toolReg.Images().Pages(uri))
-		} else {
+		case images.KindText:
+			chars["user_messages"] += int(size)
+		case images.KindAudio:
+			media += max(1, size*audioTokensPerMB>>20)
+		case images.KindVideo:
+			media += max(1, size*videoTokensPerMB>>20)
+		default:
 			pictures++
 		}
 	}
@@ -112,7 +125,8 @@ func (e *Engine) ContextParts(ctx context.Context, sessionID string, total int64
 	}
 	est["images"] = int64(pictures * imageTokens)
 	est["documents"] = int64(pages * documentPageTokens)
-	sum += est["images"] + est["documents"]
+	est["media"] = media
+	sum += est["images"] + est["documents"] + est["media"]
 	var out []api.ContextPart
 	for _, name := range order {
 		v := est[name]

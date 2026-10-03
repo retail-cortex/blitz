@@ -665,6 +665,15 @@ func TestWorkspaceHandlers(t *testing.T) {
 		st, err := w.GetSettings(ctx, connect.NewRequest(&pb.GetSettingsRequest{Workspace: dir}))
 		require.NoError(t, err)
 		assert.NotEmpty(t, st.Msg.Model)
+		kinds := map[string][]string{}
+		for _, m := range st.Msg.AcceptedMedia {
+			kinds[m.Kind] = m.Extensions
+			assert.Positive(t, m.MaxBytes)
+		}
+		assert.Contains(t, kinds["image"], ".png", "what the model takes, with extensions")
+		assert.Contains(t, kinds["text"], ".md")
+		assert.NotContains(t, kinds, "video", "the test model takes no video")
+		assert.Equal(t, "UNSUPPORTED_MEDIA", reason(t, unary(w.AddImage, &pb.AddImageRequest{Workspace: dir, Name: "clip.webm", Data: []byte{0x1A, 0x45, 0xDF, 0xA3}})))
 		key, err := w.SetSetting(ctx, connect.NewRequest(&pb.SetSettingRequest{Workspace: dir, Key: "Effort", Value: "low"}))
 		require.NoError(t, err)
 		assert.Equal(t, "effort", key.Msg.Key)

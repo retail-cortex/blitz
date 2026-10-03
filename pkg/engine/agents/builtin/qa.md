@@ -9,6 +9,7 @@ tools:
   - read_file
   - view_image
   - view_document
+  - view_media
   - grep
   - create_file
   - edit

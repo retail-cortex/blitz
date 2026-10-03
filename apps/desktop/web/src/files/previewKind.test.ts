@@ -15,7 +15,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { defaultView, previewKind, previewOnly } from "./previewKind";
+import { defaultView, playsVideo, previewKind, previewOnly } from "./previewKind";
 
 describe("previewKind", () => {
   it.each([
@@ -28,6 +28,8 @@ describe("previewKind", () => {
     ["audio/overview.wav", "audio"],
     ["talk.MP3", "audio"],
     ["voice.opus", "audio"],
+    ["demo.MP4", "video"],
+    ["old.avi", "video"],
     ["main.go", null],
     ["Makefile", null],
     ["v1.2/notes", null],
@@ -51,4 +53,14 @@ describe("defaultView", () => {
   ])("%s", (_name, kind, atLine, empty, want) => {
     expect(defaultView(kind, { atLine, empty })).toBe(want);
   });
+});
+
+describe("playsVideo", () => {
+  it.each([
+    ["a.mp4", true],
+    ["b.MOV", true],
+    ["c.webm", true],
+    ["d.avi", false],
+    ["e.wmv", false],
+  ])("%s", (p, want) => expect(playsVideo(p)).toBe(want));
 });

@@ -350,6 +350,7 @@ func toAPI(err error) error {
 		{api.ErrScriptsDisabled, connect.CodeFailedPrecondition, "SCRIPTS_DISABLED"},
 		{api.ErrUnknownLocale, connect.CodeInvalidArgument, "UNKNOWN_LOCALE"},
 		{api.ErrImagesDisabled, connect.CodeFailedPrecondition, "IMAGES_DISABLED"},
+		{api.ErrUnsupportedMedia, connect.CodeFailedPrecondition, "UNSUPPORTED_MEDIA"},
 		{api.ErrNoFetch, connect.CodeFailedPrecondition, "NO_FETCH"},
 		{api.ErrNoSearch, connect.CodeFailedPrecondition, "NO_SEARCH"},
 		{api.ErrNothingToCompact, connect.CodeFailedPrecondition, "NOTHING_TO_COMPACT"},

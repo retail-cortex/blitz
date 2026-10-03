@@ -22,7 +22,7 @@
  * beside the source; image, pdf and audio show only as a preview (audio as
  * a player); null has none.
  */
-export type PreviewKind = "markdown" | "svg" | "image" | "pdf" | "audio" | null;
+export type PreviewKind = "markdown" | "svg" | "image" | "pdf" | "audio" | "video" | null;
 
 /** The preview a file has, by its name. */
 export function previewKind(path: string): PreviewKind {
@@ -32,12 +32,16 @@ export function previewKind(path: string): PreviewKind {
   if (ext === "svg") return "svg";
   if (["png", "jpg", "jpeg", "gif", "webp", "bmp", "ico"].includes(ext)) return "image";
   if (ext === "pdf") return "pdf";
-  if (["wav", "mp3", "m4a", "aac", "ogg", "opus", "flac"].includes(ext)) return "audio";
+  if (["wav", "mp3", "m4a", "aac", "ogg", "oga", "opus", "flac", "weba"].includes(ext)) return "audio";
+  if (["mp4", "m4v", "mov", "webm", "avi", "wmv", "flv", "mpeg", "mpg", "3gp"].includes(ext)) return "video";
   return null;
 }
 
 /** Whether a kind shows only as a preview (it has no text to edit). */
-export const previewOnly = (k: PreviewKind) => k === "image" || k === "pdf" || k === "audio";
+export const previewOnly = (k: PreviewKind) => k === "image" || k === "pdf" || k === "audio" || k === "video";
+
+/** Whether the window's web view plays a video file (MP4, QuickTime, WebM); others open in the system's player. */
+export const playsVideo = (path: string) => /\.(mp4|m4v|mov|webm)$/i.test(path);
 
 /** How a file with a preview shows: as its text, or rendered. */
 export type View = "source" | "preview";

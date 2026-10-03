@@ -1,15 +1,15 @@
 ---
-title: "011 · Images and documents"
+title: "011 · Attachments"
 weight: 11
 ---
 
-*Images and documents* (`spec_images_011`)
+*Attachments: images, documents, text, audio and video* (`spec_images_011`)
 
 | | |
 |---|---|
 | Status | Implemented. Reverse-engineered from `53f8c53` (2026-09-24) and kept with the code since; its paths and names checked 2026-09-27 (`//tools/specs`). |
-| Source | `pkg/images/*.go`, `pkg/pdftext/pdftext.go`, `pkg/engine/tools/images.go`, `documents.go`, `pkg/engine/runtime/images.go`, `documents.go`, `openai_images.go`, `anthropic.go`, `contextparts.go`; `/attach`, `/paste` in `apps/cli/internal/tui`; `apps/desktop/web/src/attachments.ts` |
-| Tests | `pkg/images/images_test.go`, `documents_test.go`, `pkg/engine/tools/images_test.go`, `documents_test.go`, `pkg/engine/runtime/images_test.go`, `contextparts_test.go`, `apps/cli/internal/tui/attach_test.go`, `apps/cli/images_test.go`, `apps/desktop/web/src/attachments.test.ts` |
+| Source | `pkg/images/*.go`, `pkg/pdftext/pdftext.go`, `pkg/engine/tools/images.go`, `documents.go`, `pkg/engine/runtime/images.go`, `media.go`, `geminifiles.go`, `openai_images.go`, `anthropic.go`, `contextparts.go`, `pkg/engine/media.go`; `/attach`, `/paste` in `apps/cli/internal/tui`; `apps/desktop/web/src/attachments.ts` |
+| Tests | `pkg/images/images_test.go`, `documents_test.go`, `media_test.go`, `pkg/engine/tools/images_test.go`, `documents_test.go`, `media_test.go`, `pkg/engine/runtime/images_test.go`, `geminifiles_test.go`, `contextparts_test.go`, `pkg/engine/media_test.go`, `apps/cli/internal/tui/attach_test.go`, `apps/cli/images_test.go`, `apps/desktop/web/src/attachments.test.ts` |
 | Depends on | [spec_filetools_006](spec_filetools_006.md) (sandboxed reads) |
 
 ## 1. Purpose
@@ -45,6 +45,16 @@ Users and the agent can put pictures and PDFs in front of models. Images are val
 - **IMG-53** Anthropic: a PDF is a base64 `document` block, inside the tool result after `view_document`. OpenAI/Ollama: only `image/*` inline data becomes `input_image`; anything else is a note ("[application/pdf attachment omitted: this model can't read it]"), never a request the API rejects.
 - **IMG-54** `/context` counts PDFs apart from images, at 1,500 tokens a page ("PDF documents"), attached or from `view_document`.
 - **IMG-55** An `@paper.pdf` mention attaches the PDF; the prompt's file mentions leave PDFs (and pictures) out of the `<mentioned-files>` block. The desktop's chips show a PDF's pages and size and the PDF icon, and its sent prompt shows the PDF's name; PDFs up to 30 MB upload (what fits a service request); the service's `Image` carries `pages` (spec_service_021).
+
+## 7. Every type, and what each model takes
+
+- **IMG-60** The catalogue (`images.Media`): images (PNG, JPEG, GIF, WebP, BMP, HEIC, HEIF), PDFs, text (`text/plain` for notes, data and code: `.txt .md .csv .json .yaml .xml .html .log`, source files and more), audio (MP3, WAV, AAC, FLAC, Ogg, Opus, M4A, WebM audio) and video (MP4, QuickTime, MPEG, WebM, AVI, WMV, FLV, 3GPP), each with its kind, media type and extensions. `Detect` takes the type from the first bytes (`http.DetectContentType`, an ISO base media file's `ftyp` brand for MP4, QuickTime, M4A, 3GPP and HEIC, and the signatures of FLAC, FLV, ASF, RIFF WAVE and AVI, Ogg and Opus, EBML, ADTS, MPEG audio and MPEG program streams), the name only breaking ties (WebM audio or video; text only by its name, and only UTF-8 without NULs).
+- **IMG-61** Preparation by kind: images as IMG-10–13, GIF and BMP always re-encoded as PNG (Gemini takes no GIF, Claude no BMP), HEIC and HEIF kept as they are (no pure-Go decoder); text up to 1 MB; audio and video as they are, with their length when the header gives it cheaply (a WAVE header; an MP4-family movie header at the start or the end), up to the request's size as bytes and up to 2 GB from a workspace file, which is streamed into the store (`Store.PutFile`) and never held in memory. `Image` has its `Kind` and `Seconds`.
+- **IMG-62** What each model takes (`runtime.AcceptedMedia`, by provider and model; a fallback chain takes only what every member takes, at the smallest limits): **Gemini** images (HEIC too), PDFs, text, audio and video, audio and video inline up to 14 MB and through the Files API up to 2 GB where Blitz signs in with an API key (not on Vertex AI, which has none: 14 MB there); **Claude** images, PDFs and text; **others** (OpenAI, Ollama, Azure, Bedrock, a model Blitz doesn't know) images, text, and PDFs as their text.
+- **IMG-63** Refused at upload: `LoadImage`, `AddImage` and `LoadAttachments` (so `@mentions`, `/attach`, `--image`, the desktop's attach, paste and drop, and the `view_*` tools) check the type and size against the active agent's model before storing (`Registry.SetMediaCheck`, `Workspace.checkMedia`; for audio and video, from the first bytes, before streaming): `api.ErrUnsupportedMedia` ("talk.mp4: claude-sonnet-5 can't take video (it takes images, PDFs and text)", reason `UNSUPPORTED_MEDIA`). A mention only warns. `GetSettings` reports `accepted_media` (each kind with its types, extensions and largest file) for the front ends to offer only those.
+- **IMG-64** Sending (`images.Expand` with a `MediaPolicy` from the model, `mediaPolicy`): each stored reference goes inline (within the model's inline limits), as text (a PDF's, IMG-52; a text file's content in a `<file name=…>` block), uploaded (a Gemini `FileData`), or as a note ("[clip.mp4: this model can't take video]"), so files already in a conversation survive a model switch. A failed upload fails the request, naming the file.
+- **IMG-65** The uploader (`runtime.NewGeminiUploader`, built when a workspace opens and again when its settings are reloaded): genai's Files API as `[llm.gemini]` signs in, one upload at a time, waiting while Gemini processes the file (polling every 2 s, up to 10 minutes; a failed file says why), the file's URI kept beside it (`<sha256>.gemini.json`, pruned with it) and used for 47 hours, then uploaded again. A failure to build it is a warning.
+- **IMG-66** `view_media` (spec_filetools_006 FS-77) gives the model audio or video from the workspace; `view_image` takes pictures only, `view_document` PDFs only, each pointing at the others. `/context` counts audio (about 2,000 tokens a megabyte) and video (about 300) as "Audio and video", and text files with the prompt's text.
 
 ## 5. Provider handling
 - **IMG-30** Gemini: native inline data. Anthropic: base64 image blocks, or inside the tool result for `view_image` ([spec_models_015](spec_models_015.md) MDL-23). OpenAI/Ollama: marker substitution into `input_image` items (MDL-42). For Ollama a vision model is required.

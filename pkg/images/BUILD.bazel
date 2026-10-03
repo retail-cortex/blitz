@@ -19,6 +19,7 @@ go_library(
     srcs = [
         "clipboard.go",
         "images.go",
+        "media.go",
         "mentions.go",
         "store.go",
     ],
@@ -27,6 +28,7 @@ go_library(
     deps = [
         "//pkg/pdftext",
         "@org_golang_google_genai//:genai",
+        "@org_golang_x_image//bmp",
         "@org_golang_x_image//draw",
         "@org_golang_x_image//webp",
     ],
@@ -39,6 +41,7 @@ go_test(
         "clipboard_test.go",
         "documents_test.go",
         "images_test.go",
+        "media_test.go",
     ],
     embed = [":images"],
     shard_count = 3,
@@ -48,5 +51,6 @@ go_test(
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
         "@org_golang_google_genai//:genai",
+        "@org_golang_x_image//bmp",
     ],
 )
