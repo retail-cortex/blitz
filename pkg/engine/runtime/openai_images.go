@@ -45,8 +45,8 @@ type openAIImagesKey struct{}
 type openAIImages map[string]string
 
 // replaceImagesWithMarkers returns req with inline images replaced by
-// markers, and the context carrying them. Requests without images are
-// returned unchanged.
+// markers, and the context carrying them; other inline data is replaced by
+// a note. Requests without inline data are returned unchanged.
 func replaceImagesWithMarkers(ctx context.Context, req *model.LLMRequest) (context.Context, *model.LLMRequest) {
 	if req == nil {
 		return ctx, req
@@ -71,6 +71,12 @@ func replaceImagesWithMarkers(ctx context.Context, req *model.LLMRequest) (conte
 			}
 			if parts == nil {
 				parts = append([]*genai.Part{}, c.Parts[:j]...)
+			}
+			// Only pictures become input_image items; anything else (a PDF
+			// is normally given as its text before it gets here) is a note.
+			if !strings.HasPrefix(p.InlineData.MIMEType, "image/") {
+				parts = append(parts, genai.NewPartFromText(fmt.Sprintf("[%s attachment omitted: this model can't read it]", p.InlineData.MIMEType)))
+				continue
 			}
 			marker := imageMarkerPrefix + randomID()
 			imgs[marker] = "data:" + p.InlineData.MIMEType + ";base64," + base64.StdEncoding.EncodeToString(p.InlineData.Data)

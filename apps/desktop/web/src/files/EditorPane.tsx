@@ -15,18 +15,23 @@
  */
 
 import { useEffect, useRef, useState } from "react";
-import { mdiAlertCircleOutline, mdiAt, mdiChevronRight, mdiClose, mdiContentSave, mdiLockOutline, mdiMessagePlusOutline, mdiWrap } from "@mdi/js";
-import { addToContext } from "../events";
+import { mdiAlertCircleOutline, mdiAt, mdiChevronRight, mdiClose, mdiContentSave, mdiFilePdfBox, mdiLockOutline, mdiMessagePlusOutline, mdiWrap } from "@mdi/js";
+import { files } from "../api";
+import { inApp, printPDF } from "../desktop";
+import { message } from "../errors";
+import { addToContext, openFile } from "../events";
 import { EditorView } from "@codemirror/view";
 import { t, tn } from "../i18n";
-import { Button, Dialog, Icon, IconButton, Segmented } from "../ui/controls";
+import { Button, Dialog, Icon, IconButton, Segmented, useSnackbar } from "../ui/controls";
 import { Preview } from "./Preview";
 import { defaultView, previewKind, previewOnly, type View } from "./previewKind";
 import type { Cursor } from "../status";
 import { goToLine, languageOf, setWrap } from "./codemirror";
 import { fileIcon } from "./icons";
 import type { EditorModel, Tab } from "./useEditor";
-import { useAdvanced } from "../state";
+import { useAdvanced, useApp } from "../state";
+import { paperFor, pdfPath, printablePage } from "./printPage";
+import { drawForPrint } from "../mermaid";
 
 /**
  * The editor beside the conversation (spec_files_029 §6): the open files'
@@ -64,6 +69,49 @@ export function EditorPane({ model, onReveal, onCursor }: { model: EditorModel; 
   // preview); elsewhere, such as the composer, it still pastes plain text.
   const pane = useRef<HTMLElement>(null);
   const canToggle = !!tab && !!kind && !previewOnly(kind) && ready;
+
+  // Export as PDF: the preview, printed by the app's web engine, written
+  // beside the file; an existing PDF is replaced only when the user says.
+  const snack = useSnackbar();
+  const { prefs, theme } = useApp();
+  const [exporting, setExporting] = useState(false);
+  const [replacing, setReplacing] = useState<{ path: string; pdf: string; version: string } | null>(null);
+  const exportPdf = async (path: string, pdf: string, version: string) => {
+    setExporting(true);
+    try {
+      const markdown = await renderedPreview(pane.current);
+      const html = await printablePage({
+        markdown,
+        docPath: path,
+        title: path.slice(path.lastIndexOf("/") + 1),
+        userCss: prefs.markdown_css_light,
+        read: (p) => files.readPreview({ workspace: model.dir, path: p }),
+        redraw: theme === "dark" ? drawForPrint : undefined,
+      });
+      const data = await printPDF(html, paperFor(navigator.language));
+      await files.writeBinaryFile({ workspace: model.dir, path: pdf, data, version });
+      snack(t("desktop.files.exported", { name: pdf.slice(pdf.lastIndexOf("/") + 1) }), {
+        action: { label: t("desktop.files.open_pdf"), run: () => openFile({ dir: model.dir, path: pdf }) },
+      });
+    } catch (e) {
+      snack(t("desktop.files.export_failed", { error: message(e) }), { error: true });
+    } finally {
+      setExporting(false);
+    }
+  };
+  const startExport = async () => {
+    if (!tab) return;
+    if (shownAs !== "preview") setView(tab.path, "preview");
+    const pdf = pdfPath(tab.path);
+    try {
+      const { versions } = await files.statFiles({ workspace: model.dir, paths: [pdf] });
+      const version = versions[pdf] ?? "";
+      if (version) setReplacing({ path: tab.path, pdf, version });
+      else await exportPdf(tab.path, pdf, "");
+    } catch (e) {
+      snack(t("desktop.files.export_failed", { error: message(e) }), { error: true });
+    }
+  };
   useEffect(() => {
     if (!canToggle || !tab) return;
     const key = (e: KeyboardEvent) => {
@@ -209,6 +257,9 @@ export function EditorPane({ model, onReveal, onCursor }: { model: EditorModel; 
               }
             />
           )}
+          {kind === "markdown" && ready && inApp() && (
+            <IconButton icon={mdiFilePdfBox} label={t("desktop.files.export_pdf")} small disabled={exporting} onClick={() => void startExport()} />
+          )}
           {tab.agentRule !== "blocked" && (
             <>
               <IconButton icon={mdiAt} label={t("desktop.files.add_to_context")} small onClick={() => addToContext({ dir: model.dir, path: tab.path })} />
@@ -243,8 +294,53 @@ export function EditorPane({ model, onReveal, onCursor }: { model: EditorModel; 
           onCancel={() => setClosing(null)}
         />
       )}
+      {replacing && (
+        <Dialog
+          title={t("desktop.files.replace_pdf", { name: replacing.pdf.slice(replacing.pdf.lastIndexOf("/") + 1) })}
+          icon={mdiFilePdfBox}
+          onClose={() => setReplacing(null)}
+          footer={
+            <>
+              <Button onClick={() => setReplacing(null)}>{t("desktop.cancel")}</Button>
+              <Button
+                variant="filled"
+                onClick={() => {
+                  const r = replacing;
+                  setReplacing(null);
+                  void exportPdf(r.path, r.pdf, r.version);
+                }}
+              >
+                {t("desktop.files.replace")}
+              </Button>
+            </>
+          }
+        >
+          <p>{t("desktop.files.replace_pdf_body")}</p>
+        </Dialog>
+      )}
     </section>
   );
+}
+
+/**
+ * The preview's rendered document in pane, once it has settled: shown
+ * (the pane may just have switched to it) and no longer changing, as
+ * Mermaid diagrams finish drawing. Gives up waiting after 4 seconds.
+ */
+async function renderedPreview(pane: HTMLElement | null): Promise<HTMLElement> {
+  let last = -1;
+  for (let i = 0; i < 40; i++) {
+    const el = pane?.querySelector<HTMLElement>(".preview-markdown .markdown");
+    if (el) {
+      const size = el.innerHTML.length;
+      if (size === last) return el;
+      last = size;
+    }
+    await new Promise((r) => setTimeout(r, 100));
+  }
+  const el = pane?.querySelector<HTMLElement>(".preview-markdown .markdown");
+  if (!el) throw new Error(t("desktop.files.no_preview"));
+  return el;
 }
 
 // Notes about the file: a refused save, changes on disk.

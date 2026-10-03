@@ -235,23 +235,25 @@ func (w *Workspace) ReadFile(p string) (FileContent, error) {
 	return out, nil
 }
 
-// maxPreviewBytes is the largest image or PDF ReadPreview sends.
+// maxPreviewBytes is the largest image, PDF or sound ReadPreview sends.
 const maxPreviewBytes = 32 << 20
 
 // previewTypes are the files ReadPreview shows, by extension.
 var previewTypes = map[string]string{
 	".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif", ".webp": "image/webp",
 	".svg": "image/svg+xml", ".bmp": "image/bmp", ".ico": "image/x-icon", ".pdf": "application/pdf",
+	".wav": "audio/wav", ".mp3": "audio/mpeg", ".m4a": "audio/mp4", ".aac": "audio/aac",
+	".ogg": "audio/ogg", ".opus": "audio/ogg", ".flac": "audio/flac",
 }
 
 // PreviewType is the media type the preview shows p as ("" when it has none).
 func PreviewType(p string) string { return previewTypes[strings.ToLower(path.Ext(p))] }
 
-// ErrNoPreview: ReadPreview shows only images and PDFs, up to 32 MB.
+// ErrNoPreview: ReadPreview shows only images, PDFs and sound, up to 32 MB.
 var ErrNoPreview = errors.New("no preview")
 
-// ReadPreview returns an image or PDF's bytes and media type, for the
-// editor to show (FIL-54).
+// ReadPreview returns an image, PDF or sound file's bytes and media type,
+// for the editor to show or play (FIL-54).
 func (w *Workspace) ReadPreview(p string) (string, []byte, error) {
 	rel, _, err := userPath(p)
 	if err != nil {
@@ -259,7 +261,7 @@ func (w *Workspace) ReadPreview(p string) (string, []byte, error) {
 	}
 	mime := PreviewType(p)
 	if mime == "" {
-		return "", nil, fmt.Errorf("%w for %s: not an image or a PDF", ErrNoPreview, p)
+		return "", nil, fmt.Errorf("%w for %s: not an image, a PDF or sound", ErrNoPreview, p)
 	}
 	data, _, err := w.files().UserReadFile(rel, maxPreviewBytes)
 	if errors.Is(err, tools.ErrTooLarge) {
@@ -287,12 +289,16 @@ func isBinary(data []byte) bool {
 // must not exist yet), and returns the new version. Otherwise it returns
 // a *FileChangedError.
 func (w *Workspace) WriteFile(ctx context.Context, p, text, version string) (string, error) {
+	return w.WriteBinaryFile(ctx, p, []byte(text), version)
+}
+
+// WriteBinaryFile is WriteFile for bytes: a PDF the editor exported.
+func (w *Workspace) WriteBinaryFile(ctx context.Context, p string, data []byte, version string) (string, error) {
 	rel, slash, err := userPath(p)
 	if err != nil {
 		return "", err
 	}
 	created := false
-	data := []byte(text)
 	err = w.files().UserWriteFile(ctx, rel, data, func(current []byte, exists bool) error {
 		now := ""
 		if exists {

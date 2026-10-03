@@ -89,6 +89,7 @@ type Bound = {
   SetUnsaved(u: { message: string; quit: string; cancel: string }): Promise<void>;
   License(which: string): Promise<string>;
   PendingLinks(): Promise<DeepLink[] | null>;
+  PrintPDF(html: string, pageSize: string): Promise<string>;
 };
 
 /** A blitz://open link: a folder to open, with a prompt to fill in. */
@@ -196,6 +197,15 @@ export const openFolder = (dir: string) => app().OpenFolder(dir);
 
 /** Opens an image or PDF in the system's viewer (only in the app). */
 export const openDocument = (path: string) => app().OpenDocument(path);
+
+/**
+ * Prints a page (whole HTML, pictures inline) to PDF with the system's web
+ * engine, on A4 or Letter paper (only in the app).
+ */
+export async function printPDF(html: string, pageSize: "A4" | "Letter"): Promise<Uint8Array> {
+  const b64 = await app().PrintPDF(html, pageSize); // Go's []byte comes as base64
+  return Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+}
 
 /** Shows a file or folder selected in the system's file manager (only in the app). */
 export const revealPath = (path: string) => app().RevealPath(path);

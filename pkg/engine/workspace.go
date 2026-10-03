@@ -43,6 +43,7 @@ import (
 	"github.com/retail-cortex/blitz/pkg/plugins"
 	"github.com/retail-cortex/blitz/pkg/redact"
 	"google.golang.org/adk/v2/model"
+	"google.golang.org/genai"
 )
 
 // Options configure Open.
@@ -315,6 +316,7 @@ func Open(ctx context.Context, cfg *config.Config, o Options) (*Workspace, error
 			opts = append(opts, runtime.WithReviewModel(m))
 		}
 	}
+	w.setupSpeaker(ctx, o.Warn)
 	built := map[string]bool{}
 	for _, h := range cfg.Hooks.All() { // prompt hooks naming their model
 		if h.Kind() != config.HookPrompt || h.Model == "" || built[h.Model] {
@@ -419,10 +421,26 @@ func (w *Workspace) Close() error {
 	return err
 }
 
-// LoadAttachments loads image files (failures are errors naming the path)
-// and @image mentions in prompt (failures are warnings: the prompt may be
-// piped text that merely contains an @path) through the workspace sandbox.
-// Identical images are attached once.
+// setupSpeaker gives generate_audio the [audio] model's speaker (none
+// without one), warning when it can't be built; its calls go in the
+// session's /cost.
+func (w *Workspace) setupSpeaker(ctx context.Context, warn func(string)) {
+	cfg := w.cfg
+	sp, err := runtime.NewSpeaker(ctx, cfg)
+	if err != nil {
+		warn(i18n.T("audio.model_failed", "model", cfg.Audio.Model, "error", ModelErrorSummary(err, cfg)))
+	}
+	w.tools.SetSpeaker(sp, err, cfg.Audio, func(ctx context.Context, session, model string, usage *genai.GenerateContentResponseUsageMetadata) {
+		if session != "" && w.engine != nil {
+			w.engine.RecordSpeech(ctx, session, model, usage)
+		}
+	})
+}
+
+// LoadAttachments loads image and PDF files (failures are errors naming
+// the path) and @image or @paper.pdf mentions in prompt (failures are
+// warnings: the prompt may be piped text that merely contains an @path)
+// through the workspace sandbox. Identical files are attached once.
 func (w *Workspace) LoadAttachments(paths []string, prompt string, warn func(string)) ([]*images.Image, error) {
 	var out []*images.Image
 	seen := map[string]bool{}

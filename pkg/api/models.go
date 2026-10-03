@@ -108,6 +108,9 @@ type Settings struct {
 	Effort string
 	// Style is the output style in use ("default": none).
 	Style string
+	// SpeechModel is generate_audio's speech model ([audio] model; "" for
+	// none), and SpeechError why it can't be used.
+	SpeechModel, SpeechError string
 }
 
 // StyleInfo is an output style (/style).

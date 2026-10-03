@@ -43,4 +43,5 @@ check=()
 bazel run "${q[@]}" //tools/notices -- \
 	--go-repos="$tmp/repos" --go-mod="$PWD/go.mod" --goroot="$goroot" --apache="$PWD/LICENSE" \
 	--npm-lock="$PWD/pnpm-lock.yaml" --npm-store="$bin/node_modules/.aspect_rules_js" \
+	--fonts="Noto Sans, Noto Sans Mono and Noto Sans Math (the Noto Project)=$PWD/pkg/engine/mdpdf/fonts" \
 	--out="$PWD/THIRD_PARTY_NOTICES" "${check[@]}"

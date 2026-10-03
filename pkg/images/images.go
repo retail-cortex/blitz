@@ -12,15 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package images prepares pictures for vision models and keeps them out of
-// session files.
+// Package images prepares pictures and PDFs for models and keeps them out
+// of session files.
 //
 // An image is normalised once (format checked, oversized pictures scaled
 // down and re-encoded), written to a content-addressed Store and referred to
 // in conversation history by a FileData part whose URI starts with URIScheme.
 // Session files therefore hold a short reference instead of megabytes of
 // base64; Expand swaps the references for the bytes just before each model
-// request.
+// request. A PDF is kept as it is, with its page count; Expand gives it to
+// a model that reads PDFs as is, and to others as its text
+// (spec_images_011).
 package images
 
 import (
@@ -39,6 +41,7 @@ import (
 	"path"
 	"strings"
 
+	"github.com/retail-cortex/blitz/pkg/pdftext"
 	xdraw "golang.org/x/image/draw"
 	_ "golang.org/x/image/webp" // registers the WebP decoder
 )
@@ -52,6 +55,9 @@ const (
 	DefaultMaxDimension = 1568
 	DefaultMaxInput     = 20 << 20
 	MaxEncodedBytes     = 3_750_000
+	// MaxDocumentBytes is the largest PDF accepted, Anthropic's request
+	// limit.
+	MaxDocumentBytes = 32 << 20
 	// maxPixels rejects decompression bombs before decoding: a tiny file
 	// can declare a gigantic canvas.
 	maxPixels = 100_000_000
@@ -85,7 +91,12 @@ type Image struct {
 	// Size is len(Data), kept for an image whose data stays elsewhere (one
 	// held by the Blitz service).
 	Size int
+	// Pages is a PDF's page count; 0 for a picture.
+	Pages int
 }
+
+// IsDocument reports whether img is a PDF rather than a picture.
+func (img *Image) IsDocument() bool { return img.MIME == pdftext.MIME }
 
 // URI is the reference stored in conversation history.
 func (img *Image) URI() string { return URIScheme + img.SHA256 }
@@ -96,11 +107,21 @@ func (img *Image) Summary() string {
 	if n == 0 {
 		n = img.Size
 	}
+	if img.IsDocument() {
+		return fmt.Sprintf("%s %s, %s", img.Name, pagesLabel(img.Pages), humanBytes(n))
+	}
 	return fmt.Sprintf("%s %d×%d, %s", img.Name, img.Width, img.Height, humanBytes(n))
 }
 
-// ErrNotImage is returned for data that isn't a supported image.
-var ErrNotImage = errors.New("not a PNG, JPEG, GIF or WebP image")
+func pagesLabel(n int) string {
+	if n == 1 {
+		return "1 page"
+	}
+	return fmt.Sprintf("%d pages", n)
+}
+
+// ErrNotImage is returned for data that isn't a supported image or a PDF.
+var ErrNotImage = errors.New("not a PNG, JPEG, GIF or WebP image, or a PDF")
 
 var supported = map[string]bool{"image/png": true, "image/jpeg": true, "image/gif": true, "image/webp": true}
 
@@ -113,9 +134,17 @@ func IsImagePath(p string) bool {
 	return false
 }
 
+// IsAttachablePath reports whether a file name is one an @mention attaches
+// rather than inlines: a picture or a PDF.
+func IsAttachablePath(p string) bool { return IsImagePath(p) || pdftext.IsPDFPath(p) }
+
 // Prepare validates data and scales it down when it is larger than the
-// limits allow. The format is detected from the bytes, never the name.
+// limits allow. The format is detected from the bytes, never the name. A
+// PDF (up to MaxDocumentBytes) is kept as it is, once it's known readable.
 func Prepare(name string, data []byte, o Options) (*Image, error) {
+	if pdftext.IsPDF(data) {
+		return prepareDocument(name, data)
+	}
 	o = o.withDefaults()
 	if int64(len(data)) > o.MaxInput {
 		return nil, fmt.Errorf("%s is %s; the limit is %s", name, humanBytes(len(data)), humanBytes(int(o.MaxInput)))
@@ -148,6 +177,19 @@ func Prepare(name string, data []byte, o Options) (*Image, error) {
 	sum := sha256.Sum256(img.Data)
 	img.SHA256 = hex.EncodeToString(sum[:])
 	return img, nil
+}
+
+func prepareDocument(name string, data []byte) (*Image, error) {
+	if len(data) > MaxDocumentBytes {
+		return nil, fmt.Errorf("%s is %s; the limit for a PDF is %s", name, humanBytes(len(data)), humanBytes(MaxDocumentBytes))
+	}
+	pages, err := pdftext.Pages(data)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", name, err)
+	}
+	sum := sha256.Sum256(data)
+	return &Image{Name: path.Base(strings.ReplaceAll(name, `\`, "/")), Data: data, MIME: pdftext.MIME,
+		Pages: pages, SHA256: hex.EncodeToString(sum[:]), OriginalBytes: len(data)}, nil
 }
 
 // shrink scales the image to fit maxDim and re-encodes it: PNG for

@@ -56,6 +56,8 @@ One TOML file, `.env.toml`, loaded through `github.com/rrmcguinness/modenv` (hie
 | `[sandbox.commands]` | `allow`, `deny` (defaults below), `auto_approve` | | |
 | `[ui]` | `markdown` true, `spinner` true, `terminal_title` true, `history_file` `~/.blitz/history`, `history_size` 1000, `diff_lines` 120, `theme` `auto`, `locale` `en-US`, `locales_dir` `~/.blitz/locales`, `style` (none), `notify_after` 30, `notify` `both`, `status_line` (none), `editor` `emacs`, `keybindings` `~/.blitz/keybindings.toml` | | `style`: [spec_memory_012](spec_memory_012.md) MEM-40 |
 | `[images]` | `enabled` true, `dir` `~/.blitz/images`, `max_dimension` 1568, `max_input_mb` 20, `retain_days` 30 | | |
+| `[pdf]` | `page_size` `auto` (`a4`, `letter`; auto: Letter where the locale's country uses it) | | the `export_pdf` tool: [spec_filetools_006](spec_filetools_006.md) FS-70 |
+| `[audio]` | `model` (none: no speech), `voice`, `speakers` (two `{name, voice}`), `max_chars` 9000 | | `generate_audio`: [spec_models_015](spec_models_015.md) MDL-90; `audio.model` and `audio.voice` can be set with `SetConfigValue` |
 | `[memory]` | `enabled` true, `files` `["AGENTS.md","CLAUDE.md","GEMINI.md","BLITZ.md"]`, `local_files` `["CLAUDE.local.md","BLITZ.local.md"]`, `rule_dirs` `[".blitz/rules",".agents/rules",".claude/rules"]`, `global` `~/.blitz/BLITZ.md`, `global_rules` `~/.blitz/rules`, `max_bytes` 32 KiB, `auto` true (the agent's notes) | | see [spec_memory_012](spec_memory_012.md) |
 | `[context]` | `compaction` true, `token_threshold` 120000, `retain_events` 20 | | |
 | `[audit]` | `enabled` true, `dir` `~/.blitz/audit` | | |

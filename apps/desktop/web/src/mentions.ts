@@ -67,3 +67,8 @@ export function appendMention(draft: string, path: string): string {
 export function isImagePath(path: string): boolean {
   return /\.(png|jpe?g|gif|webp)$/i.test(path);
 }
+
+/** Whether a path is attached rather than inlined: an image or a PDF (pkg/images's IsAttachablePath). */
+export function isAttachablePath(path: string): boolean {
+  return isImagePath(path) || /\.pdf$/i.test(path);
+}

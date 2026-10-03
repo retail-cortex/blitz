@@ -19,18 +19,26 @@ import (
 	"encoding/json"
 
 	"github.com/retail-cortex/blitz/pkg/api"
+	"github.com/retail-cortex/blitz/pkg/images"
+	"github.com/retail-cortex/blitz/pkg/pdftext"
 	"google.golang.org/adk/v2/session"
 	"google.golang.org/genai"
 )
 
-// imageTokens is roughly what an image costs in a prompt.
-const imageTokens = 1500
+// imageTokens is roughly what an image costs in a prompt, and
+// documentPageTokens a PDF's page (text and picture, as Claude reads it;
+// Gemini's are cheaper).
+const (
+	imageTokens        = 1500
+	documentPageTokens = 1500
+)
 
 // ContextParts estimates what a session's next prompt is made of
 // (spec_parity_027 PAR-UI-06): the active agent's system prompt, the
 // project instructions and notes, the tool declarations, the prompts,
-// replies, tool calls and results, images and summaries of earlier
-// conversation. Each is its text's length / 4 (images a flat amount),
+// replies, tool calls and results, images, PDFs and summaries of earlier
+// conversation. Each is its text's length / 4 (images a flat amount, PDFs
+// an amount a page),
 // scaled so they add up to total when the model reported one.
 func (e *Engine) ContextParts(ctx context.Context, sessionID string, total int64) []api.ContextPart {
 	e.mu.RLock()
@@ -38,7 +46,7 @@ func (e *Engine) ContextParts(ctx context.Context, sessionID string, total int64
 	extra := e.extraInstructions
 	e.mu.RUnlock()
 	chars := map[string]int{}
-	order := []string{"system_prompt", "instructions", "tool_declarations", "user_messages", "replies", "tool_calls", "tool_results", "images", "summary"}
+	order := []string{"system_prompt", "instructions", "tool_declarations", "user_messages", "replies", "tool_calls", "tool_results", "images", "documents", "summary"}
 	if ok {
 		chars["system_prompt"] = len(spec.InterpolatePrompt(e.cfg.Blitz.AgencyLevel))
 		for _, t := range e.toolReg.GetToolsForAgent(spec.Tools) {
@@ -51,7 +59,14 @@ func (e *Engine) ContextParts(ctx context.Context, sessionID string, total int64
 		}
 	}
 	chars["instructions"] = len(extra)
-	images := 0
+	pictures, pages := 0, 0
+	attached := func(uri, mime string) {
+		if mime == pdftext.MIME {
+			pages += max(1, e.toolReg.Images().Pages(uri))
+		} else {
+			pictures++
+		}
+	}
 	if got, err := e.sessions.Get(ctx, &session.GetRequest{AppName: appName, UserID: "user", SessionID: sessionID}); err == nil {
 		for _, ev := range contextEvents(finalEvents(got.Session)) {
 			if ev.Actions.Compaction != nil {
@@ -73,8 +88,13 @@ func (e *Engine) ContextParts(ctx context.Context, sessionID string, total int64
 				case p.FunctionResponse != nil:
 					b, _ := json.Marshal(p.FunctionResponse.Response)
 					chars["tool_results"] += len(b)
-				case p.InlineData != nil || p.FileData != nil:
-					images++
+					if uri, ok := p.FunctionResponse.Response[images.ToolResultKey].(string); ok { // view_image, view_document
+						attached(uri, e.toolReg.Images().MIME(uri))
+					}
+				case p.FileData != nil:
+					attached(p.FileData.FileURI, p.FileData.MIMEType)
+				case p.InlineData != nil:
+					attached("", p.InlineData.MIMEType)
 				case p.Thought:
 				case ev.Author == "user":
 					chars["user_messages"] += len(p.Text)
@@ -90,8 +110,9 @@ func (e *Engine) ContextParts(ctx context.Context, sessionID string, total int64
 		est[k] = int64(c / 4)
 		sum += est[k]
 	}
-	est["images"] = int64(images * imageTokens)
-	sum += est["images"]
+	est["images"] = int64(pictures * imageTokens)
+	est["documents"] = int64(pages * documentPageTokens)
+	sum += est["images"] + est["documents"]
 	var out []api.ContextPart
 	for _, name := range order {
 		v := est[name]

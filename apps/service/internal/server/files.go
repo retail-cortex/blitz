@@ -108,6 +108,18 @@ func (h fileService) WriteFile(ctx context.Context, r req[pb.WriteFileRequest]) 
 	return ok(&pb.WriteFileResponse{Version: v})
 }
 
+func (h fileService) WriteBinaryFile(ctx context.Context, r req[pb.WriteBinaryFileRequest]) (*connect.Response[pb.WriteBinaryFileResponse], error) {
+	w, err := h.s.workspace(ctx, r.Msg.Workspace)
+	if err != nil {
+		return nil, err
+	}
+	v, err := w.WriteBinaryFile(ctx, r.Msg.Path, r.Msg.Data, r.Msg.Version)
+	if err != nil {
+		return nil, fileError(err)
+	}
+	return ok(&pb.WriteBinaryFileResponse{Version: v})
+}
+
 func (h fileService) CreateFolder(ctx context.Context, r req[pb.CreateFolderRequest]) (*connect.Response[pb.CreateFolderResponse], error) {
 	w, err := h.s.workspace(ctx, r.Msg.Workspace)
 	if err != nil {

@@ -15,9 +15,12 @@
 package runtime
 
 import (
+	"bytes"
 	"context"
+	"fmt"
 	"testing"
 
+	"github.com/go-pdf/fpdf"
 	"github.com/retail-cortex/blitz/pkg/api"
 	"github.com/retail-cortex/blitz/pkg/images"
 	"github.com/stretchr/testify/assert"
@@ -39,13 +42,16 @@ func partsByName(parts []api.ContextPart) map[string]int64 {
 func TestContextParts(t *testing.T) {
 	thought := &genai.Content{Role: genai.RoleModel, Parts: []*genai.Part{{Text: "thinking hard", Thought: true}, {Text: "a reply long enough to count for something"}}}
 	f := newEngineWith(t, fixtureOpts{cfg: imagesDir(t)},
-		toolCall("list_files", map[string]any{"path": "."}), thought, textContent("a cat"))
+		toolCall("list_files", map[string]any{"path": "."}), thought, textContent("a cat"), textContent("a paper"))
 	require.NoError(t, f.eng.SetInstructions(context.Background(), "project memory that the agent always reads"))
 	_, err := collect(t, f.eng, "s", "list the files in this directory, please")
 	require.NoError(t, err)
 	img, err := f.tools.AddImage("cat.png", testPNG(t, 8, 8))
 	require.NoError(t, err)
 	require.NoError(t, f.eng.Execute(context.Background(), "s", "what is this?", nil, WithAttachments(images.Part(img))))
+	doc, err := f.tools.AddImage("paper.pdf", testPDF(t, 3))
+	require.NoError(t, err)
+	require.NoError(t, f.eng.Execute(context.Background(), "s", "summarise", nil, WithAttachments(images.Part(doc))))
 
 	got := partsByName(f.eng.ContextParts(context.Background(), "s", 0))
 	for _, name := range []string{"system_prompt", "instructions", "tool_declarations", "user_messages", "replies", "tool_calls", "tool_results"} {
@@ -54,6 +60,7 @@ func TestContextParts(t *testing.T) {
 		})
 	}
 	assert.Equal(t, int64(imageTokens), got["images"])
+	assert.Equal(t, int64(3*documentPageTokens), got["documents"], "a PDF counts by its pages")
 	assert.Zero(t, got["summary"], "nothing was compacted")
 
 	scaled := f.eng.ContextParts(context.Background(), "s", 100)
@@ -84,4 +91,18 @@ func TestUnavailableModel(t *testing.T) {
 		assert.ErrorIs(t, err, ErrModelUnavailable)
 		assert.ErrorContains(t, err, "no key")
 	}
+}
+
+// testPDF is a PDF of n pages.
+func testPDF(t *testing.T, n int) []byte {
+	t.Helper()
+	f := fpdf.New("P", "mm", "A4", "")
+	f.SetFont("Helvetica", "", 12)
+	for i := range n {
+		f.AddPage()
+		f.Cell(0, 10, fmt.Sprintf("page %d", i+1))
+	}
+	var buf bytes.Buffer
+	require.NoError(t, f.Output(&buf))
+	return buf.Bytes()
 }

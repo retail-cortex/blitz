@@ -183,9 +183,18 @@ locale    = "en-US"   # interface language; change with /locale (e.g. /locale es
 # locales_dir = "~/.blitz/locales"   # extra or corrected translations (*.json)
 
 [images]
-enabled       = true    # @shot.png, /attach, /paste, --image and the view_image tool
+enabled       = true    # @shot.png, @paper.pdf, /attach, /paste, --image, view_image and view_document
 max_dimension = 1568    # longest edge sent to the model (pixels)
-retain_days   = 30      # delete stored images unused for this long
+retain_days   = 30      # delete stored images and PDFs unused for this long
+
+[pdf]
+page_size = "auto"   # export_pdf's paper: a4, letter, or auto (from the locale)
+
+[audio]
+# model = "gemini/gemini-2.5-flash-preview-tts"   # generate_audio's speech model (or openai/gpt-4o-mini-tts); none: off
+# voice = "Kore"
+# speakers = [{ name = "Ana", voice = "Kore" }, { name = "Ben", voice = "Puck" }]   # a two-host overview
+max_chars = 9000   # about ten minutes
 
 [memory]
 enabled = true

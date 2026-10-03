@@ -126,6 +126,24 @@ async function draw(source: string, theme: Theme): Promise<string> {
   }
 }
 
+/**
+ * Draws source as SVG for paper, in Mermaid's light default theme
+ * whatever the window's: Export as PDF from a dark window. The window's
+ * next diagram sets its own theme again.
+ */
+export async function drawForPrint(source: string): Promise<string> {
+  loading ??= import("mermaid").then((m) => m.default);
+  const m = await loading;
+  m.initialize({ startOnLoad: false, securityLevel: "strict", theme: "default", fontSize: 14 });
+  configured = "";
+  const id = `mermaid-${++seq}`;
+  try {
+    return (await m.render(id, source)).svg;
+  } finally {
+    document.getElementById(`d${id}`)?.remove();
+  }
+}
+
 /** A ```mermaid block: the diagram, or its source while it doesn't parse (a reply still coming in). */
 export function MermaidBlock({ source }: { source: string }) {
   const { theme } = useApp();
@@ -164,7 +182,7 @@ export function MermaidBlock({ source }: { source: string }) {
     );
   }
   return (
-    <div className="code-block mermaid-block">
+    <div className="code-block mermaid-block" data-source={source}>
       <div className="code-head">
         <span className="t-label muted">{lang}</span>
         <span>

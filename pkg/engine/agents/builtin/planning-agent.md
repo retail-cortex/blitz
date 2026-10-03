@@ -10,6 +10,7 @@ tools:
   - glob
   - read_file
   - view_image
+  - view_document
   - grep
   - lsp
   - ask_user_question

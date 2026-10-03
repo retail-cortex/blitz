@@ -35,6 +35,7 @@ import (
 	"github.com/anthropics/anthropic-sdk-go/shared/constant"
 	"github.com/anthropics/anthropic-sdk-go/vertex"
 	"github.com/retail-cortex/blitz/pkg/config"
+	"github.com/retail-cortex/blitz/pkg/pdftext"
 	"google.golang.org/adk/v2/model"
 	adksession "google.golang.org/adk/v2/session"
 	"google.golang.org/genai"
@@ -446,6 +447,16 @@ func convertContents(contents []*genai.Content) ([]anthropic.BetaMessageParam, e
 				blocks = append(blocks, anthropic.NewBetaToolUseBlock(p.FunctionCall.ID, args, p.FunctionCall.Name))
 			case p.FunctionResponse != nil:
 				blocks = append(blocks, toolResult(p.FunctionResponse))
+			case p.InlineData != nil && p.InlineData.MIMEType == pdftext.MIME:
+				// A PDF right after a tool result belongs to that result
+				// (view_document); elsewhere it is a document block.
+				doc := pdfDocument(p.InlineData)
+				if n := len(blocks); n > 0 && blocks[n-1].OfToolResult != nil {
+					tr := blocks[n-1].OfToolResult
+					tr.Content = append(tr.Content, anthropic.BetaToolResultBlockParamContentUnion{OfDocument: doc.OfDocument})
+					continue
+				}
+				blocks = append(blocks, doc)
 			case p.InlineData != nil:
 				img, ok := imageSource(p.InlineData)
 				if !ok {
@@ -490,6 +501,11 @@ func imageSource(b *genai.Blob) (anthropic.BetaBase64ImageSourceParam, bool) {
 		return anthropic.BetaBase64ImageSourceParam{Data: base64.StdEncoding.EncodeToString(b.Data), MediaType: mt}, true
 	}
 	return anthropic.BetaBase64ImageSourceParam{}, false
+}
+
+// pdfDocument is a document block for inline PDF bytes.
+func pdfDocument(b *genai.Blob) anthropic.BetaContentBlockParamUnion {
+	return anthropic.NewBetaDocumentBlock(anthropic.BetaBase64PDFSourceParam{Data: base64.StdEncoding.EncodeToString(b.Data)})
 }
 
 // toolResult encodes an ADK function response. Tools report failures in an

@@ -9,9 +9,12 @@ tools:
   - web_search
   - read_file
   - view_image
+  - view_document
   - list_files
   - glob
   - create_file
+  - export_pdf
+  - generate_audio
   - edit
   - replace_in_file
   - notebook_edit

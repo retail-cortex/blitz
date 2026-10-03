@@ -15,7 +15,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { appendMention, insertMention, isImagePath, mentionAt, mentionText } from "./mentions";
+import { appendMention, insertMention, isAttachablePath, isImagePath, mentionAt, mentionText } from "./mentions";
 
 describe("mentionAt", () => {
   it.each([
@@ -68,4 +68,12 @@ describe("isImagePath", () => {
     ["png", false],
     ["src/", false],
   ])("%s", (p, want) => expect(isImagePath(p)).toBe(want));
+});
+
+describe("isAttachablePath", () => {
+  it.each([
+    ["a.png", true],
+    ["papers/Attention.PDF", true],
+    ["notes.md", false],
+  ])("%s", (p, want) => expect(isAttachablePath(p)).toBe(want));
 });

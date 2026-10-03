@@ -470,6 +470,7 @@ body.resizing iframe, body.resizing .cm-editor { pointer-events: none; }
 .attachment-text small { font-size: 11px; }
 .bubble-images { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
 .bubble-images img { max-width: 180px; max-height: 140px; border-radius: var(--md-shape-md); object-fit: cover; }
+.bubble-doc { display: inline-flex; align-items: center; gap: 6px; max-width: 220px; padding: 6px 10px; border-radius: var(--md-shape-md); background: var(--md-surface-container-high); color: var(--md-on-surface); }
 
 /* Command completion (above the composer) */
 .command-menu { position: absolute; left: 0; right: 0; bottom: calc(100% + 8px); z-index: 30; max-height: min(360px, 45vh); overflow-y: auto; padding: 6px;
@@ -598,6 +599,8 @@ body.resizing iframe, body.resizing .cm-editor { pointer-events: none; }
 .preview-image { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 16px;
   background: repeating-conic-gradient(var(--md-surface-container) 0% 25%, var(--md-surface) 0% 50%) 50% / 20px 20px; }
 .preview-image img { max-width: 100%; max-height: calc(100% - 32px); object-fit: contain; box-shadow: var(--md-elevation-1); }
+.preview-audio { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 24px; height: 100%; }
+.preview-audio audio { width: min(520px, 100%); }
 .preview-pdf { background: var(--md-surface-container); padding: 16px; }
 .pdf-pages { display: flex; flex-direction: column; align-items: center; gap: 12px; }
 .pdf-pages canvas { background: #fff; box-shadow: var(--md-elevation-1); }

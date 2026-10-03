@@ -34,10 +34,12 @@ service FileService {
   rpc ListDir(ListDirRequest) returns (ListDirResponse);
   // A file for the editor.
   rpc ReadFile(ReadFileRequest) returns (ReadFileResponse);
-  // An image or PDF's bytes, to show it.
+  // An image, PDF or sound file's bytes, to show or play it.
   rpc ReadPreview(ReadPreviewRequest) returns (ReadPreviewResponse);
   // Writes a file if it still has the version read (FILE_CHANGED if not).
   rpc WriteFile(WriteFileRequest) returns (WriteFileResponse);
+  // Writes bytes (a PDF the editor exported) as WriteFile writes text.
+  rpc WriteBinaryFile(WriteBinaryFileRequest) returns (WriteBinaryFileResponse);
   // Creates a folder, and any missing folders above it; it must not exist.
   rpc CreateFolder(CreateFolderRequest) returns (CreateFolderResponse);
   // Moves a file or folder; the destination must not exist.
@@ -125,7 +127,8 @@ message ReadPreviewRequest {
 message ReadPreviewResponse {
   string path = 1;
   // image/png, image/jpeg, image/gif, image/webp, image/svg+xml, image/bmp,
-  // image/x-icon or application/pdf.
+  // image/x-icon, application/pdf, audio/wav, audio/mpeg, audio/mp4,
+  // audio/aac, audio/ogg or audio/flac.
   string mime = 2;
   bytes data = 3;
 }
@@ -141,6 +144,20 @@ message WriteFileRequest {
 
 // Response message for FileService.WriteFile.
 message WriteFileResponse {
+  string version = 1;
+}
+
+// Request message for FileService.WriteBinaryFile.
+message WriteBinaryFileRequest {
+  string workspace = 1;
+  string path = 2;
+  bytes data = 3;
+  // The version read; "" when the file must not exist yet.
+  string version = 4;
+}
+
+// Response message for FileService.WriteBinaryFile.
+message WriteBinaryFileResponse {
   string version = 1;
 }
 

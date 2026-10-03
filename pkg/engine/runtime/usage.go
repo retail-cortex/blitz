@@ -110,6 +110,27 @@ func (t *UsageTracker) RecordWrites(session, model string, m *genai.GenerateCont
 	return u
 }
 
+// RecordSpeech adds a speech model's call (generate_audio) to session:
+// its tokens and cost, but not as a prompt, so the context's size stays
+// the conversation's. Without usage (a provider that reports none) the
+// cost is unknown.
+func (t *UsageTracker) RecordSpeech(session, model string, m *genai.GenerateContentResponseUsageMetadata) {
+	u := t.Estimate(model, m, 0)
+	u.LastPrompt = 0
+	if m == nil {
+		u.Priced = false
+	}
+	observability.RecordTokens(context.Background(), model, u.Input, u.Output, u.Cached, u.CostUSD, u.Priced)
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	s := t.sessions[session]
+	if s == nil {
+		s = &api.Usage{Priced: true}
+		t.sessions[session] = s
+	}
+	s.Add(u)
+}
+
 // RecordSearch adds web search queries, and what they cost, to session.
 func (t *UsageTracker) RecordSearch(session string, queries int, costUSD float64) {
 	t.mu.Lock()

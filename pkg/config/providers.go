@@ -373,6 +373,8 @@ var settableValues = map[string]bool{
 	"llm.anthropic.base_url":   true,
 	"llm.openai.model":         true,
 	"llm.openai.base_url":      true,
+	"audio.model":              true,
+	"audio.voice":              true,
 	// What /config --save keeps.
 	"blitz.default_agent":   true,
 	"blitz.agency_level":    true,

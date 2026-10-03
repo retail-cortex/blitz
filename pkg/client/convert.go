@@ -233,7 +233,7 @@ func skill(s *pb.SkillInfo) api.SkillInfo {
 func imageOf(m *pb.Image) *images.Image {
 	return &images.Image{
 		Name: m.Name, MIME: m.MimeType, Width: int(m.Width), Height: int(m.Height), SHA256: m.Id,
-		Resized: m.Resized, Size: int(m.Size),
+		Resized: m.Resized, Size: int(m.Size), Pages: int(m.Pages),
 	}
 }
 

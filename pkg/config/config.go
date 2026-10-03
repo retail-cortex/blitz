@@ -68,6 +68,8 @@ type Config struct {
 	Audit       AuditConfig      `toml:"audit"`
 	Checkpoints CheckpointConfig `toml:"checkpoints"`
 	Images      ImagesConfig     `toml:"images"`
+	PDF         PDFConfig        `toml:"pdf"`
+	Audio       AudioConfig      `toml:"audio"`
 	Hooks       HooksConfig      `toml:"hooks"`
 	MCP         MCPConfig        `toml:"mcp"`
 	Web         WebConfig        `toml:"web"`

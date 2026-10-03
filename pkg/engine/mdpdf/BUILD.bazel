@@ -1,0 +1,59 @@
+# Copyright 2026 Retail Cortex
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "mdpdf",
+    srcs = ["mdpdf.go"],
+    embedsrcs = [
+        "fonts/NotoSans-Bold.ttf.gz",
+        "fonts/NotoSans-BoldItalic.ttf.gz",
+        "fonts/NotoSans-Italic.ttf.gz",
+        "fonts/NotoSans-Regular.ttf.gz",
+        "fonts/NotoSansMono-Regular.ttf.gz",
+        "fonts/NotoSansMath-Regular.ttf.gz",
+    ],
+    importpath = "github.com/retail-cortex/blitz/pkg/engine/mdpdf",
+    visibility = [
+        "//pkg/engine:__subpackages__",
+        # pdftext's test reads back text the typesetter wrote.
+        "//pkg/pdftext:__pkg__",
+    ],
+    deps = [
+        "@com_github_alecthomas_chroma_v2//:chroma",
+        "@com_github_alecthomas_chroma_v2//lexers",
+        "@com_github_alecthomas_chroma_v2//styles",
+        "@com_github_go_pdf_fpdf//:fpdf",
+        "@com_github_yuin_goldmark//:goldmark",
+        "@com_github_yuin_goldmark//ast",
+        "@com_github_yuin_goldmark//extension",
+        "@com_github_yuin_goldmark//extension/ast",
+        "@com_github_yuin_goldmark//text",
+        "@com_github_yuin_goldmark//util",
+        "@org_golang_x_image//font/sfnt",
+    ],
+)
+
+go_test(
+    name = "mdpdf_test",
+    srcs = ["mdpdf_test.go"],
+    embed = [":mdpdf"],
+    deps = [
+        "//pkg/pdftext",
+        "@com_github_ledongthuc_pdf//:pdf",
+        "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//require",
+    ],
+)

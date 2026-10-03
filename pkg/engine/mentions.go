@@ -38,10 +38,10 @@ const (
 
 // withMentions adds what the prompt's @paths name (text as typed) to the
 // prompt for the agent: a file's content (up to mentionMaxBytes, else its
-// start and a note to read the rest), a folder's listing. Images are the
-// front ends' (they attach them); paths that don't exist, or that the
-// workspace doesn't let the agent read (outside it, blocked), are left as
-// written. The transcript keeps the text as typed.
+// start and a note to read the rest), a folder's listing. Pictures and
+// PDFs are the front ends' (they attach them); paths that don't exist, or
+// that the workspace doesn't let the agent read (outside it, blocked), are
+// left as written. The transcript keeps the text as typed.
 func (w *Workspace) withMentions(ctx context.Context, prompt, text string) string {
 	ws := w.tools.Workspace()
 	var b strings.Builder
@@ -64,7 +64,7 @@ func (w *Workspace) withMentions(ctx context.Context, prompt, text string) strin
 			total += len(block)
 			continue
 		}
-		if images.IsImagePath(p) {
+		if images.IsAttachablePath(p) { // attached by the front ends
 			continue
 		}
 		rel, err := ws.Rel(strings.TrimSuffix(p, "/"))

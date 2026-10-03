@@ -22,6 +22,7 @@ import (
 	"sync"
 
 	"github.com/retail-cortex/blitz/pkg/engine/memory"
+	"github.com/retail-cortex/blitz/pkg/engine/tools"
 )
 
 // RulesKey is the tool-result field that carries path-scoped rules the
@@ -90,9 +91,23 @@ func (s *scopedRules) take(session string, paths []string) []*memory.Rule {
 func toolPaths(workspace, tool string, args map[string]any) []string {
 	var raw []string
 	switch tool {
-	case "read_file", "create_file", "replace_in_file", "edit", "delete_snippet", "delete_file", "view_image", "notebook_edit":
+	case "read_file", "create_file", "replace_in_file", "edit", "delete_snippet", "delete_file", "view_image", "view_document", "notebook_edit":
 		if p, ok := args["path"].(string); ok && p != "" {
 			raw = append(raw, p)
+		}
+	case "generate_audio":
+		for _, k := range []string{"text_path", "path"} {
+			if p, ok := args[k].(string); ok && p != "" {
+				raw = append(raw, p)
+			}
+		}
+	case "export_pdf": // path, or markdown given
+		p, _ := args["path"].(string)
+		out, _ := args["output"].(string)
+		for _, f := range []string{p, tools.ExportPDFOutputPath(p, out)} {
+			if f != "" {
+				raw = append(raw, f)
+			}
 		}
 	case "apply_patch":
 		patch, _ := args["patch"].(string)

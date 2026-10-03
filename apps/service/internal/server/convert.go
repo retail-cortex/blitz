@@ -130,7 +130,7 @@ func skillMsgs(list []api.SkillInfo) []*pb.SkillInfo {
 func imageMsg(img *images.Image) *pb.Image {
 	return &pb.Image{
 		Id: img.SHA256, Name: img.Name, MimeType: img.MIME, Width: int32(img.Width), Height: int32(img.Height),
-		Size: int64(len(img.Data)), Resized: img.Resized,
+		Size: int64(len(img.Data)), Resized: img.Resized, Pages: int32(img.Pages),
 	}
 }
 

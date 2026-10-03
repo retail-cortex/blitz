@@ -9,6 +9,7 @@ tools:
   - glob
   - read_file
   - view_image
+  - view_document
   - grep
   - create_file
   - replace_in_file

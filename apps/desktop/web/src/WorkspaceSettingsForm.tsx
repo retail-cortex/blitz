@@ -117,6 +117,9 @@ function Section({
   );
 }
 
+/** Speech models to suggest for [audio] model: Gemini's and OpenAI's. */
+const speechModels = ["gemini/gemini-2.5-flash-preview-tts", "gemini/gemini-2.5-pro-preview-tts", "openai/gpt-4o-mini-tts", "openai/tts-1-hd"];
+
 /**
  * A workspace's settings as one form of folding cards (Settings ›
  * Workspaces, for an open workspace: from its pencil in the Workspaces
@@ -156,6 +159,7 @@ export function WorkspaceSettingsForm({
   const [approvals, setApprovals] = useState<Approval[]>([]);
   const [usage, setUsage] = useState<Usage>();
   const [modelRef, setModelRef] = useState("");
+  const [speechRef, setSpeechRef] = useState("");
   const catalog = useModelCatalog(dir);
 
   const model = settings ? (settings.provider ? `${settings.provider}/${settings.model}` : settings.model) : "";
@@ -189,6 +193,7 @@ export function WorkspaceSettingsForm({
   }, [load]);
   // Rules and approvals changed elsewhere (the settings, a terminal, a file).
   useOnConfigChanged(dir, load);
+  useEffect(() => setSpeechRef(settings?.speechModel ?? ""), [settings?.speechModel]);
   useEffect(() => {
     setModelRef(model);
     if (!settings?.model) return;
@@ -259,6 +264,36 @@ export function WorkspaceSettingsForm({
                 onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
                 onCommit={(ref) => ref && ref !== model && !checkModelRef(ref, catalog, settings?.provider).error && act(() => workspaces.setModel({ workspace: dir, ref }), t("desktop.rs.model_set", { model: ref }))}
               />
+            )}
+          </Field>
+          {/* In simple mode too: without it, audio overviews can't be found. */}
+          <Field label={t("desktop.rs.speech_model")} supporting={t("desktop.rs.speech_model_help")} error={settings?.speechError || undefined}>
+            {(id) => (
+              <>
+                <input
+                  id={id}
+                  className="input mono"
+                  list={`${id}-speech`}
+                  value={speechRef}
+                  placeholder={t("desktop.rs.speech_model_none")}
+                  spellCheck={false}
+                  onChange={(e) => setSpeechRef(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
+                  onBlur={() => {
+                    const ref = speechRef.trim();
+                    if (ref === (settings?.speechModel ?? "")) return;
+                    act(
+                      () => config.setConfigValue({ workspace: dir, key: "audio.model", value: ref }),
+                      ref ? t("desktop.rs.speech_model_set", { model: ref }) : t("desktop.rs.speech_model_off"),
+                    );
+                  }}
+                />
+                <datalist id={`${id}-speech`}>
+                  {speechModels.map((m) => (
+                    <option key={m} value={m} />
+                  ))}
+                </datalist>
+              </>
             )}
           </Field>
         </Section>

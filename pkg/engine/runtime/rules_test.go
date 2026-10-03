@@ -84,3 +84,34 @@ func TestPatchPaths(t *testing.T) {
 	got = strings.Join(patchPaths(begin), ",")
 	assert.Equal(t, "a.go,b.go,c.go,d.go", got, "begin patch %q", got)
 }
+
+func TestToolPaths(t *testing.T) {
+	ws := t.TempDir()
+	real, err := filepath.EvalSymlinks(ws)
+	require.NoError(t, err)
+	tests := []struct {
+		tool string
+		args map[string]any
+		want []string
+	}{
+		{"read_file", map[string]any{"path": "a.go"}, []string{"a.go"}},
+		{"export_pdf", map[string]any{"path": "notes/w1.md"}, []string{"notes/w1.md", "notes/w1.pdf"}},
+		{"export_pdf", map[string]any{"path": "w1.md", "output": "out/w1.pdf"}, []string{"w1.md", "out/w1.pdf"}},
+		{"generate_audio", map[string]any{"text_path": "s.md", "path": "audio/o.wav"}, []string{"s.md", "audio/o.wav"}},
+		{"export_pdf", map[string]any{"markdown": "# x", "output": "summary.pdf"}, []string{"summary.pdf"}},
+		{"list_files", map[string]any{"path": "."}, nil},
+	}
+	for _, tc := range tests {
+		t.Run(tc.tool, func(t *testing.T) {
+			for _, w := range tc.want { // existing files resolve through symlinks
+				require.NoError(t, os.MkdirAll(filepath.Dir(filepath.Join(ws, w)), 0o755))
+				require.NoError(t, os.WriteFile(filepath.Join(ws, w), nil, 0o644))
+			}
+			got := toolPaths(ws, tc.tool, tc.args)
+			require.Len(t, got, len(tc.want))
+			for i, w := range tc.want {
+				assert.Equal(t, filepath.Join(real, w), got[i])
+			}
+		})
+	}
+}

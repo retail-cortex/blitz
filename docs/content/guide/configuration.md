@@ -138,7 +138,7 @@ Blitz changes its settings file a line at a time, keeping your comments: `/permi
 |---|---|
 | `.env.toml` | Settings |
 | `workspaces/` | Each workspace's own settings |
-| `sessions/`, `checkpoints/`, `images/` | Saved sessions, undo checkpoints, attached images |
+| `sessions/`, `checkpoints/`, `images/` | Saved sessions, undo checkpoints, attached images and PDFs |
 | `audit/`, `logs/` | The audit log and the diagnostic log |
 | `approvals.json` | Approvals answered "always" |
 | `agents/`, `skills/`, `commands/`, `rules/`, `BLITZ.md` | Your own agents, skills, commands, rules and instructions |

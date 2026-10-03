@@ -25,6 +25,7 @@ go_library(
     importpath = "github.com/retail-cortex/blitz/pkg/images",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/pdftext",
         "@org_golang_google_genai//:genai",
         "@org_golang_x_image//draw",
         "@org_golang_x_image//webp",
@@ -36,11 +37,14 @@ go_test(
     size = "small",
     srcs = [
         "clipboard_test.go",
+        "documents_test.go",
         "images_test.go",
     ],
     embed = [":images"],
     shard_count = 3,
     deps = [
+        "//pkg/pdftext",
+        "@com_github_go_pdf_fpdf//:fpdf",
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
         "@org_golang_google_genai//:genai",

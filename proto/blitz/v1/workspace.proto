@@ -203,9 +203,10 @@ service WorkspaceService {
   // Deletes one of those notes, by its name (NO_NOTE).
   rpc ForgetNote(ForgetNoteRequest) returns (ForgetNoteResponse);
 
-  // Reads an image from the workspace for a prompt (IMAGES_DISABLED).
+  // Reads an image or a PDF from the workspace for a prompt
+  // (IMAGES_DISABLED).
   rpc LoadImage(LoadImageRequest) returns (LoadImageResponse);
-  // Stores image data (e.g. pasted) for a prompt (IMAGES_DISABLED).
+  // Stores image or PDF data (e.g. pasted) for a prompt (IMAGES_DISABLED).
   rpc AddImage(AddImageRequest) returns (AddImageResponse);
   // Names the web search provider (NO_FETCH when the agent can't fetch
   // pages, so a search would give it nothing to read).
@@ -640,6 +641,11 @@ message GetSettingsResponse {
   string effort = 10;
   // The output style in use ("default": none).
   string style = 11;
+  // The speech model generate_audio reads aloud with ([audio] model,
+  // "provider/model"; "" for none).
+  string speech_model = 12;
+  // Why the speech model can't be used ("" when it can, or there's none).
+  string speech_error = 13;
 }
 
 // Request message for WorkspaceService.SetPermissionMode.
@@ -1400,7 +1406,7 @@ message TrustProjectResponse {
   bool reopened = 1;
 }
 
-// Image is an image stored for a prompt.
+// Image is an image or a PDF stored for a prompt.
 message Image {
   // For Turn.image_ids: the SHA-256 of the data.
   string id = 1;
@@ -1412,6 +1418,8 @@ message Image {
   int64 size = 6;
   // Scaled down to fit the model's limits.
   bool resized = 7;
+  // A PDF's page count (mime_type application/pdf); 0 for a picture.
+  int32 pages = 8;
 }
 
 // Request message for WorkspaceService.LoadImage.
