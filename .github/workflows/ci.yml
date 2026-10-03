@@ -76,7 +76,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y bubblewrap pkg-config libgtk-3-dev libwebkit2gtk-4.1-dev
+          sudo apt-get install -y bubblewrap pkg-config libgtk-3-dev libwebkit2gtk-4.1-dev xvfb xauth
           # Ubuntu 24.04 restricts unprivileged user namespaces via AppArmor.
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
       # gVisor runs skill scripts on Linux; pinned release and checksum.
@@ -103,16 +103,28 @@ jobs:
       # On Linux, where the sandbox and gVisor tests also run, the same
       # tests run instrumented: the coverage of apps/ and pkg/ goes into the
       # job summary, and the job fails below tools/coverage/floor.txt.
-      # docs.yml publishes the report on the site.
+      # docs.yml publishes the report on the site. Xvfb gives Export as
+      # PDF's printing tests a display (its socket mounted into the sandbox).
       - name: Tests, with coverage
         if: runner.os == 'Linux'
-        run: tools/coverage.sh --config=race -- --markdown="$GITHUB_STEP_SUMMARY"
+        run: |
+          xvfb-run -a -f "$RUNNER_TEMP/Xauthority" tools/coverage.sh --config=race \
+            --sandbox_add_mount_pair=/tmp/.X11-unix -- --markdown="$GITHUB_STEP_SUMMARY"
       - name: Upload the coverage report
         if: runner.os == 'Linux'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: coverage
           path: docs/data/coverage.json
+      # Export as PDF prints with WebKitGTK, which needs a display: Xvfb's,
+      # its socket mounted into the test's sandbox. It must not skip.
+      - name: Print to PDF with WebKitGTK
+        if: runner.os == 'Linux'
+        run: |
+          xvfb-run -a -f "$RUNNER_TEMP/Xauthority" bazel test //apps/desktop/internal/printpdf:printpdf_test \
+            --nocache_test_results --sandbox_add_mount_pair=/tmp/.X11-unix \
+            --test_output=all --test_arg=-test.v | tee print.txt
+          if grep -q -- '--- SKIP' print.txt; then exit 1; fi
       - name: Sandbox enforcement must not be skipped
         run: |
           bazel test //pkg/engine/tools:tools_test --nocache_test_results --test_output=all \

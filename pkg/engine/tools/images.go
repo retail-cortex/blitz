@@ -21,6 +21,7 @@ import (
 
 	"github.com/retail-cortex/blitz/pkg/engine/audit"
 	"github.com/retail-cortex/blitz/pkg/images"
+	"github.com/retail-cortex/blitz/pkg/pdftext"
 	"google.golang.org/adk/v2/agent"
 	"google.golang.org/adk/v2/tool"
 	"google.golang.org/adk/v2/tool/functiontool"
@@ -29,9 +30,10 @@ import (
 // Images returns the image store, or nil when images are disabled.
 func (r *Registry) Images() *images.Store { return r.images }
 
-// LoadImage reads an image file through the workspace sandbox (so blocked
-// and out-of-workspace paths are refused), prepares it for the model and
-// stores it. The audit log records the path and hash, not the picture.
+// LoadImage reads an image file or a PDF through the workspace sandbox (so
+// blocked and out-of-workspace paths are refused), prepares it for the
+// model and stores it. The audit log records the path and hash, not the
+// content.
 func (r *Registry) LoadImage(path string) (*images.Image, error) {
 	if r.images == nil {
 		return nil, api.ErrImagesDisabled
@@ -40,7 +42,11 @@ func (r *Registry) LoadImage(path string) (*images.Image, error) {
 	if err != nil {
 		return nil, err
 	}
-	data, err := r.workspace.ReadFileLimit(rel, r.imageOpts.MaxInput)
+	limit := r.imageOpts.MaxInput
+	if pdftext.IsPDFPath(rel) {
+		limit = images.MaxDocumentBytes
+	}
+	data, err := r.workspace.ReadFileLimit(rel, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -78,6 +84,9 @@ func (r *Registry) storeImage(name string, data []byte) (*images.Image, error) {
 }
 
 func attachmentDetail(source string, img *images.Image) string {
+	if img.IsDocument() {
+		return fmt.Sprintf("%s sha256=%s %s %d pages %d bytes", source, img.SHA256, img.MIME, img.Pages, len(img.Data))
+	}
 	return fmt.Sprintf("%s sha256=%s %s %d×%d %d bytes", source, img.SHA256, img.MIME, img.Width, img.Height, len(img.Data))
 }
 

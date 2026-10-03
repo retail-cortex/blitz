@@ -443,6 +443,15 @@ func (e *Engine) RecordSearch(ctx context.Context, sessionID string, queries int
 	e.saveUsage(ctx, sessionID)
 }
 
+// RecordSpeech adds a speech model's usage (generate_audio) to
+// sessionID's usage, priced by [pricing] like any model's, and saves it.
+// A provider that reports no usage leaves the cost unknown.
+func (e *Engine) RecordSpeech(ctx context.Context, sessionID, model string, usage *genai.GenerateContentResponseUsageMetadata) {
+	e.restoreUsage(sessionID)
+	e.usage.RecordSpeech(sessionID, settingsName(model), usage)
+	e.saveUsage(ctx, sessionID)
+}
+
 // saveUsage keeps sessionID's usage so far in the store.
 func (e *Engine) saveUsage(ctx context.Context, sessionID string) {
 	if e.usageStore == nil {
@@ -778,6 +787,9 @@ func (e *Engine) imageInstruction(spec *agents.AgentSpec) string {
 	text := "\n\n## Images\nYou can see images. When the user attaches an image or screenshot, it is included in their message: look at it and answer about what it actually shows (text, UI, diagrams, errors)."
 	if slices.Contains(spec.Tools, "view_image") {
 		text += " To look at an image file in the workspace, call view_image with its path; the picture follows the tool result."
+	}
+	if slices.Contains(spec.Tools, "view_document") {
+		text += " To read a PDF in the workspace (a paper, slides), call view_document with its path; the document follows the tool result."
 	}
 	return text
 }

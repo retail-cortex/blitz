@@ -62,6 +62,18 @@ func TestFileService(t *testing.T) {
 	assert.Equal(t, "FILE_CHANGED", info.Reason, "stale write: %v %v", code, info)
 	assert.Equal(t, st.Msg.Versions["src/a.go"], info.Metadata["current_version"], "stale write: %v %v", code, info)
 
+	// Bytes, as an exported PDF: created, then replaced at its version.
+	pdf := []byte("%PDF-1.7\x00\xff")
+	b, err := files.WriteBinaryFile(ctx, connect.NewRequest(&pb.WriteBinaryFileRequest{Workspace: dir, Path: "notes.pdf", Data: pdf}))
+	require.NoError(t, err)
+	got, _ := os.ReadFile(filepath.Join(dir, "notes.pdf"))
+	assert.Equal(t, pdf, got)
+	_, err = files.WriteBinaryFile(ctx, connect.NewRequest(&pb.WriteBinaryFileRequest{Workspace: dir, Path: "notes.pdf", Data: []byte("x")}))
+	code, info = errorReason(t, err)
+	assert.Equal(t, "FILE_CHANGED", info.Reason, "a new file over an existing one: %v %v", code, info)
+	_, err = files.WriteBinaryFile(ctx, connect.NewRequest(&pb.WriteBinaryFileRequest{Workspace: dir, Path: "notes.pdf", Data: []byte("%PDF-2"), Version: b.Msg.Version}))
+	require.NoError(t, err)
+
 	for name, call := range map[string]struct {
 		err    error
 		reason string

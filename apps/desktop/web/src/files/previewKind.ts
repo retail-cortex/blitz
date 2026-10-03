@@ -14,14 +14,15 @@
  * limitations under the License.
  */
 
-// What the editor can show other than as text: Markdown rendered, and
-// images and PDFs.
+// What the editor can show other than as text: Markdown rendered, images
+// and PDFs, and sound to play.
 
 /**
  * How a file previews: markdown and svg are text with a rendered view
- * beside the source; image and pdf show only as a preview; null has none.
+ * beside the source; image, pdf and audio show only as a preview (audio as
+ * a player); null has none.
  */
-export type PreviewKind = "markdown" | "svg" | "image" | "pdf" | null;
+export type PreviewKind = "markdown" | "svg" | "image" | "pdf" | "audio" | null;
 
 /** The preview a file has, by its name. */
 export function previewKind(path: string): PreviewKind {
@@ -31,11 +32,12 @@ export function previewKind(path: string): PreviewKind {
   if (ext === "svg") return "svg";
   if (["png", "jpg", "jpeg", "gif", "webp", "bmp", "ico"].includes(ext)) return "image";
   if (ext === "pdf") return "pdf";
+  if (["wav", "mp3", "m4a", "aac", "ogg", "opus", "flac"].includes(ext)) return "audio";
   return null;
 }
 
 /** Whether a kind shows only as a preview (it has no text to edit). */
-export const previewOnly = (k: PreviewKind) => k === "image" || k === "pdf";
+export const previewOnly = (k: PreviewKind) => k === "image" || k === "pdf" || k === "audio";
 
 /** How a file with a preview shows: as its text, or rendered. */
 export type View = "source" | "preview";

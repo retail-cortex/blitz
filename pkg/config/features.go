@@ -64,6 +64,38 @@ type ImagesConfig struct {
 	RetainDays   int    `toml:"retain_days"`   // unused images are deleted after this (0 = keep)
 }
 
+// PDFConfig shapes the PDFs the export_pdf tool writes.
+type PDFConfig struct {
+	// PageSize is a4, letter, or auto (the default): Letter where the
+	// locale's country uses it (LC_PAPER, LANG), A4 elsewhere.
+	PageSize string `toml:"page_size"`
+}
+
+// AudioConfig is spoken audio: the generate_audio tool reads text aloud
+// with a speech model and writes a sound file.
+type AudioConfig struct {
+	// Model is the speech model as "provider/model": a Gemini text-to-speech
+	// model ("gemini/gemini-2.5-flash-preview-tts") or an OpenAI one
+	// ("openai/gpt-4o-mini-tts"). Empty turns generate_audio off.
+	Model string `toml:"model"`
+	// Voice is the voice for a single speaker, by the provider's name for
+	// it ("Kore" for Gemini, "coral" for OpenAI); empty is the provider's
+	// default.
+	Voice string `toml:"voice"`
+	// Speakers are two named voices for a conversation, such as a
+	// two-host overview, whose lines start "Name: " (Gemini only).
+	Speakers []SpeakerConfig `toml:"speakers"`
+	// MaxChars caps the text spoken in one call (default 9000, about ten
+	// minutes; Gemini's audio is uncompressed, about 3 MB a minute).
+	MaxChars int `toml:"max_chars"`
+}
+
+// SpeakerConfig is one voice in a conversation.
+type SpeakerConfig struct {
+	Name  string `toml:"name" json:"name"`   // as the text's lines name them
+	Voice string `toml:"voice" json:"voice"` // the provider's voice name
+}
+
 // MemoryConfig controls project instruction files loaded into the prompt.
 type MemoryConfig struct {
 	// Enabled loads project instruction files (BLITZ.md, AGENTS.md) into the
@@ -454,6 +486,9 @@ var DefaultPricing = map[string]ModelPrice{
 	"claude-opus-5":    {InputPerMTok: 5.00, OutputPerMTok: 25.00, CachedInputPerMTok: 0.50, CacheWritePerMTok: 6.25},
 	"claude-sonnet-5":  {InputPerMTok: 2.00, OutputPerMTok: 10.00, CachedInputPerMTok: 0.20, CacheWritePerMTok: 2.50},
 	"claude-haiku-4-5": {InputPerMTok: 1.00, OutputPerMTok: 5.00, CachedInputPerMTok: 0.10, CacheWritePerMTok: 1.25},
+	// Gemini's speech models ([audio] model): text in, audio tokens out.
+	"gemini-2.5-flash-preview-tts": {InputPerMTok: 0.50, OutputPerMTok: 10.00},
+	"gemini-2.5-pro-preview-tts":   {InputPerMTok: 1.00, OutputPerMTok: 20.00},
 }
 
 // PriceChange is a published list price that takes effect on a date.
@@ -531,6 +566,8 @@ func applyFeatureDefaults(c *Config) {
 	c.Log = LogConfig{Level: "info", Dir: filepath.Join(dir, "logs"), RetainDays: 14}
 	c.Checkpoints = CheckpointConfig{Enabled: true, MaxBytes: 64 * 1024 * 1024, Dir: "~/.blitz/checkpoints", MaxAgeDays: 30}
 	c.Images = ImagesConfig{Enabled: true, Dir: filepath.Join(dir, "images"), MaxDimension: 1568, MaxInputMB: 20, RetainDays: 30}
+	c.PDF = PDFConfig{PageSize: "auto"}
+	c.Audio = AudioConfig{MaxChars: 9_000}
 	c.Web = WebConfig{Enabled: true, MaxBytes: 2 * 1024 * 1024, TimeoutSeconds: 20}
 	c.Browser = BrowserConfig{Enabled: true, Width: 1280, Height: 800}
 	// Prices in effect when the configuration loads: a service running

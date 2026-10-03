@@ -29,8 +29,9 @@ const PdfView = lazy(() => import("./PdfView").then((m) => ({ default: m.PdfView
 
 /**
  * A file shown rather than edited (FIL-54): Markdown rendered from the
- * editor's current text, an SVG from it as an image, and images and PDFs
- * from the file's bytes (ReadPreview), PDFs drawn with pdf.js.
+ * editor's current text, an SVG from it as an image, and images, PDFs and
+ * sound from the file's bytes (ReadPreview), PDFs drawn with pdf.js and
+ * sound in the system's player.
  */
 export function Preview({ dir, path, kind, text }: { dir: string; path: string; kind: PreviewKind; text?: string }) {
   if (kind === "markdown") return <MarkdownPreview dir={dir} path={path} text={text ?? ""} />;
@@ -104,6 +105,13 @@ function FilePreview({ dir, path, kind }: { dir: string; path: string; kind: Pre
   );
   if (error) return <p className="editor-note error-text">{error}</p>;
   if (!url) return <p className="editor-note muted">{t("desktop.checking")}</p>;
+  if (kind === "audio")
+    return (
+      <div className="preview preview-audio">
+        <audio controls src={url} aria-label={path} />
+        {external}
+      </div>
+    );
   if (kind === "pdf")
     return (
       <>

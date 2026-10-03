@@ -73,6 +73,7 @@ go_library(
     importpath = "github.com/retail-cortex/blitz/apps/desktop",
     visibility = ["//visibility:private"],
     deps = [
+        "//apps/desktop/internal/printpdf",
         "//pkg/config",
         "//pkg/legal",
         "//pkg/loginitem",

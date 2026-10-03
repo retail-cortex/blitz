@@ -40,7 +40,9 @@ import {
   mdiHelpCircleOutline,
   mdiHistory,
   mdiFolderOutline,
+  mdiFilePdfBox,
   mdiImageOutline,
+  mdiVolumeHigh,
   mdiImagePlusOutline,
   mdiMagnify,
   mdiMessageReplyTextOutline,
@@ -80,12 +82,12 @@ import {
   type ComposeDetail,
   type LoadSessionDetail,
 } from "./events";
-import { appendMention, insertMention, isImagePath, mentionAt } from "./mentions";
+import { appendMention, insertMention, isAttachablePath, mentionAt } from "./mentions";
 import { pollMs, shouldPoll, welcomeTiles, type TileAction } from "./suggestions";
 import { ComposerDock, focusComposerEvent } from "./composerDock";
 import { refreshRuns, runInSession } from "./backgroundRuns";
 import { fileIcon } from "./files/icons";
-import { describeImage, imageFiles, readyIds, rejectReason, uploading, type Attachment } from "./attachments";
+import { attachableFiles, describeImage, isDocument, readyIds, rejectReason, uploading, type Attachment } from "./attachments";
 import { Markdown } from "./Markdown";
 import { language, t, tn, useLanguage } from "./i18n";
 import { notify, shouldNotify, type NotifyKind } from "./notify";
@@ -413,7 +415,8 @@ export function Conversation({
           snack(why, { error: true });
           continue;
         }
-        const a: Attachment = { key: `${Date.now()}-${Math.random()}`, name: f.name || "pasted image", url: URL.createObjectURL(f) };
+        const doc = isDocument(f);
+        const a: Attachment = { key: `${Date.now()}-${Math.random()}`, name: f.name || "pasted image", url: doc ? "" : URL.createObjectURL(f), document: doc };
         setAttachments((list) => [...list, a]);
         (async () => {
           try {
@@ -428,11 +431,11 @@ export function Conversation({
     },
     [dir, imagesOn, snack],
   );
-  // An image in the workspace (an @mention of one, or Add to context).
+  // An image or PDF in the workspace (an @mention of one, or Add to context).
   const addImagePath = useCallback(
     (path: string) => {
       if (!imagesOn) return;
-      const a: Attachment = { key: `${Date.now()}-${Math.random()}`, name: path.slice(path.lastIndexOf("/") + 1), url: "" };
+      const a: Attachment = { key: `${Date.now()}-${Math.random()}`, name: path.slice(path.lastIndexOf("/") + 1), url: "", document: /\.pdf$/i.test(path) };
       setAttachments((list) => [...list, a]);
       workspaces.loadImage({ workspace: dir, path }).then(
         (res) => setAttachments((list) => list.map((x) => (x.key === a.key ? { ...x, id: res.image!.id, detail: describeImage(res.image!) } : x))),
@@ -798,7 +801,7 @@ export function Conversation({
   addToContextRef.current = async (d) => {
     if (d.fresh && !running) await newSession();
     setDraft((draft) => appendMention(d.fresh ? "" : draft, d.path));
-    if (isImagePath(d.path)) addImagePath(d.path);
+    if (isAttachablePath(d.path)) addImagePath(d.path);
   };
   useEffect(() => {
     const f = (e: Event) => {
@@ -889,7 +892,7 @@ export function Conversation({
       onDrop={(e) => {
         e.preventDefault();
         setDragging(false);
-        addFiles(imageFiles(e.dataTransfer.files));
+        addFiles(attachableFiles(e.dataTransfer.files));
       }}
     >
       {dragging && (
@@ -1264,9 +1267,16 @@ function UserBubble({ entry, running, onRewind, onEdit }: { entry: UserEntry; ru
         {entry.sub === "aside" && <span className="t-label muted">{t("desktop.bubble.aside")}</span>}
         {entry.images && (
           <div className="bubble-images">
-            {entry.images.map((img) => (
-              <img key={img.url} src={img.url} alt={img.name} title={img.name} />
-            ))}
+            {entry.images.map((img, i) =>
+              img.url ? (
+                <img key={img.url} src={img.url} alt={img.name} title={img.name} />
+              ) : (
+                <span key={`${i}-${img.name}`} className="bubble-doc t-body-sm" title={img.name}>
+                  <Icon path={/\.pdf$/i.test(img.name) ? mdiFilePdfBox : mdiImageOutline} size="sm" />
+                  <span className="ellipsis">{img.name}</span>
+                </span>
+              ),
+            )}
           </div>
         )}
         <div className="bubble-text">{entry.text}</div>
@@ -1294,7 +1304,9 @@ function Thought({ text, open }: { text: string; open: boolean }) {
 }
 
 function toolIcon(name: string): string {
-  if (/^(read_file|list_files|view_image)$/.test(name)) return mdiFileDocumentOutline;
+  if (name === "export_pdf") return mdiFilePdfBox;
+  if (name === "generate_audio") return mdiVolumeHigh;
+  if (/^(read_file|list_files|view_image|view_document)$/.test(name)) return mdiFileDocumentOutline;
   if (/^(glob|grep|list_or_search_skills)$/.test(name)) return mdiMagnify;
   if (/(create|replace|delete|edit|patch|notebook)/.test(name)) return mdiFileEditOutline;
   if (/shell|process/.test(name)) return mdiConsole;
@@ -1693,7 +1705,7 @@ function Composer({
     setDraft(r.text);
     setCaret(r.caret);
     requestAnimationFrame(() => ref.current?.setSelectionRange(r.caret, r.caret));
-    if (isImagePath(path)) onAddImagePath(path);
+    if (isAttachablePath(path)) onAddImagePath(path);
   };
   const trackCaret = (e: { currentTarget: HTMLTextAreaElement }) => setCaret(e.currentTarget.selectionStart ?? 0);
   // Grow with the text, up to a limit.
@@ -1766,7 +1778,7 @@ function Composer({
         <div className="attachments">
           {attachments.map((a) => (
             <div key={a.key} className={`attachment ${a.error ? "failed" : ""}`} title={a.error || `${a.name}${a.detail ? ` · ${a.detail}` : ""}`}>
-              {a.url ? <img src={a.url} alt="" /> : <Icon path={mdiImageOutline} />}
+              {a.url ? <img src={a.url} alt="" /> : <Icon path={a.document ? mdiFilePdfBox : mdiImageOutline} />}
               <span className="attachment-text">
                 <span className="ellipsis">{a.name}</span>
                 <small className={a.error ? "error-text ellipsis" : "muted ellipsis"}>{a.error || a.detail || t("desktop.attach.uploading")}</small>
@@ -1790,7 +1802,7 @@ function Composer({
         }}
         onSelect={trackCaret}
         onPaste={(e) => {
-          const files = imageFiles(e.clipboardData.files);
+          const files = attachableFiles(e.clipboardData.files);
           if (files.length) {
             e.preventDefault();
             onAddFiles(files);
@@ -1849,11 +1861,11 @@ function Composer({
             <input
               ref={picker}
               type="file"
-              accept="image/*"
+              accept="image/*,application/pdf"
               multiple
               hidden
               onChange={(e) => {
-                onAddFiles(imageFiles(e.target.files));
+                onAddFiles(attachableFiles(e.target.files));
                 e.target.value = "";
               }}
             />

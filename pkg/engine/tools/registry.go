@@ -68,6 +68,7 @@ type Registry struct {
 	rules    *PermissionRules
 
 	browser *browserTool // nil: no browser tool
+	speech  *speech      // generate_audio's speech model (SetSpeaker)
 	lsp     *lsp.Manager // language servers (nil: none configured)
 
 	notesMu sync.Mutex
@@ -224,6 +225,7 @@ func NewRegistry(cfg *config.Config, agentReg *agents.Registry, skillProv *skill
 		{[]string{"list_files"}, func() (tool.Tool, error) { return NewListFilesTool(ws) }},
 		{[]string{"glob"}, func() (tool.Tool, error) { return NewGlobTool(ws) }},
 		{[]string{"create_file"}, func() (tool.Tool, error) { return NewCreateFileTool(ws, r.hooks) }},
+		{[]string{"export_pdf"}, func() (tool.Tool, error) { return NewExportPDFTool(ws, r.hooks, cfg.PDF.PageSize) }},
 		{[]string{"delete_file"}, func() (tool.Tool, error) { return NewDeleteFileTool(ws, r.hooks) }},
 		{[]string{"replace_in_file", "edit"}, func() (tool.Tool, error) { return NewReplaceInFileTool(ws, r.hooks) }},
 		{[]string{"notebook_edit"}, func() (tool.Tool, error) { return NewNotebookEditTool(ws, r.hooks) }},
@@ -249,6 +251,12 @@ func NewRegistry(cfg *config.Config, agentReg *agents.Registry, skillProv *skill
 				return nil, nil
 			}
 			return NewViewImageTool(r)
+		}},
+		{[]string{"view_document"}, func() (tool.Tool, error) {
+			if r.images == nil {
+				return nil, nil
+			}
+			return NewViewDocumentTool(r)
 		}},
 		{[]string{"universal_constructor"}, func() (tool.Tool, error) {
 			return NewUniversalConstructorTool(cfg.Tools.UCToolsDir, r.hooks, env, policy)
@@ -282,6 +290,12 @@ func NewRegistry(cfg *config.Config, agentReg *agents.Registry, skillProv *skill
 		}, timeout, config.ExpandHome("~/.blitz/walkthroughs"))
 		entries = append(entries, entry{[]string{"browser"}, func() (tool.Tool, error) { return NewBrowserTool(r.browser) }})
 	}
+	// Always there, for a speech model set later; agents have it only while
+	// there's one (hidden).
+	r.speech = &speech{speechState: speechState{cfg: cfg.Audio}}
+	entries = append(entries, entry{[]string{"generate_audio"}, func() (tool.Tool, error) {
+		return NewGenerateAudioTool(ws, r.hooks, r.speech, sb.AllowNetwork)
+	}})
 	if cfg.Web.Enabled && cfg.Web.SearchProvider != "" {
 		sc := WebSearchConfig{
 			Provider:     cfg.Web.SearchProvider,
@@ -488,7 +502,7 @@ func (r *Registry) GetToolsForAgent(toolNames []string) []tool.Tool {
 	var result []tool.Tool
 	seen := make(map[string]bool)
 	for _, name := range toolNames {
-		if t, ok := r.tools[name]; ok && !seen[t.Name()] {
+		if t, ok := r.tools[name]; ok && !seen[t.Name()] && !r.hidden(name) {
 			result = append(result, t)
 			seen[t.Name()] = true
 		}
@@ -509,7 +523,7 @@ func (r *Registry) GetAllTools() []tool.Tool {
 	var list []tool.Tool
 	seen := make(map[string]bool)
 	for _, t := range r.tools {
-		if !seen[t.Name()] {
+		if !seen[t.Name()] && !r.hidden(t.Name()) {
 			list = append(list, t)
 			seen[t.Name()] = true
 		}

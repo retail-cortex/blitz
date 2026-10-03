@@ -130,11 +130,15 @@ function textOf(n: Hast | undefined): string {
 
 const components: Components = {
   a: ({ href, children }) => <Link href={href}>{children}</Link>,
+  // A picture shows as a link to it; Export as PDF puts the picture in
+  // (files/printPage.ts), by the marks on its wrapper.
   img: ({ src, alt }) =>
     typeof src === "string" && src ? (
-      <Link href={src}>
-        <Icon path={mdiImageOutline} size="sm" /> {alt || "image"}
-      </Link>
+      <span className="md-image" data-src={src} data-alt={alt ?? ""}>
+        <Link href={src}>
+          <Icon path={mdiImageOutline} size="sm" /> {alt || "image"}
+        </Link>
+      </span>
     ) : (
       <span>{alt}</span>
     ),

@@ -85,6 +85,7 @@ go_library(
         "@in_gopkg_yaml_v3//:yaml_v3",
         "@org_golang_google_adk_v2//model",
         "@org_golang_google_adk_v2//session",
+        "@org_golang_google_genai//:genai",
     ] + select({
         "@rules_go//go/platform:aix": [
             "@org_golang_x_sys//unix",

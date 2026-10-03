@@ -591,3 +591,26 @@ func TestOpenBuildsTheConfiguredModel(t *testing.T) {
 	assert.NotNil(t, w.Audit(), "on by default")
 	assert.NotNil(t, w.Locales())
 }
+
+// A speech model set in the settings ([audio] model) takes effect when
+// they're reloaded: generate_audio appears, and the settings report it;
+// one that can't be built is reported with why, and the tool stays away.
+func TestSpeechModelReload(t *testing.T) {
+	w := openTest(t)
+	hasTool := func() bool { return len(w.tools.GetToolsForAgent([]string{"generate_audio"})) == 1 }
+	assert.False(t, hasTool())
+	assert.Empty(t, w.Settings().SpeechModel)
+
+	cfg := *w.cfg
+	cfg.Audio.Model = "gemini/gemini-2.5-flash-preview-tts"
+	cfg.LLM.Gemini.APIKey = "test-key"
+	_ = w.ReloadProviders(context.Background(), &cfg)
+	assert.True(t, hasTool())
+	assert.Equal(t, "gemini/gemini-2.5-flash-preview-tts", w.Settings().SpeechModel)
+	assert.Empty(t, w.Settings().SpeechError)
+
+	cfg.Audio.Model = "anthropic/claude-sonnet-5"
+	_ = w.ReloadProviders(context.Background(), &cfg)
+	assert.False(t, hasTool())
+	assert.Contains(t, w.Settings().SpeechError, "can't generate speech")
+}

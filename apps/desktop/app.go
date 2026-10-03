@@ -27,6 +27,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/retail-cortex/blitz/apps/desktop/internal/printpdf"
 	"github.com/retail-cortex/blitz/pkg/legal"
 	"github.com/retail-cortex/blitz/pkg/loginitem"
 	"github.com/retail-cortex/blitz/pkg/socket"
@@ -261,6 +262,13 @@ func (a *App) OpenURL(link string) error {
 	}
 	runtime.BrowserOpenURL(a.ctx, link)
 	return nil
+}
+
+// PrintPDF prints a page (Export as PDF: a Markdown preview, its pictures
+// inline) to PDF with the system's web engine, offscreen, on pageSize
+// paper ("A4" or "Letter"). Its scripts don't run.
+func (a *App) PrintPDF(html, pageSize string) ([]byte, error) {
+	return printpdf.Print(html, pageSize, time.Minute)
 }
 
 // findService finds the blitzd that goes with this app: beside its

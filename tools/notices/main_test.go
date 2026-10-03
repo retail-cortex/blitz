@@ -32,6 +32,7 @@ func TestIdentify(t *testing.T) {
 		"Permission to use, copy, modify, and/or distribute this software for any purpose": "ISC",
 		"This is free and unencumbered software released into the public domain.":          "Unlicense",
 		"Mozilla Public License Version 2.0":                                               "MPL-2.0",
+		"This Font Software is licensed under the SIL Open Font License, Version 1.1.":     "OFL-1.1",
 		"GNU GENERAL PUBLIC LICENSE Version 3":                                             "",
 		"All rights reserved.":                                                             "",
 	} {
@@ -75,4 +76,21 @@ func TestReadComponent(t *testing.T) {
 	write("LICENSE", "GNU GENERAL PUBLIC LICENSE Version 3")
 	_, err = readComponent("x", "1", dir)
 	assert.Error(t, err, "an unaccepted license file accepted")
+}
+
+// Fonts bundled into the programs are read from their folders, each with
+// its license, and printed in a section of their own.
+func TestBundledFonts(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "LICENSE.txt"), []byte("This Font Software is licensed under the SIL Open Font License,\nVersion 1.1."), 0o644))
+	fonts, problems := bundledFonts("Noto Sans=" + dir + "; ;Missing=" + filepath.Join(dir, "nope"))
+	require.Len(t, fonts, 1)
+	assert.Equal(t, "OFL-1.1", fonts[0].license)
+	require.Len(t, problems, 1)
+	assert.Contains(t, problems[0], "Missing")
+
+	text := render(nil, nil, fonts, "APACHE")
+	assert.Contains(t, text, "Fonts bundled into blitz")
+	assert.Contains(t, text, "SIL Open Font License")
+	assert.NotContains(t, render(nil, nil, nil, "APACHE"), "Fonts bundled")
 }

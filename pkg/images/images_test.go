@@ -212,7 +212,7 @@ func TestExpand(t *testing.T) {
 	in := []*genai.Content{plain, user, tool, gone}
 	snapshot := []*genai.Part{user.Parts[0], user.Parts[1]}
 
-	out := Expand(in, s)
+	out := Expand(in, s, nil)
 	assert.Same(t, plain, out[0], "contents without images should be passed through")
 	b := out[1].Parts[0].InlineData
 	assert.NotNil(t, b, "user image not expanded: %+v", out[1].Parts)
@@ -227,9 +227,9 @@ func TestExpand(t *testing.T) {
 	assert.Equal(t, snapshot, user.Parts, "Expand modified its input")
 	assert.Nil(t, user.Parts[0].InlineData, "Expand modified its input")
 	assert.Len(t, tool.Parts, 1, "Expand modified its input")
-	got := Expand([]*genai.Content{plain}, s)
+	got := Expand([]*genai.Content{plain}, s, nil)
 	assert.Same(t, plain, got[0], "no refs: same slice expected")
-	nilStore := Expand([]*genai.Content{user}, nil)
+	nilStore := Expand([]*genai.Content{user}, nil, nil)
 	assert.NotEqual(t, "", nilStore[0].Parts[0].Text, "nil store should give a placeholder")
 }
 
@@ -322,7 +322,7 @@ func TestExpandNilAndUnnamed(t *testing.T) {
 	missing := &Image{MIME: "image/png", SHA256: strings.Repeat("1", 64)}
 	in := []*genai.Content{nil, {Role: genai.RoleUser, Parts: []*genai.Part{Part(missing)}}}
 	assert.True(t, HasRefs(in))
-	out := Expand(in, nil)
+	out := Expand(in, nil, nil)
 	assert.Nil(t, out[0])
 	assert.Equal(t, "[image is no longer available]", out[1].Parts[0].Text)
 }

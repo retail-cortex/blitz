@@ -62,7 +62,7 @@ The discount code lives in [\`internal/cart/discount.go\`](https://github.com/ex
 interface State {
   sessions: SessionInfo[];
   active: string;
-  settings: { agent: string; model: string; provider: string; effort: string; mode: string; agency: string; locale: string; style: string };
+  settings: { agent: string; model: string; provider: string; effort: string; mode: string; agency: string; locale: string; style: string; speechModel?: string };
   pending: Map<string, (answer: string) => void>;
   usage: Usage;
   // The project settings' trust state: the "shop" workspace has some.
@@ -433,6 +433,7 @@ const fakeFiles = new Map<string, string>([
   ["docs/logo.svg", '<svg xmlns="http://www.w3.org/2000/svg" width="120" height="120"><circle cx="60" cy="60" r="50" fill="#1a73e8"/></svg>\n'],
   ["docs/shot.png", "\u0000png"],
   ["docs/spec.pdf", "\u0000pdf"],
+  ["docs/overview.wav", "\u0000wav"],
   ["cmd/shop/main.go", 'package main\n\nimport (\n\t"log"\n\t"net/http"\n\n\t"example.com/shop/internal/cart"\n)\n\nfunc main() {\n\thttp.HandleFunc("/cart", cart.Handler)\n\tlog.Fatal(http.ListenAndServe(":8080", nil))\n}\n'],
   [
     "internal/cart/discount.go",
@@ -591,7 +592,7 @@ export function installFake() {
       service(WorkspaceService, {
         getSettings: ({ workspace }) => {
           const s = state(workspace).settings;
-          return { agent: s.agent, model: s.model, provider: s.provider, effort: s.effort, permissionMode: s.mode, agency: s.agency, locale: s.locale, style: s.style, imagesEnabled: true };
+          return { agent: s.agent, model: s.model, provider: s.provider, effort: s.effort, permissionMode: s.mode, agency: s.agency, locale: s.locale, style: s.style, imagesEnabled: true, speechModel: s.speechModel ?? "" };
         },
         getModel: ({ workspace }) => ({ name: state(workspace).settings.model, provider: state(workspace).settings.provider, unavailable: "" }),
         setModel: ({ workspace, ref }) => {
@@ -828,6 +829,7 @@ export function installFake() {
           const c = scopeConfig(workspace);
           if (key === "llm.provider") c.provider = value;
           if (key === "blitz.default_model") c.model = value;
+          if (key === "audio.model" && workspace) state(workspace).settings.speechModel = value;
           return change(workspace);
         },
         getConfigFile: ({ workspace }) => ({ path: configPath(workspace), text: scopeConfig(workspace).text }),
@@ -936,6 +938,29 @@ export function installFake() {
             const x = out.length;
             out += `xref\n0 ${objs.length + 1}\n0000000000 65535 f \n${offs.map((o) => `${String(o).padStart(10, "0")} 00000 n \n`).join("")}trailer\n<< /Size ${objs.length + 1} /Root 1 0 R >>\nstartxref\n${x}\n%%EOF\n`;
             return { path, mime: "application/pdf", data: new TextEncoder().encode(out) };
+          }
+          if (path.endsWith(".wav")) {
+            // A second of a 440 Hz tone, 8 kHz mono.
+            const rate = 8000;
+            const pcm = new Int16Array(rate).map((_, i) => Math.round(8000 * Math.sin((2 * Math.PI * 440 * i) / rate)));
+            const head = new DataView(new ArrayBuffer(44));
+            const str = (o: number, s: string) => [...s].forEach((c, i) => head.setUint8(o + i, c.charCodeAt(0)));
+            str(0, "RIFF");
+            head.setUint32(4, 36 + pcm.byteLength, true);
+            str(8, "WAVEfmt ");
+            head.setUint32(16, 16, true); // fmt chunk size
+            head.setUint16(20, 1, true); // PCM
+            head.setUint16(22, 1, true); // mono
+            head.setUint32(24, rate, true);
+            head.setUint32(28, rate * 2, true); // bytes a second
+            head.setUint16(32, 2, true); // block align
+            head.setUint16(34, 16, true); // bits a sample
+            str(36, "data");
+            head.setUint32(40, pcm.byteLength, true);
+            const data = new Uint8Array(44 + pcm.byteLength);
+            data.set(new Uint8Array(head.buffer), 0);
+            data.set(new Uint8Array(pcm.buffer), 44);
+            return { path, mime: "audio/wav", data };
           }
           // A 2×2 PNG, whatever the file.
           const png = Uint8Array.from(atob("iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAFklEQVR4nGP8z8DwnwEIGP8zMDAAAB0IAgBfJnXoAAAAAElFTkSuQmCC"), (c) => c.charCodeAt(0));

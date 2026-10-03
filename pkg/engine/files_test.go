@@ -265,6 +265,8 @@ func TestReadPreview(t *testing.T) {
 	write(t, w.Dir(), "img/logo.PNG", "\x89PNG data")
 	write(t, w.Dir(), "doc.pdf", "%PDF-1.7")
 	write(t, w.Dir(), "icon.svg", "<svg/>")
+	write(t, w.Dir(), "audio/overview.wav", "RIFF")
+	write(t, w.Dir(), "talk.MP3", "ID3")
 	write(t, w.Dir(), "main.go", "package main")
 	for _, tc := range []struct {
 		path, mime, data string
@@ -273,6 +275,8 @@ func TestReadPreview(t *testing.T) {
 		{"img/logo.PNG", "image/png", "\x89PNG data", nil},
 		{"doc.pdf", "application/pdf", "%PDF-1.7", nil},
 		{"icon.svg", "image/svg+xml", "<svg/>", nil},
+		{"audio/overview.wav", "audio/wav", "RIFF", nil},
+		{"talk.MP3", "audio/mpeg", "ID3", nil},
 		{"main.go", "", "", ErrNoPreview},
 		{"none.png", "", "", fs.ErrNotExist},
 		{"../x.png", "", "", ErrBadPath},

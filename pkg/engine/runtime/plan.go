@@ -31,6 +31,7 @@ var planReadOnlyTools = map[string]bool{
 	"grep":                  true,
 	"lsp":                   true,
 	"view_image":            true,
+	"view_document":         true,
 	"web_fetch":             true,
 	"web_search":            true,
 	"list_agents":           true,
@@ -100,7 +101,7 @@ func CarryOutPrompt(planFile string) string {
 // allowed-tools, to Blitz's.
 var toolAliases = map[string][]string{
 	"bash":         {"run_shell_command", "manage_background_process"},
-	"read":         {"read_file", "view_image"},
+	"read":         {"read_file", "view_image", "view_document"},
 	"edit":         {"replace_in_file", "delete_snippet", "apply_patch"},
 	"multiedit":    {"replace_in_file", "apply_patch"},
 	"write":        {"create_file"},

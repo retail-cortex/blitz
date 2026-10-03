@@ -23,6 +23,7 @@ import (
 	"image"
 	"image/png"
 	"io"
+	"iter"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -162,7 +163,15 @@ func TestAnthropicImages(t *testing.T) {
 			{FunctionResponse: &genai.FunctionResponse{ID: "t1", Name: "view_image", Response: map[string]any{"path": "a.png"}}},
 			{InlineData: &genai.Blob{Data: pic, MIMEType: "image/png"}},
 		}},
-		{Role: genai.RoleUser, Parts: []*genai.Part{{InlineData: &genai.Blob{Data: []byte("%PDF"), MIMEType: "application/pdf"}}}},
+		{Role: genai.RoleModel, Parts: []*genai.Part{{FunctionCall: &genai.FunctionCall{ID: "t2", Name: "view_document", Args: map[string]any{"path": "p.pdf"}}}}},
+		{Role: genai.RoleUser, Parts: []*genai.Part{
+			{FunctionResponse: &genai.FunctionResponse{ID: "t2", Name: "view_document", Response: map[string]any{"path": "p.pdf"}}},
+			{InlineData: &genai.Blob{Data: []byte("%PDF-tool"), MIMEType: "application/pdf"}},
+		}},
+		{Role: genai.RoleUser, Parts: []*genai.Part{
+			{InlineData: &genai.Blob{Data: []byte("%PDF-user"), MIMEType: "application/pdf"}},
+			{InlineData: &genai.Blob{Data: []byte("RIFF"), MIMEType: "audio/wav"}},
+		}},
 	}}
 	_, err := collectResponses(t, m, req, false)
 	require.NoError(t, err)
@@ -174,7 +183,14 @@ func TestAnthropicImages(t *testing.T) {
 	// The tool's image is inside its tool_result, not a separate block.
 	wantTool := `"content":[{"text":"{\"path\":\"a.png\"}","type":"text"},{"source":{"data":"` + b64
 	assert.Contains(t, s, wantTool, "tool_result should contain the image:\n%s", s)
-	assert.Contains(t, s, "application/pdf attachment omitted", "unsupported media should become a note:\n%s", s)
+	// PDFs are document blocks: inside the tool_result after view_document,
+	// else on their own.
+	pdf := func(data string) string {
+		return `{"source":{"data":"` + base64.StdEncoding.EncodeToString([]byte(data)) + `","media_type":"application/pdf","type":"base64"},"type":"document"}`
+	}
+	assert.Contains(t, s, `{\"path\":\"p.pdf\"}","type":"text"},`+pdf("%PDF-tool"), "tool_result should contain the PDF:\n%s", s)
+	assert.Contains(t, s, `"type":"tool_result"},`+pdf("%PDF-user"), "user PDF should be a document block of its own:\n%s", s)
+	assert.Contains(t, s, "audio/wav attachment omitted", "unsupported media should become a note:\n%s", s)
 }
 
 // fakeOpenAI records Responses API request bodies.
@@ -204,6 +220,8 @@ func TestOpenAIImages(t *testing.T) {
 	pic := testPNG(t, 4, 4)
 	userParts := []*genai.Part{{InlineData: &genai.Blob{Data: pic, MIMEType: "image/png"}}, genai.NewPartFromText("what?")}
 	req := &model.LLMRequest{Contents: []*genai.Content{
+		{Role: genai.RoleUser, Parts: []*genai.Part{{InlineData: &genai.Blob{Data: []byte("%PDF-1.7"), MIMEType: "application/pdf"}}, genai.NewPartFromText("earlier")}},
+		{Role: genai.RoleModel, Parts: []*genai.Part{genai.NewPartFromText("noted")}},
 		{Role: genai.RoleUser, Parts: userParts},
 		{Role: genai.RoleModel, Parts: []*genai.Part{{FunctionCall: &genai.FunctionCall{ID: "c1", Name: "view_image", Args: map[string]any{"path": "a.png"}}}}},
 		{Role: genai.RoleUser, Parts: []*genai.Part{
@@ -222,6 +240,7 @@ func TestOpenAIImages(t *testing.T) {
 	assert.Equal(t, 2, strings.Count(body, `"type":"input_image"`), "expected two input_image items:\n%s", body)
 	assert.Equal(t, 2, strings.Count(body, dataURL), "expected two input_image items:\n%s", body)
 	assert.NotContains(t, body, "blitz-image", "a marker leaked to the provider:\n%s", body)
+	assert.Contains(t, body, "application/pdf attachment omitted", "a PDF is never an input_image:\n%s", body)
 	assert.LessOrEqual(t, strings.Index(body, `"input_image"`), strings.Index(body, `"what?"`), "image should come before the question")
 	// The caller's request is not modified.
 	assert.NotNil(t, userParts[0].InlineData, "request contents were mutated")
@@ -318,4 +337,67 @@ func TestImageWrappersEdgeCases(t *testing.T) {
 	assert.Nil(t, gotReq)
 	_, err := rewriteImageMarkers([]byte("not json"), openAIImages{})
 	assert.Error(t, err)
+}
+
+func TestSupportsDocuments(t *testing.T) {
+	tests := []struct {
+		provider, model string
+		want            bool
+	}{
+		{"gemini", "gemini-3-pro", true},
+		{"gemini", "models/gemini-2.5-flash", true},
+		{"anthropic", "claude-sonnet-5", true},
+		{"vertex-anthropic", "claude-opus-5@20260101", true},
+		{"anthropic", "us.anthropic.claude-sonnet-5-v1:0", false}, // Bedrock's IDs
+		{"openai", "gpt-5", false},
+		{"ollama", "llama4", false},
+		{"azure", "my-deployment", false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.provider+"/"+tc.model, func(t *testing.T) {
+			assert.Equal(t, tc.want, SupportsDocuments(tc.provider, tc.model))
+		})
+	}
+}
+
+// namedModel is a model with a name only.
+type namedModel struct{ name string }
+
+func (m namedModel) Name() string { return m.name }
+func (m namedModel) GenerateContent(context.Context, *model.LLMRequest, bool) iter.Seq2[*model.LLMResponse, error] {
+	return func(func(*model.LLMResponse, error) bool) {}
+}
+
+func TestDocumentPolicy(t *testing.T) {
+	gemini := withModelSettings(namedModel{"gemini-3-pro"}, "gemini")
+	claude := withModelSettings(namedModel{"claude-sonnet-5"}, "anthropic")
+	gpt := withModelSettings(namedModel{"gpt-5"}, "openai")
+	type doc struct{ size, pages int }
+	tests := []struct {
+		name  string
+		model model.LLM
+		yes   []doc
+		no    []doc
+	}{
+		{"gemini", gemini, []doc{{1 << 20, 500}}, []doc{{15 << 20, 1}, {1, 1001}}},
+		{"claude", withImages(claude, nil), []doc{{20 << 20, 100}}, []doc{{23 << 20, 1}, {1, 101}}},
+		{"chain of readers", newFallbackModel([]model.LLM{gemini, claude}), []doc{{1 << 20, 100}}, []doc{{1, 101}}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			p := documentPolicy(tc.model)
+			require.NotNil(t, p)
+			for _, d := range tc.yes {
+				assert.True(t, p(d.size, d.pages), "%+v", d)
+			}
+			for _, d := range tc.no {
+				assert.False(t, p(d.size, d.pages), "%+v", d)
+			}
+		})
+	}
+	for name, m := range map[string]model.LLM{
+		"openai": gpt, "chain with a non-reader": newFallbackModel([]model.LLM{gemini, gpt}), "unwrapped": namedModel{"x"},
+	} {
+		t.Run(name, func(t *testing.T) { assert.Nil(t, documentPolicy(m)) })
+	}
 }

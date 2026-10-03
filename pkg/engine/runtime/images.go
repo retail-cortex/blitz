@@ -25,7 +25,8 @@ import (
 
 // imageModel expands stored-image references in each request into the
 // image bytes, so conversation history (and session files) only ever hold
-// the references.
+// the references. A PDF goes as it is to a model that reads PDFs, as its
+// text to others (documentPolicy), so switching models mid-session is safe.
 type imageModel struct {
 	inner model.LLM
 	store *images.Store
@@ -46,7 +47,7 @@ func (m *imageModel) Name() string { return m.inner.Name() }
 func (m *imageModel) GenerateContent(ctx context.Context, req *model.LLMRequest, stream bool) iter.Seq2[*model.LLMResponse, error] {
 	if req != nil && images.HasRefs(req.Contents) {
 		cp := *req
-		cp.Contents = images.Expand(req.Contents, m.store)
+		cp.Contents = images.Expand(req.Contents, m.store, documentPolicy(m.inner))
 		req = &cp
 	}
 	return m.inner.GenerateContent(ctx, req, stream)

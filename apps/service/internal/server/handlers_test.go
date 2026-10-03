@@ -218,10 +218,13 @@ func TestEveryHandlerRefusesARelativeWorkspace(t *testing.T) {
 			return unary(w.DeleteAgentFile, &pb.DeleteAgentFileRequest{Workspace: ws, Scope: pb.AgentScope_AGENT_SCOPE_WORKSPACE})
 		},
 
-		"ListDir":      func() error { return unary(f.ListDir, &pb.ListDirRequest{Workspace: ws}) },
-		"ReadFile":     func() error { return unary(f.ReadFile, &pb.ReadFileRequest{Workspace: ws}) },
-		"ReadPreview":  func() error { return unary(f.ReadPreview, &pb.ReadPreviewRequest{Workspace: ws}) },
-		"WriteFile":    func() error { return unary(f.WriteFile, &pb.WriteFileRequest{Workspace: ws}) },
+		"ListDir":     func() error { return unary(f.ListDir, &pb.ListDirRequest{Workspace: ws}) },
+		"ReadFile":    func() error { return unary(f.ReadFile, &pb.ReadFileRequest{Workspace: ws}) },
+		"ReadPreview": func() error { return unary(f.ReadPreview, &pb.ReadPreviewRequest{Workspace: ws}) },
+		"WriteFile":   func() error { return unary(f.WriteFile, &pb.WriteFileRequest{Workspace: ws}) },
+		"WriteBinaryFile": func() error {
+			return unary(f.WriteBinaryFile, &pb.WriteBinaryFileRequest{Workspace: ws})
+		},
 		"CreateFolder": func() error { return unary(f.CreateFolder, &pb.CreateFolderRequest{Workspace: ws}) },
 		"RenameFile":   func() error { return unary(f.RenameFile, &pb.RenameFileRequest{Workspace: ws}) },
 		"DeleteFile":   func() error { return unary(f.DeleteFile, &pb.DeleteFileRequest{Workspace: ws}) },

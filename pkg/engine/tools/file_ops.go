@@ -24,6 +24,7 @@ import (
 	"strings"
 
 	"github.com/retail-cortex/blitz/pkg/api"
+	"github.com/retail-cortex/blitz/pkg/pdftext"
 
 	"google.golang.org/adk/v2/agent"
 	"google.golang.org/adk/v2/tool"
@@ -46,6 +47,7 @@ type ReadFileOutput struct {
 	Content    string `json:"content"`
 	TotalLines int    `json:"total_lines"`
 	Truncated  bool   `json:"truncated,omitempty"`
+	Note       string `json:"note,omitempty"`
 	Error      string `json:"error,omitempty"`
 }
 
@@ -59,6 +61,11 @@ func NewReadFileTool(ws *Workspace) (tool.Tool, error) {
 		func(ctx agent.Context, input ReadFileInput) (ReadFileOutput, error) {
 			if strings.HasSuffix(strings.ToLower(input.Path), ".ipynb") && input.StartLine == 0 && input.EndLine == 0 {
 				if out, ok := readNotebook(ws, input.Path); ok {
+					return out, nil
+				}
+			}
+			if pdftext.IsPDFPath(input.Path) {
+				if out, ok := readPDF(ctx, ws, input); ok {
 					return out, nil
 				}
 			}
@@ -93,7 +100,11 @@ func readFileLines(ws *Workspace, input ReadFileInput) (ReadFileOutput, error) {
 	if info.Size() > ws.MaxFileSize() {
 		return ReadFileOutput{}, fmt.Errorf("file is %d bytes, exceeding the %d byte limit; use grep or run_shell_command with head/tail instead", info.Size(), ws.MaxFileSize())
 	}
+	return pageLines(io.LimitReader(f, ws.MaxFileSize()), input)
+}
 
+// pageLines numbers r's lines, keeping the requested range.
+func pageLines(src io.Reader, input ReadFileInput) (ReadFileOutput, error) {
 	start := 1
 	if input.StartLine > 1 {
 		start = input.StartLine
@@ -124,7 +135,7 @@ func readFileLines(ws *Workspace, input ReadFileInput) (ReadFileOutput, error) {
 		sb.WriteByte('\n')
 		return true
 	}
-	r := bufio.NewReaderSize(io.LimitReader(f, ws.MaxFileSize()), 64*1024)
+	r := bufio.NewReaderSize(src, 64*1024)
 	for {
 		line, readErr := r.ReadString('\n')
 		if readErr != nil && readErr != io.EOF {

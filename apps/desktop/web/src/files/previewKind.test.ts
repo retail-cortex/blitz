@@ -25,13 +25,16 @@ describe("previewKind", () => {
     ["a/b/shot.PNG", "image"],
     ["photo.jpeg", "image"],
     ["spec.pdf", "pdf"],
+    ["audio/overview.wav", "audio"],
+    ["talk.MP3", "audio"],
+    ["voice.opus", "audio"],
     ["main.go", null],
     ["Makefile", null],
     ["v1.2/notes", null],
     [".md", "markdown"],
   ])("%s", (path, want) => expect(previewKind(path)).toBe(want));
-  it("images and PDFs show only as previews", () => {
-    expect([previewOnly("image"), previewOnly("pdf"), previewOnly("markdown"), previewOnly(null)]).toEqual([true, true, false, false]);
+  it("images, PDFs and sound show only as previews", () => {
+    expect([previewOnly("image"), previewOnly("pdf"), previewOnly("audio"), previewOnly("markdown"), previewOnly(null)]).toEqual([true, true, true, false, false]);
   });
 });
 
@@ -43,6 +46,7 @@ describe("defaultView", () => {
     ["svg opens its source", "svg", false, false, "source"],
     ["images only preview", "image", true, true, "preview"],
     ["pdfs only preview", "pdf", false, false, "preview"],
+    ["sound only plays", "audio", false, false, "preview"],
     ["other files are source", null, false, false, "source"],
   ])("%s", (_name, kind, atLine, empty, want) => {
     expect(defaultView(kind, { atLine, empty })).toBe(want);

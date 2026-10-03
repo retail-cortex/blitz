@@ -214,7 +214,16 @@ func (w *Workspace) Settings() api.Settings {
 		PermissionMode: string(w.tools.Hooks().Mode()),
 		Effort:         w.engine.Effort(),
 		Style:          w.styleName(),
+		SpeechModel:    w.cfg.Audio.Model,
+		SpeechError:    errText(w.tools.SpeakerErr()),
 	}
+}
+
+func errText(err error) string {
+	if err == nil {
+		return ""
+	}
+	return err.Error()
 }
 
 // SetPermissionMode changes which actions run without asking, for every
@@ -271,6 +280,8 @@ func (w *Workspace) Set(ctx context.Context, key, value string) (string, error) 
 func (w *Workspace) ReloadProviders(ctx context.Context, cfg *config.Config) error {
 	w.cfg.LLM = cfg.LLM
 	w.cfg.Blitz.DefaultModel = cfg.Blitz.DefaultModel
+	w.cfg.Audio = cfg.Audio
+	w.setupSpeaker(ctx, func(string) {}) // before the rebuild, which lists generate_audio once there's a speaker
 	return w.rebuildModels(ctx)
 }
 
