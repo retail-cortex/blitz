@@ -26,7 +26,11 @@ go_library(
         "fonts/NotoSansMath-Regular.ttf.gz",
     ],
     importpath = "github.com/retail-cortex/blitz/pkg/engine/mdpdf",
-    visibility = ["//visibility:public"],
+    visibility = [
+        "//pkg/engine:__subpackages__",
+        # pdftext's test reads back text the typesetter wrote.
+        "//pkg/pdftext:__pkg__",
+    ],
     deps = [
         "@com_github_alecthomas_chroma_v2//:chroma",
         "@com_github_alecthomas_chroma_v2//lexers",
