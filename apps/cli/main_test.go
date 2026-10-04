@@ -26,6 +26,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/retail-cortex/blitz/pkg/api"
 	"github.com/retail-cortex/blitz/pkg/config"
@@ -197,7 +198,9 @@ func useTestServices(t *testing.T) {
 	}
 	t.Cleanup(func() {
 		cancel()
-		wg.Wait()
+		stopped := make(chan struct{})
+		go func() { wg.Wait(); close(stopped) }()
+		servicetest.Stopped(t, stopped, 20*time.Second)
 		startShared, startPrivate, serviceDirs = oldShared, oldPrivate, oldDirs
 	})
 }

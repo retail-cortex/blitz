@@ -73,9 +73,9 @@ func TestRelease(t *testing.T) {
 	t.Cleanup(func() { os.RemoveAll(dir) })
 	sock := filepath.Join(dir, "s.sock")
 	ctx, cancel := context.WithCancel(context.Background())
-	done := make(chan error, 1)
-	go func() { done <- servicetest.Run(ctx, sock) }()
-	t.Cleanup(func() { cancel(); <-done })
+	done := make(chan struct{})
+	go func() { servicetest.Run(ctx, sock); close(done) }()
+	t.Cleanup(func() { cancel(); servicetest.Stopped(t, done, 20*time.Second) })
 	for deadline := time.Now().Add(10 * time.Second); !socket.Running(sock); time.Sleep(20 * time.Millisecond) {
 		require.False(t, time.Now().After(deadline), "service didn't start")
 	}
