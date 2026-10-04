@@ -34,11 +34,11 @@ func TestAuthCommand(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(bin, "gcloud"), []byte(`#!/bin/sh
 case "$*" in
   *login*) echo "Waiting for you"; echo "Opening https://accounts.google.com/auth?x=1"; echo '{"type":"authorized_user"}' > "$GOOGLE_APPLICATION_CREDENTIALS" ;;
-  *revoke*) rm -f "$GOOGLE_APPLICATION_CREDENTIALS" ;;
+  *revoke*) /bin/rm -f "$GOOGLE_APPLICATION_CREDENTIALS" ;;
 esac
 `), 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(bin, "aws"), []byte("#!/bin/sh\necho \"Enter WXYZ-1234 at https://device.sso.aws/\"\nexit 1\n"), 0o755))
-	t.Setenv("PATH", bin+":/usr/bin:/bin")
+	t.Setenv("PATH", bin) // only the fakes: CI runners come with az, aws and gcloud installed
 
 	out, err := runCLI(t, "auth", "status")
 	require.NoError(t, err)

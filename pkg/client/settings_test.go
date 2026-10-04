@@ -110,11 +110,11 @@ func TestSignInThroughTheService(t *testing.T) {
 	gcloud := `#!/bin/sh
 case "$*" in
   *login*) echo "Go to https://accounts.google.com/auth?x=1"; echo '{"type":"authorized_user"}' > "$GOOGLE_APPLICATION_CREDENTIALS" ;;
-  *revoke*) rm -f "$GOOGLE_APPLICATION_CREDENTIALS" ;;
+  *revoke*) /bin/rm -f "$GOOGLE_APPLICATION_CREDENTIALS" ;;
 esac
 `
 	require.NoError(t, os.WriteFile(filepath.Join(bin, "gcloud"), []byte(gcloud), 0o755))
-	t.Setenv("PATH", bin+":/usr/bin:/bin")
+	t.Setenv("PATH", bin) // only the fakes: CI runners come with az, aws and gcloud installed
 
 	s := servicetest.New(func(context.Context, string) (*engine.Workspace, error) { return nil, nil })
 	srv := httptest.NewServer(s.Handler())
