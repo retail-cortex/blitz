@@ -454,3 +454,9 @@ func splitVersion(v string) ([3]int, string) {
 	}
 	return out, pre
 }
+
+// fileExists reports whether p exists.
+func fileExists(p string) bool {
+	_, err := os.Stat(p)
+	return err == nil
+}

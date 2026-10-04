@@ -16,9 +16,11 @@ package main
 
 import (
 	"fmt"
+	"path/filepath"
 	"text/tabwriter"
 
-	"github.com/retail-cortex/blitz/pkg/engine/runtime"
+	"github.com/retail-cortex/blitz/pkg/client"
+	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/spf13/cobra"
 )
 
@@ -34,14 +36,26 @@ func newModelsCommand(g *globalFlags) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if len(args) == 0 && len(runtime.ConfiguredProviders(cfg)) == 0 {
+			sock, err := ensureService(cmd.Context())
+			if err != nil {
+				return err
+			}
+			dir, err := filepath.Abs(config.ExpandHome(cfg.Tools.WorkspaceDir))
+			if err != nil {
+				return err
+			}
+			list, err := client.AttachSettings(sock).ListModels(cmd.Context(), dir, args...)
+			if err != nil {
+				return err
+			}
+			if len(args) == 0 && len(list) == 0 {
 				return withCode(exitUsage, fmt.Errorf("no provider is set up: run blitz setup, or name one (gemini, anthropic, openai, ollama)"))
 			}
 			out := cmd.OutOrStdout()
 			failed := 0
-			for _, pm := range runtime.ListModels(cmd.Context(), cfg, args...) {
+			for _, pm := range list {
 				fmt.Fprintf(out, "%s\n", pm.Provider)
-				if pm.Err != nil {
+				if pm.Err != "" {
 					failed++
 					fmt.Fprintf(out, "  can't list its models: %v\n\n", pm.Err)
 					continue
@@ -52,8 +66,8 @@ func newModelsCommand(g *globalFlags) *cobra.Command {
 				tw := tabwriter.NewWriter(out, 2, 4, 2, ' ', 0)
 				for _, m := range pm.Models {
 					price := "-"
-					if m.Price != nil {
-						price = fmt.Sprintf("$%.2f in, $%.2f out per million tokens", m.Price.InputPerMTok, m.Price.OutputPerMTok)
+					if m.HasPrice {
+						price = fmt.Sprintf("$%.2f in, $%.2f out per million tokens", m.InputPerMTok, m.OutputPerMTok)
 					}
 					fmt.Fprintf(tw, "  %s/%s\t%s\n", pm.Provider, m.ID, price)
 				}

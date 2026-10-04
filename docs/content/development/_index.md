@@ -11,7 +11,7 @@ A monorepo of independent apps over shared packages, one Go module. The rule: **
 
 | Path | What |
 |---|---|
-| `apps/cli` | `blitz`, the CLI: flags, `--dir`, output modes, one-shot runs, `doctor`, `config`, `workers`, `service install`. Attaches to the service when it runs, else opens the workspace in process (`--local` forces that) |
+| `apps/cli` | `blitz`, the CLI: flags, `--dir`, output modes, one-shot runs, `doctor`, `config`, `workers`, `service install`. Links no engine: attaches to the service (starting it when it isn't running), or to a private `blitzd` for a run of its own (`--local`); `doctor` runs in `blitzd` |
 | `apps/cli/internal/tui` | The REPL: commands, rendering, input, steering keys. Drives an `api.Backend` |
 | `apps/service` | `blitzd`, the per-user service: `internal/daemon` runs it, `internal/server` has the Connect handlers over `engine.Workspace` (translation only) and the approval/question broker. `servicetest` runs it inside other packages' tests |
 | `apps/vscode` | The VS Code extension (TypeScript): the desktop app's page in a view, a local proxy to the service, packed by `tools/vsix` |

@@ -24,18 +24,16 @@ import (
 	"strings"
 	"time"
 
-	"github.com/retail-cortex/blitz/pkg/socket"
-
 	"github.com/retail-cortex/blitz/pkg/api"
 
 	"github.com/retail-cortex/blitz/apps/cli/internal/tui"
 	"github.com/retail-cortex/blitz/pkg/client"
 	"github.com/retail-cortex/blitz/pkg/config"
-	"github.com/retail-cortex/blitz/pkg/engine"
+	"github.com/retail-cortex/blitz/pkg/loginitem"
 	"github.com/spf13/cobra"
 )
 
-// workerOps are a workspace's workers, in the service or in this process.
+// workerOps are a workspace's workers, in the service.
 type workerOps interface {
 	ListWorkers() ([]api.WorkerInfo, error)
 	EnableWorker(name, hash string) (api.WorkerInfo, error)
@@ -45,38 +43,22 @@ type workerOps interface {
 	UndoWorkerRun(runID string, force bool) ([]string, error)
 }
 
-// localWorkers runs workers in this process, when the service isn't running.
-type localWorkers struct{ *engine.Workspace }
-
-func (l localWorkers) UndoWorkerRun(runID string, force bool) ([]string, error) {
-	res, err := l.Workspace.UndoWorkerRun(runID, force)
-	return res.Restored, err
-}
-
-func (l localWorkers) RunWorker(ctx context.Context, name string, on func(api.Event)) (api.Run, error) {
-	return l.Workspace.RunWorker(ctx, name, engine.RunOptions{Manual: true, OnEvent: on})
-}
-
-// openWorkers reaches the workspace's workers through the service when it
-// is running (it owns them then), and otherwise in this process. close
-// releases what it opened.
+// openWorkers reaches the workspace's workers in the Blitz service (started
+// when it isn't running), which owns them. close releases what it opened.
 func openWorkers(ctx context.Context, g *globalFlags) (ops workerOps, close func(), err error) {
 	cfg, err := loadConfig(g)
 	if err != nil {
 		return nil, nil, err
 	}
-	if sock := socket.DefaultSocket(); socket.Running(sock) {
-		dir, err := filepath.Abs(config.ExpandHome(cfg.Tools.WorkspaceDir))
-		if err != nil {
-			return nil, nil, err
-		}
-		return client.AttachWorkers(sock, dir), func() {}, nil
-	}
-	w, err := engine.Open(ctx, cfg, engine.Options{})
+	dir, err := filepath.Abs(config.ExpandHome(cfg.Tools.WorkspaceDir))
 	if err != nil {
 		return nil, nil, err
 	}
-	return localWorkers{w}, func() { w.Close() }, nil
+	sock, err := ensureService(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+	return client.AttachWorkers(sock, dir), func() {}, nil
 }
 
 func newWorkersCommand(g *globalFlags) *cobra.Command {
@@ -249,8 +231,8 @@ func workersEnable(cmd *cobra.Command, g *globalFlags, name string, yes bool) er
 		next = on.Next.Local().Format("Mon Jan 2 15:04")
 	}
 	fmt.Fprintf(out, "✓ %s enabled; next run %s.\n", name, next)
-	if !socket.Running(socket.DefaultSocket()) {
-		fmt.Fprintln(out, "Workers run in the Blitz service: start it with 'blitz service install' (or run blitzd).")
+	if !loginitem.Installed() { // a service started on demand stops when idle
+		fmt.Fprintln(out, "Workers run in the Blitz service: keep it running with 'blitz service install'.")
 	}
 	return nil
 }

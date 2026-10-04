@@ -48,6 +48,10 @@ go_library(
     name = "desktop_lib",
     srcs = [
         "app.go",
+        "appearance.go",
+        "appearance_darwin.go",
+        "appearance_darwin.m",
+        "appearance_other.go",
         "cli.go",
         "deeplink.go",
         "folder.go",
@@ -63,9 +67,11 @@ go_library(
     clinkopts = select({
         "@rules_go//go/platform:darwin": [
             "-framework UniformTypeIdentifiers",
+            "-framework AppKit",
         ],
         "@rules_go//go/platform:ios": [
             "-framework UniformTypeIdentifiers",
+            "-framework AppKit",
         ],
         "//conditions:default": [],
     }),
@@ -78,6 +84,7 @@ go_library(
         "//pkg/legal",
         "//pkg/loginitem",
         "//pkg/sandboxsetup",
+        "//pkg/shellpath",
         "//pkg/socket",
         "@com_github_wailsapp_wails_v2//:wails",
         "@com_github_wailsapp_wails_v2//pkg/options",
@@ -120,6 +127,7 @@ go_test(
     size = "small",
     srcs = [
         "app_test.go",
+        "appearance_test.go",
         "cli_test.go",
         "deeplink_test.go",
         "folder_test.go",

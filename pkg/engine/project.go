@@ -182,6 +182,10 @@ func (w *Workspace) TrustProject(hash string, trusted bool) error {
 	return TrustProject(w.cfg, hash, trusted)
 }
 
+// ForgetProjectTrust forgets the decision about the workspace's project
+// settings: they wait for trust again.
+func (w *Workspace) ForgetProjectTrust() error { return ForgetProjectTrust(w.cfg) }
+
 func trustStore(cfg *config.Config) *config.TrustStore {
 	dir := cfg.Dir
 	if dir == "" {

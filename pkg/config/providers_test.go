@@ -215,13 +215,15 @@ func TestSetAuth(t *testing.T) {
 	}{
 		{name: "Gemini with ADC", provider: "gemini", auth: ProviderAuth{Method: AuthADC, ProjectID: " my-project ", Location: "us-central1"},
 			want: ProviderInfo{Auth: AuthADC, ProjectID: "my-project", Location: "us-central1"}},
+		{name: "Gemini with a Google account", provider: "gemini", auth: ProviderAuth{Method: AuthOAuth, ProjectID: "my-project", Location: "us-central1"},
+			want: ProviderInfo{Auth: AuthOAuth, ProjectID: "my-project", Location: "us-central1"}},
 		{name: "Gemini back to a key keeps the project", provider: "gemini", auth: ProviderAuth{Method: AuthAPIKey},
 			want: ProviderInfo{ProjectID: "my-project", Location: "us-central1"}},
 		{name: "Claude on Vertex AI", provider: "anthropic", auth: ProviderAuth{Method: AuthADC, ProjectID: "claude-p", Location: "us-east5"},
 			want: ProviderInfo{Auth: AuthADC, ProjectID: "claude-p", Location: "us-east5"}},
 		{name: "Claude with ant's active profile", provider: "anthropic", auth: ProviderAuth{Method: AuthOAuth}, want: ProviderInfo{Auth: AuthOAuth, ProjectID: "claude-p", Location: "us-east5"}},
 		{name: "Claude with a named profile", provider: "anthropic", auth: ProviderAuth{Method: AuthOAuth, Profile: "work"}, want: ProviderInfo{Auth: AuthOAuth, Profile: "work", ProjectID: "claude-p", Location: "us-east5"}},
-		{name: "OAuth isn't Gemini's", provider: "gemini", auth: ProviderAuth{Method: AuthOAuth}, err: "gemini signs in with api_key or adc"},
+		{name: "no such method for Gemini", provider: "gemini", auth: ProviderAuth{Method: "password"}, err: "gemini signs in with api_key or adc or oauth"},
 		{name: "no such method for Claude", provider: "anthropic", auth: ProviderAuth{Method: "password"}, err: "anthropic signs in with api_key or oauth or adc"},
 		{name: "OpenAI takes a key only", provider: "openai", auth: ProviderAuth{Method: AuthOAuth}, err: "API key only"},
 		{name: "a path isn't a profile", provider: "anthropic", auth: ProviderAuth{Method: AuthOAuth, Profile: "../x"}, err: "isn't a profile name"},
@@ -249,7 +251,40 @@ func TestSetAuth(t *testing.T) {
 	_, err = SetValue("", ws, "llm.gemini.auth", "adc")
 	assert.NoError(t, err)
 	_, err = SetValue("", ws, "llm.gemini.auth", "oauth")
+	assert.NoError(t, err)
+	_, err = SetValue("", ws, "llm.gemini.auth", "password")
 	assert.Error(t, err)
+}
+
+// Bedrock and Azure sign in with OAuth too (AWS IAM Identity Center,
+// Entra ID), from the settings file and the CLI, as well as with keys.
+func TestSetAuthClouds(t *testing.T) {
+	keysEnv(t)
+	ws := t.TempDir()
+	_, err := SetAuth("", ws, "bedrock", ProviderAuth{Method: AuthOAuth, Profile: "dev"})
+	require.NoError(t, err)
+	_, err = SetAuth("", ws, "azure", ProviderAuth{Method: AuthOAuth})
+	require.NoError(t, err)
+	cfg, err := LoadWorkspace("", ws)
+	require.NoError(t, err)
+	assert.Equal(t, AuthOAuth, cfg.LLM.Bedrock.Auth)
+	assert.Equal(t, "dev", cfg.LLM.Bedrock.Profile)
+	assert.Equal(t, AuthOAuth, cfg.LLM.Azure.Auth)
+
+	_, err = SetAuth("", ws, "azure", ProviderAuth{Method: AuthEntra})
+	assert.NoError(t, err, "entra, as before")
+	_, err = SetAuth("", ws, "bedrock", ProviderAuth{Method: AuthAPIKey})
+	require.NoError(t, err)
+	cfg, _ = LoadWorkspace("", ws)
+	assert.Empty(t, cfg.LLM.Bedrock.Auth, "back to access keys")
+	assert.Equal(t, "dev", cfg.LLM.Bedrock.Profile, "the profile kept")
+
+	_, err = SetAuth("", ws, "bedrock", ProviderAuth{Method: AuthADC})
+	assert.ErrorContains(t, err, "bedrock signs in with api_key or oauth")
+	_, err = SetAuth("", ws, "ollama", ProviderAuth{Method: AuthOAuth})
+	assert.ErrorContains(t, err, "unknown provider")
+	assert.Equal(t, []string{AuthADC, AuthOAuth}, AuthMethods("gemini"))
+	assert.Empty(t, AuthMethods("openai"))
 }
 
 // The provider form's sign-in is part of its one change.

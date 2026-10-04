@@ -23,8 +23,8 @@ go_library(
     ],
     importpath = "github.com/retail-cortex/blitz/pkg/engine/browser",
     visibility = [
-        # The engine's browser tool, and blitz doctor.
-        "//apps/cli:__pkg__",
+        # The engine's browser tool, and blitz doctor (blitzd doctor).
+        "//apps/service/internal/doctor:__pkg__",
         "//pkg/engine:__subpackages__",
     ],
     deps = ["@com_github_gorilla_websocket//:websocket"],

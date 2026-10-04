@@ -15,18 +15,16 @@
 package main
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	goruntime "runtime"
 	"slices"
 	"strings"
-	"time"
 
 	"github.com/retail-cortex/blitz/pkg/loginitem"
+	"github.com/retail-cortex/blitz/pkg/shellpath"
 )
 
 // CLIStatus says where the blitz command is: the one that comes with this
@@ -46,6 +44,8 @@ type CLIStatus struct {
 type CLIInstall struct {
 	Link    string `json:"link"`
 	Profile string `json:"profile"`
+	// Removed lists the dead blitz links a reinstall took off PATH.
+	Removed []string `json:"removed,omitempty"`
 }
 
 // CLIStatus reports where this app's blitz is and whether a terminal
@@ -70,6 +70,72 @@ func (a *App) InstallCLI() (CLIInstall, error) {
 	}
 	shell := loginShell()
 	return installCLI(cli, home, shell, goruntime.GOOS, userPath(shell))
+}
+
+// ReinstallCLI links this app's blitz again, for when the one on PATH is
+// another build's or a dead link (a developer's old bazel-bin, an app
+// since moved): it removes the dead blitz links on PATH, points the blitz
+// link the shell finds at this app's, and links it as InstallCLI does when
+// there's none. A blitz on PATH that's a file, not a link, is the user's
+// and is left alone.
+func (a *App) ReinstallCLI() (CLIInstall, error) {
+	cli, err := findCLI()
+	if err != nil {
+		return CLIInstall{}, err
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return CLIInstall{}, err
+	}
+	shell := loginShell()
+	return reinstallCLI(cli, home, shell, goruntime.GOOS, userPath(shell))
+}
+
+// reinstallCLI is ReinstallCLI's work, for cli, home, shell, goos and the
+// shell's path.
+func reinstallCLI(cli, home, shell, goos string, path []string) (CLIInstall, error) {
+	var removed []string
+	for _, d := range path {
+		if d == "" {
+			continue
+		}
+		p := filepath.Join(d, "blitz")
+		info, err := os.Lstat(p)
+		if err != nil || info.Mode()&os.ModeSymlink == 0 {
+			continue
+		}
+		if _, err := os.Stat(p); err == nil {
+			continue // a live link: the shell may find it, below
+		}
+		if err := os.Remove(p); err != nil {
+			return CLIInstall{Removed: removed}, fmt.Errorf("%s is a dead link and couldn't be removed: %w", p, err)
+		}
+		removed = append(removed, p)
+	}
+	found := lookPathIn(path, "blitz")
+	if found == "" {
+		out, err := installCLI(cli, home, shell, goos, path)
+		out.Removed = removed
+		return out, err
+	}
+	out := CLIInstall{Link: found, Removed: removed}
+	if info, err := os.Lstat(found); err != nil || info.Mode()&os.ModeSymlink == 0 {
+		return out, fmt.Errorf("%s is a program, not a link: remove it to use this app's blitz", found)
+	}
+	if target, err := filepath.EvalSymlinks(found); err == nil && target == cli {
+		return out, nil
+	}
+	// A new link beside the old, renamed over it: never no blitz at all.
+	tmp := found + ".blitz-new"
+	os.Remove(tmp)
+	if err := os.Symlink(cli, tmp); err != nil {
+		return out, err
+	}
+	if err := os.Rename(tmp, found); err != nil {
+		os.Remove(tmp)
+		return out, err
+	}
+	return out, nil
 }
 
 func cliStatus(cli string, path []string) CLIStatus {
@@ -217,49 +283,10 @@ func profileFor(home, shell, goos, dir string) (string, string) {
 	return filepath.Join(home, ".profile"), `export PATH="` + rel + `:$PATH"`
 }
 
-// loginShell is the user's shell ($SHELL, else the system's default).
-func loginShell() string {
-	if s := os.Getenv("SHELL"); s != "" {
-		return s
-	}
-	if goruntime.GOOS == "darwin" {
-		return "/bin/zsh"
-	}
-	return "/bin/sh"
-}
-
-// pathMarker starts the line userPath reads, among whatever else the
-// shell's startup files print.
-const pathMarker = "BLITZ_PATH="
-
-// userPath is PATH as a new terminal has it: what an interactive login
-// shell prints, else (it fails, or takes over 5 s) this app's PATH.
-func userPath(shell string) []string {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	// fish joins a quoted $PATH with colons too.
-	out, err := exec.CommandContext(ctx, shell, "-i", "-l", "-c", `printf '`+pathMarker+`%s\n' "$PATH"`).Output()
-	if err == nil {
-		for _, l := range strings.Split(string(out), "\n") {
-			if v, ok := strings.CutPrefix(l, pathMarker); ok {
-				return filepath.SplitList(v)
-			}
-		}
-	}
-	return filepath.SplitList(os.Getenv("PATH"))
-}
-
-// lookPathIn is the first executable file named name in dirs ("" if
-// none), as the shell would find it.
-func lookPathIn(dirs []string, name string) string {
-	for _, d := range dirs {
-		if d == "" {
-			continue
-		}
-		p := filepath.Join(d, name)
-		if info, err := os.Stat(p); err == nil && !info.IsDir() && info.Mode()&0o111 != 0 {
-			return p
-		}
-	}
-	return ""
-}
+// loginShell, userPath and lookPathIn find programs as a terminal would
+// (pkg/shellpath).
+var (
+	loginShell = shellpath.LoginShell
+	userPath   = shellpath.UserPath
+	lookPathIn = shellpath.LookPathIn
+)

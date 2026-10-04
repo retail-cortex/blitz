@@ -78,12 +78,21 @@ func TestConfigKeyCommands(t *testing.T) {
 	require.NoError(t, err)
 	out, _ = run("", "config", "keys")
 	assert.Contains(t, out, "anthropic  keychain\n", "keys:\n%s", out)
+	_, err = run("", "config", "set-auth", "gemini", "oauth", "--project", "my-project")
+	require.NoError(t, err)
+	out, _ = run("", "config", "keys")
+	assert.Contains(t, out, "gemini     OAuth, your Google account (blitz auth login google), project my-project", "keys:\n%s", out)
+	_, err = run("", "config", "set-auth", "bedrock", "oauth", "--profile", "dev")
+	require.NoError(t, err, "bedrock signs in with AWS IAM Identity Center")
+	_, err = run("", "config", "set-auth", "azure", "oauth")
+	require.NoError(t, err, "azure with Entra ID")
 
 	for name, args := range map[string][]string{
 		"no key":           {"config", "set-key", "openai"},
 		"not keyed":        {"config", "set-key", "ollama"},
 		"nothing here":     {"config", "secure-key", "openai"},
-		"not Gemini's":     {"config", "set-auth", "gemini", "oauth"},
+		"not OpenAI's":     {"config", "set-auth", "openai", "oauth"},
+		"not a provider":   {"config", "set-auth", "ollama", "oauth"},
 		"no project flag":  {"config", "set-auth", "anthropic", "adc", "--projet", "p"},
 		"no such method":   {"config", "set-auth", "anthropic", "password"},
 		"a key only":       {"config", "set-auth", "openai", "adc"},

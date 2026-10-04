@@ -34,8 +34,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// The CLI attaches to a workspace the service holds, and --local on it is
-// refused.
+// The CLI attaches to a workspace the service holds, and --local, a run of
+// its own, takes it from the service when no turn runs there.
 func TestAttachToTheService(t *testing.T) {
 	isolate(t)
 	t.Setenv("GEMINI_API_KEY", "")
@@ -62,10 +62,11 @@ func TestAttachToTheService(t *testing.T) {
 	_, err = runCLI(t, "-d", ws, "--output-format", "json", "hello")
 	assert.Equal(t, exitFailure, exitCodeFor(err), "attached one-shot: %v", err)
 	assert.Contains(t, err.Error(), "model initialization failed", "attached one-shot: %v", err)
-	// --local opens it here, which the service's lock refuses.
+	// --local starts a service of its own, which the shared one lets have
+	// the workspace: it fails on the same unconfigured model, not the lock.
 	_, err = runCLI(t, "--local", "-d", ws, "hello")
-	assert.Equal(t, exitUsage, exitCodeFor(err), "--local on a workspace the service holds: %v", err)
-	assert.Contains(t, err.Error(), "open elsewhere", "--local on a workspace the service holds: %v", err)
+	assert.Equal(t, exitFailure, exitCodeFor(err), "--local on a workspace the service holds: %v", err)
+	assert.Contains(t, err.Error(), "model initialization failed", "--local on a workspace the service holds: %v", err)
 
 	cancel()
 	select {
@@ -152,14 +153,20 @@ func TestCommandsWithTheService(t *testing.T) {
 	cfg := mustConfig(t, ws)
 	var warnings []string
 	asked := false
-	b, _, remote, err := openBackend(context.Background(), cfg, backendOptions{trustProject: true, askTrust: func(api.ProjectSettings) string {
+	// --trust-project is a run of its own: a private service, which the
+	// shared one lets have the workspace (no turn runs there).
+	own, _, ownShared, err := openBackend(context.Background(), cfg, backendOptions{trustProject: true}, func(s string) { warnings = append(warnings, s) })
+	require.NoError(t, err)
+	assert.False(t, ownShared)
+	assert.True(t, own.ProjectSettings().Loaded, "trusted for the run")
+	stopPrivate()
+	b, _, remote, err := openBackend(context.Background(), cfg, backendOptions{askTrust: func(api.ProjectSettings) string {
 		asked = true
 		return "trust"
 	}}, func(s string) { warnings = append(warnings, s) })
 	require.NoError(t, err)
 	assert.True(t, remote)
 	assert.True(t, asked, "the project's settings were asked about")
-	assert.NotEmpty(t, warnings, "--trust-project doesn't apply to the service's workspace")
 	assert.Equal(t, api.TrustTrusted, b.ProjectSettings().State)
 	require.NoError(t, b.Close())
 

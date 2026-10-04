@@ -117,7 +117,7 @@
 }
 .menubar-item::after { content: ""; position: absolute; inset: 0; border-radius: inherit; background: currentColor; opacity: 0; transition: opacity 0.15s; pointer-events: none; }
 .menubar-item:hover::after { opacity: 0.08; }
-.menubar-item:focus-visible { outline: 2px solid var(--md-primary); outline-offset: 1px; }
+.menubar-item:focus-visible { outline: 2px solid var(--accent-b); outline-offset: 1px; }
 .menubar-item[aria-expanded="true"] { color: var(--md-on-surface); background: var(--md-surface-container-highest); }
 .menubar-chevron { margin-right: -4px; opacity: 0.7; }
 .menubar-badge { margin-left: 2px; background: var(--md-primary); color: var(--md-on-primary); }
@@ -131,7 +131,7 @@
 /* The app's mark and name. */
 .brand { display: flex; align-items: center; gap: 6px; flex: none; font: 500 20px/28px var(--md-font-display); }
 .workspace-body { position: relative; display: flex; flex: 1; min-height: 0; }
-.workspace-center { flex: 1; min-width: 0; display: flex; flex-direction: column; min-height: 0; }
+.workspace-center { flex: 1; min-width: 160px; display: flex; flex-direction: column; min-height: 0; }
 .chat-panel { position: relative; flex: none; display: flex; flex-direction: column; min-width: 320px; min-height: 0; border-left: 1px solid var(--md-outline-variant); background: var(--md-surface); }
 .panel-resize { position: absolute; left: -3px; top: 0; bottom: 0; width: 6px; cursor: col-resize; z-index: 5; }
 .panel-resize:hover, body.resizing .panel-resize { background: color-mix(in srgb, var(--md-primary) 30%, transparent); }
@@ -237,7 +237,7 @@ body.resizing iframe, body.resizing .cm-editor { pointer-events: none; }
    the ring is drawn, still). Dark: light blue to green; light: deep blue
    to deep green, each theme's own title colours. */
 @property --ring-angle { syntax: "<angle>"; initial-value: 0deg; inherits: false; }
-:root { --ring-a: var(--md-primary); --ring-b: var(--md-tertiary); --ring-mid: color-mix(in oklab, var(--ring-a), var(--ring-b)); }
+:root { --ring-a: var(--accent-a); --ring-b: var(--md-tertiary); --ring-mid: var(--accent-b); }
 :is(.composer, .composer-dock)::after {
   content: ""; position: absolute; inset: -1px; border-radius: inherit; padding: 1.5px; pointer-events: none;
   background: conic-gradient(from var(--ring-angle), var(--ring-a), var(--ring-mid), var(--ring-b), var(--ring-mid), var(--ring-a));
@@ -252,7 +252,10 @@ body.resizing iframe, body.resizing .cm-editor { pointer-events: none; }
 .composer.running::after, .composer-dock:has(.composer.running)::after { opacity: 1; animation-duration: 2.5s; }
 .composer:not(.composer-dock .composer):focus-within, .composer-dock:focus-within { box-shadow: 0 0 18px -6px var(--ring-b); }
 @keyframes ring-turn { to { --ring-angle: 360deg; } }
-@media (prefers-reduced-motion: reduce) { :is(.composer, .composer-dock)::after { animation: none; } }
+/* Send (steer, while the agent works) glows with the ring's turn. */
+.composer.running .composer-bar .icon-btn.filled:not(:disabled) { animation: send-glow 2.5s ease-in-out infinite; }
+@keyframes send-glow { 50% { box-shadow: var(--accent-shadow-hover), var(--accent-highlight); } }
+@media (prefers-reduced-motion: reduce) { :is(.composer, .composer-dock)::after, .composer.running .composer-bar .icon-btn.filled { animation: none; } }
 /* The pinned composer (composerDock.ts): part of the window's frame, like
    the status bar under it, not a card. Flush and square, one line at rest,
    growing upward; the ring (above) is its border, focus and a running turn
@@ -270,8 +273,7 @@ body.resizing iframe, body.resizing .cm-editor { pointer-events: none; }
 .composer-dock .composer-bar { grid-area: bar; flex-wrap: nowrap; gap: 2px; }
 /* One height for the text's line and the buttons, so a single line and the icons share a centre. */
 .composer-dock .composer-bar .icon-btn, .composer-dock .key-hint { width: 30px; height: 30px; }
-.composer-dock .composer-bar .icon-btn.filled, .composer-dock .composer-bar .icon-btn.tonal { background: none; color: var(--md-primary); }
-.composer-dock .composer-bar .icon-btn:disabled { color: var(--md-on-surface-variant); opacity: 0.5; }
+.composer-dock .composer-bar .icon-btn .icon { width: 18px; height: 18px; }
 /* Background tasks: a flat row above the input, not a card. */
 .composer-dock .tasks { border: none; border-bottom: 1px solid var(--md-outline-variant); border-radius: 0; background: transparent; box-shadow: none; padding: 6px 14px; }
 .composer textarea { border: none; outline: none; resize: none; background: transparent; color: var(--md-on-surface); font: 400 15px/22px var(--md-font); padding: 4px 0; min-height: 30px; max-height: 280px; }
@@ -477,7 +479,7 @@ body.resizing iframe, body.resizing .cm-editor { pointer-events: none; }
   background: var(--md-surface-container-high); border-radius: var(--md-shape-lg); box-shadow: var(--md-elevation-2); }
 .command-option { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 36px; padding: 6px 12px; border: none; border-radius: var(--md-shape-sm);
   background: none; color: var(--md-on-surface); font: inherit; text-align: left; cursor: pointer; }
-.command-option.on { background: var(--md-secondary-container); color: var(--md-on-secondary-container); }
+.command-option.on { background: var(--accent-tint); color: var(--on-accent-tint); }
 .command-option code { color: var(--md-primary); font-weight: 500; }
 .command-source { height: 20px; padding: 0 8px; font-size: 11px; }
 .command-hint { padding: 6px 12px 2px; }
@@ -500,7 +502,7 @@ body.resizing iframe, body.resizing .cm-editor { pointer-events: none; }
 .palette-item { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 44px; padding: 8px 12px; border: none; border-radius: var(--md-shape-md);
   background: none; color: var(--md-on-surface); font: inherit; text-align: left; cursor: pointer; }
 .palette-item .icon { color: var(--md-on-surface-variant); }
-.palette-item.on { background: var(--md-secondary-container); color: var(--md-on-secondary-container); }
+.palette-item.on { background: var(--accent-tint); color: var(--on-accent-tint); }
 .palette-item .detail { margin-left: auto; max-width: 50%; }
 .palette-empty { padding: 24px; text-align: center; }
 .palette-foot { padding: 8px 20px; border-top: 1px solid var(--md-outline-variant); }
@@ -518,7 +520,7 @@ body.resizing iframe, body.resizing .cm-editor { pointer-events: none; }
 .provider-choice .seg { align-self: flex-start; }
 .key-status { display: flex; flex-direction: column; gap: 4px; max-width: 640px; padding: 10px 12px; border-radius: var(--md-shape-sm, 8px); background: color-mix(in srgb, var(--md-on-surface) 4%, transparent); }
 .settings-edit { display: grid; grid-template-columns: minmax(0, 1fr) 260px; gap: 12px; }
-.settings-editor { height: max(300px, calc(85vh - 420px)); border: 1px solid var(--md-outline-variant); border-radius: 8px; overflow: hidden; }
+.settings-editor { height: max(300px, calc(85vh - 420px)); border: 1px solid var(--md-outline); border-radius: var(--field-radius); overflow: hidden; }
 .settings-help {
   display: flex; flex-direction: column; gap: 6px; padding: 12px; border-radius: 8px; overflow: auto;
   background: color-mix(in srgb, var(--md-primary) 6%, transparent); border: 1px solid var(--md-outline-variant);
@@ -527,6 +529,8 @@ body.resizing iframe, body.resizing .cm-editor { pointer-events: none; }
 .settings-help p { margin: 0; line-height: 1.5; }
 @media (max-width: 900px) { .settings-edit { grid-template-columns: 1fr; } .settings-help { max-height: 140px; } }
 .settings-editor .cm-editor { height: 100%; }
+.settings-editor { transition: border-color 0.15s, box-shadow 0.15s; }
+.settings-editor:focus-within { border-color: var(--accent-a); box-shadow: 0 0 0 3px var(--focus-ring); }
 /* Settings → Documents: a theme's CSS, and a sample it styles. */
 .doc-settings { gap: 10px; }
 .doc-settings .doc-css-editor { height: 220px; }
@@ -543,15 +547,20 @@ body.resizing iframe, body.resizing .cm-editor { pointer-events: none; }
 .settings-reference dd { margin: 2px 0 0; }
 
 /* Files (spec_files_029): the shelf, the editor beside the conversation. */
-.files-shelf { position: relative; width: 272px; flex: none; display: flex; flex-direction: column; min-height: 0; border-right: 1px solid var(--md-outline-variant); background: var(--md-surface-container-low); }
+/* Always in the row, never over the editor or the chat: in a narrow
+   window it gives way down to 180 px, as the editor does to 160 px. */
+.files-shelf { position: relative; width: 272px; flex: 0 1 auto; min-width: 180px; display: flex; flex-direction: column; min-height: 0; border-right: 1px solid var(--md-outline-variant); background: var(--md-surface-container-low); }
 .files-head { padding: 10px 6px 6px 16px; gap: 0; }
+/* The shelf's tools a size down (about 10%) from the small icon buttons. */
+.files-head .icon-btn.small { width: 29px; height: 29px; }
+.files-head .icon-btn .icon { width: 18px; height: 18px; }
 .files-tree { flex: 1; overflow: auto; padding: 0 6px 24px; outline: none; }
 .files-note { padding: 8px 12px; }
 .tree-row { display: flex; align-items: center; gap: 6px; width: 100%; height: 28px; padding-right: 8px; border: none; border-radius: var(--md-shape-xs); background: none; color: var(--md-on-surface); font: 400 13px/20px var(--md-font); text-align: left; cursor: pointer; white-space: nowrap; }
 .tree-row:hover { background: color-mix(in srgb, var(--md-on-surface) 6%, transparent); }
 .tree-row:focus-visible { outline: 2px solid var(--md-primary); outline-offset: -2px; }
 .tree-row.selected { background: color-mix(in srgb, var(--md-on-surface) 8%, transparent); }
-.tree-row.active { background: var(--md-secondary-container); color: var(--md-on-secondary-container); }
+.tree-row.active { background: var(--accent-tint); color: var(--on-accent-tint); }
 /* Where a dragged entry would move to: a folder's row, or the whole tree for the workspace. */
 .tree-row.drop-target, .files-tree.drop-target { background: color-mix(in srgb, var(--md-primary) 12%, transparent); outline: 1px solid var(--md-primary); outline-offset: -1px; }
 .tree-row.hidden-entry .tree-name, .tree-row.hidden-entry .tree-icon { opacity: 0.55; }
@@ -565,6 +574,15 @@ body.resizing iframe, body.resizing .cm-editor { pointer-events: none; }
 .tree-row.git-modified .git-letter, .tree-row.git-renamed .git-letter { color: var(--hl-number); }
 .tree-row.git-added .git-letter, .tree-row.git-untracked .git-letter { color: var(--hl-string); }
 .tree-row.git-conflicted .git-letter, .tree-row.git-deleted .git-letter { color: var(--md-error); }
+/* Light: the tree's ink a step darker, so names stay easy to read on the
+   pale shelf: a heavier weight (thin dark-on-light text looked faint
+   beside the panes), hidden entries less faded, icons and git colours
+   deeper. */
+:root:not([data-theme="dark"]) .tree-row { font-weight: 500; }
+:root:not([data-theme="dark"]) .tree-row.hidden-entry .tree-name, :root:not([data-theme="dark"]) .tree-row.hidden-entry .tree-icon { opacity: 0.72; }
+:root:not([data-theme="dark"]) :is(.tree-icon, .tree-twisty) { color: #3c4043; }
+:root:not([data-theme="dark"]) .tree-row:is(.git-modified, .git-renamed) :is(.tree-name, .git-letter) { color: #8a4500; }
+:root:not([data-theme="dark"]) .tree-row:is(.git-added, .git-untracked) :is(.tree-name, .git-letter) { color: #146c2e; }
 .git-dot { flex: none; width: 6px; height: 6px; margin: 0 4px; border-radius: 50%; background: var(--hl-number); }
 .tree-row.naming { cursor: default; }
 .tree-row.naming:hover { background: none; }
@@ -574,7 +592,8 @@ body.resizing iframe, body.resizing .cm-editor { pointer-events: none; }
 .editor-tabs { display: flex; align-items: center; gap: 2px; min-height: 40px; padding: 4px 6px 0; overflow-x: auto; border-bottom: 1px solid var(--md-outline-variant); background: var(--md-surface-container-low); }
 .editor-tab { display: flex; align-items: center; gap: 6px; max-width: 220px; height: 34px; padding: 0 2px 0 10px; border-radius: var(--md-shape-xs) var(--md-shape-xs) 0 0; color: var(--md-on-surface-variant); font: 400 13px/20px var(--md-font); cursor: pointer; flex: none; }
 .editor-tab:hover { background: color-mix(in srgb, var(--md-on-surface) 6%, transparent); }
-.editor-tab.active { background: var(--md-surface); color: var(--md-on-surface); box-shadow: inset 0 2px 0 var(--md-primary); }
+/* The open tab: the accent's gradient along its top. */
+.editor-tab.active { background: var(--accent-grad) top / 100% 2px no-repeat, var(--md-surface); color: var(--md-on-surface); }
 .editor-tab .icon-btn { opacity: 0.6; }
 .editor-tab:hover .icon-btn, .editor-tab.active .icon-btn { opacity: 1; }
 .dirty-dot { width: 8px; height: 8px; flex: none; border-radius: 50%; background: var(--md-primary); }
@@ -612,10 +631,6 @@ span.file-link:hover { color: var(--md-primary); text-decoration: underline; }
 code.file-link { color: var(--md-primary); text-decoration: underline; text-decoration-color: color-mix(in srgb, var(--md-primary) 40%, transparent); text-underline-offset: 2px; }
 code.file-link:hover { text-decoration-color: currentColor; }
 
-/* Narrow windows: the shelf floats over the editor. */
-@media (max-width: 1100px) {
-  .files-shelf { position: absolute; top: 0; left: 0; bottom: 0; z-index: 21; box-shadow: var(--md-elevation-3); }
-}
 .files-shelf, .editor-tabs, .menu { -webkit-user-select: none; user-select: none; }
 
 /* The chat as a side panel: a smaller greeting (center stage keeps the full one). */
@@ -742,7 +757,7 @@ code.file-link:hover { text-decoration-color: currentColor; }
 .search-hit { display: flex; flex-direction: column; align-items: stretch; gap: 4px; width: 100%; padding: 8px 12px; border: none; border-radius: var(--md-shape-md);
   background: none; color: var(--md-on-surface); text-align: left; cursor: pointer; font: inherit; }
 .search-hit[aria-disabled="true"] { cursor: default; }
-.search-hit.on { background: var(--md-secondary-container); color: var(--md-on-secondary-container); }
+.search-hit.on { background: var(--accent-tint); color: var(--on-accent-tint); }
 .search-hit-head { display: flex; align-items: center; gap: 12px; min-width: 0; }
 .search-hit-head .icon { color: var(--md-on-surface-variant); flex: none; }
 .search-hit-head .ellipsis { flex: 1; min-width: 0; }
@@ -772,7 +787,7 @@ code.file-link:hover { text-decoration-color: currentColor; }
 .table-kind { display: block; max-width: 300px; }
 .table-filter { width: 100%; margin-top: 4px; padding: 2px 6px; font-size: 12px; min-height: 0; height: 26px; }
 .table-rownum { position: sticky; left: 0; background: var(--md-surface-container, var(--md-surface)); text-align: right; min-width: 56px !important; }
-.table-grid tr.focus td { background: var(--md-secondary-container); color: var(--md-on-secondary-container); }
+.table-grid tr.focus td { background: var(--accent-tint-solid); color: var(--on-accent-tint); }
 .table-grid tbody tr:hover td { background: var(--md-surface-container-high, var(--md-secondary-container)); }
 
 /* A search hit, and Find in file's matches, in a document's preview (files/find.ts). */
@@ -781,6 +796,33 @@ code.file-link:hover { text-decoration-color: currentColor; }
 
 /* Find in file, over a document's preview (files/FindBar.tsx). */
 .find-bar { display: flex; align-items: center; gap: 6px; padding: 4px 8px 4px 14px; border-bottom: 1px solid var(--md-outline-variant); background: var(--md-surface-container); }
-.find-bar input { flex: 1; min-width: 0; max-width: 360px; font: inherit; color: var(--md-on-surface); background: var(--md-surface); border: 1px solid var(--md-outline-variant); border-radius: 6px; padding: 4px 8px; outline: none; }
+.find-bar input { flex: 1; min-width: 0; max-width: 360px; font: inherit; color: var(--md-on-surface); background: var(--md-surface); border: 1px solid var(--md-outline); border-radius: var(--field-radius); padding: 4px 8px; outline: none; }
+.find-bar input:focus { border-color: var(--accent-a); box-shadow: 0 0 0 3px var(--focus-ring); }
 .find-bar input:focus { border-color: var(--md-primary); }
 .find-bar .find-count { min-width: 80px; font-size: 12px; }
+
+/* The commit dialog (CommitDialog.tsx): the drafted message, then the
+   staged files, each with git's status letter in its colour. */
+.commit-message { min-height: 160px; font-size: 13px; line-height: 20px; }
+.commit-dialog .progress { margin: 2px 0; }
+.commit-files ul { list-style: none; margin: 6px 0 0; padding: 0; max-height: 200px; overflow-y: auto; }
+.commit-files li { gap: 10px; padding: 3px 0; font-size: 13px; }
+.commit-status { flex: none; width: 18px; text-align: center; font: 600 12px/18px var(--md-mono); border-radius: var(--md-shape-xs); color: var(--hl-number); }
+.commit-status.s-A { color: var(--hl-string); }
+.commit-status.s-D { color: var(--md-error); }
+.commit-empty { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; padding: 8px 0 16px; }
+.commit-empty p { margin: 0; }
+.commit-empty .btn { margin-top: 8px; }
+
+/* A provider's sign-in (SignInPanel.tsx): its status and buttons, and
+   while signing in the progress, a device code and the page's link. */
+.signin-card { display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; border: 1px solid var(--md-outline-variant); border-radius: var(--field-radius); background: var(--md-surface-container-lowest); }
+.signin-head { gap: 10px; }
+.signin-text { display: flex; flex-direction: column; min-width: 0; }
+.signin-ok { color: var(--hl-string); }
+.signin-note { margin: 0; }
+.signin-progress { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
+.signin-progress .progress { align-self: stretch; }
+.signin-progress p { margin: 0; }
+.signin-code { font: 600 24px/32px var(--md-mono); letter-spacing: 3px; padding: 4px 12px; border-radius: var(--md-shape-sm); background: var(--accent-tint); color: var(--on-accent-tint); }
+:root[data-glass="on"] .signin-card { background: var(--glass-strong); }

@@ -188,6 +188,11 @@ type BedrockConfig struct {
 	// Model is the Bedrock model or inference profile ID, e.g.
 	// us.anthropic.claude-sonnet-4-5-20250929-v1:0.
 	Model string `toml:"model"`
+	// Auth says how the credentials come: "" (access keys, or whatever
+	// the chain finds) or "oauth", an AWS IAM Identity Center (SSO)
+	// sign-in, `aws sso login` (blitz auth login aws), for Profile. Both
+	// go through the same chain; "oauth" says how you sign in.
+	Auth string `toml:"auth"`
 }
 
 // AzureConfig holds settings for models on Azure: OpenAI models through
@@ -203,9 +208,9 @@ type AzureConfig struct {
 	BaseURL          string `toml:"base_url"`
 	AnthropicBaseURL string `toml:"anthropic_base_url"`
 	// APIKey is the resource's key (default: AZURE_OPENAI_API_KEY, or
-	// ANTHROPIC_FOUNDRY_API_KEY for Claude). Auth "entra" uses Entra ID
-	// instead: Azure's credential chain (environment, workload and managed
-	// identity, the Azure CLI's login).
+	// ANTHROPIC_FOUNDRY_API_KEY for Claude). Auth "entra" (or "oauth", the
+	// same) uses Entra ID instead: Azure's credential chain (environment,
+	// workload and managed identity, the Azure CLI's login, az login).
 	APIKey string `toml:"api_key"`
 	Auth   string `toml:"auth"`
 	// Model is the deployment to use.
@@ -217,7 +222,10 @@ const AuthEntra = "entra"
 
 // How a provider authenticates: an API key (the default, also for ""),
 // Google Cloud's Application Default Credentials (Gemini through Vertex
-// AI), or an Anthropic OAuth profile from `ant auth login`.
+// AI), or an account sign-in (OAuth): a Google account (Gemini, on Vertex
+// AI), an Anthropic Console profile from `ant auth login`, an AWS IAM
+// Identity Center sign-in (Bedrock) or Entra ID (Azure). Signing in adds
+// to API keys; a key keeps working.
 const (
 	AuthAPIKey = "api_key"
 	AuthADC    = "adc"
@@ -236,9 +244,11 @@ type GeminiConfig struct {
 	APIKeyTTL     string `toml:"api_key_ttl"`
 	// Model is the Gemini model to use.
 	Model string `toml:"model"`
-	// Auth is "api_key" ("" too: the Gemini API) or "adc": Vertex AI with
-	// Application Default Credentials (`gcloud auth application-default
-	// login`, or a service account), in ProjectID and Location.
+	// Auth is "api_key" ("" too: the Gemini API), "adc": Vertex AI with
+	// Application Default Credentials (a service account, a Google Cloud
+	// machine's, or gcloud's sign-in), or "oauth": Vertex AI with your
+	// Google account, signed in with gcloud (blitz auth login google); both
+	// in ProjectID and Location.
 	Auth string `toml:"auth"`
 	// ProjectID and Location are Vertex AI's; empty, they come from
 	// GOOGLE_CLOUD_PROJECT and GOOGLE_CLOUD_LOCATION (Location: "global").
@@ -248,7 +258,7 @@ type GeminiConfig struct {
 
 // UsesADC reports whether Gemini authenticates with Application Default
 // Credentials, through Vertex AI.
-func (g GeminiConfig) UsesADC() bool { return g.Auth == AuthADC }
+func (g GeminiConfig) UsesADC() bool { return g.Auth == AuthADC || g.Auth == AuthOAuth }
 
 // UsesADC reports whether a provider signs in with Google's Application
 // Default Credentials.

@@ -26,6 +26,8 @@ import { ModelInput, refreshModelCatalog, useModelCatalog } from "./ModelInput";
 import { Button, Chip, Icon, Segmented, useSnackbar } from "./ui/controls";
 import { useAdvanced } from "./state";
 import { showsSignIn } from "./simpleMode";
+import { SignInPanel } from "./SignInPanel";
+import { signInProvider } from "./signin";
 
 /** Providers llm.provider can name; the first three take API keys. */
 const providers = ["gemini", "anthropic", "openai", "ollama"];
@@ -49,8 +51,18 @@ const inFile = (p: ProviderConfig) => p.keySource === KeySource.KEYCHAIN || p.ke
 /** Where a provider's key comes from, when it has one. */
 const hasKey = (p?: ProviderConfig) => !!p && !p.keyMissing && p.keySource !== KeySource.NONE && p.keySource !== KeySource.UNSPECIFIED;
 
-/** The sign-ins each provider takes besides an API key. */
-const authMethods: Record<string, string[]> = { gemini: ["adc"], anthropic: ["oauth", "adc"] };
+/**
+ * The sign-ins each provider takes besides an API key (config's
+ * authMethods): Google Cloud ADC, and an account (OAuth). OpenAI and
+ * Ollama take a key only.
+ */
+const authMethods: Record<string, string[]> = { gemini: ["adc", "oauth"], anthropic: ["oauth", "adc"] };
+
+/** A sign-in method's name: an account's says whose (Google, Anthropic). */
+const methodLabel = (provider: string, m: string) => t(m === "oauth" ? `desktop.keys.auth.oauth.${provider}` : `desktop.keys.auth.${m}`);
+
+/** Whether a method signs in on Vertex AI (a project and location). */
+const onVertex = (provider: string, m: string) => m === "adc" || (m === "oauth" && provider === "gemini");
 
 /**
  * What the form saves as one change: the provider, the default model, and
@@ -218,7 +230,7 @@ export function ProviderSettings({ workspace, compact }: { workspace: string; co
               <select className="select" aria-label={t("desktop.keys.sign_in")} value={choice.method} disabled={busy} onChange={set("method")}>
                 {["api_key", ...others].map((m) => (
                   <option key={m} value={m}>
-                    {t(`desktop.keys.auth.${m}`)}
+                    {methodLabel(choice.provider, m)}
                   </option>
                 ))}
               </select>
@@ -227,19 +239,19 @@ export function ProviderSettings({ workspace, compact }: { workspace: string; co
                 small
                 label={t("desktop.keys.sign_in")}
                 value={choice.method}
-                options={["api_key", ...others].map((m) => ({ value: m, label: t(`desktop.keys.auth.${m}`) }))}
+                options={["api_key", ...others].map((m) => ({ value: m, label: methodLabel(choice.provider, m) }))}
                 onChange={(method) => !busy && setChoice({ ...choice, method })}
               />
             )}
           </div>
         )}
-        {keyed && choice.method === "adc" && (
+        {keyed && onVertex(choice.provider, choice.method) && (
           <div className="pair even">
             {text("projectId", "desktop.keys.project", "desktop.keys.project_placeholder")}
             {text("location", "desktop.keys.location", "desktop.keys.location_placeholder")}
           </div>
         )}
-        {keyed && choice.method === "oauth" && <div className="single">{text("profile", "desktop.keys.profile", "desktop.keys.profile_placeholder")}</div>}
+        {keyed && choice.method === "oauth" && choice.provider === "anthropic" && <div className="single">{text("profile", "desktop.keys.profile", "desktop.keys.profile_placeholder")}</div>}
         {keyed && choice.method === "api_key" && (
           <label className="field single">
             <span className="t-label">{t("desktop.keys.key_label", { provider: providerNames[keyed.name] ?? keyed.name })}</span>
@@ -256,7 +268,14 @@ export function ProviderSettings({ workspace, compact }: { workspace: string; co
             />
           </label>
         )}
-        {keyed && choice.method !== "api_key" && <p className="t-body-sm muted">{t(`desktop.keys.${choice.method}_hint`, { provider: modelNames[choice.provider] ?? choice.provider })}</p>}
+        {keyed && choice.method !== "api_key" && (
+          <SignInPanel workspace={workspace} provider={signInProvider(choice.method, choice.provider)} profile={choice.method === "oauth" ? choice.profile : ""} />
+        )}
+        {!keyed && signInProvider("", saved.provider) && <SignInPanel workspace={workspace} provider={signInProvider("", saved.provider)} />}
+        {keyed && choice.method !== "api_key" && (
+          <p className="t-body-sm muted">{t(choice.method === "oauth" && choice.provider === "gemini" ? "desktop.keys.google_oauth_hint" : `desktop.keys.${choice.method}_hint`, { provider: modelNames[choice.provider] ?? choice.provider })}</p>
+        )}
+        {choice.provider === "openai" && <p className="t-body-sm muted">{t("desktop.keys.openai_key_only")}</p>}
         {keyed && choice.method === "api_key" && <KeyStatus workspace={workspace} p={keyed} busy={busy} act={act} />}
         {keyed && !compact && advanced && keyed.name !== "gemini" && <BaseURL workspace={workspace} p={keyed} busy={busy} act={act} />}
         <div className="row" style={{ justifyContent: "flex-end", gap: 8 }}>

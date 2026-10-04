@@ -18,6 +18,7 @@
 // "system" (the default), applied as html[data-theme] and kept in step
 // with the system's setting as it changes.
 
+import { setAppearance } from "./desktop";
 import { editorConfig, editorIsDark, onEditorThemeChange } from "./host";
 
 /** The user's choice of theme: the system's, light or dark. */
@@ -39,17 +40,24 @@ export function systemIsDark(): boolean {
   return darkQuery()?.matches ?? false;
 }
 
-/** Applies the theme, density and conversation width to the document. */
-export function applyTheme(theme: Theme, density: "comfortable" | "compact" = "comfortable", width: "full" | "readable" = "full", transparency: "on" | "off" = "on") {
+/**
+ * Applies the theme, density and conversation width to the document; pref
+ * is the user's choice, which the macOS window follows ("system" leaves it
+ * to the system, so the system's switches still reach the page).
+ */
+export function applyTheme(theme: Theme, density: "comfortable" | "compact" = "comfortable", width: "full" | "readable" = "full", transparency: "on" | "off" = "on", pref: ThemePref = theme) {
   const root = document.documentElement;
   root.dataset.theme = theme;
   root.dataset.density = density;
   root.dataset.width = width;
   root.dataset.glass = transparency === "on" && !reducedTransparency() ? "on" : "off";
   // In the macOS app the window itself is translucent: the desktop shows
-  // through instead of the page's backdrop.
-  if (nativeGlass()) root.dataset.nativeGlass = "";
-  else delete root.dataset.nativeGlass;
+  // through instead of the page's backdrop, blurred in the theme the user
+  // chose rather than the system's.
+  if (nativeGlass()) {
+    root.dataset.nativeGlass = "";
+    setAppearance(pref);
+  } else delete root.dataset.nativeGlass;
 }
 
 /** Whether the system asks for less transparency. */

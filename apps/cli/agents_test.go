@@ -68,7 +68,6 @@ func TestHomeRel(t *testing.T) {
 
 func TestBackgroundNeedsItsArguments(t *testing.T) {
 	isolate(t)
-	t.Setenv("BLITZ_SOCKET", filepath.Join(t.TempDir(), "none.sock"))
 	for _, args := range [][]string{
 		{"--bg"},
 		{"--bg", "-i", "hello"},

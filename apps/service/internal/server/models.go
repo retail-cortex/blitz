@@ -57,9 +57,10 @@ func (h configService) ListModels(ctx context.Context, r req[pb.ListModelsReques
 	if err != nil {
 		return nil, err
 	}
+	key := dir + "\x00" + strings.Join(r.Msg.Providers, ",")
 	c := &h.s.models
 	c.mu.Lock()
-	if l, kept := c.byID[dir]; kept && time.Now().Before(l.expires) {
+	if l, kept := c.byID[key]; kept && time.Now().Before(l.expires) {
 		c.mu.Unlock()
 		return ok(l.res)
 	}
@@ -76,7 +77,7 @@ func (h configService) ListModels(ctx context.Context, r req[pb.ListModelsReques
 	}
 	res := &pb.ListModelsResponse{DefaultProvider: strings.ToLower(cfg.LLM.Provider)}
 	fresh := modelsFresh
-	for _, pm := range listModels(ctx, cfg) {
+	for _, pm := range listModels(ctx, cfg, r.Msg.Providers...) {
 		p := &pb.ProviderModels{Provider: pm.Provider, Note: pm.Note}
 		if pm.Err != nil {
 			p.Error = pm.Err.Error()
@@ -84,6 +85,11 @@ func (h configService) ListModels(ctx context.Context, r req[pb.ListModelsReques
 		}
 		for _, m := range pm.Models {
 			p.Ids = append(p.Ids, m.ID)
+			lm := &pb.ListedModel{Id: m.ID}
+			if m.Price != nil {
+				lm.HasPrice, lm.InputPerMtok, lm.OutputPerMtok = true, m.Price.InputPerMTok, m.Price.OutputPerMTok
+			}
+			p.Models = append(p.Models, lm)
 		}
 		res.Providers = append(res.Providers, p)
 	}
@@ -91,7 +97,7 @@ func (h configService) ListModels(ctx context.Context, r req[pb.ListModelsReques
 	if c.byID == nil {
 		c.byID = map[string]modelList{}
 	}
-	c.byID[dir] = modelList{res: res, expires: time.Now().Add(fresh)}
+	c.byID[key] = modelList{res: res, expires: time.Now().Add(fresh)}
 	c.mu.Unlock()
 	return ok(res)
 }

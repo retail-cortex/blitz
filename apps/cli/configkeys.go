@@ -79,10 +79,13 @@ func keyCommands(g *globalFlags) []*cobra.Command {
 				if p.KeySource == config.KeyPlain || p.KeySource == config.KeyObfuscated {
 					src += " (move it: blitz config secure-key " + p.Name + ")"
 				}
-				switch p.Auth {
-				case config.AuthADC:
-					src = "Google Cloud ADC, project " + cmp.Or(p.ProjectID, "from GOOGLE_CLOUD_PROJECT") + ", location " + cmp.Or(p.Location, "from GOOGLE_CLOUD_LOCATION, else global") + " (key: " + src + ", unused)"
-				case config.AuthOAuth:
+				vertex := "project " + cmp.Or(p.ProjectID, "from GOOGLE_CLOUD_PROJECT") + ", location " + cmp.Or(p.Location, "from GOOGLE_CLOUD_LOCATION, else global")
+				switch {
+				case p.Auth == config.AuthADC:
+					src = "Google Cloud ADC, " + vertex + " (key: " + src + ", unused)"
+				case p.Auth == config.AuthOAuth && p.Name == "gemini":
+					src = "OAuth, your Google account (blitz auth login google), " + vertex + " (key: " + src + ", unused)"
+				case p.Auth == config.AuthOAuth:
 					src = "OAuth, `ant auth login` profile " + cmp.Or(p.Profile, "ant's active one") + " (key: " + src + ", unused)"
 				}
 				fmt.Fprintf(out, "  %-10s %s\n", p.Name, src)
@@ -160,26 +163,34 @@ func keyCommands(g *globalFlags) []*cobra.Command {
 	var auth config.ProviderAuth
 	setAuth := &cobra.Command{
 		Use:   "set-auth <provider> <api_key|adc|oauth>",
-		Short: "Choose how a provider signs in: an API key, Google Cloud ADC (gemini, anthropic) or an ant OAuth profile (anthropic)",
-		Long: `Choose how a provider signs in.
+		Short: "Choose how a provider signs in: an API key, Google Cloud ADC (gemini, anthropic) or an account (OAuth: gemini, anthropic, bedrock, azure)",
+		Long: `Choose how a provider signs in. API keys keep working: an account is
+another way, and blitz auth login signs in to it.
 
-  api_key  the provider's API key (the default; blitz config set-key)
+  api_key  the provider's API key (the default; blitz config set-key), or
+           for bedrock, access keys
   adc      gemini or anthropic (Claude) on Vertex AI with Google Cloud's
-           Application Default Credentials (gcloud auth application-default
-           login): --project and --location, else GOOGLE_CLOUD_PROJECT and
-           GOOGLE_CLOUD_LOCATION (default global)
-  oauth    anthropic with an Anthropic Console sign-in (ant auth login):
-           --profile, else ant's active profile`,
-		Example: `  blitz config set-auth gemini adc --project my-project
-  blitz config set-auth anthropic adc --project my-project --location us-east5
+           Application Default Credentials (a service account, a Google
+           Cloud machine's, or gcloud's sign-in): --project and --location,
+           else GOOGLE_CLOUD_PROJECT and GOOGLE_CLOUD_LOCATION (default global)
+  oauth    an account sign-in:
+             gemini     your Google account, on Vertex AI (blitz auth login
+                        google): --project and --location, as adc
+             anthropic  an Anthropic Console sign-in (blitz auth login
+                        anthropic): --profile, else ant's active profile
+             bedrock    AWS IAM Identity Center (blitz auth login aws):
+                        --profile
+             azure      Entra ID (blitz auth login azure; "entra" too)
+           OpenAI and Ollama have no account sign-in: they take an API key.`,
+		Example: `  blitz config set-auth gemini oauth --project my-project
+  blitz config set-auth gemini adc --project my-project
   blitz config set-auth anthropic oauth --profile work
+  blitz config set-auth bedrock oauth --profile dev
+  blitz config set-auth azure oauth
   blitz config set-auth gemini api_key`,
 		Args: cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			p, err := provider(args)
-			if err != nil {
-				return err
-			}
+			p := strings.ToLower(args[0]) // SetAuth names the providers that sign in
 			dir, err := scope()
 			if err != nil {
 				return err
@@ -193,9 +204,9 @@ func keyCommands(g *globalFlags) []*cobra.Command {
 			return nil
 		},
 	}
-	setAuth.Flags().StringVar(&auth.ProjectID, "project", "", "adc: the Google Cloud project")
-	setAuth.Flags().StringVar(&auth.Location, "location", "", "adc: the Vertex AI location (global, us-central1, …)")
-	setAuth.Flags().StringVar(&auth.Profile, "profile", "", "oauth: the ant auth login profile")
+	setAuth.Flags().StringVar(&auth.ProjectID, "project", "", "adc, gemini oauth: the Google Cloud project")
+	setAuth.Flags().StringVar(&auth.Location, "location", "", "adc, gemini oauth: the Vertex AI location (global, us-central1, …)")
+	setAuth.Flags().StringVar(&auth.Profile, "profile", "", "anthropic oauth: the ant profile; bedrock oauth: the AWS profile")
 	all := []*cobra.Command{keys, setKey, removeKey, secureKey, setAuth}
 	for _, c := range all {
 		c.Flags().BoolVarP(&workspace, "workspace", "w", false, "The workspace's own settings (--dir, else the current directory)")

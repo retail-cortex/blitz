@@ -98,7 +98,7 @@ func runSearch(cmd *cobra.Command, g *globalFlags, o searchOptions, terms string
 	out := cmd.OutOrStdout()
 	warn := func(s string) { fmt.Fprintln(cmd.ErrOrStderr(), s) }
 	opened := time.Now()
-	b, _, remote, err := openBackend(ctx, cfg, backendOptions{trustProject: g.trustProject}, warn)
+	b, _, remote, err := openBackend(ctx, cfg, backendOptions{trustProject: g.trustProject, flags: g}, warn)
 	if err != nil {
 		return err
 	}

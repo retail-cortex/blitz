@@ -274,25 +274,7 @@ func (a *App) PrintPDF(html, pageSize string) ([]byte, error) {
 // findService finds the blitzd that goes with this app: beside its
 // executable (Blitz.app, the .deb), in its Bazel runfiles (bazel run), or
 // on PATH.
-func findService() (string, error) {
-	var dirs []string
-	if d := loginitem.Beside(); d != "" {
-		dirs = append(dirs, d)
-	}
-	for _, root := range runfilesRoots() {
-		dirs = append(dirs, filepath.Join(root, "_main", "apps", "service"))
-	}
-	return loginitem.FindService(dirs...)
-}
+func findService() (string, error) { return loginitem.FindService(loginitem.ServiceDirs()...) }
 
 // runfilesRoots are where Bazel puts this program's runfiles, when it ran it.
-func runfilesRoots() []string {
-	var out []string
-	if d := os.Getenv("RUNFILES_DIR"); d != "" {
-		out = append(out, d)
-	}
-	if exe, err := os.Executable(); err == nil {
-		out = append(out, exe+".runfiles")
-	}
-	return out
-}
+func runfilesRoots() []string { return loginitem.RunfilesRoots() }

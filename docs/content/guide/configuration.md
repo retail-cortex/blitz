@@ -77,7 +77,7 @@ A key in the environment (`GEMINI_API_KEY`, `ANTHROPIC_API_KEY`, `OPENAI_API_KEY
 
 ## Signing in without a key
 
-Gemini and Claude can use an account instead of an API key: the desktop app's **Sign in with**, `blitz config set-auth`, or `auth` in the settings. The sign-in belongs to the machine the Blitz service runs on, so sign in there.
+Gemini and Claude can use an account instead of an API key: the desktop app's **Sign in with**, `blitz config set-auth`, or `auth` in the settings. API keys keep working; an account is another way. The sign-in belongs to the machine the Blitz service runs on, and Blitz can run it for you there: **Sign in** in **Settings › Providers & keys** (shown once you choose an account), or `blitz auth login google|anthropic|aws|azure`. Either runs the provider's own tool (`gcloud`, `ant`, `aws`, `az`), which opens the sign-in page in your browser; `blitz auth status` shows where each stands, and `blitz auth logout` signs out. The commands below do the same by hand. Each provider that has an account sign-in offers it as an option beside the key: Gemini (a Google account, `auth = "oauth"`, on Vertex AI in your project, like ADC), Claude (an Anthropic account), Amazon Bedrock (`[llm.bedrock] auth = "oauth"`: AWS IAM Identity Center for `profile`) and Azure (`auth = "oauth"` or `"entra"`: Entra ID); `blitz config set-auth` sets any of them. OpenAI has no account sign-in for other apps: it takes an API key.
 
 **Gemini with Google Cloud (Application Default Credentials).** Gemini runs on Vertex AI in your Google Cloud project, billed there.
 

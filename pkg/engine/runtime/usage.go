@@ -16,7 +16,6 @@ package runtime
 
 import (
 	"context"
-	"strings"
 	"sync"
 
 	"github.com/retail-cortex/blitz/pkg/api"
@@ -41,16 +40,7 @@ func NewUsageTracker(pricing map[string]config.ModelPrice) *UsageTracker {
 // price finds the price for model: exact, else the longest configured prefix
 // ("gemini-3.8-flash-001" uses "gemini-3.8-flash").
 func (t *UsageTracker) price(model string) (config.ModelPrice, bool) {
-	if p, ok := t.pricing[model]; ok {
-		return p, true
-	}
-	best, found := "", false
-	for name := range t.pricing {
-		if strings.HasPrefix(model, name) && len(name) > len(best) {
-			best, found = name, true
-		}
-	}
-	return t.pricing[best], found
+	return config.PriceFor(t.pricing, model)
 }
 
 // CacheWriteTokensKey is the LLMResponse.CustomMetadata key a model uses to

@@ -164,6 +164,21 @@ type ContextConfig struct {
 	RetainEvents   int  `toml:"retain_events"`
 }
 
+// PriceFor finds model's price in pricing: exact, else the longest
+// configured prefix ("gemini-3.8-flash-001" uses "gemini-3.8-flash").
+func PriceFor(pricing map[string]ModelPrice, model string) (ModelPrice, bool) {
+	if p, ok := pricing[model]; ok {
+		return p, true
+	}
+	best, found := "", false
+	for name := range pricing {
+		if strings.HasPrefix(model, name) && len(name) > len(best) {
+			best, found = name, true
+		}
+	}
+	return pricing[best], found
+}
+
 // ModelPrice is the cost per million tokens, in USD.
 type ModelPrice struct {
 	// InputPerMTok is the price of a million input tokens.

@@ -48,7 +48,7 @@ curl --unix-socket ~/.blitz/run/blitz.sock -H 'Content-Type: application/json' \
 
 Every request names its workspace by absolute path. The service opens a workspace on first use, each with its own copy of the settings, and keeps it open for other clients. Opening is shared: two clients asking for the same workspace wait on one open, and other workspaces don't wait at all.
 
-A workspace has one owner at a time, held with an OS file lock, so `blitz --local` on a workspace the service holds is refused. Closing a workspace is refused while a turn runs in it.
+A workspace has one owner at a time, held with an OS file lock: `blitz --local` runs in a private service, which the shared one hands an idle workspace to, and is refused while a turn runs there. A service the CLI starts on demand (no login item) stops after 15 minutes with nothing to do; `blitz service install` keeps one running, which workers need. Closing a workspace is refused while a turn runs in it.
 
 Approvals and questions travel on the running turn's event stream: the client that started the turn answers them. An approval with no client to answer, such as from a worker, is refused.
 

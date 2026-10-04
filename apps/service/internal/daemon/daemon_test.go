@@ -23,6 +23,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"sync"
 	"testing"
 	"time"
@@ -300,4 +301,127 @@ func TestLogDir(t *testing.T) {
 			assert.Equal(t, want, logDir(cfg))
 		})
 	}
+}
+
+// isolateService gives a test a home with no keys and a short socket path.
+func isolateService(t *testing.T) string {
+	t.Helper()
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("MODENV_PREFIX", "")
+	for _, k := range []string{"GEMINI_API_KEY", "GOOGLE_API_KEY", "OPENAI_API_KEY", "ANTHROPIC_API_KEY", "LLM_PROVIDER"} {
+		t.Setenv(k, "")
+	}
+	t.Chdir(t.TempDir())
+	dir, err := os.MkdirTemp("/tmp", "bd")
+	require.NoError(t, err)
+	t.Cleanup(func() { os.RemoveAll(dir) })
+	return filepath.Join(dir, "s.sock")
+}
+
+// A service a client started on demand stops once idle for IdleExit, and
+// a private one when its stdin (the client's pipe) closes; either way
+// cleanly, its socket removed.
+func TestRunStopsByItself(t *testing.T) {
+	old := watchEvery
+	watchEvery = 20 * time.Millisecond
+	t.Cleanup(func() { watchEvery = old })
+	wait := func(t *testing.T, done chan error, sock string) {
+		t.Helper()
+		select {
+		case err := <-done:
+			assert.NoError(t, err)
+		case <-time.After(15 * time.Second):
+			t.Fatal("service didn't stop")
+		}
+		assert.NoFileExists(t, sock)
+	}
+
+	t.Run("idle", func(t *testing.T) {
+		sock := isolateService(t)
+		done := make(chan error, 1)
+		go func() { done <- Run(context.Background(), Options{Socket: sock, IdleExit: 300 * time.Millisecond}) }()
+		wait(t, done, sock)
+	})
+	t.Run("stdin closed", func(t *testing.T) {
+		sock := isolateService(t)
+		r, w := io.Pipe()
+		done := make(chan error, 1)
+		go func() { done <- Run(context.Background(), Options{Socket: sock, ExitWith: r}) }()
+		for deadline := time.Now().Add(10 * time.Second); !socket.Running(sock); time.Sleep(20 * time.Millisecond) {
+			require.False(t, time.Now().After(deadline), "service didn't start")
+		}
+		require.NoError(t, w.Close())
+		wait(t, done, sock)
+	})
+}
+
+// A private service's run settings go over each workspace's own.
+func TestRunOverridesApply(t *testing.T) {
+	cfg := &config.Config{}
+	cfg.Blitz.DefaultModel = "configured"
+	cfg.Plugins.Dirs = []string{"/p0"}
+	RunOverrides{Model: "m", Agent: "a", Agency: "HIGH", PluginDirs: []string{"/p1"}, AddDirs: []string{"/d1"}, SessionDir: "/tmp/s"}.apply(cfg)
+	assert.Equal(t, "m", cfg.Blitz.DefaultModel)
+	assert.Equal(t, "a", cfg.Blitz.DefaultAgent)
+	assert.Equal(t, "high", cfg.Blitz.AgencyLevel)
+	assert.Equal(t, []string{"/p0", "/p1"}, cfg.Plugins.Dirs)
+	assert.Equal(t, []string{"/d1"}, cfg.Sandbox.AllowedPaths)
+	assert.Equal(t, "/tmp/s", cfg.Session.StorageDir)
+
+	kept := &config.Config{}
+	kept.Blitz.DefaultModel = "configured"
+	RunOverrides{}.apply(kept)
+	assert.Equal(t, "configured", kept.Blitz.DefaultModel, "no override, the configuration's")
+}
+
+// Only the shared service runs the workers' schedules: it holds a
+// workspace with an enabled worker; a private one, started for a run of
+// its own, leaves that workspace to the others.
+func TestPrivateServiceRunsNoSchedules(t *testing.T) {
+	assert.True(t, Options{}.schedules(&config.Config{Workers: config.WorkersConfig{Enabled: true}}))
+	assert.False(t, Options{Private: true}.schedules(&config.Config{Workers: config.WorkersConfig{Enabled: true}}))
+	assert.False(t, Options{}.schedules(&config.Config{}))
+
+	sock := isolateService(t)
+	ws := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(ws, "workers", "nightly"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(ws, "workers", "nightly", "WORKER.md"), []byte("---\nschedule: daily at 3am\n---\nTidy up.\n"), 0o644))
+	serve := func(o Options) func() {
+		o.Socket = sock
+		ctx, cancel := context.WithCancel(context.Background())
+		done := make(chan error, 1)
+		go func() { done <- Run(ctx, o) }()
+		for deadline := time.Now().Add(10 * time.Second); !socket.Running(sock); time.Sleep(20 * time.Millisecond) {
+			require.False(t, time.Now().After(deadline), "service didn't start")
+		}
+		return func() { cancel(); <-done }
+	}
+	// busy asks the service what it holds open (opening the workspace here
+	// to find out would race the scheduler for its lock).
+	canonical, err := filepath.EvalSymlinks(ws)
+	require.NoError(t, err)
+	busy := func() bool {
+		res, err := pb.NewWorkspaceServiceClient(socket.Client(sock), socket.BaseURL).ListWorkspaces(context.Background(), connect.NewRequest(&pb.ListWorkspacesRequest{}))
+		return err == nil && slices.Contains(res.Msg.Workspaces, canonical)
+	}
+
+	// Enabled through the shared service, which then holds the workspace
+	// for its schedule.
+	stop := serve(Options{})
+	wc := pb.NewWorkerServiceClient(socket.Client(sock), socket.BaseURL)
+	list, err := wc.ListWorkers(context.Background(), connect.NewRequest(&pb.ListWorkersRequest{Workspace: ws}))
+	require.NoError(t, err)
+	require.Len(t, list.Msg.Workers, 1)
+	_, err = wc.EnableWorker(context.Background(), connect.NewRequest(&pb.EnableWorkerRequest{Workspace: ws, Name: "nightly", Hash: list.Msg.Workers[0].Hash}))
+	require.NoError(t, err)
+	stop()
+
+	stop = serve(Options{})
+	assert.Eventually(t, busy, 5*time.Second, 50*time.Millisecond, "the shared service opens it for the schedule")
+	stop()
+
+	stop = serve(Options{Private: true})
+	defer stop()
+	time.Sleep(500 * time.Millisecond) // a scheduler, were there one, rescans at start
+	assert.False(t, busy(), "a private service leaves it alone")
 }

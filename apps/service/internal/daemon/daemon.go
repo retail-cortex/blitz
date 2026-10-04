@@ -19,8 +19,10 @@ package daemon
 import (
 	"context"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/retail-cortex/blitz/apps/service/internal/server"
@@ -42,6 +44,59 @@ type Options struct {
 	Config string
 	// Version is reported in the diagnostic log and telemetry.
 	Version string
+	// IdleExit stops the service after this long with nothing to do (no
+	// request, turn or background run); 0 never. For a service a client
+	// started on demand, not the login item's.
+	IdleExit time.Duration
+	// ExitWith stops the service when it reads to its end: the stdin of
+	// a private service, a pipe from the client that started it, which
+	// closes when that client exits, however it exits. Nil: never.
+	ExitWith io.Reader
+	// Run are one client's settings for every workspace a private service
+	// opens (the CLI's flags for that run).
+	Run RunOverrides
+	// Private marks a service a client started for a run of its own: it
+	// serves that client only, and never runs the workers' schedules (the
+	// shared service does; a private one would run them twice, and open
+	// every workspace with an enabled worker, keeping it from the others).
+	Private bool
+}
+
+// schedules reports whether the service runs the workers' schedules.
+func (o Options) schedules(cfg *config.Config) bool { return cfg.Workers.Enabled && !o.Private }
+
+// RunOverrides are a run's settings over the configuration: what the
+// CLI's flags set, for the private service it starts for that run.
+type RunOverrides struct {
+	Model, Agent, Agency string
+	// PluginDirs load more plugins; AddDirs are more read-write roots
+	// (as sandbox.allowed_paths).
+	PluginDirs, AddDirs []string
+	// SessionDir keeps sessions elsewhere (--no-session-persistence: a
+	// folder the CLI removes).
+	SessionDir string
+	// TrustProject trusts the project's settings for this run.
+	TrustProject bool
+	// AppendSystemPrompt is added to the agent's instructions.
+	AppendSystemPrompt string
+}
+
+// apply sets the overrides on a workspace's configuration.
+func (r RunOverrides) apply(cfg *config.Config) {
+	if r.Model != "" {
+		cfg.Blitz.DefaultModel = r.Model
+	}
+	if r.Agent != "" {
+		cfg.Blitz.DefaultAgent = r.Agent
+	}
+	if r.Agency != "" {
+		cfg.Blitz.AgencyLevel = strings.ToLower(r.Agency)
+	}
+	cfg.Plugins.Dirs = append(cfg.Plugins.Dirs, r.PluginDirs...)
+	cfg.Sandbox.AllowedPaths = append(cfg.Sandbox.AllowedPaths, r.AddDirs...)
+	if r.SessionDir != "" {
+		cfg.Session.StorageDir = r.SessionDir
+	}
 }
 
 // Run serves until ctx is done, then lets turns in progress finish for a
@@ -74,10 +129,13 @@ func Run(ctx context.Context, o Options) error {
 			return nil, err
 		}
 		cfg.Tools.WorkspaceDir = dir
+		o.Run.apply(cfg)
 		w, err := engine.Open(ctx, cfg, engine.Options{
-			Streaming: true,
-			Warn:      func(msg string) { slog.Warn(msg, "workspace", dir) },
-			Workers:   store,
+			Streaming:          true,
+			Warn:               func(msg string) { slog.Warn(msg, "workspace", dir) },
+			Workers:            store,
+			TrustProject:       o.Run.TrustProject,
+			AppendSystemPrompt: o.Run.AppendSystemPrompt,
 		})
 		if err != nil {
 			return nil, err
@@ -95,12 +153,47 @@ func Run(ctx context.Context, o Options) error {
 		return err
 	}
 	defer os.Remove(o.Socket)
-	if cfg.Workers.Enabled {
+	ctx, stop := context.WithCancel(ctx)
+	defer stop()
+	go watch(ctx, stop, o, s.IdleFor)
+	if o.schedules(cfg) {
 		s.StartScheduler(ctx)
 	}
 	fmt.Fprintf(os.Stderr, "Blitz service listening on %s\n", o.Socket)
 	slog.Info("serve", "socket", o.Socket)
 	return server.Serve(ctx, l, s.Handler(), grace)
+}
+
+// watchEvery is how often watch looks at the service's idle time.
+var watchEvery = time.Second
+
+// watch calls stop when the service has been idle for o.IdleExit, or when
+// o.ExitWith reaches its end (the client that started it has gone).
+func watch(ctx context.Context, stop context.CancelFunc, o Options, idleFor func() time.Duration) {
+	if o.ExitWith != nil {
+		go func() {
+			_, _ = io.Copy(io.Discard, o.ExitWith)
+			slog.Info("exit: the client that started the service has gone")
+			stop()
+		}()
+	}
+	if o.IdleExit <= 0 {
+		return
+	}
+	t := time.NewTicker(watchEvery)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			if idleFor() >= o.IdleExit {
+				slog.Info("exit: idle", "after", o.IdleExit)
+				stop()
+				return
+			}
+		}
+	}
 }
 
 // logDir is where the service's diagnostic log is, "" when it's off.

@@ -55,6 +55,27 @@ import (
 	"golang.org/x/text/language/display"
 )
 
+// Setup loads the catalogs (the built-in ones, and the files in dir) and
+// makes locale ("" for DefaultLocale) the current language, telling warn
+// about catalogs that don't load and a locale that isn't a language code.
+func Setup(dir, locale string, warn func(string)) *Bundle {
+	b, errs := NewBundle(dir)
+	for _, err := range errs {
+		warn(err.Error())
+	}
+	want := locale
+	if want == "" {
+		want = DefaultLocale
+	}
+	tag, err := b.Resolve(want)
+	if err != nil {
+		warn(fmt.Sprintf("ui.locale %q is not a language code; using %s", locale, DefaultLocale))
+		tag, _ = b.Resolve(DefaultLocale)
+	}
+	SetCurrent(b.Localizer(tag))
+	return b
+}
+
 // DefaultLocale is the source language; every key must exist in it.
 const DefaultLocale = "en-US"
 

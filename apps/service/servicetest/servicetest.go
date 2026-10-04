@@ -47,3 +47,14 @@ func Serve(ctx context.Context, l net.Listener, h http.Handler, grace time.Durat
 func Run(ctx context.Context, socket string) error {
 	return daemon.Run(ctx, daemon.Options{Socket: socket, Version: "test"})
 }
+
+// RunOverrides are a private service's run settings (blitzd's hidden
+// flags, which the CLI sets for a run of its own).
+type RunOverrides = daemon.RunOverrides
+
+// RunWith runs a private service, as a client starts for a run of its own,
+// on socket, with the configuration file config ("" for the usual search)
+// and the run's settings, until ctx is done.
+func RunWith(ctx context.Context, socket, config string, run RunOverrides) error {
+	return daemon.Run(ctx, daemon.Options{Socket: socket, Config: config, Version: "test", Run: run, Private: true})
+}

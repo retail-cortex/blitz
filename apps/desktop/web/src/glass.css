@@ -31,6 +31,14 @@
     radial-gradient(55vmax 45vmax at 100% 20%, #ddd0fb 0%, transparent 60%),
     radial-gradient(60vmax 50vmax at 40% 110%, #c2e6d4 0%, transparent 60%),
     #e3e8f1;
+  /* The same glows over the macOS window's own blur: translucent, so the
+     desktop still shows through, but the gradient reaches the top bar and
+     the gaps between the panes, as the backdrop does in VS Code. */
+  --backdrop-native:
+    radial-gradient(60vmax 50vmax at 8% 0%, rgb(188 210 251 / 0.85) 0%, transparent 60%),
+    radial-gradient(55vmax 45vmax at 100% 20%, rgb(221 208 251 / 0.8) 0%, transparent 60%),
+    radial-gradient(60vmax 50vmax at 40% 110%, rgb(194 230 212 / 0.85) 0%, transparent 60%),
+    rgb(227 232 241 / 0.68);
 }
 :root[data-theme="dark"] {
   --backdrop:
@@ -38,6 +46,11 @@
     radial-gradient(55vmax 45vmax at 100% 20%, #33205a 0%, transparent 60%),
     radial-gradient(60vmax 50vmax at 40% 110%, #0f3a36 0%, transparent 60%),
     #0b0e15;
+  --backdrop-native:
+    radial-gradient(60vmax 50vmax at 8% 0%, rgb(27 45 94 / 0.85) 0%, transparent 60%),
+    radial-gradient(55vmax 45vmax at 100% 20%, rgb(51 32 90 / 0.8) 0%, transparent 60%),
+    radial-gradient(60vmax 50vmax at 40% 110%, rgb(15 58 54 / 0.85) 0%, transparent 60%),
+    rgb(11 14 21 / 0.55);
 }
 
 /* Light glass is frosted, not clear: pale panes over a pale backdrop
@@ -58,7 +71,11 @@
   --glass-border: rgb(110 122 145 / 0.28);
   --glass-edge: inset 0 1px 0 rgb(255 255 255 / 0.7);
   --glass-shadow: 0 8px 28px rgb(31 38 70 / 0.14), 0 1px 3px rgb(31 38 70 / 0.1);
+  /* Ink a step darker on frosted panes: muted text, and the text and
+     outlined buttons' blue. */
+  --md-on-surface-variant: #3c4043;
 }
+:root[data-glass="on"]:not([data-theme="dark"]) .btn:not(.filled):not(.tonal):not(.danger) { --fg: #0842a0; }
 :root[data-glass="on"][data-theme="dark"] {
   --md-surface: rgb(22 25 32 / 0.55);
   --md-surface-dim: rgb(18 20 26 / 0.6);
@@ -74,11 +91,16 @@
   --glass-border: rgb(255 255 255 / 0.1);
   --glass-edge: inset 0 1px 0 rgb(255 255 255 / 0.07);
   --glass-shadow: 0 8px 32px rgb(0 0 0 / 0.35), 0 1px 2px rgb(0 0 0 / 0.3);
+  --md-on-surface-variant: #c4c7c5;
 }
 
 /* The backdrop, and the shell letting it through. */
 :root[data-glass="on"] body { background: var(--backdrop); background-attachment: fixed; }
-:root[data-glass="on"][data-native-glass] body { background: transparent; }
+/* In the macOS app the desktop shows through the window, under the
+   backdrop's glows in the page's theme: the window's blur follows the
+   page's theme too (SetAppearance), but the glows' base keeps the ink on
+   its own theme even where it doesn't, as before the page has told it. */
+:root[data-glass="on"][data-native-glass] body { background: var(--backdrop-native); background-attachment: fixed; }
 :root[data-glass="on"] .shell,
 :root[data-glass="on"] .main,
 :root[data-glass="on"] .editor-panel { background: transparent; }
@@ -104,19 +126,23 @@
 }
 
 /* What floats over other text stays readable even where nothing blurs:
-   dialogs, menus, and the panels that float over the chat or the editor
-   in narrower windows. The composer's "/" and "@" menu can't blur: it
+   dialogs and menus. The composer's "/" and "@" menu can't blur: it
    sits inside the composer, whose own blur is the only backdrop it sees. */
 :root[data-glass="on"] :is(.dialog, .menu) { background: var(--glass-strong); }
 :root[data-glass="on"] .command-menu { background: var(--glass-strong); border: 1px solid var(--glass-border); box-shadow: var(--glass-shadow), var(--glass-edge); }
-@media (max-width: 1100px) {
-  :root[data-glass="on"] .files-shelf { background: var(--glass-strong); border-right: 1px solid var(--glass-border); box-shadow: var(--glass-shadow); }
-}
 
 /* Panes: the workspace's areas float as rounded glass panes, a little
    apart, with the backdrop (or the desktop) showing between them; the top
    bar sits on the backdrop itself. */
 :root[data-glass="on"] .topbar { background: transparent; border-bottom: none; -webkit-backdrop-filter: none; backdrop-filter: none; }
+/* Light: the menus in the darkest ink, over the backdrop's glows. */
+:root[data-glass="on"]:not([data-theme="dark"]) :is(.topbar, .welcome-bar) .menubar-item { color: var(--md-on-surface); }
+/* Fields and their lists on glass: the field's own surface, nearly opaque. */
+:root[data-glass="on"] :is(.input, .select) { background: var(--glass-strong); }
+:root[data-glass="on"] .select option { background: var(--glass-strong); }
+/* A disabled button on light glass: a little more there than on a solid
+   surface, where 38% left it a smudge on the frosted pane. */
+:root[data-glass="on"]:not([data-theme="dark"]) :is(.btn, .icon-btn):disabled { opacity: 0.5; }
 /* The search bar on the backdrop: a pane of its own, as the panes are. */
 :root[data-glass="on"] .toolbar-search { background: var(--glass-strong); border: 1px solid var(--glass-border); box-shadow: var(--glass-edge); }
 :root[data-glass="on"] .workspace-body { gap: 8px; padding: 0 8px 8px; }
@@ -147,7 +173,3 @@
 /* The status bar is a strip of glass along the foot, under the panes. */
 :root[data-glass="on"] .status-bar { border-top: 1px solid var(--glass-border); box-shadow: var(--glass-edge); }
 :root[data-glass="on"] .workspace-center .editor-pane { background: transparent; -webkit-backdrop-filter: none; backdrop-filter: none; }
-/* The panes stay put when they float in narrower windows. */
-@media (max-width: 1100px) {
-  :root[data-glass="on"] .files-shelf { top: 0; left: 8px; bottom: 8px; border-radius: var(--md-shape-lg); }
-}

@@ -35,6 +35,7 @@ import (
 	"github.com/retail-cortex/blitz/pkg/engine"
 	"github.com/retail-cortex/blitz/pkg/engine/workers"
 	"github.com/retail-cortex/blitz/pkg/images"
+	"github.com/retail-cortex/blitz/pkg/signin"
 	pb "github.com/retail-cortex/blitz/proto/blitz/v1"
 )
 
@@ -53,8 +54,10 @@ type Server struct {
 	logDir    string      // where the diagnostic log is written ("": off)
 	sched     *scheduler  // nil: workers aren't run
 	broker    *broker
-	runs      runs       // background runs
-	models    modelLists // providers' models, for ListModels
+	runs      runs          // background runs
+	models    modelLists    // providers' models, for ListModels
+	act       activity      // requests served, for IdleFor
+	signins   signin.Runner // providers' sign-ins, one per provider at a time
 
 	mu         sync.Mutex
 	workspaces map[string]*workspace // by canonical directory
@@ -90,6 +93,7 @@ type workspace struct {
 // New returns a server that opens workspaces with open.
 func New(open Opener, opts ...Option) *Server {
 	s := &Server{open: open, version: "dev", started: time.Now(), program: programFile(), broker: newBroker(), workspaces: map[string]*workspace{}, opening: map[string]*opening{}}
+	s.act.last = s.started
 	for _, o := range opts {
 		o(s)
 	}
@@ -105,7 +109,7 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle(pb.NewWorkerServiceHandler(workerService{s}, limit))
 	mux.Handle(pb.NewConfigServiceHandler(configService{s}, limit))
 	mux.Handle(pb.NewFileServiceHandler(fileService{s}, limit))
-	return mux
+	return s.act.track(mux)
 }
 
 // Close closes every workspace; none opens after it.

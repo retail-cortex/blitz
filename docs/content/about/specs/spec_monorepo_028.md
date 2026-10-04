@@ -33,8 +33,8 @@ Blitz is three independent apps (the CLI, the service, the desktop app) over sha
 | `third_party/` | Changes to outside code: the Wails patch for Linux |
 | `release/` | The CLI release archives |
 
-- **MR-01** Apps depend on `pkg/` only, never on each other; tests may run the service through `apps/service/servicetest`. Front ends (the REPL, the desktop app), `pkg/api`, `pkg/client` and `pkg/socket` never reach the engine; only the service and the CLI's `--local` mode link it. One Go module (`github.com/retail-cortex/blitz`).
-- **MR-02** Enforced twice: engine libraries' `visibility` lists only the engine, the service, the CLI's `main` package and the three packages whose tests use the engine; and `bazel run //tools:check_deps` (CI) queries the build graph — libraries only — and fails when a front end's, the contract's or a shared package's library reaches the engine, when an app's library reaches another app, or when an engine library is public. Gazelle keeps an existing `visibility`, so new engine packages start public and fail the check until given one.
+- **MR-01** Apps depend on `pkg/` only, never on each other; tests may run the service through `apps/service/servicetest`. Front ends (the CLI, the REPL, the desktop app), `pkg/api`, `pkg/client` and `pkg/socket` never reach the engine; only the service links it (*since 2026-10-04*: the CLI's `--local` runs in a private `blitzd`). One Go module (`github.com/retail-cortex/blitz`).
+- **MR-02** Enforced twice: engine libraries' `visibility` lists only the engine, the service, the CLI's `main` package (for its tests) and the three packages whose tests use the engine; and `bazel run //tools:check_deps` (CI) queries the build graph — libraries only — and fails when a front end's (the CLI's included, *since 2026-10-04*: every workspace runs in `blitzd`, [spec_cli_020](spec_cli_020.md) CLI-14), the contract's or a shared package's library reaches the engine, when an app's library reaches another app, or when an engine library is public. Gazelle keeps an existing `visibility`, so new engine packages start public and fail the check until given one.
 
 ## 3. Build
 

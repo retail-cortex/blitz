@@ -15,49 +15,16 @@
 package main
 
 import (
-	"cmp"
-	"context"
 	"errors"
-	"fmt"
-	"io"
-	"os"
 	"os/exec"
-	"path/filepath"
-	"sort"
-	"strings"
-	"time"
 
-	"github.com/retail-cortex/blitz/apps/cli/internal/tui"
-	"github.com/retail-cortex/blitz/pkg/api"
-	"github.com/retail-cortex/blitz/pkg/config"
-	"github.com/retail-cortex/blitz/pkg/engine"
-	"github.com/retail-cortex/blitz/pkg/engine/browser"
-	"github.com/retail-cortex/blitz/pkg/engine/memory"
-	"github.com/retail-cortex/blitz/pkg/engine/runtime"
-	"github.com/retail-cortex/blitz/pkg/engine/skills"
-	"github.com/retail-cortex/blitz/pkg/engine/tools"
-	"github.com/retail-cortex/blitz/pkg/observability"
-	"github.com/retail-cortex/blitz/pkg/plugins"
 	"github.com/spf13/cobra"
-	"google.golang.org/adk/v2/model"
-	adksession "google.golang.org/adk/v2/session"
-	"google.golang.org/genai"
 )
 
-type checkStatus int
-
-const (
-	statusOK checkStatus = iota
-	statusWarn
-	statusFail
-)
-
-type check struct {
-	name   string
-	status checkStatus
-	detail string
-}
-
+// newDoctorCommand is blitz doctor: blitzd doctor runs the checks (they
+// build models, sandboxes and MCP clients, which only the service
+// carries), with this run's settings, and prints them here. It needn't
+// have a service running.
 func newDoctorCommand(g *globalFlags) *cobra.Command {
 	var online bool
 	cmd := &cobra.Command{
@@ -65,10 +32,18 @@ func newDoctorCommand(g *globalFlags) *cobra.Command {
 		Short: "Check configuration, credentials, sandbox and integrations",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			checks := runDoctor(cmd.Context(), g, online)
-			failed := printChecks(cmd.OutOrStdout(), checks)
-			if failed > 0 {
-				return withCode(exitFailure, fmt.Errorf("%d check(s) failed", failed))
+			bin, err := serviceBinary()
+			if err != nil {
+				return withCode(exitUsage, err)
+			}
+			c := exec.CommandContext(cmd.Context(), bin, doctorArgs(g, online)...)
+			c.Stdin, c.Stdout, c.Stderr = cmd.InOrStdin(), cmd.OutOrStdout(), cmd.ErrOrStderr()
+			if err := c.Run(); err != nil {
+				var exit *exec.ExitError
+				if errors.As(err, &exit) {
+					return withCode(exit.ExitCode(), errors.New("some checks failed"))
+				}
+				return err
 			}
 			return nil
 		},
@@ -77,502 +52,27 @@ func newDoctorCommand(g *globalFlags) *cobra.Command {
 	return cmd
 }
 
-func runDoctor(ctx context.Context, g *globalFlags, online bool) []check {
-	if ctx == nil {
-		ctx = context.Background()
+// doctorArgs are blitzd doctor's flags for this run's settings.
+func doctorArgs(g *globalFlags, online bool) []string {
+	args := []string{"doctor"}
+	add := func(flag, v string) {
+		if v != "" {
+			args = append(args, flag, v)
+		}
 	}
-	var checks []check
-	add := func(name string, st checkStatus, format string, a ...any) {
-		checks = append(checks, check{name, st, fmt.Sprintf(format, a...)})
+	add("--config", g.config)
+	add("--dir", g.dir)
+	add("--model", g.model)
+	add("--agent", g.agent)
+	add("--agency", g.agency)
+	for _, d := range g.pluginDirs {
+		add("--plugin-dir", d)
 	}
-
-	cfgDir := config.ConfigDir(g.config)
-	cfgFile := filepath.Join(cfgDir, ".env.toml")
-	if info, err := os.Stat(cfgFile); err != nil {
-		add("config file", statusWarn, "%s not found (defaults in use; run 'blitz config init')", cfgFile)
-	} else if info.Mode().Perm()&0o077 != 0 {
-		add("config file", statusWarn, "%s is readable by others (mode %v); run chmod 600", cfgFile, info.Mode().Perm())
-	} else {
-		add("config file", statusOK, "%s", cfgFile)
+	for _, d := range g.addDirs {
+		add("--add-dir", d)
 	}
-
-	cfg, err := loadConfig(g)
-	if err != nil {
-		add("config parse", statusFail, "%v", err)
-		return checks
-	}
-	add("config parse", statusOK, "provider %s, model %s, agent %s", cfg.LLM.Provider, cfg.ModelName(), cfg.Blitz.DefaultAgent)
-	checkProject(cfg, add)
-	checkSkills(cfg, add)
-
-	// Offline, credentials are only found, not tried; with --online the
-	// model request below tries them.
-	confirm := " (use --online to confirm)"
 	if online {
-		confirm = ""
+		args = append(args, "--online")
 	}
-	switch key := apiKeyFor(cfg); {
-	case cfg.LLM.Provider == "gemini" && cfg.LLM.Gemini.UsesADC():
-		st, detail := checkADC("gemini", cfg.LLM.Gemini.ProjectID, cfg.LLM.Gemini.Location, confirm)
-		add("credentials", st, "%s", detail)
-	case cfg.LLM.Provider == "anthropic" && cfg.LLM.Anthropic.UsesADC():
-		st, detail := checkADC("anthropic", cfg.LLM.Anthropic.ProjectID, cfg.LLM.Anthropic.Location, confirm)
-		add("credentials", st, "Claude on Vertex AI, %s", detail)
-	case cfg.LLM.Provider == "anthropic" && cfg.LLM.Anthropic.UsesOAuth():
-		dir, name := cfg.LLM.Anthropic.OAuthProfile()
-		if _, err := os.Stat(filepath.Join(dir, "credentials", name+".json")); err != nil {
-			add("credentials", statusFail, "no `ant auth login` profile %q in %s: sign in with `ant auth login`", name, dir)
-		} else {
-			add("credentials", statusOK, "Anthropic OAuth, `ant auth login` profile %q%s", name, confirm)
-		}
-	case cfg.LLM.Provider == "anthropic" && key == "":
-		if os.Getenv("ANTHROPIC_AUTH_TOKEN") != "" {
-			add("credentials", statusOK, "ANTHROPIC_AUTH_TOKEN is set")
-		} else {
-			add("credentials", statusWarn, "no api_key; relying on an `ant auth login` profile or workload identity%s", confirm)
-		}
-	case cfg.LLM.Provider == "ollama":
-		add("credentials", statusOK, "ollama needs no API key (%s)", cfg.LLM.OpenAI.BaseURL)
-	case cfg.LLM.Provider == "bedrock":
-		add("credentials", statusOK, "AWS's credential chain, region %q%s", cfg.LLM.Bedrock.Region, confirm)
-	case cfg.LLM.Provider == "azure":
-		add("credentials", statusOK, "Azure resource %q, auth %q%s", cfg.LLM.Azure.Resource, cmp.Or(cfg.LLM.Azure.Auth, "api_key"), confirm)
-	case cfg.LLM.Provider == "vertex-anthropic":
-		st, detail := checkADC("anthropic", cfg.LLM.Anthropic.ProjectID, cfg.LLM.Anthropic.Location, confirm)
-		add("credentials", st, "Claude on Vertex AI, %s", detail)
-	case key == "" && keyCommandFor(cfg) != "":
-		add("credentials", statusOK, "the key comes from api_key_command%s", confirm)
-	case key == "":
-		add("credentials", statusFail, "no API key for provider %q", cfg.LLM.Provider)
-	default:
-		add("credentials", statusOK, "API key for %s: %s", cfg.LLM.Provider, maskSecret(key))
-	}
-
-	if !runtime.NewUsageTracker(cfg.Pricing).HasPrice(cfg.ModelName()) {
-		add("pricing", statusWarn, "no price for %q; /cost will show tokens only (add [pricing.%q])", cfg.ModelName(), cfg.ModelName())
-	} else {
-		add("pricing", statusOK, "estimates use [pricing] for %s", cfg.ModelName())
-	}
-
-	switch _, on, err := observability.ParseLevel(cfg.Log.Level); {
-	case err != nil:
-		add("log", statusWarn, "%v", err)
-	case !on:
-		add("log", statusOK, "off")
-	default:
-		add("log", statusOK, "%s level to %s", cfg.Log.Level, config.ExpandHome(cfg.Log.Dir))
-	}
-	switch endpoint := cfg.Telemetry.Endpoint; {
-	case !cfg.Telemetry.Enabled:
-		add("telemetry", statusOK, "off")
-	case endpoint == "" && os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT") == "" && os.Getenv("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT") == "":
-		add("telemetry", statusWarn, "on, but no endpoint set; exporting to the OTLP default %s", observability.DefaultEndpoint)
-	default:
-		if endpoint == "" {
-			endpoint = "OTEL_EXPORTER_OTLP_* endpoint"
-		}
-		content := "names, timings and token counts only"
-		if cfg.Telemetry.CaptureContent {
-			content = "including prompts and tool content (secrets masked)"
-		}
-		add("telemetry", statusOK, "OTLP/HTTP to %s; %s", endpoint, content)
-	}
-
-	checkModel := func(label string, m model.LLM, err error, ref string) {
-		fail := statusFail
-		if ref != "" { // a broken fallback is a warning: the session still works
-			fail = statusWarn
-		}
-		if err != nil {
-			add(label, fail, "%s%s", refPrefix(ref), engine.ModelErrorSummary(err, cfg))
-			return
-		}
-		add(label, statusOK, "%s%s initialised", refPrefix(ref), m.Name())
-		if !online {
-			return
-		}
-		octx, cancel := context.WithTimeout(ctx, 30*time.Second)
-		err = pingModel(octx, m)
-		cancel()
-		if err != nil {
-			add(label+" request", fail, "%s", engine.ModelErrorSummary(err, cfg))
-		} else {
-			add(label+" request", statusOK, "model responded")
-		}
-	}
-	// Each model is checked on its own: through the fallback chain a dead
-	// primary would look healthy.
-	primaryCfg := *cfg
-	primaryCfg.LLM.FallbackModels = nil
-	llm, err := runtime.NewModel(ctx, &primaryCfg, "")
-	checkModel("model", llm, err, "")
-	for i, ref := range cfg.LLM.FallbackModels {
-		m, err := runtime.NewModelRef(ctx, cfg, ref)
-		checkModel(fmt.Sprintf("fallback %d", i+1), m, err, ref)
-	}
-	pins := make([]string, 0, len(cfg.AgentModels))
-	for agent := range cfg.AgentModels {
-		pins = append(pins, agent)
-	}
-	sort.Strings(pins)
-	for _, agent := range pins {
-		ref := cfg.AgentModels[agent]
-		m, err := runtime.NewModelRef(ctx, cfg, ref)
-		checkModel("pin "+agent, m, err, ref)
-	}
-
-	for _, bin := range []string{"bash", "git"} {
-		if p, err := exec.LookPath(bin); err != nil {
-			st := statusWarn
-			if bin == "bash" {
-				st = statusFail
-			}
-			add(bin, st, "not found on PATH")
-		} else {
-			add(bin, statusOK, "%s", p)
-		}
-	}
-
-	reg, err := tools.NewRegistry(cfg, nil, nil)
-	if err != nil {
-		add("sandbox", statusFail, "%v", err)
-	} else {
-		defer reg.Close()
-		add("workspace", statusOK, "%s", reg.Workspace().Dir())
-		st := statusOK
-		if !reg.ShellSandbox().Active() {
-			st = statusWarn
-		}
-		add("shell sandbox", st, "%s", reg.ShellSandbox().Status())
-		switch mode := reg.Hooks().Mode(); {
-		case reg.ModeNote() != nil:
-			add("permissions", statusWarn, "bypass requested (permission_mode or auto_approve) but %v; starting in default mode", reg.ModeNote())
-		case cfg.Blitz.AutoApprove && cfg.Blitz.PermissionMode == "":
-			add("permissions", statusOK, "bypass (from auto_approve = true; prefer permission_mode = \"bypass\")")
-		default:
-			add("permissions", statusOK, "%s", mode)
-		}
-		if rules := reg.Rules().List(); len(rules) > 0 {
-			counts := map[tools.Effect]int{}
-			for _, r := range rules {
-				counts[r.Effect]++
-			}
-			add("permission rules", statusOK, "%d deny, %d ask, %d allow (/permissions lists them)", counts[tools.EffectDeny], counts[tools.EffectAsk], counts[tools.EffectAllow])
-		}
-
-		// A provider that can't be used fails the registry, above.
-		switch {
-		case cfg.Web.SearchProvider == "":
-		case !online:
-			add("web search", statusOK, "%s (use --online to run a test search)", reg.SearchProvider())
-		default:
-			if out, err := reg.WebSearch(ctx, "Go programming language", 3); err != nil {
-				add("web search", statusFail, "%s: %v", reg.SearchProvider(), err)
-			} else {
-				add("web search", statusOK, "%s: %d results", reg.SearchProvider(), len(out.Results))
-			}
-		}
-
-		if cfg.Web.Enabled && cfg.Browser.Enabled {
-			if path, err := browser.Find(cfg.Browser.Path); err != nil {
-				add("browser", statusWarn, "%v (the browser tool can't run)", err)
-			} else {
-				add("browser", statusOK, "%s", path)
-			}
-		}
-
-		if list, err := plugins.Default().List(); err != nil {
-			add("plugins", statusFail, "%v", err)
-		} else {
-			for _, i := range list {
-				switch h, err := plugins.Hash(plugins.Default().PluginDir(i)); {
-				case err != nil || h != i.Hash:
-					add("plugin "+i.Name, statusWarn, "%s: its files changed since it was installed, so it isn't loaded (blitz plugin update %s)", i.Version, i.Name)
-				case !i.Enabled:
-					add("plugin "+i.Name, statusOK, "%s, disabled", i.Version)
-				default:
-					add("plugin "+i.Name, statusOK, "%s", i.Version)
-				}
-			}
-		}
-
-		for _, s := range cfg.MCP.Servers {
-			switch {
-			case s.Disabled: // not started, so not connected to either
-				add("mcp "+s.Name, statusOK, "disabled")
-				continue
-			case s.Command != "":
-				if _, err := exec.LookPath(s.Command); err != nil {
-					add("mcp "+s.Name, statusFail, "command %q not found", s.Command)
-					continue
-				}
-			}
-			if !online {
-				add("mcp "+s.Name, statusOK, "configured (use --online to connect)")
-				continue
-			}
-			n, err := countMCPTools(ctx, reg, s)
-			if err != nil {
-				add("mcp "+s.Name, statusFail, "%v", err)
-			} else {
-				add("mcp "+s.Name, statusOK, "%d tools", n)
-			}
-		}
-	}
-
-	for _, h := range cfg.Hooks.All() {
-		first := strings.Fields(h.Command)
-		if len(h.Args) > 0 {
-			first = h.Args
-		}
-		if h.Kind() == config.HookCommand && len(first) > 0 && !strings.ContainsAny(first[0], "$;|&") {
-			if _, err := exec.LookPath(first[0]); err != nil && !fileExists(first[0]) {
-				add("hook", statusWarn, "%q: %s not found", h.Describe(), first[0])
-				continue
-			}
-		}
-		add("hook", statusOK, "%s", h.Describe())
-	}
-
-	sessDir := config.ExpandHome(cfg.Session.StorageDir)
-	if info, err := os.Stat(sessDir); err == nil && info.Mode().Perm()&0o077 != 0 {
-		add("sessions", statusWarn, "%s is accessible by others (mode %v)", sessDir, info.Mode().Perm())
-	} else {
-		add("sessions", statusOK, "%s", sessDir)
-	}
-	if cfg.Audit.Enabled {
-		add("audit log", statusOK, "%s", config.ExpandHome(cfg.Audit.Dir))
-	} else {
-		add("audit log", statusWarn, "disabled")
-	}
-
-	if mem := memory.LoadAll(config.ExpandHome(cfg.Tools.WorkspaceDir), cfg.Memory); len(mem.Docs)+len(mem.Rules) > 0 {
-		var paths []string
-		for _, d := range mem.Docs {
-			paths = append(paths, d.Path)
-		}
-		detail := strings.Join(paths, ", ")
-		if len(mem.Rules) > 0 {
-			detail += fmt.Sprintf(" (+%d path-scoped rules)", len(mem.Rules))
-		}
-		add("project memory", statusOK, "%s", detail)
-	} else {
-		add("project memory", statusOK, "none found (%s)", strings.Join(cfg.Memory.Files, ", "))
-	}
-	return checks
-}
-
-func printChecks(w io.Writer, checks []check) (failed int) {
-	icons := map[checkStatus]string{statusOK: tui.Green + "✓" + tui.Reset, statusWarn: tui.Yellow + "!" + tui.Reset, statusFail: tui.Red + "✗" + tui.Reset}
-	for _, c := range checks {
-		fmt.Fprintf(w, " %s %-16s %s\n", icons[c.status], c.name, c.detail)
-		if c.status == statusFail {
-			failed++
-		}
-	}
-	return failed
-}
-
-// checkADC says whether provider on Vertex AI has a project and
-// Application Default Credentials: a key file, gcloud's login, or (unseen
-// from here) a Google Cloud machine's metadata server. confirm ends a line
-// saying credentials were found (how to try them, or nothing).
-func checkADC(provider, project, location, confirm string) (checkStatus, string) {
-	project = cmp.Or(project, os.Getenv("GOOGLE_CLOUD_PROJECT"))
-	if project == "" {
-		return statusFail, fmt.Sprintf("Google Cloud ADC needs a project: set [llm.%s] project_id or GOOGLE_CLOUD_PROJECT", provider)
-	}
-	where := fmt.Sprintf("Google Cloud ADC, project %s, location %s: ", project, cmp.Or(location, os.Getenv("GOOGLE_CLOUD_LOCATION"), "global"))
-	if os.Getenv("GOOGLE_APPLICATION_CREDENTIALS") != "" {
-		return statusOK, where + "GOOGLE_APPLICATION_CREDENTIALS" + confirm
-	}
-	if config.ADCFile() != "" {
-		return statusOK, where + "gcloud's application-default login" + confirm
-	}
-	return statusWarn, where + "no credentials file; run `gcloud auth application-default login` unless this is a Google Cloud machine"
-}
-
-// keyCommandFor is the provider's api_key_command.
-func keyCommandFor(cfg *config.Config) string {
-	switch cfg.LLM.Provider {
-	case "openai":
-		return cfg.LLM.OpenAI.APIKeyCommand
-	case "anthropic":
-		return cfg.LLM.Anthropic.APIKeyCommand
-	case "gemini", "":
-		return cfg.LLM.Gemini.APIKeyCommand
-	}
-	return ""
-}
-
-func apiKeyFor(cfg *config.Config) string {
-	switch cfg.LLM.Provider {
-	case "openai", "ollama":
-		return cfg.LLM.OpenAI.APIKey
-	case "anthropic":
-		return cfg.LLM.Anthropic.APIKey
-	default:
-		return cfg.LLM.Gemini.APIKey
-	}
-}
-
-// maskSecret shows only enough of a secret to recognise it.
-func maskSecret(s string) string {
-	if len(s) <= 8 {
-		return strings.Repeat("*", len(s))
-	}
-	return s[:3] + "…" + s[len(s)-4:]
-}
-
-// pingModel sends a minimal request to verify credentials and connectivity.
-func pingModel(ctx context.Context, llm model.LLM) error {
-	req := &model.LLMRequest{
-		Model:    llm.Name(),
-		Contents: []*genai.Content{genai.NewContentFromText("Reply with the single word: ok", genai.RoleUser)},
-		Config:   &genai.GenerateContentConfig{MaxOutputTokens: 16},
-	}
-	for resp, err := range llm.GenerateContent(ctx, req, false) {
-		if err != nil {
-			return err
-		}
-		if resp != nil {
-			return nil
-		}
-	}
-	return errors.New("no response")
-}
-
-// standaloneContext satisfies agent.ReadonlyContext outside an agent run,
-// e.g. to list MCP tools from the doctor command.
-type standaloneContext struct{ context.Context }
-
-func (standaloneContext) UserContent() *genai.Content             { return nil }
-func (standaloneContext) InvocationID() string                    { return "doctor" }
-func (standaloneContext) AgentName() string                       { return "doctor" }
-func (standaloneContext) ReadonlyState() adksession.ReadonlyState { return nil }
-func (standaloneContext) UserID() string                          { return "user" }
-func (standaloneContext) AppName() string                         { return "blitz" }
-func (standaloneContext) SessionID() string                       { return "doctor" }
-func (standaloneContext) Branch() string                          { return "" }
-
-func fileExists(p string) bool {
-	_, err := os.Stat(p)
-	return err == nil
-}
-
-// countMCPTools connects to one server and lists its tools. A failing
-// server's toolset lists no tools rather than fail (a turn goes on without
-// it) and warns instead: that warning is the error here.
-func countMCPTools(ctx context.Context, reg *tools.Registry, s config.MCPServerConfig) (int, error) {
-	mgr := reg.MCP()
-	var warnings []string
-	mgr.Warn = func(msg string) { warnings = append(warnings, msg) }
-	agent := "" // the primary agent's servers, else one of the agents it's for
-	if len(s.Agents) > 0 {
-		agent = s.Agents[0]
-	}
-	for _, ts := range mgr.ToolsetsFor(agent, agent == "") {
-		if ts.Name() != "mcp:"+s.Name {
-			continue
-		}
-		cctx, cancel := context.WithTimeout(ctx, 20*time.Second)
-		defer cancel()
-		list, err := ts.Tools(standaloneContext{cctx})
-		if err == nil && len(list) == 0 && len(warnings) > 0 {
-			err = errors.New(strings.Join(warnings, "; "))
-		}
-		if err != nil {
-			return 0, err
-		}
-		return len(list), nil
-	}
-	return 0, fmt.Errorf("not found")
-}
-
-func refPrefix(ref string) string {
-	if ref == "" {
-		return ""
-	}
-	return ref + ": "
-}
-
-// checkSkills reports skills that don't load, the skills policy's own
-// problems, and skills whose scripts the policy blocks.
-func checkSkills(cfg *config.Config, add func(name string, st checkStatus, format string, args ...any)) {
-	if !cfg.Skills.Enabled {
-		return
-	}
-	for _, p := range cfg.Skills.Policy.Problems() {
-		add("skills policy", statusWarn, "%s", p)
-	}
-	prov, err := skills.NewProvider()
-	if err != nil {
-		add("skills", statusFail, "%v", err)
-		return
-	}
-	if err := prov.DiscoverExternal(cfg.SkillSearchPaths(config.ExpandHome(cfg.Tools.WorkspaceDir))); err != nil {
-		for _, line := range strings.Split(err.Error(), "\n") {
-			add("skills", statusWarn, "%s", line)
-		}
-	}
-	all := prov.List()
-	withScripts, blocked := 0, 0
-	for _, s := range all {
-		if len(s.Scripts) == 0 {
-			continue
-		}
-		withScripts++
-		ev := skills.Evaluate(s, cfg.Skills.Policy)
-		if ev.Runnable() {
-			continue
-		}
-		blocked++
-		reason := "no script may run"
-		if len(ev.Blocked) > 0 {
-			reason = ev.Blocked[0]
-		} else if len(ev.Scripts[0].Reasons) > 0 {
-			reason = ev.Scripts[0].Reasons[0]
-		}
-		add("skill "+s.Name, statusWarn, "scripts blocked: %s (/skills show %s)", reason, s.Name)
-	}
-	add("skills", statusOK, "%d loaded, %d with scripts, %d blocked by skills.policy", len(all), withScripts, blocked)
-
-	switch box, note, err := tools.NewScriptBox(tools.ScriptBoxConfig{Mode: cfg.Skills.Policy.Sandbox}); {
-	case err != nil:
-		add("script sandbox", statusWarn, "%v; skill scripts won't run", err)
-	case note != "":
-		add("script sandbox", statusOK, "%s (%s)", box.Name(), note)
-	default:
-		add("script sandbox", statusOK, "%s", box.Name())
-	}
-}
-
-// checkProject lists the workspace's project settings: what applies, what
-// waits for trust, and what a project may not set.
-func checkProject(cfg *config.Config, add func(string, checkStatus, string, ...any)) {
-	p, err := engine.ReviewProject(cfg)
-	if err != nil || len(p.Files) == 0 && len(p.Problems) == 0 && len(p.Pending) == 0 {
-		return
-	}
-	for _, prob := range p.Problems {
-		add("project settings", statusWarn, "%s", prob)
-	}
-	if len(p.Files) > 0 || len(p.Pending) > 0 {
-		st, trust := statusOK, "nothing needs trust"
-		switch p.State {
-		case api.TrustTrusted:
-			trust = "trusted"
-		case api.TrustDeclined:
-			trust = "declined, not loaded ('blitz trust' to review)"
-		case api.TrustNew, api.TrustChanged:
-			st = statusWarn
-			trust = p.State + ", not loaded ('blitz trust' to review)"
-		}
-		add("project settings", st, "%s: %d applied; %d need trust: %s", strings.Join(p.Files, ", "), len(p.Applied), len(p.Pending), trust)
-	}
-	for _, it := range p.Ignored {
-		if it.Reason == config.ReasonNever || it.Reason == config.ReasonUnknown {
-			add("project setting", statusWarn, "%s: %s ignored (%s)", it.File, it.Key, tui.ProjectReason(it.Reason))
-		}
-	}
+	return args
 }

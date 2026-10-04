@@ -20,12 +20,9 @@ import (
 	"os"
 
 	"github.com/retail-cortex/blitz/apps/cli/internal/tui"
-	"github.com/retail-cortex/blitz/pkg/api"
 	"github.com/retail-cortex/blitz/pkg/client"
 	"github.com/retail-cortex/blitz/pkg/config"
-	"github.com/retail-cortex/blitz/pkg/engine"
 	"github.com/retail-cortex/blitz/pkg/i18n"
-	"github.com/retail-cortex/blitz/pkg/socket"
 	"github.com/spf13/cobra"
 )
 
@@ -50,16 +47,16 @@ func newTrustCommand(g *globalFlags) *cobra.Command {
 				cfg.Tools.WorkspaceDir, _ = os.Getwd()
 			}
 			out := cmd.OutOrStdout()
+			t, err := projectTruster(cmd.Context(), cfg)
+			if err != nil {
+				return err
+			}
 			if revoke {
-				if err := engine.ForgetProjectTrust(cfg); err != nil {
+				if err := t.ForgetProjectTrust(); err != nil {
 					return err
 				}
 				fmt.Fprintln(out, i18n.T("project.revoked"))
 				return nil
-			}
-			t, err := projectTruster(cmd.Context(), cfg)
-			if err != nil {
-				return err
 			}
 			p := t.ProjectSettings()
 			tui.ShowProject(out, p)
@@ -73,29 +70,12 @@ func newTrustCommand(g *globalFlags) *cobra.Command {
 	return cmd
 }
 
-// projectTruster is the running service's workspace, which reopens it
-// with a decision, or else the settings on disk.
-func projectTruster(ctx context.Context, cfg *config.Config) (tui.ProjectTruster, error) {
-	if sock := socket.DefaultSocket(); socket.Running(sock) {
-		return client.Attach(ctx, sock, cfg.Tools.WorkspaceDir, nil)
-	}
-	return localProject{cfg}, nil
-}
-
-// localProject reads and trusts project settings on disk, without opening
-// the workspace.
-type localProject struct{ cfg *config.Config }
-
-func (l localProject) Dir() string { return l.cfg.Tools.WorkspaceDir }
-
-func (l localProject) ProjectSettings() api.ProjectSettings {
-	p, err := engine.ReviewProject(l.cfg)
+// projectTruster is the workspace in the Blitz service (started when it
+// isn't running), which reopens it with a decision.
+func projectTruster(ctx context.Context, cfg *config.Config) (*client.Remote, error) {
+	sock, err := ensureService(ctx)
 	if err != nil {
-		return api.ProjectSettings{State: api.TrustNone, Problems: []string{err.Error()}}
+		return nil, err
 	}
-	return p
-}
-
-func (l localProject) TrustProject(hash string, trusted bool) error {
-	return engine.TrustProject(l.cfg, hash, trusted)
+	return client.Attach(ctx, sock, cfg.Tools.WorkspaceDir, nil)
 }

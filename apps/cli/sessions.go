@@ -18,12 +18,11 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/retail-cortex/blitz/pkg/engine"
 	"github.com/spf13/cobra"
 )
 
 // newSessionsCommand is `blitz sessions export <id>`: a stored session as
-// Markdown, from its files (spec_parity_027 PAR-SES-11).
+// Markdown, from the service (spec_parity_027 PAR-SES-11).
 func newSessionsCommand(g *globalFlags) *cobra.Command {
 	cmd := &cobra.Command{Use: "sessions", Short: "Work with saved sessions"}
 	var out string
@@ -32,11 +31,11 @@ func newSessionsCommand(g *globalFlags) *cobra.Command {
 		Short: "Write a session as Markdown: prompts, answers and tool calls, secrets masked",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cfg, err := loadConfig(g)
+			r, err := attachWorkspace(cmd.Context(), g)
 			if err != nil {
 				return err
 			}
-			md, err := engine.ExportSession(cfg, args[0])
+			md, err := r.ExportSession(args[0])
 			if err != nil {
 				return withCode(exitUsage, err)
 			}

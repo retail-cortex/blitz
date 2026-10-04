@@ -272,3 +272,11 @@ enabled = true
 # match   = "run_shell_command"
 # command = "~/.blitz/hooks/check-command.sh"   # exit 2 to block; stderr is the reason
 `
+
+// maskSecret shows a secret's ends only.
+func maskSecret(s string) string {
+	if len(s) <= 8 {
+		return strings.Repeat("*", len(s))
+	}
+	return s[:3] + "…" + s[len(s)-4:]
+}

@@ -39,10 +39,8 @@ import (
 
 	"github.com/retail-cortex/blitz/apps/cli/internal/tui"
 	"github.com/retail-cortex/blitz/pkg/config"
-	"github.com/retail-cortex/blitz/pkg/engine"
-	"github.com/retail-cortex/blitz/pkg/engine/runtime"
 	"github.com/retail-cortex/blitz/pkg/i18n"
-	"github.com/retail-cortex/blitz/pkg/pdftext"
+	"github.com/retail-cortex/blitz/pkg/observability"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )
@@ -88,14 +86,12 @@ type rootOptions struct {
 }
 
 func main() {
-	// A PDF's text is read in a child: this program, run again.
-	pdftext.MaybeServe()
-	pdftext.UseHelper()
-	// Until engine.StartObservability installs the log file, slog's default would
+	// Until observability.StartProcess installs the log file, slog's default would
 	// print to stderr and duplicate the terminal warnings.
 	slog.SetDefault(slog.New(slog.DiscardHandler))
 	root := newRootCommand()
 	err := root.Execute()
+	stopPrivate() // a run's own service stops with it
 	if err != nil {
 		fmt.Fprintln(os.Stderr, i18n.T("repl.error", "error", err))
 	}
@@ -137,7 +133,7 @@ Exit codes: 0 success, 1 error, 2 usage, 3 --max-turns reached,
 	f.BoolVarP(&o.version, "version", "v", false, "Print Blitz version")
 	addRunFlags(f, o)
 
-	root.AddCommand(newExecCommand(o), newInitCommand(o), newDoctorCommand(&o.global), newConfigCommand(&o.global), newServeCommand(), newWorkersCommand(&o.global), newServiceCommand(), newLicenseCommand(), newTrustCommand(&o.global), newMCPCommand(&o.global), newWorktreesCommand(&o.global), newMemoryCommand(&o.global), newPluginCommand(), newModelsCommand(&o.global), newUpdateCommand(), newSessionsCommand(&o.global), newAgentsCommand(), newAttachCommand(o), newLogsCommand(), newStopCommand(), newSecurityCommand(), newSearchCommand(&o.global))
+	root.AddCommand(newExecCommand(o), newInitCommand(o), newDoctorCommand(&o.global), newConfigCommand(&o.global), newServeCommand(), newWorkersCommand(&o.global), newServiceCommand(), newLicenseCommand(), newTrustCommand(&o.global), newMCPCommand(&o.global), newWorktreesCommand(&o.global), newMemoryCommand(&o.global), newPluginCommand(), newModelsCommand(&o.global), newUpdateCommand(), newSessionsCommand(&o.global), newAgentsCommand(), newAttachCommand(o), newLogsCommand(), newStopCommand(), newSecurityCommand(), newSearchCommand(&o.global), newAuthCommand(&o.global))
 	return root
 }
 
@@ -337,13 +333,14 @@ func runRoot(cmd *cobra.Command, o *rootOptions, args []string) (err error) {
 	if len(o.global.addDirs) > 0 {
 		o.local = true // and its own sandbox
 	}
-	if o.noPersist { // sessions in a folder removed at exit, in this process
+	sessionDir := ""
+	if o.noPersist { // sessions in a folder removed at exit, in a service of the run's own
 		tmp, err := os.MkdirTemp("", "blitz-sessions-")
 		if err != nil {
 			return err
 		}
 		defer os.RemoveAll(tmp)
-		cfg.Session.StorageDir = tmp
+		sessionDir = tmp
 		o.local = true
 	}
 
@@ -354,7 +351,7 @@ func runRoot(cmd *cobra.Command, o *rootOptions, args []string) (err error) {
 		slog.Warn(msg)
 		fmt.Fprintf(warnOut, "%s!  %s%s\n", tui.Yellow, msg, tui.Reset)
 	}
-	defer engine.StartObservability(ctx, cfg, version, warnFn)()
+	defer startLog(cfg, warnFn)()
 	defer func() { // runs before the log closes
 		if err != nil {
 			slog.Error("exit", "code", exitCodeFor(err), "error", err)
@@ -371,7 +368,7 @@ func runRoot(cmd *cobra.Command, o *rootOptions, args []string) (err error) {
 			return tui.AskTrust(ctx, tui.NewLineReader(os.Stdin, os.Stdout), os.Stdout, dir, p)
 		}
 	}
-	w, locales, remote, err := openBackend(ctx, cfg, backendOptions{local: o.local, streaming: pretty, trustProject: o.global.trustProject, appendPrompt: appendPrompt, askTrust: askTrust(cfg.Tools.WorkspaceDir)}, warnFn)
+	w, locales, remote, err := openBackend(ctx, cfg, backendOptions{local: o.local, streaming: pretty, trustProject: o.global.trustProject, appendPrompt: appendPrompt, sessionDir: sessionDir, flags: &o.global, askTrust: askTrust(cfg.Tools.WorkspaceDir)}, warnFn)
 	if err != nil {
 		return err
 	}
@@ -408,7 +405,7 @@ func runRoot(cmd *cobra.Command, o *rootOptions, args []string) (err error) {
 		}
 	}
 	if merr := w.ModelErr(); merr != nil {
-		msg := i18n.T("startup.model_failed", "error", engine.ModelErrorSummary(merr, cfg))
+		msg := i18n.T("startup.model_failed", "error", modelErrorText(merr, cfg))
 		if oneShot {
 			// Every turn would fail; say why at once, with an exit code.
 			return withCode(exitFailure, fmt.Errorf("%s (run 'blitz doctor')", msg))
@@ -485,7 +482,7 @@ func runRoot(cmd *cobra.Command, o *rootOptions, args []string) (err error) {
 	}
 
 	if oneShot {
-		if model := w.Model().Name; o.maxCostUSD > 0 && !runtime.NewUsageTracker(cfg.Pricing).HasPrice(model) {
+		if model := w.Model().Name; o.maxCostUSD > 0 && !hasPrice(cfg, model) {
 			warnFn(i18n.T("startup.cost_unpriced", "model", model))
 		}
 		run := oneShotOptions{
@@ -538,7 +535,7 @@ func runRoot(cmd *cobra.Command, o *rootOptions, args []string) (err error) {
 			if err != nil {
 				return nil, nil, nil, err
 			}
-			nb, loc, _, err := openBackend(ctx, next, backendOptions{local: o.local, streaming: pretty, trustProject: o.global.trustProject, appendPrompt: appendPrompt, askTrust: askTrust(next.Tools.WorkspaceDir)}, warnFn)
+			nb, loc, _, err := openBackend(ctx, next, backendOptions{local: o.local, streaming: pretty, trustProject: o.global.trustProject, appendPrompt: appendPrompt, sessionDir: sessionDir, flags: &g, askTrust: askTrust(next.Tools.WorkspaceDir)}, warnFn)
 			if err != nil {
 				return nil, nil, nil, err
 			}
@@ -711,4 +708,32 @@ func follower(w api.Backend, id string) func(context.Context, func(api.Event)) (
 	return func(ctx context.Context, on func(api.Event)) (api.TurnResult, error) {
 		return r.FollowBackground(ctx, id, on)
 	}
+}
+
+// modelErrorText is why the model is unavailable, as the service reports
+// it (already short and safe), on one line, with any configured
+// credential masked all the same.
+func modelErrorText(err error, cfg *config.Config) string {
+	msg, _, _ := strings.Cut(err.Error(), "\n")
+	return observability.SecretRedactor(cfg).String(msg)
+}
+
+// hasPrice reports whether Blitz knows model's price (for --max-cost-usd).
+func hasPrice(cfg *config.Config, model string) bool {
+	_, ok := config.PriceFor(cfg.Pricing, model)
+	return ok
+}
+
+// startLog opens the diagnostic log and makes it slog's default; the
+// returned func closes it. The CLI exports no telemetry: the service,
+// which runs the turns, does.
+func startLog(cfg *config.Config, warn func(string)) func() {
+	logger, f, err := observability.OpenLog(cfg.Log, observability.SecretRedactor(cfg))
+	if err != nil {
+		warn("diagnostic log disabled: " + err.Error())
+		logger, f, _ = observability.OpenLog(config.LogConfig{Level: "off"}, observability.SecretRedactor(cfg))
+	}
+	slog.SetDefault(logger)
+	slog.Info("start", "version", version, "socket", socket.DefaultSocket())
+	return func() { f.Close() }
 }

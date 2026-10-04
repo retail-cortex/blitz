@@ -123,7 +123,7 @@ func newAzureModel(ctx context.Context, cfg config.AzureConfig, name string, pol
 	if name == "" {
 		return nil, errors.New("[llm.azure] model: the deployment to use")
 	}
-	entra := cfg.Auth == config.AuthEntra
+	entra := cfg.Auth == config.AuthEntra || cfg.Auth == config.AuthOAuth
 	if cfg.Auth != "" && cfg.Auth != config.AuthAPIKey && !entra {
 		return nil, fmt.Errorf("unknown [llm.azure] auth %q (api_key or entra)", cfg.Auth)
 	}

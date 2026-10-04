@@ -86,7 +86,12 @@ func TestGeminiClientConfig(t *testing.T) {
 			backend: genai.BackendVertexAI, project: "env-p", location: "global",
 		},
 		{name: "ADC without a project", gemini: config.GeminiConfig{Auth: config.AuthADC}, err: "needs a Google Cloud project"},
-		{name: "an unknown method", gemini: config.GeminiConfig{Auth: "oauth"}, err: "unknown [llm.gemini] auth"},
+		{
+			name:    "a Google account (OAuth), on Vertex AI as ADC",
+			gemini:  config.GeminiConfig{Auth: config.AuthOAuth, ProjectID: "p", Location: "us-central1"},
+			backend: genai.BackendVertexAI, project: "p", location: "us-central1",
+		},
+		{name: "an unknown method", gemini: config.GeminiConfig{Auth: "password"}, err: "unknown [llm.gemini] auth"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Setenv("GOOGLE_CLOUD_PROJECT", tc.env["GOOGLE_CLOUD_PROJECT"])

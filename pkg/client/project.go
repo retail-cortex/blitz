@@ -42,6 +42,14 @@ func (r *Remote) TrustProject(hash string, trusted bool) error {
 	return fromAPI(err)
 }
 
+// ForgetProjectTrust forgets the decision about the project settings in
+// the service, which reopens the workspace without them unless a turn is
+// running there (WorkspaceService.ForgetProjectTrust).
+func (r *Remote) ForgetProjectTrust() error {
+	_, err := r.workspaces.ForgetProjectTrust(context.Background(), connect.NewRequest(&pb.ForgetProjectTrustRequest{Workspace: r.dir}))
+	return fromAPI(err)
+}
+
 func projectSettings(m *pb.ProjectSettings) api.ProjectSettings {
 	if m == nil {
 		return api.ProjectSettings{State: api.TrustNone}

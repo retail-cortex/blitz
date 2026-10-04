@@ -282,7 +282,7 @@ func geminiClientConfig(ctx context.Context, g config.GeminiConfig, pol retryPol
 			cc.Project, cc.Location = g.ProjectID, g.Location
 		}
 		return cc, nil
-	case config.AuthADC:
+	case config.AuthADC, config.AuthOAuth: // a Google account's sign-in is ADC too
 		cc := pol.geminiConfig("")
 		cc.Backend = genai.BackendVertexAI
 		project, location, err := vertexPlace("gemini", g.ProjectID, g.Location)

@@ -68,6 +68,27 @@
   --hl-attr: #8b5000;
   --hl-meta: #5f6368;
 
+  /* The accent: the chat input's ring's blue to teal (primary toward
+     tertiary, not all the way to green), for filled buttons, the
+     composer's buttons, switches and focus; light, a brighter blue than
+     the primary's, so it isn't the old navy. Selected and tonal controls
+     are a tint of the same gradient, so they read as a lighter version of
+     it. */
+  --accent-a: #1a73e8;
+  --accent-b: #00838f;
+  --accent-grad: linear-gradient(135deg, var(--accent-a), var(--accent-b));
+  --on-accent: var(--md-on-primary);
+  --accent-tint: linear-gradient(135deg, color-mix(in srgb, var(--accent-a) 18%, #fff), color-mix(in srgb, var(--accent-b) 18%, #fff));
+  --accent-tint-solid: color-mix(in srgb, var(--accent-a) 18%, #fff); /* for table cells, where a gradient would repeat */
+  --on-accent-tint: var(--md-on-primary-container);
+  --accent-edge: color-mix(in srgb, var(--accent-a) 25%, transparent);
+  --accent-highlight: inset 0 1px 0 rgb(255 255 255 / 0.18);
+  --accent-shadow: 0 1px 2px rgb(11 87 208 / 0.25), 0 4px 12px -2px color-mix(in srgb, var(--accent-b) 45%, transparent);
+  --accent-shadow-hover: 0 2px 4px rgb(11 87 208 / 0.3), 0 8px 20px -4px color-mix(in srgb, var(--accent-b) 55%, transparent);
+  --focus-ring: color-mix(in srgb, var(--accent-b) 28%, transparent);
+  /* Every field-like box (inputs, text areas, selects, the code editors). */
+  --field-radius: var(--md-shape-sm);
+
   --md-shape-xs: 4px;
   --md-shape-sm: 8px;
   --md-shape-md: 12px;
@@ -135,6 +156,16 @@
   --hl-type: #6fd7df;
   --hl-attr: #f8c77e;
   --hl-meta: #bdc1c6;
+  --accent-a: #a8c7fa;
+  --accent-b: color-mix(in oklab, #a8c7fa 45%, #6dd58c);
+  --accent-tint: linear-gradient(135deg, color-mix(in oklab, var(--accent-a) 30%, #17325c), color-mix(in oklab, var(--accent-b) 30%, #123f45));
+  --accent-tint-solid: color-mix(in oklab, var(--accent-a) 30%, #17325c);
+  --on-accent-tint: var(--md-on-primary-container);
+  --accent-edge: color-mix(in srgb, var(--accent-a) 40%, transparent);
+  --accent-highlight: inset 0 1px 0 rgb(255 255 255 / 0.3);
+  --accent-shadow: 0 1px 2px rgb(0 0 0 / 0.4), 0 4px 14px -2px color-mix(in srgb, var(--accent-b) 35%, transparent);
+  --accent-shadow-hover: 0 2px 4px rgb(0 0 0 / 0.45), 0 8px 22px -4px color-mix(in srgb, var(--accent-b) 45%, transparent);
+  --focus-ring: color-mix(in srgb, var(--accent-b) 35%, transparent);
 }
 
 :root[data-density="compact"] {
@@ -157,7 +188,7 @@ body {
 h1, h2, h3, h4 { font-family: var(--md-font-display); font-weight: 400; margin: 0; }
 code, pre, kbd { font-family: var(--md-mono); font-size: 13px; }
 a { color: var(--md-primary); }
-:focus-visible { outline: 2px solid var(--md-primary); outline-offset: 2px; }
+:focus-visible { outline: 2px solid var(--accent-b); outline-offset: 2px; }
 ::selection { background: var(--md-primary-container); color: var(--md-on-primary-container); }
 ::-webkit-scrollbar { width: 10px; height: 10px; }
 ::-webkit-scrollbar-thumb { background: var(--md-outline-variant); border-radius: 10px; border: 3px solid transparent; background-clip: content-box; }
@@ -196,7 +227,7 @@ a { color: var(--md-primary); }
   border: none; background: var(--bg); color: var(--fg);
   font: 500 14px/20px var(--md-font); letter-spacing: 0.1px;
   cursor: pointer; white-space: nowrap; user-select: none; overflow: hidden;
-  transition: box-shadow 0.15s;
+  transition: box-shadow 0.15s, transform 0.15s, background-color 0.15s, border-color 0.15s;
 }
 .btn::after, .icon-btn::after, .chip::after, .list-item::after, .seg button::after, .menu-item::after {
   content: ""; position: absolute; inset: 0; border-radius: inherit;
@@ -207,13 +238,19 @@ a { color: var(--md-primary); }
 .btn:disabled, .icon-btn:disabled, .chip:disabled { opacity: 0.38; cursor: default; }
 .btn:disabled::after, .icon-btn:disabled::after { opacity: 0; }
 .btn.has-icon { padding-left: 16px; }
-.btn.filled { --bg: var(--md-primary); --fg: var(--md-on-primary); }
-.btn.filled:hover { box-shadow: var(--md-elevation-1); }
-.btn.tonal { --bg: var(--md-secondary-container); --fg: var(--md-on-secondary-container); }
-.btn.outlined { border: 1px solid var(--md-outline); }
+.btn.filled, .icon-btn.filled { background: var(--accent-grad); color: var(--on-accent); box-shadow: var(--accent-shadow), var(--accent-highlight); }
+.btn.filled:hover:not(:disabled), .icon-btn.filled:hover:not(:disabled) { box-shadow: var(--accent-shadow-hover), var(--accent-highlight); transform: translateY(-1px); }
+.btn.filled:active:not(:disabled), .icon-btn.filled:active:not(:disabled) { box-shadow: var(--accent-shadow), var(--accent-highlight); transform: none; }
+/* Disabled, a filled button goes flat: no gradient while it can't be pressed. */
+.btn.filled:disabled, .icon-btn.filled:disabled { background: var(--md-surface-container-highest); color: var(--md-on-surface); box-shadow: none; }
+.btn.tonal, .icon-btn.tonal { background: var(--accent-tint); color: var(--on-accent-tint); box-shadow: inset 0 0 0 1px var(--accent-edge); }
+.btn.outlined { border: 1px solid color-mix(in srgb, var(--accent-a) 55%, var(--md-outline)); }
+.btn.outlined:hover:not(:disabled) { border-color: var(--accent-a); }
 .btn.text { padding: 0 12px; }
 .btn.danger { --fg: var(--md-error); }
-.btn.filled.danger { --bg: var(--md-error); --fg: var(--md-on-error); }
+/* Danger stays solid red: a gradient there would blur what it means. */
+.btn.filled.danger { background: var(--md-error); color: var(--md-on-error); box-shadow: var(--md-elevation-1); }
+.btn.filled.danger:disabled { background: var(--md-surface-container-highest); color: var(--md-on-surface); box-shadow: none; }
 .btn.small { height: 32px; padding: 0 16px; font-size: 13px; }
 
 .icon-btn {
@@ -222,9 +259,8 @@ a { color: var(--md-primary); }
   background: transparent; color: var(--md-on-surface-variant); cursor: pointer;
 }
 .icon-btn.small { width: 32px; height: 32px; }
-.icon-btn.selected { background: var(--md-secondary-container); color: var(--md-on-secondary-container); }
-.icon-btn.filled { background: var(--md-primary); color: var(--md-on-primary); }
-.icon-btn.tonal { background: var(--md-secondary-container); color: var(--md-on-secondary-container); }
+.icon-btn { transition: box-shadow 0.15s, transform 0.15s; }
+.icon-btn.selected { background: var(--accent-tint); color: var(--on-accent-tint); }
 
 /* Chips */
 .chip {
@@ -234,21 +270,21 @@ a { color: var(--md-primary); }
   color: var(--md-on-surface-variant); font: 500 13px/18px var(--md-font); cursor: pointer; white-space: nowrap;
 }
 .chip .icon { width: 18px; height: 18px; }
-.chip.selected { background: var(--md-secondary-container); color: var(--md-on-secondary-container); border-color: transparent; }
+.chip.selected { background: var(--accent-tint); color: var(--on-accent-tint); border-color: var(--accent-edge); }
 .chip.warn { background: var(--md-warning-container); color: var(--md-on-warning-container); border-color: transparent; }
 .chip.danger { background: var(--md-error-container); color: var(--md-on-error-container); border-color: transparent; }
 .chip.static { cursor: default; }
 .chip.static::after { display: none; }
 
 /* Segmented buttons */
-.seg { display: inline-flex; border: 1px solid var(--md-outline); border-radius: var(--md-shape-full); overflow: hidden; }
+.seg { display: inline-flex; border: 1px solid color-mix(in srgb, var(--accent-a) 45%, var(--md-outline)); border-radius: var(--md-shape-full); overflow: hidden; }
 .seg button {
   position: relative; display: inline-flex; align-items: center; gap: 6px; height: 36px; padding: 0 16px;
-  border: none; border-left: 1px solid var(--md-outline); background: transparent; color: var(--md-on-surface);
+  border: none; border-left: 1px solid color-mix(in srgb, var(--accent-a) 45%, var(--md-outline)); background: transparent; color: var(--md-on-surface);
   font: 500 13px/18px var(--md-font); cursor: pointer;
 }
 .seg button:first-child { border-left: none; }
-.seg button.on { background: var(--md-secondary-container); color: var(--md-on-secondary-container); }
+.seg button.on { background: var(--accent-tint); color: var(--on-accent-tint); }
 .seg.small button { height: 32px; padding: 0 12px; }
 /* An M3 search bar that opens a search (the top bar's: the palette). */
 .toolbar-search {
@@ -258,7 +294,7 @@ a { color: var(--md-primary); }
 }
 .toolbar-search::after { content: ""; position: absolute; inset: 0; border-radius: inherit; background: currentColor; opacity: 0; transition: opacity 0.15s; pointer-events: none; }
 .toolbar-search:hover::after { opacity: 0.08; }
-.toolbar-search:focus-visible { outline: 2px solid var(--md-primary); outline-offset: 2px; }
+.toolbar-search:focus-visible { outline: 2px solid var(--accent-b); outline-offset: 2px; }
 .toolbar-search-text { flex: 1; min-width: 0; }
 .toolbar-search-key { flex: none; background: var(--md-surface-container-highest); color: var(--md-on-surface-variant); }
 
@@ -270,11 +306,17 @@ a { color: var(--md-primary); }
 .field .supporting.error-text { color: var(--md-error); }
 .input, .select, textarea.input {
   width: 100%; min-height: 40px; padding: 8px 12px;
-  border: 1px solid var(--md-outline); border-radius: var(--md-shape-xs);
-  background: transparent; color: var(--md-on-surface); font: 400 14px/20px var(--md-font);
+  border: 1px solid var(--md-outline); border-radius: var(--field-radius);
+  background: var(--md-surface-container-lowest); color: var(--md-on-surface); font: 400 14px/20px var(--md-font);
+  transition: border-color 0.15s, box-shadow 0.15s;
 }
-.input:focus, .select:focus { outline: none; border-color: var(--md-primary); box-shadow: inset 0 0 0 1px var(--md-primary); }
+.input::placeholder { color: var(--md-on-surface-variant); opacity: 0.8; }
+.input:hover:not(:focus):not(:disabled), .select:hover:not(:focus):not(:disabled) { border-color: var(--md-on-surface-variant); }
+/* Focus: the accent's border with a soft halo, as the chat input glows. */
+.input:focus, .select:focus { outline: none; border-color: var(--accent-a); box-shadow: 0 0 0 3px var(--focus-ring); }
+.input:disabled, .select:disabled { opacity: 0.6; cursor: default; }
 .input.invalid { border-color: var(--md-error); }
+.input.invalid:focus { box-shadow: 0 0 0 3px color-mix(in srgb, var(--md-error) 22%, transparent); }
 textarea.input { resize: vertical; min-height: 80px; }
 .select { appearance: none; padding-right: 32px; cursor: pointer;
   background-image: linear-gradient(45deg, transparent 50%, currentColor 50%), linear-gradient(135deg, currentColor 50%, transparent 50%);
@@ -285,14 +327,15 @@ textarea.input { resize: vertical; min-height: 80px; }
 .switch { position: relative; display: inline-block; width: 52px; height: 32px; flex: none; vertical-align: middle; }
 .switch input { display: block; appearance: none; margin: 0; width: 52px; height: 32px; border-radius: 16px; cursor: pointer;
   background: var(--md-surface-container-highest); border: 2px solid var(--md-outline); transition: background 0.15s; }
-.switch input:checked { background: var(--md-primary); border-color: var(--md-primary); }
+.switch input:checked { background: var(--accent-grad); border-color: transparent; box-shadow: var(--accent-highlight); }
+.switch input:focus-visible { outline: 2px solid var(--accent-b); outline-offset: 2px; }
 .switch input:disabled { opacity: 0.38; cursor: default; }
 .switch span { position: absolute; top: 8px; left: 8px; width: 16px; height: 16px; border-radius: 50%;
   background: var(--md-outline); pointer-events: none; transition: all 0.15s; }
 .switch input:checked + span { left: 24px; top: 4px; width: 24px; height: 24px; background: var(--md-on-primary); }
 
 /* Slider */
-input[type="range"] { accent-color: var(--md-primary); width: 100%; }
+input[type="range"] { accent-color: var(--accent-a); width: 100%; }
 
 /* Lists */
 .list { display: flex; flex-direction: column; gap: 2px; }
@@ -301,7 +344,7 @@ input[type="range"] { accent-color: var(--md-primary); width: 100%; }
   border: none; border-radius: var(--md-shape-full); background: transparent; color: var(--md-on-surface-variant);
   font: 500 14px/20px var(--md-font); text-align: left; cursor: pointer; width: 100%;
 }
-.list-item.active { background: var(--md-secondary-container); color: var(--md-on-secondary-container); }
+.list-item.active { background: var(--accent-tint); color: var(--on-accent-tint); }
 .list-item .trailing { margin-left: auto; display: flex; align-items: center; gap: 2px; }
 .list-item .hover-only { opacity: 0; transition: opacity 0.1s; }
 .list-item:hover .hover-only, .list-item:focus-within .hover-only, .list-item.active .hover-only { opacity: 1; }
@@ -330,7 +373,7 @@ input[type="range"] { accent-color: var(--md-primary); width: 100%; }
 }
 .menu-item .icon { margin-top: 0; color: var(--md-on-surface-variant); }
 .menu-item small { display: block; color: var(--md-on-surface-variant); font-size: 12px; line-height: 16px; }
-.menu-item.on { background: color-mix(in srgb, var(--md-secondary-container) 60%, transparent); }
+.menu-item.on { background: var(--accent-tint); }
 .menu-divider { height: 1px; margin: 8px 0; background: var(--md-outline-variant); }
 .menu-label { padding: 8px 16px 4px; font: 500 12px/16px var(--md-font); color: var(--md-on-surface-variant); }
 /* An item with buttons at its end (MenuItem.actions), shown on hover or focus. */
@@ -383,8 +426,8 @@ input[type="range"] { accent-color: var(--md-primary); width: 100%; }
 :root[data-theme="dark"] .snackbar .btn { --fg: #0b57d0; }
 
 /* Progress */
-.progress { height: 4px; border-radius: 2px; background: var(--md-secondary-container); overflow: hidden; position: relative; }
-.progress::after { content: ""; position: absolute; inset: 0 60% 0 0; background: var(--md-primary); animation: indeterminate 1.4s infinite; border-radius: 2px; }
+.progress { height: 4px; border-radius: 2px; background: var(--accent-tint); overflow: hidden; position: relative; }
+.progress::after { content: ""; position: absolute; inset: 0 60% 0 0; background: var(--accent-grad); animation: indeterminate 1.4s infinite; border-radius: 2px; }
 @keyframes indeterminate { from { transform: translateX(-100%); } to { transform: translateX(250%); } }
 .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
 .pulse { animation: pulse 1.2s ease-in-out infinite; }
@@ -396,5 +439,6 @@ input[type="range"] { accent-color: var(--md-primary); width: 100%; }
 kbd { padding: 1px 6px; border-radius: 4px; background: var(--md-surface-container-highest); font-size: 12px; }
 
 @media (prefers-reduced-motion: reduce) {
+  .btn.filled:hover, .icon-btn.filled:hover { transform: none; }
   *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
 }

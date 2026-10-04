@@ -23,8 +23,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/retail-cortex/blitz/pkg/client"
 	"github.com/retail-cortex/blitz/pkg/config"
-	"github.com/retail-cortex/blitz/pkg/engine"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -58,7 +58,6 @@ func stdio(t *testing.T, in string) func() string {
 func runEnv(t *testing.T) string {
 	t.Helper()
 	fakeModel(t, isolate(t))
-	t.Setenv("BLITZ_SOCKET", filepath.Join(t.TempDir(), "none.sock"))
 	return t.TempDir()
 }
 
@@ -111,10 +110,7 @@ func TestRunSessionsAcrossRuns(t *testing.T) {
 	stdio(t, "")
 	_, err := runCLI(t, "-d", ws, "--name", "base", "first")
 	require.NoError(t, err)
-	e, err := engine.Open(context.Background(), mustConfig(t, ws), engine.Options{})
-	require.NoError(t, err)
-	before, err := e.ListSessions(true)
-	e.Close()
+	before, err := attached(t, ws).ListSessions(true)
 	require.NoError(t, err)
 	require.Len(t, before, 1)
 
@@ -123,12 +119,17 @@ func TestRunSessionsAcrossRuns(t *testing.T) {
 	_, err = runCLI(t, "-d", ws, "--no-session-persistence", "third")
 	require.NoError(t, err)
 
-	e, err = engine.Open(context.Background(), mustConfig(t, ws), engine.Options{})
+	after, err := attached(t, ws).ListSessions(true)
 	require.NoError(t, err)
-	defer e.Close()
-	after, err := e.ListSessions(true)
+	assert.Len(t, after, 2, "the fork is a new session; the unpersisted run (a service of its own) left none")
+}
+
+// attached is ws's workspace in the test's service.
+func attached(t *testing.T, ws string) *client.Remote {
+	t.Helper()
+	r, err := client.Attach(context.Background(), os.Getenv("BLITZ_SOCKET"), ws, nil)
 	require.NoError(t, err)
-	assert.Len(t, after, 2, "the fork is a new session; the unpersisted run left none")
+	return r
 }
 
 func mustConfig(t *testing.T, ws string) *config.Config {
@@ -177,7 +178,6 @@ func TestRunREPLOnStdin(t *testing.T) {
 // fails at once.
 func TestRunREPLWithoutAModel(t *testing.T) {
 	isolate(t)
-	t.Setenv("BLITZ_SOCKET", filepath.Join(t.TempDir(), "none.sock"))
 	out := stdio(t, "")
 	_, err := runCLI(t, "-d", t.TempDir(), "-i")
 	require.NoError(t, err, out())
@@ -188,17 +188,14 @@ func TestRunREPLWithoutAModel(t *testing.T) {
 // only noted.
 func TestRunProjectNotice(t *testing.T) {
 	fakeModel(t, isolate(t))
-	t.Setenv("BLITZ_SOCKET", filepath.Join(t.TempDir(), "none.sock"))
 	ws := projectDir(t)
 	out := stdio(t, "")
 	_, err := runCLI(t, "-d", ws, "hi")
 	require.NoError(t, err, out())
 	assert.Contains(t, out(), "waiting for your trust")
 
-	cfg := mustConfig(t, ws)
-	p, err := engine.ReviewProject(cfg)
-	require.NoError(t, err)
-	require.NoError(t, engine.TrustProject(cfg, p.Hash, true))
+	r := attached(t, ws)
+	require.NoError(t, r.TrustProject(r.ProjectSettings().Hash, true))
 	out = stdio(t, "")
 	_, err = runCLI(t, "-d", ws, "-i")
 	require.NoError(t, err, out())
@@ -209,7 +206,6 @@ func TestRunProjectNotice(t *testing.T) {
 // needs the "=": --worktree takes no value otherwise.)
 func TestRunInAWorktree(t *testing.T) {
 	fakeModel(t, isolate(t))
-	t.Setenv("BLITZ_SOCKET", filepath.Join(t.TempDir(), "none.sock"))
 	repo := gitRepo(t)
 	out := stdio(t, "")
 	_, err := runCLI(t, "-d", repo, "--worktree=try", "hi")
@@ -282,10 +278,7 @@ func TestRunMoreEntryPoints(t *testing.T) {
 	require.NoError(t, err, out())
 	assert.Contains(t, out(), `"type":"result"`)
 
-	e, err := engine.Open(context.Background(), mustConfig(t, ws), engine.Options{})
-	require.NoError(t, err)
-	list, err := e.ListSessions(true)
-	e.Close()
+	list, err := attached(t, ws).ListSessions(true)
 	require.NoError(t, err)
 	require.NotEmpty(t, list)
 	other := t.TempDir()
