@@ -39,6 +39,27 @@
 .shell { overflow: hidden; }
 .status-bar .menu-anchor { display: flex; height: 100%; }
 .menu.wide-menu { min-width: 340px; }
+/* The chat history (HistoryMenu): search and filter on top, rows with a
+   checkbox, and the delete bar at the bottom once some are ticked. */
+.menu.history-menu { display: flex; flex-direction: column; width: 400px; max-width: calc(100vw - 32px); max-height: 70vh; padding: 0; overflow: hidden; }
+.history-head { display: flex; flex-direction: column; gap: 8px; padding: 12px 12px 4px; }
+.history-search { position: relative; display: flex; align-items: center; }
+.history-search .icon { position: absolute; left: 10px; color: var(--md-on-surface-variant); pointer-events: none; }
+.history-search .input { width: 100%; padding-left: 34px; }
+.history-head .seg { align-self: flex-start; }
+.history-all { display: flex; align-items: center; gap: 10px; cursor: pointer; }
+.history-menu input[type="checkbox"] { flex: none; width: 16px; height: 16px; margin: 0; accent-color: var(--accent-a); cursor: pointer; }
+.history-menu input[type="checkbox"]:disabled { opacity: 0.35; cursor: default; }
+.history-list { flex: 1; min-height: 0; overflow-y: auto; padding-bottom: 8px; }
+.history-row { position: relative; display: flex; align-items: center; padding-left: 16px; }
+.history-row.on, .history-row.ticked { background: var(--accent-tint); }
+.history-row .menu-item { flex: 1; min-width: 0; padding-left: 12px; padding-right: 48px; background: transparent; }
+.history-row .menu-item > span { min-width: 0; overflow-wrap: anywhere; }
+.history-row:hover:not(.on):not(.ticked) { background: color-mix(in srgb, var(--md-on-surface) 6%, transparent); }
+.history-delete { position: absolute; right: 8px; opacity: 0; }
+.history-row:hover .history-delete, .history-row:focus-within .history-delete { opacity: 1; }
+.history-foot { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-top: 1px solid var(--md-outline-variant); background: var(--md-surface-container-high, var(--md-surface-container)); }
+.delete-list { max-height: 160px; margin: 8px 0 0; padding-left: 20px; overflow-y: auto; }
 .sb-item { display: inline-flex; align-items: center; gap: 4px; height: 100%; padding: 0 6px; min-width: 0; font: inherit; color: inherit; }
 .sb-item .icon.sm { width: 14px; height: 14px; flex: none; }
 .sb-button { border: none; background: none; cursor: pointer; border-radius: var(--md-shape-xs); }
@@ -583,6 +604,9 @@ body.resizing iframe, body.resizing .cm-editor { pointer-events: none; }
 :root:not([data-theme="dark"]) :is(.tree-icon, .tree-twisty) { color: #3c4043; }
 :root:not([data-theme="dark"]) .tree-row:is(.git-modified, .git-renamed) :is(.tree-name, .git-letter) { color: #8a4500; }
 :root:not([data-theme="dark"]) .tree-row:is(.git-added, .git-untracked) :is(.tree-name, .git-letter) { color: #146c2e; }
+/* A staged change: the letter on a tinted chip; partly staged, an outlined one. */
+.git-letter.staged-all, .git-letter.staged-some { border-radius: 4px; box-shadow: inset 0 0 0 1px currentColor; }
+.git-letter.staged-all { background: color-mix(in srgb, currentColor 18%, transparent); }
 .git-dot { flex: none; width: 6px; height: 6px; margin: 0 4px; border-radius: 50%; background: var(--hl-number); }
 .tree-row.naming { cursor: default; }
 .tree-row.naming:hover { background: none; }

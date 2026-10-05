@@ -88,3 +88,21 @@ func TestListAllSessions(t *testing.T) {
 	require.Len(t, all, 1)
 	assert.Equal(t, s.ID, all[0].ID)
 }
+
+// A session's origin, kept in its record; a worker's run saved before
+// sessions kept one is known by its title.
+func TestSessionOrigin(t *testing.T) {
+	for _, tt := range []struct {
+		name, origin, title, want string
+	}{
+		{"a chat", "", "Fix the cart", ""},
+		{"a worker's run", session.OriginWorker, "⏰ deps 2026-10-04 09:00", session.OriginWorker},
+		{"a worker's run, renamed", session.OriginWorker, "Dependency report", session.OriginWorker},
+		{"a worker's run from before origins", "", "⏰ deps 2026-10-01 09:00", session.OriginWorker},
+		{"a detached run", session.OriginBackground, "check", session.OriginBackground},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, sessionInfo(&session.SessionRecord{Origin: tt.origin, Title: tt.title}).Origin)
+		})
+	}
+}

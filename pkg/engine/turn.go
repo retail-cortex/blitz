@@ -92,6 +92,7 @@ func (w *Workspace) RunDetached(ctx context.Context, t api.Turn, started func(se
 	if err != nil {
 		return api.TurnResult{}, err
 	}
+	rec.Origin = session.OriginBackground
 	if started != nil {
 		started(rec.ID)
 	}

@@ -18,6 +18,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"os/exec"
 	"slices"
 	"strings"
@@ -80,8 +81,11 @@ func (w *Workspace) SessionDiff() string {
 	return w.tools.Checkpoints().SessionDiff(active.ID)
 }
 
-// GitDiff runs git diff (stat and patch) in the workspace. color keeps
-// git's terminal colours. On failure the output holds git's message.
+// GitDiff is every change in the workspace since the last commit (stat
+// and patch): staged and not, and the files git doesn't track yet as new
+// files (at most maxUntrackedDiffs of them). Before the first commit, it's
+// everything staged and not. color keeps git's terminal colours. On
+// failure the output holds git's message.
 //
 // The agent can write the repository's .git/config, and git diff would run
 // commands named there (fsmonitor, external diff, textconv and filter
@@ -91,14 +95,48 @@ func (w *Workspace) GitDiff(ctx context.Context, color bool) (string, error) {
 	if color {
 		ui = "always"
 	}
-	args := []string{"-c", "color.ui=" + ui, "-c", "core.fsmonitor=false"}
-	args = append(args, noFilters(ctx, w.Dir())...)
-	args = append(args, "diff", "--no-ext-diff", "--no-textconv", "--stat", "--patch")
-	cmd := exec.CommandContext(ctx, "git", args...)
-	cmd.Dir = w.Dir()
-	out, err := cmd.CombinedOutput()
-	return string(out), err
+	base := []string{"-c", "color.ui=" + ui, "-c", "core.fsmonitor=false"}
+	base = append(base, noFilters(ctx, w.Dir())...)
+	git := func(args ...string) ([]byte, error) {
+		cmd := exec.CommandContext(ctx, "git", append(slices.Clone(base), args...)...)
+		cmd.Dir = w.Dir()
+		return cmd.CombinedOutput()
+	}
+	// Against the last commit; before the first, against an empty tree.
+	since := "HEAD"
+	if _, err := git("rev-parse", "--verify", "--quiet", "HEAD"); err != nil {
+		empty, err := git("hash-object", "-t", "tree", os.DevNull)
+		if err != nil {
+			return string(empty), err
+		}
+		since = strings.TrimSpace(string(empty))
+	}
+	out, err := git("diff", "--no-ext-diff", "--no-textconv", "--stat", "--patch", since)
+	if err != nil {
+		return string(out), err
+	}
+	untracked, lerr := git("ls-files", "--others", "--exclude-standard", "-z")
+	if lerr != nil {
+		return string(out), nil
+	}
+	paths := strings.Split(strings.TrimRight(string(untracked), "\x00"), "\x00")
+	for i, p := range paths {
+		if p == "" {
+			continue
+		}
+		if i == maxUntrackedDiffs {
+			out = append(out, fmt.Sprintf("\n(%d more new files not shown)\n", len(paths)-i)...)
+			break
+		}
+		// --no-index exits 1 when the files differ, as a new file does.
+		d, _ := git("diff", "--no-ext-diff", "--no-textconv", "--no-index", "--", os.DevNull, p)
+		out = append(out, d...)
+	}
+	return string(out), nil
 }
+
+// maxUntrackedDiffs is how many new files GitDiff shows.
+var maxUntrackedDiffs = 50
 
 // GitStatus reads the workspace's branch and changed files.
 func (w *Workspace) GitStatus(ctx context.Context) (api.GitStatus, error) {

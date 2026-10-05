@@ -40,7 +40,7 @@ func timestamp(t time.Time) *timestamppb.Timestamp {
 func sessionMsg(s api.SessionInfo) *pb.SessionInfo {
 	out := &pb.SessionInfo{
 		Id: s.ID, Title: s.Title, Agent: s.Agent, Workspace: s.Workspace, Snapshot: s.Snapshot, From: s.From,
-		MovedFrom: s.MovedFrom, MovedAt: int32(s.MovedAt),
+		MovedFrom: s.MovedFrom, MovedAt: int32(s.MovedAt), Origin: s.Origin,
 		MessageCount: int32(s.MessageCount), Created: timestamp(s.Created), Updated: timestamp(s.Updated),
 	}
 	for _, m := range s.Messages {

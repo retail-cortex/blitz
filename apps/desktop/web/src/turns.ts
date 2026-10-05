@@ -223,26 +223,50 @@ export interface FileDiff {
   lines: { kind: "add" | "del" | "hunk" | "ctx" | "meta"; text: string }[];
 }
 
-/** Splits a unified diff into files, counting what each adds and removes. */
+/** What git's per-file header says, which the diff's lines don't. */
+const gitHeader = /^(new file mode|deleted file mode|old mode|new mode|similarity index|dissimilarity index|rename from|rename to|copy from|copy to|index) /;
+
+/**
+ * Splits a unified diff into files, counting what each adds and removes.
+ * Git's "diff --git" header starts a file, so one with no lines (binary,
+ * or only its mode changed) still shows; a summary before the first file
+ * is skipped.
+ */
 export function parseDiff(diff: string): FileDiff[] {
   const files: FileDiff[] = [];
   let cur: FileDiff | undefined;
+  let header = false; // in a "diff --git" header, before its first hunk
   const lines = diff.replace(/\n$/, "").split("\n");
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
+    if (line.startsWith("diff --git ")) {
+      cur = { path: line.match(/ b\/(.*)$/)?.[1] ?? line.slice(11), added: 0, removed: 0, lines: [] };
+      files.push(cur);
+      header = true;
+      continue;
+    }
     if (line.startsWith("--- ") && lines[i + 1]?.startsWith("+++ ")) {
       const to = lines[i + 1].slice(4).replace(/^b\//, "").split("\t")[0];
       const from = line.slice(4).replace(/^a\//, "").split("\t")[0];
-      cur = { path: to === "/dev/null" ? from : to, added: 0, removed: 0, lines: [] };
-      files.push(cur);
+      const path = to === "/dev/null" ? from : to;
+      if (header && cur) cur.path = path;
+      else files.push((cur = { path, added: 0, removed: 0, lines: [] }));
+      header = false;
       i++;
       continue;
     }
-    if (line.startsWith("diff --git") || line.startsWith("index ") || line.startsWith("# ")) {
-      if (line.startsWith("# ")) files.push({ path: line.slice(2).split(":")[0], added: 0, removed: 0, lines: [{ kind: "meta", text: line.slice(2) }] });
+    if (header && gitHeader.test(line)) continue;
+    if (header && line.startsWith("Binary files ")) {
+      cur?.lines.push({ kind: "meta", text: line });
+      continue;
+    }
+    if (line.startsWith("# ")) {
+      files.push({ path: line.slice(2).split(":")[0], added: 0, removed: 0, lines: [{ kind: "meta", text: line.slice(2) }] });
+      cur = undefined;
       continue;
     }
     if (!cur) continue;
+    header = false;
     if (line.startsWith("@@")) cur.lines.push({ kind: "hunk", text: line });
     else if (line.startsWith("+")) {
       cur.added++;

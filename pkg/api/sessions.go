@@ -35,8 +35,11 @@ type SessionInfo struct {
 	From string
 	// MovedFrom is the workspace /cd moved the session from, and MovedAt
 	// the number of messages it had then ("" and 0 if it never moved).
-	MovedFrom    string
-	MovedAt      int
+	MovedFrom string
+	MovedAt   int
+	// Origin is what started the session: "worker" (a worker's run),
+	// "background" (blitz --bg), or "" for a chat.
+	Origin       string
 	MessageCount int
 	Created      time.Time
 	Updated      time.Time

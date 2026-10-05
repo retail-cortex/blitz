@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -27,6 +28,7 @@ import (
 	"github.com/retail-cortex/blitz/pkg/api"
 	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/config/configtest"
+	"github.com/retail-cortex/blitz/pkg/engine/session"
 	"github.com/retail-cortex/blitz/pkg/engine/workers"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -156,6 +158,11 @@ func TestRunWorkerEnforcesPermissions(t *testing.T) {
 	assert.Len(t, runs, 1, "recorded runs %+v %v", runs, err)
 	assert.Equal(t, run.ID, runs[0].ID, "recorded runs %+v %v", runs, err)
 	assert.Equal(t, []string{"reports/deps.md"}, runs[0].Files, "the run's files are recorded")
+	list, err := w.ListSessions(false)
+	require.NoError(t, err)
+	i := slices.IndexFunc(list, func(s api.SessionInfo) bool { return s.ID == run.SessionID })
+	require.GreaterOrEqual(t, i, 0, "the run's session is listed")
+	assert.Equal(t, session.OriginWorker, list[i].Origin, "listed as a worker's run")
 
 	// Its change is its own: not the sessions' /undo, but the run's undo
 	// (BL-WK-01, BL-WK-02).

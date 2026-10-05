@@ -24,6 +24,7 @@ import (
 	"github.com/retail-cortex/blitz/pkg/api"
 	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/engine/runtime"
+	"github.com/retail-cortex/blitz/pkg/engine/session"
 	"github.com/retail-cortex/blitz/pkg/images"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -210,6 +211,7 @@ func TestRunDetached(t *testing.T) {
 	rec, err := w.storage.Get(started)
 	require.NoError(t, err)
 	assert.Len(t, rec.Messages, 2)
+	assert.Equal(t, session.OriginBackground, rec.Origin)
 	assert.Equal(t, 1, w.UsageOf(started).Calls)
 	assert.NoError(t, w.DeleteSession(context.Background(), started), "still held by the run's storage")
 }

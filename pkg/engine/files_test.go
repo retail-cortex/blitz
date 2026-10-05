@@ -395,6 +395,17 @@ func TestGitState(t *testing.T) {
 	}
 }
 
+// How much of each porcelain status is staged.
+func TestStagedState(t *testing.T) {
+	for xy, want := range map[string]string{
+		"M ": "all", "A ": "all", "D ": "all", "R ": "all",
+		"MM": "some", "AM": "some", "RM": "some",
+		" M": "", " D": "", "??": "", "UU": "", "AA": "", "DD": "", "AU": "",
+	} {
+		t.Run(xy, func(t *testing.T) { assert.Equal(t, want, stagedState(xy)) })
+	}
+}
+
 // In a repository, finding files asks git, which also lists renamed
 // files once; files deleted from disk but still in the index, and hidden
 // ones, aren't found. A limit of 0 means the default, and results stop at

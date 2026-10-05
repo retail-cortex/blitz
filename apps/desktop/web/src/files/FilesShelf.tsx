@@ -46,7 +46,7 @@ import { addToContext } from "../events";
 import { files } from "../api";
 import { message } from "../errors";
 import { FileKind, GitAction, type FileEntry } from "../gen/blitz/v1/file_pb";
-import { gitActions, gitKeys } from "./gitMenu";
+import { gitActions, gitKeys, stagedKey } from "./gitMenu";
 import { t } from "../i18n";
 import { Button, ContextMenu, Dialog, Icon, IconButton, useSnackbar, type MenuEntry } from "../ui/controls";
 import { ResizeHandle } from "../ui/ResizeHandle";
@@ -349,7 +349,7 @@ export function FilesShelf({
         { label: t("desktop.files.rename"), icon: mdiRenameOutline, detail: "F2", onSelect: () => setNaming({ kind: "rename", path: e.path }) },
         { label: t("desktop.files.delete"), icon: mdiDeleteOutline, danger: true, onSelect: () => setDeleting(e) },
       );
-      const git = gitActions({ folder: isFolder(e), git: e.git }, repo);
+      const git = gitActions({ folder: isFolder(e), git: e.git, staged: e.staged }, repo);
       if (advanced && git.length > 0) {
         items.push("divider", { heading: t("desktop.files.git.heading") });
         for (const a of git) {
@@ -511,7 +511,11 @@ export function FilesShelf({
                   <span className="ellipsis tree-name">{e.name}</span>
                   {e.kind === FileKind.SYMLINK && <Icon path={mdiLinkVariant} size="sm" className="muted" />}
                   {e.agentRule && <Icon path={mdiLockOutline} size="sm" className="muted" />}
-                  {e.git === "changed" ? <span className="git-dot" /> : e.git && <span className="git-letter">{gitLetters[e.git] ?? ""}</span>}
+                  {e.git === "changed" ? <span className="git-dot" /> : e.git && (
+                      <span className={`git-letter ${e.staged ? `staged-${e.staged}` : ""}`} title={t(stagedKey(e.staged))}>
+                        {gitLetters[e.git] ?? ""}
+                      </span>
+                    )}
                 </button>
               )}
               {isFolder(e) && open && newRow(e.path, depth + 1)}

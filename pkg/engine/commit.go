@@ -82,7 +82,7 @@ func (w *Workspace) DraftCommit(ctx context.Context, stageAll bool) (CommitDraft
 	draft := CommitDraft{Files: files}
 	msg, err := w.askCommitMessage(ctx)
 	if err != nil {
-		draft.Problem = err.Error()
+		draft.Problem = ModelErrorSummary(err, w.cfg)
 		return draft, nil
 	}
 	draft.Message = msg

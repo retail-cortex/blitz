@@ -134,6 +134,47 @@ describe("parseDiff", () => {
     const deleted = parseDiff("--- a/gone.txt\n+++ /dev/null\n@@ -1 +0,0 @@\n-bye\n");
     expect(deleted[0].path).toBe("gone.txt");
   });
+  it("reads git's headers: a summary, new, binary, renamed and deleted files", () => {
+    const d = [
+      " a.txt | 2 +-",
+      " 1 file changed",
+      "",
+      "diff --git a/a.txt b/a.txt",
+      "index 1111111..2222222 100644",
+      "--- a/a.txt",
+      "+++ b/a.txt",
+      "@@ -1 +1 @@",
+      "-one",
+      "+two",
+      "diff --git a/n.txt b/n.txt",
+      "new file mode 100644",
+      "index 0000000..3333333",
+      "--- /dev/null",
+      "+++ b/n.txt",
+      "@@ -0,0 +1 @@",
+      "+new",
+      "diff --git a/logo.png b/logo.png",
+      "new file mode 100644",
+      "index 0000000..4444444",
+      "Binary files /dev/null and b/logo.png differ",
+      "diff --git a/old.txt b/moved.txt",
+      "similarity index 100%",
+      "rename from old.txt",
+      "rename to moved.txt",
+      "diff --git a/k.txt b/k.txt",
+      "deleted file mode 100644",
+      "index 5555555..0000000",
+      "--- a/k.txt",
+      "+++ /dev/null",
+      "@@ -1 +0,0 @@",
+      "-gone",
+      "",
+    ].join("\n");
+    const files = parseDiff(d);
+    expect(files.map((f) => `${f.path} +${f.added} -${f.removed}`)).toEqual(["a.txt +1 -1", "n.txt +1 -0", "logo.png +0 -0", "moved.txt +0 -0", "k.txt +0 -1"]);
+    expect(files[1].lines.map((l) => l.kind)).toEqual(["hunk", "add"]);
+    expect(files[2].lines).toEqual([{ kind: "meta", text: "Binary files /dev/null and b/logo.png differ" }]);
+  });
 });
 
 describe("turnAnswers", () => {
