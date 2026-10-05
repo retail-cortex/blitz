@@ -26,7 +26,6 @@ import (
 	"github.com/retail-cortex/blitz/pkg/api"
 	"github.com/retail-cortex/blitz/pkg/client"
 	"github.com/retail-cortex/blitz/pkg/config"
-	"github.com/retail-cortex/blitz/pkg/engine"
 	"github.com/retail-cortex/blitz/pkg/i18n"
 	"github.com/retail-cortex/blitz/pkg/socket"
 )
@@ -105,60 +104,111 @@ func loadConfig(f *globalFlags) (*config.Config, error) {
 type backendOptions struct {
 	local, streaming bool
 	// trustProject trusts the project settings for this run
-	// (--trust-project), in a workspace opened here.
+	// (--trust-project), in a service of its own.
 	trustProject bool
-	// appendPrompt is added to the agent's instructions (a local run).
+	// appendPrompt is added to the agent's instructions (a run of its own).
 	appendPrompt string
+	// sessionDir keeps this run's sessions elsewhere
+	// (--no-session-persistence: a folder removed at exit).
+	sessionDir string
+	// flags are the run's flags: --config, and --model, --agent, --agency,
+	// --plugin-dir and --add-dir, which make it a run of its own.
+	flags *globalFlags
 	// askTrust asks about project settings waiting for a decision and
 	// returns "trust", "decline" or "" (no answer); nil when nobody can
 	// be asked.
 	askTrust func(api.ProjectSettings) string
 }
 
-// openBackend attaches to the workspace in the Blitz service when one
-// is running (unless local), and otherwise opens it in this process. It
-// also returns the interface's translation catalogs, which are always this
-// process's, and whether it attached. Project settings waiting for trust
-// are asked about first: before the workspace opens here, or in the
-// service, which reopens it with the answer.
+// private reports whether the run's settings are its own, so it needs a
+// service of its own rather than the shared one.
+func (o backendOptions) private() bool {
+	g := o.flags
+	if g == nil {
+		g = &globalFlags{}
+	}
+	return o.local || o.trustProject || o.appendPrompt != "" || o.sessionDir != "" ||
+		g.model != "" || g.agent != "" || g.agency != "" || len(g.pluginDirs) > 0 || len(g.addDirs) > 0
+}
+
+// serviceOptions are the private service's settings for this run.
+func (o backendOptions) serviceOptions(cfg *config.Config) serviceOptions {
+	g := o.flags
+	if g == nil {
+		g = &globalFlags{}
+	}
+	so := serviceOptions{Config: g.config, Model: g.model, Agent: g.agent, Agency: g.agency, SessionDir: o.sessionDir, TrustProject: o.trustProject, AppendSystemPrompt: o.appendPrompt}
+	for _, d := range g.pluginDirs {
+		if abs, err := filepath.Abs(config.ExpandHome(d)); err == nil {
+			so.PluginDirs = append(so.PluginDirs, abs)
+		}
+	}
+	for _, d := range g.addDirs {
+		if abs, err := filepath.Abs(config.ExpandHome(d)); err == nil {
+			so.AddDirs = append(so.AddDirs, abs)
+		}
+	}
+	return so
+}
+
+// openBackend attaches to the workspace in a Blitz service: the per-user
+// one (started when it isn't running), or one started for this run alone
+// when its settings are its own. It also returns the interface's
+// translation catalogs, which are always this process's, and whether it
+// attached to the shared service. Project settings waiting for trust are
+// asked about once attached; the service reopens the workspace with the
+// answer.
 func openBackend(ctx context.Context, cfg *config.Config, o backendOptions, warn func(string)) (api.Backend, *i18n.Bundle, bool, error) {
-	sock := socket.DefaultSocket()
-	if !o.local && len(cfg.Plugins.Dirs) == 0 && socket.Running(sock) { // --plugin-dir runs here
-		r, err := client.Attach(ctx, sock, cfg.Tools.WorkspaceDir, warn)
-		if err != nil {
-			if errors.Is(err, api.ErrSandboxUnavailable) { // --local would need it too
-				return nil, nil, false, fmt.Errorf("attaching to the Blitz service at %s: %w", sock, err)
-			}
-			return nil, nil, false, fmt.Errorf("attaching to the Blitz service at %s: %w (--local runs without it)", sock, err)
+	locales := i18n.Setup(config.ExpandHome(cfg.UI.LocalesDir), cfg.UI.Locale, warn)
+	private := o.private()
+	var sock string
+	var err error
+	if private {
+		if sock, err = startPrivate(ctx, o.serviceOptions(cfg)); err != nil {
+			return nil, nil, false, fmt.Errorf("starting a Blitz service for this run: %w", err)
 		}
-		locales := engine.SetupLocale(cfg, warn)
-		if o.trustProject {
-			warn(i18n.T("project.trust_run_attached"))
-		}
-		if p := r.ProjectSettings(); o.askTrust != nil && tui.NeedsTrustDecision(p) {
-			if d := o.askTrust(p); d != "" {
-				if err := r.TrustProject(p.Hash, d == "trust"); err != nil {
-					warn(err.Error())
-				}
-			}
-		}
-		return r, locales, true, nil
-	}
-	if o.askTrust != nil && !o.trustProject {
-		if p, err := engine.ReviewProject(cfg); err == nil && tui.NeedsTrustDecision(p) {
-			if d := o.askTrust(p); d != "" {
-				if err := engine.TrustProject(cfg, p.Hash, d == "trust"); err != nil {
-					warn(err.Error())
-				}
-			}
-		}
-	}
-	w, err := engine.Open(ctx, cfg, engine.Options{Streaming: o.streaming, Warn: warn, TrustProject: o.trustProject, AppendSystemPrompt: o.appendPrompt})
-	if errors.Is(err, api.ErrWorkspaceBusy) {
-		return nil, nil, false, withCode(exitUsage, fmt.Errorf("%w (another blitz has it open)", err))
-	}
-	if err != nil {
+	} else if sock, err = ensureService(ctx); err != nil {
 		return nil, nil, false, err
 	}
-	return w, w.Locales(), false, nil
+	r, err := client.Attach(ctx, sock, cfg.Tools.WorkspaceDir, warn)
+	if private && errors.Is(err, api.ErrWorkspaceBusy) && releaseShared(ctx, cfg.Tools.WorkspaceDir) {
+		r, err = client.Attach(ctx, sock, cfg.Tools.WorkspaceDir, warn) // the shared service let it go
+	}
+	switch {
+	case errors.Is(err, api.ErrWorkspaceBusy):
+		return nil, nil, false, withCode(exitUsage, fmt.Errorf("%w (another blitz has it open)", err))
+	case err != nil:
+		return nil, nil, false, fmt.Errorf("attaching to the Blitz service at %s: %w", sock, err)
+	}
+	if p := r.ProjectSettings(); o.askTrust != nil && !o.trustProject && tui.NeedsTrustDecision(p) {
+		if d := o.askTrust(p); d != "" {
+			if err := r.TrustProject(p.Hash, d == "trust"); err != nil {
+				warn(err.Error())
+			}
+		}
+	}
+	return r, locales, !private, nil
+}
+
+// releaseShared asks the shared service, when it runs, to close the
+// workspace in dir so a run of its own can open it; false when it can't
+// (a turn is running there, or it isn't the shared service that has it).
+func releaseShared(ctx context.Context, dir string) bool {
+	sock := socket.DefaultSocket()
+	return socket.Running(sock) && client.Release(ctx, sock, dir) == nil
+}
+
+// attachWorkspace attaches to the workspace (--dir, else the current
+// directory) in the Blitz service, started when it isn't running.
+func attachWorkspace(ctx context.Context, g *globalFlags) (*client.Remote, error) {
+	cfg, err := loadConfig(g)
+	if err != nil {
+		return nil, err
+	}
+	dir := cfg.Tools.WorkspaceDir
+	sock, err := ensureService(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return client.Attach(ctx, sock, dir, nil)
 }

@@ -15,12 +15,13 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"strings"
 
+	"github.com/retail-cortex/blitz/pkg/client"
 	"github.com/retail-cortex/blitz/pkg/config"
-	"github.com/retail-cortex/blitz/pkg/engine/tools"
 	"github.com/spf13/cobra"
 )
 
@@ -122,15 +123,22 @@ always asks.`,
 			if len(args) == 2 {
 				sample = args[1]
 			}
-			c, err := tools.CheckPermissionRule(tools.Effect(effect), args[0], sample)
+			sock, err := ensureService(cmd.Context())
 			if err != nil {
-				return withCode(exitUsage, err)
+				return err
+			}
+			c, err := client.AttachSettings(sock).CheckPermission(cmd.Context(), effect, args[0], sample)
+			if err != nil {
+				return err
+			}
+			if c.Error != "" {
+				return withCode(exitUsage, errors.New(c.Error))
 			}
 			out := cmd.OutOrStdout()
 			fmt.Fprintf(out, "%s %s: %s\n", effect, c.Rule, describeRule(c))
 			if c.Tested {
 				fmt.Fprintf(out, "  %q: %s\n", sample, map[bool]string{true: "matches", false: "doesn't match"}[c.Matches])
-				if c.Redirect != "" && c.Matches && c.Kind == tools.RuleShell && effect == "allow" {
+				if c.Redirect != "" && c.Matches && c.Kind == "shell" && effect == "allow" {
 					fmt.Fprintf(out, "  but it writes %s through a redirection, so it still asks\n", c.Redirect)
 				}
 			}
@@ -173,13 +181,13 @@ always asks.`,
 }
 
 // describeRule says how a checked rule matches.
-func describeRule(c tools.RuleCheck) string {
+func describeRule(c client.RuleCheck) string {
 	switch c.Form {
-	case tools.FormPrefix:
+	case "prefix":
 		return fmt.Sprintf("the command %q with any arguments", c.Pattern)
-	case tools.FormGlob:
+	case "glob":
 		return fmt.Sprintf("commands matching %q (* is any text)", c.Pattern)
-	case tools.FormRegex:
+	case "regex":
 		return fmt.Sprintf("commands the regular expression %q matches in full", strings.TrimPrefix(c.Pattern, "re:"))
 	case "path":
 		return fmt.Sprintf("paths matching %q, and what's under them", c.Pattern)

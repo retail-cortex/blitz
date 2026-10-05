@@ -46,7 +46,6 @@ func TestAddDir(t *testing.T) {
 
 func TestWorkersUndoUnknownRun(t *testing.T) {
 	isolate(t)
-	t.Setenv("BLITZ_SOCKET", filepath.Join(t.TempDir(), "none.sock"))
 	out, err := runCLI(t, "-d", t.TempDir(), "workers", "undo", "20260930T000000-nope")
 	assert.Equal(t, exitUsage, exitCodeFor(err), "%v\n%s", err, out)
 	assert.ErrorContains(t, err, "nothing to undo")
@@ -71,7 +70,6 @@ func TestLoadConfigOverrides(t *testing.T) {
 // A workspace that can't open here is the run's error.
 func TestOpenBackendFails(t *testing.T) {
 	home := isolate(t)
-	t.Setenv("BLITZ_SOCKET", filepath.Join(t.TempDir(), "none.sock"))
 	require.NoError(t, os.MkdirAll(filepath.Join(home, ".blitz"), 0o700))
 	require.NoError(t, os.WriteFile(filepath.Join(home, ".blitz", ".env.toml"), []byte("[permissions]\nallow = [\"nonsense(\"]\n"), 0o600))
 	stdio(t, "")

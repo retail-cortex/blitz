@@ -38,9 +38,11 @@ libs='kind("go_library", %s)'
 # shellcheck disable=SC2059
 {
 	empty "front ends and the contract don't reach the engine" \
-		"$(printf "$libs" 'deps(kind("go_library", //apps/cli/internal/tui/... + //apps/desktop/... + //pkg/api/... + //pkg/client/... + //pkg/socket/...))') intersect //pkg/engine/..."
+		"$(printf "$libs" 'deps(kind("go_library", //apps/desktop/... + //pkg/api/... + //pkg/client/... + //pkg/socket/...))') intersect //pkg/engine/..."
 	empty "shared packages don't reach the apps" \
 		"$(printf "$libs" 'deps(kind("go_library", //pkg/...))') intersect //apps/..."
+	empty "the CLI doesn't reach the engine (every workspace runs in blitzd)" \
+		"$(printf "$libs" 'deps(kind("go_library", //apps/cli/...))') intersect //pkg/engine/..."
 	empty "the CLI doesn't reach the other apps" \
 		"$(printf "$libs" 'deps(kind("go_library", //apps/cli/...))') intersect (//apps/service/... + //apps/desktop/... + //apps/tray/...)"
 	empty "the service doesn't reach the other apps" \

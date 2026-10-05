@@ -87,6 +87,19 @@ func AttachHTTP(ctx context.Context, hc connect.HTTPClient, baseURL, dir string,
 	return r, nil
 }
 
+// Release asks the service on sock to close dir's workspace, so another
+// process can open it: refused (an error) while a turn runs there; nothing
+// to do when it isn't open (WorkspaceService.CloseWorkspace).
+func Release(ctx context.Context, sock, dir string) error {
+	abs, err := filepath.Abs(config.ExpandHome(dir))
+	if err != nil {
+		return err
+	}
+	c := pb.NewWorkspaceServiceClient(socket.Client(sock), socket.BaseURL)
+	_, err = c.CloseWorkspace(ctx, connect.NewRequest(&pb.CloseWorkspaceRequest{Workspace: abs}))
+	return fromAPI(err)
+}
+
 // failed reports a call Backend can't return an error from.
 func (r *Remote) failed(what string, err error) {
 	r.warn(fmt.Sprintf("%s: %v", what, fromAPI(err)))

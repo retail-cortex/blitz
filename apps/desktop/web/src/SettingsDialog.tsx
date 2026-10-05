@@ -39,7 +39,7 @@ import {
   mdiWeatherNight,
   mdiWhiteBalanceSunny,
 } from "@mdi/js";
-import { appVersion, cliStatus, installCLI, installService, restartService, serviceStatus, setTray, stopService, type CLIStatus, type ServiceStatus } from "./desktop";
+import { appVersion, cliStatus, installCLI, installService, reinstallCLI, restartService, serviceStatus, setTray, stopService, type CLIStatus, type ServiceStatus } from "./desktop";
 import { SandboxFixResult, sandboxDetail, useSandboxFix } from "./SandboxNotice";
 import { configChanged, showLicense } from "./events";
 import { checkService, settleTimeout, type ServiceCheck, waitForService, withTimeout } from "./serviceVersion";
@@ -481,7 +481,9 @@ function OSSandbox() {
 
 /**
  * The blitz command: whether a terminal finds it, and Install, which links
- * the app's onto the user's PATH when no blitz is there. Not in a browser.
+ * the app's onto the user's PATH when no blitz is there, or Reinstall when
+ * one is (another build's link, or dead links left on a developer's
+ * machine). Not in a browser.
  */
 function CommandLine() {
   const [status, setStatus] = useState<CLIStatus | undefined | null>(null); // null: checking
@@ -492,12 +494,13 @@ function CommandLine() {
     cliStatus().then(setStatus, (e) => setError(String(e)));
   }, []);
   if (status === undefined) return null;
-  const install = async () => {
+  const install = async (again: boolean) => {
     setBusy(true);
     setError("");
     try {
-      const done = await installCLI();
-      setNote(done.profile ? t("desktop.cli.installed_profile", { link: done.link, profile: done.profile }) : t("desktop.cli.installed", { link: done.link }));
+      const done = again ? await reinstallCLI() : await installCLI();
+      const linked = done.profile ? t("desktop.cli.installed_profile", { link: done.link, profile: done.profile }) : t("desktop.cli.installed", { link: done.link });
+      setNote(done.removed?.length ? `${linked} ${t("desktop.cli.removed", { links: done.removed.join(", ") })}` : linked);
       setStatus(await cliStatus());
     } catch (e) {
       setError(String(e));
@@ -518,9 +521,9 @@ function CommandLine() {
   return (
     <>
       <Setting title={t("desktop.cli")} detail={detail}>
-        {status && status.cli && !status.on_path && (
-          <Button small variant="tonal" disabled={busy} onClick={install}>
-            {t("desktop.service.install_short")}
+        {status && status.cli && (
+          <Button small variant="tonal" disabled={busy} onClick={() => void install(!!status.on_path)} title={status.on_path ? t("desktop.cli.reinstall_hint") : undefined}>
+            {status.on_path ? t("desktop.service.reinstall") : t("desktop.service.install_short")}
           </Button>
         )}
       </Setting>

@@ -60,7 +60,12 @@ const gitTimeout = 15 * time.Second
 // gitDo runs git in the workspace for an action, safely (see above), with
 // stdin if given, a time limit, and git's message in the error.
 func (w *Workspace) gitDo(ctx context.Context, stdin []byte, args ...string) ([]byte, error) {
-	ctx, cancel := context.WithTimeout(ctx, gitTimeout)
+	return w.gitDoFor(ctx, gitTimeout, stdin, args...)
+}
+
+// gitDoFor is gitDo with its own time limit (a commit runs hooks).
+func (w *Workspace) gitDoFor(ctx context.Context, timeout time.Duration, stdin []byte, args ...string) ([]byte, error) {
+	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	base := append([]string{"-c", "core.fsmonitor=false"}, noFilters(ctx, w.Dir())...)
 	cmd := exec.CommandContext(ctx, "git", append(base, args...)...)

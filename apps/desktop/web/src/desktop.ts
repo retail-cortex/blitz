@@ -48,6 +48,7 @@ export interface CLIStatus {
 export interface CLIInstall {
   link: string;
   profile: string;
+  removed?: string[]; // the dead blitz links a reinstall took off PATH
 }
 
 /** Whether the OS sandbox for the agent's commands works here (Linux; "unsupported" elsewhere). */
@@ -75,6 +76,7 @@ type Bound = {
   SandboxStatus(): Promise<SandboxStatus>;
   FixSandbox(): Promise<SandboxFix>;
   InstallCLI(): Promise<CLIInstall>;
+  ReinstallCLI(): Promise<CLIInstall>;
   StopService(pid: number): Promise<void>;
   RestartService(pid: number): Promise<void>;
   ChooseWorkspace(title: string): Promise<string>;
@@ -87,6 +89,7 @@ type Bound = {
   FileManager(): Promise<string>;
   Notify(title: string, body: string, dir: string): Promise<void>;
   SetUnsaved(u: { message: string; quit: string; cancel: string }): Promise<void>;
+  SetAppearance(theme: string): Promise<void>;
   License(which: string): Promise<string>;
   PendingLinks(): Promise<DeepLink[] | null>;
   PrintPDF(html: string, pageSize: string): Promise<string>;
@@ -138,6 +141,8 @@ export const fixSandbox = () => app().FixSandbox();
 export const cliStatus = async () => (inApp() ? app().CLIStatus() : undefined);
 /** Puts the app's blitz on the user's PATH (a no-op when one is there already). */
 export const installCLI = () => app().InstallCLI();
+/** Links this app's blitz again: dead links off PATH, the one found pointed at this app's. */
+export const reinstallCLI = () => app().ReinstallCLI();
 /** Stops the running service: its login item, else process pid (0: unknown). */
 export const stopService = (pid: number) => app().StopService(pid);
 /** Stops the running service and starts the blitzd that goes with this app. */
@@ -235,6 +240,15 @@ export async function notifyNative(title: string, body: string, dir: string): Pr
  */
 export function setUnsaved(message: string, quit: string, cancel: string) {
   if (inApp()) app().SetUnsaved({ message, quit, cancel }).catch(() => {});
+}
+
+/**
+ * Gives the window the theme the user chose, so macOS's translucent window
+ * blurs in it rather than in the system's; "system" follows the system
+ * again (nothing in a browser).
+ */
+export function setAppearance(theme: "system" | "light" | "dark") {
+  if (inApp()) app().SetAppearance(theme).catch(() => {});
 }
 
 /** Which license text: the NOTICE, the Apache License, or the third-party notices. */

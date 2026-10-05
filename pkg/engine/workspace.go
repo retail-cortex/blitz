@@ -40,6 +40,7 @@ import (
 	"github.com/retail-cortex/blitz/pkg/engine/workers"
 	"github.com/retail-cortex/blitz/pkg/i18n"
 	"github.com/retail-cortex/blitz/pkg/images"
+	"github.com/retail-cortex/blitz/pkg/observability"
 	"github.com/retail-cortex/blitz/pkg/plugins"
 	"github.com/retail-cortex/blitz/pkg/redact"
 	"google.golang.org/adk/v2/model"
@@ -561,34 +562,12 @@ func agentModelRefs(cfg *config.Config, reg *agents.Registry, warn func(string))
 // SetupLocale loads translation catalogs (built in, then ui.locales_dir) and
 // activates ui.locale for the process.
 func SetupLocale(cfg *config.Config, warn func(string)) *i18n.Bundle {
-	b, errs := i18n.NewBundle(config.ExpandHome(cfg.UI.LocalesDir))
-	for _, err := range errs {
-		warn(err.Error())
-	}
-	locale := cfg.UI.Locale
-	if locale == "" {
-		locale = i18n.DefaultLocale
-	}
-	tag, err := b.Resolve(locale)
-	if err != nil {
-		warn(fmt.Sprintf("ui.locale %q is not a language code; using %s", cfg.UI.Locale, i18n.DefaultLocale))
-		tag, _ = b.Resolve(i18n.DefaultLocale)
-	}
-	i18n.SetCurrent(b.Localizer(tag))
-	return b
+	return i18n.Setup(config.ExpandHome(cfg.UI.LocalesDir), cfg.UI.Locale, warn)
 }
 
 // SecretRedactor masks configured credentials and the values of scrubbed
 // environment variables in audit entries, logs and telemetry.
-func SecretRedactor(cfg *config.Config) *redact.Redactor {
-	secrets := []string{cfg.LLM.Gemini.APIKey, cfg.LLM.OpenAI.APIKey, cfg.LLM.Anthropic.APIKey, cfg.Web.SearchAPIKey}
-	for _, s := range cfg.MCP.Servers {
-		for _, v := range s.Env {
-			secrets = append(secrets, v)
-		}
-	}
-	return redact.FromEnv(cfg.Sandbox.ScrubEnv, secrets...)
-}
+func SecretRedactor(cfg *config.Config) *redact.Redactor { return observability.SecretRedactor(cfg) }
 
 // ModelErrorSummary makes a model error safe and readable: some SDK errors
 // embed their whole client config, including the API key, and most need

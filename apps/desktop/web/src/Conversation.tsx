@@ -1095,7 +1095,7 @@ function SessionBar({
               ]
         }
       />
-      <IconButton icon={mdiPlus} label={t("desktop.chat.new")} variant="tonal" onClick={onNew} disabled={running} />
+      <IconButton icon={mdiPlus} label={t("desktop.chat.new")} variant="filled" onClick={onNew} disabled={running} />
     </div>
   );
 }

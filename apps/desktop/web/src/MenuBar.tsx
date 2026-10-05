@@ -37,6 +37,7 @@ import {
   mdiShieldCheckOutline,
   mdiRobotOutline,
   mdiPlus,
+  mdiSourceCommit,
 } from "@mdi/js";
 import { workers, workspaces } from "./api";
 import { inboxCounts, useRuns } from "./backgroundRuns";
@@ -84,6 +85,7 @@ export const guideURL = "https://retail-cortex.github.io/blitz/guide/";
 export function MenuBar({
   dir = "",
   onChanges,
+  onCommit,
   onAgent,
   onWorker,
   onSearch,
@@ -93,6 +95,8 @@ export function MenuBar({
 }: {
   dir?: string;
   onChanges?: (s: ChangesSource) => void;
+  /** Opens the commit dialog (Changes › Commit…). */
+  onCommit?: () => void;
   onAgent?: (i: ItemIntent) => void;
   onWorker?: (i: ItemIntent) => void;
   onSearch: () => void;
@@ -138,6 +142,7 @@ export function MenuBar({
     { label: t("desktop.menu.changes.session"), detail: t("desktop.changes.session"), icon: mdiHistory, onSelect: () => onChanges?.("session") },
     { label: t("desktop.menu.changes.git"), icon: mdiGit, onSelect: () => onChanges?.("git") },
   ];
+  if (onCommit) changes.push("divider", { label: t("desktop.commit.open"), icon: mdiSourceCommit, onSelect: onCommit });
 
   const agentItems: MenuEntry[] = [
     { label: t("desktop.menu.agents.add"), icon: mdiPlus, onSelect: () => onAgent?.(intent("new")) },

@@ -353,6 +353,8 @@ func TestListModelsOverTheAPI(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, res.Msg.Providers, 2)
 	assert.Equal(t, []string{"gemini-3.8-flash", "gemini-3.8-pro"}, res.Msg.Providers[0].Ids)
+	require.Len(t, res.Msg.Providers[0].Models, 2, "the models with their prices")
+	assert.Equal(t, "gemini-3.8-flash", res.Msg.Providers[0].Models[0].Id)
 	assert.Equal(t, "no key", res.Msg.Providers[1].Error)
 	assert.NotEmpty(t, res.Msg.DefaultProvider)
 
@@ -362,7 +364,7 @@ func TestListModelsOverTheAPI(t *testing.T) {
 
 	// A failed provider's listing is kept for less; a settings change drops it.
 	s.models.mu.Lock()
-	assert.WithinDuration(t, time.Now().Add(modelsRetry), s.models.byID[""].expires, 5*time.Second)
+	assert.WithinDuration(t, time.Now().Add(modelsRetry), s.models.byID["\x00"].expires, 5*time.Second)
 	s.models.mu.Unlock()
 	failing = false
 	_, err = cc.SetApiKey(ctx, connect.NewRequest(&pb.SetApiKeyRequest{Provider: "anthropic", Key: "sk-ant-x"}))

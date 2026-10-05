@@ -68,7 +68,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   const theme = resolveTheme(prefs.theme, systemDark);
   // Before the screen is painted, so no text shows in the wrong language.
   useLayoutEffect(() => setLanguage(prefs.language), [prefs.language]);
-  useEffect(() => applyTheme(theme, prefs.density, prefs.width, prefs.transparency), [theme, prefs.density, prefs.width, prefs.transparency]);
+  useEffect(() => applyTheme(theme, prefs.density, prefs.width, prefs.transparency, prefs.theme), [theme, prefs.density, prefs.width, prefs.transparency, prefs.theme]);
   // The user's CSS for Markdown previews, the theme in effect's.
   const docCss = docCssFor(prefs, theme);
   useEffect(() => applyDocCss(docCss), [docCss]);

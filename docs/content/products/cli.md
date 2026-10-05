@@ -21,7 +21,7 @@ blitz --image ui.png "why is this misaligned?"   # attach images (@ui.png in the
 blitz --add-dir ../shared-lib           # let the agent work in another directory too, for this run
 ```
 
-When the [service](service.md) is running, `blitz` attaches to it and says so; `--local` runs the workspace in its own process instead. A workspace held by the service can't also be opened with `--local`.
+`blitz` runs no workspace itself: it attaches to the [service](service.md), starting it if it isn't running (without a login item, a service started this way stops after 15 minutes with nothing to do). A run with settings of its own (`--local`, `--model`, `--agent`, `--append-system-prompt`, `--add-dir`, `--plugin-dir`, `--no-session-persistence`, `--trust-project`) gets a private service that stops when the run does; if the shared service has the workspace open and idle, it hands it over, and while a turn runs there the run is refused. `blitz doctor` runs its checks in `blitzd`, so it works with no service running.
 
 ## Scripting
 

@@ -21,6 +21,7 @@ go_library(
         "logread.go",
         "metrics.go",
         "span.go",
+        "start.go",
         "telemetry.go",
     ],
     importpath = "github.com/retail-cortex/blitz/pkg/observability",
@@ -56,6 +57,7 @@ go_test(
         "metrics_test.go",
         "observability_test.go",
         "span_test.go",
+        "start_test.go",
     ],
     embed = [":observability"],
     deps = [

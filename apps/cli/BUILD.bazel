@@ -22,6 +22,7 @@ go_library(
     name = "cli_lib",
     srcs = [
         "agents.go",
+        "auth.go",
         "configcmd.go",
         "configkeys.go",
         "configperms.go",
@@ -38,6 +39,9 @@ go_library(
         "search.go",
         "security.go",
         "service.go",
+        "services.go",
+        "services_unix.go",
+        "services_windows.go",
         "sessions.go",
         "setup.go",
         "trust.go",
@@ -52,18 +56,11 @@ go_library(
         "//pkg/api",
         "//pkg/client",
         "//pkg/config",
-        "//pkg/engine",
-        "//pkg/engine/browser",
-        "//pkg/engine/memory",
-        "//pkg/engine/runtime",
-        "//pkg/engine/skills",
-        "//pkg/engine/tools",
         "//pkg/i18n",
         "//pkg/images",
         "//pkg/loginitem",
         "//pkg/mcpauth",
         "//pkg/observability",
-        "//pkg/pdftext",
         "//pkg/plugins",
         "//pkg/sandboxsetup",
         "//pkg/secrets",
@@ -74,15 +71,15 @@ go_library(
         "@com_github_google_jsonschema_go//jsonschema",
         "@com_github_spf13_cobra//:cobra",
         "@com_github_spf13_pflag//:pflag",
-        "@org_golang_google_adk_v2//model",
-        "@org_golang_google_adk_v2//session",
-        "@org_golang_google_genai//:genai",
         "@org_golang_x_term//:term",
     ],
 )
 
 go_binary(
     name = "blitz_unsigned",
+    # The service it starts and runs doctor in, found in its runfiles under
+    # bazel run (releases and packages put it beside blitz).
+    data = ["//apps/service:blitzd"],  # keep
     embed = [":cli_lib"],
     # Its own Mach-O UUID (build/macos.bzl).
     gc_linkopts = macho_uuid_linkopts("dev.blitz.cli"),
@@ -97,9 +94,11 @@ go_test(
     srcs = [
         "agents_test.go",
         "attach_test.go",
+        "auth_test.go",
         "configkeys_test.go",
         "doctor_test.go",
         "headless_test.go",
+        "helpers_test.go",
         "images_test.go",
         "leak_test.go",
         "limits_test.go",
@@ -113,6 +112,7 @@ go_test(
         "search_test.go",
         "security_test.go",
         "service_test.go",
+        "services_test.go",
         "sessions_test.go",
         "setup_test.go",
         "trust_test.go",
@@ -120,6 +120,10 @@ go_test(
         "workers_test.go",
         "worktrees_test.go",
     ],
+    # Go's own timeout, under Bazel's: a hang dumps every goroutine.
+    args = ["-test.timeout=240s"],
+    # The real blitzd, which TestRealServices starts.
+    data = ["//apps/service:blitzd"],  # keep
     embed = [":cli_lib"],
     shard_count = 6,
     # Starts commands in the OS sandbox, which can't nest in Bazel's on
@@ -128,6 +132,7 @@ go_test(
     deps = [
         "//apps/service/servicetest",
         "//pkg/api",
+        "//pkg/client",
         "//pkg/config",
         "//pkg/config/configtest",
         "//pkg/engine",

@@ -21,6 +21,8 @@ import (
 	"context"
 	"net"
 	"net/http"
+	"runtime/pprof"
+	"strings"
 	"time"
 
 	"github.com/retail-cortex/blitz/apps/service/internal/daemon"
@@ -46,4 +48,33 @@ func Serve(ctx context.Context, l net.Listener, h http.Handler, grace time.Durat
 // configuration, until ctx is done.
 func Run(ctx context.Context, socket string) error {
 	return daemon.Run(ctx, daemon.Options{Socket: socket, Version: "test"})
+}
+
+// RunOverrides are a private service's run settings (blitzd's hidden
+// flags, which the CLI sets for a run of its own).
+type RunOverrides = daemon.RunOverrides
+
+// RunWith runs a private service, as a client starts for a run of its own,
+// on socket, with the configuration file config ("" for the usual search)
+// and the run's settings, until ctx is done.
+func RunWith(ctx context.Context, socket, config string, run RunOverrides) error {
+	return daemon.Run(ctx, daemon.Options{Socket: socket, Config: config, Version: "test", Run: run, Private: true})
+}
+
+// Stopped waits for done (a service's Run returning) for up to limit, and
+// otherwise reports every goroutine's stack and fails the test: a service
+// that won't stop says where it's stuck, rather than the test hanging
+// until its timeout.
+func Stopped(t interface {
+	Helper()
+	Fatalf(format string, args ...any)
+}, done <-chan struct{}, limit time.Duration) {
+	t.Helper()
+	select {
+	case <-done:
+	case <-time.After(limit):
+		var b strings.Builder
+		_ = pprof.Lookup("goroutine").WriteTo(&b, 2)
+		t.Fatalf("the service didn't stop within %s; goroutines:\n%s", limit, b.String())
+	}
 }

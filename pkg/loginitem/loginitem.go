@@ -357,6 +357,32 @@ func FindService(dirs ...string) (string, error) {
 	return "", errors.New("blitzd, the Blitz service, isn't installed beside this program or on PATH")
 }
 
+// RunfilesRoots are where Bazel puts the running program's runfiles, when
+// Bazel runs it (bazel run, bazel test).
+func RunfilesRoots() []string {
+	var out []string
+	if d := os.Getenv("RUNFILES_DIR"); d != "" {
+		out = append(out, d)
+	}
+	if exe, err := os.Executable(); err == nil {
+		out = append(out, exe+".runfiles")
+	}
+	return out
+}
+
+// ServiceDirs are where a program finds the blitzd that goes with it:
+// beside it (as released and bundled), then in its Bazel runfiles.
+func ServiceDirs() []string {
+	var dirs []string
+	if d := Beside(); d != "" {
+		dirs = append(dirs, d)
+	}
+	for _, root := range RunfilesRoots() {
+		dirs = append(dirs, filepath.Join(root, "_main", "apps", "service"))
+	}
+	return dirs
+}
+
 // Beside is the directory of the running program (symlinks resolved), for
 // FindService.
 func Beside() string {

@@ -22,6 +22,7 @@ go_library(
         "convert.go",
         "processes.go",
         "project.go",
+        "settings.go",
         "workers.go",
     ],
     importpath = "github.com/retail-cortex/blitz/pkg/client",
@@ -50,8 +51,11 @@ go_test(
         "processes_test.go",
         "project_test.go",
         "remote_test.go",
+        "settings_test.go",
         "workers_test.go",
     ],
+    # Go's own timeout, under Bazel's: a hang dumps every goroutine.
+    args = ["-test.timeout=240s"],
     embed = [":client"],
     shard_count = 2,
     # Starts commands in the OS sandbox, which can't nest in Bazel's on

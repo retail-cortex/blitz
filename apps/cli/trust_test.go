@@ -21,6 +21,7 @@ import (
 	"testing"
 
 	"github.com/retail-cortex/blitz/pkg/api"
+	"github.com/retail-cortex/blitz/pkg/client"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -88,7 +89,6 @@ func TestOpenBackendAsksAboutTheProject(t *testing.T) {
 // is a usage error; and a decision made here is kept.
 func TestTrustCommandEdges(t *testing.T) {
 	isolate(t)
-	t.Setenv("BLITZ_SOCKET", filepath.Join(t.TempDir(), "none.sock"))
 	ws := projectDir(t)
 	t.Chdir(ws)
 	out, err := runCLI(t, "trust")
@@ -97,11 +97,14 @@ func TestTrustCommandEdges(t *testing.T) {
 	_, err = runCLI(t, "trust", filepath.Join(t.TempDir(), "missing"))
 	assert.Equal(t, exitUsage, exitCodeFor(err))
 
-	cfg := mustConfig(t, ws)
-	l := localProject{cfg}
-	assert.Equal(t, ws, l.Dir())
-	p := l.ProjectSettings()
-	require.NoError(t, l.TrustProject(p.Hash, true))
-	assert.Equal(t, api.TrustTrusted, l.ProjectSettings().State)
+	r, err := client.Attach(context.Background(), os.Getenv("BLITZ_SOCKET"), ws, nil)
+	require.NoError(t, err, "trust started the service")
+	p := r.ProjectSettings()
+	require.NoError(t, r.TrustProject(p.Hash, true))
+	assert.Equal(t, api.TrustTrusted, r.ProjectSettings().State)
+	out, err = runCLI(t, "trust", "--revoke", ws)
+	require.NoError(t, err)
+	assert.Contains(t, out, "asked again")
+	assert.Equal(t, api.TrustNew, r.ProjectSettings().State, "forgotten in the service")
 
 }

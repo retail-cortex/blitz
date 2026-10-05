@@ -64,4 +64,9 @@ func TestRemoteProjectTrust(t *testing.T) {
 	p = r.ProjectSettings()
 	assert.Equal(t, api.TrustTrusted, p.State)
 	assert.True(t, p.Loaded, "the workspace wasn't reopened with them")
+
+	require.NoError(t, r.ForgetProjectTrust())
+	p = r.ProjectSettings()
+	assert.Equal(t, api.TrustNew, p.State, "forgotten: waiting for trust again")
+	assert.False(t, p.Loaded, "reopened without them")
 }

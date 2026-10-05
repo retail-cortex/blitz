@@ -70,3 +70,25 @@ func TestFailureExitCode(t *testing.T) {
 	code := run(context.Background(), []string{"--config", conf, "--socket", filepath.Join(t.TempDir(), "s.sock")})
 	assert.Equal(t, exitFailure, code, "blitzd with bad settings: exit %d", code)
 }
+
+// blitzd doctor runs the checks: exit 1 when one fails (no model key),
+// 0 when they pass.
+func TestDoctor(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("MODENV_PREFIX", "")
+	for _, k := range []string{"GEMINI_API_KEY", "GOOGLE_API_KEY", "OPENAI_API_KEY", "ANTHROPIC_API_KEY", "LLM_PROVIDER"} {
+		t.Setenv(k, "")
+	}
+	t.Chdir(t.TempDir())
+	require.NoError(t, os.MkdirAll(filepath.Join(home, ".blitz"), 0o700))
+	require.NoError(t, os.WriteFile(filepath.Join(home, ".blitz", ".env.toml"), []byte("[llm]\nprovider = \"openai\"\n"), 0o600))
+	assert.Equal(t, exitFailure, run(context.Background(), []string{"doctor", "-d", t.TempDir()}), "no key")
+	assert.Equal(t, exitUsage, run(context.Background(), []string{"doctor", "extra"}))
+}
+
+// A private service's prompt file that isn't there is a usage error.
+func TestPromptFileMissing(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	assert.Equal(t, exitUsage, run(context.Background(), []string{"--exit-with-stdin", "--append-system-prompt-file", filepath.Join(t.TempDir(), "missing.md"), "--socket", filepath.Join(t.TempDir(), "s.sock")}))
+}

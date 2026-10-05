@@ -90,6 +90,15 @@ service WorkspaceService {
   // already, and returns its git status (NO_GIT without git on the
   // service's PATH, GIT_FAILED).
   rpc InitGitRepo(InitGitRepoRequest) returns (InitGitRepoResponse);
+  // Lists what's staged (everything staged first with stage_all, as git
+  // add --all) and has the model draft a commit message from its diff,
+  // secrets redacted; nothing is asked with nothing staged, and a model
+  // that fails leaves the message empty with problem saying why
+  // (NOT_A_REPOSITORY, GIT_FAILED).
+  rpc DraftCommit(DraftCommitRequest) returns (DraftCommitResponse);
+  // Commits what's staged with the message (the repository's hooks run)
+  // (NOT_A_REPOSITORY, NOTHING_STAGED, EMPTY_MESSAGE, GIT_FAILED).
+  rpc Commit(CommitRequest) returns (CommitResponse);
   // Changes a setting for the workspace: agency, or effort (a reasoning
   // effort, or "auto" to clear it) (UNKNOWN_SETTING, INVALID_AGENCY,
   // INVALID_SETTING).
@@ -185,6 +194,10 @@ service WorkspaceService {
   // shown (PROJECT_CHANGED if they have changed since), and reopens the
   // workspace so they take effect, unless a turn is running in it.
   rpc TrustProject(TrustProjectRequest) returns (TrustProjectResponse);
+  // Forgets the decision about the project settings (blitz trust
+  // --revoke): they wait for trust again, and the workspace reopens
+  // without them unless a turn is running in it.
+  rpc ForgetProjectTrust(ForgetProjectTrustRequest) returns (ForgetProjectTrustResponse);
 
   // Removes and returns what watched background processes (notify) of a
   // session reported while no turn ran there.
@@ -1420,6 +1433,18 @@ message ForgetNoteRequest {
 // Response message for WorkspaceService.ForgetNote.
 message ForgetNoteResponse {}
 
+// Request message for WorkspaceService.ForgetProjectTrust.
+message ForgetProjectTrustRequest {
+  string workspace = 1;
+}
+
+// Response message for WorkspaceService.ForgetProjectTrust.
+message ForgetProjectTrustResponse {
+  // The workspace was reopened without the settings; false when a turn
+  // was running (it takes effect when the workspace next opens).
+  bool reopened = 1;
+}
+
 // Request message for WorkspaceService.TrustProject.
 message TrustProjectRequest {
   string workspace = 1;
@@ -1640,4 +1665,43 @@ message InitGitRepoRequest {
 message InitGitRepoResponse {
   // The repository's git status, after git init.
   GetGitStatusResponse status = 1;
+}
+
+// A file in the index, for the commit dialog.
+message StagedFile {
+  // Git's status letter: A, M, D, T, …
+  string status = 1;
+  // Workspace-relative, with "/".
+  string path = 2;
+}
+
+// Request message for WorkspaceService.DraftCommit.
+message DraftCommitRequest {
+  string workspace = 1;
+  // Stage every change first (git add --all).
+  bool stage_all = 2;
+}
+
+// Response message for WorkspaceService.DraftCommit.
+message DraftCommitResponse {
+  // What's staged; none means nothing to commit.
+  repeated StagedFile files = 1;
+  // The drafted message ("" with problem set when the model failed).
+  string message = 2;
+  // Why there's no draft.
+  string problem = 3;
+}
+
+// Request message for WorkspaceService.Commit.
+message CommitRequest {
+  string workspace = 1;
+  string message = 2;
+}
+
+// Response message for WorkspaceService.Commit.
+message CommitResponse {
+  // The new commit's short hash.
+  string hash = 1;
+  // Its message's first line.
+  string subject = 2;
 }

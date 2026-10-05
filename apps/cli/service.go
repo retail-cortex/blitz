@@ -154,8 +154,11 @@ func plural(n int, one, many string) string {
 }
 
 // serviceBinary finds blitzd: beside this blitz (as released and bundled),
-// else on PATH.
-func serviceBinary() (string, error) { return loginitem.FindService(loginitem.Beside()) }
+// in its Bazel runfiles (bazel run), else on PATH.
+func serviceBinary() (string, error) { return loginitem.FindService(serviceDirs()...) }
+
+// serviceDirs are where serviceBinary looks before PATH; tests narrow it.
+var serviceDirs = loginitem.ServiceDirs
 
 // newServeCommand keeps "blitz serve" working, for login items installed
 // before the service became its own program: it runs blitzd.

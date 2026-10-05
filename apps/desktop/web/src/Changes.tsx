@@ -16,13 +16,14 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { timestampDate } from "@bufbuild/protobuf/wkt";
-import { mdiAlertCircleOutline, mdiFileCompare, mdiRefresh, mdiSourceBranch, mdiSourceBranchPlus, mdiTextBoxOutline, mdiUndoVariant } from "@mdi/js";
+import { mdiAlertCircleOutline, mdiFileCompare, mdiRefresh, mdiSourceBranch, mdiSourceBranchPlus, mdiSourceCommit, mdiTextBoxOutline, mdiUndoVariant } from "@mdi/js";
 import { sessions, workspaces } from "./api";
 import { message, reason } from "./errors";
 import { language, t, tn } from "./i18n";
 import type { Checkpoint, GetGitStatusResponse } from "./gen/blitz/v1/workspace_pb";
 import { filesTouched } from "./events";
 import { languageFor } from "./highlight";
+import { CommitDialog } from "./CommitDialog";
 import { Markdown } from "./Markdown";
 import { parseDiff, type FileDiff } from "./turns";
 import { highlight } from "./highlight";
@@ -86,6 +87,7 @@ export function Changes({ dir, source, onSource: setSource }: { dir: string; sou
   // Git's view: whether the folder is a repository, and git installed.
   const [git, setGit] = useState<GetGitStatusResponse>();
   const [initing, setIniting] = useState(false);
+  const [committing, setCommitting] = useState(false);
 
   const refresh = useCallback(async () => {
     setError("");
@@ -162,6 +164,11 @@ export function Changes({ dir, source, onSource: setSource }: { dir: string; sou
         )}
         <span className="spacer" />
         {advanced && <IconButton icon={mdiRefresh} label={t("desktop.refresh")} onClick={refresh} />}
+        {source === "git" && git?.repo && (
+          <Button variant="tonal" small icon={mdiSourceCommit} onClick={() => setCommitting(true)}>
+            {t("desktop.commit.open")}
+          </Button>
+        )}
         <Button variant="tonal" small icon={mdiUndoVariant} disabled={checkpoints.length === 0} onClick={() => undo()}>
           {t("desktop.changes.undo_last")}
         </Button>
@@ -258,6 +265,7 @@ export function Changes({ dir, source, onSource: setSource }: { dir: string; sou
           <p className="muted">{conflict}</p>
         </Dialog>
       )}
+      {committing && <CommitDialog dir={dir} onClose={() => setCommitting(false)} onCommitted={() => void refresh()} />}
     </div>
   );
 }

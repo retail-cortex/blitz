@@ -19,6 +19,7 @@ import { SandboxNotice } from "./SandboxNotice";
 import { useWorkspaceSettings } from "./workspaceSettings";
 import { mdiMagnify, mdiFileTreeOutline } from "@mdi/js";
 import { ChangesDialog, type ChangesSource } from "./Changes";
+import { CommitDialog } from "./CommitDialog";
 import { Conversation } from "./Conversation";
 import { filesTouchedEvent, goToFile, openFileEvent, revealInTreeEvent, viewEvent, type OpenFileDetail, type ViewDetail } from "./events";
 import { EditorPane } from "./files/EditorPane";
@@ -34,7 +35,7 @@ import { useApp } from "./state";
 import { publishStatus } from "./status";
 import { t } from "./i18n";
 import { IconButton } from "./ui/controls";
-import { filesFloat, panelWidth, useWindowWidth } from "./ui/layout";
+import { panelWidth, useWindowWidth } from "./ui/layout";
 import { ResizeHandle } from "./ui/ResizeHandle";
 import { Brand, MenuBar } from "./MenuBar";
 import { intent as newIntent, type ItemIntent } from "./intent";
@@ -72,7 +73,7 @@ export function Workspace({
   const { prefs, update, theme } = useApp();
   // What's open over the editor: the changes (this session's or git's),
   // an agent or a worker, as the menus asked.
-  const [modal, setModal] = useState<{ kind: "changes"; source: ChangesSource } | { kind: "agent" | "worker"; intent: ItemIntent } | null>(null);
+  const [modal, setModal] = useState<{ kind: "changes"; source: ChangesSource } | { kind: "agent" | "worker"; intent: ItemIntent } | { kind: "commit" } | null>(null);
   const dir = ws.dir;
   const { settings, modelProblem, settingsError, settingsReason, project, reviewing, setReviewing, refreshSettings } = useWorkspaceSettings(dir);
 
@@ -157,9 +158,10 @@ export function Workspace({
   // a width saved on a larger display is kept to what fits this one.
   const win = useWindowWidth();
   const filesWidth = panelWidth(prefs.files_width, 272, 200, Math.min(560, win - 600));
-  // The chat leaves the editor 400 px beside the shelf when it sits inline
-  // (narrower windows float the shelf over the editor).
-  const chatMax = (w: number) => w - (prefs.files && w > filesFloat ? filesWidth : 56) - 400;
+  // The chat leaves the editor 400 px beside the shelf (or the rail). The
+  // shelf never floats over the others: in a narrow window they all shrink
+  // to their minimums, and it can be minimized to the rail.
+  const chatMax = (w: number) => w - (prefs.files ? filesWidth : 56) - 400;
   const chatWidth = panelWidth(prefs.chat_width, Math.max(380, Math.min(520, Math.round(win * 0.32))), 320, chatMax(win));
   const chatCenter = editor.tabs.length === 0;
   const revealInTree = (path: string) => {
@@ -198,6 +200,7 @@ export function Workspace({
         <MenuBar
           dir={dir}
           onChanges={(source) => setModal({ kind: "changes", source })}
+          onCommit={() => setModal({ kind: "commit" })}
           onAgent={(intent) => setModal({ kind: "agent", intent })}
           onWorker={(intent) => setModal({ kind: "worker", intent })}
           onSearch={onSearch}
@@ -215,14 +218,11 @@ export function Workspace({
             onResize={(w) => update((p) => ({ ...p, files_width: w }))}
             showHidden={prefs.show_hidden}
             onToggleHidden={() => update((p) => ({ ...p, show_hidden: !p.show_hidden }))}
+            onCommit={() => setModal({ kind: "commit" })}
             active={editor.active}
             refresh={touched}
             reveal={reveal}
-            onOpen={(p) => {
-              open(p);
-              // Narrow, the shelf floats over the editor: make way.
-              if (window.matchMedia(`(max-width: ${filesFloat}px)`).matches) update((x) => ({ ...x, files: false }));
-            }}
+            onOpen={open}
             onMoved={editor.moved}
             onChanged={() => setTouched((n) => n + 1)}
             onClose={() => update((p) => ({ ...p, files: false }))}
@@ -265,6 +265,7 @@ export function Workspace({
           </FileLinksProvider>
         </aside>
       </div>
+      {visible && modal?.kind === "commit" && <CommitDialog dir={dir} onClose={() => setModal(null)} onCommitted={() => setTouched((n) => n + 1)} />}
       {visible && modal?.kind === "changes" && <ChangesDialog dir={dir} initial={modal.source} onClose={() => setModal(null)} />}
       {visible && modal?.kind === "agent" && <AgentEditor key={modal.intent.n} workspace={dir} scope={AgentScope.WORKSPACE} intent={modal.intent} dialog={{ onClose: () => setModal(null) }} />}
       {visible && modal?.kind === "worker" && <WorkerModal key={modal.intent.n} dir={dir} intent={modal.intent} onClose={() => setModal(null)} />}

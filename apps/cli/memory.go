@@ -15,50 +15,62 @@
 package main
 
 import (
-	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"strings"
 
-	"github.com/retail-cortex/blitz/pkg/engine/memory"
+	"github.com/retail-cortex/blitz/pkg/api"
 	"github.com/spf13/cobra"
 )
 
 // newMemoryCommand is `blitz memory list|show|edit|forget`: the notes the
 // agent saved in a workspace with its remember tool (spec_parity_027
-// PAR-MEM-11), read and changed on disk.
+// PAR-MEM-11), through the Blitz service.
 func newMemoryCommand(g *globalFlags) *cobra.Command {
 	cmd := &cobra.Command{Use: "memory", Short: "List, show, edit and forget the notes the agent saved"}
-	dir := func() string {
-		d := g.dir
-		if d == "" {
-			d, _ = os.Getwd()
+	notes := func(cmd *cobra.Command) ([]api.Note, error) {
+		r, err := attachWorkspace(cmd.Context(), g)
+		if err != nil {
+			return nil, err
 		}
-		return memory.NotesDir(d)
+		return r.ListNotes()
 	}
-	find := func(name string) (memory.Note, error) {
-		n, err := memory.FindNote(dir(), name)
-		if errors.Is(err, memory.ErrNoNote) {
-			return n, withCode(exitUsage, err)
+	// find is the note named name, or the only one whose name starts so.
+	find := func(cmd *cobra.Command, name string) (api.Note, error) {
+		list, err := notes(cmd)
+		if err != nil {
+			return api.Note{}, err
 		}
-		return n, err
+		var found []api.Note
+		for _, n := range list {
+			if n.Name == name {
+				return n, nil
+			}
+			if strings.HasPrefix(n.Name, name) {
+				found = append(found, n)
+			}
+		}
+		if len(found) == 1 {
+			return found[0], nil
+		}
+		return api.Note{}, withCode(exitUsage, fmt.Errorf("%w: %q", api.ErrNoNote, name))
 	}
 	list := &cobra.Command{
 		Use:   "list",
 		Short: "List this workspace's notes, newest first",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			notes, err := memory.Notes(dir())
+			list, err := notes(cmd)
 			if err != nil {
 				return err
 			}
 			out := cmd.OutOrStdout()
-			if len(notes) == 0 {
+			if len(list) == 0 {
 				fmt.Fprintln(out, "No notes: the agent saves them with its remember tool.")
 				return nil
 			}
-			for _, n := range notes {
+			for _, n := range list {
 				fmt.Fprintf(out, "%s\t%s\t%s\n", n.Name, n.Kind, firstLine(n.Text, 80))
 			}
 			return nil
@@ -69,7 +81,7 @@ func newMemoryCommand(g *globalFlags) *cobra.Command {
 		Short: "Show a note (its name, or the start of it)",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			n, err := find(args[0])
+			n, err := find(cmd, args[0])
 			if err != nil {
 				return err
 			}
@@ -82,7 +94,7 @@ func newMemoryCommand(g *globalFlags) *cobra.Command {
 		Short: "Edit a note in $VISUAL or $EDITOR",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			n, err := find(args[0])
+			n, err := find(cmd, args[0])
 			if err != nil {
 				return err
 			}
@@ -105,11 +117,15 @@ func newMemoryCommand(g *globalFlags) *cobra.Command {
 		Short:   "Delete a note",
 		Args:    cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			n, err := find(args[0])
+			n, err := find(cmd, args[0])
 			if err != nil {
 				return err
 			}
-			if err := os.Remove(n.Path); err != nil {
+			r, err := attachWorkspace(cmd.Context(), g)
+			if err != nil {
+				return err
+			}
+			if err := r.ForgetNote(n.Name); err != nil {
 				return err
 			}
 			fmt.Fprintf(cmd.OutOrStdout(), "Forgot %s.\n", n.Name)

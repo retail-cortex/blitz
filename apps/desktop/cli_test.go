@@ -188,6 +188,107 @@ func TestInstallCLI(t *testing.T) {
 	}
 }
 
+// Reinstalling: dead blitz links come off PATH, the link the shell finds
+// is pointed at this app's, the user's own program is left alone, and with
+// none left it installs as InstallCLI does.
+func TestReinstallCLI(t *testing.T) {
+	t.Setenv("ZDOTDIR", "")
+	tests := []struct {
+		name string
+		// setup prepares home and returns PATH.
+		setup   func(t *testing.T, home string) []string
+		link    string   // relative to home
+		removed []string // relative to home
+		err     string
+	}{
+		{
+			name: "another build's link",
+			setup: func(t *testing.T, home string) []string {
+				dir := filepath.Join(home, ".local", "bin")
+				old := program(t, filepath.Join(home, "old-build"), "blitz")
+				require.NoError(t, os.MkdirAll(dir, 0o755))
+				require.NoError(t, os.Symlink(old, filepath.Join(dir, "blitz")))
+				return []string{dir}
+			},
+			link: ".local/bin/blitz",
+		},
+		{
+			name: "dead links before it",
+			setup: func(t *testing.T, home string) []string {
+				dead := filepath.Join(home, "bin")
+				dir := filepath.Join(home, ".local", "bin")
+				old := program(t, filepath.Join(home, "old-build"), "blitz")
+				for _, d := range []string{dead, dir} {
+					require.NoError(t, os.MkdirAll(d, 0o755))
+				}
+				require.NoError(t, os.Symlink("/gone/bazel-bin/blitz", filepath.Join(dead, "blitz")))
+				require.NoError(t, os.Symlink(old, filepath.Join(dir, "blitz")))
+				return []string{dead, dir}
+			},
+			link:    ".local/bin/blitz",
+			removed: []string{"bin/blitz"},
+		},
+		{
+			name: "only a dead link",
+			setup: func(t *testing.T, home string) []string {
+				dir := filepath.Join(home, ".local", "bin")
+				require.NoError(t, os.MkdirAll(dir, 0o755))
+				require.NoError(t, os.Symlink("/gone/blitz", filepath.Join(dir, "blitz")))
+				return []string{dir}
+			},
+			link:    ".local/bin/blitz",
+			removed: []string{".local/bin/blitz"},
+		},
+		{
+			name: "already this app's",
+			setup: func(t *testing.T, home string) []string {
+				return []string{filepath.Join(home, ".local", "bin")}
+			},
+			link: ".local/bin/blitz",
+		},
+		{
+			name: "the user's own program",
+			setup: func(t *testing.T, home string) []string {
+				program(t, filepath.Join(home, "tools"), "blitz")
+				return []string{filepath.Join(home, "tools")}
+			},
+			err: "not a link",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			home := t.TempDir()
+			cli := program(t, t.TempDir(), "blitz")
+			path := tt.setup(t, home)
+			if tt.name == "already this app's" {
+				require.NoError(t, os.MkdirAll(path[0], 0o755))
+				require.NoError(t, os.Symlink(cli, filepath.Join(path[0], "blitz")))
+			}
+			got, err := reinstallCLI(cli, home, "/bin/zsh", "linux", path)
+			if tt.err != "" {
+				assert.ErrorContains(t, err, tt.err)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, filepath.Join(home, tt.link), got.Link)
+			var removed []string
+			for _, r := range tt.removed {
+				removed = append(removed, filepath.Join(home, r))
+			}
+			assert.Equal(t, removed, got.Removed)
+			for _, r := range removed {
+				if r != got.Link {
+					assert.NoFileExists(t, r)
+				}
+			}
+			target, err := filepath.EvalSymlinks(got.Link)
+			require.NoError(t, err)
+			assert.Equal(t, cli, target)
+			assert.NoFileExists(t, got.Link+".blitz-new")
+		})
+	}
+}
+
 // The line that puts ~/.local/bin on PATH goes in once, after what the
 // file had.
 func TestAddToPathOnce(t *testing.T) {

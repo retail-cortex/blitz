@@ -736,6 +736,18 @@ func (h workspaceService) TrustProject(ctx context.Context, r req[pb.TrustProjec
 	return ok(&pb.TrustProjectResponse{Reopened: reopened})
 }
 
+func (h workspaceService) ForgetProjectTrust(ctx context.Context, r req[pb.ForgetProjectTrustRequest]) (*connect.Response[pb.ForgetProjectTrustResponse], error) {
+	w, err := h.s.workspace(ctx, r.Msg.Workspace)
+	if err != nil {
+		return nil, err
+	}
+	if err := w.ForgetProjectTrust(); err != nil {
+		return nil, toAPI(err)
+	}
+	reopened := h.s.closeWorkspace(r.Msg.Workspace) == nil
+	return ok(&pb.ForgetProjectTrustResponse{Reopened: reopened})
+}
+
 func (h workspaceService) TakeProcessNotices(ctx context.Context, r req[pb.TakeProcessNoticesRequest]) (*connect.Response[pb.TakeProcessNoticesResponse], error) {
 	w, err := h.s.workspace(ctx, r.Msg.Workspace)
 	if err != nil {
@@ -922,6 +934,48 @@ func (h workspaceService) InitGitRepo(ctx context.Context, r req[pb.InitGitRepoR
 		return nil, apiError(connect.CodeFailedPrecondition, "GIT_FAILED", err)
 	}
 	return ok(&pb.InitGitRepoResponse{Status: gitStatusMsg(st)})
+}
+
+func (h workspaceService) DraftCommit(ctx context.Context, r req[pb.DraftCommitRequest]) (*connect.Response[pb.DraftCommitResponse], error) {
+	w, err := h.s.workspace(ctx, r.Msg.Workspace)
+	if err != nil {
+		return nil, err
+	}
+	d, err := w.DraftCommit(ctx, r.Msg.StageAll)
+	if err != nil {
+		return nil, commitError(err)
+	}
+	out := &pb.DraftCommitResponse{Message: d.Message, Problem: d.Problem}
+	for _, f := range d.Files {
+		out.Files = append(out.Files, &pb.StagedFile{Status: f.Status, Path: f.Path})
+	}
+	return ok(out)
+}
+
+func (h workspaceService) Commit(ctx context.Context, r req[pb.CommitRequest]) (*connect.Response[pb.CommitResponse], error) {
+	w, err := h.s.workspace(ctx, r.Msg.Workspace)
+	if err != nil {
+		return nil, err
+	}
+	hash, subject, err := w.Commit(ctx, r.Msg.Message)
+	if err != nil {
+		return nil, commitError(err)
+	}
+	return ok(&pb.CommitResponse{Hash: hash, Subject: subject})
+}
+
+// commitError gives DraftCommit's and Commit's errors their codes.
+func commitError(err error) error {
+	switch {
+	case errors.Is(err, engine.ErrNotARepository):
+		return apiError(connect.CodeFailedPrecondition, "NOT_A_REPOSITORY", err)
+	case errors.Is(err, engine.ErrNothingStaged):
+		return apiError(connect.CodeFailedPrecondition, "NOTHING_STAGED", err)
+	case errors.Is(err, engine.ErrEmptyMessage):
+		return apiError(connect.CodeInvalidArgument, "EMPTY_MESSAGE", err)
+	default:
+		return apiError(connect.CodeFailedPrecondition, "GIT_FAILED", err)
+	}
 }
 
 func gitStatusMsg(st api.GitStatus) *pb.GetGitStatusResponse {

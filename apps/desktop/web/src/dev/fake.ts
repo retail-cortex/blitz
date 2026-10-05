@@ -32,6 +32,23 @@ import { FileKind, FileService, GitAction } from "../gen/blitz/v1/file_pb";
 import { AgentFileSchema, AgentScope, SuggestionKind, SuggestionSchema, WorkspaceService, type AgentDefinition } from "../gen/blitz/v1/workspace_pb";
 
 // Whether the fake workspace is a git repository (?norepo: not yet).
+// The providers the fake has signed in to, and each one's sign-in.
+const fakeSignedIn = new Set<string>();
+const fakeTools: Record<string, string> = { google: "gcloud", anthropic: "ant", aws: "aws", azure: "az" };
+function fakeSignIn(provider: string) {
+  const found = provider === "google" || provider === "aws";
+  return {
+    provider,
+    tool: fakeTools[provider],
+    toolFound: found,
+    install: "https://example.com/install",
+    signedIn: fakeSignedIn.has(provider),
+    detail: fakeSignedIn.has(provider) ? "you@example.com (authorized_user)" : found ? "no Application Default Credentials" : "",
+  };
+}
+
+// Whether the fake commit dialog has files staged (after "Stage all changes").
+let fakeStaged = false;
 let fakeRepo = !new URLSearchParams(location.search).has("norepo");
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -855,6 +872,25 @@ export function installFake() {
         undo: () => ({ label: "Fix the coupon rounding", restored: ["internal/cart/discount.go"] }),
         // ?fake&norepo: a folder that isn't a repository yet.
         getGitStatus: () => (fakeRepo ? { git: true, repo: true, branch: "fix/coupon-rounding", changed: 2 } : { git: true, repo: false }),
+        // The commit dialog: nothing staged until "Stage all changes".
+        draftCommit: async ({ stageAll }) => {
+          if (stageAll) fakeStaged = true;
+          if (!fakeStaged) return { files: [], message: "", problem: "" };
+          await sleep(900);
+          return {
+            files: [
+              { status: "M", path: "internal/cart/discount.go" },
+              { status: "A", path: "internal/cart/discount_test.go" },
+            ],
+            message: "Fix coupon rounding: round the total, not each line\n\nApplyCoupon rounded every line item before summing, so a cart could\nbe off by a cent. Sum first, then apply the discount and round once.\n\n- Add TestApplyCouponRounding for the 333/333/334 cart",
+            problem: "",
+          };
+        },
+        commit: async ({ message }) => {
+          await sleep(500);
+          fakeStaged = false;
+          return { hash: "3f2a9c1", subject: message.split("\n")[0] };
+        },
         initGitRepo: () => {
           fakeRepo = true;
           return { status: { git: true, repo: true, branch: "main", changed: 0 } };
@@ -867,6 +903,23 @@ export function installFake() {
       });
       service(ConfigService, {
         getInterfaceLanguage: () => ({ locale: "", catalogs: [] }),
+        // Sign-ins: gcloud and aws "installed", ant and az not.
+        getSignIn: ({ provider }) => ({
+          statuses: (provider ? [provider] : ["google", "anthropic", "aws", "azure"]).map((p) => fakeSignIn(p)),
+        }),
+        signIn: async function* ({ provider }) {
+          yield { line: "Your browser has been opened to visit:" };
+          await sleep(500);
+          yield { line: "https://accounts.example.com/o/oauth2/auth?client_id=blitz", url: "https://accounts.example.com/o/oauth2/auth?client_id=blitz" };
+          if (provider === "aws") yield { line: "Then enter the code: WXYZ-1234", code: "WXYZ-1234" };
+          await sleep(1500);
+          fakeSignedIn.add(provider);
+          yield { done: true, status: fakeSignIn(provider) };
+        },
+        signOut: ({ provider }) => {
+          fakeSignedIn.delete(provider);
+          return { status: fakeSignIn(provider) };
+        },
         listModels: () => ({
           defaultProvider: "gemini",
           providers: [

@@ -32,6 +32,18 @@ service ConfigService {
   // The models each configured provider offers, from its API (kept for a
   // few minutes), so forms can suggest and check model names.
   rpc ListModels(ListModelsRequest) returns (ListModelsResponse);
+  // Returns the providers' sign-ins (one provider's, or all four:
+  // google, anthropic, aws, azure): whether the vendor's tool is installed
+  // and whether its credentials work now. Signing in adds to API keys.
+  rpc GetSignIn(GetSignInRequest) returns (GetSignInResponse);
+  // Runs a provider's sign-in with its vendor's tool (gcloud, ant, aws,
+  // az) on the service's machine, streaming what the tool prints (the
+  // sign-in page's URL, a device code), then retries the open workspaces'
+  // models (NO_TOOL, SIGN_IN_RUNNING, SIGN_IN_FAILED, UNKNOWN_PROVIDER,
+  // INVALID_PROFILE).
+  rpc SignIn(SignInRequest) returns (stream SignInResponse);
+  // Signs out of a provider with its vendor's tool.
+  rpc SignOut(SignOutRequest) returns (SignOutResponse);
   // Stores a provider's API key in the keychain and refers to it.
   rpc SetApiKey(SetApiKeyRequest) returns (SetApiKeyResponse);
   // Moves a provider's API key written in the scope's file (as plain text
@@ -299,6 +311,76 @@ message SettingInfo {
 message ListModelsRequest {
   // The workspace whose settings name the providers; "" for the user's.
   string workspace = 1;
+  // Only these providers (gemini, anthropic, openai, …), configured or
+  // not; none for every configured one.
+  repeated string providers = 2;
+}
+
+// A listed model with the price Blitz knows for it.
+message ListedModel {
+  string id = 1;
+  // Dollars per million tokens; has_price false when Blitz knows none.
+  bool has_price = 2;
+  double input_per_mtok = 3;
+  double output_per_mtok = 4;
+}
+
+// Request message for ConfigService.GetSignIn.
+message GetSignInRequest {
+  // The workspace whose settings name the profiles; "" for the user's.
+  string workspace = 1;
+  // google, anthropic, aws or azure; "" for all four.
+  string provider = 2;
+  // A profile over the configured one (anthropic, aws).
+  string profile = 3;
+}
+
+// A provider's sign-in.
+message SignInStatus {
+  string provider = 1;
+  // The vendor's program, whether it's installed, and where to get it.
+  string tool = 2;
+  bool tool_found = 3;
+  string install = 4;
+  // Its credentials work now, and what they are (account, profile, file).
+  bool signed_in = 5;
+  string detail = 6;
+}
+
+// Response message for ConfigService.GetSignIn.
+message GetSignInResponse {
+  repeated SignInStatus statuses = 1;
+}
+
+// Request message for ConfigService.SignIn.
+message SignInRequest {
+  string workspace = 1;
+  string provider = 2;
+  string profile = 3;
+}
+
+// Response message for ConfigService.SignIn: a line the tool printed, or
+// the end.
+message SignInResponse {
+  string line = 1;
+  // The sign-in page, and a device code, when the line has them.
+  string url = 2;
+  string code = 3;
+  // The sign-in finished; status is the provider's after it.
+  bool done = 4;
+  SignInStatus status = 5;
+}
+
+// Request message for ConfigService.SignOut.
+message SignOutRequest {
+  string workspace = 1;
+  string provider = 2;
+  string profile = 3;
+}
+
+// Response message for ConfigService.SignOut.
+message SignOutResponse {
+  SignInStatus status = 1;
 }
 
 // ProviderModels are one provider's models.
@@ -311,6 +393,8 @@ message ProviderModels {
   // What the list is when it isn't the provider's own (Bedrock, Azure:
   // the configured model only).
   string note = 4;
+  // The models with their prices, in the order of ids.
+  repeated ListedModel models = 5;
 }
 
 // Response message for ConfigService.ListModels.

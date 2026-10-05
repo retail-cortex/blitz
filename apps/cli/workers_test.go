@@ -31,7 +31,6 @@ import (
 	"time"
 
 	"github.com/retail-cortex/blitz/apps/service/servicetest"
-	"github.com/retail-cortex/blitz/pkg/engine"
 	"github.com/retail-cortex/blitz/pkg/socket"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -76,7 +75,6 @@ func fakeModel(t *testing.T, home string) {
 
 func TestWorkersCommandsLocally(t *testing.T) {
 	fakeModel(t, isolate(t))
-	t.Setenv("BLITZ_SOCKET", filepath.Join(t.TempDir(), "none.sock")) // no service
 	ws := t.TempDir()
 	addWorker(t, ws, "deps", "---\ndescription: Report outdated modules\nschedule: Weekdays at 9:30\npermissions: [\"write:reports/\"]\n---\nWrite reports/deps.md.\n")
 
@@ -94,7 +92,7 @@ func TestWorkersCommandsLocally(t *testing.T) {
 	out, err = runCLI(t, "-d", ws, "workers", "enable", "deps", "--yes")
 	require.NoError(t, err, "enable: %v\n%s", err, out)
 	require.Contains(t, out, "deps enabled", "enable: %v\n%s", err, out)
-	require.Contains(t, out, "blitzd", "enable: %v\n%s", err, out)
+	require.Contains(t, out, "blitz service install", "no login item: the service started on demand stops when idle: %v\n%s", err, out)
 	out, err = runCLI(t, "-d", ws, "workers", "run", "deps")
 	require.NoError(t, err, "run: %v\n%s", err, out)
 	require.Contains(t, out, "succeeded", "run: %v\n%s", err, out)
@@ -131,7 +129,7 @@ func TestWorkersCommandsThroughTheService(t *testing.T) {
 	enabled, enableErr := runCLI(t, "-d", ws, "workers", "enable", "hello", "--yes")
 	require.NoError(t, enableErr, "enable through the service")
 	require.Contains(t, enabled, "hello enabled")
-	require.NotContains(t, enabled, "blitzd")
+	require.Contains(t, enabled, "blitz service install", "no login item")
 	out, err := runCLI(t, "-d", ws, "workers", "run", "hello")
 	require.NoError(t, err, "run through the service: %v\n%s", err, out)
 	require.Contains(t, out, "succeeded", "run through the service: %v\n%s", err, out)
@@ -173,7 +171,6 @@ func createFile(id, path string) string {
 func TestWorkersRunChangesAndUndo(t *testing.T) {
 	home := isolate(t)
 	scriptedModel(t, home, createFile("1", "reports/deps.md"), createFile("2", "elsewhere.md"))
-	t.Setenv("BLITZ_SOCKET", filepath.Join(t.TempDir(), "none.sock"))
 	ws := t.TempDir()
 	addWorker(t, ws, "deps", "---\ndescription: Report\nschedule: daily at noon\nagent: blitz\nmodel: ollama/fake\npermissions: [\"write:reports/\"]\n---\nWrite reports/deps.md.\n")
 	out, err := runCLI(t, "-d", ws, "workers", "enable", "deps", "--yes")
@@ -201,7 +198,6 @@ func TestWorkersRunChangesAndUndo(t *testing.T) {
 // A run whose model fails is a failed run, with its error.
 func TestWorkersRunFails(t *testing.T) {
 	isolate(t)
-	t.Setenv("BLITZ_SOCKET", filepath.Join(t.TempDir(), "none.sock"))
 	home := os.Getenv("HOME")
 	settings := fmt.Sprintf("[llm]\nprovider = \"ollama\"\n[llm.openai]\nbase_url = %q\nmodel = \"fake\"\n", failingModel(t))
 	require.NoError(t, os.MkdirAll(filepath.Join(home, ".blitz"), 0o700))
@@ -219,7 +215,6 @@ func TestWorkersRunFails(t *testing.T) {
 // worker that doesn't parse, and none at all.
 func TestWorkersCommandErrors(t *testing.T) {
 	isolate(t)
-	t.Setenv("BLITZ_SOCKET", filepath.Join(t.TempDir(), "none.sock"))
 	missing := filepath.Join(t.TempDir(), "missing")
 	for _, args := range [][]string{{"workers"}, {"workers", "enable", "x"}, {"workers", "disable", "x"}, {"workers", "run", "x"}, {"workers", "runs", "x"}, {"workers", "undo", "x"}} {
 		t.Run(strings.Join(args, " ")+" without a workspace", func(t *testing.T) {
@@ -250,10 +245,4 @@ func TestWorkersCommandErrors(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, out, "fine hasn't run yet.")
 
-	// A workspace open elsewhere can't be opened for its workers.
-	e, err := engine.Open(context.Background(), mustConfig(t, ws), engine.Options{})
-	require.NoError(t, err)
-	defer e.Close()
-	_, err = runCLI(t, "-d", ws, "workers")
-	assert.Error(t, err)
 }

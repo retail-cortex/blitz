@@ -315,3 +315,16 @@ func TestPluralCategory(t *testing.T) {
 	l := mustBundle(t).Localizer(language.English)
 	assert.Equal(t, "Another answer…", l.N("question", 1), "no .one: .other")
 }
+
+// Setup makes a locale current, and says when one isn't a language code.
+func TestSetup(t *testing.T) {
+	t.Cleanup(func() { Setup("", DefaultLocale, func(string) {}) })
+	var warned []string
+	warn := func(m string) { warned = append(warned, m) }
+	b := Setup(t.TempDir(), "", warn)
+	require.NotNil(t, b)
+	assert.Empty(t, warned, "the default")
+	Setup(t.TempDir(), "not a language!", warn)
+	require.Len(t, warned, 1)
+	assert.Contains(t, warned[0], "not a language code")
+}

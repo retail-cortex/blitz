@@ -521,9 +521,12 @@ func SetValue(prefixDir, workspace, key, value string) (string, error) {
 
 // ProviderAuth is how a provider signs in: Method "api_key" ("" too), "adc"
 // (Gemini, or Claude, on Vertex AI with Application Default Credentials,
-// in ProjectID and Location) or "oauth" (Claude, with the `ant auth login`
-// profile named by Profile, else ant's active one). Empty fields are
-// removed, so the environment's or the global settings' apply.
+// in ProjectID and Location) or "oauth", an account sign-in: Gemini with a
+// Google account (on Vertex AI, in ProjectID and Location), Claude with
+// the `ant auth login` profile named by Profile (else ant's active one),
+// Bedrock with an AWS IAM Identity Center sign-in for Profile, Azure with
+// Entra ID ("entra" too). Empty fields are removed, so the environment's
+// or the global settings' apply.
 type ProviderAuth struct {
 	Method    string
 	ProjectID string
@@ -532,9 +535,19 @@ type ProviderAuth struct {
 }
 
 // authMethods are the sign-in methods each provider takes besides an API
-// key: Google Cloud's Application Default Credentials (Gemini, and Claude
-// on Vertex AI) and an `ant auth login` profile (Claude).
-var authMethods = map[string][]string{"gemini": {AuthADC}, "anthropic": {AuthOAuth, AuthADC}}
+// key (access keys, for Bedrock): Google Cloud's Application Default
+// Credentials (Gemini, and Claude on Vertex AI) and an account sign-in,
+// OAuth (every provider here; OpenAI and Ollama have none).
+var authMethods = map[string][]string{
+	"gemini":    {AuthADC, AuthOAuth},
+	"anthropic": {AuthOAuth, AuthADC},
+	"bedrock":   {AuthOAuth},
+	"azure":     {AuthOAuth, AuthEntra},
+}
+
+// AuthMethods are the sign-in methods provider takes besides an API key,
+// for the forms and the CLI's help.
+func AuthMethods(provider string) []string { return slices.Clone(authMethods[provider]) }
 
 func (a ProviderAuth) check(provider string) error {
 	if a.Method == "" || a.Method == AuthAPIKey {
@@ -560,10 +573,10 @@ func (a ProviderAuth) edits(provider string) []settingEdit {
 		method = ""
 	}
 	e := []settingEdit{{table, "auth", method}}
-	switch a.Method {
-	case AuthADC:
+	switch {
+	case a.Method == AuthADC, a.Method == AuthOAuth && provider == "gemini":
 		e = append(e, settingEdit{table, "project_id", a.ProjectID}, settingEdit{table, "location", a.Location})
-	case AuthOAuth:
+	case a.Method == AuthOAuth && (provider == "anthropic" || provider == "bedrock"):
 		e = append(e, settingEdit{table, "profile", a.Profile})
 	}
 	return e
@@ -599,8 +612,8 @@ func editSettings(prefixDir, workspace string, edits []settingEdit) (string, err
 // SetAuth sets how provider signs in, in a scope. It returns the file
 // written.
 func SetAuth(prefixDir, workspace, provider string, a ProviderAuth) (string, error) {
-	if !knownProvider(provider) {
-		return "", fmt.Errorf("unknown provider %q (%s)", provider, strings.Join(KeyedProviders, ", "))
+	if _, signsIn := authMethods[provider]; !knownProvider(provider) && !signsIn {
+		return "", fmt.Errorf("unknown provider %q (%s, bedrock, azure)", provider, strings.Join(KeyedProviders, ", "))
 	}
 	a.trim()
 	if err := a.check(provider); err != nil {

@@ -19,11 +19,14 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/retail-cortex/blitz/apps/service/servicetest"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/retail-cortex/blitz/pkg/api"
 	"github.com/retail-cortex/blitz/pkg/config"
@@ -96,6 +99,7 @@ func runCLI(t *testing.T, args ...string) (string, error) {
 	cmd.SetErr(&out)
 	cmd.SetArgs(args)
 	err := cmd.Execute()
+	stopPrivate() // as main does
 	return out.String(), err
 }
 
@@ -147,7 +151,58 @@ func isolate(t *testing.T) string {
 		t.Setenv(k, "")
 	}
 	t.Chdir(t.TempDir())
+	useTestServices(t)
 	return home
+}
+
+// useTestServices gives the test a socket of its own, with no service on
+// it, and starts the services the CLI asks for (the shared one, a run's
+// own) in this process, stopping them when the test ends.
+func useTestServices(t *testing.T) {
+	t.Helper()
+	short := func() string { // socket paths must be short
+		d, err := os.MkdirTemp("/tmp", "bt")
+		require.NoError(t, err)
+		t.Cleanup(func() { os.RemoveAll(d) })
+		return filepath.Join(d, "s.sock")
+	}
+	t.Setenv("BLITZ_SOCKET", short())
+	ctx, cancel := context.WithCancel(context.Background())
+	var wg sync.WaitGroup
+	run := func(sock string, serve func(context.Context, string) error) error {
+		done := make(chan struct{})
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			defer close(done)
+			serve(ctx, sock)
+		}()
+		return waitService(context.Background(), sock, done)
+	}
+	oldShared, oldPrivate, oldDirs := startShared, startPrivate, serviceDirs
+	serviceDirs = func() []string { return nil } // PATH only: not the runfiles' real blitzd
+	startShared = func(_ context.Context, sock string) error { return run(sock, servicetest.Run) }
+	startPrivate = func(_ context.Context, o serviceOptions) (string, error) {
+		sock := short()
+		ro := servicetest.RunOverrides{Model: o.Model, Agent: o.Agent, Agency: o.Agency, PluginDirs: o.PluginDirs, AddDirs: o.AddDirs, SessionDir: o.SessionDir, TrustProject: o.TrustProject, AppendSystemPrompt: o.AppendSystemPrompt}
+		pctx, stop := context.WithCancel(ctx)
+		done := make(chan struct{})
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			defer close(done)
+			servicetest.RunWith(pctx, sock, o.Config, ro)
+		}()
+		keepPrivate(func() { stop(); <-done })
+		return sock, waitService(context.Background(), sock, done)
+	}
+	t.Cleanup(func() {
+		cancel()
+		stopped := make(chan struct{})
+		go func() { wg.Wait(); close(stopped) }()
+		servicetest.Stopped(t, stopped, 20*time.Second)
+		startShared, startPrivate, serviceDirs = oldShared, oldPrivate, oldDirs
+	})
 }
 
 func TestConfigInitAndShow(t *testing.T) {
@@ -284,111 +339,6 @@ func TestOneShotFailsWithoutModel(t *testing.T) {
 	assert.Contains(t, err.Error(), "model initialization failed", "expected model failure, got %v", err)
 }
 
-func TestDoctorPricingCheck(t *testing.T) {
-	home := isolate(t)
-	os.MkdirAll(filepath.Join(home, ".blitz"), 0o700)
-	os.WriteFile(filepath.Join(home, ".blitz", ".env.toml"), []byte("[blitz]\ndefault_model = \"mystery-model-1\"\n"), 0o600)
-	checks := runDoctor(context.Background(), &globalFlags{}, false)
-	found := false
-	for _, c := range checks {
-		t.Run(c.name, func(t *testing.T) {
-			if c.name == "pricing" {
-				found = true
-				assert.Equal(t, statusWarn, c.status, "pricing check %+v", c)
-				assert.Contains(t, c.detail, "mystery-model-1", "pricing check %+v", c)
-			}
-		})
-	}
-	assert.True(t, found, "doctor has no pricing check")
-}
-
-// doctor checks the sign-in the provider uses: a project and ADC for
-// Gemini on Vertex AI, an ant profile for Claude with OAuth.
-func TestDoctorSignInCheck(t *testing.T) {
-	for _, tc := range []struct {
-		name     string
-		settings string
-		setup    func(t *testing.T, home string)
-		status   checkStatus
-		detail   string
-	}{
-		{name: "ADC without a project", settings: "[llm]\nprovider = \"gemini\"\n[llm.gemini]\nauth = \"adc\"\n",
-			status: statusFail, detail: "needs a project"},
-		{name: "ADC without credentials", settings: "[llm]\nprovider = \"gemini\"\n[llm.gemini]\nauth = \"adc\"\nproject_id = \"p\"\n",
-			status: statusWarn, detail: "gcloud auth application-default login"},
-		{name: "ADC from gcloud's login", settings: "[llm]\nprovider = \"gemini\"\n[llm.gemini]\nauth = \"adc\"\nproject_id = \"p\"\n",
-			setup: func(t *testing.T, home string) {
-				dir := filepath.Join(home, "gcloud")
-				t.Setenv("CLOUDSDK_CONFIG", dir)
-				require.NoError(t, os.MkdirAll(dir, 0o700))
-				require.NoError(t, os.WriteFile(filepath.Join(dir, "application_default_credentials.json"), []byte("{}"), 0o600))
-			},
-			status: statusOK, detail: "project p, location global: gcloud's application-default login"},
-		{name: "Claude on Vertex AI", settings: "[llm]\nprovider = \"anthropic\"\n[llm.anthropic]\nauth = \"adc\"\nproject_id = \"claude-p\"\nlocation = \"us-east5\"\n",
-			setup: func(t *testing.T, home string) {
-				t.Setenv("GOOGLE_APPLICATION_CREDENTIALS", filepath.Join(home, "key.json"))
-			},
-			status: statusOK, detail: "Claude on Vertex AI, Google Cloud ADC, project claude-p, location us-east5: GOOGLE_APPLICATION_CREDENTIALS"},
-		{name: "OAuth without a profile", settings: "[llm]\nprovider = \"anthropic\"\n[llm.anthropic]\nauth = \"oauth\"\nprofile = \"work\"\n",
-			status: statusFail, detail: "no `ant auth login` profile \"work\""},
-		{name: "OAuth with ant's profile", settings: "[llm]\nprovider = \"anthropic\"\n[llm.anthropic]\nauth = \"oauth\"\n",
-			setup: func(t *testing.T, home string) {
-				require.NoError(t, os.MkdirAll(filepath.Join(home, "ant", "credentials"), 0o700))
-				require.NoError(t, os.WriteFile(filepath.Join(home, "ant", "credentials", "default.json"), []byte("{}"), 0o600))
-			},
-			status: statusOK, detail: "profile \"default\""},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			home := isolate(t)
-			t.Setenv("GOOGLE_CLOUD_PROJECT", "")
-			t.Setenv("GOOGLE_CLOUD_LOCATION", "")
-			t.Setenv("GOOGLE_APPLICATION_CREDENTIALS", "")
-			t.Setenv("CLOUDSDK_CONFIG", filepath.Join(home, "no-gcloud"))
-			// Building the model looks for ADC; not finding a file, Google's
-			// libraries would probe for a metadata server (and outlive the
-			// test). Naming one skips the probe; nothing asks it for a token.
-			t.Setenv("GCE_METADATA_HOST", "127.0.0.1:1")
-			t.Setenv("ANTHROPIC_CONFIG_DIR", filepath.Join(home, "ant"))
-			t.Setenv("ANTHROPIC_PROFILE", "")
-			if tc.setup != nil {
-				tc.setup(t, home)
-			}
-			require.NoError(t, os.MkdirAll(filepath.Join(home, ".blitz"), 0o700))
-			require.NoError(t, os.WriteFile(filepath.Join(home, ".blitz", ".env.toml"), []byte(tc.settings), 0o600))
-			var got *check
-			for _, c := range runDoctor(context.Background(), &globalFlags{}, false) {
-				if c.name == "credentials" {
-					got = &c
-				}
-			}
-			require.NotNil(t, got, "doctor has no credentials check")
-			assert.Equal(t, tc.status, got.status, "%+v", got)
-			assert.Contains(t, got.detail, tc.detail)
-			if got.status == statusOK {
-				assert.Contains(t, got.detail, "(use --online to confirm)", "offline, found credentials aren't tried")
-			}
-		})
-	}
-}
-
-// With --online the model request tries the credentials, so the
-// credentials line doesn't suggest --online.
-func TestCheckADCOnline(t *testing.T) {
-	home := isolate(t)
-	t.Setenv("GOOGLE_CLOUD_LOCATION", "")
-	t.Setenv("GOOGLE_APPLICATION_CREDENTIALS", filepath.Join(home, "key.json"))
-	for _, tc := range []struct{ confirm, want string }{
-		{"", "Google Cloud ADC, project p, location global: GOOGLE_APPLICATION_CREDENTIALS"},
-		{" (use --online to confirm)", "Google Cloud ADC, project p, location global: GOOGLE_APPLICATION_CREDENTIALS (use --online to confirm)"},
-	} {
-		t.Run(tc.want, func(t *testing.T) {
-			st, detail := checkADC("gemini", "p", "", tc.confirm)
-			assert.Equal(t, statusOK, st)
-			assert.Equal(t, tc.want, detail)
-		})
-	}
-}
-
 func TestOneShotPlanRefusesEdits(t *testing.T) {
 	e := testEnv(t,
 		toolCall("create_file", map[string]any{"path": "x.txt", "content": "x"}),
@@ -404,39 +354,6 @@ func TestOneShotPlanRefusesEdits(t *testing.T) {
 	require.Equal(t, "1. make x.txt", res.Result, "result %+v %v", res, err)
 	toolErr, _ := res.ToolCalls[0].Result["error"].(string)
 	require.Contains(t, toolErr, "plan mode", "create_file result %+v", res.ToolCalls[0])
-}
-
-func TestDoctorSkillsCheck(t *testing.T) {
-	home := isolate(t)
-	cp := filepath.Join(home, ".blitz")
-	for name, doc := range map[string]string{
-		"ok":     "---\nname: ok-skill\nscripts:\n  - name: run\n    language: python\n    inline_code: \"print(1)\"\n---\n",
-		"net":    "---\nname: net-skill\nexecution_hints: {custom_hints: {network: \"true\"}}\nscripts:\n  - name: run\n    language: python\n    inline_code: \"print(1)\"\n---\n",
-		"broken": "---\nname: broken\nexecution_hints: {hitl_tier: TIER_9}\n---\n",
-		"plain":  "---\nname: plain\n---\nJust instructions.\n",
-	} {
-		os.MkdirAll(filepath.Join(cp, "skills", name), 0o700)
-		os.WriteFile(filepath.Join(cp, "skills", name, "SKILL.md"), []byte(doc), 0o600)
-	}
-	os.WriteFile(filepath.Join(cp, ".env.toml"), []byte("[skills.policy]\nsandbox = \"docker\"\n"), 0o600)
-	byName := map[string][]check{}
-	for _, c := range runDoctor(context.Background(), &globalFlags{}, false) {
-		byName[c.name] = append(byName[c.name], c)
-	}
-	has := func(name string, st checkStatus, text string) {
-		t.Helper()
-		for _, c := range byName[name] {
-			if c.status == st && strings.Contains(c.detail, text) {
-				return
-			}
-		}
-		t.Errorf("no %q check with %q: %+v", name, text, byName[name])
-	}
-	has("skills policy", statusWarn, `sandbox = "docker"`)
-	has("skills", statusWarn, "TIER_9")
-	has("skill net-skill", statusWarn, "needs the network")
-	has("skills", statusOK, "2 with scripts, 1 blocked")
-	assert.Len(t, byName["skill ok-skill"], 0, "ok-skill reported: %+v", byName["skill ok-skill"])
 }
 
 // exec runs one prompt, like `blitz <prompt>`, and never the REPL.

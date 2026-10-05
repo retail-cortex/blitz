@@ -38,6 +38,7 @@ import {
   mdiMinusBoxOutline,
   mdiPlusBoxOutline,
   mdiSourceBranch,
+  mdiSourceCommit,
   mdiUndoVariant,
 } from "@mdi/js";
 import { fileManager, revealPath } from "../desktop";
@@ -48,7 +49,6 @@ import { FileKind, GitAction, type FileEntry } from "../gen/blitz/v1/file_pb";
 import { gitActions, gitKeys } from "./gitMenu";
 import { t } from "../i18n";
 import { Button, ContextMenu, Dialog, Icon, IconButton, useSnackbar, type MenuEntry } from "../ui/controls";
-import { filesFloat, useFloatingDismiss } from "../ui/layout";
 import { ResizeHandle } from "../ui/ResizeHandle";
 import { fileIcon } from "./icons";
 import { ancestors, emptyTree, isFolder, joinPath, moveTarget, parentOf, rows, setExpanded, shownFolders, validName, withChildren, type Tree } from "./tree";
@@ -88,6 +88,7 @@ export function FilesShelf({
   onOpen,
   onMoved,
   onChanged,
+  onCommit,
   onClose,
   width,
   onResize,
@@ -108,14 +109,13 @@ export function FilesShelf({
   onMoved: (from: string, to: string | null) => void;
   /** Files changed on disk outside the editor (a git action): list again, reload open tabs. */
   onChanged: () => void;
+  /** Opens the commit dialog (the git menu's Commit…). */
+  onCommit?: () => void;
   onClose: () => void;
 }) {  // Simple mode: no refresh, collapse, hidden files, git actions or relative paths.
   const advanced = useAdvanced();
 
   const snack = useSnackbar();
-  // Floating over the editor, a click outside or Escape minimizes it.
-  const shelf = useRef<HTMLElement>(null);
-  useFloatingDismiss(true, shelf, `(max-width: ${filesFloat}px)`, "files", onClose);
   const [tree, setTree] = useState<Tree>(emptyTree);
   const [selected, setSelected] = useState<string | null>(null);
   const [naming, setNaming] = useState<Naming | null>(null);
@@ -360,6 +360,7 @@ export function FilesShelf({
             onSelect: () => (a === GitAction.DISCARD ? setDiscarding(e) : void runGit(e, a)),
           });
         }
+        if (onCommit) items.push({ label: t("desktop.commit.open"), icon: mdiSourceCommit, onSelect: onCommit });
       }
       items.push(
         "divider",
@@ -414,7 +415,7 @@ export function FilesShelf({
         if (row && (ev.key === "Delete" || ev.metaKey)) setDeleting(row);
         break;
       case "Escape":
-        if (!selected) return; // the floating shelf's Escape minimizes it
+        if (!selected) return;
         setSelected(null);
         break;
       default:
@@ -429,7 +430,7 @@ export function FilesShelf({
     ) : null;
 
   return (
-    <aside className="files-shelf" aria-label={t("desktop.files.title")} style={{ width }} ref={shelf}>
+    <aside className="files-shelf" aria-label={t("desktop.files.title")} style={{ width }}>
       <ResizeHandle width={width} edge="right" min={200} max={() => Math.min(560, window.innerWidth - 600)} label={t("desktop.files.resize")} onResize={onResize} />
       <div className="panel-head files-head">
         <span className="t-title-sm spacer">{t("desktop.files.title")}</span>

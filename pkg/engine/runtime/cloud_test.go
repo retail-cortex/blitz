@@ -103,6 +103,7 @@ func TestAzureModels(t *testing.T) {
 		{name: "OpenAI with Entra", model: "gpt-x", auth: "entra", want: "hi from gpt", header: "api-key= x-api-key= auth=Bearer entra-for-https://cognitiveservices.azure.com/.default"},
 		{name: "Claude with a key", model: "claude-x", want: "hi from claude", header: "/anthropic/v1/messages api-key= x-api-key=k1"},
 		{name: "Claude with Entra", model: "claude-x", auth: "entra", want: "hi from claude", header: "auth=Bearer entra-for-https://ai.azure.com/.default"},
+		{name: "OpenAI with OAuth, as Entra", model: "gpt-x", auth: "oauth", want: "hi from gpt", header: "api-key= x-api-key= auth=Bearer entra-for-https://cognitiveservices.azure.com/.default"},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			c := base
