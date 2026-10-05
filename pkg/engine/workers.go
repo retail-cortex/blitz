@@ -356,6 +356,9 @@ const unattendedPreamble = "You are running unattended as the scheduled worker %
 	"You may only do what the worker is permitted; anything else is refused, and you should carry on without it or stop. " +
 	"End with a short summary of what you did and anything you couldn't do.\n\n"
 
+// workerTitlePrefix starts a worker run's session title.
+const workerTitlePrefix = "⏰ "
+
 // RunWorker runs the named worker once, now, and records the run. The
 // worker must be enabled at its current hash. The run has a session of its
 // own (not the workspace's active one), gets exactly the worker's
@@ -414,10 +417,11 @@ func (w *Workspace) RunWorker(ctx context.Context, name string, o RunOptions) (a
 	}
 	defer st.Release()
 	st.SetWorkspace(w.Dir())
-	rec, err := st.CreateSession(session.NewSessionID(), fmt.Sprintf("⏰ %s %s", name, run.Started.Format("2006-01-02 15:04")), agent)
+	rec, err := st.CreateSession(session.NewSessionID(), fmt.Sprintf("%s%s %s", workerTitlePrefix, name, run.Started.Format("2006-01-02 15:04")), agent)
 	if err != nil {
 		return w.runFailed(run, o, err), err
 	}
+	rec.Origin = session.OriginWorker
 	run.SessionID = rec.ID
 	if o.OnStart != nil {
 		o.OnStart(run)

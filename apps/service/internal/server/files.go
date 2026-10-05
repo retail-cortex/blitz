@@ -70,7 +70,7 @@ func (h fileService) ListDir(ctx context.Context, r req[pb.ListDirRequest]) (*co
 	for _, e := range l.Entries {
 		res.Entries = append(res.Entries, &pb.FileEntry{
 			Name: e.Name, Path: e.Path, Kind: fileKinds[e.Kind], Size: e.Size, Modified: timestamp(e.Modified),
-			Git: e.Git, Hidden: e.Hidden, AgentRule: e.AgentRule,
+			Git: e.Git, Staged: e.Staged, Hidden: e.Hidden, AgentRule: e.AgentRule,
 		})
 	}
 	return ok(res)

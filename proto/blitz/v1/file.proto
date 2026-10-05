@@ -83,6 +83,9 @@ message FileEntry {
   string hidden = 7;
   // The agent's rule for it: "blocked", "read_only", or "".
   string agent_rule = 8;
+  // How much of a file's change is staged: "all", "some" (staged, then
+  // changed again), or "" (none, or a folder).
+  string staged = 9;
 }
 
 // Request message for FileService.ListDir.

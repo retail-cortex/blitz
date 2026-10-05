@@ -16,23 +16,34 @@
 
 import { describe, expect, it } from "vitest";
 import { GitAction } from "../gen/blitz/v1/file_pb";
-import { gitActions, gitKeys } from "./gitMenu";
+import { gitActions, gitKeys, stagedKey } from "./gitMenu";
 
 const { STAGE, UNSTAGE, DISCARD, IGNORE } = GitAction;
 
 describe("the Files tree's git actions", () => {
   it.each([
-    ["a modified file", false, "modified", [STAGE, UNSTAGE, DISCARD, IGNORE]],
-    ["a deleted file", false, "deleted", [STAGE, UNSTAGE, DISCARD, IGNORE]],
-    ["a renamed file", false, "renamed", [STAGE, UNSTAGE, DISCARD, IGNORE]],
-    ["an added file: nothing in the last commit to go back to", false, "added", [STAGE, UNSTAGE, IGNORE]],
-    ["an untracked file: nothing staged, nothing to discard", false, "untracked", [STAGE, IGNORE]],
-    ["a conflicted file", false, "conflicted", [STAGE, UNSTAGE, IGNORE]],
-    ["a clean file", false, "", [IGNORE]],
-    ["a folder with changes", true, "changed", [STAGE, UNSTAGE, DISCARD, IGNORE]],
-    ["a clean folder", true, "", [IGNORE]],
-  ])("%s", (_, folder, git, want) => {
-    expect(gitActions({ folder, git }, true)).toEqual(want);
+    ["a modified file, not staged", false, "modified", "", [STAGE, DISCARD, IGNORE]],
+    ["a staged file", false, "modified", "all", [UNSTAGE, DISCARD, IGNORE]],
+    ["a file changed again after staging", false, "modified", "some", [STAGE, UNSTAGE, DISCARD, IGNORE]],
+    ["a deleted file", false, "deleted", "", [STAGE, DISCARD, IGNORE]],
+    ["a staged deletion", false, "deleted", "all", [UNSTAGE, DISCARD, IGNORE]],
+    ["a renamed file", false, "renamed", "all", [UNSTAGE, DISCARD, IGNORE]],
+    ["an added file: nothing in the last commit to go back to", false, "added", "all", [UNSTAGE, IGNORE]],
+    ["an untracked file: nothing staged, nothing to discard", false, "untracked", "", [STAGE, IGNORE]],
+    ["a conflicted file: staging marks it resolved", false, "conflicted", "", [STAGE, IGNORE]],
+    ["a clean file", false, "", "", [IGNORE]],
+    ["a folder with changes", true, "changed", "", [STAGE, UNSTAGE, DISCARD, IGNORE]],
+    ["a clean folder", true, "", "", [IGNORE]],
+  ])("%s", (_, folder, git, staged, want) => {
+    expect(gitActions({ folder, git, staged }, true)).toEqual(want);
+  });
+
+  it.each([
+    ["all", "desktop.files.git.state_staged"],
+    ["some", "desktop.files.git.state_partly"],
+    ["", "desktop.files.git.state_unstaged"],
+  ])("names the staged state %j", (staged, key) => {
+    expect(stagedKey(staged)).toBe(key);
   });
 
   it("offers nothing outside a repository", () => {

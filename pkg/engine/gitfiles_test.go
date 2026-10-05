@@ -121,10 +121,28 @@ func TestGitFileAction(t *testing.T) {
 	gitOut(t, dir, "commit", "-qm", "init")
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "f.txt"), []byte("two\n"), 0o644))
 
+	staged := func() string {
+		t.Helper()
+		l, err := w.ListDir(ctx, "", false)
+		require.NoError(t, err)
+		for _, e := range l.Entries {
+			if e.Path == "f.txt" {
+				assert.Equal(t, "modified", e.Git)
+				return e.Staged
+			}
+		}
+		t.Fatal("no f.txt")
+		return ""
+	}
+	assert.Empty(t, staged())
 	require.NoError(t, w.GitFileAction(ctx, "f.txt", GitStage))
 	assert.Equal(t, "f.txt", gitOut(t, dir, "diff", "--cached", "--name-only"))
+	assert.Equal(t, "all", staged(), "the Files view sees it staged")
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "f.txt"), []byte("three\n"), 0o644))
+	assert.Equal(t, "some", staged(), "changed again after staging")
 	require.NoError(t, w.GitFileAction(ctx, "f.txt", GitUnstage))
 	assert.Empty(t, gitOut(t, dir, "diff", "--cached", "--name-only"))
+	assert.Empty(t, staged())
 	require.NoError(t, w.GitFileAction(ctx, "f.txt", GitDiscard))
 	data, err := os.ReadFile(filepath.Join(dir, "f.txt"))
 	require.NoError(t, err)

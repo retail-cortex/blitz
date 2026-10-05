@@ -62,6 +62,10 @@ type FileEntry struct {
 	// "untracked", "conflicted"; "changed" for a folder with changes
 	// under it), "" when clean or outside a repository.
 	Git string
+	// Staged says how much of a file's change is in git's index: "all"
+	// (staged), "some" (staged, then changed again), or "" (none, or a
+	// folder).
+	Staged string
 	// Hidden says why the entry is hidden by default: "blocked" (the
 	// agent's blocked paths), "ignored" (git), "dot", or "".
 	Hidden string
@@ -177,6 +181,9 @@ func (w *Workspace) ListDir(ctx context.Context, p string, showHidden bool) (Dir
 			entry.Hidden = "dot"
 		}
 		entry.Git = g.status(child, entry.Kind == KindFolder)
+		if entry.Kind != KindFolder {
+			entry.Staged = g.staged[child]
+		}
 		out.Entries = append(out.Entries, entry)
 	}
 	if g.repo {
@@ -446,8 +453,9 @@ func DisplayPrompt(text string) string {
 // configured programs (filters, fsmonitor), as GitDiff.
 
 type gitStatus struct {
-	repo  bool
-	files map[string]string // workspace-relative path → status
+	repo   bool
+	files  map[string]string // workspace-relative path → status
+	staged map[string]string // workspace-relative path → "all" or "some"
 }
 
 // status is the status of path (a folder: whether anything under it changed).
@@ -482,7 +490,7 @@ func (w *Workspace) gitInfo(ctx context.Context, dir string) gitStatus {
 		return gitStatus{}
 	}
 	top := strings.TrimSpace(string(prefix)) // the workspace, from the repository's top
-	g := gitStatus{repo: true, files: map[string]string{}}
+	g := gitStatus{repo: true, files: map[string]string{}, staged: map[string]string{}}
 	out, err := w.git(ctx, nil, "--literal-pathspecs", "status", "--porcelain=v1", "-z", "--untracked-files=all", "--ignored=no", "--", dir)
 	if err != nil {
 		return g
@@ -502,8 +510,26 @@ func (w *Workspace) gitInfo(ctx context.Context, dir string) gitStatus {
 			continue
 		}
 		g.files[rel] = gitState(xy)
+		if s := stagedState(xy); s != "" {
+			g.staged[rel] = s
+		}
 	}
 	return g
+}
+
+// stagedState is how much of a porcelain XY status is in the index: "all"
+// (X set, Y clean), "some" (both set), "" (none, untracked, conflicted).
+func stagedState(xy string) string {
+	x, y := xy[0], xy[1]
+	switch {
+	case xy == "??" || x == 'U' || y == 'U' || xy == "DD" || xy == "AA":
+		return ""
+	case x != ' ' && y == ' ':
+		return "all"
+	case x != ' ':
+		return "some"
+	}
+	return ""
 }
 
 // gitState names a porcelain XY status.

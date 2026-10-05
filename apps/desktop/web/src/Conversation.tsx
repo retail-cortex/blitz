@@ -38,7 +38,6 @@ import {
   mdiFileEditOutline,
   mdiFormatListChecks,
   mdiHelpCircleOutline,
-  mdiHistory,
   mdiFolderOutline,
   mdiFileMusicOutline,
   mdiFilePdfBox,
@@ -64,6 +63,7 @@ import {
 import { files, serviceLost, sessions, workspaces } from "./api";
 import { editorConfig, toEditor } from "./host";
 import { DiffView } from "./Changes";
+import { chatTitle, HistoryMenu } from "./HistoryMenu";
 import { isUnavailable, message, reason } from "./errors";
 import type { SessionInfo } from "./gen/blitz/v1/session_pb";
 import { Decision, type ApprovalRequest, type Question, type Task, type Usage } from "./gen/blitz/v1/turn_pb";
@@ -185,7 +185,7 @@ export function Conversation({
   }, [dir]);
   const commands = useMemo(() => allCommands(customCommands), [customCommands]);
   const [dragging, setDragging] = useState(false);
-  const [deleting, setDeleting] = useState<SessionInfo | null>(null);
+  const [deleting, setDeleting] = useState<SessionInfo[] | null>(null);
   const [forceRewind, setForceRewind] = useState<{ index: number; mode: string; error: string } | null>(null);
   const abort = useRef<AbortController | null>(null);
   const following = useRef(""); // the background run the turn view follows
@@ -586,15 +586,25 @@ export function Conversation({
       fail(e);
     }
   };
-  const remove = async (s: SessionInfo) => {
+  // Deletes the chats one by one; those that can't go (a worker's run
+  // still going, say) are reported, and the rest still deleted.
+  const remove = async (list: SessionInfo[]) => {
     setDeleting(null);
-    try {
-      await sessions.deleteSession({ workspace: dir, sessionId: s.id });
-      snack(t("desktop.chat.deleted", { title: chatTitle(s) }));
-      await refreshList();
-    } catch (e) {
-      snack(message(e), { error: true });
+    let done = 0;
+    const failed: string[] = [];
+    for (const s of list) {
+      try {
+        await sessions.deleteSession({ workspace: dir, sessionId: s.id });
+        done++;
+      } catch (e) {
+        failed.push(`${chatTitle(s)}: ${message(e)}`);
+      }
     }
+    // One snackbar: what was deleted, and what couldn't be and why.
+    const deleted = done === 0 ? "" : done === 1 && list.length === 1 ? t("desktop.chat.deleted", { title: chatTitle(list[0]) }) : tn("desktop.chat.deleted_n", done);
+    if (failed.length) snack([deleted, tn("desktop.chat.delete_failed", failed.length, { reason: failed.join("; ") })].filter(Boolean).join(". "), { error: true });
+    else snack(deleted);
+    await refreshList();
   };
   const rename = async (title: string) => {
     try {
@@ -971,19 +981,26 @@ export function Conversation({
       {dockEl && visible ? createPortal(dock, dockEl) : dock}
       {deleting && (
         <Dialog
-          title={t("desktop.chat.delete_title", { title: chatTitle(deleting) })}
+          title={deleting.length === 1 ? t("desktop.chat.delete_title", { title: chatTitle(deleting[0]) }) : tn("desktop.chat.delete_n_title", deleting.length)}
           icon={mdiDeleteOutline}
           onClose={() => setDeleting(null)}
           footer={
             <>
               <Button onClick={() => setDeleting(null)}>{t("desktop.cancel")}</Button>
               <Button variant="filled" danger onClick={() => void remove(deleting)}>
-                {t("desktop.chat.delete")}
+                {deleting.length === 1 ? t("desktop.chat.delete") : tn("desktop.chat.delete_n", deleting.length)}
               </Button>
             </>
           }
         >
-          <p>{t("desktop.chat.delete_body")}</p>
+          <p>{deleting.length === 1 ? t("desktop.chat.delete_body") : tn("desktop.chat.delete_n_body", deleting.length)}</p>
+          {deleting.length > 1 && (
+            <ul className="delete-list t-body-sm">
+              {deleting.map((s) => (
+                <li key={s.id}>{chatTitle(s)}</li>
+              ))}
+            </ul>
+          )}
         </Dialog>
       )}
       {forceRewind && (
@@ -1017,10 +1034,6 @@ export function Conversation({
 }
 
 /** How a chat is named in History: a snapshot by its name, else its title. */
-function chatTitle(s: SessionInfo): string {
-  return s.snapshot ? `📸 ${s.snapshot}` : s.title || t("desktop.untitled");
-}
-
 function SessionBar({
   session,
   list,
@@ -1036,7 +1049,7 @@ function SessionBar({
   onNew: () => void;
   onLoad: (id: string) => void;
   onRename: (t: string) => void;
-  onDelete: (s: SessionInfo) => void;
+  onDelete: (s: SessionInfo[]) => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [title, setTitle] = useState("");
@@ -1075,26 +1088,7 @@ function SessionBar({
         </button>
       )}
       <span className="spacer" />
-      <Menu
-        placement="down end"
-        className="wide-menu"
-        trigger={(p) => <IconButton icon={mdiHistory} label={t("desktop.chat.history")} disabled={running} {...p} />}
-        items={
-          list.length === 0
-            ? [{ heading: t("desktop.chat.none") }]
-            : [
-                { heading: t("desktop.chat.list") },
-                ...list.map((s) => ({
-                  label: chatTitle(s),
-                  detail: tn("desktop.messages", s.messageCount) + (s.updated ? ` · ${timestampDate(s.updated).toLocaleString(language(), { dateStyle: "medium", timeStyle: "short" })}` : ""),
-                  on: s.id === session?.id,
-                  onSelect: () => onLoad(s.id),
-                  // The chat in view can't be deleted: start or load another first.
-                  actions: s.id === session?.id ? undefined : [{ icon: mdiDeleteOutline, label: t("desktop.chat.delete"), removes: true, onSelect: () => onDelete(s) }],
-                })),
-              ]
-        }
-      />
+      <HistoryMenu list={list} current={session?.id} disabled={running} onLoad={onLoad} onDelete={onDelete} />
       <IconButton icon={mdiPlus} label={t("desktop.chat.new")} variant="filled" onClick={onNew} disabled={running} />
     </div>
   );

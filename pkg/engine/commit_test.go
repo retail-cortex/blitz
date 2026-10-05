@@ -156,6 +156,9 @@ func TestDraftCommit(t *testing.T) {
 		want  string
 	}{
 		{"no model", func(context.Context, *config.Config, string) (model.LLM, error) { return nil, errors.New("no key") }, "no key"},
+		{"a client's config in the error", func(context.Context, *config.Config, string) (model.LLM, error) {
+			return nil, errors.New("bad key. ClientConfig: {APIKey: sk-secret}")
+		}, "bad key"},
 		{"an empty reply", func(context.Context, *config.Config, string) (model.LLM, error) {
 			return &promptLLM{reply: "```\n```"}, nil
 		}, "no message"},
@@ -170,6 +173,7 @@ func TestDraftCommit(t *testing.T) {
 			assert.Len(t, d.Files, 1)
 			assert.Empty(t, d.Message)
 			assert.Contains(t, d.Problem, tt.want)
+			assert.NotContains(t, d.Problem, "ClientConfig", "the summary, never the client's internals")
 		})
 	}
 

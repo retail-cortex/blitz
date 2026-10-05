@@ -125,6 +125,59 @@ func TestCommit(t *testing.T) {
 	assert.Equal(t, "NOTHING_STAGED", info.Reason)
 }
 
+// What the desktop's Files tree and Changes view see as files are staged:
+// each file's flag says how much of it is staged, and the git diff holds
+// every change since the last commit, new files too.
+func TestStagedFlagsAndDiff(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("no git")
+	}
+	_, s := serve(t, nil, text("hi"))
+	srv := httptest.NewServer(s.Handler())
+	defer srv.Close()
+	ws := pb.NewWorkspaceServiceClient(http.DefaultClient, srv.URL)
+	files := pb.NewFileServiceClient(http.DefaultClient, srv.URL)
+	ctx := context.Background()
+	dir := t.TempDir()
+	git := func(args ...string) {
+		t.Helper()
+		cmd := exec.Command("git", append([]string{"-c", "user.email=t@t", "-c", "user.name=t"}, args...)...)
+		cmd.Dir = dir
+		out, err := cmd.CombinedOutput()
+		require.NoError(t, err, "%s", out)
+	}
+	write := func(name, data string) {
+		t.Helper()
+		require.NoError(t, os.WriteFile(filepath.Join(dir, name), []byte(data), 0o644))
+	}
+	git("init", "-q")
+	write("a.txt", "one\n")
+	git("add", ".")
+	git("commit", "-qm", "init")
+	write("a.txt", "two\n")
+	write("n.txt", "new\n")
+	flags := func() map[string]string {
+		t.Helper()
+		l, err := files.ListDir(ctx, connect.NewRequest(&pb.ListDirRequest{Workspace: dir}))
+		require.NoError(t, err)
+		out := map[string]string{}
+		for _, e := range l.Msg.Entries {
+			out[e.Path] = e.Git + "/" + e.Staged
+		}
+		return out
+	}
+	assert.Equal(t, map[string]string{"a.txt": "modified/", "n.txt": "untracked/"}, flags())
+
+	_, err := files.GitFileAction(ctx, connect.NewRequest(&pb.GitFileActionRequest{Workspace: dir, Path: "a.txt", Action: pb.GitAction_GIT_ACTION_STAGE}))
+	require.NoError(t, err)
+	assert.Equal(t, map[string]string{"a.txt": "modified/all", "n.txt": "untracked/"}, flags())
+
+	d, err := ws.GetDiff(ctx, connect.NewRequest(&pb.GetDiffRequest{Workspace: dir, Git: true}))
+	require.NoError(t, err)
+	assert.Contains(t, d.Msg.Diff, "+two", "a staged change")
+	assert.Contains(t, d.Msg.Diff, "+new", "a new file")
+}
+
 func TestCommitError(t *testing.T) {
 	tests := []struct {
 		err  error

@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"strings"
 
 	"github.com/retail-cortex/blitz/pkg/api"
 
@@ -31,13 +32,22 @@ import (
 func sessionInfo(r *session.SessionRecord) api.SessionInfo {
 	info := api.SessionInfo{
 		ID: r.ID, Title: r.Title, Agent: r.Agent, Workspace: r.Workspace, Snapshot: r.Name, From: r.From,
-		MovedFrom: r.MovedFrom, MovedAt: r.MovedAt,
+		MovedFrom: r.MovedFrom, MovedAt: r.MovedAt, Origin: origin(r),
 		MessageCount: r.MessageCount, Created: r.CreatedAt, Updated: r.UpdatedAt,
 	}
 	for _, m := range r.Messages {
 		info.Messages = append(info.Messages, api.Message{Role: m.Role, Text: userText(m.Role, m.Content), Time: m.Timestamp, Kind: m.Kind})
 	}
 	return info
+}
+
+// origin is what started a session; a worker's run saved before sessions
+// kept it is known by the title RunWorker gives it ("⏰ name date").
+func origin(r *session.SessionRecord) string {
+	if r.Origin == "" && strings.HasPrefix(r.Title, workerTitlePrefix) {
+		return session.OriginWorker
+	}
+	return r.Origin
 }
 
 func sessionInfos(list []*session.SessionRecord) []api.SessionInfo {

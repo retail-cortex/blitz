@@ -258,6 +258,68 @@ func TestRevokeApprovalSaveFails(t *testing.T) {
 	}
 }
 
+// The git diff is every change since the last commit, staged or not, and
+// new files; before the first commit, what's staged and what isn't.
+func TestGitDiffEveryChange(t *testing.T) {
+	needGit(t)
+	ctx := context.Background()
+	t.Run("since the last commit", func(t *testing.T) {
+		w := openTest(t)
+		dir := w.Dir()
+		gitIn(t, dir, "init", "-q")
+		write(t, dir, "staged.txt", "one\n")
+		write(t, dir, "unstaged.txt", "one\n")
+		write(t, dir, "gone.txt", "one\n")
+		gitIn(t, dir, "add", ".")
+		gitIn(t, dir, "commit", "-qm", "init")
+		write(t, dir, "staged.txt", "staged two\n")
+		gitIn(t, dir, "add", "staged.txt")
+		write(t, dir, "unstaged.txt", "unstaged two\n")
+		require.NoError(t, os.Remove(filepath.Join(dir, "gone.txt")))
+		write(t, dir, "new.txt", "brand new\n")
+		diff, err := w.GitDiff(ctx, false)
+		require.NoError(t, err, diff)
+		for _, want := range []string{"+staged two", "+unstaged two", "deleted file mode", "b/new.txt", "+brand new"} {
+			assert.Contains(t, diff, want)
+		}
+	})
+	t.Run("before the first commit", func(t *testing.T) {
+		w := openTest(t)
+		dir := w.Dir()
+		gitIn(t, dir, "init", "-q")
+		write(t, dir, "a.txt", "added\n")
+		gitIn(t, dir, "add", "a.txt")
+		write(t, dir, "a.txt", "added, then changed\n")
+		write(t, dir, "n.txt", "untracked\n")
+		diff, err := w.GitDiff(ctx, false)
+		require.NoError(t, err, diff)
+		for _, want := range []string{"+added", "+added, then changed", "+untracked"} {
+			assert.Contains(t, diff, want)
+		}
+	})
+	t.Run("many new files", func(t *testing.T) {
+		old := maxUntrackedDiffs
+		maxUntrackedDiffs = 2
+		t.Cleanup(func() { maxUntrackedDiffs = old })
+		w := openTest(t)
+		dir := w.Dir()
+		gitIn(t, dir, "init", "-q")
+		for _, n := range []string{"a", "b", "c", "d"} {
+			write(t, dir, n+".txt", n+"\n")
+		}
+		diff, err := w.GitDiff(ctx, false)
+		require.NoError(t, err, diff)
+		assert.Contains(t, diff, "b/a.txt")
+		assert.NotContains(t, diff, "b/c.txt")
+		assert.Contains(t, diff, "(2 more new files not shown)")
+	})
+	t.Run("not a repository", func(t *testing.T) {
+		w := openTest(t)
+		_, err := w.GitDiff(ctx, false)
+		assert.Error(t, err)
+	})
+}
+
 // The diff can be colored; with no active session there is no session
 // diff.
 func TestGitDiffColorAndNoSessionDiff(t *testing.T) {

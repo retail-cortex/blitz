@@ -193,7 +193,13 @@ function state(dir: string): State {
     first.messageCount = first.messages.length;
     const other = create(SessionInfoSchema, { id: "session-0", title: "Fix the flaky checkout test", workspace: dir, messageCount: 14, updated: now() });
     s = {
-      sessions: [first, other],
+      sessions: [
+        first,
+        other,
+        create(SessionInfoSchema, { id: "session-w1", title: "⏰ nightly-deps 2026-10-04 02:00", origin: "worker", agent: "blitz", workspace: dir, messageCount: 6, updated: now() }),
+        create(SessionInfoSchema, { id: "session-w2", title: "⏰ nightly-deps 2026-10-03 02:00", origin: "worker", agent: "blitz", workspace: dir, messageCount: 4, updated: now() }),
+        create(SessionInfoSchema, { id: "session-1b", title: "Add the cart API docs", workspace: dir, messageCount: 9, updated: now() }),
+      ],
       active: first.id,
       settings: { agent: "blitz", model: "gemini-3.8-flash", provider: "gemini", effort: "", mode: "default", agency: "high", locale: "en-US", style: "default" },
       pending: new Map(),
@@ -611,7 +617,7 @@ export function installFake() {
           const s = state(workspace);
           if (ref.startsWith("worker-") && !s.sessions.some((x) => x.id === ref)) {
             // A worker run's session: its report.
-            const run = create(SessionInfoSchema, { id: ref, title: "⏰ nightly-deps", workspace, created: now(), updated: now(), messages: [msg("user", "Check for outdated dependencies."), msg("model", "Two modules are behind: golang.org/x/net and google.golang.org/grpc. The report is in reports/deps.md.")] });
+            const run = create(SessionInfoSchema, { id: ref, title: "⏰ nightly-deps", origin: "worker", workspace, created: now(), updated: now(), messages: [msg("user", "Check for outdated dependencies."), msg("model", "Two modules are behind: golang.org/x/net and google.golang.org/grpc. The report is in reports/deps.md.")] });
             run.messageCount = 2;
             s.sessions.push(run);
           }

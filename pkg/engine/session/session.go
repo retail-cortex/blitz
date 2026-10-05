@@ -54,6 +54,12 @@ var validID = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$`)
 // ErrInvalidID is returned for session IDs that could escape the storage directory.
 var ErrInvalidID = errors.New("invalid session id")
 
+// What started a session (SessionRecord.Origin); a chat has none.
+const (
+	OriginWorker     = "worker"     // a worker's run, scheduled or not
+	OriginBackground = "background" // a detached run (blitz --bg)
+)
+
 // SessionRecord holds persistent metadata and chat history for a session.
 type SessionRecord struct {
 	ID           string    `json:"id"`
@@ -81,6 +87,9 @@ type SessionRecord struct {
 	// that were in the other workspace.
 	MovedFrom string `json:"moved_from,omitempty"`
 	MovedAt   int    `json:"moved_at,omitempty"`
+	// Origin is what started the session: OriginWorker, OriginBackground,
+	// or "" for a chat.
+	Origin string `json:"origin,omitempty"`
 	// Messages is populated by Load and for the active session; List leaves it
 	// empty and reports MessageCount instead.
 	Messages []Message `json:"messages,omitempty"`

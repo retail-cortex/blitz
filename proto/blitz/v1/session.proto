@@ -136,6 +136,9 @@ message SessionInfo {
   // had then: earlier prompts were there (empty and 0 if never moved).
   string moved_from = 11;
   int32 moved_at = 12;
+  // What started it: "worker" (a worker's run), "background" (a detached
+  // run, blitz --bg), or "" for a chat.
+  string origin = 13;
 }
 
 // Message is one message in a transcript.
