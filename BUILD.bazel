@@ -62,6 +62,7 @@ exports_files(
 #   bazel run //:desktop-web             the desktop page in a browser (?fake)
 #   bazel run //:docs                    the docs site, http://localhost:1313
 #   bazel build //:deb                   the desktop .deb (Linux)
+#   bazel build //:pacman                the desktop's Arch Linux package
 #   bazel build //:mac-app               Blitz.app (macOS)
 #   bazel build //:archives              every platform's release archive
 #   bazel build //:build-all             everything this machine can build:
@@ -103,6 +104,11 @@ alias(
 )
 
 alias(
+    name = "pacman",
+    actual = "//apps/desktop/packaging:pacman",
+)
+
+alias(
     name = "mac-app",
     actual = "//apps/desktop/packaging:Blitz.app",
 )
@@ -121,6 +127,7 @@ filegroup(
         ":blitzd",
         ":deb",
         ":desktop",
+        ":pacman",
     ],
     tags = ["manual"],
     target_compatible_with = ["@platforms//os:linux"],

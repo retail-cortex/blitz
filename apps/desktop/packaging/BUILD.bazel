@@ -230,6 +230,78 @@ the service, which it installs and starts.""",
     visibility = ["//visibility:public"],
 )
 
+# ---- Arch Linux: a .pkg.tar.zst with the .deb's programs, link, launcher
+# and icons, made by //tools/pacman (rules_pkg has no pacman rule) and
+# compressed with zstd. Arch keeps a package's licenses in
+# /usr/share/licenses/<name>; the Apache License is the system's copy
+# (the licenses package), so only the notices are added.
+
+pkg_files(
+    name = "pacman_licenses",
+    srcs = [
+        "//:NOTICE",
+        "//:THIRD_PARTY_NOTICES",
+    ],
+    prefix = "usr/share/licenses/blitz-desktop",
+    strip_prefix = strip_prefix.files_only(),
+)
+
+pkg_tar(
+    name = "pacman_data",
+    srcs = [
+        ":deb_icon",
+        ":deb_icon_scalable",
+        ":deb_launcher",
+        ":deb_link",
+        ":deb_programs",
+        ":pacman_licenses",
+    ],
+    extension = "tar",
+    target_compatible_with = _LINUX,
+)
+
+# The build date is the build's, when stamped (--config=release), else a
+# fixed one so builds match.
+_PACMAN_CMD = """
+[ -f bazel-out/volatile-status.txt ] && export SOURCE_DATE_EPOCH="$$(sed -n 's/^BUILD_TIMESTAMP //p' bazel-out/volatile-status.txt)"
+$(execpath //tools/pacman) \
+  --data $(execpath :pacman_data) \
+  --version-file $(execpath //build:version) \
+  --arch {arch} \
+  --name blitz-desktop \
+  --desc "Blitz desktop app: a window onto the Blitz service, with the blitz command, blitz-tray and blitzd" \
+  --url https://github.com/retail-cortex/blitz \
+  --license Apache-2.0 \
+  --packager "Blitz <https://github.com/retail-cortex/blitz/issues>" \
+  --depend bubblewrap \
+  --depend gtk3 \
+  --depend "webkit2gtk-4.1>=2.40" \
+  --out $@.tar
+$(ZSTD_BIN) -q -19 -T0 --rm -o $@ $@.tar
+"""
+
+# Named without its version or architecture, like the .deb: the release
+# workflow names it blitz-desktop-<pkgver>-<pkgrel>-<arch>.pkg.tar.zst.
+# The dependencies are the .deb's (2.40 is the first WebKitGTK that hands
+# the app a request's body; bubblewrap is the agent's sandbox on Linux).
+genrule(
+    name = "pacman",
+    srcs = [
+        ":pacman_data",
+        "//build:version",
+    ],
+    outs = ["blitz-desktop.pkg.tar.zst"],
+    cmd = select({
+        "@platforms//cpu:arm64": _PACMAN_CMD.format(arch = "aarch64"),
+        "@platforms//cpu:x86_64": _PACMAN_CMD.format(arch = "x86_64"),
+    }),
+    stamp = -1,
+    target_compatible_with = _LINUX,
+    toolchains = ["@zstd_toolchains//:resolved_toolchain"],
+    tools = ["//tools/pacman"],
+    visibility = ["//visibility:public"],
+)
+
 # The packages carry the license files (each on its own platform).
 sh_test(
     name = "app_contents_test",
@@ -246,5 +318,14 @@ sh_test(
     srcs = ["contents_test.sh"],
     args = ["$(rootpath :deb)"],
     data = [":deb"],
+    target_compatible_with = _LINUX,
+)
+
+sh_test(
+    name = "pacman_contents_test",
+    size = "small",
+    srcs = ["contents_test.sh"],
+    args = ["$(rootpath :pacman)"],
+    data = [":pacman"],
     target_compatible_with = _LINUX,
 )

@@ -26,7 +26,7 @@ Blitz reads your workspace, makes the change, checks it, and gets out of the way
 
 ## Install
 
-Download the archive for your platform from the [releases](https://github.com/retail-cortex/blitz/releases): macOS (`darwin_arm64`, `darwin_amd64`), Linux (`linux_amd64`, `linux_arm64`) or Windows (`windows_amd64`). Each holds `blitz`, `blitzd`, the `blz` shortcut (a link to `blitz`; not on Windows) and the license files; put its folder on your `PATH`. The desktop app is `Blitz_<version>_macos_universal.dmg`, or `blitz-desktop_<version>_<arch>.deb` for Ubuntu 24.04, Debian 13 and later.
+Download the archive for your platform from the [releases](https://github.com/retail-cortex/blitz/releases): macOS (`darwin_arm64`, `darwin_amd64`), Linux (`linux_amd64`, `linux_arm64`) or Windows (`windows_amd64`). Each holds `blitz`, `blitzd`, the `blz` shortcut (a link to `blitz`; not on Windows) and the license files; put its folder on your `PATH`. The desktop app is `Blitz_<version>_macos_universal.dmg`, `blitz-desktop_<version>_<arch>.deb` for Ubuntu 24.04, Debian 13 and later, or `blitz-desktop-<version>-1-<arch>.pkg.tar.zst` for Arch Linux (`sudo pacman -U ./blitz-desktop-<version>-1-x86_64.pkg.tar.zst`).
 
 **On Linux, the shell sandbox is required.** Install bubblewrap (`sudo apt install bubblewrap`) and run `blitz security`: it says whether bubblewrap runs. On Ubuntu 24.04 and later, AppArmor restricts the user namespaces it needs; `blitz security fix-apparmor` (or **Allow bubblewrap** in the desktop app) installs an AppArmor profile that lets bwrap alone have them, asking for your password once. Until the sandbox works, workspaces don't open; to run the agent's commands unsandboxed instead, set `[sandbox] shell = "auto"` in `~/.blitz/.env.toml`.
 
@@ -124,6 +124,7 @@ bazel run //:docs                         # the docs site, http://localhost:1313
 bazel build //:mac-app                    # macOS: Blitz.app (universal)
 bazel build //:deb                        # Linux: bazel-bin/apps/desktop/packaging/blitz-desktop_amd64.deb
 sudo dpkg -i bazel-bin/apps/desktop/packaging/blitz-desktop_amd64.deb   # reinstalls even at the same version
+bazel build //:pacman                     # Arch Linux: bazel-bin/apps/desktop/packaging/blitz-desktop.pkg.tar.zst
 bazel build --config=release //:archives  # the release archives, every platform, version from git
 ```
 
