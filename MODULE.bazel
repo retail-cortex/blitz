@@ -27,6 +27,11 @@ bazel_dep(name = "platforms", version = "1.1.0")
 bazel_dep(name = "rules_pkg", version = "1.3.0")
 bazel_dep(name = "rules_buf", version = "0.5.4")
 
+# zstd, which compresses the Arch Linux package
+# (//apps/desktop/packaging:pacman): bazel_lib's prebuilt binaries.
+bazel_lib_toolchains = use_extension("@bazel_lib//lib:extensions.bzl", "toolchains")
+use_repo(bazel_lib_toolchains, "zstd_toolchains")
+
 go_sdk = use_extension("@rules_go//go:extensions.bzl", "go_sdk")
 go_sdk.from_file(go_mod = "//:go.mod")
 

@@ -88,8 +88,9 @@ jobs:
           gh release create "$GITHUB_REF_NAME" --draft --verify-tag --generate-notes "${pre[@]}" \
             --notes-file .github/release-footer.md dist/*
 
-  # The desktop app: a universal macOS disk image and Linux .debs, attached
-  # to the draft release, each signed keylessly with its own cosign bundle.
+  # The desktop app: a universal macOS disk image, and Linux .debs and Arch
+  # Linux packages, attached to the draft release, each signed keylessly
+  # with its own cosign bundle.
   # Bazel builds the app and the packages; on macOS sign_macos.sh signs it
   # with a Developer ID and notarises it when the signing secrets are set
   # (spec_release_025 REL-22), else signs it ad hoc with a warning.
@@ -175,6 +176,12 @@ jobs:
           mkdir dist
           deb="$(bazel cquery --config=release --output=files //apps/desktop/packaging:deb | grep '\.deb$' | head -1)"
           cp "$deb" "dist/blitz-desktop_${version}_$(dpkg --print-architecture).deb"
+          # Arch's name, from the package's own pkgver (a pre-release is
+          # 0.4.0rc1) and arch: blitz-desktop-0.3.2-1-x86_64.pkg.tar.zst.
+          bazel build --config=release //apps/desktop/packaging:pacman
+          pkg="$(bazel cquery --config=release --output=files //apps/desktop/packaging:pacman)"
+          info="$(zstd -dcq "$pkg" | tar -xOf - .PKGINFO)"
+          cp "$pkg" "dist/blitz-desktop-$(sed -n 's/^pkgver = //p' <<<"$info")-$(sed -n 's/^arch = //p' <<<"$info").pkg.tar.zst"
       # The package installs on a clean system: its dependencies resolve,
       # the app's libraries are all found, and the programs run.
       - name: Smoke test
@@ -187,12 +194,32 @@ jobs:
           /usr/lib/blitz-desktop/blitzd --version
           /usr/lib/blitz-desktop/blitz-tray --version
           test "$(readlink -f /usr/bin/blitz-desktop)" = /usr/lib/blitz-desktop/blitz-desktop
+      # The Arch package installs on a current Arch Linux with pacman: its
+      # dependencies resolve, the libraries are found, the programs run and
+      # the files match its .MTREE. x86_64 only: Arch has no arm64 image.
+      # pacman's download sandbox is off: it needs seccomp and Landlock,
+      # which a container may not give it, and the container is thrown away.
+      - name: Arch Linux smoke test
+        if: runner.os == 'Linux' && runner.arch == 'X64'
+        run: |
+          docker run --rm -v "$PWD/dist:/dist:ro" archlinux:latest bash -euxc '
+            pacman -Syu --noconfirm --needed --disable-sandbox
+            pacman -U --noconfirm --disable-sandbox /dist/blitz-desktop-*.pkg.tar.zst
+            if ldd /usr/lib/blitz-desktop/blitz-desktop | grep "not found"; then exit 1; fi
+            /usr/lib/blitz-desktop/blitz --version
+            /usr/lib/blitz-desktop/blitzd --version
+            /usr/lib/blitz-desktop/blitz-tray --version
+            test "$(readlink -f /usr/bin/blitz-desktop)" = /usr/lib/blitz-desktop/blitz-desktop
+            pacman -Qkk blitz-desktop
+            pacman -R --noconfirm blitz-desktop
+            test ! -e /usr/lib/blitz-desktop
+          '
       - name: Sign and attach
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           cd dist
-          for f in *.dmg *.deb; do
+          for f in *.dmg *.deb *.pkg.tar.zst; do
             [ -e "$f" ] || continue
             cosign sign-blob --yes --bundle "$f.sigstore.json" "$f"
             gh release upload "$GITHUB_REF_NAME" "$f" "$f.sigstore.json" --clobber
