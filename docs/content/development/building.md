@@ -27,12 +27,20 @@ Tested on macOS 13 and later, Apple silicon and Intel.
 
 ## Linux
 
-Tested on Ubuntu 24.04 (x86-64); Debian 13 and later work too.
+Tested on Ubuntu 24.04 (x86-64), Debian 13 and later, and Arch Linux.
 
 1. Install the build dependencies. The CLI and the service need only git; the desktop app also needs GTK and WebKitGTK 4.1, and the shell sandbox needs bubblewrap:
 
+   Ubuntu 24.04 or Debian 13 and later:
+
    ```bash
    sudo apt-get install -y git bubblewrap pkg-config libgtk-3-dev libwebkit2gtk-4.1-dev
+   ```
+
+   Arch Linux:
+
+   ```bash
+   sudo pacman -S --needed git bubblewrap pkg-config gtk3 webkit2gtk-4.1
    ```
 
 2. Install Bazelisk from its [releases](https://github.com/bazelbuild/bazelisk/releases) as `bazel` on your `PATH`, for example:

@@ -82,10 +82,21 @@ git clone https://github.com/retail-cortex/blitz.git && cd blitz
 
 The builds and tests are run with the full Xcode installed.
 
-### Linux (Ubuntu 24.04 or Debian 13 and later)
+### Linux (Ubuntu 24.04, Debian 13 and later, or Arch Linux)
+
+Ubuntu 24.04 or Debian 13 and later:
 
 ```bash
 sudo apt-get install -y git bubblewrap pkg-config libgtk-3-dev libwebkit2gtk-4.1-dev
+sudo curl -fsSLo /usr/local/bin/bazel https://github.com/bazelbuild/bazelisk/releases/latest/download/bazelisk-linux-amd64
+sudo chmod +x /usr/local/bin/bazel       # bazelisk-linux-arm64 on ARM
+git clone https://github.com/retail-cortex/blitz.git && cd blitz
+```
+
+Arch Linux:
+
+```bash
+sudo pacman -S --needed git bubblewrap pkg-config gtk3 webkit2gtk-4.1
 sudo curl -fsSLo /usr/local/bin/bazel https://github.com/bazelbuild/bazelisk/releases/latest/download/bazelisk-linux-amd64
 sudo chmod +x /usr/local/bin/bazel       # bazelisk-linux-arm64 on ARM
 git clone https://github.com/retail-cortex/blitz.git && cd blitz
@@ -121,7 +132,7 @@ The short names are aliases in the root `BUILD.bazel`, which lists them; the ful
 ### Common problems
 
 - **"bazel: command not found" or the wrong Bazel version.** Install Bazelisk as `bazel`; don't install Bazel itself.
-- **The desktop app fails to build on Linux with a missing `gtk+-3.0` or `webkit2gtk-4.1`.** Install `libgtk-3-dev libwebkit2gtk-4.1-dev pkg-config`. Older distributions only ship WebKitGTK 4.0, which isn't supported.
+- **The desktop app fails to build on Linux with a missing `gtk+-3.0` or `webkit2gtk-4.1`.** Install `libgtk-3-dev libwebkit2gtk-4.1-dev pkg-config` (Ubuntu/Debian) or `gtk3 webkit2gtk-4.1 pkg-config` (Arch). Older distributions only ship WebKitGTK 4.0, which isn't supported.
 - **`doctor` says the sandbox is unavailable on Ubuntu 24.04.** AppArmor restricts unprivileged user namespaces, which bubblewrap needs: `sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0` (or an AppArmor profile for `bwrap`). Inside Docker, the default seccomp profile blocks them too.
 - **The sandbox or gVisor tests skip.** They need bubblewrap (Linux) and `runsc` (`RUNSC_PATH`); CI fails if they skip, locally they don't.
 - **Out of disk space.** A full build with tests and every platform's archive takes several gigabytes under Bazel's output base; `bazel clean` frees the build outputs.
