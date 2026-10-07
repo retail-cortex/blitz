@@ -17,7 +17,8 @@
 # third-party notices: in Blitz.app's Resources, in the .deb's
 # /usr/share/doc/blitz-desktop (with Debian's copyright file), or in the
 # Arch package's /usr/share/licenses/blitz-desktop (with its .PKGINFO and
-# .MTREE; listing it needs the zstd command). On Linux
+# .MTREE; listing it needs the zstd command, which reads it from stdin:
+# it skips a runfile's symlink). On Linux
 # the app is built for WebKitGTK 4.1 (webkit2_41), whose web view passes
 # the page's API requests to the service whole. Both carry the programs
 # beside the app: the CLI, the service and the tray.
@@ -32,7 +33,7 @@ if [ -d "$pkg" ]; then
 		[ -x "$pkg/Contents/MacOS/$exe" ] || { echo "✗ Blitz.app has no Contents/MacOS/$exe"; fail=1; }
 	done
 elif [[ "$pkg" == *.pkg.tar.zst ]]; then
-	list="$(zstd -dcq "$pkg" | tar -tvf -)"
+	list="$(zstd -dcq <"$pkg" | tar -tvf -)"
 	for f in .PKGINFO .MTREE; do
 		grep -q " $f$" <<<"$list" || { echo "✗ the Arch package has no $f"; fail=1; }
 	done
@@ -42,7 +43,7 @@ elif [[ "$pkg" == *.pkg.tar.zst ]]; then
 	for exe in blitz blitz-desktop blitzd blitz-tray; do
 		grep -Eq "^-rwxr-xr-x root/root .* usr/lib/blitz-desktop/$exe$" <<<"$list" || { echo "✗ the Arch package has no /usr/lib/blitz-desktop/$exe, root's and 0755"; fail=1; }
 	done
-	zstd -dcq "$pkg" | tar -xOf - usr/lib/blitz-desktop/blitz-desktop | grep -ac webkit_uri_scheme_request_get_http_body >/dev/null ||
+	zstd -dcq <"$pkg" | tar -xOf - usr/lib/blitz-desktop/blitz-desktop | grep -ac webkit_uri_scheme_request_get_http_body >/dev/null ||
 		{ echo "✗ the Arch package's app wasn't built for WebKitGTK 4.1 (the webkit2_41 tag)"; fail=1; }
 else
 	list="$(dpkg-deb -c "$pkg")"
