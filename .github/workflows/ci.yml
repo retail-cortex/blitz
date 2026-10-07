@@ -57,15 +57,18 @@ jobs:
           fetch-depth: 0 # buf breaking compares with the previous commit
       # The disk cache's key hashes MODULE.bazel and every BUILD file: a
       # change to one restores the last cache and saves it again, with this
-      # run's outputs added. Pull requests restore main's caches but don't
-      # save their own, which only that pull request could use.
+      # run's outputs added. Only main saves: another branch's caches serve
+      # only that branch, and GitHub's 10 GB for the repository evicts the
+      # oldest first, main's included (a run started by hand on a branch
+      # saved 7.8 GB). release.yml restores these by name
+      # (ci-ubuntu-latest, ci-macos-latest): keep the names in step.
       - name: Set up Bazel
         uses: bazel-contrib/setup-bazel@c5acdfb288317d0b5c0bbd7a396a3dc868bb0f86 # 0.19.0
         with:
           bazelisk-cache: true
           disk-cache: ${{ github.workflow }}-${{ matrix.os }}
           repository-cache: true
-          cache-save: ${{ github.event_name != 'pull_request' }}
+          cache-save: ${{ github.ref == 'refs/heads/main' }}
       # Bazel touches each disk cache entry it reads or writes: what this
       # run didn't touch is removed before the cache is saved (below).
       - name: Mark the build's start

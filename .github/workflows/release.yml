@@ -48,7 +48,11 @@ jobs:
         with:
           bazelisk-cache: true
           repository-cache: true
-          # A tag's caches serve only that tag: restore main's, save none.
+          # ci.yml's build outputs from main, so only what the version
+          # stamp touches is built again (the links and the archives): a
+          # tag can restore main's caches. It saves none, which would serve
+          # only this tag.
+          disk-cache: ci-ubuntu-latest
           cache-save: false
       # Release tools are pinned to exact versions, so a rebuild of a tag
       # uses the same tools as the original release.
@@ -123,7 +127,10 @@ jobs:
         with:
           bazelisk-cache: true
           repository-cache: true
-          # A tag's caches serve only that tag: restore main's, save none.
+          # ci.yml's build outputs from main for this OS, as in the release
+          # job. The key carries the CPU, so ARM Linux, which CI doesn't
+          # build, finds none and builds everything.
+          disk-cache: ${{ matrix.os == 'macos-latest' && 'ci-macos-latest' || 'ci-ubuntu-latest' }}
           cache-save: false
       - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
         with:
