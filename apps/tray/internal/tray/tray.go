@@ -119,7 +119,7 @@ func Probe(ctx context.Context, sock string, installed func() bool) Status {
 func Shutdown(ctx context.Context, sock string) error {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	c := pb.NewWorkspaceServiceClient(socket.Client(sock), socket.BaseURL)
+	c := pb.NewWorkspaceServiceClient(clientFor(sock), socket.BaseURL)
 	_, err := c.Shutdown(ctx, connect.NewRequest(&pb.ShutdownRequest{}))
 	return err
 }
