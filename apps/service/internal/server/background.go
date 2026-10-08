@@ -49,9 +49,12 @@ type bgRun struct {
 	started               time.Time
 	cancel                context.CancelFunc
 	done                  chan struct{} // closed when it has ended
-	w                     *workspace
 
-	mu       sync.Mutex
+	mu sync.Mutex
+	// w is the run's workspace while it runs; an ended run lets it go (it
+	// may be closed, and its sessions with it) and keeps its cost.
+	w        *workspace
+	cost     float64
 	session  string
 	state    string // running, done, failed or stopped
 	ended    time.Time
@@ -103,7 +106,10 @@ func (r *bgRun) info(b *broker) *pb.BackgroundRun {
 	if !r.ended.IsZero() {
 		m.Ended = timestamppb.New(r.ended)
 	}
-	if r.session != "" {
+	switch {
+	case r.w == nil:
+		m.CostUsd = r.cost
+	case r.session != "":
 		m.CostUsd = r.w.UsageOf(r.session).CostUSD
 	}
 	for _, id := range r.requests {
@@ -159,7 +165,12 @@ func (s *Server) startRun(w *workspace, t api.Turn) (*bgRun, error) {
 			r.state = "done"
 		}
 		r.ended = time.Now()
+		if r.session != "" {
+			r.cost = w.UsageOf(r.session).CostUSD
+		}
+		r.w = nil
 		r.mu.Unlock()
+		cancel() // its context's done with
 		select {
 		case <-started:
 		default: // it failed before its session existed

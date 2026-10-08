@@ -345,13 +345,21 @@ func (s *ScriptHooks) Async(ctx context.Context, event, tool string, ev HookEven
 }
 
 // startPost starts the worker on first use, so no goroutine exists unless
-// a post_tool hook actually fires.
+// a post_tool hook actually fires. After Close none starts: nobody would
+// close its queue, and it would wait on it for good.
 func (s *ScriptHooks) startPost() *postQueue {
 	q := &s.postQ
 	q.start.Do(func() {
-		q.jobs = make(chan postJob, postQueueSize)
-		q.done = make(chan struct{})
+		q.mu.Lock()
+		defer q.mu.Unlock()
 		q.ctx, q.cancel = context.WithCancel(context.Background())
+		q.done = make(chan struct{})
+		if q.closed {
+			q.cancel()
+			close(q.done)
+			return // Async and flush see closed, and send nothing
+		}
+		q.jobs = make(chan postJob, postQueueSize)
 		go func() {
 			defer close(q.done)
 			for job := range q.jobs {

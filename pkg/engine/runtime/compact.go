@@ -200,6 +200,12 @@ func (e *Engine) EventCount(ctx context.Context, sessionID string) int {
 // the session is deleted. A session this process never loaded is fine.
 func (e *Engine) ForgetSession(ctx context.Context, sessionID string) {
 	_ = e.sessions.Delete(ctx, &session.DeleteRequest{AppName: appName, UserID: "user", SessionID: sessionID})
+	// And what the engine kept about it: its tasks, notes, usage, rules.
+	e.tasks.mu.Lock()
+	tasks := e.tasks.forgetSessionLocked(sessionID)
+	e.tasks.mu.Unlock()
+	e.usage.Forget(append(tasks, sessionID)...)
+	e.scoped.forget(sessionID)
 }
 
 // truncater is a session service that can drop the end of a session's log

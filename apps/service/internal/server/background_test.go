@@ -68,7 +68,7 @@ func runState(t *testing.T, c clients, id string, states ...string) *pb.Backgrou
 
 func TestBackgroundRuns(t *testing.T) {
 	create := call("create_file", map[string]any{"path": "made.txt", "content": "hi\n"})
-	c, _ := serve(t, func(cfg *config.Config) { cfg.Blitz.AutoApprove = false }, create, text("made it"))
+	c, s := serve(t, func(cfg *config.Config) { cfg.Blitz.AutoApprove = false }, create, text("made it"))
 	dir := t.TempDir()
 	ctx := context.Background()
 
@@ -105,6 +105,12 @@ func TestBackgroundRuns(t *testing.T) {
 	require.NoError(t, err)
 	done := runState(t, c, run.Id, "done")
 	assert.NotNil(t, done.Ended)
+	// Ended, it lets its workspace go (closing it frees its sessions).
+	r, err := s.run(run.Id)
+	require.NoError(t, err)
+	r.mu.Lock()
+	assert.Nil(t, r.w)
+	r.mu.Unlock()
 	_, err = os.Stat(filepath.Join(dir, "made.txt"))
 	assert.NoError(t, err, "the approved change wasn't made")
 

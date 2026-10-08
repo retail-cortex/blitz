@@ -52,6 +52,13 @@ func (s *scopedRules) set(rules []memory.Rule) {
 	s.rules = rules
 }
 
+// forget drops what was handed out in a deleted session.
+func (s *scopedRules) forget(session string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.given, session)
+}
+
 // take returns the rules matching any of paths not yet handed out in
 // session, and marks them handed out.
 func (s *scopedRules) take(session string, paths []string) []*memory.Rule {

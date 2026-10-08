@@ -457,6 +457,56 @@ func TestTaskPruning(t *testing.T) {
 	assert.Equal(t, 0, taskNumber("other"))
 }
 
+// Across sessions, only the latest maxEndedTasks ended tasks are kept;
+// pruning says which went.
+func TestTaskPruningAcrossSessions(t *testing.T) {
+	m := newTaskManager()
+	for i := 1; i <= maxEndedTasks+5; i++ {
+		id := fmt.Sprintf("task-%d", i)
+		m.tasks[id] = &task{info: api.TaskInfo{ID: id, Session: fmt.Sprintf("worker-run-%d", i), State: api.TaskDone}}
+	}
+	dropped := m.pruneLocked("worker-run-1")
+	assert.Len(t, m.tasks, maxEndedTasks)
+	assert.ElementsMatch(t, []string{"task-1", "task-2", "task-3", "task-4", "task-5"}, dropped)
+}
+
+// A deleted session's ended tasks, notes, usage and handed-out rules are
+// forgotten; other sessions' stay.
+func TestForgetSessionForgetsItsState(t *testing.T) {
+	f := newEngineWith(t, fixtureOpts{})
+	e := f.eng
+	e.tasks.mu.Lock()
+	e.tasks.tasks["task-1"] = &task{info: api.TaskInfo{ID: "task-1", Session: "gone", State: api.TaskDone}}
+	e.tasks.tasks["task-2"] = &task{info: api.TaskInfo{ID: "task-2", Session: "gone", State: api.TaskRunning}}
+	e.tasks.tasks["task-3"] = &task{info: api.TaskInfo{ID: "task-3", Session: "kept", State: api.TaskDone}}
+	e.tasks.notes["gone"] = []string{"note"}
+	e.tasks.notes["kept"] = []string{"note"}
+	e.tasks.mu.Unlock()
+	for _, id := range []string{"gone", "kept", "task-1"} {
+		e.usage.Record(id, "m", &genai.GenerateContentResponseUsageMetadata{PromptTokenCount: 10})
+	}
+	e.scoped.mu.Lock()
+	e.scoped.given = map[string]map[string]bool{"gone": {"r.md": true}, "kept": {"r.md": true}}
+	e.scoped.mu.Unlock()
+
+	e.ForgetSession(context.Background(), "gone")
+
+	e.tasks.mu.Lock()
+	assert.NotContains(t, e.tasks.tasks, "task-1")
+	assert.Contains(t, e.tasks.tasks, "task-2", "still running")
+	assert.Contains(t, e.tasks.tasks, "task-3")
+	assert.NotContains(t, e.tasks.notes, "gone")
+	assert.Contains(t, e.tasks.notes, "kept")
+	e.tasks.mu.Unlock()
+	assert.Zero(t, e.usage.Session("gone").Input)
+	assert.Zero(t, e.usage.Session("task-1").Input)
+	assert.Equal(t, int64(10), e.usage.Session("kept").Input)
+	e.scoped.mu.Lock()
+	assert.NotContains(t, e.scoped.given, "gone")
+	assert.Contains(t, e.scoped.given, "kept")
+	e.scoped.mu.Unlock()
+}
+
 // Waiting on a running task returns when the wait is over, and stopping an
 // unknown task fails.
 func TestWaitTaskTimesOut(t *testing.T) {

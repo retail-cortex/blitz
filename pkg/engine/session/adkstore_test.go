@@ -225,3 +225,49 @@ func TestReadEvents(t *testing.T) {
 	_, err = ReadEvents(dir, "locked")
 	assert.Error(t, err, "a log that can't be opened")
 }
+
+// Only the sessions used last stay in memory, and those a turn runs in;
+// one dropped loads again from its file, whole.
+func TestPersistentServiceKeepsFewSessions(t *testing.T) {
+	old := Resident
+	Resident = 2
+	t.Cleanup(func() { Resident = old })
+	ctx := context.Background()
+	svc, err := NewPersistentService(t.TempDir())
+	require.NoError(t, err)
+	create := func(id string) adksession.Session {
+		resp, err := svc.Create(ctx, &adksession.CreateRequest{AppName: "app", UserID: "u", SessionID: id})
+		require.NoError(t, err)
+		return resp.Session
+	}
+
+	unpin := svc.Pin("a")
+	a := create("a")
+	appendText(t, svc, a, "user", "user", "hello a", false)
+	for _, id := range []string{"b", "c", "d"} {
+		appendText(t, svc, create(id), "user", "user", "hello "+id, false)
+	}
+	assert.Equal(t, []string{"a", "c", "d"}, svc.residentIDs(), "a is pinned; b, the oldest, is dropped")
+	appendText(t, svc, a, "model", "model", "still here", false) // a turn's event, to the session it loaded
+	unpin()
+	assert.Equal(t, []string{"c", "d"}, svc.residentIDs(), "unpinned, a is the oldest")
+
+	assert.Equal(t, []string{"hello a", "still here"}, eventTexts(t, svc, "a"), "loaded again from its file")
+	assert.Equal(t, []string{"hello b"}, eventTexts(t, svc, "b"))
+	assert.Equal(t, []string{"a", "b"}, svc.residentIDs())
+
+	require.NoError(t, svc.Delete(ctx, &adksession.DeleteRequest{AppName: "app", UserID: "u", SessionID: "b"}))
+	assert.Equal(t, []string{"a"}, svc.residentIDs())
+
+	// Pins nest, and unpinning twice is harmless.
+	u1, u2 := svc.Pin("x"), svc.Pin("x")
+	u1()
+	u1()
+	svc.resMu.Lock()
+	assert.Equal(t, 1, svc.pinned["x"])
+	svc.resMu.Unlock()
+	u2()
+	svc.resMu.Lock()
+	assert.NotContains(t, svc.pinned, "x")
+	svc.resMu.Unlock()
+}

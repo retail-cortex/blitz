@@ -64,13 +64,31 @@ func policyFrom(cfg config.LLMConfig) retryPolicy {
 // The stall limit also bounds the wait for headers, which for non-streamed
 // requests is the whole generation, so it must exceed the longest
 // generation expected (default 10 minutes).
+//
+// Models are built often (a command's or worker's model, each idea
+// refresh, every model check while one is unavailable), so they share one
+// client per stall limit: a client of their own each would each keep its
+// connections and their goroutines until they went idle.
 func (p retryPolicy) httpClient() *http.Client {
+	modelClientsMu.Lock()
+	defer modelClientsMu.Unlock()
+	if c, ok := modelClients[p.stall]; ok {
+		return c
+	}
 	base := http.DefaultTransport.(*http.Transport).Clone()
 	base.DialContext = (&net.Dialer{Timeout: dialTimeout, KeepAlive: 30 * time.Second}).DialContext
 	base.TLSHandshakeTimeout = tlsTimeout
 	base.ResponseHeaderTimeout = p.stall
-	return &http.Client{Transport: &stallTransport{base: base, stall: p.stall}}
+	c := &http.Client{Transport: &stallTransport{base: base, stall: p.stall}}
+	modelClients[p.stall] = c
+	return c
 }
+
+// modelClients are the models' HTTP clients, by stall limit.
+var (
+	modelClientsMu sync.Mutex
+	modelClients   = map[time.Duration]*http.Client{}
+)
 
 // stallTransport cancels a request whose response body goes quiet for
 // longer than stall. Each successful read pushes the deadline back, so long
