@@ -148,7 +148,7 @@ Not code, but blocking confidence in the specs above. *Source: ROADMAP 9, MANUAL
 - **BL-VER-01** Run every unchecked item of `MANUAL_VERIFICATION.md` (real providers 💲, terminal behaviour, macOS and Linux sandboxes, MCP, steering, fallback and pinning, the service, workers and the desktop app — §§36–37), and record results there; each failure becomes a backlog item here.
 - **BL-VER-02** Verify the first release from `retail-cortex/blitz` against its new cosign identity (§18).
 - **BL-VER-04** Claude on Vertex AI, live, once project `rmcguinness-lab` has Claude Opus quota (requested after 2026-09-28; `global` and `us-east5` both answered `429 RESOURCE_EXHAUSTED`): `blitz config set-auth anthropic adc`, then `blitz doctor --online` and a session with Claude Opus 5.5 (streaming, a tool call, an image, prompt caching in `/cost`), and the desktop form's "Google Cloud (ADC)". Blitz's side was checked up to the request: the credentials, the Vertex path and the model were accepted.
-- **BL-VER-03** Windows: build, run, and document what's unsupported (no OS sandbox, no process guard, no skill scripts; shell tools need Git Bash or WSL).
+- **BL-VER-03** Windows: build, run, and document what's unsupported (no OS sandbox, no process guard, no skill scripts; shell tools need Git Bash or WSL). *The tray and the desktop page in a browser are built ([spec_windows_036](spec_windows_036.md)); running them on Windows is WIN-40.*
 
 ## 10. Deliberate limitations (not backlog)
 

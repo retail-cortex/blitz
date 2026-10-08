@@ -23,6 +23,7 @@ import (
 	"os"
 
 	"github.com/retail-cortex/blitz/pkg/config"
+	"github.com/retail-cortex/blitz/pkg/pageserver"
 	"github.com/retail-cortex/blitz/pkg/socket"
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
@@ -87,7 +88,7 @@ func main() {
 		},
 		AssetServer: &assetserver.Options{
 			Assets:  dist,
-			Handler: serviceProxy(app.socket),
+			Handler: pageserver.Proxy(app.socket),
 		},
 		OnStartup: app.startup,
 		// A window with unsaved changes in the editor asks first.

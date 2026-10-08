@@ -26,6 +26,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	goruntime "runtime"
 	"time"
 
 	"github.com/retail-cortex/blitz/pkg/config"
@@ -49,6 +50,11 @@ func DefaultSocket() string {
 // Listen opens the Unix socket at path for this user only. It refuses when
 // a service already answers there, and replaces a socket left by one that
 // died.
+//
+// On Windows, permission bits mean nothing (Chmod only sets read-only);
+// there the socket is as private as the folder it's in, whose access
+// control list the user's profile gives it: ~/.blitz/run is only the
+// user's (and the system's, and administrators').
 func Listen(path string) (net.Listener, error) {
 	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0o700); err != nil {
@@ -56,7 +62,7 @@ func Listen(path string) (net.Listener, error) {
 	}
 	// The directory, not only the socket, keeps other users out: there is
 	// no window between creating the socket and restricting it.
-	if err := os.Chmod(dir, 0o700); err != nil {
+	if err := restrict(dir, 0o700); err != nil {
 		return nil, err
 	}
 	if _, err := os.Lstat(path); err == nil {
@@ -71,11 +77,19 @@ func Listen(path string) (net.Listener, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := os.Chmod(path, 0o600); err != nil {
+	if err := restrict(path, 0o600); err != nil {
 		l.Close()
 		return nil, err
 	}
 	return l, nil
+}
+
+// restrict sets path's permissions (not on Windows, which has none).
+func restrict(path string, mode os.FileMode) error {
+	if goruntime.GOOS == "windows" {
+		return nil
+	}
+	return os.Chmod(path, mode)
 }
 
 // Running reports whether a service answers on the socket.

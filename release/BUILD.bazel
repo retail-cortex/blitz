@@ -20,7 +20,8 @@ load("@rules_shell//shell:sh_test.bzl", "sh_test")
 # The release archives: blitz and blitzd (which `blitz service install`
 # expects beside it) for each platform, with blz (a link to blitz) where
 # links exist, and the README, the license, the notice and the
-# third-party notices. Built on any machine
+# third-party notices. Windows's also has blitz-tray, which starts the
+# service and serves the desktop page (it has no desktop app). Built on any machine
 # (pure Go); the release workflow adds the version to the file names,
 # checksums them and signs the checksums. The desktop app's packages are
 # //apps/desktop/packaging's.
@@ -80,11 +81,19 @@ pkg_mklink(
     if goos != "windows"
 ]
 
+pkg_files(
+    name = "tray_windows_amd64",
+    srcs = ["//apps/tray:blitz-tray_windows_amd64"],
+    attributes = pkg_attributes(mode = "0755"),
+    renames = {"//apps/tray:blitz-tray_windows_amd64": "blitz-tray.exe"},
+)
+
 pkg_zip(
     name = "blitz_windows_amd64",
     srcs = [
         ":docs",
         ":programs_windows_amd64",
+        ":tray_windows_amd64",
     ],
     package_dir = "blitz_windows_amd64",
 )

@@ -34,6 +34,11 @@ service WorkspaceService {
   // Describes the service itself, so a client can tell whether it's the
   // version it expects (older services don't have it: Unimplemented).
   rpc GetServiceInfo(GetServiceInfoRequest) returns (GetServiceInfoResponse);
+  // Stops the service as SIGTERM does: turns in progress get a few seconds,
+  // then it exits. For clients that can't signal it (Windows, where it
+  // isn't a login item: the tray stops it this way). A service that can't
+  // stop itself (one in a test) is FAILED_PRECONDITION.
+  rpc Shutdown(ShutdownRequest) returns (ShutdownResponse);
   // The days the service has a log for, newest first, and its log
   // directory.
   rpc ListLogDays(ListLogDaysRequest) returns (ListLogDaysResponse);
@@ -246,6 +251,13 @@ message Saved {
   // Why it wasn't saved; empty on success.
   string error = 2;
 }
+
+// Request message for WorkspaceService.Shutdown.
+message ShutdownRequest {}
+
+// Response message for WorkspaceService.Shutdown: sent before the service
+// stops.
+message ShutdownResponse {}
 
 // Request message for WorkspaceService.GetServiceInfo.
 message GetServiceInfoRequest {}

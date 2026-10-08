@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package main
+package pageserver
 
 import (
 	"bytes"
@@ -61,7 +61,7 @@ func TestProxyReachesTheService(t *testing.T) {
 	go servicetest.Serve(ctx, l, s.Handler(), time.Second)
 	t.Cleanup(func() { cancel(); s.Close() })
 
-	page := httptest.NewServer(serviceProxy(path))
+	page := httptest.NewServer(Proxy(path))
 	defer page.Close()
 	sessions := pb.NewSessionServiceClient(http.DefaultClient, page.URL)
 	ws := t.TempDir()
@@ -94,7 +94,7 @@ func TestProxyReachesTheService(t *testing.T) {
 
 // With no service, the page gets an error its client can read.
 func TestProxyWithoutAService(t *testing.T) {
-	page := httptest.NewServer(serviceProxy(filepath.Join(t.TempDir(), "none.sock")))
+	page := httptest.NewServer(Proxy(filepath.Join(t.TempDir(), "none.sock")))
 	defer page.Close()
 	c := pb.NewWorkspaceServiceClient(http.DefaultClient, page.URL)
 	_, err := c.GetModel(context.Background(), connect.NewRequest(&pb.GetModelRequest{Workspace: "/x"}))

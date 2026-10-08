@@ -16,10 +16,12 @@ A monorepo of independent apps over shared packages, one Go module. The rule: **
 | `apps/service` | `blitzd`, the per-user service: `internal/daemon` runs it, `internal/server` has the Connect handlers over `engine.Workspace` (translation only) and the approval/question broker. `servicetest` runs it inside other packages' tests |
 | `apps/vscode` | The VS Code extension (TypeScript): the desktop app's page in a view, a local proxy to the service, packed by `tools/vsix` |
 | `apps/desktop` | The desktop app (Wails v2, cgo), forwarding the page's API calls to the service socket; `web/` is its page (React + TypeScript, pnpm, the generated Connect client in `src/gen`), `packaging/` its icon, `Info.plist`, release script and Linux packages (the Arch one made by `tools/pacman`) |
-| `apps/tray` | `blitz-tray`, the service in the system tray (fyne.io/systray: D-Bus StatusNotifierItem on Linux, Cocoa on macOS): `internal/tray` has its behaviour (the menu for a status, the actions), `main.go` draws it; shipped beside the app in the `.deb` and `Blitz.app` |
+| `apps/tray` | `blitz-tray`, the service in the system tray (fyne.io/systray: D-Bus StatusNotifierItem on Linux, Cocoa on macOS, Win32 on Windows): `internal/tray` has its behaviour (the menu for a status, the actions, the page's `/host/` calls), `main.go` draws it; shipped beside the app in the `.deb` and `Blitz.app`, and in the Windows zip, where it serves the desktop page (`bazel run //apps/tray:blitz-tray_page` tries that here) |
 | `pkg/api` | The contract between front ends and the engine: `Backend`, and the values, events and errors that cross it. Depends only on `config` and `images` |
 | `pkg/client` | `Backend` over the service's API |
-| `pkg/loginitem` | Starting the service at login and controlling it (launchd, systemd), for the CLI and the desktop app |
+| `pkg/loginitem` | Starting the service at login and controlling it (launchd, systemd), and the tray (also the registry's Run key on Windows), for the CLI, the desktop app and the tray |
+| `pkg/pageserver` | The desktop page in front of the service: the proxy to its socket (the app's web view and the tray use it), and the loopback server, behind a one-time link and a cookie, that serves the page to a browser on Windows |
+| `pkg/fileview` | Showing files and folders in the system's programs (file manager, viewer), never running one: for the desktop app and the tray |
 | `pkg/socket` | Where the service listens (the per-user Unix socket), and how to reach it |
 | `pkg/engine` | The program without a UI: `engine.Open` builds a `Workspace` (registries, tools, sessions, model, engine) implementing `api.Backend` with typed operations that return data and never print |
 | `pkg/engine/runtime` | The engine over the ADK runner: models and providers, fallback, per-model settings, compaction, steering, side questions, usage and cost |

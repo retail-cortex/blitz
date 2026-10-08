@@ -12,23 +12,94 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+load("@bazel_lib//lib:copy_to_directory.bzl", "copy_to_directory")
+load("@bazel_lib//lib:transitions.bzl", "platform_transition_filegroup")
 load("@rules_go//go:def.bzl", "go_binary", "go_library")
 load("//build:macos.bzl", "macho_uuid_linkopts", "signed_binary")
 
-# The tray: Linux (StatusNotifierItem over D-Bus, pure Go) and macOS (cgo,
-# Cocoa). Windows would work with the library but isn't packaged.
+# The tray: Linux (StatusNotifierItem over D-Bus, pure Go), macOS (cgo,
+# Cocoa) and Windows (pure Go), where it also serves the desktop page.
 _TRAY_OS = select({
     "@platforms//os:linux": [],
     "@platforms//os:macos": [],
+    "@platforms//os:windows": [],
     "//conditions:default": ["@platforms//:incompatible"],
 })
 
+# The desktop page, which the tray serves on Windows (page.go), built for
+# this machine as the desktop app's is.
+platform_transition_filegroup(
+    name = "page",
+    srcs = ["//apps/desktop/web:page"],
+    target_platform = "@platforms//host",
+)
+
+# The page, where go:embed looks for it.
+copy_to_directory(
+    name = "dist",
+    srcs = [":page"],
+    root_paths = ["apps/desktop/web/dist"],
+)
+
 go_library(
     name = "tray_lib",
-    srcs = ["main.go"],
+    srcs = [
+        "icons_other.go",
+        "icons_windows.go",
+        "lock_unix.go",
+        "lock_windows.go",
+        "main.go",
+        "page.go",
+        "page_none.go",
+    ],
+    # The page only for the builds that serve it (page.go).
     embedsrcs = [
         "icons/running-44.png",
         "icons/stopped-44.png",
+        "icons/windows-running-64.png",
+        "icons/windows-stopped-64.png",
+    ] + select({
+        "@platforms//os:windows": [":dist"],
+        "//conditions:default": [],
+    }),  # keep
+    importpath = "github.com/retail-cortex/blitz/apps/tray",
+    target_compatible_with = _TRAY_OS,
+    visibility = ["//visibility:private"],
+    deps = [
+        "//apps/tray/internal/tray",
+        "//pkg/config",
+        "//pkg/i18n",
+        "//pkg/loginitem",
+        "//pkg/pageserver",
+        "//pkg/socket",
+        "@io_fyne_systray//:systray",
+    ] + select({
+        "@rules_go//go/platform:windows": [
+            "@org_golang_x_sys//windows",
+        ],
+        "//conditions:default": [],
+    }),
+)
+
+# The tray serving the page as it does on Windows, built for this machine
+# to try it: bazel run //apps/tray:blitz-tray_page.
+go_library(
+    name = "tray_page_lib",
+    srcs = [
+        "icons_other.go",
+        "icons_windows.go",
+        "lock_unix.go",
+        "lock_windows.go",
+        "main.go",
+        "page.go",
+        "page_none.go",
+    ],
+    embedsrcs = [
+        "icons/running-44.png",
+        "icons/stopped-44.png",
+        "icons/windows-running-64.png",
+        "icons/windows-stopped-64.png",
+        ":dist",
     ],
     importpath = "github.com/retail-cortex/blitz/apps/tray",
     target_compatible_with = _TRAY_OS,
@@ -38,9 +109,35 @@ go_library(
         "//pkg/config",
         "//pkg/i18n",
         "//pkg/loginitem",
+        "//pkg/pageserver",
         "//pkg/socket",
         "@io_fyne_systray//:systray",
-    ],
+    ] + select({
+        "@rules_go//go/platform:windows": [
+            "@org_golang_x_sys//windows",
+        ],
+        "//conditions:default": [],
+    }),
+)
+
+go_binary(
+    name = "blitz-tray_page",
+    embed = [":tray_page_lib"],
+    gotags = ["traypage"],
+    target_compatible_with = _TRAY_OS,
+)
+
+# The tray for Windows (//release): pure Go, and a GUI program, so no
+# console window opens with it.
+go_binary(
+    name = "blitz-tray_windows_amd64",
+    embed = [":tray_lib"],
+    gc_linkopts = ["-H=windowsgui"],
+    goarch = "amd64",
+    goos = "windows",
+    pure = "on",
+    visibility = ["//release:__pkg__"],
+    x_defs = {"main.version": "{STABLE_BLITZ_VERSION}"},
 )
 
 go_binary(

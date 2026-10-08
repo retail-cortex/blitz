@@ -1463,6 +1463,7 @@
     "tray.restart": "Reiniciar el servicio",
     "tray.open_app": "Abrir Blitz",
     "tray.open_logs": "Abrir los registros",
+    "tray.start_at_login": "Iniciar Blitz al iniciar sesión",
     "tray.quit": "Cerrar la bandeja",
     "tray.quit_hint": "El servicio sigue en ejecución",
     "tray.starting": "Iniciando el servicio…",

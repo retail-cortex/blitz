@@ -114,6 +114,16 @@ func Probe(ctx context.Context, sock string, installed func() bool) Status {
 	return st
 }
 
+// Shutdown asks the service at sock to stop (WorkspaceService.Shutdown):
+// how the tray stops one it can't signal (Windows).
+func Shutdown(ctx context.Context, sock string) error {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	c := pb.NewWorkspaceServiceClient(clientFor(sock), socket.BaseURL)
+	_, err := c.Shutdown(ctx, connect.NewRequest(&pb.ShutdownRequest{}))
+	return err
+}
+
 // ServiceLogDir is where the service at sock writes its log, as it says
 // (ListLogDays): the log.dir it started with. "" when it isn't running,
 // doesn't say, or has its log off.

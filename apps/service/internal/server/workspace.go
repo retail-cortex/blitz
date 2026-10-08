@@ -18,6 +18,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"time"
 
@@ -41,6 +42,23 @@ func (h workspaceService) GetServiceInfo(context.Context, req[pb.GetServiceInfoR
 	exe, _ := os.Executable()
 	return ok(&pb.GetServiceInfoResponse{Version: h.s.version, Executable: exe, Started: timestamppb.New(h.s.started), Pid: int32(os.Getpid()), Replaced: replaced(h.s.program, exe)})
 }
+
+// WithShutdown is what Shutdown calls to stop the service; without it the
+// service can't be stopped that way.
+func WithShutdown(stop func()) Option { return func(s *Server) { s.shutdown = stop } }
+
+func (h workspaceService) Shutdown(context.Context, req[pb.ShutdownRequest]) (*connect.Response[pb.ShutdownResponse], error) {
+	if h.s.shutdown == nil {
+		return nil, connect.NewError(connect.CodeFailedPrecondition, errors.New("this service can't be stopped by a request"))
+	}
+	slog.Info("exit: a client asked")
+	// After the response is on its way: the stop drains requests in progress.
+	time.AfterFunc(shutdownDelay, h.s.shutdown)
+	return ok(&pb.ShutdownResponse{})
+}
+
+// shutdownDelay lets Shutdown's response go out before the service stops.
+var shutdownDelay = 50 * time.Millisecond
 
 // WithLogDir is the directory of the service's diagnostic log, which
 // ListLogDays and ReadLog read ("": none).

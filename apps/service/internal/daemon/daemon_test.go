@@ -320,7 +320,7 @@ func isolateService(t *testing.T) string {
 
 // A service a client started on demand stops once idle for IdleExit, and
 // a private one when its stdin (the client's pipe) closes; either way
-// cleanly, its socket removed.
+// cleanly, its socket removed. So does any service a client asks to stop.
 func TestRunStopsByItself(t *testing.T) {
 	old := watchEvery
 	watchEvery = 20 * time.Millisecond
@@ -351,6 +351,18 @@ func TestRunStopsByItself(t *testing.T) {
 			require.False(t, time.Now().After(deadline), "service didn't start")
 		}
 		require.NoError(t, w.Close())
+		wait(t, done, sock)
+	})
+	t.Run("asked to", func(t *testing.T) {
+		sock := isolateService(t)
+		done := make(chan error, 1)
+		go func() { done <- Run(context.Background(), Options{Socket: sock}) }()
+		for deadline := time.Now().Add(10 * time.Second); !socket.Running(sock); time.Sleep(20 * time.Millisecond) {
+			require.False(t, time.Now().After(deadline), "service didn't start")
+		}
+		c := pb.NewWorkspaceServiceClient(socket.Client(sock), socket.BaseURL)
+		_, err := c.Shutdown(context.Background(), connect.NewRequest(&pb.ShutdownRequest{}))
+		require.NoError(t, err)
 		wait(t, done, sock)
 	})
 }

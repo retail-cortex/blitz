@@ -19,7 +19,7 @@ import { createPortal } from "react-dom";
 import { mdiDeleteOutline, mdiFolderOpenOutline, mdiRefresh } from "@mdi/js";
 import { timestampDate } from "@bufbuild/protobuf/wkt";
 import { workspaces } from "./api";
-import { inApp, openFolder } from "./desktop";
+import { canCall, openFolder } from "./desktop";
 import { message } from "./errors";
 import type { LogEntry, ReadLogResponse } from "./gen/blitz/v1/workspace_pb";
 import { t } from "./i18n";
@@ -114,7 +114,7 @@ export function LogViewer() {
         <input className="input spacer" type="search" value={text} onChange={(e) => setText(e.target.value)} placeholder={t("desktop.logs.search")} aria-label={t("desktop.logs.search")} />
         <IconButton icon={mdiRefresh} label={t("desktop.logs.refresh")} onClick={() => setTick((n) => n + 1)} />
         {canDelete(day, new Date()) && <IconButton icon={mdiDeleteOutline} label={t("desktop.logs.delete", { day })} onClick={() => setDeleting(day)} />}
-        {inApp() && dir && (
+        {canCall("OpenFolder") && dir && (
           <Button small icon={mdiFolderOpenOutline} onClick={() => openFolder(dir).catch((e) => snack(message(e), { error: true }))}>
             {t("desktop.logs.open_folder")}
           </Button>

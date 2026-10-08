@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-1 -1 26 26" width="64" height="64">
+  <!-- The tray's icon on Windows while the service is stopped: the running
+       bolt (windows-running.svg) in grey, edged dark.
+       windows-stopped-64.png is rendered from it
+       (inkscape windows-stopped.svg -w 64 -h 64 -o windows-stopped-64.png). -->
+  <path fill="#9aa0a6" stroke="#3c4043" stroke-width="1.2" stroke-linejoin="round" d="M11 15H6L13 1V9H18L11 23V15Z"/>
+</svg>

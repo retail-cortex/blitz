@@ -9,7 +9,7 @@ Blitz's desktop app is a window onto the [service](service.md), laid out like an
 
 ## Install
 
-`Blitz_<version>_macos_universal.dmg` for macOS 13 and later (signed with a Developer ID and notarized), or `blitz-desktop_<version>_<arch>.deb` for Ubuntu 24.04, Debian 13 and later. Each carries its own `blitz` and `blitzd`, so the app can install the service without a separate download. There is no Windows package, because the service doesn't install there.
+`Blitz_<version>_macos_universal.dmg` for macOS 13 and later (signed with a Developer ID and notarized), or `blitz-desktop_<version>_<arch>.deb` for Ubuntu 24.04, Debian 13 and later. Each carries its own `blitz` and `blitzd`, so the app can install the service without a separate download. There is no Windows package: on Windows, `blitz-tray.exe` in the release's zip opens this page in a window of its own ([below](#on-windows)).
 
 From source: `bazel build //apps/desktop/packaging:Blitz.app` (macOS) or `:deb` (Linux); see [building](../development/building.md).
 
@@ -25,6 +25,10 @@ The Linux `.deb` runs in ChromeOS's Linux container (Crostini): `amd64` on Intel
 - **Folders.** Linux sees its home directory and the folders shared with it in the Files app (under `/mnt/chromeos/`); open workspaces from there.
 - **Keys.** The container has no keyring, so API keys are kept in `~/.blitz/secrets.toml`, readable only by you.
 - **The service** runs as a `systemctl --user` service in the container. ChromeOS stops the container when you shut down or leave Linux idle, so scheduled workers only run while it's up.
+
+### On Windows
+
+Unzip `blitz_<version>_windows_amd64.zip` and run `blitz-tray.exe`. It starts the service and puts a bolt in the notification area (amber while the service runs, grey when it doesn't). **Open Blitz** shows the app in an Edge window with no tabs or address bar, served by the tray on `127.0.0.1` to that window only; **Start Blitz at login** keeps it. Most of the app works as on macOS and Linux. Choosing a workspace asks for its path, and Export as PDF and installing the CLI aren't there. Spec: [Windows](../about/specs/spec_windows_036.md).
 
 ## The window
 

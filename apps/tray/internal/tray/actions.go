@@ -44,6 +44,12 @@ type Actions struct {
 	// LogDir is where the running service says its log is ("" when it
 	// doesn't say); nil asks nobody. The settings file answers otherwise.
 	LogDir func() string
+	// Shutdown asks the service to stop (nil: nobody is asked, and Stop
+	// signals it).
+	Shutdown func() error
+	// Page is a link that opens the page the tray serves (Windows, which
+	// has no desktop app); nil opens the desktop app instead.
+	Page func() (string, error)
 }
 
 // Start starts the service: through its login item when it has one, else
@@ -68,14 +74,18 @@ func (a Actions) Start() error {
 	return nil
 }
 
-// Stop stops the service: its login item's, else the process that
-// answered (SIGTERM, so turns in progress get a few seconds).
+// Stop stops the service: its login item's, else the service asked to
+// stop, else the process that answered (SIGTERM). Either way turns in
+// progress get a few seconds.
 func (a Actions) Stop() error {
 	if loginitem.Installed() {
 		_ = loginitem.Stop() // not loaded is fine: it may run on its own
 		if a.Wait(false, 5*time.Second) {
 			return nil
 		}
+	}
+	if a.Shutdown != nil && a.Shutdown() == nil && a.Wait(false, 15*time.Second) {
+		return nil
 	}
 	if pid := a.Status().PID; pid > 0 {
 		if p, err := os.FindProcess(pid); err == nil {
@@ -106,8 +116,17 @@ func (a Actions) Restart() error {
 }
 
 // OpenApp opens the desktop app: the bundle the tray is in (macOS),
-// blitz-desktop beside it or on PATH (Linux).
+// blitz-desktop beside it or on PATH (Linux); or, with a Page, the page
+// in a browser's app window (Windows).
 func (a Actions) OpenApp() error {
+	if a.Page != nil {
+		link, err := a.Page()
+		if err != nil {
+			return err
+		}
+		name, args := appWindow(goruntime.GOOS, os.Getenv, isFile, link)
+		return a.Run(name, args...)
+	}
 	if goruntime.GOOS == "darwin" {
 		// Blitz.app/Contents/MacOS/blitz-tray
 		if app := filepath.Dir(filepath.Dir(a.Beside)); strings.HasSuffix(app, ".app") {
@@ -139,8 +158,11 @@ func (a Actions) OpenLogs() error {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return err
 	}
-	if goruntime.GOOS == "darwin" {
+	switch goruntime.GOOS {
+	case "darwin":
 		return a.Run("open", dir)
+	case "windows":
+		return a.Run("explorer", dir)
 	}
 	return a.Run("xdg-open", dir)
 }
@@ -163,7 +185,7 @@ func isFile(p string) bool {
 // output discarded, and reaps it when it exits.
 func Detached(name string, args ...string) error {
 	cmd := exec.Command(name, args...)
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+	cmd.SysProcAttr = detached()
 	if err := cmd.Start(); err != nil {
 		return err
 	}

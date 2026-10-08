@@ -17,6 +17,11 @@
 // Open the logs. It starts at login beside the service (--install), and
 // talks to the service over its socket like any client.
 //
+// Windows has no desktop app: there the tray serves the desktop page
+// itself (pkg/pageserver) and Open Blitz shows it in an Edge app window.
+// The service has no login item there either, so the tray starts it, and
+// its menu has Start at login for the tray.
+//
 // Linux needs a StatusNotifierItem host: KDE and most desktops have one;
 // GNOME needs the AppIndicator extension (Ubuntu's is on by default).
 // Without one there's no icon, and the tray waits quietly.
@@ -24,15 +29,14 @@ package main
 
 import (
 	"context"
-	_ "embed"
 	"flag"
 	"fmt"
+	"io/fs"
 	"log"
 	"os"
 	"path/filepath"
 	goruntime "runtime"
 	"sync"
-	"syscall"
 	"time"
 
 	"fyne.io/systray"
@@ -40,17 +44,8 @@ import (
 	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/i18n"
 	"github.com/retail-cortex/blitz/pkg/loginitem"
+	"github.com/retail-cortex/blitz/pkg/pageserver"
 	"github.com/retail-cortex/blitz/pkg/socket"
-)
-
-// The icons: a white bolt, filled while the service runs and outlined
-// while it's stopped (icons/*.svg). macOS takes them as templates and
-// tints them to suit the menu bar; Linux shows them as they are.
-var (
-	//go:embed icons/running-44.png
-	runningIcon []byte
-	//go:embed icons/stopped-44.png
-	stoppedIcon []byte
 )
 
 // version is set at link time for releases.
@@ -86,20 +81,28 @@ func exit(err error) {
 	}
 }
 
-// installTray makes this program start at login, and starts it now.
-func installTray() error {
+// program is this program's file, links resolved, so a login entry keeps
+// working when a link moves.
+func program() (string, error) {
 	exe, err := os.Executable()
 	if err != nil {
-		return err
+		return "", err
 	}
-	if exe, err = filepath.EvalSymlinks(exe); err != nil {
+	return filepath.EvalSymlinks(exe)
+}
+
+// installTray makes this program start at login, and starts it now.
+func installTray() error {
+	exe, err := program()
+	if err != nil {
 		return err
 	}
 	if err := loginitem.InstallTray(exe); err != nil {
 		return err
 	}
-	// launchd has started it on macOS; on Linux, start it in this session.
-	if goruntime.GOOS == "linux" && (os.Getenv("DISPLAY") != "" || os.Getenv("WAYLAND_DISPLAY") != "") {
+	// launchd has started it on macOS; on Linux and Windows, start it in
+	// this session.
+	if goruntime.GOOS == "windows" || goruntime.GOOS == "linux" && (os.Getenv("DISPLAY") != "" || os.Getenv("WAYLAND_DISPLAY") != "") {
 		return tray.Detached(exe) // a tray already running keeps its lock; this one exits
 	}
 	return nil
@@ -120,7 +123,7 @@ func lock() bool {
 	if err != nil {
 		return true
 	}
-	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
+	if !tryLock(f) {
 		f.Close()
 		return false
 	}
@@ -132,10 +135,11 @@ func onReady() {
 	sock := socket.DefaultSocket()
 	status := func() tray.Status { return tray.Probe(context.Background(), sock, loginitem.Installed) }
 	acts := tray.Actions{
-		Run:    tray.Detached,
-		Beside: loginitem.Beside(),
-		Status: status,
-		LogDir: func() string { return tray.ServiceLogDir(context.Background(), sock) },
+		Run:      tray.Detached,
+		Beside:   loginitem.Beside(),
+		Status:   status,
+		LogDir:   func() string { return tray.ServiceLogDir(context.Background(), sock) },
+		Shutdown: func() error { return tray.Shutdown(context.Background(), sock) },
 		Wait: func(running bool, d time.Duration) bool {
 			for end := time.Now().Add(d); ; time.Sleep(300 * time.Millisecond) {
 				if socket.Running(sock) == running {
@@ -146,6 +150,10 @@ func onReady() {
 				}
 			}
 		},
+	}
+
+	if page != nil {
+		acts.Page = pageLink(page, sock, acts)
 	}
 
 	tray.SetupLocale()
@@ -160,14 +168,16 @@ func onReady() {
 	open := systray.AddMenuItem(i18n.T("tray.open_app"), "")
 	logs := systray.AddMenuItem(i18n.T("tray.open_logs"), "")
 	systray.AddSeparator()
+	// Windows: the tray is what starts at login (and starts the service).
+	atLogin := &systray.MenuItem{ClickedCh: make(chan struct{})}
+	if goruntime.GOOS == "windows" {
+		atLogin = systray.AddMenuItemCheckbox(i18n.T("tray.start_at_login"), "", loginitem.TrayInstalled())
+		systray.AddSeparator()
+	}
 	quit := systray.AddMenuItem(i18n.T("tray.quit"), i18n.T("tray.quit_hint"))
 
 	show := func(m tray.Menu, note string) {
-		if m.Running {
-			systray.SetTemplateIcon(runningIcon, runningIcon)
-		} else {
-			systray.SetTemplateIcon(stoppedIcon, stoppedIcon)
-		}
+		setIcon(m.Running)
 		title := m.State.Title
 		if note != "" {
 			title = note
@@ -217,9 +227,15 @@ func onReady() {
 			refresh()
 		}()
 	}
+	// Windows: nothing else starts the service at login.
+	if goruntime.GOOS == "windows" && !status().Running {
+		do(i18n.T("tray.starting"), acts.Start)
+	}
 	go func() {
 		for {
 			select {
+			case <-atLogin.ClickedCh:
+				do("", func() error { return toggleAtLogin(atLogin) })
 			case <-start.ClickedCh:
 				do(i18n.T("tray.starting"), acts.Start)
 			case <-stop.ClickedCh:
@@ -244,4 +260,46 @@ func onReady() {
 			}
 		}
 	}()
+}
+
+// toggleAtLogin starts the tray at login, or stops that, and ticks the
+// menu item to match.
+func toggleAtLogin(item *systray.MenuItem) error {
+	var err error
+	if loginitem.TrayInstalled() {
+		err = loginitem.UninstallTray()
+	} else if exe, e := program(); e != nil {
+		err = e
+	} else {
+		err = loginitem.InstallTray(exe)
+	}
+	if loginitem.TrayInstalled() {
+		item.Check()
+	} else {
+		item.Uncheck()
+	}
+	return err
+}
+
+// pageLink serves the page (on its first use) and returns a link that
+// opens it, a new one each time.
+func pageLink(page fs.FS, sock string, acts tray.Actions) func() (string, error) {
+	var (
+		mu  sync.Mutex
+		srv *pageserver.Server
+	)
+	return func() (string, error) {
+		mu.Lock()
+		defer mu.Unlock()
+		if srv == nil {
+			exe, _ := program()
+			host := tray.Host{Actions: acts, Version: version, Socket: sock, Tray: exe}
+			s, err := pageserver.Start(pageserver.Options{Page: page, Socket: sock, Host: host.Handler()})
+			if err != nil {
+				return "", err
+			}
+			srv = s
+		}
+		return srv.OpenURL(), nil
+	}
 }
