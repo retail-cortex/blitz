@@ -1,0 +1,128 @@
+---
+title: "037 · Visual editor"
+weight: 37
+---
+
+*A visual Markdown editor, with live code blocks and language servers* (`spec_visual_editor_037`)
+
+| | |
+|---|---|
+| Status | **Approved** (2026-10-08); phase 1 under way on `visual-editor`. |
+| Source (planned) | New: `language.proto` in `proto/blitz/v1`, `language.go` in `apps/service/internal/server`, a job object for Windows beside `pkg/engine/tools/procgroup_other.go`, and the page's `files/visual/` (the TipTap editor, its Markdown parser and serializer, the code block view) and `files/language.ts` (CodeMirror's completion, hover, lint and go-to-definition over `LanguageService`). Changed: `pkg/engine/lsp` (documents from the editor, completion, diagnostics to watchers) |
+| Depends on | [spec_files_029](spec_files_029.md) (the editor, previews, FIL-64 below), [spec_filetools_006](spec_filetools_006.md) FS-60–62 (the language servers the agent uses), [spec_desktop_024](spec_desktop_024.md) DSK-24 (what the page renders), [spec_project_config_031](spec_project_config_031.md) (trust), [spec_service_021](spec_service_021.md) SVC-01 |
+
+## 1. Purpose
+
+Markdown files open in the Files editor as a read-only preview, and are changed in their source. This makes the preview the editor: you write in the rendered document (headings, lists, tables, links), and its code blocks are real code editors, with completion, problems and hover from the language's server (gopls first). The same language servers come to the Files editor's source view, so a `.go` file gets them too.
+
+The owner's brief (2026-10-08) asked for TipTap with Monaco code blocks, over a WebSocket bridge to gopls. Decided the same day, after looking at what Blitz has:
+
+- **Code blocks are CodeMirror 6, not Monaco.** The Files editor is CodeMirror already (FIL-40): one editor, one theme, one set of keys. CodeMirror needs no web workers, no `eval` and no extra fonts, so it works unchanged in the app's web views (WebKit on macOS, WebKitGTK on Linux), in Edge on Windows ([spec_windows_036](spec_windows_036.md)) and under VS Code's content security policy. Monaco would add 3–5 MB, worker bundling and a second editor.
+- **The editor reaches language servers through the service's API, not a WebSocket.** The service already runs a language server per workspace and language for the agent (FS-61), kills it with the workspace, and (on macOS and Linux) when the service dies. A new `LanguageService` (FIL-64) puts the editor on the same servers. No WebSocket: the app's web view refuses them, the VS Code proxy doesn't carry them, and the service never listens on a port (SVC-01). No second gopls beside the agent's.
+
+What the brief asked, and where this spec answers it:
+
+| Brief | Here |
+|---|---|
+| TipTap for the Markdown document | §3 (VE-01–VE-14) |
+| Code blocks as real editors (React node views) | §4 (VE-20–VE-25), CodeMirror |
+| Completion and diagnostics from gopls | §5–§6 (VE-30–VE-47) |
+| A bridge from the page to gopls | §5, `LanguageService` over the existing proxy |
+| Web workers working in WebKitGTK | None needed (CodeMirror) |
+| Code edits reaching the document, so saving keeps them | VE-22 |
+| gopls started, checked and stopped with the app, no orphans | VE-45, VE-46 (and a job object on Windows) |
+| CSP allowing injected components | Nothing to allow: no iframes, workers or `eval` (VE-52) |
+
+## 2. Phases
+
+| Phase | What |
+|---|---|
+| 1 | `LanguageService` (FIL-64), and language intelligence in the Files editor's source view: completion, hover, problems, go to definition, for files on disk (unsaved text included) |
+| 2 | The visual editor for Markdown (TipTap): editing in the rendered document, faithful to the file's Markdown; code blocks as CodeMirror editors with highlighting and word completion |
+| 3 | Language intelligence in code blocks: each block a document of its own for its language's server (Go first, then TypeScript and Python) |
+
+Each phase ships on its own; phase 2 doesn't need phase 1, and phase 3 needs both.
+
+## 3. The visual editor (phase 2)
+
+- **VE-01** Markdown files (`.md`, `.markdown`; `.mdx` stays source and preview, since its JSX can't be edited faithfully) open in **Visual**, which replaces **Preview**: the switch in the file's bar reads **Visual** / **Source**, and ⌘⇧V / Ctrl+Shift+V switches (FIL-54's rules for which view a file opens in stay: at a line, or empty, it opens in Source). Visual is the document as Preview showed it (the document style of FIL-57, the user's CSS included), and editable.
+- **VE-02** The editor is TipTap 3 (ProseMirror) in a React component (`@tiptap/react`), loaded the first time a Markdown file opens (a chunk of its own, like Mermaid's). Exact versions are pinned (DSK-99).
+- **VE-03** It edits CommonMark with GitHub's extensions (what the chat and Preview render, remark-gfm): headings 1–6, paragraphs, **bold**, *italic*, ~~strikethrough~~, `inline code`, links, images, bullet, numbered and task lists (nested), quotes, tables (alignment, header row), horizontal rules, hard breaks, code blocks (§4) and Mermaid diagrams (VE-24).
+- **VE-04** **Faithful to the file.** Opening a file and saving it without a change writes the same bytes. Changing one part rewrites only that part: each top-level block keeps the source it was read from (its range in the file), and the serializer writes an untouched block's source as it was, so list markers (`-` or `*`), emphasis (`*` or `_`), heading style, table spacing, line endings and wrapping stay the author's. A block that changed is written in one house style (`-` lists, `*` emphasis, `**` strong, ATX headings, fenced code with backticks, tables padded to their columns), and the blank lines around it are kept.
+- **VE-05** What Visual can't edit is kept, not lost: raw HTML, front matter (`---` YAML at the top), footnotes, math (`$…$`, `$$…$$`), reference-style link definitions, and anything else the parser doesn't map to the schema show as a **source block**: its Markdown in a small CodeMirror editor, labelled ("HTML", "Front matter", …), edited as text. Raw HTML is never rendered (DSK-24).
+- **VE-06** The text model stays the tab's (FIL-40–45): Visual edits produce the tab's text (the serializer runs on each change, debounced to 150 ms, and at once before a save, a switch to Source or closing), so the dot for unsaved changes, ⌘S, `FILE_CHANGED` with **Overwrite** / **Reload**, unsaved changes surviving a switch and asking on close all work as in Source. A file changed on disk while open reloads Visual as it reloads Source (FIL-33), keeping the cursor's block when it can.
+- **VE-07** Undo and redo are the document's (ProseMirror's history), across text and code blocks (VE-22). Switching to Source and back starts a new history in the other view, as switching tabs does today.
+- **VE-08** Typing Markdown works as it would in the source: `# ` makes a heading, `- ` / `1. ` / `[ ] ` a list, `> ` a quote, ```` ``` ```` + Enter a code block, `---` + Enter a rule, `**bold**` and `` `code` `` as they're closed. ⌘B, ⌘I, ⌘E (code), ⌘⇧X (strike), ⌘K (link), ⌘⌥1–6 (headings), ⌘⇧7 / ⌘⇧8 / ⌘⇧9 (numbered, bullet, task list); Ctrl on Windows and Linux.
+- **VE-09** **/** at the start of an empty line opens a menu of blocks (heading, list, task list, quote, table, code block in a language, Mermaid diagram, rule), filtered as you type. A selection shows a small bar: bold, italic, code, strike, link, heading level.
+- **VE-10** Links: ⌘K or the bar edits the URL and text. A relative path completes from the workspace's files (FindFiles), and links behave as in Preview when clicked with ⌘ (Ctrl): FIL-56's rules, in the editor's tab. A plain click places the cursor.
+- **VE-11** Images aren't loaded (DSK-24): an image is the box Preview shows (its alt text and path), and clicking it edits both. Pasting or dropping an image file is out of scope (VE-60).
+- **VE-12** Tables: Tab and Shift+Tab move between cells, and the table's menu adds and removes rows and columns and sets a column's alignment. Cells hold inline content only, as GitHub's tables do.
+- **VE-13** Pasting: Markdown text is parsed as Markdown; HTML (from a browser or a word processor) is cleaned to what the schema holds (headings, emphasis, links, lists, tables, code), with scripts, styles, event handlers and unknown elements dropped; anything else is plain text. ⌘⇧V in Visual pastes plain text. Copy puts Markdown and the rendered HTML on the clipboard (DSK-72a's two forms).
+- **VE-15** **Styled as Blitz, not as TipTap.** TipTap is headless, but its extensions, ProseMirror and their menus come with styles of their own (selection outlines, gap cursors, table resize handles, placeholder text, drop cursors, floating menus); none of them reach the page. The editor imports no package CSS: every rule is the app's, in a stylesheet of its own over the M3 tokens (`m3.css`) and the document's `--doc-*` variables (`files/document.css`), so the document looks exactly as Preview did and follows the theme (light, dark, compact density) and the user's document CSS (FIL-57). The **/** menu, the selection bar, the link editor, the table menu and the language menu are the app's own controls (`ui/controls.tsx`: menus, buttons, fields), not TipTap's. Focus, selection, the cursor in an empty block, a selected node (an image, a rule, a code block), table cell selection and drop positions are drawn in the accent colour, as the rest of the app draws them.
+- **VE-16** **A design pass before it ships.** Each block kind, the menus and the code blocks are screenshotted with the fake service (`?fake`) in WebKit, in light and dark, against Preview's rendering of the same document; differences are fixed, not accepted. The pass is part of phase 2, with time set aside for it.
+- **VE-14** Find (FIL-72) works in Visual as in Preview: the find bar's matches marked in the document, Enter to the next. Workspace search hits open Visual at the hit (SRCH-43). Export as PDF (DSK-93) prints the document from a read-only render of the tab's text, as it does today.
+
+## 4. Code blocks (phase 2)
+
+- **VE-20** A fenced code block is a CodeMirror 6 editor inside the document (a TipTap node view): the Files editor's setup (FIL-40–42: highlighting by the fence's language, from `@codemirror/language-data`, bracket matching, indentation, word completion), without line numbers by default, growing with its content. Its header shows the language (a menu to change it, with search) and **Copy**.
+- **VE-21** The cursor moves in and out as if the block were text: Up at its first line or Left at its start leaves it for the block above, Down and Right likewise below; Backspace in an empty block turns it into a paragraph; ⌘Enter (Ctrl+Enter) leaves it for a new paragraph after it. Tab indents inside it.
+- **VE-22** **Edits reach the document at once.** Each change in the CodeMirror editor is dispatched to ProseMirror as a transaction in the same event (no debounce), replacing the block's text by the changed range; a change to the block from ProseMirror (undo, a paste over it, a collaborative replace in future) is applied to the CodeMirror editor. One undo history covers both (the code editor has none of its own), so ⌘Z after typing in a block undoes the typing. The serializer reads the block's text from the document, so a save always has what's on screen.
+- **VE-23** An indented code block (four spaces) shows as a code block, and is written back indented unless changed (VE-04); a changed one is written fenced.
+- **VE-24** A ```` ```mermaid ```` block shows its diagram (FIL-55), with **Edit** to show its source in a code block above the diagram, redrawn as you type (debounced to 300 ms); a source that doesn't parse shows why, as today.
+- **VE-25** Many blocks stay cheap: a block off screen keeps its text but not its editor (created as it scrolls into view), so a document with 200 code blocks opens as fast as Preview did.
+
+## 5. `LanguageService` (phase 1; FIL-64)
+
+A new Connect service, in a new `language.proto` beside the other protos. Every request names its workspace (SVC-10). The page's transport carries unary calls and server streams, not two-way streams (FIL-64), so a document's changes are calls and its diagnostics are a stream.
+
+- **VE-30** **Documents.** `OpenDocument` opens a document for the editor and returns its ID, its language and the server's state: `ready`, `starting`, `missing` (the command isn't installed: what to install, VE-44), `disabled` (configuration), `untrusted` (VE-43) or `none` (no server for the language). A document is a workspace file (`path`, relative) with its current text (unsaved edits included), or a code block (VE-50). `ChangeDocument` sends the whole new text with a version (the editor calls it debounced to 150 ms); `CloseDocument` ends it. Calls with an older version than the document's are answered for the newer one or refused as `STALE`.
+- **VE-31** **Leases.** Documents belong to the client that opened them, and a client that goes away (the window closed, the page reloaded, a crash) mustn't leave them open: each document lasts while its client calls or watches within 2 minutes (`KeepDocuments`, every 30 s, from the page), then closes. At most 64 editor documents per workspace; opening more closes the least recently used.
+- **VE-32** **Completion.** `Complete(document, version, line, column, trigger)` returns up to 200 items: label, kind, detail, documentation (Markdown), the text to insert or the edit to make (a range and text; snippets as LSP snippets), the extra edits some servers add (an import for gopls), whether the list is incomplete (ask again as typing narrows it), and the server's sort and filter text. The editor shows them with CodeMirror's autocompletion beside FIL-42's words, the server's first; documentation shows beside the list, rendered as Markdown.
+- **VE-33** **Hover.** `Hover(document, version, line, column)` returns Markdown and the range it's about; the editor shows it after the pointer rests 400 ms (or ⌘I, Ctrl+I), rendered with the chat's renderer.
+- **VE-34** **Definition and references.** `Definition` and `References` return locations (path, line, column, the line's text, at most 100), as the agent's tool does. ⌘-click (Ctrl-click) or F12 goes to a definition: in the same file, the cursor moves; in another workspace file, it opens in the editor at the line; outside the workspace (the standard library, the module cache), it opens read-only in a tab of its own when the service may read it, else the location is shown. ⇧F12 lists references in a panel below the editor.
+- **VE-35** **Diagnostics.** `WatchDiagnostics(workspace)` streams each open editor document's diagnostics as the server publishes them: document, version, and each diagnostic's range, severity, message, source and code. The editor underlines them (`@codemirror/lint`: errors, warnings, information and hints), with the message on hover and a mark in the gutter; the file's tab and the status bar count errors and warnings. The stream keeps a client's documents alive (VE-31).
+- **VE-36** Positions are lines and columns of characters (1-based), as the agent's tool uses (FS-60); the engine converts to and from the server's UTF-16 offsets.
+- **VE-37** Errors carry a reason (`NO_SERVER`, `SERVER_MISSING`, `UNTRUSTED`, `SERVER_FAILED`, `UNKNOWN_DOCUMENT`, `STALE`). The editor shows none of them as an alert: a document without a server gets FIL-42's completion and a quiet note in the status bar ("No Go language server: install gopls"), and a failure says why there once.
+
+## 6. The engine (phase 1)
+
+- **VE-40** The editor's documents and the agent's share each workspace's servers (`lsp.Manager`, in `pkg/engine/lsp`): one gopls per workspace, as now. `initialize` adds what the editor uses: completion (snippets, documentation in Markdown, resolving details, the extra edits), and the diagnostics' code and related information.
+- **VE-41** **Unsaved text.** A document the editor has open is the server's copy of that file while it's open: its text is the editor's (unsaved edits included), and the engine's sync from disk (the agent's tool, the diagnostics after its edits) leaves it alone, so the agent's diagnostics for a file you're editing are for what you see. When the editor closes it, the next sync is from disk again.
+- **VE-42** **Open documents.** The editor's documents don't count towards the 32 documents the engine keeps open for the agent (FS-61's cap closes only the agent's own), so a file you're editing is never closed under you.
+- **VE-43** **Trust.** Language servers run the project's code (gopls loads its packages, and `go list` runs its build), so the editor's servers start only in a workspace whose project settings are trusted ([spec_project_config_031](spec_project_config_031.md)); in another, `OpenDocument` answers `untrusted`, and the editor offers **Trust this project** (FIL-61). The agent's `lsp` tool is unchanged (§10).
+- **VE-44** **A missing server** is said, with what to install (`go install golang.org/x/tools/gopls@latest`, `npm i -g typescript-language-server typescript`, `npm i -g pyright`, `rustup component add rust-analyzer`). Installing it for you is FIL-62, a later step.
+- **VE-45** **Health.** A server that exits is started again on the next request (after 1 minute when it failed to start, as FS-61), and its documents are opened in it again, so the editor needs no action; a server that stops answering (no reply to a request in 30 s, three times running) is stopped and started again. `GetLanguageStatus(workspace)` lists the servers: language, command, state, since when, and the last error, shown in **Settings › Workspaces › Language servers** with **Restart**.
+- **VE-46** **No orphans.** A workspace's servers stop when it closes and when the service stops (FS-62), and when the service dies they die with it: on macOS and Linux by the process group and the parent-death guard (as today); **on Windows, by a job object** (`KILL_ON_JOB_CLOSE`) that holds every process a language server starts (gopls's `go list` included), so nothing outlives a crash there either. Tests start a fake server, kill the service and check no process is left.
+
+## 7. Code blocks and language servers (phase 3)
+
+- **VE-50** **A block is a document.** A code block in a language with a server is opened as a document of its own (`OpenDocument` with the Markdown file's path, the block's index and language, and its text), kept open while it's on screen or being edited. The engine gives it a file of its own the server can read without it existing on disk (an overlay): `.blitz/snippets/<hash>/snippet.<ext>` under the workspace's root, so it sees the workspace's modules and packages but isn't part of any package beside the Markdown file. Nothing is written to disk.
+- **VE-51** **Making a block a whole file.** Most blocks are fragments. Before the server sees one, the engine adds what the language needs, hidden from the editor, and maps positions across it: for Go, `package snippet` when the block has no `package` line, and the block's statements inside `func _() { … }` when it doesn't start with a declaration (`package`, `import`, `func`, `type`, `var`, `const`, or a comment before one); TypeScript and Python blocks are files as they are. Diagnostics on the added lines are dropped, and "declared and not used" in a wrapped Go block is shown as a hint.
+- **VE-52** **Nothing else to allow.** Code blocks are DOM inside the document, not iframes, and CodeMirror needs no workers or `eval`, so the desktop page, the Windows tray's page and VS Code's policy need no change.
+- **VE-53** Languages with blocks in phase 3: Go, then TypeScript and JavaScript, then Python. Rust needs its block inside a Cargo project, so it keeps FIL-42's completion.
+
+## 8. Size, platforms and dependencies
+
+- **VE-55** New packages, pinned (DSK-99) and in THIRD_PARTY_NOTICES (all MIT): `@tiptap/react`, `@tiptap/pm`, `@tiptap/starter-kit` and the table, task list and link extensions; a Markdown parser that gives each block its source range (`markdown-it` with its source maps, or mdast through remark, which Preview has already; decided in phase 2) and `@codemirror/lint`. Together about 300 kB, in the visual editor's chunk, loaded with the first Markdown file.
+- **VE-56** Platforms: the app on macOS (WebKit) and Linux (WebKitGTK), the Windows tray's page in Edge, and a browser in development. The VS Code extension shows only the chat (VSC-04), so it gets none of this until it shows files.
+
+## 9. Tests
+
+- **VE-90** **Round trip.** Every Markdown file in this repository (`docs/`, the specs, READMEs, `.agents/`) is parsed and serialized without a change and compared byte for byte with the file (VE-04), in Vitest, without a DOM. A set of edits (a word in a paragraph, a list item added, a table cell, a code block's text) changes only the lines it should.
+- **VE-91** Pasted HTML: scripts, handlers, styles and unknown elements are dropped (VE-13); raw HTML in a file stays a source block (VE-05).
+- **VE-92** The service and engine: `LanguageService` against the fake language server (`lsptest`, which gains completion), its leases (a client gone closes its documents), versions (`STALE`), unsaved text over disk syncs, the editor's documents outside the agent's cap, Go block wrapping and position mapping, and the trust gate; and against real gopls when `BLITZ_TEST_GOPLS=1` (as `TestGopls`).
+- **VE-93** No orphans (VE-46): a fake server that starts a child, the service killed, nothing left (Linux, macOS, Windows).
+- **VE-94** The page, by hand (until Playwright, `.agents/TODO.md`): editing each block kind, code blocks' keys and undo, completion and problems in a Go file and a Go block, in the app on macOS and Linux and the tray's page on Windows.
+
+## 10. Decisions (review, 2026-10-08)
+
+1. **Visual replaces Preview** (VE-01): Visual and Source, no read-only view in the editor.
+2. **The trust gate is the editor's** (VE-43). The agent's `lsp` tool is unchanged; gating it too is a separate decision.
+3. **Phases in order**: the language service first, then the visual editor, then language servers in code blocks.
+4. **Installing a missing server** (FIL-62) waits: VE-44 only says what to install.
+5. **TipTap is styled as the app** (VE-15), with a design pass (VE-16).
+
+## 11. Out of scope
+
+- **VE-60** Images pasted or dropped into a document (they'd be saved beside it), collaborative editing, comments, and Markdown in the chat's composer.
+- **VE-61** Code actions (quick fixes, organize imports), rename, formatting with the server, signature help and semantic highlighting: later, once the basics are used.

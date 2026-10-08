@@ -46,5 +46,6 @@ Files are named `spec_<name>_NNN.md`, where `NNN` is the order of execution: eac
 | 034 | [vscode](spec_vscode_034.md) | The VS Code extension: the desktop app's chat in a view, attached to the service through a local proxy, approvals in the diff view, the selection and files as context |
 | 035 | [search](spec_search_035.md) | Workspace search: an index of the files, PDFs and notebooks, chats and notes, kept up by scans, searched by words (FTS5, BM25) from the desktop app, the CLI and the agent |
 | 036 | [windows](spec_windows_036.md) | Blitz on Windows: the tray runs the service and serves the desktop page on a loopback port, behind a one-time link, in an Edge app window |
+| 037 | [visual editor](spec_visual_editor_037.md) | Draft: Markdown edited in its rendered form (TipTap), code blocks as CodeMirror editors, and language servers (gopls first) for the editor through a `LanguageService` on the service |
 
 Background and history: [the roadmap](../roadmap.md), [where to pick up](../../development/next-steps.md), [development](../../development/_index.md).
