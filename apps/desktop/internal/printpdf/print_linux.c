@@ -32,6 +32,7 @@ typedef struct {
   uintptr_t handle;
   char *path;
   GtkWidget *window;
+  WebKitWebView *view;
   gboolean loaded;
   char *error;
 } job;
@@ -52,6 +53,9 @@ static void finish(job *j) {
     g_clear_error(&err);
   }
   g_unlink(j->path);
+  // The view may outlive the window for a moment (it's in the middle of a
+  // signal when a load fails): it mustn't call back into the freed job.
+  g_signal_handlers_disconnect_by_data(j->view, j);
   gtk_widget_destroy(j->window);
   g_free(j->path);
   g_free(j->html);
@@ -133,7 +137,12 @@ static gboolean decide_policy(WebKitWebView *view, WebKitPolicyDecision *decisio
 static gboolean start(gpointer data) {
   job *j = data;
   j->window = gtk_offscreen_window_new();
-  WebKitWebView *view = WEBKIT_WEB_VIEW(webkit_web_view_new_with_context(webkit_web_context_new_ephemeral()));
+  // The view keeps its context; ours is given up, or every print would
+  // leave a context (and its web process's state) behind.
+  WebKitWebContext *context = webkit_web_context_new_ephemeral();
+  WebKitWebView *view = WEBKIT_WEB_VIEW(webkit_web_view_new_with_context(context));
+  g_object_unref(context);
+  j->view = view;
   webkit_settings_set_enable_javascript(webkit_web_view_get_settings(view), FALSE);
   gtk_widget_set_size_request(GTK_WIDGET(view), (int)(j->width - 2 * j->margin), (int)(j->height - 2 * j->margin));
   gtk_container_add(GTK_CONTAINER(j->window), GTK_WIDGET(view));

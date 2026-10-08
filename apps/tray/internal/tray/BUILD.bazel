@@ -45,6 +45,7 @@ go_test(
     srcs = [
         "actions_test.go",
         "locale_test.go",
+        "probe_test.go",
         "tray_test.go",
     ],
     embed = [":tray"],
