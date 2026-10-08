@@ -1463,6 +1463,7 @@
     "tray.restart": "Redémarrer le service",
     "tray.open_app": "Ouvrir Blitz",
     "tray.open_logs": "Ouvrir les journaux",
+    "tray.start_at_login": "Lancer Blitz à l’ouverture de session",
     "tray.quit": "Quitter la zone de notification",
     "tray.quit_hint": "Le service continue de fonctionner",
     "tray.starting": "Démarrage du service…",

@@ -1,0 +1,48 @@
+load("@rules_go//go:def.bzl", "go_library", "go_test")
+
+# Copyright 2026 Retail Cortex
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+go_library(
+    name = "pageserver",
+    srcs = [
+        "proxy.go",
+        "server.go",
+    ],
+    importpath = "github.com/retail-cortex/blitz/pkg/pageserver",
+    visibility = ["//visibility:public"],
+    deps = ["//pkg/socket"],
+)
+
+go_test(
+    name = "pageserver_test",
+    size = "small",
+    srcs = [
+        "proxy_test.go",
+        "server_test.go",
+    ],
+    embed = [":pageserver"],
+    deps = [
+        "//apps/service/servicetest",
+        "//pkg/config",
+        "//pkg/engine",
+        "//pkg/engine/runtime",
+        "//pkg/socket",
+        "//proto/blitz/v1:blitzv1_go_proto",
+        "@com_connectrpc_connect//:connect",
+        "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//require",
+        "@org_golang_google_genai//:genai",
+    ],
+)

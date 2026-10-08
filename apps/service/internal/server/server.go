@@ -52,6 +52,7 @@ type Server struct {
 	started   time.Time   // when New ran
 	program   os.FileInfo // the executable as it was then (nil if unknown)
 	logDir    string      // where the diagnostic log is written ("": off)
+	shutdown  func()      // stops the service, for Shutdown (nil: it can't)
 	sched     *scheduler  // nil: workers aren't run
 	broker    *broker
 	runs      runs          // background runs

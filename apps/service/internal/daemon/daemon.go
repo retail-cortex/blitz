@@ -121,6 +121,9 @@ func Run(ctx context.Context, o Options) error {
 	}
 	runs := workers.OpenRunLog(config.ExpandHome("~/.blitz/worker-runs"))
 
+	ctx, stop := context.WithCancel(ctx)
+	defer stop()
+
 	// Each workspace gets its own configuration: a workspace owns and
 	// changes it.
 	s := server.New(func(ctx context.Context, dir string) (*engine.Workspace, error) {
@@ -145,7 +148,7 @@ func Run(ctx context.Context, o Options) error {
 		}
 		slog.Info("workspace opened", "workspace", dir)
 		return w, nil
-	}, server.WithScheduler(server.SchedulerConfig{Store: store, Runs: runs, MaxConcurrent: cfg.Workers.Policy.MaxConcurrent}), server.WithVersion(o.Version), server.WithConfigDir(o.Config), server.WithLogDir(logDir(cfg)))
+	}, server.WithScheduler(server.SchedulerConfig{Store: store, Runs: runs, MaxConcurrent: cfg.Workers.Policy.MaxConcurrent}), server.WithVersion(o.Version), server.WithConfigDir(o.Config), server.WithLogDir(logDir(cfg)), server.WithShutdown(stop))
 	defer s.Close()
 
 	l, err := socket.Listen(o.Socket)
@@ -153,8 +156,6 @@ func Run(ctx context.Context, o Options) error {
 		return err
 	}
 	defer os.Remove(o.Socket)
-	ctx, stop := context.WithCancel(ctx)
-	defer stop()
 	go watch(ctx, stop, o, s.IdleFor)
 	if o.schedules(cfg) {
 		s.StartScheduler(ctx)

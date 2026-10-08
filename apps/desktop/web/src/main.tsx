@@ -17,6 +17,7 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App";
+import { detectHost } from "./desktop";
 import { EditorPanel } from "./EditorPanel";
 import { editorConfig } from "./host";
 import { installQuietInputs } from "./ui/inputs";
@@ -32,6 +33,7 @@ async function start() {
     const { installFake } = await import("./dev/fake");
     installFake();
   }
+  await detectHost(); // the tray serving the page (Windows) does some of the app's work
   installQuietInputs(); // no system capitals or corrections in names, paths, models
   createRoot(document.getElementById("root")!).render(
     <StrictMode>

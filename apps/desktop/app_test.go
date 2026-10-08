@@ -17,7 +17,6 @@ package main
 import (
 	"context"
 	"os"
-	"os/exec"
 	"path/filepath"
 	goruntime "runtime"
 	"strings"
@@ -266,19 +265,6 @@ func TestInstallCLIErrors(t *testing.T) {
 		assert.Equal(t, filepath.Join(home, ".local", "bin"), dir)
 		assert.False(t, onPath)
 	}
-}
-
-// OpenFolder and OpenDocument report a program that won't start.
-func TestOpenCommandFails(t *testing.T) {
-	orig := openCommand
-	t.Cleanup(func() { openCommand = orig })
-	assert.Equal(t, filepath.Base(orig("/x").Path), map[bool]string{true: "open", false: "xdg-open"}[goruntime.GOOS == "darwin"])
-	openCommand = func(string) *exec.Cmd { return exec.Command(filepath.Join(t.TempDir(), "missing")) }
-	a := &App{}
-	assert.ErrorContains(t, a.OpenFolder(t.TempDir()), "opening")
-	doc := filepath.Join(t.TempDir(), "a.png")
-	require.NoError(t, os.WriteFile(doc, nil, 0o600))
-	assert.ErrorContains(t, a.OpenDocument(doc), "opening")
 }
 
 // Links other than web and mail ones are refused before anything opens;

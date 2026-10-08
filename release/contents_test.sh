@@ -14,11 +14,19 @@
 # limitations under the License.
 
 # Every release archive carries the license, the notice and the
-# third-party notices beside the programs, and blz, a link to blitz.
+# third-party notices beside the programs, and blz, a link to blitz (but
+# Windows's zip, which has the tray instead).
 set -euo pipefail
 fail=0
 for archive in "$@"; do
-	case "$archive" in *.zip) continue ;; esac # GNU tar can't list zips
+	case "$archive" in *.zip) # GNU tar can't list zips
+		list="$(unzip -Z1 "$archive")"
+		for f in LICENSE NOTICE THIRD_PARTY_NOTICES README.md blitz.exe blitzd.exe blitz-tray.exe; do
+			grep -q "/$f$" <<<"$list" || { echo "✗ $(basename "$archive") has no $f"; fail=1; }
+		done
+		continue
+		;;
+	esac
 	list="$(tar -tzf "$archive")"
 	for f in LICENSE NOTICE THIRD_PARTY_NOTICES README.md blitz blitzd blz; do
 		grep -q "/$f$" <<<"$list" || { echo "✗ $(basename "$archive") has no $f"; fail=1; }

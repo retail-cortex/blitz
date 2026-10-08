@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-1 -1 26 26" width="64" height="64">
+  <!-- The tray's icon on Windows while the service runs: the brand's bolt
+       (docs/static/brand.svg) in its amber, edged dark, so it shows on
+       light and dark taskbars alike (Windows doesn't tint tray icons).
+       windows-running-64.png is rendered from it
+       (inkscape windows-running.svg -w 64 -h 64 -o windows-running-64.png). -->
+  <path fill="#fbbc04" stroke="#5f3a00" stroke-width="1.2" stroke-linejoin="round" d="M11 15H6L13 1V9H18L11 23V15Z"/>
+</svg>

@@ -17,7 +17,7 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { mdiOpenInNew } from "@mdi/js";
 import { files } from "../api";
-import { inApp, openDocument } from "../desktop";
+import { canCall, openDocument } from "../desktop";
 import { message } from "../errors";
 import { t } from "../i18n";
 import { Button, useSnackbar } from "../ui/controls";
@@ -129,7 +129,7 @@ function FilePreview({ dir, path, kind }: { dir: string; path: string; kind: Pre
       if (made) URL.revokeObjectURL(made);
     };
   }, [dir, path, kind]);
-  const external = inApp() && (
+  const external = canCall("OpenDocument") && (
     <Button small icon={mdiOpenInNew} onClick={() => openDocument(`${dir}/${path}`).catch((e) => snack(message(e), { error: true }))}>
       {t("desktop.files.open_viewer")}
     </Button>

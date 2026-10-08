@@ -66,6 +66,7 @@ vite_bin.vite(
     tags = ["no-sandbox"],
     visibility = [
         "//apps/desktop:__pkg__",
+        "//apps/tray:__pkg__",
         "//apps/vscode:__pkg__",
     ],
 )

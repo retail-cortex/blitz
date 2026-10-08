@@ -15,7 +15,7 @@ curl -fsSL https://github.com/retail-cortex/blitz/releases/latest/download/insta
 
 Later, `blitz update` installs the latest release over this one (`--check` only says whether there is one). It checks the release's signature with cosign, and its checksum; without cosign it asks for `--skip-signature`. A copy installed by Homebrew is updated with `brew upgrade blitz`.
 
-Or download the archive for your platform from the [releases](https://github.com/retail-cortex/blitz/releases). Each holds `blitz`, `blitzd`, the `blz` shortcut (a link to `blitz`, not on Windows), and the license files:
+Or download the archive for your platform from the [releases](https://github.com/retail-cortex/blitz/releases). Each holds `blitz`, `blitzd`, the `blz` shortcut (a link to `blitz`, not on Windows), and the license files; Windows's also has `blitz-tray.exe`, which runs the service and opens the [desktop app's page](../products/desktop.md#on-windows):
 
 | Platform | Archive |
 |---|---|

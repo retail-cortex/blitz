@@ -72,10 +72,9 @@ helper process (IMG-52).
 - **Chromebooks:** if a colleague sees a blank window, set
   `WEBKIT_DISABLE_DMABUF_RENDERER=1` automatically on ChromeOS.
 - **A signed macOS release:** the Apple Developer ID is pending.
-- **The tray on Windows:** it needs what Windows lacks first: the service
-  installing there (a login item; REL-25 says it doesn't) and a Windows
-  package of the desktop app. The tray itself also needs a lock and
-  detaching that aren't Unix-only (`flock`, `Setsid`).
+- **Windows, by hand:** the tray and its page are built (spec_windows_036);
+  run them on Windows (WIN-40, manual verification §45), then a native
+  folder picker and Arm64 (WIN-42).
 - **Wails v3** (decided 2026-09-29: stay on v2). v3 was at `v3.0.0-beta.26`
   and the tray, its main draw, is done separately. Revisit when v3 has a
   stable release that has been out a while, or we need several windows or

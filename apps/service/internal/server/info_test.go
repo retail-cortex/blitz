@@ -194,3 +194,40 @@ func TestGetModelReportsAnUnavailableModel(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotEmpty(t, m.Msg.Unavailable)
 }
+
+// Shutdown stops a service that can stop itself, after answering; one that
+// can't says so.
+func TestShutdown(t *testing.T) {
+	shutdownDelay = time.Millisecond
+	for _, tc := range []struct {
+		name    string
+		canStop bool
+		want    connect.Code
+	}{
+		{"can stop", true, 0},
+		{"can't stop", false, connect.CodeFailedPrecondition},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			stopped := make(chan struct{})
+			var opts []Option
+			if tc.canStop {
+				opts = append(opts, WithShutdown(func() { close(stopped) }))
+			}
+			s := New(nil, opts...)
+			srv := httptest.NewServer(s.Handler())
+			defer func() { srv.Close(); s.Close() }()
+			c := pb.NewWorkspaceServiceClient(http.DefaultClient, srv.URL)
+			_, err := c.Shutdown(context.Background(), connect.NewRequest(&pb.ShutdownRequest{}))
+			if tc.want != 0 {
+				assert.Equal(t, tc.want, connect.CodeOf(err), "err %v", err)
+				return
+			}
+			require.NoError(t, err)
+			select {
+			case <-stopped:
+			case <-time.After(5 * time.Second):
+				t.Fatal("the service didn't stop")
+			}
+		})
+	}
+}

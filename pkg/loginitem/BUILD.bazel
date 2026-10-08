@@ -16,16 +16,30 @@ load("@rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "loginitem",
-    srcs = ["loginitem.go"],
+    srcs = [
+        "loginitem.go",
+        "run_other.go",
+        "run_windows.go",
+    ],
     importpath = "github.com/retail-cortex/blitz/pkg/loginitem",
     visibility = ["//visibility:public"],
-    deps = ["//pkg/config"],
+    deps = [
+        "//pkg/config",
+    ] + select({
+        "@rules_go//go/platform:windows": [
+            "@org_golang_x_sys//windows/registry",
+        ],
+        "//conditions:default": [],
+    }),
 )
 
 go_test(
     name = "loginitem_test",
     size = "small",
-    srcs = ["loginitem_test.go"],
+    srcs = [
+        "loginitem_test.go",
+        "run_other_test.go",
+    ],
     embed = [":loginitem"],
     deps = [
         "@com_github_stretchr_testify//assert",

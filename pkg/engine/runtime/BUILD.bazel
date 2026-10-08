@@ -54,10 +54,10 @@ go_library(
         # three only in tests (//tools:check_deps checks libraries).
         "//apps/cli:__pkg__",
         "//apps/cli/internal/tui:__pkg__",
-        "//apps/desktop:__pkg__",
         "//apps/service:__subpackages__",
         "//pkg/client:__pkg__",
         "//pkg/engine:__subpackages__",
+        "//pkg/pageserver:__pkg__",
     ],
     deps = [
         "//pkg/api",

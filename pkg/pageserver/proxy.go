@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package main
+package pageserver
 
 import (
 	"encoding/binary"
@@ -31,11 +31,11 @@ import (
 // to the service.
 const apiPrefix = "/blitz.v1."
 
-// serviceProxy forwards the page's API requests to the service's Unix
+// Proxy forwards the page's API requests to the service's Unix
 // socket (a web view can't open one itself), streaming responses as they
 // come. Anything else is not found: the page's own files are served by
-// Wails.
-func serviceProxy(path string) http.Handler {
+// Wails, or by a Server.
+func Proxy(path string) http.Handler {
 	target, _ := url.Parse(socket.BaseURL)
 	proxy := &httputil.ReverseProxy{
 		Rewrite: func(r *httputil.ProxyRequest) {

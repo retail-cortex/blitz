@@ -1463,6 +1463,7 @@
     "tray.restart": "Restart the service",
     "tray.open_app": "Open Blitz",
     "tray.open_logs": "Open the logs",
+    "tray.start_at_login": "Start Blitz at login",
     "tray.quit": "Quit the tray",
     "tray.quit_hint": "The service keeps running",
     "tray.starting": "Starting the service…",

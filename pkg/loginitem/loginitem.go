@@ -13,7 +13,9 @@
 // limitations under the License.
 
 // Package loginitem starts the Blitz service (blitzd) at login and
-// controls it: a launchd agent on macOS, a systemd user unit on Linux.
+// controls it: a launchd agent on macOS, a systemd user unit on Linux. On
+// Windows only the tray starts at login (InstallTray), and it starts the
+// service.
 // The CLI (`blitz service …`) and the desktop app both use it, so the app
 // needs no CLI to install, restart or stop the service.
 package loginitem
@@ -185,7 +187,8 @@ func Restart() error {
 }
 
 // TrayLabel is the tray's launchd agent (macOS); on Linux the tray starts
-// from an XDG autostart entry, as graphical programs do.
+// from an XDG autostart entry, as graphical programs do, and on Windows
+// from a value in the registry's Run key.
 const TrayLabel = "dev.blitz.tray"
 
 // TrayPath is where the tray's start-at-login entry is written.
@@ -195,6 +198,8 @@ func TrayPath() (string, error) {
 		return config.ExpandHome("~/Library/LaunchAgents/" + TrayLabel + ".plist"), nil
 	case "linux":
 		return filepath.Join(xdgConfigHome(), "autostart", "blitz-tray.desktop"), nil
+	case "windows":
+		return runPath(), nil
 	}
 	return "", ErrUnsupported
 }
@@ -208,6 +213,9 @@ func xdgConfigHome() string {
 
 // TrayInstalled reports whether the tray starts at login.
 func TrayInstalled() bool {
+	if goruntime.GOOS == "windows" {
+		return runInstalled()
+	}
 	p, err := TrayPath()
 	if err != nil {
 		return false
@@ -217,8 +225,12 @@ func TrayInstalled() bool {
 }
 
 // InstallTray makes bin (blitz-tray, an absolute path) start at login. On
-// macOS launchd starts it now too; on Linux the caller starts it.
+// macOS launchd starts it now too; on Linux and Windows the caller starts
+// it.
 func InstallTray(bin string) error {
+	if goruntime.GOOS == "windows" {
+		return installRun(bin)
+	}
 	path, err := TrayPath()
 	if err != nil {
 		return err
@@ -240,6 +252,9 @@ func InstallTray(bin string) error {
 
 // UninstallTray stops the tray starting at login (and on macOS, stops it).
 func UninstallTray() error {
+	if goruntime.GOOS == "windows" {
+		return uninstallRun()
+	}
 	path, err := TrayPath()
 	if err != nil {
 		return err

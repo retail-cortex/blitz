@@ -17,8 +17,11 @@
 // The desktop app's own functions (Go methods bound by Wails), for what the
 // service can't do: its own status and installation, native dialogs, the
 // window's settings, and opening links outside the window. Wails injects
-// window.go at run time. In a plain browser (development) they fall back
-// to stand-ins: settings in localStorage, links in a new tab.
+// window.go at run time. Where there's no desktop app (Windows) the tray
+// serves the page to a browser and answers some of them itself, under
+// /host/ (apps/tray/internal/tray/host.go). In a plain browser
+// (development), and for what the tray doesn't do, they fall back to
+// stand-ins: settings in localStorage, links in a new tab.
 import { workspaces } from "./api";
 import { editorConfig, toEditor } from "./host";
 import { t } from "./i18n";
@@ -108,17 +111,64 @@ function bound(): Bound | undefined {
 /** Whether the page runs inside the desktop app. */
 export const inApp = () => !!bound();
 
+/** The methods the program serving the page answers (the tray's), once asked. */
+let hostMethods: ReadonlySet<string> = new Set();
+
+/**
+ * Asks the program serving the page which of the app's methods it answers
+ * (GET /host/info). Call once before rendering; outside the tray's page
+ * nothing answers, and none are.
+ */
+export async function detectHost(): Promise<void> {
+  if (inApp() || editorConfig()) return;
+  try {
+    const res = await fetch("/host/info", { headers: { Accept: "application/json" } });
+    const info: unknown = res.ok ? await res.json() : undefined;
+    const methods = (info as { methods?: unknown } | undefined)?.methods;
+    if (Array.isArray(methods)) hostMethods = new Set(methods.filter((m): m is string => typeof m === "string"));
+  } catch {
+    // no host: a development server's page, or a file
+  }
+}
+
+/** Forgets the host (tests). */
+export const resetHost = () => (hostMethods = new Set());
+
+/** Calls one of the app's methods on the program serving the page. */
+async function hostCall(method: string, args: unknown[]): Promise<unknown> {
+  const res = await fetch(`/host/${method}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(args),
+  });
+  const body: unknown = await res.json().catch(() => undefined);
+  if (!res.ok) throw new Error((body as { error?: string } | undefined)?.error ?? res.statusText);
+  return body;
+}
+
+/** Whether the app's method can be called: in the app, or on the tray that serves the page. */
+export const canCall = (method: keyof Bound) => inApp() || hostMethods.has(method);
+
+/** The tray's methods, as the app's. */
+const host = new Proxy({} as Bound, {
+  get: (_, method: string) =>
+    hostMethods.has(method)
+      ? (...args: unknown[]) => hostCall(method, args)
+      : () => Promise.reject(new Error("not running inside the Blitz desktop app")),
+});
+
 function app(): Bound {
   const b = bound();
-  if (!b) throw new Error("not running inside the Blitz desktop app");
-  return b;
+  if (b) return b;
+  if (hostMethods.size > 0) return host;
+  throw new Error("not running inside the Blitz desktop app");
 }
 
 const devPrefsKey = "blitz.desktop.prefs";
 
 /** The service's status (in a browser: whether the dev server's proxy reaches one). */
 export async function serviceStatus(): Promise<ServiceStatus> {
-  if (!inApp()) {
+  if (!canCall("ServiceStatus")) {
     // In a browser the dev server proxies to the service: ask it something.
     const running = await workspaces.listWorkspaces({}).then(
       () => true,
@@ -134,11 +184,11 @@ export const installService = () => app().InstallService();
 /** Shows the service in the system tray at login and now, or stops that. */
 export const setTray = (on: boolean) => app().SetTray(on);
 /** The OS sandbox's state (undefined in a browser). */
-export const sandboxStatus = async () => (inApp() ? app().SandboxStatus() : undefined);
+export const sandboxStatus = async () => (canCall("SandboxStatus") ? app().SandboxStatus() : undefined);
 /** Lets bubblewrap past AppArmor's restriction, with the system's password dialog. */
 export const fixSandbox = () => app().FixSandbox();
 /** Where the blitz command is (undefined in a browser, which can't install it). */
-export const cliStatus = async () => (inApp() ? app().CLIStatus() : undefined);
+export const cliStatus = async () => (canCall("CLIStatus") ? app().CLIStatus() : undefined);
 /** Puts the app's blitz on the user's PATH (a no-op when one is there already). */
 export const installCLI = () => app().InstallCLI();
 /** Links this app's blitz again: dead links off PATH, the one found pointed at this app's. */
@@ -149,10 +199,10 @@ export const stopService = (pid: number) => app().StopService(pid);
 export const restartService = (pid: number) => app().RestartService(pid);
 
 /** Whether the file a running service started from is still there (true in a browser). */
-export const programExists = async (path: string) => (inApp() && path ? app().ProgramExists(path) : true);
+export const programExists = async (path: string) => (canCall("ProgramExists") && path ? app().ProgramExists(path) : true);
 
 /** The app's version ("dev" outside a release, and in a browser). */
-export const appVersion = async () => (inApp() ? app().Version() : "dev");
+export const appVersion = async () => (canCall("Version") ? app().Version() : "dev");
 
 /**
  * Asks for a folder to open as a workspace (a native dialog; in a browser,
@@ -197,10 +247,10 @@ export async function openURL(url: string): Promise<void> {
   return app().OpenURL(url);
 }
 
-/** Shows a folder in the file manager (only in the app). */
+/** Shows a folder in the file manager (in the app, or from the tray). */
 export const openFolder = (dir: string) => app().OpenFolder(dir);
 
-/** Opens an image or PDF in the system's viewer (only in the app). */
+/** Opens an image or PDF in the system's viewer (in the app, or from the tray). */
 export const openDocument = (path: string) => app().OpenDocument(path);
 
 /**
@@ -212,13 +262,13 @@ export async function printPDF(html: string, pageSize: "A4" | "Letter"): Promise
   return Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
 }
 
-/** Shows a file or folder selected in the system's file manager (only in the app). */
+/** Shows a file or folder selected in the system's file manager (in the app, or from the tray). */
 export const revealPath = (path: string) => app().RevealPath(path);
 
 let fileManagerName: Promise<string> | undefined;
-/** The system file manager's name (Finder, Dolphin, …; "" when unknown), or null outside the app. */
+/** The system file manager's name (Finder, Dolphin, …; "" when unknown), or null where nothing can show files. */
 export function fileManager(): Promise<string | null> {
-  if (!inApp()) return Promise.resolve(null);
+  if (!canCall("FileManager")) return Promise.resolve(null);
   fileManagerName ??= app().FileManager().catch(() => "");
   return fileManagerName;
 }
@@ -259,7 +309,7 @@ export type LicenseText = "notice" | "full" | "third-party";
  * that only the app has them).
  */
 export async function licenseText(which: LicenseText): Promise<string> {
-  if (!inApp()) return t("desktop.license.dev");
+  if (!canCall("License")) return t("desktop.license.dev");
   return app().License(which);
 }
 
