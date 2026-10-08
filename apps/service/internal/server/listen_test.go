@@ -15,8 +15,12 @@
 package server
 
 import (
+	"bufio"
 	"context"
+	"io"
 	"io/fs"
+	"net"
+	"net/http"
 	"os"
 	"path/filepath"
 	"testing"
@@ -56,6 +60,36 @@ func TestListenIsPrivateAndSingle(t *testing.T) {
 	l, err = socket.Listen(path)
 	require.NoError(t, err, "stale socket")
 	l.Close()
+}
+
+// A connection a client leaves open with nothing to ask is closed, so
+// clients that drop theirs can't pile them up in the service.
+func TestServeClosesIdleConnections(t *testing.T) {
+	old := idleTimeout
+	idleTimeout = 100 * time.Millisecond
+	t.Cleanup(func() { idleTimeout = old })
+	path := filepath.Join(socketDir(t), "s.sock")
+	l, err := socket.Listen(path)
+	require.NoError(t, err)
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	go func() { _ = Serve(ctx, l, New(nil).Handler(), time.Second) }()
+
+	conn, err := net.Dial("unix", path)
+	require.NoError(t, err)
+	defer conn.Close()
+	_, err = io.WriteString(conn, "POST /blitz.v1.WorkspaceService/GetServiceInfo HTTP/1.1\r\nHost: blitz\r\nContent-Type: application/json\r\nContent-Length: 2\r\n\r\n{}")
+	require.NoError(t, err)
+	res, err := http.ReadResponse(bufio.NewReader(conn), nil)
+	require.NoError(t, err)
+	_, _ = io.Copy(io.Discard, res.Body)
+	res.Body.Close()
+	assert.Equal(t, http.StatusOK, res.StatusCode)
+
+	// Kept open after the answer, the connection is closed once idle.
+	require.NoError(t, conn.SetReadDeadline(time.Now().Add(5*time.Second)))
+	_, err = conn.Read(make([]byte, 1))
+	assert.ErrorIs(t, err, io.EOF, "the service closed the idle connection")
 }
 
 func TestServeOverTheSocket(t *testing.T) {

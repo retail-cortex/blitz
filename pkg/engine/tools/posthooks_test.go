@@ -159,3 +159,20 @@ func TestPostToolWorkerSurvivesAPanic(t *testing.T) {
 	b, _ := os.ReadFile(out)
 	require.Contains(t, string(b), `"tool":"grep"`, "worker stopped after a panic")
 }
+
+// A post_tool hook firing after Close (the first one, so no worker was
+// started) starts none: nobody would close its queue, and it would wait
+// for good. Nothing runs, and flush returns.
+func TestPostToolAfterCloseStartsNoWorker(t *testing.T) {
+	out := filepath.Join(t.TempDir(), "events")
+	h, _ := newHooks(t, appendHook(out, ""))
+	h.Close()
+	h.PostTool(context.Background(), "s", "grep", nil, nil, nil)
+	require.NoError(t, h.flush(context.Background()))
+	select {
+	case <-h.postQ.done:
+	default:
+		t.Fatal("a worker was started after Close")
+	}
+	require.NoFileExists(t, out)
+}

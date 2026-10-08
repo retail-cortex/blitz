@@ -22,6 +22,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -430,13 +431,61 @@ func TestManagerAnswers(t *testing.T) {
 
 // Diagnostics coming faster than they're read: the latest are kept.
 func TestServerNotified(t *testing.T) {
-	s := &server{diags: map[string]publishedDiags{}, changed: make(chan struct{}, 1)}
-	for _, msg := range []string{"first", "second"} {
-		params, _ := json.Marshal(map[string]any{"uri": "file:///a.go", "diagnostics": []any{map[string]any{"message": msg}}})
+	s := &server{text: map[string]string{"file:///a.go": "package a"}, diags: map[string]publishedDiags{}, changed: make(chan struct{}, 1)}
+	for _, uri := range []string{"file:///a.go", "file:///a.go", "file:///other.go"} {
+		params, _ := json.Marshal(map[string]any{"uri": uri, "diagnostics": []any{map[string]any{"message": "about " + uri}}})
 		s.notified("textDocument/publishDiagnostics", params)
 	}
-	assert.Equal(t, "second", s.diags["file:///a.go"].items[0].Message)
+	assert.Equal(t, "about file:///a.go", s.diags["file:///a.go"].items[0].Message)
+	assert.NotContains(t, s.diags, "file:///other.go", "only open documents' diagnostics are kept")
 	assert.Len(t, s.changed, 1)
+}
+
+// Only the documents synced last stay open: the others are closed, and
+// their text and diagnostics forgotten.
+func TestServerKeepsFewDocumentsOpen(t *testing.T) {
+	old := maxOpen
+	maxOpen = 2
+	t.Cleanup(func() { maxOpen = old })
+	m, f, src := newFakeManager(t, func(_ *fakeServer, method string, _ json.RawMessage) (any, string) {
+		if method == "initialize" {
+			return map[string]any{"capabilities": map[string]any{}}, ""
+		}
+		return nil, ""
+	})
+	dir := filepath.Dir(src)
+	files := []string{src}
+	for _, name := range []string{"b.go", "c.go", "d.go"} {
+		p := filepath.Join(dir, name)
+		require.NoError(t, os.WriteFile(p, []byte("package main\n"), 0o644))
+		files = append(files, p)
+	}
+	ctx := context.Background()
+	for _, p := range files {
+		_, err := m.Diagnostics(ctx, p, time.Millisecond)
+		require.NoError(t, err)
+	}
+	m.mu.Lock()
+	s := m.running["go"]
+	m.mu.Unlock()
+	s.mu.Lock()
+	assert.Equal(t, []string{fileURI(files[2]), fileURI(files[3])}, s.opened)
+	assert.Len(t, s.text, 2)
+	assert.Len(t, s.version, 2)
+	s.mu.Unlock()
+	require.Eventually(t, func() bool {
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		closed := slices.DeleteFunc(slices.Clone(f.methods), func(m string) bool { return m != "textDocument/didClose" })
+		return len(closed) == 2
+	}, 5*time.Second, 10*time.Millisecond, "the two oldest closed")
+
+	// One closed is opened again when asked about.
+	_, err := m.Diagnostics(ctx, src, time.Millisecond)
+	require.NoError(t, err)
+	s.mu.Lock()
+	assert.Equal(t, []string{fileURI(files[3]), fileURI(src)}, s.opened)
+	s.mu.Unlock()
 }
 
 // A long line is cut in a location's text; a column before the line starts

@@ -22,11 +22,17 @@ import (
 	"time"
 )
 
+// idleTimeout closes a client's connection after this long with no
+// request: a client that makes one for each call and drops it (an old
+// tray did, every 2 s) would otherwise hold one open, and its goroutine,
+// for as long as the service runs. Streams in progress aren't idle.
+var idleTimeout = 2 * time.Minute
+
 // Serve serves h on l (HTTP/1.1, and HTTP/2 without TLS for gRPC clients)
 // until ctx is done, then stops accepting and waits up to grace for calls
 // in progress.
 func Serve(ctx context.Context, l net.Listener, h http.Handler, grace time.Duration) error {
-	srv := &http.Server{Handler: h, ReadHeaderTimeout: 10 * time.Second}
+	srv := &http.Server{Handler: h, ReadHeaderTimeout: 10 * time.Second, IdleTimeout: idleTimeout}
 	srv.Protocols = new(http.Protocols)
 	srv.Protocols.SetHTTP1(true)
 	srv.Protocols.SetUnencryptedHTTP2(true)

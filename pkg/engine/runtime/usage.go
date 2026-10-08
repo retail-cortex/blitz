@@ -153,6 +153,18 @@ func (t *UsageTracker) Has(session string) bool {
 	return t.sessions[session] != nil
 }
 
+// Forget drops sessions' (or tasks') usage: deleted, or gone for good.
+func (t *UsageTracker) Forget(ids ...string) {
+	if len(ids) == 0 {
+		return
+	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	for _, id := range ids {
+		delete(t.sessions, id)
+	}
+}
+
 // Session returns the usage recorded for session.
 func (t *UsageTracker) Session(session string) api.Usage {
 	t.mu.Lock()

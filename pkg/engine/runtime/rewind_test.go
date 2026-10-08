@@ -101,3 +101,23 @@ func TestCompactAtEitherSideOfAPrompt(t *testing.T) {
 	assert.NotContains(t, got, "q1", "up to here: %s", got)
 	assert.Contains(t, got, "q2", "up to here: %s", got)
 }
+
+// With no session kept in memory between turns, a turn still runs in its
+// session (pinned while it runs), and the next one in it sees its history,
+// loaded again from the file.
+func TestTurnsWithSessionsDroppedBetween(t *testing.T) {
+	old := cpsession.Resident
+	cpsession.Resident = 0
+	t.Cleanup(func() { cpsession.Resident = old })
+	svc, err := cpsession.NewPersistentService(t.TempDir())
+	require.NoError(t, err)
+	f := newEngineWith(t, fixtureOpts{opts: []Option{WithSessionService(svc)}}, textContent("r1"), textContent("r2"), textContent("r3"))
+	runTurns(t, f.eng, "a", "q1")
+	runTurns(t, f.eng, "b", "other")
+	runTurns(t, f.eng, "a", "q2")
+	got := lastRequestText(f.llm)
+	for _, want := range []string{"q1", "r1", "q2"} {
+		assert.Contains(t, got, want)
+	}
+	assert.NotContains(t, got, "other")
+}

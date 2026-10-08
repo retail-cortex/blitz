@@ -22,6 +22,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -87,10 +88,11 @@ type server struct {
 	c    *conn
 
 	mu      sync.Mutex
-	text    map[string]string // what was sent, by URI
+	text    map[string]string // what was sent, by URI: the open documents
 	version map[string]int
-	diags   map[string]publishedDiags
-	changed chan struct{} // a diagnostics notification came
+	opened  []string                  // the open documents' URIs, least recently synced first
+	diags   map[string]publishedDiags // for open documents only
+	changed chan struct{}             // a diagnostics notification came
 }
 
 type publishedDiags struct {
@@ -227,14 +229,22 @@ func (s *server) notified(method string, params json.RawMessage) {
 	if json.Unmarshal(params, &p) != nil {
 		return
 	}
+	uri := normalURI(p.URI)
 	s.mu.Lock()
-	s.diags[normalURI(p.URI)] = publishedDiags{at: time.Now(), items: p.Diagnostics}
+	// Servers report on files nobody opened (gopls, a whole package's):
+	// only open documents' are asked for, so only theirs are kept.
+	if _, open := s.text[uri]; open {
+		s.diags[uri] = publishedDiags{at: time.Now(), items: p.Diagnostics}
+	}
 	s.mu.Unlock()
 	select {
 	case s.changed <- struct{}{}:
 	default:
 	}
 }
+
+// maxOpen is how many documents a server has open at once.
+var maxOpen = 32
 
 // sync sends path's content as it is on disk: opened the first time,
 // changed after, nothing when it's the same. It returns the content.
@@ -255,7 +265,25 @@ func (s *server) sync(path string) (string, error) {
 	v := s.version[uri]
 	s.text[uri] = text
 	delete(s.diags, uri) // stale
+	s.opened = slices.DeleteFunc(s.opened, func(u string) bool { return u == uri })
+	s.opened = append(s.opened, uri)
+	// The least recently synced documents beyond maxOpen are closed: their
+	// text isn't kept here, nor by the server.
+	var closing []string
+	for len(s.opened) > maxOpen {
+		old := s.opened[0]
+		s.opened = s.opened[1:]
+		delete(s.text, old)
+		delete(s.version, old)
+		delete(s.diags, old)
+		closing = append(closing, old)
+	}
 	s.mu.Unlock()
+	for _, old := range closing {
+		if err := s.c.send("textDocument/didClose", map[string]any{"textDocument": map[string]any{"uri": old}}); err != nil {
+			return "", err
+		}
+	}
 	if !open {
 		return text, s.c.send("textDocument/didOpen", map[string]any{"textDocument": map[string]any{
 			"uri": uri, "languageId": languageID(s.lang, path), "version": v, "text": text,
