@@ -57,6 +57,7 @@ go_test(
         "host_test.go",
         "ico_test.go",
         "locale_test.go",
+        "probe_test.go",
         "tray_test.go",
     ],
     embed = [":tray"],

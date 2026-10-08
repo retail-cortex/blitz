@@ -19,6 +19,8 @@ package tray
 
 import (
 	"context"
+	"net/http"
+	"sync"
 	"time"
 
 	"connectrpc.com/connect"
@@ -74,6 +76,28 @@ func MenuFor(s Status) Menu {
 	return m
 }
 
+// clients are the tray's HTTP clients, one per socket for its whole life.
+// A client of its own per call would leave its connection open (the
+// service keeps it, idle, as clients may reuse it): asked every 2 s, the
+// tray and the service each gained a connection and its goroutines every
+// time, without end.
+var (
+	clientsMu sync.Mutex
+	clients   = map[string]*http.Client{}
+)
+
+// clientFor is the client for the service at sock.
+func clientFor(sock string) *http.Client {
+	clientsMu.Lock()
+	defer clientsMu.Unlock()
+	c, ok := clients[sock]
+	if !ok {
+		c = socket.Client(sock)
+		clients[sock] = c
+	}
+	return c
+}
+
 // Probe asks the service at sock how it is, within a second or two.
 func Probe(ctx context.Context, sock string, installed func() bool) Status {
 	st := Status{Installed: installed()}
@@ -83,7 +107,7 @@ func Probe(ctx context.Context, sock string, installed func() bool) Status {
 	st.Running = true
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
-	c := pb.NewWorkspaceServiceClient(socket.Client(sock), socket.BaseURL)
+	c := pb.NewWorkspaceServiceClient(clientFor(sock), socket.BaseURL)
 	if res, err := c.GetServiceInfo(ctx, connect.NewRequest(&pb.GetServiceInfoRequest{})); err == nil {
 		st.Version, st.PID = res.Msg.Version, int(res.Msg.Pid)
 	}
@@ -109,7 +133,7 @@ func ServiceLogDir(ctx context.Context, sock string) string {
 	}
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
-	c := pb.NewWorkspaceServiceClient(socket.Client(sock), socket.BaseURL)
+	c := pb.NewWorkspaceServiceClient(clientFor(sock), socket.BaseURL)
 	res, err := c.ListLogDays(ctx, connect.NewRequest(&pb.ListLogDaysRequest{}))
 	if err != nil {
 		return ""

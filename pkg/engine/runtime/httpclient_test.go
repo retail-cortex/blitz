@@ -197,3 +197,11 @@ func TestPolicyDefaults(t *testing.T) {
 	require.Equal(t, 3, d.MaxRetries, "config defaults = %d retries, %ds stall", d.MaxRetries, d.StallTimeoutSeconds)
 	require.Equal(t, 600, d.StallTimeoutSeconds, "config defaults = %d retries, %ds stall", d.MaxRetries, d.StallTimeoutSeconds)
 }
+
+// Models built with one stall limit share a client (and its connections);
+// another limit gets its own.
+func TestModelsShareAClient(t *testing.T) {
+	a := retryPolicy{stall: 41 * time.Second}.httpClient()
+	require.Same(t, a, retryPolicy{stall: 41 * time.Second, maxRetries: 5}.httpClient())
+	require.NotSame(t, a, retryPolicy{stall: 42 * time.Second}.httpClient())
+}

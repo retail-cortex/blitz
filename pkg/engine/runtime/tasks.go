@@ -51,6 +51,7 @@ const TaskUpdatesKey = "task_updates"
 const (
 	maxTaskEvents    = 200  // events kept per task
 	maxTasksRetained = 16   // finished tasks kept per session
+	maxEndedTasks    = 64   // finished tasks kept in all, across sessions
 	maxNoteResult    = 2000 // characters of a result in its note
 )
 
@@ -282,8 +283,9 @@ func (e *Engine) StartTask(ctx context.Context, agentName, prompt, isolation str
 	runCtx, stopTimer := context.WithTimeoutCause(runCtx, timeout, fmt.Errorf("its time limit (%s, tools.background_agent_timeout)", timeout))
 	t := &task{info: api.TaskInfo{ID: id, Agent: agentName, Prompt: textutil.Ellipsize(first, 200), Session: st.sessionID, State: api.TaskRunning, Started: time.Now()}, done: make(chan struct{}), cancel: cancel}
 	m.tasks[id] = t
-	m.pruneLocked(st.sessionID)
+	pruned := m.pruneLocked(st.sessionID)
 	m.mu.Unlock()
+	e.usage.Forget(pruned...)
 
 	// A task isolated in a worktree gets its own tools there.
 	var isolated *tools.Registry
@@ -399,10 +401,15 @@ func (e *Engine) endTask(ctx context.Context, t *task, result string, err error)
 	}
 	info := t.info
 	info.Usage = e.usage.Session(info.ID)
-	m.notes[info.Session] = append(m.notes[info.Session], TaskNote(info))
+	// A session that never prompts again never takes its notes: it keeps
+	// only its latest.
+	notes := append(m.notes[info.Session], TaskNote(info))
+	m.notes[info.Session] = notes[max(len(notes)-maxTasksRetained, 0):]
 	m.publishLocked(info.Session, api.SessionEvent{Task: &info})
 	onDone := m.onDone
+	pruned := m.pruneLocked(info.Session)
 	m.mu.Unlock()
+	e.usage.Forget(pruned...)
 	if onDone != nil { // before waiters wake: the transcript has it by then
 		onDone(info)
 	}
@@ -538,21 +545,47 @@ func (e *Engine) StopTasks() {
 	}
 }
 
-// pruneLocked drops session's oldest ended tasks beyond the ones kept.
-func (m *taskManager) pruneLocked(session string) {
-	var ended []*task
-	for _, t := range m.tasks {
-		if t.info.Session == session && t.info.State != api.TaskRunning && t.info.State != api.TaskWaiting {
-			ended = append(ended, t)
+// pruneLocked drops session's oldest ended tasks beyond the ones kept,
+// then the oldest of all sessions' beyond maxEndedTasks (sessions come and
+// go: each worker run is one). It returns the dropped tasks' IDs.
+func (m *taskManager) pruneLocked(session string) []string {
+	var dropped []string
+	drop := func(ended []*task, keep int) {
+		if len(ended) <= keep {
+			return
+		}
+		slices.SortFunc(ended, func(a, b *task) int { return taskNumber(a.info.ID) - taskNumber(b.info.ID) })
+		for _, t := range ended[:len(ended)-keep] {
+			delete(m.tasks, t.info.ID)
+			dropped = append(dropped, t.info.ID)
 		}
 	}
-	if len(ended) <= maxTasksRetained {
-		return
+	ended := func(in func(*task) bool) []*task {
+		var out []*task
+		for _, t := range m.tasks {
+			if in(t) && t.info.State != api.TaskRunning && t.info.State != api.TaskWaiting {
+				out = append(out, t)
+			}
+		}
+		return out
 	}
-	slices.SortFunc(ended, func(a, b *task) int { return taskNumber(a.info.ID) - taskNumber(b.info.ID) })
-	for _, t := range ended[:len(ended)-maxTasksRetained] {
-		delete(m.tasks, t.info.ID)
+	drop(ended(func(t *task) bool { return t.info.Session == session }), maxTasksRetained)
+	drop(ended(func(*task) bool { return true }), maxEndedTasks)
+	return dropped
+}
+
+// forgetSessionLocked drops a deleted session's ended tasks and notes,
+// returning the tasks' IDs; its running tasks end on their own.
+func (m *taskManager) forgetSessionLocked(session string) []string {
+	delete(m.notes, session)
+	var dropped []string
+	for id, t := range m.tasks {
+		if t.info.Session == session && t.info.State != api.TaskRunning && t.info.State != api.TaskWaiting {
+			delete(m.tasks, id)
+			dropped = append(dropped, id)
+		}
 	}
+	return dropped
 }
 
 // worktreeTools makes task id's worktree and a tools registry rooted in

@@ -24,6 +24,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"sync"
 
 	adksession "google.golang.org/adk/v2/session"
@@ -35,18 +36,34 @@ const eventsSuffix = ".events.jsonl"
 // and appends every final event to <dir>/<session>.events.jsonl, so a
 // conversation (including tool calls and compaction summaries) can be resumed
 // in a later process by using the same session ID.
+//
+// Only the few sessions used last stay in memory (Resident), and those a
+// turn runs in (Pin); the others are dropped and loaded again from their
+// file when next asked for, so a service that runs many sessions (a
+// worker's every run is one) doesn't keep every conversation it ever ran.
 type PersistentService struct {
 	inner adksession.Service
 	dir   string
 	mu    sync.Mutex // serialises loads and file appends
+
+	resMu  sync.Mutex
+	recent []sessionKey   // the sessions in memory, least recently used first
+	pinned map[string]int // turns running in each session, by ID
 }
+
+// Resident is how many sessions stay in memory with no turn running in
+// them.
+var Resident = 4
+
+// sessionKey names a session in the in-memory service.
+type sessionKey struct{ app, user, id string }
 
 // NewPersistentService stores event logs in dir (created owner-only).
 func NewPersistentService(dir string) (*PersistentService, error) {
 	if err := os.MkdirAll(dir, dirPerm); err != nil {
 		return nil, err
 	}
-	return &PersistentService{inner: adksession.InMemoryService(), dir: dir}, nil
+	return &PersistentService{inner: adksession.InMemoryService(), dir: dir, pinned: map[string]int{}}, nil
 }
 
 func (p *PersistentService) eventsPath(id string) (string, error) {
@@ -79,12 +96,16 @@ func (p *PersistentService) Create(ctx context.Context, req *adksession.CreateRe
 		_ = p.inner.Delete(ctx, &adksession.DeleteRequest{AppName: req.AppName, UserID: req.UserID, SessionID: resp.Session.ID()})
 		return nil, err
 	}
+	p.touch(ctx, sessionKey{req.AppName, req.UserID, resp.Session.ID()})
 	return resp, nil
 }
 
 // Get returns a session, loading it from disk on first access after a restart.
 func (p *PersistentService) Get(ctx context.Context, req *adksession.GetRequest) (*adksession.GetResponse, error) {
 	resp, err := p.inner.Get(ctx, req)
+	if err == nil {
+		p.touch(ctx, sessionKey{req.AppName, req.UserID, req.SessionID})
+	}
 	if err == nil || !p.HasEvents(req.SessionID) {
 		return resp, err
 	}
@@ -102,6 +123,7 @@ func (p *PersistentService) Get(ctx context.Context, req *adksession.GetRequest)
 		}
 	}
 	p.mu.Unlock()
+	p.touch(ctx, sessionKey{req.AppName, req.UserID, req.SessionID})
 	return p.inner.Get(ctx, req)
 }
 
@@ -115,7 +137,85 @@ func (p *PersistentService) Delete(ctx context.Context, req *adksession.DeleteRe
 	if path, err := p.eventsPath(req.SessionID); err == nil {
 		_ = os.Remove(path)
 	}
+	p.forget(sessionKey{req.AppName, req.UserID, req.SessionID})
 	return p.inner.Delete(ctx, req)
+}
+
+// Pin keeps session id in memory until the returned func is called: a
+// turn's events go to the session the runner loaded, which must still be
+// there. Pins nest (two turns in one session).
+func (p *PersistentService) Pin(id string) (unpin func()) {
+	p.resMu.Lock()
+	p.pinned[id]++
+	p.resMu.Unlock()
+	var once sync.Once
+	return func() {
+		once.Do(func() {
+			p.resMu.Lock()
+			if p.pinned[id]--; p.pinned[id] <= 0 {
+				delete(p.pinned, id)
+			}
+			p.resMu.Unlock()
+			p.evict(context.Background())
+		})
+	}
+}
+
+// touch marks a session in memory as just used, then drops the least
+// recently used beyond Resident.
+func (p *PersistentService) touch(ctx context.Context, k sessionKey) {
+	p.resMu.Lock()
+	p.recent = slices.DeleteFunc(p.recent, func(r sessionKey) bool { return r == k })
+	p.recent = append(p.recent, k)
+	p.resMu.Unlock()
+	p.evict(ctx)
+}
+
+// forget stops tracking a session that has left memory.
+func (p *PersistentService) forget(k sessionKey) {
+	p.resMu.Lock()
+	p.recent = slices.DeleteFunc(p.recent, func(r sessionKey) bool { return r == k })
+	p.resMu.Unlock()
+}
+
+// evict drops the least recently used sessions no turn runs in, until at
+// most Resident of those are left. Their files have every final event, so
+// Get loads them again as after a restart.
+func (p *PersistentService) evict(ctx context.Context) {
+	p.resMu.Lock()
+	var drop []sessionKey
+	unpinned := 0
+	for _, k := range p.recent {
+		if p.pinned[k.id] == 0 {
+			unpinned++
+		}
+	}
+	keep := p.recent[:0]
+	for _, k := range p.recent {
+		if unpinned > Resident && p.pinned[k.id] == 0 {
+			drop = append(drop, k)
+			unpinned--
+			continue
+		}
+		keep = append(keep, k)
+	}
+	p.recent = keep
+	p.resMu.Unlock()
+	for _, k := range drop {
+		_ = p.inner.Delete(ctx, &adksession.DeleteRequest{AppName: k.app, UserID: k.user, SessionID: k.id})
+	}
+}
+
+// residentIDs are the sessions in memory now, least recently used first
+// (tests).
+func (p *PersistentService) residentIDs() []string {
+	p.resMu.Lock()
+	defer p.resMu.Unlock()
+	out := make([]string, len(p.recent))
+	for i, k := range p.recent {
+		out[i] = k.id
+	}
+	return out
 }
 
 // AppendEvent records the event in memory, then durably appends final events.
@@ -189,6 +289,7 @@ func (p *PersistentService) Truncate(ctx context.Context, appName, userID, id st
 	if err != nil {
 		return err
 	}
+	defer p.touch(ctx, sessionKey{appName, userID, id})
 	return p.replayLocked(ctx, created.Session)
 }
 

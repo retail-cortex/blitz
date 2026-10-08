@@ -983,6 +983,9 @@ func (e *Engine) Execute(ctx context.Context, sessionID, prompt string, handler 
 		attribute.Bool("plan_only", st.planOnly),
 	)
 	defer e.recordTurn(ctx, sessionID, span, index)
+	if p, ok := e.sessions.(pinner); ok {
+		defer p.Pin(sessionID)() // its events go to the session the runner loaded
+	}
 	before := e.Usage(sessionID)
 	err = drain(r.Run(ctx, "user", sessionID, userContent(prompt, st.attachments), rc), handler)
 	after := e.usage.Session(sessionID)
@@ -999,6 +1002,12 @@ func (e *Engine) Execute(ctx context.Context, sessionID, prompt string, handler 
 		slog.ErrorContext(ctx, "turn failed", "session", sessionID, "error", err)
 	}
 	return err
+}
+
+// pinner is a session service that keeps only some sessions in memory
+// (session.PersistentService): a session a turn runs in must stay.
+type pinner interface {
+	Pin(id string) (unpin func())
 }
 
 // runnerFor returns the runner for a run and the root agent and model it
