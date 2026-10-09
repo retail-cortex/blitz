@@ -17,8 +17,8 @@
 // The editor's CodeMirror setup (spec_files_029 §6): the window's colours,
 // languages loaded when first needed, completion from the language and
 // from the file's words, and the editor's keys.
-import { autocompletion, closeBrackets, closeBracketsKeymap, completeAnyWord, completionKeymap } from "@codemirror/autocomplete";
-import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
+import { acceptCompletion, autocompletion, closeBrackets, closeBracketsKeymap, completeAnyWord, completionKeymap, completionStatus, startCompletion } from "@codemirror/autocomplete";
+import { defaultKeymap, history, historyKeymap, indentLess, indentMore } from "@codemirror/commands";
 import { bracketMatching, foldGutter, foldKeymap, HighlightStyle, indentOnInput, indentUnit, LanguageDescription, syntaxHighlighting } from "@codemirror/language";
 import { languages } from "@codemirror/language-data";
 import { gotoLine, highlightSelectionMatches, search, searchKeymap } from "@codemirror/search";
@@ -169,6 +169,39 @@ export async function languageSupport(path: string): Promise<Extension> {
   }
 }
 
+/** What Tab does at the cursor: indent (at a line's start, after a blank, or over a selection) or complete. */
+export function tabAction(state: EditorState): "indent" | "insert" | "complete" {
+  const sel = state.selection;
+  if (sel.ranges.some((r) => !r.empty)) return "indent";
+  const before = sel.ranges.map((r) => state.sliceDoc(state.doc.lineAt(r.head).from, r.head));
+  if (before.every((b) => b.trim() === "")) return "indent";
+  if (before.every((b) => /\s$/.test(b))) return "insert";
+  return "complete";
+}
+
+/**
+ * Tab: accepts an open completion; indents at a line's start or over a
+ * selection, and inserts an indent after a blank; elsewhere (after a word
+ * or a ".") asks for completions, inserting nothing. Shift-Tab outdents.
+ */
+export const tabKey: KeyBinding = {
+  key: "Tab",
+  run: (view) => {
+    if (completionStatus(view.state) === "active") return acceptCompletion(view);
+    switch (tabAction(view.state)) {
+      case "indent":
+        return indentMore(view);
+      case "insert":
+        view.dispatch(view.state.replaceSelection(view.state.facet(indentUnit)), { scrollIntoView: true, userEvent: "input" });
+        return true;
+      default:
+        startCompletion(view);
+        return true; // never moves focus out of the editor
+    }
+  },
+  shift: indentLess,
+};
+
 /**
  * A new editor state for a file's text, with its language (languageSupport)
  * and any extra extensions; words completes words from the file too.
@@ -209,7 +242,7 @@ export function fileState(text: string, lang: Extension, hooks: EditorHooks, wra
       ...historyKeymap,
       ...foldKeymap,
       ...completionKeymap,
-      indentWithTab,
+      tabKey,
     ]),
     lang,
     extra,
@@ -240,7 +273,7 @@ export function embeddedCode(lang: Extension, keys: KeyBinding[]): Extension {
     EditorState.languageData.of(() => [{ autocomplete: completeAnyWord }]),
     tooltips({ parent: document.body }),
     // An open completion's keys first: ↑↓ move in it, not out of the block.
-    keymap.of([...completionKeymap, ...keys, ...closeBracketsKeymap, ...defaultKeymap, indentWithTab]),
+    keymap.of([...completionKeymap, ...keys, ...closeBracketsKeymap, ...defaultKeymap, tabKey]),
     lang,
     theme,
   ];

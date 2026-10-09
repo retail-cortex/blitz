@@ -241,6 +241,13 @@ func (m *Manager) startServer(ctx context.Context, cfg Server) (*server, error) 
 		proc.Stop()
 		return nil, err
 	}
+	// pyright waits for this before it asks for its settings and answers
+	// anything (a client with workspace folders and configuration, as
+	// ours, is expected to send it, as VS Code does).
+	if err := s.c.send("workspace/didChangeConfiguration", map[string]any{"settings": map[string]any{}}); err != nil {
+		proc.Stop()
+		return nil, err
+	}
 	return s, nil
 }
 

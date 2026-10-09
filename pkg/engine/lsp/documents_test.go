@@ -322,11 +322,17 @@ func TestWatchDiagnostics(t *testing.T) {
 		}
 	}, 5*time.Second, 5*time.Millisecond)
 	publish(1, "numbered", 12)
-	select {
-	case d := <-got:
-		assert.Equal(t, "12", d.Diagnostics[0].Code)
-	case <-time.After(5 * time.Second):
-		t.Fatal("no diagnostics")
+	// A watcher that started as "unused" came may hear it twice (the
+	// document's diagnostics when it starts, and the publish): skipped.
+	for numbered := false; !numbered; {
+		select {
+		case d := <-got:
+			if numbered = d.Diagnostics[0].Message == "numbered"; numbered {
+				assert.Equal(t, "12", d.Diagnostics[0].Code)
+			}
+		case <-time.After(5 * time.Second):
+			t.Fatal("no diagnostics")
+		}
 	}
 	cancel()
 	assert.ErrorIs(t, <-done, context.Canceled)

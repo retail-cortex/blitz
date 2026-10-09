@@ -230,3 +230,35 @@ func TestGoplsSnippets(t *testing.T) {
 		}
 	}
 }
+
+// TestPyright asks pyright about a Python file and a Python code block
+// (spec_visual_editor_037 §7): it answers only once told the client's
+// configuration changed. Set BLITZ_TEST_PYRIGHT=1 with pyright installed.
+func TestPyright(t *testing.T) {
+	if os.Getenv("BLITZ_TEST_PYRIGHT") == "" {
+		t.Skip("set BLITZ_TEST_PYRIGHT=1 to ask pyright")
+	}
+	dir, _ := filepath.EvalSymlinks(t.TempDir())
+	launch := func(ctx context.Context, argv []string) (lsp.Process, error) { return startProcess(argv) }
+	m := lsp.NewManager(dir, []lsp.Server{{Language: "python", Command: []string{"pyright-langserver", "--stdio"}, Extensions: []string{".py"}}}, launch)
+	defer m.Close()
+	ctx := context.Background()
+	text := "import os\n\ndef greet(name: str) -> str:\n    return 'hi ' + name\n\nprint(greet(42))\nos.pa\n"
+	for _, info := range []lsp.DocumentInfo{
+		m.OpenDocument("w", filepath.Join(dir, "demo.py"), text, 1),
+		m.OpenSnippet("w", lsp.SnippetPath(dir, "py", ".py"), text, 1),
+	} {
+		require.NotEmpty(t, info.ID)
+		var list lsp.CompletionList
+		require.Eventually(t, func() bool {
+			var err error
+			list, err = m.Complete(ctx, info.ID, 1, 7, 6, "")
+			return err == nil && len(list.Items) > 0
+		}, 60*time.Second, 500*time.Millisecond, "completion from pyright")
+		var labels []string
+		for _, it := range list.Items {
+			labels = append(labels, it.Label)
+		}
+		assert.Contains(t, labels, "path")
+	}
+}
