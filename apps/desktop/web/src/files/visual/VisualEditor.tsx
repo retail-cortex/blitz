@@ -20,7 +20,7 @@
 // CodeMirror editors. It reads the tab's text and gives back Markdown
 // faithful to the file (VE-04): the tab keeps the text, so saving, unsaved
 // changes and conflicts work as in Source.
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { getSchema, type Editor, type JSONContent, type NodeViewRendererProps } from "@tiptap/core";
 import { EditorContent, useEditor } from "@tiptap/react";
@@ -39,6 +39,7 @@ import {
   mdiFormatListNumbered,
   mdiFormatQuoteClose,
   mdiFormatStrikethroughVariant,
+  mdiImageOutline,
   mdiLinkVariant,
   mdiLinkVariantOff,
   mdiMinus,
@@ -52,7 +53,7 @@ import {
 } from "@mdi/js";
 import { t } from "../../i18n";
 import { followLink } from "../../Markdown";
-import { Icon, IconButton, useSnackbar } from "../../ui/controls";
+import { ContextMenu, Icon, IconButton, useSnackbar, type MenuEntry } from "../../ui/controls";
 import { CodeBlockView } from "./codeBlock";
 import { fingerprints, parseMarkdown, serializeMarkdown, type Parsed } from "./markdown";
 import { sourceAttr, visualExtensions } from "./schema";
@@ -126,6 +127,8 @@ export function VisualEditor({ dir, path, text, onChange, onSave }: Props) {
   const slashRef = useRef<SlashState | null>(null);
   slashRef.current = slash;
   const [linking, setLinking] = useState<LinkState | null>(null);
+  const [imaging, setImaging] = useState<ImageState | null>(null);
+  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
 
   // Markdown out: only when it says something new.
   const write = useCallback((editor: Editor) => {
@@ -174,8 +177,13 @@ export function VisualEditor({ dir, path, text, onChange, onSave }: Props) {
 
   // The tab's text in: the first time, and when it changes other than by
   // this editor (a reload from disk, Source's edits).
+  // TipTap may replace its editor (React mounts twice in development), so
+  // the text is loaded into each editor it hands over.
+  const loadedInto = useRef<Editor | null>(null);
   useLayoutEffect(() => {
-    if (!editor || text === written.current) return;
+    if (!editor || editor.isDestroyed) return;
+    if (editor === loadedInto.current && text === written.current) return;
+    loadedInto.current = editor;
     const p = parseMarkdown(text);
     editor.commands.setContent(p.doc, { emitUpdate: false });
     parsed.current = p;
@@ -188,27 +196,37 @@ export function VisualEditor({ dir, path, text, onChange, onSave }: Props) {
     if (editor && !editor.isDestroyed) write(editor);
   }, [editor, write]);
 
-  // ⌘S: written, then saved; the code blocks ask for it the same way.
+  // ⌘S: written, then saved; the code blocks ask for it the same way (an
+  // event that bubbles to the wrapper: the editor's view mounts after this).
+  const wrapper = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    const dom = editor?.view.dom;
-    if (!dom) return;
+    const dom = wrapper.current;
+    if (!dom || !editor || editor.isDestroyed) return;
     const onSave = () => {
       write(editor);
       save.current();
     };
+    // ⌘S from the toolbar or a menu, or with the focus nowhere (a menu
+    // just closed), saves too.
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.metaKey || e.ctrlKey) || e.shiftKey || e.altKey || e.key.toLowerCase() !== "s") return;
+      const at = document.activeElement;
+      if (!(at === document.body || (at && dom.contains(at))) || dom.offsetParent === null) return;
+      e.preventDefault();
+      e.stopPropagation();
+      onSave();
+    };
     dom.addEventListener("visual-save", onSave);
-    return () => dom.removeEventListener("visual-save", onSave);
+    window.addEventListener("keydown", onKey, true);
+    return () => {
+      dom.removeEventListener("visual-save", onSave);
+      window.removeEventListener("keydown", onKey, true);
+    };
   }, [editor, write]);
 
   // The / menu's keys, while it's open.
   const slashKeys = (event: KeyboardEvent): boolean => {
     if ((event.metaKey || event.ctrlKey) && !event.shiftKey && !event.altKey) {
-      if (event.key === "s") {
-        event.preventDefault();
-        if (editor) write(editor);
-        save.current();
-        return true;
-      }
       if (event.key === "k" && editor) {
         event.preventDefault();
         setLinking(linkAt(editor));
@@ -234,14 +252,34 @@ export function VisualEditor({ dir, path, text, onChange, onSave }: Props) {
     return false;
   };
 
-  if (!editor) return null;
+  if (!editor || editor.isDestroyed) return null;
+  const open: Openers = { link: () => setLinking(linkAt(editor)), image: () => setImaging(imageAt(editor)) };
   return (
-    <div className="visual-editor">
+    <div
+      ref={wrapper}
+      className="visual-editor"
+      onContextMenu={(e) => {
+        if ((e.target as HTMLElement).closest(".visual-code, .visual-toolbar")) return; // CodeMirror's, and the browser's on buttons
+        e.preventDefault();
+        setMenu({ x: e.clientX, y: e.clientY });
+      }}
+    >
+      <Toolbar editor={editor} open={open} />
       <EditorContent editor={editor} />
       {slash && <SlashMenu editor={editor} state={slash} onPick={(item) => runSlash(editor, slash, item)} />}
-      <SelectionBar editor={editor} onLink={() => setLinking(linkAt(editor))} />
-      <TableBar editor={editor} />
+      {menu && (
+        <ContextMenu
+          x={menu.x}
+          y={menu.y}
+          items={contextItems(editor, open)}
+          onClose={() => {
+            setMenu(null);
+            editor.commands.focus(); // back to the document, for the next key
+          }}
+        />
+      )}
       {linking && <LinkEditor editor={editor} state={linking} onClose={() => setLinking(null)} />}
+      {imaging && <ImageEditor editor={editor} state={imaging} onClose={() => setImaging(null)} />}
     </div>
   );
 }
@@ -349,76 +387,109 @@ function Floating({ top, left, className, children }: { top: number; left: numbe
   );
 }
 
-// The selection bar (VE-09): marks, a link and the heading level.
+// The formatting actions (VE-09): the toolbar above the document and the
+// right-click menu show the same ones, in the same groups.
 
 function useEditorTick(editor: Editor) {
   const [, setTick] = useState(0);
   useEffect(() => {
     const f = () => setTick((n) => n + 1);
     editor.on("transaction", f);
+    editor.on("focus", f);
     editor.on("blur", f);
     return () => {
       editor.off("transaction", f);
+      editor.off("focus", f);
       editor.off("blur", f);
     };
   }, [editor]);
 }
 
-function SelectionBar({ editor, onLink }: { editor: Editor; onLink: () => void }) {
+/** The link and image editors the actions open. */
+interface Openers {
+  link: () => void;
+  image: () => void;
+}
+
+interface Action {
+  id: string;
+  icon: string;
+  label: string;
+  active?: boolean;
+  disabled?: boolean;
+  run: () => void;
+}
+
+/** The actions, in groups, for the editor as it is now. */
+export function actionGroups(editor: Editor, open: Openers): Action[][] {
+  const chain = () => editor.chain().focus();
+  const inCode = editor.isActive("codeBlock") || editor.isActive("rawBlock");
+  const a = (id: string, icon: string, run: () => unknown, active?: boolean, label = t(`desktop.visual.action.${id}`)): Action => ({ id, icon, label, active, disabled: inCode && id !== "code_block", run: () => void run() });
+  const groups: Action[][] = [
+    [1, 2, 3].map((level) =>
+      a(`h${level}`, [mdiFormatHeader1, mdiFormatHeader2, mdiFormatHeader3][level - 1], () => chain().toggleHeading({ level: level as 1 | 2 | 3 }).run(), editor.isActive("heading", { level }), t("desktop.visual.heading", { level })),
+    ),
+    [
+      a("bold", mdiFormatBold, () => chain().toggleBold().run(), editor.isActive("bold")),
+      a("italic", mdiFormatItalic, () => chain().toggleItalic().run(), editor.isActive("italic")),
+      a("code", mdiCodeTags, () => chain().toggleCode().run(), editor.isActive("code")),
+      a("strike", mdiFormatStrikethroughVariant, () => chain().toggleStrike().run(), editor.isActive("strike")),
+    ],
+    [
+      a("bullets", mdiFormatListBulleted, () => chain().toggleBulletList().run(), editor.isActive("bulletList")),
+      a("numbers", mdiFormatListNumbered, () => chain().toggleOrderedList().run(), editor.isActive("orderedList")),
+      a("tasks", mdiCheckboxMarkedOutline, () => chain().toggleTaskList().run(), editor.isActive("taskList")),
+    ],
+    [
+      a("quote", mdiFormatQuoteClose, () => chain().toggleBlockquote().run(), editor.isActive("blockquote")),
+      a("code_block", mdiCodeBraces, () => chain().toggleCodeBlock().run(), editor.isActive("codeBlock")),
+      a("diagram", mdiSitemapOutline, () => chain().setNode("codeBlock", { language: "mermaid" }).insertContent("flowchart LR\n  A --> B").run()),
+      a("rule", mdiMinus, () => chain().setHorizontalRule().run()),
+    ],
+    [
+      a("link", mdiLinkVariant, open.link, editor.isActive("link")),
+      a("image", mdiImageOutline, open.image, editor.isActive("image")),
+      a("table", mdiTable, () => chain().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run(), editor.isActive("table")),
+    ],
+  ];
+  if (editor.isActive("table"))
+    groups.push([
+      a("add_row", mdiTableRowPlusAfter, () => chain().addRowAfter().run()),
+      a("add_column", mdiTableColumnPlusAfter, () => chain().addColumnAfter().run()),
+      a("delete_row", mdiTableRowRemove, () => chain().deleteRow().run()),
+      a("delete_column", mdiTableColumnRemove, () => chain().deleteColumn().run()),
+      a("delete_table", mdiTableRemove, () => chain().deleteTable().run()),
+    ]);
+  return groups;
+}
+
+// The toolbar: always there, above the document, while it scrolls.
+function Toolbar({ editor, open }: { editor: Editor; open: Openers }) {
   useEditorTick(editor);
-  const { selection } = editor.state;
-  if (selection.empty || !editor.isFocused || editor.isActive("codeBlock") || selection instanceof NodeSelection) return null;
-  const at = editor.view.coordsAtPos(selection.from);
-  // Above the selection, or below it when the pane's top is in the way.
-  const paneTop = editor.view.dom.closest(".preview")?.getBoundingClientRect().top ?? 0;
-  const top = at.top - 46 < paneTop + 4 ? editor.view.coordsAtPos(selection.to).bottom + 8 : at.top - 46;
-  const mark = (name: string, icon: string, label: string, toggle: () => boolean) => (
-    <IconButton key={name} small icon={icon} label={label} selected={editor.isActive(name)} onMouseDown={(e) => e.preventDefault()} onClick={() => toggle()} />
-  );
+  const groups = actionGroups(editor, open);
   return (
-    <Floating top={top} left={at.left} className="visual-bar">
-      {mark("bold", mdiFormatBold, t("desktop.visual.bold"), () => editor.chain().focus().toggleBold().run())}
-      {mark("italic", mdiFormatItalic, t("desktop.visual.italic"), () => editor.chain().focus().toggleItalic().run())}
-      {mark("code", mdiCodeTags, t("desktop.visual.code"), () => editor.chain().focus().toggleCode().run())}
-      {mark("strike", mdiFormatStrikethroughVariant, t("desktop.visual.strike"), () => editor.chain().focus().toggleStrike().run())}
-      <IconButton small icon={mdiLinkVariant} label={t("desktop.visual.link")} selected={editor.isActive("link")} onMouseDown={(e) => e.preventDefault()} onClick={onLink} />
-      <span className="visual-bar-gap" />
-      {[1, 2, 3].map((level) => (
-        <IconButton
-          key={level}
-          small
-          icon={[mdiFormatHeader1, mdiFormatHeader2, mdiFormatHeader3][level - 1]}
-          label={t("desktop.visual.heading", { level })}
-          selected={editor.isActive("heading", { level })}
-          onMouseDown={(e) => e.preventDefault()}
-          onClick={() => editor.chain().focus().toggleHeading({ level: level as 1 | 2 | 3 }).run()}
-        />
+    <div className="visual-toolbar" role="toolbar" aria-label={t("desktop.visual.toolbar")}>
+      {groups.map((g, i) => (
+        <div key={i} className={i === 5 ? "visual-toolbar-group visual-toolbar-table" : "visual-toolbar-group"}>
+          {g.map((x) => (
+            <IconButton key={x.id} small icon={x.icon} label={x.label} selected={x.active} disabled={x.disabled} onMouseDown={(e) => e.preventDefault()} onClick={x.run} />
+          ))}
+        </div>
       ))}
-    </Floating>
+    </div>
   );
 }
 
-// The table bar (VE-12): rows and columns in and out, the table gone.
-
-function TableBar({ editor }: { editor: Editor }) {
-  useEditorTick(editor);
-  if (!editor.isFocused || !editor.isActive("table")) return null;
-  const $pos = editor.state.selection.$from;
-  let depth = $pos.depth;
-  while (depth > 0 && $pos.node(depth).type.name !== "table") depth--;
-  const dom = editor.view.nodeDOM($pos.before(depth)) as HTMLElement | null;
-  const box = dom?.getBoundingClientRect();
-  if (!box) return null;
-  const act = (icon: string, key: string, run: () => boolean) => <IconButton key={key} small icon={icon} label={t(`desktop.visual.table.${key}`)} onMouseDown={(e) => e.preventDefault()} onClick={() => run()} />;
-  return (
-    <Floating top={box.top - 44} left={box.left} className="visual-bar visual-table-bar">
-      {act(mdiTableRowPlusAfter, "add_row", () => editor.chain().focus().addRowAfter().run())}
-      {act(mdiTableColumnPlusAfter, "add_column", () => editor.chain().focus().addColumnAfter().run())}
-      {act(mdiTableRowRemove, "delete_row", () => editor.chain().focus().deleteRow().run())}
-      {act(mdiTableColumnRemove, "delete_column", () => editor.chain().focus().deleteColumn().run())}
-      {act(mdiTableRemove, "delete_table", () => editor.chain().focus().deleteTable().run())}
-    </Floating>
-  );
+// The right-click menu: the actions that make sense where it was opened,
+// the table's first when it's in one.
+function contextItems(editor: Editor, open: Openers): MenuEntry[] {
+  const groups = actionGroups(editor, open);
+  const pick = (g: Action[]) => g.map((x) => ({ label: x.label, icon: x.icon, on: x.active, disabled: x.disabled, onSelect: x.run }));
+  const [headings, marks, lists, blocks, insert, table] = groups;
+  const out: MenuEntry[] = [];
+  if (table) out.push({ heading: t("desktop.visual.table_heading") }, ...pick(table), "divider");
+  out.push(...pick(marks), "divider", ...pick(insert), "divider", ...pick(headings), "divider", ...pick(lists), "divider", ...pick(blocks));
+  return out;
 }
 
 // The link editor (VE-10): its address, applied to the selection or the
@@ -457,6 +528,9 @@ function LinkEditor({ editor, state, onClose }: { editor: Editor; state: LinkSta
         aria-label={t("desktop.visual.link")}
         onChange={(e) => setHref(e.target.value)}
         onKeyDown={(e) => {
+          // Consumed here: the focus goes back to the document, which would
+          // take the same key (an Enter replacing the selection).
+          if (e.key === "Enter" || e.key === "Escape") e.preventDefault();
           if (e.key === "Enter") apply();
           if (e.key === "Escape") {
             onClose();
@@ -476,6 +550,54 @@ function LinkEditor({ editor, state, onClose }: { editor: Editor; state: LinkSta
           }}
         />
       )}
+    </div>,
+    document.body,
+  );
+}
+
+// The image editor (VE-11): its address and description, for the picture
+// selected or a new one at the cursor. Pictures show as boxes, never
+// loaded (DSK-24).
+
+interface ImageState {
+  src: string;
+  alt: string;
+  /** The picture being edited, or null for a new one. */
+  pos: number | null;
+}
+
+function imageAt(editor: Editor): ImageState {
+  const { selection } = editor.state;
+  if (selection instanceof NodeSelection && selection.node.type.name === "image") {
+    return { src: selection.node.attrs.src as string, alt: (selection.node.attrs.alt as string) ?? "", pos: selection.from };
+  }
+  return { src: "", alt: "", pos: null };
+}
+
+function ImageEditor({ editor, state, onClose }: { editor: Editor; state: ImageState; onClose: () => void }) {
+  const [src, setSrc] = useState(state.src);
+  const [alt, setAlt] = useState(state.alt);
+  const at = editor.view.coordsAtPos(state.pos ?? editor.state.selection.from);
+  const apply = () => {
+    if (!src.trim()) return onClose();
+    const attrs = { src: src.trim(), alt: alt.trim(), title: null };
+    if (state.pos !== null) editor.chain().focus().command(({ tr }) => (tr.setNodeMarkup(state.pos!, undefined, attrs), true)).run();
+    else editor.chain().focus().insertContent({ type: "image", attrs }).run();
+    onClose();
+  };
+  const keys = (e: ReactKeyboardEvent) => {
+    if (e.key === "Enter" || e.key === "Escape") e.preventDefault(); // not the document's too
+    if (e.key === "Enter") apply();
+    if (e.key === "Escape") {
+      onClose();
+      editor.commands.focus();
+    }
+  };
+  return createPortal(
+    <div className="menu floating visual-link visual-image" style={{ top: at.bottom + 6, left: at.left }}>
+      <input className="input" autoFocus value={src} placeholder={t("desktop.visual.image_placeholder")} aria-label={t("desktop.visual.image_address")} onChange={(e) => setSrc(e.target.value)} onKeyDown={keys} />
+      <input className="input" value={alt} placeholder={t("desktop.visual.image_alt")} aria-label={t("desktop.visual.image_alt")} onChange={(e) => setAlt(e.target.value)} onKeyDown={keys} />
+      <IconButton small icon={mdiImageOutline} label={t("desktop.visual.image_apply")} onClick={apply} />
     </div>,
     document.body,
   );

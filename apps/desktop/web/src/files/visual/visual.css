@@ -108,6 +108,24 @@
 @keyframes visual-blink { to { visibility: hidden; } }
 .ProseMirror-dropcursor, .visual-editor .prosemirror-dropcursor-block { background: var(--doc-accent) !important; }
 
+/* The toolbar: above the document, on the document's background, while it scrolls */
+.visual-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 4px 2px;
+  padding: 6px 12px;
+  background: var(--doc-background);
+  border-bottom: 1px solid var(--md-outline-variant);
+}
+.visual-toolbar-group { display: flex; align-items: center; gap: 2px; }
+.visual-toolbar-group + .visual-toolbar-group { padding-left: 6px; margin-left: 4px; border-left: 1px solid var(--md-outline-variant); }
+.visual-toolbar-table { background: color-mix(in srgb, var(--doc-accent) 8%, transparent); border-radius: var(--md-shape-full); padding: 0 4px; }
+.visual-toolbar-group + .visual-toolbar-table { border-left: 0; }
+
 /* The menus: the app's (m3.css .menu), placed by the editor */
 .menu.floating.visual-slash { min-width: 220px; max-height: 320px; overflow-y: auto; padding: 4px 0; }
 .menu.floating.visual-slash .menu-item { width: 100%; border: 0; background: none; text-align: left; }
@@ -116,3 +134,4 @@
 .menu.floating.visual-bar .visual-bar-gap { width: 1px; height: 20px; margin: 0 4px; background: var(--md-outline-variant); }
 .menu.floating.visual-link { display: flex; align-items: center; gap: 4px; padding: 6px; }
 .menu.floating.visual-link .input { width: 320px; }
+.menu.floating.visual-image .input + .input { width: 200px; }
