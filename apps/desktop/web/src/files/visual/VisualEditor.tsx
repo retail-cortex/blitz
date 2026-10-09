@@ -264,8 +264,10 @@ export function VisualEditor({ dir, path, text, onChange, onSave }: Props) {
         setMenu({ x: e.clientX, y: e.clientY });
       }}
     >
+      <div className="visual-scroll">
+        <EditorContent editor={editor} />
+      </div>
       <Toolbar editor={editor} open={open} />
-      <EditorContent editor={editor} />
       {slash && <SlashMenu editor={editor} state={slash} onPick={(item) => runSlash(editor, slash, item)} />}
       {menu && (
         <ContextMenu
@@ -463,7 +465,7 @@ export function actionGroups(editor: Editor, open: Openers): Action[][] {
   return groups;
 }
 
-// The toolbar: always there, above the document, while it scrolls.
+// The toolbar: always there, docked at the panel's foot under the document.
 function Toolbar({ editor, open }: { editor: Editor; open: Openers }) {
   useEditorTick(editor);
   const groups = actionGroups(editor, open);
