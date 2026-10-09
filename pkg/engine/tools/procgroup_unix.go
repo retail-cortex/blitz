@@ -59,3 +59,7 @@ func guardArgv(argv []string) (wrapped []string, childEnd *os.File, release func
 	wrapped = append([]string{"bash", "-c", guardScript, "blitz-guard"}, argv...)
 	return wrapped, r, func() { w.Close() }, nil
 }
+
+// inGroup does nothing on Unix: the process group and the guard already
+// hold the command's processes (configureProcessGroup, guardArgv).
+func inGroup(*exec.Cmd) func() { return func() {} }

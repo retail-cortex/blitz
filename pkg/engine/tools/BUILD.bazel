@@ -58,6 +58,7 @@ go_library(
         "plan.go",
         "procgroup_other.go",
         "procgroup_unix.go",
+        "procgroup_windows.go",
         "pyenv.go",
         "pyversion.go",
         "registry.go",
@@ -130,6 +131,9 @@ go_library(
         "@rules_go//go/platform:linux": [
             "@dev_gvisor_gvisor//sandboxexec/sandbox",
         ],
+        "@rules_go//go/platform:windows": [
+            "@org_golang_x_sys//windows",
+        ],
         "//conditions:default": [],
     }),
 )
@@ -193,6 +197,7 @@ go_test(
         "plan_cov_test.go",
         "plan_test.go",
         "posthooks_test.go",
+        "procgroup_windows_test.go",
         "pyenv_cov_test.go",
         "pyenv_test.go",
         "pyversion_cov_test.go",

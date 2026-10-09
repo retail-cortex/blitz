@@ -80,7 +80,7 @@ type message struct {
 
 // Serve answers like a small language server: a problem ("fake problem")
 // on line 1 of every file unless it says "fixed"; the symbol Foo defined
-// on line 2, column 6, and used on line 4.
+// on line 2, column 6, and used on line 4; Foo as the only completion.
 func Serve(in io.Reader, out io.Writer) {
 	r := bufio.NewReader(in)
 	send := func(v any) {
@@ -128,6 +128,10 @@ func Serve(in io.Reader, out io.Writer) {
 			reply([]any{loc(1, 5), loc(3, 4)})
 		case "textDocument/hover":
 			reply(map[string]any{"contents": map[string]any{"kind": "markdown", "value": "```go\nfunc Foo()\n```"}})
+		case "textDocument/completion":
+			reply(map[string]any{"isIncomplete": false, "items": []any{
+				map[string]any{"label": "Foo", "kind": 3, "detail": "func()", "documentation": "Foo does nothing."},
+			}})
 		case "workspace/symbol":
 			reply([]any{map[string]any{"name": "Foo", "kind": 12, "containerName": "main", "location": loc(1, 5)}})
 		case "shutdown":

@@ -1,0 +1,323 @@
+// Copyright 2026 Retail Cortex
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package blitz.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/retail-cortex/blitz/proto/blitz/v1;blitzv1";
+
+// LanguageService is the workspace's language servers for the editor
+// (spec_visual_editor_037): completion, hover, definitions, references and
+// problems for the documents it has open, unsaved text included. The
+// editor shares the servers the agent's lsp tool uses: one per workspace
+// and language.
+//
+// A document is opened, changed with its whole text and a version, and
+// closed; its diagnostics come on a stream. Documents belong to a client
+// (a window), and close by themselves when it hasn't called or watched for
+// two minutes (KeepDocuments keeps them). Positions are 1-based lines and
+// columns in characters.
+//
+// Every request names its workspace by absolute directory. Errors carry an
+// ErrorInfo detail: UNKNOWN_DOCUMENT, STALE (an older version than the
+// document's), UNTRUSTED, NO_SERVER, SERVER_MISSING, SERVER_FAILED,
+// BAD_PATH.
+service LanguageService {
+  // Opens a document for the editor; the server starts if it isn't
+  // running (the state says how that is going).
+  rpc OpenDocument(OpenDocumentRequest) returns (OpenDocumentResponse);
+  // Replaces a document's text: the newer version wins.
+  rpc ChangeDocument(ChangeDocumentRequest) returns (ChangeDocumentResponse);
+  // Closes a document: the server reads the file from disk again.
+  rpc CloseDocument(CloseDocumentRequest) returns (CloseDocumentResponse);
+  // Keeps a client's documents open (every 30 s while its window is).
+  rpc KeepDocuments(KeepDocumentsRequest) returns (KeepDocumentsResponse);
+  // Completion at a position.
+  rpc Complete(CompleteRequest) returns (CompleteResponse);
+  // What the server says about the symbol at a position (Markdown).
+  rpc Hover(HoverRequest) returns (HoverResponse);
+  // Where the symbol at a position is defined.
+  rpc Definition(DefinitionRequest) returns (DefinitionResponse);
+  // Where the symbol at a position is used, its definition included.
+  rpc References(ReferencesRequest) returns (ReferencesResponse);
+  // A client's documents' diagnostics, as servers publish them (each
+  // document's latest first, then changes). Watching keeps the client's
+  // documents open.
+  rpc WatchDiagnostics(WatchDiagnosticsRequest) returns (stream WatchDiagnosticsResponse);
+  // The workspace's language servers and how each is.
+  rpc GetLanguageStatus(GetLanguageStatusRequest) returns (GetLanguageStatusResponse);
+  // Stops a language's server; the next request starts it again, and the
+  // editor's documents are opened in it again.
+  rpc RestartLanguageServer(RestartLanguageServerRequest) returns (RestartLanguageServerResponse);
+}
+
+// How a document's language server is.
+enum ServerState {
+  SERVER_STATE_UNSPECIFIED = 0;
+  // Running: requests are answered.
+  SERVER_STATE_READY = 1;
+  // Being started.
+  SERVER_STATE_STARTING = 2;
+  // Its command isn't installed (install says what to install).
+  SERVER_STATE_MISSING = 3;
+  // It failed to start or stopped; tried again after a minute.
+  SERVER_STATE_FAILED = 4;
+  // The workspace's project settings aren't trusted.
+  SERVER_STATE_UNTRUSTED = 5;
+  // No server is configured for the language.
+  SERVER_STATE_NONE = 6;
+  // Configured, not started yet (no file of its language asked).
+  SERVER_STATE_IDLE = 7;
+}
+
+// Request message for LanguageService.OpenDocument.
+message OpenDocumentRequest {
+  string workspace = 1;
+  // The client opening it (a random ID per window).
+  string client = 2;
+  // The file, relative to the workspace.
+  string path = 3;
+  // Its text in the editor, unsaved edits included.
+  string text = 4;
+  // The editor's version of the text (it only grows).
+  int64 version = 5;
+}
+
+// Response message for LanguageService.OpenDocument.
+message OpenDocumentResponse {
+  // The document's ID, for the other calls.
+  string document = 1;
+  // The language server's language ("go"), "" with none.
+  string language = 2;
+  ServerState state = 3;
+  // Why it's missing, failed or untrusted, for people.
+  string detail = 4;
+  // What to run to install a missing server.
+  string install = 5;
+}
+
+// Request message for LanguageService.ChangeDocument.
+message ChangeDocumentRequest {
+  string workspace = 1;
+  string document = 2;
+  string text = 3;
+  int64 version = 4;
+}
+
+// Response message for LanguageService.ChangeDocument.
+message ChangeDocumentResponse {}
+
+// Request message for LanguageService.CloseDocument.
+message CloseDocumentRequest {
+  string workspace = 1;
+  string document = 2;
+}
+
+// Response message for LanguageService.CloseDocument.
+message CloseDocumentResponse {}
+
+// Request message for LanguageService.KeepDocuments.
+message KeepDocumentsRequest {
+  string workspace = 1;
+  string client = 2;
+}
+
+// Response message for LanguageService.KeepDocuments.
+message KeepDocumentsResponse {
+  // The client's documents still open (one missing was closed: open it
+  // again).
+  repeated string documents = 1;
+}
+
+// A position in a document: 1-based line and column, in characters.
+message TextPosition {
+  int32 line = 1;
+  int32 column = 2;
+}
+
+// A range in a document, from start to before end.
+message TextRange {
+  TextPosition start = 1;
+  TextPosition end = 2;
+}
+
+// A change to a document's text: the range replaced by text.
+message TextEdit {
+  TextRange range = 1;
+  string text = 2;
+}
+
+// Request message for LanguageService.Complete.
+message CompleteRequest {
+  string workspace = 1;
+  string document = 2;
+  // The version the position is in.
+  int64 version = 3;
+  TextPosition position = 4;
+  // The character typed that asked for it ("." in Go), "" when asked for.
+  string trigger = 5;
+}
+
+// One completion.
+message CompletionItem {
+  string label = 1;
+  // function, method, field, variable, constant, class, interface, struct,
+  // module, keyword, snippet, property, type parameter, …
+  string kind = 2;
+  // A short description (a type or signature).
+  string detail = 3;
+  // Documentation, in Markdown.
+  string documentation = 4;
+  // What to insert: edit's text over edit's range when set, else
+  // insert_text at the position, replacing the word before it.
+  string insert_text = 5;
+  TextEdit edit = 6;
+  // insert_text or edit's text is an LSP snippet ($1, ${2:name}).
+  bool snippet = 7;
+  // Other changes that come with it (an import).
+  repeated TextEdit additional_edits = 8;
+  // The server's order and the text it filters by.
+  string sort_text = 9;
+  string filter_text = 10;
+}
+
+// Response message for LanguageService.Complete.
+message CompleteResponse {
+  // At most 200.
+  repeated CompletionItem items = 1;
+  // Typing more may find others: ask again rather than filter.
+  bool incomplete = 2;
+}
+
+// Request message for LanguageService.Hover.
+message HoverRequest {
+  string workspace = 1;
+  string document = 2;
+  int64 version = 3;
+  TextPosition position = 4;
+}
+
+// Response message for LanguageService.Hover.
+message HoverResponse {
+  // Markdown; "" when the server has nothing to say.
+  string text = 1;
+}
+
+// Request message for LanguageService.Definition.
+message DefinitionRequest {
+  string workspace = 1;
+  string document = 2;
+  int64 version = 3;
+  TextPosition position = 4;
+}
+
+// Request message for LanguageService.References.
+message ReferencesRequest {
+  string workspace = 1;
+  string document = 2;
+  int64 version = 3;
+  TextPosition position = 4;
+}
+
+// A place in a file, as Definition and References answer.
+message SourceLocation {
+  // Relative to the workspace when inside it, else absolute.
+  string path = 1;
+  int32 line = 2;
+  int32 column = 3;
+  // The line's text, trimmed.
+  string text = 4;
+  // The file is outside the workspace (the standard library, a module).
+  bool outside = 5;
+}
+
+// Response message for LanguageService.Definition.
+message DefinitionResponse {
+  // At most 100.
+  repeated SourceLocation locations = 1;
+}
+
+// Response message for LanguageService.References.
+message ReferencesResponse {
+  // At most 100.
+  repeated SourceLocation locations = 1;
+}
+
+// One problem a server reports.
+message LanguageDiagnostic {
+  TextRange range = 1;
+  // error, warning, information or hint.
+  string severity = 2;
+  string message = 3;
+  // Who reported it ("compiler", "staticcheck").
+  string source = 4;
+  // Its code, when it has one.
+  string code = 5;
+}
+
+// Request message for LanguageService.WatchDiagnostics.
+message WatchDiagnosticsRequest {
+  string workspace = 1;
+  string client = 2;
+}
+
+// Response message for LanguageService.WatchDiagnostics: a document's
+// diagnostics, all of them, replacing those sent before.
+message WatchDiagnosticsResponse {
+  string document = 1;
+  // The document's version they're about.
+  int64 version = 2;
+  repeated LanguageDiagnostic diagnostics = 3;
+}
+
+// Request message for LanguageService.GetLanguageStatus.
+message GetLanguageStatusRequest {
+  string workspace = 1;
+}
+
+// A language's server.
+message LanguageServerStatus {
+  string language = 1;
+  // The command that runs it.
+  repeated string command = 2;
+  // Its file extensions (".go").
+  repeated string extensions = 3;
+  // Ready, starting, failed, missing or idle.
+  ServerState state = 4;
+  // Started or failed at.
+  google.protobuf.Timestamp since = 5;
+  // Why it failed.
+  string error = 6;
+  // What to run to install it, when missing.
+  string install = 7;
+}
+
+// Response message for LanguageService.GetLanguageStatus.
+message GetLanguageStatusResponse {
+  repeated LanguageServerStatus servers = 1;
+  // The project's settings aren't trusted: no server starts for the editor.
+  bool untrusted = 2;
+}
+
+// Request message for LanguageService.RestartLanguageServer.
+message RestartLanguageServerRequest {
+  string workspace = 1;
+  string language = 2;
+}
+
+// Response message for LanguageService.RestartLanguageServer.
+message RestartLanguageServerResponse {}

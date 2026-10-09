@@ -41,6 +41,7 @@ genrule(
     outs = ["content/architecture/api/%s.md" % p for p in [
         "config",
         "file",
+        "language",
         "session",
         "turn",
         "worker",

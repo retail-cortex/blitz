@@ -55,7 +55,7 @@ func lspServers(cfg *config.Config) []lsp.Server {
 func lspLauncher(env *ExecEnv) lsp.Launcher {
 	return func(ctx context.Context, argv []string) (lsp.Process, error) {
 		if _, err := exec.LookPath(argv[0]); err != nil {
-			return nil, fmt.Errorf("%s isn't installed (or not on PATH)", argv[0])
+			return nil, &lsp.NotInstalledError{Command: argv[0]}
 		}
 		cmd, err := env.command(ctx, argv)
 		if err != nil {

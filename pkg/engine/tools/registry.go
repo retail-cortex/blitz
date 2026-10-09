@@ -453,6 +453,10 @@ func (r *Registry) SetMCP(m *MCPManager) {
 // MCP returns the MCP server manager.
 func (r *Registry) MCP() *MCPManager { return r.mcp }
 
+// LSP is the workspace's language servers (nil when the registry has
+// none), which the editor shares with the agent's lsp tool.
+func (r *Registry) LSP() *lsp.Manager { return r.lsp }
+
 // ScriptHooks returns the configured lifecycle hooks.
 func (r *Registry) ScriptHooks() *ScriptHooks { return r.scripts }
 

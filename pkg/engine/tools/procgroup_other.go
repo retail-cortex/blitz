@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//go:build !unix
+//go:build !unix && !windows
 
 package tools
 
@@ -36,3 +36,7 @@ func killProcessGroup(cmd *exec.Cmd) error {
 func guardArgv(argv []string) ([]string, *os.File, func(), error) {
 	return argv, nil, func() {}, nil
 }
+
+// inGroup does nothing here: there is nothing to hold the command's
+// processes together.
+func inGroup(*exec.Cmd) func() { return func() {} }

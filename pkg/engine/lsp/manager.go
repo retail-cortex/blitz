@@ -54,7 +54,10 @@ type Manager struct {
 	running map[string]*server   // by language
 	start   map[string]*starting // starts under way, by language
 	failed  map[string]failure   // why a language's server couldn't start
+	since   map[string]time.Time // when each language's server started, or failed to
 	closed  bool
+
+	docs documents // the editor's (documents.go)
 }
 
 // starting is a server's start, which every caller for its language waits
@@ -80,7 +83,7 @@ var failedRetry = time.Minute
 func NewManager(root string, servers []Server, launch Launcher) *Manager {
 	life, end := context.WithCancel(context.Background())
 	return &Manager{root: root, launch: launch, servers: servers, life: life, end: end,
-		running: map[string]*server{}, start: map[string]*starting{}, failed: map[string]failure{}}
+		running: map[string]*server{}, start: map[string]*starting{}, failed: map[string]failure{}, since: map[string]time.Time{}}
 }
 
 type server struct {
@@ -90,14 +93,22 @@ type server struct {
 	mu      sync.Mutex
 	text    map[string]string // what was sent, by URI: the open documents
 	version map[string]int
-	opened  []string                  // the open documents' URIs, least recently synced first
+	opened  []string                  // the agent's open documents' URIs, least recently synced first
+	held    map[string]int            // the editor's documents, by URI: how many hold each
 	diags   map[string]publishedDiags // for open documents only
 	changed chan struct{}             // a diagnostics notification came
+	// onDiags is told of each URI whose diagnostics came (the editor's
+	// watchers); nil for none.
+	onDiags func(uri string)
+	// timeouts counts the editor's requests in a row the server didn't
+	// answer in time (VE-45).
+	timeouts int
 }
 
 type publishedDiags struct {
-	at    time.Time
-	items []wireDiagnostic
+	at      time.Time
+	version int // the document's version they're about (0: unsaid)
+	items   []wireDiagnostic
 }
 
 // startTimeout bounds starting a server (initialize).
@@ -163,6 +174,7 @@ func (m *Manager) startFor(cfg Server, st *starting) {
 	}
 	m.mu.Lock()
 	delete(m.start, cfg.Language)
+	m.since[cfg.Language] = time.Now()
 	switch {
 	case m.closed:
 		if s != nil {
@@ -187,7 +199,7 @@ func (m *Manager) startServer(ctx context.Context, cfg Server) (*server, error) 
 	if err != nil {
 		return nil, err
 	}
-	s := &server{lang: cfg.Language, text: map[string]string{}, version: map[string]int{}, diags: map[string]publishedDiags{}, changed: make(chan struct{}, 1)}
+	s := &server{lang: cfg.Language, text: map[string]string{}, version: map[string]int{}, held: map[string]int{}, diags: map[string]publishedDiags{}, changed: make(chan struct{}, 1), onDiags: m.diagnosed}
 	s.c = newConn(proc, s.notified)
 	ictx, cancel := context.WithTimeout(ctx, startTimeout)
 	defer cancel()
@@ -198,11 +210,25 @@ func (m *Manager) startServer(ctx context.Context, cfg Server) (*server, error) 
 		"workspaceFolders": []any{map[string]any{"uri": root, "name": filepath.Base(m.root)}},
 		"capabilities": map[string]any{
 			"textDocument": map[string]any{
-				"synchronization":    map[string]any{"didSave": false},
+				"synchronization": map[string]any{"didSave": false},
+				// The editor's completion (spec_visual_editor_037 VE-32).
+				"completion": map[string]any{
+					"contextSupport": true,
+					"completionItem": map[string]any{
+						"snippetSupport":          true,
+						"documentationFormat":     []string{"markdown", "plaintext"},
+						"insertReplaceSupport":    true,
+						"labelDetailsSupport":     true,
+						"deprecatedSupport":       true,
+						"preselectSupport":        false,
+						"insertTextModeSupport":   map[string]any{"valueSet": []int{1}},
+						"commitCharactersSupport": false,
+					},
+				},
 				"hover":              map[string]any{"contentFormat": []string{"markdown", "plaintext"}},
 				"definition":         map[string]any{"linkSupport": true},
 				"references":         map[string]any{},
-				"publishDiagnostics": map[string]any{"relatedInformation": false},
+				"publishDiagnostics": map[string]any{"relatedInformation": false, "versionSupport": true},
 			},
 			"workspace": map[string]any{"symbol": map[string]any{}, "configuration": true, "workspaceFolders": true},
 		},
@@ -224,6 +250,7 @@ func (s *server) notified(method string, params json.RawMessage) {
 	}
 	var p struct {
 		URI         string           `json:"uri"`
+		Version     int              `json:"version"`
 		Diagnostics []wireDiagnostic `json:"diagnostics"`
 	}
 	if json.Unmarshal(params, &p) != nil {
@@ -233,10 +260,15 @@ func (s *server) notified(method string, params json.RawMessage) {
 	s.mu.Lock()
 	// Servers report on files nobody opened (gopls, a whole package's):
 	// only open documents' are asked for, so only theirs are kept.
-	if _, open := s.text[uri]; open {
-		s.diags[uri] = publishedDiags{at: time.Now(), items: p.Diagnostics}
+	_, open := s.text[uri]
+	if open {
+		s.diags[uri] = publishedDiags{at: time.Now(), version: p.Version, items: p.Diagnostics}
 	}
+	held, onDiags := s.held[uri] > 0, s.onDiags
 	s.mu.Unlock()
+	if open && held && onDiags != nil {
+		onDiags(uri)
+	}
 	select {
 	case s.changed <- struct{}{}:
 	default:
@@ -256,6 +288,11 @@ func (s *server) sync(path string) (string, error) {
 	text := string(data)
 	uri := fileURI(path)
 	s.mu.Lock()
+	if s.held[uri] > 0 { // the editor's text, unsaved edits included (VE-41)
+		held := s.text[uri]
+		s.mu.Unlock()
+		return held, nil
+	}
 	prev, open := s.text[uri]
 	if open && prev == text {
 		s.mu.Unlock()
@@ -343,6 +380,8 @@ type wireDiagnostic struct {
 	Severity int       `json:"severity"`
 	Message  string    `json:"message"`
 	Source   string    `json:"source"`
+	// Code is a number or a string.
+	Code json.RawMessage `json:"code,omitempty"`
 }
 
 // position is (1-based line, 1-based column in characters) in text as

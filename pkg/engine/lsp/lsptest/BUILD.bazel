@@ -19,6 +19,10 @@ go_library(
     testonly = True,
     srcs = ["lsptest.go"],
     importpath = "github.com/retail-cortex/blitz/pkg/engine/lsp/lsptest",
-    visibility = ["//pkg/engine:__subpackages__"],
+    visibility = [
+        # The engine's tests, and the service's (LanguageService).
+        "//apps/service:__subpackages__",
+        "//pkg/engine:__subpackages__",
+    ],
     deps = ["//pkg/engine/lsp"],
 )

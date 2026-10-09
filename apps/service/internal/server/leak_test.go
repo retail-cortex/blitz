@@ -17,8 +17,13 @@ package server
 import (
 	"testing"
 
+	"github.com/retail-cortex/blitz/pkg/engine/lsp/lsptest"
 	"go.uber.org/goleak"
 )
 
-// No test may leave a goroutine running.
-func TestMain(m *testing.M) { goleak.VerifyTestMain(m) }
+// No test may leave a goroutine running. The test binary is also the fake
+// language server the LanguageService tests start.
+func TestMain(m *testing.M) {
+	lsptest.MaybeServe()
+	goleak.VerifyTestMain(m)
+}
