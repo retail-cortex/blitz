@@ -38,6 +38,7 @@
   --md-on-error: #ffffff;
   --md-error-container: #f9dedc;
   --md-on-error-container: #410e0b;
+  --md-warning: #7a5900;
   --md-warning-container: #ffdf99;
   --md-on-warning-container: #251a00;
   --md-surface: #ffffff;
@@ -127,6 +128,7 @@
   --md-on-error: #601410;
   --md-error-container: #8c1d18;
   --md-on-error-container: #f9dedc;
+  --md-warning: #f0bf48;
   --md-warning-container: #5c4300;
   --md-on-warning-container: #ffdf99;
   --md-surface: #131314;

@@ -7,8 +7,9 @@ weight: 37
 
 | | |
 |---|---|
-| Status | **Approved** (2026-10-08); phase 1 under way on `visual-editor`. |
-| Source (planned) | New: `language.proto` in `proto/blitz/v1`, `language.go` in `apps/service/internal/server`, a job object for Windows beside `pkg/engine/tools/procgroup_other.go`, and the page's `files/visual/` (the TipTap editor, its Markdown parser and serializer, the code block view) and `files/language.ts` (CodeMirror's completion, hover, lint and go-to-definition over `LanguageService`). Changed: `pkg/engine/lsp` (documents from the editor, completion, diagnostics to watchers) |
+| Status | **Approved** (2026-10-08). Phase 1 implemented on `visual-editor` (2026-10-08): `LanguageService`, and completion, hover, problems and go to definition in the source editor, checked with real gopls in WebKit. Still to do in phase 1: the references panel (VE-34), and opening a definition outside the workspace read-only (a snackbar says where it is). Phases 2 and 3 planned. |
+| Source | Phase 1: `proto/blitz/v1/language.proto`, `apps/service/internal/server/language.go`, `pkg/engine/language.go`, `pkg/engine/lsp/documents.go` (with `manager.go`), `pkg/engine/tools/procgroup_windows.go`; the page's `files/language.ts`, `files/languageUi.tsx`, `LanguageServers.tsx`. Planned: the page's `files/visual/` (the TipTap editor, its Markdown parser and serializer, the code block view) |
+| Tests | `pkg/engine/lsp/documents_test.go`, `pkg/engine/language_test.go`, `apps/service/internal/server/language_test.go`, `pkg/engine/tools/procgroup_windows_test.go` (Windows only), `apps/desktop/web/src/files/language.test.ts` |
 | Depends on | [spec_files_029](spec_files_029.md) (the editor, previews, FIL-64 below), [spec_filetools_006](spec_filetools_006.md) FS-60–62 (the language servers the agent uses), [spec_desktop_024](spec_desktop_024.md) DSK-24 (what the page renders), [spec_project_config_031](spec_project_config_031.md) (trust), [spec_service_021](spec_service_021.md) SVC-01 |
 
 ## 1. Purpose

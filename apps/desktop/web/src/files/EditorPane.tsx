@@ -28,6 +28,8 @@ import { Button, Dialog, Icon, IconButton, Segmented, useSnackbar } from "../ui/
 import { Preview } from "./Preview";
 import { defaultView, previewKind, previewOnly, type View } from "./previewKind";
 import type { Cursor } from "../status";
+import { ServerState } from "../gen/blitz/v1/language_pb";
+import { languageSession, type LanguageStatus } from "./language";
 import { goToLine, languageOf, setWrap } from "./codemirror";
 import { fileIcon } from "./icons";
 import type { EditorModel, Tab } from "./useEditor";
@@ -174,7 +176,16 @@ export function EditorPane({ model, onReveal, onCursor }: { model: EditorModel; 
     if (!path) return cursorTo.current?.(undefined);
     const sel = v.state.selection.main;
     const line = v.state.doc.lineAt(sel.head);
-    cursorTo.current?.({ line: line.number, column: sel.head - line.from + 1, selected: sel.to - sel.from, language: languageOf(path)?.name ?? "" });
+    const ls = languageSession(model.dir).status(path);
+    cursorTo.current?.({
+      line: line.number,
+      column: sel.head - line.from + 1,
+      selected: sel.to - sel.from,
+      language: languageOf(path)?.name ?? "",
+      errors: ls?.errors,
+      warnings: ls?.warnings,
+      server: serverNote(ls),
+    });
   };
 
   // One view, made once; every change is kept as its tab's state.
@@ -215,6 +226,16 @@ export function EditorPane({ model, onReveal, onCursor }: { model: EditorModel; 
     else cursorTo.current?.(undefined);
     // report reads refs.
   }, [state, ready, showPreview, tab?.path]);
+
+  // The file's problems and its server's state, as they change.
+  useEffect(() => {
+    if (!tab || showPreview) return;
+    return languageSession(model.dir).subscribe(tab.path, () => {
+      const v = view.current;
+      if (v && shown.current === tab.path) report(v);
+    });
+    // report reads refs.
+  }, [model.dir, tab?.path, showPreview]);
 
   // Go to a line when asked (a link, Go to file).
   useEffect(() => {
@@ -448,4 +469,17 @@ export function formatSize(n: number): string {
   if (n < 1024) return `${n} B`;
   if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} kB`;
   return `${(n / 1024 / 1024).toFixed(1)} MB`;
+}
+
+/** Why a file has no language server's help, for the status bar ("" when it has). */
+function serverNote(ls: LanguageStatus | undefined): string {
+  switch (ls?.state) {
+    case ServerState.MISSING:
+      return t("desktop.files.server_missing", { install: ls.install || ls.detail });
+    case ServerState.FAILED:
+      return t("desktop.files.server_failed", { error: ls.detail });
+    case ServerState.UNTRUSTED:
+      return t("desktop.files.server_untrusted");
+  }
+  return "";
 }

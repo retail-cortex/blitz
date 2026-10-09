@@ -83,6 +83,12 @@
 .sb-meter.high > span { background: var(--md-error); }
 .sb-cost, .sb-cursor { font-variant-numeric: tabular-nums; }
 .sb-cursor { gap: 10px; }
+/* The file's problems and its language server's note (spec_visual_editor_037 VE-35, VE-37). */
+.sb-problems { display: inline-flex; gap: 8px; }
+.sb-errors, .sb-warnings { display: inline-flex; align-items: center; gap: 3px; }
+.sb-errors { color: var(--md-error); }
+.sb-warnings { color: var(--md-warning); }
+.sb-server { max-width: 280px; }
 /* Narrow windows keep the icons and numbers. */
 @media (max-width: 900px) { .status-bar .sb-low { display: none; } .sb-model { max-width: 160px; } }
 @media (max-width: 640px) { .sb-cursor, .sb-ws { display: none; } }
@@ -850,3 +856,12 @@ code.file-link:hover { text-decoration-color: currentColor; }
 .signin-progress p { margin: 0; }
 .signin-code { font: 600 24px/32px var(--md-mono); letter-spacing: 3px; padding: 4px 12px; border-radius: var(--md-shape-sm); background: var(--accent-tint); color: var(--on-accent-tint); }
 :root[data-glass="on"] .signin-card { background: var(--glass-strong); }
+
+/* Settings › Workspaces › Language servers (spec_visual_editor_037 VE-45). */
+.lsp-list { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 4px; }
+.lsp-row { display: grid; grid-template-columns: 10px 96px minmax(0, 1fr) minmax(0, 1.4fr) 32px; align-items: center; gap: 10px; min-height: 36px; }
+.lsp-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--md-outline-variant); }
+.lsp-dot.lsp-ready { background: var(--md-primary); }
+.lsp-dot.lsp-starting { background: var(--md-tertiary); }
+.lsp-dot.lsp-missing, .lsp-dot.lsp-failed { background: var(--md-error); }
+.lsp-command { color: var(--md-on-surface-variant); }

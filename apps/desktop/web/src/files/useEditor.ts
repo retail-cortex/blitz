@@ -22,6 +22,7 @@ import type { EditorState } from "@codemirror/state";
 import { files } from "../api";
 import { errorMeta, message, reason } from "../errors";
 import { fileState, languageSupport } from "./codemirror";
+import { languageExtension, languageSession, type LanguageHooks } from "./language";
 import { nameOf } from "./tree";
 
 /** An open file: its tab, the version its text is based on, and what the editor knows about it. */
@@ -83,7 +84,7 @@ export interface EditorModel {
  * A workspace's open files: loading, saving (refused over someone else's
  * change), reloading, and noticing changes made elsewhere.
  */
-export function useEditor(dir: string): EditorModel {
+export function useEditor(dir: string, language?: Omit<LanguageHooks, "open">): EditorModel {
   const [tabs, setTabs] = useState<Tab[]>([]);
   const [active, setActive] = useState<string | null>(null);
   const [target, setTarget] = useState<Target | null>(null);
@@ -94,24 +95,30 @@ export function useEditor(dir: string): EditorModel {
   tabsRef.current = tabs;
 
   const patch = useCallback((path: string, p: Partial<Tab>) => setTabs((ts) => ts.map((t) => (t.path === path ? { ...t, ...p } : t))), []);
+  // The language servers' hooks; open is the model's own (defined below).
+  const hooks = useRef(language);
+  hooks.current = language;
+  const openRef = useRef<EditorModel["open"]>(() => {});
 
   // A new editor state for text; its changes mark the tab dirty.
   const makeState = useCallback(
     async (path: string, text: string) => {
       const lang = await languageSupport(path);
       saved.current.set(path, text);
+      const h = hooks.current;
+      const servers = h ? languageExtension(dir, path, { ...h, open: (p, line, column) => openRef.current(p, line, column) }) : [];
       const s = fileState(text, lang, {
         save: () => void save(path),
         changed: (st) => {
           const dirty = st.doc.toString() !== saved.current.get(path);
           if (tabsRef.current.find((t) => t.path === path)?.dirty !== dirty) patch(path, { dirty });
         },
-      });
+      }, false, servers);
       states.current.set(path, s);
       return s;
     },
     // save is defined below; it's stable while dir is.
-    [patch],
+    [dir, patch],
   );
 
   const load = useCallback(
@@ -139,7 +146,10 @@ export function useEditor(dir: string): EditorModel {
     [load],
   );
 
+  openRef.current = open;
+
   const close = useCallback((path: string) => {
+    languageSession(dir).close(path);
     states.current.delete(path);
     saved.current.delete(path);
     setTabs((ts) => {
@@ -148,7 +158,7 @@ export function useEditor(dir: string): EditorModel {
       setActive((a) => (a === path ? (next[Math.min(i, next.length - 1)]?.path ?? null) : a));
       return next;
     });
-  }, []);
+  }, [dir]);
 
   const save = useCallback(
     async (path: string, overwrite = false): Promise<boolean> => {
@@ -207,6 +217,7 @@ export function useEditor(dir: string): EditorModel {
           continue;
         }
         const next = to + t.path.slice(from.length);
+        languageSession(dir).moved(t.path, next);
         const s = states.current.get(t.path);
         if (s) states.current.set(next, s);
         const sv = saved.current.get(t.path);
@@ -217,7 +228,7 @@ export function useEditor(dir: string): EditorModel {
         setActive((a) => (a === t.path ? next : a));
       }
     },
-    [patch],
+    [dir, patch],
   );
 
   return useMemo(

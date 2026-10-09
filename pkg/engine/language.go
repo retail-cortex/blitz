@@ -200,8 +200,7 @@ func sourceLocations(locs []lsp.Location) []SourceLocation {
 func (w *Workspace) WatchDiagnostics(ctx context.Context, client string, send func(lsp.DocumentDiagnostics) error) error {
 	m, err := w.languages()
 	if err != nil {
-		<-ctx.Done() // nothing to watch: wait like a stream with nothing to say
-		return ctx.Err()
+		return nil // no servers: nothing will ever come, so the stream ends
 	}
 	return m.WatchDiagnostics(ctx, client, send)
 }

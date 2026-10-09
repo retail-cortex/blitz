@@ -16,6 +16,8 @@ package server
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -25,6 +27,7 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/retail-cortex/blitz/pkg/config"
+	"github.com/retail-cortex/blitz/pkg/engine"
 	pb "github.com/retail-cortex/blitz/proto/blitz/v1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -196,4 +199,158 @@ func TestLanguageServiceStates(t *testing.T) {
 		_, info := errorReason(t, err)
 		assert.Equal(t, "SERVER_MISSING", info.Reason)
 	})
+}
+
+// A workspace with every language server turned off: documents have none,
+// the lists are empty, and the rest say there's nothing to ask.
+func TestLanguageServiceWithoutServers(t *testing.T) {
+	_, s := serve(t, func(cfg *config.Config) {
+		cfg.LSP = map[string]config.LSPServerConfig{}
+		for lang := range config.DefaultLSPServers {
+			cfg.LSP[lang] = config.LSPServerConfig{Disabled: true}
+		}
+	})
+	lc := languageClient(t, s)
+	ctx := context.Background()
+	dir := t.TempDir()
+	res, err := lc.OpenDocument(ctx, connect.NewRequest(&pb.OpenDocumentRequest{Workspace: dir, Client: "w", Path: "a.go"}))
+	require.NoError(t, err)
+	assert.Equal(t, pb.ServerState_SERVER_STATE_NONE, res.Msg.State)
+	kept, err := lc.KeepDocuments(ctx, connect.NewRequest(&pb.KeepDocumentsRequest{Workspace: dir, Client: "w"}))
+	require.NoError(t, err)
+	assert.Empty(t, kept.Msg.Documents)
+	status, err := lc.GetLanguageStatus(ctx, connect.NewRequest(&pb.GetLanguageStatusRequest{Workspace: dir}))
+	require.NoError(t, err)
+	assert.Empty(t, status.Msg.Servers)
+	pos := &pb.TextPosition{Line: 1, Column: 1}
+	for name, call := range map[string]func() error{
+		"change": func() error {
+			_, err := lc.ChangeDocument(ctx, connect.NewRequest(&pb.ChangeDocumentRequest{Workspace: dir, Document: "doc-1"}))
+			return err
+		},
+		"complete": func() error {
+			_, err := lc.Complete(ctx, connect.NewRequest(&pb.CompleteRequest{Workspace: dir, Document: "doc-1", Position: pos}))
+			return err
+		},
+		"hover": func() error {
+			_, err := lc.Hover(ctx, connect.NewRequest(&pb.HoverRequest{Workspace: dir, Document: "doc-1", Position: pos}))
+			return err
+		},
+		"definition": func() error {
+			_, err := lc.Definition(ctx, connect.NewRequest(&pb.DefinitionRequest{Workspace: dir, Document: "doc-1", Position: pos}))
+			return err
+		},
+		"references": func() error {
+			_, err := lc.References(ctx, connect.NewRequest(&pb.ReferencesRequest{Workspace: dir, Document: "doc-1", Position: pos}))
+			return err
+		},
+		"restart": func() error {
+			_, err := lc.RestartLanguageServer(ctx, connect.NewRequest(&pb.RestartLanguageServerRequest{Workspace: dir, Language: "go"}))
+			return err
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, info := errorReason(t, call())
+			assert.Equal(t, "SERVER_FAILED", info.Reason, "no language servers in this workspace")
+		})
+	}
+	_, err = lc.CloseDocument(ctx, connect.NewRequest(&pb.CloseDocumentRequest{Workspace: dir, Document: "doc-1"}))
+	assert.Error(t, err)
+
+	// Watching with no servers ends at once: nothing will ever come.
+	stream, err := lc.WatchDiagnostics(ctx, connect.NewRequest(&pb.WatchDiagnosticsRequest{Workspace: dir, Client: "w"}))
+	require.NoError(t, err)
+	assert.False(t, stream.Receive())
+	assert.NoError(t, stream.Err())
+	stream.Close()
+}
+
+// Every call needs a workspace: a relative directory is refused.
+func TestLanguageServiceBadWorkspace(t *testing.T) {
+	_, s := serve(t, fakeGo)
+	lc := languageClient(t, s)
+	ctx := context.Background()
+	const bad = "relative/dir"
+	pos := &pb.TextPosition{Line: 1, Column: 1}
+	for name, call := range map[string]func() error{
+		"open": func() error {
+			_, err := lc.OpenDocument(ctx, connect.NewRequest(&pb.OpenDocumentRequest{Workspace: bad}))
+			return err
+		},
+		"change": func() error {
+			_, err := lc.ChangeDocument(ctx, connect.NewRequest(&pb.ChangeDocumentRequest{Workspace: bad}))
+			return err
+		},
+		"close": func() error {
+			_, err := lc.CloseDocument(ctx, connect.NewRequest(&pb.CloseDocumentRequest{Workspace: bad}))
+			return err
+		},
+		"keep": func() error {
+			_, err := lc.KeepDocuments(ctx, connect.NewRequest(&pb.KeepDocumentsRequest{Workspace: bad}))
+			return err
+		},
+		"complete": func() error {
+			_, err := lc.Complete(ctx, connect.NewRequest(&pb.CompleteRequest{Workspace: bad, Position: pos}))
+			return err
+		},
+		"hover": func() error {
+			_, err := lc.Hover(ctx, connect.NewRequest(&pb.HoverRequest{Workspace: bad, Position: pos}))
+			return err
+		},
+		"definition": func() error {
+			_, err := lc.Definition(ctx, connect.NewRequest(&pb.DefinitionRequest{Workspace: bad, Position: pos}))
+			return err
+		},
+		"references": func() error {
+			_, err := lc.References(ctx, connect.NewRequest(&pb.ReferencesRequest{Workspace: bad, Position: pos}))
+			return err
+		},
+		"status": func() error {
+			_, err := lc.GetLanguageStatus(ctx, connect.NewRequest(&pb.GetLanguageStatusRequest{Workspace: bad}))
+			return err
+		},
+		"restart": func() error {
+			_, err := lc.RestartLanguageServer(ctx, connect.NewRequest(&pb.RestartLanguageServerRequest{Workspace: bad}))
+			return err
+		},
+		"watch": func() error {
+			stream, err := lc.WatchDiagnostics(ctx, connect.NewRequest(&pb.WatchDiagnosticsRequest{Workspace: bad}))
+			if err != nil {
+				return err
+			}
+			defer stream.Close()
+			stream.Receive()
+			return stream.Err()
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			assert.Error(t, call())
+		})
+	}
+}
+
+// The engine's errors become reasons the editor can act on.
+func TestLanguageErrors(t *testing.T) {
+	for _, tc := range []struct {
+		err    error
+		code   connect.Code
+		reason string
+	}{
+		{engine.ErrUnknownDocument, connect.CodeNotFound, "UNKNOWN_DOCUMENT"},
+		{engine.ErrStaleDocument, connect.CodeAborted, "STALE"},
+		{engine.ErrUntrusted, connect.CodeFailedPrecondition, "UNTRUSTED"},
+		{fmt.Errorf("x: %w", engine.ErrNoLanguageServer), connect.CodeFailedPrecondition, "NO_SERVER"},
+		{&engine.ServerNotInstalledError{Command: "gopls"}, connect.CodeFailedPrecondition, "SERVER_MISSING"},
+		{engine.ErrBadPath, connect.CodeInvalidArgument, "BAD_PATH"},
+		{errors.New("broken pipe"), connect.CodeUnavailable, "SERVER_FAILED"},
+	} {
+		t.Run(tc.reason, func(t *testing.T) {
+			code, info := errorReason(t, languageError(tc.err))
+			assert.Equal(t, tc.code, code)
+			assert.Equal(t, tc.reason, info.Reason)
+		})
+	}
+	assert.Equal(t, connect.CodeCanceled, connect.CodeOf(languageError(context.Canceled)))
+	ce := connect.NewError(connect.CodeInternal, errors.New("already a connect error"))
+	assert.Same(t, ce, languageError(ce))
 }
