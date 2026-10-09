@@ -46,6 +46,18 @@ es_proto_library(
     proto = "//proto/blitz/v1:blitzv1_proto",
 )
 
+# Every Markdown file in the repository, which the visual editor must
+# read and write back unchanged (spec_visual_editor_037 VE-90).
+_markdown = [
+    "//:markdown",
+    "//apps/vscode:markdown",
+    "//docs:markdown",
+    "//pkg/engine:markdown",
+    "//pkg/engine/agents/builtin:markdown",
+    "//pkg/engine/commands:markdown",
+    "//pkg/engine/skills/builtin:markdown",
+]
+
 _inputs = [
     ":srcs",
     ":api_ts",
@@ -76,7 +88,7 @@ vitest_bin.vitest_test(
     size = "small",
     args = ["run"],
     chdir = package_name(),
-    data = _inputs,
+    data = _inputs + _markdown,
 )
 
 # The same tests with coverage of the page's lines and branches, failing
@@ -88,7 +100,7 @@ vitest_bin.vitest_test(
         "--coverage",
     ],
     chdir = package_name(),
-    data = _inputs,
+    data = _inputs + _markdown,
     # As for the page: Vite resolves the sources to their real paths, which
     # the sandbox's symlinks lead outside of, and coverage then matches none.
     # Nor the launcher's file system patches, which keep paths in the

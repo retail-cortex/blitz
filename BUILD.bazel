@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+load("@bazel_lib//lib:copy_to_bin.bzl", "copy_to_bin")
 load("@gazelle//:def.bzl", "gazelle")
 load("@npm//:defs.bzl", "npm_link_all_packages")
 
@@ -152,4 +153,17 @@ alias(
         "@platforms//os:macos": ":build-all-mac",
     }),
     tags = ["manual"],
+)
+
+# The package's Markdown, for the visual editor's round-trip test
+# (//apps/desktop/web:test, spec_visual_editor_037 VE-90), in the output
+# tree as the page's tests need it.
+copy_to_bin(
+    name = "markdown",
+    srcs = glob([
+        "*.md",
+        ".agents/**/*.md",
+        ".github/**/*.md",
+    ]),
+    visibility = ["//apps/desktop/web:__pkg__"],
 )

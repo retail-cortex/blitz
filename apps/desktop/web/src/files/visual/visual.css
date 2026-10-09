@@ -1,0 +1,118 @@
+/**
+ * Copyright 2026 Retail Cortex
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+
+/*
+ * The visual editor (spec_visual_editor_037 VE-15): the document styled as
+ * Preview styles it (files/document.css, under .preview-markdown .markdown),
+ * and what editing adds drawn in the app's colours. No TipTap or ProseMirror
+ * stylesheet is loaded: these are all the editor's rules.
+ */
+
+.visual-editor { position: relative; }
+.visual-editor .visual-doc { outline: none; white-space: pre-wrap; word-wrap: break-word; caret-color: var(--doc-accent); min-height: 60vh; }
+.visual-editor .visual-doc p:empty::before, .visual-editor .visual-doc p > br.ProseMirror-trailingBreak:only-child { content: ""; }
+.visual-editor .visual-doc ::selection { background: color-mix(in srgb, var(--doc-accent) 24%, transparent); }
+.visual-editor .visual-doc li { position: relative; }
+/* Above document.css's block margins (:is(…, .code-block) weighs three classes) */
+.visual-editor .visual-doc.markdown li > p { margin: 0; }
+.visual-editor .visual-doc a { cursor: text; }
+.visual-editor .visual-doc a:hover { text-decoration: underline; text-underline-offset: 2px; }
+
+/* Inline code, as Preview's .inline-code */
+.visual-editor .visual-doc code:not(.raw-inline) {
+  padding: 0.15em 0.4em;
+  border-radius: var(--md-shape-xs);
+  background: var(--doc-code-bg);
+  font-family: var(--doc-mono);
+  font-size: 0.86em;
+}
+.visual-editor .visual-doc .raw-inline {
+  padding: 0.1em 0.35em;
+  border-radius: var(--md-shape-xs);
+  border: 1px dashed var(--md-outline-variant);
+  font-family: var(--doc-mono);
+  font-size: 0.82em;
+  color: var(--doc-muted);
+}
+
+/* A picture: Preview's box (it's never loaded) */
+.visual-editor .visual-doc .md-image {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 6px;
+  border-radius: var(--md-shape-xs);
+  background: var(--doc-code-bg);
+  color: var(--doc-accent);
+  font-size: 0.92em;
+}
+.visual-editor .visual-doc .md-image::before { content: "\1F5BC"; font-size: 0.9em; }
+
+/* Task lists: TipTap's markup, Preview's look */
+.visual-editor .visual-doc ul[data-type="taskList"] { list-style: none; padding-left: 0.2em; }
+.visual-editor .visual-doc ul[data-type="taskList"] > li { display: flex; gap: 0.5em; align-items: flex-start; }
+.visual-editor .visual-doc ul[data-type="taskList"] > li > label { flex: none; margin-top: 0.22em; user-select: none; }
+.visual-editor .visual-doc ul[data-type="taskList"] > li > label input { margin: 0; accent-color: var(--doc-accent); cursor: pointer; }
+.visual-editor .visual-doc ul[data-type="taskList"] > li > div { flex: 1; min-width: 0; }
+.visual-editor .visual-doc.markdown ul[data-type="taskList"] > li > div > p { margin: 0; }
+.visual-editor .visual-doc ul[data-type="taskList"] > li[data-checked="true"] > div { color: var(--doc-muted); }
+
+/* Tables: Preview's, with the header row in the body */
+.visual-editor .visual-doc table { width: 100%; border-collapse: separate; border-spacing: 0; border: 1px solid var(--doc-rule); border-radius: var(--doc-radius); overflow: hidden; font-size: 0.92em; margin: 0.8em 0; }
+.visual-editor .visual-doc :is(th, td) { padding: 8px 12px; border: 0; border-bottom: 1px solid var(--doc-rule); text-align: left; vertical-align: top; position: relative; }
+.visual-editor .visual-doc tr:last-child > :is(th, td) { border-bottom: 0; }
+.visual-editor .visual-doc th { background: var(--doc-table-head); font-weight: 600; }
+.visual-editor .visual-doc tr:nth-child(odd):not(:first-child) td { background: var(--doc-table-stripe); }
+.visual-editor .visual-doc.markdown :is(th, td) > p { margin: 0; }
+.visual-editor .visual-doc .selectedCell::after { content: ""; position: absolute; inset: 0; background: color-mix(in srgb, var(--doc-accent) 16%, transparent); pointer-events: none; }
+
+/* Code, raw and diagram blocks: Preview's code block, with CodeMirror */
+.visual-editor .visual-doc .visual-code { margin: 0.8em 0; border-radius: var(--doc-radius); background: var(--doc-block-bg); border: 1px solid var(--md-outline-variant); overflow: hidden; white-space: normal; }
+.visual-editor .visual-doc .visual-code .code-head { min-height: 32px; padding: 0 8px 0 14px; gap: 8px; }
+.visual-editor .visual-doc .visual-code .code-head > .t-label:first-child { flex: 1; }
+.visual-editor .visual-doc .visual-code-button { border: 0; background: none; padding: 4px 8px; border-radius: var(--md-shape-full); color: var(--md-on-surface-variant); cursor: pointer; }
+.visual-editor .visual-doc .visual-code-button:hover { background: color-mix(in srgb, var(--md-on-surface) 8%, transparent); }
+.visual-editor .visual-doc .visual-code-editor { font-family: var(--doc-mono); font-size: 13px; }
+.visual-editor .visual-doc .visual-code-editor .cm-content { padding: 12px 0; line-height: 1.55; }
+.visual-editor .visual-doc .visual-code-editor .cm-line { padding: 0 18px; }
+.visual-editor .visual-doc .visual-code-editor.cm-focused { outline: none; }
+.visual-editor .visual-doc .visual-code:focus-within { border-color: var(--doc-accent); }
+.visual-editor .visual-doc .raw-block { border-style: dashed; }
+.visual-editor .visual-doc .raw-block .code-head .t-label { text-transform: uppercase; letter-spacing: 0.06em; }
+.visual-editor .visual-doc .visual-mermaid { background: var(--doc-diagram-bg); }
+/* CodeMirror's theme shows its editor with !important */
+.visual-editor .visual-doc .visual-mermaid:not(.editing) .visual-code-editor { display: none !important; }
+.visual-editor .visual-doc .visual-mermaid .visual-diagram { padding: 20px; border-top: 1px solid var(--md-outline-variant); }
+.visual-editor .visual-doc .visual-mermaid:not(.editing) .visual-diagram { border-top: 0; }
+
+/* Selected nodes, the gap cursor and drops: the accent */
+.visual-editor .visual-doc .ProseMirror-selectednode { outline: 2px solid var(--doc-accent); outline-offset: 2px; border-radius: var(--md-shape-xs); }
+.visual-editor .visual-doc hr.ProseMirror-selectednode { outline-offset: 6px; }
+.visual-editor .visual-doc .ProseMirror-gapcursor { display: none; pointer-events: none; position: absolute; }
+.visual-editor .visual-doc .ProseMirror-gapcursor::after { content: ""; display: block; position: absolute; top: -2px; width: 20px; border-top: 2px solid var(--doc-accent); animation: visual-blink 1.1s steps(2, start) infinite; }
+.visual-editor .visual-doc.ProseMirror-focused .ProseMirror-gapcursor { display: block; }
+@keyframes visual-blink { to { visibility: hidden; } }
+.ProseMirror-dropcursor, .visual-editor .prosemirror-dropcursor-block { background: var(--doc-accent) !important; }
+
+/* The menus: the app's (m3.css .menu), placed by the editor */
+.menu.floating.visual-slash { min-width: 220px; max-height: 320px; overflow-y: auto; padding: 4px 0; }
+.menu.floating.visual-slash .menu-item { width: 100%; border: 0; background: none; text-align: left; }
+.menu.floating.visual-slash .menu-item.on { background: var(--md-secondary-container); color: var(--md-on-secondary-container); }
+.menu.floating.visual-bar { display: flex; align-items: center; gap: 2px; padding: 4px; border-radius: var(--md-shape-full); }
+.menu.floating.visual-bar .visual-bar-gap { width: 1px; height: 20px; margin: 0 4px; background: var(--md-outline-variant); }
+.menu.floating.visual-link { display: flex; align-items: center; gap: 4px; padding: 6px; }
+.menu.floating.visual-link .input { width: 320px; }

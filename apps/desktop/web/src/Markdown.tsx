@@ -69,6 +69,25 @@ async function openPath(dir: string, to: Extract<LinkTarget, { kind: "path" }>) 
   openFile({ dir, path: to.path, line: to.line });
 }
 
+/**
+ * Follows a link in a document (FIL-56): a web or mail link in the system
+ * browser, #heading to it in el's document, a workspace path in the
+ * editor or the tree; fail says why not.
+ */
+export function followLink(href: string, doc: { dir: string; path: string }, el: Element, fail: (message: string) => void) {
+  follow(resolveLink(href, doc.path), href, doc, doc.dir, el, fail);
+}
+
+function follow(to: LinkTarget, href: string, doc: { path: string } | null, dir: string | undefined, el: Element, fail: (message: string) => void) {
+  const failed = (err: unknown) => fail(message(err));
+  if (to.kind === "url") openURL(to.href).catch(failed);
+  else if (to.kind === "anchor") scrollToHeading(el, to.id);
+  else if (to.kind === "outside") fail(t("desktop.markdown.outside", { href }));
+  else if (doc && to.path === doc.path && !to.folder && !to.line) {
+    if (to.anchor) scrollToHeading(el, to.anchor);
+  } else if (dir !== undefined) openPath(dir, to).catch(failed);
+}
+
 function Link({ href, children }: { href?: string; children?: ReactNode }) {
   const snack = useSnackbar();
   const doc = useContext(DocContext);
@@ -79,15 +98,9 @@ function Link({ href, children }: { href?: string; children?: ReactNode }) {
   // In the chat, only paths to files the workspace has are links to them.
   if (to.kind === "path" && !doc && !(links?.known.has(to.path) || (to.folder && to.path))) to = { kind: "url", href };
   if (to.kind === "anchor" && !doc) to = { kind: "url", href };
-  const fail = (err: unknown) => snack(message(err), { error: true });
   const onClick = (e: MouseEvent<HTMLAnchorElement>) => {
     e.preventDefault();
-    if (to.kind === "url") openURL(to.href).catch(fail);
-    else if (to.kind === "anchor") scrollToHeading(e.currentTarget, to.id);
-    else if (to.kind === "outside") snack(t("desktop.markdown.outside", { href }), { error: true });
-    else if (doc && to.path === doc.path && !to.folder && !to.line) {
-      if (to.anchor) scrollToHeading(e.currentTarget, to.anchor);
-    } else if (dir !== undefined) openPath(dir, to).catch(fail);
+    follow(to, href, doc, dir, e.currentTarget, (m) => snack(m, { error: true }));
   };
   return (
     <a href={href} title={href} onClick={onClick}>

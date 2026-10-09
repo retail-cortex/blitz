@@ -35,6 +35,7 @@ import {
   lineNumbers,
   rectangularSelection,
   tooltips,
+  type KeyBinding,
 } from "@codemirror/view";
 import { tags } from "@lezer/highlight";
 import { detectIndent } from "./indent";
@@ -213,6 +214,29 @@ export function fileState(text: string, lang: Extension, hooks: EditorHooks, wra
     }),
   ];
   return EditorState.create({ doc: text, extensions });
+}
+
+/**
+ * What a code editor inside a document needs (the visual editor's code
+ * blocks): the file editor's look, keys and completion, without line
+ * numbers, history (the document's undoes it) or search.
+ */
+export function embeddedCode(lang: Extension, keys: KeyBinding[]): Extension {
+  return [
+    highlightSpecialChars(),
+    drawSelection(),
+    EditorState.allowMultipleSelections.of(true),
+    indentOnInput(),
+    syntaxHighlighting(highlightStyle, { fallback: true }),
+    bracketMatching(),
+    closeBrackets(),
+    autocompletion({ activateOnTyping: true }),
+    EditorState.languageData.of(() => [{ autocomplete: completeAnyWord }]),
+    tooltips({ parent: document.body }),
+    keymap.of([...keys, ...closeBracketsKeymap, ...completionKeymap, ...defaultKeymap, indentWithTab]),
+    lang,
+    theme,
+  ];
 }
 
 /** Turns soft wrapping on or off. */

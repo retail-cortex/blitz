@@ -77,6 +77,8 @@ export interface EditorModel {
   check: () => Promise<void>;
   /** A file was renamed or deleted in the shelf. */
   moved: (from: string, to: string | null) => void;
+  /** Replaces a tab's text (the visual editor's Markdown), as an edit. */
+  setText: (path: string, text: string) => void;
   dirtyCount: number;
 }
 
@@ -231,6 +233,31 @@ export function useEditor(dir: string, language?: Omit<LanguageHooks, "open">): 
     [dir, patch],
   );
 
+  // The visual editor's Markdown, as the smallest change to the tab's text,
+  // so the source's history and the dirty dot follow it.
+  const setText = useCallback(
+    (path: string, text: string) => {
+      const s = states.current.get(path);
+      if (!s) return;
+      const cur = s.doc.toString();
+      if (cur === text) return;
+      let start = 0;
+      let curEnd = cur.length;
+      let nextEnd = text.length;
+      while (start < curEnd && start < nextEnd && cur.charCodeAt(start) === text.charCodeAt(start)) start++;
+      while (curEnd > start && nextEnd > start && cur.charCodeAt(curEnd - 1) === text.charCodeAt(nextEnd - 1)) {
+        curEnd--;
+        nextEnd--;
+      }
+      const next = s.update({ changes: { from: start, to: curEnd, insert: text.slice(start, nextEnd) }, userEvent: "input.visual" }).state;
+      states.current.set(path, next);
+      languageSession(dir).change(path, text);
+      const dirty = text !== saved.current.get(path);
+      if (tabsRef.current.find((t) => t.path === path)?.dirty !== dirty) patch(path, { dirty });
+    },
+    [dir, patch],
+  );
+
   return useMemo(
     () => ({
       dir,
@@ -249,8 +276,9 @@ export function useEditor(dir: string, language?: Omit<LanguageHooks, "open">): 
       reload,
       check,
       moved,
+      setText,
       dirtyCount: tabs.filter((t) => t.dirty).length,
     }),
-    [dir, tabs, active, target, wrap, open, close, save, reload, check, moved],
+    [dir, tabs, active, target, wrap, open, close, save, reload, check, moved, setText],
   );
 }

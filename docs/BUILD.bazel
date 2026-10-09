@@ -13,6 +13,7 @@
 # limitations under the License.
 
 load("@bazel_lib//lib:copy_file.bzl", "copy_file")
+load("@bazel_lib//lib:copy_to_bin.bzl", "copy_to_bin")
 load("@rules_hugo//hugo:rules.bzl", "hugo_serve", "hugo_site", "hugo_theme")
 
 # The project's documentation, published to GitHub Pages from main:
@@ -94,4 +95,13 @@ hugo_serve(
     name = "serve",
     dep = [":site"],
     visibility = ["//:__pkg__"],
+)
+
+# The package's Markdown, for the visual editor's round-trip test
+# (//apps/desktop/web:test, spec_visual_editor_037 VE-90), in the output
+# tree as the page's tests need it.
+copy_to_bin(
+    name = "markdown",
+    srcs = glob(["**/*.md"]),
+    visibility = ["//apps/desktop/web:__pkg__"],
 )

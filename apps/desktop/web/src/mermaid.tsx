@@ -109,7 +109,7 @@ async function load(theme: Theme): Promise<Mermaid> {
 }
 
 /** Draws source as SVG in theme's colors; throws what's wrong with it. */
-async function draw(source: string, theme: Theme): Promise<string> {
+export async function drawDiagram(source: string, theme: Theme): Promise<string> {
   const key = `${theme}\0${source}`;
   const hit = cache.get(key);
   if (hit) return hit;
@@ -158,7 +158,7 @@ export function MermaidBlock({ source }: { source: string }) {
     // After the text settles (it streams in, or is being typed), and after
     // a theme change has reached the CSS variables.
     const timer = setTimeout(() => {
-      draw(source, theme).then(
+      drawDiagram(source, theme).then(
         (s) => live && (setSvg(s), setError("")),
         (e: unknown) => live && (setSvg(""), setError(e instanceof Error ? e.message : String(e))),
       );
