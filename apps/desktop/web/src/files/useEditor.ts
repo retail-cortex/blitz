@@ -79,6 +79,8 @@ export interface EditorModel {
   moved: (from: string, to: string | null) => void;
   /** Replaces a tab's text (the visual editor's Markdown), as an edit. */
   setText: (path: string, text: string) => void;
+  /** The language servers' hooks, for the visual editor's code blocks (none: no servers). */
+  language?: LanguageHooks;
   dirtyCount: number;
 }
 
@@ -149,6 +151,19 @@ export function useEditor(dir: string, language?: Omit<LanguageHooks, "open">): 
   );
 
   openRef.current = open;
+
+  const hasServers = !!language;
+  const languageHooks = useMemo<LanguageHooks | undefined>(
+    () =>
+      hasServers
+        ? {
+            open: (p, line, column) => openRef.current(p, line, column),
+            outside: (loc) => hooks.current?.outside(loc),
+            markdown: (md) => hooks.current?.markdown(md) ?? { dom: document.createElement("div"), destroy: () => {} },
+          }
+        : undefined,
+    [hasServers],
+  );
 
   const close = useCallback((path: string) => {
     languageSession(dir).close(path);
@@ -277,8 +292,9 @@ export function useEditor(dir: string, language?: Omit<LanguageHooks, "open">): 
       check,
       moved,
       setText,
+      language: languageHooks,
       dirtyCount: tabs.filter((t) => t.dirty).length,
     }),
-    [dir, tabs, active, target, wrap, open, close, save, reload, check, moved, setText],
+    [dir, tabs, active, target, wrap, open, close, save, reload, check, moved, setText, languageHooks],
   );
 }

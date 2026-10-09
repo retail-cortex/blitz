@@ -22,7 +22,7 @@ import { setTransport } from "../api";
 import { ErrorInfoSchema } from "../gen/blitz/v1/turn_pb";
 import { CompletionItemSchema, LanguageService, ServerState } from "../gen/blitz/v1/language_pb";
 import { create } from "@bufbuild/protobuf";
-import { completionOf, diagnosticsOf, LanguageSession, offsetOf, positionOf, snippetTemplate } from "./language";
+import { completionOf, diagnosticsOf, docKey, LanguageSession, offsetOf, positionOf, snippetTemplate } from "./language";
 
 describe("positions", () => {
   const doc = Text.of(["package main", "", "func Foo() {}"]);
@@ -78,7 +78,7 @@ function fakeService() {
     createRouterTransport(({ service }) => {
       service(LanguageService, {
         openDocument: (r) => {
-          calls.push(`open ${r.path} v${r.version}`);
+          calls.push(`open ${r.path}${r.block ? ` ${r.block.id}${r.block.extension}` : ""} v${r.version}`);
           texts.set("doc-1", r.text);
           return { document: "doc-1", language: "go", state: ServerState.READY };
         },
@@ -170,6 +170,23 @@ describe("a language session", () => {
     expect(s.status("main.go")).toBeUndefined();
     expect(await s.ready("main.go")).toBeUndefined();
     s.close("main.go");
+  });
+
+  it("keeps a Markdown file's code blocks as documents of their own", async () => {
+    const f = fakeService();
+    const s = new LanguageSession("/ws");
+    const block = { extension: ".go", id: "b1" };
+    await s.open("notes.md", "x := 1\n", block);
+    await s.open("notes.md", "y := 2\n", { extension: ".py", id: "b1" }); // the block's language changed
+    expect(f.calls).toEqual(["open notes.md b1.go v1", "open notes.md b1.py v1"]);
+    expect(s.status(docKey("notes.md", block))).toMatchObject({ language: "go" });
+    expect(s.status("notes.md")).toBeUndefined();
+
+    s.moved("notes.md", "docs/notes.md");
+    await vi.waitFor(() => expect(f.calls.filter((c) => c.startsWith("open docs/notes.md"))).toHaveLength(2));
+    expect(s.status(docKey("notes.md", block))).toBeUndefined();
+    s.close(docKey("docs/notes.md", block));
+    s.close(docKey("docs/notes.md", { extension: ".py", id: "b1" }));
   });
 });
 

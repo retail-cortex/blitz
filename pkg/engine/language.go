@@ -16,8 +16,12 @@ package engine
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
+	"fmt"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/retail-cortex/blitz/pkg/engine/lsp"
@@ -95,13 +99,27 @@ func (w *Workspace) languages() (*lsp.Manager, error) {
 	return m, nil
 }
 
+// CodeBlock is a code block opened as a document (spec_visual_editor_037
+// §7): its language as a file extension, and the client's ID for it.
+type CodeBlock struct {
+	Extension string
+	ID        string
+}
+
+// extension is what a code block's extension may be: a dot and a word.
+var extension = regexp.MustCompile(`^\.[A-Za-z0-9+_-]{1,16}$`)
+
 // OpenDocument opens the workspace file p (relative) for client's editor,
-// with its text as the editor has it. In an untrusted workspace the
-// document isn't opened: the state says why.
-func (w *Workspace) OpenDocument(client, p, text string, version int64) (lsp.DocumentInfo, error) {
+// with its text as the editor has it; or, with block, a code block in the
+// Markdown file p, as a file of its own that's never written. In an
+// untrusted workspace the document isn't opened: the state says why.
+func (w *Workspace) OpenDocument(client, p, text string, version int64, block *CodeBlock) (lsp.DocumentInfo, error) {
 	rel, _, err := userPath(p)
 	if err != nil {
 		return lsp.DocumentInfo{}, err
+	}
+	if block != nil && (!extension.MatchString(block.Extension) || block.ID == "") {
+		return lsp.DocumentInfo{}, fmt.Errorf("%w: a code block needs an extension (.go) and an ID", ErrBadPath)
 	}
 	m, err := w.languages()
 	if err != nil {
@@ -109,6 +127,11 @@ func (w *Workspace) OpenDocument(client, p, text string, version int64) (lsp.Doc
 	}
 	if !w.LanguageTrusted() {
 		return lsp.DocumentInfo{State: lsp.StateUntrusted, Detail: ErrUntrusted.Error()}, nil
+	}
+	if block != nil {
+		sum := sha256.Sum256([]byte(client + "\x00" + rel + "\x00" + block.ID))
+		path := lsp.SnippetPath(w.Dir(), hex.EncodeToString(sum[:8]), strings.ToLower(block.Extension))
+		return m.OpenSnippet(client, path, text, version), nil
 	}
 	return m.OpenDocument(client, filepath.Join(w.Dir(), rel), text, version), nil
 }

@@ -179,6 +179,10 @@ func TestLanguageServiceStates(t *testing.T) {
 		_, err = lc.OpenDocument(ctx, connect.NewRequest(&pb.OpenDocumentRequest{Workspace: dir, Client: "w", Path: "../out.go"}))
 		_, info := errorReason(t, err)
 		assert.Equal(t, "BAD_PATH", info.Reason)
+		// A code block needs its language as an extension.
+		_, err = lc.OpenDocument(ctx, connect.NewRequest(&pb.OpenDocumentRequest{Workspace: dir, Client: "w", Path: "notes.md", Block: &pb.CodeBlock{Extension: "go", Id: "b1"}}))
+		_, info = errorReason(t, err)
+		assert.Equal(t, "BAD_PATH", info.Reason)
 	})
 	t.Run("missing", func(t *testing.T) {
 		_, s := serve(t, func(cfg *config.Config) {

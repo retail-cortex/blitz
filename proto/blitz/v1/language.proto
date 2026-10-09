@@ -95,6 +95,20 @@ message OpenDocumentRequest {
   string text = 4;
   // The editor's version of the text (it only grows).
   int64 version = 5;
+  // Set for a code block in the Markdown file at path, rather than the
+  // file itself (spec_visual_editor_037 §7).
+  CodeBlock block = 6;
+}
+
+// A code block opened as a document: the server sees it as a file of its
+// own, in the workspace, that's never written to disk. Go fragments are
+// made whole files first (a package clause, statements inside a
+// function), the positions mapped across.
+message CodeBlock {
+  // Its language, as a file extension (".go").
+  string extension = 1;
+  // An ID the client gives the block, unique in its window.
+  string id = 2;
 }
 
 // Response message for LanguageService.OpenDocument.
@@ -235,7 +249,8 @@ message ReferencesRequest {
 
 // A place in a file, as Definition and References answer.
 message SourceLocation {
-  // Relative to the workspace when inside it, else absolute.
+  // Relative to the workspace when inside it, else absolute; "" for the
+  // code block the request was about.
   string path = 1;
   int32 line = 2;
   int32 column = 3;

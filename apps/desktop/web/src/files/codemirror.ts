@@ -239,7 +239,8 @@ export function embeddedCode(lang: Extension, keys: KeyBinding[]): Extension {
     autocompletion({ activateOnTyping: true }),
     EditorState.languageData.of(() => [{ autocomplete: completeAnyWord }]),
     tooltips({ parent: document.body }),
-    keymap.of([...keys, ...closeBracketsKeymap, ...completionKeymap, ...defaultKeymap, indentWithTab]),
+    // An open completion's keys first: ↑↓ move in it, not out of the block.
+    keymap.of([...completionKeymap, ...keys, ...closeBracketsKeymap, ...defaultKeymap, indentWithTab]),
     lang,
     theme,
   ];

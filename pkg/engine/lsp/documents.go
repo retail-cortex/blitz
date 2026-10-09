@@ -107,6 +107,7 @@ type Document struct {
 	text     string
 	server   *server // the server it's open in (nil: not yet)
 	lastSeen time.Time
+	snippet  bool // a code block (snippet.go), not a file
 }
 
 // DocumentInfo is what opening a document says.
@@ -175,6 +176,17 @@ func (m *Manager) stateOf(language string) (State, error) {
 // OpenDocument opens path (absolute) for client's editor with its text,
 // starting the server in the background when it isn't running.
 func (m *Manager) OpenDocument(client, path, text string, version int64) DocumentInfo {
+	return m.open(client, path, text, version, false)
+}
+
+// OpenSnippet opens a code block as the file path (SnippetPath), which
+// isn't on disk: a Go fragment is made a whole file for the server, and
+// positions are the block's own.
+func (m *Manager) OpenSnippet(client, path, text string, version int64) DocumentInfo {
+	return m.open(client, path, text, version, true)
+}
+
+func (m *Manager) open(client, path, text string, version int64, snippet bool) DocumentInfo {
 	cfg := m.config(path)
 	if cfg == nil {
 		return DocumentInfo{State: StateNone}
@@ -187,7 +199,7 @@ func (m *Manager) OpenDocument(client, path, text string, version int64) Documen
 	}
 	d.next++
 	doc := &Document{ID: "doc-" + strconv.Itoa(d.next), Client: client, Path: path, Language: cfg.Language,
-		Version: version, uri: fileURI(path), text: text, lastSeen: time.Now()}
+		Version: version, uri: fileURI(path), text: text, lastSeen: time.Now(), snippet: snippet}
 	d.byID[doc.ID] = doc
 	evicted := d.evictLocked()
 	if !d.sweeping {
@@ -260,7 +272,7 @@ func (m *Manager) attach(ctx context.Context, doc *Document) error {
 	}
 	fresh := doc.server != s
 	doc.server = s
-	text := doc.text
+	text, _ := serverText(doc)
 	d.mu.Unlock()
 	return s.put(doc.uri, doc.Path, text, fresh)
 }
@@ -443,7 +455,8 @@ func (m *Manager) request(ctx context.Context, id string, version int64, line, c
 	}
 	m.docs.mu.Lock()
 	stale := version != doc.Version
-	text := doc.text
+	text, w := serverText(doc)
+	line += w.prefix
 	m.docs.mu.Unlock()
 	if stale {
 		return nil, nil, nil, ErrStale
@@ -553,25 +566,27 @@ func (m *Manager) Complete(ctx context.Context, id string, version int64, line, 
 		_ = json.Unmarshal(raw, &list.Items) // a bare array
 	}
 	m.docs.mu.Lock()
-	text := doc.text
+	text, w := serverText(doc)
+	lines := strings.Count(doc.text, "\n") + 1
 	m.docs.mu.Unlock()
 	out := CompletionList{Incomplete: list.Incomplete}
-	for _, w := range list.Items {
-		c := Completion{Label: w.Label, Detail: w.Detail, Documentation: hoverText(w.Documentation),
-			InsertText: w.InsertText, Snippet: w.InsertTextFormat == 2, SortText: w.SortText, FilterText: w.FilterText}
-		if w.Kind > 0 && w.Kind < len(completionKinds) {
-			c.Kind = completionKinds[w.Kind]
+	for _, item := range list.Items {
+		c := Completion{Label: item.Label, Detail: item.Detail, Documentation: hoverText(item.Documentation),
+			InsertText: item.InsertText, Snippet: item.InsertTextFormat == 2, SortText: item.SortText, FilterText: item.FilterText}
+		if item.Kind > 0 && item.Kind < len(completionKinds) {
+			c.Kind = completionKinds[item.Kind]
 		}
 		if c.InsertText == "" {
-			c.InsertText = w.Label
+			c.InsertText = item.Label
 		}
-		if w.TextEdit != nil {
-			if e, ok := textEdit(text, *w.TextEdit); ok {
+		if item.TextEdit != nil {
+			if e, ok := textEdit(text, *item.TextEdit); ok && w.shift(&e, lines) {
 				c.Edit = &e
 			}
 		}
-		for _, a := range w.AdditionalTextEdits {
-			if e, ok := textEdit(text, a); ok {
+		for _, a := range item.AdditionalTextEdits {
+			// An edit in what was added (an import above a wrapped block) can't be made.
+			if e, ok := textEdit(text, a); ok && w.shift(&e, lines) {
 				c.AdditionalEdits = append(c.AdditionalEdits, e)
 			}
 		}
@@ -627,7 +642,7 @@ func (m *Manager) DocumentHover(ctx context.Context, id string, version int64, l
 
 // DocumentDefinition is where the symbol at (line, col) is defined.
 func (m *Manager) DocumentDefinition(ctx context.Context, id string, version int64, line, col int) ([]Location, error) {
-	s, _, params, err := m.request(ctx, id, version, line, col)
+	s, doc, params, err := m.request(ctx, id, version, line, col)
 	if err != nil {
 		return nil, err
 	}
@@ -635,12 +650,37 @@ func (m *Manager) DocumentDefinition(ctx context.Context, id string, version int
 	if err := m.call(ctx, s, "textDocument/definition", params, &raw); err != nil {
 		return nil, err
 	}
-	return m.locations(raw), nil
+	return m.inBlock(doc, m.locations(raw)), nil
+}
+
+// inBlock maps the locations in a code block's own file to the block:
+// path "", the line its own; those in what was added are dropped.
+func (m *Manager) inBlock(doc *Document, locs []Location) []Location {
+	if !doc.snippet {
+		return locs
+	}
+	m.docs.mu.Lock()
+	_, w := serverText(doc)
+	lines := strings.Count(doc.text, "\n") + 1
+	m.docs.mu.Unlock()
+	self := m.readable(doc.uri, wirePosition{}).Path
+	var out []Location
+	for _, l := range locs {
+		if l.Path != self {
+			out = append(out, l)
+			continue
+		}
+		l.Path, l.Line = "", l.Line-w.prefix
+		if l.Line >= 1 && l.Line <= lines {
+			out = append(out, l)
+		}
+	}
+	return out
 }
 
 // DocumentReferences are where the symbol at (line, col) is used.
 func (m *Manager) DocumentReferences(ctx context.Context, id string, version int64, line, col int) ([]Location, error) {
-	s, _, params, err := m.request(ctx, id, version, line, col)
+	s, doc, params, err := m.request(ctx, id, version, line, col)
 	if err != nil {
 		return nil, err
 	}
@@ -649,7 +689,7 @@ func (m *Manager) DocumentReferences(ctx context.Context, id string, version int
 	if err := m.call(ctx, s, "textDocument/references", params, &raw); err != nil {
 		return nil, err
 	}
-	return m.locations(raw), nil
+	return m.inBlock(doc, m.locations(raw)), nil
 }
 
 // DocumentDiagnostic is one problem in an editor document.
@@ -748,6 +788,8 @@ func (m *Manager) diagnosticsOf(id string) (DocumentDiagnostics, bool) {
 		return DocumentDiagnostics{}, false
 	}
 	s, uri, version := doc.server, doc.uri, doc.Version
+	_, w := serverText(doc)
+	lines := strings.Count(doc.text, "\n") + 1
 	d.mu.Unlock()
 	s.mu.Lock()
 	pub, ok := s.diags[uri]
@@ -757,14 +799,23 @@ func (m *Manager) diagnosticsOf(id string) (DocumentDiagnostics, bool) {
 		return DocumentDiagnostics{}, false
 	}
 	out := DocumentDiagnostics{Document: id, Version: version, Diagnostics: []DocumentDiagnostic{}}
-	for _, w := range pub.items {
+	for _, item := range pub.items {
 		sev := "error"
-		if w.Severity > 0 && w.Severity < len(severities) {
-			sev = severities[w.Severity]
+		if item.Severity > 0 && item.Severity < len(severities) {
+			sev = severities[item.Severity]
+		}
+		e := TextEdit{Start: charPosition(text, item.Range.Start), End: charPosition(text, item.Range.End)}
+		if !w.shift(&e, lines) {
+			continue // about what was added, not the block
+		}
+		// A fragment's variables are often only shown, not used, and the
+		// packages it calls aren't imported.
+		if w.wrapped && (strings.Contains(item.Message, "declared and not used") || unimported(item.Message, text)) {
+			sev = "hint"
 		}
 		out.Diagnostics = append(out.Diagnostics, DocumentDiagnostic{
-			Start: charPosition(text, w.Range.Start), End: charPosition(text, w.Range.End),
-			Severity: sev, Message: w.Message, Source: w.Source, Code: diagnosticCode(w.Code),
+			Start: e.Start, End: e.End,
+			Severity: sev, Message: item.Message, Source: item.Source, Code: diagnosticCode(item.Code),
 		})
 	}
 	return out, true

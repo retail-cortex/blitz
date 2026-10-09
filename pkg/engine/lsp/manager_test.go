@@ -21,6 +21,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -158,4 +159,74 @@ func startProcess(argv []string) (lsp.Process, error) {
 		return nil, err
 	}
 	return &osProcess{cmd: cmd, in: in, out: out}, nil
+}
+
+// TestGoplsSnippets asks gopls about code blocks (spec_visual_editor_037
+// §7): files that exist only for the server, in the workspace's module, so
+// a block sees the workspace's packages; and a fragment of statements made
+// a whole file. Set BLITZ_TEST_GOPLS=1 with gopls installed.
+func TestGoplsSnippets(t *testing.T) {
+	if os.Getenv("BLITZ_TEST_GOPLS") == "" {
+		t.Skip("set BLITZ_TEST_GOPLS=1 to ask gopls")
+	}
+	dir, _ := filepath.EvalSymlinks(t.TempDir())
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module example.com/demo\n\ngo 1.22\n"), 0o644))
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "greet"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "greet", "greet.go"), []byte("package greet\n\n// Hello greets.\nfunc Hello(name string) string { return \"hi \" + name }\n"), 0o644))
+	launch := func(ctx context.Context, argv []string) (lsp.Process, error) { return startProcess(argv) }
+	m := lsp.NewManager(dir, []lsp.Server{{Language: "go", Command: []string{"gopls"}, Extensions: []string{".go"}}}, launch)
+	defer m.Close()
+	ctx := context.Background()
+
+	// A block with an import of the workspace's own package.
+	text := "import \"example.com/demo/greet\"\n\nfunc main() {\n\tgreet.\n}\n"
+	info := m.OpenSnippet("w", lsp.SnippetPath(dir, "abc", ".go"), text, 1)
+	require.NotEmpty(t, info.ID)
+	var list lsp.CompletionList
+	require.Eventually(t, func() bool {
+		var err error
+		list, err = m.Complete(ctx, info.ID, 1, 4, 8, ".")
+		return err == nil && len(list.Items) > 0
+	}, 60*time.Second, 500*time.Millisecond, "completion in a block")
+	var labels []string
+	for _, c := range list.Items {
+		labels = append(labels, c.Label)
+	}
+	assert.Contains(t, labels, "Hello", "the workspace's package, from a block")
+	_, err := os.Stat(filepath.Join(dir, "blitz-snippets"))
+	assert.ErrorIs(t, err, os.ErrNotExist, "nothing written")
+
+	// A fragment of statements: wrapped, positions the block's own.
+	frag := m.OpenSnippet("w", lsp.SnippetPath(dir, "def", ".go"), "x := 1\ny := undefinedName\nfmt.Println(x, y)\n", 1)
+	got := make(chan lsp.DocumentDiagnostics, 8)
+	wctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	go func() {
+		_ = m.WatchDiagnostics(wctx, "w", func(d lsp.DocumentDiagnostics) error { got <- d; return nil })
+	}()
+	deadline := time.After(60 * time.Second)
+	for {
+		select {
+		case d := <-got:
+			if d.Document != frag.ID || len(d.Diagnostics) == 0 {
+				continue
+			}
+			var undefined *lsp.DocumentDiagnostic
+			severity := map[string]string{}
+			for i, x := range d.Diagnostics {
+				severity[x.Message] = x.Severity
+				if strings.Contains(x.Message, "undefinedName") {
+					undefined = &d.Diagnostics[i]
+				}
+			}
+			require.NotNil(t, undefined)
+			assert.Equal(t, "error", undefined.Severity)
+			assert.Equal(t, "hint", severity["undefined: fmt"], "a fragment's missing import")
+			assert.Equal(t, 2, undefined.Start.Line, "line 2 of the block, not of the wrapped file")
+			assert.Equal(t, 6, undefined.Start.Column)
+			return
+		case <-deadline:
+			t.Fatal("no diagnostics for the fragment")
+		}
+	}
 }

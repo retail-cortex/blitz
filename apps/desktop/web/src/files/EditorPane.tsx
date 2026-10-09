@@ -349,7 +349,7 @@ export function EditorPane({ model, onReveal, onCursor }: { model: EditorModel; 
         {showVisual && tab && previewText !== undefined && (
           <div className="preview preview-markdown visual-host">
             <Suspense fallback={null}>
-              <VisualEditor key={tab.path} dir={model.dir} path={tab.path} text={previewText} onChange={(md) => model.setText(tab.path, md)} onSave={() => void model.save(tab.path)} />
+              <VisualEditor key={tab.path} dir={model.dir} path={tab.path} text={previewText} onChange={(md) => model.setText(tab.path, md)} onSave={() => void model.save(tab.path)} language={model.language} />
             </Suspense>
           </div>
         )}

@@ -29,7 +29,7 @@ func TestOpenDocumentUntrusted(t *testing.T) {
 	w := openProject(t, ws, Options{})
 	defer w.Close()
 	assert.False(t, w.LanguageTrusted())
-	info, err := w.OpenDocument("w", "main.go", "package main\n", 1)
+	info, err := w.OpenDocument("w", "main.go", "package main\n", 1, nil)
 	require.NoError(t, err)
 	assert.Equal(t, LanguageUntrusted, info.State)
 	assert.Empty(t, info.ID)
@@ -37,14 +37,33 @@ func TestOpenDocumentUntrusted(t *testing.T) {
 
 	require.NoError(t, w.TrustProject(w.ProjectSettings().Hash, true))
 	assert.True(t, w.LanguageTrusted())
-	info, err = w.OpenDocument("w", "main.go", "package main\n", 1)
+	info, err = w.OpenDocument("w", "main.go", "package main\n", 1, nil)
 	require.NoError(t, err)
 	assert.NotEqual(t, LanguageUntrusted, info.State)
 	assert.NotEmpty(t, info.ID)
 	require.NoError(t, w.CloseDocument(info.ID))
 
-	_, err = w.OpenDocument("w", "../out.go", "", 1)
+	_, err = w.OpenDocument("w", "../out.go", "", 1, nil)
 	assert.ErrorIs(t, err, ErrBadPath)
+}
+
+// A Markdown file's code block opens as a document of its own; one
+// without a language or an ID is refused.
+func TestOpenCodeBlock(t *testing.T) {
+	ws := projectWorkspace(t)
+	w := openProject(t, ws, Options{})
+	defer w.Close()
+	require.NoError(t, w.TrustProject(w.ProjectSettings().Hash, true))
+	info, err := w.OpenDocument("w", "notes.md", "x := 1\n", 1, &CodeBlock{Extension: ".GO", ID: "b1"})
+	require.NoError(t, err)
+	assert.NotEmpty(t, info.ID)
+	assert.Equal(t, "go", info.Language)
+	require.NoError(t, w.CloseDocument(info.ID))
+
+	for _, block := range []*CodeBlock{{Extension: "go", ID: "b1"}, {Extension: ".go"}, {Extension: "../x", ID: "b1"}} {
+		_, err = w.OpenDocument("w", "notes.md", "", 1, block)
+		assert.ErrorIs(t, err, ErrBadPath)
+	}
 }
 
 // Locations outside the workspace are marked.

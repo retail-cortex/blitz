@@ -18,7 +18,9 @@
 // workspace's documents on the service's LanguageService, and the
 // CodeMirror extension that gives a file completion, problems, hover and
 // go to definition from them. The service shares the agent's servers; a
-// window's documents last while it keeps them (every 30 s).
+// window's documents last while it keeps them (every 30 s). A code block
+// in a Markdown file is a document of its own (§7): keyed by the file's
+// path and the block's ID, its lines are the block's.
 import { snippet, type Completion, type CompletionContext, type CompletionResult } from "@codemirror/autocomplete";
 import { lintGutter, setDiagnostics, type Diagnostic } from "@codemirror/lint";
 import { EditorSelection, EditorState, type Extension, type Text } from "@codemirror/state";
@@ -51,8 +53,21 @@ export interface Problem {
   source: string;
 }
 
+/** A code block in a Markdown file: its language as an extension (".go") and its ID. */
+export interface BlockRef {
+  extension: string;
+  id: string;
+}
+
+/** The session's key for path's document, or for a block in it. */
+export function docKey(path: string, block?: BlockRef): string {
+  return block ? `${path}\u0000${block.id}${block.extension}` : path;
+}
+
 interface Doc {
+  key: string;
   path: string;
+  block?: BlockRef;
   id: string;
   language: string;
   state: ServerState;
@@ -92,21 +107,21 @@ export class LanguageSession {
 
   constructor(readonly dir: string) {}
 
-  /** Calls f when path's problems or server state change. */
-  subscribe(path: string, f: () => void): () => void {
-    let set = this.listeners.get(path);
-    if (!set) this.listeners.set(path, (set = new Set()));
+  /** Calls f when key's problems or server state change. */
+  subscribe(key: string, f: () => void): () => void {
+    let set = this.listeners.get(key);
+    if (!set) this.listeners.set(key, (set = new Set()));
     set.add(f);
     return () => set.delete(f);
   }
 
-  private notify(path: string) {
-    for (const f of this.listeners.get(path) ?? []) f();
+  private notify(key: string) {
+    for (const f of this.listeners.get(key) ?? []) f();
   }
 
-  /** How path's server is, and its problems' counts (undefined: not open). */
-  status(path: string): LanguageStatus | undefined {
-    const d = this.docs.get(path);
+  /** How key's server is, and its problems' counts (undefined: not open). */
+  status(key: string): LanguageStatus | undefined {
+    const d = this.docs.get(key);
     if (!d || d.state === ServerState.NONE) return undefined;
     const list = d.problems?.list ?? [];
     return {
@@ -119,29 +134,30 @@ export class LanguageSession {
     };
   }
 
-  /** path's problems for the text the editor has now (none while older). */
-  problems(path: string): Problem[] | undefined {
-    const d = this.docs.get(path);
+  /** key's problems for the text the editor has now (none while older). */
+  problems(key: string): Problem[] | undefined {
+    const d = this.docs.get(key);
     if (!d?.problems || d.problems.version !== d.version) return undefined;
     return d.problems.list;
   }
 
-  /** Opens path with text, once; later calls only change its text. */
-  open(path: string, text: string): Promise<void> {
-    const d = this.docs.get(path);
+  /** Opens path (or a block in it) with text, once; later calls only change its text. */
+  open(path: string, text: string, block?: BlockRef): Promise<void> {
+    const key = docKey(path, block);
+    const d = this.docs.get(key);
     if (d) {
-      if (d.text !== text) this.change(path, text);
+      if (d.text !== text) this.change(key, text);
       return d.opening ?? Promise.resolve();
     }
-    const doc: Doc = { path, id: "", language: "", state: ServerState.STARTING, detail: "", install: "", text, version: 1, sent: 1 };
-    this.docs.set(path, doc);
+    const doc: Doc = { key, path, block, id: "", language: "", state: ServerState.STARTING, detail: "", install: "", text, version: 1, sent: 1 };
+    this.docs.set(key, doc);
     doc.opening = this.openOnServer(doc);
     return doc.opening;
   }
 
   private async openOnServer(doc: Doc) {
     try {
-      const r = await api.openDocument({ workspace: this.dir, client: clientId, path: doc.path, text: doc.text, version: BigInt(doc.version) });
+      const r = await api.openDocument({ workspace: this.dir, client: clientId, path: doc.path, text: doc.text, version: BigInt(doc.version), block: doc.block });
       Object.assign(doc, { id: r.document, language: r.language, state: r.state, detail: r.detail, install: r.install, sent: doc.version });
     } catch {
       doc.state = ServerState.NONE; // no language service here (an older service, the fake): the editor goes on without
@@ -149,22 +165,22 @@ export class LanguageSession {
     doc.opening = undefined;
     if (doc.id) {
       this.start();
-      if (doc.version !== doc.sent) void this.flush(doc.path);
+      if (doc.version !== doc.sent) void this.flush(doc.key);
       if (doc.state === ServerState.STARTING) this.awaitReady(doc);
     }
-    this.notify(doc.path);
+    this.notify(doc.key);
   }
 
   // A server being started: its state is asked for again until it settles.
   private awaitReady(doc: Doc, tries = 30) {
     setTimeout(async () => {
-      if (this.docs.get(doc.path) !== doc || tries === 0) return;
+      if (this.docs.get(doc.key) !== doc || tries === 0) return;
       try {
         const st = await api.getLanguageStatus({ workspace: this.dir });
         const server = st.servers.find((s) => s.language === doc.language);
         if (server && server.state !== ServerState.STARTING && server.state !== ServerState.IDLE) {
           Object.assign(doc, { state: server.state, detail: server.error, install: server.install });
-          this.notify(doc.path);
+          this.notify(doc.key);
           return;
         }
       } catch {
@@ -175,18 +191,18 @@ export class LanguageSession {
   }
 
   /** The editor's text changed: it goes to the server shortly. */
-  change(path: string, text: string) {
-    const d = this.docs.get(path);
+  change(key: string, text: string) {
+    const d = this.docs.get(key);
     if (!d || d.text === text) return;
     d.text = text;
     d.version++;
     clearTimeout(d.timer);
-    d.timer = setTimeout(() => void this.flush(path), changeDelay);
+    d.timer = setTimeout(() => void this.flush(key), changeDelay);
   }
 
-  /** Sends path's latest text now (before a request about it). */
-  async flush(path: string): Promise<Doc | undefined> {
-    const d = this.docs.get(path);
+  /** Sends key's latest text now (before a request about it). */
+  async flush(key: string): Promise<Doc | undefined> {
+    const d = this.docs.get(key);
     if (!d) return undefined;
     await d.opening;
     clearTimeout(d.timer);
@@ -204,31 +220,32 @@ export class LanguageSession {
   // A document the service closed (the window was away too long): opened
   // again with the text it has now.
   private async reopen(d: Doc) {
-    this.docs.delete(d.path);
-    await this.open(d.path, d.text);
+    this.docs.delete(d.key);
+    await this.open(d.path, d.text, d.block);
   }
 
-  /** The editor closed path. */
-  close(path: string) {
-    const d = this.docs.get(path);
+  /** The editor closed key's document. */
+  close(key: string) {
+    const d = this.docs.get(key);
     if (!d) return;
     clearTimeout(d.timer);
-    this.docs.delete(path);
+    this.docs.delete(key);
     if (d.id) void api.closeDocument({ workspace: this.dir, document: d.id }).catch(() => {});
     if (this.docs.size === 0) this.stop();
   }
 
-  /** Renames an open document's path (moved in the Files shelf). */
+  /** Renames an open document's path, and its blocks' (moved in the Files shelf). */
   moved(from: string, to: string) {
-    const d = this.docs.get(from);
-    if (!d) return;
-    this.close(from);
-    void this.open(to, d.text);
+    for (const d of [...this.docs.values()]) {
+      if (d.path !== from) continue;
+      this.close(d.key);
+      void this.open(to, d.text, d.block);
+    }
   }
 
   /** The document and its version, ready for a request (undefined: no server). */
-  async ready(path: string): Promise<{ id: string; version: bigint } | undefined> {
-    const d = await this.flush(path);
+  async ready(key: string): Promise<{ id: string; version: bigint } | undefined> {
+    const d = await this.flush(key);
     if (!d?.id || (d.state !== ServerState.READY && d.state !== ServerState.STARTING)) return undefined;
     return { id: d.id, version: BigInt(d.version) };
   }
@@ -274,7 +291,7 @@ export class LanguageSession {
               source: x.source,
             })),
           };
-          this.notify(d.path);
+          this.notify(d.key);
         }
       } catch {
         // the stream broke (the service restarted): watch again shortly
@@ -392,15 +409,16 @@ export interface LanguageHooks {
  * step, completion beside the editor's own, problems underlined and in the
  * gutter, hover after 400 ms, and ⌘-click or F12 to a definition.
  */
-export function languageExtension(dir: string, path: string, hooks: LanguageHooks): Extension {
+export function languageExtension(dir: string, path: string, hooks: LanguageHooks, block?: BlockRef): Extension {
   const session = languageSession(dir);
+  const key = docKey(path, block);
 
   const complete = async (ctx: CompletionContext): Promise<CompletionResult | null> => {
     const word = ctx.matchBefore(/[\w$]*/);
     const before = ctx.state.sliceDoc(Math.max(0, ctx.pos - 1), ctx.pos);
     const trigger = ".:>".includes(before) && before !== "" ? before : "";
     if (!ctx.explicit && !trigger && (!word || word.from === word.to)) return null;
-    const doc = await session.ready(path);
+    const doc = await session.ready(key);
     if (!doc || ctx.aborted) return null;
     const pos = positionOf(ctx.state.doc, ctx.pos);
     try {
@@ -422,7 +440,7 @@ export function languageExtension(dir: string, path: string, hooks: LanguageHook
 
   const hover = hoverTooltip(
     async (view, pos) => {
-      const doc = await session.ready(path);
+      const doc = await session.ready(key);
       if (!doc) return null;
       const word = view.state.wordAt(pos);
       try {
@@ -447,14 +465,14 @@ export function languageExtension(dir: string, path: string, hooks: LanguageHook
 
   const goToDefinition = (view: EditorView, pos: number) => {
     void (async () => {
-      const doc = await session.ready(path);
+      const doc = await session.ready(key);
       if (!doc) return;
       try {
         const r = await api.definition({ workspace: dir, document: doc.id, version: doc.version, position: positionOf(view.state.doc, pos) });
         const loc = r.locations[0];
         if (!loc) return;
         if (loc.outside) hooks.outside(loc);
-        else if (loc.path === path) {
+        else if (block ? loc.path === "" : loc.path === path) {
           const at = offsetOf(view.state.doc, loc.line, loc.column);
           view.dispatch({ selection: EditorSelection.cursor(at), effects: EditorView.scrollIntoView(at, { y: "center" }) });
         } else hooks.open(loc.path, loc.line, loc.column);
@@ -469,17 +487,20 @@ export function languageExtension(dir: string, path: string, hooks: LanguageHook
   // back to the view, for the file it shows.
   const sync = ViewPlugin.define((view) => {
     const show = () => {
-      const problems = session.problems(path);
+      const problems = session.problems(key);
       if (problems) view.dispatch(setDiagnostics(view.state, diagnosticsOf(view.state.doc, problems)));
     };
-    void session.open(path, view.state.doc.toString());
-    const off = session.subscribe(path, () => queueMicrotask(show));
+    void session.open(path, view.state.doc.toString(), block);
+    const off = session.subscribe(key, () => queueMicrotask(show));
     queueMicrotask(show); // what came while another file was shown
     return {
       update(u: ViewUpdate) {
-        if (u.docChanged) session.change(path, u.state.doc.toString());
+        if (u.docChanged) session.change(key, u.state.doc.toString());
       },
-      destroy: off,
+      destroy: () => {
+        off();
+        if (block) session.close(key); // a block's document is its view's; a file's is its tab's
+      },
     };
   });
 
@@ -492,7 +513,7 @@ export function languageExtension(dir: string, path: string, hooks: LanguageHook
     EditorView.domEventHandlers({
       mousedown: (e, view) => {
         // Only with a server: otherwise ⌘-click adds a cursor, as before.
-        if (!(e.metaKey || e.ctrlKey) || e.button !== 0 || session.status(path)?.state !== ServerState.READY) return false;
+        if (!(e.metaKey || e.ctrlKey) || e.button !== 0 || session.status(key)?.state !== ServerState.READY) return false;
         const pos = view.posAtCoords({ x: e.clientX, y: e.clientY });
         if (pos === null) return false;
         e.preventDefault();

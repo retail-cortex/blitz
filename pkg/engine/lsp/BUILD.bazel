@@ -20,6 +20,7 @@ go_library(
         "client.go",
         "documents.go",
         "manager.go",
+        "snippet.go",
     ],
     importpath = "github.com/retail-cortex/blitz/pkg/engine/lsp",
     visibility = ["//pkg/engine:__subpackages__"],
@@ -33,6 +34,7 @@ go_test(
         "lsp_test.go",
         "manager_test.go",
         "server_test.go",
+        "snippet_test.go",
     ],
     embed = [":lsp"],
     deps = [

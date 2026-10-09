@@ -54,7 +54,8 @@ import {
 import { t } from "../../i18n";
 import { followLink } from "../../Markdown";
 import { Button, ContextMenu, Icon, IconButton, useSnackbar, type MenuEntry } from "../../ui/controls";
-import { CodeBlockView } from "./codeBlock";
+import type { LanguageHooks } from "../language";
+import { CodeBlockView, type BlockContext } from "./codeBlock";
 import { fingerprints, parseMarkdown, serializeMarkdown, type Parsed } from "./markdown";
 import { sourceAttr, visualExtensions } from "./schema";
 import "./visual.css";
@@ -64,11 +65,11 @@ const writeDelay = 150;
 
 // The extensions with their views: code and raw blocks as CodeMirror,
 // images as Preview's boxes (never loaded, DSK-24).
-function editorExtensions() {
+function editorExtensions(context?: BlockContext) {
   return visualExtensions().map((ext) => {
     switch (ext.name) {
       case "codeBlock":
-        return ext.extend({ addNodeView: () => ({ node, view, getPos }: NodeViewRendererProps) => new CodeBlockView(node, view, getPos, "code") });
+        return ext.extend({ addNodeView: () => ({ node, view, getPos }: NodeViewRendererProps) => new CodeBlockView(node, view, getPos, "code", context) });
       case "rawBlock":
         return ext.extend({ addNodeView: () => ({ node, view, getPos }: NodeViewRendererProps) => new CodeBlockView(node, view, getPos, "raw") });
       case "image":
@@ -109,10 +110,12 @@ interface Props {
   /** Markdown written back, as the document changes. */
   onChange: (text: string) => void;
   onSave: () => void;
+  /** The language servers' hooks, for code blocks (none: no servers). */
+  language?: LanguageHooks;
 }
 
 /** A Markdown file, edited in its rendered form. */
-export function VisualEditor({ dir, path, text, onChange, onSave }: Props) {
+export function VisualEditor({ dir, path, text, onChange, onSave, language }: Props) {
   const snack = useSnackbar();
   const parsed = useRef<Parsed | null>(null);
   const prints = useRef(new Map<string, string>());
@@ -122,7 +125,27 @@ export function VisualEditor({ dir, path, text, onChange, onSave }: Props) {
   change.current = onChange;
   const save = useRef(onSave);
   save.current = onSave;
-  const extensions = useMemo(editorExtensions, []);
+  // The editor is made once: a block's hooks are read when they're called.
+  const hooks = useRef(language);
+  hooks.current = language;
+  const hasServers = !!language;
+  const extensions = useMemo(
+    () =>
+      editorExtensions(
+        hasServers
+          ? {
+              dir,
+              path,
+              hooks: {
+                open: (p, line, column) => hooks.current?.open(p, line, column),
+                outside: (loc) => hooks.current?.outside(loc),
+                markdown: (md) => hooks.current?.markdown(md) ?? { dom: document.createElement("div"), destroy: () => {} },
+              },
+            }
+          : undefined,
+      ),
+    [dir, path, hasServers],
+  );
   const [slash, setSlash] = useState<SlashState | null>(null);
   const slashRef = useRef<SlashState | null>(null);
   slashRef.current = slash;

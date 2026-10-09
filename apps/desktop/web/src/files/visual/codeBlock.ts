@@ -21,7 +21,9 @@
 // document (undo, a paste over it) reaches it; the document's history
 // undoes both. The cursor moves in and out as if the block were text. A
 // Mermaid block shows its diagram, its source a click away; a raw block
-// (HTML, front matter) is its Markdown, labelled.
+// (HTML, front matter) is its Markdown, labelled. A Go, TypeScript,
+// JavaScript or Python block is on its language server (§7), as a
+// document of its own.
 import { Compartment, EditorState as CMState, type Extension } from "@codemirror/state";
 import { EditorView as CMView, type KeyBinding, type ViewUpdate } from "@codemirror/view";
 import { redo, undo } from "@tiptap/pm/history";
@@ -33,9 +35,31 @@ import { drawDiagram } from "../../mermaid";
 import { indentUnit } from "@codemirror/language";
 import { embeddedCode, languageSupport } from "../codemirror";
 import { detectIndent } from "../indent";
+import { languageExtension, type LanguageHooks } from "../language";
 
 // A language for a fence's info string, as a file name CodeMirror knows.
 const fenceNames: Record<string, string> = { js: "x.js", javascript: "x.js", ts: "x.ts", typescript: "x.ts", tsx: "x.tsx", jsx: "x.jsx", py: "x.py", python: "x.py", go: "x.go", rust: "x.rs", rs: "x.rs", sh: "x.sh", bash: "x.sh", shell: "x.sh", zsh: "x.sh", json: "x.json", yaml: "x.yaml", yml: "x.yaml", toml: "x.toml", html: "x.html", css: "x.css", sql: "x.sql", java: "x.java", c: "x.c", cpp: "x.cpp", "c++": "x.cpp", proto: "x.proto", protobuf: "x.proto", dockerfile: "Dockerfile", md: "x.md", markdown: "x.md", diff: "x.diff", xml: "x.xml", kotlin: "x.kt", swift: "x.swift", ruby: "x.rb", php: "x.php" };
+
+// The languages whose servers a block is on (§7; not Rust: rust-analyzer
+// needs a crate).
+const served = new Set([".go", ".ts", ".tsx", ".js", ".jsx", ".py"]);
+
+/** The extension (".go") of a fence's language when its blocks have a language server, else "". */
+export function servedExtension(lang: string | null | undefined): string {
+  const name = fenceFile(lang);
+  const ext = name.slice(name.lastIndexOf("."));
+  return served.has(ext) ? ext : "";
+}
+
+/** The Markdown file a code block is in, for its language server. */
+export interface BlockContext {
+  dir: string;
+  path: string;
+  hooks: LanguageHooks;
+}
+
+// Each block view's ID, unique in the window.
+let blocks = 0;
 
 /** The file name whose language a fence's info string names. */
 export function fenceFile(lang: string | null | undefined): string {
@@ -97,6 +121,8 @@ export class CodeBlockView implements NodeView {
   private cm: CMView;
   private updating = false;
   private language = new Compartment();
+  private server = new Compartment();
+  private id = `b${++blocks}`;
   private label: HTMLElement;
   private diagram?: HTMLElement;
   private drawTimer?: ReturnType<typeof setTimeout>;
@@ -107,6 +133,7 @@ export class CodeBlockView implements NodeView {
     private view: EditorView,
     private getPos: () => number | undefined,
     private kind: Kind,
+    private context?: BlockContext,
   ) {
     this.dom = document.createElement("div");
     this.dom.className = kind === "raw" ? "code-block visual-code raw-block" : "code-block visual-code";
@@ -164,11 +191,21 @@ export class CodeBlockView implements NodeView {
     ];
     return [
       embeddedCode(this.language.of([]), keys),
+      this.server.of(this.serverExtension()),
       indentUnit.of(this.text().includes("\n\t") || /^go$/i.test(((this.node.attrs.language as string | null) ?? "").trim()) ? "\t" : detectIndent(this.text())),
       CMView.editorAttributes.of({ class: "visual-code-editor" }), // CodeMirror owns its element's classes
       CMView.updateListener.of((u) => this.forward(u)),
       CMState.readOnly.of(!this.view.editable),
     ];
+  }
+
+  // The block on its language's server, when it has one and the document
+  // can be edited.
+  private serverExtension(): Extension {
+    const ext = this.kind === "code" ? servedExtension(this.node.attrs.language as string | null) : "";
+    if (!ext || !this.context || !this.view.editable) return [];
+    const { dir, path, hooks } = this.context;
+    return languageExtension(dir, path, hooks, { extension: ext, id: this.id });
   }
 
   private showLanguage() {
@@ -380,6 +417,7 @@ export class CodeBlockView implements NodeView {
     if (languageChanged) {
       this.showLanguage();
       void this.setLanguage();
+      this.cm.dispatch({ effects: this.server.reconfigure(this.serverExtension()) });
     }
     if (this.updating) return true;
     const next = this.text();

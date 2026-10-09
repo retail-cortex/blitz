@@ -69,7 +69,11 @@ func (h languageService) OpenDocument(ctx context.Context, r req[pb.OpenDocument
 	if err != nil {
 		return nil, err
 	}
-	info, err := w.OpenDocument(r.Msg.Client, r.Msg.Path, r.Msg.Text, r.Msg.Version)
+	var block *engine.CodeBlock
+	if b := r.Msg.Block; b != nil {
+		block = &engine.CodeBlock{Extension: b.Extension, ID: b.Id}
+	}
+	info, err := w.OpenDocument(r.Msg.Client, r.Msg.Path, r.Msg.Text, r.Msg.Version, block)
 	if err != nil {
 		return nil, languageError(err)
 	}
