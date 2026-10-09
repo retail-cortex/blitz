@@ -469,8 +469,40 @@ export function actionGroups(editor: Editor, open: Openers): Action[][] {
 function Toolbar({ editor, open }: { editor: Editor; open: Openers }) {
   useEditorTick(editor);
   const groups = actionGroups(editor, open);
+  const bar = useRef<HTMLDivElement>(null);
+  // Which ends have more to scroll to, for the fades that say so.
+  const [more, setMore] = useState({ start: false, end: false });
+  const measure = useCallback(() => {
+    const el = bar.current;
+    if (!el) return;
+    const next = { start: el.scrollLeft > 1, end: el.scrollLeft + el.clientWidth < el.scrollWidth - 1 };
+    setMore((m) => (m.start === next.start && m.end === next.end ? m : next));
+  }, []);
+  useEffect(() => {
+    const el = bar.current;
+    if (!el) return;
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [measure]);
+  // The table's actions come into view when the cursor enters a table.
+  const inTable = groups.length > 5;
+  useEffect(() => {
+    if (inTable) bar.current?.querySelector(".visual-toolbar-table")?.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "smooth" });
+    measure();
+  }, [inTable, measure]);
   return (
-    <div className="visual-toolbar" role="toolbar" aria-label={t("desktop.visual.toolbar")}>
+    <div
+      ref={bar}
+      onScroll={measure}
+      className={`visual-toolbar${more.start ? " more-start" : ""}${more.end ? " more-end" : ""}`}
+      role="toolbar"
+      aria-label={t("desktop.visual.toolbar")}
+      // A mouse wheel scrolls the one row sideways (trackpads do already).
+      onWheel={(e) => {
+        if (e.deltaX === 0 && e.deltaY !== 0) e.currentTarget.scrollLeft += e.deltaY;
+      }}
+    >
       {groups.map((g, i) => (
         <div key={i} className={i === 5 ? "visual-toolbar-group visual-toolbar-table" : "visual-toolbar-group"}>
           {g.map((x) => (
