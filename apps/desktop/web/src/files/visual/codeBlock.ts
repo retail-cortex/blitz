@@ -43,6 +43,48 @@ export function fenceFile(lang: string | null | undefined): string {
   return fenceNames[l] ?? (l ? `x.${l}` : "x.txt");
 }
 
+// The picker's languages: the fence's name and how people call it.
+function languages(): [string, string][] {
+  return [
+    ["", t("desktop.visual.language_plain")],
+    ["go", "Go"],
+    ["ts", "TypeScript"],
+    ["js", "JavaScript"],
+    ["python", "Python"],
+    ["bash", "Shell"],
+    ["json", "JSON"],
+    ["yaml", "YAML"],
+    ["toml", "TOML"],
+    ["html", "HTML"],
+    ["css", "CSS"],
+    ["sql", "SQL"],
+    ["rust", "Rust"],
+    ["java", "Java"],
+    ["kotlin", "Kotlin"],
+    ["swift", "Swift"],
+    ["c", "C"],
+    ["cpp", "C++"],
+    ["proto", "Protobuf"],
+    ["dockerfile", "Dockerfile"],
+    ["diff", "Diff"],
+    ["md", "Markdown"],
+    ["mermaid", t("desktop.visual.language_mermaid")],
+  ];
+}
+
+/** How the header names a fence's language: the picker's name, else the fence's. */
+function languageName(lang: string | null | undefined): string {
+  const id = (lang ?? "").trim().toLowerCase();
+  return languages().find(([l]) => l === id)?.[1] ?? id;
+}
+
+function isMermaidLang(lang: unknown): boolean {
+  return typeof lang === "string" && lang.trim().toLowerCase() === "mermaid";
+}
+
+// The open picker's close, so one opens at a time.
+let closePicker: (() => void) | undefined;
+
 // The raw blocks the catalogs name; the rest are "other".
 const rawKinds = new Set(["frontmatter", "html", "definition", "footnote"]);
 
@@ -71,8 +113,14 @@ export class CodeBlockView implements NodeView {
     const head = document.createElement("div");
     head.className = "code-head";
     head.contentEditable = "false";
-    this.label = document.createElement("span");
-    this.label.className = "t-label muted";
+    // A code block's language is a button: it opens the picker.
+    this.label = document.createElement(kind === "code" ? "button" : "span");
+    this.label.className = kind === "code" ? "visual-lang t-label" : "t-label muted";
+    if (this.label instanceof HTMLButtonElement) {
+      this.label.type = "button";
+      this.label.title = t("desktop.visual.language");
+      this.label.onclick = () => this.pickLanguage();
+    }
     head.append(this.label);
     if (kind === "code") {
       const copy = document.createElement("button");
@@ -125,7 +173,7 @@ export class CodeBlockView implements NodeView {
 
   private showLanguage() {
     const lang = (this.node.attrs.language as string | null) ?? "";
-    this.label.textContent = this.kind === "raw" ? t(`desktop.visual.raw.${rawKinds.has(this.node.attrs.kind as string) ? this.node.attrs.kind : "other"}`) : lang || "text";
+    this.label.textContent = this.kind === "raw" ? t(`desktop.visual.raw.${rawKinds.has(this.node.attrs.kind as string) ? this.node.attrs.kind : "other"}`) : languageName(lang);
   }
 
   private async setLanguage() {
@@ -237,8 +285,96 @@ export class CodeBlockView implements NodeView {
     return true;
   }
 
+  // The language picker: a search over the usual languages, or any name
+  // typed (the fence's info string). Chosen, it's the block's language.
+  private pickLanguage() {
+    closePicker?.();
+    const at = this.label.getBoundingClientRect();
+    const box = document.createElement("div");
+    box.className = "menu floating visual-lang-picker";
+    box.setAttribute("role", "listbox");
+    box.style.top = `${at.bottom + 4}px`;
+    box.style.left = `${at.left}px`;
+    const input = document.createElement("input");
+    input.className = "input";
+    input.placeholder = t("desktop.visual.language_search");
+    input.setAttribute("aria-label", t("desktop.visual.language"));
+    const list = document.createElement("div");
+    list.className = "visual-lang-list";
+    box.append(input, list);
+    let index = 0;
+    let options: [string, string][] = [];
+    const current = ((this.node.attrs.language as string | null) ?? "").trim().toLowerCase();
+    const render = () => {
+      const q = input.value.trim().toLowerCase();
+      options = languages().filter(([id, name]) => !q || id.includes(q) || name.toLowerCase().includes(q));
+      if (q && !languages().some(([id]) => id === q)) options.push([q, t("desktop.visual.language_use", { name: q })]);
+      index = Math.min(index, Math.max(0, options.length - 1));
+      list.replaceChildren(
+        ...options.map(([id, name], i) => {
+          const b = document.createElement("button");
+          b.type = "button";
+          b.className = `menu-item${i === index ? " on" : ""}${id === current ? " current" : ""}`;
+          b.textContent = name;
+          b.onmousedown = (e) => e.preventDefault();
+          b.onclick = () => choose(id);
+          return b;
+        }),
+      );
+      list.querySelector(".on")?.scrollIntoView({ block: "nearest" });
+    };
+    const close = () => {
+      box.remove();
+      document.removeEventListener("mousedown", outside, true);
+      closePicker = undefined;
+    };
+    const choose = (id: string) => {
+      close();
+      this.setLanguageAttr(id);
+      this.cm.focus();
+    };
+    const outside = (e: MouseEvent) => {
+      if (!box.contains(e.target as Node)) close();
+    };
+    input.oninput = () => {
+      index = 0;
+      render();
+    };
+    input.onkeydown = (e) => {
+      if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+        e.preventDefault();
+        index = (index + (e.key === "ArrowDown" ? 1 : options.length - 1)) % Math.max(1, options.length);
+        render();
+      } else if (e.key === "Enter") {
+        e.preventDefault();
+        if (options[index]) choose(options[index][0]);
+      } else if (e.key === "Escape") {
+        e.preventDefault();
+        close();
+        this.cm.focus();
+      }
+    };
+    document.body.append(box);
+    document.addEventListener("mousedown", outside, true);
+    closePicker = close;
+    index = Math.max(0, languages().findIndex(([id]) => id === current));
+    render();
+    const r = box.getBoundingClientRect();
+    if (r.bottom > window.innerHeight - 8) box.style.top = `${Math.max(8, at.top - 4 - r.height)}px`;
+    if (r.right > window.innerWidth - 8) box.style.left = `${Math.max(8, window.innerWidth - 8 - r.width)}px`;
+    input.focus();
+  }
+
+  private setLanguageAttr(id: string) {
+    const pos = this.getPos();
+    if (pos === undefined) return;
+    this.view.dispatch(this.view.state.tr.setNodeMarkup(pos, undefined, { ...this.node.attrs, language: id || null }));
+  }
+
   update(node: PMNode): boolean {
     if (node.type !== this.node.type) return false;
+    // A diagram and a code block are drawn differently: made again.
+    if (this.kind === "code" && isMermaidLang(node.attrs.language) !== this.isMermaid()) return false;
     const languageChanged = node.attrs.language !== this.node.attrs.language || node.attrs.kind !== this.node.attrs.kind;
     this.node = node;
     if (languageChanged) {
@@ -292,6 +428,7 @@ export class CodeBlockView implements NodeView {
   }
 
   destroy() {
+    closePicker?.();
     clearTimeout(this.drawTimer);
     this.cm.destroy();
   }

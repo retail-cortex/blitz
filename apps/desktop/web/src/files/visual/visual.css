@@ -86,6 +86,10 @@
 .visual-editor .visual-doc .visual-code { margin: 0.8em 0; border-radius: var(--doc-radius); background: var(--doc-block-bg); border: 1px solid var(--md-outline-variant); overflow: hidden; white-space: normal; }
 .visual-editor .visual-doc .visual-code .code-head { min-height: 32px; padding: 0 8px 0 14px; gap: 8px; }
 .visual-editor .visual-doc .visual-code .code-head > .t-label:first-child { flex: 1; }
+.visual-editor .visual-doc .visual-code .code-head > .visual-lang:first-child { flex: none; margin-right: auto; }
+.visual-editor .visual-doc .visual-lang { border: 0; background: none; padding: 4px 8px; margin-left: -8px; border-radius: var(--md-shape-full); color: var(--md-on-surface-variant); cursor: pointer; }
+.visual-editor .visual-doc .visual-lang::after { content: " \25BE"; opacity: 0.7; }
+.visual-editor .visual-doc .visual-lang:hover { background: color-mix(in srgb, var(--md-on-surface) 8%, transparent); }
 .visual-editor .visual-doc .visual-code-button { border: 0; background: none; padding: 4px 8px; border-radius: var(--md-shape-full); color: var(--md-on-surface-variant); cursor: pointer; }
 .visual-editor .visual-doc .visual-code-button:hover { background: color-mix(in srgb, var(--md-on-surface) 8%, transparent); }
 .visual-editor .visual-doc .visual-code-editor { font-family: var(--doc-mono); font-size: 13px; }
@@ -149,6 +153,14 @@
 .menu.floating.visual-slash .menu-item.on { background: var(--md-secondary-container); color: var(--md-on-secondary-container); }
 .menu.floating.visual-bar { display: flex; align-items: center; gap: 2px; padding: 4px; border-radius: var(--md-shape-full); }
 .menu.floating.visual-bar .visual-bar-gap { width: 1px; height: 20px; margin: 0 4px; background: var(--md-outline-variant); }
+/* The code block's language picker */
+.menu.floating.visual-lang-picker { width: 240px; padding: 6px; max-height: none; overflow: visible; }
+.menu.floating.visual-lang-picker .input { width: 100%; margin-bottom: 4px; }
+.visual-lang-list { max-height: 260px; overflow-y: auto; }
+.visual-lang-list .menu-item { width: 100%; border: 0; background: none; text-align: left; }
+.visual-lang-list .menu-item.on { background: var(--md-secondary-container); color: var(--md-on-secondary-container); }
+.visual-lang-list .menu-item.current { font-weight: 600; }
+
 /* The link and image editors: their own width, not a menu's, inside the window */
 .menu.floating.visual-popover { max-width: calc(100vw - 16px); max-height: none; overflow: visible; padding: 8px; }
 .menu.floating.visual-link { display: flex; align-items: center; gap: 4px; width: min(440px, calc(100vw - 16px)); }
