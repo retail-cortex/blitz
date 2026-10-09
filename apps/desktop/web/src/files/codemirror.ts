@@ -47,10 +47,11 @@ const highlightStyle = HighlightStyle.define([
   { tag: [tags.string, tags.special(tags.string), tags.regexp, tags.character], color: "var(--hl-string)" },
   { tag: [tags.number, tags.integer, tags.float], color: "var(--hl-number)" },
   { tag: [tags.comment, tags.lineComment, tags.blockComment, tags.docComment], color: "var(--hl-comment)", fontStyle: "italic" },
-  { tag: [tags.function(tags.variableName), tags.function(tags.propertyName), tags.definition(tags.function(tags.variableName)), tags.heading], color: "var(--hl-title)" },
+  // HTML's and XML's tag names in the title colour, as most editors show them.
+  { tag: [tags.function(tags.variableName), tags.function(tags.propertyName), tags.definition(tags.function(tags.variableName)), tags.heading, tags.tagName], color: "var(--hl-title)" },
   { tag: [tags.typeName, tags.className, tags.namespace, tags.definition(tags.typeName)], color: "var(--hl-type)" },
   { tag: [tags.propertyName, tags.attributeName, tags.labelName], color: "var(--hl-attr)" },
-  { tag: [tags.meta, tags.tagName, tags.processingInstruction, tags.annotation], color: "var(--hl-meta)" },
+  { tag: [tags.meta, tags.angleBracket, tags.processingInstruction, tags.annotation, tags.documentMeta], color: "var(--hl-meta)" },
   { tag: tags.emphasis, fontStyle: "italic" },
   { tag: tags.strong, fontWeight: "600" },
   { tag: tags.link, textDecoration: "underline" },
@@ -157,6 +158,11 @@ export async function languageSupport(path: string): Promise<Extension> {
   const desc = languageOf(path);
   if (!desc) return [];
   try {
+    // Markdown highlights its fenced code too, in the fence's language.
+    if (desc.name === "Markdown") {
+      const { markdown, markdownLanguage } = await import("@codemirror/lang-markdown");
+      return markdown({ base: markdownLanguage, codeLanguages: languages });
+    }
     return await desc.load();
   } catch {
     return []; // plain text rather than no editor
