@@ -87,7 +87,10 @@ export function visualExtensions(): Extensions {
       codeBlock: false, // Blitz's, with CodeMirror (the editor's node view)
       underline: false, // not Markdown
       link: { openOnClick: false, autolink: true, linkOnPaste: true, HTMLAttributes: { rel: null, target: null, class: null } },
-      trailingNode: false,
+      // An empty line after a last block that isn't a paragraph (a code
+      // block, a diagram, a table), to type on; written only once typed in
+      // (markdown.ts skips a new empty paragraph).
+      trailingNode: { node: "paragraph", notAfter: ["paragraph"] },
     }),
     Code.extend({ excludes: "" }),
     CodeBlock.configure({ languageClassPrefix: "language-", defaultLanguage: null }),

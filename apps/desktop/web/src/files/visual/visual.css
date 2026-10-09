@@ -65,7 +65,8 @@
 /* Task lists: TipTap's markup, Preview's look */
 .visual-editor .visual-doc ul[data-type="taskList"] { list-style: none; padding-left: 0.2em; }
 .visual-editor .visual-doc ul[data-type="taskList"] > li { display: flex; gap: 0.5em; align-items: flex-start; }
-.visual-editor .visual-doc ul[data-type="taskList"] > li > label { flex: none; margin-top: 0.22em; user-select: none; }
+/* The box centred on the first line of the item's text: as tall as a line */
+.visual-editor .visual-doc ul[data-type="taskList"] > li > label { flex: none; display: flex; align-items: center; height: calc(1em * var(--doc-line-height)); margin: 0; user-select: none; }
 .visual-editor .visual-doc ul[data-type="taskList"] > li > label input { margin: 0; accent-color: var(--doc-accent); cursor: pointer; }
 .visual-editor .visual-doc ul[data-type="taskList"] > li > div { flex: 1; min-width: 0; }
 .visual-editor .visual-doc.markdown ul[data-type="taskList"] > li > div > p { margin: 0; }

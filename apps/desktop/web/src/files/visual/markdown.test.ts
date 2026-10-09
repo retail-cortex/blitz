@@ -154,6 +154,26 @@ describe("round trip, edited", () => {
   });
 });
 
+describe("the editor's empty last line", () => {
+  // The editor adds an empty paragraph after a last block that isn't one
+  // (TipTap's trailing node), to type on; the file doesn't get it.
+  it.each([["ends with code\n\n```go\nx := 1\n```\n"], ["# Title\n\n| a |\n|---|\n| 1 |\n"], ["```mermaid\nflowchart LR\n  A --> B\n```"]])("%j is written unchanged", (text) => {
+    const parsed = parseMarkdown(text);
+    const doc = PMNode.fromJSON(schema, parsed.doc);
+    const prints = fingerprints(doc);
+    const withLine = doc.copy(doc.content.addToEnd(schema.nodes.paragraph.create()));
+    expect(serializeMarkdown(withLine, parsed, prints)).toBe(text);
+  });
+  it("is written once it's typed in", () => {
+    const text = "```go\nx := 1\n```\n";
+    const parsed = parseMarkdown(text);
+    const doc = PMNode.fromJSON(schema, parsed.doc);
+    const prints = fingerprints(doc);
+    const typed = doc.copy(doc.content.addToEnd(schema.nodes.paragraph.create(null, schema.text("Next"))));
+    expect(serializeMarkdown(typed, parsed, prints)).toBe("```go\nx := 1\n```\n\nNext\n");
+  });
+});
+
 describe("escaping", () => {
   it.each([
     ["a*b", "a\\*b"],
