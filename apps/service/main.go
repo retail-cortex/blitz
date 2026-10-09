@@ -102,6 +102,7 @@ every login.`,
 		if exitWithStdin { // a private service
 			o.ExitWith, o.Private = os.Stdin, true
 		}
+		o.AdoptPath = !o.Private // a private service has its terminal's
 		if promptFile != "" {
 			data, err := os.ReadFile(promptFile)
 			if err != nil {

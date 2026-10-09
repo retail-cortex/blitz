@@ -30,6 +30,7 @@ import (
 	"github.com/retail-cortex/blitz/pkg/engine"
 	"github.com/retail-cortex/blitz/pkg/engine/workers"
 	"github.com/retail-cortex/blitz/pkg/observability"
+	"github.com/retail-cortex/blitz/pkg/shellpath"
 	"github.com/retail-cortex/blitz/pkg/socket"
 )
 
@@ -60,6 +61,11 @@ type Options struct {
 	// shared service does; a private one would run them twice, and open
 	// every workspace with an enabled worker, keeping it from the others).
 	Private bool
+	// AdoptPath gives the service the user's login shell's PATH at start:
+	// blitzd's, started by the tray, launchd or systemd with the system's
+	// bare one (spec_service_021 SVC-57). A private service has its
+	// terminal's already, and tests' services keep theirs.
+	AdoptPath bool
 }
 
 // schedules reports whether the service runs the workers' schedules.
@@ -99,6 +105,9 @@ func (r RunOverrides) apply(cfg *config.Config) {
 	}
 }
 
+// adoptUserPath gives the service the login shell's PATH; tests replace it.
+var adoptUserPath = shellpath.AdoptUserPath
+
 // Run serves until ctx is done, then lets turns in progress finish for a
 // few seconds and removes the socket. A service already answering on the
 // socket is an error wrapping socket.ErrRunning.
@@ -109,6 +118,14 @@ func Run(ctx context.Context, o Options) error {
 	cfg, err := config.Load(o.Config)
 	if err != nil {
 		return fmt.Errorf("failed to load configuration: %w", err)
+	}
+	// Started by the tray, launchd or systemd, the service has the system's
+	// bare PATH: the terminal's is the one the user's tools and language
+	// servers are on.
+	if o.AdoptPath {
+		if n := adoptUserPath(); n > 0 {
+			slog.Info("PATH from the login shell", "added", n)
+		}
 	}
 	warn := func(msg string) { slog.Warn(msg) }
 	defer engine.StartObservability(ctx, cfg, o.Version, warn)()

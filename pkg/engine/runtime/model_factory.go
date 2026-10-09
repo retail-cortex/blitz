@@ -18,6 +18,7 @@ import (
 	"cmp"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"iter"
 	"log/slog"
@@ -255,55 +256,76 @@ func vertexPlace(provider, project, location string) (string, string, error) {
 	return project, cmp.Or(location, os.Getenv("GOOGLE_CLOUD_LOCATION"), "global"), nil
 }
 
-// geminiClientConfig is the genai client for Gemini's settings: the Gemini
-// API with an API key, or Vertex AI with Application Default Credentials
-// (auth = "adc"). genai signs requests itself only on an HTTP client of its
-// own; ours (retries, stalls) gets the credentials added here, as genai's
-// UseDefaultCredentials would, with the quota project genai would send.
-// Credentials that can't be found fail here, when the model is built,
-// rather than at the first request.
+// geminiClientConfig is the genai client for Gemini's settings, with one
+// credential, the first there is: an API key (set, from its command, or
+// GEMINI_API_KEY), alone, to the Gemini API; else Google Cloud's
+// credentials, to Vertex AI: Application Default Credentials (a service
+// account's key file, GOOGLE_APPLICATION_CREDENTIALS), else the Google
+// account signed in with gcloud (OAuth), else, with auth = "adc", a Google
+// Cloud machine's.
+// The auth setting doesn't change the order: a key always comes first. An
+// unknown auth is an error. genai signs requests itself only on an HTTP
+// client of its own; ours (retries, stalls) gets the credentials here, on
+// a copy, so no other model's requests carry them. Credentials that can't
+// be found fail here, when the model is built, rather than at the first
+// request.
 func geminiClientConfig(ctx context.Context, g config.GeminiConfig, pol retryPolicy) (*genai.ClientConfig, error) {
 	switch g.Auth {
-	case "", config.AuthAPIKey:
-		cc := pol.geminiConfig(g.APIKey)
-		if g.APIKey == "" && g.APIKeyCommand != "" {
-			k, key, err := commandKeyNow(ctx, g.APIKeyCommand, g.APIKeyTTL)
-			if err != nil {
-				return nil, fmt.Errorf("[llm.gemini] %w", err)
-			}
-			cc.APIKey = key
-			cc.HTTPClient = withKeyCommand(cc.HTTPClient, k, "x-goog-api-key", false)
-		}
-		if cc.APIKey != "" {
-			// The Gemini API refuses a project and location, which are
-			// Vertex AI's (left in the settings when switching from adc).
-			cc.Backend = genai.BackendGeminiAPI
-		} else {
-			cc.Project, cc.Location = g.ProjectID, g.Location
-		}
-		return cc, nil
-	case config.AuthADC, config.AuthOAuth: // a Google account's sign-in is ADC too
-		cc := pol.geminiConfig("")
-		cc.Backend = genai.BackendVertexAI
-		project, location, err := vertexPlace("gemini", g.ProjectID, g.Location)
+	case "", config.AuthAPIKey, config.AuthADC, config.AuthOAuth:
+	default:
+		return nil, fmt.Errorf("unknown [llm.gemini] auth %q (api_key, adc or oauth)", g.Auth)
+	}
+	cc := pol.geminiConfig(g.APIKey)
+	if g.APIKey == "" && g.APIKeyCommand != "" {
+		k, key, err := commandKeyNow(ctx, g.APIKeyCommand, g.APIKeyTTL)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("[llm.gemini] %w", err)
 		}
-		cc.Project, cc.Location = project, location
-		creds, err := googleCredentials()
-		if err != nil {
-			return nil, fmt.Errorf("gemini with Application Default Credentials: %w (sign in with `gcloud auth application-default login` on the machine running Blitz)", err)
-		}
-		if err := httptransport.AddAuthorizationMiddleware(cc.HTTPClient, creds); err != nil {
-			return nil, fmt.Errorf("gemini with Application Default Credentials: %w", err)
-		}
-		cc.Credentials = creds
-		if quota, err := creds.QuotaProjectID(ctx); err == nil && quota != "" {
-			cc.HTTPOptions.Headers = http.Header{"X-Goog-User-Project": []string{quota}}
-		}
+		cc.APIKey = key
+		cc.HTTPClient = withKeyCommand(cc.HTTPClient, k, "x-goog-api-key", false)
+	}
+	if cc.APIKey == "" { // set after the settings were read
+		cc.APIKey = cmp.Or(os.Getenv("GEMINI_API_KEY"), os.Getenv("GOOGLE_API_KEY"))
+	}
+	if cc.APIKey != "" {
+		// The Gemini API refuses a project and location, which are
+		// Vertex AI's (left in the settings when switching from adc).
+		cc.Backend = genai.BackendGeminiAPI
 		return cc, nil
 	}
-	return nil, fmt.Errorf("unknown [llm.gemini] auth %q (api_key or adc)", g.Auth)
+
+	// Google Cloud only when there's a sign of it: a credentials file, or
+	// auth asking (a Google Cloud machine's own are found by asking its
+	// metadata server, which elsewhere only waits).
+	if !g.UsesADC() && config.ADCFile() == "" {
+		return nil, errors.New("gemini needs an API key, or Google Cloud credentials (sign in with `gcloud auth application-default login` on the machine running Blitz, or set [llm.gemini] auth = \"adc\")")
+	}
+	creds, err := googleCredentials()
+	if err != nil {
+		return nil, fmt.Errorf("gemini needs an API key or Google Cloud credentials: %w (set a key, or sign in with `gcloud auth application-default login` on the machine running Blitz)", err)
+	}
+	if g.ProjectID == "" && os.Getenv("GOOGLE_CLOUD_PROJECT") == "" {
+		// A service account's key file names its project.
+		if p, err := creds.ProjectID(ctx); err == nil {
+			g.ProjectID = p
+		}
+	}
+	project, location, err := vertexPlace("gemini", g.ProjectID, g.Location)
+	if err != nil {
+		return nil, err
+	}
+	cc.Backend = genai.BackendVertexAI
+	cc.Project, cc.Location = project, location
+	signed := *cc.HTTPClient // the models' shared client stays unsigned
+	cc.HTTPClient = &signed
+	if err := httptransport.AddAuthorizationMiddleware(cc.HTTPClient, creds); err != nil {
+		return nil, fmt.Errorf("gemini with Google Cloud credentials: %w", err)
+	}
+	cc.Credentials = creds
+	if quota, err := creds.QuotaProjectID(ctx); err == nil && quota != "" {
+		cc.HTTPOptions.Headers = http.Header{"X-Goog-User-Project": []string{quota}}
+	}
+	return cc, nil
 }
 
 // MockLLM provides an in-memory LLM implementation for tests and offline validation.

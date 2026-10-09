@@ -42,7 +42,7 @@ One TOML file, `.env.toml`, loaded through `github.com/rrmcguinness/modenv` (hie
 | | `max_retries` | `3` | `0` disables |
 | | `stall_timeout_seconds` | `600` | |
 | | `fallback_models` | `[]` | `provider/model` or bare model |
-| `[llm.gemini]` | `api_key`, `api_key_command`, `api_key_ttl` (5m), `model`, `auth` (`api_key` or `adc`), `project_id`, `location` | model `gemini-3.8-flash`; `auth` `api_key` | `adc`: [spec_models_015](spec_models_015.md) |
+| `[llm.gemini]` | `api_key`, `api_key_command`, `api_key_ttl` (5m), `model`, `auth` (`api_key`, `adc` or `oauth`; a key, when there is one, comes first: spec_models_015), `project_id`, `location` | model `gemini-3.8-flash`; `auth` `api_key` | `adc`: [spec_models_015](spec_models_015.md) |
 | `[llm.openai]` | `api_key`, `api_key_command`, `api_key_ttl`, `base_url`, `model` | `https://api.openai.com/v1`, `gpt-4o` | shared by `ollama` |
 | `[llm.anthropic]` | `api_key`, `api_key_command`, `api_key_ttl`, `auth` (`api_key`, `oauth` or `adc`), `profile`, `project_id`, `location`, `model`, `base_url`, `fallbacks` | `claude-opus-5`, `default`; `auth` `api_key` | `oauth`, `adc`: [spec_models_015](spec_models_015.md) |
 | `[llm.bedrock]` | `region`, `profile`, `model` | | Claude on Amazon Bedrock ([spec_models_015](spec_models_015.md) §3) |
