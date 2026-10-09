@@ -148,6 +148,11 @@
 .menu.floating.visual-slash .menu-item.on { background: var(--md-secondary-container); color: var(--md-on-secondary-container); }
 .menu.floating.visual-bar { display: flex; align-items: center; gap: 2px; padding: 4px; border-radius: var(--md-shape-full); }
 .menu.floating.visual-bar .visual-bar-gap { width: 1px; height: 20px; margin: 0 4px; background: var(--md-outline-variant); }
-.menu.floating.visual-link { display: flex; align-items: center; gap: 4px; padding: 6px; }
-.menu.floating.visual-link .input { width: 320px; }
-.menu.floating.visual-image .input + .input { width: 200px; }
+/* The link and image editors: their own width, not a menu's, inside the window */
+.menu.floating.visual-popover { max-width: calc(100vw - 16px); max-height: none; overflow: visible; padding: 8px; }
+.menu.floating.visual-link { display: flex; align-items: center; gap: 4px; width: min(440px, calc(100vw - 16px)); }
+.menu.floating.visual-link .input { flex: 1; min-width: 0; }
+.menu.floating.visual-image { display: flex; flex-direction: column; gap: 4px; width: min(400px, calc(100vw - 16px)); padding: 12px; }
+.menu.floating.visual-image .input { width: 100%; }
+.menu.floating.visual-image .input + label { margin-top: 6px; }
+.visual-popover-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px; }

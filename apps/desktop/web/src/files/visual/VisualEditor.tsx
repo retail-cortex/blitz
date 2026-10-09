@@ -53,7 +53,7 @@ import {
 } from "@mdi/js";
 import { t } from "../../i18n";
 import { followLink } from "../../Markdown";
-import { ContextMenu, Icon, IconButton, useSnackbar, type MenuEntry } from "../../ui/controls";
+import { Button, ContextMenu, Icon, IconButton, useSnackbar, type MenuEntry } from "../../ui/controls";
 import { CodeBlockView } from "./codeBlock";
 import { fingerprints, parseMarkdown, serializeMarkdown, type Parsed } from "./markdown";
 import { sourceAttr, visualExtensions } from "./schema";
@@ -228,7 +228,9 @@ export function VisualEditor({ dir, path, text, onChange, onSave }: Props) {
   const slashKeys = (event: KeyboardEvent): boolean => {
     if ((event.metaKey || event.ctrlKey) && !event.shiftKey && !event.altKey) {
       if (event.key === "k" && editor) {
+        // The link, not the app's command palette (⌘K elsewhere).
         event.preventDefault();
+        event.stopPropagation();
         setLinking(linkAt(editor));
         return true;
       }
@@ -526,6 +528,26 @@ function contextItems(editor: Editor, open: Openers): MenuEntry[] {
   return out;
 }
 
+// The link and image editors' popover: at the cursor, inside the window
+// (above the cursor when there's no room below), the focus in its field.
+function Popover({ at, className, children }: { at: { top: number; bottom: number; left: number }; className: string; children: ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    const x = Math.min(0, window.innerWidth - 8 - r.right) + Math.max(0, 8 - r.left);
+    const y = r.bottom > window.innerHeight - 8 ? at.top - 6 - r.height - r.top : 0;
+    el.style.transform = `translate(${x}px, ${y}px)`;
+  });
+  return createPortal(
+    <div ref={ref} className={`menu floating visual-popover ${className}`} style={{ top: at.bottom + 6, left: at.left }}>
+      {children}
+    </div>,
+    document.body,
+  );
+}
+
 // The link editor (VE-10): its address, applied to the selection or the
 // link the cursor is in; removed with Remove.
 
@@ -552,8 +574,8 @@ function LinkEditor({ editor, state, onClose }: { editor: Editor; state: LinkSta
     } else chain.unsetLink().run();
     onClose();
   };
-  return createPortal(
-    <div className="menu floating visual-link" style={{ top: at.bottom + 6, left: at.left }}>
+  return (
+    <Popover at={at} className="visual-link">
       <input
         className="input"
         autoFocus
@@ -584,8 +606,7 @@ function LinkEditor({ editor, state, onClose }: { editor: Editor; state: LinkSta
           }}
         />
       )}
-    </div>,
-    document.body,
+    </Popover>
   );
 }
 
@@ -627,12 +648,30 @@ function ImageEditor({ editor, state, onClose }: { editor: Editor; state: ImageS
       editor.commands.focus();
     }
   };
-  return createPortal(
-    <div className="menu floating visual-link visual-image" style={{ top: at.bottom + 6, left: at.left }}>
-      <input className="input" autoFocus value={src} placeholder={t("desktop.visual.image_placeholder")} aria-label={t("desktop.visual.image_address")} onChange={(e) => setSrc(e.target.value)} onKeyDown={keys} />
-      <input className="input" value={alt} placeholder={t("desktop.visual.image_alt")} aria-label={t("desktop.visual.image_alt")} onChange={(e) => setAlt(e.target.value)} onKeyDown={keys} />
-      <IconButton small icon={mdiImageOutline} label={t("desktop.visual.image_apply")} onClick={apply} />
-    </div>,
-    document.body,
+  return (
+    <Popover at={at} className="visual-image">
+      <label className="t-label-sm muted" htmlFor="visual-image-src">
+        {t("desktop.visual.image_address")}
+      </label>
+      <input id="visual-image-src" className="input" autoFocus value={src} placeholder={t("desktop.visual.image_placeholder")} onChange={(e) => setSrc(e.target.value)} onKeyDown={keys} />
+      <label className="t-label-sm muted" htmlFor="visual-image-alt">
+        {t("desktop.visual.image_alt")}
+      </label>
+      <input id="visual-image-alt" className="input" value={alt} onChange={(e) => setAlt(e.target.value)} onKeyDown={keys} />
+      <div className="visual-popover-actions">
+        <Button
+          small
+          onClick={() => {
+            onClose();
+            editor.commands.focus();
+          }}
+        >
+          {t("desktop.cancel")}
+        </Button>
+        <Button small variant="filled" icon={mdiImageOutline} disabled={!src.trim()} onClick={apply}>
+          {state.pos !== null ? t("desktop.visual.image_update") : t("desktop.visual.image_apply")}
+        </Button>
+      </div>
+    </Popover>
   );
 }
