@@ -71,10 +71,12 @@ describe("round trip, untouched", () => {
     expect(files.length).toBeGreaterThan(100);
   });
 
+  // Coverage's instrumentation on a CI runner takes seconds over the
+  // largest (roadmap.md: 7 s; 0.1 s without).
   it.each(files.map((f) => [repo ? relative(repo, f) : f, f]))("%s", (_name, file) => {
     const text = readFileSync(file, "utf8");
     expect(roundTrip(text)).toBe(text);
-  });
+  }, 30_000);
 
   it.each([[""], ["\n"], ["one line"], ["no newline at the end\n\nsecond"], ["\r\nwindows\r\n\r\nline endings\r\n"]])("%j", (text) => {
     expect(roundTrip(text)).toBe(text);

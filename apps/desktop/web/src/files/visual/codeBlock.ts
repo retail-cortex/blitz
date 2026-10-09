@@ -38,7 +38,7 @@ import { detectIndent } from "../indent";
 import { languageExtension, type LanguageHooks } from "../language";
 
 // A language for a fence's info string, as a file name CodeMirror knows.
-const fenceNames: Record<string, string> = { js: "x.js", javascript: "x.js", ts: "x.ts", typescript: "x.ts", tsx: "x.tsx", jsx: "x.jsx", py: "x.py", python: "x.py", go: "x.go", rust: "x.rs", rs: "x.rs", sh: "x.sh", bash: "x.sh", shell: "x.sh", zsh: "x.sh", json: "x.json", yaml: "x.yaml", yml: "x.yaml", toml: "x.toml", html: "x.html", css: "x.css", sql: "x.sql", java: "x.java", c: "x.c", cpp: "x.cpp", "c++": "x.cpp", proto: "x.proto", protobuf: "x.proto", dockerfile: "Dockerfile", md: "x.md", markdown: "x.md", diff: "x.diff", xml: "x.xml", kotlin: "x.kt", swift: "x.swift", ruby: "x.rb", php: "x.php" };
+const fenceNames: Record<string, string> = { js: "x.js", javascript: "x.js", ts: "x.ts", typescript: "x.ts", tsx: "x.tsx", jsx: "x.jsx", py: "x.py", python: "x.py", go: "x.go", rust: "x.rs", rs: "x.rs", sh: "x.sh", bash: "x.sh", shell: "x.sh", zsh: "x.sh", json: "x.json", yaml: "x.yaml", yml: "x.yaml", toml: "x.toml", html: "x.html", css: "x.css", sql: "x.sql", java: "x.java", c: "x.c", cpp: "x.cpp", "c++": "x.cpp", proto: "x.proto", protobuf: "x.proto", dockerfile: "Dockerfile", md: "x.md", markdown: "x.md", diff: "x.diff", xml: "x.xml", kotlin: "x.kt", swift: "x.swift", ruby: "x.rb", php: "x.php", r: "x.r" };
 
 // The languages whose servers a block is on (§7; not Rust: rust-analyzer
 // needs a crate).
@@ -82,6 +82,7 @@ function languages(): [string, string][] {
     ["html", "HTML"],
     ["css", "CSS"],
     ["sql", "SQL"],
+    ["r", "R"],
     ["rust", "Rust"],
     ["java", "Java"],
     ["kotlin", "Kotlin"],

@@ -106,3 +106,19 @@ func TestGVisorHidesBlockedPaths(t *testing.T) {
 	require.NotContains(t, out, "key.pem", "a blocked folder is visible")
 	require.Contains(t, out, "hello", "an allowed file is hidden")
 }
+
+// A resolv.conf that links outside /etc (systemd-resolved's) is mounted at
+// its target; a plain file, or a link within /etc, needs nothing.
+func TestDNSMounts(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "run", "stub-resolv.conf")
+	require.NoError(t, os.MkdirAll(filepath.Dir(target), 0o755))
+	require.NoError(t, os.WriteFile(target, []byte("nameserver 127.0.0.53\n"), 0o644))
+	link := filepath.Join(dir, "resolv.conf")
+	require.NoError(t, os.Symlink(target, link))
+	real, err := filepath.EvalSymlinks(target)
+	require.NoError(t, err)
+	assert.Equal(t, []sandbox.Mount{{Source: real, Destination: real, Type: sandbox.MountTypeBind, ReadOnly: true}}, dnsMounts(link))
+	assert.Empty(t, dnsMounts(target), "a file")
+	assert.Empty(t, dnsMounts(filepath.Join(dir, "missing")))
+}

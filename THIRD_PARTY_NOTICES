@@ -11,7 +11,7 @@ and packages the programs link; don't edit it by hand.
 Go modules linked into blitz, blitzd and the desktop app
 ========================================================
 
-  Go standard library 1.27.1                                     BSD-3-Clause
+  Go standard library 1.27.2                                     BSD-3-Clause
   cloud.google.com/go v0.123.0                                   Apache-2.0
   cloud.google.com/go/auth v0.23.2                               Apache-2.0
   cloud.google.com/go/auth/oauth2adapt v0.2.8                    Apache-2.0
@@ -144,7 +144,7 @@ Go modules linked into blitz, blitzd and the desktop app
   golang.org/x/crypto v0.57.0                                    BSD-3-Clause
   golang.org/x/exp v0.0.0-20260112195511-716be5621a96            BSD-3-Clause
   golang.org/x/image v0.46.0                                     BSD-3-Clause
-  golang.org/x/net v0.59.0                                       BSD-3-Clause
+  golang.org/x/net v0.60.0                                       BSD-3-Clause
   golang.org/x/oauth2 v0.36.0                                    BSD-3-Clause
   golang.org/x/sync v0.23.0                                      BSD-3-Clause
   golang.org/x/sys v0.48.0                                       BSD-3-Clause
@@ -168,7 +168,7 @@ Go modules linked into blitz, blitzd and the desktop app
   rsc.io/omap v1.2.0                                             BSD-3-Clause
   rsc.io/ordered v1.1.1                                          BSD-3-Clause
 
-Go standard library 1.27.1
+Go standard library 1.27.2
 --------------------------
 
 Copyright 2009 The Go Authors.
@@ -2954,7 +2954,7 @@ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-golang.org/x/net v0.59.0
+golang.org/x/net v0.60.0
 ------------------------
 
 Copyright 2009 The Go Authors.

@@ -208,7 +208,9 @@ export function VisualEditor({ dir, path, text, onChange, onSave, language }: Pr
     if (editor === loadedInto.current && text === written.current) return;
     loadedInto.current = editor;
     const p = parseMarkdown(text);
-    editor.commands.setContent(p.doc, { emitUpdate: false });
+    // Not an edit: ⌘Z never undoes the file away (an empty document, then
+    // written back to disk).
+    editor.chain().setMeta("addToHistory", false).setContent(p.doc, { emitUpdate: false }).run();
     parsed.current = p;
     prints.current = fingerprints(editor.state.doc);
     written.current = text;

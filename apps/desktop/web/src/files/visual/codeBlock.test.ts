@@ -27,6 +27,7 @@ describe("a code block's language", () => {
     ["py", "x.py", ".py"],
     ["python", "x.py", ".py"],
     ["rust", "x.rs", ""], // rust-analyzer needs a crate
+    ["r", "x.r", ""],
     ["mermaid", "x.mermaid", ""],
     ["", "x.txt", ""],
     [null, "x.txt", ""],
