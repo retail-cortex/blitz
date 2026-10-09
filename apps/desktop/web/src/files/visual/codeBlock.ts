@@ -359,7 +359,13 @@ export class CodeBlockView implements NodeView {
           return b;
         }),
       );
-      list.querySelector(".on")?.scrollIntoView({ block: "nearest" });
+      // The list only (scrollIntoView would scroll the page around it too).
+      const on = list.querySelector(".on");
+      if (on) {
+        const r = on.getBoundingClientRect(), l = list.getBoundingClientRect();
+        if (r.top < l.top) list.scrollTop -= l.top - r.top;
+        else if (r.bottom > l.bottom) list.scrollTop += r.bottom - l.bottom;
+      }
     };
     const close = () => {
       box.remove();

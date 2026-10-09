@@ -202,6 +202,25 @@ export const tabKey: KeyBinding = {
   shift: indentLess,
 };
 
+let layer: HTMLElement | undefined;
+
+/**
+ * Where every editor's tooltips go: one element on the page, fixed and of
+ * no size. Each editor puts a box of its own there, with its theme's
+ * classes (and so the editor's 100% height); in the body itself, a
+ * document with many code blocks stacked a window's height for each below
+ * the app, and any focus or scrollIntoView then scrolled the whole window
+ * into that empty space.
+ */
+export function tooltipLayer(): HTMLElement {
+  if (!layer?.isConnected) {
+    layer = document.createElement("div");
+    layer.className = "cm-tooltip-layer";
+    document.body.append(layer);
+  }
+  return layer;
+}
+
 /**
  * A new editor state for a file's text, with its language (languageSupport)
  * and any extra extensions; words completes words from the file too.
@@ -224,7 +243,7 @@ export function fileState(text: string, lang: Extension, hooks: EditorHooks, wra
     autocompletion({ activateOnTyping: true }),
     // Tooltips (completion and its documentation, hover, problems) on the
     // page, so the editor pane's edge doesn't cut them off.
-    tooltips({ parent: document.body }),
+    tooltips({ parent: tooltipLayer() }),
     // Words from the file, beside what the language itself offers.
     words ? EditorState.languageData.of(() => [{ autocomplete: completeAnyWord }]) : [],
     rectangularSelection(),
@@ -271,7 +290,7 @@ export function embeddedCode(lang: Extension, keys: KeyBinding[]): Extension {
     closeBrackets(),
     autocompletion({ activateOnTyping: true }),
     EditorState.languageData.of(() => [{ autocomplete: completeAnyWord }]),
-    tooltips({ parent: document.body }),
+    tooltips({ parent: tooltipLayer() }),
     // An open completion's keys first: ↑↓ move in it, not out of the block.
     keymap.of([...completionKeymap, ...keys, ...closeBracketsKeymap, ...defaultKeymap, tabKey]),
     lang,

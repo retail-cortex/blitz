@@ -29,14 +29,14 @@
 
 /* Shell: the main area fills the window; its top bar is the title bar. */
 .shell { display: flex; flex-direction: column; height: 100%; background: var(--md-surface); }
-.main { position: relative; display: flex; flex-direction: column; flex: 1; min-width: 0; min-height: 0; background: var(--md-surface); overflow: hidden; }
+.main { position: relative; display: flex; flex-direction: column; flex: 1; min-width: 0; min-height: 0; background: var(--md-surface); overflow: hidden; overflow: clip; }
 /* The status bar along the window's foot (DSK-39). */
 .status-bar {
   display: flex; align-items: center; gap: 2px; flex: none; height: 26px; padding: 0 12px; min-width: 0;
   background: var(--md-surface-container); border-top: 1px solid var(--md-outline-variant); color: var(--md-on-surface-variant);
   white-space: nowrap; position: relative; z-index: 5;
 }
-.shell { overflow: hidden; }
+.shell { overflow: hidden; overflow: clip; } /* clip: not even scrolled by code */
 .status-bar .menu-anchor { display: flex; height: 100%; }
 .menu.wide-menu { min-width: 340px; }
 /* The chat history (HistoryMenu): search and filter on top, rows with a
@@ -865,3 +865,7 @@ code.file-link:hover { text-decoration-color: currentColor; }
 .lsp-dot.lsp-starting { background: var(--md-tertiary); }
 .lsp-dot.lsp-missing, .lsp-dot.lsp-failed { background: var(--md-error); }
 .lsp-command { color: var(--md-on-surface-variant); }
+
+/* Every editor's tooltips (codemirror.ts tooltipLayer): fixed and of no
+   size, so the boxes the editors put there never make the page taller. */
+.cm-tooltip-layer { position: fixed; top: 0; left: 0; width: 0; height: 0; overflow: visible; z-index: 500; }

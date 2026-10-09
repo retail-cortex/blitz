@@ -515,7 +515,14 @@ function Toolbar({ editor, open }: { editor: Editor; open: Openers }) {
   // The table's actions come into view when the cursor enters a table.
   const inTable = groups.length > 5;
   useEffect(() => {
-    if (inTable) bar.current?.querySelector(".visual-toolbar-table")?.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "smooth" });
+    // Sideways in the bar only: scrollIntoView would scroll every box
+    // around it too, the window's included.
+    const el = bar.current;
+    const group = el?.querySelector(".visual-toolbar-table");
+    if (inTable && el && group) {
+      const over = group.getBoundingClientRect().right - el.getBoundingClientRect().right;
+      if (over > 0) el.scrollBy({ left: over, behavior: "smooth" });
+    }
     measure();
   }, [inTable, measure]);
   return (
