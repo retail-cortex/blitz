@@ -205,7 +205,9 @@ func (e *ExecEnv) command(ctx context.Context, argv []string) (*guardedCmd, erro
 	return &guardedCmd{Cmd: cmd, childEnd: childEnd, release: release}, nil
 }
 
-// Start starts the command and drops the parent's copy of the child's guard fd.
+// Start starts the command and drops the parent's copy of the child's guard
+// fd. On Windows the process goes into a job of its own, closed (killing
+// what's left in it) when the command is released.
 func (g *guardedCmd) Start() error {
 	err := g.Cmd.Start()
 	if g.childEnd != nil {
@@ -213,8 +215,14 @@ func (g *guardedCmd) Start() error {
 	}
 	if err != nil {
 		g.Release()
+		return err
 	}
-	return err
+	group, guard := inGroup(g.Cmd), g.release
+	g.release = func() {
+		guard()
+		group()
+	}
+	return nil
 }
 
 // Wait waits for the command, then releases the guard, which kills anything

@@ -18,7 +18,9 @@
 import { useEffect, useState } from "react";
 import {
   mdiAlertCircleOutline,
+  mdiAlertOutline,
   mdiCircleMedium,
+  mdiCloseCircleOutline,
   mdiCreationOutline,
   mdiInboxOutline,
   mdiLoading,
@@ -214,6 +216,27 @@ function WorkspaceItems({ dir, onWorkspaceSettings }: { dir: string; onWorkspace
         <span className="sb-item sb-cursor">
           <span>{c.selected > 0 ? t("desktop.status.cursor_selected", { line: c.line, column: c.column, selected: c.selected }) : t("desktop.status.cursor", { line: c.line, column: c.column })}</span>
           {c.language && <span className="sb-low">{c.language}</span>}
+          {(c.errors ?? 0) + (c.warnings ?? 0) > 0 && (
+            <span className="sb-problems" title={t("desktop.status.problems_title", { errors: c.errors ?? 0, warnings: c.warnings ?? 0 })}>
+              {!!c.errors && (
+                <span className="sb-errors">
+                  <Icon path={mdiCloseCircleOutline} size="sm" />
+                  {c.errors}
+                </span>
+              )}
+              {!!c.warnings && (
+                <span className="sb-warnings">
+                  <Icon path={mdiAlertOutline} size="sm" />
+                  {c.warnings}
+                </span>
+              )}
+            </span>
+          )}
+          {c.server && (
+            <span className="sb-low ellipsis sb-server" title={c.server}>
+              {c.server}
+            </span>
+          )}
         </span>
       )}
       {s && (

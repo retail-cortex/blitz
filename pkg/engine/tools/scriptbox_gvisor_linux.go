@@ -129,6 +129,19 @@ func findRunsc() (string, error) {
 	return "", errors.New("runsc not found (set RUNSC_PATH, put it on PATH, or unpack gVisor into ~/.blitz/bin)")
 }
 
+// dnsMounts are what a sandbox with the network needs, besides /etc, to
+// resolve names: /etc/resolv.conf is often a link outside /etc (to
+// systemd-resolved's /run/systemd/resolve/stub-resolv.conf), which the
+// sandbox doesn't have, leaving it no nameserver. The link's target is
+// mounted, read-only, at its own path.
+func dnsMounts(resolv string) []sandbox.Mount {
+	target, err := filepath.EvalSymlinks(resolv)
+	if err != nil || target == resolv || strings.HasPrefix(target, "/etc/") {
+		return nil
+	}
+	return []sandbox.Mount{{Source: target, Destination: target, Type: sandbox.MountTypeBind, ReadOnly: true}}
+}
+
 func (b *gvisorBox) Name() string { return "gvisor" }
 
 func (b *gvisorBox) Run(ctx context.Context, req ScriptRequest) (ScriptResult, error) {
@@ -157,6 +170,7 @@ func (b *gvisorBox) Run(ctx context.Context, req ScriptRequest) (ScriptResult, e
 	network := sandbox.NetworkModeNone
 	if req.Network {
 		network = sandbox.NetworkModeHost
+		mounts = append(mounts, dnsMounts("/etc/resolv.conf")...)
 	}
 	dir := req.Dir
 	if dir == "" {

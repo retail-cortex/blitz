@@ -29,14 +29,14 @@
 
 /* Shell: the main area fills the window; its top bar is the title bar. */
 .shell { display: flex; flex-direction: column; height: 100%; background: var(--md-surface); }
-.main { position: relative; display: flex; flex-direction: column; flex: 1; min-width: 0; min-height: 0; background: var(--md-surface); overflow: hidden; }
+.main { position: relative; display: flex; flex-direction: column; flex: 1; min-width: 0; min-height: 0; background: var(--md-surface); overflow: hidden; overflow: clip; }
 /* The status bar along the window's foot (DSK-39). */
 .status-bar {
   display: flex; align-items: center; gap: 2px; flex: none; height: 26px; padding: 0 12px; min-width: 0;
   background: var(--md-surface-container); border-top: 1px solid var(--md-outline-variant); color: var(--md-on-surface-variant);
   white-space: nowrap; position: relative; z-index: 5;
 }
-.shell { overflow: hidden; }
+.shell { overflow: hidden; overflow: clip; } /* clip: not even scrolled by code */
 .status-bar .menu-anchor { display: flex; height: 100%; }
 .menu.wide-menu { min-width: 340px; }
 /* The chat history (HistoryMenu): search and filter on top, rows with a
@@ -83,6 +83,12 @@
 .sb-meter.high > span { background: var(--md-error); }
 .sb-cost, .sb-cursor { font-variant-numeric: tabular-nums; }
 .sb-cursor { gap: 10px; }
+/* The file's problems and its language server's note (spec_visual_editor_037 VE-35, VE-37). */
+.sb-problems { display: inline-flex; gap: 8px; }
+.sb-errors, .sb-warnings { display: inline-flex; align-items: center; gap: 3px; }
+.sb-errors { color: var(--md-error); }
+.sb-warnings { color: var(--md-warning); }
+.sb-server { max-width: 280px; }
 /* Narrow windows keep the icons and numbers. */
 @media (max-width: 900px) { .status-bar .sb-low { display: none; } .sb-model { max-width: 160px; } }
 @media (max-width: 640px) { .sb-cursor, .sb-ws { display: none; } }
@@ -472,10 +478,10 @@ body.resizing iframe, body.resizing .cm-editor { pointer-events: none; }
 .hljs-string, .hljs-regexp, .hljs-addition, .hljs-template-string { color: var(--hl-string); }
 .hljs-number, .hljs-symbol, .hljs-bullet { color: var(--hl-number); }
 .hljs-comment, .hljs-quote { color: var(--hl-comment); font-style: italic; }
-.hljs-title, .hljs-section, .hljs-function .hljs-title, .hljs-title.function_ { color: var(--hl-title); }
+.hljs-title, .hljs-section, .hljs-function .hljs-title, .hljs-title.function_, .hljs-name { color: var(--hl-title); }
 .hljs-type, .hljs-title.class_, .hljs-class .hljs-title { color: var(--hl-type); }
 .hljs-attr, .hljs-attribute, .hljs-variable, .hljs-template-variable, .hljs-property, .hljs-params { color: var(--hl-attr); }
-.hljs-meta, .hljs-name, .hljs-tag { color: var(--hl-meta); }
+.hljs-meta, .hljs-tag { color: var(--hl-meta); }
 .hljs-emphasis { font-style: italic; }
 .hljs-strong { font-weight: 600; }
 .dl.add .hljs-string, .dl.del .hljs-string { color: inherit; }
@@ -850,3 +856,16 @@ code.file-link:hover { text-decoration-color: currentColor; }
 .signin-progress p { margin: 0; }
 .signin-code { font: 600 24px/32px var(--md-mono); letter-spacing: 3px; padding: 4px 12px; border-radius: var(--md-shape-sm); background: var(--accent-tint); color: var(--on-accent-tint); }
 :root[data-glass="on"] .signin-card { background: var(--glass-strong); }
+
+/* Settings › Workspaces › Language servers (spec_visual_editor_037 VE-45). */
+.lsp-list { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 4px; }
+.lsp-row { display: grid; grid-template-columns: 10px 96px minmax(0, 1fr) minmax(0, 1.4fr) 32px; align-items: center; gap: 10px; min-height: 36px; }
+.lsp-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--md-outline-variant); }
+.lsp-dot.lsp-ready { background: var(--md-primary); }
+.lsp-dot.lsp-starting { background: var(--md-tertiary); }
+.lsp-dot.lsp-missing, .lsp-dot.lsp-failed { background: var(--md-error); }
+.lsp-command { color: var(--md-on-surface-variant); }
+
+/* Every editor's tooltips (codemirror.ts tooltipLayer): fixed and of no
+   size, so the boxes the editors put there never make the page taller. */
+.cm-tooltip-layer { position: fixed; top: 0; left: 0; width: 0; height: 0; overflow: visible; z-index: 500; }

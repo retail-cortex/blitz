@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { openSearchPanel } from "@codemirror/search";
 import { mdiAlertCircleOutline, mdiAt, mdiChevronRight, mdiClose, mdiContentSave, mdiFilePdfBox, mdiLockOutline, mdiMagnify, mdiMessagePlusOutline, mdiWrap } from "@mdi/js";
 import { files } from "../api";
@@ -26,8 +26,12 @@ import { EditorView } from "@codemirror/view";
 import { t, tn } from "../i18n";
 import { Button, Dialog, Icon, IconButton, Segmented, useSnackbar } from "../ui/controls";
 import { Preview } from "./Preview";
+// The visual editor (TipTap) loads with the first Markdown file shown in it.
+const VisualEditor = lazy(() => import("./visual/VisualEditor").then((m) => ({ default: m.VisualEditor })));
 import { defaultView, previewKind, previewOnly, type View } from "./previewKind";
 import type { Cursor } from "../status";
+import { ServerState } from "../gen/blitz/v1/language_pb";
+import { languageSession, type LanguageStatus } from "./language";
 import { goToLine, languageOf, setWrap } from "./codemirror";
 import { fileIcon } from "./icons";
 import type { EditorModel, Tab } from "./useEditor";
@@ -84,6 +88,11 @@ export function EditorPane({ model, onReveal, onCursor }: { model: EditorModel; 
   const snack = useSnackbar();
   const { prefs, theme } = useApp();
   const [exporting, setExporting] = useState(false);
+  // Markdown in advanced mode is edited where it shows (spec_visual_editor_037
+  // VE-01): Visual in Preview's place, except while it prints (Export as
+  // PDF prints the preview) or shows a search hit. MDX keeps Preview.
+  const visual = advanced && kind === "markdown" && !!tab && !/\.mdx$/i.test(tab.path);
+  const showVisual = visual && !!ready && showPreview && !found && !exporting;
   const [replacing, setReplacing] = useState<{ path: string; pdf: string; version: string } | null>(null);
   const exportPdf = async (path: string, pdf: string, version: string) => {
     setExporting(true);
@@ -174,7 +183,16 @@ export function EditorPane({ model, onReveal, onCursor }: { model: EditorModel; 
     if (!path) return cursorTo.current?.(undefined);
     const sel = v.state.selection.main;
     const line = v.state.doc.lineAt(sel.head);
-    cursorTo.current?.({ line: line.number, column: sel.head - line.from + 1, selected: sel.to - sel.from, language: languageOf(path)?.name ?? "" });
+    const ls = languageSession(model.dir).status(path);
+    cursorTo.current?.({
+      line: line.number,
+      column: sel.head - line.from + 1,
+      selected: sel.to - sel.from,
+      language: languageOf(path)?.name ?? "",
+      errors: ls?.errors,
+      warnings: ls?.warnings,
+      server: serverNote(ls),
+    });
   };
 
   // One view, made once; every change is kept as its tab's state.
@@ -215,6 +233,16 @@ export function EditorPane({ model, onReveal, onCursor }: { model: EditorModel; 
     else cursorTo.current?.(undefined);
     // report reads refs.
   }, [state, ready, showPreview, tab?.path]);
+
+  // The file's problems and its server's state, as they change.
+  useEffect(() => {
+    if (!tab || showPreview) return;
+    return languageSession(model.dir).subscribe(tab.path, () => {
+      const v = view.current;
+      if (v && shown.current === tab.path) report(v);
+    });
+    // report reads refs.
+  }, [model.dir, tab?.path, showPreview]);
 
   // Go to a line when asked (a link, Go to file).
   useEffect(() => {
@@ -287,7 +315,7 @@ export function EditorPane({ model, onReveal, onCursor }: { model: EditorModel; 
                 // The view a file opens in comes first: Markdown's preview.
                 kind === "markdown"
                   ? [
-                      { value: "preview", label: t("desktop.files.preview") },
+                      { value: "preview", label: visual ? t("desktop.files.visual") : t("desktop.files.preview") },
                       { value: "source", label: t("desktop.files.source") },
                     ]
                   : [
@@ -318,7 +346,14 @@ export function EditorPane({ model, onReveal, onCursor }: { model: EditorModel; 
         <div className="editor-host" ref={host} hidden={!ready || showPreview} />
         {tab?.loading && <p className="editor-note muted">{t("desktop.checking")}</p>}
         {tab?.error && <p className="editor-note error-text">{tab.error}</p>}
-        {showPreview && tab && <Preview dir={model.dir} path={tab.path} kind={kind} text={previewText} line={atLine ? model.target?.line : undefined} find={found} onFound={model.clearTarget} />}
+        {showVisual && tab && previewText !== undefined && (
+          <div className="preview preview-markdown visual-host">
+            <Suspense fallback={null}>
+              <VisualEditor key={tab.path} dir={model.dir} path={tab.path} text={previewText} onChange={(md) => model.setText(tab.path, md)} onSave={() => void model.save(tab.path)} language={model.language} />
+            </Suspense>
+          </div>
+        )}
+        {showPreview && !showVisual && tab && <Preview dir={model.dir} path={tab.path} kind={kind} text={previewText} line={atLine ? model.target?.line : undefined} find={found} onFound={model.clearTarget} />}
         {!showPreview && tab?.binary && <p className="editor-note muted">{t("desktop.files.binary", { size: formatSize(tab.size) })}</p>}
         {!showPreview && tab?.tooLarge && <p className="editor-note muted">{t("desktop.files.too_large", { size: formatSize(tab.size) })}</p>}
       </div>
@@ -448,4 +483,17 @@ export function formatSize(n: number): string {
   if (n < 1024) return `${n} B`;
   if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} kB`;
   return `${(n / 1024 / 1024).toFixed(1)} MB`;
+}
+
+/** Why a file has no language server's help, for the status bar ("" when it has). */
+function serverNote(ls: LanguageStatus | undefined): string {
+  switch (ls?.state) {
+    case ServerState.MISSING:
+      return t("desktop.files.server_missing", { install: ls.install || ls.detail });
+    case ServerState.FAILED:
+      return t("desktop.files.server_failed", { error: ls.detail });
+    case ServerState.UNTRUSTED:
+      return t("desktop.files.server_untrusted");
+  }
+  return "";
 }

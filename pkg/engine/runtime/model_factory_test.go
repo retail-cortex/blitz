@@ -20,6 +20,8 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -36,6 +38,15 @@ type staticToken string
 
 func (s staticToken) Token(context.Context) (*auth.Token, error) {
 	return &auth.Token{Value: string(s), Type: "Bearer"}, nil
+}
+
+// adcFile names a credentials file, a sign of Google Cloud (its content
+// is fakeADC's to supply).
+func adcFile(t *testing.T) {
+	t.Helper()
+	p := filepath.Join(t.TempDir(), "adc.json")
+	require.NoError(t, os.WriteFile(p, []byte(`{"type":"service_account"}`), 0o600))
+	t.Setenv("GOOGLE_APPLICATION_CREDENTIALS", p)
 }
 
 // fakeADC makes googleCredentials return a fixed token and quota project,
@@ -64,6 +75,7 @@ func TestGeminiClientConfig(t *testing.T) {
 		name     string
 		gemini   config.GeminiConfig
 		env      map[string]string
+		adc      bool
 		backend  genai.Backend
 		apiKey   string
 		project  string
@@ -73,10 +85,23 @@ func TestGeminiClientConfig(t *testing.T) {
 		{name: "an API key", gemini: config.GeminiConfig{APIKey: "AIza"}, backend: genai.BackendGeminiAPI, apiKey: "AIza"},
 		{name: "an API key, said so", gemini: config.GeminiConfig{Auth: config.AuthAPIKey, APIKey: "AIza"}, backend: genai.BackendGeminiAPI, apiKey: "AIza"},
 		{name: "an API key ignores Vertex AI's project", gemini: config.GeminiConfig{APIKey: "AIza", ProjectID: "p", Location: "us-central1"}, backend: genai.BackendGeminiAPI, apiKey: "AIza"},
-		{name: "no key leaves genai to the environment", gemini: config.GeminiConfig{ProjectID: "p"}, backend: genai.BackendUnspecified, project: "p"},
+		{
+			name: "no key: Google Cloud's credentials", gemini: config.GeminiConfig{ProjectID: "p"}, adc: true,
+			backend: genai.BackendVertexAI, project: "p", location: "global",
+		},
+		{name: "no key, no sign of Google Cloud", gemini: config.GeminiConfig{ProjectID: "p"}, err: "gemini needs an API key"},
+		{
+			name: "a key in the environment comes first", gemini: config.GeminiConfig{Auth: config.AuthOAuth, ProjectID: "p"}, adc: true,
+			env: map[string]string{"GEMINI_API_KEY": "AIza-env"}, backend: genai.BackendGeminiAPI, apiKey: "AIza-env",
+		},
+		{
+			name:    "a key comes first, even with auth = adc",
+			gemini:  config.GeminiConfig{Auth: config.AuthADC, APIKey: "AIza", ProjectID: "p", Location: "us-central1"},
+			backend: genai.BackendGeminiAPI, apiKey: "AIza",
+		},
 		{
 			name:    "ADC with a project and location",
-			gemini:  config.GeminiConfig{Auth: config.AuthADC, APIKey: "AIza-ignored", ProjectID: "p", Location: "us-central1"},
+			gemini:  config.GeminiConfig{Auth: config.AuthADC, ProjectID: "p", Location: "us-central1"},
 			backend: genai.BackendVertexAI, project: "p", location: "us-central1",
 		},
 		{
@@ -96,6 +121,13 @@ func TestGeminiClientConfig(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Setenv("GOOGLE_CLOUD_PROJECT", tc.env["GOOGLE_CLOUD_PROJECT"])
 			t.Setenv("GOOGLE_CLOUD_LOCATION", "")
+			t.Setenv("GEMINI_API_KEY", tc.env["GEMINI_API_KEY"])
+			t.Setenv("GOOGLE_API_KEY", "")
+			t.Setenv("GOOGLE_APPLICATION_CREDENTIALS", "")
+			t.Setenv("CLOUDSDK_CONFIG", t.TempDir()) // no gcloud sign-in
+			if tc.adc {
+				adcFile(t)
+			}
 			cc, err := geminiClientConfig(context.Background(), tc.gemini, pol)
 			if tc.err != "" {
 				assert.ErrorContains(t, err, tc.err)
@@ -139,6 +171,49 @@ func TestGeminiADCSignsRequests(t *testing.T) {
 	fakeADC(t, errors.New("could not find default credentials"))
 	_, err = geminiClientConfig(context.Background(), config.GeminiConfig{Auth: config.AuthADC, ProjectID: "p"}, pol)
 	assert.ErrorContains(t, err, "gcloud auth application-default login")
+	adcFile(t)
+	t.Setenv("GEMINI_API_KEY", "")
+	t.Setenv("GOOGLE_API_KEY", "")
+	_, err = geminiClientConfig(context.Background(), config.GeminiConfig{}, pol)
+	assert.ErrorContains(t, err, "gemini needs an API key or Google Cloud credentials")
+}
+
+// Google's credentials sign only the model they were found for: the
+// models' shared HTTP client stays unsigned, so a model with a key (or
+// another provider's) never sends Google's token too.
+func TestGeminiCredentialsStayTheirs(t *testing.T) {
+	pol := retryPolicy{maxRetries: 0, stall: 7 * time.Minute}
+	shared := pol.httpClient()
+	before := shared.Transport
+	fakeADC(t, nil)
+	cc, err := geminiClientConfig(context.Background(), config.GeminiConfig{Auth: config.AuthOAuth, ProjectID: "p"}, pol)
+	require.NoError(t, err)
+	assert.NotSame(t, shared, cc.HTTPClient)
+	assert.Same(t, shared, pol.httpClient())
+	assert.Equal(t, before, shared.Transport, "the shared client isn't signed")
+	keyed, err := geminiClientConfig(context.Background(), config.GeminiConfig{Auth: config.AuthOAuth, APIKey: "AIza"}, pol)
+	require.NoError(t, err)
+	assert.Same(t, shared, keyed.HTTPClient)
+	assert.Nil(t, keyed.Credentials)
+}
+
+// A service account's key file names its project, used when none is set.
+func TestGeminiProjectFromCredentials(t *testing.T) {
+	old := googleCredentials
+	t.Cleanup(func() { googleCredentials = old })
+	googleCredentials = func() (*auth.Credentials, error) {
+		return auth.NewCredentials(&auth.CredentialsOptions{
+			TokenProvider:     staticToken("sa-token"),
+			ProjectIDProvider: auth.CredentialsPropertyFunc(func(context.Context) (string, error) { return "sa-project", nil }),
+		}), nil
+	}
+	t.Setenv("GOOGLE_CLOUD_PROJECT", "")
+	t.Setenv("GEMINI_API_KEY", "")
+	t.Setenv("GOOGLE_API_KEY", "")
+	adcFile(t)
+	cc, err := geminiClientConfig(context.Background(), config.GeminiConfig{}, retryPolicy{stall: time.Minute})
+	require.NoError(t, err)
+	assert.Equal(t, "sa-project", cc.Project)
 }
 
 // buildProviderModel picks the provider's API, or, with none named, the

@@ -7,7 +7,7 @@ weight: 29
 
 | | |
 |---|---|
-| Status | Phase 1 implemented (2026-09-27, on `main`); phases 2 and 3 planned |
+| Status | Phase 1 implemented (2026-09-27, on `main`); phase 2 largely done; phase 3 detailed in [spec_visual_editor_037](spec_visual_editor_037.md) (draft) |
 | Source | `pkg/engine/files.go`, `pkg/engine/tools/userfs.go`, `proto/blitz/v1/file.proto`, `apps/service/internal/server/files.go`, `apps/desktop/unsaved.go`; the page's `src/files/` |
 | Depends on | [spec_workspace_018](spec_workspace_018.md), [spec_service_021](spec_service_021.md), [spec_desktop_024](spec_desktop_024.md), [spec_filetools_006](spec_filetools_006.md) |
 
@@ -28,7 +28,7 @@ The owner's decisions (2026-09-27):
 |---|---|
 | 1 | `FileService`; the Files shelf (tree, git status, hidden toggle, file operations); the editor (tabs, highlighting, word and keyword completion, saving with conflict detection); quick open; paths in the conversation open the editor; the agent told of your edits |
 | 2 | Diffs in the editor (unsaved against disk, against `HEAD`, the agent's changes this session) and in the Changes view, reverting one hunk of the agent's changes; find in files; **Add to chat** (a file or lines as a reference in the composer); badges for files the agent read or changed; image and Markdown previews; reveal in Finder |
-| 3 | `LanguageService` over language servers: completion, hover, go to definition, references, problems (with **Ask Blitz to fix**); installing a missing server; the agent's use of the same |
+| 3 | `LanguageService` over language servers: completion, hover, go to definition, references, problems (with **Ask Blitz to fix**); installing a missing server; the agent's use of the same. Detailed, with the visual Markdown editor, in [spec_visual_editor_037](spec_visual_editor_037.md) |
 
 ## 3. Service: `FileService` (phase 1)
 
@@ -63,7 +63,7 @@ Every request names its workspace (SVC-10) and a path relative to it.
 
 - **FIL-40** CodeMirror 6: tabs (a dot for unsaved changes, middle click or ⌘W closes, asking about unsaved changes), the path as breadcrumbs, line numbers, the active line, bracket matching, folding, search and replace (⌘F), go to line (⌃G), multiple cursors, indentation from the file (tabs or spaces), soft wrap off (a toggle).
 - **FIL-41** Highlighting by file name (`@codemirror/language-data`: Go, TypeScript and JavaScript, Python, Rust, Java, C and C++, JSON, YAML, TOML, Markdown, HTML, CSS, SQL, shell, protobuf, Dockerfile and more), each language's parser loaded when first needed. Colours from the window's theme, light and dark, matching the conversation's code blocks.
-- **FIL-42** Completion without a language server: the language's keywords and snippets where CodeMirror has them, and words from the open files. Phase 3 adds a language server's.
+- **FIL-42** Completion without a language server: the language's keywords and snippets where CodeMirror has them, and words from the open files. Phase 3 adds a language server's ([spec_visual_editor_037](spec_visual_editor_037.md) VE-32).
 - **FIL-43** ⌘S saves (`WriteFile` with the version it loaded). `FILE_CHANGED` asks: **Overwrite**, **Reload** (discard yours), or cancel; phase 2 adds **Compare**.
 - **FIL-44** Binary and too-large files open as a note saying so, with the size. Blocked files open with a bar: "Blitz's agent can't read this file"; read-only roots likewise.
 - **FIL-45** Unsaved changes survive switching workspaces and views; closing a workspace (any way: its menu, the workspace dropdown, its details) or the window with unsaved changes asks first. The page tells the app how many files are unsaved (`SetUnsaved`, in the window's language), and the app's close handler asks with a native dialog.
@@ -84,8 +84,8 @@ Every request names its workspace (SVC-10) and a path relative to it.
 
 ## 8. Phase 3 (outline)
 
-- **FIL-60** `LanguageService`: the service runs a language server per workspace and language (gopls, typescript-language-server, pyright, rust-analyzer, and others by configuration) and answers `Complete`, `Hover`, `Definition`, `References` and a `Diagnostics` stream. The page's transport can't hold a two-way stream, so these are separate calls.
-- **FIL-61** Language servers run the project's code (build files, plugins), so they start only in trusted workspaces (the project's settings trusted, [spec_project_config_031](spec_project_config_031.md)), in the OS sandbox with the workspace writable.
+- **FIL-64** *Was FIL-60, a number §7's git item also had; renumbered 2026-10-08.* `LanguageService`: the service runs a language server per workspace and language (gopls, typescript-language-server, pyright, rust-analyzer, and others by configuration) and answers `Complete`, `Hover`, `Definition`, `References` and a `Diagnostics` stream. The page's transport can't hold a two-way stream, so these are separate calls. Detailed in [spec_visual_editor_037](spec_visual_editor_037.md) §5–§6.
+- **FIL-61** (Detailed in [spec_visual_editor_037](spec_visual_editor_037.md) VE-43.) Language servers run the project's code (build files, plugins), so they start only in trusted workspaces (the project's settings trusted, [spec_project_config_031](spec_project_config_031.md)), in the OS sandbox with the workspace writable.
 - **FIL-62** A missing server: the window offers to install it. Blitz installs into `~/.blitz/tools` (never system-wide) with the language's own tool (`go install gopls@<pinned>`, npm for the TypeScript and Python servers, `rustup component add rust-analyzer`) or a release binary checked against its published checksum, in the OS sandbox with the network allowed, and says what it runs first. If the language's own tool is missing, it says how to get it.
 - **FIL-63** Problems inline and in a list, with **Ask Blitz to fix**. The agent gets tools over the same servers (definitions, references, diagnostics).
 

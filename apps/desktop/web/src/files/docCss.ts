@@ -39,6 +39,7 @@ export const docVariables: [name: string, about: string][] = [
   ["--doc-quote-bg", "block quotes"],
   ["--doc-table-head", "table header row"],
   ["--doc-table-stripe", "every other table row"],
+  ["--doc-table-rule", "the lines between table rows"],
   ["--doc-diagram-bg", "Mermaid diagrams"],
   ["--doc-radius", "corner radius"],
 ];

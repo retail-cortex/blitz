@@ -30,6 +30,11 @@ export interface Cursor {
   selected: number;
   /** The file's language, as CodeMirror names it ("" if none). */
   language: string;
+  /** The file's problems, from its language server (spec_visual_editor_037 VE-35). */
+  errors?: number;
+  warnings?: number;
+  /** Why the file has no language server's help ("" or undefined: it has). */
+  server?: string;
 }
 
 /** A workspace's state for the status bar. */

@@ -53,3 +53,31 @@ func TestFind(t *testing.T) {
 	t.Setenv("SHELL", "")
 	assert.NotEmpty(t, LoginShell())
 }
+
+// The terminal's folders first, in its order; this process's after; each
+// once.
+func TestMerge(t *testing.T) {
+	for _, tc := range []struct {
+		name            string
+		user, own, want []string
+	}{
+		{"the terminal's first", []string{"/nvm/bin", "/usr/bin"}, []string{"/usr/bin", "/bin"}, []string{"/nvm/bin", "/usr/bin", "/bin"}},
+		{"no terminal", nil, []string{"/usr/bin", "/usr/bin", ""}, []string{"/usr/bin"}},
+		{"nothing", nil, nil, nil},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.want, Merge(tc.user, tc.own))
+		})
+	}
+}
+
+// A service started without a terminal takes the login shell's PATH.
+func TestAdoptUserPath(t *testing.T) {
+	shell := filepath.Join(t.TempDir(), "sh")
+	require.NoError(t, os.WriteFile(shell, []byte("#!/bin/sh\nprintf 'BLITZ_PATH=/nvm/bin:/usr/bin\\n'\n"), 0o755))
+	t.Setenv("SHELL", shell)
+	t.Setenv("PATH", "/usr/bin:/bin")
+	assert.Equal(t, 1, AdoptUserPath())
+	assert.Equal(t, "/nvm/bin:/usr/bin:/bin", os.Getenv("PATH"))
+	assert.Equal(t, 0, AdoptUserPath(), "already there")
+}

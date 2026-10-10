@@ -34,7 +34,7 @@ trap 'rm -rf "$tmp"' EXIT
 "$tool" -d "$(dirname "$1")" -o "$tmp" -r=false > /dev/null
 
 # Pages in reading order: the conversation first, then what surrounds it.
-order=(session turn workspace file config worker)
+order=(session turn workspace file language config worker)
 mkdir -p "$out"
 for proto in "$@"; do
   name="$(basename "$proto" .proto)"

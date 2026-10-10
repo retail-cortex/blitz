@@ -17,8 +17,8 @@
 // The editor's CodeMirror setup (spec_files_029 §6): the window's colours,
 // languages loaded when first needed, completion from the language and
 // from the file's words, and the editor's keys.
-import { autocompletion, closeBrackets, closeBracketsKeymap, completeAnyWord, completionKeymap } from "@codemirror/autocomplete";
-import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
+import { acceptCompletion, autocompletion, closeBrackets, closeBracketsKeymap, completeAnyWord, completionKeymap, completionStatus, startCompletion } from "@codemirror/autocomplete";
+import { defaultKeymap, history, historyKeymap, indentLess, indentMore } from "@codemirror/commands";
 import { bracketMatching, foldGutter, foldKeymap, HighlightStyle, indentOnInput, indentUnit, LanguageDescription, syntaxHighlighting } from "@codemirror/language";
 import { languages } from "@codemirror/language-data";
 import { gotoLine, highlightSelectionMatches, search, searchKeymap } from "@codemirror/search";
@@ -34,6 +34,8 @@ import {
   keymap,
   lineNumbers,
   rectangularSelection,
+  tooltips,
+  type KeyBinding,
 } from "@codemirror/view";
 import { tags } from "@lezer/highlight";
 import { detectIndent } from "./indent";
@@ -45,10 +47,11 @@ const highlightStyle = HighlightStyle.define([
   { tag: [tags.string, tags.special(tags.string), tags.regexp, tags.character], color: "var(--hl-string)" },
   { tag: [tags.number, tags.integer, tags.float], color: "var(--hl-number)" },
   { tag: [tags.comment, tags.lineComment, tags.blockComment, tags.docComment], color: "var(--hl-comment)", fontStyle: "italic" },
-  { tag: [tags.function(tags.variableName), tags.function(tags.propertyName), tags.definition(tags.function(tags.variableName)), tags.heading], color: "var(--hl-title)" },
+  // HTML's and XML's tag names in the title colour, as most editors show them.
+  { tag: [tags.function(tags.variableName), tags.function(tags.propertyName), tags.definition(tags.function(tags.variableName)), tags.heading, tags.tagName], color: "var(--hl-title)" },
   { tag: [tags.typeName, tags.className, tags.namespace, tags.definition(tags.typeName)], color: "var(--hl-type)" },
   { tag: [tags.propertyName, tags.attributeName, tags.labelName], color: "var(--hl-attr)" },
-  { tag: [tags.meta, tags.tagName, tags.processingInstruction, tags.annotation], color: "var(--hl-meta)" },
+  { tag: [tags.meta, tags.angleBracket, tags.processingInstruction, tags.annotation, tags.documentMeta], color: "var(--hl-meta)" },
   { tag: tags.emphasis, fontStyle: "italic" },
   { tag: tags.strong, fontWeight: "600" },
   { tag: tags.link, textDecoration: "underline" },
@@ -105,6 +108,35 @@ const theme = EditorView.theme({
   ".cm-tooltip": { backgroundColor: "var(--md-surface-container-high)", color: "var(--md-on-surface)", border: "1px solid var(--md-outline-variant)", borderRadius: "8px" },
   ".cm-tooltip-autocomplete > ul > li[aria-selected]": { backgroundColor: "var(--md-secondary-container)", color: "var(--md-on-secondary-container)" },
   ".cm-foldPlaceholder": { backgroundColor: "var(--md-surface-container-high)", border: "none", color: "var(--md-on-surface-variant)" },
+  // Problems from a language server (spec_visual_editor_037 VE-35), in the
+  // window's colours rather than CodeMirror's.
+  ".cm-lintRange-error": { backgroundImage: "none", textDecoration: "underline wavy var(--md-error)", textDecorationSkipInk: "none", textUnderlineOffset: "3px" },
+  ".cm-lintRange-warning": { backgroundImage: "none", textDecoration: "underline wavy var(--md-warning)", textDecorationSkipInk: "none", textUnderlineOffset: "3px" },
+  ".cm-lintRange-info, .cm-lintRange-hint": { backgroundImage: "none", textDecoration: "underline dotted var(--md-on-surface-variant)", textUnderlineOffset: "3px" },
+  ".cm-tooltip-lint": { padding: "4px 0" },
+  ".cm-diagnostic": { padding: "4px 12px", fontFamily: "var(--md-font)", fontSize: "13px", borderLeft: "3px solid transparent" },
+  ".cm-diagnostic-error": { borderLeftColor: "var(--md-error)" },
+  ".cm-diagnostic-warning": { borderLeftColor: "var(--md-warning)" },
+  ".cm-diagnostic-info, .cm-diagnostic-hint": { borderLeftColor: "var(--md-outline)" },
+  ".cm-diagnosticSource": { color: "var(--md-on-surface-variant)", opacity: 1, fontSize: "12px" },
+  ".cm-gutter-lint": { width: "12px" },
+  ".cm-gutter-lint .cm-gutterElement": { padding: "0 2px" },
+  ".cm-lint-marker": { width: "8px", height: "8px", borderRadius: "50%", content: "none", marginTop: "6px" },
+  ".cm-lint-marker-error": { backgroundColor: "var(--md-error)" },
+  ".cm-lint-marker-warning": { backgroundColor: "var(--md-warning)" },
+  ".cm-lint-marker-info": { backgroundColor: "var(--md-outline)" },
+  // Hover and completion documentation, as Markdown.
+  ".cm-lsp-hover": { maxWidth: "560px", maxHeight: "320px", overflow: "auto", padding: "8px 12px", fontSize: "13px" },
+  ".cm-lsp-hover .markdown > :first-child, .cm-completionInfo .markdown > :first-child": { marginTop: 0 },
+  ".cm-lsp-hover .markdown > :last-child, .cm-completionInfo .markdown > :last-child": { marginBottom: 0 },
+  ".cm-lsp-hover pre, .cm-completionInfo pre": { margin: "4px 0", whiteSpace: "pre-wrap" },
+  // A signature is code, not a code block: no head, no copy button, no card.
+  ".cm-lsp-hover .code-head, .cm-completionInfo .code-head": { display: "none" },
+  ".cm-lsp-hover .code-block, .cm-completionInfo .code-block": { border: "none", background: "none", margin: "0 0 6px", borderRadius: 0 },
+  ".cm-lsp-hover .code-block pre, .cm-completionInfo .code-block pre": { padding: 0, background: "none" },
+  ".cm-lsp-hover hr, .cm-completionInfo hr": { margin: "6px 0" },
+  ".cm-completionInfo": { padding: "8px 12px", maxWidth: "420px", fontSize: "13px" },
+  ".cm-completionDetail": { color: "var(--md-on-surface-variant)", fontStyle: "normal", marginLeft: "8px" },
 });
 
 /** What the editor calls back for. */
@@ -126,10 +158,67 @@ export async function languageSupport(path: string): Promise<Extension> {
   const desc = languageOf(path);
   if (!desc) return [];
   try {
+    // Markdown highlights its fenced code too, in the fence's language.
+    if (desc.name === "Markdown") {
+      const { markdown, markdownLanguage } = await import("@codemirror/lang-markdown");
+      return markdown({ base: markdownLanguage, codeLanguages: languages });
+    }
     return await desc.load();
   } catch {
     return []; // plain text rather than no editor
   }
+}
+
+/** What Tab does at the cursor: indent (at a line's start, after a blank, or over a selection) or complete. */
+export function tabAction(state: EditorState): "indent" | "insert" | "complete" {
+  const sel = state.selection;
+  if (sel.ranges.some((r) => !r.empty)) return "indent";
+  const before = sel.ranges.map((r) => state.sliceDoc(state.doc.lineAt(r.head).from, r.head));
+  if (before.every((b) => b.trim() === "")) return "indent";
+  if (before.every((b) => /\s$/.test(b))) return "insert";
+  return "complete";
+}
+
+/**
+ * Tab: accepts an open completion; indents at a line's start or over a
+ * selection, and inserts an indent after a blank; elsewhere (after a word
+ * or a ".") asks for completions, inserting nothing. Shift-Tab outdents.
+ */
+export const tabKey: KeyBinding = {
+  key: "Tab",
+  run: (view) => {
+    if (completionStatus(view.state) === "active") return acceptCompletion(view);
+    switch (tabAction(view.state)) {
+      case "indent":
+        return indentMore(view);
+      case "insert":
+        view.dispatch(view.state.replaceSelection(view.state.facet(indentUnit)), { scrollIntoView: true, userEvent: "input" });
+        return true;
+      default:
+        startCompletion(view);
+        return true; // never moves focus out of the editor
+    }
+  },
+  shift: indentLess,
+};
+
+let layer: HTMLElement | undefined;
+
+/**
+ * Where every editor's tooltips go: one element on the page, fixed and of
+ * no size. Each editor puts a box of its own there, with its theme's
+ * classes (and so the editor's 100% height); in the body itself, a
+ * document with many code blocks stacked a window's height for each below
+ * the app, and any focus or scrollIntoView then scrolled the whole window
+ * into that empty space.
+ */
+export function tooltipLayer(): HTMLElement {
+  if (!layer?.isConnected) {
+    layer = document.createElement("div");
+    layer.className = "cm-tooltip-layer";
+    document.body.append(layer);
+  }
+  return layer;
 }
 
 /**
@@ -152,6 +241,9 @@ export function fileState(text: string, lang: Extension, hooks: EditorHooks, wra
     bracketMatching(),
     closeBrackets(),
     autocompletion({ activateOnTyping: true }),
+    // Tooltips (completion and its documentation, hover, problems) on the
+    // page, so the editor pane's edge doesn't cut them off.
+    tooltips({ parent: tooltipLayer() }),
     // Words from the file, beside what the language itself offers.
     words ? EditorState.languageData.of(() => [{ autocomplete: completeAnyWord }]) : [],
     rectangularSelection(),
@@ -169,7 +261,7 @@ export function fileState(text: string, lang: Extension, hooks: EditorHooks, wra
       ...historyKeymap,
       ...foldKeymap,
       ...completionKeymap,
-      indentWithTab,
+      tabKey,
     ]),
     lang,
     extra,
@@ -180,6 +272,30 @@ export function fileState(text: string, lang: Extension, hooks: EditorHooks, wra
     }),
   ];
   return EditorState.create({ doc: text, extensions });
+}
+
+/**
+ * What a code editor inside a document needs (the visual editor's code
+ * blocks): the file editor's look, keys and completion, without line
+ * numbers, history (the document's undoes it) or search.
+ */
+export function embeddedCode(lang: Extension, keys: KeyBinding[]): Extension {
+  return [
+    highlightSpecialChars(),
+    drawSelection(),
+    EditorState.allowMultipleSelections.of(true),
+    indentOnInput(),
+    syntaxHighlighting(highlightStyle, { fallback: true }),
+    bracketMatching(),
+    closeBrackets(),
+    autocompletion({ activateOnTyping: true }),
+    EditorState.languageData.of(() => [{ autocomplete: completeAnyWord }]),
+    tooltips({ parent: tooltipLayer() }),
+    // An open completion's keys first: ↑↓ move in it, not out of the block.
+    keymap.of([...completionKeymap, ...keys, ...closeBracketsKeymap, ...defaultKeymap, tabKey]),
+    lang,
+    theme,
+  ];
 }
 
 /** Turns soft wrapping on or off. */

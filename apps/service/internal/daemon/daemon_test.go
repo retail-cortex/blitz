@@ -25,6 +25,7 @@ import (
 	"path/filepath"
 	"slices"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -38,6 +39,34 @@ import (
 
 // The service answers over its socket, opens workspaces on demand,
 // refuses a second service on the socket, and removes the socket when
+// The tests' services never ask the login shell; they count the asks.
+var adopted atomic.Int32
+
+func init() {
+	adoptUserPath = func() int { adopted.Add(1); return 1 }
+}
+
+// A service asked to (blitzd) takes the login shell's PATH; others (a private
+// one, tests') don't.
+func TestRunAdoptsUserPath(t *testing.T) {
+	// A bad record of workers stops it just after.
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("MODENV_PREFIX", "")
+	require.NoError(t, os.MkdirAll(filepath.Join(home, ".blitz"), 0o700))
+	require.NoError(t, os.WriteFile(filepath.Join(home, ".blitz", "workers.json"), []byte("{"), 0o600))
+	for _, adopt := range []bool{true, false} {
+		before := adopted.Load()
+		err := Run(context.Background(), Options{Socket: filepath.Join(t.TempDir(), "s.sock"), AdoptPath: adopt})
+		require.ErrorContains(t, err, "workers.json")
+		if !adopt {
+			assert.Equal(t, before, adopted.Load())
+		} else {
+			assert.Equal(t, before+1, adopted.Load())
+		}
+	}
+}
+
 // stopped.
 func TestRun(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())

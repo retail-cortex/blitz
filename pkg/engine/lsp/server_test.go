@@ -183,7 +183,7 @@ func TestConnRepliesOffReader(t *testing.T) {
 
 	go func() {
 		for _, m := range []string{
-			`{"jsonrpc":"2.0","id":7,"method":"workspace/configuration"}`,
+			`{"jsonrpc":"2.0","id":7,"method":"workspace/configuration","params":{"items":[{"section":"python"},{"section":"pyright"}]}}`,
 			`{"jsonrpc":"2.0","method":"window/hello"}`,
 		} {
 			fmt.Fprintf(serverOut, "Content-Length: %d\r\n\r\n%s", len(m), m)
@@ -197,7 +197,7 @@ func TestConnRepliesOffReader(t *testing.T) {
 	}
 	body, err := readMessage(bufio.NewReader(serverIn))
 	require.NoError(t, err)
-	assert.JSONEq(t, `{"jsonrpc":"2.0","id":7,"result":[]}`, string(body))
+	assert.JSONEq(t, `{"jsonrpc":"2.0","id":7,"result":[null,null]}`, string(body), "the defaults, one for each item")
 }
 
 // A server that can't start is reported, and not started again for a
@@ -511,4 +511,30 @@ func TestLanguageID(t *testing.T) {
 			assert.Equal(t, want, languageID("ruby", file))
 		})
 	}
+}
+
+// After initialized, the client says its configuration changed: pyright
+// answers nothing until it hears it.
+func TestManagerSendsConfiguration(t *testing.T) {
+	var mu sync.Mutex
+	var methods []string
+	m, _, src := newFakeManager(t, func(_ *fakeServer, method string, _ json.RawMessage) (any, string) {
+		mu.Lock()
+		methods = append(methods, method)
+		mu.Unlock()
+		if method == "initialize" {
+			return map[string]any{"capabilities": map[string]any{}}, ""
+		}
+		return nil, ""
+	})
+	_, err := m.For(context.Background(), src)
+	require.NoError(t, err)
+	require.Eventually(t, func() bool {
+		mu.Lock()
+		defer mu.Unlock()
+		return len(methods) >= 3
+	}, 5*time.Second, 5*time.Millisecond)
+	mu.Lock()
+	defer mu.Unlock()
+	assert.Equal(t, []string{"initialize", "initialized", "workspace/didChangeConfiguration"}, methods[:3])
 }

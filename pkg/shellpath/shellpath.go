@@ -82,3 +82,34 @@ func Find(name string) string {
 	}
 	return LookPathIn(UserPath(LoginShell()), name)
 }
+
+// Merge is the user's PATH, in their terminal's order, then this
+// process's folders it lacks; each folder once.
+func Merge(user, own []string) []string {
+	seen := map[string]bool{}
+	var out []string
+	for _, d := range append(append([]string{}, user...), own...) {
+		if d != "" && !seen[d] {
+			seen[d] = true
+			out = append(out, d)
+		}
+	}
+	return out
+}
+
+// AdoptUserPath gives this process the user's terminal's PATH (see
+// Merge): a service that launchd, systemd or the tray started has the
+// system's bare one, without the folders language servers and tools are
+// installed in (nvm, Homebrew, ~/go/bin). It returns how many folders
+// were added. Windows has no login shell to ask: nothing changes there.
+func AdoptUserPath() int {
+	if runtime.GOOS == "windows" {
+		return 0
+	}
+	own := filepath.SplitList(os.Getenv("PATH"))
+	merged := Merge(UserPath(LoginShell()), own)
+	if err := os.Setenv("PATH", strings.Join(merged, string(os.PathListSeparator))); err != nil {
+		return 0
+	}
+	return len(merged) - len(Merge(nil, own))
+}

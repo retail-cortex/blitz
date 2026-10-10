@@ -24,6 +24,7 @@ import {
   mdiChevronRight,
   mdiDeleteOutline,
   mdiFileCogOutline,
+  mdiCodeBraces,
   mdiFolderOutline,
   mdiKeyOutline,
   mdiMagnify,
@@ -44,6 +45,7 @@ import { checkModelRef } from "./models";
 import { ModelInput, useModelCatalog } from "./ModelInput";
 import { agencies, efforts, modes } from "./options";
 import { PermissionSettings } from "./PermissionSettings";
+import { LanguageServers } from "./LanguageServers";
 import { SearchSettings } from "./SearchSettings";
 import { ProviderSettings } from "./ProviderSettings";
 import { useApp } from "./state";
@@ -494,6 +496,10 @@ export function WorkspaceSettingsForm({
               <Button small icon={mdiFileCogOutline} onClick={onSettingsFile}>
                 {t("desktop.rs.file_edit")}
               </Button>
+            </Section>
+
+            <Section id="language-servers" icon={mdiCodeBraces} title={t("desktop.lsp.title")} scope={t("desktop.rs.scope.workspace")}>
+              <LanguageServers dir={dir} />
             </Section>
 
             <Section

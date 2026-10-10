@@ -116,7 +116,7 @@ func (c *conn) read() {
 		}
 		switch {
 		case m.Method != "" && len(m.ID) > 0: // a request from the server: answer it plainly
-			c.reply(m.ID, m.Method)
+			c.reply(m.ID, m.Method, m.Params)
 		case m.Method != "":
 			if c.notify != nil {
 				c.notify(m.Method, m.Params)
@@ -147,12 +147,17 @@ func (c *conn) read() {
 }
 
 // reply answers requests servers make of their client: configuration
-// (none), and the rest with null. It queues the answer for answer to
-// write, never blocking the reader.
-func (c *conn) reply(id json.RawMessage, method string) {
+// (null, the server's defaults, for each item asked about), and the rest
+// with null. It queues the answer for answer to write, never blocking the
+// reader.
+func (c *conn) reply(id json.RawMessage, method string, params json.RawMessage) {
 	var result any
 	if method == "workspace/configuration" {
-		result = []any{}
+		var p struct {
+			Items []json.RawMessage `json:"items"`
+		}
+		_ = json.Unmarshal(params, &p)
+		result = make([]any, len(p.Items))
 	}
 	select {
 	case c.replies <- map[string]any{"jsonrpc": "2.0", "id": id, "result": result}:

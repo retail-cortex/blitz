@@ -89,3 +89,12 @@ genrule(
     ]),
     tools = ["//tools/vsix"],
 )
+
+# The package's Markdown, for the visual editor's round-trip test
+# (//apps/desktop/web:test, spec_visual_editor_037 VE-90), in the output
+# tree as the page's tests need it.
+copy_to_bin(
+    name = "markdown",
+    srcs = glob(["*.md"]),
+    visibility = ["//apps/desktop/web:__pkg__"],
+)

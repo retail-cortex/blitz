@@ -35,6 +35,11 @@ async function start() {
   }
   await detectHost(); // the tray serving the page (Windows) does some of the app's work
   installQuietInputs(); // no system capitals or corrections in names, paths, models
+  // The app fills the window and never scrolls as a page: whatever scrolls
+  // it (a focus, a scrollIntoView, something below the app) is undone.
+  window.addEventListener("scroll", () => {
+    if (window.scrollX || window.scrollY) window.scrollTo(0, 0);
+  });
   createRoot(document.getElementById("root")!).render(
     <StrictMode>
       {editorConfig() ? <EditorPanel /> : <App />}

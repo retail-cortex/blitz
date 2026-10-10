@@ -27,6 +27,7 @@ import { FilesShelf } from "./files/FilesShelf";
 import { FileLinksProvider } from "./files/links";
 import { reportUnsaved } from "./files/unsaved";
 import { useEditor } from "./files/useEditor";
+import { renderMarkdown } from "./files/languageUi";
 import { workspaceColor } from "./palette";
 import { displayName, type WorkspacePrefs } from "./prefs";
 import { waiting } from "./project";
@@ -34,7 +35,7 @@ import { ProjectDialog } from "./ProjectDialog";
 import { useApp } from "./state";
 import { publishStatus } from "./status";
 import { t } from "./i18n";
-import { IconButton } from "./ui/controls";
+import { IconButton, useSnackbar } from "./ui/controls";
 import { panelWidth, useWindowWidth } from "./ui/layout";
 import { ResizeHandle } from "./ui/ResizeHandle";
 import { Brand, MenuBar } from "./MenuBar";
@@ -101,7 +102,12 @@ export function Workspace({
   }, [dir, showView]);
 
   // Files (spec_files_029): the shelf, the editor, Go to file.
-  const editor = useEditor(dir);
+  const snack = useSnackbar();
+  const editor = useEditor(dir, {
+    // A definition outside the workspace (the standard library, a module) can't open here.
+    outside: (loc) => snack(t("desktop.files.definition_outside", { path: loc.path, line: loc.line })),
+    markdown: renderMarkdown,
+  });
   const [reveal, setReveal] = useState<{ path: string } | null>(null);
   const [touched, setTouched] = useState(0);
   const editorRef = useRef(editor);
