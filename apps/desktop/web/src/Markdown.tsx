@@ -17,11 +17,13 @@
 // Markdown as React elements (react-markdown), never raw HTML: HTML in the
 // text shows as text. Web links open in the system browser after a click,
 // never in the window; relative links open the workspace file or folder
-// they name (FIL-56), and #anchors scroll to a heading. Images aren't
-// loaded (output can't make the app fetch anything); they show as links.
-// ```mermaid blocks are drawn as diagrams (mermaid.tsx).
-import { createContext, memo, useContext, type MouseEvent, type ReactNode } from "react";
-import ReactMarkdown, { type Components } from "react-markdown";
+// they name (FIL-56), and #anchors scroll to a heading. Pictures in the
+// document (data: images) and, in a document, the workspace's are shown
+// (files/pictures.ts); a web picture is never fetched (DSK-24): it shows
+// as a link. A lone HTML <img> is such a picture too; other HTML shows as
+// nothing. ```mermaid blocks are drawn as diagrams (mermaid.tsx).
+import { createContext, memo, useContext, useEffect, useState, type MouseEvent, type ReactNode } from "react";
+import ReactMarkdown, { defaultUrlTransform, type Components, type UrlTransform } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { mdiImageOutline, mdiOpenInNew } from "@mdi/js";
 import { files } from "./api";
@@ -32,6 +34,7 @@ import { openFile, openFileAt, revealInTree } from "./events";
 import { FileKind } from "./gen/blitz/v1/file_pb";
 import { useFileLinks, useFileRef } from "./files/links";
 import { resolveLink, slugger, type LinkTarget } from "./files/mdlinks";
+import { htmlPicture, isDataImage, pictureURL } from "./files/pictures";
 import { t, useLanguage } from "./i18n";
 import { MermaidBlock } from "./mermaid";
 import { Icon, useSnackbar } from "./ui/controls";
@@ -141,20 +144,60 @@ function textOf(n: Hast | undefined): string {
   return (n.children ?? []).map(textOf).join("");
 }
 
-const components: Components = {
-  a: ({ href, children }) => <Link href={href}>{children}</Link>,
-  // A picture shows as a link to it; Export as PDF puts the picture in
-  // (files/printPage.ts), by the marks on its wrapper.
-  img: ({ src, alt }) =>
-    typeof src === "string" && src ? (
-      <span className="md-image" data-src={src} data-alt={alt ?? ""}>
+// A picture: shown when it's in the document or the workspace, else a
+// link to it. Export as PDF puts the picture in (files/printPage.ts), by
+// the marks on its wrapper.
+function Picture({ src, alt, width, height }: { src: string; alt: string; width?: string; height?: string }) {
+  const doc = useContext(DocContext);
+  const links = useFileLinks();
+  const dir = doc?.dir ?? links?.dir ?? "";
+  const [url, setUrl] = useState(() => (isDataImage(src) ? src.trim() : ""));
+  useEffect(() => {
+    let live = true;
+    void pictureURL(dir, doc ? doc.path : null, src).then((u) => live && setUrl(u));
+    return () => {
+      live = false;
+    };
+  }, [dir, doc, src]);
+  return (
+    <span className="md-image" data-src={src} data-alt={alt}>
+      {url ? (
+        <img src={url} alt={alt} title={alt || undefined} width={width} height={height} loading="lazy" draggable={false} />
+      ) : (
         <Link href={src}>
           <Icon path={mdiImageOutline} size="sm" /> {alt || "image"}
         </Link>
-      </span>
-    ) : (
-      <span>{alt}</span>
-    ),
+      )}
+    </span>
+  );
+}
+
+// data: images survive (react-markdown drops data: URLs); every other URL
+// as react-markdown allows.
+const urlTransform: UrlTransform = (url, key, node) => (key === "src" && node.tagName === "img" && isDataImage(url) ? url.trim() : defaultUrlTransform(url));
+
+// A lone HTML <img> becomes a Markdown picture (its src, alt and size
+// only); the rest of the HTML is skipped (skipHtml).
+type MdNode = { type: string; value?: string; url?: string; alt?: string; title?: null; children?: MdNode[]; data?: { hProperties?: Record<string, string> } };
+function htmlPictures() {
+  const walk = (n: MdNode) => {
+    n.children?.forEach((c, i, all) => {
+      const pic = c.type === "html" && c.value ? htmlPicture(c.value) : null;
+      if (pic) {
+        const hProperties: Record<string, string> = {};
+        if (pic.width) hProperties.width = pic.width;
+        if (pic.height) hProperties.height = pic.height;
+        all[i] = { type: "image", url: pic.src, alt: pic.alt, title: null, data: { hProperties } };
+      } else walk(c);
+    });
+  };
+  return (tree: MdNode) => walk(tree);
+}
+
+const components: Components = {
+  a: ({ href, children }) => <Link href={href}>{children}</Link>,
+  img: ({ src, alt, width, height }) =>
+    typeof src === "string" && src ? <Picture src={src} alt={alt ?? ""} width={width === undefined ? undefined : String(width)} height={height === undefined ? undefined : String(height)} /> : <span>{alt}</span>,
   pre: ({ children }) => <>{children}</>,
   code: ({ className, children }) => {
     const text = String(children ?? "");
@@ -201,6 +244,7 @@ function sourceLines() {
   return (tree: Hast) => mark(tree);
 }
 const docPlugins = [sourceLines];
+const remarkPlugins = [remarkGfm, htmlPictures];
 
 /** Markdown rendered (see the file's header for what it never does). */
 export const Markdown = memo(function Markdown({ text }: { text: string }) {
@@ -208,7 +252,7 @@ export const Markdown = memo(function Markdown({ text }: { text: string }) {
   const doc = useContext(DocContext);
   return (
     <div className="markdown">
-      <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={doc ? docPlugins : undefined} components={doc ? { ...components, ...headings() } : components} skipHtml>
+      <ReactMarkdown remarkPlugins={remarkPlugins} rehypePlugins={doc ? docPlugins : undefined} components={doc ? { ...components, ...headings() } : components} urlTransform={urlTransform} skipHtml>
         {text}
       </ReactMarkdown>
     </div>

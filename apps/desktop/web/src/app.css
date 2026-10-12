@@ -873,3 +873,6 @@ code.file-link:hover { text-decoration-color: currentColor; }
 .cm-tooltip-layer { position: fixed; inset: 0; pointer-events: none; z-index: 500; }
 .cm-tooltip-layer > * { position: absolute; inset: 0; height: auto; }
 .cm-tooltip-layer .cm-tooltip { pointer-events: auto; }
+
+/* Pictures in Markdown (files/pictures.ts): within the column. */
+.markdown .md-image img { max-width: 100%; height: auto; vertical-align: middle; border-radius: var(--md-shape-xs); }

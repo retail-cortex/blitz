@@ -61,6 +61,15 @@
   font-size: 0.92em;
 }
 .visual-editor .visual-doc .md-image::before { content: "\1F5BC"; font-size: 0.9em; }
+/* A picture that can be shown (in the document or the workspace) */
+.visual-editor .visual-doc .md-image.shown { display: inline; padding: 0; background: none; }
+.visual-editor .visual-doc .md-image.shown::before { content: none; }
+.visual-editor .visual-doc .md-image.shown img { max-width: 100%; height: auto; vertical-align: middle; border-radius: var(--md-shape-xs); }
+.visual-editor .visual-doc .ProseMirror-selectednode.md-image.shown img { outline: 2px solid var(--md-primary); outline-offset: 2px; }
+/* An HTML <img> block: its picture, the source behind Edit */
+.visual-editor .visual-doc .visual-picture { background: none; }
+.visual-editor .visual-doc .visual-picture-view { padding: 8px; text-align: center; }
+.visual-editor .visual-doc .visual-picture-view img { max-width: 100%; height: auto; }
 
 /* Task lists: TipTap's markup, Preview's look */
 .visual-editor .visual-doc ul[data-type="taskList"] { list-style: none; padding-left: 0.2em; }
