@@ -17,7 +17,8 @@
 import { realpathSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname } from "node:path";
-import { defineConfig } from "vite";
+import { fileURLToPath } from "node:url";
+import { defineConfig, searchForWorkspaceRoot } from "vite";
 import react from "@vitejs/plugin-react";
 
 // Bazel builds the page (//apps/desktop/web:page) into its output tree,
@@ -56,6 +57,9 @@ export default defineConfig({
   // In development (plain browser), API calls go to the service's socket,
   // as the desktop app's Go side does.
   server: {
+    // Packages with files of their own (KaTeX's fonts) resolve into
+    // Bazel's output tree, outside the workspace Vite serves.
+    fs: { allow: [searchForWorkspaceRoot(process.cwd()), dirname(fileURLToPath(import.meta.resolve("katex/package.json")))] },
     proxy: {
       "/blitz.v1.": {
         target: { socketPath: process.env.BLITZ_SOCKET || `${homedir()}/.blitz/run/blitz.sock` } as unknown as string,

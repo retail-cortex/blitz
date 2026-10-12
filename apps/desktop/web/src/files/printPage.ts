@@ -105,6 +105,35 @@ export function windowCss(doc: Document): string {
   return out;
 }
 
+/** Fetches a font of the app's own (tests replace it). */
+export type FetchFont = (url: string) => Promise<ArrayBuffer>;
+const fetchFont: FetchFont = (url) => fetch(url).then((r) => (r.ok ? r.arrayBuffer() : Promise.reject(new Error(`${r.status} ${url}`))));
+
+/**
+ * css with KaTeX's fonts put in, as data: URLs (their WOFF2 only): the
+ * printed page has no base URL, so its fonts' relative URLs (resolved here
+ * against base) would load nothing and math would print in other fonts
+ * (#21). A font that can't be read keeps its rule as it was.
+ */
+export async function withMathFonts(css: string, base: string, fetch: FetchFont = fetchFont): Promise<string> {
+  const faces = [...css.matchAll(/@font-face\s*\{[^}]*\}/g)].filter((m) => /font-family:\s*["']?KaTeX_/.test(m[0]));
+  let out = css;
+  for (const m of faces) {
+    const woff2 = /url\(\s*["']?([^"')]+\.woff2)["']?\s*\)/.exec(m[0]);
+    if (!woff2) continue;
+    try {
+      const data = new Uint8Array(await fetch(new URL(woff2[1], base).href));
+      let bin = "";
+      for (let i = 0; i < data.length; i += 0x8000) bin += String.fromCharCode(...data.subarray(i, i + 0x8000));
+      const face = m[0].replace(/src:[^;}]*(;|(?=\}))/, `src: url(data:font/woff2;base64,${btoa(bin)}) format("woff2")$1`);
+      out = out.replace(m[0], face);
+    } catch {
+      // that font prints as it would have
+    }
+  }
+  return out;
+}
+
 /**
  * The page to print for a rendered preview (its .markdown element): a
  * copy, with each picture (the preview shows them as links, marked
@@ -118,6 +147,7 @@ export async function printablePage(o: {
   userCss: string;
   read: ReadPicture;
   redraw?: (source: string) => Promise<string>;
+  fetchFont?: FetchFont;
 }): Promise<string> {
   const copy = o.markdown.cloneNode(true) as HTMLElement;
   // Diagrams print as drawn, not as zoomed in the window (panzoom.ts).
@@ -141,5 +171,7 @@ export async function printablePage(o: {
     img.alt = el.dataset.alt ?? "";
     el.replaceWith(img);
   }
-  return pageHTML({ title: o.title, body: copy.outerHTML, css: windowCss(o.markdown.ownerDocument), userCss: o.userCss });
+  let css = windowCss(o.markdown.ownerDocument);
+  if (copy.querySelector(".katex")) css = await withMathFonts(css, o.markdown.ownerDocument.baseURI, o.fetchFont);
+  return pageHTML({ title: o.title, body: copy.outerHTML, css, userCss: o.userCss });
 }

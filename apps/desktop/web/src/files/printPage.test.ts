@@ -15,7 +15,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { pageHTML, paperFor, pdfPath, pictureURL, type ReadPicture } from "./printPage";
+import { pageHTML, paperFor, pdfPath, pictureURL, type ReadPicture, withMathFonts } from "./printPage";
 
 describe("paperFor", () => {
   it.each([
@@ -65,3 +65,32 @@ describe("pictureURL", () => {
     ["img/", ""],
   ])("%s", async (src, want) => expect(await pictureURL(src, "notes/week1.md", read)).toBe(want));
 });
+
+describe("withMathFonts", () => {
+  const css = [
+    '@font-face { font-family: KaTeX_Main; src: url("/assets/KaTeX_Main-Regular.woff2") format("woff2"), url("/assets/KaTeX_Main-Regular.woff") format("woff"); font-weight: normal; }',
+    '@font-face { font-family: "KaTeX_Math"; src: url(KaTeX_Math-Italic.woff2) format("woff2"); }',
+    '@font-face { font-family: Inter; src: url("/assets/Inter.woff2") format("woff2"); }',
+    ".katex { font: normal 1.21em KaTeX_Main; }",
+  ].join("\n");
+
+  it("puts KaTeX's fonts in, as their WOFF2 alone, and nothing else", async () => {
+    const asked: string[] = [];
+    const out = await withMathFonts(css, "wails://wails/index.html", async (url) => {
+      asked.push(url);
+      return new Uint8Array([119, 79, 70, 50]).buffer; // "wOF2"
+    });
+    expect(asked).toEqual(["wails://wails/assets/KaTeX_Main-Regular.woff2", "wails://wails/KaTeX_Math-Italic.woff2"]);
+    expect(out).toContain('font-family: KaTeX_Main; src: url(data:font/woff2;base64,d09GMg==) format("woff2"); font-weight: normal; }');
+    expect(out).toContain('font-family: "KaTeX_Math"; src: url(data:font/woff2;base64,d09GMg==) format("woff2"); }');
+    expect(out).not.toContain("KaTeX_Main-Regular.woff\")");
+    expect(out).toContain('url("/assets/Inter.woff2")'); // not KaTeX's
+    expect(out).toContain(".katex { font: normal 1.21em KaTeX_Main; }");
+  });
+
+  it("keeps a font it can't read as it was", async () => {
+    const out = await withMathFonts(css, "http://localhost:5173/", async () => Promise.reject(new Error("404")));
+    expect(out).toBe(css);
+  });
+});
+
