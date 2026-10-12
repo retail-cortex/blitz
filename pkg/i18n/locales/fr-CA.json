@@ -1177,7 +1177,7 @@
     "desktop.settings.width.full": "Pleine",
     "desktop.settings.width.readable": "Lisible",
     "desktop.settings.doc_width": "Largeur du document",
-    "desktop.settings.doc_width.detail": "Lisible garde les documents Markdown dans une colonne; Pleine utilise tout l'éditeur. ⌘ ou Ctrl avec + et − agrandissent l'éditeur et les documents.",
+    "desktop.settings.doc_width.detail": "Pleine utilise tout l'éditeur pour les documents Markdown; Lisible les garde dans une colonne. ⌘ ou Ctrl avec + et − agrandissent l'éditeur et les documents.",
     "desktop.palette.fullscreen": "Plein écran",
     "desktop.settings.composer": "Saisie du clavardage",
     "desktop.settings.composer.detail": "Épinglée, elle occupe le bas de la fenêtre dans chaque vue; ⌘L (Ctrl+L) y mène de partout.",

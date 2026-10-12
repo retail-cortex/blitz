@@ -34,7 +34,7 @@ func TestPrefsDefaultsAndRoundTrip(t *testing.T) {
 	require.Equal(t, "system", p.Theme, "defaults %+v %v", p, err)
 	require.Equal(t, "comfortable", p.Density, "defaults %+v %v", p, err)
 	require.Equal(t, "full", p.Width, "defaults %+v %v", p, err)
-	require.Equal(t, "readable", p.DocWidth, "defaults %+v %v", p, err)
+	require.Equal(t, "full", p.DocWidth, "defaults %+v %v", p, err)
 	require.Equal(t, 100, p.EditorZoom, "defaults %+v %v", p, err)
 	require.Equal(t, "on", p.Notifications, "defaults %+v %v", p, err)
 	require.Equal(t, "pinned", p.Composer, "defaults %+v %v", p, err)
@@ -49,7 +49,7 @@ func TestPrefsDefaultsAndRoundTrip(t *testing.T) {
 	}
 	p.Active = b // closed: can't be active
 	p.Files, p.ShowHidden, p.ChatWidth, p.FilesWidth = true, true, -3, 99999
-	p.DocWidth, p.EditorZoom = "full", 125
+	p.DocWidth, p.EditorZoom = "readable", 125
 	saved, err := s.save(p)
 	require.NoError(t, err)
 	require.Len(t, saved.Workspaces, 2, "normalized %+v", saved)
@@ -62,12 +62,12 @@ func TestPrefsDefaultsAndRoundTrip(t *testing.T) {
 	require.True(t, saved.ShowHidden, "normalized %+v", saved)
 	require.Equal(t, 0, saved.ChatWidth, "normalized %+v", saved)
 	require.Equal(t, 0, saved.FilesWidth, "normalized %+v", saved)
-	require.Equal(t, "full", saved.DocWidth, "normalized %+v", saved)
+	require.Equal(t, "readable", saved.DocWidth, "normalized %+v", saved)
 	require.Equal(t, 125, saved.EditorZoom, "normalized %+v", saved)
 	p.DocWidth, p.EditorZoom = "huge", 900
 	odd, err := s.save(p)
 	require.NoError(t, err)
-	require.Equal(t, "readable", odd.DocWidth, "normalized %+v", odd)
+	require.Equal(t, "full", odd.DocWidth, "normalized %+v", odd)
 	require.Equal(t, 100, odd.EditorZoom, "normalized %+v", odd)
 	info, err := os.Stat(s.path)
 	require.NoError(t, err, "file mode %v", info)

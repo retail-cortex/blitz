@@ -225,8 +225,8 @@ function Appearance() {
             value={prefs.doc_width}
             onChange={(doc_width) => update((p) => ({ ...p, doc_width }))}
             options={[
-              { value: "readable", label: t("desktop.settings.width.readable") },
               { value: "full", label: t("desktop.settings.width.full") },
+              { value: "readable", label: t("desktop.settings.width.readable") },
             ]}
           />
         </Setting>

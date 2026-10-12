@@ -1177,7 +1177,7 @@
     "desktop.settings.width.full": "Full",
     "desktop.settings.width.readable": "Readable",
     "desktop.settings.doc_width": "Document width",
-    "desktop.settings.doc_width.detail": "Readable keeps Markdown documents to a column; Full uses the whole editor. ⌘ or Ctrl with + and − zooms the editor and documents.",
+    "desktop.settings.doc_width.detail": "Full uses the whole editor for Markdown documents; Readable keeps them to a column. ⌘ or Ctrl with + and − zooms the editor and documents.",
     "desktop.palette.fullscreen": "Full screen",
     "desktop.settings.composer": "Chat input",
     "desktop.settings.composer.detail": "Pinned, it spans the window's foot on every view; ⌘L (Ctrl+L) reaches it from anywhere.",

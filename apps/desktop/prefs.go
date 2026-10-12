@@ -66,8 +66,8 @@ type Prefs struct {
 	// whole panel) or "readable" (a column of about 860 px).
 	Width string `json:"width"`
 	// DocWidth is how wide a document (Markdown in Preview and Visual)
-	// runs: "readable" (the default, a column) or "full" (the whole
-	// editor).
+	// runs: "full" (the default, the whole editor) or "readable" (a
+	// column).
 	DocWidth string `json:"doc_width"`
 	// EditorZoom is the editor's and documents' zoom, in percent (50–200;
 	// 100 by default).
@@ -126,8 +126,8 @@ func (p *Prefs) normalize() {
 	if p.Width != "readable" {
 		p.Width = "full"
 	}
-	if p.DocWidth != "full" {
-		p.DocWidth = "readable"
+	if p.DocWidth != "readable" {
+		p.DocWidth = "full"
 	}
 	if p.EditorZoom < 50 || p.EditorZoom > 200 {
 		p.EditorZoom = 100

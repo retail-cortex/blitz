@@ -1177,7 +1177,7 @@
     "desktop.settings.width.full": "Completo",
     "desktop.settings.width.readable": "Legible",
     "desktop.settings.doc_width": "Ancho del documento",
-    "desktop.settings.doc_width.detail": "Legible mantiene los documentos Markdown en una columna; Completo usa todo el editor. ⌘ o Ctrl con + y − amplían el editor y los documentos.",
+    "desktop.settings.doc_width.detail": "Completo usa todo el editor para los documentos Markdown; Legible los mantiene en una columna. ⌘ o Ctrl con + y − amplían el editor y los documentos.",
     "desktop.palette.fullscreen": "Pantalla completa",
     "desktop.settings.composer": "Entrada del chat",
     "desktop.settings.composer.detail": "Fijada, ocupa todo el pie de la ventana en cada vista; ⌘L (Ctrl+L) la alcanza desde cualquier sitio.",
