@@ -166,7 +166,7 @@ export async function languageSupport(path: string): Promise<Extension> {
     // Markdown highlights its fenced code too, in the fence's language.
     if (desc.name === "Markdown") {
       const { markdown, markdownLanguage } = await import("@codemirror/lang-markdown");
-      return markdown({ base: markdownLanguage, codeLanguages: languages });
+      return markdown({ base: markdownLanguage, codeLanguages: languages, extensions: [markdownMath] });
     }
     return await desc.load();
   } catch {
@@ -225,6 +225,49 @@ export function tooltipLayer(): HTMLElement {
   }
   return layer;
 }
+
+// Math in Markdown's source ($…$, $$…$$; spec_files_029 FIL-67), read as
+// GitHub does (math.ts isInlineMath): the TeX highlighted, its dollars
+// marked. The shape @lezer/markdown's inline parsers take.
+interface InlineContext {
+  readonly end: number;
+  char(pos: number): number;
+  slice(from: number, to: number): string;
+  elt(type: string, from: number, to: number, children?: readonly unknown[]): unknown;
+  addElement(elt: unknown): number;
+}
+const dollar = 36;
+const backslash = 92;
+const markdownMath = {
+  defineNodes: [
+    { name: "InlineMath", style: tags.special(tags.string) },
+    { name: "MathMark", style: tags.processingInstruction },
+  ],
+  parseInline: [
+    {
+      name: "InlineMath",
+      parse(cx: InlineContext, next: number, pos: number): number {
+        if (next !== dollar) return -1;
+        const d = cx.char(pos + 1) === dollar ? 2 : 1;
+        const start = pos + d;
+        for (let i = start; i < cx.end; i++) {
+          const c = cx.char(i);
+          if (c === backslash) {
+            i++;
+            continue;
+          }
+          if (c !== dollar) continue;
+          if (d === 2 && cx.char(i + 1) !== dollar) continue;
+          if (i === start) return -1;
+          const end = i + d;
+          if (d === 1 && (/^\s|\s$/.test(cx.slice(start, i)) || /\d/.test(String.fromCharCode(cx.char(end))))) return -1;
+          return cx.addElement(cx.elt("InlineMath", pos, end, [cx.elt("MathMark", pos, start), cx.elt("MathMark", i, end)]));
+        }
+        return -1;
+      },
+    },
+  ],
+};
 
 /**
  * A new editor state for a file's text, with its language (languageSupport)

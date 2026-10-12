@@ -43,6 +43,7 @@ import {
   mdiLinkVariant,
   mdiLinkVariantOff,
   mdiMinus,
+  mdiSigma,
   mdiSitemapOutline,
   mdiTable,
   mdiTableColumnPlusAfter,
@@ -57,6 +58,7 @@ import { Button, ContextMenu, Icon, IconButton, useSnackbar, type MenuEntry } fr
 import type { LanguageHooks } from "../language";
 import { pictureURL } from "../pictures";
 import { CodeBlockView, type BlockContext } from "./codeBlock";
+import { MathInlineView } from "./mathInline";
 import { fingerprints, parseMarkdown, serializeMarkdown, type Parsed } from "./markdown";
 import { sourceAttr, visualExtensions } from "./schema";
 import "./visual.css";
@@ -74,6 +76,10 @@ function editorExtensions(doc: { dir: string; path: string }, context?: BlockCon
         return ext.extend({ addNodeView: () => ({ node, view, getPos }: NodeViewRendererProps) => new CodeBlockView(node, view, getPos, "code", context) });
       case "rawBlock":
         return ext.extend({ addNodeView: () => ({ node, view, getPos }: NodeViewRendererProps) => new CodeBlockView(node, view, getPos, "raw", undefined, doc) });
+      case "mathBlock":
+        return ext.extend({ addNodeView: () => ({ node, view, getPos }: NodeViewRendererProps) => new CodeBlockView(node, view, getPos, "math") });
+      case "mathInline":
+        return ext.extend({ addNodeView: () => ({ node, view, getPos }: NodeViewRendererProps) => new MathInlineView(node, view, getPos) });
       case "image":
         return ext.extend({
           renderHTML: ({ node }: { node: PMNode }) => ["span", { class: "md-image", "data-src": node.attrs.src as string, title: node.attrs.src as string }, (node.attrs.alt as string) || (node.attrs.src as string)],
@@ -369,6 +375,9 @@ interface SlashItem {
   run: (e: Editor) => void;
 }
 
+// A new equation block (FIL-67), to change.
+const newEquation = { type: "mathBlock", attrs: { text: "E = mc^2" } };
+
 const slashMenu: Omit<SlashItem, "label">[] = [
   { id: "h1", icon: mdiFormatHeader1, run: (e) => e.chain().focus().setNode("heading", { level: 1 }).run() },
   { id: "h2", icon: mdiFormatHeader2, run: (e) => e.chain().focus().setNode("heading", { level: 2 }).run() },
@@ -384,6 +393,7 @@ const slashMenu: Omit<SlashItem, "label">[] = [
     icon: mdiSitemapOutline,
     run: (e) => e.chain().focus().setNode("codeBlock", { language: "mermaid" }).insertContent("flowchart LR\n  A --> B").run(),
   },
+  { id: "equation", icon: mdiSigma, run: (e) => e.chain().focus().insertContent(newEquation).run() },
   { id: "rule", icon: mdiMinus, run: (e) => e.chain().focus().setHorizontalRule().run() },
 ];
 
@@ -513,6 +523,7 @@ export function actionGroups(editor: Editor, open: Openers): Action[][] {
       a("quote", mdiFormatQuoteClose, () => chain().toggleBlockquote().run(), editor.isActive("blockquote")),
       a("code_block", mdiCodeBraces, () => chain().toggleCodeBlock().run(), editor.isActive("codeBlock")),
       a("diagram", mdiSitemapOutline, () => chain().setNode("codeBlock", { language: "mermaid" }).insertContent("flowchart LR\n  A --> B").run()),
+      a("equation", mdiSigma, () => chain().insertContent(newEquation).run()),
       a("rule", mdiMinus, () => chain().setHorizontalRule().run()),
     ],
     [

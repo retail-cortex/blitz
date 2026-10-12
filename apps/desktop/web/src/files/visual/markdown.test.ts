@@ -105,6 +105,33 @@ describe("round trip, edited", () => {
     expect(changed.length).toBeLessThanOrEqual(3);
   });
 
+  it("keeps math, writes it back as written, and escapes a dollar that could open it", () => {
+    const text = "Mean $\\bar{x}$ and a price of $5.\n\n$$\nE = mc^2\n$$\n\n```math\n\\int x\n```\n";
+    expect(roundTrip(text)).toBe(text);
+    const parsed = parseMarkdown(text);
+    const doc = PMNode.fromJSON(schema, parsed.doc);
+    expect(doc.child(0).child(1).type.name).toBe("mathInline");
+    expect(doc.child(1).attrs).toMatchObject({ text: "E = mc^2", fence: false });
+    expect(doc.child(2).attrs).toMatchObject({ text: "\\int x", fence: true });
+    const prints = fingerprints(doc);
+    // Each block changed: printed in the house style, as it was written.
+    let tr = new Transform(doc);
+    tr = tr.insert(1, schema.text("Note: "));
+    const p2 = tr.mapping.map(doc.child(0).nodeSize);
+    tr.setNodeMarkup(p2, undefined, { ...doc.child(1).attrs, text: "E = m c^2" });
+    const p3 = tr.mapping.map(doc.child(0).nodeSize + doc.child(1).nodeSize);
+    tr.setNodeMarkup(p3, undefined, { ...doc.child(2).attrs, text: "\\int y" });
+    const out = serializeMarkdown(tr.doc, parsed, prints);
+    expect(out).toBe("Note: Mean $\\bar{x}$ and a price of \\$5.\n\n$$\nE = m c^2\n$$\n\n```math\n\\int y\n```\n");
+    // Typed text with dollars that could be math reads back as the same text.
+    const typed = schema.nodeFromJSON({ type: "doc", content: [{ type: "paragraph", content: [{ type: "text", text: "costs $x and $y" }] }] });
+    const md = serializeMarkdown(typed, { sources: new Map(), trailing: "" }, new Map());
+    expect(md).toBe("costs \\$x and \\$y\n");
+    expect(roundTrip(md)).toBe(md);
+    const reread = PMNode.fromJSON(schema, parseMarkdown(md).doc);
+    expect(reread.textContent).toBe("costs $x and $y");
+  });
+
   it("prints a new document in the house style", () => {
     const doc = schema.nodeFromJSON({
       type: "doc",

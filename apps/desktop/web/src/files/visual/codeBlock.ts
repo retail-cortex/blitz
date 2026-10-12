@@ -116,7 +116,7 @@ let closePicker: (() => void) | undefined;
 const rawKinds = new Set(["frontmatter", "html", "definition", "footnote"]);
 
 /** Code blocks and raw blocks: which text they hold and how it changes. */
-type Kind = "code" | "raw";
+type Kind = "code" | "raw" | "math";
 
 /** A CodeMirror editor for a code block or a raw block, in the document. */
 export class CodeBlockView implements NodeView {
@@ -141,7 +141,7 @@ export class CodeBlockView implements NodeView {
     private doc?: { dir: string; path: string },
   ) {
     this.dom = document.createElement("div");
-    this.dom.className = kind === "raw" ? "code-block visual-code raw-block" : "code-block visual-code";
+    this.dom.className = kind === "raw" ? "code-block visual-code raw-block" : kind === "math" ? "code-block visual-code math-block" : "code-block visual-code";
     const head = document.createElement("div");
     head.className = "code-head";
     head.contentEditable = "false";
@@ -171,10 +171,32 @@ export class CodeBlockView implements NodeView {
     this.setLanguage();
     if (this.isMermaid()) this.addDiagram();
     else if (this.isPicture()) this.addPicture();
+    else if (kind === "math") this.addMath();
+  }
+
+  // A math block (FIL-67): drawn by KaTeX, its TeX behind Edit, as a
+  // diagram's source.
+  private addMath() {
+    this.diagram = document.createElement("div");
+    this.diagram.className = "visual-diagram visual-math-view";
+    this.diagram.contentEditable = "false";
+    this.addEditToggle();
+    this.dom.classList.add("visual-mermaid");
+    this.dom.append(this.diagram);
+    this.showMath();
+  }
+
+  private showMath() {
+    const target = this.diagram;
+    if (!target) return;
+    const tex = this.text();
+    void import("../mathRender").then(({ renderMath }) => {
+      if (this.diagram === target) renderMath(target, tex, true);
+    });
   }
 
   private text(): string {
-    return this.kind === "raw" ? ((this.node.attrs.text as string) ?? "") : this.node.textContent;
+    return this.kind === "code" ? this.node.textContent : ((this.node.attrs.text as string) ?? "");
   }
 
   // An HTML block that's one <img>: its picture shows (DSK-24 renders no
@@ -252,11 +274,11 @@ export class CodeBlockView implements NodeView {
 
   private showLanguage() {
     const lang = (this.node.attrs.language as string | null) ?? "";
-    this.label.textContent = this.kind === "raw" ? t(`desktop.visual.raw.${rawKinds.has(this.node.attrs.kind as string) ? this.node.attrs.kind : "other"}`) : languageName(lang);
+    this.label.textContent = this.kind === "math" ? t("desktop.visual.math") : this.kind === "raw" ? t(`desktop.visual.raw.${rawKinds.has(this.node.attrs.kind as string) ? this.node.attrs.kind : "other"}`) : languageName(lang);
   }
 
   private async setLanguage() {
-    const name = this.kind === "raw" ? (this.node.attrs.kind === "html" ? "x.html" : this.node.attrs.kind === "frontmatter" ? "x.yaml" : "x.md") : fenceFile(this.node.attrs.language as string | null);
+    const name = this.kind === "math" ? "x.tex" : this.kind === "raw" ? (this.node.attrs.kind === "html" ? "x.html" : this.node.attrs.kind === "frontmatter" ? "x.yaml" : "x.md") : fenceFile(this.node.attrs.language as string | null);
     const support = await languageSupport(name);
     this.cm.dispatch({ effects: this.language.reconfigure(support) });
   }
@@ -311,10 +333,11 @@ export class CodeBlockView implements NodeView {
     if (this.updating || !this.cm.hasFocus) return;
     const pos = this.getPos();
     if (pos === undefined) return;
-    if (this.kind === "raw") {
+    if (this.kind !== "code") {
       if (!update.docChanged) return;
       this.view.dispatch(this.view.state.tr.setNodeMarkup(pos, undefined, { ...this.node.attrs, text: update.state.doc.toString() }));
       if (this.isPicture()) this.showPicture();
+      if (this.kind === "math") this.showMath();
       return;
     }
     let offset = pos + 1;
@@ -495,6 +518,7 @@ export class CodeBlockView implements NodeView {
       this.updating = false;
       if (this.isMermaid()) this.draw();
       if (this.isPicture()) this.showPicture();
+      if (this.kind === "math") this.showMath();
     }
     return true;
   }

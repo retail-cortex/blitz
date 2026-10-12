@@ -21,10 +21,12 @@
 // document (data: images) and, in a document, the workspace's are shown
 // (files/pictures.ts); a web picture is never fetched (DSK-24): it shows
 // as a link. A lone HTML <img> is such a picture too; other HTML shows as
-// nothing. ```mermaid blocks are drawn as diagrams (mermaid.tsx).
+// nothing. ```mermaid blocks are drawn as diagrams (mermaid.tsx), and math
+// ($…$ in a document, $$…$$ and ```math anywhere) by KaTeX (files/math.ts).
 import { createContext, memo, useContext, useEffect, useState, type MouseEvent, type ReactNode } from "react";
-import ReactMarkdown, { defaultUrlTransform, type Components, type UrlTransform } from "react-markdown";
+import ReactMarkdown, { defaultUrlTransform, type Components, type Options, type UrlTransform } from "react-markdown";
 import remarkGfm from "remark-gfm";
+import remarkMath from "remark-math";
 import { mdiImageOutline, mdiOpenInNew } from "@mdi/js";
 import { files } from "./api";
 import { CodeBlock } from "./CodeBlock";
@@ -34,6 +36,7 @@ import { openFile, openFileAt, revealInTree } from "./events";
 import { FileKind } from "./gen/blitz/v1/file_pb";
 import { useFileLinks, useFileRef } from "./files/links";
 import { resolveLink, slugger, type LinkTarget } from "./files/mdlinks";
+import { githubMath } from "./files/math";
 import { htmlPicture, isDataImage, pictureURL } from "./files/pictures";
 import { t, useLanguage } from "./i18n";
 import { MermaidBlock } from "./mermaid";
@@ -243,16 +246,39 @@ function sourceLines() {
   };
   return (tree: Hast) => mark(tree);
 }
-const docPlugins = [sourceLines];
-const remarkPlugins = [remarkGfm, htmlPictures];
+// Documents take $…$ as GitHub does; the chat only $$…$$ (and ```math),
+// so a reply's prices stay prices.
+const docRemark = [remarkGfm, remarkMath, githubMath, htmlPictures];
+const chatRemark = [remarkGfm, [remarkMath, { singleDollarTextMath: false }], htmlPictures] as NonNullable<Options["remarkPlugins"]>;
+
+// KaTeX loads the first time a text has math (its own chunk, mathRender.ts);
+// until it's there, math shows as its source.
+type Rehype = NonNullable<Options["rehypePlugins"]>;
+let rehypeMath: Rehype[number] | null = null;
+let loadingMath: Promise<void> | null = null;
+const hasMath = /\$|```\s*math/;
+function loadMath(): Promise<void> {
+  loadingMath ??= import("./files/mathRender").then((m) => void (rehypeMath = m.rehypeMath));
+  return loadingMath;
+}
+function useMath(text: string): boolean {
+  const wants = hasMath.test(text);
+  const [, loaded] = useState(0);
+  useEffect(() => {
+    if (wants && !rehypeMath) void loadMath().then(() => loaded((n) => n + 1));
+  }, [wants]);
+  return wants && !!rehypeMath;
+}
 
 /** Markdown rendered (see the file's header for what it never does). */
 export const Markdown = memo(function Markdown({ text }: { text: string }) {
   useLanguage();
   const doc = useContext(DocContext);
+  const math = useMath(text);
+  const rehype: Rehype = [...(doc ? [sourceLines] : []), ...(math && rehypeMath ? [rehypeMath] : [])];
   return (
     <div className="markdown">
-      <ReactMarkdown remarkPlugins={remarkPlugins} rehypePlugins={doc ? docPlugins : undefined} components={doc ? { ...components, ...headings() } : components} urlTransform={urlTransform} skipHtml>
+      <ReactMarkdown remarkPlugins={doc ? docRemark : chatRemark} rehypePlugins={rehype} components={doc ? { ...components, ...headings() } : components} urlTransform={urlTransform} skipHtml>
         {text}
       </ReactMarkdown>
     </div>

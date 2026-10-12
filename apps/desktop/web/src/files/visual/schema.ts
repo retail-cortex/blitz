@@ -22,7 +22,7 @@
 // the ID of the source it was read from, so an untouched block is written
 // back as it was (VE-04). No node views here: the editor adds them, and
 // the tests build the same schema without a DOM.
-import { Extension, Node, type Extensions } from "@tiptap/core";
+import { Extension, InputRule, Node, type Extensions } from "@tiptap/core";
 import { Code } from "@tiptap/extension-code";
 import { CodeBlock } from "@tiptap/extension-code-block";
 import { Image } from "@tiptap/extension-image";
@@ -31,7 +31,7 @@ import { Table, TableCell, TableHeader, TableRow } from "@tiptap/extension-table
 import { StarterKit } from "@tiptap/starter-kit";
 
 /** The top-level blocks that remember their source. */
-export const sourcedBlocks = ["paragraph", "heading", "blockquote", "bulletList", "orderedList", "taskList", "codeBlock", "horizontalRule", "table", "rawBlock"];
+export const sourcedBlocks = ["paragraph", "heading", "blockquote", "bulletList", "orderedList", "taskList", "codeBlock", "horizontalRule", "table", "rawBlock", "mathBlock"];
 
 /** The attribute naming a block's source (nothing in the DOM, so pasted blocks have none). */
 export const sourceAttr = "blitzSource";
@@ -79,6 +79,48 @@ export const RawInline = Node.create({
   renderHTML: ({ node }) => ["code", { "data-raw-inline": "", class: "raw-inline" }, node.attrs.text as string],
 });
 
+/**
+ * A math block (spec_files_029 FIL-67): its TeX, written as $$…$$ or, when
+ * it was read from one, a ```math fence (fence).
+ */
+export const MathBlock = Node.create({
+  name: "mathBlock",
+  group: "block",
+  atom: true,
+  defining: true,
+  addAttributes() {
+    return { text: { default: "" }, fence: { default: false } };
+  },
+  parseHTML: () => [{ tag: "div[data-math-block]" }],
+  renderHTML: ({ node }) => ["div", { "data-math-block": "", class: "math-block" }, node.attrs.text as string],
+});
+
+/** Inline math: its TeX, between one dollar or two (dollars). Typing $x$ makes one. */
+export const MathInline = Node.create({
+  name: "mathInline",
+  group: "inline",
+  inline: true,
+  atom: true,
+  addAttributes() {
+    return { text: { default: "" }, dollars: { default: 1 } };
+  },
+  parseHTML: () => [{ tag: "span[data-math-inline]" }],
+  renderHTML: ({ node }) => ["span", { "data-math-inline": "", class: "math-inline" }, node.attrs.text as string],
+  addInputRules() {
+    // $x$ as GitHub reads it: no space inside either dollar, not escaped.
+    // The whole match (both dollars) becomes the node.
+    const type = this.type;
+    return [
+      new InputRule({
+        find: /(?<![\\$])\$([^\s$](?:[^$]*[^\s$])?)\$$/,
+        handler: ({ state, range, match }) => {
+          state.tr.replaceWith(range.from, range.to, type.create({ text: match[1] }));
+        },
+      }),
+    ];
+  },
+});
+
 /** The visual editor's extensions, without node views. */
 export function visualExtensions(): Extensions {
   return [
@@ -103,6 +145,8 @@ export function visualExtensions(): Extensions {
     TableCell,
     RawBlock,
     RawInline,
+    MathBlock,
+    MathInline,
     SourceIDs,
   ];
 }

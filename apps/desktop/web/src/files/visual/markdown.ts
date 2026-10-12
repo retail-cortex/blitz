@@ -26,7 +26,10 @@ import type { Node as PMNode } from "@tiptap/pm/model";
 import type * as md from "mdast";
 import { fromMarkdown } from "mdast-util-from-markdown";
 import { gfmFromMarkdown } from "mdast-util-gfm";
+import { mathFromMarkdown } from "mdast-util-math";
 import { gfm } from "micromark-extension-gfm";
+import { math } from "micromark-extension-math";
+import { keepGitHubMath } from "../math";
 import { sourceAttr } from "./schema";
 
 /** A block's source, and the text between it and the block before. */
@@ -72,7 +75,8 @@ export function parseMarkdown(text: string): Parsed {
     offset = stop;
   }
   const body = text.slice(offset);
-  const tree = fromMarkdown(body, { extensions: [gfm()], mdastExtensions: [gfmFromMarkdown()] });
+  const tree = fromMarkdown(body, { extensions: [gfm(), math()], mdastExtensions: [gfmFromMarkdown(), mathFromMarkdown()] });
+  keepGitHubMath(tree, body); // $…$ as GitHub reads it: prices stay text
   const slice = (node: md.Node) => body.slice(node.position?.start.offset ?? 0, node.position?.end.offset ?? 0);
   for (const child of tree.children) {
     const start = offset + (child.position?.start.offset ?? 0);
@@ -112,8 +116,11 @@ function block(node: md.Node, slice: (n: md.Node) => string): JSONContent {
       if (l.ordered) return { type: "orderedList", attrs: { start: l.start ?? 1, spread }, content: items };
       return { type: "bulletList", attrs: { spread }, content: items };
     }
+    case "math": // $$…$$
+      return { type: "mathBlock", attrs: { text: (node as md.Literal).value } };
     case "code": {
       const c = node as md.Code;
+      if (c.lang === "math") return { type: "mathBlock", attrs: { text: c.value, fence: true } };
       return { type: "codeBlock", attrs: { language: c.lang || null }, content: c.value ? [{ type: "text", text: c.value }] : undefined };
     }
     case "thematicBreak":
@@ -170,6 +177,9 @@ function inline(nodes: md.PhrasingContent[] | md.RootContent[], marks: Mark[], s
       }
       case "break":
         out.push({ type: "hardBreak" });
+        break;
+      case "inlineMath":
+        out.push({ type: "mathInline", attrs: { text: (node as md.Literal).value, dollars: slice(node).startsWith("$$") ? 2 : 1 } });
         break;
       default: // inline HTML, reference links and images, footnote marks
         out.push({ type: "rawInline", attrs: { text: slice(node) } });
@@ -245,6 +255,13 @@ function printBlock(node: PMNode): string {
       return printTable(node);
     case "rawBlock":
       return node.attrs.text as string;
+    case "mathBlock": {
+      const text = node.attrs.text as string;
+      if (!node.attrs.fence) return `$$\n${text}\n$$`;
+      const longest = Math.max(2, ...[...text.matchAll(/`+/g)].map((m) => m[0].length));
+      const fence = "`".repeat(longest + 1);
+      return `${fence}math\n${text}\n${fence}`;
+    }
   }
   return printInline(node);
 }
@@ -350,6 +367,11 @@ function printInline(node: PMNode, inTable = false): string {
       case "rawInline":
         out += child.attrs.text as string;
         break;
+      case "mathInline": {
+        const d = "$".repeat((child.attrs.dollars as number) === 2 ? 2 : 1);
+        out += `${d}${child.attrs.text as string}${d}`;
+        break;
+      }
     }
   });
   close(0);
@@ -382,6 +404,7 @@ export function escapeText(text: string, inTable = false): string {
   out = out.replace(/(^|[^\p{L}\p{N}])_|_(?=$|[^\p{L}\p{N}])/gu, (m) => m.replace("_", "\\_"));
   out = out.replace(/<(?=[A-Za-z/!?])/g, "\\<");
   out = out.replace(/~~/g, "\\~\\~");
+  out = out.replace(/\$(?=\S)/g, "\\$"); // could open math (a price's too: it reads the same)
   if (inTable) out = out.replace(/\|/g, "\\|");
   return out;
 }

@@ -178,3 +178,14 @@
 .menu.floating.visual-image .input { width: 100%; }
 .menu.floating.visual-image .input + label { margin-top: 6px; }
 .visual-popover-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px; }
+
+/* Math (FIL-67): inline, drawn, its TeX in a field when selected; a block
+   drawn, its TeX behind Edit. */
+.visual-editor .visual-doc .math-inline-view { cursor: pointer; border-radius: var(--md-shape-xs); padding: 0 1px; }
+.visual-editor .visual-doc .math-inline-view:hover { background: var(--doc-code-bg); }
+.visual-editor .visual-doc .math-inline-view.ProseMirror-selectednode { outline: 2px solid var(--md-primary); outline-offset: 1px; }
+.visual-editor .visual-doc .math-block { background: none; }
+.visual-editor .visual-doc .visual-math-view { padding: 12px 16px; overflow-x: auto; text-align: center; }
+.visual-editor .visual-doc .visual-math-view .katex { font-size: 1.15em; }
+.visual-math-field input { width: min(420px, 70vw); font-family: var(--md-mono); }
+
