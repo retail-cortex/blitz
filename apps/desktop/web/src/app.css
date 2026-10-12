@@ -876,3 +876,21 @@ code.file-link:hover { text-decoration-color: currentColor; }
 
 /* Pictures in Markdown (files/pictures.ts): within the column. */
 .markdown .md-image img { max-width: 100%; height: auto; vertical-align: middle; border-radius: var(--md-shape-xs); }
+
+/* Diagrams pan and zoom (panzoom.ts): ⌘/Ctrl and the wheel or a pinch,
+   drag to pan, double-click to fit; Expand shows one over the window. */
+.code-head-actions { display: inline-flex; align-items: center; }
+.diagram-controls { display: inline-flex; align-items: center; }
+.diagram-control svg { display: block; }
+.mermaid-diagram.pannable { cursor: grab; touch-action: none; }
+.mermaid-diagram.pannable.panning { cursor: grabbing; }
+.mermaid-diagram.zoomed { overflow: hidden; }
+.mermaid-diagram.panning svg, .mermaid-diagram.zoomed svg { user-select: none; -webkit-user-select: none; }
+.diagram-viewer { position: fixed; inset: 0; z-index: 900; background: var(--md-scrim); animation: fade 0.15s; }
+.diagram-viewer-stage { position: absolute; inset: 56px 24px 24px; display: flex; align-items: center; justify-content: center; padding: 16px; border-radius: var(--md-shape-lg); background: var(--glass-strong, var(--md-surface)); -webkit-backdrop-filter: blur(24px); backdrop-filter: blur(24px); box-shadow: var(--md-elevation-3); overflow: hidden; }
+.diagram-viewer-bar { position: absolute; top: 12px; right: 24px; display: flex; align-items: center; gap: 4px; padding: 2px 4px; border-radius: var(--md-shape-full, 999px); background: var(--glass-strong, var(--md-surface-container-high)); color: var(--md-on-surface); box-shadow: var(--md-elevation-2); }
+
+/* The editor's zoom when it isn't 100% (files/zoom.ts): click to reset. */
+.zoom-badge { margin-right: 4px; padding: 2px 8px; border: 1px solid var(--md-outline-variant); border-radius: var(--md-shape-full, 999px); background: none; color: var(--md-on-surface-variant); cursor: pointer; }
+.zoom-badge:hover { background: var(--md-surface-container-high); color: var(--md-on-surface); }
+

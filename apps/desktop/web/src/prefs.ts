@@ -55,6 +55,10 @@ export interface Prefs {
   files_width: number;
   /** How wide the conversation runs: the whole panel, or a readable column. */
   width: "full" | "readable";
+  /** How wide a document (Markdown in Preview and Visual) runs: a readable column, or the whole editor. */
+  doc_width: "readable" | "full";
+  /** The editor's and documents' zoom, in percent (50–200). */
+  editor_zoom: number;
   /** A background task that ends while nothing runs starts a turn about it. */
   task_continue: boolean;
   /** Advanced settings shown (simpleMode.ts); off, novices see what they need. */
@@ -85,6 +89,8 @@ export const defaultPrefs: Prefs = {
   task_continue: false,
   advanced: false,
   width: "full",
+  doc_width: "readable",
+  editor_zoom: 100,
   transparency: "on",
   markdown_css_light: "",
   markdown_css_dark: "",
@@ -128,6 +134,8 @@ export function normalizePrefs(raw: unknown): Prefs {
     files: r.files === true,
     show_hidden: r.show_hidden === true,
     width: pick(r.width, ["full", "readable"] as const, "full"),
+    doc_width: pick(r.doc_width, ["readable", "full"] as const, "readable"),
+    editor_zoom: typeof r.editor_zoom === "number" && r.editor_zoom >= 50 && r.editor_zoom <= 200 ? Math.round(r.editor_zoom) : 100,
     task_continue: r.task_continue === true,
     advanced: r.advanced === true,
     transparency: pick(r.transparency, ["on", "off"] as const, "on"),

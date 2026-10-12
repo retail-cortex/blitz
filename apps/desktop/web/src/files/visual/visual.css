@@ -101,7 +101,7 @@
 .visual-editor .visual-doc .visual-lang:hover { background: color-mix(in srgb, var(--md-on-surface) 8%, transparent); }
 .visual-editor .visual-doc .visual-code-button { border: 0; background: none; padding: 4px 8px; border-radius: var(--md-shape-full); color: var(--md-on-surface-variant); cursor: pointer; }
 .visual-editor .visual-doc .visual-code-button:hover { background: color-mix(in srgb, var(--md-on-surface) 8%, transparent); }
-.visual-editor .visual-doc .visual-code-editor { font-family: var(--doc-mono); font-size: 13px; }
+.visual-editor .visual-doc .visual-code-editor { font-family: var(--doc-mono); font-size: calc(13px * var(--zoom, 1)); }
 .visual-editor .visual-doc .visual-code-editor .cm-content { padding: 12px 0; line-height: 1.55; }
 .visual-editor .visual-doc .visual-code-editor .cm-line { padding: 0 18px; }
 .visual-editor .visual-doc .visual-code-editor.cm-focused { outline: none; }

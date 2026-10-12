@@ -24,6 +24,7 @@ import { CodeBlock } from "./CodeBlock";
 import { t } from "./i18n";
 import { useApp } from "./state";
 import type { Theme } from "./theme";
+import { diagramControls, panZoom } from "./panzoom";
 import { IconButton } from "./ui/controls";
 
 type Mermaid = (typeof import("mermaid"))["default"];
@@ -173,6 +174,22 @@ export function MermaidBlock({ source }: { source: string }) {
     if (host.current) host.current.innerHTML = svg; // DOMPurify-cleaned by Mermaid (strict)
   }, [svg, showSource]);
 
+  // Pan and zoom (panzoom.ts), its controls in the head.
+  const controls = useRef<HTMLSpanElement>(null);
+  const drawn = !!svg && !showSource;
+  const svgRef = useRef(svg);
+  svgRef.current = svg;
+  useEffect(() => {
+    if (!drawn || !host.current || !controls.current) return;
+    const pz = panZoom(host.current);
+    const box = diagramControls(pz, () => svgRef.current);
+    controls.current.replaceChildren(box);
+    return () => {
+      pz.destroy();
+      box.remove();
+    };
+  }, [drawn]);
+
   if (!svg) {
     return (
       <>
@@ -185,7 +202,8 @@ export function MermaidBlock({ source }: { source: string }) {
     <div className="code-block mermaid-block" data-source={source}>
       <div className="code-head">
         <span className="t-label muted">{lang}</span>
-        <span>
+        <span className="code-head-actions">
+          <span ref={controls} />
           <IconButton
             icon={showSource ? mdiGraphOutline : mdiCodeTags}
             label={showSource ? t("desktop.mermaid.show_diagram") : t("desktop.mermaid.source")}

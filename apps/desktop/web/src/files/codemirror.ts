@@ -59,7 +59,8 @@ const highlightStyle = HighlightStyle.define([
 ]);
 
 const theme = EditorView.theme({
-  "&": { height: "100%", backgroundColor: "var(--md-surface)", color: "var(--md-on-surface)", fontSize: "13px" },
+  // --zoom: the editor's zoom (zoom.ts), set on the editor pane.
+  "&": { height: "100%", backgroundColor: "var(--md-surface)", color: "var(--md-on-surface)", fontSize: "calc(13px * var(--zoom, 1))" },
   "&.cm-focused": { outline: "none" },
   ".cm-scroller": { fontFamily: "var(--md-mono)", lineHeight: "20px" },
   ".cm-content": { caretColor: "var(--md-primary)" },

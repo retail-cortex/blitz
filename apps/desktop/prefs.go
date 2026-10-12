@@ -65,6 +65,13 @@ type Prefs struct {
 	// Width is how wide the conversation runs: "full" (the default, the
 	// whole panel) or "readable" (a column of about 860 px).
 	Width string `json:"width"`
+	// DocWidth is how wide a document (Markdown in Preview and Visual)
+	// runs: "readable" (the default, a column) or "full" (the whole
+	// editor).
+	DocWidth string `json:"doc_width"`
+	// EditorZoom is the editor's and documents' zoom, in percent (50–200;
+	// 100 by default).
+	EditorZoom int `json:"editor_zoom"`
 	// TaskContinue means a background task that ends while nothing runs starts
 	// a turn about it.
 	TaskContinue bool `json:"task_continue"`
@@ -118,6 +125,12 @@ func (p *Prefs) normalize() {
 	}
 	if p.Width != "readable" {
 		p.Width = "full"
+	}
+	if p.DocWidth != "full" {
+		p.DocWidth = "readable"
+	}
+	if p.EditorZoom < 50 || p.EditorZoom > 200 {
+		p.EditorZoom = 100
 	}
 	if p.Notifications != "off" {
 		p.Notifications = "on"

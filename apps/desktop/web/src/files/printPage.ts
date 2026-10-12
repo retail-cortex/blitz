@@ -120,6 +120,8 @@ export async function printablePage(o: {
   redraw?: (source: string) => Promise<string>;
 }): Promise<string> {
   const copy = o.markdown.cloneNode(true) as HTMLElement;
+  // Diagrams print as drawn, not as zoomed in the window (panzoom.ts).
+  for (const svg of Array.from(copy.querySelectorAll<SVGElement>(".mermaid-diagram > svg"))) svg.style.transform = "";
   if (o.redraw) {
     for (const block of Array.from(copy.querySelectorAll<HTMLElement>(".mermaid-block[data-source]"))) {
       const diagram = block.querySelector(".mermaid-diagram");

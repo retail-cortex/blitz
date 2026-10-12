@@ -32,6 +32,7 @@ import { Selection, TextSelection } from "@tiptap/pm/state";
 import type { EditorView, NodeView } from "@tiptap/pm/view";
 import { t } from "../../i18n";
 import { drawDiagram } from "../../mermaid";
+import { diagramControls, panZoom, type PanZoom } from "../../panzoom";
 import { indentUnit } from "@codemirror/language";
 import { embeddedCode, languageSupport } from "../codemirror";
 import { detectIndent } from "../indent";
@@ -128,6 +129,7 @@ export class CodeBlockView implements NodeView {
   private label: HTMLElement;
   private diagram?: HTMLElement;
   private drawTimer?: ReturnType<typeof setTimeout>;
+  private pz?: PanZoom;
   private editing = false;
 
   constructor(
@@ -264,6 +266,10 @@ export class CodeBlockView implements NodeView {
     this.diagram = document.createElement("div");
     this.diagram.className = "mermaid-diagram visual-diagram";
     this.diagram.contentEditable = "false";
+    // Pan and zoom (panzoom.ts), its controls before Edit.
+    this.pz = panZoom(this.diagram);
+    const diagram = this.diagram;
+    this.dom.querySelector(".code-head")?.append(diagramControls(this.pz, () => diagram.innerHTML));
     this.addEditToggle();
     this.dom.classList.add("visual-mermaid");
     this.dom.append(this.diagram);
@@ -522,6 +528,7 @@ export class CodeBlockView implements NodeView {
   destroy() {
     closePicker?.();
     clearTimeout(this.drawTimer);
+    this.pz?.destroy();
     this.cm.destroy();
   }
 }
