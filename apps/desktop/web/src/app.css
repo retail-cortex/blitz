@@ -866,6 +866,10 @@ code.file-link:hover { text-decoration-color: currentColor; }
 .lsp-dot.lsp-missing, .lsp-dot.lsp-failed { background: var(--md-error); }
 .lsp-command { color: var(--md-on-surface-variant); }
 
-/* Every editor's tooltips (codemirror.ts tooltipLayer): fixed and of no
-   size, so the boxes the editors put there never make the page taller. */
-.cm-tooltip-layer { position: fixed; top: 0; left: 0; width: 0; height: 0; overflow: visible; z-index: 500; }
+/* Every editor's tooltips (codemirror.ts tooltipLayer): fixed over the
+   window, so the boxes the editors put there never make the page taller;
+   each box at its corner, so tooltips measure against the window (in a
+   box of no size, WebKit's absolute tooltips shrank to a word a line). */
+.cm-tooltip-layer { position: fixed; inset: 0; pointer-events: none; z-index: 500; }
+.cm-tooltip-layer > * { position: absolute; inset: 0; height: auto; }
+.cm-tooltip-layer .cm-tooltip { pointer-events: auto; }

@@ -126,16 +126,20 @@ const theme = EditorView.theme({
   ".cm-lint-marker-warning": { backgroundColor: "var(--md-warning)" },
   ".cm-lint-marker-info": { backgroundColor: "var(--md-outline)" },
   // Hover and completion documentation, as Markdown.
-  ".cm-lsp-hover": { maxWidth: "560px", maxHeight: "320px", overflow: "auto", padding: "8px 12px", fontSize: "13px" },
+  // Wide enough for a signature or a struct, and short enough to fit
+  // above or below the word; code keeps its lines and scrolls sideways,
+  // the documentation wraps.
+  ".cm-lsp-hover": { width: "max-content", maxWidth: "min(760px, 70vw)", maxHeight: "45vh", overflow: "auto", padding: "8px 12px", fontSize: "13px" },
   ".cm-lsp-hover .markdown > :first-child, .cm-completionInfo .markdown > :first-child": { marginTop: 0 },
   ".cm-lsp-hover .markdown > :last-child, .cm-completionInfo .markdown > :last-child": { marginBottom: 0 },
-  ".cm-lsp-hover pre, .cm-completionInfo pre": { margin: "4px 0", whiteSpace: "pre-wrap" },
+  ".cm-lsp-hover pre, .cm-completionInfo pre": { margin: "4px 0", whiteSpace: "pre", overflowX: "auto" },
+  ".cm-lsp-hover .markdown, .cm-completionInfo .markdown": { maxWidth: "72ch" },
   // A signature is code, not a code block: no head, no copy button, no card.
   ".cm-lsp-hover .code-head, .cm-completionInfo .code-head": { display: "none" },
   ".cm-lsp-hover .code-block, .cm-completionInfo .code-block": { border: "none", background: "none", margin: "0 0 6px", borderRadius: 0 },
   ".cm-lsp-hover .code-block pre, .cm-completionInfo .code-block pre": { padding: 0, background: "none" },
   ".cm-lsp-hover hr, .cm-completionInfo hr": { margin: "6px 0" },
-  ".cm-completionInfo": { padding: "8px 12px", maxWidth: "420px", fontSize: "13px" },
+  ".cm-completionInfo": { padding: "8px 12px", maxWidth: "min(560px, 45vw)", maxHeight: "50vh", overflow: "auto", fontSize: "13px" },
   ".cm-completionDetail": { color: "var(--md-on-surface-variant)", fontStyle: "normal", marginLeft: "8px" },
 });
 
@@ -205,8 +209,8 @@ export const tabKey: KeyBinding = {
 let layer: HTMLElement | undefined;
 
 /**
- * Where every editor's tooltips go: one element on the page, fixed and of
- * no size. Each editor puts a box of its own there, with its theme's
+ * Where every editor's tooltips go: one element fixed over the window
+ * (app.css). Each editor puts a box of its own there, with its theme's
  * classes (and so the editor's 100% height); in the body itself, a
  * document with many code blocks stacked a window's height for each below
  * the app, and any focus or scrollIntoView then scrolled the whole window
