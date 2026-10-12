@@ -111,7 +111,7 @@
   backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
   background: var(--md-surface);
 }
-:root[data-glass="on"] :is(.menu, .dialog, .composer, .snackbar, .toast) {
+:root[data-glass="on"] :is(.menu, .dialog, .composer, .snackbar, .toast, .cm-tooltip) {
   -webkit-backdrop-filter: blur(calc(var(--glass-blur) * 1.25)) saturate(var(--glass-saturate));
   backdrop-filter: blur(calc(var(--glass-blur) * 1.25)) saturate(var(--glass-saturate));
   border: 1px solid var(--glass-border);
@@ -126,9 +126,9 @@
 }
 
 /* What floats over other text stays readable even where nothing blurs:
-   dialogs and menus. The composer's "/" and "@" menu can't blur: it
+   dialogs, menus and the editors' tooltips (hover, completion). The composer's "/" and "@" menu can't blur: it
    sits inside the composer, whose own blur is the only backdrop it sees. */
-:root[data-glass="on"] :is(.dialog, .menu) { background: var(--glass-strong); }
+:root[data-glass="on"] :is(.dialog, .menu, .cm-tooltip) { background: var(--glass-strong); }
 :root[data-glass="on"] .command-menu { background: var(--glass-strong); border: 1px solid var(--glass-border); box-shadow: var(--glass-shadow), var(--glass-edge); }
 
 /* Panes: the workspace's areas float as rounded glass panes, a little

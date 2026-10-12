@@ -118,6 +118,9 @@ describe("normalizePrefs", () => {
     expect(normalizePrefs({ advanced: true }).advanced).toBe(true);
     expect(normalizePrefs({ advanced: "yes" }).advanced).toBe(false);
     expect(normalizePrefs({ width: "readable" }).width).toBe("readable");
+    expect(normalizePrefs({})).toMatchObject({ doc_width: "full", editor_zoom: 100 });
+    expect(normalizePrefs({ doc_width: "readable", editor_zoom: 124.6 })).toMatchObject({ doc_width: "readable", editor_zoom: 125 });
+    expect(normalizePrefs({ doc_width: "wide", editor_zoom: 300 })).toMatchObject({ doc_width: "full", editor_zoom: 100 });
     expect(normalizePrefs({ width: "huge" }).width).toBe("full");
   });
 });

@@ -32,10 +32,12 @@ import { Selection, TextSelection } from "@tiptap/pm/state";
 import type { EditorView, NodeView } from "@tiptap/pm/view";
 import { t } from "../../i18n";
 import { drawDiagram } from "../../mermaid";
+import { diagramControls, panZoom, type PanZoom } from "../../panzoom";
 import { indentUnit } from "@codemirror/language";
 import { embeddedCode, languageSupport } from "../codemirror";
 import { detectIndent } from "../indent";
 import { languageExtension, type LanguageHooks } from "../language";
+import { htmlPicture, pictureURL } from "../pictures";
 
 // A language for a fence's info string, as a file name CodeMirror knows.
 const fenceNames: Record<string, string> = { js: "x.js", javascript: "x.js", ts: "x.ts", typescript: "x.ts", tsx: "x.tsx", jsx: "x.jsx", py: "x.py", python: "x.py", go: "x.go", rust: "x.rs", rs: "x.rs", sh: "x.sh", bash: "x.sh", shell: "x.sh", zsh: "x.sh", json: "x.json", yaml: "x.yaml", yml: "x.yaml", toml: "x.toml", html: "x.html", css: "x.css", sql: "x.sql", java: "x.java", c: "x.c", cpp: "x.cpp", "c++": "x.cpp", proto: "x.proto", protobuf: "x.proto", dockerfile: "Dockerfile", md: "x.md", markdown: "x.md", diff: "x.diff", xml: "x.xml", kotlin: "x.kt", swift: "x.swift", ruby: "x.rb", php: "x.php", r: "x.r" };
@@ -114,7 +116,7 @@ let closePicker: (() => void) | undefined;
 const rawKinds = new Set(["frontmatter", "html", "definition", "footnote"]);
 
 /** Code blocks and raw blocks: which text they hold and how it changes. */
-type Kind = "code" | "raw";
+type Kind = "code" | "raw" | "math";
 
 /** A CodeMirror editor for a code block or a raw block, in the document. */
 export class CodeBlockView implements NodeView {
@@ -127,6 +129,7 @@ export class CodeBlockView implements NodeView {
   private label: HTMLElement;
   private diagram?: HTMLElement;
   private drawTimer?: ReturnType<typeof setTimeout>;
+  private pz?: PanZoom;
   private editing = false;
 
   constructor(
@@ -135,9 +138,10 @@ export class CodeBlockView implements NodeView {
     private getPos: () => number | undefined,
     private kind: Kind,
     private context?: BlockContext,
+    private doc?: { dir: string; path: string },
   ) {
     this.dom = document.createElement("div");
-    this.dom.className = kind === "raw" ? "code-block visual-code raw-block" : "code-block visual-code";
+    this.dom.className = kind === "raw" ? "code-block visual-code raw-block" : kind === "math" ? "code-block visual-code math-block" : "code-block visual-code";
     const head = document.createElement("div");
     head.className = "code-head";
     head.contentEditable = "false";
@@ -166,10 +170,69 @@ export class CodeBlockView implements NodeView {
     this.showLanguage();
     this.setLanguage();
     if (this.isMermaid()) this.addDiagram();
+    else if (this.isPicture()) this.addPicture();
+    else if (kind === "math") this.addMath();
+  }
+
+  // A math block (FIL-67): drawn by KaTeX, its TeX behind Edit, as a
+  // diagram's source.
+  private addMath() {
+    this.diagram = document.createElement("div");
+    this.diagram.className = "visual-diagram visual-math-view";
+    this.diagram.contentEditable = "false";
+    this.addEditToggle();
+    this.dom.classList.add("visual-mermaid");
+    this.dom.append(this.diagram);
+    this.showMath();
+  }
+
+  private showMath() {
+    const target = this.diagram;
+    if (!target) return;
+    const tex = this.text();
+    void import("../mathRender").then(({ renderMath }) => {
+      if (this.diagram === target) renderMath(target, tex, true);
+    });
   }
 
   private text(): string {
-    return this.kind === "raw" ? ((this.node.attrs.text as string) ?? "") : this.node.textContent;
+    return this.kind === "code" ? this.node.textContent : ((this.node.attrs.text as string) ?? "");
+  }
+
+  // An HTML block that's one <img>: its picture shows (DSK-24 renders no
+  // other HTML), its source behind Edit, as a diagram's.
+  private isPicture() {
+    return this.kind === "raw" && this.node.attrs.kind === "html" && !!htmlPicture(this.text());
+  }
+
+  private addPicture() {
+    this.diagram = document.createElement("div");
+    this.diagram.className = "visual-diagram visual-picture-view";
+    this.diagram.contentEditable = "false";
+    this.addEditToggle();
+    this.dom.classList.add("visual-mermaid", "visual-picture");
+    this.dom.append(this.diagram);
+    this.showPicture();
+  }
+
+  private showPicture() {
+    const pic = htmlPicture(this.text());
+    const target = this.diagram;
+    if (!pic || !target) return;
+    void pictureURL(this.doc?.dir ?? "", this.doc?.path ?? null, pic.src).then((url) => {
+      if (this.diagram !== target) return;
+      if (!url) {
+        target.textContent = pic.alt || pic.src.slice(0, 80);
+        return;
+      }
+      const img = document.createElement("img");
+      img.src = url;
+      img.alt = pic.alt;
+      if (pic.width) img.style.width = /^\d+$/.test(pic.width) ? `${pic.width}px` : pic.width;
+      if (pic.height) img.style.height = /^\d+$/.test(pic.height) ? `${pic.height}px` : pic.height;
+      img.draggable = false;
+      target.replaceChildren(img);
+    });
   }
 
   private isMermaid() {
@@ -211,11 +274,11 @@ export class CodeBlockView implements NodeView {
 
   private showLanguage() {
     const lang = (this.node.attrs.language as string | null) ?? "";
-    this.label.textContent = this.kind === "raw" ? t(`desktop.visual.raw.${rawKinds.has(this.node.attrs.kind as string) ? this.node.attrs.kind : "other"}`) : languageName(lang);
+    this.label.textContent = this.kind === "math" ? t("desktop.visual.math") : this.kind === "raw" ? t(`desktop.visual.raw.${rawKinds.has(this.node.attrs.kind as string) ? this.node.attrs.kind : "other"}`) : languageName(lang);
   }
 
   private async setLanguage() {
-    const name = this.kind === "raw" ? (this.node.attrs.kind === "html" ? "x.html" : this.node.attrs.kind === "frontmatter" ? "x.yaml" : "x.md") : fenceFile(this.node.attrs.language as string | null);
+    const name = this.kind === "math" ? "x.tex" : this.kind === "raw" ? (this.node.attrs.kind === "html" ? "x.html" : this.node.attrs.kind === "frontmatter" ? "x.yaml" : "x.md") : fenceFile(this.node.attrs.language as string | null);
     const support = await languageSupport(name);
     this.cm.dispatch({ effects: this.language.reconfigure(support) });
   }
@@ -225,6 +288,18 @@ export class CodeBlockView implements NodeView {
     this.diagram = document.createElement("div");
     this.diagram.className = "mermaid-diagram visual-diagram";
     this.diagram.contentEditable = "false";
+    // Pan and zoom (panzoom.ts), its controls before Edit.
+    this.pz = panZoom(this.diagram);
+    const diagram = this.diagram;
+    this.dom.querySelector(".code-head")?.append(diagramControls(this.pz, () => diagram.innerHTML));
+    this.addEditToggle();
+    this.dom.classList.add("visual-mermaid");
+    this.dom.append(this.diagram);
+    this.draw(0);
+  }
+
+  // Edit / Done in the head: the source shows while editing.
+  private addEditToggle() {
     const edit = document.createElement("button");
     edit.type = "button";
     edit.className = "visual-code-button t-label";
@@ -236,9 +311,6 @@ export class CodeBlockView implements NodeView {
       if (this.editing) this.cm.focus();
     };
     this.dom.querySelector(".code-head")?.append(edit);
-    this.dom.classList.add("visual-mermaid");
-    this.dom.append(this.diagram);
-    this.draw(0);
   }
 
   private draw(delay = 300) {
@@ -261,9 +333,11 @@ export class CodeBlockView implements NodeView {
     if (this.updating || !this.cm.hasFocus) return;
     const pos = this.getPos();
     if (pos === undefined) return;
-    if (this.kind === "raw") {
+    if (this.kind !== "code") {
       if (!update.docChanged) return;
       this.view.dispatch(this.view.state.tr.setNodeMarkup(pos, undefined, { ...this.node.attrs, text: update.state.doc.toString() }));
+      if (this.isPicture()) this.showPicture();
+      if (this.kind === "math") this.showMath();
       return;
     }
     let offset = pos + 1;
@@ -419,6 +493,7 @@ export class CodeBlockView implements NodeView {
     if (node.type !== this.node.type) return false;
     // A diagram and a code block are drawn differently: made again.
     if (this.kind === "code" && isMermaidLang(node.attrs.language) !== this.isMermaid()) return false;
+    if (this.kind === "raw" && (node.attrs.kind === "html" && !!htmlPicture((node.attrs.text as string) ?? "")) !== this.isPicture()) return false;
     const languageChanged = node.attrs.language !== this.node.attrs.language || node.attrs.kind !== this.node.attrs.kind;
     this.node = node;
     if (languageChanged) {
@@ -442,6 +517,8 @@ export class CodeBlockView implements NodeView {
       this.cm.dispatch({ changes: { from: start, to: curEnd, insert: next.slice(start, nextEnd) } });
       this.updating = false;
       if (this.isMermaid()) this.draw();
+      if (this.isPicture()) this.showPicture();
+      if (this.kind === "math") this.showMath();
     }
     return true;
   }
@@ -475,6 +552,7 @@ export class CodeBlockView implements NodeView {
   destroy() {
     closePicker?.();
     clearTimeout(this.drawTimer);
+    this.pz?.destroy();
     this.cm.destroy();
   }
 }

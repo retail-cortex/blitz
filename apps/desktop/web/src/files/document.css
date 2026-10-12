@@ -52,12 +52,13 @@
 }
 
 .preview-markdown { background: var(--doc-background); }
+/* --zoom: the editor's zoom (files/zoom.ts), set on the editor pane. */
 .preview-markdown .markdown {
-  max-width: var(--doc-measure);
+  max-width: calc(var(--doc-measure) * var(--zoom, 1));
   margin: 0 auto;
   padding: var(--doc-padding);
   font-family: var(--doc-font);
-  font-size: var(--doc-size);
+  font-size: calc(var(--doc-size) * var(--zoom, 1));
   line-height: var(--doc-line-height);
   color: var(--doc-text);
   overflow-wrap: break-word;
@@ -119,7 +120,7 @@
   font-size: 0.86em;
 }
 .preview-markdown .markdown .code-block { border-radius: var(--doc-radius); background: var(--doc-block-bg); }
-.preview-markdown .markdown .code-block pre { padding: 14px 18px; font-family: var(--doc-mono); font-size: 13px; line-height: 1.55; }
+.preview-markdown .markdown .code-block pre { padding: 14px 18px; font-family: var(--doc-mono); font-size: calc(13px * var(--zoom, 1)); line-height: 1.55; }
 
 /* Tables */
 .preview-markdown .markdown .table-wrap { border: 1px solid var(--doc-table-rule); border-radius: var(--doc-radius); }
@@ -137,3 +138,7 @@
 /* Diagrams */
 .preview-markdown .markdown .mermaid-block { background: var(--doc-diagram-bg); }
 .preview-markdown .markdown .mermaid-diagram { padding: 20px; }
+
+/* Document width: Full uses the whole editor (Settings, the editor's bar). */
+.editor-pane[data-doc-width="full"] .preview-markdown .markdown { max-width: none; }
+

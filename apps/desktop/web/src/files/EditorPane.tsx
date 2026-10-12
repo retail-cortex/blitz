@@ -14,9 +14,9 @@
  * limitations under the License.
  */
 
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { openSearchPanel } from "@codemirror/search";
-import { mdiAlertCircleOutline, mdiAt, mdiChevronRight, mdiClose, mdiContentSave, mdiFilePdfBox, mdiLockOutline, mdiMagnify, mdiMessagePlusOutline, mdiWrap } from "@mdi/js";
+import { mdiAlertCircleOutline, mdiArrowExpandHorizontal, mdiAt, mdiChevronRight, mdiClose, mdiContentSave, mdiFilePdfBox, mdiLockOutline, mdiMagnify, mdiMessagePlusOutline, mdiWrap } from "@mdi/js";
 import { files } from "../api";
 import { inApp, printPDF } from "../desktop";
 import { message } from "../errors";
@@ -35,6 +35,7 @@ import { languageSession, type LanguageStatus } from "./language";
 import { goToLine, languageOf, setWrap } from "./codemirror";
 import { fileIcon } from "./icons";
 import type { EditorModel, Tab } from "./useEditor";
+import { useEditorZoom } from "./zoom";
 import { useAdvanced, useApp } from "../state";
 import { paperFor, pdfPath, printablePage } from "./printPage";
 import { drawForPrint } from "../mermaid";
@@ -86,7 +87,7 @@ export function EditorPane({ model, onReveal, onCursor }: { model: EditorModel; 
   // Export as PDF: the preview, printed by the app's web engine, written
   // beside the file; an existing PDF is replaced only when the user says.
   const snack = useSnackbar();
-  const { prefs, theme } = useApp();
+  const { prefs, theme, update } = useApp();
   const [exporting, setExporting] = useState(false);
   // Markdown in advanced mode is edited where it shows (spec_visual_editor_037
   // VE-01): Visual in Preview's place, except while it prints (Export as
@@ -256,10 +257,14 @@ export function EditorPane({ model, onReveal, onCursor }: { model: EditorModel; 
     if (view.current && state) setWrap(view.current, model.wrap);
   }, [model.wrap, state]);
 
+  // The pane's zoom (zoom.ts): CodeMirror measures its lines again.
+  const [zoom, setZoom] = useEditorZoom(pane);
+  useEffect(() => view.current?.requestMeasure(), [zoom]);
+
   const closeTab = (x: Tab) => (x.dirty ? setClosing(x) : model.close(x.path));
 
   return (
-    <section className="editor-pane" ref={pane} aria-label={t("desktop.files.editor")}>
+    <section className="editor-pane" ref={pane} aria-label={t("desktop.files.editor")} style={{ "--zoom": zoom / 100 } as CSSProperties} data-doc-width={prefs.doc_width}>
       <div className="editor-tabs" role="tablist">
         {model.tabs.map((x) => (
           <div
@@ -286,6 +291,20 @@ export function EditorPane({ model, onReveal, onCursor }: { model: EditorModel; 
           </div>
         ))}
         <span className="spacer" />
+        {zoom !== 100 && (
+          <button type="button" className="zoom-badge t-label" title={t("desktop.files.zoom_reset")} onClick={() => (setZoom(100), view.current?.focus())}>
+            {t("desktop.files.zoom", { percent: zoom })}
+          </button>
+        )}
+        {tab && /\.(md|markdown|mdx)$/i.test(tab.path) && (
+          <IconButton
+            icon={mdiArrowExpandHorizontal}
+            label={t(prefs.doc_width === "full" ? "desktop.files.doc_width_readable" : "desktop.files.doc_width_full")}
+            small
+            selected={prefs.doc_width === "full"}
+            onClick={() => update((p) => ({ ...p, doc_width: p.doc_width === "full" ? "readable" : "full" }))}
+          />
+        )}
         {advanced && <IconButton icon={mdiWrap} label={t("desktop.files.wrap")} small selected={model.wrap} onClick={() => model.setWrap(!model.wrap)} />}
       </div>
       {tab && (

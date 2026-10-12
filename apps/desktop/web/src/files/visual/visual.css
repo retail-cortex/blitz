@@ -61,6 +61,15 @@
   font-size: 0.92em;
 }
 .visual-editor .visual-doc .md-image::before { content: "\1F5BC"; font-size: 0.9em; }
+/* A picture that can be shown (in the document or the workspace) */
+.visual-editor .visual-doc .md-image.shown { display: inline; padding: 0; background: none; }
+.visual-editor .visual-doc .md-image.shown::before { content: none; }
+.visual-editor .visual-doc .md-image.shown img { max-width: 100%; height: auto; vertical-align: middle; border-radius: var(--md-shape-xs); }
+.visual-editor .visual-doc .ProseMirror-selectednode.md-image.shown img { outline: 2px solid var(--md-primary); outline-offset: 2px; }
+/* An HTML <img> block: its picture, the source behind Edit */
+.visual-editor .visual-doc .visual-picture { background: none; }
+.visual-editor .visual-doc .visual-picture-view { padding: 8px; text-align: center; }
+.visual-editor .visual-doc .visual-picture-view img { max-width: 100%; height: auto; }
 
 /* Task lists: TipTap's markup, Preview's look */
 .visual-editor .visual-doc ul[data-type="taskList"] { list-style: none; padding-left: 0.2em; }
@@ -92,7 +101,7 @@
 .visual-editor .visual-doc .visual-lang:hover { background: color-mix(in srgb, var(--md-on-surface) 8%, transparent); }
 .visual-editor .visual-doc .visual-code-button { border: 0; background: none; padding: 4px 8px; border-radius: var(--md-shape-full); color: var(--md-on-surface-variant); cursor: pointer; }
 .visual-editor .visual-doc .visual-code-button:hover { background: color-mix(in srgb, var(--md-on-surface) 8%, transparent); }
-.visual-editor .visual-doc .visual-code-editor { font-family: var(--doc-mono); font-size: 13px; }
+.visual-editor .visual-doc .visual-code-editor { font-family: var(--doc-mono); font-size: calc(13px * var(--zoom, 1)); }
 .visual-editor .visual-doc .visual-code-editor .cm-content { padding: 12px 0; line-height: 1.55; }
 .visual-editor .visual-doc .visual-code-editor .cm-line { padding: 0 18px; }
 .visual-editor .visual-doc .visual-code-editor.cm-focused { outline: none; }
@@ -169,3 +178,14 @@
 .menu.floating.visual-image .input { width: 100%; }
 .menu.floating.visual-image .input + label { margin-top: 6px; }
 .visual-popover-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px; }
+
+/* Math (FIL-67): inline, drawn, its TeX in a field when selected; a block
+   drawn, its TeX behind Edit. */
+.visual-editor .visual-doc .math-inline-view { cursor: pointer; border-radius: var(--md-shape-xs); padding: 0 1px; }
+.visual-editor .visual-doc .math-inline-view:hover { background: var(--doc-code-bg); }
+.visual-editor .visual-doc .math-inline-view.ProseMirror-selectednode { outline: 2px solid var(--md-primary); outline-offset: 1px; }
+.visual-editor .visual-doc .math-block { background: none; }
+.visual-editor .visual-doc .visual-math-view { padding: 12px 16px; overflow-x: auto; text-align: center; }
+.visual-editor .visual-doc .visual-math-view .katex { font-size: 1.15em; }
+.visual-math-field input { width: min(420px, 70vw); font-family: var(--md-mono); }
+
