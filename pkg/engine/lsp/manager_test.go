@@ -231,6 +231,54 @@ func TestGoplsSnippets(t *testing.T) {
 	}
 }
 
+// TestGoplsSnippetsOutsideModule asks gopls about a Go block in a
+// workspace whose module is in a folder (backend/go.mod), not at its
+// root: its file is in the manager's own folder, which gopls can list.
+func TestGoplsSnippetsOutsideModule(t *testing.T) {
+	if os.Getenv("BLITZ_TEST_GOPLS") == "" {
+		t.Skip("set BLITZ_TEST_GOPLS=1 to ask gopls")
+	}
+	dir, _ := filepath.EvalSymlinks(t.TempDir())
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "backend"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "backend", "go.mod"), []byte("module example.com/backend\n\ngo 1.22\n"), 0o644))
+	launch := func(ctx context.Context, argv []string) (lsp.Process, error) { return startProcess(argv) }
+	m := lsp.NewManager(dir, []lsp.Server{{Language: "go", Command: []string{"gopls"}, Extensions: []string{".go"}}}, launch)
+	defer m.Close()
+	info := m.OpenSnippet("w", m.SnippetPath("abc", ".go"), "package daemon\n\nimport \"fmt\"\n\nfunc F() { fmt.Println(1) }\n", 1)
+	require.NotEmpty(t, info.ID)
+	var hover string
+	require.Eventually(t, func() bool {
+		var err error
+		hover, err = m.DocumentHover(context.Background(), info.ID, 1, 5, 18)
+		return err == nil && hover != ""
+	}, 60*time.Second, 500*time.Millisecond, "a hover in the block")
+	assert.Contains(t, hover, "Println")
+	got := make(chan lsp.DocumentDiagnostics, 64)
+	wctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() {
+		_ = m.WatchDiagnostics(wctx, "w", func(d lsp.DocumentDiagnostics) error { got <- d; return nil })
+	}()
+	require.NoError(t, m.ChangeDocument(context.Background(), info.ID, 2, "package daemon\n\nfunc F() { undefinedName() }\n"))
+	deadline := time.After(60 * time.Second)
+	for {
+		select {
+		case d := <-got:
+			if d.Version != 2 || len(d.Diagnostics) == 0 {
+				continue
+			}
+			var messages []string
+			for _, x := range d.Diagnostics {
+				messages = append(messages, x.Message)
+			}
+			assert.Equal(t, []string{"undefined: undefinedName"}, messages, "its errors, not that it's in no package")
+			return
+		case <-deadline:
+			t.Fatal("no diagnostics for the block")
+		}
+	}
+}
+
 // TestPyright asks pyright about a Python file and a Python code block
 // (spec_visual_editor_037 §7): it answers only once told the client's
 // configuration changed. Set BLITZ_TEST_PYRIGHT=1 with pyright installed.

@@ -346,7 +346,7 @@ func TestLanguageErrors(t *testing.T) {
 		{fmt.Errorf("x: %w", engine.ErrNoLanguageServer), connect.CodeFailedPrecondition, "NO_SERVER"},
 		{&engine.ServerNotInstalledError{Command: "gopls"}, connect.CodeFailedPrecondition, "SERVER_MISSING"},
 		{engine.ErrBadPath, connect.CodeInvalidArgument, "BAD_PATH"},
-		{errors.New("broken pipe"), connect.CodeUnavailable, "SERVER_FAILED"},
+		{errors.New("broken pipe"), connect.CodeUnknown, "SERVER_FAILED"},
 	} {
 		t.Run(tc.reason, func(t *testing.T) {
 			code, info := errorReason(t, languageError(tc.err))

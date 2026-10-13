@@ -37,7 +37,13 @@ export function errorMeta(e: unknown, key: string): string {
   return e.findDetails(ErrorInfoSchema)[0]?.metadata[key] ?? "";
 }
 
-/** Whether the service couldn't be reached (it stopped, is stopping, or isn't running). */
+/**
+ * Whether the service couldn't be reached (it stopped, is stopping, or
+ * isn't running). An Unavailable the service answered with another reason
+ * (a language server's failure, from an older service) isn't that.
+ */
 export function isUnavailable(e: unknown): boolean {
-  return e instanceof ConnectError && e.code === Code.Unavailable;
+  if (!(e instanceof ConnectError) || e.code !== Code.Unavailable) return false;
+  const why = reason(e);
+  return why === "" || why === "SHUTTING_DOWN";
 }

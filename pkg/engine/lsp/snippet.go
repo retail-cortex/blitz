@@ -19,6 +19,7 @@ package lsp
 // Go fragment is made a whole file first, so the server can read it.
 
 import (
+	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -97,6 +98,52 @@ func serverText(doc *Document) (string, wrapping) {
 // diagnostics.
 func SnippetPath(root, key, ext string) string {
 	return filepath.Join(root, "blitz-snippets", key, "snippet"+ext)
+}
+
+// SnippetPath is where the code block key's file is said to be: under the
+// workspace's root (the function SnippetPath); but a Go block in a
+// workspace no go.mod or go.work covers is in a folder of the manager's
+// own outside it, made for it, since gopls lists a file outside a module
+// from its folder, which must exist (and nothing is written to the
+// workspace).
+func (m *Manager) SnippetPath(key, ext string) string {
+	if !strings.EqualFold(ext, ".go") || inGoModule(m.root) {
+		return SnippetPath(m.root, key, ext)
+	}
+	dir := m.scratchDir()
+	if dir == "" || os.MkdirAll(filepath.Join(dir, key), 0o700) != nil {
+		return SnippetPath(m.root, key, ext)
+	}
+	return filepath.Join(dir, key, "snippet"+ext)
+}
+
+// scratchDir is the manager's own folder for code blocks' folders, made
+// the first time it's asked for and removed when it closes ("" if it
+// can't be made).
+func (m *Manager) scratchDir() string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.scratch == "" && !m.closed {
+		if dir, err := os.MkdirTemp("", "blitz-snippets-"); err == nil {
+			m.scratch, _ = filepath.EvalSymlinks(dir)
+		}
+	}
+	return m.scratch
+}
+
+// inGoModule reports whether a go.mod or go.work in dir or a folder above
+// it makes it part of a Go module.
+func inGoModule(dir string) bool {
+	for d := filepath.Clean(dir); ; d = filepath.Dir(d) {
+		for _, f := range []string{"go.mod", "go.work"} {
+			if _, err := os.Stat(filepath.Join(d, f)); err == nil {
+				return true
+			}
+		}
+		if filepath.Dir(d) == d {
+			return false
+		}
+	}
 }
 
 // shift moves an edit from the server's text to the block's, reporting

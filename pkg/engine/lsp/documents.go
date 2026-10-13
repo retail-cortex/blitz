@@ -790,6 +790,7 @@ func (m *Manager) diagnosticsOf(id string) (DocumentDiagnostics, bool) {
 	s, uri, version := doc.server, doc.uri, doc.Version
 	_, w := serverText(doc)
 	lines := strings.Count(doc.text, "\n") + 1
+	snippet := doc.snippet
 	d.mu.Unlock()
 	s.mu.Lock()
 	pub, ok := s.diags[uri]
@@ -807,6 +808,11 @@ func (m *Manager) diagnosticsOf(id string) (DocumentDiagnostics, bool) {
 		e := TextEdit{Start: charPosition(text, item.Range.Start), End: charPosition(text, item.Range.End)}
 		if !w.shift(&e, lines) {
 			continue // about what was added, not the block
+		}
+		// gopls on a block outside a module: true of every block, and its
+		// errors still come.
+		if snippet && strings.HasPrefix(item.Message, "No packages found for open file") {
+			continue
 		}
 		// A fragment's variables are often only shown, not used, and the
 		// packages it calls aren't imported.

@@ -51,7 +51,9 @@ func languageError(err error) error {
 	if errors.As(err, &ce) {
 		return ce
 	}
-	return apiError(connect.CodeUnavailable, "SERVER_FAILED", err)
+	// Not Unavailable: that says the Blitz service is gone, and clients
+	// (the desktop page) take it so.
+	return apiError(connect.CodeUnknown, "SERVER_FAILED", err)
 }
 
 var serverStates = map[engine.LanguageState]pb.ServerState{
