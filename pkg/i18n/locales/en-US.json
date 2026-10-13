@@ -1718,6 +1718,8 @@
     "desktop.worker.open_session": "Open its conversation",
     "desktop.settings.transparency": "Transparency",
     "desktop.settings.transparency.detail": "Glass surfaces that let the desktop and the window behind them show through, blurred. Off: solid surfaces (also when the system asks for reduced transparency).",
+    "desktop.settings.gpu": "Use the graphics card",
+    "desktop.settings.gpu.detail": "Draws the window with the graphics card where it can, which keeps it light on the processor. Turn it off if the window flickers or goes blank. Takes effect when Blitz restarts; if Blitz won't start at all, start it with BLITZ_GPU=off.",
     "desktop.diagram.zoom_in": "Zoom in",
     "desktop.diagram.zoom_out": "Zoom out",
     "desktop.diagram.fit": "Fit",

@@ -1718,6 +1718,8 @@
     "desktop.worker.open_session": "Ouvrir sa conversation",
     "desktop.settings.transparency": "Transparence",
     "desktop.settings.transparency.detail": "Des surfaces de verre qui laissent voir, flouté, le bureau et ce qui est derrière. Désactivée : surfaces opaques (aussi quand le système demande de réduire la transparence).",
+    "desktop.settings.gpu": "Utiliser la carte graphique",
+    "desktop.settings.gpu.detail": "Dessine la fenêtre avec la carte graphique quand c'est possible, ce qui ménage le processeur. Désactivez-la si la fenêtre clignote ou reste vide. S'applique au redémarrage de Blitz; si Blitz ne démarre plus, lancez-le avec BLITZ_GPU=off.",
     "desktop.diagram.zoom_in": "Zoom avant",
     "desktop.diagram.zoom_out": "Zoom arrière",
     "desktop.diagram.fit": "Ajuster",

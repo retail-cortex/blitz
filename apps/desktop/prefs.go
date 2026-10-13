@@ -80,6 +80,10 @@ type Prefs struct {
 	Advanced bool `json:"advanced"`
 	// Transparency is "on" (the default: glass surfaces) or "off".
 	Transparency string `json:"transparency"`
+	// GPU is "on" (the default: on Linux the window draws with the
+	// graphics card where it can) or "off" (in software); read as the app
+	// starts (gpu.go).
+	GPU string `json:"gpu"`
 	// MarkdownCSSLight and MarkdownCSSDark are the user's CSS for Markdown
 	// previews in each theme, over the defaults (at most maxMarkdownCSS
 	// bytes each).
@@ -137,6 +141,9 @@ func (p *Prefs) normalize() {
 	}
 	if p.Transparency != "off" {
 		p.Transparency = "on"
+	}
+	if p.GPU != "off" {
+		p.GPU = "on"
 	}
 	for _, css := range []*string{&p.MarkdownCSSLight, &p.MarkdownCSSDark} {
 		if len(*css) > maxMarkdownCSS {

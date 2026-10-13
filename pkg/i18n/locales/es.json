@@ -1718,6 +1718,8 @@
     "desktop.worker.open_session": "Abrir su conversación",
     "desktop.settings.transparency": "Transparencia",
     "desktop.settings.transparency.detail": "Superficies de vidrio que dejan ver, difuminado, el escritorio y lo que hay detrás. Desactivada: superficies opacas (también cuando el sistema pide reducir la transparencia).",
+    "desktop.settings.gpu": "Usar la tarjeta gráfica",
+    "desktop.settings.gpu.detail": "Dibuja la ventana con la tarjeta gráfica cuando puede, lo que ahorra procesador. Desactívala si la ventana parpadea o se queda en blanco. Se aplica al reiniciar Blitz; si Blitz no llega a abrirse, inícialo con BLITZ_GPU=off.",
     "desktop.diagram.zoom_in": "Acercar",
     "desktop.diagram.zoom_out": "Alejar",
     "desktop.diagram.fit": "Ajustar",

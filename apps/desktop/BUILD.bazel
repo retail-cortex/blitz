@@ -55,6 +55,7 @@ go_library(
         "cli.go",
         "deeplink.go",
         "folder.go",
+        "gpu.go",
         "link_darwin.go",
         "main.go",
         "prefs.go",
@@ -90,6 +91,7 @@ go_library(
         "@com_github_wailsapp_wails_v2//:wails",
         "@com_github_wailsapp_wails_v2//pkg/options",
         "@com_github_wailsapp_wails_v2//pkg/options/assetserver",
+        "@com_github_wailsapp_wails_v2//pkg/options/linux",
         "@com_github_wailsapp_wails_v2//pkg/options/mac",
         "@com_github_wailsapp_wails_v2//pkg/runtime",
     ],
@@ -132,6 +134,7 @@ go_test(
         "cli_test.go",
         "deeplink_test.go",
         "folder_test.go",
+        "gpu_test.go",
         "license_test.go",
         "prefs_test.go",
         "sandbox_test.go",
@@ -148,6 +151,7 @@ go_test(
         "//pkg/socket",
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
+        "@com_github_wailsapp_wails_v2//pkg/options/linux",
     ],
 )
 

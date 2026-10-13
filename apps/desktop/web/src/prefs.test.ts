@@ -121,6 +121,9 @@ describe("normalizePrefs", () => {
     expect(normalizePrefs({})).toMatchObject({ doc_width: "full", editor_zoom: 100 });
     expect(normalizePrefs({ doc_width: "readable", editor_zoom: 124.6 })).toMatchObject({ doc_width: "readable", editor_zoom: 125 });
     expect(normalizePrefs({ doc_width: "wide", editor_zoom: 300 })).toMatchObject({ doc_width: "full", editor_zoom: 100 });
+    expect(normalizePrefs({}).gpu).toBe("on");
+    expect(normalizePrefs({ gpu: "off" }).gpu).toBe("off");
+    expect(normalizePrefs({ gpu: "maybe" }).gpu).toBe("on");
     expect(normalizePrefs({ width: "huge" }).width).toBe("full");
   });
 });

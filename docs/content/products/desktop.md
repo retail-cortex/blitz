@@ -15,6 +15,8 @@ From source: `bazel build //apps/desktop/packaging:Blitz.app` (macOS) or `:deb` 
 
 **On Linux, the shell sandbox is required.** The `.deb` installs bubblewrap with it, and the app's Settings › Service says whether bubblewrap runs. On Ubuntu 24.04 and later, AppArmor restricts the user namespaces it needs; `blitz security fix-apparmor` (or **Allow bubblewrap** in the desktop app) installs an AppArmor profile that lets bwrap alone have them, asking for your password once. Until the sandbox works, workspaces don't open; to run the agent's commands unsandboxed instead, set `[sandbox] shell = "auto"` in `~/.blitz/.env.toml`. A workspace that didn't open for want of it shows the same button above it, and the service restarts once it's fixed.
 
+**On Linux, the window draws with your graphics card** where WebKitGTK can use it, which keeps the app light on the processor. If the window flickers or goes blank, turn off **Use the graphics card** in Settings › Appearance (with the advanced settings shown) and restart Blitz; if it won't start at all, start it once with `BLITZ_GPU=off blitz-desktop`.
+
 ### Chromebooks (ChromeOS's Linux development environment)
 
 The Linux `.deb` runs in ChromeOS's Linux container (Crostini): `amd64` on Intel Chromebooks such as the Pixelbook, `arm64` on ARM ones. It hasn't been tested there yet; reports are welcome.

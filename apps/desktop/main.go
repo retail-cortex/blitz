@@ -28,6 +28,7 @@ import (
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
+	"github.com/wailsapp/wails/v2/pkg/options/linux"
 	"github.com/wailsapp/wails/v2/pkg/options/mac"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
@@ -50,6 +51,7 @@ func main() {
 	for _, l := range linkArgs(os.Args[1:]) { // Linux: opened with a link
 		app.links.receive(l)
 	}
+	saved, _ := app.prefs.load() // the defaults when none are readable
 	err := wails.Run(&options.App{
 		Title:     "Blitz",
 		Width:     1280,
@@ -73,6 +75,7 @@ func main() {
 			WindowIsTranslucent:  true,
 			OnUrlOpen:            app.links.receive,
 		},
+		Linux: &linux.Options{WebviewGpuPolicy: gpuPolicy(saved.GPU, os.Getenv)},
 		// One app: a second start (a link, on Linux) goes to the first.
 		SingleInstanceLock: &options.SingleInstanceLock{
 			UniqueId: "dev.blitz.desktop",
