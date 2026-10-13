@@ -65,6 +65,8 @@ go_library(
         "prefs.go",
         "sandbox.go",
         "unsaved.go",
+        "windowicon_linux.go",
+        "windowicon_other.go",
     ],
     cdeps = [":embedded_info_plist"],  # keep
     cgo = True,
@@ -79,7 +81,10 @@ go_library(
         ],
         "//conditions:default": [],
     }),
-    embedsrcs = [":dist"],  # keep
+    embedsrcs = [
+        ":dist",
+        "windowicon.png",  # the Linux window's (windowicon_linux.go)
+    ],  # keep
     importpath = "github.com/retail-cortex/blitz/apps/desktop",
     visibility = ["//visibility:private"],
     deps = [

@@ -38,3 +38,22 @@ func gpuPolicy(pref string, getenv func(string) string) linux.WebviewGpuPolicy {
 	}
 	return linux.WebviewGpuPolicyOnDemand
 }
+
+// programName is the Linux window's class, which the dock or taskbar
+// matches to the app's launcher (StartupWMClass in
+// packaging/linux/blitz-desktop.desktop), whatever the binary is called.
+const programName = "blitz-desktop"
+
+// linuxOptions are the Linux window's options: the GPU as gpuPolicy has
+// it, the window's class and its icon (for a taskbar that doesn't find the
+// launcher's). Drawing in software also turns off WebKitGTK's DMA-BUF
+// renderer (setenv, before WebKitGTK starts), the usual cause of a blank
+// or garbled window on NVIDIA's drivers and in VMs, unless the
+// environment already says.
+func linuxOptions(pref string, getenv func(string) string, setenv func(k, v string) error) *linux.Options {
+	policy := gpuPolicy(pref, getenv)
+	if policy == linux.WebviewGpuPolicyNever && getenv("WEBKIT_DISABLE_DMABUF_RENDERER") == "" {
+		_ = setenv("WEBKIT_DISABLE_DMABUF_RENDERER", "1")
+	}
+	return &linux.Options{WebviewGpuPolicy: policy, ProgramName: programName, Icon: windowIcon}
+}

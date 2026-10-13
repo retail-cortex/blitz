@@ -28,7 +28,6 @@ import (
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
-	"github.com/wailsapp/wails/v2/pkg/options/linux"
 	"github.com/wailsapp/wails/v2/pkg/options/mac"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
@@ -74,11 +73,14 @@ func main() {
 			WebviewIsTransparent: true,
 			WindowIsTranslucent:  true,
 			OnUrlOpen:            app.links.receive,
+			// Escape closes the page's dialogs and popovers; in full
+			// screen it would leave full screen too.
+			DisableEscapeExitsFullscreen: true,
 		},
 		// macOS's menu bar, About and Settings… in the app menu
 		// (appmenu.go); none elsewhere.
 		Menu:  app.appMenu(MenuLabels{}),
-		Linux: &linux.Options{WebviewGpuPolicy: gpuPolicy(saved.GPU, os.Getenv)},
+		Linux: linuxOptions(saved.GPU, os.Getenv, os.Setenv),
 		// One app: a second start (a link, on Linux) goes to the first.
 		SingleInstanceLock: &options.SingleInstanceLock{
 			UniqueId: "dev.blitz.desktop",
