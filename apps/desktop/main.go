@@ -75,6 +75,9 @@ func main() {
 			WindowIsTranslucent:  true,
 			OnUrlOpen:            app.links.receive,
 		},
+		// macOS's menu bar, About and Settings… in the app menu
+		// (appmenu.go); none elsewhere.
+		Menu:  app.appMenu(MenuLabels{}),
 		Linux: &linux.Options{WebviewGpuPolicy: gpuPolicy(saved.GPU, os.Getenv)},
 		// One app: a second start (a link, on Linux) goes to the first.
 		SingleInstanceLock: &options.SingleInstanceLock{

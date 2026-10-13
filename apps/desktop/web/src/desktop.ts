@@ -93,6 +93,7 @@ type Bound = {
   Notify(title: string, body: string, dir: string): Promise<void>;
   SetUnsaved(u: { message: string; quit: string; cancel: string }): Promise<void>;
   SetAppearance(theme: string): Promise<void>;
+  SetMenu(l: AppMenuLabels): Promise<void>;
   License(which: string): Promise<string>;
   PendingLinks(): Promise<DeepLink[] | null>;
   PrintPDF(html: string, pageSize: string): Promise<string>;
@@ -302,6 +303,22 @@ export function setUnsaved(message: string, quit: string, cancel: string) {
  */
 export function setAppearance(theme: "system" | "light" | "dark") {
   if (inApp()) app().SetAppearance(theme).catch(() => {});
+}
+
+/** The macOS app menu's words, in the window's language. */
+export type AppMenuLabels = { about: string; settings: string; hide: string; hide_others: string; show_all: string; quit: string };
+
+/** Relabels the macOS app menu (DSK-101) in the window's language; nothing elsewhere. */
+export function setAppMenu(l: AppMenuLabels) {
+  if (inApp()) app().SetMenu(l).catch(() => {});
+}
+
+/** Calls f when the app menu's About Blitz or Settings… is chosen (macOS). */
+export function onAppMenu(f: (item: "about" | "settings") => void): () => void {
+  const rt = (window as unknown as { runtime?: WailsRuntime }).runtime;
+  if (!inApp() || !rt?.EventsOn) return () => {};
+  const offs = [rt.EventsOn("menu:about", () => f("about")), rt.EventsOn("menu:settings", () => f("settings"))];
+  return () => offs.forEach((off) => off());
 }
 
 /** Which license text: the NOTICE, the Apache License, or the third-party notices. */

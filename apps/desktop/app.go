@@ -49,6 +49,9 @@ type App struct {
 	unsaved   Unsaved // the editor's unsaved changes (unsaved.go)
 
 	links links // blitz:// links (deeplink.go)
+
+	// emit tells the page of an event (tests); nil, the Wails runtime's.
+	emit func(name string)
 }
 
 func (a *App) startup(ctx context.Context) {
