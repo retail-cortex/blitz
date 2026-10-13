@@ -130,7 +130,7 @@ func (w *Workspace) OpenDocument(client, p, text string, version int64, block *C
 	}
 	if block != nil {
 		sum := sha256.Sum256([]byte(client + "\x00" + rel + "\x00" + block.ID))
-		path := lsp.SnippetPath(w.Dir(), hex.EncodeToString(sum[:8]), strings.ToLower(block.Extension))
+		path := m.SnippetPath(hex.EncodeToString(sum[:8]), strings.ToLower(block.Extension))
 		return m.OpenSnippet(client, path, text, version), nil
 	}
 	return m.OpenDocument(client, filepath.Join(w.Dir(), rel), text, version), nil

@@ -18,6 +18,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"path/filepath"
 	"sync"
 	"testing"
@@ -137,7 +138,8 @@ func TestSnippetDocument(t *testing.T) {
 	assert.Empty(t, list.Items[0].AdditionalEdits, "an edit to what was added (an import) can't be made")
 
 	// Problems: in the block's lines; about what was added, dropped; a
-	// fragment's unused variable and missing import, hints.
+	// fragment's unused variable and missing import, hints; gopls's "in
+	// no package" (a block outside a module), dropped.
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	got := make(chan DocumentDiagnostics, 8)
@@ -147,6 +149,7 @@ func TestSnippetDocument(t *testing.T) {
 	}
 	f.notify("textDocument/publishDiagnostics", map[string]any{"uri": fileURI(path), "diagnostics": []any{
 		diag(0, "in package snippet"), diag(3, "declared and not used: x"), diag(4, "undefined: fmt"), diag(4, "too many arguments"),
+		diag(3, "No packages found for open file "+path+"."),
 	}})
 	select {
 	case d := <-got:
@@ -178,6 +181,48 @@ func TestUnimported(t *testing.T) {
 	} {
 		t.Run(tc.message, func(t *testing.T) {
 			assert.Equal(t, tc.want, unimported(tc.message, text))
+		})
+	}
+}
+
+// A Go block is said to be under the workspace when a module covers it,
+// and otherwise in a folder of the manager's own that exists, so gopls
+// can list it; nothing is written to the workspace.
+func TestManagerSnippetPath(t *testing.T) {
+	for _, tc := range []struct {
+		name, file, ext string
+		inRoot          bool
+	}{
+		{"a module at the root", "go.mod", ".go", true},
+		{"a go.work at the root", "go.work", ".go", true},
+		{"a module above the root", "../go.mod", ".go", true},
+		{"no module", "", ".go", false},
+		{"no module, another language", "", ".py", true},
+		{"no module, an upper-case extension", "", ".GO", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			parent, _ := filepath.EvalSymlinks(t.TempDir())
+			root := filepath.Join(parent, "ws")
+			require.NoError(t, os.MkdirAll(root, 0o755))
+			if tc.file != "" {
+				require.NoError(t, os.WriteFile(filepath.Join(root, tc.file), []byte("module x\n"), 0o644))
+			}
+			m := NewManager(root, nil, nil)
+			p := m.SnippetPath("k1", tc.ext)
+			if tc.inRoot {
+				assert.Equal(t, SnippetPath(root, "k1", tc.ext), p)
+			} else {
+				assert.NotContains(t, p, root)
+				assert.Equal(t, "snippet"+tc.ext, filepath.Base(p))
+				assert.DirExists(t, filepath.Dir(p), "gopls lists the block from its folder")
+				assert.Equal(t, filepath.Dir(filepath.Dir(p)), filepath.Dir(filepath.Dir(m.SnippetPath("k2", tc.ext))), "one folder of the manager's")
+			}
+			assert.NoDirExists(t, filepath.Join(root, "blitz-snippets"), "nothing written to the workspace")
+			m.Close()
+			if !tc.inRoot {
+				assert.NoDirExists(t, filepath.Dir(filepath.Dir(p)), "removed when the manager closes")
+				assert.Equal(t, SnippetPath(root, "k3", tc.ext), m.SnippetPath("k3", tc.ext), "none made once closed")
+			}
 		})
 	}
 }

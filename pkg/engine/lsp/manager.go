@@ -56,6 +56,7 @@ type Manager struct {
 	failed  map[string]failure   // why a language's server couldn't start
 	since   map[string]time.Time // when each language's server started, or failed to
 	closed  bool
+	scratch string // code blocks' folders outside the workspace (snippet.go)
 
 	docs documents // the editor's (documents.go)
 }
@@ -643,6 +644,8 @@ func (m *Manager) Close() {
 	servers := m.running
 	m.running = map[string]*server{}
 	m.closed = true
+	scratch := m.scratch
+	m.scratch = ""
 	starts := make([]*starting, 0, len(m.start))
 	for _, st := range m.start {
 		starts = append(starts, st)
@@ -654,6 +657,9 @@ func (m *Manager) Close() {
 	}
 	for _, s := range servers {
 		s.shutdown()
+	}
+	if scratch != "" {
+		os.RemoveAll(scratch)
 	}
 }
 
