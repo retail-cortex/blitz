@@ -257,8 +257,10 @@ body.resizing iframe, body.resizing .cm-editor { pointer-events: none; }
 
 /* The chat input's border, in or out of the conversation (pinned, the dock
    carries it): the welcome title's gradient (its primary to its tertiary,
-   .gradient-text) as a ring turning around it, slowly at rest and faster
-   while the agent works, brighter with a soft glow when focused. A
+   .gradient-text) as a ring, still at rest and turning while the agent
+   works, brighter with a soft glow when focused. Only while it works: the
+   angle can't be animated by the compositor, so a turning ring repaints
+   every frame, a core's worth where WebKitGTK draws without the GPU. A
    gradient on a pseudo-element masked to the border's width; the angle is
    a registered property so it animates (where @property isn't supported
    the ring is drawn, still). Dark: light blue to green; light: deep blue
@@ -272,11 +274,10 @@ body.resizing iframe, body.resizing .cm-editor { pointer-events: none; }
   -webkit-mask-composite: xor;
   mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
   opacity: 0.75; transition: opacity 0.2s;
-  animation: ring-turn 8s linear infinite;
 }
 .composer-dock .composer::after { display: none; } /* pinned: the dock's ring */
 :is(.composer, .composer-dock):focus-within::after { opacity: 1; }
-.composer.running::after, .composer-dock:has(.composer.running)::after { opacity: 1; animation-duration: 2.5s; }
+.composer.running::after, .composer-dock:has(.composer.running)::after { opacity: 1; animation: ring-turn 2.5s linear infinite; }
 .composer:not(.composer-dock .composer):focus-within, .composer-dock:focus-within { box-shadow: 0 0 18px -6px var(--ring-b); }
 @keyframes ring-turn { to { --ring-angle: 360deg; } }
 /* Send (steer, while the agent works) glows with the ring's turn. */
