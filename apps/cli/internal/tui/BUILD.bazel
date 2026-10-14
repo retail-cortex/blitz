@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+load("@bazel_lib//lib:copy_to_bin.bzl", "copy_to_bin")
 load("@rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
@@ -174,4 +175,13 @@ go_test(
         ],
         "//conditions:default": [],
     }),
+)
+
+# The REPL's commands (/help's list, helpGroups), in the output tree, for
+# the desktop page's test that its slash commands match them
+# (//apps/desktop/web:test, spec_desktop_024 DSK-102).
+copy_to_bin(
+    name = "commands",
+    srcs = ["commands.go"],
+    visibility = ["//apps/desktop/web:__pkg__"],
 )

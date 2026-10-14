@@ -18,6 +18,7 @@
 // through the service's API (as the terminal's REPL does), and the
 // workspace's custom commands and skills, which run as turns.
 import { t } from "./i18n";
+import { builtinsInOrder, commandGroups, terminalOnly, type CommandGroup } from "./slashCommands";
 
 /** A slash command as the composer offers it. */
 export interface CommandSpec {
@@ -26,32 +27,13 @@ export interface CommandSpec {
   description: string;
   /** "builtin" runs in the window; the others run as a command turn. */
   source: "builtin" | "project" | "user" | "bundled" | "skill";
+  /** A built-in's group in /help (slashCommands.ts). */
+  group?: CommandGroup;
 }
 
-const builtinArgs: Record<string, string | undefined> = {
-  plan: "<goal>",
-  btw: "<question>",
-  search: "web|session <terms>",
-  undo: "[--force]",
-  checkpoints: undefined,
-  diff: undefined,
-  cost: undefined,
-  context: undefined,
-  compact: "[focus]",
-  agent: "[name]",
-  model: "[provider/model]",
-  mode: "[default|accept-edits|plan|dont-ask|bypass]",
-  effort: "[minimal|low|medium|high|max|auto]",
-  session: "save <name> [--force]",
-  rename: "<title>",
-  new: undefined,
-  license: "[full|third-party]",
-  help: undefined,
-};
-
-/** The built-in commands, described in the window's language. */
+/** The built-in commands, by group then name, described in the window's language. */
 export const builtins = (): CommandSpec[] =>
-  Object.entries(builtinArgs).map(([name, args]) => ({ name, args, description: t(`desktop.cmd.${name}`), source: "builtin" }));
+  builtinsInOrder().map((b) => ({ name: b.name, args: b.args, description: t(b.describe ?? `desktop.cmd.${b.name}`), source: "builtin", group: b.group }));
 
 /** A composer line as a command, or undefined when it isn't one. */
 export function parseCommand(line: string): { name: string; args: string } | undefined {
@@ -66,6 +48,7 @@ export function parseCommand(line: string): { name: string; args: string } | und
   // /agents-update (the engine reads them the same way).
   const update = /^update(?:\s+([\s\S]*))?$/i.exec(args);
   if ((name === "skills" || name === "agents") && update) return { name: `${name}-update`, args: (update[1] ?? "").trim() };
+  if (name === "set") return { name: "config", args }; // the terminal's other name for it
   return { name, args };
 }
 
@@ -87,21 +70,41 @@ export function matchCommands(draft: string, all: CommandSpec[]): CommandSpec[] 
 export function allCommands(custom: CommandSpec[]): CommandSpec[] {
   const own = builtins();
   const names = new Set(own.map((b) => b.name));
-  return [...own, ...custom.filter((c) => !names.has(c.name))];
+  return [...own, ...custom.filter((c) => !names.has(c.name)).sort((a, b) => a.name.localeCompare(b.name))];
 }
 
-/** /help's text, as Markdown. */
+/** /help's text, as Markdown: the built-ins in their groups, then the custom commands by source, each sorted. */
 export function helpText(all: CommandSpec[]): string {
   // A "|" would end a table cell, also inside code: escape it everywhere.
   const cell = (s: string) => s.replace(/\|/g, "\\|");
   const row = (c: CommandSpec) => `| \`/${cell(c.name + (c.args ? " " + c.args : ""))}\` | ${cell(c.description)} |`;
-  const custom = all.filter((c) => c.source !== "builtin");
   const head = `| ${t("desktop.help.command")} | ${t("desktop.help.does")} |\n|---|---|\n`;
-  let s = `**${t("desktop.help.title")}**\n\n${head}` + all.filter((c) => c.source === "builtin").map(row).join("\n");
-  if (custom.length) s += `\n\n**${t("desktop.help.custom")}**\n\n${head}` + custom.map(row).join("\n");
+  const byName = (a: CommandSpec, b: CommandSpec) => a.name.localeCompare(b.name);
+  let s = `**${t("desktop.help.title")}**`;
+  for (const g of commandGroups) {
+    const list = all.filter((c) => c.source === "builtin" && c.group === g).sort(byName);
+    if (list.length) s += `\n\n**${t(`help.group.${g}`)}**\n\n${head}` + list.map(row).join("\n");
+  }
+  const custom = all.filter((c) => c.source !== "builtin");
+  if (custom.length) {
+    s += `\n\n**${t("desktop.help.custom")}**`;
+    const sources = [...new Set(custom.map((c) => c.source))].sort((a, b) => sourceRank(a) - sourceRank(b) || a.localeCompare(b));
+    for (const src of sources) {
+      const key = `help.source.${src}`;
+      const title = t(key);
+      s += `\n\n**${title === key ? src : title}**\n\n${head}` + custom.filter((c) => c.source === src).sort(byName).map(row).join("\n");
+    }
+  }
+  s += `\n\n${t("desktop.help.terminal_only", { commands: terminalOnly.map((c) => (c === "!" ? "`!<command>`" : `\`/${c}\``)).join(", ") })}`;
   s += `\n\n${t("desktop.help.palette")}`;
   return s;
 }
+
+const customOrder = ["bundled", "project", "user", "plugin", "skill", "mcp"];
+const sourceRank = (src: string) => {
+  const i = customOrder.indexOf(src.split(/[: ]/)[0]);
+  return i < 0 ? customOrder.length : i;
+};
 
 /** An entry of the command palette. */
 export interface PaletteItem {

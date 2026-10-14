@@ -205,6 +205,14 @@ export function showLicense(detail: { which: "notice" | "full" | "third-party" }
   window.dispatchEvent(new CustomEvent(showLicenseEvent, { detail }));
 }
 
+/** The event that opens the Settings dialog on a section (and scope). */
+export const openSettingsEvent = "blitz:open-settings";
+
+/** Opens Settings on a section; for the settings file or a workspace's, scope is its directory. */
+export function openSettings(detail: { section: string; scope?: string }) {
+  window.dispatchEvent(new CustomEvent(openSettingsEvent, { detail }));
+}
+
 /** The event that brings a workspace's waiting request (an approval, a question) into view. */
 export const showPendingEvent = "blitz:show-pending";
 
