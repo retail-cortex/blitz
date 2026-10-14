@@ -5,6 +5,8 @@ weight: 30
 
 Spec: [models](../about/specs/spec_models_015.md).
 
+With no model set, Blitz uses Gemini's `gemini-4-argon` (for chat and for Google web searches). Choose another with `/model provider/model` in a session, `--model`, or `model` under `[llm.<provider>]` in the settings; a model you've set is kept across releases.
+
 ## Resilience
 
 Model requests are retried on rate limits, overload, 5xx responses and dropped connections, with exponential backoff that honours `Retry-After` (`llm.max_retries`, default 3; `0` turns retries off). A request that sends nothing for `llm.stall_timeout_seconds` (default 600) fails instead of hanging the turn. A stream that fails partway through isn't retried, because its text has already been shown. At most `tools.max_parallel` (default 8) tool calls from one model response run at once.

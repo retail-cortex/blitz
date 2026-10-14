@@ -36,7 +36,7 @@ The setup wizard gives the workspace its *agent harness*: the instructions every
 - **Desktop:** a new workspace's chat opens on the tile **Set up this workspace for agents**. It's also **Help › Set up the agent harness**.
 - **Terminal:** `/setup` in a session, or `blitz init` from the shell. `/setup testing` focuses it on one area.
 
-For a new project, write the specification first: `/spec a link shortener for our team` asks what you're building and for whom, how fast and how big it must be, where it runs, and how people sign in, then writes numbered specs in `.agents/specs/`. `/setup` offers this when there's no specification yet, and reads it when there is. When a spec changes later, `/skills update` and `/agents update` bring the project's skills and agents in line.
+For a new project, write the specification first: `/spec a link shortener for our team` asks what kind of project it is (Software, here), what you're building and for whom, how fast and how big it must be, where it runs, and how people sign in, then writes numbered specs in `.agents/specs/`. `/setup` offers this when there's no specification yet, and reads it when there is. When a spec changes later, `/skills update` and `/agents update` bring the project's skills and agents in line. [Start any project: spec, then setup](spec-then-setup.md) walks through this for software, research, analysis and writing.
 
 The wizard surveys the folder first and changes nothing until it has asked you. In an empty folder it asks what the project is and who uses it, the stack, how it's built, tested and deployed, your conventions, and what agents must never do. In a folder with code it shows what it worked out and asks only about the gaps. For linkr you might answer:
 
@@ -112,51 +112,54 @@ Never edit files.
 
 `permission_mode: plan` keeps it read-only. Switch to an agent with `/agent reviewer` (in the desktop app, also by clicking the agent in the status bar). From then on it works on the conversation, with its history. Agents also hand work to each other: ask the main agent to "have the reviewer check this", and it delegates.
 
-## 5. Create your specs
+## 5. Refine your specs
 
 A spec says what the software must do before anyone builds it. It's the agent's brief, the reviewer's checklist and, later, the record of why things are the way they are. Blitz itself is built this way: every feature starts as a requirement in a spec.
 
-The shape Blitz uses works for any project:
+`/spec` wrote the first set in step 2, in `.agents/specs/`:
 
-- **One file per area,** numbered in the order to build them, since each builds on the ones before: `docs/specs/spec_store_001.md`, `spec_api_002.md`, `spec_admin_003.md`.
+- **One file per stage,** numbered in the order to build them, since each builds on the ones before: `001-overview.md`, then `002-architecture.md`, `003-store.md`, `004-api.md`, `005-admin.md`. `README.md` lists them.
 - **Numbered requirements** with a short prefix per spec (`STO-01`, `API-04`), one testable statement each, so a prompt, a test and a review can all name the same requirement.
-- **Specs change with the code:** a change in behaviour updates its spec in the same commit, with the date. A spec that drifts from the code stops being worth reading.
+- **Specs change with the code:** a change in behaviour updates its spec first. A spec that drifts from the code stops being worth reading.
 
-Write the first one with the agent, in plan mode, so it asks before writing anything:
+Refine one by telling `/spec` what changed; it asks what it can't work out, then updates that spec and keeps its requirement IDs:
 
 ```text
-/plan Write docs/specs/spec_api_002.md for linkr's HTTP API: create a short link,
-follow one, list mine, delete one. Number the requirements API-01, API-02 and so on.
-Include the status codes, validation and limits.
+/spec The API also needs to list my links and delete one, with the status codes,
+validation and limits for each.
 ```
 
-The agent drafts the plan and asks you to approve it. Read it as you would a colleague's design: this is the cheapest moment to change your mind. A finished spec looks like:
+Read the result as you would a colleague's design: this is the cheapest moment to change your mind. A spec looks like:
 
 ```markdown
-# 002 · API
+# 004. API
 
-| | |
-|---|---|
-| Status | Draft |
-| Depends on | spec_store_001 |
+Status: draft
+Depends on: 003-store
 
-## 1. Links
+## Context
+The HTTP API the team's tools and the admin page use.
+
+## Requirements
 - **API-01** `POST /links` with `{"url": …}` creates a short link and answers `201` with `{"code": …}`. A URL that isn't http or https is `400`.
 - **API-02** `GET /{code}` answers `302` to the URL; an unknown code is `404`.
 - **API-03** Codes are 7 characters from `[a-zA-Z0-9]`, generated, never reused.
 
-## 2. Known gaps
-- No custom codes yet.
+## Done when
+`go test ./...` covers API-01 to API-03 and passes.
+
+## Open questions
+- Custom codes?
 ```
 
-Add a line to `.agents/AGENTS.md` so every agent follows the habit: "Specs are in `docs/specs/`; every change implements or updates a numbered requirement there."
+`/setup` already put a **Specifications** section in `.agents/AGENTS.md`, so every agent knows the specs are the brief. When you change a spec, run `/skills update` and `/agents update`; the desktop's welcome screen reminds you when a spec is newer than them.
 
 ## 6. Build your software
 
 Now build from the specs, a requirement or a small group at a time:
 
 ```text
-Implement API-01 to API-03 from docs/specs/spec_api_002.md, with tests.
+Implement API-01 to API-03 from .agents/specs/004-api.md, with tests.
 Run the checks when you're done.
 ```
 

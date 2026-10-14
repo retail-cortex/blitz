@@ -11,7 +11,7 @@ On macOS or Linux, the install script puts `blitz`, `blitzd` and `blz` in `~/.lo
 curl -fsSL https://github.com/retail-cortex/blitz/releases/latest/download/install.sh | sh
 ```
 
-`BLITZ_BIN` picks another folder, `BLITZ_VERSION=v0.2.0` a release, and `BLITZ_REQUIRE_SIGNATURE=1` refuses to install without checking the signature. With Homebrew: `brew install retail-cortex/tap/blitz`.
+`BLITZ_BIN` picks another folder, `BLITZ_VERSION=v0.5.3` a particular release (the latest without it), and `BLITZ_REQUIRE_SIGNATURE=1` refuses to install without checking the signature. With Homebrew: `brew install retail-cortex/tap/blitz`.
 
 Later, `blitz update` installs the latest release over this one (`--check` only says whether there is one). It checks the release's signature with cosign, and its checksum; without cosign it asks for `--skip-signature`. A copy installed by Homebrew is updated with `brew upgrade blitz`.
 
@@ -73,3 +73,7 @@ blitz service install           # starts blitzd at every login (launchd or syste
 ```
 
 With the service running, `blitz` attaches to it, the desktop app works, and [workers](../products/service.md#workers) run on their schedules.
+
+## Start a project
+
+In a new folder, run `/spec` and then `/setup` (in the desktop app's chat, or in a session): `/spec` asks what the project is for and writes its specification, and `/setup` fits the workspace to it, for software, research, data analysis or writing. [Start any project: spec, then setup](../tutorials/spec-then-setup.md) shows each.

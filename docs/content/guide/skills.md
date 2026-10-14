@@ -34,7 +34,7 @@ scripts:
 - `TIER_0_BYPASS_ALL` needs both the skill's `allow_hitl_bypass` and the policy's; otherwise it becomes tier 3.
 - Dependencies must be plain package requirements: URLs, paths and pip options are refused.
 
-`/skills show <name>` lists every decision and the skill's content hash, for `trusted_hashes`. `blitz doctor` reports skills that don't parse and scripts the policy blocks.
+`/skills update` revisits the project's skills against its specification (`.agents/specs/`) and offers what to add, change or retire ([spec, then setup](../tutorials/spec-then-setup.md)). `/skills show <name>` lists every decision and the skill's content hash, for `trusted_hashes`. `blitz doctor` reports skills that don't parse and scripts the policy blocks.
 
 | Tier | Approval | Can write |
 |---|---|---|

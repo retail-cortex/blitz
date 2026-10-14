@@ -16,8 +16,11 @@ Spec: [agents](../about/specs/spec_agents_014.md).
 | `planning-agent` | Breaking down requirements; roadmaps |
 | `agent-creator` | Writes agent definitions and skills |
 | `model-judge` | Compares models |
+| `project-spec` | Writes the project's specification for any kind of work (`/spec`) |
+| `project-setup` | Sets up the workspace's instructions, skills and agents (`/setup`) |
+| `harness-update` | Revisits the skills or agents against the specification (`/skills update`, `/agents update`) |
 
-`/agents` lists them and `/agent <name>` switches. The primary agent delegates to the others with `invoke_agent`, up to three levels deep.
+`/agents` lists them, `/agent <name>` switches, and `/agents update` revisits your project's agents against its specification ([spec, then setup](../tutorials/spec-then-setup.md)). The primary agent delegates to the others with `invoke_agent`, up to three levels deep.
 
 Your own agents are Markdown files with YAML frontmatter in `~/.blitz/agents` (for every workspace) and the project's `.agents/agents`: a name, a description, the system prompt, the tools it may use, and optionally its own model. Built-in agents can't be overridden. Adding, editing or deleting a file applies from the next prompt, without a restart.
 
