@@ -15,6 +15,7 @@
 package main
 
 import (
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -48,27 +49,42 @@ func TestGPUPolicy(t *testing.T) {
 	}
 }
 
-// The Linux window: its class and icon, and in software WebKitGTK's
-// DMA-BUF renderer off too, unless the environment already says.
+// hasNvidia checks whether the NVIDIA control device exists.
+func TestHasNvidia(t *testing.T) {
+	assert.True(t, hasNvidia(t.TempDir()), "present device path")
+	assert.False(t, hasNvidia(filepath.Join(t.TempDir(), "nvidiactl")), "absent device path")
+}
+
+// The Linux window: its class and icon; on NVIDIA with the GPU on,
+// shared-memory DMA-BUF handoff to GTK3; in software, WebKitGTK's DMA-BUF
+// renderer off too, unless the environment already says.
 func TestLinuxOptions(t *testing.T) {
 	for _, tc := range []struct {
-		name, pref, dmabuf string
-		want               linux.WebviewGpuPolicy
-		set                map[string]string
+		name, pref, dmabuf, shm string
+		nvidia                  bool
+		want                    linux.WebviewGpuPolicy
+		set                     map[string]string
 	}{
-		{"the GPU", "on", "", linux.WebviewGpuPolicyOnDemand, map[string]string{}},
-		{"software", "off", "", linux.WebviewGpuPolicyNever, map[string]string{"WEBKIT_DISABLE_DMABUF_RENDERER": "1"}},
-		{"software, DMA-BUF already set", "off", "0", linux.WebviewGpuPolicyNever, map[string]string{}},
+		{"the GPU", "on", "", "", false, linux.WebviewGpuPolicyOnDemand, map[string]string{}},
+		{"the GPU on NVIDIA", "on", "", "", true, linux.WebviewGpuPolicyOnDemand, map[string]string{"WEBKIT_DMABUF_RENDERER_FORCE_SHM": "1"}},
+		{"the GPU on NVIDIA, SHM already set", "on", "", "0", true, linux.WebviewGpuPolicyOnDemand, map[string]string{}},
+		{"the GPU on NVIDIA, DMA-BUF already set", "on", "1", "", true, linux.WebviewGpuPolicyOnDemand, map[string]string{}},
+		{"software", "off", "", "", false, linux.WebviewGpuPolicyNever, map[string]string{"WEBKIT_DISABLE_DMABUF_RENDERER": "1"}},
+		{"software on NVIDIA", "off", "", "", true, linux.WebviewGpuPolicyNever, map[string]string{"WEBKIT_DISABLE_DMABUF_RENDERER": "1"}},
+		{"software, DMA-BUF already set", "off", "0", "", false, linux.WebviewGpuPolicyNever, map[string]string{}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			set := map[string]string{}
 			env := func(k string) string {
-				if k == "WEBKIT_DISABLE_DMABUF_RENDERER" {
+				switch k {
+				case "WEBKIT_DISABLE_DMABUF_RENDERER":
 					return tc.dmabuf
+				case "WEBKIT_DMABUF_RENDERER_FORCE_SHM":
+					return tc.shm
 				}
 				return ""
 			}
-			o := linuxOptions(tc.pref, env, func(k, v string) error { set[k] = v; return nil })
+			o := linuxOptions(tc.pref, tc.nvidia, env, func(k, v string) error { set[k] = v; return nil })
 			assert.Equal(t, tc.want, o.WebviewGpuPolicy)
 			assert.Equal(t, tc.set, set)
 			assert.Equal(t, "blitz-desktop", o.ProgramName, "the launcher's StartupWMClass")
