@@ -45,6 +45,17 @@ weight: 1
 
 See [Start any project: spec, then setup](../tutorials/spec-then-setup.md).
 
+### Safer, clearer MCP servers and agents
+
+- **Secrets stay secret.** An MCP server's header values (an access token, often) are now masked in logs, telemetry and `blitz config show`, as its environment values were.
+- **Your rules always apply.** An auto-approved server's resources now follow your `deny` and `ask` rules, as its tools do.
+- **Problems show where you are.** When an MCP server goes down, is paused or comes back, the conversation says so, instead of only the service's log.
+- **What's off looks off.** `/mcp` marks disabled servers, and `/tools` no longer offers their tools.
+- **No silent skips.** A project's SSE server entry, which Blitz can't run, is reported rather than tried and failed.
+- **Agent files mean what they say.** `permission_mode: acceptEdits` and other alias spellings now work, and can't loosen an untrusted project's agent.
+- **Worker costs show** in the desktop app's run list.
+- **New guide pages** for [workers](../guide/workers.md), [MCP servers](../guide/mcp.md) and [agents](../guide/agents.md), in the app's user guide.
+
 ### Every command, in the app too
 
 - **The desktop app has the terminal's slash commands.** Type `/` in the chat, or press ⌘K, for the same commands in the same groups: `/status`, `/goal`, `/loop`, `/memory`, `/permissions`, `/approvals`, `/skills`, `/mcp`, `/tools`, `/export`, `/fork`, `/rewind`, `/copy` and more, 31 of them new to the app.
