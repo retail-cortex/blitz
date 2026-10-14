@@ -521,15 +521,24 @@ export function Dialog({
   );
 }
 
-type Snack = { id: number; text: string; action?: { label: string; run: () => void }; error?: boolean };
+type Snack = { id: number; text: string; top?: number; action?: { label: string; run: () => void }; error?: boolean };
 const SnackContext = createContext<(text: string, opts?: { action?: Snack["action"]; error?: boolean }) => void>(() => {});
 
-/** Shows short messages at the bottom of the window, one at a time. */
+/** Where a snackbar goes: just below the top bar, wherever a banner has
+ *  pushed it, or undefined to leave it to the stylesheet. */
+export function snackTop(doc: Pick<Document, "querySelector"> | undefined = globalThis.document): number | undefined {
+  const bar = doc?.querySelector(".topbar");
+  if (!bar) return undefined;
+  return Math.round(bar.getBoundingClientRect().bottom) + 8;
+}
+
+/** Shows short messages at the top center of the window, below the top bar,
+ *  one at a time. */
 export function SnackbarProvider({ children }: { children: ReactNode }) {
   const [snack, setSnack] = useState<Snack | null>(null);
   const next = useRef(0);
   const show = useCallback((text: string, opts?: { action?: Snack["action"]; error?: boolean }) => {
-    setSnack({ id: ++next.current, text, ...opts });
+    setSnack({ id: ++next.current, text, top: snackTop(), ...opts });
   }, []);
   useEffect(() => {
     if (!snack) return;
@@ -540,7 +549,7 @@ export function SnackbarProvider({ children }: { children: ReactNode }) {
     <SnackContext.Provider value={show}>
       {children}
       {snack && (
-        <div className="snackbar" role="status">
+        <div className="snackbar" role="status" style={snack.top === undefined ? undefined : { top: snack.top }}>
           <span className="spacer">{snack.text}</span>
           {snack.action && (
             <Button
@@ -559,5 +568,5 @@ export function SnackbarProvider({ children }: { children: ReactNode }) {
   );
 }
 
-/** Shows a short message at the bottom of the window (inside SnackbarProvider). */
+/** Shows a short message at the top of the window (inside SnackbarProvider). */
 export const useSnackbar = () => useContext(SnackContext);
