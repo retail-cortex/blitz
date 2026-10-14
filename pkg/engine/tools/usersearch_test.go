@@ -79,7 +79,7 @@ func TestGoogleSearchUsesGroundingAndResolvesLinks(t *testing.T) {
 	require.Equal(t, "", out.Error, out.Error)
 	assert.Equal(t, []string{"chat google 1"}, billed)
 	assert.Equal(t, "POST", got.method, "request %+v", got)
-	assert.Equal(t, "/models/gemini-3.8-flash:generateContent", got.path, "request %+v", got)
+	assert.Equal(t, "/models/gemini-4-argon:generateContent", got.path, "request %+v", got)
 	assert.Equal(t, "gem-key", got.token, "request %+v", got)
 	tools, _ := got.body["tools"].([]any)
 	assert.Len(t, tools, 1, "no google_search tool in %v", got.body)

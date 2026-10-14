@@ -776,7 +776,7 @@ func DefaultConfig() *Config {
 			StallTimeoutSeconds: 600,
 			Gemini: GeminiConfig{
 				APIKey: os.Getenv("GEMINI_API_KEY"),
-				Model:  "gemini-3.8-flash",
+				Model:  "gemini-4-argon",
 			},
 			OpenAI: OpenAIConfig{
 				APIKey:  os.Getenv("OPENAI_API_KEY"),

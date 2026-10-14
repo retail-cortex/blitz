@@ -1754,9 +1754,9 @@
     "desktop.settings.doc_css.sample_text": "# Notes de version\n\nBlitz **2.0** affiche votre [documentation](https://example.com) comme des documents.\n\n## Nouveautés\n\n- Des diagrammes à partir de blocs `mermaid`\n- [x] Les aperçus s'ouvrent d'abord\n\n> Les citations se détachent du texte.\n\n| Réglage | Par défaut |\n| --- | --- |\n| Largeur | 760px |\n| Taille | 15px |\n\n```go\nfunc main() { fmt.Println(\"salut\") }\n```\n\n```mermaid\nflowchart LR\n  A[Écrire] --> B[Prévisualiser] --> C[Partager]\n```\n",
     "desktop.files.reveal_in": "Afficher dans {name}",
     "desktop.files.reveal_in_file_manager": "Afficher dans le gestionnaire de fichiers",
-    "desktop.model.spaces": "Un nom de modèle ne contient pas d'espaces : fournisseur/modèle, comme gemini/gemini-3.8-flash.",
+    "desktop.model.spaces": "Un nom de modèle ne contient pas d'espaces : fournisseur/modèle, comme gemini/gemini-4-argon.",
     "desktop.model.no_name": "Ajoutez le nom du modèle après le fournisseur.",
     "desktop.model.unlisted": "{provider} ne liste pas {model} : il sera envoyé tel qu'écrit.",
-    "desktop.agents.invalid.defaultModel": "Un nom de modèle ne contient pas d'espaces : fournisseur/modèle, comme gemini/gemini-3.8-flash."
+    "desktop.agents.invalid.defaultModel": "Un nom de modèle ne contient pas d'espaces : fournisseur/modèle, comme gemini/gemini-4-argon."
   }
 }

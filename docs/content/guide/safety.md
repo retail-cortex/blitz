@@ -30,7 +30,7 @@ In the `auto` mode the reviewer sees the action (and its diff), the last few mes
 
 ```toml
 [permissions.auto]
-model = "gemini/gemini-3.8-flash"
+model = "gemini/gemini-4-argon"
 environment = "Our repositories are under github.com/acme; pushing branches is fine, pushing to main isn't. Hosts: *.acme.dev."
 ```
 

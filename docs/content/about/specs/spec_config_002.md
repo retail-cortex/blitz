@@ -42,7 +42,7 @@ One TOML file, `.env.toml`, loaded through `github.com/rrmcguinness/modenv` (hie
 | | `max_retries` | `3` | `0` disables |
 | | `stall_timeout_seconds` | `600` | |
 | | `fallback_models` | `[]` | `provider/model` or bare model |
-| `[llm.gemini]` | `api_key`, `api_key_command`, `api_key_ttl` (5m), `model`, `auth` (`api_key`, `adc` or `oauth`; a key, when there is one, comes first: spec_models_015), `project_id`, `location` | model `gemini-3.8-flash`; `auth` `api_key` | `adc`: [spec_models_015](spec_models_015.md) |
+| `[llm.gemini]` | `api_key`, `api_key_command`, `api_key_ttl` (5m), `model`, `auth` (`api_key`, `adc` or `oauth`; a key, when there is one, comes first: spec_models_015), `project_id`, `location` | model `gemini-4-argon` (`gemini-3.8-flash` until 2026-10-13); `auth` `api_key` | `adc`: [spec_models_015](spec_models_015.md) |
 | `[llm.openai]` | `api_key`, `api_key_command`, `api_key_ttl`, `base_url`, `model` | `https://api.openai.com/v1`, `gpt-4o` | shared by `ollama` |
 | `[llm.anthropic]` | `api_key`, `api_key_command`, `api_key_ttl`, `auth` (`api_key`, `oauth` or `adc`), `profile`, `project_id`, `location`, `model`, `base_url`, `fallbacks` | `claude-opus-5`, `default`; `auth` `api_key` | `oauth`, `adc`: [spec_models_015](spec_models_015.md) |
 | `[llm.bedrock]` | `region`, `profile`, `model` | | Claude on Amazon Bedrock ([spec_models_015](spec_models_015.md) §3) |
@@ -80,7 +80,7 @@ Built-in lists:
 - Blocked paths: `.env`, `.env.local`, `.env.*.local`, `.env.toml`, `.env.*.toml`, `*.pem`, `*.key`, `*.p12`, `id_rsa*`, `id_ecdsa*`, `id_ed25519*`, `~/.ssh`, `~/.aws`, `~/.gnupg`, `~/.config/gcloud`, `~/.azure`, `~/.kube`, `~/.docker/config.json`, `~/.netrc`.
 - Scrubbed env: `*_API_KEY`, `*_API_TOKEN`, `*_SECRET`, `*_SECRET_KEY`, `*_ACCESS_KEY`, `AWS_SESSION_TOKEN`, `GOOGLE_APPLICATION_CREDENTIALS`, `MODENV_*`.
 - Denied commands: `sudo *`, `su *`, `doas *`, `shutdown *`, `reboot *`, `halt *`, `mkfs *`, `mkfs.*`, `diskutil erase*`.
-- Pricing (USD per 1M tokens, input/output/cached/cache-write): `gemini-3.8-flash` 0.75/3.75/0.075 (introductory until 2026-12-31; 1.50/7.50/0.15 from 2027-01-01, see CFG-13), `gemini-2.5-pro` 1.25/10/0.31, `gpt-4o` 2.50/10/1.25, `claude-opus-5` 5/25/0.50/6.25, `claude-sonnet-5` 2/10/0.20/2.50, `claude-haiku-4-5` 1/5/0.10/1.25.
+- Pricing (USD per 1M tokens, input/output/cached/cache-write): `gemini-3.8-flash` 0.75/3.75/0.075 (introductory until 2026-12-31; 1.50/7.50/0.15 from 2027-01-01, see CFG-13), `gemini-4-argon` 0.75/3.75/0.075 (the default since 2026-10-13; a placeholder at 3.8 Flash's price until Argon's is published), `gemini-2.5-pro` 1.25/10/0.31, `gpt-4o` 2.50/10/1.25, `claude-opus-5` 5/25/0.50/6.25, `claude-sonnet-5` 2/10/0.20/2.50, `claude-haiku-4-5` 1/5/0.10/1.25.
 
 - **CFG-10** `Config.ModelName()` returns `blitz.default_model` if set, else the active provider's `model` (`openai` and `ollama` share `[llm.openai]`).
 - **CFG-11** Setting a list (e.g. `blocked_paths`, `commands.deny`) **replaces** the default list.

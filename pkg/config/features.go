@@ -516,7 +516,7 @@ type WebConfig struct {
 	// "searxng".
 	SearchURL string `toml:"search_url"`
 	// SearchModel is the Gemini model that runs "google" searches
-	// (default: llm.gemini.model, else gemini-3.8-flash).
+	// (default: llm.gemini.model, else gemini-4-argon).
 	SearchModel string `toml:"search_model"`
 	// SearchMaxResults is how many results a web search returns (0: 5).
 	SearchMaxResults int `toml:"search_max_results"`
@@ -529,8 +529,12 @@ var DefaultPricing = map[string]ModelPrice{
 	// Gemini 3.8 Flash at its introductory price, valid through 2026-12-31
 	// (PriceChanges has the price from 2027-01-01).
 	"gemini-3.8-flash": {InputPerMTok: 0.75, OutputPerMTok: 3.75, CachedInputPerMTok: 0.075},
-	"gemini-2.5-pro":   {InputPerMTok: 1.25, OutputPerMTok: 10.00, CachedInputPerMTok: 0.31},
-	"gpt-4o":           {InputPerMTok: 2.50, OutputPerMTok: 10.00, CachedInputPerMTok: 1.25},
+	// Gemini 4 Argon, the default model since 2026-10-13: a placeholder at
+	// Gemini 3.8 Flash's introductory price until its own is published
+	// (no PriceChanges entry).
+	"gemini-4-argon": {InputPerMTok: 0.75, OutputPerMTok: 3.75, CachedInputPerMTok: 0.075},
+	"gemini-2.5-pro": {InputPerMTok: 1.25, OutputPerMTok: 10.00, CachedInputPerMTok: 0.31},
+	"gpt-4o":         {InputPerMTok: 2.50, OutputPerMTok: 10.00, CachedInputPerMTok: 1.25},
 	// Claude list prices; cache reads bill at 10% of input, 5-minute cache
 	// writes at 125%.
 	"claude-opus-5":    {InputPerMTok: 5.00, OutputPerMTok: 25.00, CachedInputPerMTok: 0.50, CacheWritePerMTok: 6.25},
