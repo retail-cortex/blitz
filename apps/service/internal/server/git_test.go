@@ -176,6 +176,40 @@ func TestStagedFlagsAndDiff(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, d.Msg.Diff, "+two", "a staged change")
 	assert.Contains(t, d.Msg.Diff, "+new", "a new file")
+
+	// View revisions, and a restore.
+	h, err := files.GetFileHistory(ctx, connect.NewRequest(&pb.GetFileHistoryRequest{Workspace: dir, Path: "a.txt"}))
+	require.NoError(t, err)
+	require.Len(t, h.Msg.Revisions, 1)
+	rev := h.Msg.Revisions[0]
+	assert.Equal(t, "init", rev.Subject)
+	assert.Equal(t, "a.txt", rev.Path)
+	assert.NotNil(t, rev.When)
+	rd, err := files.GetFileRevisionDiff(ctx, connect.NewRequest(&pb.GetFileRevisionDiffRequest{Workspace: dir, Path: "a.txt", Commit: rev.Commit}))
+	require.NoError(t, err)
+	assert.Contains(t, rd.Msg.Diff, "-one")
+	_, err = files.GetFileRevisionDiff(ctx, connect.NewRequest(&pb.GetFileRevisionDiffRequest{Workspace: dir, Path: "a.txt", Commit: "HEAD"}))
+	assert.Equal(t, "BAD_REVISION", reasonOf(err))
+	_, err = files.RestoreFileRevision(ctx, connect.NewRequest(&pb.RestoreFileRevisionRequest{Workspace: dir, Path: "a.txt", Commit: rev.Commit, Version: "stale"}))
+	assert.Equal(t, "FILE_CHANGED", reasonOf(err))
+	rr, err := files.RestoreFileRevision(ctx, connect.NewRequest(&pb.RestoreFileRevisionRequest{Workspace: dir, Path: "a.txt", Commit: rev.Commit, Version: engine.FileVersion([]byte("two\n"))}))
+	require.NoError(t, err)
+	assert.Equal(t, engine.FileVersion([]byte("one\n")), rr.Msg.Version)
+
+	// Remove from .gitignore, and a rule it can't remove.
+	write(".gitignore", "*.log\n")
+	write("x.log", "x")
+	l, err := files.ListDir(ctx, connect.NewRequest(&pb.ListDirRequest{Workspace: dir, ShowHidden: true}))
+	require.NoError(t, err)
+	for _, e := range l.Msg.Entries {
+		assert.Equal(t, e.Path == "x.log", e.Ignored, e.Path)
+	}
+	_, err = files.GitFileAction(ctx, connect.NewRequest(&pb.GitFileActionRequest{Workspace: dir, Path: "x.log", Action: pb.GitAction_GIT_ACTION_UNIGNORE}))
+	assert.Equal(t, "IGNORED_ELSEWHERE", reasonOf(err))
+	_, err = files.GitFileAction(ctx, connect.NewRequest(&pb.GitFileActionRequest{Workspace: dir, Path: "n.txt", Action: pb.GitAction_GIT_ACTION_IGNORE}))
+	require.NoError(t, err)
+	_, err = files.GitFileAction(ctx, connect.NewRequest(&pb.GitFileActionRequest{Workspace: dir, Path: "n.txt", Action: pb.GitAction_GIT_ACTION_UNIGNORE}))
+	require.NoError(t, err)
 }
 
 func TestCommitError(t *testing.T) {

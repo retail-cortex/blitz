@@ -533,6 +533,18 @@ const fakeFiles = new Map<string, string>([
   ["bin/shop", "\u0000binary"],
 ]);
 const fakeGit: Record<string, string> = { "internal/cart/discount.go": "modified", "internal/cart/discount_test.go": "untracked", "web/app.ts": "added" };
+// What .gitignore ignores in the fake: bin/, *.log, and the lines Add to
+// .gitignore wrote.
+const fakeIgnored = (p: string) =>
+  p.startsWith("bin") || p.endsWith(".log") || (fakeFiles.get(".gitignore") ?? "").split("\n").some((l) => l === `/${p}` || l === `/${p}/`);
+// A file's commits in the fake: three, the oldest its first lines only.
+const fakeRevisions = (p: string) =>
+  [
+    { commit: "c3a1f0e9b8d7c6a5f4e3d2c1b0a9f8e7d6c5b4a3", subject: "Round coupon discounts half up", author: "Ana Ruiz", days: 1 },
+    { commit: "9b2e4d6f8a0c1e3b5d7f9a2c4e6b8d0f1a3c5e7b", subject: "Read the coupon from the request", author: "Sam Lee", days: 6 },
+    { commit: "5e8c1a7f3d9b2e6a0c4f8d1b7e3a9c5f2d6b0e8a", subject: `Add ${p.split("/").pop()}`, author: "Ana Ruiz", days: 30 },
+  ].map((r) => ({ ...r, short: r.commit.slice(0, 7), path: p, when: timestampFromDate(new Date(Date.now() - r.days * 86400000)) }));
+const fakeOldText = (text: string) => text.split("\n").slice(0, 3).join("\n") + "\n";
 const fakeHidden = (p: string) => (p === ".env" ? "blocked" : p.startsWith("bin") ? "ignored" : p.split("/").pop()!.startsWith(".") ? "dot" : "");
 const fakeVersion = (text: string) => String(text.length) + ":" + [...text].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7).toString(16);
 
@@ -1099,7 +1111,7 @@ export function installFake() {
           const entries = [...seen].map(([name, folder]) => {
             const p = prefix + name;
             const git = folder ? (Object.keys(fakeGit).some((g) => g.startsWith(p + "/")) ? "changed" : "") : (fakeGit[p] ?? "");
-            return { name, path: p, kind: folder ? FileKind.FOLDER : FileKind.FILE, size: BigInt(fakeFiles.get(p)?.length ?? 0), git, hidden: fakeHidden(p), agentRule: p === ".env" ? "blocked" : "" };
+            return { name, path: p, kind: folder ? FileKind.FOLDER : FileKind.FILE, size: BigInt(fakeFiles.get(p)?.length ?? 0), git, hidden: fakeHidden(p), ignored: fakeIgnored(p), agentRule: p === ".env" ? "blocked" : "" };
           });
           entries.sort((a, b) => (a.kind !== b.kind ? (a.kind === FileKind.FOLDER ? -1 : 1) : a.name.localeCompare(b.name)));
           return { entries: showHidden ? entries : entries.filter((e) => !e.hidden), repo: true };
@@ -1183,7 +1195,29 @@ export function installFake() {
           ((window as unknown as { __gitActions?: unknown[] }).__gitActions ??= []).push({ path, action });
           if (action === GitAction.DISCARD) for (const g of Object.keys(fakeGit)) if (g === path || g.startsWith(path + "/")) delete fakeGit[g];
           if (action === GitAction.IGNORE) fakeFiles.set(".gitignore", (fakeFiles.get(".gitignore") ?? "") + `/${path}${fakeFiles.has(path) ? "" : "/"}\n`);
+          if (action === GitAction.UNIGNORE) {
+            const lines = (fakeFiles.get(".gitignore") ?? "").split("\n");
+            const kept = lines.filter((l) => l !== `/${path}` && l !== `/${path}/`);
+            if (kept.length === lines.length && fakeIgnored(path)) {
+              const [pattern, line] = path.startsWith("bin") ? ["bin/", 1] : ["*.log", 2];
+              throw new ConnectError(`${path} is ignored by \`${pattern}\` (.gitignore:${line}), not by a line Blitz added: edit that file to change it.`, Code.FailedPrecondition);
+            }
+            fakeFiles.set(".gitignore", kept.join("\n"));
+          }
           return {};
+        },
+        getFileHistory: ({ path }) => ({ revisions: fakeFiles.has(path) ? fakeRevisions(path) : [] }),
+        getFileRevisionDiff: ({ path, commit }) => {
+          const now = fakeFiles.get(path) ?? "";
+          if (commit === fakeRevisions(path)[0].commit) return { diff: "" };
+          const then = fakeOldText(now);
+          const add = now.split("\n").slice(3).filter((l) => l !== "");
+          return { diff: `diff --git a/${path} b/${path}\n--- a/${path}\n+++ b/${path}\n@@ -1,3 +1,${3 + add.length} @@\n${then.trimEnd().split("\n").map((l) => " " + l).join("\n")}\n${add.map((l) => "+" + l).join("\n")}\n` };
+        },
+        restoreFileRevision: ({ path, commit }) => {
+          const text = commit === fakeRevisions(path)[0].commit ? (fakeFiles.get(path) ?? "") : fakeOldText(fakeFiles.get(path) ?? "");
+          fakeFiles.set(path, text);
+          return { version: fakeVersion(text) };
         },
         deleteFile: ({ path }) => {
           for (const p of [...fakeFiles.keys()]) if (p === path || p.startsWith(path + "/")) fakeFiles.delete(p);

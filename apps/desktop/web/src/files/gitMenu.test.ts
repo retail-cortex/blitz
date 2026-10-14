@@ -18,7 +18,7 @@ import { describe, expect, it } from "vitest";
 import { GitAction } from "../gen/blitz/v1/file_pb";
 import { gitActions, gitKeys, stagedKey } from "./gitMenu";
 
-const { STAGE, UNSTAGE, DISCARD, IGNORE } = GitAction;
+const { STAGE, UNSTAGE, DISCARD, IGNORE, UNIGNORE } = GitAction;
 
 describe("the Files tree's git actions", () => {
   it.each([
@@ -39,6 +39,13 @@ describe("the Files tree's git actions", () => {
   });
 
   it.each([
+    ["an ignored file", false],
+    ["an ignored folder", true],
+  ])("takes %s out of .gitignore instead", (_, folder) => {
+    expect(gitActions({ folder, git: "", ignored: true }, true)).toEqual([UNIGNORE]);
+  });
+
+  it.each([
     ["all", "desktop.files.git.state_staged"],
     ["some", "desktop.files.git.state_partly"],
     ["", "desktop.files.git.state_unstaged"],
@@ -51,7 +58,7 @@ describe("the Files tree's git actions", () => {
   });
 
   it("has a label and a confirmation for every action it offers", () => {
-    for (const a of [STAGE, UNSTAGE, DISCARD, IGNORE]) {
+    for (const a of [STAGE, UNSTAGE, DISCARD, IGNORE, UNIGNORE]) {
       expect(gitKeys[a].item).toMatch(/^desktop\.files\.git\./);
       expect(gitKeys[a].done).toMatch(/^desktop\.files\.git\./);
     }

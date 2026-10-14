@@ -69,6 +69,9 @@ type FileEntry struct {
 	// Hidden says why the entry is hidden by default: "blocked" (the
 	// agent's blocked paths), "ignored" (git), "dot", or "".
 	Hidden string
+	// Ignored says git ignores it, whatever Hidden says (a dotfile git
+	// ignores is hidden as "dot").
+	Ignored bool
 	// AgentRule is the agent's rule for the path: "blocked", "read_only"
 	// or "".
 	AgentRule string
@@ -189,7 +192,8 @@ func (w *Workspace) ListDir(ctx context.Context, p string, showHidden bool) (Dir
 	if g.repo {
 		ignored := w.gitIgnored(ctx, out.Entries)
 		for i := range out.Entries {
-			if out.Entries[i].Hidden == "" && ignored[out.Entries[i].Path] {
+			out.Entries[i].Ignored = ignored[out.Entries[i].Path]
+			if out.Entries[i].Hidden == "" && out.Entries[i].Ignored {
 				out.Entries[i].Hidden = "ignored"
 			}
 		}
