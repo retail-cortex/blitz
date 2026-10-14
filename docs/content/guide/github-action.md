@@ -25,7 +25,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: retail-cortex/blitz/action@v0.5.3
+      - uses: retail-cortex/blitz/action@v0.5.4
         with:
           gemini-api-key: ${{ secrets.GEMINI_API_KEY }}   # or anthropic-api-key, openai-api-key
 ```
@@ -55,7 +55,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - uses: retail-cortex/blitz/action@v0.5.3
+      - uses: retail-cortex/blitz/action@v0.5.4
         with:
           mode: review
           anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -77,7 +77,7 @@ jobs:
       pull-requests: write
     steps:
       - uses: actions/checkout@v4
-      - uses: retail-cortex/blitz/action@v0.5.3
+      - uses: retail-cortex/blitz/action@v0.5.4
         with:
           mode: issue-to-pr
           gemini-api-key: ${{ secrets.GEMINI_API_KEY }}
