@@ -208,8 +208,11 @@ export function showLicense(detail: { which: "notice" | "full" | "third-party" }
 /** The event that opens the user docs on a page (docs/DocsDialog.tsx). */
 export const openDocsEvent = "blitz:open-docs";
 
-/** Opens the user docs on a page, by its site path ("" the home page, "guide/models"), at a heading. */
-export function openDocs(detail: { page: string; anchor?: string }) {
+/**
+ * Opens the user docs on a page, by its site path ("" the home page,
+ * "guide/models"), at a heading; with no page, where they were left.
+ */
+export function openDocs(detail: { page?: string; anchor?: string }) {
   window.dispatchEvent(new CustomEvent(openDocsEvent, { detail }));
 }
 

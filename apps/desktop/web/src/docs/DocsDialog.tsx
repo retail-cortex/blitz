@@ -26,12 +26,20 @@ import { DocsLinksProvider, Markdown, type DocsLinks } from "../Markdown";
 import { Button, Dialog, Icon, IconButton } from "../ui/controls";
 import { docLink, docPicture, searchDocs, siteURLOf, type DocNode, type DocPage } from "./index";
 import { loadAppDocs, type AppDocs as Docs } from "./load";
+import { firstPage, lastPlace, savePlace } from "./place";
 
-/** Where the docs open: a page by its site path ("" the home page), at a heading. */
+/**
+ * Where the docs open: a page by its site path ("" the home page), at a
+ * heading; with no page, where they were left (Tutorials the first time).
+ */
 export interface DocsAt {
-  page: string;
+  page?: string;
   anchor?: string;
 }
+
+// A place in the viewer's history: a page, a heading on it, and the
+// scroll to come back to (where the guide was left).
+type Place = { page: string; anchor?: string; scroll?: number };
 
 function Tree({ node, at, open, depth = 0 }: { node: DocNode; at: string; open: (path: string) => void; depth?: number }) {
   return (
@@ -51,7 +59,7 @@ function Tree({ node, at, open, depth = 0 }: { node: DocNode; at: string; open: 
 /** The docs viewer, open on a page. */
 export function DocsDialog({ initial, onClose }: { initial: DocsAt; onClose: () => void }) {
   const [docs, setDocs] = useState<Docs | null>(null);
-  const [history, setHistory] = useState<DocsAt[]>([initial]);
+  const [history, setHistory] = useState<Place[]>(() => [initial.page === undefined ? lastPlace() : { page: initial.page, anchor: initial.anchor }]);
   const [index, setIndex] = useState(0);
   const [query, setQuery] = useState("");
   // In a narrow window the navigation folds behind Contents (app.css).
@@ -61,7 +69,8 @@ export function DocsDialog({ initial, onClose }: { initial: DocsAt; onClose: () 
     void loadAppDocs().then(setDocs);
   }, []);
   const at = history[index];
-  const page: DocPage | undefined = docs?.pages.get(at.page) ?? docs?.pages.get("");
+  // A page this release doesn't have (left in an older one) opens Tutorials.
+  const page: DocPage | undefined = docs?.pages.get(at.page) ?? docs?.pages.get(firstPage) ?? docs?.pages.get("");
   const go = (path: string, anchor?: string) => {
     setHistory((h) => [...h.slice(0, index + 1), { page: path, anchor }]);
     setIndex((i) => i + 1);
@@ -76,7 +85,7 @@ export function DocsDialog({ initial, onClose }: { initial: DocsAt; onClose: () 
     if (!el) return;
     const h = at.anchor ? el.querySelector(`[data-anchor="${CSS.escape(at.anchor)}"]`) : null;
     if (h) h.scrollIntoView({ block: "start" });
-    else el.scrollTop = 0;
+    else el.scrollTop = at.scroll ?? 0;
     // A table's cells carry their column's name, for the narrow layout,
     // where each row stacks (app.css).
     for (const table of el.querySelectorAll("table")) {
@@ -107,6 +116,13 @@ export function DocsDialog({ initial, onClose }: { initial: DocsAt; onClose: () 
     [docs, page, index],
   );
   const hits = docs && query.trim() ? searchDocs([...docs.pages.values()], query) : null;
+  // Where the guide is, for next time: the page, and the scroll as it moves.
+  useEffect(() => {
+    if (page) savePlace({ page: page.path, scroll: at.anchor ? undefined : at.scroll });
+  }, [page, at]);
+  const onScroll = () => {
+    if (page && pane.current) savePlace({ page: page.path, scroll: pane.current.scrollTop });
+  };
   const trail = page ? page.path.split("/").map((_, i, parts) => parts.slice(0, i + 1).join("/")) : [];
   return (
     <Dialog
@@ -144,7 +160,7 @@ export function DocsDialog({ initial, onClose }: { initial: DocsAt; onClose: () 
             </>
           )}
         </div>
-        <div className="settings-pane docs-pane" ref={pane}>
+        <div className="settings-pane docs-pane" ref={pane} onScroll={onScroll}>
           <button className="link-button docs-contents" aria-expanded={navOpen} onClick={() => setNavOpen((o) => !o)}>
             <Icon path={mdiFormatListBulleted} size="sm" /> {t("desktop.docs.contents")}
           </button>

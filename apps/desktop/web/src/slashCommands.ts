@@ -771,9 +771,9 @@ export const builtinCommands: Builtin[] = [
     name: "docs",
     args: "[topic]",
     group: "settings",
-    // The docs of this release, in the app (DSK-103): the home page, or the best match for the topic.
+    // The docs of this release, in the app (DSK-103): where they were left, or the best match for the topic.
     async run(c) {
-      if (!c.args) return openDocs({ page: "" });
+      if (!c.args) return openDocs({}); // where it was left
       const { pages } = await loadAppDocs();
       const hit = searchDocs([...pages.values()], c.args, 1)[0];
       if (!hit) return c.say(t("desktop.docs.none", { query: c.args }));

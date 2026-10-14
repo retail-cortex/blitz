@@ -230,7 +230,7 @@ export function MenuBar({
 
   const help: MenuEntry[] = [
     // The docs of this release, in the app (DSK-103).
-    { label: t("desktop.menu.guide"), icon: mdiBookOpenPageVariantOutline, onSelect: () => openDocs({ page: "guide" }) },
+    { label: t("desktop.menu.guide"), icon: mdiBookOpenPageVariantOutline, onSelect: () => openDocs({}) }, // where it was left, Tutorials the first time
     { label: t("desktop.menu.tutorials"), icon: mdiSchoolOutline, onSelect: () => openDocs({ page: "tutorials" }) },
     ...(dir ? [{ label: t("desktop.setup.title"), icon: mdiAutoFix, onSelect: () => startSetup(dir) }] : []),
     "divider",

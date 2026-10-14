@@ -364,7 +364,7 @@ function Shell() {
           onCancel={() => setUnsavedClose(null)}
         />
       )}
-      {docsAt && <DocsDialog key={`${docsAt.page}#${docsAt.anchor ?? ""}`} initial={docsAt} onClose={() => setDocsAt(null)} />}
+      {docsAt && <DocsDialog key={`${docsAt.page ?? "(last)"}#${docsAt.anchor ?? ""}`} initial={docsAt} onClose={() => setDocsAt(null)} />}
       {settingsAt && <SettingsDialog initial={settingsAt.section} scope={settingsAt.scope} onClose={() => setSettingsAt(null)} />}
       {license && <LicenseDialog initial={license} onClose={() => setLicense(null)} />}
       {searchOpen !== null && prefs.active && <SearchDialog dir={prefs.active} initialQuery={searchOpen} onClose={() => setSearchOpen(null)} />}
