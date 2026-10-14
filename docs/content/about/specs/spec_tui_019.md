@@ -48,7 +48,7 @@ The REPL is a thin front end over `api.Backend`: it reads input, dispatches slas
 
 | Command | Behaviour |
 |---|---|
-| `/help` | Command list |
+| `/help` | Command list, grouped (Session, Agents and models, Planning and long work, Workspace and files, Permissions and safety, Extensions, Settings), each sorted by command; then the custom commands by source (built into Blitz, the project's, the user's, plugins', skills, MCP prompts), each sorted |
 | `/agents`, `/agent <name>` | List (active and pinned marked) / switch agent |
 | `/model [<ref>]` | Show / switch model for unpinned agents; warns if the active agent is pinned |
 | `/pin_model [<agent> <model>]`, `/unpin <agent>` | Show pins / pin / unpin; reports where it was saved |

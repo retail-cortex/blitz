@@ -134,6 +134,7 @@ Exit codes: 0 success, 1 error, 2 usage, 3 --max-turns reached,
 	addRunFlags(f, o)
 
 	root.AddCommand(newExecCommand(o), newInitCommand(o), newDoctorCommand(&o.global), newConfigCommand(&o.global), newServeCommand(), newWorkersCommand(&o.global), newServiceCommand(), newLicenseCommand(), newTrustCommand(&o.global), newMCPCommand(&o.global), newWorktreesCommand(&o.global), newMemoryCommand(&o.global), newPluginCommand(), newModelsCommand(&o.global), newUpdateCommand(), newSessionsCommand(&o.global), newAgentsCommand(), newAttachCommand(o), newLogsCommand(), newStopCommand(), newSecurityCommand(), newSearchCommand(&o.global), newAuthCommand(&o.global))
+	groupHelp(root)
 	return root
 }
 
@@ -206,6 +207,7 @@ func newExecCommand(root *rootOptions) *cobra.Command {
 			o.global.config, o.global.dir = root.global.config, root.global.dir // persistent flags
 			return runRoot(cmd, o, args)
 		},
+		Annotations: map[string]string{groupedFlagsKey: "yes"}, // the run's flags, in groups
 	}
 	addRunFlags(cmd.Flags(), o)
 	return cmd

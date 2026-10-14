@@ -103,6 +103,7 @@ go_test(
         "features_test.go",
         "follow_test.go",
         "fork_test.go",
+        "help_test.go",
         "i18n_lint_test.go",
         "init_test.go",
         "keybindings_test.go",
