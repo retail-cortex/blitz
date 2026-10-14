@@ -19,7 +19,7 @@
 // their navigation, search, and back and forward. A link to a page the app
 // doesn't carry, and "Open on the web", go to the website.
 import { useEffect, useMemo, useRef, useState } from "react";
-import { mdiArrowLeft, mdiArrowRight, mdiBookOpenPageVariantOutline, mdiMagnify, mdiOpenInNew } from "@mdi/js";
+import { mdiArrowLeft, mdiArrowRight, mdiBookOpenPageVariantOutline, mdiFormatListBulleted, mdiMagnify, mdiOpenInNew } from "@mdi/js";
 import { openURL } from "../desktop";
 import { t } from "../i18n";
 import { DocsLinksProvider, Markdown, type DocsLinks } from "../Markdown";
@@ -54,6 +54,8 @@ export function DocsDialog({ initial, onClose }: { initial: DocsAt; onClose: () 
   const [history, setHistory] = useState<DocsAt[]>([initial]);
   const [index, setIndex] = useState(0);
   const [query, setQuery] = useState("");
+  // In a narrow window the navigation folds behind Contents (app.css).
+  const [navOpen, setNavOpen] = useState(false);
   const pane = useRef<HTMLDivElement>(null);
   useEffect(() => {
     void loadAppDocs().then(setDocs);
@@ -64,6 +66,7 @@ export function DocsDialog({ initial, onClose }: { initial: DocsAt; onClose: () 
     setHistory((h) => [...h.slice(0, index + 1), { page: path, anchor }]);
     setIndex((i) => i + 1);
     setQuery("");
+    setNavOpen(false);
   };
   const back = () => setIndex((i) => Math.max(0, i - 1));
   const forward = () => setIndex((i) => Math.min(history.length - 1, i + 1));
@@ -74,6 +77,12 @@ export function DocsDialog({ initial, onClose }: { initial: DocsAt; onClose: () 
     const h = at.anchor ? el.querySelector(`[data-anchor="${CSS.escape(at.anchor)}"]`) : null;
     if (h) h.scrollIntoView({ block: "start" });
     else el.scrollTop = 0;
+    // A table's cells carry their column's name, for the narrow layout,
+    // where each row stacks (app.css).
+    for (const table of el.querySelectorAll("table")) {
+      const names = [...table.querySelectorAll("thead th")].map((th) => th.textContent?.trim() ?? "");
+      for (const row of table.querySelectorAll("tbody tr")) [...row.children].forEach((td, i) => td.setAttribute("data-label", names[i] ?? ""));
+    }
   }, [at, page]);
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
@@ -120,7 +129,7 @@ export function DocsDialog({ initial, onClose }: { initial: DocsAt; onClose: () 
         </>
       }
     >
-      <div className="settings docs">
+      <div className={`settings docs ${navOpen ? "nav-open" : ""}`}>
         <div className="settings-nav list docs-nav">
           <label className="docs-search">
             <Icon path={mdiMagnify} size="sm" />
@@ -136,6 +145,9 @@ export function DocsDialog({ initial, onClose }: { initial: DocsAt; onClose: () 
           )}
         </div>
         <div className="settings-pane docs-pane" ref={pane}>
+          <button className="link-button docs-contents" aria-expanded={navOpen} onClick={() => setNavOpen((o) => !o)}>
+            <Icon path={mdiFormatListBulleted} size="sm" /> {t("desktop.docs.contents")}
+          </button>
           {!docs ? (
             <p className="muted">{t("desktop.checking")}</p>
           ) : hits ? (

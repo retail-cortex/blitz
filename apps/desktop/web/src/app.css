@@ -911,3 +911,29 @@ code.file-link:hover { text-decoration-color: currentColor; }
 .docs-trail button::after { content: "›"; margin-left: 4px; }
 .docs-hits { display: flex; flex-direction: column; gap: 4px; }
 .docs-hit { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: left; white-space: normal; }
+/* A narrow window: the navigation folds behind Contents, over the page
+   when open; the page takes the width. */
+.docs { container: docs / inline-size; position: relative; }
+.docs-contents { display: none; align-items: center; gap: 6px; margin-bottom: 8px; }
+@container docs (max-width: 700px) {
+  .docs-contents { display: inline-flex; }
+  .docs-nav { display: none; }
+  .docs.nav-open .docs-nav { display: flex; position: absolute; inset: 32px 0 0 0; width: auto; z-index: 2; background: var(--md-surface-container-high); border: 1px solid var(--md-outline-variant); border-radius: var(--field-radius); padding: 8px; box-shadow: var(--md-elevation-2); }
+  :root[data-glass="on"] .docs.nav-open .docs-nav { background: var(--glass-strong); }
+  .docs.nav-open .docs-pane > :not(.docs-contents) { visibility: hidden; } /* the page waits behind the open contents */
+}
+/* A command or path in a table cell stays on one line (a wide table
+   scrolls) rather than breaking at its hyphens. */
+.docs-pane .markdown td code { white-space: nowrap; }
+/* A narrow page: a table's rows stack, each a card: the first cell as its
+   heading, the others under it with their column's name (data-label). */
+.docs-pane { container: docs-page / inline-size; }
+@container docs-page (max-width: 620px) {
+  .docs-pane .markdown table, .docs-pane .markdown tbody, .docs-pane .markdown tr, .docs-pane .markdown td { display: block; width: auto; }
+  .docs-pane .markdown thead { display: none; }
+  .docs-pane .markdown tr { border: 1px solid var(--md-outline-variant); border-radius: 8px; padding: 8px 12px; margin-bottom: 8px; }
+  .docs-pane .markdown td { border: none; padding: 2px 0; }
+  .docs-pane .markdown td:first-child { font-weight: 600; }
+  .docs-pane .markdown td:not(:first-child)[data-label]:not([data-label=""])::before { content: attr(data-label) ": "; color: var(--md-on-surface-variant); font-weight: 500; }
+  .docs-pane .markdown td code { white-space: normal; overflow-wrap: anywhere; }
+}

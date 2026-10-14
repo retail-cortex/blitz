@@ -578,6 +578,7 @@
     "desktop.cmd.usage": "Usage: {usage}",
     "desktop.cmd.wait": "Wait for the agent to finish (or stop it) before /{name}.",
     "desktop.docs.title": "User guide",
+    "desktop.docs.contents": "Contents",
     "desktop.docs.back": "Back",
     "desktop.docs.forward": "Forward",
     "desktop.docs.web": "Open on the web",
