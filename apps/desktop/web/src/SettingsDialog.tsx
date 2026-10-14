@@ -39,7 +39,7 @@ import {
   mdiWeatherNight,
   mdiWhiteBalanceSunny,
 } from "@mdi/js";
-import { appVersion, cliStatus, installCLI, installService, reinstallCLI, restartService, serviceStatus, setTray, stopService, type CLIStatus, type ServiceStatus } from "./desktop";
+import { appVersion, cliStatus, installCLI, isLinuxApp, installService, reinstallCLI, restartService, serviceStatus, setTray, stopService, type CLIStatus, type ServiceStatus } from "./desktop";
 import { SandboxFixResult, sandboxDetail, useSandboxFix } from "./SandboxNotice";
 import { configChanged, showLicense } from "./events";
 import { checkService, settleTimeout, type ServiceCheck, waitForService, withTimeout } from "./serviceVersion";
@@ -208,6 +208,11 @@ function Appearance() {
         <Setting title={t("desktop.settings.transparency")} detail={t("desktop.settings.transparency.detail")}>
           <Switch label={t("desktop.settings.transparency")} checked={prefs.transparency === "on"} onChange={(on) => update((p) => ({ ...p, transparency: on ? "on" : "off" }))} />
         </Setting>
+        {isLinuxApp() && (
+          <Setting title={t("desktop.settings.gpu")} detail={t("desktop.settings.gpu.detail")}>
+            <Switch label={t("desktop.settings.gpu")} checked={prefs.gpu === "on"} onChange={(on) => update((p) => ({ ...p, gpu: on ? "on" : "off" }))} />
+          </Setting>
+        )}
         <Setting title={t("desktop.settings.width")} detail={t("desktop.settings.width.detail")}>
           <Segmented
             label={t("desktop.settings.width")}

@@ -50,6 +50,7 @@ func main() {
 	for _, l := range linkArgs(os.Args[1:]) { // Linux: opened with a link
 		app.links.receive(l)
 	}
+	saved, _ := app.prefs.load() // the defaults when none are readable
 	err := wails.Run(&options.App{
 		Title:     "Blitz",
 		Width:     1280,
@@ -72,7 +73,14 @@ func main() {
 			WebviewIsTransparent: true,
 			WindowIsTranslucent:  true,
 			OnUrlOpen:            app.links.receive,
+			// Escape closes the page's dialogs and popovers; in full
+			// screen it would leave full screen too.
+			DisableEscapeExitsFullscreen: true,
 		},
+		// macOS's menu bar, About and Settings… in the app menu
+		// (appmenu.go); none elsewhere.
+		Menu:  app.appMenu(MenuLabels{}),
+		Linux: linuxOptions(saved.GPU, os.Getenv, os.Setenv),
 		// One app: a second start (a link, on Linux) goes to the first.
 		SingleInstanceLock: &options.SingleInstanceLock{
 			UniqueId: "dev.blitz.desktop",

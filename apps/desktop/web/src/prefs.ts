@@ -65,6 +65,8 @@ export interface Prefs {
   advanced: boolean;
   /** Glass: translucent, blurred surfaces ("off": solid ones). */
   transparency: "on" | "off";
+  /** Linux: the window draws with the graphics card where it can ("off": in software; read when the app starts). */
+  gpu: "on" | "off";
   /** The user's CSS for Markdown previews in each theme, over the defaults (FIL-57). */
   markdown_css_light: string;
   markdown_css_dark: string;
@@ -92,6 +94,7 @@ export const defaultPrefs: Prefs = {
   doc_width: "full",
   editor_zoom: 100,
   transparency: "on",
+  gpu: "on",
   markdown_css_light: "",
   markdown_css_dark: "",
 };
@@ -139,6 +142,7 @@ export function normalizePrefs(raw: unknown): Prefs {
     task_continue: r.task_continue === true,
     advanced: r.advanced === true,
     transparency: pick(r.transparency, ["on", "off"] as const, "on"),
+    gpu: pick(r.gpu, ["on", "off"] as const, "on"),
     chat_width: pixels(r.chat_width),
     files_width: pixels(r.files_width),
     markdown_css_light: css(r.markdown_css_light),

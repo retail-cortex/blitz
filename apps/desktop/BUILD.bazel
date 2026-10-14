@@ -52,14 +52,21 @@ go_library(
         "appearance_darwin.go",
         "appearance_darwin.m",
         "appearance_other.go",
+        "appmenu.go",
+        "appmenu_darwin.go",
+        "appmenu_darwin.m",
+        "appmenu_other.go",
         "cli.go",
         "deeplink.go",
         "folder.go",
+        "gpu.go",
         "link_darwin.go",
         "main.go",
         "prefs.go",
         "sandbox.go",
         "unsaved.go",
+        "windowicon_linux.go",
+        "windowicon_other.go",
     ],
     cdeps = [":embedded_info_plist"],  # keep
     cgo = True,
@@ -74,7 +81,10 @@ go_library(
         ],
         "//conditions:default": [],
     }),
-    embedsrcs = [":dist"],  # keep
+    embedsrcs = [
+        ":dist",
+        "windowicon.png",  # the Linux window's (windowicon_linux.go)
+    ],  # keep
     importpath = "github.com/retail-cortex/blitz/apps/desktop",
     visibility = ["//visibility:private"],
     deps = [
@@ -88,8 +98,11 @@ go_library(
         "//pkg/shellpath",
         "//pkg/socket",
         "@com_github_wailsapp_wails_v2//:wails",
+        "@com_github_wailsapp_wails_v2//pkg/menu",
+        "@com_github_wailsapp_wails_v2//pkg/menu/keys",
         "@com_github_wailsapp_wails_v2//pkg/options",
         "@com_github_wailsapp_wails_v2//pkg/options/assetserver",
+        "@com_github_wailsapp_wails_v2//pkg/options/linux",
         "@com_github_wailsapp_wails_v2//pkg/options/mac",
         "@com_github_wailsapp_wails_v2//pkg/runtime",
     ],
@@ -129,9 +142,11 @@ go_test(
     srcs = [
         "app_test.go",
         "appearance_test.go",
+        "appmenu_test.go",
         "cli_test.go",
         "deeplink_test.go",
         "folder_test.go",
+        "gpu_test.go",
         "license_test.go",
         "prefs_test.go",
         "sandbox_test.go",
@@ -148,6 +163,8 @@ go_test(
         "//pkg/socket",
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
+        "@com_github_wailsapp_wails_v2//pkg/menu",
+        "@com_github_wailsapp_wails_v2//pkg/options/linux",
     ],
 )
 

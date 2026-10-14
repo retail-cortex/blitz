@@ -18,7 +18,7 @@ import { useCallback, useEffect, useState } from "react";
 import { watchWorkerFailures } from "./workerFailures";
 import { mdiAlertOutline, mdiFolderOpenOutline, mdiLightningBolt, mdiServerOff } from "@mdi/js";
 import { config as configAPI, onServiceLost, workspaces as workspaceAPI } from "./api";
-import { appVersion, chooseWorkspace, type LicenseText, installService, onDeepLink, onNotificationOpen, restartService, serviceStatus, type ServiceStatus, toggleFullscreen } from "./desktop";
+import { appVersion, chooseWorkspace, type LicenseText, installService, onAppMenu, onDeepLink, onNotificationOpen, restartService, serviceStatus, type ServiceStatus, setAppMenu, toggleFullscreen } from "./desktop";
 import { checkService, type ServiceCheck } from "./serviceVersion";
 import { CommandPalette } from "./CommandPalette";
 import { SearchDialog } from "./SearchDialog";
@@ -151,7 +151,7 @@ function StaleService({ state, check }: { state: ServiceCheck; check: () => Prom
 
 function Shell() {
   const { prefs, loaded, update, prefsError, activity, stop } = useApp();
-  useLanguage(); // the whole window follows a language change
+  const language = useLanguage(); // the whole window follows a language change
   const [confirmClose, setConfirmClose] = useState<string | null>(null);
   const snack = useSnackbar();
   const { service, error, check, setError } = useServiceStatus();
@@ -173,6 +173,19 @@ function Shell() {
   // workspace's (null: closed).
   const [settingsAt, setSettingsAt] = useState<{ section: Section; scope?: string } | null>(null);
   const openSettings = useCallback((section: Section, scope?: string) => setSettingsAt({ section, scope }), []);
+  // macOS's app menu: its words in the window's language, and its About
+  // Blitz and Settings… (DSK-101).
+  useEffect(() => {
+    setAppMenu({
+      about: t("desktop.appmenu.about"),
+      settings: t("desktop.appmenu.settings"),
+      hide: t("desktop.appmenu.hide"),
+      hide_others: t("desktop.appmenu.hide_others"),
+      show_all: t("desktop.appmenu.show_all"),
+      quit: t("desktop.appmenu.quit"),
+    });
+  }, [language]);
+  useEffect(() => onAppMenu((item) => setSettingsAt({ section: item === "about" ? "about" : "appearance" })), []);
   const [paletteOpen, setPaletteOpen] = useState(false);
   // Workspace search, open with the query it starts with (null: closed).
   const [searchOpen, setSearchOpen] = useState<string | null>(null);
