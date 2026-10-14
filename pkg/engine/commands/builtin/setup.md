@@ -3,4 +3,4 @@ description: "Set up this workspace's agent harness: a git repository and .gitig
 argument-hint: "[what to focus on]"
 agent: project-setup
 ---
-Set up this workspace's agent harness, following your steps: survey (reading the specification in .agents/specs/ if there is one, or offering /spec first if not), interview me, make it a git repository with a fitting .gitignore, write .agents/AGENTS.md, point AGENTS.md, CLAUDE.md, GEMINI.md and BLITZ.md at it, then propose skills and agents for me to choose. $ARGUMENTS
+Set up this workspace's agent harness, following your steps: survey (reading the specification in .agents/specs/ if there is one, or offering /spec first if not), interview me, make it a git repository with a .gitignore that fits its kind, write .agents/AGENTS.md for that kind of work, point AGENTS.md, CLAUDE.md, GEMINI.md and BLITZ.md at it, then propose skills and agents for me to choose. $ARGUMENTS

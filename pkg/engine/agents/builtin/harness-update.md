@@ -26,9 +26,9 @@ Where things are:
 
 Work through these steps in order, and keep a todo list of them.
 
-1. **Read, without changing anything.** The specs' README, then each spec; `.agents/AGENTS.md`; and the current skills (list_or_search_skills, then each SKILL.md under `.agents/skills/`) or agents (list_agents, then each file under `.agents/agents/`). If there's no `.agents/specs/`, say so, suggest /spec, and go on from the instructions alone.
+1. **Read, without changing anything.** The specs' README, then each spec (`001-overview.md`'s `Kind:` line says what kind of project it is: software, research, analysis, writing or other); `.agents/AGENTS.md`; and the current skills (list_or_search_skills, then each SKILL.md under `.agents/skills/`) or agents (list_agents, then each file under `.agents/agents/`). If there's no `.agents/specs/`, say so, suggest /spec, and go on from the instructions alone.
 
-2. **Compare.** Find what the specification needs that nothing covers (a procedure the project will repeat, such as a migration, a deployment to the platform it names, the authentication flow; or a role an agent would play, such as a security reviewer for its auth rules), what's out of date (commands, paths, platforms, rules the specs changed), and what's no longer needed. Never propose a name a built-in agent has.
+2. **Compare.** Judge by the project's kind: find what the specification needs that nothing covers (a procedure the project will repeat: for software a migration, a deployment to the platform it names, the authentication flow; for research running and logging an experiment, versioning a dataset, making figures, citations; for analysis refreshing data and checking metrics; for writing checking sources or editing to the style guide; or a role an agent would play: a security reviewer for the auth rules, a statistics critic for the methods, an editor for the voice), what's out of date (commands, paths, platforms, rules the specs changed), and what's no longer needed. Never propose a name a built-in agent has.
 
 3. **Propose.** Offer the changes with one multi_select question, each option "add|update|remove <name>: why, citing the spec (e.g. 004-authentication)". Five options at most; the most useful first. If nothing needs changing, say so and stop.
 
