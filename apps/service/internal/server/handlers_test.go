@@ -231,8 +231,9 @@ func TestEveryHandlerRefusesARelativeWorkspace(t *testing.T) {
 		"GitFileAction": func() error {
 			return unary(f.GitFileAction, &pb.GitFileActionRequest{Workspace: ws, Path: "x", Action: pb.GitAction_GIT_ACTION_STAGE})
 		},
-		"FindFiles": func() error { return unary(f.FindFiles, &pb.FindFilesRequest{Workspace: ws}) },
-		"StatFiles": func() error { return unary(f.StatFiles, &pb.StatFilesRequest{Workspace: ws}) },
+		"RenderDocx": func() error { return unary(f.RenderDocx, &pb.RenderDocxRequest{Workspace: ws}) },
+		"FindFiles":  func() error { return unary(f.FindFiles, &pb.FindFilesRequest{Workspace: ws}) },
+		"StatFiles":  func() error { return unary(f.StatFiles, &pb.StatFilesRequest{Workspace: ws}) },
 	} {
 		t.Run(name, func(t *testing.T) {
 			code, info := errorReason(t, call())

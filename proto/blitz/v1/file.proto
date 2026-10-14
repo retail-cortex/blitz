@@ -51,6 +51,9 @@ service FileService {
   // the workspace's .gitignore. Git runs with the repository's filter
   // drivers and fsmonitor switched off. NOT_A_REPOSITORY outside one.
   rpc GitFileAction(GitFileActionRequest) returns (GitFileActionResponse);
+  // Markdown written as a Word document (.docx), its images read beside
+  // the file it belongs to; the caller writes it (Export as Word, /export).
+  rpc RenderDocx(RenderDocxRequest) returns (RenderDocxResponse);
   // Files whose path matches a query, best first (Go to file).
   rpc FindFiles(FindFilesRequest) returns (FindFilesResponse);
   // Files' current versions, to notice changes made elsewhere.
@@ -219,6 +222,19 @@ message GitFileActionRequest {
 
 // Response message for FileService.GitFileAction.
 message GitFileActionResponse {}
+
+// Request message for FileService.RenderDocx.
+message RenderDocxRequest {
+  string workspace = 1;
+  // The Markdown file it's from, for its images ("" for none).
+  string path = 2;
+  string markdown = 3;
+}
+
+// Response message for FileService.RenderDocx.
+message RenderDocxResponse {
+  bytes data = 1;
+}
 
 // Request message for FileService.FindFiles.
 message FindFilesRequest {

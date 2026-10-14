@@ -16,7 +16,7 @@
 
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { openSearchPanel } from "@codemirror/search";
-import { mdiAlertCircleOutline, mdiArrowExpandHorizontal, mdiAt, mdiChevronRight, mdiClose, mdiContentSave, mdiFilePdfBox, mdiLockOutline, mdiMagnify, mdiMessagePlusOutline, mdiWrap } from "@mdi/js";
+import { mdiAlertCircleOutline, mdiArrowExpandHorizontal, mdiAt, mdiChevronRight, mdiClose, mdiContentSave, mdiExport, mdiFilePdfBox, mdiFileWordBoxOutline, mdiLockOutline, mdiMagnify, mdiMessagePlusOutline, mdiWrap } from "@mdi/js";
 import { files } from "../api";
 import { inApp, printPDF } from "../desktop";
 import { message } from "../errors";
@@ -24,7 +24,7 @@ import { addToContext, findInFileEvent, openFile } from "../events";
 import { FindBar } from "./FindBar";
 import { EditorView } from "@codemirror/view";
 import { t, tn } from "../i18n";
-import { Button, Dialog, Icon, IconButton, Segmented, useSnackbar } from "../ui/controls";
+import { Button, Dialog, Icon, IconButton, Menu, Segmented, useSnackbar } from "../ui/controls";
 import { Preview } from "./Preview";
 // The visual editor (TipTap) loads with the first Markdown file shown in it.
 const VisualEditor = lazy(() => import("./visual/VisualEditor").then((m) => ({ default: m.VisualEditor })));
@@ -37,7 +37,7 @@ import { fileIcon } from "./icons";
 import type { EditorModel, Tab } from "./useEditor";
 import { useEditorZoom } from "./zoom";
 import { useAdvanced, useApp } from "../state";
-import { paperFor, pdfPath, printablePage } from "./printPage";
+import { exportPath, paperFor, printablePage } from "./printPage";
 import { drawForPrint } from "../mermaid";
 
 /**
@@ -94,7 +94,28 @@ export function EditorPane({ model, onReveal, onCursor }: { model: EditorModel; 
   // PDF prints the preview) or shows a search hit. MDX keeps Preview.
   const visual = advanced && kind === "markdown" && !!tab && !/\.mdx$/i.test(tab.path);
   const showVisual = visual && !!ready && showPreview && !found && !exporting;
-  const [replacing, setReplacing] = useState<{ path: string; pdf: string; version: string } | null>(null);
+  // An export that would replace a file waits for the user to say so.
+  type Export = { kind: "pdf" | "docx"; path: string; out: string; version: string };
+  const [replacing, setReplacing] = useState<Export | null>(null);
+  const runExport = (e: Export) => void (e.kind === "pdf" ? exportPdf(e.path, e.out, e.version) : exportDocx(e.path, e.out, e.version));
+  const exported = (out: string) =>
+    snack(t("desktop.files.exported", { name: out.slice(out.lastIndexOf("/") + 1) }), {
+      action: { label: t("desktop.files.open_pdf"), run: () => openFile({ dir: model.dir, path: out }) },
+    });
+  // Export as Word (FS-75): the editor's text, written by the service.
+  const exportDocx = async (path: string, out: string, version: string) => {
+    setExporting(true);
+    try {
+      const markdown = model.state(path)?.doc.toString() ?? "";
+      const { data } = await files.renderDocx({ workspace: model.dir, path, markdown });
+      await files.writeBinaryFile({ workspace: model.dir, path: out, data, version });
+      exported(out);
+    } catch (e) {
+      snack(t("desktop.files.export_docx_failed", { error: message(e) }), { error: true });
+    } finally {
+      setExporting(false);
+    }
+  };
   const exportPdf = async (path: string, pdf: string, version: string) => {
     setExporting(true);
     try {
@@ -109,26 +130,25 @@ export function EditorPane({ model, onReveal, onCursor }: { model: EditorModel; 
       });
       const data = await printPDF(html, paperFor(navigator.language));
       await files.writeBinaryFile({ workspace: model.dir, path: pdf, data, version });
-      snack(t("desktop.files.exported", { name: pdf.slice(pdf.lastIndexOf("/") + 1) }), {
-        action: { label: t("desktop.files.open_pdf"), run: () => openFile({ dir: model.dir, path: pdf }) },
-      });
+      exported(pdf);
     } catch (e) {
       snack(t("desktop.files.export_failed", { error: message(e) }), { error: true });
     } finally {
       setExporting(false);
     }
   };
-  const startExport = async () => {
+  const startExport = async (kind: Export["kind"]) => {
     if (!tab) return;
-    if (shownAs !== "preview") setView(tab.path, "preview");
-    const pdf = pdfPath(tab.path);
+    // A PDF prints the preview.
+    if (kind === "pdf" && shownAs !== "preview") setView(tab.path, "preview");
+    const out = exportPath(tab.path, kind === "pdf" ? ".pdf" : ".docx");
     try {
-      const { versions } = await files.statFiles({ workspace: model.dir, paths: [pdf] });
-      const version = versions[pdf] ?? "";
-      if (version) setReplacing({ path: tab.path, pdf, version });
-      else await exportPdf(tab.path, pdf, "");
+      const { versions } = await files.statFiles({ workspace: model.dir, paths: [out] });
+      const e = { kind, path: tab.path, out, version: versions[out] ?? "" };
+      if (e.version) setReplacing(e);
+      else runExport(e);
     } catch (e) {
-      snack(t("desktop.files.export_failed", { error: message(e) }), { error: true });
+      snack(t(kind === "pdf" ? "desktop.files.export_failed" : "desktop.files.export_docx_failed", { error: message(e) }), { error: true });
     }
   };
   // Find in file (FIL-72): Cmd/Ctrl+F, the toolbar, or the palette; the
@@ -345,8 +365,16 @@ export function EditorPane({ model, onReveal, onCursor }: { model: EditorModel; 
             />
           )}
           {(findsPreview || findsSource) && <IconButton icon={mdiMagnify} label={t("desktop.files.find")} small selected={finding > 0} onClick={startFind} />}
-          {kind === "markdown" && ready && inApp() && (
-            <IconButton icon={mdiFilePdfBox} label={t("desktop.files.export_pdf")} small disabled={exporting} onClick={() => void startExport()} />
+          {kind === "markdown" && ready && (
+            <Menu
+              trigger={(props) => <IconButton {...props} icon={mdiExport} label={t("desktop.files.export")} small disabled={exporting} />}
+              placement="down end"
+              items={[
+                // Printing a PDF needs the app's web engine.
+                ...(inApp() ? [{ label: t("desktop.files.export_pdf"), icon: mdiFilePdfBox, onSelect: () => void startExport("pdf") }] : []),
+                { label: t("desktop.files.export_docx"), icon: mdiFileWordBoxOutline, onSelect: () => void startExport("docx") },
+              ]}
+            />
           )}
           {tab.agentRule !== "blocked" && (
             <>
@@ -392,8 +420,8 @@ export function EditorPane({ model, onReveal, onCursor }: { model: EditorModel; 
       )}
       {replacing && (
         <Dialog
-          title={t("desktop.files.replace_pdf", { name: replacing.pdf.slice(replacing.pdf.lastIndexOf("/") + 1) })}
-          icon={mdiFilePdfBox}
+          title={t("desktop.files.replace_pdf", { name: replacing.out.slice(replacing.out.lastIndexOf("/") + 1) })}
+          icon={replacing.kind === "pdf" ? mdiFilePdfBox : mdiFileWordBoxOutline}
           onClose={() => setReplacing(null)}
           footer={
             <>
@@ -403,7 +431,7 @@ export function EditorPane({ model, onReveal, onCursor }: { model: EditorModel; 
                 onClick={() => {
                   const r = replacing;
                   setReplacing(null);
-                  void exportPdf(r.path, r.pdf, r.version);
+                  runExport(r);
                 }}
               >
                 {t("desktop.files.replace")}
@@ -411,7 +439,7 @@ export function EditorPane({ model, onReveal, onCursor }: { model: EditorModel; 
             </>
           }
         >
-          <p>{t("desktop.files.replace_pdf_body")}</p>
+          <p>{t(replacing.kind === "pdf" ? "desktop.files.replace_pdf_body" : "desktop.files.replace_docx_body")}</p>
         </Dialog>
       )}
     </section>

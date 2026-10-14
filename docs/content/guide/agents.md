@@ -128,7 +128,7 @@ These are the names to list in an agent's `tools`. Some exist only when their fe
 | `run_shell_command`, `manage_background_process` | Commands, in the OS sandbox |
 | `web_fetch`, `web_search`, `browser` | The web, a search provider, a real browser ([search](search.md)) |
 | `view_image`, `view_document`, `view_media` | An image, a PDF, or a recording or video, as far as the model takes them ([attachments](images.md)) |
-| `export_pdf`, `generate_audio` | A Markdown file as a PDF; text read aloud, with a speech model set ([attachments](images.md)) |
+| `export_pdf`, `export_docx`, `generate_audio` | A Markdown file as a PDF or a Word document; text read aloud, with a speech model set ([attachments](images.md)) |
 | `ask_user_question` | Asking you, with options |
 | `remember` | Notes the agent keeps for later sessions ([extending](extending.md#notes-the-agent-keeps)) |
 | `list_or_search_skills`, `activate_skill`, `run_skill_script` | [Skills](skills.md) |

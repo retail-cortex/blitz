@@ -17,7 +17,10 @@ package main
 import (
 	"fmt"
 	"os"
+	"path/filepath"
+	"strings"
 
+	"github.com/retail-cortex/blitz/pkg/docx"
 	"github.com/spf13/cobra"
 )
 
@@ -28,7 +31,7 @@ func newSessionsCommand(g *globalFlags) *cobra.Command {
 	var out string
 	export := &cobra.Command{
 		Use:   "export <session-id>",
-		Short: "Write a session as Markdown: prompts, answers and tool calls, secrets masked",
+		Short: "Write a session as Markdown (or Word, with -o name.docx): prompts, answers and tool calls, secrets masked",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			r, err := attachWorkspace(cmd.Context(), g)
@@ -43,14 +46,27 @@ func newSessionsCommand(g *globalFlags) *cobra.Command {
 				_, err = fmt.Fprint(cmd.OutOrStdout(), md)
 				return err
 			}
-			if err := os.WriteFile(out, []byte(md), 0o644); err != nil {
+			data, err := exportData(md, out)
+			if err != nil {
+				return err
+			}
+			if err := os.WriteFile(out, data, 0o644); err != nil {
 				return err
 			}
 			fmt.Fprintf(cmd.ErrOrStderr(), "Wrote %s\n", out)
 			return nil
 		},
 	}
-	export.Flags().StringVarP(&out, "output", "o", "", "The file to write (default: standard output)")
+	export.Flags().StringVarP(&out, "output", "o", "", "The file to write, a .docx name for a Word document (default: standard output)")
 	cmd.AddCommand(export)
 	return cmd
+}
+
+// exportData is a session's Markdown as the file out wants it: a Word
+// document for a .docx name (FS-75), else the Markdown itself.
+func exportData(md, out string) ([]byte, error) {
+	if strings.EqualFold(filepath.Ext(out), ".docx") {
+		return docx.Render([]byte(md), docx.Options{})
+	}
+	return []byte(md), nil
 }

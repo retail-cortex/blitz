@@ -15,6 +15,7 @@ tools:
   - glob
   - create_file
   - export_pdf
+  - export_docx
   - generate_audio
   - edit
   - replace_in_file

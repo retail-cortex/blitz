@@ -50,7 +50,15 @@ PDFs attach the way images do: `summarise @papers/attention.pdf`, `/attach`, `--
 - Images the file links in the workspace are included; web images and raw HTML aren't. A Mermaid diagram prints as its code: export from the desktop app to draw it.
 - Paper is A4 or Letter: `[pdf] page_size = "a4"`, `"letter"`, or `"auto"` (the default, from your locale).
 
-In the desktop app, **Export as PDF** in a Markdown file's bar prints the preview exactly as it shows, diagrams included, with the system's own web engine. No browser needed.
+In the desktop app, **Export › Export as PDF** in a Markdown file's bar prints the preview exactly as it shows, diagrams included, with the system's own web engine. No browser needed.
+
+## Word documents out
+
+`export_docx` writes a Markdown file as a Word document beside it (`notes/week1.md` → `notes/week1.docx`), with the same rules as `export_pdf`: it asks first, `/undo` removes it, and "a summary of our conversation as a Word document" writes only the `.docx`. In the desktop app, **Export › Export as Word** in a Markdown file's bar does the same with what's in the editor, and `/export notes.docx` (or `blitz sessions export <id> -o notes.docx`) writes a conversation.
+
+- It uses Word's own styles: headings are Heading 1–6 (so the navigation pane and a table of contents work), and lists, quotes, code and tables have styles you can change for the whole document at once.
+- Links stay links, including links to a heading in the same file; images the file links in the workspace are embedded.
+- Raw HTML is left out, and a Mermaid diagram is kept as its code: for the drawing, export a PDF from the desktop app.
 
 ## Audio
 

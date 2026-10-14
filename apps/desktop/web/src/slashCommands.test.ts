@@ -87,7 +87,11 @@ beforeEach(() => {
         listCheckpoints: () => ({ checkpoints: [] }),
         undo: () => ({ restored: [] }),
       });
-      service(FileService, { writeFile: (r) => (rec(`write ${r.path} ${r.text}`), { version: "1" }) });
+      service(FileService, {
+        writeFile: (r) => (rec(`write ${r.path} ${r.text}`), { version: "1" }),
+        renderDocx: (r) => (rec(`renderDocx ${r.markdown}`), { data: new Uint8Array([80, 75]) }),
+        writeBinaryFile: (r) => (rec(`writeBinary ${r.path} ${r.data.length}`), { version: "1" }),
+      });
       service(ConfigService, { setConfigValue: (r) => (rec(`config ${r.key}=${r.value}`), { change: { path: "/u/.env.toml" } }) });
     }),
   );
@@ -168,6 +172,7 @@ describe("commands", () => {
     ["/copy 3", "error: usage", [], [], []],
     ["/export", "Wrote the session to fix-the-cart.md", ["write fix-the-cart.md # chat"], [], []],
     ["/export /w/notes/chat.md", "notes/chat.md", ["write notes/chat.md # chat"], [], []],
+    ["/export chat.docx", "chat.docx", ["renderDocx # chat", "writeBinary chat.docx 2"], [], []],
     ["/export /tmp/x.md", "error:", [], [], []],
     ["/fork 2", "s2", ["fork 2"], ["reload", "refreshList"], []],
     ["/fork x", "error:", [], [], []],

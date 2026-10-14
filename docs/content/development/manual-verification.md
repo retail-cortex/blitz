@@ -551,3 +551,12 @@ On Windows 10 (1803 or later) or 11: unzip `blitz_<version>_windows_amd64.zip` (
   **Expected:** 403 both times: no cookie, and a foreign host.
 - [ ] `icacls %USERPROFILE%\.blitz\run`
   **Expected:** only you, SYSTEM and Administrators.
+
+## 46. Word documents (spec_filetools_006 FS-75, spec_desktop_024 DSK-93b)
+
+- [ ] In the desktop app, open a Markdown file with headings, a numbered list starting at 5, a task list, a table, code, a link to `#a-heading` and a workspace image; **Export › Export as Word**.
+  **Expected:** `<name>.docx` beside it; a second export asks **Replace <name>.docx?**.
+- [ ] Open it in Word, then in Pages (or LibreOffice).
+  **Expected:** no repair prompt; headings in the navigation pane; the list counts 5, 6; the table's header row, alignment and borders; code in a monospace shaded block; the heading link jumps; the image fits the page.
+- [ ] In a session, `/export chat.docx`; from a shell, `blitz sessions export <id> -o chat.docx`.
+  **Expected:** both open in Word with the conversation's headings and code.

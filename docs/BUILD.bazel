@@ -119,5 +119,9 @@ copy_to_bin(
 copy_to_bin(
     name = "markdown",
     srcs = glob(["**/*.md"]),
-    visibility = ["//apps/desktop/web:__pkg__"],
+    visibility = [
+        "//apps/desktop/web:__pkg__",
+        # The Word writer's test writes every page.
+        "//pkg/docx:__pkg__",
+    ],
 )
