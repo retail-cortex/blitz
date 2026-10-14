@@ -84,6 +84,7 @@ The hard part: a task may need an approval while the person is doing something e
 ## 7a. Agent defaults
 
 - **BGA-50** Agent frontmatter may set `permission_mode`, `max_turns` and `background` (PAR-PAR-03). Through `invoke_agent`, `plan` refuses the agent's changes (its own plan gate) and the other modes replace the workspace's for its actions (`tools.WithMode`). A mode looser than the workspace's applies only to built-in agents, the user's own and, once its settings are trusted, the project's ([spec_project_config_031](spec_project_config_031.md)); `bypass` also needs the OS sandbox; otherwise the workspace's mode stays and the log says why. `max_turns` gives the agent its own model-call budget, in the foreground and as a task. `background: true` is `invoke_agent`'s default for the agent, unless the call says otherwise. An unknown mode or a negative `max_turns` rejects the agent's file.
+- **BGA-50a** *2026-10-14.* `permission_mode` is parsed before it's ranked or applied (`api.ParsePermissionMode`): an alias (`acceptEdits`, `bypassPermissions`, `ask`) is its canonical mode for every check, so it can't slip past "a project's agent can't loosen the mode until trusted", and a value that doesn't parse is ignored with a warning (`runtime/agentrun.go`).
 
 ## 8. Phases (as built)
 

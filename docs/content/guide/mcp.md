@@ -33,7 +33,7 @@ blitz mcp login docs
 | `blitz mcp login <name>`, `logout <name>` | Sign in to an HTTP server in the browser (OAuth), or forget the sign-in |
 | `blitz doctor --online` | Connects to each server and counts its tools |
 
-In a session, `/mcp` lists the servers and whether their tools ask first, `/tools` shows which tools each agent gets, and `/status` names them. The desktop app has the same `/mcp`, `/tools` and `/status`; servers are added from the terminal or in the settings file.
+In a session, `/mcp` lists the servers, which are disabled, and whether their tools ask first, `/tools` shows which tools each agent gets, and `/status` names them. The desktop app has the same `/mcp`, `/tools` and `/status`; servers are added from the terminal or in the settings file.
 
 ## In the settings file
 
@@ -58,7 +58,7 @@ env = { GITHUB_TOKEN = "ghp_…" }
 
 Each server needs a unique `name` and exactly one of `command` or `url`; otherwise the workspace won't open, saying why.
 
-**Keep the file private.** `env` and `headers` values are stored as written, in plain text. Only OAuth sign-ins (`blitz mcp login`) go to the system keychain. Prefer a server that reads its token from its own config, or OAuth, when you can.
+**Keep the file private.** `env` and `headers` values are stored as written, in plain text (Blitz masks them in its logs and in `blitz config show`). Only OAuth sign-ins (`blitz mcp login`) go to the system keychain. Prefer a server that reads its token from its own config, or OAuth, when you can.
 
 ## Servers a project brings
 
@@ -68,11 +68,11 @@ A repository can suggest servers in `.mcp.json`, `.agents/mcp_config.json` or `.
 { "mcpServers": { "issues": { "command": "node", "args": ["tools/issues-mcp.js"] } } }
 ```
 
-They start only after you **trust the project's settings** (the desktop app asks; `blitz trust` in the terminal), and again after any change to them or the scripts they run. A project's server always runs in the sandbox and always asks before its tools run. A server of your own with the same name wins. Plugins can bring servers too ([plugins](extending.md#plugins)).
+An entry Blitz can't start (an SSE server, or one with neither a command nor a URL) is skipped, and the project's settings review says why. They start only after you **trust the project's settings** (the desktop app asks; `blitz trust` in the terminal), and again after any change to them or the scripts they run. A project's server always runs in the sandbox and always asks before its tools run. A server of your own with the same name wins. Plugins can bring servers too ([plugins](extending.md#plugins)).
 
 ## Approvals and permissions
 
-An MCP tool asks before it runs, like a shell command, showing the tool, the server and its arguments. **Allow once**, for the session or always, works per server and tool. `auto_approve = true` skips the question (your `deny` and `ask` rules still apply), and you can write rules for them:
+An MCP tool asks before it runs, like a shell command, showing the tool, the server and its arguments. **Allow once**, for the session or always, works per server and tool. `auto_approve = true` skips the question, for the server's tools and its resources alike (your `deny` and `ask` rules still apply), and you can write rules for them:
 
 ```toml
 [permissions]
@@ -92,6 +92,6 @@ The rule names the server and the tool as the agent sees it (with its prefix, if
 
 - **Startup:** stdio servers start the first time their tools are needed, not when the workspace opens. A crashed one starts again on the next call.
 - **Failures:** after two failures in a row its tools pause for 15 seconds, then longer each time (up to 5 minutes), and come back by themselves. A tool call that runs past `timeout_seconds` fails.
-- **Where to look:** the service's log: **Settings › Logs** in the desktop app, or `blitz logs` in the terminal. Look for `mcp server … unavailable`, `keeps failing` or `needs signing in again: blitz mcp login …`.
+- **Where to look:** a server going unavailable, being paused and coming back shows in the conversation where it happened. Everything else is in the service's log (**Settings › Logs** in the desktop app): look for `mcp server … unavailable`, `keeps failing` or `needs signing in again: blitz mcp login …`.
 - **Names:** a tool named like one of Blitz's own is skipped, and when two servers offer the same name the first wins; a `prefix` fixes both.
 - **Checks:** `blitz doctor` says whether each server's command is on the PATH; `blitz doctor --online` connects and lists its tools.

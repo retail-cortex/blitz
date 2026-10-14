@@ -40,7 +40,7 @@ Model Context Protocol servers extend agents with external tools, over stdio (a 
 - **MCP-30** Unless the server is `auto_approve`, each call needs approval: kind `mcp_tool`, detail `<tool> (MCP server "<server>")` plus sorted `key=value` args, key `mcp:<server>:<tool>`, target `server:tool`.
 - **MCP-31** Each call is bounded by the server's timeout ("MCP tool X timed out after d").
 - **MCP-32** Circuit breaker per server, threshold **2** consecutive transport failures (timeouts or "failed to call MCP tool" errors; tool errors reported by the server count as healthy). An open server's tools disappear from the model's list and calls fail "MCP server X is unavailable after repeated failures; retrying in d". Cooldown 15 s doubling to 5 min; then one trial call.
-- **MCP-33** The terminal gets one warning when a server first fails, one when it is paused, and one when it recovers; every failure is logged.
+- **MCP-33** The user hears once when a server first fails, once when it is paused, and once when it recovers; every failure is logged. *(2026-10-14: the service sends a workspace's warnings to its log, so these are also the turn's notices when they happen in a turn (`tools.WithNotices`, set by `runtime.WithTurnNotices`), shown in the conversation in the terminal and the desktop app.)*
 
 ## 5a. Resources, prompts, questions and sign-in
 
@@ -52,3 +52,7 @@ Model Context Protocol servers extend agents with external tools, over stdio (a 
 
 ## 6. Diagnostics
 - **MCP-40** `doctor` checks each stdio command is on PATH, and with `--online` connects and counts tools. `/mcp` lists servers ([spec_workspace_018](spec_workspace_018.md) WS-72); `/tools` shows which servers are offered to the active agent.
+- **MCP-41** *2026-10-14.* `ListMCPServers` lists every configured server, a disabled one marked (`MCPServer.disabled`; `/mcp` in the terminal and the desktop app says "disabled: configured, not started"), even when none could start; a disabled server's tools are offered to no agent (`/tools`).
+- **MCP-42** *2026-10-14.* An MCP server's `headers` values, and a `Bearer <token>`'s token alone, are secrets to the redactor (logs, telemetry, the audit log) as its `env` values are, and `blitz config show` masks them.
+- **MCP-43** *2026-10-14.* `auto_approve` skips the question for a server's resources too, never a rule: `read_mcp_resource` and `list_mcp_resources` with a server follow `deny` and `ask` rules as its tools do (`approveMCPServer`).
+- **MCP-44** *2026-10-14.* Blitz speaks stdio and streamable HTTP, not SSE. A project's `.mcp.json` or `.agents/mcp_config.json` entry with `"type": "sse"`, or with neither or both of a command and a URL, is skipped, and the project's problems say why.
