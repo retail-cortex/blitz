@@ -19,8 +19,10 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 
+	"github.com/retail-cortex/blitz/pkg/api"
 	"github.com/retail-cortex/blitz/pkg/i18n"
 )
 
@@ -174,73 +176,167 @@ func HandleCommand(ctx context.Context, input string, app *App) (bool, error) {
 	return true, nil
 }
 
-func printHelp(app *App) {
-	rows := [][2]string{
-		{"/agents", "help.agents"},
-		{"/agent [name]", "help.agent"},
-		{"/model [name]", "help.model"},
-		{"/pin_model [<agent> <model>]", "help.pin"},
-		{"/unpin <agent>", "help.unpin"},
-		{"/model_settings [<model> [key=value…|reset]]", "help.model_settings"},
-		{"/skills list|show <name>|search <q>", "help.skills"},
-		{"/session list [--all]|new|load <id|name>|save <name>", "help.session"},
-		{"/undo [--force]", "help.undo"},
-		{"/rewind [n [mode]] [--force]", "help.rewind"},
+// helpGroups are /help's built-in commands in groups (shown in this
+// order, each sorted by command): usage, and the description's key.
+var helpGroups = []struct {
+	title string // its i18n key
+	rows  [][2]string
+}{
+	{"help.group.session", [][2]string{
+		{"/btw <question>", "help.btw"},
 		{"/checkpoints", "help.checkpoints"},
-		{"/diff [git]", "help.diff"},
-		{"/cost", "help.cost"},
-		{"/context", "help.context"},
+		{"/clear", "help.clear"},
 		{"/compact [focus]", "help.compact"},
-		{"/memory [reload|add <note>]", "help.memory"},
-		{"/init", "help.init"},
-		{"/approvals [revoke <n>|clear]", "help.approvals"},
-		{"/hooks", "help.hooks"},
-		{"/style [name]", "help.style"},
-		{"/fork [n]", "help.fork"},
+		{"/context", "help.context"},
+		{"/copy [n]", "help.copy"},
+		{"/cost", "help.cost"},
 		{"/export [file]", "help.export"},
+		{"/fork [n]", "help.fork"},
+		{"/rename <name>", "help.rename"},
+		{"/rewind [n [mode]] [--force]", "help.rewind"},
+		{"/session list [--all]|new|load <id|name>|save <name>", "help.session"},
+		{"/status", "help.status"},
+		{"/undo [--force]", "help.undo"},
+	}},
+	{"help.group.agents", [][2]string{
+		{"/agent [name]", "help.agent"},
+		{"/agents", "help.agents"},
+		{"/effort [minimal|low|medium|high|max|auto]", "help.effort"},
+		{"/model [name]", "help.model"},
+		{"/model_settings [<model> [key=value…|reset]]", "help.model_settings"},
+		{"/pin_model [<agent> <model>]", "help.pin"},
+		{"/style [name]", "help.style"},
+		{"/unpin <agent>", "help.unpin"},
+	}},
+	{"help.group.work", [][2]string{
 		{"/goal [<condition>|clear]", "help.goal"},
 		{"/loop [<interval> <prompt>|stop <n>]", "help.loop"},
-		{"/permissions [allow|ask|deny|remove <rule> [--save]]", "help.permissions"},
-		{"/mcp", "help.mcp"},
-		{"/tools", "help.tools"},
 		{"/plan <goal>", "help.plan"},
-		{"/mode [default|accept-edits|plan|dont-ask|bypass]", "help.mode"},
-		{"/effort [minimal|low|medium|high|max|auto]", "help.effort"},
 		{"/search web|session <terms>", "help.search"},
-		{"/btw <question>", "help.btw"},
-		{"/rename <name>", "help.rename"},
-		{"/envs [prune|remove <key>]", "help.envs"},
-		{"!<command>", "help.shell"},
-		{"/sandbox", "help.sandbox"},
-		{"/attach [path|clear]", "help.attach"},
-		{"/paste", "help.paste"},
-		{"/locale [code]", "help.locale"},
-		{"/config [key=value [--save]], /set", "help.set"},
-		{"/status", "help.status"},
-		{"/copy [n]", "help.copy"},
-		{"/theme [name [--save]]", "help.theme"},
-		{"/cd [path]", "help.cd"},
 		{"/tasks [show|stop <id>]", "help.tasks"},
+	}},
+	{"help.group.workspace", [][2]string{
+		{"!<command>", "help.shell"},
+		{"/attach [path|clear]", "help.attach"},
+		{"/cd [path]", "help.cd"},
+		{"/diff [git]", "help.diff"},
+		{"/init", "help.init"},
+		{"/memory [reload|add <note>]", "help.memory"},
+		{"/paste", "help.paste"},
 		{"/trust", "help.trust"},
-		{"/license [full|third-party]", "help.license"},
-		{"/clear", "help.clear"},
+	}},
+	{"help.group.safety", [][2]string{
+		{"/approvals [revoke <n>|clear]", "help.approvals"},
+		{"/hooks", "help.hooks"},
+		{"/mode [default|accept-edits|plan|dont-ask|bypass]", "help.mode"},
+		{"/permissions [allow|ask|deny|remove <rule> [--save]]", "help.permissions"},
+		{"/sandbox", "help.sandbox"},
+	}},
+	{"help.group.extensions", [][2]string{
+		{"/envs [prune|remove <key>]", "help.envs"},
+		{"/mcp", "help.mcp"},
+		{"/skills list|show <name>|search <q>", "help.skills"},
+		{"/tools", "help.tools"},
+	}},
+	{"help.group.settings", [][2]string{
+		{"/config [key=value [--save]], /set", "help.set"},
 		{"/exit, /quit", "help.exit"},
-	}
-	fmt.Printf("\n%s%s:%s\n", Bold, i18n.T("help.title"), Reset)
-	for _, r := range rows {
-		fmt.Printf("  %s%-36s%s %s\n", Bold, r[0], Reset, i18n.T(r[1]))
+		{"/license [full|third-party]", "help.license"},
+		{"/locale [code]", "help.locale"},
+		{"/theme [name [--save]]", "help.theme"},
+	}},
+}
+
+// customSources is the order /help lists custom commands in, by source
+// ("mcp" for every MCP server's prompts); others follow, by name.
+var customSources = []string{"bundled", "project", "user", "plugin", "skill", "mcp"}
+
+func printHelp(app *App) {
+	fmt.Printf("\n%s%s%s\n", Bold, i18n.T("help.title"), Reset)
+	for _, g := range helpGroups {
+		fmt.Printf("\n%s%s%s\n", Bold, i18n.T(g.title), Reset)
+		for _, r := range sortedRows(g.rows) {
+			fmt.Printf("  %s%-36s%s %s\n", Bold, r[0], Reset, i18n.T(r[1]))
+		}
 	}
 	if cmds := app.Workspace.ListCommands(); len(cmds) > 0 {
-		fmt.Printf("\n%s%s:%s\n", Bold, i18n.T("help.custom_title"), Reset)
-		for _, c := range cmds {
-			usage := "/" + c.Name
-			if c.ArgumentHint != "" {
-				usage += " " + c.ArgumentHint
+		fmt.Printf("\n%s%s%s\n", Bold, i18n.T("help.custom_title"), Reset)
+		for _, g := range customGroups(cmds) {
+			fmt.Printf("\n%s%s%s\n", Bold, sourceTitle(g.source), Reset)
+			for _, c := range g.cmds {
+				usage := "/" + c.Name
+				if c.ArgumentHint != "" {
+					usage += " " + c.ArgumentHint
+				}
+				from := ""
+				if _, detail := sourceKind(c.Source); detail != "" { // the MCP server, the plugin
+					from = fmt.Sprintf(" %s(%s)%s", Dim, safe(detail), Reset)
+				}
+				fmt.Printf("  %s%-36s%s %s%s\n", Bold, safe(usage), Reset, safe(c.Description), from)
 			}
-			fmt.Printf("  %s%-36s%s %s %s(%s)%s\n", Bold, safe(usage), Reset, safe(c.Description), Dim, c.Source, Reset)
 		}
 	}
 	fmt.Printf("\n  %s%s%s\n\n", Dim, i18n.T("help.input"), Reset)
+}
+
+// sortedRows is rows by command, without its / or !.
+func sortedRows(rows [][2]string) [][2]string {
+	out := slices.Clone(rows)
+	key := func(r [2]string) string { return strings.TrimLeft(r[0], "/!") }
+	slices.SortStableFunc(out, func(a, b [2]string) int { return strings.Compare(key(a), key(b)) })
+	return out
+}
+
+type commandGroup struct {
+	source string
+	cmds   []api.CommandInfo
+}
+
+// customGroups is cmds by source, in customSources' order then the rest by
+// name, each sorted by name.
+func customGroups(cmds []api.CommandInfo) []commandGroup {
+	bySource := map[string][]api.CommandInfo{}
+	for _, c := range cmds {
+		src, _ := sourceKind(c.Source)
+		bySource[src] = append(bySource[src], c)
+	}
+	order := slices.Clone(customSources)
+	var rest []string
+	for src := range bySource {
+		if !slices.Contains(order, src) {
+			rest = append(rest, src)
+		}
+	}
+	slices.Sort(rest)
+	var out []commandGroup
+	for _, src := range append(order, rest...) {
+		list := bySource[src]
+		if len(list) == 0 {
+			continue
+		}
+		slices.SortFunc(list, func(a, b api.CommandInfo) int { return strings.Compare(a.Name, b.Name) })
+		out = append(out, commandGroup{src, list})
+	}
+	return out
+}
+
+// sourceKind splits a command's source into its kind and what it names:
+// "mcp:github" is ("mcp", "github"), "plugin tools" ("plugin", "tools").
+func sourceKind(source string) (kind, detail string) {
+	if i := strings.IndexAny(source, ": "); i >= 0 {
+		return source[:i], source[i+1:]
+	}
+	return source, ""
+}
+
+// sourceTitle is a custom commands group's heading: the source's own
+// words, or the source as it is when it has none.
+func sourceTitle(source string) string {
+	key := "help.source." + source
+	if t := i18n.T(key); t != key {
+		return t
+	}
+	return source
 }
 
 // isCustomCommand reports whether name is a custom slash command (a
