@@ -205,6 +205,14 @@ export function showLicense(detail: { which: "notice" | "full" | "third-party" }
   window.dispatchEvent(new CustomEvent(showLicenseEvent, { detail }));
 }
 
+/** The event that opens the user docs on a page (docs/DocsDialog.tsx). */
+export const openDocsEvent = "blitz:open-docs";
+
+/** Opens the user docs on a page, by its site path ("" the home page, "guide/models"), at a heading. */
+export function openDocs(detail: { page: string; anchor?: string }) {
+  window.dispatchEvent(new CustomEvent(openDocsEvent, { detail }));
+}
+
 /** The event that opens the Settings dialog on a section (and scope). */
 export const openSettingsEvent = "blitz:open-settings";
 

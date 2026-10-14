@@ -25,7 +25,8 @@ import { SearchDialog } from "./SearchDialog";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { applyUserLanguage, t, useLanguage } from "./i18n";
 import { message, reason } from "./errors";
-import { compose, goToFileEvent, openSettingsEvent, searchWorkspaceEvent, showLicenseEvent } from "./events";
+import { compose, goToFileEvent, openDocsEvent, openSettingsEvent, searchWorkspaceEvent, showLicenseEvent } from "./events";
+import { DocsDialog, type DocsAt } from "./docs/DocsDialog";
 import { UnsavedDialog } from "./files/EditorPane";
 import { LicenseDialog } from "./LicenseDialog";
 import { Brand, MenuBar } from "./MenuBar";
@@ -173,6 +174,13 @@ function Shell() {
   // workspace's (null: closed).
   const [settingsAt, setSettingsAt] = useState<{ section: Section; scope?: string } | null>(null);
   const openSettings = useCallback((section: Section, scope?: string) => setSettingsAt({ section, scope }), []);
+  // The user docs (Help, the palette, /docs), open on a page.
+  const [docsAt, setDocsAt] = useState<DocsAt | null>(null);
+  useEffect(() => {
+    const f = (e: Event) => setDocsAt((e as CustomEvent<DocsAt>).detail);
+    window.addEventListener(openDocsEvent, f);
+    return () => window.removeEventListener(openDocsEvent, f);
+  }, []);
   // A slash command (/config) asks for a section.
   useEffect(() => {
     const f = (e: Event) => {
@@ -356,6 +364,7 @@ function Shell() {
           onCancel={() => setUnsavedClose(null)}
         />
       )}
+      {docsAt && <DocsDialog key={`${docsAt.page}#${docsAt.anchor ?? ""}`} initial={docsAt} onClose={() => setDocsAt(null)} />}
       {settingsAt && <SettingsDialog initial={settingsAt.section} scope={settingsAt.scope} onClose={() => setSettingsAt(null)} />}
       {license && <LicenseDialog initial={license} onClose={() => setLicense(null)} />}
       {searchOpen !== null && prefs.active && <SearchDialog dir={prefs.active} initialQuery={searchOpen} onClose={() => setSearchOpen(null)} />}

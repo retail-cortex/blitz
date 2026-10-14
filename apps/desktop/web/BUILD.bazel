@@ -66,6 +66,7 @@ _inputs = [
     ":srcs",
     ":api_ts",
     ":node_modules",
+    "//docs:user_docs",
     "//pkg/i18n:locales",
 ]
 

@@ -25,7 +25,7 @@ import { stopAllLoops } from "./loops";
 import { builtin, builtinCommands, builtinsInOrder, commandGroups, exportName, goalPrompt, type CommandContext } from "./slashCommands";
 
 vi.mock("./clipboard", () => ({ copyText: vi.fn(async () => {}) }));
-vi.mock("./events", () => ({ showLicense: vi.fn() }));
+vi.mock("./events", () => ({ showLicense: vi.fn(), openDocs: vi.fn() }));
 
 // What the fake service was asked, as "method arg…".
 let calls: string[] = [];
@@ -257,6 +257,9 @@ describe("commands", () => {
     ["/checkpoints", "", [], [], []],
     ["/undo", "", [], [], []],
     ["/license full", "", [], [], []],
+    ["/docs", "", [], [], []],
+    ["/docs spec then setup", "", [], [], []],
+    ["/docs zzzz-nothing", "Nothing in the docs", [], [], []],
     ["/license what", "error: usage", [], [], []],
   ])("%s", async (line, says, wantCalls, wantDid, wantRan) => {
     const r = await exec(line);

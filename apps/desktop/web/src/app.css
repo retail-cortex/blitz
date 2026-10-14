@@ -900,3 +900,14 @@ code.file-link:hover { text-decoration-color: currentColor; }
 .markdown .katex { font-size: 1.1em; }
 .markdown .katex-error, .math-error { color: var(--md-error); font-family: var(--md-mono); font-size: 0.9em; }
 
+/* The user docs (docs/DocsDialog.tsx): the navigation and search at the
+   left, the page at the right, in Settings' layout. */
+.docs-nav { display: flex; flex-direction: column; gap: 2px; overflow: auto; }
+.docs-nav-item { width: 100%; text-align: left; }
+.docs-search { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; }
+.docs-search .input { flex: 1; min-width: 0; }
+.docs-pane { overflow: auto; }
+.docs-trail { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 4px; font-size: 0.9em; }
+.docs-trail button::after { content: "›"; margin-left: 4px; }
+.docs-hits { display: flex; flex-direction: column; gap: 4px; }
+.docs-hit { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: left; white-space: normal; }

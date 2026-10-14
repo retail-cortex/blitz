@@ -16,6 +16,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  mdiBookOpenPageVariantOutline,
   mdiAutoFix,
   mdiCalendarClock,
   mdiFullscreen,
@@ -35,7 +36,8 @@ import {
 } from "@mdi/js";
 import { files, sessions, workspaces } from "./api";
 import { allCommands, paletteResults, searchesFiles, type CommandSpec, type PaletteItem } from "./commands";
-import { compose, findInFile, loadSession, openFile, searchWorkspace, showView, startSetup } from "./events";
+import { compose, findInFile, loadSession, openDocs, openFile, searchWorkspace, showView, startSetup } from "./events";
+import { loadAppDocs } from "./docs/load";
 import { findTerms, hitTarget, queryTerms } from "./search";
 import { fileIcon } from "./files/icons";
 import { splitLine } from "./files/paths";
@@ -64,6 +66,15 @@ export function CommandPalette({ onClose, onOpenWorkspace, onSettings }: { onClo
   const [chats, setChats] = useState<{ id: string; title: string; detail: string }[]>([]);
   const [found, setFound] = useState<string[]>([]);
   const [passages, setPassages] = useState<SearchHit[]>([]);
+  // The user docs' pages (DSK-103), by title.
+  const [docPages, setDocPages] = useState<{ path: string; title: string }[]>([]);
+  useEffect(() => {
+    let live = true;
+    void loadAppDocs().then((d) => live && setDocPages([...d.pages.values()].filter((p) => p.path !== "").map((p) => ({ path: p.path, title: p.title }))));
+    return () => {
+      live = false;
+    };
+  }, []);
   const input = useRef<HTMLInputElement>(null);
   const list = useRef<HTMLDivElement>(null);
   // Escape, the focus kept inside and given back: as in a dialog.
@@ -198,6 +209,7 @@ export function CommandPalette({ onClose, onOpenWorkspace, onSettings }: { onClo
       out.push({ group: t("desktop.palette.group.workspaces"), label: displayName(w), detail: w.dir, icon: mdiFolderOutline, run: done(() => update((p) => openWorkspace(p, w.dir))) });
     for (const w of recentWorkspaces(prefs))
       out.push({ group: t("desktop.palette.group.workspaces"), label: t("desktop.palette.reopen", { name: displayName(w) }), detail: w.dir, icon: mdiFolderOutline, run: done(() => update((p) => openWorkspace(p, w.dir))) });
+    for (const d of docPages) out.push({ group: t("desktop.palette.group.docs"), label: d.title, detail: d.path, icon: mdiBookOpenPageVariantOutline, run: done(() => openDocs({ page: d.path })) });
     out.push(
       { group: t("desktop.palette.group.workspaces"), label: t("desktop.palette.open_workspace"), icon: mdiFolderOpenOutline, run: done(onOpenWorkspace) },
       { group: t("desktop.palette.group.settings"), label: t("desktop.settings"), icon: mdiCogOutline, run: done(() => onSettings()) },
@@ -207,7 +219,7 @@ export function CommandPalette({ onClose, onOpenWorkspace, onSettings }: { onClo
       ...(dir ? [{ group: t("desktop.palette.group.settings"), label: t("desktop.run_settings"), detail: displayName(openWorkspaces(prefs).find((w) => w.dir === dir) ?? { dir }), icon: mdiTuneVariant, run: done(() => onSettings("workspaces", dir)) }] : []),
     );
     return out;
-  }, [dir, custom, chats, prefs, update, onClose, onOpenWorkspace, onSettings]);
+  }, [dir, custom, chats, docPages, prefs, update, onClose, onOpenWorkspace, onSettings]);
 
   const shown = paletteResults(fileItems, items, query, textItems);
   useEffect(() => setPick(0), [query]);
