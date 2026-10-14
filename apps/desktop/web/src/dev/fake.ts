@@ -530,10 +530,15 @@ const fakeFiles = new Map<string, string>([
   ["web/app.ts", "export function total(items: { cents: number }[]): number {\n  return items.reduce((a, b) => a + b.cents, 0);\n}\n"],
   [".env", "STRIPE_KEY=sk_test_fake\n"],
   [".gitignore", "bin/\n*.log\n"],
+  ["AGENTS.md", "# Shop\n\nRun `go test ./...` before committing.\n"],
   ["bin/shop", "\u0000binary"],
 ]);
 const fakeGit: Record<string, string> = { "internal/cart/discount.go": "modified", "internal/cart/discount_test.go": "untracked", "web/app.ts": "added" };
-const fakeHidden = (p: string) => (p === ".env" ? "blocked" : p.startsWith("bin") ? "ignored" : p.split("/").pop()!.startsWith(".") ? "dot" : "");
+const fakeInstructionFiles = ["AGENTS.md", "CLAUDE.md", "GEMINI.md", "BLITZ.md"];
+const fakeHidden = (p: string) => {
+  const name = p.split("/").pop()!;
+  return p === ".env" ? "blocked" : p.startsWith("bin") ? "ignored" : name.startsWith(".") ? "dot" : fakeInstructionFiles.includes(name) ? "agent" : "";
+};
 const fakeVersion = (text: string) => String(text.length) + ":" + [...text].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7).toString(16);
 
 // Background runs (blitz --bg), made on first use in the first workspace

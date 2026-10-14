@@ -79,7 +79,8 @@ message FileEntry {
   // modified, added, deleted, renamed, untracked, conflicted; "changed"
   // for a folder with changes under it; "" when clean or not in git.
   string git = 6;
-  // Why it's hidden by default: "blocked", "ignored", "dot", or "".
+  // Why it's hidden by default: "blocked", "ignored", "dot", "agent" (an
+  // agent instruction file such as AGENTS.md), or "".
   string hidden = 7;
   // The agent's rule for it: "blocked", "read_only", or "".
   string agent_rule = 8;

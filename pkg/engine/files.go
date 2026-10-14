@@ -67,7 +67,8 @@ type FileEntry struct {
 	// folder).
 	Staged string
 	// Hidden says why the entry is hidden by default: "blocked" (the
-	// agent's blocked paths), "ignored" (git), "dot", or "".
+	// agent's blocked paths), "ignored" (git), "dot", "agent" (an agent
+	// instruction file such as AGENTS.md, memory.files), or "".
 	Hidden string
 	// AgentRule is the agent's rule for the path: "blocked", "read_only"
 	// or "".
@@ -137,6 +138,13 @@ func userPath(p string) (string, string, error) {
 	return rel, filepath.ToSlash(rel), nil
 }
 
+// agentFile reports whether name is an agent instruction file's
+// (memory.files and memory.local_files, AGENTS.md and the like): support
+// files, hidden in the tree like dotfiles (FIL-12).
+func (w *Workspace) agentFile(name string) bool {
+	return slices.Contains(w.cfg.Memory.Files, name) || slices.Contains(w.cfg.Memory.LocalFiles, name)
+}
+
 // ListDir lists the folder p (the workspace for ""), folders first.
 // Hidden entries are left out unless showHidden.
 func (w *Workspace) ListDir(ctx context.Context, p string, showHidden bool) (DirListing, error) {
@@ -179,6 +187,8 @@ func (w *Workspace) ListDir(ctx context.Context, p string, showHidden bool) (Dir
 			entry.Hidden = "blocked"
 		} else if strings.HasPrefix(entry.Name, ".") {
 			entry.Hidden = "dot"
+		} else if entry.Kind != KindFolder && w.agentFile(entry.Name) {
+			entry.Hidden = "agent"
 		}
 		entry.Git = g.status(child, entry.Kind == KindFolder)
 		if entry.Kind != KindFolder {
