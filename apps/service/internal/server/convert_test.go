@@ -148,3 +148,11 @@ func TestSuggestionKinds(t *testing.T) {
 	}
 	assert.Equal(t, pb.SuggestionKind_SUGGESTION_KIND_HARNESS_UPDATE, suggestionKinds[api.SuggestHarnessUpdate])
 }
+
+// A worker run with a cost says it's priced, so the desktop app shows it;
+// one without, as an unpriced model's, doesn't.
+func TestRunMsgPriced(t *testing.T) {
+	assert.True(t, runMsg(api.Run{Calls: 3, CostUSD: 0.012}).Usage.Priced)
+	assert.False(t, runMsg(api.Run{Calls: 3}).Usage.Priced)
+	assert.Equal(t, int32(3), runMsg(api.Run{Calls: 3}).Usage.Calls)
+}

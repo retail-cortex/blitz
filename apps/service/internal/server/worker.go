@@ -83,7 +83,9 @@ func runMsg(r api.Run) *pb.WorkerRun {
 	out := &pb.WorkerRun{
 		Id: r.ID, Workspace: r.Workspace, Worker: r.Worker, Hash: r.Hash, Status: runStatus(r.Status), Manual: r.Manual,
 		Started: timestamp(r.Started), Duration: durationpb.New(r.Duration),
-		Usage: &pb.Usage{Calls: int32(r.Calls), CostUsd: r.CostUSD}, SessionId: r.SessionID, Files: r.Files,
+		// A cost means the model had a price (an unpriced one's runs cost
+		// nothing), so the desktop app shows it.
+		Usage: &pb.Usage{Calls: int32(r.Calls), CostUsd: r.CostUSD, Priced: r.CostUSD > 0}, SessionId: r.SessionID, Files: r.Files,
 	}
 	for _, f := range r.Refusals {
 		out.Refusals = append(out.Refusals, &pb.Refusal{Tool: f.Tool, Kind: actionKind(f.Kind), Detail: f.Detail, Time: timestamp(f.Time)})
