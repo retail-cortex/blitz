@@ -18,8 +18,10 @@ So "workspace settings" are yours and private; "project settings" travel with th
 | [Configuration](configuration.md) | Where settings live, providers, API keys, per-workspace settings |
 | [Safety](safety.md) | Approvals, permission modes and rules, the sandboxes, checkpoints, the audit log |
 | [Models](models.md) | Retries, fallback models, per-agent models, per-model settings, cost |
-| [Agents and tools](agents.md) | The built-in agents and the tools they use |
-| [Extending](extending.md) | Project memory, MCP servers, hooks, custom commands |
+| [Agents and tools](agents.md) | Using and switching agents, agency, a model per agent, writing your own, delegation, the tools |
+| [MCP servers](mcp.md) | Adding a server's tools, its approvals, prompts and resources, and what to do when one misbehaves |
+| [Extending](extending.md) | Project memory, hooks, custom commands, plugins |
+| [Workers](workers.md) | Prompts on a schedule, unattended, with only the permissions you give them |
 | [Skills](skills.md) | Agent Skills, the skills policy, sandboxed scripts |
 | [Search](search.md) | Web search providers, `/search web` and `/search session` |
 | [Images](images.md) | Attaching screenshots and pictures |

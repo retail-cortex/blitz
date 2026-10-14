@@ -67,7 +67,8 @@ Decisions are `once`, `session`, `always` or `deny`; a question is answered with
 | `blitz config init\|show\|path` | Writes, shows or locates the settings file |
 | `blitz config set-key\|keys\|secure-key\|remove-key` | API keys in the OS keychain ([configuration](../guide/configuration.md)) |
 | `blitz search <terms>` | [Searches the workspace](../guide/search.md#workspace-search): files, PDFs and notebooks, chats, notes (`--in`, `--json`, `--status`, `--reindex`) |
-| `blitz workers …` | Lists, enables, runs and shows the history of [workers](service.md#workers) |
+| `blitz workers …` | Lists, enables, runs, undoes and shows the history of [workers](../guide/workers.md) |
+| `blitz mcp add\|list\|get\|remove\|enable\|disable\|login\|logout …` | Adds and manages [MCP servers](../guide/mcp.md); `login` signs in to one over OAuth |
 | `blitz service install\|uninstall\|status` | Starts the service at login, or stops doing so |
 | `blitz init` | Runs `/setup` unattended: sets up the project for agents (`.agents/AGENTS.md` and the files that import it) |
 | `blitz license [full\|third-party]` | The NOTICE, the Apache License, or the notices of the software Blitz includes |

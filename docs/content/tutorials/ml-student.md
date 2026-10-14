@@ -215,7 +215,7 @@ The paper is A4 or Letter, from your locale; `[pdf] page_size` sets it.
 
 ## 9. Digest new sources overnight
 
-A worker is a workflow the Blitz service runs on a schedule, unattended, with only the permissions you give it ([the service](../products/service.md#workers)). This one writes notes and flashcards for whatever you dropped in `inbox/` during the day. Create `.agents/workers/digest/WORKER.md` (or, with advanced settings on, **Workers › Add worker** in the desktop app):
+A worker is a workflow the Blitz service runs on a schedule, unattended, with only the permissions you give it ([Workers](../guide/workers.md)). This one writes notes and flashcards for whatever you dropped in `inbox/` during the day. Create `.agents/workers/digest/WORKER.md` (or, with advanced settings on, **Workers › Add worker** in the desktop app):
 
 ```markdown
 ---
