@@ -25,7 +25,7 @@ import { SearchDialog } from "./SearchDialog";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { applyUserLanguage, t, useLanguage } from "./i18n";
 import { message, reason } from "./errors";
-import { compose, goToFileEvent, searchWorkspaceEvent, showLicenseEvent } from "./events";
+import { compose, goToFileEvent, openSettingsEvent, searchWorkspaceEvent, showLicenseEvent } from "./events";
 import { UnsavedDialog } from "./files/EditorPane";
 import { LicenseDialog } from "./LicenseDialog";
 import { Brand, MenuBar } from "./MenuBar";
@@ -173,6 +173,15 @@ function Shell() {
   // workspace's (null: closed).
   const [settingsAt, setSettingsAt] = useState<{ section: Section; scope?: string } | null>(null);
   const openSettings = useCallback((section: Section, scope?: string) => setSettingsAt({ section, scope }), []);
+  // A slash command (/config) asks for a section.
+  useEffect(() => {
+    const f = (e: Event) => {
+      const d = (e as CustomEvent<{ section: Section; scope?: string }>).detail;
+      setSettingsAt({ section: d.section, scope: d.scope });
+    };
+    window.addEventListener(openSettingsEvent, f);
+    return () => window.removeEventListener(openSettingsEvent, f);
+  }, []);
   // macOS's app menu: its words in the window's language, and its About
   // Blitz and Settings… (DSK-101).
   useEffect(() => {

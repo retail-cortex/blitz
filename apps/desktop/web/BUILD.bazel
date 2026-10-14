@@ -58,6 +58,10 @@ _markdown = [
     "//pkg/engine/skills/builtin:markdown",
 ]
 
+# The terminal's slash commands, which the window's must match
+# (slashParity.test.ts, spec_desktop_024 DSK-102).
+_terminal = ["//apps/cli/internal/tui:commands"]
+
 _inputs = [
     ":srcs",
     ":api_ts",
@@ -88,7 +92,7 @@ vitest_bin.vitest_test(
     size = "small",
     args = ["run"],
     chdir = package_name(),
-    data = _inputs + _markdown,
+    data = _inputs + _markdown + _terminal,
 )
 
 # The same tests with coverage of the page's lines and branches, failing
@@ -100,7 +104,7 @@ vitest_bin.vitest_test(
         "--coverage",
     ],
     chdir = package_name(),
-    data = _inputs + _markdown,
+    data = _inputs + _markdown + _terminal,
     # As for the page: Vite resolves the sources to their real paths, which
     # the sandbox's symlinks lead outside of, and coverage then matches none.
     # Nor the launcher's file system patches, which keep paths in the

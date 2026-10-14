@@ -260,6 +260,8 @@ function fakeProject(s: State) {
 // first 4 s after a workspace first asks; ?noharness offers the setup,
 // ?stale the update of the skills and agents.
 const suggestionsAsked = new Map<string, number>();
+// The session's goal (/goal), the same for every workspace.
+let fakeGoal: { condition: string; continues: number; max: number; last: string } | undefined;
 function fakeSuggestions(dir: string) {
   if (!suggestionsAsked.has(dir)) suggestionsAsked.set(dir, Date.now());
   const pending = Date.now() - suggestionsAsked.get(dir)! < 4000;
@@ -593,6 +595,12 @@ export function installFake() {
   setTransport(
     createRouterTransport(({ service }) => {
       service(SessionService, {
+        // The slash commands' (slashCommands.ts): enough to see each answer.
+        exportSession: ({ workspace }) => ({ markdown: `# ${active(state(workspace)).title || "Chat"}\n` }),
+        forkSession: ({ workspace }) => ({ session: active(state(workspace)) }),
+        getGoal: () => ({ goal: fakeGoal }),
+        setGoal: ({ condition }) => ((fakeGoal = { condition, continues: 0, max: 10, last: "" }), { goal: fakeGoal }),
+        clearGoal: () => ((fakeGoal = undefined), {}),
         getActiveSession: ({ workspace }) => ({ session: active(state(workspace)) }),
         listSessions: ({ workspace }) => ({ sessions: state(workspace).sessions.map((s) => ({ ...s, messages: [] })) }),
         newSession: ({ workspace }) => {
@@ -673,6 +681,21 @@ export function installFake() {
         saveSnapshot: ({ name }) => ({ snapshot: { id: "snap-1", snapshot: name } }),
       });
       service(WorkspaceService, {
+        // The slash commands' (slashCommands.ts): enough to see each answer.
+        getSandbox: () => ({ summary: ["Shell commands: sandboxed (sandbox-exec)", "Network: allowed for listed hosts", "Writable: the workspace and the temp folder"] }),
+        listMCPServers: () => ({ servers: [{ name: "github", target: "npx @modelcontextprotocol/server-github", autoApprove: false }] }),
+        pinModel: ({ agent, ref }) => ({ agent, model: ref }),
+        unpinModel: ({ agent, workspace }) => ({ agent, model: state(workspace).settings.model }),
+        reloadMemory: () => ({ paths: ["/home/me/blitz/AGENTS.md", "/home/me/blitz/.agents/AGENTS.md"], files: ["AGENTS.md"] }),
+        addMemory: () => ({ path: "/home/me/blitz/BLITZ.md" }),
+        listNotes: () => ({ notes: [{ name: "answer-style", kind: "feedback", text: "Keep answers short; show the command first." }] }),
+        forgetNote: () => ({}),
+        listHooks: () => ({ hooks: [{ event: "PreToolUse", type: "command", match: "run_shell_command", runs: "./scripts/guard.sh", source: "your settings", failures: [] }] }),
+        listEnvs: () => ({ envs: [{ key: "a1b2c3", deps: ["pandas", "matplotlib"], skills: ["data-report"], size: 182_000_000n, ready: true }] }),
+        pruneEnvs: () => ({ removed: 0, freed: 0n, failed: [] }),
+        removeEnv: () => ({}),
+        listSkills: ({ query }) => ({ skills: [{ name: "pdf", description: "Read and summarize PDF files" }, { name: "release", description: "Cut a release: tag, notes, checks" }].filter((x) => !query || x.name.includes(query)) }),
+        getSkill: ({ name }) => ({ skill: { name, description: "Read and summarize PDF files", tools: [{ name: "read_file" }] } }),
         getSettings: ({ workspace }) => {
           const s = state(workspace).settings;
           return { agent: s.agent, model: s.model, provider: s.provider, effort: s.effort, permissionMode: s.mode, agency: s.agency, locale: s.locale, style: s.style, imagesEnabled: true, speechModel: s.speechModel ?? "", acceptedMedia: fakeAccepted(s.provider) };
