@@ -64,6 +64,7 @@ func openMCP(t *testing.T) *Workspace {
 		c.MCP.Servers = []config.MCPServerConfig{
 			{Name: "srv", URL: url, AutoApprove: true, Agents: []string{"*"}, Prefix: "srv_"},
 			{Name: "other", Command: "some-server", Args: []string{"--stdio"}, Agents: []string{"reviewer"}},
+			{Name: "off", Command: "never-started", Disabled: true},
 		}
 	})
 	return w
@@ -74,8 +75,9 @@ func openMCP(t *testing.T) *Workspace {
 func TestMCPServersAndPrompts(t *testing.T) {
 	w := openMCP(t)
 	servers := w.ListMCPServers()
-	require.Len(t, servers, 2)
+	require.Len(t, servers, 3)
 	assert.Equal(t, api.MCPServer{Name: "other", Target: "some-server --stdio"}, servers[1])
+	assert.Equal(t, api.MCPServer{Name: "off", Target: "never-started", Disabled: true}, servers[2], "a disabled server is listed, marked")
 	assert.True(t, servers[0].AutoApprove)
 
 	offers := w.ActiveAgentTools().MCP

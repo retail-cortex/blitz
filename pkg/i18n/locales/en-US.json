@@ -224,6 +224,7 @@
     "mcp.title": "MCP servers:",
     "mcp.approval_required": "approval required",
     "mcp.auto_approved": "auto-approved",
+    "mcp.disabled": "disabled: configured, not started",
     "resume.usage": "Usage: /resume <session-id|snapshot-name>   (see /session list)",
     "resume.done": "Resumed session {id} ({title}, {messages})",
     "resume.other_workspace": "This session was started in {workspace}; file references may not match this workspace.",

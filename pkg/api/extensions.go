@@ -112,6 +112,8 @@ type MCPServer struct {
 	// Target is its URL, or the command that starts it.
 	Target      string
 	AutoApprove bool
+	// Disabled means it's configured but never started (disabled = true).
+	Disabled bool
 }
 
 // ToolInfo is a tool an agent can call.

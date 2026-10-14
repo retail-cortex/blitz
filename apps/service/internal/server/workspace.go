@@ -426,7 +426,7 @@ func (h workspaceService) ListMCPServers(ctx context.Context, r req[pb.ListMCPSe
 	}
 	out := &pb.ListMCPServersResponse{}
 	for _, m := range w.ListMCPServers() {
-		out.Servers = append(out.Servers, &pb.MCPServer{Name: m.Name, Target: m.Target, AutoApprove: m.AutoApprove})
+		out.Servers = append(out.Servers, &pb.MCPServer{Name: m.Name, Target: m.Target, AutoApprove: m.AutoApprove, Disabled: m.Disabled})
 	}
 	return ok(out)
 }

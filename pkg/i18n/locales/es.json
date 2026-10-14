@@ -224,6 +224,7 @@
     "mcp.title": "Servidores MCP:",
     "mcp.approval_required": "requiere aprobación",
     "mcp.auto_approved": "aprobado automáticamente",
+    "mcp.disabled": "desactivado: configurado, sin iniciar",
     "resume.usage": "Uso: /resume <id-de-sesión|nombre-de-instantánea>   (consulta /session list)",
     "resume.done": "Sesión {id} reanudada ({title}, {messages})",
     "resume.other_workspace": "Esta sesión se inició en {workspace}; las referencias a archivos pueden no coincidir con este espacio de trabajo.",

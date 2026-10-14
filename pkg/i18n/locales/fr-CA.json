@@ -224,6 +224,7 @@
     "mcp.title": "Serveurs MCP :",
     "mcp.approval_required": "approbation requise",
     "mcp.auto_approved": "approuvé automatiquement",
+    "mcp.disabled": "désactivé : configuré, non démarré",
     "resume.usage": "Utilisation : /resume <id-de-session|nom-d’instantané>   (voir /session list)",
     "resume.done": "Session {id} reprise ({title}, {messages})",
     "resume.other_workspace": "Cette session a été démarrée dans {workspace}; les références de fichiers peuvent ne pas correspondre à cet espace de travail.",

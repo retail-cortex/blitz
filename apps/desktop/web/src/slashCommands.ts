@@ -707,7 +707,7 @@ export const builtinCommands: Builtin[] = [
     async run(c) {
       const servers = (await workspaces.listMCPServers({ workspace: c.dir })).servers;
       if (servers.length === 0) return c.say(t("mcp.none"));
-      c.say(bullets(t("mcp.title"), servers.map((s) => `**${md(s.name)}** ${code(s.target)} — ${s.autoApprove ? t("mcp.auto_approved") : t("mcp.approval_required")}`)), "info", true);
+      c.say(bullets(t("mcp.title"), servers.map((s) => `**${md(s.name)}** ${code(s.target)} — ${s.disabled ? t("mcp.disabled") : s.autoApprove ? t("mcp.auto_approved") : t("mcp.approval_required")}`)), "info", true);
     },
   },
   {
