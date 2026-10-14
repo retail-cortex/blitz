@@ -17,6 +17,7 @@ package lsp
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -223,6 +224,52 @@ func TestManagerSnippetPath(t *testing.T) {
 				assert.NoDirExists(t, filepath.Dir(filepath.Dir(p)), "removed when the manager closes")
 				assert.Equal(t, SnippetPath(root, "k3", tc.ext), m.SnippetPath("k3", tc.ext), "none made once closed")
 			}
+		})
+	}
+}
+
+// A completion's edit may come as an InsertReplaceEdit (its insert range),
+// or with no range, which isn't an edit.
+func TestTextEditRanges(t *testing.T) {
+	text := "hello\nworld"
+	at := func(line, char int) wirePosition { return wirePosition{Line: line, Character: char} }
+	e, ok := textEdit(text, wireTextEdit{Insert: &wireRange{Start: at(1, 0), End: at(1, 5)}, NewText: "there"})
+	require.True(t, ok)
+	assert.Equal(t, TextEdit{Start: Position{Line: 2, Column: 1}, End: Position{Line: 2, Column: 6}, Text: "there"}, e)
+	_, ok = textEdit(text, wireTextEdit{NewText: "x"})
+	assert.False(t, ok, "no range, no edit")
+}
+
+// Definitions and references of a document the manager doesn't have.
+func TestNavigationUnknownDocument(t *testing.T) {
+	m := NewManager(t.TempDir(), nil, nil)
+	defer m.Close()
+	_, err := m.DocumentDefinition(context.Background(), "no-such-doc", 1, 1, 1)
+	assert.ErrorIs(t, err, ErrUnknownDocument)
+	_, err = m.DocumentReferences(context.Background(), "no-such-doc", 1, 1, 1)
+	assert.ErrorIs(t, err, ErrUnknownDocument)
+}
+
+// A language's state: starting while a start is under way; failed, or
+// missing when the server isn't installed, until the retry time passes.
+func TestStateOf(t *testing.T) {
+	m := NewManager(t.TempDir(), nil, nil)
+	defer m.Close()
+	for _, tc := range []struct {
+		name  string
+		setup func()
+		want  State
+	}{
+		{"idle", func() {}, StateIdle},
+		{"starting", func() { m.start["go"] = &starting{done: make(chan struct{})} }, StateStarting},
+		{"failed", func() { delete(m.start, "go"); m.failed["go"] = failure{err: errors.New("crashed"), at: time.Now()} }, StateFailed},
+		{"missing", func() { m.failed["go"] = failure{err: &NotInstalledError{Command: "gopls"}, at: time.Now()} }, StateMissing},
+		{"failed long ago", func() { m.failed["go"] = failure{err: errors.New("crashed"), at: time.Now().Add(-2 * failedRetry)} }, StateIdle},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			tc.setup()
+			got, _ := m.stateOf("go")
+			assert.Equal(t, tc.want, got)
 		})
 	}
 }
