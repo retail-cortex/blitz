@@ -15,6 +15,7 @@
 package main
 
 import (
+	"os"
 	"strings"
 
 	"github.com/wailsapp/wails/v2/pkg/options/linux"
@@ -39,6 +40,13 @@ func gpuPolicy(pref string, getenv func(string) string) linux.WebviewGpuPolicy {
 	return linux.WebviewGpuPolicyOnDemand
 }
 
+// hasNvidia reports whether the NVIDIA driver's control device (dev,
+// "/dev/nvidiactl") is present.
+func hasNvidia(dev string) bool {
+	_, err := os.Stat(dev)
+	return err == nil
+}
+
 // programName is the Linux window's class, which the dock or taskbar
 // matches to the app's launcher (StartupWMClass in
 // packaging/linux/blitz-desktop.desktop), whatever the binary is called.
@@ -46,14 +54,29 @@ const programName = "blitz-desktop"
 
 // linuxOptions are the Linux window's options: the GPU as gpuPolicy has
 // it, the window's class and its icon (for a taskbar that doesn't find the
-// launcher's). Drawing in software also turns off WebKitGTK's DMA-BUF
-// renderer (setenv, before WebKitGTK starts), the usual cause of a blank
-// or garbled window on NVIDIA's drivers and in VMs, unless the
-// environment already says.
-func linuxOptions(pref string, getenv func(string) string, setenv func(k, v string) error) *linux.Options {
+// launcher's). On NVIDIA with the GPU on, WebKitGTK leaves its DMA-BUF
+// renderer off and draws in software whatever the policy says, so Blitz
+// turns it on (WEBKIT_FORCE_DMABUF_RENDERER=1) and has it hand frames to
+// the GTK3 window in shared memory (WEBKIT_DMABUF_RENDERER_FORCE_SHM=1):
+// with GPU buffers, NVIDIA's EGL attaches a Wayland explicit-sync object
+// (wp_linux_drm_syncobj_surface_v1) to GTK3's surface, which commits
+// without an acquire point and the compositor ends the connection
+// (protocol error 71). A variable the environment already sets is left
+// alone, and WEBKIT_DISABLE_DMABUF_RENDERER leaves both unset. Drawing in
+// software turns off the DMA-BUF renderer altogether, unless the
+// environment already says. The variables are set before WebKitGTK
+// starts, and its web process inherits them.
+func linuxOptions(pref string, nvidia bool, getenv func(string) string, setenv func(k, v string) error) *linux.Options {
 	policy := gpuPolicy(pref, getenv)
-	if policy == linux.WebviewGpuPolicyNever && getenv("WEBKIT_DISABLE_DMABUF_RENDERER") == "" {
+	switch {
+	case policy == linux.WebviewGpuPolicyNever && getenv("WEBKIT_DISABLE_DMABUF_RENDERER") == "":
 		_ = setenv("WEBKIT_DISABLE_DMABUF_RENDERER", "1")
+	case policy == linux.WebviewGpuPolicyOnDemand && nvidia && getenv("WEBKIT_DISABLE_DMABUF_RENDERER") == "":
+		for _, k := range []string{"WEBKIT_FORCE_DMABUF_RENDERER", "WEBKIT_DMABUF_RENDERER_FORCE_SHM"} {
+			if getenv(k) == "" {
+				_ = setenv(k, "1")
+			}
+		}
 	}
 	return &linux.Options{WebviewGpuPolicy: policy, ProgramName: programName, Icon: windowIcon}
 }
