@@ -40,6 +40,7 @@ import { githubMath } from "./files/math";
 import { htmlPicture, isDataImage, pictureURL } from "./files/pictures";
 import { t, useLanguage } from "./i18n";
 import { MermaidBlock } from "./mermaid";
+import type { DocTarget } from "./docs/index";
 import { Icon, useSnackbar } from "./ui/controls";
 
 /** The Markdown file being shown: its workspace and its path in it. */
@@ -52,6 +53,22 @@ const DocContext = createContext<MarkdownDoc | null>(null);
 
 /** Says which file the Markdown inside is (a preview), so relative links start at its folder. */
 export const MarkdownDocProvider = DocContext.Provider;
+
+/**
+ * How a page of the user docs (docs/DocsDialog.tsx) resolves its links and
+ * pictures: to its pages, the website, or the pictures the app carries,
+ * never the workspace's.
+ */
+export interface DocsLinks {
+  link(href: string): DocTarget;
+  picture(src: string): string | undefined;
+  open(path: string, anchor?: string): void;
+}
+
+const DocsContext = createContext<DocsLinks | null>(null);
+
+/** Says the Markdown inside is a page of the user docs. */
+export const DocsLinksProvider = DocsContext.Provider;
 
 /** Scrolls the document el is in to the heading with id. */
 export function scrollToHeading(el: Element | null, id: string): boolean {
@@ -94,11 +111,31 @@ function follow(to: LinkTarget, href: string, doc: { path: string } | null, dir:
   } else if (dir !== undefined) openPath(dir, to).catch(failed);
 }
 
+// A link in a page of the user docs: another page, a heading, or the web.
+function DocsLink({ docs, href, children }: { docs: DocsLinks; href: string; children?: ReactNode }) {
+  const snack = useSnackbar();
+  const to = docs.link(href);
+  const onClick = (e: MouseEvent<HTMLAnchorElement>) => {
+    e.preventDefault();
+    if (to.kind === "page") docs.open(to.path, to.anchor);
+    else if (to.kind === "anchor") scrollToHeading(e.currentTarget, to.id);
+    else openURL(to.href).catch((err) => snack(message(err), { error: true }));
+  };
+  return (
+    <a href={href} title={to.kind === "url" ? to.href : href} onClick={onClick}>
+      {children}
+      {to.kind === "url" && <Icon path={mdiOpenInNew} size="sm" className="link-icon" />}
+    </a>
+  );
+}
+
 function Link({ href, children }: { href?: string; children?: ReactNode }) {
   const snack = useSnackbar();
   const doc = useContext(DocContext);
+  const docs = useContext(DocsContext);
   const links = useFileLinks();
   if (!href) return <>{children}</>;
+  if (docs) return <DocsLink docs={docs} href={href}>{children}</DocsLink>;
   let to = resolveLink(href, doc ? doc.path : null);
   const dir = doc?.dir ?? links?.dir;
   // In the chat, only paths to files the workspace has are links to them.
@@ -152,16 +189,18 @@ function textOf(n: Hast | undefined): string {
 // the marks on its wrapper.
 function Picture({ src, alt, width, height }: { src: string; alt: string; width?: string; height?: string }) {
   const doc = useContext(DocContext);
+  const docs = useContext(DocsContext);
   const links = useFileLinks();
   const dir = doc?.dir ?? links?.dir ?? "";
-  const [url, setUrl] = useState(() => (isDataImage(src) ? src.trim() : ""));
+  const [url, setUrl] = useState(() => (isDataImage(src) ? src.trim() : (docs?.picture(src) ?? "")));
   useEffect(() => {
+    if (docs) return; // the docs' pictures are the app's own
     let live = true;
     void pictureURL(dir, doc ? doc.path : null, src).then((u) => live && setUrl(u));
     return () => {
       live = false;
     };
-  }, [dir, doc, src]);
+  }, [dir, doc, docs, src]);
   return (
     <span className="md-image" data-src={src} data-alt={alt}>
       {url ? (
@@ -274,11 +313,13 @@ function useMath(text: string): boolean {
 export const Markdown = memo(function Markdown({ text }: { text: string }) {
   useLanguage();
   const doc = useContext(DocContext);
+  const docs = useContext(DocsContext);
   const math = useMath(text);
   const rehype: Rehype = [...(doc ? [sourceLines] : []), ...(math && rehypeMath ? [rehypeMath] : [])];
+  const document = !!doc || !!docs; // a document's math and headings, not a reply's
   return (
     <div className="markdown">
-      <ReactMarkdown remarkPlugins={doc ? docRemark : chatRemark} rehypePlugins={rehype} components={doc ? { ...components, ...headings() } : components} urlTransform={urlTransform} skipHtml>
+      <ReactMarkdown remarkPlugins={document ? docRemark : chatRemark} rehypePlugins={rehype} components={document ? { ...components, ...headings() } : components} urlTransform={urlTransform} skipHtml>
         {text}
       </ReactMarkdown>
     </div>

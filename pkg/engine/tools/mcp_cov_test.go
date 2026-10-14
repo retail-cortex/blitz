@@ -318,3 +318,59 @@ func TestStdioTransportCantStart(t *testing.T) {
 		})
 	}
 }
+
+// An auto-approved server's resources are read without asking, but a deny
+// rule still refuses them and an ask rule asks, as for its tools.
+func TestApproveMCPServerResourcesFollowRules(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Tools.WorkspaceDir = t.TempDir()
+	cfg.Tools.ApprovalsFile = ""
+	reg, err := NewRegistry(cfg, nil, nil)
+	require.NoError(t, err)
+	t.Cleanup(func() { reg.Close() })
+	reg.mcp = newMCPManagerWithToolsets(map[string]tool.Toolset{"gh": inMemoryMCP(t, "create_issue"), "docs": inMemoryMCP(t, "search")}, map[string]bool{"gh": true}, nil)
+	for _, tc := range []struct {
+		name, server string
+		rules        []string // deny
+		ask          []string
+		asked, err   bool
+	}{
+		{"auto-approved, no rule", "gh", nil, nil, false, false},
+		{"auto-approved, denied", "gh", []string{"mcp(gh:read_mcp_resource)"}, nil, false, true},
+		{"auto-approved, ask", "gh", nil, []string{"mcp(gh:*)"}, true, false},
+		{"not auto-approved", "docs", nil, nil, true, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			h, reqs := approverHooks(true)
+			h.SetRules(rulesOf(t, nil, tc.ask, tc.rules))
+			reg.hooks = h
+			err := reg.approveMCPServer(context.Background(), tc.server, "read_mcp_resource", map[string]any{"uri": "x"})
+			assert.Equal(t, tc.err, err != nil, "err %v", err)
+			assert.Equal(t, tc.asked, len(*reqs) > 0, "asked %v", *reqs)
+		})
+	}
+}
+
+// A server's failing and recovering is told to the workspace's warnings
+// and, in a turn, to the conversation: the first failure, the pause, the
+// recovery; not every failed call.
+func TestMCPHealthToldInTheTurn(t *testing.T) {
+	m := NewMCPManagerFromToolsets([]MCPToolset{{Config: config.MCPServerConfig{Name: "gh"}, Toolset: staticToolset{}}}, nil)
+	var warned, said []string
+	m.Warn = func(s string) { warned = append(warned, s) }
+	ctx := WithNotices(context.Background(), func(s string) { said = append(said, s) })
+	srv := m.servers[0]
+	for range mcpFailThreshold + 1 {
+		m.recordFailure(ctx, srv, errors.New("down"))
+	}
+	m.recordSuccess(ctx, srv)
+	require.Len(t, said, 3, "%v", said)
+	assert.Contains(t, said[0], `mcp server "gh" unavailable: down`)
+	assert.Contains(t, said[1], "keeps failing")
+	assert.Contains(t, said[2], "available again")
+	assert.Equal(t, said, warned, "the log hears the same")
+	// Outside a turn: the log only.
+	m.recordFailure(context.Background(), srv, errors.New("down again"))
+	assert.Len(t, said, 3)
+	assert.Len(t, warned, 4)
+}

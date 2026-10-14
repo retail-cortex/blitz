@@ -16,7 +16,7 @@
 
 import { realpathSync } from "node:fs";
 import { homedir } from "node:os";
-import { dirname } from "node:path";
+import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { defineConfig, searchForWorkspaceRoot } from "vite";
 import react from "@vitejs/plugin-react";
@@ -59,7 +59,8 @@ export default defineConfig({
   server: {
     // Packages with files of their own (KaTeX's fonts) resolve into
     // Bazel's output tree, outside the workspace Vite serves.
-    fs: { allow: [searchForWorkspaceRoot(process.cwd()), dirname(fileURLToPath(import.meta.resolve("katex/package.json")))] },
+    // The user docs (src/docs) are the repository's, beside the package.
+    fs: { allow: [searchForWorkspaceRoot(process.cwd()), dirname(fileURLToPath(import.meta.resolve("katex/package.json"))), resolve(process.cwd(), "../../../docs")] },
     proxy: {
       "/blitz.v1.": {
         target: { socketPath: process.env.BLITZ_SOCKET || `${homedir()}/.blitz/run/blitz.sock` } as unknown as string,

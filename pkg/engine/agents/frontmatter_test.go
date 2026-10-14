@@ -77,6 +77,18 @@ func TestEmbeddedRegistry(t *testing.T) {
 			assert.Contains(t, a.SystemPrompt, ".agents/specs/")
 		})
 	}
+
+	// Any kind of project, not only software: the spec agent asks the kind
+	// and records it; setup and the updates read it.
+	spec, _ := reg.Get("project-spec")
+	for _, kind := range []string{"Software", "Research or science", "Data analysis", "Writing or documentation", "Something else", "`Kind: software|research|analysis|writing|other`", "Objectives"} {
+		assert.Contains(t, spec.SystemPrompt, kind)
+	}
+	for _, name := range []string{"project-setup", "harness-update"} {
+		a, _ := reg.Get(name)
+		assert.Contains(t, a.SystemPrompt, "`Kind:`", "%s reads the kind", name)
+		assert.Contains(t, a.SystemPrompt, "research", "%s knows research workspaces", name)
+	}
 }
 
 func contains(s, substr string) bool {

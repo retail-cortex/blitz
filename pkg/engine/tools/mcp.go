@@ -617,24 +617,47 @@ func (p *managedTool) ProcessRequest(ctx agent.Context, req *model.LLMRequest) e
 	return toolutils.PackTool(req, p)
 }
 
-// recordFailure feeds the breaker. The terminal hears about the first
-// failure of a streak and about the server being paused, not about every
-// failed call; the log gets each one.
+// recordFailure feeds the breaker. The user hears about the first failure
+// of a streak and about the server being paused, not about every failed
+// call (in the turn they happen in, and the service's log); the log gets
+// each one.
 func (m *MCPManager) recordFailure(ctx context.Context, s *mcpServer, err error) {
 	slog.WarnContext(ctx, "mcp server call failed", "server", s.cfg.Name, "error", err)
 	switch streak, opened, cooldown := s.health.Failure(); {
 	case opened:
-		m.Warn(fmt.Sprintf("mcp server %q keeps failing; its tools are paused for %s", s.cfg.Name, cooldown))
+		m.tell(ctx, fmt.Sprintf("mcp server %q keeps failing; its tools are paused for %s", s.cfg.Name, cooldown))
 	case streak == 1:
-		m.Warn(fmt.Sprintf("mcp server %q unavailable: %v", s.cfg.Name, err))
+		m.tell(ctx, fmt.Sprintf("mcp server %q unavailable: %v", s.cfg.Name, err))
 	}
 }
 
 func (m *MCPManager) recordSuccess(ctx context.Context, s *mcpServer) {
 	if s.health.Success() {
 		slog.InfoContext(ctx, "mcp server recovered", "server", s.cfg.Name)
-		m.Warn(fmt.Sprintf("mcp server %q is available again", s.cfg.Name))
+		m.tell(ctx, fmt.Sprintf("mcp server %q is available again", s.cfg.Name))
 	}
+}
+
+// tell says msg to the workspace's warnings (the service's log) and, in a
+// turn, to the conversation, so the person using it sees why a tool went.
+func (m *MCPManager) tell(ctx context.Context, msg string) {
+	m.Warn(msg)
+	if f := turnNotices(ctx); f != nil {
+		f(msg)
+	}
+}
+
+type noticesKey struct{}
+
+// WithNotices sends what the tools tell the user during work under ctx to
+// f: the turn's notices (runtime.WithTurnNotices sets it).
+func WithNotices(ctx context.Context, f func(string)) context.Context {
+	return context.WithValue(ctx, noticesKey{}, f)
+}
+
+func turnNotices(ctx context.Context) func(string) {
+	f, _ := ctx.Value(noticesKey{}).(func(string))
+	return f
 }
 
 // readonlyWith and toolWith keep an ADK context's methods but take

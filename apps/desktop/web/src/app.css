@@ -900,3 +900,51 @@ code.file-link:hover { text-decoration-color: currentColor; }
 .markdown .katex { font-size: 1.1em; }
 .markdown .katex-error, .math-error { color: var(--md-error); font-family: var(--md-mono); font-size: 0.9em; }
 
+/* The user docs (docs/DocsDialog.tsx): the navigation and search at the
+   left, the page at the right, in Settings' layout. */
+.docs-nav { display: flex; flex-direction: column; gap: 2px; overflow: auto; }
+.docs-nav-item { width: 100%; text-align: left; }
+.docs-search { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; }
+.docs-search .input { flex: 1; min-width: 0; }
+.docs-pane { overflow: auto; }
+.docs-trail { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 4px; font-size: 0.9em; }
+.docs-trail button::after { content: "›"; margin-left: 4px; }
+.docs-hits { display: flex; flex-direction: column; gap: 4px; }
+.docs-hit { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: left; white-space: normal; }
+/* A narrow window: the navigation folds behind Contents, over the page
+   when open; the page takes the width. */
+.docs { container: docs / inline-size; position: relative; }
+.docs-contents { display: none; align-items: center; gap: 6px; margin-bottom: 8px; }
+@container docs (max-width: 700px) {
+  .docs-contents { display: inline-flex; }
+  .docs-nav { display: none; }
+  .docs.nav-open .docs-nav { display: flex; position: absolute; inset: 32px 0 0 0; width: auto; z-index: 2; background: var(--md-surface-container-high); border: 1px solid var(--md-outline-variant); border-radius: var(--field-radius); padding: 8px; box-shadow: var(--md-elevation-2); }
+  :root[data-glass="on"] .docs.nav-open .docs-nav { background: var(--glass-strong); }
+  .docs.nav-open .docs-pane > :not(.docs-contents) { visibility: hidden; } /* the page waits behind the open contents */
+}
+/* Tables in the docs. Wide enough, a table keeps its columns, each at
+   least 8em (a crowded one scrolls rather than squeezing), and code in a
+   cell stays on one line. Narrower, its rows stack as cards: the first
+   cell as the heading, the others under it with their column's name
+   (data-label); a table of four or more columns stacks sooner. */
+.docs-pane .markdown th, .docs-pane .markdown td { min-width: 8em; }
+.docs-pane .markdown td code { white-space: nowrap; }
+.docs-pane { container: docs-page / inline-size; }
+@container docs-page (max-width: 900px) {
+  .docs-pane .markdown table:has(tr > :nth-child(4)), .docs-pane .markdown table:has(tr > :nth-child(4)) tbody, .docs-pane .markdown table:has(tr > :nth-child(4)) tr, .docs-pane .markdown table:has(tr > :nth-child(4)) td { display: block; width: auto; min-width: 0; }
+  .docs-pane .markdown table:has(tr > :nth-child(4)) thead { display: none; }
+  .docs-pane .markdown table:has(tr > :nth-child(4)) tr { border: 1px solid var(--md-outline-variant); border-radius: 8px; padding: 8px 12px; margin-bottom: 8px; }
+  .docs-pane .markdown table:has(tr > :nth-child(4)) td { border: none; padding: 2px 0; }
+  .docs-pane .markdown table:has(tr > :nth-child(4)) td:first-child { font-weight: 600; }
+  .docs-pane .markdown table:has(tr > :nth-child(4)) td:not(:first-child)[data-label]:not([data-label=""])::before { content: attr(data-label) ": "; color: var(--md-on-surface-variant); font-weight: 500; }
+  .docs-pane .markdown table:has(tr > :nth-child(4)) td code { white-space: normal; overflow-wrap: anywhere; }
+}
+@container docs-page (max-width: 680px) {
+  .docs-pane .markdown table, .docs-pane .markdown table tbody, .docs-pane .markdown table tr, .docs-pane .markdown table td { display: block; width: auto; min-width: 0; }
+  .docs-pane .markdown table thead { display: none; }
+  .docs-pane .markdown table tr { border: 1px solid var(--md-outline-variant); border-radius: 8px; padding: 8px 12px; margin-bottom: 8px; }
+  .docs-pane .markdown table td { border: none; padding: 2px 0; }
+  .docs-pane .markdown table td:first-child { font-weight: 600; }
+  .docs-pane .markdown table td:not(:first-child)[data-label]:not([data-label=""])::before { content: attr(data-label) ": "; color: var(--md-on-surface-variant); font-weight: 500; }
+  .docs-pane .markdown table td code { white-space: normal; overflow-wrap: anywhere; }
+}

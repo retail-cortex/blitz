@@ -604,7 +604,7 @@ func (r *Remote) ListMCPServers() []api.MCPServer {
 	}
 	var out []api.MCPServer
 	for _, m := range res.Msg.Servers {
-		out = append(out, api.MCPServer{Name: m.Name, Target: m.Target, AutoApprove: m.AutoApprove})
+		out = append(out, api.MCPServer{Name: m.Name, Target: m.Target, AutoApprove: m.AutoApprove, Disabled: m.Disabled})
 	}
 	return out
 }

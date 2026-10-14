@@ -150,7 +150,7 @@ func WithNotice(f func(string)) Option { return func(e *Engine) { e.notice = f }
 // (the turn's own events, so the conversation shows them) rather than to
 // the engine's WithNotice, which gets them outside a turn.
 func WithTurnNotices(ctx context.Context, f func(string)) context.Context {
-	return context.WithValue(ctx, turnNoticeKey{}, f)
+	return tools.WithNotices(context.WithValue(ctx, turnNoticeKey{}, f), f) // the tools' (an MCP server failing) too
 }
 
 // noticeTo is where a notice raised under ctx goes: the turn's sink, else

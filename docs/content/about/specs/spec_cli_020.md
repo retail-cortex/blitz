@@ -27,7 +27,8 @@ weight: 20
 | `blitz config init [--force] \| path \| show` | Configuration file management (§8) |
 | `blitz serve [...]` | Hidden: runs `blitzd`, the per-user service, with the same arguments ([spec_service_021](spec_service_021.md) SVC-00) |
 | `blitz service install \| uninstall \| status` | Login item for the service |
-| `blitz workers [list] \| enable <name> [-y] \| disable <name> \| run <name> \| runs <name> [-n N]` | Workers ([spec_workers_023](spec_workers_023.md)) |
+| `blitz workers [list] \| enable <name> [-y] \| disable <name> \| run <name> \| runs <name> [-n N] \| undo <run-id> [-f]` | Workers ([spec_workers_023](spec_workers_023.md)) |
+| `blitz mcp add <name> <command\|url> [--env K=V] [--header K:V] [--prefix p] [--agents a,b] \| list \| get <name> \| remove \| enable \| disable \| login \| logout <name>` | MCP servers in the user's settings ([spec_mcp_009](spec_mcp_009.md) MCP-03, MCP-38) |
 | `blitz license [full\|third-party]` | The NOTICE (with pointers to the rest), the Apache License, or the third-party notices, paged on a terminal; the REPL's `/license` shows the same ([spec_release_readiness_030](spec_release_readiness_030.md) RR-05) |
 | `blitz completion bash\|zsh\|fish\|powershell` | Cobra-generated shell completion |
 

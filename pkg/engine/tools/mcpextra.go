@@ -402,17 +402,21 @@ func NewMCPResourceTools(r *Registry) ([]tool.Tool, error) {
 	return []tool.Tool{list, read}, nil
 }
 
-// approveMCPServer approves using server as its tools are: at once for an
-// auto-approved server, else through the usual approval.
+// approveMCPServer approves using server as its tools are: an
+// auto-approved server's without the question, but never past a deny or
+// ask rule; else through the usual approval.
 func (r *Registry) approveMCPServer(ctx context.Context, server, action string, args map[string]any) error {
 	s, err := r.mcp.server(server)
 	if err != nil {
 		return err
 	}
+	req := mcpApproval(server, action, args)
 	if s.cfg.AutoApprove {
-		return nil
+		if effect, _ := r.hooks.Rules().Decide(RuleMCP, req.Targets); effect != EffectDeny && effect != EffectAsk {
+			return nil
+		}
 	}
-	return r.hooks.Approve(ctx, mcpApproval(server, action, args))
+	return r.hooks.Approve(ctx, req)
 }
 
 // askUser asks the user a question as ask_user_question does: a

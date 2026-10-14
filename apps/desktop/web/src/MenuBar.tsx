@@ -42,8 +42,8 @@ import {
 import { workers, workspaces } from "./api";
 import { inboxCounts, useRuns } from "./backgroundRuns";
 import type { ChangesSource } from "./Changes";
-import { openURL } from "./desktop";
-import { startSetup } from "./events";
+import { openDocs, startSetup } from "./events";
+import { docSections } from "./docs/sections";
 import { fileName } from "./agentForm";
 import { AgentScope, type AgentFile } from "./gen/blitz/v1/workspace_pb";
 import { WorkerState, type Worker } from "./gen/blitz/v1/worker_pb";
@@ -68,9 +68,6 @@ export function Brand() {
     </span>
   );
 }
-
-/** Where the user guide is published. */
-export const guideURL = "https://retail-cortex.github.io/blitz/guide/";
 
 /**
  * The top bar's menus, from the left edge of the center panel: Workspaces
@@ -232,9 +229,13 @@ export function MenuBar({
   const othersWaiting = openWorkspaces(prefs).some((w) => w.dir !== prefs.active && activity[w.dir]?.waiting);
 
   const help: MenuEntry[] = [
-    { label: t("desktop.menu.guide"), icon: mdiBookOpenPageVariantOutline, onSelect: () => void openURL(guideURL).catch(() => {}) },
-    ...(dir ? [{ label: t("desktop.setup.title"), icon: mdiAutoFix, onSelect: () => startSetup(dir) }] : []),
+    // The docs of this release, in the app (DSK-103).
+    { label: t("desktop.menu.guide"), icon: mdiBookOpenPageVariantOutline, onSelect: () => openDocs({}) }, // where it was left, Tutorials the first time
     "divider",
+    // Each of the guide's sections, a link of its own.
+    ...docSections.map((d) => ({ label: t(d.labelKey), icon: d.icon, onSelect: () => openDocs({ page: d.page }) })),
+    "divider",
+    ...(dir ? [{ label: t("desktop.setup.title"), icon: mdiAutoFix, onSelect: () => startSetup(dir) }] : []),
     { label: t("desktop.menu.about"), icon: mdiInformationOutline, onSelect: () => onSettings("about") },
   ];
 

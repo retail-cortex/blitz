@@ -100,6 +100,22 @@ hugo_serve(
 # The package's Markdown, for the visual editor's round-trip test
 # (//apps/desktop/web:test, spec_visual_editor_037 VE-90), in the output
 # tree as the page's tests need it.
+# The user docs, which the desktop app carries so they match its release
+# (spec_desktop_024 DSK-103): the home page, getting started, tutorials,
+# guide, products and releases, and their one picture.
+copy_to_bin(
+    name = "user_docs",
+    srcs = glob([
+        "content/_index.md",
+        "content/getting-started/**/*.md",
+        "content/tutorials/**/*.md",
+        "content/guide/**/*.md",
+        "content/products/**/*.md",
+        "content/releases/**/*.md",
+    ]) + ["static/images/desktop.png"],
+    visibility = ["//apps/desktop/web:__pkg__"],
+)
+
 copy_to_bin(
     name = "markdown",
     srcs = glob(["**/*.md"]),

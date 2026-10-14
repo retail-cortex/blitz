@@ -87,6 +87,11 @@ func maskConfig(cfg *config.Config) config.Config {
 			env[k] = maskSecret(v)
 		}
 		s.Env = env
+		headers := make(map[string]string, len(s.Headers))
+		for k, v := range s.Headers {
+			headers[k] = maskSecret(v)
+		}
+		s.Headers = headers
 		servers[i] = s
 	}
 	c.MCP.Servers = servers

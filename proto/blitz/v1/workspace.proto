@@ -935,6 +935,8 @@ message MCPServer {
   // Its URL, or the command that starts it.
   string target = 2;
   bool auto_approve = 3;
+  // Configured, but never started (disabled = true).
+  bool disabled = 4;
 }
 
 // Request message for WorkspaceService.ListMCPServers.

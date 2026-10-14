@@ -279,6 +279,9 @@ func TestAgentRunDefaults(t *testing.T) {
 		{name: "accept-edits, the user's agent", front: "permission_mode: accept-edits", replies: []*genai.Content{create, textContent("ok")}, created: true},
 		{name: "accept-edits, an untrusted project's agent", front: "permission_mode: accept-edits", inside: true, replies: []*genai.Content{create, textContent("ok")}},
 		{name: "plan", front: "permission_mode: plan", replies: []*genai.Content{create, textContent("ok")}},
+		// An alias is its canonical mode: it applies, and can't slip past the checks.
+		{name: "an alias, the user's agent", front: "permission_mode: acceptEdits", replies: []*genai.Content{create, textContent("ok")}, created: true},
+		{name: "an alias, an untrusted project's agent", front: "permission_mode: acceptEdits", inside: true, replies: []*genai.Content{create, textContent("ok")}},
 		{name: "its own budget", front: "max_turns: 2", replies: []*genai.Content{list, list, list, list}, err: api.ErrMaxTurns},
 	}
 	for _, c := range cases {

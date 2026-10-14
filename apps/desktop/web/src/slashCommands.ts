@@ -21,7 +21,9 @@
 // (terminalOnly) are named in /help with the window's way instead.
 import { config, files, sessions, workspaces } from "./api";
 import { copyText } from "./clipboard";
-import { showLicense } from "./events";
+import { openDocs, showLicense } from "./events";
+import { loadAppDocs } from "./docs/load";
+import { searchDocs } from "./docs/index";
 import { language, t, tn } from "./i18n";
 import { formatInterval, listLoops, parseInterval, startLoop, stopLoop } from "./loops";
 import { efforts, modeOf } from "./options";
@@ -705,7 +707,7 @@ export const builtinCommands: Builtin[] = [
     async run(c) {
       const servers = (await workspaces.listMCPServers({ workspace: c.dir })).servers;
       if (servers.length === 0) return c.say(t("mcp.none"));
-      c.say(bullets(t("mcp.title"), servers.map((s) => `**${md(s.name)}** ${code(s.target)} — ${s.autoApprove ? t("mcp.auto_approved") : t("mcp.approval_required")}`)), "info", true);
+      c.say(bullets(t("mcp.title"), servers.map((s) => `**${md(s.name)}** ${code(s.target)} — ${s.disabled ? t("mcp.disabled") : s.autoApprove ? t("mcp.auto_approved") : t("mcp.approval_required")}`)), "info", true);
     },
   },
   {
@@ -763,6 +765,19 @@ export const builtinCommands: Builtin[] = [
         c.say(t("desktop.cmd.config_set", { key, value }));
       }
       c.settingsChanged();
+    },
+  },
+  {
+    name: "docs",
+    args: "[topic]",
+    group: "settings",
+    // The docs of this release, in the app (DSK-103): where they were left, or the best match for the topic.
+    async run(c) {
+      if (!c.args) return openDocs({}); // where it was left
+      const { pages } = await loadAppDocs();
+      const hit = searchDocs([...pages.values()], c.args, 1)[0];
+      if (!hit) return c.say(t("desktop.docs.none", { query: c.args }));
+      openDocs({ page: hit.page.path });
     },
   },
   { name: "help", group: "settings", run: (c) => c.say(c.help(), "info", true) },

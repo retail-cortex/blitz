@@ -477,6 +477,9 @@ func cmdMCP(app *App) {
 		if s.AutoApprove {
 			approval = i18n.T("mcp.auto_approved")
 		}
+		if s.Disabled {
+			approval = i18n.T("mcp.disabled")
+		}
 		fmt.Printf("  • %s%s%s: %s %s(%s)%s\n", Bold, safe(s.Name), Reset, safe(s.Target), Dim, approval, Reset)
 	}
 	fmt.Println()

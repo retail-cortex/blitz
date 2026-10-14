@@ -176,21 +176,28 @@ func newMCPCommand(g *globalFlags) *cobra.Command {
 			}
 			out := cmd.OutOrStdout()
 			store := secrets.Default(config.ConfigDir(g.config))
-			// Pasted lines, for a browser on another machine (SSH).
+			ctx, cancel := context.WithTimeout(cmd.Context(), 10*time.Minute)
+			defer cancel()
+			// Pasted lines, for a browser on another machine (SSH). The
+			// input is taken now, and a line read after the sign-in ends
+			// is dropped, not left blocking.
 			pasted := make(chan string)
+			in := cmd.InOrStdin()
 			go func() {
-				sc := bufio.NewScanner(cmd.InOrStdin())
+				defer close(pasted)
+				sc := bufio.NewScanner(in)
 				for sc.Scan() {
-					pasted <- sc.Text()
+					select {
+					case pasted <- sc.Text():
+					case <-ctx.Done():
+						return
+					}
 				}
-				close(pasted)
 			}()
 			show := func(u string) {
 				fmt.Fprintf(out, "Open this address to sign in to %s:\n\n  %s\n\nWaiting for the browser. If it's on another machine, paste the address it ends on here.\n", s.Name, u)
 				openBrowser(u)
 			}
-			ctx, cancel := context.WithTimeout(cmd.Context(), 10*time.Minute)
-			defer cancel()
 			if err := mcpauth.Login(ctx, store, s.Name, s.URL, show, pasted); err != nil {
 				return fmt.Errorf("signing in to %s: %w", s.Name, err)
 			}

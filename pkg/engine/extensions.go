@@ -150,19 +150,16 @@ func (w *Workspace) neededEnvs(envs *tools.PyEnvs) map[string]bool {
 	return needed
 }
 
-// ListMCPServers returns the configured MCP servers, or none when none
-// could be started.
+// ListMCPServers returns the configured MCP servers, the disabled ones
+// marked.
 func (w *Workspace) ListMCPServers() []api.MCPServer {
-	if len(w.tools.MCP().Servers()) == 0 {
-		return nil
-	}
 	var out []api.MCPServer
 	for _, s := range w.cfg.MCP.Servers {
 		target := s.URL
 		if target == "" {
 			target = strings.Join(append([]string{s.Command}, s.Args...), " ")
 		}
-		out = append(out, api.MCPServer{Name: s.Name, Target: target, AutoApprove: s.AutoApprove})
+		out = append(out, api.MCPServer{Name: s.Name, Target: target, AutoApprove: s.AutoApprove, Disabled: s.Disabled})
 	}
 	return out
 }
@@ -181,7 +178,7 @@ func (w *Workspace) ActiveAgentTools() api.AgentTools {
 	}
 	sort.Slice(out.Tools, func(i, j int) bool { return out.Tools[i].Name < out.Tools[j].Name })
 	for _, s := range w.cfg.MCP.Servers {
-		if mcpOfferedTo(s.Agents, active) {
+		if !s.Disabled && mcpOfferedTo(s.Agents, active) { // a disabled server offers nothing
 			out.MCP = append(out.MCP, api.MCPOffer{Server: s.Name, Tools: s.Tools, Prefix: s.Prefix})
 		}
 	}

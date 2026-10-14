@@ -37,7 +37,7 @@ The setup wizard writes the instructions every agent in this folder reads, and p
 - **Desktop:** the chat's first tile, **Set up this workspace for agents**, or **Help › Set up the agent harness**.
 - **Terminal:** `/setup`.
 
-Setup first offers to write a specification with `/spec`. For a study it's worth it: what you want to find out, the data, where training runs and the results you'll report become numbered specs in `.agents/specs/` that setup, and later your skills and agents, follow.
+Setup first offers to write a specification with `/spec`. Choose **Research or science** when it asks what kind of project this is (it guesses from your notebooks and data). For a study it's worth it: what you want to find out, the data, where training runs and the results you'll report become numbered specs in `.agents/specs/` that setup, and later your skills and agents, follow.
 
 Tell it about the course, how you work and what's off limits. For this workspace:
 
@@ -215,7 +215,7 @@ The paper is A4 or Letter, from your locale; `[pdf] page_size` sets it.
 
 ## 9. Digest new sources overnight
 
-A worker is a workflow the Blitz service runs on a schedule, unattended, with only the permissions you give it ([the service](../products/service.md#workers)). This one writes notes and flashcards for whatever you dropped in `inbox/` during the day. Create `.agents/workers/digest/WORKER.md` (or, with advanced settings on, **Workers › Add worker** in the desktop app):
+A worker is a workflow the Blitz service runs on a schedule, unattended, with only the permissions you give it ([Workers](../guide/workers.md)). This one writes notes and flashcards for whatever you dropped in `inbox/` during the day. Create `.agents/workers/digest/WORKER.md` (or, with advanced settings on, **Workers › Add worker** in the desktop app):
 
 ```markdown
 ---

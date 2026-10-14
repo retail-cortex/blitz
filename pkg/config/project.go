@@ -217,13 +217,16 @@ func LoadProject(workspace string) *Project {
 		p.Pending = append(p.Pending, pendingItems(workspace, pf)...)
 	}
 	for _, name := range MCPProjectFiles {
-		pf, err := readMCPJSON(workspace, name)
+		pf, skipped, err := readMCPJSON(workspace, name)
 		switch {
 		case errors.Is(err, os.ErrNotExist):
 			continue
 		case err != nil:
 			p.Problems = append(p.Problems, fmt.Sprintf("%s: %v", name, err))
 			continue
+		}
+		for _, why := range skipped {
+			p.Problems = append(p.Problems, fmt.Sprintf("%s: %s", name, why))
 		}
 		p.Files = append(p.Files, name)
 		pf.Referenced = referencedFiles(workspace, pf)
@@ -236,22 +239,24 @@ func LoadProject(workspace string) *Project {
 // readMCPJSON reads an MCP server list in the shape Claude Code and
 // Antigravity write: {"mcpServers": {"name": {"command", "args", "env"}
 // or {"url"/"httpUrl"/"serverUrl", "headers"}}}. Its servers need trust
-// like any project MCP server.
-func readMCPJSON(workspace, name string) (*projectFile, error) {
+// like any project MCP server. An entry Blitz can't start (SSE, which it
+// doesn't speak; neither or both of a command and a URL) is skipped, and
+// skipped says why.
+func readMCPJSON(workspace, name string) (pf *projectFile, skipped []string, err error) {
 	path := filepath.Join(workspace, name)
 	info, err := os.Lstat(path)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if !info.Mode().IsRegular() {
-		return nil, errors.New("not a regular file (a link is not followed)")
+		return nil, nil, errors.New("not a regular file (a link is not followed)")
 	}
 	if info.Size() > maxProjectFileSize {
-		return nil, fmt.Errorf("larger than %d KB", maxProjectFileSize>>10)
+		return nil, nil, fmt.Errorf("larger than %d KB", maxProjectFileSize>>10)
 	}
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	var doc struct {
 		MCPServers map[string]struct {
@@ -262,12 +267,13 @@ func readMCPJSON(workspace, name string) (*projectFile, error) {
 			HTTPURL   string            `json:"httpUrl"`
 			ServerURL string            `json:"serverUrl"`
 			Headers   map[string]string `json:"headers"`
+			Type      string            `json:"type"`
 		} `json:"mcpServers"`
 	}
 	if err := json.Unmarshal(data, &doc); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	pf := &projectFile{file: name}
+	pf = &projectFile{file: name}
 	for _, n := range sortedKeysOf(doc.MCPServers) {
 		s := doc.MCPServers[n]
 		url := s.URL
@@ -277,12 +283,17 @@ func readMCPJSON(workspace, name string) (*projectFile, error) {
 		if url == "" {
 			url = s.ServerURL
 		}
-		if (s.Command == "") == (url == "") {
-			continue // neither, or both: not a server Blitz can start
+		switch {
+		case strings.EqualFold(s.Type, "sse"):
+			skipped = append(skipped, fmt.Sprintf("MCP server %q uses SSE, which Blitz doesn't speak (stdio and streamable HTTP only); skipped", n))
+			continue
+		case (s.Command == "") == (url == ""):
+			skipped = append(skipped, fmt.Sprintf("MCP server %q needs a command or a URL, not both or neither; skipped", n))
+			continue
 		}
 		pf.MCP.Servers = append(pf.MCP.Servers, projectMCPServer{Name: n, Command: s.Command, Args: s.Args, Env: s.Env, URL: url, Headers: s.Headers})
 	}
-	return pf, nil
+	return pf, skipped, nil
 }
 
 func sortedKeysOf[V any](m map[string]V) []string {

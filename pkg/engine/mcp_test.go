@@ -19,6 +19,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -64,6 +65,7 @@ func openMCP(t *testing.T) *Workspace {
 		c.MCP.Servers = []config.MCPServerConfig{
 			{Name: "srv", URL: url, AutoApprove: true, Agents: []string{"*"}, Prefix: "srv_"},
 			{Name: "other", Command: "some-server", Args: []string{"--stdio"}, Agents: []string{"reviewer"}},
+			{Name: "off", Command: "never-started", Disabled: true},
 		}
 	})
 	return w
@@ -74,8 +76,9 @@ func openMCP(t *testing.T) *Workspace {
 func TestMCPServersAndPrompts(t *testing.T) {
 	w := openMCP(t)
 	servers := w.ListMCPServers()
-	require.Len(t, servers, 2)
+	require.Len(t, servers, 3)
 	assert.Equal(t, api.MCPServer{Name: "other", Target: "some-server --stdio"}, servers[1])
+	assert.Equal(t, api.MCPServer{Name: "off", Target: "never-started", Disabled: true}, servers[2], "a disabled server is listed, marked")
 	assert.True(t, servers[0].AutoApprove)
 
 	offers := w.ActiveAgentTools().MCP
@@ -119,4 +122,22 @@ func TestMCPResourceMentions(t *testing.T) {
 	assert.Contains(t, got, `<resource name="srv:file:///readme">`+"\nhello from the server\n</resource>")
 	got = w.withMentions(context.Background(), "read @srv:file:///missing", "read @srv:file:///missing")
 	assert.Contains(t, got, "(couldn't be read:")
+}
+
+// An MCP server that can't be reached says so in the turn, not only in
+// the service's log.
+func TestMCPUnavailableToldInTheTurn(t *testing.T) {
+	w, _ := openTestWith(t, func(c *config.Config) {
+		c.MCP.Servers = []config.MCPServerConfig{{Name: "gone", URL: "http://127.0.0.1:1/mcp"}}
+	}, text("done"))
+	s, err := w.NewSession()
+	require.NoError(t, err)
+	var notices []string
+	_, err = w.Run(context.Background(), s.ID, api.Turn{Text: "hello"}, func(e api.Event) {
+		if e.Notice != nil {
+			notices = append(notices, e.Notice.Text)
+		}
+	})
+	require.NoError(t, err)
+	assert.True(t, slices.ContainsFunc(notices, func(n string) bool { return strings.Contains(n, `mcp server "gone" unavailable`) }), "notices: %v", notices)
 }

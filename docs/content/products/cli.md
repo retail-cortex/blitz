@@ -67,7 +67,8 @@ Decisions are `once`, `session`, `always` or `deny`; a question is answered with
 | `blitz config init\|show\|path` | Writes, shows or locates the settings file |
 | `blitz config set-key\|keys\|secure-key\|remove-key` | API keys in the OS keychain ([configuration](../guide/configuration.md)) |
 | `blitz search <terms>` | [Searches the workspace](../guide/search.md#workspace-search): files, PDFs and notebooks, chats, notes (`--in`, `--json`, `--status`, `--reindex`) |
-| `blitz workers …` | Lists, enables, runs and shows the history of [workers](service.md#workers) |
+| `blitz workers …` | Lists, enables, runs, undoes and shows the history of [workers](../guide/workers.md) |
+| `blitz mcp add\|list\|get\|remove\|enable\|disable\|login\|logout …` | Adds and manages [MCP servers](../guide/mcp.md); `login` signs in to one over OAuth |
 | `blitz service install\|uninstall\|status` | Starts the service at login, or stops doing so |
 | `blitz init` | Runs `/setup` unattended: sets up the project for agents (`.agents/AGENTS.md` and the files that import it) |
 | `blitz license [full\|third-party]` | The NOTICE, the Apache License, or the notices of the software Blitz includes |
@@ -129,7 +130,7 @@ Decisions are `once`, `session`, `always` or `deny`; a question is answered with
 | `/mode [name]`, `/permissions …` | Permission mode and rules ([safety](../guide/safety.md)) |
 | `/plan <goal>` | A plan for approval, without changing anything |
 | `/grill-me <task>` | The agent asks you clarifying questions first, then proposes an approach; it changes nothing |
-| `/spec [what to build, or what changed]` | Write or revise the project's specification: the spec agent asks what it's for, who uses it, its performance and scale, where it runs, and how users sign in and what they may do, then writes numbered specs in `.agents/specs/` (`001-overview.md`, then each deliverable in the order it's built). Run it before `/setup`, which reads it |
+| `/spec [what you're working on, or what changed]` | Write or revise the project's specification, for software, research, data analysis or writing: the spec agent asks what kind of project it is, then what it's for and what that kind needs (for software its users, performance, platform and sign-in; for research the question, data, methods, compute, ethics and outputs), then writes numbered specs in `.agents/specs/` (`001-overview.md`, then each deliverable in the order it's built). Run it before `/setup`, which reads it |
 | `/skills update [focus]`, `/agents update [focus]` | Revisit the project's skills or agents against its specification, and add, change or retire the ones you choose; run them after a spec changes |
 | `/setup [focus]` | Set up the project's agent harness (with no specification yet, it first offers `/spec`): the setup agent asks about the project, makes it a git repository with a `.gitignore` for its stack, writes `.agents/AGENTS.md`, makes `AGENTS.md`, `CLAUDE.md`, `GEMINI.md` and `BLITZ.md` import it, and offers skills and agents to add (also `/init`, `blitz init`) |
 | `/goal <condition>`, `/goal [clear]` | Keep the agent working until the condition holds, judged after each turn |

@@ -22,25 +22,10 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { builtinCommands, terminalOnly } from "./slashCommands";
+import { terminalCommands } from "./terminalCommands";
 
 // The terminal's other names for a command the window has.
 const aliases: Record<string, string> = { set: "config" };
-
-/** The command names in the REPL's helpGroups usages: "/config [...], /set" is config and set. */
-export function terminalCommands(source: string): string[] {
-  const start = source.indexOf("var helpGroups");
-  const end = source.indexOf("\n}\n", start);
-  const block = source.slice(start, end);
-  const names = new Set<string>();
-  for (const [, usage] of block.matchAll(/\{"([^"]+)", "help\.[a-z_]+"\}/g)) {
-    for (const part of usage.split(", ")) {
-      if (part.startsWith("!")) names.add("!");
-      const m = /^\/([a-z_]+)/.exec(part);
-      if (m) names.add(m[1]);
-    }
-  }
-  return [...names].sort();
-}
 
 describe("parity with the terminal", () => {
   const file = join(process.cwd(), "..", "..", "..", "apps", "cli", "internal", "tui", "commands.go");
