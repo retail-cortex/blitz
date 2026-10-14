@@ -80,7 +80,7 @@ func main() {
 		// macOS's menu bar, About and Settings… in the app menu
 		// (appmenu.go); none elsewhere.
 		Menu:  app.appMenu(MenuLabels{}),
-		Linux: linuxOptions(saved.GPU, os.Getenv, os.Setenv),
+		Linux: linuxOptions(saved.GPU, hasNvidia("/dev/nvidiactl"), os.Getenv, os.Setenv),
 		// One app: a second start (a link, on Linux) goes to the first.
 		SingleInstanceLock: &options.SingleInstanceLock{
 			UniqueId: "dev.blitz.desktop",

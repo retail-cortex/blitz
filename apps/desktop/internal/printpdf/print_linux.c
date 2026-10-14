@@ -143,7 +143,10 @@ static gboolean start(gpointer data) {
   WebKitWebView *view = WEBKIT_WEB_VIEW(webkit_web_view_new_with_context(context));
   g_object_unref(context);
   j->view = view;
-  webkit_settings_set_enable_javascript(webkit_web_view_get_settings(view), FALSE);
+  WebKitSettings *settings = webkit_web_view_get_settings(view);
+  webkit_settings_set_enable_javascript(settings, FALSE);
+  // GtkOffscreenWindow has no OpenGL context in GTK3.
+  webkit_settings_set_hardware_acceleration_policy(settings, WEBKIT_HARDWARE_ACCELERATION_POLICY_NEVER);
   gtk_widget_set_size_request(GTK_WIDGET(view), (int)(j->width - 2 * j->margin), (int)(j->height - 2 * j->margin));
   gtk_container_add(GTK_CONTAINER(j->window), GTK_WIDGET(view));
   gtk_widget_show_all(j->window);
