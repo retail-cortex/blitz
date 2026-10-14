@@ -1744,9 +1744,9 @@
     "desktop.settings.doc_css.sample_text": "# Release notes\n\nBlitz **2.0** reads your [docs](https://example.com) as documents.\n\n## What's new\n\n- Diagrams from `mermaid` blocks\n- [x] Previews open first\n\n> Quotes stand out from the text.\n\n| Setting | Default |\n| --- | --- |\n| Measure | 760px |\n| Size | 15px |\n\n```go\nfunc main() { fmt.Println(\"hi\") }\n```\n\n```mermaid\nflowchart LR\n  A[Write] --> B[Preview] --> C[Share]\n```\n",
     "desktop.files.reveal_in": "Show in {name}",
     "desktop.files.reveal_in_file_manager": "Show in file manager",
-    "desktop.model.spaces": "A model name has no spaces: provider/model, like gemini/gemini-3.8-flash.",
+    "desktop.model.spaces": "A model name has no spaces: provider/model, like gemini/gemini-4-argon.",
     "desktop.model.no_name": "Add the model's name after the provider.",
     "desktop.model.unlisted": "{provider} doesn't list {model}: it will be sent as written.",
-    "desktop.agents.invalid.defaultModel": "A model name has no spaces: provider/model, like gemini/gemini-3.8-flash."
+    "desktop.agents.invalid.defaultModel": "A model name has no spaces: provider/model, like gemini/gemini-4-argon."
   }
 }

@@ -116,7 +116,7 @@ const configTemplate = `
 
 [blitz]
 default_agent = "blitz"
-# default_model = "gemini-3.8-flash"  # overrides llm.<provider>.model for every provider
+# default_model = "gemini-4-argon"  # overrides llm.<provider>.model for every provider
 agency_level  = "high"      # low | medium | high | extreme
 temperature   = 0.2
 max_tokens    = 65536
@@ -137,7 +137,7 @@ stall_timeout_seconds = 600 # fail a model request that sends nothing for this l
 #                           # Credentials (gcloud auth application-default login)
 # project_id = "..."        # adc: or GOOGLE_CLOUD_PROJECT
 # location = "global"       # adc: or GOOGLE_CLOUD_LOCATION
-model = "gemini-3.8-flash"
+model = "gemini-4-argon"
 
 [llm.anthropic]
 # api_key   = "..."         # or ANTHROPIC_API_KEY, ANTHROPIC_AUTH_TOKEN, or an "ant auth login" profile
@@ -230,7 +230,7 @@ enabled = true
 # search_provider = "google"              # google | brave | tavily | searxng; enables web_search and /search web
 # search_api_key  = "..."                 # google: defaults to the Gemini key; or BRAVE_API_KEY / TAVILY_API_KEY
 # search_url      = "http://localhost:8888" # searxng instance
-# search_model    = "gemini-3.8-flash"      # google: the Gemini model that searches
+# search_model    = "gemini-4-argon"        # google: the Gemini model that searches
 
 # [skills.policy]                                  # caps what skills' scripts may do; skills can only be stricter
 # min_hitl_tier = 2                                # 1 auto + audit, 2 also checkpoint, 3 always ask

@@ -201,7 +201,7 @@ function state(dir: string): State {
         create(SessionInfoSchema, { id: "session-1b", title: "Add the cart API docs", workspace: dir, messageCount: 9, updated: now() }),
       ],
       active: first.id,
-      settings: { agent: "blitz", model: "gemini-3.8-flash", provider: "gemini", effort: "", mode: "default", agency: "high", locale: "en-US", style: "default" },
+      settings: { agent: "blitz", model: "gemini-4-argon", provider: "gemini", effort: "", mode: "default", agency: "high", locale: "en-US", style: "default" },
       pending: new Map(),
       tasks: new Map(),
       usage: create(UsageSchema, { calls: 3, input: 18234n, output: 2210n, lastPrompt: 12876n, costUsd: 0.0123, priced: true }),
@@ -929,7 +929,7 @@ export function installFake() {
         listModels: () => ({
           defaultProvider: "gemini",
           providers: [
-            { provider: "gemini", ids: ["gemini-3.5-flash-lite", "gemini-3.8-flash", "gemini-3.8-pro"] },
+            { provider: "gemini", ids: ["gemini-3.5-flash-lite", "gemini-3.8-flash", "gemini-3.8-pro", "gemini-4-argon"] },
             { provider: "anthropic", error: "no API key" },
           ],
         }),
@@ -1048,7 +1048,7 @@ export function installFake() {
             { key: "llm.max_retries", type: "integer", default: "3", doc: "MaxRetries is how many times a failed model call is tried again." },
             { key: "llm.stream", type: "boolean", default: "true", doc: "Stream shows the answer as it comes." },
             { key: "llm.gemini", type: "table", default: "", doc: "GeminiConfig configures the Gemini provider." },
-            { key: "llm.gemini.model", type: "string", default: '"gemini-3.8-flash"', doc: "Model is the Gemini model to use." },
+            { key: "llm.gemini.model", type: "string", default: '"gemini-4-argon"', doc: "Model is the Gemini model to use." },
             { key: "model_settings.<model>.top_p", type: "number", default: "", doc: "TopP is nucleus sampling: only the most likely tokens up to this probability." },
           ],
         }),

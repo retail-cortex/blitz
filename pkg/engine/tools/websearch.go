@@ -49,7 +49,7 @@ type WebSearchConfig struct {
 	Provider     string // brave | tavily | searxng | google
 	APIKey       string // brave/tavily/google; falls back to BRAVE_API_KEY / TAVILY_API_KEY / GEMINI_API_KEY
 	BaseURL      string // searxng instance, or an override for the others
-	Model        string // google: the Gemini model that runs the search (default gemini-3.8-flash)
+	Model        string // google: the Gemini model that runs the search (default gemini-4-argon)
 	MaxResults   int
 	DenyDomains  []string
 	AllowNetwork bool
@@ -69,7 +69,7 @@ var searchEndpoints = map[string]string{
 	"google": "https://generativelanguage.googleapis.com/v1beta",
 }
 
-const googleSearchModel = "gemini-3.8-flash"
+const googleSearchModel = "gemini-4-argon"
 
 type webSearcher struct {
 	cfg    WebSearchConfig

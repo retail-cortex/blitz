@@ -36,6 +36,11 @@ func TestDefaultPricingAtAppliesPriceChanges(t *testing.T) {
 	got := DefaultPricingAt(time.Date(2027, 6, 1, 0, 0, 0, 0, time.UTC))["claude-opus-5"]
 	assert.Equal(t, DefaultPricing["claude-opus-5"], got, "claude-opus-5 changed: %+v", got)
 	assert.Equal(t, 0.75, DefaultPricing["gemini-3.8-flash"].InputPerMTok, "DefaultPricingAt modified DefaultPricing")
+	// The default model is priced (a placeholder at 3.8 Flash's price), so
+	// costs show and --max-cost-usd holds.
+	argon, ok := DefaultPricing[DefaultConfig().LLM.Gemini.Model]
+	assert.True(t, ok, "the default Gemini model has a price")
+	assert.Equal(t, DefaultPricing["gemini-3.8-flash"], argon)
 }
 
 func TestDefaultConfigUsesPricesInEffect(t *testing.T) {
