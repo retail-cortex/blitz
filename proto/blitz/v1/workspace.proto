@@ -411,6 +411,9 @@ enum SuggestionKind {
   // A model's suggestion from the recent conversations: title on the tile,
   // prompt sent when it's chosen.
   SUGGESTION_KIND_IDEA = 5;
+  // The specification (.agents/specs/) changed after the skills and agents:
+  // run /skills update (then /agents update).
+  SUGGESTION_KIND_HARNESS_UPDATE = 6;
 }
 
 // Suggestion is one welcome tile.

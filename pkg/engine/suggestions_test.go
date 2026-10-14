@@ -65,6 +65,44 @@ func TestHarnessMissing(t *testing.T) {
 	}
 }
 
+// The skills and agents are stale when a spec changed after all of them;
+// then, with instructions in place, the update is suggested first.
+func TestHarnessStale(t *testing.T) {
+	old, recent := time.Now().Add(-2*time.Hour), time.Now().Add(-time.Minute)
+	for _, tc := range []struct {
+		name  string
+		files map[string]time.Time
+		want  bool
+	}{
+		{"no specs", map[string]time.Time{".agents/skills/a/SKILL.md": old}, false},
+		{"specs, no skills or agents", map[string]time.Time{".agents/specs/001-overview.md": recent}, false},
+		{"specs older than the skills", map[string]time.Time{".agents/specs/001-overview.md": old, ".agents/skills/a/SKILL.md": recent}, false},
+		{"specs newer than the skills", map[string]time.Time{".agents/specs/001-overview.md": recent, ".agents/skills/a/SKILL.md": old}, true},
+		{"specs newer than the agents", map[string]time.Time{".agents/specs/002-api.md": recent, ".agents/agents/reviewer.md": old}, true},
+		{"one agent newer than the specs", map[string]time.Time{".agents/specs/002-api.md": recent, ".agents/skills/a/SKILL.md": old, ".agents/agents/reviewer.md": time.Now()}, false},
+		{"only the index changed", map[string]time.Time{".agents/specs/README.md": recent, ".agents/specs/notes.txt": time.Now(), ".agents/skills/a/SKILL.md": old}, true},
+		{"not a spec", map[string]time.Time{".agents/specs/notes.txt": recent, ".agents/skills/a/SKILL.md": old}, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			w := openTest(t)
+			for f, at := range tc.files {
+				path := filepath.Join(w.Dir(), filepath.FromSlash(f))
+				require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+				require.NoError(t, os.WriteFile(path, []byte("x"), 0o644))
+				require.NoError(t, os.Chtimes(path, at, at))
+			}
+			assert.Equal(t, tc.want, w.HarnessStale())
+			require.NoError(t, os.WriteFile(filepath.Join(w.Dir(), "AGENTS.md"), []byte("x"), 0o644))
+			got := kinds(w.Suggestions(context.Background()))
+			if tc.want {
+				assert.Equal(t, []api.SuggestionKind{api.SuggestHarnessUpdate}, got, "the update is offered")
+			} else {
+				assert.NotContains(t, got, api.SuggestHarnessUpdate)
+			}
+		})
+	}
+}
+
 // State tiles come at once; ideas are written in the background from the
 // recent conversations, kept, and written again only after they change.
 func TestSuggestions(t *testing.T) {

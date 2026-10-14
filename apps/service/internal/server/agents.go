@@ -171,9 +171,10 @@ func (h workspaceService) GetSuggestions(ctx context.Context, r req[pb.GetSugges
 }
 
 var suggestionKinds = map[api.SuggestionKind]pb.SuggestionKind{
-	api.SuggestSetup:        pb.SuggestionKind_SUGGESTION_KIND_SETUP,
-	api.SuggestContinue:     pb.SuggestionKind_SUGGESTION_KIND_CONTINUE,
-	api.SuggestChanges:      pb.SuggestionKind_SUGGESTION_KIND_CHANGES,
-	api.SuggestWorkerFailed: pb.SuggestionKind_SUGGESTION_KIND_WORKER_FAILED,
-	api.SuggestIdea:         pb.SuggestionKind_SUGGESTION_KIND_IDEA,
+	api.SuggestSetup:         pb.SuggestionKind_SUGGESTION_KIND_SETUP,
+	api.SuggestContinue:      pb.SuggestionKind_SUGGESTION_KIND_CONTINUE,
+	api.SuggestChanges:       pb.SuggestionKind_SUGGESTION_KIND_CHANGES,
+	api.SuggestWorkerFailed:  pb.SuggestionKind_SUGGESTION_KIND_WORKER_FAILED,
+	api.SuggestIdea:          pb.SuggestionKind_SUGGESTION_KIND_IDEA,
+	api.SuggestHarnessUpdate: pb.SuggestionKind_SUGGESTION_KIND_HARNESS_UPDATE,
 }

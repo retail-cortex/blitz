@@ -60,7 +60,13 @@ export function parseCommand(line: string): { name: string; args: string } | und
   // Names are letters, digits, "-", "_", ":" and "."; "/usr/bin …" is a path.
   const m = /^\/([A-Za-z][\w:.-]*)(?:\s+([\s\S]*))?$/.exec(t);
   if (!m) return undefined;
-  return { name: m[1].toLowerCase(), args: (m[2] ?? "").trim() };
+  const name = m[1].toLowerCase();
+  const args = (m[2] ?? "").trim();
+  // /skills update and /agents update are the bundled /skills-update and
+  // /agents-update (the engine reads them the same way).
+  const update = /^update(?:\s+([\s\S]*))?$/i.exec(args);
+  if ((name === "skills" || name === "agents") && update) return { name: `${name}-update`, args: (update[1] ?? "").trim() };
+  return { name, args };
 }
 
 /**

@@ -599,7 +599,8 @@ func newCompleter(w api.Backend) *tui.Completer {
 		"tools", "plan", "show", "init", "mode", "permissions", "effort", "rewind", "pin_model", "unpin", "model_settings", "search", "btw", "rename", "envs", "tasks", "cd", "trust", "license", "status", "copy", "config", "theme"} {
 		c.Command(cmd)
 	}
-	c.Command("skills", "list", "show", "search")
+	c.Command("skills", "list", "show", "search", "update")
+	c.Command("agents", "update")
 	c.Command("session", "list", "new", "load", "save")
 	c.Command("search", "web", "session")
 	c.Command("envs", "prune", "remove")

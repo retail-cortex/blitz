@@ -257,13 +257,15 @@ function fakeProject(s: State) {
 }
 
 // The welcome tiles (GetSuggestions): ideas are "being written" for the
-// first 4 s after a workspace first asks; ?noharness offers the setup.
+// first 4 s after a workspace first asks; ?noharness offers the setup,
+// ?stale the update of the skills and agents.
 const suggestionsAsked = new Map<string, number>();
 function fakeSuggestions(dir: string) {
   if (!suggestionsAsked.has(dir)) suggestionsAsked.set(dir, Date.now());
   const pending = Date.now() - suggestionsAsked.get(dir)! < 4000;
   const last = state(dir).sessions.find((x) => x.messages.length > 0);
   const out: MessageInitShape<typeof SuggestionSchema>[] = [];
+  if (new URLSearchParams(location.search).has("stale")) out.push({ kind: SuggestionKind.HARNESS_UPDATE });
   if (last) out.push({ kind: SuggestionKind.CONTINUE, title: last.title, sessionId: last.id });
   out.push({ kind: SuggestionKind.CHANGES, count: Object.keys(fakeGit).length });
   if (!pending) {
@@ -865,6 +867,9 @@ export function installFake() {
         listCommands: () => ({
           commands: [
             { name: "setup", description: "Set up the agent harness: .agents/AGENTS.md, skills and agents", source: "bundled" },
+            { name: "spec", description: "Write or revise the project's specification, as numbered specs in .agents/specs/", argumentHint: "[what to build, or what changed]", source: "bundled" },
+            { name: "skills-update", description: "Revisit this workspace's skills against its specification; also /skills update", argumentHint: "[what to focus on]", source: "bundled" },
+            { name: "agents-update", description: "Revisit this workspace's agents against its specification; also /agents update", argumentHint: "[what to focus on]", source: "bundled" },
             { name: "review", description: "Review the uncommitted changes for bugs", argumentHint: "[branch | files]", source: "bundled" },
             { name: "db:migrate", description: "Write a database migration", argumentHint: "<name>", source: "project" },
           ],

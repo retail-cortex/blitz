@@ -186,6 +186,22 @@ func (c Command) Expand(args string) string {
 	return body
 }
 
+// subcommands are the words a command may be spelled with a subcommand:
+// /skills update is /skills-update (front ends keep /skills and /agents
+// for themselves).
+var subcommands = map[string]bool{"skills": true, "agents": true}
+
+// Alias returns the command a line "/name args" runs, and its arguments:
+// "skills update x" is ("skills-update", "x"), and "agents update" is
+// ("agents-update", ""); anything else is as it was.
+func Alias(name, args string) (string, string) {
+	sub, rest, _ := strings.Cut(strings.TrimSpace(args), " ")
+	if n := strings.ToLower(name); subcommands[n] && strings.EqualFold(sub, "update") {
+		return n + "-update", strings.TrimSpace(rest)
+	}
+	return name, args
+}
+
 // Bundled returns the commands built into Blitz.
 func Bundled() []Command {
 	entries, _ := fs.ReadDir(builtinFS, "builtin")

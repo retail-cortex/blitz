@@ -105,7 +105,7 @@ func (w *Workspace) ListCommands() []api.CommandInfo {
 func (w *Workspace) expandCommand(ctx context.Context, t *api.Turn) ([]runtime.ExecOption, error) {
 	line := strings.TrimPrefix(strings.TrimSpace(t.Text), "/")
 	name, args, _ := strings.Cut(line, " ")
-	name = strings.ToLower(name)
+	name, args = commands.Alias(strings.ToLower(name), args)
 	if strings.HasPrefix(name, "mcp__") {
 		prompt, err := w.mcpPrompt(ctx, name, args)
 		if err != nil {

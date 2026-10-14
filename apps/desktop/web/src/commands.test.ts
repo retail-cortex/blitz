@@ -32,6 +32,11 @@ describe("commands", () => {
     expect(parseCommand("/")).toBeUndefined();
     expect(parseCommand("//not a command")).toBeUndefined();
     expect(parseCommand("/usr/bin is odd")).toBeUndefined(); // a path, not a command
+    // /skills update and /agents update: the bundled update commands.
+    expect(parseCommand("/skills update the auth spec")).toEqual({ name: "skills-update", args: "the auth spec" });
+    expect(parseCommand("/Agents UPDATE")).toEqual({ name: "agents-update", args: "" });
+    expect(parseCommand("/skills updated")).toEqual({ name: "skills", args: "updated" });
+    expect(parseCommand("/review update")).toEqual({ name: "review", args: "update" });
   });
 
   it("offers matches while the name is typed", () => {

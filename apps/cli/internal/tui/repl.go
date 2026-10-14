@@ -381,6 +381,18 @@ func RunREPL(ctx context.Context, app *App) error {
 			cmdMemory(ctx, []string{"reload"}, app)
 			continue
 		}
+		if isUpdateCommand(line) {
+			// /skills update and /agents update: bundled commands (the
+			// engine reads them as /skills-update and /agents-update), not
+			// this REPL's /skills and /agents.
+			active, ok := app.Workspace.ActiveSession()
+			if !ok {
+				fmt.Printf("%s✗ %s%s\n", Red, i18n.T("session.none_active"), Reset)
+				continue
+			}
+			runTurn(ctx, app, active.ID, line, interrupts, turnOptions{command: true})
+			continue
+		}
 		if rest, ok := strings.CutPrefix(line, "/goal"); ok && (rest == "" || rest[0] == ' ') {
 			if cond := strings.TrimSpace(rest); cond != "" && cond != "clear" {
 				startGoal(ctx, app, line, cond, interrupts)

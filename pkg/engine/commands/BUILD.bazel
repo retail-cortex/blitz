@@ -25,6 +25,9 @@ go_library(
         "builtin/verify.md",
         "builtin/grill-me.md",
         "builtin/setup.md",
+        "builtin/spec.md",
+        "builtin/skills-update.md",
+        "builtin/agents-update.md",
     ],
     importpath = "github.com/retail-cortex/blitz/pkg/engine/commands",
     visibility = [

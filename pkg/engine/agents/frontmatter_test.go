@@ -63,6 +63,20 @@ func TestEmbeddedRegistry(t *testing.T) {
 	helios, ok := reg.Get("helios")
 	require.True(t, ok, "expected to find 'helios' agent")
 	require.NotNil(t, helios, "expected to find 'helios' agent")
+
+	// /spec's and /skills update's agents: they interview and write, with
+	// no shell.
+	for _, name := range []string{"project-spec", "harness-update"} {
+		t.Run(name, func(t *testing.T) {
+			a, ok := reg.Get(name)
+			require.True(t, ok)
+			assert.True(t, reg.IsBuiltin(name))
+			assert.Contains(t, a.Tools, "ask_user_question")
+			assert.Contains(t, a.Tools, "create_file")
+			assert.NotContains(t, a.Tools, "run_shell_command")
+			assert.Contains(t, a.SystemPrompt, ".agents/specs/")
+		})
+	}
 }
 
 func contains(s, substr string) bool {

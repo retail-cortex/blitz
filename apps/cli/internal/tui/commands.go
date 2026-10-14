@@ -254,6 +254,14 @@ func isCustomCommand(app *App, name string) bool {
 	return false
 }
 
+// isUpdateCommand reports whether line is /skills update or /agents
+// update, with or without a focus: a turn, unlike the rest of /skills and
+// /agents.
+func isUpdateCommand(line string) bool {
+	f := strings.Fields(line)
+	return len(f) >= 2 && (strings.EqualFold(f[0], "/skills") || strings.EqualFold(f[0], "/agents")) && strings.EqualFold(f[1], "update")
+}
+
 func handleSkillsCommand(args []string, app *App) {
 	sub := "list"
 	if len(args) > 0 {
