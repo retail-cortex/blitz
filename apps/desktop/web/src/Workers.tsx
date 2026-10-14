@@ -138,7 +138,7 @@ export function WorkerModal({ dir, intent, onClose }: { dir: string; intent: Ite
         </>
       }
     >
-      <p>{t("desktop.workers.delete_body", { name })}</p>
+      <p>{t("desktop.workers.delete_body", { name, folder: worker?.path.replace(/\/WORKER\.md$/, "") || `.agents/workers/${name}` })}</p>
     </Dialog>
   );
   // Deleting from the menu asks, and nothing else.
