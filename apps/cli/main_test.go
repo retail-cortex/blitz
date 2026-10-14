@@ -388,3 +388,13 @@ func TestLicenseCommand(t *testing.T) {
 	_, err := runCLI(t, "license", "bogus")
 	assert.Equal(t, exitUsage, exitCodeFor(err), "bogus: %v", err)
 }
+
+// config show masks an MCP server's environment and header values.
+func TestMaskConfigMCPSecrets(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.MCP.Servers = []config.MCPServerConfig{{Name: "docs", URL: "https://x", Env: map[string]string{"TOKEN": "env-secret-1234567"}, Headers: map[string]string{"Authorization": "Bearer hdr-secret-1234567"}}}
+	m := maskConfig(cfg)
+	assert.NotContains(t, m.MCP.Servers[0].Env["TOKEN"], "secret")
+	assert.NotContains(t, m.MCP.Servers[0].Headers["Authorization"], "secret-1234")
+	assert.Equal(t, "Bearer hdr-secret-1234567", cfg.MCP.Servers[0].Headers["Authorization"], "the config itself is unchanged")
+}

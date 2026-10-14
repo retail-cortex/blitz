@@ -44,8 +44,11 @@ func TestStartProcess(t *testing.T) {
 	assert.Contains(t, warned[0], "diagnostic log disabled")
 
 	cfg.LLM.Gemini.APIKey = "AIzaSyTESTSECRET-0123456789"
-	cfg.MCP.Servers = []config.MCPServerConfig{{Env: map[string]string{"TOKEN": "mcp-secret-value-123"}}}
+	cfg.MCP.Servers = []config.MCPServerConfig{{Env: map[string]string{"TOKEN": "mcp-secret-value-123"}, Headers: map[string]string{"Authorization": "Bearer hdr-secret-token-456"}}}
 	r := SecretRedactor(cfg)
 	assert.NotContains(t, r.String("key AIzaSyTESTSECRET-0123456789 and mcp-secret-value-123"), "SECRET")
 	assert.NotContains(t, r.String("mcp-secret-value-123"), "mcp-secret")
+	// A header's value, whole or its token alone.
+	assert.NotContains(t, r.String("sent Authorization: Bearer hdr-secret-token-456"), "hdr-secret")
+	assert.NotContains(t, r.String("token=hdr-secret-token-456"), "hdr-secret")
 }

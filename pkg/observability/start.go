@@ -17,6 +17,7 @@ package observability
 import (
 	"context"
 	"log/slog"
+	"strings"
 
 	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/redact"
@@ -47,13 +48,21 @@ func StartProcess(ctx context.Context, cfg *config.Config, version string, warn 
 	}
 }
 
-// SecretRedactor masks configured credentials and the values of scrubbed
-// environment variables in audit entries, logs and telemetry.
+// SecretRedactor masks configured credentials, the values of scrubbed
+// environment variables, and MCP servers' environment and header values
+// (tokens, often) in audit entries, logs and telemetry.
 func SecretRedactor(cfg *config.Config) *redact.Redactor {
 	secrets := []string{cfg.LLM.Gemini.APIKey, cfg.LLM.OpenAI.APIKey, cfg.LLM.Anthropic.APIKey, cfg.Web.SearchAPIKey}
 	for _, s := range cfg.MCP.Servers {
 		for _, v := range s.Env {
 			secrets = append(secrets, v)
+		}
+		for _, v := range s.Headers {
+			secrets = append(secrets, v)
+			// "Bearer <token>": the token alone too, as it may be logged apart.
+			if _, token, ok := strings.Cut(v, " "); ok {
+				secrets = append(secrets, strings.TrimSpace(token))
+			}
 		}
 	}
 	return redact.FromEnv(cfg.Sandbox.ScrubEnv, secrets...)
