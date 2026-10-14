@@ -24,7 +24,7 @@ import { addToContext, findInFileEvent, openFile } from "../events";
 import { FindBar } from "./FindBar";
 import { EditorView } from "@codemirror/view";
 import { t, tn } from "../i18n";
-import { Button, Dialog, Icon, IconButton, Segmented, useSnackbar } from "../ui/controls";
+import { Button, ContextMenu, Dialog, Icon, IconButton, Segmented, useSnackbar, type MenuEntry } from "../ui/controls";
 import { Preview } from "./Preview";
 // The visual editor (TipTap) loads with the first Markdown file shown in it.
 const VisualEditor = lazy(() => import("./visual/VisualEditor").then((m) => ({ default: m.VisualEditor })));
@@ -35,6 +35,7 @@ import { languageSession, type LanguageStatus } from "./language";
 import { goToLine, languageOf, setWrap } from "./codemirror";
 import { fileIcon } from "./icons";
 import type { EditorModel, Tab } from "./useEditor";
+import { tabsToClose, type CloseWhich } from "./tabMenu";
 import { useEditorZoom } from "./zoom";
 import { useAdvanced, useApp } from "../state";
 import { paperFor, pdfPath, printablePage } from "./printPage";
@@ -50,7 +51,9 @@ export function EditorPane({ model, onReveal, onCursor }: { model: EditorModel; 
   const host = useRef<HTMLDivElement>(null);
   const view = useRef<EditorView | null>(null);
   const shown = useRef<string | null>(null);
-  const [closing, setClosing] = useState<Tab | null>(null);
+  // Tabs waiting on the unsaved-changes question, and the tab menu (FIL-40a).
+  const [closing, setClosing] = useState<Tab[] | null>(null);
+  const [tabMenu, setTabMenu] = useState<{ x: number; y: number; path: string } | null>(null);
   const tab = model.tabs.find((x) => x.path === model.active);
   const ready = tab && !tab.loading && !tab.error && !tab.binary && !tab.tooLarge;
   // Images and PDFs show as previews; Markdown and SVG can, and Markdown
@@ -261,7 +264,27 @@ export function EditorPane({ model, onReveal, onCursor }: { model: EditorModel; 
   const [zoom, setZoom] = useEditorZoom(pane);
   useEffect(() => view.current?.requestMeasure(), [zoom]);
 
-  const closeTab = (x: Tab) => (x.dirty ? setClosing(x) : model.close(x.path));
+  // Closing tabs with unsaved changes asks first, for all of them at once.
+  const closeTabs = (ts: Tab[]) => {
+    if (!ts.length) return;
+    if (ts.some((x) => x.dirty)) setClosing(ts);
+    else model.closeMany(ts.map((x) => x.path));
+  };
+  const closeTab = (x: Tab) => closeTabs([x]);
+  const tabMenuItems = (path: string): MenuEntry[] => {
+    const item = (which: CloseWhich, key: string): MenuEntry => {
+      const ts = tabsToClose(model.tabs, path, which);
+      return { label: t(key), disabled: !ts.length, onSelect: () => closeTabs(ts) };
+    };
+    return [
+      item("this", "desktop.files.tab.close"),
+      item("others", "desktop.files.tab.close_others"),
+      item("right", "desktop.files.tab.close_right"),
+      "divider",
+      item("saved", "desktop.files.tab.close_saved"),
+      item("all", "desktop.files.tab.close_all"),
+    ];
+  };
 
   return (
     <section className="editor-pane" ref={pane} aria-label={t("desktop.files.editor")} style={{ "--zoom": zoom / 100 } as CSSProperties} data-doc-width={prefs.doc_width}>
@@ -275,6 +298,10 @@ export function EditorPane({ model, onReveal, onCursor }: { model: EditorModel; 
             title={x.path}
             onClick={() => model.activate(x.path)}
             onAuxClick={(e) => e.button === 1 && closeTab(x)}
+            onContextMenu={(e) => {
+              e.preventDefault();
+              setTabMenu({ x: e.clientX, y: e.clientY, path: x.path });
+            }}
           >
             <Icon path={fileIcon(x.name)} size="sm" />
             <span className="ellipsis">{x.name}</span>
@@ -376,15 +403,19 @@ export function EditorPane({ model, onReveal, onCursor }: { model: EditorModel; 
         {!showPreview && tab?.binary && <p className="editor-note muted">{t("desktop.files.binary", { size: formatSize(tab.size) })}</p>}
         {!showPreview && tab?.tooLarge && <p className="editor-note muted">{t("desktop.files.too_large", { size: formatSize(tab.size) })}</p>}
       </div>
+      {tabMenu && <ContextMenu x={tabMenu.x} y={tabMenu.y} items={tabMenuItems(tabMenu.path)} onClose={() => setTabMenu(null)} />}
       {closing && (
         <UnsavedDialog
-          names={[closing.name]}
+          names={closing.filter((x) => x.dirty).map((x) => x.name)}
           onSave={async () => {
-            if (await model.save(closing.path)) model.close(closing.path);
+            // Saves each unsaved tab, then closes the ones that saved and
+            // those that had nothing to save; a failed save stays open.
+            const ok = await Promise.all(closing.map((x) => (x.dirty ? model.save(x.path) : true)));
+            model.closeMany(closing.filter((_, i) => ok[i]).map((x) => x.path));
             setClosing(null);
           }}
           onDiscard={() => {
-            model.close(closing.path);
+            model.closeMany(closing.map((x) => x.path));
             setClosing(null);
           }}
           onCancel={() => setClosing(null)}

@@ -23,6 +23,7 @@ import { files } from "../api";
 import { errorMeta, message, reason } from "../errors";
 import { fileState, languageSupport } from "./codemirror";
 import { languageExtension, languageSession, type LanguageHooks } from "./language";
+import { afterClosing } from "./tabMenu";
 import { nameOf } from "./tree";
 
 /** An open file: its tab, the version its text is based on, and what the editor knows about it. */
@@ -71,6 +72,8 @@ export interface EditorModel {
   open: (path: string, line?: number, column?: number, find?: string[]) => void;
   activate: (path: string) => void;
   close: (path: string) => void;
+  /** Closes several tabs at once, unsaved changes and all (FIL-40a). */
+  closeMany: (paths: readonly string[]) => void;
   save: (path: string, overwrite?: boolean) => Promise<boolean>;
   reload: (path: string) => Promise<void>;
   /** Asks the service whether open files changed elsewhere. */
@@ -165,17 +168,22 @@ export function useEditor(dir: string, language?: Omit<LanguageHooks, "open">): 
     [hasServers],
   );
 
-  const close = useCallback((path: string) => {
-    languageSession(dir).close(path);
-    states.current.delete(path);
-    saved.current.delete(path);
-    setTabs((ts) => {
-      const i = ts.findIndex((t) => t.path === path);
-      const next = ts.filter((t) => t.path !== path);
-      setActive((a) => (a === path ? (next[Math.min(i, next.length - 1)]?.path ?? null) : a));
-      return next;
-    });
-  }, [dir]);
+  const closeMany = useCallback(
+    (paths: readonly string[]) => {
+      const closed = new Set(paths);
+      for (const path of closed) {
+        languageSession(dir).close(path);
+        states.current.delete(path);
+        saved.current.delete(path);
+      }
+      setTabs((ts) => {
+        setActive((a) => afterClosing(ts, a, closed).active);
+        return ts.filter((t) => !closed.has(t.path));
+      });
+    },
+    [dir],
+  );
+  const close = useCallback((path: string) => closeMany([path]), [closeMany]);
 
   const save = useCallback(
     async (path: string, overwrite = false): Promise<boolean> => {
@@ -287,6 +295,7 @@ export function useEditor(dir: string, language?: Omit<LanguageHooks, "open">): 
       open,
       activate: setActive,
       close,
+      closeMany,
       save,
       reload,
       check,
@@ -295,6 +304,6 @@ export function useEditor(dir: string, language?: Omit<LanguageHooks, "open">): 
       language: languageHooks,
       dirtyCount: tabs.filter((t) => t.dirty).length,
     }),
-    [dir, tabs, active, target, wrap, open, close, save, reload, check, moved, setText, languageHooks],
+    [dir, tabs, active, target, wrap, open, close, closeMany, save, reload, check, moved, setText, languageHooks],
   );
 }
