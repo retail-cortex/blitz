@@ -322,14 +322,19 @@ func TestTrustStore(t *testing.T) {
 func TestProjectMCPJSON(t *testing.T) {
 	isolateConfigEnv(t)
 	ws := projectWorkspace(t, map[string]string{
-		".mcp.json":               `{"mcpServers": {"db": {"command": "npx", "args": ["@acme/db-mcp"], "env": {"DB": "dev"}}, "broken": {}}}`,
+		".mcp.json":               `{"mcpServers": {"db": {"command": "npx", "args": ["@acme/db-mcp"], "env": {"DB": "dev"}}, "broken": {}, "events": {"type": "sse", "url": "https://mcp.example/sse"}}}`,
 		".agents/mcp_config.json": `{"mcpServers": {"docs": {"serverUrl": "https://mcp.example/docs", "headers": {"X-Team": "core"}}}}`,
 	})
 	cfg, err := LoadWorkspace("", ws)
 	require.NoError(t, err)
 	p := cfg.Project
 	assert.Equal(t, []string{".mcp.json", ".agents/mcp_config.json"}, p.Files)
-	_, ok := item(p.Pending, ProjectMCP, "db", "npx @acme/db-mcp")
+	// What can't start is skipped, saying why: SSE, and neither a command nor a URL.
+	assert.Contains(t, p.Problems, `.mcp.json: MCP server "events" uses SSE, which Blitz doesn't speak (stdio and streamable HTTP only); skipped`)
+	assert.Contains(t, p.Problems, `.mcp.json: MCP server "broken" needs a command or a URL, not both or neither; skipped`)
+	_, ok := item(p.Pending, ProjectMCP, "events", "https://mcp.example/sse")
+	assert.False(t, ok, "an SSE server is pending")
+	_, ok = item(p.Pending, ProjectMCP, "db", "npx @acme/db-mcp")
 	assert.True(t, ok, "%+v", p.Pending)
 	_, ok = item(p.Pending, ProjectMCP, "docs", "https://mcp.example/docs")
 	assert.True(t, ok, "%+v", p.Pending)

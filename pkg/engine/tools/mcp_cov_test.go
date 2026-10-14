@@ -318,3 +318,35 @@ func TestStdioTransportCantStart(t *testing.T) {
 		})
 	}
 }
+
+// An auto-approved server's resources are read without asking, but a deny
+// rule still refuses them and an ask rule asks, as for its tools.
+func TestApproveMCPServerResourcesFollowRules(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Tools.WorkspaceDir = t.TempDir()
+	cfg.Tools.ApprovalsFile = ""
+	reg, err := NewRegistry(cfg, nil, nil)
+	require.NoError(t, err)
+	t.Cleanup(func() { reg.Close() })
+	reg.mcp = newMCPManagerWithToolsets(map[string]tool.Toolset{"gh": inMemoryMCP(t, "create_issue"), "docs": inMemoryMCP(t, "search")}, map[string]bool{"gh": true}, nil)
+	for _, tc := range []struct {
+		name, server string
+		rules        []string // deny
+		ask          []string
+		asked, err   bool
+	}{
+		{"auto-approved, no rule", "gh", nil, nil, false, false},
+		{"auto-approved, denied", "gh", []string{"mcp(gh:read_mcp_resource)"}, nil, false, true},
+		{"auto-approved, ask", "gh", nil, []string{"mcp(gh:*)"}, true, false},
+		{"not auto-approved", "docs", nil, nil, true, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			h, reqs := approverHooks(true)
+			h.SetRules(rulesOf(t, nil, tc.ask, tc.rules))
+			reg.hooks = h
+			err := reg.approveMCPServer(context.Background(), tc.server, "read_mcp_resource", map[string]any{"uri": "x"})
+			assert.Equal(t, tc.err, err != nil, "err %v", err)
+			assert.Equal(t, tc.asked, len(*reqs) > 0, "asked %v", *reqs)
+		})
+	}
+}
