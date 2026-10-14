@@ -34,7 +34,14 @@ var modeRank = map[api.PermissionMode]int{api.ModePlan: 0, api.ModeDontAsk: 1, a
 // agents, the user's own, and a trusted project's; bypass also needs the
 // OS sandbox. Otherwise the workspace's mode stays, and the log says why.
 func (e *Engine) agentRun(ctx context.Context, spec *agents.AgentSpec) context.Context {
-	if m := api.PermissionMode(spec.PermissionMode); m != "" {
+	// The mode as written may be an alias (acceptEdits, bypassPermissions):
+	// rank and apply its canonical form, so one can't slip past the checks.
+	m, err := api.ParsePermissionMode(spec.PermissionMode)
+	if err != nil {
+		slog.WarnContext(ctx, "agent permission_mode not applied", "agent", spec.Name, "error", err)
+		m = ""
+	}
+	if spec.PermissionMode != "" && m != "" {
 		current := e.toolReg.Hooks().Mode()
 		switch {
 		case modeRank[m] > modeRank[current] && !e.mayLoosen(spec):
