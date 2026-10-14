@@ -350,3 +350,27 @@ func TestApproveMCPServerResourcesFollowRules(t *testing.T) {
 		})
 	}
 }
+
+// A server's failing and recovering is told to the workspace's warnings
+// and, in a turn, to the conversation: the first failure, the pause, the
+// recovery; not every failed call.
+func TestMCPHealthToldInTheTurn(t *testing.T) {
+	m := NewMCPManagerFromToolsets([]MCPToolset{{Config: config.MCPServerConfig{Name: "gh"}, Toolset: staticToolset{}}}, nil)
+	var warned, said []string
+	m.Warn = func(s string) { warned = append(warned, s) }
+	ctx := WithNotices(context.Background(), func(s string) { said = append(said, s) })
+	srv := m.servers[0]
+	for range mcpFailThreshold + 1 {
+		m.recordFailure(ctx, srv, errors.New("down"))
+	}
+	m.recordSuccess(ctx, srv)
+	require.Len(t, said, 3, "%v", said)
+	assert.Contains(t, said[0], `mcp server "gh" unavailable: down`)
+	assert.Contains(t, said[1], "keeps failing")
+	assert.Contains(t, said[2], "available again")
+	assert.Equal(t, said, warned, "the log hears the same")
+	// Outside a turn: the log only.
+	m.recordFailure(context.Background(), srv, errors.New("down again"))
+	assert.Len(t, said, 3)
+	assert.Len(t, warned, 4)
+}

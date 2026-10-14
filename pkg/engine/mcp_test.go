@@ -19,6 +19,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -121,4 +122,22 @@ func TestMCPResourceMentions(t *testing.T) {
 	assert.Contains(t, got, `<resource name="srv:file:///readme">`+"\nhello from the server\n</resource>")
 	got = w.withMentions(context.Background(), "read @srv:file:///missing", "read @srv:file:///missing")
 	assert.Contains(t, got, "(couldn't be read:")
+}
+
+// An MCP server that can't be reached says so in the turn, not only in
+// the service's log.
+func TestMCPUnavailableToldInTheTurn(t *testing.T) {
+	w, _ := openTestWith(t, func(c *config.Config) {
+		c.MCP.Servers = []config.MCPServerConfig{{Name: "gone", URL: "http://127.0.0.1:1/mcp"}}
+	}, text("done"))
+	s, err := w.NewSession()
+	require.NoError(t, err)
+	var notices []string
+	_, err = w.Run(context.Background(), s.ID, api.Turn{Text: "hello"}, func(e api.Event) {
+		if e.Notice != nil {
+			notices = append(notices, e.Notice.Text)
+		}
+	})
+	require.NoError(t, err)
+	assert.True(t, slices.ContainsFunc(notices, func(n string) bool { return strings.Contains(n, `mcp server "gone" unavailable`) }), "notices: %v", notices)
 }
