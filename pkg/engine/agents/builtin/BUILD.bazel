@@ -27,6 +27,8 @@ go_library(
         "qa.md",
         "web-retriever.md",
         "project-setup.md",
+        "project-spec.md",
+        "harness-update.md",
     ],
     importpath = "github.com/retail-cortex/blitz/pkg/engine/agents/builtin",
     visibility = [

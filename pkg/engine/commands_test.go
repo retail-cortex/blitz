@@ -103,6 +103,32 @@ func TestCustomCommands(t *testing.T) {
 	assert.ErrorIs(t, err, api.ErrUnknownCommand, "unknown command: %v", err)
 }
 
+// /spec runs Project Spec with what to build; /skills update and /agents
+// update are /skills-update and /agents-update, run by Harness Update.
+func TestSpecAndUpdateCommands(t *testing.T) {
+	w := openTest(t)
+	ctx := context.Background()
+	for _, tc := range []struct {
+		line, want, args string
+	}{
+		{"/spec a recipe-sharing web app", "Write this project's specification", "a recipe-sharing web app"},
+		{"/skills update the auth spec", "Update the skills", "the auth spec"},
+		{"/agents Update", "Update the agents", ""},
+		{"/skills-update deploys", "Update the skills", "deploys"},
+	} {
+		t.Run(tc.line, func(t *testing.T) {
+			turn := &api.Turn{Text: tc.line}
+			opts, err := w.expandCommand(ctx, turn)
+			require.NoError(t, err)
+			assert.Contains(t, turn.Prompt, tc.want)
+			assert.True(t, strings.HasSuffix(strings.TrimSpace(turn.Prompt), "."+strings.TrimRight(" "+tc.args, " ")), "the arguments, without the subcommand, end the prompt: %q", turn.Prompt)
+			assert.Len(t, opts, 1, "its agent")
+		})
+	}
+	_, err := w.expandCommand(ctx, &api.Turn{Text: "/skills list"})
+	assert.ErrorIs(t, err, api.ErrUnknownCommand, "only update is a command; the rest is the front end's")
+}
+
 // A command's frontmatter picks the agent and model of its turn; an
 // unknown agent or a model that can't be built is an error naming it.
 func TestCommandAgentAndModel(t *testing.T) {

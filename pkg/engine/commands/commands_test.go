@@ -74,13 +74,19 @@ func TestLoadNamespacesAndBundled(t *testing.T) {
 	}
 	files, _ := fs.ReadDir(builtinFS, "builtin")
 	assert.Len(t, bundled, len(files), "every bundled file parses: one that doesn't is skipped without a word")
-	for _, name := range []string{"review", "security-review", "simplify", "verify", "grill-me", "setup"} {
+	for _, name := range []string{"review", "security-review", "simplify", "verify", "grill-me", "setup", "spec", "skills-update", "agents-update"} {
 		t.Run(name, func(t *testing.T) {
 			_, ok := bundled[name]
 			assert.True(t, ok, "bundled command %s missing", name)
 		})
 	}
 	assert.Equal(t, "project-setup", bundled["setup"].Agent, "/setup runs the setup agent")
+	assert.Contains(t, bundled["setup"].Body, "/spec", "/setup offers /spec first")
+	assert.Equal(t, "project-spec", bundled["spec"].Agent, "/spec runs the spec agent")
+	assert.Contains(t, bundled["spec"].Expand("a recipe app"), ".agents/specs/ in the order they'd be built. a recipe app")
+	assert.Equal(t, "harness-update", bundled["skills-update"].Agent)
+	assert.Equal(t, "harness-update", bundled["agents-update"].Agent)
+	assert.Contains(t, bundled["agents-update"].Expand(""), "Update the agents")
 	assert.True(t, bundled["review"].Plan, "review should be read-only (plan), simplify shouldn't")
 	assert.False(t, bundled["simplify"].Plan, "review should be read-only (plan), simplify shouldn't")
 	// /grill-me <task> (BL-CLI-02): read-only, questions before any proposal.
@@ -90,6 +96,26 @@ func TestLoadNamespacesAndBundled(t *testing.T) {
 	assert.Contains(t, prompt, "Task: add rate limiting")
 	assert.Contains(t, prompt, "ask_user_question")
 	assert.Contains(t, prompt, "Don't change any files.")
+}
+
+// /skills update and /agents update name the update commands; the rest
+// of /skills and /agents is the front ends'.
+func TestAlias(t *testing.T) {
+	for _, tc := range []struct{ name, args, wantName, wantArgs string }{
+		{"skills", "update", "skills-update", ""},
+		{"skills", " update  the auth spec ", "skills-update", "the auth spec"},
+		{"Agents", "UPDATE x", "agents-update", "x"},
+		{"skills", "list", "skills", "list"},
+		{"skills", "updated", "skills", "updated"},
+		{"review", "update", "review", "update"},
+		{"skills", "", "skills", ""},
+	} {
+		t.Run(tc.name+" "+tc.args, func(t *testing.T) {
+			n, a := Alias(tc.name, tc.args)
+			assert.Equal(t, tc.wantName, n)
+			assert.Equal(t, tc.wantArgs, a)
+		})
+	}
 }
 
 // TestParseEdgeCases checks frontmatter and description corner cases.

@@ -44,6 +44,8 @@ An agent is a persona: a system prompt, a tool list, an agency level and optiona
 | `agent-creator` | Creates and validates agent specs and skills | high |
 | `model-judge` | Compares model responses | medium |
 | `project-setup` | Sets up a workspace's agent harness: interviews, `.agents/AGENTS.md`, the instruction files importing it, skills and agents (`/setup`, [spec_memory_012](spec_memory_012.md) MEM-22) | medium |
+| `project-spec` | Writes and revises the project's specification in `.agents/specs/` after an interview on intent, users, performance, platform and security (`/spec`, MEM-42) | medium |
+| `harness-update` | Revisits the skills or agents against the specification (`/skills update`, `/agents update`, MEM-44) | medium |
 
 - **AG-12** Built-in prompts are persona-free and terse (no mascot, plain status marks).
 
