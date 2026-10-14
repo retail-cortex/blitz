@@ -37,17 +37,18 @@ describe("commands", () => {
     expect(parseCommand("/Agents UPDATE")).toEqual({ name: "agents-update", args: "" });
     expect(parseCommand("/skills updated")).toEqual({ name: "skills", args: "updated" });
     expect(parseCommand("/review update")).toEqual({ name: "review", args: "update" });
+    expect(parseCommand("/set effort=high")).toEqual({ name: "config", args: "effort=high" });
   });
 
   it("offers matches while the name is typed", () => {
     const all = allCommands(custom);
-    expect(matchCommands("/co", all).map((c) => c.name)).toEqual(["cost", "context", "compact"]);
+    expect(matchCommands("/co", all).map((c) => c.name)).toEqual(["compact", "context", "copy", "cost", "config"]);
     expect(matchCommands("/snap", all).map((c) => c.name)).toEqual(["session"]); // by its description
     expect(matchCommands("/migr", all).map((c) => c.name)).toEqual(["db:migrate"]);
     expect(matchCommands("/cost now", all)).toEqual([]); // past the name
     expect(matchCommands("hello", all)).toEqual([]);
     expect(matchCommands("/", all)).toHaveLength(12);
-    expect(matchCommands("  /co", all).map((c) => c.name)).toEqual(["cost", "context", "compact"]); // a stray space
+    expect(matchCommands("  /co", all).map((c) => c.name)).toEqual(["compact", "context", "copy", "cost", "config"]); // a stray space
     expect(matchCommands("\n/", all)).toHaveLength(12); // a stray new line
     expect(matchCommands("text\n/", all)).toEqual([]); // not the whole message
   });
@@ -123,3 +124,23 @@ describe("paletteResults", () => {
     expect(searchesFiles(query)).toBe(want);
   });
 });
+
+describe("help", () => {
+  it("lists the built-ins in the terminal's groups, then the custom commands by source, and what's terminal-only", () => {
+    const text = helpText(allCommands([
+      { name: "zeta", description: "z", source: "project" },
+      { name: "alpha", description: "a", source: "project" },
+      { name: "spec", description: "s", source: "bundled" },
+    ]));
+    const at = (s: string) => text.indexOf(s);
+    expect(at("**Session**")).toBeGreaterThan(0);
+    expect(at("**Session**")).toBeLessThan(at("**Agents and models**"));
+    expect(at("**Permissions and safety**")).toBeLessThan(at("**Settings**"));
+    expect(at("`/compact")).toBeLessThan(at("`/copy"));
+    expect(at("**Built into Blitz**")).toBeLessThan(at("**This project's**"));
+    expect(at("`/alpha`")).toBeLessThan(at("`/zeta`"));
+    expect(text).toContain("`/clear`");
+    expect(text).toContain("`!<command>`");
+  });
+});
+

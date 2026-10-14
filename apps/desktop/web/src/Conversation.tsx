@@ -69,6 +69,7 @@ import type { SessionInfo } from "./gen/blitz/v1/session_pb";
 import { Decision, type ApprovalRequest, type Question, type Task, type Usage } from "./gen/blitz/v1/turn_pb";
 import type { BackgroundTask, GetSettingsResponse, GetSuggestionsResponse } from "./gen/blitz/v1/workspace_pb";
 import { allCommands, helpText, matchCommands, parseCommand, type CommandSpec } from "./commands";
+import { builtin, type CommandContext } from "./slashCommands";
 import {
   addToContextEvent,
   composeEvent,
@@ -76,7 +77,7 @@ import {
   configChanged,
   filesTouched,
   loadSessionEvent,
-  showLicense,
+  openSettings,
   showPendingEvent,
   takePendingCompose,
   takePendingLoad,
@@ -91,9 +92,9 @@ import { refreshRuns, runInSession } from "./backgroundRuns";
 import { fileIcon } from "./files/icons";
 import { acceptAttribute, acceptedAs, describeImage, isDocument, readyIds, rejectReason, uploading, type Accepted, type Attachment } from "./attachments";
 import { Markdown } from "./Markdown";
-import { language, t, tn, useLanguage } from "./i18n";
+import { t, tn, useLanguage } from "./i18n";
 import { notify, shouldNotify, type NotifyKind } from "./notify";
-import { efforts, effortIcon, modeOf } from "./options";
+import { effortIcon } from "./options";
 import { useAdvanced, useApp } from "./state";
 import { publishStatus } from "./status";
 import { useOpenPath } from "./files/links";
@@ -155,7 +156,7 @@ export function Conversation({
     window.addEventListener(focusComposerEvent, focus);
     return () => window.removeEventListener(focusComposerEvent, focus);
   }, [visible]);
-  const { prefs, setActivity, registerStop } = useApp();
+  const { prefs, update, setActivity, registerStop } = useApp();
   const snack = useSnackbar();
   const [list, setList] = useState<SessionInfo[]>([]);
   const [session, setSession] = useState<SessionInfo>();
@@ -652,151 +653,59 @@ export function Conversation({
       say(t("desktop.cmd.unknown", { name: c.name }), "error");
       return true;
     }
-    const startsTurn = spec.source !== "builtin" || ["plan", "btw", "search", "new", "undo", "compact", "rename", "session", "agent", "model"].includes(c.name);
+    const own = spec.source === "builtin" ? builtin(c.name) : undefined;
+    const startsTurn = spec.source !== "builtin" || !!own?.turn;
     if (running && startsTurn) {
       say(t("desktop.cmd.wait", { name: c.name }), "error");
       return true;
     }
-    if (spec.source !== "builtin") {
+    if (!own) {
       run(line.trim(), { command: true });
       return true;
     }
-    const usage = () => say(t("desktop.cmd.usage", { usage: `/${spec.name}${spec.args ? " " + spec.args : ""}` }), "error");
-    const k = (n: bigint) => Number(n).toLocaleString(language());
+    const ctx: CommandContext = {
+      dir,
+      args: c.args,
+      line,
+      settings,
+      sessionId: session?.id,
+      sessionTitle: session?.title,
+      projectWaiting,
+      say,
+      run: (text, opts) => void run(text, opts),
+      send: (text) => sendRef.current(text),
+      snack,
+      usage: () => say(t("desktop.cmd.usage", { usage: `/${spec.name}${spec.args ? " " + spec.args : ""}` }), "error"),
+      busy: () => latestRunning.current,
+      settingsChanged: onSettingsChanged,
+      openView: onOpenView,
+      openSettings: (section, scope) => openSettings({ section, scope }),
+      reviewProject: onReviewProject,
+      reload,
+      refreshTotal,
+      refreshList,
+      newSession,
+      rename,
+      rewind,
+      addImagePath,
+      clearAttachments: () => {
+        const n = attachments.length;
+        attachments.forEach((a) => URL.revokeObjectURL(a.url));
+        setAttachments([]);
+        return n;
+      },
+      answers: () => entries.filter((e): e is Extract<Entry, { kind: "model" }> => e.kind === "model" && !!e.text.trim()).map((e) => e.text),
+      theme: () => prefs.theme,
+      setTheme: (theme) => update((p) => ({ ...p, theme })),
+      help: () => helpText(commands),
+    };
     try {
-      switch (c.name) {
-        case "plan":
-          return c.args ? (run(c.args, { plan: true }), true) : (usage(), true);
-        case "btw":
-          return c.args ? (run(c.args, { aside: true, shown: `/btw ${c.args}` }), true) : (usage(), true);
-        case "search": {
-          const [sub, ...rest] = c.args.split(/\s+/);
-          const terms = rest.join(" ").trim();
-          if (!terms || (sub !== "web" && sub !== "session")) return usage(), true;
-          const recorded = `/search ${sub} ${terms}`;
-          if (sub === "session") {
-            const r = await sessions.searchSession({ workspace: dir, terms });
-            if (r.found === 0) say(t("desktop.search.session_none", { terms }));
-            else run(recorded, { prompt: r.prompt, readOnly: "search", shown: recorded });
-            return true;
-          }
-          say(t("desktop.search.searching", { terms }));
-          const r = await workspaces.searchWeb({ workspace: dir, terms });
-          if (r.links.length === 0) {
-            say(t("desktop.search.none", { terms }));
-            return true;
-          }
-          say(`${t("desktop.search.found", { provider: r.provider })}\n\n${r.links.map((l, i) => `${i + 1}. [${l.title.replace(/[[\]]/g, "")}](${l.url})`).join("\n")}\n\n${t("desktop.search.reading")}`, "info", true);
-          run(recorded, { prompt: r.prompt, readOnly: "search", fetchGrants: r.links.map((l) => l.url), shown: recorded });
-          return true;
-        }
-        case "undo": {
-          const res = await workspaces.undo({ workspace: dir, force: c.args === "--force" });
-          say(res.restored.length ? t("desktop.changes.undid", { label: res.label, files: res.restored.join(", ") }) : t("desktop.undo.nothing"));
-          if (res.error) say(res.error.message, "error");
-          return true;
-        }
-        case "checkpoints": {
-          const r = await workspaces.listCheckpoints({ workspace: dir });
-          say(
-            r.checkpoints.length
-              ? t("desktop.checkpoints.title") + "\n\n" + r.checkpoints.map((cp) => `- ${cp.label} — ${cp.files.map((f) => `\`${f}\``).join(", ")}`).join("\n")
-              : t("desktop.checkpoints.none"),
-            "info",
-            true,
-          );
-          return true;
-        }
-        case "diff":
-          onOpenView("changes");
-          return true;
-        case "cost":
-        case "context": {
-          const r = await sessions.getUsage({ workspace: dir });
-          const u = r.usage;
-          if (!u || u.calls === 0) return say(t("desktop.usage.none")), true;
-          say(
-            c.name === "cost"
-              ? `| | |\n|---|---|\n| ${t("desktop.usage.calls")} | ${u.calls} |\n| ${t("desktop.usage.sent")} | ${k(u.input)} (${t("desktop.usage.cached", { count: k(u.cached) })}) |\n| ${t("desktop.usage.received")} | ${k(u.output)} |\n| ${t("desktop.usage.cost")} | ${u.priced ? "$" + u.costUsd.toFixed(4) : t("desktop.usage.unpriced")} |`
-              : t("desktop.usage.context", { count: k(u.lastPrompt) }) + (r.autoCompact ? t("desktop.usage.auto", { threshold: r.threshold.toLocaleString(language()) }) : t("desktop.usage.manual")),
-            "info",
-            true,
-          );
-          return true;
-        }
-        case "compact": {
-          say(t("desktop.compacting"));
-          const r = await sessions.compact({ workspace: dir, focus: c.args });
-          say(t("desktop.compacted", { events: r.eventsCompacted, chars: r.summaryChars }));
-          refreshTotal();
-          return true;
-        }
-        case "agent": {
-          if (!c.args) {
-            const r = await workspaces.listAgents({ workspace: dir });
-            say(t("desktop.agents.title") + "\n\n" + r.agents.map((a) => `- ${a.active ? "**" : ""}${a.displayName}${a.active ? `** ${t("desktop.agents.active")}` : ""} — \`${a.name}\`: ${a.description}`).join("\n"), "info", true);
-            return true;
-          }
-          const r = await workspaces.setAgent({ workspace: dir, name: c.args });
-          say(t("desktop.agents.switched", { name: r.agent?.displayName ?? c.args }));
-          onSettingsChanged();
-          return true;
-        }
-        case "model": {
-          if (!c.args) {
-            const m = await workspaces.getModel({ workspace: dir });
-            const ref = `${m.provider ? m.provider + "/" : ""}${m.name}`;
-            say(m.unavailable ? t("desktop.model.unavailable", { model: ref, reason: m.unavailable }) : t("desktop.model.is", { model: ref }), "info", true);
-            return true;
-          }
-          await workspaces.setModel({ workspace: dir, ref: c.args });
-          say(t("desktop.model.now", { model: c.args }));
-          onSettingsChanged();
-          return true;
-        }
-        case "mode": {
-          if (!c.args) return say(t("desktop.mode.is", { mode: modeOf(settings?.permissionMode ?? "default").label }), "info", true), true;
-          const r = await workspaces.setPermissionMode({ workspace: dir, mode: c.args });
-          say(t("desktop.mode.now", { mode: modeOf(r.mode).label }));
-          onSettingsChanged();
-          return true;
-        }
-        case "effort": {
-          if (!c.args) return say(t("desktop.effort.is", { effort: efforts().find((e) => e.value === (settings?.effort ?? ""))?.label ?? t("desktop.effort.auto") }), "info", true), true;
-          await workspaces.setSetting({ workspace: dir, key: "effort", value: c.args });
-          say(t("desktop.effort.now", { effort: c.args }));
-          onSettingsChanged();
-          return true;
-        }
-        case "session": {
-          const m = /^save\s+(\S+)(\s+--force)?$/.exec(c.args);
-          if (!m) return usage(), true;
-          const r = await sessions.saveSnapshot({ workspace: dir, name: m[1], force: !!m[2] });
-          say(t("desktop.snapshot.saved", { name: r.snapshot?.snapshot ?? m[1] }));
-          refreshList();
-          return true;
-        }
-        case "rename":
-          return c.args ? (await rename(c.args), say(t("desktop.renamed", { title: c.args })), true) : (usage(), true);
-        case "new":
-          await newSession();
-          return true;
-        case "license": {
-          const which = c.args === "full" || c.args === "third-party" ? c.args : c.args ? null : "notice";
-          if (!which) return usage(), true;
-          showLicense({ which });
-          return true;
-        }
-        case "help":
-          say(helpText(commands), "info", true);
-          return true;
-      }
+      await own.run(ctx);
     } catch (e) {
       if (isUnavailable(e)) serviceLost();
       say(message(e), "error");
-      return true;
     }
-    return false;
+    return true;
   };
   useEffect(() => {
     const f = (e: Event) => {
@@ -810,6 +719,13 @@ export function Conversation({
   });
   const executeRef = useRef(execute);
   executeRef.current = execute;
+  // A /loop's firing: a command runs as typed, anything else is sent (the
+  // loop skips a firing while a turn runs).
+  const sendRef = useRef<(text: string) => void>(() => {});
+  sendRef.current = (text: string) => {
+    if (text.startsWith("/")) void execute(text);
+    else void run(text);
+  };
 
   // The Files view adds a file or folder to the next prompt, or starts a
   // conversation about it.
