@@ -17,6 +17,7 @@
 import { describe, expect, it } from "vitest";
 import { docFiles, docPictures } from "./content";
 import { docLink, docPicture, docTree, loadDocs, parsePage, pathOf, searchDocs, siteURL, siteURLOf } from "./index";
+import { docSections } from "./sections";
 
 const { pages, tree } = loadDocs(docFiles);
 const carried = new Set(pages.keys());
@@ -27,6 +28,13 @@ describe("the docs the app carries", () => {
     for (const p of ["", "getting-started", "tutorials", "guide", "guide/models", "products/desktop", "releases"]) expect(carried, p).toContain(p);
     expect([...carried].some((p) => p.startsWith("about") || p.startsWith("development"))).toBe(false);
     for (const page of pages.values()) expect(page.title, page.file).not.toBe("");
+  });
+
+  it("has every section the Help menu links to, in its order", () => {
+    const order = tree.children.map((n) => n.page.path);
+    for (const d of docSections) expect(carried, d.page).toContain(d.page);
+    const at = docSections.map((d) => order.indexOf(d.page));
+    expect(at).toEqual([...at].sort((a, b) => a - b));
   });
 
   it("lists the sections in the site's order", () => {

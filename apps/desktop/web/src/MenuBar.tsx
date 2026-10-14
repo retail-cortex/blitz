@@ -37,13 +37,13 @@ import {
   mdiShieldCheckOutline,
   mdiRobotOutline,
   mdiPlus,
-  mdiSchoolOutline,
   mdiSourceCommit,
 } from "@mdi/js";
 import { workers, workspaces } from "./api";
 import { inboxCounts, useRuns } from "./backgroundRuns";
 import type { ChangesSource } from "./Changes";
 import { openDocs, startSetup } from "./events";
+import { docSections } from "./docs/sections";
 import { fileName } from "./agentForm";
 import { AgentScope, type AgentFile } from "./gen/blitz/v1/workspace_pb";
 import { WorkerState, type Worker } from "./gen/blitz/v1/worker_pb";
@@ -231,9 +231,11 @@ export function MenuBar({
   const help: MenuEntry[] = [
     // The docs of this release, in the app (DSK-103).
     { label: t("desktop.menu.guide"), icon: mdiBookOpenPageVariantOutline, onSelect: () => openDocs({}) }, // where it was left, Tutorials the first time
-    { label: t("desktop.menu.tutorials"), icon: mdiSchoolOutline, onSelect: () => openDocs({ page: "tutorials" }) },
-    ...(dir ? [{ label: t("desktop.setup.title"), icon: mdiAutoFix, onSelect: () => startSetup(dir) }] : []),
     "divider",
+    // Each of the guide's sections, a link of its own.
+    ...docSections.map((d) => ({ label: t(d.labelKey), icon: d.icon, onSelect: () => openDocs({ page: d.page }) })),
+    "divider",
+    ...(dir ? [{ label: t("desktop.setup.title"), icon: mdiAutoFix, onSelect: () => startSetup(dir) }] : []),
     { label: t("desktop.menu.about"), icon: mdiInformationOutline, onSelect: () => onSettings("about") },
   ];
 
