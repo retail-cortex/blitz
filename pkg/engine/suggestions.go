@@ -21,6 +21,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io/fs"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -68,8 +69,48 @@ func (w *Workspace) HarnessMissing() bool {
 	return true
 }
 
+// maxHarnessFiles bounds the files HarnessStale looks at in a folder.
+const maxHarnessFiles = 2000
+
+// HarnessStale reports whether the specification changed after the skills
+// and agents: a spec in .agents/specs/ is newer than every file under
+// .agents/skills/ and .agents/agents/, and there is at least one of those.
+func (w *Workspace) HarnessStale() bool {
+	at := func(parts ...string) string { return filepath.Join(append([]string{w.Dir(), ".agents"}, parts...)...) }
+	specs := newestFile(at("specs"), ".md")
+	if specs.IsZero() {
+		return false
+	}
+	harness := newestFile(at("skills"), "")
+	if a := newestFile(at("agents"), ""); a.After(harness) {
+		harness = a
+	}
+	return !harness.IsZero() && specs.After(harness)
+}
+
+// newestFile is when the newest regular file under dir (ending in ext,
+// when given) changed; zero when there's none.
+func newestFile(dir, ext string) time.Time {
+	var newest time.Time
+	seen := 0
+	_ = filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() || !d.Type().IsRegular() || !strings.HasSuffix(p, ext) {
+			return nil
+		}
+		if seen++; seen > maxHarnessFiles {
+			return filepath.SkipAll
+		}
+		if info, err := d.Info(); err == nil && info.ModTime().After(newest) {
+			newest = info.ModTime()
+		}
+		return nil
+	})
+	return newest
+}
+
 // Suggestions returns the workspace's welcome tiles: setup when it has no
-// agent instructions, the latest conversation, uncommitted changes and a
+// agent instructions, an update of the skills and agents when the
+// specification changed after them, the latest conversation, uncommitted changes and a
 // failed worker, then up to three ideas from the recent conversations. When
 // those changed since the ideas were written, new ones are written in the
 // background (Pending) and the earlier ones are returned meanwhile.
@@ -77,6 +118,8 @@ func (w *Workspace) Suggestions(ctx context.Context) api.Suggestions {
 	out := api.Suggestions{HarnessMissing: w.HarnessMissing()}
 	if out.HarnessMissing {
 		out.Tiles = append(out.Tiles, api.Suggestion{Kind: api.SuggestSetup})
+	} else if w.HarnessStale() {
+		out.Tiles = append(out.Tiles, api.Suggestion{Kind: api.SuggestHarnessUpdate})
 	}
 	recent := w.recentSessions()
 	if len(recent) > 0 {

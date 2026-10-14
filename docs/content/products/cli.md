@@ -129,7 +129,9 @@ Decisions are `once`, `session`, `always` or `deny`; a question is answered with
 | `/mode [name]`, `/permissions …` | Permission mode and rules ([safety](../guide/safety.md)) |
 | `/plan <goal>` | A plan for approval, without changing anything |
 | `/grill-me <task>` | The agent asks you clarifying questions first, then proposes an approach; it changes nothing |
-| `/setup [focus]` | Set up the project's agent harness: the setup agent asks about the project, makes it a git repository with a `.gitignore` for its stack, writes `.agents/AGENTS.md`, makes `AGENTS.md`, `CLAUDE.md`, `GEMINI.md` and `BLITZ.md` import it, and offers skills and agents to add (also `/init`, `blitz init`) |
+| `/spec [what to build, or what changed]` | Write or revise the project's specification: the spec agent asks what it's for, who uses it, its performance and scale, where it runs, and how users sign in and what they may do, then writes numbered specs in `.agents/specs/` (`001-overview.md`, then each deliverable in the order it's built). Run it before `/setup`, which reads it |
+| `/skills update [focus]`, `/agents update [focus]` | Revisit the project's skills or agents against its specification, and add, change or retire the ones you choose; run them after a spec changes |
+| `/setup [focus]` | Set up the project's agent harness (with no specification yet, it first offers `/spec`): the setup agent asks about the project, makes it a git repository with a `.gitignore` for its stack, writes `.agents/AGENTS.md`, makes `AGENTS.md`, `CLAUDE.md`, `GEMINI.md` and `BLITZ.md` import it, and offers skills and agents to add (also `/init`, `blitz init`) |
 | `/goal <condition>`, `/goal [clear]` | Keep the agent working until the condition holds, judged after each turn |
 | `/loop <interval> <prompt>`, `/loop [stop <n>]` | Send a prompt again every interval while the REPL stays open |
 | `/btw <question>` | A side question: answered with what the session knows, and not kept |

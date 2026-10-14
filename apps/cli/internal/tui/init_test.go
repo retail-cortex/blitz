@@ -53,3 +53,30 @@ func TestInitWritesAndLoadsBlitzMD(t *testing.T) {
 	assert.NotEqual(t, 0, len(recorded), "transcript %q", recorded)
 	assert.Equal(t, "/setup", recorded[0], "transcript %q", recorded)
 }
+
+// /skills update and /agents update run the bundled update commands as
+// turns, recorded as typed; /skills alone is still the REPL's list.
+func TestUpdateCommandsRunTurns(t *testing.T) {
+	app, llm := newCommandAppWith(t, configtest.RunTools, "/skills update the auth spec\n/agents update\n/skills\n/exit\n",
+		genai.NewContentFromText("skills reviewed", genai.RoleModel), genai.NewContentFromText("agents reviewed", genai.RoleModel))
+	out := captureStdout(t, func() { RunREPL(context.Background(), app) })
+	require.Len(t, llm.Requests, 2, "two turns, and /skills listed the skills:\n%s", out)
+	assert.Contains(t, requestTextAt(llm, 0), "Update the skills")
+	assert.Contains(t, requestTextAt(llm, 0), "the auth spec")
+	assert.Contains(t, requestTextAt(llm, 1), "Update the agents")
+	var recorded []string
+	for _, m := range local(app).Storage().Active().Messages {
+		recorded = append(recorded, m.Content)
+	}
+	assert.Contains(t, recorded, "/skills update the auth spec")
+	assert.Contains(t, recorded, "/agents update")
+}
+
+func TestIsUpdateCommand(t *testing.T) {
+	for line, want := range map[string]bool{
+		"/skills update": true, "/agents update x": true, "/Skills UPDATE": true,
+		"/skills": false, "/skills list": false, "/agents": false, "/skills-update": false, "/review update": false,
+	} {
+		assert.Equal(t, want, isUpdateCommand(line), line)
+	}
+}

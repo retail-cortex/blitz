@@ -20,6 +20,10 @@ type SuggestionKind string
 const (
 	// SuggestSetup suggests /setup: the workspace has no agent instructions.
 	SuggestSetup SuggestionKind = "setup"
+	// SuggestHarnessUpdate suggests /skills update (then /agents update):
+	// the specification (.agents/specs/) changed after the skills and
+	// agents.
+	SuggestHarnessUpdate SuggestionKind = "harness_update"
 	// SuggestContinue suggests picking up the latest conversation (SessionID,
 	// Title).
 	SuggestContinue SuggestionKind = "continue"

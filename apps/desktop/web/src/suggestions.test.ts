@@ -58,6 +58,11 @@ describe("welcome tiles", () => {
     ],
     ["a failed worker, without", { kind: SuggestionKind.WORKER_FAILED, worker: "deps" }, ["4", "Find out why the worker deps failed", { type: "send", prompt: "Find out why the worker deps failed" }]],
     ["a model's idea", { kind: SuggestionKind.IDEA, title: " Finish the rounding tests ", prompt: "Add the tests." }, ["5", "Finish the rounding tests", { type: "send", prompt: "Add the tests." }]],
+    [
+      "a changed specification",
+      { kind: SuggestionKind.HARNESS_UPDATE },
+      ["6", "The specification changed: update the skills and agents", { type: "send", prompt: "/skills update" }],
+    ],
   ])("%s", (_, s, want) => {
     expect(tiles({ suggestions: [s] })).toEqual([want]);
   });

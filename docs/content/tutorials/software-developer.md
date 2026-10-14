@@ -36,6 +36,8 @@ The setup wizard gives the workspace its *agent harness*: the instructions every
 - **Desktop:** a new workspace's chat opens on the tile **Set up this workspace for agents**. It's also **Help › Set up the agent harness**.
 - **Terminal:** `/setup` in a session, or `blitz init` from the shell. `/setup testing` focuses it on one area.
 
+For a new project, write the specification first: `/spec a link shortener for our team` asks what you're building and for whom, how fast and how big it must be, where it runs, and how people sign in, then writes numbered specs in `.agents/specs/`. `/setup` offers this when there's no specification yet, and reads it when there is. When a spec changes later, `/skills update` and `/agents update` bring the project's skills and agents in line.
+
 The wizard surveys the folder first and changes nothing until it has asked you. In an empty folder it asks what the project is and who uses it, the stack, how it's built, tested and deployed, your conventions, and what agents must never do. In a folder with code it shows what it worked out and asks only about the gaps. For linkr you might answer:
 
 > A URL shortener for my team. Go 1.25, standard library only, SQLite for storage. `go test ./...` must pass before anything is done. Never commit, never touch `deploy/`.

@@ -37,6 +37,8 @@ The setup wizard writes the instructions every agent in this folder reads, and p
 - **Desktop:** the chat's first tile, **Set up this workspace for agents**, or **Help › Set up the agent harness**.
 - **Terminal:** `/setup`.
 
+Setup first offers to write a specification with `/spec`. For a study it's worth it: what you want to find out, the data, where training runs and the results you'll report become numbered specs in `.agents/specs/` that setup, and later your skills and agents, follow.
+
 Tell it about the course, how you work and what's off limits. For this workspace:
 
 > This is my research and study workspace for CSCE 478/878 Machine Learning: decision trees, ANNs, Bayesian classifiers, genetic algorithms, k-NN, SVMs, ensembles, deep learning, clustering and RL. Four exams (45%), auto-graded labs in R (21%), readings (19%) and a project. I write notes in Markdown with LaTeX and Mermaid, labs in R, experiments in R or Python. Help me with active recall and exam prep. Follow the course's academic integrity and AI policies.
