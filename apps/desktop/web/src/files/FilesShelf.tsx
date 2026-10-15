@@ -25,6 +25,7 @@ import {
   mdiDeleteOutline,
   mdiEyeOffOutline,
   mdiEyeOutline,
+  mdiHistory,
   mdiFilePlusOutline,
   mdiFolderOpenOutline,
   mdiFolderOutline,
@@ -51,6 +52,7 @@ import { t } from "../i18n";
 import { Button, ContextMenu, Dialog, Icon, IconButton, useSnackbar, type MenuEntry } from "../ui/controls";
 import { ResizeHandle } from "../ui/ResizeHandle";
 import { fileIcon } from "./icons";
+import { RevisionsDialog } from "./RevisionsDialog";
 import { ancestors, emptyTree, isFolder, joinPath, moveTarget, parentOf, rows, setExpanded, shownFolders, validName, withChildren, type Tree } from "./tree";
 import { useAdvanced } from "../state";
 
@@ -60,6 +62,7 @@ const gitIcons: Record<GitAction, string> = {
   [GitAction.UNSTAGE]: mdiMinusBoxOutline,
   [GitAction.DISCARD]: mdiUndoVariant,
   [GitAction.IGNORE]: mdiEyeOffOutline,
+  [GitAction.UNIGNORE]: mdiEyeOutline,
 };
 
 const gitLetters: Record<string, string> = { modified: "M", added: "A", deleted: "D", renamed: "R", untracked: "U", conflicted: "!" };
@@ -122,6 +125,7 @@ export function FilesShelf({
   const [menu, setMenu] = useState<{ x: number; y: number; entry: FileEntry | null } | null>(null);
   const [deleting, setDeleting] = useState<FileEntry | null>(null);
   const [discarding, setDiscarding] = useState<FileEntry | null>(null);
+  const [revisionsOf, setRevisionsOf] = useState<string | null>(null);
   // The workspace is a git repository (from its listing): git actions are offered.
   const [repo, setRepo] = useState(false);
   const [error, setError] = useState("");
@@ -349,7 +353,7 @@ export function FilesShelf({
         { label: t("desktop.files.rename"), icon: mdiRenameOutline, detail: "F2", onSelect: () => setNaming({ kind: "rename", path: e.path }) },
         { label: t("desktop.files.delete"), icon: mdiDeleteOutline, danger: true, onSelect: () => setDeleting(e) },
       );
-      const git = gitActions({ folder: isFolder(e), git: e.git, staged: e.staged }, repo);
+      const git = gitActions({ folder: isFolder(e), git: e.git, staged: e.staged, ignored: e.ignored }, repo);
       if (advanced && git.length > 0) {
         items.push("divider", { heading: t("desktop.files.git.heading") });
         for (const a of git) {
@@ -359,6 +363,9 @@ export function FilesShelf({
             danger: a === GitAction.DISCARD,
             onSelect: () => (a === GitAction.DISCARD ? setDiscarding(e) : void runGit(e, a)),
           });
+        }
+        if (!isFolder(e) && !e.ignored && e.git !== "untracked" && e.git !== "added") {
+          items.push({ label: t("desktop.files.revisions.open"), icon: mdiHistory, onSelect: () => setRevisionsOf(e.path) });
         }
         if (onCommit) items.push({ label: t("desktop.commit.open"), icon: mdiSourceCommit, onSelect: onCommit });
       }
@@ -527,6 +534,7 @@ export function FilesShelf({
       {menu && <ContextMenu x={menu.x} y={menu.y} items={menuItems(menu.entry)} onClose={() => setMenu(null)} />}
       {/* At the page's level: the shelf's glass blur would otherwise be the
           frame its dialogs centre in. */}
+      {revisionsOf && createPortal(<RevisionsDialog dir={dir} path={revisionsOf} onClose={() => setRevisionsOf(null)} onRestored={onChanged} />, document.body)}
       {discarding &&
         createPortal(
           <Dialog

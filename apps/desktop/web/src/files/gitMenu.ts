@@ -27,10 +27,11 @@ const tracked = new Set(["modified", "deleted", "renamed"]);
 /**
  * The git actions for an entry, in menu order: stage what isn't staged yet,
  * unstage what is (for a folder, either may apply to what's under it),
- * discard tracked changes (a confirmed action), and ignore anything. None
- * outside a repository. staged is the listing's "all", "some" or "".
+ * discard tracked changes (a confirmed action), and ignore anything, or
+ * take an ignored one out of .gitignore. None outside a repository.
+ * staged is the listing's "all", "some" or "".
  */
-export function gitActions(entry: { folder: boolean; git: string; staged?: string }, repo: boolean): GitAction[] {
+export function gitActions(entry: { folder: boolean; git: string; staged?: string; ignored?: boolean }, repo: boolean): GitAction[] {
   if (!repo) return [];
   const changed = entry.git !== "";
   const staged = entry.staged ?? "";
@@ -38,7 +39,7 @@ export function gitActions(entry: { folder: boolean; git: string; staged?: strin
   if (changed && (entry.folder || staged !== "all")) out.push(GitAction.STAGE);
   if (changed && (entry.folder ? entry.git === "changed" : staged !== "")) out.push(GitAction.UNSTAGE);
   if (entry.folder ? entry.git === "changed" : tracked.has(entry.git)) out.push(GitAction.DISCARD);
-  out.push(GitAction.IGNORE);
+  out.push(entry.ignored ? GitAction.UNIGNORE : GitAction.IGNORE);
   return out;
 }
 
@@ -49,6 +50,7 @@ export const gitKeys: Record<GitAction, { item: string; done: string }> = {
   [GitAction.UNSTAGE]: { item: "desktop.files.git.unstage", done: "desktop.files.git.unstaged" },
   [GitAction.DISCARD]: { item: "desktop.files.git.discard", done: "desktop.files.git.discarded" },
   [GitAction.IGNORE]: { item: "desktop.files.git.ignore", done: "desktop.files.git.ignored" },
+  [GitAction.UNIGNORE]: { item: "desktop.files.git.unignore", done: "desktop.files.git.unignored" },
 };
 
 /** The i18n key of a changed file's staged state, for its flag's tooltip. */
