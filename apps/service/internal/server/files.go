@@ -193,13 +193,16 @@ func (h fileService) GetFileHistory(ctx context.Context, r req[pb.GetFileHistory
 	if err != nil {
 		return nil, err
 	}
-	revs, err := w.FileHistory(ctx, r.Msg.Path, int(r.Msg.Limit))
+	revs, more, err := w.History(ctx, r.Msg.Path, int(r.Msg.Limit), int(r.Msg.Skip))
 	if err != nil {
 		return nil, fileError(err)
 	}
-	out := &pb.GetFileHistoryResponse{}
+	out := &pb.GetFileHistoryResponse{More: more}
 	for _, rev := range revs {
-		out.Revisions = append(out.Revisions, &pb.FileRevision{Commit: rev.Commit, Short: rev.Short, Author: rev.Author, When: timestamp(rev.When), Subject: rev.Subject, Path: rev.Path})
+		out.Revisions = append(out.Revisions, &pb.FileRevision{
+			Commit: rev.Commit, Short: rev.Short, Author: rev.Author, Email: rev.Email, When: timestamp(rev.When), Subject: rev.Subject, Path: rev.Path,
+			Parents: rev.Parents, Added: int32(rev.Added), Removed: int32(rev.Removed), Files: int32(rev.Files),
+		})
 	}
 	return ok(out)
 }
@@ -209,11 +212,17 @@ func (h fileService) GetFileRevisionDiff(ctx context.Context, r req[pb.GetFileRe
 	if err != nil {
 		return nil, err
 	}
-	diff, err := w.FileRevisionDiff(ctx, r.Msg.Path, r.Msg.Commit)
+	against := map[pb.RevisionDiff]engine.DiffAgainst{
+		pb.RevisionDiff_REVISION_DIFF_UNSPECIFIED: engine.AgainstNow,
+		pb.RevisionDiff_REVISION_DIFF_NOW:         engine.AgainstNow,
+		pb.RevisionDiff_REVISION_DIFF_PARENT:      engine.AgainstParent,
+		pb.RevisionDiff_REVISION_DIFF_OTHER:       engine.AgainstOther,
+	}[r.Msg.Against]
+	diff, truncated, err := w.RevisionDiff(ctx, r.Msg.Path, r.Msg.Commit, r.Msg.OtherCommit, against)
 	if err != nil {
 		return nil, fileError(err)
 	}
-	return ok(&pb.GetFileRevisionDiffResponse{Diff: diff})
+	return ok(&pb.GetFileRevisionDiffResponse{Diff: diff, Truncated: truncated})
 }
 
 func (h fileService) RestoreFileRevision(ctx context.Context, r req[pb.RestoreFileRevisionRequest]) (*connect.Response[pb.RestoreFileRevisionResponse], error) {
@@ -221,11 +230,15 @@ func (h fileService) RestoreFileRevision(ctx context.Context, r req[pb.RestoreFi
 	if err != nil {
 		return nil, err
 	}
-	version, err := w.RestoreFileRevision(ctx, r.Msg.Path, r.Msg.Commit, r.Msg.Version)
+	version, files, err := w.Restore(ctx, r.Msg.Path, r.Msg.Commit, r.Msg.Version, r.Msg.Preview)
 	if err != nil {
 		return nil, fileError(err)
 	}
-	return ok(&pb.RestoreFileRevisionResponse{Version: version})
+	out := &pb.RestoreFileRevisionResponse{Version: version}
+	for _, f := range files {
+		out.Files = append(out.Files, &pb.RestoredFile{Path: f.Path, Recreated: f.Recreated})
+	}
+	return ok(out)
 }
 
 func (h fileService) RenderDocx(ctx context.Context, r req[pb.RenderDocxRequest]) (*connect.Response[pb.RenderDocxResponse], error) {

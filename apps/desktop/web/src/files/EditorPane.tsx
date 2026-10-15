@@ -16,11 +16,11 @@
 
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { openSearchPanel } from "@codemirror/search";
-import { mdiAlertCircleOutline, mdiArrowExpandHorizontal, mdiAt, mdiChevronRight, mdiClose, mdiContentSave, mdiExport, mdiFilePdfBox, mdiFileWordBoxOutline, mdiLockOutline, mdiMagnify, mdiMessagePlusOutline, mdiWrap } from "@mdi/js";
+import { mdiAlertCircleOutline, mdiArrowExpandHorizontal, mdiAt, mdiChevronRight, mdiClose, mdiContentSave, mdiExport, mdiFilePdfBox, mdiFileWordBoxOutline, mdiHistory, mdiLockOutline, mdiMagnify, mdiMessagePlusOutline, mdiWrap } from "@mdi/js";
 import { files } from "../api";
 import { inApp, printPDF } from "../desktop";
 import { message } from "../errors";
-import { addToContext, findInFileEvent, openFile } from "../events";
+import { addToContext, findInFileEvent, openFile, showHistory } from "../events";
 import { FindBar } from "./FindBar";
 import { EditorView } from "@codemirror/view";
 import { t, tn } from "../i18n";
@@ -313,6 +313,8 @@ export function EditorPane({ model, onReveal, onCursor }: { model: EditorModel; 
       "divider",
       item("saved", "desktop.files.tab.close_saved"),
       item("all", "desktop.files.tab.close_all"),
+      "divider",
+      { label: t("desktop.files.revisions.open"), icon: mdiHistory, onSelect: () => showHistory({ dir: model.dir, path, folder: false }) },
     ];
   };
 

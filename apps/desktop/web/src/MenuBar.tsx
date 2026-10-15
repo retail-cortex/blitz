@@ -37,6 +37,7 @@ import {
   mdiShieldCheckOutline,
   mdiRobotOutline,
   mdiPlus,
+  mdiSourceBranch,
   mdiSourceCommit,
 } from "@mdi/js";
 import { workers, workspaces } from "./api";
@@ -83,6 +84,7 @@ export function MenuBar({
   dir = "",
   onChanges,
   onCommit,
+  onHistory,
   onAgent,
   onWorker,
   onSearch,
@@ -94,6 +96,8 @@ export function MenuBar({
   onChanges?: (s: ChangesSource) => void;
   /** Opens the commit dialog (Changes › Commit…). */
   onCommit?: () => void;
+  /** Shows the workspace's history (View revisions for every file). */
+  onHistory?: () => void;
   onAgent?: (i: ItemIntent) => void;
   onWorker?: (i: ItemIntent) => void;
   onSearch: () => void;
@@ -139,6 +143,7 @@ export function MenuBar({
     { label: t("desktop.menu.changes.session"), detail: t("desktop.changes.session"), icon: mdiHistory, onSelect: () => onChanges?.("session") },
     { label: t("desktop.menu.changes.git"), icon: mdiGit, onSelect: () => onChanges?.("git") },
   ];
+  if (onHistory) changes.push({ label: t("desktop.menu.changes.history"), icon: mdiSourceBranch, onSelect: onHistory });
   if (onCommit) changes.push("divider", { label: t("desktop.commit.open"), icon: mdiSourceCommit, onSelect: onCommit });
 
   const agentItems: MenuEntry[] = [

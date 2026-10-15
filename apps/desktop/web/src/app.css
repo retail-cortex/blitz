@@ -964,3 +964,41 @@ code.file-link:hover { text-decoration-color: currentColor; }
 /* Settings › Skills: the search field takes the room, the scope fits its text. */
 .skill-search > .input { flex: 1 1 auto; min-width: 0; width: auto; }
 .skill-search > .select { flex: 0 1 auto; width: auto; max-width: 40%; }
+
+/* History (FIL-59b): a graph column of lanes beside each commit, date
+   headings, author dots and change bars. Lane colours stay readable in
+   both themes. */
+:root {
+  --graph-0: #1a73e8; --graph-1: #e8710a; --graph-2: #188038; --graph-3: #a142f4;
+  --graph-4: #d93025; --graph-5: #12a4af; --graph-6: #c5221f; --graph-7: #f9ab00;
+}
+.history .revision-list { padding-right: 4px; display: flex; flex-direction: column; }
+.history .revision-list > * { flex: none; }
+.history .revision-list > .btn { align-self: center; margin: 8px 0; }
+.history-row { display: flex; align-items: center; gap: 8px; width: 100%; height: 52px; padding: 0 8px 0 0; border: 0; border-radius: var(--md-shape-sm); background: none; color: inherit; text-align: left; cursor: pointer; }
+.history-row:hover { background: var(--md-surface-container-highest); }
+.history-row.selected { background: var(--accent-tint); }
+.history-group { display: flex; align-items: center; gap: 8px; height: 28px; }
+.history-graph { flex: none; overflow: visible; }
+.history-graph .lane { fill: none; stroke-width: 2; }
+.history-graph .node { stroke: var(--md-surface-container-high); stroke-width: 2; }
+.history-text { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+.author-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; vertical-align: middle; }
+.history-size { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; width: 72px; flex: none; }
+.history-bar { display: flex; height: 6px; min-width: 4px; border-radius: 3px; overflow: hidden; }
+.history-bar .add { background: var(--graph-2); }
+.history-bar .del { background: var(--graph-4); }
+.history-head { position: sticky; top: 0; z-index: 1; display: flex; flex-direction: row; flex-wrap: wrap; align-items: center; gap: 8px; padding: 0 0 8px; background: var(--md-surface-container-high); text-align: start; }
+.history-head > .spacer { flex: 1; min-width: 0; }
+@media (min-width: 761px) { .revisions.history { grid-template-columns: minmax(300px, 440px) 1fr; } }
+.history-files { margin: 8px 0 0; padding-left: 20px; max-height: 240px; overflow: auto; }
+.history-graph .lane-0 { stroke: var(--graph-0); } .history-graph .node.lane-0 { fill: var(--graph-0); } .history-graph .node.merge.lane-0 { stroke: var(--graph-0); }
+.history-graph .lane-1 { stroke: var(--graph-1); } .history-graph .node.lane-1 { fill: var(--graph-1); } .history-graph .node.merge.lane-1 { stroke: var(--graph-1); }
+.history-graph .lane-2 { stroke: var(--graph-2); } .history-graph .node.lane-2 { fill: var(--graph-2); } .history-graph .node.merge.lane-2 { stroke: var(--graph-2); }
+.history-graph .lane-3 { stroke: var(--graph-3); } .history-graph .node.lane-3 { fill: var(--graph-3); } .history-graph .node.merge.lane-3 { stroke: var(--graph-3); }
+.history-graph .lane-4 { stroke: var(--graph-4); } .history-graph .node.lane-4 { fill: var(--graph-4); } .history-graph .node.merge.lane-4 { stroke: var(--graph-4); }
+.history-graph .lane-5 { stroke: var(--graph-5); } .history-graph .node.lane-5 { fill: var(--graph-5); } .history-graph .node.merge.lane-5 { stroke: var(--graph-5); }
+.history-graph .lane-6 { stroke: var(--graph-6); } .history-graph .node.lane-6 { fill: var(--graph-6); } .history-graph .node.merge.lane-6 { stroke: var(--graph-6); }
+.history-graph .lane-7 { stroke: var(--graph-7); } .history-graph .node.lane-7 { fill: var(--graph-7); } .history-graph .node.merge.lane-7 { stroke: var(--graph-7); }
+/* A merge is a ring in its lane's colour. */
+.history-graph .node.merge { fill: var(--md-surface-container-high); stroke-width: 2.5; }

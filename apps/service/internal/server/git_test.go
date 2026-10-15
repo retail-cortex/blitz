@@ -196,6 +196,22 @@ func TestStagedFlagsAndDiff(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, engine.FileVersion([]byte("one\n")), rr.Msg.Version)
 
+	// A folder's (here the workspace's) history: parents, what a commit
+	// changed, two compared, and a restore's preview.
+	all, err := files.GetFileHistory(ctx, connect.NewRequest(&pb.GetFileHistoryRequest{Workspace: dir, Path: "", Limit: 1}))
+	require.NoError(t, err)
+	require.Len(t, all.Msg.Revisions, 1)
+	assert.Equal(t, 1, int(all.Msg.Revisions[0].Files))
+	changes, err := files.GetFileRevisionDiff(ctx, connect.NewRequest(&pb.GetFileRevisionDiffRequest{Workspace: dir, Path: "", Commit: rev.Commit, Against: pb.RevisionDiff_REVISION_DIFF_PARENT}))
+	require.NoError(t, err)
+	assert.Contains(t, changes.Msg.Diff, "+one", "what the first commit changed")
+	same, err := files.GetFileRevisionDiff(ctx, connect.NewRequest(&pb.GetFileRevisionDiffRequest{Workspace: dir, Path: "", Commit: rev.Commit, Against: pb.RevisionDiff_REVISION_DIFF_OTHER, OtherCommit: rev.Commit}))
+	require.NoError(t, err)
+	assert.Empty(t, same.Msg.Diff, "a commit against itself")
+	preview, err := files.RestoreFileRevision(ctx, connect.NewRequest(&pb.RestoreFileRevisionRequest{Workspace: dir, Path: "", Commit: rev.Commit, Preview: true}))
+	require.NoError(t, err)
+	assert.Empty(t, preview.Msg.Files, "a.txt is as it was; n.txt, added since, is kept")
+
 	// Remove from .gitignore, and a rule it can't remove.
 	write(".gitignore", "*.log\n")
 	write("x.log", "x")

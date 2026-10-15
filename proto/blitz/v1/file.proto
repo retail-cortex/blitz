@@ -53,14 +53,18 @@ service FileService {
   // NOT_A_REPOSITORY outside one; IGNORED_ELSEWHERE when another rule
   // still ignores what's taken out (pattern and source in the metadata).
   rpc GitFileAction(GitFileActionRequest) returns (GitFileActionResponse);
-  // The commits that changed a file, newest first, following renames
-  // (View revisions). NOT_A_REPOSITORY outside one.
+  // The commits that changed a file (following renames), a folder or the
+  // whole workspace (path ""), newest first, a page at a time, with their
+  // parents for a graph (View revisions). NOT_A_REPOSITORY outside one.
   rpc GetFileHistory(GetFileHistoryRequest) returns (GetFileHistoryResponse);
-  // How a file today differs from one of its revisions, as a unified diff
-  // (BAD_REVISION for a revision not in its history).
+  // A unified diff for a file or folder: from a revision to now, what a
+  // revision changed, or between two revisions (BAD_REVISION for one that
+  // isn't a commit of the history).
   rpc GetFileRevisionDiff(GetFileRevisionDiffRequest) returns (GetFileRevisionDiffResponse);
-  // Puts a file back as it was in one of its revisions, if it still has
-  // the version given (FILE_CHANGED if not); the index is left alone.
+  // Puts a file back as it was in a revision, if it still has the version
+  // given (FILE_CHANGED if not); or a folder's files changed or deleted
+  // since, keeping those added since (preview: only says which). The
+  // index is left alone.
   rpc RestoreFileRevision(RestoreFileRevisionRequest) returns (RestoreFileRevisionResponse);
   // Markdown written as a Word document (.docx), its images read beside
   // the file it belongs to; the caller writes it (Export as Word, /export).
@@ -240,7 +244,7 @@ message GitFileActionRequest {
 // Response message for FileService.GitFileAction.
 message GitFileActionResponse {}
 
-// One commit that changed a file.
+// One commit in a history.
 message FileRevision {
   // The full hash, and abbreviated.
   string commit = 1;
@@ -249,52 +253,95 @@ message FileRevision {
   google.protobuf.Timestamp when = 4;
   // The commit message's first line.
   string subject = 5;
-  // The file's path at that commit, from the repository's root.
+  // A file's path at that commit, from the repository's root; "" in a
+  // folder's history.
   string path = 6;
+  // Its parents (full hashes), as the history is simplified to the path.
+  repeated string parents = 7;
+  string email = 8;
+  // The lines it added and removed in the file or folder, in how many files.
+  int32 added = 9;
+  int32 removed = 10;
+  int32 files = 11;
 }
 
 // Request message for FileService.GetFileHistory.
 message GetFileHistoryRequest {
   string workspace = 1;
-  // Workspace-relative, with "/".
+  // Workspace-relative, with "/": a file, a folder, or "" for the workspace.
   string path = 2;
-  // At most this many (0: 50; never more than 200).
+  // At most this many (0: 100; never more than 500).
   int32 limit = 3;
+  // After this many of the newest.
+  int32 skip = 4;
 }
 
 // Response message for FileService.GetFileHistory.
 message GetFileHistoryResponse {
   repeated FileRevision revisions = 1;
+  // Older revisions follow.
+  bool more = 2;
+}
+
+// What a revision is compared with.
+enum RevisionDiff {
+  // Not said: as REVISION_DIFF_NOW.
+  REVISION_DIFF_UNSPECIFIED = 0;
+  // The working copy: how it differs from the revision.
+  REVISION_DIFF_NOW = 1;
+  // Its parent: what the revision changed.
+  REVISION_DIFF_PARENT = 2;
+  // Another revision (other_commit).
+  REVISION_DIFF_OTHER = 3;
 }
 
 // Request message for FileService.GetFileRevisionDiff.
 message GetFileRevisionDiffRequest {
   string workspace = 1;
+  // A file, a folder, or "" for the workspace.
   string path = 2;
-  // A commit hash from the file's history.
+  // A commit hash.
   string commit = 3;
+  RevisionDiff against = 4;
+  // The later revision, for REVISION_DIFF_OTHER.
+  string other_commit = 5;
 }
 
 // Response message for FileService.GetFileRevisionDiff.
 message GetFileRevisionDiffResponse {
-  // Unified diff from the revision to today's file; "" when the same.
+  // Unified diff; "" when the same.
   string diff = 1;
+  // Cut short at 2 MB, at a line.
+  bool truncated = 2;
 }
 
 // Request message for FileService.RestoreFileRevision.
 message RestoreFileRevisionRequest {
   string workspace = 1;
+  // A file, a folder, or "" for the workspace.
   string path = 2;
   string commit = 3;
-  // The file's version as the caller last saw it ("" when it doesn't
+  // A file's version as the caller last saw it ("" when it doesn't
   // exist).
   string version = 4;
+  // For a folder: only say which files it would put back.
+  bool preview = 5;
+}
+
+// A file a folder's restore puts back.
+message RestoredFile {
+  // Workspace-relative, with "/".
+  string path = 1;
+  // It was deleted since, and comes back.
+  bool recreated = 2;
 }
 
 // Response message for FileService.RestoreFileRevision.
 message RestoreFileRevisionResponse {
-  // The file's new version.
+  // A file's new version.
   string version = 1;
+  // A folder's files it put back (or would, with preview).
+  repeated RestoredFile files = 2;
 }
 
 // Request message for FileService.RenderDocx.

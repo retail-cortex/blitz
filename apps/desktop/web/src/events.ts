@@ -177,6 +177,19 @@ export function revealInTree(detail: { dir: string; path: string }) {
   window.dispatchEvent(new CustomEvent(revealInTreeEvent, { detail }));
 }
 
+/** The event that opens a history (View revisions, FIL-59b). */
+export const historyEvent = "blitz:history";
+/** What a history is of: a file, a folder, or the workspace (path ""). */
+export interface HistoryDetail {
+  dir: string;
+  path: string;
+  folder: boolean;
+}
+/** Asks a workspace to show the history of a file, a folder or itself. */
+export function showHistory(detail: HistoryDetail) {
+  window.dispatchEvent(new CustomEvent(historyEvent, { detail }));
+}
+
 /** The event that opens Go to file. */
 export const goToFileEvent = "blitz:go-to-file";
 /** Asks a workspace to open Go to file. */
