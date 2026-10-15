@@ -948,3 +948,7 @@ code.file-link:hover { text-decoration-color: currentColor; }
   .docs-pane .markdown table td:not(:first-child)[data-label]:not([data-label=""])::before { content: attr(data-label) ": "; color: var(--md-on-surface-variant); font-weight: 500; }
   .docs-pane .markdown table td code { white-space: normal; overflow-wrap: anywhere; }
 }
+
+/* Settings › Skills: the search field takes the room, the scope fits its text. */
+.skill-search > .input { flex: 1 1 auto; min-width: 0; width: auto; }
+.skill-search > .select { flex: 0 1 auto; width: auto; max-width: 40%; }

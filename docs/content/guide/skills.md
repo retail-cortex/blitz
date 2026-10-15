@@ -26,6 +26,46 @@ scripts:
 ---
 ```
 
+## Skills from a registry
+
+A registry, such as your organization's Castor registry, offers skills to install by name. Each skill is a `.zip` whose SHA-256 the registry gives, and Blitz refuses one that doesn't match.
+
+```sh
+blitz skills registry add https://castor.example.com/skills/index.json --token-stdin   # the token is kept in the keychain
+blitz skills search literature
+blitz skills install castor/lit-review              # for you, in every workspace
+blitz skills install castor/lit-review --project    # in this project's .agents/skills, for everyone
+blitz skills update                                 # every skill whose registry has a new version
+blitz skills uninstall lit-review
+```
+
+In a session, `/skills search` also lists what your registries offer, and `/skills install <registry>/<name>` installs one. In the desktop app it's **Settings › Skills** (with the advanced settings shown): add a registry, find skills, install them for you or the open workspace, update and uninstall. Open conversations can use a new skill at once, with no restart.
+
+| Command | Does |
+|---|---|
+| `blitz skills registry add <url>` | Adds a registry, after reading its index; `--name` names it, `--token-stdin` reads an access token |
+| `blitz skills registry list`, `remove <name>` | Lists them, or forgets one and its token (its skills stay) |
+| `blitz skills search [words]` | Skills whose name or description has every word |
+| `blitz skills install <registry>/<name>` | Installs one (`--project`: in this folder's `.agents/skills`) |
+| `blitz skills update [name…]`, `uninstall <name>`, `list` | Keeps them up to date, removes one, lists them |
+
+A registry is `https://` (or `http://localhost`, or a local file), and the token is only ever sent to the registry's own host. An installed skill is an ordinary skill folder: the skills policy below applies to it as to any other, and Blitz never replaces a folder it didn't install.
+
+**Serving a registry.** An index is a JSON file:
+
+```json
+{
+  "version": 1,
+  "name": "Castor",
+  "skills": [
+    {"name": "lit-review", "description": "Reviews the literature on a question", "version": "1.2.0",
+     "archive_url": "lit-review-1.2.0.zip", "sha256": "9f2c…", "castor_id": "sk_lit"}
+  ]
+}
+```
+
+`archive_url` is absolute or relative to the index. The archive holds `SKILL.md` (naming the skill) at its root or in one folder, and the skill's other files.
+
 ## The skills policy
 
 `[skills.policy]` caps what skills may ask for: the approval tier, script languages, network, which environment variables pass through, timeouts, trusted content hashes, denied tools and scopes, and packages (the index, wheels only, allow and deny lists, pinning). The stricter of the skill's request and the policy always applies:

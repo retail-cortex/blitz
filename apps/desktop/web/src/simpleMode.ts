@@ -21,7 +21,7 @@
 // with useAdvanced (state.tsx); the larger ones are here.
 
 /** The Settings dialog's sections, in order. */
-export const allSections = ["appearance", "documents", "providers", "permissions", "agents", "file", "workspaces", "service", "logs", "about"] as const;
+export const allSections = ["appearance", "documents", "providers", "permissions", "agents", "skills", "file", "workspaces", "service", "logs", "about"] as const;
 /** A section of the Settings dialog. */
 export type SectionId = (typeof allSections)[number];
 
