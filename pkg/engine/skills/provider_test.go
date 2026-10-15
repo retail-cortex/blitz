@@ -131,3 +131,38 @@ func TestSearchEmptyQueryConcurrentWithWriter(t *testing.T) {
 	n = len(p.Search("no-such-skill-xyz"))
 	assert.Equal(t, 0, n, "expected no matches, got %d", n)
 }
+
+// A skill installed or removed after the workspace opened comes and goes
+// at the next look (SK-95).
+func TestProviderNoticesChangedFolders(t *testing.T) {
+	dir := t.TempDir()
+	p, err := NewProvider()
+	require.NoError(t, err)
+	require.NoError(t, p.DiscoverExternal([]string{dir, filepath.Join(dir, "missing")}))
+	_, ok := p.Get("fresh")
+	assert.False(t, ok)
+
+	add := func(name string) {
+		t.Helper()
+		require.NoError(t, os.MkdirAll(filepath.Join(dir, name), 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(dir, name, "SKILL.md"), []byte("---\nname: "+name+"\ndescription: new\n---\nbody\n"), 0o644))
+	}
+	add("fresh")
+	// Some file systems keep a second's resolution: make the change show.
+	future := time.Now().Add(2 * time.Second)
+	require.NoError(t, os.Chtimes(dir, future, future))
+	s, ok := p.Get("fresh")
+	require.True(t, ok, "installed after opening")
+	assert.Equal(t, "new", s.Description)
+	assert.NotEmpty(t, p.Search("fresh"))
+
+	require.NoError(t, os.RemoveAll(filepath.Join(dir, "fresh")))
+	later := future.Add(2 * time.Second)
+	require.NoError(t, os.Chtimes(dir, later, later))
+	for _, s := range p.List() {
+		assert.NotEqual(t, "fresh", s.Name, "removed")
+	}
+	_, ok = p.Get("fresh")
+	assert.False(t, ok)
+	assert.NotEmpty(t, p.List(), "the built-in skills stay")
+}

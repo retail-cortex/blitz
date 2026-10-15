@@ -21,7 +21,7 @@ Method: every documented command, tool, flag, hook event, setting and surface of
 
 **Priorities.** **P0**: affects everyday use or safety parity; do first. **P1**: important for common workflows. **P2**: valuable, less common. Sizes as in 026 (S ≤ ½ day, M 1–2 days, L 3+ days).
 
-**Not in scope** (§11): features tied to a vendor's accounts or cloud (claude.ai login, cloud sessions, mobile, Slack, Remote Control over claude.ai, marketplace directories run by the vendor), and IDE editing features that aren't agent features (tab completion). Where a local equivalent makes sense, it is listed instead.
+**Not in scope** (§11): features tied to a vendor's accounts or cloud (claude.ai login, cloud sessions, mobile, Slack, Remote Control over claude.ai, marketplace directories run by the vendor; registries the user adds, such as Castor's, are in scope: [spec_skills_013](spec_skills_013.md) SK-90), and IDE editing features that aren't agent features (tab completion). Where a local equivalent makes sense, it is listed instead.
 
 **Decisions** (§12): five gaps conflicted with earlier Blitz decisions. The owner decided them on 2026-09-26; the resulting requirements are in the sections below, and §12 records what was decided and why.
 

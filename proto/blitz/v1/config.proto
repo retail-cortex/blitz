@@ -16,6 +16,8 @@ syntax = "proto3";
 
 package blitz.v1;
 
+import "google/protobuf/timestamp.proto";
+
 option go_package = "github.com/retail-cortex/blitz/proto/blitz/v1;blitzv1";
 
 // ConfigService reads and changes the settings: the global file
@@ -86,6 +88,26 @@ service ConfigService {
   // when they don't), and their own catalogs ([ui] locales_dir): the
   // desktop app's System language follows them.
   rpc GetInterfaceLanguage(GetInterfaceLanguageRequest) returns (GetInterfaceLanguageResponse);
+  // The skill registries the user added, and the skills installed from
+  // them (spec_skills_013 SK-90..SK-96).
+  rpc ListSkillRegistries(ListSkillRegistriesRequest) returns (ListSkillRegistriesResponse);
+  // Checks a registry's index and remembers it, its token in the keychain
+  // (REGISTRY_FAILED when the index can't be read).
+  rpc AddSkillRegistry(AddSkillRegistryRequest) returns (AddSkillRegistryResponse);
+  // Forgets a registry and its token; its skills stay (NO_REGISTRY).
+  rpc RemoveSkillRegistry(RemoveSkillRegistryRequest) returns (RemoveSkillRegistryResponse);
+  // The registries' skills that match a query, and why any registry
+  // couldn't be read.
+  rpc SearchRegistrySkills(SearchRegistrySkillsRequest) returns (SearchRegistrySkillsResponse);
+  // Installs a skill for the user or in a workspace, its archive checked
+  // against the hash the registry gives (NOT_OFFERED, AMBIGUOUS,
+  // HASH_MISMATCH, SKILL_EXISTS, REGISTRY_FAILED). Open sessions see it
+  // at once.
+  rpc InstallRegistrySkill(InstallRegistrySkillRequest) returns (InstallRegistrySkillResponse);
+  // Updates installed skills whose registry offers another archive.
+  rpc UpdateRegistrySkills(UpdateRegistrySkillsRequest) returns (UpdateRegistrySkillsResponse);
+  // Removes a skill installed from a registry (NOT_INSTALLED).
+  rpc UninstallRegistrySkill(UninstallRegistrySkillRequest) returns (UninstallRegistrySkillResponse);
 }
 
 // Request message for ConfigService.GetInterfaceLanguage.
@@ -507,4 +529,115 @@ message SetReadOnlyDefaultsRequest {
 // Response message for ConfigService.SetReadOnlyDefaults.
 message SetReadOnlyDefaultsResponse {
   ConfigChange change = 1;
+}
+
+// A skill registry the user added.
+message SkillRegistry {
+  string name = 1;
+  string url = 2;
+  // Its token is in the keychain.
+  bool has_token = 3;
+}
+
+// A skill a registry offers.
+message RegistrySkill {
+  string registry = 1;
+  string name = 2;
+  string description = 3;
+  string version = 4;
+  // Its id in the Castor registry, when it has one.
+  string castor_id = 5;
+}
+
+// A skill installed from a registry.
+message InstalledSkill {
+  string name = 1;
+  string registry = 2;
+  string version = 3;
+  // Its folder.
+  string dir = 4;
+  google.protobuf.Timestamp installed = 5;
+}
+
+// Request message for ConfigService.ListSkillRegistries.
+message ListSkillRegistriesRequest {}
+
+// Response message for ConfigService.ListSkillRegistries.
+message ListSkillRegistriesResponse {
+  repeated SkillRegistry registries = 1;
+  repeated InstalledSkill installed = 2;
+}
+
+// Request message for ConfigService.AddSkillRegistry.
+message AddSkillRegistryRequest {
+  // An https URL, or a local file, serving a skills index.
+  string url = 1;
+  // What to call it ("" for the index's own name).
+  string name = 2;
+  // An access token for it ("" for none).
+  string token = 3;
+}
+
+// Response message for ConfigService.AddSkillRegistry.
+message AddSkillRegistryResponse {
+  SkillRegistry registry = 1;
+  int32 skills = 2;
+}
+
+// Request message for ConfigService.RemoveSkillRegistry.
+message RemoveSkillRegistryRequest {
+  string name = 1;
+}
+
+// Response message for ConfigService.RemoveSkillRegistry.
+message RemoveSkillRegistryResponse {}
+
+// Request message for ConfigService.SearchRegistrySkills.
+message SearchRegistrySkillsRequest {
+  // Words each hit has in its name or description ("" for all).
+  string query = 1;
+}
+
+// Response message for ConfigService.SearchRegistrySkills.
+message SearchRegistrySkillsResponse {
+  repeated RegistrySkill skills = 1;
+  // Registries that couldn't be read, and why.
+  repeated string problems = 2;
+}
+
+// Request message for ConfigService.InstallRegistrySkill.
+message InstallRegistrySkillRequest {
+  // "registry/name", or a name only one registry offers.
+  string ref = 1;
+  // The workspace to install it in (its .agents/skills); "" for the user.
+  string workspace = 2;
+}
+
+// Response message for ConfigService.InstallRegistrySkill.
+message InstallRegistrySkillResponse {
+  InstalledSkill skill = 1;
+}
+
+// Request message for ConfigService.UpdateRegistrySkills.
+message UpdateRegistrySkillsRequest {
+  // The skills to update; none for all.
+  repeated string names = 1;
+}
+
+// Response message for ConfigService.UpdateRegistrySkills.
+message UpdateRegistrySkillsResponse {
+  repeated InstalledSkill updated = 1;
+  repeated string problems = 2;
+}
+
+// Request message for ConfigService.UninstallRegistrySkill.
+message UninstallRegistrySkillRequest {
+  string name = 1;
+  // The workspace whose skill it is, when the user has none of the name.
+  string workspace = 2;
+}
+
+// Response message for ConfigService.UninstallRegistrySkill.
+message UninstallRegistrySkillResponse {
+  InstalledSkill skill = 1;
 }

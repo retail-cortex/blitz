@@ -21,9 +21,11 @@ import (
 	"os"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/retail-cortex/blitz/pkg/api"
 	"github.com/retail-cortex/blitz/pkg/i18n"
+	"github.com/retail-cortex/blitz/pkg/skillreg"
 )
 
 // ErrExit is returned by HandleCommand when the user asks to quit.
@@ -402,7 +404,67 @@ func handleSkillsCommand(args []string, app *App) {
 		for _, s := range matched {
 			fmt.Printf("  • %s%s%s: %s\n", Bold, safe(s.Name), Reset, safe(s.Description))
 		}
+		searchRegistries(query)
 		fmt.Println()
+
+	case "registry", "registries":
+		regs, err := skillRegistries().Registries()
+		if err != nil {
+			fmt.Printf("%s✗ %v%s\n", Red, safe(err.Error()), Reset)
+			return
+		}
+		if len(regs) == 0 {
+			fmt.Println(i18n.T("skills.registry_none"))
+			return
+		}
+		fmt.Printf("\n%s%s:%s\n", Bold, i18n.T("skills.registry_title"), Reset)
+		for _, r := range regs {
+			fmt.Printf("  • %s%s%s %s\n", Bold, safe(r.Name), Reset, Dim+safe(r.URL)+Reset)
+		}
+		fmt.Println()
+
+	case "install":
+		if len(args) < 2 {
+			fmt.Printf("%s%s%s\n", Yellow, i18n.T("skills.install_usage"), Reset)
+			return
+		}
+		dir := ""
+		if len(args) > 2 && args[2] == "--project" {
+			dir = app.Workspace.Dir()
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+		defer cancel()
+		i, err := skillRegistries().Install(ctx, args[1], dir)
+		if err != nil {
+			fmt.Printf("%s✗ %s%s\n", Red, safe(err.Error()), Reset)
+			return
+		}
+		fmt.Printf("%s✓ %s%s\n", Green, i18n.T("skills.installed_from", "name", i.Name, "version", i.Version, "registry", i.Registry), Reset)
+	}
+}
+
+// skillRegistries is the user's registries (a variable for tests).
+var skillRegistries = skillreg.Default
+
+// searchRegistries lists what the user's registries offer for query, if
+// they added any.
+func searchRegistries(query string) {
+	store := skillRegistries()
+	if regs, _ := store.Registries(); len(regs) == 0 {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	found, err := store.Search(ctx, query)
+	fmt.Printf("\n%s%s:%s\n", Bold, i18n.T("skills.registry_hits", "count", len(found)), Reset)
+	for _, f := range found {
+		fmt.Printf("  • %s%s/%s%s %s: %s\n", Bold, safe(f.Registry), safe(f.Name), Reset, Dim+safe(f.Version)+Reset, safe(f.Description))
+	}
+	if err != nil {
+		fmt.Printf("%s%s%s\n", Yellow, safe(err.Error()), Reset)
+	}
+	if len(found) > 0 {
+		fmt.Printf("%s%s%s\n", Dim, i18n.T("skills.install_hint"), Reset)
 	}
 }
 

@@ -534,6 +534,14 @@ const fakeFiles = new Map<string, string>([
   ["bin/shop", "\u0000binary"],
 ]);
 const fakeGit: Record<string, string> = { "internal/cart/discount.go": "modified", "internal/cart/discount_test.go": "untracked", "web/app.ts": "added" };
+// Skill registries in the fake: Castor's offer, and what was installed.
+const fakeRegistries: { name: string; url: string; hasToken: boolean }[] = [];
+const fakeRegistrySkills = [
+  { registry: "castor", name: "lit-review", description: "Reviews the literature on a question and keeps refs.bib in order", version: "1.2.0", castorId: "sk_lit" },
+  { registry: "castor", name: "stats-critic", description: "Checks a study's statistics: tests, power, multiple comparisons", version: "0.4.1", castorId: "sk_stats" },
+  { registry: "castor", name: "release-notes", description: "Drafts user-facing release notes from merged pull requests", version: "2.0.0", castorId: "sk_notes" },
+];
+const fakeInstalledSkills: { name: string; registry: string; version: string; dir: string; installed: ReturnType<typeof now> }[] = [];
 // What .gitignore ignores in the fake: bin/, *.log, and the lines Add to
 // .gitignore wrote.
 const fakeIgnored = (p: string) =>
@@ -953,6 +961,35 @@ export function installFake() {
         }),
       });
       service(ConfigService, {
+        listSkillRegistries: () => ({ registries: fakeRegistries, installed: fakeInstalledSkills }),
+        addSkillRegistry: ({ url, name, token }) => {
+          if (!/^https:\/\//.test(url) && !url.startsWith("/")) throw new ConnectError(`${url}: a registry needs https (http only for localhost)`, Code.FailedPrecondition);
+          const reg = { name: name || "castor", url, hasToken: !!token };
+          fakeRegistries.splice(0, fakeRegistries.length, ...fakeRegistries.filter((r) => r.name !== reg.name), reg);
+          return { registry: reg, skills: fakeRegistrySkills.length };
+        },
+        removeSkillRegistry: ({ name }) => {
+          fakeRegistries.splice(0, fakeRegistries.length, ...fakeRegistries.filter((r) => r.name !== name));
+          return {};
+        },
+        searchRegistrySkills: ({ query }) => ({
+          skills: fakeRegistries.length ? fakeRegistrySkills.filter((k) => query.toLowerCase().split(/\s+/).every((w) => (k.name + " " + k.description).toLowerCase().includes(w))) : [],
+          problems: [],
+        }),
+        installRegistrySkill: ({ ref, workspace }) => {
+          const [registry, name] = ref.includes("/") ? ref.split("/") : ["castor", ref];
+          const k = fakeRegistrySkills.find((x) => x.name === name);
+          if (!k) throw new ConnectError(`no registry offers that skill: ${ref}`, Code.NotFound);
+          const skill = { name, registry, version: k.version, dir: workspace ? `${workspace}/.agents/skills/${name}` : `/home/me/.blitz/skills/${name}`, installed: now() };
+          fakeInstalledSkills.splice(0, fakeInstalledSkills.length, ...fakeInstalledSkills.filter((i) => i.dir !== skill.dir), skill);
+          return { skill };
+        },
+        updateRegistrySkills: () => ({ updated: [], problems: [] }),
+        uninstallRegistrySkill: ({ name }) => {
+          const i = fakeInstalledSkills.findIndex((x) => x.name === name);
+          const [skill] = fakeInstalledSkills.splice(i, 1);
+          return { skill };
+        },
         getInterfaceLanguage: () => ({ locale: "", catalogs: [] }),
         // Sign-ins: gcloud and aws "installed", ant and az not.
         getSignIn: ({ provider }) => ({

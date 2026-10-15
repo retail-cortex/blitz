@@ -960,3 +960,7 @@ code.file-link:hover { text-decoration-color: currentColor; }
   .revisions { grid-template-columns: 1fr; grid-template-rows: minmax(120px, 35%) 1fr; }
   .revision-list { border-right: 0; border-bottom: 1px solid var(--md-outline-variant); padding: 0 0 8px; }
 }
+
+/* Settings › Skills: the search field takes the room, the scope fits its text. */
+.skill-search > .input { flex: 1 1 auto; min-width: 0; width: auto; }
+.skill-search > .select { flex: 0 1 auto; width: auto; max-width: 40%; }

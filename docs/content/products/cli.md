@@ -115,6 +115,7 @@ Decisions are `once`, `session`, `always` or `deny`; a question is answered with
 | `/export [file]` | The session as Markdown, or a Word document for a `.docx` name: prompts, answers, tool calls (`blitz sessions export <id>` from the shell) |
 | `/style [name]` | How the agent writes its answers: `default`, `concise`, `explanatory`, or yours in `~/.blitz/styles` |
 | `/session list [--all]\|new\|load <id\|name>\|save <name>`, `/resume`, `/rename` | Sessions and snapshots, scoped to the workspace |
+| `blitz skills registry add\|list\|remove`, `blitz skills search\|install\|update\|uninstall\|list` | Skills from registries such as Castor, hash-checked ([skills](../guide/skills.md#skills-from-a-registry)) |
 | `blitz plugin install\|list\|show\|enable\|disable\|remove\|update`, `blitz plugin marketplace add\|list\|remove`, `blitz plugin import claude\|gemini <dir>`, `--plugin-dir <dir>` | Plugins: skills, commands, agents, hooks and MCP servers in one bundle ([extending](../guide/extending.md#plugins)) |
 | `blitz --bg "<prompt>"` | Start the prompt as a background run in the Blitz service and return |
 | `blitz agents [--all]`, `blitz attach <id>`, `blitz logs <id> [-f]`, `blitz stop <id>` | The background runs in every workspace; follow one in the REPL, answering what it asks, then carry on in its session; show what it has done; stop it |
