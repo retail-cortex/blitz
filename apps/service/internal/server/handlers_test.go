@@ -239,8 +239,8 @@ func TestEveryHandlerRefusesARelativeWorkspace(t *testing.T) {
 			return unary(f.RestoreFileRevision, &pb.RestoreFileRevisionRequest{Workspace: ws})
 		},
 		"RenderDocx": func() error { return unary(f.RenderDocx, &pb.RenderDocxRequest{Workspace: ws}) },
-		"FindFiles": func() error { return unary(f.FindFiles, &pb.FindFilesRequest{Workspace: ws}) },
-		"StatFiles": func() error { return unary(f.StatFiles, &pb.StatFilesRequest{Workspace: ws}) },
+		"FindFiles":  func() error { return unary(f.FindFiles, &pb.FindFilesRequest{Workspace: ws}) },
+		"StatFiles":  func() error { return unary(f.StatFiles, &pb.StatFilesRequest{Workspace: ws}) },
 	} {
 		t.Run(name, func(t *testing.T) {
 			code, info := errorReason(t, call())
