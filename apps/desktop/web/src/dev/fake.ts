@@ -305,6 +305,26 @@ async function* runTurn(dir: string, text: string, plan: boolean): AsyncGenerato
     yield ev({ case: "finished", value: { before, after: s.usage } });
     return;
   }
+  if (/burst/i.test(text)) {
+    // Parallel tool calls that each need approval: their requests arrive
+    // together, and the turn ends only once every one is answered.
+    const files = ["AGENTS.md", "CLAUDE.md", "GEMINI.md"];
+    const ids = files.map(() => `a${++nextRequest}`);
+    const answers = ids.map((id) => new Promise<string>((r) => s.pending.set(id, r)));
+    for (const [i, path] of files.entries()) yield ev({ case: "toolCall", value: { id: `p${i}`, name: "create_file", args: { path } } });
+    for (const [i, path] of files.entries()) {
+      yield ev({ case: "approvalRequest", value: { requestId: ids[i], tool: "create_file", kind: ActionKind.WRITE, detail: `create ${path}` } });
+    }
+    const got = await Promise.all(answers);
+    for (const [i, path] of files.entries()) {
+      yield ev({ case: "toolResult", value: { id: `p${i}`, name: "create_file", result: got[i] === "deny" ? { error: "the user denied it" } : { success: true, path } } });
+    }
+    const text = "Created the agent instruction files.";
+    sess.messages.push(msg("model", text));
+    yield ev({ case: "text", value: { text } });
+    yield ev({ case: "finished", value: { before, after: s.usage } });
+    return;
+  }
   for (const part of ["The user wants the rounding fixed. ", "I'll read the discount code first, then ", "write a failing test."]) {
     yield ev({ case: "text", value: { text: part, partial: true, thought: true } });
     await sleep(120);

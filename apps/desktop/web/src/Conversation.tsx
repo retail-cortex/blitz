@@ -69,6 +69,7 @@ import { isUnavailable, message, reason } from "./errors";
 import type { SessionInfo } from "./gen/blitz/v1/session_pb";
 import { Decision, type ApprovalRequest, type Question, type Task, type Usage } from "./gen/blitz/v1/turn_pb";
 import type { BackgroundTask, GetSettingsResponse, GetSuggestionsResponse } from "./gen/blitz/v1/workspace_pb";
+import { addWait, dropWait, type Pending } from "./waits";
 import { allCommands, helpText, matchCommands, parseCommand, type CommandSpec } from "./commands";
 import { builtin, type CommandContext } from "./slashCommands";
 import {
@@ -106,7 +107,6 @@ import { Button, Dialog, Icon, IconButton, Menu, useSnackbar } from "./ui/contro
 /** A background task's approval request or question, waiting for an answer. */
 type TaskRequest = { id: string; who: string; approval?: ApprovalRequest; question?: Question };
 
-type Pending = { kind: "approval"; req: ApprovalRequest } | { kind: "question"; q: Question };
 
 /** How a turn is sent (see Turn in the API). */
 interface TurnOptions {
@@ -164,7 +164,10 @@ export function Conversation({
   const [entries, setEntries] = useState<Entry[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [running, setRunning] = useState(false);
-  const [pending, setPending] = useState<Pending | null>(null);
+  // The turn's requests waiting for an answer, oldest first, shown one at
+  // a time (waits.ts).
+  const [waits, setWaits] = useState<Pending[]>([]);
+  const pending = waits[0] ?? null;
   // Background tasks' approval requests and questions, waiting.
   const [taskRequests, setTaskRequests] = useState<TaskRequest[]>([]);
   const [turnUsage, setTurnUsage] = useState("");
@@ -352,8 +355,13 @@ export function Conversation({
           if (!ev) continue;
           const taskList = tasksOf(ev);
           if (taskList) setTasks(taskList);
-          else if (ev.kind.case === "approvalRequest") setPending({ kind: "approval", req: ev.kind.value });
-          else if (ev.kind.case === "question") setPending({ kind: "question", q: ev.kind.value });
+          else if (ev.kind.case === "approvalRequest") {
+            const req = ev.kind.value;
+            setWaits((w) => addWait(w, { kind: "approval", req }));
+          } else if (ev.kind.case === "question") {
+            const q = ev.kind.value;
+            setWaits((w) => addWait(w, { kind: "question", q }));
+          }
           else setEntries((e) => applyEvent(e, ev));
           if (ev.kind.case === "toolResult" || ev.kind.case === "finished") filesTouched({ dir });
           if (ev.kind.case === "finished") {
@@ -369,7 +377,7 @@ export function Conversation({
         else setEntries((e) => [...e, { kind: "notice", text: t("desktop.stopped"), tone: "info" }]);
       } finally {
         setRunning(false);
-        setPending(null);
+        setWaits([]);
         abort.current = null;
         following.current = "";
         done();
@@ -561,14 +569,14 @@ export function Conversation({
   const decide = async (decision: Decision) => {
     if (pending?.kind !== "approval") return;
     const requestId = pending.req.requestId;
-    setPending(null);
+    setWaits((w) => dropWait(w, requestId));
     await sessions.approve({ workspace: dir, requestId, decision }).catch(fail);
   };
 
   const answer = async (text: string) => {
     if (pending?.kind !== "question") return;
     const requestId = pending.q.requestId;
-    setPending(null);
+    setWaits((w) => dropWait(w, requestId));
     await sessions.answer({ workspace: dir, requestId, answer: text }).catch(fail);
   };
 
