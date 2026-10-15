@@ -22,6 +22,17 @@
 
 #include <stdint.h>
 
+// BLITZ_PRINT_READY is the body of an async function both printers run
+// once the page has loaded, and print after: it waits for the page's
+// fonts and every picture to be ready to draw, for at most 10 seconds.
+// Printing straight away printed pictures as blank space when a font was
+// still loading (KaTeX's, inlined with font-display: block).
+#define BLITZ_PRINT_READY                                                                       \
+  "await Promise.race(["                                                                       \
+  "Promise.all([document.fonts.ready, ...Array.from(document.images, (i) => i.decode().catch(() => {}))]),"\
+  "new Promise((r) => setTimeout(r, 10000))]);"                                                 \
+  "return true;"
+
 // Prints html on pages of width x height points with margin points on
 // each side, on the UI thread, and answers handle through blitzPrintDone.
 void blitz_print_pdf(const char *html, double width, double height, double margin, uintptr_t handle);

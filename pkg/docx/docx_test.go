@@ -241,3 +241,54 @@ func TestRenderTheDocs(t *testing.T) {
 	}))
 	assert.Greater(t, n, 50)
 }
+
+// Maths, diagrams drawn by the caller, SVG and HTML pictures (the fixes
+// for exports missing equations, diagrams and pictures).
+func TestMathDiagramsAndPictures(t *testing.T) {
+	src := "# Fit\n\nInline $\\beta_1$ and $5 kept.\n\n$$\n\\hat{\\beta} = (X^TX)^{-1}X^Ty\n$$\n\n" +
+		"```mermaid\ngraph LR\n  a --> b\n```\n\n```mermaid\ngraph TD\n  broken\n```\n\n```mermaid\ngraph TD\n  undrawn\n```\n\n" +
+		"<img src=\"figs/plot.png\" width=\"100\" alt=\"plot\">\n\nAn inline <img src=\"figs/box.svg\" alt=\"box\"> too.\n"
+	png := picture(t, 400, 200)
+	box := []byte(`<svg xmlns="http://www.w3.org/2000/svg" width="120" height="60"><rect width="120" height="60"/></svg>`)
+	data, err := Render([]byte(src), Options{
+		ReadImage: func(dest string) ([]byte, error) {
+			switch dest {
+			case "figs/plot.png":
+				return png, nil
+			case "figs/box.svg":
+				return box, nil
+			}
+			return nil, fs.ErrNotExist
+		},
+		Diagram: func(lang, source string) ([]byte, int, bool) {
+			switch source {
+			case "graph LR\n  a --> b":
+				return png, 200, true
+			case "graph TD\n  broken":
+				return []byte("not a picture"), 100, true
+			}
+			return nil, 0, false
+		},
+	})
+	require.NoError(t, err)
+	parts := unpack(t, data)
+	wellFormed(t, parts)
+	doc := parts["word/document.xml"]
+	assert.Contains(t, doc, `xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"`)
+	assert.Contains(t, doc, `<m:oMath><m:sSub>`, "inline maths")
+	assert.Contains(t, doc, `<m:oMathPara><m:oMath>`, "displayed maths")
+	assert.Contains(t, doc, "> and $5<", "a dollar amount stays text")
+	assert.Equal(t, 2, strings.Count(doc, "A Mermaid diagram, kept as its code."), "the broken and the undrawn diagrams stay code")
+	assert.Contains(t, doc, "graph TD")
+	assert.Contains(t, doc, `<wp:extent cx="1905000" cy="952500"/>`, "the diagram at its CSS size (200 px)")
+	assert.Contains(t, doc, `<wp:extent cx="952500" cy="476250"/>`, "the <img> at its width (100 px)")
+	assert.Contains(t, doc, `<asvg:svgBlip`, "the SVG, with a fallback")
+	media := 0
+	for name := range parts {
+		if strings.HasPrefix(name, "word/media/") {
+			media++
+		}
+	}
+	assert.Equal(t, 4, media, "the diagram, the PNG, the SVG and its fallback")
+	assert.Contains(t, parts["[Content_Types].xml"], `Extension="svg"`)
+}

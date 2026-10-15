@@ -18,6 +18,7 @@ import (
 	"context"
 	"errors"
 	"io/fs"
+	"strings"
 
 	"connectrpc.com/connect"
 	"github.com/retail-cortex/blitz/pkg/docx"
@@ -232,7 +233,11 @@ func (h fileService) RenderDocx(ctx context.Context, r req[pb.RenderDocxRequest]
 	if err != nil {
 		return nil, err
 	}
-	data, err := w.RenderDocx(r.Msg.Path, r.Msg.Markdown)
+	diagrams := map[string]engine.Diagram{}
+	for _, d := range r.Msg.Diagrams {
+		diagrams[strings.TrimSpace(d.Source)] = engine.Diagram{PNG: d.Png, Width: int(d.Width)}
+	}
+	data, err := w.RenderDocx(r.Msg.Path, r.Msg.Markdown, diagrams)
 	if errors.Is(err, docx.ErrNotText) {
 		return nil, invalid(err)
 	}

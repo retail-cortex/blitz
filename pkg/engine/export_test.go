@@ -34,7 +34,7 @@ func TestRenderDocx(t *testing.T) {
 	require.NoError(t, png.Encode(&pic, image.NewGray(image.Rect(0, 0, 4, 4))))
 	write(t, w.Dir(), "notes/img/c.png", pic.String())
 
-	data, err := w.RenderDocx("notes/week1.md", "# Week 1\n\n![chart](img/c.png) ![out](../../outside.png)")
+	data, err := w.RenderDocx("notes/week1.md", "# Week 1\n\n![chart](img/c.png) ![out](../../outside.png) ![root](/notes/img/c.png) ![encoded](img%2Fc.png)\n\n```mermaid\ngraph LR\n  a --> b\n```\n\n```mermaid\ngraph TD\n  x\n```", map[string]Diagram{"graph LR\n  a --> b": {PNG: pic.Bytes(), Width: 200}})
 	require.NoError(t, err)
 	z, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
 	require.NoError(t, err)
@@ -43,12 +43,15 @@ func TestRenderDocx(t *testing.T) {
 		names = append(names, f.Name)
 	}
 	assert.Contains(t, names, "word/media/image1.png", "the image beside the file")
-	assert.NotContains(t, strings.Join(names, " "), "image2", "nothing outside the workspace")
+	assert.Contains(t, names, "word/media/image2.png", "from the workspace's root, as the preview reads it")
+	assert.Contains(t, names, "word/media/image3.png", "percent-encoded")
+	assert.Contains(t, names, "word/media/image4.png", "the drawn diagram")
+	assert.NotContains(t, strings.Join(names, " "), "image5", "nothing outside the workspace; an undrawn diagram stays code")
 
-	_, err = w.RenderDocx("", "# A conversation")
+	_, err = w.RenderDocx("", "# A conversation", nil)
 	assert.NoError(t, err, "no file: no images to read")
-	_, err = w.RenderDocx("../x.md", "# X")
+	_, err = w.RenderDocx("../x.md", "# X", nil)
 	assert.ErrorIs(t, err, ErrBadPath)
-	_, err = w.RenderDocx("x.md", "\x00")
+	_, err = w.RenderDocx("x.md", "\x00", nil)
 	assert.ErrorIs(t, err, docx.ErrNotText)
 }

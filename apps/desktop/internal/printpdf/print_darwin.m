@@ -68,7 +68,21 @@ static NSMutableSet<BlitzPDFPrinter *> *printing;
     return;
   }
   self.loaded = YES;
-  [self print];
+  // The page has loaded, but its fonts (KaTeX's, inlined with
+  // font-display: block) and pictures may not be ready to draw: printing
+  // now prints the pictures as blank space. Wait for both (at most 10 s),
+  // in the app's own script world: the page's scripts stay off.
+  if (@available(macOS 11.0, *)) {
+    [webView callAsyncJavaScript:[NSString stringWithUTF8String:BLITZ_PRINT_READY]
+                       arguments:@{}
+                         inFrame:nil
+                  inContentWorld:WKContentWorld.defaultClientWorld
+               completionHandler:^(id result, NSError *error) {
+                 [self print]; // ready, or as ready as it gets
+               }];
+  } else {
+    [self print];
+  }
 }
 
 - (void)webView:(WKWebView *)webView didFailNavigation:(WKNavigation *)navigation withError:(NSError *)error {

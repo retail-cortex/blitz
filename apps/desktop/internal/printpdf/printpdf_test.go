@@ -16,7 +16,13 @@ package printpdf
 
 import (
 	"bytes"
+	"compress/gzip"
 	"context"
+	"encoding/base64"
+	"image"
+	"image/color"
+	"image/png"
+	"io"
 	"os"
 	"runtime"
 	"strings"
@@ -92,4 +98,44 @@ func TestPrintTimesOut(t *testing.T) {
 
 func TestDoneForAJobThatsGone(t *testing.T) {
 	done(12345, []byte("x"), nil) // no one waits: nothing happens
+}
+
+// A picture inline in the page (as Export as PDF puts them) is in the PDF,
+// also while a font inlined with font-display: block (as KaTeX's are, for
+// a document with maths) is loading: printing then printed the pictures
+// as blank space.
+func TestPrintPicturesWhileAFontLoads(t *testing.T) {
+	if !ui {
+		t.Skip("no display to print with")
+	}
+	img := image.NewRGBA(image.Rect(0, 0, 1400, 1100))
+	for x := range 1400 {
+		for y := range 1100 {
+			img.Set(x, y, color.RGBA{R: uint8(x * y), G: uint8(x ^ y), B: uint8(y * 7), A: 255})
+		}
+	}
+	var buf bytes.Buffer
+	require.NoError(t, png.Encode(&buf, img))
+	src := "data:image/png;base64," + base64.StdEncoding.EncodeToString(buf.Bytes())
+
+	gz, err := os.ReadFile("../../../../pkg/engine/mdpdf/fonts/NotoSans-Regular.ttf.gz")
+	require.NoError(t, err)
+	zr, err := gzip.NewReader(bytes.NewReader(gz))
+	require.NoError(t, err)
+	ttf, err := io.ReadAll(zr)
+	require.NoError(t, err)
+	font := "data:font/ttf;base64," + base64.StdEncoding.EncodeToString(ttf)
+
+	for name, style := range map[string]string{
+		"pictures":            `img { max-width: 100%; }`,
+		"pictures and a font": `@font-face { font-display: block; font-family: Maths; src: url(` + font + `) format("truetype"); } .m { font-family: Maths; } img { max-width: 100%; }`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			html := `<!doctype html><html><head><meta charset="utf-8"><style>` + style + `</style></head><body>
+<h1>Figures</h1><p class="m">β = 0.138</p><ol><li>One: <img src="` + src + `" alt="one"></li><li>Two: <img src="` + src + `" alt="two"></li></ol></body></html>`
+			data, err := Print(html, "A4", time.Minute)
+			require.NoError(t, err)
+			assert.Greater(t, len(data), 400_000, "the pictures are in the PDF (it has %d bytes)", len(data))
+		})
+	}
 }

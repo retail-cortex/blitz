@@ -39,7 +39,7 @@ import { tabsToClose, type CloseWhich } from "./tabMenu";
 import { useEditorZoom } from "./zoom";
 import { useAdvanced, useApp } from "../state";
 import { exportPath, paperFor, printablePage } from "./printPage";
-import { drawForPrint } from "../mermaid";
+import { drawAsPicture, drawForPrint, mermaidSources } from "../mermaid";
 
 /**
  * The editor beside the conversation (spec_files_029 §6): the open files'
@@ -110,7 +110,17 @@ export function EditorPane({ model, onReveal, onCursor }: { model: EditorModel; 
     setExporting(true);
     try {
       const markdown = model.state(path)?.doc.toString() ?? "";
-      const { data } = await files.renderDocx({ workspace: model.dir, path, markdown });
+      // Its diagrams drawn here, where Mermaid runs; one that won't draw
+      // stays as its code.
+      const diagrams = [];
+      for (const source of new Set(mermaidSources(markdown))) {
+        try {
+          diagrams.push({ source, ...(await drawAsPicture(source)) });
+        } catch {
+          // kept as code
+        }
+      }
+      const { data } = await files.renderDocx({ workspace: model.dir, path, markdown, diagrams });
       await files.writeBinaryFile({ workspace: model.dir, path: out, data, version });
       exported(out);
     } catch (e) {

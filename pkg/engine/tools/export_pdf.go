@@ -20,10 +20,12 @@ import (
 	"fmt"
 	"io/fs"
 	"path"
+	"path/filepath"
 	"strings"
 
 	"github.com/retail-cortex/blitz/pkg/docx"
 	"github.com/retail-cortex/blitz/pkg/engine/mdpdf"
+	"github.com/retail-cortex/blitz/pkg/markdown"
 	"google.golang.org/adk/v2/agent"
 	"google.golang.org/adk/v2/tool"
 	"google.golang.org/adk/v2/tool/functiontool"
@@ -170,11 +172,16 @@ func newExportTool(ws *Workspace, hooks *Hooks, f exportFormat) (tool.Tool, erro
 				return fail(fmt.Sprintf("%s: %v", cmp.Or(input.Path, "markdown"), err))
 			}
 			// Images are relative to the Markdown file, or to the document
-			// for markdown given, and read as the file tools read: inside
-			// the workspace, never a blocked path.
-			dir := path.Dir(cmp.Or(src, rel))
+			// for markdown given, resolved as the preview resolves them, and
+			// read as the file tools read: inside the workspace, never a
+			// blocked path.
+			docPath := filepath.ToSlash(cmp.Or(src, rel))
 			doc, size, pages, err := f.render(data, func(dest string) ([]byte, error) {
-				p, err := ws.Rel(path.Join(dir, dest))
+				local, ok := markdown.LocalPath(dest, docPath)
+				if !ok {
+					return nil, fmt.Errorf("%s: not in the workspace", dest)
+				}
+				p, err := ws.Rel(local)
 				if err != nil {
 					return nil, err
 				}

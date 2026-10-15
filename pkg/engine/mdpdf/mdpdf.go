@@ -302,8 +302,18 @@ func (r *renderer) block(n ast.Node) {
 		r.list(n)
 	case *east.Table:
 		r.table(n)
+	case *markdown.MathBlock:
+		// Maths prints as its LaTeX: drawing it needs TeX, which the
+		// desktop app's export has.
+		r.code(strings.Split(n.Source, "\n"), "latex")
 	case *ast.HTMLBlock:
-		// Raw HTML isn't drawn, as in the app's preview.
+		// Raw HTML isn't drawn, as in the app's preview, except a picture
+		// written as one <img>.
+		if pic, ok := markdown.HTMLPicture(strings.Join(markdown.Lines(n, r.src), "\n")); ok {
+			r.begin(baseSize, style{})
+			r.picture(pic.Src, pic.Alt)
+			r.endLine()
+		}
 	default:
 		r.blocks(n)
 	}
@@ -446,9 +456,19 @@ func (r *renderer) inline(n ast.Node) {
 		r.text(string(n.Label(r.src)))
 		r.st = saved
 	case *ast.Image:
-		r.image(n)
+		r.picture(string(n.Destination), markdown.PlainText(n, r.src))
+	case *markdown.Math:
+		r.text("$" + n.Source + "$")
 	case *ast.RawHTML:
-		// Skipped, as in the preview.
+		// Skipped, as in the preview, except a picture as one <img>.
+		var b strings.Builder
+		for i := range n.Segments.Len() {
+			seg := n.Segments.At(i)
+			b.Write(seg.Value(r.src))
+		}
+		if pic, ok := markdown.HTMLPicture(b.String()); ok {
+			r.picture(pic.Src, pic.Alt)
+		}
 	case *east.TaskCheckBox:
 		r.checkbox(n.IsChecked)
 	default: // strikethrough and the like: their text
@@ -575,14 +595,13 @@ func (r *renderer) checkbox(checked bool) {
 	r.f.SetX(x + box + 1.6)
 }
 
-// image draws a picture on its own line, scaled to fit the text width.
-func (r *renderer) image(n *ast.Image) {
-	alt := markdown.PlainText(n, r.src)
-	data, kind := r.loadImage(string(n.Destination))
+// picture draws a picture on its own line, scaled to fit the text width.
+func (r *renderer) picture(dest, alt string) {
+	data, kind := r.loadImage(dest)
 	if data == nil {
 		saved := r.st
 		r.st.italic, r.st.color = true, mutedColor
-		r.text("[image: " + cmpString(alt, string(n.Destination)) + "]")
+		r.text("[image: " + cmpString(alt, dest) + "]")
 		r.st = saved
 		return
 	}
@@ -591,7 +610,7 @@ func (r *renderer) image(n *ast.Image) {
 	info := r.f.RegisterImageOptionsReader(name, fpdf.ImageOptions{ImageType: kind}, bytes.NewReader(data))
 	if r.f.Err() || info == nil {
 		r.f.ClearError()
-		r.text("[image: " + cmpString(alt, string(n.Destination)) + "]")
+		r.text("[image: " + cmpString(alt, dest) + "]")
 		return
 	}
 	info.SetDpi(96)

@@ -279,3 +279,18 @@ func TestCmpString(t *testing.T) {
 	assert.Equal(t, "a", cmpString("a", "b"))
 	assert.Equal(t, "b", cmpString("", "b"))
 }
+
+// Maths prints as its LaTeX, and a lone HTML <img> as a picture.
+func TestMathAndHTMLPictures(t *testing.T) {
+	res, text := render(t, "Inline $\\beta_1$.\n\n$$\n\\sum_i x_i\n$$\n\n<img src=\"c.png\" alt=\"chart\">\n\nAnd <img src=\"missing.png\" alt=\"gone\"> inline.\n",
+		Options{ReadImage: func(dest string) ([]byte, error) {
+			if dest == "c.png" {
+				return encode(t, "png"), nil
+			}
+			return nil, errors.New("no such picture")
+		}})
+	assert.Contains(t, text, `$\beta_1$`)
+	assert.Contains(t, text, `\sum`, "displayed maths as its LaTeX")
+	assert.Contains(t, text, "[image: gone]")
+	assert.Equal(t, 1, bytes.Count(res.PDF, []byte("/Subtype /Image")))
+}

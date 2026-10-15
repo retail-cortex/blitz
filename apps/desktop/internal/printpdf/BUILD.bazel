@@ -52,6 +52,8 @@ go_test(
     name = "printpdf_test",
     size = "small",
     srcs = ["printpdf_test.go"],
+    # A font to inline as KaTeX's are (TestPrintPicturesWhileAFontLoads).
+    data = ["//pkg/engine/mdpdf:fonts/NotoSans-Regular.ttf.gz"],
     embed = [":printpdf"],
     # Linux prints only with a display: CI runs this under xvfb-run, with
     # the X socket mounted into the sandbox; without one, the printing

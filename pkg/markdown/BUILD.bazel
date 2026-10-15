@@ -16,13 +16,17 @@ load("@rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "markdown",
-    srcs = ["markdown.go"],
+    srcs = [
+        "markdown.go",
+        "math.go",
+    ],
     importpath = "github.com/retail-cortex/blitz/pkg/markdown",
     visibility = ["//visibility:public"],
     deps = [
         "@com_github_yuin_goldmark//:goldmark",
         "@com_github_yuin_goldmark//ast",
         "@com_github_yuin_goldmark//extension",
+        "@com_github_yuin_goldmark//parser",
         "@com_github_yuin_goldmark//text",
         "@com_github_yuin_goldmark//util",
     ],

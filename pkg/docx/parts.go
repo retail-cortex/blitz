@@ -39,6 +39,7 @@ const contentTypes = xmlHd + `<Types xmlns="http://schemas.openxmlformats.org/pa
 	`<Default Extension="png" ContentType="image/png"/>` +
 	`<Default Extension="jpeg" ContentType="image/jpeg"/>` +
 	`<Default Extension="gif" ContentType="image/gif"/>` +
+	`<Default Extension="svg" ContentType="image/svg+xml"/>` +
 	`<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>` +
 	`<Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>` +
 	`<Override PartName="/word/numbering.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.numbering+xml"/>` +
@@ -118,7 +119,8 @@ func (w *writer) document(size [2]int) string {
 	b.WriteString(xmlHd + `<w:document xmlns:w="` + nsW + `" xmlns:r="` + nsR + `"` +
 		` xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"` +
 		` xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"` +
-		` xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"><w:body>`)
+		` xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"` +
+		` xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><w:body>`)
 	b.WriteString(w.body.String())
 	fmt.Fprintf(&b, `<w:sectPr><w:pgSz w:w="%d" w:h="%d"/><w:pgMar w:top="%d" w:right="%d" w:bottom="%d" w:left="%d" w:header="720" w:footer="720" w:gutter="0"/></w:sectPr>`,
 		size[0], size[1], margin, margin, margin, margin)

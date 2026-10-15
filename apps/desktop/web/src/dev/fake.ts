@@ -1314,7 +1314,10 @@ export function installFake() {
             latin1: false,
           };
         },
-        renderDocx: ({ markdown }) => ({ data: new TextEncoder().encode("PK fake docx\n" + markdown) }),
+        renderDocx: ({ markdown, diagrams }) => {
+          ((window as unknown as { __diagrams?: unknown[] }).__diagrams ??= []).push(...diagrams.map((d) => ({ source: d.source, bytes: d.png.length, width: d.width, height: d.height })));
+          return { data: new TextEncoder().encode("PK fake docx\n" + markdown) };
+        },
         statFiles: ({ paths }) => ({ versions: Object.fromEntries(paths.map((p) => [p, fakeFiles.has(p) ? fakeVersion(fakeFiles.get(p)!) : ""])) }),
       });
       service(WorkerService, {

@@ -18,8 +18,9 @@
 // goldmark, written as WordprocessingML with Word's own heading, list,
 // quote, code and table styles, so the navigation pane, a table of
 // contents and restyling work as in any Word document. Links stay links
-// (to a heading too), local images are embedded, raw HTML is skipped, and
-// Mermaid diagrams and math are kept as their source.
+// (to a heading too), local pictures are embedded (SVG too, and a lone HTML
+// <img>), maths becomes Word equations, other raw HTML is skipped, and
+// Mermaid diagrams are kept as their source.
 package docx
 
 import (
@@ -30,6 +31,8 @@ import (
 	_ "image/gif" // registers the GIF decoder
 	_ "image/jpeg"
 	_ "image/png"
+	"regexp"
+	"strconv"
 	"strings"
 	"time"
 	"unicode"
@@ -59,6 +62,10 @@ type Options struct {
 	ReadImage func(dest string) ([]byte, error)
 	// Time is the document's creation date (default now).
 	Time time.Time
+	// Diagram returns a picture of a fenced block's diagram (a ```mermaid
+	// block, by its text), and its width in pixels; ok false keeps the
+	// block as its code. nil: every diagram stays code.
+	Diagram func(lang, source string) (png []byte, width int, ok bool)
 }
 
 // ErrNotText is returned for input that isn't text.
@@ -165,10 +172,24 @@ func (w *writer) block(n ast.Node, p para) {
 		w.body.WriteString(`<w:p><w:pPr><w:pBdr><w:bottom w:val="single" w:sz="6" w:space="1" w:color="BFBFBF"/></w:pBdr></w:pPr></w:p>`)
 	case *ast.FencedCodeBlock:
 		lang := string(n.Language(w.src))
-		w.codeBlock(markdown.Lines(n, w.src), p)
+		lines := markdown.Lines(n, w.src)
 		if strings.EqualFold(lang, "mermaid") {
+			if w.o.Diagram != nil {
+				// A picture that isn't one keeps the diagram as its code.
+				if png, width, ok := w.o.Diagram(strings.ToLower(lang), strings.Join(lines, "\n")); ok {
+					if kind, _, _ := pictureKind(png); kind != "" {
+						w.body.WriteString(`<w:p><w:pPr><w:jc w:val="center"/></w:pPr>`)
+						w.embed(png, "diagram", width)
+						w.body.WriteString("</w:p>")
+						return
+					}
+				}
+			}
+			w.codeBlock(lines, p)
 			w.note("A Mermaid diagram, kept as its code.", p)
+			return
 		}
+		w.codeBlock(lines, p)
 	case *ast.CodeBlock:
 		w.codeBlock(markdown.Lines(n, w.src), p)
 	case *ast.Blockquote:
@@ -178,8 +199,16 @@ func (w *writer) block(n ast.Node, p para) {
 		w.list(n, p)
 	case *east.Table:
 		w.table(n)
+	case *markdown.MathBlock:
+		w.body.WriteString(`<w:p><w:pPr><w:jc w:val="center"/></w:pPr><m:oMathPara><m:oMath>` + omml(n.Source) + `</m:oMath></m:oMathPara></w:p>`)
 	case *ast.HTMLBlock:
-		// Raw HTML isn't written, as the app's preview doesn't draw it.
+		// Raw HTML isn't written, as the app's preview doesn't draw it,
+		// except a picture written as one <img>.
+		if pic, ok := markdown.HTMLPicture(strings.Join(markdown.Lines(n, w.src), "\n")); ok {
+			w.body.WriteString("<w:p>" + w.pPr(p))
+			w.picture(pic.Src, pic.Alt, pic.Width)
+			w.body.WriteString("</w:p>")
+		}
 	default:
 		w.blocks(n, p)
 	}
@@ -417,9 +446,19 @@ func (w *writer) inline(n ast.Node) {
 	case *ast.AutoLink:
 		w.hyperlink(string(n.URL(w.src)), func() { w.run(string(n.Label(w.src))) })
 	case *ast.Image:
-		w.image(n)
+		w.picture(string(n.Destination), markdown.PlainText(n, w.src), 0)
+	case *markdown.Math:
+		w.body.WriteString("<m:oMath>" + omml(n.Source) + "</m:oMath>")
 	case *ast.RawHTML:
-		// Skipped, as in the preview.
+		// Skipped, as in the preview, except a picture as one <img>.
+		var b strings.Builder
+		for i := range n.Segments.Len() {
+			seg := n.Segments.At(i)
+			b.Write(seg.Value(w.src))
+		}
+		if pic, ok := markdown.HTMLPicture(b.String()); ok {
+			w.picture(pic.Src, pic.Alt, pic.Width)
+		}
 	case *east.TaskCheckBox:
 		if n.IsChecked {
 			w.run("☒ ")
@@ -510,46 +549,135 @@ func (w *writer) rel(kind, target string, external bool) string {
 	return id
 }
 
-// image embeds a picture the caller lets it read, scaled to the text
-// width; anything else is written as its alt text.
-func (w *writer) image(n *ast.Image) {
-	alt := markdown.PlainText(n, w.src)
-	dest := string(n.Destination)
-	data, ext, wpx, hpx := w.loadImage(dest)
-	if data == nil {
-		saved := w.italic
-		w.italic = true
-		w.run("[image: " + cmp(alt, dest) + "]")
-		w.italic = saved
+// picture embeds a picture the caller lets it read, at width pixels (0:
+// its own), scaled to the text width; anything else is written as its
+// alt text.
+func (w *writer) picture(dest, alt string, width int) {
+	if w.o.ReadImage == nil || dest == "" || strings.HasPrefix(strings.TrimSpace(dest), "data:") || strings.Contains(dest, "://") {
+		w.missing(alt, dest) // a data: or web picture, or nothing to read with
 		return
+	}
+	data, err := w.o.ReadImage(dest)
+	if err != nil || !w.embed(data, alt, width) {
+		w.missing(alt, dest)
+	}
+}
+
+// missing writes a picture that can't be embedded as its alt text.
+func (w *writer) missing(alt, dest string) {
+	saved := w.italic
+	w.italic = true
+	w.run("[image: " + cmp(alt, dest) + "]")
+	w.italic = saved
+}
+
+// embed puts a picture's bytes in the document at width pixels (0: its
+// own), scaled to the text width; false when they aren't a picture.
+func (w *writer) embed(data []byte, alt string, width int) bool {
+	ext, wpx, hpx := pictureKind(data)
+	if ext == "" {
+		return false
+	}
+	if width > 0 && wpx > 0 {
+		wpx, hpx = width, hpx*width/wpx
 	}
 	w.pics++
 	name := fmt.Sprintf("image%d.%s", w.pics, ext)
 	w.media = append(w.media, media{name: name, data: data})
 	id := w.rel("http://schemas.openxmlformats.org/officeDocument/2006/relationships/image", "media/"+name, false)
+	blip := `<a:blip r:embed="` + id + `"/>`
+	if ext == "svg" {
+		// Word draws the SVG; older readers draw the fallback, a blank
+		// PNG, as Word's own files carry one.
+		w.pics++
+		fallback := fmt.Sprintf("image%d.png", w.pics)
+		w.media = append(w.media, media{name: fallback, data: blankPNG})
+		fid := w.rel("http://schemas.openxmlformats.org/officeDocument/2006/relationships/image", "media/"+fallback, false)
+		blip = `<a:blip r:embed="` + fid + `"><a:extLst><a:ext uri="{96DAC541-7B7A-43D3-8B79-37D633B846F1}"><asvg:svgBlip xmlns:asvg="http://schemas.microsoft.com/office/drawing/2016/SVG/main" r:embed="` + id + `"/></a:ext></a:extLst></a:blip>`
+	}
 	cx, cy := wpx*emuPerPx, hpx*emuPerPx
 	if cx > w.textWidth {
 		cx, cy = w.textWidth, cy*w.textWidth/cx
 	}
-	fmt.Fprintf(&w.body, `<w:r><w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0"><wp:extent cx="%d" cy="%d"/><wp:docPr id="%d" name="Picture %d" descr="%s"/><wp:cNvGraphicFramePr><a:graphicFrameLocks noChangeAspect="1"/></wp:cNvGraphicFramePr><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic><pic:nvPicPr><pic:cNvPr id="%d" name="%s" descr="%s"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip r:embed="%s"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="%d" cy="%d"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r>`,
-		cx, cy, w.pics, w.pics, escape(alt), w.pics, name, escape(alt), id, cx, cy)
+	fmt.Fprintf(&w.body, `<w:r><w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0"><wp:extent cx="%d" cy="%d"/><wp:docPr id="%d" name="Picture %d" descr="%s"/><wp:cNvGraphicFramePr><a:graphicFrameLocks noChangeAspect="1"/></wp:cNvGraphicFramePr><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic><pic:nvPicPr><pic:cNvPr id="%d" name="%s" descr="%s"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill>%s<a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="%d" cy="%d"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r>`,
+		cx, cy, w.pics, w.pics, escape(alt), w.pics, name, escape(alt), blip, cx, cy)
+	return true
 }
 
-// loadImage reads and checks an image: its bytes, extension and size in
-// pixels; nil when it can't be embedded.
-func (w *writer) loadImage(dest string) ([]byte, string, int, int) {
-	if w.o.ReadImage == nil || dest == "" || strings.Contains(dest, ":") {
-		return nil, "", 0, 0 // remote (http:, data:) or nothing to read with
-	}
-	data, err := w.o.ReadImage(dest)
-	if err != nil {
-		return nil, "", 0, 0
+// pictureKind is a picture's extension and size in pixels, or "" when
+// the bytes aren't one Word shows (PNG, JPEG, GIF, SVG).
+func pictureKind(data []byte) (string, int, int) {
+	if wpx, hpx, ok := svgSize(data); ok {
+		return "svg", wpx, hpx
 	}
 	cfg, format, err := image.DecodeConfig(bytes.NewReader(data))
 	if err != nil || cfg.Width <= 0 || cfg.Height <= 0 || cfg.Width*cfg.Height > maxPixels {
-		return nil, "", 0, 0
+		return "", 0, 0
 	}
-	return data, map[string]string{"jpeg": "jpeg", "png": "png", "gif": "gif"}[format], cfg.Width, cfg.Height
+	return map[string]string{"jpeg": "jpeg", "png": "png", "gif": "gif"}[format], cfg.Width, cfg.Height
+}
+
+var (
+	svgTag    = regexp.MustCompile(`(?is)<svg\b[^>]*>`)
+	svgAttr   = regexp.MustCompile(`(?i)\b(width|height|viewBox)\s*=\s*["']([^"']*)["']`)
+	svgNumber = regexp.MustCompile(`^\s*([0-9.]+)\s*(px)?\s*$`)
+)
+
+// svgStart is how an SVG file begins: its <svg> element, perhaps after an
+// XML declaration, a doctype and comments.
+var svgStart = regexp.MustCompile(`(?is)^\s*(<\?xml[^>]*>\s*)?(<!--.*?-->\s*|<!doctype[^>]*>\s*)*<svg\b[^>]*>`)
+
+// svgSize is an SVG's size in pixels: its width and height, else its
+// viewBox's, else 300 × 150 (as a browser draws one); ok is false when
+// data isn't an SVG file (an HTML page with an <svg> in it isn't).
+func svgSize(data []byte) (int, int, bool) {
+	head := bytes.TrimPrefix(data[:min(len(data), 4096)], []byte("\xef\xbb\xbf")) // a UTF-8 byte order mark
+	if !svgStart.Match(head) {
+		return 0, 0, false
+	}
+	tag := svgTag.Find(head)
+	var wpx, hpx float64
+	var box []string
+	for _, m := range svgAttr.FindAllSubmatch(tag, -1) {
+		v := string(m[2])
+		switch strings.ToLower(string(m[1])) {
+		case "width":
+			if n := svgNumber.FindStringSubmatch(v); n != nil {
+				wpx, _ = strconv.ParseFloat(n[1], 64)
+			}
+		case "height":
+			if n := svgNumber.FindStringSubmatch(v); n != nil {
+				hpx, _ = strconv.ParseFloat(n[1], 64)
+			}
+		case "viewbox":
+			box = strings.Fields(strings.ReplaceAll(v, ",", " "))
+		}
+	}
+	if (wpx <= 0 || hpx <= 0) && len(box) == 4 {
+		bw, _ := strconv.ParseFloat(box[2], 64)
+		bh, _ := strconv.ParseFloat(box[3], 64)
+		switch {
+		case wpx > 0 && bw > 0:
+			hpx = wpx * bh / bw
+		case hpx > 0 && bh > 0:
+			wpx = hpx * bw / bh
+		default:
+			wpx, hpx = bw, bh
+		}
+	}
+	if wpx <= 0 || hpx <= 0 {
+		wpx, hpx = 300, 150
+	}
+	return int(wpx), int(hpx), true
+}
+
+// blankPNG is a 1 × 1 transparent PNG: an SVG's fallback.
+var blankPNG = []byte{
+	0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52,
+	0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x06, 0x00, 0x00, 0x00, 0x1f, 0x15, 0xc4,
+	0x89, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x44, 0x41, 0x54, 0x78, 0x9c, 0x63, 0x00, 0x01, 0x00, 0x00,
+	0x05, 0x00, 0x01, 0x0d, 0x0a, 0x2d, 0xb4, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4e, 0x44, 0xae,
+	0x42, 0x60, 0x82,
 }
 
 func cmp(a, b string) string {

@@ -303,6 +303,20 @@ message RenderDocxRequest {
   // The Markdown file it's from, for its images ("" for none).
   string path = 2;
   string markdown = 3;
+  // Its ```mermaid diagrams, drawn by the caller (the service can't run
+  // Mermaid); one not here stays as its code.
+  repeated DocxDiagram diagrams = 4;
+}
+
+// A diagram drawn as a picture, for RenderDocx.
+message DocxDiagram {
+  // The ```mermaid block's text: its lines, without the fences.
+  string source = 1;
+  // A PNG of it.
+  bytes png = 2;
+  // Its size in CSS pixels (the PNG may have more, for sharpness).
+  int32 width = 3;
+  int32 height = 4;
 }
 
 // Response message for FileService.RenderDocx.

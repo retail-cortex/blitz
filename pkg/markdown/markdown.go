@@ -13,13 +13,16 @@
 // limitations under the License.
 
 // Package markdown parses Markdown the way Blitz's exporters read it
-// (GitHub-flavoured, by goldmark, a leading YAML front matter dropped as the
-// desktop preview drops it) and gives the plain text of its nodes, for the
+// (GitHub-flavoured, by goldmark, with $…$ and $$…$$ maths, a leading YAML
+// front matter dropped, as the desktop preview reads it) and gives the plain text of its nodes, for the
 // PDF and Word writers alike.
 package markdown
 
 import (
+	"net/url"
+	"path"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/yuin/goldmark"
@@ -36,7 +39,7 @@ var frontMatter = regexp.MustCompile(`\A---\r?\n(?s:.*?)\r?\n---\r?\n`)
 // It returns the document and the source its nodes point into.
 func Parse(src []byte) (ast.Node, []byte) {
 	src = frontMatter.ReplaceAll(src, nil)
-	return goldmark.New(goldmark.WithExtensions(extension.GFM)).Parser().Parse(text.NewReader(src)), src
+	return goldmark.New(goldmark.WithExtensions(extension.GFM, mathExt)).Parser().Parse(text.NewReader(src)), src
 }
 
 // Unescape resolves backslash escapes and character references, as an
@@ -71,6 +74,8 @@ func PlainText(n ast.Node, src []byte) string {
 				b.Write(c.Value)
 			case *ast.AutoLink:
 				b.Write(c.Label(src))
+			case *Math:
+				b.WriteString(c.Source)
 			case *ast.RawHTML:
 			default:
 				walk(c)
@@ -103,4 +108,87 @@ func Lines(n ast.Node, src []byte) []string {
 		b.Write(seg.Value(src))
 	}
 	return strings.Split(strings.TrimRight(b.String(), "\n"), "\n")
+}
+
+// LocalPath is where a picture or link written dest in the document at
+// docPath (workspace-relative, with "/") points in the workspace, as the
+// desktop app's preview resolves it (files/mdlinks.ts): percent-escapes
+// decoded, a query and a fragment dropped, a leading "/" from the
+// workspace's root, else from the document's folder. ok is false for a
+// URL (http:, data:, …), a fragment alone, or a path that leaves the
+// workspace.
+func LocalPath(dest, docPath string) (rel string, ok bool) {
+	d := strings.TrimSpace(dest)
+	if d == "" || strings.HasPrefix(d, "#") || strings.HasPrefix(d, "//") || scheme.MatchString(d) {
+		return "", false
+	}
+	if i := strings.IndexAny(d, "?#"); i >= 0 {
+		d = d[:i]
+	}
+	if u, err := url.PathUnescape(d); err == nil {
+		d = u
+	}
+	var parts []string
+	if !strings.HasPrefix(d, "/") && docPath != "" {
+		parts = strings.Split(path.Dir(docPath), "/")
+		if parts[0] == "." {
+			parts = nil
+		}
+	}
+	for _, p := range strings.Split(d, "/") {
+		switch p {
+		case "", ".":
+		case "..":
+			if len(parts) == 0 {
+				return "", false
+			}
+			parts = parts[:len(parts)-1]
+		default:
+			parts = append(parts, p)
+		}
+	}
+	if len(parts) == 0 {
+		return "", false
+	}
+	return strings.Join(parts, "/"), true
+}
+
+var scheme = regexp.MustCompile(`^[a-zA-Z][a-zA-Z0-9+.-]*:`)
+
+// Picture is a picture written as HTML.
+type Picture struct {
+	Src, Alt string
+	// Width is its width in pixels when the tag gives one, else 0.
+	Width int
+}
+
+var (
+	loneImg   = regexp.MustCompile(`(?is)^\s*<img\b((?:\s+[\w:-]+(?:\s*=\s*(?:"[^"]*"|'[^']*'|[^\s"'=<>` + "`" + `]+))?)*)\s*/?>\s*$`)
+	attribute = regexp.MustCompile(`([\w:-]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>` + "`" + `]+)))?`)
+)
+
+// HTMLPicture is the picture in html when it's nothing but one <img> tag,
+// as the preview shows one (raw HTML is otherwise left out): its src,
+// alt and width.
+func HTMLPicture(html string) (Picture, bool) {
+	m := loneImg.FindStringSubmatch(html)
+	if m == nil {
+		return Picture{}, false
+	}
+	attrs := map[string]string{}
+	for _, a := range attribute.FindAllStringSubmatch(m[1], -1) {
+		attrs[strings.ToLower(a[1])] = htmlUnescape(a[2] + a[3] + a[4])
+	}
+	if attrs["src"] == "" {
+		return Picture{}, false
+	}
+	p := Picture{Src: attrs["src"], Alt: attrs["alt"]}
+	if w, err := strconv.Atoi(strings.TrimSuffix(attrs["width"], "px")); err == nil && w > 0 {
+		p.Width = w
+	}
+	return p, true
+}
+
+func htmlUnescape(s string) string {
+	return strings.NewReplacer("&amp;", "&", "&lt;", "<", "&gt;", ">", "&quot;", `"`, "&#39;", "'").Replace(s)
 }

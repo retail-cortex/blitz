@@ -145,6 +145,82 @@ export async function drawForPrint(source: string): Promise<string> {
   }
 }
 
+/** A diagram drawn as a picture: PNG bytes at twice its size, and its size in CSS pixels. */
+export interface DiagramPicture {
+  png: Uint8Array;
+  width: number;
+  height: number;
+}
+
+/**
+ * Draws a diagram as a PNG, for documents that can't run Mermaid (Export
+ * as Word): in Mermaid's light default theme, its labels SVG text (Word
+ * and a canvas can't draw HTML labels), at twice its size for sharpness.
+ */
+export async function drawAsPicture(source: string): Promise<DiagramPicture> {
+  loading ??= import("mermaid").then((m) => m.default);
+  const m = await loading;
+  m.initialize({ startOnLoad: false, securityLevel: "strict", theme: "default", fontSize: 14, htmlLabels: false, flowchart: { htmlLabels: false } });
+  configured = "";
+  const id = `mermaid-${++seq}`;
+  let svg: string;
+  try {
+    svg = (await m.render(id, source)).svg;
+  } finally {
+    document.getElementById(`d${id}`)?.remove();
+  }
+  const { width, height } = svgSize(svg);
+  const img = new Image();
+  img.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(sized(svg, width, height))}`;
+  await img.decode();
+  const scale = 2;
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.ceil(width * scale);
+  canvas.height = Math.ceil(height * scale);
+  const g = canvas.getContext("2d");
+  if (!g) throw new Error("no canvas to draw the diagram on");
+  g.fillStyle = "#fff";
+  g.fillRect(0, 0, canvas.width, canvas.height);
+  g.drawImage(img, 0, 0, canvas.width, canvas.height);
+  const blob = await new Promise<Blob | null>((done) => canvas.toBlob(done, "image/png"));
+  if (!blob) throw new Error("the diagram couldn't be drawn");
+  return { png: new Uint8Array(await blob.arrayBuffer()), width: Math.round(width), height: Math.round(height) };
+}
+
+/** A Mermaid SVG's size in CSS pixels: its viewBox's (Mermaid sizes the element by CSS). */
+export function svgSize(svg: string): { width: number; height: number } {
+  const box = /viewBox="([\d.\s,-]+)"/.exec(svg)?.[1].split(/[\s,]+/).map(Number);
+  if (box && box.length === 4 && box[2] > 0 && box[3] > 0) return { width: box[2], height: box[3] };
+  const w = Number(/\bwidth="([\d.]+)/.exec(svg)?.[1]);
+  const h = Number(/\bheight="([\d.]+)/.exec(svg)?.[1]);
+  return { width: w > 0 ? w : 600, height: h > 0 ? h : 400 };
+}
+
+// The SVG with its size written on it: an <img> of an SVG sized only by
+// CSS (max-width) draws at no size.
+function sized(svg: string, width: number, height: number): string {
+  return svg.replace(/<svg\b([^>]*)>/, (_m, attrs: string) => `<svg${attrs.replace(/\s(width|height)="[^"]*"/g, "").replace(/\sstyle="[^"]*"/, "")} width="${width}" height="${height}">`);
+}
+
+/**
+ * The ```mermaid blocks in Markdown, by their source as the Word writer
+ * reads it (its lines, without the fences or a last newline).
+ */
+export function mermaidSources(markdown: string): string[] {
+  const out: string[] = [];
+  const fence = /^( {0,3})(`{3,}|~{3,})[ \t]*mermaid\b[^\n]*\n([\s\S]*?)^ {0,3}\2[`~]*[ \t]*$/gim;
+  for (const m of markdown.matchAll(fence)) {
+    const indent = m[1].length;
+    const body = m[3]
+      .split("\n")
+      .map((l) => l.replace(new RegExp(`^ {0,${indent}}`), ""))
+      .join("\n")
+      .replace(/\n+$/, "");
+    out.push(body);
+  }
+  return out;
+}
+
 /** A ```mermaid block: the diagram, or its source while it doesn't parse (a reply still coming in). */
 export function MermaidBlock({ source }: { source: string }) {
   const { theme } = useApp();
