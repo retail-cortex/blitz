@@ -17,8 +17,10 @@ package runtime
 import (
 	"context"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -204,4 +206,120 @@ func TestModelsShareAClient(t *testing.T) {
 	a := retryPolicy{stall: 41 * time.Second}.httpClient()
 	require.Same(t, a, retryPolicy{stall: 41 * time.Second, maxRetries: 5}.httpClient())
 	require.NotSame(t, a, retryPolicy{stall: 42 * time.Second}.httpClient())
+}
+
+// freezer is a TCP proxy whose connections can go silent, as a VPN or NAT
+// that drops a connection does: nothing gets through, and nothing says so.
+// Connections made after freeze pass traffic.
+type freezer struct {
+	ln     net.Listener
+	mu     sync.Mutex
+	frozen []*atomic.Bool
+	done   chan struct{}
+}
+
+func newFreezer(t *testing.T, target string) *freezer {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	f := &freezer{ln: ln, done: make(chan struct{})}
+	t.Cleanup(func() { close(f.done); ln.Close() })
+	go func() {
+		for {
+			in, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			out, err := net.Dial("tcp", target)
+			if err != nil {
+				in.Close()
+				continue
+			}
+			frozen := new(atomic.Bool)
+			f.mu.Lock()
+			f.frozen = append(f.frozen, frozen)
+			f.mu.Unlock()
+			go f.pipe(in, out, frozen)
+			go f.pipe(out, in, frozen)
+		}
+	}()
+	return f
+}
+
+func (f *freezer) pipe(from, to net.Conn, frozen *atomic.Bool) {
+	defer to.Close()
+	buf := make([]byte, 32<<10)
+	for {
+		n, err := from.Read(buf)
+		if frozen.Load() {
+			<-f.done // swallowed, until the test ends
+			return
+		}
+		if n > 0 {
+			if _, werr := to.Write(buf[:n]); werr != nil {
+				return
+			}
+		}
+		if err != nil {
+			return
+		}
+	}
+}
+
+// freeze silences every connection made so far.
+func (f *freezer) freeze() {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for _, b := range f.frozen {
+		b.Store(true)
+	}
+}
+
+func TestDeadConnectionFailsFastAndTheNextRequestReconnects(t *testing.T) {
+	after, timeout := h2PingAfter, h2PingTimeout
+	h2PingAfter, h2PingTimeout = 100*time.Millisecond, 200*time.Millisecond
+	t.Cleanup(func() { h2PingAfter, h2PingTimeout = after, timeout })
+
+	srv := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		io.WriteString(w, r.Proto)
+	}))
+	srv.EnableHTTP2 = true
+	srv.StartTLS()
+	defer srv.Close()
+	proxy := newFreezer(t, srv.Listener.Addr().String())
+
+	// The stall limit is far off: only the health check can end the wait.
+	tr := retryPolicy{stall: time.Minute}.transport()
+	tr.TLSClientConfig = srv.Client().Transport.(*http.Transport).TLSClientConfig.Clone()
+	defer tr.CloseIdleConnections()
+	client := &http.Client{Transport: tr}
+	url := "https://" + proxy.ln.Addr().String()
+
+	get := func() (string, error) {
+		ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+		defer cancel()
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+		require.NoError(t, err)
+		resp, err := client.Do(req)
+		if err != nil {
+			return "", err
+		}
+		defer resp.Body.Close()
+		b, err := io.ReadAll(resp.Body)
+		return string(b), err
+	}
+
+	proto, err := get()
+	require.NoError(t, err)
+	require.Equal(t, "HTTP/2.0", proto)
+
+	proxy.freeze()
+	start := time.Now()
+	_, err = get()
+	require.Error(t, err, "a request on a dead connection fails")
+	require.NotErrorIs(t, err, context.DeadlineExceeded, "it fails by the health check, not the caller giving up")
+	require.Less(t, time.Since(start), 2*time.Second)
+
+	proto, err = get()
+	require.NoError(t, err, "the next request makes a new connection")
+	require.Equal(t, "HTTP/2.0", proto)
 }

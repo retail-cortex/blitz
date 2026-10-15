@@ -59,7 +59,8 @@ func policyFrom(cfg config.LLMConfig) retryPolicy {
 // httpClient returns the client every model SDK uses. A request fails
 // instead of hanging when connecting, the TLS handshake, the wait for
 // response headers, or the gap between reads of the (streamed) body takes
-// too long. The SDKs' retry logic then applies to connection-level failures.
+// too long, or its connection stops answering pings. The SDKs' retry logic
+// then applies to connection-level failures.
 //
 // The stall limit also bounds the wait for headers, which for non-streamed
 // requests is the whole generation, so it must exceed the longest
@@ -75,13 +76,31 @@ func (p retryPolicy) httpClient() *http.Client {
 	if c, ok := modelClients[p.stall]; ok {
 		return c
 	}
+	c := &http.Client{Transport: &stallTransport{base: p.transport(), stall: p.stall}}
+	modelClients[p.stall] = c
+	return c
+}
+
+// Health checks for the models' HTTP/2 connections. Every request to a
+// provider shares one connection, and one that dies without a word (a VPN
+// or NAT dropping it, a network change) would otherwise hold each request
+// sent on it until the stall limit, retries included. A connection quiet
+// for h2PingAfter is pinged and closed when no answer comes within
+// h2PingTimeout; its requests fail, and the SDKs retry them on a new one.
+// A model that is slow to answer still answers pings.
+var (
+	h2PingAfter   = 30 * time.Second
+	h2PingTimeout = 15 * time.Second
+)
+
+// transport is the models' transport, with every limit but the body's.
+func (p retryPolicy) transport() *http.Transport {
 	base := http.DefaultTransport.(*http.Transport).Clone()
 	base.DialContext = (&net.Dialer{Timeout: dialTimeout, KeepAlive: 30 * time.Second}).DialContext
 	base.TLSHandshakeTimeout = tlsTimeout
 	base.ResponseHeaderTimeout = p.stall
-	c := &http.Client{Transport: &stallTransport{base: base, stall: p.stall}}
-	modelClients[p.stall] = c
-	return c
+	base.HTTP2 = &http.HTTP2Config{SendPingTimeout: h2PingAfter, PingTimeout: h2PingTimeout}
+	return base
 }
 
 // modelClients are the models' HTTP clients, by stall limit.
