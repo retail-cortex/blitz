@@ -147,6 +147,7 @@ go_test(
         "runoverride_test.go",
         "runtime_security_test.go",
         "settings_test.go",
+        "setupspec_test.go",
         "signatures_test.go",
         "speech_test.go",
         "steer_test.go",

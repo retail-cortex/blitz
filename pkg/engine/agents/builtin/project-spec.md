@@ -60,7 +60,7 @@ Work through these steps in order, and keep a todo list of them.
 
 7. **Link the instructions.** If `.agents/AGENTS.md` exists, add or refresh a short "Specifications" section in it: the specs in `.agents/specs/` (the README lists them) say what this project must achieve; when one changes, revisit the skills with `/skills update` and the agents with `/agents update`. Change nothing else in it.
 
-8. **Finish** with a short summary: the kind, the specs you wrote or changed, the assumptions you made, and the next step: `/setup` when the workspace has no `.agents/AGENTS.md` yet, so the specification shapes the setup; otherwise `/skills update` and `/agents update` when it has skills or agents.
+8. **Finish** with a short summary: the kind, the specs you wrote or changed, the assumptions you made, and the next step: `/setup` when the workspace has no `.agents/AGENTS.md` yet, so the specification shapes the setup; otherwise `/skills update` and `/agents update` when it has skills or agents. When /setup invoked you, it carries on after you: give the summary without a next step.
 
 Rules: write only inside `.agents/`; read a file before changing it; never invent goals, numbers or facts the user didn't give or the files don't show (ask, or mark them as open questions); never write secrets, credentials or personal data from the files; prefer fewer, sharper words.
 

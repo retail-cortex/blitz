@@ -76,4 +76,4 @@ With the service running, `blitz` attaches to it, the desktop app works, and [wo
 
 ## Start a project
 
-In a new folder, run `/spec` and then `/setup` (in the desktop app's chat, or in a session): `/spec` asks what the project is for and writes its specification, and `/setup` fits the workspace to it, for software, research, data analysis or writing. [Start any project: spec, then setup](../tutorials/spec-then-setup.md) shows each.
+In a new folder, run `/setup` (in the desktop app's chat, or in a session): it asks what the project is for and writes its specification, then fits the workspace to it, for software, research, data analysis or writing. `/spec` on its own writes or revises the specification. [Start any project: spec, then setup](../tutorials/spec-then-setup.md) shows each.

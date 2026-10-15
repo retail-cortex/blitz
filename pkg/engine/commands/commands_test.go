@@ -81,7 +81,7 @@ func TestLoadNamespacesAndBundled(t *testing.T) {
 		})
 	}
 	assert.Equal(t, "project-setup", bundled["setup"].Agent, "/setup runs the setup agent")
-	assert.Contains(t, bundled["setup"].Body, "/spec", "/setup offers /spec first")
+	assert.Contains(t, bundled["setup"].Body, "project-spec agent", "/setup writes the specification first, with the spec agent")
 	assert.Equal(t, "project-spec", bundled["spec"].Agent, "/spec runs the spec agent")
 	assert.Contains(t, bundled["spec"].Expand("a recipe app"), ".agents/specs/ in the order the work happens. a recipe app")
 	assert.Contains(t, bundled["spec"].Body, "what kind of project", "/spec asks the kind first: not only software")
