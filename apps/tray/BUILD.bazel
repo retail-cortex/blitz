@@ -44,6 +44,8 @@ copy_to_directory(
 go_library(
     name = "tray_lib",
     srcs = [
+        "dock_darwin.go",
+        "dock_other.go",
         "icons_other.go",
         "icons_windows.go",
         "lock_unix.go",
@@ -52,6 +54,25 @@ go_library(
         "page.go",
         "page_none.go",
     ],
+    cgo = True,
+    clinkopts = select({
+        "@rules_go//go/platform:darwin": [
+            "-framework AppKit",
+        ],
+        "@rules_go//go/platform:ios": [
+            "-framework AppKit",
+        ],
+        "//conditions:default": [],
+    }),
+    copts = select({
+        "@rules_go//go/platform:darwin": [
+            "-x objective-c",
+        ],
+        "@rules_go//go/platform:ios": [
+            "-x objective-c",
+        ],
+        "//conditions:default": [],
+    }),
     # The page only for the builds that serve it (page.go).
     embedsrcs = [
         "icons/running-44.png",
@@ -86,6 +107,8 @@ go_library(
 go_library(
     name = "tray_page_lib",
     srcs = [
+        "dock_darwin.go",
+        "dock_other.go",
         "icons_other.go",
         "icons_windows.go",
         "lock_unix.go",
@@ -94,6 +117,19 @@ go_library(
         "page.go",
         "page_none.go",
     ],
+    cgo = True,
+    clinkopts = select({
+        "@rules_go//go/platform:darwin": [
+            "-framework AppKit",
+        ],
+        "//conditions:default": [],
+    }),  # keep
+    copts = select({
+        "@rules_go//go/platform:darwin": [
+            "-x objective-c",
+        ],
+        "//conditions:default": [],
+    }),  # keep
     embedsrcs = [
         "icons/running-44.png",
         "icons/stopped-44.png",

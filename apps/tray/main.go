@@ -70,6 +70,7 @@ func main() {
 		if !lock() {
 			return // one tray is enough
 		}
+		menuBarOnly()
 		systray.Run(onReady, func() {})
 	}
 }
