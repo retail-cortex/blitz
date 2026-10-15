@@ -39,6 +39,7 @@ go_library(
     deps = [
         "//pkg/api",
         "//pkg/config",
+        "//pkg/docx",
         "//pkg/engine",
         "//pkg/engine/agents",
         "//pkg/engine/runtime",

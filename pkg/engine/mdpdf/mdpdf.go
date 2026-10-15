@@ -34,7 +34,6 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -45,12 +44,9 @@ import (
 	"github.com/alecthomas/chroma/v2/lexers"
 	"github.com/alecthomas/chroma/v2/styles"
 	"github.com/go-pdf/fpdf"
-	"github.com/yuin/goldmark"
+	"github.com/retail-cortex/blitz/pkg/markdown"
 	"github.com/yuin/goldmark/ast"
-	"github.com/yuin/goldmark/extension"
 	east "github.com/yuin/goldmark/extension/ast"
-	"github.com/yuin/goldmark/text"
-	"github.com/yuin/goldmark/util"
 	"golang.org/x/image/font/sfnt"
 )
 
@@ -191,9 +187,6 @@ var headingSizes = map[int]float64{1: 20, 2: 16, 3: 13.5, 4: 12, 5: 11, 6: 10.5}
 
 func lineHeight(pt float64) float64 { return pt * ptToMM * lineFactor }
 
-// frontMatter is a leading YAML block, which the desktop preview hides too.
-var frontMatter = regexp.MustCompile(`\A---\r?\n(?s:.*?)\r?\n---\r?\n`)
-
 // Render typesets Markdown.
 func Render(src []byte, o Options) (*Result, error) {
 	fs, err := fonts()
@@ -204,8 +197,7 @@ func Render(src []byte, o Options) (*Result, error) {
 	if err != nil {
 		return nil, fmt.Errorf("fonts: %w", err)
 	}
-	src = frontMatter.ReplaceAll(src, nil)
-	doc := goldmark.New(goldmark.WithExtensions(extension.GFM)).Parser().Parse(text.NewReader(src))
+	doc, src := markdown.Parse(src)
 
 	size := o.PageSize
 	if size != Letter {
@@ -224,7 +216,7 @@ func Render(src []byte, o Options) (*Result, error) {
 	f.SetCreationDate(cmpTime(o.Time))
 	title := o.Title
 	if title == "" {
-		title = firstHeading(doc, src)
+		title = markdown.FirstHeading(doc, src)
 	}
 	if title != "" {
 		f.SetTitle(title, true)
@@ -255,18 +247,6 @@ func cmpTime(t time.Time) time.Time {
 		return time.Now()
 	}
 	return t
-}
-
-func firstHeading(doc ast.Node, src []byte) string {
-	var title string
-	_ = ast.Walk(doc, func(n ast.Node, entering bool) (ast.WalkStatus, error) {
-		if h, ok := n.(*ast.Heading); ok && entering {
-			title = plainText(h, src)
-			return ast.WalkStop, nil
-		}
-		return ast.WalkContinue, nil
-	})
-	return title
 }
 
 // style is how inline text is set.
@@ -310,12 +290,12 @@ func (r *renderer) block(n ast.Node) {
 		r.rule()
 	case *ast.FencedCodeBlock:
 		lang := string(n.Language(r.src))
-		r.code(r.lines(n), lang)
+		r.code(markdown.Lines(n, r.src), lang)
 		if strings.EqualFold(lang, "mermaid") {
 			r.note("Diagram: export from the Blitz desktop app to draw it.")
 		}
 	case *ast.CodeBlock:
-		r.code(r.lines(n), "")
+		r.code(markdown.Lines(n, r.src), "")
 	case *ast.Blockquote:
 		r.quote(n)
 	case *ast.List:
@@ -382,7 +362,7 @@ func (r *renderer) heading(n *ast.Heading) {
 	r.keep(lineHeight(size)*2 + 8) // never last on a page
 	level := min(n.Level-1, r.lastLevel+1)
 	r.lastLevel = level
-	r.f.Bookmark(plainText(n, r.src), level, -1)
+	r.f.Bookmark(markdown.PlainText(n, r.src), level, -1)
 	r.begin(size, style{bold: true})
 	r.f.SetX(r.left())
 	r.inlines(n)
@@ -432,11 +412,7 @@ func (r *renderer) inlines(n ast.Node) {
 func (r *renderer) inline(n ast.Node) {
 	switch n := n.(type) {
 	case *ast.Text:
-		v := n.Value(r.src)
-		if !n.IsRaw() {
-			v = unescape(v)
-		}
-		r.text(string(v))
+		r.text(string(markdown.TextOf(n, r.src)))
 		switch {
 		case n.HardLineBreak():
 			r.f.Ln(r.lh)
@@ -478,12 +454,6 @@ func (r *renderer) inline(n ast.Node) {
 	default: // strikethrough and the like: their text
 		r.inlines(n)
 	}
-}
-
-// unescape resolves backslash escapes and character references, as an
-// HTML renderer would.
-func unescape(v []byte) []byte {
-	return util.ResolveEntityNames(util.ResolveNumericReferences(util.UnescapePunctuations(v)))
 }
 
 // text writes a run of inline text in the current style, wrapping at the
@@ -607,7 +577,7 @@ func (r *renderer) checkbox(checked bool) {
 
 // image draws a picture on its own line, scaled to fit the text width.
 func (r *renderer) image(n *ast.Image) {
-	alt := plainText(n, r.src)
+	alt := markdown.PlainText(n, r.src)
 	data, kind := r.loadImage(string(n.Destination))
 	if data == nil {
 		saved := r.st
@@ -672,16 +642,6 @@ func cmpString(a, b string) string {
 		return a
 	}
 	return b
-}
-
-func (r *renderer) lines(n ast.Node) []string {
-	var b strings.Builder
-	l := n.Lines()
-	for i := range l.Len() {
-		seg := l.At(i)
-		b.Write(seg.Value(r.src))
-	}
-	return strings.Split(strings.TrimRight(b.String(), "\n"), "\n")
 }
 
 type segment struct {
@@ -880,7 +840,7 @@ func (r *renderer) table(t *east.Table) {
 	for row := t.FirstChild(); row != nil; row = row.NextSibling() {
 		var cells []string
 		for c := row.FirstChild(); c != nil; c = c.NextSibling() {
-			cells = append(cells, plainText(c, r.src))
+			cells = append(cells, markdown.PlainText(c, r.src))
 		}
 		if _, ok := row.(*east.TableHeader); ok {
 			header++
@@ -996,36 +956,6 @@ func (r *renderer) columnWidths(rows [][]string, header, cols int) []float64 {
 		out[i] *= total / used
 	}
 	return out
-}
-
-// plainText is the text of a node's inlines, without formatting.
-func plainText(n ast.Node, src []byte) string {
-	var b strings.Builder
-	var walk func(ast.Node)
-	walk = func(n ast.Node) {
-		for c := n.FirstChild(); c != nil; c = c.NextSibling() {
-			switch c := c.(type) {
-			case *ast.Text:
-				v := c.Value(src)
-				if !c.IsRaw() {
-					v = unescape(v)
-				}
-				b.Write(v)
-				if c.SoftLineBreak() || c.HardLineBreak() {
-					b.WriteByte(' ')
-				}
-			case *ast.String:
-				b.Write(c.Value)
-			case *ast.AutoLink:
-				b.Write(c.Label(src))
-			case *ast.RawHTML:
-			default:
-				walk(c)
-			}
-		}
-	}
-	walk(n)
-	return strings.TrimSpace(b.String())
 }
 
 // ErrNotMarkdown is returned for input that isn't text.

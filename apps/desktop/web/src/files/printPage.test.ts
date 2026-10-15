@@ -15,7 +15,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { pageHTML, paperFor, pdfPath, pictureURL, type ReadPicture, withMathFonts } from "./printPage";
+import { exportPath, pageHTML, paperFor, pdfPath, pictureURL, type ReadPicture, withMathFonts } from "./printPage";
 
 describe("paperFor", () => {
   it.each([
@@ -27,6 +27,11 @@ describe("paperFor", () => {
     ["es-MX", "Letter"],
     ["not a locale!", "A4"],
   ])("%s", (locale, want) => expect(paperFor(locale)).toBe(want));
+});
+
+it("names a Word export like the PDF", () => {
+  expect(exportPath("docs/notes.md", ".docx")).toBe("docs/notes.docx");
+  expect(exportPath("README.markdown", ".docx")).toBe("README.docx");
 });
 
 describe("pdfPath", () => {

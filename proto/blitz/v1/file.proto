@@ -62,6 +62,9 @@ service FileService {
   // Puts a file back as it was in one of its revisions, if it still has
   // the version given (FILE_CHANGED if not); the index is left alone.
   rpc RestoreFileRevision(RestoreFileRevisionRequest) returns (RestoreFileRevisionResponse);
+  // Markdown written as a Word document (.docx), its images read beside
+  // the file it belongs to; the caller writes it (Export as Word, /export).
+  rpc RenderDocx(RenderDocxRequest) returns (RenderDocxResponse);
   // Files whose path matches a query, best first (Go to file).
   rpc FindFiles(FindFilesRequest) returns (FindFilesResponse);
   // Files' current versions, to notice changes made elsewhere.
@@ -292,6 +295,19 @@ message RestoreFileRevisionRequest {
 message RestoreFileRevisionResponse {
   // The file's new version.
   string version = 1;
+}
+
+// Request message for FileService.RenderDocx.
+message RenderDocxRequest {
+  string workspace = 1;
+  // The Markdown file it's from, for its images ("" for none).
+  string path = 2;
+  string markdown = 3;
+}
+
+// Response message for FileService.RenderDocx.
+message RenderDocxResponse {
+  bytes data = 1;
 }
 
 // Request message for FileService.FindFiles.

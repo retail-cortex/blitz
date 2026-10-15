@@ -20,6 +20,7 @@ import (
 	"io/fs"
 
 	"connectrpc.com/connect"
+	"github.com/retail-cortex/blitz/pkg/docx"
 	"github.com/retail-cortex/blitz/pkg/engine"
 	pb "github.com/retail-cortex/blitz/proto/blitz/v1"
 )
@@ -224,6 +225,21 @@ func (h fileService) RestoreFileRevision(ctx context.Context, r req[pb.RestoreFi
 		return nil, fileError(err)
 	}
 	return ok(&pb.RestoreFileRevisionResponse{Version: version})
+}
+
+func (h fileService) RenderDocx(ctx context.Context, r req[pb.RenderDocxRequest]) (*connect.Response[pb.RenderDocxResponse], error) {
+	w, err := h.s.workspace(ctx, r.Msg.Workspace)
+	if err != nil {
+		return nil, err
+	}
+	data, err := w.RenderDocx(r.Msg.Path, r.Msg.Markdown)
+	if errors.Is(err, docx.ErrNotText) {
+		return nil, invalid(err)
+	}
+	if err != nil {
+		return nil, fileError(err)
+	}
+	return ok(&pb.RenderDocxResponse{Data: data})
 }
 
 func (h fileService) FindFiles(ctx context.Context, r req[pb.FindFilesRequest]) (*connect.Response[pb.FindFilesResponse], error) {

@@ -112,7 +112,7 @@ Decisions are `once`, `session`, `always` or `deny`; a question is answered with
 | `/approvals [revoke <n>\|clear]` | Remembered approval rules |
 | `/hooks` | The hooks, where they come from, and their recent failures |
 | `/fork [n]` | Continue in a copy of the session, up to prompt `n` |
-| `/export [file]` | The session as Markdown: prompts, answers, tool calls (`blitz sessions export <id>` from the shell) |
+| `/export [file]` | The session as Markdown, or a Word document for a `.docx` name: prompts, answers, tool calls (`blitz sessions export <id>` from the shell) |
 | `/style [name]` | How the agent writes its answers: `default`, `concise`, `explanatory`, or yours in `~/.blitz/styles` |
 | `/session list [--all]\|new\|load <id\|name>\|save <name>`, `/resume`, `/rename` | Sessions and snapshots, scoped to the workspace |
 | `blitz plugin install\|list\|show\|enable\|disable\|remove\|update`, `blitz plugin marketplace add\|list\|remove`, `blitz plugin import claude\|gemini <dir>`, `--plugin-dir <dir>` | Plugins: skills, commands, agents, hooks and MCP servers in one bundle ([extending](../guide/extending.md#plugins)) |

@@ -200,7 +200,13 @@ export const builtinCommands: Builtin[] = [
       let path = c.args || exportName(c.sessionTitle ?? "", c.sessionId ?? "");
       if (path.startsWith(c.dir + "/")) path = path.slice(c.dir.length + 1);
       if (path.startsWith("/")) return c.say(t("desktop.cmd.in_workspace", { path }), "error");
-      await files.writeFile({ workspace: c.dir, path, text: r.markdown });
+      // A .docx name writes a Word document (FS-75); anything else, Markdown.
+      if (/\.docx$/i.test(path)) {
+        const { data } = await files.renderDocx({ workspace: c.dir, path: "", markdown: r.markdown });
+        await files.writeBinaryFile({ workspace: c.dir, path, data });
+      } else {
+        await files.writeFile({ workspace: c.dir, path, text: r.markdown });
+      }
       c.say(t("export.done", { path }));
     },
   },

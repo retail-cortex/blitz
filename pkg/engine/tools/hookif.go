@@ -52,6 +52,9 @@ func callTargets(tool string, args map[string]any) map[string][]string {
 	case "export_pdf": // path, or markdown given
 		add(RuleRead, str("path"))
 		add(RuleWrite, ExportPDFOutputPath(str("path"), str("output")))
+	case "export_docx":
+		add(RuleRead, str("path"))
+		add(RuleWrite, ExportDocxOutputPath(str("path"), str("output")))
 	case "delete_file":
 		add(RuleDelete, str("path"))
 	case "web_fetch", "browser":

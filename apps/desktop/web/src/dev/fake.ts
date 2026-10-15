@@ -1181,6 +1181,13 @@ export function installFake() {
           fakeFiles.set(path, text);
           return { version: fakeVersion(text) };
         },
+        writeBinaryFile: ({ path, data, version }) => {
+          const now = fakeFiles.get(path);
+          if ((now === undefined ? "" : fakeVersion(now)) !== version) throw new ConnectError(`${path} was changed since it was opened`, Code.FailedPrecondition);
+          const text = new TextDecoder().decode(data);
+          fakeFiles.set(path, text);
+          return { version: fakeVersion(text) };
+        },
         createFolder: ({ path }) => {
           fakeFiles.set(path + "/.keep", "");
           return {};
@@ -1270,6 +1277,7 @@ export function installFake() {
             latin1: false,
           };
         },
+        renderDocx: ({ markdown }) => ({ data: new TextEncoder().encode("PK fake docx\n" + markdown) }),
         statFiles: ({ paths }) => ({ versions: Object.fromEntries(paths.map((p) => [p, fakeFiles.has(p) ? fakeVersion(fakeFiles.get(p)!) : ""])) }),
       });
       service(WorkerService, {

@@ -41,6 +41,7 @@ import {
   mdiFolderOutline,
   mdiFileMusicOutline,
   mdiFilePdfBox,
+  mdiFileWordBoxOutline,
   mdiFileVideoOutline,
   mdiImageOutline,
   mdiVolumeHigh,
@@ -1236,6 +1237,7 @@ function kindOfName(name: string): string {
 
 function toolIcon(name: string): string {
   if (name === "export_pdf") return mdiFilePdfBox;
+  if (name === "export_docx") return mdiFileWordBoxOutline;
   if (name === "generate_audio") return mdiVolumeHigh;
   if (name === "view_media") return mdiFileVideoOutline;
   if (/^(read_file|list_files|view_image|view_document)$/.test(name)) return mdiFileDocumentOutline;
