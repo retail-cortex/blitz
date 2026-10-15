@@ -5,6 +5,7 @@ weight: 55
 
 What each release of Blitz brings, beyond the change list on [GitHub's releases page](https://github.com/retail-cortex/blitz/releases).
 
+- [Blitz 0.6.0](blitz-0.6.0.md): Word export with equations, pictures and diagrams; pictures in every PDF; skills from registries such as Castor; file revisions.
 - [Blitz 0.5.4](blitz-0.5.4.md): `/spec` for research, data analysis and writing, every terminal command in the desktop app, and the user guide in the app.
 - [Blitz 0.5.3](blitz-0.5.3.md): `/spec` and `/setup` from a specification, Gemini 4 Argon by default, a lighter idle window and native Mac menus.
 - [Blitz 0.5.2](blitz-0.5.2.md): Go code blocks steady as you hover, and Go help in more projects.

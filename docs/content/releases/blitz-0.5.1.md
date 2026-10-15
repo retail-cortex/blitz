@@ -1,6 +1,6 @@
 ---
 title: Blitz 0.5.1
-weight: 4
+weight: 5
 ---
 
 **Equations, pictures and room to breathe.** Download it from the [GitHub release](https://github.com/retail-cortex/blitz/releases/tag/v0.5.1).
