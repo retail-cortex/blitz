@@ -18,10 +18,12 @@
 package main
 
 import (
+	"context"
 	"embed"
 	"log"
 	"os"
 
+	"github.com/retail-cortex/blitz/apps/desktop/internal/webprocess"
 	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/pageserver"
 	"github.com/retail-cortex/blitz/pkg/socket"
@@ -99,9 +101,13 @@ func main() {
 			Handler: pageserver.Proxy(app.socket),
 		},
 		OnStartup: app.startup,
-		// A window with unsaved changes in the editor asks first.
-		OnBeforeClose: app.beforeClose,
-		Bind:          []any{app},
+		// A window with unsaved changes in the editor asks first. On
+		// Linux the web process is then ended before the window closes:
+		// left to exit on its own, it crashes on NVIDIA (webprocess).
+		OnBeforeClose: func(ctx context.Context) bool {
+			return app.beforeClose(ctx) || webprocess.Quit()
+		},
+		Bind: []any{app},
 	})
 	if err != nil {
 		log.Fatal(err)

@@ -89,6 +89,7 @@ go_library(
     visibility = ["//visibility:private"],
     deps = [
         "//apps/desktop/internal/printpdf",
+        "//apps/desktop/internal/webprocess",
         "//pkg/config",
         "//pkg/fileview",
         "//pkg/legal",
