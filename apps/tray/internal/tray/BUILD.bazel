@@ -35,6 +35,7 @@ go_library(
     }),
     visibility = ["//apps/tray:__subpackages__"],
     deps = [
+        "//pkg/api",
         "//pkg/config",
         "//pkg/fileview",
         "//pkg/i18n",

@@ -39,6 +39,7 @@ import { workspaceColor } from "./palette";
 import { displayName } from "./prefs";
 import { InboxDialog } from "./RunsInbox";
 import { useApp } from "./state";
+import { shownVersion } from "./serviceVersion";
 import { contextShare, tokens, useWorkspaceStatus } from "./status";
 import { Icon, Menu, useSnackbar } from "./ui/controls";
 import { useWorkerFailures } from "./workerFailures";
@@ -58,7 +59,7 @@ export function StatusBar({ serviceUp, version, onWorkspaceSettings }: { service
   const dir = ws?.dir ?? "";
   return (
     <footer className="status-bar t-label-sm" role="contentinfo" aria-label={t("desktop.status.label")}>
-      <span className={`sb-item sb-service ${serviceUp ? "up" : "lost"}`} title={serviceUp ? t("desktop.status.service_up", { version: version ?? "" }) : t("desktop.app.lost")}>
+      <span className={`sb-item sb-service ${serviceUp ? "up" : "lost"}`} title={serviceUp ? t("desktop.status.service_up", { version: shownVersion(version ?? "") }) : t("desktop.app.lost")}>
         <Icon path={mdiCircleMedium} size="sm" />
         <span className="sb-low">{serviceUp ? t("desktop.status.connected") : t("desktop.status.reconnecting")}</span>
       </span>
