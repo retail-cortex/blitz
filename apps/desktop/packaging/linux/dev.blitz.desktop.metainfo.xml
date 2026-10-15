@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+ Copyright 2026 Retail Cortex
+
+ Licensed under the Apache License, Version 2.0 (the "License");
+ you may not use this file except in compliance with the License.
+ You may obtain a copy of the License at
+
+     http://www.apache.org/licenses/LICENSE-2.0
+
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
+-->
+
+<!-- What software centres (GNOME Software, Ubuntu's App Center, KDE
+     Discover) show for the package: without it the author is "Unknown". -->
+<component type="desktop-application">
+  <id>dev.blitz.desktop</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>Apache-2.0</project_license>
+  <name>Blitz</name>
+  <summary>A coding agent for your projects</summary>
+  <developer id="dev.blitz">
+    <name>Retail Cortex</name>
+  </developer>
+  <!-- The same, for AppStream before 1.0 (Ubuntu 22.04's). -->
+  <developer_name>Retail Cortex</developer_name>
+  <description>
+    <p>
+      A window onto the Blitz service: workspaces, chats with the agent,
+      approvals, changes and workers. Includes the blitz command,
+      blitz-tray (the service in the system tray) and blitzd, the
+      service, which it installs and starts.
+    </p>
+  </description>
+  <launchable type="desktop-id">blitz-desktop.desktop</launchable>
+  <icon type="stock">blitz-desktop</icon>
+  <categories>
+    <category>Development</category>
+  </categories>
+  <url type="homepage">https://retail-cortex.github.io/blitz/</url>
+  <url type="bugtracker">https://github.com/retail-cortex/blitz/issues</url>
+  <url type="vcs-browser">https://github.com/retail-cortex/blitz</url>
+  <content_rating type="oars-1.1"/>
+</component>

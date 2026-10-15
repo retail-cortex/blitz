@@ -524,16 +524,30 @@ export function Dialog({
 type Snack = { id: number; text: string; top?: number; action?: { label: string; run: () => void }; error?: boolean };
 const SnackContext = createContext<(text: string, opts?: { action?: Snack["action"]; error?: boolean }) => void>(() => {});
 
-/** Where a snackbar goes: just below the top bar, wherever a banner has
- *  pushed it, or undefined to leave it to the stylesheet. */
-export function snackTop(doc: Pick<Document, "querySelector"> | undefined = globalThis.document): number | undefined {
-  const bar = doc?.querySelector(".topbar");
-  if (!bar) return undefined;
-  return Math.round(bar.getBoundingClientRect().bottom) + 8;
+/** The headers a snackbar mustn't cover: the top bar, and the panes'
+ *  tab strips and toolbars under it. */
+const snackClear = ".topbar, .editor-tabs, .editor-head, .files-head, .side-head, .panel-head";
+
+/** Where a snackbar goes: just below the top bar and the pane headers
+ *  under it (the window's middle 640 px, the snackbar's widest), wherever
+ *  a banner has pushed them, or undefined to leave it to the stylesheet. */
+export function snackTop(
+  doc: Pick<Document, "querySelectorAll"> | undefined = globalThis.document,
+  width: number = globalThis.innerWidth ?? 0,
+): number | undefined {
+  const left = width / 2 - 320;
+  const right = width / 2 + 320;
+  let bottom: number | undefined;
+  for (const el of doc?.querySelectorAll(snackClear) ?? []) {
+    const r = el.getBoundingClientRect();
+    if (r.height === 0 || r.right <= left || r.left >= right) continue;
+    bottom = Math.max(bottom ?? 0, r.bottom);
+  }
+  return bottom === undefined ? undefined : Math.round(bottom) + 8;
 }
 
-/** Shows short messages at the top center of the window, below the top bar,
- *  one at a time. */
+/** Shows short messages at the top center of the window, below the top bar
+ *  and the pane headers, one at a time. */
 export function SnackbarProvider({ children }: { children: ReactNode }) {
   const [snack, setSnack] = useState<Snack | null>(null);
   const next = useRef(0);
