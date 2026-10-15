@@ -416,8 +416,9 @@ input[type="range"] { accent-color: var(--accent-a); width: 100%; }
 
 /* Snackbar */
 .snackbar {
-  /* Top center, just below the top bar (snackTop() follows it down when a
-     banner shows): at the foot it covered the composer. */
+  /* Top center, below the top bar and the panes' tabs and toolbars
+     (snackTop() measures them; this is its fallback): at the foot it
+     covered the composer. */
   position: fixed; top: calc(var(--topbar-height) + 8px); left: 50%; transform: translateX(-50%); z-index: 1100;
   display: flex; align-items: center; gap: 16px; min-width: 280px; max-width: min(640px, calc(100vw - 32px)); padding: 4px 8px 4px 16px; min-height: 48px;
   background: var(--md-inverse-surface); color: var(--md-inverse-on-surface); border-radius: var(--md-shape-xs); box-shadow: var(--md-elevation-3);
