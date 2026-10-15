@@ -96,6 +96,7 @@ go_library(
     deps = [
         "//pkg/api",
         "//pkg/config",
+        "//pkg/docx",
         "//pkg/engine/agents",
         "//pkg/engine/audit",
         "//pkg/engine/breaker",
@@ -105,6 +106,7 @@ go_library(
         "//pkg/engine/skills",
         "//pkg/i18n",
         "//pkg/images",
+        "//pkg/markdown",
         "//pkg/mcpauth",
         "//pkg/observability",
         "//pkg/pdftext",
@@ -164,6 +166,7 @@ go_test(
         "documents_test.go",
         "edit_race_test.go",
         "exec_cov_test.go",
+        "export_docx_test.go",
         "export_pdf_test.go",
         "file_ops_test.go",
         "file_tools_test.go",

@@ -14,6 +14,12 @@
 
 load("@rules_go//go:def.bzl", "go_library", "go_test")
 
+# A font for the PDF printer's test, which inlines one as KaTeX's are.
+exports_files(
+    ["fonts/NotoSans-Regular.ttf.gz"],
+    visibility = ["//apps/desktop/internal/printpdf:__pkg__"],
+)
+
 go_library(
     name = "mdpdf",
     srcs = ["mdpdf.go"],
@@ -32,16 +38,13 @@ go_library(
         "//pkg/pdftext:__pkg__",
     ],
     deps = [
+        "//pkg/markdown",
         "@com_github_alecthomas_chroma_v2//:chroma",
         "@com_github_alecthomas_chroma_v2//lexers",
         "@com_github_alecthomas_chroma_v2//styles",
         "@com_github_go_pdf_fpdf//:fpdf",
-        "@com_github_yuin_goldmark//:goldmark",
         "@com_github_yuin_goldmark//ast",
-        "@com_github_yuin_goldmark//extension",
         "@com_github_yuin_goldmark//extension/ast",
-        "@com_github_yuin_goldmark//text",
-        "@com_github_yuin_goldmark//util",
         "@org_golang_x_image//font/sfnt",
     ],
 )

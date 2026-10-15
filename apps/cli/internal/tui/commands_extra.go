@@ -27,6 +27,7 @@ import (
 
 	"github.com/retail-cortex/blitz/pkg/api"
 
+	"github.com/retail-cortex/blitz/pkg/docx"
 	"github.com/retail-cortex/blitz/pkg/i18n"
 	"github.com/retail-cortex/blitz/pkg/textutil"
 )
@@ -302,7 +303,8 @@ func cmdFork(ctx context.Context, args []string, app *App) {
 }
 
 // cmdExport writes the session as Markdown (PAR-SES-11): to the file
-// given (relative to the workspace), else to one named for the session.
+// given (relative to the workspace), else to one named for the session. A
+// .docx name writes a Word document instead (FS-75).
 func cmdExport(args []string, app *App) {
 	md, err := app.Workspace.ExportSession("")
 	if err != nil {
@@ -320,7 +322,14 @@ func cmdExport(args []string, app *App) {
 	if !filepath.IsAbs(path) {
 		path = filepath.Join(app.Workspace.Dir(), path)
 	}
-	if err := os.WriteFile(path, []byte(md), 0o644); err != nil {
+	data := []byte(md)
+	if strings.EqualFold(filepath.Ext(path), ".docx") {
+		if data, err = docx.Render(data, docx.Options{}); err != nil {
+			fmt.Printf("%s✗ %v%s\n", Red, err, Reset)
+			return
+		}
+	}
+	if err := os.WriteFile(path, data, 0o644); err != nil {
 		fmt.Printf("%s✗ %v%s\n", Red, err, Reset)
 		return
 	}

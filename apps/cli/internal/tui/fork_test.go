@@ -53,6 +53,11 @@ func TestForkAndExportCommands(t *testing.T) {
 	data, err := os.ReadFile(filepath.Join(app.Workspace.Dir(), "tidy-up.md"))
 	require.NoError(t, err)
 	assert.Contains(t, string(data), "# Tidy up")
+	out = captureStdout(t, func() { cmdExport([]string{"tidy.docx"}, app) })
+	assert.Contains(t, out, "tidy.docx")
+	data, err = os.ReadFile(filepath.Join(app.Workspace.Dir(), "tidy.docx"))
+	require.NoError(t, err)
+	assert.Equal(t, "PK", string(data[:2]), "a Word document is a zip")
 
 	out = captureStdout(t, func() { cmdFork(ctx, nil, app) })
 	assert.Contains(t, out, "Now in a copy of the session")

@@ -232,6 +232,7 @@ func NewRegistry(cfg *config.Config, agentReg *agents.Registry, skillProv *skill
 		{[]string{"glob"}, func() (tool.Tool, error) { return NewGlobTool(ws) }},
 		{[]string{"create_file"}, func() (tool.Tool, error) { return NewCreateFileTool(ws, r.hooks) }},
 		{[]string{"export_pdf"}, func() (tool.Tool, error) { return NewExportPDFTool(ws, r.hooks, cfg.PDF.PageSize) }},
+		{[]string{"export_docx"}, func() (tool.Tool, error) { return NewExportDocxTool(ws, r.hooks, cfg.PDF.PageSize) }},
 		{[]string{"delete_file"}, func() (tool.Tool, error) { return NewDeleteFileTool(ws, r.hooks) }},
 		{[]string{"replace_in_file", "edit"}, func() (tool.Tool, error) { return NewReplaceInFileTool(ws, r.hooks) }},
 		{[]string{"notebook_edit"}, func() (tool.Tool, error) { return NewNotebookEditTool(ws, r.hooks) }},

@@ -18,10 +18,13 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"sync"
+	"time"
 
 	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/engine/skills/builtin"
@@ -32,6 +35,12 @@ type Provider struct {
 	mu      sync.RWMutex
 	skills  map[string]*Skill
 	builtin map[string]bool
+	// dirs are the folders searched, and stamps their times when last
+	// searched: a skill added, replaced or removed (by a registry install,
+	// /skills update, the agent) changes its folder's time, and the next
+	// look searches again (SK-95).
+	dirs   []string
+	stamps map[string]time.Time
 }
 
 // NewProvider initializes the skills provider with embedded built-in skills.
@@ -77,7 +86,61 @@ func (p *Provider) loadEmbeddedSkills() error {
 func (p *Provider) DiscoverExternal(dirs []string) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	for _, d := range dirs {
+		if !slices.Contains(p.dirs, d) {
+			p.dirs = append(p.dirs, d)
+		}
+	}
+	err := p.discover(dirs)
+	p.stamps = stamps(p.dirs)
+	return err
+}
 
+// stamps are the folders' modification times (zero for one that's missing).
+func stamps(dirs []string) map[string]time.Time {
+	out := make(map[string]time.Time, len(dirs))
+	for _, d := range dirs {
+		if info, err := os.Stat(config.ExpandHome(d)); err == nil {
+			out[d] = info.ModTime()
+		} else {
+			out[d] = time.Time{}
+		}
+	}
+	return out
+}
+
+// refresh searches the folders again when one changed since it last did,
+// so skills installed or removed meanwhile come and go without a restart.
+// Their problems were reported when the workspace opened; doctor reports
+// a new one.
+func (p *Provider) refresh() {
+	p.mu.RLock()
+	if len(p.dirs) == 0 {
+		p.mu.RUnlock()
+		return
+	}
+	same := maps.Equal(stamps(p.dirs), p.stamps)
+	p.mu.RUnlock()
+	if same {
+		return
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	now := stamps(p.dirs)
+	if maps.Equal(now, p.stamps) {
+		return // another look did it
+	}
+	for name := range p.skills {
+		if !p.builtin[name] {
+			delete(p.skills, name)
+		}
+	}
+	_ = p.discover(p.dirs)
+	p.stamps = now
+}
+
+// discover adds the skills in dirs; p.mu is held.
+func (p *Provider) discover(dirs []string) error {
 	var errs []error
 	for _, dir := range dirs {
 		expandedDir := config.ExpandHome(dir)
@@ -130,6 +193,7 @@ func (p *Provider) DiscoverExternal(dirs []string) error {
 
 // List returns all discovered skills sorted by name.
 func (p *Provider) List() []*Skill {
+	p.refresh()
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 	return p.listLocked()
@@ -152,6 +216,7 @@ func (p *Provider) listLocked() []*Skill {
 
 // Search filters skills matching query in name, description, or tags.
 func (p *Provider) Search(query string) []*Skill {
+	p.refresh()
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 
@@ -175,6 +240,7 @@ func (p *Provider) Search(query string) []*Skill {
 
 // Get returns a skill by name.
 func (p *Provider) Get(name string) (*Skill, bool) {
+	p.refresh()
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 

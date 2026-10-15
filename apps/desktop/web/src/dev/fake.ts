@@ -530,10 +530,35 @@ const fakeFiles = new Map<string, string>([
   ["web/app.ts", "export function total(items: { cents: number }[]): number {\n  return items.reduce((a, b) => a + b.cents, 0);\n}\n"],
   [".env", "STRIPE_KEY=sk_test_fake\n"],
   [".gitignore", "bin/\n*.log\n"],
+  ["AGENTS.md", "# Shop\n\nRun `go test ./...` before committing.\n"],
   ["bin/shop", "\u0000binary"],
 ]);
 const fakeGit: Record<string, string> = { "internal/cart/discount.go": "modified", "internal/cart/discount_test.go": "untracked", "web/app.ts": "added" };
-const fakeHidden = (p: string) => (p === ".env" ? "blocked" : p.startsWith("bin") ? "ignored" : p.split("/").pop()!.startsWith(".") ? "dot" : "");
+// Skill registries in the fake: Castor's offer, and what was installed.
+const fakeRegistries: { name: string; url: string; hasToken: boolean }[] = [];
+const fakeRegistrySkills = [
+  { registry: "castor", name: "lit-review", description: "Reviews the literature on a question and keeps refs.bib in order", version: "1.2.0", castorId: "sk_lit" },
+  { registry: "castor", name: "stats-critic", description: "Checks a study's statistics: tests, power, multiple comparisons", version: "0.4.1", castorId: "sk_stats" },
+  { registry: "castor", name: "release-notes", description: "Drafts user-facing release notes from merged pull requests", version: "2.0.0", castorId: "sk_notes" },
+];
+const fakeInstalledSkills: { name: string; registry: string; version: string; dir: string; installed: ReturnType<typeof now> }[] = [];
+// What .gitignore ignores in the fake: bin/, *.log, and the lines Add to
+// .gitignore wrote.
+const fakeIgnored = (p: string) =>
+  p.startsWith("bin") || p.endsWith(".log") || (fakeFiles.get(".gitignore") ?? "").split("\n").some((l) => l === `/${p}` || l === `/${p}/`);
+// A file's commits in the fake: three, the oldest its first lines only.
+const fakeRevisions = (p: string) =>
+  [
+    { commit: "c3a1f0e9b8d7c6a5f4e3d2c1b0a9f8e7d6c5b4a3", subject: "Round coupon discounts half up", author: "Ana Ruiz", days: 1 },
+    { commit: "9b2e4d6f8a0c1e3b5d7f9a2c4e6b8d0f1a3c5e7b", subject: "Read the coupon from the request", author: "Sam Lee", days: 6 },
+    { commit: "5e8c1a7f3d9b2e6a0c4f8d1b7e3a9c5f2d6b0e8a", subject: `Add ${p.split("/").pop()}`, author: "Ana Ruiz", days: 30 },
+  ].map((r) => ({ ...r, short: r.commit.slice(0, 7), path: p, when: timestampFromDate(new Date(Date.now() - r.days * 86400000)) }));
+const fakeOldText = (text: string) => text.split("\n").slice(0, 3).join("\n") + "\n";
+const fakeInstructionFiles = ["AGENTS.md", "CLAUDE.md", "GEMINI.md", "BLITZ.md"];
+const fakeHidden = (p: string) => {
+  const name = p.split("/").pop()!;
+  return p === ".env" ? "blocked" : name.startsWith(".") ? "dot" : fakeInstructionFiles.includes(name) ? "agent" : fakeIgnored(p) ? "ignored" : "";
+};
 const fakeVersion = (text: string) => String(text.length) + ":" + [...text].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7).toString(16);
 
 // Background runs (blitz --bg), made on first use in the first workspace
@@ -936,6 +961,35 @@ export function installFake() {
         }),
       });
       service(ConfigService, {
+        listSkillRegistries: () => ({ registries: fakeRegistries, installed: fakeInstalledSkills }),
+        addSkillRegistry: ({ url, name, token }) => {
+          if (!/^https:\/\//.test(url) && !url.startsWith("/")) throw new ConnectError(`${url}: a registry needs https (http only for localhost)`, Code.FailedPrecondition);
+          const reg = { name: name || "castor", url, hasToken: !!token };
+          fakeRegistries.splice(0, fakeRegistries.length, ...fakeRegistries.filter((r) => r.name !== reg.name), reg);
+          return { registry: reg, skills: fakeRegistrySkills.length };
+        },
+        removeSkillRegistry: ({ name }) => {
+          fakeRegistries.splice(0, fakeRegistries.length, ...fakeRegistries.filter((r) => r.name !== name));
+          return {};
+        },
+        searchRegistrySkills: ({ query }) => ({
+          skills: fakeRegistries.length ? fakeRegistrySkills.filter((k) => query.toLowerCase().split(/\s+/).every((w) => (k.name + " " + k.description).toLowerCase().includes(w))) : [],
+          problems: [],
+        }),
+        installRegistrySkill: ({ ref, workspace }) => {
+          const [registry, name] = ref.includes("/") ? ref.split("/") : ["castor", ref];
+          const k = fakeRegistrySkills.find((x) => x.name === name);
+          if (!k) throw new ConnectError(`no registry offers that skill: ${ref}`, Code.NotFound);
+          const skill = { name, registry, version: k.version, dir: workspace ? `${workspace}/.agents/skills/${name}` : `/home/me/.blitz/skills/${name}`, installed: now() };
+          fakeInstalledSkills.splice(0, fakeInstalledSkills.length, ...fakeInstalledSkills.filter((i) => i.dir !== skill.dir), skill);
+          return { skill };
+        },
+        updateRegistrySkills: () => ({ updated: [], problems: [] }),
+        uninstallRegistrySkill: ({ name }) => {
+          const i = fakeInstalledSkills.findIndex((x) => x.name === name);
+          const [skill] = fakeInstalledSkills.splice(i, 1);
+          return { skill };
+        },
         getInterfaceLanguage: () => ({ locale: "", catalogs: [] }),
         // Sign-ins: gcloud and aws "installed", ant and az not.
         getSignIn: ({ provider }) => ({
@@ -1099,7 +1153,7 @@ export function installFake() {
           const entries = [...seen].map(([name, folder]) => {
             const p = prefix + name;
             const git = folder ? (Object.keys(fakeGit).some((g) => g.startsWith(p + "/")) ? "changed" : "") : (fakeGit[p] ?? "");
-            return { name, path: p, kind: folder ? FileKind.FOLDER : FileKind.FILE, size: BigInt(fakeFiles.get(p)?.length ?? 0), git, hidden: fakeHidden(p), agentRule: p === ".env" ? "blocked" : "" };
+            return { name, path: p, kind: folder ? FileKind.FOLDER : FileKind.FILE, size: BigInt(fakeFiles.get(p)?.length ?? 0), git, hidden: fakeHidden(p), ignored: fakeIgnored(p), agentRule: p === ".env" ? "blocked" : "" };
           });
           entries.sort((a, b) => (a.kind !== b.kind ? (a.kind === FileKind.FOLDER ? -1 : 1) : a.name.localeCompare(b.name)));
           return { entries: showHidden ? entries : entries.filter((e) => !e.hidden), repo: true };
@@ -1164,6 +1218,13 @@ export function installFake() {
           fakeFiles.set(path, text);
           return { version: fakeVersion(text) };
         },
+        writeBinaryFile: ({ path, data, version }) => {
+          const now = fakeFiles.get(path);
+          if ((now === undefined ? "" : fakeVersion(now)) !== version) throw new ConnectError(`${path} was changed since it was opened`, Code.FailedPrecondition);
+          const text = new TextDecoder().decode(data);
+          fakeFiles.set(path, text);
+          return { version: fakeVersion(text) };
+        },
         createFolder: ({ path }) => {
           fakeFiles.set(path + "/.keep", "");
           return {};
@@ -1183,7 +1244,29 @@ export function installFake() {
           ((window as unknown as { __gitActions?: unknown[] }).__gitActions ??= []).push({ path, action });
           if (action === GitAction.DISCARD) for (const g of Object.keys(fakeGit)) if (g === path || g.startsWith(path + "/")) delete fakeGit[g];
           if (action === GitAction.IGNORE) fakeFiles.set(".gitignore", (fakeFiles.get(".gitignore") ?? "") + `/${path}${fakeFiles.has(path) ? "" : "/"}\n`);
+          if (action === GitAction.UNIGNORE) {
+            const lines = (fakeFiles.get(".gitignore") ?? "").split("\n");
+            const kept = lines.filter((l) => l !== `/${path}` && l !== `/${path}/`);
+            if (kept.length === lines.length && fakeIgnored(path)) {
+              const [pattern, line] = path.startsWith("bin") ? ["bin/", 1] : ["*.log", 2];
+              throw new ConnectError(`${path} is ignored by \`${pattern}\` (.gitignore:${line}), not by a line Blitz added: edit that file to change it.`, Code.FailedPrecondition);
+            }
+            fakeFiles.set(".gitignore", kept.join("\n"));
+          }
           return {};
+        },
+        getFileHistory: ({ path }) => ({ revisions: fakeFiles.has(path) ? fakeRevisions(path) : [] }),
+        getFileRevisionDiff: ({ path, commit }) => {
+          const now = fakeFiles.get(path) ?? "";
+          if (commit === fakeRevisions(path)[0].commit) return { diff: "" };
+          const then = fakeOldText(now);
+          const add = now.split("\n").slice(3).filter((l) => l !== "");
+          return { diff: `diff --git a/${path} b/${path}\n--- a/${path}\n+++ b/${path}\n@@ -1,3 +1,${3 + add.length} @@\n${then.trimEnd().split("\n").map((l) => " " + l).join("\n")}\n${add.map((l) => "+" + l).join("\n")}\n` };
+        },
+        restoreFileRevision: ({ path, commit }) => {
+          const text = commit === fakeRevisions(path)[0].commit ? (fakeFiles.get(path) ?? "") : fakeOldText(fakeFiles.get(path) ?? "");
+          fakeFiles.set(path, text);
+          return { version: fakeVersion(text) };
         },
         deleteFile: ({ path }) => {
           for (const p of [...fakeFiles.keys()]) if (p === path || p.startsWith(path + "/")) fakeFiles.delete(p);
@@ -1230,6 +1313,10 @@ export function installFake() {
             sorted: sortColumn > 0,
             latin1: false,
           };
+        },
+        renderDocx: ({ markdown, diagrams }) => {
+          ((window as unknown as { __diagrams?: unknown[] }).__diagrams ??= []).push(...diagrams.map((d) => ({ source: d.source, bytes: d.png.length, width: d.width, height: d.height })));
+          return { data: new TextEncoder().encode("PK fake docx\n" + markdown) };
         },
         statFiles: ({ paths }) => ({ versions: Object.fromEntries(paths.map((p) => [p, fakeFiles.has(p) ? fakeVersion(fakeFiles.get(p)!) : ""])) }),
       });

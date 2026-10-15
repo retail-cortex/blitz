@@ -34,7 +34,12 @@ export function paperFor(locale: string): "A4" | "Letter" {
 
 /** The PDF's name for a Markdown file: the same name with .pdf. */
 export function pdfPath(path: string): string {
-  return path.replace(/\.(md|markdown|mdx)$/i, "") + ".pdf";
+  return exportPath(path, ".pdf");
+}
+
+/** An export's name for a Markdown file: the same name with ext (".docx"). */
+export function exportPath(path: string, ext: string): string {
+  return path.replace(/\.(md|markdown|mdx)$/i, "") + ext;
 }
 
 /** Rules for paper over the window's CSS: no app chrome, a white page, nothing cut across pages. */

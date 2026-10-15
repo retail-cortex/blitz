@@ -75,3 +75,12 @@ func TestSessionsExportErrors(t *testing.T) {
 	_, err = runCLI(t, "sessions", "export", rec.ID, "-o", filepath.Join(t.TempDir(), "no", "such", "file.md"))
 	assert.Error(t, err)
 }
+
+func TestExportData(t *testing.T) {
+	md, err := exportData("# Chat", "chat.md")
+	require.NoError(t, err)
+	assert.Equal(t, "# Chat", string(md))
+	doc, err := exportData("# Chat", "out/Chat.DOCX")
+	require.NoError(t, err)
+	assert.Equal(t, "PK", string(doc[:2]), "a Word document is a zip")
+}

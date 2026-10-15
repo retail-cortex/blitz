@@ -47,10 +47,19 @@ PDFs attach the way images do: `summarise @papers/attention.pdf`, `/attach`, `--
 `export_pdf` typesets a Markdown file as a PDF beside it (`notes/week1.md` → `notes/week1.pdf`, or `output`), in pure Go, so it works in the terminal, in workers and in the service. It asks before writing, like any file the agent creates, and `/undo` removes it. Ask for a PDF of something that isn't a file ("a summary of our conversation as a PDF") and only the PDF is written: the agent gives the tool the Markdown itself.
 
 - Headings become the PDF's outline; lists, task lists, quotes, tables, code (highlighted), rules and page numbers are laid out; accents, Greek, Cyrillic and maths symbols print.
-- Images the file links in the workspace are included; web images and raw HTML aren't. A Mermaid diagram prints as its code: export from the desktop app to draw it.
+- Pictures the file shows in the workspace are included (an HTML `<img>` too); web pictures and other raw HTML aren't. Maths and Mermaid diagrams print as their source: export from the desktop app to draw them.
 - Paper is A4 or Letter: `[pdf] page_size = "a4"`, `"letter"`, or `"auto"` (the default, from your locale).
 
-In the desktop app, **Export as PDF** in a Markdown file's bar prints the preview exactly as it shows, diagrams included, with the system's own web engine. No browser needed.
+In the desktop app, **Export › Export as PDF** in a Markdown file's bar prints the preview exactly as it shows, diagrams included, with the system's own web engine. No browser needed.
+
+## Word documents out
+
+`export_docx` writes a Markdown file as a Word document beside it (`notes/week1.md` → `notes/week1.docx`), with the same rules as `export_pdf`: it asks first, `/undo` removes it, and "a summary of our conversation as a Word document" writes only the `.docx`. In the desktop app, **Export › Export as Word** in a Markdown file's bar does the same with what's in the editor, and `/export notes.docx` (or `blitz sessions export <id> -o notes.docx`) writes a conversation.
+
+- It uses Word's own styles: headings are Heading 1–6 (so the navigation pane and a table of contents work), and lists, quotes, code and tables have styles you can change for the whole document at once.
+- Links stay links, including links to a heading in the same file; pictures the file shows in the workspace are embedded, SVG and HTML `<img>` tags included.
+- Maths (`$…$` and `$$…$$`) becomes Word equations you can edit.
+- From the desktop app, Mermaid diagrams are drawn into the document; the agent's `export_docx` and `/export` keep a diagram as its code. Other raw HTML is left out.
 
 ## Audio
 

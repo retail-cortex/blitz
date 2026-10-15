@@ -87,8 +87,17 @@ beforeEach(() => {
         listCheckpoints: () => ({ checkpoints: [] }),
         undo: () => ({ restored: [] }),
       });
-      service(FileService, { writeFile: (r) => (rec(`write ${r.path} ${r.text}`), { version: "1" }) });
-      service(ConfigService, { setConfigValue: (r) => (rec(`config ${r.key}=${r.value}`), { change: { path: "/u/.env.toml" } }) });
+      service(FileService, {
+        writeFile: (r) => (rec(`write ${r.path} ${r.text}`), { version: "1" }),
+        renderDocx: (r) => (rec(`renderDocx ${r.markdown}`), { data: new Uint8Array([80, 75]) }),
+        writeBinaryFile: (r) => (rec(`writeBinary ${r.path} ${r.data.length}`), { version: "1" }),
+      });
+      service(ConfigService, {
+        setConfigValue: (r) => (rec(`config ${r.key}=${r.value}`), { change: { path: "/u/.env.toml" } }),
+        listSkillRegistries: () => ({ registries: [{ name: "castor", url: "https://c.example/index.json" }] }),
+        searchRegistrySkills: () => ({ skills: [{ registry: "castor", name: "lit-review", version: "1.2.0", description: "reviews literature" }], problems: ["registry other: HTTP 500"] }),
+        installRegistrySkill: (r) => (rec(`install ${r.ref} ${r.workspace}`), { skill: { name: "lit-review", version: "1.2.0", registry: "castor" } }),
+      });
     }),
   );
 });
@@ -168,6 +177,7 @@ describe("commands", () => {
     ["/copy 3", "error: usage", [], [], []],
     ["/export", "Wrote the session to fix-the-cart.md", ["write fix-the-cart.md # chat"], [], []],
     ["/export /w/notes/chat.md", "notes/chat.md", ["write notes/chat.md # chat"], [], []],
+    ["/export chat.docx", "chat.docx", ["renderDocx # chat", "writeBinary chat.docx 2"], [], []],
     ["/export /tmp/x.md", "error:", [], [], []],
     ["/fork 2", "s2", ["fork 2"], ["reload", "refreshList"], []],
     ["/fork x", "error:", [], [], []],
@@ -227,6 +237,10 @@ describe("commands", () => {
     ["/skills show pdf", "read_file", [], [], []],
     ["/skills show nope", "error:", [], [], []],
     ["/skills update", "", [], [], ['/skills update {"command":true}']],
+    ["/skills search lit", "castor/lit-review", [], [], []],
+    ["/skills install castor/lit-review --project", "Installed lit-review 1.2.0 from castor", ["install castor/lit-review /w"], [], []],
+    ["/skills install", "error:", [], [], []],
+    ["/skills registry", "", [], ["settings skills undefined"], []],
     ["/tools", "read_file", [], [], []],
     ["/config", "", [], ["settings file /w"], []],
     ["/config temperature=0.1", "this session", ["set temperature=0.1"], ["settingsChanged"], []],

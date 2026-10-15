@@ -198,3 +198,20 @@ func TestReadTableOverTheAPI(t *testing.T) {
 	_, err = files.ReadTable(ctx, connect.NewRequest(&pb.ReadTableRequest{Workspace: "relative", Path: "bottle.csv"}))
 	assert.Error(t, err)
 }
+
+// Export as Word over the API: the document's bytes, or why not.
+func TestRenderDocxOverTheAPI(t *testing.T) {
+	_, s := serve(t, nil)
+	srv := httptest.NewServer(s.Handler())
+	defer srv.Close()
+	files := pb.NewFileServiceClient(http.DefaultClient, srv.URL)
+	ctx := context.Background()
+	dir := t.TempDir()
+	res, err := files.RenderDocx(ctx, connect.NewRequest(&pb.RenderDocxRequest{Workspace: dir, Path: "notes.md", Markdown: "# Notes"}))
+	require.NoError(t, err)
+	assert.Equal(t, "PK", string(res.Msg.Data[:2]), "a zip")
+	_, err = files.RenderDocx(ctx, connect.NewRequest(&pb.RenderDocxRequest{Workspace: dir, Markdown: "\x00"}))
+	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+	_, err = files.RenderDocx(ctx, connect.NewRequest(&pb.RenderDocxRequest{Workspace: dir, Path: "../x.md", Markdown: "# X"}))
+	assert.Equal(t, "BAD_PATH", reasonOf(err))
+}

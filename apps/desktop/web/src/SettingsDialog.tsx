@@ -23,6 +23,7 @@ import {
   mdiFolderMultipleOutline,
   mdiKeyChainVariant,
   mdiProgressClock,
+  mdiPuzzleOutline,
   mdiRobotOutline,
   mdiArrowLeft,
   mdiFolderOpenOutline,
@@ -53,6 +54,7 @@ import { LogViewer } from "./LogViewer";
 import { ProviderSettings } from "./ProviderSettings";
 import { SettingsFile } from "./settingsfile/SettingsFile";
 import { DocumentSettings } from "./files/DocumentSettings";
+import { SkillSettings } from "./SkillSettings";
 import { useAdvanced, useApp } from "./state";
 import { sectionShown, settingsSections, type SectionId } from "./simpleMode";
 import type { ThemePref } from "./theme";
@@ -69,6 +71,7 @@ const sectionIcons: Record<Section, string> = {
   providers: mdiKeyChainVariant,
   permissions: mdiShieldCheckOutline,
   agents: mdiRobotOutline,
+  skills: mdiPuzzleOutline,
   file: mdiFileDocumentEditOutline,
   workspaces: mdiFolderMultipleOutline,
   service: mdiServerNetwork,
@@ -107,6 +110,7 @@ export function SettingsDialog({ onClose, initial = "appearance", scope: initial
           {section === "providers" && <ProviderSettings workspace="" />}
           {section === "permissions" && <PermissionSettings workspace="" />}
           {section === "agents" && <UserAgents />}
+          {section === "skills" && <SkillSettings />}
           {section === "file" && <FileSection scope={scope} />}
           {section === "workspaces" && (
             <Workspaces

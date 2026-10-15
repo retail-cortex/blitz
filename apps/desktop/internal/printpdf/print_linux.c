@@ -104,13 +104,29 @@ static void print(job *j, WebKitWebView *view) {
   gtk_paper_size_free(paper);
 }
 
+#if WEBKIT_CHECK_VERSION(2, 40, 0)
+// The fonts and pictures are ready (or 10 s went by): print.
+static void ready(GObject *source, GAsyncResult *result, gpointer data) {
+  job *j = data;
+  JSCValue *value = webkit_web_view_call_async_javascript_function_finish(WEBKIT_WEB_VIEW(source), result, NULL);
+  g_clear_object(&value);
+  print(j, j->view);
+}
+#endif
+
 static void load_changed(WebKitWebView *view, WebKitLoadEvent event, gpointer data) {
   job *j = data;
   if (event != WEBKIT_LOAD_FINISHED || j->loaded || j->error != NULL) {
     return;
   }
   j->loaded = TRUE;
+#if WEBKIT_CHECK_VERSION(2, 40, 0)
+  // The page has loaded, but its fonts and pictures may not be ready to
+  // draw: wait for them (BLITZ_PRINT_READY), then print.
+  webkit_web_view_call_async_javascript_function(view, BLITZ_PRINT_READY, -1, NULL, NULL, NULL, NULL, ready, j);
+#else
   print(j, view);
+#endif
 }
 
 static gboolean load_failed(WebKitWebView *view, WebKitLoadEvent event, gchar *uri, GError *err, gpointer data) {
@@ -144,7 +160,10 @@ static gboolean start(gpointer data) {
   g_object_unref(context);
   j->view = view;
   WebKitSettings *settings = webkit_web_view_get_settings(view);
-  webkit_settings_set_enable_javascript(settings, FALSE);
+  // The page's own scripts never run; the printer's wait for its fonts
+  // and pictures does (load_changed).
+  webkit_settings_set_enable_javascript(settings, TRUE);
+  webkit_settings_set_enable_javascript_markup(settings, FALSE);
   // GtkOffscreenWindow has no OpenGL context in GTK3.
   webkit_settings_set_hardware_acceleration_policy(settings, WEBKIT_HARDWARE_ACCELERATION_POLICY_NEVER);
   gtk_widget_set_size_request(GTK_WIDGET(view), (int)(j->width - 2 * j->margin), (int)(j->height - 2 * j->margin));

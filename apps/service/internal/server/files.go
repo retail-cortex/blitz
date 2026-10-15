@@ -18,8 +18,10 @@ import (
 	"context"
 	"errors"
 	"io/fs"
+	"strings"
 
 	"connectrpc.com/connect"
+	"github.com/retail-cortex/blitz/pkg/docx"
 	"github.com/retail-cortex/blitz/pkg/engine"
 	pb "github.com/retail-cortex/blitz/proto/blitz/v1"
 )
@@ -47,6 +49,12 @@ func fileError(err error) error {
 		return apiError(connect.CodeInvalidArgument, "BAD_FILTER", err)
 	case errors.Is(err, engine.ErrNotARepository):
 		return apiError(connect.CodeFailedPrecondition, "NOT_A_REPOSITORY", err)
+	case errors.Is(err, engine.ErrBadRevision):
+		return apiError(connect.CodeInvalidArgument, "BAD_REVISION", err)
+	}
+	var elsewhere *engine.IgnoredElsewhereError
+	if errors.As(err, &elsewhere) {
+		return apiError(connect.CodeFailedPrecondition, "IGNORED_ELSEWHERE", err, "pattern", elsewhere.Pattern, "source", elsewhere.Source)
 	}
 	return toAPI(err)
 }
@@ -70,7 +78,7 @@ func (h fileService) ListDir(ctx context.Context, r req[pb.ListDirRequest]) (*co
 	for _, e := range l.Entries {
 		res.Entries = append(res.Entries, &pb.FileEntry{
 			Name: e.Name, Path: e.Path, Kind: fileKinds[e.Kind], Size: e.Size, Modified: timestamp(e.Modified),
-			Git: e.Git, Staged: e.Staged, Hidden: e.Hidden, AgentRule: e.AgentRule,
+			Git: e.Git, Staged: e.Staged, Hidden: e.Hidden, Ignored: e.Ignored, AgentRule: e.AgentRule,
 		})
 	}
 	return ok(res)
@@ -158,10 +166,11 @@ func (h fileService) DeleteFile(ctx context.Context, r req[pb.DeleteFileRequest]
 }
 
 var gitActions = map[pb.GitAction]engine.GitAction{
-	pb.GitAction_GIT_ACTION_STAGE:   engine.GitStage,
-	pb.GitAction_GIT_ACTION_UNSTAGE: engine.GitUnstage,
-	pb.GitAction_GIT_ACTION_DISCARD: engine.GitDiscard,
-	pb.GitAction_GIT_ACTION_IGNORE:  engine.GitIgnore,
+	pb.GitAction_GIT_ACTION_STAGE:    engine.GitStage,
+	pb.GitAction_GIT_ACTION_UNSTAGE:  engine.GitUnstage,
+	pb.GitAction_GIT_ACTION_DISCARD:  engine.GitDiscard,
+	pb.GitAction_GIT_ACTION_IGNORE:   engine.GitIgnore,
+	pb.GitAction_GIT_ACTION_UNIGNORE: engine.GitUnignore,
 }
 
 func (h fileService) GitFileAction(ctx context.Context, r req[pb.GitFileActionRequest]) (*connect.Response[pb.GitFileActionResponse], error) {
@@ -177,6 +186,65 @@ func (h fileService) GitFileAction(ctx context.Context, r req[pb.GitFileActionRe
 		return nil, fileError(err)
 	}
 	return ok(&pb.GitFileActionResponse{})
+}
+
+func (h fileService) GetFileHistory(ctx context.Context, r req[pb.GetFileHistoryRequest]) (*connect.Response[pb.GetFileHistoryResponse], error) {
+	w, err := h.s.workspace(ctx, r.Msg.Workspace)
+	if err != nil {
+		return nil, err
+	}
+	revs, err := w.FileHistory(ctx, r.Msg.Path, int(r.Msg.Limit))
+	if err != nil {
+		return nil, fileError(err)
+	}
+	out := &pb.GetFileHistoryResponse{}
+	for _, rev := range revs {
+		out.Revisions = append(out.Revisions, &pb.FileRevision{Commit: rev.Commit, Short: rev.Short, Author: rev.Author, When: timestamp(rev.When), Subject: rev.Subject, Path: rev.Path})
+	}
+	return ok(out)
+}
+
+func (h fileService) GetFileRevisionDiff(ctx context.Context, r req[pb.GetFileRevisionDiffRequest]) (*connect.Response[pb.GetFileRevisionDiffResponse], error) {
+	w, err := h.s.workspace(ctx, r.Msg.Workspace)
+	if err != nil {
+		return nil, err
+	}
+	diff, err := w.FileRevisionDiff(ctx, r.Msg.Path, r.Msg.Commit)
+	if err != nil {
+		return nil, fileError(err)
+	}
+	return ok(&pb.GetFileRevisionDiffResponse{Diff: diff})
+}
+
+func (h fileService) RestoreFileRevision(ctx context.Context, r req[pb.RestoreFileRevisionRequest]) (*connect.Response[pb.RestoreFileRevisionResponse], error) {
+	w, err := h.s.workspace(ctx, r.Msg.Workspace)
+	if err != nil {
+		return nil, err
+	}
+	version, err := w.RestoreFileRevision(ctx, r.Msg.Path, r.Msg.Commit, r.Msg.Version)
+	if err != nil {
+		return nil, fileError(err)
+	}
+	return ok(&pb.RestoreFileRevisionResponse{Version: version})
+}
+
+func (h fileService) RenderDocx(ctx context.Context, r req[pb.RenderDocxRequest]) (*connect.Response[pb.RenderDocxResponse], error) {
+	w, err := h.s.workspace(ctx, r.Msg.Workspace)
+	if err != nil {
+		return nil, err
+	}
+	diagrams := map[string]engine.Diagram{}
+	for _, d := range r.Msg.Diagrams {
+		diagrams[strings.TrimSpace(d.Source)] = engine.Diagram{PNG: d.Png, Width: int(d.Width)}
+	}
+	data, err := w.RenderDocx(r.Msg.Path, r.Msg.Markdown, diagrams)
+	if errors.Is(err, docx.ErrNotText) {
+		return nil, invalid(err)
+	}
+	if err != nil {
+		return nil, fileError(err)
+	}
+	return ok(&pb.RenderDocxResponse{Data: data})
 }
 
 func (h fileService) FindFiles(ctx context.Context, r req[pb.FindFilesRequest]) (*connect.Response[pb.FindFilesResponse], error) {

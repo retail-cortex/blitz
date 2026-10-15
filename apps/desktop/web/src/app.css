@@ -948,3 +948,19 @@ code.file-link:hover { text-decoration-color: currentColor; }
   .docs-pane .markdown table td:not(:first-child)[data-label]:not([data-label=""])::before { content: attr(data-label) ": "; color: var(--md-on-surface-variant); font-weight: 500; }
   .docs-pane .markdown table td code { white-space: normal; overflow-wrap: anywhere; }
 }
+
+/* View revisions (FIL-59a): the commits beside the diff; stacked when narrow. */
+.revisions { display: grid; grid-template-columns: minmax(220px, 320px) 1fr; gap: 16px; min-height: 0; flex: 1; }
+.revision-list { list-style: none; margin: 0; padding: 0; overflow-y: auto; border-right: 1px solid var(--md-outline-variant); padding-right: 8px; }
+.revision { display: flex; flex-direction: column; gap: 2px; width: 100%; padding: 8px 12px; border: 0; border-radius: var(--md-shape-sm); background: none; color: inherit; text-align: left; cursor: pointer; min-width: 0; }
+.revision:hover { background: var(--md-surface-container-highest); }
+.revision.selected { background: var(--accent-tint); }
+.revision-diff { overflow: auto; min-width: 0; }
+@media (max-width: 760px) {
+  .revisions { grid-template-columns: 1fr; grid-template-rows: minmax(120px, 35%) 1fr; }
+  .revision-list { border-right: 0; border-bottom: 1px solid var(--md-outline-variant); padding: 0 0 8px; }
+}
+
+/* Settings › Skills: the search field takes the room, the scope fits its text. */
+.skill-search > .input { flex: 1 1 auto; min-width: 0; width: auto; }
+.skill-search > .select { flex: 0 1 auto; width: auto; max-width: 40%; }

@@ -69,7 +69,10 @@ func TestListDirHiddenAndGit(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("no git")
 	}
-	w, _ := openTestWith(t, func(c *config.Config) { c.Sandbox.BlockedPaths = []string{".env", "*.pem"} })
+	w, _ := openTestWith(t, func(c *config.Config) {
+		c.Sandbox.BlockedPaths = []string{".env", "*.pem"}
+		c.Memory.Files = append(c.Memory.Files, "TEAM.md")
+	})
 	dir, ctx := w.Dir(), context.Background()
 	gitIn(t, dir, "init", "-q")
 	write(t, dir, ".gitignore", "build/\n*.log\n")
@@ -84,6 +87,10 @@ func TestListDirHiddenAndGit(t *testing.T) {
 	write(t, dir, "debug.log", "x")
 	write(t, dir, ".env", "KEY=1")
 	write(t, dir, ".editorconfig", "root = true")
+	write(t, dir, "AGENTS.md", "# Agents")
+	write(t, dir, "CLAUDE.local.md", "mine")
+	write(t, dir, "TEAM.md", "ours")
+	write(t, dir, "pkg/CLAUDE.md", "# Nested")
 
 	l, err := w.ListDir(ctx, "", false)
 	require.NoError(t, err)
@@ -101,7 +108,8 @@ func TestListDirHiddenAndGit(t *testing.T) {
 
 	all, err := w.ListDir(ctx, ".", true)
 	require.NoError(t, err)
-	for name, hidden := range map[string]string{"build": "ignored", "debug.log": "ignored", ".env": "blocked", ".editorconfig": "dot", ".gitignore": "dot"} {
+	for name, hidden := range map[string]string{"build": "ignored", "debug.log": "ignored", ".env": "blocked", ".editorconfig": "dot", ".gitignore": "dot",
+		"AGENTS.md": "agent", "CLAUDE.local.md": "agent", "TEAM.md": "agent"} {
 		t.Run(name, func(t *testing.T) {
 			e := entry(t, all, name)
 			assert.Equal(t, hidden, e.Hidden, "%s hidden %q, want %q", name, e.Hidden, hidden)
@@ -111,6 +119,9 @@ func TestListDirHiddenAndGit(t *testing.T) {
 	assert.Equal(t, "blocked", e.AgentRule, ".env rule %q", e.AgentRule)
 	assert.NotContains(t, names(all), ".git", ".git listed")
 	sub, _ := w.ListDir(ctx, "pkg", false)
+	assert.NotContains(t, names(sub), "CLAUDE.md", "a nested instruction file is hidden too")
+	subAll, _ := w.ListDir(ctx, "pkg", true)
+	assert.Equal(t, "agent", entry(t, subAll, "CLAUDE.md").Hidden)
 	e = entry(t, sub, "new.go")
 	assert.Equal(t, "untracked", e.Git, "pkg/new.go: %+v", e)
 	assert.Equal(t, "pkg/new.go", e.Path, "pkg/new.go: %+v", e)

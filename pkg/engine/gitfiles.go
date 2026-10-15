@@ -52,7 +52,22 @@ const (
 	GitDiscard GitAction = "discard"
 	// GitIgnore adds a line for it to the workspace's .gitignore.
 	GitIgnore GitAction = "ignore"
+	// GitUnignore takes the line GitIgnore added out of .gitignore.
+	GitUnignore GitAction = "unignore"
 )
+
+// IgnoredElsewhereError is an unignore of a path that some other rule
+// ignores (a pattern, another .gitignore): Blitz doesn't rewrite those.
+type IgnoredElsewhereError struct {
+	Path    string
+	Pattern string // as written, such as "*.log"
+	Source  string // where, such as ".gitignore:12"
+}
+
+// Error says which rule ignores the path, in the user's language.
+func (e *IgnoredElsewhereError) Error() string {
+	return i18n.T("git.ignored_elsewhere", "path", e.Path, "pattern", e.Pattern, "source", e.Source)
+}
 
 // gitTimeout bounds one git command here.
 const gitTimeout = 15 * time.Second
@@ -114,6 +129,8 @@ func (w *Workspace) GitFileAction(ctx context.Context, p string, action GitActio
 		}
 	case GitIgnore:
 		err = w.ignore(slash)
+	case GitUnignore:
+		err = w.unignore(ctx, slash)
 	default:
 		return fmt.Errorf("unknown git action %q", action)
 	}
@@ -145,6 +162,55 @@ func (w *Workspace) ignore(slash string) error {
 		return err
 	}
 	w.userEdited(".gitignore", "added "+line)
+	return nil
+}
+
+// unignore takes the anchored line ignore wrote for slash ("/path",
+// "/folder/") out of the workspace's .gitignore. When git still ignores it
+// (another pattern, another .gitignore), it puts the file back and says
+// which rule does: Blitz doesn't rewrite other rules.
+func (w *Workspace) unignore(ctx context.Context, slash string) error {
+	file := filepath.Join(w.Dir(), ".gitignore")
+	data, err := os.ReadFile(file)
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	ours := map[string]bool{"/" + slash: true, "/" + slash + "/": true}
+	lines := strings.SplitAfter(string(data), "\n")
+	kept := slices.DeleteFunc(slices.Clone(lines), func(l string) bool { return ours[strings.TrimSpace(l)] })
+	removed := len(kept) < len(lines)
+	if removed {
+		if err := os.WriteFile(file, []byte(strings.Join(kept, "")), 0o644); err != nil {
+			return err
+		}
+	}
+	if rule := w.ignoredBy(ctx, slash); rule != nil {
+		if removed {
+			return errors.Join(rule, os.WriteFile(file, data, 0o644))
+		}
+		return rule
+	}
+	if removed {
+		w.userEdited(".gitignore", "removed /"+slash)
+	}
+	return nil
+}
+
+// ignoredBy says which rule makes git ignore slash, or nil when none does.
+func (w *Workspace) ignoredBy(ctx context.Context, slash string) *IgnoredElsewhereError {
+	name := slash
+	if info, err := os.Stat(filepath.Join(w.Dir(), filepath.FromSlash(slash))); err == nil && info.IsDir() {
+		name += "/"
+	}
+	// -z --verbose: source, line, pattern and path, each NUL-ended; exit 1
+	// when nothing matches.
+	out, err := w.gitDo(ctx, []byte(name+"\x00"), "check-ignore", "--verbose", "-z", "--no-index", "--stdin")
+	if err != nil {
+		return nil
+	}
+	if f := strings.Split(string(out), "\x00"); len(f) >= 4 && f[0] != "" {
+		return &IgnoredElsewhereError{Path: slash, Pattern: f[2], Source: filepath.ToSlash(f[0]) + ":" + f[1]}
+	}
 	return nil
 }
 

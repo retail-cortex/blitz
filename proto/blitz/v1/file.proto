@@ -48,9 +48,23 @@ service FileService {
   rpc DeleteFile(DeleteFileRequest) returns (DeleteFileResponse);
   // Runs a git action on a file or folder of the workspace: stage it,
   // unstage it, discard its changes (back to the last commit), or add it to
-  // the workspace's .gitignore. Git runs with the repository's filter
-  // drivers and fsmonitor switched off. NOT_A_REPOSITORY outside one.
+  // the workspace's .gitignore or take it out again. Git runs with the
+  // repository's filter drivers and fsmonitor switched off.
+  // NOT_A_REPOSITORY outside one; IGNORED_ELSEWHERE when another rule
+  // still ignores what's taken out (pattern and source in the metadata).
   rpc GitFileAction(GitFileActionRequest) returns (GitFileActionResponse);
+  // The commits that changed a file, newest first, following renames
+  // (View revisions). NOT_A_REPOSITORY outside one.
+  rpc GetFileHistory(GetFileHistoryRequest) returns (GetFileHistoryResponse);
+  // How a file today differs from one of its revisions, as a unified diff
+  // (BAD_REVISION for a revision not in its history).
+  rpc GetFileRevisionDiff(GetFileRevisionDiffRequest) returns (GetFileRevisionDiffResponse);
+  // Puts a file back as it was in one of its revisions, if it still has
+  // the version given (FILE_CHANGED if not); the index is left alone.
+  rpc RestoreFileRevision(RestoreFileRevisionRequest) returns (RestoreFileRevisionResponse);
+  // Markdown written as a Word document (.docx), its images read beside
+  // the file it belongs to; the caller writes it (Export as Word, /export).
+  rpc RenderDocx(RenderDocxRequest) returns (RenderDocxResponse);
   // Files whose path matches a query, best first (Go to file).
   rpc FindFiles(FindFilesRequest) returns (FindFilesResponse);
   // Files' current versions, to notice changes made elsewhere.
@@ -79,13 +93,17 @@ message FileEntry {
   // modified, added, deleted, renamed, untracked, conflicted; "changed"
   // for a folder with changes under it; "" when clean or not in git.
   string git = 6;
-  // Why it's hidden by default: "blocked", "ignored", "dot", or "".
+  // Why it's hidden by default: "blocked", "ignored", "dot", "agent" (an
+  // agent instruction file such as AGENTS.md), or "".
   string hidden = 7;
   // The agent's rule for it: "blocked", "read_only", or "".
   string agent_rule = 8;
   // How much of a file's change is staged: "all", "some" (staged, then
   // changed again), or "" (none, or a folder).
   string staged = 9;
+  // Git ignores it, whatever hidden says (a dotfile git ignores is hidden
+  // as "dot").
+  bool ignored = 10;
 }
 
 // Request message for FileService.ListDir.
@@ -207,6 +225,8 @@ enum GitAction {
   GIT_ACTION_DISCARD = 3;
   // A line for it ("/path", "/folder/") in the workspace's .gitignore.
   GIT_ACTION_IGNORE = 4;
+  // That line taken out of the workspace's .gitignore again.
+  GIT_ACTION_UNIGNORE = 5;
 }
 
 // Request message for FileService.GitFileAction.
@@ -219,6 +239,90 @@ message GitFileActionRequest {
 
 // Response message for FileService.GitFileAction.
 message GitFileActionResponse {}
+
+// One commit that changed a file.
+message FileRevision {
+  // The full hash, and abbreviated.
+  string commit = 1;
+  string short = 2;
+  string author = 3;
+  google.protobuf.Timestamp when = 4;
+  // The commit message's first line.
+  string subject = 5;
+  // The file's path at that commit, from the repository's root.
+  string path = 6;
+}
+
+// Request message for FileService.GetFileHistory.
+message GetFileHistoryRequest {
+  string workspace = 1;
+  // Workspace-relative, with "/".
+  string path = 2;
+  // At most this many (0: 50; never more than 200).
+  int32 limit = 3;
+}
+
+// Response message for FileService.GetFileHistory.
+message GetFileHistoryResponse {
+  repeated FileRevision revisions = 1;
+}
+
+// Request message for FileService.GetFileRevisionDiff.
+message GetFileRevisionDiffRequest {
+  string workspace = 1;
+  string path = 2;
+  // A commit hash from the file's history.
+  string commit = 3;
+}
+
+// Response message for FileService.GetFileRevisionDiff.
+message GetFileRevisionDiffResponse {
+  // Unified diff from the revision to today's file; "" when the same.
+  string diff = 1;
+}
+
+// Request message for FileService.RestoreFileRevision.
+message RestoreFileRevisionRequest {
+  string workspace = 1;
+  string path = 2;
+  string commit = 3;
+  // The file's version as the caller last saw it ("" when it doesn't
+  // exist).
+  string version = 4;
+}
+
+// Response message for FileService.RestoreFileRevision.
+message RestoreFileRevisionResponse {
+  // The file's new version.
+  string version = 1;
+}
+
+// Request message for FileService.RenderDocx.
+message RenderDocxRequest {
+  string workspace = 1;
+  // The Markdown file it's from, for its images ("" for none).
+  string path = 2;
+  string markdown = 3;
+  // Its ```mermaid diagrams, drawn by the caller (the service can't run
+  // Mermaid); one not here stays as its code.
+  repeated DocxDiagram diagrams = 4;
+}
+
+// A diagram drawn as a picture, for RenderDocx.
+message DocxDiagram {
+  // The ```mermaid block's text: its lines, without the fences.
+  string source = 1;
+  // A PNG of it.
+  bytes png = 2;
+  // Its size in CSS pixels (the PNG may have more, for sharpness).
+  int32 width = 3;
+  int32 height = 4;
+}
+
+// Response message for FileService.RenderDocx.
+message RenderDocxResponse {
+  bytes data = 1;
+}
 
 // Request message for FileService.FindFiles.
 message FindFilesRequest {

@@ -200,7 +200,13 @@ export const builtinCommands: Builtin[] = [
       let path = c.args || exportName(c.sessionTitle ?? "", c.sessionId ?? "");
       if (path.startsWith(c.dir + "/")) path = path.slice(c.dir.length + 1);
       if (path.startsWith("/")) return c.say(t("desktop.cmd.in_workspace", { path }), "error");
-      await files.writeFile({ workspace: c.dir, path, text: r.markdown });
+      // A .docx name writes a Word document (FS-75); anything else, Markdown.
+      if (/\.docx$/i.test(path)) {
+        const { data } = await files.renderDocx({ workspace: c.dir, path: "", markdown: r.markdown });
+        await files.writeBinaryFile({ workspace: c.dir, path, data });
+      } else {
+        await files.writeFile({ workspace: c.dir, path, text: r.markdown });
+      }
       c.say(t("export.done", { path }));
     },
   },
@@ -712,13 +718,21 @@ export const builtinCommands: Builtin[] = [
   },
   {
     name: "skills",
-    args: "[show <name>|search <q>|update [focus]]",
+    args: "[show <name>|search <q>|install <registry>/<name> [--project]|registry|update [focus]]",
     group: "extensions",
     describe: "help.skills",
     async run(c) {
       const [sub = "list", ...rest] = words(c.args);
       const arg = rest.join(" ");
       if (sub === "update") return c.run(c.line.trim(), { command: true });
+      // Registries (SK-96): managed in Settings › Skills, installed from here too.
+      if (sub === "registry" || sub === "registries") return c.openSettings("skills");
+      if (sub === "install") {
+        const ref = rest.find((w) => w !== "--project");
+        if (!ref) return c.say(t("skills.install_usage"), "error");
+        const r = await config.installRegistrySkill({ ref, workspace: rest.includes("--project") ? c.dir : "" });
+        return c.say(t("skills.installed_from", { name: r.skill?.name ?? ref, version: r.skill?.version ?? "", registry: r.skill?.registry ?? "" }));
+      }
       if (sub === "show") {
         if (!arg) return c.say(t("skills.show_usage"), "error");
         const s = (await workspaces.getSkill({ workspace: c.dir, name: arg })).skill;
@@ -729,7 +743,15 @@ export const builtinCommands: Builtin[] = [
       if (sub !== "list" && sub !== "search") return c.usage();
       const all = (await workspaces.listSkills({ workspace: c.dir, query: sub === "search" ? arg : "" })).skills;
       const title = sub === "search" ? t("skills.search_results", { query: arg, count: all.length }) : t("skills.discovered", { count: all.length });
-      c.say(bullets(title, all.map((s) => `**${md(s.name)}**: ${md(s.description)}`)), "info", true);
+      let text = bullets(title, all.map((s) => `**${md(s.name)}**: ${md(s.description)}`));
+      // A search also looks in the user's registries, when there are any.
+      if (sub === "search" && (await config.listSkillRegistries({})).registries.length) {
+        const r = await config.searchRegistrySkills({ query: arg });
+        text += "\n\n" + bullets(t("skills.registry_hits", { count: r.skills.length }), r.skills.map((s) => `**${md(s.registry)}/${md(s.name)}** ${md(s.version)}: ${md(s.description)}`));
+        if (r.skills.length) text += `\n\n${t("skills.install_hint")}`;
+        if (r.problems.length) text += `\n\n${r.problems.map(md).join("\n")}`;
+      }
+      c.say(text, "info", true);
     },
   },
   {
