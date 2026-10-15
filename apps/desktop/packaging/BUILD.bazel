@@ -150,6 +150,14 @@ pkg_files(
     prefix = "usr/share/applications",
 )
 
+# The AppStream metainfo, where software centres find the author (Retail
+# Cortex), the summary and the links.
+pkg_files(
+    name = "deb_metainfo",
+    srcs = ["linux/dev.blitz.desktop.metainfo.xml"],
+    prefix = "usr/share/metainfo",
+)
+
 pkg_files(
     name = "deb_icon",
     srcs = ["appicon.png"],
@@ -186,6 +194,7 @@ pkg_tar(
         ":deb_icon_scalable",
         ":deb_launcher",
         ":deb_link",
+        ":deb_metainfo",
         ":deb_programs",
     ],
     extension = "tar.gz",
@@ -214,7 +223,7 @@ approvals, changes and workers. Includes the blitz command, blitz-tray (the serv
 tray) and blitzd,
 the service, which it installs and starts.""",
     homepage = "https://github.com/retail-cortex/blitz",
-    maintainer = "Blitz <https://github.com/retail-cortex/blitz/issues>",
+    maintainer = "Retail Cortex <https://github.com/retail-cortex/blitz/issues>",
     package = "blitz-desktop",
     # Debian's name_arch; rules_pkg's default, name_version_arch, would
     # leave the version out ("blitz-desktop__amd64.deb"): it comes from
@@ -253,6 +262,7 @@ pkg_tar(
         ":deb_icon_scalable",
         ":deb_launcher",
         ":deb_link",
+        ":deb_metainfo",
         ":deb_programs",
         ":pacman_licenses",
     ],
@@ -272,7 +282,7 @@ $(execpath //tools/pacman) \
   --desc "Blitz desktop app: a window onto the Blitz service, with the blitz command, blitz-tray and blitzd" \
   --url https://github.com/retail-cortex/blitz \
   --license Apache-2.0 \
-  --packager "Blitz <https://github.com/retail-cortex/blitz/issues>" \
+  --packager "Retail Cortex <https://github.com/retail-cortex/blitz/issues>" \
   --depend bubblewrap \
   --depend gtk3 \
   --depend "webkit2gtk-4.1>=2.40" \

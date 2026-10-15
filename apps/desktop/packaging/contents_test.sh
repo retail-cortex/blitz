@@ -40,6 +40,7 @@ elif [[ "$pkg" == *.pkg.tar.zst ]]; then
 	for f in NOTICE THIRD_PARTY_NOTICES; do
 		grep -q " usr/share/licenses/blitz-desktop/$f$" <<<"$list" || { echo "✗ the Arch package has no /usr/share/licenses/blitz-desktop/$f"; fail=1; }
 	done
+	grep -q " usr/share/metainfo/dev.blitz.desktop.metainfo.xml$" <<<"$list" || { echo "✗ the Arch package has no AppStream metainfo"; fail=1; }
 	for exe in blitz blitz-desktop blitzd blitz-tray; do
 		grep -Eq "^-rwxr-xr-x root/root .* usr/lib/blitz-desktop/$exe$" <<<"$list" || { echo "✗ the Arch package has no /usr/lib/blitz-desktop/$exe, root's and 0755"; fail=1; }
 	done
@@ -50,6 +51,9 @@ else
 	for f in copyright NOTICE THIRD_PARTY_NOTICES; do
 		grep -q "usr/share/doc/blitz-desktop/$f$" <<<"$list" || { echo "✗ the .deb has no /usr/share/doc/blitz-desktop/$f"; fail=1; }
 	done
+	grep -q "usr/share/metainfo/dev.blitz.desktop.metainfo.xml$" <<<"$list" || { echo "✗ the .deb has no AppStream metainfo"; fail=1; }
+	# Software centres show the maintainer when there's no metainfo.
+	dpkg-deb -f "$pkg" Maintainer | grep -q "^Retail Cortex " || { echo "✗ the .deb's maintainer isn't Retail Cortex"; fail=1; }
 	for exe in blitz blitzd blitz-tray; do
 		grep -q "usr/lib/blitz-desktop/$exe$" <<<"$list" || { echo "✗ the .deb has no /usr/lib/blitz-desktop/$exe"; fail=1; }
 	done
