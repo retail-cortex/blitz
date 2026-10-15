@@ -1702,7 +1702,7 @@
     "project.ignored_unknown": "{file} : {key} n’est pas un paramètre de projet; ignoré",
     "project.unreadable": "Paramètres du projet non lus : {problem}",
     "project.local_tracked": "{path} est suivi par git : il devrait rester personnel",
-    "project.trust_workspace_deprecated": "blitz.trust_workspace est obsolète : il fait confiance aux paramètres du projet à chaque exécution sans demander. Utilisez plutôt blitz trust",
+    "project.trust_workspace_deprecated": "blitz.trust_workspace est obsolète depuis la v0.2.0 : il fait confiance aux paramètres du projet à chaque exécution sans demander. Utilisez plutôt blitz trust",
     "project.item.hook": "le hook {key} exécute {value}",
     "project.item.mcp": "serveur MCP {key} : {value}",
     "project.item.allow": "règle d’autorisation {value}",

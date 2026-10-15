@@ -1702,7 +1702,7 @@
     "project.ignored_unknown": "{file}: {key} isn't a project setting; ignored",
     "project.unreadable": "Project settings not read: {problem}",
     "project.local_tracked": "{path} is tracked by git: it's meant to stay personal",
-    "project.trust_workspace_deprecated": "blitz.trust_workspace is deprecated: it trusts the project's settings on every run without asking. Use blitz trust instead",
+    "project.trust_workspace_deprecated": "blitz.trust_workspace is deprecated since v0.2.0: it trusts the project's settings on every run without asking. Use blitz trust instead",
     "project.item.hook": "hook {key} runs {value}",
     "project.item.mcp": "MCP server {key}: {value}",
     "project.item.allow": "allow rule {value}",

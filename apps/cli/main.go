@@ -145,7 +145,7 @@ func addRunFlags(f *pflag.FlagSet, o *rootOptions) {
 	f.StringVarP(&o.global.model, "model", "m", "", "Model identifier to use")
 	f.StringVar(&o.global.agency, "agency", "", "Agency level (low, medium, high, extreme)")
 	f.BoolVar(&o.global.trustProject, "trust-project", false, "Trust the workspace's project settings (.blitz/settings.toml) for this run, without recording it")
-	f.BoolVar(&o.global.trustProject, "trust-workspace", false, "Deprecated: --trust-project")
+	f.BoolVar(&o.global.trustProject, "trust-workspace", false, "Deprecated since v0.2.0: --trust-project")
 	_ = f.MarkHidden("trust-workspace")
 	f.StringVarP(&o.global.worktree, "worktree", "w", "", "Start in a new git worktree (.blitz/worktrees/<name>, branch blitz/<name>); no name: one is made up")
 	f.Lookup("worktree").NoOptDefVal = "new"

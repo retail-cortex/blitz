@@ -138,7 +138,7 @@ type BlitzConfig struct {
 	// anything: always (every prompt), agent-decides (it may choose to, with
 	// enter_plan_mode) or never (only in plan mode and /plan).
 	PlanReview string `toml:"plan_review"`
-	// TrustWorkspace is deprecated: it trusts the workspace's project
+	// TrustWorkspace is deprecated since v0.2.0: it trusts the workspace's project
 	// settings (.blitz/settings.toml, its skills' scripts) as they are, for
 	// each run, without recording it. Use blitz trust instead. Only the
 	// user's own settings or --trust-workspace can set it.

@@ -1702,7 +1702,7 @@
     "project.ignored_unknown": "{file}: {key} no es una configuración de proyecto; se ignora",
     "project.unreadable": "No se leyó la configuración del proyecto: {problem}",
     "project.local_tracked": "{path} está en git: debería quedar como personal",
-    "project.trust_workspace_deprecated": "blitz.trust_workspace está obsoleto: confía en la configuración del proyecto en cada ejecución sin preguntar. Usa blitz trust",
+    "project.trust_workspace_deprecated": "blitz.trust_workspace está obsoleto desde la v0.2.0: confía en la configuración del proyecto en cada ejecución sin preguntar. Usa blitz trust",
     "project.item.hook": "el hook {key} ejecuta {value}",
     "project.item.mcp": "servidor MCP {key}: {value}",
     "project.item.allow": "regla de permiso {value}",
