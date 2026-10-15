@@ -90,7 +90,9 @@ vite_bin.vite(
 
 vitest_bin.vitest_test(
     name = "test",
-    size = "small",
+    # About 30 s on CI's macOS runners, which a slow one pushed past
+    # small's 60 s.
+    size = "medium",
     args = ["run"],
     chdir = package_name(),
     data = _inputs + _markdown + _terminal,
