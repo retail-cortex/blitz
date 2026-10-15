@@ -78,10 +78,21 @@ static NSMutableSet<BlitzPDFPrinter *> *printing;
                          inFrame:nil
                   inContentWorld:WKContentWorld.defaultClientWorld
                completionHandler:^(id result, NSError *error) {
-                 [self print]; // ready, or as ready as it gets
+                 if (error == nil) {
+                   [self print]; // ready, or as ready as it gets
+                   return;
+                 }
+                 // The wait couldn't run: give the page time instead.
+                 NSLog(@"blitz print: waiting for the page failed: %@", error.localizedDescription);
+                 dispatch_after(dispatch_time(DISPATCH_TIME_NOW, BLITZ_PRINT_FALLBACK_MS * NSEC_PER_MSEC),
+                                dispatch_get_main_queue(), ^{
+                                  [self print];
+                                });
                }];
   } else {
-    [self print];
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, BLITZ_PRINT_FALLBACK_MS * NSEC_PER_MSEC), dispatch_get_main_queue(), ^{
+      [self print];
+    });
   }
 }
 
