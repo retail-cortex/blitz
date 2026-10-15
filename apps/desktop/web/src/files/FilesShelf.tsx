@@ -43,7 +43,7 @@ import {
   mdiUndoVariant,
 } from "@mdi/js";
 import { fileManager, revealPath } from "../desktop";
-import { addToContext } from "../events";
+import { addToContext, showHistory } from "../events";
 import { files } from "../api";
 import { message } from "../errors";
 import { FileKind, GitAction, type FileEntry } from "../gen/blitz/v1/file_pb";
@@ -52,7 +52,6 @@ import { t } from "../i18n";
 import { Button, ContextMenu, Dialog, Icon, IconButton, useSnackbar, type MenuEntry } from "../ui/controls";
 import { ResizeHandle } from "../ui/ResizeHandle";
 import { fileIcon } from "./icons";
-import { RevisionsDialog } from "./RevisionsDialog";
 import { ancestors, emptyTree, isFolder, joinPath, moveTarget, parentOf, rows, setExpanded, shownFolders, validName, withChildren, type Tree } from "./tree";
 import { useAdvanced } from "../state";
 
@@ -125,7 +124,6 @@ export function FilesShelf({
   const [menu, setMenu] = useState<{ x: number; y: number; entry: FileEntry | null } | null>(null);
   const [deleting, setDeleting] = useState<FileEntry | null>(null);
   const [discarding, setDiscarding] = useState<FileEntry | null>(null);
-  const [revisionsOf, setRevisionsOf] = useState<string | null>(null);
   // The workspace is a git repository (from its listing): git actions are offered.
   const [repo, setRepo] = useState(false);
   const [error, setError] = useState("");
@@ -364,8 +362,8 @@ export function FilesShelf({
             onSelect: () => (a === GitAction.DISCARD ? setDiscarding(e) : void runGit(e, a)),
           });
         }
-        if (!isFolder(e) && !e.ignored && e.git !== "untracked" && e.git !== "added") {
-          items.push({ label: t("desktop.files.revisions.open"), icon: mdiHistory, onSelect: () => setRevisionsOf(e.path) });
+        if (!e.ignored && e.git !== "untracked" && e.git !== "added") {
+          items.push({ label: t("desktop.files.revisions.open"), icon: mdiHistory, onSelect: () => showHistory({ dir, path: e.path, folder: isFolder(e) }) });
         }
         if (onCommit) items.push({ label: t("desktop.commit.open"), icon: mdiSourceCommit, onSelect: onCommit });
       }
@@ -534,7 +532,6 @@ export function FilesShelf({
       {menu && <ContextMenu x={menu.x} y={menu.y} items={menuItems(menu.entry)} onClose={() => setMenu(null)} />}
       {/* At the page's level: the shelf's glass blur would otherwise be the
           frame its dialogs centre in. */}
-      {revisionsOf && createPortal(<RevisionsDialog dir={dir} path={revisionsOf} onClose={() => setRevisionsOf(null)} onRestored={onChanged} />, document.body)}
       {discarding &&
         createPortal(
           <Dialog

@@ -28,7 +28,7 @@ import { ActionKind, ErrorInfoSchema, UsageSchema, type Usage } from "../gen/bli
 type Out = MessageInitShape<typeof RunTurnResponseSchema>;
 import { RunStatus, WorkerService, WorkerState } from "../gen/blitz/v1/worker_pb";
 import { ConfigService, KeySource } from "../gen/blitz/v1/config_pb";
-import { FileKind, FileService, GitAction } from "../gen/blitz/v1/file_pb";
+import { FileKind, FileService, GitAction, RevisionDiff } from "../gen/blitz/v1/file_pb";
 import { AgentFileSchema, AgentScope, SuggestionKind, SuggestionSchema, WorkspaceService, type AgentDefinition } from "../gen/blitz/v1/workspace_pb";
 
 // Whether the fake workspace is a git repository (?norepo: not yet).
@@ -546,13 +546,20 @@ const fakeInstalledSkills: { name: string; registry: string; version: string; di
 // .gitignore wrote.
 const fakeIgnored = (p: string) =>
   p.startsWith("bin") || p.endsWith(".log") || (fakeFiles.get(".gitignore") ?? "").split("\n").some((l) => l === `/${p}` || l === `/${p}/`);
-// A file's commits in the fake: three, the oldest its first lines only.
-const fakeRevisions = (p: string) =>
-  [
-    { commit: "c3a1f0e9b8d7c6a5f4e3d2c1b0a9f8e7d6c5b4a3", subject: "Round coupon discounts half up", author: "Ana Ruiz", days: 1 },
-    { commit: "9b2e4d6f8a0c1e3b5d7f9a2c4e6b8d0f1a3c5e7b", subject: "Read the coupon from the request", author: "Sam Lee", days: 6 },
-    { commit: "5e8c1a7f3d9b2e6a0c4f8d1b7e3a9c5f2d6b0e8a", subject: `Add ${p.split("/").pop()}`, author: "Ana Ruiz", days: 30 },
-  ].map((r) => ({ ...r, short: r.commit.slice(0, 7), path: p, when: timestampFromDate(new Date(Date.now() - r.days * 86400000)) }));
+// A history in the fake: six commits, with a branch merged in.
+const fakeRevisions = (p: string) => {
+  const h = (n: number) => n.toString(16).padStart(2, "0").repeat(20);
+  const day = (d: number, hours = 0) => timestampFromDate(new Date(Date.now() - d * 86400000 - hours * 3600000));
+  const rows = [
+    { n: 6, parents: [5, 4], subject: "Merge branch 'coupon-rounding'", author: "Ana Ruiz", email: "ana@example.com", when: day(0, 2), added: 0, removed: 0 },
+    { n: 5, parents: [3], subject: "Read the coupon from the request", author: "Sam Lee", email: "sam@example.com", when: day(0, 5), added: 14, removed: 3 },
+    { n: 4, parents: [3], subject: "Round coupon discounts half up", author: "Ana Ruiz", email: "ana@example.com", when: day(1), added: 6, removed: 2 },
+    { n: 3, parents: [2], subject: "Add the cart's tests", author: "Kim Park", email: "kim@example.com", when: day(4), added: 120, removed: 0 },
+    { n: 2, parents: [1], subject: "Price items in cents", author: "Sam Lee", email: "sam@example.com", when: day(12), added: 40, removed: 38 },
+    { n: 1, parents: [], subject: `Add ${p.split("/").pop() || "the shop"}`, author: "Ana Ruiz", email: "ana@example.com", when: day(40), added: 210, removed: 0 },
+  ];
+  return rows.map((r) => ({ commit: h(r.n), short: h(r.n).slice(0, 7), parents: r.parents.map(h), subject: r.subject, author: r.author, email: r.email, when: r.when, path: p, added: r.added, removed: r.removed, files: r.added + r.removed ? 2 : 0 }));
+};
 const fakeOldText = (text: string) => text.split("\n").slice(0, 3).join("\n") + "\n";
 const fakeInstructionFiles = ["AGENTS.md", "CLAUDE.md", "GEMINI.md", "BLITZ.md"];
 const fakeHidden = (p: string) => {
@@ -1255,15 +1262,22 @@ export function installFake() {
           }
           return {};
         },
-        getFileHistory: ({ path }) => ({ revisions: fakeFiles.has(path) ? fakeRevisions(path) : [] }),
-        getFileRevisionDiff: ({ path, commit }) => {
-          const now = fakeFiles.get(path) ?? "";
-          if (commit === fakeRevisions(path)[0].commit) return { diff: "" };
+        getFileHistory: ({ path, skip }) => ({ revisions: skip ? [] : fakeRevisions(path), more: false }),
+        getFileRevisionDiff: ({ path, commit, against, otherCommit }) => {
+          const file = fakeFiles.has(path) ? path : "internal/cart/discount.go";
+          const now = fakeFiles.get(file) ?? "";
+          if (against === RevisionDiff.NOW && commit === fakeRevisions(path)[0].commit) return { diff: "" };
           const then = fakeOldText(now);
           const add = now.split("\n").slice(3).filter((l) => l !== "");
-          return { diff: `diff --git a/${path} b/${path}\n--- a/${path}\n+++ b/${path}\n@@ -1,3 +1,${3 + add.length} @@\n${then.trimEnd().split("\n").map((l) => " " + l).join("\n")}\n${add.map((l) => "+" + l).join("\n")}\n` };
+          const note = against === RevisionDiff.OTHER ? ` (${commit.slice(0, 7)}..${otherCommit.slice(0, 7)})` : "";
+          return { diff: `diff --git a/${file} b/${file}\n--- a/${file}\n+++ b/${file}${note}\n@@ -1,3 +1,${3 + add.length} @@\n${then.trimEnd().split("\n").map((l) => " " + l).join("\n")}\n${add.map((l) => "+" + l).join("\n")}\n`, truncated: false };
         },
-        restoreFileRevision: ({ path, commit }) => {
+        restoreFileRevision: ({ path, commit, preview }) => {
+          if (!fakeFiles.has(path)) {
+            const under = [...fakeFiles.keys()].filter((p) => p.startsWith(path ? path + "/" : "")).slice(0, 3);
+            return { files: under.map((p, i) => ({ path: p, recreated: i === 2 })), version: "" };
+          }
+          if (preview) return { files: [], version: "" };
           const text = commit === fakeRevisions(path)[0].commit ? (fakeFiles.get(path) ?? "") : fakeOldText(fakeFiles.get(path) ?? "");
           fakeFiles.set(path, text);
           return { version: fakeVersion(text) };

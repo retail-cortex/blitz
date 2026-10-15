@@ -21,7 +21,8 @@ import { mdiMagnify, mdiFileTreeOutline } from "@mdi/js";
 import { ChangesDialog, type ChangesSource } from "./Changes";
 import { CommitDialog } from "./CommitDialog";
 import { Conversation } from "./Conversation";
-import { filesTouchedEvent, goToFile, openFileEvent, revealInTreeEvent, viewEvent, type OpenFileDetail, type ViewDetail } from "./events";
+import { filesTouchedEvent, goToFile, historyEvent, openFileEvent, revealInTreeEvent, viewEvent, type HistoryDetail, type OpenFileDetail, type ViewDetail } from "./events";
+import { HistoryDialog } from "./files/HistoryDialog";
 import { EditorPane } from "./files/EditorPane";
 import { FilesShelf } from "./files/FilesShelf";
 import { FileLinksProvider } from "./files/links";
@@ -74,7 +75,9 @@ export function Workspace({
   const { prefs, update, theme } = useApp();
   // What's open over the editor: the changes (this session's or git's),
   // an agent or a worker, as the menus asked.
-  const [modal, setModal] = useState<{ kind: "changes"; source: ChangesSource } | { kind: "agent" | "worker"; intent: ItemIntent } | { kind: "commit" } | null>(null);
+  const [modal, setModal] = useState<
+    { kind: "changes"; source: ChangesSource } | { kind: "agent" | "worker"; intent: ItemIntent } | { kind: "commit" } | { kind: "history"; path: string; folder: boolean } | null
+  >(null);
   const dir = ws.dir;
   const { settings, modelProblem, settingsError, settingsReason, project, reviewing, setReviewing, refreshSettings } = useWorkspaceSettings(dir);
 
@@ -128,6 +131,10 @@ export function Workspace({
       const d = (e as CustomEvent<{ dir: string; path: string }>).detail;
       if (d.dir === dir) revealRef.current(d.path);
     };
+    const onHistory = (e: Event) => {
+      const d = (e as CustomEvent<HistoryDetail>).detail;
+      if (d.dir === dir) setModal({ kind: "history", path: d.path, folder: d.folder });
+    };
     // A tool ran or a turn ended: look again soon (tools come in bursts).
     let timer: ReturnType<typeof setTimeout> | undefined;
     const onTouched = (e: Event) => {
@@ -137,11 +144,13 @@ export function Workspace({
     };
     window.addEventListener(openFileEvent, onOpen);
     window.addEventListener(revealInTreeEvent, onReveal);
+    window.addEventListener(historyEvent, onHistory);
     window.addEventListener(filesTouchedEvent, onTouched);
     return () => {
       clearTimeout(timer);
       window.removeEventListener(openFileEvent, onOpen);
       window.removeEventListener(revealInTreeEvent, onReveal);
+      window.removeEventListener(historyEvent, onHistory);
       window.removeEventListener(filesTouchedEvent, onTouched);
     };
   }, [dir, open]);
@@ -207,6 +216,7 @@ export function Workspace({
           dir={dir}
           onChanges={(source) => setModal({ kind: "changes", source })}
           onCommit={() => setModal({ kind: "commit" })}
+          onHistory={() => setModal({ kind: "history", path: "", folder: true })}
           onAgent={(intent) => setModal({ kind: "agent", intent })}
           onWorker={(intent) => setModal({ kind: "worker", intent })}
           onSearch={onSearch}
@@ -271,6 +281,7 @@ export function Workspace({
           </FileLinksProvider>
         </aside>
       </div>
+      {visible && modal?.kind === "history" && <HistoryDialog dir={dir} path={modal.path} folder={modal.folder} onClose={() => setModal(null)} onRestored={() => setTouched((n) => n + 1)} />}
       {visible && modal?.kind === "commit" && <CommitDialog dir={dir} onClose={() => setModal(null)} onCommitted={() => setTouched((n) => n + 1)} />}
       {visible && modal?.kind === "changes" && <ChangesDialog dir={dir} initial={modal.source} onClose={() => setModal(null)} />}
       {visible && modal?.kind === "agent" && <AgentEditor key={modal.intent.n} workspace={dir} scope={AgentScope.WORKSPACE} intent={modal.intent} dialog={{ onClose: () => setModal(null) }} />}
