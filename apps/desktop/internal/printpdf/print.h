@@ -23,15 +23,30 @@
 #include <stdint.h>
 
 // BLITZ_PRINT_READY is the body of an async function both printers run
-// once the page has loaded, and print after: it waits for the page's
-// fonts and every picture to be ready to draw, for at most 10 seconds.
-// Printing straight away printed pictures as blank space when a font was
-// still loading (KaTeX's, inlined with font-display: block).
-#define BLITZ_PRINT_READY                                                                       \
-  "await Promise.race(["                                                                       \
-  "Promise.all([document.fonts.ready, ...Array.from(document.images, (i) => i.decode().catch(() => {}))]),"\
-  "new Promise((r) => setTimeout(r, 10000))]);"                                                 \
+// once the page has loaded, and print after: it makes every font the page
+// declares load (layout may not have asked for them yet), waits for the
+// fonts and every picture to be ready to draw, and lets the page settle
+// for its next paint; at most 10 seconds. Printing straight away printed
+// pictures as blank space when a font was still loading (KaTeX's, inlined
+// with font-display: block).
+#define BLITZ_PRINT_READY                                                                          \
+  "const settle = (ms) => new Promise((r) => setTimeout(r, ms));"                                \
+  "const deadline = Date.now() + 10000;"                                                         \
+  "const ready = async () => {"                                                                  \
+  "  await Promise.all(Array.from(document.fonts, (f) => f.load().catch(() => {})));"            \
+  "  await document.fonts.ready;"                                                                \
+  "  await Promise.all(Array.from(document.images, (i) => i.decode().catch(() => {})));"         \
+  "  while (Date.now() < deadline && (document.fonts.status !== 'loaded' ||"                    \
+  "         Array.from(document.images).some((i) => !i.complete))) await settle(50);"            \
+  "  if (document.body) document.body.getBoundingClientRect();"                                  \
+  "  await settle(150);"                                                                         \
+  "};"                                                                                           \
+  "await Promise.race([ready(), settle(10000)]);"                                                \
   "return true;"
+
+// BLITZ_PRINT_FALLBACK_MS is how long a printer waits when it can't run
+// BLITZ_PRINT_READY, rather than printing at once.
+#define BLITZ_PRINT_FALLBACK_MS 1500
 
 // Prints html on pages of width x height points with margin points on
 // each side, on the UI thread, and answers handle through blitzPrintDone.

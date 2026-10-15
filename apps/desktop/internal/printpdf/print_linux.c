@@ -104,12 +104,27 @@ static void print(job *j, WebKitWebView *view) {
   gtk_paper_size_free(paper);
 }
 
+// The page has had BLITZ_PRINT_FALLBACK_MS to get ready: print.
+static gboolean print_later(gpointer data) {
+  job *j = data;
+  print(j, j->view);
+  return G_SOURCE_REMOVE;
+}
+
 #if WEBKIT_CHECK_VERSION(2, 40, 0)
-// The fonts and pictures are ready (or 10 s went by): print.
+// The fonts and pictures are ready (or 10 s went by): print. When the
+// wait couldn't run, give the page time instead.
 static void ready(GObject *source, GAsyncResult *result, gpointer data) {
   job *j = data;
-  JSCValue *value = webkit_web_view_call_async_javascript_function_finish(WEBKIT_WEB_VIEW(source), result, NULL);
+  GError *err = NULL;
+  JSCValue *value = webkit_web_view_call_async_javascript_function_finish(WEBKIT_WEB_VIEW(source), result, &err);
   g_clear_object(&value);
+  if (err != NULL) {
+    g_warning("blitz print: waiting for the page failed: %s", err->message);
+    g_clear_error(&err);
+    g_timeout_add(BLITZ_PRINT_FALLBACK_MS, print_later, j);
+    return;
+  }
   print(j, j->view);
 }
 #endif
@@ -125,7 +140,7 @@ static void load_changed(WebKitWebView *view, WebKitLoadEvent event, gpointer da
   // draw: wait for them (BLITZ_PRINT_READY), then print.
   webkit_web_view_call_async_javascript_function(view, BLITZ_PRINT_READY, -1, NULL, NULL, NULL, NULL, ready, j);
 #else
-  print(j, view);
+  g_timeout_add(BLITZ_PRINT_FALLBACK_MS, print_later, j);
 #endif
 }
 
