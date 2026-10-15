@@ -16,7 +16,8 @@
 
 // The docs the app carries, loaded the first time something asks (the
 // viewer, the palette, /docs): their own chunk, never the page's.
-import { loadDocs } from "./index";
+import { appVersion } from "../desktop";
+import { loadDocs, withRelease } from "./index";
 
 /** The docs, their pages and navigation, and the pictures they show. */
 export type AppDocs = ReturnType<typeof loadDocs> & { pictures: Record<string, string> };
@@ -25,6 +26,9 @@ let loaded: Promise<AppDocs> | null = null;
 
 /** The docs the app carries, loaded once. */
 export function loadAppDocs(): Promise<AppDocs> {
-  loaded ??= import("./content").then((m) => ({ ...loadDocs(m.docFiles), pictures: m.docPictures }));
+  loaded ??= Promise.all([import("./content"), appVersion().catch(() => "dev")]).then(([m, version]) => ({
+    ...loadDocs(withRelease(m.docFiles, version)),
+    pictures: m.docPictures,
+  }));
   return loaded;
 }

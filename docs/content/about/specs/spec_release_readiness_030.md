@@ -63,7 +63,7 @@ The owner's review (2026-09-27) found the project not ready to release: the old 
   - `development/`: working on Blitz (from `AGENTS.md`), building from source on each OS, where to pick up, manual verification, translating;
   - `about/`: performance (measured, and by design), the roadmap, history, and the specs (`about/specs/`, the index as `_index.md`).
 - **RR-32** Root keeps only what tools and packages need there: `README.md` (short), `LICENSE`, `NOTICE`, `OWNERS.txt`, and `AGENTS.md` as a short pointer for coding agents (§8). `CONTRIBUTING.md` lives at `docs/CONTRIBUTING.md` (GitHub finds it there) and the site mounts it (`//docs:contributing`, under Development). `.agents/` is emptied into the site.
-- **RR-33** Published to GitHub Pages by a workflow on pushes to `main` that change `docs/` (and by hand): `bazel build //docs:site`, the link check, then `actions/upload-pages-artifact` and `actions/deploy-pages`.
+- **RR-33** Published to GitHub Pages by a workflow on pushes to `main` that change `docs/` (and by hand): `bazel build //docs:site`, the link check, then `actions/upload-pages-artifact` and `actions/deploy-pages`. *2026-10-15 (the owner's request: no version pins to bump):* before building, the workflow writes the docs' `release.json` data file with the latest published release's tag (`gh release view`), which the `release` shortcode shows in install snippets (`vX.Y.Z` without it, as in a local build). Publishing a release runs the workflow, whose `redeploy` job starts it again on `main` (Pages deploy only from `main`; the release's own run is on its tag).
 
 ## 7. README, contributing, owners
 

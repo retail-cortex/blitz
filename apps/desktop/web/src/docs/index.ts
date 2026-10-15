@@ -177,3 +177,17 @@ export function loadDocs(files: Record<string, string>): { pages: Map<string, Do
   const list = Object.entries(files).map(([file, text]) => parsePage(file, text));
   return { pages: new Map(list.map((p) => [p.path, p])), tree: docTree(list) };
 }
+
+/** The release shortcode in a page (docs/layouts/shortcodes/release.html). */
+const releaseShortcode = /\{\{<\s*release\s*>\}\}/g;
+
+/**
+ * The pages with the release shortcode filled in. On the site it's the
+ * latest release; the docs the app carries are its release's, so it's the
+ * app's version (0.6.2 is v0.6.2), or vX.Y.Z when the app isn't a release
+ * (a development build, a commit), as a local build of the site shows.
+ */
+export function withRelease(files: Record<string, string>, appVersion: string): Record<string, string> {
+  const tag = /^\d+\.\d+\.\d+(-rc\.\d+)?$/.test(appVersion) ? `v${appVersion}` : "vX.Y.Z";
+  return Object.fromEntries(Object.entries(files).map(([path, text]) => [path, text.replace(releaseShortcode, tag)]));
+}

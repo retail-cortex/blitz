@@ -72,3 +72,6 @@ pnpm-debug.log*
 # The coverage summary tools/coverage.sh writes for the docs site; CI
 # makes its own.
 /docs/data/coverage.json
+# The latest release, which the docs workflow writes for the release
+# shortcode (docs/layouts/shortcodes/release.html).
+/docs/data/release.json
