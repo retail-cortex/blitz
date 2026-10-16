@@ -43,7 +43,7 @@ import {
 import { appVersion, cliStatus, installCLI, isLinuxApp, installService, reinstallCLI, restartService, serviceStatus, setTray, stopService, type CLIStatus, type ServiceStatus } from "./desktop";
 import { SandboxFixResult, sandboxDetail, useSandboxFix } from "./SandboxNotice";
 import { configChanged, showLicense } from "./events";
-import { checkService, settleTimeout, type ServiceCheck, waitForService, withTimeout } from "./serviceVersion";
+import { checkService, settleTimeout, type ServiceCheck, shownVersion, waitForService, withTimeout } from "./serviceVersion";
 import { languages, t } from "./i18n";
 import { workspaceColor } from "./palette";
 import { displayName, editWorkspace, forgetWorkspace, openWorkspace, type WorkspacePrefs } from "./prefs";
@@ -452,9 +452,9 @@ function Service() {
       <CommandLine />
       <OSSandbox />
       {version && (
-        <Setting title={t("desktop.service.version")} detail={version.stale ? t(`desktop.service.stale.${version.stale}`, { service: version.info?.version ?? "?", app: version.app, path: version.info?.executable ?? "" }) : undefined}>
+        <Setting title={t("desktop.service.version")} detail={version.stale ? t(`desktop.service.stale.${version.stale}`, { service: shownVersion(version.info?.version ?? "?"), app: shownVersion(version.app), path: version.info?.executable ?? "" }) : undefined}>
           <span className={version.stale ? "error-text" : "muted"}>
-            {version.info ? version.info.version : t("desktop.service.version_unknown")} · {t("desktop.service.app_version", { version: version.app })}
+            {version.info ? shownVersion(version.info.version) : t("desktop.service.version_unknown")} · {t("desktop.service.app_version", { version: shownVersion(version.app) })}
           </span>
         </Setting>
       )}
@@ -561,7 +561,7 @@ function About() {
   return (
     <div className="stack">
       <span className="t-title-lg">{t("desktop.brand")}</span>
-      <span className="muted">{t("desktop.about.version", { version })}</span>
+      <span className="muted">{t("desktop.about.version", { version: shownVersion(version) })}</span>
       <p className="muted">{t("desktop.about.body", { file: "~/.blitz/desktop.json" })}</p>
       <div className="row wrap">
         <span className="t-body-sm muted">{t("desktop.about.license")}</span>

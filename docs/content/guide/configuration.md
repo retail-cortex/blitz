@@ -41,7 +41,7 @@ When a project's settings (`.blitz/settings.toml`) need trust, the REPL lists wh
 - `/trust` (REPL), `blitz trust [dir]` and Settings › Workspaces › **Project settings** show what applies, what waits and what was ignored, and change the decision; `blitz trust --revoke` forgets it.
 - With nobody to ask (`blitz exec`, a pipe), settings that need trust stay off; `--trust-project` trusts them for that run only.
 - `blitz doctor` lists the project's settings and anything ignored.
-- `blitz.trust_workspace` and `--trust-workspace` are deprecated: the project's agents and skills now load without them, and they trust the project's settings for each run without recording it.
+- `blitz.trust_workspace` and `--trust-workspace` are deprecated since v0.2.0: the project's agents and skills now load without them, and they trust the project's settings for each run without recording it.
 
 ## Providers and models
 

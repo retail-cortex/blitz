@@ -242,6 +242,9 @@ type liveRun struct {
 	events  []*pb.TurnEvent
 	done    bool
 	changed chan struct{} // closed and replaced when events arrive or the run ends
+	// stop cancels the run's context with api.ErrRunStopped: the run ends,
+	// recorded as stopped.
+	stop context.CancelCauseFunc
 }
 
 func (lr *liveRun) add(ev *pb.TurnEvent, done bool) {
@@ -274,14 +277,18 @@ func (sc *scheduler) start(ctx context.Context, dir, name string, manual bool) (
 
 	started := make(chan api.Run, 1)
 	failed := make(chan error, 1)
+	// Each run can be stopped on its own (StopWorkerRun); stopping the
+	// scheduler stops them all.
+	runCtx, cancel := context.WithCancelCause(sc.base)
 	go func() {
 		defer sc.wg.Done()
 		defer func() { <-sc.slots }()
+		defer cancel(nil)
 		var lr *liveRun
-		run, err := w.RunWorker(sc.base, name, engine.RunOptions{
+		run, err := w.RunWorker(runCtx, name, engine.RunOptions{
 			Manual: manual,
 			OnStart: func(r api.Run) {
-				lr = &liveRun{run: r, changed: make(chan struct{})}
+				lr = &liveRun{run: r, changed: make(chan struct{}), stop: cancel}
 				sc.mu.Lock()
 				sc.live[r.ID] = lr
 				sc.mu.Unlock()
@@ -363,6 +370,20 @@ func (sc *scheduler) liveRuns(dir, name string) []api.Run {
 		}
 	}
 	return out
+}
+
+// stopRun stops the run going now with id, and returns its record as it
+// was; false when no such run is going.
+func (sc *scheduler) stopRun(id string) (api.Run, bool) {
+	lr := sc.liveRun(id)
+	if lr == nil {
+		return api.Run{}, false
+	}
+	lr.mu.Lock()
+	r := lr.run
+	lr.mu.Unlock()
+	lr.stop(api.ErrRunStopped)
+	return r, true
 }
 
 func (sc *scheduler) liveRun(id string) *liveRun {

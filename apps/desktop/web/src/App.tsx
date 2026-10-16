@@ -19,7 +19,7 @@ import { watchWorkerFailures } from "./workerFailures";
 import { mdiAlertOutline, mdiFolderOpenOutline, mdiLightningBolt, mdiServerOff } from "@mdi/js";
 import { config as configAPI, onServiceLost, workspaces as workspaceAPI } from "./api";
 import { appVersion, chooseWorkspace, type LicenseText, installService, onAppMenu, onDeepLink, onNotificationOpen, restartService, serviceStatus, type ServiceStatus, setAppMenu, toggleFullscreen } from "./desktop";
-import { checkService, type ServiceCheck } from "./serviceVersion";
+import { checkService, type ServiceCheck, shownVersion } from "./serviceVersion";
 import { CommandPalette } from "./CommandPalette";
 import { SearchDialog } from "./SearchDialog";
 import { ErrorBoundary } from "./ErrorBoundary";
@@ -122,7 +122,7 @@ function StaleService({ state, check }: { state: ServiceCheck; check: () => Prom
         await new Promise((r) => setTimeout(r, 1000));
         const now = await check();
         if (now && !now.stale) {
-          snack(t("desktop.service.restarted", { version: now.info?.version ?? "?" }));
+          snack(t("desktop.service.restarted", { version: shownVersion(now.info?.version ?? "?") }));
           return;
         }
       }
@@ -137,7 +137,7 @@ function StaleService({ state, check }: { state: ServiceCheck; check: () => Prom
     <div className="banner">
       <Icon path={mdiServerOff} />
       <span className="spacer">
-        {t(`desktop.service.stale.${stale}`, { service: info?.version ?? "?", app, path: info?.executable ?? "" })}
+        {t(`desktop.service.stale.${stale}`, { service: shownVersion(info?.version ?? "?"), app: shownVersion(app), path: info?.executable ?? "" })}
         {bin === "" && <span className="muted"> {t("desktop.service.no_blitzd")}</span>}
         {error && <span className="error-text"> {error}</span>}
       </span>

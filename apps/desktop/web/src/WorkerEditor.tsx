@@ -16,13 +16,14 @@
 
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { mdiAlertCircleOutline, mdiRefresh } from "@mdi/js";
+import { mdiAlertCircleOutline, mdiCreationOutline, mdiRefresh } from "@mdi/js";
 import { workers, workspaces } from "./api";
 import { message, reason } from "./errors";
 import { t } from "./i18n";
 import { ModelInput, useModelCatalog } from "./ModelInput";
 import { Button, Dialog, Icon, Segmented, useSnackbar } from "./ui/controls";
-import { canSave, edited, emptyWorkerForm, footerNote, formFromWorker, validWorkerName, workerName, workerRequest, type WorkerForm } from "./workerForm";
+import { applyRewrite, canSave, edited, emptyWorkerForm, footerNote, formFromWorker, permissionChanges, validWorkerName, workerName, workerRequest, type WorkerForm } from "./workerForm";
+import type { RewriteWorkerResponse } from "./gen/blitz/v1/worker_pb";
 
 // An example of the permissions field (syntax, not prose).
 const permissionsExample = ["shell:go test ./...", "write:reports/*"].join("\n");
@@ -71,6 +72,10 @@ export function WorkerEditor({
   const [loaded, setLoaded] = useState<WorkerForm | null>(null);
   const [stale, setStale] = useState(false);
   const [confirmReload, setConfirmReload] = useState(false);
+  // Rewrite with AI: the model's suggestion, shown before it's taken.
+  const [rewriting, setRewriting] = useState(false);
+  const [suggestion, setSuggestion] = useState<RewriteWorkerResponse | null>(null);
+  const [takePermissions, setTakePermissions] = useState(true);
   const load = async () => {
     if (!edit) return;
     try {
@@ -124,6 +129,24 @@ export function WorkerEditor({
       setBusy(false);
     }
   };
+  const rewrite = async () => {
+    setRewriting(true);
+    try {
+      const res = await workers.rewriteWorker({ workspace: dir, worker: workerRequest(f) });
+      if (res.problem) snack(t("desktop.worker.rewrite_failed", { problem: res.problem }), { error: true });
+      else {
+        setTakePermissions(true);
+        setSuggestion(res);
+      }
+    } catch (e) {
+      snack(message(e), { error: true });
+    } finally {
+      setRewriting(false);
+    }
+  };
+  const perms = suggestion ? permissionChanges(f, suggestion.permissions) : { added: [], removed: [] };
+  const permsDiffer = perms.added.length + perms.removed.length > 0;
+
   // Reloading the file from disk drops the form's edits: asked first when there are some.
   const reload = () => (edited(f, loaded) ? setConfirmReload(true) : void load());
 
@@ -209,10 +232,25 @@ export function WorkerEditor({
             <ModelInput value={f.model} onChange={(v) => set("model", v)} catalog={catalog} placeholder={t("desktop.newworker.model_placeholder")} />
           </label>
         </div>
-        <label className="field">
-          <span className="t-label">{t("desktop.newworker.prompt")}</span>
-          <textarea className="input new-worker-prompt" value={f.prompt} placeholder={t("desktop.newworker.prompt_placeholder")} rows={8} onChange={(e) => set("prompt", e.target.value)} />
-        </label>
+        <div className="field">
+          <label className="t-label" htmlFor="worker-prompt">
+            {t("desktop.newworker.prompt")}
+          </label>
+          {rewriting && <div className="progress" role="progressbar" aria-label={t("desktop.worker.rewriting")} />}
+          <textarea
+            id="worker-prompt"
+            className="input new-worker-prompt"
+            value={f.prompt}
+            placeholder={t("desktop.newworker.prompt_placeholder")}
+            rows={8}
+            onChange={(e) => set("prompt", e.target.value)}
+          />
+          <span>
+            <Button small icon={mdiCreationOutline} disabled={rewriting || !f.prompt.trim()} title={t("desktop.worker.rewrite_hint")} onClick={() => void rewrite()}>
+              {rewriting ? t("desktop.worker.rewriting") : t("desktop.worker.rewrite")}
+            </Button>
+          </span>
+        </div>
         <label className="field">
           <span className="t-label">{t("desktop.newworker.permissions")}</span>
           <textarea className="input mono" value={f.permissions} placeholder={permissionsExample} rows={3} spellCheck={false} onChange={(e) => set("permissions", e.target.value)} />
@@ -237,6 +275,58 @@ export function WorkerEditor({
           />
           <span className="t-body-sm muted">{t("desktop.newworker.catchup_hint")}</span>
         </div>
+        {suggestion && (
+          <Dialog
+            wide
+            title={t("desktop.worker.rewrite_title")}
+            icon={mdiCreationOutline}
+            onClose={() => setSuggestion(null)}
+            footer={
+              <>
+                <Button onClick={() => setSuggestion(null)}>{t("desktop.worker.rewrite_keep")}</Button>
+                <Button
+                  variant="filled"
+                  onClick={() => {
+                    setF((x) => applyRewrite(x, suggestion, permsDiffer && takePermissions));
+                    setSuggestion(null);
+                  }}
+                >
+                  {t("desktop.worker.rewrite_use")}
+                </Button>
+              </>
+            }
+          >
+            <div className="stack rewrite-review">
+              {suggestion.changes.length > 0 && (
+                <ul className="rewrite-changes t-body-sm">
+                  {suggestion.changes.map((c) => (
+                    <li key={c}>{c}</li>
+                  ))}
+                </ul>
+              )}
+              <textarea className="input mono rewrite-prompt" readOnly rows={11} value={suggestion.prompt} aria-label={t("desktop.worker.rewrite_title")} />
+              {permsDiffer && (
+                <div className="stack" style={{ gap: 4 }}>
+                  <label className="row check">
+                    <input type="checkbox" checked={takePermissions} onChange={(e) => setTakePermissions(e.target.checked)} />
+                    <span>{t("desktop.worker.rewrite_permissions")}</span>
+                  </label>
+                  {perms.added.map((p) => (
+                    <code key={"+" + p} className="t-body-sm add-count">
+                      + {p}
+                    </code>
+                  ))}
+                  {perms.removed.map((p) => (
+                    <code key={"-" + p} className="t-body-sm del-count">
+                      − {p}
+                    </code>
+                  ))}
+                </div>
+              )}
+              <p className="t-body-sm muted">{t("desktop.worker.rewrite_note")}</p>
+            </div>
+          </Dialog>
+        )}
         {confirmReload && (
           <Dialog
             title={t("desktop.editworker.reload_title")}

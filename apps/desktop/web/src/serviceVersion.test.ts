@@ -15,7 +15,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { staleReason, waitForService, withTimeout } from "./serviceVersion";
+import { shownVersion, staleReason, waitForService, withTimeout } from "./serviceVersion";
 
 describe("staleReason", () => {
   const info = { version: "1.4.0", executable: "/usr/lib/blitz-desktop/blitzd", pid: 42 };
@@ -69,5 +69,18 @@ describe("withTimeout", () => {
   });
   it("rejects a call that doesn't answer", async () => {
     await expect(withTimeout(new Promise(() => {}), 10)).rejects.toThrow("no answer");
+  });
+});
+
+describe("shownVersion", () => {
+  // Releases are vN.N.N where people read them, as the tags and docs write
+  // them; the stamped version (compared with the service's) has no "v".
+  it("adds the v to a release", () => {
+    expect(shownVersion("0.6.2")).toBe("v0.6.2");
+    expect(shownVersion("0.7.0-rc.1")).toBe("v0.7.0-rc.1");
+    expect(shownVersion("0.6.2-3-gabc1234")).toBe("v0.6.2-3-gabc1234");
+  });
+  it("leaves anything else as it is", () => {
+    for (const v of ["dev", "abc1234-dirty.5f3e2a1", "?", ""]) expect(shownVersion(v)).toBe(v);
   });
 });

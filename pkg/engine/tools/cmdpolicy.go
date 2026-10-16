@@ -16,6 +16,7 @@ package tools
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -269,6 +270,14 @@ func (p *CommandPolicy) Evaluate(script string) CommandDecision {
 		}
 	}
 	d := CommandDecision{Verdict: VerdictNeedsApproval, Commands: rendered}
+	// A search of the whole disk or home folder is never what's meant, and
+	// is slow and noisy (on macOS, a prompt per private folder): refused
+	// whatever the rules and mode.
+	for _, c := range cmds {
+		if reason, ok := diskSweep(c); ok {
+			return CommandDecision{Verdict: VerdictDeny, Reason: reason, Commands: rendered}
+		}
+	}
 	if p == nil {
 		return d
 	}
@@ -356,6 +365,55 @@ func (p *CommandPolicy) Evaluate(script string) CommandDecision {
 		d.Reason = ""
 	}
 	return d
+}
+
+// sweepTools search a tree recursively; sweepIfRecursive do with -r or -R.
+var (
+	sweepTools       = map[string]bool{"find": true, "gfind": true, "fd": true, "fdfind": true, "rg": true, "du": true, "tree": true}
+	sweepIfRecursive = map[string]bool{"grep": true, "egrep": true, "ls": true}
+)
+
+// homeDir is the user's home folder, for diskSweep; tests replace it.
+var homeDir = func() string {
+	h, _ := os.UserHomeDir()
+	return h
+}
+
+// diskSweep reports whether c searches the whole disk or the user's home
+// folder recursively (find / -name uv, rg --files ~), and what to do
+// instead.
+func diskSweep(c simpleCommand) (string, bool) {
+	if len(c.words) < 2 || c.redirect != "" {
+		return "", false
+	}
+	name := filepath.Base(c.words[0])
+	recursive := sweepTools[name]
+	if sweepIfRecursive[name] {
+		for _, w := range c.words[1:] {
+			if w == "--recursive" || strings.HasPrefix(w, "-") && !strings.HasPrefix(w, "--") && strings.ContainsAny(w, "rR") {
+				recursive = true
+			}
+		}
+	}
+	if !recursive {
+		return "", false
+	}
+	home := filepath.Clean(homeDir())
+	roots := map[string]bool{"/": true, "~": true, "~/": true, "$HOME": true, "${HOME}": true, "$HOME/": true, "${HOME}/": true,
+		"/Users": true, "/home": true, "/Volumes": true, "/System/Volumes/Data": true}
+	for _, w := range c.words[1:] {
+		if strings.HasPrefix(w, "-") {
+			continue
+		}
+		trimmed := w
+		if len(trimmed) > 1 {
+			trimmed = strings.TrimRight(trimmed, "/")
+		}
+		if roots[w] || roots[trimmed] || home != "." && home != "/" && trimmed == home {
+			return fmt.Sprintf("%q searches the whole disk or home folder, which is slow and reaches into private folders (on macOS, each one asks the user): to find an executable use `command -v <name>` (or `which <name>`); otherwise search the workspace, or name the folder (such as /opt/homebrew or ~/.cache/uv)", c.String()), true
+		}
+	}
+	return "", false
 }
 
 const maxNestedShellDepth = 3

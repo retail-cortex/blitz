@@ -21,12 +21,14 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"sync"
 	"time"
 
 	anthropicoption "github.com/anthropics/anthropic-sdk-go/option"
 	openaioption "github.com/openai/openai-go/v3/option"
 	"github.com/retail-cortex/blitz/pkg/config"
+	"github.com/retail-cortex/blitz/pkg/i18n"
 	"google.golang.org/genai"
 )
 
@@ -59,7 +61,8 @@ func policyFrom(cfg config.LLMConfig) retryPolicy {
 // httpClient returns the client every model SDK uses. A request fails
 // instead of hanging when connecting, the TLS handshake, the wait for
 // response headers, or the gap between reads of the (streamed) body takes
-// too long. The SDKs' retry logic then applies to connection-level failures.
+// too long, or its connection stops answering pings. The SDKs' retry logic
+// then applies to connection-level failures.
 //
 // The stall limit also bounds the wait for headers, which for non-streamed
 // requests is the whole generation, so it must exceed the longest
@@ -67,35 +70,65 @@ func policyFrom(cfg config.LLMConfig) retryPolicy {
 //
 // Models are built often (a command's or worker's model, each idea
 // refresh, every model check while one is unavailable), so they share one
-// client per stall limit: a client of their own each would each keep its
+// client per stall limit (and retrying or not): a client of their own each would each keep its
 // connections and their goroutines until they went idle.
 func (p retryPolicy) httpClient() *http.Client {
 	modelClientsMu.Lock()
 	defer modelClientsMu.Unlock()
-	if c, ok := modelClients[p.stall]; ok {
+	key := clientKey{stall: p.stall, retries: p.maxRetries > 0}
+	if c, ok := modelClients[key]; ok {
 		return c
 	}
+	c := &http.Client{Transport: &stallTransport{base: p.transport(), stall: p.stall, retries: key.retries}}
+	modelClients[key] = c
+	return c
+}
+
+// Health checks for the models' HTTP/2 connections. Every request to a
+// provider shares one connection, and one that dies without a word (a VPN
+// or NAT dropping it, a network change) would otherwise hold each request
+// sent on it until the stall limit, retries included. A connection quiet
+// for h2PingAfter is pinged and closed when no answer comes within
+// h2PingTimeout; its requests fail, and the SDKs retry them on a new one.
+// A model that is slow to answer still answers pings.
+var (
+	h2PingAfter   = 30 * time.Second
+	h2PingTimeout = 15 * time.Second
+)
+
+// transport is the models' transport, with every limit but the body's.
+func (p retryPolicy) transport() *http.Transport {
 	base := http.DefaultTransport.(*http.Transport).Clone()
 	base.DialContext = (&net.Dialer{Timeout: dialTimeout, KeepAlive: 30 * time.Second}).DialContext
 	base.TLSHandshakeTimeout = tlsTimeout
 	base.ResponseHeaderTimeout = p.stall
-	c := &http.Client{Transport: &stallTransport{base: base, stall: p.stall}}
-	modelClients[p.stall] = c
-	return c
+	base.HTTP2 = &http.HTTP2Config{SendPingTimeout: h2PingAfter, PingTimeout: h2PingTimeout}
+	return base
 }
 
-// modelClients are the models' HTTP clients, by stall limit.
+// modelClients are the models' HTTP clients, by stall limit and whether
+// requests are retried (which a dropped connection's notice says).
 var (
 	modelClientsMu sync.Mutex
-	modelClients   = map[time.Duration]*http.Client{}
+	modelClients   = map[clientKey]*http.Client{}
 )
+
+// clientKey tells the models' HTTP clients apart.
+type clientKey struct {
+	stall   time.Duration
+	retries bool
+}
 
 // stallTransport cancels a request whose response body goes quiet for
 // longer than stall. Each successful read pushes the deadline back, so long
 // streams that keep producing tokens are never cut off.
+//
+// A request whose connection fails is retried by the SDKs (retries); the
+// turn hears of it in passing, so a wait for the model isn't a silent one.
 type stallTransport struct {
-	base  http.RoundTripper
-	stall time.Duration
+	base    http.RoundTripper
+	stall   time.Duration
+	retries bool
 }
 
 func (t *stallTransport) RoundTrip(req *http.Request) (*http.Response, error) {
@@ -103,6 +136,9 @@ func (t *stallTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	resp, err := t.base.RoundTrip(req.WithContext(ctx))
 	if err != nil {
 		cancel(nil)
+		if f := statusTo(req.Context()); f != nil && t.retries && req.Context().Err() == nil {
+			f(i18n.T("model.reconnecting", "error", connError(err)))
+		}
 		return nil, err
 	}
 	b := &stallBody{rc: resp.Body, ctx: ctx, cancel: cancel, stall: t.stall}
@@ -137,6 +173,16 @@ func (b *stallBody) Close() error {
 		b.cancel(nil)
 	})
 	return b.rc.Close()
+}
+
+// connError is the gist of a failed connection: "unexpected EOF" rather
+// than the method and URL around it.
+func connError(err error) string {
+	var u *url.Error
+	if errors.As(err, &u) {
+		err = u.Err
+	}
+	return err.Error()
 }
 
 // Backoff for Gemini, whose SDK doesn't retry unless asked. The Anthropic

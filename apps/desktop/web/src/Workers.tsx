@@ -30,6 +30,7 @@ import {
   mdiPlay,
   mdiProgressClock,
   mdiShieldCheckOutline,
+  mdiStopCircleOutline,
 } from "@mdi/js";
 import { workers } from "./api";
 import { message } from "./errors";
@@ -60,11 +61,20 @@ const runKeys: Record<RunStatus, string> = {
   [RunStatus.FAILED]: "failed",
   [RunStatus.LIMITED]: "limited",
   [RunStatus.SKIPPED]: "skipped",
+  [RunStatus.STOPPED]: "stopped",
 };
 const runLabel = (s: RunStatus) => (runKeys[s] ? t(`desktop.run.${runKeys[s]}`) : "?");
 
 const runIcon = (s: RunStatus) =>
-  s === RunStatus.SUCCEEDED ? mdiCheckCircleOutline : s === RunStatus.RUNNING ? mdiProgressClock : s === RunStatus.SKIPPED ? mdiPauseCircleOutline : mdiCloseCircleOutline;
+  s === RunStatus.SUCCEEDED
+    ? mdiCheckCircleOutline
+    : s === RunStatus.RUNNING
+      ? mdiProgressClock
+      : s === RunStatus.SKIPPED
+        ? mdiPauseCircleOutline
+        : s === RunStatus.STOPPED
+          ? mdiStopCircleOutline
+          : mdiCloseCircleOutline;
 
 /** How often an open worker dialog asks for the workers again. */
 const workersPollMs = 5000;
@@ -241,6 +251,7 @@ function WorkerView({
 }) {
   const [runs, setRuns] = useState<WorkerRun[]>([]);
   const [live, setLive] = useState<Entry[] | null>(null);
+  const [liveId, setLiveId] = useState("");
   const [error, setError] = useState("");
 
   const refreshRuns = useCallback(async () => {
@@ -266,6 +277,7 @@ function WorkerView({
     act(async () => {
       const started = (await workers.runWorker({ workspace: dir, name: worker.name })).run!;
       setLive([]);
+      setLiveId(started.id);
       try {
         for await (const res of workers.watchWorkerRun({ runId: started.id })) {
           const ev = res.event; // none in the proxy's keepalive messages
@@ -274,7 +286,16 @@ function WorkerView({
       } catch {
         // A run too quick to watch is simply recorded.
       }
+      setLiveId("");
       await refreshRuns();
+    });
+  // Stopping takes a moment (the run's turn winds down): the list catches
+  // up when it has, or when the run being watched here ends.
+  const stop = (id: string) =>
+    act(async () => {
+      await workers.stopWorkerRun({ runId: id });
+      await refreshRuns();
+      setTimeout(() => void refreshRuns().catch(() => {}), 1000);
     });
 
   const requested = useRef({ runNow, disable, onRequestDone });
@@ -356,7 +377,14 @@ function WorkerView({
       {error && <p className="error-text">{error}</p>}
       {live && (
         <div className="card outlined live-run">
-          <div className="t-title-sm">{t("desktop.worker.this_run")}</div>
+          <div className="row">
+            <span className="t-title-sm spacer">{t("desktop.worker.this_run")}</span>
+            {liveId && (
+              <Button small danger icon={mdiStopCircleOutline} onClick={() => void stop(liveId)}>
+                {t("desktop.worker.stop")}
+              </Button>
+            )}
+          </div>
           {live.length === 0 && <p className="muted">{t("desktop.worker.running")}</p>}
           {live.map((e, i) =>
             e.kind === "tool" ? (
@@ -390,7 +418,14 @@ function WorkerView({
                   {t("desktop.worker.refused", { detail: f.detail })}
                 </span>
               ))}
-              {r.error && <span className="t-body-sm error-text">{r.error.message}</span>}
+              {r.error && <span className={`t-body-sm ${r.status === RunStatus.STOPPED ? "muted" : "error-text"}`}>{r.error.message}</span>}
+              {r.status === RunStatus.RUNNING && (
+                <span>
+                  <Button small danger icon={mdiStopCircleOutline} onClick={() => void stop(r.id)}>
+                    {t("desktop.worker.stop")}
+                  </Button>
+                </span>
+              )}
               {r.files.length > 0 && <span className="t-body-sm muted">{t("desktop.worker.changed", { files: r.files.join(", ") })}</span>}
               {r.sessionId && (
                 <span>

@@ -16,7 +16,7 @@
 
 import { describe, expect, it } from "vitest";
 import { docFiles, docPictures } from "./content";
-import { docLink, docPicture, docTree, loadDocs, parsePage, pathOf, searchDocs, siteURL, siteURLOf } from "./index";
+import { docLink, docPicture, docTree, loadDocs, parsePage, pathOf, searchDocs, siteURL, siteURLOf, withRelease } from "./index";
 import { docSections } from "./sections";
 
 const { pages, tree } = loadDocs(docFiles);
@@ -110,5 +110,22 @@ describe("pages and links", () => {
     const t = docTree([parsePage("_index.md", "# Home"), parsePage("b/_index.md", "---\ntitle: B\nweight: 2\n---\n"), parsePage("a/_index.md", "---\ntitle: A\nweight: 2\n---\n"), parsePage("c/_index.md", "---\ntitle: C\nweight: 1\n---\n"), parsePage("a/x.md", "# X")]);
     expect(t.children.map((n) => n.page.title)).toEqual(["C", "A", "B"]);
     expect(t.children[1].children.map((n) => n.page.title)).toEqual(["X"]);
+  });
+});
+
+describe("withRelease", () => {
+  // Install snippets name the release with a shortcode (no pinned version
+  // to bump); the app's copy is its own release's.
+  const files = { "guide/github-action.md": "uses: retail-cortex/blitz/action@{{< release >}}\nand {{<release>}}" };
+  it("fills in the app's release", () => {
+    expect(withRelease(files, "0.6.2")["guide/github-action.md"]).toBe("uses: retail-cortex/blitz/action@v0.6.2\nand v0.6.2");
+    expect(withRelease(files, "0.7.0-rc.1")["guide/github-action.md"]).toContain("action@v0.7.0-rc.1");
+  });
+  it("shows vX.Y.Z when the app isn't a release", () => {
+    for (const v of ["dev", "0.6.2-3-gabc1234", "abc1234-dirty.5f3e2a1"]) expect(withRelease(files, v)["guide/github-action.md"]).toContain("action@vX.Y.Z");
+  });
+  it("leaves no shortcode in the pages the app carries", () => {
+    const left = Object.entries(withRelease(docFiles, "0.6.2")).filter(([, text]) => /\{\{[<%]/.test(text.replace(/\{\{<\s*\/?\*/g, "")));
+    expect(left.map(([f]) => f)).toEqual([]);
   });
 });

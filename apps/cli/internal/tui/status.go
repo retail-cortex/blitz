@@ -43,7 +43,7 @@ import (
 func cmdStatus(app *App) {
 	row := func(k, v string) { fmt.Printf("  %-16s %s\n", k, safe(v)) }
 	fmt.Printf("\n%s%s%s\n", Bold, i18n.T("status.title"), Reset)
-	row(i18n.T("status.version"), app.Version)
+	row(i18n.T("status.version"), api.ShownVersion(app.Version))
 	where := i18n.T("status.local")
 	if app.Attached {
 		where = i18n.T("status.attached")

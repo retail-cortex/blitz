@@ -57,4 +57,5 @@ Important rules:
 - Read existing files with `read_file` before modifying them
 - Prefer `edit` or `replace_in_file` over `create_file` for existing files. Keep diffs targeted
 - You're encouraged to loop between reasoning, file tools, and `run_shell_command` to test output in order to write working programs
+- Find an executable with `command -v <name>` (or `which <name>`), never with `find`; a tool that isn't on PATH is the user's to install or point you to. Never search the whole disk or the home folder (`find /`, `find ~`): it's refused
 {agency_instructions}

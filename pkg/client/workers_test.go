@@ -35,6 +35,15 @@ import (
 // OpenAI-compatible server that answers "done", and returns its socket.
 func runService(t *testing.T) string {
 	t.Helper()
+	return runServiceWith(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		io.WriteString(w, `{"id":"resp_1","model":"fake","output":[{"type":"message","content":[{"type":"output_text","text":"done"}]}],"usage":{"input_tokens":1,"input_tokens_details":{"cached_tokens":0},"output_tokens":1,"output_tokens_details":{"reasoning_tokens":0},"total_tokens":2}}`)
+	}))
+}
+
+// runServiceWith is runService with model's handler as the model server.
+func runServiceWith(t *testing.T, handler http.Handler) string {
+	t.Helper()
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("MODENV_PREFIX", "")
@@ -42,10 +51,7 @@ func runService(t *testing.T) string {
 		t.Setenv(k, "")
 	}
 	t.Chdir(t.TempDir())
-	model := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		io.WriteString(w, `{"id":"resp_1","model":"fake","output":[{"type":"message","content":[{"type":"output_text","text":"done"}]}],"usage":{"input_tokens":1,"input_tokens_details":{"cached_tokens":0},"output_tokens":1,"output_tokens_details":{"reasoning_tokens":0},"total_tokens":2}}`)
-	}))
+	model := httptest.NewServer(handler)
 	t.Cleanup(model.Close)
 	require.NoError(t, os.MkdirAll(filepath.Join(home, ".blitz"), 0o700))
 	settings := "[blitz]\ndefault_model = \"fake\"\n\n[llm]\nprovider = \"ollama\"\n\n[llm.openai]\nbase_url = \"" + model.URL + "/v1\"\n"
@@ -149,9 +155,60 @@ func TestRemoteClientsWithoutTheService(t *testing.T) {
 		"RunWorker":     func() error { _, err := w.RunWorker(context.Background(), "x", nil); return err },
 		"WorkerRuns":    func() error { _, err := w.WorkerRuns("x", 1); return err },
 		"UndoWorkerRun": func() error { _, err := w.UndoWorkerRun("x", false); return err },
+		"RunningRuns":   func() error { _, err := w.RunningWorkerRuns(); return err },
+		"StopWorkerRun": func() error { return w.StopWorkerRun("x") },
 	} {
 		t.Run(name, func(t *testing.T) {
 			assert.Error(t, call())
 		})
+	}
+}
+
+// A run going now is among the workspace's running runs, and stopping it
+// ends the run, recorded as stopped; one not going can't be stopped.
+func TestRemoteStopWorkerRun(t *testing.T) {
+	asked := make(chan struct{}, 1)
+	sock := runServiceWith(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Read first: the server notices the client going (the run
+		// stopped) only once the body is read.
+		io.Copy(io.Discard, r.Body)
+		select { // the model thinks until the run is stopped
+		case asked <- struct{}{}:
+		default:
+		}
+		<-r.Context().Done()
+	}))
+	dir, err := filepath.EvalSymlinks(t.TempDir())
+	require.NoError(t, err)
+	wd := filepath.Join(dir, "workers", "slow")
+	require.NoError(t, os.MkdirAll(wd, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(wd, "WORKER.md"), []byte("---\nschedule: Daily at 6 AM\n---\nThink.\n"), 0o644))
+	w := AttachWorkers(sock, dir)
+	list, err := w.ListWorkers()
+	require.NoError(t, err)
+	_, err = w.EnableWorker("slow", list[0].Hash)
+	require.NoError(t, err)
+
+	assert.ErrorContains(t, w.StopWorkerRun("nope"), "isn't running")
+	ran := make(chan api.Run, 1)
+	go func() {
+		run, _ := w.RunWorker(context.Background(), "slow", nil)
+		ran <- run
+	}()
+	select {
+	case <-asked:
+	case <-time.After(10 * time.Second):
+		t.Fatal("the run never asked its model")
+	}
+	running, err := w.RunningWorkerRuns()
+	require.NoError(t, err)
+	require.Len(t, running, 1)
+	assert.Equal(t, "slow", running[0].Worker)
+	require.NoError(t, w.StopWorkerRun(running[0].ID))
+	select {
+	case run := <-ran:
+		assert.Equal(t, api.RunStopped, run.Status, "run %+v", run)
+	case <-time.After(10 * time.Second):
+		t.Fatal("the stopped run didn't end")
 	}
 }

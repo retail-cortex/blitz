@@ -74,6 +74,7 @@ This site is in `docs/`: Markdown pages in `docs/content/`, built by Hugo with t
 
 - **Diagrams** are Mermaid: a fenced code block with the language `mermaid` (flowcharts, sequence, class and state diagrams, …) renders as a diagram, in both themes. Geekdoc's code-block render hook loads Mermaid only on pages that use it.
 - **The API reference** (`architecture/api/`) is generated, never written: `//docs:api` runs [proto-gen-md-diagrams](https://github.com/GoogleCloudPlatform/proto-gen-md-diagrams) (a `go.mod` tool, built by Bazel) over `proto/blitz/v1`, and `docs/api_pages.sh` makes its Markdown into pages. A new proto file needs adding to the list in `docs/BUILD.bazel`; better comments in the protos make better pages.
+- **Versions.** The guide describes Blitz as it is, not how it changed. It names a Blitz version only as "since vN.N.N" (what an older release lacks) or "deprecated since vN.N.N"; what changed in a release goes on its page in `releases/`. A snippet that installs or uses a release names it with `{{</* release */>}}`, which the site fills with the latest published release (`docs/layouts/shortcodes/release.html`) and the app's copy with its own version, so nothing needs bumping at a release. Other projects' versions (a dependency, an example `plugin.toml`) are written as they are.
 
 ## Conventions
 

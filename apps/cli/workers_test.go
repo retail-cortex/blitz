@@ -216,7 +216,7 @@ func TestWorkersRunFails(t *testing.T) {
 func TestWorkersCommandErrors(t *testing.T) {
 	isolate(t)
 	missing := filepath.Join(t.TempDir(), "missing")
-	for _, args := range [][]string{{"workers"}, {"workers", "enable", "x"}, {"workers", "disable", "x"}, {"workers", "run", "x"}, {"workers", "runs", "x"}, {"workers", "undo", "x"}} {
+	for _, args := range [][]string{{"workers"}, {"workers", "enable", "x"}, {"workers", "disable", "x"}, {"workers", "run", "x"}, {"workers", "runs", "x"}, {"workers", "stop", "x"}, {"workers", "undo", "x"}} {
 		t.Run(strings.Join(args, " ")+" without a workspace", func(t *testing.T) {
 			_, err := runCLI(t, append([]string{"-d", missing}, args...)...)
 			assert.Equal(t, exitUsage, exitCodeFor(err), "%v", err)
@@ -245,4 +245,13 @@ func TestWorkersCommandErrors(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, out, "fine hasn't run yet.")
 
+}
+
+// Stopping a worker that isn't running says so.
+func TestWorkersStopNothingRunning(t *testing.T) {
+	isolate(t)
+	ws := t.TempDir()
+	out, err := runCLI(t, "-d", ws, "workers", "stop", "deps")
+	require.Error(t, err, out)
+	assert.Contains(t, err.Error(), `no run of "deps" is going`)
 }

@@ -40,7 +40,7 @@ func TestMenuFor(t *testing.T) {
 		state                string
 		start, stop, restart bool
 	}{
-		{"running, with its version", Status{Running: true, Installed: true, Version: "1.4.0"}, "Blitz service: running (1.4.0)", false, true, true},
+		{"running, with its version", Status{Running: true, Installed: true, Version: "1.4.0"}, "Blitz service: running (v1.4.0)", false, true, true},
 		{"running, too old to say", Status{Running: true}, "Blitz service: running", false, true, true},
 		{"stopped login item", Status{Installed: true}, "Blitz service: stopped", true, false, false},
 		{"not installed, not running", Status{}, "Blitz service: not running", true, false, false},

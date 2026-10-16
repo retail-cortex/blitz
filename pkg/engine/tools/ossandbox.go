@@ -20,6 +20,8 @@ import (
 	"github.com/retail-cortex/blitz/pkg/api"
 	"os"
 	"path/filepath"
+	"regexp"
+	"slices"
 	"strings"
 )
 
@@ -175,6 +177,7 @@ func seatbeltProfile(spec OSSandboxSpec) string {
 		}
 		sb.WriteString(")\n")
 	}
+	denyPrivateDirs(&sb, privateDirs(), append(slices.Clone(spec.WritableDirs), spec.ReadOnlyDirs...))
 	if regexes := spec.Blocked.sbplRegexes(); len(regexes) > 0 {
 		sb.WriteString("(deny file-read* file-write*\n")
 		for _, re := range regexes {
@@ -186,6 +189,63 @@ func seatbeltProfile(spec OSSandboxSpec) string {
 		sb.WriteString("(deny network*)\n(allow network* (remote unix-socket))\n")
 	}
 	return sb.String()
+}
+
+// privateDirs are the folders macOS guards with a prompt ("Blitz would like
+// to access files in your Music folder"): the user's personal folders,
+// iCloud Drive, the apps' own data, and other volumes. A command that
+// sweeps the disk (find /, a search for a tool) would make macOS ask on
+// Blitz's behalf, once per folder and again after every update (each build
+// is a new app to macOS). Commands can't read inside them, so they skip
+// them instead; a workspace or allowed folder inside one stays readable.
+var privateDirs = func() []string {
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		return []string{"/Volumes"}
+	}
+	dirs := []string{"/Volumes"}
+	for _, d := range []string{
+		"Desktop", "Documents", "Downloads", "Movies", "Music", "Pictures",
+		"Library/Mobile Documents", "Library/Mail", "Library/Messages", "Library/Calendars",
+		"Library/Application Support/AddressBook", "Library/Safari",
+	} {
+		dirs = append(dirs, filepath.Join(home, d))
+	}
+	return dirs
+}
+
+// denyPrivateDirs denies reading inside each private dir (and listing it: its
+// own metadata stays readable, so ls -la ~ still works), then allows again
+// the roots inside one (later rules win).
+func denyPrivateDirs(sb *strings.Builder, private, roots []string) {
+	if len(private) == 0 {
+		return
+	}
+	sb.WriteString("(deny file-read*\n")
+	for _, d := range private {
+		fmt.Fprintf(sb, "  (regex #\"^%s/\")\n", strings.ReplaceAll(regexp.QuoteMeta(d), `"`, `\"`))
+	}
+	sb.WriteString(")\n(deny file-read-data\n")
+	for _, d := range private {
+		fmt.Fprintf(sb, "  (literal %s)\n", sbplString(d))
+	}
+	sb.WriteString(")\n")
+	var inside []string
+	for _, r := range roots {
+		for _, d := range private {
+			if r == d || strings.HasPrefix(r, d+string(filepath.Separator)) {
+				inside = append(inside, r)
+				break
+			}
+		}
+	}
+	if len(inside) > 0 {
+		sb.WriteString("(allow file-read*\n")
+		for _, r := range inside {
+			fmt.Fprintf(sb, "  (subpath %s)\n", sbplString(r))
+		}
+		sb.WriteString(")\n")
+	}
 }
 
 func sbplString(s string) string {

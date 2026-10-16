@@ -268,7 +268,7 @@ func event(ev *pb.TurnEvent) (api.Event, bool) {
 			out.Tasks = append(out.Tasks, api.Task{Content: t.Content, Status: t.Status})
 		}
 	case *pb.TurnEvent_Notice:
-		out.Notice = &api.Notice{Text: k.Notice.Text, Error: k.Notice.Error}
+		out.Notice = &api.Notice{Text: k.Notice.Text, Error: k.Notice.Error, Transient: k.Notice.Transient}
 	default:
 		return api.Event{}, false
 	}

@@ -64,6 +64,16 @@ service WorkerService {
   // Streams a run's events: those already produced, then live ones until
   // it finishes.
   rpc WatchWorkerRun(WatchWorkerRunRequest) returns (stream WatchWorkerRunResponse);
+  // Lists the runs going now, in every workspace, for the Workers menu.
+  rpc ListRunningWorkerRuns(ListRunningWorkerRunsRequest) returns (ListRunningWorkerRunsResponse);
+  // Stops a run going now: its turn is cancelled and it's recorded as
+  // stopped (RUN_NOT_RUNNING when it isn't going).
+  rpc StopWorkerRun(StopWorkerRunRequest) returns (StopWorkerRunResponse);
+  // Has the model rewrite a worker's instructions, as the form has them,
+  // for a good unattended run, with the permissions they need; nothing is
+  // saved. A model that fails gives problem instead of an error
+  // (NO_INSTRUCTIONS without instructions).
+  rpc RewriteWorker(RewriteWorkerRequest) returns (RewriteWorkerResponse);
 }
 
 // WorkerState is whether a worker may run.
@@ -253,6 +263,8 @@ enum RunStatus {
   RUN_STATUS_LIMITED = 4;
   // Not started: the previous run was still going (overlap: skip).
   RUN_STATUS_SKIPPED = 5;
+  // Stopped by the user while it went (StopWorkerRun).
+  RUN_STATUS_STOPPED = 6;
 }
 
 // Refusal is an action a run wasn't permitted.
@@ -341,4 +353,44 @@ message WatchWorkerRunRequest {
 // Response message for WorkerService.WatchWorkerRun.
 message WatchWorkerRunResponse {
   TurnEvent event = 1;
+}
+
+// Request message for WorkerService.ListRunningWorkerRuns.
+message ListRunningWorkerRunsRequest {}
+
+// Response message for WorkerService.ListRunningWorkerRuns.
+message ListRunningWorkerRunsResponse {
+  // Oldest first.
+  repeated WorkerRun runs = 1;
+}
+
+// Request message for WorkerService.StopWorkerRun.
+message StopWorkerRunRequest {
+  string run_id = 1;
+}
+
+// Response message for WorkerService.StopWorkerRun.
+message StopWorkerRunResponse {
+  // The run as it was when asked to stop; it ends, recorded as stopped,
+  // once its turn has wound down (WatchWorkerRun's finished event).
+  WorkerRun run = 1;
+}
+
+// Request message for WorkerService.RewriteWorker.
+message RewriteWorkerRequest {
+  string workspace = 1;
+  // The worker as the form has it (prompt required).
+  WorkerDefinition worker = 2;
+}
+
+// Response message for WorkerService.RewriteWorker.
+message RewriteWorkerResponse {
+  // The rewritten instructions (empty when problem is set).
+  string prompt = 1;
+  // The permissions they need, "kind:pattern", each valid.
+  repeated string permissions = 2;
+  // What changed and why, a line each.
+  repeated string changes = 3;
+  // Why there's no rewrite: the model's failure, redacted.
+  string problem = 4;
 }

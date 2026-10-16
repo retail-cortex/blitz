@@ -120,6 +120,9 @@ type Notice struct {
 	// Error marks something that went wrong (shown as an error); otherwise
 	// it's information.
 	Error bool
+	// Transient marks a passing status (the model's connection dropped and
+	// is being retried): a front end shows it briefly, not in the chat.
+	Transient bool
 }
 
 // Task is an item of the agent's task list.

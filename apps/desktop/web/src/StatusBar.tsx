@@ -26,6 +26,7 @@ import {
   mdiLoading,
   mdiRobotOutline,
   mdiSourceBranch,
+  mdiSourceMerge,
   mdiTuneVariant,
 } from "@mdi/js";
 import { workspaces } from "./api";
@@ -36,9 +37,11 @@ import type { AgentInfo, GetGitStatusResponse } from "./gen/blitz/v1/workspace_p
 import { t, tn } from "./i18n";
 import { effortIcon, efforts, modeOf, modes } from "./options";
 import { workspaceColor } from "./palette";
+import { inProgress, syncTitle } from "./gitRemote";
 import { displayName } from "./prefs";
 import { InboxDialog } from "./RunsInbox";
 import { useApp } from "./state";
+import { shownVersion } from "./serviceVersion";
 import { contextShare, tokens, useWorkspaceStatus } from "./status";
 import { Icon, Menu, useSnackbar } from "./ui/controls";
 import { useWorkerFailures } from "./workerFailures";
@@ -58,7 +61,7 @@ export function StatusBar({ serviceUp, version, onWorkspaceSettings }: { service
   const dir = ws?.dir ?? "";
   return (
     <footer className="status-bar t-label-sm" role="contentinfo" aria-label={t("desktop.status.label")}>
-      <span className={`sb-item sb-service ${serviceUp ? "up" : "lost"}`} title={serviceUp ? t("desktop.status.service_up", { version: version ?? "" }) : t("desktop.app.lost")}>
+      <span className={`sb-item sb-service ${serviceUp ? "up" : "lost"}`} title={serviceUp ? t("desktop.status.service_up", { version: shownVersion(version ?? "") }) : t("desktop.app.lost")}>
         <Icon path={mdiCircleMedium} size="sm" />
         <span className="sb-low">{serviceUp ? t("desktop.status.connected") : t("desktop.status.reconnecting")}</span>
       </span>
@@ -108,12 +111,20 @@ function GitItem({ dir }: { dir: string }) {
     };
   }, [dir]);
   if (!git?.repo) return null;
-  const label = git.changed > 0 ? tn("desktop.status.git_changed", git.changed, { branch: git.branch }) : t("desktop.status.git_clean", { branch: git.branch });
+  const merging = inProgress(git);
+  const label = [
+    git.changed > 0 ? tn("desktop.status.git_changed", git.changed, { branch: git.branch }) : t("desktop.status.git_clean", { branch: git.branch }),
+    merging ? tn("desktop.git.conflicts_left", git.conflicts.length) : git.upstream && (git.ahead || git.behind) ? syncTitle(git) : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
   return (
     <button className="sb-item sb-button" title={label} aria-label={label} onClick={() => showView({ dir, view: "changes" })}>
-      <Icon path={mdiSourceBranch} size="sm" />
+      <Icon path={merging ? mdiSourceMerge : mdiSourceBranch} size="sm" />
       <span className="ellipsis sb-branch">{git.branch}</span>
       {git.changed > 0 && <span className="sb-count">±{git.changed}</span>}
+      {git.behind > 0 && <span className="sb-count">↓{git.behind}</span>}
+      {git.ahead > 0 && <span className="sb-count">↑{git.ahead}</span>}
     </button>
   );
 }

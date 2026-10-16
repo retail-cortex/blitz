@@ -15,8 +15,9 @@
 name: docs
 
 # The documentation site (docs/): built by Bazel on every change to it or
-# to the protos its API reference is generated from, and after CI on main
-# for the coverage report; published to GitHub Pages from main.
+# to the protos its API reference is generated from, after CI on main
+# for the coverage report, and when a release is published for the install
+# snippets' version; published to GitHub Pages from main.
 on:
   push:
     branches: [main]
@@ -29,6 +30,11 @@ on:
     workflows: [ci]
     types: [completed]
     branches: [main]
+  # And when a release is published: the install snippets name the latest
+  # release (the release shortcode). Pages deploy only from main, so this
+  # run asks for one there (redeploy).
+  release:
+    types: [published]
 
 permissions:
   contents: read
@@ -41,7 +47,7 @@ concurrency:
 
 jobs:
   build:
-    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    if: github.event_name != 'release' && (github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -65,6 +71,17 @@ jobs:
           if [ -z "$run" ] || ! gh run download "$run" --repo "$GITHUB_REPOSITORY" --name coverage --dir docs/data; then
             echo "::warning::no coverage report from CI (run: ${run:-none}); the page will say so"
           fi
+      # The latest published release, for the install snippets (the release
+      # shortcode, docs/layouts/shortcodes/release.html); without one they
+      # say vX.Y.Z.
+      - name: Latest release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if ! gh release view --repo "$GITHUB_REPOSITORY" --json tagName --jq '{tag: .tagName}' > docs/data/release.json; then
+            rm -f docs/data/release.json
+            echo "::warning::no published release; the install snippets will say vX.Y.Z"
+          fi
       # A link to a missing page fails the build (docs/layouts).
       - run: bazel build //docs:site
       # Bazel's outputs are read-only; the artifact is a plain copy.
@@ -73,6 +90,18 @@ jobs:
         uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
           path: ${{ runner.temp }}/site
+
+  # A published release's run is on its tag, where Pages won't deploy: it
+  # starts this workflow on main, whose build reads the new release.
+  redeploy:
+    if: github.event_name == 'release'
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run docs.yml --repo "$GITHUB_REPOSITORY" --ref main
 
   deploy:
     if: github.event_name != 'pull_request'

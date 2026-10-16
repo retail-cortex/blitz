@@ -388,3 +388,26 @@ func TestParsePermissionRejectsBadGlobs(t *testing.T) {
 	_, err := ParsePermission("write:reports/[")
 	assert.Error(t, err)
 }
+
+// A write or delete pattern written with a leading "./" covers the paths
+// as the tools give them ("daily-news/x.md").
+func TestPermissionWithLeadingDot(t *testing.T) {
+	tests := []struct {
+		perm, target string
+		kind         api.ActionKind
+		want         bool
+	}{
+		{"write:./daily-news/*", "daily-news/10-15-2026.md", api.ActionWrite, true},
+		{"write:././reports/", "reports/q3/sales.md", api.ActionWrite, true},
+		{"delete:./tmp/*", "tmp/x", api.ActionDelete, true},
+		{"write:./daily-news/*", "other/x.md", api.ActionWrite, false},
+		{"shell:./build.sh", "./build.sh", api.ActionCommand, true}, // commands as written
+	}
+	for _, tt := range tests {
+		t.Run(tt.perm+" "+tt.target, func(t *testing.T) {
+			p, err := ParsePermission(tt.perm)
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, Allows([]Permission{p}, api.ApprovalRequest{Kind: tt.kind, Targets: []string{tt.target}}))
+		})
+	}
+}

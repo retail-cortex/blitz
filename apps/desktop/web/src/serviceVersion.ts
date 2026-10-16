@@ -21,6 +21,14 @@ import { Code, ConnectError } from "@connectrpc/connect";
 import { workspaces } from "./api";
 import { programExists } from "./desktop";
 
+/**
+ * A Blitz version as people see it: a release's with its "v" (v0.6.2), as
+ * the tags, the releases and the docs write it; anything else ("dev", a
+ * commit) as it is. The stamped version has no "v" (packages need it to
+ * start with a digit), and it's what staleReason compares.
+ */
+export const shownVersion = (v: string) => (/^\d+\.\d+\.\d+/.test(v) ? `v${v}` : v);
+
 /** What the running service says about itself (GetServiceInfo). */
 export interface ServiceInfo {
   version: string;

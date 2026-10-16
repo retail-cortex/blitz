@@ -16,7 +16,7 @@
 
 import { describe, expect, it } from "vitest";
 import { WorkerState } from "./gen/blitz/v1/worker_pb";
-import { canSave, edited, emptyWorkerForm, footerNote, formFromWorker, missing, savePauses, validWorkerName, workerName, workerRequest, type WorkerFields } from "./workerForm";
+import { applyRewrite, canSave, edited, emptyWorkerForm, footerNote, formFromWorker, missing, permissionChanges, savePauses, validWorkerName, workerName, workerRequest, type WorkerFields } from "./workerForm";
 
 describe("workerName", () => {
   it.each([
@@ -139,4 +139,17 @@ describe("canSave", () => {
     ["a model that can't be one", { ...f, model: "gemini 3" }, s, false],
     ["a model of no provider's list (a warning only)", { ...f, model: "gemini-nope" }, s, true],
   ])("%s", (_, form, state, want) => expect(canSave(form, state)).toBe(want));
+});
+
+describe("applyRewrite", () => {
+  const f = { ...emptyWorkerForm, prompt: "Find the news.", permissions: "web:*\nwrite:./daily-news/*" };
+  const r = { prompt: "## Sources\nFetch the feed once.", permissions: ["web:news.google.com", "write:daily-news/*"] };
+  it("takes the instructions, and the permissions when asked", () => {
+    expect(applyRewrite(f, r, true)).toEqual({ ...f, prompt: r.prompt, permissions: "web:news.google.com\nwrite:daily-news/*" });
+    expect(applyRewrite(f, r, false)).toEqual({ ...f, prompt: r.prompt });
+  });
+  it("says which permissions a rewrite adds and drops", () => {
+    expect(permissionChanges(f, r.permissions)).toEqual({ added: ["web:news.google.com", "write:daily-news/*"], removed: ["web:*", "write:./daily-news/*"] });
+    expect(permissionChanges(f, ["web:*", "write:./daily-news/*"])).toEqual({ added: [], removed: [] });
+  });
 });

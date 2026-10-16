@@ -138,7 +138,9 @@ func (w *Workspace) GitDiff(ctx context.Context, color bool) (string, error) {
 // maxUntrackedDiffs is how many new files GitDiff shows.
 var maxUntrackedDiffs = 50
 
-// GitStatus reads the workspace's branch and changed files.
+// GitStatus reads the workspace's branch and changed files, its remote
+// and upstream with the ahead and behind counts, and a merge or rebase in
+// progress with its conflicts.
 func (w *Workspace) GitStatus(ctx context.Context) (api.GitStatus, error) {
 	if _, err := exec.LookPath("git"); err != nil {
 		return api.GitStatus{}, nil
@@ -171,6 +173,7 @@ func (w *Workspace) GitStatus(ctx context.Context) (api.GitStatus, error) {
 			st.Changed++
 		}
 	}
+	w.remoteState(git, &st)
 	return st, nil
 }
 

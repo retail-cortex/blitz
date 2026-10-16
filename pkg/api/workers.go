@@ -74,7 +74,13 @@ const (
 	// RunSkipped means the run wasn't started, because the previous one was
 	// still going.
 	RunSkipped RunStatus = "skipped"
+	// RunStopped means the user stopped the run while it went.
+	RunStopped RunStatus = "stopped"
 )
+
+// ErrRunStopped is why a run the user stopped ended: the cause its
+// context is cancelled with.
+var ErrRunStopped = errors.New("stopped by the user")
 
 // Refusal is an action a run wasn't permitted.
 type Refusal struct {

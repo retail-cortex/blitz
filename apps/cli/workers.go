@@ -41,6 +41,8 @@ type workerOps interface {
 	RunWorker(ctx context.Context, name string, on func(api.Event)) (api.Run, error)
 	WorkerRuns(name string, limit int) ([]api.Run, error)
 	UndoWorkerRun(runID string, force bool) ([]string, error)
+	RunningWorkerRuns() ([]api.Run, error)
+	StopWorkerRun(runID string) error
 }
 
 // openWorkers reaches the workspace's workers in the Blitz service (started
@@ -107,9 +109,35 @@ refused and recorded.`,
 		&cobra.Command{Use: "run <name>", Short: "Run an enabled worker now and show what it does", Args: cobra.ExactArgs(1),
 			RunE: func(cmd *cobra.Command, args []string) error { return workersRun(cmd, g, args[0]) }},
 		runs,
+		&cobra.Command{Use: "stop <name|run-id>", Short: "Stop a worker's run that's going now", Args: cobra.ExactArgs(1),
+			RunE: func(cmd *cobra.Command, args []string) error { return workersStop(cmd, g, args[0]) }},
 		undo,
 	)
 	return cmd
+}
+
+// workersStop stops the running run of the worker named, or the run with
+// that ID.
+func workersStop(cmd *cobra.Command, g *globalFlags, which string) error {
+	ops, done, err := openWorkers(cmd.Context(), g)
+	if err != nil {
+		return err
+	}
+	defer done()
+	runs, err := ops.RunningWorkerRuns()
+	if err != nil {
+		return workerErr(err)
+	}
+	for _, r := range runs {
+		if r.Worker == which || r.ID == which {
+			if err := ops.StopWorkerRun(r.ID); err != nil {
+				return workerErr(err)
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "Stopping %s (run %s).\n", r.Worker, r.ID)
+			return nil
+		}
+	}
+	return withCode(exitUsage, fmt.Errorf("no run of %q is going in this workspace", which))
 }
 
 func workersUndo(cmd *cobra.Command, g *globalFlags, runID string, force bool) error {

@@ -29,7 +29,7 @@ type Out = MessageInitShape<typeof RunTurnResponseSchema>;
 import { RunStatus, WorkerService, WorkerState } from "../gen/blitz/v1/worker_pb";
 import { ConfigService, KeySource } from "../gen/blitz/v1/config_pb";
 import { FileKind, FileService, GitAction, RevisionDiff } from "../gen/blitz/v1/file_pb";
-import { AgentFileSchema, AgentScope, SuggestionKind, SuggestionSchema, WorkspaceService, type AgentDefinition } from "../gen/blitz/v1/workspace_pb";
+import { AgentFileSchema, AgentScope, ConflictChoice, GitOperation, PullOutcome, SuggestionKind, SuggestionSchema, WorkspaceService, type AgentDefinition } from "../gen/blitz/v1/workspace_pb";
 
 // Whether the fake workspace is a git repository (?norepo: not yet).
 // The providers the fake has signed in to, and each one's sign-in.
@@ -50,6 +50,23 @@ function fakeSignIn(provider: string) {
 // Whether the fake commit dialog has files staged (after "Stage all changes").
 let fakeStaged = false;
 let fakeRepo = !new URLSearchParams(location.search).has("norepo");
+// The branch and its remote: 2 commits to pull, 1 to push; pulling stops
+// on a conflict in discount.go (RemoteSync.tsx). ?fake&nopush: no upstream yet.
+const fakeRemote = {
+  upstream: new URLSearchParams(location.search).has("nopush") ? "" : "origin/fix/coupon-rounding",
+  ahead: 1,
+  behind: 2,
+  operation: GitOperation.UNSPECIFIED,
+  conflicts: [] as string[],
+};
+/** A failed-precondition error with the service's reason, as the real one sends. */
+function fakeError(msg: string, reason: string): ConnectError {
+  const err = new ConnectError(msg, Code.FailedPrecondition);
+  err.details.push({ desc: ErrorInfoSchema, value: { reason } });
+  return err;
+}
+const fakeGitStatus = () =>
+  fakeRepo ? { git: true, repo: true, branch: "fix/coupon-rounding", changed: 2, remote: true, ...fakeRemote, conflicts: [...fakeRemote.conflicts] } : { git: true, repo: false };
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const now = () => timestampFromDate(new Date());
@@ -305,6 +322,31 @@ async function* runTurn(dir: string, text: string, plan: boolean): AsyncGenerato
     yield ev({ case: "finished", value: { before, after: s.usage } });
     return;
   }
+  if (/reconnect/i.test(text)) {
+    // The model's connection drops and is retried (a transient notice, a
+    // snackbar), then the agent asks with answers too long for one line.
+    yield ev({ case: "notice", value: { text: "Lost the connection to the model (unexpected EOF). Reconnecting…", transient: true } });
+    await sleep(1200);
+    const id = `q${++nextRequest}`;
+    const answer = new Promise<string>((r) => s.pending.set(id, r));
+    yield ev({
+      case: "question",
+      value: {
+        requestId: id,
+        question: "How should recipe version history behave?",
+        options: [
+          "Store full snapshots of Recipes only (title, ingredients, steps, tags, allergens, calories) on every update, with ability to view diffs and restore a previous version",
+          "Store snapshots across Recipes, Recipe Books, and Shopping Lists on every update",
+          "View-only version history for Recipes (audit log of changes over time, without restore)",
+        ],
+      },
+    });
+    const text = `Going with: ${await answer}`;
+    sess.messages.push(msg("model", text));
+    yield ev({ case: "text", value: { text } });
+    yield ev({ case: "finished", value: { before, after: s.usage } });
+    return;
+  }
   if (/burst/i.test(text)) {
     // Parallel tool calls that each need approval: their requests arrive
     // together, and the turn ends only once every one is answered.
@@ -468,6 +510,13 @@ const change = (workspace: string) => ({ change: { path: configPath(workspace), 
 // The workspace's workers, and each one's WORKER.md as written (spec).
 type FakeWorker = Record<string, unknown> & { name: string; hash: string; state: WorkerState; path: string; spec: Record<string, unknown> & { schedule: string } };
 const fakeSpec = (name: string, o: Record<string, unknown> = {}) => ({ name, description: "", schedule: "", timezone: "", agent: "", model: "", permissions: [] as string[], maxTurns: 0, maxCostUsd: 0, timeout: "", catchUp: "", prompt: "", ...o });
+// Worker runs going now (?fake&noruns: none).
+const fakeLive: { id: string; workspace: string; worker: string; status: RunStatus; started: ReturnType<typeof now>; manual: boolean; sessionId: string; error?: { reason: string; message: string } }[] = new URLSearchParams(location.search).has("noruns")
+  ? []
+  : [
+      { id: "live-1", workspace: "/home/me/blitz", worker: "nightly-deps", status: RunStatus.RUNNING, started: now(), manual: false, sessionId: "worker-nightly-3" },
+      { id: "live-2", workspace: "/home/me/notes", worker: "daily-news", status: RunStatus.RUNNING, started: now(), manual: true, sessionId: "worker-news-1" },
+    ];
 const fakeWorkers: FakeWorker[] = [
   {
     name: "nightly-deps",
@@ -752,7 +801,12 @@ export function installFake() {
           const s = state(workspace).settings;
           return { agent: s.agent, model: s.model, provider: s.provider, effort: s.effort, permissionMode: s.mode, agency: s.agency, locale: s.locale, style: s.style, imagesEnabled: true, speechModel: s.speechModel ?? "", acceptedMedia: fakeAccepted(s.provider) };
         },
-        getModel: ({ workspace }) => ({ name: state(workspace).settings.model, provider: state(workspace).settings.provider, unavailable: "" }),
+        // ?nomodel: the model can't be reached (the chat's warning card).
+        getModel: ({ workspace }) => ({
+          name: state(workspace).settings.model,
+          provider: state(workspace).settings.provider,
+          unavailable: new URLSearchParams(location.search).has("nomodel") ? "the Gemini API key is missing (set GEMINI_API_KEY)" : "",
+        }),
         setModel: ({ workspace, ref }) => {
           const [provider, name] = ref.includes("/") ? ref.split("/", 2) : [state(workspace).settings.provider, ref];
           Object.assign(state(workspace).settings, { provider, model: name });
@@ -912,7 +966,8 @@ export function installFake() {
         },
         closeWorkspace: () => ({}),
         loadImage: ({ path }) => ({ image: { id: `img-${path}`, name: path, mime: "image/png", width: 640, height: 480, size: 12345n } }),
-        getServiceInfo: () => ({ version: "dev", executable: "" }),
+        // ?oldservice: a service older than the app (the stale banner).
+        getServiceInfo: () => ({ version: new URLSearchParams(location.search).has("oldservice") ? "0.6.1" : "dev", executable: "" }),
         listLogDays: () => ({ days: [...fakeLogDays], dir: "~/.blitz/logs" }),
         deleteLogDay: ({ day }) => {
           fakeLogDays = fakeLogDays.filter((d) => d !== day);
@@ -957,7 +1012,44 @@ export function installFake() {
         listCheckpoints: () => ({ checkpoints: [{ id: 2, label: "Fix the coupon rounding", time: now(), files: ["internal/cart/discount.go", "internal/cart/discount_test.go"] }] }),
         undo: () => ({ label: "Fix the coupon rounding", restored: ["internal/cart/discount.go"] }),
         // ?fake&norepo: a folder that isn't a repository yet.
-        getGitStatus: () => (fakeRepo ? { git: true, repo: true, branch: "fix/coupon-rounding", changed: 2 } : { git: true, repo: false }),
+        getGitStatus: () => fakeGitStatus(),
+        fetchRemote: async () => {
+          await sleep(300);
+          return { status: fakeGitStatus() };
+        },
+        pull: async () => {
+          await sleep(700);
+          const commits = fakeRemote.behind;
+          fakeRemote.behind = 0;
+          fakeRemote.operation = GitOperation.MERGE;
+          fakeRemote.conflicts = ["internal/cart/discount.go"];
+          return { outcome: PullOutcome.CONFLICTS, commits, status: fakeGitStatus() };
+        },
+        push: async () => {
+          await sleep(600);
+          if (fakeRemote.behind > 0) throw fakeError("the remote has commits this branch doesn't have: pull them first", "PUSH_REJECTED");
+          const target = fakeRemote.upstream || "origin/fix/coupon-rounding";
+          fakeRemote.upstream = target;
+          fakeRemote.ahead = 0;
+          return { target, status: fakeGitStatus() };
+        },
+        resolveConflict: ({ path, choice }) => {
+          if (choice === ConflictChoice.RESOLVED) throw fakeError("the file still has conflict markers", "MARKERS_REMAIN");
+          fakeRemote.conflicts = fakeRemote.conflicts.filter((c) => c !== path);
+          return { status: fakeGitStatus() };
+        },
+        completeMerge: async () => {
+          await sleep(400);
+          fakeRemote.operation = GitOperation.UNSPECIFIED;
+          fakeRemote.ahead += 1;
+          return { status: fakeGitStatus() };
+        },
+        abortMerge: () => {
+          fakeRemote.operation = GitOperation.UNSPECIFIED;
+          fakeRemote.conflicts = [];
+          fakeRemote.behind = 2;
+          return { status: fakeGitStatus() };
+        },
         // The commit dialog: nothing staged until "Stage all changes".
         draftCommit: async ({ stageAll }) => {
           if (stageAll) fakeStaged = true;
@@ -983,7 +1075,9 @@ export function installFake() {
         },
         getDiff: ({ git }) => ({
           diff: git
-            ? ""
+            ? fakeRemote.conflicts.length
+              ? "--- a/internal/cart/discount.go\n+++ b/internal/cart/discount.go\n@@ -40,7 +40,13 @@ func ApplyCoupon(items []Item, c Coupon) int {\n \ttotal := 0\n \tfor _, it := range items {\n+<<<<<<< HEAD\n \t\ttotal += it.Cents\n+=======\n+\t\ttotal += it.Cents * it.Qty\n+>>>>>>> origin/fix/coupon-rounding\n \t}\n"
+              : ""
             : "--- a/internal/cart/discount.go\n+++ b/internal/cart/discount.go\n@@ -40,9 +40,9 @@ func ApplyCoupon(items []Item, c Coupon) int {\n \ttotal := 0\n \tfor _, it := range items {\n-\t\ttotal += round(it.Cents * (100 - c.Percent) / 100)\n+\t\ttotal += it.Cents\n \t}\n-\treturn total\n+\treturn round(total * (100 - c.Percent) / 100)\n }\n--- /dev/null\n+++ b/internal/cart/discount_test.go\n@@ -0,0 +1,6 @@\n+package cart\n+\n+import \"testing\"\n+\n+func TestApplyCouponRounding(t *testing.T) {\n+}\n",
         }),
       });
@@ -1405,8 +1499,31 @@ export function installFake() {
         // A run that's over as soon as it's watched.
         runWorker: ({ name }) => ({ run: { id: `run-${name}-${Date.now()}`, status: RunStatus.RUNNING, started: now(), manual: true } }),
         async *watchWorkerRun() {},
-        listWorkerRuns: () => ({
+        // Rewrite with AI: a tidier version of whatever was typed.
+        rewriteWorker: async ({ worker }) => {
+          await sleep(900);
+          if (/fail/i.test(worker?.prompt ?? "")) return { prompt: "", permissions: [], changes: [], problem: "the suggestions model is unavailable (quota exceeded)" };
+          return {
+            prompt: `Write today's digest. Everything you need is here: don't look up this worker's definition or open a browser.\n\n## Sources\n\nFetch https://news.google.com/rss/search?q=artificial+intelligence+when:1d once with web_fetch.\n\n## The file\n\nWrite \`daily-news/MM-DD-YYYY.md\` (today, in ${worker?.timezone || "the worker's time zone"}), overwriting it if it exists.\n\n## Finish\n\nEnd with the file's path and how many stories went in.`,
+            permissions: ["web:news.google.com", "write:daily-news/*"],
+            changes: ["Named the feed to fetch, once", "Said where the file goes and in what format", "Narrowed web access to news.google.com"],
+            problem: "",
+          };
+        },
+        // Runs going now, in this workspace and another (the Workers menu's
+        // Running now); Stop ends one, recorded as stopped.
+        listRunningWorkerRuns: () => ({ runs: fakeLive.filter((r) => r.status === RunStatus.RUNNING) }),
+        stopWorkerRun: ({ runId }) => {
+          const r = fakeLive.find((x) => x.id === runId && x.status === RunStatus.RUNNING);
+          if (!r) throw new ConnectError(`run ${runId} isn't running`, Code.NotFound);
+          const before = { ...r };
+          r.status = RunStatus.STOPPED;
+          r.error = { reason: "RUN_STOPPED", message: "stopped by the user" };
+          return { run: before };
+        },
+        listWorkerRuns: ({ workspace, name }) => ({
           runs: [
+            ...fakeLive.filter((r) => r.workspace === workspace && r.worker === name),
             { id: "r2", status: RunStatus.SUCCEEDED, started: now(), manual: false, sessionId: "worker-nightly-2", usage: { costUsd: 0.0041, priced: true }, files: ["reports/deps.md"] },
             { id: "r1", status: RunStatus.FAILED, started: now(), manual: true, sessionId: "worker-nightly-1", error: { reason: "RUN_FAILED", message: "the run reached its cost limit" } },
           ],

@@ -89,6 +89,17 @@ func TestEmbeddedRegistry(t *testing.T) {
 		assert.Contains(t, a.SystemPrompt, "`Kind:`", "%s reads the kind", name)
 		assert.Contains(t, a.SystemPrompt, "research", "%s knows research workspaces", name)
 	}
+
+	// /setup (and /init) leads with the specification: with none, the
+	// setup agent runs the spec agent itself, in the foreground so its
+	// questions reach the person, and carries on after it.
+	setup, _ := reg.Get("project-setup")
+	assert.Contains(t, setup.Tools, "invoke_agent")
+	assert.Contains(t, setup.SystemPrompt, "invoke the `project-spec` agent")
+	assert.Contains(t, setup.SystemPrompt, "not in the background")
+	assert.Contains(t, setup.SystemPrompt, "Unattended, don't invoke it")
+	assert.NotContains(t, setup.SystemPrompt, "Set up without a specification", "it no longer asks whether to")
+	assert.Contains(t, spec.SystemPrompt, "When /setup invoked you", "the spec agent doesn't send people back to /setup")
 }
 
 func contains(s, substr string) bool {

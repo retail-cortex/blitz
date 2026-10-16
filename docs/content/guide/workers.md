@@ -88,10 +88,12 @@ Reading the workspace never needs permission. A command with `;`, `&`, `|`, `$`,
 
 ## Enabling, editing and running
 
+- **Rewrite with AI:** in the worker form, **Rewrite with AI** turns rough instructions into ones that run well unattended. It names the sources, says exactly what file to write and in what format, and says what to do when a step fails. It also suggests the narrowest permissions those instructions need. You review it first: **Use these** fills in the form, **Keep mine** leaves it as it was, and nothing is saved until you Save.
 - **Enable** pins the worker's content. Edit it (in the app, or by hand) and it pauses as **changed** until you enable it again, so what runs is always what you read.
 - **States:** new (never enabled), enabled, disabled, changed, invalid (its problems are listed).
 - **Run now:** **Run now** in the app, or `blitz workers run <name>`, runs an enabled worker at once and shows what it does.
 - **Two at once?** The same worker never runs twice at the same time; a scheduled tick that finds it running is recorded as skipped.
+- **Stop a run:** the Workers menu lists every run going now, in any workspace, under **Running now**. Hover one and click **Stop**, or use **Stop** in the worker's run list or `blitz workers stop <name>`. The run ends as **stopped**. Files it already changed stay changed, and `blitz workers undo <run-id>` puts them back.
 
 | Desktop | Terminal |
 |---|---|
@@ -99,13 +101,14 @@ Reading the workspace never needs permission. A command with `;`, `&`, `|`, `$`,
 | Open a worker, **Enable as shown** | `blitz workers enable <name>` |
 | **Run now** | `blitz workers run <name>` |
 | **Disable** | `blitz workers disable <name>` |
+| **Stop** (Workers menu › Running now, or the run list) | `blitz workers stop <name>` |
 | The worker's run list | `blitz workers runs <name>` |
 | **Edit**, **Delete** | Edit or remove the folder |
 | | `blitz workers undo <run-id>` |
 
 ## Runs and their results
 
-Each run is a conversation of its own, titled `⏰ <name>` and the time: open it from the run list, or with **History › Workers**. A run ends as succeeded, failed, limited (it hit a turn, cost or time limit) or skipped. Its record keeps the files it changed, what was refused, the cost and the error.
+Each run is a conversation of its own, titled `⏰ <name>` and the time: open it from the run list, or with **History › Workers**. A run ends as succeeded, failed, limited (it hit a turn, cost or time limit), stopped (you stopped it) or skipped. Its record keeps the files it changed, what was refused, the cost and the error.
 
 A run's file changes are its own checkpoint, outside `/undo`: `blitz workers undo <run-id>` puts them back (`--force` overwrites files changed since).
 

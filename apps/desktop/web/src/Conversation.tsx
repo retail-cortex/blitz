@@ -362,6 +362,9 @@ export function Conversation({
             const q = ev.kind.value;
             setWaits((w) => addWait(w, { kind: "question", q }));
           }
+          // A passing status (the model's connection being retried) is
+          // said in a snackbar, not kept in the chat.
+          else if (ev.kind.case === "notice" && ev.kind.value.transient) snack(ev.kind.value.text);
           else setEntries((e) => applyEvent(e, ev));
           if (ev.kind.case === "toolResult" || ev.kind.case === "finished") filesTouched({ dir });
           if (ev.kind.case === "finished") {
@@ -398,7 +401,7 @@ export function Conversation({
       latestRunning.current = false;
       if (leftover.length > 0 && !ctl.signal.aborted) run(leftover.join("\n\n"), { accepted: true });
     },
-    [dir, session, refreshList, fail, onSettingsChanged, tell, name],
+    [dir, session, refreshList, fail, onSettingsChanged, tell, name, snack],
   );
 
   // Stopping a followed background run stops the run, whose stream then
@@ -728,6 +731,8 @@ export function Conversation({
   });
   const executeRef = useRef(execute);
   executeRef.current = execute;
+  const submitRef = useRef(submit);
+  submitRef.current = submit;
   // A /loop's firing: a command runs as typed, anything else is sent (the
   // loop skips a firing while a turn runs).
   const sendRef = useRef<(text: string) => void>(() => {});
@@ -781,7 +786,11 @@ export function Conversation({
       if (d.dir !== dir) return;
       e.preventDefault(); // taken
       if (d.run && d.fresh) startFreshRef.current(d.text);
-      else if (d.run) executeRef.current(d.text);
+      // A prompt rather than a command is sent as typed (Ask the agent to resolve).
+      else if (d.run)
+        void executeRef.current(d.text).then(async (done) => {
+          if (!done) await submitRef.current(d.text);
+        });
       else if (d.append) setDraft((draft) => (draft.trim() ? `${draft.trimEnd()}\n\n${d.text}` : d.text));
       else setDraft(d.text);
     };
@@ -1507,7 +1516,7 @@ function QuestionCard({ q, onAnswer, who, autoFocus = true }: { q: Question; onA
         </div>
       )}
       {q.options.length > 0 && !q.multiSelect && (
-        <div className="row wrap">
+        <div className="row wrap answer-options">
           {q.options.map((o, i) => (
             <Button key={o} variant={i === 0 ? "filled" : "tonal"} onClick={() => onAnswer(o)}>
               {o}

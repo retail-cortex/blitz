@@ -18,9 +18,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/retail-cortex/blitz/pkg/api"
+	"github.com/retail-cortex/blitz/pkg/engine"
 
 	"connectrpc.com/connect"
 	pb "github.com/retail-cortex/blitz/proto/blitz/v1"
@@ -75,6 +77,8 @@ func runStatus(s api.RunStatus) pb.RunStatus {
 		return pb.RunStatus_RUN_STATUS_LIMITED
 	case api.RunSkipped:
 		return pb.RunStatus_RUN_STATUS_SKIPPED
+	case api.RunStopped:
+		return pb.RunStatus_RUN_STATUS_STOPPED
 	}
 	return pb.RunStatus_RUN_STATUS_UNSPECIFIED
 }
@@ -312,6 +316,56 @@ func (h workerService) GetWorkerRun(_ context.Context, r req[pb.GetWorkerRunRequ
 		return nil, apiError(connect.CodeNotFound, "UNKNOWN_RUN", fmt.Errorf("no run %q", r.Msg.RunId), "run_id", r.Msg.RunId)
 	}
 	return ok(&pb.GetWorkerRunResponse{Run: runMsg(run)})
+}
+
+// ListRunningWorkerRuns lists the runs going now in every workspace,
+// oldest first.
+func (h workerService) ListRunningWorkerRuns(context.Context, req[pb.ListRunningWorkerRunsRequest]) (*connect.Response[pb.ListRunningWorkerRunsResponse], error) {
+	sc := h.s.sched
+	if sc == nil {
+		return nil, errNoScheduler
+	}
+	runs := sc.liveRuns("", "")
+	slices.SortFunc(runs, func(a, b api.Run) int { return a.Started.Compare(b.Started) })
+	out := &pb.ListRunningWorkerRunsResponse{}
+	for _, r := range runs {
+		out.Runs = append(out.Runs, runMsg(r))
+	}
+	return ok(out)
+}
+
+// StopWorkerRun stops a run going now; it ends, recorded as stopped, once
+// its turn has wound down.
+func (h workerService) StopWorkerRun(_ context.Context, r req[pb.StopWorkerRunRequest]) (*connect.Response[pb.StopWorkerRunResponse], error) {
+	sc := h.s.sched
+	if sc == nil {
+		return nil, errNoScheduler
+	}
+	run, live := sc.stopRun(r.Msg.RunId)
+	if !live {
+		return nil, apiError(connect.CodeNotFound, "RUN_NOT_RUNNING", fmt.Errorf("run %q isn't running", r.Msg.RunId), "run_id", r.Msg.RunId)
+	}
+	return ok(&pb.StopWorkerRunResponse{Run: runMsg(run)})
+}
+
+// RewriteWorker has the model rewrite a worker's instructions (nothing is
+// saved).
+func (h workerService) RewriteWorker(ctx context.Context, r req[pb.RewriteWorkerRequest]) (*connect.Response[pb.RewriteWorkerResponse], error) {
+	w, err := h.s.workspace(ctx, r.Msg.Workspace)
+	if err != nil {
+		return nil, err
+	}
+	if r.Msg.Worker == nil {
+		return nil, apiError(connect.CodeInvalidArgument, "NO_INSTRUCTIONS", engine.ErrNoInstructions)
+	}
+	rw, err := w.RewriteWorker(ctx, workerSpec(r.Msg.Worker))
+	if errors.Is(err, engine.ErrNoInstructions) {
+		return nil, apiError(connect.CodeInvalidArgument, "NO_INSTRUCTIONS", err)
+	}
+	if err != nil {
+		return nil, toAPI(err)
+	}
+	return ok(&pb.RewriteWorkerResponse{Prompt: rw.Prompt, Permissions: rw.Permissions, Changes: rw.Changes, Problem: rw.Problem})
 }
 
 // WatchWorkerRun streams a running run's events from its start, then live

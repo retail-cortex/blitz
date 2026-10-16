@@ -18,6 +18,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -182,4 +183,75 @@ func TestOSSandboxIsolationExtras(t *testing.T) {
 	assert.NotContains(t, out.Output, "CONNECTED", "network reachable with allow_network = false")
 	b, _ := os.ReadFile(filepath.Join(dir, ".env"))
 	assert.Equal(t, "API_KEY=leak", string(b), "blocked file was modified")
+}
+
+// The folders macOS guards with a prompt can't be read inside or listed,
+// though their own metadata can; a root inside one stays readable.
+func TestSeatbeltProfilePrivateDirs(t *testing.T) {
+	var sb strings.Builder
+	denyPrivateDirs(&sb, []string{"/Users/me/Music", "/Users/me/Documents"}, []string{"/Users/me/Documents/proj", "/Users/me/Projects/x", "/tmp"})
+	p := sb.String()
+	tests := []struct {
+		name string
+		want string
+		in   bool
+	}{
+		{"inside denied", `(regex #"^/Users/me/Music/")`, true},
+		{"listing denied", `(deny file-read-data` + "\n" + `  (literal "/Users/me/Music")`, true},
+		{"a workspace inside one stays readable", `(allow file-read*` + "\n" + `  (subpath "/Users/me/Documents/proj")`, true},
+		{"roots elsewhere aren't named", `"/Users/me/Projects/x"`, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.in {
+				assert.Contains(t, p, tt.want)
+			} else {
+				assert.NotContains(t, p, tt.want)
+			}
+		})
+	}
+	sb.Reset()
+	denyPrivateDirs(&sb, nil, []string{"/x"})
+	assert.Empty(t, sb.String())
+	assert.Contains(t, privateDirs(), "/Volumes")
+}
+
+// Under the real macOS sandbox, a command sweeping the disk skips the
+// private folders (no prompt for Blitz) and still reads the workspace,
+// even one inside a private folder.
+func TestSeatbeltSkipsPrivateDirs(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("macOS only")
+	}
+	base, err := canonicalDir(t.TempDir())
+	require.NoError(t, err)
+	music := filepath.Join(base, "Music")
+	docs := filepath.Join(base, "Documents")
+	ws := filepath.Join(docs, "proj")
+	for _, d := range []string{music, ws} {
+		require.NoError(t, os.MkdirAll(d, 0o755))
+	}
+	require.NoError(t, os.WriteFile(filepath.Join(music, "song.txt"), []byte("la"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(docs, "letter.txt"), []byte("dear"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(ws, "main.go"), []byte("package main"), 0o644))
+	old := privateDirs
+	privateDirs = func() []string { return []string{music, docs} }
+	t.Cleanup(func() { privateDirs = old })
+
+	osb, err := NewOSSandbox(OSSandboxSpec{Mode: SandboxRequired, WritableDirs: []string{ws}, AllowNetwork: true})
+	if err != nil {
+		t.Skipf("no usable OS sandbox: %v", err)
+	}
+	argv, err := osb.wrapCtx(context.Background(), []string{"/bin/sh", "-c",
+		"cat " + filepath.Join(music, "song.txt") + "; ls " + music + "; cat " + filepath.Join(docs, "letter.txt") +
+			"; echo ---; stat -f %N " + music + "; cat " + filepath.Join(ws, "main.go")})
+	require.NoError(t, err)
+	out, _ := exec.Command(argv[0], argv[1:]...).CombinedOutput()
+	got := string(out)
+	before, after, _ := strings.Cut(got, "---")
+	assert.NotContains(t, before, "la\n", "read inside a private folder: %s", got)
+	assert.NotContains(t, before, "song.txt\n", "listed a private folder: %s", got)
+	assert.NotContains(t, before, "dear", "read a private folder around the workspace: %s", got)
+	assert.Contains(t, after, music, "a private folder's own metadata: %s", got)
+	assert.Contains(t, after, "package main", "the workspace inside a private folder: %s", got)
 }

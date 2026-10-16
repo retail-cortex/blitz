@@ -109,7 +109,7 @@ func newUpdateCommand() *cobra.Command {
 		},
 	}
 	cmd.Flags().BoolVar(&check, "check", false, "Only say whether a newer release exists")
-	cmd.Flags().StringVar(&want, "version", "", "Install this release (v0.2.0) instead of the latest")
+	cmd.Flags().StringVar(&want, "version", "", "Install this release (vX.Y.Z) instead of the latest")
 	cmd.Flags().BoolVar(&skipSignature, "skip-signature", false, "Install without cosign checking the release's signature (the checksum is still checked)")
 	return cmd
 }

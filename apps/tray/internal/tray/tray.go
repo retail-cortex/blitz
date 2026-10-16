@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
+	"github.com/retail-cortex/blitz/pkg/api"
 	"github.com/retail-cortex/blitz/pkg/i18n"
 	"github.com/retail-cortex/blitz/pkg/socket"
 	pb "github.com/retail-cortex/blitz/proto/blitz/v1"
@@ -61,7 +62,7 @@ func MenuFor(s Status) Menu {
 	m := Menu{Running: s.Running, Start: Item{Title: i18n.T("tray.start")}, Stop: Item{Title: i18n.T("tray.stop")}, Restart: Item{Title: i18n.T("tray.restart")}}
 	switch {
 	case s.Running && s.Version != "":
-		m.State = Item{Title: i18n.T("tray.state.running_version", "version", s.Version)}
+		m.State = Item{Title: i18n.T("tray.state.running_version", "version", api.ShownVersion(s.Version))}
 	case s.Running:
 		m.State = Item{Title: i18n.T("tray.state.running")}
 	case s.Installed:
