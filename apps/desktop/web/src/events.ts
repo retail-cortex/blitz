@@ -80,6 +80,8 @@ export const viewEvent = "blitz:view";
 export interface ViewDetail {
   dir: string;
   view: "chat" | "editor" | "changes" | "workers";
+  /** Which changes: this session's (the default) or git's. */
+  source?: "session" | "git";
 }
 /** Asks a workspace to show a view. */
 export function showView(detail: ViewDetail) {

@@ -138,6 +138,9 @@ func (w *Workspace) remoteState(git func(args ...string) ([]byte, error), st *ap
 		}
 	}
 	st.Operation = w.operation(git)
+	if st.Operation == api.GitMerging {
+		st.Merging = mergingName(git)
+	}
 	if out, err := git("diff", "--name-only", "--diff-filter=U", "-z"); err == nil {
 		for _, p := range strings.Split(string(out), "\x00") {
 			if p != "" {
@@ -168,6 +171,20 @@ func (w *Workspace) operation(git func(args ...string) ([]byte, error)) api.GitO
 		return api.GitMerging
 	}
 	return ""
+}
+
+// mergingName is the branch a merge in progress brings in (MERGE_HEAD),
+// as the user would name it: "feature", or "origin/main" for a pull's.
+func mergingName(git func(args ...string) ([]byte, error)) string {
+	out, err := git("name-rev", "--name-only", "--no-undefined", "--refs=refs/heads/*", "--refs=refs/remotes/*", "--exclude=refs/remotes/*/HEAD", "MERGE_HEAD")
+	if err != nil {
+		return ""
+	}
+	name := strings.TrimPrefix(strings.TrimSpace(string(out)), "remotes/")
+	if strings.ContainsAny(name, "~^") {
+		return "" // not a branch's tip: a commit the merge was asked for
+	}
+	return name
 }
 
 // commandKeys are the git settings whose values run commands (or let a

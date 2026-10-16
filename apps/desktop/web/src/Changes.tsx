@@ -24,6 +24,7 @@ import type { Checkpoint, GetGitStatusResponse } from "./gen/blitz/v1/workspace_
 import { filesTouched } from "./events";
 import { languageFor } from "./highlight";
 import { CommitDialog } from "./CommitDialog";
+import { BranchMenu } from "./Branches";
 import { ConflictBar, MergeBanner, RemoteButtons } from "./RemoteSync";
 import { inProgress } from "./gitRemote";
 import { Markdown } from "./Markdown";
@@ -167,6 +168,7 @@ export function Changes({ dir, source, onSource: setSource }: { dir: string; sou
         )}
         <span className="spacer" />
         {advanced && <IconButton icon={mdiRefresh} label={t("desktop.refresh")} onClick={refresh} />}
+        {source === "git" && git?.repo && <BranchMenu dir={dir} git={git} onChanged={() => void refresh()} />}
         {source === "git" && git?.repo && git.remote && <RemoteButtons dir={dir} git={git} onStatus={setGit} onChanged={() => void refresh()} />}
         {source === "git" && git?.repo && (
           <Button variant="tonal" small icon={mdiSourceCommit} disabled={inProgress(git) && git.conflicts.length > 0} onClick={() => setCommitting(true)}>

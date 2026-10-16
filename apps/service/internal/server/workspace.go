@@ -1000,7 +1000,7 @@ func gitStatusMsg(st api.GitStatus) *pb.GetGitStatusResponse {
 	out := &pb.GetGitStatusResponse{
 		Git: st.Git, Repo: st.Repo, Branch: st.Branch, Changed: int32(st.Changed),
 		Remote: st.Remote, Upstream: st.Upstream, Ahead: int32(st.Ahead), Behind: int32(st.Behind),
-		Conflicts: st.Conflicts,
+		Conflicts: st.Conflicts, Merging: st.Merging,
 	}
 	switch st.Operation {
 	case api.GitMerging:
@@ -1103,7 +1103,63 @@ func (h workspaceService) AbortMerge(ctx context.Context, r req[pb.AbortMergeReq
 	return ok(&pb.AbortMergeResponse{Status: gitStatusMsg(st)})
 }
 
-// remoteError gives the remote actions' errors their codes.
+func (h workspaceService) ListBranches(ctx context.Context, r req[pb.ListBranchesRequest]) (*connect.Response[pb.ListBranchesResponse], error) {
+	w, err := h.s.workspace(ctx, r.Msg.Workspace)
+	if err != nil {
+		return nil, err
+	}
+	bs, err := w.Branches(ctx)
+	if err != nil {
+		return nil, remoteError(err)
+	}
+	out := &pb.ListBranchesResponse{}
+	for _, b := range bs {
+		msg := &pb.Branch{Name: b.Name, Remote: b.Remote, Current: b.Current, Upstream: b.Upstream, Subject: b.Subject}
+		if !b.Time.IsZero() {
+			msg.Time = timestamppb.New(b.Time)
+		}
+		out.Branches = append(out.Branches, msg)
+	}
+	return ok(out)
+}
+
+func (h workspaceService) SwitchBranch(ctx context.Context, r req[pb.SwitchBranchRequest]) (*connect.Response[pb.SwitchBranchResponse], error) {
+	w, err := h.s.workspace(ctx, r.Msg.Workspace)
+	if err != nil {
+		return nil, err
+	}
+	st, err := w.SwitchBranch(ctx, r.Msg.Branch)
+	if err != nil {
+		return nil, remoteError(err)
+	}
+	return ok(&pb.SwitchBranchResponse{Status: gitStatusMsg(st)})
+}
+
+func (h workspaceService) CreateBranch(ctx context.Context, r req[pb.CreateBranchRequest]) (*connect.Response[pb.CreateBranchResponse], error) {
+	w, err := h.s.workspace(ctx, r.Msg.Workspace)
+	if err != nil {
+		return nil, err
+	}
+	st, err := w.CreateBranch(ctx, r.Msg.Branch)
+	if err != nil {
+		return nil, remoteError(err)
+	}
+	return ok(&pb.CreateBranchResponse{Status: gitStatusMsg(st)})
+}
+
+func (h workspaceService) MergeBranch(ctx context.Context, r req[pb.MergeBranchRequest]) (*connect.Response[pb.MergeBranchResponse], error) {
+	w, err := h.s.workspace(ctx, r.Msg.Workspace)
+	if err != nil {
+		return nil, err
+	}
+	res, err := w.MergeBranch(ctx, r.Msg.Branch)
+	if err != nil {
+		return nil, remoteError(err)
+	}
+	return ok(&pb.MergeBranchResponse{Outcome: pullOutcomes[res.Outcome], Commits: int32(res.Commits), Status: gitStatusMsg(res.Status)})
+}
+
+// remoteError gives the remote and branch actions' errors their codes.
 func remoteError(err error) error {
 	var rc *engine.RepoConfigError
 	switch {
@@ -1131,6 +1187,16 @@ func remoteError(err error) error {
 		return apiError(connect.CodeFailedPrecondition, "NOT_CONFLICTED", err)
 	case errors.Is(err, engine.ErrBadPath):
 		return apiError(connect.CodeInvalidArgument, "BAD_PATH", err)
+	case errors.Is(err, engine.ErrNoBranch):
+		return apiError(connect.CodeNotFound, "NO_BRANCH", err)
+	case errors.Is(err, engine.ErrBranchExists):
+		return apiError(connect.CodeAlreadyExists, "BRANCH_EXISTS", err)
+	case errors.Is(err, engine.ErrBadBranchName):
+		return apiError(connect.CodeInvalidArgument, "BAD_BRANCH_NAME", err)
+	case errors.Is(err, engine.ErrLocalChanges):
+		return apiError(connect.CodeFailedPrecondition, "LOCAL_CHANGES", err)
+	case errors.Is(err, engine.ErrMergeSelf):
+		return apiError(connect.CodeInvalidArgument, "MERGE_SELF", err)
 	default:
 		return apiError(connect.CodeFailedPrecondition, "GIT_FAILED", err)
 	}

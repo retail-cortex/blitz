@@ -14,13 +14,13 @@
  * limitations under the License.
  */
 
-// The workspace and its remote, in words: what a pull did, what an error
-// means, and what the agent is asked when it resolves conflicts
-// (spec_desktop_024 DSK-90b).
+// The workspace's branches and remote, in words: what a pull or a merge
+// did, what an error means, and what the agent is asked when it resolves
+// conflicts (spec_desktop_024 DSK-90b, DSK-90c).
 
 import { message, reason } from "./errors";
 import { t, tn } from "./i18n";
-import { GitOperation, PullOutcome, type GetGitStatusResponse, type PullResponse } from "./gen/blitz/v1/workspace_pb";
+import { GitOperation, PullOutcome, type GetGitStatusResponse, type MergeBranchResponse, type PullResponse } from "./gen/blitz/v1/workspace_pb";
 
 /** What a pull did, for the snackbar. */
 export function pullMessage(res: Pick<PullResponse, "outcome" | "commits">, upstream: string): string {
@@ -38,7 +38,21 @@ export function pullMessage(res: Pick<PullResponse, "outcome" | "commits">, upst
   }
 }
 
-/** A remote action's error in the user's words: the service's reason, else its message. */
+/** What merging branch from into into did, for the snackbar. */
+export function mergeMessage(res: Pick<MergeBranchResponse, "outcome" | "commits">, from: string, into: string): string {
+  switch (res.outcome) {
+    case PullOutcome.UP_TO_DATE:
+      return t("desktop.git.merged_none", { from, into });
+    case PullOutcome.MERGED:
+      return tn("desktop.git.merged_commit", res.commits, { from, into });
+    case PullOutcome.CONFLICTS:
+      return t("desktop.git.merged_conflicts", { from });
+    default:
+      return tn("desktop.git.merged_ff", res.commits, { from, into });
+  }
+}
+
+/** A remote or branch action's error in the user's words: the service's reason, else its message. */
 export function remoteErrorText(e: unknown): string {
   switch (reason(e)) {
     case "REMOTE_AUTH":
@@ -53,6 +67,16 @@ export function remoteErrorText(e: unknown): string {
       return t("desktop.git.err.markers");
     case "CONFLICTS_REMAIN":
       return t("desktop.git.err.conflicts");
+    case "NO_BRANCH":
+      return t("desktop.git.err.no_branch");
+    case "BRANCH_EXISTS":
+      return t("desktop.git.err.branch_exists");
+    case "BAD_BRANCH_NAME":
+      return t("desktop.git.err.bad_name");
+    case "LOCAL_CHANGES":
+      return t("desktop.git.err.local_changes");
+    case "MERGE_SELF":
+      return t("desktop.git.err.merge_self");
   }
   return message(e);
 }
@@ -63,13 +87,28 @@ export function inProgress(git: Pick<GetGitStatusResponse, "operation"> | undefi
 }
 
 /**
- * What the agent is asked to do with a pull's conflicts: settle each file
- * and stage it, leaving the merge (or rebase) for the user to complete.
+ * Whether the merge in progress is of a branch the user chose (Merge into…),
+ * not a pull's merge of the upstream.
  */
-export function resolvePrompt(git: Pick<GetGitStatusResponse, "operation" | "upstream" | "conflicts">): string {
+export function branchMerge(git: Pick<GetGitStatusResponse, "operation" | "upstream" | "merging">): boolean {
+  return git.operation === GitOperation.MERGE && git.merging !== "" && git.merging !== git.upstream;
+}
+
+/** What a merge or rebase in progress brings in: the merged branch, else the upstream. */
+export function mergingFrom(git: Pick<GetGitStatusResponse, "operation" | "upstream" | "merging">): string {
+  return git.operation === GitOperation.MERGE && git.merging ? git.merging : git.upstream;
+}
+
+/**
+ * What the agent is asked to do with a pull's or a merge's conflicts:
+ * settle each file and stage it, leaving the merge (or rebase) for the
+ * user to complete.
+ */
+export function resolvePrompt(git: Pick<GetGitStatusResponse, "operation" | "upstream" | "merging" | "branch" | "conflicts">): string {
   const files = git.conflicts.map((f) => `- ${f}`).join("\n");
-  const key = git.operation === GitOperation.REBASE ? "desktop.git.resolve_prompt_rebase" : "desktop.git.resolve_prompt";
-  return t(key, { upstream: git.upstream, files });
+  if (git.operation === GitOperation.REBASE) return t("desktop.git.resolve_prompt_rebase", { upstream: git.upstream, files });
+  if (branchMerge(git)) return t("desktop.git.resolve_prompt_merge", { branch: git.merging, current: git.branch, files });
+  return t("desktop.git.resolve_prompt", { upstream: git.upstream, files });
 }
 
 /** The ahead and behind counts as a tooltip ("" when in step). */

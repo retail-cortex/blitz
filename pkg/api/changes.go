@@ -48,6 +48,9 @@ type GitStatus struct {
 	// conflicts), and Conflicts the files still in conflict.
 	Operation GitOperation
 	Conflicts []string
+	// Merging is the branch a merge in progress brings in, such as
+	// "feature" or "origin/main" ("" when none, or when git can't name it).
+	Merging string
 }
 
 // GitOperation is what a repository is in the middle of.

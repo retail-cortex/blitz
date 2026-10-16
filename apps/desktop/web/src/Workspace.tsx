@@ -90,15 +90,15 @@ export function Workspace({
 
   // The command palette, the status bar and the chat ask for a view: the
   // editor (what's over it closes), or the changes or workers over it.
-  const showView = useCallback((v: ViewDetail["view"]) => {
-    if (v === "changes") setModal({ kind: "changes", source: "session" });
+  const showView = useCallback((v: ViewDetail["view"], source: ViewDetail["source"] = "session") => {
+    if (v === "changes") setModal({ kind: "changes", source });
     else if (v === "workers") setModal({ kind: "worker", intent: newIntent("show") });
     else setModal(null);
   }, []);
   useEffect(() => {
     const f = (e: Event) => {
       const d = (e as CustomEvent<ViewDetail>).detail;
-      if (d.dir === dir) showView(d.view);
+      if (d.dir === dir) showView(d.view, d.source);
     };
     window.addEventListener(viewEvent, f);
     return () => window.removeEventListener(viewEvent, f);

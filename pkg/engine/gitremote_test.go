@@ -233,6 +233,7 @@ func TestAbortMerge(t *testing.T) {
 	res, err := w.Pull(ctx)
 	require.NoError(t, err)
 	require.Equal(t, PullConflicts, res.Outcome)
+	assert.Equal(t, "origin/main", res.Status.Merging, "a pull merges the upstream")
 	st, err := w.AbortMerge(ctx)
 	require.NoError(t, err)
 	assert.Empty(t, st.Operation)
