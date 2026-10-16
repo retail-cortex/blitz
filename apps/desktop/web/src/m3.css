@@ -421,13 +421,13 @@ input[type="range"] { accent-color: var(--accent-a); width: 100%; }
      covered the composer. */
   position: fixed; top: calc(var(--topbar-height) + 8px); left: 50%; transform: translateX(-50%); z-index: 1100;
   display: flex; align-items: center; gap: 16px; min-width: 280px; max-width: min(640px, calc(100vw - 32px)); padding: 4px 8px 4px 16px; min-height: 48px;
-  background: var(--md-inverse-surface); color: var(--md-inverse-on-surface); border-radius: var(--md-shape-xs); box-shadow: var(--md-elevation-3);
+  background: var(--md-inverse-surface); color: var(--md-inverse-on-surface); border-radius: var(--md-shape-lg); box-shadow: var(--md-elevation-3);
   animation: snack-in 0.18s cubic-bezier(0.2, 0, 0, 1);
 }
 @keyframes snack-in { from { opacity: 0; transform: translate(-50%, -8px); } }
 .snackbar .btn { --fg: var(--md-primary); }
-:root[data-theme="light"] .snackbar .btn { --fg: #a8c7fa; }
-:root[data-theme="dark"] .snackbar .btn { --fg: #0b57d0; }
+:root:not([data-glass="on"])[data-theme="light"] .snackbar .btn { --fg: #a8c7fa; }
+:root:not([data-glass="on"])[data-theme="dark"] .snackbar .btn { --fg: #0b57d0; }
 
 /* Progress */
 .progress { height: 4px; border-radius: 2px; background: var(--accent-tint); overflow: hidden; position: relative; }
