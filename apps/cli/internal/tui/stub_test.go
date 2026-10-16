@@ -46,6 +46,7 @@ type stubBackend struct {
 	contextInfo      func() (api.ContextInfo, error)
 	compact          func(focus string) (api.CompactResult, error)
 	reloadMemory     func() ([]string, error)
+	reload           func() (api.ReloadResult, error)
 	addMemory        func(text string) (string, error)
 	listNotes        func() ([]api.Note, error)
 	forgetNote       func(name string) error
@@ -205,6 +206,13 @@ func (s *stubBackend) ReloadMemory(ctx context.Context) ([]string, error) {
 		return s.reloadMemory()
 	}
 	return s.Backend.ReloadMemory(ctx)
+}
+
+func (s *stubBackend) Reload(ctx context.Context) (api.ReloadResult, error) {
+	if s.reload != nil {
+		return s.reload()
+	}
+	return s.Backend.Reload(ctx)
 }
 
 func (s *stubBackend) AddMemory(ctx context.Context, text string) (string, error) {

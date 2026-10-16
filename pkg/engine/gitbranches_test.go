@@ -16,6 +16,7 @@ package engine
 
 import (
 	"context"
+	"os/exec"
 	"strings"
 	"testing"
 
@@ -202,6 +203,28 @@ func TestMergeBranchConflicts(t *testing.T) {
 	assert.Equal(t, "one\nfeature\nthree\n", read(t, dir, "f.txt"), "theirs is the merged branch's")
 	assert.True(t, w.isMerge(ctx, w.head(ctx)))
 	assert.Equal(t, "Merge branch 'feature'", strings.TrimSpace(gitOut(t, dir, "log", "-1", "--format=%s")))
+}
+
+// A merge of a commit that isn't a branch's tip (started in a terminal)
+// names no branch, rather than a "feature~1" the user never typed.
+func TestMergingACommitNamesNoBranch(t *testing.T) {
+	w, _ := remoteRepos(t)
+	ctx := context.Background()
+	dir := w.Dir()
+	gitOut(t, dir, "switch", "-q", "-c", "feature")
+	commitIn(t, dir, "f.txt", "one\nfeature\nthree\n", "feature", false)
+	commitIn(t, dir, "g.txt", "later\n", "later", false)
+	gitOut(t, dir, "switch", "-q", "main")
+	commitIn(t, dir, "f.txt", "one\nmain\nthree\n", "main", false)
+	cmd := exec.Command("git", "-c", "user.email=t@t", "-c", "user.name=t", "merge", "--no-edit", "feature~1")
+	cmd.Dir = dir
+	require.Error(t, cmd.Run(), "stops on the conflict")
+
+	st, err := w.GitStatus(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, api.GitMerging, st.Operation)
+	assert.Equal(t, []string{"f.txt"}, st.Conflicts)
+	assert.Empty(t, st.Merging)
 }
 
 func TestMergeARemoteBranch(t *testing.T) {

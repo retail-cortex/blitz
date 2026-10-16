@@ -215,7 +215,7 @@ func TestSandboxSummaryAndLoadImage(t *testing.T) {
 // apply from the next message, in the same conversation, without a
 // reload; Reload reads them regardless and says what it loaded.
 func TestAgentFilesApplyFromTheNextMessage(t *testing.T) {
-	w, llm := openTestWith(t, nil, text("one"), text("two"), text("three"))
+	w, llm := openTestWith(t, nil, text("one"), text("two"), text("three"), text("four"))
 	ctx := context.Background()
 	past := time.Now().Add(-time.Hour)
 	put := func(rel, content string, at time.Time) {
@@ -253,16 +253,24 @@ func TestAgentFilesApplyFromTheNextMessage(t *testing.T) {
 	assert.Contains(t, sys, "No globals, ever.")
 	assert.Contains(t, sys, "Tidies the second way")
 
+	put(".agents/skills/tidy/SKILL.md", skill("Tidies a third way"), later.Add(time.Minute))
+	sys = turn()
+	assert.Contains(t, sys, "Tidies a third way", "a skill edited on its own")
+	assert.Contains(t, sys, "Rule two: use spaces.")
+
+	put(".agents/agents/reviewer.md", "---\nname: reviewer\ndescription: Reviews\n---\nReview.\n", later)
 	res, err := w.Reload(ctx)
 	require.NoError(t, err)
 	assert.Equal(t, 1, res.Skills)
-	assert.Zero(t, res.Agents)
+	assert.Equal(t, 1, res.Agents)
 	assert.Len(t, res.Files, 2, "AGENTS.md and the rule: %v", res.Files)
 	assert.Empty(t, res.Problems)
 
 	put(".agents/skills/broken/SKILL.md", "no frontmatter", later)
+	put(".agents/agents/broken.md", "no frontmatter", later)
 	res, err = w.Reload(ctx)
 	require.NoError(t, err)
-	require.Len(t, res.Problems, 1)
-	assert.Contains(t, res.Problems[0], "broken")
+	require.Len(t, res.Problems, 2, "%v", res.Problems)
+	assert.Contains(t, strings.Join(res.Problems, "\n"), "skills/broken")
+	assert.Contains(t, strings.Join(res.Problems, "\n"), "broken.md")
 }
