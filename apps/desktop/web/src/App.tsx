@@ -26,18 +26,19 @@ import { ErrorBoundary } from "./ErrorBoundary";
 import { applyUserLanguage, t, useLanguage } from "./i18n";
 import { message, reason } from "./errors";
 import { compose, goToFileEvent, openDocsEvent, openSettingsEvent, searchWorkspaceEvent, showLicenseEvent } from "./events";
-import { DocsDialog, type DocsAt } from "./docs/DocsDialog";
+import { DocsDrawer, type DocsAt } from "./docs/DocsDrawer";
 import { UnsavedDialog } from "./files/EditorPane";
-import { LicenseDialog } from "./LicenseDialog";
+import { LicenseDrawer } from "./LicenseDrawer";
 import { Brand, MenuBar } from "./MenuBar";
 import { unsavedIn } from "./files/unsaved";
 import { closeWorkspace, displayName, openWorkspace, openWorkspaces, recentWorkspaces } from "./prefs";
-import { SettingsDialog, type Section } from "./SettingsDialog";
+import { SettingsDrawer, type Section } from "./SettingsDrawer";
 import { StatusBar } from "./StatusBar";
 import { ComposerDock, focusComposerEvent, isFocusComposerKey } from "./composerDock";
 import { forgetStatus } from "./status";
 import { AppStateProvider, useApp } from "./state";
 import { Button, Dialog, Icon, SnackbarProvider, useSnackbar } from "./ui/controls";
+import { DrawerProvider, DrawerSlot } from "./ui/Drawer";
 import { Workspace } from "./Workspace";
 
 /**
@@ -318,84 +319,94 @@ function Shell() {
     [activity, doClose],
   );
 
+  const resizeDrawer = useCallback((w: number) => update((p) => ({ ...p, drawer_width: w })), [update]);
+
   if (!loaded || service.state === "checking") return <Splash text={error || t("desktop.app.starting")} />;
   if (service.state === "down") return <ServiceDown status={service.status} onStarted={check} error={error} setError={setError} />;
 
   const open_ = openWorkspaces(prefs);
   const pinned = prefs.composer === "pinned" && open_.length > 0;
   return (
-    <div className="shell">
-      <main className="main">
-        {service.state === "lost" && (
-          <div className="banner">
-            <Icon path={mdiServerOff} />
-            <span>{t("desktop.app.lost")}</span>
-            <div className="progress spacer" />
+    <DrawerProvider width={prefs.drawer_width} onResize={resizeDrawer}>
+      <div className="shell">
+        <main className="main">
+          {service.state === "lost" && (
+            <div className="banner">
+              <Icon path={mdiServerOff} />
+              <span>{t("desktop.app.lost")}</span>
+              <div className="progress spacer" />
+            </div>
+          )}
+          {service.state === "up" && version.stale && <StaleService state={version} check={version.check} />}
+          <div className="main-row">
+            <div className="main-col">
+              {open_.length === 0 && <Welcome onOpen={open} onClose={close} onSettings={openSettings} onSearch={() => setPaletteOpen(true)} />}
+              <ComposerDock.Provider value={pinned ? dockEl : null}>
+                {open_.map((w) => (
+                  <Workspace
+                    key={`${w.dir}#${generation}`}
+                    ws={w}
+                    visible={w.dir === prefs.active}
+                    onOpenWorkspace={open}
+                    onCloseWorkspace={close}
+                    onSettings={openSettings}
+                    onSearch={() => setPaletteOpen(true)}
+                  />
+                ))}
+              </ComposerDock.Provider>
+            </div>
+            {/* The views (Settings, Docs, Changes, Workers, …) dock here. */}
+            <DrawerSlot />
           </div>
+        </main>
+        {/* The pinned composer's bar, across every panel. */}
+        {pinned && <div className="composer-dock" ref={setDockEl} />}
+        <StatusBar serviceUp={service.state === "up"} version={version.info?.version} onWorkspaceSettings={(dir) => openSettings("workspaces", dir)} />
+        {unsavedClose && (
+          <UnsavedDialog
+            names={[displayName(prefs.workspaces.find((w) => w.dir === unsavedClose) ?? { dir: unsavedClose })]}
+            count={unsavedIn(unsavedClose)}
+            onDiscard={() => {
+              const dir = unsavedClose;
+              setUnsavedClose(null);
+              close(dir, true);
+            }}
+            onCancel={() => setUnsavedClose(null)}
+          />
         )}
-        {service.state === "up" && version.stale && <StaleService state={version} check={version.check} />}
-        {open_.length === 0 && <Welcome onOpen={open} onClose={close} onSettings={openSettings} onSearch={() => setPaletteOpen(true)} />}
-        <ComposerDock.Provider value={pinned ? dockEl : null}>
-          {open_.map((w) => (
-            <Workspace
-              key={`${w.dir}#${generation}`}
-              ws={w}
-              visible={w.dir === prefs.active}
-              onOpenWorkspace={open}
-              onCloseWorkspace={close}
-              onSettings={openSettings}
-              onSearch={() => setPaletteOpen(true)}
-            />
-          ))}
-        </ComposerDock.Provider>
-      </main>
-      {/* The pinned composer's bar, across every panel. */}
-      {pinned && <div className="composer-dock" ref={setDockEl} />}
-      <StatusBar serviceUp={service.state === "up"} version={version.info?.version} onWorkspaceSettings={(dir) => openSettings("workspaces", dir)} />
-      {unsavedClose && (
-        <UnsavedDialog
-          names={[displayName(prefs.workspaces.find((w) => w.dir === unsavedClose) ?? { dir: unsavedClose })]}
-          count={unsavedIn(unsavedClose)}
-          onDiscard={() => {
-            const dir = unsavedClose;
-            setUnsavedClose(null);
-            close(dir, true);
-          }}
-          onCancel={() => setUnsavedClose(null)}
-        />
-      )}
-      {docsAt && <DocsDialog key={`${docsAt.page ?? "(last)"}#${docsAt.anchor ?? ""}`} initial={docsAt} onClose={() => setDocsAt(null)} />}
-      {settingsAt && <SettingsDialog initial={settingsAt.section} scope={settingsAt.scope} onClose={() => setSettingsAt(null)} />}
-      {license && <LicenseDialog initial={license} onClose={() => setLicense(null)} />}
-      {searchOpen !== null && prefs.active && <SearchDialog dir={prefs.active} initialQuery={searchOpen} onClose={() => setSearchOpen(null)} />}
-      {paletteOpen && <CommandPalette onClose={() => setPaletteOpen(false)} onOpenWorkspace={open} onSettings={(section = "appearance", scope) => openSettings(section, scope)} />}
-      {confirmClose && (
-        <Dialog
-          title={t("desktop.app.stop_close.title")}
-          icon={mdiAlertOutline}
-          onClose={() => setConfirmClose(null)}
-          footer={
-            <>
-              <Button onClick={() => setConfirmClose(null)}>{t("desktop.cancel")}</Button>
-              <Button
-                variant="filled"
-                danger
-                onClick={async () => {
-                  const dir = confirmClose;
-                  setConfirmClose(null);
-                  await stop(dir);
-                  doClose(dir);
-                }}
-              >
-                {t("desktop.app.stop_close")}
-              </Button>
-            </>
-          }
-        >
-          <p className="muted">{t("desktop.app.stop_close.body", { name: displayName(prefs.workspaces.find((w) => w.dir === confirmClose) ?? { dir: confirmClose }) })}</p>
-        </Dialog>
-      )}
-    </div>
+        {docsAt && <DocsDrawer key={`${docsAt.page ?? "(last)"}#${docsAt.anchor ?? ""}`} initial={docsAt} onClose={() => setDocsAt(null)} />}
+        {settingsAt && <SettingsDrawer initial={settingsAt.section} scope={settingsAt.scope} onClose={() => setSettingsAt(null)} />}
+        {license && <LicenseDrawer initial={license} onClose={() => setLicense(null)} />}
+        {searchOpen !== null && prefs.active && <SearchDialog dir={prefs.active} initialQuery={searchOpen} onClose={() => setSearchOpen(null)} />}
+        {paletteOpen && <CommandPalette onClose={() => setPaletteOpen(false)} onOpenWorkspace={open} onSettings={(section = "appearance", scope) => openSettings(section, scope)} />}
+        {confirmClose && (
+          <Dialog
+            title={t("desktop.app.stop_close.title")}
+            icon={mdiAlertOutline}
+            onClose={() => setConfirmClose(null)}
+            footer={
+              <>
+                <Button onClick={() => setConfirmClose(null)}>{t("desktop.cancel")}</Button>
+                <Button
+                  variant="filled"
+                  danger
+                  onClick={async () => {
+                    const dir = confirmClose;
+                    setConfirmClose(null);
+                    await stop(dir);
+                    doClose(dir);
+                  }}
+                >
+                  {t("desktop.app.stop_close")}
+                </Button>
+              </>
+            }
+          >
+            <p className="muted">{t("desktop.app.stop_close.body", { name: displayName(prefs.workspaces.find((w) => w.dir === confirmClose) ?? { dir: confirmClose }) })}</p>
+          </Dialog>
+        )}
+      </div>
+    </DrawerProvider>
   );
 }
 

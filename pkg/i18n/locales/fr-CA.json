@@ -1784,6 +1784,7 @@
     "desktop.workers.deleted": "Worker {name} supprimé",
     "desktop.palette.show_editor": "Afficher l'éditeur",
     "desktop.chat.resize": "Redimensionner le clavardage",
+    "desktop.drawer.resize": "Redimensionner le panneau",
     "tray.service": "Service Blitz",
     "tray.state.running_version": "Service Blitz : en cours ({version})",
     "tray.state.running": "Service Blitz : en cours",

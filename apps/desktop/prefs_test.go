@@ -49,7 +49,7 @@ func TestPrefsDefaultsAndRoundTrip(t *testing.T) {
 		{Dir: "relative/dir", Open: true}, // not a directory the service can open
 	}
 	p.Active = b // closed: can't be active
-	p.Files, p.ShowHidden, p.ChatWidth, p.FilesWidth = true, true, -3, 99999
+	p.Files, p.ShowHidden, p.ChatWidth, p.FilesWidth, p.DrawerWidth = true, true, -3, 99999, 480
 	p.DocWidth, p.EditorZoom, p.GPU = "readable", 125, "off"
 	saved, err := s.save(p)
 	require.NoError(t, err)
@@ -63,6 +63,7 @@ func TestPrefsDefaultsAndRoundTrip(t *testing.T) {
 	require.True(t, saved.ShowHidden, "normalized %+v", saved)
 	require.Equal(t, 0, saved.ChatWidth, "normalized %+v", saved)
 	require.Equal(t, 0, saved.FilesWidth, "normalized %+v", saved)
+	require.Equal(t, 480, saved.DrawerWidth, "normalized %+v", saved)
 	require.Equal(t, "readable", saved.DocWidth, "normalized %+v", saved)
 	require.Equal(t, 125, saved.EditorZoom, "normalized %+v", saved)
 	require.Equal(t, "off", saved.GPU, "normalized %+v", saved)

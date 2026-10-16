@@ -55,7 +55,7 @@ const DocContext = createContext<MarkdownDoc | null>(null);
 export const MarkdownDocProvider = DocContext.Provider;
 
 /**
- * How a page of the user docs (docs/DocsDialog.tsx) resolves its links and
+ * How a page of the user docs (docs/DocsDrawer.tsx) resolves its links and
  * pictures: to its pages, the website, or the pictures the app carries,
  * never the workspace's.
  */

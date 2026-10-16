@@ -118,6 +118,8 @@ export function SearchDialog({ dir, initialQuery = "", onClose }: { dir: string;
   ].join(" · ");
   return (
     <div className="scrim palette-scrim" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+      {/* The title bar still moves the window, without closing this. */}
+      <div className="scrim-drag drag-region" aria-hidden />
       <div className="palette search-dialog" role="dialog" aria-modal="true" aria-label={t("desktop.search.title")} ref={box}>
         <div className="palette-search">
           <Icon path={mdiMagnify} />

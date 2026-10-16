@@ -44,7 +44,7 @@ import { splitLine } from "./files/paths";
 import { nameOf, parentOf } from "./files/tree";
 import { displayName, openWorkspace, openWorkspaces, recentWorkspaces } from "./prefs";
 import { useApp } from "./state";
-import type { Section } from "./SettingsDialog";
+import type { Section } from "./SettingsDrawer";
 import type { SearchHit } from "./gen/blitz/v1/workspace_pb";
 import { t, tn } from "./i18n";
 import { Icon, useModal } from "./ui/controls";
@@ -228,6 +228,8 @@ export function CommandPalette({ onClose, onOpenWorkspace, onSettings }: { onClo
   let lastGroup = "";
   return (
     <div className="scrim palette-scrim" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+      {/* The title bar still moves the window, without closing this. */}
+      <div className="scrim-drag drag-region" aria-hidden />
       <div className="palette" role="dialog" aria-modal="true" aria-label={t("desktop.palette.label")} ref={box}>
         <div className="palette-search">
           <Icon path={mdiMagnify} />

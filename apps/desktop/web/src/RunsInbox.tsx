@@ -24,10 +24,11 @@ import { t } from "./i18n";
 import { isActive, refreshRuns, runAge } from "./backgroundRuns";
 import { displayName, openWorkspace } from "./prefs";
 import { useApp } from "./state";
-import { Button, Dialog, useSnackbar } from "./ui/controls";
+import { Button, useSnackbar } from "./ui/controls";
+import { Drawer } from "./ui/Drawer";
 
 /** The background runs, to open or stop (the Workers menu's and the status bar's). */
-export function InboxDialog({ list, onClose }: { list: BackgroundRun[]; onClose: () => void }) {
+export function InboxDrawer({ list, onClose }: { list: BackgroundRun[]; onClose: () => void }) {
   const { prefs, update } = useApp();
   const snack = useSnackbar();
   const now = new Date();
@@ -45,7 +46,7 @@ export function InboxDialog({ list, onClose }: { list: BackgroundRun[]; onClose:
     }
   };
   return (
-    <Dialog title={t("desktop.inbox.title")} icon={mdiInboxOutline} onClose={onClose} wide footer={<Button onClick={onClose}>{t("desktop.done")}</Button>}>
+    <Drawer title={t("desktop.inbox.title")} icon={mdiInboxOutline} onClose={onClose}>
       {list.length === 0 ? (
         <p className="muted">{t("desktop.inbox.empty")}</p>
       ) : (
@@ -72,6 +73,6 @@ export function InboxDialog({ list, onClose }: { list: BackgroundRun[]; onClose:
           ))}
         </ul>
       )}
-    </Dialog>
+    </Drawer>
   );
 }

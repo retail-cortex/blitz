@@ -53,6 +53,8 @@ export interface Prefs {
   chat_width: number;
   /** The Files shelf's width in pixels (0: its default). */
   files_width: number;
+  /** The drawer's width in pixels (0: its default), where the views open. */
+  drawer_width: number;
   /** How wide the conversation runs: the whole panel, or a readable column. */
   width: "full" | "readable";
   /** How wide a document (Markdown in Preview and Visual) runs: the whole editor, or a readable column. */
@@ -88,6 +90,7 @@ export const defaultPrefs: Prefs = {
   show_hidden: false,
   chat_width: 0,
   files_width: 0,
+  drawer_width: 0,
   task_continue: false,
   advanced: false,
   width: "full",
@@ -145,6 +148,7 @@ export function normalizePrefs(raw: unknown): Prefs {
     gpu: pick(r.gpu, ["on", "off"] as const, "on"),
     chat_width: pixels(r.chat_width),
     files_width: pixels(r.files_width),
+    drawer_width: pixels(r.drawer_width),
     markdown_css_light: css(r.markdown_css_light),
     markdown_css_dark: css(r.markdown_css_dark),
   };

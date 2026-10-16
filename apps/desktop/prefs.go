@@ -62,6 +62,9 @@ type Prefs struct {
 	ChatWidth int `json:"chat_width,omitempty"`
 	// FilesWidth is the Files shelf's width in pixels (0: its default).
 	FilesWidth int `json:"files_width,omitempty"`
+	// DrawerWidth is the drawer's width in pixels (0: its default), where
+	// the views (Settings, Changes, Workers, …) open.
+	DrawerWidth int `json:"drawer_width,omitempty"`
 	// Width is how wide the conversation runs: "full" (the default, the
 	// whole panel) or "readable" (a column of about 860 px).
 	Width string `json:"width"`
@@ -153,7 +156,7 @@ func (p *Prefs) normalize() {
 	if !languageTag.MatchString(p.Language) {
 		p.Language = "system"
 	}
-	for _, w := range []*int{&p.ChatWidth, &p.FilesWidth} {
+	for _, w := range []*int{&p.ChatWidth, &p.FilesWidth, &p.DrawerWidth} {
 		if *w < 0 || *w > 10000 {
 			*w = 0
 		}

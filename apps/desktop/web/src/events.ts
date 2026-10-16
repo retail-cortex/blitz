@@ -220,7 +220,7 @@ export function showLicense(detail: { which: "notice" | "full" | "third-party" }
   window.dispatchEvent(new CustomEvent(showLicenseEvent, { detail }));
 }
 
-/** The event that opens the user docs on a page (docs/DocsDialog.tsx). */
+/** The event that opens the user docs on a page (docs/DocsDrawer.tsx). */
 export const openDocsEvent = "blitz:open-docs";
 
 /**
