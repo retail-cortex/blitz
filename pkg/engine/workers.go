@@ -472,6 +472,9 @@ func (w *Workspace) RunWorker(ctx context.Context, name string, o RunOptions) (a
 	switch {
 	case runErr == nil:
 		run.Status = api.RunSucceeded
+	case errors.Is(context.Cause(ctx), api.ErrRunStopped):
+		run.Status = api.RunStopped
+		run.Error = api.ErrRunStopped.Error()
 	case api.IsLimit(runErr):
 		run.Status = api.RunLimited
 		run.Error = runErr.Error()

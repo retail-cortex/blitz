@@ -92,6 +92,7 @@ Reading the workspace never needs permission. A command with `;`, `&`, `|`, `$`,
 - **States:** new (never enabled), enabled, disabled, changed, invalid (its problems are listed).
 - **Run now:** **Run now** in the app, or `blitz workers run <name>`, runs an enabled worker at once and shows what it does.
 - **Two at once?** The same worker never runs twice at the same time; a scheduled tick that finds it running is recorded as skipped.
+- **Stop a run:** the Workers menu lists every run going now, in any workspace, under **Running now**. Hover one and click **Stop**, or use **Stop** in the worker's run list or `blitz workers stop <name>`. The run ends as **stopped**. Files it already changed stay changed, and `blitz workers undo <run-id>` puts them back.
 
 | Desktop | Terminal |
 |---|---|
@@ -99,13 +100,14 @@ Reading the workspace never needs permission. A command with `;`, `&`, `|`, `$`,
 | Open a worker, **Enable as shown** | `blitz workers enable <name>` |
 | **Run now** | `blitz workers run <name>` |
 | **Disable** | `blitz workers disable <name>` |
+| **Stop** (Workers menu › Running now, or the run list) | `blitz workers stop <name>` |
 | The worker's run list | `blitz workers runs <name>` |
 | **Edit**, **Delete** | Edit or remove the folder |
 | | `blitz workers undo <run-id>` |
 
 ## Runs and their results
 
-Each run is a conversation of its own, titled `⏰ <name>` and the time: open it from the run list, or with **History › Workers**. A run ends as succeeded, failed, limited (it hit a turn, cost or time limit) or skipped. Its record keeps the files it changed, what was refused, the cost and the error.
+Each run is a conversation of its own, titled `⏰ <name>` and the time: open it from the run list, or with **History › Workers**. A run ends as succeeded, failed, limited (it hit a turn, cost or time limit), stopped (you stopped it) or skipped. Its record keeps the files it changed, what was refused, the cost and the error.
 
 A run's file changes are its own checkpoint, outside `/undo`: `blitz workers undo <run-id>` puts them back (`--force` overwrites files changed since).
 

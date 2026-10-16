@@ -510,6 +510,13 @@ const change = (workspace: string) => ({ change: { path: configPath(workspace), 
 // The workspace's workers, and each one's WORKER.md as written (spec).
 type FakeWorker = Record<string, unknown> & { name: string; hash: string; state: WorkerState; path: string; spec: Record<string, unknown> & { schedule: string } };
 const fakeSpec = (name: string, o: Record<string, unknown> = {}) => ({ name, description: "", schedule: "", timezone: "", agent: "", model: "", permissions: [] as string[], maxTurns: 0, maxCostUsd: 0, timeout: "", catchUp: "", prompt: "", ...o });
+// Worker runs going now (?fake&noruns: none).
+const fakeLive: { id: string; workspace: string; worker: string; status: RunStatus; started: ReturnType<typeof now>; manual: boolean; sessionId: string; error?: { reason: string; message: string } }[] = new URLSearchParams(location.search).has("noruns")
+  ? []
+  : [
+      { id: "live-1", workspace: "/home/me/blitz", worker: "nightly-deps", status: RunStatus.RUNNING, started: now(), manual: false, sessionId: "worker-nightly-3" },
+      { id: "live-2", workspace: "/home/me/notes", worker: "daily-news", status: RunStatus.RUNNING, started: now(), manual: true, sessionId: "worker-news-1" },
+    ];
 const fakeWorkers: FakeWorker[] = [
   {
     name: "nightly-deps",
@@ -1486,8 +1493,20 @@ export function installFake() {
         // A run that's over as soon as it's watched.
         runWorker: ({ name }) => ({ run: { id: `run-${name}-${Date.now()}`, status: RunStatus.RUNNING, started: now(), manual: true } }),
         async *watchWorkerRun() {},
-        listWorkerRuns: () => ({
+        // Runs going now, in this workspace and another (the Workers menu's
+        // Running now); Stop ends one, recorded as stopped.
+        listRunningWorkerRuns: () => ({ runs: fakeLive.filter((r) => r.status === RunStatus.RUNNING) }),
+        stopWorkerRun: ({ runId }) => {
+          const r = fakeLive.find((x) => x.id === runId && x.status === RunStatus.RUNNING);
+          if (!r) throw new ConnectError(`run ${runId} isn't running`, Code.NotFound);
+          const before = { ...r };
+          r.status = RunStatus.STOPPED;
+          r.error = { reason: "RUN_STOPPED", message: "stopped by the user" };
+          return { run: before };
+        },
+        listWorkerRuns: ({ workspace, name }) => ({
           runs: [
+            ...fakeLive.filter((r) => r.workspace === workspace && r.worker === name),
             { id: "r2", status: RunStatus.SUCCEEDED, started: now(), manual: false, sessionId: "worker-nightly-2", usage: { costUsd: 0.0041, priced: true }, files: ["reports/deps.md"] },
             { id: "r1", status: RunStatus.FAILED, started: now(), manual: true, sessionId: "worker-nightly-1", error: { reason: "RUN_FAILED", message: "the run reached its cost limit" } },
           ],

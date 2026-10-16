@@ -27,4 +27,4 @@ weight: 22
 - **CL-06** Error conversion: an `ErrorInfo.reason` maps back to `pkg/api`'s sentinel or typed error (e.g. `PROMPT_BLOCKED` → `*BlockedError`, `NO_ACTIVE_SESSION` → `ErrNoActiveSession`), wrapped so `errors.Is` matches while the message stays the service's.
 - **CL-07** Operations whose `Backend` signature has no error (listings) return empty results and report the failure through `warn`.
 - **CL-08** Images: `LoadImage`/`AddImage` upload to the service and turns reference images by ID.
-- **CL-09** Workers: `AttachWorkers(socket, dir)` implements the CLI's worker operations over `WorkerService`; `RunWorker` starts a run, watches its events (`WatchWorkerRun`), and returns the record once the run has finished (immediately if it finished before watching began).
+- **CL-09** Workers: `AttachWorkers(socket, dir)` implements the CLI's worker operations over `WorkerService`; `RunWorker` starts a run, watches its events (`WatchWorkerRun`), and returns the record once the run has finished (immediately if it finished before watching began). `RunningWorkerRuns` (the workspace's runs going now) and `StopWorkerRun` serve `blitz workers stop`.

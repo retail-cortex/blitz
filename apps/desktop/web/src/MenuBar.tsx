@@ -47,7 +47,8 @@ import { openDocs, startSetup } from "./events";
 import { docSections } from "./docs/sections";
 import { fileName } from "./agentForm";
 import { AgentScope, type AgentFile } from "./gen/blitz/v1/workspace_pb";
-import { WorkerState, type Worker } from "./gen/blitz/v1/worker_pb";
+import { WorkerState, type Worker, type WorkerRun } from "./gen/blitz/v1/worker_pb";
+import { runningEntries } from "./runningWorkers";
 import { intent, type ItemIntent } from "./intent";
 import { t, tn } from "./i18n";
 import { displayName, forgetWorkspace, openWorkspace, openWorkspaces, recentWorkspaces } from "./prefs";
@@ -57,7 +58,8 @@ import type { Section } from "./SettingsDialog";
 import { useApp } from "./state";
 import { menuIds } from "./simpleMode";
 import { workspaceColor } from "./palette";
-import { Icon, IconButton, Menu, ToolbarSearch, type MenuEntry } from "./ui/controls";
+import { Icon, IconButton, Menu, ToolbarSearch, useSnackbar, type MenuEntry } from "./ui/controls";
+import { message } from "./errors";
 import { useWorkerFailures } from "./workerFailures";
 
 /** The app's name and mark, at the left of the top bar. */
@@ -113,6 +115,9 @@ export function MenuBar({
   const failures = useWorkerFailures();
   const [agents, setAgents] = useState<AgentFile[]>([]);
   const [workerList, setWorkerList] = useState<Worker[]>([]);
+  // Every workspace's runs going now, each with Stop.
+  const [liveRuns, setLiveRuns] = useState<WorkerRun[]>([]);
+  const snack = useSnackbar();
   const [inbox, setInbox] = useState(false);
 
   // The lists are asked for when the workspace opens and each time their
@@ -129,6 +134,10 @@ export function MenuBar({
     workers.listWorkers({ workspace: dir }).then(
       (r) => setWorkerList(r.workers),
       () => setWorkerList([]),
+    );
+    workers.listRunningWorkerRuns({}).then(
+      (r) => setLiveRuns(r.runs),
+      () => setLiveRuns([]),
     );
   }, [dir]);
   useEffect(() => {
@@ -172,6 +181,20 @@ export function MenuBar({
       icon: mdiInboxOutline,
       onSelect: () => setInbox(true),
     },
+    ...runningEntries(liveRuns, {
+      dir,
+      workspaceName: (d) => displayName(prefs.workspaces.find((w) => w.dir === d) ?? { dir: d }),
+      // Its worker, here; in another workspace, that workspace.
+      onShow: (r) => (r.workspace === dir ? onWorker?.(intent("show", r.worker)) : update((p) => openWorkspace(p, r.workspace))),
+      onStop: (r) =>
+        void workers.stopWorkerRun({ runId: r.id }).then(
+          () => {
+            snack(t("desktop.menu.workers.stopping", { name: r.worker }));
+            setLiveRuns((runs) => runs.filter((x) => x.id !== r.id));
+          },
+          (e) => snack(message(e), { error: true }),
+        ),
+    }),
     "divider",
     ...(workerList.length === 0
       ? [{ heading: t("desktop.menu.workers.none") }]

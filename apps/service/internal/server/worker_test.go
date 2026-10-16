@@ -16,6 +16,7 @@ package server
 
 import (
 	"context"
+	"iter"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -32,6 +33,7 @@ import (
 	pb "github.com/retail-cortex/blitz/proto/blitz/v1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/adk/v2/model"
 	"google.golang.org/genai"
 )
 
@@ -46,6 +48,12 @@ func serveWorkers(t *testing.T, rescan time.Duration, replies ...*genai.Content)
 // (a test that drives it by hand doesn't want its rescans).
 func serveScheduler(t *testing.T, rescan time.Duration, start bool, replies ...*genai.Content) (pb.WorkerServiceClient, *Server) {
 	t.Helper()
+	return serveSchedulerWith(t, rescan, start, runtime.NewMockLLM("m", replies...))
+}
+
+// serveSchedulerWith is serveScheduler with llm as every workspace's model.
+func serveSchedulerWith(t *testing.T, rescan time.Duration, start bool, llm model.LLM) (pb.WorkerServiceClient, *Server) {
+	t.Helper()
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("MODENV_PREFIX", "")
 	store, err := workers.OpenStore(filepath.Join(t.TempDir(), "workers.json"))
@@ -54,7 +62,7 @@ func serveScheduler(t *testing.T, rescan time.Duration, start bool, replies ...*
 		cfg := config.DefaultConfig()
 		cfg.Tools.WorkspaceDir = dir
 		cfg.Session.StorageDir = t.TempDir()
-		return engine.Open(ctx, cfg, engine.Options{Model: runtime.NewMockLLM("m", replies...), Workers: store})
+		return engine.Open(ctx, cfg, engine.Options{Model: llm, Workers: store})
 	}, WithScheduler(SchedulerConfig{Store: store, Runs: workers.OpenRunLog(filepath.Join(os.Getenv("HOME"), ".blitz", "worker-runs")), MaxConcurrent: 2, Rescan: rescan}))
 	srv := httptest.NewServer(s.Handler())
 	ctx, cancel := context.WithCancel(context.Background())
@@ -373,4 +381,79 @@ func TestPartialWorkerRunUndoReportsTheError(t *testing.T) {
 	assert.Equal(t, []string{"reports/a/r.md"}, undone.Msg.Restored)
 	require.NotNil(t, undone.Msg.Error, "the file that wasn't restored")
 	assert.Contains(t, undone.Msg.Error.Message, "reports/b/r.md")
+}
+
+// thinking is a model that never answers: it waits until its call is
+// cancelled, as a model working on a long reply would.
+type thinking struct{ calls chan struct{} }
+
+func (m thinking) Name() string { return "thinking" }
+
+func (m thinking) GenerateContent(ctx context.Context, _ *model.LLMRequest, _ bool) iter.Seq2[*model.LLMResponse, error] {
+	return func(yield func(*model.LLMResponse, error) bool) {
+		select {
+		case m.calls <- struct{}{}:
+		default:
+		}
+		<-ctx.Done()
+		yield(nil, ctx.Err())
+	}
+}
+
+// A run going now is listed among every workspace's running runs, and can
+// be stopped: it ends at once, recorded as stopped by the user, and the
+// worker can run again.
+func TestStopWorkerRun(t *testing.T) {
+	llm := thinking{calls: make(chan struct{}, 1)}
+	c, _ := serveSchedulerWith(t, time.Hour, true, llm)
+	ctx := context.Background()
+	dir, _ := filepath.EvalSymlinks(t.TempDir())
+	addWorker(t, dir, "slow", "---\nschedule: Daily at 6 AM\n---\nThink about it.\n")
+	list, err := c.ListWorkers(ctx, connect.NewRequest(&pb.ListWorkersRequest{Workspace: dir}))
+	require.NoError(t, err)
+	_, err = c.EnableWorker(ctx, connect.NewRequest(&pb.EnableWorkerRequest{Workspace: dir, Name: "slow", Hash: list.Msg.Workers[0].Hash}))
+	require.NoError(t, err)
+
+	_, err = c.StopWorkerRun(ctx, connect.NewRequest(&pb.StopWorkerRunRequest{RunId: "nope"}))
+	code, info := errorReason(t, err)
+	assert.Equal(t, connect.CodeNotFound, code)
+	assert.Equal(t, "RUN_NOT_RUNNING", info.Reason)
+
+	started, err := c.RunWorker(ctx, connect.NewRequest(&pb.RunWorkerRequest{Workspace: dir, Name: "slow"}))
+	require.NoError(t, err)
+	id := started.Msg.Run.Id
+	select {
+	case <-llm.calls:
+	case <-time.After(10 * time.Second):
+		t.Fatal("the run never asked its model")
+	}
+	running, err := c.ListRunningWorkerRuns(ctx, connect.NewRequest(&pb.ListRunningWorkerRunsRequest{}))
+	require.NoError(t, err)
+	require.Len(t, running.Msg.Runs, 1)
+	assert.Equal(t, id, running.Msg.Runs[0].Id)
+	assert.Equal(t, "slow", running.Msg.Runs[0].Worker)
+	assert.Equal(t, dir, running.Msg.Runs[0].Workspace)
+
+	stopped, err := c.StopWorkerRun(ctx, connect.NewRequest(&pb.StopWorkerRunRequest{RunId: id}))
+	require.NoError(t, err)
+	assert.Equal(t, id, stopped.Msg.Run.Id)
+	var run *pb.WorkerRun
+	require.Eventually(t, func() bool {
+		got, err := c.GetWorkerRun(ctx, connect.NewRequest(&pb.GetWorkerRunRequest{RunId: id}))
+		if err == nil {
+			run = got.Msg.Run
+		}
+		return err == nil && run.Status != pb.RunStatus_RUN_STATUS_RUNNING
+	}, 5*time.Second, 10*time.Millisecond)
+	assert.Equal(t, pb.RunStatus_RUN_STATUS_STOPPED, run.Status, "run %v", run)
+	assert.Equal(t, "RUN_STOPPED", run.Error.GetReason())
+	assert.Equal(t, api.ErrRunStopped.Error(), run.Error.GetMessage())
+
+	running, err = c.ListRunningWorkerRuns(ctx, connect.NewRequest(&pb.ListRunningWorkerRunsRequest{}))
+	require.NoError(t, err)
+	assert.Empty(t, running.Msg.Runs)
+	again, err := c.RunWorker(ctx, connect.NewRequest(&pb.RunWorkerRequest{Workspace: dir, Name: "slow"}))
+	require.NoError(t, err, "the worker runs again")
+	_, err = c.StopWorkerRun(ctx, connect.NewRequest(&pb.StopWorkerRunRequest{RunId: again.Msg.Run.Id}))
+	require.NoError(t, err)
 }

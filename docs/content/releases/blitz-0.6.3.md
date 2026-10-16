@@ -22,6 +22,7 @@ weight: 1
 ### What's new
 
 - **Pull and Push on the Changes page.** On the Git view, Pull and Push show how many commits each would bring or send, checked against the remote when the page opens. The status bar shows ↓ and ↑ beside the branch. Pull follows your git config (merge or rebase) and keeps your uncommitted work. A branch that isn't on the remote yet gets **Publish branch**.
+- **Stop a worker that's running.** The Workers menu now lists every worker running right now, in any workspace, under **Running now**, each with a **Stop** button. A worker's run list has Stop too, and so does `blitz workers stop <name>`. The run ends as "stopped", and any files it changed can still be undone.
 - **Merge conflicts, settled in place.** A pull that stops on conflicts marks each file. Open it in the editor, keep yours, take theirs, or mark it resolved once you've edited it. Or click **Ask the agent to resolve**, review its work, and press **Complete merge**. **Abort** puts everything back as it was before the pull.
 
 - **`/init` leads with the specification.** In a workspace without specs, `/setup` (and `/init`) asks the specification's questions itself, writes the specs, and then sets up the workspace from them. Running `/spec` again later still revises the specs in place.

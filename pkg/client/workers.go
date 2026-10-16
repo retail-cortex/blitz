@@ -151,6 +151,7 @@ var runStatuses = map[pb.RunStatus]api.RunStatus{
 	pb.RunStatus_RUN_STATUS_FAILED:    api.RunFailed,
 	pb.RunStatus_RUN_STATUS_LIMITED:   api.RunLimited,
 	pb.RunStatus_RUN_STATUS_SKIPPED:   api.RunSkipped,
+	pb.RunStatus_RUN_STATUS_STOPPED:   api.RunStopped,
 }
 
 // UndoWorkerRun restores the files a run changed (WorkerService.UndoWorkerRun).
@@ -160,6 +161,28 @@ func (w *Workers) UndoWorkerRun(runID string, force bool) ([]string, error) {
 		return nil, fromAPI(err)
 	}
 	return res.Msg.Restored, errorFromInfo(res.Msg.Error)
+}
+
+// RunningWorkerRuns returns the runs going now in this workspace, oldest
+// first (WorkerService.ListRunningWorkerRuns).
+func (w *Workers) RunningWorkerRuns() ([]api.Run, error) {
+	res, err := w.c.ListRunningWorkerRuns(context.Background(), connect.NewRequest(&pb.ListRunningWorkerRunsRequest{}))
+	if err != nil {
+		return nil, fromAPI(err)
+	}
+	var out []api.Run
+	for _, r := range res.Msg.Runs {
+		if r.Workspace == w.dir {
+			out = append(out, workerRun(r))
+		}
+	}
+	return out, nil
+}
+
+// StopWorkerRun stops a run going now (WorkerService.StopWorkerRun).
+func (w *Workers) StopWorkerRun(runID string) error {
+	_, err := w.c.StopWorkerRun(context.Background(), connect.NewRequest(&pb.StopWorkerRunRequest{RunId: runID}))
+	return fromAPI(err)
 }
 
 func workerRun(r *pb.WorkerRun) api.Run {
