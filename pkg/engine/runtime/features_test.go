@@ -173,14 +173,14 @@ func TestEngineResumesPersistedSession(t *testing.T) {
 }
 
 func TestEngineInstructions(t *testing.T) {
-	f := newEngineWith(t, fixtureOpts{opts: []Option{WithInstructions("\nPROJECT RULE: use tabs")}}, textContent("ok"))
+	f := newEngineWith(t, fixtureOpts{opts: []Option{WithInstructions("\nPROJECT RULE: use tabs and /users/{user_id}")}}, textContent("ok"), textContent("ok"))
 	collect(t, f.eng, "s", "hi")
 	sys := systemText(f.llm)
-	assert.Contains(t, sys, "PROJECT RULE: use tabs", "instructions missing from system prompt")
-	f.eng.SetInstructions(context.Background(), "\nNEW RULE")
+	assert.Contains(t, sys, "PROJECT RULE: use tabs and /users/{user_id}", "instructions missing from system prompt")
+	require.NoError(t, f.eng.SetInstructions(context.Background(), "\nNEW RULE with {state_key}"))
 	collect(t, f.eng, "s2", "hi")
 	sys = systemText(f.llm)
-	assert.Contains(t, sys, "NEW RULE", "SetInstructions not applied")
+	assert.Contains(t, sys, "NEW RULE with {state_key}", "SetInstructions not applied")
 	assert.NotContains(t, sys, "PROJECT RULE", "SetInstructions not applied")
 }
 

@@ -585,10 +585,14 @@ func (e *Engine) newLLMAgentWith(reg *tools.Registry, spec *agents.AgentSpec, ll
 			list = append(list, t)
 		}
 	}
+	// InstructionProvider returns the text verbatim: Config.Instruction
+	// treats every {ident} in prompts, AGENTS.md or notes as an ADK
+	// session-state template key and fails the turn when it is unset.
+	fullInstruction := instruction + e.imageInstruction(spec) + diagramInstruction + e.extraInstructions
 	return llmagent.New(llmagent.Config{
 		Name:                  spec.Name,
 		Description:           spec.Description,
-		Instruction:           instruction + e.imageInstruction(spec) + diagramInstruction + e.extraInstructions,
+		InstructionProvider:   func(agent.ReadonlyContext) (string, error) { return fullInstruction, nil },
 		Model:                 withAgentSettings(llm, spec),
 		Tools:                 list,
 		Toolsets:              toolsets,
