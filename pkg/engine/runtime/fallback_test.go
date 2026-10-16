@@ -299,3 +299,18 @@ func TestSingleModelChain(t *testing.T) {
 	assert.Same(t, m, newFallbackModel([]model.LLM{m}))
 	assert.Nil(t, withModelSettings(nil, "gemini"))
 }
+
+// A caller that stops reading while a model answers (a turn stopped
+// mid-reply) counts as the model answering: it stays first in line.
+func TestConsumerStoppingCountsAsAnswered(t *testing.T) {
+	primary, backup := &scripted{name: "gemini-x"}, &scripted{name: "claude-y"}
+	f, _ := chainOf(t, primary, backup)
+	for range f.GenerateContent(t.Context(), &model.LLMRequest{}, false) {
+		break
+	}
+	text, _, from, err := call(t, f, t.Context())
+	require.NoError(t, err)
+	require.Equal(t, "from gemini-x", text)
+	require.Empty(t, from)
+	require.Equal(t, 0, backup.count())
+}

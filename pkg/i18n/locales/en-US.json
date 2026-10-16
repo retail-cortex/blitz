@@ -352,6 +352,7 @@
     "tools.legend": "● also available in /plan. Tools that change files or run commands ask for approval unless auto-approved.",
     "model.fallback": "{primary} is unavailable; answering with fallback {model} for now.",
     "model.fallback_recovered": "{model} is answering again.",
+    "model.reconnecting": "Lost the connection to the model ({error}). Reconnecting…",
     "help.pin": "Run an agent on its own model (\"provider/model\"); no arguments lists pins",
     "help.unpin": "Return an agent to the configured model",
     "pin.title": "Pinned models",

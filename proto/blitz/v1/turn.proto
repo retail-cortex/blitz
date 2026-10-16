@@ -95,6 +95,9 @@ message Notice {
   string text = 1;
   // Something went wrong (shown as an error), else information.
   bool error = 2;
+  // A passing status (the model's connection dropped and is being retried),
+  // shown briefly (the desktop's snackbar) rather than kept in the chat.
+  bool transient = 3;
 }
 
 // Tasks is the agent's task list (the todo tool).

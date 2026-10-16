@@ -74,6 +74,7 @@ type (
 	subagentDepthKey struct{}
 	runStateKey      struct{}
 	turnNoticeKey    struct{}
+	turnStatusKey    struct{}
 )
 
 // runState is carried in the context of one Execute call.
@@ -151,6 +152,19 @@ func WithNotice(f func(string)) Option { return func(e *Engine) { e.notice = f }
 // the engine's WithNotice, which gets them outside a turn.
 func WithTurnNotices(ctx context.Context, f func(string)) context.Context {
 	return tools.WithNotices(context.WithValue(ctx, turnNoticeKey{}, f), f) // the tools' (an MCP server failing) too
+}
+
+// WithTurnStatus sends passing statuses raised during runs under ctx to f:
+// a model request whose connection failed and is being retried. Unlike
+// notices, they aren't kept in the conversation.
+func WithTurnStatus(ctx context.Context, f func(string)) context.Context {
+	return context.WithValue(ctx, turnStatusKey{}, f)
+}
+
+// statusTo is where a passing status raised under ctx goes, or nil.
+func statusTo(ctx context.Context) func(string) {
+	f, _ := ctx.Value(turnStatusKey{}).(func(string))
+	return f
 }
 
 // noticeTo is where a notice raised under ctx goes: the turn's sink, else

@@ -305,6 +305,31 @@ async function* runTurn(dir: string, text: string, plan: boolean): AsyncGenerato
     yield ev({ case: "finished", value: { before, after: s.usage } });
     return;
   }
+  if (/reconnect/i.test(text)) {
+    // The model's connection drops and is retried (a transient notice, a
+    // snackbar), then the agent asks with answers too long for one line.
+    yield ev({ case: "notice", value: { text: "Lost the connection to the model (unexpected EOF). Reconnecting…", transient: true } });
+    await sleep(1200);
+    const id = `q${++nextRequest}`;
+    const answer = new Promise<string>((r) => s.pending.set(id, r));
+    yield ev({
+      case: "question",
+      value: {
+        requestId: id,
+        question: "How should recipe version history behave?",
+        options: [
+          "Store full snapshots of Recipes only (title, ingredients, steps, tags, allergens, calories) on every update, with ability to view diffs and restore a previous version",
+          "Store snapshots across Recipes, Recipe Books, and Shopping Lists on every update",
+          "View-only version history for Recipes (audit log of changes over time, without restore)",
+        ],
+      },
+    });
+    const text = `Going with: ${await answer}`;
+    sess.messages.push(msg("model", text));
+    yield ev({ case: "text", value: { text } });
+    yield ev({ case: "finished", value: { before, after: s.usage } });
+    return;
+  }
   if (/burst/i.test(text)) {
     // Parallel tool calls that each need approval: their requests arrive
     // together, and the turn ends only once every one is answered.

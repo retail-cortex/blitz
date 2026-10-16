@@ -315,6 +315,7 @@ func (e *Engine) StartTask(ctx context.Context, agentName, prompt, isolation str
 	runCtx = context.WithValue(runCtx, runStateKey{}, own)
 	runCtx = context.WithValue(runCtx, taskKey{}, id)
 	runCtx = context.WithValue(runCtx, turnNoticeKey{}, (func(string))(nil))
+	runCtx = context.WithValue(runCtx, turnStatusKey{}, (func(string))(nil))
 	runCtx = context.WithValue(runCtx, subagentEventKey{}, func(ev *session.Event) { e.taskEvent(t, ev) })
 	runCtx = tools.Background(runCtx)
 	if isolated != nil {

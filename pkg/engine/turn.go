@@ -226,6 +226,8 @@ func (w *Workspace) run(ctx context.Context, sessionID string, t turn, on func(a
 	// Notices the engine raises during the turn (a fallback model taking
 	// over) are part of the conversation.
 	ctx = runtime.WithTurnNotices(ctx, func(msg string) { on(api.Event{Notice: &api.Notice{Text: msg}}) })
+	// A model connection being retried is said in passing.
+	ctx = runtime.WithTurnStatus(ctx, func(msg string) { on(api.Event{Notice: &api.Notice{Text: msg, Transient: true}}) })
 
 	if len(t.FetchGrants) > 0 {
 		ctx = tools.WithFetchGrants(ctx, t.FetchGrants)

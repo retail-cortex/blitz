@@ -21,12 +21,14 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"sync"
 	"time"
 
 	anthropicoption "github.com/anthropics/anthropic-sdk-go/option"
 	openaioption "github.com/openai/openai-go/v3/option"
 	"github.com/retail-cortex/blitz/pkg/config"
+	"github.com/retail-cortex/blitz/pkg/i18n"
 	"google.golang.org/genai"
 )
 
@@ -68,16 +70,17 @@ func policyFrom(cfg config.LLMConfig) retryPolicy {
 //
 // Models are built often (a command's or worker's model, each idea
 // refresh, every model check while one is unavailable), so they share one
-// client per stall limit: a client of their own each would each keep its
+// client per stall limit (and retrying or not): a client of their own each would each keep its
 // connections and their goroutines until they went idle.
 func (p retryPolicy) httpClient() *http.Client {
 	modelClientsMu.Lock()
 	defer modelClientsMu.Unlock()
-	if c, ok := modelClients[p.stall]; ok {
+	key := clientKey{stall: p.stall, retries: p.maxRetries > 0}
+	if c, ok := modelClients[key]; ok {
 		return c
 	}
-	c := &http.Client{Transport: &stallTransport{base: p.transport(), stall: p.stall}}
-	modelClients[p.stall] = c
+	c := &http.Client{Transport: &stallTransport{base: p.transport(), stall: p.stall, retries: key.retries}}
+	modelClients[key] = c
 	return c
 }
 
@@ -103,18 +106,29 @@ func (p retryPolicy) transport() *http.Transport {
 	return base
 }
 
-// modelClients are the models' HTTP clients, by stall limit.
+// modelClients are the models' HTTP clients, by stall limit and whether
+// requests are retried (which a dropped connection's notice says).
 var (
 	modelClientsMu sync.Mutex
-	modelClients   = map[time.Duration]*http.Client{}
+	modelClients   = map[clientKey]*http.Client{}
 )
+
+// clientKey tells the models' HTTP clients apart.
+type clientKey struct {
+	stall   time.Duration
+	retries bool
+}
 
 // stallTransport cancels a request whose response body goes quiet for
 // longer than stall. Each successful read pushes the deadline back, so long
 // streams that keep producing tokens are never cut off.
+//
+// A request whose connection fails is retried by the SDKs (retries); the
+// turn hears of it in passing, so a wait for the model isn't a silent one.
 type stallTransport struct {
-	base  http.RoundTripper
-	stall time.Duration
+	base    http.RoundTripper
+	stall   time.Duration
+	retries bool
 }
 
 func (t *stallTransport) RoundTrip(req *http.Request) (*http.Response, error) {
@@ -122,6 +136,9 @@ func (t *stallTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	resp, err := t.base.RoundTrip(req.WithContext(ctx))
 	if err != nil {
 		cancel(nil)
+		if f := statusTo(req.Context()); f != nil && t.retries && req.Context().Err() == nil {
+			f(i18n.T("model.reconnecting", "error", connError(err)))
+		}
 		return nil, err
 	}
 	b := &stallBody{rc: resp.Body, ctx: ctx, cancel: cancel, stall: t.stall}
@@ -156,6 +173,16 @@ func (b *stallBody) Close() error {
 		b.cancel(nil)
 	})
 	return b.rc.Close()
+}
+
+// connError is the gist of a failed connection: "unexpected EOF" rather
+// than the method and URL around it.
+func connError(err error) string {
+	var u *url.Error
+	if errors.As(err, &u) {
+		err = u.Err
+	}
+	return err.Error()
 }
 
 // Backoff for Gemini, whose SDK doesn't retry unless asked. The Anthropic

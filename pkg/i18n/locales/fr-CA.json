@@ -352,6 +352,7 @@
     "tools.legend": "● aussi disponible dans /plan. Les outils qui modifient des fichiers ou exécutent des commandes demandent une approbation, sauf s’ils sont approuvés d’office.",
     "model.fallback": "{primary} n’est pas disponible; le modèle de relève {model} répond pour l’instant.",
     "model.fallback_recovered": "{model} répond de nouveau.",
+    "model.reconnecting": "Connexion au modèle perdue ({error}). Reconnexion…",
     "help.pin": "Faire tourner un agent sur son propre modèle (« fournisseur/modèle »); sans argument, liste les assignations",
     "help.unpin": "Remettre un agent sur le modèle configuré",
     "pin.title": "Modèles assignés",

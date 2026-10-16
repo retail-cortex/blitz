@@ -352,6 +352,7 @@
     "tools.legend": "● también disponible en /plan. Las herramientas que cambian archivos o ejecutan comandos piden aprobación salvo que estén autoaprobadas.",
     "model.fallback": "{primary} no está disponible; por ahora responde el modelo de respaldo {model}.",
     "model.fallback_recovered": "{model} vuelve a responder.",
+    "model.reconnecting": "Se perdió la conexión con el modelo ({error}). Reconectando…",
     "help.pin": "Ejecutar un agente con su propio modelo (\"proveedor/modelo\"); sin argumentos, lista las asignaciones",
     "help.unpin": "Devolver un agente al modelo configurado",
     "pin.title": "Modelos asignados",
