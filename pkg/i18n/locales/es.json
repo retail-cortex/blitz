@@ -1784,7 +1784,6 @@
     "desktop.workers.deleted": "Worker {name} eliminado",
     "desktop.palette.show_editor": "Mostrar el editor",
     "desktop.chat.resize": "Cambiar el tamaño del chat",
-    "desktop.drawer.resize": "Cambiar el tamaño del panel",
     "tray.service": "Servicio de Blitz",
     "tray.state.running_version": "Servicio de Blitz: en ejecución ({version})",
     "tray.state.running": "Servicio de Blitz: en ejecución",

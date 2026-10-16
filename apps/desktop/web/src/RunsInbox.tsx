@@ -46,7 +46,7 @@ export function InboxDrawer({ list, onClose }: { list: BackgroundRun[]; onClose:
     }
   };
   return (
-    <Drawer title={t("desktop.inbox.title")} icon={mdiInboxOutline} onClose={onClose}>
+    <Drawer title={t("desktop.inbox.title")} icon={mdiInboxOutline} onClose={onClose} className="inbox-drawer">
       {list.length === 0 ? (
         <p className="muted">{t("desktop.inbox.empty")}</p>
       ) : (

@@ -15,64 +15,38 @@
  */
 
 // The drawer: the views (Settings, Docs, Changes, History, Workers, the
-// inbox, Licenses) dock at the window's right, beside the chat, rather
-// than over it. It isn't modal: the window, the editor and the chat stay
-// usable, and only its ✕ or Escape (with the focus in it) closes it.
+// inbox, Licenses) rise from the status bar as a sheet over the window's
+// middle (the Files shelf, the editor, the chat and the pinned input),
+// up to the title bar, which stays: its menus work and it moves the
+// window. Only its ✕ or Escape (with the focus in it) closes it.
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { mdiClose, mdiUndoVariant } from "@mdi/js";
 import { t } from "../i18n";
 import { Button, Dialog, Icon, IconButton } from "./controls";
-import { panelWidth, useWindowWidth } from "./layout";
 import { DrawerClaims, type Ask, type Claim } from "./drawerClaims";
-import { ResizeHandle } from "./ResizeHandle";
-
-/** The narrowest a drawer gets, and what the workspace keeps beside a
- *  docked one (the Files rail and the chat at their narrowest, a little
- *  of the editor): in a narrower window the drawer floats over the chat. */
-export const drawerMin = 360;
-const workspaceMin = 640;
-
-/** A drawer's width: the saved one (0: 720 px, or 45% of a smaller
- *  window), kept to what fits the window. */
-export function drawerWidth(saved: number, win: number): number {
-  return panelWidth(saved, Math.min(720, Math.round(win * 0.45)), drawerMin, win - 48);
-}
-
-/** Whether a drawer that wide docks beside the workspace (else it floats
- *  over the chat at the right). */
-export function drawerDocks(width: number, win: number): boolean {
-  return win - width >= workspaceMin;
-}
 
 interface DrawerState {
   slot: HTMLElement | null;
   current: number | null;
-  width: number;
-  docked: boolean;
   claim: (c: Claim) => () => void;
   requestClose: (c: Claim) => void;
-  resize: (w: number) => void;
 }
 
 const DrawerContext = createContext<DrawerState | null>(null);
 
 /**
  * Holds the window's one drawer: a drawer that opens closes the one that
- * was open (asking first when it has unsaved changes). width is the saved
- * width (0: the default); onResize saves a new one.
+ * was open (asking first when it has unsaved changes).
  */
-export function DrawerProvider({ width: saved, onResize, children }: { width: number; onResize: (w: number) => void; children: ReactNode }) {
+export function DrawerProvider({ children }: { children: ReactNode }) {
   const [slot, setSlot] = useState<HTMLElement | null>(null);
   const [current, setCurrent] = useState<number | null>(null);
   const [pending, setPending] = useState<Ask | null>(null);
   const [claims] = useState(() => new DrawerClaims(setCurrent, setPending));
   const claim = useCallback((c: Claim) => claims.claim(c), [claims]);
   const requestClose = useCallback((c: Claim) => claims.requestClose(c), [claims]);
-  const win = useWindowWidth();
-  const width = drawerWidth(saved, win);
-  const docked = drawerDocks(width, win);
-  const value = useMemo<DrawerState>(() => ({ slot, current, width, docked, claim, requestClose, resize: onResize }), [slot, current, width, docked, claim, requestClose, onResize]);
+  const value = useMemo<DrawerState>(() => ({ slot, current, claim, requestClose }), [slot, current, claim, requestClose]);
   return (
     <DrawerContext.Provider value={value}>
       <DrawerSlotContext.Provider value={setSlot}>{children}</DrawerSlotContext.Provider>
@@ -118,26 +92,18 @@ export function DrawerProvider({ width: saved, onResize, children }: { width: nu
 
 const DrawerSlotContext = createContext<(el: HTMLElement | null) => void>(() => {});
 
-/** Where the drawer docks: the main row's right end. */
+/** Where the drawer rises: over the main area under the title bar. */
 export function DrawerSlot() {
   const set = useContext(DrawerSlotContext);
   return <div className="drawer-slot" ref={set} />;
-}
-
-/** How much of the window's width a docked drawer takes (0 with none open,
- *  or one floating over the chat), for the workspace's panels to fit. */
-export function useDrawerSpace(): number {
-  const s = useContext(DrawerContext);
-  return s && s.current !== null && s.docked ? s.width : 0;
 }
 
 let nextId = 0;
 
 /**
  * A view in the drawer: the counterpart of Dialog for what's browsed or
- * edited for a while. Its header continues the title bar (it drags the
- * window); ✕ or Escape, with the focus inside it and no dialog over it,
- * closes it. A drawer with unsaved changes (dirty) asks before it closes,
+ * edited for a while, with the window's whole middle to lay it out. ✕ or
+ * Escape, with the focus inside it and no dialog over it, closes it. A drawer with unsaved changes (dirty) asks before it closes,
  * or before another drawer takes its place.
  */
 export function Drawer({
@@ -209,21 +175,16 @@ export function Drawer({
   // One waiting behind a question (keep its changes, or not) stays mounted,
   // hidden, so keeping them finds them as they were.
   if (host && !host.slot) return null;
-  const width = host?.width ?? drawerMin;
   const drawer = (
     <aside
       ref={ref}
-      className={`drawer ${host && !host.docked ? "floating" : ""} ${className}`}
-      style={{ width }}
+      className={`drawer ${className}`}
       hidden={!shown}
       role="complementary"
       aria-label={typeof title === "string" ? title : undefined}
       tabIndex={-1}
     >
-      {host && (
-        <ResizeHandle width={width} edge="left" min={drawerMin} max={() => window.innerWidth - 48} label={t("desktop.drawer.resize")} onResize={host.resize} />
-      )}
-      <header className="drawer-head drag-region">
+      <header className="drawer-head">
         {icon && <Icon path={icon} className="muted" />}
         <h2 className="t-title spacer">{title}</h2>
         {headerActions}

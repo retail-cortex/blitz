@@ -189,7 +189,6 @@
 /* The status bar is a strip of glass along the foot, under the panes. */
 :root[data-glass="on"] .status-bar { border-top: 1px solid var(--glass-border); box-shadow: var(--glass-edge); }
 :root[data-glass="on"] .workspace-center .editor-pane { background: transparent; -webkit-backdrop-filter: none; backdrop-filter: none; }
-/* The drawer is a pane like the others, 8 px from the window's edges and
-   the workspace; floating over the chat, it lifts off it. */
-:root[data-glass="on"] .drawer { margin: 8px 8px 8px 0; }
-:root[data-glass="on"] .drawer.floating { top: var(--topbar-height); right: 8px; bottom: 8px; margin: 0; background: var(--glass-strong); }
+/* The drawer is a pane like the others, 8 px from the window's edges,
+   nearly opaque over the panes it covers. */
+:root[data-glass="on"] .drawer { left: 8px; right: 8px; bottom: 8px; background: var(--glass-strong); }

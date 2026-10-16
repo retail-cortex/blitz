@@ -170,26 +170,27 @@ body.resizing iframe, body.resizing .cm-editor { pointer-events: none; }
 .chat-panel.center { flex: 1; min-width: 0; border-left: none; }
 
 /* The drawer (ui/Drawer.tsx): the views (Settings, Docs, Changes, History,
-   Workers, the inbox, Licenses) dock at the window's right, beside the
-   workspace, as tall as it; its header continues the title bar. In a
-   narrow window it floats over the chat instead. */
+   Workers, the inbox, Licenses) rise from the status bar as a sheet over
+   the window's middle (the Files shelf, the editor, the chat and the
+   pinned input) up to the title bar, which stays: its menus, and moving
+   the window. */
 .main-row { position: relative; display: flex; flex: 1; min-height: 0; }
 .main-col { display: flex; flex-direction: column; flex: 1; min-width: 0; min-height: 0; }
 .drawer-slot { display: contents; }
 .drawer {
-  position: relative; flex: none; display: flex; flex-direction: column; min-width: 0; min-height: 0;
-  border-left: 1px solid var(--md-outline-variant); background: var(--md-surface); outline: none;
-  animation: drawer-in 0.15s cubic-bezier(0.2, 0, 0, 1);
+  position: absolute; left: 0; right: 0; top: var(--topbar-height); bottom: 0; z-index: 40;
+  display: flex; flex-direction: column; min-width: 0; min-height: 0;
+  border-top: 1px solid var(--md-outline-variant); background: var(--md-surface); outline: none;
+  animation: drawer-up 0.22s cubic-bezier(0.2, 0, 0, 1);
 }
 .drawer[hidden] { display: none; }
-/* Floating, it starts under the title bar, so the menus stay in reach. */
-.drawer.floating { position: absolute; top: var(--topbar-height); right: 0; bottom: 0; z-index: 40; box-shadow: var(--md-elevation-3); border-top: 1px solid var(--md-outline-variant); }
-.drawer.floating .drawer-head { height: 56px; }
-.drawer-head { display: flex; align-items: center; gap: 12px; height: var(--topbar-height); padding: 0 8px 0 20px; flex: none; }
+/* While it's up, the pinned input under it gives it the room. */
+.shell:has(.drawer:not([hidden])) .composer-dock { display: none; }
+.drawer-head { display: flex; align-items: center; gap: 12px; height: 56px; padding: 0 12px 0 24px; flex: none; border-bottom: 1px solid var(--md-outline-variant); }
 .drawer-head h2 { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.drawer > .body { padding: 0 20px 16px; overflow-y: auto; flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 20px; }
-.drawer > footer { padding: 12px 20px 16px; display: flex; justify-content: flex-end; align-items: center; gap: 8px; }
-@keyframes drawer-in { from { opacity: 0; transform: translateX(24px); } }
+.drawer > .body { padding: 20px 24px; overflow-y: auto; flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 20px; }
+.drawer > footer { padding: 12px 24px; display: flex; justify-content: flex-end; align-items: center; gap: 8px; border-top: 1px solid var(--md-outline-variant); }
+@keyframes drawer-up { from { transform: translateY(100%); } }
 @media (prefers-reduced-motion: reduce) { .drawer { animation: none; } }
 /* While a dialog is open the title bar still moves the window: the strip
    over it drags (the scrim no longer closes the dialog on a click). */
@@ -493,8 +494,14 @@ body.resizing iframe, body.resizing .cm-editor { pointer-events: none; }
 /* In the drawer: the sections on the left as long as there's room, then
    a rail of their icons (the names in tooltips). */
 .drawer { container: drawer / inline-size; }
-.settings-drawer .settings { gap: 16px; }
-.settings-drawer .settings-nav { width: 180px; position: sticky; top: 0; align-self: flex-start; }
+.settings-drawer .settings { gap: 32px; }
+.settings-drawer .settings-nav { width: 220px; position: sticky; top: 0; align-self: flex-start; }
+/* A form reads best at a measure: the settings, a worker's form and the
+   licenses keep to one, centered in the sheet; Changes, History and the
+   guide take its whole width. */
+.settings-drawer .settings-pane { max-width: 960px; }
+.settings-drawer .settings { width: 100%; max-width: 1220px; margin-inline: auto; }
+:is(.worker-drawer, .inbox-drawer, .license-drawer) > :is(.body, footer) > * { width: 100%; max-width: 1080px; margin-inline: auto; }
 @container drawer (max-width: 600px) {
   .settings-drawer .settings-nav { width: 48px; }
   .settings-drawer .settings-nav .list-item { justify-content: center; padding-inline: 0; }

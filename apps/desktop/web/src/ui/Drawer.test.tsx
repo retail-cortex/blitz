@@ -18,25 +18,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { Dialog } from "./controls";
-import { Drawer, drawerDocks, drawerMin, drawerWidth } from "./Drawer";
-
-describe("drawerWidth", () => {
-  it.each([
-    { name: "720 px by default in a wide window", saved: 0, win: 1800, want: 720 },
-    { name: "45% of a smaller window", saved: 0, win: 1200, want: 540 },
-    { name: "never below the minimum", saved: 0, win: 700, want: drawerMin },
-    { name: "the saved width", saved: 600, win: 1600, want: 600 },
-    { name: "a saved width kept to the window", saved: 2000, win: 1200, want: 1152 },
-  ])("$name", ({ saved, win, want }) => expect(drawerWidth(saved, win)).toBe(want));
-});
-
-describe("drawerDocks", () => {
-  it.each([
-    { name: "docks beside the workspace in a wide window", width: 560, win: 1440, want: true },
-    { name: "floats over the chat when the workspace would get too narrow", width: 560, win: 1100, want: false },
-    { name: "docks with exactly the workspace's room", width: 400, win: 1040, want: true },
-  ])("$name", ({ width, win, want }) => expect(drawerDocks(width, win)).toBe(want));
-});
+import { Drawer } from "./Drawer";
 
 // What the views would show (not the page's own text).
 const [settings, commit, body, foot] = ["Settings", "Commit", "body", "foot"];
@@ -54,8 +36,8 @@ describe("Drawer", () => {
     expect(html).not.toContain("aria-modal");
   });
 
-  it("has a header that drags the window, a close button, its body and footer", () => {
-    expect(html).toMatch(/<header class="drawer-head drag-region">/);
+  it("has a header with a close button, its body and footer", () => {
+    expect(html).toMatch(/<header class="drawer-head">/);
     expect(html).toContain('aria-label="Close"');
     expect(html).toContain("<p>body</p>");
     expect(html).toContain("<footer><span>foot</span></footer>");

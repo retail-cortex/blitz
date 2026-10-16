@@ -44,7 +44,7 @@ export function LicenseDrawer({ initial, onClose }: { initial: LicenseText; onCl
     };
   }, [which]);
   return (
-    <Drawer title={t("desktop.license.title")} icon={mdiScaleBalance} onClose={onClose}>
+    <Drawer title={t("desktop.license.title")} icon={mdiScaleBalance} onClose={onClose} className="license-drawer">
       <div className="stack" style={{ gap: 12 }}>
         <Segmented<LicenseText>
           label={t("desktop.license.title")}

@@ -37,7 +37,6 @@ import { useApp } from "./state";
 import { publishStatus } from "./status";
 import { t } from "./i18n";
 import { IconButton, useSnackbar } from "./ui/controls";
-import { useDrawerSpace } from "./ui/Drawer";
 import { panelWidth, useWindowWidth } from "./ui/layout";
 import { ResizeHandle } from "./ui/ResizeHandle";
 import { Brand, MenuBar } from "./MenuBar";
@@ -180,8 +179,7 @@ export function Workspace({
 
   // Panel widths follow the window (resized, or moved to another display):
   // a width saved on a larger display is kept to what fits this one.
-  // A docked drawer takes its width from the window's.
-  const win = useWindowWidth() - useDrawerSpace();
+  const win = useWindowWidth();
   const filesWidth = panelWidth(prefs.files_width, 272, 200, Math.min(560, win - 600));
   // The chat leaves the editor 400 px beside the shelf (or the rail). The
   // shelf never floats over the others: in a narrow window they all shrink

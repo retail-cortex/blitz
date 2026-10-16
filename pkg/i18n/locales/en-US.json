@@ -1784,7 +1784,6 @@
     "desktop.workers.deleted": "Worker {name} deleted",
     "desktop.palette.show_editor": "Show the editor",
     "desktop.chat.resize": "Resize the chat",
-    "desktop.drawer.resize": "Resize the panel",
     "tray.service": "Blitz service",
     "tray.state.running_version": "Blitz service: running ({version})",
     "tray.state.running": "Blitz service: running",

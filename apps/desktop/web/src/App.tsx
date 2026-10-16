@@ -319,15 +319,13 @@ function Shell() {
     [activity, doClose],
   );
 
-  const resizeDrawer = useCallback((w: number) => update((p) => ({ ...p, drawer_width: w })), [update]);
-
   if (!loaded || service.state === "checking") return <Splash text={error || t("desktop.app.starting")} />;
   if (service.state === "down") return <ServiceDown status={service.status} onStarted={check} error={error} setError={setError} />;
 
   const open_ = openWorkspaces(prefs);
   const pinned = prefs.composer === "pinned" && open_.length > 0;
   return (
-    <DrawerProvider width={prefs.drawer_width} onResize={resizeDrawer}>
+    <DrawerProvider>
       <div className="shell">
         <main className="main">
           {service.state === "lost" && (
@@ -355,7 +353,7 @@ function Shell() {
                 ))}
               </ComposerDock.Provider>
             </div>
-            {/* The views (Settings, Docs, Changes, Workers, …) dock here. */}
+            {/* The views (Settings, Docs, Changes, Workers, …) rise here, over the middle. */}
             <DrawerSlot />
           </div>
         </main>

@@ -594,15 +594,13 @@ On Windows 10 (1803 or later) or 11: unzip `blitz_<version>_windows_amd64.zip` (
 
 ## 50. Panels stay put: the drawer (spec_desktop_024 DSK-65c, DSK-60)
 
-- [ ] Open Settings (⌘,), then drag the window by the title bar, and by the drawer's header.
-  **Expected:** the window moves; Settings stays open. Click in the chat and type: Settings stays open beside it.
+- [ ] Open Settings (⌘,), then drag the window by the title bar.
+  **Expected:** Settings rises from the status bar over the whole middle, up to the title bar; the window moves and Settings stays open.
 - [ ] Open, in turn, Help › User guide, Changes, the workspace's history, a worker, the background runs (status bar) and Settings › About › Licenses.
-  **Expected:** each opens in the drawer at the right, taking the place of the one before; ✕ or Escape (with the focus in it) closes it.
-- [ ] Drag the drawer's left edge, close it and open it again; double-click the edge.
-  **Expected:** it opens at the width you left it; double-click goes back to the default. In a window under about 1,100 px it floats over the chat, under the title bar.
+  **Expected:** each rises in the drawer, taking the place of the one before; the pinned chat input steps aside while it's up and comes back when it closes; ✕ or Escape (with the focus in it) closes it.
 - [ ] **Workers › Add worker**, type a few words, then press ⌘, (or ✕, or Escape in the form).
   **Expected:** "Discard changes?"; **Cancel** brings the form back with your words, **Discard** closes it.
 - [ ] Open **Commit changes…** (or delete a chat) and click beside the dialog, then drag the window by the title bar over the dimmed area.
   **Expected:** the dialog stays open and the window moves; Escape or its buttons close it.
 - [ ] Light and dark, with Transparency on and off.
-  **Expected:** the drawer is a pane like the chat's, with no clipped controls; under 600 px Settings' sections are a rail of icons.
+  **Expected:** the drawer is a pane like the chat's, the panes under it not showing through, with no clipped controls; in a narrow window Settings' sections are a rail of icons.
