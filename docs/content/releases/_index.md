@@ -5,6 +5,7 @@ weight: 55
 
 What each release of Blitz brings, beyond the change list on [GitHub's releases page](https://github.com/retail-cortex/blitz/releases).
 
+- [Blitz 0.6.5](blitz-0.6.5.md): branches and merges on the Changes page; version control in plain words; edits to rules, instructions and skills apply from the next message, with `/reload` to read them all again; braces in your rules no longer break Gemini turns.
 - [Blitz 0.6.3](blitz-0.6.3.md): `/init` asks about your project and sets it up in one go; Pull, Push and merge conflicts on the Changes page; running workers can be stopped, and their instructions rewritten with AI; a dropped connection to the model reconnects instead of freezing the chat; no more macOS prompts for your personal folders.
 - [Blitz 0.6.2](blitz-0.6.2.md): a turn no longer hangs when the agent asks for several approvals at once; the Mac tray stays out of the Dock; Linux software centres name Retail Cortex.
 - [Blitz 0.6.1](blitz-0.6.1.md): quitting the Linux desktop app no longer crashes on NVIDIA graphics cards.
