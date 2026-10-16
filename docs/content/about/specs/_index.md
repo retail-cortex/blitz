@@ -47,5 +47,6 @@ Files are named `spec_<name>_NNN.md`, where `NNN` is the order of execution: eac
 | 035 | [search](spec_search_035.md) | Workspace search: an index of the files, PDFs and notebooks, chats and notes, kept up by scans, searched by words (FTS5, BM25) from the desktop app, the CLI and the agent |
 | 036 | [windows](spec_windows_036.md) | Blitz on Windows: the tray runs the service and serves the desktop page on a loopback port, behind a one-time link, in an Edge app window |
 | 037 | [visual editor](spec_visual_editor_037.md) | Draft: Markdown edited in its rendered form (TipTap), code blocks as CodeMirror editors, and language servers (gopls first) for the editor through a `LanguageService` on the service |
+| 038 | [electron](spec_electron_038.md) | Trial: the desktop app in Electron (one engine on every platform, a real app on Windows) over the page and `blitz-tray --serve` as its host |
 
 Background and history: [the roadmap](../roadmap.md), [where to pick up](../../development/next-steps.md), [development](../../development/_index.md).

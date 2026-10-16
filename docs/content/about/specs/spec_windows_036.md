@@ -13,7 +13,7 @@ weight: 36
 
 ## 1. Purpose
 
-Windows has no desktop app ([spec_desktop_024](spec_desktop_024.md) DSK-05), but the page needs no Wails. It asks its own origin for the API, and every one of the app's bindings has a stand-in in a browser. On Windows the tray becomes the launcher. `blitz-tray.exe` is one small pure-Go program that runs the service, serves the page on a loopback port, and opens it in a window of its own. There's no installer and no web view to ship.
+Windows has no desktop app ([spec_desktop_024](spec_desktop_024.md) DSK-05), but the page needs no Wails. It asks its own origin for the API, and every one of the app's bindings has a stand-in in a browser. On Windows the tray becomes the launcher. `blitz-tray.exe` is one small pure-Go program that runs the service, serves the page on a loopback port, and opens it in a window of its own. There's no installer and no web view to ship. *Since v0.6.6* an Electron build, which would give Windows a real app, is on trial ([spec_electron_038](spec_electron_038.md)); its window uses this tray's host (`blitz-tray --serve`).
 
 ## 2. The tray on Windows
 

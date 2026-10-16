@@ -153,3 +153,36 @@ exports_files(["LICENSE", "data/assets.json"])""",
     url = "https://github.com/thegeeklab/hugo-geekdoc/releases/download/v4.1.3/hugo-geekdoc.tar.gz",
 )
 use_repo(hugo_deps, "geekdoc", "hugo")
+
+# The Electron runtime for the Electron trial (apps/electron,
+# spec_electron_038), one archive a platform, fetched here rather than by
+# the electron npm package's install script (pnpm runs none).
+http_archive = use_repo_rule("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
+
+_ELECTRON_VERSION = "44.5.1"
+
+_ELECTRON_BUILD = """filegroup(
+    name = "files",
+    srcs = glob(["**"], exclude = ["BUILD.bazel", "REPO.bazel", "WORKSPACE"]),
+    visibility = ["//visibility:public"],
+)
+"""
+
+[
+    http_archive(
+        name = "electron_" + platform.replace("-", "_"),
+        build_file_content = _ELECTRON_BUILD,
+        sha256 = sha256,
+        url = "https://github.com/electron/electron/releases/download/v{v}/electron-v{v}-{p}.zip".format(
+            p = platform,
+            v = _ELECTRON_VERSION,
+        ),
+    )
+    for platform, sha256 in {
+        "darwin-arm64": "1d75703019bb16461ae65f3081d7e6f5c0b11e901d0ccb5c343bcf7bcdd6435c",
+        "darwin-x64": "e567d13833d0e161d7749727355b98643461df3395b537cfa7bdddf8a8bfedff",
+        "linux-arm64": "ee1790d743af1abd6a7e3971589dcd8635b58dab51ca1359123ba5216ce3a453",
+        "linux-x64": "5bcd217611d6843ececd6c9e9c1fcd1da3ab066c43d8b1a9e4b44689a1fba6f5",
+        "win32-x64": "9b382492dcfee91f8f9e92c91f7972550a1b95d2299cac72279dab33a600d7db",
+    }.items()
+]

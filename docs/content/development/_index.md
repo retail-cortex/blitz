@@ -16,6 +16,7 @@ A monorepo of independent apps over shared packages, one Go module. The rule: **
 | `apps/service` | `blitzd`, the per-user service: `internal/daemon` runs it, `internal/server` has the Connect handlers over `engine.Workspace` (translation only) and the approval/question broker. `servicetest` runs it inside other packages' tests |
 | `apps/vscode` | The VS Code extension (TypeScript): the desktop app's page in a view, a local proxy to the service, packed by `tools/vsix` |
 | `apps/desktop` | The desktop app (Wails v2, cgo), forwarding the page's API calls to the service socket; `web/` is its page (React + TypeScript, pnpm, the generated Connect client in `src/gen`), `packaging/` its icon, `Info.plist`, release script and Linux packages (the Arch one made by `tools/pacman`) |
+| `apps/electron` | The Electron trial of the desktop app ([spec_electron_038](../about/specs/spec_electron_038.md)): its main process and preload (TypeScript), with the page and `blitz-tray --serve` as its host; the Electron runtime comes from `MODULE.bazel` |
 | `apps/tray` | `blitz-tray`, the service in the system tray (fyne.io/systray: D-Bus StatusNotifierItem on Linux, Cocoa on macOS, Win32 on Windows): `internal/tray` has its behaviour (the menu for a status, the actions, the page's `/host/` calls), `main.go` draws it; shipped beside the app in the `.deb` and `Blitz.app`, and in the Windows zip, where it serves the desktop page (`bazel run //apps/tray:blitz-tray_page` tries that here) |
 | `pkg/api` | The contract between front ends and the engine: `Backend`, and the values, events and errors that cross it. Depends only on `config` and `images` |
 | `pkg/client` | `Backend` over the service's API |
@@ -60,6 +61,7 @@ bazel test //apps/desktop/web:coverage   # the desktop page's line and branch co
 bazel run //tools/codeowners    # .github/CODEOWNERS from OWNERS.txt
 bazel run //:desktop            # the desktop app (it finds its blitzd in the runfiles)
 bazel run //:desktop-web        # the desktop page in a browser (?fake: no service needed)
+bazel run //apps/electron:dev   # the Electron trial against this machine's service (spec_electron_038)
 bazel build //:mac-app          # the desktop app (macOS; //:deb on Linux, which needs webkit2gtk)
 bazel build //:archives         # the CLI release archives, every platform
 BLITZ_TELEMETRY=1 BLITZ_LOG_LEVEL=debug bazel run //apps/cli:blitz   # traces to http://localhost:4318; logs in ~/.blitz/logs
