@@ -283,3 +283,59 @@ func TestCommandPolicyRedirects(t *testing.T) {
 	deny := mustPolicy(t, CommandPolicyConfig{Deny: []string{"rm"}})
 	assert.NotEqual(t, VerdictDeny, deny.Evaluate("ls > rm").Verdict)
 }
+
+// A recursive search of the whole disk or the home folder is refused,
+// whatever the rules (it reaches into private folders: on macOS, each
+// asks the user); narrower searches and command -v aren't.
+func TestDiskSweepIsRefused(t *testing.T) {
+	old := homeDir
+	homeDir = func() string { return "/Users/me" }
+	t.Cleanup(func() { homeDir = old })
+	open, err := NewCommandPolicy(CommandPolicyConfig{AutoApprove: []string{"find", "rg", "grep", "ls", "du"}})
+	require.NoError(t, err)
+	tests := []struct {
+		cmd     string
+		refused bool
+	}{
+		// What agents ran looking for tools.
+		{`find / -name Rscript 2>/dev/null`, true},
+		{`echo "PATH: $PATH" && which uv || find / -name uv 2>/dev/null`, true},
+		{`which uv || find / -name uv -type f 2>/dev/null`, true},
+		{`find /Users/me -name "uv-receipt.json" 2>/dev/null | head -n 5`, true},
+		{`find ~ -name '*.pem'`, true},
+		{`find $HOME -maxdepth 3`, true},
+		{`find -L / -name x`, true},
+		{`sudo find / -name x`, true},
+		{`sh -c 'find / -name x'`, true},
+		{`rg --files /`, true},
+		{`fd uv ~/`, true},
+		{`du -sh /Users/me/`, true},
+		{`grep -r TODO ~`, true},
+		{`ls -R /`, true},
+		{`find /Volumes -name x`, true},
+		// Fine: a named folder, the workspace, or no recursion.
+		{`command -v uv`, false},
+		{`which uv`, false},
+		{`find /opt/homebrew -name R`, false},
+		{`find /Users/me/.cache/uv -name "*certifi*"`, false},
+		{`find . -name '*_test.go'`, false},
+		{`ls -la /Users/me`, false},
+		{`ls /`, false},
+		{`grep TODO /Users/me/notes.txt`, false},
+		{`rg TODO src`, false},
+		{`echo / ~`, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.cmd, func(t *testing.T) {
+			for _, p := range []*CommandPolicy{nil, open} {
+				d := p.Evaluate(tt.cmd)
+				if tt.refused {
+					assert.Equal(t, VerdictDeny, d.Verdict)
+					assert.Contains(t, d.Reason, "command -v")
+				} else {
+					assert.NotEqual(t, VerdictDeny, d.Verdict, d.Reason)
+				}
+			}
+		})
+	}
+}

@@ -91,7 +91,7 @@ func NewRunShellCommandTool(cfg ShellConfig) (tool.Tool, error) {
 	return functiontool.New(
 		functiontool.Config{
 			Name:        "run_shell_command",
-			Description: "Execute a shell command with timeout, output capture, and optional background execution",
+			Description: "Execute a shell command with timeout, output capture, and optional background execution. To find an executable use `command -v <name>` or `which <name>`, never `find`: a search of / or the home folder is refused.",
 		},
 		func(ctx agent.Context, input RunShellCommandInput) (RunShellCommandOutput, error) {
 			return runShellCommand(ctx, cfg, input), nil
