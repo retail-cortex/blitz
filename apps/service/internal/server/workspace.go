@@ -997,5 +997,141 @@ func commitError(err error) error {
 }
 
 func gitStatusMsg(st api.GitStatus) *pb.GetGitStatusResponse {
-	return &pb.GetGitStatusResponse{Git: st.Git, Repo: st.Repo, Branch: st.Branch, Changed: int32(st.Changed)}
+	out := &pb.GetGitStatusResponse{
+		Git: st.Git, Repo: st.Repo, Branch: st.Branch, Changed: int32(st.Changed),
+		Remote: st.Remote, Upstream: st.Upstream, Ahead: int32(st.Ahead), Behind: int32(st.Behind),
+		Conflicts: st.Conflicts,
+	}
+	switch st.Operation {
+	case api.GitMerging:
+		out.Operation = pb.GitOperation_GIT_OPERATION_MERGE
+	case api.GitRebasing:
+		out.Operation = pb.GitOperation_GIT_OPERATION_REBASE
+	}
+	return out
+}
+
+func (h workspaceService) FetchRemote(ctx context.Context, r req[pb.FetchRemoteRequest]) (*connect.Response[pb.FetchRemoteResponse], error) {
+	w, err := h.s.workspace(ctx, r.Msg.Workspace)
+	if err != nil {
+		return nil, err
+	}
+	st, err := w.Fetch(ctx)
+	if err != nil {
+		return nil, remoteError(err)
+	}
+	return ok(&pb.FetchRemoteResponse{Status: gitStatusMsg(st)})
+}
+
+// pullOutcomes are the engine's pull outcomes as the API's.
+var pullOutcomes = map[engine.PullOutcome]pb.PullOutcome{
+	engine.PullUpToDate:    pb.PullOutcome_PULL_OUTCOME_UP_TO_DATE,
+	engine.PullFastForward: pb.PullOutcome_PULL_OUTCOME_FAST_FORWARD,
+	engine.PullMerged:      pb.PullOutcome_PULL_OUTCOME_MERGED,
+	engine.PullRebased:     pb.PullOutcome_PULL_OUTCOME_REBASED,
+	engine.PullConflicts:   pb.PullOutcome_PULL_OUTCOME_CONFLICTS,
+}
+
+func (h workspaceService) Pull(ctx context.Context, r req[pb.PullRequest]) (*connect.Response[pb.PullResponse], error) {
+	w, err := h.s.workspace(ctx, r.Msg.Workspace)
+	if err != nil {
+		return nil, err
+	}
+	res, err := w.Pull(ctx)
+	if err != nil {
+		return nil, remoteError(err)
+	}
+	return ok(&pb.PullResponse{Outcome: pullOutcomes[res.Outcome], Commits: int32(res.Commits), Status: gitStatusMsg(res.Status)})
+}
+
+func (h workspaceService) Push(ctx context.Context, r req[pb.PushRequest]) (*connect.Response[pb.PushResponse], error) {
+	w, err := h.s.workspace(ctx, r.Msg.Workspace)
+	if err != nil {
+		return nil, err
+	}
+	target, st, err := w.Push(ctx)
+	if err != nil {
+		return nil, remoteError(err)
+	}
+	return ok(&pb.PushResponse{Target: target, Status: gitStatusMsg(st)})
+}
+
+// conflictChoices are the API's conflict choices as the engine's.
+var conflictChoices = map[pb.ConflictChoice]engine.ConflictChoice{
+	pb.ConflictChoice_CONFLICT_CHOICE_MINE:     engine.KeepMine,
+	pb.ConflictChoice_CONFLICT_CHOICE_THEIRS:   engine.TakeTheirs,
+	pb.ConflictChoice_CONFLICT_CHOICE_RESOLVED: engine.MarkResolved,
+}
+
+func (h workspaceService) ResolveConflict(ctx context.Context, r req[pb.ResolveConflictRequest]) (*connect.Response[pb.ResolveConflictResponse], error) {
+	choice, known := conflictChoices[r.Msg.Choice]
+	if !known {
+		return nil, apiError(connect.CodeInvalidArgument, "INVALID_CHOICE", errors.New("choice is required"))
+	}
+	w, err := h.s.workspace(ctx, r.Msg.Workspace)
+	if err != nil {
+		return nil, err
+	}
+	st, err := w.ResolveConflict(ctx, r.Msg.Path, choice)
+	if err != nil {
+		return nil, remoteError(err)
+	}
+	return ok(&pb.ResolveConflictResponse{Status: gitStatusMsg(st)})
+}
+
+func (h workspaceService) CompleteMerge(ctx context.Context, r req[pb.CompleteMergeRequest]) (*connect.Response[pb.CompleteMergeResponse], error) {
+	w, err := h.s.workspace(ctx, r.Msg.Workspace)
+	if err != nil {
+		return nil, err
+	}
+	st, err := w.CompleteMerge(ctx)
+	if err != nil {
+		return nil, remoteError(err)
+	}
+	return ok(&pb.CompleteMergeResponse{Status: gitStatusMsg(st)})
+}
+
+func (h workspaceService) AbortMerge(ctx context.Context, r req[pb.AbortMergeRequest]) (*connect.Response[pb.AbortMergeResponse], error) {
+	w, err := h.s.workspace(ctx, r.Msg.Workspace)
+	if err != nil {
+		return nil, err
+	}
+	st, err := w.AbortMerge(ctx)
+	if err != nil {
+		return nil, remoteError(err)
+	}
+	return ok(&pb.AbortMergeResponse{Status: gitStatusMsg(st)})
+}
+
+// remoteError gives the remote actions' errors their codes.
+func remoteError(err error) error {
+	var rc *engine.RepoConfigError
+	switch {
+	case errors.As(err, &rc):
+		return apiError(connect.CodeFailedPrecondition, "REPO_CONFIG_COMMAND", err, "key", rc.Key)
+	case errors.Is(err, engine.ErrNotARepository):
+		return apiError(connect.CodeFailedPrecondition, "NOT_A_REPOSITORY", err)
+	case errors.Is(err, engine.ErrNoRemote):
+		return apiError(connect.CodeFailedPrecondition, "NO_REMOTE", err)
+	case errors.Is(err, engine.ErrNoUpstream):
+		return apiError(connect.CodeFailedPrecondition, "NO_UPSTREAM", err)
+	case errors.Is(err, engine.ErrInProgress):
+		return apiError(connect.CodeFailedPrecondition, "GIT_BUSY", err)
+	case errors.Is(err, engine.ErrPushRejected):
+		return apiError(connect.CodeFailedPrecondition, "PUSH_REJECTED", err)
+	case errors.Is(err, engine.ErrRemoteAuth):
+		return apiError(connect.CodeUnauthenticated, "REMOTE_AUTH", err)
+	case errors.Is(err, engine.ErrNoOperation):
+		return apiError(connect.CodeFailedPrecondition, "NO_MERGE", err)
+	case errors.Is(err, engine.ErrConflictsRemain):
+		return apiError(connect.CodeFailedPrecondition, "CONFLICTS_REMAIN", err)
+	case errors.Is(err, engine.ErrMarkersRemain):
+		return apiError(connect.CodeFailedPrecondition, "MARKERS_REMAIN", err)
+	case errors.Is(err, engine.ErrNotConflicted):
+		return apiError(connect.CodeFailedPrecondition, "NOT_CONFLICTED", err)
+	case errors.Is(err, engine.ErrBadPath):
+		return apiError(connect.CodeInvalidArgument, "BAD_PATH", err)
+	default:
+		return apiError(connect.CodeFailedPrecondition, "GIT_FAILED", err)
+	}
 }

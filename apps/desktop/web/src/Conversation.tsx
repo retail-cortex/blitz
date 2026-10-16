@@ -731,6 +731,8 @@ export function Conversation({
   });
   const executeRef = useRef(execute);
   executeRef.current = execute;
+  const submitRef = useRef(submit);
+  submitRef.current = submit;
   // A /loop's firing: a command runs as typed, anything else is sent (the
   // loop skips a firing while a turn runs).
   const sendRef = useRef<(text: string) => void>(() => {});
@@ -784,7 +786,11 @@ export function Conversation({
       if (d.dir !== dir) return;
       e.preventDefault(); // taken
       if (d.run && d.fresh) startFreshRef.current(d.text);
-      else if (d.run) executeRef.current(d.text);
+      // A prompt rather than a command is sent as typed (Ask the agent to resolve).
+      else if (d.run)
+        void executeRef.current(d.text).then(async (done) => {
+          if (!done) await submitRef.current(d.text);
+        });
       else if (d.append) setDraft((draft) => (draft.trim() ? `${draft.trimEnd()}\n\n${d.text}` : d.text));
       else setDraft(d.text);
     };

@@ -29,7 +29,7 @@ type Out = MessageInitShape<typeof RunTurnResponseSchema>;
 import { RunStatus, WorkerService, WorkerState } from "../gen/blitz/v1/worker_pb";
 import { ConfigService, KeySource } from "../gen/blitz/v1/config_pb";
 import { FileKind, FileService, GitAction, RevisionDiff } from "../gen/blitz/v1/file_pb";
-import { AgentFileSchema, AgentScope, SuggestionKind, SuggestionSchema, WorkspaceService, type AgentDefinition } from "../gen/blitz/v1/workspace_pb";
+import { AgentFileSchema, AgentScope, ConflictChoice, GitOperation, PullOutcome, SuggestionKind, SuggestionSchema, WorkspaceService, type AgentDefinition } from "../gen/blitz/v1/workspace_pb";
 
 // Whether the fake workspace is a git repository (?norepo: not yet).
 // The providers the fake has signed in to, and each one's sign-in.
@@ -50,6 +50,23 @@ function fakeSignIn(provider: string) {
 // Whether the fake commit dialog has files staged (after "Stage all changes").
 let fakeStaged = false;
 let fakeRepo = !new URLSearchParams(location.search).has("norepo");
+// The branch and its remote: 2 commits to pull, 1 to push; pulling stops
+// on a conflict in discount.go (RemoteSync.tsx). ?fake&nopush: no upstream yet.
+const fakeRemote = {
+  upstream: new URLSearchParams(location.search).has("nopush") ? "" : "origin/fix/coupon-rounding",
+  ahead: 1,
+  behind: 2,
+  operation: GitOperation.UNSPECIFIED,
+  conflicts: [] as string[],
+};
+/** A failed-precondition error with the service's reason, as the real one sends. */
+function fakeError(msg: string, reason: string): ConnectError {
+  const err = new ConnectError(msg, Code.FailedPrecondition);
+  err.details.push({ desc: ErrorInfoSchema, value: { reason } });
+  return err;
+}
+const fakeGitStatus = () =>
+  fakeRepo ? { git: true, repo: true, branch: "fix/coupon-rounding", changed: 2, remote: true, ...fakeRemote, conflicts: [...fakeRemote.conflicts] } : { git: true, repo: false };
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const now = () => timestampFromDate(new Date());
@@ -982,7 +999,44 @@ export function installFake() {
         listCheckpoints: () => ({ checkpoints: [{ id: 2, label: "Fix the coupon rounding", time: now(), files: ["internal/cart/discount.go", "internal/cart/discount_test.go"] }] }),
         undo: () => ({ label: "Fix the coupon rounding", restored: ["internal/cart/discount.go"] }),
         // ?fake&norepo: a folder that isn't a repository yet.
-        getGitStatus: () => (fakeRepo ? { git: true, repo: true, branch: "fix/coupon-rounding", changed: 2 } : { git: true, repo: false }),
+        getGitStatus: () => fakeGitStatus(),
+        fetchRemote: async () => {
+          await sleep(300);
+          return { status: fakeGitStatus() };
+        },
+        pull: async () => {
+          await sleep(700);
+          const commits = fakeRemote.behind;
+          fakeRemote.behind = 0;
+          fakeRemote.operation = GitOperation.MERGE;
+          fakeRemote.conflicts = ["internal/cart/discount.go"];
+          return { outcome: PullOutcome.CONFLICTS, commits, status: fakeGitStatus() };
+        },
+        push: async () => {
+          await sleep(600);
+          if (fakeRemote.behind > 0) throw fakeError("the remote has commits this branch doesn't have: pull them first", "PUSH_REJECTED");
+          const target = fakeRemote.upstream || "origin/fix/coupon-rounding";
+          fakeRemote.upstream = target;
+          fakeRemote.ahead = 0;
+          return { target, status: fakeGitStatus() };
+        },
+        resolveConflict: ({ path, choice }) => {
+          if (choice === ConflictChoice.RESOLVED) throw fakeError("the file still has conflict markers", "MARKERS_REMAIN");
+          fakeRemote.conflicts = fakeRemote.conflicts.filter((c) => c !== path);
+          return { status: fakeGitStatus() };
+        },
+        completeMerge: async () => {
+          await sleep(400);
+          fakeRemote.operation = GitOperation.UNSPECIFIED;
+          fakeRemote.ahead += 1;
+          return { status: fakeGitStatus() };
+        },
+        abortMerge: () => {
+          fakeRemote.operation = GitOperation.UNSPECIFIED;
+          fakeRemote.conflicts = [];
+          fakeRemote.behind = 2;
+          return { status: fakeGitStatus() };
+        },
         // The commit dialog: nothing staged until "Stage all changes".
         draftCommit: async ({ stageAll }) => {
           if (stageAll) fakeStaged = true;
@@ -1008,7 +1062,9 @@ export function installFake() {
         },
         getDiff: ({ git }) => ({
           diff: git
-            ? ""
+            ? fakeRemote.conflicts.length
+              ? "--- a/internal/cart/discount.go\n+++ b/internal/cart/discount.go\n@@ -40,7 +40,13 @@ func ApplyCoupon(items []Item, c Coupon) int {\n \ttotal := 0\n \tfor _, it := range items {\n+<<<<<<< HEAD\n \t\ttotal += it.Cents\n+=======\n+\t\ttotal += it.Cents * it.Qty\n+>>>>>>> origin/fix/coupon-rounding\n \t}\n"
+              : ""
             : "--- a/internal/cart/discount.go\n+++ b/internal/cart/discount.go\n@@ -40,9 +40,9 @@ func ApplyCoupon(items []Item, c Coupon) int {\n \ttotal := 0\n \tfor _, it := range items {\n-\t\ttotal += round(it.Cents * (100 - c.Percent) / 100)\n+\t\ttotal += it.Cents\n \t}\n-\treturn total\n+\treturn round(total * (100 - c.Percent) / 100)\n }\n--- /dev/null\n+++ b/internal/cart/discount_test.go\n@@ -0,0 +1,6 @@\n+package cart\n+\n+import \"testing\"\n+\n+func TestApplyCouponRounding(t *testing.T) {\n+}\n",
         }),
       });
