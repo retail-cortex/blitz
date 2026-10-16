@@ -140,24 +140,37 @@ func TestPull(t *testing.T) {
 	}
 }
 
+// conflictCase is a pull whose changes clash, settled one way.
+type conflictCase struct {
+	name   string
+	rebase bool
+	choice ConflictChoice
+	edit   string // the file as edited by hand, for MarkResolved
+	want   string
+	ahead  int // mine and the merge commit; a rebase replays mine, or drops it once empty
+}
+
 // A pull whose changes clash stops with the conflicts; each file is
-// settled (mine or theirs, which a rebase swaps in git's terms, or edited
-// by hand), and the merge or rebase completes.
-func TestPullConflicts(t *testing.T) {
-	tests := []struct {
-		name   string
-		rebase bool
-		choice ConflictChoice
-		edit   string // the file as edited by hand, for MarkResolved
-		want   string
-		ahead  int // mine and the merge commit; a rebase replays mine, or drops it once empty
-	}{
-		{"merge, keep mine", false, KeepMine, "", "one\nmine\nthree\n", 2},
-		{"merge, take theirs", false, TakeTheirs, "", "one\ntheirs\nthree\n", 2},
-		{"merge, edited", false, MarkResolved, "one\nboth\nthree\n", "one\nboth\nthree\n", 2},
-		{"rebase, keep mine", true, KeepMine, "", "one\nmine\nthree\n", 1},
-		{"rebase, take theirs", true, TakeTheirs, "", "one\ntheirs\nthree\n", 0},
-	}
+// settled (mine or theirs, or edited by hand), and the merge completes.
+// (Merges and rebases are separate tests, so they run on separate shards.)
+func TestPullConflictsMerge(t *testing.T) {
+	pullConflicts(t, []conflictCase{
+		{"keep mine", false, KeepMine, "", "one\nmine\nthree\n", 2},
+		{"take theirs", false, TakeTheirs, "", "one\ntheirs\nthree\n", 2},
+		{"edited", false, MarkResolved, "one\nboth\nthree\n", "one\nboth\nthree\n", 2},
+	})
+}
+
+// As TestPullConflictsMerge, for a rebase, which swaps mine and theirs in
+// git's terms.
+func TestPullConflictsRebase(t *testing.T) {
+	pullConflicts(t, []conflictCase{
+		{"keep mine", true, KeepMine, "", "one\nmine\nthree\n", 1},
+		{"take theirs", true, TakeTheirs, "", "one\ntheirs\nthree\n", 0},
+	})
+}
+
+func pullConflicts(t *testing.T, tests []conflictCase) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			w, other := remoteRepos(t)

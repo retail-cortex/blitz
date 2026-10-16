@@ -191,7 +191,7 @@ go_test(
         "workspace_test.go",
     ],
     embed = [":engine"],
-    shard_count = 6,
+    shard_count = 10,
     deps = [
         "//pkg/api",
         "//pkg/config",
