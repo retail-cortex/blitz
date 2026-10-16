@@ -753,6 +753,16 @@ func (r *Remote) ReloadMemory(ctx context.Context) ([]string, error) {
 	return m.Paths, nil
 }
 
+// Reload reads the agents, skills, instruction files and rules again
+// (WorkspaceService.ReloadAgentFiles).
+func (r *Remote) Reload(ctx context.Context) (api.ReloadResult, error) {
+	res, err := r.workspaces.ReloadAgentFiles(ctx, connect.NewRequest(&pb.ReloadAgentFilesRequest{Workspace: r.dir}))
+	if err != nil {
+		return api.ReloadResult{}, err
+	}
+	return api.ReloadResult{Agents: int(res.Msg.Agents), Skills: int(res.Msg.Skills), Files: res.Msg.Files, Problems: res.Msg.Problems}, nil
+}
+
 // AddMemory appends a note to the project's memory file and returns the
 // file (WorkspaceService.AddMemory).
 func (r *Remote) AddMemory(ctx context.Context, text string) (string, error) {

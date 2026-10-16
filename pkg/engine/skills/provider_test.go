@@ -166,3 +166,36 @@ func TestProviderNoticesChangedFolders(t *testing.T) {
 	assert.False(t, ok)
 	assert.NotEmpty(t, p.List(), "the built-in skills stay")
 }
+
+// A skill edited in place (its folder's times unchanged) is read again at
+// the next look; Refresh says whether it read, and Reload reads regardless.
+func TestProviderNoticesEditedSkills(t *testing.T) {
+	dir := t.TempDir()
+	skill := filepath.Join(dir, "tidy", "SKILL.md")
+	require.NoError(t, os.MkdirAll(filepath.Dir(skill), 0o755))
+	write := func(description string, at time.Time) {
+		t.Helper()
+		require.NoError(t, os.WriteFile(skill, []byte("---\nname: tidy\ndescription: "+description+"\n---\nbody\n"), 0o644))
+		require.NoError(t, os.Chtimes(skill, at, at))
+	}
+	start := time.Now().Add(-time.Hour)
+	write("first", start)
+	p, err := NewProvider()
+	require.NoError(t, err)
+	require.NoError(t, p.DiscoverExternal([]string{dir}))
+	assert.False(t, p.Refresh(), "nothing changed")
+	assert.Equal(t, 1, p.External())
+
+	write("second", start.Add(2*time.Second))
+	assert.True(t, p.Refresh(), "the edit is seen")
+	s, ok := p.Get("tidy")
+	require.True(t, ok)
+	assert.Equal(t, "second", s.Description)
+
+	// Same size and time: only Reload sees it.
+	write("thirds", start.Add(2*time.Second))
+	assert.False(t, p.Refresh())
+	require.NoError(t, p.Reload())
+	s, _ = p.Get("tidy")
+	assert.Equal(t, "thirds", s.Description)
+}

@@ -1050,6 +1050,10 @@ export function installFake() {
           fakeRemote.behind = 2;
           return { status: fakeGitStatus() };
         },
+        reloadAgentFiles: async () => {
+          await sleep(300);
+          return { agents: 2, skills: 3, files: ["AGENTS.md", ".agents/rules/style.md"], problems: [] };
+        },
         // The commit dialog: nothing staged until "Stage all changes".
         draftCommit: async ({ stageAll }) => {
           if (stageAll) fakeStaged = true;

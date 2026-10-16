@@ -39,6 +39,16 @@ type ContextPart struct {
 	Tokens int64
 }
 
+// ReloadResult is what Reload loaded: how many agents and skills from
+// files (built-in ones aside), the instruction files and rules, and the
+// files that didn't load.
+type ReloadResult struct {
+	Agents   int
+	Skills   int
+	Files    []string
+	Problems []string
+}
+
 // CompactResult is what Compact did.
 type CompactResult struct {
 	EventsCompacted int

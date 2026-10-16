@@ -27,6 +27,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 
@@ -363,6 +364,53 @@ func resolveImport(imp, dir, root string) (string, bool) {
 		return "", false
 	}
 	return p, true
+}
+
+// Stamp is what the files LoadAll would read hold now: the path, size and
+// time of each instruction file it looks for (missing ones too, so one
+// created later changes it), every rule file in the rule folders, and each
+// file loaded reads imported. Comparing it with the stamp taken when they
+// were loaded says whether to load them again; it reads no file.
+func Stamp(workspace string, cfg config.MemoryConfig, loaded Loaded) string {
+	if !cfg.Enabled {
+		return ""
+	}
+	h := sha256.New()
+	file := func(path string) {
+		if info, err := os.Stat(path); err == nil {
+			fmt.Fprintf(h, "%s\x00%d\x00%d\n", path, info.Size(), info.ModTime().UnixNano())
+		} else {
+			fmt.Fprintf(h, "%s\x00-\n", path)
+		}
+	}
+	folder := func(dir string) {
+		_ = filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {
+			if err == nil && !d.IsDir() && strings.HasSuffix(strings.ToLower(d.Name()), ".md") {
+				file(p)
+			}
+			return nil
+		})
+	}
+	if cfg.Global != "" {
+		file(config.ExpandHome(cfg.Global))
+	}
+	if cfg.GlobalRules != "" {
+		folder(config.ExpandHome(cfg.GlobalRules))
+	}
+	for _, dir := range searchDirs(workspace) {
+		for _, name := range append(slices.Clone(cfg.Files), cfg.LocalFiles...) {
+			file(filepath.Join(dir, name))
+		}
+		for _, rd := range cfg.RuleDirs {
+			folder(filepath.Join(dir, filepath.FromSlash(rd)))
+		}
+	}
+	for _, d := range loaded.Docs {
+		if d.ImportedFrom != "" {
+			file(d.Path)
+		}
+	}
+	return fmt.Sprintf("%x", h.Sum(nil))
 }
 
 // searchDirs lists directories from the repo root down to workspace.

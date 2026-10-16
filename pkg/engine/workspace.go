@@ -99,7 +99,11 @@ type Workspace struct {
 	storage      *session.Storage
 	audit        *audit.Logger
 	memory       memory.Loaded
-	locales      *i18n.Bundle
+	// memoryStamp is what the instruction files and rules held when last
+	// loaded (memory.Stamp); memoryMu guards reloading them.
+	memoryStamp string
+	memoryMu    sync.Mutex
+	locales     *i18n.Bundle
 	// project are the project settings as the workspace opened.
 	project api.ProjectSettings
 	// moveNotes tell a session's next prompt that /cd moved it here
@@ -528,6 +532,7 @@ func (w *Workspace) loadMemory() {
 		_, b := blocked.Match(p)
 		return b
 	}})
+	w.memoryStamp = memory.Stamp(w.Dir(), w.cfg.Memory, w.memory)
 }
 
 // unavailable stands in for the configured model when it can't be built:

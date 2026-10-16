@@ -167,6 +167,10 @@ service WorkspaceService {
 
   // Re-reads project instruction files and returns their paths.
   rpc ReloadMemory(ReloadMemoryRequest) returns (ReloadMemoryResponse);
+  // Re-reads the agents, skills, instruction files and rules whether or
+  // not they look changed, and says what it loaded (/reload). Each turn
+  // already reloads what changed; MCP servers aren't restarted.
+  rpc ReloadAgentFiles(ReloadAgentFilesRequest) returns (ReloadAgentFilesResponse);
   // Appends a note to the project instruction file.
   rpc AddMemory(AddMemoryRequest) returns (AddMemoryResponse);
   // Returns the languages with an interface catalog.
@@ -1016,6 +1020,23 @@ message ReloadMemoryResponse {
   repeated string paths = 1;
   // The file names looked for, in order.
   repeated string files = 2;
+}
+
+// Request message for WorkspaceService.ReloadAgentFiles.
+message ReloadAgentFilesRequest {
+  string workspace = 1;
+}
+
+// Response message for WorkspaceService.ReloadAgentFiles.
+message ReloadAgentFilesResponse {
+  // Agents loaded from files (built-in ones aside).
+  int32 agents = 1;
+  // Skills loaded from files (built-in ones aside).
+  int32 skills = 2;
+  // The instruction files and rules loaded.
+  repeated string files = 3;
+  // Files that didn't load, and why.
+  repeated string problems = 4;
 }
 
 // Request message for WorkspaceService.AddMemory.

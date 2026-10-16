@@ -560,3 +560,12 @@ On Windows 10 (1803 or later) or 11: unzip `blitz_<version>_windows_amd64.zip` (
   **Expected:** no repair prompt; headings in the navigation pane; the list counts 5, 6; the table's header row, alignment and borders; code in a monospace shaded block; the heading link jumps; the image fits the page.
 - [ ] In a session, `/export chat.docx`; from a shell, `blitz sessions export <id> -o chat.docx`.
   **Expected:** both open in Word with the conversation's headings and code.
+
+## 49. Agent files apply from the next message (spec_memory_012 MEM-25, spec_desktop_024 DSK-91d)
+
+- [ ] 💲 In a workspace with a rule in `.agents/rules/` (say, "Answer in French"), start a conversation and send a message; then edit the rule ("Answer in German") in an editor and send another, in the same conversation.
+  **Expected:** the second answer follows the edited rule, with no reload. The same for `AGENTS.md`, and for a skill's `SKILL.md` edited in place (its new description in `/skills`).
+- [ ] 💲 Send several messages without changing anything.
+  **Expected:** nothing reloads (the turns aren't slower, and the provider's prompt cache keeps hitting: `/cost` shows cached tokens).
+- [ ] **Agents › Reload agent files**, then `/reload` in the chat.
+  **Expected:** "Reloaded N agents, N skills and N instruction files and rules."; `/reload` lists the files. Break a skill's frontmatter and reload: the error says which file didn't load.

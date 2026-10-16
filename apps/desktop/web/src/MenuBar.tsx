@@ -37,6 +37,7 @@ import {
   mdiShieldCheckOutline,
   mdiRobotOutline,
   mdiPlus,
+  mdiRefresh,
   mdiSourceBranch,
   mdiSourceCommit,
 } from "@mdi/js";
@@ -60,6 +61,7 @@ import { menuIds } from "./simpleMode";
 import { workspaceColor } from "./palette";
 import { Icon, IconButton, Menu, ToolbarSearch, useSnackbar, type MenuEntry } from "./ui/controls";
 import { message } from "./errors";
+import { reloadSummary } from "./reload";
 import { useWorkerFailures } from "./workerFailures";
 
 /** The app's name and mark, at the left of the top bar. */
@@ -129,6 +131,17 @@ export function MenuBar({
       () => setAgents([]),
     );
   }, [dir]);
+  // Reload agent files: the agents, skills, instructions and rules read again.
+  const reloadAgentFiles = async () => {
+    try {
+      const r = await workspaces.reloadAgentFiles({ workspace: dir });
+      snack(reloadSummary(r));
+      if (r.problems.length) snack(`${t("reload.problems")} ${r.problems.join("; ")}`, { error: true });
+      loadAgents();
+    } catch (e) {
+      snack(message(e), { error: true });
+    }
+  };
   const loadWorkers = useCallback(() => {
     if (!dir) return;
     workers.listWorkers({ workspace: dir }).then(
@@ -157,6 +170,7 @@ export function MenuBar({
 
   const agentItems: MenuEntry[] = [
     { label: t("desktop.menu.agents.add"), icon: mdiPlus, onSelect: () => onAgent?.(intent("new")) },
+    { label: t("desktop.menu.agents.reload"), detail: t("desktop.menu.agents.reload_hint"), icon: mdiRefresh, disabled: !dir, onSelect: () => void reloadAgentFiles() },
     "divider",
     ...(agents.length === 0
       ? [{ heading: t("desktop.menu.agents.none") }]

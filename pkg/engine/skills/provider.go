@@ -15,6 +15,8 @@
 package skills
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -24,7 +26,6 @@ import (
 	"slices"
 	"sort"
 	"sync"
-	"time"
 
 	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/engine/skills/builtin"
@@ -35,12 +36,12 @@ type Provider struct {
 	mu      sync.RWMutex
 	skills  map[string]*Skill
 	builtin map[string]bool
-	// dirs are the folders searched, and stamps their times when last
-	// searched: a skill added, replaced or removed (by a registry install,
-	// /skills update, the agent) changes its folder's time, and the next
-	// look searches again (SK-95).
+	// dirs are the folders searched, and stamps what they held when last
+	// searched: a skill added, edited, replaced or removed (by a registry
+	// install, /skills update, the agent, an editor) changes its stamp,
+	// and the next look searches again (SK-95).
 	dirs   []string
-	stamps map[string]time.Time
+	stamps map[string]string
 }
 
 // NewProvider initializes the skills provider with embedded built-in skills.
@@ -96,47 +97,106 @@ func (p *Provider) DiscoverExternal(dirs []string) error {
 	return err
 }
 
-// stamps are the folders' modification times (zero for one that's missing).
-func stamps(dirs []string) map[string]time.Time {
-	out := make(map[string]time.Time, len(dirs))
+// stamps are what each folder holds, as discover reads it: every SKILL.md's
+// path, size and time, and its folder's time (a resource added or removed
+// beside it). Nothing else in a skill is looked at, so a skill holding an
+// environment doesn't slow the look. A missing folder stamps as "".
+func stamps(dirs []string) map[string]string {
+	out := make(map[string]string, len(dirs))
 	for _, d := range dirs {
-		if info, err := os.Stat(config.ExpandHome(d)); err == nil {
-			out[d] = info.ModTime()
-		} else {
-			out[d] = time.Time{}
-		}
+		out[d] = folderStamp(config.ExpandHome(d))
 	}
 	return out
 }
 
-// refresh searches the folders again when one changed since it last did,
-// so skills installed or removed meanwhile come and go without a restart.
-// Their problems were reported when the workspace opened; doctor reports
-// a new one.
-func (p *Provider) refresh() {
+// heavyDirs are folders a skill may keep an environment or a repository
+// in, which hold no skill: each turn's look skips them.
+var heavyDirs = []string{".git", "node_modules", ".venv", "venv", "__pycache__"}
+
+func folderStamp(dir string) string {
+	if _, err := os.Stat(dir); err != nil {
+		return ""
+	}
+	h := sha256.New()
+	_ = filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
+		if err == nil && d.IsDir() && path != dir && slices.Contains(heavyDirs, d.Name()) {
+			return filepath.SkipDir
+		}
+		if err != nil || d.IsDir() || d.Name() != "SKILL.md" {
+			return nil
+		}
+		if info, err := os.Stat(path); err == nil {
+			fmt.Fprintf(h, "%s\x00%d\x00%d", path, info.Size(), info.ModTime().UnixNano())
+		}
+		if info, err := os.Stat(filepath.Dir(path)); err == nil {
+			fmt.Fprintf(h, "\x00%d", info.ModTime().UnixNano())
+		}
+		h.Write([]byte{'\n'})
+		return nil
+	})
+	return hex.EncodeToString(h.Sum(nil))
+}
+
+// Refresh searches the folders again when what they hold changed since it
+// last did, so skills installed, edited or removed meanwhile come and go
+// without a restart, and reports whether it did. Their problems were
+// reported when the workspace opened; doctor reports a new one.
+func (p *Provider) Refresh() bool {
 	p.mu.RLock()
 	if len(p.dirs) == 0 {
 		p.mu.RUnlock()
-		return
+		return false
 	}
 	same := maps.Equal(stamps(p.dirs), p.stamps)
 	p.mu.RUnlock()
 	if same {
-		return
+		return false
 	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	now := stamps(p.dirs)
 	if maps.Equal(now, p.stamps) {
-		return // another look did it
+		return false // another look did it
 	}
+	p.rediscover(now)
+	return true
+}
+
+// Reload searches the folders again whether or not they look changed
+// (/reload), and returns what couldn't be loaded.
+func (p *Provider) Reload() error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.rediscover(stamps(p.dirs))
+}
+
+// rediscover drops the external skills and searches the folders again,
+// which now holds; p.mu is held.
+func (p *Provider) rediscover(now map[string]string) error {
 	for name := range p.skills {
 		if !p.builtin[name] {
 			delete(p.skills, name)
 		}
 	}
-	_ = p.discover(p.dirs)
+	err := p.discover(p.dirs)
 	p.stamps = now
+	return err
+}
+
+// refresh is Refresh for a look at the skills.
+func (p *Provider) refresh() { p.Refresh() }
+
+// External counts the skills found in the folders (not built in).
+func (p *Provider) External() int {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	n := 0
+	for name := range p.skills {
+		if !p.builtin[name] {
+			n++
+		}
+	}
+	return n
 }
 
 // discover adds the skills in dirs; p.mu is held.
