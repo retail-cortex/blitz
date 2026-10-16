@@ -40,7 +40,7 @@ import { workspaceColor } from "./palette";
 import { inProgress, syncTitle } from "./gitRemote";
 import { displayName } from "./prefs";
 import { InboxDialog } from "./RunsInbox";
-import { useApp } from "./state";
+import { useAdvanced, useApp } from "./state";
 import { shownVersion } from "./serviceVersion";
 import { contextShare, tokens, useWorkspaceStatus } from "./status";
 import { Icon, Menu, useSnackbar } from "./ui/controls";
@@ -84,6 +84,8 @@ export function StatusBar({ serviceUp, version, onWorkspaceSettings }: { service
 }
 
 function GitItem({ dir }: { dir: string }) {
+  // Git's changes and branches are advanced: simple mode shows this session's.
+  const advanced = useAdvanced();
   const [git, setGit] = useState<GetGitStatusResponse>();
   useEffect(() => {
     let live = true;
@@ -119,7 +121,7 @@ function GitItem({ dir }: { dir: string }) {
     .filter(Boolean)
     .join(" ");
   return (
-    <button className="sb-item sb-button" title={label} aria-label={label} onClick={() => showView({ dir, view: "changes" })}>
+    <button className="sb-item sb-button" title={label} aria-label={label} onClick={() => showView({ dir, view: "changes", source: advanced ? "git" : "session" })}>
       <Icon path={merging ? mdiSourceMerge : mdiSourceBranch} size="sm" />
       <span className="ellipsis sb-branch">{git.branch}</span>
       {git.changed > 0 && <span className="sb-count">±{git.changed}</span>}

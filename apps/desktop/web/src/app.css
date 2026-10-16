@@ -391,6 +391,9 @@ body.resizing iframe, body.resizing .cm-editor { pointer-events: none; }
 /* The remote (RemoteSync.tsx): what Pull would bring and Push send, a pull's
    merge waiting, and its conflicted files. */
 .sync-count { min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--md-primary); color: var(--md-on-primary); font: 500 11px/18px var(--md-font); text-align: center; }
+/* The branch menu (Branches.tsx): the current branch, kept short in the toolbar. */
+.branch-name { max-width: 22ch; }
+.branch-menu { min-width: 280px; max-width: 420px; max-height: min(60vh, 520px); overflow-y: auto; }
 .merge-banner { margin: 12px 20px 0; display: flex; flex-direction: column; gap: 8px; border-left: 3px solid var(--md-tertiary, var(--md-primary)); }
 .merge-banner p { margin: 0; }
 .conflict-bar { gap: 8px; padding: 8px 12px; margin-bottom: 8px; border-radius: var(--md-shape-md); background: var(--md-surface-container-high); border-left: 3px solid var(--md-error); }

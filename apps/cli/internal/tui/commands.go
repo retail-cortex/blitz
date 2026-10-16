@@ -224,6 +224,7 @@ var helpGroups = []struct {
 		{"/diff [git]", "help.diff"},
 		{"/init", "help.init"},
 		{"/memory [reload|add <note>]", "help.memory"},
+		{"/reload", "help.reload"},
 		{"/paste", "help.paste"},
 		{"/trust", "help.trust"},
 	}},

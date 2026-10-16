@@ -58,7 +58,17 @@ const fakeRemote = {
   behind: 2,
   operation: GitOperation.UNSPECIFIED,
   conflicts: [] as string[],
+  merging: "",
 };
+// The branches (Branches.tsx): switching changes the branch the status shows;
+// merging "spike/lazy-totals" stops on a conflict, any other branch fast-forwards.
+let fakeBranch = "fix/coupon-rounding";
+const fakeBranches = [
+  { name: "fix/coupon-rounding", subject: "Round the total, not each line", upstream: "origin/fix/coupon-rounding" },
+  { name: "main", subject: "Release 1.4.0", upstream: "origin/main" },
+  { name: "spike/lazy-totals", subject: "Compute totals on read", upstream: "" },
+  { name: "origin/feature/gift-cards", subject: "Gift card balance lookup", upstream: "", remote: true },
+];
 /** A failed-precondition error with the service's reason, as the real one sends. */
 function fakeError(msg: string, reason: string): ConnectError {
   const err = new ConnectError(msg, Code.FailedPrecondition);
@@ -66,7 +76,7 @@ function fakeError(msg: string, reason: string): ConnectError {
   return err;
 }
 const fakeGitStatus = () =>
-  fakeRepo ? { git: true, repo: true, branch: "fix/coupon-rounding", changed: 2, remote: true, ...fakeRemote, conflicts: [...fakeRemote.conflicts] } : { git: true, repo: false };
+  fakeRepo ? { git: true, repo: true, branch: fakeBranch, changed: 2, remote: true, ...fakeRemote, conflicts: [...fakeRemote.conflicts] } : { git: true, repo: false };
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const now = () => timestampFromDate(new Date());
@@ -1023,6 +1033,7 @@ export function installFake() {
           fakeRemote.behind = 0;
           fakeRemote.operation = GitOperation.MERGE;
           fakeRemote.conflicts = ["internal/cart/discount.go"];
+          fakeRemote.merging = fakeRemote.upstream;
           return { outcome: PullOutcome.CONFLICTS, commits, status: fakeGitStatus() };
         },
         push: async () => {
@@ -1041,14 +1052,53 @@ export function installFake() {
         completeMerge: async () => {
           await sleep(400);
           fakeRemote.operation = GitOperation.UNSPECIFIED;
+          fakeRemote.merging = "";
           fakeRemote.ahead += 1;
           return { status: fakeGitStatus() };
         },
         abortMerge: () => {
           fakeRemote.operation = GitOperation.UNSPECIFIED;
           fakeRemote.conflicts = [];
+          fakeRemote.merging = "";
           fakeRemote.behind = 2;
           return { status: fakeGitStatus() };
+        },
+        listBranches: async () => {
+          await sleep(200);
+          return { branches: fakeBranches.map((b, i) => ({ ...b, remote: !!b.remote, current: b.name === fakeBranch, time: timestampFromDate(new Date(Date.now() - i * 86_400_000)) })) };
+        },
+        switchBranch: async ({ branch }) => {
+          await sleep(300);
+          if (fakeRemote.operation !== GitOperation.UNSPECIFIED) throw fakeError("a merge or rebase is in progress: complete or abort it first", "GIT_BUSY");
+          if (!fakeBranches.some((b) => b.name === branch)) throw fakeError("there's no such branch", "NO_BRANCH");
+          const local = branch.replace(/^origin\//, "");
+          if (local !== branch && !fakeBranches.some((b) => b.name === local)) fakeBranches.push({ name: local, subject: fakeBranches.find((b) => b.name === branch)!.subject, upstream: branch });
+          fakeBranch = local;
+          return { status: fakeGitStatus() };
+        },
+        createBranch: async ({ branch }) => {
+          await sleep(300);
+          if (!branch || /\s|\.\.|^-/.test(branch)) throw fakeError("that isn't a valid branch name", "BAD_BRANCH_NAME");
+          if (fakeBranches.some((b) => b.name === branch)) throw fakeError("a branch with that name already exists", "BRANCH_EXISTS");
+          fakeBranches.unshift({ name: branch, subject: fakeBranches.find((b) => b.name === fakeBranch)?.subject ?? "", upstream: "" });
+          fakeBranch = branch;
+          return { status: fakeGitStatus() };
+        },
+        mergeBranch: async ({ branch }) => {
+          await sleep(500);
+          if (branch === fakeBranch) throw fakeError("that's the current branch", "MERGE_SELF");
+          if (branch === "spike/lazy-totals") {
+            fakeRemote.operation = GitOperation.MERGE;
+            fakeRemote.conflicts = ["internal/cart/totals.go"];
+            fakeRemote.merging = branch;
+            return { outcome: PullOutcome.CONFLICTS, commits: 3, status: fakeGitStatus() };
+          }
+          fakeRemote.ahead += 2;
+          return { outcome: PullOutcome.FAST_FORWARD, commits: 2, status: fakeGitStatus() };
+        },
+        reloadAgentFiles: async () => {
+          await sleep(300);
+          return { agents: 2, skills: 3, files: ["AGENTS.md", ".agents/rules/style.md"], problems: [] };
         },
         // The commit dialog: nothing staged until "Stage all changes".
         draftCommit: async ({ stageAll }) => {

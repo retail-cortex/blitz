@@ -24,7 +24,7 @@ import { workspaces } from "./api";
 import { compose, filesTouched, openFile, showView } from "./events";
 import { t, tn } from "./i18n";
 import { ConflictChoice, GitOperation, PullOutcome, type GetGitStatusResponse } from "./gen/blitz/v1/workspace_pb";
-import { inProgress, pullMessage, remoteErrorText, resolvePrompt, syncTitle } from "./gitRemote";
+import { branchMerge, inProgress, mergingFrom, pullMessage, remoteErrorText, resolvePrompt, syncTitle } from "./gitRemote";
 import { Button, Dialog, Icon, useSnackbar } from "./ui/controls";
 
 type Props = {
@@ -94,13 +94,15 @@ export function RemoteButtons({ dir, git, onStatus, onChanged }: Props) {
   );
 }
 
-/** A merge or rebase a pull left waiting: its conflicts, and the ways out. */
+/** A merge or rebase a pull or a branch's merge left waiting: its conflicts, and the ways out. */
 export function MergeBanner({ dir, git, onChanged }: Omit<Props, "onStatus">) {
   const snack = useSnackbar();
   const [busy, setBusy] = useState(false);
   const [aborting, setAborting] = useState(false);
   const rebase = git.operation === GitOperation.REBASE;
   const left = git.conflicts.length;
+  // A branch the user merged, not a pull: the abort goes back to before the merge.
+  const ofBranch = branchMerge(git);
 
   const run = async (f: () => Promise<unknown>, done: string) => {
     setBusy(true);
@@ -125,7 +127,7 @@ export function MergeBanner({ dir, git, onChanged }: Omit<Props, "onStatus">) {
       <div className="row">
         <Icon path={mdiSourceMerge} />
         <span className="t-title-sm spacer">
-          {rebase ? t("desktop.git.rebasing", { upstream: git.upstream }) : t("desktop.git.merging", { upstream: git.upstream })}
+          {rebase ? t("desktop.git.rebasing", { upstream: git.upstream }) : t("desktop.git.merging", { upstream: mergingFrom(git) })}
         </span>
       </div>
       <p className="muted t-body-sm">{left > 0 ? tn("desktop.git.conflicts_left", left) : rebase ? t("desktop.git.ready_rebase") : t("desktop.git.ready_merge")}</p>
@@ -156,7 +158,7 @@ export function MergeBanner({ dir, git, onChanged }: Omit<Props, "onStatus">) {
                 danger
                 onClick={() => {
                   setAborting(false);
-                  void run(() => workspaces.abortMerge({ workspace: dir }), t("desktop.git.aborted"));
+                  void run(() => workspaces.abortMerge({ workspace: dir }), ofBranch ? t("desktop.git.aborted_merge") : t("desktop.git.aborted"));
                 }}
               >
                 {rebase ? t("desktop.git.abort_rebase") : t("desktop.git.abort_merge")}
@@ -164,7 +166,7 @@ export function MergeBanner({ dir, git, onChanged }: Omit<Props, "onStatus">) {
             </>
           }
         >
-          <p className="muted">{t("desktop.git.abort_detail")}</p>
+          <p className="muted">{ofBranch ? t("desktop.git.abort_detail_merge") : t("desktop.git.abort_detail")}</p>
         </Dialog>
       )}
     </div>

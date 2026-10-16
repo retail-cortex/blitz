@@ -143,6 +143,9 @@ type Backend interface {
 	Compact(ctx context.Context, focus string) (CompactResult, error)
 	MemoryFiles() []string
 	ReloadMemory(ctx context.Context) ([]string, error)
+	// Reload reads the agents, skills, instruction files and rules again
+	// whether or not they look changed (each turn reloads what changed).
+	Reload(ctx context.Context) (ReloadResult, error)
 	AddMemory(ctx context.Context, text string) (string, error)
 	AvailableLocales() ([]LocaleInfo, string)
 	SetLocale(ctx context.Context, input string) (LocaleChange, error)

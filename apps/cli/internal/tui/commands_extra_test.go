@@ -222,6 +222,34 @@ func TestMemoryCommandOutputs(t *testing.T) {
 	})
 }
 
+// /reload says what it loaded and what didn't, and reports a failure.
+func TestReloadCommandOutputs(t *testing.T) {
+	runCommandCases(t, map[string]commandCase{
+		"fails": {
+			setup: func(s *stubBackend) {
+				s.reload = func() (api.ReloadResult, error) { return api.ReloadResult{}, errBoom }
+			},
+			line: "/reload", want: []string{"✗ boom"}, notWant: []string{"Reloaded"},
+		},
+		"loaded": {
+			setup: func(s *stubBackend) {
+				s.reload = func() (api.ReloadResult, error) {
+					return api.ReloadResult{Agents: 2, Skills: 1, Files: []string{"AGENTS.md", ".agents/rules/style.md"}}, nil
+				}
+			},
+			line: "/reload", want: []string{"Reloaded 2 agents, 1 skill and 2 instruction files and rules.", "• AGENTS.md", "• .agents/rules/style.md"},
+		},
+		"problems": {
+			setup: func(s *stubBackend) {
+				s.reload = func() (api.ReloadResult, error) {
+					return api.ReloadResult{Problems: []string{"skills/broken/SKILL.md: no name"}}, nil
+				}
+			},
+			line: "/reload", want: []string{"These didn't load:", "• skills/broken/SKILL.md: no name"},
+		},
+	})
+}
+
 // /fork, /export, /style, /hooks, /approvals and /mcp show what there is and
 // report failures.
 func TestSessionAndListCommandOutputs(t *testing.T) {

@@ -99,6 +99,7 @@ func TestRemoteCallsFailWithoutTheService(t *testing.T) {
 		"RewindPoints":         func() error { _, err := r.RewindPoints(); return err },
 		"Rewind":               func() error { _, err := r.Rewind(ctx, 0, api.RewindBoth, false); return err },
 		"ReloadMemory":         func() error { _, err := r.ReloadMemory(ctx); return err },
+		"Reload":               func() error { _, err := r.Reload(ctx); return err },
 		"AddMemory":            func() error { _, err := r.AddMemory(ctx, "x"); return err },
 		"SetLocale":            func() error { _, err := r.SetLocale(ctx, "fr"); return err },
 		"Undo":                 func() error { _, err := r.Undo(false); return err },
@@ -300,6 +301,10 @@ func TestRemoteBackendCalls(t *testing.T) {
 		paths, err := r.ReloadMemory(ctx)
 		require.NoError(t, err)
 		assert.Contains(t, paths, p)
+		reloaded, err := r.Reload(ctx)
+		require.NoError(t, err)
+		assert.Contains(t, reloaded.Files, p)
+		assert.Empty(t, reloaded.Problems)
 		assert.NotEmpty(t, r.MemoryFiles())
 		notes, err := r.ListNotes()
 		require.NoError(t, err)

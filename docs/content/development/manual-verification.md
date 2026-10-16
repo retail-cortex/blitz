@@ -489,7 +489,7 @@ These touch your real keychain and settings: use a test key, or a throwaway `--c
 - [ ] The sandbox required on Linux: on Ubuntu 24.04 with the AppArmor restriction on and no `[sandbox] shell` in the settings, `blitz` and the desktop app refuse to open a workspace, saying why and how to fix it or set `auto`, and `blitz doctor` fails its sandbox check; after `sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0` they open, sandboxed (`/sandbox`); with `shell = "auto"` they open, unsandboxed, and `doctor` warns.
 - [ ] Fixing it: on Ubuntu 24.04 with the restriction on, `blitz security` says AppArmor stops bwrap; `blitz security fix-apparmor` asks for the sudo password, writes `/etc/apparmor.d/blitz-bwrap` and loads it, and then `blitz security`, `blitz doctor` and opening a workspace all work, sandboxed, while `unshare -Ur true` (another program) is still refused. In the desktop app, opening a workspace shows a notice above it, *This workspace didn't open…*, with **Allow bubblewrap**: the system's password dialog, then *Restarting the Blitz service…*, and the workspace opens, sandboxed. Settings › Service shows **OS sandbox** with the same button and restart; cancelling the dialog shows the error and the commands to run by hand. On macOS the row isn't there.
 - [ ] ADC shared only on request: signed in with ADC, a command (`env | grep GOOGLE_APPLICATION_CREDENTIALS`) finds nothing; with `[sandbox] share_adc = true` it names a copy that `gcloud auth application-default print-access-token` can use, gone after the command. The same key in a project's `.blitz/settings.toml` is listed as ignored. `cat ~/.config/anthropic/configs/*` from a command is refused unless Claude signs in with `ant`.
-- [ ] Changes › **Git** in a folder that isn't a repository. **Expected:** "This is not a git repository" and **Make it a repository**, no error; clicking it runs `git init` (a `.git` folder), the view shows no changes and the status bar the branch within a second. With git off the service's PATH: it says git isn't installed, with no button.
+- [ ] Changes › **Version control** in a folder that isn't a repository. **Expected:** "This folder isn't under version control" and **Turn on version control**, no error; clicking it runs `git init` (a `.git` folder), the view shows no changes and the status bar the branch within a second. With git off the service's PATH: it says git isn't installed, with no button.
 - [ ] Tray language: Settings › Appearance › **Interface language** Français (Canada), then quit the tray and start it again (switch it off and on). **Expected:** the menu is in French ("Service Blitz : en cours", **Arrêter le service**…). Back to System: the system's language, English when it has no catalog.
 - [ ] 💲 Usage after a restart: two prompts, note `/cost` and `/context`; quit and `blitz --continue` (or restart the service and reload the desktop app). **Expected:** the same totals and context size, not zeros; another prompt adds to them.
 - [ ] 💲 Chats survive a service restart: start a chat in the desktop app, restart the service (Settings › Service › **Restart**), send two more prompts in the same chat, then reopen it from the history. **Expected:** every prompt and answer is there, titled by the first prompt; no "Failed to save session" in Settings › Logs.
@@ -560,3 +560,34 @@ On Windows 10 (1803 or later) or 11: unzip `blitz_<version>_windows_amd64.zip` (
   **Expected:** no repair prompt; headings in the navigation pane; the list counts 5, 6; the table's header row, alignment and borders; code in a monospace shaded block; the heading link jumps; the image fits the page.
 - [ ] In a session, `/export chat.docx`; from a shell, `blitz sessions export <id> -o chat.docx`.
   **Expected:** both open in Word with the conversation's headings and code.
+
+## 47. Branches on the Changes page (spec_desktop_024 DSK-90c, spec_service_021 SVC-37)
+
+- [ ] In a repository with a remote and a second branch on it, open **Changes › Version control** and click the branch button.
+  **Expected:** **Branches** lists the local ones (the current one checked), **On the remote** the remote's branches no local branch tracks, each with its last commit's subject.
+- [ ] Choose a remote branch.
+  **Expected:** "Switched to <name>."; the status bar shows the new branch, the toolbar's Pull has its upstream, and files open in the editor show the branch's content.
+- [ ] Edit a file the other branch also changed, without committing, and switch to that branch.
+  **Expected:** "Your uncommitted changes would be overwritten by that branch: commit them first."; still on the same branch, the edit kept.
+- [ ] **New branch…**: try `a b`, then an existing name, then `try/branches`.
+  **Expected:** the first two are refused under the field; the third switches to the new branch with your uncommitted changes still there.
+- [ ] Commit on the new branch, switch back to `main`, and **Merge into main…** with `try/branches`.
+  **Expected:** "Brought 1 commit from try/branches into main."; merging it again says main already has everything in it.
+- [ ] Make both branches change the same line, then merge.
+  **Expected:** "Merging try/branches stopped on conflicts…"; the banner says **Merging try/branches** (not the upstream); **Take theirs** takes the merged branch's line; **Complete merge** commits "Merge branch 'try/branches'". Repeat and **Abort merge**: the dialog says the branch goes back to before the merge, and it does.
+- [ ] Click the branch in the status bar.
+  **Expected:** Changes opens on Git (in simple mode, on this session's changes).
+
+## 48. Plain words for version control (spec_desktop_024 DSK-90d)
+
+- [ ] In each language (Settings › Appearance › Interface language), go through the Changes menu, the Changes view's toolbar, the commit dialog, a file's right-click menu in the Files tree, its history and the status bar's branch.
+  **Expected:** no "Git", "stage" or ".gitignore" in a label: **Version control**, **Commit changes…**, **Include in commit** / **Leave out of commit**, **Include all changes**, **Do not version** / **Version it again**, **View history…**. Git is named only when it isn't installed, in the sign-in message and in a repository-config warning.
+
+## 49. Agent files apply from the next message (spec_memory_012 MEM-25, spec_desktop_024 DSK-91d)
+
+- [ ] 💲 In a workspace with a rule in `.agents/rules/` (say, "Answer in French"), start a conversation and send a message; then edit the rule ("Answer in German") in an editor and send another, in the same conversation.
+  **Expected:** the second answer follows the edited rule, with no reload. The same for `AGENTS.md`, and for a skill's `SKILL.md` edited in place (its new description in `/skills`).
+- [ ] 💲 Send several messages without changing anything.
+  **Expected:** nothing reloads (the turns aren't slower, and the provider's prompt cache keeps hitting: `/cost` shows cached tokens).
+- [ ] **Agents › Reload agent files**, then `/reload` in the chat.
+  **Expected:** "Reloaded N agents, N skills and N instruction files and rules."; `/reload` lists the files. Break a skill's frontmatter and reload: the error says which file didn't load.

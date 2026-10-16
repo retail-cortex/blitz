@@ -27,6 +27,7 @@ import { searchDocs } from "./docs/index";
 import { language, t, tn } from "./i18n";
 import { formatInterval, listLoops, parseInterval, startLoop, stopLoop } from "./loops";
 import { efforts, modeOf } from "./options";
+import { reloadSummary } from "./reload";
 import type { GetSettingsResponse } from "./gen/blitz/v1/workspace_pb";
 
 /** The groups, in /help's order (titles: help.group.<id>, shared with the terminal). */
@@ -540,6 +541,16 @@ export const builtinCommands: Builtin[] = [
   },
   { name: "diff", group: "workspace", run: (c) => c.openView("changes") },
   { name: "init", group: "workspace", describe: "help.init", turn: true, run: (c) => c.run("/setup", { command: true }) },
+  {
+    name: "reload",
+    group: "workspace",
+    describe: "help.reload",
+    async run(c) {
+      const r = await workspaces.reloadAgentFiles({ workspace: c.dir });
+      const files = r.files.length ? bullets(reloadSummary(r), r.files.map(code)) : reloadSummary(r);
+      c.say(r.problems.length ? `${files}\n\n${bullets(t("reload.problems"), r.problems.map(md))}` : files, r.problems.length ? "error" : "info", true);
+    },
+  },
   {
     name: "memory",
     args: "[reload|add <note>|notes|forget <name>]",

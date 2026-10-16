@@ -129,6 +129,24 @@ service WorkspaceService {
   // the uncommitted changes back (NO_MERGE, REPO_CONFIG_COMMAND,
   // GIT_FAILED).
   rpc AbortMerge(AbortMergeRequest) returns (AbortMergeResponse);
+  // Lists the local branches, then the remotes' branches no local branch
+  // tracks, each newest commit first (NOT_A_REPOSITORY, GIT_FAILED).
+  rpc ListBranches(ListBranchesRequest) returns (ListBranchesResponse);
+  // Checks out a branch, carrying uncommitted changes along; a remote's
+  // branch gets a local one that tracks it (NOT_A_REPOSITORY, NO_BRANCH,
+  // BAD_BRANCH_NAME, LOCAL_CHANGES, GIT_BUSY, REPO_CONFIG_COMMAND,
+  // GIT_FAILED).
+  rpc SwitchBranch(SwitchBranchRequest) returns (SwitchBranchResponse);
+  // Makes a branch at the current commit and switches to it, keeping
+  // uncommitted changes (NOT_A_REPOSITORY, BRANCH_EXISTS, BAD_BRANCH_NAME,
+  // GIT_BUSY, REPO_CONFIG_COMMAND, GIT_FAILED).
+  rpc CreateBranch(CreateBranchRequest) returns (CreateBranchResponse);
+  // Merges a branch into the current one, keeping uncommitted changes. One
+  // that stops on conflicts isn't an error: its outcome is CONFLICTS, and
+  // ResolveConflict, CompleteMerge and AbortMerge finish it
+  // (NOT_A_REPOSITORY, NO_BRANCH, BAD_BRANCH_NAME, MERGE_SELF, GIT_BUSY,
+  // REPO_CONFIG_COMMAND, GIT_FAILED).
+  rpc MergeBranch(MergeBranchRequest) returns (MergeBranchResponse);
   // Changes a setting for the workspace: agency, or effort (a reasoning
   // effort, or "auto" to clear it) (UNKNOWN_SETTING, INVALID_AGENCY,
   // INVALID_SETTING).
@@ -167,6 +185,10 @@ service WorkspaceService {
 
   // Re-reads project instruction files and returns their paths.
   rpc ReloadMemory(ReloadMemoryRequest) returns (ReloadMemoryResponse);
+  // Re-reads the agents, skills, instruction files and rules whether or
+  // not they look changed, and says what it loaded (/reload). Each turn
+  // already reloads what changed; MCP servers aren't restarted.
+  rpc ReloadAgentFiles(ReloadAgentFilesRequest) returns (ReloadAgentFilesResponse);
   // Appends a note to the project instruction file.
   rpc AddMemory(AddMemoryRequest) returns (AddMemoryResponse);
   // Returns the languages with an interface catalog.
@@ -1018,6 +1040,23 @@ message ReloadMemoryResponse {
   repeated string files = 2;
 }
 
+// Request message for WorkspaceService.ReloadAgentFiles.
+message ReloadAgentFilesRequest {
+  string workspace = 1;
+}
+
+// Response message for WorkspaceService.ReloadAgentFiles.
+message ReloadAgentFilesResponse {
+  // Agents loaded from files (built-in ones aside).
+  int32 agents = 1;
+  // Skills loaded from files (built-in ones aside).
+  int32 skills = 2;
+  // The instruction files and rules loaded.
+  repeated string files = 3;
+  // Files that didn't load, and why.
+  repeated string problems = 4;
+}
+
 // Request message for WorkspaceService.AddMemory.
 message AddMemoryRequest {
   string workspace = 1;
@@ -1708,6 +1747,9 @@ message GetGitStatusResponse {
   GitOperation operation = 9;
   // The files still in conflict, workspace-relative with "/".
   repeated string conflicts = 10;
+  // The branch a merge in progress brings in, such as "feature" or
+  // "origin/main" (empty when none, or when git can't name it).
+  string merging = 11;
 }
 
 // What a repository is in the middle of.
@@ -1868,4 +1910,73 @@ message AbortMergeRequest {
 message AbortMergeResponse {
   // The git status after it.
   GetGitStatusResponse status = 1;
+}
+
+// A branch the workspace can switch to or merge.
+message Branch {
+  // Its short name: "main", or "origin/feature" for a remote's.
+  string name = 1;
+  // A remote's branch no local branch tracks: switching to it makes one.
+  bool remote = 2;
+  // The branch checked out.
+  bool current = 3;
+  // A local branch's upstream, such as "origin/main".
+  string upstream = 4;
+  // Its last commit's subject.
+  string subject = 5;
+  // Its last commit's time.
+  google.protobuf.Timestamp time = 6;
+}
+
+// Request message for WorkspaceService.ListBranches.
+message ListBranchesRequest {
+  string workspace = 1;
+}
+
+// Response message for WorkspaceService.ListBranches.
+message ListBranchesResponse {
+  repeated Branch branches = 1;
+}
+
+// Request message for WorkspaceService.SwitchBranch.
+message SwitchBranchRequest {
+  string workspace = 1;
+  // A branch's name as ListBranches gives it.
+  string branch = 2;
+}
+
+// Response message for WorkspaceService.SwitchBranch.
+message SwitchBranchResponse {
+  // The git status after it.
+  GetGitStatusResponse status = 1;
+}
+
+// Request message for WorkspaceService.CreateBranch.
+message CreateBranchRequest {
+  string workspace = 1;
+  // The new branch's name.
+  string branch = 2;
+}
+
+// Response message for WorkspaceService.CreateBranch.
+message CreateBranchResponse {
+  // The git status after it, on the new branch.
+  GetGitStatusResponse status = 1;
+}
+
+// Request message for WorkspaceService.MergeBranch.
+message MergeBranchRequest {
+  string workspace = 1;
+  // The branch to merge into the current one, as ListBranches names it.
+  string branch = 2;
+}
+
+// Response message for WorkspaceService.MergeBranch.
+message MergeBranchResponse {
+  // UP_TO_DATE, FAST_FORWARD, MERGED or CONFLICTS (never REBASED).
+  PullOutcome outcome = 1;
+  // Commits brought in from the branch.
+  int32 commits = 2;
+  // The git status after the merge.
+  GetGitStatusResponse status = 3;
 }

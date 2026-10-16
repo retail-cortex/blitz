@@ -163,6 +163,7 @@ func TestEveryHandlerRefusesARelativeWorkspace(t *testing.T) {
 		"ListMCPServers":       func() error { return unary(w.ListMCPServers, &pb.ListMCPServersRequest{Workspace: ws}) },
 		"ListTools":            func() error { return unary(w.ListTools, &pb.ListToolsRequest{Workspace: ws}) },
 		"ReloadMemory":         func() error { return unary(w.ReloadMemory, &pb.ReloadMemoryRequest{Workspace: ws}) },
+		"ReloadAgentFiles":     func() error { return unary(w.ReloadAgentFiles, &pb.ReloadAgentFilesRequest{Workspace: ws}) },
 		"AddMemory":            func() error { return unary(w.AddMemory, &pb.AddMemoryRequest{Workspace: ws}) },
 		"ListLocales":          func() error { return unary(w.ListLocales, &pb.ListLocalesRequest{Workspace: ws}) },
 		"SetLocale":            func() error { return unary(w.SetLocale, &pb.SetLocaleRequest{Workspace: ws}) },
@@ -780,6 +781,10 @@ func TestWorkspaceHandlers(t *testing.T) {
 		mem, err := w.ReloadMemory(ctx, connect.NewRequest(&pb.ReloadMemoryRequest{Workspace: dir}))
 		require.NoError(t, err)
 		assert.Contains(t, mem.Msg.Paths, added.Msg.Path)
+		reloaded, err := w.ReloadAgentFiles(ctx, connect.NewRequest(&pb.ReloadAgentFilesRequest{Workspace: dir}))
+		require.NoError(t, err)
+		assert.Contains(t, reloaded.Msg.Files, added.Msg.Path, "the instruction file AddMemory wrote")
+		assert.Empty(t, reloaded.Msg.Problems)
 		note, err := memory.SaveNote(memory.NotesDir(dir), memory.NoteFact, "The tests need Docker.")
 		require.NoError(t, err)
 		notes, err := w.ListNotes(ctx, connect.NewRequest(&pb.ListNotesRequest{Workspace: dir}))

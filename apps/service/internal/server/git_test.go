@@ -405,11 +405,104 @@ func TestRemoteError(t *testing.T) {
 		{engine.ErrMarkersRemain, "MARKERS_REMAIN"},
 		{engine.ErrNotConflicted, "NOT_CONFLICTED"},
 		{engine.ErrBadPath, "BAD_PATH"},
+		{engine.ErrNoBranch, "NO_BRANCH"},
+		{engine.ErrBranchExists, "BRANCH_EXISTS"},
+		{engine.ErrBadBranchName, "BAD_BRANCH_NAME"},
+		{fmt.Errorf("%w (f.txt)", engine.ErrLocalChanges), "LOCAL_CHANGES"},
+		{engine.ErrMergeSelf, "MERGE_SELF"},
 		{errors.New("network down"), "GIT_FAILED"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.want, func(t *testing.T) {
 			assert.Equal(t, tt.want, reasonOf(remoteError(tt.err)))
+		})
+	}
+}
+
+func TestBranches(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("no git")
+	}
+	empty := filepath.Join(t.TempDir(), "gitconfig")
+	require.NoError(t, os.WriteFile(empty, nil, 0o644))
+	t.Setenv("GIT_CONFIG_GLOBAL", empty)
+	t.Setenv("GIT_CONFIG_NOSYSTEM", "1")
+	dir := t.TempDir()
+	git := func(args ...string) {
+		t.Helper()
+		cmd := exec.Command("git", append([]string{"-c", "user.email=t@t", "-c", "user.name=t"}, args...)...)
+		cmd.Dir = dir
+		out, err := cmd.CombinedOutput()
+		require.NoError(t, err, "git %v: %s", args, out)
+	}
+	git("init", "-q", "-b", "main")
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "f.txt"), []byte("one\n"), 0o644))
+	git("add", "f.txt")
+	git("commit", "-qm", "init")
+
+	_, s := serve(t, nil, text("hi"))
+	srv := httptest.NewServer(s.Handler())
+	defer srv.Close()
+	ws := pb.NewWorkspaceServiceClient(http.DefaultClient, srv.URL)
+	ctx := context.Background()
+
+	c, err := ws.CreateBranch(ctx, connect.NewRequest(&pb.CreateBranchRequest{Workspace: dir, Branch: "feature"}))
+	require.NoError(t, err)
+	assert.Equal(t, "feature", c.Msg.Status.Branch)
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "f.txt"), []byte("feature\n"), 0o644))
+	git("commit", "-qam", "feature work")
+
+	l, err := ws.ListBranches(ctx, connect.NewRequest(&pb.ListBranchesRequest{Workspace: dir}))
+	require.NoError(t, err)
+	require.Len(t, l.Msg.Branches, 2)
+	assert.Equal(t, "feature", l.Msg.Branches[0].Name, "newest commit first")
+	assert.True(t, l.Msg.Branches[0].Current)
+	assert.Equal(t, "feature work", l.Msg.Branches[0].Subject)
+	assert.NotNil(t, l.Msg.Branches[0].Time)
+
+	sw, err := ws.SwitchBranch(ctx, connect.NewRequest(&pb.SwitchBranchRequest{Workspace: dir, Branch: "main"}))
+	require.NoError(t, err)
+	assert.Equal(t, "main", sw.Msg.Status.Branch)
+
+	m, err := ws.MergeBranch(ctx, connect.NewRequest(&pb.MergeBranchRequest{Workspace: dir, Branch: "feature"}))
+	require.NoError(t, err)
+	assert.Equal(t, pb.PullOutcome_PULL_OUTCOME_FAST_FORWARD, m.Msg.Outcome)
+	assert.Equal(t, int32(1), m.Msg.Commits)
+
+	tests := []struct {
+		name string
+		call func() error
+		want string
+	}{
+		{"switch to a missing branch", func() error {
+			_, err := ws.SwitchBranch(ctx, connect.NewRequest(&pb.SwitchBranchRequest{Workspace: dir, Branch: "nope"}))
+			return err
+		}, "NO_BRANCH"},
+		{"create a taken name", func() error {
+			_, err := ws.CreateBranch(ctx, connect.NewRequest(&pb.CreateBranchRequest{Workspace: dir, Branch: "feature"}))
+			return err
+		}, "BRANCH_EXISTS"},
+		{"create a bad name", func() error {
+			_, err := ws.CreateBranch(ctx, connect.NewRequest(&pb.CreateBranchRequest{Workspace: dir, Branch: "a..b"}))
+			return err
+		}, "BAD_BRANCH_NAME"},
+		{"merge the current branch", func() error {
+			_, err := ws.MergeBranch(ctx, connect.NewRequest(&pb.MergeBranchRequest{Workspace: dir, Branch: "main"}))
+			return err
+		}, "MERGE_SELF"},
+		{"list outside a repository", func() error {
+			_, err := ws.ListBranches(ctx, connect.NewRequest(&pb.ListBranchesRequest{Workspace: t.TempDir()}))
+			return err
+		}, "NOT_A_REPOSITORY"},
+		{"a relative workspace", func() error {
+			_, err := ws.ListBranches(ctx, connect.NewRequest(&pb.ListBranchesRequest{Workspace: "relative"}))
+			return err
+		}, "INVALID_WORKSPACE"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, info := errorReason(t, tt.call())
+			assert.Equal(t, tt.want, info.Reason)
 		})
 	}
 }

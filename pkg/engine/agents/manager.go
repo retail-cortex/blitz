@@ -132,6 +132,28 @@ func (r *Registry) Refresh() (bool, error) {
 	return true, errors.Join(errs...)
 }
 
+// Invalidate makes the next Refresh load the external agents again
+// whether or not their files look changed (/reload): an edit that kept a
+// file's size and time is seen too.
+func (r *Registry) Invalidate() {
+	r.mu.Lock()
+	r.stamp = "" // no directory set stamps as ""
+	r.mu.Unlock()
+}
+
+// External counts the agents loaded from files (not built in).
+func (r *Registry) External() int {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	n := 0
+	for name := range r.agents {
+		if !r.builtin[name] {
+			n++
+		}
+	}
+	return n
+}
+
 // IsBuiltin reports whether name is a built-in agent's.
 func (r *Registry) IsBuiltin(name string) bool { return r.builtin[name] }
 
