@@ -184,6 +184,25 @@ func TestEngineInstructions(t *testing.T) {
 	assert.NotContains(t, sys, "PROJECT RULE", "SetInstructions not applied")
 }
 
+func TestEngineInstructionsKeepBraces(t *testing.T) {
+	tests := []struct {
+		name, text string
+	}{
+		{"placeholder", "Name branches {ticket}-{slug}."},
+		{"optional placeholder", "Greet {user?} by name."},
+		{"prefixed placeholder", "Read {app:config} first."},
+		{"artifact placeholder", "See {artifact.notes}."},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			f := newEngineWith(t, fixtureOpts{opts: []Option{WithInstructions("\n" + tt.text)}}, textContent("ok"))
+			_, err := collect(t, f.eng, "s", "hi")
+			require.NoError(t, err)
+			assert.Contains(t, systemText(f.llm), tt.text, "instructions not passed through verbatim")
+		})
+	}
+}
+
 func systemText(m *MockLLM) string {
 	req := m.Requests[len(m.Requests)-1]
 	var sb strings.Builder
