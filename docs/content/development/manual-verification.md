@@ -591,3 +591,16 @@ On Windows 10 (1803 or later) or 11: unzip `blitz_<version>_windows_amd64.zip` (
   **Expected:** nothing reloads (the turns aren't slower, and the provider's prompt cache keeps hitting: `/cost` shows cached tokens).
 - [ ] **Agents › Reload agent files**, then `/reload` in the chat.
   **Expected:** "Reloaded N agents, N skills and N instruction files and rules."; `/reload` lists the files. Break a skill's frontmatter and reload: the error says which file didn't load.
+
+## 50. Panels stay put: the drawer (spec_desktop_024 DSK-65c, DSK-60)
+
+- [ ] Open Settings (⌘,), then drag the window by the title bar.
+  **Expected:** Settings slides down from under the top menu over the whole middle, to the status bar; the window moves and Settings stays open.
+- [ ] Open, in turn, Help › User guide, Changes, the workspace's history, an agent (Agents menu), a worker, the background runs (status bar) and Settings › About › Licenses.
+  **Expected:** each slides down in the drawer, taking the place of the one before; the pinned chat input steps aside while it's up and comes back when it closes; ✕ or Escape (with the focus in it) closes it.
+- [ ] **Workers › Add worker** (and **Agents › Add agent**), type a few words, then press ⌘, (or ✕, or Escape in the form).
+  **Expected:** "Discard changes?"; **Cancel** brings the form back with your words, **Discard** closes it.
+- [ ] Open **Commit changes…** (or delete a chat) and click beside the dialog, then drag the window by the title bar over the dimmed area.
+  **Expected:** the dialog stays open and the window moves; Escape or its buttons close it.
+- [ ] Light and dark, with Transparency on and off.
+  **Expected:** the drawer is a pane like the chat's, the panes under it not showing through, with no clipped controls; in a narrow window Settings' sections are a rail of icons.

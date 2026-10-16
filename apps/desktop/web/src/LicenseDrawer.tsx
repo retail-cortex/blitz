@@ -19,14 +19,15 @@ import { mdiScaleBalance } from "@mdi/js";
 import { licenseText, type LicenseText } from "./desktop";
 import { message } from "./errors";
 import { t } from "./i18n";
-import { Button, Dialog, Segmented } from "./ui/controls";
+import { Segmented } from "./ui/controls";
+import { Drawer } from "./ui/Drawer";
 
 /**
  * Blitz's license terms (spec_release_readiness_030 RR-05): the NOTICE,
  * the Apache License and the third-party notices, as the app embeds them.
  * Opened from Settings › About and by /license.
  */
-export function LicenseDialog({ initial, onClose }: { initial: LicenseText; onClose: () => void }) {
+export function LicenseDrawer({ initial, onClose }: { initial: LicenseText; onClose: () => void }) {
   const [which, setWhich] = useState<LicenseText>(initial);
   const [text, setText] = useState("");
   const [error, setError] = useState("");
@@ -43,7 +44,7 @@ export function LicenseDialog({ initial, onClose }: { initial: LicenseText; onCl
     };
   }, [which]);
   return (
-    <Dialog title={t("desktop.license.title")} icon={mdiScaleBalance} onClose={onClose} wide footer={<Button onClick={onClose}>{t("desktop.done")}</Button>}>
+    <Drawer title={t("desktop.license.title")} icon={mdiScaleBalance} onClose={onClose} className="license-drawer">
       <div className="stack" style={{ gap: 12 }}>
         <Segmented<LicenseText>
           label={t("desktop.license.title")}
@@ -57,6 +58,6 @@ export function LicenseDialog({ initial, onClose }: { initial: LicenseText; onCl
         />
         {error ? <p className="error-text">{error}</p> : <pre className="license-text">{text || t("desktop.checking")}</pre>}
       </div>
-    </Dialog>
+    </Drawer>
   );
 }

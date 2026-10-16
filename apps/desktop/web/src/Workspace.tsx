@@ -18,11 +18,11 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
 import { SandboxNotice } from "./SandboxNotice";
 import { useWorkspaceSettings } from "./workspaceSettings";
 import { mdiMagnify, mdiFileTreeOutline } from "@mdi/js";
-import { ChangesDialog, type ChangesSource } from "./Changes";
+import { ChangesDrawer, type ChangesSource } from "./Changes";
 import { CommitDialog } from "./CommitDialog";
 import { Conversation } from "./Conversation";
 import { filesTouchedEvent, goToFile, historyEvent, openFileEvent, revealInTreeEvent, viewEvent, type HistoryDetail, type OpenFileDetail, type ViewDetail } from "./events";
-import { HistoryDialog } from "./files/HistoryDialog";
+import { HistoryDrawer } from "./files/HistoryDrawer";
 import { EditorPane } from "./files/EditorPane";
 import { FilesShelf } from "./files/FilesShelf";
 import { FileLinksProvider } from "./files/links";
@@ -41,8 +41,8 @@ import { panelWidth, useWindowWidth } from "./ui/layout";
 import { ResizeHandle } from "./ui/ResizeHandle";
 import { Brand, MenuBar } from "./MenuBar";
 import { intent as newIntent, type ItemIntent } from "./intent";
-import type { Section } from "./SettingsDialog";
-import { WorkerModal } from "./Workers";
+import type { Section } from "./SettingsDrawer";
+import { WorkerDrawer } from "./Workers";
 import { AgentEditor } from "./AgentEditor";
 import { AgentScope } from "./gen/blitz/v1/workspace_pb";
 
@@ -50,8 +50,8 @@ import { AgentScope } from "./gen/blitz/v1/workspace_pb";
  * One open workspace, laid out like an IDE: the top bar (the brand over
  * the Files shelf, then the menus from the center panel's left edge), the
  * Files shelf on the left, the
- * editor in the middle (Changes, an agent or a worker open over it, in a
- * dialog, from the menus), the chat on the
+ * editor in the middle (Changes, an agent or a worker open over it, in
+ * the drawer, from the menus), the chat on the
  * right, and the run settings panel beside it. Kept mounted while another
  * is shown, so a turn keeps streaming.
  */
@@ -67,33 +67,43 @@ export function Workspace({
   visible: boolean;
   onOpenWorkspace: () => void;
   onCloseWorkspace: (dir: string) => void;
-  /** Opens the Settings dialog on a section (for the settings file, this workspace's). */
+  /** Opens Settings on a section (for the settings file, this workspace's). */
   onSettings: (section: Section, scope?: string) => void;
   /** Opens the command palette (the top bar's search). */
   onSearch: () => void;
 }) {
   const { prefs, update, theme } = useApp();
-  // What's open over the editor: the changes (this session's or git's),
-  // an agent or a worker, as the menus asked.
-  const [modal, setModal] = useState<
-    { kind: "changes"; source: ChangesSource } | { kind: "agent" | "worker"; intent: ItemIntent } | { kind: "commit" } | { kind: "history"; path: string; folder: boolean } | null
-  >(null);
+  // What the menus opened: a view in the drawer beside the workspace (the
+  // changes, this session's or git's; history; a worker), and a dialog
+  // over it (committing). A worker and an agent have their own states: a
+  // form with unsaved changes asks before another view takes the drawer
+  // (the drawer closes the one it replaces).
+  const [drawer, setDrawer] = useState<{ kind: "changes"; source: ChangesSource } | { kind: "history"; path: string; folder: boolean } | null>(null);
+  const [worker, setWorker] = useState<ItemIntent | null>(null);
+  const [agent, setAgent] = useState<ItemIntent | null>(null);
+  const [modal, setModal] = useState<{ kind: "commit" } | null>(null);
   const dir = ws.dir;
   const { settings, modelProblem, settingsError, settingsReason, project, reviewing, setReviewing, refreshSettings } = useWorkspaceSettings(dir);
 
   // Showing a worker sees the workers' failed runs (BL-WK-11).
   const seeWorkers = useCallback(() => update((p) => ({ ...p, workspaces: p.workspaces.map((w) => (w.dir === dir ? { ...w, workers_seen: Date.now() } : w)) })), [dir, update]);
   useEffect(() => {
-    if (visible && modal?.kind === "worker") seeWorkers();
-  }, [visible, modal, seeWorkers]);
+    if (visible && worker) seeWorkers();
+  }, [visible, worker, seeWorkers]);
   useEffect(() => publishStatus(dir, { settings }), [dir, settings]);
 
   // The command palette, the status bar and the chat ask for a view: the
-  // editor (what's over it closes), or the changes or workers over it.
+  // editor (what's open beside or over it closes), or the changes or
+  // workers in the drawer.
   const showView = useCallback((v: ViewDetail["view"], source: ViewDetail["source"] = "session") => {
-    if (v === "changes") setModal({ kind: "changes", source });
-    else if (v === "workers") setModal({ kind: "worker", intent: newIntent("show") });
-    else setModal(null);
+    if (v === "changes") setDrawer({ kind: "changes", source });
+    else if (v === "workers") setWorker(newIntent("show"));
+    else {
+      setDrawer(null);
+      setWorker(null);
+      setAgent(null);
+      setModal(null);
+    }
   }, []);
   useEffect(() => {
     const f = (e: Event) => {
@@ -133,7 +143,7 @@ export function Workspace({
     };
     const onHistory = (e: Event) => {
       const d = (e as CustomEvent<HistoryDetail>).detail;
-      if (d.dir === dir) setModal({ kind: "history", path: d.path, folder: d.folder });
+      if (d.dir === dir) setDrawer({ kind: "history", path: d.path, folder: d.folder });
     };
     // A tool ran or a turn ended: look again soon (tools come in bursts).
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -214,11 +224,11 @@ export function Workspace({
         </div>
         <MenuBar
           dir={dir}
-          onChanges={(source) => setModal({ kind: "changes", source })}
+          onChanges={(source) => setDrawer({ kind: "changes", source })}
           onCommit={() => setModal({ kind: "commit" })}
-          onHistory={() => setModal({ kind: "history", path: "", folder: true })}
-          onAgent={(intent) => setModal({ kind: "agent", intent })}
-          onWorker={(intent) => setModal({ kind: "worker", intent })}
+          onHistory={() => setDrawer({ kind: "history", path: "", folder: true })}
+          onAgent={setAgent}
+          onWorker={setWorker}
           onSearch={onSearch}
           onSettings={onSettings}
           onOpenWorkspace={onOpenWorkspace}
@@ -281,11 +291,13 @@ export function Workspace({
           </FileLinksProvider>
         </aside>
       </div>
-      {visible && modal?.kind === "history" && <HistoryDialog dir={dir} path={modal.path} folder={modal.folder} onClose={() => setModal(null)} onRestored={() => setTouched((n) => n + 1)} />}
+      {visible && drawer?.kind === "history" && (
+        <HistoryDrawer key={`${drawer.path}#${drawer.folder}`} dir={dir} path={drawer.path} folder={drawer.folder} onClose={() => setDrawer(null)} onRestored={() => setTouched((n) => n + 1)} />
+      )}
       {visible && modal?.kind === "commit" && <CommitDialog dir={dir} onClose={() => setModal(null)} onCommitted={() => setTouched((n) => n + 1)} />}
-      {visible && modal?.kind === "changes" && <ChangesDialog dir={dir} initial={modal.source} onClose={() => setModal(null)} />}
-      {visible && modal?.kind === "agent" && <AgentEditor key={modal.intent.n} workspace={dir} scope={AgentScope.WORKSPACE} intent={modal.intent} dialog={{ onClose: () => setModal(null) }} />}
-      {visible && modal?.kind === "worker" && <WorkerModal key={modal.intent.n} dir={dir} intent={modal.intent} onClose={() => setModal(null)} />}
+      {visible && drawer?.kind === "changes" && <ChangesDrawer key={drawer.source} dir={dir} initial={drawer.source} onClose={() => setDrawer(null)} />}
+      {visible && agent && <AgentEditor key={agent.n} workspace={dir} scope={AgentScope.WORKSPACE} intent={agent} drawer={{ onClose: () => setAgent(null) }} />}
+      {visible && worker && <WorkerDrawer key={worker.n} dir={dir} intent={worker} onClose={() => setWorker(null)} />}
       {reviewing && visible && <ProjectDialog dir={dir} onClose={() => setReviewing(false)} onDecided={refreshSettings} />}
     </section>
   );

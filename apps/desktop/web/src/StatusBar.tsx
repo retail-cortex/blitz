@@ -39,7 +39,7 @@ import { effortIcon, efforts, modeOf, modes } from "./options";
 import { workspaceColor } from "./palette";
 import { inProgress, syncTitle } from "./gitRemote";
 import { displayName } from "./prefs";
-import { InboxDialog } from "./RunsInbox";
+import { InboxDrawer } from "./RunsInbox";
 import { useAdvanced, useApp } from "./state";
 import { shownVersion } from "./serviceVersion";
 import { contextShare, tokens, useWorkspaceStatus } from "./status";
@@ -161,7 +161,7 @@ function RunsItem() {
         <Icon path={mdiInboxOutline} size="sm" />
         <span>{waiting || active}</span>
       </button>
-      {open && <InboxDialog list={list} onClose={() => setOpen(false)} />}
+      {open && <InboxDrawer list={list} onClose={() => setOpen(false)} />}
     </>
   );
 }

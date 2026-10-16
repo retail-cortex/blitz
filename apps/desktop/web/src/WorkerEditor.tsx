@@ -44,7 +44,8 @@ export interface WorkerEdit {
  * worker waits to be reviewed and enabled; an edited one keeps its name,
  * is saved only over the file as it was loaded, and an enabled one waits
  * to be enabled again. Its buttons (Cancel, Save or Create) go in footer,
- * the dialog's footer, when given.
+ * the drawer's footer, when given. onDirty hears whether the form holds
+ * changes that aren't saved, so closing can ask first.
  */
 export function WorkerEditor({
   dir,
@@ -52,12 +53,14 @@ export function WorkerEditor({
   footer,
   onCancel,
   onSaved,
+  onDirty,
 }: {
   dir: string;
   edit?: WorkerEdit;
   footer: HTMLElement | null;
   onCancel: () => void;
   onSaved: (name: string) => void;
+  onDirty?: (dirty: boolean) => void;
 }) {
   const snack = useSnackbar();
   const [f, setF] = useState<WorkerForm>({ ...emptyWorkerForm, name: edit?.name ?? "", timezone: edit ? "" : (Intl.DateTimeFormat().resolvedOptions().timeZone ?? "") });
@@ -105,6 +108,12 @@ export function WorkerEditor({
       () => {},
     );
   }, [dir]);
+  // Unsaved: an edit that differs from the file as loaded, or a new
+  // worker's form that differs from the blank one it started as.
+  const [blank] = useState(f);
+  const dirty = edited(f, edit ? loaded : blank);
+  useEffect(() => onDirty?.(dirty), [dirty, onDirty]);
+  useEffect(() => () => onDirty?.(false), [onDirty]);
   const set = <K extends keyof WorkerForm>(k: K, v: WorkerForm[K]) => setF((x) => ({ ...x, [k]: v }));
   const note = footerNote(f, edit);
 

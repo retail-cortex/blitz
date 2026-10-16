@@ -23,7 +23,8 @@ import { mdiArrowLeft, mdiArrowRight, mdiBookOpenPageVariantOutline, mdiFormatLi
 import { openURL } from "../desktop";
 import { t } from "../i18n";
 import { DocsLinksProvider, Markdown, type DocsLinks } from "../Markdown";
-import { Button, Dialog, Icon, IconButton } from "../ui/controls";
+import { Icon, IconButton } from "../ui/controls";
+import { Drawer } from "../ui/Drawer";
 import { docLink, docPicture, searchDocs, siteURLOf, type DocNode, type DocPage } from "./index";
 import { loadAppDocs, type AppDocs as Docs } from "./load";
 import { firstPage, lastPlace, savePlace } from "./place";
@@ -57,7 +58,7 @@ function Tree({ node, at, open, depth = 0 }: { node: DocNode; at: string; open: 
 }
 
 /** The docs viewer, open on a page. */
-export function DocsDialog({ initial, onClose }: { initial: DocsAt; onClose: () => void }) {
+export function DocsDrawer({ initial, onClose }: { initial: DocsAt; onClose: () => void }) {
   const [docs, setDocs] = useState<Docs | null>(null);
   const [history, setHistory] = useState<Place[]>(() => [initial.page === undefined ? lastPlace() : { page: initial.page, anchor: initial.anchor }]);
   const [index, setIndex] = useState(0);
@@ -125,23 +126,16 @@ export function DocsDialog({ initial, onClose }: { initial: DocsAt; onClose: () 
   };
   const trail = page ? page.path.split("/").map((_, i, parts) => parts.slice(0, i + 1).join("/")) : [];
   return (
-    <Dialog
+    <Drawer
       title={t("desktop.docs.title")}
       icon={mdiBookOpenPageVariantOutline}
       onClose={onClose}
-      large
+      className="docs-drawer"
       headerActions={
         <>
           <IconButton icon={mdiArrowLeft} label={t("desktop.docs.back")} disabled={index === 0} onClick={back} />
           <IconButton icon={mdiArrowRight} label={t("desktop.docs.forward")} disabled={index === history.length - 1} onClick={forward} />
-        </>
-      }
-      footer={
-        <>
-          <Button onClick={() => void openURL(siteURLOf(page?.path ?? "", at.anchor)).catch(() => {})}>
-            <Icon path={mdiOpenInNew} size="sm" /> {t("desktop.docs.web")}
-          </Button>
-          <Button onClick={onClose}>{t("desktop.done")}</Button>
+          <IconButton icon={mdiOpenInNew} label={t("desktop.docs.web")} onClick={() => void openURL(siteURLOf(page?.path ?? "", at.anchor)).catch(() => {})} />
         </>
       }
     >
@@ -197,6 +191,6 @@ export function DocsDialog({ initial, onClose }: { initial: DocsAt; onClose: () 
           ) : null}
         </div>
       </div>
-    </Dialog>
+    </Drawer>
   );
 }

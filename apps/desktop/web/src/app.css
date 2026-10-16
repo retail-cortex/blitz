@@ -112,6 +112,7 @@
 .list-item.static-item::after { display: none; }
 
 /* Welcome */
+.main-col > .welcome { flex: 1; height: auto; min-height: 0; }
 .welcome-body { display: flex; flex-direction: column; align-items: flex-start; gap: 16px; width: min(720px, 90%); }
 .welcome-body .t-display { background: linear-gradient(90deg, var(--md-primary), var(--md-tertiary)); -webkit-background-clip: text; background-clip: text; color: transparent; }
 .welcome-recent { margin-top: 32px; }
@@ -167,6 +168,34 @@ body.resizing { cursor: col-resize; -webkit-user-select: none; user-select: none
 body.resizing iframe, body.resizing .cm-editor { pointer-events: none; }
 .files-rail { flex: none; width: 48px; display: flex; flex-direction: column; align-items: center; gap: 4px; padding-top: 8px; border-right: 1px solid var(--md-outline-variant); background: var(--md-surface-container-low); }
 .chat-panel.center { flex: 1; min-width: 0; border-left: none; }
+
+/* The drawer (ui/Drawer.tsx): the views (Settings, Docs, Changes, History,
+   an agent, Workers, the inbox, Licenses) slide down from under the top
+   menu as a sheet over the window's middle (the Files shelf, the editor,
+   the chat and the pinned input) to the status bar. The title bar stays:
+   its menus, and moving the window. The slot is the frame it slides in,
+   clipped at the top menu's edge. */
+.main-row { position: relative; display: flex; flex: 1; min-height: 0; }
+.main-col { display: flex; flex-direction: column; flex: 1; min-width: 0; min-height: 0; }
+.drawer-slot { position: absolute; left: 0; right: 0; top: var(--topbar-height); bottom: 0; z-index: 40; overflow: hidden; pointer-events: none; }
+.drawer {
+  position: absolute; inset: 0; pointer-events: auto;
+  display: flex; flex-direction: column; min-width: 0; min-height: 0;
+  border-top: 1px solid var(--md-outline-variant); background: var(--md-surface); outline: none;
+  animation: drawer-down 0.22s cubic-bezier(0.2, 0, 0, 1);
+}
+.drawer[hidden] { display: none; }
+/* While it's up, the pinned input under it gives it the room. */
+.shell:has(.drawer:not([hidden])) .composer-dock { display: none; }
+.drawer-head { display: flex; align-items: center; gap: 12px; height: 56px; padding: 0 12px 0 24px; flex: none; border-bottom: 1px solid var(--md-outline-variant); }
+.drawer-head h2 { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.drawer > .body { padding: 20px 24px; overflow-y: auto; flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 20px; }
+.drawer > footer { padding: 12px 24px; display: flex; justify-content: flex-end; align-items: center; gap: 8px; border-top: 1px solid var(--md-outline-variant); }
+@keyframes drawer-down { from { transform: translateY(-100%); } }
+@media (prefers-reduced-motion: reduce) { .drawer { animation: none; } }
+/* While a dialog is open the title bar still moves the window: the strip
+   over it drags (the scrim no longer closes the dialog on a click). */
+.scrim-drag { position: absolute; top: 0; left: 0; right: 0; height: var(--topbar-height); }
 
 /* Chat */
 .chat { display: flex; flex-direction: column; flex: 1; min-height: 0; }
@@ -459,16 +488,40 @@ body.resizing iframe, body.resizing .cm-editor { pointer-events: none; }
 .effect-ask { background: var(--md-warning-container); color: var(--md-on-warning-container); border-color: transparent; }
 .small-card { margin: 0 12px 8px 20px; padding: 10px 12px; font-size: 13px; }
 
-/* Settings dialog */
+/* Settings */
 .settings { display: flex; gap: 24px; min-height: 100%; }
 .settings-nav { width: 200px; flex: none; }
 .settings-pane { flex: 1; min-width: 0; padding-bottom: 8px; }
+/* In the drawer: the sections on the left as long as there's room, then
+   a rail of their icons (the names in tooltips). */
+.drawer { container: drawer / inline-size; }
+.settings-drawer .settings { gap: 32px; }
+.settings-drawer .settings-nav { width: 220px; position: sticky; top: 0; align-self: flex-start; }
+/* A form reads best at a measure: the settings, a worker's form and the
+   licenses keep to one, centered in the sheet; Changes, History and the
+   guide take its whole width. */
+.settings-drawer .settings-pane { max-width: 960px; }
+.settings-drawer .settings { width: 100%; max-width: 1220px; margin-inline: auto; }
+:is(.worker-drawer, .agent-drawer, .inbox-drawer, .license-drawer) > :is(.body, footer) > * { width: 100%; max-width: 1080px; margin-inline: auto; }
+@container drawer (max-width: 600px) {
+  .settings-drawer .settings-nav { width: 48px; }
+  .settings-drawer .settings-nav .list-item { justify-content: center; padding-inline: 0; }
+  .settings-drawer .settings-nav-label { display: none; }
+}
 .setting { display: flex; align-items: center; gap: 24px; padding: 16px 0; border-bottom: 1px solid var(--md-outline-variant); }
 .setting > .stack { flex: 1; min-width: 200px; }
 /* A control takes what it needs, up to about half the row; a long value
    (a path) wraps inside it rather than squeezing the description. */
 .setting-control { flex: 0 1 auto; min-width: 0; max-width: 55%; }
 .setting-control code { overflow-wrap: anywhere; }
+/* A narrow settings pane (the drawer at its narrower widths) puts each
+   control under its description rather than squeezing either. */
+.settings-pane { container: settings-pane / inline-size; }
+@container settings-pane (max-width: 520px) {
+  .setting { flex-wrap: wrap; gap: 8px 24px; }
+  .setting > .stack { flex-basis: 100%; min-width: 0; }
+  .setting-control { max-width: 100%; }
+}
 .swatches { display: flex; gap: 10px; flex-wrap: wrap; }
 .swatch { width: 36px; height: 36px; border-radius: 50%; border: 2px solid transparent; color: var(--md-surface); display: inline-flex; align-items: center; justify-content: center; cursor: pointer; }
 .swatch[aria-checked="true"] { box-shadow: 0 0 0 2px var(--md-surface-container-high), 0 0 0 4px var(--md-on-surface); }
@@ -575,6 +628,7 @@ body.resizing iframe, body.resizing .cm-editor { pointer-events: none; }
 .settings-help code { font-family: var(--md-mono); overflow-wrap: anywhere; }
 .settings-help p { margin: 0; line-height: 1.5; }
 @media (max-width: 900px) { .settings-edit { grid-template-columns: 1fr; } .settings-help { max-height: 140px; } }
+@container drawer (max-width: 760px) { .settings-edit { grid-template-columns: 1fr; } .settings-help { max-height: 140px; } }
 .settings-editor .cm-editor { height: 100%; }
 .settings-editor { transition: border-color 0.15s, box-shadow 0.15s; }
 .settings-editor:focus-within { border-color: var(--accent-a); box-shadow: 0 0 0 3px var(--focus-ring); }
@@ -688,7 +742,7 @@ code.file-link:hover { text-decoration-color: currentColor; }
 /* Only the sides: the session bar is a chat column too, with its own top and bottom. */
 .chat-panel:not(.center) .chat-column { padding-inline: 20px; }
 
-/* The license texts: monospace, wrapped, scrolling inside the dialog. */
+/* The license texts: monospace, wrapped, scrolling inside the drawer. */
 .license-text { max-height: 60vh; overflow: auto; margin: 0; padding: 16px; border-radius: var(--md-shape-md); background: var(--md-surface-container-low); font-size: 12px; line-height: 18px; white-space: pre-wrap; overflow-wrap: anywhere; }
 /* The project settings dialog's lists (ProjectDialog.tsx). */
 .project-items { margin: 4px 0 8px; padding-left: 20px; display: grid; gap: 4px; overflow-wrap: anywhere; }
@@ -716,7 +770,7 @@ code.file-link:hover { text-decoration-color: currentColor; }
 .log-msg { overflow-wrap: anywhere; }
 .log-attr { font-size: 11.5px; }
 
-/* The New worker dialog: two fields a row, three for the limits. */
+/* The New worker form: two fields a row, three for the limits. */
 .new-worker .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 16px; }
 .new-worker .triple { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px 16px; }
 .new-worker .field .input, .new-worker .field .select { width: 100%; }
@@ -743,15 +797,15 @@ code.file-link:hover { text-decoration-color: currentColor; }
 .agent-actions { gap: 8px; padding-top: 4px; }
 .agent-where { min-width: 0; text-align: right; }
 /* In Settings: a framed split, as tall as the pane allows. */
-/* What the menus open over the editor: the changes and an agent fill a
-   large dialog edge to edge; a worker reads as a wide one. */
-.changes-dialog .body { padding: 0; gap: 0; border-top: 1px solid var(--md-outline-variant); }
-.changes-dialog .changes { flex: 1; min-height: 0; }
-.worker-dialog .worker { max-width: none; }
+/* What the menus open in the drawer: the changes fill it edge to edge;
+   an agent and a worker keep the form's measure. */
+.changes-drawer > .body { padding: 0; gap: 0; border-top: 1px solid var(--md-outline-variant); overflow: hidden; }
+.changes-drawer .changes { flex: 1; min-height: 0; }
+.worker-drawer .worker { max-width: none; }
 /* An agent's form reads as the worker's: the dialog's padding and scroll,
    its buttons in the footer. */
-.agent-dialog .agent-editor, .agent-dialog .split, .agent-dialog .split-main { display: block; overflow: visible; padding: 0; }
-.agent-dialog .agent-form { max-width: none; gap: 14px; padding-bottom: 8px; }
+.agent-drawer .agent-editor, .agent-drawer .split, .agent-drawer .split-main { display: block; overflow: visible; padding: 0; }
+.agent-drawer .agent-form { max-width: none; gap: 14px; padding-bottom: 8px; }
 /* A form's buttons in its dialog's footer (the worker's, the agent's). */
 .dialog-actions { display: flex; flex: 1; align-items: center; gap: 8px; min-width: 0; }
 .agent-editor-user { height: min(640px, calc(100vh - 300px)); border: 1px solid var(--md-outline-variant); border-radius: var(--md-shape-md); overflow: hidden; }
@@ -919,7 +973,7 @@ code.file-link:hover { text-decoration-color: currentColor; }
 .markdown .katex { font-size: 1.1em; }
 .markdown .katex-error, .math-error { color: var(--md-error); font-family: var(--md-mono); font-size: 0.9em; }
 
-/* The user docs (docs/DocsDialog.tsx): the navigation and search at the
+/* The user docs (docs/DocsDrawer.tsx): the navigation and search at the
    left, the page at the right, in Settings' layout. */
 .docs-nav { display: flex; flex-direction: column; gap: 2px; overflow: auto; }
 .docs-nav-item { width: 100%; text-align: left; }
@@ -933,6 +987,10 @@ code.file-link:hover { text-decoration-color: currentColor; }
 /* A narrow window: the navigation folds behind Contents, over the page
    when open; the page takes the width. */
 .docs { container: docs / inline-size; position: relative; }
+/* In the drawer, the navigation and the page scroll on their own. */
+.docs-drawer > .body { overflow: hidden; padding-bottom: 0; }
+.docs-drawer .docs { flex: 1; min-height: 0; }
+.docs-drawer :is(.docs-nav, .docs-pane) { padding-bottom: 16px; }
 .docs-contents { display: none; align-items: center; gap: 6px; margin-bottom: 8px; }
 @container docs (max-width: 700px) {
   .docs-contents { display: inline-flex; }
@@ -1011,6 +1069,14 @@ code.file-link:hover { text-decoration-color: currentColor; }
 .history-head > .spacer { flex: 1; min-width: 0; }
 @media (min-width: 761px) { .revisions.history { grid-template-columns: minmax(300px, 440px) 1fr; } }
 .history-files { margin: 8px 0 0; padding-left: 20px; max-height: 240px; overflow: auto; }
+/* In the drawer: the list and the diff scroll on their own, and stack
+   when the drawer is narrow. */
+.history-drawer > .body { overflow: hidden; }
+.drawer .history-head { background: var(--md-surface); }
+@container drawer (max-width: 760px) {
+  .drawer .revisions, .drawer .revisions.history { grid-template-columns: 1fr; grid-template-rows: minmax(120px, 35%) 1fr; }
+  .drawer .revision-list { border-right: 0; border-bottom: 1px solid var(--md-outline-variant); padding: 0 0 8px; }
+}
 .history-graph .lane-0 { stroke: var(--graph-0); } .history-graph .node.lane-0 { fill: var(--graph-0); } .history-graph .node.merge.lane-0 { stroke: var(--graph-0); }
 .history-graph .lane-1 { stroke: var(--graph-1); } .history-graph .node.lane-1 { fill: var(--graph-1); } .history-graph .node.merge.lane-1 { stroke: var(--graph-1); }
 .history-graph .lane-2 { stroke: var(--graph-2); } .history-graph .node.lane-2 { fill: var(--graph-2); } .history-graph .node.merge.lane-2 { stroke: var(--graph-2); }
