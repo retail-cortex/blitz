@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/retail-cortex/blitz/pkg/loginitem"
+	"github.com/retail-cortex/blitz/pkg/pagehost"
 	"github.com/retail-cortex/blitz/pkg/socket"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -155,7 +156,7 @@ func TestStopServiceLoginItemAndStillRunning(t *testing.T) {
 
 // ProgramExists is true for files only; preferences go through the store.
 func TestProgramExistsAndPrefs(t *testing.T) {
-	a := &App{prefs: &prefsStore{path: filepath.Join(t.TempDir(), "desktop.json")}}
+	a := &App{prefs: pagehost.NewPrefsStore(filepath.Join(t.TempDir(), "desktop.json"))}
 	dir := t.TempDir()
 	assert.True(t, a.ProgramExists(program(t, dir, "x")))
 	assert.False(t, a.ProgramExists(dir))
@@ -170,28 +171,6 @@ func TestProgramExistsAndPrefs(t *testing.T) {
 	assert.Equal(t, saved, got)
 }
 
-// Preferences that can't be read or saved are reported, with the defaults.
-func TestPrefsErrors(t *testing.T) {
-	dir := t.TempDir()
-	s := &prefsStore{path: dir} // a directory where the file goes
-	p, err := s.load()
-	assert.Error(t, err)
-	assert.Equal(t, defaults(), p)
-
-	file := filepath.Join(t.TempDir(), "file")
-	require.NoError(t, os.WriteFile(file, nil, 0o600))
-	_, err = (&prefsStore{path: filepath.Join(file, "desktop.json")}).save(Prefs{})
-	assert.Error(t, err, "a directory it can't make")
-	_, err = (&prefsStore{path: dir}).save(Prefs{})
-	assert.Error(t, err, "a directory where the file goes")
-	if os.Geteuid() != 0 {
-		ro := filepath.Join(t.TempDir(), "ro")
-		require.NoError(t, os.Mkdir(ro, 0o500))
-		_, err = (&prefsStore{path: filepath.Join(ro, "desktop.json")}).save(Prefs{})
-		assert.Error(t, err, "a directory it can't write")
-	}
-}
-
 // With no unsaved changes the window closes without asking.
 func TestBeforeCloseWithoutChanges(t *testing.T) {
 	a := &App{}
@@ -201,86 +180,34 @@ func TestBeforeCloseWithoutChanges(t *testing.T) {
 	assert.False(t, a.beforeClose(context.TODO()), "nothing to lose: close")
 }
 
-// The page's CLI calls find this app's blitz in its runfiles, ask the
-// login shell for PATH, and link it.
-func TestCLIFromRunfiles(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("ZDOTDIR", "")
-	root := t.TempDir()
-	t.Setenv("RUNFILES_DIR", root)
+// Links other than web and mail ones are refused before anything opens.
+func TestOpenURLRefuses(t *testing.T) {
+	assert.ErrorContains(t, (&App{}).OpenURL("file:///etc/passwd"), "only web and mail links")
+}
+
+// program writes an executable file at dir/name and returns its path,
+// symlinks resolved.
+func program(t *testing.T, dir, name string) string {
+	t.Helper()
+	require.NoError(t, os.MkdirAll(dir, 0o755))
+	p := filepath.Join(dir, name)
+	require.NoError(t, os.WriteFile(p, []byte("#!/bin/sh\n"), 0o755))
+	p, err := filepath.EvalSymlinks(p)
+	require.NoError(t, err)
+	return p
+}
+
+// The CLI's calls are the shared host's: with no blitz beside the app,
+// there's nothing to link.
+func TestCLIBindings(t *testing.T) {
+	t.Setenv("RUNFILES_DIR", t.TempDir())
+	t.Setenv("HOME", t.TempDir())
 	a := &App{}
-	if _, err := findCLI(); err == nil {
+	if a.CLIStatus().CLI != "" {
 		t.Skip("a blitz is beside the test")
 	}
 	_, err := a.InstallCLI()
 	assert.ErrorContains(t, err, "isn't installed beside the app")
-	assert.Empty(t, a.CLIStatus().CLI)
-
-	cli := program(t, filepath.Join(root, "_main", "apps", "cli"), "blitz")
-	shell := filepath.Join(t.TempDir(), "zsh")
-	require.NoError(t, os.WriteFile(shell, []byte("#!/bin/sh\nprintf 'BLITZ_PATH=/nowhere\\n'\n"), 0o755))
-	t.Setenv("SHELL", shell)
-	got, err := a.InstallCLI()
-	require.NoError(t, err)
-	assert.Equal(t, filepath.Join(home, ".local", "bin", "blitz"), got.Link)
-	assert.Equal(t, filepath.Join(home, ".zshrc"), got.Profile)
-	s := a.CLIStatus()
-	assert.Equal(t, cli, s.CLI)
-	assert.Empty(t, s.OnPath, "the login shell's PATH doesn't have it yet")
-
-	t.Setenv("SHELL", "")
-	want := "/bin/sh"
-	if goruntime.GOOS == "darwin" {
-		want = "/bin/zsh"
-	}
-	assert.Equal(t, want, loginShell())
-}
-
-// installCLI and addToPath report what they can't write; linkDir passes
-// over a system directory it can't write.
-func TestInstallCLIErrors(t *testing.T) {
-	cli := program(t, t.TempDir(), "blitz")
-	file := filepath.Join(t.TempDir(), "file")
-	require.NoError(t, os.WriteFile(file, nil, 0o600))
-	_, err := installCLI(cli, file, "/bin/sh", "linux", nil)
-	assert.Error(t, err, "a home that's a file")
-
-	_, err = addToPath(file, "/bin/sh", "linux", "/x")
-	assert.Error(t, err, "a profile under a file")
-	home := t.TempDir()
-	require.NoError(t, os.Mkdir(filepath.Join(home, ".profile"), 0o700))
-	_, err = addToPath(home, "/bin/sh", "linux", "/x")
-	assert.Error(t, err, "a profile that's a directory")
-
-	home = t.TempDir()
-	require.NoError(t, os.MkdirAll(filepath.Join(home, ".config"), 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(home, ".config", "fish"), nil, 0o644))
-	got, err := installCLI(cli, home, "/usr/bin/fish", "linux", []string{"", "/usr/bin"})
-	assert.ErrorContains(t, err, "couldn't add")
-	assert.Equal(t, filepath.Join(home, ".local", "bin", "blitz"), got.Link, "linked all the same")
-
-	if os.Geteuid() != 0 && !writable("/usr/local/bin") {
-		dir, onPath := linkDir(home, []string{"/usr/local/bin"})
-		assert.Equal(t, filepath.Join(home, ".local", "bin"), dir)
-		assert.False(t, onPath)
-	}
-}
-
-// Links other than web and mail ones are refused before anything opens;
-// writable tells a directory it can write in.
-func TestOpenURLRefusesAndWritable(t *testing.T) {
-	assert.ErrorContains(t, (&App{}).OpenURL("file:///etc/passwd"), "only web and mail links")
-	assert.True(t, writable(t.TempDir()))
-	assert.False(t, writable(filepath.Join(t.TempDir(), "missing")))
-}
-
-// Without a home directory there's nowhere to link the CLI.
-func TestInstallCLIWithoutHome(t *testing.T) {
-	root := t.TempDir()
-	program(t, filepath.Join(root, "_main", "apps", "cli"), "blitz")
-	t.Setenv("RUNFILES_DIR", root)
-	t.Setenv("HOME", "")
-	_, err := (&App{}).InstallCLI()
-	assert.Error(t, err)
+	_, err = a.ReinstallCLI()
+	assert.ErrorContains(t, err, "isn't installed beside the app")
 }

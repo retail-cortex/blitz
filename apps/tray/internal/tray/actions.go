@@ -98,6 +98,9 @@ func (a Actions) Stop() error {
 	return nil
 }
 
+// Running reports whether the service answers now.
+func (a Actions) Running() bool { return a.Status().Running }
+
 // Restart restarts the service (Stop then Start without a login item).
 func (a Actions) Restart() error {
 	if loginitem.Installed() {

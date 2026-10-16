@@ -12,11 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package tray
+package pagehost
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -26,13 +25,10 @@ import (
 	goruntime "runtime"
 	"strings"
 	"testing"
-	"time"
 
-	"connectrpc.com/connect"
 	"github.com/retail-cortex/blitz/pkg/legal"
+	"github.com/retail-cortex/blitz/pkg/loginitem"
 	"github.com/retail-cortex/blitz/pkg/pageserver"
-	"github.com/retail-cortex/blitz/pkg/socket"
-	pb "github.com/retail-cortex/blitz/proto/blitz/v1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -49,9 +45,9 @@ func call(t *testing.T, h http.Handler, method string, args ...any) (int, json.R
 
 // The host answers the desktop app's calls the page makes, and lists them.
 func TestHost(t *testing.T) {
-	f, a := newFake(t)
+	svc, beside, _ := fakeSystem(t)
 	sock := filepath.Join(shortTemp(t), "blitz.sock")
-	h := Host{Actions: a, Version: "1.2.3", Socket: sock, Tray: "/opt/blitz/blitz-tray"}.Handler()
+	h := Host{Service: svc, Beside: beside, Version: "1.2.3", Socket: sock, Tray: "/opt/blitz/blitz-tray"}.Handler()
 
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/host/info", nil))
@@ -81,6 +77,8 @@ func TestHost(t *testing.T) {
 		{"no folder there", "OpenFolder", []any{file + ".no"}, http.StatusInternalServerError, ""},
 		{"not an absolute path", "RevealPath", []any{"a.txt"}, http.StatusInternalServerError, ""},
 		{"a wrong argument", "SetTray", []any{"yes"}, http.StatusInternalServerError, ""},
+		{"a path missing", "OpenFolder", nil, http.StatusInternalServerError, `{"error":"missing argument 1"}`},
+		{"which license, missing", "License", nil, http.StatusInternalServerError, `{"error":"missing argument 1"}`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			code, body := call(t, h, tc.method, tc.args...)
@@ -96,21 +94,21 @@ func TestHost(t *testing.T) {
 	require.NoError(t, json.Unmarshal(body, &st))
 	assert.Equal(t, ServiceStatus{Socket: sock, Tray: "/opt/blitz/blitz-tray"}, st)
 
-	// The service's controls are the tray's own.
-	f.running = true
+	// The service's controls are the host's (the tray's Actions).
 	code, body := call(t, h, "StopService", 0)
-	assert.Equal(t, http.StatusInternalServerError, code, "the fake never stops: %s", body)
-	require.NoError(t, os.WriteFile(filepath.Join(a.Beside, "blitzd"), []byte("#!/bin/sh\n"), 0o755))
-	f.running = false
+	assert.Equal(t, http.StatusOK, code, string(body))
 	code, body = call(t, h, "RestartService", 0)
 	assert.Equal(t, http.StatusOK, code, string(body))
-	assert.Contains(t, f.ran, "blitzd")
+	assert.Equal(t, []string{"stop", "restart"}, svc.calls)
+	svc.err = errors.New("no blitzd")
+	code, body = call(t, h, "StopService", 0)
+	assert.Equal(t, http.StatusInternalServerError, code)
+	assert.JSONEq(t, `{"error":"no blitzd"}`, string(body))
 }
 
 // Calls must be POSTs of a JSON array, to a method the host has.
 func TestHostRequests(t *testing.T) {
-	_, a := newFake(t)
-	h := Host{Actions: a}.Handler()
+	h := Host{}.Handler()
 	for _, tc := range []struct {
 		name, method, path, body string
 		code                     int
@@ -134,14 +132,14 @@ func TestHostInstallService(t *testing.T) {
 	if goruntime.GOOS == "windows" {
 		t.Skip("the registry")
 	}
-	f, a := newFake(t)
-	h := Host{Actions: a}.Handler()
+	svc, beside, ran := fakeSystem(t)
+	h := Host{Service: svc, Beside: beside}.Handler()
 	code, body := call(t, h, "InstallService")
 	assert.Equal(t, http.StatusInternalServerError, code, "no blitzd: %s", body)
-	require.NoError(t, os.WriteFile(filepath.Join(a.Beside, "blitzd"), []byte("#!/bin/sh\n"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(beside, "blitzd"), []byte("#!/bin/sh\n"), 0o755))
 	code, body = call(t, h, "InstallService")
 	assert.Equal(t, http.StatusOK, code, string(body))
-	assert.NotEmpty(t, f.ran, "the login item is loaded")
+	assert.NotEmpty(t, *ran, "the login item is loaded")
 }
 
 // The tray's start-at-login entry goes on and off from the page; the file
@@ -150,8 +148,8 @@ func TestHostSetTrayAndFileManager(t *testing.T) {
 	if goruntime.GOOS == "windows" {
 		t.Skip("the registry")
 	}
-	_, a := newFake(t)
-	h := Host{Actions: a, Tray: "/opt/blitz/blitz-tray"}.Handler()
+	svc, beside, _ := fakeSystem(t)
+	h := Host{Service: svc, Beside: beside, Tray: "/opt/blitz/blitz-tray"}.Handler()
 	for _, on := range []bool{true, false} {
 		code, body := call(t, h, "SetTray", on)
 		require.Equal(t, http.StatusOK, code, string(body))
@@ -171,48 +169,87 @@ func mustJSON(t *testing.T, v any) string {
 	return string(b)
 }
 
-// Stop asks the service to stop before it signals it.
-func TestStopAsksFirst(t *testing.T) {
-	f, a := newFake(t)
-	f.running = true
-	asked := 0
-	a.Shutdown = func() error { asked++; f.running = false; return nil }
-	require.NoError(t, a.Stop())
-	assert.Equal(t, 1, asked)
-
-	// A service that can't be asked is signalled (here: no process, so it
-	// stays up).
-	f.running = true
-	a.Shutdown = func() error { return errors.New("unimplemented") }
-	assert.ErrorContains(t, a.Stop(), "still running")
-}
-
-// Shutdown reaches the service's Shutdown over its socket.
-func TestShutdown(t *testing.T) {
-	sock := filepath.Join(shortTemp(t), "blitz.sock")
-	ln, err := socket.Listen(sock)
-	require.NoError(t, err)
-	asked := make(chan struct{}, 1)
-	mux := http.NewServeMux()
-	mux.Handle(pb.NewWorkspaceServiceHandler(shutdownService{asked: asked}))
-	srv := &http.Server{Handler: mux}
-	go func() { _ = srv.Serve(ln) }()
-	t.Cleanup(func() { srv.Close() })
-	require.NoError(t, Shutdown(context.Background(), sock))
-	select {
-	case <-asked:
-	case <-time.After(5 * time.Second):
-		t.Fatal("not asked")
+// The preferences, the sandbox and (but on Windows) the blitz command are
+// the host's too, the preferences only when it keeps them.
+func TestHostPrefsSandboxAndCLI(t *testing.T) {
+	names := func(h http.Handler) []string {
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/host/info", nil))
+		var info struct{ Methods []string }
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &info))
+		return info.Methods
 	}
-	assert.Error(t, Shutdown(context.Background(), filepath.Join(shortTemp(t), "none.sock")))
+	assert.NotContains(t, names(Host{}.Handler()), "GetPrefs", "no store: the page keeps its own")
+
+	h := Host{Prefs: NewPrefsStore(filepath.Join(t.TempDir(), "desktop.json"))}.Handler()
+	all := names(h)
+	for _, m := range []string{"GetPrefs", "SavePrefs", "SandboxStatus", "FixSandbox"} {
+		assert.Contains(t, all, m)
+	}
+	cli := []string{"CLIStatus", "InstallCLI", "ReinstallCLI"}
+	for _, m := range cli {
+		if goruntime.GOOS == "windows" {
+			assert.NotContains(t, all, m)
+		} else {
+			assert.Contains(t, all, m)
+		}
+	}
+
+	code, body := call(t, h, "GetPrefs")
+	require.Equal(t, http.StatusOK, code, string(body))
+	var p Prefs
+	require.NoError(t, json.Unmarshal(body, &p))
+	p.Theme = "dark"
+	code, body = call(t, h, "SavePrefs", p)
+	require.Equal(t, http.StatusOK, code, string(body))
+	_, body = call(t, h, "GetPrefs")
+	require.NoError(t, json.Unmarshal(body, &p))
+	assert.Equal(t, "dark", p.Theme, "saved in the file")
+	code, _ = call(t, h, "SavePrefs")
+	assert.Equal(t, http.StatusInternalServerError, code, "no preferences to save")
+
+	code, body = call(t, h, "SandboxStatus")
+	require.Equal(t, http.StatusOK, code, string(body))
+	assert.Contains(t, string(body), `"state"`)
+	if goruntime.GOOS != "windows" {
+		code, body = call(t, h, "CLIStatus")
+		assert.Equal(t, http.StatusOK, code, string(body))
+	}
 }
 
-type shutdownService struct {
-	pb.UnimplementedWorkspaceServiceHandler
-	asked chan struct{}
+// fakeService records what the host asks of the service.
+type fakeService struct {
+	calls   []string
+	running bool
+	err     error
 }
 
-func (s shutdownService) Shutdown(context.Context, *connect.Request[pb.ShutdownRequest]) (*connect.Response[pb.ShutdownResponse], error) {
-	s.asked <- struct{}{}
-	return connect.NewResponse(&pb.ShutdownResponse{}), nil
+func (f *fakeService) Start() error   { f.calls = append(f.calls, "start"); return f.err }
+func (f *fakeService) Stop() error    { f.calls = append(f.calls, "stop"); return f.err }
+func (f *fakeService) Restart() error { f.calls = append(f.calls, "restart"); return f.err }
+func (f *fakeService) Running() bool  { return f.running }
+
+// fakeSystem is a host's world for a test: a fake service, an empty
+// directory beside it (no blitzd), no blitzd on PATH, a home of its own,
+// and the login item's system commands recorded instead of run.
+func fakeSystem(t *testing.T) (*fakeService, string, *[]string) {
+	t.Helper()
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("PATH", t.TempDir())
+	var ran []string
+	old := loginitem.RunSystem
+	loginitem.RunSystem = func(name string, args ...string) error {
+		ran = append(ran, name+" "+strings.Join(args, " "))
+		return nil
+	}
+	t.Cleanup(func() { loginitem.RunSystem = old })
+	return &fakeService{}, t.TempDir(), &ran
+}
+
+// shortTemp is a directory short enough for a socket's path.
+func shortTemp(t *testing.T) string {
+	dir, err := os.MkdirTemp("/tmp", "host")
+	require.NoError(t, err)
+	t.Cleanup(func() { os.RemoveAll(dir) })
+	return dir
 }

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package main
+package pagehost
 
 import (
 	"encoding/json"
@@ -28,8 +28,8 @@ import (
 )
 
 func TestPrefsDefaultsAndRoundTrip(t *testing.T) {
-	s := &prefsStore{path: filepath.Join(t.TempDir(), "blitz", "desktop.json")}
-	p, err := s.load()
+	s := NewPrefsStore(filepath.Join(t.TempDir(), "blitz", "desktop.json"))
+	p, err := s.Load()
 	require.NoError(t, err, "defaults %+v", p)
 	require.Equal(t, "system", p.Theme, "defaults %+v %v", p, err)
 	require.Equal(t, "comfortable", p.Density, "defaults %+v %v", p, err)
@@ -51,7 +51,7 @@ func TestPrefsDefaultsAndRoundTrip(t *testing.T) {
 	p.Active = b // closed: can't be active
 	p.Files, p.ShowHidden, p.ChatWidth, p.FilesWidth = true, true, -3, 99999
 	p.DocWidth, p.EditorZoom, p.GPU = "readable", 125, "off"
-	saved, err := s.save(p)
+	saved, err := s.Save(p)
 	require.NoError(t, err)
 	require.Len(t, saved.Workspaces, 2, "normalized %+v", saved)
 	require.Equal(t, a, saved.Workspaces[0].Dir, "normalized %+v", saved)
@@ -67,14 +67,14 @@ func TestPrefsDefaultsAndRoundTrip(t *testing.T) {
 	require.Equal(t, 125, saved.EditorZoom, "normalized %+v", saved)
 	require.Equal(t, "off", saved.GPU, "normalized %+v", saved)
 	p.DocWidth, p.EditorZoom = "huge", 900
-	odd, err := s.save(p)
+	odd, err := s.Save(p)
 	require.NoError(t, err)
 	require.Equal(t, "full", odd.DocWidth, "normalized %+v", odd)
 	require.Equal(t, 100, odd.EditorZoom, "normalized %+v", odd)
 	info, err := os.Stat(s.path)
 	require.NoError(t, err, "file mode %v", info)
 	require.Equal(t, fs.FileMode(0o600), info.Mode().Perm(), "file mode %v %v", info, err)
-	got, err := s.load()
+	got, err := s.Load()
 	require.NoError(t, err, "loaded %+v", got)
 	require.Equal(t, "dark", got.Theme, "loaded %+v %v", got, err)
 	require.Len(t, got.Workspaces, 2, "loaded %+v %v", got, err)
@@ -85,12 +85,12 @@ func TestPrefsDefaultsAndRoundTrip(t *testing.T) {
 // The page reads workspaces as a list: with none it must be [], not null
 // (a first start crashed the page when the service came up).
 func TestPrefsSendAnEmptyListNotNull(t *testing.T) {
-	s := &prefsStore{path: filepath.Join(t.TempDir(), "desktop.json")}
-	p, err := s.load()
+	s := NewPrefsStore(filepath.Join(t.TempDir(), "desktop.json"))
+	p, err := s.Load()
 	require.NoError(t, err)
 	data, _ := json.Marshal(p)
 	require.Contains(t, string(data), `"workspaces":[]`, "defaults encode as %s", data)
-	saved, _ := s.save(Prefs{})
+	saved, _ := s.Save(Prefs{})
 	data, _ = json.Marshal(saved)
 	require.Contains(t, string(data), `"workspaces":[]`, "saved encode as %s", data)
 }
@@ -135,15 +135,15 @@ func TestPrefsMarkdownCSS(t *testing.T) {
 
 func TestDamagedPrefsAreSetAside(t *testing.T) {
 	dir := t.TempDir()
-	s := &prefsStore{path: filepath.Join(dir, "desktop.json")}
+	s := NewPrefsStore(filepath.Join(dir, "desktop.json"))
 	os.WriteFile(s.path, []byte("{nope"), 0o600)
-	p, err := s.load()
+	p, err := s.Load()
 	require.Error(t, err, "%+v", p)
 	require.Contains(t, err.Error(), "set aside", "%+v %v", p, err)
 	require.Equal(t, "system", p.Theme, "%+v %v", p, err)
 	_, err = os.Stat(s.path + ".damaged")
 	assert.NoError(t, err, "the damaged file wasn't kept")
-	_, err = s.load()
+	_, err = s.Load()
 	assert.NoError(t, err, "after setting it aside")
 }
 
@@ -163,7 +163,7 @@ func TestSafeURL(t *testing.T) {
 		"http://[::1":               false,
 	} {
 		t.Run(link, func(t *testing.T) {
-			got := safeURL(link)
+			got := SafeURL(link)
 			assert.Equal(t, want, got, "%q: %v", link, got)
 		})
 	}
@@ -172,11 +172,11 @@ func TestSafeURL(t *testing.T) {
 // A damaged file that can't be set aside says so.
 func TestDamagedPrefsNotSetAside(t *testing.T) {
 	dir := t.TempDir()
-	s := &prefsStore{path: filepath.Join(dir, "desktop.json")}
+	s := NewPrefsStore(filepath.Join(dir, "desktop.json"))
 	require.NoError(t, os.WriteFile(s.path, []byte("{not json"), 0o600))
 	require.NoError(t, os.Chmod(dir, 0o500))
 	t.Cleanup(func() { os.Chmod(dir, 0o700) })
-	p, err := s.load()
+	p, err := s.Load()
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "couldn't be set aside")
 	assert.ErrorIs(t, err, fs.ErrPermission)

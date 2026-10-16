@@ -25,6 +25,7 @@ import (
 
 	"github.com/retail-cortex/blitz/apps/desktop/internal/webprocess"
 	"github.com/retail-cortex/blitz/pkg/config"
+	"github.com/retail-cortex/blitz/pkg/pagehost"
 	"github.com/retail-cortex/blitz/pkg/pageserver"
 	"github.com/retail-cortex/blitz/pkg/socket"
 	"github.com/wailsapp/wails/v2"
@@ -47,12 +48,12 @@ var version = "dev"
 const maxWindowSize = 16384
 
 func main() {
-	app := &App{socket: socket.DefaultSocket(), prefs: &prefsStore{path: config.ExpandHome("~/.blitz/desktop.json")}}
+	app := &App{socket: socket.DefaultSocket(), prefs: pagehost.NewPrefsStore(config.ExpandHome("~/.blitz/desktop.json"))}
 	app.links.emit = showLink
 	for _, l := range linkArgs(os.Args[1:]) { // Linux: opened with a link
 		app.links.receive(l)
 	}
-	saved, _ := app.prefs.load() // the defaults when none are readable
+	saved, _ := app.prefs.Load() // the defaults when none are readable
 	err := wails.Run(&options.App{
 		Title:     "Blitz",
 		Width:     1280,

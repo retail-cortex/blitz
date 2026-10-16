@@ -51,6 +51,8 @@ libs='kind("go_library", %s)'
 		"$(printf "$libs" 'deps(kind("go_library", //apps/desktop/...))') intersect (//apps/cli/... + //apps/service/... + //apps/tray/...)"
 	empty "the tray doesn't reach the other apps or the engine" \
 		"$(printf "$libs" 'deps(kind("go_library", //apps/tray/...))') intersect (//apps/cli/... + //apps/service/... + //apps/desktop/... + //pkg/engine/...)"
+	empty "the page's host doesn't reach the engine (it runs in the tray and the desktop app)" \
+		"$(printf "$libs" 'deps(kind("go_library", //pkg/pagehost/...))') intersect //pkg/engine/..."
 	empty "no engine library is public" \
 		'attr(visibility, "//visibility:public", kind("go_library", //pkg/engine/...))'
 }

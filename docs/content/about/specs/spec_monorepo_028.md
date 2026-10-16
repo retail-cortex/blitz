@@ -27,6 +27,7 @@ Blitz is three independent apps (the CLI, the service, the desktop app) over sha
 | `pkg/client`, `pkg/socket` | `Backend` over the service's API; where the service listens |
 | `pkg/engine`, `pkg/engine/…` | The engine (`engine.Open` → `Workspace`, implementing `api.Backend`) |
 | `pkg/{config,i18n,images,observability,redact,textutil}` | Shared by every app |
+| `pkg/pagehost` | What the desktop page asks of the program serving it, beyond the service (its status and controls, the window's preferences, the `blitz` command's installation, the OS sandbox): the tray's `/host/` and the desktop app's bindings call the same code (since v0.6.6) |
 | `proto/blitz/v1` | The service API's protos |
 | `build/` | Build rules and settings: the Connect compiler for the Go protos, nogo, the version stamp, `es_proto.bzl`, `macos.bzl`, `pkg_config.bzl`, `workspace_status.sh` |
 | `tools/` | Commands for working on the repository: `check_deps`, `check_format.sh`, `buf`, `tidy`, `license_headers`, `third_party_notices.sh` (with `notices`, its Go program), `gopackagesdriver.sh` |

@@ -17,32 +17,20 @@ package main
 import (
 	"context"
 
+	"github.com/retail-cortex/blitz/pkg/pagehost"
 	"github.com/retail-cortex/blitz/pkg/sandboxsetup"
 )
 
-// SandboxFix is what FixSandbox did: the sandbox's state after it, and if
-// it didn't work, why and the commands to run by hand.
-type SandboxFix struct {
-	Status   sandboxsetup.Status `json:"status"`
-	Error    string              `json:"error,omitempty"`
-	Commands string              `json:"commands,omitempty"`
-}
+// SandboxFix is what FixSandbox did (pkg/pagehost).
+type SandboxFix = pagehost.SandboxFix
 
 // SandboxStatus is whether the OS sandbox for the agent's commands works
-// here (Linux: bubblewrap; "unsupported" elsewhere, where the page hides
-// the setting).
-func (a *App) SandboxStatus() sandboxsetup.Status { return sandboxsetup.Check(a.context()) }
+// here (pkg/pagehost).
+func (a *App) SandboxStatus() sandboxsetup.Status { return pagehost.SandboxStatus(a.context()) }
 
-// FixSandbox lets bubblewrap past AppArmor's restriction with a profile
-// for bwrap alone, asking for the password with the system's dialog
-// (pkexec), then checks again.
-func (a *App) FixSandbox() SandboxFix {
-	st, err := sandboxsetup.Fix(a.context(), sandboxsetup.Elevation{Graphical: true})
-	if err != nil {
-		return SandboxFix{Status: st, Error: err.Error(), Commands: sandboxsetup.Commands(st)}
-	}
-	return SandboxFix{Status: st}
-}
+// FixSandbox lets bubblewrap past AppArmor's restriction, asking for the
+// password with the system's dialog, then checks again (pkg/pagehost).
+func (a *App) FixSandbox() SandboxFix { return pagehost.FixSandbox(a.context()) }
 
 // context is the app's, or a background one before Wails starts it (tests).
 func (a *App) context() context.Context {

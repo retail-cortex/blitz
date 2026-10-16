@@ -28,8 +28,8 @@ import (
 	"time"
 
 	"github.com/retail-cortex/blitz/apps/desktop/internal/printpdf"
-	"github.com/retail-cortex/blitz/pkg/legal"
 	"github.com/retail-cortex/blitz/pkg/loginitem"
+	"github.com/retail-cortex/blitz/pkg/pagehost"
 	"github.com/retail-cortex/blitz/pkg/socket"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
@@ -40,7 +40,7 @@ import (
 type App struct {
 	ctx    context.Context
 	socket string
-	prefs  *prefsStore
+	prefs  *pagehost.PrefsStore
 
 	notifyOnce sync.Once
 	notifyOK   bool // notifications work and the user allowed them
@@ -98,19 +98,8 @@ func (a *App) Notify(title, body, dir string) error {
 func (a *App) Version() string { return version }
 
 // ServiceStatus says whether the service answers and whether it starts at
-// login.
-type ServiceStatus struct {
-	Running   bool   `json:"running"`
-	Installed bool   `json:"installed"`
-	Socket    string `json:"socket"`
-	// Service is the blitzd this app installs and restarts ("" if none
-	// was found).
-	Service string `json:"service"`
-	// Tray is the blitz-tray beside this app ("" if none was found), and
-	// TrayInstalled whether it starts at login.
-	Tray          string `json:"tray"`
-	TrayInstalled bool   `json:"tray_installed"`
-}
+// login (pkg/pagehost).
+type ServiceStatus = pagehost.ServiceStatus
 
 // ServiceStatus reports whether the service answers on its socket, whether
 // its login item is installed, and which blitzd this app would install.
@@ -229,38 +218,25 @@ func (a *App) ChooseWorkspace(title string) (string, error) {
 
 // ProgramExists reports whether path is a file: the program a running
 // service started from may have been removed since (DSK-51a).
-func (a *App) ProgramExists(path string) bool {
-	info, err := os.Stat(path)
-	return err == nil && !info.IsDir()
-}
+func (a *App) ProgramExists(path string) bool { return pagehost.ProgramExists(path) }
 
 // GetPrefs returns the window's settings (the defaults when none are
 // saved). A damaged file is reported once and replaced by the defaults.
-func (a *App) GetPrefs() (Prefs, error) { return a.prefs.load() }
+func (a *App) GetPrefs() (Prefs, error) { return a.prefs.Load() }
 
 // SavePrefs saves the window's settings and returns them as saved
 // (normalized).
-func (a *App) SavePrefs(p Prefs) (Prefs, error) { return a.prefs.save(p) }
+func (a *App) SavePrefs(p Prefs) (Prefs, error) { return a.prefs.Save(p) }
 
 // License returns one of Blitz's license texts for the About view:
 // "notice" (the NOTICE), "full" (the Apache License) or "third-party"
 // (the notices of the software the app includes).
-func (a *App) License(which string) (string, error) {
-	switch which {
-	case "notice":
-		return legal.Notice, nil
-	case "full":
-		return legal.License, nil
-	case "third-party":
-		return legal.ThirdParty, nil
-	}
-	return "", fmt.Errorf("unknown license text %q", which)
-}
+func (a *App) License(which string) (string, error) { return pagehost.License(which) }
 
 // OpenURL opens a web or mail link in the system browser, never in the
 // window. Other schemes are refused.
 func (a *App) OpenURL(link string) error {
-	if !safeURL(link) {
+	if !pagehost.SafeURL(link) {
 		return fmt.Errorf("not opening %q: only web and mail links open", link)
 	}
 	runtime.BrowserOpenURL(a.ctx, link)

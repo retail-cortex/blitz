@@ -12,14 +12,22 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package tray
+// Package pagehost answers the desktop page's calls to the program that
+// serves it, where the Wails app's bindings aren't there: the tray on
+// Windows, and the Electron app's sidecar (blitz-tray --serve). It also
+// holds what those calls do that the Wails app does too (the window's
+// preferences, the blitz command's installation, the OS sandbox), so
+// every host answers alike.
+package pagehost
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	goruntime "runtime"
 	"slices"
 	"strings"
@@ -31,24 +39,40 @@ import (
 	"github.com/retail-cortex/blitz/pkg/socket"
 )
 
-// Host answers the page the tray serves (pageserver.HostPrefix) with what
-// the desktop app's bindings do and a browser can't: the service's
-// status and controls, starting at login, showing files, the licenses.
-// The page calls POST /host/<Method> with its arguments as a JSON array
-// and gets the result as JSON, or {"error": "…"} with status 500, the
-// method names being the desktop app's (window.go.main.App); GET
-// /host/info lists them.
+// Service starts and stops the service for the host (the tray's
+// Actions).
+type Service interface {
+	Start() error
+	Stop() error
+	Restart() error
+	Running() bool
+}
+
+// Host answers the page it serves (pageserver.HostPrefix) with what the
+// desktop app's bindings do and a browser can't: the service's status
+// and controls, starting at login, showing files, the licenses, the
+// window's preferences, the blitz command and the OS sandbox. The page
+// calls POST /host/<Method> with its arguments as a JSON array and gets
+// the result as JSON, or {"error": "…"} with status 500, the method names
+// being the desktop app's (window.go.main.App); GET /host/info lists
+// them.
 type Host struct {
-	Actions Actions
-	// Version is the tray's, which the page shows as the app's.
+	Service Service
+	// Beside is the directory blitzd is looked for in before PATH (the
+	// host's own).
+	Beside string
+	// Version is the host's, which the page shows as the app's.
 	Version string
 	// Socket is the service's.
 	Socket string
 	// Tray is the tray's own program, which starts at login.
 	Tray string
+	// Prefs keeps the window's preferences (nil: the page keeps its own).
+	Prefs *PrefsStore
 }
 
-// ServiceStatus is the desktop app's ServiceStatus, as the page reads it.
+// ServiceStatus says whether the service answers and whether it starts at
+// login, as the page reads it.
 type ServiceStatus struct {
 	Running       bool   `json:"running"`
 	Installed     bool   `json:"installed"`
@@ -72,7 +96,7 @@ func (h Host) methods() map[string]hostMethod {
 			return nil, f(p)
 		}
 	}
-	return map[string]hostMethod{
+	m := map[string]hostMethod{
 		"Version":       func([]json.RawMessage) (any, error) { return h.Version, nil },
 		"ServiceStatus": func([]json.RawMessage) (any, error) { return h.status(), nil },
 		"InstallService": func([]json.RawMessage) (any, error) {
@@ -88,14 +112,14 @@ func (h Host) methods() map[string]hostMethod {
 			}
 			return nil, loginitem.UninstallTray()
 		},
-		"StopService":    func([]json.RawMessage) (any, error) { return nil, h.Actions.Stop() },
-		"RestartService": func([]json.RawMessage) (any, error) { return nil, h.Actions.Restart() },
+		"StopService":    func([]json.RawMessage) (any, error) { return nil, h.Service.Stop() },
+		"RestartService": func([]json.RawMessage) (any, error) { return nil, h.Service.Restart() },
 		"ProgramExists": func(args []json.RawMessage) (any, error) {
 			var p string
 			if err := arg(args, 0, &p); err != nil {
 				return nil, err
 			}
-			return isFile(p), nil
+			return ProgramExists(p), nil
 		},
 		"OpenFolder":   path(fileview.OpenFolder),
 		"OpenDocument": path(fileview.OpenDocument),
@@ -106,15 +130,35 @@ func (h Host) methods() map[string]hostMethod {
 			if err := arg(args, 0, &which); err != nil {
 				return nil, err
 			}
-			return license(which)
+			return License(which)
 		},
+		"SandboxStatus": func([]json.RawMessage) (any, error) { return SandboxStatus(context.Background()), nil },
+		"FixSandbox":    func([]json.RawMessage) (any, error) { return FixSandbox(context.Background()), nil },
 	}
+	if h.Prefs != nil {
+		m["GetPrefs"] = func([]json.RawMessage) (any, error) { return h.Prefs.Load() }
+		m["SavePrefs"] = func(args []json.RawMessage) (any, error) {
+			var p Prefs
+			if err := arg(args, 0, &p); err != nil {
+				return nil, err
+			}
+			return h.Prefs.Save(p)
+		}
+	}
+	// The blitz command goes on PATH with a link and the shell's startup
+	// file: not Windows's way.
+	if goruntime.GOOS != "windows" {
+		m["CLIStatus"] = func([]json.RawMessage) (any, error) { return CurrentCLIStatus(), nil }
+		m["InstallCLI"] = func([]json.RawMessage) (any, error) { return InstallCLI() }
+		m["ReinstallCLI"] = func([]json.RawMessage) (any, error) { return ReinstallCLI() }
+	}
+	return m
 }
 
 // status is the service's status as the page shows it. On Windows the
 // service starts at login with the tray, which starts it.
 func (h Host) status() ServiceStatus {
-	bin, _ := loginitem.FindService(h.Actions.Beside)
+	bin, _ := loginitem.FindService(h.Beside)
 	installed := loginitem.Installed()
 	if goruntime.GOOS == "windows" {
 		installed = loginitem.TrayInstalled()
@@ -129,20 +173,22 @@ func (h Host) installService() error {
 		if err := loginitem.InstallTray(h.Tray); err != nil {
 			return err
 		}
-		if h.Actions.Status().Running {
+		if h.Service.Running() {
 			return nil
 		}
-		return h.Actions.Start()
+		return h.Service.Start()
 	}
-	bin, err := loginitem.FindService(h.Actions.Beside)
+	bin, err := loginitem.FindService(h.Beside)
 	if err != nil {
 		return err
 	}
 	return loginitem.Install(bin)
 }
 
-// license is one of the license texts the desktop app shows.
-func license(which string) (string, error) {
+// License is one of the license texts the desktop app shows: "notice"
+// (the NOTICE), "full" (the Apache License) or "third-party" (the notices
+// of the software the app includes).
+func License(which string) (string, error) {
 	switch which {
 	case "notice":
 		return legal.Notice, nil
@@ -152,6 +198,13 @@ func license(which string) (string, error) {
 		return legal.ThirdParty, nil
 	}
 	return "", fmt.Errorf("unknown license text %q", which)
+}
+
+// ProgramExists reports whether path is a file: the program a running
+// service started from may have been removed since (DSK-51a).
+func ProgramExists(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && !info.IsDir()
 }
 
 // arg decodes the i-th argument into v.
