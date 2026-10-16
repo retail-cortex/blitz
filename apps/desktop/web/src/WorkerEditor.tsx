@@ -16,7 +16,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { mdiAlertCircleOutline, mdiAutoFix, mdiRefresh } from "@mdi/js";
+import { mdiAlertCircleOutline, mdiCreationOutline, mdiRefresh } from "@mdi/js";
 import { workers, workspaces } from "./api";
 import { message, reason } from "./errors";
 import { t } from "./i18n";
@@ -233,22 +233,23 @@ export function WorkerEditor({
           </label>
         </div>
         <div className="field">
-          <div className="row">
-            <span className="t-label spacer" id="worker-prompt-label">
-              {t("desktop.newworker.prompt")}
-            </span>
-            <Button small variant="tonal" icon={mdiAutoFix} disabled={rewriting || !f.prompt.trim()} title={t("desktop.worker.rewrite_hint")} onClick={() => void rewrite()}>
-              {rewriting ? t("desktop.worker.rewriting") : t("desktop.worker.rewrite")}
-            </Button>
-          </div>
+          <label className="t-label" htmlFor="worker-prompt">
+            {t("desktop.newworker.prompt")}
+          </label>
+          {rewriting && <div className="progress" role="progressbar" aria-label={t("desktop.worker.rewriting")} />}
           <textarea
+            id="worker-prompt"
             className="input new-worker-prompt"
-            aria-labelledby="worker-prompt-label"
             value={f.prompt}
             placeholder={t("desktop.newworker.prompt_placeholder")}
             rows={8}
             onChange={(e) => set("prompt", e.target.value)}
           />
+          <span>
+            <Button small icon={mdiCreationOutline} disabled={rewriting || !f.prompt.trim()} title={t("desktop.worker.rewrite_hint")} onClick={() => void rewrite()}>
+              {rewriting ? t("desktop.worker.rewriting") : t("desktop.worker.rewrite")}
+            </Button>
+          </span>
         </div>
         <label className="field">
           <span className="t-label">{t("desktop.newworker.permissions")}</span>
@@ -278,7 +279,7 @@ export function WorkerEditor({
           <Dialog
             wide
             title={t("desktop.worker.rewrite_title")}
-            icon={mdiAutoFix}
+            icon={mdiCreationOutline}
             onClose={() => setSuggestion(null)}
             footer={
               <>
@@ -303,7 +304,7 @@ export function WorkerEditor({
                   ))}
                 </ul>
               )}
-              <textarea className="input rewrite-prompt" readOnly rows={11} value={suggestion.prompt} aria-label={t("desktop.worker.rewrite_title")} />
+              <textarea className="input mono rewrite-prompt" readOnly rows={11} value={suggestion.prompt} aria-label={t("desktop.worker.rewrite_title")} />
               {permsDiffer && (
                 <div className="stack" style={{ gap: 4 }}>
                   <label className="row check">

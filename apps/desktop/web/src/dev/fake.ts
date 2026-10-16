@@ -801,7 +801,12 @@ export function installFake() {
           const s = state(workspace).settings;
           return { agent: s.agent, model: s.model, provider: s.provider, effort: s.effort, permissionMode: s.mode, agency: s.agency, locale: s.locale, style: s.style, imagesEnabled: true, speechModel: s.speechModel ?? "", acceptedMedia: fakeAccepted(s.provider) };
         },
-        getModel: ({ workspace }) => ({ name: state(workspace).settings.model, provider: state(workspace).settings.provider, unavailable: "" }),
+        // ?nomodel: the model can't be reached (the chat's warning card).
+        getModel: ({ workspace }) => ({
+          name: state(workspace).settings.model,
+          provider: state(workspace).settings.provider,
+          unavailable: new URLSearchParams(location.search).has("nomodel") ? "the Gemini API key is missing (set GEMINI_API_KEY)" : "",
+        }),
         setModel: ({ workspace, ref }) => {
           const [provider, name] = ref.includes("/") ? ref.split("/", 2) : [state(workspace).settings.provider, ref];
           Object.assign(state(workspace).settings, { provider, model: name });
@@ -961,7 +966,8 @@ export function installFake() {
         },
         closeWorkspace: () => ({}),
         loadImage: ({ path }) => ({ image: { id: `img-${path}`, name: path, mime: "image/png", width: 640, height: 480, size: 12345n } }),
-        getServiceInfo: () => ({ version: "dev", executable: "" }),
+        // ?oldservice: a service older than the app (the stale banner).
+        getServiceInfo: () => ({ version: new URLSearchParams(location.search).has("oldservice") ? "0.6.1" : "dev", executable: "" }),
         listLogDays: () => ({ days: [...fakeLogDays], dir: "~/.blitz/logs" }),
         deleteLogDay: ({ day }) => {
           fakeLogDays = fakeLogDays.filter((d) => d !== day);

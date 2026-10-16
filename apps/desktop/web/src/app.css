@@ -244,7 +244,7 @@ body.resizing iframe, body.resizing .cm-editor { pointer-events: none; }
    instructions, and the permissions it would add or drop. */
 .rewrite-review { gap: 12px; }
 .rewrite-changes { margin: 0; padding-left: 20px; }
-.rewrite-prompt { font: 13px/1.5 var(--md-mono, ui-monospace, monospace); resize: vertical; min-height: 180px; max-height: 40vh; }
+.rewrite-prompt { resize: vertical; max-height: 40vh; }
 /* A question's answers can be sentences: each wraps within the card, and
    a button of several lines keeps rounded corners rather than a pill. */
 .answer-options .btn { height: auto; min-height: 40px; max-width: 100%; padding: 10px 24px; white-space: normal; text-align: start; overflow-wrap: anywhere; border-radius: 20px; }

@@ -133,6 +133,18 @@
    page's own ink (not Material's inverse slab). */
 :root[data-glass="on"] .snackbar { background: var(--glass-strong); color: var(--md-on-surface); }
 :root[data-glass="on"] .snackbar .btn { --fg: var(--md-primary); }
+/* Warnings (the service out of date or lost, a model unavailable, a
+   setting's problem) are panes of glass too, with the warning's colour on
+   their edge and icon, not a solid yellow block. */
+:root[data-glass="on"] :is(.banner, .card.warn) {
+  background: var(--glass-strong); color: var(--md-on-surface);
+  border: 1px solid var(--glass-border); border-left: 3px solid var(--md-warning);
+  box-shadow: var(--glass-shadow), var(--glass-edge);
+  -webkit-backdrop-filter: blur(calc(var(--glass-blur) * 1.25)) saturate(var(--glass-saturate));
+  backdrop-filter: blur(calc(var(--glass-blur) * 1.25)) saturate(var(--glass-saturate));
+}
+:root[data-glass="on"] :is(.banner, .card.warn) > .icon { color: var(--md-warning); }
+:root[data-glass="on"] .main > .banner { margin: 8px 8px 0; border-radius: var(--md-shape-lg); }
 :root[data-glass="on"] .command-menu { background: var(--glass-strong); border: 1px solid var(--glass-border); box-shadow: var(--glass-shadow), var(--glass-edge); }
 
 /* Panes: the workspace's areas float as rounded glass panes, a little
