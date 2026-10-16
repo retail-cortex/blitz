@@ -23,6 +23,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/retail-cortex/blitz/pkg/api"
 	"github.com/retail-cortex/blitz/pkg/config"
@@ -208,4 +209,60 @@ func TestSandboxSummaryAndLoadImage(t *testing.T) {
 	assert.Error(t, err)
 	_, err = os.Stat(filepath.Join(w.Dir(), "a.png"))
 	assert.NoError(t, err)
+}
+
+// Instruction files, rules and skills edited while the workspace is open
+// apply from the next message, in the same conversation, without a
+// reload; Reload reads them regardless and says what it loaded.
+func TestAgentFilesApplyFromTheNextMessage(t *testing.T) {
+	w, llm := openTestWith(t, nil, text("one"), text("two"), text("three"))
+	ctx := context.Background()
+	past := time.Now().Add(-time.Hour)
+	put := func(rel, content string, at time.Time) {
+		t.Helper()
+		write(t, w.Dir(), rel, content)
+		require.NoError(t, os.Chtimes(filepath.Join(w.Dir(), rel), at, at))
+	}
+	skill := func(description string) string {
+		return "---\nname: tidy\ndescription: " + description + "\n---\nbody\n"
+	}
+	put("AGENTS.md", "Rule one: use tabs.", past)
+	put(".agents/rules/style.md", "No globals.", past)
+	put(".agents/skills/tidy/SKILL.md", skill("Tidies the first way"), past)
+	s, _, err := w.OpenSession("", false)
+	require.NoError(t, err)
+	turn := func() string {
+		t.Helper()
+		_, err := w.Run(ctx, s.ID, api.Turn{Text: "hi"}, func(api.Event) {})
+		require.NoError(t, err)
+		return systemText(llm.Requests[len(llm.Requests)-1].Config)
+	}
+
+	sys := turn()
+	assert.Contains(t, sys, "Rule one: use tabs.", "created after the workspace opened")
+	assert.Contains(t, sys, "No globals.")
+	assert.Contains(t, sys, "Tidies the first way")
+
+	later := past.Add(time.Minute)
+	put("AGENTS.md", "Rule two: use spaces.", later)
+	put(".agents/rules/style.md", "No globals, ever.", later)
+	put(".agents/skills/tidy/SKILL.md", skill("Tidies the second way"), later)
+	sys = turn()
+	assert.Contains(t, sys, "Rule two: use spaces.", "edited mid-conversation")
+	assert.NotContains(t, sys, "Rule one")
+	assert.Contains(t, sys, "No globals, ever.")
+	assert.Contains(t, sys, "Tidies the second way")
+
+	res, err := w.Reload(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, 1, res.Skills)
+	assert.Zero(t, res.Agents)
+	assert.Len(t, res.Files, 2, "AGENTS.md and the rule: %v", res.Files)
+	assert.Empty(t, res.Problems)
+
+	put(".agents/skills/broken/SKILL.md", "no frontmatter", later)
+	res, err = w.Reload(ctx)
+	require.NoError(t, err)
+	require.Len(t, res.Problems, 1)
+	assert.Contains(t, res.Problems[0], "broken")
 }

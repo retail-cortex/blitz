@@ -39,7 +39,7 @@ Front ends use only `api.Backend` (implemented by `*Workspace` and by the servic
 | Sessions | `OpenSession`, `ActiveSession`, `ListSessions(all)`, `NewSession`, `LoadSession`, `SaveSnapshot`, `RenameSession` |
 | Agents & models | `ListAgents`, `ActiveAgent`, `SetAgent`, `Model`, `SetModel`, `PinModel`, `Unpin`, `AllModelSettings`, `ModelSettings`, `UpdateModelSettings`, `Settings`, `Set` |
 | Extensions | `ListSkills`, `SearchSkills`, `Skill`, `ListEnvs`, `RemoveEnv`, `PruneEnvs`, `ListMCPServers`, `ActiveAgentTools` |
-| Context | `SessionUsage`, `Context`, `Compact`, `MemoryFiles`, `ReloadMemory`, `AddMemory`, `AvailableLocales`, `SetLocale`, `SandboxSummary` |
+| Context | `SessionUsage`, `Context`, `Compact`, `MemoryFiles`, `ReloadMemory`, `Reload`, `AddMemory`, `AvailableLocales`, `SetLocale`, `SandboxSummary` |
 | Changes | `ListCheckpoints`, `Undo`, `SessionDiff`, `GitDiff`, `ListApprovals`, `RevokeApprovals`, `ClearApprovals` |
 | Images & search | `LoadImage`, `AddImage`, `LoadAttachments`, `SearchProvider`, `SearchWeb`, `SearchSession` |
 

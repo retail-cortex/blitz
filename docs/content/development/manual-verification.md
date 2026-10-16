@@ -582,3 +582,12 @@ On Windows 10 (1803 or later) or 11: unzip `blitz_<version>_windows_amd64.zip` (
 
 - [ ] In each language (Settings › Appearance › Interface language), go through the Changes menu, the Changes view's toolbar, the commit dialog, a file's right-click menu in the Files tree, its history and the status bar's branch.
   **Expected:** no "Git", "stage" or ".gitignore" in a label: **Version control**, **Commit changes…**, **Include in commit** / **Leave out of commit**, **Include all changes**, **Do not version** / **Version it again**, **View history…**. Git is named only when it isn't installed, in the sign-in message and in a repository-config warning.
+
+## 49. Agent files apply from the next message (spec_memory_012 MEM-25, spec_desktop_024 DSK-91d)
+
+- [ ] 💲 In a workspace with a rule in `.agents/rules/` (say, "Answer in French"), start a conversation and send a message; then edit the rule ("Answer in German") in an editor and send another, in the same conversation.
+  **Expected:** the second answer follows the edited rule, with no reload. The same for `AGENTS.md`, and for a skill's `SKILL.md` edited in place (its new description in `/skills`).
+- [ ] 💲 Send several messages without changing anything.
+  **Expected:** nothing reloads (the turns aren't slower, and the provider's prompt cache keeps hitting: `/cost` shows cached tokens).
+- [ ] **Agents › Reload agent files**, then `/reload` in the chat.
+  **Expected:** "Reloaded N agents, N skills and N instruction files and rules."; `/reload` lists the files. Break a skill's frontmatter and reload: the error says which file didn't load.

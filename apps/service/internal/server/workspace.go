@@ -466,6 +466,18 @@ func (h workspaceService) ReloadMemory(ctx context.Context, r req[pb.ReloadMemor
 	return ok(&pb.ReloadMemoryResponse{Paths: paths, Files: w.MemoryFiles()})
 }
 
+func (h workspaceService) ReloadAgentFiles(ctx context.Context, r req[pb.ReloadAgentFilesRequest]) (*connect.Response[pb.ReloadAgentFilesResponse], error) {
+	w, err := h.s.workspace(ctx, r.Msg.Workspace)
+	if err != nil {
+		return nil, err
+	}
+	res, err := w.Reload(ctx)
+	if err != nil {
+		return nil, toAPI(err)
+	}
+	return ok(&pb.ReloadAgentFilesResponse{Agents: int32(res.Agents), Skills: int32(res.Skills), Files: res.Files, Problems: res.Problems})
+}
+
 func (h workspaceService) AddMemory(ctx context.Context, r req[pb.AddMemoryRequest]) (*connect.Response[pb.AddMemoryResponse], error) {
 	w, err := h.s.workspace(ctx, r.Msg.Workspace)
 	if err != nil {

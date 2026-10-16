@@ -52,6 +52,8 @@ func handleExtraCommand(ctx context.Context, cmd string, args []string, app *App
 		cmdCompact(ctx, args, app)
 	case "memory":
 		cmdMemory(ctx, args, app)
+	case "reload":
+		cmdReload(ctx, app)
 	case "approvals":
 		cmdApprovals(args, app)
 	case "hooks":
@@ -220,6 +222,34 @@ func cmdCompact(ctx context.Context, args []string, app *App) {
 	if line := UsageLine(res.Before, res.After); line != "" {
 		fmt.Printf("%s%s%s\n", Dim, line, Reset)
 	}
+}
+
+// cmdReload reads the agents, skills, instruction files and rules again,
+// and says what it loaded and what didn't load.
+func cmdReload(ctx context.Context, app *App) {
+	res, err := app.Workspace.Reload(ctx)
+	if err != nil {
+		fmt.Printf("%s✗ %v%s\n", Red, err, Reset)
+		return
+	}
+	fmt.Println(reloadSummary(res))
+	for _, p := range res.Files {
+		fmt.Printf("  • %s\n", safe(p))
+	}
+	if len(res.Problems) > 0 {
+		fmt.Printf("%s%s%s\n", Yellow, i18n.T("reload.problems"), Reset)
+		for _, p := range res.Problems {
+			fmt.Printf("  • %s\n", safe(p))
+		}
+	}
+}
+
+// reloadSummary says what a reload loaded, in a sentence.
+func reloadSummary(res api.ReloadResult) string {
+	return i18n.T("reload.done",
+		"agents", i18n.N("reload.agents", res.Agents),
+		"skills", i18n.N("reload.skills", res.Skills),
+		"files", i18n.N("reload.files", len(res.Files)))
 }
 
 func cmdMemory(ctx context.Context, args []string, app *App) {

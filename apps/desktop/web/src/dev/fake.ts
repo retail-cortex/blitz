@@ -1096,6 +1096,10 @@ export function installFake() {
           fakeRemote.ahead += 2;
           return { outcome: PullOutcome.FAST_FORWARD, commits: 2, status: fakeGitStatus() };
         },
+        reloadAgentFiles: async () => {
+          await sleep(300);
+          return { agents: 2, skills: 3, files: ["AGENTS.md", ".agents/rules/style.md"], problems: [] };
+        },
         // The commit dialog: nothing staged until "Stage all changes".
         draftCommit: async ({ stageAll }) => {
           if (stageAll) fakeStaged = true;

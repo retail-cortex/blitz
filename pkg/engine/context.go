@@ -90,6 +90,13 @@ func (w *Workspace) MemoryFiles() []string { return w.cfg.Memory.Files }
 // ReloadMemory re-reads project instruction files into the engine and
 // returns their paths.
 func (w *Workspace) ReloadMemory(ctx context.Context) ([]string, error) {
+	w.memoryMu.Lock()
+	defer w.memoryMu.Unlock()
+	return w.reloadMemory(ctx)
+}
+
+// reloadMemory is ReloadMemory with w.memoryMu held.
+func (w *Workspace) reloadMemory(ctx context.Context) ([]string, error) {
 	w.loadMemory()
 	w.engine.SetScopedRules(w.memory.Rules)
 	if err := w.engine.SetInstructions(ctx, w.instructions()); err != nil {

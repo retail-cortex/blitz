@@ -141,9 +141,9 @@ type turn struct {
 // options for a non-aside turn (a worker's agent and model).
 func (w *Workspace) run(ctx context.Context, sessionID string, t turn, on func(api.Event), st *session.Storage, extra ...runtime.ExecOption) (api.TurnResult, error) {
 	// A model that couldn't be built may work now (a sign-in since), and
-	// agent files may have changed.
+	// agents, skills, instruction files or rules may have changed.
 	w.RetryModel(ctx)
-	w.RefreshAgents(ctx)
+	w.refreshAgentFiles(ctx)
 	ctx = tools.WithPromptID(ctx, uuid.NewString())
 	// The turn's plan state: the plan tools report the user's decision here.
 	gate := tools.NewPlanGate(t.Plan || t.planMode)

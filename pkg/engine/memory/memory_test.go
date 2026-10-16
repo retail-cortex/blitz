@@ -19,6 +19,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/stretchr/testify/assert"
@@ -80,4 +81,51 @@ func TestAppend(t *testing.T) {
 	assert.Equal(t, "# Project notes for Blitz\n\n- use tabs\n- run go vet\n", string(b), "append result %q", b)
 	_, err = Append(ws, "BLITZ.md", "  ")
 	assert.Error(t, err, "expected error for empty note")
+}
+
+// Stamp changes with any file LoadAll reads or looks for, and only then.
+func TestStamp(t *testing.T) {
+	cfg := config.MemoryConfig{Enabled: true, Files: []string{"AGENTS.md", "CLAUDE.md"}, RuleDirs: []string{".agents/rules"}}
+	tests := []struct {
+		name   string
+		change func(t *testing.T, ws string)
+		same   bool
+	}{
+		{"nothing", func(t *testing.T, ws string) {}, true},
+		{"a file edited", func(t *testing.T, ws string) { write(t, filepath.Join(ws, "AGENTS.md"), "use tabs, always") }, false},
+		{"a file created", func(t *testing.T, ws string) { write(t, filepath.Join(ws, "CLAUDE.md"), "new") }, false},
+		{"a rule added", func(t *testing.T, ws string) { write(t, filepath.Join(ws, ".agents", "rules", "new.md"), "rule") }, false},
+		{"a rule edited", func(t *testing.T, ws string) {
+			write(t, filepath.Join(ws, ".agents", "rules", "style.md"), "no globals, ever")
+		}, false},
+		{"a rule removed", func(t *testing.T, ws string) {
+			require.NoError(t, os.Remove(filepath.Join(ws, ".agents", "rules", "style.md")))
+		}, false},
+		{"an import edited", func(t *testing.T, ws string) { write(t, filepath.Join(ws, "docs", "more.md"), "more, edited") }, false},
+		{"another file", func(t *testing.T, ws string) { write(t, filepath.Join(ws, "README.md"), "not an instruction file") }, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ws := t.TempDir()
+			write(t, filepath.Join(ws, "AGENTS.md"), "use tabs\n@docs/more.md")
+			write(t, filepath.Join(ws, "docs", "more.md"), "more")
+			write(t, filepath.Join(ws, ".agents", "rules", "style.md"), "no globals")
+			// Some file systems keep a second's resolution: date the files back.
+			past := time.Now().Add(-time.Hour)
+			for _, f := range []string{"AGENTS.md", "docs/more.md", ".agents/rules/style.md"} {
+				require.NoError(t, os.Chtimes(filepath.Join(ws, f), past, past))
+			}
+			loaded := LoadAll(ws, cfg)
+			require.Len(t, loaded.Docs, 3, "AGENTS.md, its import and the rule")
+			before := Stamp(ws, cfg, loaded)
+
+			tt.change(t, ws)
+			if tt.same {
+				assert.Equal(t, before, Stamp(ws, cfg, loaded))
+			} else {
+				assert.NotEqual(t, before, Stamp(ws, cfg, loaded))
+			}
+		})
+	}
+	assert.Empty(t, Stamp(t.TempDir(), config.MemoryConfig{}, Loaded{}), "memory off")
 }
