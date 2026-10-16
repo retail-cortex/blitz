@@ -1,6 +1,6 @@
 ---
 title: Blitz 0.6.2
-weight: 1
+weight: 2
 ---
 
 **Approve everything the agent asks, all at once.** Download it from the [GitHub release](https://github.com/retail-cortex/blitz/releases/tag/v0.6.2).

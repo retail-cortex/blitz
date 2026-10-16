@@ -1,6 +1,6 @@
 ---
 title: Blitz 0.3.0
-weight: 13
+weight: 14
 ---
 
 **A coding agent that does the work and gets out of the way.** Blitz reads your project, makes the change, checks it and stops. It has no persona and no chatter. It's a compiled Go program that runs the model you choose, on your machine, with your keys. It's open source under the Apache-2.0 license.
