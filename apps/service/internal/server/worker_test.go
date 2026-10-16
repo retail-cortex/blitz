@@ -457,3 +457,23 @@ func TestStopWorkerRun(t *testing.T) {
 	_, err = c.StopWorkerRun(ctx, connect.NewRequest(&pb.StopWorkerRunRequest{RunId: again.Msg.Run.Id}))
 	require.NoError(t, err)
 }
+
+// Rewriting needs instructions; without a model it can reach, it says
+// why rather than failing.
+func TestRewriteWorkerOverTheAPI(t *testing.T) {
+	c, _ := serveWorkers(t, time.Hour)
+	ctx := context.Background()
+	dir, _ := filepath.EvalSymlinks(t.TempDir())
+	for _, w := range []*pb.WorkerDefinition{nil, {Name: "x", Prompt: " "}} {
+		_, err := c.RewriteWorker(ctx, connect.NewRequest(&pb.RewriteWorkerRequest{Workspace: dir, Worker: w}))
+		code, info := errorReason(t, err)
+		assert.Equal(t, connect.CodeInvalidArgument, code)
+		assert.Equal(t, "NO_INSTRUCTIONS", info.Reason)
+	}
+	res, err := c.RewriteWorker(ctx, connect.NewRequest(&pb.RewriteWorkerRequest{Workspace: dir, Worker: &pb.WorkerDefinition{Name: "x", Prompt: "Find the news."}}))
+	require.NoError(t, err)
+	assert.Empty(t, res.Msg.Prompt)
+	assert.NotEmpty(t, res.Msg.Problem, "no suggestions model can be built here")
+	_, err = c.RewriteWorker(ctx, connect.NewRequest(&pb.RewriteWorkerRequest{Workspace: "relative", Worker: &pb.WorkerDefinition{Prompt: "x"}}))
+	assert.Error(t, err)
+}

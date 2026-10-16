@@ -22,6 +22,7 @@ import (
 	"strings"
 
 	"github.com/retail-cortex/blitz/pkg/api"
+	"github.com/retail-cortex/blitz/pkg/engine"
 
 	"connectrpc.com/connect"
 	pb "github.com/retail-cortex/blitz/proto/blitz/v1"
@@ -345,6 +346,26 @@ func (h workerService) StopWorkerRun(_ context.Context, r req[pb.StopWorkerRunRe
 		return nil, apiError(connect.CodeNotFound, "RUN_NOT_RUNNING", fmt.Errorf("run %q isn't running", r.Msg.RunId), "run_id", r.Msg.RunId)
 	}
 	return ok(&pb.StopWorkerRunResponse{Run: runMsg(run)})
+}
+
+// RewriteWorker has the model rewrite a worker's instructions (nothing is
+// saved).
+func (h workerService) RewriteWorker(ctx context.Context, r req[pb.RewriteWorkerRequest]) (*connect.Response[pb.RewriteWorkerResponse], error) {
+	w, err := h.s.workspace(ctx, r.Msg.Workspace)
+	if err != nil {
+		return nil, err
+	}
+	if r.Msg.Worker == nil {
+		return nil, apiError(connect.CodeInvalidArgument, "NO_INSTRUCTIONS", engine.ErrNoInstructions)
+	}
+	rw, err := w.RewriteWorker(ctx, workerSpec(r.Msg.Worker))
+	if errors.Is(err, engine.ErrNoInstructions) {
+		return nil, apiError(connect.CodeInvalidArgument, "NO_INSTRUCTIONS", err)
+	}
+	if err != nil {
+		return nil, toAPI(err)
+	}
+	return ok(&pb.RewriteWorkerResponse{Prompt: rw.Prompt, Permissions: rw.Permissions, Changes: rw.Changes, Problem: rw.Problem})
 }
 
 // WatchWorkerRun streams a running run's events from its start, then live

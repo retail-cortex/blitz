@@ -88,6 +88,7 @@ Reading the workspace never needs permission. A command with `;`, `&`, `|`, `$`,
 
 ## Enabling, editing and running
 
+- **Rewrite with AI:** in the worker form, **Rewrite with AI** turns rough instructions into ones that run well unattended. It names the sources, says exactly what file to write and in what format, and says what to do when a step fails. It also suggests the narrowest permissions those instructions need. You review it first: **Use these** fills in the form, **Keep mine** leaves it as it was, and nothing is saved until you Save.
 - **Enable** pins the worker's content. Edit it (in the app, or by hand) and it pauses as **changed** until you enable it again, so what runs is always what you read.
 - **States:** new (never enabled), enabled, disabled, changed, invalid (its problems are listed).
 - **Run now:** **Run now** in the app, or `blitz workers run <name>`, runs an enabled worker at once and shows what it does.

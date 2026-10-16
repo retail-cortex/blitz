@@ -142,3 +142,20 @@ export function canSave(f: WorkerForm, s: { busy: boolean; editing: boolean; loa
   if (missing(f) || s.busy || checkModelRef(f.model, emptyCatalog).error) return false;
   return !s.editing || (s.loaded && !s.stale);
 }
+
+/** A rewrite of a worker's instructions (WorkerService.RewriteWorker). */
+export interface WorkerRewrite {
+  prompt: string;
+  permissions: string[];
+}
+
+/** The form with a rewrite taken: its instructions, and its permissions when withPermissions. */
+export function applyRewrite(f: WorkerForm, r: WorkerRewrite, withPermissions: boolean): WorkerForm {
+  return { ...f, prompt: r.prompt, permissions: withPermissions ? r.permissions.join("\n") : f.permissions };
+}
+
+/** How a rewrite's permissions differ from the form's: those it adds and those it drops. */
+export function permissionChanges(f: WorkerForm, suggested: string[]): { added: string[]; removed: string[] } {
+  const now = workerRequest(f).permissions;
+  return { added: suggested.filter((p) => !now.includes(p)), removed: now.filter((p) => !suggested.includes(p)) };
+}

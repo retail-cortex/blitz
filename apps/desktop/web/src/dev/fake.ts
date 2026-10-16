@@ -1493,6 +1493,17 @@ export function installFake() {
         // A run that's over as soon as it's watched.
         runWorker: ({ name }) => ({ run: { id: `run-${name}-${Date.now()}`, status: RunStatus.RUNNING, started: now(), manual: true } }),
         async *watchWorkerRun() {},
+        // Rewrite with AI: a tidier version of whatever was typed.
+        rewriteWorker: async ({ worker }) => {
+          await sleep(900);
+          if (/fail/i.test(worker?.prompt ?? "")) return { prompt: "", permissions: [], changes: [], problem: "the suggestions model is unavailable (quota exceeded)" };
+          return {
+            prompt: `Write today's digest. Everything you need is here: don't look up this worker's definition or open a browser.\n\n## Sources\n\nFetch https://news.google.com/rss/search?q=artificial+intelligence+when:1d once with web_fetch.\n\n## The file\n\nWrite \`daily-news/MM-DD-YYYY.md\` (today, in ${worker?.timezone || "the worker's time zone"}), overwriting it if it exists.\n\n## Finish\n\nEnd with the file's path and how many stories went in.`,
+            permissions: ["web:news.google.com", "write:daily-news/*"],
+            changes: ["Named the feed to fetch, once", "Said where the file goes and in what format", "Narrowed web access to news.google.com"],
+            problem: "",
+          };
+        },
         // Runs going now, in this workspace and another (the Workers menu's
         // Running now); Stop ends one, recorded as stopped.
         listRunningWorkerRuns: () => ({ runs: fakeLive.filter((r) => r.status === RunStatus.RUNNING) }),

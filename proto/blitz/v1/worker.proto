@@ -69,6 +69,11 @@ service WorkerService {
   // Stops a run going now: its turn is cancelled and it's recorded as
   // stopped (RUN_NOT_RUNNING when it isn't going).
   rpc StopWorkerRun(StopWorkerRunRequest) returns (StopWorkerRunResponse);
+  // Has the model rewrite a worker's instructions, as the form has them,
+  // for a good unattended run, with the permissions they need; nothing is
+  // saved. A model that fails gives problem instead of an error
+  // (NO_INSTRUCTIONS without instructions).
+  rpc RewriteWorker(RewriteWorkerRequest) returns (RewriteWorkerResponse);
 }
 
 // WorkerState is whether a worker may run.
@@ -369,4 +374,23 @@ message StopWorkerRunResponse {
   // The run as it was when asked to stop; it ends, recorded as stopped,
   // once its turn has wound down (WatchWorkerRun's finished event).
   WorkerRun run = 1;
+}
+
+// Request message for WorkerService.RewriteWorker.
+message RewriteWorkerRequest {
+  string workspace = 1;
+  // The worker as the form has it (prompt required).
+  WorkerDefinition worker = 2;
+}
+
+// Response message for WorkerService.RewriteWorker.
+message RewriteWorkerResponse {
+  // The rewritten instructions (empty when problem is set).
+  string prompt = 1;
+  // The permissions they need, "kind:pattern", each valid.
+  repeated string permissions = 2;
+  // What changed and why, a line each.
+  repeated string changes = 3;
+  // Why there's no rewrite: the model's failure, redacted.
+  string problem = 4;
 }
