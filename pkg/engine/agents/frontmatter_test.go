@@ -176,6 +176,7 @@ func TestInterpolatePromptLevels(t *testing.T) {
 			got := spec.InterpolatePrompt(level)
 			assert.Contains(t, got, want)
 			assert.NotContains(t, got, "agency_instructions", "both placeholder forms are filled")
+			assert.NotContains(t, got, "{", "double-brace placeholder leaves no stray braces")
 		})
 	}
 }

@@ -176,8 +176,8 @@ func (spec *AgentSpec) InterpolatePrompt(agencyLevel string) string {
 		agencyLevel = "high"
 	}
 	agencyInstructions := getAgencyInstructions(agencyLevel)
-	prompt := strings.ReplaceAll(spec.SystemPrompt, "{agency_instructions}", agencyInstructions)
-	return strings.ReplaceAll(prompt, "{{agency_instructions}}", agencyInstructions)
+	prompt := strings.ReplaceAll(spec.SystemPrompt, "{{agency_instructions}}", agencyInstructions)
+	return strings.ReplaceAll(prompt, "{agency_instructions}", agencyInstructions)
 }
 
 func getAgencyInstructions(level string) string {
