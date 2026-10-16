@@ -595,10 +595,10 @@ On Windows 10 (1803 or later) or 11: unzip `blitz_<version>_windows_amd64.zip` (
 ## 50. Panels stay put: the drawer (spec_desktop_024 DSK-65c, DSK-60)
 
 - [ ] Open Settings (⌘,), then drag the window by the title bar.
-  **Expected:** Settings rises from the status bar over the whole middle, up to the title bar; the window moves and Settings stays open.
-- [ ] Open, in turn, Help › User guide, Changes, the workspace's history, a worker, the background runs (status bar) and Settings › About › Licenses.
-  **Expected:** each rises in the drawer, taking the place of the one before; the pinned chat input steps aside while it's up and comes back when it closes; ✕ or Escape (with the focus in it) closes it.
-- [ ] **Workers › Add worker**, type a few words, then press ⌘, (or ✕, or Escape in the form).
+  **Expected:** Settings slides down from under the top menu over the whole middle, to the status bar; the window moves and Settings stays open.
+- [ ] Open, in turn, Help › User guide, Changes, the workspace's history, an agent (Agents menu), a worker, the background runs (status bar) and Settings › About › Licenses.
+  **Expected:** each slides down in the drawer, taking the place of the one before; the pinned chat input steps aside while it's up and comes back when it closes; ✕ or Escape (with the focus in it) closes it.
+- [ ] **Workers › Add worker** (and **Agents › Add agent**), type a few words, then press ⌘, (or ✕, or Escape in the form).
   **Expected:** "Discard changes?"; **Cancel** brings the form back with your words, **Discard** closes it.
 - [ ] Open **Commit changes…** (or delete a chat) and click beside the dialog, then drag the window by the title bar over the dimmed area.
   **Expected:** the dialog stays open and the window moves; Escape or its buttons close it.

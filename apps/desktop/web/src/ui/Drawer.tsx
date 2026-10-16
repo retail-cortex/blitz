@@ -14,11 +14,11 @@
  * limitations under the License.
  */
 
-// The drawer: the views (Settings, Docs, Changes, History, Workers, the
-// inbox, Licenses) rise from the status bar as a sheet over the window's
-// middle (the Files shelf, the editor, the chat and the pinned input),
-// up to the title bar, which stays: its menus work and it moves the
-// window. Only its ✕ or Escape (with the focus in it) closes it.
+// The drawer: the views (Settings, Docs, Changes, History, an agent,
+// Workers, the inbox, Licenses) slide down from under the top menu as a
+// sheet over the window's middle (the Files shelf, the editor, the chat
+// and the pinned input) to the status bar. The title bar stays: its menus
+// work and it moves the window. Only its ✕ or Escape (with the focus in it) closes it.
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { mdiClose, mdiUndoVariant } from "@mdi/js";
@@ -92,7 +92,7 @@ export function DrawerProvider({ children }: { children: ReactNode }) {
 
 const DrawerSlotContext = createContext<(el: HTMLElement | null) => void>(() => {});
 
-/** Where the drawer rises: over the main area under the title bar. */
+/** The frame the drawer slides down in: the main area under the title bar. */
 export function DrawerSlot() {
   const set = useContext(DrawerSlotContext);
   return <div className="drawer-slot" ref={set} />;

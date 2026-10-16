@@ -25,6 +25,7 @@ import { AgentScope, type AgentFile } from "./gen/blitz/v1/workspace_pb";
 import { addTools, advancedCount, agentFromForm, agentPath, deleteTarget, emptyAgentForm, fileName, formFromAgent, invalidFields, sameForm, toolChoices, validAgentName, type AgentField, type AgentForm } from "./agentForm";
 import { agencies, efforts, modes } from "./options";
 import { Button, Dialog, Field, Icon, IconButton, Segmented, Switch, useSnackbar } from "./ui/controls";
+import { Drawer } from "./ui/Drawer";
 import { workerName } from "./workerForm";
 import type { ItemIntent } from "./intent";
 
@@ -39,7 +40,7 @@ type Open = { path: string } | { path: "" } | null;
  * (~/.blitz/agents), and a form for each of an agent file's settings,
  * its prompt and the model settings it runs with. The user's are listed
  * beside the form; the workspace's are in the top bar's Agents menu,
- * which opens one in a dialog (intent, dialog).
+ * which opens one in the drawer (intent, drawer).
  * context is the workspace asked for the tools and models to offer (the
  * user's agents have none of their own; "" offers none, and tools are
  * typed).
@@ -49,14 +50,14 @@ export function AgentEditor({
   scope,
   context = workspace,
   intent,
-  dialog,
+  drawer,
 }: {
   workspace: string;
   scope: AgentScope;
   context?: string;
   intent?: ItemIntent;
-  /** Shown as a dialog over the window (the Agents menu's); closing asks first when there are unsaved edits. */
-  dialog?: { onClose: () => void };
+  /** Shown in the drawer (the Agents menu's); closing, or another view taking the drawer, asks first when there are unsaved edits. */
+  drawer?: { onClose: () => void };
 }) {
   const snack = useSnackbar();
   const [files, setFiles] = useState<AgentFile[]>([]);
@@ -70,7 +71,7 @@ export function AgentEditor({
   const [problems, setProblems] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [deleting, setDeleting] = useState(false);
-  // The dialog's footer, where the form's buttons go when it's a dialog.
+  // The drawer's footer, where the form's buttons go when it's in the drawer.
   const [footer, setFooter] = useState<HTMLDivElement | null>(null);
   // A switch waiting for the user to drop unsaved edits.
   const [pending, setPending] = useState<(() => void) | null>(null);
@@ -151,7 +152,7 @@ export function AgentEditor({
     });
 
   // The workspace's agents are listed in the top bar's Agents menu, which
-  // opens one in a dialog (intent); the user's (Settings › Agents) keep
+  // opens one in the drawer (intent); the user's (Settings › Agents) keep
   // their list beside the form.
   const listed = scope === AgentScope.USER;
 
@@ -208,7 +209,7 @@ export function AgentEditor({
       await workspaces.deleteAgentFile({ workspace, scope, ...deleteTarget(file?.path ?? "", previous) });
       snack(t("desktop.agents.deleted", { name: previous || fileName(file?.path ?? "") }));
       setOpen(null);
-      if (dialog) return dialog.onClose();
+      if (drawer) return drawer.onClose();
       await refresh();
     } catch (e) {
       snack(message(e), { error: true });
@@ -216,7 +217,7 @@ export function AgentEditor({
   };
 
   const where = agentPath(dir, form.name);
-  // Where it's saved, Delete, Revert or Cancel, and Save: in the dialog's
+  // Where it's saved, Delete, Revert or Cancel, and Save: in the drawer's
   // footer (as the worker form's), else below the form.
   const actions = (path: string) => (
     <>
@@ -234,7 +235,7 @@ export function AgentEditor({
         </Button>
       )}
       {path === "" && (
-        <Button onClick={() => (dialog ? dialog.onClose() : setOpen(null))}>{t("desktop.cancel")}</Button>
+        <Button onClick={() => (drawer ? drawer.onClose() : setOpen(null))}>{t("desktop.cancel")}</Button>
       )}
       <Button variant="filled" icon={mdiContentSaveOutline} disabled={busy || invalid.length > 0 || (!dirty && path !== "")} onClick={() => void save()}>
         {t("desktop.agents.save")}
@@ -330,7 +331,7 @@ export function AgentEditor({
         )}
         {open !== null && !(file?.problem && !file.agent) && (
           <div className="worker agent-form">
-            {!dialog && (
+            {!drawer && (
               <div className="row">
                 <h2 className="t-headline spacer ellipsis">{form.displayName.trim() || form.name.trim() || t("desktop.agents.new")}</h2>
                 {dirty && <span className="t-body-sm muted">{t("desktop.agents.unsaved")}</span>}
@@ -448,7 +449,7 @@ export function AgentEditor({
                 ))}
               </div>
             )}
-            {dialog ? footer && createPortal(actions(open.path), footer) : <div className="row wrap agent-actions">{actions(open.path)}</div>}
+            {drawer ? footer && createPortal(actions(open.path), footer) : <div className="row wrap agent-actions">{actions(open.path)}</div>}
           </div>
         )}
       </section>
@@ -501,21 +502,20 @@ export function AgentEditor({
         )}
     </div>
   );
-  if (!dialog) return body;
+  if (!drawer) return body;
   const title = open?.path === "" && !form.displayName.trim() && !form.name.trim() ? t("desktop.agents.new") : form.displayName.trim() || form.name.trim() || fileName(file?.path ?? "");
   return (
-    <Dialog
+    <Drawer
       title={title}
       icon={mdiRobotOutline}
-      wide
-      className="agent-dialog"
+      className="agent-drawer"
       footer={<div className="dialog-actions" ref={setFooter} />}
-      closeButton
       headerActions={dirty && <span className="t-body-sm muted">{t("desktop.agents.unsaved")}</span>}
-      onClose={() => leave(dialog.onClose)}
+      dirty={dirty}
+      onClose={drawer.onClose}
     >
       {body}
-    </Dialog>
+    </Drawer>
   );
 }
 

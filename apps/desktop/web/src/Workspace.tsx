@@ -50,8 +50,8 @@ import { AgentScope } from "./gen/blitz/v1/workspace_pb";
  * One open workspace, laid out like an IDE: the top bar (the brand over
  * the Files shelf, then the menus from the center panel's left edge), the
  * Files shelf on the left, the
- * editor in the middle (Changes, an agent or a worker open over it, in a
- * dialog, from the menus), the chat on the
+ * editor in the middle (Changes, an agent or a worker open over it, in
+ * the drawer, from the menus), the chat on the
  * right, and the run settings panel beside it. Kept mounted while another
  * is shown, so a turn keeps streaming.
  */
@@ -67,7 +67,7 @@ export function Workspace({
   visible: boolean;
   onOpenWorkspace: () => void;
   onCloseWorkspace: (dir: string) => void;
-  /** Opens the Settings dialog on a section (for the settings file, this workspace's). */
+  /** Opens Settings on a section (for the settings file, this workspace's). */
   onSettings: (section: Section, scope?: string) => void;
   /** Opens the command palette (the top bar's search). */
   onSearch: () => void;
@@ -75,12 +75,13 @@ export function Workspace({
   const { prefs, update, theme } = useApp();
   // What the menus opened: a view in the drawer beside the workspace (the
   // changes, this session's or git's; history; a worker), and a dialog
-  // over it (committing, an agent). The worker has its own state: a form
-  // with unsaved changes asks before another view takes the drawer (the
-  // drawer closes the one it replaces).
+  // over it (committing). A worker and an agent have their own states: a
+  // form with unsaved changes asks before another view takes the drawer
+  // (the drawer closes the one it replaces).
   const [drawer, setDrawer] = useState<{ kind: "changes"; source: ChangesSource } | { kind: "history"; path: string; folder: boolean } | null>(null);
   const [worker, setWorker] = useState<ItemIntent | null>(null);
-  const [modal, setModal] = useState<{ kind: "agent"; intent: ItemIntent } | { kind: "commit" } | null>(null);
+  const [agent, setAgent] = useState<ItemIntent | null>(null);
+  const [modal, setModal] = useState<{ kind: "commit" } | null>(null);
   const dir = ws.dir;
   const { settings, modelProblem, settingsError, settingsReason, project, reviewing, setReviewing, refreshSettings } = useWorkspaceSettings(dir);
 
@@ -100,6 +101,7 @@ export function Workspace({
     else {
       setDrawer(null);
       setWorker(null);
+      setAgent(null);
       setModal(null);
     }
   }, []);
@@ -225,7 +227,7 @@ export function Workspace({
           onChanges={(source) => setDrawer({ kind: "changes", source })}
           onCommit={() => setModal({ kind: "commit" })}
           onHistory={() => setDrawer({ kind: "history", path: "", folder: true })}
-          onAgent={(intent) => setModal({ kind: "agent", intent })}
+          onAgent={setAgent}
           onWorker={setWorker}
           onSearch={onSearch}
           onSettings={onSettings}
@@ -294,7 +296,7 @@ export function Workspace({
       )}
       {visible && modal?.kind === "commit" && <CommitDialog dir={dir} onClose={() => setModal(null)} onCommitted={() => setTouched((n) => n + 1)} />}
       {visible && drawer?.kind === "changes" && <ChangesDrawer key={drawer.source} dir={dir} initial={drawer.source} onClose={() => setDrawer(null)} />}
-      {visible && modal?.kind === "agent" && <AgentEditor key={modal.intent.n} workspace={dir} scope={AgentScope.WORKSPACE} intent={modal.intent} dialog={{ onClose: () => setModal(null) }} />}
+      {visible && agent && <AgentEditor key={agent.n} workspace={dir} scope={AgentScope.WORKSPACE} intent={agent} drawer={{ onClose: () => setAgent(null) }} />}
       {visible && worker && <WorkerDrawer key={worker.n} dir={dir} intent={worker} onClose={() => setWorker(null)} />}
       {reviewing && visible && <ProjectDialog dir={dir} onClose={() => setReviewing(false)} onDecided={refreshSettings} />}
     </section>

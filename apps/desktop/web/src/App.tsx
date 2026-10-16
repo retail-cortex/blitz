@@ -353,7 +353,7 @@ function Shell() {
                 ))}
               </ComposerDock.Provider>
             </div>
-            {/* The views (Settings, Docs, Changes, Workers, …) rise here, over the middle. */}
+            {/* The views (Settings, Docs, Changes, Workers, …) slide down here, over the middle. */}
             <DrawerSlot />
           </div>
         </main>

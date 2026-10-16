@@ -170,18 +170,19 @@ body.resizing iframe, body.resizing .cm-editor { pointer-events: none; }
 .chat-panel.center { flex: 1; min-width: 0; border-left: none; }
 
 /* The drawer (ui/Drawer.tsx): the views (Settings, Docs, Changes, History,
-   Workers, the inbox, Licenses) rise from the status bar as a sheet over
-   the window's middle (the Files shelf, the editor, the chat and the
-   pinned input) up to the title bar, which stays: its menus, and moving
-   the window. */
+   an agent, Workers, the inbox, Licenses) slide down from under the top
+   menu as a sheet over the window's middle (the Files shelf, the editor,
+   the chat and the pinned input) to the status bar. The title bar stays:
+   its menus, and moving the window. The slot is the frame it slides in,
+   clipped at the top menu's edge. */
 .main-row { position: relative; display: flex; flex: 1; min-height: 0; }
 .main-col { display: flex; flex-direction: column; flex: 1; min-width: 0; min-height: 0; }
-.drawer-slot { display: contents; }
+.drawer-slot { position: absolute; left: 0; right: 0; top: var(--topbar-height); bottom: 0; z-index: 40; overflow: hidden; pointer-events: none; }
 .drawer {
-  position: absolute; left: 0; right: 0; top: var(--topbar-height); bottom: 0; z-index: 40;
+  position: absolute; inset: 0; pointer-events: auto;
   display: flex; flex-direction: column; min-width: 0; min-height: 0;
   border-top: 1px solid var(--md-outline-variant); background: var(--md-surface); outline: none;
-  animation: drawer-up 0.22s cubic-bezier(0.2, 0, 0, 1);
+  animation: drawer-down 0.22s cubic-bezier(0.2, 0, 0, 1);
 }
 .drawer[hidden] { display: none; }
 /* While it's up, the pinned input under it gives it the room. */
@@ -190,7 +191,7 @@ body.resizing iframe, body.resizing .cm-editor { pointer-events: none; }
 .drawer-head h2 { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .drawer > .body { padding: 20px 24px; overflow-y: auto; flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 20px; }
 .drawer > footer { padding: 12px 24px; display: flex; justify-content: flex-end; align-items: center; gap: 8px; border-top: 1px solid var(--md-outline-variant); }
-@keyframes drawer-up { from { transform: translateY(100%); } }
+@keyframes drawer-down { from { transform: translateY(-100%); } }
 @media (prefers-reduced-motion: reduce) { .drawer { animation: none; } }
 /* While a dialog is open the title bar still moves the window: the strip
    over it drags (the scrim no longer closes the dialog on a click). */
@@ -487,7 +488,7 @@ body.resizing iframe, body.resizing .cm-editor { pointer-events: none; }
 .effect-ask { background: var(--md-warning-container); color: var(--md-on-warning-container); border-color: transparent; }
 .small-card { margin: 0 12px 8px 20px; padding: 10px 12px; font-size: 13px; }
 
-/* Settings dialog */
+/* Settings */
 .settings { display: flex; gap: 24px; min-height: 100%; }
 .settings-nav { width: 200px; flex: none; }
 .settings-pane { flex: 1; min-width: 0; padding-bottom: 8px; }
@@ -501,7 +502,7 @@ body.resizing iframe, body.resizing .cm-editor { pointer-events: none; }
    guide take its whole width. */
 .settings-drawer .settings-pane { max-width: 960px; }
 .settings-drawer .settings { width: 100%; max-width: 1220px; margin-inline: auto; }
-:is(.worker-drawer, .inbox-drawer, .license-drawer) > :is(.body, footer) > * { width: 100%; max-width: 1080px; margin-inline: auto; }
+:is(.worker-drawer, .agent-drawer, .inbox-drawer, .license-drawer) > :is(.body, footer) > * { width: 100%; max-width: 1080px; margin-inline: auto; }
 @container drawer (max-width: 600px) {
   .settings-drawer .settings-nav { width: 48px; }
   .settings-drawer .settings-nav .list-item { justify-content: center; padding-inline: 0; }
@@ -741,7 +742,7 @@ code.file-link:hover { text-decoration-color: currentColor; }
 /* Only the sides: the session bar is a chat column too, with its own top and bottom. */
 .chat-panel:not(.center) .chat-column { padding-inline: 20px; }
 
-/* The license texts: monospace, wrapped, scrolling inside the dialog. */
+/* The license texts: monospace, wrapped, scrolling inside the drawer. */
 .license-text { max-height: 60vh; overflow: auto; margin: 0; padding: 16px; border-radius: var(--md-shape-md); background: var(--md-surface-container-low); font-size: 12px; line-height: 18px; white-space: pre-wrap; overflow-wrap: anywhere; }
 /* The project settings dialog's lists (ProjectDialog.tsx). */
 .project-items { margin: 4px 0 8px; padding-left: 20px; display: grid; gap: 4px; overflow-wrap: anywhere; }
@@ -769,7 +770,7 @@ code.file-link:hover { text-decoration-color: currentColor; }
 .log-msg { overflow-wrap: anywhere; }
 .log-attr { font-size: 11.5px; }
 
-/* The New worker dialog: two fields a row, three for the limits. */
+/* The New worker form: two fields a row, three for the limits. */
 .new-worker .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 16px; }
 .new-worker .triple { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px 16px; }
 .new-worker .field .input, .new-worker .field .select { width: 100%; }
@@ -796,15 +797,15 @@ code.file-link:hover { text-decoration-color: currentColor; }
 .agent-actions { gap: 8px; padding-top: 4px; }
 .agent-where { min-width: 0; text-align: right; }
 /* In Settings: a framed split, as tall as the pane allows. */
-/* What the menus open over the editor: the changes and an agent fill a
-   large dialog edge to edge; a worker reads as a wide one. */
+/* What the menus open in the drawer: the changes fill it edge to edge;
+   an agent and a worker keep the form's measure. */
 .changes-drawer > .body { padding: 0; gap: 0; border-top: 1px solid var(--md-outline-variant); overflow: hidden; }
 .changes-drawer .changes { flex: 1; min-height: 0; }
 .worker-drawer .worker { max-width: none; }
 /* An agent's form reads as the worker's: the dialog's padding and scroll,
    its buttons in the footer. */
-.agent-dialog .agent-editor, .agent-dialog .split, .agent-dialog .split-main { display: block; overflow: visible; padding: 0; }
-.agent-dialog .agent-form { max-width: none; gap: 14px; padding-bottom: 8px; }
+.agent-drawer .agent-editor, .agent-drawer .split, .agent-drawer .split-main { display: block; overflow: visible; padding: 0; }
+.agent-drawer .agent-form { max-width: none; gap: 14px; padding-bottom: 8px; }
 /* A form's buttons in its dialog's footer (the worker's, the agent's). */
 .dialog-actions { display: flex; flex: 1; align-items: center; gap: 8px; min-width: 0; }
 .agent-editor-user { height: min(640px, calc(100vh - 300px)); border: 1px solid var(--md-outline-variant); border-radius: var(--md-shape-md); overflow: hidden; }
