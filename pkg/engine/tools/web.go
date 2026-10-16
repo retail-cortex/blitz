@@ -198,9 +198,19 @@ func (f *webFetcher) checkResolved(ctx context.Context, host string) error {
 // [network] ca_file's authorities, once set up).
 func defaultTLS() *tls.Config {
 	if t, ok := http.DefaultTransport.(*http.Transport); ok && t.TLSClientConfig != nil {
-		return t.TLSClientConfig.Clone()
+		return fetchTLS(t.TLSClientConfig)
 	}
 	return nil
+}
+
+// fetchTLS is base for the fetcher's transport. The default transport
+// adds "h2" to its protocols once it has spoken HTTP/2; this one, with its
+// own dialer, speaks HTTP/1.1 only, and a server offered h2 answers in it
+// ("malformed HTTP response \x00\x00…"), so none are offered.
+func fetchTLS(base *tls.Config) *tls.Config {
+	c := base.Clone()
+	c.NextProtos = nil
+	return c
 }
 
 func (f *webFetcher) checkURL(u *url.URL) error {

@@ -50,6 +50,7 @@ Check for outdated Go modules and write reports/deps.md.
 ## 4. Permissions and policy
 
 - **WK-20** A permission is `<kind>:<pattern>`: `shell:<command or glob>`, `write:<path glob>`, `delete:<path glob>`, `web:<host or search provider>`, `mcp:<server>:<tool glob>`. Write/delete paths are workspace-relative and may not be absolute or use `..`. Globs use `path.Match` (`*` doesn't cross `/`); a pattern ending in `/` covers everything below.
+- **WK-20a** *Since v0.6.3.* A `write` or `delete` pattern written with a leading `./` (`write:./daily-news/*`) is read without it (`daily-news/*`), as the tools give paths; before, it matched nothing, and the worker's writes were refused.
 - **WK-21** A request is allowed only if it has targets and **every** target is covered by a permission of its kind. File targets must be clean workspace-relative paths. A shell command containing any of `; & | \` $ ( ) < > \ \n \r` is covered **only** by a permission that is exactly that command (so `go list *` can't cover `go list x; rm -rf ~`). Reading never needs permission.
 - **WK-22** Host policy `[workers.policy]`: `allow` (permission kinds; default all five), `default_max_turns` 50, `default_max_cost_usd` 1, `default_timeout` 30m, `max_turns` 200, `max_cost_usd` 10, `max_timeout` 2h, `max_concurrent` 2. Disallowed permissions are dropped and caps applied, each with a note shown to the user.
 

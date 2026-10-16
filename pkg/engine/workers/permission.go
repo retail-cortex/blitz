@@ -67,6 +67,11 @@ func ParsePermission(s string) (Permission, error) {
 		if strings.HasPrefix(pattern, "/") || strings.Contains("/"+pattern+"/", "/../") {
 			return Permission{}, fmt.Errorf("permission %q: paths are relative to the workspace and can't use \"..\"", s)
 		}
+		// "./reports/*" is "reports/*", as the tools give paths: a leading
+		// "./" would match nothing.
+		for strings.HasPrefix(pattern, "./") && len(pattern) > 2 {
+			pattern = strings.TrimLeft(pattern[2:], "/")
+		}
 	}
 	if _, err := path.Match(pattern, ""); err != nil {
 		return Permission{}, fmt.Errorf("permission %q: %w", s, err)

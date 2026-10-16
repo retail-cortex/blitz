@@ -35,6 +35,8 @@ weight: 1
 - **Answers you can read.** When the agent asks a question with long answers, each answer now wraps onto more lines instead of being cut off at the edge of the card.
 - **Messages that match the rest of the window.** The message at the top of the window is now a rounded pane of glass, like the panes and menus, instead of a flat dark bar.
 - **The docs name the latest release.** Install commands in the docs and the in-app guide show the newest version, filled in when the docs are built, rather than one that had to be updated by hand.
+- **Workers may write where they're told.** A permission written as `write:./daily-news/*` matched nothing, so the worker's writes were refused. A leading `./` now works as you'd expect.
+- **Fetching from Google News works.** Some sites, Google News among them, failed to fetch with "malformed HTTP response". They load now.
 - **No more "Blitz would like to access your Music folder".** An agent searching the whole disk for a program (`find / -name …`) made macOS ask about each of your personal folders. Agents now find programs with `command -v`, searches of the whole disk or your home folder are refused, and on the Mac, commands can't reach into Desktop, Documents, Downloads, Music, Pictures, Movies, iCloud Drive, Mail or Photos. A project kept in one of those folders still works.
 
 ### Good to know

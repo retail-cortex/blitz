@@ -194,3 +194,23 @@ func TestHTMLToText(t *testing.T) {
 	got = htmlToText("not html at all")
 	assert.Equal(t, "not html at all", got, "plain text = %q", got)
 }
+
+// A server that speaks HTTP/2 is fetched over HTTP/1.1, even once Go's
+// default transport (whose TLS settings the fetcher starts from) offers h2.
+func TestWebFetchFromAnHTTP2Server(t *testing.T) {
+	srv := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/plain")
+		w.Write([]byte("hello over " + r.Proto))
+	}))
+	srv.EnableHTTP2 = true
+	srv.StartTLS()
+	defer srv.Close()
+	base := srv.Client().Transport.(*http.Transport).TLSClientConfig.Clone()
+	base.NextProtos = []string{"h2", "http/1.1"} // as the default transport's, after HTTP/2
+	f := testFetcher(WebFetchConfig{AllowPrivate: true})
+	f.client.Transport.(*http.Transport).TLSClientConfig = fetchTLS(base)
+	out := f.fetch(context.Background(), allowAll(), srv.URL)
+	require.Empty(t, out.Error)
+	assert.Equal(t, "hello over HTTP/1.1", out.Content)
+	assert.Equal(t, []string{"h2", "http/1.1"}, base.NextProtos, "the base is left alone")
+}
