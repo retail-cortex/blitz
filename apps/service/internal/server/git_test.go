@@ -244,3 +244,172 @@ func TestCommitError(t *testing.T) {
 		})
 	}
 }
+
+// The Changes page's remote actions over the API: a pull that stops on a
+// conflict, settled and completed, then a push; and errors with codes.
+func TestPullResolvePush(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("no git")
+	}
+	empty := filepath.Join(t.TempDir(), "gitconfig")
+	require.NoError(t, os.WriteFile(empty, nil, 0o644))
+	t.Setenv("GIT_CONFIG_GLOBAL", empty)
+	t.Setenv("GIT_CONFIG_NOSYSTEM", "1")
+	git := func(dir string, args ...string) {
+		t.Helper()
+		cmd := exec.Command("git", append([]string{"-c", "user.email=t@t", "-c", "user.name=t"}, args...)...)
+		cmd.Dir = dir
+		out, err := cmd.CombinedOutput()
+		require.NoError(t, err, "git %v: %s", args, out)
+	}
+	commit := func(dir, content string, push bool) {
+		t.Helper()
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "f.txt"), []byte(content), 0o644))
+		git(dir, "commit", "-qam", content)
+		if push {
+			git(dir, "push", "-q")
+		}
+	}
+	bare, dir, other := t.TempDir(), t.TempDir(), t.TempDir()
+	git(bare, "init", "-q", "--bare", "-b", "main")
+	git(dir, "init", "-q", "-b", "main")
+	git(dir, "config", "user.email", "t@t")
+	git(dir, "config", "user.name", "t")
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "f.txt"), []byte("one\n"), 0o644))
+	git(dir, "add", "f.txt")
+	git(dir, "commit", "-qm", "init")
+	git(dir, "remote", "add", "origin", bare)
+	git(dir, "push", "-q", "-u", "origin", "main")
+	git(other, "clone", "-q", bare, ".")
+	commit(other, "theirs\n", true)
+	commit(dir, "mine\n", false)
+
+	_, s := serve(t, nil, text("hi"))
+	srv := httptest.NewServer(s.Handler())
+	defer srv.Close()
+	ws := pb.NewWorkspaceServiceClient(http.DefaultClient, srv.URL)
+	ctx := context.Background()
+
+	f, err := ws.FetchRemote(ctx, connect.NewRequest(&pb.FetchRemoteRequest{Workspace: dir}))
+	require.NoError(t, err)
+	assert.True(t, f.Msg.Status.Remote)
+	assert.Equal(t, "origin/main", f.Msg.Status.Upstream)
+	assert.Equal(t, int32(1), f.Msg.Status.Ahead)
+	assert.Equal(t, int32(1), f.Msg.Status.Behind)
+
+	_, err = ws.Push(ctx, connect.NewRequest(&pb.PushRequest{Workspace: dir}))
+	_, info := errorReason(t, err)
+	assert.Equal(t, "PUSH_REJECTED", info.Reason)
+	_, err = ws.ResolveConflict(ctx, connect.NewRequest(&pb.ResolveConflictRequest{Workspace: dir, Path: "f.txt", Choice: pb.ConflictChoice_CONFLICT_CHOICE_MINE}))
+	_, info = errorReason(t, err)
+	assert.Equal(t, "NO_MERGE", info.Reason, "no pull has stopped yet")
+
+	// Not a repository: each says so.
+	plain := t.TempDir()
+	_, err = ws.FetchRemote(ctx, connect.NewRequest(&pb.FetchRemoteRequest{Workspace: plain}))
+	_, info = errorReason(t, err)
+	assert.Equal(t, "NOT_A_REPOSITORY", info.Reason)
+	_, err = ws.Pull(ctx, connect.NewRequest(&pb.PullRequest{Workspace: plain}))
+	_, info = errorReason(t, err)
+	assert.Equal(t, "NOT_A_REPOSITORY", info.Reason)
+
+	p, err := ws.Pull(ctx, connect.NewRequest(&pb.PullRequest{Workspace: dir}))
+	require.NoError(t, err)
+	assert.Equal(t, pb.PullOutcome_PULL_OUTCOME_CONFLICTS, p.Msg.Outcome)
+	assert.Equal(t, int32(1), p.Msg.Commits)
+	assert.Equal(t, pb.GitOperation_GIT_OPERATION_MERGE, p.Msg.Status.Operation)
+	assert.Equal(t, []string{"f.txt"}, p.Msg.Status.Conflicts)
+
+	_, err = ws.ResolveConflict(ctx, connect.NewRequest(&pb.ResolveConflictRequest{Workspace: dir, Path: "f.txt"}))
+	_, info = errorReason(t, err)
+	assert.Equal(t, "INVALID_CHOICE", info.Reason)
+	_, err = ws.CompleteMerge(ctx, connect.NewRequest(&pb.CompleteMergeRequest{Workspace: dir}))
+	_, info = errorReason(t, err)
+	assert.Equal(t, "CONFLICTS_REMAIN", info.Reason)
+
+	r, err := ws.ResolveConflict(ctx, connect.NewRequest(&pb.ResolveConflictRequest{Workspace: dir, Path: "f.txt", Choice: pb.ConflictChoice_CONFLICT_CHOICE_THEIRS}))
+	require.NoError(t, err)
+	assert.Empty(t, r.Msg.Status.Conflicts)
+	c, err := ws.CompleteMerge(ctx, connect.NewRequest(&pb.CompleteMergeRequest{Workspace: dir}))
+	require.NoError(t, err)
+	assert.Equal(t, pb.GitOperation_GIT_OPERATION_UNSPECIFIED, c.Msg.Status.Operation)
+	got, err := os.ReadFile(filepath.Join(dir, "f.txt"))
+	require.NoError(t, err)
+	assert.Equal(t, "theirs\n", string(got))
+
+	pushed, err := ws.Push(ctx, connect.NewRequest(&pb.PushRequest{Workspace: dir}))
+	require.NoError(t, err)
+	assert.Equal(t, "origin/main", pushed.Msg.Target)
+	assert.Zero(t, pushed.Msg.Status.Ahead)
+
+	_, err = ws.AbortMerge(ctx, connect.NewRequest(&pb.AbortMergeRequest{Workspace: dir}))
+	_, info = errorReason(t, err)
+	assert.Equal(t, "NO_MERGE", info.Reason)
+
+	// A merge or rebase, as the status reports it.
+	git(other, "pull", "-q", "--no-rebase")
+	commit(other, "theirs again\n", true)
+	commit(dir, "mine again\n", false)
+	git(dir, "config", "pull.rebase", "true")
+	p, err = ws.Pull(ctx, connect.NewRequest(&pb.PullRequest{Workspace: dir}))
+	require.NoError(t, err)
+	assert.Equal(t, pb.GitOperation_GIT_OPERATION_REBASE, p.Msg.Status.Operation)
+	a, err := ws.AbortMerge(ctx, connect.NewRequest(&pb.AbortMergeRequest{Workspace: dir}))
+	require.NoError(t, err)
+	assert.Equal(t, pb.GitOperation_GIT_OPERATION_UNSPECIFIED, a.Msg.Status.Operation)
+
+	for _, call := range []func() error{
+		func() error {
+			_, err := ws.FetchRemote(ctx, connect.NewRequest(&pb.FetchRemoteRequest{Workspace: "relative"}))
+			return err
+		},
+		func() error {
+			_, err := ws.Pull(ctx, connect.NewRequest(&pb.PullRequest{Workspace: "relative"}))
+			return err
+		},
+		func() error {
+			_, err := ws.Push(ctx, connect.NewRequest(&pb.PushRequest{Workspace: "relative"}))
+			return err
+		},
+		func() error {
+			_, err := ws.ResolveConflict(ctx, connect.NewRequest(&pb.ResolveConflictRequest{Workspace: "relative", Choice: pb.ConflictChoice_CONFLICT_CHOICE_MINE}))
+			return err
+		},
+		func() error {
+			_, err := ws.CompleteMerge(ctx, connect.NewRequest(&pb.CompleteMergeRequest{Workspace: "relative"}))
+			return err
+		},
+		func() error {
+			_, err := ws.AbortMerge(ctx, connect.NewRequest(&pb.AbortMergeRequest{Workspace: "relative"}))
+			return err
+		},
+	} {
+		assert.Error(t, call(), "a workspace must be an absolute folder")
+	}
+}
+
+func TestRemoteError(t *testing.T) {
+	tests := []struct {
+		err  error
+		want string
+	}{
+		{&engine.RepoConfigError{Key: "core.sshcommand"}, "REPO_CONFIG_COMMAND"},
+		{engine.ErrNotARepository, "NOT_A_REPOSITORY"},
+		{engine.ErrNoRemote, "NO_REMOTE"},
+		{engine.ErrNoUpstream, "NO_UPSTREAM"},
+		{engine.ErrInProgress, "GIT_BUSY"},
+		{engine.ErrPushRejected, "PUSH_REJECTED"},
+		{fmt.Errorf("%w (denied)", engine.ErrRemoteAuth), "REMOTE_AUTH"},
+		{engine.ErrNoOperation, "NO_MERGE"},
+		{engine.ErrConflictsRemain, "CONFLICTS_REMAIN"},
+		{engine.ErrMarkersRemain, "MARKERS_REMAIN"},
+		{engine.ErrNotConflicted, "NOT_CONFLICTED"},
+		{engine.ErrBadPath, "BAD_PATH"},
+		{errors.New("network down"), "GIT_FAILED"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.want, func(t *testing.T) {
+			assert.Equal(t, tt.want, reasonOf(remoteError(tt.err)))
+		})
+	}
+}

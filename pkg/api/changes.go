@@ -37,7 +37,28 @@ type GitStatus struct {
 	Repo    bool
 	Branch  string
 	Changed int
+	// Remote is whether the repository has a remote; Upstream is the
+	// branch's (such as "origin/main"), empty when it has none. Ahead and
+	// Behind count the commits each side has that the other hasn't, as of
+	// the last fetch.
+	Remote        bool
+	Upstream      string
+	Ahead, Behind int
+	// Operation is a merge or rebase in progress (a pull that stopped on
+	// conflicts), and Conflicts the files still in conflict.
+	Operation GitOperation
+	Conflicts []string
 }
+
+// GitOperation is what a repository is in the middle of.
+type GitOperation string
+
+const (
+	// GitMerging is a merge waiting to be completed or aborted.
+	GitMerging GitOperation = "merge"
+	// GitRebasing is a rebase waiting to be continued or aborted.
+	GitRebasing GitOperation = "rebase"
+)
 
 // UndoResult is what Undo restored.
 type UndoResult struct {

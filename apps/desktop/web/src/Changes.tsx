@@ -24,6 +24,8 @@ import type { Checkpoint, GetGitStatusResponse } from "./gen/blitz/v1/workspace_
 import { filesTouched } from "./events";
 import { languageFor } from "./highlight";
 import { CommitDialog } from "./CommitDialog";
+import { ConflictBar, MergeBanner, RemoteButtons } from "./RemoteSync";
+import { inProgress } from "./gitRemote";
 import { Markdown } from "./Markdown";
 import { parseDiff, type FileDiff } from "./turns";
 import { highlight } from "./highlight";
@@ -140,6 +142,7 @@ export function Changes({ dir, source, onSource: setSource }: { dir: string; sou
   };
 
   const notRepo = source === "git" && git && !git.repo;
+  const conflicted = new Set(source === "git" ? (git?.conflicts ?? []) : []);
   const file = files?.find((f) => f.path === selected);
   const totals = (files ?? []).reduce((t, f) => ({ added: t.added + f.added, removed: t.removed + f.removed }), { added: 0, removed: 0 });
   return (
@@ -164,8 +167,9 @@ export function Changes({ dir, source, onSource: setSource }: { dir: string; sou
         )}
         <span className="spacer" />
         {advanced && <IconButton icon={mdiRefresh} label={t("desktop.refresh")} onClick={refresh} />}
+        {source === "git" && git?.repo && git.remote && <RemoteButtons dir={dir} git={git} onStatus={setGit} onChanged={() => void refresh()} />}
         {source === "git" && git?.repo && (
-          <Button variant="tonal" small icon={mdiSourceCommit} onClick={() => setCommitting(true)}>
+          <Button variant="tonal" small icon={mdiSourceCommit} disabled={inProgress(git) && git.conflicts.length > 0} onClick={() => setCommitting(true)}>
             {t("desktop.commit.open")}
           </Button>
         )}
@@ -173,6 +177,7 @@ export function Changes({ dir, source, onSource: setSource }: { dir: string; sou
           {t("desktop.changes.undo_last")}
         </Button>
       </div>
+      {source === "git" && git && inProgress(git) && <MergeBanner dir={dir} git={git} onChanged={() => void refresh()} />}
       {error && (
         <div className="card error row">
           <Icon path={mdiAlertCircleOutline} /> {error}
@@ -200,12 +205,13 @@ export function Changes({ dir, source, onSource: setSource }: { dir: string; sou
             {files?.length === 0 && <p className="muted t-body-sm">{source === "session" ? t("desktop.changes.none_session") : t("desktop.changes.none_git")}</p>}
             <div className="list">
               {files?.map((f) => (
-                <button key={f.path} className={`list-item file-item ${f.path === selected ? "active" : ""}`} onClick={() => setSelected(f.path)} title={f.path}>
+                <button key={f.path} className={`list-item file-item ${f.path === selected ? "active" : ""} ${conflicted.has(f.path) ? "conflicted" : ""}`} onClick={() => setSelected(f.path)} title={conflicted.has(f.path) ? `${f.path} · ${t("desktop.git.conflict")}` : f.path}>
                   <span className="lines">
                     <span className="ellipsis mono">{f.path.split("/").pop()}</span>
                     <small className="ellipsis">{f.path}</small>
                   </span>
                   <span className="trailing t-body-sm">
+                    {conflicted.has(f.path) && <span className="conflict-chip">{t("desktop.git.conflict")}</span>}
                     <span className="add-count">+{f.added}</span>
                     <span className="del-count">−{f.removed}</span>
                   </span>
@@ -237,6 +243,7 @@ export function Changes({ dir, source, onSource: setSource }: { dir: string; sou
                 <Markdown text={summary} />
               </details>
             )}
+            {file && conflicted.has(file.path) && <ConflictBar dir={dir} path={file.path} onChanged={() => void refresh()} />}
             {file ? <DiffView files={[file]} /> : files === null ? <p className="muted">{t("desktop.loading")}</p> : null}
           </div>
         </div>

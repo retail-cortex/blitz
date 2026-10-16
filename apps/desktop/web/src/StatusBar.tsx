@@ -26,6 +26,7 @@ import {
   mdiLoading,
   mdiRobotOutline,
   mdiSourceBranch,
+  mdiSourceMerge,
   mdiTuneVariant,
 } from "@mdi/js";
 import { workspaces } from "./api";
@@ -36,6 +37,7 @@ import type { AgentInfo, GetGitStatusResponse } from "./gen/blitz/v1/workspace_p
 import { t, tn } from "./i18n";
 import { effortIcon, efforts, modeOf, modes } from "./options";
 import { workspaceColor } from "./palette";
+import { inProgress, syncTitle } from "./gitRemote";
 import { displayName } from "./prefs";
 import { InboxDialog } from "./RunsInbox";
 import { useApp } from "./state";
@@ -108,12 +110,20 @@ function GitItem({ dir }: { dir: string }) {
     };
   }, [dir]);
   if (!git?.repo) return null;
-  const label = git.changed > 0 ? tn("desktop.status.git_changed", git.changed, { branch: git.branch }) : t("desktop.status.git_clean", { branch: git.branch });
+  const merging = inProgress(git);
+  const label = [
+    git.changed > 0 ? tn("desktop.status.git_changed", git.changed, { branch: git.branch }) : t("desktop.status.git_clean", { branch: git.branch }),
+    merging ? tn("desktop.git.conflicts_left", git.conflicts.length) : git.upstream && (git.ahead || git.behind) ? syncTitle(git) : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
   return (
     <button className="sb-item sb-button" title={label} aria-label={label} onClick={() => showView({ dir, view: "changes" })}>
-      <Icon path={mdiSourceBranch} size="sm" />
+      <Icon path={merging ? mdiSourceMerge : mdiSourceBranch} size="sm" />
       <span className="ellipsis sb-branch">{git.branch}</span>
       {git.changed > 0 && <span className="sb-count">±{git.changed}</span>}
+      {git.behind > 0 && <span className="sb-count">↓{git.behind}</span>}
+      {git.ahead > 0 && <span className="sb-count">↑{git.ahead}</span>}
     </button>
   );
 }

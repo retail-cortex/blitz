@@ -23,7 +23,7 @@ export const composeEvent = "blitz:compose";
 export interface ComposeDetail {
   dir: string;
   text: string;
-  /** Run it at once (a command without arguments) instead of filling the composer. */
+  /** Run it at once (a command, or a prompt, which is sent) instead of filling the composer. */
   run?: boolean;
   /** Add it after what's typed (a paragraph apart) instead of replacing it. */
   append?: boolean;

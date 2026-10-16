@@ -104,6 +104,31 @@ service WorkspaceService {
   // Commits what's staged with the message (the repository's hooks run)
   // (NOT_A_REPOSITORY, NOTHING_STAGED, EMPTY_MESSAGE, GIT_FAILED).
   rpc Commit(CommitRequest) returns (CommitResponse);
+  // Fetches the upstream's remote (else every remote) for the ahead and
+  // behind counts, and returns the git status (NOT_A_REPOSITORY, NO_REMOTE,
+  // REPO_CONFIG_COMMAND, REMOTE_AUTH, GIT_FAILED).
+  rpc FetchRemote(FetchRemoteRequest) returns (FetchRemoteResponse);
+  // Pulls the upstream's commits as the repository's git config says
+  // (pull.rebase, pull.ff; a merge when neither is set), keeping
+  // uncommitted changes. One that stops on conflicts isn't an error: its
+  // outcome is CONFLICTS (NOT_A_REPOSITORY, NO_UPSTREAM, GIT_BUSY,
+  // REPO_CONFIG_COMMAND, REMOTE_AUTH, GIT_FAILED).
+  rpc Pull(PullRequest) returns (PullResponse);
+  // Pushes the branch to its upstream, or publishes it to the remote and
+  // tracks it (NOT_A_REPOSITORY, NO_REMOTE, GIT_BUSY, PUSH_REJECTED,
+  // REPO_CONFIG_COMMAND, REMOTE_AUTH, GIT_FAILED).
+  rpc Push(PushRequest) returns (PushResponse);
+  // Settles a file a pull left in conflict (NO_MERGE, NOT_CONFLICTED,
+  // MARKERS_REMAIN, BAD_PATH, REPO_CONFIG_COMMAND, GIT_FAILED).
+  rpc ResolveConflict(ResolveConflictRequest) returns (ResolveConflictResponse);
+  // Completes the merge or rebase a pull started; a rebase may stop on
+  // its next commit's conflicts (NO_MERGE, CONFLICTS_REMAIN,
+  // REPO_CONFIG_COMMAND, GIT_FAILED).
+  rpc CompleteMerge(CompleteMergeRequest) returns (CompleteMergeResponse);
+  // Gives up the merge or rebase a pull started, putting the branch and
+  // the uncommitted changes back (NO_MERGE, REPO_CONFIG_COMMAND,
+  // GIT_FAILED).
+  rpc AbortMerge(AbortMergeRequest) returns (AbortMergeResponse);
   // Changes a setting for the workspace: agency, or effort (a reasoning
   // effort, or "auto" to clear it) (UNKNOWN_SETTING, INVALID_AGENCY,
   // INVALID_SETTING).
@@ -1671,6 +1696,28 @@ message GetGitStatusResponse {
   int32 changed = 3;
   // Git is on the service's PATH (else repo is false).
   bool git = 4;
+  // The repository has a remote.
+  bool remote = 5;
+  // The branch's upstream, such as "origin/main"; empty when it has none.
+  string upstream = 6;
+  // Commits the branch has that the upstream hasn't, as of the last fetch.
+  int32 ahead = 7;
+  // Commits the upstream has that the branch hasn't, as of the last fetch.
+  int32 behind = 8;
+  // A merge or rebase in progress (a pull that stopped on conflicts).
+  GitOperation operation = 9;
+  // The files still in conflict, workspace-relative with "/".
+  repeated string conflicts = 10;
+}
+
+// What a repository is in the middle of.
+enum GitOperation {
+  // Nothing: no merge or rebase in progress.
+  GIT_OPERATION_UNSPECIFIED = 0;
+  // A merge, to complete (a merge commit) or abort.
+  GIT_OPERATION_MERGE = 1;
+  // A rebase, to continue or abort.
+  GIT_OPERATION_REBASE = 2;
 }
 
 // Request message for WorkspaceService.InitGitRepo.
@@ -1721,4 +1768,104 @@ message CommitResponse {
   string hash = 1;
   // Its message's first line.
   string subject = 2;
+}
+
+// Request message for WorkspaceService.FetchRemote.
+message FetchRemoteRequest {
+  string workspace = 1;
+}
+
+// Response message for WorkspaceService.FetchRemote.
+message FetchRemoteResponse {
+  // The git status after the fetch.
+  GetGitStatusResponse status = 1;
+}
+
+// Request message for WorkspaceService.Pull.
+message PullRequest {
+  string workspace = 1;
+}
+
+// How a pull went.
+enum PullOutcome {
+  PULL_OUTCOME_UNSPECIFIED = 0;
+  // Nothing new.
+  PULL_OUTCOME_UP_TO_DATE = 1;
+  // The branch moved to the upstream's commit.
+  PULL_OUTCOME_FAST_FORWARD = 2;
+  // A merge commit joined the two.
+  PULL_OUTCOME_MERGED = 3;
+  // The branch's commits were replayed on the upstream's.
+  PULL_OUTCOME_REBASED = 4;
+  // Stopped on conflicts: a merge or rebase waits (status.conflicts).
+  PULL_OUTCOME_CONFLICTS = 5;
+}
+
+// Response message for WorkspaceService.Pull.
+message PullResponse {
+  PullOutcome outcome = 1;
+  // Commits brought in from the upstream.
+  int32 commits = 2;
+  // The git status after the pull.
+  GetGitStatusResponse status = 3;
+}
+
+// Request message for WorkspaceService.Push.
+message PushRequest {
+  string workspace = 1;
+}
+
+// Response message for WorkspaceService.Push.
+message PushResponse {
+  // Where it pushed, as "remote/branch".
+  string target = 1;
+  // The git status after the push.
+  GetGitStatusResponse status = 2;
+}
+
+// How a conflicted file is settled.
+enum ConflictChoice {
+  CONFLICT_CHOICE_UNSPECIFIED = 0;
+  // The branch's version, from before the pull.
+  CONFLICT_CHOICE_MINE = 1;
+  // The upstream's version.
+  CONFLICT_CHOICE_THEIRS = 2;
+  // As edited by hand (refused while conflict markers remain).
+  CONFLICT_CHOICE_RESOLVED = 3;
+}
+
+// Request message for WorkspaceService.ResolveConflict.
+message ResolveConflictRequest {
+  string workspace = 1;
+  // The file, workspace-relative.
+  string path = 2;
+  ConflictChoice choice = 3;
+}
+
+// Response message for WorkspaceService.ResolveConflict.
+message ResolveConflictResponse {
+  // The git status after it.
+  GetGitStatusResponse status = 1;
+}
+
+// Request message for WorkspaceService.CompleteMerge.
+message CompleteMergeRequest {
+  string workspace = 1;
+}
+
+// Response message for WorkspaceService.CompleteMerge.
+message CompleteMergeResponse {
+  // The git status after it: a rebase may have stopped on new conflicts.
+  GetGitStatusResponse status = 1;
+}
+
+// Request message for WorkspaceService.AbortMerge.
+message AbortMergeRequest {
+  string workspace = 1;
+}
+
+// Response message for WorkspaceService.AbortMerge.
+message AbortMergeResponse {
+  // The git status after it.
+  GetGitStatusResponse status = 1;
 }
