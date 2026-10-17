@@ -337,3 +337,17 @@ export function previewContent(v: unknown): PreviewContent {
   const str = (k: string) => (typeof o[k] === "string" ? (o[k] as string).slice(0, maxContentHTML) : "");
   return { url: str("url"), title: str("title"), html: str("html"), selection: str("selection") };
 }
+
+/**
+ * Whether the window draws without the graphics card (EL-07): BLITZ_GPU=off,
+ * or the gpu preference off in desktop.json (Settings › Appearance › Use
+ * the graphics card, on Linux), read before Electron starts.
+ */
+export function gpuOff(env: Record<string, string | undefined>, prefs: string | undefined): boolean {
+  if (env.BLITZ_GPU === "off") return true;
+  try {
+    return (JSON.parse(prefs ?? "{}") as { gpu?: unknown }).gpu === "off";
+  } catch {
+    return false;
+  }
+}

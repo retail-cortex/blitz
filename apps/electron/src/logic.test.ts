@@ -23,6 +23,7 @@ import {
   consoleLine,
   contentScript,
   englishMenu,
+  gpuOff,
   isExternal,
   isLocalHost,
   isWindowMethod,
@@ -254,4 +255,14 @@ describe("preload", () => {
   const list = (re: RegExp) => [...(src.match(re)?.[1] ?? "").matchAll(/"([^"]+)"/g)].map((m) => m[1]);
   it("offers the window's calls", () => expect(list(/const methods = \[([^\]]*)\]/)).toEqual([...windowMethods]));
   it("passes on the window's events", () => expect(list(/const events = new Set\(\[([^\]]*)\]\)/)).toEqual([...pageEvents]));
+});
+
+describe("gpuOff", () => {
+  it.each([
+    { env: {}, prefs: undefined, want: false },
+    { env: {}, prefs: '{"gpu":"on"}', want: false },
+    { env: {}, prefs: '{"gpu":"off"}', want: true },
+    { env: { BLITZ_GPU: "off" }, prefs: '{"gpu":"on"}', want: true },
+    { env: {}, prefs: "not json", want: false },
+  ])("$env $prefs", ({ env, prefs, want }) => expect(gpuOff(env, prefs)).toBe(want));
 });

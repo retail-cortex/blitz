@@ -315,8 +315,8 @@ export const restartService = (pid: number) => app().RestartService(pid);
 /** Whether the file a running service started from is still there (true in a browser). */
 export const programExists = async (path: string) => (canCall("ProgramExists") && path ? app().ProgramExists(path) : true);
 
-/** Whether this is the Linux app (its window draws through WebKitGTK). */
-export const isLinuxApp = () => inApp() && typeof navigator !== "undefined" && /Linux/.test(navigator.userAgent) && !/Android/.test(navigator.userAgent);
+/** Whether this is the Linux app (the Wails app's or the Electron app's window), which can draw without the graphics card. */
+export const isLinuxApp = () => (inApp() || inElectron()) && typeof navigator !== "undefined" && /Linux/.test(navigator.userAgent) && !/Android/.test(navigator.userAgent);
 
 /** The app's version ("dev" outside a release, and in a browser). */
 export const appVersion = async () => (canCall("Version") ? app().Version() : "dev");

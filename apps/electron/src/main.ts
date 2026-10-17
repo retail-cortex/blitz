@@ -21,6 +21,7 @@
 // picker, printing to PDF, notifications, the menu, closing with unsaved
 // changes, the web previews) through the preload's window.blitzElectron.
 import { spawn, type ChildProcess } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { mkdtemp, rm, stat, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import path from "node:path";
@@ -33,6 +34,7 @@ import {
   consoleLine,
   contentScript,
   englishMenu,
+  gpuOff,
   isExternal,
   isWindowMethod,
   keepLine,
@@ -56,6 +58,16 @@ import {
 } from "./logic";
 
 app.setName("Blitz");
+
+// Without the graphics card when the user said so (EL-07): before Electron starts.
+const readPrefs = () => {
+  try {
+    return readFileSync(path.join(homedir(), ".blitz", "desktop.json"), "utf8");
+  } catch {
+    return undefined;
+  }
+};
+if (gpuOff(process.env, readPrefs())) app.disableHardwareAcceleration();
 
 /** The program that serves the page: bin/ in the app, beside blitzd and blitz. */
 const host = path.join(app.getAppPath(), "bin", process.platform === "win32" ? "blitz-tray.exe" : "blitz-tray");

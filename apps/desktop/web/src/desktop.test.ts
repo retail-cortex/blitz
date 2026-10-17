@@ -35,6 +35,7 @@ const {
   fileManager,
   getPrefs,
   inElectron,
+  isLinuxApp,
   licenseText,
   nativeGlass,
   onAppMenu,
@@ -260,6 +261,14 @@ describe("the Electron app's window", () => {
     await previewBounds("w1", { x: 0, y: 0, width: 1, height: 1 });
     await previewVisible("w1", false);
     await previewClose("w1");
+  });
+
+  it("is the Linux app on Linux, for the graphics card setting", () => {
+    electronWindow({});
+    vi.stubGlobal("navigator", { userAgent: "Mozilla/5.0 (X11; Linux x86_64) Electron/44.5.1" });
+    expect(isLinuxApp()).toBe(true);
+    vi.stubGlobal("navigator", { userAgent: "Mozilla/5.0 (Macintosh) Electron/44.5.1" });
+    expect(isLinuxApp()).toBe(false);
   });
 
   it("isn't macOS's translucent window unless it says so", () => {

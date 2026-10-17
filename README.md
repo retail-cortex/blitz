@@ -45,9 +45,9 @@ The macOS command-line binaries aren't notarized: clear the quarantine flag with
 
 The Linux `.deb` runs in ChromeOS's Linux container (Crostini): `amd64` on Intel Chromebooks such as the Pixelbook, `arm64` on ARM ones. It hasn't been tested there yet; reports are welcome.
 
-- **Debian version.** The container is Debian 12 or 13 (`cat /etc/debian_version`). The app needs WebKitGTK 4.1 at 2.40 or later, which current Debian 12 has; the package refuses an older one. A Chromebook past its last ChromeOS update keeps its container's Debian updates, but may never move to a newer Debian.
+- **Debian version.** The container is Debian 12 or 13 (`cat /etc/debian_version`); the package's libraries (GTK 3, NSS and the like) are in both. A Chromebook past its last ChromeOS update keeps its container's Debian updates, but may never move to a newer Debian.
 - **Install.** `sudo apt install ./blitz-desktop_<version>_amd64.deb`, which brings bubblewrap, the shell sandbox Blitz requires on Linux: `blitz doctor` says whether it works in the container, and if it can't, `[sandbox] shell = "auto"` in `~/.blitz/.env.toml` runs commands without it. gVisor is unlikely to run there; skill scripts use bubblewrap instead.
-- **A blank or garbled window.** Some Chromebooks can't pass WebKitGTK's rendering through the VM: start the app with `WEBKIT_DISABLE_DMABUF_RENDERER=1 blitz-desktop`.
+- **A blank or garbled window.** Some Chromebooks can't pass the graphics card through the VM: start the app with `BLITZ_GPU=off blitz-desktop`, then turn off **Use the graphics card** in Settings › Appearance to keep it so.
 - **Projects.** Linux sees its home directory and the folders shared with it in the Files app (under `/mnt/chromeos/`); open workspaces from there.
 - **Keys.** The container has no keyring, so API keys are kept in `~/.blitz/secrets.toml`, readable only by you.
 - **The service** runs as a `systemctl --user` service in the container. ChromeOS stops the container when you shut down or leave Linux idle, so scheduled workers only run while it's up.
@@ -102,7 +102,7 @@ sudo chmod +x /usr/local/bin/bazel       # bazelisk-linux-arm64 on ARM
 git clone https://github.com/retail-cortex/blitz.git && cd blitz
 ```
 
-GTK and WebKitGTK are only for the desktop app; bubblewrap is the shell sandbox.
+GTK and WebKitGTK are only for the Wails desktop app, which `bazel build //...` still builds though it's no longer released (the released Electron app needs neither to build); bubblewrap is the shell sandbox.
 
 ### Windows
 
@@ -136,7 +136,7 @@ The short names are aliases in the root `BUILD.bazel`, which lists them; the ful
 ### Common problems
 
 - **"bazel: command not found" or the wrong Bazel version.** Install Bazelisk as `bazel`; don't install Bazel itself.
-- **The desktop app fails to build on Linux with a missing `gtk+-3.0` or `webkit2gtk-4.1`.** Install `libgtk-3-dev libwebkit2gtk-4.1-dev pkg-config` (Ubuntu/Debian) or `gtk3 webkit2gtk-4.1 pkg-config` (Arch). Older distributions only ship WebKitGTK 4.0, which isn't supported.
+- **The Wails app (`//apps/desktop`) fails to build on Linux with a missing `gtk+-3.0` or `webkit2gtk-4.1`.** Install `libgtk-3-dev libwebkit2gtk-4.1-dev pkg-config` (Ubuntu/Debian) or `gtk3 webkit2gtk-4.1 pkg-config` (Arch). Older distributions only ship WebKitGTK 4.0, which isn't supported.
 - **`doctor` says the sandbox is unavailable on Ubuntu 24.04.** AppArmor restricts unprivileged user namespaces, which bubblewrap needs: `sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0` (or an AppArmor profile for `bwrap`). Inside Docker, the default seccomp profile blocks them too.
 - **The sandbox or gVisor tests skip.** They need bubblewrap (Linux) and `runsc` (`RUNSC_PATH`); CI fails if they skip, locally they don't.
 - **Out of disk space.** A full build with tests and every platform's archive takes several gigabytes under Bazel's output base; `bazel clean` frees the build outputs.

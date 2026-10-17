@@ -46,7 +46,7 @@ nogo runs in every compile of the repository's own Go code: Go vet's analyzers, 
 
 ## Pure Go where it counts
 
-The CLI and the service build with `CGO_ENABLED=0`: static binaries with no runtime dependencies, cross-compiled from either macOS or Linux to every platform. Only the desktop app uses cgo (WebKit on macOS, WebKitGTK on Linux).
+The CLI and the service build with `CGO_ENABLED=0`: static binaries with no runtime dependencies, cross-compiled from either macOS or Linux to every platform. Only the Wails desktop app uses cgo (WebKit on macOS, WebKitGTK on Linux); the released desktop app is Electron, from its prebuilt archives ([spec_electron_038](../about/specs/spec_electron_038.md)), with the same pure-Go programs inside.
 
 ## Reproducible releases
 
