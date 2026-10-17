@@ -15,7 +15,7 @@ Blitz's desktop app is a window onto the [service](service.md), laid out like an
 - **Windows 10 (1803) and later:** `Blitz_<version>_windows_x64.zip`. Unzip it anywhere and run `Blitz.exe`. It isn't signed yet, so SmartScreen asks first (**More info › Run anyway**).
 - **Linux:** `blitz-desktop_<version>_<arch>.deb` for Ubuntu 24.04, Debian 13 and later, the Arch Linux package, or `blitz-desktop_<version>_linux_<arch>.tar.gz` for any distribution (unpack it and run `blitz-desktop`; on Ubuntu 24.04 and later prefer the `.deb`, which can set up Electron's sandbox).
 
-Each carries its own `blitz`, `blitzd` and `blitz-tray`, so the app can install the service without a separate download. The app updates itself from the releases: it checks once a day, and **Settings › About** checks now. A package manager's copy (the `.deb`, the Arch package, Homebrew) is updated by the package manager instead.
+Each carries its own `blitz`, `blitzd` and `blitz-tray`, so the app can install the service without a separate download. The app updates itself from the releases: when it opens (every five days at most) it looks for a new one, downloads it, checks its signature, and offers **Restart**; **Settings › About** checks now, and **Update automatically** turns it off. A package manager's copy (the `.deb`, the Arch package, Homebrew) is updated by the package manager instead.
 
 From source: `bazel build //apps/electron/packaging:Blitz_arm64.app` (or `:Blitz_x64.app`) on macOS, `:deb`, `:pacman` or `:linux_tar` on Linux, and `:windows_zip` anywhere; or `bazel run //apps/electron:dev` to run it. See [building](../development/building.md).
 

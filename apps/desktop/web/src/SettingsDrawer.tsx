@@ -40,7 +40,8 @@ import {
   mdiWeatherNight,
   mdiWhiteBalanceSunny,
 } from "@mdi/js";
-import { appVersion, cliStatus, installCLI, isLinuxApp, installService, reinstallCLI, restartService, serviceStatus, setTray, stopService, type CLIStatus, type ServiceStatus } from "./desktop";
+import { appVersion, canUpdate, checkUpdate, cliStatus, downloadUpdate, installCLI, isLinuxApp, installService, openURL, reinstallCLI, restartService, serviceStatus, setTray, stopService, type CLIStatus, type ServiceStatus, type UpdateStatus } from "./desktop";
+import { restart, shouldDownload, updateLine } from "./updates";
 import { SandboxFixResult, sandboxDetail, useSandboxFix } from "./SandboxNotice";
 import { configChanged, showLicense } from "./events";
 import { checkService, settleTimeout, type ServiceCheck, shownVersion, waitForService, withTimeout } from "./serviceVersion";
@@ -58,7 +59,7 @@ import { SkillSettings } from "./SkillSettings";
 import { useAdvanced, useApp } from "./state";
 import { sectionShown, settingsSections, type SectionId } from "./simpleMode";
 import type { ThemePref } from "./theme";
-import { Button, Chip, Icon, IconButton, Segmented, Switch } from "./ui/controls";
+import { Button, Chip, Icon, IconButton, Segmented, Switch, useSnackbar } from "./ui/controls";
 import { Drawer } from "./ui/Drawer";
 import { LookFields, WorkspaceSettingsForm } from "./WorkspaceSettingsForm";
 import { useWorkspaceSettings } from "./workspaceSettings";
@@ -574,6 +575,63 @@ function CommandLine() {
   );
 }
 
+/**
+ * The app's update (spec_electron_038 EL-90): where it is, Check now,
+ * Download or Restart to update, the release's notes, and whether it's
+ * looked for when the app opens.
+ */
+function Updates() {
+  const { prefs, update } = useApp();
+  const snack = useSnackbar();
+  const [status, setStatus] = useState<UpdateStatus | null>(null);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    checkUpdate(false).then(setStatus, (e) => setStatus({ current: "", latest: "", available: false, can: true, downloading: false, ready: false, error: String(e) }));
+  }, []);
+  const act = async (f: () => Promise<UpdateStatus>) => {
+    setBusy(true);
+    try {
+      setStatus(await f());
+    } catch (e) {
+      snack(String(e instanceof Error ? e.message : e), { error: true });
+    } finally {
+      setBusy(false);
+    }
+  };
+  const line = updateLine(busy && status?.available && !status.ready ? { ...status, downloading: true } : status);
+  return (
+    <>
+      <Setting title={t("desktop.update.title")} detail={t(line.key, line.vars)}>
+        <div className="row wrap">
+          {status?.notes && status.available && (
+            <Button small onClick={() => void openURL(status.notes!)}>
+              {t("desktop.update.notes")}
+            </Button>
+          )}
+          {status?.ready ? (
+            <Button small variant="filled" onClick={() => void restart((m) => snack(m, { error: true }))}>
+              {t("desktop.update.restart")}
+            </Button>
+          ) : status && shouldDownload(status) ? (
+            <Button small variant="tonal" disabled={busy} onClick={() => void act(downloadUpdate)}>
+              {t("desktop.update.download")}
+            </Button>
+          ) : (
+            <Button small disabled={busy || !status?.can} onClick={() => void act(() => checkUpdate(true))}>
+              {t("desktop.update.check")}
+            </Button>
+          )}
+        </div>
+      </Setting>
+      {status?.can && (
+        <Setting title={t("desktop.update.auto")} detail={t("desktop.update.auto_detail")}>
+          <Switch label={t("desktop.update.auto")} checked={prefs.updates !== "off"} onChange={(on) => update((p) => ({ ...p, updates: on ? "auto" : "off" }))} />
+        </Setting>
+      )}
+    </>
+  );
+}
+
 function About() {
   const [version, setVersion] = useState("");
   useEffect(() => {
@@ -583,6 +641,7 @@ function About() {
     <div className="stack">
       <span className="t-title-lg">{t("desktop.brand")}</span>
       <span className="muted">{t("desktop.about.version", { version: shownVersion(version) })}</span>
+      {canUpdate() && <Updates />}
       <p className="muted">{t("desktop.about.body", { file: "~/.blitz/desktop.json" })}</p>
       <div className="row wrap">
         <span className="t-body-sm muted">{t("desktop.about.license")}</span>

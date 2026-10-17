@@ -22,7 +22,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const stubWindow = () => vi.stubGlobal("window", { location: { origin: "http://127.0.0.1:5000" } });
 stubWindow();
 
-const { appVersion, canCall, chooseWorkspace, detectHost, fileManager, getPrefs, inElectron, licenseText, nativeGlass, onAppMenu, onNotificationOpen, openFolder, openURL, printPDF, resetHost, revealPath, serviceStatus, setAppMenu, toggleFullscreen } = await import("./desktop");
+const { appVersion, canCall, canUpdate, checkUpdate, chooseWorkspace, downloadUpdate, restartToUpdate, detectHost, fileManager, getPrefs, inElectron, licenseText, nativeGlass, onAppMenu, onNotificationOpen, openFolder, openURL, printPDF, resetHost, revealPath, serviceStatus, setAppMenu, toggleFullscreen } = await import("./desktop");
 
 type Call = { url: string; method: string; body?: unknown };
 
@@ -208,5 +208,31 @@ describe("preferences kept by the host", () => {
     vi.stubGlobal("fetch", tray({ GetPrefs: { theme: "dark", workspaces: [] }, SavePrefs: null }));
     await detectHost();
     expect((await getPrefs()).theme).toBe("dark");
+  });
+});
+
+describe("updates", () => {
+  it("are the host's, and restarting quits the window after the swap is started", async () => {
+    const calls: { method: string; args: unknown[] }[] = [];
+    const fetched: Call[] = [];
+    electronWindow({ Quit: undefined }, calls);
+    const ready = { current: "0.6.6", latest: "v0.6.7", available: true, can: true, downloading: false, ready: true };
+    vi.stubGlobal("fetch", tray({ CheckUpdate: ready, DownloadUpdate: ready, ApplyUpdate: null }, fetched));
+    await detectHost();
+    expect(canUpdate()).toBe(true);
+    expect(await checkUpdate()).toEqual(ready);
+    expect(fetched.at(-1)).toEqual({ url: "/host/CheckUpdate", method: "POST", body: [false] });
+    await checkUpdate(true);
+    expect(fetched.at(-1)?.body).toEqual([true]);
+    expect((await downloadUpdate()).ready).toBe(true);
+    await restartToUpdate();
+    expect(fetched.at(-1)?.url).toBe("/host/ApplyUpdate");
+    expect(calls.map((c) => c.method)).toEqual(["Quit"]);
+  });
+
+  it("aren't offered where nothing answers", async () => {
+    vi.stubGlobal("fetch", tray({ Version: "1" }));
+    await detectHost();
+    expect(canUpdate()).toBe(false);
   });
 });

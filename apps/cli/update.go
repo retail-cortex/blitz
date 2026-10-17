@@ -15,6 +15,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -168,7 +169,7 @@ func checkSignature(ctx context.Context, sums, bundle string) error {
 	if err != nil {
 		return err
 	}
-	err = verifySignature(ctx, data, b, config.ExpandHome("~/.blitz"))
+	err = verifySignature(ctx, bytes.NewReader(data), b, config.ExpandHome("~/.blitz"))
 	if !errors.Is(err, selfupdate.ErrOldBundle) {
 		if err != nil {
 			return fmt.Errorf("%w: nothing was installed", err)

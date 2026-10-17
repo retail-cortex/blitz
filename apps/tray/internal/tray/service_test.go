@@ -74,3 +74,18 @@ func (s shutdownService) Shutdown(context.Context, *connect.Request[pb.ShutdownR
 	s.asked <- struct{}{}
 	return connect.NewResponse(&pb.ShutdownResponse{}), nil
 }
+
+// The service says where its program is; nothing answers when it isn't
+// running.
+func TestServiceExecutable(t *testing.T) {
+	sock := filepath.Join(shortTemp(t), "blitz.sock")
+	assert.Empty(t, ServiceExecutable(context.Background(), sock))
+	ln, err := socket.Listen(sock)
+	require.NoError(t, err)
+	mux := http.NewServeMux()
+	mux.Handle(pb.NewWorkspaceServiceHandler(infoService{}))
+	srv := &http.Server{Handler: mux}
+	go func() { _ = srv.Serve(ln) }()
+	t.Cleanup(func() { srv.Close() })
+	assert.Equal(t, "/Applications/Blitz.app/Contents/Resources/app/bin/blitzd", ServiceExecutable(context.Background(), sock))
+}

@@ -39,6 +39,7 @@ func TestPrefsDefaultsAndRoundTrip(t *testing.T) {
 	require.Equal(t, "on", p.Notifications, "defaults %+v %v", p, err)
 	require.Equal(t, "pinned", p.Composer, "defaults %+v %v", p, err)
 	require.Equal(t, "on", p.GPU, "defaults %+v %v", p, err)
+	require.Equal(t, "auto", p.Updates, "defaults %+v %v", p, err)
 	require.Len(t, p.Workspaces, 0, "defaults %+v %v", p, err)
 	a, b := t.TempDir(), t.TempDir()
 	p.Theme, p.Composer, p.Advanced = "dark", "panel", true

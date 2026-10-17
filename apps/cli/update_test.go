@@ -23,6 +23,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -82,7 +83,7 @@ func fakeRelease(t *testing.T, badSum bool) {
 	releases = func() selfupdate.Source { return src }
 	// A release before v0.6.6: its signature only cosign checks, and
 	// there's none.
-	verifySignature = func(context.Context, []byte, []byte, string) error { return selfupdate.ErrOldBundle }
+	verifySignature = func(context.Context, io.Reader, []byte, string) error { return selfupdate.ErrOldBundle }
 	lookCosign = func() (string, error) { return "", errors.New("not found") }
 }
 
@@ -161,7 +162,7 @@ func TestUpdateChecksTheSignature(t *testing.T) {
 	dir := installed(t)
 	version = "0.1.0"
 
-	verifySignature = func(context.Context, []byte, []byte, string) error {
+	verifySignature = func(context.Context, io.Reader, []byte, string) error {
 		return errors.New("the release's signature doesn't verify: wrong identity")
 	}
 	_, err := runCLI(t, "update")
@@ -169,8 +170,9 @@ func TestUpdateChecksTheSignature(t *testing.T) {
 	data, _ := os.ReadFile(filepath.Join(dir, "blitz"))
 	assert.Equal(t, "old blitz", string(data), "nothing was installed")
 
-	verifySignature = func(_ context.Context, artifact, bundle []byte, _ string) error {
-		assert.Contains(t, string(artifact), "blitz_9.9.9", "the checksums are what's checked")
+	verifySignature = func(_ context.Context, artifact io.Reader, _ []byte, _ string) error {
+		data, _ := io.ReadAll(artifact)
+		assert.Contains(t, string(data), "blitz_9.9.9", "the checksums are what's checked")
 		return nil
 	}
 	out, err := runCLI(t, "update")
@@ -346,4 +348,11 @@ func TestCheckSignatureReadsItsFiles(t *testing.T) {
 	require.NoError(t, os.WriteFile(sums, []byte("x"), 0o600))
 	assert.Error(t, checkSignature(context.Background(), filepath.Join(dir, "missing.txt"), filepath.Join(dir, "b.json")))
 	assert.Error(t, checkSignature(context.Background(), sums, filepath.Join(dir, "missing.json")))
+}
+
+// cosign is looked for on PATH.
+func TestLookCosign(t *testing.T) {
+	t.Setenv("PATH", t.TempDir())
+	_, err := lookCosign()
+	assert.Error(t, err)
 }

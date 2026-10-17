@@ -84,6 +84,9 @@ type Prefs struct {
 	// graphics card where it can) or "off" (in software); read as the app
 	// starts (gpu.go).
 	GPU string `json:"gpu"`
+	// Updates is "auto" (the default: the app looks for a release daily
+	// and downloads it, ready to restart) or "off".
+	Updates string `json:"updates"`
 	// MarkdownCSSLight and MarkdownCSSDark are the user's CSS for Markdown
 	// previews in each theme, over the defaults (at most maxMarkdownCSS
 	// bytes each).
@@ -141,6 +144,9 @@ func (p *Prefs) normalize() {
 	}
 	if p.Transparency != "off" {
 		p.Transparency = "on"
+	}
+	if p.Updates != "off" {
+		p.Updates = "auto"
 	}
 	if p.GPU != "off" {
 		p.GPU = "on"

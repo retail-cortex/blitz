@@ -20,7 +20,7 @@
 // app's other modules, so the lists are here as well as in logic.ts.
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from "electron";
 
-const methods = ["ChooseWorkspace", "Notify", "OpenURL", "PrintPDF", "SetAppearance", "SetMenu", "SetUnsaved", "PendingLinks", "ToggleFullscreen"];
+const methods = ["ChooseWorkspace", "Notify", "OpenURL", "PrintPDF", "SetAppearance", "SetMenu", "SetUnsaved", "PendingLinks", "ToggleFullscreen", "Quit"];
 const events = new Set(["menu:about", "menu:settings", "deeplink:open", "notification:open"]);
 
 contextBridge.exposeInMainWorld("blitzElectron", {

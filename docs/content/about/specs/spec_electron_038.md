@@ -7,9 +7,9 @@ weight: 38
 
 | | |
 |---|---|
-| Status | **Shipping** from v0.6.6 (approved 2026-10-16; the owner's decision after trying it on macOS and Windows): Electron replaces the Wails app in releases (EL-80). Done: the shared host and `blitz-tray --serve` ([spec_service_021](spec_service_021.md) SVC-53a), the shell (EL-01–EL-22), the page's routing (EL-40–EL-42), the packages (EL-80). To do: the updates (EL-90) and the web preview (EL-100). The Wails app (`apps/desktop`) still builds but isn't released. |
+| Status | **Shipping** from v0.6.6 (approved 2026-10-16; the owner's decision after trying it on macOS and Windows): Electron replaces the Wails app in releases (EL-80). Done: the shared host and `blitz-tray --serve` ([spec_service_021](spec_service_021.md) SVC-53a), the shell (EL-01–EL-22), the page's routing (EL-40–EL-42), the packages (EL-80). Done also: the updates (EL-90–EL-93). To do: the web preview (EL-100). The Wails app (`apps/desktop`) still builds but isn't released. |
 | Source | `apps/electron` (`src/main.ts`, `src/preload.ts`, `src/logic.ts`, `dev.sh`, `defs.bzl`, `BUILD.bazel`), `apps/electron/packaging` (`BUILD.bazel`, `mac.bzl`, `sign_macos.sh`, `entitlements.plist`, `contents_test.sh`), the Electron runtime in `MODULE.bazel`, `pkg/pagehost`, `apps/tray/internal/tray/serve.go` |
-| Tests | `apps/electron/src/logic.test.ts` (vitest), `apps/desktop/web/src/desktop.test.ts` (the routing), `//apps/electron:typecheck`, `apps/tray/internal/tray/serve_test.go`, `pkg/pagehost/host_test.go` |
+| Tests | `apps/electron/src/logic.test.ts` (vitest), `pkg/selfupdate/*_test.go`, `pkg/pagehost/update_test.go`, `apps/tray/internal/tray/apply_test.go`, `apps/desktop/web/src/updates.test.ts`, `apps/desktop/web/src/desktop.test.ts` (the routing), `//apps/electron:typecheck`, `apps/tray/internal/tray/serve_test.go`, `pkg/pagehost/host_test.go` |
 
 ## 1. Purpose
 
@@ -61,7 +61,18 @@ The trial tries Electron instead: Chromium on macOS, Linux and Windows. It's a n
   - **Linux** (this machine's architecture): Electron in `/usr/lib/blitz-desktop` with its program as `blitz-desktop` (where the Wails app's was, so the link on PATH and the launcher stay) and `chrome-sandbox` setuid root (Electron's sandbox where user namespaces are restricted, as on Ubuntu 24.04), as a `.deb`, an Arch package and a tarball (`linux_tar`, which updates itself; unpacked by a user, its `chrome-sandbox` isn't setuid).
   - `contents_test.sh` checks each package's programs, licenses and identity.
 
-## 6. Findings
+## 6. Updates
+
+- **EL-90** *Since v0.6.6* the app updates itself from the releases (the owner's choice: Blitz's own updater, not Electron's). The host (`pkg/pagehost` `Updater`, in `blitz-tray --serve`) answers:
+  - `CheckUpdate(force)`: the latest release and where the update is (`UpdateStatus`: current, latest, available, can and why not, downloading, ready, error, the release's page). The answer of the last check (`~/.blitz/updates/last-check.json`) stands for five days (`CheckEvery`): GitHub is asked again only after that, or when forced (**Check now**).
+  - `DownloadUpdate`: downloads the release's package for this machine (`selfupdate.DesktopAsset`: the Mac's disk image, the Windows zip, the Linux tarball) into `~/.blitz/updates/<tag>`, checks it against its own Sigstore bundle (`selfupdate.VerifySignature`, [spec_release_025](spec_release_025.md) REL-13 and REL-24), and unpacks it (a disk image through `hdiutil`, mounted where nothing shows it; archives refusing anything outside their folder). The call returns when it's done: nothing is polled.
+  - `UpdateStatus`: where it is, without asking GitHub.
+  - `ApplyUpdate`: copies the host out of the app (`~/.blitz/updates/apply-blitz-tray`) and starts it as `--apply-update` with the app's process (the host's parent) to wait for; the page then quits the app through the window (`Quit`, which asks first about unsaved changes).
+- **EL-91** `blitz-tray --apply-update --staged … --root … --relaunch … --wait-pid …` (`tray.Update`): waits for the app to quit (2 min at most, else nothing changes), stops the service if it runs from the app (Windows can't replace a program in use), swaps the app (`selfupdate.Apply`: the old one moved aside, the new one moved in, or copied across disks, the old one put back if that fails, then removed), starts the service again, and the app (the new one, or the old one if the swap failed), logging to `~/.blitz/logs/update.log`.
+- **EL-92** It doesn't update itself where a package manager installed it (under `/usr` or `/opt`: the `.deb`, the Arch package) or in a development build: `can` is false and `reason` says so, and the page shows the reason.
+- **EL-93** The page (`updates.ts`): when the app opens, unless `updates` is `off` in the preferences, it checks (at most every five days), downloads an update it can take, and when it's ready says so with **Restart** (a snackbar); nothing repeats while the app runs. **Settings › About** shows the update's state with **Check now**, **Download**, **Restart to update** and the release's notes, and **Update automatically** (the `updates` preference).
+
+## 7. Findings
 
 *To do (EL-60).* The Electron build beside the Wails app on macOS and Linux, and beside the Edge tray on Windows: download and installed size, memory with one workspace open after five minutes (all processes), cold start until the page is ready, macOS glass, the NVIDIA checks (#39, #52), and on Windows the folder picker, Export as PDF, notifications, the CLI and starting at login. Then a recommendation: replace Wails, keep both, or stop.
 

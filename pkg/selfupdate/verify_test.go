@@ -15,10 +15,12 @@
 package selfupdate
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/sigstore/sigstore-go/pkg/root"
@@ -37,7 +39,7 @@ func TestVerifyEntityNeedsSCTs(t *testing.T) {
 	require.NoError(t, err)
 	entity, err := vs.Sign(workflow, SignerIssuer, []byte("sums"))
 	require.NoError(t, err)
-	assert.ErrorContains(t, verifyEntity(vs, entity, []byte("sums"), verifierOptions...), "signed certificate timestamp")
+	assert.ErrorContains(t, verifyEntity(vs, entity, strings.NewReader("sums"), verifierOptions...), "signed certificate timestamp")
 }
 
 // Only the release workflow's signature of the very checksums, on a
@@ -63,7 +65,7 @@ func TestVerifyEntity(t *testing.T) {
 			require.NoError(t, err)
 			// The virtual CA's certificates have no SCTs: the rest of what a
 			// release's signature must have.
-			err = verifyEntity(vs, entity, tc.artifact, verify.WithTransparencyLog(1), verify.WithObserverTimestamps(1))
+			err = verifyEntity(vs, entity, bytes.NewReader(tc.artifact), verify.WithTransparencyLog(1), verify.WithObserverTimestamps(1))
 			if tc.ok {
 				assert.NoError(t, err)
 			} else {
@@ -79,15 +81,15 @@ func TestVerifySignature(t *testing.T) {
 	ctx := context.Background()
 	old, err := os.ReadFile(filepath.Join("testdata", "cosign-v2.sigstore.json"))
 	require.NoError(t, err)
-	assert.ErrorIs(t, VerifySignature(ctx, []byte("x"), old, ""), ErrOldBundle)
-	assert.ErrorContains(t, VerifySignature(ctx, []byte("x"), []byte("not json"), ""), "reading the release's signature")
+	assert.ErrorIs(t, VerifySignature(ctx, strings.NewReader("x"), old, ""), ErrOldBundle)
+	assert.ErrorContains(t, VerifySignature(ctx, strings.NewReader("x"), []byte("not json"), ""), "reading the release's signature")
 
 	saved := TrustedRoot
 	t.Cleanup(func() { TrustedRoot = saved })
 	TrustedRoot = func(context.Context, string) (root.TrustedMaterial, error) { return nil, errors.New("offline") }
 	bundle, err := os.ReadFile(filepath.Join("testdata", "bundle-v0.3.sigstore.json"))
 	require.NoError(t, err)
-	assert.ErrorContains(t, VerifySignature(ctx, []byte("x"), bundle, t.TempDir()), "getting Sigstore's trust root: offline")
+	assert.ErrorContains(t, VerifySignature(ctx, strings.NewReader("x"), bundle, t.TempDir()), "getting Sigstore's trust root: offline")
 }
 
 // The trust root comes through Sigstore's TUF repository, cached where
@@ -108,5 +110,5 @@ func TestVerifySignatureRefusesAnotherIdentity(t *testing.T) {
 	TrustedRoot = func(context.Context, string) (root.TrustedMaterial, error) { return vs, nil }
 	bundle, err := os.ReadFile(filepath.Join("testdata", "bundle-v0.3.sigstore.json"))
 	require.NoError(t, err)
-	assert.ErrorContains(t, VerifySignature(context.Background(), []byte("x"), bundle, ""), "doesn't verify")
+	assert.ErrorContains(t, VerifySignature(context.Background(), strings.NewReader("x"), bundle, ""), "doesn't verify")
 }

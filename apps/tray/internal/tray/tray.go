@@ -125,6 +125,22 @@ func Shutdown(ctx context.Context, sock string) error {
 	return err
 }
 
+// ServiceExecutable is the program the service at sock runs from, as it
+// says (GetServiceInfo); "" when it isn't running or doesn't say.
+func ServiceExecutable(ctx context.Context, sock string) string {
+	if !socket.Running(sock) {
+		return ""
+	}
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	c := pb.NewWorkspaceServiceClient(clientFor(sock), socket.BaseURL)
+	res, err := c.GetServiceInfo(ctx, connect.NewRequest(&pb.GetServiceInfoRequest{}))
+	if err != nil {
+		return ""
+	}
+	return res.Msg.Executable
+}
+
 // ServiceLogDir is where the service at sock writes its log, as it says
 // (ListLogDays): the log.dir it started with. "" when it isn't running,
 // doesn't say, or has its log off.

@@ -29,6 +29,7 @@ export const windowMethods = [
   "SetUnsaved",
   "PendingLinks",
   "ToggleFullscreen",
+  "Quit",
 ] as const;
 export type WindowMethod = (typeof windowMethods)[number];
 

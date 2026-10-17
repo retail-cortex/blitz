@@ -98,7 +98,25 @@ type Bound = {
   License(which: string): Promise<string>;
   PendingLinks(): Promise<DeepLink[] | null>;
   PrintPDF(html: string, pageSize: string): Promise<string>;
+  CheckUpdate(force?: boolean): Promise<UpdateStatus>;
+  UpdateStatus(): Promise<UpdateStatus>;
+  DownloadUpdate(): Promise<UpdateStatus>;
+  ApplyUpdate(): Promise<void>;
+  Quit(): Promise<void>;
 };
+
+/** The desktop app's update, as its host says (spec_electron_038 EL-90). */
+export interface UpdateStatus {
+  current: string;
+  latest: string; // the latest release's tag
+  available: boolean;
+  can: boolean; // the app updates itself here (else reason says why not)
+  reason?: string;
+  downloading: boolean;
+  ready: boolean; // downloaded, checked, unpacked: restart to update
+  error?: string;
+  notes?: string; // the release's page
+}
 
 /** A blitz://open link: a folder to open, with a prompt to fill in. */
 export interface DeepLink {
@@ -396,6 +414,27 @@ export type AppMenuLabels = { about: string; settings: string; hide: string; hid
 /** Relabels the macOS app menu (DSK-101) in the window's language; nothing elsewhere. */
 export function setAppMenu(l: AppMenuLabels) {
   if (canCall("SetMenu")) app().SetMenu(l).catch(() => {});
+}
+
+/** Whether the app updates itself (the Electron app's host answers). */
+export const canUpdate = () => canCall("CheckUpdate");
+/**
+ * Where the update is: the host asks for the latest release only five days
+ * after it last did, unless force (Check now).
+ */
+export const checkUpdate = (force = false) => app().CheckUpdate(force);
+/** Where the update is, without asking for the latest release again (a download, followed). */
+export const updateStatus = () => app().UpdateStatus();
+/** Downloads, checks and unpacks the latest release; resolves when it's done. */
+export const downloadUpdate = () => app().DownloadUpdate();
+/**
+ * Restarts into the downloaded update: the host starts the swap, which
+ * waits for the app to quit (asking first about unsaved changes, as
+ * quitting does), then quits it.
+ */
+export async function restartToUpdate(): Promise<void> {
+  await app().ApplyUpdate();
+  await app().Quit();
 }
 
 /** Calls f when the app menu's About Blitz or Settings… is chosen (macOS). */

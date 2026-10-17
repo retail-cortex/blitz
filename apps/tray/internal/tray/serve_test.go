@@ -17,11 +17,13 @@ package tray
 import (
 	"bufio"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/cookiejar"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -85,4 +87,35 @@ func TestServe(t *testing.T) {
 func TestPageDirRefusesOtherDirectories(t *testing.T) {
 	_, err := PageDir(t.TempDir())
 	assert.ErrorContains(t, err, "isn't the desktop page")
+}
+
+// Serve says when it can't serve, or can't write its link.
+func TestServeFailures(t *testing.T) {
+	page, err := PageDir(writePage(t))
+	require.NoError(t, err)
+	assert.Error(t, Serve(pageserver.Options{Page: page, Addr: "example.com:80"}, strings.NewReader(""), io.Discard), "not a loopback address")
+	assert.Error(t, Serve(pageserver.Options{Page: page}, strings.NewReader(""), failingWriter{}), "the link can't be written")
+	var w limitedWriter
+	assert.Error(t, Serve(pageserver.Options{Page: page}, strings.NewReader("link\n"), &w), "the second link can't be written")
+}
+
+// writePage is a folder with the page's index.html.
+func writePage(t *testing.T) string {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "index.html"), []byte("<title>Blitz</title>"), 0o600))
+	return dir
+}
+
+type failingWriter struct{}
+
+func (failingWriter) Write([]byte) (int, error) { return 0, errors.New("closed") }
+
+// limitedWriter takes one write, then fails.
+type limitedWriter struct{ n int }
+
+func (w *limitedWriter) Write(p []byte) (int, error) {
+	if w.n++; w.n > 1 {
+		return 0, errors.New("closed")
+	}
+	return len(p), nil
 }

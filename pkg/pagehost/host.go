@@ -31,6 +31,7 @@ import (
 	goruntime "runtime"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/retail-cortex/blitz/pkg/fileview"
 	"github.com/retail-cortex/blitz/pkg/legal"
@@ -69,6 +70,8 @@ type Host struct {
 	Tray string
 	// Prefs keeps the window's preferences (nil: the page keeps its own).
 	Prefs *PrefsStore
+	// Updates updates the desktop app the host runs in (nil: no updates).
+	Updates *Updater
 }
 
 // ServiceStatus says whether the service answers and whether it starts at
@@ -150,6 +153,28 @@ func (h Host) methods() map[string]hostMethod {
 	m["CLIStatus"] = func([]json.RawMessage) (any, error) { return CurrentCLIStatus(), nil }
 	m["InstallCLI"] = func([]json.RawMessage) (any, error) { return InstallCLI() }
 	m["ReinstallCLI"] = func([]json.RawMessage) (any, error) { return ReinstallCLI() }
+	if u := h.Updates; u != nil {
+		// CheckUpdate(force): when the app opens (force false: GitHub is
+		// asked only five days after the last check) or Check now (true).
+		m["CheckUpdate"] = func(args []json.RawMessage) (any, error) {
+			var force bool
+			if len(args) > 0 {
+				if err := arg(args, 0, &force); err != nil {
+					return nil, err
+				}
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+			return u.Check(ctx, force), nil
+		}
+		m["UpdateStatus"] = func([]json.RawMessage) (any, error) { return u.Status(), nil }
+		m["DownloadUpdate"] = func([]json.RawMessage) (any, error) {
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
+			defer cancel()
+			return u.Download(ctx), nil
+		}
+		m["ApplyUpdate"] = func([]json.RawMessage) (any, error) { return nil, u.Apply() }
+	}
 	return m
 }
 

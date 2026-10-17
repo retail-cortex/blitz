@@ -15,6 +15,7 @@
 package selfupdate
 
 import (
+	"archive/tar"
 	"archive/zip"
 	"bytes"
 	"compress/gzip"
@@ -244,4 +245,27 @@ func TestFetchFailures(t *testing.T) {
 	data, err := os.ReadFile(to)
 	require.NoError(t, err)
 	assert.Equal(t, "data", string(data))
+}
+
+// A tarball's programs that can't be written, and a folder in the way of
+// a program, are errors that leave things as they were.
+func TestExtractAndReplaceFailures(t *testing.T) {
+	var b bytes.Buffer
+	gz := gzip.NewWriter(&b)
+	tw := tar.NewWriter(gz)
+	require.NoError(t, tw.WriteHeader(&tar.Header{Name: "d/" + ProgramName("blitz"), Mode: 0o755, Size: 1, Typeflag: tar.TypeReg}))
+	tw.Write([]byte("x"))
+	tw.Close()
+	gz.Close()
+	dir := t.TempDir()
+	archive := filepath.Join(dir, "a.tar.gz")
+	require.NoError(t, os.WriteFile(archive, b.Bytes(), 0o600))
+	_, err := ExtractPrograms(archive, filepath.Join(dir, "no", "such"), "blitz")
+	assert.Error(t, err)
+
+	src := filepath.Join(dir, "src")
+	require.NoError(t, os.WriteFile(src, []byte("new"), 0o644))
+	folder := filepath.Join(dir, "blitz")
+	require.NoError(t, os.Mkdir(folder, 0o755))
+	assert.ErrorContains(t, ReplaceFiles([][2]string{{src, folder}}), "is a folder")
 }

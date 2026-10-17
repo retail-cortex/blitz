@@ -67,7 +67,7 @@ func (infoService) ListLogDays(context.Context, *connect.Request[pb.ListLogDaysR
 }
 
 func (infoService) GetServiceInfo(context.Context, *connect.Request[pb.GetServiceInfoRequest]) (*connect.Response[pb.GetServiceInfoResponse], error) {
-	return connect.NewResponse(&pb.GetServiceInfoResponse{Version: "1.4.0", Pid: 4242}), nil
+	return connect.NewResponse(&pb.GetServiceInfoResponse{Version: "1.4.0", Pid: 4242, Executable: "/Applications/Blitz.app/Contents/Resources/app/bin/blitzd"}), nil
 }
 
 func TestProbe(t *testing.T) {

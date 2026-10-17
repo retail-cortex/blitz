@@ -113,6 +113,9 @@ describe("normalizePrefs", () => {
     expect(normalizePrefs({ files: "yes", show_hidden: 1, chat_width: -5 })).toMatchObject({ files: false, show_hidden: false, chat_width: 0 });
     expect(normalizePrefs({ files_width: 300.6 })).toMatchObject({ files_width: 301 });
     expect(normalizePrefs({ files_width: 20000 })).toMatchObject({ files_width: 0 });
+    expect(normalizePrefs({})).toMatchObject({ updates: "auto" });
+    expect(normalizePrefs({ updates: "off" })).toMatchObject({ updates: "off" });
+    expect(normalizePrefs({ updates: "sometimes" })).toMatchObject({ updates: "auto" });
     expect(normalizePrefs({}).width).toBe("full");
     expect(normalizePrefs({}).advanced).toBe(false); // simple until asked
     expect(normalizePrefs({ advanced: true }).advanced).toBe(true);

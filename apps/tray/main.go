@@ -51,6 +51,7 @@ import (
 	"github.com/retail-cortex/blitz/pkg/loginitem"
 	"github.com/retail-cortex/blitz/pkg/pagehost"
 	"github.com/retail-cortex/blitz/pkg/pageserver"
+	"github.com/retail-cortex/blitz/pkg/selfupdate"
 	"github.com/retail-cortex/blitz/pkg/socket"
 )
 
@@ -66,12 +67,19 @@ func main() {
 	showVersion := flag.Bool("version", false, "Print the version and exit")
 	serve := flag.Bool("serve", false, "Serve the desktop page for a window (the Electron app): print a link to it as a JSON line, a new one for each \"link\" line read, until standard input closes")
 	pageDir := flag.String("page", "", "With --serve: the built page's directory (default: the page built into the tray)")
+	applyUpdate := flag.Bool("apply-update", false, "Put a downloaded desktop app in place of the running one (the app's host runs this), then start it")
+	staged := flag.String("staged", "", "With --apply-update: the new app")
+	root := flag.String("root", "", "With --apply-update: the app it replaces")
+	relaunch := flag.String("relaunch", "", "With --apply-update: what starts the app again")
+	waitPID := flag.Int("wait-pid", 0, "With --apply-update: the app's process, waited for")
 	flag.Parse()
 	switch {
 	case *showVersion:
 		fmt.Println("blitz-tray", version)
 	case *serve:
 		exit(serveWindow(*pageDir))
+	case *applyUpdate:
+		exit(applyDownloaded(*staged, *root, *relaunch, *waitPID))
 	case *install:
 		exit(installTray())
 	case *uninstall:
@@ -158,7 +166,43 @@ func serveWindow(dir string) error {
 		return errors.New("this blitz-tray has no page built in: pass --page")
 	}
 	sock := socket.DefaultSocket()
-	return tray.Serve(pageserver.Options{Page: p, Socket: sock, Host: newHost(sock, newActions(sock)).Handler()}, os.Stdin, os.Stdout)
+	host := newHost(sock, newActions(sock))
+	// The Electron app updates itself through its host (pkg/pagehost).
+	host.Updates = &pagehost.Updater{
+		Version: version, HostExe: host.Tray,
+		Dir: config.ExpandHome("~/.blitz/updates"), CacheDir: config.ExpandHome("~/.blitz"),
+		Source: selfupdate.GitHub, Spawn: tray.Detached, GOOS: goruntime.GOOS, GOARCH: goruntime.GOARCH,
+	}
+	return tray.Serve(pageserver.Options{Page: p, Socket: sock, Host: host.Handler()}, os.Stdin, os.Stdout)
+}
+
+// applyDownloaded puts the staged app in place of root (--apply-update),
+// logging to ~/.blitz/logs/update.log.
+func applyDownloaded(staged, root, relaunch string, waitPID int) error {
+	dir := config.ExpandHome("~/.blitz/logs")
+	_ = os.MkdirAll(dir, 0o700)
+	log, err := os.OpenFile(filepath.Join(dir, "update.log"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
+	if err != nil {
+		return err
+	}
+	defer log.Close()
+	sock := socket.DefaultSocket()
+	acts := newActions(sock)
+	// The service starts again from the new app, at the same path.
+	acts.Beside = filepath.Join(root, "resources", "app", "bin")
+	if goruntime.GOOS == "darwin" {
+		acts.Beside = filepath.Join(root, "Contents", "Resources", "app", "bin")
+	}
+	err = tray.Update{
+		Staged: staged, Root: root, Relaunch: relaunch, WaitPID: waitPID, Actions: acts,
+		ServiceExe: func() string { return tray.ServiceExecutable(context.Background(), sock) },
+		Exited:     tray.Exited,
+		Log:        log,
+	}.Run()
+	if err != nil {
+		fmt.Fprintln(log, time.Now().Format(time.RFC3339), err)
+	}
+	return err
 }
 
 // newActions controls the service on sock.

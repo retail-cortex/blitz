@@ -15,11 +15,11 @@
 package selfupdate
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"path/filepath"
 
 	"github.com/sigstore/sigstore-go/pkg/bundle"
@@ -57,12 +57,13 @@ func trustOptions(ctx context.Context, cacheDir string) *tuf.Options {
 }
 
 // VerifySignature checks that bundleJSON (a Sigstore bundle, as the
-// release workflow writes beside checksums.txt) is the release workflow's
-// signature of artifact: its certificate is for the workflow on a release
+// release workflow writes beside checksums.txt and each desktop package)
+// is the release workflow's signature of artifact, read once as it's
+// checked: its certificate is for the workflow on a release
 // tag, from GitHub's issuer, logged in Sigstore's transparency log.
 // cacheDir keeps Sigstore's trust root between checks ("" for the user's
 // default).
-func VerifySignature(ctx context.Context, artifact, bundleJSON []byte, cacheDir string) error {
+func VerifySignature(ctx context.Context, artifact io.Reader, bundleJSON []byte, cacheDir string) error {
 	if isOldBundle(bundleJSON) {
 		return ErrOldBundle
 	}
@@ -84,7 +85,7 @@ var verifierOptions = []verify.VerifierOption{verify.WithTransparencyLog(1), ver
 
 // verifyEntity checks entity's signature of artifact against trusted, for
 // the release workflow's identity.
-func verifyEntity(trusted root.TrustedMaterial, entity verify.SignedEntity, artifact []byte, opts ...verify.VerifierOption) error {
+func verifyEntity(trusted root.TrustedMaterial, entity verify.SignedEntity, artifact io.Reader, opts ...verify.VerifierOption) error {
 	v, err := verify.NewVerifier(trusted, opts...)
 	if err != nil {
 		return err
@@ -93,7 +94,7 @@ func verifyEntity(trusted root.TrustedMaterial, entity verify.SignedEntity, arti
 	if err != nil {
 		return err
 	}
-	if _, err := v.Verify(entity, verify.NewPolicy(verify.WithArtifact(bytes.NewReader(artifact)), verify.WithCertificateIdentity(id))); err != nil {
+	if _, err := v.Verify(entity, verify.NewPolicy(verify.WithArtifact(artifact), verify.WithCertificateIdentity(id))); err != nil {
 		return fmt.Errorf("the release's signature doesn't verify: %w", err)
 	}
 	return nil

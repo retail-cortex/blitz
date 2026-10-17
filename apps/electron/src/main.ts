@@ -279,6 +279,12 @@ ipcMain.handle("blitz:call", async (e, method: unknown, args: unknown) => {
     case "ToggleFullscreen":
       win.setFullScreen(!win.isFullScreen());
       return;
+    case "Quit":
+      // As the menu's Quit: closing asks first about unsaved changes. An
+      // update waiting to be put in place (the host's ApplyUpdate) goes
+      // ahead once the app has quit.
+      app.quit();
+      return;
   }
 });
 

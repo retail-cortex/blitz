@@ -93,6 +93,7 @@ go_library(
         "//pkg/loginitem",
         "//pkg/pagehost",
         "//pkg/pageserver",
+        "//pkg/selfupdate",
         "//pkg/socket",
         "@io_fyne_systray//:systray",
     ] + select({
