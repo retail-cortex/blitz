@@ -103,7 +103,41 @@ type Bound = {
   DownloadUpdate(): Promise<UpdateStatus>;
   ApplyUpdate(): Promise<void>;
   Quit(): Promise<void>;
+  PreviewOpen(id: string, url: string): Promise<string>;
+  PreviewBounds(id: string, b: PreviewBounds): Promise<void>;
+  PreviewVisible(id: string, visible: boolean): Promise<void>;
+  PreviewNavigate(id: string, step: string): Promise<void>;
+  PreviewClose(id: string): Promise<void>;
+  PreviewCapture(id: string): Promise<string>;
+  PreviewContent(id: string): Promise<PreviewContent>;
+  PreviewConsole(id: string): Promise<string[]>;
 };
+
+/** Where a web preview goes in the window, in the page's pixels. */
+export interface PreviewBounds {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+/** A web preview's page, as the window says when it changes (preview:state). */
+export interface PreviewState {
+  id: string;
+  url: string;
+  title: string;
+  loading: boolean;
+  back: boolean;
+  forward: boolean;
+}
+
+/** What Add to chat reads from a web preview: its address, title, HTML and selection (HTML). */
+export interface PreviewContent {
+  url: string;
+  title: string;
+  html: string;
+  selection: string;
+}
 
 /** The desktop app's update, as its host says (spec_electron_038 EL-90). */
 export interface UpdateStatus {
@@ -195,11 +229,20 @@ const windowHas = (method: string) => !!electronWindow()?.methods.includes(metho
  */
 export const canCall = (method: keyof Bound) => inApp() || windowHas(method) || hostMethods.has(method);
 
+/**
+ * What the Electron window said went wrong, without what Electron adds
+ * ("Error invoking remote method 'blitz:call': Error: ").
+ */
+export function windowError(e: unknown): string {
+  const m = e instanceof Error ? e.message : String(e);
+  return m.replace(/^Error invoking remote method '[^']*': (?:Error: )?/, "");
+}
+
 /** The app's methods outside the Wails app: the Electron window's, then the host's. */
 const served = new Proxy({} as Bound, {
   get: (_, method: string) => {
     const w = electronWindow();
-    if (w && windowHas(method)) return (...args: unknown[]) => w.call(method, ...args);
+    if (w && windowHas(method)) return (...args: unknown[]) => w.call(method, ...args).catch((e: unknown) => Promise.reject(new Error(windowError(e))));
     if (hostMethods.has(method)) return (...args: unknown[]) => hostCall(method, args);
     return () => Promise.reject(new Error("not running inside the Blitz desktop app"));
   },
@@ -504,5 +547,43 @@ export function onNotificationOpen(f: (dir: string) => void): () => void {
   if (!on) return () => {};
   return on("notification:open", (dir) => {
     if (typeof dir === "string") f(dir);
+  });
+}
+
+/**
+ * Whether web pages can open in the editor (spec_electron_038 EL-100):
+ * only the Electron app's window can show them.
+ */
+export const canPreview = () => windowHas("PreviewOpen");
+/**
+ * Opens web preview id at an address (a bare host gets http:// or
+ * https://), or points it there when it's open; resolves with the address.
+ */
+export const previewOpen = (id: string, url: string) => app().PreviewOpen(id, url);
+/** Places web preview id over the page's placeholder. */
+export const previewBounds = (id: string, b: PreviewBounds) => (canPreview() ? app().PreviewBounds(id, b).catch(() => {}) : Promise.resolve());
+/** Shows or hides web preview id (hidden under a menu, a dialog, a drawer, or another tab). */
+export const previewVisible = (id: string, visible: boolean) => (canPreview() ? app().PreviewVisible(id, visible).catch(() => {}) : Promise.resolve());
+/** Moves web preview id: back, forward, reload or stop (an address opens with previewOpen). */
+export const previewNavigate = (id: string, step: "back" | "forward" | "reload" | "stop") => app().PreviewNavigate(id, step);
+/** Closes web preview id. */
+export const previewClose = (id: string) => (canPreview() ? app().PreviewClose(id).catch(() => {}) : Promise.resolve());
+/** Web preview id's page as a PNG. */
+export async function previewCapture(id: string): Promise<Uint8Array> {
+  const b64 = await app().PreviewCapture(id);
+  return Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+}
+/** Web preview id's address, title, HTML and selection. */
+export const previewContent = (id: string) => app().PreviewContent(id);
+/** The errors web preview id's console has shown since it opened, the latest last. */
+export const previewConsole = (id: string) => app().PreviewConsole(id);
+
+/** Calls f when a web preview's page changes (its address, title, loading). */
+export function onPreviewState(f: (s: PreviewState) => void): () => void {
+  const on = windowEvents();
+  if (!on || !inElectron()) return () => {};
+  return on("preview:state", (arg) => {
+    const s = arg as Partial<PreviewState> | undefined;
+    if (s && typeof s.id === "string") f({ id: s.id, url: s.url ?? "", title: s.title ?? "", loading: !!s.loading, back: !!s.back, forward: !!s.forward });
   });
 }

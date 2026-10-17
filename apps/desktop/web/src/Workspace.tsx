@@ -21,7 +21,7 @@ import { mdiMagnify, mdiFileTreeOutline } from "@mdi/js";
 import { ChangesDrawer, type ChangesSource } from "./Changes";
 import { CommitDialog } from "./CommitDialog";
 import { Conversation } from "./Conversation";
-import { filesTouchedEvent, goToFile, historyEvent, openFileEvent, revealInTreeEvent, viewEvent, type HistoryDetail, type OpenFileDetail, type ViewDetail } from "./events";
+import { filesTouchedEvent, goToFile, historyEvent, openFileEvent, openWebEvent, revealInTreeEvent, viewEvent, type HistoryDetail, type OpenFileDetail, type OpenWebDetail, type ViewDetail } from "./events";
 import { HistoryDrawer } from "./files/HistoryDrawer";
 import { EditorPane } from "./files/EditorPane";
 import { FilesShelf } from "./files/FilesShelf";
@@ -137,6 +137,13 @@ export function Workspace({
       const d = (e as CustomEvent<OpenFileDetail>).detail;
       if (d.dir === dir) open(d.path, d.line, d.column, d.find);
     };
+    // A web page opens in a tab of its own (EL-100).
+    const onWeb = (e: Event) => {
+      const d = (e as CustomEvent<OpenWebDetail>).detail;
+      if (d.dir !== dir) return;
+      editorRef.current.openWeb(d.url);
+      setModal(null);
+    };
     const onReveal = (e: Event) => {
       const d = (e as CustomEvent<{ dir: string; path: string }>).detail;
       if (d.dir === dir) revealRef.current(d.path);
@@ -153,12 +160,14 @@ export function Workspace({
       timer = setTimeout(() => setTouched((n) => n + 1), 300);
     };
     window.addEventListener(openFileEvent, onOpen);
+    window.addEventListener(openWebEvent, onWeb);
     window.addEventListener(revealInTreeEvent, onReveal);
     window.addEventListener(historyEvent, onHistory);
     window.addEventListener(filesTouchedEvent, onTouched);
     return () => {
       clearTimeout(timer);
       window.removeEventListener(openFileEvent, onOpen);
+      window.removeEventListener(openWebEvent, onWeb);
       window.removeEventListener(revealInTreeEvent, onReveal);
       window.removeEventListener(historyEvent, onHistory);
       window.removeEventListener(filesTouchedEvent, onTouched);

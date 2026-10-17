@@ -30,11 +30,20 @@ export const windowMethods = [
   "PendingLinks",
   "ToggleFullscreen",
   "Quit",
+  // The web preview (EL-100).
+  "PreviewOpen",
+  "PreviewBounds",
+  "PreviewVisible",
+  "PreviewNavigate",
+  "PreviewClose",
+  "PreviewCapture",
+  "PreviewContent",
+  "PreviewConsole",
 ] as const;
 export type WindowMethod = (typeof windowMethods)[number];
 
 /** The events the window sends the page. */
-export const pageEvents = ["menu:about", "menu:settings", "deeplink:open", "notification:open"] as const;
+export const pageEvents = ["menu:about", "menu:settings", "deeplink:open", "notification:open", "preview:state"] as const;
 export type PageEvent = (typeof pageEvents)[number];
 
 /**
@@ -211,3 +220,120 @@ export const isWindowMethod = (method: unknown): method is WindowMethod => typeo
 
 /** The i-th argument, as text ("" when it isn't). */
 export const text = (args: readonly unknown[], i: number) => (typeof args[i] === "string" ? (args[i] as string) : "");
+
+/**
+ * The address a web preview opens (EL-101): http and https only, never
+ * file: or other schemes. One without a scheme gets http:// for this
+ * machine (localhost:3000) and https:// elsewhere; undefined for anything
+ * that isn't a web address.
+ */
+export function previewURL(raw: unknown): string | undefined {
+  if (typeof raw !== "string") return undefined;
+  let s = raw.trim();
+  if (!s) return undefined;
+  // A scheme (http:, file:, javascript:), not a host and its port (localhost:3000).
+  if (!/^[a-z][a-z0-9+.-]*:(?!\d)/i.test(s)) {
+    const host = s.startsWith("[") ? s.slice(0, s.indexOf("]") + 1) : (s.split(/[/:?#]/)[0] ?? "");
+    s = (isLocalHost(host) ? "http://" : "https://") + s;
+  }
+  let u: URL;
+  try {
+    u = new URL(s);
+  } catch {
+    return undefined;
+  }
+  if ((u.protocol !== "http:" && u.protocol !== "https:") || !u.hostname) return undefined;
+  return u.href;
+}
+
+/** Whether a host name is this machine's (localhost, 127.0.0.1, [::1]). */
+export function isLocalHost(host: string): boolean {
+  const h = host.toLowerCase();
+  return h === "localhost" || h.endsWith(".localhost") || h === "127.0.0.1" || h === "[::1]" || h === "::1";
+}
+
+/** A preview's ID from the page: letters, digits, - and _, up to 64. */
+export const previewId = (v: unknown): string | undefined => (typeof v === "string" && /^[\w-]{1,64}$/.test(v) ? v : undefined);
+
+/** Where a preview goes in the window, in the page's pixels. */
+export interface Bounds {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+/** The bounds the page sent, whole and not negative; undefined when they aren't bounds. */
+export function bounds(v: unknown): Bounds | undefined {
+  if (typeof v !== "object" || v === null) return undefined;
+  const o = v as Record<string, unknown>;
+  const out: Record<string, number> = {};
+  for (const k of ["x", "y", "width", "height"]) {
+    const n = o[k];
+    if (typeof n !== "number" || !Number.isFinite(n)) return undefined;
+    out[k] = Math.min(Math.max(0, Math.round(n)), 100_000);
+  }
+  return out as unknown as Bounds;
+}
+
+/** What the preview's toolbar asks of it (an address opens with PreviewOpen). */
+export type PreviewStep = "back" | "forward" | "reload" | "stop";
+
+/** A step the page asked for; undefined for one it can't ask for. */
+export const previewStep = (v: unknown): PreviewStep | undefined => (v === "back" || v === "forward" || v === "reload" || v === "stop" ? v : undefined);
+
+/** The console errors a preview keeps, the latest. */
+export const maxConsoleLines = 200;
+
+/**
+ * A preview's console message as kept for Add to chat (EL-104): errors
+ * only, with where they came from; undefined for the rest.
+ */
+export function consoleLine(level: string, message: string, source: string, line: number): string | undefined {
+  if (level !== "error") return undefined;
+  const at = source ? ` (${source}${line ? `:${line}` : ""})` : "";
+  return message.slice(0, 4000) + at;
+}
+
+/** Adds a line to the kept ones, dropping the oldest past maxConsoleLines. */
+export function keepLine(lines: string[], line: string): void {
+  lines.push(line);
+  if (lines.length > maxConsoleLines) lines.splice(0, lines.length - maxConsoleLines);
+}
+
+/** The largest page or selection Add to chat takes, as HTML (the service's limit too). */
+export const maxContentHTML = 2 << 20;
+
+/**
+ * What Add to chat reads from a preview (EL-104), run in a world of its own
+ * so the page's scripts can't change what it sees: the address, the title,
+ * the page's HTML and the selection's, each cut to maxContentHTML.
+ */
+export const contentScript = `(() => {
+  const max = ${maxContentHTML};
+  const cut = (s) => (s.length > max ? s.slice(0, max) : s);
+  const sel = window.getSelection();
+  let selection = "";
+  if (sel && sel.rangeCount && !sel.isCollapsed) {
+    const box = document.createElement("div");
+    for (let i = 0; i < sel.rangeCount; i++) box.appendChild(sel.getRangeAt(i).cloneContents());
+    selection = box.innerHTML;
+  }
+  const root = document.documentElement;
+  return { url: location.href, title: document.title, html: cut(root ? root.outerHTML : ""), selection: cut(selection) };
+})()`;
+
+/** What PreviewContent answers: the page's address, title, HTML and selection. */
+export interface PreviewContent {
+  url: string;
+  title: string;
+  html: string;
+  selection: string;
+}
+
+/** The content script's answer, as strings; empty where it gave none. */
+export function previewContent(v: unknown): PreviewContent {
+  const o = (typeof v === "object" && v !== null ? v : {}) as Record<string, unknown>;
+  const str = (k: string) => (typeof o[k] === "string" ? (o[k] as string).slice(0, maxContentHTML) : "");
+  return { url: str("url"), title: str("title"), html: str("html"), selection: str("selection") };
+}

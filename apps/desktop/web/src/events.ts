@@ -17,7 +17,9 @@
 // Events between parts of the window that don't share state: the command
 // palette asks a workspace's composer to take text or run a command, or a
 // workspace to show a view.
+import type { WebBlock } from "./attachments";
 
+/** The event that asks a workspace's composer to take text, or run a command. */
 export const composeEvent = "blitz:compose";
 /** What the composer is asked to take. */
 export interface ComposeDetail {
@@ -57,6 +59,31 @@ export function takePendingCompose(dir: string): ComposeDetail | undefined {
   const d = pendingCompose.get(dir);
   pendingCompose.delete(dir);
   return d;
+}
+
+/** The event that opens a web page in a workspace's editor (spec_electron_038 EL-100). */
+export const openWebEvent = "blitz:open-web";
+/** A web page to open in a workspace's editor ("" asks for its address). */
+export interface OpenWebDetail {
+  dir: string;
+  url: string;
+}
+/** Opens a web page in a workspace's editor, in a tab of its own. */
+export function openWeb(detail: OpenWebDetail) {
+  window.dispatchEvent(new CustomEvent(openWebEvent, { detail }));
+}
+
+/** The event that adds a web page's content to a workspace's next prompt (EL-104). */
+export const addWebEvent = "blitz:add-web";
+/** What Add to chat adds: a page's content (block), or a screenshot of it (image, a PNG). */
+export interface AddWebDetail {
+  dir: string;
+  block?: WebBlock;
+  image?: { name: string; data: Uint8Array };
+}
+/** Adds a web page's content, or a screenshot of it, to a workspace's composer. */
+export function addWeb(detail: AddWebDetail) {
+  window.dispatchEvent(new CustomEvent(addWebEvent, { detail }));
 }
 
 /** The event that adds a file or folder to a workspace's next prompt. */

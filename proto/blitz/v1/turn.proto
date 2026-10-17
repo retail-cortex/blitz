@@ -61,6 +61,26 @@ message Turn {
   // command's prompt, agent, model, tools and plan mode; the transcript
   // records text. An unknown command fails with UNKNOWN_COMMAND.
   bool command = 12;
+  // What the user added from outside the workspace (the desktop app's web
+  // preview: a page, a selection, its console's errors), given to the
+  // agent as content to read, never as instructions; the transcript
+  // notes each block's title and URL.
+  repeated ContextBlock context = 13;
+}
+
+// ContextBlock is content the user added to a turn from elsewhere.
+message ContextBlock {
+  // What it is: "web_page", "web_selection" or "console".
+  string kind = 1;
+  // Where it came from.
+  string url = 2;
+  // The page's title.
+  string title = 3;
+  // The content as HTML (a page, a selection), made into text by the
+  // service; at most 2 MB.
+  string html = 4;
+  // The content as text (the console's errors), used when html is empty.
+  string text = 5;
 }
 
 // TurnEvent is something that happened during a turn. Events arrive in

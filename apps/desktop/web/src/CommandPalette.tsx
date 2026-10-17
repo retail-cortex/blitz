@@ -33,10 +33,11 @@ import {
   mdiTuneVariant,
   mdiWeatherNight,
   mdiWhiteBalanceSunny,
+  mdiWeb,
 } from "@mdi/js";
 import { files, sessions, workspaces } from "./api";
 import { allCommands, paletteResults, searchesFiles, type CommandSpec, type PaletteItem } from "./commands";
-import { compose, findInFile, loadSession, openDocs, openFile, searchWorkspace, showView, startSetup } from "./events";
+import { compose, findInFile, loadSession, openDocs, openFile, openWeb, searchWorkspace, showView, startSetup } from "./events";
 import { loadAppDocs } from "./docs/load";
 import { findTerms, hitTarget, queryTerms } from "./search";
 import { fileIcon } from "./files/icons";
@@ -48,7 +49,7 @@ import type { Section } from "./SettingsDrawer";
 import type { SearchHit } from "./gen/blitz/v1/workspace_pb";
 import { t, tn } from "./i18n";
 import { Icon, useModal } from "./ui/controls";
-import { toggleFullscreen } from "./desktop";
+import { canPreview, toggleFullscreen } from "./desktop";
 
 /**
  * Cmd/Ctrl+K, Cmd/Ctrl+P or the top bar's search: the workspace's files
@@ -200,6 +201,8 @@ export function CommandPalette({ onClose, onOpenWorkspace, onSettings }: { onClo
         { group: t("desktop.palette.group.view"), label: prefs.files ? t("desktop.files.hide") : t("desktop.files.show"), icon: mdiFileTreeOutline, run: done(() => update((p) => ({ ...p, files: !p.files }))) },
         { group: t("desktop.palette.group.view"), label: t("desktop.palette.show_editor"), icon: mdiCodeBraces, run: done(() => showView({ dir, view: "editor" })) },
         { group: t("desktop.palette.group.view"), label: t("desktop.palette.show_changes"), icon: mdiFileCompare, run: done(() => showView({ dir, view: "changes" })) },
+        // Web pages open in the editor where the window can show them (EL-100).
+        ...(canPreview() ? [{ group: t("desktop.palette.group.view"), label: t("desktop.web.open"), icon: mdiWeb, run: done(() => openWeb({ dir, url: "" })) }] : []),
         ...(prefs.advanced ? [{ group: t("desktop.palette.group.view"), label: t("desktop.palette.show_workers"), icon: mdiCalendarClock, run: done(() => showView({ dir, view: "workers" })) }] : []),
         { group: t("desktop.palette.group.view"), label: t("desktop.palette.fullscreen"), detail: "F11", icon: mdiFullscreen, run: done(() => void toggleFullscreen().catch(() => {})) },
       );
@@ -223,7 +226,10 @@ export function CommandPalette({ onClose, onOpenWorkspace, onSettings }: { onClo
 
   const shown = paletteResults(fileItems, items, query, textItems);
   useEffect(() => setPick(0), [query]);
-  useEffect(() => list.current?.querySelector(".palette-item.on")?.scrollIntoView({ block: "nearest" }), [pick]);
+  // In braces: Chromium's scrollIntoView returns a promise, which React would take for a cleanup.
+  useEffect(() => {
+    list.current?.querySelector(".palette-item.on")?.scrollIntoView({ block: "nearest" });
+  }, [pick]);
 
   let lastGroup = "";
   return (

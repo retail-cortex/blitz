@@ -60,6 +60,7 @@ import {
   mdiWrenchOutline,
   mdiFileCompare,
   mdiKeyboardOutline,
+  mdiConsoleLine,
 } from "@mdi/js";
 import { files, serviceLost, sessions, workspaces } from "./api";
 import { editorConfig, toEditor } from "./host";
@@ -74,6 +75,7 @@ import { allCommands, helpText, matchCommands, parseCommand, type CommandSpec } 
 import { builtin, type CommandContext } from "./slashCommands";
 import {
   addToContextEvent,
+  addWebEvent,
   composeEvent,
   setupCommand,
   configChanged,
@@ -84,6 +86,7 @@ import {
   takePendingCompose,
   takePendingLoad,
   type AddToContextDetail,
+  type AddWebDetail,
   type ComposeDetail,
   type LoadSessionDetail,
 } from "./events";
@@ -92,7 +95,7 @@ import { pollMs, shouldPoll, welcomeTiles, type TileAction } from "./suggestions
 import { ComposerDock, focusComposerEvent } from "./composerDock";
 import { refreshRuns, runInSession } from "./backgroundRuns";
 import { fileIcon } from "./files/icons";
-import { acceptAttribute, acceptedAs, describeImage, isDocument, readyIds, rejectReason, uploading, type Accepted, type Attachment } from "./attachments";
+import { acceptAttribute, acceptedAs, describeImage, isDocument, readyIds, rejectReason, uploading, webBlocks, type Accepted, type Attachment, type WebBlock } from "./attachments";
 import { Markdown } from "./Markdown";
 import { t, tn, useLanguage } from "./i18n";
 import { notify, shouldNotify, type NotifyKind } from "./notify";
@@ -118,6 +121,8 @@ interface TurnOptions {
   prompt?: string;
   fetchGrants?: string[];
   images?: Attachment[];
+  /** Content added from web pages (EL-104), sent as the turn's context. */
+  context?: WebBlock[];
   /** The prompt as shown, when it differs from the text sent. */
   shown?: string;
   /** Follow this background run instead of sending text (blitz --bg). */
@@ -305,6 +310,7 @@ export function Conversation({
     async (text: string, opts: TurnOptions = {}) => {
       if (!session) return;
       const images = opts.images ?? [];
+      const context = opts.context ?? [];
       if (!opts.accepted && !opts.follow)
         setEntries((e) => [
           ...e,
@@ -312,7 +318,7 @@ export function Conversation({
             kind: "user",
             text: opts.shown ?? (opts.plan ? `/plan ${text}` : text),
             sub: opts.aside ? "aside" : undefined,
-            images: images.length ? images.map((a) => ({ url: a.url, name: a.name })) : undefined,
+            images: images.length || context.length ? [...images.map((a) => ({ url: a.url, name: a.name })), ...context.map((b) => ({ url: "", name: b.title || b.url, web: b.kind }))] : undefined,
           },
         ]);
       setRunning(true);
@@ -344,6 +350,7 @@ export function Conversation({
               prompt: opts.prompt ?? "",
               fetchGrants: opts.fetchGrants ?? [],
               command: !!opts.command,
+              context,
             },
           },
           { signal: ctl.signal },
@@ -474,8 +481,9 @@ export function Conversation({
     if (parseCommand(text) && (await execute(text))) return;
     if (!running) {
       const images = attachments.filter((a) => a.id && !a.error);
+      const context = webBlocks(attachments);
       setAttachments([]);
-      return run(text, { images });
+      return run(text, { images, context });
     }
     // While a turn runs, a message steers it.
     try {
@@ -756,6 +764,25 @@ export function Conversation({
     };
     window.addEventListener(addToContextEvent, f);
     return () => window.removeEventListener(addToContextEvent, f);
+  }, [dir]);
+
+  // A web page in the editor adds its content (a chip of its own, sent as
+  // the turn's context) or a screenshot (an image, as a pasted one).
+  const addWebRef = useRef<(d: AddWebDetail) => void>(() => {});
+  addWebRef.current = (d) => {
+    if (d.image) addFiles([new File([d.image.data as BlobPart], d.image.name, { type: "image/png" })]);
+    const b = d.block;
+    if (!b) return;
+    const name = b.title || b.url;
+    setAttachments((list) => [...list, { key: `${Date.now()}-${Math.random()}`, name, url: "", web: b, detail: t(`desktop.web.added.${b.kind}`, { url: b.url }) }]);
+  };
+  useEffect(() => {
+    const f = (e: Event) => {
+      const d = (e as CustomEvent<AddWebDetail>).detail;
+      if (d.dir === dir) addWebRef.current(d);
+    };
+    window.addEventListener(addWebEvent, f);
+    return () => window.removeEventListener(addWebEvent, f);
   }, [dir]);
 
   // A command to run in a new chat (the setup), once that chat is shown.
@@ -1207,7 +1234,7 @@ function UserBubble({ entry, running, onRewind, onEdit }: { entry: UserEntry; ru
                 <img key={img.url} src={img.url} alt={img.name} title={img.name} />
               ) : (
                 <span key={`${i}-${img.name}`} className="bubble-doc t-body-sm" title={img.name}>
-                  <Icon path={kindIcon(kindOfName(img.name))} size="sm" />
+                  <Icon path={img.web ? webIcon(img.web) : kindIcon(kindOfName(img.name))} size="sm" />
                   <span className="ellipsis">{img.name}</span>
                 </span>
               ),
@@ -1239,6 +1266,9 @@ function Thought({ text, open }: { text: string; open: boolean }) {
 }
 
 /** An attachment's icon by its kind. */
+/** A web content chip's icon: the console's, or a page's. */
+const webIcon = (kind: string) => (kind === "console" ? mdiConsoleLine : mdiWeb);
+
 function kindIcon(kind: string): string {
   return { document: mdiFilePdfBox, text: mdiFileDocumentOutline, audio: mdiFileMusicOutline, video: mdiFileVideoOutline }[kind] ?? mdiImageOutline;
 }
@@ -1731,7 +1761,7 @@ function Composer({
         <div className="attachments">
           {attachments.map((a) => (
             <div key={a.key} className={`attachment ${a.error ? "failed" : ""}`} title={a.error || `${a.name}${a.detail ? ` · ${a.detail}` : ""}`}>
-              {a.url ? <img src={a.url} alt="" /> : <Icon path={kindIcon(a.kind ?? (a.document ? "document" : "image"))} />}
+              {a.url ? <img src={a.url} alt="" /> : <Icon path={a.web ? webIcon(a.web.kind) : kindIcon(a.kind ?? (a.document ? "document" : "image"))} />}
               <span className="attachment-text">
                 <span className="ellipsis">{a.name}</span>
                 <small className={a.error ? "error-text ellipsis" : "muted ellipsis"}>{a.error || a.detail || t("desktop.attach.uploading")}</small>

@@ -19,24 +19,32 @@
 // host's /host/ calls, on one loopback origin), opens a window on the
 // link it prints, and answers what only a window can do (the folder
 // picker, printing to PDF, notifications, the menu, closing with unsaved
-// changes) through the preload's window.blitzElectron.
+// changes, the web previews) through the preload's window.blitzElectron.
 import { spawn, type ChildProcess } from "node:child_process";
 import { mkdtemp, rm, stat, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import path from "node:path";
 import { createInterface } from "node:readline";
 import { pathToFileURL } from "node:url";
-import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, Notification, session, shell, type MenuItemConstructorOptions } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, Notification, session, shell, WebContentsView, type MenuItemConstructorOptions, type Session } from "electron";
 import {
   appMenu,
+  bounds,
+  consoleLine,
+  contentScript,
   englishMenu,
   isExternal,
   isWindowMethod,
+  keepLine,
   linkArgs,
   menuLabels,
   originOf,
   parseDeepLink,
   parseLink,
+  previewContent,
+  previewId,
+  previewStep,
+  previewURL,
   printOptions,
   text,
   theme,
@@ -279,6 +287,42 @@ ipcMain.handle("blitz:call", async (e, method: unknown, args: unknown) => {
     case "ToggleFullscreen":
       win.setFullScreen(!win.isFullScreen());
       return;
+    case "PreviewOpen": {
+      const id = previewId(a[0]);
+      const url = previewURL(a[1]);
+      if (!id || !url) throw new Error(`not opening ${JSON.stringify(a[1])}: only web addresses open in a preview`);
+      openPreview(id, url);
+      return url;
+    }
+    case "PreviewBounds": {
+      const b = bounds(a[1]);
+      if (b) preview(a).view.setBounds(b);
+      return;
+    }
+    case "PreviewVisible":
+      preview(a).view.setVisible(a[1] === true);
+      return;
+    case "PreviewNavigate": {
+      const wc = preview(a).view.webContents;
+      const step = previewStep(a[1]);
+      if (step === "back") wc.navigationHistory.goBack();
+      else if (step === "forward") wc.navigationHistory.goForward();
+      else if (step === "reload") wc.reload();
+      else if (step === "stop") wc.stop();
+      else throw new Error(`no such step: ${JSON.stringify(a[1])}`);
+      return;
+    }
+    case "PreviewClose":
+      closePreview(previewId(a[0]) ?? "");
+      return;
+    case "PreviewCapture": {
+      const image = await preview(a).view.webContents.capturePage();
+      return image.toPNG().toString("base64");
+    }
+    case "PreviewContent":
+      return previewContent(await preview(a).view.webContents.executeJavaScriptInIsolatedWorld(1000, [{ code: contentScript }]));
+    case "PreviewConsole":
+      return [...preview(a).errors];
     case "Quit":
       // As the menu's Quit: closing asks first about unsaved changes. An
       // update waiting to be put in place (the host's ApplyUpdate) goes
@@ -287,6 +331,91 @@ ipcMain.handle("blitz:call", async (e, method: unknown, args: unknown) => {
       return;
   }
 });
+
+/**
+ * The web previews (EL-100): one view each, over the page's placeholder,
+ * in a session of their own (persist:preview, so sign-ins last) with no
+ * preload and no Node, sandboxed. Only web addresses load; new windows
+ * open in the same view; downloads and permissions (but writing to the
+ * clipboard) are refused.
+ */
+const previews = new Map<string, { view: WebContentsView; errors: string[] }>();
+let previewSession: Session | undefined;
+
+function previewSessionOf(): Session {
+  if (previewSession) return previewSession;
+  const s = session.fromPartition("persist:preview");
+  s.setPermissionRequestHandler((_wc, permission, done) => done(permission === "clipboard-sanitized-write"));
+  s.setPermissionCheckHandler((_wc, permission) => permission === "clipboard-sanitized-write");
+  s.on("will-download", (e) => e.preventDefault());
+  previewSession = s;
+  return s;
+}
+
+/** A preview by the page's ID; it throws for one that isn't open. */
+function preview(a: unknown[]) {
+  const p = previews.get(previewId(a[0]) ?? "");
+  if (!p) throw new Error("no such preview");
+  return p;
+}
+
+/** Opens (or points) preview id at url, hidden until the page places and shows it. */
+function openPreview(id: string, url: string) {
+  if (!win) return;
+  let p = previews.get(id);
+  if (!p) {
+    const view = new WebContentsView({ webPreferences: { session: previewSessionOf(), sandbox: true, contextIsolation: true, nodeIntegration: false, spellcheck: false } });
+    view.setVisible(false);
+    view.setBackgroundColor("#ffffff");
+    win.contentView.addChildView(view);
+    p = { view, errors: [] };
+    previews.set(id, p);
+    watchPreview(id, p);
+  }
+  // A page that won't load shows Chromium's error page, and its error.
+  p.view.webContents.loadURL(url).catch(() => {});
+}
+
+/** Keeps a preview to web addresses, and tells the page where it is. */
+function watchPreview(id: string, p: { view: WebContentsView; errors: string[] }) {
+  const wc = p.view.webContents;
+  wc.setWindowOpenHandler(({ url }) => {
+    const u = previewURL(url);
+    if (u) void wc.loadURL(u).catch(() => {});
+    return { action: "deny" };
+  });
+  const stay = (e: { preventDefault(): void }, url: string) => {
+    if (!previewURL(url)) e.preventDefault();
+  };
+  wc.on("will-navigate", stay);
+  wc.on("will-redirect", stay);
+  const state = () => {
+    if (wc.isDestroyed()) return;
+    send("preview:state", { id, url: wc.getURL(), title: wc.getTitle(), loading: wc.isLoading(), back: wc.navigationHistory.canGoBack(), forward: wc.navigationHistory.canGoForward() });
+  };
+  wc.on("did-start-loading", state);
+  wc.on("did-stop-loading", state);
+  wc.on("did-navigate", state);
+  wc.on("did-navigate-in-page", state);
+  wc.on("page-title-updated", state);
+  wc.on("console-message", (e) => {
+    const line = consoleLine(e.level, e.message, e.sourceId, e.lineNumber);
+    if (line) keepLine(p.errors, line);
+  });
+  wc.on("did-fail-load", (_e, code, description, url, mainFrame) => {
+    // -3: a load stopped (by another), not failed.
+    if (mainFrame && code !== -3) keepLine(p.errors, `${description} (${url})`);
+  });
+}
+
+/** Closes a preview: its view goes, and its page with it. */
+function closePreview(id: string) {
+  const p = previews.get(id);
+  if (!p) return;
+  previews.delete(id);
+  win?.contentView.removeChildView(p.view);
+  p.view.webContents.close();
+}
 
 /** Starting failed: say why, and quit. */
 function fail(err: unknown) {

@@ -22,7 +22,42 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const stubWindow = () => vi.stubGlobal("window", { location: { origin: "http://127.0.0.1:5000" } });
 stubWindow();
 
-const { appVersion, canCall, canUpdate, checkUpdate, chooseWorkspace, downloadUpdate, restartToUpdate, detectHost, fileManager, getPrefs, inElectron, licenseText, nativeGlass, onAppMenu, onNotificationOpen, openFolder, openURL, printPDF, resetHost, revealPath, serviceStatus, setAppMenu, toggleFullscreen } = await import("./desktop");
+const {
+  appVersion,
+  canCall,
+  canPreview,
+  canUpdate,
+  checkUpdate,
+  chooseWorkspace,
+  downloadUpdate,
+  restartToUpdate,
+  detectHost,
+  fileManager,
+  getPrefs,
+  inElectron,
+  licenseText,
+  nativeGlass,
+  onAppMenu,
+  onNotificationOpen,
+  onPreviewState,
+  openFolder,
+  openURL,
+  previewBounds,
+  previewCapture,
+  previewClose,
+  previewConsole,
+  previewContent,
+  previewNavigate,
+  previewOpen,
+  previewVisible,
+  printPDF,
+  resetHost,
+  revealPath,
+  serviceStatus,
+  setAppMenu,
+  toggleFullscreen,
+  windowError,
+} = await import("./desktop");
 
 type Call = { url: string; method: string; body?: unknown };
 
@@ -168,6 +203,63 @@ describe("the Electron app's window", () => {
     expect(items).toEqual(["settings", "about"]);
     expect(dirs).toEqual(["/home/me/shop"]);
     setAppMenu({ about: "À propos", settings: "Réglages…", hide: "", hide_others: "", show_all: "", quit: "" });
+  });
+
+  it("shows web previews (EL-100), and says how they change", async () => {
+    const calls: { method: string; args: unknown[] }[] = [];
+    const content = { url: "http://localhost:3000/", title: "Home", html: "<p>hi</p>", selection: "" };
+    const { emit } = electronWindow(
+      {
+        PreviewOpen: "http://localhost:3000/",
+        PreviewBounds: undefined,
+        PreviewVisible: undefined,
+        PreviewNavigate: undefined,
+        PreviewClose: undefined,
+        PreviewCapture: btoa("PNG"),
+        PreviewContent: content,
+        PreviewConsole: ["boom"],
+      },
+      calls,
+    );
+    expect(canPreview()).toBe(true);
+    expect(await previewOpen("w1", "localhost:3000")).toBe("http://localhost:3000/");
+    await previewBounds("w1", { x: 1, y: 2, width: 3, height: 4 });
+    await previewVisible("w1", true);
+    await previewNavigate("w1", "back");
+    expect(new TextDecoder().decode(await previewCapture("w1"))).toBe("PNG");
+    expect(await previewContent("w1")).toEqual(content);
+    expect(await previewConsole("w1")).toEqual(["boom"]);
+    await previewClose("w1");
+    expect(calls.map((c) => c.method)).toEqual(["PreviewOpen", "PreviewBounds", "PreviewVisible", "PreviewNavigate", "PreviewCapture", "PreviewContent", "PreviewConsole", "PreviewClose"]);
+    expect(calls[1].args).toEqual(["w1", { x: 1, y: 2, width: 3, height: 4 }]);
+
+    const states: unknown[] = [];
+    const off = onPreviewState((s) => states.push(s));
+    emit("preview:state", { id: "w1", url: "http://localhost:3000/", title: "Home", loading: true, back: false });
+    emit("preview:state", "not a state");
+    off();
+    emit("preview:state", { id: "w1" });
+    expect(states).toEqual([{ id: "w1", url: "http://localhost:3000/", title: "Home", loading: true, back: false, forward: false }]);
+  });
+
+  it("says what went wrong without Electron's prefix", async () => {
+    expect(windowError(new Error("Error invoking remote method 'blitz:call': Error: not opening \"file:///x\""))).toBe('not opening "file:///x"');
+    expect(windowError("plain")).toBe("plain");
+    electronWindow({ PreviewOpen: undefined });
+    (window as unknown as { blitzElectron: { call: () => Promise<never> } }).blitzElectron.call = () => Promise.reject(new Error("Error invoking remote method 'blitz:call': Error: refused"));
+    await expect(previewOpen("w1", "file:///x")).rejects.toThrow(/^refused$/);
+  });
+
+  it("has no web previews elsewhere", async () => {
+    electronWindow({ OpenURL: undefined });
+    expect(canPreview()).toBe(false);
+    stubWindow();
+    expect(canPreview()).toBe(false);
+    expect(onPreviewState(() => {})).toBeTypeOf("function");
+    // Placing, showing and closing a preview that isn't there is nothing.
+    await previewBounds("w1", { x: 0, y: 0, width: 1, height: 1 });
+    await previewVisible("w1", false);
+    await previewClose("w1");
   });
 
   it("isn't macOS's translucent window unless it says so", () => {

@@ -351,7 +351,11 @@ func TestSessionHandlers(t *testing.T) {
 	require.NoError(t, err)
 	id := made.Msg.Session.Id
 	for _, prompt := range []string{"one", "two"} {
-		require.NoError(t, streamErr(s.RunTurn(ctx, connect.NewRequest(&pb.RunTurnRequest{Workspace: dir, SessionId: id, Turn: &pb.Turn{Text: prompt, Timeout: durationpb.New(time.Minute)}}))))
+		turn := &pb.Turn{Text: prompt, Timeout: durationpb.New(time.Minute)}
+		if prompt == "two" { // with a page added from the web preview
+			turn.Context = []*pb.ContextBlock{{Kind: "web_page", Url: "http://localhost:3000/", Title: "Home", Html: "<p>Hello</p>"}}
+		}
+		require.NoError(t, streamErr(s.RunTurn(ctx, connect.NewRequest(&pb.RunTurnRequest{Workspace: dir, SessionId: id, Turn: turn}))))
 	}
 	list, err := s.ListSessions(ctx, connect.NewRequest(&pb.ListSessionsRequest{Workspace: dir, All: true}))
 	require.NoError(t, err)
@@ -365,6 +369,7 @@ func TestSessionHandlers(t *testing.T) {
 	exported, err := s.ExportSession(ctx, connect.NewRequest(&pb.ExportSessionRequest{Workspace: dir, SessionId: id}))
 	require.NoError(t, err)
 	assert.Contains(t, exported.Msg.Markdown, "first answer")
+	assert.Contains(t, exported.Msg.Markdown, `<added-content kind="web_page" url="http://localhost:3000/" title="Home">`, "the added page, as the agent had it")
 	usage, err := s.GetUsage(ctx, connect.NewRequest(&pb.GetUsageRequest{Workspace: dir, Parts: true}))
 	require.NoError(t, err)
 	assert.NotEmpty(t, usage.Msg.Parts, "context parts")
@@ -388,7 +393,7 @@ func TestSessionHandlers(t *testing.T) {
 	assert.Equal(t, "UNKNOWN_REWIND_MODE", reason(t, unary(s.Rewind, &pb.RewindRequest{Workspace: dir, Index: points.Msg.Points[1].Index, Mode: "sideways"})))
 	rewound, err := s.Rewind(ctx, connect.NewRequest(&pb.RewindRequest{Workspace: dir, Index: points.Msg.Points[1].Index, Mode: "conversation"}))
 	require.NoError(t, err)
-	assert.Equal(t, "two", rewound.Msg.Prompt)
+	assert.Equal(t, "two\n[added: Home]", rewound.Msg.Prompt, "noted as images are")
 	assert.NotNil(t, rewound.Msg.Compacted)
 
 	forked, err := s.ForkSession(ctx, connect.NewRequest(&pb.ForkSessionRequest{Workspace: dir}))

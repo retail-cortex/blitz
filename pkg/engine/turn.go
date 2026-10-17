@@ -181,7 +181,7 @@ func (w *Workspace) run(ctx context.Context, sessionID string, t turn, on func(a
 		if !t.Accepted {
 			// Where the conversation stood, so /rewind can cut it here.
 			events := w.engine.EventCount(ctx, sessionID)
-			w.appendIn(st, sessionID, on, session.Message{Role: "user", Content: recorded + AttachmentNote(t.Images), Events: &events})
+			w.appendIn(st, sessionID, on, session.Message{Role: "user", Content: recorded + AttachmentNote(t.Images) + AddedNote(t.Context), Events: &events})
 		}
 		w.turnStarted(sessionID)
 		defer w.turnEnded(sessionID)
@@ -244,6 +244,7 @@ func (w *Workspace) run(ctx context.Context, sessionID string, t turn, on func(a
 	}
 	prompt = withHookContext(prompt, "prompt_submit", hookContext)
 	prompt = w.withMentions(ctx, prompt, t.Text)
+	prompt = withAdded(prompt, t.Context)
 	var err error
 	if t.Aside {
 		err = w.engine.Aside(ctx, sessionID, prompt, handler)

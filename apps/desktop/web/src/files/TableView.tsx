@@ -60,7 +60,10 @@ export function TableView({ dir, path, line }: { dir: string; path: string; line
       clearTimeout(timer);
     };
   }, [dir, path, search, filters, sort, offset]);
-  useEffect(() => focused.current?.scrollIntoView({ block: "center" }), [page]);
+  // In braces: Chromium's scrollIntoView returns a promise, which React would take for a cleanup.
+  useEffect(() => {
+    focused.current?.scrollIntoView({ block: "center" });
+  }, [page]);
   // Asking again starts at the first page.
   const ask = <T,>(set: (v: T) => void) => (v: T) => (set(v), setOffset(0));
   const setSearchAt = ask(setSearch);

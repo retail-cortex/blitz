@@ -46,6 +46,20 @@ export interface Attachment {
   id?: string; // the service's ID once uploaded
   detail?: string; // size and dimensions, once uploaded
   error?: string;
+  web?: WebBlock; // content added from a web page, sent as is (not uploaded)
+}
+
+/**
+ * Content added from a web page in the editor (spec_electron_038 EL-104):
+ * the page, a selection or its console's errors, sent with the prompt as
+ * the turn's context (the service gives it to the agent as data).
+ */
+export interface WebBlock {
+  kind: "web_page" | "web_selection" | "console";
+  url: string;
+  title: string;
+  html: string;
+  text: string;
 }
 
 const extOf = (name: string) => {
@@ -104,4 +118,7 @@ export function describeImage(i: { width: number; height: number; size: bigint |
 export const readyIds = (list: Attachment[]) => list.filter((a) => a.id && !a.error).map((a) => a.id!);
 
 /** Whether any image is still uploading. */
-export const uploading = (list: Attachment[]) => list.some((a) => !a.id && !a.error);
+export const uploading = (list: Attachment[]) => list.some((a) => !a.id && !a.error && !a.web);
+
+/** The web content among the attachments, for the turn's context. */
+export const webBlocks = (list: Attachment[]) => list.filter((a) => a.web).map((a) => a.web!);

@@ -30,13 +30,14 @@ import remarkMath from "remark-math";
 import { mdiImageOutline, mdiOpenInNew } from "@mdi/js";
 import { files } from "./api";
 import { CodeBlock } from "./CodeBlock";
-import { openURL } from "./desktop";
+import { canPreview, openURL } from "./desktop";
 import { message } from "./errors";
-import { openFile, openFileAt, revealInTree } from "./events";
+import { openFile, openFileAt, openWeb, revealInTree } from "./events";
 import { FileKind } from "./gen/blitz/v1/file_pb";
 import { useFileLinks, useFileRef } from "./files/links";
 import { resolveLink, slugger, type LinkTarget } from "./files/mdlinks";
 import { githubMath } from "./files/math";
+import { isLocalLink } from "./files/webTabs";
 import { htmlPicture, isDataImage, pictureURL } from "./files/pictures";
 import { t, useLanguage } from "./i18n";
 import { MermaidBlock } from "./mermaid";
@@ -94,8 +95,9 @@ async function openPath(dir: string, to: Extract<LinkTarget, { kind: "path" }>) 
 
 /**
  * Follows a link in a document (FIL-56): a web or mail link in the system
- * browser, #heading to it in el's document, a workspace path in the
- * editor or the tree; fail says why not.
+ * browser (one to this machine's web server in a web tab, where the window
+ * shows them: spec_electron_038 EL-102), #heading to it in el's document,
+ * a workspace path in the editor or the tree; fail says why not.
  */
 export function followLink(href: string, doc: { dir: string; path: string }, el: Element, fail: (message: string) => void) {
   follow(resolveLink(href, doc.path), href, doc, doc.dir, el, fail);
@@ -103,7 +105,10 @@ export function followLink(href: string, doc: { dir: string; path: string }, el:
 
 function follow(to: LinkTarget, href: string, doc: { path: string } | null, dir: string | undefined, el: Element, fail: (message: string) => void) {
   const failed = (err: unknown) => fail(message(err));
-  if (to.kind === "url") openURL(to.href).catch(failed);
+  if (to.kind === "url") {
+    if (dir && canPreview() && isLocalLink(to.href)) openWeb({ dir, url: to.href });
+    else openURL(to.href).catch(failed);
+  }
   else if (to.kind === "anchor") scrollToHeading(el, to.id);
   else if (to.kind === "outside") fail(t("desktop.markdown.outside", { href }));
   else if (doc && to.path === doc.path && !to.folder && !to.line) {

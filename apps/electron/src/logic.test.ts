@@ -14,8 +14,38 @@
  * limitations under the License.
  */
 
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { appMenu, englishMenu, isExternal, isWindowMethod, linkArgs, maxLinkPrompt, menuLabels, originOf, parseDeepLink, parseLink, printOptions, text, theme, unsaved } from "./logic";
+import {
+  appMenu,
+  bounds,
+  consoleLine,
+  contentScript,
+  englishMenu,
+  isExternal,
+  isLocalHost,
+  isWindowMethod,
+  keepLine,
+  linkArgs,
+  maxConsoleLines,
+  maxContentHTML,
+  maxLinkPrompt,
+  menuLabels,
+  originOf,
+  pageEvents,
+  parseDeepLink,
+  parseLink,
+  previewContent,
+  previewId,
+  previewStep,
+  previewURL,
+  printOptions,
+  text,
+  theme,
+  unsaved,
+  windowMethods,
+} from "./logic";
 
 describe("parseLink", () => {
   it.each([
@@ -116,4 +146,112 @@ describe("parseDeepLink", () => {
   it("finds the links among a command line's arguments", () => {
     expect(linkArgs(["/app/blitz", "--flag", "blitz://open?dir=/tmp"])).toEqual(["blitz://open?dir=/tmp"]);
   });
+});
+
+describe("previewURL", () => {
+  it.each([
+    { raw: "http://localhost:3000/a?b#c", want: "http://localhost:3000/a?b#c" },
+    { raw: "https://example.com", want: "https://example.com/" },
+    { raw: "  localhost:5173 ", want: "http://localhost:5173/" },
+    { raw: "localhost", want: "http://localhost/" },
+    { raw: "127.0.0.1:8000/docs", want: "http://127.0.0.1:8000/docs" },
+    { raw: "[::1]:8080", want: "http://[::1]:8080/" },
+    { raw: "app.localhost:3000", want: "http://app.localhost:3000/" },
+    { raw: "example.com", want: "https://example.com/" },
+    { raw: "example.com:8443/x", want: "https://example.com:8443/x" },
+    { raw: "file:///etc/passwd", want: undefined },
+    { raw: "javascript:alert(1)", want: undefined },
+    { raw: "data:text/html,hi", want: undefined },
+    { raw: "blitz://open?dir=/", want: undefined },
+    { raw: "mailto:a@b.c", want: undefined },
+    { raw: "http://", want: undefined },
+    { raw: "", want: undefined },
+    { raw: 42, want: undefined },
+  ])("$raw", ({ raw, want }) => expect(previewURL(raw)).toBe(want));
+});
+
+describe("isLocalHost", () => {
+  it("is this machine's names only", () => {
+    for (const h of ["localhost", "LOCALHOST", "web.localhost", "127.0.0.1", "[::1]", "::1"]) expect(isLocalHost(h)).toBe(true);
+    for (const h of ["example.com", "localhost.example.com", "127.0.0.2", ""]) expect(isLocalHost(h)).toBe(false);
+  });
+});
+
+describe("previewId", () => {
+  it("takes plain IDs only", () => {
+    expect(previewId("web-1_a")).toBe("web-1_a");
+    expect(previewId("")).toBeUndefined();
+    expect(previewId("a/b")).toBeUndefined();
+    expect(previewId("x".repeat(65))).toBeUndefined();
+    expect(previewId(7)).toBeUndefined();
+  });
+});
+
+describe("bounds", () => {
+  it("rounds, and keeps them on the window", () => {
+    expect(bounds({ x: 10.4, y: -3, width: 200.6, height: 1e9 })).toEqual({ x: 10, y: 0, width: 201, height: 100_000 });
+  });
+  it.each([null, "x", {}, { x: 1, y: 1, width: 1 }, { x: 1, y: 1, width: 1, height: NaN }, { x: "1", y: 1, width: 1, height: 1 }])("refuses %j", (v) => expect(bounds(v)).toBeUndefined());
+});
+
+describe("previewStep", () => {
+  it("is a step, never an address", () => {
+    for (const s of ["back", "forward", "reload", "stop"]) expect(previewStep(s)).toBe(s);
+    expect(previewStep("localhost:3000")).toBeUndefined();
+    expect(previewStep({})).toBeUndefined();
+  });
+});
+
+describe("console", () => {
+  it("keeps errors, with where they came from", () => {
+    expect(consoleLine("error", "boom", "http://x/app.js", 12)).toBe("boom (http://x/app.js:12)");
+    expect(consoleLine("error", "boom", "http://x/app.js", 0)).toBe("boom (http://x/app.js)");
+    expect(consoleLine("error", "boom", "", 0)).toBe("boom");
+    expect(consoleLine("error", "x".repeat(5000), "", 0)).toHaveLength(4000);
+    expect(consoleLine("warning", "meh", "", 0)).toBeUndefined();
+    expect(consoleLine("info", "hi", "", 0)).toBeUndefined();
+  });
+  it("keeps the latest lines", () => {
+    const lines: string[] = [];
+    for (let i = 0; i < maxConsoleLines + 5; i++) keepLine(lines, String(i));
+    expect(lines).toHaveLength(maxConsoleLines);
+    expect(lines[0]).toBe("5");
+    expect(lines.at(-1)).toBe(String(maxConsoleLines + 4));
+  });
+});
+
+describe("previewContent", () => {
+  it("is strings, cut to the limit", () => {
+    expect(previewContent({ url: "http://x/", title: "T", html: "<p>a</p>", selection: 3 })).toEqual({ url: "http://x/", title: "T", html: "<p>a</p>", selection: "" });
+    expect(previewContent(undefined)).toEqual({ url: "", title: "", html: "", selection: "" });
+    expect(previewContent({ html: "x".repeat(maxContentHTML + 1) }).html).toHaveLength(maxContentHTML);
+  });
+  it("reads the page and the selection", () => {
+    // The script as a function of a page like the preview's.
+    const range = { cloneContents: () => "<b>sel</b>" };
+    const page = {
+      window: { getSelection: () => ({ rangeCount: 1, isCollapsed: false, getRangeAt: () => range }) },
+      document: {
+        title: "Home",
+        documentElement: { outerHTML: "<html>hi</html>" },
+        createElement: () => {
+          const box = { innerHTML: "", appendChild: (s: string) => void (box.innerHTML += s) };
+          return box;
+        },
+      },
+      location: { href: "http://localhost:3000/" },
+    };
+    const run = new Function("window", "document", "location", `return ${contentScript};`);
+    expect(run(page.window, page.document, page.location)).toEqual({ url: "http://localhost:3000/", title: "Home", html: "<html>hi</html>", selection: "<b>sel</b>" });
+    page.window.getSelection = () => ({ rangeCount: 0, isCollapsed: true, getRangeAt: () => range });
+    expect(run(page.window, page.document, page.location).selection).toBe("");
+  });
+});
+
+// A sandboxed preload can't import logic.ts: its own lists must say the same.
+describe("preload", () => {
+  const src = readFileSync(path.join(__dirname, "preload.ts"), "utf8");
+  const list = (re: RegExp) => [...(src.match(re)?.[1] ?? "").matchAll(/"([^"]+)"/g)].map((m) => m[1]);
+  it("offers the window's calls", () => expect(list(/const methods = \[([^\]]*)\]/)).toEqual([...windowMethods]));
+  it("passes on the window's events", () => expect(list(/const events = new Set\(\[([^\]]*)\]\)/)).toEqual([...pageEvents]));
 });

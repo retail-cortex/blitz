@@ -910,6 +910,16 @@ code.file-link:hover { text-decoration-color: currentColor; }
 .find-bar input:focus { border-color: var(--accent-a); box-shadow: 0 0 0 3px var(--focus-ring); }
 .find-bar input:focus { border-color: var(--md-primary); }
 .find-bar .find-count { min-width: 80px; font-size: 12px; }
+/* A web page in the editor (spec_electron_038 EL-100): its toolbar, its
+   address (as the find bar's field), and the place the window's view of
+   the page fills. */
+.web-bar { gap: 4px; padding-left: 8px; }
+.web-address-form { flex: 1; min-width: 0; display: flex; }
+.web-address { flex: 1; min-width: 0; font: inherit; color: var(--md-on-surface); background: var(--md-surface); border: 1px solid var(--md-outline); border-radius: var(--field-radius); padding: 4px 8px; outline: none; }
+.web-address:focus { border-color: var(--md-primary); box-shadow: 0 0 0 3px var(--focus-ring); }
+.web-view { flex: 1; min-height: 0; background: var(--md-surface); }
+/* A file's body, kept (CodeMirror lives in it) while a web tab shows. */
+.editor-body[hidden] { display: none; }
 
 /* The commit dialog (CommitDialog.tsx): the drafted message, then the
    staged files, each with git's status letter in its colour. */
