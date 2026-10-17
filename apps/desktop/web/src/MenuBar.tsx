@@ -54,7 +54,7 @@ import { displayName, forgetWorkspace, openWorkspace, openWorkspaces, recentWork
 import { InboxDrawer } from "./RunsInbox";
 import { workerStateLabel } from "./Workers";
 import type { Section } from "./SettingsDrawer";
-import { manifestIcons, manifestKinds, type ManifestKind } from "./manifest/ManifestDrawer";
+import { type ManifestKind } from "./manifest/ManifestDrawer";
 import { useApp } from "./state";
 import { menuIds } from "./simpleMode";
 import { workspaceColor } from "./palette";
@@ -158,9 +158,10 @@ export function MenuBar({
   if (onHistory) changes.push({ label: t("desktop.menu.changes.history"), icon: mdiSourceBranch, onSelect: onHistory });
   if (onCommit) changes.push("divider", { label: t("desktop.commit.open"), icon: mdiSourceCommit, onSelect: onCommit });
 
-  // Manifest: the kinds a workspace's .agents folder holds, then its
-  // workers (which keep their own drawer), then Reload agent files.
-  const kindItems: MenuEntry[] = manifestKinds.map((k) => ({ label: t(`desktop.manifest.${k}`), icon: manifestIcons[k], onSelect: () => onManifest?.(k) }));
+  // Manifest: one entry for the drawer that holds every kind the
+  // workspace's .agents folder has, then its workers (which keep their
+  // own drawer), then Reload agent files.
+  const openItem: MenuEntry = { label: t("desktop.manifest.open"), detail: t("desktop.manifest.open_hint"), icon: mdiBookOpenPageVariantOutline, disabled: !dir, onSelect: () => onManifest?.("agents") };
   const reloadItem: MenuEntry = { label: t("desktop.menu.agents.reload"), detail: t("desktop.menu.agents.reload_hint"), icon: mdiRefresh, disabled: !dir, onSelect: () => void reloadAgentFiles() };
 
   const workerItems: MenuEntry[] = [
@@ -272,7 +273,7 @@ export function MenuBar({
           )}
           {menus.includes("manifest") && (
             <Menu
-              className="menubar-menu"
+              className="menubar-menu manifest-menu"
               trigger={(p) => (
                 <MenuButton
                   label={t("desktop.manifest")}
@@ -282,7 +283,7 @@ export function MenuBar({
                   onClick={() => (loadWorkers(), p.onClick())}
                 />
               )}
-              items={[...kindItems, "divider", { heading: t("desktop.view.workers") }, ...workerItems, "divider", reloadItem]}
+              items={[openItem, "divider", { heading: t("desktop.view.workers") }, ...workerItems, "divider", reloadItem]}
             />
           )}
         </>

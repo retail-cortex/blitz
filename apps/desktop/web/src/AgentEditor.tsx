@@ -16,7 +16,7 @@
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { mdiAlertCircleOutline, mdiChevronDown, mdiChevronRight, mdiClose, mdiContentSaveOutline, mdiDeleteOutline, mdiPlus, mdiRefresh, mdiRobotOutline, mdiUndoVariant } from "@mdi/js";
+import { mdiAlertCircleOutline, mdiArrowLeft, mdiChevronDown, mdiChevronRight, mdiClose, mdiContentSaveOutline, mdiDeleteOutline, mdiPlus, mdiRefresh, mdiRobotOutline, mdiUndoVariant } from "@mdi/js";
 import { workspaces } from "./api";
 import { message } from "./errors";
 import { t } from "./i18n";
@@ -54,6 +54,7 @@ export function AgentEditor({
   intent,
   drawer,
   list,
+  slide,
 }: {
   workspace: string;
   scope: AgentScope;
@@ -63,6 +64,8 @@ export function AgentEditor({
   drawer?: { onClose: () => void };
   /** The agents listed beside the form (the user's always; a workspace's in the Manifest). */
   list?: boolean;
+  /** The list fills the pane and the form slides in over it, closed by Cancel or Save (the Manifest's). */
+  slide?: boolean;
 }) {
   const snack = useSnackbar();
   const [files, setFiles] = useState<AgentFile[]>([]);
@@ -159,7 +162,9 @@ export function AgentEditor({
   // The workspace's agents are listed in the top bar's Agents menu, which
   // opens one in the drawer (intent); the user's (Settings › Agents) keep
   // their list beside the form.
-  const listed = list ?? scope === AgentScope.USER;
+  const listed = slide || (list ?? scope === AgentScope.USER);
+  // Back to the list (slide), asking first when there are unsaved edits.
+  const close = () => leave(() => setOpen(null));
 
   // What the top bar's Agents menu asked for: a new agent, or one to edit
   // or delete, once the list has it.
@@ -200,6 +205,7 @@ export function AgentEditor({
       setForm(saved);
       setBase(saved);
       snack(t("desktop.agents.saved", { name: saved.name }));
+      if (slide) setOpen(null);
       await refresh();
     } catch (e) {
       setProblems([message(e)]);
@@ -239,8 +245,8 @@ export function AgentEditor({
           {t("desktop.agents.revert")}
         </Button>
       )}
-      {path === "" && (
-        <Button onClick={() => (drawer ? drawer.onClose() : setOpen(null))}>{t("desktop.cancel")}</Button>
+      {(path === "" || slide) && (
+        <Button onClick={() => (slide ? close() : drawer ? drawer.onClose() : setOpen(null))}>{t("desktop.cancel")}</Button>
       )}
       <Button variant="filled" icon={mdiContentSaveOutline} disabled={busy || invalid.length > 0 || (!dirty && path !== "")} onClick={() => void save()}>
         {t("desktop.agents.save")}
@@ -250,10 +256,10 @@ export function AgentEditor({
   const fieldError = (k: AgentField) => (invalid.includes(k) && (k !== "name" || form.name) && (k !== "description" || form.description || form.name) ? t(`desktop.agents.invalid.${k}`) : undefined);
 
   const body = (
-    <div className={`agent-editor ${listed ? "agent-editor-user" : ""}`}>
+    <div className={`agent-editor ${slide ? `agent-editor-slide ${open !== null ? "is-open" : ""}` : listed ? "agent-editor-user" : ""}`}>
       <div className="split">
       {listed && (
-      <aside className="split-side">
+      <aside className="split-side" inert={slide && open !== null}>
         <div className="row side-head">
           <span className="t-title-sm spacer">{t(scope === AgentScope.USER ? "desktop.agents.user_title" : "desktop.agents.workspace_title")}</span>
           <IconButton icon={mdiPlus} label={t("desktop.agents.new")} small onClick={startNew} />
@@ -302,7 +308,14 @@ export function AgentEditor({
         </div>
       </aside>
       )}
-      <section className="split-main">
+      <section className="split-main" inert={slide && open === null}>
+        {slide && open !== null && (
+          <div className="row agent-back">
+            <IconButton icon={mdiArrowLeft} label={t("desktop.agents.back")} onClick={close} />
+            <h2 className="t-headline spacer ellipsis">{form.displayName.trim() || form.name.trim() || (open.path ? fileName(open.path) : t("desktop.agents.new"))}</h2>
+            {dirty && <span className="t-body-sm muted">{t("desktop.agents.unsaved")}</span>}
+          </div>
+        )}
         {!listed && error && (
           <div className="card error row small-card">
             <Icon path={mdiAlertCircleOutline} size="sm" /> {error}
@@ -316,10 +329,10 @@ export function AgentEditor({
             </Button>
           </div>
         )}
-        {listed && open === null && files.length > 0 && <p className="muted">{t("desktop.agents.choose")}</p>}
+        {listed && !slide && open === null && files.length > 0 && <p className="muted">{t("desktop.agents.choose")}</p>}
         {open !== null && file?.problem && !file.agent && (
           <div className="worker">
-            <h2 className="t-headline">{fileName(file.path)}</h2>
+            {!slide && <h2 className="t-headline">{fileName(file.path)}</h2>}
             <div className="card error stack" style={{ gap: 4 }}>
               <span className="row" style={{ gap: 6 }}>
                 <Icon path={mdiAlertCircleOutline} size="sm" /> {t("desktop.agents.broken_detail")}
@@ -336,7 +349,7 @@ export function AgentEditor({
         )}
         {open !== null && !(file?.problem && !file.agent) && (
           <div className="worker agent-form">
-            {!drawer && (
+            {!drawer && !slide && (
               <div className="row">
                 <h2 className="t-headline spacer ellipsis">{form.displayName.trim() || form.name.trim() || t("desktop.agents.new")}</h2>
                 {dirty && <span className="t-body-sm muted">{t("desktop.agents.unsaved")}</span>}

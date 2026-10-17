@@ -67,7 +67,7 @@ export function ManifestDrawer({ dir, initial, onClose }: { dir: string; initial
           ))}
         </div>
         <div className="settings-pane">
-          {kind === "agents" && <AgentEditor workspace={dir} scope={AgentScope.WORKSPACE} list />}
+          {kind === "agents" && <AgentEditor workspace={dir} scope={AgentScope.WORKSPACE} slide />}
           {kind === "secrets" && <SecretsEditor workspace={dir} />}
           {folders[kind] && <Coming kind={kind} />}
         </div>
