@@ -79,6 +79,7 @@ go_test(
         "language_test.go",
         "leak_test.go",
         "listen_test.go",
+        "mcp_test.go",
         "scheduler_test.go",
         "server_test.go",
         "signin_test.go",

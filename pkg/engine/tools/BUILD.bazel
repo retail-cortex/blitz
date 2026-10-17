@@ -181,6 +181,7 @@ go_test(
         "mcp_cov_test.go",
         "mcp_resilience_test.go",
         "mcp_test.go",
+        "mcp_update_test.go",
         "mcpextra_cov_test.go",
         "mcpextra_test.go",
         "media_test.go",
