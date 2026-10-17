@@ -63,7 +63,7 @@ import { SecretsEditor } from "./SecretsEditor";
 import { SkillSettings } from "./SkillSettings";
 import { WorkersSettings } from "./WorkersSettings";
 import { useAdvanced, useApp } from "./state";
-import { sectionShown, settingsSections, type SectionId } from "./simpleMode";
+import { sectionShown, shownGroups, type SectionId } from "./simpleMode";
 import { paletteOf, type ThemePref } from "./theme";
 import { darkThemes, lightThemes, type DarkThemeId, type LightThemeId } from "./themes";
 import { Button, Chip, Dialog, Icon, IconButton, Segmented, Switch, useSnackbar } from "./ui/controls";
@@ -106,9 +106,10 @@ export function SettingsDrawer({ onClose, initial = "providers", scope: initialS
   const [asked, setSection] = useState<SectionId>(initial === "file" ? "providers" : initial);
   const [scope, setScope] = useState(initialScope);
   const flip = useFlip(initial === "file");
-  // Simple mode shows what a newcomer needs (settingsSections); a section
-  // hidden when advanced is turned off falls back to the first.
-  const sections = settingsSections(advanced);
+  // Simple mode shows what a newcomer needs (settingsSections), in their
+  // groups; a section hidden when advanced is turned off falls back to the
+  // first.
+  const groups = shownGroups(advanced);
   const section = sectionShown(asked, advanced);
   const showFile = flip.face === "file" && advanced;
   const actions = (
@@ -132,7 +133,10 @@ export function SettingsDrawer({ onClose, initial = "providers", scope: initialS
       <div className={`settings-flip ${flip.turning}`} onAnimationEnd={flip.turned}>
         <div className="settings" hidden={showFile}>
           <div className="settings-nav list" role="tablist">
-            {sections.map((id) => (
+            {groups.flatMap((g) => [
+              // Headings with advanced settings, when there are enough sections to need them.
+              ...(advanced ? [<span key={`group-${g.id}`} role="presentation" className="settings-nav-group">{t(`desktop.settings.group.${g.id}`)}</span>] : []),
+              ...g.sections.map((id) => (
               <button
                 key={id}
                 role="tab"
@@ -145,7 +149,8 @@ export function SettingsDrawer({ onClose, initial = "providers", scope: initialS
                 <Icon path={sectionIcons[id]} />
                 <span className="settings-nav-label">{t(`desktop.settings.${id}`)}</span>
               </button>
-            ))}
+            )),
+            ])}
           </div>
           <div className="settings-pane">
             {section === "providers" && <ProviderSettings workspace="" />}

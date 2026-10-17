@@ -15,7 +15,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { allSections, menuIds, sectionShown, settingsSections, showsSignIn } from "./simpleMode";
+import { allSections, menuIds, sectionGroups, sectionShown, settingsSections, showsSignIn, shownGroups } from "./simpleMode";
 
 describe("simple mode", () => {
   it("keeps what a newcomer needs in Settings, and everything with advanced", () => {
@@ -46,5 +46,17 @@ describe("simple mode", () => {
     { advanced: true, method: "api_key", want: true },
   ])("shows sign-in for $method: $want (advanced: $advanced)", ({ advanced, method, want }) => {
     expect(showsSignIn(advanced, method)).toBe(want);
+  });
+  it("groups every section once, in order", () => {
+    expect(sectionGroups.flatMap((g) => g.sections)).toEqual([...allSections]);
+  });
+
+  it("shows only the groups with a section shown", () => {
+    expect(shownGroups(false).map((g) => [g.id, g.sections])).toEqual([
+      ["start", ["providers", "appearance"]],
+      ["access", ["workspaces"]],
+      ["system", ["about"]],
+    ]);
+    expect(shownGroups(true).map((g) => g.id)).toEqual(["start", "setup", "access", "system"]);
   });
 });

@@ -515,6 +515,9 @@ body.resizing iframe, body.resizing .cm-editor { pointer-events: none; }
 .drawer { container: drawer / inline-size; }
 .settings-drawer .settings { gap: 32px; }
 .settings-drawer .settings-nav { width: 220px; position: sticky; top: 0; align-self: flex-start; }
+/* A group's heading in Settings' side list (Getting started, Global setup…). */
+.settings-nav-group { padding: 12px 16px 4px; font: 500 12px/16px var(--md-font); color: var(--md-on-surface-variant); }
+.settings-nav-group:first-child { padding-top: 0; }
 /* A form reads best at a measure: the settings, a worker's form and the
    licenses keep to one, centered in the sheet; Changes, History and the
    guide take its whole width. */
@@ -537,6 +540,9 @@ body.resizing iframe, body.resizing .cm-editor { pointer-events: none; }
   .settings-drawer .settings-nav { width: 48px; }
   .settings-drawer .settings-nav .list-item { justify-content: center; padding-inline: 0; }
   .settings-drawer .settings-nav-label { display: none; }
+  /* Icons only: a group's heading is a thin rule between the groups. */
+  .settings-drawer .settings-nav-group { height: 1px; padding: 0; margin: 8px 10px; overflow: hidden; color: transparent; background: var(--md-outline-variant); }
+  .settings-drawer .settings-nav-group:first-child { display: none; }
 }
 .setting { display: flex; align-items: center; gap: 24px; padding: 16px 0; border-bottom: 1px solid var(--md-outline-variant); }
 .setting > .stack { flex: 1; min-width: 200px; }

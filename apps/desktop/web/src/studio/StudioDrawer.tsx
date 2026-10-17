@@ -28,8 +28,12 @@ import { Icon, IconButton, useSnackbar } from "../ui/controls";
 import { Drawer } from "../ui/Drawer";
 import { WorkersPane } from "./WorkersPane";
 
-/** The kinds Studio holds (spec_studio_040), in the menu's order. */
-export const studioKinds = ["agents", "skills", "workflows", "workers", "evals", "rules", "guardrails", "secrets"] as const;
+/**
+ * The kinds Studio holds (spec_studio_040), in the order an agent is
+ * built: what it is and follows (agents, skills, rules, guardrails), what
+ * runs (workflows, workers), checking it (evals), and secrets.
+ */
+export const studioKinds = ["agents", "skills", "rules", "guardrails", "workflows", "workers", "evals", "secrets"] as const;
 /** A kind of item in Studio. */
 export type StudioKind = (typeof studioKinds)[number];
 
