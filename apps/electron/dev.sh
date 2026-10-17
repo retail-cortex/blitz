@@ -33,4 +33,26 @@ if [[ -z "$link" ]]; then
 	exit 1
 fi
 electron="$(python3 -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "$link" 2>/dev/null || readlink -f "$link")"
+
+# macOS names the app (menu bar, Dock, window switcher) from its bundle's
+# Info.plist, which says Electron: run a copy of the bundle named Blitz,
+# made once per Electron and kept in the user's caches, re-signed (ad hoc)
+# since its Info.plist changed.
+if [[ "$(uname)" == "Darwin" && "$2" == Electron.app/* ]]; then
+	bundle="$(cd "$(dirname "$electron")/../.." && pwd -P)"
+	key="$(printf '%s' "$bundle" | shasum | cut -c1-12)"
+	cache="$HOME/Library/Caches/dev.blitz.electron/$key"
+	named="$cache/Blitz.app"
+	if [[ ! -e "$cache/ready" ]]; then
+		mkdir -p "$cache"
+		ditto "$bundle" "$named"
+		plist="$named/Contents/Info.plist"
+		plutil -replace CFBundleName -string Blitz "$plist"
+		plutil -replace CFBundleDisplayName -string Blitz "$plist"
+		plutil -replace CFBundleIdentifier -string dev.blitz.electron "$plist"
+		codesign --force --deep --sign - "$named" >/dev/null 2>&1
+		touch "$cache/ready"
+	fi
+	electron="$named/Contents/MacOS/Electron"
+fi
 exec "$electron" "$app" "${@:3}"
