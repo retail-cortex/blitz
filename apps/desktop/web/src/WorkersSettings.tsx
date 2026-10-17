@@ -22,7 +22,8 @@ import { workers } from "./api";
 import { message } from "./errors";
 import { showView } from "./events";
 import { language, t } from "./i18n";
-import { WorkerState, type WorkerRun, type WorkspaceWorkers } from "./gen/blitz/v1/worker_pb";
+import { WorkerState, type WorkerPolicySettings, type WorkerRun, type WorkspaceWorkers } from "./gen/blitz/v1/worker_pb";
+import { WorkerLimits } from "./WorkerLimits";
 import { displayName, openWorkspace } from "./prefs";
 import { runDetail } from "./runningWorkers";
 import { useApp } from "./state";
@@ -37,7 +38,8 @@ const overviewPollMs = 10000;
 /**
  * Settings › Workers (spec_workers_023 WK-60–WK-62): the global workers,
  * saved in ~/.blitz/workers and run in the home workspace, listed and
- * edited as Studio lists a workspace's; the worker runs going now, in
+ * edited as Studio lists a workspace's; the limits on every worker; the
+ * worker runs going now, in
  * every workspace; and every workspace the service has workers on record
  * for, open in the app or not, so none is forgotten: one not in the app's
  * workspaces says so, with Open; one whose folder is gone, with Forget.
@@ -48,6 +50,7 @@ export function WorkersSettings({ onLeave }: { onLeave: () => void }) {
   const snack = useSnackbar();
   const [home, setHome] = useState("");
   const [groups, setGroups] = useState<WorkspaceWorkers[]>([]);
+  const [policy, setPolicy] = useState<WorkerPolicySettings>();
   const [running, setRunning] = useState<WorkerRun[]>([]);
   const [error, setError] = useState("");
   const [forgetting, setForgetting] = useState("");
@@ -57,6 +60,7 @@ export function WorkersSettings({ onLeave }: { onLeave: () => void }) {
       const [all, live] = await Promise.all([workers.listAllWorkers({}), workers.listRunningWorkerRuns({})]);
       setHome(all.home);
       setGroups(all.workspaces.filter((g) => !g.home));
+      setPolicy(all.policy);
       setRunning(live.runs);
       setError("");
     } catch (e) {
@@ -101,6 +105,7 @@ export function WorkersSettings({ onLeave }: { onLeave: () => void }) {
     <div className="stack workers-settings" style={{ gap: 20 }}>
       <p className="t-body-sm muted">{t("desktop.workers.settings_intro")}</p>
       {error && <p className="error-text">{error}</p>}
+      {policy && <WorkerLimits policy={policy} onChanged={() => void refresh()} />}
       {home && (
         <div className="slide-box">
           <WorkersPane dir={home} global onLeave={onLeave} />

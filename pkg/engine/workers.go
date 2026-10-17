@@ -53,6 +53,22 @@ func defaultWorkerStore() (*workers.Store, error) {
 	return workers.OpenStore(config.ExpandHome("~/.blitz/workers.json"))
 }
 
+// workerPolicy is the host's limit on workers ([workers.policy]) now.
+func (w *Workspace) workerPolicy() config.WorkerPolicy {
+	w.policyMu.Lock()
+	defer w.policyMu.Unlock()
+	return w.cfg.Workers.Policy
+}
+
+// ReloadWorkerPolicy applies cfg's [workers.policy] (Settings › Workers'
+// limits) from the next listing or run (WK-63); a run going keeps the
+// limits it started with.
+func (w *Workspace) ReloadWorkerPolicy(cfg *config.Config) {
+	w.policyMu.Lock()
+	defer w.policyMu.Unlock()
+	w.cfg.Workers.Policy = cfg.Workers.Policy
+}
+
 // workerRoots are the directories holding the workspace's workers; the
 // home workspace's are the user's global workers (~/.blitz/workers).
 func (w *Workspace) workerRoots() []string {
@@ -103,7 +119,7 @@ func (w *Workspace) workerInfo(wk *workers.Worker, loadErr error, now time.Time)
 		info.Problems = []string{loadErr.Error()}
 	}
 	if loadErr == nil {
-		eff := workers.Apply(wk, w.cfg.Workers.Policy)
+		eff := workers.Apply(wk, w.workerPolicy())
 		for _, p := range eff.Permissions {
 			info.Permissions = append(info.Permissions, p.String())
 		}
@@ -411,7 +427,7 @@ func (w *Workspace) RunWorker(ctx context.Context, name string, o RunOptions) (a
 		w.runsMu.Unlock()
 	}()
 
-	eff := workers.Apply(wk, w.cfg.Workers.Policy)
+	eff := workers.Apply(wk, w.workerPolicy())
 	agent := cmp.Or(wk.Agent, w.engine.ActiveAgent())
 	run := api.Run{ID: newRunID(), Workspace: w.Dir(), Worker: name, Hash: wk.Hash, Status: api.RunRunning, Manual: o.Manual, Started: time.Now()}
 

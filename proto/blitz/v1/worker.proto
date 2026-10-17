@@ -430,6 +430,33 @@ message ListAllWorkersResponse {
   string home = 1;
   // The home workspace first, then the others by folder.
   repeated WorkspaceWorkers workspaces = 2;
+  // The global limits on every worker ([workers.policy]).
+  WorkerPolicySettings policy = 3;
+}
+
+// The global limits on every worker, as the settings have them
+// ([workers.policy]; spec_workers_023 WK-63). A worker asks for
+// permissions and limits; these remove what isn't allowed, fill in what
+// it leaves out, and cap the rest.
+message WorkerPolicySettings {
+  // The permission kinds a worker may be given: shell, write, delete,
+  // web, mcp (none: it may only read).
+  repeated string allow = 1;
+  // What a worker that sets no limit gets.
+  int32 default_max_turns = 2;
+  double default_max_cost_usd = 3;
+  string default_timeout = 4;
+  // The most a worker may ask for.
+  int32 max_turns = 5;
+  double max_cost_usd = 6;
+  string max_timeout = 7;
+  // How many worker runs may go at once, across workspaces, as set.
+  int32 max_concurrent = 8;
+  // How many the service allows now: a change to max_concurrent applies
+  // when the service restarts.
+  int32 running_max_concurrent = 9;
+  // The settings file they're in.
+  string path = 10;
 }
 
 // Request message for WorkerService.ForgetWorkspaceWorkers.

@@ -796,7 +796,7 @@ func DefaultConfig() *Config {
 			Paths:    []string{".agents/workers", "workers"},
 			NotifyOn: []string{"failed", "limited"},
 			Policy: WorkerPolicy{
-				Allow:             []string{"shell", "write", "delete", "web", "mcp"},
+				Allow:             slices.Clone(WorkerPermissionKinds),
 				DefaultMaxTurns:   50,
 				DefaultMaxCostUSD: 1,
 				DefaultTimeout:    "30m",

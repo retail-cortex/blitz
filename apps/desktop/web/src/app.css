@@ -869,6 +869,10 @@ code.file-link:hover { text-decoration-color: currentColor; }
 .slide-actions { bottom: 0; padding: 12px 0; margin-top: 4px; border-top: 1px solid var(--md-outline-variant); }
 .slide-actions:empty { display: none; }
 @media (prefers-reduced-motion: reduce) { .slide-pane .slide-list, .slide-pane .slide-detail { transition: none; } }
+/* Settings › Workers' limits: a name, then what a worker that sets none
+   gets and the most it may ask for. */
+.worker-limits-grid { display: grid; grid-template-columns: minmax(110px, max-content) minmax(0, 1fr) minmax(0, 1fr); gap: 8px 12px; align-items: center; max-width: 640px; }
+.worker-limits-grid .input { width: 100%; }
 /* A slide pane in a settings section: a box of its own height. */
 .slide-box { height: min(440px, calc(100vh - 320px)); min-height: 300px; padding: 12px 12px 0; border: 1px solid var(--md-outline-variant); border-radius: var(--md-shape-md); }
 /* The Studio drawer: the kinds' list is narrow, and each kind's pane

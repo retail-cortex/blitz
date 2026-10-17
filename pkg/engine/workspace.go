@@ -95,6 +95,7 @@ type Workspace struct {
 	goalMu       sync.Mutex
 	goals        map[string]api.Goal // by session
 	cfg          *config.Config
+	policyMu     sync.Mutex // guards cfg.Workers.Policy, which the settings can change
 	agents       *agents.Registry
 	skills       *skills.Provider
 	tools        *tools.Registry

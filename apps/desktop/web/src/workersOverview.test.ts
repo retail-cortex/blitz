@@ -14,8 +14,10 @@
  * limitations under the License.
  */
 
+import { create } from "@bufbuild/protobuf";
 import { describe, expect, it } from "vitest";
-import { workspaceFlag } from "./workersOverview";
+import { WorkerPolicySettingsSchema } from "./gen/blitz/v1/worker_pb";
+import { limitFields, toggleKind, workspaceFlag } from "./workersOverview";
 
 describe("workspaceFlag", () => {
   const listed = [{ dir: "/w/shop" }, { dir: "/w/blog" }];
@@ -25,5 +27,23 @@ describe("workspaceFlag", () => {
     ["a gone folder, listed or not", { workspace: "/w/blog", missing: true }, "missing"],
   ] as const)("%s", (_, g, want) => {
     expect(workspaceFlag(g, listed)).toBe(want);
+  });
+});
+
+describe("toggleKind", () => {
+  it.each([
+    ["turns one off", ["shell", "write", "web"], "write", "shell, web"],
+    ["turns one on, in order", ["web", "shell"], "write", "shell, write, web"],
+    ["the last one off: none", ["mcp"], "mcp", "none"],
+    ["from none", [], "delete", "delete"],
+  ])("%s", (_, allow, kind, want) => {
+    expect(toggleKind(allow, kind)).toBe(want);
+  });
+});
+
+describe("limitFields", () => {
+  it("shows the numbers set, and nothing for those that aren't", () => {
+    const p = create(WorkerPolicySettingsSchema, { maxConcurrent: 2, defaultMaxTurns: 50, maxCostUsd: 12.5, defaultTimeout: "30m" });
+    expect(limitFields(p)).toEqual({ max_concurrent: "2", default_max_turns: "50", max_turns: "", default_max_cost_usd: "", max_cost_usd: "12.5", default_timeout: "30m", max_timeout: "" });
   });
 });

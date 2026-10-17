@@ -19,6 +19,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -27,6 +28,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/BurntSushi/toml"
 	"github.com/retail-cortex/blitz/pkg/secrets"
@@ -444,7 +446,20 @@ var typedValues = map[string]string{
 	"search.enrich_daily_limit": "int",
 	"search.include_ignored":    "bool",
 	"search.sources":            "sources",
+	// Settings › Workers' limits (spec_workers_023 WK-63).
+	"workers.policy.allow":                "kinds",
+	"workers.policy.max_concurrent":       "int",
+	"workers.policy.default_max_turns":    "int",
+	"workers.policy.max_turns":            "int",
+	"workers.policy.default_max_cost_usd": "usd",
+	"workers.policy.max_cost_usd":         "usd",
+	"workers.policy.default_timeout":      "duration",
+	"workers.policy.max_timeout":          "duration",
 }
+
+// WorkerPermissionKinds are the permission kinds a worker may be given
+// (workers.policy.allow).
+var WorkerPermissionKinds = []string{"shell", "write", "delete", "web", "mcp"}
 
 // SearchSourceNames are the sources workspace search knows.
 var SearchSourceNames = []string{"files", "documents", "chats", "notes"}
@@ -465,6 +480,38 @@ func typedValue(kind, key, value string) (string, any, error) {
 			return "", nil, fmt.Errorf("%s is a whole number, 0 or more, not %q", key, value)
 		}
 		return strconv.Itoa(n), int64(n), nil
+	case "usd":
+		f, err := strconv.ParseFloat(value, 64)
+		if err != nil || f < 0 || math.IsNaN(f) || math.IsInf(f, 0) {
+			return "", nil, fmt.Errorf("%s is an amount in US dollars, 0 or more, not %q", key, value)
+		}
+		literal := strconv.FormatFloat(f, 'f', -1, 64)
+		if !strings.Contains(literal, ".") {
+			literal += ".0" // a float, as the file reads it back
+		}
+		return literal, f, nil
+	case "duration":
+		d, err := time.ParseDuration(value)
+		if err != nil || d <= 0 {
+			return "", nil, fmt.Errorf("%s is a length of time like 30m or 2h, not %q", key, value)
+		}
+		return strconv.Quote(value), value, nil
+	case "kinds":
+		// "none": workers may only read.
+		quoted, back := []string{}, []any{}
+		for _, s := range strings.Split(value, ",") {
+			s = strings.TrimSpace(s)
+			if s == "" || s == "none" {
+				continue
+			}
+			if !slices.Contains(WorkerPermissionKinds, s) {
+				return "", nil, fmt.Errorf("%q isn't a permission kind (%s)", s, strings.Join(WorkerPermissionKinds, ", "))
+			}
+			if !slices.Contains(back, any(s)) {
+				quoted, back = append(quoted, strconv.Quote(s)), append(back, s)
+			}
+		}
+		return "[" + strings.Join(quoted, ", ") + "]", back, nil
 	case "sources":
 		var quoted []string
 		var back []any

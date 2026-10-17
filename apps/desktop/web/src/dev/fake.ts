@@ -531,6 +531,9 @@ const fakeElsewhere = [
   { workspace: "/home/me/notes", home: false, missing: false, problem: "", workers: [{ workspace: "/home/me/notes", name: "weekly-notes", state: WorkerState.ENABLED, schedule: "Fridays at 17:00", problems: [], permissions: [] }] },
   { workspace: "/home/me/old-site", home: false, missing: true, problem: "", workers: [{ workspace: "/home/me/old-site", name: "backup", state: WorkerState.ENABLED, problems: [], permissions: [] }] },
 ];
+// The global limits on every worker ([workers.policy]); the service still
+// runs two at once until it restarts.
+const fakePolicy = { allow: ["shell", "write", "web"], defaultMaxTurns: 50, defaultMaxCostUsd: 1, defaultTimeout: "30m", maxTurns: 200, maxCostUsd: 10, maxTimeout: "2h", maxConcurrent: 3, runningMaxConcurrent: 2, path: "/home/me/.blitz/.env.toml" };
 // Worker runs going now (?fake&noruns: none).
 const fakeLive: { id: string; workspace: string; worker: string; status: RunStatus; started: ReturnType<typeof now>; manual: boolean; sessionId: string; error?: { reason: string; message: string } }[] = new URLSearchParams(location.search).has("noruns")
   ? []
@@ -1303,6 +1306,12 @@ export function installFake() {
             if (key === "search.enrich_daily_limit") s.enrichDailyLimit = Number(value) || 200;
             if (key === "search.include_ignored") s.includeIgnored = value === "true";
           }
+          // Settings › Workers' limits.
+          if (key === "workers.policy.allow") fakePolicy.allow = value === "none" ? [] : value ? value.split(",").map((k) => k.trim()) : ["shell", "write", "delete", "web", "mcp"];
+          const limit = { max_concurrent: "maxConcurrent", default_max_turns: "defaultMaxTurns", max_turns: "maxTurns", default_max_cost_usd: "defaultMaxCostUsd", max_cost_usd: "maxCostUsd" }[key.replace("workers.policy.", "")] as "maxConcurrent" | undefined;
+          if (key.startsWith("workers.policy.") && limit) fakePolicy[limit] = Number(value);
+          if (key === "workers.policy.default_timeout") fakePolicy.defaultTimeout = value || "30m";
+          if (key === "workers.policy.max_timeout") fakePolicy.maxTimeout = value || "2h";
           return change(workspace);
         },
         getConfigFile: ({ workspace }) => ({ path: configPath(workspace), text: scopeConfig(workspace).text }),
@@ -1576,6 +1585,7 @@ export function installFake() {
         listWorkers: ({ workspace }) => ({ workers: workspace === fakeHome ? fakeGlobal : fakeWorkers }),
         listAllWorkers: () => ({
           home: fakeHome,
+          policy: fakePolicy,
           workspaces: [
             { workspace: fakeHome, home: true, workers: fakeGlobal },
             { workspace: "/home/me/shop", workers: fakeWorkers },

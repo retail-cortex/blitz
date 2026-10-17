@@ -416,10 +416,24 @@ func (h workerService) ListAllWorkers(ctx context.Context, _ req[pb.ListAllWorke
 	if err != nil {
 		return nil, err
 	}
+	cfg, err := config.Load(h.s.configDir)
+	if err != nil {
+		return nil, invalid(err)
+	}
+	path, _, err := config.ReadSettingsFile(h.s.configDir, "")
+	if err != nil {
+		return nil, invalid(err)
+	}
+	p := cfg.Workers.Policy
+	policy := &pb.WorkerPolicySettings{
+		Allow: p.Allow, DefaultMaxTurns: int32(p.DefaultMaxTurns), DefaultMaxCostUsd: p.DefaultMaxCostUSD, DefaultTimeout: p.DefaultTimeout,
+		MaxTurns: int32(p.MaxTurns), MaxCostUsd: p.MaxCostUSD, MaxTimeout: p.MaxTimeout,
+		MaxConcurrent: int32(p.MaxConcurrent), RunningMaxConcurrent: int32(cap(sc.slots)), Path: path,
+	}
 	known := sc.cfg.Store.Known()
 	others := slices.Sorted(maps.Keys(known))
 	others = slices.DeleteFunc(others, func(d string) bool { return d == home })
-	out := &pb.ListAllWorkersResponse{Home: home}
+	out := &pb.ListAllWorkersResponse{Home: home, Policy: policy}
 	for _, dir := range append([]string{home}, others...) {
 		group := &pb.WorkspaceWorkers{Workspace: dir, Home: dir == home}
 		out.Workspaces = append(out.Workspaces, group)

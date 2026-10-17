@@ -534,6 +534,12 @@ func TestAllWorkersOverTheAPI(t *testing.T) {
 		})
 	}
 	assert.Equal(t, home, all.Msg.Workspaces[0].Workspace, "home first")
+	if p := all.Msg.Policy; assert.NotNil(t, p, "the global limits") {
+		assert.Equal(t, int32(2), p.RunningMaxConcurrent, "as the scheduler runs")
+		assert.Equal(t, config.WorkerPermissionKinds, p.Allow)
+		assert.NotZero(t, p.MaxTurns)
+		assert.NotEmpty(t, p.Path)
+	}
 
 	// A global worker made in the home workspace is written to ~/.blitz/workers.
 	made, err := c.CreateWorker(ctx, connect.NewRequest(&pb.CreateWorkerRequest{Workspace: home, Name: "digest", Schedule: "Daily at 8 AM", Prompt: "Write the digest."}))

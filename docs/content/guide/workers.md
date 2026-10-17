@@ -112,6 +112,18 @@ Some work belongs to no project: a morning news digest, tidying your downloads. 
 
 **Desktop:** **Settings › Workers**, then **New worker** in the Global workers box. **Terminal:** write the file, then `blitz workers enable <name> --dir ~/.blitz/home`.
 
+## Limits for every worker
+
+**Settings › Workers › Limits for every worker** caps what any worker may do, in your global settings (`[workers.policy]`):
+
+| Setting | What it does |
+|---|---|
+| Model calls, Cost, Time | What a worker that sets no limit gets, and the most one may ask for |
+| Runs at once | How many runs go at the same time, across every workspace (applies when the service restarts) |
+| Workers may be given | The permission kinds a worker may have: shell commands, writing files, deleting files, the web, MCP tools. All off: workers may only read |
+
+A change applies from each worker's next run.
+
 ## Every workspace's workers
 
 The service runs a workspace's enabled workers whether or not the app has that workspace open. **Settings › Workers** lists every workspace with workers on record, so none runs unseen:

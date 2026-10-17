@@ -15,11 +15,11 @@
  */
 
 // Every workspace's workers (Settings › Workers, spec_workers_023
-// WK-61): what's said of each workspace, and the home workspace the
-// global workers run in.
+// WK-61–WK-63): what's said of each workspace, the home workspace the
+// global workers run in, and the global limits' fields.
 
 import { workers } from "./api";
-import type { WorkspaceWorkers } from "./gen/blitz/v1/worker_pb";
+import type { WorkerPolicySettings, WorkspaceWorkers } from "./gen/blitz/v1/worker_pb";
 
 /** What's said of a workspace with workers: its folder is gone, it isn't one of the app's, or neither. */
 export type WorkspaceFlag = "missing" | "unlisted" | "listed";
@@ -42,4 +42,33 @@ export function globalHome(): Promise<string> {
     },
   );
   return home;
+}
+
+/** The permission kinds a worker may be given (workers.policy.allow), in order. */
+export const permissionKinds = ["shell", "write", "delete", "web", "mcp"] as const;
+
+/** A global limit's setting, under workers.policy. */
+export type LimitField = "max_concurrent" | "default_max_turns" | "max_turns" | "default_max_cost_usd" | "max_cost_usd" | "default_timeout" | "max_timeout";
+
+/** The limits as the form's fields show them (a number unset is empty). */
+export function limitFields(p: WorkerPolicySettings): Record<LimitField, string> {
+  const n = (v: number) => (v ? String(v) : "");
+  return {
+    max_concurrent: n(p.maxConcurrent),
+    default_max_turns: n(p.defaultMaxTurns),
+    max_turns: n(p.maxTurns),
+    default_max_cost_usd: n(p.defaultMaxCostUsd),
+    max_cost_usd: n(p.maxCostUsd),
+    default_timeout: p.defaultTimeout,
+    max_timeout: p.maxTimeout,
+  };
+}
+
+/** workers.policy.allow with kind turned on or off, in order ("none" when none is left). */
+export function toggleKind(allow: readonly string[], kind: string): string {
+  const on = new Set(allow);
+  if (on.has(kind)) on.delete(kind);
+  else on.add(kind);
+  const out = permissionKinds.filter((k) => on.has(k));
+  return out.length ? out.join(", ") : "none";
 }
