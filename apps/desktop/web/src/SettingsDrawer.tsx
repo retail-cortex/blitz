@@ -41,6 +41,7 @@ import {
   mdiAlertCircleOutline,
   mdiWeatherNight,
   mdiWhiteBalanceSunny,
+  mdiCalendarClock,
 } from "@mdi/js";
 import { appVersion, canUpdate, checkUpdate, cliStatus, downloadUpdate, installCLI, isLinuxApp, installService, openURL, reinstallCLI, restartService, serviceStatus, setTray, stopService, type CLIStatus, type ServiceStatus, type UpdateStatus } from "./desktop";
 import { restart, shouldDownload, updateLine } from "./updates";
@@ -60,6 +61,7 @@ import { DocumentSettings } from "./files/DocumentSettings";
 import { McpSettings } from "./McpSettings";
 import { SecretsEditor } from "./SecretsEditor";
 import { SkillSettings } from "./SkillSettings";
+import { WorkersSettings } from "./WorkersSettings";
 import { useAdvanced, useApp } from "./state";
 import { sectionShown, settingsSections, type SectionId } from "./simpleMode";
 import { paletteOf, type ThemePref } from "./theme";
@@ -81,6 +83,7 @@ const sectionIcons: Record<SectionId, string> = {
   appearance: mdiPaletteOutline,
   agents: mdiRobotOutline,
   skills: mdiPuzzleOutline,
+  workers: mdiCalendarClock,
   mcp: mdiPowerPlugOutline,
   workspaces: mdiFolderMultipleOutline,
   permissions: mdiShieldCheckOutline,
@@ -150,6 +153,7 @@ export function SettingsDrawer({ onClose, initial = "providers", scope: initialS
             {section === "appearance" && <Appearance />}
             {section === "agents" && <UserAgents />}
             {section === "skills" && <SkillSettings />}
+            {section === "workers" && <WorkersSettings onLeave={onClose} />}
             {section === "mcp" && <McpSettings />}
             {section === "workspaces" && (
               <Workspaces

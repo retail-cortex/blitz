@@ -53,8 +53,12 @@ func defaultWorkerStore() (*workers.Store, error) {
 	return workers.OpenStore(config.ExpandHome("~/.blitz/workers.json"))
 }
 
-// workerRoots are the directories holding the workspace's workers.
+// workerRoots are the directories holding the workspace's workers; the
+// home workspace's are the user's global workers (~/.blitz/workers).
 func (w *Workspace) workerRoots() []string {
+	if config.IsHomeWorkspace("", w.Dir()) {
+		return []string{config.UserWorkersDir("")}
+	}
 	var out []string
 	for _, p := range w.cfg.Workers.Paths {
 		if !filepath.IsAbs(p) {

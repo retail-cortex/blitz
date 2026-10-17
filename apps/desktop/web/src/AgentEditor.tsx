@@ -55,6 +55,7 @@ export function AgentEditor({
   drawer,
   list,
   slide,
+  onDirty,
 }: {
   workspace: string;
   scope: AgentScope;
@@ -66,6 +67,8 @@ export function AgentEditor({
   list?: boolean;
   /** The list fills the pane and the form slides in over it, closed by Cancel or Save (Studio's). */
   slide?: boolean;
+  /** Hears whether the form holds unsaved changes (Studio's drawer asks before closing). */
+  onDirty?: (dirty: boolean) => void;
 }) {
   const snack = useSnackbar();
   const [files, setFiles] = useState<AgentFile[]>([]);
@@ -88,6 +91,7 @@ export function AgentEditor({
   const catalog = useModelCatalog(context);
 
   const dirty = open !== null && !sameForm(form, base);
+  useEffect(() => onDirty?.(dirty), [dirty, onDirty]);
   const dirtyRef = useRef(dirty);
   dirtyRef.current = dirty;
   const openRef = useRef(open);
@@ -256,10 +260,10 @@ export function AgentEditor({
   const fieldError = (k: AgentField) => (invalid.includes(k) && (k !== "name" || form.name) && (k !== "description" || form.description || form.name) ? t(`desktop.agents.invalid.${k}`) : undefined);
 
   const body = (
-    <div className={`agent-editor ${slide ? `agent-editor-slide ${open !== null ? "is-open" : ""}` : listed ? "agent-editor-user" : ""}`}>
+    <div className={`agent-editor ${slide ? `slide-pane ${open !== null ? "is-open" : ""}` : listed ? "agent-editor-user" : ""}`}>
       <div className="split">
       {listed && (
-      <aside className="split-side" inert={slide && open !== null}>
+      <aside className={`split-side ${slide ? "slide-list" : ""}`} inert={slide && open !== null}>
         <div className="row side-head">
           <span className="t-title-sm spacer">{t(scope === AgentScope.USER ? "desktop.agents.user_title" : "desktop.agents.workspace_title")}</span>
           <IconButton icon={mdiPlus} label={t("desktop.agents.new")} small onClick={startNew} />
@@ -308,9 +312,9 @@ export function AgentEditor({
         </div>
       </aside>
       )}
-      <section className="split-main" inert={slide && open === null}>
+      <section className={`split-main ${slide ? "slide-detail" : ""}`} inert={slide && open === null}>
         {slide && open !== null && (
-          <div className="row agent-back">
+          <div className="row slide-back">
             <IconButton icon={mdiArrowLeft} label={t("desktop.agents.back")} onClick={close} />
             <h2 className="t-headline spacer ellipsis">{form.displayName.trim() || form.name.trim() || (open.path ? fileName(open.path) : t("desktop.agents.new"))}</h2>
             {dirty && <span className="t-body-sm muted">{t("desktop.agents.unsaved")}</span>}
@@ -471,7 +475,7 @@ export function AgentEditor({
                 ))}
               </div>
             )}
-            {drawer ? footer && createPortal(actions(open.path), footer) : <div className="row wrap agent-actions">{actions(open.path)}</div>}
+            {drawer ? footer && createPortal(actions(open.path), footer) : <div className={`row wrap agent-actions ${slide ? "slide-actions" : ""}`}>{actions(open.path)}</div>}
           </div>
         )}
       </section>

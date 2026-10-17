@@ -14,25 +14,37 @@
  * limitations under the License.
  */
 
-import { useState } from "react";
-import { mdiBookOpenPageVariantOutline, mdiCheckDecagramOutline, mdiFlaskOutline, mdiKeyVariant, mdiPuzzleOutline, mdiRobotOutline, mdiScaleBalance, mdiShieldLockOutline, mdiSitemapOutline } from "@mdi/js";
+import { useEffect, useState } from "react";
+import { mdiBookOpenPageVariantOutline, mdiCalendarClock, mdiCheckDecagramOutline, mdiRefresh, mdiFlaskOutline, mdiKeyVariant, mdiPuzzleOutline, mdiRobotOutline, mdiScaleBalance, mdiShieldLockOutline, mdiSitemapOutline } from "@mdi/js";
 import { AgentEditor } from "../AgentEditor";
+import { workspaces } from "../api";
+import { message } from "../errors";
+import type { ItemIntent } from "../intent";
+import { reloadSummary } from "../reload";
 import { AgentScope } from "../gen/blitz/v1/workspace_pb";
 import { t } from "../i18n";
 import { SecretsEditor } from "../SecretsEditor";
-import { Icon } from "../ui/controls";
+import { Icon, IconButton, useSnackbar } from "../ui/controls";
 import { Drawer } from "../ui/Drawer";
+import { WorkersPane } from "./WorkersPane";
 
 /** The kinds Studio holds (spec_studio_040), in the menu's order. */
-export const studioKinds = ["agents", "skills", "workflows", "evals", "rules", "guardrails", "secrets"] as const;
+export const studioKinds = ["agents", "skills", "workflows", "workers", "evals", "rules", "guardrails", "secrets"] as const;
 /** A kind of item in Studio. */
 export type StudioKind = (typeof studioKinds)[number];
+
+/** What Studio opens on: a kind, and for workers what to show (a worker, a new one). */
+export interface StudioOpen {
+  kind: StudioKind;
+  intent?: ItemIntent;
+}
 
 /** Each kind's icon. */
 export const studioIcons: Record<StudioKind, string> = {
   agents: mdiRobotOutline,
   skills: mdiPuzzleOutline,
   workflows: mdiSitemapOutline,
+  workers: mdiCalendarClock,
   evals: mdiFlaskOutline,
   rules: mdiScaleBalance,
   guardrails: mdiShieldLockOutline,
@@ -53,21 +65,50 @@ const folders: Partial<Record<StudioKind, string>> = {
  * holds, kind by kind, each listed and edited here: agents, skills,
  * workflows, evals, rules, guardrails, and its own secrets.
  */
-export function StudioDrawer({ dir, initial, onClose }: { dir: string; initial: StudioKind; onClose: () => void }) {
-  const [kind, setKind] = useState<StudioKind>(initial);
+export function StudioDrawer({ dir, initial, onClose, onWorkers }: { dir: string; initial: StudioOpen; onClose: () => void; onWorkers?: () => void }) {
+  const snack = useSnackbar();
+  const [kind, setKind] = useState<StudioKind>(initial.kind);
+  // Whether the kind's form holds unsaved changes: closing asks first.
+  const [dirty, setDirty] = useState(false);
+  // Showing the workers sees their failed runs (BL-WK-11).
+  useEffect(() => {
+    if (kind === "workers") onWorkers?.();
+  }, [kind, onWorkers]);
+  const choose = (k: StudioKind) => {
+    setDirty(false);
+    setKind(k);
+  };
+  // Reload agent files: the agents, skills, instructions and rules read again.
+  const reload = async () => {
+    try {
+      const r = await workspaces.reloadAgentFiles({ workspace: dir });
+      snack(reloadSummary(r));
+      if (r.problems.length) snack(`${t("reload.problems")} ${r.problems.join("; ")}`, { error: true });
+    } catch (e) {
+      snack(message(e), { error: true });
+    }
+  };
   return (
-    <Drawer title={t("desktop.studio")} icon={mdiBookOpenPageVariantOutline} onClose={onClose} className="settings-drawer studio-drawer">
+    <Drawer
+      title={t("desktop.studio")}
+      icon={mdiBookOpenPageVariantOutline}
+      onClose={onClose}
+      className="settings-drawer studio-drawer"
+      dirty={dirty}
+      headerActions={<IconButton icon={mdiRefresh} label={t("desktop.menu.agents.reload")} onClick={() => void reload()} />}
+    >
       <div className="settings">
         <div className="settings-nav list" role="tablist">
           {studioKinds.map((k) => (
-            <button key={k} role="tab" aria-selected={k === kind} data-autofocus={k === kind ? "" : undefined} className={`list-item ${k === kind ? "active" : ""}`} title={t(`desktop.studio.${k}`)} onClick={() => setKind(k)}>
+            <button key={k} role="tab" aria-selected={k === kind} data-autofocus={k === kind ? "" : undefined} className={`list-item ${k === kind ? "active" : ""}`} title={t(`desktop.studio.${k}`)} onClick={() => choose(k)}>
               <Icon path={studioIcons[k]} />
               <span className="settings-nav-label">{t(`desktop.studio.${k}`)}</span>
             </button>
           ))}
         </div>
         <div className="settings-pane">
-          {kind === "agents" && <AgentEditor workspace={dir} scope={AgentScope.WORKSPACE} slide />}
+          {kind === "agents" && <AgentEditor workspace={dir} scope={AgentScope.WORKSPACE} slide onDirty={setDirty} />}
+          {kind === "workers" && <WorkersPane dir={dir} intent={initial.kind === "workers" ? initial.intent : undefined} onLeave={onClose} onDirty={setDirty} />}
           {kind === "secrets" && <SecretsEditor workspace={dir} />}
           {folders[kind] && <Coming kind={kind} />}
         </div>

@@ -53,6 +53,7 @@ go_library(
         "//pkg/i18n",
         "//pkg/images",
         "//pkg/observability",
+        "//pkg/redact",
         "//pkg/secrets",
         "//pkg/signin",
         "//pkg/skillreg",

@@ -117,6 +117,33 @@ func (s *Store) Forget(dir, name string) error {
 	return s.saveLocked()
 }
 
+// ForgetWorkspace drops what the store knows of every worker of dir
+// (its folder is gone): none of them is enabled any more.
+func (s *Store) ForgetWorkspace(dir string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, ok := s.workspaces[dir]; !ok {
+		return nil
+	}
+	delete(s.workspaces, dir)
+	return s.saveLocked()
+}
+
+// Known is every worker the store has a record of, by workspace
+// directory and name: whether it's enabled.
+func (s *Store) Known() map[string]map[string]bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := make(map[string]map[string]bool, len(s.workspaces))
+	for dir, workers := range s.workspaces {
+		out[dir] = make(map[string]bool, len(workers))
+		for name, e := range workers {
+			out[dir][name] = e.Enabled
+		}
+	}
+	return out
+}
+
 // Workspaces are the directories with at least one enabled worker, which
 // the service watches even when no client has them open.
 func (s *Store) Workspaces() []string {

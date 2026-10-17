@@ -79,6 +79,27 @@ func TestStoreForget(t *testing.T) {
 	assert.NoError(t, s.Forget("/work", "never-known"))
 }
 
+// Known lists every worker on record, enabled or not; forgetting a
+// workspace drops all of its, on disk too.
+func TestStoreKnownAndForgetWorkspace(t *testing.T) {
+	w, _ := Load(writeWorker(t, t.TempDir(), "deps", valid))
+	path := filepath.Join(t.TempDir(), "workers.json")
+	s, err := OpenStore(path)
+	require.NoError(t, err)
+	require.NoError(t, s.Enable("/gone", w, w.Hash))
+	require.NoError(t, s.Disable("/gone", "news"))
+	require.NoError(t, s.Disable("/kept", "deps"))
+	assert.Equal(t, map[string]map[string]bool{"/gone": {"deps": true, "news": false}, "/kept": {"deps": false}}, s.Known())
+
+	require.NoError(t, s.ForgetWorkspace("/gone"))
+	assert.Equal(t, map[string]map[string]bool{"/kept": {"deps": false}}, s.Known())
+	assert.Empty(t, s.Workspaces())
+	again, err := OpenStore(path)
+	require.NoError(t, err)
+	assert.Equal(t, s.Known(), again.Known(), "forgotten on disk too")
+	assert.NoError(t, s.ForgetWorkspace("/never-known"))
+}
+
 func TestApplyPolicy(t *testing.T) {
 	w, err := Load(writeWorker(t, t.TempDir(), "deps", `---
 schedule: hourly

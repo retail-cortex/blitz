@@ -855,20 +855,22 @@ code.file-link:hover { text-decoration-color: currentColor; }
 .agent-editor-user { height: min(640px, calc(100vh - 300px)); border: 1px solid var(--md-outline-variant); border-radius: var(--md-shape-md); overflow: hidden; }
 .agent-editor-user .split-side { width: 230px; }
 .agent-editor-user .split-main { padding: 18px 20px; }
-/* Studio's agents: the list fills the pane, and an agent's form
-   slides in over it from the right, closed by back, Cancel or Save. */
-.agent-editor-slide { position: relative; height: 100%; overflow: hidden; }
-.agent-editor-slide > .split { position: relative; min-height: 0; }
-.agent-editor-slide .split-side, .agent-editor-slide .split-main { transition: transform 0.22s cubic-bezier(0.2, 0, 0, 1), opacity 0.22s, visibility 0s; }
-.agent-editor-slide .split-side { width: 100%; padding: 0 0 8px; border-right: none; }
-.agent-editor-slide .split-main { position: absolute; inset: 0; padding: 0 4px 0 0; transform: translateX(100%); opacity: 0; visibility: hidden; transition-delay: 0s, 0s, 0.22s; }
-.agent-editor-slide.is-open .split-side { transform: translateX(-24px); opacity: 0; visibility: hidden; transition-delay: 0s, 0s, 0.22s; }
-.agent-editor-slide.is-open .split-main { transform: none; opacity: 1; visibility: visible; transition-delay: 0s; }
-.agent-editor-slide .agent-form { max-width: none; }
-.agent-back, .agent-editor-slide .agent-actions { position: sticky; z-index: 1; background: var(--md-surface); }
-.agent-back { top: 0; gap: 8px; padding-bottom: 12px; }
-.agent-editor-slide .agent-actions { bottom: 0; padding: 12px 0; border-top: 1px solid var(--md-outline-variant); }
-@media (prefers-reduced-motion: reduce) { .agent-editor-slide .split-side, .agent-editor-slide .split-main { transition: none; } }
+/* A list that fills its pane, an item's view sliding in over it from the
+   right, closed by back, Cancel or Save (Studio's agents and workers). */
+.slide-pane { position: relative; height: 100%; min-height: 0; overflow: hidden; }
+.slide-pane .slide-list, .slide-pane .slide-detail { transition: transform 0.22s cubic-bezier(0.2, 0, 0, 1), opacity 0.22s, visibility 0s; }
+.slide-pane .slide-list { width: 100%; height: 100%; overflow-y: auto; padding: 0 0 8px; border-right: none; display: flex; flex-direction: column; gap: 8px; }
+.slide-pane .slide-detail { position: absolute; inset: 0; overflow-y: auto; padding: 0 4px 0 0; transform: translateX(100%); opacity: 0; visibility: hidden; transition-delay: 0s, 0s, 0.22s; }
+.slide-pane.is-open .slide-list { transform: translateX(-24px); opacity: 0; visibility: hidden; transition-delay: 0s, 0s, 0.22s; }
+.slide-pane.is-open .slide-detail { transform: none; opacity: 1; visibility: visible; transition-delay: 0s; }
+.slide-pane .agent-form, .slide-pane .worker { max-width: none; }
+.slide-back, .slide-actions { position: sticky; z-index: 1; background: var(--md-surface); }
+.slide-back { top: 0; gap: 8px; padding-bottom: 12px; }
+.slide-actions { bottom: 0; padding: 12px 0; margin-top: 4px; border-top: 1px solid var(--md-outline-variant); }
+.slide-actions:empty { display: none; }
+@media (prefers-reduced-motion: reduce) { .slide-pane .slide-list, .slide-pane .slide-detail { transition: none; } }
+/* A slide pane in a settings section: a box of its own height. */
+.slide-box { height: min(440px, calc(100vh - 320px)); min-height: 300px; padding: 12px 12px 0; border: 1px solid var(--md-outline-variant); border-radius: var(--md-shape-md); }
 /* The Studio drawer: the kinds' list is narrow, and each kind's pane
    fills the drawer's height (and scrolls itself). */
 .studio-drawer > .body { overflow: hidden; }

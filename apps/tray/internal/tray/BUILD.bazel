@@ -74,6 +74,7 @@ go_test(
     ],
     embed = [":tray"],
     deps = [
+        "//pkg/config",
         "//pkg/i18n",
         "//pkg/loginitem",
         "//pkg/pageserver",

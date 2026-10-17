@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
+	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/i18n"
 	"github.com/retail-cortex/blitz/pkg/socket"
 	pb "github.com/retail-cortex/blitz/proto/blitz/v1"
@@ -149,7 +150,8 @@ func WorkerEntries(e Extras) []Entry {
 }
 
 // workerLabel names a worker: its name, with its workspace's folder name
-// before it when the workers come from more than one workspace.
+// (Global for the home workspace's) before it when the workers come from
+// more than one workspace.
 func workerLabel(workers []*pb.Worker) func(workspace, name string) string {
 	spaces := map[string]bool{}
 	for _, w := range workers {
@@ -158,6 +160,9 @@ func workerLabel(workers []*pb.Worker) func(workspace, name string) string {
 	return func(workspace, name string) string {
 		if len(spaces) <= 1 {
 			return name
+		}
+		if config.IsHomeWorkspace("", workspace) {
+			return i18n.T("tray.workers.global") + " › " + name
 		}
 		return filepath.Base(workspace) + " › " + name
 	}

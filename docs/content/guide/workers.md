@@ -19,7 +19,7 @@ The desktop app and `blitz service install` keep it running. A service the CLI s
 
 ## Your first worker
 
-**Desktop:** **Studio › Add worker**, then fill in:
+**Desktop:** **Studio › Workers**, then **New worker** (the calendar icon), and fill in:
 
 | Field | What to put |
 |---|---|
@@ -93,18 +93,31 @@ Reading the workspace never needs permission. A command with `;`, `&`, `|`, `$`,
 - **States:** new (never enabled), enabled, disabled, changed, invalid (its problems are listed).
 - **Run now:** **Run now** in the app, or `blitz workers run <name>`, runs an enabled worker at once and shows what it does.
 - **Two at once?** The same worker never runs twice at the same time; a scheduled tick that finds it running is recorded as skipped.
-- **Stop a run:** the Studio menu lists every run going now, in any workspace, under **Running now**. Hover one and click **Stop**, or use **Stop** in the worker's run list or `blitz workers stop <name>`. The run ends as **stopped**. Files it already changed stay changed, and `blitz workers undo <run-id>` puts them back.
+- **Stop a run:** **Studio › Workers** lists the workspace's runs going now under **Running now**, and **Settings › Workers** every workspace's. Click **Stop**, or use **Stop** in the worker's run list or `blitz workers stop <name>`. The run ends as **stopped**. Files it already changed stay changed, and `blitz workers undo <run-id>` puts them back.
 
 | Desktop | Terminal |
 |---|---|
-| **Studio › Add worker** | Write `WORKER.md` |
+| **Studio › Workers › New worker** | Write `WORKER.md` |
 | Open a worker, **Enable as shown** | `blitz workers enable <name>` |
 | **Run now** | `blitz workers run <name>` |
 | **Disable** | `blitz workers disable <name>` |
-| **Stop** (Studio menu › Running now, or the run list) | `blitz workers stop <name>` |
+| **Stop** (Running now, or the run list) | `blitz workers stop <name>` |
 | The worker's run list | `blitz workers runs <name>` |
 | **Edit**, **Delete** | Edit or remove the folder |
 | | `blitz workers undo <run-id>` |
+
+## Global workers
+
+Some work belongs to no project: a morning news digest, tidying your downloads. A **global worker** is saved in `~/.blitz/workers/<name>/WORKER.md` and runs in a folder of its own, `~/.blitz/home`, made the first time it's needed. Everything else is the same: review and enable, schedules, permissions, runs.
+
+**Desktop:** **Settings › Workers**, then **New worker** in the Global workers box. **Terminal:** write the file, then `blitz workers enable <name> --dir ~/.blitz/home`.
+
+## Every workspace's workers
+
+The service runs a workspace's enabled workers whether or not the app has that workspace open. **Settings › Workers** lists every workspace with workers on record, so none runs unseen:
+
+- **Not in your workspaces:** **Add and open** brings it back into the app, on its workers.
+- **Folder missing:** the folder was moved or deleted, so its workers don't run. **Forget** disables them and stops the service looking for the folder; nothing on disk is touched.
 
 ## Runs and their results
 
@@ -112,7 +125,7 @@ Each run is a conversation of its own, titled `⏰ <name>` and the time: open it
 
 A run's file changes are its own checkpoint, outside `/undo`: `blitz workers undo <run-id>` puts them back (`--force` overwrites files changed since).
 
-**When one fails:** the Studio menu gets a red dot, the status bar a failed-runs button, and a new chat's welcome screen offers **Find out why the worker … failed**. To be told elsewhere, set a command in your settings:
+**When one fails:** the Studio button gets a red dot, the status bar a failed-runs button, and a new chat's welcome screen offers **Find out why the worker … failed**. To be told elsewhere, set a command in your settings:
 
 ```toml
 [workers]

@@ -18,11 +18,17 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
+	"maps"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 
 	"github.com/retail-cortex/blitz/pkg/api"
+	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/engine"
+	"github.com/retail-cortex/blitz/pkg/redact"
 
 	"connectrpc.com/connect"
 	pb "github.com/retail-cortex/blitz/proto/blitz/v1"
@@ -399,4 +405,69 @@ func (h workerService) WatchWorkerRun(ctx context.Context, r req[pb.WatchWorkerR
 			return ctx.Err()
 		}
 	}
+}
+
+func (h workerService) ListAllWorkers(ctx context.Context, _ req[pb.ListAllWorkersRequest]) (*connect.Response[pb.ListAllWorkersResponse], error) {
+	sc := h.s.sched
+	if sc == nil {
+		return nil, errNoScheduler
+	}
+	home, err := config.EnsureHomeWorkspace("")
+	if err != nil {
+		return nil, err
+	}
+	known := sc.cfg.Store.Known()
+	others := slices.Sorted(maps.Keys(known))
+	others = slices.DeleteFunc(others, func(d string) bool { return d == home })
+	out := &pb.ListAllWorkersResponse{Home: home}
+	for _, dir := range append([]string{home}, others...) {
+		group := &pb.WorkspaceWorkers{Workspace: dir, Home: dir == home}
+		out.Workspaces = append(out.Workspaces, group)
+		if _, err := os.Stat(dir); errors.Is(err, fs.ErrNotExist) {
+			group.Missing = true
+			for _, name := range slices.Sorted(maps.Keys(known[dir])) {
+				state := pb.WorkerState_WORKER_STATE_DISABLED
+				if known[dir][name] {
+					state = pb.WorkerState_WORKER_STATE_ENABLED
+				}
+				group.Workers = append(group.Workers, &pb.Worker{Workspace: dir, Name: name, State: state})
+			}
+			continue
+		}
+		w, err := h.s.workspace(ctx, dir)
+		if err != nil {
+			group.Problem = redact.Mask(err.Error())
+			continue
+		}
+		list, err := w.ListWorkers()
+		if err != nil {
+			group.Problem = redact.Mask(err.Error())
+			continue
+		}
+		for _, info := range list {
+			group.Workers = append(group.Workers, workerMsg(info))
+		}
+	}
+	return ok(out)
+}
+
+func (h workerService) ForgetWorkspaceWorkers(ctx context.Context, r req[pb.ForgetWorkspaceWorkersRequest]) (*connect.Response[pb.ForgetWorkspaceWorkersResponse], error) {
+	sc := h.s.sched
+	if sc == nil {
+		return nil, errNoScheduler
+	}
+	dir := r.Msg.Workspace
+	if real, err := canonical(dir); err == nil {
+		dir = real
+	} else if !filepath.IsAbs(dir) {
+		return nil, apiError(connect.CodeInvalidArgument, "INVALID_WORKSPACE", err, "workspace", dir)
+	}
+	if len(sc.liveRuns(dir, "")) > 0 {
+		return nil, toAPI(api.ErrRunInProgress)
+	}
+	if err := sc.cfg.Store.ForgetWorkspace(dir); err != nil {
+		return nil, err
+	}
+	sc.rescan(ctx)
+	return ok(&pb.ForgetWorkspaceWorkersResponse{})
 }

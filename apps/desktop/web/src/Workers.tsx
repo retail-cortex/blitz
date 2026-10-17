@@ -18,9 +18,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { timestampDate } from "@bufbuild/protobuf/wkt";
 import {
   mdiAlertCircleOutline,
-  mdiCalendarClock,
-  mdiCalendarEdit,
-  mdiCalendarPlus,
   mdiCheckCircleOutline,
   mdiCloseCircleOutline,
   mdiDeleteOutline,
@@ -38,11 +35,7 @@ import { loadSession } from "./events";
 import { language, t } from "./i18n";
 import { RunStatus, WorkerState, type Worker, type WorkerRun } from "./gen/blitz/v1/worker_pb";
 import { applyEvent, failed, summarizeArgs, type Entry } from "./turns";
-import { WorkerEditor } from "./WorkerEditor";
-import { savePauses } from "./workerForm";
-import { Button, Chip, Dialog, Icon, useSnackbar } from "./ui/controls";
-import { Drawer } from "./ui/Drawer";
-import type { ItemIntent } from "./intent";
+import { Button, Chip, Icon } from "./ui/controls";
 
 const stateKeys: Record<WorkerState, string> = {
   [WorkerState.UNSPECIFIED]: "",
@@ -77,154 +70,11 @@ const runIcon = (s: RunStatus) =>
           ? mdiStopCircleOutline
           : mdiCloseCircleOutline;
 
-/** How often an open worker dialog asks for the workers again. */
-const workersPollMs = 5000;
-
 /** Whether a worker's latest run failed or hit a limit. */
-const lastFailed = (w: Worker) => w.lastRun?.status === RunStatus.FAILED || w.lastRun?.status === RunStatus.LIMITED;
-
-/**
- * A worker, in the drawer, from the top bar's Workers menu (intent): a
- * read view (what it does and may do, its runs; Run, Enable or Disable,
- * Edit, Delete) and an edit view (its form, its buttons in the footer),
- * switching in place in one drawer; a new worker starts on the form, and
- * saving shows it. Cancel goes back to the read view; ✕ closes the
- * drawer, asking first when the form has unsaved changes, as does another
- * drawer opening in its place. Deleting asks first.
- * Without a name (the status bar's failed runs) it shows the first worker
- * whose last run failed, else the first.
- */
-export function WorkerDrawer({ dir, intent, onClose }: { dir: string; intent: ItemIntent; onClose: () => void }) {
-  const snack = useSnackbar();
-  const [list, setList] = useState<Worker[] | null>(null);
-  const [name, setName] = useState(intent.id);
-  const [mode, setMode] = useState<"read" | "edit" | "new">(intent.kind === "new" ? "new" : intent.kind === "edit" ? "edit" : "read");
-  const [deleting, setDeleting] = useState(intent.kind === "delete");
-  // A run or disable the menu asked for, for the read view to do once.
-  const [request, setRequest] = useState<"run" | "disable" | undefined>(intent.kind === "run" || intent.kind === "disable" ? intent.kind : undefined);
-  const [error, setError] = useState("");
-  // The drawer's footer, where the edit view puts its buttons, and whether
-  // the form holds unsaved changes.
-  const [footer, setFooter] = useState<HTMLDivElement | null>(null);
-  const [dirty, setDirty] = useState(false);
-
-  const refresh = useCallback(async () => {
-    try {
-      setList((await workers.listWorkers({ workspace: dir })).workers);
-      setError("");
-    } catch (e) {
-      setError(message(e));
-    }
-  }, [dir]);
-  // WORKER.md files edited elsewhere show up (BL-DSK-50).
-  useEffect(() => {
-    void refresh();
-    const timer = setInterval(refresh, workersPollMs);
-    return () => clearInterval(timer);
-  }, [refresh]);
-  useEffect(() => {
-    if (!name && list?.length) setName((list.find(lastFailed) ?? list[0]).name);
-  }, [list, name]);
-
-  const worker = list?.find((w) => w.name === name);
-  const remove = async () => {
-    setDeleting(false);
-    try {
-      await workers.deleteWorker({ workspace: dir, name });
-      snack(t("desktop.workers.deleted", { name }));
-      onClose();
-    } catch (e) {
-      snack(message(e), { error: true });
-      if (intent.kind === "delete") onClose();
-    }
-  };
-  const confirm = deleting && (
-    <Dialog
-      title={t("desktop.workers.delete_title", { name })}
-      icon={mdiDeleteOutline}
-      onClose={() => (intent.kind === "delete" ? onClose() : setDeleting(false))}
-      footer={
-        <>
-          <Button onClick={() => (intent.kind === "delete" ? onClose() : setDeleting(false))}>{t("desktop.cancel")}</Button>
-          <Button variant="filled" danger onClick={() => void remove()}>
-            {t("desktop.workers.delete")}
-          </Button>
-        </>
-      }
-    >
-      <p>{t("desktop.workers.delete_body", { name, folder: worker?.path.replace(/\/WORKER\.md$/, "") || `.agents/workers/${name}` })}</p>
-    </Dialog>
-  );
-  // Deleting from the menu asks, and nothing else.
-  if (intent.kind === "delete") return confirm || null;
-
-  const toRead = () => {
-    setMode("read");
-    void refresh();
-  };
-  // One drawer, its view switching in place: the read view, or the form
-  // (editing this worker, or a new one).
-  const title = mode === "new" ? t("desktop.newworker.title") : mode === "edit" ? t("desktop.editworker.title", { name }) : worker?.name || t("desktop.view.workers");
-  return (
-    <>
-      <Drawer
-        title={title}
-        icon={mode === "new" ? mdiCalendarPlus : mode === "edit" ? mdiCalendarEdit : mdiCalendarClock}
-        className="worker-drawer"
-        headerActions={mode === "read" && worker && <WorkerChip state={worker.state} />}
-        footer={mode === "read" ? undefined : <div className="dialog-actions" ref={setFooter} />}
-        dirty={mode !== "read" && dirty}
-        onClose={onClose}
-      >
-        {error && (
-          <div className="card error row">
-            <Icon path={mdiAlertCircleOutline} /> {error}
-          </div>
-        )}
-        {mode === "new" && (
-          <WorkerEditor
-            key="new"
-            dir={dir}
-            footer={footer}
-            onCancel={onClose}
-            onDirty={setDirty}
-            onSaved={(n) => {
-              setName(n);
-              toRead();
-            }}
-          />
-        )}
-        {mode === "edit" && worker && <WorkerEditor key={`edit-${worker.name}`} dir={dir} edit={{ name: worker.name, path: worker.path, pauses: savePauses(worker.state) }} footer={footer} onCancel={toRead} onSaved={toRead} onDirty={setDirty} />}
-        {mode === "read" && list?.length === 0 && (
-          <div className="stack" style={{ gap: 12 }}>
-            <p className="muted">{t("desktop.workers.none", { path: ".agents/workers/<name>/WORKER.md" })}</p>
-            <Button variant="tonal" icon={mdiCalendarPlus} onClick={() => setMode("new")}>
-              {t("desktop.newworker.title")}
-            </Button>
-          </div>
-        )}
-        {mode === "read" && worker && (
-          <WorkerView
-            dir={dir}
-            worker={worker}
-            onChange={refresh}
-            onEdit={() => setMode("edit")}
-            onDelete={() => setDeleting(true)}
-            request={request}
-            onRequestDone={() => setRequest(undefined)}
-            onLeave={onClose}
-            key={worker.name + worker.hash}
-          />
-        )}
-        {mode === "read" && list && list.length > 0 && name && !worker && <p className="muted">{t("desktop.workers.gone", { name })}</p>}
-      </Drawer>
-      {confirm}
-    </>
-  );
-}
+export const lastFailed = (w: Worker) => w.lastRun?.status === RunStatus.FAILED || w.lastRun?.status === RunStatus.LIMITED;
 
 /** A worker's state as a chip (Enabled tinted, Changed a warning, Invalid an error). */
-function WorkerChip({ state }: { state: WorkerState }) {
+export function WorkerChip({ state }: { state: WorkerState }) {
   return (
     <Chip className="static" selected={state === WorkerState.ENABLED} tone={state === WorkerState.INVALID ? "danger" : state === WorkerState.CHANGED ? "warn" : undefined}>
       {workerStateLabel(state)}
@@ -232,7 +82,11 @@ function WorkerChip({ state }: { state: WorkerState }) {
   );
 }
 
-function WorkerView({
+/**
+ * A worker's read view (Studio › Workers): what it does and may do, its
+ * runs, and Run, Enable or Disable, Edit and Delete.
+ */
+export function WorkerView({
   dir,
   worker,
   onChange,
@@ -247,7 +101,7 @@ function WorkerView({
   onChange: () => void;
   onEdit: () => void;
   onDelete: () => void;
-  /** A run or disable the Workers menu asked for, done once (onRequestDone). */
+  /** A run or disable asked for (an intent), done once (onRequestDone). */
   request?: "run" | "disable";
   onRequestDone: () => void;
   /** Called when it sends the user elsewhere (a run's conversation). */

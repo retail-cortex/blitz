@@ -294,6 +294,10 @@ func TestWorkerHandlersNeedAScheduler(t *testing.T) {
 		"RunWorker":      func() error { return unary(wk.RunWorker, &pb.RunWorkerRequest{Workspace: dir}) },
 		"ListWorkerRuns": func() error { return unary(wk.ListWorkerRuns, &pb.ListWorkerRunsRequest{Workspace: dir}) },
 		"GetWorkerRun":   func() error { return unary(wk.GetWorkerRun, &pb.GetWorkerRunRequest{RunId: "x"}) },
+		"ListAllWorkers": func() error { return unary(wk.ListAllWorkers, &pb.ListAllWorkersRequest{}) },
+		"ForgetWorkspaceWorkers": func() error {
+			return unary(wk.ForgetWorkspaceWorkers, &pb.ForgetWorkspaceWorkersRequest{Workspace: dir})
+		},
 		"WatchWorkerRun": func() error {
 			return streamErr(wk.WatchWorkerRun(ctx, connect.NewRequest(&pb.WatchWorkerRunRequest{RunId: "x"})))
 		},

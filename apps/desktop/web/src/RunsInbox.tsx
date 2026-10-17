@@ -27,7 +27,7 @@ import { useApp } from "./state";
 import { Button, useSnackbar } from "./ui/controls";
 import { Drawer } from "./ui/Drawer";
 
-/** The background runs, to open or stop (the Workers menu's and the status bar's). */
+/** The background runs, to open or stop (the status bar's). */
 export function InboxDrawer({ list, onClose }: { list: BackgroundRun[]; onClose: () => void }) {
   const { prefs, update } = useApp();
   const snack = useSnackbar();

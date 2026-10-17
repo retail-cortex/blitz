@@ -520,12 +520,23 @@ const change = (workspace: string) => ({ change: { path: configPath(workspace), 
 // The workspace's workers, and each one's WORKER.md as written (spec).
 type FakeWorker = Record<string, unknown> & { name: string; hash: string; state: WorkerState; path: string; spec: Record<string, unknown> & { schedule: string } };
 const fakeSpec = (name: string, o: Record<string, unknown> = {}) => ({ name, description: "", schedule: "", timezone: "", agent: "", model: "", permissions: [] as string[], maxTurns: 0, maxCostUsd: 0, timeout: "", catchUp: "", prompt: "", ...o });
+// The home workspace the global workers run in (~/.blitz/home), and theirs.
+const fakeHome = "/home/me/.blitz/home";
+const fakeGlobal: FakeWorker[] = [
+  { name: "daily-news", description: "Summarises the morning's news in ~/notes/news.md.", state: WorkerState.ENABLED, schedule: "Daily at 7 AM", cron: "0 7 * * *", timezone: "America/Chicago", hash: "77ab", path: "/home/me/.blitz/workers/daily-news/WORKER.md", limits: { maxTurns: 10, maxCostUsd: 0.2 }, spec: fakeSpec("daily-news", { schedule: "Daily at 7 AM", timezone: "America/Chicago", prompt: "Summarise the morning's news." }) },
+];
+// Other workspaces with workers on record (Settings › Workers): one not
+// in the app's workspaces, one whose folder is gone.
+const fakeElsewhere = [
+  { workspace: "/home/me/notes", home: false, missing: false, problem: "", workers: [{ workspace: "/home/me/notes", name: "weekly-notes", state: WorkerState.ENABLED, schedule: "Fridays at 17:00", problems: [], permissions: [] }] },
+  { workspace: "/home/me/old-site", home: false, missing: true, problem: "", workers: [{ workspace: "/home/me/old-site", name: "backup", state: WorkerState.ENABLED, problems: [], permissions: [] }] },
+];
 // Worker runs going now (?fake&noruns: none).
 const fakeLive: { id: string; workspace: string; worker: string; status: RunStatus; started: ReturnType<typeof now>; manual: boolean; sessionId: string; error?: { reason: string; message: string } }[] = new URLSearchParams(location.search).has("noruns")
   ? []
   : [
-      { id: "live-1", workspace: "/home/me/blitz", worker: "nightly-deps", status: RunStatus.RUNNING, started: now(), manual: false, sessionId: "worker-nightly-3" },
-      { id: "live-2", workspace: "/home/me/notes", worker: "daily-news", status: RunStatus.RUNNING, started: now(), manual: true, sessionId: "worker-news-1" },
+      { id: "live-1", workspace: "/home/me/shop", worker: "nightly-deps", status: RunStatus.RUNNING, started: now(), manual: false, sessionId: "worker-nightly-3" },
+      { id: "live-2", workspace: fakeHome, worker: "daily-news", status: RunStatus.RUNNING, started: now(), manual: true, sessionId: "worker-news-1" },
     ];
 const fakeWorkers: FakeWorker[] = [
   {
@@ -1562,7 +1573,20 @@ export function installFake() {
           fakeWorkers.unshift(w);
           return { worker: w };
         },
-        listWorkers: () => ({ workers: fakeWorkers }),
+        listWorkers: ({ workspace }) => ({ workers: workspace === fakeHome ? fakeGlobal : fakeWorkers }),
+        listAllWorkers: () => ({
+          home: fakeHome,
+          workspaces: [
+            { workspace: fakeHome, home: true, workers: fakeGlobal },
+            { workspace: "/home/me/shop", workers: fakeWorkers },
+            ...fakeElsewhere,
+          ],
+        }),
+        forgetWorkspaceWorkers: ({ workspace }) => {
+          const i = fakeElsewhere.findIndex((g) => g.workspace === workspace);
+          if (i >= 0) fakeElsewhere.splice(i, 1);
+          return {};
+        },
         deleteWorker: ({ name }) => {
           const i = fakeWorkers.findIndex((x) => x.name === name);
           if (i < 0) throw new ConnectError(`no such worker: ${name}`, Code.NotFound);
@@ -1615,8 +1639,8 @@ export function installFake() {
             problem: "",
           };
         },
-        // Runs going now, in this workspace and another (the Workers menu's
-        // Running now); Stop ends one, recorded as stopped.
+        // Runs going now, in this workspace and the global workers' (Running
+        // now); Stop ends one, recorded as stopped.
         listRunningWorkerRuns: () => ({ runs: fakeLive.filter((r) => r.status === RunStatus.RUNNING) }),
         stopWorkerRun: ({ runId }) => {
           const r = fakeLive.find((x) => x.id === runId && x.status === RunStatus.RUNNING);

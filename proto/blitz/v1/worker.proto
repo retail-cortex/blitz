@@ -64,7 +64,8 @@ service WorkerService {
   // Streams a run's events: those already produced, then live ones until
   // it finishes.
   rpc WatchWorkerRun(WatchWorkerRunRequest) returns (stream WatchWorkerRunResponse);
-  // Lists the runs going now, in every workspace, for the Workers menu.
+  // Lists the runs going now, in every workspace (Studio › Workers and
+  // Settings › Workers).
   rpc ListRunningWorkerRuns(ListRunningWorkerRunsRequest) returns (ListRunningWorkerRunsResponse);
   // Stops a run going now: its turn is cancelled and it's recorded as
   // stopped (RUN_NOT_RUNNING when it isn't going).
@@ -74,6 +75,16 @@ service WorkerService {
   // saved. A model that fails gives problem instead of an error
   // (NO_INSTRUCTIONS without instructions).
   rpc RewriteWorker(RewriteWorkerRequest) returns (RewriteWorkerResponse);
+  // Lists every workspace the service has workers on record for (enabled
+  // or disabled), and the home workspace the user's global workers run
+  // in (~/.blitz/home, made when missing), each with its workers. A
+  // workspace whose folder is gone is listed as missing, with the workers
+  // on record; one that can't be opened, with the problem.
+  rpc ListAllWorkers(ListAllWorkersRequest) returns (ListAllWorkersResponse);
+  // Forgets every worker of a workspace: none of them is enabled any
+  // more, and the service no longer looks for its folder. Their files
+  // aren't touched. Refused while one of them runs (RUN_IN_PROGRESS).
+  rpc ForgetWorkspaceWorkers(ForgetWorkspaceWorkersRequest) returns (ForgetWorkspaceWorkersResponse);
 }
 
 // WorkerState is whether a worker may run.
@@ -394,3 +405,37 @@ message RewriteWorkerResponse {
   // Why there's no rewrite: the model's failure, redacted.
   string problem = 4;
 }
+
+// Request message for WorkerService.ListAllWorkers.
+message ListAllWorkersRequest {}
+
+// One workspace's workers, in ListAllWorkersResponse.
+message WorkspaceWorkers {
+  // The workspace's folder.
+  string workspace = 1;
+  // Whether it's the home workspace (the user's global workers).
+  bool home = 2;
+  // Whether its folder is gone: workers then has only each worker on
+  // record's workspace, name and state (enabled or disabled).
+  bool missing = 3;
+  // Its workers, by name.
+  repeated Worker workers = 4;
+  // Why its workers can't be listed (it can't be opened), redacted.
+  string problem = 5;
+}
+
+// Response message for WorkerService.ListAllWorkers.
+message ListAllWorkersResponse {
+  // The home workspace, where the global workers run.
+  string home = 1;
+  // The home workspace first, then the others by folder.
+  repeated WorkspaceWorkers workspaces = 2;
+}
+
+// Request message for WorkerService.ForgetWorkspaceWorkers.
+message ForgetWorkspaceWorkersRequest {
+  string workspace = 1;
+}
+
+// Response message for WorkerService.ForgetWorkspaceWorkers.
+message ForgetWorkspaceWorkersResponse {}

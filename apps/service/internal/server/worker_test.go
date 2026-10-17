@@ -477,3 +477,82 @@ func TestRewriteWorkerOverTheAPI(t *testing.T) {
 	_, err = c.RewriteWorker(ctx, connect.NewRequest(&pb.RewriteWorkerRequest{Workspace: "relative", Worker: &pb.WorkerDefinition{Prompt: "x"}}))
 	assert.Error(t, err)
 }
+
+// ListAllWorkers lists the home workspace (the global workers, in
+// ~/.blitz/workers) first, then every workspace with workers on record,
+// a gone folder as missing with its records; forgetting one drops it.
+func TestAllWorkersOverTheAPI(t *testing.T) {
+	c, s := serveScheduler(t, time.Hour, false)
+	ctx := context.Background()
+	global := filepath.Join(os.Getenv("HOME"), ".blitz", "workers")
+	addWorkerIn(t, global, "news", "---\nschedule: Daily at 7 AM\n---\nSummarise the news.\n")
+	project, _ := filepath.EvalSymlinks(t.TempDir())
+	addWorker(t, project, "deps", "---\nschedule: Daily at 6 AM\n---\nWrite the report.\n")
+	gone, _ := filepath.EvalSymlinks(t.TempDir())
+	addWorker(t, gone, "old", "---\nschedule: Daily at 5 AM\n---\nDo the old thing.\n")
+	for _, dir := range []string{project, gone} {
+		list, err := c.ListWorkers(ctx, connect.NewRequest(&pb.ListWorkersRequest{Workspace: dir}))
+		require.NoError(t, err)
+		wk := list.Msg.Workers[0]
+		_, err = c.EnableWorker(ctx, connect.NewRequest(&pb.EnableWorkerRequest{Workspace: dir, Name: wk.Name, Hash: wk.Hash}))
+		require.NoError(t, err)
+	}
+	require.NoError(t, os.RemoveAll(gone))
+	s.sched.rescan(ctx) // a gone folder is skipped, said once
+	s.sched.rescan(ctx)
+	assert.True(t, s.sched.missing[gone], "the gone folder is noted")
+
+	all, err := c.ListAllWorkers(ctx, connect.NewRequest(&pb.ListAllWorkersRequest{}))
+	require.NoError(t, err)
+	home := all.Msg.Home
+	require.Len(t, all.Msg.Workspaces, 3, "%v", all.Msg.Workspaces)
+	byDir := map[string]*pb.WorkspaceWorkers{}
+	for _, g := range all.Msg.Workspaces {
+		byDir[g.Workspace] = g
+	}
+	tests := []struct {
+		name          string
+		dir           string
+		home, missing bool
+		worker        string
+		state         pb.WorkerState
+	}{
+		{"the global workers", home, true, false, "news", pb.WorkerState_WORKER_STATE_NEW},
+		{"a project", project, false, false, "deps", pb.WorkerState_WORKER_STATE_ENABLED},
+		{"a gone folder", gone, false, true, "old", pb.WorkerState_WORKER_STATE_ENABLED},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := byDir[tt.dir]
+			require.NotNil(t, g, "%v", all.Msg.Workspaces)
+			assert.Equal(t, tt.home, g.Home)
+			assert.Equal(t, tt.missing, g.Missing)
+			assert.Empty(t, g.Problem)
+			require.Len(t, g.Workers, 1)
+			assert.Equal(t, tt.worker, g.Workers[0].Name)
+			assert.Equal(t, tt.state, g.Workers[0].State)
+		})
+	}
+	assert.Equal(t, home, all.Msg.Workspaces[0].Workspace, "home first")
+
+	// A global worker made in the home workspace is written to ~/.blitz/workers.
+	made, err := c.CreateWorker(ctx, connect.NewRequest(&pb.CreateWorkerRequest{Workspace: home, Name: "digest", Schedule: "Daily at 8 AM", Prompt: "Write the digest."}))
+	require.NoError(t, err, "%v", made)
+	assert.FileExists(t, filepath.Join(global, "digest", workers.FileName))
+
+	_, err = c.ForgetWorkspaceWorkers(ctx, connect.NewRequest(&pb.ForgetWorkspaceWorkersRequest{Workspace: gone}))
+	require.NoError(t, err)
+	all, err = c.ListAllWorkers(ctx, connect.NewRequest(&pb.ListAllWorkersRequest{}))
+	require.NoError(t, err)
+	assert.Len(t, all.Msg.Workspaces, 2, "the gone folder is forgotten: %v", all.Msg.Workspaces)
+	_, err = c.ForgetWorkspaceWorkers(ctx, connect.NewRequest(&pb.ForgetWorkspaceWorkersRequest{Workspace: "relative"}))
+	code, info := errorReason(t, err)
+	assert.Equal(t, connect.CodeInvalidArgument, code, "%v", info)
+}
+
+func addWorkerIn(t *testing.T, root, name, content string) {
+	t.Helper()
+	wd := filepath.Join(root, name)
+	require.NoError(t, os.MkdirAll(wd, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(wd, workers.FileName), []byte(content), 0o644))
+}

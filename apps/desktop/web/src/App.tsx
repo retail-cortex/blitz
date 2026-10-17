@@ -25,6 +25,7 @@ import { SearchDialog } from "./SearchDialog";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { applyUserLanguage, t, useLanguage } from "./i18n";
 import { message, reason } from "./errors";
+import { globalHome } from "./workersOverview";
 import { compose, goToFileEvent, openDocsEvent, openSettingsEvent, searchWorkspaceEvent, showLicenseEvent, showView } from "./events";
 import { DocsDrawer, type DocsAt } from "./docs/DocsDrawer";
 import { UnsavedDialog } from "./files/EditorPane";
@@ -281,10 +282,16 @@ function Shell() {
   // A click on a notification shows its workspace.
   useEffect(() => onNotificationOpen((dir) => update((p) => openWorkspace(p, dir))), [update]);
   // A blitz://open link opens its folder with the prompt filled in, not
-  // sent; blitz://workers (the tray's) opens it on its workers.
+  // sent; blitz://workers (the tray's) opens it on its workers, or
+  // Settings › Workers for the global ones.
   useEffect(
     () =>
-      onDeepLink((link) => {
+      onDeepLink(async (link) => {
+        // The global workers' (the home workspace's) are in Settings › Workers.
+        if (link.view === "workers" && link.dir === (await globalHome())) {
+          setSettingsAt({ section: "workers" });
+          return;
+        }
         update((p) => openWorkspace(p, link.dir));
         if (link.view) {
           showView({ dir: link.dir, view: link.view });

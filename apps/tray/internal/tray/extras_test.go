@@ -24,6 +24,7 @@ import (
 	"testing"
 
 	"connectrpc.com/connect"
+	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/socket"
 	pb "github.com/retail-cortex/blitz/proto/blitz/v1"
 	"github.com/stretchr/testify/assert"
@@ -76,6 +77,13 @@ func TestWorkerEntries(t *testing.T) {
 
 	two := append(one, &pb.Worker{Workspace: "/w/blog", Name: "nightly", State: pb.WorkerState_WORKER_STATE_ENABLED})
 	assert.Equal(t, "shop › nightly", WorkerEntries(Extras{Workers: two})[0].Title)
+	t.Setenv("MODENV_PREFIX", t.TempDir())
+	global := append(one, &pb.Worker{Workspace: config.HomeWorkspace(""), Name: "news", State: pb.WorkerState_WORKER_STATE_ENABLED})
+	var titles []string
+	for _, e := range WorkerEntries(Extras{Workers: global}) {
+		titles = append(titles, e.Title)
+	}
+	assert.Contains(t, titles, "Global › news", "the home workspace's are the global workers")
 
 	none := WorkerEntries(Extras{})
 	require.Len(t, none, 1)
