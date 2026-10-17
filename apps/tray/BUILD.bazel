@@ -149,6 +149,7 @@ go_library(
         "//pkg/loginitem",
         "//pkg/pagehost",
         "//pkg/pageserver",
+        "//pkg/selfupdate",
         "//pkg/socket",
         "@io_fyne_systray//:systray",
     ] + select({
@@ -210,10 +211,7 @@ signed_binary(
         goos = "darwin",
         pure = "off",
         target_compatible_with = ["@platforms//os:macos"],
-        visibility = [
-            "//apps/desktop/packaging:__pkg__",
-            "//apps/electron:__subpackages__",
-        ],
+        visibility = ["//apps/electron:__subpackages__"],
         x_defs = {"main.version": "{STABLE_BLITZ_VERSION}"},
     )
     for arch in [

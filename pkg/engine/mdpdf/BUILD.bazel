@@ -14,12 +14,6 @@
 
 load("@rules_go//go:def.bzl", "go_library", "go_test")
 
-# A font for the PDF printer's test, which inlines one as KaTeX's are.
-exports_files(
-    ["fonts/NotoSans-Regular.ttf.gz"],
-    visibility = ["//apps/desktop/internal/printpdf:__pkg__"],
-)
-
 go_library(
     name = "mdpdf",
     srcs = ["mdpdf.go"],

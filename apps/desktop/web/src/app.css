@@ -16,11 +16,10 @@
 
 /* Layout and views. Colours and components come from m3.css. */
 
-/* The window's title bar is the page's: these areas drag the window,
-   in the Wails app (--wails-draggable) and in Electron (app-region); what
-   can be clicked in them doesn't. */
-.drag-region { --wails-draggable: drag; -webkit-app-region: drag; app-region: drag; }
-.no-drag, .drag-region button, .drag-region input, .drag-region .menu-anchor { --wails-draggable: no-drag; -webkit-app-region: no-drag; app-region: no-drag; }
+/* The window's title bar is the page's: these areas drag the window
+   (Electron's app-region); what can be clicked in them doesn't. */
+.drag-region { -webkit-app-region: drag; app-region: drag; }
+.no-drag, .drag-region button, .drag-region input, .drag-region .menu-anchor { -webkit-app-region: no-drag; app-region: no-drag; }
 /* Electron drags wherever a drag region is, even under what's drawn over
    it: menus, dialogs, the palette, snackbars and the drawer, which can
    reach over the title bar, mark themselves as not dragging. */

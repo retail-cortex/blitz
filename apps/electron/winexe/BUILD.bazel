@@ -37,10 +37,10 @@ go_test(
     srcs = ["main_test.go"],
     args = [
         "-exe=$(rootpath @electron_win32_x64//:electron.exe)",
-        "-icon=$(rootpath //apps/desktop/packaging:appicon.png)",
+        "-icon=$(rootpath //apps/electron:appicon.png)",
     ],
     data = [
-        "//apps/desktop/packaging:appicon.png",
+        "//apps/electron:appicon.png",
         "@electron_win32_x64//:electron.exe",
     ],
     embed = [":winexe_lib"],

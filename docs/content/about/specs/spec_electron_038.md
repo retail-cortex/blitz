@@ -1,5 +1,5 @@
 ---
-title: "038 · Electron trial"
+title: "038 · Electron desktop app"
 weight: 38
 ---
 
@@ -7,15 +7,15 @@ weight: 38
 
 | | |
 |---|---|
-| Status | **Shipping** from v0.6.6 (approved 2026-10-16; the owner's decision after trying it on macOS and Windows): Electron replaces the Wails app in releases (EL-80). Done: the shared host and `blitz-tray --serve` ([spec_service_021](spec_service_021.md) SVC-53a), the shell (EL-01–EL-22), the page's routing (EL-40–EL-42), the packages (EL-80). Done also: the updates (EL-90–EL-93) and the web preview with Add to chat (EL-100–EL-105). The Wails app (`apps/desktop`) still builds but isn't released. |
-| Source | `apps/electron` (`src/main.ts`, `src/preload.ts`, `src/logic.ts`, `dev.sh`, `defs.bzl`, `BUILD.bazel`), `apps/electron/packaging` (`BUILD.bazel`, `mac.bzl`, `sign_macos.sh`, `entitlements.plist`, `contents_test.sh`), the Electron runtime in `MODULE.bazel`, `pkg/pagehost`, `apps/tray/internal/tray/serve.go` |
+| Status | **Shipping** from v0.6.6 (approved 2026-10-16; the owner's decision after trying it on macOS and Windows): Electron replaces the Wails app in releases (EL-80). Done: the shared host and `blitz-tray --serve` ([spec_service_021](spec_service_021.md) SVC-53a), the shell (EL-01–EL-22), the page's routing (EL-40–EL-42), the packages (EL-80). Done also: the updates (EL-90–EL-93) and the web preview with Add to chat (EL-100–EL-105). The Wails app is removed from the repository (since v0.6.6; restorable from the v0.6.5 tag): `apps/desktop` keeps only the page (`apps/desktop/web`). |
+| Source | `apps/electron` (`src/main.ts`, `src/preload.ts`, `src/logic.ts`, `dev.sh`, `defs.bzl`, `BUILD.bazel`, `appicon.png`, `appicon.svg`, `winexe`), `apps/electron/packaging` (`BUILD.bazel`, `mac.bzl`, `sign_macos.sh`, `entitlements.plist`, `contents_test.sh`, `linux/`), the Electron runtime in `MODULE.bazel`, `pkg/pagehost`, `apps/tray/internal/tray/serve.go` |
 | Tests | `apps/electron/src/logic.test.ts` (vitest), `pkg/selfupdate/*_test.go`, `pkg/pagehost/update_test.go`, `apps/tray/internal/tray/apply_test.go`, `apps/desktop/web/src/updates.test.ts`, `apps/desktop/web/src/desktop.test.ts` (the routing), `//apps/electron:typecheck`, `apps/tray/internal/tray/serve_test.go`, `pkg/pagehost/host_test.go` |
 
 ## 1. Purpose
 
-The desktop app ([spec_desktop_024](spec_desktop_024.md)) is Wails: each system's own web view, WebKit on macOS and WebKitGTK on Linux. Windows has none. There the tray serves the page to Edge ([spec_windows_036](spec_windows_036.md)), without a folder picker, PDF export, the CLI's installation or menus. WebKitGTK has cost real bugs too (the NVIDIA crashes, #39 and #52).
+Until v0.6.5 the desktop app ([spec_desktop_024](spec_desktop_024.md)) was Wails: each system's own web view, WebKit on macOS and WebKitGTK on Linux. Windows had none. There the tray served the page to Edge ([spec_windows_036](spec_windows_036.md)), without a folder picker, PDF export, the CLI's installation or menus. WebKitGTK cost real bugs too (the NVIDIA crashes, #39 and #52).
 
-The trial tries Electron instead: Chromium on macOS, Linux and Windows. It's a new surface beside the Wails app, not a replacement. Whether it replaces Wails is decided from measured numbers (§6).
+This spec began as a trial of Electron beside the Wails app: Chromium on macOS, Linux and Windows. The owner chose it (2026-10-16): since v0.6.6 it's the desktop app on every platform, and the Wails app is removed from the repository (restorable from the v0.6.5 tag if it's ever needed).
 
 ## 2. How it fits together
 
@@ -23,18 +23,18 @@ The trial tries Electron instead: Chromium on macOS, Linux and Windows. It's a n
 - **EL-02** The host stops when its standard input closes, which happens when Electron quits. If it stops on its own, the main process starts it again and points the window at the new link.
 - **EL-03** The app (`//apps/electron:app`, `resources/app` once packaged) holds `package.json`, `dist/` (the main process and preload, TypeScript compiled by `tsc`), `page/` (the desktop page, `//apps/desktop/web:page`) and `bin/` (`blitz-tray`, with `blitzd` and `blitz` beside it as in the desktop app's packages, so the host finds them as it does there).
 - **EL-04** The Electron runtime comes from Electron's release archives, one per platform (darwin-arm64, darwin-x64, linux-arm64, linux-x64, win32-x64), each pinned by its SHA-256 in `MODULE.bazel` (44.5.1). The `electron` npm package is there for its type definitions only: pnpm runs no install scripts.
-- **EL-05** `bazel run //:desktop` (`//apps/electron:dev`) runs it on this machine against its service; `//:desktop-wails` runs the Wails app, which still builds but isn't released. The root's `//:mac-app`, `//:deb`, `//:pacman`, `//:desktop-tar` and `//:windows-zip` are the Electron packages (EL-80). Electron runs from where its archive was unpacked, not from the runfiles' links, so macOS finds its framework. On macOS it runs a copy of Electron's bundle named Blitz (`CFBundleName`, `CFBundleDisplayName`, bundle ID `dev.blitz.electron`, re-signed ad hoc), made once per Electron in `~/Library/Caches/dev.blitz.electron`: macOS names the app in the menu bar, the Dock and the window switcher from the bundle, which says Electron. 
+- **EL-05** `bazel run //:desktop` (`//apps/electron:dev`) runs it on this machine against its service. The root's `//:mac-app`, `//:deb`, `//:pacman`, `//:desktop-tar` and `//:windows-zip` are the Electron packages (EL-80). Electron runs from where its archive was unpacked, not from the runfiles' links, so macOS finds its framework. On macOS it runs a copy of Electron's bundle named Blitz (`CFBundleName`, `CFBundleDisplayName`, bundle ID `dev.blitz.electron`, re-signed ad hoc), made once per Electron in `~/Library/Caches/dev.blitz.electron`: macOS names the app in the menu bar, the Dock and the window switcher from the bundle, which says Electron. 
 
 ## 3. The window
 
 - **EL-06** The Windows zip's program is Electron's, as `Blitz.exe`, with Blitz's icon (the app's, at 16–256 px) and file details (product and description Blitz, Retail Cortex, the release's version), which Explorer, the taskbar and Task Manager show: `//apps/electron/winexe` rewrites its resources at build time, on any machine (`tc-hib/winres`), keeping the rest (its manifest), and removes Electron's signature, which no longer matches. Elsewhere the window has the icon too (`icon.png` in the app).
-- **EL-07** The window draws with the graphics card (Chromium's own choice of renderer) unless `BLITZ_GPU=off`, or the `gpu` preference is `off` (**Use the graphics card** in Settings › Appearance, shown on Linux in either app): then Electron starts with hardware acceleration off (`gpuOff`, read from `~/.blitz/desktop.json` before Electron starts). The Wails app's WebKitGTK workarounds (its NVIDIA renderer, DMA-BUF) don't apply.
+- **EL-07** The window draws with the graphics card (Chromium's own choice of renderer) unless `BLITZ_GPU=off`, or the `gpu` preference is `off` (**Use the graphics card** in Settings › Appearance, shown on Linux): then Electron starts with hardware acceleration off (`gpuOff`, read from `~/.blitz/desktop.json` before Electron starts). The Wails app's WebKitGTK workarounds (its NVIDIA renderer, DMA-BUF) went with it.
 
 - **EL-10** One window: a second start (with a `blitz://` link, on Linux and Windows) goes to the first (`requestSingleInstanceLock`).
 - **EL-11** Locked down: the page runs sandboxed, with context isolation and without Node. It sees only the preload's `window.blitzElectron`. The window never leaves the host's origin: other links open in the system's browser or mail program if they're web or mail links (`isExternal`, as the desktop app's `SafeURL`), and nowhere otherwise. New windows are refused. Permissions are granted for notifications, writing to the clipboard and full screen only.
-- **EL-12** On macOS the page draws the whole window, title bar included (hidden inset), over the desktop showing through (`vibrancy`). Its title bar moves the window: the page's `.drag-region`s are Electron's drag regions too (`app-region: drag`, beside the Wails app's `--wails-draggable`), with what can be clicked in them excepted; and since Electron drags wherever a region is, even under what's drawn over it, menus, dialogs, the palette, snackbars and the drawer are excepted too (`app-region: no-drag`). The preload says so (`nativeGlass`), for the page's glass ([spec_desktop_024](spec_desktop_024.md) DSK-38). Elsewhere the window is solid.
+- **EL-12** On macOS the page draws the whole window, title bar included (hidden inset), over the desktop showing through (`vibrancy`). Its title bar moves the window: the page's `.drag-region`s are Electron's drag regions too (`app-region: drag`), with what can be clicked in them excepted; and since Electron drags wherever a region is, even under what's drawn over it, menus, dialogs, the palette, snackbars and the drawer are excepted too (`app-region: no-drag`). The preload says so (`nativeGlass`), for the page's glass ([spec_desktop_024](spec_desktop_024.md) DSK-38). Elsewhere the window is solid.
 - **EL-13** macOS's menu bar is the desktop app's (DSK-101): **About Blitz**, **Settings…** (⌘,), Hide, Hide Others, Show All, **Quit Blitz** (⌘Q), then Edit and Window, in the page's language (`SetMenu`). About and Settings tell the page (`menu:about`, `menu:settings`). Elsewhere there's no menu bar.
-- **EL-14** Closing the window, or quitting, with unsaved changes in the editor asks first, in the page's words (`SetUnsaved`, as the desktop app's `beforeClose`).
+- **EL-14** Closing the window, or quitting, with unsaved changes in the editor asks first, in the page's words (`SetUnsaved`).
 
 ## 4. What the page asks of the window
 
@@ -42,7 +42,7 @@ The trial tries Electron instead: Chromium on macOS, Linux and Windows. It's a n
   - `ChooseWorkspace(title)`: the system's folder picker (it can make a folder); `""` when cancelled.
   - `Notify(title, body, dir)`: a system notification; a click brings the window back and sends `notification:open` with `dir`.
   - `OpenURL(url)`: web and mail links only, in the system's browser; anything else is an error.
-  - `PrintPDF(html, pageSize)`: the page (whole HTML, pictures inline) printed to PDF in a hidden window with its scripts off, on A4 or Letter paper with 15 mm margins, after it has loaded; the bytes as base64, as the desktop app returns them. A minute at most.
+  - `PrintPDF(html, pageSize)`: the page (whole HTML, pictures inline) printed to PDF in a hidden window with its scripts off, on A4 or Letter paper with 15 mm margins, once it has loaded and its fonts and pictures are ready to draw (at most 10 s more: DSK-93a); the bytes as base64 (DSK-93a). A minute at most.
   - `SetAppearance(theme)`: the window's theme (`system`, `light` or `dark`).
   - `SetMenu(labels)`, `SetUnsaved(u)`: EL-13 and EL-14.
   - `PendingLinks()`: the `blitz://` links that came before the page was ready.
@@ -52,8 +52,8 @@ The trial tries Electron instead: Chromium on macOS, Linux and Windows. It's a n
 
 ## 5. The page, and what's not done
 
-- **EL-40** The page's `desktop.ts` routes each of the app's calls by capability (`canCall`): the Wails app, else the Electron window (`window.blitzElectron`), else the host (`/host/`), else the browser's stand-in. The window's events (`onAppMenu`, `onDeepLink`, `onNotificationOpen`) come from the Wails runtime or the Electron window alike, the window's glass (`nativeGlass`) from either, and Export as PDF is offered wherever `PrintPDF` is.
-- **EL-41** Preferences go wherever `GetPrefs` is answered. Outside the Wails app, the first time the host keeps them and the browser's storage still has some, the browser's move to the host if the host has no workspaces yet, and the browser's copy is forgotten either way (`adoptBrowserPrefs`): the Windows tray's page, which kept them in the browser, doesn't lose its workspaces.
+- **EL-40** The page's `desktop.ts` routes each of the app's calls by capability (`canCall`): the Electron window (`window.blitzElectron`), else the host (`/host/`), else the browser's stand-in (the Wails path went with the Wails app). The window's events (`onAppMenu`, `onDeepLink`, `onNotificationOpen`) and its glass (`nativeGlass`) come from the Electron window, and Export as PDF is offered wherever `PrintPDF` is.
+- **EL-41** Preferences go wherever `GetPrefs` is answered. The first time the host keeps them and the browser's storage still has some, the browser's move to the host if the host has no workspaces yet, and the browser's copy is forgotten either way (`adoptBrowserPrefs`): the Windows tray's page, which kept them in the browser, doesn't lose its workspaces.
 - **EL-42** *Known limit.* The host serves on a new loopback port each time it starts, so the window's origin changes with each launch, and what the page keeps in the browser's storage for itself (where the user guide was left, folded sections) starts afresh each time, as on the Windows tray's page.
 - **EL-31** Not yet: Authenticode signing on Windows (SmartScreen asks before the zip's `Blitz.exe` first runs), and a Windows installer.
 - **EL-80** *Since v0.6.6* releases carry the Electron app, not the Wails app (`apps/electron/packaging`; [spec_release_025](spec_release_025.md) REL-21–26). Each package's app comes from `electron_app` (`defs.bzl`): `package.json`, `dist/`, `page/`, `icon.png` and `bin/` with that platform's `blitz`, `blitzd` and `blitz-tray`.
@@ -84,6 +84,6 @@ The trial tries Electron instead: Chromium on macOS, Linux and Windows. It's a n
 
 ## 8. Findings
 
-*To do (EL-60).* The Electron build beside the Wails app on macOS and Linux, and beside the Edge tray on Windows: download and installed size, memory with one workspace open after five minutes (all processes), cold start until the page is ready, macOS glass, the NVIDIA checks (#39, #52), and on Windows the folder picker, Export as PDF, notifications, the CLI and starting at login. Then a recommendation: replace Wails, keep both, or stop.
+*Superseded by the owner's decision (2026-10-16, EL-80); kept as the record.* The Electron build beside the Wails app on macOS and Linux, and beside the Edge tray on Windows: download and installed size, memory with one workspace open after five minutes (all processes), cold start until the page is ready, macOS glass, the NVIDIA checks (#39, #52), and on Windows the folder picker, Export as PDF, notifications, the CLI and starting at login. Then a recommendation: replace Wails, keep both, or stop.
 
 First readings (macOS, Apple silicon, 2026-10-16, development build): the page loads from the host and reaches the service; `PrintPDF` returns a PDF; `file:` links and unknown calls are refused; quitting stops the host; with the page routed (EL-40), the window has its glass, a workspace added through the host's preferences opens (saved in `desktop.json`), and Export as PDF writes the PDF beside the file; Electron and the host together hold about 530 MB resident at idle on the welcome screen (resident sizes added up, which counts shared memory more than once: a first number, not the comparison).

@@ -356,8 +356,8 @@ export function Conversation({
           { signal: ctl.signal },
         );
         for await (const res of stream) {
-          // The desktop app keeps a quiet stream moving with empty messages
-          // (proxy.go): WebKitGTK may hold back what came before a pause.
+          // The page's server keeps a quiet stream moving with empty
+          // messages (pkg/pageserver proxy.go), which carry no event.
           const ev = res.event;
           if (!ev) continue;
           const taskList = tasksOf(ev);

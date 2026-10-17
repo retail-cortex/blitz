@@ -12,7 +12,10 @@
 
 Blitz reads your workspace, makes the change, checks it, and gets out of the way: no persona, no filler, no chatter. It's written in Go on Google's Agent Development Kit and runs Gemini, Claude, OpenAI-compatible or Ollama models.
 
-![The Blitz desktop app: files, an editor and the agent's chat](docs/static/images/desktop.png)
+<picture>
+  <source media="(prefers-color-scheme: light)" srcset="docs/static/images/desktop-light.png">
+  <img alt="The Blitz desktop app: the workspace's files, an editor, and the agent's chat asking to create a test, with its task list" src="docs/static/images/desktop.png">
+</picture>
 
 **Documentation: https://retail-cortex.github.io/blitz/**
 
@@ -87,7 +90,7 @@ The builds and tests are run with the full Xcode installed.
 Ubuntu 24.04 or Debian 13 and later:
 
 ```bash
-sudo apt-get install -y git bubblewrap pkg-config libgtk-3-dev libwebkit2gtk-4.1-dev
+sudo apt-get install -y git build-essential bubblewrap
 sudo curl -fsSLo /usr/local/bin/bazel https://github.com/bazelbuild/bazelisk/releases/latest/download/bazelisk-linux-amd64
 sudo chmod +x /usr/local/bin/bazel       # bazelisk-linux-arm64 on ARM
 git clone https://github.com/retail-cortex/blitz.git && cd blitz
@@ -96,13 +99,13 @@ git clone https://github.com/retail-cortex/blitz.git && cd blitz
 Arch Linux:
 
 ```bash
-sudo pacman -S --needed git bubblewrap pkg-config gtk3 webkit2gtk-4.1
+sudo pacman -S --needed git base-devel bubblewrap
 sudo curl -fsSLo /usr/local/bin/bazel https://github.com/bazelbuild/bazelisk/releases/latest/download/bazelisk-linux-amd64
 sudo chmod +x /usr/local/bin/bazel       # bazelisk-linux-arm64 on ARM
 git clone https://github.com/retail-cortex/blitz.git && cd blitz
 ```
 
-GTK and WebKitGTK are only for the Wails desktop app, which `bazel build //...` still builds though it's no longer released (the released Electron app needs neither to build); bubblewrap is the shell sandbox.
+A C compiler (`build-essential`, `base-devel`) is for the tray's cgo and bubblewrap is the shell sandbox; Bazel downloads everything else, the desktop app's Electron included.
 
 ### Windows
 
@@ -119,7 +122,6 @@ bazel run //:blitzd                       # the service, in the foreground
 bazel run //:tray                         # the service in the system tray (Linux, macOS)
 bazel run //:desktop                      # the desktop app (Electron), on this machine's service
 bazel run //:desktop-web                  # the desktop page in a browser, http://localhost:5173/?fake
-bazel run //:desktop-wails                # the Wails app, no longer released
 bazel run //:docs                         # the docs site, http://localhost:1313
 
 bazel build //:mac-app                    # macOS: bazel-bin/apps/electron/packaging/darwin_<arm64|x64>/Blitz.app, for this Mac
@@ -136,7 +138,6 @@ The short names are aliases in the root `BUILD.bazel`, which lists them; the ful
 ### Common problems
 
 - **"bazel: command not found" or the wrong Bazel version.** Install Bazelisk as `bazel`; don't install Bazel itself.
-- **The Wails app (`//apps/desktop`) fails to build on Linux with a missing `gtk+-3.0` or `webkit2gtk-4.1`.** Install `libgtk-3-dev libwebkit2gtk-4.1-dev pkg-config` (Ubuntu/Debian) or `gtk3 webkit2gtk-4.1 pkg-config` (Arch). Older distributions only ship WebKitGTK 4.0, which isn't supported.
 - **`doctor` says the sandbox is unavailable on Ubuntu 24.04.** AppArmor restricts unprivileged user namespaces, which bubblewrap needs: `sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0` (or an AppArmor profile for `bwrap`). Inside Docker, the default seccomp profile blocks them too.
 - **The sandbox or gVisor tests skip.** They need bubblewrap (Linux) and `runsc` (`RUNSC_PATH`); CI fails if they skip, locally they don't.
 - **Out of disk space.** A full build with tests and every platform's archive takes several gigabytes under Bazel's output base; `bazel clean` frees the build outputs.

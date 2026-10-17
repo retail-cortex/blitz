@@ -34,7 +34,7 @@ const apiPrefix = "/blitz.v1."
 // Proxy forwards the page's API requests to the service's Unix
 // socket (a web view can't open one itself), streaming responses as they
 // come. Anything else is not found: the page's own files are served by
-// Wails, or by a Server.
+// a Server.
 func Proxy(path string) http.Handler {
 	target, _ := url.Parse(socket.BaseURL)
 	proxy := &httputil.ReverseProxy{
@@ -89,8 +89,9 @@ func emptyMessage(contentType string) ([]byte, bool) {
 
 // keepalive is a Connect stream's body that passes the service's messages
 // through whole and adds an empty one whenever the stream has been quiet
-// for interval. WebKitGTK, the Linux web view, sometimes holds back the
-// last data written before a pause until more arrives: an approval
+// for interval. Some web views (WebKitGTK, which the desktop app used
+// before Electron) hold back the last data written before a pause until
+// more arrives: an approval
 // request, after which the service waits for the answer, could stay
 // unseen and the turn stuck at "Working". The page skips empty messages.
 type keepalive struct {

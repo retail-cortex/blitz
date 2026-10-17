@@ -13,11 +13,10 @@
 // limitations under the License.
 
 // Package pagehost answers the desktop page's calls to the program that
-// serves it, where the Wails app's bindings aren't there: the tray on
-// Windows, and the Electron app's sidecar (blitz-tray --serve). It also
-// holds what those calls do that the Wails app does too (the window's
-// preferences, the blitz command's installation, the OS sandbox), so
-// every host answers alike.
+// serves it: the Electron app's sidecar (blitz-tray --serve), and the
+// tray's page in a browser on Windows. It holds what those calls do (the
+// window's preferences, the service, the blitz command's installation,
+// the OS sandbox, updates), so every host answers alike.
 package pagehost
 
 import (

@@ -59,11 +59,11 @@ genrule(
     name = "blitz_exe",
     srcs = [
         "@electron_win32_x64//:electron.exe",
-        "//apps/desktop/packaging:appicon.png",
+        "//apps/electron:appicon.png",
         "//build:version",
     ],
     outs = ["windows/Blitz.exe"],
-    cmd = "$(location //apps/electron/winexe) --in $(location @electron_win32_x64//:electron.exe) --icon $(location //apps/desktop/packaging:appicon.png) --version $$(cat $(location //build:version)) --out $@",
+    cmd = "$(location //apps/electron/winexe) --in $(location @electron_win32_x64//:electron.exe) --icon $(location //apps/electron:appicon.png) --version $$(cat $(location //build:version)) --out $@",
     tools = ["//apps/electron/winexe"],
 )
 
@@ -95,6 +95,23 @@ pkg_zip(
     visibility = ["//visibility:public"],
 )
 
+# The macOS app's icon, from the app's PNG.
+genrule(
+    name = "icon",
+    srcs = ["//apps/electron:appicon.png"],
+    outs = ["iconfile.icns"],
+    cmd = """
+set="$$(mktemp -d)/iconfile.iconset"
+mkdir -p "$$set"
+for s in 16 32 128 256 512; do
+  sips -z $$s $$s $< --out "$$set/icon_$${s}x$${s}.png" >/dev/null
+  sips -z $$((s * 2)) $$((s * 2)) $< --out "$$set/icon_$${s}x$${s}@2x.png" >/dev/null
+done
+iconutil -c icns -o $@ "$$set"
+""",
+    target_compatible_with = _MACOS,
+)
+
 # ---- macOS: Blitz.app for each Mac (arm64, x64: Electron's runtimes are
 # separate), released as one disk image each.
 
@@ -122,7 +139,7 @@ pkg_zip(
         app = ":app_darwin_" + arch,
         dir = "darwin_" + arch,
         electron = "@electron_darwin_" + arch + "//:files",
-        icon = "//apps/desktop/packaging:icon",
+        icon = ":icon",
         licenses = [
             "//:LICENSE",
             "//:NOTICE",
@@ -139,9 +156,9 @@ pkg_zip(
 ]
 
 # ---- Linux: for this machine's architecture, in /usr/lib/blitz-desktop
-# (Electron's program as blitz-desktop, where the Wails app's was, so the
-# link on PATH and the launcher stay), as a .deb, an Arch package and a
-# tarball (which updates itself).
+# (Electron's program as blitz-desktop, with the link on PATH and the
+# launcher), as a .deb, an Arch package and a tarball (which updates
+# itself).
 
 electron_app(
     name = "app_linux",
@@ -217,34 +234,34 @@ pkg_mklink(
 
 pkg_files(
     name = "linux_launcher",
-    srcs = ["//apps/desktop/packaging:linux/blitz-desktop.desktop"],
+    srcs = ["linux/blitz-desktop.desktop"],
     prefix = "usr/share/applications",
 )
 
 pkg_files(
     name = "linux_metainfo",
-    srcs = ["//apps/desktop/packaging:linux/dev.blitz.desktop.metainfo.xml"],
+    srcs = ["linux/dev.blitz.desktop.metainfo.xml"],
     prefix = "usr/share/metainfo",
 )
 
 pkg_files(
     name = "linux_icons",
     srcs = [
-        "//apps/desktop/packaging:appicon.png",
-        "//apps/desktop/packaging:appicon.svg",
+        "//apps/electron:appicon.png",
+        "//apps/electron:appicon.svg",
     ],
     renames = {
-        "//apps/desktop/packaging:appicon.png": "usr/share/icons/hicolor/1024x1024/apps/blitz-desktop.png",
-        "//apps/desktop/packaging:appicon.svg": "usr/share/icons/hicolor/scalable/apps/blitz-desktop.svg",
+        "//apps/electron:appicon.png": "usr/share/icons/hicolor/1024x1024/apps/blitz-desktop.png",
+        "//apps/electron:appicon.svg": "usr/share/icons/hicolor/scalable/apps/blitz-desktop.svg",
     },
 )
 
 pkg_files(
     name = "deb_doc",
     srcs = [
+        "linux/copyright",
         "//:NOTICE",
         "//:THIRD_PARTY_NOTICES",
-        "//apps/desktop/packaging:linux/copyright",
     ],
     prefix = "usr/share/doc/blitz-desktop",
     strip_prefix = strip_prefix.files_only(),

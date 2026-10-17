@@ -32,7 +32,7 @@ bin="$(bazel info "${q[@]}" bazel-bin)"
 # Go modules linked into the three programs; --notool_deps leaves out the
 # compilers and code generators that only run during the build.
 bazel query "${q[@]}" --notool_deps \
-	'kind(go_library, deps(set(//apps/cli:blitz_unsigned //apps/service:blitzd_unsigned //apps/desktop:blitz-desktop_unsigned)))' \
+	'kind(go_library, deps(set(//apps/cli:blitz_unsigned //apps/service:blitzd_unsigned //apps/tray:blitz-tray_unsigned)))' \
 	--output=label |
 	sed -nE 's|^@@?(gazelle\+\+go_deps\+)?([^/]+)//.*|\2|p' | sort -u |
 	sed "s|^|$out_base/external/gazelle++go_deps+|" >"$tmp/repos"

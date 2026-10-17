@@ -17,6 +17,6 @@ Starting the service at login. Source: [`pkg/loginitem`](https://github.com/reta
 
 ## Used by
 
-apps/cli, apps/desktop.
+apps/cli, apps/tray, pkg/pagehost (the desktop app).
 
 Spec: [service](../about/specs/spec_service_021.md).

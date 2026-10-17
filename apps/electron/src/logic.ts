@@ -351,3 +351,42 @@ export function gpuOff(env: Record<string, string | undefined>, prefs: string | 
     return false;
   }
 }
+
+/**
+ * Run in the printed page once it has loaded, in a world of its own (the
+ * page's scripts are off, and so are timers, so the main process does the
+ * waiting): makes every font the page declares load (layout may not have
+ * asked for them yet) and every picture decode. Printing straight away
+ * printed pictures as blank space while a font was still loading (KaTeX's,
+ * inlined with font-display: block).
+ */
+export const printLoadScript = `(() => {
+  for (const f of Array.from(document.fonts)) f.load().catch(() => {});
+  for (const i of Array.from(document.images)) i.decode().catch(() => {});
+  return true;
+})()`;
+
+/** Whether the printed page's fonts and pictures are ready to draw (laying it out, so they're drawn next). */
+export const printCheckScript = `(() => {
+  const ready = document.fonts.status === "loaded" && Array.from(document.images).every((i) => i.complete);
+  if (ready && document.body) document.body.getBoundingClientRect();
+  return ready;
+})()`;
+
+/** How long printing waits for fonts and pictures at most, and how often it looks. */
+export const printWait = { deadlineMs: 10_000, everyMs: 50, settleMs: 150 };
+
+/**
+ * Waits until check says the page is ready, or the deadline: check is
+ * asked every printWait.everyMs (a failed check counts as ready: printing
+ * goes ahead), then the page has printWait.settleMs to paint.
+ */
+export async function waitForPrint(check: () => Promise<unknown>, sleep = (ms: number) => new Promise((r) => setTimeout(r, ms)), now = Date.now): Promise<void> {
+  const deadline = now() + printWait.deadlineMs;
+  while (now() < deadline) {
+    const ready = await check().catch(() => true);
+    if (ready === true) break;
+    await sleep(printWait.everyMs);
+  }
+  await sleep(printWait.settleMs);
+}

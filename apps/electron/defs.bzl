@@ -50,7 +50,7 @@ def electron_app(name, out, programs, exe = "", **kwargs):
     copy_to_directory(
         name = name,
         srcs = [
-            "//apps/desktop/packaging:appicon.png",
+            "//apps/electron:appicon.png",
             "//apps/electron:app.package.json",
             "//apps/electron:dist",
             "//apps/electron:page",
@@ -59,7 +59,7 @@ def electron_app(name, out, programs, exe = "", **kwargs):
         replace_prefixes = {
             rel("apps/electron/app.package.json"): "package.json",
             rel("apps/electron/dist"): "dist",
-            "apps/desktop/packaging/appicon.png": "icon.png",
+            rel("apps/electron/appicon.png"): "icon.png",
             "apps/desktop/web/dist": "page",
             rel(pkg + "/" + name + "_bin"): "bin",
         },

@@ -81,11 +81,11 @@ describe("withMathFonts", () => {
 
   it("puts KaTeX's fonts in, as their WOFF2 alone, and nothing else", async () => {
     const asked: string[] = [];
-    const out = await withMathFonts(css, "wails://wails/index.html", async (url) => {
+    const out = await withMathFonts(css, "http://127.0.0.1:5123/index.html", async (url) => {
       asked.push(url);
       return new Uint8Array([119, 79, 70, 50]).buffer; // "wOF2"
     });
-    expect(asked).toEqual(["wails://wails/assets/KaTeX_Main-Regular.woff2", "wails://wails/KaTeX_Math-Italic.woff2"]);
+    expect(asked).toEqual(["http://127.0.0.1:5123/assets/KaTeX_Main-Regular.woff2", "http://127.0.0.1:5123/KaTeX_Math-Italic.woff2"]);
     expect(out).toContain('font-family: KaTeX_Main; src: url(data:font/woff2;base64,d09GMg==) format("woff2"); font-weight: normal; }');
     expect(out).toContain('font-family: "KaTeX_Math"; src: url(data:font/woff2;base64,d09GMg==) format("woff2"); }');
     expect(out).not.toContain("KaTeX_Main-Regular.woff\")");

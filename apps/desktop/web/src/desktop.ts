@@ -14,13 +14,13 @@
  * limitations under the License.
  */
 
-// The desktop app's own functions (Go methods bound by Wails), for what the
-// service can't do: its own status and installation, native dialogs, the
-// window's settings, and opening links outside the window. Wails injects
-// window.go at run time. Where there's no desktop app (Windows) the tray
-// serves the page to a browser and answers some of them itself, under
-// /host/ (apps/tray/internal/tray/host.go). In a plain browser
-// (development), and for what the tray doesn't do, they fall back to
+// The desktop app's own functions, for what the service can't do: its own
+// status and installation, native dialogs, the window's settings, and
+// opening links outside the window. The Electron app's window answers
+// those only a window can (window.blitzElectron, its preload), and the
+// program serving the page the rest, under /host/ (blitz-tray --serve,
+// pkg/pagehost; the Windows tray's page in a browser too). In a plain
+// browser (development), and for what neither does, they fall back to
 // stand-ins: settings in localStorage, links in a new tab.
 import { workspaces } from "./api";
 import { editorConfig, toEditor } from "./host";
@@ -70,7 +70,8 @@ export interface SandboxFix {
   commands?: string;
 }
 
-type Bound = {
+/** The app's methods, by name: the window's and its host's. */
+type AppMethods = {
   Version(): Promise<string>;
   ProgramExists(path: string): Promise<boolean>;
   ServiceStatus(): Promise<ServiceStatus>;
@@ -158,13 +159,6 @@ export interface DeepLink {
   prompt: string;
 }
 
-function bound(): Bound | undefined {
-  return (window as unknown as { go?: { main?: { App?: Bound } } }).go?.main?.App;
-}
-
-/** Whether the page runs inside the desktop app. */
-export const inApp = () => !!bound();
-
 /** The methods the program serving the page answers (the tray's), once asked. */
 let hostMethods: ReadonlySet<string> = new Set();
 
@@ -174,7 +168,7 @@ let hostMethods: ReadonlySet<string> = new Set();
  * nothing answers, and none are.
  */
 export async function detectHost(): Promise<void> {
-  if (inApp() || editorConfig()) return;
+  if (editorConfig()) return;
   try {
     const res = await fetch("/host/info", { headers: { Accept: "application/json" } });
     const info: unknown = res.ok ? await res.json() : undefined;
@@ -223,11 +217,11 @@ export const inElectron = () => !!electronWindow();
 const windowHas = (method: string) => !!electronWindow()?.methods.includes(method);
 
 /**
- * Whether the app's method can be called: in the Wails app, else by the
- * Electron app's window, else by the program serving the page (the
- * tray, or the Electron app's host).
+ * Whether the app's method can be called: by the Electron app's window,
+ * else by the program serving the page (the Electron app's host, or the
+ * tray).
  */
-export const canCall = (method: keyof Bound) => inApp() || windowHas(method) || hostMethods.has(method);
+export const canCall = (method: keyof AppMethods) => windowHas(method) || hostMethods.has(method);
 
 /**
  * What the Electron window said went wrong, without what Electron adds
@@ -238,8 +232,8 @@ export function windowError(e: unknown): string {
   return m.replace(/^Error invoking remote method '[^']*': (?:Error: )?/, "");
 }
 
-/** The app's methods outside the Wails app: the Electron window's, then the host's. */
-const served = new Proxy({} as Bound, {
+/** The app's methods: the Electron window's, then the host's. */
+const served = new Proxy({} as AppMethods, {
   get: (_, method: string) => {
     const w = electronWindow();
     if (w && windowHas(method)) return (...args: unknown[]) => w.call(method, ...args).catch((e: unknown) => Promise.reject(new Error(windowError(e))));
@@ -248,21 +242,16 @@ const served = new Proxy({} as Bound, {
   },
 });
 
-function app(): Bound {
-  const b = bound();
-  if (b) return b;
+function app(): AppMethods {
   if (inElectron() || hostMethods.size > 0) return served;
   throw new Error("not running inside the Blitz desktop app");
 }
 
 /**
- * Listens to the window's events (its menu, links, notifications): the
- * Wails app's runtime's, or the Electron window's; undefined in a
- * browser, which has none.
+ * Listens to the window's events (its menu, links, notifications, web
+ * previews): the Electron window's; undefined in a browser, which has none.
  */
 function windowEvents(): ((name: string, f: (arg: unknown) => void) => () => void) | undefined {
-  const rt = (window as unknown as { runtime?: WailsRuntime }).runtime;
-  if (inApp() && rt?.EventsOn) return (name, f) => rt.EventsOn(name, f);
   const w = electronWindow();
   if (w) return (name, f) => w.on(name, f);
   return undefined;
@@ -270,11 +259,10 @@ function windowEvents(): ((name: string, f: (arg: unknown) => void) => () => voi
 
 /**
  * Whether the window is macOS's translucent one, the page's glass drawn
- * over the desktop showing through (the Wails app's, or Electron's).
+ * over the desktop showing through (Electron's).
  */
 export function nativeGlass(): boolean {
   if (typeof window === "undefined" || typeof navigator === "undefined") return false;
-  if (inApp()) return /Mac/.test(navigator.userAgent);
   return !!electronWindow()?.nativeGlass;
 }
 
@@ -315,8 +303,8 @@ export const restartService = (pid: number) => app().RestartService(pid);
 /** Whether the file a running service started from is still there (true in a browser). */
 export const programExists = async (path: string) => (canCall("ProgramExists") && path ? app().ProgramExists(path) : true);
 
-/** Whether this is the Linux app (the Wails app's or the Electron app's window), which can draw without the graphics card. */
-export const isLinuxApp = () => (inApp() || inElectron()) && typeof navigator !== "undefined" && /Linux/.test(navigator.userAgent) && !/Android/.test(navigator.userAgent);
+/** Whether this is the Linux app (the Electron app's window), which can draw without the graphics card. */
+export const isLinuxApp = () => inElectron() && typeof navigator !== "undefined" && /Linux/.test(navigator.userAgent) && !/Android/.test(navigator.userAgent);
 
 /** The app's version ("dev" outside a release, and in a browser). */
 export const appVersion = async () => (canCall("Version") ? app().Version() : "dev");
@@ -340,7 +328,7 @@ export async function getPrefs(): Promise<Prefs> {
     }
   }
   const saved = normalizePrefs(await app().GetPrefs());
-  return inApp() ? saved : adoptBrowserPrefs(saved);
+  return adoptBrowserPrefs(saved);
 }
 
 /**
@@ -405,7 +393,7 @@ export const openDocument = (path: string) => app().OpenDocument(path);
 
 /**
  * Prints a page (whole HTML, pictures inline) to PDF with the window's web
- * engine, on A4 or Letter paper (in the Wails or Electron app: canCall("PrintPDF")).
+ * engine, on A4 or Letter paper (in the Electron app: canCall("PrintPDF")).
  */
 export async function printPDF(html: string, pageSize: "A4" | "Letter"): Promise<Uint8Array> {
   const b64 = await app().PrintPDF(html, pageSize); // Go's []byte comes as base64
@@ -500,24 +488,11 @@ export async function licenseText(which: LicenseText): Promise<string> {
   return app().License(which);
 }
 
-type WailsRuntime = {
-  EventsOn(name: string, f: (...args: unknown[]) => void): () => void;
-  WindowIsFullscreen(): Promise<boolean>;
-  WindowFullscreen(): void;
-  WindowUnfullscreen(): void;
-};
-
 /** Makes the window full screen, or puts it back (in a browser: the page). */
 export async function toggleFullscreen(): Promise<void> {
   const w = electronWindow();
   if (w && windowHas("ToggleFullscreen")) {
     await w.call("ToggleFullscreen");
-    return;
-  }
-  const rt = (window as unknown as { runtime?: WailsRuntime }).runtime;
-  if (rt?.WindowIsFullscreen) {
-    if (await rt.WindowIsFullscreen()) rt.WindowUnfullscreen();
-    else rt.WindowFullscreen();
     return;
   }
   if (document.fullscreenElement) await document.exitFullscreen();

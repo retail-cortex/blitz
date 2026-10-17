@@ -18,6 +18,6 @@ The CLI shows them with `blitz license` and `/license`, the service with `blitzd
 
 ## Used by
 
-apps/cli/internal/tui, apps/service, apps/desktop.
+apps/cli/internal/tui, apps/service, pkg/pagehost (the desktop app's licenses).
 
 Spec: [release readiness](../about/specs/spec_release_readiness_030.md).

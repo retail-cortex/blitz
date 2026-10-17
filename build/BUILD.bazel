@@ -14,8 +14,8 @@
 
 # Build rules and settings shared by every package: the Go protos'
 # Connect compiler, nogo's static analysis, and the version stamp. The
-# rules and macros sit beside this file (es_proto.bzl, macos.bzl,
-# pkg_config.bzl); the commands developers run are in //tools.
+# rules and macros sit beside this file (es_proto.bzl, macos.bzl); the
+# commands developers run are in //tools.
 
 load("@rules_go//go:def.bzl", "nogo")
 load("@rules_go//proto:compiler.bzl", "go_proto_compiler")

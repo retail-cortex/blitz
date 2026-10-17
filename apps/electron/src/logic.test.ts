@@ -41,10 +41,14 @@ import {
   previewId,
   previewStep,
   previewURL,
+  printCheckScript,
+  printLoadScript,
   printOptions,
+  printWait,
   text,
   theme,
   unsaved,
+  waitForPrint,
   windowMethods,
 } from "./logic";
 
@@ -265,4 +269,37 @@ describe("gpuOff", () => {
     { env: { BLITZ_GPU: "off" }, prefs: '{"gpu":"on"}', want: true },
     { env: {}, prefs: "not json", want: false },
   ])("$env $prefs", ({ env, prefs, want }) => expect(gpuOff(env, prefs)).toBe(want));
+});
+
+describe("printing waits for fonts and pictures", () => {
+  it("starts them loading, and says when they're ready", () => {
+    const loaded: string[] = [];
+    const font = { load: async () => void loaded.push("font") };
+    const img = { complete: false, decode: async () => void loaded.push("img") };
+    const doc = { fonts: Object.assign([font], { status: "loading" }), images: [img], body: { getBoundingClientRect: () => ({}) } };
+    const run = (code: string) => new Function("document", `return ${code};`)(doc);
+    expect(run(printLoadScript)).toBe(true);
+    expect(loaded).toEqual(["font", "img"]);
+    expect(run(printCheckScript)).toBe(false);
+    doc.fonts.status = "loaded";
+    img.complete = true;
+    expect(run(printCheckScript)).toBe(true);
+  });
+  it("waits until ready, or the deadline, then lets the page paint", async () => {
+    let t = 0;
+    const slept: number[] = [];
+    const sleep = async (ms: number) => void (slept.push(ms), (t += ms));
+    let asks = 0;
+    await waitForPrint(async () => ++asks === 3, sleep, () => t);
+    expect(asks).toBe(3);
+    expect(slept).toEqual([printWait.everyMs, printWait.everyMs, printWait.settleMs]);
+    t = 0;
+    slept.length = 0;
+    await waitForPrint(async () => false, sleep, () => t);
+    expect(t).toBe(printWait.deadlineMs + printWait.settleMs);
+    t = 0;
+    slept.length = 0;
+    await waitForPrint(() => Promise.reject(new Error("gone")), sleep, () => t);
+    expect(slept).toEqual([printWait.settleMs]);
+  });
 });

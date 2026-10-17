@@ -23,7 +23,6 @@ load("@npm//:defs.bzl", "npm_link_all_packages")
 # gazelle:resolve go github.com/retail-cortex/blitz/proto/blitz/v1 //proto/blitz/v1:blitzv1_go_proto
 # Not Go, or not this module.
 # gazelle:exclude apps/desktop/web
-# gazelle:exclude apps/desktop/packaging
 # gazelle:exclude apps/vscode
 # An IDE's own Bazel aspects (Build Server Protocol), which Bazel still
 # loads from the tree.
@@ -46,7 +45,6 @@ exports_files(
         "buf.yaml",
     ],
     visibility = [
-        "//apps/desktop/packaging:__pkg__",
         "//apps/electron:__subpackages__",
         "//apps/vscode:__pkg__",
         "//pkg/legal:__pkg__",
@@ -63,7 +61,6 @@ exports_files(
 #   bazel run //:desktop                 the desktop app (Electron), on this
 #                                        machine's service
 #   bazel run //:desktop-web             the desktop page in a browser (?fake)
-#   bazel run //:desktop-wails           the Wails app (no longer released)
 #   bazel run //:docs                    the docs site, http://localhost:1313
 #   bazel build //:deb                   the desktop .deb (Linux)
 #   bazel build //:pacman                the desktop's Arch Linux package
@@ -95,11 +92,6 @@ alias(
 )
 
 alias(
-    name = "desktop-wails",
-    actual = "//apps/desktop:blitz-desktop",
-)
-
-alias(
     name = "desktop-web",
     actual = "//apps/desktop/web:dev",
 )
@@ -107,6 +99,7 @@ alias(
 alias(
     name = "docs",
     actual = "//docs:serve",
+    tags = ["manual"],
 )
 
 alias(

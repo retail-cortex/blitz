@@ -78,7 +78,14 @@ platform_transition_filegroup(
 )
 
 exports_files(
-    ["app.package.json"],
+    [
+        "app.package.json",
+        # The app's icon (the brand's bolt on the app's blue; the PNG is
+        # rendered from the SVG): the window's, Blitz.exe's, the macOS
+        # app's and the Linux launcher's.
+        "appicon.png",
+        "appicon.svg",
+    ],
     visibility = ["//apps/electron:__subpackages__"],
 )
 

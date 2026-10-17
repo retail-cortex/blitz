@@ -3,7 +3,7 @@ title: Desktop app
 weight: 30
 ---
 
-Blitz's desktop app is a window onto the [service](service.md), laid out like an IDE: the workspace's files on the left, an editor in the middle, and the agent's chat on the right. It contains no engine. Every workspace, turn, approval, session and worker lives in the service, which keeps running, and keeps running workers, after the window closes. Source: `apps/desktop` (Go, Wails v2) and `apps/desktop/web` (React and TypeScript). Specs: [desktop](../about/specs/spec_desktop_024.md), [files](../about/specs/spec_files_029.md).
+Blitz's desktop app is a window onto the [service](service.md), laid out like an IDE: the workspace's files on the left, an editor in the middle, and the agent's chat on the right. It contains no engine. Every workspace, turn, approval, session and worker lives in the service, which keeps running, and keeps running workers, after the window closes. Source: `apps/electron` (Electron) and `apps/desktop/web` (React and TypeScript), with `blitz-tray --serve` as its host (`pkg/pagehost`). Specs: [desktop](../about/specs/spec_desktop_024.md), [Electron](../about/specs/spec_electron_038.md), [files](../about/specs/spec_files_029.md).
 
 ![The desktop app: the workspace's files, an editor, and the chat with an approval and the agent's task list](../../images/desktop.png)
 
@@ -56,13 +56,17 @@ Unzip `blitz_<version>_windows_amd64.zip` and run `blitz-tray.exe`. It starts th
 - **Slash commands** as in the terminal: type `/` in the chat for the same commands, in the same groups (`/help` lists them), from `/status`, `/goal` and `/loop` to `/permissions`, `/memory` and `/skills update`. Only `/clear`, `/exit`, `/paste`, `/cd` and `!<command>` are the terminal's alone.
 - **Settings** (⌘,; on macOS also **Blitz › Settings…** in the menu bar, beside **About Blitz**). Providers and API keys (kept in the OS keychain), one form for the provider you use, Gemini unless you choose another; the settings file itself (highlighted, completing tables, settings and values from the settings reference, with **Validate**, which marks problems at their lines and in the gutter, the setting at the cursor described beside the editor, every setting described on hover and in a searchable list), the service's log (by day, level and text; a past day's can be deleted), the service in the system tray, on Linux the OS sandbox (**Allow bubblewrap** when AppArmor stops it, with your password), **Install** for the `blitz` command (a link on your PATH, adding `~/.local/bin` to it in your shell's startup file when needed), appearance (System, Light or Dark; on macOS the translucent window follows the theme you choose, so Light stays light when macOS is dark), **Documents** (your own CSS for Markdown previews, for each theme, over the defaults) and the interface language (English, Spanish or Canadian French, from the same catalogs as the terminal). **About** shows the license and the third-party notices.
 
+![A web page in the editor, its page and console errors added to the next prompt](../../images/desktop-web-preview.png)
+
+![The Changes drawer: the session's diff beside the agent's summary, over the middle of the window](../../images/desktop-changes.png)
+
 Blitz starts simple: it shows what you need to work with an agent, with sensible defaults for the rest. **Settings › Appearance › Show advanced settings** reveals everything else: custom agents and scheduled workers, model and generation settings, permission rules, git actions and more. Turning it off again hides them without changing them.
 
 The window keeps only its own settings, in `~/.blitz/desktop.json`: its theme, layout, and the workspaces it knows. Everything else lives in the service, so the REPL and the app see the same sessions.
 
 ## How it talks to the service
 
-A web view can't open a Unix socket, so the app's Go side forwards the page's API calls, and only those, to the service's socket. The page uses Connect's generated TypeScript client against its own origin; responses stream through as they arrive, so turn events appear as they happen. The app opens no listener of its own, so nothing new is reachable from the network.
+A web page can't open a Unix socket, so the app starts a host beside it, `blitz-tray --serve`, which serves the page on a loopback address behind a one-time link and forwards the page's API calls, and only those, to the service's socket. The page uses Connect's generated TypeScript client against its own origin; responses stream through as they arrive, so turn events appear as they happen. The host listens only on `127.0.0.1` and stops when the window closes, so nothing new is reachable from the network.
 
 Model and tool output is rendered as React elements (Markdown with raw HTML skipped), never as HTML. Web links open in the system browser, and images in output are never fetched. Mermaid diagrams are drawn in Mermaid's strict mode, and their SVG is sanitized before it's shown.
 

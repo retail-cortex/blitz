@@ -38,20 +38,20 @@ libs='kind("go_library", %s)'
 # shellcheck disable=SC2059
 {
 	empty "front ends and the contract don't reach the engine" \
-		"$(printf "$libs" 'deps(kind("go_library", //apps/desktop/... + //pkg/api/... + //pkg/client/... + //pkg/socket/...))') intersect //pkg/engine/..."
+		"$(printf "$libs" 'deps(kind("go_library", //apps/tray/... + //apps/electron/... + //pkg/api/... + //pkg/client/... + //pkg/socket/...))') intersect //pkg/engine/..."
 	empty "shared packages don't reach the apps" \
 		"$(printf "$libs" 'deps(kind("go_library", //pkg/...))') intersect //apps/..."
 	empty "the CLI doesn't reach the engine (every workspace runs in blitzd)" \
 		"$(printf "$libs" 'deps(kind("go_library", //apps/cli/...))') intersect //pkg/engine/..."
 	empty "the CLI doesn't reach the other apps" \
-		"$(printf "$libs" 'deps(kind("go_library", //apps/cli/...))') intersect (//apps/service/... + //apps/desktop/... + //apps/tray/...)"
+		"$(printf "$libs" 'deps(kind("go_library", //apps/cli/...))') intersect (//apps/service/... + //apps/tray/... + //apps/electron/...)"
 	empty "the service doesn't reach the other apps" \
-		"$(printf "$libs" 'deps(kind("go_library", //apps/service/...) except //apps/service/servicetest/...)') intersect (//apps/cli/... + //apps/desktop/... + //apps/tray/...)"
-	empty "the desktop app doesn't reach the other apps" \
-		"$(printf "$libs" 'deps(kind("go_library", //apps/desktop/...))') intersect (//apps/cli/... + //apps/service/... + //apps/tray/...)"
+		"$(printf "$libs" 'deps(kind("go_library", //apps/service/...) except //apps/service/servicetest/...)') intersect (//apps/cli/... + //apps/tray/... + //apps/electron/...)"
+	empty "the Electron app's build tools don't reach the other apps" \
+		"$(printf "$libs" 'deps(kind("go_library", //apps/electron/...))') intersect (//apps/cli/... + //apps/service/... + //apps/tray/...)"
 	empty "the tray doesn't reach the other apps or the engine" \
-		"$(printf "$libs" 'deps(kind("go_library", //apps/tray/...))') intersect (//apps/cli/... + //apps/service/... + //apps/desktop/... + //pkg/engine/...)"
-	empty "the page's host doesn't reach the engine (it runs in the tray and the desktop app)" \
+		"$(printf "$libs" 'deps(kind("go_library", //apps/tray/...))') intersect (//apps/cli/... + //apps/service/... + //apps/electron/... + //pkg/engine/...)"
+	empty "the page's host doesn't reach the engine (it runs in the tray, the desktop app's host)" \
 		"$(printf "$libs" 'deps(kind("go_library", //pkg/pagehost/...))') intersect //pkg/engine/..."
 	empty "no engine library is public" \
 		'attr(visibility, "//visibility:public", kind("go_library", //pkg/engine/...))'

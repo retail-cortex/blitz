@@ -18,7 +18,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // Tests run without a DOM: the window is a plain object, with no desktop
-// app in it (no window.go), and fetch is the tray answering.
+// app in it (no window.blitzElectron), and fetch is the tray answering.
 const stubWindow = () => vi.stubGlobal("window", { location: { origin: "http://127.0.0.1:5000" } });
 stubWindow();
 

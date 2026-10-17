@@ -3,7 +3,7 @@ title: Building from source
 weight: 10
 ---
 
-Blitz builds with [Bazel](https://bazel.build) 9.2. Bazel downloads Go, Node, pnpm, buf, Hugo and every dependency at pinned versions, so the machine needs only Bazelisk (which picks the Bazel version in `.bazelversion`), git, and, for the desktop app, the platform's native toolkit.
+Blitz builds with [Bazel](https://bazel.build) 9.2. Bazel downloads Go, Node, pnpm, buf, Hugo and every dependency at pinned versions, so the machine needs only Bazelisk (which picks the Bazel version in `.bazelversion`), git, and, on macOS, Xcode (on Linux, bubblewrap for the shell sandbox).
 
 ## macOS
 
@@ -30,18 +30,18 @@ Tested on macOS 13 and later, Apple silicon and Intel.
 
 Tested on Ubuntu 24.04 (x86-64), Debian 13 and later, and Arch Linux.
 
-1. Install the build dependencies. The CLI and the service need only git, and the shell sandbox needs bubblewrap; `bazel build //...` and `bazel test //...` also build the Wails app (no longer released), which needs GTK and WebKitGTK 4.1:
+1. Install the build dependencies: git, a C compiler (the tray uses cgo), and bubblewrap for the shell sandbox. Everything else, the desktop app's Electron included, Bazel downloads.
 
    Ubuntu 24.04 or Debian 13 and later:
 
    ```bash
-   sudo apt-get install -y git bubblewrap pkg-config libgtk-3-dev libwebkit2gtk-4.1-dev
+   sudo apt-get install -y git build-essential bubblewrap
    ```
 
    Arch Linux:
 
    ```bash
-   sudo pacman -S --needed git bubblewrap pkg-config gtk3 webkit2gtk-4.1
+   sudo pacman -S --needed git base-devel bubblewrap
    ```
 
 2. Install Bazelisk from its [releases](https://github.com/bazelbuild/bazelisk/releases) as `bazel` on your `PATH`, for example:
@@ -60,7 +60,7 @@ Tested on Ubuntu 24.04 (x86-64), Debian 13 and later, and Arch Linux.
 
    The package is `bazel-bin/apps/electron/packaging/blitz-desktop_amd64.deb` (`_arm64` on ARM). To install it here or on another machine (Ubuntu 24.04, Debian 13 or later, the same architecture), give apt the file's path, with the `./`, or it looks for a package of that name in its repositories: `sudo apt install ./blitz-desktop_amd64.deb`. It installs the programs in `/usr/lib/blitz-desktop/`, with `blitz-desktop` on the `PATH` and a launcher in the applications menu. A local build's version is always `0.0.0` (only `--config=release` stamps one), so apt sees a newer build as the package already installed and does nothing: `sudo apt install --reinstall ./blitz-desktop_amd64.deb` (and `--allow-downgrades` over a release).
 
-   On Arch Linux, install the build's libraries with `sudo pacman -S --needed base-devel pkgconf gtk3 webkit2gtk-4.1 bubblewrap zstd` and build the Arch package instead: `bazel build //:pacman`. It's `bazel-bin/apps/electron/packaging/blitz-desktop.pkg.tar.zst`, which installs the same files, the notices in `/usr/share/licenses/blitz-desktop/`: `sudo pacman -U bazel-bin/apps/electron/packaging/blitz-desktop.pkg.tar.zst`. pacman reinstalls a package at the same version, so a local build (`0.0.0-1`) replaces another; over a release it asks before downgrading. `sudo pacman -R blitz-desktop` removes it.
+   On Arch Linux, build the Arch package instead: `bazel build //:pacman`. It's `bazel-bin/apps/electron/packaging/blitz-desktop.pkg.tar.zst`, which installs the same files, the notices in `/usr/share/licenses/blitz-desktop/`: `sudo pacman -U bazel-bin/apps/electron/packaging/blitz-desktop.pkg.tar.zst`. pacman reinstalls a package at the same version, so a local build (`0.0.0-1`) replaces another; over a release it asks before downgrading. `sudo pacman -R blitz-desktop` removes it.
 
 4. Ubuntu 24.04 restricts unprivileged user namespaces through AppArmor, which bubblewrap and gVisor need, and Blitz requires the sandbox on Linux. For bubblewrap alone, `blitz security fix-apparmor` installs an AppArmor profile (`/etc/apparmor.d/blitz-bwrap`) with your password; that's enough to use Blitz and run its sandbox tests. The gVisor tests need `runsc` to have them too: `sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0` lifts the restriction for every program until the next boot, as CI does.
 
@@ -102,5 +102,5 @@ This site is in `docs/`, built with Hugo through Bazel:
 
 ```bash
 bazel build //docs:site                 # the site, in bazel-bin/docs/site
-bazel run //docs:serve                  # a local preview at http://localhost:1313
+bazel run //:docs                       # a local preview at http://localhost:1313
 ```

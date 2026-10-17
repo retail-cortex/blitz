@@ -69,6 +69,9 @@ genrule(
 } > $@""",
 )
 
+# Manual: it copies the docs into the output tree, as :user_docs and
+# :markdown (the page's tests' copies) do, so //... can't build them
+# together. Build it on its own (docs.yml does).
 hugo_site(
     name = "site",
     config = "hugo.yaml",
@@ -88,12 +91,15 @@ hugo_site(
     # Hugo's errors (a broken link, say) are only printed when not quiet.
     quiet = False,
     static = glob(["static/**"]) + [":geekdoc_license"],
+    tags = ["manual"],
     theme = ":geekdoc",
 )
 
+# Manual, as :site is.
 hugo_serve(
     name = "serve",
     dep = [":site"],
+    tags = ["manual"],
     visibility = ["//:__pkg__"],
 )
 

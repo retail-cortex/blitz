@@ -47,10 +47,13 @@ import {
   previewId,
   previewStep,
   previewURL,
+  printCheckScript,
+  printLoadScript,
   printOptions,
   text,
   theme,
   unsaved,
+  waitForPrint,
   type DeepLink,
   type MenuLabels,
   type PageEvent,
@@ -122,7 +125,7 @@ async function start() {
     show: false,
     title: "Blitz",
     // macOS: the page draws the whole window, title bar included, over the
-    // desktop showing through (as the Wails app: hidden inset, translucent).
+    // desktop showing through (hidden inset, translucent).
     // Elsewhere the window has Blitz's icon (its taskbar button, its title
     // bar), as the Windows program does (winexe).
     ...(process.platform === "darwin"
@@ -243,8 +246,10 @@ async function printPDF(html: string, pageSize: unknown): Promise<string> {
     const loaded = printer.loadURL(pathToFileURL(file).href);
     const timeout = new Promise<never>((_, reject) => setTimeout(() => reject(new Error("printing took longer than a minute")), 60_000));
     await Promise.race([loaded, timeout]);
-    // The load event waits for pictures and style sheets; fonts may still be on their way.
-    await new Promise((r) => setTimeout(r, 300));
+    // Fonts and pictures may not be ready to draw yet: wait for them.
+    const wc = printer.webContents;
+    await wc.executeJavaScriptInIsolatedWorld(1001, [{ code: printLoadScript }]).catch(() => {});
+    await waitForPrint(() => wc.executeJavaScriptInIsolatedWorld(1001, [{ code: printCheckScript }]));
     const pdf = await Promise.race([printer.webContents.printToPDF(printOptions(pageSize)), timeout]);
     return pdf.toString("base64"); // as Go's []byte reaches the page
   } finally {

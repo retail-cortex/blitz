@@ -8,7 +8,7 @@ weight: 29
 | | |
 |---|---|
 | Status | Phase 1 implemented (2026-09-27, on `main`); phase 2 largely done; phase 3 detailed in [spec_visual_editor_037](spec_visual_editor_037.md) (draft) |
-| Source | `pkg/engine/files.go`, `pkg/engine/tools/userfs.go`, `proto/blitz/v1/file.proto`, `apps/service/internal/server/files.go`, `apps/desktop/unsaved.go`; the page's `src/files/` |
+| Source | `pkg/engine/files.go`, `pkg/engine/tools/userfs.go`, `proto/blitz/v1/file.proto`, `apps/service/internal/server/files.go`, `apps/electron/src/main.ts` (the close prompt; unsaved.go in the Wails app until v0.6.5); the page's `src/files/` |
 | Depends on | [spec_workspace_018](spec_workspace_018.md), [spec_service_021](spec_service_021.md), [spec_desktop_024](spec_desktop_024.md), [spec_filetools_006](spec_filetools_006.md) |
 
 ## 1. Purpose
@@ -67,7 +67,7 @@ Every request names its workspace (SVC-10) and a path relative to it.
 - **FIL-42** Completion without a language server: the language's keywords and snippets where CodeMirror has them, and words from the open files. Phase 3 adds a language server's ([spec_visual_editor_037](spec_visual_editor_037.md) VE-32).
 - **FIL-43** ⌘S saves (`WriteFile` with the version it loaded). `FILE_CHANGED` asks: **Overwrite**, **Reload** (discard yours), or cancel; phase 2 adds **Compare**.
 - **FIL-44** Binary and too-large files open as a note saying so, with the size. Blocked files open with a bar: "Blitz's agent can't read this file"; read-only roots likewise.
-- **FIL-45** Unsaved changes survive switching workspaces and views; closing a workspace (any way: its menu, the workspace dropdown, its details) or the window with unsaved changes asks first. The page tells the app how many files are unsaved (`SetUnsaved`, in the window's language), and the app's close handler asks with a native dialog.
+- **FIL-45** Unsaved changes survive switching workspaces and views; closing a workspace (any way: its menu, the workspace dropdown, its details) or the window with unsaved changes asks first. The page tells the app how many files are unsaved (`SetUnsaved`, in the window's language), and the app's close handler asks with a native dialog (the Electron window's, EL-14).
 
 ## 7. Phase 2 (outline)
 
