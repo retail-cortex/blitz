@@ -67,6 +67,7 @@ go_library(
         "//pkg/plugins",
         "//pkg/sandboxsetup",
         "//pkg/secrets",
+        "//pkg/selfupdate",
         "//pkg/skillreg",
         "//pkg/socket",
         "//pkg/textutil",
@@ -151,6 +152,7 @@ go_test(
         "//pkg/plugins",
         "//pkg/sandboxsetup",
         "//pkg/secrets",
+        "//pkg/selfupdate",
         "//pkg/skillreg",
         "//pkg/socket",
         "@com_github_modelcontextprotocol_go_sdk//mcp",
@@ -174,6 +176,7 @@ go_test(
         pure = "on",
         visibility = [
             "//apps/desktop/packaging:__pkg__",
+            "//apps/electron:__subpackages__",
             "//release:__pkg__",
         ],
         x_defs = {"main.version": "{STABLE_BLITZ_VERSION}"},

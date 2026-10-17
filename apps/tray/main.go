@@ -22,6 +22,10 @@
 // The service has no login item there either, so the tray starts it, and
 // its menu has Start at login for the tray.
 //
+// --serve serves the page without an icon, for the Electron app's window
+// (apps/electron), which starts it: it prints a link to the page and
+// stops when its standard input closes.
+//
 // Linux needs a StatusNotifierItem host: KDE and most desktops have one;
 // GNOME needs the AppIndicator extension (Ubuntu's is on by default).
 // Without one there's no icon, and the tray waits quietly.
@@ -29,6 +33,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"io/fs"
@@ -44,7 +49,9 @@ import (
 	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/i18n"
 	"github.com/retail-cortex/blitz/pkg/loginitem"
+	"github.com/retail-cortex/blitz/pkg/pagehost"
 	"github.com/retail-cortex/blitz/pkg/pageserver"
+	"github.com/retail-cortex/blitz/pkg/selfupdate"
 	"github.com/retail-cortex/blitz/pkg/socket"
 )
 
@@ -58,10 +65,21 @@ func main() {
 	install := flag.Bool("install", false, "Start the tray at login (and now), then exit")
 	uninstall := flag.Bool("uninstall", false, "Stop starting the tray at login, then exit")
 	showVersion := flag.Bool("version", false, "Print the version and exit")
+	serve := flag.Bool("serve", false, "Serve the desktop page for a window (the Electron app): print a link to it as a JSON line, a new one for each \"link\" line read, until standard input closes")
+	pageDir := flag.String("page", "", "With --serve: the built page's directory (default: the page built into the tray)")
+	applyUpdate := flag.Bool("apply-update", false, "Put a downloaded desktop app in place of the running one (the app's host runs this), then start it")
+	staged := flag.String("staged", "", "With --apply-update: the new app")
+	root := flag.String("root", "", "With --apply-update: the app it replaces")
+	relaunch := flag.String("relaunch", "", "With --apply-update: what starts the app again")
+	waitPID := flag.Int("wait-pid", 0, "With --apply-update: the app's process, waited for")
 	flag.Parse()
 	switch {
 	case *showVersion:
 		fmt.Println("blitz-tray", version)
+	case *serve:
+		exit(serveWindow(*pageDir))
+	case *applyUpdate:
+		exit(applyDownloaded(*staged, *root, *relaunch, *waitPID))
 	case *install:
 		exit(installTray())
 	case *uninstall:
@@ -132,10 +150,65 @@ func lock() bool {
 	return true
 }
 
-func onReady() {
+// serveWindow serves the page for the Electron app's window (--serve):
+// the page in dir, else the one built in; no icon, and no tray lock, so a
+// tray can show its icon beside it.
+func serveWindow(dir string) error {
+	p := page
+	if dir != "" {
+		d, err := tray.PageDir(dir)
+		if err != nil {
+			return err
+		}
+		p = d
+	}
+	if p == nil {
+		return errors.New("this blitz-tray has no page built in: pass --page")
+	}
 	sock := socket.DefaultSocket()
+	host := newHost(sock, newActions(sock))
+	// The Electron app updates itself through its host (pkg/pagehost).
+	host.Updates = &pagehost.Updater{
+		Version: version, HostExe: host.Tray,
+		Dir: config.ExpandHome("~/.blitz/updates"), CacheDir: config.ExpandHome("~/.blitz"),
+		Source: selfupdate.GitHub, Spawn: tray.Detached, GOOS: goruntime.GOOS, GOARCH: goruntime.GOARCH,
+	}
+	return tray.Serve(pageserver.Options{Page: p, Socket: sock, Host: host.Handler()}, os.Stdin, os.Stdout)
+}
+
+// applyDownloaded puts the staged app in place of root (--apply-update),
+// logging to ~/.blitz/logs/update.log.
+func applyDownloaded(staged, root, relaunch string, waitPID int) error {
+	dir := config.ExpandHome("~/.blitz/logs")
+	_ = os.MkdirAll(dir, 0o700)
+	log, err := os.OpenFile(filepath.Join(dir, "update.log"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
+	if err != nil {
+		return err
+	}
+	defer log.Close()
+	sock := socket.DefaultSocket()
+	acts := newActions(sock)
+	// The service starts again from the new app, at the same path.
+	acts.Beside = filepath.Join(root, "resources", "app", "bin")
+	if goruntime.GOOS == "darwin" {
+		acts.Beside = filepath.Join(root, "Contents", "Resources", "app", "bin")
+	}
+	err = tray.Update{
+		Staged: staged, Root: root, Relaunch: relaunch, WaitPID: waitPID, Actions: acts,
+		ServiceExe: func() string { return tray.ServiceExecutable(context.Background(), sock) },
+		Exited:     tray.Exited,
+		Log:        log,
+	}.Run()
+	if err != nil {
+		fmt.Fprintln(log, time.Now().Format(time.RFC3339), err)
+	}
+	return err
+}
+
+// newActions controls the service on sock.
+func newActions(sock string) tray.Actions {
 	status := func() tray.Status { return tray.Probe(context.Background(), sock, loginitem.Installed) }
-	acts := tray.Actions{
+	return tray.Actions{
 		Run:      tray.Detached,
 		Beside:   loginitem.Beside(),
 		Status:   status,
@@ -152,6 +225,19 @@ func onReady() {
 			}
 		},
 	}
+}
+
+// newHost answers the page's calls to its host, with acts for the
+// service.
+func newHost(sock string, acts tray.Actions) pagehost.Host {
+	exe, _ := program()
+	return pagehost.Host{Service: acts, Beside: acts.Beside, Version: version, Socket: sock, Tray: exe, Prefs: pagehost.NewPrefsStore(config.ExpandHome("~/.blitz/desktop.json"))}
+}
+
+func onReady() {
+	sock := socket.DefaultSocket()
+	acts := newActions(sock)
+	status := acts.Status
 
 	if page != nil {
 		acts.Page = pageLink(page, sock, acts)
@@ -293,9 +379,7 @@ func pageLink(page fs.FS, sock string, acts tray.Actions) func() (string, error)
 		mu.Lock()
 		defer mu.Unlock()
 		if srv == nil {
-			exe, _ := program()
-			host := tray.Host{Actions: acts, Version: version, Socket: sock, Tray: exe}
-			s, err := pageserver.Start(pageserver.Options{Page: page, Socket: sock, Host: host.Handler()})
+			s, err := pageserver.Start(pageserver.Options{Page: page, Socket: sock, Host: newHost(sock, acts).Handler()})
 			if err != nil {
 				return "", err
 			}

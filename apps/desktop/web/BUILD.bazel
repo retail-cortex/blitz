@@ -82,7 +82,7 @@ vite_bin.vite(
     # symlinks outside the sandbox; outside it, the copy is a real file.
     tags = ["no-sandbox"],
     visibility = [
-        "//apps/desktop:__pkg__",
+        "//apps/electron:__pkg__",
         "//apps/tray:__pkg__",
         "//apps/vscode:__pkg__",
     ],

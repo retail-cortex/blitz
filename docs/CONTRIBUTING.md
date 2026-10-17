@@ -10,7 +10,7 @@ Thanks for helping. This page is how to get a change into Blitz: setting up, the
 
 ## Set up
 
-You need git and [Bazelisk](https://github.com/bazelbuild/bazelisk) (as `bazel`), plus Xcode on macOS, or GTK and WebKitGTK on Linux for the desktop app. [Building from source](content/development/building.md) has the steps for each OS. Then:
+You need git and [Bazelisk](https://github.com/bazelbuild/bazelisk) (as `bazel`), plus Xcode on macOS, or bubblewrap on Linux for the shell sandbox. [Building from source](content/development/building.md) has the steps for each OS. Then:
 
 ```bash
 bazel build //...

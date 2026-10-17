@@ -57,6 +57,10 @@ type Turn struct {
 	// FetchGrants are URLs the agent may fetch in this turn without asking
 	// (the pages a web search handed it).
 	FetchGrants []string
+	// Context is what the user added from outside the workspace (a web
+	// page, a selection, a console's errors), given to the agent as content
+	// to read, not instructions.
+	Context []ContextBlock
 	// OnAccepted, if set, runs once the prompt has passed prompt_submit
 	// hooks and been recorded, just before it is sent.
 	OnAccepted func()
@@ -210,3 +214,15 @@ var ErrUnsupportedMedia = errors.New("the model can't take this file")
 // takes it (none runs, or it already collected the unread ones): send it
 // as the next prompt. The transcript has it already.
 var ErrSteerTooLate = errors.New("the turn has ended: send it as the next prompt")
+
+// ContextBlock is content the user added to a turn from elsewhere: the
+// desktop app's web preview.
+type ContextBlock struct {
+	// Kind is what it is: "web_page", "web_selection" or "console".
+	Kind string
+	// URL is where it came from, and Title the page's title.
+	URL, Title string
+	// HTML is the content as HTML, made into text for the agent; Text is
+	// used when it's empty.
+	HTML, Text string
+}

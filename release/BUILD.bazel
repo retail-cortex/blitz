@@ -21,10 +21,10 @@ load("@rules_shell//shell:sh_test.bzl", "sh_test")
 # expects beside it) for each platform, with blz (a link to blitz) where
 # links exist, and the README, the license, the notice and the
 # third-party notices. Windows's also has blitz-tray, which starts the
-# service and serves the desktop page (it has no desktop app). Built on any machine
+# service and serves the desktop page in a browser. Built on any machine
 # (pure Go); the release workflow adds the version to the file names,
 # checksums them and signs the checksums. The desktop app's packages are
-# //apps/desktop/packaging's.
+# //apps/electron/packaging's.
 
 _PLATFORMS = [
     ("darwin", "amd64"),

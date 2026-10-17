@@ -27,7 +27,7 @@ import type { Task, TurnEvent } from "./gen/blitz/v1/turn_pb";
  * the agent worked (steer), a stop hook's request (hook), or the go-ahead
  * for an approved plan (plan).
  */
-export type UserEntry = { kind: "user"; text: string; sub?: "steer" | "hook" | "plan" | "aside"; index?: number; images?: { url: string; name: string }[] };
+export type UserEntry = { kind: "user"; text: string; sub?: "steer" | "hook" | "plan" | "aside"; index?: number; images?: { url: string; name: string; web?: string }[] };
 
 /**
  * One item of the conversation as shown: a prompt, model text, a thought,

@@ -17,8 +17,13 @@ package tray
 import "syscall"
 
 // detached is how a program the tray starts runs: in a process group of
-// its own and with no console window, so it outlives the tray.
+// its own, so it outlives the tray, with a console that's never shown.
+// Not without a console (DETACHED_PROCESS): the service runs console
+// programs all the time (git, shells, language servers), and Windows
+// gives each one of a process without a console a window of its own,
+// which flashed open and shut every few seconds. With a hidden console
+// they share it. (A GUI program, such as Edge, ignores the flag.)
 func detached() *syscall.SysProcAttr {
-	const detachedProcess = 0x00000008
-	return &syscall.SysProcAttr{CreationFlags: syscall.CREATE_NEW_PROCESS_GROUP | detachedProcess}
+	const createNoWindow = 0x08000000
+	return &syscall.SysProcAttr{CreationFlags: syscall.CREATE_NEW_PROCESS_GROUP | createNoWindow, HideWindow: true}
 }

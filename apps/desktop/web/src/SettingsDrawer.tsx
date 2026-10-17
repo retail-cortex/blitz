@@ -40,7 +40,8 @@ import {
   mdiWeatherNight,
   mdiWhiteBalanceSunny,
 } from "@mdi/js";
-import { appVersion, cliStatus, installCLI, isLinuxApp, installService, reinstallCLI, restartService, serviceStatus, setTray, stopService, type CLIStatus, type ServiceStatus } from "./desktop";
+import { appVersion, canUpdate, checkUpdate, cliStatus, downloadUpdate, installCLI, isLinuxApp, installService, openURL, reinstallCLI, restartService, serviceStatus, setTray, stopService, type CLIStatus, type ServiceStatus, type UpdateStatus } from "./desktop";
+import { restart, shouldDownload, updateLine } from "./updates";
 import { SandboxFixResult, sandboxDetail, useSandboxFix } from "./SandboxNotice";
 import { configChanged, showLicense } from "./events";
 import { checkService, settleTimeout, type ServiceCheck, shownVersion, waitForService, withTimeout } from "./serviceVersion";
@@ -57,8 +58,9 @@ import { DocumentSettings } from "./files/DocumentSettings";
 import { SkillSettings } from "./SkillSettings";
 import { useAdvanced, useApp } from "./state";
 import { sectionShown, settingsSections, type SectionId } from "./simpleMode";
-import type { ThemePref } from "./theme";
-import { Button, Chip, Icon, IconButton, Segmented, Switch } from "./ui/controls";
+import { paletteOf, type ThemePref } from "./theme";
+import { darkThemes, lightThemes, type DarkThemeId, type LightThemeId } from "./themes";
+import { Button, Chip, Icon, IconButton, Segmented, Switch, useSnackbar } from "./ui/controls";
 import { Drawer } from "./ui/Drawer";
 import { LookFields, WorkspaceSettingsForm } from "./WorkspaceSettingsForm";
 import { useWorkspaceSettings } from "./workspaceSettings";
@@ -163,7 +165,8 @@ function Setting({ title, detail, children }: { title: string; detail?: string; 
 // advanced settings, theme, language and notifications; the rest have
 // sensible defaults and show with advanced settings.
 function Appearance() {
-  const { prefs, update } = useApp();
+  const { prefs, update, theme } = useApp();
+  const palette = paletteOf(theme, prefs.light_theme, prefs.dark_theme);
   return (
     <div className="stack" style={{ gap: 0 }}>
       <Setting title={t("desktop.settings.advanced")} detail={t("desktop.settings.advanced.detail")}>
@@ -180,6 +183,25 @@ function Appearance() {
             { value: "dark", label: t("desktop.settings.theme.dark"), icon: mdiWeatherNight },
           ]}
         />
+      </Setting>
+      {/* The colour theme for each, as VS Code's preferred light and dark themes. */}
+      <Setting title={t("desktop.settings.light_theme")} detail={t("desktop.settings.light_theme.detail")}>
+        <select className="select language-select" aria-label={t("desktop.settings.light_theme")} value={prefs.light_theme} onChange={(e) => update((p) => ({ ...p, light_theme: e.target.value as LightThemeId }))}>
+          {lightThemes.map((x) => (
+            <option key={x.id} value={x.id}>
+              {x.name}
+            </option>
+          ))}
+        </select>
+      </Setting>
+      <Setting title={t("desktop.settings.dark_theme")} detail={t("desktop.settings.dark_theme.detail")}>
+        <select className="select language-select" aria-label={t("desktop.settings.dark_theme")} value={prefs.dark_theme} onChange={(e) => update((p) => ({ ...p, dark_theme: e.target.value as DarkThemeId }))}>
+          {darkThemes.map((x) => (
+            <option key={x.id} value={x.id}>
+              {x.name}
+            </option>
+          ))}
+        </select>
       </Setting>
       <Setting title={t("desktop.settings.language")} detail={t("desktop.settings.language.detail")}>
         <select className="select language-select" aria-label={t("desktop.settings.language")} value={prefs.language} onChange={(e) => update((p) => ({ ...p, language: e.target.value }))}>
@@ -218,8 +240,8 @@ function Appearance() {
             ]}
           />
         </Setting>
-        <Setting title={t("desktop.settings.transparency")} detail={t("desktop.settings.transparency.detail")}>
-          <Switch label={t("desktop.settings.transparency")} checked={prefs.transparency === "on"} onChange={(on) => update((p) => ({ ...p, transparency: on ? "on" : "off" }))} />
+        <Setting title={t("desktop.settings.transparency")} detail={palette === "blitz" ? t("desktop.settings.transparency.detail") : t("desktop.settings.transparency.blitz_only")}>
+          <Switch label={t("desktop.settings.transparency")} disabled={palette !== "blitz"} checked={prefs.transparency === "on" && palette === "blitz"} onChange={(on) => update((p) => ({ ...p, transparency: on ? "on" : "off" }))} />
         </Setting>
         {isLinuxApp() && (
           <Setting title={t("desktop.settings.gpu")} detail={t("desktop.settings.gpu.detail")}>
@@ -514,6 +536,9 @@ function OSSandbox() {
  * one is (another build's link, or dead links left on a developer's
  * machine). Not in a browser.
  */
+/** The folder of a Windows or Unix path. */
+const folderOf = (p: string) => p.replace(/[\\/][^\\/]*$/, "");
+
 function CommandLine() {
   const [status, setStatus] = useState<CLIStatus | undefined | null>(null); // null: checking
   const [busy, setBusy] = useState(false);
@@ -523,13 +548,22 @@ function CommandLine() {
     cliStatus().then(setStatus, (e) => setError(String(e)));
   }, []);
   if (status === undefined) return null;
+  const byPath = status?.method === "path";
   const install = async (again: boolean) => {
     setBusy(true);
     setError("");
     try {
       const done = again ? await reinstallCLI() : await installCLI();
-      const linked = done.profile ? t("desktop.cli.installed_profile", { link: done.link, profile: done.profile }) : t("desktop.cli.installed", { link: done.link });
-      setNote(done.removed?.length ? `${linked} ${t("desktop.cli.removed", { links: done.removed.join(", ") })}` : linked);
+      // Windows puts the folder on PATH (no links): its own words.
+      const linked = byPath
+        ? done.profile
+          ? t("desktop.cli.installed_path", { folder: folderOf(done.link) })
+          : t("desktop.cli.found_path", { path: done.link })
+        : done.profile
+          ? t("desktop.cli.installed_profile", { link: done.link, profile: done.profile })
+          : t("desktop.cli.installed", { link: done.link });
+      const removed = done.removed?.length ? (byPath ? t("desktop.cli.removed_path", { folders: done.removed.join(", ") }) : t("desktop.cli.removed", { links: done.removed.join(", ") })) : "";
+      setNote(removed ? `${linked} ${removed}` : linked);
       setStatus(await cliStatus());
     } catch (e) {
       setError(String(e));
@@ -545,19 +579,76 @@ function CommandLine() {
         : status.installed
           ? t("desktop.cli.on_path", { path: status.on_path })
           : status.on_path
-            ? t("desktop.cli.other", { path: status.on_path })
-            : t("desktop.cli.detail");
+            ? t(byPath ? "desktop.cli.other_path" : "desktop.cli.other", { path: status.on_path })
+            : t(byPath ? "desktop.cli.detail_path" : "desktop.cli.detail");
   return (
     <>
       <Setting title={t("desktop.cli")} detail={detail}>
         {status && status.cli && (
-          <Button small variant="tonal" disabled={busy} onClick={() => void install(!!status.on_path)} title={status.on_path ? t("desktop.cli.reinstall_hint") : undefined}>
+          <Button small variant="tonal" disabled={busy} onClick={() => void install(!!status.on_path)} title={status.on_path ? t(byPath ? "desktop.cli.reinstall_hint_path" : "desktop.cli.reinstall_hint") : undefined}>
             {status.on_path ? t("desktop.service.reinstall") : t("desktop.service.install_short")}
           </Button>
         )}
       </Setting>
       {note && <p className="muted">{note}</p>}
       {error && <p className="error-text">{error}</p>}
+    </>
+  );
+}
+
+/**
+ * The app's update (spec_electron_038 EL-90): where it is, Check now,
+ * Download or Restart to update, the release's notes, and whether it's
+ * looked for when the app opens.
+ */
+function Updates() {
+  const { prefs, update } = useApp();
+  const snack = useSnackbar();
+  const [status, setStatus] = useState<UpdateStatus | null>(null);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    checkUpdate(false).then(setStatus, (e) => setStatus({ current: "", latest: "", available: false, can: true, downloading: false, ready: false, error: String(e) }));
+  }, []);
+  const act = async (f: () => Promise<UpdateStatus>) => {
+    setBusy(true);
+    try {
+      setStatus(await f());
+    } catch (e) {
+      snack(String(e instanceof Error ? e.message : e), { error: true });
+    } finally {
+      setBusy(false);
+    }
+  };
+  const line = updateLine(busy && status?.available && !status.ready ? { ...status, downloading: true } : status);
+  return (
+    <>
+      <Setting title={t("desktop.update.title")} detail={t(line.key, line.vars)}>
+        <div className="row wrap">
+          {status?.notes && status.available && (
+            <Button small onClick={() => void openURL(status.notes!)}>
+              {t("desktop.update.notes")}
+            </Button>
+          )}
+          {status?.ready ? (
+            <Button small variant="filled" onClick={() => void restart((m) => snack(m, { error: true }))}>
+              {t("desktop.update.restart")}
+            </Button>
+          ) : status && shouldDownload(status) ? (
+            <Button small variant="tonal" disabled={busy} onClick={() => void act(downloadUpdate)}>
+              {t("desktop.update.download")}
+            </Button>
+          ) : (
+            <Button small disabled={busy || !status?.can} onClick={() => void act(() => checkUpdate(true))}>
+              {t("desktop.update.check")}
+            </Button>
+          )}
+        </div>
+      </Setting>
+      {status?.can && (
+        <Setting title={t("desktop.update.auto")} detail={t("desktop.update.auto_detail")}>
+          <Switch label={t("desktop.update.auto")} checked={prefs.updates !== "off"} onChange={(on) => update((p) => ({ ...p, updates: on ? "auto" : "off" }))} />
+        </Setting>
+      )}
     </>
   );
 }
@@ -571,6 +662,7 @@ function About() {
     <div className="stack">
       <span className="t-title-lg">{t("desktop.brand")}</span>
       <span className="muted">{t("desktop.about.version", { version: shownVersion(version) })}</span>
+      {canUpdate() && <Updates />}
       <p className="muted">{t("desktop.about.body", { file: "~/.blitz/desktop.json" })}</p>
       <div className="row wrap">
         <span className="t-body-sm muted">{t("desktop.about.license")}</span>

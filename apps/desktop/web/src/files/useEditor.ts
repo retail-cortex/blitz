@@ -17,14 +17,16 @@
 // A workspace's open files (spec_files_029 §6): their tabs, and the
 // editor state of each, kept while the workspace is open so unsaved
 // changes survive switching views and workspaces.
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { EditorState } from "@codemirror/state";
 import { files } from "../api";
+import { onPreviewState, previewClose } from "../desktop";
 import { errorMeta, message, reason } from "../errors";
 import { fileState, languageSupport } from "./codemirror";
 import { languageExtension, languageSession, type LanguageHooks } from "./language";
 import { afterClosing } from "./tabMenu";
 import { nameOf } from "./tree";
+import { isWebPath, newWebId, webId, webPath, webTabName } from "./webTabs";
 
 /** An open file: its tab, the version its text is based on, and what the editor knows about it. */
 export interface Tab {
@@ -43,6 +45,17 @@ export interface Tab {
   disk?: "changed" | "deleted";
   /** A save was refused: the file changed since (its version now). */
   conflict?: string;
+  /** A web page's tab (path web:<id>, spec_electron_038 EL-100), not a file's. */
+  web?: WebPage;
+}
+
+/** A web tab's page, as its preview last said. */
+export interface WebPage {
+  url: string;
+  title: string;
+  loading: boolean;
+  back: boolean;
+  forward: boolean;
 }
 
 /** Where to put the cursor when a tab is shown next. */
@@ -80,6 +93,10 @@ export interface EditorModel {
   check: () => Promise<void>;
   /** A file was renamed or deleted in the shelf. */
   moved: (from: string, to: string | null) => void;
+  /** Opens a web page in a tab of its own (spec_electron_038 EL-100); returns the tab's path. */
+  openWeb: (url: string) => string;
+  /** What a web tab's preview said of its page. */
+  setWeb: (path: string, page: Partial<WebPage>) => void;
   /** Replaces a tab's text (the visual editor's Markdown), as an edit. */
   setText: (path: string, text: string) => void;
   /** The language servers' hooks, for the visual editor's code blocks (none: no servers). */
@@ -172,6 +189,7 @@ export function useEditor(dir: string, language?: Omit<LanguageHooks, "open">): 
     (paths: readonly string[]) => {
       const closed = new Set(paths);
       for (const path of closed) {
+        if (isWebPath(path)) void previewClose(webId(path));
         languageSession(dir).close(path);
         states.current.delete(path);
         saved.current.delete(path);
@@ -216,7 +234,7 @@ export function useEditor(dir: string, language?: Omit<LanguageHooks, "open">): 
   }, [load, patch]);
 
   const check = useCallback(async () => {
-    const open = tabsRef.current.filter((t) => !t.loading && !t.error);
+    const open = tabsRef.current.filter((t) => !t.loading && !t.error && !t.web);
     if (open.length === 0) return;
     let versions: Record<string, string>;
     try {
@@ -255,6 +273,28 @@ export function useEditor(dir: string, language?: Omit<LanguageHooks, "open">): 
     },
     [dir, patch],
   );
+
+  const openWeb = useCallback((url: string) => {
+    const path = webPath(newWebId());
+    setTabs((ts) => [...ts, { path, name: webTabName(url, ""), loading: false, version: "", size: 0, binary: false, tooLarge: false, agentRule: "", dirty: false, web: { url, title: "", loading: true, back: false, forward: false } }]);
+    setActive(path);
+    setTarget(null);
+    return path;
+  }, []);
+  const setWeb = useCallback(
+    (path: string, page: Partial<WebPage>) =>
+      setTabs((ts) =>
+        ts.map((t) => {
+          if (t.path !== path || !t.web) return t;
+          const web = { ...t.web, ...page };
+          return { ...t, web, name: webTabName(web.url, web.title) };
+        }),
+      ),
+    [],
+  );
+
+  // The window says when a web tab's page changes (its address, title, loading).
+  useEffect(() => onPreviewState(({ id, ...page }) => setWeb(webPath(id), page)), [setWeb]);
 
   // The visual editor's Markdown, as the smallest change to the tab's text,
   // so the source's history and the dirty dot follow it.
@@ -300,10 +340,12 @@ export function useEditor(dir: string, language?: Omit<LanguageHooks, "open">): 
       reload,
       check,
       moved,
+      openWeb,
+      setWeb,
       setText,
       language: languageHooks,
       dirtyCount: tabs.filter((t) => t.dirty).length,
     }),
-    [dir, tabs, active, target, wrap, open, close, closeMany, save, reload, check, moved, setText, languageHooks],
+    [dir, tabs, active, target, wrap, open, close, closeMany, save, reload, check, moved, openWeb, setWeb, setText, languageHooks],
   );
 }

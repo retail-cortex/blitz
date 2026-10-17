@@ -18,6 +18,6 @@ Where the service listens, and how to reach it. Source: [`pkg/socket`](https://g
 
 ## Used by
 
-apps/cli, apps/desktop, apps/service, apps/service/internal/daemon, pkg/client.
+apps/cli, apps/service, apps/service/internal/daemon, apps/tray, pkg/client, pkg/pagehost, pkg/pageserver.
 
 Spec: [service](../about/specs/spec_service_021.md).

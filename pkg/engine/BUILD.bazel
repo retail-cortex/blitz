@@ -18,6 +18,7 @@ load("@rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "engine",
     srcs = [
+        "added.go",
         "agentfiles.go",
         "backend.go",
         "changes.go",
@@ -149,6 +150,7 @@ go_test(
     name = "engine_test",
     size = "small",
     srcs = [
+        "added_test.go",
         "agentfiles_test.go",
         "backend_test.go",
         "changes_test.go",

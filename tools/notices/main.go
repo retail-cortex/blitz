@@ -49,19 +49,20 @@ func main() {
 		goroot   = flag.String("goroot", "", "the Go SDK, for the standard library's license")
 		apache   = flag.String("apache", "LICENSE", "the Apache License 2.0 text, printed once at the end")
 		fonts    = flag.String("fonts", "", "fonts bundled into the programs, as name=directory (with their license file); repeat with ;")
+		themes   = flag.String("themes", "", "colour themes the desktop app's are taken from, as fonts are given")
 		lock     = flag.String("npm-lock", "", "the pnpm-lock.yaml (the page's packages are what ships)")
 		store    = flag.String("npm-store", "", "rules_js's package store (node_modules/.aspect_rules_js)")
 		out      = flag.String("out", "THIRD_PARTY_NOTICES", "the file to write")
 		checkOld = flag.Bool("check", false, "fail if the file differs from what would be written, instead of writing it")
 	)
 	flag.Parse()
-	if err := run(*repos, *gomod, *goroot, *apache, *lock, *store, *fonts, *out, *checkOld); err != nil {
+	if err := run(*repos, *gomod, *goroot, *apache, *lock, *store, *fonts, *themes, *out, *checkOld); err != nil {
 		fmt.Fprintln(os.Stderr, "✗", err)
 		os.Exit(1)
 	}
 }
 
-func run(reposFile, gomod, goroot, apachePath, lock, store, fonts, out string, check bool) error {
+func run(reposFile, gomod, goroot, apachePath, lock, store, fonts, themes, out string, check bool) error {
 	versions, err := moduleVersions(gomod)
 	if err != nil {
 		return err
@@ -80,6 +81,8 @@ func run(reposFile, gomod, goroot, apachePath, lock, store, fonts, out string, c
 	npmComps, errs := npmPackages(lock, store)
 	problems = append(problems, errs...)
 	fontComps, errs := bundledFonts(fonts)
+	themeComps, themeErrs := bundledFonts(themes)
+	errs = append(errs, themeErrs...)
 	problems = append(problems, errs...)
 	if len(problems) > 0 {
 		sort.Strings(problems)
@@ -89,19 +92,19 @@ func run(reposFile, gomod, goroot, apachePath, lock, store, fonts, out string, c
 	if err != nil {
 		return err
 	}
-	text := render(goComps, npmComps, fontComps, string(apacheText))
+	text := render(goComps, npmComps, fontComps, themeComps, string(apacheText))
 	if check {
 		old, _ := os.ReadFile(out)
 		if !bytes.Equal(old, []byte(text)) {
 			return fmt.Errorf("%s is out of date: run tools/third_party_notices.sh", out)
 		}
-		fmt.Printf("✓ %s is current (%d Go modules, %d npm packages, %d fonts)\n", out, len(goComps), len(npmComps), len(fontComps))
+		fmt.Printf("✓ %s is current (%d Go modules, %d npm packages, %d fonts, %d themes)\n", out, len(goComps), len(npmComps), len(fontComps), len(themeComps))
 		return nil
 	}
 	if err := os.WriteFile(out, []byte(text), 0o644); err != nil {
 		return err
 	}
-	fmt.Printf("✓ wrote %s (%d Go modules, %d npm packages, %d fonts)\n", out, len(goComps), len(npmComps), len(fontComps))
+	fmt.Printf("✓ wrote %s (%d Go modules, %d npm packages, %d fonts, %d themes)\n", out, len(goComps), len(npmComps), len(fontComps), len(themeComps))
 	return nil
 }
 
@@ -479,7 +482,7 @@ func identify(text string) string {
 	return ""
 }
 
-func render(goComps, npmComps, fontComps []component, apache string) string {
+func render(goComps, npmComps, fontComps, themeComps []component, apache string) string {
 	var b strings.Builder
 	b.WriteString(`THIRD-PARTY NOTICES
 
@@ -520,6 +523,9 @@ and packages the programs link; don't edit it by hand.
 	section("npm packages bundled into the desktop app's window", npmComps)
 	if len(fontComps) > 0 {
 		section("Fonts bundled into blitz, blitzd and the desktop app (PDFs the agent exports)", fontComps)
+	}
+	if len(themeComps) > 0 {
+		section("Colour themes the desktop app's are taken from (their colours)", themeComps)
 	}
 	title := "Apache License 2.0"
 	fmt.Fprintf(&b, "%s\n%s\n\n%s\n", title, strings.Repeat("=", len(title)), strings.TrimSpace(apache))

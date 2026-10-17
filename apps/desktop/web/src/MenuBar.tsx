@@ -40,11 +40,13 @@ import {
   mdiRefresh,
   mdiSourceBranch,
   mdiSourceCommit,
+  mdiWebPlus,
 } from "@mdi/js";
 import { workers, workspaces } from "./api";
 import { inboxCounts, useRuns } from "./backgroundRuns";
 import type { ChangesSource } from "./Changes";
-import { openDocs, startSetup } from "./events";
+import { canPreview } from "./desktop";
+import { openDocs, openWeb, startSetup } from "./events";
 import { docSections } from "./docs/sections";
 import { fileName } from "./agentForm";
 import { AgentScope, type AgentFile } from "./gen/blitz/v1/workspace_pb";
@@ -321,6 +323,8 @@ export function MenuBar({
       <Menu className="menubar-menu" trigger={(p) => <MenuButton label={t("desktop.menu.help")} {...p} />} items={help} />
       <span className="spacer" />
       <ToolbarSearch onClick={onSearch} />
+      {/* A web page in the editor (EL-102), from anywhere: the editor's own button shows only with a file open. */}
+      {dir && canPreview() && <IconButton icon={mdiWebPlus} label={t("desktop.web.open")} onClick={() => openWeb({ dir, url: "" })} />}
       <IconButton icon={mdiCogOutline} label={t("desktop.menu.settings_hint")} onClick={() => onSettings("appearance")} />
       {inbox && <InboxDrawer list={runs} onClose={() => setInbox(false)} />}
     </nav>

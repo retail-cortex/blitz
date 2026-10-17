@@ -1,0 +1,8 @@
+{
+  "name": "blitz",
+  "productName": "Blitz",
+  "version": "0.0.0-trial",
+  "description": "Blitz, the coding agent: the Electron trial of the desktop app.",
+  "license": "Apache-2.0",
+  "main": "dist/main.js"
+}

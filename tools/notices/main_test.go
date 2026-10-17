@@ -89,8 +89,10 @@ func TestBundledFonts(t *testing.T) {
 	require.Len(t, problems, 1)
 	assert.Contains(t, problems[0], "Missing")
 
-	text := render(nil, nil, fonts, "APACHE")
+	text := render(nil, nil, fonts, fonts, "APACHE")
 	assert.Contains(t, text, "Fonts bundled into blitz")
 	assert.Contains(t, text, "SIL Open Font License")
-	assert.NotContains(t, render(nil, nil, nil, "APACHE"), "Fonts bundled")
+	assert.Contains(t, text, "Colour themes the desktop app's are taken from")
+	assert.NotContains(t, render(nil, nil, nil, nil, "APACHE"), "Fonts bundled")
+	assert.NotContains(t, render(nil, nil, nil, nil, "APACHE"), "Colour themes")
 }

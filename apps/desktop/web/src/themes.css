@@ -1,0 +1,147 @@
+/**
+ * Copyright 2026 Retail Cortex
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+/*
+ * The colour themes besides Blitz's own (m3.css, glass.css), chosen in
+ * Settings › Appearance for light and for dark, as VS Code's are: the page
+ * sets html[data-palette] to the one in effect. Each gives the M3 roles
+ * and the highlighting their colours; they're solid (no glass: theme.ts
+ * turns it off). Their colours are the themes' own, both MIT-licensed:
+ *   One Light: Atom's one-light-ui and one-light-syntax (GitHub Inc.).
+ *   One Dark Pro: Binaryify's OneDark-Pro for VS Code.
+ */
+
+/* One Light: ui-bg hsl(230 1% 98%), its levels and border; the syntax
+   theme's mono and hues; the accent hsl(230 100% 66%). */
+:root[data-palette="one-light"] {
+  --md-primary: #4078f2;
+  --md-on-primary: #ffffff;
+  --md-primary-container: #dfe6fd;
+  --md-on-primary-container: #1b2f78;
+  --md-secondary: #0184bc;
+  --md-secondary-container: #d6eef8;
+  --md-on-secondary-container: #003a55;
+  --md-tertiary: #50a14f;
+  --md-tertiary-container: #dcefdc;
+  --md-on-tertiary-container: #1d4a1c;
+  --md-error: #e45649;
+  --md-on-error: #ffffff;
+  --md-error-container: #fbe0dd;
+  --md-on-error-container: #6b130b;
+  --md-warning: #986801;
+  --md-warning-container: #f6e6c2;
+  --md-on-warning-container: #3d2a00;
+  --md-surface: #fafafa;
+  --md-surface-dim: #eaeaeb;
+  --md-surface-container-lowest: #ffffff;
+  --md-surface-container-low: #f5f5f5;
+  --md-surface-container: #f0f0f1;
+  --md-surface-container-high: #eaeaeb;
+  --md-surface-container-highest: #e2e2e3;
+  --md-on-surface: #383a42;
+  --md-on-surface-variant: #696c77;
+  --md-outline: #a0a1a7;
+  --md-outline-variant: #dbdbdc;
+  --md-inverse-surface: #383a42;
+  --md-inverse-on-surface: #fafafa;
+  --md-scrim: rgb(56 58 66 / 0.3);
+  --md-diff-add: #e3f1e3;
+  --md-diff-add-fg: #3a7a39;
+  --md-diff-del: #fbe5e3;
+  --md-diff-del-fg: #ca1243;
+  --md-code-bg: #f0f0f1;
+  --hl-keyword: #a626a4;
+  --hl-string: #50a14f;
+  --hl-number: #986801;
+  --hl-comment: #a0a1a7;
+  --hl-title: #4078f2;
+  --hl-type: #c18401;
+  --hl-attr: #986801;
+  --hl-meta: #0184bc;
+  --accent-a: #526fff;
+  --accent-b: #4078f2;
+  --on-accent: #ffffff;
+  --accent-tint: linear-gradient(135deg, color-mix(in srgb, var(--accent-a) 16%, #fff), color-mix(in srgb, var(--accent-b) 16%, #fff));
+  --accent-tint-solid: color-mix(in srgb, var(--accent-a) 16%, #fff);
+  --on-accent-tint: #1b2f78;
+  --accent-edge: color-mix(in srgb, var(--accent-a) 30%, transparent);
+  --accent-highlight: none;
+  --accent-shadow: 0 1px 2px rgb(56 58 66 / 0.18);
+  --accent-shadow-hover: 0 2px 6px rgb(56 58 66 / 0.22);
+  --focus-ring: color-mix(in srgb, var(--accent-a) 28%, transparent);
+}
+
+/* One Dark Pro: the editor #282c34, the side bar #21252b, inputs
+   #1d1f23, borders #181a1f and #3e4452, the text #abb2bf, the cursor's
+   blue and its token colours. */
+:root[data-palette="one-dark-pro"] {
+  --md-primary: #61afef;
+  --md-on-primary: #1d1f23;
+  --md-primary-container: #2c3e57;
+  --md-on-primary-container: #d6e8fb;
+  --md-secondary: #56b6c2;
+  --md-secondary-container: #24434a;
+  --md-on-secondary-container: #cdeef2;
+  --md-tertiary: #98c379;
+  --md-tertiary-container: #31402a;
+  --md-on-tertiary-container: #dcefcf;
+  --md-error: #e06c75;
+  --md-on-error: #1d1f23;
+  --md-error-container: #4f2a30;
+  --md-on-error-container: #f6d3d6;
+  --md-warning: #e5c07b;
+  --md-warning-container: #4a3f26;
+  --md-on-warning-container: #f6e8c9;
+  --md-surface: #282c34;
+  --md-surface-dim: #21252b;
+  --md-surface-container-lowest: #1d1f23;
+  --md-surface-container-low: #21252b;
+  --md-surface-container: #21252b;
+  --md-surface-container-high: #2c313a;
+  --md-surface-container-highest: #323842;
+  --md-on-surface: #abb2bf;
+  --md-on-surface-variant: #9da5b4;
+  --md-outline: #5c6370;
+  --md-outline-variant: #3e4452;
+  /* Snackbars: raised in the editor's own grey, as its notifications are. */
+  --md-inverse-surface: #3e4452;
+  --md-inverse-on-surface: #d7dae0;
+  --md-scrim: rgb(0 0 0 / 0.45);
+  --md-diff-add: rgb(152 195 121 / 0.16);
+  --md-diff-add-fg: #98c379;
+  --md-diff-del: rgb(224 108 117 / 0.16);
+  --md-diff-del-fg: #e06c75;
+  --md-code-bg: #21252b;
+  --hl-keyword: #c678dd;
+  --hl-string: #98c379;
+  --hl-number: #d19a66;
+  --hl-comment: #7f848e;
+  --hl-title: #61afef;
+  --hl-type: #e5c07b;
+  --hl-attr: #d19a66;
+  --hl-meta: #56b6c2;
+  --accent-a: #4d78cc;
+  --accent-b: #528bff;
+  --on-accent: #ffffff;
+  --accent-tint: linear-gradient(135deg, color-mix(in oklab, var(--accent-a) 28%, #282c34), color-mix(in oklab, var(--accent-b) 28%, #282c34));
+  --accent-tint-solid: color-mix(in oklab, var(--accent-a) 28%, #282c34);
+  --on-accent-tint: #d6e8fb;
+  --accent-edge: color-mix(in srgb, var(--accent-a) 40%, transparent);
+  --accent-highlight: none;
+  --accent-shadow: 0 1px 2px rgb(0 0 0 / 0.4);
+  --accent-shadow-hover: 0 2px 6px rgb(0 0 0 / 0.45);
+  --focus-ring: color-mix(in srgb, var(--accent-a) 35%, transparent);
+}

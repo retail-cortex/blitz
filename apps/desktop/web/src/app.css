@@ -16,9 +16,14 @@
 
 /* Layout and views. Colours and components come from m3.css. */
 
-/* The window's title bar is the page's: these areas drag the window. */
-.drag-region { --wails-draggable: drag; }
-.no-drag, .drag-region button, .drag-region input, .drag-region .menu-anchor { --wails-draggable: no-drag; }
+/* The window's title bar is the page's: these areas drag the window
+   (Electron's app-region); what can be clicked in them doesn't. */
+.drag-region { -webkit-app-region: drag; app-region: drag; }
+.no-drag, .drag-region button, .drag-region input, .drag-region .menu-anchor { -webkit-app-region: no-drag; app-region: no-drag; }
+/* Electron drags wherever a drag region is, even under what's drawn over
+   it: menus, dialogs, the palette, snackbars and the drawer, which can
+   reach over the title bar, mark themselves as not dragging. */
+:is(.menu, .context-menu, .dialog, .palette, .snackbar, .toast, .drawer, .cm-tooltip, [role="menu"], [role="dialog"], [role="listbox"]) { -webkit-app-region: no-drag; app-region: no-drag; }
 
 .splash, .welcome { position: relative; height: 100%; display: flex; align-items: center; justify-content: center; }
 .splash > .drag-region { position: absolute; inset: 0 0 auto 0; height: 40px; }
@@ -160,6 +165,7 @@
 .brand { display: flex; align-items: center; gap: 6px; flex: none; font: 500 20px/28px var(--md-font-display); }
 .workspace-body { position: relative; display: flex; flex: 1; min-height: 0; }
 .workspace-center { flex: 1; min-width: 160px; display: flex; flex-direction: column; min-height: 0; }
+.workspace-center[hidden] { display: none; }
 .chat-panel { position: relative; flex: none; display: flex; flex-direction: column; min-width: 320px; min-height: 0; border-left: 1px solid var(--md-outline-variant); background: var(--md-surface); }
 .panel-resize { position: absolute; left: -3px; top: 0; bottom: 0; width: 6px; cursor: col-resize; z-index: 5; }
 .panel-resize:hover, body.resizing .panel-resize { background: color-mix(in srgb, var(--md-primary) 30%, transparent); }
@@ -168,6 +174,17 @@ body.resizing { cursor: col-resize; -webkit-user-select: none; user-select: none
 body.resizing iframe, body.resizing .cm-editor { pointer-events: none; }
 .files-rail { flex: none; width: 48px; display: flex; flex-direction: column; align-items: center; gap: 4px; padding-top: 8px; border-right: 1px solid var(--md-outline-variant); background: var(--md-surface-container-low); }
 .chat-panel.center { flex: 1; min-width: 0; border-left: none; }
+.chat-panel[hidden] { display: none; }
+/* A pane shrunk behind the other (Workspace.tsx PaneRail): the Files
+   rail's look, on the side the pane was, saying it's there. */
+.pane-rail.right { border-right: none; border-left: 1px solid var(--md-outline-variant); }
+.pane-rail-button { display: flex; flex-direction: column; align-items: center; gap: 2px; width: 44px; padding: 8px 0; border: none; border-radius: var(--md-shape-sm); background: none; color: var(--md-on-surface-variant); cursor: pointer; }
+.pane-rail-button:hover { background: color-mix(in srgb, var(--md-on-surface) 8%, transparent); color: var(--md-on-surface); }
+.pane-rail-button:focus-visible { outline: 2px solid var(--focus-ring); }
+.pane-rail-icon { position: relative; display: flex; }
+.rail-badge { position: absolute; top: -6px; right: -10px; background: var(--md-primary); color: var(--md-on-primary); }
+.rail-dot { position: absolute; top: -2px; right: -4px; margin: 0; }
+.pane-rail-name { font-size: 11px; }
 
 /* The drawer (ui/Drawer.tsx): the views (Settings, Docs, Changes, History,
    an agent, Workers, the inbox, Licenses) slide down from under the top
@@ -904,6 +921,16 @@ code.file-link:hover { text-decoration-color: currentColor; }
 .find-bar input:focus { border-color: var(--accent-a); box-shadow: 0 0 0 3px var(--focus-ring); }
 .find-bar input:focus { border-color: var(--md-primary); }
 .find-bar .find-count { min-width: 80px; font-size: 12px; }
+/* A web page in the editor (spec_electron_038 EL-100): its toolbar, its
+   address (as the find bar's field), and the place the window's view of
+   the page fills. */
+.web-bar { gap: 4px; padding-left: 8px; }
+.web-address-form { flex: 1; min-width: 0; display: flex; }
+.web-address { flex: 1; min-width: 0; font: inherit; color: var(--md-on-surface); background: var(--md-surface); border: 1px solid var(--md-outline); border-radius: var(--field-radius); padding: 4px 8px; outline: none; }
+.web-address:focus { border-color: var(--md-primary); box-shadow: 0 0 0 3px var(--focus-ring); }
+.web-view { flex: 1; min-height: 0; background: var(--md-surface); }
+/* A file's body, kept (CodeMirror lives in it) while a web tab shows. */
+.editor-body[hidden] { display: none; }
 
 /* The commit dialog (CommitDialog.tsx): the drafted message, then the
    staged files, each with git's status letter in its colour. */

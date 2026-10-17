@@ -179,7 +179,7 @@ prefix = "fs"
   ```
   **Expected:** `Verified OK` and every file `OK`; the former repository's identity is rejected. (The items above were run against `rmcguinness/code_puppy`.)
 
-- [ ] Desktop release, before the Apple secrets are set: a tag's draft release has `Blitz_<v>_macos_universal.dmg`, `blitz-desktop_<v>_amd64.deb`, `blitz-desktop_<v>_arm64.deb` and a `.sigstore.json` for each, and the macOS job warns that it signed ad hoc. `cosign verify-blob --bundle <file>.sigstore.json` (identity flags as for `checksums.txt`) accepts each.
+- [ ] Desktop release, before the Apple secrets are set: a tag's draft release has `Blitz_<v>_macos_arm64.dmg`, `Blitz_<v>_macos_x64.dmg`, the Windows zip, the `.deb`s, Arch packages and tarballs for amd64 and arm64, and a `.sigstore.json` for each, and the macOS job warns that it signed ad hoc. `cosign verify-blob --bundle <file>.sigstore.json` (identity flags as for `checksums.txt`) accepts each.
 - [ ] Set the six secrets (spec_release_025 REL-22), tag again. **Expected:** the macOS job notarises (a few minutes) and `spctl` passes. Download the dmg in Safari, open it, drag Blitz to Applications, open it: no Gatekeeper warning, About shows the tag's version, and "Install and start the service" works (the bundled CLI is signed too). On an Intel Mac too, if one is at hand.
 - [ ] On Ubuntu 24.04: `sudo apt install ./blitz-desktop_<v>_amd64.deb`; Blitz is in the app launcher with its icon, opens, installs the service (`systemctl --user status blitz`), and `sudo apt remove blitz-desktop` removes it.
 
@@ -380,9 +380,9 @@ Set `fallback_models = ["anthropic/claude-sonnet-5"]` with a working Anthropic k
 
 ## 37. Desktop app
 
-- [ ] `bazel build //apps/desktop/packaging:Blitz.app`, copy it out of Bazel's output (`ditto "$(bazel cquery --output=files //apps/desktop/packaging:Blitz.app)" /tmp/Blitz.app`) and open it with no service running. **Expected:** it offers to install the service; accepting runs `blitz service install` and the app continues.
+- [ ] `bazel build //:mac-app`, copy it out of Bazel's output (`ditto "$(bazel cquery --output=files //:mac-app)" /tmp/Blitz.app`) and open it with no service running. **Expected:** it offers to install the service; accepting runs `blitz service install` and the app continues.
 - [ ] With the service running: open a workspace with "+". **Expected:** a tab named after the directory, showing the active agent and model (or why the model is unavailable).
-- [ ] 💲 A turn in the app: its text appears as it streams, not only at the end. **This checks that WebKit streams responses through Wails's asset server**, which the tests can't: they exercise the proxy over plain HTTP.
+- [ ] 💲 A turn in the app: its text appears as it streams, not only at the end. **This checks that responses stream through the host (`blitz-tray --serve`) into the Electron window**, which the tests can't: they exercise the proxy without a window.
 - [ ] 💲 A turn that edits a file with approvals on. **Expected:** the approval shows the diff; "Allow once" edits the file; "Deny" doesn't, and the agent says so.
 - [ ] 💲 While a turn runs, type a message and press Steer. **Expected:** "Queued for the agent", and the agent takes it into account at its next tool call; Stop ends the turn with "Interrupted."
 - [ ] 💲 An `ask_user_question`. **Expected:** the question with its options; the answer reaches the agent.
@@ -406,7 +406,7 @@ Set `fallback_models = ["anthropic/claude-sonnet-5"]` with a working Anthropic k
 - [ ] Commands: type `/` and pick with the arrows; `/cost`, `/context`, `/checkpoints`, `/help` show results; `/nope` is refused; `/usr/bin is odd` goes to the agent as text. 💲 `/btw what is this repo?` answers without adding to History's message count; `/search web connect-go interceptors` lists links then reads them; a workspace command (`.claude/commands/x.md`) runs. Cmd+K: "changes" + Enter shows Changes; a workspace name switches to it; "theme dark" switches the theme.
 - [ ] Settings › Appearance › Interface language: Español, then Français (Canada). **Expected:** the whole window changes at once — top bar, dropdown, composer, menus, settings, the "Open a workspace" folder dialog's title — and stays after a restart; System follows System Settings › Language & Region. Set `"language": "en-XA"` in `~/.blitz/desktop.json`: no plain English left except what the service or model wrote.
 - [ ] A narrower window (about 1000 px): the run settings float over the chat, the Files shelf floats over the editor and minimizes when a file opens, the view switcher shows icons.
-- [ ] On Linux with a graphics card (DSK-100): `bazel run //apps/desktop/gpucheck:gpu_check`, the window left uncovered. **Expected:** the app's WebKit environment shows what `linuxOptions` set (on NVIDIA with `gpu` on, `WEBKIT_FORCE_DMABUF_RENDERER=1 WEBKIT_DMABUF_RENDERER_FORCE_SHM=1`); with `gpu` on, WebKit's own report (`webkit://gpu`, in that environment) shows a policy other than `never`, GPU painting and the card's `GL_RENDERER`; off, the policy is `never`; idle, the window and WebKit's processes stay under 5% of a core in both, and the app keeps running. `-- --seconds 120 --max-cpu 2 on` changes the soak. Then open the app with `gpu` on and look at it: the whole window drawn, not blank or garbled. Seen 2026-10-14 on an RTX 4090 (driver 580, KDE Wayland, WebKitGTK 2.52.6): all pass, idle 0.6% of a core. Without the forced renderer WebKit draws in software on NVIDIA (policy `never`); forced without shared memory, the window dies with Wayland protocol error 71 (NVIDIA's EGL sets up explicit sync on GTK3's surface, which commits without an acquire point). Then close the window several times, by its close button, with `gpu` on. **Expected:** `coredumpctl list` shows no new `WebKitWebProcess` dump: the close ends the web process through WebKit first (`apps/desktop/internal/webprocess`). Seen 2026-10-15 on the same machine: before, 3 of 5 closes left a SIGSEGV dump in `libnvidia-eglcore`; after, none of 14.
+- [ ] On Linux with a graphics card (EL-07): `bazel run //:desktop` with **Use the graphics card** (Settings › Appearance) on, then off, restarting between. **Expected:** the whole window drawn either way, not blank or garbled; idle, the app's processes stay under 5% of a core; closing the window several times leaves no new dump in `coredumpctl list`. `BLITZ_GPU=off` turns it off too.
 
 ## 38. Parity features (ROADMAP item 25)
 
@@ -454,15 +454,15 @@ Set `fallback_models = ["anthropic/claude-sonnet-5"]` with a working Anthropic k
 ## 39. Monorepo and Bazel (spec_monorepo_028)
 
 - [ ] A fresh clone on a Mac with only Bazelisk (`brew install bazelisk`): `bazel test //...` passes, downloading Go, Node and the tools itself.
-- [ ] The same on Ubuntu 24.04 with `libgtk-3-dev libwebkit2gtk-4.1-dev pkg-config` (and bubblewrap): `bazel test //...` passes; `bazel build //apps/desktop/packaging:deb`, `sudo apt install ./…deb`, and Blitz opens from the app launcher.
-- [ ] The Bazel-built `Blitz.app` (section 37) opens, shows its version under Settings › About (`dev`, or the tag in a `--config=release` build), installs the service (its `blitzd` beside `blitz`), and works as before. On an Intel Mac too, if one is at hand.
-- [ ] `bazel run //apps/desktop/web:dev`, then http://localhost:5173/?fake: the page works without a service.
+- [ ] The same on Ubuntu 24.04 with git and bubblewrap: `bazel test //...` passes; `bazel build //:deb`, `sudo apt install ./…deb`, and Blitz opens from the app launcher.
+- [ ] The Bazel-built `Blitz.app` (section 37) opens, shows its version under Settings › About (`dev`, or the tag in a `--config=release` build), installs the service (the `blitzd` it carries), and works as before. On an Intel Mac too, if one is at hand.
+- [ ] `bazel run //:desktop-web`, then http://localhost:5173/?fake: the page works without a service.
 - [ ] Your editor with `GOPACKAGESDRIVER=<repo>/tools/gopackagesdriver.sh`: go to definition from `pkg/client` into `proto/blitz/v1` (generated) works; no false errors.
 - [ ] The first push of the branch: every CI step passes on both runners, and the reproducible job finds the archives identical.
 - [ ] The first tag after the move: the draft release has five archives with `blitz`, `blitzd` and `blz`, their SBOMs, `checksums.txt` and its bundle, the dmg and two .debs with bundles; `blitz --version` and `blitzd --version` show the tag.
 - [ ] Existing installs: after upgrading, a login item installed as `blitz serve` still starts the service (the hidden command runs `blitzd`); `blitz service install` rewrites it to `blitzd`.
-- [ ] With an older service running (or one whose program was deleted), `bazel run //apps/desktop:blitz-desktop`. **Expected:** a banner says the service is older (or its program is gone) with **Restart the service**; clicking it stops that service (its login item, else its process) and starts this build's `blitzd` at login, and the banner goes, with "The service restarted". Settings › Service shows both versions, the service program, and **Restart** and **Stop**: Stop stops it (the window then offers to start it), also for a `blitzd` started by hand in a terminal.
-- [ ] Open workspace from `bazel run //apps/desktop:blitz-desktop`: the folder dialog stays open until you choose; the terminal logs `open workspace dialog: "<dir>" …` (a dialog that closes on its own logs an empty answer after a moment).
+- [ ] With an older service running (or one whose program was deleted), `bazel run //:desktop`. **Expected:** a banner says the service is older (or its program is gone) with **Restart the service**; clicking it stops that service (its login item, else its process) and starts this build's `blitzd` at login, and the banner goes, with "The service restarted". Settings › Service shows both versions, the service program, and **Restart** and **Stop**: Stop stops it (the window then offers to start it), also for a `blitzd` started by hand in a terminal.
+- [ ] Open workspace from `bazel run //:desktop`: the folder dialog stays open until you choose.
 
 ## 40. API keys and per-workspace settings (spec_config_002 §6)
 

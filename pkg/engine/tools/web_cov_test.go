@@ -99,8 +99,7 @@ func TestDefaultTLSOtherTransport(t *testing.T) {
 	assert.Nil(t, defaultTLS())
 }
 
-// Empty globs match nothing; runs of blank lines become one.
+// Empty globs match nothing.
 func TestWebHelpersEdges(t *testing.T) {
 	assert.False(t, matchDomain([]string{" ", ""}, "example.com"))
-	assert.Equal(t, "a\n\nb", collapseBlankLines("a\n\n\n\nb"))
 }

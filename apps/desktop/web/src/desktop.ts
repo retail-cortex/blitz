@@ -14,13 +14,13 @@
  * limitations under the License.
  */
 
-// The desktop app's own functions (Go methods bound by Wails), for what the
-// service can't do: its own status and installation, native dialogs, the
-// window's settings, and opening links outside the window. Wails injects
-// window.go at run time. Where there's no desktop app (Windows) the tray
-// serves the page to a browser and answers some of them itself, under
-// /host/ (apps/tray/internal/tray/host.go). In a plain browser
-// (development), and for what the tray doesn't do, they fall back to
+// The desktop app's own functions, for what the service can't do: its own
+// status and installation, native dialogs, the window's settings, and
+// opening links outside the window. The Electron app's window answers
+// those only a window can (window.blitzElectron, its preload), and the
+// program serving the page the rest, under /host/ (blitz-tray --serve,
+// pkg/pagehost; the Windows tray's page in a browser too). In a plain
+// browser (development), and for what neither does, they fall back to
 // stand-ins: settings in localStorage, links in a new tab.
 import { workspaces } from "./api";
 import { editorConfig, toEditor } from "./host";
@@ -45,6 +45,7 @@ export interface CLIStatus {
   cli: string; // the blitz beside the app ("" if not found)
   on_path: string; // the blitz on the user's PATH ("" if none)
   installed: boolean; // on_path is the app's
+  method?: "link" | "path"; // a link on PATH (macOS, Linux), or its folder on the user's PATH (Windows)
 }
 
 /** What installing the CLI did: the link, and the startup file it added its directory to PATH in ("" if none). */
@@ -69,7 +70,8 @@ export interface SandboxFix {
   commands?: string;
 }
 
-type Bound = {
+/** The app's methods, by name: the window's and its host's. */
+type AppMethods = {
   Version(): Promise<string>;
   ProgramExists(path: string): Promise<boolean>;
   ServiceStatus(): Promise<ServiceStatus>;
@@ -97,20 +99,67 @@ type Bound = {
   License(which: string): Promise<string>;
   PendingLinks(): Promise<DeepLink[] | null>;
   PrintPDF(html: string, pageSize: string): Promise<string>;
+  CheckUpdate(force?: boolean): Promise<UpdateStatus>;
+  UpdateStatus(): Promise<UpdateStatus>;
+  DownloadUpdate(): Promise<UpdateStatus>;
+  ApplyUpdate(): Promise<void>;
+  Quit(): Promise<void>;
+  PreviewOpen(id: string, url: string): Promise<string>;
+  PreviewBounds(id: string, b: PreviewBounds): Promise<void>;
+  PreviewVisible(id: string, visible: boolean): Promise<void>;
+  PreviewNavigate(id: string, step: string): Promise<void>;
+  PreviewClose(id: string): Promise<void>;
+  PreviewCapture(id: string): Promise<string>;
+  PreviewContent(id: string): Promise<PreviewContent>;
+  PreviewConsole(id: string): Promise<string[]>;
+  PreviewPrintPDF(id: string, pageSize: string): Promise<string>;
+  PreviewPicture(id: string, url: string): Promise<{ ext: string; data: string }>;
 };
+
+/** Where a web preview goes in the window, in the page's pixels. */
+export interface PreviewBounds {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+/** A web preview's page, as the window says when it changes (preview:state). */
+export interface PreviewState {
+  id: string;
+  url: string;
+  title: string;
+  loading: boolean;
+  back: boolean;
+  forward: boolean;
+}
+
+/** What Add to chat reads from a web preview: its address, title, HTML and selection (HTML). */
+export interface PreviewContent {
+  url: string;
+  title: string;
+  html: string;
+  selection: string;
+}
+
+/** The desktop app's update, as its host says (spec_electron_038 EL-90). */
+export interface UpdateStatus {
+  current: string;
+  latest: string; // the latest release's tag
+  available: boolean;
+  can: boolean; // the app updates itself here (else reason says why not)
+  reason?: string;
+  downloading: boolean;
+  ready: boolean; // downloaded, checked, unpacked: restart to update
+  error?: string;
+  notes?: string; // the release's page
+}
 
 /** A blitz://open link: a folder to open, with a prompt to fill in. */
 export interface DeepLink {
   dir: string;
   prompt: string;
 }
-
-function bound(): Bound | undefined {
-  return (window as unknown as { go?: { main?: { App?: Bound } } }).go?.main?.App;
-}
-
-/** Whether the page runs inside the desktop app. */
-export const inApp = () => !!bound();
 
 /** The methods the program serving the page answers (the tray's), once asked. */
 let hostMethods: ReadonlySet<string> = new Set();
@@ -121,7 +170,7 @@ let hostMethods: ReadonlySet<string> = new Set();
  * nothing answers, and none are.
  */
 export async function detectHost(): Promise<void> {
-  if (inApp() || editorConfig()) return;
+  if (editorConfig()) return;
   try {
     const res = await fetch("/host/info", { headers: { Accept: "application/json" } });
     const info: unknown = res.ok ? await res.json() : undefined;
@@ -147,22 +196,76 @@ async function hostCall(method: string, args: unknown[]): Promise<unknown> {
   return body;
 }
 
-/** Whether the app's method can be called: in the app, or on the tray that serves the page. */
-export const canCall = (method: keyof Bound) => inApp() || hostMethods.has(method);
+/**
+ * What the Electron app's window answers (window.blitzElectron, from its
+ * preload, spec_electron_038): the calls only a window can make, and its
+ * events. The rest of the app's methods are its host's (/host/).
+ */
+type ElectronWindow = {
+  methods: readonly string[];
+  nativeGlass: boolean;
+  call(method: string, ...args: unknown[]): Promise<unknown>;
+  on(event: string, f: (arg: unknown) => void): () => void;
+};
 
-/** The tray's methods, as the app's. */
-const host = new Proxy({} as Bound, {
-  get: (_, method: string) =>
-    hostMethods.has(method)
-      ? (...args: unknown[]) => hostCall(method, args)
-      : () => Promise.reject(new Error("not running inside the Blitz desktop app")),
+function electronWindow(): ElectronWindow | undefined {
+  return (window as unknown as { blitzElectron?: ElectronWindow }).blitzElectron;
+}
+
+/** Whether the page runs in the Electron app's window. */
+export const inElectron = () => !!electronWindow();
+
+/** Whether the Electron app's window answers method. */
+const windowHas = (method: string) => !!electronWindow()?.methods.includes(method);
+
+/**
+ * Whether the app's method can be called: by the Electron app's window,
+ * else by the program serving the page (the Electron app's host, or the
+ * tray).
+ */
+export const canCall = (method: keyof AppMethods) => windowHas(method) || hostMethods.has(method);
+
+/**
+ * What the Electron window said went wrong, without what Electron adds
+ * ("Error invoking remote method 'blitz:call': Error: ").
+ */
+export function windowError(e: unknown): string {
+  const m = e instanceof Error ? e.message : String(e);
+  return m.replace(/^Error invoking remote method '[^']*': (?:Error: )?/, "");
+}
+
+/** The app's methods: the Electron window's, then the host's. */
+const served = new Proxy({} as AppMethods, {
+  get: (_, method: string) => {
+    const w = electronWindow();
+    if (w && windowHas(method)) return (...args: unknown[]) => w.call(method, ...args).catch((e: unknown) => Promise.reject(new Error(windowError(e))));
+    if (hostMethods.has(method)) return (...args: unknown[]) => hostCall(method, args);
+    return () => Promise.reject(new Error("not running inside the Blitz desktop app"));
+  },
 });
 
-function app(): Bound {
-  const b = bound();
-  if (b) return b;
-  if (hostMethods.size > 0) return host;
+function app(): AppMethods {
+  if (inElectron() || hostMethods.size > 0) return served;
   throw new Error("not running inside the Blitz desktop app");
+}
+
+/**
+ * Listens to the window's events (its menu, links, notifications, web
+ * previews): the Electron window's; undefined in a browser, which has none.
+ */
+function windowEvents(): ((name: string, f: (arg: unknown) => void) => () => void) | undefined {
+  const w = electronWindow();
+  if (w) return (name, f) => w.on(name, f);
+  return undefined;
+}
+
+/**
+ * Whether the window is macOS's translucent one, the page's glass drawn
+ * over the desktop showing through (Electron's).
+ */
+export function nativeGlass(): boolean {
+  if (typeof window === "undefined" || typeof navigator === "undefined") return false;
+  return !!electronWindow()?.nativeGlass;
 }
 
 const devPrefsKey = "blitz.desktop.prefs";
@@ -202,8 +305,8 @@ export const restartService = (pid: number) => app().RestartService(pid);
 /** Whether the file a running service started from is still there (true in a browser). */
 export const programExists = async (path: string) => (canCall("ProgramExists") && path ? app().ProgramExists(path) : true);
 
-/** Whether this is the Linux app (its window draws through WebKitGTK). */
-export const isLinuxApp = () => inApp() && typeof navigator !== "undefined" && /Linux/.test(navigator.userAgent) && !/Android/.test(navigator.userAgent);
+/** Whether this is the Linux app (the Electron app's window), which can draw without the graphics card. */
+export const isLinuxApp = () => inElectron() && typeof navigator !== "undefined" && /Linux/.test(navigator.userAgent) && !/Android/.test(navigator.userAgent);
 
 /** The app's version ("dev" outside a release, and in a browser). */
 export const appVersion = async () => (canCall("Version") ? app().Version() : "dev");
@@ -213,25 +316,58 @@ export const appVersion = async () => (canCall("Version") ? app().Version() : "d
  * a prompt); "" when cancelled.
  */
 export async function chooseWorkspace(): Promise<string> {
-  if (!inApp()) return window.prompt(t("desktop.choose.prompt")) ?? "";
+  if (!canCall("ChooseWorkspace")) return window.prompt(t("desktop.choose.prompt")) ?? "";
   return app().ChooseWorkspace(t("desktop.choose.title"));
 }
 
 /** The window's saved preferences, normalized (in a browser, from localStorage). */
 export async function getPrefs(): Promise<Prefs> {
-  if (!inApp()) {
+  if (!canCall("GetPrefs")) {
     try {
       return normalizePrefs(JSON.parse(localStorage.getItem(devPrefsKey) ?? "{}"));
     } catch {
       return defaultPrefs;
     }
   }
-  return normalizePrefs(await app().GetPrefs());
+  const saved = normalizePrefs(await app().GetPrefs());
+  return adoptBrowserPrefs(saved);
+}
+
+/**
+ * The Windows tray's page kept its preferences in the browser's storage
+ * before its host kept them (in desktop.json, as the app does): the first
+ * time, when the host has no workspaces and the browser does, the
+ * browser's move to the host, and the browser's copy goes.
+ */
+async function adoptBrowserPrefs(saved: Prefs): Promise<Prefs> {
+  let old: Prefs | undefined;
+  try {
+    const raw = localStorage.getItem(devPrefsKey);
+    if (raw !== null) old = normalizePrefs(JSON.parse(raw));
+  } catch {
+    return saved; // no storage, or nothing readable in it
+  }
+  if (!old) return saved;
+  if (saved.workspaces.length > 0 || old.workspaces.length === 0) {
+    try {
+      localStorage.removeItem(devPrefsKey);
+    } catch {
+      // nothing to forget
+    }
+    return saved;
+  }
+  const moved = normalizePrefs(await app().SavePrefs(old));
+  try {
+    localStorage.removeItem(devPrefsKey);
+  } catch {
+    // kept: the host has them now, and is asked first
+  }
+  return moved;
 }
 
 /** Saves the preferences and returns them as saved (normalized). */
 export async function savePrefs(p: Prefs): Promise<Prefs> {
-  if (!inApp()) {
+  if (!canCall("SavePrefs")) {
     try {
       localStorage.setItem(devPrefsKey, JSON.stringify(p));
     } catch {
@@ -244,7 +380,7 @@ export async function savePrefs(p: Prefs): Promise<Prefs> {
 
 /** Opens a link from model output in the system browser (never the window). */
 export async function openURL(url: string): Promise<void> {
-  if (!inApp()) {
+  if (!canCall("OpenURL")) {
     window.open(url, "_blank", "noopener,noreferrer");
     return;
   }
@@ -258,8 +394,8 @@ export const openFolder = (dir: string) => app().OpenFolder(dir);
 export const openDocument = (path: string) => app().OpenDocument(path);
 
 /**
- * Prints a page (whole HTML, pictures inline) to PDF with the system's web
- * engine, on A4 or Letter paper (only in the app).
+ * Prints a page (whole HTML, pictures inline) to PDF with the window's web
+ * engine, on A4 or Letter paper (in the Electron app: canCall("PrintPDF")).
  */
 export async function printPDF(html: string, pageSize: "A4" | "Letter"): Promise<Uint8Array> {
   const b64 = await app().PrintPDF(html, pageSize); // Go's []byte comes as base64
@@ -279,7 +415,7 @@ export function fileManager(): Promise<string | null> {
 
 /** Shows a system notification; a click brings the window to dir. */
 export async function notifyNative(title: string, body: string, dir: string): Promise<void> {
-  if (inApp()) return app().Notify(title, body, dir);
+  if (canCall("Notify")) return app().Notify(title, body, dir);
   // Inside an editor: the editor's own.
   if (editorConfig()) return toEditor({ type: "notify", title, body });
   // A browser (development): the web's own notifications.
@@ -293,7 +429,7 @@ export async function notifyNative(title: string, body: string, dir: string): Pr
  * window asks first (message "" when there are none).
  */
 export function setUnsaved(message: string, quit: string, cancel: string) {
-  if (inApp()) app().SetUnsaved({ message, quit, cancel }).catch(() => {});
+  if (canCall("SetUnsaved")) app().SetUnsaved({ message, quit, cancel }).catch(() => {});
 }
 
 /**
@@ -302,7 +438,7 @@ export function setUnsaved(message: string, quit: string, cancel: string) {
  * again (nothing in a browser).
  */
 export function setAppearance(theme: "system" | "light" | "dark") {
-  if (inApp()) app().SetAppearance(theme).catch(() => {});
+  if (canCall("SetAppearance")) app().SetAppearance(theme).catch(() => {});
 }
 
 /** The macOS app menu's words, in the window's language. */
@@ -310,14 +446,35 @@ export type AppMenuLabels = { about: string; settings: string; hide: string; hid
 
 /** Relabels the macOS app menu (DSK-101) in the window's language; nothing elsewhere. */
 export function setAppMenu(l: AppMenuLabels) {
-  if (inApp()) app().SetMenu(l).catch(() => {});
+  if (canCall("SetMenu")) app().SetMenu(l).catch(() => {});
+}
+
+/** Whether the app updates itself (the Electron app's host answers). */
+export const canUpdate = () => canCall("CheckUpdate");
+/**
+ * Where the update is: the host asks for the latest release only five days
+ * after it last did, unless force (Check now).
+ */
+export const checkUpdate = (force = false) => app().CheckUpdate(force);
+/** Where the update is, without asking for the latest release again (a download, followed). */
+export const updateStatus = () => app().UpdateStatus();
+/** Downloads, checks and unpacks the latest release; resolves when it's done. */
+export const downloadUpdate = () => app().DownloadUpdate();
+/**
+ * Restarts into the downloaded update: the host starts the swap, which
+ * waits for the app to quit (asking first about unsaved changes, as
+ * quitting does), then quits it.
+ */
+export async function restartToUpdate(): Promise<void> {
+  await app().ApplyUpdate();
+  await app().Quit();
 }
 
 /** Calls f when the app menu's About Blitz or Settings… is chosen (macOS). */
 export function onAppMenu(f: (item: "about" | "settings") => void): () => void {
-  const rt = (window as unknown as { runtime?: WailsRuntime }).runtime;
-  if (!inApp() || !rt?.EventsOn) return () => {};
-  const offs = [rt.EventsOn("menu:about", () => f("about")), rt.EventsOn("menu:settings", () => f("settings"))];
+  const on = windowEvents();
+  if (!on) return () => {};
+  const offs = [on("menu:about", () => f("about")), on("menu:settings", () => f("settings"))];
   return () => offs.forEach((off) => off());
 }
 
@@ -333,19 +490,11 @@ export async function licenseText(which: LicenseText): Promise<string> {
   return app().License(which);
 }
 
-type WailsRuntime = {
-  EventsOn(name: string, f: (...args: unknown[]) => void): () => void;
-  WindowIsFullscreen(): Promise<boolean>;
-  WindowFullscreen(): void;
-  WindowUnfullscreen(): void;
-};
-
 /** Makes the window full screen, or puts it back (in a browser: the page). */
 export async function toggleFullscreen(): Promise<void> {
-  const rt = (window as unknown as { runtime?: WailsRuntime }).runtime;
-  if (rt?.WindowIsFullscreen) {
-    if (await rt.WindowIsFullscreen()) rt.WindowUnfullscreen();
-    else rt.WindowFullscreen();
+  const w = electronWindow();
+  if (w && windowHas("ToggleFullscreen")) {
+    await w.call("ToggleFullscreen");
     return;
   }
   if (document.fullscreenElement) await document.exitFullscreen();
@@ -357,9 +506,9 @@ export async function toggleFullscreen(): Promise<void> {
  * each as it comes.
  */
 export function onDeepLink(f: (link: DeepLink) => void): () => void {
-  const rt = (window as unknown as { runtime?: WailsRuntime }).runtime;
-  if (!inApp() || !rt?.EventsOn) return () => {};
-  const off = rt.EventsOn("deeplink:open", (link) => {
+  const on = windowEvents();
+  if (!on || !canCall("PendingLinks")) return () => {};
+  const off = on("deeplink:open", (link) => {
     if (link && typeof link === "object" && typeof (link as DeepLink).dir === "string") f(link as DeepLink);
   });
   app()
@@ -371,9 +520,57 @@ export function onDeepLink(f: (link: DeepLink) => void): () => void {
 
 /** Calls f with the workspace a clicked notification is about. */
 export function onNotificationOpen(f: (dir: string) => void): () => void {
-  const rt = (window as unknown as { runtime?: WailsRuntime }).runtime;
-  if (!rt?.EventsOn) return () => {};
-  return rt.EventsOn("notification:open", (dir) => {
+  const on = windowEvents();
+  if (!on) return () => {};
+  return on("notification:open", (dir) => {
     if (typeof dir === "string") f(dir);
+  });
+}
+
+/**
+ * Whether web pages can open in the editor (spec_electron_038 EL-100):
+ * only the Electron app's window can show them.
+ */
+export const canPreview = () => windowHas("PreviewOpen");
+/**
+ * Opens web preview id at an address (a bare host gets http:// or
+ * https://), or points it there when it's open; resolves with the address.
+ */
+export const previewOpen = (id: string, url: string) => app().PreviewOpen(id, url);
+/** Places web preview id over the page's placeholder. */
+export const previewBounds = (id: string, b: PreviewBounds) => (canPreview() ? app().PreviewBounds(id, b).catch(() => {}) : Promise.resolve());
+/** Shows or hides web preview id (hidden under a menu, a dialog, a drawer, or another tab). */
+export const previewVisible = (id: string, visible: boolean) => (canPreview() ? app().PreviewVisible(id, visible).catch(() => {}) : Promise.resolve());
+/** Moves web preview id: back, forward, reload or stop (an address opens with previewOpen). */
+export const previewNavigate = (id: string, step: "back" | "forward" | "reload" | "stop") => app().PreviewNavigate(id, step);
+/** Closes web preview id. */
+export const previewClose = (id: string) => (canPreview() ? app().PreviewClose(id).catch(() => {}) : Promise.resolve());
+/** Web preview id's page as a PNG. */
+export async function previewCapture(id: string): Promise<Uint8Array> {
+  const b64 = await app().PreviewCapture(id);
+  return Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+}
+/** Web preview id's address, title, HTML and selection. */
+export const previewContent = (id: string) => app().PreviewContent(id);
+/** The errors web preview id's console has shown since it opened, the latest last. */
+export const previewConsole = (id: string) => app().PreviewConsole(id);
+/** A picture of web preview id's page, downloaded through its session: its extension and bytes. */
+export async function previewPicture(id: string, url: string): Promise<{ ext: string; data: Uint8Array }> {
+  const p = await app().PreviewPicture(id, url);
+  return { ext: p.ext, data: Uint8Array.from(atob(p.data), (c) => c.charCodeAt(0)) };
+}
+/** Web preview id's page printed to PDF, on A4 or Letter paper. */
+export async function previewPrintPDF(id: string, pageSize: "A4" | "Letter"): Promise<Uint8Array> {
+  const b64 = await app().PreviewPrintPDF(id, pageSize);
+  return Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+}
+
+/** Calls f when a web preview's page changes (its address, title, loading). */
+export function onPreviewState(f: (s: PreviewState) => void): () => void {
+  const on = windowEvents();
+  if (!on || !inElectron()) return () => {};
+  return on("preview:state", (arg) => {
+    const s = arg as Partial<PreviewState> | undefined;
+    if (s && typeof s.id === "string") f({ id: s.id, url: s.url ?? "", title: s.title ?? "", loading: !!s.loading, back: !!s.back, forward: !!s.forward });
   });
 }

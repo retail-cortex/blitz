@@ -13,7 +13,7 @@ curl -fsSL https://github.com/retail-cortex/blitz/releases/latest/download/insta
 
 `BLITZ_BIN` picks another folder, `BLITZ_VERSION={{< release >}}` a particular release (the latest without it), and `BLITZ_REQUIRE_SIGNATURE=1` refuses to install without checking the signature. With Homebrew: `brew install retail-cortex/tap/blitz`.
 
-Later, `blitz update` installs the latest release over this one (`--check` only says whether there is one). It checks the release's signature with cosign, and its checksum; without cosign it asks for `--skip-signature`. A copy installed by Homebrew is updated with `brew upgrade blitz`.
+Later, `blitz update` installs the latest release over this one (`--check` only says whether there is one). It checks the release's signature and its checksum itself, with nothing else to install (releases before v0.6.6 need cosign for their signature). A copy installed by Homebrew is updated with `brew upgrade blitz`.
 
 Or download the archive for your platform from the [releases](https://github.com/retail-cortex/blitz/releases). Each holds `blitz`, `blitzd`, the `blz` shortcut (a link to `blitz`, not on Windows), and the license files; Windows's also has `blitz-tray.exe`, which runs the service and opens the [desktop app's page](../products/desktop.md#on-windows):
 
@@ -25,7 +25,7 @@ Or download the archive for your platform from the [releases](https://github.com
 | Linux, ARM64 | `blitz_<version>_linux_arm64.tar.gz` |
 | Windows, x86-64 | `blitz_<version>_windows_amd64.zip` |
 
-Unpack it and put its folder on your `PATH`. The desktop app comes separately: `Blitz_<version>_macos_universal.dmg`, or `blitz-desktop_<version>_<arch>.deb` for Ubuntu 24.04, Debian 13 and later (`sudo apt install ./blitz-desktop_*.deb`).
+Unpack it and put its folder on your `PATH`. The desktop app comes separately: `Blitz_<version>_macos_arm64.dmg` (Apple silicon) or `_x64.dmg` (Intel), `Blitz_<version>_windows_x64.zip` (unzip it and run `Blitz.exe`), or for Linux `blitz-desktop_<version>_<arch>.deb` for Ubuntu 24.04, Debian 13 and later (`sudo apt install ./blitz-desktop_*.deb`), the Arch package, or the tarball.
 
 The macOS command-line binaries aren't notarized, so a copy downloaded in a browser is quarantined and Gatekeeper won't run it. Clear the flag with `xattr -d com.apple.quarantine blitz blitzd`, or open it once through Finder's context menu.
 

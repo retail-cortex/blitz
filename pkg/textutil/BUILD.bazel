@@ -18,10 +18,12 @@ go_library(
     name = "textutil",
     srcs = [
         "glob.go",
+        "html.go",
         "textutil.go",
     ],
     importpath = "github.com/retail-cortex/blitz/pkg/textutil",
     visibility = ["//visibility:public"],
+    deps = ["@org_golang_x_net//html"],
 )
 
 go_test(
@@ -29,6 +31,7 @@ go_test(
     size = "small",
     srcs = [
         "glob_test.go",
+        "html_test.go",
         "textutil_test.go",
     ],
     embed = [":textutil"],

@@ -94,7 +94,10 @@ export function SearchDialog({ dir, initialQuery = "", onClose }: { dir: string;
     };
   }, [dir, query, sources, scanned, semantic, mode, hidden]);
   useEffect(() => setPick(0), [hits]);
-  useEffect(() => list.current?.querySelector(".search-hit.on")?.scrollIntoView({ block: "nearest" }), [pick]);
+  // In braces: Chromium's scrollIntoView returns a promise, which React would take for a cleanup.
+  useEffect(() => {
+    list.current?.querySelector(".search-hit.on")?.scrollIntoView({ block: "nearest" });
+  }, [pick]);
 
   const terms = useMemo(() => queryTerms(query), [query]);
   const open = (h: SearchHit) => {

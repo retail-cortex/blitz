@@ -183,6 +183,11 @@ func (h sessionService) RunTurn(ctx context.Context, r req[pb.RunTurnRequest], s
 		imgs = append(imgs, img)
 	}
 
+	var added []api.ContextBlock
+	for _, c := range t.Context {
+		added = append(added, api.ContextBlock{Kind: c.Kind, URL: c.Url, Title: c.Title, HTML: c.Html, Text: c.Text})
+	}
+
 	var mu sync.Mutex
 	var sendErr error
 	send := func(ev *pb.TurnEvent) {
@@ -196,7 +201,7 @@ func (h sessionService) RunTurn(ctx context.Context, r req[pb.RunTurnRequest], s
 	res, runErr := w.Run(ctx, r.Msg.SessionId, api.Turn{
 		Text: t.Text, Prompt: t.Prompt, Plan: t.Plan, ReadOnly: t.ReadOnly, Aside: t.Aside, Accepted: t.Accepted,
 		Images: imgs, MaxTurns: int(t.MaxTurns), FetchGrants: t.FetchGrants,
-		MaxCostUSD: t.MaxCostUsd, Timeout: t.GetTimeout().AsDuration(), Command: t.Command,
+		MaxCostUSD: t.MaxCostUsd, Timeout: t.GetTimeout().AsDuration(), Command: t.Command, Context: added,
 		OnAccepted: func() { send(&pb.TurnEvent{Kind: &pb.TurnEvent_Accepted{Accepted: &pb.Accepted{}}}) },
 	}, func(e api.Event) { send(eventMsg(e)) })
 

@@ -23,17 +23,17 @@ Blitz is a native Go coding agent built on the Google Agent Development Kit (`go
 
 ## 3. Layout
 
-A monorepo of three apps (`apps/cli`, `apps/service`, `apps/desktop`) over shared packages (`pkg/`, the engine in `pkg/engine/`), with the protos in `proto/` the build's rules in `build/`, commands for working on it in `tools/`, changes to outside code in `third_party/`, and the release archives in `release/`: [spec_monorepo_028](spec_monorepo_028.md) §2 has the table and the dependency rules.
+A monorepo of apps (`apps/cli`, `apps/service`, `apps/tray`, `apps/electron` with its page in `apps/desktop/web`, `apps/vscode`) over shared packages (`pkg/`, the engine in `pkg/engine/`), with the protos in `proto/` the build's rules in `build/`, commands for working on it in `tools/`, changes to outside code in `third_party/`, and the release archives in `release/`: [spec_monorepo_028](spec_monorepo_028.md) §2 has the table and the dependency rules.
 
 - **SET-10** Code private to one app goes in `apps/<app>/internal/`; code more than one app uses goes in `pkg/` (the engine's in `pkg/engine/`). Slash-command logic lives in `pkg/engine`, not in a UI.
-- **SET-11** Build outputs are not committed (`/bazel-*`, `/bin/`, `/dist/`, `/blitz`, `/blz`, `/apps/desktop/web/dist/`, `/apps/desktop/packaging/{bin,dist}/`, `/user.bazelrc`); neither is generated code (MR-12). Editor swap files are ignored.
+- **SET-11** Build outputs are not committed (`/bazel-*`, `/bin/`, `/dist/`, `/blitz`, `/blz`, `/apps/desktop/web/dist/`, `/user.bazelrc`); neither is generated code (MR-12). Editor swap files are ignored.
 
 ## 4. Toolchain
 
 - **SET-20** Go `1.27.1` (`go.mod`), downloaded by rules_go; Node 22 by rules_nodejs; Bazel 9.2 (`.bazelversion`).
 - **SET-21** Tools come through Bazel: protoc (protobuf's toolchain), `protoc-gen-go` and `protoc-gen-connect-go` (Go dependencies), `protoc-gen-es` (the page's lockfile), buf (rules_buf), staticcheck and govulncheck (`tool` directives in `go.mod`). There is no separate tools module.
 - **SET-22** Bazel builds everything (decision 2026-09-27, reversing "No Bazel" of 2026-09-26): [spec_monorepo_028](spec_monorepo_028.md). There is no Makefile.
-- **SET-23** Key dependencies: ADK v2, `genai`, `anthropic-sdk-go`, `openai-go`, Connect, `modenv`, BurntSushi TOML, cobra/pflag, `mvdan.cc/sh` (command parsing), `go-udiff`, glamour, ergochat/readline, `robfig/cron`, OpenTelemetry, gVisor `sandboxexec` (Linux), Wails v2 (the desktop app).
+- **SET-23** Key dependencies: ADK v2, `genai`, `anthropic-sdk-go`, `openai-go`, Connect, `modenv`, BurntSushi TOML, cobra/pflag, `mvdan.cc/sh` (command parsing), `go-udiff`, glamour, ergochat/readline, `robfig/cron`, OpenTelemetry, gVisor `sandboxexec` (Linux); for the desktop app, Electron (Wails v2 until v0.6.5).
 
 ## 5. Commands
 
@@ -43,7 +43,7 @@ A monorepo of three apps (`apps/cli`, `apps/service`, `apps/desktop`) over share
 | `bazel test //...` (`--config=race`) | Every test (with the race detector) |
 | `bazel run //apps/cli:blitz -- …` | Run the CLI |
 | `bazel build //release:archives` | The CLI release archives, every platform |
-| `bazel build //apps/desktop/packaging:Blitz.app` / `:deb` | The desktop app's package (macOS / Linux) |
+| `bazel build //:mac-app` / `//:deb` / `//:windows-zip` | The desktop app's package (macOS / Linux / Windows; [spec_electron_038](spec_electron_038.md) EL-80) |
 | `bazel run //:gazelle` | Update the BUILD files after adding a package or import |
 | `bazel run //tools:tidy` | `go mod tidy`, `bazel mod tidy`, Gazelle |
 | `bazel run //tools:check_deps`, `tools/check_format.sh` | The dependency rules; formatting |

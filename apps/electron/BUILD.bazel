@@ -1,0 +1,154 @@
+# Copyright 2026 Retail Cortex
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# The Electron trial of the desktop app (spec_electron_038): Electron's
+# window over the desktop page, with blitz-tray --serve as its host.
+#   bazel run //apps/electron:dev   (this machine, against its service)
+
+load("@bazel_lib//lib:copy_to_bin.bzl", "copy_to_bin")
+load("@bazel_lib//lib:transitions.bzl", "platform_transition_filegroup")
+load("@npm//:defs.bzl", "npm_link_all_packages")
+load("@npm//apps/electron:typescript/package_json.bzl", tsc_bin = "bin")
+load("@npm//apps/electron:vitest/package_json.bzl", vitest_bin = "bin")
+load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
+load(":defs.bzl", "electron_app")
+
+npm_link_all_packages(name = "node_modules")
+
+copy_to_bin(
+    name = "srcs",
+    srcs = glob(["src/**"]) + [
+        "package.json",
+        "tsconfig.build.json",
+        "tsconfig.json",
+    ],
+)
+
+_inputs = [
+    ":srcs",
+    ":node_modules",
+]
+
+# dist/{main,preload,logic}.js, the main process and the preload.
+tsc_bin.tsc(
+    name = "dist",
+    srcs = _inputs,
+    args = [
+        "-p",
+        "tsconfig.build.json",
+    ],
+    chdir = package_name(),
+    out_dirs = ["dist"],
+    visibility = ["//apps/electron:__subpackages__"],
+)
+
+tsc_bin.tsc_test(
+    name = "typecheck",
+    size = "small",
+    args = ["--noEmit"],
+    chdir = package_name(),
+    data = _inputs,
+)
+
+vitest_bin.vitest_test(
+    name = "test",
+    size = "small",
+    args = ["run"],
+    chdir = package_name(),
+    data = _inputs,
+)
+
+# The desktop page, built for this machine (as the tray's).
+platform_transition_filegroup(
+    name = "page",
+    srcs = ["//apps/desktop/web:page"],
+    target_platform = "@platforms//host",
+    visibility = ["//apps/electron:__subpackages__"],
+)
+
+exports_files(
+    [
+        "app.package.json",
+        # The app's icon (the brand's bolt on the app's blue; the PNG is
+        # rendered from the SVG): the window's, Blitz.exe's, the macOS
+        # app's and the Linux launcher's.
+        "appicon.png",
+        "appicon.svg",
+    ],
+    visibility = ["//apps/electron:__subpackages__"],
+)
+
+# The app Electron runs, for this machine (bazel run :dev); the packages'
+# are //apps/electron/packaging's.
+electron_app(
+    name = "app",
+    out = "app",
+    programs = {
+        "blitz": "//apps/cli:blitz",
+        "blitz-tray": "//apps/tray:blitz-tray",
+        "blitzd": "//apps/service:blitzd",
+    },
+)
+
+config_setting(
+    name = "darwin_arm64",
+    constraint_values = [
+        "@platforms//os:macos",
+        "@platforms//cpu:arm64",
+    ],
+    visibility = ["//:__pkg__"],
+)
+
+config_setting(
+    name = "darwin_x64",
+    constraint_values = [
+        "@platforms//os:macos",
+        "@platforms//cpu:x86_64",
+    ],
+    visibility = ["//:__pkg__"],
+)
+
+config_setting(
+    name = "linux_arm64",
+    constraint_values = [
+        "@platforms//os:linux",
+        "@platforms//cpu:arm64",
+    ],
+)
+
+config_setting(
+    name = "linux_x64",
+    constraint_values = [
+        "@platforms//os:linux",
+        "@platforms//cpu:x86_64",
+    ],
+)
+
+# Electron for this machine, and its program in it.
+_ELECTRON = {
+    ":darwin_arm64": ("@electron_darwin_arm64//:files", "Electron.app/Contents/MacOS/Electron"),
+    ":darwin_x64": ("@electron_darwin_x64//:files", "Electron.app/Contents/MacOS/Electron"),
+    ":linux_arm64": ("@electron_linux_arm64//:files", "electron"),
+    ":linux_x64": ("@electron_linux_x64//:files", "electron"),
+}
+
+sh_binary(
+    name = "dev",
+    srcs = ["dev.sh"],
+    args = [
+        "$(rootpath :app)",
+    ] + select({k: [v[1]] for k, v in _ELECTRON.items()}),
+    data = [":app"] + select({k: [v[0]] for k, v in _ELECTRON.items()}),
+    visibility = ["//:__pkg__"],
+)

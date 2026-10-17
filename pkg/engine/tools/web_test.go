@@ -188,13 +188,6 @@ func TestWebFetchRedirects(t *testing.T) {
 	assert.True(t, strings.HasSuffix(out.FinalURL, "/final"), "same-host redirect: %+v", out)
 }
 
-func TestHTMLToText(t *testing.T) {
-	got := htmlToText("<div>a</div><div>b</div><p></p><p></p><p>c</p><noscript>x</noscript>")
-	assert.Equal(t, "a\nb\nc", got, "htmlToText = %q", got)
-	got = htmlToText("not html at all")
-	assert.Equal(t, "not html at all", got, "plain text = %q", got)
-}
-
 // A server that speaks HTTP/2 is fetched over HTTP/1.1, even once Go's
 // default transport (whose TLS settings the fetcher starts from) offers h2.
 func TestWebFetchFromAnHTTP2Server(t *testing.T) {

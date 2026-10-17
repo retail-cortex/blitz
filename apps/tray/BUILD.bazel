@@ -91,7 +91,9 @@ go_library(
         "//pkg/config",
         "//pkg/i18n",
         "//pkg/loginitem",
+        "//pkg/pagehost",
         "//pkg/pageserver",
+        "//pkg/selfupdate",
         "//pkg/socket",
         "@io_fyne_systray//:systray",
     ] + select({
@@ -145,7 +147,9 @@ go_library(
         "//pkg/config",
         "//pkg/i18n",
         "//pkg/loginitem",
+        "//pkg/pagehost",
         "//pkg/pageserver",
+        "//pkg/selfupdate",
         "//pkg/socket",
         "@io_fyne_systray//:systray",
     ] + select({
@@ -172,7 +176,10 @@ go_binary(
     goarch = "amd64",
     goos = "windows",
     pure = "on",
-    visibility = ["//release:__pkg__"],
+    visibility = [
+        "//apps/electron:__subpackages__",
+        "//release:__pkg__",
+    ],
     x_defs = {"main.version": "{STABLE_BLITZ_VERSION}"},
 )
 
@@ -204,7 +211,7 @@ signed_binary(
         goos = "darwin",
         pure = "off",
         target_compatible_with = ["@platforms//os:macos"],
-        visibility = ["//apps/desktop/packaging:__pkg__"],
+        visibility = ["//apps/electron:__subpackages__"],
         x_defs = {"main.version": "{STABLE_BLITZ_VERSION}"},
     )
     for arch in [

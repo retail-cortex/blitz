@@ -68,6 +68,7 @@
   --md-code-bg: rgb(240 244 249 / 0.88);
   --md-scrim: rgb(20 26 38 / 0.26);
   --glass-strong: rgb(250 252 255 / 0.96);
+  --glass-solid: rgb(250 252 255);
   --glass-border: rgb(110 122 145 / 0.28);
   --glass-edge: inset 0 1px 0 rgb(255 255 255 / 0.7);
   --glass-shadow: 0 8px 28px rgb(31 38 70 / 0.14), 0 1px 3px rgb(31 38 70 / 0.1);
@@ -88,6 +89,7 @@
   --md-code-bg: rgb(12 14 19 / 0.55);
   --md-scrim: rgb(0 0 0 / 0.28);
   --glass-strong: rgb(30 34 44 / 0.95);
+  --glass-solid: rgb(30 34 44);
   --glass-border: rgb(255 255 255 / 0.1);
   --glass-edge: inset 0 1px 0 rgb(255 255 255 / 0.07);
   --glass-shadow: 0 8px 32px rgb(0 0 0 / 0.35), 0 1px 2px rgb(0 0 0 / 0.3);
@@ -190,5 +192,7 @@
 :root[data-glass="on"] .status-bar { border-top: 1px solid var(--glass-border); box-shadow: var(--glass-edge); }
 :root[data-glass="on"] .workspace-center .editor-pane { background: transparent; -webkit-backdrop-filter: none; backdrop-filter: none; }
 /* The drawer is a pane like the others, 8 px from the window's edges,
-   nearly opaque over the panes it covers. */
-:root[data-glass="on"] .drawer { left: 8px; right: 8px; bottom: 8px; background: var(--glass-strong); }
+   with the panes' edge and shadow, but opaque: it covers the window's
+   whole middle, and what's under it (faint at 95%, the blur not always
+   drawn) only got in the way of reading it. */
+:root[data-glass="on"] .drawer { left: 8px; right: 8px; bottom: 8px; background: var(--glass-solid); }

@@ -16,16 +16,18 @@
 
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { openSearchPanel } from "@codemirror/search";
-import { mdiAlertCircleOutline, mdiArrowExpandHorizontal, mdiAt, mdiChevronRight, mdiClose, mdiContentSave, mdiExport, mdiFilePdfBox, mdiFileWordBoxOutline, mdiHistory, mdiLockOutline, mdiMagnify, mdiMessagePlusOutline, mdiWrap } from "@mdi/js";
+import { mdiAlertCircleOutline, mdiArrowExpandHorizontal, mdiAt, mdiChevronRight, mdiClose, mdiContentSave, mdiExport, mdiFilePdfBox, mdiFileWordBoxOutline, mdiHistory, mdiLockOutline, mdiMagnify, mdiMessagePlusOutline, mdiWeb, mdiWebPlus, mdiWrap, mdiArrowCollapse, mdiArrowExpand } from "@mdi/js";
 import { files } from "../api";
-import { inApp, printPDF } from "../desktop";
+import { canCall, canPreview, printPDF } from "../desktop";
 import { message } from "../errors";
-import { addToContext, findInFileEvent, openFile, showHistory } from "../events";
+import { addToContext, findInFileEvent, openFile, openWeb, showHistory } from "../events";
 import { FindBar } from "./FindBar";
 import { EditorView } from "@codemirror/view";
 import { t, tn } from "../i18n";
 import { Button, ContextMenu, Dialog, Icon, IconButton, Menu, Segmented, useSnackbar, type MenuEntry } from "../ui/controls";
 import { Preview } from "./Preview";
+import { WebPreview } from "./WebPreview";
+import { isWebPath } from "./webTabs";
 // The visual editor (TipTap) loads with the first Markdown file shown in it.
 const VisualEditor = lazy(() => import("./visual/VisualEditor").then((m) => ({ default: m.VisualEditor })));
 import { defaultView, previewKind, previewOnly, type View } from "./previewKind";
@@ -46,7 +48,18 @@ import { drawAsPicture, drawForPrint, mermaidSources } from "../mermaid";
  * tabs, the active one's path, notes about it, and CodeMirror. One view
  * shows each tab's own state in turn.
  */
-export function EditorPane({ model, onReveal, onCursor }: { model: EditorModel; onReveal: (path: string) => void; onCursor?: (c: Cursor | undefined) => void }) {
+export function EditorPane({
+  model,
+  onReveal,
+  onCursor,
+  expand,
+}: {
+  model: EditorModel;
+  onReveal: (path: string) => void;
+  onCursor?: (c: Cursor | undefined) => void;
+  /** The editor expanded over the chat, or not (the tab bar's button). */
+  expand?: { expanded: boolean; toggle: () => void };
+}) {
   const advanced = useAdvanced(); // the wrap toggle is advanced
   const host = useRef<HTMLDivElement>(null);
   const view = useRef<EditorView | null>(null);
@@ -55,10 +68,12 @@ export function EditorPane({ model, onReveal, onCursor }: { model: EditorModel; 
   const [closing, setClosing] = useState<Tab[] | null>(null);
   const [tabMenu, setTabMenu] = useState<{ x: number; y: number; path: string } | null>(null);
   const tab = model.tabs.find((x) => x.path === model.active);
-  const ready = tab && !tab.loading && !tab.error && !tab.binary && !tab.tooLarge;
+  // A web page's tab (EL-100) shows its page, not a file.
+  const web = tab?.web ? (tab as Tab & { web: NonNullable<Tab["web"]> }) : undefined;
+  const ready = tab && !web && !tab.loading && !tab.error && !tab.binary && !tab.tooLarge;
   // Images and PDFs show as previews; Markdown and SVG can, and Markdown
   // does when it opens (FIL-54). views keeps each tab's choice.
-  const kind = tab ? previewKind(tab.path) : null;
+  const kind = tab && !web ? previewKind(tab.path) : null;
   const [views, setViews] = useState<ReadonlyMap<string, View>>(new Map());
   const atLine = !!tab && model.target?.path === tab.path && !!model.target.line;
   // A search hit in Markdown shows in the preview, its words marked.
@@ -313,8 +328,8 @@ export function EditorPane({ model, onReveal, onCursor }: { model: EditorModel; 
       "divider",
       item("saved", "desktop.files.tab.close_saved"),
       item("all", "desktop.files.tab.close_all"),
-      "divider",
-      { label: t("desktop.files.revisions.open"), icon: mdiHistory, onSelect: () => showHistory({ dir: model.dir, path, folder: false }) },
+      // A web page has no revisions.
+      ...(isWebPath(path) ? [] : ["divider" as const, { label: t("desktop.files.revisions.open"), icon: mdiHistory, onSelect: () => showHistory({ dir: model.dir, path, folder: false }) }]),
     ];
   };
 
@@ -335,7 +350,7 @@ export function EditorPane({ model, onReveal, onCursor }: { model: EditorModel; 
               setTabMenu({ x: e.clientX, y: e.clientY, path: x.path });
             }}
           >
-            <Icon path={fileIcon(x.name)} size="sm" />
+            <Icon path={x.web ? mdiWeb : fileIcon(x.name)} size="sm" />
             <span className="ellipsis">{x.name}</span>
             {x.dirty && <span className="dirty-dot" aria-label={t("desktop.files.unsaved")} />}
             <IconButton
@@ -350,6 +365,16 @@ export function EditorPane({ model, onReveal, onCursor }: { model: EditorModel; 
           </div>
         ))}
         <span className="spacer" />
+        {canPreview() && <IconButton icon={mdiWebPlus} label={t("desktop.web.open")} small onClick={() => openWeb({ dir: model.dir, url: "" })} />}
+        {expand && (
+          <IconButton
+            icon={expand.expanded ? mdiArrowCollapse : mdiArrowExpand}
+            label={t(expand.expanded ? "desktop.files.shrink" : "desktop.files.expand")}
+            small
+            selected={expand.expanded}
+            onClick={expand.toggle}
+          />
+        )}
         {zoom !== 100 && (
           <button type="button" className="zoom-badge t-label" title={t("desktop.files.zoom_reset")} onClick={() => (setZoom(100), view.current?.focus())}>
             {t("desktop.files.zoom", { percent: zoom })}
@@ -366,7 +391,8 @@ export function EditorPane({ model, onReveal, onCursor }: { model: EditorModel; 
         )}
         {advanced && <IconButton icon={mdiWrap} label={t("desktop.files.wrap")} small selected={model.wrap} onClick={() => model.setWrap(!model.wrap)} />}
       </div>
-      {tab && (
+      {web && <WebPreview key={web.path} tab={web} model={model} />}
+      {tab && !web && (
         <div className="editor-head">
           <nav className="crumbs ellipsis" aria-label={t("desktop.files.path")}>
             {tab.path.split("/").map((part, i, all) => (
@@ -410,7 +436,7 @@ export function EditorPane({ model, onReveal, onCursor }: { model: EditorModel; 
               placement="down end"
               items={[
                 // Printing a PDF needs the app's web engine.
-                ...(inApp() ? [{ label: t("desktop.files.export_pdf"), icon: mdiFilePdfBox, onSelect: () => void startExport("pdf") }] : []),
+                ...(canCall("PrintPDF") ? [{ label: t("desktop.files.export_pdf"), icon: mdiFilePdfBox, onSelect: () => void startExport("pdf") }] : []),
                 { label: t("desktop.files.export_docx"), icon: mdiFileWordBoxOutline, onSelect: () => void startExport("docx") },
               ]}
             />
@@ -426,9 +452,9 @@ export function EditorPane({ model, onReveal, onCursor }: { model: EditorModel; 
           </Button>
         </div>
       )}
-      {tab && <Bars tab={tab} model={model} />}
+      {tab && !web && <Bars tab={tab} model={model} />}
       {finding > 0 && findsPreview && <FindBar box={findBox} text={previewText ?? ""} focus={finding} onClose={() => setFinding(0)} />}
-      <div className="editor-body">
+      <div className="editor-body" hidden={!!web}>
         <div className="editor-host" ref={host} hidden={!ready || showPreview} />
         {tab?.loading && <p className="editor-note muted">{t("desktop.checking")}</p>}
         {tab?.error && <p className="editor-note error-text">{tab.error}</p>}

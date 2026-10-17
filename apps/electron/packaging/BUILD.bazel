@@ -1,0 +1,445 @@
+# Copyright 2026 Retail Cortex
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# The desktop app's packages (spec_electron_038 EL-80): Electron's runtime
+# for each platform, named Blitz, with the app (//apps/electron) in its
+# resources/app. Build with --config=release for the version. Signing,
+# notarising and the disk images are the release workflow's
+# (sign_macos.sh), since they need Apple's tools and keys.
+
+load("@rules_pkg//pkg:deb.bzl", "pkg_deb")
+load("@rules_pkg//pkg:mappings.bzl", "pkg_attributes", "pkg_files", "pkg_mklink", "strip_prefix")
+load("@rules_pkg//pkg:tar.bzl", "pkg_tar")
+load("@rules_pkg//pkg:zip.bzl", "pkg_zip")
+load("@rules_shell//shell:sh_test.bzl", "sh_test")
+load("//apps/electron:defs.bzl", "electron_app")
+load(":mac.bzl", "mac_app")
+
+_MACOS = ["@platforms//os:macos"]
+
+_LINUX = ["@platforms//os:linux"]
+
+pkg_files(
+    name = "notices",
+    srcs = [
+        "//:LICENSE",
+        "//:NOTICE",
+        "//:THIRD_PARTY_NOTICES",
+    ],
+    prefix = "blitz-licenses",
+)
+
+# ---- Windows: a zip to unzip anywhere and run Blitz.exe (its programs
+# cross-built in pure Go, so it builds on any machine).
+
+electron_app(
+    name = "app_windows",
+    out = "windows/resources/app",
+    exe = ".exe",
+    programs = {
+        "blitz": "//apps/cli:blitz_windows_amd64",
+        "blitz-tray": "//apps/tray:blitz-tray_windows_amd64",
+        "blitzd": "//apps/service:blitzd_windows_amd64",
+    },
+)
+
+# Electron's program as Blitz.exe, with Blitz's icon and details (winexe).
+genrule(
+    name = "blitz_exe",
+    srcs = [
+        "@electron_win32_x64//:electron.exe",
+        "//apps/electron:appicon.png",
+        "//build:version",
+    ],
+    outs = ["windows/Blitz.exe"],
+    cmd = "$(location //apps/electron/winexe) --in $(location @electron_win32_x64//:electron.exe) --icon $(location //apps/electron:appicon.png) --version $$(cat $(location //build:version)) --out $@",
+    tools = ["//apps/electron/winexe"],
+)
+
+pkg_files(
+    name = "electron_windows",
+    srcs = ["@electron_win32_x64//:files_but_program"],
+    strip_prefix = strip_prefix.from_pkg(),
+)
+
+pkg_files(
+    name = "windows_files",
+    srcs = [
+        ":app_windows",
+        ":blitz_exe",
+    ],
+    strip_prefix = strip_prefix.from_pkg("windows"),
+)
+
+# Released as Blitz_<version>_windows_x64.zip.
+pkg_zip(
+    name = "windows_zip",
+    srcs = [
+        ":electron_windows",
+        ":notices",
+        ":windows_files",
+    ],
+    out = "Blitz_windows_x64.zip",
+    package_dir = "Blitz",
+    visibility = ["//visibility:public"],
+)
+
+# The macOS app's icon, from the app's PNG.
+genrule(
+    name = "icon",
+    srcs = ["//apps/electron:appicon.png"],
+    outs = ["iconfile.icns"],
+    cmd = """
+set="$$(mktemp -d)/iconfile.iconset"
+mkdir -p "$$set"
+for s in 16 32 128 256 512; do
+  sips -z $$s $$s $< --out "$$set/icon_$${s}x$${s}.png" >/dev/null
+  sips -z $$((s * 2)) $$((s * 2)) $< --out "$$set/icon_$${s}x$${s}@2x.png" >/dev/null
+done
+iconutil -c icns -o $@ "$$set"
+""",
+    target_compatible_with = _MACOS,
+)
+
+# ---- macOS: Blitz.app for each Mac (arm64, x64: Electron's runtimes are
+# separate), released as one disk image each.
+
+[
+    electron_app(
+        name = "app_darwin_" + arch,
+        out = "darwin_" + arch + "/app",
+        programs = {
+            "blitz": "//apps/cli:blitz_darwin_" + goarch,
+            "blitz-tray": "//apps/tray:blitz-tray_darwin_" + goarch,
+            "blitzd": "//apps/service:blitzd_darwin_" + goarch,
+        },
+        target_compatible_with = _MACOS,
+    )
+    for arch, goarch in [
+        ("arm64", "arm64"),
+        ("x64", "amd64"),
+    ]
+]
+
+[
+    mac_app(
+        name = "Blitz_" + arch + ".app",
+        anchor = "@electron_darwin_" + arch + "//:Electron.app/Contents/Info.plist",
+        app = ":app_darwin_" + arch,
+        dir = "darwin_" + arch,
+        electron = "@electron_darwin_" + arch + "//:files",
+        icon = ":icon",
+        licenses = [
+            "//:LICENSE",
+            "//:NOTICE",
+            "//:THIRD_PARTY_NOTICES",
+        ],
+        target_compatible_with = _MACOS,
+        version = "//build:version",
+        visibility = ["//visibility:public"],
+    )
+    for arch in [
+        "arm64",
+        "x64",
+    ]
+]
+
+# ---- Linux: for this machine's architecture, in /usr/lib/blitz-desktop
+# (Electron's program as blitz-desktop, with the link on PATH and the
+# launcher), as a .deb, an Arch package and a tarball (which updates
+# itself).
+
+electron_app(
+    name = "app_linux",
+    out = "linux/resources/app",
+    programs = {
+        "blitz": "//apps/cli:blitz",
+        "blitz-tray": "//apps/tray:blitz-tray",
+        "blitzd": "//apps/service:blitzd",
+    },
+    target_compatible_with = _LINUX,
+)
+
+_ELECTRON_LINUX = {
+    "@platforms//cpu:arm64": "@electron_linux_arm64",
+    "@platforms//cpu:x86_64": "@electron_linux_x64",
+}
+
+pkg_files(
+    name = "linux_runtime",
+    srcs = select({cpu: [repo + "//:files_but_program"] for cpu, repo in _ELECTRON_LINUX.items()}),
+    attributes = pkg_attributes(mode = "0755"),
+    strip_prefix = strip_prefix.from_pkg(),
+    target_compatible_with = _LINUX,
+)
+
+pkg_files(
+    name = "linux_program",
+    srcs = select({cpu: [repo + "//:electron"] for cpu, repo in _ELECTRON_LINUX.items()}),
+    attributes = pkg_attributes(mode = "0755"),
+    renames = select({cpu: {repo + "//:electron": "blitz-desktop"} for cpu, repo in _ELECTRON_LINUX.items()}),
+    target_compatible_with = _LINUX,
+)
+
+# Chromium's sandbox helper, setuid root (as Electron needs where the
+# system restricts unprivileged user namespaces, as Ubuntu 24.04 does).
+pkg_files(
+    name = "linux_sandbox",
+    srcs = select({cpu: [repo + "//:chrome-sandbox"] for cpu, repo in _ELECTRON_LINUX.items()}),
+    attributes = pkg_attributes(
+        group = "root",
+        mode = "4755",
+        user = "root",
+    ),
+    renames = select({cpu: {repo + "//:chrome-sandbox": "chrome-sandbox"} for cpu, repo in _ELECTRON_LINUX.items()}),
+    target_compatible_with = _LINUX,
+)
+
+pkg_files(
+    name = "linux_app",
+    srcs = [":app_linux"],
+    attributes = pkg_attributes(mode = "0755"),
+    strip_prefix = strip_prefix.from_pkg("linux"),
+    target_compatible_with = _LINUX,
+)
+
+pkg_tar(
+    name = "linux_install",
+    srcs = [
+        ":linux_app",
+        ":linux_program",
+        ":linux_runtime",
+        ":linux_sandbox",
+    ],
+    package_dir = "usr/lib/blitz-desktop",
+    target_compatible_with = _LINUX,
+)
+
+pkg_mklink(
+    name = "linux_link",
+    link_name = "usr/bin/blitz-desktop",
+    target = "../lib/blitz-desktop/blitz-desktop",
+)
+
+pkg_files(
+    name = "linux_launcher",
+    srcs = ["linux/blitz-desktop.desktop"],
+    prefix = "usr/share/applications",
+)
+
+pkg_files(
+    name = "linux_metainfo",
+    srcs = ["linux/dev.blitz.desktop.metainfo.xml"],
+    prefix = "usr/share/metainfo",
+)
+
+pkg_files(
+    name = "linux_icons",
+    srcs = [
+        "//apps/electron:appicon.png",
+        "//apps/electron:appicon.svg",
+    ],
+    renames = {
+        "//apps/electron:appicon.png": "usr/share/icons/hicolor/1024x1024/apps/blitz-desktop.png",
+        "//apps/electron:appicon.svg": "usr/share/icons/hicolor/scalable/apps/blitz-desktop.svg",
+    },
+)
+
+pkg_files(
+    name = "deb_doc",
+    srcs = [
+        "linux/copyright",
+        "//:NOTICE",
+        "//:THIRD_PARTY_NOTICES",
+    ],
+    prefix = "usr/share/doc/blitz-desktop",
+    strip_prefix = strip_prefix.files_only(),
+)
+
+pkg_tar(
+    name = "deb_data",
+    srcs = [
+        ":deb_doc",
+        ":linux_icons",
+        ":linux_launcher",
+        ":linux_link",
+        ":linux_metainfo",
+    ],
+    extension = "tar.gz",
+    target_compatible_with = _LINUX,
+    deps = [":linux_install"],
+)
+
+# Electron's libraries (Ubuntu 24.04's t64 names first), and bubblewrap,
+# the sandbox for the agent's commands, which Linux requires.
+pkg_deb(
+    name = "deb",
+    architecture = select({
+        "@platforms//cpu:arm64": "arm64",
+        "@platforms//cpu:x86_64": "amd64",
+    }),
+    data = ":deb_data",
+    depends = [
+        "bubblewrap",
+        "libasound2t64 | libasound2",
+        "libatk-bridge2.0-0t64 | libatk-bridge2.0-0",
+        "libgbm1",
+        "libgtk-3-0t64 | libgtk-3-0",
+        "libnotify4",
+        "libnss3",
+        "libsecret-1-0",
+        "libxss1",
+        "libxtst6",
+        "xdg-utils",
+    ],
+    description = """Blitz desktop app
+A window onto the Blitz service: workspaces, chats with the agent,
+approvals, changes and workers. Includes the blitz command, blitz-tray (the service in the system
+tray) and blitzd,
+the service, which it installs and starts.""",
+    homepage = "https://github.com/retail-cortex/blitz",
+    maintainer = "Retail Cortex <https://github.com/retail-cortex/blitz/issues>",
+    package = "blitz-desktop",
+    package_file_name = select({
+        "@platforms//cpu:arm64": "blitz-desktop_arm64.deb",
+        "@platforms//cpu:x86_64": "blitz-desktop_amd64.deb",
+    }),
+    priority = "optional",
+    section = "devel",
+    target_compatible_with = _LINUX,
+    version_file = "//build:version",
+    visibility = ["//visibility:public"],
+)
+
+pkg_files(
+    name = "pacman_licenses",
+    srcs = [
+        "//:NOTICE",
+        "//:THIRD_PARTY_NOTICES",
+    ],
+    prefix = "usr/share/licenses/blitz-desktop",
+    strip_prefix = strip_prefix.files_only(),
+)
+
+pkg_tar(
+    name = "pacman_data",
+    srcs = [
+        ":linux_icons",
+        ":linux_launcher",
+        ":linux_link",
+        ":linux_metainfo",
+        ":pacman_licenses",
+    ],
+    extension = "tar",
+    target_compatible_with = _LINUX,
+    deps = [":linux_install"],
+)
+
+_PACMAN_CMD = """
+[ -f bazel-out/volatile-status.txt ] && export SOURCE_DATE_EPOCH="$$(sed -n 's/^BUILD_TIMESTAMP //p' bazel-out/volatile-status.txt)"
+$(execpath //tools/pacman) \\
+  --data $(execpath :pacman_data) \\
+  --version-file $(execpath //build:version) \\
+  --arch {arch} \\
+  --name blitz-desktop \\
+  --desc "Blitz desktop app: a window onto the Blitz service, with the blitz command, blitz-tray and blitzd" \\
+  --url https://github.com/retail-cortex/blitz \\
+  --license Apache-2.0 \\
+  --packager "Retail Cortex <https://github.com/retail-cortex/blitz/issues>" \\
+  --depend alsa-lib \\
+  --depend bubblewrap \\
+  --depend gtk3 \\
+  --depend libnotify \\
+  --depend libsecret \\
+  --depend libxss \\
+  --depend libxtst \\
+  --depend mesa \\
+  --depend nss \\
+  --depend xdg-utils \\
+  --out $@.tar
+$(ZSTD_BIN) -q -19 -T0 --rm -o $@ $@.tar
+"""
+
+genrule(
+    name = "pacman",
+    srcs = [
+        ":pacman_data",
+        "//build:version",
+    ],
+    outs = ["blitz-desktop.pkg.tar.zst"],
+    cmd = select({
+        "@platforms//cpu:arm64": _PACMAN_CMD.format(arch = "aarch64"),
+        "@platforms//cpu:x86_64": _PACMAN_CMD.format(arch = "x86_64"),
+    }),
+    stamp = -1,
+    target_compatible_with = _LINUX,
+    toolchains = ["@zstd_toolchains//:resolved_toolchain"],
+    tools = ["//tools/pacman"],
+    visibility = ["//visibility:public"],
+)
+
+# The tarball, which updates itself (the packages above are their package
+# manager's to update): blitz-desktop/ with the program, unpacked anywhere.
+# Without root, chrome-sandbox isn't setuid: where the system restricts
+# user namespaces (Ubuntu 24.04), the .deb is the one to use.
+pkg_tar(
+    name = "linux_tar",
+    srcs = [
+        ":linux_app",
+        ":linux_program",
+        ":linux_runtime",
+        ":linux_sandbox",
+        ":notices",
+    ],
+    extension = "tar.gz",
+    package_dir = "blitz-desktop",
+    target_compatible_with = _LINUX,
+    visibility = ["//visibility:public"],
+)
+
+# The packages carry the programs and the license files.
+sh_test(
+    name = "windows_contents_test",
+    size = "small",
+    srcs = ["contents_test.sh"],
+    args = ["$(rootpath :windows_zip)"],
+    data = [":windows_zip"],
+)
+
+sh_test(
+    name = "mac_contents_test",
+    size = "small",
+    srcs = ["contents_test.sh"],
+    args = ["$(rootpath :Blitz_arm64.app)"],
+    data = [":Blitz_arm64.app"],
+    target_compatible_with = _MACOS,
+)
+
+sh_test(
+    name = "deb_contents_test",
+    size = "small",
+    srcs = ["contents_test.sh"],
+    args = ["$(rootpath :deb)"],
+    data = [":deb"],
+    target_compatible_with = _LINUX,
+)
+
+sh_test(
+    name = "pacman_contents_test",
+    size = "small",
+    srcs = ["contents_test.sh"],
+    args = ["$(rootpath :pacman)"],
+    data = [":pacman"],
+    target_compatible_with = _LINUX,
+)

@@ -16,7 +16,7 @@
 
 import { describe, expect, it } from "vitest";
 import { normalizePrefs, maxMarkdownCSS, baseName, closeWorkspace, defaultPrefs, displayName, editWorkspace, forgetWorkspace, moveWorkspace, openWorkspace, type Prefs } from "./prefs";
-import { resolveTheme } from "./theme";
+import { paletteOf, resolveTheme } from "./theme";
 import { workspaceColor } from "./palette";
 
 const dirs = (p: Prefs) => p.workspaces.map((w) => `${w.dir}${w.open ? "" : "(closed)"}`).join(" ");
@@ -73,6 +73,15 @@ describe("theme", () => {
     expect(resolveTheme("light", true)).toBe("light");
     expect(resolveTheme("dark", false)).toBe("dark");
   });
+  it("uses the colour theme chosen for light, or for dark (Blitz's own by default)", () => {
+    expect(paletteOf("light", "one-light", "blitz")).toBe("one-light");
+    expect(paletteOf("dark", "one-light", "blitz")).toBe("blitz");
+    expect(paletteOf("dark", "blitz", "one-dark-pro")).toBe("one-dark-pro");
+    expect([defaultPrefs.light_theme, defaultPrefs.dark_theme]).toEqual(["blitz", "blitz"]);
+    expect(normalizePrefs({ light_theme: "one-light", dark_theme: "one-dark-pro" })).toMatchObject({ light_theme: "one-light", dark_theme: "one-dark-pro" });
+    // A dark theme for light, or one this build doesn't have: Blitz's.
+    expect(normalizePrefs({ light_theme: "one-dark-pro", dark_theme: "solarized" })).toMatchObject({ light_theme: "blitz", dark_theme: "blitz" });
+  });
   it("gives each workspace colour a shade per theme", () => {
     expect(workspaceColor("teal", "light")).not.toBe(workspaceColor("teal", "dark"));
     expect(workspaceColor("nonsense", "light")).toBe(workspaceColor("blue", "light"));
@@ -113,6 +122,9 @@ describe("normalizePrefs", () => {
     expect(normalizePrefs({ files: "yes", show_hidden: 1, chat_width: -5 })).toMatchObject({ files: false, show_hidden: false, chat_width: 0 });
     expect(normalizePrefs({ files_width: 300.6 })).toMatchObject({ files_width: 301 });
     expect(normalizePrefs({ files_width: 20000 })).toMatchObject({ files_width: 0 });
+    expect(normalizePrefs({})).toMatchObject({ updates: "auto" });
+    expect(normalizePrefs({ updates: "off" })).toMatchObject({ updates: "off" });
+    expect(normalizePrefs({ updates: "sometimes" })).toMatchObject({ updates: "auto" });
     expect(normalizePrefs({}).width).toBe("full");
     expect(normalizePrefs({}).advanced).toBe(false); // simple until asked
     expect(normalizePrefs({ advanced: true }).advanced).toBe(true);

@@ -15,7 +15,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { acceptAttribute, acceptedAs, attachableFiles, clock, describeImage, isDocument, maxUploadBytes, readyIds, rejectReason, uploading, type Accepted, type Attachment } from "./attachments";
+import { acceptAttribute, acceptedAs, attachableFiles, clock, describeImage, isDocument, maxUploadBytes, readyIds, rejectReason, uploading, webBlocks, type Accepted, type Attachment } from "./attachments";
 
 // What the service reports for a Claude model, and for Gemini.
 const claude: Accepted[] = [
@@ -56,6 +56,16 @@ describe("attachments", () => {
     expect(readyIds(list)).toEqual(["x"]);
     expect(uploading(list)).toBe(true);
     expect(uploading([list[0], list[2]])).toBe(false);
+  });
+  it("sends web content as it is, uploading nothing", () => {
+    const page = { kind: "web_page" as const, url: "http://localhost:3000/", title: "Home", html: "<p>hi</p>", text: "" };
+    const list: Attachment[] = [
+      { key: "1", name: "a", url: "u1", id: "x" },
+      { key: "2", name: "Home", url: "", web: page },
+    ];
+    expect(uploading(list)).toBe(false);
+    expect(readyIds(list)).toEqual(["x"]);
+    expect(webBlocks(list)).toEqual([page]);
   });
   it("describes an uploaded file", () => {
     expect(describeImage({ width: 1280, height: 720, size: 2n * 1024n * 1024n, resized: true })).toBe("1280×720 · 2.0 MB · scaled down");

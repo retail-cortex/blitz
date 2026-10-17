@@ -39,6 +39,7 @@ import { forgetStatus } from "./status";
 import { AppStateProvider, useApp } from "./state";
 import { Button, Dialog, Icon, SnackbarProvider, useSnackbar } from "./ui/controls";
 import { DrawerProvider, DrawerSlot } from "./ui/Drawer";
+import { restart, useAutoUpdate } from "./updates";
 import { Workspace } from "./Workspace";
 
 /**
@@ -171,6 +172,13 @@ function Shell() {
     if (service.state === "up") watchWorkerFailures(Object.fromEntries(JSON.parse(seen)));
   }, [seen, service.state]);
   const version = useServiceVersion(service.state === "up");
+  // The app's update: looked for when it opens (every five days at most),
+  // downloaded, then offered with Restart (spec_electron_038 EL-90).
+  useAutoUpdate(loaded && service.state === "up" && prefs.updates !== "off", (s) =>
+    snack(t("desktop.update.snack", { version: s.latest }), {
+      action: { label: t("desktop.update.restart_short"), run: () => void restart((m) => snack(m, { error: true })) },
+    }),
+  );
   // The Settings dialog, open on a section, and for the settings file a
   // workspace's (null: closed).
   const [settingsAt, setSettingsAt] = useState<{ section: Section; scope?: string } | null>(null);

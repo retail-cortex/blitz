@@ -11,7 +11,7 @@ sha256sum --ignore-missing -c checksums.txt
 
 ### Desktop app
 
-`Blitz_*_macos_universal.dmg` (notarized when the release was signed) and `blitz-desktop_*.deb` (Ubuntu 24.04, Debian 13 and later).
+`Blitz_*_macos_arm64.dmg` (Apple silicon) and `Blitz_*_macos_x64.dmg` (Intel), notarized when the release was signed; `Blitz_*_windows_x64.zip` (unzip anywhere and run `Blitz.exe`; not signed, so SmartScreen asks first); `blitz-desktop_*.deb` (Ubuntu 24.04, Debian 13 and later), the Arch Linux `.pkg.tar.zst`, and `blitz-desktop_*_linux_*.tar.gz` (any Linux; it updates itself). The app updates itself from here on, except where a package manager installed it.
 
 ### macOS
 

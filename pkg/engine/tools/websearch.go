@@ -222,7 +222,7 @@ func (s *webSearcher) run(ctx context.Context, q string, n int) WebSearchOutput 
 			continue
 		}
 		r.Title = textutil.Ellipsize(strings.TrimSpace(r.Title), 200)
-		r.Snippet = textutil.Ellipsize(htmlToText(r.Snippet), searchSnippetChars)
+		r.Snippet = textutil.Ellipsize(textutil.HTMLToText(r.Snippet), searchSnippetChars)
 		out.Results = append(out.Results, r)
 		if len(out.Results) == n {
 			break

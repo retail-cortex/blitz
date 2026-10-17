@@ -77,10 +77,19 @@ jobs:
           bazel build --config=release --action_env=VSIX_VERSION="$version" //apps/vscode:vsix
           cp "$(bazel cquery --config=release --action_env=VSIX_VERSION="$version" --output=files //apps/vscode:vsix)" "dist/blitz_${version}_vscode.vsix"
           (cd dist && sha256sum blitz_* > checksums.txt)
-          cosign sign-blob --yes --bundle dist/checksums.txt.sigstore.json dist/checksums.txt
+          # Sigstore's standard bundle (not cosign's older one), which
+          # `blitz update` and the desktop app check without cosign
+          # (pkg/selfupdate); cosign verify-blob reads either.
+          cosign sign-blob --yes --new-bundle-format --bundle dist/checksums.txt.sigstore.json dist/checksums.txt
           # The install script (curl …/releases/latest/download/install.sh | sh),
           # which checks the archives against the signed checksums.
           cp release/install.sh dist/install.sh
+          # The desktop app for Windows (apps/electron/packaging): a zip,
+          # cross-built here, signed like the other desktop packages with
+          # its own bundle, which the app's updater checks (pkg/selfupdate).
+          bazel build --config=release //apps/electron/packaging:windows_zip
+          cp "$(bazel cquery --config=release --output=files //apps/electron/packaging:windows_zip)" "dist/Blitz_${version}_windows_x64.zip"
+          cosign sign-blob --yes --new-bundle-format --bundle "dist/Blitz_${version}_windows_x64.zip.sigstore.json" "dist/Blitz_${version}_windows_x64.zip"
       - name: Draft release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -92,12 +101,14 @@ jobs:
           gh release create "$GITHUB_REF_NAME" --draft --verify-tag --generate-notes "${pre[@]}" \
             --notes-file .github/release-footer.md dist/*
 
-  # The desktop app: a universal macOS disk image, and Linux .debs and Arch
-  # Linux packages, attached to the draft release, each signed keylessly
-  # with its own cosign bundle.
-  # Bazel builds the app and the packages; on macOS sign_macos.sh signs it
-  # with a Developer ID and notarises it when the signing secrets are set
-  # (spec_release_025 REL-22), else signs it ad hoc with a warning.
+  # The desktop app (Electron, apps/electron/packaging; spec_electron_038
+  # EL-80): a macOS disk image for each Mac (arm64, x64), and Linux .debs,
+  # Arch Linux packages and tarballs, attached to the draft release, each
+  # signed keylessly with its own cosign bundle (the Windows zip is the
+  # release job's). Bazel builds the apps and the packages; on macOS
+  # sign_macos.sh signs them with a Developer ID and notarises them when
+  # the signing secrets are set (spec_release_025 REL-22), else signs them
+  # ad hoc with a warning.
   desktop:
     needs: release
     strategy:
@@ -135,9 +146,6 @@ jobs:
       - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
         with:
           cosign-release: v2.6.1
-      - name: Linux build dependencies
-        if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends pkg-config libgtk-3-dev libwebkit2gtk-4.1-dev
       # A throwaway keychain holding the Developer ID certificate, and the
       # App Store Connect API key for notarytool.
       - name: Signing keychain
@@ -162,7 +170,7 @@ jobs:
       - name: Unsigned
         if: runner.os == 'macOS' && env.SIGNING != 'true'
         run: echo "::warning::MACOS_CERTIFICATE isn't set; the macOS app is signed ad hoc and not notarised"
-      - name: macOS disk image
+      - name: macOS disk images
         if: runner.os == 'macOS'
         env:
           DESKTOP_SIGN_IDENTITY: ${{ env.SIGNING == 'true' && secrets.DESKTOP_SIGN_IDENTITY || '' }}
@@ -170,23 +178,28 @@ jobs:
           NOTARY_ISSUER: ${{ secrets.NOTARY_ISSUER }}
         run: |
           version="${GITHUB_REF_NAME#v}"
-          bazel build --config=release //apps/desktop/packaging:Blitz.app
           mkdir dist
-          apps/desktop/packaging/sign_macos.sh \
-            "$(bazel cquery --config=release --output=files //apps/desktop/packaging:Blitz.app)" \
-            "$version" "dist/Blitz_${version}_macos_universal.dmg"
+          for arch in arm64 x64; do
+            bazel build --config=release "//apps/electron/packaging:Blitz_${arch}.app"
+            apps/electron/packaging/sign_macos.sh \
+              "$(bazel cquery --config=release --output=files "//apps/electron/packaging:Blitz_${arch}.app")" \
+              "$version" "dist/Blitz_${version}_macos_${arch}.dmg"
+          done
       - name: Linux package
         if: runner.os == 'Linux'
         run: |
           version="${GITHUB_REF_NAME#v}"
-          bazel build --config=release //apps/desktop/packaging:deb
+          bazel build --config=release //apps/electron/packaging:deb
           mkdir dist
-          deb="$(bazel cquery --config=release --output=files //apps/desktop/packaging:deb | grep '\.deb$' | head -1)"
+          deb="$(bazel cquery --config=release --output=files //apps/electron/packaging:deb | grep '\.deb$' | head -1)"
           cp "$deb" "dist/blitz-desktop_${version}_$(dpkg --print-architecture).deb"
+          # The tarball, which updates itself (pkg/selfupdate).
+          bazel build --config=release //apps/electron/packaging:linux_tar
+          cp "$(bazel cquery --config=release --output=files //apps/electron/packaging:linux_tar)" "dist/blitz-desktop_${version}_linux_$(dpkg --print-architecture).tar.gz"
           # Arch's name, from the package's own pkgver (a pre-release is
           # 0.4.0rc1) and arch: blitz-desktop-0.3.2-1-x86_64.pkg.tar.zst.
-          bazel build --config=release //apps/desktop/packaging:pacman
-          pkg="$(bazel cquery --config=release --output=files //apps/desktop/packaging:pacman)"
+          bazel build --config=release //apps/electron/packaging:pacman
+          pkg="$(bazel cquery --config=release --output=files //apps/electron/packaging:pacman)"
           info="$(zstd -dcq <"$pkg" | tar -xOf - .PKGINFO)"
           cp "$pkg" "dist/blitz-desktop-$(sed -n 's/^pkgver = //p' <<<"$info")-$(sed -n 's/^arch = //p' <<<"$info").pkg.tar.zst"
       # The package installs on a clean system: its dependencies resolve,
@@ -197,10 +210,11 @@ jobs:
           sudo apt-get install -y ./dist/blitz-desktop_*.deb
           ldd /usr/lib/blitz-desktop/blitz-desktop > ldd.txt
           if grep 'not found' ldd.txt; then exit 1; fi
-          /usr/lib/blitz-desktop/blitz --version
-          /usr/lib/blitz-desktop/blitzd --version
-          /usr/lib/blitz-desktop/blitz-tray --version
+          /usr/lib/blitz-desktop/resources/app/bin/blitz --version
+          /usr/lib/blitz-desktop/resources/app/bin/blitzd --version
+          /usr/lib/blitz-desktop/resources/app/bin/blitz-tray --version
           test "$(readlink -f /usr/bin/blitz-desktop)" = /usr/lib/blitz-desktop/blitz-desktop
+          test "$(stat -c %a:%U /usr/lib/blitz-desktop/chrome-sandbox)" = 4755:root
       # The Arch package installs on a current Arch Linux with pacman: its
       # dependencies resolve, the libraries are found, the programs run and
       # the files match its .MTREE. x86_64 only: Arch has no arm64 image.
@@ -213,9 +227,9 @@ jobs:
             pacman -Syu --noconfirm --needed --disable-sandbox
             pacman -U --noconfirm --disable-sandbox /dist/blitz-desktop-*.pkg.tar.zst
             if ldd /usr/lib/blitz-desktop/blitz-desktop | grep "not found"; then exit 1; fi
-            /usr/lib/blitz-desktop/blitz --version
-            /usr/lib/blitz-desktop/blitzd --version
-            /usr/lib/blitz-desktop/blitz-tray --version
+            /usr/lib/blitz-desktop/resources/app/bin/blitz --version
+            /usr/lib/blitz-desktop/resources/app/bin/blitzd --version
+            /usr/lib/blitz-desktop/resources/app/bin/blitz-tray --version
             test "$(readlink -f /usr/bin/blitz-desktop)" = /usr/lib/blitz-desktop/blitz-desktop
             pacman -Qkk blitz-desktop
             pacman -R --noconfirm blitz-desktop
@@ -226,9 +240,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           cd dist
-          for f in *.dmg *.deb *.pkg.tar.zst; do
+          for f in *.dmg *.deb *.pkg.tar.zst *.tar.gz; do
             [ -e "$f" ] || continue
-            cosign sign-blob --yes --bundle "$f.sigstore.json" "$f"
+            cosign sign-blob --yes --new-bundle-format --bundle "$f.sigstore.json" "$f"
             gh release upload "$GITHUB_REF_NAME" "$f" "$f.sigstore.json" --clobber
           done
       - name: Remove the signing keychain

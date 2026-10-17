@@ -19,7 +19,7 @@ Everything through 2026-09-29 is pushed to `main`, most of it with
    macOS, or the failures fixed.
 
 2. **Manual test of the desktop app (S).** Install a fresh build
-   (`bazel build //:deb`, then `sudo apt install ./bazel-bin/apps/desktop/packaging/blitz-desktop_amd64.deb`),
+   (`bazel build //:deb`, then `sudo apt install ./bazel-bin/apps/electron/packaging/blitz-desktop_amd64.deb`),
    restart the service when the app offers, and go through the new
    checks in `docs/content/development/manual-verification.md`: settings
    editor, log viewer, copy buttons, full width and full screen (F11),
@@ -27,7 +27,7 @@ Everything through 2026-09-29 is pushed to `main`, most of it with
    in the system viewer**), **New worker**, the tray (Settings › Service ›
    **Show in the system tray**: every menu action, logging out and in),
    usage after a restart, chats surviving a service restart. On macOS
-   too, once CI builds `Blitz.app`.
+   too (`bazel build //:mac-app`).
 
 3. **Recover the lost Notebook chat (XS, the owner's data, ask first).**
    `~/.blitz/sessions/session-20260929-020838-b9e4f262` lost its
@@ -51,8 +51,8 @@ helper process (IMG-52).
 - **Playwright end-to-end tests for the desktop page (M).** Decided
   2026-10-01, deferred until the usability pass settles the UI, so the
   fake service (`dev/fake.ts`) isn't rewritten twice. Playwright, for its
-  WebKit (the web view on macOS and Linux) and Chromium (WebView2 on
-  Windows). Two tiers: `?fake` for every flow, on every push; a few smoke
+  Chromium (the Electron app's engine since v0.6.6, and Edge's for the
+  Windows tray's page). Two tiers: `?fake` for every flow, on every push; a few smoke
   tests against a throwaway keyless `blitzd` (`BLITZ_SOCKET`, `HOME` in a
   short `/tmp` dir), which catch the fake drifting from the service. A
   `//apps/desktop/web:e2e` target (tagged `requires-network`/`manual`:
@@ -60,8 +60,8 @@ helper process (IMG-52).
   after `bazel test //...`. First flows: the file tree (deselect, drag and
   drop), the agent editor (create, problems, advanced settings, delete a
   broken file, Settings › Agents), worker editing (save pauses, stale-file
-  reload, fixing an invalid worker). Out of reach: the Wails shell (native
-  dialogs, notifications, deep links, the tray, `window.go.*`). Done: both
+  reload, fixing an invalid worker). Out of reach: the Electron shell (native
+  dialogs, notifications, deep links, the tray, `window.blitzElectron`). Done: both
   tiers green in CI on Linux and macOS.
 
 ## Waiting on something
@@ -69,17 +69,12 @@ helper process (IMG-52).
 - **Claude on Vertex AI, live** (backlog BL-VER-04): needs Claude Opus
   quota in `rmcguinness-lab` (requested). Then BL-ENG-22: client-side
   refusal fallback on Vertex AI.
-- **Chromebooks:** if a colleague sees a blank window, set
-  `WEBKIT_DISABLE_DMABUF_RENDERER=1` automatically on ChromeOS.
+- **Chromebooks:** if a colleague sees a blank window, turn the
+  graphics card off automatically on ChromeOS (`BLITZ_GPU=off`, EL-07).
 - **A signed macOS release:** the Apple Developer ID is pending.
 - **Windows, by hand:** the tray and its page are built (spec_windows_036);
   run them on Windows (WIN-40, manual verification §45), then a native
   folder picker and Arm64 (WIN-42).
-- **Wails v3** (decided 2026-09-29: stay on v2). v3 was at `v3.0.0-beta.26`
-  and the tray, its main draw, is done separately. Revisit when v3 has a
-  stable release that has been out a while, or we need several windows or
-  native menus, or a v2 bug blocks us; start with a short branch trial
-  (window, bindings, the asset handler, `.deb` and `Blitz.app`).
 
 ## Known local test failures
 

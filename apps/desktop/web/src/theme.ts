@@ -18,8 +18,9 @@
 // "system" (the default), applied as html[data-theme] and kept in step
 // with the system's setting as it changes.
 
-import { setAppearance } from "./desktop";
+import { nativeGlass, setAppearance } from "./desktop";
 import { editorConfig, editorIsDark, onEditorThemeChange } from "./host";
+import type { DarkThemeId, LightThemeId } from "./themes";
 
 /** The user's choice of theme: the system's, light or dark. */
 export type ThemePref = "system" | "light" | "dark";
@@ -40,17 +41,22 @@ export function systemIsDark(): boolean {
   return darkQuery()?.matches ?? false;
 }
 
+/** The colour theme in effect: the light or dark one chosen, for the theme shown. */
+export const paletteOf = (theme: Theme, light: LightThemeId, dark: DarkThemeId): string => (theme === "dark" ? dark : light);
+
 /**
  * Applies the theme, density and conversation width to the document; pref
  * is the user's choice, which the macOS window follows ("system" leaves it
- * to the system, so the system's switches still reach the page).
+ * to the system, so the system's switches still reach the page). Glass is
+ * Blitz's own theme's: the others are solid.
  */
-export function applyTheme(theme: Theme, density: "comfortable" | "compact" = "comfortable", width: "full" | "readable" = "full", transparency: "on" | "off" = "on", pref: ThemePref = theme) {
+export function applyTheme(theme: Theme, density: "comfortable" | "compact" = "comfortable", width: "full" | "readable" = "full", transparency: "on" | "off" = "on", pref: ThemePref = theme, palette = "blitz") {
   const root = document.documentElement;
   root.dataset.theme = theme;
+  root.dataset.palette = palette;
   root.dataset.density = density;
   root.dataset.width = width;
-  root.dataset.glass = transparency === "on" && !reducedTransparency() ? "on" : "off";
+  root.dataset.glass = transparency === "on" && palette === "blitz" && !reducedTransparency() ? "on" : "off";
   // In the macOS app the window itself is translucent: the desktop shows
   // through instead of the page's backdrop, blurred in the theme the user
   // chose rather than the system's.
@@ -63,12 +69,6 @@ export function applyTheme(theme: Theme, density: "comfortable" | "compact" = "c
 /** Whether the system asks for less transparency. */
 export function reducedTransparency(): boolean {
   return typeof window !== "undefined" && !!window.matchMedia?.("(prefers-reduced-transparency: reduce)").matches;
-}
-
-/** Whether the window is macOS's translucent one (the desktop app). */
-function nativeGlass(): boolean {
-  if (typeof window === "undefined" || typeof navigator === "undefined") return false;
-  return "go" in window && /Mac/.test(navigator.userAgent);
 }
 
 /** Calls f whenever the system switches between light and dark. */

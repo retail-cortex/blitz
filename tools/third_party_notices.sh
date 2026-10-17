@@ -32,7 +32,7 @@ bin="$(bazel info "${q[@]}" bazel-bin)"
 # Go modules linked into the three programs; --notool_deps leaves out the
 # compilers and code generators that only run during the build.
 bazel query "${q[@]}" --notool_deps \
-	'kind(go_library, deps(set(//apps/cli:blitz_unsigned //apps/service:blitzd_unsigned //apps/desktop:blitz-desktop_unsigned)))' \
+	'kind(go_library, deps(set(//apps/cli:blitz_unsigned //apps/service:blitzd_unsigned //apps/tray:blitz-tray_unsigned)))' \
 	--output=label |
 	sed -nE 's|^@@?(gazelle\+\+go_deps\+)?([^/]+)//.*|\2|p' | sort -u |
 	sed "s|^|$out_base/external/gazelle++go_deps+|" >"$tmp/repos"
@@ -44,4 +44,5 @@ bazel run "${q[@]}" //tools/notices -- \
 	--go-repos="$tmp/repos" --go-mod="$PWD/go.mod" --goroot="$goroot" --apache="$PWD/LICENSE" \
 	--npm-lock="$PWD/pnpm-lock.yaml" --npm-store="$bin/node_modules/.aspect_rules_js" \
 	--fonts="Noto Sans, Noto Sans Mono and Noto Sans Math (the Noto Project)=$PWD/pkg/engine/mdpdf/fonts" \
+	--themes="One Light (Atom's one-light-ui and one-light-syntax, GitHub Inc.)=$PWD/third_party/themes/one-light;One Dark Pro (Binaryify)=$PWD/third_party/themes/one-dark-pro" \
 	--out="$PWD/THIRD_PARTY_NOTICES" "${check[@]}"

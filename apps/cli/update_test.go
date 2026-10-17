@@ -16,13 +16,14 @@ package main
 
 import (
 	"archive/tar"
-	"archive/zip"
 	"bytes"
 	"compress/gzip"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -30,38 +31,13 @@ import (
 	goruntime "runtime"
 	"testing"
 
+	"github.com/retail-cortex/blitz/pkg/selfupdate"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-func TestCompareVersions(t *testing.T) {
-	for _, tt := range []struct {
-		a, b string
-		want int // sign
-	}{
-		{"v0.2.0", "0.1.9", 1},
-		{"v0.1.0", "v0.1.0", 0},
-		{"v0.1.0-rc.1", "v0.1.0", -1},
-		{"v0.1.0", "v0.1.0-rc.2", 1},
-		{"v0.1.0-rc.2", "v0.1.0-rc.1", 1},
-		{"v1.0.0", "v0.99.99", 1},
-	} {
-		t.Run(tt.a+" "+tt.b, func(t *testing.T) {
-			got := compareVersions(tt.a, tt.b)
-			assert.Equal(t, tt.want, sign(got))
-		})
-	}
-}
-
-func sign(n int) int {
-	switch {
-	case n > 0:
-		return 1
-	case n < 0:
-		return -1
-	}
-	return 0
-}
+// src is the release source the tests serve.
+var src selfupdate.Source
 
 // fakeRelease serves v9.9.9 for this machine, with checksums (or a bad
 // one).
@@ -99,11 +75,15 @@ func fakeRelease(t *testing.T, badSum bool) {
 		}
 	}))
 	t.Cleanup(srv.Close)
-	oldAPI, oldDL, oldExe, oldCosign, oldVersion := releasesAPI, releasesDownload, executable, lookCosign, version
+	oldReleases, oldExe, oldVerify, oldCosign, oldVersion := releases, executable, verifySignature, lookCosign, version
 	t.Cleanup(func() {
-		releasesAPI, releasesDownload, executable, lookCosign, version = oldAPI, oldDL, oldExe, oldCosign, oldVersion
+		releases, executable, verifySignature, lookCosign, version = oldReleases, oldExe, oldVerify, oldCosign, oldVersion
 	})
-	releasesAPI, releasesDownload = srv.URL+"/api", srv.URL+"/download"
+	src = selfupdate.Source{API: srv.URL + "/api", Download: srv.URL + "/download"}
+	releases = func() selfupdate.Source { return src }
+	// A release before v0.6.6: its signature only cosign checks, and
+	// there's none.
+	verifySignature = func(context.Context, io.Reader, []byte, string) error { return selfupdate.ErrOldBundle }
 	lookCosign = func() (string, error) { return "", errors.New("not found") }
 }
 
@@ -131,7 +111,7 @@ func TestUpdate(t *testing.T) {
 
 	_, err = runCLI(t, "update")
 	assert.Equal(t, exitUsage, exitCodeFor(err))
-	assert.ErrorContains(t, err, "cosign isn't installed")
+	assert.ErrorContains(t, err, "can only be checked with cosign, which isn't installed")
 
 	out, err = runCLI(t, "update", "--skip-signature")
 	require.NoError(t, err, out)
@@ -174,9 +154,35 @@ func cosignScript(t *testing.T, code int) {
 	lookCosign = func() (string, error) { return path, nil }
 }
 
-// With cosign installed, the checksums' signature decides: a good one
-// installs, a bad one installs nothing.
+// The checksums' signature decides, checked here (Sigstore's bundle): a
+// good one installs, a bad one installs nothing.
 func TestUpdateChecksTheSignature(t *testing.T) {
+	isolate(t)
+	fakeRelease(t, false)
+	dir := installed(t)
+	version = "0.1.0"
+
+	verifySignature = func(context.Context, io.Reader, []byte, string) error {
+		return errors.New("the release's signature doesn't verify: wrong identity")
+	}
+	_, err := runCLI(t, "update")
+	assert.ErrorContains(t, err, "wrong identity: nothing was installed")
+	data, _ := os.ReadFile(filepath.Join(dir, "blitz"))
+	assert.Equal(t, "old blitz", string(data), "nothing was installed")
+
+	verifySignature = func(_ context.Context, artifact io.Reader, _ []byte, _ string) error {
+		data, _ := io.ReadAll(artifact)
+		assert.Contains(t, string(data), "blitz_9.9.9", "the checksums are what's checked")
+		return nil
+	}
+	out, err := runCLI(t, "update")
+	require.NoError(t, err, out)
+	assert.Contains(t, out, "The checksums are signed by Blitz's release workflow.")
+}
+
+// An older release's signature (cosign's own bundle) is checked with
+// cosign: a good one installs, a bad one installs nothing.
+func TestUpdateChecksAnOldSignatureWithCosign(t *testing.T) {
 	isolate(t)
 	fakeRelease(t, false)
 	dir := installed(t)
@@ -184,7 +190,7 @@ func TestUpdateChecksTheSignature(t *testing.T) {
 
 	cosignScript(t, 1)
 	_, err := runCLI(t, "update")
-	assert.ErrorContains(t, err, "signature doesn't verify")
+	assert.ErrorContains(t, err, "signature doesn't verify, so nothing was installed")
 	data, _ := os.ReadFile(filepath.Join(dir, "blitz"))
 	assert.Equal(t, "old blitz", string(data), "nothing was installed")
 
@@ -238,7 +244,7 @@ func TestUpdateReleaseLookups(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { fmt.Fprint(w, body) }))
 			t.Cleanup(srv.Close)
-			releasesAPI = srv.URL
+			src.API = srv.URL
 			_, err := runCLI(t, "update", "--check")
 			assert.ErrorContains(t, err, "no release tag in the answer")
 		})
@@ -246,17 +252,17 @@ func TestUpdateReleaseLookups(t *testing.T) {
 	t.Run("API error", func(t *testing.T) {
 		srv := httptest.NewServer(http.NotFoundHandler())
 		t.Cleanup(srv.Close)
-		releasesAPI = srv.URL
+		src.API = srv.URL
 		_, err := runCLI(t, "update", "--check")
 		assert.ErrorContains(t, err, "finding the latest release: HTTP 404")
 	})
 	t.Run("API unreachable", func(t *testing.T) {
-		releasesAPI = "http://127.0.0.1:1"
+		src.API = "http://127.0.0.1:1"
 		_, err := runCLI(t, "update", "--check")
 		assert.ErrorContains(t, err, "finding the latest release")
 	})
 	t.Run("bad URL", func(t *testing.T) {
-		releasesAPI = "http://bad host"
+		src.API = "http://bad host"
 		_, err := runCLI(t, "update", "--check")
 		assert.ErrorContains(t, err, "finding the latest release")
 	})
@@ -288,127 +294,6 @@ func TestUpdateArchiveWithoutTheService(t *testing.T) {
 	}
 }
 
-// checkSum needs the file's line in checksums.txt.
-func TestCheckSum(t *testing.T) {
-	dir := t.TempDir()
-	file := filepath.Join(dir, "a.tar.gz")
-	require.NoError(t, os.WriteFile(file, []byte("x"), 0o644))
-	sums := filepath.Join(dir, "checksums.txt")
-	require.NoError(t, os.WriteFile(sums, []byte("abc  other.tar.gz\nmalformed\n"), 0o644))
-	assert.ErrorContains(t, checkSum(sums, file), "a.tar.gz isn't in checksums.txt")
-	assert.Error(t, checkSum(filepath.Join(dir, "missing.txt"), file), "no checksums file")
-	require.NoError(t, os.WriteFile(sums, []byte("abc  missing.tar.gz\n"), 0o644))
-	assert.Error(t, checkSum(sums, filepath.Join(dir, "missing.tar.gz")), "no archive")
-}
-
-// extractPrograms reads Windows' zip archives as well as tarballs, and
-// refuses what isn't an archive.
-func TestExtractPrograms(t *testing.T) {
-	dir := t.TempDir()
-	archive := filepath.Join(dir, "blitz.zip")
-	f, err := os.Create(archive)
-	require.NoError(t, err)
-	zw := zip.NewWriter(f)
-	_, err = zw.Create("blitz_x/")
-	require.NoError(t, err)
-	for _, p := range []string{"blitz_x/" + programName("blitz"), "blitz_x/" + programName("blitzd"), "blitz_x/README.md"} {
-		w, err := zw.Create(p)
-		require.NoError(t, err)
-		fmt.Fprint(w, "new "+filepath.Base(p))
-	}
-	require.NoError(t, zw.Close())
-	require.NoError(t, f.Close())
-	out := t.TempDir()
-	files, err := extractPrograms(archive, out)
-	require.NoError(t, err)
-	assert.Len(t, files, 2)
-	data, err := os.ReadFile(files["blitzd"])
-	require.NoError(t, err)
-	assert.Equal(t, "new "+programName("blitzd"), string(data))
-
-	for name, content := range map[string]string{"bad.zip": "not a zip", "bad.tar.gz": "not gzip"} {
-		t.Run(name, func(t *testing.T) {
-			p := filepath.Join(dir, name)
-			require.NoError(t, os.WriteFile(p, []byte(content), 0o644))
-			_, err := extractPrograms(p, out)
-			assert.Error(t, err)
-		})
-	}
-	t.Run("missing", func(t *testing.T) {
-		_, err := extractPrograms(filepath.Join(dir, "none.tar.gz"), out)
-		assert.Error(t, err)
-	})
-	t.Run("truncated tar", func(t *testing.T) {
-		var buf bytes.Buffer
-		gz := gzip.NewWriter(&buf)
-		gz.Write([]byte("this is not a tar header but long enough to be read as one, almost"))
-		gz.Close()
-		p := filepath.Join(dir, "trunc.tar.gz")
-		require.NoError(t, os.WriteFile(p, buf.Bytes(), 0o644))
-		_, err := extractPrograms(p, out)
-		assert.Error(t, err)
-	})
-	t.Run("unwritable", func(t *testing.T) {
-		_, err := extractPrograms(archive, filepath.Join(dir, "no", "such"))
-		assert.Error(t, err)
-	})
-}
-
-// replaceFiles fails cleanly when it can't read or place a new file, and
-// then leaves every destination as it was: both programs or neither.
-func TestReplaceFiles(t *testing.T) {
-	for name, tc := range map[string]struct {
-		pairs func(dir string) [][2]string
-	}{
-		"a missing source": {pairs: func(dir string) [][2]string {
-			return [][2]string{{filepath.Join(dir, "src"), filepath.Join(dir, "blitzd")}, {filepath.Join(dir, "missing"), filepath.Join(dir, "blitz")}}
-		}},
-		"no folder to stage in": {pairs: func(dir string) [][2]string {
-			return [][2]string{{filepath.Join(dir, "src"), filepath.Join(dir, "blitzd")}, {filepath.Join(dir, "src"), filepath.Join(dir, "no", "blitz")}}
-		}},
-		// A folder in the way: staging works, the second program can't be
-		// placed after the first was.
-		"the second rename fails": {pairs: func(dir string) [][2]string {
-			return [][2]string{{filepath.Join(dir, "src"), filepath.Join(dir, "blitzd")}, {filepath.Join(dir, "src"), filepath.Join(dir, "busy")}}
-		}},
-	} {
-		t.Run(name, func(t *testing.T) {
-			dir := t.TempDir()
-			require.NoError(t, os.WriteFile(filepath.Join(dir, "src"), []byte("new"), 0o644))
-			require.NoError(t, os.WriteFile(filepath.Join(dir, "blitzd"), []byte("old blitzd"), 0o755))
-			require.NoError(t, os.MkdirAll(filepath.Join(dir, "busy", "child"), 0o755))
-			assert.Error(t, replaceFiles(tc.pairs(dir)))
-			data, err := os.ReadFile(filepath.Join(dir, "blitzd"))
-			require.NoError(t, err)
-			assert.Equal(t, "old blitzd", string(data), "the first program is put back")
-			for _, left := range []string{"blitzd.new", "blitzd.old", "busy.new", "blitz.new"} {
-				assert.NoFileExists(t, filepath.Join(dir, left))
-			}
-		})
-	}
-}
-
-// replaceFiles puts every new file in place, and leaves nothing beside.
-func TestReplaceFilesReplacesAll(t *testing.T) {
-	dir := t.TempDir()
-	for _, f := range []string{"blitz", "blitzd"} {
-		require.NoError(t, os.WriteFile(filepath.Join(dir, f+".src"), []byte("new "+f), 0o644))
-		require.NoError(t, os.WriteFile(filepath.Join(dir, f), []byte("old "+f), 0o755))
-	}
-	require.NoError(t, replaceFiles([][2]string{
-		{filepath.Join(dir, "blitzd.src"), filepath.Join(dir, "blitzd")},
-		{filepath.Join(dir, "blitz.src"), filepath.Join(dir, "blitz")},
-		{filepath.Join(dir, "blitz.src"), filepath.Join(dir, "fresh")},
-	}))
-	for f, want := range map[string]string{"blitz": "new blitz", "blitzd": "new blitzd", "fresh": "new blitz"} {
-		data, err := os.ReadFile(filepath.Join(dir, f))
-		require.NoError(t, err)
-		assert.Equal(t, want, string(data))
-		assert.NoFileExists(t, filepath.Join(dir, f+".old"))
-		assert.NoFileExists(t, filepath.Join(dir, f+".new"))
-	}
-}
-
 // serveArchive serves archive as v9.9.9's for this machine, with its
 // checksum.
 func serveArchive(t *testing.T, archive []byte) {
@@ -426,7 +311,7 @@ func serveArchive(t *testing.T, archive []byte) {
 		}
 	}))
 	t.Cleanup(srv.Close)
-	releasesDownload = srv.URL
+	src.Download = srv.URL
 }
 
 // What fails while installing leaves the installation as it was: an
@@ -437,21 +322,37 @@ func TestUpdateInstallFailures(t *testing.T) {
 	fakeRelease(t, false)
 	dir := installed(t)
 	version = "0.1.0"
-	working := releasesDownload
+	working := src.Download
 
 	serveArchive(t, []byte("not an archive"))
 	_, err := runCLI(t, "update", "--skip-signature")
 	assert.ErrorContains(t, err, "gzip")
 
-	releasesDownload = "http://127.0.0.1:1"
+	src.Download = "http://127.0.0.1:1"
 	_, err = runCLI(t, "update", "--skip-signature")
 	assert.ErrorContains(t, err, "downloading ")
 
-	releasesDownload = working
+	src.Download = working
 	require.NoError(t, os.Chmod(dir, 0o555))
 	t.Cleanup(func() { os.Chmod(dir, 0o755) })
 	_, err = runCLI(t, "update", "--skip-signature")
 	assert.ErrorContains(t, err, "replacing ")
 	data, _ := os.ReadFile(filepath.Join(dir, "blitz"))
 	assert.Equal(t, "old blitz", string(data))
+}
+
+// The signature check reads the checksums and the bundle it downloaded.
+func TestCheckSignatureReadsItsFiles(t *testing.T) {
+	dir := t.TempDir()
+	sums := filepath.Join(dir, "checksums.txt")
+	require.NoError(t, os.WriteFile(sums, []byte("x"), 0o600))
+	assert.Error(t, checkSignature(context.Background(), filepath.Join(dir, "missing.txt"), filepath.Join(dir, "b.json")))
+	assert.Error(t, checkSignature(context.Background(), sums, filepath.Join(dir, "missing.json")))
+}
+
+// cosign is looked for on PATH.
+func TestLookCosign(t *testing.T) {
+	t.Setenv("PATH", t.TempDir())
+	_, err := lookCosign()
+	assert.Error(t, err)
 }

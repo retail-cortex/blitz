@@ -295,26 +295,6 @@
   },
   "selectedYankedVersions": {},
   "moduleExtensions": {
-    "//build:pkg_config.bzl%pkg_config": {
-      "general": {
-        "bzlTransitiveDigest": "M7Wf4AuyVJbA26tP3s2zBgiPiicYgGpxDT70ZOsZL/8=",
-        "usagesDigest": "AV173t+verXm8qH45OoTz1AK8UqG2C6xjDDncwYyPkE=",
-        "recordedInputs": [],
-        "generatedRepoSpecs": {
-          "webkitgtk": {
-            "repoRuleId": "@@//build:pkg_config.bzl%pkg_config_repository",
-            "attributes": {
-              "modules": [
-                "gtk+-3.0",
-                "gio-unix-2.0",
-                "webkit2gtk-4.1",
-                "libsoup-3.0"
-              ]
-            }
-          }
-        }
-      }
-    },
     "@@aspect_tools_telemetry+//:extension.bzl%telemetry": {
       "general": {
         "bzlTransitiveDigest": "zFgbaCUuPzH6bIE7CBHBVCqjWSJ78/WNXisdzXaKSnU=",
