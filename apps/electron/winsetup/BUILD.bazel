@@ -1,0 +1,69 @@
+# Copyright 2026 Retail Cortex
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@rules_go//go:def.bzl", "go_binary", "go_library", "go_test")
+
+go_library(
+    name = "winsetup_lib",
+    srcs = [
+        "main.go",
+        "system_other.go",
+        "system_windows.go",
+    ],
+    importpath = "github.com/retail-cortex/blitz/apps/electron/winsetup",
+    visibility = ["//visibility:private"],
+    deps = [
+        "//pkg/wininstall",
+    ] + select({
+        "@rules_go//go/platform:windows": [
+            "//pkg/loginitem",
+            "//pkg/pagehost",
+            "@org_golang_x_sys//windows",
+        ],
+        "//conditions:default": [],
+    }),
+)
+
+go_binary(
+    name = "winsetup",
+    embed = [":winsetup_lib"],
+    visibility = ["//visibility:public"],
+)
+
+# The setup program as released (spec_electron_038 EL-81): for Windows,
+# cross-built in pure Go, with no console window. packaging gives it its
+# icon (winexe), ships it in the zip as the uninstaller and makes the
+# setup program from it and the zip (pack).
+go_binary(
+    name = "winsetup_windows_amd64",
+    embed = [":winsetup_lib"],
+    gc_linkopts = ["-H=windowsgui"],
+    goarch = "amd64",
+    goos = "windows",
+    pure = "on",
+    visibility = ["//apps/electron:__subpackages__"],
+    x_defs = {"main.version": "{STABLE_BLITZ_VERSION}"},
+)
+
+go_test(
+    name = "winsetup_test",
+    size = "small",
+    srcs = ["main_test.go"],
+    embed = [":winsetup_lib"],
+    deps = [
+        "//pkg/wininstall",
+        "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//require",
+    ],
+)

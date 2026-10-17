@@ -96,6 +96,7 @@ go_library(
         "//pkg/pageserver",
         "//pkg/selfupdate",
         "//pkg/socket",
+        "//pkg/wininstall",
         "@io_fyne_systray//:systray",
     ] + select({
         "@rules_go//go/platform:windows": [
@@ -153,6 +154,7 @@ go_library(
         "//pkg/pageserver",
         "//pkg/selfupdate",
         "//pkg/socket",
+        "//pkg/wininstall",
         "@io_fyne_systray//:systray",
     ] + select({
         "@rules_go//go/platform:windows": [

@@ -39,6 +39,7 @@ import (
 	"io/fs"
 	"log"
 	"os"
+	"os/exec"
 	"path/filepath"
 	goruntime "runtime"
 	"sync"
@@ -53,6 +54,7 @@ import (
 	"github.com/retail-cortex/blitz/pkg/pageserver"
 	"github.com/retail-cortex/blitz/pkg/selfupdate"
 	"github.com/retail-cortex/blitz/pkg/socket"
+	"github.com/retail-cortex/blitz/pkg/wininstall"
 )
 
 // version is set at link time for releases.
@@ -217,8 +219,19 @@ func applyDownloaded(staged, root, relaunch string, waitPID int) error {
 	}.Run()
 	if err != nil {
 		fmt.Fprintln(log, time.Now().Format(time.RFC3339), err)
+		return err
 	}
-	return err
+	if goruntime.GOOS == "windows" {
+		// Installed with the setup program: Add or remove programs shows
+		// the new version (EL-81).
+		out, verr := exec.Command(filepath.Join(acts.Beside, "blitz-tray.exe"), "--version").Output()
+		if v := wininstall.TrayVersion(string(out)); verr == nil && v != "" {
+			if err := wininstall.SetDisplayVersion(v); err != nil {
+				fmt.Fprintln(log, time.Now().Format(time.RFC3339), "updating the installed version:", err)
+			}
+		}
+	}
+	return nil
 }
 
 // newActions controls the service on sock.

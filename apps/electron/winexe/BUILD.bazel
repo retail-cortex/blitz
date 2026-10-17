@@ -38,9 +38,11 @@ go_test(
     args = [
         "-exe=$(rootpath @electron_win32_x64//:electron.exe)",
         "-icon=$(rootpath //apps/electron:appicon.png)",
+        "-setup=$(rootpath //apps/electron/winsetup:winsetup_windows_amd64)",
     ],
     data = [
         "//apps/electron:appicon.png",
+        "//apps/electron/winsetup:winsetup_windows_amd64",
         "@electron_win32_x64//:electron.exe",
     ],
     embed = [":winexe_lib"],

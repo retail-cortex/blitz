@@ -34,6 +34,8 @@ import (
 var (
 	exePath  = flag.String("exe", "", "Electron's Windows program")
 	iconPath = flag.String("icon", "", "the app's icon")
+	// A Go program for Windows, without resources: the setup program.
+	setupPath = flag.String("setup", "", "the setup program")
 )
 
 // runfile is a path from $(rootpath), which is relative to the main
@@ -51,7 +53,7 @@ func runfile(t *testing.T, p string) string {
 func TestRewrite(t *testing.T) {
 	exe := runfile(t, *exePath)
 	out := filepath.Join(t.TempDir(), "Blitz.exe")
-	require.NoError(t, run(exe, runfile(t, *iconPath), "0.6.6", out))
+	require.NoError(t, run(exe, runfile(t, *iconPath), "0.6.6", out, blitzExe))
 
 	before := load(t, exe)
 	after := load(t, out)
@@ -74,6 +76,32 @@ func TestRewrite(t *testing.T) {
 
 	manifest := winres.RT_MANIFEST
 	assert.Equal(t, before.Get(manifest, winres.ID(1), 0x409) != nil, after.Get(manifest, winres.ID(1), 0x409) != nil, "the manifest stays as it was")
+}
+
+// A program without resources (a Go program, the setup program) gets
+// them, with a manifest that doesn't ask for an administrator.
+func TestRewriteGoProgram(t *testing.T) {
+	out := filepath.Join(t.TempDir(), "setup.exe")
+	require.NoError(t, run(runfile(t, *setupPath), runfile(t, *iconPath), "0.7.1", out, Details{Name: "Uninstall Blitz.exe", Description: "Blitz Setup"}))
+	rs := load(t, out)
+	_, err := rs.GetIcon(winres.ID(1))
+	require.NoError(t, err)
+	m := rs.Get(winres.RT_MANIFEST, winres.ID(1), 0x409)
+	require.NotNil(t, m, "a manifest")
+	assert.Contains(t, string(m), `level="asInvoker"`)
+}
+
+// The setup program is named as itself (--name, --description).
+func TestRewriteDetails(t *testing.T) {
+	out := filepath.Join(t.TempDir(), "setup.exe")
+	var stderr bytes.Buffer
+	require.Equal(t, 0, cmd([]string{"--in", runfile(t, *exePath), "--icon", runfile(t, *iconPath), "--version", "0.7.1", "--out", out, "--name", "Uninstall Blitz.exe", "--description", "Blitz Setup"}, &stderr), stderr.String())
+	v, err := version.FromBytes(load(t, out).Get(winres.RT_VERSION, winres.ID(1), 0))
+	require.NoError(t, err)
+	table := v.Table().GetMainTranslation()
+	assert.Equal(t, "Blitz Setup", table[version.FileDescription])
+	assert.Equal(t, "Uninstall Blitz.exe", table[version.OriginalFilename])
+	assert.Equal(t, "Blitz", table[version.ProductName])
 }
 
 // load reads a program's resources.
@@ -108,16 +136,16 @@ func TestRewriteRefuses(t *testing.T) {
 		{"not a program", notExe, write("ok2.png", 256, 256), filepath.Join(dir, "o.exe"), "reading the program's resources"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			assert.ErrorContains(t, run(tc.in, tc.icon, "1.0.0", tc.out), tc.want)
+			assert.ErrorContains(t, run(tc.in, tc.icon, "1.0.0", tc.out, blitzExe), tc.want)
 		})
 	}
 	if *exePath != "" {
 		exe := runfile(t, *exePath)
-		assert.ErrorContains(t, run(exe, write("small.png", 64, 64), "1.0.0", filepath.Join(dir, "o.exe")), "at least 256 px")
-		assert.ErrorContains(t, run(exe, write("wide.png", 512, 256), "1.0.0", filepath.Join(dir, "o.exe")), "must be square")
+		assert.ErrorContains(t, run(exe, write("small.png", 64, 64), "1.0.0", filepath.Join(dir, "o.exe"), blitzExe), "at least 256 px")
+		assert.ErrorContains(t, run(exe, write("wide.png", 512, 256), "1.0.0", filepath.Join(dir, "o.exe"), blitzExe), "must be square")
 		bad := filepath.Join(dir, "bad.png")
 		require.NoError(t, os.WriteFile(bad, []byte("not a png"), 0o600))
-		assert.ErrorContains(t, run(exe, bad, "1.0.0", filepath.Join(dir, "o.exe")), "reading the icon")
+		assert.ErrorContains(t, run(exe, bad, "1.0.0", filepath.Join(dir, "o.exe"), blitzExe), "reading the icon")
 	}
 }
 

@@ -90,6 +90,11 @@ jobs:
           bazel build --config=release //apps/electron/packaging:windows_zip
           cp "$(bazel cquery --config=release --output=files //apps/electron/packaging:windows_zip)" "dist/Blitz_${version}_windows_x64.zip"
           cosign sign-blob --yes --new-bundle-format --bundle "dist/Blitz_${version}_windows_x64.zip.sigstore.json" "dist/Blitz_${version}_windows_x64.zip"
+          # Its setup program (apps/electron/winsetup): the zip installed for
+          # the person running it, without an administrator; signed alike.
+          bazel build --config=release //apps/electron/packaging:windows_setup
+          cp "$(bazel cquery --config=release --output=files //apps/electron/packaging:windows_setup)" "dist/Blitz_${version}_windows_x64_setup.exe"
+          cosign sign-blob --yes --new-bundle-format --bundle "dist/Blitz_${version}_windows_x64_setup.exe.sigstore.json" "dist/Blitz_${version}_windows_x64_setup.exe"
       - name: Draft release
         env:
           GH_TOKEN: ${{ github.token }}
