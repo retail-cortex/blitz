@@ -155,10 +155,11 @@ export interface UpdateStatus {
   notes?: string; // the release's page
 }
 
-/** A blitz://open link: a folder to open, with a prompt to fill in. */
+/** A blitz:// link: a folder to open, with a prompt to fill in (open) or a view to show (workers). */
 export interface DeepLink {
   dir: string;
   prompt: string;
+  view?: "workers";
 }
 
 /** The methods the program serving the page answers (the tray's), once asked. */
@@ -502,7 +503,7 @@ export async function toggleFullscreen(): Promise<void> {
 }
 
 /**
- * Calls f with each blitz://open link: those the app was opened with, then
+ * Calls f with each blitz:// link: those the app was opened with, then
  * each as it comes.
  */
 export function onDeepLink(f: (link: DeepLink) => void): () => void {

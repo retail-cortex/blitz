@@ -147,6 +147,10 @@ describe("parseDeepLink", () => {
     { name: "no folder", raw: "blitz://open?prompt=hi", want: undefined },
     { name: "another action", raw: "blitz://run?dir=/tmp", want: undefined },
     { name: "another scheme", raw: "https://open?dir=/tmp", want: undefined },
+    { name: "a folder's workers", raw: "blitz://workers?dir=/tmp/shop&prompt=ignored", want: { dir: "/tmp/shop", prompt: "", view: "workers" } },
+    { name: "workers without a folder", raw: "blitz://workers", want: undefined },
+    { name: "workers of a relative folder", raw: "blitz://workers?dir=shop", want: undefined },
+    { name: "another action", raw: "blitz://settings?dir=/tmp", want: undefined },
     { name: "a prompt too long", raw: `blitz://open?dir=/tmp&prompt=${"x".repeat(maxLinkPrompt + 1)}`, want: undefined },
   ])("$name", ({ raw, want }) => expect(parseDeepLink(raw, "/home/me")).toEqual(want));
 

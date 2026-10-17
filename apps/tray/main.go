@@ -271,6 +271,10 @@ func onReady() {
 	open := systray.AddMenuItem(i18n.T("tray.open_app"), "")
 	logs := systray.AddMenuItem(i18n.T("tray.open_logs"), "")
 	systray.AddSeparator()
+	// What the running service has: its MCP servers and workers.
+	mcpMenu := &submenu{parent: systray.AddMenuItem(i18n.T("tray.mcp"), "")}
+	workersMenu := &submenu{parent: systray.AddMenuItem(i18n.T("tray.workers"), "")}
+	systray.AddSeparator()
 	// Windows: the tray is what starts at login (and starts the service).
 	atLogin := &systray.MenuItem{ClickedCh: make(chan struct{})}
 	if goruntime.GOOS == "windows" {
@@ -305,16 +309,37 @@ func onReady() {
 	busy := ""
 	setBusy := func(s string) { mu.Lock(); busy = s; mu.Unlock() }
 	isBusy := func() bool { mu.Lock(); defer mu.Unlock(); return busy != "" }
+	var do func(doing string, f func() error)
+	click := func(a tray.Action) {
+		do("", func() error { return tray.Do(context.Background(), sock, a, acts.OpenLink) })
+	}
 	refresh := func() {
 		st := status()
 		mu.Lock()
 		note := busy
 		mu.Unlock()
 		show(tray.MenuFor(st), note)
+		var extras tray.Extras
+		var err error
+		if st.Running {
+			extras, err = tray.FetchExtras(context.Background(), sock)
+		}
+		// Shown while the service runs and answers (an older one doesn't).
+		for _, sm := range []*submenu{mcpMenu, workersMenu} {
+			if st.Running && err == nil {
+				sm.parent.Show()
+			} else {
+				sm.parent.Hide()
+			}
+		}
+		if st.Running && err == nil {
+			mcpMenu.show(tray.MCPEntries(extras), click)
+			workersMenu.show(tray.WorkerEntries(extras), click)
+		}
 	}
 	refresh()
 
-	do := func(doing string, f func() error) {
+	do = func(doing string, f func() error) {
 		setBusy(doing)
 		refresh()
 		go func() {

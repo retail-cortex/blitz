@@ -53,6 +53,7 @@ go_library(
         "main.go",
         "page.go",
         "page_none.go",
+        "submenu.go",
     ],
     cgo = True,
     clinkopts = select({
@@ -118,6 +119,7 @@ go_library(
         "main.go",
         "page.go",
         "page_none.go",
+        "submenu.go",
     ],
     cgo = True,
     clinkopts = select({

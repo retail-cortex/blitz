@@ -110,9 +110,21 @@ export interface ViewDetail {
   /** Which changes: this session's (the default) or git's. */
   source?: "session" | "git";
 }
-/** Asks a workspace to show a view. */
+// Views for a workspace that isn't there yet (it's opening), shown when it
+// mounts.
+const pendingViews = new Map<string, ViewDetail>();
+
+/** Asks a workspace to show a view. One for a workspace that isn't there yet waits for it. */
 export function showView(detail: ViewDetail) {
-  window.dispatchEvent(new CustomEvent(viewEvent, { detail }));
+  const taken = !window.dispatchEvent(new CustomEvent(viewEvent, { detail, cancelable: true }));
+  if (!taken) pendingViews.set(detail.dir, detail);
+}
+
+/** The view waiting to be shown in a workspace, once. */
+export function takePendingView(dir: string): ViewDetail | undefined {
+  const v = pendingViews.get(dir);
+  pendingViews.delete(dir);
+  return v;
 }
 
 /** The event that loads a session in a workspace. */

@@ -48,7 +48,7 @@ This spec began as a trial of Electron beside the Wails app: Chromium on macOS, 
   - `PendingLinks()`: the `blitz://` links that came before the page was ready.
   - `ToggleFullscreen()`.
 - **EL-21** Everything else the page asks of its host (the service's status and controls, preferences in `~/.blitz/desktop.json`, the CLI, the sandbox, files, licenses) goes to `/host/` (WIN-14), as on the Windows tray's page.
-- **EL-22** `blitz://open?dir=<folder>&prompt=<text>` links ([spec_parity_027](spec_parity_027.md) PAR-INT-03) reach the page as `deeplink:open`, or wait for `PendingLinks`: the folder must be an absolute path that exists (`~` is the home folder), the prompt at most 20,000 characters. The packaged app registers the `blitz` scheme.
+- **EL-22** `blitz://open?dir=<folder>&prompt=<text>` links ([spec_parity_027](spec_parity_027.md) PAR-INT-03) reach the page as `deeplink:open`, or wait for `PendingLinks`: the folder must be an absolute path that exists (`~` is the home folder), the prompt at most 20,000 characters. *Since v0.7.1* `blitz://workers?dir=<folder>` (the tray's **Show in Blitz**, WK-57) opens the folder on its workers (`DeepLink.view`; the page's `showView`, which waits for a workspace still opening, `takePendingView`). The packaged app registers the `blitz` scheme.
 
 ## 5. The page, and what's not done
 

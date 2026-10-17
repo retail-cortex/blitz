@@ -184,16 +184,19 @@ export function printOptions(pageSize: unknown) {
 /** The longest prompt a blitz:// link may carry (as deeplink.go). */
 export const maxLinkPrompt = 20000;
 
-/** A blitz://open link's folder and prompt. */
+/** A blitz:// link's folder, and its prompt (open) or view (workers). */
 export interface DeepLink {
   dir: string;
   prompt: string;
+  view?: "workers";
 }
 
 /**
- * Reads blitz://open?dir=<folder>&prompt=<text>: the folder must be an
- * absolute path (whether it's a folder is the main process's to check),
- * the prompt at most maxLinkPrompt characters. Undefined otherwise.
+ * Reads blitz://open?dir=<folder>&prompt=<text> and, from the tray,
+ * blitz://workers?dir=<folder> (the folder's workers): the folder must be
+ * an absolute path (whether it's a folder is the main process's to
+ * check), the prompt at most maxLinkPrompt characters. Undefined
+ * otherwise.
  */
 export function parseDeepLink(raw: string, home = ""): DeepLink | undefined {
   let u: URL;
@@ -204,11 +207,12 @@ export function parseDeepLink(raw: string, home = ""): DeepLink | undefined {
   }
   if (u.protocol !== "blitz:") return undefined;
   const action = (u.host || u.pathname.replace(/^\/+/, "")).replace(/\/$/, "");
-  if (action !== "open") return undefined;
+  if (action !== "open" && action !== "workers") return undefined;
   let dir = u.searchParams.get("dir") ?? "";
   if (home && (dir === "~" || dir.startsWith("~/"))) dir = home + dir.slice(1);
   const absolute = dir.startsWith("/") || /^[A-Za-z]:[\\/]/.test(dir);
   if (!absolute) return undefined;
+  if (action === "workers") return { dir, prompt: "", view: "workers" };
   const prompt = u.searchParams.get("prompt") ?? "";
   if ([...prompt].length > maxLinkPrompt) return undefined;
   return { dir, prompt };

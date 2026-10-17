@@ -25,7 +25,7 @@ import { SearchDialog } from "./SearchDialog";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { applyUserLanguage, t, useLanguage } from "./i18n";
 import { message, reason } from "./errors";
-import { compose, goToFileEvent, openDocsEvent, openSettingsEvent, searchWorkspaceEvent, showLicenseEvent } from "./events";
+import { compose, goToFileEvent, openDocsEvent, openSettingsEvent, searchWorkspaceEvent, showLicenseEvent, showView } from "./events";
 import { DocsDrawer, type DocsAt } from "./docs/DocsDrawer";
 import { UnsavedDialog } from "./files/EditorPane";
 import { LicenseDrawer } from "./LicenseDrawer";
@@ -280,11 +280,16 @@ function Shell() {
   }, []);
   // A click on a notification shows its workspace.
   useEffect(() => onNotificationOpen((dir) => update((p) => openWorkspace(p, dir))), [update]);
-  // A blitz://open link opens its folder with the prompt filled in, not sent.
+  // A blitz://open link opens its folder with the prompt filled in, not
+  // sent; blitz://workers (the tray's) opens it on its workers.
   useEffect(
     () =>
       onDeepLink((link) => {
         update((p) => openWorkspace(p, link.dir));
+        if (link.view) {
+          showView({ dir: link.dir, view: link.view });
+          return;
+        }
         if (link.prompt) compose({ dir: link.dir, text: link.prompt });
         snack(t("desktop.link_opened", { dir: displayName({ dir: link.dir, name: "" }) }));
       }),

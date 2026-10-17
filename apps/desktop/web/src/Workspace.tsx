@@ -21,7 +21,7 @@ import { mdiCodeBraces, mdiMagnify, mdiFileTreeOutline, mdiMessageTextOutline } 
 import { ChangesDrawer, type ChangesSource } from "./Changes";
 import { CommitDialog } from "./CommitDialog";
 import { Conversation } from "./Conversation";
-import { filesTouchedEvent, goToFile, historyEvent, openFileEvent, openWebEvent, revealInTreeEvent, viewEvent, type HistoryDetail, type OpenFileDetail, type OpenWebDetail, type ViewDetail } from "./events";
+import { filesTouchedEvent, goToFile, historyEvent, openFileEvent, openWebEvent, revealInTreeEvent, takePendingView, viewEvent, type HistoryDetail, type OpenFileDetail, type OpenWebDetail, type ViewDetail } from "./events";
 import { HistoryDrawer } from "./files/HistoryDrawer";
 import { EditorPane } from "./files/EditorPane";
 import { FilesShelf } from "./files/FilesShelf";
@@ -108,9 +108,14 @@ export function Workspace({
   useEffect(() => {
     const f = (e: Event) => {
       const d = (e as CustomEvent<ViewDetail>).detail;
-      if (d.dir === dir) showView(d.view, d.source);
+      if (d.dir !== dir) return;
+      e.preventDefault(); // taken
+      showView(d.view, d.source);
     };
     window.addEventListener(viewEvent, f);
+    // One asked for before this workspace was there (a blitz://workers link).
+    const waiting = takePendingView(dir);
+    if (waiting) showView(waiting.view, waiting.source);
     return () => window.removeEventListener(viewEvent, f);
   }, [dir, showView]);
 
