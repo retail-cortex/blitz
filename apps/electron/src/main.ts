@@ -340,6 +340,11 @@ ipcMain.handle("blitz:call", async (e, method: unknown, args: unknown) => {
       return previewContent(await preview(a).view.webContents.executeJavaScriptInIsolatedWorld(1000, [{ code: contentScript }]));
     case "PreviewConsole":
       return [...preview(a).errors];
+    case "PreviewPrintPDF": {
+      // The page as it shows, for Save to workspace (EL-106).
+      const pdf = await preview(a).view.webContents.printToPDF(printOptions(a[1]));
+      return pdf.toString("base64");
+    }
     case "Quit":
       // As the menu's Quit: closing asks first about unsaved changes. An
       // update waiting to be put in place (the host's ApplyUpdate) goes

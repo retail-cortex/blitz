@@ -15,12 +15,13 @@
  */
 
 import { useEffect, useRef, useState } from "react";
-import { mdiArrowLeft, mdiArrowRight, mdiClose, mdiCameraOutline, mdiConsoleLine, mdiMessagePlusOutline, mdiOpenInNew, mdiRefresh, mdiSelectionDrag, mdiWeb } from "@mdi/js";
+import { mdiArrowLeft, mdiArrowRight, mdiClose, mdiCameraOutline, mdiConsoleLine, mdiContentSaveOutline, mdiMessagePlusOutline, mdiOpenInNew, mdiRefresh, mdiSelectionDrag, mdiWeb } from "@mdi/js";
 import { openURL, previewBounds, previewCapture, previewConsole, previewContent, previewNavigate, previewOpen, previewVisible } from "../desktop";
 import { message } from "../errors";
 import { addWeb } from "../events";
 import { t } from "../i18n";
 import { Button, Icon, IconButton, Menu, useSnackbar } from "../ui/controls";
+import { SaveWebDialog } from "./SaveWebDialog";
 import type { EditorModel, Tab } from "./useEditor";
 import { consoleBlock, covered, overlays, pageBlock, webId, webTabName } from "./webTabs";
 
@@ -43,6 +44,7 @@ export function WebPreview({ tab, model }: { tab: Tab & { web: NonNullable<Tab["
   const [editing, setEditing] = useState(false);
   const [error, setError] = useState("");
   const [started, setStarted] = useState(opened.has(id));
+  const [saving, setSaving] = useState(false);
   const snack = useSnackbar();
 
   // The address follows the page, unless it's being typed.
@@ -158,6 +160,7 @@ export function WebPreview({ tab, model }: { tab: Tab & { web: NonNullable<Tab["
             onChange={(e) => setAddress(e.target.value)}
           />
         </form>
+        <IconButton icon={mdiContentSaveOutline} label={t("desktop.web.save.title")} small disabled={!started || !web.url} onClick={() => setSaving(true)} />
         <IconButton icon={mdiOpenInNew} label={t("desktop.web.open_browser")} small disabled={!web.url} onClick={() => void openURL(web.url).catch((e) => snack(message(e), { error: true }))} />
         <Menu
           trigger={(props) => (
@@ -187,6 +190,7 @@ export function WebPreview({ tab, model }: { tab: Tab & { web: NonNullable<Tab["
         )}
         <div className="web-view" ref={place} hidden={!started} />
       </div>
+      {saving && <SaveWebDialog dir={model.dir} id={id} url={web.url} title={web.title} onClose={() => setSaving(false)} />}
     </>
   );
 }

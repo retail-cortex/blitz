@@ -39,6 +39,7 @@ export const windowMethods = [
   "PreviewCapture",
   "PreviewContent",
   "PreviewConsole",
+  "PreviewPrintPDF",
 ] as const;
 export type WindowMethod = (typeof windowMethods)[number];
 
