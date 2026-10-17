@@ -72,7 +72,9 @@ describe("the skill form", () => {
   it("tells a script's language, and splits a test run's arguments", () => {
     expect(languageOfScript("scripts/a.py")).toBe("python");
     expect(languageOfScript("scripts/a.ts")).toBe("typescript");
-    expect(languageOfScript("scripts/a.sh")).toBe("");
+    expect(languageOfScript("scripts/a.sh")).toBe("shell");
+    expect(languageOfScript("scripts/a.BAT")).toBe("cmd");
+    expect(languageOfScript("scripts/a.ps1")).toBe("");
     expect(splitArgs(`--from v1 "the notes" 'x y' z`)).toEqual(["--from", "v1", "the notes", "x y", "z"]);
     expect(splitArgs("  ")).toEqual([]);
   });

@@ -431,6 +431,10 @@ type WorkersConfig struct {
 	NotifyOn []string `toml:"notify_on"`
 }
 
+// ScriptLanguages are the languages a skill's scripts may be written in
+// (skills.policy.languages): shell and cmd run with the system's shell.
+var ScriptLanguages = []string{"python", "typescript", "shell", "cmd"}
+
 // WorkerPolicy is the host's limit on workers. A worker asks for
 // permissions and limits; the policy removes what it doesn't allow and
 // caps the rest.
@@ -508,8 +512,8 @@ func (p SkillPolicy) Problems() []string {
 		probs = append(probs, "skills.policy.network_allow is ignored unless network = \"allowlist\"")
 	}
 	for _, l := range p.Languages {
-		if !strings.EqualFold(l, "python") && !strings.EqualFold(l, "typescript") {
-			probs = append(probs, fmt.Sprintf("skills.policy.languages: unknown language %q (python, typescript)", l))
+		if !slices.ContainsFunc(ScriptLanguages, func(k string) bool { return strings.EqualFold(k, l) }) {
+			probs = append(probs, fmt.Sprintf("skills.policy.languages: unknown language %q (%s)", l, strings.Join(ScriptLanguages, ", ")))
 		}
 	}
 	if p.MaxTimeoutSeconds < 0 {
@@ -815,7 +819,7 @@ func DefaultConfig() *Config {
 			},
 			Policy: SkillPolicy{
 				MinHITLTier:       2,
-				Languages:         []string{"python", "typescript"},
+				Languages:         slices.Clone(ScriptLanguages),
 				Sandbox:           "auto",
 				Network:           "none",
 				MaxTimeoutSeconds: 300,

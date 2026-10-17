@@ -76,6 +76,8 @@ export function SkillsPane({ workspace, onDirty }: { workspace: string; onDirty?
   const [problems, setProblems] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [filesDirty, setFilesDirty] = useState(false);
+  // A reference or script open in its tab: the file's buttons stand in for the skill's.
+  const [fileOpen, setFileOpen] = useState(false);
   const [pending, setPending] = useState<(() => void) | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [adding, setAdding] = useState(false);
@@ -245,7 +247,10 @@ export function SkillsPane({ workspace, onDirty }: { workspace: string; onDirty?
             <Tabs
               value={tab}
               label={t("desktop.skills.tabs")}
-              onChange={setTab}
+              onChange={(v) => {
+                setFileOpen(false);
+                setTab(v);
+              }}
               tabs={[
                 { value: "general", label: t("desktop.skills.tab.general") },
                 { value: "references", label: t("desktop.skills.tab.references"), note: file?.skill?.references.length || undefined },
@@ -350,7 +355,8 @@ export function SkillsPane({ workspace, onDirty }: { workspace: string; onDirty?
                 <Icon path={mdiFileDocumentMultipleOutline} size="sm" /> {t("desktop.skills.save_first")}
               </p>
             )}
-            {tab !== "general" && saved && file && <SkillFiles key={tab} workspace={workspace} file={file} folder={tab} onFile={setFile} onDirty={setFilesDirty} />}
+            {tab !== "general" && saved && file && <SkillFiles key={tab} workspace={workspace} file={file} folder={tab} onFile={setFile} onDirty={setFilesDirty} onOpen={setFileOpen} />}
+            {!(tab !== "general" && fileOpen) && (
             <div className="row wrap agent-actions slide-actions">
               <span className="t-body-sm muted spacer ellipsis" title={where}>
                 {where && t("desktop.agents.where", { path: where })}
@@ -370,6 +376,7 @@ export function SkillsPane({ workspace, onDirty }: { workspace: string; onDirty?
                 {t("desktop.skills.save")}
               </Button>
             </div>
+            )}
           </>
         )}
       </section>

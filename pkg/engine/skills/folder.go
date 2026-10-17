@@ -43,16 +43,17 @@ const (
 
 // scriptLanguages are the languages of scripts found in scripts/, by
 // extension.
-var scriptLanguages = map[string]ScriptLanguage{".py": LanguagePython, ".ts": LanguageTypeScript}
+var scriptLanguages = map[string]ScriptLanguage{".py": LanguagePython, ".ts": LanguageTypeScript, ".sh": LanguageShell, ".cmd": LanguageCmd, ".bat": LanguageCmd}
 
 // ScriptLanguageOf is the language of a script file, by its extension
-// (.py, .ts); unspecified for anything else.
+// (.py, .ts, .sh, .cmd and .bat); unspecified for anything else.
 func ScriptLanguageOf(name string) ScriptLanguage { return scriptLanguages[path.Ext(name)] }
 
 // scanBundle fills in what the skill's folder holds (SK-97, SK-98): its
 // resources (the files beside SKILL.md, and everything under
 // references/), its references, and, when the front matter declares no
-// scripts, those in scripts/ (.py and .ts), named by their file name. A
+// scripts, those in scripts/ (.py, .ts, .sh, .cmd, .bat), named by their
+// file name. A
 // skill that declares its scripts keeps exactly those: its other files
 // there may be helpers they import.
 func (s *Skill) scanBundle() {

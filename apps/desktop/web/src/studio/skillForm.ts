@@ -75,14 +75,15 @@ export function kindOf(s: Pick<SkillInfo, "kind">): SkillKind {
   return (skillKinds as readonly string[]).includes(s.kind) ? (s.kind as SkillKind) : "simple";
 }
 
-/** The languages a script can be written in, with their extensions. */
-export const scriptLanguages = { python: ".py", typescript: ".ts" } as const;
+/** The languages a script can be written in, with their extensions (SK-105: shell and cmd run with the system's shell). */
+export const scriptLanguages = { python: ".py", typescript: ".ts", shell: ".sh", cmd: ".cmd" } as const;
 /** A script's language. */
 export type ScriptLanguage = keyof typeof scriptLanguages;
 
 /** A script file's language, from its extension ("" for neither). */
 export function languageOfScript(path: string): ScriptLanguage | "" {
-  return path.endsWith(".py") ? "python" : path.endsWith(".ts") ? "typescript" : "";
+  const ext = path.slice(path.lastIndexOf(".")).toLowerCase();
+  return ext === ".py" ? "python" : ext === ".ts" ? "typescript" : ext === ".sh" ? "shell" : ext === ".cmd" || ext === ".bat" ? "cmd" : "";
 }
 
 /** A new file's path in a skill's folder, from the name typed: under folder, with ext when it has none; "" when it won't do. */
@@ -94,9 +95,16 @@ export function filePath(folder: "references" | "scripts", name: string, ext: st
 
 /** A new script's first lines: what it is, and where its arguments come in. */
 export function scriptTemplate(language: ScriptLanguage, name: string): string {
-  return language === "python"
-    ? `"""${name}: what it does."""\n\nimport sys\n\n\ndef main(args: list[str]) -> int:\n    print("args:", args)\n    return 0\n\n\nif __name__ == "__main__":\n    sys.exit(main(sys.argv[1:]))\n`
-    : `// ${name}: what it does.\n\nconst args = process.argv.slice(2);\nconsole.log("args:", args);\n`;
+  switch (language) {
+    case "python":
+      return `"""${name}: what it does."""\n\nimport sys\n\n\ndef main(args: list[str]) -> int:\n    print("args:", args)\n    return 0\n\n\nif __name__ == "__main__":\n    sys.exit(main(sys.argv[1:]))\n`;
+    case "typescript":
+      return `// ${name}: what it does.\n\nconst args = process.argv.slice(2);\nconsole.log("args:", args);\n`;
+    case "shell":
+      return `#!/bin/sh\n# ${name}: what it does.\nset -eu\n\necho "args: $*"\n`;
+    case "cmd":
+      return `@echo off\nrem ${name}: what it does.\n\necho args: %*\n`;
+  }
 }
 
 /** A test run's arguments, split as a shell would split simple words and "quoted text". */

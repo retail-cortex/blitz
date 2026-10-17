@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -138,7 +139,10 @@ func (s *SkillScripts) Run(ctx context.Context, in RunSkillScriptInput) (out Run
 		return fail("skills.policy doesn't allow this script: %s", strings.Join(verdict.Reasons, "; "))
 	}
 	ts := sc.Language == skills.LanguageTypeScript
-	if sc.Language != skills.LanguagePython && !ts {
+	// Shell and cmd scripts run with the system's shell: no packages, no
+	// entry point (SK-105).
+	shell := sc.Language == skills.LanguageShell || sc.Language == skills.LanguageCmd
+	if sc.Language != skills.LanguagePython && !ts && !shell {
 		return fail("%s scripts aren't supported", sc.Language)
 	}
 	out.Tier = ev.Tier.String()
@@ -157,10 +161,13 @@ func (s *SkillScripts) Run(ctx context.Context, in RunSkillScriptInput) (out Run
 		}
 		sc.InlineCode, sc.StorageURI = string(src), ""
 	}
-	var python string // the script's runtime: python3 (or a managed Python), or node
-	if ts {
+	var python string // the script's runtime: python3 (or a managed Python), node, or a shell
+	switch {
+	case shell:
+		python, err = systemShell(sc.Language)
+	case ts:
 		python, err = SystemNode()
-	} else {
+	default:
 		python, err = s.pythonFor(ctx, box, skill.Name, requiresPython(skill, sc))
 	}
 	if err != nil {
@@ -181,7 +188,10 @@ func (s *SkillScripts) Run(ctx context.Context, in RunSkillScriptInput) (out Run
 	}
 
 	interp := python
-	readOnly := append([]string{s.ws.Dir()}, MountsFor(python)...)
+	readOnly := []string{s.ws.Dir()}
+	if !shell { // a system shell needs no mount of its own
+		readOnly = append(readOnly, MountsFor(python)...)
+	}
 	var nodeModules string
 	if ts && len(sc.Dependencies) > 0 {
 		env, ready := s.nodes.Lookup(python, sc.Dependencies)
@@ -200,7 +210,7 @@ func (s *SkillScripts) Run(ctx context.Context, in RunSkillScriptInput) (out Run
 		nodeModules = env.Modules()
 		readOnly = append(readOnly, env.Dir)
 	}
-	if !ts && len(sc.Dependencies) > 0 {
+	if !ts && !shell && len(sc.Dependencies) > 0 {
 		env, ready := s.envs.Lookup(python, sc.Dependencies)
 		if !ready {
 			// Installing reaches the network and runs installers: approved on
@@ -235,7 +245,7 @@ func (s *SkillScripts) Run(ctx context.Context, in RunSkillScriptInput) (out Run
 
 	var writable []string
 	env := []string{"SKILL_DIR=" + scriptDir}
-	if !ts {
+	if !ts && !shell {
 		env = append(env, "PYTHONDONTWRITEBYTECODE=1", "PYTHONNOUSERSITE=1")
 	}
 	if ev.Tier >= skills.Tier2AuditedWrite || ev.Bypass {
@@ -278,8 +288,10 @@ func (s *SkillScripts) Run(ctx context.Context, in RunSkillScriptInput) (out Run
 			scriptPath)
 	case ts:
 		argv = append(append([]string{interp}, nodeFlags...), scriptPath)
+	case sc.Language == skills.LanguageCmd:
+		argv = []string{interp, "/d", "/c", scriptPath}
 	}
-	if !ts && sc.EntryPoint != "" {
+	if !ts && !shell && sc.EntryPoint != "" {
 		// Call the named function, with the script's module run under a
 		// name other than __main__.
 		argv = []string{interp, "-c",
@@ -352,7 +364,7 @@ func materializeScript(skill *skills.Skill, sc skills.ScriptDefinition) (path, d
 	cleanup = func() { os.RemoveAll(tmp) }
 	switch {
 	case sc.InlineCode != "":
-		path = filepath.Join(tmp, sc.Name+".py")
+		path = filepath.Join(tmp, sc.Name+inlineExt[sc.Language])
 		err = os.WriteFile(path, []byte(sc.InlineCode), 0o600)
 	case sc.RelativePath != "":
 		if err = skill.CopyTo(tmp); err == nil {
@@ -370,6 +382,26 @@ func materializeScript(skill *skills.Skill, sc skills.ScriptDefinition) (path, d
 		tmp = c
 	}
 	return path, tmp, cleanup, nil
+}
+
+// inlineExt is an inline script's file extension, by language.
+var inlineExt = map[skills.ScriptLanguage]string{
+	skills.LanguagePython: ".py", skills.LanguageUnspecified: ".py", skills.LanguageShell: ".sh", skills.LanguageCmd: ".cmd",
+}
+
+// systemShell is the shell a shell or cmd script runs with: /bin/sh, or
+// cmd.exe (%ComSpec%) on Windows.
+func systemShell(l skills.ScriptLanguage) (string, error) {
+	if l == skills.LanguageCmd {
+		if c := os.Getenv("ComSpec"); c != "" {
+			return c, nil
+		}
+		return exec.LookPath("cmd.exe")
+	}
+	if _, err := os.Stat("/bin/sh"); err != nil {
+		return "", errors.New("shell scripts need /bin/sh (macOS and Linux)")
+	}
+	return "/bin/sh", nil
 }
 
 // requiresPython is the Python a script needs: its definition's

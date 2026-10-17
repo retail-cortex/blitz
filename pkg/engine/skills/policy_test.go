@@ -232,3 +232,31 @@ func TestStorageURIDefinitions(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "https://storage.googleapis.com/bucket/dir/s.py", u)
 }
+
+// Shell scripts need macOS or Linux, cmd scripts Windows (SK-105).
+func TestScriptPlatforms(t *testing.T) {
+	tests := []struct {
+		lang ScriptLanguage
+		os   string
+		ok   bool
+	}{
+		{LanguageShell, "darwin", true},
+		{LanguageShell, "linux", true},
+		{LanguageShell, "windows", false},
+		{LanguageCmd, "windows", true},
+		{LanguageCmd, "linux", false},
+		{LanguagePython, "windows", true},
+	}
+	for _, tt := range tests {
+		t.Run(string(tt.lang)+"/"+tt.os, func(t *testing.T) {
+			assert.Equal(t, tt.ok, platformReason(tt.lang, tt.os) == "")
+		})
+	}
+	for ext, want := range map[string]ScriptLanguage{"a.sh": LanguageShell, "a.cmd": LanguageCmd, "a.bat": LanguageCmd, "a.ps1": LanguageUnspecified} {
+		assert.Equal(t, want, ScriptLanguageOf(ext), ext)
+	}
+	s, err := ParseSkillMD([]byte("---\nname: x\ndescription: d\nscripts:\n  - name: a\n    language: bash\n    inline_code: echo\n  - name: b\n    language: bat\n    inline_code: echo\n---\n"), "x")
+	require.NoError(t, err)
+	assert.Equal(t, LanguageShell, s.Scripts[0].Language)
+	assert.Equal(t, LanguageCmd, s.Scripts[1].Language)
+}

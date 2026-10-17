@@ -881,9 +881,8 @@ code.file-link:hover { text-decoration-color: currentColor; }
 .worker-limits-grid .input { width: 100%; }
 /* Studio's skills: a skill's files beside the open one's editor, and a
    script's test run. */
-.skill-files-split { display: grid; grid-template-columns: minmax(180px, 240px) minmax(0, 1fr); gap: 16px; align-items: start; }
 .skill-file-list .list-item[aria-disabled="true"] { cursor: default; }
-.code-area { height: max(220px, calc(100vh - 640px)); border: 1px solid var(--md-outline); border-radius: var(--field-radius); overflow: hidden; }
+.code-area { height: 100%; min-height: 240px; border: 1px solid var(--md-outline); border-radius: var(--field-radius); overflow: hidden; }
 .code-area .cm-editor { height: 100%; }
 .code-area:focus-within { border-color: var(--accent-a); box-shadow: 0 0 0 3px var(--focus-ring); }
 .skill-run-output { margin: 0; max-height: 220px; overflow: auto; padding: 8px 10px; border-radius: var(--md-shape-xs); background: var(--md-surface-container); font: 12px/1.5 var(--md-mono); white-space: pre-wrap; }
@@ -892,7 +891,16 @@ code.file-link:hover { text-decoration-color: currentColor; }
 .skill-files .skill-file-name { flex: 1 1 220px; width: auto; min-width: 0; }
 .add-skill { width: min(520px, 100%); min-width: 0; }
 .add-skill .list-item { min-width: 0; }
-@container agent-form (max-width: 640px) { .skill-files-split { grid-template-columns: 1fr; } }
+@container agent-form (max-width: 640px) { /* A reference or script given the whole tab: its bar, then the editor or
+   preview filling the height left, then the test run. */
+.skill-file-view { min-height: calc(100vh - 300px); }
+.skill-file-body { flex: 1; display: flex; flex-direction: column; min-height: 280px; }
+.skill-file-body > .code-area { flex: 1; }
+.skill-file-preview { flex: 1; min-height: 280px; overflow: auto; border: 1px solid var(--md-outline-variant); border-radius: var(--field-radius); }
+.skill-file-head code { font-size: 13px; }
+.skill-test-run { padding: 8px 12px; }
+.skill-test-run.open { padding-bottom: 12px; display: flex; flex-direction: column; gap: 8px; }
+.skill-test-toggle { gap: 8px; width: 100%; padding: 4px 0; border: none; background: none; color: inherit; font: inherit; cursor: pointer; text-align: left; }
 /* A slide pane in a settings section: a box of its own height. */
 .slide-box { height: min(440px, calc(100vh - 320px)); min-height: 300px; padding: 12px 12px 0; border: 1px solid var(--md-outline-variant); border-radius: var(--md-shape-md); }
 /* The Studio drawer: the kinds' list is narrow, and each kind's pane

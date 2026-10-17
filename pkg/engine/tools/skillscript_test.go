@@ -18,6 +18,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -329,4 +330,40 @@ func TestNodeVersion(t *testing.T) {
 	}
 	_, ok := nodeVersion("node 22")
 	assert.False(t, ok)
+}
+
+// A shell script found in scripts/ runs with /bin/sh in the sandbox, its
+// arguments and SKILL_DIR passed; a cmd script is refused off Windows
+// (SK-105).
+func TestRunShellScript(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell scripts run on macOS and Linux")
+	}
+	skillsDir := t.TempDir()
+	dir := filepath.Join(skillsDir, "shelly")
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "scripts"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "SKILL.md"), []byte("---\nname: shelly\ndescription: d\n---\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "scripts", "hello.sh"), []byte("echo \"hello $1|$2\"\ntest -n \"$SKILL_DIR\" && echo dir\nexit 3\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "scripts", "win.cmd"), []byte("@echo off\necho hi\n"), 0o644))
+	prov, _ := skills.NewProvider()
+	require.NoError(t, prov.DiscoverExternal([]string{skillsDir}))
+	wsDir, _ := filepath.EvalSymlinks(t.TempDir())
+	ws, err := OpenWorkspace(WorkspaceOptions{Dir: wsDir})
+	require.NoError(t, err)
+	t.Cleanup(func() { ws.Close() })
+	policy := config.DefaultConfig().Skills.Policy
+	hooks, _ := approverHooks(true)
+	r := NewSkillScripts(prov, policy, ws, hooks, NewPyEnvs(filepath.Join(t.TempDir(), "envs"), policy.Packages),
+		ScriptBoxConfig{Mode: os.Getenv("BLITZ_PYENV_SANDBOX"), Blocked: ws.Blocked(), StateDir: t.TempDir()})
+	if _, err := r.Box(); err != nil {
+		t.Skipf("no script sandbox: %v", err)
+	}
+
+	out := r.Run(context.Background(), RunSkillScriptInput{Skill: "shelly", Script: "hello", Args: []string{"a b", "c"}})
+	require.Empty(t, out.Error, "%+v", out)
+	assert.Equal(t, 3, out.ExitCode, "%+v", out)
+	assert.Equal(t, "hello a b|c\ndir\n", out.Stdout, "%+v", out)
+
+	out = r.Run(context.Background(), RunSkillScriptInput{Skill: "shelly", Script: "win"})
+	assert.Contains(t, out.Error, "cmd scripts run on Windows only")
 }

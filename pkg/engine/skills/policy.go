@@ -19,6 +19,7 @@ import (
 	"path"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"slices"
 	"strings"
 
@@ -59,6 +60,21 @@ func (e Evaluation) Runnable() bool {
 		}
 	}
 	return false
+}
+
+// goos is the operating system scripts run on (a variable for tests).
+var goos = runtime.GOOS
+
+// platformReason is why a script of language can't run on os ("" when it
+// can): shell scripts need macOS or Linux, cmd scripts Windows.
+func platformReason(l ScriptLanguage, os string) string {
+	switch {
+	case l.Platform() == "unix" && os == "windows":
+		return "shell scripts run on macOS and Linux, not Windows"
+	case l.Platform() == "windows" && os != "windows":
+		return "cmd scripts run on Windows only"
+	}
+	return ""
 }
 
 // Evaluate applies policy p to skill s.
@@ -120,6 +136,9 @@ func Evaluate(s *Skill, p config.SkillPolicy) Evaluation {
 		v := ScriptVerdict{Name: sc.Name, Dependencies: sc.Dependencies, Reasons: slices.Clone(ev.Blocked)}
 		if !slices.ContainsFunc(p.Languages, func(l string) bool { return strings.EqualFold(l, string(sc.Language)) }) {
 			v.Reasons = append(v.Reasons, fmt.Sprintf("language %q isn't in skills.policy.languages", orNone(string(sc.Language))))
+		}
+		if r := platformReason(sc.Language, goos); r != "" {
+			v.Reasons = append(v.Reasons, r)
 		}
 		v.TimeoutSeconds = sc.TimeoutSeconds
 		if v.TimeoutSeconds == 0 && hints != nil {

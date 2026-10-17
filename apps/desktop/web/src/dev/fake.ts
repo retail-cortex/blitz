@@ -545,7 +545,7 @@ const fakeProjectSkills: FakeSkill[] = [
     agents: [],
     members: [],
     instructions: "Read `git log` since the last tag, group the changes by what they mean for users, and write the notes in the style the reference shows.",
-    files: { "references/style.md": "# Style\n\n- Start with what's new for users.\n- Short lines.\n", "scripts/count.py": '"""count: changes since a tag."""\n\nimport sys\n\nprint("3 entries since", sys.argv[1:] or ["the last tag"])\n' },
+    files: { "references/style.md": "# Style\n\n- Start with what's new for users.\n- Short lines.\n", "scripts/count.py": '"""count: changes since a tag."""\n\nimport sys\n\nprint("3 entries since", sys.argv[1:] or ["the last tag"])\n', "scripts/tag.sh": '#!/bin/sh\n# tag: tags the release.\nset -eu\n\necho "tagging $1"\n', "references/brand.pdf": "%PDF-1.4", "references/logo.png": "" },
   },
   { name: "ship-it", description: "Cut a release: notes, tag and checks", tools: "", agents: ["reviewer"], members: ["release-notes", "pdf"], instructions: "Write the notes, then tag the release once the checks pass.", files: {} },
   { name: "tone", description: "Keep answers short and friendly", tools: "", agents: [], members: [], instructions: "Answer in two or three sentences.", files: {} },
@@ -557,8 +557,8 @@ const fakeOtherSkills = [
 const fakeSkillInfo = (workspace: string, x: FakeSkill) => {
   const refs = Object.keys(x.files).filter((p) => p.startsWith("references/"));
   const scripts = Object.keys(x.files)
-    .filter((p) => /^scripts\/.+\.(py|ts)$/.test(p))
-    .map((p) => ({ name: p.replace(/^scripts\/|\.(py|ts)$/g, ""), language: p.endsWith(".py") ? "python" : "typescript", source: p, allowed: true, reasons: [] as string[], found: true, deps: [] as string[] }));
+    .filter((p) => /^scripts\/.+\.(py|ts|sh|cmd|bat)$/.test(p))
+    .map((p) => ({ name: p.replace(/^scripts\/|\.(py|ts|sh|cmd|bat)$/g, ""), language: ({ py: "python", ts: "typescript", sh: "shell" } as Record<string, string>)[p.split(".").pop()!] ?? "cmd", source: p, allowed: true, reasons: [] as string[], found: true, deps: [] as string[] }));
   const kind = x.members.length ? "meta" : scripts.length ? "scripts" : refs.length ? "references" : "simple";
   return { name: x.name, description: x.description, dir: `${workspace}/.agents/skills/${x.name}`, kind, project: true, references: refs, scripts, agents: x.agents, members: x.members, blocked: [] as string[] };
 };
@@ -1484,7 +1484,7 @@ export function installFake() {
           return { entries: showHidden ? entries : entries.filter((e) => !e.hidden), repo: true };
         },
         readPreview: ({ path }) => {
-          if (!fakeFiles.has(path)) notFound(path);
+          if (!fakeFiles.has(path) && !path.startsWith(".agents/skills/")) notFound(path); // a skill's references preview too
           if (path.endsWith(".pdf")) {
             // A two-page PDF.
             const page = (n: number) => `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 200] /Contents ${n} 0 R /Resources << /Font << /F1 5 0 R >> >> >>`;

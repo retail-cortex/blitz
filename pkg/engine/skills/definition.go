@@ -146,7 +146,24 @@ const (
 	LanguageUnspecified ScriptLanguage = ""
 	LanguagePython      ScriptLanguage = "python"
 	LanguageTypeScript  ScriptLanguage = "typescript"
+	// LanguageShell is a POSIX shell script (/bin/sh; macOS and Linux) and
+	// LanguageCmd a Windows batch script (cmd.exe): Blitz's, not Castor's
+	// (spec_skills_013 SK-105).
+	LanguageShell ScriptLanguage = "shell"
+	LanguageCmd   ScriptLanguage = "cmd"
 )
+
+// Platform is the operating system a language's scripts run on ("" for
+// any): shell scripts need a POSIX shell, cmd scripts Windows.
+func (l ScriptLanguage) Platform() string {
+	switch l {
+	case LanguageShell:
+		return "unix"
+	case LanguageCmd:
+		return "windows"
+	}
+	return ""
+}
 
 // UnmarshalYAML reads python / typescript, or the proto enum names.
 func (l *ScriptLanguage) UnmarshalYAML(n *yaml.Node) error {
@@ -158,8 +175,12 @@ func (l *ScriptLanguage) UnmarshalYAML(n *yaml.Node) error {
 		*l = LanguagePython
 	case "typescript", "ts":
 		*l = LanguageTypeScript
+	case "shell", "sh", "bash":
+		*l = LanguageShell
+	case "cmd", "bat", "batch":
+		*l = LanguageCmd
 	default:
-		return fmt.Errorf("line %d: unknown script language %q (use python or typescript)", n.Line, n.Value)
+		return fmt.Errorf("line %d: unknown script language %q (use python, typescript, shell or cmd)", n.Line, n.Value)
 	}
 	return nil
 }
