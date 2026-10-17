@@ -20,6 +20,7 @@ import { config } from "./api";
 import { message } from "./errors";
 import type { Secret } from "./gen/blitz/v1/config_pb";
 import { t } from "./i18n";
+import { forgetSecretNames } from "./secretComplete";
 import { Button, Dialog, Icon, IconButton, useSnackbar } from "./ui/controls";
 
 /** Whether key can name a secret: letters, digits, _, . and -, up to 64 (secrets.ValidKey). */
@@ -33,9 +34,8 @@ export const validSecretKey = (key: string) => /^[A-Za-z0-9_.-]{1,64}$/.test(key
  */
 export const secretPlaceholder = (key: string, workspace = "") => `{secrets:${workspace ? "workspace" : "global"}:${key}}`;
 
-/** Where a global secret is stored: its name in the keychain. A workspace's
- * is urn:blitz:<its settings folder>:secrets:<key>. */
-export const globalURN = (key: string) => `urn:blitz:global:secrets:${key}`;
+/** Where a secret is stored: its scope's prefix (urn:blitz:<scope>:secrets:) and its key. */
+export const storedName = (prefix: string, key: string) => `${prefix}${key}`;
 
 /**
  * The user's secrets in a scope (spec_secrets_039): the global ones
@@ -47,6 +47,7 @@ export function SecretsEditor({ workspace = "" }: { workspace?: string }) {
   const snack = useSnackbar();
   const [list, setList] = useState<Secret[]>([]);
   const [store, setStore] = useState("");
+  const [prefix, setPrefix] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [key, setKey] = useState("");
@@ -60,6 +61,7 @@ export function SecretsEditor({ workspace = "" }: { workspace?: string }) {
       const r = await config.listSecrets({ workspace });
       setList(r.secrets);
       setStore(r.store);
+      setPrefix(r.prefix);
       setError("");
     } catch (e) {
       setError(message(e));
@@ -71,6 +73,7 @@ export function SecretsEditor({ workspace = "" }: { workspace?: string }) {
     setBusy(true);
     try {
       snack(await run());
+      forgetSecretNames();
       await load();
       return true;
     } catch (e) {
@@ -100,8 +103,8 @@ export function SecretsEditor({ workspace = "" }: { workspace?: string }) {
               <div className="stack spacer" style={{ gap: 2, minWidth: 0 }}>
                 <code>{secretPlaceholder(s.key, workspace)}</code>
                 <span className="t-body-sm muted">
-                  {!workspace && t("desktop.secrets.stored", { urn: globalURN(s.key) })}
-                  {!workspace && s.updated && " · "}
+                  {prefix && t("desktop.secrets.stored", { urn: storedName(prefix, s.key) })}
+                  {prefix && s.updated && " · "}
                   {s.updated && t("desktop.secrets.updated", { when: new Date(Number(s.updated.seconds) * 1000).toLocaleString() })}
                 </span>
               </div>

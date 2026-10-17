@@ -135,6 +135,33 @@ export function Segmented<T extends string>({
   );
 }
 
+/**
+ * Tabs over one panel: the chosen one marked; ← and → (Home, End) move
+ * between them, as a tab list does. The panel is the caller's.
+ */
+export function Tabs<T extends string>({ value, tabs, onChange, label }: { value: T; tabs: { value: T; label: string; icon?: string; note?: ReactNode }[]; onChange: (v: T) => void; label: string }) {
+  const key = (e: React.KeyboardEvent) => {
+    const i = tabs.findIndex((x) => x.value === value);
+    const to = e.key === "ArrowRight" ? i + 1 : e.key === "ArrowLeft" ? i - 1 : e.key === "Home" ? 0 : e.key === "End" ? tabs.length - 1 : -2;
+    if (to === -2) return;
+    e.preventDefault();
+    const next = tabs[(to + tabs.length) % tabs.length];
+    onChange(next.value);
+    (e.currentTarget.querySelector(`[data-tab="${next.value}"]`) as HTMLElement | null)?.focus();
+  };
+  return (
+    <div className="tabs" role="tablist" aria-label={label} onKeyDown={key}>
+      {tabs.map((x) => (
+        <button key={x.value} type="button" role="tab" data-tab={x.value} aria-selected={x.value === value} tabIndex={x.value === value ? 0 : -1} className={`tab ${x.value === value ? "on" : ""}`} onClick={() => onChange(x.value)}>
+          {x.icon && <Icon path={x.icon} size="sm" />}
+          <span>{x.label}</span>
+          {x.note}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 const mac = typeof navigator !== "undefined" && /Mac/i.test(navigator.platform);
 
 /**

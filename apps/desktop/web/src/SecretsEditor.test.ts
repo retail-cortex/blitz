@@ -15,7 +15,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { globalURN, secretPlaceholder, validSecretKey } from "./SecretsEditor";
+import { secretPlaceholder, storedName, validSecretKey } from "./SecretsEditor";
 
 describe("secrets", () => {
   it.each([
@@ -29,6 +29,6 @@ describe("secrets", () => {
   it("names a secret with its scope", () => {
     expect(secretPlaceholder("db")).toBe("{secrets:global:db}");
     expect(secretPlaceholder("db", "/w/shop")).toBe("{secrets:workspace:db}");
-    expect(globalURN("db")).toBe("urn:blitz:global:secrets:db");
+    expect(storedName("urn:blitz:global:secrets:", "db")).toBe("urn:blitz:global:secrets:db");
   });
 });

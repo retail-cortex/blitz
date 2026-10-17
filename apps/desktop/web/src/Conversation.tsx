@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+import { useSecretSuggest } from "./SecretSuggest";
 import { memo, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { timestampDate } from "@bufbuild/protobuf/wkt";
@@ -1705,7 +1706,12 @@ function Composer({
     requestAnimationFrame(() => ref.current?.setSelectionRange(r.caret, r.caret));
     if (isAttachablePath(path)) onAddImagePath(path);
   };
-  const trackCaret = (e: { currentTarget: HTMLTextAreaElement }) => setCaret(e.currentTarget.selectionStart ?? 0);
+  // Completing {secrets:…}: the workspace's and the global names.
+  const secretSuggest = useSecretSuggest(draft, setDraft, ref, dir);
+  const trackCaret = (e: { currentTarget: HTMLTextAreaElement }) => {
+    setCaret(e.currentTarget.selectionStart ?? 0);
+    secretSuggest.trackCaret(e);
+  };
   // Grow with the text, up to a limit.
   useEffect(() => {
     const el = ref.current;
@@ -1749,6 +1755,7 @@ function Composer({
           </div>
         </div>
       )}
+      {!menuOpen && !mentionOpen && secretSuggest.menu}
       {mentionOpen && (
         <div className="command-menu" role="listbox" aria-label={t("desktop.mention.files")}>
           {found.paths.map((p, i) => (
@@ -1807,6 +1814,7 @@ function Composer({
           }
         }}
         onKeyDown={(e) => {
+          if (!menuOpen && !mentionOpen && secretSuggest.onKeyDown(e)) return;
           if (mentionOpen && !e.nativeEvent.isComposing) {
             const n = found.paths.length;
             if (e.key === "ArrowDown" || e.key === "ArrowUp") {

@@ -207,6 +207,7 @@ a { color: var(--md-primary); }
 .muted { color: var(--md-on-surface-variant); }
 .mono { font-family: var(--md-mono); }
 .error-text { color: var(--md-error); }
+.warning-text { color: var(--md-warning); }
 .ellipsis { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .row { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .stack { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
@@ -288,6 +289,12 @@ a { color: var(--md-primary); }
 .seg button:first-child { border-left: none; }
 .seg button.on { background: var(--accent-tint); color: var(--on-accent-tint); }
 .seg.small button { height: 32px; padding: 0 12px; }
+/* Tabs: a row of labels over one panel, the chosen one underlined. */
+.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--md-outline-variant); overflow-x: auto; }
+.tab { position: relative; display: inline-flex; align-items: center; gap: 6px; height: 40px; padding: 0 14px; border: none; background: transparent; color: var(--md-on-surface-variant); font: 500 13px/18px var(--md-font); cursor: pointer; white-space: nowrap; }
+.tab.on { color: var(--md-primary); }
+.tab.on::before { content: ""; position: absolute; left: 10px; right: 10px; bottom: -1px; height: 3px; border-radius: 3px 3px 0 0; background: var(--md-primary); }
+.tab:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
 /* Every option as wide as the widest. */
 .seg.equal { display: inline-grid; grid-auto-flow: column; grid-auto-columns: 1fr; }
 .seg.equal button { justify-content: center; }

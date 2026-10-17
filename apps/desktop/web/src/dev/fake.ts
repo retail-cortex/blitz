@@ -811,6 +811,10 @@ export function installFake() {
           ],
         }),
         restartMCPServer: () => ({}),
+        draftManifest: ({ name, current }) => ({
+          text: `# ${name || "Reviewer"}\n\nYou review changes for correctness first, then clarity.\n\n## How you work\n- Read the diff and the files it touches.\n- List real bugs with the line and why.\n- Suggest the smallest fix.\n${current ? "\n(Improved from the instructions there.)" : ""}`,
+          changes: ["Said what the agent is for and how it works", "Added a short checklist"],
+        }),
         pinModel: ({ agent, ref }) => ({ agent, model: ref }),
         unpinModel: ({ agent, workspace }) => ({ agent, model: state(workspace).settings.model }),
         reloadMemory: () => ({ paths: ["/home/me/blitz/AGENTS.md", "/home/me/blitz/.agents/AGENTS.md"], files: ["AGENTS.md"] }),

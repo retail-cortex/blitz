@@ -22,6 +22,7 @@ import type { EditorState } from "@codemirror/state";
 import { files } from "../api";
 import { onPreviewState, previewClose } from "../desktop";
 import { errorMeta, message, reason } from "../errors";
+import { secretCompletion } from "./secretCompletion";
 import { fileState, languageSupport } from "./codemirror";
 import { languageExtension, languageSession, type LanguageHooks } from "./language";
 import { afterClosing } from "./tabMenu";
@@ -137,7 +138,7 @@ export function useEditor(dir: string, language?: Omit<LanguageHooks, "open">): 
           const dirty = st.doc.toString() !== saved.current.get(path);
           if (tabsRef.current.find((t) => t.path === path)?.dirty !== dirty) patch(path, { dirty });
         },
-      }, false, servers);
+      }, false, [servers, secretCompletion(dir)]);
       states.current.set(path, s);
       return s;
     },

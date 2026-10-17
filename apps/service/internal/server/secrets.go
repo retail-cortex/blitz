@@ -19,6 +19,7 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/retail-cortex/blitz/pkg/config"
+	"github.com/retail-cortex/blitz/pkg/secrets"
 	pb "github.com/retail-cortex/blitz/proto/blitz/v1"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -45,7 +46,7 @@ func (h configService) ListSecrets(_ context.Context, r req[pb.ListSecretsReques
 	if err != nil {
 		return nil, err
 	}
-	out := &pb.ListSecretsResponse{Store: vault.Store.Kind()}
+	out := &pb.ListSecretsResponse{Store: vault.Store.Kind(), Prefix: secrets.URN(sc, "")}
 	for _, e := range list {
 		out.Secrets = append(out.Secrets, &pb.Secret{Key: e.Key, Updated: timestamppb.New(e.Updated)})
 	}

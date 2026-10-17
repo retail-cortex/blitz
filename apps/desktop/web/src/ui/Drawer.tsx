@@ -153,6 +153,9 @@ export function Drawer({
     if (!el || !shown) return;
     const key = (e: KeyboardEvent) => {
       if (e.key !== "Escape" || e.defaultPrevented || document.querySelector('[aria-modal="true"]')) return;
+      // A completion menu open in the field (SuggestTextarea's) takes it:
+      // React's handler runs after this one, so it can't say so first.
+      if ((e.target as HTMLElement | null)?.closest?.(".suggest-field")?.querySelector(".command-menu")) return;
       e.preventDefault();
       close();
     };

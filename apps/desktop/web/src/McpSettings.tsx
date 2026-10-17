@@ -22,6 +22,7 @@ import { configChanged } from "./events";
 import type { MCPServerConfig } from "./gen/blitz/v1/config_pb";
 import { t } from "./i18n";
 import { emptyForm, formProblems, fromForm, targetOf, toForm, type McpForm } from "./mcpForm";
+import { SuggestTextarea } from "./SecretSuggest";
 import { Button, Dialog, Icon, IconButton, Segmented, Switch, useSnackbar } from "./ui/controls";
 
 /**
@@ -186,7 +187,12 @@ function ServerDialog({ editing, initial, taken, busy, onClose, onSave }: { edit
   const area = (k: "args" | "env" | "headers", placeholder: string) => (
     <label className="field">
       <span className="t-label">{t(`desktop.mcp.field.${k}`)}</span>
-      <textarea className="input mono" rows={3} value={f[k]} placeholder={placeholder} spellCheck={false} onChange={(e) => set(k, e.target.value)} />
+      {k === "args" ? (
+        <textarea className="input mono" rows={3} value={f[k]} placeholder={placeholder} spellCheck={false} onChange={(e) => set(k, e.target.value)} />
+      ) : (
+        // Environment and header values may name global secrets.
+        <SuggestTextarea className="input mono" rows={3} value={f[k]} placeholder={placeholder} spellCheck={false} onValue={(v) => set(k, v)} workspace="" />
+      )}
     </label>
   );
   return (

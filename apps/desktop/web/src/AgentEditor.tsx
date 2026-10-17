@@ -24,6 +24,8 @@ import { ModelInput, useModelCatalog } from "./ModelInput";
 import { AgentScope, type AgentFile } from "./gen/blitz/v1/workspace_pb";
 import { addTools, advancedCount, agentFromForm, agentPath, deleteTarget, emptyAgentForm, fileName, formFromAgent, invalidFields, sameForm, toolChoices, validAgentName, type AgentField, type AgentForm } from "./agentForm";
 import { agencies, efforts, modes } from "./options";
+import { SuggestTextarea } from "./SecretSuggest";
+import { DraftButton } from "./manifest/Draft";
 import { Button, Dialog, Field, Icon, IconButton, Segmented, Switch, useSnackbar } from "./ui/controls";
 import { Drawer } from "./ui/Drawer";
 import { workerName } from "./workerForm";
@@ -51,6 +53,7 @@ export function AgentEditor({
   context = workspace,
   intent,
   drawer,
+  list,
 }: {
   workspace: string;
   scope: AgentScope;
@@ -58,6 +61,8 @@ export function AgentEditor({
   intent?: ItemIntent;
   /** Shown in the drawer (the Agents menu's); closing, or another view taking the drawer, asks first when there are unsaved edits. */
   drawer?: { onClose: () => void };
+  /** The agents listed beside the form (the user's always; a workspace's in the Manifest). */
+  list?: boolean;
 }) {
   const snack = useSnackbar();
   const [files, setFiles] = useState<AgentFile[]>([]);
@@ -154,7 +159,7 @@ export function AgentEditor({
   // The workspace's agents are listed in the top bar's Agents menu, which
   // opens one in the drawer (intent); the user's (Settings › Agents) keep
   // their list beside the form.
-  const listed = scope === AgentScope.USER;
+  const listed = list ?? scope === AgentScope.USER;
 
   // What the top bar's Agents menu asked for: a new agent, or one to edit
   // or delete, once the list has it.
@@ -358,8 +363,12 @@ export function AgentEditor({
                 {(id) => <input id={id} className="input" value={form.description} onChange={(e) => set("description", e.target.value)} />}
               </Field>
             </div>
+            <div className="row field-tools">
+              <span className="spacer" />
+              <DraftButton workspace={workspace || context} kind="agent" name={form.displayName || form.name} description={form.description} current={form.prompt} onUse={(text) => set("prompt", text)} disabled={!(workspace || context)} />
+            </div>
             <Field label={t("desktop.agents.prompt")} supporting={t("desktop.agents.prompt_hint", { placeholder: "{agency_instructions}" })}>
-              {(id) => <textarea id={id} className="input agent-prompt" value={form.prompt} rows={8} spellCheck={false} placeholder={t("desktop.agents.prompt_placeholder")} onChange={(e) => set("prompt", e.target.value)} />}
+              {(id) => <SuggestTextarea id={id} className="input agent-prompt" value={form.prompt} rows={8} spellCheck={false} placeholder={t("desktop.agents.prompt_placeholder")} onValue={(v) => set("prompt", v)} workspace={scope === AgentScope.WORKSPACE ? workspace : ""} />}
             </Field>
             <label className="row agent-switch">
               <Switch checked={form.background} label={t("desktop.agents.background")} onChange={(v) => set("background", v)} />

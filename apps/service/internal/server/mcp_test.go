@@ -97,3 +97,16 @@ func TestMCPServersOverTheAPI(t *testing.T) {
 	_, err = cfg.SetMCPServerEnabled(ctx, connect.NewRequest(&pb.SetMCPServerEnabledRequest{Name: "wiki"}))
 	assert.Equal(t, connect.CodeNotFound, code(err))
 }
+
+// DraftManifest refuses a kind it has no brief for, and answers a problem
+// (not an error) when the model can't be had.
+func TestDraftManifestOverTheAPI(t *testing.T) {
+	c, _ := serve(t, nil)
+	ctx := context.Background()
+	dir := t.TempDir()
+	_, err := c.workspaces.DraftManifest(ctx, connect.NewRequest(&pb.DraftManifestRequest{Workspace: dir, Kind: "poem", Request: "x"}))
+	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+	res, err := c.workspaces.DraftManifest(ctx, connect.NewRequest(&pb.DraftManifestRequest{Workspace: dir, Kind: "agent", Description: "a reviewer"}))
+	require.NoError(t, err)
+	assert.True(t, res.Msg.Text != "" || res.Msg.Problem != "", "a draft or why not")
+}

@@ -40,6 +40,7 @@ import { Icon, IconButton, useSnackbar } from "./ui/controls";
 import { panelWidth, useWindowWidth } from "./ui/layout";
 import { ResizeHandle } from "./ui/ResizeHandle";
 import { Brand, MenuBar } from "./MenuBar";
+import { ManifestDrawer, type ManifestKind } from "./manifest/ManifestDrawer";
 import { intent as newIntent, type ItemIntent } from "./intent";
 import type { Section } from "./SettingsDrawer";
 import { WorkerDrawer } from "./Workers";
@@ -81,6 +82,7 @@ export function Workspace({
   const [drawer, setDrawer] = useState<{ kind: "changes"; source: ChangesSource } | { kind: "history"; path: string; folder: boolean } | null>(null);
   const [worker, setWorker] = useState<ItemIntent | null>(null);
   const [agent, setAgent] = useState<ItemIntent | null>(null);
+  const [manifest, setManifest] = useState<ManifestKind | null>(null);
   const [modal, setModal] = useState<{ kind: "commit" } | null>(null);
   const dir = ws.dir;
   const { settings, modelProblem, settingsError, settingsReason, project, reviewing, setReviewing, refreshSettings } = useWorkspaceSettings(dir);
@@ -102,6 +104,7 @@ export function Workspace({
       setDrawer(null);
       setWorker(null);
       setAgent(null);
+      setManifest(null);
       setModal(null);
     }
   }, []);
@@ -251,8 +254,8 @@ export function Workspace({
           onChanges={(source) => setDrawer({ kind: "changes", source })}
           onCommit={() => setModal({ kind: "commit" })}
           onHistory={() => setDrawer({ kind: "history", path: "", folder: true })}
-          onAgent={setAgent}
           onWorker={setWorker}
+          onManifest={setManifest}
           onSearch={onSearch}
           onSettings={onSettings}
           onOpenWorkspace={onOpenWorkspace}
@@ -325,6 +328,7 @@ export function Workspace({
       {visible && drawer?.kind === "changes" && <ChangesDrawer key={drawer.source} dir={dir} initial={drawer.source} onClose={() => setDrawer(null)} />}
       {visible && agent && <AgentEditor key={agent.n} workspace={dir} scope={AgentScope.WORKSPACE} intent={agent} drawer={{ onClose: () => setAgent(null) }} />}
       {visible && worker && <WorkerDrawer key={worker.n} dir={dir} intent={worker} onClose={() => setWorker(null)} />}
+      {visible && manifest && <ManifestDrawer key={manifest} dir={dir} initial={manifest} onClose={() => setManifest(null)} />}
       {reviewing && visible && <ProjectDialog dir={dir} onClose={() => setReviewing(false)} onDecided={refreshSettings} />}
     </section>
   );

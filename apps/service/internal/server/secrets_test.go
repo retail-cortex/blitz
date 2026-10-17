@@ -41,6 +41,11 @@ func TestSecretsOverTheAPI(t *testing.T) {
 		res, err := cfg.ListSecrets(ctx, connect.NewRequest(&pb.ListSecretsRequest{Workspace: ws}))
 		require.NoError(t, err)
 		assert.Equal(t, "memory", res.Msg.Store)
+		if ws == "" {
+			assert.Equal(t, "urn:blitz:global:secrets:", res.Msg.Prefix)
+		} else {
+			assert.Regexp(t, `^urn:blitz:.+-[0-9a-f]{8}:secrets:$`, res.Msg.Prefix)
+		}
 		var out []string
 		for _, x := range res.Msg.Secrets {
 			out = append(out, x.Key)

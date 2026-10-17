@@ -35,8 +35,6 @@ import {
   mdiPencilOutline,
   mdiPlay,
   mdiShieldCheckOutline,
-  mdiRobotOutline,
-  mdiPlus,
   mdiRefresh,
   mdiSourceBranch,
   mdiSourceCommit,
@@ -48,8 +46,6 @@ import type { ChangesSource } from "./Changes";
 import { canPreview } from "./desktop";
 import { openDocs, openWeb, startSetup } from "./events";
 import { docSections } from "./docs/sections";
-import { fileName } from "./agentForm";
-import { AgentScope, type AgentFile } from "./gen/blitz/v1/workspace_pb";
 import { WorkerState, type Worker, type WorkerRun } from "./gen/blitz/v1/worker_pb";
 import { runningEntries } from "./runningWorkers";
 import { intent, type ItemIntent } from "./intent";
@@ -58,6 +54,7 @@ import { displayName, forgetWorkspace, openWorkspace, openWorkspaces, recentWork
 import { InboxDrawer } from "./RunsInbox";
 import { workerStateLabel } from "./Workers";
 import type { Section } from "./SettingsDrawer";
+import { manifestIcons, manifestKinds, type ManifestKind } from "./manifest/ManifestDrawer";
 import { useApp } from "./state";
 import { menuIds } from "./simpleMode";
 import { workspaceColor } from "./palette";
@@ -91,8 +88,8 @@ export function MenuBar({
   onChanges,
   onCommit,
   onHistory,
-  onAgent,
   onWorker,
+  onManifest,
   onSearch,
   onSettings,
   onOpenWorkspace,
@@ -104,8 +101,9 @@ export function MenuBar({
   onCommit?: () => void;
   /** Shows the workspace's history (View revisions for every file). */
   onHistory?: () => void;
-  onAgent?: (i: ItemIntent) => void;
   onWorker?: (i: ItemIntent) => void;
+  /** Opens the manifest on a kind (Manifest › Agents, Skills…). */
+  onManifest?: (kind: ManifestKind) => void;
   onSearch: () => void;
   onSettings: (section: Section, scope?: string) => void;
   onOpenWorkspace: () => void;
@@ -117,7 +115,6 @@ export function MenuBar({
   const menus = menuIds(advanced);
   const runs = useRuns();
   const failures = useWorkerFailures();
-  const [agents, setAgents] = useState<AgentFile[]>([]);
   const [workerList, setWorkerList] = useState<Worker[]>([]);
   // Every workspace's runs going now, each with Stop.
   const [liveRuns, setLiveRuns] = useState<WorkerRun[]>([]);
@@ -126,20 +123,12 @@ export function MenuBar({
 
   // The lists are asked for when the workspace opens and each time their
   // menu opens, so they show what's on disk now.
-  const loadAgents = useCallback(() => {
-    if (!dir) return;
-    workspaces.listAgentFiles({ workspace: dir, scope: AgentScope.WORKSPACE }).then(
-      (r) => setAgents(r.files),
-      () => setAgents([]),
-    );
-  }, [dir]);
   // Reload agent files: the agents, skills, instructions and rules read again.
   const reloadAgentFiles = async () => {
     try {
       const r = await workspaces.reloadAgentFiles({ workspace: dir });
       snack(reloadSummary(r));
       if (r.problems.length) snack(`${t("reload.problems")} ${r.problems.join("; ")}`, { error: true });
-      loadAgents();
     } catch (e) {
       snack(message(e), { error: true });
     }
@@ -156,9 +145,8 @@ export function MenuBar({
     );
   }, [dir]);
   useEffect(() => {
-    loadAgents();
     loadWorkers();
-  }, [loadAgents, loadWorkers]);
+  }, [loadWorkers]);
 
   const { active, waiting } = inboxCounts(runs);
   const failed = dir ? (failures[dir] ?? 0) : 0;
@@ -170,24 +158,10 @@ export function MenuBar({
   if (onHistory) changes.push({ label: t("desktop.menu.changes.history"), icon: mdiSourceBranch, onSelect: onHistory });
   if (onCommit) changes.push("divider", { label: t("desktop.commit.open"), icon: mdiSourceCommit, onSelect: onCommit });
 
-  const agentItems: MenuEntry[] = [
-    { label: t("desktop.menu.agents.add"), icon: mdiPlus, onSelect: () => onAgent?.(intent("new")) },
-    { label: t("desktop.menu.agents.reload"), detail: t("desktop.menu.agents.reload_hint"), icon: mdiRefresh, disabled: !dir, onSelect: () => void reloadAgentFiles() },
-    "divider",
-    ...(agents.length === 0
-      ? [{ heading: t("desktop.menu.agents.none") }]
-      : agents.map((f): MenuEntry => {
-          const name = f.agent?.displayName || f.agent?.name || fileName(f.path);
-          return {
-            label: name,
-            detail: f.problem ? t("desktop.agents.broken") : f.agent?.description,
-            icon: mdiRobotOutline,
-            danger: !!f.problem,
-            onSelect: () => onAgent?.(intent("edit", f.path)),
-            actions: [{ icon: mdiDeleteOutline, label: t("desktop.menu.remove", { name }), removes: true, onSelect: () => onAgent?.(intent("delete", f.path)) }],
-          };
-        })),
-  ];
+  // Manifest: the kinds a workspace's .agents folder holds, then its
+  // workers (which keep their own drawer), then Reload agent files.
+  const kindItems: MenuEntry[] = manifestKinds.map((k) => ({ label: t(`desktop.manifest.${k}`), icon: manifestIcons[k], onSelect: () => onManifest?.(k) }));
+  const reloadItem: MenuEntry = { label: t("desktop.menu.agents.reload"), detail: t("desktop.menu.agents.reload_hint"), icon: mdiRefresh, disabled: !dir, onSelect: () => void reloadAgentFiles() };
 
   const workerItems: MenuEntry[] = [
     { label: t("desktop.menu.workers.add"), icon: mdiCalendarPlus, onSelect: () => onWorker?.(intent("new")) },
@@ -296,27 +270,20 @@ export function MenuBar({
               {t("desktop.view.changes")}
             </button>
           )}
-          {menus.includes("agents") && (
+          {menus.includes("manifest") && (
             <Menu
               className="menubar-menu"
-              trigger={(p) => <MenuButton label={t("desktop.view.agents")} {...p} onClick={() => (loadAgents(), p.onClick())} />}
-              items={agentItems}
+              trigger={(p) => (
+                <MenuButton
+                  label={t("desktop.manifest")}
+                  badge={active > 0 ? { n: waiting || active, waiting: waiting > 0 } : undefined}
+                  dot={failed > 0}
+                  {...p}
+                  onClick={() => (loadWorkers(), p.onClick())}
+                />
+              )}
+              items={[...kindItems, "divider", { heading: t("desktop.view.workers") }, ...workerItems, "divider", reloadItem]}
             />
-          )}
-          {menus.includes("workers") && (
-          <Menu
-            className="menubar-menu"
-            trigger={(p) => (
-              <MenuButton
-                label={t("desktop.view.workers")}
-                badge={active > 0 ? { n: waiting || active, waiting: waiting > 0 } : undefined}
-                dot={failed > 0}
-                {...p}
-                onClick={() => (loadWorkers(), p.onClick())}
-              />
-            )}
-            items={workerItems}
-          />
           )}
         </>
       )}

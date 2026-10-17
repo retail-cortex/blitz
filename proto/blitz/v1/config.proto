@@ -762,6 +762,8 @@ message ListSecretsResponse {
   repeated Secret secrets = 1;
   // Where the values are kept ("macOS Keychain").
   string store = 2;
+  // The scope's stored names start with this: urn:blitz:<scope>:secrets:.
+  string prefix = 3;
 }
 
 // Request message for ConfigService.SetSecret.
