@@ -47,6 +47,7 @@ exports_files(
     ],
     visibility = [
         "//apps/desktop/packaging:__pkg__",
+        "//apps/electron:__pkg__",
         "//apps/vscode:__pkg__",
         "//pkg/legal:__pkg__",
         "//proto/blitz/v1:__pkg__",

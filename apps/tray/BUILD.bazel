@@ -174,7 +174,10 @@ go_binary(
     goarch = "amd64",
     goos = "windows",
     pure = "on",
-    visibility = ["//release:__pkg__"],
+    visibility = [
+        "//apps/electron:__pkg__",
+        "//release:__pkg__",
+    ],
     x_defs = {"main.version": "{STABLE_BLITZ_VERSION}"},
 )
 

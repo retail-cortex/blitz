@@ -20,6 +20,9 @@ load("@bazel_lib//lib:copy_to_bin.bzl", "copy_to_bin")
 load("@bazel_lib//lib:copy_to_directory.bzl", "copy_to_directory")
 load("@bazel_lib//lib:transitions.bzl", "platform_transition_filegroup")
 load("@npm//:defs.bzl", "npm_link_all_packages")
+load("@rules_pkg//pkg:mappings.bzl", "pkg_attributes", "pkg_files", "strip_prefix")
+load("@rules_pkg//pkg:tar.bzl", "pkg_tar")
+load("@rules_pkg//pkg:zip.bzl", "pkg_zip")
 load("@npm//apps/electron:typescript/package_json.bzl", tsc_bin = "bin")
 load("@npm//apps/electron:vitest/package_json.bzl", vitest_bin = "bin")
 load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
@@ -79,24 +82,27 @@ platform_transition_filegroup(
 # dist/ (the main process), page/ (the desktop page) and bin/ (blitz-tray,
 # which serves the page, with blitzd and blitz beside it, as in the
 # desktop app's packages).
+_APP_SRCS = [
+    "app.package.json",
+    ":dist",
+    ":page",
+    "//apps/cli:blitz",
+    "//apps/service:blitzd",
+    "//apps/tray:blitz-tray",
+]
+
+_APP_PREFIXES = {
+    "app.package.json": "package.json",
+    "apps/desktop/web/dist": "page",
+    "apps/cli/": "bin/",
+    "apps/service/": "bin/",
+    "apps/tray/": "bin/",
+}
+
 copy_to_directory(
     name = "app",
-    srcs = [
-        "app.package.json",
-        ":dist",
-        ":page",
-        "//apps/cli:blitz",
-        "//apps/service:blitzd",
-        "//apps/tray:blitz-tray",
-    ],
-    include_external_repositories = [],
-    replace_prefixes = {
-        "app.package.json": "package.json",
-        "apps/desktop/web/dist": "page",
-        "apps/cli/": "bin/",
-        "apps/service/": "bin/",
-        "apps/tray/": "bin/",
-    },
+    srcs = _APP_SRCS,
+    replace_prefixes = _APP_PREFIXES,
 )
 
 config_setting(
@@ -146,4 +152,105 @@ sh_binary(
         "$(rootpath :app)",
     ] + select({k: [v[1]] for k, v in _ELECTRON.items()}),
     data = [":app"] + select({k: [v[0]] for k, v in _ELECTRON.items()}),
+)
+
+# The app for Windows, its programs cross-built in pure Go: what goes in
+# the zip's resources/app.
+copy_to_directory(
+    name = "app_windows",
+    out = "windows/resources/app",
+    srcs = [
+        "app.package.json",
+        ":dist",
+        ":page",
+        "//apps/cli:blitz_windows_amd64",
+        "//apps/service:blitzd_windows_amd64",
+        "//apps/tray:blitz-tray_windows_amd64",
+    ],
+    replace_prefixes = {
+        "app.package.json": "package.json",
+        "apps/desktop/web/dist": "page",
+        "apps/cli/blitz_windows_amd64_/blitz_windows_amd64.exe": "bin/blitz.exe",
+        "apps/service/blitzd_windows_amd64_/blitzd_windows_amd64.exe": "bin/blitzd.exe",
+        "apps/tray/blitz-tray_windows_amd64_/blitz-tray_windows_amd64.exe": "bin/blitz-tray.exe",
+    },
+)
+
+# Electron's own files for Windows (its licenses among them), its program
+# named Blitz.exe.
+pkg_files(
+    name = "electron_windows",
+    srcs = ["@electron_win32_x64//:files"],
+    renames = {"@electron_win32_x64//:electron.exe": "Blitz.exe"},
+    strip_prefix = strip_prefix.from_pkg(),
+)
+
+pkg_files(
+    name = "resources_app_windows",
+    srcs = [":app_windows"],
+    strip_prefix = strip_prefix.from_pkg("windows"),
+)
+
+pkg_files(
+    name = "notices",
+    srcs = [
+        "//:LICENSE",
+        "//:NOTICE",
+        "//:THIRD_PARTY_NOTICES",
+    ],
+    prefix = "blitz-licenses",
+)
+
+# The Windows trial (spec_electron_038 EL-50): unzip it anywhere and run
+# Blitz.exe. Not signed, and not in releases: CI's electron-trial job
+# builds it as an artifact.
+pkg_zip(
+    name = "windows_zip",
+    srcs = [
+        ":electron_windows",
+        ":notices",
+        ":resources_app_windows",
+    ],
+    out = "blitz-electron_windows_amd64.zip",
+    package_dir = "blitz-electron_windows_amd64",
+)
+
+# The Linux trial, built on (and for) a Linux x86-64 machine: unpack it
+# and run ./blitz (Electron's program, renamed).
+pkg_files(
+    name = "electron_linux",
+    srcs = ["@electron_linux_x64//:files"],
+    attributes = pkg_attributes(mode = "0755"),
+    renames = {"@electron_linux_x64//:electron": "blitz"},
+    strip_prefix = strip_prefix.from_pkg(),
+)
+
+# The app for Linux, as :app, where the tar's resources/app goes.
+copy_to_directory(
+    name = "app_linux",
+    out = "linux/resources/app",
+    srcs = _APP_SRCS,
+    replace_prefixes = _APP_PREFIXES,
+)
+
+pkg_files(
+    name = "resources_app_linux",
+    srcs = [":app_linux"],
+    attributes = pkg_attributes(mode = "0755"),
+    strip_prefix = strip_prefix.from_pkg("linux"),
+)
+
+pkg_tar(
+    name = "linux_tar",
+    srcs = [
+        ":electron_linux",
+        ":notices",
+        ":resources_app_linux",
+    ],
+    extension = "tar.gz",
+    package_dir = "blitz-electron_linux_amd64",
+    target_compatible_with = [
+        "@platforms//os:linux",
+        "@platforms//cpu:x86_64",
+    ],
 )

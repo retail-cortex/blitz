@@ -166,6 +166,9 @@ _ELECTRON_BUILD = """filegroup(
     srcs = glob(["**"], exclude = ["BUILD.bazel", "REPO.bazel", "WORKSPACE"]),
     visibility = ["//visibility:public"],
 )
+
+# Electron's program, renamed in the packages.
+exports_files(glob(["electron", "electron.exe"], allow_empty = True))
 """
 
 [
