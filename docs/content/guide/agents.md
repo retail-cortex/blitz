@@ -62,7 +62,7 @@ An agent is a Markdown file: front matter, then the system prompt.
 | `.agents/agents/*.md` in the project | Everyone who works in it (desktop: the **Agents** menu) |
 | A plugin's `agents/` folder | Whoever enables the plugin |
 
-In the desktop app both are with the advanced settings (**Settings › Appearance › Show advanced settings**): **Add agent**, fill in the name, description and instructions, and open **Advanced** for the rest. `/setup` and `/agents update` also write project agents for you, and the `agent-creator` agent writes one from a description.
+In the desktop app both are with the advanced settings (**Show advanced** (in the Settings title bar)): **Add agent**, fill in the name, description and instructions, and open **Advanced** for the rest. `/setup` and `/agents update` also write project agents for you, and the `agent-creator` agent writes one from a description.
 
 ```markdown
 ---

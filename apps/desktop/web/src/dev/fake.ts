@@ -805,7 +805,7 @@ export function installFake() {
         listEnvs: () => ({ envs: [{ key: "a1b2c3", deps: ["pandas", "matplotlib"], skills: ["data-report"], size: 182_000_000n, ready: true }] }),
         pruneEnvs: () => ({ removed: 0, freed: 0n, failed: [] }),
         removeEnv: () => ({}),
-        listSkills: ({ query }) => ({ skills: [{ name: "pdf", description: "Read and summarize PDF files" }, { name: "release", description: "Cut a release: tag, notes, checks" }].filter((x) => !query || x.name.includes(query)) }),
+        listSkills: ({ workspace, query }) => ({ skills: [{ name: "pdf", description: "Read and summarize PDF files", dir: "/home/me/.blitz/skills/pdf" }, { name: "release", description: "Cut a release: tag, notes, checks", dir: `${workspace}/.agents/skills/release` }, { name: "deploy", version: "1.2.0", description: "Deploy to staging and production", dir: "/home/me/.blitz/plugins/acme/skills/deploy" }].filter((x) => !query || x.name.includes(query)) }),
         getSkill: ({ name }) => ({ skill: { name, description: "Read and summarize PDF files", tools: [{ name: "read_file" }] } }),
         getSettings: ({ workspace }) => {
           const s = state(workspace).settings;

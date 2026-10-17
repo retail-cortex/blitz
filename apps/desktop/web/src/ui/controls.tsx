@@ -106,22 +106,25 @@ export function Chip({
 /**
  * A segmented button: one of a few options, as radio buttons. Each option
  * is named by its label, even where its text is hidden (icons only).
+ * Equal makes every option as wide as the widest, as Settings' are.
  */
 export function Segmented<T extends string>({
   value,
   options,
   onChange,
   small,
+  equal,
   label,
 }: {
   value: T;
   options: { value: T; label: string; icon?: string }[];
   onChange: (v: T) => void;
   small?: boolean;
+  equal?: boolean;
   label: string;
 }) {
   return (
-    <div className={`seg ${small ? "small" : ""}`} role="radiogroup" aria-label={label}>
+    <div className={`seg${small ? " small" : ""}${equal ? " equal" : ""}`} role="radiogroup" aria-label={label}>
       {options.map((o) => (
         <button key={o.value} type="button" role="radio" aria-checked={o.value === value} aria-label={o.label} className={o.value === value ? "on" : ""} onClick={() => onChange(o.value)}>
           {o.icon && <Icon path={o.icon} size="sm" />}

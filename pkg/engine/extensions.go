@@ -32,7 +32,7 @@ import (
 func (w *Workspace) skillInfo(s *skills.Skill) api.SkillInfo {
 	info := api.SkillInfo{
 		Name: s.Name, Description: s.Description, Version: s.Version, License: s.License, Category: s.Category,
-		Compatibility: s.Compatibility, Tags: s.Tags, NeedsNetwork: s.ExecutionHints.NeedsNetwork(),
+		Compatibility: s.Compatibility, Tags: s.Tags, NeedsNetwork: s.ExecutionHints.NeedsNetwork(), Dir: s.HostDir(),
 	}
 	for _, t := range s.ToolRequirements {
 		info.Tools = append(info.Tools, api.SkillTool{Name: t.Name, Scopes: t.Scopes, Why: t.Description})

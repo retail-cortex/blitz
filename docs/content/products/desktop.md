@@ -66,7 +66,7 @@ Unzip `blitz_<version>_windows_amd64.zip` and run `blitz-tray.exe`. It starts th
 
 ![The One Light theme](../../images/desktop-one-light.png)
 
-Blitz starts simple: it shows what you need to work with an agent, with sensible defaults for the rest. **Settings › Appearance › Show advanced settings** reveals everything else: custom agents and scheduled workers, model and generation settings, permission rules, git actions and more. Turning it off again hides them without changing them.
+Blitz starts simple: it shows what you need to work with an agent, with sensible defaults for the rest. **Show advanced** (in the Settings title bar) reveals everything else: custom agents and scheduled workers, model and generation settings, permission rules, git actions and more. Turning it off again hides them without changing them.
 
 The window keeps only its own settings, in `~/.blitz/desktop.json`: its theme, layout, and the workspaces it knows. Everything else lives in the service, so the REPL and the app see the same sessions.
 

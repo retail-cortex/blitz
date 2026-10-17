@@ -15,21 +15,27 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
-import { mdiDeleteOutline, mdiDownload, mdiKeyOutline, mdiMagnify, mdiPlus, mdiRefresh } from "@mdi/js";
-import { config } from "./api";
+import { mdiDeleteOutline, mdiDownload, mdiFileDocumentOutline, mdiFolderOpenOutline, mdiKeyOutline, mdiMagnify, mdiPlus, mdiRefresh } from "@mdi/js";
+import { config, workspaces } from "./api";
+import { revealPath } from "./desktop";
+import { openFile } from "./events";
 import { message } from "./errors";
 import type { InstalledSkill, RegistrySkill, SkillRegistry } from "./gen/blitz/v1/config_pb";
+import type { SkillInfo } from "./gen/blitz/v1/workspace_pb";
 import { t, tn } from "./i18n";
+import { skillFile, skillWhere, skillWhereOrder } from "./skillList";
 import { useApp } from "./state";
 import { Button, Icon, IconButton, useSnackbar } from "./ui/controls";
 
 /**
- * Settings › Skills (spec_skills_013 SK-96): the skill registries, such as
- * Castor, the skills they offer, and those installed from them. A skill
- * installs for the user or into the active workspace; open sessions see
- * it at once.
+ * Settings › Skills (spec_skills_013 SK-96): the skills the active
+ * workspace finds (its .agents/skills, the user's, the registries' and
+ * plugins'), the skill registries, such as Castor, the skills they offer,
+ * and those installed from them. A skill installs for the user or into
+ * the active workspace; open sessions see it at once. onOpen: a skill's
+ * file was opened in the editor (Settings closes).
  */
-export function SkillSettings() {
+export function SkillSettings({ onOpen }: { onOpen?: () => void }) {
   const snack = useSnackbar();
   const { prefs } = useApp();
   const active = prefs.workspaces.find((w) => w.dir === prefs.active && w.open)?.dir ?? "";
@@ -100,6 +106,7 @@ export function SkillSettings() {
     <div className="stack skill-settings" style={{ gap: 16 }}>
       <p className="t-body-sm muted">{t("desktop.skills.intro")}</p>
       {error && <p className="error-text">{error}</p>}
+      <FoundSkills workspace={active} registryDirs={installed.map((i) => i.dir)} onOpen={onOpen} />
 
       <section className="stack" style={{ gap: 8 }}>
         <span className="t-title-sm">{t("desktop.skills.registries")}</span>
@@ -237,4 +244,79 @@ export function SkillSettings() {
 export function workspaceOf(dir: string): string {
   const m = /^(.*)\/\.agents\/skills\/[^/]+$/.exec(dir);
   return m ? m[1] : "";
+}
+
+/**
+ * The skills the workspace finds, by where they come from (SK-96a): its
+ * own open in the editor, the others show in the file manager.
+ */
+function FoundSkills({ workspace, registryDirs, onOpen }: { workspace: string; registryDirs: string[]; onOpen?: () => void }) {
+  const snack = useSnackbar();
+  const [skills, setSkills] = useState<SkillInfo[] | null>(null);
+  const [error, setError] = useState("");
+  useEffect(() => {
+    if (!workspace) return;
+    let live = true;
+    workspaces.listSkills({ workspace }).then(
+      (r) => live && (setSkills(r.skills), setError("")),
+      (e) => live && setError(message(e)),
+    );
+    return () => {
+      live = false;
+    };
+  }, [workspace]);
+  const groups = skillWhereOrder
+    .map((where) => ({ where, list: (skills ?? []).filter((s) => skillWhere(s.dir, workspace, registryDirs) === where) }))
+    .filter((g) => g.list.length > 0);
+  return (
+    <section className="stack" style={{ gap: 12 }}>
+      <span className="t-title-sm">{t("desktop.skills.found")}</span>
+      {!workspace ? (
+        <p className="t-body-sm muted">{t("desktop.skills.found.no_workspace")}</p>
+      ) : error ? (
+        <p className="error-text">{error}</p>
+      ) : skills && groups.length === 0 ? (
+        <p className="t-body-sm muted">{t("desktop.skills.found.none")}</p>
+      ) : (
+        groups.map((g) => (
+          <div key={g.where} className="stack" style={{ gap: 4 }}>
+            <span className="t-label muted">{t(`desktop.skills.where.${g.where}`)}</span>
+            <div className="list">
+              {g.list.map((s) => {
+                const file = skillFile(s.dir, workspace);
+                return (
+                  <div key={s.dir || s.name} className="rule">
+                    <div className="stack spacer" style={{ gap: 2, minWidth: 0 }}>
+                      <span>
+                        <strong>{s.name}</strong> {s.version && <span className="t-body-sm muted">{s.version}</span>}
+                      </span>
+                      {s.description && <span className="t-body-sm muted ellipsis" title={s.description}>{s.description}</span>}
+                      {s.dir && (
+                        <code className="t-body-sm ellipsis" title={s.dir}>
+                          {s.dir}
+                        </code>
+                      )}
+                    </div>
+                    {file ? (
+                      <IconButton
+                        icon={mdiFileDocumentOutline}
+                        label={t("desktop.skills.open", { name: s.name })}
+                        small
+                        onClick={() => {
+                          openFile({ dir: workspace, path: file });
+                          onOpen?.();
+                        }}
+                      />
+                    ) : (
+                      s.dir && <IconButton icon={mdiFolderOpenOutline} label={t("desktop.skills.reveal", { name: s.name })} small onClick={() => void revealPath(s.dir).catch((e) => snack(message(e), { error: true }))} />
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ))
+      )}
+    </section>
+  );
 }

@@ -49,6 +49,8 @@ type SkillInfo struct {
 	Env, Withheld []string
 	// Blocked are reasons none of the scripts may run.
 	Blocked []string
+	// Dir is the skill's folder on disk ("" for a built-in skill).
+	Dir string
 }
 
 // SkillTool is a tool a skill needs.

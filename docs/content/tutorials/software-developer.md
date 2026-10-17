@@ -88,7 +88,7 @@ Skills can carry Python or TypeScript scripts, run in a sandbox that reads the w
 
 An agent is a role: its own instructions, the tools it may use, its model, and how freely it acts. Blitz comes with general agents (`blitz`, `qa`, `planning-agent` and others, see [Agents and tools](../guide/agents.md)); your own add the roles this project needs. The wizard offers up to four, such as a reviewer, a test writer or a specialist for the riskiest part of the code.
 
-- **Desktop:** turn on **Settings › Appearance › Show advanced settings**, then **Agents › Add agent**. Fill in a name, a description, and the system instructions; under **Advanced**, the model, agency, permission mode and tools.
+- **Desktop:** turn on **Show advanced** (in the Settings title bar), then **Agents › Add agent**. Fill in a name, a description, and the system instructions; under **Advanced**, the model, agency, permission mode and tools.
 - **By hand:** a Markdown file in `.agents/agents/`, the frontmatter for its settings and the body for its instructions.
 
 A reviewer that reads and reports but never edits:

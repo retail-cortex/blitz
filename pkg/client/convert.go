@@ -231,6 +231,7 @@ func skill(s *pb.SkillInfo) api.SkillInfo {
 		Name: s.Name, Description: s.Description, Version: s.Version, License: s.License, Category: s.Category,
 		Compatibility: s.Compatibility, Tags: s.Tags, Hash: s.Hash, Tier: s.Tier, Bypass: s.Bypass,
 		Network: s.Network, NeedsNetwork: s.NeedsNetwork, Env: s.Env, Withheld: s.Withheld, Blocked: s.Blocked,
+		Dir: s.Dir,
 	}
 	for _, t := range s.Tools {
 		out.Tools = append(out.Tools, api.SkillTool{Name: t.Name, Scopes: t.Scopes, Why: t.Why})

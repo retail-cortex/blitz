@@ -15,7 +15,7 @@ Workers run in the **Blitz service** (`blitzd`), not in the window or the termin
 blitz service install     # starts the service at login (launchd or systemd)
 ```
 
-The desktop app and `blitz service install` keep it running. A service the CLI started on its own stops after 15 idle minutes, and with it the schedules. Keys a worker needs belong in `~/.blitz/.env.toml` (or the keychain): a service started at login doesn't see your shell's environment. In the desktop app, Workers is with the advanced settings (**Settings › Appearance › Show advanced settings**).
+The desktop app and `blitz service install` keep it running. A service the CLI started on its own stops after 15 idle minutes, and with it the schedules. Keys a worker needs belong in `~/.blitz/.env.toml` (or the keychain): a service started at login doesn't see your shell's environment. In the desktop app, Workers is with the advanced settings (**Show advanced** (in the Settings title bar)).
 
 ## Your first worker
 

@@ -881,6 +881,8 @@ message SkillInfo {
   repeated string withheld = 16;
   // Why none of the scripts may run.
   repeated string blocked = 17;
+  // Its folder on disk ("" for a built-in skill).
+  string dir = 18;
 }
 
 // SkillTool is a tool a skill needs.

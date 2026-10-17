@@ -325,7 +325,7 @@ export function MenuBar({
       <ToolbarSearch onClick={onSearch} />
       {/* A web page in the editor (EL-102), from anywhere: the editor's own button shows only with a file open. */}
       {dir && canPreview() && <IconButton icon={mdiWebPlus} label={t("desktop.web.open")} onClick={() => openWeb({ dir, url: "" })} />}
-      <IconButton icon={mdiCogOutline} label={t("desktop.menu.settings_hint")} onClick={() => onSettings("appearance")} />
+      <IconButton icon={mdiCogOutline} label={t("desktop.menu.settings_hint")} onClick={() => onSettings("providers")} />
       {inbox && <InboxDrawer list={runs} onClose={() => setInbox(false)} />}
     </nav>
   );

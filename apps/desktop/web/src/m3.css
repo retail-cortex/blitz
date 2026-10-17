@@ -288,6 +288,9 @@ a { color: var(--md-primary); }
 .seg button:first-child { border-left: none; }
 .seg button.on { background: var(--accent-tint); color: var(--on-accent-tint); }
 .seg.small button { height: 32px; padding: 0 12px; }
+/* Every option as wide as the widest. */
+.seg.equal { display: inline-grid; grid-auto-flow: column; grid-auto-columns: 1fr; }
+.seg.equal button { justify-content: center; }
 /* An M3 search bar that opens a search (the top bar's: the palette). */
 .toolbar-search {
   position: relative; display: inline-flex; align-items: center; gap: 10px; width: clamp(180px, 24vw, 360px); height: 40px; padding: 0 8px 0 14px;

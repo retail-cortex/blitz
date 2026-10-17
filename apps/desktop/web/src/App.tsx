@@ -231,7 +231,7 @@ function Shell() {
         setPaletteOpen(true);
       } else if ((e.metaKey || e.ctrlKey) && e.key === ",") {
         e.preventDefault();
-        setSettingsAt({ section: "appearance" });
+        setSettingsAt({ section: "providers" });
       } else if (isFocusComposerKey(e)) {
         e.preventDefault();
         window.dispatchEvent(new Event(focusComposerEvent));

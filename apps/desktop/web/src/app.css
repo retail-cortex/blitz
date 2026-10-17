@@ -519,6 +519,18 @@ body.resizing iframe, body.resizing .cm-editor { pointer-events: none; }
    guide take its whole width. */
 .settings-drawer .settings-pane { max-width: 960px; }
 .settings-drawer .settings { width: 100%; max-width: 1220px; margin-inline: auto; }
+/* The settings file is Settings' other side (its title bar's braces): it
+   turns a quarter out, changes side and turns back in. */
+.settings-flip { min-height: 100%; }
+.settings[hidden], .settings-file-side[hidden] { display: none; }
+.settings-flip.flip-out { animation: settings-flip-out 140ms ease-in forwards; }
+.settings-flip.flip-in { animation: settings-flip-in 160ms ease-out; }
+@keyframes settings-flip-out { to { transform: perspective(1600px) rotateY(90deg); } }
+@keyframes settings-flip-in { from { transform: perspective(1600px) rotateY(-90deg); } }
+.settings-file-side { width: 100%; max-width: 1220px; margin-inline: auto; }
+/* Show advanced, in the title bar: its words, then the switch. */
+.drawer-switch { gap: 10px; margin-inline-end: 4px; cursor: pointer; white-space: nowrap; }
+@container drawer (max-width: 600px) { .drawer-switch { font-size: 0; gap: 0; } }
 :is(.worker-drawer, .agent-drawer, .inbox-drawer, .license-drawer) > :is(.body, footer) > * { width: 100%; max-width: 1080px; margin-inline: auto; }
 @container drawer (max-width: 600px) {
   .settings-drawer .settings-nav { width: 48px; }
@@ -531,6 +543,8 @@ body.resizing iframe, body.resizing .cm-editor { pointer-events: none; }
    (a path) wraps inside it rather than squeezing the description. */
 .setting-control { flex: 0 1 auto; min-width: 0; max-width: 55%; }
 .setting-control code { overflow-wrap: anywhere; }
+/* Appearance's menus (the light and dark themes, the language) line up. */
+.setting-control .language-select { width: 220px; max-width: 100%; }
 /* A narrow settings pane (the drawer at its narrower widths) puts each
    control under its description rather than squeezing either. */
 .settings-pane { container: settings-pane / inline-size; }

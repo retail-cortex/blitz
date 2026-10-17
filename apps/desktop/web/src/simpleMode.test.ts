@@ -19,15 +19,16 @@ import { allSections, menuIds, sectionShown, settingsSections, showsSignIn } fro
 
 describe("simple mode", () => {
   it("keeps what a newcomer needs in Settings, and everything with advanced", () => {
-    expect(settingsSections(false)).toEqual(["appearance", "providers", "workspaces", "about"]);
+    expect(settingsSections(false)).toEqual(["providers", "appearance", "workspaces", "about"]);
     expect(settingsSections(true)).toEqual([...allSections]);
   });
 
   it.each([
-    { asked: "logs" as const, advanced: false, want: "appearance" },
+    { asked: "logs" as const, advanced: false, want: "providers" },
     { asked: "logs" as const, advanced: true, want: "logs" },
     { asked: "workspaces" as const, advanced: false, want: "workspaces" },
-    { asked: "file" as const, advanced: false, want: "appearance" },
+    { asked: "skills" as const, advanced: false, want: "providers" },
+    { asked: "appearance" as const, advanced: false, want: "appearance" },
   ])("opens $asked as $want (advanced: $advanced)", ({ asked, advanced, want }) => {
     expect(sectionShown(asked, advanced)).toBe(want);
   });

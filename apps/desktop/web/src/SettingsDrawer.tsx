@@ -18,8 +18,8 @@ import { useCallback, useEffect, useState } from "react";
 import {
   mdiBrain,
   mdiCheckCircleOutline,
+  mdiCodeBraces,
   mdiCogOutline,
-  mdiFileDocumentEditOutline,
   mdiFolderMultipleOutline,
   mdiKeyChainVariant,
   mdiProgressClock,
@@ -60,23 +60,24 @@ import { useAdvanced, useApp } from "./state";
 import { sectionShown, settingsSections, type SectionId } from "./simpleMode";
 import { paletteOf, type ThemePref } from "./theme";
 import { darkThemes, lightThemes, type DarkThemeId, type LightThemeId } from "./themes";
-import { Button, Chip, Icon, IconButton, Segmented, Switch, useSnackbar } from "./ui/controls";
+import { Button, Chip, Dialog, Icon, IconButton, Segmented, Switch, useSnackbar } from "./ui/controls";
 import { Drawer } from "./ui/Drawer";
 import { LookFields, WorkspaceSettingsForm } from "./WorkspaceSettingsForm";
 import { useWorkspaceSettings } from "./workspaceSettings";
 
-/** A section of the Settings dialog (simpleMode.ts lists them, and which a newcomer sees). */
-export type Section = SectionId;
+/**
+ * What Settings opens on: a section (simpleMode.ts lists them, and which a
+ * newcomer sees), or "file", the settings file on the other side of them.
+ */
+export type Section = SectionId | "file";
 
-const sectionIcons: Record<Section, string> = {
-  appearance: mdiPaletteOutline,
-  documents: mdiLanguageMarkdownOutline,
+const sectionIcons: Record<SectionId, string> = {
   providers: mdiKeyChainVariant,
-  permissions: mdiShieldCheckOutline,
+  appearance: mdiPaletteOutline,
   agents: mdiRobotOutline,
   skills: mdiPuzzleOutline,
-  file: mdiFileDocumentEditOutline,
   workspaces: mdiFolderMultipleOutline,
+  permissions: mdiShieldCheckOutline,
   service: mdiServerNetwork,
   logs: mdiTextBoxSearchOutline,
   about: mdiInformationOutline,
@@ -86,59 +87,117 @@ const sectionIcons: Record<Section, string> = {
  * The window's settings, opening on a section (initial) and, for
  * Workspaces and the settings file, on a workspace (scope): a workspace's
  * own settings are in Workspaces (its pencil in the Workspaces menu, and
- * the status bar's model, open them there).
+ * the status bar's model, open them there). The title bar holds Show
+ * advanced settings and, with them, the settings file: Settings turns
+ * over to show it, as a page's source, and back.
  */
-export function SettingsDrawer({ onClose, initial = "appearance", scope: initialScope = "" }: { onClose: () => void; initial?: Section; scope?: string }) {
+export function SettingsDrawer({ onClose, initial = "providers", scope: initialScope = "" }: { onClose: () => void; initial?: Section; scope?: string }) {
   const advanced = useAdvanced();
-  const [asked, setSection] = useState<Section>(initial);
+  const { update } = useApp();
+  const [asked, setSection] = useState<SectionId>(initial === "file" ? "providers" : initial);
   const [scope, setScope] = useState(initialScope);
+  const flip = useFlip(initial === "file");
   // Simple mode shows what a newcomer needs (settingsSections); a section
-  // hidden when advanced is turned off falls back to Appearance.
+  // hidden when advanced is turned off falls back to the first.
   const sections = settingsSections(advanced);
   const section = sectionShown(asked, advanced);
+  const showFile = flip.face === "file" && advanced;
+  const actions = (
+    <>
+      <label className="row drawer-switch t-label" title={t("desktop.settings.advanced.detail")}>
+        {t("desktop.settings.advanced.short")}
+        <Switch label={t("desktop.settings.advanced")} checked={advanced} onChange={(on) => update((p) => ({ ...p, advanced: on }))} />
+      </label>
+      {advanced && (
+        <IconButton
+          icon={mdiCodeBraces}
+          label={t(showFile ? "desktop.settings.file.back" : "desktop.settings.file.show")}
+          selected={showFile}
+          onClick={() => flip.turn(showFile ? "settings" : "file")}
+        />
+      )}
+    </>
+  );
   return (
-    <Drawer title={t("desktop.settings")} icon={mdiCogOutline} onClose={onClose} className="settings-drawer">
-      <div className="settings">
-        <div className="settings-nav list" role="tablist">
-          {sections.map((id) => (
-            <button
-              key={id}
-              role="tab"
-              aria-selected={id === section}
-              data-autofocus={id === section ? "" : undefined}
-              className={`list-item ${id === section ? "active" : ""}`}
-              title={t(`desktop.settings.${id}`)}
-              onClick={() => setSection(id)}
-            >
-              <Icon path={sectionIcons[id]} />
-              <span className="settings-nav-label">{t(`desktop.settings.${id}`)}</span>
-            </button>
-          ))}
+    <Drawer title={t("desktop.settings")} icon={mdiCogOutline} onClose={onClose} className="settings-drawer" headerActions={actions}>
+      <div className={`settings-flip ${flip.turning}`} onAnimationEnd={flip.turned}>
+        <div className="settings" hidden={showFile}>
+          <div className="settings-nav list" role="tablist">
+            {sections.map((id) => (
+              <button
+                key={id}
+                role="tab"
+                aria-selected={id === section}
+                data-autofocus={id === section && !showFile ? "" : undefined}
+                className={`list-item ${id === section ? "active" : ""}`}
+                title={t(`desktop.settings.${id}`)}
+                onClick={() => setSection(id)}
+              >
+                <Icon path={sectionIcons[id]} />
+                <span className="settings-nav-label">{t(`desktop.settings.${id}`)}</span>
+              </button>
+            ))}
+          </div>
+          <div className="settings-pane">
+            {section === "providers" && <ProviderSettings workspace="" />}
+            {section === "appearance" && <Appearance />}
+            {section === "agents" && <UserAgents />}
+            {section === "skills" && <SkillSettings onOpen={onClose} />}
+            {section === "workspaces" && (
+              <Workspaces
+                initial={initial === "workspaces" ? initialScope : ""}
+                onSettingsFile={(dir) => {
+                  setScope(dir);
+                  flip.turn("file");
+                }}
+              />
+            )}
+            {section === "permissions" && <PermissionSettings workspace="" />}
+            {section === "service" && <Service />}
+            {section === "logs" && <LogViewer />}
+            {section === "about" && <About />}
+          </div>
         </div>
-        <div className="settings-pane">
-          {section === "appearance" && <Appearance />}
-          {section === "documents" && <DocumentSettings />}
-          {section === "providers" && <ProviderSettings workspace="" />}
-          {section === "permissions" && <PermissionSettings workspace="" />}
-          {section === "agents" && <UserAgents />}
-          {section === "skills" && <SkillSettings />}
-          {section === "file" && <FileSection scope={scope} />}
-          {section === "workspaces" && (
-            <Workspaces
-              initial={initial === "workspaces" ? initialScope : ""}
-              onSettingsFile={(dir) => {
-                setScope(dir);
-                setSection("file");
-              }}
-            />
-          )}
-          {section === "service" && <Service />}
-          {section === "logs" && <LogViewer />}
-          {section === "about" && <About />}
-        </div>
+        {/* Kept once shown, so turning back and forth keeps what's typed. */}
+        {advanced && flip.shown && (
+          <div className="settings-file-side" hidden={!showFile}>
+            <FileSection key={scope} scope={scope} />
+          </div>
+        )}
       </div>
     </Drawer>
   );
+}
+
+/**
+ * Settings' two sides: the sections and the settings file. Turning goes
+ * out (a quarter turn), changes side and comes back in; with reduced
+ * motion it changes side at once. shown: the file's side has been shown.
+ */
+function useFlip(file: boolean) {
+  const [face, setFace] = useState<"settings" | "file">(file ? "file" : "settings");
+  const [next, setNext] = useState<"settings" | "file" | null>(null);
+  const [turning, setTurning] = useState<"" | "flip-out" | "flip-in">("");
+  const [shown, setShown] = useState(file);
+  const turn = (to: "settings" | "file") => {
+    if (to === face && !next) return;
+    if (to === "file") setShown(true);
+    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) {
+      setFace(to);
+      return;
+    }
+    setNext(to);
+    setTurning("flip-out");
+  };
+  const turned = (e: React.AnimationEvent) => {
+    if (e.target !== e.currentTarget) return;
+    if (turning === "flip-out" && next) {
+      setFace(next);
+      setNext(null);
+      setTurning("flip-in");
+    } else setTurning("");
+  };
+  return { face, turning, shown, turn, turned };
 }
 
 // The user's agents (~/.blitz/agents), offered the tools and models of
@@ -167,13 +226,17 @@ function Setting({ title, detail, children }: { title: string; detail?: string; 
 function Appearance() {
   const { prefs, update, theme } = useApp();
   const palette = paletteOf(theme, prefs.light_theme, prefs.dark_theme);
+  const [documents, setDocuments] = useState(false);
   return (
     <div className="stack" style={{ gap: 0 }}>
-      <Setting title={t("desktop.settings.advanced")} detail={t("desktop.settings.advanced.detail")}>
-        <Switch label={t("desktop.settings.advanced")} checked={prefs.advanced} onChange={(advanced) => update((p) => ({ ...p, advanced }))} />
-      </Setting>
+      {documents && (
+        <Dialog title={t("desktop.settings.documents")} icon={mdiLanguageMarkdownOutline} onClose={() => setDocuments(false)} large closeButton>
+          <DocumentSettings />
+        </Dialog>
+      )}
       <Setting title={t("desktop.settings.theme")} detail={t("desktop.settings.theme.detail")}>
         <Segmented<ThemePref>
+          equal
           label={t("desktop.settings.theme")}
           value={prefs.theme}
           onChange={(theme) => update((p) => ({ ...p, theme }))}
@@ -216,10 +279,17 @@ function Appearance() {
       <Setting title={t("desktop.settings.notifications")} detail={t("desktop.settings.notifications.detail")}>
         <Switch label={t("desktop.settings.notifications")} checked={prefs.notifications === "on"} onChange={(on) => update((p) => ({ ...p, notifications: on ? "on" : "off" }))} />
       </Setting>
+      {/* The Markdown previews' styles, in a dialog of their own. */}
+      <Setting title={t("desktop.settings.documents")} detail={t("desktop.settings.documents.detail")}>
+        <Button variant="outlined" icon={mdiLanguageMarkdownOutline} onClick={() => setDocuments(true)}>
+          {t("desktop.settings.documents.edit")}
+        </Button>
+      </Setting>
       {prefs.advanced && (
         <>
         <Setting title={t("desktop.settings.composer")} detail={t("desktop.settings.composer.detail")}>
           <Segmented
+            equal
             label={t("desktop.settings.composer")}
             value={prefs.composer}
             onChange={(composer) => update((p) => ({ ...p, composer }))}
@@ -231,6 +301,7 @@ function Appearance() {
         </Setting>
         <Setting title={t("desktop.settings.density")} detail={t("desktop.settings.density.detail")}>
           <Segmented
+            equal
             label={t("desktop.settings.density")}
             value={prefs.density}
             onChange={(density) => update((p) => ({ ...p, density }))}
@@ -250,6 +321,7 @@ function Appearance() {
         )}
         <Setting title={t("desktop.settings.width")} detail={t("desktop.settings.width.detail")}>
           <Segmented
+            equal
             label={t("desktop.settings.width")}
             value={prefs.width}
             onChange={(width) => update((p) => ({ ...p, width }))}
@@ -261,6 +333,7 @@ function Appearance() {
         </Setting>
         <Setting title={t("desktop.settings.doc_width")} detail={t("desktop.settings.doc_width.detail")}>
           <Segmented
+            equal
             label={t("desktop.settings.doc_width")}
             value={prefs.doc_width}
             onChange={(doc_width) => update((p) => ({ ...p, doc_width }))}
@@ -485,7 +558,7 @@ function Service() {
       {version && (
         <Setting title={t("desktop.service.version")} detail={version.stale ? t(`desktop.service.stale.${version.stale}`, { service: shownVersion(version.info?.version ?? "?"), app: shownVersion(version.app), path: version.info?.executable ?? "" }) : undefined}>
           <span className={version.stale ? "error-text" : "muted"}>
-            {version.info ? shownVersion(version.info.version) : t("desktop.service.version_unknown")} · {t("desktop.service.app_version", { version: shownVersion(version.app) })}
+            {version.info ? shownVersion(version.info.version) : t("desktop.service.version_unknown")}
           </span>
         </Setting>
       )}

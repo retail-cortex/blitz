@@ -97,6 +97,7 @@ export function DocumentSettings() {
       <p className="t-body-sm muted">{t("desktop.settings.doc_css.detail")}</p>
       <div className="row doc-settings-bar">
         <Segmented<Theme>
+          equal
           label={t("desktop.settings.doc_css.theme")}
           value={theme}
           onChange={setTheme}
