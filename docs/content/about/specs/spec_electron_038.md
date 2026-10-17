@@ -7,9 +7,9 @@ weight: 38
 
 | | |
 |---|---|
-| Status | **Trial** (approved 2026-10-16). Steps: the shared host and `blitz-tray --serve` (done, [spec_service_021](spec_service_021.md) SVC-53a); the Electron shell (this spec's EL-01–EL-31, done on macOS); the page's routing by capability (EL-40, to do); the Windows zip and CI (EL-50, to do); the findings (§6, to do). Nothing of it ships in releases. |
+| Status | **Trial** (approved 2026-10-16). Steps: the shared host and `blitz-tray --serve` (done, [spec_service_021](spec_service_021.md) SVC-53a); the Electron shell (EL-01–EL-31, done on macOS); the page's routing by capability (EL-40–EL-42, done); the Windows zip and CI (EL-50, to do); the findings (§6, to do). Nothing of it ships in releases. |
 | Source | `apps/electron` (`src/main.ts`, `src/preload.ts`, `src/logic.ts`, `dev.sh`, `BUILD.bazel`), the Electron runtime in `MODULE.bazel`, `pkg/pagehost`, `apps/tray/internal/tray/serve.go` |
-| Tests | `apps/electron/src/logic.test.ts` (vitest), `//apps/electron:typecheck`, `apps/tray/internal/tray/serve_test.go`, `pkg/pagehost/host_test.go` |
+| Tests | `apps/electron/src/logic.test.ts` (vitest), `apps/desktop/web/src/desktop.test.ts` (the routing), `//apps/electron:typecheck`, `apps/tray/internal/tray/serve_test.go`, `pkg/pagehost/host_test.go` |
 
 ## 1. Purpose
 
@@ -47,15 +47,16 @@ The trial tries Electron instead: Chromium on macOS, Linux and Windows. It's a n
 - **EL-21** Everything else the page asks of its host (the service's status and controls, preferences in `~/.blitz/desktop.json`, the CLI, the sandbox, files, licenses) goes to `/host/` (WIN-14), as on the Windows tray's page.
 - **EL-22** `blitz://open?dir=<folder>&prompt=<text>` links ([spec_parity_027](spec_parity_027.md) PAR-INT-03) reach the page as `deeplink:open`, or wait for `PendingLinks`: the folder must be an absolute path that exists (`~` is the home folder), the prompt at most 20,000 characters. The packaged app registers the `blitz` scheme.
 
-## 5. Not yet
+## 5. The page, and what's not done
 
-- **EL-30** The page doesn't use the window's calls yet: it routes them by capability in the next step (EL-40).
+- **EL-40** The page's `desktop.ts` routes each of the app's calls by capability (`canCall`): the Wails app, else the Electron window (`window.blitzElectron`), else the host (`/host/`), else the browser's stand-in. The window's events (`onAppMenu`, `onDeepLink`, `onNotificationOpen`) come from the Wails runtime or the Electron window alike, the window's glass (`nativeGlass`) from either, and Export as PDF is offered wherever `PrintPDF` is.
+- **EL-41** Preferences go wherever `GetPrefs` is answered. Outside the Wails app, the first time the host keeps them and the browser's storage still has some, the browser's move to the host if the host has no workspaces yet, and the browser's copy is forgotten either way (`adoptBrowserPrefs`): the Windows tray's page, which kept them in the browser, doesn't lose its workspaces.
+- **EL-42** *Known limit.* The host serves on a new loopback port each time it starts, so the window's origin changes with each launch, and what the page keeps in the browser's storage for itself (where the user guide was left, folded sections) starts afresh each time, as on the Windows tray's page.
 - **EL-31** Not signed, no installers and no auto-update: the trial runs from Bazel (macOS, Linux) and from a zip (Windows, EL-50).
-- **EL-40** *To do.* The page's `desktop.ts` routes each call by capability: the Wails app, else the window (`window.blitzElectron`), else the host (`/host/`), else the browser's stand-in. Export as PDF is offered wherever `PrintPDF` is.
 - **EL-50** *To do.* A `workflow_dispatch` CI job builds the Windows zip (Electron's win32 runtime, the app, and the tray, service and CLI cross-built in pure Go) and Linux and macOS archives, as artifacts. Electron's licenses go with them, and its npm dependencies into the third-party notices.
 
 ## 6. Findings
 
 *To do (EL-60).* The Electron build beside the Wails app on macOS and Linux, and beside the Edge tray on Windows: download and installed size, memory with one workspace open after five minutes (all processes), cold start until the page is ready, macOS glass, the NVIDIA checks (#39, #52), and on Windows the folder picker, Export as PDF, notifications, the CLI and starting at login. Then a recommendation: replace Wails, keep both, or stop.
 
-First readings (macOS, Apple silicon, 2026-10-16, development build): the page loads from the host and reaches the service; `PrintPDF` returns a PDF; `file:` links and unknown calls are refused; quitting stops the host; Electron and the host together hold about 530 MB resident at idle on the welcome screen (resident sizes added up, which counts shared memory more than once: a first number, not the comparison).
+First readings (macOS, Apple silicon, 2026-10-16, development build): the page loads from the host and reaches the service; `PrintPDF` returns a PDF; `file:` links and unknown calls are refused; quitting stops the host; with the page routed (EL-40), the window has its glass, a workspace added through the host's preferences opens (saved in `desktop.json`), and Export as PDF writes the PDF beside the file; Electron and the host together hold about 530 MB resident at idle on the welcome screen (resident sizes added up, which counts shared memory more than once: a first number, not the comparison).

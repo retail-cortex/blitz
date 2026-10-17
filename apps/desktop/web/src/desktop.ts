@@ -147,22 +147,73 @@ async function hostCall(method: string, args: unknown[]): Promise<unknown> {
   return body;
 }
 
-/** Whether the app's method can be called: in the app, or on the tray that serves the page. */
-export const canCall = (method: keyof Bound) => inApp() || hostMethods.has(method);
+/**
+ * What the Electron app's window answers (window.blitzElectron, from its
+ * preload, spec_electron_038): the calls only a window can make, and its
+ * events. The rest of the app's methods are its host's (/host/).
+ */
+type ElectronWindow = {
+  methods: readonly string[];
+  nativeGlass: boolean;
+  call(method: string, ...args: unknown[]): Promise<unknown>;
+  on(event: string, f: (arg: unknown) => void): () => void;
+};
 
-/** The tray's methods, as the app's. */
-const host = new Proxy({} as Bound, {
-  get: (_, method: string) =>
-    hostMethods.has(method)
-      ? (...args: unknown[]) => hostCall(method, args)
-      : () => Promise.reject(new Error("not running inside the Blitz desktop app")),
+function electronWindow(): ElectronWindow | undefined {
+  return (window as unknown as { blitzElectron?: ElectronWindow }).blitzElectron;
+}
+
+/** Whether the page runs in the Electron app's window. */
+export const inElectron = () => !!electronWindow();
+
+/** Whether the Electron app's window answers method. */
+const windowHas = (method: string) => !!electronWindow()?.methods.includes(method);
+
+/**
+ * Whether the app's method can be called: in the Wails app, else by the
+ * Electron app's window, else by the program serving the page (the
+ * tray, or the Electron app's host).
+ */
+export const canCall = (method: keyof Bound) => inApp() || windowHas(method) || hostMethods.has(method);
+
+/** The app's methods outside the Wails app: the Electron window's, then the host's. */
+const served = new Proxy({} as Bound, {
+  get: (_, method: string) => {
+    const w = electronWindow();
+    if (w && windowHas(method)) return (...args: unknown[]) => w.call(method, ...args);
+    if (hostMethods.has(method)) return (...args: unknown[]) => hostCall(method, args);
+    return () => Promise.reject(new Error("not running inside the Blitz desktop app"));
+  },
 });
 
 function app(): Bound {
   const b = bound();
   if (b) return b;
-  if (hostMethods.size > 0) return host;
+  if (inElectron() || hostMethods.size > 0) return served;
   throw new Error("not running inside the Blitz desktop app");
+}
+
+/**
+ * Listens to the window's events (its menu, links, notifications): the
+ * Wails app's runtime's, or the Electron window's; undefined in a
+ * browser, which has none.
+ */
+function windowEvents(): ((name: string, f: (arg: unknown) => void) => () => void) | undefined {
+  const rt = (window as unknown as { runtime?: WailsRuntime }).runtime;
+  if (inApp() && rt?.EventsOn) return (name, f) => rt.EventsOn(name, f);
+  const w = electronWindow();
+  if (w) return (name, f) => w.on(name, f);
+  return undefined;
+}
+
+/**
+ * Whether the window is macOS's translucent one, the page's glass drawn
+ * over the desktop showing through (the Wails app's, or Electron's).
+ */
+export function nativeGlass(): boolean {
+  if (typeof window === "undefined" || typeof navigator === "undefined") return false;
+  if (inApp()) return /Mac/.test(navigator.userAgent);
+  return !!electronWindow()?.nativeGlass;
 }
 
 const devPrefsKey = "blitz.desktop.prefs";
@@ -213,25 +264,58 @@ export const appVersion = async () => (canCall("Version") ? app().Version() : "d
  * a prompt); "" when cancelled.
  */
 export async function chooseWorkspace(): Promise<string> {
-  if (!inApp()) return window.prompt(t("desktop.choose.prompt")) ?? "";
+  if (!canCall("ChooseWorkspace")) return window.prompt(t("desktop.choose.prompt")) ?? "";
   return app().ChooseWorkspace(t("desktop.choose.title"));
 }
 
 /** The window's saved preferences, normalized (in a browser, from localStorage). */
 export async function getPrefs(): Promise<Prefs> {
-  if (!inApp()) {
+  if (!canCall("GetPrefs")) {
     try {
       return normalizePrefs(JSON.parse(localStorage.getItem(devPrefsKey) ?? "{}"));
     } catch {
       return defaultPrefs;
     }
   }
-  return normalizePrefs(await app().GetPrefs());
+  const saved = normalizePrefs(await app().GetPrefs());
+  return inApp() ? saved : adoptBrowserPrefs(saved);
+}
+
+/**
+ * The Windows tray's page kept its preferences in the browser's storage
+ * before its host kept them (in desktop.json, as the app does): the first
+ * time, when the host has no workspaces and the browser does, the
+ * browser's move to the host, and the browser's copy goes.
+ */
+async function adoptBrowserPrefs(saved: Prefs): Promise<Prefs> {
+  let old: Prefs | undefined;
+  try {
+    const raw = localStorage.getItem(devPrefsKey);
+    if (raw !== null) old = normalizePrefs(JSON.parse(raw));
+  } catch {
+    return saved; // no storage, or nothing readable in it
+  }
+  if (!old) return saved;
+  if (saved.workspaces.length > 0 || old.workspaces.length === 0) {
+    try {
+      localStorage.removeItem(devPrefsKey);
+    } catch {
+      // nothing to forget
+    }
+    return saved;
+  }
+  const moved = normalizePrefs(await app().SavePrefs(old));
+  try {
+    localStorage.removeItem(devPrefsKey);
+  } catch {
+    // kept: the host has them now, and is asked first
+  }
+  return moved;
 }
 
 /** Saves the preferences and returns them as saved (normalized). */
 export async function savePrefs(p: Prefs): Promise<Prefs> {
-  if (!inApp()) {
+  if (!canCall("SavePrefs")) {
     try {
       localStorage.setItem(devPrefsKey, JSON.stringify(p));
     } catch {
@@ -244,7 +328,7 @@ export async function savePrefs(p: Prefs): Promise<Prefs> {
 
 /** Opens a link from model output in the system browser (never the window). */
 export async function openURL(url: string): Promise<void> {
-  if (!inApp()) {
+  if (!canCall("OpenURL")) {
     window.open(url, "_blank", "noopener,noreferrer");
     return;
   }
@@ -258,8 +342,8 @@ export const openFolder = (dir: string) => app().OpenFolder(dir);
 export const openDocument = (path: string) => app().OpenDocument(path);
 
 /**
- * Prints a page (whole HTML, pictures inline) to PDF with the system's web
- * engine, on A4 or Letter paper (only in the app).
+ * Prints a page (whole HTML, pictures inline) to PDF with the window's web
+ * engine, on A4 or Letter paper (in the Wails or Electron app: canCall("PrintPDF")).
  */
 export async function printPDF(html: string, pageSize: "A4" | "Letter"): Promise<Uint8Array> {
   const b64 = await app().PrintPDF(html, pageSize); // Go's []byte comes as base64
@@ -279,7 +363,7 @@ export function fileManager(): Promise<string | null> {
 
 /** Shows a system notification; a click brings the window to dir. */
 export async function notifyNative(title: string, body: string, dir: string): Promise<void> {
-  if (inApp()) return app().Notify(title, body, dir);
+  if (canCall("Notify")) return app().Notify(title, body, dir);
   // Inside an editor: the editor's own.
   if (editorConfig()) return toEditor({ type: "notify", title, body });
   // A browser (development): the web's own notifications.
@@ -293,7 +377,7 @@ export async function notifyNative(title: string, body: string, dir: string): Pr
  * window asks first (message "" when there are none).
  */
 export function setUnsaved(message: string, quit: string, cancel: string) {
-  if (inApp()) app().SetUnsaved({ message, quit, cancel }).catch(() => {});
+  if (canCall("SetUnsaved")) app().SetUnsaved({ message, quit, cancel }).catch(() => {});
 }
 
 /**
@@ -302,7 +386,7 @@ export function setUnsaved(message: string, quit: string, cancel: string) {
  * again (nothing in a browser).
  */
 export function setAppearance(theme: "system" | "light" | "dark") {
-  if (inApp()) app().SetAppearance(theme).catch(() => {});
+  if (canCall("SetAppearance")) app().SetAppearance(theme).catch(() => {});
 }
 
 /** The macOS app menu's words, in the window's language. */
@@ -310,14 +394,14 @@ export type AppMenuLabels = { about: string; settings: string; hide: string; hid
 
 /** Relabels the macOS app menu (DSK-101) in the window's language; nothing elsewhere. */
 export function setAppMenu(l: AppMenuLabels) {
-  if (inApp()) app().SetMenu(l).catch(() => {});
+  if (canCall("SetMenu")) app().SetMenu(l).catch(() => {});
 }
 
 /** Calls f when the app menu's About Blitz or Settings… is chosen (macOS). */
 export function onAppMenu(f: (item: "about" | "settings") => void): () => void {
-  const rt = (window as unknown as { runtime?: WailsRuntime }).runtime;
-  if (!inApp() || !rt?.EventsOn) return () => {};
-  const offs = [rt.EventsOn("menu:about", () => f("about")), rt.EventsOn("menu:settings", () => f("settings"))];
+  const on = windowEvents();
+  if (!on) return () => {};
+  const offs = [on("menu:about", () => f("about")), on("menu:settings", () => f("settings"))];
   return () => offs.forEach((off) => off());
 }
 
@@ -342,6 +426,11 @@ type WailsRuntime = {
 
 /** Makes the window full screen, or puts it back (in a browser: the page). */
 export async function toggleFullscreen(): Promise<void> {
+  const w = electronWindow();
+  if (w && windowHas("ToggleFullscreen")) {
+    await w.call("ToggleFullscreen");
+    return;
+  }
   const rt = (window as unknown as { runtime?: WailsRuntime }).runtime;
   if (rt?.WindowIsFullscreen) {
     if (await rt.WindowIsFullscreen()) rt.WindowUnfullscreen();
@@ -357,9 +446,9 @@ export async function toggleFullscreen(): Promise<void> {
  * each as it comes.
  */
 export function onDeepLink(f: (link: DeepLink) => void): () => void {
-  const rt = (window as unknown as { runtime?: WailsRuntime }).runtime;
-  if (!inApp() || !rt?.EventsOn) return () => {};
-  const off = rt.EventsOn("deeplink:open", (link) => {
+  const on = windowEvents();
+  if (!on || !canCall("PendingLinks")) return () => {};
+  const off = on("deeplink:open", (link) => {
     if (link && typeof link === "object" && typeof (link as DeepLink).dir === "string") f(link as DeepLink);
   });
   app()
@@ -371,9 +460,9 @@ export function onDeepLink(f: (link: DeepLink) => void): () => void {
 
 /** Calls f with the workspace a clicked notification is about. */
 export function onNotificationOpen(f: (dir: string) => void): () => void {
-  const rt = (window as unknown as { runtime?: WailsRuntime }).runtime;
-  if (!rt?.EventsOn) return () => {};
-  return rt.EventsOn("notification:open", (dir) => {
+  const on = windowEvents();
+  if (!on) return () => {};
+  return on("notification:open", (dir) => {
     if (typeof dir === "string") f(dir);
   });
 }

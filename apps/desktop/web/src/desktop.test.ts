@@ -22,7 +22,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const stubWindow = () => vi.stubGlobal("window", { location: { origin: "http://127.0.0.1:5000" } });
 stubWindow();
 
-const { appVersion, canCall, detectHost, fileManager, licenseText, openFolder, resetHost, revealPath, serviceStatus } = await import("./desktop");
+const { appVersion, canCall, chooseWorkspace, detectHost, fileManager, getPrefs, inElectron, licenseText, nativeGlass, onAppMenu, onNotificationOpen, openFolder, openURL, printPDF, resetHost, revealPath, serviceStatus, setAppMenu, toggleFullscreen } = await import("./desktop");
 
 type Call = { url: string; method: string; body?: unknown };
 
@@ -90,5 +90,123 @@ describe("no host", () => {
     expect(canCall("Version")).toBe(false);
     expect(await appVersion()).toBe("dev");
     expect(await fileManager()).toBeNull();
+  });
+});
+
+/**
+ * The Electron app's window (its preload's window.blitzElectron),
+ * answering methods with results; calls records what the page asked of
+ * it, and emit sends one of its events.
+ */
+function electronWindow(results: Record<string, unknown>, calls: { method: string; args: unknown[] }[] = [], nativeGlass = false) {
+  const listeners = new Map<string, ((arg: unknown) => void)[]>();
+  const w = {
+    methods: Object.keys(results),
+    nativeGlass,
+    call: vi.fn(async (method: string, ...args: unknown[]) => {
+      calls.push({ method, args });
+      return results[method];
+    }),
+    on: (event: string, f: (arg: unknown) => void) => {
+      listeners.set(event, [...(listeners.get(event) ?? []), f]);
+      return () => listeners.set(event, (listeners.get(event) ?? []).filter((g) => g !== f));
+    },
+  };
+  vi.stubGlobal("window", { location: { origin: "http://127.0.0.1:5000" }, blitzElectron: w });
+  return { emit: (event: string, arg?: unknown) => (listeners.get(event) ?? []).forEach((f) => f(arg)) };
+}
+
+/** A localStorage of its own for a test. */
+function storage(initial: Record<string, string> = {}) {
+  const m = new Map(Object.entries(initial));
+  vi.stubGlobal("localStorage", {
+    getItem: (k: string) => m.get(k) ?? null,
+    setItem: (k: string, v: string) => void m.set(k, v),
+    removeItem: (k: string) => void m.delete(k),
+  });
+  return m;
+}
+
+describe("the Electron app's window", () => {
+  it("answers what only a window can do; its host the rest", async () => {
+    const calls: { method: string; args: unknown[] }[] = [];
+    const fetched: Call[] = [];
+    electronWindow({ ChooseWorkspace: "/home/me/shop", OpenURL: undefined, PrintPDF: btoa("%PDF-1.4"), ToggleFullscreen: undefined }, calls, true);
+    vi.stubGlobal("fetch", tray({ Version: "1.2.3", OpenFolder: null }, fetched));
+    await detectHost();
+    expect(inElectron()).toBe(true);
+    expect(nativeGlass()).toBe(true);
+    expect(canCall("ChooseWorkspace")).toBe(true);
+    expect(canCall("OpenFolder")).toBe(true);
+    expect(canCall("SandboxStatus")).toBe(false);
+
+    expect(await chooseWorkspace()).toBe("/home/me/shop");
+    await openURL("https://example.com");
+    expect(new TextDecoder().decode(await printPDF("<p>hi</p>", "Letter"))).toBe("%PDF-1.4");
+    await toggleFullscreen();
+    expect(calls.map((c) => c.method)).toEqual(["ChooseWorkspace", "OpenURL", "PrintPDF", "ToggleFullscreen"]);
+    expect(calls[2].args).toEqual(["<p>hi</p>", "Letter"]);
+
+    await openFolder("/home/me/shop");
+    expect(fetched.at(-1)).toEqual({ url: "/host/OpenFolder", method: "POST", body: ["/home/me/shop"] });
+    expect(await appVersion()).toBe("1.2.3");
+  });
+
+  it("hears its menu and notifications", async () => {
+    const { emit } = electronWindow({ SetMenu: undefined });
+    const items: string[] = [];
+    const dirs: string[] = [];
+    const offMenu = onAppMenu((item) => items.push(item));
+    const offOpen = onNotificationOpen((dir) => dirs.push(dir));
+    emit("menu:settings");
+    emit("menu:about");
+    emit("notification:open", "/home/me/shop");
+    emit("notification:open", 7); // not a folder
+    offMenu();
+    offOpen();
+    emit("menu:settings");
+    expect(items).toEqual(["settings", "about"]);
+    expect(dirs).toEqual(["/home/me/shop"]);
+    setAppMenu({ about: "À propos", settings: "Réglages…", hide: "", hide_others: "", show_all: "", quit: "" });
+  });
+
+  it("isn't macOS's translucent window unless it says so", () => {
+    electronWindow({});
+    expect(nativeGlass()).toBe(false);
+  });
+});
+
+describe("preferences kept by the host", () => {
+  const key = "blitz.desktop.prefs";
+  const shop = { workspaces: [{ dir: "/home/me/shop", name: "Shop", open: true }], active: "/home/me/shop" };
+
+  it("moves the browser's to the host the first time, then forgets them", async () => {
+    const m = storage({ [key]: JSON.stringify(shop) });
+    const fetched: Call[] = [];
+    vi.stubGlobal("fetch", tray({ GetPrefs: { theme: "system", workspaces: [] }, SavePrefs: { ...shop, theme: "system" } }, fetched));
+    await detectHost();
+    const p = await getPrefs();
+    expect(p.workspaces.map((w) => w.dir)).toEqual(["/home/me/shop"]);
+    const saved = fetched.find((c) => c.url === "/host/SavePrefs");
+    expect((saved?.body as { workspaces: { dir: string }[] }[])[0].workspaces[0].dir).toBe("/home/me/shop");
+    expect(m.has(key)).toBe(false);
+  });
+
+  it("keeps the host's when it has workspaces, and forgets the browser's", async () => {
+    const m = storage({ [key]: JSON.stringify(shop) });
+    const fetched: Call[] = [];
+    vi.stubGlobal("fetch", tray({ GetPrefs: { workspaces: [{ dir: "/home/me/other", open: true }] }, SavePrefs: null }, fetched));
+    await detectHost();
+    const p = await getPrefs();
+    expect(p.workspaces.map((w) => w.dir)).toEqual(["/home/me/other"]);
+    expect(fetched.some((c) => c.url === "/host/SavePrefs")).toBe(false);
+    expect(m.has(key)).toBe(false);
+  });
+
+  it("leaves the host's alone when the browser has none", async () => {
+    storage();
+    vi.stubGlobal("fetch", tray({ GetPrefs: { theme: "dark", workspaces: [] }, SavePrefs: null }));
+    await detectHost();
+    expect((await getPrefs()).theme).toBe("dark");
   });
 });

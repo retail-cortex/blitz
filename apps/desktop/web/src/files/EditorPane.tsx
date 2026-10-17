@@ -18,7 +18,7 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type
 import { openSearchPanel } from "@codemirror/search";
 import { mdiAlertCircleOutline, mdiArrowExpandHorizontal, mdiAt, mdiChevronRight, mdiClose, mdiContentSave, mdiExport, mdiFilePdfBox, mdiFileWordBoxOutline, mdiHistory, mdiLockOutline, mdiMagnify, mdiMessagePlusOutline, mdiWrap } from "@mdi/js";
 import { files } from "../api";
-import { inApp, printPDF } from "../desktop";
+import { canCall, printPDF } from "../desktop";
 import { message } from "../errors";
 import { addToContext, findInFileEvent, openFile, showHistory } from "../events";
 import { FindBar } from "./FindBar";
@@ -410,7 +410,7 @@ export function EditorPane({ model, onReveal, onCursor }: { model: EditorModel; 
               placement="down end"
               items={[
                 // Printing a PDF needs the app's web engine.
-                ...(inApp() ? [{ label: t("desktop.files.export_pdf"), icon: mdiFilePdfBox, onSelect: () => void startExport("pdf") }] : []),
+                ...(canCall("PrintPDF") ? [{ label: t("desktop.files.export_pdf"), icon: mdiFilePdfBox, onSelect: () => void startExport("pdf") }] : []),
                 { label: t("desktop.files.export_docx"), icon: mdiFileWordBoxOutline, onSelect: () => void startExport("docx") },
               ]}
             />

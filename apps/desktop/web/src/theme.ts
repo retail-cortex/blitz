@@ -18,7 +18,7 @@
 // "system" (the default), applied as html[data-theme] and kept in step
 // with the system's setting as it changes.
 
-import { setAppearance } from "./desktop";
+import { nativeGlass, setAppearance } from "./desktop";
 import { editorConfig, editorIsDark, onEditorThemeChange } from "./host";
 
 /** The user's choice of theme: the system's, light or dark. */
@@ -63,12 +63,6 @@ export function applyTheme(theme: Theme, density: "comfortable" | "compact" = "c
 /** Whether the system asks for less transparency. */
 export function reducedTransparency(): boolean {
   return typeof window !== "undefined" && !!window.matchMedia?.("(prefers-reduced-transparency: reduce)").matches;
-}
-
-/** Whether the window is macOS's translucent one (the desktop app). */
-function nativeGlass(): boolean {
-  if (typeof window === "undefined" || typeof navigator === "undefined") return false;
-  return "go" in window && /Mac/.test(navigator.userAgent);
 }
 
 /** Calls f whenever the system switches between light and dark. */
