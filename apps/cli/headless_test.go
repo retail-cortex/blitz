@@ -24,6 +24,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -283,13 +284,14 @@ func TestStreamInputPromptAndCancel(t *testing.T) {
 	e := testEnv(t, loopReplies(3)...)
 	sess, _ := e.Storage().CreateSession("", "t", "blitz")
 	inR, inW := io.Pipe()
-	var out bytes.Buffer
+	out := &syncBuffer{}
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
 	go func() {
-		done <- runStreamInput(ctx, e, oneShotOptions{prompt: "first", sessionID: sess.ID, format: formatStreamJSON, stdout: &out, maxTurns: 1}, inR)
+		done <- runStreamInput(ctx, e, oneShotOptions{prompt: "first", sessionID: sess.ID, format: formatStreamJSON, stdout: out, maxTurns: 1}, inR)
 	}()
-	time.Sleep(100 * time.Millisecond)
+	// Cancelled once the first turn has failed, waiting for more input.
+	require.Eventually(t, func() bool { return strings.Contains(out.String(), `"type":"result"`) }, 10*time.Second, 10*time.Millisecond)
 	cancel()
 	select {
 	case err := <-done:
@@ -371,4 +373,22 @@ func TestOneShotJSONSchemaRetryKeepsTheLimits(t *testing.T) {
 	assert.Equal(t, 7, retry.MaxTurns)
 	assert.Equal(t, 1.5, retry.MaxCostUSD)
 	assert.Equal(t, time.Minute, retry.Timeout)
+}
+
+// syncBuffer is a bytes.Buffer safe to write from a run while a test reads it.
+type syncBuffer struct {
+	mu sync.Mutex
+	b  bytes.Buffer
+}
+
+func (s *syncBuffer) Write(p []byte) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.b.Write(p)
+}
+
+func (s *syncBuffer) String() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.b.String()
 }

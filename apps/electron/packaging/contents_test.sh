@@ -56,8 +56,10 @@ else
 	fi
 	for f in NOTICE THIRD_PARTY_NOTICES; do grep -q "$docs/$f$" <<<"$list" || no "no $docs/$f"; done
 	grep -q "usr/share/metainfo/dev.blitz.desktop.metainfo.xml$" <<<"$list" || no "no AppStream metainfo"
-	grep -Eq "^-rwxr-xr-x root/root .* \.?/?usr/lib/blitz-desktop/blitz-desktop$" <<<"$list" || no "no /usr/lib/blitz-desktop/blitz-desktop, root's and 0755"
-	grep -Eq "^-rwsr-xr-x root/root .* \.?/?usr/lib/blitz-desktop/chrome-sandbox$" <<<"$list" || no "chrome-sandbox isn't setuid root"
+	# root by name (the Arch package) or by id (the .deb: rules_pkg drops
+	# the names of a merged tar).
+	grep -Eq "^-rwxr-xr-x (root/root|0/0) .* \.?/?usr/lib/blitz-desktop/blitz-desktop$" <<<"$list" || no "no /usr/lib/blitz-desktop/blitz-desktop, root's and 0755"
+	grep -Eq "^-rwsr-xr-x (root/root|0/0) .* \.?/?usr/lib/blitz-desktop/chrome-sandbox$" <<<"$list" || no "chrome-sandbox isn't setuid root"
 	for exe in blitz blitzd blitz-tray; do
 		grep -q "usr/lib/blitz-desktop/resources/app/bin/$exe$" <<<"$list" || no "no /usr/lib/blitz-desktop/resources/app/bin/$exe"
 	done
