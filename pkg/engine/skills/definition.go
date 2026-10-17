@@ -183,6 +183,8 @@ type ScriptDefinition struct {
 	// RequiresPython is the Python a script needs (">=3.11"); without it,
 	// the script's PEP 723 metadata may say (BL-SK-03).
 	RequiresPython string `yaml:"requires_python,omitempty"`
+	// Found means it wasn't declared but found in scripts/ (SK-98).
+	Found bool `yaml:"-"`
 }
 
 // CompiledReference is Castor's pointer to a registered, hashed skill.

@@ -51,6 +51,16 @@ type SkillInfo struct {
 	Blocked []string
 	// Dir is the skill's folder on disk ("" for a built-in skill).
 	Dir string
+	// Kind is simple, references, scripts or meta, from its folder
+	// (spec_skills_013 SK-97).
+	Kind string
+	// Agents are the agents it's offered to (none: every one); Members the
+	// skills a meta skill combines; References its files under
+	// references/.
+	Agents, Members, References []string
+	// Project means the workspace's own: its folder is in the workspace,
+	// so Studio edits it.
+	Project bool
 }
 
 // SkillTool is a tool a skill needs.
@@ -69,6 +79,39 @@ type SkillScript struct {
 	Deps     []string
 	Allowed  bool
 	Reasons  []string // why it may not run
+	// Found means it isn't declared but was found in scripts/ (SK-98).
+	Found bool
+}
+
+// SkillSpec is what Studio's skill form edits (SK-100): the skill's name
+// (its folder's), what it's for, the tools it may use (allowed-tools,
+// space-separated), the agents it's offered to, the skills it combines
+// and its instructions.
+type SkillSpec struct {
+	Name, Description, Tools string
+	Agents, Members          []string
+	Instructions             string
+}
+
+// SkillFile is a skill as Studio edits it: what ListSkills says of it,
+// its SKILL.md (path, content hash), the form's fields as written, and
+// whether it's the workspace's own, which may be edited.
+type SkillFile struct {
+	Info     SkillInfo
+	Path     string
+	Hash     string
+	Spec     SkillSpec
+	Editable bool
+}
+
+// ScriptRun is how a skill's script ran from Studio's Test run.
+type ScriptRun struct {
+	ExitCode       int
+	Stdout, Stderr string
+	TimedOut       bool
+	Sandbox        string
+	Files          []string
+	Error          string
 }
 
 // Runnable reports whether any of the skill's scripts may run.

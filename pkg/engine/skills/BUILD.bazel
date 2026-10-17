@@ -18,8 +18,10 @@ go_library(
     name = "skills",
     srcs = [
         "definition.go",
+        "folder.go",
         "policy.go",
         "provider.go",
+        "save.go",
         "skill.go",
     ],
     importpath = "github.com/retail-cortex/blitz/pkg/engine/skills",
@@ -47,6 +49,7 @@ go_test(
         "definition_test.go",
         "policy_test.go",
         "provider_test.go",
+        "save_test.go",
         "skill_test.go",
     ],
     embed = [":skills"],

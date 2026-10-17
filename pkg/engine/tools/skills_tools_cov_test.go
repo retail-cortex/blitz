@@ -92,3 +92,48 @@ func TestSkillToolsListAndActivate(t *testing.T) {
 		})
 	}
 }
+
+// A meta skill brings its members' instructions, theirs in turn, each
+// once even through a loop; an agents: list hides a skill from others;
+// read_skill_file reads a reference, never outside the folder (SK-98,
+// SK-99).
+func TestMetaSkillsAgentsAndReferences(t *testing.T) {
+	dir := t.TempDir()
+	for name, md := range map[string]string{
+		"combo": "---\nname: combo\ndescription: d\nskills: [guide, inner, missing]\n---\nCombine.\n",
+		"inner": "---\nname: inner\ndescription: d\nskills: [plain, combo]\n---\nInner.\n",
+		"guide": "---\nname: guide\ndescription: d\n---\nGuide.\n",
+		"plain": "---\nname: plain\ndescription: d\n---\nPlain.\n",
+		"staff": "---\nname: staff\ndescription: d\nagents: [reviewer]\n---\nStaff only.\n",
+	} {
+		require.NoError(t, os.MkdirAll(filepath.Join(dir, name), 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(dir, name, "SKILL.md"), []byte(md), 0o644))
+	}
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "guide", "references"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "guide", "references", "style.md"), []byte("Short lines."), 0o644))
+	prov, _ := skills.NewProvider()
+	require.NoError(t, prov.DiscoverExternal([]string{dir}))
+	policy := config.DefaultConfig().Skills.Policy
+
+	out := activate(prov, policy, "combo", "", map[string]bool{})
+	assert.Equal(t, "Combine.", out.Instructions)
+	var names []string
+	for _, m := range out.Members {
+		names = append(names, m.SkillName)
+	}
+	assert.Equal(t, []string{"guide", "inner", "plain", "missing"}, names, "each once; the loop back to combo ends")
+	assert.Equal(t, []string{"references/style.md"}, out.Members[0].References)
+	assert.Contains(t, out.Members[3].Error, "not found")
+
+	assert.Contains(t, activate(prov, policy, "staff", "blitz", map[string]bool{}).Error, "offered to reviewer")
+	assert.Empty(t, activate(prov, policy, "staff", "reviewer", map[string]bool{}).Error)
+	assert.Empty(t, activate(prov, policy, "staff", "", map[string]bool{}).Error, "an agent that can't be told")
+
+	read := toolOf(t)(NewReadSkillFileTool(prov))
+	got := runTool(t, read, map[string]any{"skill_name": "guide", "path": "references/style.md"})
+	assert.Equal(t, "Short lines.", got["content"])
+	assert.NotEmpty(t, errOf(runTool(t, read, map[string]any{"skill_name": "guide", "path": "../plain/SKILL.md"})))
+	assert.NotEmpty(t, errOf(runTool(t, read, map[string]any{"skill_name": "nope", "path": "x"})))
+	assert.NotEmpty(t, errOf(runTool(t, toolOf(t)(NewReadSkillFileTool(nil)), map[string]any{"skill_name": "guide", "path": "x"})))
+	assert.Equal(t, "", callerAgent(createTestToolContext()), "no agent behind the context")
+}

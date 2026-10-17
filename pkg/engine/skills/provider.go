@@ -82,6 +82,7 @@ func (p *Provider) loadEmbeddedSkills() error {
 		skill, err := ParseSkillMD(data, "builtin://"+path)
 		if err == nil && skill.Name != "" {
 			skill.fsys, skill.root = builtin.FS, filepath.ToSlash(filepath.Dir(path))
+			skill.scanBundle()
 			p.skills[skill.Name] = skill
 			p.builtin[skill.Name] = true
 		}
@@ -241,17 +242,10 @@ func (p *Provider) discover(dirs []string) error {
 				return nil
 			}
 			if skill.Name != "" {
-				// Discover any neighboring resource files
+				// Its resources, references and scripts, from its folder.
 				skillDir := filepath.Dir(path)
 				skill.fsys, skill.root, skill.hostDir = os.DirFS(skillDir), ".", skillDir
-				resources := []string{}
-				entries, _ := os.ReadDir(skillDir)
-				for _, entry := range entries {
-					if !entry.IsDir() && entry.Name() != "SKILL.md" {
-						resources = append(resources, entry.Name())
-					}
-				}
-				skill.Resources = resources
+				skill.scanBundle()
 				p.skills[skill.Name] = skill
 			}
 			return nil
@@ -259,6 +253,14 @@ func (p *Provider) discover(dirs []string) error {
 	}
 
 	return errors.Join(errs...)
+}
+
+// IsBuiltin reports whether name is a built-in skill's, which a skill on
+// disk can't take.
+func (p *Provider) IsBuiltin(name string) bool {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	return p.builtin[name]
 }
 
 // List returns all discovered skills sorted by name.

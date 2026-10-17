@@ -172,6 +172,33 @@ service WorkspaceService {
   rpc ListSkills(ListSkillsRequest) returns (ListSkillsResponse);
   // Returns one skill (SKILL_NOT_FOUND).
   rpc GetSkill(GetSkillRequest) returns (GetSkillResponse);
+  // Returns a skill as Studio edits it: its SKILL.md's fields and hash,
+  // and whether it's the workspace's own, which may be edited
+  // (SKILL_NOT_FOUND; spec_skills_013 SK-100).
+  rpc GetSkillFile(GetSkillFileRequest) returns (GetSkillFileResponse);
+  // Writes a skill of the workspace's from Studio's form: a new one in
+  // .agents/skills, or an existing one (renamed when the name differs) if
+  // its SKILL.md still has the hash read (HASH_MISMATCH). Its front
+  // matter's other fields are kept. Problems are returned, with nothing
+  // written, when it can't be saved.
+  rpc SaveSkill(SaveSkillRequest) returns (SaveSkillResponse);
+  // Deletes a skill of the workspace's: its folder (SKILL_NOT_FOUND).
+  rpc DeleteSkill(DeleteSkillRequest) returns (DeleteSkillResponse);
+  // Returns one of a skill's files (references/…, scripts/…).
+  rpc ReadSkillFile(ReadSkillFileRequest) returns (ReadSkillFileResponse);
+  // Writes one of a workspace skill's files, under references/ or
+  // scripts/, never outside its folder.
+  rpc WriteSkillFile(WriteSkillFileRequest) returns (WriteSkillFileResponse);
+  // Removes one of a workspace skill's files.
+  rpc DeleteSkillFile(DeleteSkillFileRequest) returns (DeleteSkillFileResponse);
+  // Copies any skill the workspace sees into .agents/skills under a name
+  // of its own, files and all, to edit (problems, nothing written, when
+  // the name won't do).
+  rpc CopySkill(CopySkillRequest) returns (CopySkillResponse);
+  // Runs one of a skill's scripts now with arguments, as run_skill_script
+  // would (the policy, its sandbox and the permission rules apply): the
+  // user starts it, so its approvals are given.
+  rpc RunSkillScript(RunSkillScriptRequest) returns (RunSkillScriptResponse);
   // Returns skill scripts' environments (SCRIPTS_DISABLED).
   rpc ListEnvs(ListEnvsRequest) returns (ListEnvsResponse);
   // Removes one environment.
@@ -889,6 +916,16 @@ message SkillInfo {
   repeated string blocked = 17;
   // Its folder on disk ("" for a built-in skill).
   string dir = 18;
+  // simple, references, scripts or meta, from its folder.
+  string kind = 19;
+  // The agents it's offered to (none: every one).
+  repeated string agents = 20;
+  // The skills a meta skill combines.
+  repeated string members = 21;
+  // Its files under references/, as references/<path>.
+  repeated string references = 22;
+  // The workspace's own: its folder is in the workspace.
+  bool project = 23;
 }
 
 // SkillTool is a tool a skill needs.
@@ -908,6 +945,8 @@ message SkillScript {
   repeated string deps = 5;
   bool allowed = 6;
   repeated string reasons = 7;
+  // Not declared, but found in scripts/.
+  bool found = 8;
 }
 
 // Request message for WorkspaceService.ListSkills.
@@ -931,6 +970,143 @@ message GetSkillRequest {
 // Response message for WorkspaceService.GetSkill.
 message GetSkillResponse {
   SkillInfo skill = 1;
+}
+
+// What Studio's skill form edits.
+message SkillSpec {
+  // Its folder's name: lowercase letters, digits and single hyphens.
+  string name = 1;
+  string description = 2;
+  // The tools it may use (allowed-tools), space-separated.
+  string tools = 3;
+  repeated string agents = 4;
+  // The skills a meta skill combines.
+  repeated string members = 5;
+  string instructions = 6;
+}
+
+// A skill as Studio edits it.
+message SkillFile {
+  SkillInfo skill = 1;
+  // Its SKILL.md.
+  string path = 2;
+  // SKILL.md's content hash, for SaveSkill ("" when not editable).
+  string hash = 3;
+  SkillSpec spec = 4;
+  // The workspace's own: Studio may change it.
+  bool editable = 5;
+}
+
+// Request message for WorkspaceService.GetSkillFile.
+message GetSkillFileRequest {
+  string workspace = 1;
+  string name = 2;
+}
+
+// Response message for WorkspaceService.GetSkillFile.
+message GetSkillFileResponse {
+  SkillFile file = 1;
+}
+
+// Request message for WorkspaceService.SaveSkill.
+message SaveSkillRequest {
+  string workspace = 1;
+  // The skill edited; empty for a new one.
+  string previous_name = 2;
+  // Its SKILL.md's hash when read.
+  string hash = 3;
+  SkillSpec skill = 4;
+}
+
+// Response message for WorkspaceService.SaveSkill.
+message SaveSkillResponse {
+  SkillFile file = 1;
+  repeated string problems = 2;
+}
+
+// Request message for WorkspaceService.DeleteSkill.
+message DeleteSkillRequest {
+  string workspace = 1;
+  string name = 2;
+}
+
+// Response message for WorkspaceService.DeleteSkill.
+message DeleteSkillResponse {}
+
+// Request message for WorkspaceService.ReadSkillFile.
+message ReadSkillFileRequest {
+  string workspace = 1;
+  string name = 2;
+  // Relative to the skill's folder.
+  string path = 3;
+}
+
+// Response message for WorkspaceService.ReadSkillFile.
+message ReadSkillFileResponse {
+  bytes content = 1;
+}
+
+// Request message for WorkspaceService.WriteSkillFile.
+message WriteSkillFileRequest {
+  string workspace = 1;
+  string name = 2;
+  // references/… or scripts/…
+  string path = 3;
+  bytes content = 4;
+}
+
+// Response message for WorkspaceService.WriteSkillFile.
+message WriteSkillFileResponse {
+  SkillFile file = 1;
+}
+
+// Request message for WorkspaceService.DeleteSkillFile.
+message DeleteSkillFileRequest {
+  string workspace = 1;
+  string name = 2;
+  string path = 3;
+}
+
+// Response message for WorkspaceService.DeleteSkillFile.
+message DeleteSkillFileResponse {
+  SkillFile file = 1;
+}
+
+// Request message for WorkspaceService.CopySkill.
+message CopySkillRequest {
+  string workspace = 1;
+  // The skill copied: any the workspace sees.
+  string from = 2;
+  // The copy's name.
+  string name = 3;
+}
+
+// Response message for WorkspaceService.CopySkill.
+message CopySkillResponse {
+  SkillFile file = 1;
+  repeated string problems = 2;
+}
+
+// Request message for WorkspaceService.RunSkillScript.
+message RunSkillScriptRequest {
+  string workspace = 1;
+  string name = 2;
+  string script = 3;
+  repeated string args = 4;
+}
+
+// Response message for WorkspaceService.RunSkillScript.
+message RunSkillScriptResponse {
+  int32 exit_code = 1;
+  string stdout = 2;
+  string stderr = 3;
+  bool timed_out = 4;
+  // The sandbox it ran in.
+  string sandbox = 5;
+  // Files it wrote to its output directory.
+  repeated string output_files = 6;
+  // Why it didn't run, or failed to.
+  string error = 7;
 }
 
 // Env is an isolated Python environment built for skill scripts.

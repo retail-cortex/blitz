@@ -52,6 +52,7 @@ go_library(
         "search.go",
         "sessions.go",
         "settingswatch.go",
+        "skillfiles.go",
         "styles.go",
         "suggestions.go",
         "tables.go",

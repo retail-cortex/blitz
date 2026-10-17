@@ -347,6 +347,7 @@ func NewRegistry(cfg *config.Config, agentReg *agents.Registry, skillProv *skill
 		entries = append(entries,
 			entry{[]string{"list_or_search_skills"}, func() (tool.Tool, error) { return NewListSkillsTool(skillProv) }},
 			entry{[]string{"activate_skill"}, func() (tool.Tool, error) { return NewActivateSkillTool(skillProv, &cfg.Skills.Policy) }},
+			entry{[]string{"read_skill_file"}, func() (tool.Tool, error) { return NewReadSkillFileTool(skillProv) }},
 		)
 	}
 	if agentReg != nil {

@@ -996,7 +996,9 @@ func (e *Engine) buildTreeLocked(active string, override model.LLM) (tree, error
 			var sb strings.Builder
 			sb.WriteString("\n\n## Available Agent Skills:\n")
 			for _, s := range allSkills {
-				fmt.Fprintf(&sb, "- **%s**: %s\n", s.Name, s.Description)
+				if s.OfferedTo(rootSpec.Name) { // agents: offers it to others only
+					fmt.Fprintf(&sb, "- **%s**: %s\n", s.Name, s.Description)
+				}
 			}
 			sb.WriteString("\nUse `activate_skill` to load full skill instructions whenever relevant.\n")
 			rootInstruction += sb.String()

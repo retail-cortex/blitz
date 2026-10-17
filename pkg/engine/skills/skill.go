@@ -65,6 +65,11 @@ type SkillMetadata struct {
 	SkillID              string                `yaml:"skill_id,omitempty"`
 	URI                  string                `yaml:"uri,omitempty"`
 	SourceURI            string                `yaml:"source_uri,omitempty"`
+
+	// Agents are the agents the skill is offered to (none: every one);
+	// Members the skills a meta skill combines (spec_skills_013 SK-99).
+	Agents  []string `yaml:"agents,omitempty"`
+	Members []string `yaml:"skills,omitempty"`
 }
 
 // Skill represents an Agent Skill specification.
@@ -73,6 +78,9 @@ type Skill struct {
 	Content   string   `json:"content"`
 	Path      string   `json:"path"`
 	Resources []string `json:"resources"`
+	// References are the files under references/, as references/<path>
+	// (also in Resources).
+	References []string `json:"references,omitempty"`
 	// Problems are definition errors (see SkillMetadata.Validate).
 	Problems []string `json:"problems,omitempty"`
 
