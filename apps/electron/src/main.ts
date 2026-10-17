@@ -103,7 +103,11 @@ async function start() {
     title: "Blitz",
     // macOS: the page draws the whole window, title bar included, over the
     // desktop showing through (as the Wails app: hidden inset, translucent).
-    ...(process.platform === "darwin" ? { titleBarStyle: "hiddenInset" as const, vibrancy: "under-window" as const, visualEffectState: "active" as const, backgroundColor: "#00000000" } : { backgroundColor: "#131314" }),
+    // Elsewhere the window has Blitz's icon (its taskbar button, its title
+    // bar), as the Windows program does (winexe).
+    ...(process.platform === "darwin"
+      ? { titleBarStyle: "hiddenInset" as const, vibrancy: "under-window" as const, visualEffectState: "active" as const, backgroundColor: "#00000000" }
+      : { backgroundColor: "#131314", icon: path.join(app.getAppPath(), "icon.png") }),
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       sandbox: true,

@@ -84,6 +84,7 @@ platform_transition_filegroup(
 # desktop app's packages).
 _APP_SRCS = [
     "app.package.json",
+    "//apps/desktop/packaging:appicon.png",
     ":dist",
     ":page",
     "//apps/cli:blitz",
@@ -93,6 +94,7 @@ _APP_SRCS = [
 
 _APP_PREFIXES = {
     "app.package.json": "package.json",
+    "apps/desktop/packaging/appicon.png": "icon.png",
     "apps/desktop/web/dist": "page",
     "apps/cli/": "bin/",
     "apps/service/": "bin/",
@@ -163,12 +165,14 @@ copy_to_directory(
         ":dist",
         ":page",
         "//apps/cli:blitz_windows_amd64",
+        "//apps/desktop/packaging:appicon.png",
         "//apps/service:blitzd_windows_amd64",
         "//apps/tray:blitz-tray_windows_amd64",
     ],
     out = "windows/resources/app",
     replace_prefixes = {
         "app.package.json": "package.json",
+        "apps/desktop/packaging/appicon.png": "icon.png",
         "apps/desktop/web/dist": "page",
         "apps/cli/blitz_windows_amd64_/blitz_windows_amd64.exe": "bin/blitz.exe",
         "apps/service/blitzd_windows_amd64_/blitzd_windows_amd64.exe": "bin/blitzd.exe",
@@ -176,13 +180,32 @@ copy_to_directory(
     },
 )
 
-# Electron's own files for Windows (its licenses among them), its program
-# named Blitz.exe.
+# Electron's program for Windows as Blitz.exe, with Blitz's icon and
+# details (winexe).
+genrule(
+    name = "blitz_exe",
+    srcs = [
+        "@electron_win32_x64//:electron.exe",
+        "//apps/desktop/packaging:appicon.png",
+        "//build:version",
+    ],
+    outs = ["windows/Blitz.exe"],
+    cmd = "$(location //apps/electron/winexe) --in $(location @electron_win32_x64//:electron.exe) --icon $(location //apps/desktop/packaging:appicon.png) --version $$(cat $(location //build:version)) --out $@",
+    tools = ["//apps/electron/winexe"],
+)
+
+# Electron's own files for Windows (its licenses among them), and
+# Blitz.exe.
 pkg_files(
     name = "electron_windows",
-    srcs = ["@electron_win32_x64//:files"],
-    renames = {"@electron_win32_x64//:electron.exe": "Blitz.exe"},
+    srcs = ["@electron_win32_x64//:files_but_program"],
     strip_prefix = strip_prefix.from_pkg(),
+)
+
+pkg_files(
+    name = "program_windows",
+    srcs = [":blitz_exe"],
+    strip_prefix = strip_prefix.from_pkg("windows"),
 )
 
 pkg_files(
@@ -209,6 +232,7 @@ pkg_zip(
     srcs = [
         ":electron_windows",
         ":notices",
+        ":program_windows",
         ":resources_app_windows",
     ],
     out = "blitz-electron_windows_amd64.zip",

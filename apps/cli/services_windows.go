@@ -16,9 +16,11 @@ package main
 
 import "syscall"
 
-// detached starts a process in a group of its own, with no console, so it
-// outlives this one.
+// detached starts a process in a group of its own, so it outlives this
+// one, with a console that's never shown: without one (DETACHED_PROCESS),
+// each console program the service runs (git, shells) got a window of its
+// own, flashing open and shut (as the tray's, apps/tray).
 func detached() *syscall.SysProcAttr {
-	const detachedProcess = 0x00000008
-	return &syscall.SysProcAttr{CreationFlags: syscall.CREATE_NEW_PROCESS_GROUP | detachedProcess}
+	const createNoWindow = 0x08000000
+	return &syscall.SysProcAttr{CreationFlags: syscall.CREATE_NEW_PROCESS_GROUP | createNoWindow, HideWindow: true}
 }
