@@ -18,6 +18,7 @@
 // keeps them in ~/.blitz/desktop.json. The helpers here are pure, so the
 // rules for opening, closing and editing workspaces are tested alone.
 import type { ThemePref } from "./theme";
+import { darkThemes, lightThemes, type DarkThemeId, type LightThemeId } from "./themes";
 
 /**
  * A workspace as the window knows it: its folder, the name, description
@@ -63,11 +64,14 @@ export interface Prefs {
   task_continue: boolean;
   /** Advanced settings shown (simpleMode.ts); off, novices see what they need. */
   advanced: boolean;
-  /** Glass: translucent, blurred surfaces ("off": solid ones). */
+  /** Glass: translucent, blurred surfaces ("off": solid ones); Blitz's own themes only. */
   transparency: "on" | "off";
+  /** The colour theme for light, and for dark (theme.ts's lightThemes, darkThemes). */
+  light_theme: LightThemeId;
+  dark_theme: DarkThemeId;
   /** Linux: the window draws with the graphics card where it can ("off": in software; read when the app starts). */
   gpu: "on" | "off";
-  /** The app's updates: looked for daily and downloaded, ready to restart ("off": not). */
+  /** The app's updates: looked for when it opens (every five days at most) and downloaded, ready to restart ("off": not). */
   updates: "auto" | "off";
   /** The user's CSS for Markdown previews in each theme, over the defaults (FIL-57). */
   markdown_css_light: string;
@@ -96,6 +100,8 @@ export const defaultPrefs: Prefs = {
   doc_width: "full",
   editor_zoom: 100,
   transparency: "on",
+  light_theme: "blitz",
+  dark_theme: "blitz",
   gpu: "on",
   updates: "auto",
   markdown_css_light: "",
@@ -145,6 +151,8 @@ export function normalizePrefs(raw: unknown): Prefs {
     task_continue: r.task_continue === true,
     advanced: r.advanced === true,
     transparency: pick(r.transparency, ["on", "off"] as const, "on"),
+    light_theme: pick(r.light_theme, lightThemes.map((x) => x.id), "blitz"),
+    dark_theme: pick(r.dark_theme, darkThemes.map((x) => x.id), "blitz"),
     gpu: pick(r.gpu, ["on", "off"] as const, "on"),
     updates: pick(r.updates, ["auto", "off"] as const, "auto"),
     chat_width: pixels(r.chat_width),

@@ -40,6 +40,8 @@ func TestPrefsDefaultsAndRoundTrip(t *testing.T) {
 	require.Equal(t, "pinned", p.Composer, "defaults %+v %v", p, err)
 	require.Equal(t, "on", p.GPU, "defaults %+v %v", p, err)
 	require.Equal(t, "auto", p.Updates, "defaults %+v %v", p, err)
+	require.Equal(t, "blitz", p.LightTheme, "defaults %+v %v", p, err)
+	require.Equal(t, "blitz", p.DarkTheme, "defaults %+v %v", p, err)
 	require.Len(t, p.Workspaces, 0, "defaults %+v %v", p, err)
 	a, b := t.TempDir(), t.TempDir()
 	p.Theme, p.Composer, p.Advanced = "dark", "panel", true
@@ -52,6 +54,7 @@ func TestPrefsDefaultsAndRoundTrip(t *testing.T) {
 	p.Active = b // closed: can't be active
 	p.Files, p.ShowHidden, p.ChatWidth, p.FilesWidth = true, true, -3, 99999
 	p.DocWidth, p.EditorZoom, p.GPU = "readable", 125, "off"
+	p.LightTheme, p.DarkTheme = "one-light", "one-dark-pro"
 	saved, err := s.Save(p)
 	require.NoError(t, err)
 	require.Len(t, saved.Workspaces, 2, "normalized %+v", saved)
@@ -67,11 +70,16 @@ func TestPrefsDefaultsAndRoundTrip(t *testing.T) {
 	require.Equal(t, "readable", saved.DocWidth, "normalized %+v", saved)
 	require.Equal(t, 125, saved.EditorZoom, "normalized %+v", saved)
 	require.Equal(t, "off", saved.GPU, "normalized %+v", saved)
+	require.Equal(t, "one-light", saved.LightTheme, "normalized %+v", saved)
+	require.Equal(t, "one-dark-pro", saved.DarkTheme, "normalized %+v", saved)
 	p.DocWidth, p.EditorZoom = "huge", 900
+	p.LightTheme, p.DarkTheme = "one-dark-pro", "solarized" // not for light; unknown
 	odd, err := s.Save(p)
 	require.NoError(t, err)
 	require.Equal(t, "full", odd.DocWidth, "normalized %+v", odd)
 	require.Equal(t, 100, odd.EditorZoom, "normalized %+v", odd)
+	require.Equal(t, "blitz", odd.LightTheme, "normalized %+v", odd)
+	require.Equal(t, "blitz", odd.DarkTheme, "normalized %+v", odd)
 	info, err := os.Stat(s.path)
 	require.NoError(t, err, "file mode %v", info)
 	require.Equal(t, fs.FileMode(0o600), info.Mode().Perm(), "file mode %v %v", info, err)

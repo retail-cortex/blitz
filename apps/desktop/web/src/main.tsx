@@ -24,6 +24,7 @@ import { installQuietInputs } from "./ui/inputs";
 import "./m3.css";
 import "./app.css";
 import "./glass.css";
+import "./themes.css";
 import "./files/document.css";
 
 async function start() {

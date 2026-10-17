@@ -78,14 +78,21 @@ type Prefs struct {
 	// Advanced shows the advanced settings throughout the window; off (the
 	// default) it shows what a newcomer needs.
 	Advanced bool `json:"advanced"`
-	// Transparency is "on" (the default: glass surfaces) or "off".
+	// Transparency is "on" (the default: glass surfaces, in Blitz's own
+	// themes) or "off".
 	Transparency string `json:"transparency"`
+	// LightTheme and DarkTheme are the colour themes for light and for
+	// dark: "blitz" (the default), or "one-light" and "one-dark-pro"
+	// (the page's themes.ts).
+	LightTheme string `json:"light_theme"`
+	DarkTheme  string `json:"dark_theme"`
 	// GPU is "on" (the default: on Linux the window draws with the
 	// graphics card where it can) or "off" (in software); read as the app
 	// starts (gpu.go).
 	GPU string `json:"gpu"`
-	// Updates is "auto" (the default: the app looks for a release daily
-	// and downloads it, ready to restart) or "off".
+	// Updates is "auto" (the default: the app looks for a release when it
+	// opens, every five days at most, and downloads it, ready to restart)
+	// or "off".
 	Updates string `json:"updates"`
 	// MarkdownCSSLight and MarkdownCSSDark are the user's CSS for Markdown
 	// previews in each theme, over the defaults (at most maxMarkdownCSS
@@ -147,6 +154,12 @@ func (p *Prefs) normalize() {
 	}
 	if p.Updates != "off" {
 		p.Updates = "auto"
+	}
+	if p.LightTheme != "one-light" {
+		p.LightTheme = "blitz"
+	}
+	if p.DarkTheme != "one-dark-pro" {
+		p.DarkTheme = "blitz"
 	}
 	if p.GPU != "off" {
 		p.GPU = "on"

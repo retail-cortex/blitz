@@ -58,7 +58,8 @@ import { DocumentSettings } from "./files/DocumentSettings";
 import { SkillSettings } from "./SkillSettings";
 import { useAdvanced, useApp } from "./state";
 import { sectionShown, settingsSections, type SectionId } from "./simpleMode";
-import type { ThemePref } from "./theme";
+import { paletteOf, type ThemePref } from "./theme";
+import { darkThemes, lightThemes, type DarkThemeId, type LightThemeId } from "./themes";
 import { Button, Chip, Icon, IconButton, Segmented, Switch, useSnackbar } from "./ui/controls";
 import { Drawer } from "./ui/Drawer";
 import { LookFields, WorkspaceSettingsForm } from "./WorkspaceSettingsForm";
@@ -164,7 +165,8 @@ function Setting({ title, detail, children }: { title: string; detail?: string; 
 // advanced settings, theme, language and notifications; the rest have
 // sensible defaults and show with advanced settings.
 function Appearance() {
-  const { prefs, update } = useApp();
+  const { prefs, update, theme } = useApp();
+  const palette = paletteOf(theme, prefs.light_theme, prefs.dark_theme);
   return (
     <div className="stack" style={{ gap: 0 }}>
       <Setting title={t("desktop.settings.advanced")} detail={t("desktop.settings.advanced.detail")}>
@@ -181,6 +183,25 @@ function Appearance() {
             { value: "dark", label: t("desktop.settings.theme.dark"), icon: mdiWeatherNight },
           ]}
         />
+      </Setting>
+      {/* The colour theme for each, as VS Code's preferred light and dark themes. */}
+      <Setting title={t("desktop.settings.light_theme")} detail={t("desktop.settings.light_theme.detail")}>
+        <select className="select language-select" aria-label={t("desktop.settings.light_theme")} value={prefs.light_theme} onChange={(e) => update((p) => ({ ...p, light_theme: e.target.value as LightThemeId }))}>
+          {lightThemes.map((x) => (
+            <option key={x.id} value={x.id}>
+              {x.name}
+            </option>
+          ))}
+        </select>
+      </Setting>
+      <Setting title={t("desktop.settings.dark_theme")} detail={t("desktop.settings.dark_theme.detail")}>
+        <select className="select language-select" aria-label={t("desktop.settings.dark_theme")} value={prefs.dark_theme} onChange={(e) => update((p) => ({ ...p, dark_theme: e.target.value as DarkThemeId }))}>
+          {darkThemes.map((x) => (
+            <option key={x.id} value={x.id}>
+              {x.name}
+            </option>
+          ))}
+        </select>
       </Setting>
       <Setting title={t("desktop.settings.language")} detail={t("desktop.settings.language.detail")}>
         <select className="select language-select" aria-label={t("desktop.settings.language")} value={prefs.language} onChange={(e) => update((p) => ({ ...p, language: e.target.value }))}>
@@ -219,8 +240,8 @@ function Appearance() {
             ]}
           />
         </Setting>
-        <Setting title={t("desktop.settings.transparency")} detail={t("desktop.settings.transparency.detail")}>
-          <Switch label={t("desktop.settings.transparency")} checked={prefs.transparency === "on"} onChange={(on) => update((p) => ({ ...p, transparency: on ? "on" : "off" }))} />
+        <Setting title={t("desktop.settings.transparency")} detail={palette === "blitz" ? t("desktop.settings.transparency.detail") : t("desktop.settings.transparency.blitz_only")}>
+          <Switch label={t("desktop.settings.transparency")} disabled={palette !== "blitz"} checked={prefs.transparency === "on" && palette === "blitz"} onChange={(on) => update((p) => ({ ...p, transparency: on ? "on" : "off" }))} />
         </Setting>
         {isLinuxApp() && (
           <Setting title={t("desktop.settings.gpu")} detail={t("desktop.settings.gpu.detail")}>

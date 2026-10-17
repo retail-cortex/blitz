@@ -22,7 +22,7 @@ import { getPrefs, savePrefs } from "./desktop";
 import { setLanguage } from "./i18n";
 import { defaultPrefs, type Prefs } from "./prefs";
 import { applyDocCss, docCssFor } from "./files/docCss";
-import { applyTheme, onSystemThemeChange, resolveTheme, systemIsDark, type Theme } from "./theme";
+import { applyTheme, onSystemThemeChange, paletteOf, resolveTheme, systemIsDark, type Theme } from "./theme";
 
 /** What a workspace is doing: a turn running, or waiting for the user. */
 export interface Activity {
@@ -68,7 +68,8 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   const theme = resolveTheme(prefs.theme, systemDark);
   // Before the screen is painted, so no text shows in the wrong language.
   useLayoutEffect(() => setLanguage(prefs.language), [prefs.language]);
-  useEffect(() => applyTheme(theme, prefs.density, prefs.width, prefs.transparency, prefs.theme), [theme, prefs.density, prefs.width, prefs.transparency, prefs.theme]);
+  const palette = paletteOf(theme, prefs.light_theme, prefs.dark_theme);
+  useEffect(() => applyTheme(theme, prefs.density, prefs.width, prefs.transparency, prefs.theme, palette), [theme, prefs.density, prefs.width, prefs.transparency, prefs.theme, palette]);
   // The user's CSS for Markdown previews, the theme in effect's.
   const docCss = docCssFor(prefs, theme);
   useEffect(() => applyDocCss(docCss), [docCss]);
