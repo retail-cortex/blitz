@@ -42,7 +42,15 @@ func (w *Workspace) ownsSkill(s *skills.Skill) bool {
 	if dir == "" {
 		return false
 	}
-	rel, err := filepath.Rel(w.Dir(), dir)
+	ws := w.Dir()
+	// Both through their symbolic links (/var is /private/var on macOS).
+	if real, err := filepath.EvalSymlinks(ws); err == nil {
+		ws = real
+	}
+	if real, err := filepath.EvalSymlinks(dir); err == nil {
+		dir = real
+	}
+	rel, err := filepath.Rel(ws, dir)
 	return err == nil && rel != "." && !strings.HasPrefix(rel, "..") && !filepath.IsAbs(rel)
 }
 

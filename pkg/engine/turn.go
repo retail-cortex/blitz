@@ -166,6 +166,8 @@ func (w *Workspace) run(ctx context.Context, sessionID string, t turn, on func(a
 	case t.planMode:
 		prompt = runtime.PlanPrompt(prompt)
 	}
+	// \skill-name in the prompt: those skills' instructions go with it.
+	prompt += w.skillMentionNote(t.Text)
 	if !t.Aside {
 		w.activate(st, sessionID)
 		prompt := -1 // the prompt's index in the transcript, for /rewind
