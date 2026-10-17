@@ -41,6 +41,7 @@ import {
   previewContent,
   previewId,
   previewStep,
+  addressURL,
   previewURL,
   printCheckScript,
   printLoadScript,
@@ -174,6 +175,27 @@ describe("previewURL", () => {
     { raw: "", want: undefined },
     { raw: 42, want: undefined },
   ])("$raw", ({ raw, want }) => expect(previewURL(raw)).toBe(want));
+});
+
+describe("addressURL", () => {
+  const google = (q: string) => `https://www.google.com/search?q=${q}`;
+  it.each([
+    { raw: "localhost:3000", want: "http://localhost:3000/" },
+    { raw: "localhost", want: "http://localhost/" },
+    { raw: "example.com", want: "https://example.com/" },
+    { raw: "https://example.com/a?b", want: "https://example.com/a?b" },
+    { raw: "intranet:8080/x", want: "https://intranet:8080/x" },
+    { raw: "[::1]:8080", want: "http://[::1]:8080/" },
+    { raw: "golang", want: google("golang") },
+    { raw: "react hooks", want: google("react%20hooks") },
+    { raw: "  what is 2+2? ", want: google("what%20is%202%2B2%3F") },
+    { raw: "c++/templates", want: google("c%2B%2B%2Ftemplates") },
+    { raw: "react: hooks", want: google("react%3A%20hooks") },
+    { raw: "file:///etc/passwd", want: undefined },
+    { raw: "javascript:alert(1)", want: undefined },
+    { raw: "", want: undefined },
+    { raw: 42, want: undefined },
+  ])("$raw", ({ raw, want }) => expect(addressURL(raw)).toBe(want));
 });
 
 describe("isLocalHost", () => {

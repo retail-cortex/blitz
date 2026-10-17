@@ -475,7 +475,7 @@
     "desktop.web.forward": "Forward",
     "desktop.web.reload": "Reload",
     "desktop.web.stop": "Stop loading",
-    "desktop.web.address": "Address (localhost:3000, or any web page)",
+    "desktop.web.address": "Search Google or type an address (localhost:3000)",
     "desktop.web.open_browser": "Open in browser",
     "desktop.web.empty": "Type an address to open a page: your app on this machine (localhost:3000) or any web page. Add to chat then puts the page, a selection, a screenshot or its console's errors in the conversation.",
     "desktop.web.add_to_chat": "Add to chat",

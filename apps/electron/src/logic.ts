@@ -248,6 +248,27 @@ export function previewURL(raw: unknown): string | undefined {
   return u.href;
 }
 
+/** Where a typed search goes (EL-101a): Google, with the words as its query. */
+export const searchURL = (words: string) => `https://www.google.com/search?q=${encodeURIComponent(words)}`;
+
+/**
+ * What the address bar opens (EL-101a): a web address as previewURL takes
+ * it, else a Google search for the words. Words are anything with a space,
+ * or a bare word that isn't a host (no dot, no port, not this machine's,
+ * not an IPv6 address).
+ * Other schemes (file:, javascript:) are still refused, not searched.
+ */
+export function addressURL(raw: unknown): string | undefined {
+  if (typeof raw !== "string") return undefined;
+  const s = raw.trim();
+  if (!s) return undefined;
+  if (/\s/.test(s)) return searchURL(s);
+  if (/^[a-z][a-z0-9+.-]*:(?!\d)/i.test(s)) return previewURL(s);
+  const host = s.split(/[/?#]/)[0] ?? "";
+  if (!s.startsWith("[") && !host.includes(".") && !/:\d+$/.test(host) && !isLocalHost(host)) return searchURL(s);
+  return previewURL(s) ?? searchURL(s);
+}
+
 /** Whether a host name is this machine's (localhost, 127.0.0.1, [::1]). */
 export function isLocalHost(host: string): boolean {
   const h = host.toLowerCase();

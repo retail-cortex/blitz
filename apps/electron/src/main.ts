@@ -48,6 +48,7 @@ import {
   previewContent,
   previewId,
   previewStep,
+  addressURL,
   previewURL,
   printCheckScript,
   printLoadScript,
@@ -308,7 +309,7 @@ ipcMain.handle("blitz:call", async (e, method: unknown, args: unknown) => {
       return;
     case "PreviewOpen": {
       const id = previewId(a[0]);
-      const url = previewURL(a[1]);
+      const url = addressURL(a[1]);
       if (!id || !url) throw new Error(`not opening ${JSON.stringify(a[1])}: only web addresses open in a preview`);
       openPreview(id, url);
       return url;

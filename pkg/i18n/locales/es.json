@@ -475,7 +475,7 @@
     "desktop.web.forward": "Adelante",
     "desktop.web.reload": "Recargar",
     "desktop.web.stop": "Detener la carga",
-    "desktop.web.address": "Dirección (localhost:3000, o cualquier página web)",
+    "desktop.web.address": "Busca en Google o escribe una dirección (localhost:3000)",
     "desktop.web.open_browser": "Abrir en el navegador",
     "desktop.web.empty": "Escribe una dirección para abrir una página: tu aplicación en este equipo (localhost:3000) o cualquier página web. Luego, Añadir al chat pone en la conversación la página, una selección, una captura o los errores de su consola.",
     "desktop.web.add_to_chat": "Añadir al chat",

@@ -475,7 +475,7 @@
     "desktop.web.forward": "Suivante",
     "desktop.web.reload": "Actualiser",
     "desktop.web.stop": "Arrêter le chargement",
-    "desktop.web.address": "Adresse (localhost:3000, ou toute page Web)",
+    "desktop.web.address": "Rechercher sur Google ou saisir une adresse (localhost:3000)",
     "desktop.web.open_browser": "Ouvrir dans le navigateur",
     "desktop.web.empty": "Tapez une adresse pour ouvrir une page : votre application sur cet ordinateur (localhost:3000) ou toute page Web. Ajouter à la conversation y met ensuite la page, une sélection, une capture d'écran ou les erreurs de sa console.",
     "desktop.web.add_to_chat": "Ajouter à la conversation",
