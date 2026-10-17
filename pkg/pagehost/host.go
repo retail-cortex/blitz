@@ -67,6 +67,9 @@ type Host struct {
 	Socket string
 	// Tray is the tray's own program, which starts at login.
 	Tray string
+	// StartTray starts the tray in this session, where launchd doesn't
+	// (Linux and Windows; nil: it isn't started).
+	StartTray func() error
 	// Prefs keeps the window's preferences (nil: the page keeps its own).
 	Prefs *PrefsStore
 	// Updates updates the desktop app the host runs in (nil: no updates).
@@ -110,7 +113,10 @@ func (h Host) methods() map[string]hostMethod {
 				return nil, err
 			}
 			if on {
-				return nil, loginitem.InstallTray(h.Tray)
+				if err := loginitem.InstallTray(h.Tray); err != nil {
+					return nil, err
+				}
+				return nil, h.startTray()
 			}
 			return nil, loginitem.UninstallTray()
 		},
@@ -175,6 +181,36 @@ func (h Host) methods() map[string]hostMethod {
 		m["ApplyUpdate"] = func([]json.RawMessage) (any, error) { return nil, u.Apply() }
 	}
 	return m
+}
+
+// startTray starts the tray where launchd hasn't (a tray already running
+// keeps its lock, and the new one exits).
+func (h Host) startTray() error {
+	if goruntime.GOOS == "darwin" || h.StartTray == nil {
+		return nil
+	}
+	return h.StartTray()
+}
+
+// Repair rewrites login entries that name a program no longer there (an
+// install that moved, as the desktop app's did in v0.7.0): the tray's,
+// which it then starts, and the service's. What it can't repair it
+// returns, joined.
+func (h Host) Repair() error {
+	var errs []error
+	if fixed, err := loginitem.RepairTray(h.Tray); err != nil {
+		errs = append(errs, fmt.Errorf("repairing the tray's login entry: %w", err))
+	} else if fixed {
+		errs = append(errs, h.startTray())
+	}
+	if goruntime.GOOS != "windows" {
+		if bin, err := loginitem.FindService(h.Beside); err == nil {
+			if _, err := loginitem.RepairService(bin); err != nil {
+				errs = append(errs, fmt.Errorf("repairing the service's login item: %w", err))
+			}
+		}
+	}
+	return errors.Join(errs...)
 }
 
 // status is the service's status as the page shows it. On Windows the

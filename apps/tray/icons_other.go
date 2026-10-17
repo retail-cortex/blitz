@@ -18,25 +18,37 @@ package main
 
 import (
 	_ "embed"
+	goruntime "runtime"
 
 	"fyne.io/systray"
 )
 
-// The icons: a white bolt, filled while the service runs and outlined
-// while it's stopped (icons/*.svg). macOS takes them as templates and
-// tints them to suit the menu bar; Linux shows them as they are.
+// The icons: on macOS a white bolt, filled while the service runs and
+// outlined while it's stopped (icons/*.svg), which macOS takes as
+// templates and tints to suit the menu bar. Linux shows icons as they
+// are, on light panels and dark, so there the bolt is in colour as on
+// Windows: amber while the service runs, grey while it's stopped
+// (icons/windows-*.svg).
 var (
 	//go:embed icons/running-44.png
 	runningIcon []byte
 	//go:embed icons/stopped-44.png
 	stoppedIcon []byte
+	//go:embed icons/windows-running-64.png
+	runningColour []byte
+	//go:embed icons/windows-stopped-64.png
+	stoppedColour []byte
 )
 
 // setIcon shows the service's state in the icon.
 func setIcon(running bool) {
+	template, colour := stoppedIcon, stoppedColour
 	if running {
-		systray.SetTemplateIcon(runningIcon, runningIcon)
-	} else {
-		systray.SetTemplateIcon(stoppedIcon, stoppedIcon)
+		template, colour = runningIcon, runningColour
 	}
+	if goruntime.GOOS == "darwin" {
+		systray.SetTemplateIcon(template, template)
+		return
+	}
+	systray.SetIcon(colour)
 }

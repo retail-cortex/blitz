@@ -16,6 +16,7 @@ package loginitem
 
 import (
 	"errors"
+	"strings"
 
 	"golang.org/x/sys/windows/registry"
 )
@@ -38,6 +39,20 @@ func runInstalled() bool {
 	defer k.Close()
 	_, _, err = k.GetStringValue(runValue)
 	return err == nil
+}
+
+// runProgram is the program the tray's value runs ("" when there's none).
+func runProgram() string {
+	k, err := registry.OpenKey(registry.CURRENT_USER, runKey, registry.QUERY_VALUE)
+	if err != nil {
+		return ""
+	}
+	defer k.Close()
+	v, _, err := k.GetStringValue(runValue)
+	if err != nil {
+		return ""
+	}
+	return strings.Trim(v, `"`) // installRun's quotes; backslashes are the path's
 }
 
 // installRun starts bin at login: its value in runKey, quoted, as paths

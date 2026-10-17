@@ -121,10 +121,20 @@ func installTray() error {
 	}
 	// launchd has started it on macOS; on Linux and Windows, start it in
 	// this session.
-	if goruntime.GOOS == "windows" || goruntime.GOOS == "linux" && (os.Getenv("DISPLAY") != "" || os.Getenv("WAYLAND_DISPLAY") != "") {
-		return tray.Detached(exe) // a tray already running keeps its lock; this one exits
+	if goruntime.GOOS == "darwin" {
+		return nil
 	}
-	return nil
+	return startTray(exe)
+}
+
+// startTray starts exe (this program) as the tray in this session, on
+// Windows or a Linux desktop (none without a display). A tray already
+// running keeps its lock; the new one exits.
+func startTray(exe string) error {
+	if goruntime.GOOS == "linux" && os.Getenv("DISPLAY") == "" && os.Getenv("WAYLAND_DISPLAY") == "" {
+		return nil
+	}
+	return tray.Detached(exe)
 }
 
 // lockFile holds the lock: kept here, it isn't collected (and closed,
@@ -167,6 +177,12 @@ func serveWindow(dir string) error {
 	}
 	sock := socket.DefaultSocket()
 	host := newHost(sock, newActions(sock))
+	// Login entries an older install wrote may name programs since moved.
+	go func() {
+		if err := host.Repair(); err != nil {
+			fmt.Fprintln(os.Stderr, "blitz-tray:", err)
+		}
+	}()
 	// The Electron app updates itself through its host (pkg/pagehost).
 	host.Updates = &pagehost.Updater{
 		Version: version, HostExe: host.Tray,
@@ -231,7 +247,7 @@ func newActions(sock string) tray.Actions {
 // service.
 func newHost(sock string, acts tray.Actions) pagehost.Host {
 	exe, _ := program()
-	return pagehost.Host{Service: acts, Beside: acts.Beside, Version: version, Socket: sock, Tray: exe, Prefs: pagehost.NewPrefsStore(config.ExpandHome("~/.blitz/desktop.json"))}
+	return pagehost.Host{Service: acts, Beside: acts.Beside, Version: version, Socket: sock, Tray: exe, StartTray: func() error { return startTray(exe) }, Prefs: pagehost.NewPrefsStore(config.ExpandHome("~/.blitz/desktop.json"))}
 }
 
 func onReady() {
