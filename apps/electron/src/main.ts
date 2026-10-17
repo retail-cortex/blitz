@@ -43,6 +43,8 @@ import {
   originOf,
   parseDeepLink,
   parseLink,
+  pictureExtension,
+  maxPictureBytes,
   previewContent,
   previewId,
   previewStep,
@@ -340,6 +342,21 @@ ipcMain.handle("blitz:call", async (e, method: unknown, args: unknown) => {
       return previewContent(await preview(a).view.webContents.executeJavaScriptInIsolatedWorld(1000, [{ code: contentScript }]));
     case "PreviewConsole":
       return [...preview(a).errors];
+    case "PreviewPicture": {
+      // A picture of the page, for Save to workspace (EL-106): through the
+      // preview's session (its sign-ins), web addresses and pictures only.
+      preview(a);
+      const url = previewURL(a[1]);
+      if (!url) throw new Error(`not fetching ${JSON.stringify(a[1])}: only web addresses`);
+      const res = await previewSessionOf().fetch(url, { signal: AbortSignal.timeout(30_000) });
+      if (!res.ok) throw new Error(`${url}: ${res.status} ${res.statusText}`);
+      const ext = pictureExtension(res.headers.get("content-type") ?? "");
+      if (!ext) throw new Error(`${url} isn't a picture`);
+      if (Number(res.headers.get("content-length") ?? 0) > maxPictureBytes) throw new Error(`${url} is larger than ${maxPictureBytes >> 20} MB`);
+      const data = Buffer.from(await res.arrayBuffer());
+      if (data.length > maxPictureBytes) throw new Error(`${url} is larger than ${maxPictureBytes >> 20} MB`);
+      return { ext, data: data.toString("base64") };
+    }
     case "PreviewPrintPDF": {
       // The page as it shows, for Save to workspace (EL-106).
       const pdf = await preview(a).view.webContents.printToPDF(printOptions(a[1]));

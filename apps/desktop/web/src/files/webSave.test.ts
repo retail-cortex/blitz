@@ -16,8 +16,8 @@
 
 import { Window } from "happy-dom";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import { pageMarkdown } from "./webMarkdown";
-import { pageHTML, saveName, savePath } from "./webSave";
+import { pageMarkdown, pagePictures } from "./webMarkdown";
+import { pageHTML, pictureName, picturesFolder, saveName, savePath } from "./webSave";
 
 // The Markdown is made with the window's DOM: happy-dom's here (the tests
 // otherwise run without one).
@@ -89,5 +89,29 @@ describe("pageMarkdown", () => {
   it("keeps the page's own first heading, the note under it, and takes the body without a main", () => {
     const md = pageMarkdown("<body><h1>Docs</h1><p>Hi</p></body>", "https://example.com/", "Docs", when);
     expect(md).toBe("# Docs\n\nSaved from <https://example.com/> on 2026-10-16.\n\nHi\n");
+  });
+});
+
+describe("the page's pictures", () => {
+  const html = `<body><nav><img src="/nav.png"></nav><main><img src="a.png" alt="A"><img src="/b.svg"><img src="a.png"><img src="data:image/gif;base64,R0lG"></main></body>`;
+  it("are the web pictures of the main content, each once", () => {
+    expect(pagePictures(html, "http://localhost:3000/shop/")).toEqual(["http://localhost:3000/shop/a.png", "http://localhost:3000/b.svg"]);
+  });
+  it("show from beside the Markdown when saved there, else from the site", () => {
+    const md = pageMarkdown(html, "http://localhost:3000/shop/", "Shop", when, new Map([["http://localhost:3000/shop/a.png", "Shop · Cart_files/a.png"]]));
+    expect(md).toContain("![A](<Shop · Cart_files/a.png>)");
+    expect(md).toContain("](http://localhost:3000/b.svg)");
+  });
+  it("go in a folder named after the file", () => {
+    expect(picturesFolder("docs/web/Shop · Cart.md")).toBe("docs/web/Shop · Cart_files");
+    expect(picturesFolder("cart.md")).toBe("cart_files");
+  });
+  it("are named after their addresses, once each", () => {
+    const taken = new Set<string>();
+    expect(pictureName("http://h/img/logo.png?v=2", "png", taken)).toBe("logo.png");
+    expect(pictureName("http://h/other/Logo.png", "png", taken)).toBe("Logo-2.png");
+    expect(pictureName("http://h/photo%20of%20me.jpeg", "jpg", taken)).toBe("photo-of-me.jpg");
+    expect(pictureName("http://h/", "svg", taken)).toBe("picture.svg");
+    expect(pictureName("not a url", "gif", taken)).toBe("picture.gif");
   });
 });

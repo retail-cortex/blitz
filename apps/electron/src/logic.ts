@@ -40,6 +40,7 @@ export const windowMethods = [
   "PreviewContent",
   "PreviewConsole",
   "PreviewPrintPDF",
+  "PreviewPicture",
 ] as const;
 export type WindowMethod = (typeof windowMethods)[number];
 
@@ -390,4 +391,13 @@ export async function waitForPrint(check: () => Promise<unknown>, sleep = (ms: n
     await sleep(printWait.everyMs);
   }
   await sleep(printWait.settleMs);
+}
+
+/** The largest picture Save to workspace downloads (EL-106). */
+export const maxPictureBytes = 10 << 20;
+
+/** A picture's file extension by its type ("" for what isn't a picture Save to workspace keeps). */
+export function pictureExtension(contentType: string): string {
+  const type = contentType.split(";")[0].trim().toLowerCase();
+  return { "image/png": "png", "image/jpeg": "jpg", "image/gif": "gif", "image/webp": "webp", "image/svg+xml": "svg", "image/avif": "avif", "image/x-icon": "ico", "image/vnd.microsoft.icon": "ico", "image/bmp": "bmp" }[type] ?? "";
 }

@@ -69,3 +69,27 @@ export function pageHTML(html: string, url: string, when = new Date()): string {
   if (head) return `${note}\n${html.slice(0, head.index! + head[0].length)}${base}${html.slice(head.index! + head[0].length)}`;
   return `${note}\n${base}\n${html}`;
 }
+
+/** How many pictures, and how many bytes in all, Save to workspace downloads with a page. */
+export const pictureLimits = { count: 50, bytes: 50 << 20 };
+
+/** The folder a Markdown file's pictures go in, beside it: "docs/Cart.md" → "docs/Cart_files". */
+export const picturesFolder = (path: string) => path.replace(/\.md$/i, "") + "_files";
+
+/**
+ * A downloaded picture's file name, from its address (else "picture"),
+ * with the extension its type says, and not one of taken (which gets it).
+ */
+export function pictureName(url: string, ext: string, taken: Set<string>): string {
+  let base = "";
+  try {
+    base = decodeURIComponent(new URL(url).pathname.split("/").pop() ?? "");
+  } catch {
+    base = "";
+  }
+  base = base.replace(/\.[a-z0-9]{1,5}$/i, "").replace(/[\\/:*?"<>|\s\u0000-\u001f]+/g, "-").replace(/^[.-]+|[.-]+$/g, "").slice(0, 60) || "picture";
+  let name = `${base}.${ext}`;
+  for (let i = 2; taken.has(name.toLowerCase()); i++) name = `${base}-${i}.${ext}`;
+  taken.add(name.toLowerCase());
+  return name;
+}

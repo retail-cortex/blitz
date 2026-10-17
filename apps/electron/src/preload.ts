@@ -40,6 +40,7 @@ const methods = [
   "PreviewContent",
   "PreviewConsole",
   "PreviewPrintPDF",
+  "PreviewPicture",
 ];
 const events = new Set(["menu:about", "menu:settings", "deeplink:open", "notification:open", "preview:state"]);
 

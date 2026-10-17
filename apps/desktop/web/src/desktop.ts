@@ -113,6 +113,7 @@ type AppMethods = {
   PreviewContent(id: string): Promise<PreviewContent>;
   PreviewConsole(id: string): Promise<string[]>;
   PreviewPrintPDF(id: string, pageSize: string): Promise<string>;
+  PreviewPicture(id: string, url: string): Promise<{ ext: string; data: string }>;
 };
 
 /** Where a web preview goes in the window, in the page's pixels. */
@@ -553,6 +554,11 @@ export async function previewCapture(id: string): Promise<Uint8Array> {
 export const previewContent = (id: string) => app().PreviewContent(id);
 /** The errors web preview id's console has shown since it opened, the latest last. */
 export const previewConsole = (id: string) => app().PreviewConsole(id);
+/** A picture of web preview id's page, downloaded through its session: its extension and bytes. */
+export async function previewPicture(id: string, url: string): Promise<{ ext: string; data: Uint8Array }> {
+  const p = await app().PreviewPicture(id, url);
+  return { ext: p.ext, data: Uint8Array.from(atob(p.data), (c) => c.charCodeAt(0)) };
+}
 /** Web preview id's page printed to PDF, on A4 or Letter paper. */
 export async function previewPrintPDF(id: string, pageSize: "A4" | "Letter"): Promise<Uint8Array> {
   const b64 = await app().PreviewPrintPDF(id, pageSize);

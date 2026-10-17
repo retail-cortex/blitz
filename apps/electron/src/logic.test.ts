@@ -37,6 +37,7 @@ import {
   pageEvents,
   parseDeepLink,
   parseLink,
+  pictureExtension,
   previewContent,
   previewId,
   previewStep,
@@ -302,4 +303,15 @@ describe("printing waits for fonts and pictures", () => {
     await waitForPrint(() => Promise.reject(new Error("gone")), sleep, () => t);
     expect(slept).toEqual([printWait.settleMs]);
   });
+});
+
+describe("pictureExtension", () => {
+  it.each([
+    ["image/png", "png"],
+    ["image/jpeg; charset=binary", "jpg"],
+    ["IMAGE/SVG+XML", "svg"],
+    ["image/webp", "webp"],
+    ["text/html", ""],
+    ["", ""],
+  ])("%s", (type, want) => expect(pictureExtension(type)).toBe(want));
 });

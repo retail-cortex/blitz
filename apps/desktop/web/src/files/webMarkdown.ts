@@ -24,13 +24,11 @@ import { visualExtensions } from "./visual/schema";
 import { localDay } from "./webSave";
 
 /**
- * The page as Markdown, as the visual editor writes it: its main content
- * (main, else article, else the body) without scripts, styles or forms,
- * links and pictures made absolute, with where it came from under its
- * first heading (the page's title, when it starts without one).
- * Needs a DOM (the window's).
+ * The page's main content (main, else article, else the body) without
+ * scripts, styles, forms or navigation, its links and pictures made
+ * absolute. Needs a DOM (the window's).
  */
-export function pageMarkdown(html: string, url: string, title: string, when = new Date()): string {
+function mainContent(html: string, url: string): HTMLElement {
   const doc = new DOMParser().parseFromString(html, "text/html");
   const root = doc.querySelector("main") ?? doc.querySelector("article") ?? doc.body;
   root.querySelectorAll("script, style, noscript, template, iframe, svg, canvas, form, button, input, select, textarea, nav").forEach((el) => el.remove());
@@ -45,6 +43,28 @@ export function pageMarkdown(html: string, url: string, title: string, when = ne
   };
   root.querySelectorAll("a[href]").forEach((a) => absolute(a, "href"));
   root.querySelectorAll("img[src]").forEach((img) => absolute(img, "src"));
+  return root;
+}
+
+/** The web pictures (http, https) the page's Markdown shows, each once, in order. */
+export function pagePictures(html: string, url: string): string[] {
+  const srcs = Array.from(mainContent(html, url).querySelectorAll("img[src]"), (img) => img.getAttribute("src") ?? "");
+  return [...new Set(srcs.filter((s) => /^https?:\/\//i.test(s)))];
+}
+
+/**
+ * The page as Markdown, as the visual editor writes it: its main content
+ * (mainContent), with where it came from under its first heading (the
+ * page's title, when it starts without one). A picture saved beside it
+ * (local: its web address to its path, relative to the Markdown) shows
+ * from there; the rest from the site. Needs a DOM (the window's).
+ */
+export function pageMarkdown(html: string, url: string, title: string, when = new Date(), local: ReadonlyMap<string, string> = new Map()): string {
+  const root = mainContent(html, url);
+  root.querySelectorAll("img[src]").forEach((img) => {
+    const path = local.get(img.getAttribute("src") ?? "");
+    if (path) img.setAttribute("src", path);
+  });
   const extensions = visualExtensions();
   const body = PMNode.fromJSON(getSchema(extensions), generateJSON(root.innerHTML, extensions));
   const markdown = serializeMarkdown(body, { sources: new Map(), trailing: "" }, new Map()).trim();
