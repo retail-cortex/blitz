@@ -17,7 +17,7 @@ Blitz's desktop app is a window onto the [service](service.md), laid out like an
 
 Each carries its own `blitz`, `blitzd` and `blitz-tray`, so the app can install the service without a separate download. The app updates itself from the releases: when it opens (every five days at most) it looks for a new one, downloads it, checks its signature, and offers **Restart**; **Settings › About** checks now, and **Update automatically** turns it off. A package manager's copy (the `.deb`, the Arch package, Homebrew) is updated by the package manager instead.
 
-From source: `bazel build //apps/electron/packaging:Blitz_arm64.app` (or `:Blitz_x64.app`) on macOS, `:deb`, `:pacman` or `:linux_tar` on Linux, and `:windows_zip` anywhere; or `bazel run //apps/electron:dev` to run it. See [building](../development/building.md).
+From source: `bazel build //:mac-app` on macOS, `//:deb`, `//:pacman` or `//:desktop-tar` on Linux, and `//:windows-zip` anywhere; or `bazel run //:desktop` to run it. See [building](../development/building.md).
 
 **On Linux, the shell sandbox is required.** The `.deb` installs bubblewrap with it, and the app's Settings › Service says whether bubblewrap runs. On Ubuntu 24.04 and later, AppArmor restricts the user namespaces it needs; `blitz security fix-apparmor` (or **Allow bubblewrap** in the desktop app) installs an AppArmor profile that lets bwrap alone have them, asking for your password once. Until the sandbox works, workspaces don't open; to run the agent's commands unsandboxed instead, set `[sandbox] shell = "auto"` in `~/.blitz/.env.toml`. A workspace that didn't open for want of it shows the same button above it, and the service restarts once it's fixed.
 

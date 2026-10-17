@@ -59,10 +59,10 @@ bazel run //:docs               # this site at http://localhost:1313
 tools/coverage.sh               # test coverage of apps/ and pkg/; fails below tools/coverage/floor.txt
 bazel test //apps/desktop/web:coverage   # the desktop page's line and branch coverage; fails below vite.config.ts's thresholds
 bazel run //tools/codeowners    # .github/CODEOWNERS from OWNERS.txt
-bazel run //:desktop            # the desktop app (it finds its blitzd in the runfiles)
+bazel run //:desktop            # the desktop app (Electron, spec_electron_038) on this machine's service
 bazel run //:desktop-web        # the desktop page in a browser (?fake: no service needed)
-bazel run //apps/electron:dev   # the Electron trial against this machine's service (spec_electron_038)
-bazel build //:mac-app          # the desktop app (macOS; //:deb on Linux, which needs webkit2gtk)
+bazel run //:desktop-wails      # the Wails app, still built but no longer released
+bazel build //:mac-app          # the desktop app for this Mac; //:deb, //:pacman, //:desktop-tar on Linux; //:windows-zip anywhere
 bazel build //:archives         # the CLI release archives, every platform
 BLITZ_TELEMETRY=1 BLITZ_LOG_LEVEL=debug bazel run //apps/cli:blitz   # traces to http://localhost:4318; logs in ~/.blitz/logs
 bazel test //pkg/engine/tools:tools_test --test_env=BLITZ_PYENV_TESTS=1 --test_filter='PyEnv|InstallsPackages'   # real Python environments (network)

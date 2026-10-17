@@ -60,12 +60,16 @@ exports_files(
 #
 #   bazel run //:blitz -- doctor         the CLI (arguments after --)
 #   bazel run //:blitzd                  the service, in the foreground
-#   bazel run //:desktop                 the desktop app, with its own blitzd
+#   bazel run //:desktop                 the desktop app (Electron), on this
+#                                        machine's service
 #   bazel run //:desktop-web             the desktop page in a browser (?fake)
+#   bazel run //:desktop-wails           the Wails app (no longer released)
 #   bazel run //:docs                    the docs site, http://localhost:1313
 #   bazel build //:deb                   the desktop .deb (Linux)
 #   bazel build //:pacman                the desktop's Arch Linux package
-#   bazel build //:mac-app               Blitz.app (macOS)
+#   bazel build //:desktop-tar           the desktop tarball (Linux)
+#   bazel build //:mac-app               Blitz.app for this Mac (macOS)
+#   bazel build //:windows-zip           the Windows app's zip (from any OS)
 #   bazel build //:archives              every platform's release archive
 #   bazel build //:build-all             everything this machine can build:
 #                                        //:build-all-linux or -mac
@@ -87,6 +91,11 @@ alias(
 
 alias(
     name = "desktop",
+    actual = "//apps/electron:dev",
+)
+
+alias(
+    name = "desktop-wails",
     actual = "//apps/desktop:blitz-desktop",
 )
 
@@ -102,17 +111,30 @@ alias(
 
 alias(
     name = "deb",
-    actual = "//apps/desktop/packaging:deb",
+    actual = "//apps/electron/packaging:deb",
 )
 
 alias(
     name = "pacman",
-    actual = "//apps/desktop/packaging:pacman",
+    actual = "//apps/electron/packaging:pacman",
+)
+
+alias(
+    name = "desktop-tar",
+    actual = "//apps/electron/packaging:linux_tar",
 )
 
 alias(
     name = "mac-app",
-    actual = "//apps/desktop/packaging:Blitz.app",
+    actual = select({
+        "//apps/electron:darwin_arm64": "//apps/electron/packaging:Blitz_arm64.app",
+        "//apps/electron:darwin_x64": "//apps/electron/packaging:Blitz_x64.app",
+    }),
+)
+
+alias(
+    name = "windows-zip",
+    actual = "//apps/electron/packaging:windows_zip",
 )
 
 alias(
@@ -129,7 +151,9 @@ filegroup(
         ":blitzd",
         ":deb",
         ":desktop",
+        ":desktop-tar",
         ":pacman",
+        ":windows-zip",
     ],
     tags = ["manual"],
     target_compatible_with = ["@platforms//os:linux"],
@@ -142,6 +166,7 @@ filegroup(
         ":blitzd",
         ":desktop",
         ":mac-app",
+        ":windows-zip",
     ],
     tags = ["manual"],
     target_compatible_with = ["@platforms//os:macos"],

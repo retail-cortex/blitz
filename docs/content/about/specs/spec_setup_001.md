@@ -43,7 +43,7 @@ A monorepo of three apps (`apps/cli`, `apps/service`, `apps/desktop`) over share
 | `bazel test //...` (`--config=race`) | Every test (with the race detector) |
 | `bazel run //apps/cli:blitz -- …` | Run the CLI |
 | `bazel build //release:archives` | The CLI release archives, every platform |
-| `bazel build //apps/desktop/packaging:Blitz.app` / `:deb` | The desktop app's package (macOS / Linux) |
+| `bazel build //:mac-app` / `//:deb` / `//:windows-zip` | The desktop app's package (macOS / Linux / Windows; [spec_electron_038](spec_electron_038.md) EL-80) |
 | `bazel run //:gazelle` | Update the BUILD files after adding a package or import |
 | `bazel run //tools:tidy` | `go mod tidy`, `bazel mod tidy`, Gazelle |
 | `bazel run //tools:check_deps`, `tools/check_format.sh` | The dependency rules; formatting |

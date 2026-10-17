@@ -117,14 +117,17 @@ bazel test //...                          # every test: Go, the desktop page, th
 bazel run //:blitz -- doctor              # the CLI (arguments after --); built at bazel-bin/apps/cli/blitz
 bazel run //:blitzd                       # the service, in the foreground
 bazel run //:tray                         # the service in the system tray (Linux, macOS)
-bazel run //:desktop                      # the desktop app, with its own blitzd
+bazel run //:desktop                      # the desktop app (Electron), on this machine's service
 bazel run //:desktop-web                  # the desktop page in a browser, http://localhost:5173/?fake
+bazel run //:desktop-wails                # the Wails app, no longer released
 bazel run //:docs                         # the docs site, http://localhost:1313
 
-bazel build //:mac-app                    # macOS: Blitz.app (universal)
-bazel build //:deb                        # Linux: bazel-bin/apps/desktop/packaging/blitz-desktop_amd64.deb
-sudo dpkg -i bazel-bin/apps/desktop/packaging/blitz-desktop_amd64.deb   # reinstalls even at the same version
-bazel build //:pacman                     # Arch Linux: bazel-bin/apps/desktop/packaging/blitz-desktop.pkg.tar.zst
+bazel build //:mac-app                    # macOS: bazel-bin/apps/electron/packaging/darwin_<arm64|x64>/Blitz.app, for this Mac
+bazel build //:windows-zip                # Windows (from any OS): bazel-bin/apps/electron/packaging/Blitz_windows_x64.zip
+bazel build //:deb                        # Linux: bazel-bin/apps/electron/packaging/blitz-desktop_amd64.deb
+sudo dpkg -i bazel-bin/apps/electron/packaging/blitz-desktop_amd64.deb   # reinstalls even at the same version
+bazel build //:pacman                     # Arch Linux: bazel-bin/apps/electron/packaging/blitz-desktop.pkg.tar.zst
+bazel build //:desktop-tar                # Linux: the tarball, which updates itself
 bazel build --config=release //:archives  # the release archives, every platform, version from git
 ```
 

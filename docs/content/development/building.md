@@ -19,17 +19,18 @@ Tested on macOS 13 and later, Apple silicon and Intel.
    bazel-bin/apps/cli/blitz --version      # and bazel-bin/apps/service/blitzd
    ```
 
-4. The desktop app, as `Blitz.app` (universal: both architectures build on either Mac):
+4. The desktop app, as `Blitz.app` for this Mac (`bazel-bin/apps/electron/packaging/darwin_arm64/Blitz.app`, or `darwin_x64` on Intel; `//apps/electron/packaging:Blitz_x64.app` builds Intel's on Apple silicon too), or run it from the build:
 
    ```bash
-   bazel build //apps/desktop/packaging:Blitz.app
+   bazel build //:mac-app
+   bazel run //:desktop
    ```
 
 ## Linux
 
 Tested on Ubuntu 24.04 (x86-64), Debian 13 and later, and Arch Linux.
 
-1. Install the build dependencies. The CLI and the service need only git; the desktop app also needs GTK and WebKitGTK 4.1, and the shell sandbox needs bubblewrap:
+1. Install the build dependencies. The CLI and the service need only git, and the shell sandbox needs bubblewrap; `bazel build //...` and `bazel test //...` also build the Wails app (no longer released), which needs GTK and WebKitGTK 4.1:
 
    Ubuntu 24.04 or Debian 13 and later:
 
@@ -54,21 +55,22 @@ Tested on Ubuntu 24.04 (x86-64), Debian 13 and later, and Arch Linux.
 
    ```bash
    bazel build //apps/cli:blitz //apps/service:blitzd
-   bazel build //apps/desktop/packaging:deb
+   bazel build //:deb
    ```
 
-   The package is `bazel-bin/apps/desktop/packaging/blitz-desktop_amd64.deb` (`_arm64` on ARM). To install it here or on another machine (Ubuntu 24.04, Debian 13 or later, the same architecture), give apt the file's path, with the `./`, or it looks for a package of that name in its repositories: `sudo apt install ./blitz-desktop_amd64.deb`. It installs the programs in `/usr/lib/blitz-desktop/`, with `blitz-desktop` on the `PATH` and a launcher in the applications menu. A local build's version is always `0.0.0` (only `--config=release` stamps one), so apt sees a newer build as the package already installed and does nothing: `sudo apt install --reinstall ./blitz-desktop_amd64.deb` (and `--allow-downgrades` over a release).
+   The package is `bazel-bin/apps/electron/packaging/blitz-desktop_amd64.deb` (`_arm64` on ARM). To install it here or on another machine (Ubuntu 24.04, Debian 13 or later, the same architecture), give apt the file's path, with the `./`, or it looks for a package of that name in its repositories: `sudo apt install ./blitz-desktop_amd64.deb`. It installs the programs in `/usr/lib/blitz-desktop/`, with `blitz-desktop` on the `PATH` and a launcher in the applications menu. A local build's version is always `0.0.0` (only `--config=release` stamps one), so apt sees a newer build as the package already installed and does nothing: `sudo apt install --reinstall ./blitz-desktop_amd64.deb` (and `--allow-downgrades` over a release).
 
-   On Arch Linux, install the build's libraries with `sudo pacman -S --needed base-devel pkgconf gtk3 webkit2gtk-4.1 bubblewrap zstd` and build the Arch package instead: `bazel build //:pacman`. It's `bazel-bin/apps/desktop/packaging/blitz-desktop.pkg.tar.zst`, which installs the same files, the notices in `/usr/share/licenses/blitz-desktop/`: `sudo pacman -U bazel-bin/apps/desktop/packaging/blitz-desktop.pkg.tar.zst`. pacman reinstalls a package at the same version, so a local build (`0.0.0-1`) replaces another; over a release it asks before downgrading. `sudo pacman -R blitz-desktop` removes it.
+   On Arch Linux, install the build's libraries with `sudo pacman -S --needed base-devel pkgconf gtk3 webkit2gtk-4.1 bubblewrap zstd` and build the Arch package instead: `bazel build //:pacman`. It's `bazel-bin/apps/electron/packaging/blitz-desktop.pkg.tar.zst`, which installs the same files, the notices in `/usr/share/licenses/blitz-desktop/`: `sudo pacman -U bazel-bin/apps/electron/packaging/blitz-desktop.pkg.tar.zst`. pacman reinstalls a package at the same version, so a local build (`0.0.0-1`) replaces another; over a release it asks before downgrading. `sudo pacman -R blitz-desktop` removes it.
 
 4. Ubuntu 24.04 restricts unprivileged user namespaces through AppArmor, which bubblewrap and gVisor need, and Blitz requires the sandbox on Linux. For bubblewrap alone, `blitz security fix-apparmor` installs an AppArmor profile (`/etc/apparmor.d/blitz-bwrap`) with your password; that's enough to use Blitz and run its sandbox tests. The gVisor tests need `runsc` to have them too: `sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0` lifts the restriction for every program until the next boot, as CI does.
 
 ## Windows
 
-Building on Windows isn't supported. Build in WSL 2 with the Linux steps, or cross-compile: the release archives, Windows included, build on macOS or Linux:
+Building on Windows isn't supported. Build in WSL 2 with the Linux steps, or cross-compile: the release archives and the desktop app's zip, Windows included, build on macOS or Linux:
 
 ```bash
 bazel build //release:archives          # every platform's archive
+bazel build //:windows-zip              # the desktop app: bazel-bin/apps/electron/packaging/Blitz_windows_x64.zip
 ```
 
 On Windows, Blitz runs without the OS sandbox and the process guard; skill scripts don't run.
