@@ -70,14 +70,16 @@ var (
 	defaultStore Store
 )
 
-// Default is this machine's store: the Keychain on macOS, the Secret
-// Service on Linux when secret-tool can reach one, else a file in dir
-// (the settings directory).
+// Default is this machine's store: the Keychain on macOS, the Credential
+// Manager on Windows, the Secret Service on Linux when secret-tool can
+// reach one, else a file in dir (the settings directory).
 func Default(dir string) Store {
 	defaultOnce.Do(func() {
 		switch {
 		case goruntime.GOOS == "darwin":
 			defaultStore = keychain{}
+		case goruntime.GOOS == "windows":
+			defaultStore = osStore(dir)
 		case goruntime.GOOS == "linux" && secretServiceAvailable():
 			defaultStore = secretService{}
 		default:

@@ -24,7 +24,10 @@ go_library(
 go_test(
     name = "redact_test",
     size = "small",
-    srcs = ["redact_test.go"],
+    srcs = [
+        "redact_test.go",
+        "remember_test.go",
+    ],
     embed = [":redact"],
     deps = ["@com_github_stretchr_testify//assert"],
 )

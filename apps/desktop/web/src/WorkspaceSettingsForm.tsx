@@ -27,6 +27,7 @@ import {
   mdiCodeBraces,
   mdiFolderOutline,
   mdiKeyOutline,
+  mdiKeyVariant,
   mdiMagnify,
   mdiRobotOutline,
   mdiShieldAlertOutline,
@@ -48,6 +49,7 @@ import { PermissionSettings } from "./PermissionSettings";
 import { LanguageServers } from "./LanguageServers";
 import { SearchSettings } from "./SearchSettings";
 import { ProviderSettings } from "./ProviderSettings";
+import { SecretsEditor } from "./SecretsEditor";
 import { useApp } from "./state";
 import { lookOf, WorkspaceFields, type WorkspaceLook } from "./WorkspaceFields";
 import { editWorkspace, type WorkspacePrefs } from "./prefs";
@@ -435,6 +437,9 @@ export function WorkspaceSettingsForm({
 
             <Section id="keys" icon={mdiKeyOutline} title={t("desktop.rs.keys")} scope={t("desktop.rs.scope.workspace")} summary={settings?.provider}>
               <ProviderSettings workspace={dir} compact />
+            </Section>
+            <Section id="secrets" icon={mdiKeyVariant} title={t("desktop.settings.secrets")} scope={t("desktop.rs.scope.workspace")}>
+              <SecretsEditor workspace={dir} />
             </Section>
 
             <Section id="rules" icon={mdiShieldCheckOutline} title={t("desktop.rs.rules", { count: rules.filter((r) => r.source !== "built-in").length })} scope={t("desktop.rs.scope.workspace")}>

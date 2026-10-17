@@ -614,6 +614,9 @@ const fakeFiles = new Map<string, string>([
 ]);
 const fakeGit: Record<string, string> = { "internal/cart/discount.go": "modified", "internal/cart/discount_test.go": "untracked", "web/app.ts": "added" };
 // Skill registries in the fake: Castor's offer, and what was installed.
+// The user's secrets' names, by scope ("" global).
+const fakeSecrets = new Map<string, string[]>([["", ["github_token", "jira_api_key"]]]);
+
 // Settings › MCP servers: the global servers, edited in place.
 const fakeMCP: MCPServerConfig[] = [
   create(MCPServerConfigSchema, { name: "github", command: "npx", args: ["-y", "@modelcontextprotocol/server-github"], env: { GITHUB_TOKEN: "ghp_…" } }),
@@ -1146,6 +1149,16 @@ export function installFake() {
       });
       service(ConfigService, {
         listSkillRegistries: () => ({ registries: fakeRegistries, installed: fakeInstalledSkills }),
+        listSecrets: ({ workspace }) => ({ secrets: (fakeSecrets.get(workspace) ?? []).map((key) => ({ key, updated: { seconds: BigInt(1760700000), nanos: 0 } })), store: "macOS Keychain" }),
+        setSecret: ({ workspace, key }) => {
+          const l = fakeSecrets.get(workspace) ?? [];
+          if (!l.includes(key)) fakeSecrets.set(workspace, [...l, key].sort());
+          return {};
+        },
+        deleteSecret: ({ workspace, key }) => {
+          fakeSecrets.set(workspace, (fakeSecrets.get(workspace) ?? []).filter((k) => k !== key));
+          return {};
+        },
         listBuiltinSkills: () => ({
           skills: [
             { name: "code-review", description: "Review a change for bugs, style and tests", version: "1.0.0" },

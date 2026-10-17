@@ -180,7 +180,7 @@ func (w *Workspace) ListMCPServers() []api.MCPServer {
 // restart, disabled and removed ones stop, and the agents are built
 // again so the next turn offers what's there now.
 func (w *Workspace) ReloadMCP(ctx context.Context, cfg *config.Config) error {
-	changed, err := w.tools.MCP().Update(cfg.MCP.Servers)
+	changed, err := w.tools.MCP().Update(mcpWithSecrets(cfg.MCP.Servers, w.Dir()))
 	if err != nil {
 		return err
 	}

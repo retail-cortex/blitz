@@ -108,6 +108,13 @@ service ConfigService {
   rpc UpdateRegistrySkills(UpdateRegistrySkillsRequest) returns (UpdateRegistrySkillsResponse);
   // Removes a skill installed from a registry (NOT_INSTALLED).
   rpc UninstallRegistrySkill(UninstallRegistrySkillRequest) returns (UninstallRegistrySkillResponse);
+  // Returns the names of the user's secrets in a scope (global, or a
+  // workspace's own), never their values.
+  rpc ListSecrets(ListSecretsRequest) returns (ListSecretsResponse);
+  // Stores a secret's value in the system's keychain.
+  rpc SetSecret(SetSecretRequest) returns (SetSecretResponse);
+  // Removes a secret.
+  rpc DeleteSecret(DeleteSecretRequest) returns (DeleteSecretResponse);
   // Returns the skills Blitz ships with.
   rpc ListBuiltinSkills(ListBuiltinSkillsRequest) returns (ListBuiltinSkillsResponse);
   // Returns the MCP servers of the global settings, with the file they're in.
@@ -736,3 +743,44 @@ message ListBuiltinSkillsResponse {
   // By name.
   repeated BuiltinSkill skills = 1;
 }
+
+// Secret is one of the user's secrets, as listed: its key ({secrets:key}
+// in prompts and settings) and when its value was set; never the value.
+message Secret {
+  string key = 1;
+  google.protobuf.Timestamp updated = 2;
+}
+
+// Request message for ConfigService.ListSecrets.
+message ListSecretsRequest {
+  // Empty for the global secrets.
+  string workspace = 1;
+}
+
+// Response message for ConfigService.ListSecrets.
+message ListSecretsResponse {
+  repeated Secret secrets = 1;
+  // Where the values are kept ("macOS Keychain").
+  string store = 2;
+}
+
+// Request message for ConfigService.SetSecret.
+message SetSecretRequest {
+  // Empty for a global secret.
+  string workspace = 1;
+  string key = 2;
+  string value = 3;
+}
+
+// Response message for ConfigService.SetSecret.
+message SetSecretResponse {}
+
+// Request message for ConfigService.DeleteSecret.
+message DeleteSecretRequest {
+  // Empty for a global secret.
+  string workspace = 1;
+  string key = 2;
+}
+
+// Response message for ConfigService.DeleteSecret.
+message DeleteSecretResponse {}

@@ -23,7 +23,9 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -43,6 +45,7 @@ import (
 	"github.com/retail-cortex/blitz/pkg/observability"
 	"github.com/retail-cortex/blitz/pkg/plugins"
 	"github.com/retail-cortex/blitz/pkg/redact"
+	"github.com/retail-cortex/blitz/pkg/secrets"
 	"google.golang.org/adk/v2/model"
 	"google.golang.org/genai"
 )
@@ -248,6 +251,7 @@ func Open(ctx context.Context, cfg *config.Config, o Options) (*Workspace, error
 	w.loadProject(cfg, o.TrustProject || cfg.Blitz.TrustWorkspace, o.Warn)
 	w.loadPlugins(cfg, o.Warn)
 
+	cfg.MCP.Servers = mcpWithSecrets(cfg.MCP.Servers, dir)
 	if w.tools, err = tools.NewRegistry(cfg, w.agents, w.skills); err != nil {
 		return nil, fmt.Errorf("failed to initialize tools: %w", err)
 	}
@@ -361,6 +365,7 @@ func Open(ctx context.Context, cfg *config.Config, o Options) (*Workspace, error
 		runtime.WithNotice(o.Warn),
 		runtime.WithTaskDone(w.taskEnded),
 		runtime.WithProjectTrusted(w.project.Loaded),
+		runtime.WithSecrets(w.expandSecrets),
 	)...)
 	if err != nil {
 		w.Close()
@@ -590,4 +595,45 @@ func ModelErrorSummary(err error, cfg *config.Config) string {
 	}
 	r := redact.FromEnv(cfg.Sandbox.ScrubEnv, cfg.LLM.Gemini.APIKey, cfg.LLM.OpenAI.APIKey, cfg.LLM.Anthropic.APIKey)
 	return r.String(msg)
+}
+
+// mcpWithSecrets is servers with {secrets:key} in their env and header
+// values put in, for the workspace in dir (the values are masked in logs:
+// SecretRedactor masks every MCP env and header value).
+func mcpWithSecrets(servers []config.MCPServerConfig, dir string) []config.MCPServerConfig {
+	vault := config.Vault("")
+	scope := config.SecretScope("", dir)
+	lookup := func(key string) (string, bool) { return vault.Lookup(scope, key) }
+	expand := func(m map[string]string) map[string]string {
+		var out map[string]string
+		for k, v := range m {
+			if !secrets.HasPlaceholders(v) {
+				continue
+			}
+			if out == nil {
+				out = maps.Clone(m)
+			}
+			x, used := secrets.Expand(v, lookup)
+			redact.Remember(used...)
+			out[k] = x
+		}
+		if out == nil {
+			return m
+		}
+		return out
+	}
+	out := slices.Clone(servers)
+	for i := range out {
+		out[i].Env = expand(out[i].Env)
+		out[i].Headers = expand(out[i].Headers)
+	}
+	return out
+}
+
+// expandSecrets puts {secrets:key} values into text: the workspace's own
+// secret, else the global one (spec_secrets_039).
+func (w *Workspace) expandSecrets(text string) (string, []string) {
+	vault := config.Vault("")
+	scope := config.SecretScope("", w.Dir())
+	return secrets.Expand(text, func(key string) (string, bool) { return vault.Lookup(scope, key) })
 }

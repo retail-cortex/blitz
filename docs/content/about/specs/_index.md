@@ -48,5 +48,6 @@ Files are named `spec_<name>_NNN.md`, where `NNN` is the order of execution: eac
 | 036 | [windows](spec_windows_036.md) | Blitz on Windows: the tray runs the service and serves the desktop page on a loopback port, behind a one-time link, in an Edge app window |
 | 037 | [visual editor](spec_visual_editor_037.md) | Draft: Markdown edited in its rendered form (TipTap), code blocks as CodeMirror editors, and language servers (gopls first) for the editor through a `LanguageService` on the service |
 | 038 | [electron](spec_electron_038.md) | The desktop app in Electron (one engine on every platform, a real app on Windows) over the page and `blitz-tray --serve` as its host; since v0.6.6 |
+| 039 | [secrets](spec_secrets_039.md) | The user's secrets in the system's keychain, named in prompts and settings as `{secrets:key}`; since v0.7.1 |
 
 Background and history: [the roadmap](../roadmap.md), [where to pick up](../../development/next-steps.md), [development](../../development/_index.md).

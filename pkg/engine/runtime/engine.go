@@ -35,6 +35,8 @@ import (
 	"sync/atomic"
 
 	"github.com/retail-cortex/blitz/pkg/api"
+	"github.com/retail-cortex/blitz/pkg/redact"
+	"github.com/retail-cortex/blitz/pkg/secrets"
 
 	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/engine/agents"
@@ -187,12 +189,22 @@ func WithAgentModel(agent string, llm model.LLM) Option {
 	}
 }
 
+// WithSecrets gives the engine {secrets:key} values (spec_secrets_039):
+// expand puts them in text's place and returns those used. They're put in
+// only as the model is called, never in the session, the transcript or
+// the hooks' view.
+func WithSecrets(expand func(text string) (string, []string)) Option {
+	return func(e *Engine) { e.secrets = expand }
+}
+
 // WithInstructions appends text (e.g. project memory) to every agent's instructions.
 func WithInstructions(text string) Option { return func(e *Engine) { e.extraInstructions = text } }
 
 // Engine orchestrates the Google ADK execution lifecycle for Blitz.
 // It is safe for concurrent use.
 type Engine struct {
+	// secrets expands {secrets:key} as the model is called (nil: none).
+	secrets func(text string) (string, []string)
 	// hookContext is pre_tool hooks' additional_context, by tool call ID,
 	// until the result goes back.
 	hookContext sync.Map
@@ -592,7 +604,7 @@ func (e *Engine) newLLMAgentWith(reg *tools.Registry, spec *agents.AgentSpec, ll
 	return llmagent.New(llmagent.Config{
 		Name:                  spec.Name,
 		Description:           spec.Description,
-		InstructionProvider:   func(agent.ReadonlyContext) (string, error) { return fullInstruction, nil },
+		InstructionProvider:   func(agent.ReadonlyContext) (string, error) { return e.expandSecrets(fullInstruction), nil },
 		Model:                 withAgentSettings(llm, spec),
 		Tools:                 list,
 		Toolsets:              toolsets,
@@ -605,18 +617,92 @@ func (e *Engine) newLLMAgentWith(reg *tools.Registry, spec *agents.AgentSpec, ll
 	})
 }
 
-// beforeModel enforces the per-run model-call budget.
-func (e *Engine) beforeModel(ctx agent.Context, _ *model.LLMRequest) (*model.LLMResponse, error) {
+// beforeModel enforces the per-run model-call budget, and puts
+// {secrets:key} values into the request's messages.
+func (e *Engine) beforeModel(ctx agent.Context, req *model.LLMRequest) (*model.LLMResponse, error) {
 	if st := stateFrom(ctx); st != nil && st.maxTurns > 0 {
 		if n := st.turns.Add(1); n > int64(st.maxTurns) {
 			return nil, fmt.Errorf("%w (%d model calls)", api.ErrMaxTurns, st.maxTurns)
 		}
 	}
+	if req != nil {
+		req.Contents = e.expandContents(req.Contents)
+	}
 	return nil, nil
+}
+
+// expandSecrets is text with {secrets:key} values put in, and those used
+// remembered for the redactors.
+func (e *Engine) expandSecrets(text string) string {
+	if e.secrets == nil {
+		return text
+	}
+	out, used := e.secrets(text)
+	redact.Remember(used...)
+	return out
+}
+
+// expandContents puts secrets into copies of the messages that name them:
+// the session's own stay as they were, so nothing stores a value.
+func (e *Engine) expandContents(contents []*genai.Content) []*genai.Content {
+	if e.secrets == nil {
+		return contents
+	}
+	var out []*genai.Content
+	for i, c := range contents {
+		if c == nil || !partsNameSecrets(c.Parts) {
+			if out != nil {
+				out = append(out, c)
+			}
+			continue
+		}
+		if out == nil {
+			out = append(make([]*genai.Content, 0, len(contents)), contents[:i]...)
+		}
+		cp := &genai.Content{Role: c.Role, Parts: make([]*genai.Part, len(c.Parts))}
+		for j, p := range c.Parts {
+			if p == nil || !secrets.HasPlaceholders(p.Text) {
+				cp.Parts[j] = p
+				continue
+			}
+			q := *p
+			q.Text = e.expandSecrets(p.Text)
+			cp.Parts[j] = &q
+		}
+		out = append(out, cp)
+	}
+	if out == nil {
+		return contents
+	}
+	return out
+}
+
+func partsNameSecrets(parts []*genai.Part) bool {
+	for _, p := range parts {
+		if p != nil && secrets.HasPlaceholders(p.Text) {
+			return true
+		}
+	}
+	return false
+}
+
+// maskSecrets masks the secret values the model echoes in its answer.
+func maskSecrets(resp *model.LLMResponse) {
+	if resp == nil || resp.Content == nil {
+		return
+	}
+	for _, p := range resp.Content.Parts {
+		if p != nil && p.Text != "" {
+			p.Text = redact.Mask(p.Text)
+		}
+	}
 }
 
 // afterModel records token usage for the run's session.
 func (e *Engine) afterModel(ctx agent.Context, resp *model.LLMResponse, respErr error) (*model.LLMResponse, error) {
+	if e.secrets != nil {
+		maskSecrets(resp)
+	}
 	if resp == nil || resp.Partial {
 		return nil, nil
 	}

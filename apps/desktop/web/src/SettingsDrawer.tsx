@@ -22,6 +22,7 @@ import {
   mdiCogOutline,
   mdiFolderMultipleOutline,
   mdiKeyChainVariant,
+  mdiKeyVariant,
   mdiProgressClock,
   mdiPuzzleOutline,
   mdiRobotOutline,
@@ -57,6 +58,7 @@ import { ProviderSettings } from "./ProviderSettings";
 import { SettingsFile } from "./settingsfile/SettingsFile";
 import { DocumentSettings } from "./files/DocumentSettings";
 import { McpSettings } from "./McpSettings";
+import { SecretsEditor } from "./SecretsEditor";
 import { SkillSettings } from "./SkillSettings";
 import { useAdvanced, useApp } from "./state";
 import { sectionShown, settingsSections, type SectionId } from "./simpleMode";
@@ -75,6 +77,7 @@ export type Section = SectionId | "file";
 
 const sectionIcons: Record<SectionId, string> = {
   providers: mdiKeyChainVariant,
+  secrets: mdiKeyVariant,
   appearance: mdiPaletteOutline,
   agents: mdiRobotOutline,
   skills: mdiPuzzleOutline,
@@ -143,6 +146,7 @@ export function SettingsDrawer({ onClose, initial = "providers", scope: initialS
           </div>
           <div className="settings-pane">
             {section === "providers" && <ProviderSettings workspace="" />}
+            {section === "secrets" && <SecretsEditor />}
             {section === "appearance" && <Appearance />}
             {section === "agents" && <UserAgents />}
             {section === "skills" && <SkillSettings />}

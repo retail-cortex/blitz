@@ -273,6 +273,23 @@ func knownProvider(p string) bool {
 	return false
 }
 
+// SecretScope is the scope of a workspace's own secrets
+// (secrets.URN): its settings folder's name, <name>-<hash8>; "global"
+// for none.
+func SecretScope(prefixDir, workspace string) string {
+	if workspace == "" {
+		return "global"
+	}
+	return filepath.Base(WorkspaceSettingsDir(prefixDir, workspace))
+}
+
+// Vault is the user's secrets (spec_secrets_039): their values in the
+// OS store, their names beside the settings.
+func Vault(prefixDir string) secrets.Vault {
+	dir := ConfigDir(prefixDir)
+	return secrets.Vault{Store: secrets.Default(dir), Index: filepath.Join(dir, "secret-names.toml")}
+}
+
 // secretName is the stored secret's name for a provider's key in a scope.
 func secretName(prefixDir, workspace, provider string) string {
 	if workspace == "" {
