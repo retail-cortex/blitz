@@ -31,6 +31,7 @@ import { Markdown } from "./Markdown";
 import { parseDiff, type FileDiff } from "./turns";
 import { highlight } from "./highlight";
 import { Button, Dialog, Icon, IconButton, Segmented, useSnackbar } from "./ui/controls";
+import { Drawer } from "./ui/Drawer";
 import { useAdvanced } from "./state";
 
 const lang = (path: string) => languageFor(path);
@@ -280,15 +281,15 @@ export function Changes({ dir, source, onSource: setSource }: { dir: string; sou
 }
 
 /**
- * The workspace's changes over the editor (the top bar's Changes menu, the
+ * The workspace's changes in the drawer (the top bar's Changes menu, the
  * status bar's changed files, a turn's summary): this session's or git's,
  * starting on initial.
  */
-export function ChangesDialog({ dir, initial, onClose }: { dir: string; initial: Source; onClose: () => void }) {
+export function ChangesDrawer({ dir, initial, onClose }: { dir: string; initial: Source; onClose: () => void }) {
   const [source, setSource] = useState<Source>(initial);
   return (
-    <Dialog title={t("desktop.view.changes")} icon={mdiFileCompare} large className="changes-dialog" closeButton onClose={onClose}>
+    <Drawer title={t("desktop.view.changes")} icon={mdiFileCompare} className="changes-drawer" onClose={onClose}>
       <Changes dir={dir} source={source} onSource={setSource} />
-    </Dialog>
+    </Drawer>
   );
 }

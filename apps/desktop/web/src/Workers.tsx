@@ -41,6 +41,7 @@ import { applyEvent, failed, summarizeArgs, type Entry } from "./turns";
 import { WorkerEditor } from "./WorkerEditor";
 import { savePauses } from "./workerForm";
 import { Button, Chip, Dialog, Icon, useSnackbar } from "./ui/controls";
+import { Drawer } from "./ui/Drawer";
 import type { ItemIntent } from "./intent";
 
 const stateKeys: Record<WorkerState, string> = {
@@ -83,16 +84,17 @@ const workersPollMs = 5000;
 const lastFailed = (w: Worker) => w.lastRun?.status === RunStatus.FAILED || w.lastRun?.status === RunStatus.LIMITED;
 
 /**
- * A worker, over the editor, from the top bar's Workers menu (intent): a
+ * A worker, in the drawer, from the top bar's Workers menu (intent): a
  * read view (what it does and may do, its runs; Run, Enable or Disable,
  * Edit, Delete) and an edit view (its form, its buttons in the footer),
- * switching in place in one dialog; a new worker starts on the form, and
- * saving shows it. Cancel goes back to the read view; the close button
- * closes the dialog. Deleting asks first.
+ * switching in place in one drawer; a new worker starts on the form, and
+ * saving shows it. Cancel goes back to the read view; ✕ closes the
+ * drawer, asking first when the form has unsaved changes, as does another
+ * drawer opening in its place. Deleting asks first.
  * Without a name (the status bar's failed runs) it shows the first worker
  * whose last run failed, else the first.
  */
-export function WorkerModal({ dir, intent, onClose }: { dir: string; intent: ItemIntent; onClose: () => void }) {
+export function WorkerDrawer({ dir, intent, onClose }: { dir: string; intent: ItemIntent; onClose: () => void }) {
   const snack = useSnackbar();
   const [list, setList] = useState<Worker[] | null>(null);
   const [name, setName] = useState(intent.id);
@@ -101,8 +103,10 @@ export function WorkerModal({ dir, intent, onClose }: { dir: string; intent: Ite
   // A run or disable the menu asked for, for the read view to do once.
   const [request, setRequest] = useState<"run" | "disable" | undefined>(intent.kind === "run" || intent.kind === "disable" ? intent.kind : undefined);
   const [error, setError] = useState("");
-  // The dialog's footer, where the edit view puts its buttons.
+  // The drawer's footer, where the edit view puts its buttons, and whether
+  // the form holds unsaved changes.
   const [footer, setFooter] = useState<HTMLDivElement | null>(null);
+  const [dirty, setDirty] = useState(false);
 
   const refresh = useCallback(async () => {
     try {
@@ -158,19 +162,18 @@ export function WorkerModal({ dir, intent, onClose }: { dir: string; intent: Ite
     setMode("read");
     void refresh();
   };
-  // One dialog, its view switching in place: the read view, or the form
+  // One drawer, its view switching in place: the read view, or the form
   // (editing this worker, or a new one).
   const title = mode === "new" ? t("desktop.newworker.title") : mode === "edit" ? t("desktop.editworker.title", { name }) : worker?.name || t("desktop.view.workers");
   return (
     <>
-      <Dialog
+      <Drawer
         title={title}
         icon={mode === "new" ? mdiCalendarPlus : mode === "edit" ? mdiCalendarEdit : mdiCalendarClock}
-        wide
-        className="worker-dialog"
-        closeButton
+        className="worker-drawer"
         headerActions={mode === "read" && worker && <WorkerChip state={worker.state} />}
         footer={mode === "read" ? undefined : <div className="dialog-actions" ref={setFooter} />}
+        dirty={mode !== "read" && dirty}
         onClose={onClose}
       >
         {error && (
@@ -184,13 +187,14 @@ export function WorkerModal({ dir, intent, onClose }: { dir: string; intent: Ite
             dir={dir}
             footer={footer}
             onCancel={onClose}
+            onDirty={setDirty}
             onSaved={(n) => {
               setName(n);
               toRead();
             }}
           />
         )}
-        {mode === "edit" && worker && <WorkerEditor key={`edit-${worker.name}`} dir={dir} edit={{ name: worker.name, path: worker.path, pauses: savePauses(worker.state) }} footer={footer} onCancel={toRead} onSaved={toRead} />}
+        {mode === "edit" && worker && <WorkerEditor key={`edit-${worker.name}`} dir={dir} edit={{ name: worker.name, path: worker.path, pauses: savePauses(worker.state) }} footer={footer} onCancel={toRead} onSaved={toRead} onDirty={setDirty} />}
         {mode === "read" && list?.length === 0 && (
           <div className="stack" style={{ gap: 12 }}>
             <p className="muted">{t("desktop.workers.none", { path: ".agents/workers/<name>/WORKER.md" })}</p>
@@ -213,7 +217,7 @@ export function WorkerModal({ dir, intent, onClose }: { dir: string; intent: Ite
           />
         )}
         {mode === "read" && list && list.length > 0 && name && !worker && <p className="muted">{t("desktop.workers.gone", { name })}</p>}
-      </Dialog>
+      </Drawer>
       {confirm}
     </>
   );

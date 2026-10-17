@@ -24,6 +24,7 @@ import { RevisionDiff, type FileRevision, type RestoredFile } from "../gen/blitz
 import { language, t, tn } from "../i18n";
 import { parseDiff } from "../turns";
 import { Button, Dialog, IconButton, Segmented, useSnackbar } from "../ui/controls";
+import { Drawer } from "../ui/Drawer";
 import { authorHue, changeShare, dateGroup, sameGroup, type DateGroup } from "./history";
 import { layoutGraph, type GraphRow } from "./historyGraph";
 
@@ -39,7 +40,7 @@ const pageSize = 100;
  * Shift-click (or ⌘-click) a second to compare the two. Restore puts a
  * file, or a folder's files, back as they were (files added since stay).
  */
-export function HistoryDialog({ dir, path, folder, onClose, onRestored }: { dir: string; path: string; folder: boolean; onClose: () => void; onRestored: () => void }) {
+export function HistoryDrawer({ dir, path, folder, onClose, onRestored }: { dir: string; path: string; folder: boolean; onClose: () => void; onRestored: () => void }) {
   const snack = useSnackbar();
   const name = path ? path.slice(path.lastIndexOf("/") + 1) : dir.replace(/\/+$/, "").slice(dir.replace(/\/+$/, "").lastIndexOf("/") + 1);
   const [revisions, setRevisions] = useState<FileRevision[] | null>(null);
@@ -123,12 +124,11 @@ export function HistoryDialog({ dir, path, folder, onClose, onRestored }: { dir:
   const one = selected.length === 1 ? (revisions ?? []).find((r) => r.commit === selected[0]) : undefined;
   const restoreLabel = !folder ? "desktop.files.revisions.restore" : path ? "desktop.history.restore_folder" : "desktop.history.restore_workspace";
   return (
-    <Dialog
+    <Drawer
       title={t(path ? "desktop.files.revisions.title" : "desktop.history.workspace_title", { name })}
       icon={mdiHistory}
-      large
+      className="history-drawer"
       onClose={onClose}
-      closeButton
       footer={
         one && (
           <Button variant="filled" icon={mdiRestore} onClick={() => void startRestore(one)}>
@@ -254,7 +254,7 @@ export function HistoryDialog({ dir, path, folder, onClose, onRestored }: { dir:
           )}
         </Dialog>
       )}
-    </Dialog>
+    </Drawer>
   );
 }
 

@@ -58,7 +58,8 @@ import { SkillSettings } from "./SkillSettings";
 import { useAdvanced, useApp } from "./state";
 import { sectionShown, settingsSections, type SectionId } from "./simpleMode";
 import type { ThemePref } from "./theme";
-import { Button, Chip, Dialog, Icon, IconButton, Segmented, Switch } from "./ui/controls";
+import { Button, Chip, Icon, IconButton, Segmented, Switch } from "./ui/controls";
+import { Drawer } from "./ui/Drawer";
 import { LookFields, WorkspaceSettingsForm } from "./WorkspaceSettingsForm";
 import { useWorkspaceSettings } from "./workspaceSettings";
 
@@ -85,7 +86,7 @@ const sectionIcons: Record<Section, string> = {
  * own settings are in Workspaces (its pencil in the Workspaces menu, and
  * the status bar's model, open them there).
  */
-export function SettingsDialog({ onClose, initial = "appearance", scope: initialScope = "" }: { onClose: () => void; initial?: Section; scope?: string }) {
+export function SettingsDrawer({ onClose, initial = "appearance", scope: initialScope = "" }: { onClose: () => void; initial?: Section; scope?: string }) {
   const advanced = useAdvanced();
   const [asked, setSection] = useState<Section>(initial);
   const [scope, setScope] = useState(initialScope);
@@ -94,13 +95,21 @@ export function SettingsDialog({ onClose, initial = "appearance", scope: initial
   const sections = settingsSections(advanced);
   const section = sectionShown(asked, advanced);
   return (
-    <Dialog title={t("desktop.settings")} icon={mdiCogOutline} onClose={onClose} large footer={<Button onClick={onClose}>{t("desktop.done")}</Button>}>
+    <Drawer title={t("desktop.settings")} icon={mdiCogOutline} onClose={onClose} className="settings-drawer">
       <div className="settings">
         <div className="settings-nav list" role="tablist">
           {sections.map((id) => (
-            <button key={id} role="tab" aria-selected={id === section} data-autofocus={id === section ? "" : undefined} className={`list-item ${id === section ? "active" : ""}`} onClick={() => setSection(id)}>
+            <button
+              key={id}
+              role="tab"
+              aria-selected={id === section}
+              data-autofocus={id === section ? "" : undefined}
+              className={`list-item ${id === section ? "active" : ""}`}
+              title={t(`desktop.settings.${id}`)}
+              onClick={() => setSection(id)}
+            >
               <Icon path={sectionIcons[id]} />
-              {t(`desktop.settings.${id}`)}
+              <span className="settings-nav-label">{t(`desktop.settings.${id}`)}</span>
             </button>
           ))}
         </div>
@@ -126,7 +135,7 @@ export function SettingsDialog({ onClose, initial = "appearance", scope: initial
           {section === "about" && <About />}
         </div>
       </div>
-    </Dialog>
+    </Drawer>
   );
 }
 

@@ -475,7 +475,12 @@ function focusables(el: HTMLElement): HTMLElement[] {
   );
 }
 
-/** A modal dialog; Escape or a click on the scrim closes it. */
+/**
+ * A modal dialog, for a short form or a question. Escape or its own
+ * buttons close it, never a click beside it: a click meant for the window
+ * (moving it by the title bar, which still drags over the scrim) mustn't
+ * lose what's in it. What's browsed for a while opens in a Drawer.
+ */
 export function Dialog({
   title,
   icon,
@@ -506,7 +511,8 @@ export function Dialog({
   const ref = useRef<HTMLDivElement>(null);
   useModal(ref, onClose);
   return (
-    <div className="scrim" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+    <div className="scrim">
+      <div className="scrim-drag drag-region" aria-hidden />
       <div className={`dialog ${wide ? "wide" : ""} ${large ? "large" : ""} ${className}`} role="dialog" aria-modal="true" tabIndex={-1} ref={ref}>
         <header>
           {icon && <Icon path={icon} size="lg" className="muted" />}
@@ -526,7 +532,7 @@ const SnackContext = createContext<(text: string, opts?: { action?: Snack["actio
 
 /** The headers a snackbar mustn't cover: the top bar, and the panes'
  *  tab strips and toolbars under it. */
-const snackClear = ".topbar, .editor-tabs, .editor-head, .files-head, .side-head, .panel-head";
+const snackClear = ".topbar, .editor-tabs, .editor-head, .files-head, .side-head, .panel-head, .drawer-head";
 
 /** Where a snackbar goes: just below the top bar and the pane headers
  *  under it (the window's middle 640 px, the snackbar's widest), wherever

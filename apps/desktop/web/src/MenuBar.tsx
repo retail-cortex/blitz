@@ -53,9 +53,9 @@ import { runningEntries } from "./runningWorkers";
 import { intent, type ItemIntent } from "./intent";
 import { t, tn } from "./i18n";
 import { displayName, forgetWorkspace, openWorkspace, openWorkspaces, recentWorkspaces } from "./prefs";
-import { InboxDialog } from "./RunsInbox";
+import { InboxDrawer } from "./RunsInbox";
 import { workerStateLabel } from "./Workers";
-import type { Section } from "./SettingsDialog";
+import type { Section } from "./SettingsDrawer";
 import { useApp } from "./state";
 import { menuIds } from "./simpleMode";
 import { workspaceColor } from "./palette";
@@ -322,7 +322,7 @@ export function MenuBar({
       <span className="spacer" />
       <ToolbarSearch onClick={onSearch} />
       <IconButton icon={mdiCogOutline} label={t("desktop.menu.settings_hint")} onClick={() => onSettings("appearance")} />
-      {inbox && <InboxDialog list={runs} onClose={() => setInbox(false)} />}
+      {inbox && <InboxDrawer list={runs} onClose={() => setInbox(false)} />}
     </nav>
   );
 }
