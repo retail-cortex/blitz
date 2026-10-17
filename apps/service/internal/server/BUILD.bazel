@@ -45,6 +45,7 @@ go_library(
         "//pkg/engine",
         "//pkg/engine/agents",
         "//pkg/engine/runtime",
+        "//pkg/engine/skills",
         "//pkg/engine/tools",
         "//pkg/engine/workers",
         "//pkg/i18n",

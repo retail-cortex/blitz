@@ -17,8 +17,7 @@
 import { create } from "@bufbuild/protobuf";
 import { describe, expect, it } from "vitest";
 import { MCPServerConfigSchema } from "./gen/blitz/v1/config_pb";
-import { MCPServerSchema } from "./gen/blitz/v1/workspace_pb";
-import { emptyForm, formatPairs, formProblems, fromForm, mcpRows, parsePairs, toForm } from "./mcpForm";
+import { emptyForm, formatPairs, formProblems, fromForm, parsePairs, targetOf, toForm } from "./mcpForm";
 
 describe("pairs", () => {
   it("reads lines of key and value, and says which aren't", () => {
@@ -60,15 +59,9 @@ describe("the form", () => {
   ])("$name", ({ f, want }) => expect(formProblems(f, ["fs"])).toEqual(want));
 });
 
-describe("mcpRows", () => {
-  it("lists the global servers with their state, then the project's", () => {
-    const configs = [create(MCPServerConfigSchema, { name: "fs", command: "npx", args: ["a"] }), create(MCPServerConfigSchema, { name: "docs", url: "https://d" })];
-    const running = [create(MCPServerSchema, { name: "db", target: "db-mcp", state: "connected" }), create(MCPServerSchema, { name: "fs", target: "npx a", state: "failed" })];
-    const rows = mcpRows(configs, running);
-    expect(rows.map((r) => [r.name, r.target, r.running?.state ?? "", !!r.config])).toEqual([
-      ["fs", "npx a", "failed", true],
-      ["docs", "https://d", "", true],
-      ["db", "db-mcp", "connected", false],
-    ]);
+describe("targetOf", () => {
+  it("is the command line or the address", () => {
+    expect(targetOf(create(MCPServerConfigSchema, { command: "npx", args: ["-y", "x"] }))).toBe("npx -y x");
+    expect(targetOf(create(MCPServerConfigSchema, { url: "https://d" }))).toBe("https://d");
   });
 });

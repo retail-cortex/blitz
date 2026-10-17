@@ -142,3 +142,19 @@ func TestSkillStoreFollowsTheSettingsDir(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotEmpty(t, up.Msg.Problems)
 }
+
+// The skills Blitz ships with are listed without a workspace, by name.
+func TestListBuiltinSkills(t *testing.T) {
+	_, s := serve(t, nil)
+	srv := httptest.NewServer(s.Handler())
+	defer srv.Close()
+	res, err := pb.NewConfigServiceClient(http.DefaultClient, srv.URL).ListBuiltinSkills(context.Background(), connect.NewRequest(&pb.ListBuiltinSkillsRequest{}))
+	require.NoError(t, err)
+	var names []string
+	for _, sk := range res.Msg.Skills {
+		names = append(names, sk.Name)
+		assert.NotEmpty(t, sk.Description, sk.Name)
+	}
+	assert.Contains(t, names, "code-review")
+	assert.IsIncreasing(t, names)
+}

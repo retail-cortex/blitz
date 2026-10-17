@@ -15,33 +15,24 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
-import { mdiCheckCircleOutline, mdiAlertCircleOutline, mdiDeleteOutline, mdiPencilOutline, mdiPlus, mdiRestart, mdiPowerPlugOutline, mdiPowerPlugOffOutline } from "@mdi/js";
-import { config, workspaces } from "./api";
+import { mdiDeleteOutline, mdiPencilOutline, mdiPlus, mdiPowerPlugOutline, mdiPowerPlugOffOutline } from "@mdi/js";
+import { config } from "./api";
 import { message } from "./errors";
 import { configChanged } from "./events";
 import type { MCPServerConfig } from "./gen/blitz/v1/config_pb";
-import type { MCPServer } from "./gen/blitz/v1/workspace_pb";
-import { t, tn } from "./i18n";
-import { emptyForm, formProblems, fromForm, mcpRows, toForm, type McpForm, type McpRow } from "./mcpForm";
-import { useApp } from "./state";
-import { Button, Chip, Dialog, Icon, IconButton, Segmented, Switch, useSnackbar } from "./ui/controls";
-
-/** How often the servers' states are asked again while the section is open. */
-const refreshEvery = 5000;
+import { t } from "./i18n";
+import { emptyForm, formProblems, fromForm, targetOf, toForm, type McpForm } from "./mcpForm";
+import { Button, Dialog, Icon, IconButton, Segmented, Switch, useSnackbar } from "./ui/controls";
 
 /**
  * Settings › MCP servers (spec_mcp_009 MCP-46): the global settings' MCP
- * servers, each on or off, with how it's doing in the workspace shown
- * (connected and its tools, waiting for a turn, failed and why) and
- * Restart; added and edited in a dialog, removed after asking. The
- * workspace's own (its project's) are listed too, not edited here.
+ * servers, each on or off; added and edited in a dialog, removed after
+ * asking. Settings are global: how each does in a workspace is that
+ * workspace's.
  */
 export function McpSettings() {
   const snack = useSnackbar();
-  const { prefs } = useApp();
-  const active = prefs.workspaces.find((w) => w.dir === prefs.active && w.open)?.dir ?? "";
   const [configs, setConfigs] = useState<MCPServerConfig[]>([]);
-  const [running, setRunning] = useState<MCPServer[]>([]);
   const [path, setPath] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -54,17 +45,12 @@ export function McpSettings() {
       const r = await config.listMCPServerConfigs({});
       setConfigs(r.servers);
       setPath(r.path);
-      setRunning(active ? (await workspaces.listMCPServers({ workspace: active })).servers : []);
       setError("");
     } catch (e) {
       setError(message(e));
     }
-  }, [active]);
-  useEffect(() => {
-    void load();
-    const id = window.setInterval(() => void load(), refreshEvery);
-    return () => window.clearInterval(id);
-  }, [load]);
+  }, []);
+  useEffect(() => void load(), [load]);
 
   // Runs a change, says how it went, tells the window and reloads.
   const act = async (run: () => Promise<string>) => {
@@ -82,17 +68,17 @@ export function McpSettings() {
     }
   };
 
-  const rows = mcpRows(configs, running);
   return (
     <div className="stack mcp-settings" style={{ gap: 16 }}>
-      <div className="stack" style={{ gap: 4 }}>
-        <p className="t-body-sm muted">{t("desktop.mcp.intro")}</p>
+      <p className="t-body-sm muted">
+        {t("desktop.mcp.intro")}
         {path && (
-          <p className="t-body-sm muted">
-            {t("desktop.mcp.file")} <code>{path}</code>
-          </p>
+          <>
+            {" "}
+            {t("desktop.mcp.file")} <code>{path}</code>.
+          </>
         )}
-      </div>
+      </p>
       {error && <p className="error-text">{error}</p>}
       <div className="row">
         <span className="t-title-sm spacer">{t("desktop.mcp.servers")}</span>
@@ -100,25 +86,22 @@ export function McpSettings() {
           {t("desktop.mcp.add")}
         </Button>
       </div>
-      {rows.length === 0 ? (
+      {configs.length === 0 ? (
         <p className="t-body-sm muted">{t("desktop.mcp.none")}</p>
       ) : (
         <div className="list">
-          {rows.map((r) => (
+          {configs.map((c) => (
             <ServerRow
-              key={r.name}
-              row={r}
-              workspace={active}
+              key={c.name}
+              server={c}
               busy={busy}
-              onEnable={(on) => act(async () => (await config.setMCPServerEnabled({ name: r.name, enabled: on }), t(on ? "desktop.mcp.enabled" : "desktop.mcp.disabled", { name: r.name })))}
-              onRestart={() => act(async () => (await workspaces.restartMCPServer({ workspace: active, name: r.name }), t("desktop.mcp.restarted", { name: r.name })))}
-              onEdit={() => r.config && setEditing({ name: r.name, form: toForm(r.config) })}
-              onRemove={() => setRemoving(r.name)}
+              onEnable={(on) => act(async () => (await config.setMCPServerEnabled({ name: c.name, enabled: on }), t(on ? "desktop.mcp.enabled" : "desktop.mcp.disabled", { name: c.name })))}
+              onEdit={() => setEditing({ name: c.name, form: toForm(c) })}
+              onRemove={() => setRemoving(c.name)}
             />
           ))}
         </div>
       )}
-      {!active && <p className="t-body-sm muted">{t("desktop.mcp.no_workspace")}</p>}
       {editing && (
         <ServerDialog
           editing={editing.name}
@@ -164,45 +147,23 @@ export function McpSettings() {
   );
 }
 
-// One server: its name, what it runs, how it's doing, and what can be
-// done with it.
-function ServerRow({ row, workspace, busy, onEnable, onRestart, onEdit, onRemove }: { row: McpRow; workspace: string; busy: boolean; onEnable: (on: boolean) => void; onRestart: () => void; onEdit: () => void; onRemove: () => void }) {
-  const enabled = row.config ? !row.config.disabled : row.running?.state !== "disabled";
-  const state = row.running?.state ?? (enabled ? "" : "disabled");
+// One server: its name, what it runs, and what can be done with it.
+function ServerRow({ server, busy, onEnable, onEdit, onRemove }: { server: MCPServerConfig; busy: boolean; onEnable: (on: boolean) => void; onEdit: () => void; onRemove: () => void }) {
+  const enabled = !server.disabled;
+  const target = targetOf(server);
   return (
     <div className="rule mcp-row">
       <Icon path={enabled ? mdiPowerPlugOutline : mdiPowerPlugOffOutline} className="muted" />
       <div className="stack spacer" style={{ gap: 2, minWidth: 0 }}>
-        <span className="row" style={{ gap: 8 }}>
-          <strong>{row.name}</strong>
-          {state && <StateChip server={row.running} state={state} />}
-          {!row.config && <span className="t-body-sm muted">{t("desktop.mcp.from_project")}</span>}
-        </span>
-        <code className="t-body-sm ellipsis" title={row.target}>
-          {row.target}
+        <strong>{server.name}</strong>
+        <code className="t-body-sm ellipsis" title={target}>
+          {target}
         </code>
-        {row.running?.error && <span className="t-body-sm error-text">{row.running.error}</span>}
       </div>
-      {workspace && row.running && state !== "disabled" && <IconButton icon={mdiRestart} label={t("desktop.mcp.restart", { name: row.name })} small disabled={busy} onClick={onRestart} />}
-      {row.config && (
-        <>
-          <IconButton icon={mdiPencilOutline} label={t("desktop.mcp.edit", { name: row.name })} small disabled={busy} onClick={onEdit} />
-          <IconButton icon={mdiDeleteOutline} label={t("desktop.mcp.remove_named", { name: row.name })} small disabled={busy} onClick={onRemove} />
-          <Switch label={t("desktop.mcp.enable", { name: row.name })} checked={enabled} disabled={busy} onChange={onEnable} />
-        </>
-      )}
+      <IconButton icon={mdiPencilOutline} label={t("desktop.mcp.edit", { name: server.name })} small disabled={busy} onClick={onEdit} />
+      <IconButton icon={mdiDeleteOutline} label={t("desktop.mcp.remove_named", { name: server.name })} small disabled={busy} onClick={onRemove} />
+      <Switch label={t("desktop.mcp.enable", { name: server.name })} checked={enabled} disabled={busy} onChange={onEnable} />
     </div>
-  );
-}
-
-// How a server is doing, as a chip: connected (and its tools), waiting
-// for a turn, failed, or off.
-function StateChip({ server, state }: { server?: MCPServer; state: string }) {
-  const label = state === "connected" ? tn("desktop.mcp.state.connected", server?.tools ?? 0) : t(`desktop.mcp.state.${state}`);
-  return (
-    <Chip className="static small" tone={state === "failed" ? "danger" : undefined} icon={state === "connected" ? mdiCheckCircleOutline : state === "failed" ? mdiAlertCircleOutline : undefined} tabIndex={-1}>
-      {label}
-    </Chip>
   );
 }
 

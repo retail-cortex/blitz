@@ -108,6 +108,8 @@ service ConfigService {
   rpc UpdateRegistrySkills(UpdateRegistrySkillsRequest) returns (UpdateRegistrySkillsResponse);
   // Removes a skill installed from a registry (NOT_INSTALLED).
   rpc UninstallRegistrySkill(UninstallRegistrySkillRequest) returns (UninstallRegistrySkillResponse);
+  // Returns the skills Blitz ships with.
+  rpc ListBuiltinSkills(ListBuiltinSkillsRequest) returns (ListBuiltinSkillsResponse);
   // Returns the MCP servers of the global settings, with the file they're in.
   rpc ListMCPServerConfigs(ListMCPServerConfigsRequest) returns (ListMCPServerConfigsResponse);
   // Adds an MCP server to the global settings, or replaces one (name):
@@ -717,4 +719,20 @@ message SetMCPServerEnabledRequest {
 // Response message for ConfigService.SetMCPServerEnabled.
 message SetMCPServerEnabledResponse {
   ConfigChange change = 1;
+}
+
+// BuiltinSkill is a skill Blitz ships with.
+message BuiltinSkill {
+  string name = 1;
+  string description = 2;
+  string version = 3;
+}
+
+// Request message for ConfigService.ListBuiltinSkills.
+message ListBuiltinSkillsRequest {}
+
+// Response message for ConfigService.ListBuiltinSkills.
+message ListBuiltinSkillsResponse {
+  // By name.
+  repeated BuiltinSkill skills = 1;
 }

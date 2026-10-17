@@ -18,7 +18,7 @@ import { useCallback, useEffect, useState } from "react";
 import {
   mdiBrain,
   mdiCheckCircleOutline,
-  mdiCodeBraces,
+  mdiXml,
   mdiCogOutline,
   mdiFolderMultipleOutline,
   mdiKeyChainVariant,
@@ -91,7 +91,7 @@ const sectionIcons: Record<SectionId, string> = {
  * Workspaces and the settings file, on a workspace (scope): a workspace's
  * own settings are in Workspaces (its pencil in the Workspaces menu, and
  * the status bar's model, open them there). The title bar holds Show
- * advanced settings and, with them, the settings file: Settings turns
+ * advanced settings and, with them, the settings file (</>): Settings turns
  * over to show it, as a page's source, and back.
  */
 export function SettingsDrawer({ onClose, initial = "providers", scope: initialScope = "" }: { onClose: () => void; initial?: Section; scope?: string }) {
@@ -113,7 +113,7 @@ export function SettingsDrawer({ onClose, initial = "providers", scope: initialS
       </label>
       {advanced && (
         <IconButton
-          icon={mdiCodeBraces}
+          icon={mdiXml}
           label={t(showFile ? "desktop.settings.file.back" : "desktop.settings.file.show")}
           selected={showFile}
           onClick={() => flip.turn(showFile ? "settings" : "file")}
@@ -145,7 +145,7 @@ export function SettingsDrawer({ onClose, initial = "providers", scope: initialS
             {section === "providers" && <ProviderSettings workspace="" />}
             {section === "appearance" && <Appearance />}
             {section === "agents" && <UserAgents />}
-            {section === "skills" && <SkillSettings onOpen={onClose} />}
+            {section === "skills" && <SkillSettings />}
             {section === "mcp" && <McpSettings />}
             {section === "workspaces" && (
               <Workspaces

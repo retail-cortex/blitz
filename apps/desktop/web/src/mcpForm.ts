@@ -18,7 +18,6 @@
 // to and from MCPServerConfig, and the list as the page shows it.
 import { create } from "@bufbuild/protobuf";
 import { MCPServerConfigSchema, type MCPServerConfig } from "./gen/blitz/v1/config_pb";
-import type { MCPServer } from "./gen/blitz/v1/workspace_pb";
 
 /** The form's fields, as typed. */
 export interface McpForm {
@@ -128,26 +127,5 @@ export function fromForm(f: McpForm): MCPServerConfig {
   });
 }
 
-/** A row of the list: a server's settings (none for a project's) and how it's doing in the workspace shown. */
-export interface McpRow {
-  name: string;
-  target: string;
-  config?: MCPServerConfig;
-  running?: MCPServer;
-}
-
 /** A server's command line or URL. */
 export const targetOf = (s: MCPServerConfig) => s.url || [s.command, ...s.args].join(" ");
-
-/**
- * The list: the global servers in their order, each with how it's doing
- * in the workspace, then the servers only the workspace has (its
- * project's), which aren't edited here.
- */
-export function mcpRows(configs: readonly MCPServerConfig[], running: readonly MCPServer[]): McpRow[] {
-  const byName = new Map(running.map((r) => [r.name, r]));
-  const rows: McpRow[] = configs.map((c) => ({ name: c.name, target: targetOf(c), config: c, running: byName.get(c.name) }));
-  const global = new Set(configs.map((c) => c.name));
-  for (const r of running) if (!global.has(r.name)) rows.push({ name: r.name, target: r.target, running: r });
-  return rows;
-}

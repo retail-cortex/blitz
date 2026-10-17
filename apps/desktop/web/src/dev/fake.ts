@@ -1146,6 +1146,13 @@ export function installFake() {
       });
       service(ConfigService, {
         listSkillRegistries: () => ({ registries: fakeRegistries, installed: fakeInstalledSkills }),
+        listBuiltinSkills: () => ({
+          skills: [
+            { name: "code-review", description: "Review a change for bugs, style and tests", version: "1.0.0" },
+            { name: "git-workflow", description: "Branches, commits and pull requests the team's way", version: "1.0.0" },
+            { name: "testing-tdd", description: "Write the failing test first, then the code", version: "1.0.0" },
+          ],
+        }),
         listMCPServerConfigs: () => ({ servers: fakeMCP, path: "~/.blitz/.env.toml" }),
         saveMCPServer: ({ name, server }) => {
           const i = fakeMCP.findIndex((m) => m.name === name);

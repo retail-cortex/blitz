@@ -58,6 +58,16 @@ func NewProvider() (*Provider, error) {
 	return p, nil
 }
 
+// Builtins are the skills Blitz ships with, by name: what every workspace
+// has before it finds any of its own (Settings › Skills lists them).
+func Builtins() ([]*Skill, error) {
+	p, err := NewProvider()
+	if err != nil {
+		return nil, err
+	}
+	return p.listLocked(), nil
+}
+
 func (p *Provider) loadEmbeddedSkills() error {
 	err := fs.WalkDir(builtin.FS, ".", func(path string, d fs.DirEntry, err error) error {
 		if err != nil || d.IsDir() || d.Name() != "SKILL.md" {

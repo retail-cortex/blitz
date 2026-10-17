@@ -22,6 +22,7 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/retail-cortex/blitz/pkg/config"
+	"github.com/retail-cortex/blitz/pkg/engine/skills"
 	"github.com/retail-cortex/blitz/pkg/secrets"
 	"github.com/retail-cortex/blitz/pkg/skillreg"
 	pb "github.com/retail-cortex/blitz/proto/blitz/v1"
@@ -173,4 +174,16 @@ func (h configService) scopeDir(workspace string) (string, error) {
 		return "", apiError(connect.CodeInvalidArgument, "INVALID_WORKSPACE", errors.New("workspace must be an absolute directory"))
 	}
 	return filepath.Clean(config.ExpandHome(workspace)), nil
+}
+
+func (h configService) ListBuiltinSkills(context.Context, req[pb.ListBuiltinSkillsRequest]) (*connect.Response[pb.ListBuiltinSkillsResponse], error) {
+	list, err := skills.Builtins()
+	if err != nil {
+		return nil, err
+	}
+	out := &pb.ListBuiltinSkillsResponse{}
+	for _, s := range list {
+		out.Skills = append(out.Skills, &pb.BuiltinSkill{Name: s.Name, Description: s.Description, Version: s.Version})
+	}
+	return ok(out)
 }
