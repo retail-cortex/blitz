@@ -77,7 +77,10 @@ jobs:
           bazel build --config=release --action_env=VSIX_VERSION="$version" //apps/vscode:vsix
           cp "$(bazel cquery --config=release --action_env=VSIX_VERSION="$version" --output=files //apps/vscode:vsix)" "dist/blitz_${version}_vscode.vsix"
           (cd dist && sha256sum blitz_* > checksums.txt)
-          cosign sign-blob --yes --bundle dist/checksums.txt.sigstore.json dist/checksums.txt
+          # Sigstore's standard bundle (not cosign's older one), which
+          # `blitz update` and the desktop app check without cosign
+          # (pkg/selfupdate); cosign verify-blob reads either.
+          cosign sign-blob --yes --new-bundle-format --bundle dist/checksums.txt.sigstore.json dist/checksums.txt
           # The install script (curl …/releases/latest/download/install.sh | sh),
           # which checks the archives against the signed checksums.
           cp release/install.sh dist/install.sh
@@ -228,7 +231,7 @@ jobs:
           cd dist
           for f in *.dmg *.deb *.pkg.tar.zst; do
             [ -e "$f" ] || continue
-            cosign sign-blob --yes --bundle "$f.sigstore.json" "$f"
+            cosign sign-blob --yes --new-bundle-format --bundle "$f.sigstore.json" "$f"
             gh release upload "$GITHUB_REF_NAME" "$f" "$f.sigstore.json" --clobber
           done
       - name: Remove the signing keychain
