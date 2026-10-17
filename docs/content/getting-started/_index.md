@@ -25,7 +25,7 @@ Or download the archive for your platform from the [releases](https://github.com
 | Linux, ARM64 | `blitz_<version>_linux_arm64.tar.gz` |
 | Windows, x86-64 | `blitz_<version>_windows_amd64.zip` |
 
-Unpack it and put its folder on your `PATH`. The desktop app comes separately: `Blitz_<version>_macos_universal.dmg`, or `blitz-desktop_<version>_<arch>.deb` for Ubuntu 24.04, Debian 13 and later (`sudo apt install ./blitz-desktop_*.deb`).
+Unpack it and put its folder on your `PATH`. The desktop app comes separately: `Blitz_<version>_macos_arm64.dmg` (Apple silicon) or `_x64.dmg` (Intel), `Blitz_<version>_windows_x64.zip` (unzip it and run `Blitz.exe`), or for Linux `blitz-desktop_<version>_<arch>.deb` for Ubuntu 24.04, Debian 13 and later (`sudo apt install ./blitz-desktop_*.deb`), the Arch package, or the tarball.
 
 The macOS command-line binaries aren't notarized, so a copy downloaded in a browser is quarantined and Gatekeeper won't run it. Clear the flag with `xattr -d com.apple.quarantine blitz blitzd`, or open it once through Finder's context menu.
 

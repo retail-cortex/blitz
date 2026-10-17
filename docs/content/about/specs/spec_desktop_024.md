@@ -24,7 +24,7 @@ It keeps only its own settings (theme, layout, the workspaces it knows and how t
 - **DSK-02** The app's executable must never be named `blitz`/`Blitz`: macOS file systems ignore case, and the bundled CLI (`Contents/MacOS/blitz`) would overwrite it.
 - **DSK-03** Minimum macOS 13.0: the build sets `-mmacosx-version-min=13.0`, and `LSMinimumSystemVersion` in `Info.plist`/`Info.dev.plist` says the same.
 - **DSK-04** The CLI and the service (`blitz`, `blitzd`) are packaged beside the app's executable (`Blitz.app/Contents/MacOS/` on macOS; `/usr/lib/blitz-desktop/` in the `.deb`) so the app can install the service without a separate install: `blitz service install` finds `blitzd` beside itself.
-- **DSK-05** Releases package the app for macOS (a universal, notarised disk image) and Linux (a `.deb`, and a `.pkg.tar.zst` for Arch Linux): [spec_release_025](spec_release_025.md) REL-20–26. There's no Windows package: on Windows the tray serves this page to a browser instead ([spec_windows_036](spec_windows_036.md)). *Since v0.6.6* an Electron build of this page is on trial, for every platform ([spec_electron_038](spec_electron_038.md)).
+- **DSK-05** Releases package the app for macOS (a universal, notarised disk image) and Linux (a `.deb`, and a `.pkg.tar.zst` for Arch Linux): [spec_release_025](spec_release_025.md) REL-20–26. There's no Windows package: on Windows the tray serves this page to a browser instead ([spec_windows_036](spec_windows_036.md)). *Since v0.6.6* the desktop app released is the Electron app, on every platform, Windows included ([spec_electron_038](spec_electron_038.md) EL-80); this spec's Wails app (`apps/desktop`) still builds, but isn't released.
 
 ## 3. Architecture
 

@@ -7,8 +7,8 @@ weight: 38
 
 | | |
 |---|---|
-| Status | **Trial** (approved 2026-10-16). Steps: the shared host and `blitz-tray --serve` (done, [spec_service_021](spec_service_021.md) SVC-53a); the Electron shell (EL-01–EL-31, done on macOS); the page's routing by capability (EL-40–EL-42, done); the Windows zip and CI (EL-50, to do); the findings (§6, to do). Nothing of it ships in releases. |
-| Source | `apps/electron` (`src/main.ts`, `src/preload.ts`, `src/logic.ts`, `dev.sh`, `BUILD.bazel`), the Electron runtime in `MODULE.bazel`, `pkg/pagehost`, `apps/tray/internal/tray/serve.go` |
+| Status | **Shipping** from v0.6.6 (approved 2026-10-16; the owner's decision after trying it on macOS and Windows): Electron replaces the Wails app in releases (EL-80). Done: the shared host and `blitz-tray --serve` ([spec_service_021](spec_service_021.md) SVC-53a), the shell (EL-01–EL-22), the page's routing (EL-40–EL-42), the packages (EL-80). To do: the updates (EL-90) and the web preview (EL-100). The Wails app (`apps/desktop`) still builds but isn't released. |
+| Source | `apps/electron` (`src/main.ts`, `src/preload.ts`, `src/logic.ts`, `dev.sh`, `defs.bzl`, `BUILD.bazel`), `apps/electron/packaging` (`BUILD.bazel`, `mac.bzl`, `sign_macos.sh`, `entitlements.plist`, `contents_test.sh`), the Electron runtime in `MODULE.bazel`, `pkg/pagehost`, `apps/tray/internal/tray/serve.go` |
 | Tests | `apps/electron/src/logic.test.ts` (vitest), `apps/desktop/web/src/desktop.test.ts` (the routing), `//apps/electron:typecheck`, `apps/tray/internal/tray/serve_test.go`, `pkg/pagehost/host_test.go` |
 
 ## 1. Purpose
@@ -54,8 +54,12 @@ The trial tries Electron instead: Chromium on macOS, Linux and Windows. It's a n
 - **EL-40** The page's `desktop.ts` routes each of the app's calls by capability (`canCall`): the Wails app, else the Electron window (`window.blitzElectron`), else the host (`/host/`), else the browser's stand-in. The window's events (`onAppMenu`, `onDeepLink`, `onNotificationOpen`) come from the Wails runtime or the Electron window alike, the window's glass (`nativeGlass`) from either, and Export as PDF is offered wherever `PrintPDF` is.
 - **EL-41** Preferences go wherever `GetPrefs` is answered. Outside the Wails app, the first time the host keeps them and the browser's storage still has some, the browser's move to the host if the host has no workspaces yet, and the browser's copy is forgotten either way (`adoptBrowserPrefs`): the Windows tray's page, which kept them in the browser, doesn't lose its workspaces.
 - **EL-42** *Known limit.* The host serves on a new loopback port each time it starts, so the window's origin changes with each launch, and what the page keeps in the browser's storage for itself (where the user guide was left, folded sections) starts afresh each time, as on the Windows tray's page.
-- **EL-31** Not signed, no installers and no auto-update: the trial runs from Bazel (macOS, Linux) and from a zip (Windows, EL-50).
-- **EL-50** *To do.* A `workflow_dispatch` CI job builds the Windows zip (Electron's win32 runtime, the app, and the tray, service and CLI cross-built in pure Go) and Linux and macOS archives, as artifacts. Electron's licenses go with them, and its npm dependencies into the third-party notices.
+- **EL-31** Not yet: Authenticode signing on Windows (SmartScreen asks before the zip's `Blitz.exe` first runs), and a Windows installer.
+- **EL-80** *Since v0.6.6* releases carry the Electron app, not the Wails app (`apps/electron/packaging`; [spec_release_025](spec_release_025.md) REL-21–26). Each package's app comes from `electron_app` (`defs.bzl`): `package.json`, `dist/`, `page/`, `icon.png` and `bin/` with that platform's `blitz`, `blitzd` and `blitz-tray`.
+  - **macOS:** `Blitz_<arm64|x64>.app` (`mac.bzl`), Electron's bundle copied whole (`ditto`, the framework's links kept), named Blitz with the Wails app's identifier `dev.blitz.desktop` (so permissions and settings carry over), the release's version, the `blitz` URL scheme, the app's icon, the app in `Contents/Resources/app`, Electron's default app removed and its licenses in `Contents/Resources/licenses`, signed ad hoc. `sign_macos.sh` signs it inside out with the hardened runtime and `entitlements.plist` (JIT, unsigned executable memory, library validation off) and makes the disk image, notarised with the signing secrets. One image per Mac: Electron's runtimes are separate.
+  - **Windows:** `Blitz_windows_x64.zip` (`windows_zip`, cross-built): Electron's files, `Blitz.exe` (EL-06), the app in `resources\app` and the licenses in `blitz-licenses`.
+  - **Linux** (this machine's architecture): Electron in `/usr/lib/blitz-desktop` with its program as `blitz-desktop` (where the Wails app's was, so the link on PATH and the launcher stay) and `chrome-sandbox` setuid root (Electron's sandbox where user namespaces are restricted, as on Ubuntu 24.04), as a `.deb`, an Arch package and a tarball (`linux_tar`, which updates itself; unpacked by a user, its `chrome-sandbox` isn't setuid).
+  - `contents_test.sh` checks each package's programs, licenses and identity.
 
 ## 6. Findings
 

@@ -20,9 +20,16 @@ load("@rules_pkg//pkg:tar.bzl", "pkg_tar")
 load("@rules_shell//shell:sh_test.bzl", "sh_test")
 load("//build:macos.bzl", "signed_app")
 
-# The app's icon, which the Electron trial's packages use too.
+# The app's icons and Linux files, which the Electron app's packages use
+# too.
 exports_files(
-    ["appicon.png"],
+    [
+        "appicon.png",
+        "appicon.svg",
+        "linux/blitz-desktop.desktop",
+        "linux/copyright",
+        "linux/dev.blitz.desktop.metainfo.xml",
+    ],
     visibility = ["//apps/electron:__subpackages__"],
 )
 
@@ -62,6 +69,7 @@ done
 iconutil -c icns -o $@ "$$set"
 """,
     target_compatible_with = _MACOS,
+    visibility = ["//apps/electron:__subpackages__"],
 )
 
 [

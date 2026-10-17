@@ -9,9 +9,15 @@ Blitz's desktop app is a window onto the [service](service.md), laid out like an
 
 ## Install
 
-`Blitz_<version>_macos_universal.dmg` for macOS 13 and later (signed with a Developer ID and notarized), or `blitz-desktop_<version>_<arch>.deb` for Ubuntu 24.04, Debian 13 and later. Each carries its own `blitz` and `blitzd`, so the app can install the service without a separate download. There is no Windows package: on Windows, `blitz-tray.exe` in the release's zip opens this page in a window of its own ([below](#on-windows)).
+*Since v0.6.6 the desktop app is built on Electron*, the same on every platform:
 
-From source: `bazel build //apps/desktop/packaging:Blitz.app` (macOS) or `:deb` (Linux); see [building](../development/building.md).
+- **macOS 13 and later:** `Blitz_<version>_macos_arm64.dmg` (Apple silicon) or `Blitz_<version>_macos_x64.dmg` (Intel), signed with a Developer ID and notarized when the release is.
+- **Windows 10 (1803) and later:** `Blitz_<version>_windows_x64.zip`. Unzip it anywhere and run `Blitz.exe`. It isn't signed yet, so SmartScreen asks first (**More info › Run anyway**).
+- **Linux:** `blitz-desktop_<version>_<arch>.deb` for Ubuntu 24.04, Debian 13 and later, the Arch Linux package, or `blitz-desktop_<version>_linux_<arch>.tar.gz` for any distribution (unpack it and run `blitz-desktop`; on Ubuntu 24.04 and later prefer the `.deb`, which can set up Electron's sandbox).
+
+Each carries its own `blitz`, `blitzd` and `blitz-tray`, so the app can install the service without a separate download. The app updates itself from the releases: it checks once a day, and **Settings › About** checks now. A package manager's copy (the `.deb`, the Arch package, Homebrew) is updated by the package manager instead.
+
+From source: `bazel build //apps/electron/packaging:Blitz_arm64.app` (or `:Blitz_x64.app`) on macOS, `:deb`, `:pacman` or `:linux_tar` on Linux, and `:windows_zip` anywhere; or `bazel run //apps/electron:dev` to run it. See [building](../development/building.md).
 
 **On Linux, the shell sandbox is required.** The `.deb` installs bubblewrap with it, and the app's Settings › Service says whether bubblewrap runs. On Ubuntu 24.04 and later, AppArmor restricts the user namespaces it needs; `blitz security fix-apparmor` (or **Allow bubblewrap** in the desktop app) installs an AppArmor profile that lets bwrap alone have them, asking for your password once. Until the sandbox works, workspaces don't open; to run the agent's commands unsandboxed instead, set `[sandbox] shell = "auto"` in `~/.blitz/.env.toml`. A workspace that didn't open for want of it shows the same button above it, and the service restarts once it's fixed.
 

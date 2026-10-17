@@ -186,14 +186,15 @@ _ELECTRON_BUILD = """filegroup(
 )
 
 # Electron's files but its program, which the packages rename (and, on
-# Windows, give Blitz's icon and details).
+# Windows, give Blitz's icon and details), and Linux's chrome-sandbox,
+# which the Linux packages make setuid root.
 filegroup(
     name = "files_but_program",
-    srcs = glob(["**"], exclude = ["BUILD.bazel", "REPO.bazel", "WORKSPACE", "electron", "electron.exe"]),
+    srcs = glob(["**"], exclude = ["BUILD.bazel", "REPO.bazel", "WORKSPACE", "electron", "electron.exe", "chrome-sandbox"]),
     visibility = ["//visibility:public"],
 )
 
-exports_files(glob(["electron", "electron.exe"], allow_empty = True))
+exports_files(glob(["electron", "electron.exe", "chrome-sandbox", "Electron.app/Contents/Info.plist"], allow_empty = True))
 """
 
 [

@@ -175,7 +175,7 @@ go_binary(
     goos = "windows",
     pure = "on",
     visibility = [
-        "//apps/electron:__pkg__",
+        "//apps/electron:__subpackages__",
         "//release:__pkg__",
     ],
     x_defs = {"main.version": "{STABLE_BLITZ_VERSION}"},
@@ -209,7 +209,10 @@ signed_binary(
         goos = "darwin",
         pure = "off",
         target_compatible_with = ["@platforms//os:macos"],
-        visibility = ["//apps/desktop/packaging:__pkg__"],
+        visibility = [
+            "//apps/desktop/packaging:__pkg__",
+            "//apps/electron:__subpackages__",
+        ],
         x_defs = {"main.version": "{STABLE_BLITZ_VERSION}"},
     )
     for arch in [
