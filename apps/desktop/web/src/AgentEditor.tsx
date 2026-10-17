@@ -546,10 +546,10 @@ export function AgentEditor({
 }
 
 /**
- * The tools an agent may use: a box for each tool offered and each the
- * agent already names, and a field to add one by name.
+ * The tools an agent (or a skill) may use: a box for each tool offered
+ * and each it already names, and a field to add one by name.
  */
-function ToolPicker({ offered, chosen, onChange }: { offered: string[]; chosen: string[]; onChange: (tools: string[]) => void }) {
+export function ToolPicker({ offered, chosen, onChange }: { offered: string[]; chosen: string[]; onChange: (tools: string[]) => void }) {
   const [adding, setAdding] = useState("");
   const all = toolChoices(offered, chosen);
   const toggle = (name: string, on: boolean) => onChange(on ? [...chosen, name] : chosen.filter((x) => x !== name));

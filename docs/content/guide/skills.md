@@ -26,6 +26,23 @@ scripts:
 ---
 ```
 
+## Kinds of skill, and Studio
+
+A skill is one of four kinds, from what its folder holds:
+
+| Kind | What it has |
+|---|---|
+| Simple | `SKILL.md` alone |
+| With references | A `references/` folder: the agent reads its files when the skill calls for them (`read_skill_file`) |
+| With scripts | Python or TypeScript files in `scripts/` (or scripts declared in the front matter), run sandboxed under the skills policy |
+| Combines skills | `skills: [a, b]` in the front matter: activating it activates them too |
+
+`agents: [reviewer]` in the front matter offers a skill only to those agents.
+
+**Desktop:** **Studio › Skills** lists the workspace's skills (`.agents/skills`). **+** makes one; click one to edit it: **General** (what it's for, its name, instructions with **Redraft**, the skills it combines, the agents it's offered to, its tools), **References** (add, upload, edit or delete files) and **Scripts** (a new script from a template, **Redraft** to have the model write it, and **Test run** with arguments). **Add from…** copies any skill you can see into the workspace to change it, or references it in the skill you're editing.
+
+**In a prompt:** type `\` and a skill's name (the composer completes it) to use that skill for the request: its instructions go with your prompt, as `/skill-name` does.
+
 ## Skills from a registry
 
 A registry, such as your organization's Castor registry, offers skills to install by name. Each skill is a `.zip` whose SHA-256 the registry gives, and Blitz refuses one that doesn't match.

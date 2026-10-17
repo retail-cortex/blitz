@@ -64,6 +64,7 @@ import {
   mdiConsoleLine,
   mdiArrowExpand,
   mdiArrowCollapse,
+  mdiPuzzleOutline,
 } from "@mdi/js";
 import { files, serviceLost, sessions, workspaces } from "./api";
 import { editorConfig, toEditor } from "./host";
@@ -94,6 +95,7 @@ import {
   type LoadSessionDetail,
 } from "./events";
 import { appendMention, insertMention, isAttachablePath, mentionAt } from "./mentions";
+import { insertSkill, skillAt, skillOptions, skillsFor } from "./skillMention";
 import { pollMs, shouldPoll, welcomeTiles, type TileAction } from "./suggestions";
 import { ComposerDock, focusComposerEvent } from "./composerDock";
 import { refreshRuns, runInSession } from "./backgroundRuns";
@@ -1706,6 +1708,21 @@ function Composer({
     requestAnimationFrame(() => ref.current?.setSelectionRange(r.caret, r.caret));
     if (isAttachablePath(path)) onAddImagePath(path);
   };
+  // Completing \skill-name: the skills the workspace sees.
+  const skillToken = menuOpen || mention ? null : skillAt(draft, caret);
+  const [skillList, setSkillList] = useState<{ name: string; description: string }[]>([]);
+  useEffect(() => {
+    if (skillToken) void skillsFor(dir).then(setSkillList);
+  }, [!!skillToken, dir]); // eslint-disable-line react-hooks/exhaustive-deps
+  const skillFound = skillToken ? skillOptions(skillToken.query, skillList) : [];
+  const skillOpen = !!skillToken && skillFound.length > 0 && dismissed !== draft;
+  const chooseSkill = (name: string) => {
+    if (!skillToken) return;
+    const r = insertSkill(draft, skillToken, name);
+    setDraft(r.text);
+    setCaret(r.caret);
+    requestAnimationFrame(() => ref.current?.setSelectionRange(r.caret, r.caret));
+  };
   // Completing {secrets:…}: the workspace's and the global names.
   const secretSuggest = useSecretSuggest(draft, setDraft, ref, dir);
   const trackCaret = (e: { currentTarget: HTMLTextAreaElement }) => {
@@ -1755,7 +1772,31 @@ function Composer({
           </div>
         </div>
       )}
-      {!menuOpen && !mentionOpen && secretSuggest.menu}
+      {!menuOpen && !mentionOpen && !skillOpen && secretSuggest.menu}
+      {skillOpen && (
+        <div className="command-menu" role="listbox" aria-label={t("desktop.skills.mention")}>
+          {skillFound.map((s, i) => (
+            <button
+              key={s.name}
+              role="option"
+              aria-selected={i === pick}
+              className={`command-option ${i === pick ? "on" : ""}`}
+              onMouseDown={(e) => {
+                e.preventDefault(); // keep the focus in the field
+                chooseSkill(s.name);
+              }}
+            >
+              <Icon path={mdiPuzzleOutline} size="sm" />
+              <code>\{s.name}</code>
+              <span className="spacer ellipsis muted t-body-sm">{s.description}</span>
+            </button>
+          ))}
+          <div className="command-hint t-body-sm muted">
+            <kbd>↑</kbd>
+            <kbd>↓</kbd> {t("desktop.keys.choose")} · <kbd>{t("desktop.keys.tab")}</kbd> {t("desktop.skills.mention_add")} · <kbd>{t("desktop.keys.esc")}</kbd> {t("desktop.keys.close")}
+          </div>
+        </div>
+      )}
       {mentionOpen && (
         <div className="command-menu" role="listbox" aria-label={t("desktop.mention.files")}>
           {found.paths.map((p, i) => (
@@ -1814,7 +1855,25 @@ function Composer({
           }
         }}
         onKeyDown={(e) => {
-          if (!menuOpen && !mentionOpen && secretSuggest.onKeyDown(e)) return;
+          if (!menuOpen && !mentionOpen && !skillOpen && secretSuggest.onKeyDown(e)) return;
+          if (skillOpen && !e.nativeEvent.isComposing) {
+            const n = skillFound.length;
+            if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+              e.preventDefault();
+              setPick((p) => (p + (e.key === "ArrowDown" ? 1 : n - 1)) % n);
+              return;
+            }
+            if (e.key === "Escape") {
+              e.preventDefault();
+              setDismissed(draft);
+              return;
+            }
+            if (e.key === "Tab" || (e.key === "Enter" && !e.shiftKey)) {
+              e.preventDefault();
+              chooseSkill(skillFound[Math.min(pick, n - 1)].name);
+              return;
+            }
+          }
           if (mentionOpen && !e.nativeEvent.isComposing) {
             const n = found.paths.length;
             if (e.key === "ArrowDown" || e.key === "ArrowUp") {

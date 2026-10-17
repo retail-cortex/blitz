@@ -534,6 +534,41 @@ const fakeElsewhere = [
 // The global limits on every worker ([workers.policy]); the service still
 // runs two at once until it restarts.
 const fakePolicy = { allow: ["shell", "write", "web"], defaultMaxTurns: 50, defaultMaxCostUsd: 1, defaultTimeout: "30m", maxTurns: 200, maxCostUsd: 10, maxTimeout: "2h", maxConcurrent: 3, runningMaxConcurrent: 2, path: "/home/me/.blitz/.env.toml" };
+// Studio's skills: the workspace's own, with their files, and those it
+// sees elsewhere (yours, a plugin's, built in) to copy or reference.
+type FakeSkill = { name: string; description: string; tools: string; agents: string[]; members: string[]; instructions: string; files: Record<string, string> };
+const fakeProjectSkills: FakeSkill[] = [
+  {
+    name: "release-notes",
+    description: "Write release notes from the git log",
+    tools: "read_file run_shell_command",
+    agents: [],
+    members: [],
+    instructions: "Read `git log` since the last tag, group the changes by what they mean for users, and write the notes in the style the reference shows.",
+    files: { "references/style.md": "# Style\n\n- Start with what's new for users.\n- Short lines.\n", "scripts/count.py": '"""count: changes since a tag."""\n\nimport sys\n\nprint("3 entries since", sys.argv[1:] or ["the last tag"])\n' },
+  },
+  { name: "ship-it", description: "Cut a release: notes, tag and checks", tools: "", agents: ["reviewer"], members: ["release-notes", "pdf"], instructions: "Write the notes, then tag the release once the checks pass.", files: {} },
+  { name: "tone", description: "Keep answers short and friendly", tools: "", agents: [], members: [], instructions: "Answer in two or three sentences.", files: {} },
+];
+const fakeOtherSkills = [
+  { name: "pdf", description: "Read and summarize PDF files", dir: "/home/me/.blitz/skills/pdf", kind: "simple", project: false, scripts: [], references: [], blocked: [] as string[], agents: [] as string[], members: [] as string[] },
+  { name: "deploy", version: "1.2.0", description: "Deploy to staging and production", dir: "/home/me/.blitz/plugins/acme/skills/deploy", kind: "scripts", project: false, scripts: [], references: [], blocked: [] as string[], agents: [] as string[], members: [] as string[] },
+];
+const fakeSkillInfo = (workspace: string, x: FakeSkill) => {
+  const refs = Object.keys(x.files).filter((p) => p.startsWith("references/"));
+  const scripts = Object.keys(x.files)
+    .filter((p) => /^scripts\/.+\.(py|ts)$/.test(p))
+    .map((p) => ({ name: p.replace(/^scripts\/|\.(py|ts)$/g, ""), language: p.endsWith(".py") ? "python" : "typescript", source: p, allowed: true, reasons: [] as string[], found: true, deps: [] as string[] }));
+  const kind = x.members.length ? "meta" : scripts.length ? "scripts" : refs.length ? "references" : "simple";
+  return { name: x.name, description: x.description, dir: `${workspace}/.agents/skills/${x.name}`, kind, project: true, references: refs, scripts, agents: x.agents, members: x.members, blocked: [] as string[] };
+};
+const fakeSkillFile = (workspace: string, x: FakeSkill) => ({
+  skill: fakeSkillInfo(workspace, x),
+  path: `${workspace}/.agents/skills/${x.name}/SKILL.md`,
+  hash: "sha256:" + x.name.length,
+  editable: true,
+  spec: { name: x.name, description: x.description, tools: x.tools, agents: x.agents, members: x.members, instructions: x.instructions },
+});
 // Worker runs going now (?fake&noruns: none).
 const fakeLive: { id: string; workspace: string; worker: string; status: RunStatus; started: ReturnType<typeof now>; manual: boolean; sessionId: string; error?: { reason: string; message: string } }[] = new URLSearchParams(location.search).has("noruns")
   ? []
@@ -839,8 +874,52 @@ export function installFake() {
         listEnvs: () => ({ envs: [{ key: "a1b2c3", deps: ["pandas", "matplotlib"], skills: ["data-report"], size: 182_000_000n, ready: true }] }),
         pruneEnvs: () => ({ removed: 0, freed: 0n, failed: [] }),
         removeEnv: () => ({}),
-        listSkills: ({ workspace, query }) => ({ skills: [{ name: "pdf", description: "Read and summarize PDF files", dir: "/home/me/.blitz/skills/pdf" }, { name: "release", description: "Cut a release: tag, notes, checks", dir: `${workspace}/.agents/skills/release` }, { name: "deploy", version: "1.2.0", description: "Deploy to staging and production", dir: "/home/me/.blitz/plugins/acme/skills/deploy" }].filter((x) => !query || x.name.includes(query)) }),
+        listSkills: ({ workspace, query }) => ({ skills: [...fakeOtherSkills, ...fakeProjectSkills.map((x) => fakeSkillInfo(workspace, x))].filter((x) => !query || x.name.includes(query)) }),
         getSkill: ({ name }) => ({ skill: { name, description: "Read and summarize PDF files", tools: [{ name: "read_file" }] } }),
+        // Studio › Skills: the workspace's own skills, their files, copies.
+        getSkillFile: ({ workspace, name }) => {
+          const x = fakeProjectSkills.find((k) => k.name === name);
+          if (x) return { file: fakeSkillFile(workspace, x) };
+          const o = fakeOtherSkills.find((k) => k.name === name);
+          if (!o) throw new ConnectError(`no skill ${name}`, Code.NotFound);
+          return { file: { skill: o, path: `${o.dir}/SKILL.md`, spec: { name: o.name, description: o.description, instructions: "Read the file, then summarize it." } } };
+        },
+        saveSkill: ({ workspace, previousName, skill }) => {
+          const sp = skill!;
+          if (!/^[a-z0-9]+(-[a-z0-9]+)*$/.test(sp.name)) return { problems: [`name "${sp.name}": lowercase letters, digits and single hyphens, up to 64`] };
+          if (!sp.description.trim()) return { problems: ["description: say what the skill is for and when to use it"] };
+          if (sp.name !== previousName && fakeProjectSkills.some((k) => k.name === sp.name)) return { problems: [`name "${sp.name}": the workspace has a skill by that name`] };
+          let x = fakeProjectSkills.find((k) => k.name === previousName);
+          if (!x) fakeProjectSkills.push((x = { name: sp.name, description: "", tools: "", agents: [], members: [], instructions: "", files: {} }));
+          Object.assign(x, { name: sp.name, description: sp.description, tools: sp.tools, agents: sp.agents, members: sp.members, instructions: sp.instructions });
+          return { file: fakeSkillFile(workspace, x) };
+        },
+        deleteSkill: ({ name }) => {
+          const i = fakeProjectSkills.findIndex((k) => k.name === name);
+          if (i < 0) throw new ConnectError(`no skill ${name}`, Code.NotFound);
+          fakeProjectSkills.splice(i, 1);
+          return {};
+        },
+        readSkillFile: ({ name, path }) => ({ content: new TextEncoder().encode(fakeProjectSkills.find((k) => k.name === name)?.files[path] ?? "") }),
+        writeSkillFile: ({ workspace, name, path, content }) => {
+          const x = fakeProjectSkills.find((k) => k.name === name)!;
+          if (!/^(references|scripts)\/[^.]/.test(path) || path.includes("..")) throw new ConnectError(`"${path}": a skill's files go in references/ or scripts/`, Code.InvalidArgument);
+          x.files[path] = new TextDecoder().decode(content);
+          return { file: fakeSkillFile(workspace, x) };
+        },
+        deleteSkillFile: ({ workspace, name, path }) => {
+          const x = fakeProjectSkills.find((k) => k.name === name)!;
+          delete x.files[path];
+          return { file: fakeSkillFile(workspace, x) };
+        },
+        copySkill: ({ workspace, from, name }) => {
+          if (fakeProjectSkills.some((k) => k.name === name)) return { problems: [`name "${name}": the workspace has a skill by that name`] };
+          const o = [...fakeOtherSkills, ...fakeProjectSkills].find((k) => k.name === from)!;
+          const x = { name, description: o.description, tools: "", agents: [], members: [], instructions: "Read the file, then summarize it.", files: {} };
+          fakeProjectSkills.push(x);
+          return { file: fakeSkillFile(workspace, x) };
+        },
+        runSkillScript: ({ script, args }) => ({ exitCode: 0, stdout: `${script}: ${args.length ? args.join(" ") : "no arguments"}\n3 entries since v0.7.0\n`, stderr: "", sandbox: "seatbelt" }),
         getSettings: ({ workspace }) => {
           const s = state(workspace).settings;
           return { agent: s.agent, model: s.model, provider: s.provider, effort: s.effort, permissionMode: s.mode, agency: s.agency, locale: s.locale, style: s.style, imagesEnabled: true, speechModel: s.speechModel ?? "", acceptedMedia: fakeAccepted(s.provider) };

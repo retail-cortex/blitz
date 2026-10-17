@@ -879,6 +879,20 @@ code.file-link:hover { text-decoration-color: currentColor; }
    gets and the most it may ask for. */
 .worker-limits-grid { display: grid; grid-template-columns: minmax(110px, max-content) minmax(0, 1fr) minmax(0, 1fr); gap: 8px 12px; align-items: center; max-width: 640px; }
 .worker-limits-grid .input { width: 100%; }
+/* Studio's skills: a skill's files beside the open one's editor, and a
+   script's test run. */
+.skill-files-split { display: grid; grid-template-columns: minmax(180px, 240px) minmax(0, 1fr); gap: 16px; align-items: start; }
+.skill-file-list .list-item[aria-disabled="true"] { cursor: default; }
+.code-area { height: max(220px, calc(100vh - 640px)); border: 1px solid var(--md-outline); border-radius: var(--field-radius); overflow: hidden; }
+.code-area .cm-editor { height: 100%; }
+.code-area:focus-within { border-color: var(--accent-a); box-shadow: 0 0 0 3px var(--focus-ring); }
+.skill-run-output { margin: 0; max-height: 220px; overflow: auto; padding: 8px 10px; border-radius: var(--md-shape-xs); background: var(--md-surface-container); font: 12px/1.5 var(--md-mono); white-space: pre-wrap; }
+.add-skill-list { max-height: 46vh; overflow-y: auto; }
+.skill-member-add { width: auto; min-width: 200px; }
+.skill-files .skill-file-name { flex: 1 1 220px; width: auto; min-width: 0; }
+.add-skill { width: min(520px, 100%); min-width: 0; }
+.add-skill .list-item { min-width: 0; }
+@container agent-form (max-width: 640px) { .skill-files-split { grid-template-columns: 1fr; } }
 /* A slide pane in a settings section: a box of its own height. */
 .slide-box { height: min(440px, calc(100vh - 320px)); min-height: 300px; padding: 12px 12px 0; border: 1px solid var(--md-outline-variant); border-radius: var(--md-shape-md); }
 /* The Studio drawer: the kinds' list is narrow, and each kind's pane
