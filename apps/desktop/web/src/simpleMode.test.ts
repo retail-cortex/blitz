@@ -33,9 +33,9 @@ describe("simple mode", () => {
     expect(sectionShown(asked, advanced)).toBe(want);
   });
 
-  it("keeps Workspaces, Changes and Help in the bar, and Manifest with advanced settings", () => {
+  it("keeps Workspaces, Changes and Help in the bar, and Studio with advanced settings", () => {
     expect(menuIds(false)).toEqual(["workspaces", "changes", "help"]);
-    expect(menuIds(true)).toEqual(["workspaces", "changes", "manifest", "help"]);
+    expect(menuIds(true)).toEqual(["workspaces", "changes", "studio", "help"]);
   });
 
   it.each([

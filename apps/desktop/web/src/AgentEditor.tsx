@@ -25,7 +25,7 @@ import { AgentScope, type AgentFile } from "./gen/blitz/v1/workspace_pb";
 import { addTools, advancedCount, agentFromForm, agentPath, deleteTarget, emptyAgentForm, fileName, formFromAgent, invalidFields, sameForm, toolChoices, validAgentName, type AgentField, type AgentForm } from "./agentForm";
 import { agencies, efforts, modes } from "./options";
 import { SuggestTextarea } from "./SecretSuggest";
-import { DraftButton } from "./manifest/Draft";
+import { DraftButton } from "./studio/Draft";
 import { Button, Dialog, Field, Icon, IconButton, Segmented, Switch, useSnackbar } from "./ui/controls";
 import { Drawer } from "./ui/Drawer";
 import { workerName } from "./workerForm";
@@ -62,9 +62,9 @@ export function AgentEditor({
   intent?: ItemIntent;
   /** Shown in the drawer (the Agents menu's); closing, or another view taking the drawer, asks first when there are unsaved edits. */
   drawer?: { onClose: () => void };
-  /** The agents listed beside the form (the user's always; a workspace's in the Manifest). */
+  /** The agents listed beside the form (the user's always; a workspace's in Studio). */
   list?: boolean;
-  /** The list fills the pane and the form slides in over it, closed by Cancel or Save (the Manifest's). */
+  /** The list fills the pane and the form slides in over it, closed by Cancel or Save (Studio's). */
   slide?: boolean;
 }) {
   const snack = useSnackbar();

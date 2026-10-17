@@ -38,11 +38,11 @@ export function sectionShown(asked: SectionId, advanced: boolean): SectionId {
 }
 
 /** The top bar's menus, in order. */
-export type MenuId = "workspaces" | "changes" | "manifest" | "help";
+export type MenuId = "workspaces" | "changes" | "studio" | "help";
 
-/** The top bar's menus shown: simple keeps Workspaces, Changes and Help; Manifest (agents, skills, workflows… and workers) is advanced. */
+/** The top bar's menus shown: simple keeps Workspaces, Changes and Help; Studio (agents, skills, workflows… and workers) is advanced. */
 export function menuIds(advanced: boolean): MenuId[] {
-  return advanced ? ["workspaces", "changes", "manifest", "help"] : ["workspaces", "changes", "help"];
+  return advanced ? ["workspaces", "changes", "studio", "help"] : ["workspaces", "changes", "help"];
 }
 
 /**

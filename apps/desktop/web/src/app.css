@@ -158,7 +158,7 @@
 .menubar-dot { flex: none; width: 7px; height: 7px; margin-left: 2px; border-radius: 50%; background: var(--md-error); }
 .menubar .toolbar-search { margin: 0 4px 0 8px; flex: 0 1 auto; min-width: 40px; }
 .menubar-menu { min-width: 260px; max-width: min(420px, calc(100vw - 32px)); }
-.manifest-menu { min-width: 220px; max-width: min(320px, calc(100vw - 32px)); }
+.studio-menu { min-width: 220px; max-width: min(320px, calc(100vw - 32px)); }
 .title-edit { opacity: 0; color: var(--md-on-surface-variant); transition: opacity 0.1s; }
 .session-title:hover .title-edit { opacity: 1; }
 
@@ -855,7 +855,7 @@ code.file-link:hover { text-decoration-color: currentColor; }
 .agent-editor-user { height: min(640px, calc(100vh - 300px)); border: 1px solid var(--md-outline-variant); border-radius: var(--md-shape-md); overflow: hidden; }
 .agent-editor-user .split-side { width: 230px; }
 .agent-editor-user .split-main { padding: 18px 20px; }
-/* The Manifest's agents: the list fills the pane, and an agent's form
+/* Studio's agents: the list fills the pane, and an agent's form
    slides in over it from the right, closed by back, Cancel or Save. */
 .agent-editor-slide { position: relative; height: 100%; overflow: hidden; }
 .agent-editor-slide > .split { position: relative; min-height: 0; }
@@ -869,12 +869,12 @@ code.file-link:hover { text-decoration-color: currentColor; }
 .agent-back { top: 0; gap: 8px; padding-bottom: 12px; }
 .agent-editor-slide .agent-actions { bottom: 0; padding: 12px 0; border-top: 1px solid var(--md-outline-variant); }
 @media (prefers-reduced-motion: reduce) { .agent-editor-slide .split-side, .agent-editor-slide .split-main { transition: none; } }
-/* The Manifest drawer: the kinds' list is narrow, and each kind's pane
+/* The Studio drawer: the kinds' list is narrow, and each kind's pane
    fills the drawer's height (and scrolls itself). */
-.manifest-drawer > .body { overflow: hidden; }
-.manifest-drawer .settings { height: 100%; min-height: 0; gap: 24px; }
-.settings-drawer.manifest-drawer .settings-nav { width: 168px; }
-.manifest-drawer .settings-pane { display: flex; flex-direction: column; min-height: 0; overflow-y: auto; }
+.studio-drawer > .body { overflow: hidden; }
+.studio-drawer .settings { height: 100%; min-height: 0; gap: 24px; }
+.settings-drawer.studio-drawer .settings-nav { width: 168px; }
+.studio-drawer .settings-pane { display: flex; flex-direction: column; min-height: 0; overflow-y: auto; }
 /* The editor answers to its pane, not the window: in a narrow pane (the
    Agents view beside a wide chat, Settings on a small screen) the list
    goes above the form, and then the form's pairs become one column. */

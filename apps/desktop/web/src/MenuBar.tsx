@@ -54,7 +54,7 @@ import { displayName, forgetWorkspace, openWorkspace, openWorkspaces, recentWork
 import { InboxDrawer } from "./RunsInbox";
 import { workerStateLabel } from "./Workers";
 import type { Section } from "./SettingsDrawer";
-import { type ManifestKind } from "./manifest/ManifestDrawer";
+import { type StudioKind } from "./studio/StudioDrawer";
 import { useApp } from "./state";
 import { menuIds } from "./simpleMode";
 import { workspaceColor } from "./palette";
@@ -89,7 +89,7 @@ export function MenuBar({
   onCommit,
   onHistory,
   onWorker,
-  onManifest,
+  onStudio,
   onSearch,
   onSettings,
   onOpenWorkspace,
@@ -102,8 +102,8 @@ export function MenuBar({
   /** Shows the workspace's history (View revisions for every file). */
   onHistory?: () => void;
   onWorker?: (i: ItemIntent) => void;
-  /** Opens the manifest on a kind (Manifest › Agents, Skills…). */
-  onManifest?: (kind: ManifestKind) => void;
+  /** Opens Studio on a kind (Studio › Agents, Skills…). */
+  onStudio?: (kind: StudioKind) => void;
   onSearch: () => void;
   onSettings: (section: Section, scope?: string) => void;
   onOpenWorkspace: () => void;
@@ -158,10 +158,10 @@ export function MenuBar({
   if (onHistory) changes.push({ label: t("desktop.menu.changes.history"), icon: mdiSourceBranch, onSelect: onHistory });
   if (onCommit) changes.push("divider", { label: t("desktop.commit.open"), icon: mdiSourceCommit, onSelect: onCommit });
 
-  // Manifest: one entry for the drawer that holds every kind the
+  // Studio: one entry for the drawer that holds every kind the
   // workspace's .agents folder has, then its workers (which keep their
   // own drawer), then Reload agent files.
-  const openItem: MenuEntry = { label: t("desktop.manifest.open"), detail: t("desktop.manifest.open_hint"), icon: mdiBookOpenPageVariantOutline, disabled: !dir, onSelect: () => onManifest?.("agents") };
+  const openItem: MenuEntry = { label: t("desktop.studio.open"), detail: t("desktop.studio.open_hint"), icon: mdiBookOpenPageVariantOutline, disabled: !dir, onSelect: () => onStudio?.("agents") };
   const reloadItem: MenuEntry = { label: t("desktop.menu.agents.reload"), detail: t("desktop.menu.agents.reload_hint"), icon: mdiRefresh, disabled: !dir, onSelect: () => void reloadAgentFiles() };
 
   const workerItems: MenuEntry[] = [
@@ -271,12 +271,12 @@ export function MenuBar({
               {t("desktop.view.changes")}
             </button>
           )}
-          {menus.includes("manifest") && (
+          {menus.includes("studio") && (
             <Menu
-              className="menubar-menu manifest-menu"
+              className="menubar-menu studio-menu"
               trigger={(p) => (
                 <MenuButton
-                  label={t("desktop.manifest")}
+                  label={t("desktop.studio")}
                   badge={active > 0 ? { n: waiting || active, waiting: waiting > 0 } : undefined}
                   dot={failed > 0}
                   {...p}

@@ -16,7 +16,7 @@
 
 // Completing {secrets:…} as it's typed (spec_secrets_039 SEC-09): the
 // token before the caret, the names that match it, and the scoped form a
-// choice puts in. The composer, the manifest's text boxes (SuggestTextarea)
+// choice puts in. The composer, Studio's text boxes (SuggestTextarea)
 // and CodeMirror (secretCompletion) share it; values are never fetched.
 import { config } from "./api";
 
@@ -93,7 +93,7 @@ export function missingSecrets(text: string, names: readonly SecretName[]): stri
 }
 
 // The names, by workspace ("" global only), kept for a little while: every
-// field asks, and they change only in Settings or the Manifest.
+// field asks, and they change only in Settings or Studio.
 const cache = new Map<string, { at: number; names: Promise<SecretName[]> }>();
 const keepFor = 30_000;
 

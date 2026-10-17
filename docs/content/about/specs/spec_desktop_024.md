@@ -121,7 +121,7 @@ It keeps only its own settings (theme, layout, the workspaces it knows and how t
   - **Appearance:** Chat input, Density, Transparency, Conversation width, Show thinking and Continue after background tasks (simple keeps the switch, Theme, Light theme, Dark theme, Interface language and Notifications).
   - **Providers & keys:** the sign-in choice (Google Cloud, an Anthropic account) with its fields, and Base URL, unless the provider already signs in some other way than an API key (`showsSignIn`).
   - **A workspace's settings:** Behaviour's Agency and Output style, and every card under **Advanced settings** (Thinking, Generation, API keys, Permission rules, Standing approvals, Project settings, Settings file, Context); simple keeps Workspace, Agent and model, and Behaviour's Permission mode and Replies in.
-  - **Menu bar:** the Manifest menu (the Agents and Workers menus until v0.7.1, [spec_manifest_040](spec_manifest_040.md) MAN-01), and Changes' Version control source (simple's Changes is a button for this session's).
+  - **Menu bar:** the Studio menu (the Agents and Workers menus until v0.7.1, [spec_studio_040](spec_studio_040.md) STU-01), and Changes' Version control source (simple's Changes is a button for this session's).
   - **Conversation:** a prompt's Rewind menu (Edit stays), Copy as Markdown and Copy the whole answer, **Always allow** on approvals, and a tool's arguments and result.
   - **Files and editor:** the shelf's Refresh, Collapse all and Show hidden files, the context menu's Git actions and Copy relative path, and the editor's Wrap long lines.
   - **Changes:** the This session / Git switch and Refresh.

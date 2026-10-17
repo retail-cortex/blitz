@@ -46,7 +46,7 @@ type DraftRequest struct {
 	Language    string
 }
 
-// draftBriefs are the model's briefs, by kind (spec_manifest_040 MAN-05).
+// draftBriefs are the model's briefs, by kind (spec_studio_040 STU-05).
 var draftBriefs = map[string]string{
 	"agent":         `You write the instructions (system prompt) of a Blitz agent: an AI coding agent working in a software workspace with tools to read, search and edit files, run commands and browse. Write instructions that make it good at its role: who it is, what it does and doesn't do, how it works step by step, what it hands back. Keep the user's intent, scope and language; don't add goals they didn't ask for. Use Markdown headings and short lists; plain words.`,
 	"skill":         `You write the instructions of a Blitz skill (SKILL.md's body): a capability an agent activates when a task calls for it. Say when to use it, the steps, the conventions to follow, and what to hand back; name its references (references/) and scripts (scripts/) where they help. Keep the user's intent, scope and language. Use Markdown headings and short lists; plain words.`,

@@ -21,7 +21,7 @@ import { message } from "../errors";
 import { t } from "../i18n";
 import { Button, Dialog } from "../ui/controls";
 
-/** What a draft is of (spec_manifest_040 MAN-05). */
+/** What a draft is of (spec_studio_040 STU-05). */
 export type DraftKind = "agent" | "skill" | "script" | "rule" | "guardrail" | "eval" | "workflow_step";
 
 /**

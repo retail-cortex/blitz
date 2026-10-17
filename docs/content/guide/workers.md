@@ -19,7 +19,7 @@ The desktop app and `blitz service install` keep it running. A service the CLI s
 
 ## Your first worker
 
-**Desktop:** **Manifest › Add worker**, then fill in:
+**Desktop:** **Studio › Add worker**, then fill in:
 
 | Field | What to put |
 |---|---|
@@ -93,15 +93,15 @@ Reading the workspace never needs permission. A command with `;`, `&`, `|`, `$`,
 - **States:** new (never enabled), enabled, disabled, changed, invalid (its problems are listed).
 - **Run now:** **Run now** in the app, or `blitz workers run <name>`, runs an enabled worker at once and shows what it does.
 - **Two at once?** The same worker never runs twice at the same time; a scheduled tick that finds it running is recorded as skipped.
-- **Stop a run:** the Manifest menu lists every run going now, in any workspace, under **Running now**. Hover one and click **Stop**, or use **Stop** in the worker's run list or `blitz workers stop <name>`. The run ends as **stopped**. Files it already changed stay changed, and `blitz workers undo <run-id>` puts them back.
+- **Stop a run:** the Studio menu lists every run going now, in any workspace, under **Running now**. Hover one and click **Stop**, or use **Stop** in the worker's run list or `blitz workers stop <name>`. The run ends as **stopped**. Files it already changed stay changed, and `blitz workers undo <run-id>` puts them back.
 
 | Desktop | Terminal |
 |---|---|
-| **Manifest › Add worker** | Write `WORKER.md` |
+| **Studio › Add worker** | Write `WORKER.md` |
 | Open a worker, **Enable as shown** | `blitz workers enable <name>` |
 | **Run now** | `blitz workers run <name>` |
 | **Disable** | `blitz workers disable <name>` |
-| **Stop** (Manifest menu › Running now, or the run list) | `blitz workers stop <name>` |
+| **Stop** (Studio menu › Running now, or the run list) | `blitz workers stop <name>` |
 | The worker's run list | `blitz workers runs <name>` |
 | **Edit**, **Delete** | Edit or remove the folder |
 | | `blitz workers undo <run-id>` |
@@ -112,7 +112,7 @@ Each run is a conversation of its own, titled `⏰ <name>` and the time: open it
 
 A run's file changes are its own checkpoint, outside `/undo`: `blitz workers undo <run-id>` puts them back (`--force` overwrites files changed since).
 
-**When one fails:** the Manifest menu gets a red dot, the status bar a failed-runs button, and a new chat's welcome screen offers **Find out why the worker … failed**. To be told elsewhere, set a command in your settings:
+**When one fails:** the Studio menu gets a red dot, the status bar a failed-runs button, and a new chat's welcome screen offers **Find out why the worker … failed**. To be told elsewhere, set a command in your settings:
 
 ```toml
 [workers]

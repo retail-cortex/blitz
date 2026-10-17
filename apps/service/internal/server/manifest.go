@@ -22,7 +22,7 @@ import (
 	pb "github.com/retail-cortex/blitz/proto/blitz/v1"
 )
 
-// The workspace manifest's editors (spec_manifest_040): what they share.
+// Studio's editors (spec_studio_040): what they share.
 
 func (h workspaceService) DraftManifest(ctx context.Context, r req[pb.DraftManifestRequest]) (*connect.Response[pb.DraftManifestResponse], error) {
 	w, err := h.s.workspace(ctx, r.Msg.Workspace)

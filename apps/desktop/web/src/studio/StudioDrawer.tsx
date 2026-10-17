@@ -23,13 +23,13 @@ import { SecretsEditor } from "../SecretsEditor";
 import { Icon } from "../ui/controls";
 import { Drawer } from "../ui/Drawer";
 
-/** The kinds a workspace's manifest holds (spec_manifest_040), in the menu's order. */
-export const manifestKinds = ["agents", "skills", "workflows", "evals", "rules", "guardrails", "secrets"] as const;
-/** A kind of manifest item. */
-export type ManifestKind = (typeof manifestKinds)[number];
+/** The kinds Studio holds (spec_studio_040), in the menu's order. */
+export const studioKinds = ["agents", "skills", "workflows", "evals", "rules", "guardrails", "secrets"] as const;
+/** A kind of item in Studio. */
+export type StudioKind = (typeof studioKinds)[number];
 
 /** Each kind's icon. */
-export const manifestIcons: Record<ManifestKind, string> = {
+export const studioIcons: Record<StudioKind, string> = {
   agents: mdiRobotOutline,
   skills: mdiPuzzleOutline,
   workflows: mdiSitemapOutline,
@@ -40,7 +40,7 @@ export const manifestIcons: Record<ManifestKind, string> = {
 };
 
 /** Where each kind's files are, in the workspace (secrets are in the keychain). */
-const folders: Partial<Record<ManifestKind, string>> = {
+const folders: Partial<Record<StudioKind, string>> = {
   skills: ".agents/skills/<name>/SKILL.md",
   workflows: ".agents/workflows/<name>.flow.yaml",
   evals: ".agents/evals/<name>.md",
@@ -49,20 +49,20 @@ const folders: Partial<Record<ManifestKind, string>> = {
 };
 
 /**
- * The workspace's manifest (spec_manifest_040): what its .agents folder
+ * The workspace's Studio (spec_studio_040): what its .agents folder
  * holds, kind by kind, each listed and edited here: agents, skills,
  * workflows, evals, rules, guardrails, and its own secrets.
  */
-export function ManifestDrawer({ dir, initial, onClose }: { dir: string; initial: ManifestKind; onClose: () => void }) {
-  const [kind, setKind] = useState<ManifestKind>(initial);
+export function StudioDrawer({ dir, initial, onClose }: { dir: string; initial: StudioKind; onClose: () => void }) {
+  const [kind, setKind] = useState<StudioKind>(initial);
   return (
-    <Drawer title={t("desktop.manifest")} icon={mdiBookOpenPageVariantOutline} onClose={onClose} className="settings-drawer manifest-drawer">
+    <Drawer title={t("desktop.studio")} icon={mdiBookOpenPageVariantOutline} onClose={onClose} className="settings-drawer studio-drawer">
       <div className="settings">
         <div className="settings-nav list" role="tablist">
-          {manifestKinds.map((k) => (
-            <button key={k} role="tab" aria-selected={k === kind} data-autofocus={k === kind ? "" : undefined} className={`list-item ${k === kind ? "active" : ""}`} title={t(`desktop.manifest.${k}`)} onClick={() => setKind(k)}>
-              <Icon path={manifestIcons[k]} />
-              <span className="settings-nav-label">{t(`desktop.manifest.${k}`)}</span>
+          {studioKinds.map((k) => (
+            <button key={k} role="tab" aria-selected={k === kind} data-autofocus={k === kind ? "" : undefined} className={`list-item ${k === kind ? "active" : ""}`} title={t(`desktop.studio.${k}`)} onClick={() => setKind(k)}>
+              <Icon path={studioIcons[k]} />
+              <span className="settings-nav-label">{t(`desktop.studio.${k}`)}</span>
             </button>
           ))}
         </div>
@@ -78,12 +78,12 @@ export function ManifestDrawer({ dir, initial, onClose }: { dir: string; initial
 
 // A kind whose editor comes in a later step: what it is, and where its
 // files go.
-function Coming({ kind }: { kind: ManifestKind }) {
+function Coming({ kind }: { kind: StudioKind }) {
   return (
-    <div className="stack manifest-coming" style={{ gap: 8 }}>
-      <p className="t-body">{t(`desktop.manifest.${kind}.about`)}</p>
+    <div className="stack studio-coming" style={{ gap: 8 }}>
+      <p className="t-body">{t(`desktop.studio.${kind}.about`)}</p>
       <p className="t-body-sm muted">
-        <Icon path={mdiCheckDecagramOutline} size="sm" /> {t("desktop.manifest.coming", { path: folders[kind] ?? "" })}
+        <Icon path={mdiCheckDecagramOutline} size="sm" /> {t("desktop.studio.coming", { path: folders[kind] ?? "" })}
       </p>
     </div>
   );
