@@ -21,6 +21,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"reflect"
 	"sort"
 	"strings"
 	"sync"
@@ -45,8 +46,12 @@ import (
 // MCPManager owns the configured MCP servers and knows which tool names each
 // one serves, so tool calls can be approved per server.
 type MCPManager struct {
-	mu       sync.Mutex
+	mu sync.Mutex
+	// srvMu guards servers, which Update and Restart replace while turns
+	// read them (list).
+	srvMu    sync.RWMutex
 	servers  []*mcpServer
+	env      *ExecEnv              // what stdio servers run through, for servers added later
 	owner    map[string]*mcpServer // tool name -> server
 	reserved map[string]bool       // built-in tool names MCP tools may not shadow
 	Warn     func(string)
@@ -66,6 +71,11 @@ type mcpServer struct {
 	session   *mcp.ClientSession // the live session, as the client last used it
 	callMu    sync.Mutex
 	call      context.Context // the tool call in progress, for elicitation
+
+	stateMu sync.Mutex
+	listed  bool   // its tools were listed at least once
+	tools   int    // how many it offered, the last time
+	lastErr string // why the last listing failed ("" when it didn't)
 }
 
 const (
@@ -294,85 +304,106 @@ func (c *closingConn) Close() error {
 // (process guard, scrubbed environment and, unless disabled per server, the
 // OS sandbox).
 func NewMCPManager(cfgs []config.MCPServerConfig, env *ExecEnv, reserved []string) (*MCPManager, error) {
-	m := &MCPManager{owner: map[string]*mcpServer{}, reserved: map[string]bool{}, Warn: func(string) {}}
+	m := &MCPManager{owner: map[string]*mcpServer{}, reserved: map[string]bool{}, env: env, Warn: func(string) {}}
 	for _, r := range reserved {
 		m.reserved[r] = true
 	}
-	names := map[string]bool{}
+	if err := checkMCPConfigs(cfgs); err != nil {
+		return nil, err
+	}
 	for _, c := range cfgs {
-		if c.Name == "" {
-			return nil, fmt.Errorf("mcp server needs a name")
-		}
-		if names[c.Name] {
-			return nil, fmt.Errorf("duplicate mcp server name %q", c.Name)
-		}
-		names[c.Name] = true
-		if (c.Command == "") == (c.URL == "") {
-			return nil, fmt.Errorf("mcp server %q: set exactly one of command or url", c.Name)
-		}
 		if c.Disabled { // blitz mcp disable
 			continue
 		}
-
-		srv := &mcpServer{cfg: c, health: breaker.New(mcpFailThreshold)}
-		if len(c.Tools) > 0 {
-			srv.allowed = map[string]bool{}
-			for _, t := range c.Tools {
-				srv.allowed[t] = true
-			}
-		}
-
-		tsCfg := mcptoolset.Config{}
-		if c.Command != "" {
-			serverEnv := env
-			if c.Sandbox != nil && !*c.Sandbox && env != nil {
-				serverEnv = &ExecEnv{ScrubEnv: env.ScrubEnv, Dir: env.Dir}
-			}
-			argv := append([]string{c.Command}, c.Args...)
-			build := func() (*guardedCmd, error) {
-				// Not tied to a request context: the server outlives the call
-				// that started it.
-				cmd, err := serverEnv.command(context.Background(), argv)
-				if err != nil {
-					return nil, err
-				}
-				base := cmd.Env
-				if base == nil {
-					base = os.Environ()
-				}
-				for k, v := range c.Env {
-					base = append(base, k+"="+v)
-				}
-				cmd.Env = base
-				return cmd, nil
-			}
-			probe, err := build() // validate the sandbox wrapping up front
-			if err != nil {
-				return nil, fmt.Errorf("mcp server %q: %w", c.Name, err)
-			}
-			probe.abandon() // never started: drop its guard pipe (and any credential copies)
-			srv.transport = &stdioTransport{build: build}
-			srv.conns = &closingTransport{inner: srv.transport}
-		} else {
-			// Signed in with blitz mcp login: its token, refreshed as it
-			// expires; otherwise a server that asks is told to sign in.
-			oauth := mcpauth.NeedsLogin(c.Name)
-			store := secrets.Default(config.ConfigDir(""))
-			if rec, err := mcpauth.Load(store, c.Name); err == nil {
-				oauth = mcpauth.Handler(store, c.Name, rec)
-			}
-			srv.conns = &closingTransport{inner: &mcp.StreamableClientTransport{Endpoint: c.URL, HTTPClient: withHeaders(c.Headers), OAuthHandler: oauth}}
-		}
-		tsCfg.Transport = srv.conns
-		tsCfg.Client = m.mcpClient(srv)
-		ts, err := mcptoolset.New(tsCfg)
+		srv, err := m.newServer(c)
 		if err != nil {
-			return nil, fmt.Errorf("mcp server %q: %w", c.Name, err)
+			return nil, err
 		}
-		srv.toolset = ts
 		m.servers = append(m.servers, srv)
 	}
 	return m, nil
+}
+
+// checkMCPConfigs refuses servers without a name, with a name taken, or
+// without exactly one of a command and a URL.
+func checkMCPConfigs(cfgs []config.MCPServerConfig) error {
+	names := map[string]bool{}
+	for _, c := range cfgs {
+		if c.Name == "" {
+			return fmt.Errorf("mcp server needs a name")
+		}
+		if names[c.Name] {
+			return fmt.Errorf("duplicate mcp server name %q", c.Name)
+		}
+		names[c.Name] = true
+		if (c.Command == "") == (c.URL == "") {
+			return fmt.Errorf("mcp server %q: set exactly one of command or url", c.Name)
+		}
+	}
+	return nil
+}
+
+// newServer prepares the server c (enabled, checked): its transport and
+// toolset, connecting when its tools are first listed.
+func (m *MCPManager) newServer(c config.MCPServerConfig) (*mcpServer, error) {
+	env := m.env
+	srv := &mcpServer{cfg: c, health: breaker.New(mcpFailThreshold)}
+	if len(c.Tools) > 0 {
+		srv.allowed = map[string]bool{}
+		for _, t := range c.Tools {
+			srv.allowed[t] = true
+		}
+	}
+
+	tsCfg := mcptoolset.Config{}
+	if c.Command != "" {
+		serverEnv := env
+		if c.Sandbox != nil && !*c.Sandbox && env != nil {
+			serverEnv = &ExecEnv{ScrubEnv: env.ScrubEnv, Dir: env.Dir}
+		}
+		argv := append([]string{c.Command}, c.Args...)
+		build := func() (*guardedCmd, error) {
+			// Not tied to a request context: the server outlives the call
+			// that started it.
+			cmd, err := serverEnv.command(context.Background(), argv)
+			if err != nil {
+				return nil, err
+			}
+			base := cmd.Env
+			if base == nil {
+				base = os.Environ()
+			}
+			for k, v := range c.Env {
+				base = append(base, k+"="+v)
+			}
+			cmd.Env = base
+			return cmd, nil
+		}
+		probe, err := build() // validate the sandbox wrapping up front
+		if err != nil {
+			return nil, fmt.Errorf("mcp server %q: %w", c.Name, err)
+		}
+		probe.abandon() // never started: drop its guard pipe (and any credential copies)
+		srv.transport = &stdioTransport{build: build}
+		srv.conns = &closingTransport{inner: srv.transport}
+	} else {
+		// Signed in with blitz mcp login: its token, refreshed as it
+		// expires; otherwise a server that asks is told to sign in.
+		oauth := mcpauth.NeedsLogin(c.Name)
+		store := secrets.Default(config.ConfigDir(""))
+		if rec, err := mcpauth.Load(store, c.Name); err == nil {
+			oauth = mcpauth.Handler(store, c.Name, rec)
+		}
+		srv.conns = &closingTransport{inner: &mcp.StreamableClientTransport{Endpoint: c.URL, HTTPClient: withHeaders(c.Headers), OAuthHandler: oauth}}
+	}
+	tsCfg.Transport = srv.conns
+	tsCfg.Client = m.mcpClient(srv)
+	ts, err := mcptoolset.New(tsCfg)
+	if err != nil {
+		return nil, fmt.Errorf("mcp server %q: %w", c.Name, err)
+	}
+	srv.toolset = ts
+	return srv, nil
 }
 
 // MCPToolset pairs a server configuration with an already-connected toolset,
@@ -426,7 +457,7 @@ func (m *MCPManager) ToolsetsFor(agent string, primary bool) []tool.Toolset {
 		return nil
 	}
 	var out []tool.Toolset
-	for _, s := range m.servers {
+	for _, s := range m.list() {
 		if s.offeredTo(agent, primary) {
 			out = append(out, &recordingToolset{m: m, srv: s})
 		}
@@ -452,7 +483,7 @@ func (m *MCPManager) Servers() []string {
 		return nil
 	}
 	var out []string
-	for _, s := range m.servers {
+	for _, s := range m.list() {
 		out = append(out, s.cfg.Name)
 	}
 	return out
@@ -477,19 +508,169 @@ func (m *MCPManager) Close() {
 	if m == nil {
 		return
 	}
-	for _, s := range m.servers {
-		if s.conns != nil {
-			s.conns.Close()
+	for _, s := range m.list() {
+		s.close()
+	}
+}
+
+// close ends the server's sessions and stops its process.
+func (s *mcpServer) close() {
+	if s.conns != nil {
+		s.conns.Close()
+	}
+	if s.transport != nil {
+		s.transport.Close()
+	}
+}
+
+// list is the servers now (Update and Restart replace them).
+func (m *MCPManager) list() []*mcpServer {
+	m.srvMu.RLock()
+	defer m.srvMu.RUnlock()
+	return m.servers
+}
+
+// Update applies cfgs in place of the servers the manager runs: a server
+// whose settings are unchanged keeps running, a changed one restarts, a
+// removed or disabled one stops, and a new one starts when its tools are
+// first listed. Agents built before take the new servers when they're
+// built again (the engine's Rebuild); changed says whether there's
+// anything new for them. Nothing changes if cfgs are wrong.
+func (m *MCPManager) Update(cfgs []config.MCPServerConfig) (changed bool, err error) {
+	if m == nil {
+		return false, nil
+	}
+	if err := checkMCPConfigs(cfgs); err != nil {
+		return false, err
+	}
+	old := map[string]*mcpServer{}
+	for _, s := range m.list() {
+		old[s.cfg.Name] = s
+	}
+	var next []*mcpServer
+	keep := map[*mcpServer]bool{}
+	for _, c := range cfgs {
+		if c.Disabled {
+			continue
 		}
-		if s.transport != nil {
-			s.transport.Close()
+		if s := old[c.Name]; s != nil && reflect.DeepEqual(s.cfg, c) {
+			next, keep[s] = append(next, s), true
+			continue
+		}
+		srv, err := m.newServer(c)
+		if err != nil {
+			for _, n := range next {
+				if !keep[n] {
+					n.close()
+				}
+			}
+			return false, err
+		}
+		next = append(next, srv)
+	}
+	if len(keep) == len(old) && len(next) == len(old) {
+		return false, nil // the same servers, in whatever order
+	}
+	m.replace(next, keep)
+	return true, nil
+}
+
+// Restart stops the server named name and starts it afresh when its tools
+// are next listed (after Rebuild, as Update).
+func (m *MCPManager) Restart(name string) error {
+	if m == nil {
+		return fmt.Errorf("no MCP server %q", name)
+	}
+	cur := m.list()
+	next := make([]*mcpServer, len(cur))
+	keep := map[*mcpServer]bool{}
+	found := false
+	for i, s := range cur {
+		if s.cfg.Name != name || s.conns == nil { // a caller's toolset can't restart
+			next[i], keep[s] = s, true
+			continue
+		}
+		srv, err := m.newServer(s.cfg)
+		if err != nil {
+			return err
+		}
+		next[i], found = srv, true
+	}
+	if !found {
+		return fmt.Errorf("no MCP server %q running", name)
+	}
+	m.replace(next, keep)
+	return nil
+}
+
+// replace puts next in place of the servers, closing the old ones not
+// kept and forgetting the tools they owned.
+func (m *MCPManager) replace(next []*mcpServer, keep map[*mcpServer]bool) {
+	m.srvMu.Lock()
+	cur := m.servers
+	m.servers = next
+	m.srvMu.Unlock()
+	m.mu.Lock()
+	for name, s := range m.owner {
+		if !keep[s] {
+			delete(m.owner, name)
 		}
 	}
+	m.mu.Unlock()
+	for _, s := range cur {
+		if !keep[s] {
+			s.close()
+		}
+	}
+}
+
+// MCPState is how one of the manager's servers is doing.
+type MCPState struct {
+	Name string
+	// State is "idle" (its tools not listed yet), "connected" (listed) or
+	// "failed" (the last listing failed, Error says why).
+	State string
+	Error string
+	// Tools is how many tools it offered when last listed.
+	Tools int
+}
+
+// States says how each running server is doing, in the configured order.
+func (m *MCPManager) States() []MCPState {
+	if m == nil {
+		return nil
+	}
+	var out []MCPState
+	for _, s := range m.list() {
+		s.stateMu.Lock()
+		st := MCPState{Name: s.cfg.Name, State: "idle", Tools: s.tools, Error: s.lastErr}
+		switch {
+		case s.lastErr != "":
+			st.State = "failed"
+		case s.listed:
+			st.State = "connected"
+		}
+		s.stateMu.Unlock()
+		out = append(out, st)
+	}
+	return out
 }
 
 type recordingToolset struct {
 	m   *MCPManager
 	srv *mcpServer
+}
+
+// setState records a listing of the server's tools: how many, or why it
+// failed.
+func (s *mcpServer) setState(tools int, err error) {
+	s.stateMu.Lock()
+	defer s.stateMu.Unlock()
+	if err != nil {
+		s.lastErr = err.Error()
+		return
+	}
+	s.listed, s.tools, s.lastErr = true, tools, ""
 }
 
 func (r *recordingToolset) Name() string { return "mcp:" + r.srv.cfg.Name }
@@ -506,9 +687,11 @@ func (r *recordingToolset) Tools(ctx agent.ReadonlyContext) ([]tool.Tool, error)
 	defer cancel()
 	tools, err := r.srv.toolset.Tools(readonlyWith{ctx, lctx})
 	if err != nil {
+		r.srv.setState(0, err)
 		r.m.recordFailure(ctx, r.srv, err)
 		return nil, nil // one broken server shouldn't break every turn
 	}
+	r.srv.setState(len(tools), nil)
 	r.m.recordSuccess(ctx, r.srv)
 	out := tools[:0:0]
 	r.m.mu.Lock()

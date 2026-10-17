@@ -26,6 +26,7 @@ go_library(
         "idle.go",
         "language.go",
         "listen.go",
+        "mcp.go",
         "models.go",
         "scheduler.go",
         "server.go",

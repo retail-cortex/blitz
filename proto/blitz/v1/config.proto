@@ -108,6 +108,15 @@ service ConfigService {
   rpc UpdateRegistrySkills(UpdateRegistrySkillsRequest) returns (UpdateRegistrySkillsResponse);
   // Removes a skill installed from a registry (NOT_INSTALLED).
   rpc UninstallRegistrySkill(UninstallRegistrySkillRequest) returns (UninstallRegistrySkillResponse);
+  // Returns the MCP servers of the global settings, with the file they're in.
+  rpc ListMCPServerConfigs(ListMCPServerConfigsRequest) returns (ListMCPServerConfigsResponse);
+  // Adds an MCP server to the global settings, or replaces one (name):
+  // open workspaces apply it at once.
+  rpc SaveMCPServer(SaveMCPServerRequest) returns (SaveMCPServerResponse);
+  // Removes an MCP server from the global settings (NOT_FOUND).
+  rpc RemoveMCPServer(RemoveMCPServerRequest) returns (RemoveMCPServerResponse);
+  // Turns an MCP server of the global settings on or off (NOT_FOUND).
+  rpc SetMCPServerEnabled(SetMCPServerEnabledRequest) returns (SetMCPServerEnabledResponse);
 }
 
 // Request message for ConfigService.GetInterfaceLanguage.
@@ -640,4 +649,72 @@ message UninstallRegistrySkillRequest {
 // Response message for ConfigService.UninstallRegistrySkill.
 message UninstallRegistrySkillResponse {
   InstalledSkill skill = 1;
+}
+
+// MCPServerConfig is an MCP server's settings ([[mcp.servers]]): exactly
+// one of command (stdio) and url (streamable HTTP).
+message MCPServerConfig {
+  string name = 1;
+  string command = 2;
+  repeated string args = 3;
+  map<string, string> env = 4;
+  string url = 5;
+  map<string, string> headers = 6;
+  // Configured, but never started.
+  bool disabled = 7;
+  // Only these of its tools; empty for all.
+  repeated string tools = 8;
+  // Its tools run without asking.
+  bool auto_approve = 9;
+  // A stdio server runs in the OS sandbox unless this is false.
+  optional bool sandbox = 10;
+  // Names its tools prefix__tool.
+  string prefix = 11;
+  // The agents offered its tools; empty for the main agent, * for all.
+  repeated string agents = 12;
+  // Bounds one tool call; 0 for the default (300).
+  int32 timeout_seconds = 13;
+}
+
+// Request message for ConfigService.ListMCPServerConfigs.
+message ListMCPServerConfigsRequest {}
+
+// Response message for ConfigService.ListMCPServerConfigs.
+message ListMCPServerConfigsResponse {
+  repeated MCPServerConfig servers = 1;
+  // The global settings file.
+  string path = 2;
+}
+
+// Request message for ConfigService.SaveMCPServer.
+message SaveMCPServerRequest {
+  // The server replaced; empty to add one.
+  string name = 1;
+  MCPServerConfig server = 2;
+}
+
+// Response message for ConfigService.SaveMCPServer.
+message SaveMCPServerResponse {
+  ConfigChange change = 1;
+}
+
+// Request message for ConfigService.RemoveMCPServer.
+message RemoveMCPServerRequest {
+  string name = 1;
+}
+
+// Response message for ConfigService.RemoveMCPServer.
+message RemoveMCPServerResponse {
+  ConfigChange change = 1;
+}
+
+// Request message for ConfigService.SetMCPServerEnabled.
+message SetMCPServerEnabledRequest {
+  string name = 1;
+  bool enabled = 2;
+}
+
+// Response message for ConfigService.SetMCPServerEnabled.
+message SetMCPServerEnabledResponse {
+  ConfigChange change = 1;
 }

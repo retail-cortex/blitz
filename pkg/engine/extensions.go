@@ -15,11 +15,13 @@
 package engine
 
 import (
+	"context"
 	"sort"
 	"strings"
 	"time"
 
 	"github.com/retail-cortex/blitz/pkg/api"
+	"github.com/retail-cortex/blitz/pkg/config"
 
 	"github.com/retail-cortex/blitz/pkg/engine/runtime"
 	"github.com/retail-cortex/blitz/pkg/engine/skills"
@@ -151,17 +153,51 @@ func (w *Workspace) neededEnvs(envs *tools.PyEnvs) map[string]bool {
 }
 
 // ListMCPServers returns the configured MCP servers, the disabled ones
-// marked.
+// marked, each with how it's doing (State: disabled, idle, connected or
+// failed).
 func (w *Workspace) ListMCPServers() []api.MCPServer {
+	states := map[string]tools.MCPState{}
+	for _, st := range w.tools.MCP().States() {
+		states[st.Name] = st
+	}
 	var out []api.MCPServer
 	for _, s := range w.cfg.MCP.Servers {
 		target := s.URL
 		if target == "" {
 			target = strings.Join(append([]string{s.Command}, s.Args...), " ")
 		}
-		out = append(out, api.MCPServer{Name: s.Name, Target: target, AutoApprove: s.AutoApprove, Disabled: s.Disabled})
+		m := api.MCPServer{Name: s.Name, Target: target, AutoApprove: s.AutoApprove, Disabled: s.Disabled, State: "disabled"}
+		if st, ok := states[s.Name]; ok && !s.Disabled {
+			m.State, m.Error, m.Tools = st.State, st.Error, st.Tools
+		}
+		out = append(out, m)
 	}
 	return out
+}
+
+// ReloadMCP applies cfg's MCP servers in place of the running ones, after
+// a settings change: unchanged servers keep running, changed ones
+// restart, disabled and removed ones stop, and the agents are built
+// again so the next turn offers what's there now.
+func (w *Workspace) ReloadMCP(ctx context.Context, cfg *config.Config) error {
+	changed, err := w.tools.MCP().Update(cfg.MCP.Servers)
+	if err != nil {
+		return err
+	}
+	w.cfg.MCP = cfg.MCP
+	if !changed {
+		return nil
+	}
+	return w.engine.Rebuild(ctx)
+}
+
+// RestartMCPServer stops the MCP server named name and starts it afresh
+// when the next turn lists its tools.
+func (w *Workspace) RestartMCPServer(ctx context.Context, name string) error {
+	if err := w.tools.MCP().Restart(name); err != nil {
+		return err
+	}
+	return w.engine.Rebuild(ctx)
 }
 
 // ActiveAgentTools returns what the active agent can use: its built-in

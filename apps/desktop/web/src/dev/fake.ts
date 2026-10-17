@@ -27,7 +27,7 @@ import { ActionKind, ErrorInfoSchema, UsageSchema, type Usage } from "../gen/bli
 
 type Out = MessageInitShape<typeof RunTurnResponseSchema>;
 import { RunStatus, WorkerService, WorkerState } from "../gen/blitz/v1/worker_pb";
-import { ConfigService, KeySource } from "../gen/blitz/v1/config_pb";
+import { ConfigService, KeySource, MCPServerConfigSchema, type MCPServerConfig } from "../gen/blitz/v1/config_pb";
 import { FileKind, FileService, GitAction, RevisionDiff } from "../gen/blitz/v1/file_pb";
 import { AgentFileSchema, AgentScope, ConflictChoice, GitOperation, PullOutcome, SuggestionKind, SuggestionSchema, WorkspaceService, type AgentDefinition } from "../gen/blitz/v1/workspace_pb";
 
@@ -614,6 +614,13 @@ const fakeFiles = new Map<string, string>([
 ]);
 const fakeGit: Record<string, string> = { "internal/cart/discount.go": "modified", "internal/cart/discount_test.go": "untracked", "web/app.ts": "added" };
 // Skill registries in the fake: Castor's offer, and what was installed.
+// Settings › MCP servers: the global servers, edited in place.
+const fakeMCP: MCPServerConfig[] = [
+  create(MCPServerConfigSchema, { name: "github", command: "npx", args: ["-y", "@modelcontextprotocol/server-github"], env: { GITHUB_TOKEN: "ghp_…" } }),
+  create(MCPServerConfigSchema, { name: "jira", url: "https://mcp.atlassian.example/v1/mcp", headers: { "X-Team": "core" } }),
+  create(MCPServerConfigSchema, { name: "postgres", command: "postgres-mcp", args: ["--ro"], disabled: true }),
+];
+
 const fakeRegistries: { name: string; url: string; hasToken: boolean }[] = [];
 const fakeRegistrySkills = [
   { registry: "castor", name: "lit-review", description: "Reviews the literature on a question and keeps refs.bib in order", version: "1.2.0", castorId: "sk_lit" },
@@ -794,7 +801,13 @@ export function installFake() {
       service(WorkspaceService, {
         // The slash commands' (slashCommands.ts): enough to see each answer.
         getSandbox: () => ({ summary: ["Shell commands: sandboxed (sandbox-exec)", "Network: allowed for listed hosts", "Writable: the workspace and the temp folder"] }),
-        listMCPServers: () => ({ servers: [{ name: "github", target: "npx @modelcontextprotocol/server-github", autoApprove: false }] }),
+        listMCPServers: () => ({
+          servers: [
+            ...fakeMCP.map((m) => ({ name: m.name, target: m.url || [m.command, ...(m.args ?? [])].join(" "), autoApprove: !!m.autoApprove, disabled: !!m.disabled, state: m.disabled ? "disabled" : m.name === "github" ? "connected" : m.name === "jira" ? "failed" : "idle", tools: m.name === "github" ? 26 : 0, error: m.name === "jira" && !m.disabled ? "401 Unauthorized: sign in with blitz mcp login jira" : "" })),
+            { name: "db", target: "npx @acme/db-mcp", state: "connected", tools: 4 },
+          ],
+        }),
+        restartMCPServer: () => ({}),
         pinModel: ({ agent, ref }) => ({ agent, model: ref }),
         unpinModel: ({ agent, workspace }) => ({ agent, model: state(workspace).settings.model }),
         reloadMemory: () => ({ paths: ["/home/me/blitz/AGENTS.md", "/home/me/blitz/.agents/AGENTS.md"], files: ["AGENTS.md"] }),
@@ -1133,6 +1146,24 @@ export function installFake() {
       });
       service(ConfigService, {
         listSkillRegistries: () => ({ registries: fakeRegistries, installed: fakeInstalledSkills }),
+        listMCPServerConfigs: () => ({ servers: fakeMCP, path: "~/.blitz/.env.toml" }),
+        saveMCPServer: ({ name, server }) => {
+          const i = fakeMCP.findIndex((m) => m.name === name);
+          if (!name && fakeMCP.some((m) => m.name === server?.name)) throw new Error(`an MCP server named "${server?.name}" is already configured`);
+          if (name && i < 0) throw new Error(`no MCP server by that name: ${name}`);
+          if (i >= 0) fakeMCP[i] = server!;
+          else fakeMCP.push(server!);
+          return { change: { path: "~/.blitz/.env.toml" } };
+        },
+        removeMCPServer: ({ name }) => {
+          fakeMCP.splice(fakeMCP.findIndex((m) => m.name === name), 1);
+          return { change: { path: "~/.blitz/.env.toml" } };
+        },
+        setMCPServerEnabled: ({ name, enabled }) => {
+          const m = fakeMCP.find((x) => x.name === name);
+          if (m) m.disabled = !enabled;
+          return { change: { path: "~/.blitz/.env.toml" } };
+        },
         addSkillRegistry: ({ url, name, token }) => {
           if (!/^https:\/\//.test(url) && !url.startsWith("/")) throw new ConnectError(`${url}: a registry needs https (http only for localhost)`, Code.FailedPrecondition);
           const reg = { name: name || "castor", url, hasToken: !!token };

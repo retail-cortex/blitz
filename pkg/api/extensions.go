@@ -116,6 +116,11 @@ type MCPServer struct {
 	AutoApprove bool
 	// Disabled means it's configured but never started (disabled = true).
 	Disabled bool
+	// State is "disabled", "idle" (its tools not listed yet), "connected"
+	// or "failed" (Error says why); Tools is how many tools it offered.
+	State string
+	Error string
+	Tools int
 }
 
 // ToolInfo is a tool an agent can call.

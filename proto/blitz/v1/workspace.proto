@@ -178,8 +178,11 @@ service WorkspaceService {
   rpc RemoveEnv(RemoveEnvRequest) returns (RemoveEnvResponse);
   // Removes environments no allowed script needs, and incomplete ones.
   rpc PruneEnvs(PruneEnvsRequest) returns (PruneEnvsResponse);
-  // Returns the configured MCP servers.
+  // Returns the configured MCP servers and how each is doing.
   rpc ListMCPServers(ListMCPServersRequest) returns (ListMCPServersResponse);
+  // Stops an MCP server and starts it afresh when the next turn lists its
+  // tools (NOT_FOUND when it isn't running).
+  rpc RestartMCPServer(RestartMCPServerRequest) returns (RestartMCPServerResponse);
   // Returns what the active agent can use.
   rpc ListTools(ListToolsRequest) returns (ListToolsResponse);
 
@@ -986,6 +989,12 @@ message MCPServer {
   bool auto_approve = 3;
   // Configured, but never started (disabled = true).
   bool disabled = 4;
+  // "disabled", "idle" (its tools not listed yet), "connected" or
+  // "failed" (error says why).
+  string state = 5;
+  string error = 6;
+  // How many tools it offered when last listed.
+  int32 tools = 7;
 }
 
 // Request message for WorkspaceService.ListMCPServers.
@@ -997,6 +1006,15 @@ message ListMCPServersRequest {
 message ListMCPServersResponse {
   repeated MCPServer servers = 1;
 }
+
+// Request message for WorkspaceService.RestartMCPServer.
+message RestartMCPServerRequest {
+  string workspace = 1;
+  string name = 2;
+}
+
+// Response message for WorkspaceService.RestartMCPServer.
+message RestartMCPServerResponse {}
 
 // ToolInfo is a tool an agent can call.
 message ToolInfo {

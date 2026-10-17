@@ -33,6 +33,7 @@ import {
   mdiMonitor,
   mdiPaletteOutline,
   mdiPencilOutline,
+  mdiPowerPlugOutline,
   mdiScaleBalance,
   mdiServerNetwork,
   mdiTextBoxSearchOutline,
@@ -55,6 +56,7 @@ import { LogViewer } from "./LogViewer";
 import { ProviderSettings } from "./ProviderSettings";
 import { SettingsFile } from "./settingsfile/SettingsFile";
 import { DocumentSettings } from "./files/DocumentSettings";
+import { McpSettings } from "./McpSettings";
 import { SkillSettings } from "./SkillSettings";
 import { useAdvanced, useApp } from "./state";
 import { sectionShown, settingsSections, type SectionId } from "./simpleMode";
@@ -76,6 +78,7 @@ const sectionIcons: Record<SectionId, string> = {
   appearance: mdiPaletteOutline,
   agents: mdiRobotOutline,
   skills: mdiPuzzleOutline,
+  mcp: mdiPowerPlugOutline,
   workspaces: mdiFolderMultipleOutline,
   permissions: mdiShieldCheckOutline,
   service: mdiServerNetwork,
@@ -143,6 +146,7 @@ export function SettingsDrawer({ onClose, initial = "providers", scope: initialS
             {section === "appearance" && <Appearance />}
             {section === "agents" && <UserAgents />}
             {section === "skills" && <SkillSettings onOpen={onClose} />}
+            {section === "mcp" && <McpSettings />}
             {section === "workspaces" && (
               <Workspaces
                 initial={initial === "workspaces" ? initialScope : ""}

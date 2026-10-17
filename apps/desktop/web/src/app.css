@@ -545,6 +545,10 @@ body.resizing iframe, body.resizing .cm-editor { pointer-events: none; }
 .setting-control code { overflow-wrap: anywhere; }
 /* Appearance's menus (the light and dark themes, the language) line up. */
 .setting-control .language-select { width: 220px; max-width: 100%; }
+/* Settings › MCP servers: a server's row, and the form's timeout beside its agents. */
+.mcp-row { align-items: flex-start; padding: 8px 0; }
+.mcp-row > .icon { margin-top: 2px; }
+.mcp-form-pair > .field { flex: 1; min-width: 0; }
 /* A narrow settings pane (the drawer at its narrower widths) puts each
    control under its description rather than squeezing either. */
 .settings-pane { container: settings-pane / inline-size; }
