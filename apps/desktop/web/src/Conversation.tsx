@@ -61,6 +61,8 @@ import {
   mdiFileCompare,
   mdiKeyboardOutline,
   mdiConsoleLine,
+  mdiArrowExpand,
+  mdiArrowCollapse,
 } from "@mdi/js";
 import { files, serviceLost, sessions, workspaces } from "./api";
 import { editorConfig, toEditor } from "./host";
@@ -140,6 +142,7 @@ export function Conversation({
   onReviewProject,
   onSettingsChanged,
   onOpenView,
+  expand,
 }: {
   dir: string;
   name: string;
@@ -152,6 +155,8 @@ export function Conversation({
   onReviewProject?: () => void;
   onSettingsChanged: () => void;
   onOpenView: (v: "changes" | "workers") => void;
+  /** The chat expanded over the editor, or not, while files are open (its header's button). */
+  expand?: { expanded: boolean; toggle: () => void };
 }) {
   // The pinned bar the composer renders into (composerDock.ts), and ⌘L.
   const dockEl = useContext(ComposerDock);
@@ -879,7 +884,7 @@ export function Conversation({
           <span className="t-title">{t("desktop.drop")}</span>
         </div>
       )}
-      <SessionBar session={session} list={list} running={running} onNew={newSession} onLoad={load} onRename={rename} onDelete={setDeleting} />
+      <SessionBar session={session} list={list} running={running} onNew={newSession} onLoad={load} onRename={rename} onDelete={setDeleting} expand={expand} />
       <div className="chat-scroll" ref={scroller} onScroll={onScroll}>
         <div className="chat-column">
           {modelProblem && (
@@ -1003,6 +1008,7 @@ function SessionBar({
   onLoad,
   onRename,
   onDelete,
+  expand,
 }: {
   session?: SessionInfo;
   list: SessionInfo[];
@@ -1011,6 +1017,7 @@ function SessionBar({
   onLoad: (id: string) => void;
   onRename: (t: string) => void;
   onDelete: (s: SessionInfo[]) => void;
+  expand?: { expanded: boolean; toggle: () => void };
 }) {
   const [editing, setEditing] = useState(false);
   const [title, setTitle] = useState("");
@@ -1049,6 +1056,14 @@ function SessionBar({
         </button>
       )}
       <span className="spacer" />
+      {expand && (
+        <IconButton
+          icon={expand.expanded ? mdiArrowCollapse : mdiArrowExpand}
+          label={t(expand.expanded ? "desktop.chat.shrink" : "desktop.chat.expand")}
+          selected={expand.expanded}
+          onClick={expand.toggle}
+        />
+      )}
       <HistoryMenu list={list} current={session?.id} disabled={running} onLoad={onLoad} onDelete={onDelete} />
       <IconButton icon={mdiPlus} label={t("desktop.chat.new")} variant="filled" onClick={onNew} disabled={running} />
     </div>

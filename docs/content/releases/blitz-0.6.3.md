@@ -1,6 +1,6 @@
 ---
 title: Blitz 0.6.3
-weight: 2
+weight: 3
 ---
 
 **Start a project with one command, pull and push from the Changes page, and keep going when the network hiccups.** Download it from the [GitHub release](https://github.com/retail-cortex/blitz/releases/tag/v0.6.3).

@@ -165,6 +165,7 @@
 .brand { display: flex; align-items: center; gap: 6px; flex: none; font: 500 20px/28px var(--md-font-display); }
 .workspace-body { position: relative; display: flex; flex: 1; min-height: 0; }
 .workspace-center { flex: 1; min-width: 160px; display: flex; flex-direction: column; min-height: 0; }
+.workspace-center[hidden] { display: none; }
 .chat-panel { position: relative; flex: none; display: flex; flex-direction: column; min-width: 320px; min-height: 0; border-left: 1px solid var(--md-outline-variant); background: var(--md-surface); }
 .panel-resize { position: absolute; left: -3px; top: 0; bottom: 0; width: 6px; cursor: col-resize; z-index: 5; }
 .panel-resize:hover, body.resizing .panel-resize { background: color-mix(in srgb, var(--md-primary) 30%, transparent); }
@@ -173,6 +174,17 @@ body.resizing { cursor: col-resize; -webkit-user-select: none; user-select: none
 body.resizing iframe, body.resizing .cm-editor { pointer-events: none; }
 .files-rail { flex: none; width: 48px; display: flex; flex-direction: column; align-items: center; gap: 4px; padding-top: 8px; border-right: 1px solid var(--md-outline-variant); background: var(--md-surface-container-low); }
 .chat-panel.center { flex: 1; min-width: 0; border-left: none; }
+.chat-panel[hidden] { display: none; }
+/* A pane shrunk behind the other (Workspace.tsx PaneRail): the Files
+   rail's look, on the side the pane was, saying it's there. */
+.pane-rail.right { border-right: none; border-left: 1px solid var(--md-outline-variant); }
+.pane-rail-button { display: flex; flex-direction: column; align-items: center; gap: 2px; width: 44px; padding: 8px 0; border: none; border-radius: var(--md-shape-sm); background: none; color: var(--md-on-surface-variant); cursor: pointer; }
+.pane-rail-button:hover { background: color-mix(in srgb, var(--md-on-surface) 8%, transparent); color: var(--md-on-surface); }
+.pane-rail-button:focus-visible { outline: 2px solid var(--focus-ring); }
+.pane-rail-icon { position: relative; display: flex; }
+.rail-badge { position: absolute; top: -6px; right: -10px; background: var(--md-primary); color: var(--md-on-primary); }
+.rail-dot { position: absolute; top: -2px; right: -4px; margin: 0; }
+.pane-rail-name { font-size: 11px; }
 
 /* The drawer (ui/Drawer.tsx): the views (Settings, Docs, Changes, History,
    an agent, Workers, the inbox, Licenses) slide down from under the top

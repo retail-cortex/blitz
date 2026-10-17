@@ -16,7 +16,7 @@
 
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { openSearchPanel } from "@codemirror/search";
-import { mdiAlertCircleOutline, mdiArrowExpandHorizontal, mdiAt, mdiChevronRight, mdiClose, mdiContentSave, mdiExport, mdiFilePdfBox, mdiFileWordBoxOutline, mdiHistory, mdiLockOutline, mdiMagnify, mdiMessagePlusOutline, mdiWeb, mdiWebPlus, mdiWrap } from "@mdi/js";
+import { mdiAlertCircleOutline, mdiArrowExpandHorizontal, mdiAt, mdiChevronRight, mdiClose, mdiContentSave, mdiExport, mdiFilePdfBox, mdiFileWordBoxOutline, mdiHistory, mdiLockOutline, mdiMagnify, mdiMessagePlusOutline, mdiWeb, mdiWebPlus, mdiWrap, mdiArrowCollapse, mdiArrowExpand } from "@mdi/js";
 import { files } from "../api";
 import { canCall, canPreview, printPDF } from "../desktop";
 import { message } from "../errors";
@@ -48,7 +48,18 @@ import { drawAsPicture, drawForPrint, mermaidSources } from "../mermaid";
  * tabs, the active one's path, notes about it, and CodeMirror. One view
  * shows each tab's own state in turn.
  */
-export function EditorPane({ model, onReveal, onCursor }: { model: EditorModel; onReveal: (path: string) => void; onCursor?: (c: Cursor | undefined) => void }) {
+export function EditorPane({
+  model,
+  onReveal,
+  onCursor,
+  expand,
+}: {
+  model: EditorModel;
+  onReveal: (path: string) => void;
+  onCursor?: (c: Cursor | undefined) => void;
+  /** The editor expanded over the chat, or not (the tab bar's button). */
+  expand?: { expanded: boolean; toggle: () => void };
+}) {
   const advanced = useAdvanced(); // the wrap toggle is advanced
   const host = useRef<HTMLDivElement>(null);
   const view = useRef<EditorView | null>(null);
@@ -355,6 +366,15 @@ export function EditorPane({ model, onReveal, onCursor }: { model: EditorModel; 
         ))}
         <span className="spacer" />
         {canPreview() && <IconButton icon={mdiWebPlus} label={t("desktop.web.open")} small onClick={() => openWeb({ dir: model.dir, url: "" })} />}
+        {expand && (
+          <IconButton
+            icon={expand.expanded ? mdiArrowCollapse : mdiArrowExpand}
+            label={t(expand.expanded ? "desktop.files.shrink" : "desktop.files.expand")}
+            small
+            selected={expand.expanded}
+            onClick={expand.toggle}
+          />
+        )}
         {zoom !== 100 && (
           <button type="button" className="zoom-badge t-label" title={t("desktop.files.zoom_reset")} onClick={() => (setZoom(100), view.current?.focus())}>
             {t("desktop.files.zoom", { percent: zoom })}

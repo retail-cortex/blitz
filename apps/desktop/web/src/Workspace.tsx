@@ -17,7 +17,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { SandboxNotice } from "./SandboxNotice";
 import { useWorkspaceSettings } from "./workspaceSettings";
-import { mdiMagnify, mdiFileTreeOutline } from "@mdi/js";
+import { mdiCodeBraces, mdiMagnify, mdiFileTreeOutline, mdiMessageTextOutline } from "@mdi/js";
 import { ChangesDrawer, type ChangesSource } from "./Changes";
 import { CommitDialog } from "./CommitDialog";
 import { Conversation } from "./Conversation";
@@ -36,7 +36,7 @@ import { ProjectDialog } from "./ProjectDialog";
 import { useApp } from "./state";
 import { publishStatus } from "./status";
 import { t } from "./i18n";
-import { IconButton, useSnackbar } from "./ui/controls";
+import { Icon, IconButton, useSnackbar } from "./ui/controls";
 import { panelWidth, useWindowWidth } from "./ui/layout";
 import { ResizeHandle } from "./ui/ResizeHandle";
 import { Brand, MenuBar } from "./MenuBar";
@@ -72,7 +72,7 @@ export function Workspace({
   /** Opens the command palette (the top bar's search). */
   onSearch: () => void;
 }) {
-  const { prefs, update, theme } = useApp();
+  const { prefs, update, theme, activity } = useApp();
   // What the menus opened: a view in the drawer beside the workspace (the
   // changes, this session's or git's; history; a worker), and a dialog
   // over it (committing). A worker and an agent have their own states: a
@@ -129,6 +129,7 @@ export function Workspace({
 
   const open = useCallback((path: string, line?: number, column?: number, find?: string[]) => {
     editorRef.current.open(path, line, column, find);
+    setWide((w) => (w === "chat" ? "" : w));
     setModal(null);
   }, []);
 
@@ -142,6 +143,7 @@ export function Workspace({
       const d = (e as CustomEvent<OpenWebDetail>).detail;
       if (d.dir !== dir) return;
       editorRef.current.openWeb(d.url);
+      setWide((w) => (w === "chat" ? "" : w));
       setModal(null);
     };
     const onReveal = (e: Event) => {
@@ -197,7 +199,15 @@ export function Workspace({
   // to their minimums, and it can be minimized to the rail.
   const chatMax = (w: number) => w - (prefs.files ? filesWidth : 56) - 400;
   const chatWidth = panelWidth(prefs.chat_width, Math.max(380, Math.min(520, Math.round(win * 0.32))), 320, chatMax(win));
-  const chatCenter = editor.tabs.length === 0;
+  // The chat or the editor expanded over the other (each one's button), to
+  // read a long answer or a file at full width; the other stays as it
+  // was, hidden behind a rail that says it's there, until it's shrunk
+  // again (a file opening shows the editor).
+  const [wide, setWide] = useState<"" | "chat" | "editor">("");
+  const chatWide = wide === "chat" && editor.tabs.length > 0;
+  const editorWide = wide === "editor" && editor.tabs.length > 0;
+  const toggleWide = (pane: "chat" | "editor") => setWide((w) => (w === pane ? "" : pane));
+  const chatCenter = editor.tabs.length === 0 || chatWide;
   const revealInTree = (path: string) => {
     if (!prefs.files) update((p) => ({ ...p, files: true }));
     setReveal({ path });
@@ -214,7 +224,7 @@ export function Workspace({
     const body = bodyRef.current;
     if (!body || !visible) return;
     const measure = () => {
-      const center = body.querySelector<HTMLElement>(":scope > .workspace-center, :scope > .chat-panel.center");
+      const center = body.querySelector<HTMLElement>(":scope > .workspace-center:not([hidden]), :scope > .chat-panel.center");
       if (center) setLead(Math.round(center.getBoundingClientRect().left));
     };
     measure();
@@ -269,12 +279,14 @@ export function Workspace({
           </nav>
         )}
         {/* With no file open, the chat takes the middle (center stage). */}
-        {!chatCenter && (
-          <div className="workspace-center">
-            <EditorPane model={editor} onReveal={revealInTree} onCursor={(cursor) => publishStatus(dir, { cursor })} />
+        {editor.tabs.length > 0 && (
+          <div className="workspace-center" hidden={chatWide}>
+            <EditorPane model={editor} onReveal={revealInTree} onCursor={(cursor) => publishStatus(dir, { cursor })} expand={{ expanded: editorWide, toggle: () => toggleWide("editor") }} />
           </div>
         )}
-        <aside className={`chat-panel ${chatCenter ? "center" : ""}`} style={chatCenter ? undefined : { width: chatWidth }} aria-label={t("desktop.view.chat")}>
+        {chatWide && <PaneRail side="left" icon={mdiCodeBraces} name={t("desktop.pane.editor")} label={t("desktop.pane.show_editor", { n: editor.tabs.length })} badge={editor.tabs.length} onShow={() => setWide("")} />}
+        {editorWide && <PaneRail side="right" icon={mdiMessageTextOutline} name={t("desktop.pane.chat")} label={t("desktop.pane.show_chat")} waiting={!!activity[dir]?.waiting} onShow={() => setWide("")} />}
+        <aside hidden={editorWide} className={`chat-panel ${chatCenter ? "center" : ""}`} style={chatCenter ? undefined : { width: chatWidth }} aria-label={t("desktop.view.chat")}>
           {!chatCenter && (
             <ResizeHandle
               width={chatWidth}
@@ -296,6 +308,7 @@ export function Workspace({
               onReviewProject={() => setReviewing(true)}
               onSettingsChanged={refreshSettings}
               onOpenView={showView}
+              expand={editor.tabs.length > 0 ? { expanded: chatWide, toggle: () => toggleWide("chat") } : undefined}
             />
           </FileLinksProvider>
         </aside>
@@ -309,5 +322,26 @@ export function Workspace({
       {visible && worker && <WorkerDrawer key={worker.n} dir={dir} intent={worker} onClose={() => setWorker(null)} />}
       {reviewing && visible && <ProjectDialog dir={dir} onClose={() => setReviewing(false)} onDecided={refreshSettings} />}
     </section>
+  );
+}
+
+/**
+ * Where a pane shrunk behind the other is (the editor while the chat is
+ * expanded, or the chat while the editor is): a rail like the Files
+ * shelf's, its icon and name, how many files it holds or whether the agent
+ * waits there, and a click to bring it back.
+ */
+function PaneRail({ side, icon, name, label, badge, waiting, onShow }: { side: "left" | "right"; icon: string; name: string; label: string; badge?: number; waiting?: boolean; onShow: () => void }) {
+  return (
+    <nav className={`files-rail pane-rail ${side}`} aria-label={name}>
+      <button type="button" className="pane-rail-button" title={label} aria-label={label} onClick={onShow}>
+        <span className="pane-rail-icon">
+          <Icon path={icon} />
+          {!!badge && <span className="badge rail-badge">{badge}</span>}
+          {waiting && <span className="dot menubar-dot rail-dot" />}
+        </span>
+        <span className="pane-rail-name t-label">{name}</span>
+      </button>
+    </nav>
   );
 }
