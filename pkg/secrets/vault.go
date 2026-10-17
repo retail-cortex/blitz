@@ -153,37 +153,37 @@ func (v Vault) Delete(scope, key string) error {
 
 // Lookup is the secret key as a workspace in scope sees it: its own,
 // else the global one.
-func (v Vault) Lookup(scope, key string) (string, bool) {
-	for _, s := range []string{scope, GlobalScope} {
-		if s == "" {
-			continue
-		}
-		if val, err := v.Store.Get(URN(s, key)); err == nil {
-			return val, true
-		}
-	}
-	return "", false
-}
+func (v Vault) Lookup(scope, key string) (string, bool) { return v.Resolve(scope)(AnyScope, key) }
 
-// placeholderRE is {secrets:<key>}.
-var placeholderRE = regexp.MustCompile(`\{secrets:([A-Za-z0-9_.-]{1,64})\}`)
+// placeholderRE is {secrets:<key>}, {secrets:global:<key>} or
+// {secrets:workspace:<key>}.
+var placeholderRE = regexp.MustCompile(`\{secrets:(?:(global|workspace):)?([A-Za-z0-9_.-]{1,64})\}`)
+
+// The scopes a placeholder can name: none (the workspace's, else the
+// global one), only the global one, or only the workspace's.
+const (
+	AnyScope      = ""
+	OnlyGlobal    = "global"
+	OnlyWorkspace = "workspace"
+)
 
 // HasPlaceholders reports whether text names a secret.
 func HasPlaceholders(text string) bool {
 	return strings.Contains(text, "{secrets:") && placeholderRE.MatchString(text)
 }
 
-// Expand puts each {secrets:<key>} in text's place with its value, as
-// lookup finds it, and returns the values used (for the redactor). A key
+// Expand puts each placeholder in text's place with its value, as lookup
+// finds it for the scope the placeholder names (AnyScope, OnlyGlobal or
+// OnlyWorkspace), and returns the values used (for the redactor). One
 // lookup doesn't find is left as written.
-func Expand(text string, lookup func(key string) (string, bool)) (string, []string) {
+func Expand(text string, lookup func(scope, key string) (string, bool)) (string, []string) {
 	if !strings.Contains(text, "{secrets:") {
 		return text, nil
 	}
 	var used []string
 	out := placeholderRE.ReplaceAllStringFunc(text, func(m string) string {
-		key := placeholderRE.FindStringSubmatch(m)[1]
-		val, ok := lookup(key)
+		sub := placeholderRE.FindStringSubmatch(m)
+		val, ok := lookup(sub[1], sub[2])
 		if !ok {
 			return m
 		}
@@ -191,4 +191,30 @@ func Expand(text string, lookup func(key string) (string, bool)) (string, []stri
 		return val
 	})
 	return out, used
+}
+
+// Resolve is a lookup for Expand in a workspace's scope: AnyScope tries
+// the workspace's own, then the global one; OnlyGlobal and OnlyWorkspace
+// only theirs.
+func (v Vault) Resolve(workspaceScope string) func(scope, key string) (string, bool) {
+	return func(scope, key string) (string, bool) {
+		var scopes []string
+		switch scope {
+		case OnlyGlobal:
+			scopes = []string{GlobalScope}
+		case OnlyWorkspace:
+			scopes = []string{workspaceScope}
+		default:
+			scopes = []string{workspaceScope, GlobalScope}
+		}
+		for _, s := range scopes {
+			if s == "" {
+				continue
+			}
+			if val, err := v.Store.Get(URN(s, key)); err == nil {
+				return val, true
+			}
+		}
+		return "", false
+	}
 }

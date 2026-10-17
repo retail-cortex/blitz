@@ -601,9 +601,7 @@ func ModelErrorSummary(err error, cfg *config.Config) string {
 // values put in, for the workspace in dir (the values are masked in logs:
 // SecretRedactor masks every MCP env and header value).
 func mcpWithSecrets(servers []config.MCPServerConfig, dir string) []config.MCPServerConfig {
-	vault := config.Vault("")
-	scope := config.SecretScope("", dir)
-	lookup := func(key string) (string, bool) { return vault.Lookup(scope, key) }
+	lookup := config.Vault("").Resolve(config.SecretScope("", dir))
 	expand := func(m map[string]string) map[string]string {
 		var out map[string]string
 		for k, v := range m {
@@ -630,10 +628,9 @@ func mcpWithSecrets(servers []config.MCPServerConfig, dir string) []config.MCPSe
 	return out
 }
 
-// expandSecrets puts {secrets:key} values into text: the workspace's own
-// secret, else the global one (spec_secrets_039).
+// expandSecrets puts secrets' values into text (spec_secrets_039):
+// {secrets:key} the workspace's own, else the global one;
+// {secrets:global:key} and {secrets:workspace:key} only that scope's.
 func (w *Workspace) expandSecrets(text string) (string, []string) {
-	vault := config.Vault("")
-	scope := config.SecretScope("", w.Dir())
-	return secrets.Expand(text, func(key string) (string, bool) { return vault.Lookup(scope, key) })
+	return secrets.Expand(text, config.Vault("").Resolve(config.SecretScope("", w.Dir())))
 }

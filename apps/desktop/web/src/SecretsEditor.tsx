@@ -25,8 +25,17 @@ import { Button, Dialog, Icon, IconButton, useSnackbar } from "./ui/controls";
 /** Whether key can name a secret: letters, digits, _, . and -, up to 64 (secrets.ValidKey). */
 export const validSecretKey = (key: string) => /^[A-Za-z0-9_.-]{1,64}$/.test(key);
 
-/** How a secret is named in prompts, instructions and settings. */
-export const secretPlaceholder = (key: string) => `{secrets:${key}}`;
+/**
+ * How a secret is named in prompts, instructions and settings: a global
+ * one as {secrets:global:key}, always the global one; a workspace's as
+ * {secrets:workspace:key}, only its own. ({secrets:key} also works: the
+ * workspace's own, else the global one.)
+ */
+export const secretPlaceholder = (key: string, workspace = "") => `{secrets:${workspace ? "workspace" : "global"}:${key}}`;
+
+/** Where a global secret is stored: its name in the keychain. A workspace's
+ * is urn:blitz:<its settings folder>:secrets:<key>. */
+export const globalURN = (key: string) => `urn:blitz:global:secrets:${key}`;
 
 /**
  * The user's secrets in a scope (spec_secrets_039): the global ones
@@ -77,7 +86,7 @@ export function SecretsEditor({ workspace = "" }: { workspace?: string }) {
   return (
     <div className="stack secrets-editor" style={{ gap: 12 }}>
       <p className="t-body-sm muted">
-        {t(workspace ? "desktop.secrets.intro_workspace" : "desktop.secrets.intro", { example: secretPlaceholder("github_token") })}
+        {t(workspace ? "desktop.secrets.intro_workspace" : "desktop.secrets.intro", { example: secretPlaceholder("github_token", workspace) })}
         {store && ` ${t("desktop.secrets.store", { store })}`}
       </p>
       {error && <p className="error-text">{error}</p>}
@@ -89,8 +98,12 @@ export function SecretsEditor({ workspace = "" }: { workspace?: string }) {
             <div key={s.key} className="rule">
               <Icon path={mdiKeyVariant} className="muted" />
               <div className="stack spacer" style={{ gap: 2, minWidth: 0 }}>
-                <code>{secretPlaceholder(s.key)}</code>
-                {s.updated && <span className="t-body-sm muted">{t("desktop.secrets.updated", { when: new Date(Number(s.updated.seconds) * 1000).toLocaleString() })}</span>}
+                <code>{secretPlaceholder(s.key, workspace)}</code>
+                <span className="t-body-sm muted">
+                  {!workspace && t("desktop.secrets.stored", { urn: globalURN(s.key) })}
+                  {!workspace && s.updated && " · "}
+                  {s.updated && t("desktop.secrets.updated", { when: new Date(Number(s.updated.seconds) * 1000).toLocaleString() })}
+                </span>
               </div>
               <IconButton icon={mdiPencilOutline} label={t("desktop.secrets.replace", { key: s.key })} small disabled={busy} onClick={() => setReplacing(s.key)} />
               <IconButton icon={mdiDeleteOutline} label={t("desktop.secrets.delete_named", { key: s.key })} small disabled={busy} onClick={() => setDeleting(s.key)} />
@@ -143,7 +156,7 @@ export function SecretsEditor({ workspace = "" }: { workspace?: string }) {
             </>
           }
         >
-          <p>{t("desktop.secrets.delete_body", { placeholder: secretPlaceholder(deleting) })}</p>
+          <p>{t("desktop.secrets.delete_body", { placeholder: secretPlaceholder(deleting, workspace) })}</p>
         </Dialog>
       )}
     </div>

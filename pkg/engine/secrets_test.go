@@ -35,13 +35,15 @@ func TestMCPWithSecrets(t *testing.T) {
 
 	in := []config.MCPServerConfig{
 		{Name: "github", Command: "x", Env: map[string]string{"GITHUB_TOKEN": "{secrets:gh}", "PLAIN": "1"}},
-		{Name: "api", URL: "https://x", Headers: map[string]string{"Authorization": "Bearer {secrets:db}"}},
+		{Name: "api", URL: "https://x", Headers: map[string]string{"Authorization": "Bearer {secrets:db}", "X-Global": "{secrets:global:gh}", "X-Missing": "{secrets:workspace:gh}"}},
 		{Name: "none", Command: "y"},
 	}
 	out := mcpWithSecrets(in, dir)
 	assert.Equal(t, "global-gh-token", out[0].Env["GITHUB_TOKEN"])
 	assert.Equal(t, "1", out[0].Env["PLAIN"])
 	assert.Equal(t, "Bearer workspace-db-pass", out[1].Headers["Authorization"])
+	assert.Equal(t, "global-gh-token", out[1].Headers["X-Global"])
+	assert.Equal(t, "{secrets:workspace:gh}", out[1].Headers["X-Missing"], "the workspace has no gh of its own")
 	assert.Equal(t, "{secrets:gh}", in[0].Env["GITHUB_TOKEN"], "the settings keep the name")
 	assert.Nil(t, out[2].Env)
 }

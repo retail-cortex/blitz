@@ -79,9 +79,9 @@ func TestVault(t *testing.T) {
 }
 
 func TestExpand(t *testing.T) {
-	lookup := func(k string) (string, bool) {
-		m := map[string]string{"token": "s3cr3t-value", "db.pass": "pw-value-99"}
-		v, ok := m[k]
+	lookup := func(scope, k string) (string, bool) {
+		m := map[string]string{"/token": "s3cr3t-value", "/db.pass": "pw-value-99", "global/token": "global-only", "workspace/token": "ws-only"}
+		v, ok := m[scope+"/"+k]
 		return v, ok
 	}
 	for _, tc := range []struct {
@@ -91,7 +91,10 @@ func TestExpand(t *testing.T) {
 		{"none", "plain text {x}", "plain text {x}", nil},
 		{"one", "use {secrets:token} here", "use s3cr3t-value here", []string{"s3cr3t-value"}},
 		{"two", "{secrets:token}:{secrets:db.pass}", "s3cr3t-value:pw-value-99", []string{"s3cr3t-value", "pw-value-99"}},
+		{"global only", "{secrets:global:token}", "global-only", []string{"global-only"}},
+		{"workspace only", "{secrets:workspace:token}", "ws-only", []string{"ws-only"}},
 		{"unknown stays", "keep {secrets:nope}", "keep {secrets:nope}", nil},
+		{"unknown scope", "{secrets:other:token}", "{secrets:other:token}", nil},
 		{"not a key", "{secrets:has space}", "{secrets:has space}", nil},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -101,6 +104,34 @@ func TestExpand(t *testing.T) {
 		})
 	}
 	assert.True(t, HasPlaceholders("a {secrets:token}"))
+	assert.True(t, HasPlaceholders("a {secrets:global:token}"))
 	assert.False(t, HasPlaceholders("a {secrets:}"))
 	assert.False(t, HasPlaceholders("nothing"))
+}
+
+// Resolve: no scope tries the workspace's, then the global one; a named
+// scope only its own, with no fallback.
+func TestResolve(t *testing.T) {
+	v := Vault{Store: &Memory{}, Index: filepath.Join(t.TempDir(), "names.toml")}
+	require.NoError(t, v.Set(GlobalScope, "token", "global-token-1"))
+	require.NoError(t, v.Set(GlobalScope, "only_global", "only-global-1"))
+	require.NoError(t, v.Set("shop-1", "token", "shop-token-11"))
+	r := v.Resolve("shop-1")
+	for _, tc := range []struct {
+		scope, key, want string
+		ok               bool
+	}{
+		{AnyScope, "token", "shop-token-11", true},
+		{AnyScope, "only_global", "only-global-1", true},
+		{OnlyGlobal, "token", "global-token-1", true},
+		{OnlyWorkspace, "token", "shop-token-11", true},
+		{OnlyWorkspace, "only_global", "", false},
+		{OnlyGlobal, "missing", "", false},
+	} {
+		got, ok := r(tc.scope, tc.key)
+		assert.Equal(t, tc.ok, ok, "%s %s", tc.scope, tc.key)
+		assert.Equal(t, tc.want, got, "%s %s", tc.scope, tc.key)
+	}
+	_, ok := v.Resolve("")(OnlyWorkspace, "token")
+	assert.False(t, ok, "no workspace: no workspace secrets")
 }
