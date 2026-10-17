@@ -514,6 +514,9 @@ function OSSandbox() {
  * one is (another build's link, or dead links left on a developer's
  * machine). Not in a browser.
  */
+/** The folder of a Windows or Unix path. */
+const folderOf = (p: string) => p.replace(/[\\/][^\\/]*$/, "");
+
 function CommandLine() {
   const [status, setStatus] = useState<CLIStatus | undefined | null>(null); // null: checking
   const [busy, setBusy] = useState(false);
@@ -523,13 +526,22 @@ function CommandLine() {
     cliStatus().then(setStatus, (e) => setError(String(e)));
   }, []);
   if (status === undefined) return null;
+  const byPath = status?.method === "path";
   const install = async (again: boolean) => {
     setBusy(true);
     setError("");
     try {
       const done = again ? await reinstallCLI() : await installCLI();
-      const linked = done.profile ? t("desktop.cli.installed_profile", { link: done.link, profile: done.profile }) : t("desktop.cli.installed", { link: done.link });
-      setNote(done.removed?.length ? `${linked} ${t("desktop.cli.removed", { links: done.removed.join(", ") })}` : linked);
+      // Windows puts the folder on PATH (no links): its own words.
+      const linked = byPath
+        ? done.profile
+          ? t("desktop.cli.installed_path", { folder: folderOf(done.link) })
+          : t("desktop.cli.found_path", { path: done.link })
+        : done.profile
+          ? t("desktop.cli.installed_profile", { link: done.link, profile: done.profile })
+          : t("desktop.cli.installed", { link: done.link });
+      const removed = done.removed?.length ? (byPath ? t("desktop.cli.removed_path", { folders: done.removed.join(", ") }) : t("desktop.cli.removed", { links: done.removed.join(", ") })) : "";
+      setNote(removed ? `${linked} ${removed}` : linked);
       setStatus(await cliStatus());
     } catch (e) {
       setError(String(e));
@@ -545,13 +557,13 @@ function CommandLine() {
         : status.installed
           ? t("desktop.cli.on_path", { path: status.on_path })
           : status.on_path
-            ? t("desktop.cli.other", { path: status.on_path })
-            : t("desktop.cli.detail");
+            ? t(byPath ? "desktop.cli.other_path" : "desktop.cli.other", { path: status.on_path })
+            : t(byPath ? "desktop.cli.detail_path" : "desktop.cli.detail");
   return (
     <>
       <Setting title={t("desktop.cli")} detail={detail}>
         {status && status.cli && (
-          <Button small variant="tonal" disabled={busy} onClick={() => void install(!!status.on_path)} title={status.on_path ? t("desktop.cli.reinstall_hint") : undefined}>
+          <Button small variant="tonal" disabled={busy} onClick={() => void install(!!status.on_path)} title={status.on_path ? t(byPath ? "desktop.cli.reinstall_hint_path" : "desktop.cli.reinstall_hint") : undefined}>
             {status.on_path ? t("desktop.service.reinstall") : t("desktop.service.install_short")}
           </Button>
         )}

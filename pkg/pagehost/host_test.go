@@ -169,8 +169,7 @@ func mustJSON(t *testing.T, v any) string {
 	return string(b)
 }
 
-// The preferences, the sandbox and (but on Windows) the blitz command are
-// the host's too, the preferences only when it keeps them.
+// The preferences, the sandbox and the blitz command are the host's too, the preferences only when it keeps them.
 func TestHostPrefsSandboxAndCLI(t *testing.T) {
 	names := func(h http.Handler) []string {
 		rec := httptest.NewRecorder()
@@ -186,13 +185,8 @@ func TestHostPrefsSandboxAndCLI(t *testing.T) {
 	for _, m := range []string{"GetPrefs", "SavePrefs", "SandboxStatus", "FixSandbox"} {
 		assert.Contains(t, all, m)
 	}
-	cli := []string{"CLIStatus", "InstallCLI", "ReinstallCLI"}
-	for _, m := range cli {
-		if goruntime.GOOS == "windows" {
-			assert.NotContains(t, all, m)
-		} else {
-			assert.Contains(t, all, m)
-		}
+	for _, m := range []string{"CLIStatus", "InstallCLI", "ReinstallCLI"} {
+		assert.Contains(t, all, m, "on every OS: Windows puts the folder on PATH")
 	}
 
 	code, body := call(t, h, "GetPrefs")
@@ -211,10 +205,8 @@ func TestHostPrefsSandboxAndCLI(t *testing.T) {
 	code, body = call(t, h, "SandboxStatus")
 	require.Equal(t, http.StatusOK, code, string(body))
 	assert.Contains(t, string(body), `"state"`)
-	if goruntime.GOOS != "windows" {
-		code, body = call(t, h, "CLIStatus")
-		assert.Equal(t, http.StatusOK, code, string(body))
-	}
+	code, body = call(t, h, "CLIStatus")
+	assert.Equal(t, http.StatusOK, code, string(body))
 }
 
 // fakeService records what the host asks of the service.

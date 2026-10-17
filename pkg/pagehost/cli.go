@@ -36,6 +36,10 @@ type CLIStatus struct {
 	// if none), and Installed whether it's this app's.
 	OnPath    string `json:"on_path"`
 	Installed bool   `json:"installed"`
+	// Method is how it goes on PATH: "link" (a link in a folder on PATH,
+	// macOS and Linux) or "path" (its folder added to the user's PATH,
+	// Windows).
+	Method string `json:"method"`
 }
 
 // CLIInstall is what InstallCLI did: the link it made, and the shell
@@ -53,6 +57,9 @@ type CLIInstall struct {
 // isn't the terminal's, on macOS especially).
 func CurrentCLIStatus() CLIStatus {
 	cli, _ := findCLI()
+	if goruntime.GOOS == "windows" {
+		return windowsCLIStatus(cli)
+	}
 	return cliStatus(cli, userPath(loginShell()))
 }
 
@@ -63,6 +70,9 @@ func InstallCLI() (CLIInstall, error) {
 	cli, err := findCLI()
 	if err != nil {
 		return CLIInstall{}, err
+	}
+	if goruntime.GOOS == "windows" {
+		return windowsInstallCLI(cli, false)
 	}
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -82,6 +92,9 @@ func ReinstallCLI() (CLIInstall, error) {
 	cli, err := findCLI()
 	if err != nil {
 		return CLIInstall{}, err
+	}
+	if goruntime.GOOS == "windows" {
+		return windowsInstallCLI(cli, true)
 	}
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -139,7 +152,7 @@ func reinstallCLI(cli, home, shell, goos string, path []string) (CLIInstall, err
 }
 
 func cliStatus(cli string, path []string) CLIStatus {
-	s := CLIStatus{CLI: cli, OnPath: lookPathIn(path, "blitz")}
+	s := CLIStatus{CLI: cli, OnPath: lookPathIn(path, "blitz"), Method: "link"}
 	if s.OnPath != "" && cli != "" {
 		resolved, err := filepath.EvalSymlinks(s.OnPath)
 		s.Installed = err == nil && resolved == cli
@@ -157,8 +170,12 @@ func findCLI() (string, error) {
 	for _, root := range loginitem.RunfilesRoots() {
 		dirs = append(dirs, filepath.Join(root, "_main", "apps", "cli"))
 	}
+	name := "blitz"
+	if goruntime.GOOS == "windows" {
+		name = "blitz.exe"
+	}
 	for _, d := range dirs {
-		p := filepath.Join(d, "blitz")
+		p := filepath.Join(d, name)
 		if info, err := os.Stat(p); err == nil && !info.IsDir() {
 			return filepath.EvalSymlinks(p)
 		}

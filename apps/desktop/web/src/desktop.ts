@@ -45,6 +45,7 @@ export interface CLIStatus {
   cli: string; // the blitz beside the app ("" if not found)
   on_path: string; // the blitz on the user's PATH ("" if none)
   installed: boolean; // on_path is the app's
+  method?: "link" | "path"; // a link on PATH (macOS, Linux), or its folder on the user's PATH (Windows)
 }
 
 /** What installing the CLI did: the link, and the startup file it added its directory to PATH in ("" if none). */

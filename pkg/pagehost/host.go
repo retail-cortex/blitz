@@ -145,13 +145,11 @@ func (h Host) methods() map[string]hostMethod {
 			return h.Prefs.Save(p)
 		}
 	}
-	// The blitz command goes on PATH with a link and the shell's startup
-	// file: not Windows's way.
-	if goruntime.GOOS != "windows" {
-		m["CLIStatus"] = func([]json.RawMessage) (any, error) { return CurrentCLIStatus(), nil }
-		m["InstallCLI"] = func([]json.RawMessage) (any, error) { return InstallCLI() }
-		m["ReinstallCLI"] = func([]json.RawMessage) (any, error) { return ReinstallCLI() }
-	}
+	// The blitz command: a link on PATH, or on Windows its folder on the
+	// user's PATH.
+	m["CLIStatus"] = func([]json.RawMessage) (any, error) { return CurrentCLIStatus(), nil }
+	m["InstallCLI"] = func([]json.RawMessage) (any, error) { return InstallCLI() }
+	m["ReinstallCLI"] = func([]json.RawMessage) (any, error) { return ReinstallCLI() }
 	return m
 }
 

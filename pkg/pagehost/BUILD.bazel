@@ -18,6 +18,9 @@ go_library(
     name = "pagehost",
     srcs = [
         "cli.go",
+        "cli_other.go",
+        "cli_windows.go",
+        "cli_winpath.go",
         "host.go",
         "prefs.go",
         "sandbox.go",
@@ -32,7 +35,13 @@ go_library(
         "//pkg/sandboxsetup",
         "//pkg/shellpath",
         "//pkg/socket",
-    ],
+    ] + select({
+        "@rules_go//go/platform:windows": [
+            "@org_golang_x_sys//windows",
+            "@org_golang_x_sys//windows/registry",
+        ],
+        "//conditions:default": [],
+    }),
 )
 
 go_test(
@@ -40,6 +49,7 @@ go_test(
     srcs = [
         "cli_install_test.go",
         "cli_test.go",
+        "cli_winpath_test.go",
         "host_test.go",
         "prefs_test.go",
     ],
