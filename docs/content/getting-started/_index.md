@@ -13,7 +13,7 @@ curl -fsSL https://github.com/retail-cortex/blitz/releases/latest/download/insta
 
 `BLITZ_BIN` picks another folder, `BLITZ_VERSION={{< release >}}` a particular release (the latest without it), and `BLITZ_REQUIRE_SIGNATURE=1` refuses to install without checking the signature. With Homebrew: `brew install retail-cortex/tap/blitz`.
 
-Later, `blitz update` installs the latest release over this one (`--check` only says whether there is one). It checks the release's signature and its checksum itself, with nothing else to install (releases before v0.6.6 need cosign for their signature). A copy installed by Homebrew is updated with `brew upgrade blitz`.
+Later, `blitz update` installs the latest release over this one (`--check` only says whether there is one). It checks the release's signature and its checksum itself, with nothing else to install (releases before v0.7.0 need cosign for their signature). A copy installed by Homebrew is updated with `brew upgrade blitz`.
 
 Or download the archive for your platform from the [releases](https://github.com/retail-cortex/blitz/releases). Each holds `blitz`, `blitzd`, the `blz` shortcut (a link to `blitz`, not on Windows), and the license files; Windows's also has `blitz-tray.exe`, which runs the service and opens the [desktop app's page](../products/desktop.md#on-windows):
 
