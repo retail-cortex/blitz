@@ -1,13 +1,13 @@
 ---
-title: Blitz 0.6.6
+title: Blitz 0.7.0
 weight: 1
 ---
 
-**A new desktop app for Mac, Windows and Linux: it updates itself, opens your web app beside the chat, and comes in the colours you like.** Download it from the [GitHub release](https://github.com/retail-cortex/blitz/releases/tag/v0.6.6).
+**A new desktop app for Mac, Windows and Linux: it updates itself, opens your web app beside the chat, and comes in the colours you like.** Download it from the [GitHub release](https://github.com/retail-cortex/blitz/releases/tag/v0.7.0).
 
 **One app everywhere, Windows included.** The desktop app is rebuilt on Electron, the same on every system. Windows gets the full app for the first time, not just a tray with a browser page: the folder picker, Export as PDF, notifications, and installing the `blitz` command. On Linux it no longer depends on WebKitGTK, so the graphics-card problems some NVIDIA systems had are gone.
 
-**It keeps itself up to date.** When the app opens it looks for a new release (every few days at most), downloads it, checks its signature, and offers **Restart**. Nothing to download by hand again.
+**It keeps itself up to date.** When the app opens it looks for a new release (every few days at most), downloads it, checks its signature, and offers **Restart**. Install 0.7.0 by hand once; after that, there’s nothing to download by hand again.
 
 **See your web app, and show it to the agent.** Click the globe in the top bar, or a `localhost` link in the chat, and the page opens in a tab beside the conversation. **Add to chat** hands the agent the page, your selection, a screenshot or the console's errors, and the agent reads them as content, never as instructions. **Save to workspace** keeps a page as Markdown (with its pictures, ready for the agent to read later), HTML or PDF.
 
