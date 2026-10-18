@@ -1423,6 +1423,42 @@ export function installFake() {
         watchWorkflowRun: ({ id }) => watchFakeRun(id),
         watchWorkflowRuns: ({ workspace }) => watchFakeRuns(workspace),
         getWorkspaceHealth: () => ({ health: clone(WorkspaceHealthSchema, { ...fakeHealth, checking: fakeChecking, progress: fakeChecking && fakeProgress ? create(HealthCheckProgressSchema, fakeProgress) : undefined }) }),
+        // The composer: one question, then a three-step draft.
+        startCompose: ({ request }) => ({
+          session: { id: "compose-fake", kind: "workflow", asking: true, costUsd: 0.0012, turns: [{ role: "user", text: request }, { role: "composer", text: "Where are the notes kept?", options: ["notes/today.md", "A folder of notes", "In the chat"] }] },
+        }),
+        answerCompose: ({ answer }) => {
+          const file = "description: A daily brief from the notes\nnodes:\n  - {id: notes, type: read_file, title: Read the notes, path: notes/today.md, position: {x: 0, y: 80}}\n  - {id: draft, type: agent, title: Draft the brief, instructions: Write a short brief for the team., position: {x: 280, y: 80}}\n  - {id: save, type: save_file, title: Save it, path: briefs/today.md, position: {x: 560, y: 80}}\nedges:\n  - {from: notes, to: draft}\n  - {from: draft, to: save}\n";
+          return {
+            session: {
+              id: "compose-fake",
+              kind: "workflow",
+              asking: false,
+              costUsd: 0.0031,
+              turns: [{ role: "user", text: "A daily brief" }, { role: "composer", text: "Where are the notes kept?", options: [] }, { role: "user", text: answer }, { role: "composer", text: "Reads today's notes, drafts a short brief and saves it in briefs/." }],
+              draft: {
+                name: "daily-brief",
+                summary: "Reads today's notes, drafts a short brief and saves it in briefs/.",
+                file,
+                problems: [],
+                workflow: {
+                  name: "daily-brief",
+                  description: "A daily brief from the notes",
+                  nodes: [
+                    flowNode("notes", "read_file", "Read the notes", 0, 80, { path: "notes/today.md" }),
+                    flowNode("draft", "agent", "Draft the brief", 280, 80, { instructions: "Write a short brief for the team." }),
+                    flowNode("save", "save_file", "Save it", 560, 80, { path: "briefs/today.md" }),
+                  ],
+                  edges: [
+                    { from: "notes", to: "draft" },
+                    { from: "draft", to: "save" },
+                  ],
+                },
+              },
+            },
+          };
+        },
+        dropCompose: () => ({}),
         startHealthCheck: ({ scope }) => {
           if (fakeChecking) throw new ConnectError("a health check of this workspace is running", Code.FailedPrecondition);
           void (async () => {

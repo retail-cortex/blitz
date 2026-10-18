@@ -694,3 +694,18 @@ The facts cost nothing; a check makes one model call per item judged (cents for 
   **Expected:** each rubric line's score (pips) and reason, the summary, who judged and when; Improve closes Studio with the request in the composer.
 - [ ] The gear: schedule *every 5 minutes*, limit *0.0001*.
   **Expected:** saved for the workspace; within a few minutes "The scheduled check didn't run: judging n items would cost about $…, over the $0.00 limit". With limit 0 it runs by itself. A new workspace that was never checked by hand is never checked on a schedule.
+
+## 54. The composer: a workflow from a conversation (spec_composer_045)
+
+Each turn is one small model call (well under a cent); the composer uses the suggestions model, else the auto reviewer's.
+
+- [ ] Studio › Workflows › **+** › **Compose with AI**. Ask for "Every weekday, read qa/sales.csv, summarize the trend in two paragraphs and save it to reports/sales-summary.md".
+  **Expected:** "Thinking…", then either a question with suggested answers as buttons, or straight away a draft: its name, its steps in order (read a file, summarize, save to a file) and no problems; the cost so far at the bottom.
+- [ ] Ask for something vague ("help with my reports").
+  **Expected:** a question, one at a time, with buttons; answering by a button or in your own words moves on; a draft comes by the fifth answer at the latest.
+- [ ] With a draft, **Ask for a change** ("also email it to me").
+  **Expected:** a new draft (email steps are coming soon, so the draft says what it can't do, or shows it as a problem to fix by hand).
+- [ ] **Open on the canvas**.
+  **Expected:** the canvas opens on a new, unsaved workflow with the draft's name (a number added if it's taken), its steps linked in order, and "Opened as a new workflow: review it, then save"; nothing is written until **Save**.
+- [ ] With the model unreachable (a wrong key), Start.
+  **Expected:** the dialog shows the error; the status bar stays *Connected* (not "The Blitz service isn't answering").

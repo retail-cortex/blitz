@@ -296,6 +296,16 @@ service WorkspaceService {
   // watches, its progress in the dashboard (WorkspaceHealth.progress);
   // HEALTH_CHECK_RUNNING when one is going.
   rpc StartHealthCheck(StartHealthCheckRequest) returns (StartHealthCheckResponse);
+
+  // The composer (spec_composer_045): starts a guided conversation that
+  // makes a component of a kind ("workflow"), and runs its first turn: a
+  // question, or a draft checked by the kind's own rules.
+  rpc StartCompose(StartComposeRequest) returns (StartComposeResponse);
+  // Answers the composer's question (or asks a change of its draft) and
+  // runs its next turn; COMPOSE_NOT_FOUND once the session has ended.
+  rpc AnswerCompose(AnswerComposeRequest) returns (AnswerComposeResponse);
+  // Ends a composer session.
+  rpc DropCompose(DropComposeRequest) returns (DropComposeResponse);
   // Returns the tasks paused workflow runs wait on (human tasks' forms,
   // timers), oldest first: one workspace's, or every one's.
   rpc ListHumanTasks(ListHumanTasksRequest) returns (ListHumanTasksResponse);
@@ -3252,3 +3262,70 @@ message StartHealthCheckRequest {
 
 // Response message for WorkspaceService.StartHealthCheck.
 message StartHealthCheckResponse {}
+
+// A composer conversation as it is.
+message ComposeSession {
+  string id = 1;
+  string kind = 2;
+  repeated ComposeTurn turns = 3;
+  // The composer's last turn is a question waiting for an answer.
+  bool asking = 4;
+  // The latest draft (unset until there's one).
+  ComposeDraft draft = 5;
+  double cost_usd = 6;
+}
+
+// One message of a composer conversation: the user's, or the composer's
+// (a question with its suggested answers, or a draft's summary).
+message ComposeTurn {
+  string role = 1;
+  string text = 2;
+  repeated string options = 3;
+}
+
+// A component the composer wrote: its name, a summary, its file, what the
+// kind's checks still find wrong, and for a workflow the workflow itself.
+message ComposeDraft {
+  string name = 1;
+  string summary = 2;
+  string file = 3;
+  repeated string problems = 4;
+  WorkflowFile workflow = 5;
+}
+
+// Request message for WorkspaceService.StartCompose.
+message StartComposeRequest {
+  string workspace = 1;
+  string kind = 2;
+  // What the user wants.
+  string request = 3;
+  // The component being changed, as its file ("" for a new one).
+  string current = 4;
+}
+
+// Response message for WorkspaceService.StartCompose.
+message StartComposeResponse {
+  ComposeSession session = 1;
+}
+
+// Request message for WorkspaceService.AnswerCompose.
+message AnswerComposeRequest {
+  string workspace = 1;
+  string id = 2;
+  string answer = 3;
+}
+
+// Response message for WorkspaceService.AnswerCompose.
+message AnswerComposeResponse {
+  ComposeSession session = 1;
+}
+
+// Request message for WorkspaceService.DropCompose.
+message DropComposeRequest {
+  string workspace = 1;
+  string id = 2;
+}
+
+// Response message for WorkspaceService.DropCompose.
+message DropComposeResponse {}
+

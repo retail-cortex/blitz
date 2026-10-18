@@ -210,7 +210,8 @@ func (h workspaceService) CheckWorkspaceHealth(ctx context.Context, r req[pb.Che
 	case errors.Is(err, engine.ErrHealthCheckRunning):
 		return apiError(connect.CodeFailedPrecondition, "HEALTH_CHECK_RUNNING", err)
 	case err != nil && !errors.Is(err, context.Canceled):
-		return connect.NewError(connect.CodeUnavailable, err)
+		// Not Unavailable: that reads as the service gone.
+		return apiError(connect.CodeFailedPrecondition, "HEALTH_CHECK_FAILED", err)
 	}
 	return stream.Send(&pb.CheckWorkspaceHealthResponse{Done: true, Judged: int32(judged), CostUsd: cost})
 }

@@ -54,6 +54,7 @@ import {
   mdiTrayFull,
   mdiUndoVariant,
   mdiWeb,
+  mdiAutoFix,
 } from "@mdi/js";
 import { A2uiForm } from "../a2ui/A2uiForm";
 import { TaskCard } from "../a2ui/TaskCard";
@@ -73,6 +74,7 @@ import { useWorkspaceStatus } from "../status";
 import { cost, goingRun, latestSteps, ms, progress, seeRun, took, useWorkflowRuns, watchedRuns } from "../workflowRuns";
 import { dated, RunPanel, statusIcon } from "./RunPanel";
 import { WorkflowSchedule } from "./WorkflowSchedule";
+import { ComposeDialog } from "./ComposeDialog";
 import { t, tn } from "../i18n";
 import { SuggestInput, SuggestTextarea } from "../SecretSuggest";
 import { Button, Dialog, Field, Icon, IconButton, Menu, MultiSelect, Segmented, useSnackbar } from "../ui/controls";
@@ -283,6 +285,8 @@ export function WorkflowsPane({
   const [pending, setPending] = useState<(() => void) | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [choosing, setChoosing] = useState(false);
+  // The composer making a workflow from a conversation (spec_composer_045).
+  const [composing, setComposing] = useState(false);
   // The mode a new workflow runs in, chosen as it's made (WF-21).
   const [newMode, setNewMode] = useState("auto");
   const workspaceMode = useWorkspaceStatus(workspace).settings?.permissionMode ?? "auto";
@@ -1098,11 +1102,40 @@ export function WorkflowsPane({
           </>
         )}
       </section>
+      {composing && (
+        <ComposeDialog
+          workspace={workspace}
+          kind="workflow"
+          onClose={() => setComposing(false)}
+          onDraft={(d) => {
+            setComposing(false);
+            const f = d.workflow ? formFromWorkflow(d.workflow) : emptyWorkflowForm;
+            const taken = list.map((w) => w.name);
+            let name = d.name || f.name;
+            for (let n = 2; name && taken.includes(name); n++) name = `${d.name}-${n}`;
+            show("", { ...f, name, description: f.description || d.summary }, false);
+          }}
+        />
+      )}
       {choosing &&
         createPortal(
           <Dialog title={t("desktop.flows.new")} icon={mdiSitemapOutline} onClose={() => setChoosing(false)} footer={<Button onClick={() => setChoosing(false)}>{t("desktop.cancel")}</Button>}>
             <FlowModeField value={newMode} workspaceMode={workspaceMode} onChange={setNewMode} />
             <div className="list">
+              <button
+                type="button"
+                className="list-item compose-entry"
+                onClick={() => {
+                  setChoosing(false);
+                  setComposing(true);
+                }}
+              >
+                <Icon path={mdiAutoFix} />
+                <span className="lines">
+                  <span className="ellipsis">{t("desktop.compose.entry")}</span>
+                  <small className="ellipsis">{t("desktop.compose.entry_about")}</small>
+                </span>
+              </button>
               {templates.map((tpl: Template) => (
                 <button
                   key={tpl}
