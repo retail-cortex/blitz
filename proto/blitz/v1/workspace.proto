@@ -926,6 +926,10 @@ message SkillInfo {
   repeated string references = 22;
   // The workspace's own: its folder is in the workspace.
   bool project = 23;
+  // Its package files (requirements.txt, pyproject.toml, package.json),
+  // as paths in its folder: the first of each kind gives its scripts
+  // their packages.
+  repeated string package_files = 24;
 }
 
 // SkillTool is a tool a skill needs.

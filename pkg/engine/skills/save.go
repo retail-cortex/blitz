@@ -247,11 +247,15 @@ func Delete(dir, name string) error {
 }
 
 // fileRel checks a path for one of a skill's own files: under
-// references/ or scripts/, inside the folder.
+// references/ or scripts/, or a package file beside SKILL.md, inside the
+// folder.
 func fileRel(rel string) (string, error) {
 	rel = path.Clean(strings.TrimSpace(rel))
 	if !inBundle(rel) {
 		return "", fmt.Errorf("%q is outside the skill's folder", rel)
+	}
+	if IsPackageFile(rel) {
+		return rel, nil // requirements.txt, pyproject.toml, package.json, beside SKILL.md too
 	}
 	top, rest, _ := strings.Cut(rel, "/")
 	if (top != ReferencesDir && top != ScriptsDir) || rest == "" {

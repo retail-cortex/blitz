@@ -21,6 +21,8 @@ import (
 	"path"
 	"slices"
 	"strings"
+
+	"github.com/BurntSushi/toml"
 )
 
 // The four kinds of skill, told from what its folder holds rather than a
@@ -107,14 +109,41 @@ func (s *Skill) scanBundle() {
 }
 
 // PackageFiles are where a skill's scripts' packages may be listed, by
-// kind: requirements.txt for Python, package.json for Node; in scripts/
+// kind, the first found winning: requirements.txt, then pyproject.toml
+// ([project] dependencies) for Python, package.json for Node; in scripts/
 // first, then beside SKILL.md.
-var PackageFiles = map[string][]string{"python": {"scripts/requirements.txt", "requirements.txt"}, "node": {"scripts/package.json", "package.json"}}
+var PackageFiles = map[string][]string{
+	"python": {"scripts/requirements.txt", "requirements.txt", "scripts/pyproject.toml", "pyproject.toml"},
+	"node":   {"scripts/package.json", "package.json"},
+}
+
+// IsPackageFile reports whether rel names one of PackageFiles.
+func IsPackageFile(rel string) bool {
+	for _, list := range PackageFiles {
+		if slices.Contains(list, rel) {
+			return true
+		}
+	}
+	return false
+}
+
+// findPackageFiles notes which of PackageFiles the skill's folder has.
+func (s *Skill) findPackageFiles() {
+	s.PackageFiles = nil
+	for _, kind := range []string{"python", "node"} {
+		for _, rel := range PackageFiles[kind] {
+			if _, err := fs.Stat(s.fsys, path.Join(s.root, rel)); err == nil {
+				s.PackageFiles = append(s.PackageFiles, rel)
+			}
+		}
+	}
+}
 
 // addPackages gives each script that names no packages those its
 // skill's requirements.txt (Python) or package.json (Node) lists, so it
 // runs in an isolated environment with them (SK-107).
 func (s *Skill) addPackages() {
+	s.findPackageFiles()
 	var py, npm []string
 	loaded := false
 	for i := range s.Scripts {
@@ -133,13 +162,25 @@ func (s *Skill) addPackages() {
 	}
 }
 
-// readPackageFiles is requirements.txt's requirements: a line each,
-// without comments and blank lines.
+// readPackageFiles is the first Python package file's requirements:
+// requirements.txt's lines, without comments and blank lines, or
+// pyproject.toml's [project] dependencies.
 func (s *Skill) readPackageFiles() []string {
 	for _, rel := range PackageFiles["python"] {
 		data, err := fs.ReadFile(s.fsys, path.Join(s.root, rel))
 		if err != nil {
 			continue
+		}
+		if strings.HasSuffix(rel, ".toml") {
+			var py struct {
+				Project struct {
+					Dependencies []string `toml:"dependencies"`
+				} `toml:"project"`
+			}
+			if _, err := toml.Decode(string(data), &py); err != nil {
+				return []string{rel + " isn't valid TOML"} // refused by the policy, with the reason shown
+			}
+			return py.Project.Dependencies
 		}
 		var out []string
 		for _, line := range strings.Split(string(data), "\n") {

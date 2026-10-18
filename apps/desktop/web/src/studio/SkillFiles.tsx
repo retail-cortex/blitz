@@ -35,6 +35,9 @@ import {
   mdiLanguageJavascript,
   mdiLanguagePython,
   mdiLanguageTypescript,
+  mdiNodejs,
+  mdiPackageVariantClosed,
+  mdiPlus,
   mdiPowershell,
   mdiPlay,
   mdiUndoVariant,
@@ -49,7 +52,7 @@ import { previewKind, previewOnly, type PreviewKind } from "../files/previewKind
 import { Button, Dialog, Icon, IconButton, Segmented, useSnackbar } from "../ui/controls";
 import { CodeArea } from "./CodeArea";
 import { DraftButton } from "./Draft";
-import { filePath, languageOfScript, scriptLanguages, scriptTemplate, splitArgs, type ScriptLanguage } from "./skillForm";
+import { activePackageFiles, filePath, languageOfScript, packageKind, packageTemplate, scriptLanguages, scriptTemplate, splitArgs, type ScriptLanguage } from "./skillForm";
 
 const decoder = new TextDecoder();
 const encoder = new TextEncoder();
@@ -192,6 +195,16 @@ export function SkillFiles({ workspace, file, folder, onFile, onDirty, onOpen }:
     }
   };
   const script = folder === "scripts" ? skill.scripts.find((s) => s.source === open) : undefined;
+  // Packages (SK-107): the package files the folder has, the first of each kind counting.
+  const packages = skill.packageFiles;
+  const active = activePackageFiles(packages);
+  const addPackageFile = (path: string) => {
+    const body = packageTemplate(path);
+    void write(path, encoder.encode(body)).then(
+      () => openFile(path, body),
+      (e) => snack(message(e), { error: true }),
+    );
+  };
   const testRun = async () => {
     if (!script) return;
     if (dirty) await save();
@@ -409,7 +422,7 @@ export function SkillFiles({ workspace, file, folder, onFile, onDirty, onOpen }:
                 <span className="lines spacer">
                   <span className="ellipsis">{s.name}</span>
                   <small className={`ellipsis ${s.allowed ? "" : "error-text"}`}>
-                    {[known ? t(`desktop.skills.lang.${lang}`) : s.language, s.allowed ? t(s.found ? "desktop.skills.script_found" : "desktop.skills.script_declared", { source: s.source }) : t("desktop.skills.script_blocked", { reasons: s.reasons.join("; ") })].join(" · ")}
+                    {[known ? t(`desktop.skills.lang.${lang}`) : s.language, s.deps.length ? t("desktop.skills.packages_n", { n: s.deps.length }) : "", s.allowed ? t(s.found ? "desktop.skills.script_found" : "desktop.skills.script_declared", { source: s.source }) : t("desktop.skills.script_blocked", { reasons: s.reasons.join("; ") })].filter(Boolean).join(" · ")}
                   </small>
                 </span>
                 <span className="trailing">
@@ -420,6 +433,39 @@ export function SkillFiles({ workspace, file, folder, onFile, onDirty, onOpen }:
             );
           })}
       </div>
+      {folder === "scripts" && (
+        <section className="stack skill-packages" style={{ gap: 6 }}>
+          <div className="row wrap" style={{ gap: 8 }}>
+            <span className="t-title-sm spacer">{t("desktop.skills.packages")}</span>
+            {!packages.some((p) => packageKind(p) === "python") && (
+              <Button small icon={mdiPlus} onClick={() => addPackageFile("scripts/requirements.txt")}>
+                {t("desktop.skills.add_package", { file: "requirements.txt" })}
+              </Button>
+            )}
+            {!packages.some((p) => packageKind(p) === "node") && (
+              <Button small icon={mdiPlus} onClick={() => addPackageFile("scripts/package.json")}>
+                {t("desktop.skills.add_package", { file: "package.json" })}
+              </Button>
+            )}
+          </div>
+          <span className="t-body-sm muted">{t("desktop.skills.packages_hint")}</span>
+          <div className="list">
+            {packages.map((p) => (
+              <div key={p} className="list-item" role="button" tabIndex={0} onClick={() => show(p)} onKeyDown={(e) => e.key === "Enter" && show(p)}>
+                <Icon path={packageKind(p) === "node" ? mdiNodejs : mdiLanguagePython} />
+                <span className="lines spacer">
+                  <span className="ellipsis">{p}</span>
+                  <small className="ellipsis">{active.has(p) ? t(packageKind(p) === "node" ? "desktop.skills.packages_node" : "desktop.skills.packages_python") : t("desktop.skills.packages_unused")}</small>
+                </span>
+                <span className="trailing">
+                  <Icon path={mdiPackageVariantClosed} size="sm" className={active.has(p) ? "muted" : "error-text"} />
+                  <IconButton icon={mdiDeleteOutline} label={t("desktop.skills.delete_file", { path: p })} small className="hover-only" onClick={(e) => (e.stopPropagation(), setDeleting(p))} />
+                </span>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
       {dialogs}
     </div>
   );

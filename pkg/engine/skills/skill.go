@@ -81,6 +81,9 @@ type Skill struct {
 	// References are the files under references/, as references/<path>
 	// (also in Resources).
 	References []string `json:"references,omitempty"`
+	// PackageFiles are the package files its folder has (requirements.txt,
+	// pyproject.toml, package.json; SK-107), as paths in it.
+	PackageFiles []string `json:"package_files,omitempty"`
 	// Problems are definition errors (see SkillMetadata.Validate).
 	Problems []string `json:"problems,omitempty"`
 

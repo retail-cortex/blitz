@@ -17,7 +17,7 @@
 import { create } from "@bufbuild/protobuf";
 import { describe, expect, it } from "vitest";
 import { SkillFileSchema } from "../gen/blitz/v1/workspace_pb";
-import { emptySkillForm, filePath, formFromSkill, kindOf, languageOfScript, sameSkillForm, skillName, specFromForm, splitArgs, validSkillName } from "./skillForm";
+import { activePackageFiles, emptySkillForm, filePath, packageKind, packageTemplate, formFromSkill, kindOf, languageOfScript, sameSkillForm, skillName, specFromForm, splitArgs, validSkillName } from "./skillForm";
 
 describe("the skill form", () => {
   it("reads a skill, tools as a list, and writes it back", () => {
@@ -67,6 +67,15 @@ describe("the skill form", () => {
     ["references", "  ", ".md", ""],
   ] as const)("new file %s/%s", (folder, name, ext, want) => {
     expect(filePath(folder, name, ext)).toBe(want);
+  });
+
+  it("tells which package files count: the first of each kind", () => {
+    expect([...activePackageFiles(["scripts/requirements.txt", "pyproject.toml", "package.json"])]).toEqual(["scripts/requirements.txt", "package.json"]);
+    expect([...activePackageFiles([])]).toEqual([]);
+    expect(packageKind("scripts/package.json")).toBe("node");
+    expect(packageKind("pyproject.toml")).toBe("python");
+    expect(packageTemplate("scripts/package.json")).toContain('"dependencies"');
+    expect(packageTemplate("scripts/requirements.txt")).toMatch(/^#/);
   });
 
   it("tells a script's language, and splits a test run's arguments", () => {

@@ -58,6 +58,9 @@ type SkillInfo struct {
 	// skills a meta skill combines; References its files under
 	// references/.
 	Agents, Members, References []string
+	// PackageFiles are its package files (requirements.txt,
+	// pyproject.toml, package.json), as paths in its folder.
+	PackageFiles []string
 	// Project means the workspace's own: its folder is in the workspace,
 	// so Studio edits it.
 	Project bool

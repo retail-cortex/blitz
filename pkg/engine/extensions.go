@@ -35,7 +35,7 @@ func (w *Workspace) skillInfo(s *skills.Skill) api.SkillInfo {
 	info := api.SkillInfo{
 		Name: s.Name, Description: s.Description, Version: s.Version, License: s.License, Category: s.Category,
 		Compatibility: s.Compatibility, Tags: s.Tags, NeedsNetwork: s.ExecutionHints.NeedsNetwork(), Dir: s.HostDir(),
-		Kind: s.Kind(), Agents: s.Agents, Members: s.Members, References: s.References, Project: w.ownsSkill(s),
+		Kind: s.Kind(), Agents: s.Agents, Members: s.Members, References: s.References, PackageFiles: s.PackageFiles, Project: w.ownsSkill(s),
 	}
 	for _, t := range s.ToolRequirements {
 		info.Tools = append(info.Tools, api.SkillTool{Name: t.Name, Scopes: t.Scopes, Why: t.Description})

@@ -112,6 +112,26 @@ export function scriptTemplate(language: ScriptLanguage, name: string): string {
   }
 }
 
+/** A package file's kind: python (requirements.txt, pyproject.toml) or node (package.json). */
+export const packageKind = (path: string): "python" | "node" => (path.endsWith("package.json") ? "node" : "python");
+
+/** The package files that give scripts their packages: the first of each kind (SK-107). */
+export function activePackageFiles(files: readonly string[]): Set<string> {
+  const out = new Set<string>();
+  for (const kind of ["python", "node"] as const) {
+    const first = files.find((f) => packageKind(f) === kind);
+    if (first) out.add(first);
+  }
+  return out;
+}
+
+/** A new package file's first lines. */
+export function packageTemplate(path: string): string {
+  if (path.endsWith("package.json")) return `{\n  "dependencies": {\n  }\n}\n`;
+  if (path.endsWith("pyproject.toml")) return `[project]\nname = "skill-scripts"\nversion = "0"\ndependencies = [\n]\n`;
+  return "# One package a line, e.g.\n# requests>=2.31\n";
+}
+
 /** A test run's arguments, split as a shell would split simple words and "quoted text". */
 export function splitArgs(line: string): string[] {
   const out: string[] = [];

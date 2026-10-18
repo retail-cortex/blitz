@@ -107,7 +107,7 @@ func skillMsg(s api.SkillInfo) *pb.SkillInfo {
 		Name: s.Name, Description: s.Description, Version: s.Version, License: s.License, Category: s.Category,
 		Compatibility: s.Compatibility, Tags: s.Tags, Hash: s.Hash, Tier: s.Tier, Bypass: s.Bypass,
 		Network: s.Network, NeedsNetwork: s.NeedsNetwork, Env: s.Env, Withheld: s.Withheld, Blocked: s.Blocked,
-		Dir: s.Dir, Kind: s.Kind, Agents: s.Agents, Members: s.Members, References: s.References, Project: s.Project,
+		Dir: s.Dir, Kind: s.Kind, Agents: s.Agents, Members: s.Members, References: s.References, Project: s.Project, PackageFiles: s.PackageFiles,
 	}
 	for _, t := range s.Tools {
 		out.Tools = append(out.Tools, &pb.SkillTool{Name: t.Name, Scopes: t.Scopes, Why: t.Why})

@@ -38,6 +38,7 @@ go_library(
     deps = [
         "//pkg/config",
         "//pkg/engine/skills/builtin",
+        "@com_github_burntsushi_toml//:toml",
         "@in_gopkg_yaml_v3//:yaml_v3",
     ],
 )

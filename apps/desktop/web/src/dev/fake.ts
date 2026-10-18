@@ -558,10 +558,17 @@ const fakeSkillInfo = (workspace: string, x: FakeSkill) => {
   const refs = Object.keys(x.files).filter((p) => p.startsWith("references/"));
   const scripts = Object.keys(x.files)
     .filter((p) => /^scripts\/.+\.(py|ts|sh|cmd|bat)$/.test(p))
-    .map((p) => ({ name: p.replace(/^scripts\/|\.(py|ts|sh|cmd|bat)$/g, ""), language: ({ py: "python", ts: "typescript", sh: "shell" } as Record<string, string>)[p.split(".").pop()!] ?? "cmd", source: p, allowed: true, reasons: [] as string[], found: true, deps: [] as string[] }));
+    .map((p) => ({ name: p.replace(/^scripts\/|\.(py|ts|sh|cmd|bat)$/g, ""), language: ({ py: "python", ts: "typescript", sh: "shell" } as Record<string, string>)[p.split(".").pop()!] ?? "cmd", source: p, allowed: true, reasons: [] as string[], found: true, deps: p.endsWith(".py") ? fakeRequirements(x) : ([] as string[]) }));
+  const packageFiles = ["scripts/requirements.txt", "requirements.txt", "scripts/pyproject.toml", "pyproject.toml", "scripts/package.json", "package.json"].filter((f) => f in x.files);
   const kind = x.members.length ? "meta" : scripts.length ? "scripts" : refs.length ? "references" : "simple";
-  return { name: x.name, description: x.description, dir: `${workspace}/.agents/skills/${x.name}`, kind, project: true, references: refs, scripts, agents: x.agents, members: x.members, blocked: [] as string[] };
+  return { name: x.name, description: x.description, dir: `${workspace}/.agents/skills/${x.name}`, kind, project: true, references: refs, scripts, packageFiles, agents: x.agents, members: x.members, blocked: [] as string[] };
 };
+// A skill's Python packages: its requirements.txt's lines.
+const fakeRequirements = (x: FakeSkill) =>
+  (x.files["scripts/requirements.txt"] ?? x.files["requirements.txt"] ?? "")
+    .split("\n")
+    .map((l) => l.replace(/#.*/, "").trim())
+    .filter(Boolean);
 const fakeSkillFile = (workspace: string, x: FakeSkill) => ({
   skill: fakeSkillInfo(workspace, x),
   path: `${workspace}/.agents/skills/${x.name}/SKILL.md`,
@@ -903,7 +910,7 @@ export function installFake() {
         readSkillFile: ({ name, path }) => ({ content: new TextEncoder().encode(fakeProjectSkills.find((k) => k.name === name)?.files[path] ?? "") }),
         writeSkillFile: ({ workspace, name, path, content }) => {
           const x = fakeProjectSkills.find((k) => k.name === name)!;
-          if (!/^(references|scripts)\/[^.]/.test(path) || path.includes("..")) throw new ConnectError(`"${path}": a skill's files go in references/ or scripts/`, Code.InvalidArgument);
+          if (!/^((references|scripts)\/[^.]|(requirements\.txt|pyproject\.toml|package\.json)$)/.test(path) || path.includes("..")) throw new ConnectError(`"${path}": a skill's files go in references/ or scripts/`, Code.InvalidArgument);
           x.files[path] = new TextDecoder().decode(content);
           return { file: fakeSkillFile(workspace, x) };
         },

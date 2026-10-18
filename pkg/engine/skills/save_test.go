@@ -214,3 +214,42 @@ func TestFoundScriptNamesAndPackages(t *testing.T) {
 	assert.True(t, LanguageJavaScript.Node())
 	assert.False(t, LanguagePowerShell.Node())
 }
+
+// pyproject.toml's [project] dependencies count when there's no
+// requirements.txt; the package files found are listed, and Studio may
+// write them beside SKILL.md as well as in scripts/ (SK-107).
+func TestPyprojectAndPackageFiles(t *testing.T) {
+	dir := t.TempDir()
+	writeSkill(t, dir, "py", "---\nname: py\ndescription: d\n---\n", map[string]string{
+		"scripts/run.py": "", "pyproject.toml": "[project]\nname = \"x\"\ndependencies = [\"httpx>=0.27\", \"rich\"]\n",
+	})
+	writeSkill(t, dir, "bad", "---\nname: bad\ndescription: d\n---\n", map[string]string{"scripts/run.py": "", "scripts/pyproject.toml": "[project\n"})
+	writeSkill(t, dir, "both", "---\nname: both\ndescription: d\n---\n", map[string]string{"scripts/run.py": "", "scripts/requirements.txt": "click\n", "pyproject.toml": "[project]\ndependencies = [\"rich\"]\n", "package.json": "{}"})
+	p, err := NewProvider()
+	require.NoError(t, err)
+	require.NoError(t, p.DiscoverExternal([]string{dir}))
+
+	tests := []struct {
+		name  string
+		deps  []string
+		files []string
+	}{
+		{"py", []string{"httpx>=0.27", "rich"}, []string{"pyproject.toml"}},
+		{"bad", []string{"scripts/pyproject.toml isn't valid TOML"}, []string{"scripts/pyproject.toml"}},
+		{"both", []string{"click"}, []string{"scripts/requirements.txt", "pyproject.toml", "package.json"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s, _ := p.Get(tt.name)
+			assert.Equal(t, tt.deps, s.Scripts[0].Dependencies)
+			assert.Equal(t, tt.files, s.PackageFiles)
+		})
+	}
+
+	for _, rel := range []string{"requirements.txt", "pyproject.toml", "package.json", "scripts/requirements.txt"} {
+		require.NoError(t, WriteFile(dir, "py", rel, []byte("x")), rel)
+	}
+	assert.Error(t, WriteFile(dir, "py", "setup.py", []byte("x")), "only the package files beside SKILL.md")
+	assert.True(t, IsPackageFile("pyproject.toml"))
+	assert.False(t, IsPackageFile("SKILL.md"))
+}
