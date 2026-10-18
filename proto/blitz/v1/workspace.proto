@@ -216,6 +216,20 @@ service WorkspaceService {
   // before-agent rule, an answer for an after-agent one. A judge that
   // fails gives problem.
   rpc TryRule(TryRuleRequest) returns (TryRuleResponse);
+  // Returns the workspace's guardrails (spec_gates_041): each built-in one,
+  // on (with its file) or off, then the custom ones.
+  rpc ListGuardrails(ListGuardrailsRequest) returns (ListGuardrailsResponse);
+  // Writes a guardrail in .agents/guardrails from Studio's form (a
+  // built-in's file switches it on), keeping its front matter's other
+  // fields; problems, with nothing written, when it can't be saved.
+  rpc SaveGuardrail(SaveGuardrailRequest) returns (SaveGuardrailResponse);
+  // Deletes a guardrail from .agents/guardrails (a built-in's: switched
+  // off; GUARDRAIL_NOT_FOUND).
+  rpc DeleteGuardrail(DeleteGuardrailRequest) returns (DeleteGuardrailResponse);
+  // Checks a sample against a guardrail as written (Try it): a custom one
+  // by the judge, the injection and secrets ones by their patterns. A
+  // judge that fails gives problem.
+  rpc TryGuardrail(TryGuardrailRequest) returns (TryGuardrailResponse);
   // Returns skill scripts' environments (SCRIPTS_DISABLED).
   rpc ListEnvs(ListEnvsRequest) returns (ListEnvsResponse);
   // Removes one environment.
@@ -2320,5 +2334,116 @@ message TryRuleResponse {
   bool pass = 1;
   string reason = 2;
   // Why it couldn't be judged.
+  string problem = 3;
+}
+
+// The limits guardrail's limits; zero or empty means none of that kind.
+message GuardrailLimits {
+  double max_cost_usd = 1;
+  int32 max_turns = 2;
+  int32 max_files_changed = 3;
+  repeated string allowed_domains = 4;
+  // Shell commands not to run (globs over the whole command).
+  repeated string commands = 5;
+}
+
+// A guardrail file.
+message GuardrailFile {
+  // Its file's name without .md (a built-in's is its id).
+  string name = 1;
+  string path = 2;
+  // prompt_injection, secrets or limits; empty for a custom one.
+  string builtin = 3;
+  // input, tool_result, output or action.
+  string stage = 4;
+  // block, warn or redact.
+  string action = 5;
+  repeated string agents = 6;
+  // The tools a tool-result or action guardrail checks.
+  repeated string tools = 7;
+  string description = 8;
+  // The secrets guardrail masks personal data too.
+  bool pii = 9;
+  // The injection guardrail confirms with the judge.
+  bool judge = 10;
+  GuardrailLimits limits = 11;
+  // A custom guardrail's check.
+  string text = 12;
+  string problem = 13;
+  // In .agents/guardrails: Studio may change it.
+  bool editable = 14;
+}
+
+// A built-in guardrail, on or off.
+message BuiltinGuardrail {
+  string id = 1;
+  string stage = 2;
+  string default_action = 3;
+  repeated string actions = 4;
+  // Its file, when it's on.
+  GuardrailFile file = 5;
+}
+
+// What Studio's guardrail form edits.
+message GuardrailSpec {
+  string name = 1;
+  string builtin = 2;
+  string stage = 3;
+  string action = 4;
+  repeated string agents = 5;
+  repeated string tools = 6;
+  string description = 7;
+  bool pii = 8;
+  bool judge = 9;
+  GuardrailLimits limits = 10;
+  string text = 11;
+}
+
+// Request message for WorkspaceService.ListGuardrails.
+message ListGuardrailsRequest {
+  string workspace = 1;
+}
+
+// Response message for WorkspaceService.ListGuardrails.
+message ListGuardrailsResponse {
+  repeated BuiltinGuardrail builtins = 1;
+  repeated GuardrailFile guardrails = 2;
+  // Where new guardrails are written (.agents/guardrails).
+  string dir = 3;
+}
+
+// Request message for WorkspaceService.SaveGuardrail.
+message SaveGuardrailRequest {
+  string workspace = 1;
+  string previous_name = 2;
+  GuardrailSpec guardrail = 3;
+}
+
+// Response message for WorkspaceService.SaveGuardrail.
+message SaveGuardrailResponse {
+  GuardrailFile guardrail = 1;
+  repeated string problems = 2;
+}
+
+// Request message for WorkspaceService.DeleteGuardrail.
+message DeleteGuardrailRequest {
+  string workspace = 1;
+  string name = 2;
+}
+
+// Response message for WorkspaceService.DeleteGuardrail.
+message DeleteGuardrailResponse {}
+
+// Request message for WorkspaceService.TryGuardrail.
+message TryGuardrailRequest {
+  string workspace = 1;
+  GuardrailSpec guardrail = 2;
+  string sample = 3;
+}
+
+// Response message for WorkspaceService.TryGuardrail.
+message TryGuardrailResponse {
+  bool pass = 1;
+  string reason = 2;
   string problem = 3;
 }

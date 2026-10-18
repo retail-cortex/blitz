@@ -27,6 +27,32 @@ The answer says how the change was tested.
 
 `block` stops a prompt (or marks an answer as failing), `warn` says so in the chat, and `revise` gives the agent the reason: with the prompt, or as a request to fix its answer (twice at most). A fast model judges each rule (the suggestions model). In the desktop app, **Studio › Rules** lists them in the order they run, reorders them by dragging, and has **Try it** to check a sample prompt or answer.
 
+Rules are about the quality of the work. **Guardrails** are about safety and limits, and they watch every step of a turn: your prompt, each tool call before it runs, what each tool brings back, and the answer. Three are built in, each switched on by a file in `.agents/guardrails/` named after it (`~/.blitz/guardrails/` for every workspace):
+
+```markdown
+---
+builtin: limits
+max_cost_usd: 2        # per turn
+max_turns: 40          # model calls per turn
+max_files_changed: 20
+allowed_domains: [example.com]
+commands: ["git push --force*"]
+---
+```
+
+`prompt_injection` watches what web pages, the browser and MCP servers return for text aimed at the agent (`action: warn` tells the agent it's data, not orders; `block` withholds it; `judge: true` has a model confirm a match). `secrets` masks credentials in answers (`action: redact`, `warn` or `block`; `pii: true` adds email addresses, phone numbers, card and social security numbers). Your own guardrail is a check in plain English, judged by the suggestions model:
+
+```markdown
+---
+stage: action          # input, tool_result, output or action
+action: block          # or warn
+tools: [run_shell_command]
+---
+Deleting a git branch, locally or on the remote.
+```
+
+A rule that can't be checked lets the turn go on; a guardrail that can't be checked and blocks stops what it guards. In the desktop app, **Studio › Guardrails** switches the built-ins on and off, tunes them, and edits your own, with **Try it**.
+
 Edit any of these, or an agent or skill in `.agents/`, while you work: the change applies from your next message, in the same conversation or a new one. Blitz checks the files' sizes and times before each message and reloads only what changed. `/reload` (in the app, **Agents › Reload agent files**) reads them all again now and says what it loaded. MCP servers in `.mcp.json` or `.agents/mcp_config.json` are the exception: open the workspace again to apply a change to them.
 
 ### Notes the agent keeps

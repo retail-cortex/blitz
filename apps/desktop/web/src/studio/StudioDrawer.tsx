@@ -26,7 +26,7 @@ import { t } from "../i18n";
 import { SecretsEditor } from "../SecretsEditor";
 import { Icon, IconButton, useSnackbar } from "../ui/controls";
 import { Drawer } from "../ui/Drawer";
-import { GatesTitle } from "./RulesOrGuardrails";
+import { GuardrailsPane } from "./GuardrailsPane";
 import { RulesPane } from "./RulesPane";
 import { SkillsPane } from "./SkillsPane";
 import { WorkersPane } from "./WorkersPane";
@@ -62,7 +62,6 @@ export const studioIcons: Record<StudioKind, string> = {
 const folders: Partial<Record<StudioKind, string>> = {
   workflows: ".agents/workflows/<name>.flow.yaml",
   evals: ".agents/evals/<name>.md",
-  guardrails: ".agents/guardrails/<name>.md",
 };
 
 /**
@@ -117,7 +116,7 @@ export function StudioDrawer({ dir, initial, onClose, onWorkers }: { dir: string
           {kind === "rules" && <RulesPane workspace={dir} onDirty={setDirty} onGuardrails={() => choose("guardrails")} />}
           {kind === "workers" && <WorkersPane dir={dir} intent={initial.kind === "workers" ? initial.intent : undefined} onLeave={onClose} onDirty={setDirty} />}
           {kind === "secrets" && <SecretsEditor workspace={dir} />}
-          {kind === "guardrails" && <GatesTitle current="guardrails" title={t("desktop.gates.guardrails")} onOther={() => choose("rules")} />}
+          {kind === "guardrails" && <GuardrailsPane workspace={dir} onDirty={setDirty} onRules={() => choose("rules")} />}
           {folders[kind] && <Coming kind={kind} />}
         </div>
       </div>
