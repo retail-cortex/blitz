@@ -33,7 +33,6 @@ import {
   mdiPlus,
   mdiRefresh,
   mdiScaleBalance,
-  mdiShieldLockOutline,
   mdiUndoVariant,
 } from "@mdi/js";
 import { workspaces } from "../api";
@@ -43,6 +42,7 @@ import type { RuleFile } from "../gen/blitz/v1/workspace_pb";
 import { SuggestTextarea } from "../SecretSuggest";
 import { Button, Chip, Dialog, Field, Icon, IconButton, Segmented, useSnackbar } from "../ui/controls";
 import { DraftButton } from "./Draft";
+import { RulesOrGuardrails } from "./RulesOrGuardrails";
 import { emptyRuleForm, formFromRule, moved, nextOrder, ruleSections, sameRuleForm, specFromForm, validRuleName, type RuleAction, type RuleForm, type RuleWhen } from "./ruleForm";
 
 /** Each action's icon. */
@@ -238,15 +238,7 @@ export function RulesPane({ workspace, onDirty, onGuardrails }: { workspace: str
         </div>
         <p className="t-body-sm muted agent-dir">{t("desktop.workers.in", { path: ".agents/rules" })}</p>
         {/* Rules or guardrails: the work's quality here, safety and limits there (spec_gates_041 GT-11). */}
-        <div className="card outlined row wrap studio-intro" style={{ gap: 10 }}>
-          <Icon path={mdiScaleBalance} className="muted" />
-          <span className="t-body-sm spacer">{t("desktop.rules.intro")}</span>
-          {onGuardrails && (
-            <Button small icon={mdiShieldLockOutline} onClick={onGuardrails}>
-              {t("desktop.rules.to_guardrails")}
-            </Button>
-          )}
-        </div>
+        <RulesOrGuardrails current="rules" onOther={onGuardrails} />
         {error && (
           <div className="card error row small-card">
             <Icon path={mdiAlertCircleOutline} size="sm" /> {error}
