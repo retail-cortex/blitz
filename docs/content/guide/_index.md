@@ -22,6 +22,7 @@ So "workspace settings" are yours and private; "project settings" travel with th
 | [MCP servers](mcp.md) | Adding a server's tools, its approvals, prompts and resources, and what to do when one misbehaves |
 | [Extending](extending.md) | Project memory, hooks, custom commands, plugins |
 | [Workers](workers.md) | Prompts on a schedule, unattended, with only the permissions you give them |
+| [Workflows](workflows.md) | Steps run in order, each one's output the next one's input: `/name` in the chat, or built on a canvas |
 | [Evals](evals.md) | Cases that check your agents still answer as they should, from Studio or `blitz eval` in CI |
 | [Skills](skills.md) | Agent Skills, the skills policy, sandboxed scripts |
 | [Search](search.md) | Web search providers, `/search web` and `/search session` |

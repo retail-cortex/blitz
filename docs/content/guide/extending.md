@@ -129,7 +129,7 @@ Other failures warn unless `fail_closed = true`. Hooks come from your own truste
 
 ## Custom commands
 
-A Markdown file is a slash command: `~/.blitz/commands/fix.md` is `/fix`. In a project, `.blitz/commands/`, `.claude/commands/` and `.agents/workflows/` work too; the project's win, and `db/migrate.md` is `/db:migrate`. The body is the prompt, with `$ARGUMENTS` or `$1`…`$9` for what you type after the command.
+A Markdown file is a slash command: `~/.blitz/commands/fix.md` is `/fix`. In a project, `.blitz/commands/`, `.claude/commands/` and `.agents/workflows/` work too; the project's win, and `db/migrate.md` is `/db:migrate`. A `.flow.yaml` in `.agents/workflows/` is a [workflow](workflows.md): several steps, run by the same `/name`. The body is the prompt, with `$ARGUMENTS` or `$1`…`$9` for what you type after the command.
 
 ```markdown
 ---

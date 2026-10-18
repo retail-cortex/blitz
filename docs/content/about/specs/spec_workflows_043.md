@@ -1,0 +1,34 @@
+---
+title: "043 · Workflows"
+weight: 43
+---
+
+*Steps joined into a graph, each step's output the next one's input, run as one turn and built on a canvas* (`spec_workflows_043`)
+
+| | |
+|---|---|
+| Status | **Done** in v0.7.1 (the owner's request, 2026-10-17): WF-01–WF-10. |
+| Source | `pkg/engine/flows/flows.go`, `pkg/engine/flowrun.go`, `pkg/engine/turn.go` (`Run`), `pkg/engine/commands.go` (`ListCommands`), `pkg/api/turn.go` (`FlowStep`), `apps/service/internal/server/workflows.go`, `apps/service/internal/server/convert.go`, `pkg/client/convert.go`, `apps/cli/internal/tui/repl.go`, `apps/desktop/web/src/studio/WorkflowsPane.tsx`, `apps/desktop/web/src/studio/workflowForm.ts`, `apps/desktop/web/src/turns.ts` |
+| Tests | `pkg/engine/flows/flows_test.go`, `pkg/engine/flowrun_test.go`, `apps/service/internal/server/workflows_test.go`, `apps/desktop/web/src/studio/workflowForm.test.ts` |
+| Depends on | [spec_skills_013](spec_skills_013.md) (SK-80, the command folders; skill scripts), [spec_gates_041](spec_gates_041.md) (rules, guardrails), [spec_studio_040](spec_studio_040.md) |
+
+## 1. Purpose
+
+Some work is the same few steps every time: read the notes, look something up, draft, tighten, save. A workflow writes those steps down once, joined so each step's output is the next one's input, and runs them in order: from the chat as `/name`, or from Studio, where it's drawn and built on a canvas.
+
+## 2. Requirements
+
+- **WF-01** A workflow is `.agents/workflows/<name>.flow.yaml`, beside the `.md` commands there (SK-80): `description`, `nodes` (each step: `id`, `type`, `title`, `position` on the canvas, and its type's settings) and `edges` (`from` → `to`: the first step's output goes to the second). Step types: **agent** (an agent works on its input as `instructions` say), **refine** (an agent improves its input), **summarize** (an agent sums it up; `instructions` are the focus), **browser** (an agent reaches the `instructions`' goal with its browser tool), **accumulate** (joins its inputs, each under its step's title), **script** (a skill's script: `skill`, `script`, `args`, the input as its last argument; its output is the step's), **read_file** (a workspace file's text, 256 KiB at most) and **save_file** (writes its input to a workspace file, asked for as any write is, and passes it on). Agent steps take `agent` (none: the active one), `skills` (given with the prompt, as `\skill-name` does) and `rules`. **email** and **data** are shown, not run yet (`flows.Parse`).
+- **WF-02** What doesn't hold is the workflow's problem, and it isn't run: a bad name, no steps, a step without an ID or with another's, an unknown type, a coming-soon one, an agent, refine or browser step without instructions, a script step without its skill and script, a file step without a path, a link to a step that isn't there or to itself, and a loop (`flows.Check`). A workflow is saved with steps not filled in yet (a draft); a bad name, ID, type, link or loop isn't saved.
+- **WF-03** Steps run in order (`flows.Order`): each after the steps that feed it, otherwise as listed. A step's input is what the steps that feed it produced, each under its title when there are several (or for accumulate); a step fed by none gets the run's input (what follows `/name`).
+- **WF-04** **A workflow runs as a turn**: a command turn whose name is a workflow's (`/name input`, over a `.md` command of that name) runs it (`Workspace.runFlow`). Each agent step is a turn of its own in the session (its text `/name › step title`, its prompt the step's instructions, its input and its skills), so it streams, asks for approval, keeps its guardrails and is judged by the after-agent gates that apply to its agent, as any turn is. The run stops at the first step that fails, with the step and why; its output is what the last steps (those feeding none) produced.
+- **WF-05** **Rules on a step**: the rules a step names, beyond the gates its turn already applied, judge its output (`gates.Judge`, as an after-agent gate): a failing **block** rule stops the workflow at that step, **revise** asks the step's agent once for a revised answer (and says so if it still fails), **warn** (or an instruction rule) says so in the chat. A rule the workspace hasn't is said in the chat. Evals never run inside a workflow: they check an agent (or a workflow) when it's made or changed (spec_evals_042).
+- **WF-06** Each step's start and end is a turn event (`api.FlowStep`, `TurnEvent.flow_step`): the workflow, the step's ID, title and type, its place (step 2 of 5), its status (running, done, failed), the start of its output (4 KiB) and its error. The CLI and the chat show a line as a step starts (`▸ /brief › Draft (2 of 5)`) and an error if it fails.
+- **WF-07** Workflows are listed among the commands (`/name`, source `workflow`) for completion and `/help`.
+- **WF-08** `WorkspaceService.ListWorkflows`, `SaveWorkflow` (from the canvas; problems with nothing written; `WORKFLOW_NOT_FOUND` for an unknown previous name) and `DeleteWorkflow` (`WORKFLOW_NOT_FOUND`).
+- **WF-09** **Studio › Workflows** (`WorkflowsPane`): the workflows as `/name`, each with its step count (or its problem) and ▶; **+** starts one from a template (**Blank**, **Research brief**: notes and a web look-up gathered, drafted and saved; **Draft and refine**; **Script report**: a script's output summed up and saved). A workflow opens on a canvas (`@xyflow/react`): the step types as a row of buttons above it (a click adds one; email and data marked soon), steps as cards (their icon, title, agent, file or script, or what they still need), joined by dragging from a step's right edge to another's left (a link that would loop isn't made), moved by dragging, removed with Delete. Beside the canvas: the selected step's settings (title, agent, instructions, skills, rules; a script's skill and script from the skills that have them, and its arguments; a file's path), or the workflow's name and description. Back, Cancel, Save and Delete, unsaved changes asked about.
+- **WF-10** **Run** (a saved workflow without problems) asks for an optional input and runs it in the background as `/name input` (`StartBackground`), in a chat of its own, watched (`WatchBackground`): each step marked running, done or failed on the canvas, the link into a running step animated, a selected step's output or error shown; an approval request shows beside the canvas (the chat's approval card) and is answered there (`Approve`); **Stop** stops it. The run's chat stays among the background runs.
+
+## 3. Known gaps
+
+Steps run one at a time, even on branches that could run side by side. A browser step drives the agent's own browser, not the app's web tabs. The step types email and data aren't built. A workflow can't be scheduled yet: a worker's prompt isn't run as a command.

@@ -1502,7 +1502,8 @@ function JsonBlock({ label, value }: { label: string; value: JsonObject }) {
   );
 }
 
-function ApprovalCard({ req, onDecide, who, autoFocus = true }: { req: ApprovalRequest; onDecide: (d: Decision) => void; who?: string; autoFocus?: boolean }) {
+/** An approval request, with its decisions (the canvas shows one too). */
+export function ApprovalCard({ req, onDecide, who, autoFocus = true }: { req: ApprovalRequest; onDecide: (d: Decision) => void; who?: string; autoFocus?: boolean }) {
   const files = req.diff ? parseDiff(req.diff) : [];
   const advanced = useAdvanced(); // Always allow: advanced
   return (

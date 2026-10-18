@@ -15,7 +15,7 @@
  */
 
 import { useEffect, useState } from "react";
-import { mdiBookOpenPageVariantOutline, mdiCalendarClock, mdiCheckDecagramOutline, mdiRefresh, mdiFlaskOutline, mdiKeyVariant, mdiPuzzleOutline, mdiRobotOutline, mdiScaleBalance, mdiShieldLockOutline, mdiSitemapOutline } from "@mdi/js";
+import { mdiBookOpenPageVariantOutline, mdiCalendarClock, mdiRefresh, mdiFlaskOutline, mdiKeyVariant, mdiPuzzleOutline, mdiRobotOutline, mdiScaleBalance, mdiShieldLockOutline, mdiSitemapOutline } from "@mdi/js";
 import { AgentEditor } from "../AgentEditor";
 import { workspaces } from "../api";
 import { message } from "../errors";
@@ -31,6 +31,7 @@ import { GuardrailsPane } from "./GuardrailsPane";
 import { RulesPane } from "./RulesPane";
 import { SkillsPane } from "./SkillsPane";
 import { WorkersPane } from "./WorkersPane";
+import { WorkflowsPane } from "./WorkflowsPane";
 
 /**
  * The kinds Studio holds (spec_studio_040), in the order an agent is
@@ -57,11 +58,6 @@ export const studioIcons: Record<StudioKind, string> = {
   rules: mdiScaleBalance,
   guardrails: mdiShieldLockOutline,
   secrets: mdiKeyVariant,
-};
-
-/** Where each kind's files are, in the workspace (secrets are in the keychain). */
-const folders: Partial<Record<StudioKind, string>> = {
-  workflows: ".agents/workflows/<name>.flow.yaml",
 };
 
 /**
@@ -131,22 +127,9 @@ export function StudioDrawer({ dir, initial, onClose, onWorkers }: { dir: string
           {kind === "secrets" && <SecretsEditor workspace={dir} />}
           {kind === "guardrails" && <GuardrailsPane workspace={dir} onDirty={setDirty} onRules={() => choose("rules")} />}
           {kind === "evals" && <EvalsPane workspace={dir} onDirty={setDirty} forAgent={evalsFor} onHandled={() => setEvalsFor("")} />}
-          {folders[kind] && <Coming kind={kind} />}
+          {kind === "workflows" && <WorkflowsPane workspace={dir} onDirty={setDirty} />}
         </div>
       </div>
     </Drawer>
-  );
-}
-
-// A kind whose editor comes in a later step: what it is, and where its
-// files go.
-function Coming({ kind }: { kind: StudioKind }) {
-  return (
-    <div className="stack studio-coming" style={{ gap: 8 }}>
-      <p className="t-body">{t(`desktop.studio.${kind}.about`)}</p>
-      <p className="t-body-sm muted">
-        <Icon path={mdiCheckDecagramOutline} size="sm" /> {t("desktop.studio.coming", { path: folders[kind] ?? "" })}
-      </p>
-    </div>
   );
 }

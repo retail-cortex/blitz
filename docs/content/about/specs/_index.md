@@ -52,5 +52,6 @@ Files are named `spec_<name>_NNN.md`, where `NNN` is the order of execution: eac
 | 040 | [studio](spec_studio_040.md) | What a workspace's .agents folder holds, each kind listed and edited in the desktop app; since v0.7.1 |
 | 041 | [gates](spec_gates_041.md) | Rules that gate an agent's turn, checked before it runs and after it answers, and guardrails at every step of it; since v0.7.1 |
 | 042 | [evals](spec_evals_042.md) | Cases that check an agent still answers as it should, run and scored exactly or by meaning; since v0.7.1 |
+| 043 | [workflows](spec_workflows_043.md) | Steps joined into a graph, run as one turn (/name) and built on a canvas; since v0.7.1 |
 
 Background and history: [the roadmap](../roadmap.md), [where to pick up](../../development/next-steps.md), [development](../../development/_index.md).

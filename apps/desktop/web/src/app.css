@@ -920,6 +920,25 @@ code.file-link:hover { text-decoration-color: currentColor; }
 .eval-threshold { width: 112px; }
 .eval-progress { width: 100%; height: 6px; accent-color: var(--md-primary); }
 .eval-text { margin: 0; padding: 8px 10px; max-height: 240px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; border-radius: var(--md-shape-sm, 8px); background: var(--md-code-bg); font: 12px/1.5 var(--md-mono); }
+/* Studio › Workflows: the palette, the canvas and the selected step's settings side by side. */
+.flow-body { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 12px; min-height: 480px; height: calc(100% - 140px); }
+.flow-main { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.flow-palette { display: flex; flex-wrap: wrap; gap: 4px; }
+.flow-palette-item { display: flex; align-items: center; gap: 6px; padding: 4px 10px; border: 1px solid var(--md-outline-variant); border-radius: 999px; background: none; color: inherit; font: inherit; font-size: 13px; cursor: pointer; }
+.flow-palette-item:hover:not(:disabled) { background: var(--md-surface-container-high, var(--md-surface-container)); }
+.flow-palette-item:disabled { opacity: 0.55; cursor: default; }
+.flow-canvas { position: relative; flex: 1; min-height: 420px; border: 1px solid var(--md-outline-variant); border-radius: var(--md-shape-md); overflow: hidden; }
+.flow-side { gap: 10px; min-width: 0; overflow: auto; }
+.flow-node { display: flex; align-items: center; gap: 8px; width: 210px; padding: 8px 10px; border: 1px solid var(--md-outline-variant); border-radius: var(--md-shape-md); background: var(--md-surface-container-low); color: var(--md-on-surface); font-size: 13px; line-height: 1.3; }
+.flow-node .lines { display: flex; flex-direction: column; min-width: 0; }
+.flow-node .lines small { color: var(--md-on-surface-variant); }
+.flow-node.selected, .flow-node.is-running { border-color: var(--md-primary); box-shadow: 0 0 0 1px var(--md-primary); }
+.flow-node.is-failed { border-color: var(--md-error); box-shadow: 0 0 0 1px var(--md-error); }
+.flow-node.soon { opacity: 0.6; }
+.workflows-pane .react-flow { --xy-background-color: transparent; }
+@media (max-width: 980px) {
+  .flow-body { grid-template-columns: minmax(0, 1fr); height: auto; }
+}
 /* A list row's main part: one button that opens it, beside the row's own buttons. */
 .row-open { display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0; padding: 0; border: none; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
 .row-open:disabled { cursor: default; }

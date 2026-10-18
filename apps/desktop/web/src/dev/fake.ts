@@ -798,11 +798,79 @@ function backgroundRuns(): BackgroundRun[] {
   return fakeRuns;
 }
 
+// Studio's workflows: a research brief, and a draft not finished yet.
+type FakeFlow = { name: string; description: string; nodes: { id: string; type: string; title: string; x: number; y: number; agent: string; skills: string[]; instructions: string; rules: string[]; skill: string; script: string; args: string[]; path: string }[]; edges: { from: string; to: string }[] };
+const flowNode = (id: string, type: string, title: string, x: number, y: number, extra: Partial<FakeFlow["nodes"][number]> = {}) => ({ id, type, title, x, y, agent: "", skills: [], instructions: "", rules: [], skill: "", script: "", args: [], path: "", ...extra });
+const fakeFlows: FakeFlow[] = [
+  {
+    name: "research-brief",
+    description: "A one-page brief from the notes and the web",
+    nodes: [
+      flowNode("notes", "read_file", "Read the notes", 0, 0, { path: "notes/coupons.md" }),
+      flowNode("look-up", "browser", "Look it up", 0, 160, { instructions: "Find how other shops round coupon discounts." }),
+      flowNode("gather", "accumulate", "Gather", 280, 80),
+      flowNode("draft", "agent", "Draft the brief", 560, 80, { agent: "reviewer", instructions: "Write a one-page brief: the key points first, sources cited.", rules: ["tested"] }),
+      flowNode("save", "save_file", "Save the brief", 840, 80, { path: "briefs/coupons.md" }),
+    ],
+    edges: [
+      { from: "notes", to: "gather" },
+      { from: "look-up", to: "gather" },
+      { from: "gather", to: "draft" },
+      { from: "draft", to: "save" },
+    ],
+  },
+  { name: "weekly-digest", description: "", nodes: [flowNode("sum-up", "summarize", "", 0, 80), flowNode("mail", "email", "", 280, 80)], edges: [{ from: "sum-up", to: "mail" }] },
+];
+const fakeFlowProblem = (f: FakeFlow) => {
+  const p = f.nodes.find((n) => n.type === "email" || n.type === "data");
+  if (p) return `step ${p.id}: ${p.type} steps don't run yet`;
+  const q = f.nodes.find((n) => (n.type === "agent" || n.type === "refine" || n.type === "browser") && !n.instructions.trim());
+  return q ? `step ${q.id}: say what it's to do` : "";
+};
+const fakeFlowFile = (workspace: string, f: FakeFlow) => ({ ...f, path: `${workspace}/.agents/workflows/${f.name}.flow.yaml`, problem: fakeFlowProblem(f) });
+// Background runs of workflows: the run's ID → the workflow.
+const fakeFlowRuns = new Map<string, FakeFlow>();
+
+async function* watchFlow(r: BackgroundRun, f: FakeFlow, ev: (kind: unknown) => MessageInitShape<typeof WatchBackgroundResponseSchema>, s: ReturnType<typeof state>) {
+  const order = ["notes", "look-up", "gather", "draft", "save"].filter((id) => f.nodes.some((n) => n.id === id));
+  const outputs: Record<string, string> = { notes: "Coupons round half up since 0.4; refunds round down.", "look-up": "Most shops round each line, then the total.", gather: "## Read the notes\n\nCoupons round half up…\n\n## Look it up\n\nMost shops round each line…", draft: "# Coupon rounding\n\nRound each line half up, then total; refunds round down. Sources: notes, three shops' docs.", save: "" };
+  for (const [i, id] of order.entries()) {
+    if (runStopped.has(r.id)) break;
+    const n = f.nodes.find((x) => x.id === id)!;
+    const step = { workflow: f.name, id, title: n.title, type: n.type, index: i + 1, count: order.length };
+    yield ev({ case: "flowStep", value: { ...step, status: "running" } });
+    await sleep(900);
+    if (n.type === "save_file") {
+      const req = `${r.id}-save`;
+      const answer = new Promise<string>((res) => s.pending.set(req, res));
+      r.state = "waiting";
+      yield ev({ case: "approvalRequest", value: { requestId: req, tool: "save_file", kind: ActionKind.WRITE, detail: n.path, scopeLabel: n.path } });
+      const a = await answer;
+      r.state = "running";
+      if (a === "deny") {
+        yield ev({ case: "flowStep", value: { ...step, status: "failed", error: `${n.path}: not approved` } });
+        yield ev({ case: "finished", value: { output: "", before: s.usage, after: s.usage, error: create(ErrorInfoSchema, { reason: "NOT_APPROVED", message: `The workflow ${f.name} stopped at ${n.title}` }) } });
+        r.state = "failed";
+        return;
+      }
+    }
+    yield ev({ case: "flowStep", value: { ...step, status: "done", output: outputs[id] ?? "" } });
+  }
+  r.state = "done";
+  r.ended = now();
+  yield ev({ case: "finished", value: { output: outputs.draft, before: s.usage, after: s.usage } });
+}
+
 async function* watchRun(id: string): AsyncGenerator<MessageInitShape<typeof WatchBackgroundResponseSchema>> {
   const r = backgroundRuns().find((x) => x.id === id);
   if (!r) throw new ConnectError(`no background run ${id}`, Code.NotFound);
   const s = state(r.workspace);
   const ev = (kind: unknown) => ({ event: { author: "blitz", kind } }) as MessageInitShape<typeof WatchBackgroundResponseSchema>;
+  const flow = fakeFlowRuns.get(id);
+  if (flow) {
+    yield* watchFlow(r, flow, ev, s);
+    return;
+  }
   const ended = () => ev({ case: "finished", value: { output: "", before: s.usage, after: s.usage } });
   if (r.state === "done") {
     yield ev({ case: "text", value: { text: "The release notes are in docs/releases/0.4.md." } });
@@ -849,6 +917,16 @@ export function installFake() {
           return { session: n };
         },
         listBackground: () => ({ runs: backgroundRuns() }),
+        // A workflow's run from Studio (/name input); other prompts aren't faked.
+        startBackground: ({ workspace, turn }) => {
+          const name = (turn?.text ?? "").replace(/^\//, "").split(" ")[0];
+          const f = fakeFlows.find((x) => x.name === name);
+          if (!f) throw new ConnectError("the fake runs only workflows in the background", Code.Unimplemented);
+          const run = create(BackgroundRunSchema, { id: `bg-${backgroundRuns().length + 1}`, workspace, sessionId: `session-flow-${Date.now()}`, prompt: turn!.text, state: "running", started: now() });
+          backgroundRuns().unshift(run);
+          fakeFlowRuns.set(run.id, f);
+          return { run };
+        },
         watchBackground: ({ id }) => watchRun(id),
         stopBackground: ({ id }) => {
           const r = backgroundRuns().find((x) => x.id === id);
@@ -944,6 +1022,23 @@ export function installFake() {
         removeEnv: () => ({}),
         listSkills: ({ workspace, query }) => ({ skills: [...fakeOtherSkills, ...fakeProjectSkills.map((x) => fakeSkillInfo(workspace, x))].filter((x) => !query || x.name.includes(query)) }),
         getSkill: ({ name }) => ({ skill: { name, description: "Read and summarize PDF files", tools: [{ name: "read_file" }] } }),
+        // Studio › Workflows: listed, saved and deleted; runs are background runs.
+        listWorkflows: ({ workspace }) => ({ dir: `${workspace}/.agents/workflows`, workflows: fakeFlows.map((f) => fakeFlowFile(workspace, f)) }),
+        saveWorkflow: ({ workspace, previousName, workflow }) => {
+          const w = workflow!;
+          if (!/^[a-z0-9]+([-_][a-z0-9]+)*$/.test(w.name)) return { problems: [`name "${w.name}": lowercase letters, digits and single hyphens, up to 64`] };
+          const next: FakeFlow = { name: w.name, description: w.description, nodes: w.nodes.map((n) => ({ ...n, skills: [...n.skills], rules: [...n.rules], args: [...n.args] })), edges: w.edges.map((e) => ({ from: e.from, to: e.to })) };
+          const i = fakeFlows.findIndex((x) => x.name === (previousName || w.name));
+          if (i >= 0) fakeFlows[i] = next;
+          else fakeFlows.push(next);
+          return { workflow: fakeFlowFile(workspace, next) };
+        },
+        deleteWorkflow: ({ name }) => {
+          const i = fakeFlows.findIndex((x) => x.name === name);
+          if (i < 0) throw new ConnectError(`no workflow ${name}`, Code.NotFound);
+          fakeFlows.splice(i, 1);
+          return {};
+        },
         // Studio › Evals: two evals, their runs, and a run streamed case by case.
         listEvals: ({ workspace }) => ({ dir: `${workspace}/.agents/evals`, evals: fakeEvals.map((e) => fakeEvalFile(workspace, e)) }),
         saveEval: ({ workspace, previousName, eval: spec }) => {
