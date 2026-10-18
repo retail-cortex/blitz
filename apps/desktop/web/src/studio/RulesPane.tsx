@@ -42,7 +42,7 @@ import type { RuleFile } from "../gen/blitz/v1/workspace_pb";
 import { SuggestTextarea } from "../SecretSuggest";
 import { Button, Chip, Dialog, Field, Icon, IconButton, Segmented, useSnackbar } from "../ui/controls";
 import { DraftButton } from "./Draft";
-import { RulesOrGuardrails } from "./RulesOrGuardrails";
+import { GatesTitle } from "./RulesOrGuardrails";
 import { emptyRuleForm, formFromRule, moved, nextOrder, ruleSections, sameRuleForm, specFromForm, validRuleName, type RuleAction, type RuleForm, type RuleWhen } from "./ruleForm";
 
 /** Each action's icon. */
@@ -231,14 +231,18 @@ export function RulesPane({ workspace, onDirty, onGuardrails }: { workspace: str
   return (
     <div className={`slide-pane rules-pane ${open ? "is-open" : ""}`}>
       <aside className="slide-list" inert={open !== null}>
-        <div className="row side-head">
-          <span className="t-title-sm spacer">{t("desktop.rules.title")}</span>
-          <IconButton icon={mdiPlus} label={t("desktop.rules.new")} small onClick={() => startNew()} />
-          <IconButton icon={mdiRefresh} label={t("desktop.refresh")} small onClick={() => void refresh()} />
-        </div>
-        <p className="t-body-sm muted agent-dir">{t("desktop.workers.in", { path: ".agents/rules" })}</p>
-        {/* Rules or guardrails: the work's quality here, safety and limits there (spec_gates_041 GT-11). */}
-        <RulesOrGuardrails current="rules" onOther={onGuardrails} />
+        <GatesTitle
+          current="rules"
+          title={t("desktop.rules.title")}
+          onOther={onGuardrails}
+          subtitle={<p className="t-body-sm muted agent-dir">{t("desktop.workers.in", { path: ".agents/rules" })}</p>}
+          actions={
+            <>
+              <IconButton icon={mdiPlus} label={t("desktop.rules.new")} small onClick={() => startNew()} />
+              <IconButton icon={mdiRefresh} label={t("desktop.refresh")} small onClick={() => void refresh()} />
+            </>
+          }
+        />
         {error && (
           <div className="card error row small-card">
             <Icon path={mdiAlertCircleOutline} size="sm" /> {error}

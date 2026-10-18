@@ -14,9 +14,10 @@
  * limitations under the License.
  */
 
-import { mdiScaleBalance, mdiShieldLockOutline } from "@mdi/js";
+import { useState, type ReactNode } from "react";
+import { mdiInformationOutline, mdiScaleBalance, mdiShieldLockOutline } from "@mdi/js";
 import { t } from "../i18n";
-import { Button, Icon } from "../ui/controls";
+import { Button, Icon, IconButton } from "../ui/controls";
 
 /** The questions the comparison answers, in order. */
 const aspects = ["for", "when", "sees", "fails", "example"] as const;
@@ -66,5 +67,27 @@ export function RulesOrGuardrails({ current, onOther }: { current: "rules" | "gu
         </div>
       )}
     </section>
+  );
+}
+
+/**
+ * A Rules or Guardrails page's title row: its title, an (i) beside it
+ * that shows or hides the comparison (hidden at first: vertical space is
+ * dear), then the page's own buttons (actions); a line under it
+ * (subtitle: where its files are), then the comparison when open.
+ */
+export function GatesTitle({ current, title, subtitle, actions, onOther }: { current: "rules" | "guardrails"; title: string; subtitle?: ReactNode; actions?: ReactNode; onOther?: () => void }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <div className="row side-head">
+        <span className="t-title-sm">{title}</span>
+        <IconButton icon={mdiInformationOutline} label={t("desktop.gates.compare")} small selected={open} aria-expanded={open} onClick={() => setOpen((o) => !o)} />
+        <span className="spacer" />
+        {actions}
+      </div>
+      {subtitle}
+      {open && <RulesOrGuardrails current={current} onOther={onOther} />}
+    </>
   );
 }

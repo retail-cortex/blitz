@@ -906,7 +906,7 @@ code.file-link:hover { text-decoration-color: currentColor; }
    reorder them. */
 .rule-section { margin-top: 8px; }
 /* Rules or guardrails, side by side at the top of both pages. */
-.rules-or-guardrails { display: flex; flex-direction: column; gap: 10px; padding: 12px 14px; margin-bottom: 4px; }
+.rules-or-guardrails { display: flex; flex-direction: column; gap: 10px; padding: 12px 14px; margin-bottom: 4px; animation: drawer-down 0.18s cubic-bezier(0.2, 0, 0, 1); }
 .rog-grid { display: grid; grid-template-columns: minmax(90px, max-content) minmax(0, 1fr) minmax(0, 1fr); gap: 6px 16px; }
 .rog-row { display: contents; }
 .rog-kind { display: flex; align-items: center; gap: 6px; font-weight: 500; color: var(--md-on-surface-variant); }
