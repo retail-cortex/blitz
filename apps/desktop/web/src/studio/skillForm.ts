@@ -75,15 +75,16 @@ export function kindOf(s: Pick<SkillInfo, "kind">): SkillKind {
   return (skillKinds as readonly string[]).includes(s.kind) ? (s.kind as SkillKind) : "simple";
 }
 
-/** The languages a script can be written in, with their extensions (SK-105: shell and cmd run with the system's shell). */
-export const scriptLanguages = { python: ".py", typescript: ".ts", shell: ".sh", cmd: ".cmd" } as const;
+/** The languages a script can be written in, with their extensions (SK-105, SK-106: shell, cmd and PowerShell run with the system's shells). */
+export const scriptLanguages = { python: ".py", typescript: ".ts", javascript: ".js", shell: ".sh", cmd: ".cmd", powershell: ".ps1" } as const;
 /** A script's language. */
 export type ScriptLanguage = keyof typeof scriptLanguages;
 
 /** A script file's language, from its extension ("" for neither). */
 export function languageOfScript(path: string): ScriptLanguage | "" {
   const ext = path.slice(path.lastIndexOf(".")).toLowerCase();
-  return ext === ".py" ? "python" : ext === ".ts" ? "typescript" : ext === ".sh" ? "shell" : ext === ".cmd" || ext === ".bat" ? "cmd" : "";
+  const by: Record<string, ScriptLanguage> = { ".py": "python", ".ts": "typescript", ".js": "javascript", ".mjs": "javascript", ".sh": "shell", ".cmd": "cmd", ".bat": "cmd", ".ps1": "powershell" };
+  return by[ext] ?? "";
 }
 
 /** A new file's path in a skill's folder, from the name typed: under folder, with ext when it has none; "" when it won't do. */
@@ -104,6 +105,10 @@ export function scriptTemplate(language: ScriptLanguage, name: string): string {
       return `#!/bin/sh\n# ${name}: what it does.\nset -eu\n\necho "args: $*"\n`;
     case "cmd":
       return `@echo off\nrem ${name}: what it does.\n\necho args: %*\n`;
+    case "javascript":
+      return `// ${name}: what it does.\n\nconst args = process.argv.slice(2);\nconsole.log("args:", args);\n`;
+    case "powershell":
+      return `# ${name}: what it does.\n$ErrorActionPreference = "Stop"\n\nWrite-Output "args: $($args -join ' ')"\n`;
   }
 }
 

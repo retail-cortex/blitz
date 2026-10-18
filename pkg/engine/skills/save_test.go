@@ -175,3 +175,42 @@ func TestSkillFiles(t *testing.T) {
 	assert.ErrorIs(t, Delete(dir, "pdf"), ErrUnknownSkill)
 	assert.ErrorIs(t, Delete(dir, "../x"), ErrUnknownSkill)
 }
+
+// Two scripts that share a name (test.py, test.ts) are each named by
+// their whole file name, so running one never runs the other; a Python
+// script takes requirements.txt's packages and a Node one package.json's
+// (SK-106, SK-107).
+func TestFoundScriptNamesAndPackages(t *testing.T) {
+	dir := t.TempDir()
+	writeSkill(t, dir, "mixed", "---\nname: mixed\ndescription: d\n---\n", map[string]string{
+		"scripts/test.py": "print(1)", "scripts/test.ts": "console.log(1)", "scripts/only.mjs": "", "scripts/win.ps1": "",
+		"requirements.txt":     "# packages\nrequests>=2.31  # http\n\nrich==13.7.1\n",
+		"scripts/package.json": `{"dependencies": {"zod": "3.23.8", "chalk": "^5"}}`,
+	})
+	writeSkill(t, dir, "declared", "---\nname: declared\ndescription: d\nscripts:\n  - name: a\n    language: python\n    relative_path: scripts/a.py\n    dependencies: [numpy]\n  - name: b\n    language: js\n    inline_code: x\n---\n",
+		map[string]string{"scripts/a.py": "", "requirements.txt": "pandas\n", "package.json": "not json"})
+	p, err := NewProvider()
+	require.NoError(t, err)
+	require.NoError(t, p.DiscoverExternal([]string{dir}))
+
+	mixed, _ := p.Get("mixed")
+	byName := map[string]ScriptDefinition{}
+	for _, sc := range mixed.Scripts {
+		byName[sc.Name] = sc
+	}
+	require.Len(t, byName, 4, "%v", mixed.Scripts)
+	assert.Equal(t, LanguagePython, byName["test.py"].Language)
+	assert.Equal(t, LanguageTypeScript, byName["test.ts"].Language)
+	assert.Equal(t, LanguageJavaScript, byName["only"].Language)
+	assert.Equal(t, LanguagePowerShell, byName["win"].Language)
+	assert.Equal(t, []string{"requests>=2.31", "rich==13.7.1"}, byName["test.py"].Dependencies)
+	assert.Equal(t, []string{"chalk@^5", "zod@3.23.8"}, byName["test.ts"].Dependencies)
+	assert.Equal(t, []string{"chalk@^5", "zod@3.23.8"}, byName["only"].Dependencies)
+	assert.Empty(t, byName["win"].Dependencies)
+
+	declared, _ := p.Get("declared")
+	assert.Equal(t, []string{"numpy"}, declared.Scripts[0].Dependencies, "its own list wins")
+	assert.Equal(t, []string{"package.json isn't valid JSON"}, declared.Scripts[1].Dependencies, "refused, with the reason")
+	assert.True(t, LanguageJavaScript.Node())
+	assert.False(t, LanguagePowerShell.Node())
+}

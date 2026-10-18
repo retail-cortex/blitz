@@ -34,7 +34,7 @@ A skill is one of four kinds, from what its folder holds:
 |---|---|
 | Simple | `SKILL.md` alone |
 | With references | A `references/` folder: the agent reads its files when the skill calls for them (`read_skill_file`) |
-| With scripts | Python (`.py`), TypeScript (`.ts`), shell (`.sh`, macOS and Linux) or cmd (`.cmd`, `.bat`, Windows) files in `scripts/`, or scripts declared in the front matter, run sandboxed under the skills policy |
+| With scripts | Python (`.py`), TypeScript (`.ts`), JavaScript (`.js`, `.mjs`), shell (`.sh`, macOS and Linux), cmd (`.cmd`, `.bat`, Windows) or PowerShell (`.ps1`, where `pwsh` is installed) files in `scripts/`, or scripts declared in the front matter, run sandboxed under the skills policy. A `requirements.txt` (Python) or `package.json` (JavaScript, TypeScript) gives them an isolated environment with those packages, installed once you approve |
 | Combines skills | `skills: [a, b]` in the front matter: activating it activates them too |
 
 `agents: [reviewer]` in the front matter offers a skill only to those agents.

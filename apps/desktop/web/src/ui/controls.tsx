@@ -139,7 +139,7 @@ export function Segmented<T extends string>({
  * Tabs over one panel: the chosen one marked; ← and → (Home, End) move
  * between them, as a tab list does. The panel is the caller's.
  */
-export function Tabs<T extends string>({ value, tabs, onChange, label }: { value: T; tabs: { value: T; label: string; icon?: string; note?: ReactNode }[]; onChange: (v: T) => void; label: string }) {
+export function Tabs<T extends string>({ value, tabs, onChange, label }: { value: T; tabs: { value: T; label: string; icon?: string; note?: ReactNode; count?: number }[]; onChange: (v: T) => void; label: string }) {
   const key = (e: React.KeyboardEvent) => {
     const i = tabs.findIndex((x) => x.value === value);
     const to = e.key === "ArrowRight" ? i + 1 : e.key === "ArrowLeft" ? i - 1 : e.key === "Home" ? 0 : e.key === "End" ? tabs.length - 1 : -2;
@@ -155,6 +155,7 @@ export function Tabs<T extends string>({ value, tabs, onChange, label }: { value
         <button key={x.value} type="button" role="tab" data-tab={x.value} aria-selected={x.value === value} tabIndex={x.value === value ? 0 : -1} className={`tab ${x.value === value ? "on" : ""}`} onClick={() => onChange(x.value)}>
           {x.icon && <Icon path={x.icon} size="sm" />}
           <span>{x.label}</span>
+          {!!x.count && <span className="badge tab-badge">{x.count}</span>}
           {x.note}
         </button>
       ))}

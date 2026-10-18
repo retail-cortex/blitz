@@ -252,7 +252,7 @@ func TestScriptPlatforms(t *testing.T) {
 			assert.Equal(t, tt.ok, platformReason(tt.lang, tt.os) == "")
 		})
 	}
-	for ext, want := range map[string]ScriptLanguage{"a.sh": LanguageShell, "a.cmd": LanguageCmd, "a.bat": LanguageCmd, "a.ps1": LanguageUnspecified} {
+	for ext, want := range map[string]ScriptLanguage{"a.sh": LanguageShell, "a.cmd": LanguageCmd, "a.bat": LanguageCmd, "a.ps1": LanguagePowerShell, "a.js": LanguageJavaScript, "a.rb": LanguageUnspecified} {
 		assert.Equal(t, want, ScriptLanguageOf(ext), ext)
 	}
 	s, err := ParseSkillMD([]byte("---\nname: x\ndescription: d\nscripts:\n  - name: a\n    language: bash\n    inline_code: echo\n  - name: b\n    language: bat\n    inline_code: echo\n---\n"), "x")

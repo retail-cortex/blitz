@@ -432,8 +432,9 @@ type WorkersConfig struct {
 }
 
 // ScriptLanguages are the languages a skill's scripts may be written in
-// (skills.policy.languages): shell and cmd run with the system's shell.
-var ScriptLanguages = []string{"python", "typescript", "shell", "cmd"}
+// (skills.policy.languages): javascript runs with node as typescript
+// does; shell, cmd and powershell with the system's shells.
+var ScriptLanguages = []string{"python", "typescript", "javascript", "shell", "cmd", "powershell"}
 
 // WorkerPolicy is the host's limit on workers. A worker asks for
 // permissions and limits; the policy removes what it doesn't allow and

@@ -186,7 +186,6 @@ export function SkillsPane({ workspace, onDirty }: { workspace: string; onDirty?
   };
 
   const saved = open !== null && open.name !== "" && file !== null;
-  const kind = file?.skill ? kindOf(file.skill) : form.members.length ? "meta" : "simple";
   const title = open?.name === "" && !form.name ? t("desktop.skills.new") : form.name || open?.name || "";
   const where = file?.path || (form.name ? `.agents/skills/${form.name.trim()}/SKILL.md` : "");
   return (
@@ -239,9 +238,6 @@ export function SkillsPane({ workspace, onDirty }: { workspace: string; onDirty?
             <div className="row slide-back">
               <IconButton icon={mdiArrowLeft} label={t("desktop.skills.back")} onClick={close} />
               <h2 className="t-headline spacer ellipsis">{title}</h2>
-              <Chip className="static" icon={kindIcons[kind]}>
-                {t(`desktop.skills.kind.${kind}`)}
-              </Chip>
               {dirty && <span className="t-body-sm muted">{t("desktop.agents.unsaved")}</span>}
             </div>
             <Tabs
@@ -253,8 +249,8 @@ export function SkillsPane({ workspace, onDirty }: { workspace: string; onDirty?
               }}
               tabs={[
                 { value: "general", label: t("desktop.skills.tab.general") },
-                { value: "references", label: t("desktop.skills.tab.references"), note: file?.skill?.references.length || undefined },
-                { value: "scripts", label: t("desktop.skills.tab.scripts"), note: file?.skill?.scripts.length || undefined },
+                { value: "references", label: t("desktop.skills.tab.references"), count: file?.skill?.references.length },
+                { value: "scripts", label: t("desktop.skills.tab.scripts"), count: file?.skill?.scripts.length },
               ]}
             />
             {tab === "general" && (

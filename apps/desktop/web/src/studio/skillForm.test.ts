@@ -74,7 +74,9 @@ describe("the skill form", () => {
     expect(languageOfScript("scripts/a.ts")).toBe("typescript");
     expect(languageOfScript("scripts/a.sh")).toBe("shell");
     expect(languageOfScript("scripts/a.BAT")).toBe("cmd");
-    expect(languageOfScript("scripts/a.ps1")).toBe("");
+    expect(languageOfScript("scripts/a.ps1")).toBe("powershell");
+    expect(languageOfScript("scripts/a.mjs")).toBe("javascript");
+    expect(languageOfScript("scripts/a.rb")).toBe("");
     expect(splitArgs(`--from v1 "the notes" 'x y' z`)).toEqual(["--from", "v1", "the notes", "x y", "z"]);
     expect(splitArgs("  ")).toEqual([]);
   });

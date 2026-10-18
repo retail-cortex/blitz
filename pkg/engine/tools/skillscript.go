@@ -138,10 +138,10 @@ func (s *SkillScripts) Run(ctx context.Context, in RunSkillScriptInput) (out Run
 	if !verdict.Allowed {
 		return fail("skills.policy doesn't allow this script: %s", strings.Join(verdict.Reasons, "; "))
 	}
-	ts := sc.Language == skills.LanguageTypeScript
-	// Shell and cmd scripts run with the system's shell: no packages, no
-	// entry point (SK-105).
-	shell := sc.Language == skills.LanguageShell || sc.Language == skills.LanguageCmd
+	ts := sc.Language.Node() // TypeScript and JavaScript run with node
+	// Shell, cmd and PowerShell scripts run with the system's shells: no
+	// packages, no entry point (SK-105, SK-106).
+	shell := sc.Language == skills.LanguageShell || sc.Language == skills.LanguageCmd || sc.Language == skills.LanguagePowerShell
 	if sc.Language != skills.LanguagePython && !ts && !shell {
 		return fail("%s scripts aren't supported", sc.Language)
 	}
@@ -189,7 +189,7 @@ func (s *SkillScripts) Run(ctx context.Context, in RunSkillScriptInput) (out Run
 
 	interp := python
 	readOnly := []string{s.ws.Dir()}
-	if !shell { // a system shell needs no mount of its own
+	if !shell || sc.Language == skills.LanguagePowerShell { // /bin/sh and cmd.exe are the system's; pwsh is installed
 		readOnly = append(readOnly, MountsFor(python)...)
 	}
 	var nodeModules string
@@ -290,6 +290,8 @@ func (s *SkillScripts) Run(ctx context.Context, in RunSkillScriptInput) (out Run
 		argv = append(append([]string{interp}, nodeFlags...), scriptPath)
 	case sc.Language == skills.LanguageCmd:
 		argv = []string{interp, "/d", "/c", scriptPath}
+	case sc.Language == skills.LanguagePowerShell:
+		argv = []string{interp, "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", scriptPath}
 	}
 	if !ts && !shell && sc.EntryPoint != "" {
 		// Call the named function, with the script's module run under a
@@ -387,11 +389,20 @@ func materializeScript(skill *skills.Skill, sc skills.ScriptDefinition) (path, d
 // inlineExt is an inline script's file extension, by language.
 var inlineExt = map[skills.ScriptLanguage]string{
 	skills.LanguagePython: ".py", skills.LanguageUnspecified: ".py", skills.LanguageShell: ".sh", skills.LanguageCmd: ".cmd",
+	skills.LanguagePowerShell: ".ps1", skills.LanguageTypeScript: ".ts", skills.LanguageJavaScript: ".mjs",
 }
 
-// systemShell is the shell a shell or cmd script runs with: /bin/sh, or
-// cmd.exe (%ComSpec%) on Windows.
+// systemShell is the shell a shell, cmd or PowerShell script runs with:
+// /bin/sh; cmd.exe (%ComSpec%) on Windows; pwsh, else Windows PowerShell.
 func systemShell(l skills.ScriptLanguage) (string, error) {
+	if l == skills.LanguagePowerShell {
+		for _, name := range []string{"pwsh", "powershell.exe"} {
+			if p, err := exec.LookPath(name); err == nil {
+				return filepath.EvalSymlinks(p)
+			}
+		}
+		return "", errors.New("PowerShell scripts need pwsh (PowerShell 7) on PATH, or Windows PowerShell")
+	}
 	if l == skills.LanguageCmd {
 		if c := os.Getenv("ComSpec"); c != "" {
 			return c, nil
@@ -437,7 +448,7 @@ func materializeTypeScript(skill *skills.Skill, sc skills.ScriptDefinition, node
 	cleanup = func() { os.RemoveAll(tmp) }
 	switch {
 	case sc.InlineCode != "":
-		path = filepath.Join(tmp, sc.Name+".ts")
+		path = filepath.Join(tmp, sc.Name+inlineExt[sc.Language])
 		err = os.WriteFile(path, []byte(sc.InlineCode), 0o600)
 	case sc.RelativePath != "":
 		if err = skill.CopyTo(tmp); err == nil {

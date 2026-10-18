@@ -151,7 +151,16 @@ const (
 	// (spec_skills_013 SK-105).
 	LanguageShell ScriptLanguage = "shell"
 	LanguageCmd   ScriptLanguage = "cmd"
+	// LanguageJavaScript runs with node, as TypeScript does, and
+	// LanguagePowerShell with pwsh (or Windows PowerShell): Blitz's too
+	// (SK-106).
+	LanguageJavaScript ScriptLanguage = "javascript"
+	LanguagePowerShell ScriptLanguage = "powershell"
 )
+
+// Node reports whether the language's scripts run with node
+// (TypeScript, JavaScript), with npm packages.
+func (l ScriptLanguage) Node() bool { return l == LanguageTypeScript || l == LanguageJavaScript }
 
 // Platform is the operating system a language's scripts run on ("" for
 // any): shell scripts need a POSIX shell, cmd scripts Windows.
@@ -179,8 +188,12 @@ func (l *ScriptLanguage) UnmarshalYAML(n *yaml.Node) error {
 		*l = LanguageShell
 	case "cmd", "bat", "batch":
 		*l = LanguageCmd
+	case "javascript", "js", "node":
+		*l = LanguageJavaScript
+	case "powershell", "pwsh", "ps1":
+		*l = LanguagePowerShell
 	default:
-		return fmt.Errorf("line %d: unknown script language %q (use python, typescript, shell or cmd)", n.Line, n.Value)
+		return fmt.Errorf("line %d: unknown script language %q (use python, typescript, javascript, shell, cmd or powershell)", n.Line, n.Value)
 	}
 	return nil
 }

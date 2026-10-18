@@ -32,8 +32,10 @@ import {
   mdiFilePlusOutline,
   mdiFileTableOutline,
   mdiLanguageMarkdownOutline,
+  mdiLanguageJavascript,
   mdiLanguagePython,
   mdiLanguageTypescript,
+  mdiPowershell,
   mdiPlay,
   mdiUndoVariant,
   mdiUpload,
@@ -53,7 +55,7 @@ const decoder = new TextDecoder();
 const encoder = new TextEncoder();
 
 /** Each script language's icon. */
-const languageIcons: Record<ScriptLanguage, string> = { python: mdiLanguagePython, typescript: mdiLanguageTypescript, shell: mdiBash, cmd: mdiConsoleLine };
+const languageIcons: Record<ScriptLanguage, string> = { python: mdiLanguagePython, typescript: mdiLanguageTypescript, javascript: mdiLanguageJavascript, shell: mdiBash, cmd: mdiConsoleLine, powershell: mdiPowershell };
 
 /** A reference's icon, by how it previews. */
 const previewIcon = (k: PreviewKind) => (k === "pdf" ? mdiFilePdfBox : k === "image" || k === "svg" ? mdiFileImageOutline : k === "markdown" ? mdiLanguageMarkdownOutline : k === "table" ? mdiFileTableOutline : mdiFileDocumentOutline);
@@ -367,13 +369,13 @@ export function SkillFiles({ workspace, file, folder, onFile, onDirty, onOpen }:
         <div className="card outlined row wrap skill-new-file" style={{ gap: 8 }}>
           <input className="input skill-file-name" autoFocus value={adding} placeholder={t(folder === "references" ? "desktop.skills.new_reference" : "desktop.skills.new_script")} aria-label={t(folder === "references" ? "desktop.skills.new_reference" : "desktop.skills.new_script")} onChange={(e) => setAdding(e.target.value)} onKeyDown={(e) => (e.key === "Enter" ? create() : e.key === "Escape" && setCreating(false))} />
           {folder === "scripts" && (
-            <Segmented
-              small
-              value={language}
-              label={t("desktop.skills.language")}
-              options={(Object.keys(scriptLanguages) as ScriptLanguage[]).map((l) => ({ value: l, label: t(`desktop.skills.lang.${l}`), icon: languageIcons[l] }))}
-              onChange={setLanguage}
-            />
+            <select className="select skill-language" value={language} aria-label={t("desktop.skills.language")} onChange={(e) => setLanguage(e.target.value as ScriptLanguage)}>
+              {(Object.keys(scriptLanguages) as ScriptLanguage[]).map((l) => (
+                <option key={l} value={l}>
+                  {t(`desktop.skills.lang.${l}`)} ({scriptLanguages[l]})
+                </option>
+              ))}
+            </select>
           )}
           <Button variant="filled" disabled={!adding.trim()} onClick={create}>
             {t("desktop.skills.create_file")}

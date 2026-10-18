@@ -447,6 +447,8 @@ input[type="range"] { accent-color: var(--accent-a); width: 100%; }
 .pulse { animation: pulse 1.2s ease-in-out infinite; }
 @keyframes pulse { 50% { opacity: 0.3; } }
 .badge { min-width: 16px; height: 16px; padding: 0 4px; border-radius: 8px; background: var(--md-error); color: var(--md-on-error); font: 500 11px/16px var(--md-font); text-align: center; }
+.tab-badge { margin-left: 2px; background: var(--md-surface-container-highest); color: var(--md-on-surface-variant); }
+.tab.on .tab-badge { background: var(--accent-tint); color: var(--on-accent-tint); }
 
 .divider { height: 1px; background: var(--md-outline-variant); flex: none; }
 .vdivider { width: 1px; background: var(--md-outline-variant); flex: none; }

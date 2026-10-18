@@ -367,3 +367,90 @@ func TestRunShellScript(t *testing.T) {
 	out = r.Run(context.Background(), RunSkillScriptInput{Skill: "shelly", Script: "win"})
 	assert.Contains(t, out.Error, "cmd scripts run on Windows only")
 }
+
+// A JavaScript script runs with node; a PowerShell one with pwsh, when
+// it's installed (SK-106).
+func TestRunJavaScriptAndPowerShell(t *testing.T) {
+	skillsDir := t.TempDir()
+	dir := filepath.Join(skillsDir, "multi")
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "scripts"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "SKILL.md"), []byte("---\nname: multi\ndescription: d\n---\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "scripts", "hi.mjs"), []byte("console.log('js', process.argv.slice(2).join('|'))\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "scripts", "hi.ps1"), []byte("Write-Output \"ps $($args -join '|')\"\n"), 0o644))
+	prov, _ := skills.NewProvider()
+	require.NoError(t, prov.DiscoverExternal([]string{skillsDir}))
+	wsDir, _ := filepath.EvalSymlinks(t.TempDir())
+	ws, err := OpenWorkspace(WorkspaceOptions{Dir: wsDir})
+	require.NoError(t, err)
+	t.Cleanup(func() { ws.Close() })
+	policy := config.DefaultConfig().Skills.Policy
+	hooks, _ := approverHooks(true)
+	r := NewSkillScripts(prov, policy, ws, hooks, NewPyEnvs(filepath.Join(t.TempDir(), "envs"), policy.Packages),
+		ScriptBoxConfig{Mode: os.Getenv("BLITZ_PYENV_SANDBOX"), Blocked: ws.Blocked(), StateDir: t.TempDir()})
+	if _, err := r.Box(); err != nil {
+		t.Skipf("no script sandbox: %v", err)
+	}
+	t.Run("javascript", func(t *testing.T) {
+		if _, err := SystemNode(); err != nil {
+			t.Skip(err)
+		}
+		out := r.Run(context.Background(), RunSkillScriptInput{Skill: "multi", Script: "hi.mjs", Args: []string{"a", "b"}})
+		require.Empty(t, out.Error, "%+v", out)
+		assert.Equal(t, "js a|b\n", out.Stdout)
+	})
+	t.Run("powershell", func(t *testing.T) {
+		out := r.Run(context.Background(), RunSkillScriptInput{Skill: "multi", Script: "hi.ps1", Args: []string{"a"}})
+		if strings.Contains(out.Error, "need pwsh") {
+			t.Skip(out.Error)
+		}
+		require.Empty(t, out.Error, "%+v", out)
+		assert.Equal(t, "ps a\n", out.Stdout)
+	})
+}
+
+// test.py and test.ts side by side, each edited after a first run: each
+// runs itself, with its edits, and never the other (the two shared the
+// name "test", so running the TypeScript one ran the Python one).
+func TestSameNamedScriptsRunThemselves(t *testing.T) {
+	skillsDir := t.TempDir()
+	dir := filepath.Join(skillsDir, "pair")
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "scripts"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "SKILL.md"), []byte("---\nname: pair\ndescription: d\n---\n"), 0o644))
+	write := func(name, body string) {
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "scripts", name), []byte(body), 0o644))
+	}
+	write("test.py", "print('py one')\n")
+	write("test.ts", "console.log('ts one');\n")
+	prov, _ := skills.NewProvider()
+	require.NoError(t, prov.DiscoverExternal([]string{skillsDir}))
+	wsDir, _ := filepath.EvalSymlinks(t.TempDir())
+	ws, err := OpenWorkspace(WorkspaceOptions{Dir: wsDir})
+	require.NoError(t, err)
+	t.Cleanup(func() { ws.Close() })
+	policy := config.DefaultConfig().Skills.Policy
+	hooks, _ := approverHooks(true)
+	r := NewSkillScripts(prov, policy, ws, hooks, NewPyEnvs(filepath.Join(t.TempDir(), "envs"), policy.Packages),
+		ScriptBoxConfig{Mode: os.Getenv("BLITZ_PYENV_SANDBOX"), Blocked: ws.Blocked(), StateDir: t.TempDir()})
+	if _, err := r.Box(); err != nil {
+		t.Skipf("no script sandbox: %v", err)
+	}
+	_, pyErr := SystemPython()
+	_, nodeErr := SystemNode()
+	run := func(script, want string, skip error) {
+		t.Helper()
+		if skip != nil {
+			t.Log(skip)
+			return
+		}
+		out := r.Run(context.Background(), RunSkillScriptInput{Skill: "pair", Script: script})
+		require.Empty(t, out.Error, "%+v", out)
+		assert.Equal(t, want, out.Stdout, "%s", script)
+	}
+	run("test.py", "py one\n", pyErr)
+	run("test.ts", "ts one\n", nodeErr)
+	write("test.ts", "console.log('ts one');\nconsole.log('ts two');\n")
+	write("test.py", "print('py one')\nprint('py two')\n")
+	require.NoError(t, prov.Reload())
+	run("test.ts", "ts one\nts two\n", nodeErr)
+	run("test.py", "py one\npy two\n", pyErr)
+}

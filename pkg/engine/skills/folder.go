@@ -15,7 +15,9 @@
 package skills
 
 import (
+	"encoding/json"
 	"io/fs"
+	"maps"
 	"path"
 	"slices"
 	"strings"
@@ -43,19 +45,25 @@ const (
 
 // scriptLanguages are the languages of scripts found in scripts/, by
 // extension.
-var scriptLanguages = map[string]ScriptLanguage{".py": LanguagePython, ".ts": LanguageTypeScript, ".sh": LanguageShell, ".cmd": LanguageCmd, ".bat": LanguageCmd}
+var scriptLanguages = map[string]ScriptLanguage{
+	".py": LanguagePython, ".ts": LanguageTypeScript, ".js": LanguageJavaScript, ".mjs": LanguageJavaScript,
+	".sh": LanguageShell, ".cmd": LanguageCmd, ".bat": LanguageCmd, ".ps1": LanguagePowerShell,
+}
 
 // ScriptLanguageOf is the language of a script file, by its extension
-// (.py, .ts, .sh, .cmd and .bat); unspecified for anything else.
+// (.py, .ts, .js, .mjs, .sh, .cmd, .bat, .ps1); unspecified for anything
+// else.
 func ScriptLanguageOf(name string) ScriptLanguage { return scriptLanguages[path.Ext(name)] }
 
 // scanBundle fills in what the skill's folder holds (SK-97, SK-98): its
 // resources (the files beside SKILL.md, and everything under
 // references/), its references, and, when the front matter declares no
-// scripts, those in scripts/ (.py, .ts, .sh, .cmd, .bat), named by their
-// file name. A
-// skill that declares its scripts keeps exactly those: its other files
-// there may be helpers they import.
+// scripts, those in scripts/ (by extension: ScriptLanguageOf), named by
+// their file name (with its extension when two share one: test.py and
+// test.ts). A skill that declares its scripts keeps exactly those: its
+// other files there may be helpers they import. Then a Python script that
+// names no packages takes requirements.txt's, and a Node one
+// package.json's dependencies (SK-107).
 func (s *Skill) scanBundle() {
 	s.Resources, s.References = []string{}, nil
 	if s.fsys == nil {
@@ -76,18 +84,97 @@ func (s *Skill) scanBundle() {
 	})
 	s.Resources = append(s.Resources, s.References...)
 
+	defer s.addPackages()
 	if len(s.Scripts) > 0 {
 		return
 	}
 	scripts, _ := fs.ReadDir(s.fsys, path.Join(s.root, ScriptsDir))
+	var found []fs.DirEntry
+	bases := map[string]int{}
 	for _, e := range scripts {
-		lang := ScriptLanguageOf(e.Name())
-		if !e.Type().IsRegular() || lang == LanguageUnspecified {
+		if e.Type().IsRegular() && ScriptLanguageOf(e.Name()) != LanguageUnspecified {
+			found = append(found, e)
+			bases[strings.TrimSuffix(e.Name(), path.Ext(e.Name()))]++
+		}
+	}
+	for _, e := range found {
+		name := strings.TrimSuffix(e.Name(), path.Ext(e.Name()))
+		if bases[name] > 1 {
+			name = e.Name() // test.py and test.ts: each by its whole name
+		}
+		s.Scripts = append(s.Scripts, ScriptDefinition{Name: name, Language: ScriptLanguageOf(e.Name()), RelativePath: ScriptsDir + "/" + e.Name(), Found: true})
+	}
+}
+
+// PackageFiles are where a skill's scripts' packages may be listed, by
+// kind: requirements.txt for Python, package.json for Node; in scripts/
+// first, then beside SKILL.md.
+var PackageFiles = map[string][]string{"python": {"scripts/requirements.txt", "requirements.txt"}, "node": {"scripts/package.json", "package.json"}}
+
+// addPackages gives each script that names no packages those its
+// skill's requirements.txt (Python) or package.json (Node) lists, so it
+// runs in an isolated environment with them (SK-107).
+func (s *Skill) addPackages() {
+	var py, npm []string
+	loaded := false
+	for i := range s.Scripts {
+		sc := &s.Scripts[i]
+		if len(sc.Dependencies) > 0 || (sc.Language != LanguagePython && !sc.Language.Node()) {
 			continue
 		}
-		name := strings.TrimSuffix(e.Name(), path.Ext(e.Name()))
-		s.Scripts = append(s.Scripts, ScriptDefinition{Name: name, Language: lang, RelativePath: ScriptsDir + "/" + e.Name(), Found: true})
+		if !loaded {
+			py, npm, loaded = s.readPackageFiles(), s.readPackageJSON(), true
+		}
+		if sc.Language == LanguagePython {
+			sc.Dependencies = py
+		} else {
+			sc.Dependencies = npm
+		}
 	}
+}
+
+// readPackageFiles is requirements.txt's requirements: a line each,
+// without comments and blank lines.
+func (s *Skill) readPackageFiles() []string {
+	for _, rel := range PackageFiles["python"] {
+		data, err := fs.ReadFile(s.fsys, path.Join(s.root, rel))
+		if err != nil {
+			continue
+		}
+		var out []string
+		for _, line := range strings.Split(string(data), "\n") {
+			if i := strings.Index(line, "#"); i >= 0 {
+				line = line[:i]
+			}
+			if line = strings.TrimSpace(line); line != "" {
+				out = append(out, line)
+			}
+		}
+		return out
+	}
+	return nil
+}
+
+// readPackageJSON is package.json's dependencies, as name@version.
+func (s *Skill) readPackageJSON() []string {
+	for _, rel := range PackageFiles["node"] {
+		data, err := fs.ReadFile(s.fsys, path.Join(s.root, rel))
+		if err != nil {
+			continue
+		}
+		var pkg struct {
+			Dependencies map[string]string `json:"dependencies"`
+		}
+		if json.Unmarshal(data, &pkg) != nil {
+			return []string{rel + " isn't valid JSON"} // refused by the policy, with the reason shown
+		}
+		var out []string
+		for _, name := range slices.Sorted(maps.Keys(pkg.Dependencies)) {
+			out = append(out, name+"@"+pkg.Dependencies[name])
+		}
+		return out
+	}
+	return nil
 }
 
 // Kind is which of the four kinds the skill is (SK-97): meta when it

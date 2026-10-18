@@ -148,7 +148,7 @@ func Evaluate(s *Skill, p config.SkillPolicy) Evaluation {
 			v.TimeoutSeconds = p.MaxTimeoutSeconds
 		}
 		check := checkDependency
-		if sc.Language == LanguageTypeScript {
+		if sc.Language.Node() {
 			check = checkNPMDependency
 		}
 		for _, dep := range sc.Dependencies {
