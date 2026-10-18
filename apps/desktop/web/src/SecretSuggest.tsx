@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import { useEffect, useState, type KeyboardEvent, type RefObject, type TextareaHTMLAttributes } from "react";
+import { useEffect, useState, type InputHTMLAttributes, type KeyboardEvent, type RefObject, type TextareaHTMLAttributes } from "react";
 import { mdiKeyVariant } from "@mdi/js";
 import { t } from "./i18n";
 import { insertSecret, missingSecrets, secretNames, secretOptions, secretTokenAt, type SecretName, type SecretOption } from "./secretComplete";
@@ -121,6 +121,39 @@ export function SuggestTextarea({
   return (
     <div className="suggest-field">
       <textarea
+        {...rest}
+        ref={setEl}
+        value={value}
+        onChange={(e) => {
+          onValue(e.target.value);
+          s.trackCaret(e);
+        }}
+        onSelect={s.trackCaret}
+        onKeyDown={(e) => {
+          if (s.onKeyDown(e)) return;
+          rest.onKeyDown?.(e);
+        }}
+      />
+      {s.menu}
+      {missing.length > 0 && <span className="t-body-sm warning-text">{t("desktop.secrets.missing", { names: missing.join(", ") })}</span>}
+    </div>
+  );
+}
+
+/** A one-line box (a header's value, an API key) that completes {secrets:…}, as SuggestTextarea does. */
+export function SuggestInput({
+  value,
+  onValue,
+  workspace,
+  ...rest
+}: Omit<InputHTMLAttributes<HTMLInputElement>, "value" | "onChange"> & { value: string; onValue: (v: string) => void; workspace: string }) {
+  const [el, setEl] = useState<HTMLInputElement | null>(null);
+  const ref = { current: el };
+  const s = useSecretSuggest(value, onValue, ref, workspace);
+  const missing = missingSecrets(value, s.names);
+  return (
+    <div className="suggest-field">
+      <input
         {...rest}
         ref={setEl}
         value={value}

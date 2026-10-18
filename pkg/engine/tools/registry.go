@@ -62,6 +62,9 @@ type Registry struct {
 	searcher     *webSearcher  // nil: no search provider configured
 	searchErr    error         // why the configured provider can't be used
 	fetch        bool          // web_fetch is available
+	// web is the web settings, for workflows' calls (spec_workflows_043).
+	web   WebFetchConfig
+	webOn bool
 	// modeNote is why the configured permission mode couldn't be used
 	// (bypass without the OS sandbox); nil when it was.
 	modeNote error
@@ -292,6 +295,11 @@ func NewRegistry(cfg *config.Config, agentReg *agents.Registry, skillProv *skill
 		}})
 	}
 	r.fetch = cfg.Web.Enabled
+	r.webOn = cfg.Web.Enabled
+	r.web = WebFetchConfig{
+		AllowDomains: cfg.Web.AllowDomains, DenyDomains: cfg.Web.DenyDomains, AllowPrivate: cfg.Web.AllowPrivate,
+		AllowNetwork: sb.AllowNetwork, MaxBytes: cfg.Web.MaxBytes, Rules: rules, Timeout: time.Duration(cfg.Web.TimeoutSeconds) * time.Second,
+	}
 	if cfg.Web.Enabled && cfg.Browser.Enabled {
 		timeout := time.Duration(cfg.Web.TimeoutSeconds) * time.Second
 		if timeout < 30*time.Second {

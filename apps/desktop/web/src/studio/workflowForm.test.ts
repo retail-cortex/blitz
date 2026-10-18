@@ -17,7 +17,7 @@
 import { create } from "@bufbuild/protobuf";
 import { describe, expect, it } from "vitest";
 import { WorkflowFileSchema } from "../gen/blitz/v1/workspace_pb";
-import { addLink, emptyWorkflowForm, linkId, linkText, setLink, formFromWorkflow, fromTemplate, newStep, removeStep, sameWorkflowForm, specFromForm, stepNeeds, templates } from "./workflowForm";
+import { addLink, emptyWorkflowForm, noAuth, linkId, linkText, setLink, formFromWorkflow, fromTemplate, newStep, removeStep, sameWorkflowForm, specFromForm, stepNeeds, templates } from "./workflowForm";
 
 describe("the workflow canvas", () => {
   it("reads a workflow and writes back each step's own settings", () => {
@@ -70,6 +70,18 @@ describe("the workflow canvas", () => {
     const x = { ...newStep("extract", [], 0, 0), fields: [{ name: "total", type: "number" as const, description: "" }, { name: " ", type: "string" as const, description: "" }], retryAttempts: "3", retryDelay: "2s" };
     expect(specFromForm({ ...emptyWorkflowForm, steps: [x] }).nodes[0]).toMatchObject({ fields: [{ name: "total", type: "number", description: "" }], retryAttempts: 3, retryDelay: "2s" });
     expect(specFromForm({ ...emptyWorkflowForm, steps: [{ ...newStep("exclusive", [], 0, 0), retryAttempts: "3", timeout: "1m" }] }).nodes[0]).toMatchObject({ retryAttempts: 0, timeout: "" });
+  });
+
+  it("keeps each call's own settings", () => {
+    const api = { ...newStep("api_call", [], 0, 0), url: " https://api.example.com/x ", method: "POST", query: [{ name: "q", value: "1" }, { name: " ", value: "x" }], bodyKind: "json" as const, body: '{"n": 1}', server: "ignored", auth: { ...noAuth, type: "oauth2" as const, tokenUrl: "https://a/t", clientId: "id", clientSecret: "{secrets:s}", scopes: "read write", token: "ignored" } };
+    expect(specFromForm({ ...emptyWorkflowForm, steps: [api] }).nodes[0]).toMatchObject({ url: "https://api.example.com/x", method: "POST", query: [{ name: "q", value: "1" }], jsonBody: '{"n": 1}', body: "", server: "", auth: { type: "oauth2", scopes: ["read", "write"], token: "" } });
+    expect(specFromForm({ ...emptyWorkflowForm, steps: [{ ...api, method: "GET", bodyKind: "text", body: "hi", auth: { ...noAuth, type: "api_key", name: "X-Key", value: "k", in: "query" } }] }).nodes[0]).toMatchObject({ method: "", body: "hi", jsonBody: "", auth: { type: "api_key", in: "query" } });
+    const mcp = { ...newStep("mcp_call", [], 0, 0), server: "shop", tool: " lookup ", argumentsJson: '{"a": 1}', url: "ignored" };
+    expect(specFromForm({ ...emptyWorkflowForm, steps: [mcp] }).nodes[0]).toMatchObject({ server: "shop", tool: "lookup", argumentsJson: '{"a": 1}', url: "", auth: undefined });
+    expect(stepNeeds(newStep("mcp_call", [], 0, 0))).toBe("mcp");
+    expect(stepNeeds(newStep("a2a_call", [], 0, 0))).toBe("url");
+    const back = formFromWorkflow(create(WorkflowFileSchema, { name: "x", nodes: [{ id: "a", type: "api_call", url: "u", jsonBody: "{}", auth: { type: "basic", username: "me", scopes: [] } }] }));
+    expect(back.steps[0]).toMatchObject({ method: "GET", bodyKind: "json", body: "{}", auth: { type: "basic", username: "me", in: "header" } });
   });
 
   it("starts from templates", () => {

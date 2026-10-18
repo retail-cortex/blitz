@@ -25,11 +25,30 @@ A workflow runs as one turn in the chat. Each agent step is a turn of its own, s
 | Browse | An agent reaches a goal with its browser tool |
 | Extract | Pulls named values out of its input (fields you list, each a type) for later steps and conditions |
 | Gather | Joins its inputs, each under its step's title |
+| Call an API | An HTTP request: method, URL, query, headers, a text or JSON body, and auth |
+| Call an MCP tool | A tool of one of the workspace's MCP servers, with arguments |
+| Ask a remote agent | A message to an agent over A2A; its reply is the output |
 | Script | Runs a skill's script; the input is its last argument, its output the step's |
 | Read a file | A workspace file's text |
 | Save to a file | Writes its input to a workspace file, once you approve |
 
 Email and data steps are shown on the canvas, and come later.
+
+## Calling services
+
+An **API call**'s values (URL, query, headers, body) take `{{ templates }}` and secrets as `{secrets:key}`, put in as the call is made and never kept in the workflow or shown. Its auth can be a bearer token, basic auth, an API key (in a header or the query) or **OAuth2 client credentials** (a token URL, a client ID and secret, scopes): the token is fetched and kept until it expires. Its output's data is `{status, headers, body}`, so a condition can read `output.data.body.total`; a status of 400 or more fails the step (catch it with an on error link).
+
+```yaml
+- id: order
+  type: api_call
+  url: "https://api.shop.example/orders/{{ input }}"
+  headers: [{name: Accept, value: application/json}]
+  auth: {type: bearer, token: "{secrets:shop_token}"}
+```
+
+An **MCP call** names one of the workspace's [MCP servers](mcp.md), a tool and its arguments; it's approved as the agent's MCP calls are. A **remote agent** step sends a message over [A2A](https://a2a-protocol.org) to the agent whose card is at a URL.
+
+Calls reach the network as `web_fetch` does: only when the web is on, public addresses only (unless `web.allow_private`), and you're asked before a new host, unless it's in `web.allow_domains` or a permission rule allows it.
 
 ## Choices, branches and failures
 

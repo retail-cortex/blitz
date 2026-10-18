@@ -25,7 +25,10 @@ import {
   mdiCloseCircleOutline,
   mdiCodeBraces,
   mdiContentSaveOutline,
+  mdiAccountNetworkOutline,
+  mdiApi,
   mdiCircleOutline,
+  mdiPowerPlugOutline,
   mdiCloseThick,
   mdiDatabaseOutline,
   mdiPlusThick,
@@ -54,8 +57,9 @@ import { message } from "../errors";
 import { Decision, type ApprovalRequest } from "../gen/blitz/v1/turn_pb";
 import type { SkillInfo, WorkflowFile } from "../gen/blitz/v1/workspace_pb";
 import { t, tn } from "../i18n";
-import { Button, Chip, Dialog, Field, Icon, IconButton, useSnackbar } from "../ui/controls";
-import { addLink, agentTypes, comingSoon, emptyWorkflowForm, formFromWorkflow, fromTemplate, gatewayTypes, linkId, linkText, newStep, removeStep, sameWorkflowForm, setLink, specFromForm, stepGroups, stepNeeds, templates, type FieldForm, type LinkKind, type StepForm, type StepType, type Template, type WorkflowForm } from "./workflowForm";
+import { SuggestInput, SuggestTextarea } from "../SecretSuggest";
+import { Button, Chip, Dialog, Field, Icon, IconButton, Segmented, useSnackbar } from "../ui/controls";
+import { addLink, agentTypes, comingSoon, emptyWorkflowForm, formFromWorkflow, fromTemplate, gatewayTypes, linkId, linkText, newStep, removeStep, sameWorkflowForm, setLink, specFromForm, methods, stepGroups, stepNeeds, templates, type AuthForm, type FieldForm, type PairForm, type LinkKind, type StepForm, type StepType, type Template, type WorkflowForm } from "./workflowForm";
 
 /** Each step type's icon. */
 const typeIcons: Record<StepType, string> = {
@@ -73,6 +77,9 @@ const typeIcons: Record<StepType, string> = {
   exclusive: mdiCloseThick,
   inclusive: mdiCircleOutline,
   parallel: mdiPlusThick,
+  api_call: mdiApi,
+  mcp_call: mdiPowerPlugOutline,
+  a2a_call: mdiAccountNetworkOutline,
 };
 
 /** A step's state in a run. */
@@ -100,7 +107,17 @@ function StepNode({ data, selected }: NodeProps<Node<StepData>>) {
       </div>
     );
   }
-  const sub = needs ? t(`desktop.flows.needs.${needs}`) : agentTypes.includes(s.type) ? s.agent || t("desktop.flows.active_agent") : s.path || (s.type === "script" ? `${s.skill} › ${s.script}` : t(`desktop.flows.type.${s.type}`));
+  const sub = needs
+    ? t(`desktop.flows.needs.${needs}`)
+    : agentTypes.includes(s.type)
+      ? s.agent || t("desktop.flows.active_agent")
+      : s.type === "api_call"
+        ? `${s.method} ${hostOf(s.url)}`
+        : s.type === "a2a_call"
+          ? hostOf(s.url)
+          : s.type === "mcp_call"
+            ? `${s.server} › ${s.tool}`
+            : s.path || (s.type === "script" ? `${s.skill} › ${s.script}` : t(`desktop.flows.type.${s.type}`));
   return (
     <div className={`flow-node ${selected ? "selected" : ""} ${status ? `is-${status}` : ""} ${comingSoon.includes(s.type) ? "soon" : ""}`}>
       {s.type !== "read_file" && <Handle type="target" position={Position.Left} />}
@@ -142,6 +159,7 @@ export function WorkflowsPane({ workspace, onDirty }: { workspace: string; onDir
   const [agents, setAgents] = useState<string[]>([]);
   const [skills, setSkills] = useState<SkillInfo[]>([]);
   const [rules, setRules] = useState<string[]>([]);
+  const [mcpServers, setMcpServers] = useState<string[]>([]);
   const [live, setLive] = useState<Live | null>(null);
   const stop = useRef<AbortController | null>(null);
 
@@ -158,6 +176,7 @@ export function WorkflowsPane({ workspace, onDirty }: { workspace: string; onDir
     workspaces.listAgents({ workspace }).then((r) => setAgents(r.agents.map((a) => a.name)), () => {});
     workspaces.listSkills({ workspace }).then((r) => setSkills(r.skills), () => {});
     workspaces.listRules({ workspace }).then((r) => setRules(r.rules.map((x) => x.name)), () => {});
+    workspaces.listMCPServers({ workspace }).then((r) => setMcpServers(r.servers.map((x) => x.name)), () => {});
   }, [workspace, refresh]);
   useEffect(() => () => stop.current?.abort(), []);
 
@@ -504,6 +523,73 @@ export function WorkflowsPane({ workspace, onDirty }: { workspace: string; onDir
                         {(id) => <input id={id} className="input mono" value={step.path} placeholder={t("desktop.flows.path_placeholder")} onChange={(e) => setStep(step.id, { path: e.target.value })} />}
                       </Field>
                     )}
+                    {step.type === "api_call" && (
+                      <>
+                        <div className="row flow-method" style={{ gap: 6 }}>
+                          <select className="select" aria-label={t("desktop.flows.method")} value={step.method} onChange={(e) => setStep(step.id, { method: e.target.value })}>
+                            {methods.map((m) => (
+                              <option key={m} value={m}>
+                                {m}
+                              </option>
+                            ))}
+                          </select>
+                          <SuggestInput className="input mono" aria-label={t("desktop.flows.url")} placeholder={t("desktop.flows.url_placeholder")} value={step.url} onValue={(v) => setStep(step.id, { url: v })} workspace={workspace} />
+                        </div>
+                        <span className="t-body-sm muted">{t("desktop.flows.call_hint")}</span>
+                        <Pairs label={t("desktop.flows.query")} pairs={step.query} workspace={workspace} onChange={(v) => setStep(step.id, { query: v })} />
+                        <Pairs label={t("desktop.flows.headers")} pairs={step.headers} workspace={workspace} onChange={(v) => setStep(step.id, { headers: v })} />
+                        {step.method !== "GET" && step.method !== "HEAD" && (
+                          <div className="stack" style={{ gap: 4 }}>
+                            <span className="t-label">{t("desktop.flows.body")}</span>
+                            <Segmented
+                              label={t("desktop.flows.body")}
+                              value={step.bodyKind}
+                              options={(["none", "text", "json"] as const).map((k) => ({ value: k, label: t(`desktop.flows.body_kinds.${k}`) }))}
+                              onChange={(v) => setStep(step.id, { bodyKind: v as StepForm["bodyKind"] })}
+                            />
+                            {step.bodyKind === "none" ? (
+                              <span className="t-body-sm muted">{t("desktop.flows.body_none")}</span>
+                            ) : (
+                              <SuggestTextarea className="input mono" rows={5} aria-label={t("desktop.flows.body")} value={step.body} placeholder={step.bodyKind === "json" ? t("desktop.flows.json_placeholder") : ""} onValue={(v) => setStep(step.id, { body: v })} workspace={workspace} />
+                            )}
+                          </div>
+                        )}
+                        <AuthFields auth={step.auth} workspace={workspace} onChange={(a) => setStep(step.id, { auth: a })} />
+                      </>
+                    )}
+                    {step.type === "mcp_call" && (
+                      <>
+                        <Field label={t("desktop.flows.mcp_server")}>
+                          {(id) => (
+                            <select id={id} className="select" value={step.server} onChange={(e) => setStep(step.id, { server: e.target.value })}>
+                              <option value="">{t("desktop.flows.choose")}</option>
+                              {[...new Set([...mcpServers, step.server].filter(Boolean))].map((s) => (
+                                <option key={s} value={s}>
+                                  {s}
+                                </option>
+                              ))}
+                            </select>
+                          )}
+                        </Field>
+                        <Field label={t("desktop.flows.mcp_tool")} supporting={t("desktop.flows.mcp_tool_hint")}>
+                          {(id) => <input id={id} className="input mono" value={step.tool} onChange={(e) => setStep(step.id, { tool: e.target.value })} />}
+                        </Field>
+                        <Field label={t("desktop.flows.arguments")} supporting={t("desktop.flows.arguments_hint")}>
+                          {(id) => <SuggestTextarea id={id} className="input mono" rows={5} value={step.argumentsJson} placeholder={t("desktop.flows.json_placeholder")} onValue={(v) => setStep(step.id, { argumentsJson: v })} workspace={workspace} />}
+                        </Field>
+                      </>
+                    )}
+                    {step.type === "a2a_call" && (
+                      <>
+                        <Field label={t("desktop.flows.agent_url")} supporting={t("desktop.flows.agent_url_hint")}>
+                          {(id) => <SuggestInput id={id} className="input mono" value={step.url} placeholder={t("desktop.flows.agent_url_placeholder")} onValue={(v) => setStep(step.id, { url: v })} workspace={workspace} />}
+                        </Field>
+                        <Field label={t("desktop.flows.message")} supporting={t("desktop.flows.message_hint")}>
+                          {(id) => <SuggestTextarea id={id} className="input" rows={4} value={step.instructions} onValue={(v) => setStep(step.id, { instructions: v })} workspace={workspace} />}
+                        </Field>
+                        <Pairs label={t("desktop.flows.headers")} pairs={step.headers} workspace={workspace} onChange={(v) => setStep(step.id, { headers: v })} />
+                      </>
+                    )}
                     {step.type === "extract" && (
                       <div className="stack" style={{ gap: 6 }}>
                         <span className="t-label">{t("desktop.flows.fields")}</span>
@@ -751,6 +837,91 @@ function Pick({ label, hint, all, chosen, onChange }: { label: string; hint: str
         })}
         {all.length === 0 && chosen.length === 0 && <span className="t-body-sm muted">—</span>}
       </div>
+    </div>
+  );
+}
+
+/** A URL's host, for a step's card ("" when it isn't one yet). */
+function hostOf(raw: string): string {
+  try {
+    return new URL(raw.replace(/\{\{.*?\}\}/g, "x")).host;
+  } catch {
+    return raw;
+  }
+}
+
+/** Names and values (headers, query parameters), each completing {secrets:…}. */
+function Pairs({ label, pairs, workspace, onChange }: { label: string; pairs: PairForm[]; workspace: string; onChange: (v: PairForm[]) => void }) {
+  return (
+    <div className="stack" style={{ gap: 4 }}>
+      <span className="t-label">{label}</span>
+      {pairs.map((p, i) => (
+        <div key={i} className="row flow-field" style={{ gap: 6 }}>
+          <input className="input mono" aria-label={t("desktop.flows.pair_name")} placeholder={t("desktop.flows.pair_name")} value={p.name} onChange={(e) => onChange(pairs.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)))} />
+          <SuggestInput className="input mono" aria-label={t("desktop.flows.pair_value")} placeholder={t("desktop.flows.pair_value")} value={p.value} onValue={(v) => onChange(pairs.map((x, j) => (j === i ? { ...x, value: v } : x)))} workspace={workspace} />
+          <IconButton icon={mdiDeleteOutline} label={t("desktop.flows.pair_remove")} small onClick={() => onChange(pairs.filter((_, j) => j !== i))} />
+        </div>
+      ))}
+      <div className="row">
+        <Button small icon={mdiPlus} onClick={() => onChange([...pairs, { name: "", value: "" }])}>
+          {t("desktop.flows.pair_add")}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+/** An API call's auth: its type, then that type's values (secrets by name). */
+function AuthFields({ auth, workspace, onChange }: { auth: AuthForm; workspace: string; onChange: (a: AuthForm) => void }) {
+  const set = (patch: Partial<AuthForm>) => onChange({ ...auth, ...patch });
+  const secret = (key: keyof AuthForm, label: string) => (
+    <Field label={label}>{(id) => <SuggestInput id={id} className="input mono" value={String(auth[key])} placeholder={t("desktop.flows.secret_placeholder")} onValue={(v) => set({ [key]: v } as Partial<AuthForm>)} workspace={workspace} />}</Field>
+  );
+  return (
+    <div className="stack" style={{ gap: 6 }}>
+      <Field label={t("desktop.flows.auth")} supporting={t("desktop.flows.auth_hint")}>
+        {(id) => (
+          <select id={id} className="select" value={auth.type} onChange={(e) => set({ type: e.target.value as AuthForm["type"] })}>
+            {(["", "bearer", "basic", "api_key", "oauth2"] as const).map((k) => (
+              <option key={k} value={k}>
+                {t(`desktop.flows.auth_types.${k || "none"}`)}
+              </option>
+            ))}
+          </select>
+        )}
+      </Field>
+      {auth.type === "bearer" && secret("token", t("desktop.flows.auth_token"))}
+      {auth.type === "basic" && (
+        <>
+          {secret("username", t("desktop.flows.auth_username"))}
+          {secret("password", t("desktop.flows.auth_password"))}
+        </>
+      )}
+      {auth.type === "api_key" && (
+        <>
+          <div className="row" style={{ gap: 6 }}>
+            <Field label={t("desktop.flows.auth_key_name")}>{(id) => <input id={id} className="input mono" value={auth.name} placeholder={t("desktop.flows.auth_key_name_placeholder")} onChange={(e) => set({ name: e.target.value })} />}</Field>
+            <Field label={t("desktop.flows.auth_key_in")}>
+              {(id) => (
+                <select id={id} className="select" value={auth.in} onChange={(e) => set({ in: e.target.value as AuthForm["in"] })}>
+                  <option value="header">{t("desktop.flows.auth_in.header")}</option>
+                  <option value="query">{t("desktop.flows.auth_in.query")}</option>
+                </select>
+              )}
+            </Field>
+          </div>
+          {secret("value", t("desktop.flows.auth_key_value"))}
+        </>
+      )}
+      {auth.type === "oauth2" && (
+        <>
+          <Field label={t("desktop.flows.auth_token_url")}>{(id) => <SuggestInput id={id} className="input mono" value={auth.tokenUrl} placeholder={t("desktop.flows.auth_token_url_placeholder")} onValue={(v) => set({ tokenUrl: v })} workspace={workspace} />}</Field>
+          {secret("clientId", t("desktop.flows.auth_client_id"))}
+          {secret("clientSecret", t("desktop.flows.auth_client_secret"))}
+          <Field label={t("desktop.flows.auth_scopes")} supporting={t("desktop.flows.auth_scopes_hint")}>{(id) => <input id={id} className="input mono" value={auth.scopes} onChange={(e) => set({ scopes: e.target.value })} />}</Field>
+          <Field label={t("desktop.flows.auth_audience")}>{(id) => <input id={id} className="input mono" value={auth.audience} onChange={(e) => set({ audience: e.target.value })} />}</Field>
+        </>
+      )}
     </div>
   );
 }

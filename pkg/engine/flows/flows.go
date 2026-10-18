@@ -56,6 +56,11 @@ const (
 	// Extract pulls named fields out of its input (a model, to a schema):
 	// they're its data.
 	Extract = "extract"
+	// MCPCall calls a tool of an MCP server; A2ACall sends a message to a
+	// remote agent (A2A); APICall makes an HTTP request (WF-14).
+	MCPCall = "mcp_call"
+	A2ACall = "a2a_call"
+	APICall = "api_call"
 	// Exclusive takes its first link whose condition holds (else its
 	// default); Inclusive every one (else its default); Parallel every
 	// link. Each passes its input on.
@@ -68,7 +73,39 @@ const (
 )
 
 // Types are the step types, in the order the palette shows them.
-var Types = []string{Agent, Refine, Summarize, Extract, Accumulate, Browser, Script, ReadFile, SaveFile, Exclusive, Inclusive, Parallel, Email, Data}
+var Types = []string{Agent, Refine, Summarize, Extract, Accumulate, Browser, Script, ReadFile, SaveFile, MCPCall, A2ACall, APICall, Exclusive, Inclusive, Parallel, Email, Data}
+
+// Pair is a named value: a header, a query parameter.
+type Pair struct {
+	Name  string `yaml:"name"`
+	Value string `yaml:"value"`
+}
+
+// Auth is how an API call authenticates. Its values take templates and
+// {secrets:key}.
+type Auth struct {
+	// Type is bearer, basic, api_key or oauth2 (client credentials).
+	Type string `yaml:"type"`
+	// Token is a bearer token.
+	Token string `yaml:"token,omitempty"`
+	// Username and Password are basic auth's.
+	Username string `yaml:"username,omitempty"`
+	Password string `yaml:"password,omitempty"`
+	// Name, Value and In (header, the default, or query) are an API key's.
+	Name  string `yaml:"name,omitempty"`
+	Value string `yaml:"value,omitempty"`
+	In    string `yaml:"in,omitempty"`
+	// TokenURL, ClientID, ClientSecret, Scopes and Audience are OAuth2
+	// client credentials'.
+	TokenURL     string   `yaml:"token_url,omitempty"`
+	ClientID     string   `yaml:"client_id,omitempty"`
+	ClientSecret string   `yaml:"client_secret,omitempty"`
+	Scopes       []string `yaml:"scopes,omitempty"`
+	Audience     string   `yaml:"audience,omitempty"`
+}
+
+// Methods are an API call's HTTP methods.
+var Methods = []string{"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD"}
 
 // IsGateway reports whether a step type routes rather than works.
 func IsGateway(t string) bool { return t == Exclusive || t == Inclusive || t == Parallel }
@@ -126,6 +163,22 @@ type Node struct {
 	Path string `yaml:"path,omitempty"`
 	// Fields are what an extract step pulls out.
 	Fields []Field `yaml:"fields,omitempty"`
+	// Server and Tool are an MCP call's; Arguments its arguments (string
+	// values take templates).
+	Server    string         `yaml:"server,omitempty"`
+	Tool      string         `yaml:"tool,omitempty"`
+	Arguments map[string]any `yaml:"arguments,omitempty"`
+	// URL is an API call's (or an A2A agent's, where its card is); Method,
+	// Query, Headers, Body (text) or JSON (a value: string values take
+	// templates) and Auth the request's. An A2A call's message is its
+	// instructions (its input when none); Headers go with its requests.
+	URL     string `yaml:"url,omitempty"`
+	Method  string `yaml:"method,omitempty"`
+	Query   []Pair `yaml:"query,omitempty"`
+	Headers []Pair `yaml:"headers,omitempty"`
+	Body    string `yaml:"body,omitempty"`
+	JSON    any    `yaml:"json,omitempty"`
+	Auth    *Auth  `yaml:"auth,omitempty"`
 	// Retry tries a failing step again; Timeout (a Go duration) stops a
 	// step that runs too long.
 	Retry   *Retry `yaml:"retry,omitempty"`
@@ -237,6 +290,10 @@ func Check(f Flow) []string {
 			probs = append(probs, where+": say what it's to do")
 		case n.Type == Extract && len(n.Fields) == 0:
 			probs = append(probs, where+": say which fields to pull out")
+		case n.Type == MCPCall && (n.Server == "" || n.Tool == ""):
+			probs = append(probs, where+": name the MCP server and its tool")
+		case (n.Type == APICall || n.Type == A2ACall) && strings.TrimSpace(n.URL) == "":
+			probs = append(probs, where+": give the URL")
 		case n.Type == Script && (n.Skill == "" || n.ScriptName == ""):
 			probs = append(probs, where+": name the skill and its script")
 		case (n.Type == ReadFile || n.Type == SaveFile) && strings.TrimSpace(n.Path) == "":
@@ -356,9 +413,62 @@ func node(f Flow, id string) *Node {
 func checkSettings(n Node, i int) []string {
 	var probs []string
 	where := fmt.Sprintf("step %s", n.ID)
-	for name, text := range map[string]string{"instructions": n.Instructions, "path": n.Path} {
+	texts := map[string]string{"instructions": n.Instructions, "path": n.Path, "url": n.URL, "body": n.Body}
+	for _, p := range n.Query {
+		texts["query "+p.Name] = p.Value
+	}
+	for _, p := range n.Headers {
+		texts["header "+p.Name] = p.Value
+	}
+	for name, text := range texts {
 		if err := CheckTemplate(text); err != nil {
 			probs = append(probs, fmt.Sprintf("%s: %s: %v", where, name, err))
+		}
+	}
+	for name, v := range map[string]any{"arguments": n.Arguments, "json": n.JSON} {
+		if err := checkValue(v); err != nil {
+			probs = append(probs, fmt.Sprintf("%s: %s: %v", where, name, err))
+		}
+	}
+	if n.Method != "" && !slices.Contains(Methods, strings.ToUpper(n.Method)) {
+		probs = append(probs, fmt.Sprintf("%s: method %q: %s", where, n.Method, strings.Join(Methods, ", ")))
+	}
+	if n.Body != "" && n.JSON != nil {
+		probs = append(probs, where+": a body or JSON, not both")
+	}
+	for _, p := range append(slices.Clone(n.Query), n.Headers...) {
+		if strings.TrimSpace(p.Name) == "" {
+			probs = append(probs, where+": a header or query parameter without a name")
+		}
+	}
+	if a := n.Auth; a != nil {
+		switch a.Type {
+		case "bearer":
+			if a.Token == "" {
+				probs = append(probs, where+": bearer auth needs a token")
+			}
+		case "basic":
+			if a.Username == "" {
+				probs = append(probs, where+": basic auth needs a username")
+			}
+		case "api_key":
+			if a.Name == "" || a.Value == "" {
+				probs = append(probs, where+": an API key needs its name and value")
+			}
+			if a.In != "" && a.In != "header" && a.In != "query" {
+				probs = append(probs, fmt.Sprintf("%s: an API key goes in header or query, not %q", where, a.In))
+			}
+		case "oauth2":
+			if a.TokenURL == "" || a.ClientID == "" || a.ClientSecret == "" {
+				probs = append(probs, where+": OAuth2 client credentials need the token URL, client ID and client secret")
+			}
+		default:
+			probs = append(probs, fmt.Sprintf("%s: auth %q: bearer, basic, api_key or oauth2", where, a.Type))
+		}
+		for _, v := range []string{a.Token, a.Username, a.Password, a.Value, a.TokenURL, a.ClientID, a.ClientSecret, a.Audience} {
+			if err := CheckTemplate(v); err != nil {
+				probs = append(probs, fmt.Sprintf("%s: auth: %v", where, err))
+			}
 		}
 	}
 	for _, a := range n.Args {
@@ -474,7 +584,7 @@ func Save(dir string, f Flow, previous string) (string, []string, error) {
 func saveChecks(f Flow) []string {
 	var probs []string
 	for _, p := range Check(f) {
-		if strings.Contains(p, "say what it's to do") || strings.Contains(p, "name the") || strings.Contains(p, "which fields") || strings.Contains(p, "two links out") || strings.Contains(p, "don't run yet") || p == "it has no steps" {
+		if strings.Contains(p, "say what it's to do") || strings.Contains(p, "name the") || strings.Contains(p, "give the URL") || strings.Contains(p, "which fields") || strings.Contains(p, "two links out") || strings.Contains(p, "don't run yet") || p == "it has no steps" {
 			continue
 		}
 		probs = append(probs, p)

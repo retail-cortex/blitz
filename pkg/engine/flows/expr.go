@@ -210,3 +210,68 @@ func DataOf(text string) any {
 }
 
 func reflectAny() reflect.Type { return reflect.TypeOf((*any)(nil)).Elem() }
+
+// checkValue reports whether each string in v (a map, a list or a
+// string) is a template that holds.
+func checkValue(v any) error {
+	switch x := v.(type) {
+	case string:
+		return CheckTemplate(x)
+	case map[string]any:
+		for _, e := range x {
+			if err := checkValue(e); err != nil {
+				return err
+			}
+		}
+	case []any:
+		for _, e := range x {
+			if err := checkValue(e); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// FillValue is v (a map, a list, a string, or anything else as it is)
+// with each string's templates filled in; a string that is one template
+// alone takes the expression's value, not its text ("{{ steps.a.data }}"
+// stays an object).
+func FillValue(v any, vars Vars) (any, error) {
+	switch x := v.(type) {
+	case string:
+		if m := templateRE.FindStringSubmatch(x); m != nil && m[0] == strings.TrimSpace(x) {
+			val, err := Eval(m[1], vars)
+			if err != nil {
+				return nil, fmt.Errorf("{{ %s }}: %w", m[1], err)
+			}
+			native, err := val.ConvertToNative(anyType)
+			if err != nil {
+				return val.Value(), nil
+			}
+			return plain(native), nil
+		}
+		return Fill(x, vars)
+	case map[string]any:
+		out := make(map[string]any, len(x))
+		for k, e := range x {
+			f, err := FillValue(e, vars)
+			if err != nil {
+				return nil, err
+			}
+			out[k] = f
+		}
+		return out, nil
+	case []any:
+		out := make([]any, len(x))
+		for i, e := range x {
+			f, err := FillValue(e, vars)
+			if err != nil {
+				return nil, err
+			}
+			out[i] = f
+		}
+		return out, nil
+	}
+	return v, nil
+}

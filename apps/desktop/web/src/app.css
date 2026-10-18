@@ -949,6 +949,11 @@ code.file-link:hover { text-decoration-color: currentColor; }
 .workflows-pane .react-flow__edge-textbg { fill: var(--md-surface); }
 .flow-field .input { min-width: 0; flex: 1; }
 .flow-field .select { flex: 0 0 110px; width: 110px; }
+.flow-field > .input:first-child { flex: 0 0 40%; }
+.flow-field > .suggest-field { flex: 1; min-width: 0; }
+.flow-field .suggest-field .input { width: 100%; }
+.flow-method .select { flex: 0 0 96px; width: 96px; }
+.flow-method .suggest-field { flex: 1; min-width: 0; }
 .flow-retry { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
 .workflows-pane .react-flow { --xy-background-color: transparent; }
 @media (max-width: 980px) {

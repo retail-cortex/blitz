@@ -802,7 +802,7 @@ function backgroundRuns(): BackgroundRun[] {
 type FakeFlow = {
   name: string;
   description: string;
-  nodes: { id: string; type: string; title: string; x: number; y: number; agent: string; skills: string[]; instructions: string; rules: string[]; skill: string; script: string; args: string[]; path: string; fields?: { name: string; type: string; description: string }[] }[];
+  nodes: { id: string; type: string; title: string; x: number; y: number; agent: string; skills: string[]; instructions: string; rules: string[]; skill: string; script: string; args: string[]; path: string; fields?: { name: string; type: string; description: string }[]; url?: string; method?: string; server?: string; tool?: string; argumentsJson?: string; headers?: { name: string; value: string }[]; auth?: { type: string; token?: string } }[];
   edges: { from: string; to: string; when?: string; if?: string; default?: boolean; error?: boolean; label?: string }[];
 };
 const flowNode = (id: string, type: string, title: string, x: number, y: number, extra: Partial<FakeFlow["nodes"][number]> = {}) => ({ id, type, title, x, y, agent: "", skills: [], instructions: "", rules: [], skill: "", script: "", args: [], path: "", ...extra });
@@ -843,6 +843,19 @@ const fakeFlows: FakeFlow[] = [
       { from: "review", to: "log" },
       { from: "refund", to: "log" },
       { from: "pull", to: "log", error: true },
+    ],
+  },
+  {
+    name: "order-status",
+    description: "Look the order up, ask shipping, file it",
+    nodes: [
+      flowNode("get", "api_call", "Get the order", 0, 80, { url: "https://api.shop.example/orders/{{ input }}", method: "GET", headers: [{ name: "Accept", value: "application/json" }], auth: { type: "bearer", token: "{secrets:shop_token}" } } as Partial<FakeFlow["nodes"][number]>),
+      flowNode("ship", "a2a_call", "Ask shipping", 280, 0, { url: "https://agents.shipping.example", instructions: "When does order {{ input }} ship?" }),
+      flowNode("issue", "mcp_call", "File an issue", 280, 160, { server: "github", tool: "create_issue", argumentsJson: '{"title": "Order {{ input }}"}' }),
+    ],
+    edges: [
+      { from: "get", to: "ship" },
+      { from: "get", to: "issue", error: true },
     ],
   },
   { name: "weekly-digest", description: "", nodes: [flowNode("sum-up", "summarize", "", 0, 80), flowNode("mail", "email", "", 280, 80)], edges: [{ from: "sum-up", to: "mail" }] },

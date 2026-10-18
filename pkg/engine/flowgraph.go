@@ -423,6 +423,50 @@ func fillStep(n flows.Node, vars flows.Vars) (flows.Node, error) {
 		}
 	}
 	n.Args = args
+	if n.URL, err = flows.Fill(n.URL, vars); err != nil {
+		return n, err
+	}
+	if n.Body, err = flows.Fill(n.Body, vars); err != nil {
+		return n, err
+	}
+	pairs := func(in []flows.Pair) ([]flows.Pair, error) {
+		out := make([]flows.Pair, len(in))
+		for i, p := range in {
+			v, err := flows.Fill(p.Value, vars)
+			if err != nil {
+				return nil, fmt.Errorf("%s: %w", p.Name, err)
+			}
+			out[i] = flows.Pair{Name: p.Name, Value: v}
+		}
+		return out, nil
+	}
+	if n.Query, err = pairs(n.Query); err != nil {
+		return n, err
+	}
+	if n.Headers, err = pairs(n.Headers); err != nil {
+		return n, err
+	}
+	if n.Arguments != nil {
+		v, err := flows.FillValue(n.Arguments, vars)
+		if err != nil {
+			return n, err
+		}
+		n.Arguments, _ = v.(map[string]any)
+	}
+	if n.JSON != nil {
+		if n.JSON, err = flows.FillValue(n.JSON, vars); err != nil {
+			return n, err
+		}
+	}
+	if n.Auth != nil {
+		a := *n.Auth
+		for _, f := range []*string{&a.Token, &a.Username, &a.Password, &a.Value, &a.TokenURL, &a.ClientID, &a.ClientSecret, &a.Audience} {
+			if *f, err = flows.Fill(*f, vars); err != nil {
+				return n, err
+			}
+		}
+		n.Auth = &a
+	}
 	return n, nil
 }
 
@@ -434,6 +478,12 @@ func (w *Workspace) runStepOnce(ctx context.Context, r *flowRun, n flows.Node, i
 		return flows.Result{Text: input, Data: flows.DataOf(input)}, nil
 	case n.Type == flows.Extract:
 		return w.extractStep(ctx, n, input)
+	case n.Type == flows.MCPCall:
+		return w.mcpStep(ctx, n)
+	case n.Type == flows.APICall:
+		return w.apiStep(ctx, n, input)
+	case n.Type == flows.A2ACall:
+		return w.a2aStep(ctx, n, input)
 	case flows.IsAgentType(n.Type):
 		r.turns.Lock()
 		defer r.turns.Unlock()

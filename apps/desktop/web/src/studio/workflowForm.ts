@@ -21,13 +21,14 @@
 import type { WorkflowFile } from "../gen/blitz/v1/workspace_pb";
 
 /** A step's type, in the order the palette shows them. */
-export const stepTypes = ["agent", "refine", "summarize", "browser", "extract", "accumulate", "script", "read_file", "save_file", "exclusive", "inclusive", "parallel", "email", "data"] as const;
+export const stepTypes = ["agent", "refine", "summarize", "browser", "extract", "accumulate", "script", "read_file", "save_file", "mcp_call", "a2a_call", "api_call", "exclusive", "inclusive", "parallel", "email", "data"] as const;
 /** A step's type. */
 export type StepType = (typeof stepTypes)[number];
 /** The palette's groups, in order. */
 export const stepGroups: { group: string; types: StepType[] }[] = [
   { group: "agents", types: ["agent", "refine", "summarize", "browser"] },
   { group: "data", types: ["extract", "accumulate", "script", "read_file", "save_file"] },
+  { group: "calls", types: ["api_call", "mcp_call", "a2a_call"] },
   { group: "flow", types: ["exclusive", "inclusive", "parallel"] },
   { group: "soon", types: ["email", "data"] },
 ];
@@ -57,7 +58,45 @@ export interface StepForm {
   retryAttempts: string;
   retryDelay: string;
   timeout: string;
+  server: string;
+  tool: string;
+  argumentsJson: string;
+  url: string;
+  method: string;
+  query: PairForm[];
+  headers: PairForm[];
+  bodyKind: "none" | "text" | "json";
+  body: string;
+  auth: AuthForm;
 }
+
+/** A header or a query parameter. */
+export interface PairForm {
+  name: string;
+  value: string;
+}
+
+/** An API call's auth, as the form holds it (scopes space-separated). */
+export interface AuthForm {
+  type: "" | "bearer" | "basic" | "api_key" | "oauth2";
+  token: string;
+  username: string;
+  password: string;
+  name: string;
+  value: string;
+  in: "header" | "query";
+  tokenUrl: string;
+  clientId: string;
+  clientSecret: string;
+  scopes: string;
+  audience: string;
+}
+
+/** No auth. */
+export const noAuth: AuthForm = { type: "", token: "", username: "", password: "", name: "", value: "", in: "header", tokenUrl: "", clientId: "", clientSecret: "", scopes: "", audience: "" };
+
+/** The HTTP methods an API call can use. */
+export const methods = ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD"] as const;
 
 /** A value an extract step pulls out. */
 export interface FieldForm {
@@ -117,6 +156,31 @@ export function formFromWorkflow(w: WorkflowFile): WorkflowForm {
       retryAttempts: n.retryAttempts > 1 ? String(n.retryAttempts) : "",
       retryDelay: n.retryDelay,
       timeout: n.timeout,
+      server: n.server,
+      tool: n.tool,
+      argumentsJson: n.argumentsJson,
+      url: n.url,
+      method: n.method || "GET",
+      query: n.query.map((p) => ({ name: p.name, value: p.value })),
+      headers: n.headers.map((p) => ({ name: p.name, value: p.value })),
+      bodyKind: (n.jsonBody ? "json" : n.body ? "text" : "none") as StepForm["bodyKind"],
+      body: n.jsonBody || n.body,
+      auth: n.auth?.type
+        ? {
+            type: n.auth.type as AuthForm["type"],
+            token: n.auth.token,
+            username: n.auth.username,
+            password: n.auth.password,
+            name: n.auth.name,
+            value: n.auth.value,
+            in: n.auth.in === "query" ? "query" : "header",
+            tokenUrl: n.auth.tokenUrl,
+            clientId: n.auth.clientId,
+            clientSecret: n.auth.clientSecret,
+            scopes: n.auth.scopes.join(" "),
+            audience: n.auth.audience,
+          }
+        : { ...noAuth },
     })),
     links: w.edges.map((e) => ({ from: e.from, to: e.to, kind: (e.error ? "error" : e.default ? "default" : e.when ? "when" : e.if ? "if" : "always") as LinkKind, condition: e.when || e.if, label: e.label })),
   };
@@ -147,6 +211,16 @@ export function specFromForm(f: WorkflowForm) {
         retryAttempts: gatewayTypes.includes(s.type) ? 0 : Math.max(0, Math.floor(Number(s.retryAttempts)) || 0),
         retryDelay: gatewayTypes.includes(s.type) || !s.retryAttempts ? "" : s.retryDelay.trim(),
         timeout: gatewayTypes.includes(s.type) ? "" : s.timeout.trim(),
+        server: s.type === "mcp_call" ? s.server : "",
+        tool: s.type === "mcp_call" ? s.tool.trim() : "",
+        argumentsJson: s.type === "mcp_call" ? s.argumentsJson.trim() : "",
+        url: s.type === "api_call" || s.type === "a2a_call" ? s.url.trim() : "",
+        method: s.type === "api_call" && s.method !== "GET" ? s.method : "",
+        query: s.type === "api_call" ? s.query.filter((p) => p.name.trim()) : [],
+        headers: s.type === "api_call" || s.type === "a2a_call" ? s.headers.filter((p) => p.name.trim()) : [],
+        body: s.type === "api_call" && s.bodyKind === "text" ? s.body : "",
+        jsonBody: s.type === "api_call" && s.bodyKind === "json" ? s.body.trim() : "",
+        auth: s.type === "api_call" && s.auth.type ? authSpec(s.auth) : undefined,
       };
     }),
     edges: f.links
@@ -165,7 +239,35 @@ export function newStep(type: StepType, steps: StepForm[], x: number, y: number)
   const taken = new Set(steps.map((s) => s.id));
   let n = 1;
   while (taken.has(`${type.replace("_", "-")}-${n}`)) n++;
-  return { id: `${type.replace("_", "-")}-${n}`, type, title: "", x, y, agent: "", skills: [], instructions: "", rules: [], skill: "", script: "", args: "", path: "", fields: [], retryAttempts: "", retryDelay: "", timeout: "" };
+  return {
+    id: `${type.replace("_", "-")}-${n}`,
+    type,
+    title: "",
+    x,
+    y,
+    agent: "",
+    skills: [],
+    instructions: "",
+    rules: [],
+    skill: "",
+    script: "",
+    args: "",
+    path: "",
+    fields: [],
+    retryAttempts: "",
+    retryDelay: "",
+    timeout: "",
+    server: "",
+    tool: "",
+    argumentsJson: "",
+    url: "",
+    method: "GET",
+    query: [],
+    headers: [],
+    bodyKind: "none",
+    body: "",
+    auth: { ...noAuth },
+  };
 }
 
 /** Removes a step and its links. */
@@ -214,6 +316,8 @@ export function stepNeeds(s: StepForm): string {
   if (s.type === "script" && (!s.skill || !s.script)) return "script";
   if ((s.type === "read_file" || s.type === "save_file") && !s.path.trim()) return "path";
   if (s.type === "extract" && !s.fields.some((x) => x.name.trim())) return "fields";
+  if (s.type === "mcp_call" && (!s.server || !s.tool.trim())) return "mcp";
+  if ((s.type === "api_call" || s.type === "a2a_call") && !s.url.trim()) return "url";
   return "";
 }
 
@@ -275,5 +379,20 @@ export function fromTemplate(tpl: Template, text: (key: string) => string): Work
       };
     default:
       return { ...emptyWorkflowForm, steps: [step("agent-1", "agent", 0, 80)] };
+  }
+}
+
+/** An auth as SaveWorkflow takes it: its type's values only. */
+function authSpec(a: AuthForm) {
+  const blank = { token: "", username: "", password: "", name: "", value: "", in: "", tokenUrl: "", clientId: "", clientSecret: "", scopes: [] as string[], audience: "" };
+  switch (a.type) {
+    case "bearer":
+      return { ...blank, type: a.type, token: a.token };
+    case "basic":
+      return { ...blank, type: a.type, username: a.username, password: a.password };
+    case "api_key":
+      return { ...blank, type: a.type, name: a.name.trim(), value: a.value, in: a.in === "query" ? "query" : "" };
+    default:
+      return { ...blank, type: a.type, tokenUrl: a.tokenUrl.trim(), clientId: a.clientId, clientSecret: a.clientSecret, scopes: a.scopes.split(/\s+/).filter(Boolean), audience: a.audience.trim() };
   }
 }

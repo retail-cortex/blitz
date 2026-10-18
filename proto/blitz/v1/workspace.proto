@@ -2678,6 +2678,46 @@ message FlowNode {
   int32 retry_attempts = 15;
   string retry_delay = 16;
   string timeout = 17;
+  // An MCP call's server, tool and arguments (a JSON object; string
+  // values take templates).
+  string server = 18;
+  string tool = 19;
+  string arguments_json = 20;
+  // An API call's URL (an A2A call's: where its agent card is), method,
+  // query, headers, body (text) or JSON body (JSON), and auth. Values
+  // take templates and {secrets:key}.
+  string url = 21;
+  string method = 22;
+  repeated FlowPair query = 23;
+  repeated FlowPair headers = 24;
+  string body = 25;
+  string json_body = 26;
+  FlowAuth auth = 27;
+}
+
+// A named value: a header, a query parameter.
+message FlowPair {
+  string name = 1;
+  string value = 2;
+}
+
+// How an API call authenticates.
+message FlowAuth {
+  // bearer, basic, api_key or oauth2 (client credentials).
+  string type = 1;
+  string token = 2;
+  string username = 3;
+  string password = 4;
+  // An API key's name, value, and where it goes (header or query).
+  string name = 5;
+  string value = 6;
+  string in = 7;
+  // OAuth2 client credentials'.
+  string token_url = 8;
+  string client_id = 9;
+  string client_secret = 10;
+  repeated string scopes = 11;
+  string audience = 12;
 }
 
 // A value an extract step pulls out.
