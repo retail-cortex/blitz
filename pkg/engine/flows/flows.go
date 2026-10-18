@@ -23,8 +23,10 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/retail-cortex/blitz/pkg/engine/gates"
 	"gopkg.in/yaml.v3"
@@ -51,13 +53,45 @@ const (
 	ReadFile = "read_file"
 	// SaveFile writes its input to a workspace file (asked first).
 	SaveFile = "save_file"
+	// Extract pulls named fields out of its input (a model, to a schema):
+	// they're its data.
+	Extract = "extract"
+	// Exclusive takes its first link whose condition holds (else its
+	// default); Inclusive every one (else its default); Parallel every
+	// link. Each passes its input on.
+	Exclusive = "exclusive"
+	Inclusive = "inclusive"
+	Parallel  = "parallel"
 	// Email and Data are shown, not run yet.
 	Email = "email"
 	Data  = "data"
 )
 
 // Types are the step types, in the order the palette shows them.
-var Types = []string{Agent, Refine, Summarize, Accumulate, Browser, Script, ReadFile, SaveFile, Email, Data}
+var Types = []string{Agent, Refine, Summarize, Extract, Accumulate, Browser, Script, ReadFile, SaveFile, Exclusive, Inclusive, Parallel, Email, Data}
+
+// IsGateway reports whether a step type routes rather than works.
+func IsGateway(t string) bool { return t == Exclusive || t == Inclusive || t == Parallel }
+
+// IsAgentType reports whether a step type is run by an agent (a turn).
+func IsAgentType(t string) bool { return t == Agent || t == Refine || t == Summarize || t == Browser }
+
+// Field is a value an extract step pulls out.
+type Field struct {
+	Name string `yaml:"name"`
+	// Type is string (the default), number, boolean or list (of strings).
+	Type        string `yaml:"type,omitempty"`
+	Description string `yaml:"description,omitempty"`
+}
+
+// Retry is how a failing step is tried again.
+type Retry struct {
+	// Attempts is how many times in all (1: no retry).
+	Attempts int `yaml:"attempts"`
+	// Delay is the wait before the first retry, doubled each time (Go
+	// duration; 1s when unset).
+	Delay string `yaml:"delay,omitempty"`
+}
 
 // comingSoon are the types shown but not run yet.
 var comingSoon = []string{Email, Data}
@@ -90,13 +124,34 @@ type Node struct {
 	Args       []string `yaml:"args,omitempty"`
 	// Path is a read_file or save_file step's file, in the workspace.
 	Path string `yaml:"path,omitempty"`
+	// Fields are what an extract step pulls out.
+	Fields []Field `yaml:"fields,omitempty"`
+	// Retry tries a failing step again; Timeout (a Go duration) stops a
+	// step that runs too long.
+	Retry   *Retry `yaml:"retry,omitempty"`
+	Timeout string `yaml:"timeout,omitempty"`
 }
 
 // Edge carries a step's output to another.
 type Edge struct {
 	From string `yaml:"from"`
 	To   string `yaml:"to"`
+	// When is a condition (a CEL expression on output, input and steps);
+	// If one in plain English, judged by a model. Without either, the
+	// link is taken whenever its step succeeds.
+	When string `yaml:"when,omitempty"`
+	If   string `yaml:"if,omitempty"`
+	// Default is taken when none of its step's conditional links is.
+	Default bool `yaml:"default,omitempty"`
+	// Error is taken when its step fails (instead of stopping the run),
+	// with the error as its input.
+	Error bool `yaml:"error,omitempty"`
+	// Label is what the canvas shows on it.
+	Label string `yaml:"label,omitempty"`
 }
+
+// Conditional reports whether a link has a condition.
+func (e Edge) Conditional() bool { return e.When != "" || e.If != "" }
 
 // Flow is a workflow file.
 type Flow struct {
@@ -180,17 +235,66 @@ func Check(f Flow) []string {
 			probs = append(probs, fmt.Sprintf("%s: %s steps don't run yet", where, n.Type))
 		case (n.Type == Agent || n.Type == Refine || n.Type == Browser) && strings.TrimSpace(n.Instructions) == "":
 			probs = append(probs, where+": say what it's to do")
+		case n.Type == Extract && len(n.Fields) == 0:
+			probs = append(probs, where+": say which fields to pull out")
 		case n.Type == Script && (n.Skill == "" || n.ScriptName == ""):
 			probs = append(probs, where+": name the skill and its script")
 		case (n.Type == ReadFile || n.Type == SaveFile) && strings.TrimSpace(n.Path) == "":
 			probs = append(probs, where+": name the file")
 		}
 	}
+	for i, n := range f.Nodes {
+		if n.ID == "" {
+			continue
+		}
+		probs = append(probs, checkSettings(n, i)...)
+	}
+	defaults, errs := map[string]int{}, map[string]int{}
 	for _, e := range f.Edges {
-		if !ids[e.From] || !ids[e.To] {
-			probs = append(probs, fmt.Sprintf("the link %s → %s: no such step", e.From, e.To))
-		} else if e.From == e.To {
-			probs = append(probs, fmt.Sprintf("the link %s → %s: a step can't feed itself", e.From, e.To))
+		link := fmt.Sprintf("the link %s → %s", e.From, e.To)
+		switch {
+		case !ids[e.From] || !ids[e.To]:
+			probs = append(probs, link+": no such step")
+			continue
+		case e.From == e.To:
+			probs = append(probs, link+": a step can't feed itself")
+		case e.When != "" && e.If != "":
+			probs = append(probs, link+": a condition in CEL or in plain English, not both")
+		case (e.Default || e.Error) && e.Conditional():
+			probs = append(probs, link+": a default or error link has no condition")
+		case e.Default && e.Error:
+			probs = append(probs, link+": a default or an error link, not both")
+		}
+		if e.When != "" {
+			if err := CheckExpr(e.When); err != nil {
+				probs = append(probs, fmt.Sprintf("%s: when: %v", link, err))
+			}
+		}
+		if e.Default {
+			defaults[e.From]++
+		}
+		if e.Error {
+			errs[e.From]++
+		}
+		if from := node(f, e.From); from != nil && from.Type == Parallel && (e.Conditional() || e.Default) {
+			probs = append(probs, link+": a parallel gateway takes every link: no conditions")
+		}
+	}
+	for id, n := range defaults {
+		if n > 1 {
+			probs = append(probs, fmt.Sprintf("step %s: one default link at most", id))
+		}
+	}
+	for id, n := range errs {
+		if n > 1 {
+			probs = append(probs, fmt.Sprintf("step %s: one error link at most", id))
+		}
+	}
+	for _, n := range f.Nodes {
+		if n.Type == Exclusive || n.Type == Inclusive {
+			if out := len(Outputs(f, n.ID)); out < 2 {
+				probs = append(probs, fmt.Sprintf("step %s: a gateway needs two links out or more", n.ID))
+			}
 		}
 	}
 	if len(probs) == 0 {
@@ -235,6 +339,84 @@ func Order(f Flow) ([]Node, error) {
 		return nil, errors.New("the steps loop: a step can't feed one that feeds it")
 	}
 	return out, nil
+}
+
+// node is f's step id, or nil.
+func node(f Flow, id string) *Node {
+	for i := range f.Nodes {
+		if f.Nodes[i].ID == id {
+			return &f.Nodes[i]
+		}
+	}
+	return nil
+}
+
+// checkSettings says what doesn't hold in a step's own settings: its
+// templates, fields, retry and timeout.
+func checkSettings(n Node, i int) []string {
+	var probs []string
+	where := fmt.Sprintf("step %s", n.ID)
+	for name, text := range map[string]string{"instructions": n.Instructions, "path": n.Path} {
+		if err := CheckTemplate(text); err != nil {
+			probs = append(probs, fmt.Sprintf("%s: %s: %v", where, name, err))
+		}
+	}
+	for _, a := range n.Args {
+		if err := CheckTemplate(a); err != nil {
+			probs = append(probs, fmt.Sprintf("%s: args: %v", where, err))
+		}
+	}
+	seen := map[string]bool{}
+	for _, fl := range n.Fields {
+		switch {
+		case !fieldNameRE.MatchString(fl.Name):
+			probs = append(probs, fmt.Sprintf("%s: field %q: letters, digits and _, from a letter", where, fl.Name))
+		case seen[fl.Name]:
+			probs = append(probs, fmt.Sprintf("%s: field %q twice", where, fl.Name))
+		}
+		seen[fl.Name] = true
+		if !slices.Contains([]string{"", "string", "number", "boolean", "list"}, fl.Type) {
+			probs = append(probs, fmt.Sprintf("%s: field %s: type %q: string, number, boolean or list", where, fl.Name, fl.Type))
+		}
+	}
+	if n.Retry != nil {
+		if n.Retry.Attempts < 1 || n.Retry.Attempts > 10 {
+			probs = append(probs, fmt.Sprintf("%s: retry attempts %d: 1 to 10", where, n.Retry.Attempts))
+		}
+		if _, err := ParseDuration(n.Retry.Delay, 0); err != nil {
+			probs = append(probs, fmt.Sprintf("%s: retry delay: %v", where, err))
+		}
+	}
+	if _, err := ParseDuration(n.Timeout, 0); err != nil {
+		probs = append(probs, fmt.Sprintf("%s: timeout: %v", where, err))
+	}
+	return probs
+}
+
+// fieldNameRE is an extract field's name: usable in CEL (output.data.name).
+var fieldNameRE = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_]{0,63}$`)
+
+// ParseDuration reads a Go duration ("90s", "5m"); "" is def.
+func ParseDuration(s string, def time.Duration) (time.Duration, error) {
+	if strings.TrimSpace(s) == "" {
+		return def, nil
+	}
+	d, err := time.ParseDuration(strings.TrimSpace(s))
+	if err != nil || d < 0 {
+		return 0, fmt.Errorf("%q isn't a duration (90s, 5m, 1h)", s)
+	}
+	return d, nil
+}
+
+// Outputs are the links out of id, in the order they're listed.
+func Outputs(f Flow, id string) []Edge {
+	var out []Edge
+	for _, e := range f.Edges {
+		if e.From == id {
+			out = append(out, e)
+		}
+	}
+	return out
 }
 
 // Inputs are the steps that feed id, in the order their links are listed.
@@ -292,7 +474,7 @@ func Save(dir string, f Flow, previous string) (string, []string, error) {
 func saveChecks(f Flow) []string {
 	var probs []string
 	for _, p := range Check(f) {
-		if strings.Contains(p, "say what it's to do") || strings.Contains(p, "name the") || strings.Contains(p, "don't run yet") || p == "it has no steps" {
+		if strings.Contains(p, "say what it's to do") || strings.Contains(p, "name the") || strings.Contains(p, "which fields") || strings.Contains(p, "two links out") || strings.Contains(p, "don't run yet") || p == "it has no steps" {
 			continue
 		}
 		probs = append(probs, p)

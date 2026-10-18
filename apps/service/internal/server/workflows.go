@@ -28,11 +28,18 @@ import (
 func workflowMsg(f flows.Flow) *pb.WorkflowFile {
 	m := &pb.WorkflowFile{Name: f.Name, Path: f.Path, Description: f.Description, Problem: f.Problem}
 	for _, n := range f.Nodes {
-		m.Nodes = append(m.Nodes, &pb.FlowNode{Id: n.ID, Type: n.Type, Title: n.Title, X: n.Position.X, Y: n.Position.Y, Agent: n.Agent, Skills: n.Skills,
-			Instructions: n.Instructions, Rules: n.Rules, Skill: n.Skill, Script: n.ScriptName, Args: n.Args, Path: n.Path})
+		pn := &pb.FlowNode{Id: n.ID, Type: n.Type, Title: n.Title, X: n.Position.X, Y: n.Position.Y, Agent: n.Agent, Skills: n.Skills,
+			Instructions: n.Instructions, Rules: n.Rules, Skill: n.Skill, Script: n.ScriptName, Args: n.Args, Path: n.Path, Timeout: n.Timeout}
+		for _, fl := range n.Fields {
+			pn.Fields = append(pn.Fields, &pb.FlowField{Name: fl.Name, Type: fl.Type, Description: fl.Description})
+		}
+		if n.Retry != nil {
+			pn.RetryAttempts, pn.RetryDelay = int32(n.Retry.Attempts), n.Retry.Delay
+		}
+		m.Nodes = append(m.Nodes, pn)
 	}
 	for _, e := range f.Edges {
-		m.Edges = append(m.Edges, &pb.FlowEdge{From: e.From, To: e.To})
+		m.Edges = append(m.Edges, &pb.FlowEdge{From: e.From, To: e.To, When: e.When, If: e.If, Default: e.Default, Error: e.Error, Label: e.Label})
 	}
 	return m
 }
@@ -40,11 +47,18 @@ func workflowMsg(f flows.Flow) *pb.WorkflowFile {
 func workflowOf(m *pb.WorkflowFile) flows.Flow {
 	f := flows.Flow{Name: m.GetName(), Description: m.GetDescription()}
 	for _, n := range m.GetNodes() {
-		f.Nodes = append(f.Nodes, flows.Node{ID: n.GetId(), Type: n.GetType(), Title: n.GetTitle(), Position: flows.Position{X: n.GetX(), Y: n.GetY()}, Agent: n.GetAgent(), Skills: n.GetSkills(),
-			Instructions: n.GetInstructions(), Rules: n.GetRules(), Skill: n.GetSkill(), ScriptName: n.GetScript(), Args: n.GetArgs(), Path: n.GetPath()})
+		fn := flows.Node{ID: n.GetId(), Type: n.GetType(), Title: n.GetTitle(), Position: flows.Position{X: n.GetX(), Y: n.GetY()}, Agent: n.GetAgent(), Skills: n.GetSkills(),
+			Instructions: n.GetInstructions(), Rules: n.GetRules(), Skill: n.GetSkill(), ScriptName: n.GetScript(), Args: n.GetArgs(), Path: n.GetPath(), Timeout: n.GetTimeout()}
+		for _, fl := range n.GetFields() {
+			fn.Fields = append(fn.Fields, flows.Field{Name: fl.GetName(), Type: fl.GetType(), Description: fl.GetDescription()})
+		}
+		if n.GetRetryAttempts() > 1 {
+			fn.Retry = &flows.Retry{Attempts: int(n.GetRetryAttempts()), Delay: n.GetRetryDelay()}
+		}
+		f.Nodes = append(f.Nodes, fn)
 	}
 	for _, e := range m.GetEdges() {
-		f.Edges = append(f.Edges, flows.Edge{From: e.GetFrom(), To: e.GetTo()})
+		f.Edges = append(f.Edges, flows.Edge{From: e.GetFrom(), To: e.GetTo(), When: e.GetWhen(), If: e.GetIf(), Default: e.GetDefault(), Error: e.GetError(), Label: e.GetLabel()})
 	}
 	return f
 }

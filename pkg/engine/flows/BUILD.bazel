@@ -16,7 +16,10 @@ load("@rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "flows",
-    srcs = ["flows.go"],
+    srcs = [
+        "expr.go",
+        "flows.go",
+    ],
     importpath = "github.com/retail-cortex/blitz/pkg/engine/flows",
     visibility = [
         # The engine and the service (//tools:check_deps checks libraries).
@@ -25,13 +28,19 @@ go_library(
     ],
     deps = [
         "//pkg/engine/gates",
+        "@com_github_google_cel_go//cel:go_default_library",
+        "@com_github_google_cel_go//common/types:go_default_library",
+        "@com_github_google_cel_go//common/types/ref:go_default_library",
         "@in_gopkg_yaml_v3//:yaml_v3",
     ],
 )
 
 go_test(
     name = "flows_test",
-    srcs = ["flows_test.go"],
+    srcs = [
+        "expr_test.go",
+        "flows_test.go",
+    ],
     embed = [":flows"],
     deps = [
         "@com_github_stretchr_testify//assert",

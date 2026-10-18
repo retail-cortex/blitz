@@ -2671,12 +2671,35 @@ message FlowNode {
   repeated string args = 12;
   // A read_file or save_file step's file, in the workspace.
   string path = 13;
+  // What an extract step pulls out.
+  repeated FlowField fields = 14;
+  // Tries in all when it fails (0 or 1: once), the first wait (a Go
+  // duration, doubled each time), and the most it may take.
+  int32 retry_attempts = 15;
+  string retry_delay = 16;
+  string timeout = 17;
+}
+
+// A value an extract step pulls out.
+message FlowField {
+  string name = 1;
+  // string, number, boolean or list.
+  string type = 2;
+  string description = 3;
 }
 
 // A link carrying a step's output to another.
 message FlowEdge {
   string from = 1;
   string to = 2;
+  // A condition: CEL (when) or plain English judged by a model (if).
+  string when = 3;
+  string if = 4;
+  // Taken when none of its step's conditional links is.
+  bool default = 5;
+  // Taken when its step fails, the error as its input.
+  bool error = 6;
+  string label = 7;
 }
 
 // A workflow file in .agents/workflows.

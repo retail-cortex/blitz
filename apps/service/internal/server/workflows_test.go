@@ -39,8 +39,13 @@ func TestWorkflowsOverTheAPI(t *testing.T) {
 	flow := &pb.WorkflowFile{Name: "brief", Description: "A brief", Nodes: []*pb.FlowNode{
 		{Id: "notes", Type: "read_file", Title: "Notes", X: 10, Y: 20, Path: "notes.md"},
 		{Id: "draft", Type: "agent", Instructions: "Write a brief.", Rules: []string{"short"}, Skills: []string{"tone"}},
-		{Id: "run", Type: "script", Skill: "pdf", Script: "render", Args: []string{"--a4"}},
-	}, Edges: []*pb.FlowEdge{{From: "notes", To: "draft"}, {From: "draft", To: "run"}}}
+		{Id: "run", Type: "script", Skill: "pdf", Script: "render", Args: []string{"--a4"}, RetryAttempts: 3, RetryDelay: "2s", Timeout: "1m"},
+		{Id: "pull", Type: "extract", Fields: []*pb.FlowField{{Name: "total", Type: "number", Description: "The sum"}}},
+		{Id: "ask", Type: "exclusive"},
+		{Id: "fix", Type: "accumulate"},
+	}, Edges: []*pb.FlowEdge{{From: "notes", To: "draft"}, {From: "draft", To: "run"}, {From: "run", To: "fix", Error: true}, {From: "run", To: "pull"}, {From: "pull", To: "ask"},
+		{From: "ask", To: "fix", When: "output.data.total > 1", Label: "big"}, {From: "ask", To: "draft2", If: "it's small"}}}
+	flow.Nodes = append(flow.Nodes, &pb.FlowNode{Id: "draft2", Type: "accumulate"})
 	saved, err := w.SaveWorkflow(ctx, connect.NewRequest(&pb.SaveWorkflowRequest{Workspace: dir, Workflow: flow}))
 	require.NoError(t, err)
 	require.Empty(t, saved.Msg.Problems)
@@ -50,7 +55,13 @@ func TestWorkflowsOverTheAPI(t *testing.T) {
 	assert.Equal(t, 10.0, got.Nodes[0].X)
 	assert.Equal(t, "render", got.Nodes[2].Script)
 	assert.Equal(t, []string{"--a4"}, got.Nodes[2].Args)
-	assert.Len(t, got.Edges, 2)
+	assert.Len(t, got.Edges, 7)
+	assert.Equal(t, int32(3), got.Nodes[2].RetryAttempts)
+	assert.Equal(t, "1m", got.Nodes[2].Timeout)
+	assert.Equal(t, "number", got.Nodes[3].Fields[0].Type)
+	assert.True(t, got.Edges[2].Error)
+	assert.Equal(t, "big", got.Edges[5].Label)
+	assert.Equal(t, "it's small", got.Edges[6].If)
 
 	draft, err := w.SaveWorkflow(ctx, connect.NewRequest(&pb.SaveWorkflowRequest{Workspace: dir, Workflow: &pb.WorkflowFile{Name: "draft", Nodes: []*pb.FlowNode{{Id: "a", Type: "agent"}}}}))
 	require.NoError(t, err)

@@ -23,10 +23,13 @@ import (
 	"testing"
 
 	"github.com/retail-cortex/blitz/pkg/api"
+	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/config/configtest"
 	"github.com/retail-cortex/blitz/pkg/engine/flows"
+	"github.com/retail-cortex/blitz/pkg/engine/runtime"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/adk/v2/model"
 )
 
 func writeFlow(t *testing.T, w *Workspace, name, content string) {
@@ -170,4 +173,131 @@ edges:
 	}
 	kept, _ := filepath.Glob(filepath.Join(w.cfg.Session.StorageDir, "flows", "*.events.jsonl"))
 	assert.NotEmpty(t, kept, "the orchestration session is on disk")
+}
+
+// An exclusive gateway on CEL takes one branch; the other is skipped, and
+// the step both lead to runs once, with the branch that ran.
+func TestFlowExclusiveGateway(t *testing.T) {
+	w, _ := openTestWith(t, configtest.RunTools)
+	require.NoError(t, os.WriteFile(filepath.Join(w.Dir(), "order.json"), []byte(`{"total": 150, "name": "ada"}`), 0o644))
+	writeFlow(t, w, "orders", `nodes:
+  - {id: read, type: read_file, path: order.json}
+  - {id: size, type: exclusive}
+  - {id: big, type: accumulate, title: Big}
+  - {id: small, type: accumulate, title: Small}
+  - {id: after, type: save_file, path: "out/{{ steps.read.data.name }}.md"}
+edges:
+  - {from: read, to: size}
+  - {from: size, to: big, when: "output.data.total > 100"}
+  - {from: size, to: small, default: true}
+  - {from: big, to: after}
+  - {from: small, to: after}
+`)
+	s := newSession(t, w)
+	status := map[string]string{}
+	var mu sync.Mutex
+	_, err := w.Run(context.Background(), s.ID, api.Turn{Text: "/orders", Command: true}, func(e api.Event) {
+		if e.Step != nil {
+			mu.Lock()
+			status[e.Step.ID] = e.Step.Status
+			mu.Unlock()
+		}
+	})
+	require.NoError(t, err)
+	assert.Equal(t, map[string]string{"read": "done", "size": "done", "big": "done", "small": "skipped", "after": "done"}, status)
+	data, err := os.ReadFile(filepath.Join(w.Dir(), "out", "ada.md"))
+	require.NoError(t, err, "the template named the file")
+	assert.Equal(t, "## size\n\n{\"total\": 150, \"name\": \"ada\"}", string(data), "only the branch that ran (big gathered the gateway's)")
+}
+
+// An inclusive gateway takes every link whose condition holds (CEL, and
+// plain English judged by the model); the join waits for both.
+func TestFlowInclusiveGateway(t *testing.T) {
+	w, _ := openTestWith(t, configtest.RunTools)
+	judge := runtime.NewMockLLM("judge", text(`{"verdict": "yes", "reason": "It asks for a refund."}`))
+	w.newModel = func(context.Context, *config.Config, string) (model.LLM, error) { return judge, nil }
+	require.NoError(t, os.WriteFile(filepath.Join(w.Dir(), "msg.md"), []byte("Refund me, it's urgent"), 0o644))
+	writeFlow(t, w, "triage", `nodes:
+  - {id: read, type: read_file, path: msg.md}
+  - {id: route, type: inclusive}
+  - {id: urgent, type: accumulate, title: Urgent}
+  - {id: refund, type: accumulate, title: Refund}
+  - {id: other, type: accumulate, title: Other}
+  - {id: both, type: accumulate}
+edges:
+  - {from: read, to: route}
+  - {from: route, to: urgent, when: 'output.text.contains("urgent")'}
+  - {from: route, to: refund, if: The message asks for a refund}
+  - {from: route, to: other, default: true}
+  - {from: urgent, to: both}
+  - {from: refund, to: both}
+  - {from: other, to: both}
+`)
+	s := newSession(t, w)
+	res, err := w.Run(context.Background(), s.ID, api.Turn{Text: "/triage", Command: true}, func(api.Event) {})
+	require.NoError(t, err)
+	assert.Equal(t, "## Urgent\n\n## route\n\nRefund me, it's urgent\n\n## Refund\n\n## route\n\nRefund me, it's urgent", res.Output, "both branches, joined")
+	assert.Contains(t, judge.Requests[0].Contents[0].Parts[0].Text, "The message asks for a refund")
+}
+
+// An error link catches a step's failure: the run goes on, the error as
+// the next step's input. Retries are tried first and said in the chat.
+func TestFlowErrorLinkAndRetry(t *testing.T) {
+	w, _ := openTestWith(t, configtest.RunTools)
+	writeFlow(t, w, "careful", `nodes:
+  - {id: read, type: read_file, path: missing.md, retry: {attempts: 2, delay: 1ms}}
+  - {id: ok, type: accumulate, title: OK}
+  - {id: handle, type: save_file, path: out/error.md}
+edges:
+  - {from: read, to: ok}
+  - {from: read, to: handle, error: true}
+`)
+	s := newSession(t, w)
+	var notices []string
+	status := map[string]string{}
+	res, err := w.Run(context.Background(), s.ID, api.Turn{Text: "/careful", Command: true}, func(e api.Event) {
+		if e.Notice != nil {
+			notices = append(notices, e.Notice.Text)
+		}
+		if e.Step != nil {
+			status[e.Step.ID] = e.Step.Status
+		}
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "failed", status["read"])
+	assert.Equal(t, "skipped", status["ok"])
+	assert.Contains(t, res.Output, "missing.md")
+	saved, err := os.ReadFile(filepath.Join(w.Dir(), "out", "error.md"))
+	require.NoError(t, err)
+	assert.Contains(t, string(saved), "missing.md")
+	require.Len(t, notices, 1)
+	assert.Contains(t, notices[0], "try 2 of 2")
+}
+
+// An extract step pulls typed fields out; a condition reads them.
+func TestFlowExtract(t *testing.T) {
+	w, _ := openTestWith(t, configtest.RunTools)
+	judge := runtime.NewMockLLM("judge", text(`{"priority": "high", "amount": "42.5", "items": ["a", 2]}`))
+	w.newModel = func(context.Context, *config.Config, string) (model.LLM, error) { return judge, nil }
+	require.NoError(t, os.WriteFile(filepath.Join(w.Dir(), "ticket.md"), []byte("High priority: refund 42.50 for a and 2"), 0o644))
+	writeFlow(t, w, "ticket", `nodes:
+  - {id: read, type: read_file, path: ticket.md}
+  - id: pull
+    type: extract
+    fields: [{name: priority}, {name: amount, type: number}, {name: items, type: list}]
+  - {id: high, type: save_file, path: out/high.md}
+  - {id: low, type: save_file, path: out/low.md}
+edges:
+  - {from: read, to: pull}
+  - {from: pull, to: high, when: 'output.data.priority == "high" && output.data.amount > 40.0'}
+  - {from: pull, to: low, default: true}
+`)
+	s := newSession(t, w)
+	_, err := w.Run(context.Background(), s.ID, api.Turn{Text: "/ticket", Command: true}, func(api.Event) {})
+	require.NoError(t, err)
+	saved, err := os.ReadFile(filepath.Join(w.Dir(), "out", "high.md"))
+	require.NoError(t, err)
+	assert.JSONEq(t, `{"priority": "high", "amount": 42.5, "items": ["a", "2"]}`, string(saved))
+	assert.NoFileExists(t, filepath.Join(w.Dir(), "out", "low.md"))
+	assert.Contains(t, judge.Requests[0].Contents[0].Parts[0].Text, "amount (number)")
 }

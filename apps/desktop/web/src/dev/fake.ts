@@ -799,7 +799,12 @@ function backgroundRuns(): BackgroundRun[] {
 }
 
 // Studio's workflows: a research brief, and a draft not finished yet.
-type FakeFlow = { name: string; description: string; nodes: { id: string; type: string; title: string; x: number; y: number; agent: string; skills: string[]; instructions: string; rules: string[]; skill: string; script: string; args: string[]; path: string }[]; edges: { from: string; to: string }[] };
+type FakeFlow = {
+  name: string;
+  description: string;
+  nodes: { id: string; type: string; title: string; x: number; y: number; agent: string; skills: string[]; instructions: string; rules: string[]; skill: string; script: string; args: string[]; path: string; fields?: { name: string; type: string; description: string }[] }[];
+  edges: { from: string; to: string; when?: string; if?: string; default?: boolean; error?: boolean; label?: string }[];
+};
 const flowNode = (id: string, type: string, title: string, x: number, y: number, extra: Partial<FakeFlow["nodes"][number]> = {}) => ({ id, type, title, x, y, agent: "", skills: [], instructions: "", rules: [], skill: "", script: "", args: [], path: "", ...extra });
 const fakeFlows: FakeFlow[] = [
   {
@@ -817,6 +822,27 @@ const fakeFlows: FakeFlow[] = [
       { from: "look-up", to: "gather" },
       { from: "gather", to: "draft" },
       { from: "draft", to: "save" },
+    ],
+  },
+  {
+    name: "refund-triage",
+    description: "Big refunds to a person, the rest straight through",
+    nodes: [
+      flowNode("ticket", "read_file", "Read the ticket", 0, 80, { path: "tickets/latest.md" }),
+      flowNode("pull", "extract", "Pull out the refund", 260, 80, { fields: [{ name: "amount", type: "number", description: "" }, { name: "order", type: "string", description: "" }] }),
+      flowNode("size", "exclusive", "How big?", 520, 80),
+      flowNode("review", "agent", "Review it", 720, 0, { agent: "reviewer", instructions: "Check order {{ steps.pull.data.order }} before refunding {{ steps.pull.data.amount }}." }),
+      flowNode("refund", "agent", "Refund it", 720, 160, { instructions: "Refund order {{ steps.pull.data.order }}." }),
+      flowNode("log", "save_file", "Log it", 980, 80, { path: "refunds/log.md" }),
+    ],
+    edges: [
+      { from: "ticket", to: "pull" },
+      { from: "pull", to: "size" },
+      { from: "size", to: "review", when: "output.data.amount > 100", label: "over $100" },
+      { from: "size", to: "refund", default: true },
+      { from: "review", to: "log" },
+      { from: "refund", to: "log" },
+      { from: "pull", to: "log", error: true },
     ],
   },
   { name: "weekly-digest", description: "", nodes: [flowNode("sum-up", "summarize", "", 0, 80), flowNode("mail", "email", "", 280, 80)], edges: [{ from: "sum-up", to: "mail" }] },
@@ -1027,7 +1053,12 @@ export function installFake() {
         saveWorkflow: ({ workspace, previousName, workflow }) => {
           const w = workflow!;
           if (!/^[a-z0-9]+([-_][a-z0-9]+)*$/.test(w.name)) return { problems: [`name "${w.name}": lowercase letters, digits and single hyphens, up to 64`] };
-          const next: FakeFlow = { name: w.name, description: w.description, nodes: w.nodes.map((n) => ({ ...n, skills: [...n.skills], rules: [...n.rules], args: [...n.args] })), edges: w.edges.map((e) => ({ from: e.from, to: e.to })) };
+          const next: FakeFlow = {
+            name: w.name,
+            description: w.description,
+            nodes: w.nodes.map((n) => ({ ...n, skills: [...n.skills], rules: [...n.rules], args: [...n.args], fields: n.fields.map((f) => ({ ...f })) })),
+            edges: w.edges.map((e) => ({ from: e.from, to: e.to, when: e.when, if: e.if, default: e.default, error: e.error, label: e.label })),
+          };
           const i = fakeFlows.findIndex((x) => x.name === (previousName || w.name));
           if (i >= 0) fakeFlows[i] = next;
           else fakeFlows.push(next);

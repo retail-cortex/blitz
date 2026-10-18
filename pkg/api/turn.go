@@ -140,6 +140,9 @@ const (
 	StepRunning = "running"
 	StepDone    = "done"
 	StepFailed  = "failed"
+	// StepSkipped is a step on a path not taken (a gateway's other
+	// branch): it doesn't run.
+	StepSkipped = "skipped"
 )
 
 // Notice is a message from Blitz itself about a turn.

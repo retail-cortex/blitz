@@ -25,7 +25,12 @@ import {
   mdiCloseCircleOutline,
   mdiCodeBraces,
   mdiContentSaveOutline,
+  mdiCircleOutline,
+  mdiCloseThick,
   mdiDatabaseOutline,
+  mdiPlusThick,
+  mdiTableArrowRight,
+  mdiSkipNextCircleOutline,
   mdiDeleteOutline,
   mdiEmailOutline,
   mdiFileDocumentOutline,
@@ -50,7 +55,7 @@ import { Decision, type ApprovalRequest } from "../gen/blitz/v1/turn_pb";
 import type { SkillInfo, WorkflowFile } from "../gen/blitz/v1/workspace_pb";
 import { t, tn } from "../i18n";
 import { Button, Chip, Dialog, Field, Icon, IconButton, useSnackbar } from "../ui/controls";
-import { addLink, agentTypes, comingSoon, emptyWorkflowForm, formFromWorkflow, fromTemplate, newStep, removeStep, sameWorkflowForm, specFromForm, stepNeeds, stepTypes, templates, type StepForm, type StepType, type Template, type WorkflowForm } from "./workflowForm";
+import { addLink, agentTypes, comingSoon, emptyWorkflowForm, formFromWorkflow, fromTemplate, gatewayTypes, linkId, linkText, newStep, removeStep, sameWorkflowForm, setLink, specFromForm, stepGroups, stepNeeds, templates, type FieldForm, type LinkKind, type StepForm, type StepType, type Template, type WorkflowForm } from "./workflowForm";
 
 /** Each step type's icon. */
 const typeIcons: Record<StepType, string> = {
@@ -64,6 +69,10 @@ const typeIcons: Record<StepType, string> = {
   save_file: mdiFileExportOutline,
   email: mdiEmailOutline,
   data: mdiDatabaseOutline,
+  extract: mdiTableArrowRight,
+  exclusive: mdiCloseThick,
+  inclusive: mdiCircleOutline,
+  parallel: mdiPlusThick,
 };
 
 /** A step's state in a run. */
@@ -78,6 +87,19 @@ function StepNode({ data, selected }: NodeProps<Node<StepData>>) {
   const s = data.step;
   const needs = stepNeeds(s);
   const status = data.run?.status;
+  if (gatewayTypes.includes(s.type)) {
+    // A gateway: a diamond, its kind's mark inside, its title under it.
+    return (
+      <div className={`flow-gateway ${selected ? "selected" : ""} ${status ? `is-${status}` : ""}`} title={t(`desktop.flows.type_hint.${s.type}`)}>
+        <Handle type="target" position={Position.Left} />
+        <span className="flow-diamond">
+          <Icon path={typeIcons[s.type]} size="sm" />
+        </span>
+        <small className="flow-gateway-title ellipsis">{s.title || t(`desktop.flows.type.${s.type}`)}</small>
+        <Handle type="source" position={Position.Right} />
+      </div>
+    );
+  }
   const sub = needs ? t(`desktop.flows.needs.${needs}`) : agentTypes.includes(s.type) ? s.agent || t("desktop.flows.active_agent") : s.path || (s.type === "script" ? `${s.skill} › ${s.script}` : t(`desktop.flows.type.${s.type}`));
   return (
     <div className={`flow-node ${selected ? "selected" : ""} ${status ? `is-${status}` : ""} ${comingSoon.includes(s.type) ? "soon" : ""}`}>
@@ -87,7 +109,7 @@ function StepNode({ data, selected }: NodeProps<Node<StepData>>) {
         <span className="ellipsis">{s.title || t(`desktop.flows.type.${s.type}`)}</span>
         <small className={`ellipsis ${needs && needs !== "coming_soon" ? "warn-text" : ""}`}>{sub}</small>
       </span>
-      {status && <Icon path={status === "running" ? mdiLoading : status === "done" ? mdiCheckCircleOutline : mdiCloseCircleOutline} spin={status === "running"} className={status === "failed" ? "error-text" : "muted"} size="sm" />}
+      {status && <Icon path={status === "running" ? mdiLoading : status === "done" ? mdiCheckCircleOutline : status === "skipped" ? mdiSkipNextCircleOutline : mdiCloseCircleOutline} spin={status === "running"} className={status === "failed" ? "error-text" : "muted"} size="sm" />}
       {s.type !== "save_file" && <Handle type="source" position={Position.Right} />}
     </div>
   );
@@ -109,6 +131,7 @@ export function WorkflowsPane({ workspace, onDirty }: { workspace: string; onDir
   const [form, setForm] = useState<WorkflowForm>(emptyWorkflowForm);
   const [base, setBase] = useState<WorkflowForm>(emptyWorkflowForm);
   const [selected, setSelected] = useState("");
+  const [selectedLink, setSelectedLink] = useState("");
   const [problems, setProblems] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [pending, setPending] = useState<(() => void) | null>(null);
@@ -173,19 +196,38 @@ export function WorkflowsPane({ workspace, onDirty }: { workspace: string; onDir
   // The canvas's nodes and links, from the form (its source of truth).
   const nodes: Node<StepData>[] = useMemo(() => form.steps.map((s) => ({ id: s.id, type: "step", position: { x: s.x, y: s.y }, data: { step: s, run: live?.steps[s.id] }, selected: s.id === selected })), [form.steps, live, selected]);
   const edges: Edge[] = useMemo(
-    () => form.links.map((l) => ({ id: `${l.from}->${l.to}`, source: l.from, target: l.to, animated: live?.steps[l.from]?.status === "done" && live?.steps[l.to]?.status === "running" })),
-    [form.links, live],
+    () =>
+      form.links.map((l) => ({
+        id: linkId(l),
+        source: l.from,
+        target: l.to,
+        label: linkText(l, (k) => t(`desktop.flows.link_text.${k}`)) || undefined,
+        className: `flow-link is-${l.kind}`,
+        selected: linkId(l) === selectedLink,
+        animated: live?.steps[l.from]?.status !== undefined && live?.steps[l.to]?.status === "running",
+      })),
+    [form.links, live, selectedLink],
   );
   const onNodesChange = (changes: NodeChange<Node<StepData>>[]) => {
     for (const c of changes) {
       if (c.type === "position" && c.position) setStep(c.id, { x: c.position.x, y: c.position.y });
       else if (c.type === "remove") setForm((f) => removeStep(f, c.id));
-      else if (c.type === "select") setSelected((cur) => (c.selected ? c.id : cur === c.id ? "" : cur));
+      else if (c.type === "select") {
+        setSelected((cur) => (c.selected ? c.id : cur === c.id ? "" : cur));
+        if (c.selected) setSelectedLink("");
+      }
     }
   };
   const onEdgesChange = (changes: EdgeChange[]) => {
-    for (const c of changes) if (c.type === "remove") setForm((f) => ({ ...f, links: f.links.filter((l) => `${l.from}->${l.to}` !== c.id) }));
+    for (const c of changes) {
+      if (c.type === "remove") setForm((f) => ({ ...f, links: f.links.filter((l) => linkId(l) !== c.id) }));
+      else if (c.type === "select") {
+        setSelectedLink((cur) => (c.selected ? c.id : cur === c.id ? "" : cur));
+        if (c.selected) setSelected("");
+      }
+    }
   };
+  const link = form.links.find((l) => linkId(l) === selectedLink);
 
   const save = async () => {
     if (busy) return;
@@ -271,6 +313,8 @@ export function WorkflowsPane({ workspace, onDirty }: { workspace: string; onDir
   const title = form.name || open || t("desktop.flows.new");
   const canRun = !!file && !dirty && !file.problem;
   const dark = document.documentElement.dataset.theme === "dark";
+  const titleOf = (id: string) => form.steps.find((s) => s.id === id)?.title || id;
+  const fromType = (id: string) => form.steps.find((s) => s.id === id)?.type;
   const scriptsOf = (skill: string) => skills.find((s) => s.name === skill)?.scripts.map((x) => x.name) ?? [];
 
   return (
@@ -345,12 +389,16 @@ export function WorkflowsPane({ workspace, onDirty }: { workspace: string; onDir
             <div className="flow-body">
               <div className="flow-main">
               <div className="flow-palette" role="toolbar" aria-label={t("desktop.flows.palette")}>
-                {stepTypes.map((type) => (
-                  <button key={type} type="button" className="flow-palette-item" title={t(`desktop.flows.type_hint.${type}`)} disabled={comingSoon.includes(type)} onClick={() => add(type)}>
-                    <Icon path={typeIcons[type]} size="sm" />
-                    <span className="ellipsis">{t(`desktop.flows.type.${type}`)}</span>
-                    {comingSoon.includes(type) && <small className="muted">{t("desktop.flows.soon")}</small>}
-                  </button>
+                {stepGroups.map(({ group, types }) => (
+                  <div key={group} className="flow-palette-group" role="group" aria-label={t(`desktop.flows.group.${group}`)}>
+                    <small className="muted flow-palette-label">{t(`desktop.flows.group.${group}`)}</small>
+                    {types.map((type) => (
+                      <button key={type} type="button" className="flow-palette-item" title={t(`desktop.flows.type_hint.${type}`)} disabled={comingSoon.includes(type)} onClick={() => add(type)}>
+                        <Icon path={typeIcons[type]} size="sm" />
+                        <span className="ellipsis">{t(`desktop.flows.type.${type}`)}</span>
+                      </button>
+                    ))}
+                  </div>
                 ))}
               </div>
               <div className="flow-canvas">
@@ -362,11 +410,14 @@ export function WorkflowsPane({ workspace, onDirty }: { workspace: string; onDir
                   onNodesChange={onNodesChange}
                   onEdgesChange={onEdgesChange}
                   onConnect={(c: Connection) => c.source && c.target && setForm((f) => addLink(f, c.source, c.target))}
-                  onPaneClick={() => setSelected("")}
+                  onPaneClick={() => {
+                    setSelected("");
+                    setSelectedLink("");
+                  }}
                   colorMode={dark ? "dark" : "light"}
                   deleteKeyCode={["Backspace", "Delete"]}
                   // Fitted once the pane has slid in and has its width.
-                  onInit={(flow: ReactFlowInstance<Node<StepData>, Edge>) => setTimeout(() => void flow.fitView({ padding: 0.2, maxZoom: 1 }), 400)}
+                  onInit={(flow: ReactFlowInstance<Node<StepData>, Edge>) => setTimeout(() => void flow.fitView({ padding: 0.15, maxZoom: 1, minZoom: 0.7 }), 400)}
                   proOptions={{ hideAttribution: true }}
                 >
                   <Background gap={20} />
@@ -408,7 +459,7 @@ export function WorkflowsPane({ workspace, onDirty }: { workspace: string; onDir
                             </select>
                           )}
                         </Field>
-                        <Field label={t(`desktop.flows.instructions.${step.type}`)}>
+                        <Field label={t(`desktop.flows.instructions.${step.type}`)} supporting={t("desktop.flows.template_hint")}>
                           {(id) => <textarea id={id} className="input" rows={5} value={step.instructions} placeholder={t(`desktop.flows.instructions_placeholder.${step.type}`)} onChange={(e) => setStep(step.id, { instructions: e.target.value })} />}
                         </Field>
                         <Pick label={t("desktop.flows.skills")} hint={t("desktop.flows.skills_hint")} all={skills.map((s) => s.name)} chosen={step.skills} onChange={(v) => setStep(step.id, { skills: v })} />
@@ -453,12 +504,83 @@ export function WorkflowsPane({ workspace, onDirty }: { workspace: string; onDir
                         {(id) => <input id={id} className="input mono" value={step.path} placeholder={t("desktop.flows.path_placeholder")} onChange={(e) => setStep(step.id, { path: e.target.value })} />}
                       </Field>
                     )}
+                    {step.type === "extract" && (
+                      <div className="stack" style={{ gap: 6 }}>
+                        <span className="t-label">{t("desktop.flows.fields")}</span>
+                        <span className="t-body-sm muted">{t("desktop.flows.fields_hint", { id: step.id })}</span>
+                        {step.fields.map((fl, i) => (
+                          <div key={i} className="row flow-field" style={{ gap: 6 }}>
+                            <input className="input mono" aria-label={t("desktop.flows.field_name")} placeholder={t("desktop.flows.field_name")} value={fl.name} onChange={(e) => setStep(step.id, { fields: step.fields.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)) })} />
+                            <select className="select" aria-label={t("desktop.flows.field_type")} value={fl.type} onChange={(e) => setStep(step.id, { fields: step.fields.map((x, j) => (j === i ? { ...x, type: e.target.value as FieldForm["type"] } : x)) })}>
+                              {(["string", "number", "boolean", "list"] as const).map((ty) => (
+                                <option key={ty} value={ty}>
+                                  {t(`desktop.flows.field_types.${ty}`)}
+                                </option>
+                              ))}
+                            </select>
+                            <IconButton icon={mdiDeleteOutline} label={t("desktop.flows.field_remove")} small onClick={() => setStep(step.id, { fields: step.fields.filter((_, j) => j !== i) })} />
+                          </div>
+                        ))}
+                        <div className="row">
+                          <Button small icon={mdiPlus} onClick={() => setStep(step.id, { fields: [...step.fields, { name: "", type: "string", description: "" }] })}>
+                            {t("desktop.flows.field_add")}
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                    {!gatewayTypes.includes(step.type) && (
+                      <div className="stack" style={{ gap: 6 }}>
+                        <span className="t-label">{t("desktop.flows.if_it_fails")}</span>
+                        <span className="t-body-sm muted">{t("desktop.flows.if_it_fails_hint")}</span>
+                        <div className="flow-retry">
+                          <Field label={t("desktop.flows.retry_attempts")}>{(id) => <input id={id} className="input" type="number" min={1} max={10} value={step.retryAttempts} placeholder="1" onChange={(e) => setStep(step.id, { retryAttempts: e.target.value })} />}</Field>
+                          <Field label={t("desktop.flows.retry_delay")}>{(id) => <input id={id} className="input mono" value={step.retryDelay} placeholder="1s" onChange={(e) => setStep(step.id, { retryDelay: e.target.value })} />}</Field>
+                          <Field label={t("desktop.flows.timeout")}>{(id) => <input id={id} className="input mono" value={step.timeout} placeholder="5m" onChange={(e) => setStep(step.id, { timeout: e.target.value })} />}</Field>
+                        </div>
+                      </div>
+                    )}
                     {live?.steps[step.id] && (live.steps[step.id].output || live.steps[step.id].error) && (
                       <div className="stack" style={{ gap: 2 }}>
                         <span className="t-label">{t(live.steps[step.id].error ? "desktop.flows.step_error" : "desktop.flows.step_output")}</span>
                         <pre className="eval-text">{live.steps[step.id].error || live.steps[step.id].output}</pre>
                       </div>
                     )}
+                  </div>
+                ) : link ? (
+                  <div className="stack flow-link-form" style={{ gap: 10 }}>
+                    <div className="row" style={{ gap: 6 }}>
+                      <span className="t-title-sm spacer">{t("desktop.flows.link_title", { from: titleOf(link.from), to: titleOf(link.to) })}</span>
+                      <IconButton icon={mdiDeleteOutline} label={t("desktop.flows.remove_link")} small onClick={() => setForm((f) => ({ ...f, links: f.links.filter((l) => linkId(l) !== selectedLink) }))} />
+                    </div>
+                    <Field label={t("desktop.flows.link_kind")}>
+                      {(id) => (
+                        <select id={id} className="select" value={link.kind} onChange={(e) => setForm((f) => setLink(f, selectedLink, { kind: e.target.value as LinkKind }))}>
+                          {(["always", "when", "if", "default", "error"] as const).map((k) => (
+                            <option key={k} value={k} disabled={k !== "always" && k !== "error" && fromType(link.from) === "parallel"}>
+                              {t(`desktop.flows.link_kinds.${k}`)}
+                            </option>
+                          ))}
+                        </select>
+                      )}
+                    </Field>
+                    <span className="t-body-sm muted">{t(`desktop.flows.link_hints.${link.kind}`)}</span>
+                    {(link.kind === "when" || link.kind === "if") && (
+                      <Field label={t(`desktop.flows.condition.${link.kind}`)} supporting={t(`desktop.flows.condition_hint.${link.kind}`)}>
+                        {(id) => (
+                          <textarea
+                            id={id}
+                            className={`input ${link.kind === "when" ? "mono" : ""}`}
+                            rows={3}
+                            value={link.condition}
+                            placeholder={t(`desktop.flows.condition_placeholder.${link.kind}`)}
+                            onChange={(e) => setForm((f) => setLink(f, selectedLink, { condition: e.target.value }))}
+                          />
+                        )}
+                      </Field>
+                    )}
+                    <Field label={t("desktop.flows.link_label")} supporting={t("desktop.flows.link_label_hint")}>
+                      {(id) => <input id={id} className="input" value={link.label} onChange={(e) => setForm((f) => setLink(f, selectedLink, { label: e.target.value }))} />}
+                    </Field>
                   </div>
                 ) : (
                   <div className="stack" style={{ gap: 10 }}>

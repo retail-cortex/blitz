@@ -17,10 +17,12 @@ package engine
 import (
 	"cmp"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/retail-cortex/blitz/pkg/api"
@@ -218,4 +220,104 @@ func (w *Workspace) stepRule(name string) (gates.Rule, bool) {
 // gate judges an answer.
 func (w *Workspace) judgeStep(ctx context.Context, r gates.Rule, output string) (gates.Verdict, error) {
 	return gates.Judge(ctx, w.ruleAsker(), r, SecretRedactor(w.cfg).String(textutil.Ellipsize(output, 12<<10)))
+}
+
+// extractBrief is the brief for an extract step.
+const extractBrief = `You pull values out of text for a workflow. Reply with JSON alone: an object with exactly the fields asked for, each of the type asked for (a list is a list of strings); null for a value the text doesn't give. Don't guess.`
+
+// extractStep pulls an extract step's fields out of its input with the
+// suggestions model (WF-13): its data is the object, its text the JSON.
+func (w *Workspace) extractStep(ctx context.Context, n flows.Node, input string) (flows.Result, error) {
+	var b strings.Builder
+	b.WriteString("The fields:\n")
+	for _, f := range n.Fields {
+		fmt.Fprintf(&b, "- %s (%s)", f.Name, cmp.Or(f.Type, "string"))
+		if f.Description != "" {
+			fmt.Fprintf(&b, ": %s", f.Description)
+		}
+		b.WriteString("\n")
+	}
+	if n.Instructions != "" {
+		fmt.Fprintf(&b, "\nAlso: %s\n", n.Instructions)
+	}
+	fmt.Fprintf(&b, "\nThe text:\n%s", SecretRedactor(w.cfg).String(textutil.Ellipsize(input, 32<<10)))
+	reply, err := w.ruleAsker()(ctx, extractBrief, b.String())
+	if err != nil {
+		return flows.Result{}, err
+	}
+	obj, ok := flows.DataOf(reply).(map[string]any)
+	if !ok {
+		return flows.Result{}, fmt.Errorf("the model's answer isn't the fields: %s", textutil.Ellipsize(reply, 200))
+	}
+	out := map[string]any{}
+	for _, f := range n.Fields {
+		v, err := fieldValue(f, obj[f.Name])
+		if err != nil {
+			return flows.Result{}, fmt.Errorf("field %s: %w", f.Name, err)
+		}
+		out[f.Name] = v
+	}
+	data, _ := json.MarshalIndent(out, "", "  ")
+	return flows.Result{Text: string(data), Data: out}, nil
+}
+
+// fieldValue is v as field f's type, or why it isn't.
+func fieldValue(f flows.Field, v any) (any, error) {
+	if v == nil {
+		return nil, nil
+	}
+	switch f.Type {
+	case "number":
+		switch x := v.(type) {
+		case float64:
+			return x, nil
+		case string:
+			if n, err := strconv.ParseFloat(strings.TrimSpace(x), 64); err == nil {
+				return n, nil
+			}
+		}
+		return nil, fmt.Errorf("%v isn't a number", v)
+	case "boolean":
+		if b, ok := v.(bool); ok {
+			return b, nil
+		}
+		return nil, fmt.Errorf("%v isn't true or false", v)
+	case "list":
+		items, ok := v.([]any)
+		if !ok {
+			return nil, fmt.Errorf("%v isn't a list", v)
+		}
+		out := make([]any, 0, len(items))
+		for _, it := range items {
+			out = append(out, fmt.Sprint(it))
+		}
+		return out, nil
+	}
+	if s, ok := v.(string); ok {
+		return s, nil
+	}
+	return fmt.Sprint(v), nil
+}
+
+// conditionBrief is the brief for a link's condition in plain English.
+const conditionBrief = `You decide whether a condition holds for a step's output in a workflow. Judge only the condition given. Reply with JSON alone: {"verdict": "yes" or "no", "reason": "one sentence"}.`
+
+// judgeCondition has the suggestions model decide whether a condition in
+// plain English holds for a step's output (WF-13).
+func (w *Workspace) judgeCondition(ctx context.Context, condition, output string) (bool, error) {
+	reply, err := w.ruleAsker()(ctx, conditionBrief, fmt.Sprintf("The condition: %s\n\nThe step's output:\n%s", condition, SecretRedactor(w.cfg).String(textutil.Ellipsize(output, 16<<10))))
+	if err != nil {
+		return false, fmt.Errorf("the condition %q couldn't be judged: %w", condition, err)
+	}
+	v, ok := flows.DataOf(reply).(map[string]any)
+	if !ok {
+		return false, fmt.Errorf("the condition %q couldn't be judged: %s", condition, textutil.Ellipsize(reply, 200))
+	}
+	switch strings.ToLower(fmt.Sprint(v["verdict"])) {
+	case "yes", "true":
+		return true, nil
+	case "no", "false":
+		return false, nil
+	}
+	return false, fmt.Errorf("the condition %q couldn't be judged: %s", condition, textutil.Ellipsize(reply, 200))
 }

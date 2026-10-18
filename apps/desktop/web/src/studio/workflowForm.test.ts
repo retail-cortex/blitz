@@ -17,7 +17,7 @@
 import { create } from "@bufbuild/protobuf";
 import { describe, expect, it } from "vitest";
 import { WorkflowFileSchema } from "../gen/blitz/v1/workspace_pb";
-import { addLink, emptyWorkflowForm, formFromWorkflow, fromTemplate, newStep, removeStep, sameWorkflowForm, specFromForm, stepNeeds, templates } from "./workflowForm";
+import { addLink, emptyWorkflowForm, linkId, linkText, setLink, formFromWorkflow, fromTemplate, newStep, removeStep, sameWorkflowForm, specFromForm, stepNeeds, templates } from "./workflowForm";
 
 describe("the workflow canvas", () => {
   it("reads a workflow and writes back each step's own settings", () => {
@@ -28,7 +28,7 @@ describe("the workflow canvas", () => {
         { id: "s", type: "script", skill: "pdf", script: "render", args: ["--a4", "-q"] },
         { id: "z", type: "weird" },
       ],
-      edges: [{ from: "a", to: "s" }, { from: "a", to: "gone" }],
+      edges: [{ from: "a", to: "s", when: "output.data.n > 1", label: "big" }, { from: "a", to: "gone" }],
     });
     const f = formFromWorkflow(w);
     expect(f.steps[1].args).toBe("--a4 -q");
@@ -36,7 +36,8 @@ describe("the workflow canvas", () => {
     const spec = specFromForm(f);
     expect(spec.nodes[0]).toMatchObject({ x: 10, agent: "writer", rules: ["short"], path: "" });
     expect(spec.nodes[1]).toMatchObject({ skill: "pdf", script: "render", args: ["--a4", "-q"], instructions: "" });
-    expect(spec.edges).toEqual([{ from: "a", to: "s" }]);
+    expect(spec.edges).toEqual([{ from: "a", to: "s", when: "output.data.n > 1", if: "", default: false, error: false, label: "big" }]);
+    expect(f.links[0]).toMatchObject({ kind: "when", condition: "output.data.n > 1" });
     expect(sameWorkflowForm(f, formFromWorkflow(w))).toBe(true);
   });
 
@@ -49,6 +50,11 @@ describe("the workflow canvas", () => {
     f = addLink(f, a.id, b.id);
     expect(f.links).toHaveLength(1);
     expect(addLink(f, a.id, b.id)).toBe(f);
+    expect(f.links[0].kind).toBe("always");
+    const g = setLink(f, linkId(f.links[0]), { kind: "error" });
+    expect(specFromForm(g).edges[0]).toMatchObject({ error: true, when: "" });
+    expect(linkText(g.links[0], (k) => `<${k}>`)).toBe("<error>");
+    expect(linkText({ ...g.links[0], kind: "if", condition: "The customer sounds angry about the refund" }, (k) => k)).toBe("The customer sounds angry a…");
     expect(addLink(f, b.id, a.id)).toBe(f);
     expect(addLink(f, a.id, a.id)).toBe(f);
     expect(removeStep(f, a.id)).toMatchObject({ steps: [b], links: [] });
@@ -60,6 +66,10 @@ describe("the workflow canvas", () => {
     expect(stepNeeds(newStep("save_file", [], 0, 0))).toBe("path");
     expect(stepNeeds(newStep("email", [], 0, 0))).toBe("coming_soon");
     expect(stepNeeds(newStep("accumulate", [], 0, 0))).toBe("");
+    expect(stepNeeds(newStep("extract", [], 0, 0))).toBe("fields");
+    const x = { ...newStep("extract", [], 0, 0), fields: [{ name: "total", type: "number" as const, description: "" }, { name: " ", type: "string" as const, description: "" }], retryAttempts: "3", retryDelay: "2s" };
+    expect(specFromForm({ ...emptyWorkflowForm, steps: [x] }).nodes[0]).toMatchObject({ fields: [{ name: "total", type: "number", description: "" }], retryAttempts: 3, retryDelay: "2s" });
+    expect(specFromForm({ ...emptyWorkflowForm, steps: [{ ...newStep("exclusive", [], 0, 0), retryAttempts: "3", timeout: "1m" }] }).nodes[0]).toMatchObject({ retryAttempts: 0, timeout: "" });
   });
 
   it("starts from templates", () => {
