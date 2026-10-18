@@ -53,6 +53,8 @@ type Config struct {
 	Workers WorkersConfig `toml:"workers"`
 	// Suggestions shape the desktop app's welcome tiles.
 	Suggestions SuggestionsConfig `toml:"suggestions"`
+	// Health is the workspace dashboard's judge and its schedule.
+	Health HealthConfig `toml:"health"`
 	// Git is what Blitz does with git in a workspace that's a repository.
 	Git     GitConfig     `toml:"git"`
 	Tools   ToolsConfig   `toml:"tools"`
@@ -779,6 +781,7 @@ func DefaultConfig() *Config {
 
 			GoalMaxContinues: 20,
 		},
+		Health: HealthConfig{Schedule: "every day at 02:00", MaxCostUSD: 1},
 		LLM: LLMConfig{
 			Provider:            "gemini",
 			MaxRetries:          3,

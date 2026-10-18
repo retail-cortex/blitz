@@ -634,3 +634,21 @@ func applyFeatureDefaults(c *Config) {
 	// across a price change picks the new price up at its next restart.
 	c.Pricing = DefaultPricingAt(time.Now())
 }
+
+// HealthConfig is the workspace dashboard's judge (spec_health_044): it
+// rates each agent, skill, rule, guardrail, eval, workflow and worker on
+// the evidence, when asked and on a schedule. Only the user's settings
+// (global or a workspace's own) set it: a project may not spend the
+// user's money.
+type HealthConfig struct {
+	// Model judges ("provider/model"; empty: the auto mode's reviewer,
+	// else the default model).
+	Model string `toml:"model"`
+	// Schedule is when the workspace's items that changed are judged again,
+	// in words or as cron ("off" or empty: only when asked). It waits for
+	// a first check made by hand.
+	Schedule string `toml:"schedule"`
+	// MaxCostUSD is the most a scheduled check may cost, estimated
+	// beforehand: one that would cost more doesn't run, and says why.
+	MaxCostUSD float64 `toml:"max_cost_usd"`
+}

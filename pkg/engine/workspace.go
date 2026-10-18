@@ -123,6 +123,8 @@ type Workspace struct {
 	// default_model is one); agentRefs are the models agents were last
 	// pinned to by default_model or [agent_models].
 	rebuildMu sync.Mutex
+	// healthMu lets one health check of the workspace run at a time.
+	healthMu  sync.Mutex
 	agentRefs map[string]string
 	// bgCtx ends when the workspace closes; bg counts the work it bounds
 	// (writing suggestions), which Close waits for.

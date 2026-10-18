@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+import { GradeBadge } from "./GradeBadge";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { mdiAlertCircleOutline, mdiArrowLeft, mdiCalendarClock, mdiCalendarPlus, mdiDeleteOutline, mdiProgressClock, mdiRefresh, mdiStopCircleOutline, mdiUndoVariant } from "@mdi/js";
@@ -192,7 +193,9 @@ export function WorkersPane({
             <button key={w.name} className={`list-item ${w.state === WorkerState.INVALID ? "has-problem" : ""}`} title={w.problems[0] || w.path} onClick={() => setOpen({ mode: "read", name: w.name })}>
               <Icon path={w.state === WorkerState.INVALID || lastFailed(w) ? mdiAlertCircleOutline : mdiCalendarClock} className={w.state === WorkerState.INVALID || lastFailed(w) ? "error-text" : undefined} />
               <span className="lines">
-                <span className="ellipsis">{w.name}</span>
+                <span className="ellipsis">
+                  {w.name} <GradeBadge kind="worker" name={w.name} />
+                </span>
                 <small className="ellipsis">{[workerStateLabel(w.state), w.schedule, w.description].filter(Boolean).join(" · ")}</small>
               </span>
             </button>

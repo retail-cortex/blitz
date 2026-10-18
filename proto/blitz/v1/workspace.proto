@@ -278,6 +278,20 @@ service WorkspaceService {
   // Stops a running workflow run, wherever it was started (a chat, the
   // background, a worker); RUN_NOT_FOUND when it isn't running.
   rpc StopWorkflowRun(StopWorkflowRunRequest) returns (StopWorkflowRunResponse);
+
+  // The workspace dashboard (spec_health_044): the facts about its items
+  // and runs, each item's latest verdict, and the scores.
+  rpc GetWorkspaceHealth(GetWorkspaceHealthRequest) returns (GetWorkspaceHealthResponse);
+  // Streams the dashboard: as it is, then again each time it changes (a
+  // file, a run, a verdict).
+  rpc WatchWorkspaceHealth(WatchWorkspaceHealthRequest) returns (stream WatchWorkspaceHealthResponse);
+  // How many items a check would judge, and its estimated cost.
+  rpc EstimateHealthCheck(EstimateHealthCheckRequest) returns (EstimateHealthCheckResponse);
+  // Judges the items that changed (or all, with force), one at a time,
+  // streaming each verdict; HEALTH_CHECK_RUNNING when one is going.
+  rpc CheckWorkspaceHealth(CheckWorkspaceHealthRequest) returns (stream CheckWorkspaceHealthResponse);
+  // Stops the workspace's check after the item being judged.
+  rpc StopHealthCheck(StopHealthCheckRequest) returns (StopHealthCheckResponse);
   // Returns the tasks paused workflow runs wait on (human tasks' forms,
   // timers), oldest first: one workspace's, or every one's.
   rpc ListHumanTasks(ListHumanTasksRequest) returns (ListHumanTasksResponse);
@@ -3034,3 +3048,181 @@ message StopWorkflowRunRequest {
 
 // Response message for WorkspaceService.StopWorkflowRun.
 message StopWorkflowRunResponse {}
+
+// A workspace's dashboard (spec_health_044).
+message WorkspaceHealth {
+  google.protobuf.Timestamp at = 1;
+  repeated HealthItem items = 2;
+  // The runs per day, the last 30, oldest first.
+  repeated HealthDay days = 3;
+  repeated HealthSignal signals = 4;
+  // The workspace's score and each kind's (1–5; 0: not judged).
+  double overall = 5;
+  map<string, double> by_kind = 6;
+  // The workspace's score before the last check.
+  double previous_overall = 7;
+  google.protobuf.Timestamp last_check = 8;
+  double last_cost_usd = 9;
+  // Why the last scheduled check didn't run.
+  string skipped = 10;
+  // The judge's model ("" the default); the schedule ("" or "off": by
+  // hand) and its next time; a scheduled check's cost limit.
+  string model = 11;
+  string schedule = 12;
+  google.protobuf.Timestamp next = 13;
+  double max_cost_usd = 14;
+  // A check is going.
+  bool checking = 15;
+}
+
+// One agent, skill, rule, guardrail, eval, workflow or worker.
+message HealthItem {
+  string kind = 1;
+  string name = 2;
+  string path = 3;
+  string detail = 4;
+  string problem = 5;
+  // uncovered, stale, unused, never_run, failing, disabled, off.
+  repeated string flags = 6;
+  // Runs, activations or decisions in the last 30 days; fired, a rule's or
+  // guardrail's that stopped, warned or revised.
+  int32 uses = 7;
+  int32 fired = 8;
+  HealthRuns runs = 9;
+  HealthEvals evals = 10;
+  // Uses per day, as WorkspaceHealth.days.
+  repeated int32 daily = 11;
+  // Its latest verdict, and its overall scores over time (oldest first).
+  HealthVerdict verdict = 12;
+  repeated double history = 13;
+}
+
+// A workflow's or a worker's runs in the last 30 days.
+message HealthRuns {
+  int32 runs = 1;
+  int32 done = 2;
+  int32 failed = 3;
+  int32 stopped = 4;
+  double cost_usd = 5;
+  int64 median_ms = 6;
+  google.protobuf.Timestamp last = 7;
+  string failing_step = 8;
+}
+
+// An agent's or an eval's latest eval results.
+message HealthEvals {
+  int32 runs = 1;
+  google.protobuf.Timestamp last = 2;
+  int32 passed = 3;
+  int32 cases = 4;
+}
+
+// The judge's verdict on an item.
+message HealthVerdict {
+  string model = 1;
+  google.protobuf.Timestamp at = 2;
+  repeated HealthScore scores = 3;
+  double overall = 4;
+  // A–D.
+  string grade = 5;
+  string summary = 6;
+  repeated string fixes = 7;
+  double cost_usd = 8;
+  // It's for the item as it is now (not changed since).
+  bool current = 9;
+}
+
+// One rubric line's score.
+message HealthScore {
+  string line = 1;
+  int32 score = 2;
+  string reason = 3;
+}
+
+// One day's runs.
+message HealthDay {
+  string date = 1;
+  int32 done = 2;
+  int32 failed = 3;
+  int32 stopped = 4;
+  double cost_usd = 5;
+}
+
+// A safety signal: the reviewer's denials, a rule's or a guardrail's
+// decisions, by what they were about.
+message HealthSignal {
+  string kind = 1;
+  string about = 2;
+  int32 count = 3;
+  google.protobuf.Timestamp last = 4;
+  string detail = 5;
+}
+
+// Request message for WorkspaceService.GetWorkspaceHealth.
+message GetWorkspaceHealthRequest {
+  string workspace = 1;
+}
+
+// Response message for WorkspaceService.GetWorkspaceHealth.
+message GetWorkspaceHealthResponse {
+  WorkspaceHealth health = 1;
+}
+
+// Request message for WorkspaceService.WatchWorkspaceHealth.
+message WatchWorkspaceHealthRequest {
+  string workspace = 1;
+}
+
+// Response message for WorkspaceService.WatchWorkspaceHealth.
+message WatchWorkspaceHealthResponse {
+  WorkspaceHealth health = 1;
+}
+
+// Which items a check judges: kinds, items ("kind/name"), or all; force
+// re-judges unchanged ones.
+message HealthCheckScope {
+  repeated string kinds = 1;
+  repeated string items = 2;
+  bool force = 3;
+}
+
+// Request message for WorkspaceService.EstimateHealthCheck.
+message EstimateHealthCheckRequest {
+  string workspace = 1;
+  HealthCheckScope scope = 2;
+}
+
+// Response message for WorkspaceService.EstimateHealthCheck.
+message EstimateHealthCheckResponse {
+  int32 items = 1;
+  double cost_usd = 2;
+  // Every model is priced (else the cost is a floor).
+  bool priced = 3;
+}
+
+// Request message for WorkspaceService.CheckWorkspaceHealth.
+message CheckWorkspaceHealthRequest {
+  string workspace = 1;
+  HealthCheckScope scope = 2;
+}
+
+// Response message for WorkspaceService.CheckWorkspaceHealth: one item's
+// verdict (or why it has none), then a last one with done.
+message CheckWorkspaceHealthResponse {
+  string item = 1;
+  int32 index = 2;
+  int32 total = 3;
+  HealthVerdict verdict = 4;
+  string error = 5;
+  double cost_usd = 6;
+  bool done = 7;
+  int32 judged = 8;
+}
+
+// Request message for WorkspaceService.StopHealthCheck.
+message StopHealthCheckRequest {
+  string workspace = 1;
+}
+
+// Response message for WorkspaceService.StopHealthCheck.
+message StopHealthCheckResponse {}

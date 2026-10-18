@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+import { GradeBadge } from "./GradeBadge";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Background, Controls, Handle, Position, ReactFlow, type Connection, type Edge, type EdgeChange, type Node, type NodeChange, type NodeProps, type ReactFlowInstance } from "@xyflow/react";
@@ -640,7 +641,9 @@ export function WorkflowsPane({
               <button type="button" className="row-open" onClick={() => show(w.name, formFromWorkflow(w), true)}>
                 {icon ? <Icon path={icon.path} spin={icon.spin} className={icon.className} /> : <Icon path={w.problem ? mdiAlertCircleOutline : mdiSitemapOutline} className={w.problem ? "error-text" : undefined} />}
                 <span className="lines spacer">
-                  <span className="ellipsis">/{w.name}</span>
+                  <span className="ellipsis">
+                    /{w.name} <GradeBadge kind="workflow" name={w.name} />
+                  </span>
                   <small className={`ellipsis ${w.problem ? "error-text" : ""}`}>
                     {live
                       ? [t(`desktop.flows.run_status.${live.status}`), t("desktop.flow_runs.steps", progress(live)), cost(live.usage?.costUsd, live.usage?.priced)].join(" · ")

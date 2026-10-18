@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+import { GradeBadge } from "./GradeBadge";
 import { useCallback, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import {
@@ -207,7 +208,9 @@ export function GuardrailsPane({ workspace, onDirty, onRules }: { workspace: str
                   <button type="button" className="row-open" onClick={() => showForm({ builtin: id }, g.file ? formFromGuardrail(g.file) : formForBuiltin(id))}>
                     <Icon path={builtinIcons[id]} className={on ? undefined : "muted"} />
                     <span className="lines spacer">
-                      <span className="ellipsis">{t(`desktop.guardrails.builtin.${id}`)}</span>
+                      <span className="ellipsis">
+                        {t(`desktop.guardrails.builtin.${id}`)} <GradeBadge kind="guardrail" name={g.file?.name ?? id} />
+                      </span>
                       <small className={`ellipsis ${g.file?.problem ? "error-text" : ""}`}>{g.file?.problem || [t(`desktop.guardrails.stage.${g.stage}`), on ? t(`desktop.guardrails.action.${g.file?.action ?? g.defaultAction}`) : t("desktop.guardrails.off"), t(`desktop.guardrails.builtin_about.${id}`)].join(" · ")}</small>
                     </span>
                   </button>
@@ -230,7 +233,9 @@ export function GuardrailsPane({ workspace, onDirty, onRules }: { workspace: str
                 <button type="button" className="row-open" onClick={() => showForm({ name: g.name }, formFromGuardrail(g))}>
                   <Icon path={g.problem ? mdiAlertCircleOutline : mdiShieldCheckOutline} className={g.problem ? "error-text" : undefined} />
                   <span className="lines spacer">
-                    <span className="ellipsis">{g.name}</span>
+                    <span className="ellipsis">
+                      {g.name} <GradeBadge kind="guardrail" name={g.name} />
+                    </span>
                     <small className={`ellipsis ${g.problem ? "error-text" : ""}`}>{g.problem || [t(`desktop.guardrails.stage.${g.stage}`), t(`desktop.guardrails.action.${g.action}`), g.description || g.text].filter(Boolean).join(" · ")}</small>
                   </span>
                 </button>

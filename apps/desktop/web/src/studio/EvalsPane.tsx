@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+import { GradeBadge } from "./GradeBadge";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { MessageInitShape } from "@bufbuild/protobuf";
 import { createPortal } from "react-dom";
@@ -315,7 +316,9 @@ export function EvalsPane({ workspace, onDirty, forAgent, onHandled }: { workspa
                 <button type="button" className="row-open" onClick={() => showForm(e.name, formFromEval(e))}>
                   <Icon path={icon} className={cls} />
                   <span className="lines spacer">
-                    <span className="ellipsis">{e.name}</span>
+                    <span className="ellipsis">
+                      {e.name} <GradeBadge kind="eval" name={e.name} />
+                    </span>
                     <small className={`ellipsis ${e.problem ? "error-text" : ""}`}>{e.problem || what}</small>
                   </span>
                 </button>

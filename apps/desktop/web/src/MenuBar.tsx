@@ -172,7 +172,7 @@ export function MenuBar({
           )}
           {/* Studio: everything the workspace's .agents folder holds, in one drawer; a dot when a worker failed. */}
           {menus.includes("studio") && (
-            <button type="button" className="menubar-item" onClick={() => onStudio?.("agents")}>
+            <button type="button" className="menubar-item" onClick={() => onStudio?.("overview")}>
               {t("desktop.studio")}
               {failed > 0 && <span className="dot menubar-dot" title={tn("desktop.switcher.failed_runs", failed)} />}
             </button>

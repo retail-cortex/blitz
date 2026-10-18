@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+import { GradeBadge } from "./studio/GradeBadge";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { mdiAlertCircleOutline, mdiArrowLeft, mdiChevronDown, mdiChevronRight, mdiClose, mdiContentSaveOutline, mdiDeleteOutline, mdiFlaskOutline, mdiPlus, mdiRefresh, mdiRobotOutline, mdiUndoVariant } from "@mdi/js";
@@ -316,7 +317,9 @@ export function AgentEditor({
               <button key={f.path} className={`list-item ${open?.path === f.path ? "active" : ""} ${f.problem ? "has-problem" : ""}`} title={f.problem || f.path} onClick={() => show(f)}>
                 <Icon path={f.problem ? mdiAlertCircleOutline : mdiRobotOutline} className={f.problem ? "error-text" : undefined} />
                 <span className="lines">
-                  <span className="ellipsis">{f.agent?.displayName || name}</span>
+                  <span className="ellipsis">
+                    {f.agent?.displayName || name} <GradeBadge kind="agent" name={f.agent?.name || name} />
+                  </span>
                   <small className={`ellipsis ${f.problem ? "error-text" : ""}`}>
                     {f.problem ? t("desktop.agents.broken") : [f.agent?.description, onEvals && f.agent && evalsForAgent(evals, f.agent.name).length === 0 ? t("desktop.evals.no_evals_yet") : ""].filter(Boolean).join(" · ")}
                   </small>

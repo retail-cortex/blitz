@@ -14,12 +14,12 @@
  * limitations under the License.
  */
 
-import { useEffect, useState } from "react";
-import { mdiBookOpenPageVariantOutline, mdiCalendarClock, mdiRefresh, mdiFlaskOutline, mdiKeyVariant, mdiPuzzleOutline, mdiRobotOutline, mdiScaleBalance, mdiShieldLockOutline, mdiSitemapOutline } from "@mdi/js";
+import { useEffect, useMemo, useState } from "react";
+import { mdiViewDashboardOutline, mdiBookOpenPageVariantOutline, mdiCalendarClock, mdiRefresh, mdiFlaskOutline, mdiKeyVariant, mdiPuzzleOutline, mdiRobotOutline, mdiScaleBalance, mdiShieldLockOutline, mdiSitemapOutline } from "@mdi/js";
 import { AgentEditor } from "../AgentEditor";
 import { workspaces } from "../api";
 import { message } from "../errors";
-import type { ItemIntent } from "../intent";
+import { intent as newIntent, type ItemIntent } from "../intent";
 import { reloadSummary } from "../reload";
 import { AgentScope } from "../gen/blitz/v1/workspace_pb";
 import { t } from "../i18n";
@@ -32,13 +32,17 @@ import { RulesPane } from "./RulesPane";
 import { SkillsPane } from "./SkillsPane";
 import { WorkersPane } from "./WorkersPane";
 import { WorkflowsPane } from "./WorkflowsPane";
+import { GradesContext } from "./GradeBadge";
+import { studioKindOf, useCheck, useWorkspaceHealth, type HealthKind } from "./health";
+import { OverviewPane } from "./OverviewPane";
 
 /**
- * The kinds Studio holds (spec_studio_040), in the order an agent is
- * built: the agent and the evals that prove it, what it follows (skills,
- * rules, guardrails), what runs (workflows, workers), and secrets.
+ * The kinds Studio holds (spec_studio_040), after the Overview of them all
+ * (spec_health_044), in the order an agent is built: the agent and the
+ * evals that prove it, what it follows (skills, rules, guardrails), what
+ * runs (workflows, workers), and secrets.
  */
-export const studioKinds = ["agents", "evals", "skills", "rules", "guardrails", "workflows", "workers", "secrets"] as const;
+export const studioKinds = ["overview", "agents", "evals", "skills", "rules", "guardrails", "workflows", "workers", "secrets"] as const;
 /** A kind of item in Studio. */
 export type StudioKind = (typeof studioKinds)[number];
 
@@ -52,6 +56,7 @@ export interface StudioOpen {
 
 /** Each kind's icon. */
 export const studioIcons: Record<StudioKind, string> = {
+  overview: mdiViewDashboardOutline,
   agents: mdiRobotOutline,
   skills: mdiPuzzleOutline,
   workflows: mdiSitemapOutline,
@@ -91,6 +96,23 @@ export function StudioDrawer({ dir, initial, onClose, onWorkers }: { dir: string
   useEffect(() => {
     if (asked && initial.kind === "workflows") setKind("workflows");
   }, [asked, initial.kind]);
+  // The dashboard, followed while Studio is open: the Overview's, and
+  // each list's grade badges (spec_health_044).
+  const { health } = useWorkspaceHealth(dir);
+  const check = useCheck(dir);
+  const grades = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const it of health?.items ?? []) if (it.verdict?.grade) m.set(`${it.kind}/${it.name}`, it.verdict.grade);
+    return { grades: m, judging: check && !check.done ? check.item : undefined };
+  }, [health, check]);
+  // An item the Overview opened: its kind's pane shows it.
+  const [jump, setJump] = useState<{ kind: StudioKind; intent: ItemIntent }>();
+  const openItem = (k: HealthKind, name: string, path: string) => {
+    const to = studioKindOf[k] as StudioKind;
+    setJump({ kind: to, intent: newIntent("show", k === "agent" ? path : name) });
+    choose(to);
+  };
+  const intentFor = (k: StudioKind) => (jump?.kind === k ? jump.intent : initial.kind === k ? initial.intent : undefined);
   // Bumped to list the shown kind again (its pane starts over, unless it
   // holds unsaved changes).
   const [listed, setListed] = useState(0);
@@ -124,12 +146,15 @@ export function StudioDrawer({ dir, initial, onClose, onWorkers }: { dir: string
             </button>
           ))}
         </div>
+        <GradesContext.Provider value={grades}>
         <div className="settings-pane" key={listed}>
+          {kind === "overview" && <OverviewPane workspace={dir} health={health} onOpen={openItem} onClose={onClose} />}
           {kind === "agents" && (
             <AgentEditor
               workspace={dir}
               scope={AgentScope.WORKSPACE}
               slide
+              intent={intentFor("agents")}
               onDirty={setDirty}
               onEvals={(agent) => {
                 setEvalsFor(agent);
@@ -139,7 +164,7 @@ export function StudioDrawer({ dir, initial, onClose, onWorkers }: { dir: string
           )}
           {kind === "skills" && <SkillsPane workspace={dir} onDirty={setDirty} />}
           {kind === "rules" && <RulesPane workspace={dir} onDirty={setDirty} onGuardrails={() => choose("guardrails")} />}
-          {kind === "workers" && <WorkersPane dir={dir} intent={initial.kind === "workers" ? initial.intent : undefined} onLeave={onClose} onDirty={setDirty} />}
+          {kind === "workers" && <WorkersPane dir={dir} intent={intentFor("workers")} onLeave={onClose} onDirty={setDirty} />}
           {kind === "secrets" && (
             <div className="studio-secrets">
               <div className="row side-head">
@@ -152,8 +177,9 @@ export function StudioDrawer({ dir, initial, onClose, onWorkers }: { dir: string
           )}
           {kind === "guardrails" && <GuardrailsPane workspace={dir} onDirty={setDirty} onRules={() => choose("rules")} />}
           {kind === "evals" && <EvalsPane workspace={dir} onDirty={setDirty} forAgent={evalsFor} onHandled={() => setEvalsFor("")} />}
-          {kind === "workflows" && <WorkflowsPane workspace={dir} onDirty={setDirty} onCanvas={setCompact} intent={initial.kind === "workflows" ? initial.intent : undefined} run={initial.run} />}
+          {kind === "workflows" && <WorkflowsPane workspace={dir} onDirty={setDirty} onCanvas={setCompact} intent={intentFor("workflows")} run={initial.run} />}
         </div>
+        </GradesContext.Provider>
       </div>
     </Drawer>
   );

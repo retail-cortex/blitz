@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+import { GradeBadge } from "./GradeBadge";
 import { useCallback, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import {
@@ -206,7 +207,7 @@ export function RulesPane({ workspace, onDirty, onGuardrails }: { workspace: str
               <Icon path={r.problem ? mdiAlertCircleOutline : actionIcons[(r.action as RuleAction) || "warn"]} className={r.problem ? "error-text" : r.action === "block" ? "error-text" : undefined} />
               <span className="lines spacer">
                 <span className="ellipsis">
-                  <span className="rule-step">{i + 1}.</span> {r.name}
+                  <span className="rule-step">{i + 1}.</span> {r.name} <GradeBadge kind="rule" name={r.name} />
                 </span>
                 <small className={`ellipsis ${r.problem ? "error-text" : ""}`}>{r.problem || [t(`desktop.rules.action.${r.action || "warn"}`), r.agents.length ? t("desktop.rules.for", { agents: r.agents.join(", ") }) : "", r.description || r.text].filter(Boolean).join(" · ")}</small>
               </span>
@@ -254,7 +255,9 @@ export function RulesPane({ workspace, onDirty, onGuardrails }: { workspace: str
               <button key={r.path} className="list-item" title={r.path} onClick={() => show(r)}>
                 <Icon path={mdiFileDocumentOutline} />
                 <span className="lines">
-                  <span className="ellipsis">{r.name}</span>
+                  <span className="ellipsis">
+                    {r.name} <GradeBadge kind="rule" name={r.name} />
+                  </span>
                   <small className="ellipsis">{[r.paths.length ? t("desktop.rules.scoped", { paths: r.paths.join(", ") }) : t("desktop.rules.always"), r.editable ? "" : r.path].filter(Boolean).join(" · ")}</small>
                 </span>
               </button>

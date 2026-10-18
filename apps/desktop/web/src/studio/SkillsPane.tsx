@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+import { GradeBadge } from "./GradeBadge";
 import { useCallback, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import {
@@ -223,7 +224,9 @@ export function SkillsPane({ workspace, onDirty }: { workspace: string; onDirty?
               <button key={s.name} className="list-item" title={s.dir} onClick={() => show(s.name)}>
                 <Icon path={broken ? mdiAlertCircleOutline : s.needsReview ? mdiShieldAlertOutline : kindIcons[k]} className={broken ? "error-text" : s.needsReview ? "warn-text" : undefined} />
                 <span className="lines">
-                  <span className="ellipsis">{s.name}</span>
+                  <span className="ellipsis">
+                    {s.name} <GradeBadge kind="skill" name={s.name} />
+                  </span>
                   <small className="ellipsis">{[s.needsReview ? t("desktop.review.pending") : "", t(`desktop.skills.kind.${k}`), s.description].filter(Boolean).join(" · ")}</small>
                 </span>
               </button>

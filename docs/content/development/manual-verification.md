@@ -675,3 +675,18 @@ Use a test service with the API keys unset (`env -u GEMINI_API_KEY`) for everyth
   **Expected:** no approval card: the reviewer allows it (`auto-allow` in the audit log); the run panel's summary ends with *Auto*.
 - [ ] Settings › Workspaces › the workspace › Behaviour › Permission mode: *Ask*. Restart the service, reopen the workspace, run the workflow again.
   **Expected:** the workspace is still *Ask*; the workflow's settings say the workspace's mode applies instead; the run asks for the save; its summary says *Ask* and its events "Asked for Auto; the workspace's mode, Ask, applied". A workflow set to *Don't ask* refuses the save instead of asking.
+
+## 53. Workspace health: Studio's Overview (spec_health_044)
+
+The facts cost nothing; a check makes one model call per item judged (cents for a small workspace). Use a test service with keys unset for the facts, and keys set only for the check.
+
+- [ ] Open Studio from the menu bar.
+  **Expected:** it opens on **Overview**: the workspace's ring ("Not judged yet"), a ring per kind with counts, the 30-day runs chart, eval coverage, Needs attention (an agent file with bad YAML shows as "doesn't load"), and a card per kind. Opening a card shows its table; reopening Studio keeps it open.
+- [ ] **Re-check**.
+  **Expected:** a dialog says how many items and about what it costs; **Judge** shows "Judging 1 of n" with a bar and Stop; the kind rings and the workspace's ring fill in as verdicts arrive; a snackbar says what it judged and cost. Each item in Studio's lists shows its grade badge (a pulsing dot while it's judged).
+- [ ] Re-check again without changing anything; then edit an agent and Re-check.
+  **Expected:** "Every item is judged and unchanged"; then only that agent is judged, and its row shows a second point on its trend.
+- [ ] Open a kind's card, click an item, then **Improve** on a fix.
+  **Expected:** each rubric line's score (pips) and reason, the summary, who judged and when; Improve closes Studio with the request in the composer.
+- [ ] The gear: schedule *every 5 minutes*, limit *0.0001*.
+  **Expected:** saved for the workspace; within a few minutes "The scheduled check didn't run: judging n items would cost about $…, over the $0.00 limit". With limit 0 it runs by itself. A new workspace that was never checked by hand is never checked on a schedule.

@@ -7,9 +7,9 @@ weight: 44
 
 | | |
 |---|---|
-| Status | **Planned** for v0.7.1 (the owner's request, 2026-10-18). Phase A (facts and the dashboard) first, then phase B (the judge, its schedule and Studio's grades). |
-| Source | (planned) `pkg/engine/health/` (facts, rubrics, verdicts, history), `pkg/engine/healthjudge.go`, `apps/service/internal/server/health.go`, `proto/blitz/v1/workspace.proto`, `apps/desktop/web/src/studio/OverviewPane.tsx`, `apps/desktop/web/src/studio/health.ts`, `apps/desktop/web/src/ui/charts.tsx` |
-| Tests | (planned) `pkg/engine/health/*_test.go`, `pkg/engine/healthjudge_test.go`, `apps/service/internal/server/health_test.go`, `apps/desktop/web/src/studio/health.test.ts` |
+| Status | **Done** in v0.7.1 (the owner's request, 2026-10-18): HL-01–HL-17. |
+| Source | `pkg/engine/health/` (`facts.go`, `verdict.go`, `judge.go`), `pkg/engine/health.go`, `pkg/config/features.go` (`HealthConfig`), `apps/service/internal/server/health.go`, `apps/service/internal/server/scheduler.go`, `proto/blitz/v1/workspace.proto`, `apps/desktop/web/src/studio/OverviewPane.tsx`, `apps/desktop/web/src/studio/health.ts`, `apps/desktop/web/src/studio/GradeBadge.tsx`, `apps/desktop/web/src/studio/StudioDrawer.tsx`, `apps/desktop/web/src/ui/charts.tsx`, `apps/desktop/web/src/ui/chartMath.ts` |
+| Tests | `pkg/engine/health/health_test.go`, `pkg/engine/health_test.go`, `apps/service/internal/server/health_test.go`, `apps/desktop/web/src/studio/health.test.ts` |
 | Depends on | [spec_studio_040](spec_studio_040.md) (the kinds), [spec_evals_042](spec_evals_042.md) (pass rates), [spec_workflows_043](spec_workflows_043.md) (receipts, schedules), [spec_gates_041](spec_gates_041.md) (the judge, rules, guardrails), [spec_background_agents_032](spec_background_agents_032.md) (workers) |
 
 ## 1. Purpose
@@ -41,7 +41,7 @@ The dashboard answers both. **Facts** come from what the workspace already recor
 
 ### Phase B: the judge, its schedule and the grades
 
-- **HL-10** **The judge** (`healthjudge.go`): one item at a time, the judge model (`[health] model`, else the auto reviewer's, else the default) gets a **rubric** for the item's kind and its **evidence**, and answers JSON: per rubric line a score 1–5 and a reason, an overall score, and up to three fixes, each a concrete change.
+- **HL-10** **The judge** (`health.Prompt`, `health.Parse`, `Workspace.CheckHealth`): one item at a time, the judge model (`[health] model`, else the auto reviewer's, else the default) gets a **rubric** for the item's kind and its **evidence**, and answers JSON: per rubric line a score 1–5 and a reason, an overall score, and up to three fixes, each a concrete change.
   - **Rubrics** (versioned, in the engine):
     - *Agent:* its instructions are clear and complete; its tools fit what it's for (no more); its evals cover what it does; its runs succeed.
     - *Skill:* its description says when to use it (it's what triggers it); its instructions are followable; its scripts run and pass the policy; something uses it.
@@ -55,9 +55,9 @@ The dashboard answers both. **Facts** come from what the workspace already recor
 - **HL-12** **Scores:** an item's grade is its overall score (A ≥ 4.5, B ≥ 3.5, C ≥ 2.5, D below); a kind's and the workspace's are their items' average, weighted by use (runs, triggers), problems counting as D.
 - **HL-13** **Checking:** `CheckWorkspaceHealth` (every item, a kind or chosen items; `force` re-judges unchanged ones) streams progress item by item, with its cost so far; `EstimateHealthCheck` says how many items would be judged and an estimated cost first; `StopHealthCheck`. One check runs per workspace at a time. Its model calls are priced and counted as the workspace's.
   - The dashboard's **Re-check** (what changed) and **Re-check all** show the estimate, then progress on the score rings as verdicts arrive; each card has its own Re-check; an item's verdict has **Re-judge**.
-- **HL-14** **Schedule:** a check runs **nightly at 02:00 by default**, changeable (when, in words or cron, as worker schedules are) or off, in the Overview's settings. It re-judges only what changed. It's kept in the workspace's own user-side settings (`[health] schedule`), never the project's files (a project may not spend the user's money), and run by the service's scheduler while the service runs; a missed night runs at the next start. A scheduled check whose estimate exceeds `[health] max_cost_usd` (default $1) doesn't run and says why.
+- **HL-14** **Schedule:** a check runs **nightly at 02:00 by default**, changeable (when, in words or cron, as worker schedules are) or off, in the Overview's settings. It re-judges only what changed. It's kept in the workspace's own user-side settings (`[health] schedule`), never the project's files (a project may not spend the user's money; `health` is among the keys a project can't set), and run by the service's scheduler (its minute rescan, `Server.healthDue`) for the workspaces open in the service; a missed night runs at the next chance. **The schedule starts after the first check made by hand**, so a workspace is never judged, and charged for, unasked. Changing `[health]` from the Overview applies at once (`ReloadProviders` takes it). A scheduled check whose estimate exceeds `[health] max_cost_usd` (default $1) doesn't run and says why.
 - **HL-15** **Studio's grades:** each item in Studio's lists shows its grade as a small badge (A–D, coloured; a dot while it's being judged; nothing when not judged), and its editor shows the verdict: scores per rubric line with reasons, the fixes, when it was judged and by which model.
-- **HL-16** **Improve:** a fix opens the item in its editor with the change drafted (the draft assist's **Use** / **Discard**, spec_studio_040), applied only when used.
+- **HL-16** **Improve:** a fix becomes a request in the chat's composer ("Improve the workflow research-brief (…): <the fix>") and Studio closes: sent, the agent makes the change as any edit, reviewed as a diff with approvals, checkpoints and undo (*as built: one path for every kind instead of a draft dialog per editor*).
 - **HL-17** **Trends:** each grade and score ring shows its change since the last check, and the expanded cards a sparkline of the item's score over the kept history.
 
 ## 3. Order and checkpoints
@@ -70,4 +70,4 @@ The dashboard answers both. **Facts** come from what the workspace already recor
 
 ## 4. Known gaps
 
-Planned; nothing is built yet.
+Scheduled checks run only for workspaces open in the service. A grade's evidence counts what the workspace records: a skill used without `activate_skill` or `run_skill_script` (its instructions pasted into a prompt) isn't counted as used. Built-in guardrails without a file are judged on their description. The judge's estimate is from the prompts' size and a typical answer, not exact.
