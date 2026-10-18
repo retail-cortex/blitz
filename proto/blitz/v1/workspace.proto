@@ -267,7 +267,7 @@ service WorkspaceService {
   rpc ListHumanTasks(ListHumanTasksRequest) returns (ListHumanTasksResponse);
   // Streams the tasks: the list now, then again each time it changes (a
   // run pauses, a task is answered, a timer fires).
-  rpc WatchHumanTasks(ListHumanTasksRequest) returns (stream ListHumanTasksResponse);
+  rpc WatchHumanTasks(WatchHumanTasksRequest) returns (stream WatchHumanTasksResponse);
   // Answers a human task with A2UI's action message, checked against its
   // form by the service: its run resumes in the background
   // (TASK_NOT_FOUND; ANSWER_INVALID with the problems; NOT_ANSWERABLE for
@@ -2751,6 +2751,21 @@ message ListHumanTasksRequest {
 
 // Response message for WorkspaceService.ListHumanTasks.
 message ListHumanTasksResponse {
+  repeated HumanTask tasks = 1;
+  // How a waiting task reaches the user with no window open ([ui]
+  // task_alerts): notify, open or off.
+  string alerts = 2;
+}
+
+// Request message for WorkspaceService.WatchHumanTasks.
+message WatchHumanTasksRequest {
+  // Empty: every workspace's.
+  string workspace = 1;
+}
+
+// Response message for WorkspaceService.WatchHumanTasks: the tasks now
+// (each message the whole list).
+message WatchHumanTasksResponse {
   repeated HumanTask tasks = 1;
   // How a waiting task reaches the user with no window open ([ui]
   // task_alerts): notify, open or off.

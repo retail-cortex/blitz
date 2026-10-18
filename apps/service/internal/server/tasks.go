@@ -90,7 +90,7 @@ func (s *Server) humanTasks(workspace string) *pb.ListHumanTasksResponse {
 // watchTasksEvery is how often a task watch looks for changes.
 var watchTasksEvery = time.Second
 
-func (h workspaceService) WatchHumanTasks(ctx context.Context, r req[pb.ListHumanTasksRequest], stream *connect.ServerStream[pb.ListHumanTasksResponse]) error {
+func (h workspaceService) WatchHumanTasks(ctx context.Context, r req[pb.WatchHumanTasksRequest], stream *connect.ServerStream[pb.WatchHumanTasksResponse]) error {
 	last := ""
 	tick := time.NewTicker(watchTasksEvery)
 	defer tick.Stop()
@@ -103,7 +103,7 @@ func (h workspaceService) WatchHumanTasks(ctx context.Context, r req[pb.ListHuma
 		}
 		if sig != last {
 			last = sig
-			if err := stream.Send(cur); err != nil {
+			if err := stream.Send(&pb.WatchHumanTasksResponse{Tasks: cur.Tasks, Alerts: cur.Alerts}); err != nil {
 				return err
 			}
 		}

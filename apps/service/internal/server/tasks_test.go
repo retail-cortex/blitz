@@ -139,7 +139,7 @@ func TestWatchHumanTasks(t *testing.T) {
 	dir, _ := filepath.EvalSymlinks(t.TempDir())
 	writeFlowFile(t, dir, "ask", "nodes:\n  - id: ask\n    type: human_task\n    form: {components: [{id: root, component: Text, text: Hi}]}\n")
 
-	stream, err := c.workspaces.WatchHumanTasks(ctx, connect.NewRequest(&pb.ListHumanTasksRequest{}))
+	stream, err := c.workspaces.WatchHumanTasks(ctx, connect.NewRequest(&pb.WatchHumanTasksRequest{}))
 	require.NoError(t, err)
 	defer stream.Close()
 	require.True(t, stream.Receive(), "%v", stream.Err())

@@ -21,7 +21,7 @@
 import { useSyncExternalStore } from "react";
 import { actionMessage, type FormAction } from "./a2ui/model";
 import { workspaces } from "./api";
-import type { HumanTask, ListHumanTasksResponse } from "./gen/blitz/v1/workspace_pb";
+import type { HumanTask, ListHumanTasksResponse, WatchHumanTasksResponse } from "./gen/blitz/v1/workspace_pb";
 
 /** How often the tasks are asked for when the service can't stream them, or the stream breaks. */
 const pollMs = 10_000;
@@ -57,7 +57,7 @@ function set(next: Partial<TasksState>) {
 }
 
 /** Takes a list the service sent: the tasks, the setting, and which have arrived. */
-function take(r: ListHumanTasksResponse) {
+function take(r: ListHumanTasksResponse | WatchHumanTasksResponse) {
   const tasks = r.tasks.filter((t) => t.kind === "human_task");
   const fresh = state.loaded ? arrived(state.tasks, tasks) : [];
   set({ tasks, alerts: alertsOf(r.alerts), loaded: true, shown: state.shown && tasks.length > 0 });
