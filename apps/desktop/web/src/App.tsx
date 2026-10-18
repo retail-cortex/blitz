@@ -20,6 +20,7 @@ import { mdiAlertOutline, mdiFolderOpenOutline, mdiLightningBolt, mdiServerOff }
 import { config as configAPI, onServiceLost, workspaces as workspaceAPI } from "./api";
 import { appVersion, chooseWorkspace, type LicenseText, installService, onAppMenu, onDeepLink, onNotificationOpen, restartService, serviceStatus, type ServiceStatus, setAppMenu, toggleFullscreen } from "./desktop";
 import { checkService, type ServiceCheck, shownVersion } from "./serviceVersion";
+import { useStopGuard } from "./stopGuard";
 import { CommandPalette } from "./CommandPalette";
 import { SearchDialog } from "./SearchDialog";
 import { ErrorBoundary } from "./ErrorBoundary";
@@ -115,6 +116,7 @@ function StaleService({ state, check }: { state: ServiceCheck; check: () => Prom
   const [bin, setBin] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const { guard, dialog: stopping } = useStopGuard();
   useEffect(() => {
     serviceStatus().then((s) => setBin(s.service), () => setBin(""));
   }, []);
@@ -149,10 +151,11 @@ function StaleService({ state, check }: { state: ServiceCheck; check: () => Prom
         {error && <span className="error-text"> {error}</span>}
       </span>
       {bin ? (
-        <Button variant="tonal" small disabled={busy} onClick={restart}>
+        <Button variant="tonal" small disabled={busy} onClick={() => guard(() => void restart())}>
           {busy ? t("desktop.service.restarting") : t("desktop.service.restart")}
         </Button>
       ) : null}
+      {stopping}
     </div>
   );
 }
@@ -452,7 +455,9 @@ function ServiceDown({ status, onStarted, error, setError }: { status: ServiceSt
     setError("");
     setBusy(true);
     try {
-      await installService();
+      // Up after all (it was busy, or starting): left as it is, with the
+      // runs going in it; installing would stop it.
+      if (!(await serviceStatus()).running) await installService();
       onStarted();
     } catch (e) {
       setError(String(e));

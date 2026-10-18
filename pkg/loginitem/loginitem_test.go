@@ -73,6 +73,22 @@ func TestInstallStopUninstall(t *testing.T) {
 		assert.Equal(t, "systemctl --user daemon-reload; systemctl --user enable blitz.service; systemctl --user restart blitz.service", strings.Join(*ran, "; "), "install ran %q", *ran)
 	}
 
+	// The same item again doesn't stop the service the runs are going in.
+	*ran = nil
+	require.NoError(t, Install(bin))
+	switch goruntime.GOOS {
+	case "darwin":
+		assert.Len(t, *ran, 2, "reinstall ran %q", *ran)
+		assert.True(t, strings.HasPrefix((*ran)[0], "launchctl print gui/"), "reinstall ran %q", *ran)
+		assert.True(t, strings.HasPrefix((*ran)[1], "launchctl kickstart gui/"), "reinstall ran %q", *ran)
+	case "linux":
+		assert.Equal(t, []string{"systemctl --user start blitz.service"}, *ran)
+	}
+	// Another program is installed in its place, and the old service stops.
+	*ran = nil
+	require.NoError(t, Install("/opt/other/blitzd"))
+	assert.Contains(t, strings.Join(*ran, "; "), map[string]string{"darwin": "bootout", "linux": "restart"}[goruntime.GOOS])
+
 	*ran = nil
 	err = Stop()
 	assert.NoError(t, err, "stop: %v, ran %q", err, *ran)

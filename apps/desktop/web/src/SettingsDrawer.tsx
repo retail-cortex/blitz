@@ -49,6 +49,7 @@ import { config } from "./api";
 import { message } from "./errors";
 import { SandboxFixResult, sandboxDetail, useSandboxFix } from "./SandboxNotice";
 import { configChanged, showLicense } from "./events";
+import { useStopGuard } from "./stopGuard";
 import { checkService, settleTimeout, type ServiceCheck, shownVersion, waitForService, withTimeout } from "./serviceVersion";
 import { languages, t } from "./i18n";
 import { workspaceColor } from "./palette";
@@ -502,6 +503,7 @@ function OpenWorkspaceSettings({ dir, onSettingsFile }: { dir: string; onSetting
 }
 
 function Service() {
+  const { guard, dialog: stopping } = useStopGuard();
   const [status, setStatus] = useState<ServiceStatus | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -551,6 +553,7 @@ function Service() {
   if (!status) return <p className="muted">{error || t("desktop.checking")}</p>;
   return (
     <div className="stack" style={{ gap: 0 }}>
+      {stopping}
       <Setting title={t("desktop.service.status")} detail={t("desktop.service.status.detail")}>
         {waiting ? (
           <Chip className="static" icon={mdiProgressClock}>
@@ -561,10 +564,10 @@ function Service() {
             <Chip className="static" icon={mdiCheckCircleOutline} selected>
               {t("desktop.service.running")}
             </Chip>
-            <Button small variant="tonal" disabled={!status.service || busy} onClick={() => act(() => restartService(version?.info?.pid ?? 0), true)}>
+            <Button small variant="tonal" disabled={!status.service || busy} onClick={() => guard(() => void act(() => restartService(version?.info?.pid ?? 0), true))}>
               {t("desktop.service.restart_short")}
             </Button>
-            <Button small danger disabled={busy} onClick={() => act(() => stopService(version?.info?.pid ?? 0), false)}>
+            <Button small danger disabled={busy} onClick={() => guard(() => void act(() => stopService(version?.info?.pid ?? 0), false))}>
               {t("desktop.service.stop")}
             </Button>
           </div>
@@ -579,7 +582,7 @@ function Service() {
           variant="tonal"
           small
           disabled={!status.service || busy}
-          onClick={() => act(installService, true)}
+          onClick={() => guard(() => void act(installService, true))}
         >
           {status.installed ? t("desktop.service.reinstall") : t("desktop.service.install_short")}
         </Button>
