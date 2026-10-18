@@ -372,7 +372,7 @@ export function SkillsPane({ workspace, onDirty }: { workspace: string; onDirty?
                 <Icon path={mdiFileDocumentMultipleOutline} size="sm" /> {t("desktop.skills.save_first")}
               </p>
             )}
-            {tab !== "general" && saved && file && <SkillFiles key={tab} workspace={workspace} file={file} folder={tab} onFile={setFile} onDirty={setFilesDirty} onOpen={setFileOpen} />}
+            {tab !== "general" && saved && file && <SkillFiles key={tab} workspace={workspace} file={file} folder={tab} onFile={setFile} onDirty={setFilesDirty} onOpen={setFileOpen} onReview={() => setReviewing(true)} />}
             {!(tab !== "general" && fileOpen) && (
             <div className="row wrap agent-actions slide-actions">
               <span className="t-body-sm muted spacer ellipsis" title={where}>

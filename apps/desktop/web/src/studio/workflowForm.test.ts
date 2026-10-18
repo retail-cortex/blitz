@@ -18,7 +18,7 @@ import { create } from "@bufbuild/protobuf";
 import { describe, expect, it } from "vitest";
 import { WorkflowFileSchema } from "../gen/blitz/v1/workspace_pb";
 import { flowModes, looser } from "../options";
-import { addLink, emptyWorkflowForm, noAuth, linkId, linkText, setLink, formFromWorkflow, fromTemplate, newStep, removeStep, sameWorkflowForm, specFromForm, stepNeeds, templates } from "./workflowForm";
+import { schedulePermissions, addLink, emptyWorkflowForm, noAuth, linkId, linkText, setLink, formFromWorkflow, fromTemplate, newStep, removeStep, sameWorkflowForm, specFromForm, stepNeeds, templates } from "./workflowForm";
 
 describe("the workflow canvas", () => {
   it("reads a workflow and writes back each step's own settings", () => {
@@ -116,5 +116,19 @@ describe("the workflow canvas", () => {
       for (const l of f.links) expect(f.steps.map((s) => s.id)).toEqual(expect.arrayContaining([l.from, l.to]));
     }
     expect(fromTemplate("brief", (k) => k).steps.map((s) => s.type)).toEqual(["read_file", "browser", "accumulate", "agent", "save_file"]);
+  });
+
+  it("lets a scheduled run do what its steps do: save their files, call their hosts, use their tools", () => {
+    const steps = [
+      { ...newStep("save_file", [], 0, 0), path: "drafts/draft.md" },
+      { ...newStep("save_file", [], 0, 0), id: "s2", path: "reports/{{date}}.md" },
+      { ...newStep("api_call", [], 0, 0), url: "https://api.example.com/v1/x" },
+      { ...newStep("api_call", [], 0, 0), id: "bad", url: "not a url" },
+      { ...newStep("mcp_call", [], 0, 0), server: "github", tool: "create_issue" },
+      { ...newStep("browser", [], 0, 0) },
+      { ...newStep("agent", [], 0, 0) },
+    ];
+    expect(schedulePermissions(steps)).toEqual(["write:drafts/draft.md", "write:reports/", "web:api.example.com", "mcp:github:create_issue", "web:*"]);
+    expect(schedulePermissions([{ ...newStep("agent", [], 0, 0) }])).toEqual([]);
   });
 });

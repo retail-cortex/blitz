@@ -975,7 +975,7 @@ code.file-link:hover { text-decoration-color: currentColor; }
 .run-table { width: 100%; border-collapse: collapse; font-size: 12px; line-height: 16px; table-layout: fixed; }
 .run-table th { position: sticky; top: 0; z-index: 1; padding: 4px 8px; background: var(--md-surface-container-low); color: var(--md-on-surface-variant); font-weight: 500; text-align: left; white-space: nowrap; border-bottom: 1px solid var(--md-outline-variant); }
 .run-table th:first-child { width: auto; }
-.run-table th:nth-child(2) { width: 96px; }
+.run-table th:nth-child(2) { width: 112px; }
 .run-table th:nth-child(3) { width: 64px; }
 .run-table th:nth-child(4) { width: 22%; }
 .run-table th:nth-child(5), .run-table th:nth-child(6) { width: 86px; }

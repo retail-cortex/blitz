@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { mdiViewDashboardOutline, mdiBookOpenPageVariantOutline, mdiCalendarClock, mdiRefresh, mdiFlaskOutline, mdiKeyVariant, mdiPuzzleOutline, mdiRobotOutline, mdiScaleBalance, mdiShieldLockOutline, mdiSitemapOutline } from "@mdi/js";
 import { AgentEditor } from "../AgentEditor";
 import { workspaces } from "../api";
@@ -22,7 +22,7 @@ import { message } from "../errors";
 import { intent as newIntent, type ItemIntent } from "../intent";
 import { reloadSummary } from "../reload";
 import { AgentScope } from "../gen/blitz/v1/workspace_pb";
-import { t } from "../i18n";
+import { t, tn } from "../i18n";
 import { SecretsEditor } from "../SecretsEditor";
 import { Icon, IconButton, useSnackbar } from "../ui/controls";
 import { Drawer } from "../ui/Drawer";
@@ -106,14 +106,14 @@ export function StudioDrawer({ dir, initial, onClose, onWorkers }: { dir: string
     return { grades: m, judging: health?.checking ? health.progress?.item : undefined };
   }, [health]);
   // A check that ends while Studio is open says how it went.
-  const [seenHealth, setSeenHealth] = useState(health);
-  if (seenHealth !== health) {
-    if (checkEnded(seenHealth, health) && health) {
-      const errors = health.lastErrors.length;
-      snack(t(errors ? "desktop.health.checked_errors" : "desktop.health.checked", { judged: health.lastJudged, cost: cost(health.lastCostUsd), errors }), { error: errors > 0 });
-    }
-    setSeenHealth(health);
-  }
+  const seenHealth = useRef(health);
+  useEffect(() => {
+    const before = seenHealth.current;
+    seenHealth.current = health;
+    if (!checkEnded(before, health) || !health) return;
+    const errors = health.lastErrors.length;
+    snack(tn(errors ? "desktop.health.checked_errors" : "desktop.health.checked", health.lastJudged, { cost: cost(health.lastCostUsd), errors }), { error: errors > 0 });
+  }, [health, snack]);
   // An item the Overview opened: its kind's pane shows it.
   const [jump, setJump] = useState<{ kind: StudioKind; intent: ItemIntent }>();
   const openItem = (k: HealthKind, name: string, path: string) => {

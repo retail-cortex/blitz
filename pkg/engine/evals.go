@@ -216,8 +216,9 @@ func (w *Workspace) evalSkillNote(names []string) string {
 // a session of its own (deleted after), unattended: files aren't changed
 // and commands aren't run; the web and MCP tools only when the eval allows
 // them.
-func (w *Workspace) runEvalCase(ctx context.Context, e evals.Eval, c evals.Case, agent, note string, score scorer) api.EvalResult {
-	r := api.EvalResult{Case: c.ID, Name: c.Name, Agent: agent, Type: c.Type, Scope: c.Scope, Prompt: c.Prompt, Expected: c.Output}
+func (w *Workspace) runEvalCase(ctx context.Context, e evals.Eval, c evals.Case, agent, note string, score scorer) (r api.EvalResult) {
+	// r is named so the deferred duration reaches the caller.
+	r = api.EvalResult{Case: c.ID, Name: c.Name, Agent: agent, Type: c.Type, Scope: c.Scope, Prompt: c.Prompt, Expected: c.Output}
 	if c.Type == evals.Near {
 		r.Threshold = c.Threshold
 	}

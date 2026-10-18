@@ -134,7 +134,7 @@ export function OverviewPane({ workspace, health, onOpen, onClose, onStarted }: 
             <div className="stack overview-score-text">
               <span className="t-title-md">{health.overall ? t("desktop.health.score_is", { grade: grade(health.overall), score: health.overall.toFixed(1) }) : t("desktop.health.not_judged")}</span>
               {delta(health.overall, health.previousOverall) && <span className="t-body-sm muted">{t("desktop.health.since_last", { delta: delta(health.overall, health.previousOverall) })}</span>}
-              <span className="t-body-sm muted">{tn("desktop.health.needs_n", needs.filter((n) => n.level !== "info").length)}</span>
+              <span className="t-body-sm muted">{tn("desktop.health.needs_n", needs.length)}</span>
             </div>
             <div className="overview-kinds">
               {healthKinds.map((k) => {
@@ -283,7 +283,7 @@ export function OverviewPane({ workspace, health, onOpen, onClose, onStarted }: 
             }
           >
             <p>{t(asking.priced ? "desktop.health.estimate" : "desktop.health.estimate_unpriced", { items: asking.items, cost: cost(asking.cost) })}</p>
-            <p className="t-body-sm muted">{t("desktop.health.estimate_model", { model: health.model || t("desktop.health.default_model") })}</p>
+            <p className="t-body-sm muted">{t(asking.force ? "desktop.health.estimate_model_all" : "desktop.health.estimate_model", { model: health.model || t("desktop.health.default_model") })}</p>
           </Dialog>,
           document.body,
         )}

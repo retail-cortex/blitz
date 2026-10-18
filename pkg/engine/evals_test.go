@@ -65,6 +65,9 @@ func TestRunEval(t *testing.T) {
 	require.Len(t, run.Results, 3)
 	assert.Equal(t, api.EvalPassed, run.Status, "only a warning: %+v", run.Results)
 	sum, capital, write := run.Results[0], run.Results[1], run.Results[2]
+	for _, r := range run.Results {
+		assert.Positive(t, r.Duration, "case %s took no time", r.Case)
+	}
 	assert.Equal(t, api.EvalPass, sum.Status)
 	assert.Equal(t, float64(1), sum.Score)
 	assert.Equal(t, w.engine.ActiveAgent(), sum.Agent)

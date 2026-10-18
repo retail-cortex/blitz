@@ -176,7 +176,7 @@ func TestGradesAndScores(t *testing.T) {
 
 func TestDue(t *testing.T) {
 	it := Item{Kind: KindAgent, Name: "a", Hash: "h1"}
-	cur := map[string]Verdict{"agent/a": {Kind: KindAgent, Name: "a", Hash: "h1", Rubric: RubricVersion, Model: "m"}}
+	cur := map[string]Verdict{"agent/a": {Kind: KindAgent, Name: "a", Hash: "h1", Rubric: RubricVersion, Model: "m-001", Ref: "m"}}
 	tests := []struct {
 		name   string
 		it     Item

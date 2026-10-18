@@ -42,7 +42,7 @@ type Draft = { name: string; schedule: string; input: string };
  * and removed here. What a worker may do and its limits are in Studio ›
  * Workers.
  */
-export function WorkflowSchedule({ workspace, workflow, disabled }: { workspace: string; workflow: string; disabled: boolean }) {
+export function WorkflowSchedule({ workspace, workflow, disabled, permissions = [] }: { workspace: string; workflow: string; disabled: boolean; permissions?: string[] }) {
   const snack = useSnackbar();
   const [all, setAll] = useState<Worker[]>([]);
   const [draft, setDraft] = useState<Draft | null>(null);
@@ -75,7 +75,7 @@ export function WorkflowSchedule({ workspace, workflow, disabled }: { workspace:
       if (!draft) return;
       setProblems([]);
       if (!draft.name) {
-        const r = await workers.createWorker({ workspace, name: scheduleName(workflow, all.map((w) => w.name)), description: t("desktop.flows.schedule.description", { name: workflow }), schedule: draft.schedule.trim(), workflow, prompt: draft.input });
+        const r = await workers.createWorker({ workspace, name: scheduleName(workflow, all.map((w) => w.name)), description: t("desktop.flows.schedule.description", { name: workflow }), schedule: draft.schedule.trim(), workflow, prompt: draft.input, permissions });
         if (!r.worker) return setProblems(r.problems);
         await workers.enableWorker({ workspace, name: r.worker.name, hash: r.worker.hash });
         snack(t("desktop.flows.schedule.added", { when: r.worker.schedule }));
@@ -102,6 +102,7 @@ export function WorkflowSchedule({ workspace, workflow, disabled }: { workspace:
     <div className="stack flow-schedule" style={{ gap: 6 }}>
       <span className="t-label">{t("desktop.flows.schedule.title")}</span>
       <span className="t-body-sm muted">{t(disabled ? "desktop.flows.schedule.save_first" : "desktop.flows.schedule.hint")}</span>
+      {!disabled && <span className="t-body-sm muted">{permissions.length ? t("desktop.flows.schedule.may", { what: permissions.join(", ") }) : t("desktop.flows.schedule.may_read")}</span>}
       {mine.map((w) => (
         <div key={w.name} className="row flow-schedule-row" style={{ gap: 6 }}>
           <Icon path={mdiCalendarClock} className={w.state === WorkerState.INVALID ? "error-text" : undefined} />

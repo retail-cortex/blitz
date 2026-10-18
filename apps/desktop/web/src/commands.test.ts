@@ -44,6 +44,7 @@ describe("commands", () => {
     const all = allCommands(custom);
     expect(matchCommands("/co", all).map((c) => c.name)).toEqual(["compact", "context", "copy", "cost", "config"]);
     expect(matchCommands("/snap", all).map((c) => c.name)).toEqual(["session"]); // by its description
+    expect(matchCommands("/mode", allCommands([])).map((c) => c.name)[0]).toBe("mode"); // typed in full, ahead of /model
     expect(matchCommands("/migr", all).map((c) => c.name)).toEqual(["db:migrate"]);
     expect(matchCommands("/cost now", all)).toEqual([]); // past the name
     expect(matchCommands("hello", all)).toEqual([]);

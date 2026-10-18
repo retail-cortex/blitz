@@ -97,13 +97,26 @@ export function latestTurn(entries: Entry[]): number {
   return 0;
 }
 
+/**
+ * A saved prompt's text and the images sent with it: the transcript notes
+ * them by name on a last line ("[images: a.png, b.jpg]", AttachmentNote),
+ * shown as named chips rather than as text.
+ */
+export function splitAttachments(text: string): { text: string; images?: { url: string; name: string }[] } {
+  const m = /\n?\[images: ([^\]\n]+)\]\s*$/.exec(text);
+  if (!m) return { text };
+  return { text: text.slice(0, m.index).trimEnd(), images: m[1].split(", ").filter(Boolean).map((name) => ({ url: "", name })) };
+}
+
 /** The entries for a saved session's messages. */
 export function fromMessages(messages: Message[]): Entry[] {
   return messages.map((m, i): Entry => {
     if (m.kind === "task") return { kind: "notice", text: m.text, tone: "info" }; // a background task that ended
     if (m.role !== "user") return { kind: "model", text: m.text, author: "", open: false };
     const sub = subKinds[m.kind];
-    return sub ? { kind: "user", text: m.text, sub } : { kind: "user", text: m.text, index: i };
+    if (sub) return { kind: "user", text: m.text, sub };
+    const { text, images } = splitAttachments(m.text);
+    return images ? { kind: "user", text, index: i, images } : { kind: "user", text, index: i };
   });
 }
 

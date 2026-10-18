@@ -76,7 +76,7 @@ import { WorkflowSchedule } from "./WorkflowSchedule";
 import { t, tn } from "../i18n";
 import { SuggestInput, SuggestTextarea } from "../SecretSuggest";
 import { Button, Dialog, Field, Icon, IconButton, Menu, MultiSelect, Segmented, useSnackbar } from "../ui/controls";
-import { addLink, agentTypes, comingSoon, emptyWorkflowForm, formFromWorkflow, fromTemplate, gatewayTypes, linkId, pauseTypes, linkText, newStep, removeStep, sameWorkflowForm, setLink, specFromForm, methods, stepGroups, stepNeeds, templates, type AuthForm, type FieldForm, type PairForm, type LinkKind, type StepForm, type StepType, type Template, type WorkflowForm } from "./workflowForm";
+import { schedulePermissions, addLink, agentTypes, comingSoon, emptyWorkflowForm, formFromWorkflow, fromTemplate, gatewayTypes, linkId, pauseTypes, linkText, newStep, removeStep, sameWorkflowForm, setLink, specFromForm, methods, stepGroups, stepNeeds, templates, type AuthForm, type FieldForm, type PairForm, type LinkKind, type StepForm, type StepType, type Template, type WorkflowForm } from "./workflowForm";
 
 /** Each step type's icon. */
 const typeIcons: Record<StepType, string> = {
@@ -1051,7 +1051,7 @@ export function WorkflowsPane({
                     </Field>
                     <Field label={t("desktop.rules.description")}>{(id) => <input id={id} className="input" value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} />}</Field>
                     <FlowModeField value={form.mode} workspaceMode={workspaceMode} onChange={(mode) => setForm((f) => ({ ...f, mode }))} />
-                    <WorkflowSchedule workspace={workspace} workflow={file?.name ?? ""} disabled={!file || dirty} />
+                    <WorkflowSchedule workspace={workspace} workflow={file?.name ?? ""} disabled={!file || dirty} permissions={schedulePermissions(form.steps)} />
                     <span className="t-body-sm muted">{t("desktop.flows.canvas_hint")}</span>
                   </div>
                 )}

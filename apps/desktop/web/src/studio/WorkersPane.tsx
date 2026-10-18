@@ -180,7 +180,7 @@ export function WorkersPane({
         )}
         {list?.length === 0 && (
           <div className="stack" style={{ gap: 12 }}>
-            <p className="muted t-body-sm">{t("desktop.workers.none", { path: `${folder}/<name>/WORKER.md` })}</p>
+            <p className="muted t-body-sm">{t(global ? "desktop.workers.none_global" : "desktop.workers.none", { path: `${folder}/<name>/WORKER.md` })}</p>
             <span>
               <Button variant="tonal" icon={mdiCalendarPlus} onClick={() => setOpen({ mode: "new", name: "" })}>
                 {t("desktop.newworker.title")}

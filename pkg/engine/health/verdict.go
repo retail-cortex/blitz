@@ -32,11 +32,14 @@ const Keep = 90 * 24 * time.Hour
 // Verdict is the judge's on one item as it was (its hash), under one
 // rubric version and model.
 type Verdict struct {
-	Kind   string    `json:"kind"`
-	Name   string    `json:"name"`
-	Hash   string    `json:"hash"`
-	Rubric int       `json:"rubric"`
+	Kind   string `json:"kind"`
+	Name   string `json:"name"`
+	Hash   string `json:"hash"`
+	Rubric int    `json:"rubric"`
+	// Model is the model that answered; Ref the one set to judge ("" the
+	// default), which a check compares.
 	Model  string    `json:"model"`
+	Ref    string    `json:"ref,omitempty"`
 	At     time.Time `json:"at"`
 	Scores []Score   `json:"scores"`
 	// Overall is 1–5.
@@ -109,13 +112,13 @@ func Scores(items []Item, latest map[string]Verdict) (overall float64, byKind ma
 }
 
 // Due reports whether an item needs judging: it loads, and has no verdict
-// for its content under this rubric version and model (or force).
+// for its content under this rubric version and model setting (or force).
 func Due(it Item, latest map[string]Verdict, model string, force bool) bool {
 	if it.Problem != "" {
 		return false
 	}
 	v, ok := latest[it.Key()]
-	return force || !ok || v.Hash != it.Hash || v.Rubric != RubricVersion || v.Model != model
+	return force || !ok || v.Hash != it.Hash || v.Rubric != RubricVersion || v.Ref != model
 }
 
 // Store keeps a workspace's verdicts and its checks' state, in a folder of

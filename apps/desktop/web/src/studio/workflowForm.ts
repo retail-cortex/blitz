@@ -435,3 +435,28 @@ function authSpec(a: AuthForm) {
       return { ...blank, type: a.type, tokenUrl: a.tokenUrl.trim(), clientId: a.clientId, clientSecret: a.clientSecret, scopes: a.scopes.split(/\s+/).filter(Boolean), audience: a.audience.trim() };
   }
 }
+
+/**
+ * What a schedule's worker may do without asking, from the workflow's own
+ * steps (WF-20): write the files its save steps save, reach the hosts its
+ * service calls call, use the MCP tools its MCP steps use, and browse for
+ * its browser steps. A scheduled run asks nobody, so without these a step
+ * that writes or reaches out would be refused every time.
+ */
+export function schedulePermissions(steps: Pick<StepForm, "type" | "path" | "url" | "server" | "tool">[]): string[] {
+  const out = new Set<string>();
+  for (const s of steps) {
+    if (s.type === "save_file" && s.path.trim() && !s.path.includes("{{")) out.add(`write:${s.path.trim()}`);
+    if (s.type === "save_file" && s.path.includes("{{")) out.add(`write:${s.path.slice(0, s.path.indexOf("{{")).replace(/[^/]*$/, "")}`);
+    if ((s.type === "api_call" || s.type === "a2a_call") && s.url.trim()) {
+      try {
+        out.add(`web:${new URL(s.url.trim()).hostname}`);
+      } catch {
+        // a URL still being written: nothing to allow yet
+      }
+    }
+    if (s.type === "mcp_call" && s.server && s.tool.trim()) out.add(`mcp:${s.server}:${s.tool.trim()}`);
+    if (s.type === "browser") out.add("web:*");
+  }
+  return [...out].filter((p) => p !== "write:");
+}

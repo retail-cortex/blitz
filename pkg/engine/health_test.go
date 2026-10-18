@@ -85,6 +85,7 @@ func TestHealthCheck(t *testing.T) {
 	v := r.Verdicts["agent/writer"]
 	assert.Equal(t, 4.6, v.Overall)
 	assert.Equal(t, "gemini/judge", v.Model)
+	assert.Equal(t, "gemini/judge", v.Ref)
 	assert.Equal(t, []string{"Say when it's done."}, v.Fixes)
 	assert.InDelta(t, 4.6, r.ByKind[health.KindAgent]*0+v.Overall, 1e-9)
 	assert.Greater(t, r.Overall, 0.0)

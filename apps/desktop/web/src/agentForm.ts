@@ -43,6 +43,14 @@ export interface AgentForm {
   prompt: string;
 }
 
+/**
+ * The tools a new agent starts with: reading, searching and changing the
+ * workspace's files, the web, asking the user, and skills. Commands
+ * (run_shell_command) and the rest are added on purpose. An agent's tools
+ * are exactly its list: with none it can only reply.
+ */
+export const starterTools = ["read_file", "list_files", "glob", "grep", "search_workspace", "create_file", "edit", "replace_in_file", "web_fetch", "web_search", "ask_user_question", "list_or_search_skills", "activate_skill"];
+
 /** A blank form. */
 export const emptyAgentForm: AgentForm = {
   name: "",
@@ -62,6 +70,9 @@ export const emptyAgentForm: AgentForm = {
   thinkingBudget: "",
   prompt: "",
 };
+
+/** A new agent's form: blank, with the starter tools. */
+export const newAgentForm: AgentForm = { ...emptyAgentForm, tools: starterTools };
 
 /** A field the form can find wrong. */
 export type AgentField = "name" | "description" | "defaultModel" | "maxTurns" | "temperature" | "topP" | "maxTokens" | "thinkingBudget";

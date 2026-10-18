@@ -23,7 +23,7 @@ import { message } from "./errors";
 import { t, tn } from "./i18n";
 import { ModelInput, useModelCatalog } from "./ModelInput";
 import { AgentScope, type AgentFile, type EvalFile } from "./gen/blitz/v1/workspace_pb";
-import { addTools, advancedCount, agentFromForm, agentPath, deleteTarget, emptyAgentForm, fileName, formFromAgent, invalidFields, sameForm, toolChoices, validAgentName, type AgentField, type AgentForm } from "./agentForm";
+import { addTools, advancedCount, agentFromForm, agentPath, deleteTarget, emptyAgentForm, newAgentForm, fileName, formFromAgent, invalidFields, sameForm, toolChoices, validAgentName, type AgentField, type AgentForm } from "./agentForm";
 import { agencies, efforts, modes } from "./options";
 import { SuggestTextarea } from "./SecretSuggest";
 import { DraftButton } from "./studio/Draft";
@@ -164,8 +164,8 @@ export function AgentEditor({
   const startNew = () =>
     leave(() => {
       setOpen({ path: "" });
-      setForm(emptyAgentForm);
-      setBase(emptyAgentForm);
+      setForm(newAgentForm);
+      setBase(newAgentForm);
       setNamed(false);
       setProblems([]);
     });
@@ -502,6 +502,11 @@ export function AgentEditor({
               </div>
               <ToolPicker offered={tools} chosen={form.tools} onChange={(v) => set("tools", v)} />
             </Advanced>
+            {form.tools.length === 0 && (
+              <div className="card warn row small-card" role="note">
+                <Icon path={mdiAlertCircleOutline} size="sm" /> {t("desktop.agents.no_tools")}
+              </div>
+            )}
             {problems.length > 0 && (
               <div className="card error stack" role="alert" style={{ gap: 4 }}>
                 {problems.map((p) => (

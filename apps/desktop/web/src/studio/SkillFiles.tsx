@@ -43,6 +43,7 @@ import {
   mdiPlay,
   mdiUndoVariant,
   mdiUpload,
+  mdiShieldAlertOutline,
 } from "@mdi/js";
 import { workspaces } from "../api";
 import { message } from "../errors";
@@ -87,7 +88,7 @@ interface RunResult {
  * unsaved edits; onOpen whether a file is open (the skill's buttons step
  * aside for the file's).
  */
-export function SkillFiles({ workspace, file, folder, onFile, onDirty, onOpen }: { workspace: string; file: SkillFile; folder: "references" | "scripts"; onFile: (f: SkillFile) => void; onDirty: (dirty: boolean) => void; onOpen: (open: boolean) => void }) {
+export function SkillFiles({ workspace, file, folder, onFile, onDirty, onOpen, onReview }: { workspace: string; file: SkillFile; folder: "references" | "scripts"; onFile: (f: SkillFile) => void; onDirty: (dirty: boolean) => void; onOpen: (open: boolean) => void; onReview?: () => void }) {
   const snack = useSnackbar();
   const skill = file.skill!;
   const name = skill.name;
@@ -343,11 +344,18 @@ export function SkillFiles({ workspace, file, folder, onFile, onDirty, onOpen }:
               <div className="stack" style={{ gap: 8 }}>
                 <div className="row" style={{ gap: 8 }}>
                   <input className="input mono spacer" autoFocus value={args} placeholder={t("desktop.skills.args")} aria-label={t("desktop.skills.args")} onChange={(e) => setArgs(e.target.value)} onKeyDown={(e) => e.key === "Enter" && void testRun()} />
-                  <Button variant="filled" icon={running ? mdiLoading : mdiPlay} iconSpin={running} disabled={running || !script.allowed} onClick={() => void testRun()}>
-                    {running ? t("desktop.skills.running") : t("desktop.skills.run")}
-                  </Button>
+                  {skill.needsReview && onReview ? (
+                    // Not trusted yet, a script runs for nobody: say so, and offer the review.
+                    <Button variant="filled" icon={mdiShieldAlertOutline} onClick={onReview}>
+                      {t("desktop.review.open")}
+                    </Button>
+                  ) : (
+                    <Button variant="filled" icon={running ? mdiLoading : mdiPlay} iconSpin={running} disabled={running || !script.allowed} onClick={() => void testRun()}>
+                      {running ? t("desktop.skills.running") : t("desktop.skills.run")}
+                    </Button>
+                  )}
                 </div>
-                <span className="t-body-sm muted">{t("desktop.skills.test_run_hint")}</span>
+                <span className="t-body-sm muted">{t(skill.needsReview && onReview ? "desktop.skills.test_run_review" : "desktop.skills.test_run_hint")}</span>
                 {run && (
                   <div className="stack" style={{ gap: 4 }}>
                     <span className={`t-body-sm ${run.error || run.exitCode !== 0 ? "error-text" : ""}`}>{run.error || (run.timedOut ? t("desktop.skills.timed_out") : t("desktop.skills.exit", { code: run.exitCode }))}</span>

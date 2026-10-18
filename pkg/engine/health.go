@@ -268,7 +268,8 @@ func (w *Workspace) CheckHealth(ctx context.Context, c HealthCheck, progress fun
 				failed = append(failed, it.Key()+": "+p.Error)
 			}
 		} else {
-			v.Model, v.At, v.CostUSD = ref, time.Now(), cost
+			// The model that answered, by name, when none is set.
+			v.Model, v.Ref, v.At, v.CostUSD = cmp.Or(ref, served), ref, time.Now(), cost
 			if serr := store.Add(v); serr != nil {
 				p.Error = serr.Error()
 			} else {
