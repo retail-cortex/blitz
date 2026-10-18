@@ -104,6 +104,7 @@ type AppMethods = {
   DownloadUpdate(): Promise<UpdateStatus>;
   ApplyUpdate(): Promise<void>;
   Quit(): Promise<void>;
+  OpenApp(): Promise<void>;
   PreviewOpen(id: string, url: string): Promise<string>;
   PreviewBounds(id: string, b: PreviewBounds): Promise<void>;
   PreviewVisible(id: string, visible: boolean): Promise<void>;
@@ -518,6 +519,18 @@ export function onDeepLink(f: (link: DeepLink) => void): () => void {
     .catch(() => {});
   return off;
 }
+
+/** Calls f when the tray says workflows' human tasks have arrived (the app's window is open). */
+export function onTasksOpen(f: () => void): () => void {
+  const on = windowEvents();
+  if (!on) return () => {};
+  return on("tasks:open", () => f());
+}
+
+/** From the tasks window: opens the app's own window (spec_electron_038 EL-110). */
+export const openApp = () => app().OpenApp();
+/** Whether this window can open the app's own (the Electron app's tasks window). */
+export const canOpenApp = () => windowHas("OpenApp");
 
 /** Calls f with the workspace a clicked notification is about. */
 export function onNotificationOpen(f: (dir: string) => void): () => void {

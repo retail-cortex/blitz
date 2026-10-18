@@ -171,8 +171,14 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// open takes a link's ticket, once, and lets the browser in.
+// open takes a link's ticket, once, and lets the browser in. A link with
+// tasks goes on to the page's tasks window (/?tasks): the desktop app's
+// small window for workflows' human tasks.
 func (s *Server) open(w http.ResponseWriter, r *http.Request) {
+	to := "/"
+	if r.URL.Query().Has("tasks") {
+		to = "/?tasks"
+	}
 	t := r.URL.Query().Get("t")
 	s.mu.Lock()
 	exp, ok := s.tickets[t]
@@ -180,7 +186,7 @@ func (s *Server) open(w http.ResponseWriter, r *http.Request) {
 	s.mu.Unlock()
 	if !ok || s.now().After(exp) {
 		if s.allowed(r) { // already in: a reload of the link
-			http.Redirect(w, r, "/", http.StatusSeeOther)
+			http.Redirect(w, r, to, http.StatusSeeOther)
 			return
 		}
 		http.Error(w, "This link has been used or has expired: open Blitz from its tray icon again.", http.StatusForbidden)
@@ -193,7 +199,7 @@ func (s *Server) open(w http.ResponseWriter, r *http.Request) {
 		HttpOnly: true,
 		SameSite: http.SameSiteStrictMode,
 	})
-	http.Redirect(w, r, "/", http.StatusSeeOther)
+	http.Redirect(w, r, to, http.StatusSeeOther)
 }
 
 // allowed reports whether the request carries the cookie.

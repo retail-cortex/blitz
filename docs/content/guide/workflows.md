@@ -32,6 +32,8 @@ A workflow runs as one turn in the chat. Each agent step is a turn of its own, s
 | Script | Runs a skill's script; the input is its last argument, its output the step's |
 | Read a file | A workspace file's text |
 | Save to a file | Writes its input to a workspace file, once you approve |
+| Ask a person | Waits until someone fills in its form; their answer is the output |
+| Wait | Waits for a time (`wait: 2h`) or until one (`until: "{{ steps.pull.data.due }}"`) |
 
 Email and data steps are shown on the canvas, and come later.
 
@@ -70,6 +72,14 @@ Branches that aren't taken are skipped, and so is everything only they lead to; 
 Steps pass on text and, when there is some, **data**: JSON an agent answered with, a `.json` file, an Extract step's fields. Later steps read it in their settings as `{{ steps.pull.data.order }}` (any CEL expression in `{{ }}` is filled in as the step starts), and conditions as `steps.pull.data.amount` (`steps["look-up"]` for an ID with a hyphen).
 
 Agent steps can name an agent (otherwise the active one), skills (given with the prompt), and **rules** their output must pass, beyond the rules every turn has: a failing block rule stops the workflow, a revise rule asks the agent once to fix its answer, a warn rule says so. Evals don't run inside a workflow: they check an agent when you make or change it ([Evals](evals.md)).
+
+## People and time
+
+An **Ask a person** step pauses the run until someone answers its form: approve or reject, a note, an amount, a choice. The form is [A2UI](https://a2ui.org) (text, fields, checkboxes, choices, sliders, dates and buttons, laid out in rows, columns, cards and tabs), drawn with the app's own controls; on the canvas, write it as JSON beside a live preview, or have **Draft** write it from a description. The button pressed is the answer's `action`, with the form's values beside it, so a gateway after it can go on with `output.data.action == "approve"`.
+
+A **Wait** step pauses the run for a time or until one. A paused run costs nothing while it waits: the service keeps it, picks a timer's run up when it's due, and an answered task's run goes on in the background, in the chat it started in. A workflow you change while a run waits won't resume that run.
+
+Waiting tasks show under the run on the canvas and, from any workspace, as a button in the status bar. How new ones reach you is **Settings › Appearance › Workflow tasks**: *Notify me* (the default), *Show the task at once*, or *Off*. With the app closed, the tray tells you: a dot on its icon, *1 workflow task waiting* in its menu, and a notification that opens a small window with only the task's form. A [worker](workers.md) can run a workflow on a schedule (its `workflow` field), so a nightly job can stop and ask before it goes on.
 
 ## Building one
 

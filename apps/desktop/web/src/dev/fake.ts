@@ -867,6 +867,37 @@ const fakeFlowProblem = (f: FakeFlow) => {
   return q ? `step ${q.id}: say what it's to do` : "";
 };
 const fakeFlowFile = (workspace: string, f: FakeFlow) => ({ ...f, path: `${workspace}/.agents/workflows/${f.name}.flow.yaml`, problem: fakeFlowProblem(f) });
+// Workflows' human tasks waiting: a refund to approve (?fake&notasks for none).
+const fakeTasks = new URLSearchParams(location.search).has("notasks")
+  ? []
+  : [
+      {
+        id: "run-7/approve",
+        run: "run-7",
+        workspace: "/Users/me/shop",
+        workflow: "refund-triage",
+        step: "approve",
+        title: "Approve the refund",
+        kind: "human_task",
+        message: "Order 4417 asks for a $240 refund: over the $100 limit.",
+        formJson: JSON.stringify({
+          components: [
+            { id: "root", component: "Column", children: ["amount", "note", "buttons"] },
+            { id: "amount", component: "TextField", label: "Refund ($)", value: { path: "/amount" }, variant: "number" },
+            { id: "note", component: "TextField", label: "Note for the customer", value: { path: "/note" }, variant: "longText" },
+            { id: "buttons", component: "Row", justify: "end", children: ["reject", "approve"] },
+            { id: "reject_label", component: "Text", text: "Reject" },
+            { id: "reject", component: "Button", child: "reject_label", action: { event: { name: "reject", context: { note: { path: "/note" } } } } },
+            { id: "approve_label", component: "Text", text: "Approve" },
+            { id: "approve", component: "Button", variant: "primary", child: "approve_label", action: { event: { name: "approve", context: { amount: { path: "/amount" }, note: { path: "/note" } } } } },
+          ],
+          data: { amount: 240, note: "" },
+        }),
+        created: now(),
+        sessionId: "session-flow-7",
+      },
+    ];
+let fakeAlerts = "notify";
 // Background runs of workflows: the run's ID → the workflow.
 const fakeFlowRuns = new Map<string, FakeFlow>();
 
@@ -1061,6 +1092,14 @@ export function installFake() {
         removeEnv: () => ({}),
         listSkills: ({ workspace, query }) => ({ skills: [...fakeOtherSkills, ...fakeProjectSkills.map((x) => fakeSkillInfo(workspace, x))].filter((x) => !query || x.name.includes(query)) }),
         getSkill: ({ name }) => ({ skill: { name, description: "Read and summarize PDF files", tools: [{ name: "read_file" }] } }),
+        // Workflows' human tasks, answered by their forms.
+        listHumanTasks: ({ workspace }) => ({ alerts: fakeAlerts, tasks: fakeTasks.filter((x) => !workspace || x.workspace === workspace) }),
+        answerHumanTask: ({ taskId }) => {
+          const i = fakeTasks.findIndex((x) => x.id === taskId);
+          if (i < 0) throw new ConnectError("no such task", Code.NotFound);
+          fakeTasks.splice(i, 1);
+          return {};
+        },
         // Studio › Workflows: listed, saved and deleted; runs are background runs.
         listWorkflows: ({ workspace }) => ({ dir: `${workspace}/.agents/workflows`, workflows: fakeFlows.map((f) => fakeFlowFile(workspace, f)) }),
         saveWorkflow: ({ workspace, previousName, workflow }) => {
@@ -1698,6 +1737,7 @@ export function installFake() {
           const c = scopeConfig(workspace);
           if (key === "llm.provider") c.provider = value;
           if (key === "blitz.default_model") c.model = value;
+          if (key === "ui.task_alerts") fakeAlerts = value;
           if (key === "audio.model" && workspace) state(workspace).settings.speechModel = value;
           if (key.startsWith("search.") && workspace) {
             const s = searchSettingsOf(workspace);

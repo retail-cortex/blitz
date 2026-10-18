@@ -106,6 +106,10 @@ func TestOpenLink(t *testing.T) {
 	res, _ = get(t, "GET", s.Origin()+"/open?t=nonsense", nil)
 	assert.Equal(t, http.StatusForbidden, res.StatusCode, "a made-up link")
 
+	res, _ = get(t, "GET", s.OpenURL()+"&tasks", nil)
+	require.Equal(t, http.StatusSeeOther, res.StatusCode)
+	assert.Equal(t, "/?tasks", res.Header.Get("Location"), "a link for the tasks window goes on to it")
+
 	now := time.Now()
 	s.now = func() time.Time { return now }
 	late := s.OpenURL()

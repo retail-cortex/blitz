@@ -42,11 +42,22 @@ func mustICO(p []byte) []byte {
 	return ico
 }
 
-// setIcon shows the service's state in the icon.
-func setIcon(running bool) {
+// setIcon shows the service's state in the icon, and a dot while
+// workflows' human tasks wait (waiting).
+func setIcon(running, waiting bool) {
+	p := stoppedPNG
 	if running {
-		systray.SetIcon(runningIcon)
-	} else {
-		systray.SetIcon(stoppedIcon)
+		p = runningPNG
 	}
+	if !waiting {
+		systray.SetIcon(map[bool][]byte{true: runningIcon, false: stoppedIcon}[running])
+		return
+	}
+	if d, err := tray.WithDot(p); err == nil {
+		if ico, err := tray.ICO(d); err == nil {
+			systray.SetIcon(ico)
+			return
+		}
+	}
+	systray.SetIcon(map[bool][]byte{true: runningIcon, false: stoppedIcon}[running])
 }

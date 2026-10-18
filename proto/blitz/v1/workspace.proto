@@ -2744,6 +2744,9 @@ message ListHumanTasksRequest {
 // Response message for WorkspaceService.ListHumanTasks.
 message ListHumanTasksResponse {
   repeated HumanTask tasks = 1;
+  // How a waiting task reaches the user with no window open ([ui]
+  // task_alerts): notify, open or off.
+  string alerts = 2;
 }
 
 // Request message for WorkspaceService.AnswerHumanTask.

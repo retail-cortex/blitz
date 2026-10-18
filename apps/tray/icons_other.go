@@ -21,6 +21,7 @@ import (
 	goruntime "runtime"
 
 	"fyne.io/systray"
+	"github.com/retail-cortex/blitz/apps/tray/internal/tray"
 )
 
 // The icons: on macOS a white bolt, filled while the service runs and
@@ -40,15 +41,27 @@ var (
 	stoppedColour []byte
 )
 
-// setIcon shows the service's state in the icon.
-func setIcon(running bool) {
+// setIcon shows the service's state in the icon, and a dot while
+// workflows' human tasks wait (waiting).
+func setIcon(running, waiting bool) {
 	template, colour := stoppedIcon, stoppedColour
 	if running {
 		template, colour = runningIcon, runningColour
+	}
+	if waiting {
+		template, colour = dotted(template), dotted(colour)
 	}
 	if goruntime.GOOS == "darwin" {
 		systray.SetTemplateIcon(template, template)
 		return
 	}
 	systray.SetIcon(colour)
+}
+
+// dotted is an icon with the waiting tasks' dot (the icon itself if that fails).
+func dotted(icon []byte) []byte {
+	if d, err := tray.WithDot(icon); err == nil {
+		return d
+	}
+	return icon
 }

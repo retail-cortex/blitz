@@ -21,7 +21,7 @@
 import type { WorkflowFile } from "../gen/blitz/v1/workspace_pb";
 
 /** A step's type, in the order the palette shows them. */
-export const stepTypes = ["agent", "refine", "summarize", "browser", "extract", "accumulate", "script", "read_file", "save_file", "mcp_call", "a2a_call", "api_call", "workflow", "exclusive", "inclusive", "parallel", "email", "data"] as const;
+export const stepTypes = ["agent", "refine", "summarize", "browser", "extract", "accumulate", "script", "read_file", "save_file", "mcp_call", "a2a_call", "api_call", "workflow", "human_task", "timer", "exclusive", "inclusive", "parallel", "email", "data"] as const;
 /** A step's type. */
 export type StepType = (typeof stepTypes)[number];
 /** The palette's groups, in order. */
@@ -29,6 +29,7 @@ export const stepGroups: { group: string; types: StepType[] }[] = [
   { group: "agents", types: ["agent", "refine", "summarize", "browser"] },
   { group: "data", types: ["extract", "accumulate", "script", "read_file", "save_file"] },
   { group: "calls", types: ["api_call", "mcp_call", "a2a_call", "workflow"] },
+  { group: "people", types: ["human_task", "timer"] },
   { group: "flow", types: ["exclusive", "inclusive", "parallel"] },
   { group: "soon", types: ["email", "data"] },
 ];
@@ -71,6 +72,9 @@ export interface StepForm {
   workflow: string;
   forEach: string;
   concurrency: string;
+  formJson: string;
+  wait: string;
+  until: string;
 }
 
 /** A header or a query parameter. */
@@ -185,6 +189,9 @@ export function formFromWorkflow(w: WorkflowFile): WorkflowForm {
           }
         : { ...noAuth },
       workflow: n.workflow,
+      formJson: n.formJson,
+      wait: n.wait,
+      until: n.until,
       forEach: n.forEach,
       concurrency: n.concurrency ? String(n.concurrency) : "",
     })),
@@ -228,6 +235,9 @@ export function specFromForm(f: WorkflowForm) {
         jsonBody: s.type === "api_call" && s.bodyKind === "json" ? s.body.trim() : "",
         auth: s.type === "api_call" && s.auth.type ? authSpec(s.auth) : undefined,
         workflow: s.type === "workflow" ? s.workflow : "",
+        formJson: s.type === "human_task" ? s.formJson.trim() : "",
+        wait: s.type === "timer" ? s.wait.trim() : "",
+        until: s.type === "timer" ? s.until.trim() : "",
         forEach: gatewayTypes.includes(s.type) ? "" : s.forEach.trim(),
         concurrency: gatewayTypes.includes(s.type) || !s.forEach.trim() ? 0 : Math.max(0, Math.floor(Number(s.concurrency)) || 0),
       };
@@ -279,6 +289,9 @@ export function newStep(type: StepType, steps: StepForm[], x: number, y: number)
     workflow: "",
     forEach: "",
     concurrency: "",
+    formJson: "",
+    wait: "",
+    until: "",
   };
 }
 
@@ -331,6 +344,8 @@ export function stepNeeds(s: StepForm): string {
   if (s.type === "mcp_call" && (!s.server || !s.tool.trim())) return "mcp";
   if ((s.type === "api_call" || s.type === "a2a_call") && !s.url.trim()) return "url";
   if (s.type === "workflow" && !s.workflow) return "workflow";
+  if (s.type === "human_task" && !s.formJson.trim()) return "form";
+  if (s.type === "timer" && !s.wait.trim() && !s.until.trim()) return "timer";
   return "";
 }
 

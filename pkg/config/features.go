@@ -43,6 +43,10 @@ type UIConfig struct {
 	// Notify is how the terminal tells you: both (bell and desktop
 	// notification), bell, desktop or off.
 	Notify string `toml:"notify"`
+	// TaskAlerts is how a workflow's human task reaches you when no app
+	// window is open: "notify" (a notification that opens the task's small
+	// window), "open" (the window opens at once) or "off".
+	TaskAlerts string `toml:"task_alerts"`
 	// StatusLine is the line shown above each prompt: "default" (model,
 	// mode, context, cost), a shell command that reads the session's state
 	// as JSON and prints the line, or "" for none.
@@ -599,6 +603,7 @@ func applyFeatureDefaults(c *Config) {
 		LocalesDir:    filepath.Join(dir, "locales"),
 		NotifyAfter:   30,
 		Notify:        "both",
+		TaskAlerts:    "notify",
 		Editor:        "emacs",
 		Keybindings:   filepath.Join(dir, "keybindings.toml"),
 	}

@@ -45,6 +45,8 @@ import {
 } from "@mdi/js";
 import { appVersion, canUpdate, checkUpdate, cliStatus, downloadUpdate, installCLI, isLinuxApp, installService, openURL, reinstallCLI, restartService, serviceStatus, setTray, stopService, type CLIStatus, type ServiceStatus, type UpdateStatus } from "./desktop";
 import { restart, shouldDownload, updateLine } from "./updates";
+import { config } from "./api";
+import { message } from "./errors";
 import { SandboxFixResult, sandboxDetail, useSandboxFix } from "./SandboxNotice";
 import { configChanged, showLicense } from "./events";
 import { checkService, settleTimeout, type ServiceCheck, shownVersion, waitForService, withTimeout } from "./serviceVersion";
@@ -62,6 +64,7 @@ import { McpSettings } from "./McpSettings";
 import { SecretsEditor } from "./SecretsEditor";
 import { SkillSettings } from "./SkillSettings";
 import { WorkersSettings } from "./WorkersSettings";
+import { refreshTasks, useTasks, type TaskAlerts } from "./humanTasks";
 import { useAdvanced, useApp } from "./state";
 import { sectionShown, shownGroups, type SectionId } from "./simpleMode";
 import { paletteOf, type ThemePref } from "./theme";
@@ -240,6 +243,35 @@ function Setting({ title, detail, children }: { title: string; detail?: string; 
 // The window's look and behaviour. Simple mode shows the switch for
 // advanced settings, theme, language and notifications; the rest have
 // sensible defaults and show with advanced settings.
+/**
+ * How workflows' human tasks reach the user ([ui] task_alerts, in the
+ * user's settings file, which the tray reads too): a notification, the
+ * tasks at once, or nothing.
+ */
+function TaskAlertsSetting() {
+  const { alerts, loaded } = useTasks();
+  const snack = useSnackbar();
+  const set = async (value: TaskAlerts) => {
+    try {
+      await config.setConfigValue({ workspace: "", key: "ui.task_alerts", value });
+      await refreshTasks();
+    } catch (e) {
+      snack(message(e), { error: true });
+    }
+  };
+  return (
+    <Setting title={t("desktop.settings.task_alerts")} detail={t("desktop.settings.task_alerts.detail")}>
+      <select className="select language-select" aria-label={t("desktop.settings.task_alerts")} value={alerts} disabled={!loaded} onChange={(e) => void set(e.target.value as TaskAlerts)}>
+        {(["notify", "open", "off"] as const).map((v) => (
+          <option key={v} value={v}>
+            {t(`desktop.settings.task_alerts.${v}`)}
+          </option>
+        ))}
+      </select>
+    </Setting>
+  );
+}
+
 function Appearance() {
   const { prefs, update, theme } = useApp();
   const palette = paletteOf(theme, prefs.light_theme, prefs.dark_theme);
@@ -296,6 +328,7 @@ function Appearance() {
       <Setting title={t("desktop.settings.notifications")} detail={t("desktop.settings.notifications.detail")}>
         <Switch label={t("desktop.settings.notifications")} checked={prefs.notifications === "on"} onChange={(on) => update((p) => ({ ...p, notifications: on ? "on" : "off" }))} />
       </Setting>
+      <TaskAlertsSetting />
       {/* The Markdown previews' styles, in a dialog of their own. */}
       <Setting title={t("desktop.settings.documents")} detail={t("desktop.settings.documents.detail")}>
         <Button variant="outlined" icon={mdiLanguageMarkdownOutline} onClick={() => setDocuments(true)}>

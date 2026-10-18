@@ -62,6 +62,7 @@ edges: [{from: ask, to: save}]
 	list, err := c.workspaces.ListHumanTasks(ctx, connect.NewRequest(&pb.ListHumanTasksRequest{}))
 	require.NoError(t, err)
 	require.Len(t, list.Msg.Tasks, 1)
+	assert.Equal(t, "notify", list.Msg.Alerts, "[ui] task_alerts' default")
 	task := list.Msg.Tasks[0]
 	assert.Equal(t, "Approve refund 42?", task.Message)
 	assert.Equal(t, "approve", task.Workflow)

@@ -25,7 +25,9 @@ import {
   mdiCloseCircleOutline,
   mdiCodeBraces,
   mdiContentSaveOutline,
+  mdiAccountCheckOutline,
   mdiAccountNetworkOutline,
+  mdiTimerSandComplete,
   mdiApi,
   mdiCircleOutline,
   mdiPowerPlugOutline,
@@ -51,11 +53,15 @@ import {
   mdiUndoVariant,
   mdiWeb,
 } from "@mdi/js";
+import { A2uiForm } from "../a2ui/A2uiForm";
+import { TaskCard } from "../a2ui/TaskCard";
+import { parseForm, starterForm } from "../a2ui/model";
 import { sessions, workspaces } from "../api";
+import { DraftButton } from "./Draft";
 import { ApprovalCard } from "../Conversation";
 import { message } from "../errors";
 import { Decision, type ApprovalRequest } from "../gen/blitz/v1/turn_pb";
-import type { SkillInfo, WorkflowFile } from "../gen/blitz/v1/workspace_pb";
+import type { HumanTask, SkillInfo, WorkflowFile } from "../gen/blitz/v1/workspace_pb";
 import { t, tn } from "../i18n";
 import { SuggestInput, SuggestTextarea } from "../SecretSuggest";
 import { Button, Chip, Dialog, Field, Icon, IconButton, Segmented, useSnackbar } from "../ui/controls";
@@ -81,12 +87,14 @@ const typeIcons: Record<StepType, string> = {
   mcp_call: mdiPowerPlugOutline,
   a2a_call: mdiAccountNetworkOutline,
   workflow: mdiSitemapOutline,
+  human_task: mdiAccountCheckOutline,
+  timer: mdiTimerSandComplete,
 };
 
 /** A step's state in a run. */
 type StepRun = { status: string; output: string; error: string };
 /** A run from the canvas: its background run, its steps, what it waits on. */
-type Live = { id: string; state: "running" | "done" | "failed" | "stopped"; steps: Record<string, StepRun>; approval: ApprovalRequest | null; error: string };
+type Live = { id: string; session: string; state: "running" | "waiting" | "done" | "failed" | "stopped"; steps: Record<string, StepRun>; approval: ApprovalRequest | null; task: HumanTask | null; error: string };
 
 type StepData = { step: StepForm; run?: StepRun };
 
@@ -120,6 +128,10 @@ function StepNode({ data, selected }: NodeProps<Node<StepData>>) {
             ? `${s.server} › ${s.tool}`
             : s.type === "workflow"
               ? `/${s.workflow}`
+              : s.type === "timer"
+                ? s.wait || s.until
+                : s.type === "human_task"
+                  ? t("desktop.flows.form_ready")
             : s.path || (s.type === "script" ? `${s.skill} › ${s.script}` : t(`desktop.flows.type.${s.type}`));
   return (
     <div className={`flow-node ${selected ? "selected" : ""} ${status ? `is-${status}` : ""} ${comingSoon.includes(s.type) ? "soon" : ""}`}>
@@ -189,7 +201,7 @@ export function WorkflowsPane({ workspace, onDirty }: { workspace: string; onDir
   const file = open ? list.find((w) => w.name === open) : undefined;
   const isNew = open === "";
   const dirty = open !== null && !sameWorkflowForm(form, base);
-  const running = live?.state === "running";
+  const running = live?.state === "running" || live?.state === "waiting";
   useEffect(() => onDirty?.(dirty || running), [dirty, running, onDirty]);
 
   const leave = (go: () => void) => (dirty ? setPending(() => go) : go());
@@ -214,6 +226,7 @@ export function WorkflowsPane({ workspace, onDirty }: { workspace: string; onDir
   const add = (type: StepType) => {
     const right = form.steps.reduce((m, s) => Math.max(m, s.x), -280);
     const s = newStep(type, form.steps, right + 280, 80);
+    if (type === "human_task") s.formJson = JSON.stringify(starterForm(), null, 2);
     setForm((f) => ({ ...f, steps: [...f.steps, s] }));
     setSelected(s.id);
   };
@@ -288,21 +301,37 @@ export function WorkflowsPane({ workspace, onDirty }: { workspace: string; onDir
   // Runs the workflow as saved, in the background, as /name input.
   const run = async (name: string) => {
     setAsking(false);
-    const ctl = new AbortController();
-    stop.current = ctl;
     try {
       const started = await sessions.startBackground({ workspace, turn: { text: `/${name} ${input}`.trim(), command: true } });
-      const id = started.run?.id ?? "";
-      setLive({ id, state: "running", steps: {}, approval: null, error: "" });
+      setLive({ id: started.run?.id ?? "", session: started.run?.sessionId ?? "", state: "running", steps: {}, approval: null, task: null, error: "" });
+      await watch(name, started.run?.id ?? "", started.run?.sessionId ?? "");
+    } catch (e) {
+      snack(message(e), { error: true });
+    }
+  };
+  // Follows a background run: each step's state, approvals, and a human
+  // task it stops at (answered beside the canvas, which resumes it).
+  const watch = async (name: string, id: string, session: string) => {
+    const ctl = new AbortController();
+    stop.current = ctl;
+    let waiting = false;
+    try {
       for await (const res of sessions.watchBackground({ id, follow: true }, { signal: ctl.signal })) {
         const k = res.event?.kind;
         if (!k) continue;
-        if (k.case === "flowStep") setLive((l) => l && { ...l, steps: { ...l.steps, [k.value.id]: { status: k.value.status, output: k.value.output, error: k.value.error } } });
-        else if (k.case === "approvalRequest") setLive((l) => l && { ...l, approval: k.value });
+        if (k.case === "flowStep") {
+          setLive((l) => l && { ...l, steps: { ...l.steps, [k.value.id]: { status: k.value.status, output: k.value.output, error: k.value.error } } });
+          if (k.value.status === "waiting") waiting = true;
+        } else if (k.case === "approvalRequest") setLive((l) => l && { ...l, approval: k.value });
         else if (k.case === "finished") {
           const err = k.value.error;
-          setLive((l) => l && { ...l, state: err ? "failed" : "done", approval: null, error: err ? err.message || err.reason : "" });
-          snack(err ? t("desktop.flows.run_failed", { name }) : t("desktop.flows.run_done", { name }), { error: !!err });
+          if (waiting && !err) {
+            const tasks = (await workspaces.listHumanTasks({ workspace })).tasks.filter((x) => x.sessionId === session && x.kind === "human_task");
+            setLive((l) => l && { ...l, state: "waiting", approval: null, task: tasks[0] ?? null });
+          } else {
+            setLive((l) => l && { ...l, state: err ? "failed" : "done", approval: null, error: err ? err.message || err.reason : "" });
+            snack(err ? t("desktop.flows.run_failed", { name }) : t("desktop.flows.run_done", { name }), { error: !!err });
+          }
         }
       }
     } catch (e) {
@@ -312,6 +341,16 @@ export function WorkflowsPane({ workspace, onDirty }: { workspace: string; onDir
       }
     } finally {
       stop.current = null;
+    }
+  };
+  // Answers the human task the run waits on: it resumes in the background.
+  const answer = async (task: HumanTask, values: Record<string, unknown>) => {
+    try {
+      const r = await workspaces.answerHumanTask({ workspace, taskId: task.id, answerJson: JSON.stringify(values) });
+      setLive((l) => l && { ...l, id: r.run?.id ?? l.id, state: "running", task: null });
+      await watch(task.workflow, r.run?.id ?? "", task.sessionId);
+    } catch (e) {
+      snack(message(e), { error: true });
     }
   };
   const halt = async () => {
@@ -461,6 +500,7 @@ export function WorkflowsPane({ workspace, onDirty }: { workspace: string; onDir
                   </div>
                 )}
                 {live?.approval && <ApprovalCard req={live.approval} onDecide={(d) => void decide(d)} />}
+                {live?.task && <TaskCard task={live.task} onAnswer={(v) => void answer(live.task!, v)} />}
                 {step ? (
                   <div className="stack flow-step-form" style={{ gap: 10 }}>
                     <div className="row" style={{ gap: 6 }}>
@@ -609,6 +649,17 @@ export function WorkflowsPane({ workspace, onDirty }: { workspace: string; onDir
                           </select>
                         )}
                       </Field>
+                    )}
+                    {step.type === "human_task" && <HumanTaskFields step={step} workspace={workspace} onChange={(patch) => setStep(step.id, patch)} />}
+                    {step.type === "timer" && (
+                      <>
+                        <Field label={t("desktop.flows.wait")} supporting={t("desktop.flows.wait_hint")}>
+                          {(id) => <input id={id} className="input mono" value={step.wait} placeholder="2h" onChange={(e) => setStep(step.id, { wait: e.target.value, until: "" })} />}
+                        </Field>
+                        <Field label={t("desktop.flows.until")} supporting={t("desktop.flows.until_hint")}>
+                          {(id) => <input id={id} className="input mono" value={step.until} placeholder="2026-10-20T09:00:00Z" onChange={(e) => setStep(step.id, { until: e.target.value, wait: "" })} />}
+                        </Field>
+                      </>
                     )}
                     {step.type === "extract" && (
                       <div className="stack" style={{ gap: 6 }}>
@@ -953,5 +1004,29 @@ function AuthFields({ auth, workspace, onChange }: { auth: AuthForm; workspace: 
         </>
       )}
     </div>
+  );
+}
+
+/** A human task's settings: the message above its form, and the form (A2UI JSON) beside a preview of it. */
+function HumanTaskFields({ step, workspace, onChange }: { step: StepForm; workspace: string; onChange: (patch: Partial<StepForm>) => void }) {
+  const parsed = parseForm(step.formJson);
+  return (
+    <>
+      <Field label={t("desktop.flows.task_message")} supporting={t("desktop.flows.task_message_hint")}>
+        {(id) => <SuggestTextarea id={id} className="input" rows={3} value={step.instructions} onValue={(v) => onChange({ instructions: v })} workspace={workspace} />}
+      </Field>
+      <div className="row field-tools">
+        <span className="t-label spacer">{t("desktop.flows.form")}</span>
+        <DraftButton workspace={workspace} kind="form" name={step.title || step.id} description={step.instructions} current={step.formJson} onUse={(v) => onChange({ formJson: v })} />
+      </div>
+      <textarea className="input mono flow-form-json" rows={10} aria-label={t("desktop.flows.form")} value={step.formJson} spellCheck={false} onChange={(e) => onChange({ formJson: e.target.value })} />
+      <span className={`t-body-sm ${parsed.problem ? "error-text" : "muted"}`}>{parsed.problem ? t("desktop.flows.form_problem", { problem: parsed.problem }) : t("desktop.flows.form_hint")}</span>
+      {parsed.form && (
+        <div className="card outlined flow-form-preview">
+          <span className="t-label">{t("desktop.flows.form_preview")}</span>
+          <A2uiForm form={parsed.form} />
+        </div>
+      )}
+    </>
   );
 }

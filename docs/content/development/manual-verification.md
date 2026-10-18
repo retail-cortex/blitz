@@ -623,3 +623,22 @@ On Windows 10 (1803 or later) or 11: unzip `blitz_<version>_windows_amd64.zip` (
   **Expected:** the dialog stays open and the window moves; Escape or its buttons close it.
 - [ ] Light and dark, with Transparency on and off.
   **Expected:** the drawer is a pane like the chat's, the panes under it not showing through, with no clipped controls; in a narrow window Settings' sections are a rail of icons.
+
+## 51. Workflow tasks: people and time (spec_workflows_043 WF-16–WF-18, spec_electron_038 EL-110)
+
+Use a test service with the API keys unset (`env -u GEMINI_API_KEY`); the workflow below needs no model.
+
+- [ ] Save `.agents/workflows/approve.flow.yaml` with a **read_file** step, an **Ask a person** step (the starter form) and a **save_file** step after it; Studio › Workflows › approve › **Run**.
+  **Expected:** the first step finishes, the second is marked waiting, and its form shows under the run; **Approve** sends it, the run goes on and asks to save.
+- [ ] Run it again and close the app window (leave the tray running). Within 10 s:
+  **Expected:** the tray's icon has a dot and its menu says *1 workflow task waiting*; a notification "approve is waiting for you" shows. Clicking it opens the small tasks window (only the form, **Later**, **Open Blitz**); **Approve** sends it and the window closes; the dot goes.
+- [ ] Settings › Appearance › Workflow tasks: **Show the task at once**, quit the app, run the workflow from the CLI (`blitz` then `/approve`) and exit the CLI.
+  **Expected:** the tasks window opens by itself, without a notification. With **Off**, nothing opens, but the tray's dot and menu item still show; the item opens the window.
+- [ ] With the app open on another workspace, start a run that waits.
+  **Expected:** a snackbar "approve is waiting for you: …" with **Open** (or a system notification while the window is behind another); the status bar shows the task button, which opens the tasks dialog. **Later** closes it and the button stays.
+- [ ] A **Wait** step with `wait: 1m` between two steps.
+  **Expected:** the run waits; about a minute later (the service's scheduler) it goes on by itself, also after a service restart in between.
+- [ ] Edit the workflow while a run waits, then answer its task.
+  **Expected:** "the workflow changed since the run paused": the run isn't resumed.
+- [ ] Linux without a notification daemon, and Windows.
+  **Expected:** Linux opens the tasks window directly; on Windows the notification comes from the Blitz app and opens the same window.

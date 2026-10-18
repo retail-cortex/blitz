@@ -36,6 +36,8 @@ import {
   originOf,
   pageEvents,
   parseDeepLink,
+  parseTasksLink,
+  tasksURL,
   parseLink,
   pictureExtension,
   previewContent,
@@ -135,6 +137,20 @@ describe("what the page sends", () => {
     expect(text(["a", 2], 0)).toBe("a");
     expect(text(["a", 2], 1)).toBe("");
     expect(text([], 3)).toBe("");
+  });
+});
+
+describe("parseTasksLink", () => {
+  it.each([
+    ["blitz://tasks", { notify: false, title: "Blitz", body: "" }],
+    ["blitz://tasks?notify=1&title=Refund%20triage&body=Approve%20it", { notify: true, title: "Refund triage", body: "Approve it" }],
+    ["blitz:tasks/", { notify: false, title: "Blitz", body: "" }],
+  ])("reads %s", (raw, want) => expect(parseTasksLink(raw)).toEqual(want));
+  it.each(["blitz://open?dir=/x", "https://tasks", "nonsense"])("ignores %s", (raw) => expect(parseTasksLink(raw)).toBeUndefined());
+  it("cuts long text", () => expect(parseTasksLink("blitz://tasks?title=" + "x".repeat(500))!.title).toHaveLength(200));
+  it("opens the page on the tasks window", () => {
+    expect(tasksURL("http://127.0.0.1:5/open?t=ab")).toBe("http://127.0.0.1:5/open?t=ab&tasks");
+    expect(tasksURL("http://127.0.0.1:5/")).toBe("http://127.0.0.1:5/?tasks");
   });
 });
 

@@ -954,6 +954,33 @@ code.file-link:hover { text-decoration-color: currentColor; }
 .flow-field .suggest-field .input { width: 100%; }
 .flow-method .select { flex: 0 0 96px; width: 96px; }
 .flow-method .suggest-field { flex: 1; min-width: 0; }
+/* A2UI forms (human tasks): the app's controls, laid out as the form says. */
+.a2ui-form { gap: 12px; }
+.a2ui-column { gap: 10px; }
+.a2ui-row { gap: 8px; }
+.a2ui-text { margin: 0; white-space: pre-wrap; }
+.a2ui-divider { width: 100%; border: 0; border-top: 1px solid var(--md-outline-variant); margin: 4px 0; }
+.a2ui-image { max-width: 100%; border-radius: var(--md-shape-sm); }
+.a2ui-image.icon, .a2ui-image.avatar { width: 40px; height: 40px; }
+.a2ui-check { gap: 8px; }
+.a2ui-check input { accent-color: var(--md-primary); width: 16px; height: 16px; }
+.a2ui-slider { width: 100%; accent-color: var(--md-primary); }
+/* Workflows' human tasks: the dialog over the app, and the Electron app's small tasks window (TasksPanel.tsx). */
+.tasks-panel { display: grid; gap: 10px; }
+.tasks-list { display: grid; gap: 2px; max-height: 160px; overflow: auto; }
+.tasks-list .list-item { gap: 10px; text-align: start; }
+.tasks-panel .task-card { margin: 0; }
+.tasks-dialog { width: min(520px, calc(100vw - 32px)); }
+.tasks-empty { margin: 8px 0; }
+.tasks-window { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; height: 100vh; background: var(--md-surface); color: var(--md-on-surface); }
+.tasks-window-head { gap: 8px; padding: 14px 16px 8px; -webkit-app-region: drag; app-region: drag; }
+.tasks-window-head .icon { color: var(--md-primary); }
+.tasks-window-body { overflow: auto; padding: 4px 16px 12px; }
+.tasks-window-foot { gap: 8px; padding: 8px 12px; border-top: 1px solid var(--md-outline-variant); }
+/* macOS: the window's buttons sit over the header's left. */
+:root[data-native-glass] .tasks-window-head { padding-left: 80px; }
+.flow-form-json { font-size: 12px; }
+.flow-form-preview { gap: 8px; }
 .flow-repeat { color: var(--md-primary); font-weight: 500; }
 .flow-field > .flow-concurrency { flex: 0 0 72px; width: 72px; }
 .flow-retry { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }

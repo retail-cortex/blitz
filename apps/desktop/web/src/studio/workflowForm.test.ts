@@ -81,6 +81,9 @@ describe("the workflow canvas", () => {
     expect(stepNeeds(newStep("mcp_call", [], 0, 0))).toBe("mcp");
     expect(stepNeeds(newStep("a2a_call", [], 0, 0))).toBe("url");
     expect(stepNeeds(newStep("workflow", [], 0, 0))).toBe("workflow");
+    expect(stepNeeds(newStep("human_task", [], 0, 0))).toBe("form");
+    expect(stepNeeds(newStep("timer", [], 0, 0))).toBe("timer");
+    expect(specFromForm({ ...emptyWorkflowForm, steps: [{ ...newStep("timer", [], 0, 0), wait: " 1h ", formJson: "x" }] }).nodes[0]).toMatchObject({ wait: "1h", formJson: "" });
     const each = { ...newStep("save_file", [], 0, 0), path: "x", forEach: " steps.a.data ", concurrency: "2", workflow: "ignored" };
     expect(specFromForm({ ...emptyWorkflowForm, steps: [each] }).nodes[0]).toMatchObject({ forEach: "steps.a.data", concurrency: 2, workflow: "" });
     expect(specFromForm({ ...emptyWorkflowForm, steps: [{ ...each, forEach: "" }] }).nodes[0]).toMatchObject({ concurrency: 0 });

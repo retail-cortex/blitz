@@ -30,6 +30,9 @@ import { compose, goToFileEvent, openDocsEvent, openSettingsEvent, searchWorkspa
 import { DocsDrawer, type DocsAt } from "./docs/DocsDrawer";
 import { UnsavedDialog } from "./files/EditorPane";
 import { LicenseDrawer } from "./LicenseDrawer";
+import { TaskAlerts } from "./TaskAlerts";
+import { TasksDialog } from "./TasksPanel";
+import { showTasks } from "./humanTasks";
 import { Brand, MenuBar } from "./MenuBar";
 import { unsavedIn } from "./files/unsaved";
 import { closeWorkspace, displayName, openWorkspace, openWorkspaces, recentWorkspaces } from "./prefs";
@@ -280,7 +283,8 @@ function Shell() {
     };
   }, []);
   // A click on a notification shows its workspace.
-  useEffect(() => onNotificationOpen((dir) => update((p) => openWorkspace(p, dir))), [update]);
+  // A notification about tasks (no folder) opens the tasks dialog.
+  useEffect(() => onNotificationOpen((dir) => (dir ? update((p) => openWorkspace(p, dir)) : showTasks())), [update]);
   // A blitz://open link opens its folder with the prompt filled in, not
   // sent; blitz://workers (the tray's) opens it on its workers, or
   // Settings › Workers for the global ones.
@@ -395,6 +399,8 @@ function Shell() {
         {docsAt && <DocsDrawer key={`${docsAt.page ?? "(last)"}#${docsAt.anchor ?? ""}`} initial={docsAt} onClose={() => setDocsAt(null)} />}
         {settingsAt && <SettingsDrawer initial={settingsAt.section} scope={settingsAt.scope} onClose={() => setSettingsAt(null)} />}
         {license && <LicenseDrawer initial={license} onClose={() => setLicense(null)} />}
+        <TasksDialog />
+        <TaskAlerts />
         {searchOpen !== null && prefs.active && <SearchDialog dir={prefs.active} initialQuery={searchOpen} onClose={() => setSearchOpen(null)} />}
         {paletteOpen && <CommandPalette onClose={() => setPaletteOpen(false)} onOpenWorkspace={open} onSettings={(section = "appearance", scope) => openSettings(section, scope)} />}
         {confirmClose && (

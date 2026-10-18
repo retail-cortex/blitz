@@ -17,6 +17,7 @@
 
 import { useEffect, useState } from "react";
 import {
+  mdiAccountCheckOutline,
   mdiAlertCircleOutline,
   mdiAlertOutline,
   mdiCircleMedium,
@@ -31,6 +32,7 @@ import {
 } from "@mdi/js";
 import { workspaces } from "./api";
 import { inboxCounts, useRuns } from "./backgroundRuns";
+import { showTasks, useTasks } from "./humanTasks";
 import { message, reason } from "./errors";
 import { configChanged, filesTouchedEvent, showPending, showView } from "./events";
 import type { AgentInfo, GetGitStatusResponse } from "./gen/blitz/v1/workspace_pb";
@@ -76,6 +78,7 @@ export function StatusBar({ serviceUp, version, onWorkspaceSettings }: { service
       )}
       <span className="spacer" />
       {ws && <Activity dir={dir} running={!!activity[dir]?.running} waiting={!!activity[dir]?.waiting} />}
+      {serviceUp && <TasksItem />}
       {serviceUp && <RunsItem />}
       {ws && <FailedItem dir={dir} />}
       {ws && serviceUp && <WorkspaceItems dir={dir} onWorkspaceSettings={() => onWorkspaceSettings(dir)} />}
@@ -163,6 +166,19 @@ function RunsItem() {
       </button>
       {open && <InboxDrawer list={list} onClose={() => setOpen(false)} />}
     </>
+  );
+}
+
+// Workflows' human tasks waiting, in any workspace: opens the tasks dialog.
+function TasksItem() {
+  const { tasks } = useTasks();
+  if (tasks.length === 0) return null;
+  const label = tn("desktop.human_tasks.waiting", tasks.length);
+  return (
+    <button className="sb-item sb-button sb-warn" title={label} aria-label={label} onClick={showTasks}>
+      <Icon path={mdiAccountCheckOutline} size="sm" />
+      <span>{tasks.length}</span>
+    </button>
   );
 }
 

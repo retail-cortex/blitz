@@ -54,7 +54,7 @@ blitz workers enable deps     # shows what it may do, then asks
 
 ## The file
 
-`.agents/workers/<name>/WORKER.md` (or `workers/<name>/WORKER.md`): the folder's name is the worker's (lowercase letters, digits, `-` and `_`). Only `schedule` and the workflow (the text after the front matter) are required; an unknown key makes the worker invalid, so typos show up at once.
+`.agents/workers/<name>/WORKER.md` (or `workers/<name>/WORKER.md`): the folder's name is the worker's (lowercase letters, digits, `-` and `_`). Only `schedule` and the prompt (the text after the front matter, unless `workflow` names one to run) are required; an unknown key makes the worker invalid, so typos show up at once.
 
 | Key | Default | Meaning |
 |---|---|---|
@@ -63,6 +63,7 @@ blitz workers enable deps     # shows what it may do, then asks
 | `timezone` | the service machine's | An IANA name, such as `Europe/Paris` |
 | `agent` | the workspace's agent | Run as another agent, for its runs only |
 | `model` | the workspace's model | `provider/model`, for its runs only |
+| `workflow` | none | Run this [workflow](workflows.md) instead of a prompt; the text after the front matter, optional then, is its input |
 | `permissions` | none: read only | What it may do (below) |
 | `limits` | 50 calls, $1, `30m` | `max_turns` (model calls), `max_cost_usd`, `timeout` |
 | `catch_up` | `none` | `once`: when the service starts or the worker is enabled, run once if a scheduled time passed since its last run |
@@ -148,6 +149,6 @@ notify_on = ["failed", "limited"]
 ## Good to know
 
 - **The service must be running** at the scheduled time. Missed times collapse into one run when it's back if `catch_up: once` is set, and are skipped otherwise; a laptop that's asleep may miss them.
-- **Background runs are different:** `blitz --bg "<prompt>"` runs one prompt in the service now, and waits for you to answer what it asks ([the service](../products/service.md#background-runs)). Workers run on a schedule and never wait.
+- **Background runs are different:** `blitz --bg "<prompt>"` runs one prompt in the service now, and waits for you to answer what it asks ([the service](../products/service.md#background-runs)). Workers run on a schedule and never wait for an approval; only a workflow's Ask a person step pauses one, until someone answers it.
 - **A loop is lighter:** `/loop 30m <prompt>` repeats a prompt while the session or window is open, with your usual approvals.
 - **Project workers and trust:** a workspace's workers are files in the project, so read them before enabling; project hooks don't run for workers until you trust the project's settings ([Sharing settings with your team](configuration.md#sharing-settings-with-your-team)).

@@ -63,6 +63,9 @@ var version = "dev"
 // every is how often the tray asks the service how it is.
 const every = 2 * time.Second
 
+// tasksEvery is how often the tray asks for workflows' human tasks.
+const tasksEvery = 10 * time.Second
+
 func main() {
 	install := flag.Bool("install", false, "Start the tray at login (and now), then exit")
 	uninstall := flag.Bool("uninstall", false, "Stop starting the tray at login, then exit")
@@ -282,6 +285,9 @@ func onReady() {
 	restart := systray.AddMenuItem(i18n.T("tray.restart"), "")
 	systray.AddSeparator()
 	open := systray.AddMenuItem(i18n.T("tray.open_app"), "")
+	// Workflows' human tasks waiting (spec_electron_038 EL-110): shown while there are some.
+	tasksItem := systray.AddMenuItem("", "")
+	tasksItem.Hide()
 	logs := systray.AddMenuItem(i18n.T("tray.open_logs"), "")
 	systray.AddSeparator()
 	// What the running service has: its MCP servers and workers.
@@ -296,8 +302,44 @@ func onReady() {
 	}
 	quit := systray.AddMenuItem(i18n.T("tray.quit"), i18n.T("tray.quit_hint"))
 
+	// The tasks, asked for every tasksEvery while the service runs: new
+	// ones tell the desktop app (a notification, or its tasks window).
+	var tasksMu sync.Mutex
+	seen := map[string]bool{}
+	waiting, first, lastAsked := 0, true, time.Time{}
+	checkTasks := func(running bool) {
+		tasksMu.Lock()
+		defer tasksMu.Unlock()
+		if !running {
+			waiting = 0
+		} else if time.Since(lastAsked) >= tasksEvery {
+			lastAsked = time.Now()
+			tasks, alerts, err := tray.FetchTasks(context.Background(), sock)
+			if err != nil {
+				return // an older service, or a moment's trouble
+			}
+			waiting = len(tasks)
+			arrived := tray.Arrived(seen, tasks)
+			// Tasks already waiting when the tray starts are only shown,
+			// not announced again.
+			if link := tray.TasksLink(alerts, arrived); link != "" && !first {
+				if err := acts.OpenLink(link); err != nil {
+					log.Printf("blitz-tray: %v", err)
+				}
+			}
+			first = false
+		}
+		if waiting > 0 {
+			tasksItem.SetTitle(tray.TasksTitle(waiting))
+			tasksItem.Show()
+		} else {
+			tasksItem.Hide()
+		}
+	}
+	isWaiting := func() bool { tasksMu.Lock(); defer tasksMu.Unlock(); return waiting > 0 }
+
 	show := func(m tray.Menu, note string) {
-		setIcon(m.Running)
+		setIcon(m.Running, m.Running && isWaiting())
 		title := m.State.Title
 		if note != "" {
 			title = note
@@ -331,6 +373,7 @@ func onReady() {
 		mu.Lock()
 		note := busy
 		mu.Unlock()
+		checkTasks(st.Running)
 		show(tray.MenuFor(st), note)
 		var extras tray.Extras
 		var err error
@@ -385,6 +428,10 @@ func onReady() {
 				do(i18n.T("tray.restarting"), acts.Restart)
 			case <-open.ClickedCh:
 				if err := acts.OpenApp(); err != nil {
+					do("", func() error { return err })
+				}
+			case <-tasksItem.ClickedCh:
+				if err := acts.OpenLink("blitz://tasks"); err != nil {
 					do("", func() error { return err })
 				}
 			case <-logs.ClickedCh:

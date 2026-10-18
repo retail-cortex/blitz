@@ -62,7 +62,10 @@ func humanTaskMsg(r engine.FlowRecord, t engine.FlowTask) *pb.HumanTask {
 }
 
 func (h workspaceService) ListHumanTasks(ctx context.Context, r req[pb.ListHumanTasksRequest]) (*connect.Response[pb.ListHumanTasksResponse], error) {
-	out := &pb.ListHumanTasksResponse{}
+	out := &pb.ListHumanTasksResponse{Alerts: "notify"}
+	if cfg, err := config.Load(h.s.configDir); err == nil && cfg.UI.TaskAlerts != "" {
+		out.Alerts = cfg.UI.TaskAlerts
+	}
 	seen := map[string]bool{}
 	for _, dir := range h.s.recordDirs() {
 		for _, rec := range engine.ListFlowRecords(dir, r.Msg.Workspace) {

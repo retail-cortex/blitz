@@ -30,6 +30,8 @@ export const windowMethods = [
   "PendingLinks",
   "ToggleFullscreen",
   "Quit",
+  // The tasks window's: opens the app's own window (EL-110).
+  "OpenApp",
   // The web preview (EL-100).
   "PreviewOpen",
   "PreviewBounds",
@@ -44,8 +46,11 @@ export const windowMethods = [
 ] as const;
 export type WindowMethod = (typeof windowMethods)[number];
 
+/** What the tasks window may call (EL-110): it has no editor, menu or previews. */
+export const taskWindowMethods: readonly WindowMethod[] = ["OpenURL", "SetAppearance", "OpenApp"];
+
 /** The events the window sends the page. */
-export const pageEvents = ["menu:about", "menu:settings", "deeplink:open", "notification:open", "preview:state"] as const;
+export const pageEvents = ["menu:about", "menu:settings", "deeplink:open", "notification:open", "preview:state", "tasks:open"] as const;
 export type PageEvent = (typeof pageEvents)[number];
 
 /**
@@ -217,6 +222,34 @@ export function parseDeepLink(raw: string, home = ""): DeepLink | undefined {
   if ([...prompt].length > maxLinkPrompt) return undefined;
   return { dir, prompt };
 }
+
+/**
+ * What blitz://tasks asks (EL-110), from the tray when a workflow's human
+ * task waits: to notify first (notify=1, with the notification's title
+ * and body in the user's language) or open the tasks window at once.
+ * Undefined for any other link.
+ */
+export interface TasksLink {
+  notify: boolean;
+  title: string;
+  body: string;
+}
+
+export function parseTasksLink(raw: string): TasksLink | undefined {
+  let u: URL;
+  try {
+    u = new URL(raw.trim());
+  } catch {
+    return undefined;
+  }
+  const action = (u.host || u.pathname.replace(/^\/+/, "")).replace(/\/$/, "");
+  if (u.protocol !== "blitz:" || action !== "tasks") return undefined;
+  const cut = (s: string | null) => [...(s ?? "")].slice(0, 200).join("");
+  return { notify: u.searchParams.get("notify") === "1", title: cut(u.searchParams.get("title")) || "Blitz", body: cut(u.searchParams.get("body")) };
+}
+
+/** The page's one-time link, opening on the tasks window (the page server keeps tasks). */
+export const tasksURL = (link: string) => link + (link.includes("?") ? "&" : "?") + "tasks";
 
 /** The blitz:// links among a command line's arguments. */
 export const linkArgs = (argv: readonly string[]) => argv.filter((a) => a.startsWith("blitz:"));

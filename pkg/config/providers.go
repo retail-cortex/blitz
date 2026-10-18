@@ -430,6 +430,7 @@ var settableValues = map[string]bool{
 	"ui.style":              true,
 	"ui.locale":             true,
 	"ui.notify":             true,
+	"ui.task_alerts":        true,
 	"ui.theme":              true,
 	"ui.editor":             true,
 	// Workspace search, from its panel in the desktop app.
