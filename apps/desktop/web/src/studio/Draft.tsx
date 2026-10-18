@@ -39,6 +39,8 @@ export function DraftButton({
   language,
   onUse,
   disabled,
+  request: preset,
+  label,
 }: {
   workspace: string;
   kind: DraftKind;
@@ -48,9 +50,13 @@ export function DraftButton({
   language?: string;
   onUse: (text: string) => void;
   disabled?: boolean;
+  /** What to ask, filled in when the dialog opens (Refine from eval failures). */
+  request?: string;
+  /** The button's text, in place of Draft or Redraft. */
+  label?: string;
 }) {
   const [open, setOpen] = useState(false);
-  const [request, setRequest] = useState("");
+  const [request, setRequest] = useState(preset ?? "");
   const [busy, setBusy] = useState(false);
   const [draft, setDraft] = useState<{ text: string; changes: string[] } | null>(null);
   const [error, setError] = useState("");
@@ -74,8 +80,17 @@ export function DraftButton({
   };
   return (
     <>
-      <Button small icon={mdiCreationOutline} disabled={disabled} onClick={() => setOpen(true)} title={t("desktop.draft.hint")}>
-        {t(current.trim() ? "desktop.draft.redraft" : "desktop.draft.draft")}
+      <Button
+        small
+        icon={mdiCreationOutline}
+        disabled={disabled}
+        onClick={() => {
+          if (preset !== undefined) setRequest(preset);
+          setOpen(true);
+        }}
+        title={t("desktop.draft.hint")}
+      >
+        {label ?? t(current.trim() ? "desktop.draft.redraft" : "desktop.draft.draft")}
       </Button>
       {open && (
         <Dialog
@@ -121,7 +136,7 @@ export function DraftButton({
           ) : (
             <label className="field">
               <span className="t-label">{t("desktop.draft.request")}</span>
-              <textarea className="input" rows={3} autoFocus value={request} placeholder={t(current.trim() ? "desktop.draft.request_improve" : "desktop.draft.request_new")} onChange={(e) => setRequest(e.target.value)} />
+              <textarea className="input" rows={preset ? 8 : 3} autoFocus value={request} placeholder={t(current.trim() ? "desktop.draft.request_improve" : "desktop.draft.request_new")} onChange={(e) => setRequest(e.target.value)} />
             </label>
           )}
           {error && <p className="error-text">{error}</p>}

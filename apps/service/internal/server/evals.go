@@ -183,3 +183,16 @@ func (h workspaceService) ListEvalRuns(ctx context.Context, r req[pb.ListEvalRun
 	}
 	return ok(out)
 }
+
+func (h workspaceService) DraftEvalCases(ctx context.Context, r req[pb.DraftEvalCasesRequest]) (*connect.Response[pb.DraftEvalCasesResponse], error) {
+	w, err := h.s.workspace(ctx, r.Msg.Workspace)
+	if err != nil {
+		return nil, err
+	}
+	existing := evalOf(&pb.EvalSpec{Cases: r.Msg.Existing}).Cases
+	d, err := w.DraftEvalCases(ctx, r.Msg.Agent, r.Msg.Request, existing)
+	if err != nil {
+		return nil, invalid(err)
+	}
+	return ok(&pb.DraftEvalCasesResponse{Cases: evalCasesMsg(d.Cases), Problem: d.Problem})
+}

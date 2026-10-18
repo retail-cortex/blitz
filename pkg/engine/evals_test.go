@@ -122,3 +122,45 @@ func TestEvalFiles(t *testing.T) {
 	require.NoError(t, w.DeleteEval("shop"))
 	assert.Empty(t, w.Evals())
 }
+
+// Drafting an agent's cases: the model's cases made to hold (safe, unused
+// IDs; defaults for a bad type, threshold or scope), one without an
+// answer left out, and what goes to the model.
+func TestDraftEvalCases(t *testing.T) {
+	w := openTest(t)
+	require.NoError(t, os.MkdirAll(w.ProjectAgentsDir(), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(w.ProjectAgentsDir(), "support.md"), []byte("---\nname: support\ndescription: Answers shop customers\ntools: [read_file]\n---\nAnswer returns questions from POLICY.md.\n"), 0o644))
+	w.RefreshAgents(context.Background())
+	judge := runtime.NewMockLLM("drafter", text("```json\n"+`{"cases": [
+		{"id": "Return Window!", "name": "Window", "prompt": "How long do I have?", "output": "30 days", "type": "near", "threshold": 0.7, "scope": "fail"},
+		{"id": "window", "prompt": "Code format?", "output": "RET-0000", "type": "exact", "threshold": 0.9, "scope": "loud"},
+		{"id": "", "prompt": "Hi", "output": "Hello", "type": "fuzzy", "threshold": 7},
+		{"id": "x", "prompt": "No answer", "output": ""}
+	]}`+"\n```"))
+	w.newModel = func(context.Context, *config.Config, string) (model.LLM, error) { return judge, nil }
+
+	d, err := w.DraftEvalCases(context.Background(), "support", "returns only", []evals.Case{{ID: "window", Prompt: "Old case"}})
+	require.NoError(t, err)
+	require.Empty(t, d.Problem)
+	require.Len(t, d.Cases, 3)
+	assert.Equal(t, evals.Case{ID: "return-window", Name: "Window", Prompt: "How long do I have?", Output: "30 days", Type: evals.Near, Threshold: 0.7, Scope: evals.Fail}, d.Cases[0])
+	assert.Equal(t, evals.Case{ID: "window-2", Prompt: "Code format?", Output: "RET-0000", Type: evals.Exact, Scope: evals.Fail}, d.Cases[1], "taken ID; exact has no threshold; a bad scope fails")
+	assert.Equal(t, evals.Case{ID: "c3", Prompt: "Hi", Output: "Hello", Type: evals.Near, Threshold: evals.DefaultThreshold, Scope: evals.Fail}, d.Cases[2])
+	sent := judge.Requests[0].Contents[0].Parts[0].Text
+	for _, want := range []string{"Answers shop customers", "Answer returns questions from POLICY.md.", "read_file", "- window: Old case", "returns only"} {
+		assert.Contains(t, sent, want)
+	}
+
+	_, err = w.DraftEvalCases(context.Background(), "nobody", "", nil)
+	assert.ErrorContains(t, err, "isn't defined")
+	w.newModel = func(context.Context, *config.Config, string) (model.LLM, error) {
+		return runtime.NewMockLLM("drafter", text("I can't think of any.")), nil
+	}
+	d, err = w.DraftEvalCases(context.Background(), "support", "", nil)
+	require.NoError(t, err)
+	assert.Equal(t, "the model's answer had no cases", d.Problem)
+	w.newModel = mockModels
+	d, _ = w.DraftEvalCases(context.Background(), "support", "", nil)
+	assert.NotEmpty(t, d.Problem, "the mock model has nothing to say")
+	assert.Equal(t, "a-very-long-identifier-that-goes", caseID("A very long identifier that goes on and on", 1, map[string]bool{}))
+}

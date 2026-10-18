@@ -15,6 +15,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import type { MessageInitShape } from "@bufbuild/protobuf";
 import { createPortal } from "react-dom";
 import {
   mdiAlertCircleOutline,
@@ -27,6 +28,7 @@ import {
   mdiChevronRight,
   mdiCloseCircleOutline,
   mdiContentSaveOutline,
+  mdiCreationOutline,
   mdiDeleteOutline,
   mdiFlaskOutline,
   mdiInformationOutline,
@@ -34,15 +36,18 @@ import {
   mdiPlay,
   mdiPlus,
   mdiRefresh,
+  mdiRobotOutline,
   mdiStop,
   mdiUndoVariant,
 } from "@mdi/js";
 import { workspaces } from "../api";
 import { message } from "../errors";
 import { t, tn } from "../i18n";
-import type { EvalFile, EvalResult, EvalRun } from "../gen/blitz/v1/workspace_pb";
+import { AgentScope, type AgentFile, type EvalCase, type EvalCaseSchema, type EvalFile, type EvalResult, type EvalRun } from "../gen/blitz/v1/workspace_pb";
 import { Button, Chip, Dialog, Field, Icon, IconButton, Segmented, Switch, Tabs, useSnackbar } from "../ui/controls";
-import { duplicateIds, emptyEvalForm, formFromEval, moveCase, newCase, resultsByCase, resultStatuses, runCounts, sameEvalForm, specFromForm, type CaseForm, type EvalForm } from "./evalForm";
+import { DraftButton } from "./Draft";
+import { agentsToRefine, evalNameFor, evalsForAgent, refineRequest } from "./evalCoverage";
+import { casesFromDraft, duplicateIds, emptyEvalForm, formFromEval, moveCase, newCase, resultsByCase, resultStatuses, runCounts, sameEvalForm, specFromForm, type CaseForm, type EvalForm } from "./evalForm";
 
 type Tab = "cases" | "settings" | "runs";
 
@@ -80,7 +85,7 @@ const scoreText = (r: EvalResult) => (r.status === "error" ? "" : r.type === "ne
  * what a failure means), its settings (agents, skills, how near cases are
  * scored, what cases may reach), and its runs, live as they're scored.
  */
-export function EvalsPane({ workspace, onDirty }: { workspace: string; onDirty?: (dirty: boolean) => void }) {
+export function EvalsPane({ workspace, onDirty, forAgent, onHandled }: { workspace: string; onDirty?: (dirty: boolean) => void; forAgent?: string; onHandled?: () => void }) {
   const snack = useSnackbar();
   const [list, setList] = useState<EvalFile[]>([]);
   const [error, setError] = useState("");
@@ -98,6 +103,9 @@ export function EvalsPane({ workspace, onDirty }: { workspace: string; onDirty?:
   const [runs, setRuns] = useState<EvalRun[]>([]);
   const [live, setLive] = useState<{ run: EvalRun | null; results: EvalResult[]; total: number } | null>(null);
   const [shown, setShown] = useState<string>("");
+  const [loaded, setLoaded] = useState(false);
+  // The draft dialog: for which agent, and whether its cases go into the open eval.
+  const [drafting, setDrafting] = useState<{ agent: string; append: boolean } | null>(null);
   const stop = useRef<AbortController | null>(null);
 
   const refresh = useCallback(async () => {
@@ -105,6 +113,7 @@ export function EvalsPane({ workspace, onDirty }: { workspace: string; onDirty?:
       const r = await workspaces.listEvals({ workspace });
       setList(r.evals);
       setError("");
+      setLoaded(true);
     } catch (e) {
       setError(message(e));
     }
@@ -121,6 +130,15 @@ export function EvalsPane({ workspace, onDirty }: { workspace: string; onDirty?:
     );
   }, [workspace, refresh]);
   useEffect(() => () => stop.current?.abort(), []);
+  // Opened for an agent (from its form): its eval, or a draft of one.
+  useEffect(() => {
+    if (!forAgent || !loaded) return;
+    const own = evalsForAgent(list, forAgent)[0];
+    if (own) showForm(own.name, formFromEval(own));
+    else setDrafting({ agent: forAgent, append: false });
+    onHandled?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [forAgent, loaded]);
 
   const file = open ? list.find((e) => e.name === open) : undefined;
   const isNew = open === "";
@@ -243,6 +261,29 @@ export function EvalsPane({ workspace, onDirty }: { workspace: string; onDirty?:
   const title = isNew && !form.name ? t("desktop.evals.new") : form.name || open || "";
   const canRun = !!file && !dirty && !file.problem && form.cases.length > 0;
   const shownRun = runs.find((r) => r.id === shown);
+  const uncovered = agents.filter((a) => evalsForAgent(list, a).length === 0);
+  // Drafted cases: a new eval for the agent, or more cases in the open one.
+  const drafted = (agent: string, cases: EvalCase[], append: boolean) => {
+    setDrafting(null);
+    if (append) {
+      setForm((f) => ({ ...f, cases: [...f.cases, ...casesFromDraft(cases)], agents: f.agents.length ? f.agents : [agent] }));
+      setTab("cases");
+      return;
+    }
+    const f: EvalForm = { ...emptyEvalForm, name: evalNameFor(agent, list.map((e) => e.name)), description: t("desktop.evals.drafted_description", { agent }), agents: [agent], cases: casesFromDraft(cases) };
+    // Unsaved until saved: closing it asks first.
+    leave(() => {
+      setForm(f);
+      setBase(emptyEvalForm);
+      setOpen("");
+      setTab("cases");
+      setProblems([]);
+      setExpanded(new Set());
+      setLive(null);
+      setShown("");
+      setRuns([]);
+    });
+  };
 
   return (
     <div className={`slide-pane evals-pane ${open !== null ? "is-open" : ""}`}>
@@ -291,6 +332,25 @@ export function EvalsPane({ workspace, onDirty }: { workspace: string; onDirty?:
             );
           })}
         </div>
+        {uncovered.length > 0 && (
+          <section className="stack rule-section" style={{ gap: 4 }}>
+            <span className="t-title-sm">{t("desktop.evals.uncovered")}</span>
+            <span className="t-body-sm muted">{t("desktop.evals.uncovered_hint")}</span>
+            <div className="list">
+              {uncovered.map((a) => (
+                <div key={a} className="list-item">
+                  <Icon path={mdiRobotOutline} className="muted" />
+                  <span className="spacer ellipsis">{a}</span>
+                  <span className="trailing">
+                    <Button small icon={mdiCreationOutline} onClick={() => setDrafting({ agent: a, append: false })}>
+                      {t("desktop.evals.draft_for")}
+                    </Button>
+                  </span>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
       </aside>
       <section className="slide-detail" inert={open === null}>
         {open !== null && (
@@ -397,9 +457,12 @@ export function EvalsPane({ workspace, onDirty }: { workspace: string; onDirty?:
                     );
                   })}
                 </div>
-                <div className="row">
+                <div className="row" style={{ gap: 8 }}>
                   <Button icon={mdiPlus} onClick={addCase}>
                     {t("desktop.evals.add_case")}
+                  </Button>
+                  <Button icon={mdiCreationOutline} disabled={agents.length === 0} onClick={() => setDrafting({ agent: form.agents[0] ?? agents[0] ?? "", append: true })}>
+                    {t("desktop.evals.draft_cases")}
                   </Button>
                 </div>
               </div>
@@ -480,6 +543,7 @@ export function EvalsPane({ workspace, onDirty }: { workspace: string; onDirty?:
                       <span className="t-body-sm muted">{summary({ counts: {}, results: live.results })}</span>
                     </div>
                     {running && <progress className="eval-progress" max={live.total} value={live.results.length} aria-label={t("desktop.evals.progress")} />}
+                    {!running && <Refine workspace={workspace} results={live.results} />}
                     <Results results={live.results} />
                   </section>
                 )}
@@ -499,7 +563,12 @@ export function EvalsPane({ workspace, onDirty }: { workspace: string; onDirty?:
                               </span>
                             </button>
                           </div>
-                          {shownRun?.id === r.id && <Results results={r.results} />}
+                          {shownRun?.id === r.id && (
+                            <>
+                              <Refine workspace={workspace} results={r.results} />
+                              <Results results={r.results} />
+                            </>
+                          )}
                         </div>
                       ))}
                     </div>
@@ -545,6 +614,18 @@ export function EvalsPane({ workspace, onDirty }: { workspace: string; onDirty?:
           </>
         )}
       </section>
+      {drafting &&
+        createPortal(
+          <DraftCases
+            workspace={workspace}
+            agents={agents}
+            agent={drafting.agent}
+            existing={drafting.append ? specFromForm(form).cases : []}
+            onClose={() => setDrafting(null)}
+            onDrafted={(agent, cases) => drafted(agent, cases, drafting.append)}
+          />,
+          document.body,
+        )}
       {deleting &&
         createPortal(
           <Dialog
@@ -588,7 +669,7 @@ export function EvalsPane({ workspace, onDirty }: { workspace: string; onDirty?:
               </>
             }
           >
-            <p>{t("desktop.agents.discard_body")}</p>
+            <p>{t("desktop.agents.discard_body", { name: title || t("desktop.agents.unnamed") })}</p>
           </Dialog>,
           document.body,
         )}
@@ -644,6 +725,114 @@ function Results({ results }: { results: EvalResult[] }) {
           )}
         </div>
       ))}
+    </div>
+  );
+}
+
+/** Has the model draft cases for an agent, from what it's for and its instructions. */
+function DraftCases({
+  workspace,
+  agents,
+  agent: initial,
+  existing,
+  onClose,
+  onDrafted,
+}: {
+  workspace: string;
+  agents: string[];
+  agent: string;
+  existing: MessageInitShape<typeof EvalCaseSchema>[];
+  onClose: () => void;
+  onDrafted: (agent: string, cases: EvalCase[]) => void;
+}) {
+  const [agent, setAgent] = useState(initial || agents[0] || "");
+  const [request, setRequest] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const draft = async () => {
+    setBusy(true);
+    setError("");
+    try {
+      const r = await workspaces.draftEvalCases({ workspace, agent, request: request.trim(), existing });
+      if (r.problem) setError(r.problem);
+      else onDrafted(agent, r.cases);
+    } catch (e) {
+      setError(message(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Dialog
+      title={t("desktop.evals.draft_title")}
+      icon={mdiCreationOutline}
+      onClose={onClose}
+      footer={
+        <>
+          <Button onClick={onClose}>{t("desktop.cancel")}</Button>
+          <Button variant="filled" icon={busy ? mdiLoading : mdiCreationOutline} iconSpin={busy} disabled={busy || !agent} onClick={() => void draft()}>
+            {busy ? t("desktop.draft.drafting") : t("desktop.evals.draft_go")}
+          </Button>
+        </>
+      }
+    >
+      <div className="stack" style={{ gap: 12 }}>
+        <p className="t-body-sm muted">{t("desktop.evals.draft_hint")}</p>
+        <Field label={t("desktop.evals.draft_agent")}>
+          {(id) => (
+            <select id={id} className="select" value={agent} onChange={(e) => setAgent(e.target.value)}>
+              {[...new Set([initial, ...agents].filter(Boolean))].map((a) => (
+                <option key={a} value={a}>
+                  {a}
+                </option>
+              ))}
+            </select>
+          )}
+        </Field>
+        <Field label={t("desktop.evals.draft_request")}>{(id) => <textarea id={id} className="input" rows={3} value={request} placeholder={t("desktop.evals.draft_request_placeholder")} onChange={(e) => setRequest(e.target.value)} />}</Field>
+        {error && <p className="error-text">{error}</p>}
+      </div>
+    </Dialog>
+  );
+}
+
+/**
+ * Refine: for each agent with cases it missed, Redraft its instructions
+ * with those cases as the request; Use saves the agent's file. An agent
+ * without a file of its own (a built-in one) isn't offered.
+ */
+function Refine({ workspace, results }: { workspace: string; results: EvalResult[] }) {
+  const snack = useSnackbar();
+  const names = agentsToRefine(results);
+  const [files, setFiles] = useState<{ file: AgentFile; scope: AgentScope }[]>([]);
+  const key = names.join(",");
+  useEffect(() => {
+    if (!names.length) return;
+    let live = true;
+    void Promise.all([AgentScope.WORKSPACE, AgentScope.USER].map((scope) => workspaces.listAgentFiles({ workspace, scope }).then((r) => r.files.map((file) => ({ file, scope })), () => [])))
+      .then((all) => live && setFiles(all.flat().filter((f) => f.file.agent && names.includes(f.file.agent.name))));
+    return () => {
+      live = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workspace, key]);
+  if (!files.length) return null;
+  const save = async (f: { file: AgentFile; scope: AgentScope }, prompt: string) => {
+    try {
+      const r = await workspaces.saveAgentFile({ workspace, scope: f.scope, previousName: f.file.agent!.name, agent: { ...f.file.agent!, prompt } });
+      if (r.problems.length) return snack(r.problems.join("; "), { error: true });
+      snack(t("desktop.evals.refined", { agent: f.file.agent!.name }));
+      setFiles((all) => all.map((x) => (x === f && r.file ? { ...x, file: r.file } : x)));
+    } catch (e) {
+      snack(message(e), { error: true });
+    }
+  };
+  return (
+    <div className="row wrap" style={{ gap: 8 }}>
+      {files.map((f) => {
+        const a = f.file.agent!;
+        return <DraftButton key={a.name} workspace={workspace} kind="agent" name={a.displayName || a.name} description={a.description} current={a.prompt} request={refineRequest(results, a.name)} label={t("desktop.evals.refine", { agent: a.name })} onUse={(text) => void save(f, text)} />;
+      })}
     </div>
   );
 }

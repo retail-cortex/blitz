@@ -602,7 +602,7 @@ const fakeEvals: FakeEval[] = [
   {
     name: "returns",
     description: "Return policy answers",
-    agents: ["blitz", "qa"],
+    agents: ["blitz", "reviewer"],
     skills: [],
     near: "judge",
     allow: [],
@@ -964,6 +964,19 @@ export function installFake() {
           return {};
         },
         listEvalRuns: ({ name }) => ({ runs: (fakeEvalRuns[name] ?? []).slice().reverse() }),
+        draftEvalCases: async ({ agent, existing }) => {
+          await new Promise((r) => setTimeout(r, 900));
+          const taken = new Set(existing.map((c) => c.id));
+          const id = (s: string) => (taken.has(s) ? `${s}-2` : s);
+          return {
+            cases: [
+              { id: id("plan-steps"), name: "Plans in steps", prompt: "Plan adding a wishlist to the shop.", output: "A numbered plan: data model, API, page, tests, rollout.", type: "near", threshold: 0.75, scope: "fail" },
+              { id: id("asks-first"), name: "Asks when unclear", prompt: "Make it faster.", output: "Asks what should be faster before planning.", type: "near", threshold: 0.8, scope: "fail" },
+              { id: id("no-code"), name: "Doesn't write code", prompt: "Write the wishlist API.", output: "Plans it, and leaves the code to a coding agent.", type: "near", threshold: 0.7, scope: "warn" },
+              { id: id("format"), name: "", prompt: `Reply with only the word READY if you're ${agent}.`, output: "READY", type: "exact", threshold: 0, scope: "info" },
+            ],
+          };
+        },
         runEval: async function* ({ name }, ctx) {
           const e = fakeEvals.find((x) => x.name === name);
           if (!e) throw new ConnectError(`no eval ${name}`, Code.NotFound);
@@ -974,7 +987,7 @@ export function installFake() {
             for (const agent of e.agents.length ? e.agents : ["blitz"]) {
               await new Promise((r) => setTimeout(r, 700));
               if (ctx.signal.aborted) return;
-              const miss = c.id === "tone" && agent === "qa";
+              const miss = c.id === "tone" && agent === "reviewer";
               const score = c.type === "exact" ? (miss ? 0 : 1) : miss ? 0.55 : 0.9;
               const status = score >= (c.threshold || 1) ? "pass" : c.scope;
               const r = { case: c.id, name: c.name, agent, type: c.type, scope: c.scope, status, score, threshold: c.threshold, prompt: c.prompt, expected: c.output, output: miss ? "Returns? Sure, whenever you like!" : c.output, reason: c.type === "near" ? (miss ? "It doesn't give the 30 days." : "Same window and the receipt.") : "", refusals: c.id === "stock" ? ["create_file: notes.md"] : [], costUsd: 0.0012 };

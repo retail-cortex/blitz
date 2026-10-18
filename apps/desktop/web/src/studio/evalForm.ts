@@ -18,7 +18,7 @@
 // and to the API, and its runs summed up. A case's threshold is typed as
 // text; each case has a key of its own so the list can be reordered.
 
-import type { EvalFile, EvalResult, EvalRun } from "../gen/blitz/v1/workspace_pb";
+import type { EvalCase, EvalFile, EvalResult, EvalRun } from "../gen/blitz/v1/workspace_pb";
 
 /** A case's output type. */
 export type CaseType = "exact" | "near";
@@ -83,17 +83,22 @@ export function formFromEval(e: EvalFile): EvalForm {
     near: e.near === "embedding" ? "embedding" : "judge",
     allowNetwork: e.allow.includes("network"),
     allowMcp: e.allow.includes("mcp"),
-    cases: e.cases.map((c) => ({
-      key: nextKey(),
-      id: c.id,
-      name: c.name,
-      prompt: c.prompt,
-      output: c.output,
-      type: c.type === "exact" ? "exact" : "near",
-      threshold: c.type === "exact" ? String(defaultThreshold) : String(c.threshold || defaultThreshold),
-      scope: c.scope === "warn" || c.scope === "info" ? c.scope : "fail",
-    })),
+    cases: casesFromDraft(e.cases),
   };
+}
+
+/** Drafted cases, as the form holds them. */
+export function casesFromDraft(cases: EvalCase[]): CaseForm[] {
+  return cases.map((c) => ({
+    key: nextKey(),
+    id: c.id,
+    name: c.name,
+    prompt: c.prompt,
+    output: c.output,
+    type: c.type === "exact" ? "exact" : "near",
+    threshold: String(c.type === "exact" ? defaultThreshold : c.threshold || defaultThreshold),
+    scope: c.scope === "warn" || c.scope === "info" ? c.scope : "fail",
+  }));
 }
 
 /** The form as SaveEval takes it. */

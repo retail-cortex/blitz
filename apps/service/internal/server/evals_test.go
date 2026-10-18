@@ -94,6 +94,12 @@ func TestEvalsOverTheAPI(t *testing.T) {
 	}
 	assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(unrunnable.Err()))
 
+	_, err = w.DraftEvalCases(ctx, connect.NewRequest(&pb.DraftEvalCasesRequest{Workspace: dir, Agent: "nobody"}))
+	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+	drafted, err := w.DraftEvalCases(ctx, connect.NewRequest(&pb.DraftEvalCasesRequest{Workspace: dir, Agent: "blitz", Existing: spec.Cases}))
+	require.NoError(t, err)
+	assert.NotEmpty(t, drafted.Msg.Problem, "the mock model drafts nothing")
+
 	require.NoError(t, unary(w.DeleteEval, &pb.DeleteEvalRequest{Workspace: dir, Name: "sums"}))
 	assert.Equal(t, "EVAL_NOT_FOUND", reason(t, unary(w.DeleteEval, &pb.DeleteEvalRequest{Workspace: dir, Name: "sums"})))
 }

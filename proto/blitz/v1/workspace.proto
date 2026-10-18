@@ -247,6 +247,10 @@ service WorkspaceService {
   rpc RunEval(RunEvalRequest) returns (stream RunEvalResponse);
   // Returns an eval's recorded runs, newest first.
   rpc ListEvalRuns(ListEvalRunsRequest) returns (ListEvalRunsResponse);
+  // Drafts cases for an agent from its description and instructions,
+  // beside the cases given, saving nothing. An unknown agent is
+  // INVALID_ARGUMENT; a model that fails gives problem.
+  rpc DraftEvalCases(DraftEvalCasesRequest) returns (DraftEvalCasesResponse);
   // Returns skill scripts' environments (SCRIPTS_DISABLED).
   rpc ListEnvs(ListEnvsRequest) returns (ListEnvsResponse);
   // Removes one environment.
@@ -2615,4 +2619,20 @@ message ListEvalRunsRequest {
 // Response message for WorkspaceService.ListEvalRuns.
 message ListEvalRunsResponse {
   repeated EvalRun runs = 1;
+}
+
+// Request message for WorkspaceService.DraftEvalCases.
+message DraftEvalCasesRequest {
+  string workspace = 1;
+  string agent = 2;
+  // What to draft cases for (optional).
+  string request = 3;
+  // The cases the eval has, not to repeat.
+  repeated EvalCase existing = 4;
+}
+
+// Response message for WorkspaceService.DraftEvalCases.
+message DraftEvalCasesResponse {
+  repeated EvalCase cases = 1;
+  string problem = 2;
 }

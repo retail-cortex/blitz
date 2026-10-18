@@ -16,16 +16,17 @@
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { mdiAlertCircleOutline, mdiArrowLeft, mdiChevronDown, mdiChevronRight, mdiClose, mdiContentSaveOutline, mdiDeleteOutline, mdiPlus, mdiRefresh, mdiRobotOutline, mdiUndoVariant } from "@mdi/js";
+import { mdiAlertCircleOutline, mdiArrowLeft, mdiChevronDown, mdiChevronRight, mdiClose, mdiContentSaveOutline, mdiDeleteOutline, mdiFlaskOutline, mdiPlus, mdiRefresh, mdiRobotOutline, mdiUndoVariant } from "@mdi/js";
 import { workspaces } from "./api";
 import { message } from "./errors";
-import { t } from "./i18n";
+import { t, tn } from "./i18n";
 import { ModelInput, useModelCatalog } from "./ModelInput";
-import { AgentScope, type AgentFile } from "./gen/blitz/v1/workspace_pb";
+import { AgentScope, type AgentFile, type EvalFile } from "./gen/blitz/v1/workspace_pb";
 import { addTools, advancedCount, agentFromForm, agentPath, deleteTarget, emptyAgentForm, fileName, formFromAgent, invalidFields, sameForm, toolChoices, validAgentName, type AgentField, type AgentForm } from "./agentForm";
 import { agencies, efforts, modes } from "./options";
 import { SuggestTextarea } from "./SecretSuggest";
 import { DraftButton } from "./studio/Draft";
+import { evalsForAgent, runInBackground } from "./studio/evalCoverage";
 import { Button, Dialog, Field, Icon, IconButton, Segmented, Switch, useSnackbar } from "./ui/controls";
 import { Drawer } from "./ui/Drawer";
 import { workerName } from "./workerForm";
@@ -56,6 +57,7 @@ export function AgentEditor({
   list,
   slide,
   onDirty,
+  onEvals,
 }: {
   workspace: string;
   scope: AgentScope;
@@ -69,8 +71,11 @@ export function AgentEditor({
   slide?: boolean;
   /** Hears whether the form holds unsaved changes (Studio's drawer asks before closing). */
   onDirty?: (dirty: boolean) => void;
+  /** Opens Studio › Evals for an agent: its eval, or a draft of one (Studio's; the agents' evals are shown when set). */
+  onEvals?: (agent: string) => void;
 }) {
   const snack = useSnackbar();
+  const [evals, setEvals] = useState<EvalFile[]>([]);
   const [files, setFiles] = useState<AgentFile[]>([]);
   const [dir, setDir] = useState("");
   const [error, setError] = useState("");
@@ -101,6 +106,7 @@ export function AgentEditor({
     try {
       const res = await workspaces.listAgentFiles({ workspace, scope });
       setFiles(res.files);
+      if (onEvals) workspaces.listEvals({ workspace }).then((r) => setEvals(r.evals), () => {});
       setDir(res.dir);
       setError("");
       // The open file changed on disk: shown again, unless it has unsaved edits.
@@ -208,7 +214,13 @@ export function AgentEditor({
       setOpen({ path: res.file.path });
       setForm(saved);
       setBase(saved);
-      snack(t("desktop.agents.saved", { name: saved.name }));
+      const covering = onEvals ? evalsForAgent(evals, saved.name) : [];
+      // Its evals are offered, not run: each run is model calls.
+      if (covering.length)
+        snack(tn("desktop.evals.saved_covered", covering.length, { name: saved.name }), {
+          action: { label: tn("desktop.evals.run_them", covering.length), run: () => void runInBackground(workspace, covering.map((e) => e.name), snack) },
+        });
+      else snack(t("desktop.agents.saved", { name: saved.name }));
       if (slide) setOpen(null);
       await refresh();
     } catch (e) {
@@ -304,7 +316,9 @@ export function AgentEditor({
                 <Icon path={f.problem ? mdiAlertCircleOutline : mdiRobotOutline} className={f.problem ? "error-text" : undefined} />
                 <span className="lines">
                   <span className="ellipsis">{f.agent?.displayName || name}</span>
-                  <small className={`ellipsis ${f.problem ? "error-text" : ""}`}>{f.problem ? t("desktop.agents.broken") : f.agent?.description}</small>
+                  <small className={`ellipsis ${f.problem ? "error-text" : ""}`}>
+                    {f.problem ? t("desktop.agents.broken") : [f.agent?.description, onEvals && f.agent && evalsForAgent(evals, f.agent.name).length === 0 ? t("desktop.evals.no_evals_yet") : ""].filter(Boolean).join(" · ")}
+                  </small>
                 </span>
               </button>
             );
@@ -391,6 +405,24 @@ export function AgentEditor({
               <Switch checked={form.background} label={t("desktop.agents.background")} onChange={(v) => set("background", v)} />
               <span className="t-label">{t("desktop.agents.background")}</span>
             </label>
+            {onEvals && previous && (
+              <div className="row agent-evals" style={{ gap: 8 }}>
+                <Icon path={mdiFlaskOutline} className="muted" />
+                <span className="stack spacer" style={{ gap: 0 }}>
+                  <span className="t-label">{t("desktop.evals.title")}</span>
+                  <span className="t-body-sm muted">
+                    {evalsForAgent(evals, previous).length
+                      ? evalsForAgent(evals, previous)
+                          .map((e) => (e.lastRun ? t("desktop.evals.agent_eval_run", { name: e.name, status: t(`desktop.evals.status.${e.lastRun.status}`) }) : t("desktop.evals.agent_eval", { name: e.name })))
+                          .join(" · ")
+                      : t("desktop.evals.agent_none")}
+                  </span>
+                </span>
+                <Button small icon={mdiFlaskOutline} onClick={() => onEvals(previous)}>
+                  {evalsForAgent(evals, previous).length ? t("desktop.evals.open_evals") : t("desktop.evals.write_evals")}
+                </Button>
+              </div>
+            )}
             <Advanced form={form} set={set} fieldError={fieldError}>
               <Field label={t("desktop.agents.name")} supporting={t("desktop.agents.name_hint")} error={fieldError("name")}>
                 {(id) => (

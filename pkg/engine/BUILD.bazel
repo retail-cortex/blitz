@@ -26,6 +26,7 @@ go_library(
         "commit.go",
         "context.go",
         "draft.go",
+        "evaldraft.go",
         "evals.go",
         "event.go",
         "export.go",

@@ -37,13 +37,14 @@ import {
 import { ToolPicker } from "../AgentEditor";
 import { workspaces } from "../api";
 import { message } from "../errors";
-import { t } from "../i18n";
+import { t, tn } from "../i18n";
 import type { SkillFile, SkillInfo } from "../gen/blitz/v1/workspace_pb";
 import { SuggestTextarea } from "../SecretSuggest";
 import { SkillReviewDialog } from "../SkillReview";
 import { forgetSkills } from "../skillMention";
 import { Button, Chip, Dialog, Field, Icon, IconButton, Tabs, useSnackbar } from "../ui/controls";
 import { DraftButton } from "./Draft";
+import { evalsForSkill, runInBackground } from "./evalCoverage";
 import { SkillFiles } from "./SkillFiles";
 import { emptySkillForm, formFromSkill, kindOf, sameSkillForm, skillName, specFromForm, validSkillName, type SkillForm, type SkillKind } from "./skillForm";
 
@@ -163,7 +164,14 @@ export function SkillsPane({ workspace, onDirty }: { workspace: string; onDirty?
         setProblems(r.problems);
         return;
       }
-      snack(t("desktop.skills.saved", { name: r.file.spec?.name ?? "" }));
+      const skill = r.file.spec?.name ?? "";
+      // The evals that use it are offered, not run: each run is model calls.
+      const covering = await workspaces.listEvals({ workspace }).then((x) => evalsForSkill(x.evals, skill), () => []);
+      if (covering.length)
+        snack(tn("desktop.evals.saved_covered", covering.length, { name: skill }), {
+          action: { label: tn("desktop.evals.run_them", covering.length), run: () => void runInBackground(workspace, covering.map((e) => e.name), snack) },
+        });
+      else snack(t("desktop.skills.saved", { name: skill }));
       setOpen(null);
       setFile(null);
       setFilesDirty(false);

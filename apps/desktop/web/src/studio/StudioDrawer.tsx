@@ -34,10 +34,10 @@ import { WorkersPane } from "./WorkersPane";
 
 /**
  * The kinds Studio holds (spec_studio_040), in the order an agent is
- * built: what it is and follows (agents, skills, rules, guardrails), what
- * runs (workflows, workers), checking it (evals), and secrets.
+ * built: the agent and the evals that prove it, what it follows (skills,
+ * rules, guardrails), what runs (workflows, workers), and secrets.
  */
-export const studioKinds = ["agents", "skills", "rules", "guardrails", "workflows", "workers", "evals", "secrets"] as const;
+export const studioKinds = ["agents", "evals", "skills", "rules", "guardrails", "workflows", "workers", "secrets"] as const;
 /** A kind of item in Studio. */
 export type StudioKind = (typeof studioKinds)[number];
 
@@ -74,6 +74,8 @@ export function StudioDrawer({ dir, initial, onClose, onWorkers }: { dir: string
   const [kind, setKind] = useState<StudioKind>(initial.kind);
   // Whether the kind's form holds unsaved changes: closing asks first.
   const [dirty, setDirty] = useState(false);
+  // The agent Studio › Evals opens for (from an agent's form).
+  const [evalsFor, setEvalsFor] = useState("");
   // Showing the workers sees their failed runs (BL-WK-11).
   useEffect(() => {
     if (kind === "workers") onWorkers?.();
@@ -111,13 +113,24 @@ export function StudioDrawer({ dir, initial, onClose, onWorkers }: { dir: string
           ))}
         </div>
         <div className="settings-pane">
-          {kind === "agents" && <AgentEditor workspace={dir} scope={AgentScope.WORKSPACE} slide onDirty={setDirty} />}
+          {kind === "agents" && (
+            <AgentEditor
+              workspace={dir}
+              scope={AgentScope.WORKSPACE}
+              slide
+              onDirty={setDirty}
+              onEvals={(agent) => {
+                setEvalsFor(agent);
+                choose("evals");
+              }}
+            />
+          )}
           {kind === "skills" && <SkillsPane workspace={dir} onDirty={setDirty} />}
           {kind === "rules" && <RulesPane workspace={dir} onDirty={setDirty} onGuardrails={() => choose("guardrails")} />}
           {kind === "workers" && <WorkersPane dir={dir} intent={initial.kind === "workers" ? initial.intent : undefined} onLeave={onClose} onDirty={setDirty} />}
           {kind === "secrets" && <SecretsEditor workspace={dir} />}
           {kind === "guardrails" && <GuardrailsPane workspace={dir} onDirty={setDirty} onRules={() => choose("rules")} />}
-          {kind === "evals" && <EvalsPane workspace={dir} onDirty={setDirty} />}
+          {kind === "evals" && <EvalsPane workspace={dir} onDirty={setDirty} forAgent={evalsFor} onHandled={() => setEvalsFor("")} />}
           {folders[kind] && <Coming kind={kind} />}
         </div>
       </div>

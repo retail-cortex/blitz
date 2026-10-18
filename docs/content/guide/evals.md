@@ -7,6 +7,18 @@ An **eval** checks that your agents still answer as they should, after you chang
 
 Spec: [evals](../about/specs/spec_evals_042.md).
 
+## From an agent to its evals
+
+Evals belong with making an agent, so in Studio they come right after **Agents**:
+
+1. **Write the agent** (or let another agent write it).
+2. **Draft its evals.** The agent's form has **Write evals**, and Studio › Evals lists **Agents without evals** with **Draft evals**: a model reads what the agent is for and its instructions and proposes cases (typical asks, edge cases, what it should decline). Edit them, then save.
+3. **Run them.**
+4. **Refine.** When the agent misses cases, **Refine its instructions** has the model rewrite them with those cases in hand; you review the change, and it's saved to the agent.
+5. **Run again.** Later, saving the agent (or a skill its evals use) offers to run its evals again.
+
+Evals run when you make or change an agent, never during a conversation: checking each answer as it happens is what [rules and guardrails](extending.md) are for.
+
 ## An eval file
 
 An eval is a Markdown file in `.agents/evals/`, so it's versioned with the project. Its cases are a table:
