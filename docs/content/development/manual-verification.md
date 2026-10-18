@@ -682,6 +682,10 @@ The facts cost nothing; a check makes one model call per item judged (cents for 
 
 - [ ] Open Studio from the menu bar.
   **Expected:** it opens on **Overview**: the workspace's ring ("Not judged yet"), a ring per kind with counts, the 30-day runs chart, eval coverage, Needs attention (an agent file with bad YAML shows as "doesn't load"), and a card per kind. Opening a card shows its table; reopening Studio keeps it open.
+- [ ] With three workspaces open, open Studio, then click through every kind and back to Overview.
+  **Expected:** every list loads at once; nothing waits (the Overview holds no connection open).
+- [ ] **Re-check**, then close Studio, and reopen it.
+  **Expected:** the check went on: the bar shows where it is; when it ends, "Judged n items for $x" (or how many couldn't be judged).
 - [ ] **Re-check**.
   **Expected:** a dialog says how many items and about what it costs; **Judge** shows "Judging 1 of n" with a bar and Stop; the kind rings and the workspace's ring fill in as verdicts arrive; a snackbar says what it judged and cost. Each item in Studio's lists shows its grade badge (a pulsing dot while it's judged).
 - [ ] Re-check again without changing anything; then edit an agent and Re-check.

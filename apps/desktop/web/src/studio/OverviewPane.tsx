@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { mdiAlertCircleOutline, mdiChartDonut, mdiChevronDown, mdiChevronRight, mdiCogOutline, mdiInformationOutline, mdiOpenInNew, mdiRefresh, mdiStop, mdiWrenchOutline } from "@mdi/js";
 import { config, workspaces } from "../api";
@@ -25,7 +25,7 @@ import { t, tn } from "../i18n";
 import { Bars, Columns, ScoreRing, Sparkline, gradeTone } from "../ui/charts";
 import { Button, Chip, Dialog, Field, Icon, IconButton, useSnackbar } from "../ui/controls";
 import { cost, ms, took } from "../workflowRuns";
-import { attention, clearCheck, dayColumns, dayTotals, delta, grade, healthKinds, itemKey, kindSummary, startCheck, stopCheck, topRuns, useCheck, type HealthKind } from "./health";
+import { attention, dayColumns, dayTotals, delta, grade, healthKinds, itemKey, kindSummary, startCheck, stopCheck, topRuns, type HealthKind } from "./health";
 
 // Studio's Overview (spec_health_044): the workspace's dashboard, every
 // card opening in place into its detail.
@@ -48,9 +48,8 @@ const when = (t?: { seconds: bigint; nanos: number }) => (t ? new Date(ms(t)).to
  * coverage, what needs attention, and each kind's items; Re-check judges
  * what changed (Re-check all, everything), after saying what it costs.
  */
-export function OverviewPane({ workspace, health, onOpen, onClose }: { workspace: string; health?: WorkspaceHealth; onOpen: (kind: HealthKind, name: string, path: string) => void; onClose: () => void }) {
+export function OverviewPane({ workspace, health, onOpen, onClose, onStarted }: { workspace: string; health?: WorkspaceHealth; onOpen: (kind: HealthKind, name: string, path: string) => void; onClose: () => void; onStarted: () => void }) {
   const snack = useSnackbar();
-  const check = useCheck(workspace);
   const [open, setOpen] = useState<string[]>(() => loadOpen(workspace));
   const [asking, setAsking] = useState<{ force: boolean; items: number; cost: number; priced: boolean; scope: { kinds?: string[]; items?: string[]; force: boolean } } | null>(null);
   const [settings, setSettings] = useState(false);
@@ -70,14 +69,6 @@ export function OverviewPane({ workspace, health, onOpen, onClose }: { workspace
     requestAnimationFrame(() => document.getElementById(`health-${id}`)?.scrollIntoView({ behavior: "smooth", block: "start" }));
   };
 
-  // A check that ended says how it went, once.
-  useEffect(() => {
-    if (!check?.done) return;
-    if (check.error) snack(check.error, { error: true });
-    else snack(t("desktop.health.checked", { judged: check.judged, cost: cost(check.cost) }), { error: check.errors.length > 0 });
-    clearCheck(workspace);
-  }, [check, snack, workspace]);
-
   const ask = async (scope: { kinds?: string[]; items?: string[]; force: boolean }) => {
     try {
       const e = await workspaces.estimateHealthCheck({ workspace, scope });
@@ -94,7 +85,8 @@ export function OverviewPane({ workspace, health, onOpen, onClose }: { workspace
   const totals = dayTotals(health.days);
   const agents = items.filter((it) => it.kind === "agent");
   const covered = agents.filter((a) => !a.flags.includes("uncovered"));
-  const going = !!check && !check.done;
+  const going = health.checking;
+  const progress = health.progress;
 
   return (
     <div className="overview">
@@ -108,22 +100,22 @@ export function OverviewPane({ workspace, health, onOpen, onClose }: { workspace
             .filter(Boolean)
             .join(" · ")}
         </span>
-        <Button small icon={mdiRefresh} disabled={going || health.checking} onClick={() => void ask({ force: false })}>
+        <Button small icon={mdiRefresh} disabled={going} onClick={() => void ask({ force: false })}>
           {t("desktop.health.recheck")}
         </Button>
-        <Button small variant="text" disabled={going || health.checking} onClick={() => void ask({ force: true })}>
+        <Button small variant="text" disabled={going} onClick={() => void ask({ force: true })}>
           {t("desktop.health.recheck_all")}
         </Button>
         <IconButton icon={mdiCogOutline} label={t("desktop.health.settings")} small onClick={() => setSettings(true)} />
       </div>
-      {(going || health.checking) && (
+      {going && (
         <div className="card overview-progress row" role="status">
           <span className="spacer">
-            {check && check.total
-              ? t("desktop.health.judging", { index: check.index, total: check.total, item: check.item, cost: cost(check.cost) })
+            {progress?.total
+              ? t("desktop.health.judging", { index: progress.index, total: progress.total, item: progress.item, cost: cost(progress.costUsd) })
               : t("desktop.health.judging_start")}
           </span>
-          <progress max={check?.total || 1} value={check?.index ?? 0} />
+          <progress max={progress?.total || 1} value={Math.max(0, (progress?.index ?? 1) - 1)} />
           <Button small icon={mdiStop} onClick={() => void stopCheck(workspace)}>
             {t("desktop.evals.stop")}
           </Button>
@@ -282,7 +274,7 @@ export function OverviewPane({ workspace, health, onOpen, onClose }: { workspace
                   onClick={() => {
                     const scope = asking.scope;
                     setAsking(null);
-                    void startCheck(workspace, scope);
+                    startCheck(workspace, scope).then(onStarted, (e) => snack(message(e), { error: true }));
                   }}
                 >
                   {t("desktop.health.judge_go")}

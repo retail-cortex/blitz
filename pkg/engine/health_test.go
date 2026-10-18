@@ -137,7 +137,7 @@ func TestHealthSchedule(t *testing.T) {
 	w.cfg.Health.Schedule = "@every 1h"
 
 	w.cfg.Health.MaxCostUSD = 1e-12
-	require.NoError(t, w.ScheduledHealthCheck(context.Background()))
+	require.NoError(t, w.ScheduledHealthCheck(context.Background(), nil))
 	st := store.State()
 	assert.Contains(t, st.Skipped, "over the $0.00 limit")
 	assert.Empty(t, judge.Requests, "nothing judged")
@@ -146,7 +146,7 @@ func TestHealthSchedule(t *testing.T) {
 	w.cfg.Health.MaxCostUSD = 0 // no limit
 	require.NoError(t, store.SetState(health.State{LastCheck: now.Add(-2 * time.Hour)}))
 	due, _, _ := w.EstimateHealthCheck(context.Background(), HealthCheck{})
-	require.NoError(t, w.ScheduledHealthCheck(context.Background()))
+	require.NoError(t, w.ScheduledHealthCheck(context.Background(), nil))
 	assert.Len(t, judge.Requests, due, "the agent and the built-in guardrails")
 	assert.Empty(t, store.State().Skipped)
 }

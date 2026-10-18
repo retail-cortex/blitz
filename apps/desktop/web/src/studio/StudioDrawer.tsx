@@ -33,7 +33,8 @@ import { SkillsPane } from "./SkillsPane";
 import { WorkersPane } from "./WorkersPane";
 import { WorkflowsPane } from "./WorkflowsPane";
 import { GradesContext } from "./GradeBadge";
-import { studioKindOf, useCheck, useWorkspaceHealth, type HealthKind } from "./health";
+import { checkEnded, studioKindOf, useWorkspaceHealth, type HealthKind } from "./health";
+import { cost } from "../workflowRuns";
 import { OverviewPane } from "./OverviewPane";
 
 /**
@@ -98,13 +99,21 @@ export function StudioDrawer({ dir, initial, onClose, onWorkers }: { dir: string
   }, [asked, initial.kind]);
   // The dashboard, followed while Studio is open: the Overview's, and
   // each list's grade badges (spec_health_044).
-  const { health } = useWorkspaceHealth(dir);
-  const check = useCheck(dir);
+  const { health, refresh: refreshHealth } = useWorkspaceHealth(dir);
   const grades = useMemo(() => {
     const m = new Map<string, string>();
     for (const it of health?.items ?? []) if (it.verdict?.grade) m.set(`${it.kind}/${it.name}`, it.verdict.grade);
-    return { grades: m, judging: check && !check.done ? check.item : undefined };
-  }, [health, check]);
+    return { grades: m, judging: health?.checking ? health.progress?.item : undefined };
+  }, [health]);
+  // A check that ends while Studio is open says how it went.
+  const [seenHealth, setSeenHealth] = useState(health);
+  if (seenHealth !== health) {
+    if (checkEnded(seenHealth, health) && health) {
+      const errors = health.lastErrors.length;
+      snack(t(errors ? "desktop.health.checked_errors" : "desktop.health.checked", { judged: health.lastJudged, cost: cost(health.lastCostUsd), errors }), { error: errors > 0 });
+    }
+    setSeenHealth(health);
+  }
   // An item the Overview opened: its kind's pane shows it.
   const [jump, setJump] = useState<{ kind: StudioKind; intent: ItemIntent }>();
   const openItem = (k: HealthKind, name: string, path: string) => {
@@ -148,7 +157,7 @@ export function StudioDrawer({ dir, initial, onClose, onWorkers }: { dir: string
         </div>
         <GradesContext.Provider value={grades}>
         <div className="settings-pane" key={listed}>
-          {kind === "overview" && <OverviewPane workspace={dir} health={health} onOpen={openItem} onClose={onClose} />}
+          {kind === "overview" && <OverviewPane workspace={dir} health={health} onOpen={openItem} onClose={onClose} onStarted={refreshHealth} />}
           {kind === "agents" && (
             <AgentEditor
               workspace={dir}

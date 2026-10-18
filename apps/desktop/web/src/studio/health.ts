@@ -18,7 +18,7 @@
 // service's WorkspaceHealth, followed live, and what the Overview and
 // Studio's grade badges make of it.
 
-import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { workspaces } from "../api";
 import type { HealthCheckScope, HealthDay, HealthItem, WorkspaceHealth } from "../gen/blitz/v1/workspace_pb";
 import type { MessageInitShape } from "@bufbuild/protobuf";
@@ -45,42 +45,43 @@ export function grade(score: number): string {
 /** An item's key: kind and name, as the service's. */
 export const itemKey = (it: Pick<HealthItem, "kind" | "name">) => `${it.kind}/${it.name}`;
 
-/** How long the stream waits before asking again when it breaks or the service can't stream. */
-const pollMs = 15_000;
+/** How often the dashboard is asked for while shown. */
+export const pollMs = 5_000;
+/** How often it's asked for while a check runs. */
+export const checkingPollMs = 1_500;
 
-/** The dashboard of a workspace, followed while shown; refresh asks again now. */
+/**
+ * The dashboard of a workspace, asked for while shown (every pollMs, more
+ * often while a check runs); refresh asks again now. It's asked for rather
+ * than streamed: the window has a few connections to the service, and a
+ * stream would hold one for as long as Studio is open.
+ */
 export function useWorkspaceHealth(workspace: string): { health?: WorkspaceHealth; error: string; refresh: () => void } {
   const [health, setHealth] = useState<WorkspaceHealth>();
   const [error, setError] = useState("");
-  const refresh = useCallback(() => {
-    workspaces.getWorkspaceHealth({ workspace }).then(
-      (r) => (setHealth(r.health), setError("")),
-      (e) => setError(String(e)),
-    );
-  }, [workspace]);
+  const [tick, setTick] = useState(0);
+  const refresh = useCallback(() => setTick((n) => n + 1), []);
+  const checking = !!health?.checking;
   useEffect(() => {
-    const ctl = new AbortController();
+    let live = true;
     let timer: ReturnType<typeof setTimeout> | undefined;
-    (async () => {
-      while (!ctl.signal.aborted) {
-        try {
-          for await (const r of workspaces.watchWorkspaceHealth({ workspace }, { signal: ctl.signal })) {
-            setHealth(r.health);
-            setError("");
-          }
-        } catch {
-          // an older service, or a dropped stream: asked again below
-        }
-        if (ctl.signal.aborted) return;
-        refresh();
-        await new Promise((res) => (timer = setTimeout(res, pollMs)));
+    const ask = async () => {
+      try {
+        const r = await workspaces.getWorkspaceHealth({ workspace });
+        if (!live) return;
+        setHealth(r.health);
+        setError("");
+      } catch (e) {
+        if (live) setError(String(e));
       }
-    })();
+      if (live) timer = setTimeout(ask, checking ? checkingPollMs : pollMs);
+    };
+    void ask();
     return () => {
-      ctl.abort();
+      live = false;
       clearTimeout(timer);
     };
-  }, [workspace, refresh]);
+  }, [workspace, checking, tick]);
   return { health, error, refresh };
 }
 
@@ -170,56 +171,9 @@ export function delta(now: number, before: number): string {
   return d > 0 ? `+${d.toFixed(1)}` : d.toFixed(1);
 }
 
-/** A check going from this window: how far, the item being judged, the cost so far, and what failed. */
-export interface CheckState {
-  index: number;
-  total: number;
-  item: string;
-  cost: number;
-  errors: string[];
-  done: boolean;
-  judged: number;
-  error?: string;
-}
-
-const checks = new Map<string, CheckState>();
-const checkListeners = new Set<() => void>();
-const checkAborts = new Map<string, AbortController>();
-
-function setCheck(workspace: string, next: CheckState | undefined) {
-  if (next) checks.set(workspace, next);
-  else checks.delete(workspace);
-  for (const f of checkListeners) f();
-}
-
-/** The workspace's check going from this window (or its last, until another starts). */
-export function useCheck(workspace: string): CheckState | undefined {
-  return useSyncExternalStore(
-    (f) => (checkListeners.add(f), () => checkListeners.delete(f)),
-    () => checks.get(workspace),
-  );
-}
-
-/** Starts a check of scope, following it; resolves with how it ended. */
-export async function startCheck(workspace: string, scope: MessageInitShape<typeof HealthCheckScopeSchema>): Promise<CheckState> {
-  const ctl = new AbortController();
-  checkAborts.set(workspace, ctl);
-  let st: CheckState = { index: 0, total: 0, item: "", cost: 0, errors: [], done: false, judged: 0 };
-  setCheck(workspace, st);
-  try {
-    for await (const r of workspaces.checkWorkspaceHealth({ workspace, scope }, { signal: ctl.signal })) {
-      st = r.done
-        ? { ...st, done: true, judged: r.judged, cost: r.costUsd, item: "" }
-        : { ...st, index: r.index, total: r.total, item: r.item, cost: r.costUsd, errors: r.error ? [...st.errors, `${r.item}: ${r.error}`] : st.errors };
-      setCheck(workspace, st);
-    }
-  } catch (e) {
-    st = { ...st, done: true, item: "", error: ctl.signal.aborted ? undefined : String(e) };
-    setCheck(workspace, st);
-  } finally {
-    checkAborts.delete(workspace);
-  }
-  return st;
+/** Starts a check of scope in the service, which runs it whoever watches; its progress shows in the dashboard. */
+export async function startCheck(workspace: string, scope: MessageInitShape<typeof HealthCheckScopeSchema>) {
+  await workspaces.startHealthCheck({ workspace, scope });
 }
 
 /** Stops the workspace's check after the item being judged. */
@@ -227,7 +181,7 @@ export async function stopCheck(workspace: string) {
   await workspaces.stopHealthCheck({ workspace }).catch(() => {});
 }
 
-/** Forgets a check that ended (its summary was shown). */
-export const clearCheck = (workspace: string) => setCheck(workspace, undefined);
+/** Whether a check just ended: it was checking before and isn't now. */
+export const checkEnded = (before: Pick<WorkspaceHealth, "checking"> | undefined, now: Pick<WorkspaceHealth, "checking"> | undefined) => !!before?.checking && !!now && !now.checking;
 
 export type { HealthCheckScope };

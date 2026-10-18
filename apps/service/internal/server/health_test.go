@@ -23,6 +23,7 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/retail-cortex/blitz/pkg/config/configtest"
+	"github.com/retail-cortex/blitz/pkg/engine"
 	pb "github.com/retail-cortex/blitz/proto/blitz/v1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -88,7 +89,32 @@ func TestWorkspaceHealthOverTheAPI(t *testing.T) {
 	assert.NotNil(t, got.Msg.Health.LastCheck)
 	assert.NotNil(t, got.Msg.Health.Next, "the schedule runs once there's been a check")
 
+	// Started in the service, it goes on alone; the dashboard says it's
+	// going, then how it ended.
+	_, err = c.workspaces.StartHealthCheck(ctx, connect.NewRequest(&pb.StartHealthCheckRequest{Workspace: dir, Scope: &pb.HealthCheckScope{Items: []string{"agent/writer"}, Force: true}}))
+	require.NoError(t, err)
+	for {
+		got, err = c.workspaces.GetWorkspaceHealth(ctx, connect.NewRequest(&pb.GetWorkspaceHealthRequest{Workspace: dir}))
+		require.NoError(t, err)
+		if !got.Msg.Health.Checking {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	assert.Zero(t, got.Msg.Health.LastJudged)
+	require.Len(t, got.Msg.Health.LastErrors, 1, "the judge had no answer")
+	assert.Contains(t, got.Msg.Health.LastErrors[0], "agent/writer")
+
 	healthChecks.Store(dir, context.CancelFunc(func() {}))
+	healthProgress.Store(dir, engine.HealthProgress{Item: "agent/writer", Index: 1, Total: 2})
+	got, err = c.workspaces.GetWorkspaceHealth(ctx, connect.NewRequest(&pb.GetWorkspaceHealthRequest{Workspace: dir}))
+	require.NoError(t, err)
+	assert.True(t, got.Msg.Health.Checking)
+	require.NotNil(t, got.Msg.Health.Progress)
+	assert.Equal(t, "agent/writer", got.Msg.Health.Progress.Item)
+	_, err = c.workspaces.StartHealthCheck(ctx, connect.NewRequest(&pb.StartHealthCheckRequest{Workspace: dir}))
+	assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err), "one at a time")
+	healthProgress.Delete(dir)
 	busy, err := c.workspaces.CheckWorkspaceHealth(ctx, connect.NewRequest(&pb.CheckWorkspaceHealthRequest{Workspace: dir}))
 	require.NoError(t, err)
 	assert.False(t, busy.Receive())

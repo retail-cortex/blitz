@@ -1654,6 +1654,7 @@
     "desktop.health.attention": "À surveiller",
     "desktop.health.changed_since": "modifié depuis son évaluation",
     "desktop.health.checked": "{judged} éléments évalués pour {cost}.",
+    "desktop.health.checked_errors": "{judged} éléments évalués pour {cost}; {errors} n'ont pas pu l'être.",
     "desktop.health.cost": "Coût",
     "desktop.health.coverage": "Couverture des évaluations",
     "desktop.health.covered": "agents avec évaluations",

@@ -29,7 +29,7 @@ type Out = MessageInitShape<typeof RunTurnResponseSchema>;
 import { RunStatus, WorkerService, WorkerState } from "../gen/blitz/v1/worker_pb";
 import { ConfigService, KeySource, MCPServerConfigSchema, type MCPServerConfig } from "../gen/blitz/v1/config_pb";
 import { FileKind, FileService, GitAction, RevisionDiff } from "../gen/blitz/v1/file_pb";
-import { HealthVerdictSchema, WorkspaceHealthSchema, type HealthItem, type WorkspaceHealth } from "../gen/blitz/v1/workspace_pb";
+import { HealthCheckProgressSchema, HealthVerdictSchema, WorkspaceHealthSchema, type HealthItem, type WorkspaceHealth } from "../gen/blitz/v1/workspace_pb";
 import { AgentFileSchema, AgentScope, EvalResultSchema, ConflictChoice, GitOperation, PullOutcome, SuggestionKind, SuggestionSchema, WorkflowRunEventSchema, WorkflowRunSchema, WorkflowRunStepSchema, WorkspaceService, type AgentDefinition, type WorkflowRun } from "../gen/blitz/v1/workspace_pb";
 
 // Whether the fake workspace is a git repository (?norepo: not yet).
@@ -1050,6 +1050,7 @@ const fakeHealth: WorkspaceHealth = create(WorkspaceHealthSchema, {
 });
 
 let fakeChecking = false;
+let fakeProgress: { item: string; index: number; total: number; costUsd: number } | undefined;
 async function* watchFakeHealth(): AsyncGenerator<{ health: WorkspaceHealth }> {
   let last = "";
   for (;;) {
@@ -1421,7 +1422,19 @@ export function installFake() {
         },
         watchWorkflowRun: ({ id }) => watchFakeRun(id),
         watchWorkflowRuns: ({ workspace }) => watchFakeRuns(workspace),
-        getWorkspaceHealth: () => ({ health: clone(WorkspaceHealthSchema, { ...fakeHealth, checking: fakeChecking }) }),
+        getWorkspaceHealth: () => ({ health: clone(WorkspaceHealthSchema, { ...fakeHealth, checking: fakeChecking, progress: fakeChecking && fakeProgress ? create(HealthCheckProgressSchema, fakeProgress) : undefined }) }),
+        startHealthCheck: ({ scope }) => {
+          if (fakeChecking) throw new ConnectError("a health check of this workspace is running", Code.FailedPrecondition);
+          void (async () => {
+            for await (const r of fakeCheck(scope)) {
+              if (r.done) {
+                fakeHealth.lastJudged = r.judged ?? 0;
+                fakeHealth.lastErrors = [];
+              } else if (!("verdict" in r)) fakeProgress = { item: r.item ?? "", index: r.index ?? 0, total: r.total ?? 0, costUsd: r.costUsd ?? 0 };
+            }
+          })();
+          return {};
+        },
         watchWorkspaceHealth: () => watchFakeHealth(),
         estimateHealthCheck: ({ scope }) => {
           const n = fakeDue(scope).length;

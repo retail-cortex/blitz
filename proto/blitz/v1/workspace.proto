@@ -292,6 +292,10 @@ service WorkspaceService {
   rpc CheckWorkspaceHealth(CheckWorkspaceHealthRequest) returns (stream CheckWorkspaceHealthResponse);
   // Stops the workspace's check after the item being judged.
   rpc StopHealthCheck(StopHealthCheckRequest) returns (StopHealthCheckResponse);
+  // Starts a check in the service and returns at once: it goes on whoever
+  // watches, its progress in the dashboard (WorkspaceHealth.progress);
+  // HEALTH_CHECK_RUNNING when one is going.
+  rpc StartHealthCheck(StartHealthCheckRequest) returns (StartHealthCheckResponse);
   // Returns the tasks paused workflow runs wait on (human tasks' forms,
   // timers), oldest first: one workspace's, or every one's.
   rpc ListHumanTasks(ListHumanTasksRequest) returns (ListHumanTasksResponse);
@@ -3071,8 +3075,21 @@ message WorkspaceHealth {
   string schedule = 12;
   google.protobuf.Timestamp next = 13;
   double max_cost_usd = 14;
-  // A check is going.
+  // A check is going, and how far it is.
   bool checking = 15;
+  HealthCheckProgress progress = 16;
+  // How the last check ended: the items it judged, and those it couldn't.
+  int32 last_judged = 17;
+  repeated string last_errors = 18;
+}
+
+// How far a check going is.
+message HealthCheckProgress {
+  // The item being judged ("kind/name"), its place, and the cost so far.
+  string item = 1;
+  int32 index = 2;
+  int32 total = 3;
+  double cost_usd = 4;
 }
 
 // One agent, skill, rule, guardrail, eval, workflow or worker.
@@ -3226,3 +3243,12 @@ message StopHealthCheckRequest {
 
 // Response message for WorkspaceService.StopHealthCheck.
 message StopHealthCheckResponse {}
+
+// Request message for WorkspaceService.StartHealthCheck.
+message StartHealthCheckRequest {
+  string workspace = 1;
+  HealthCheckScope scope = 2;
+}
+
+// Response message for WorkspaceService.StartHealthCheck.
+message StartHealthCheckResponse {}

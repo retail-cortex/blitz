@@ -1654,6 +1654,7 @@
     "desktop.health.attention": "Needs attention",
     "desktop.health.changed_since": "changed since it was judged",
     "desktop.health.checked": "Judged {judged} items for {cost}.",
+    "desktop.health.checked_errors": "Judged {judged} items for {cost}; {errors} couldn't be judged.",
     "desktop.health.cost": "Cost",
     "desktop.health.coverage": "Eval coverage",
     "desktop.health.covered": "agents with evals",

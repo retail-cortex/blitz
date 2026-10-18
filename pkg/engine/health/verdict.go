@@ -201,6 +201,10 @@ type State struct {
 	// the schedule waits for a first check by hand).
 	LastCheck time.Time `json:"last_check"`
 	LastCost  float64   `json:"last_cost_usd,omitempty"`
+	// Judged and Errors are what the last check judged, and the items it
+	// couldn't, with why.
+	Judged int      `json:"judged,omitempty"`
+	Errors []string `json:"errors,omitempty"`
 	// Skipped is why the last scheduled check didn't run.
 	Skipped string `json:"skipped,omitempty"`
 }

@@ -1654,6 +1654,7 @@
     "desktop.health.attention": "Requiere atención",
     "desktop.health.changed_since": "cambió desde que se evaluó",
     "desktop.health.checked": "Se evaluaron {judged} elementos por {cost}.",
+    "desktop.health.checked_errors": "Se evaluaron {judged} elementos por {cost}; {errors} no se pudieron evaluar.",
     "desktop.health.cost": "Costo",
     "desktop.health.coverage": "Cobertura de evaluaciones",
     "desktop.health.covered": "agentes con evaluaciones",

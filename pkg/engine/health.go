@@ -69,6 +69,8 @@ type HealthCheck struct {
 	Items []string
 	// Force judges items whose verdict is current too.
 	Force bool
+	// Starting, when set, hears of each item as its judging starts.
+	Starting func(item string, index, total int)
 }
 
 // HealthProgress is one step of a check.
@@ -232,9 +234,10 @@ func (w *Workspace) CheckHealth(ctx context.Context, c HealthCheck, progress fun
 	store := w.healthStore()
 	items := w.due(ctx, c)
 	ref := w.healthModel()
+	var failed []string
 	defer func() {
 		st := store.State()
-		st.LastCheck, st.LastCost, st.Skipped = time.Now(), costUSD, ""
+		st.LastCheck, st.LastCost, st.Skipped, st.Judged, st.Errors = time.Now(), costUSD, "", judged, failed
 		_ = store.SetState(st)
 	}()
 	if len(items) == 0 {
@@ -249,6 +252,9 @@ func (w *Workspace) CheckHealth(ctx context.Context, c HealthCheck, progress fun
 			return judged, costUSD, ctx.Err()
 		}
 		p := HealthProgress{Item: it.Key(), Index: i + 1, Total: len(items)}
+		if c.Starting != nil {
+			c.Starting(it.Key(), i+1, len(items))
+		}
 		reply, served, usage, aerr := runtime.Ask(ctx, llm, health.Instruction, health.Prompt(it, w.healthFile(it)))
 		cost := w.engine.EstimateUsage(served, usage).CostUSD
 		costUSD += cost
@@ -258,6 +264,9 @@ func (w *Workspace) CheckHealth(ctx context.Context, c HealthCheck, progress fun
 		}
 		if aerr != nil {
 			p.Error = aerr.Error()
+			if len(failed) < 10 {
+				failed = append(failed, it.Key()+": "+p.Error)
+			}
 		} else {
 			v.Model, v.At, v.CostUSD = ref, time.Now(), cost
 			if serr := store.Add(v); serr != nil {
@@ -277,7 +286,7 @@ func (w *Workspace) CheckHealth(ctx context.Context, c HealthCheck, progress fun
 
 // ScheduledHealthCheck runs the schedule's check: what changed, if its
 // estimate is within [health] max_cost_usd (else it records why not).
-func (w *Workspace) ScheduledHealthCheck(ctx context.Context) error {
+func (w *Workspace) ScheduledHealthCheck(ctx context.Context, starting func(item string, index, total int)) error {
 	n, cost, _ := w.EstimateHealthCheck(ctx, HealthCheck{})
 	store := w.healthStore()
 	if limit := w.cfg.Health.MaxCostUSD; limit > 0 && cost > limit {
@@ -287,7 +296,7 @@ func (w *Workspace) ScheduledHealthCheck(ctx context.Context) error {
 		st.LastCheck = time.Now()
 		return store.SetState(st)
 	}
-	_, _, err := w.CheckHealth(ctx, HealthCheck{}, nil)
+	_, _, err := w.CheckHealth(ctx, HealthCheck{Starting: starting}, nil)
 	return err
 }
 
