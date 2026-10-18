@@ -21,9 +21,13 @@ import "@xyflow/react/dist/style.css";
 import {
   mdiAlertCircleOutline,
   mdiArrowLeft,
-  mdiCheckCircleOutline,
-  mdiCloseCircleOutline,
+  mdiChevronDoubleLeft,
+  mdiChevronDoubleRight,
+  mdiChevronDown,
+  mdiChevronUp,
   mdiCodeBraces,
+  mdiHistory,
+  mdiShapePlusOutline,
   mdiContentSaveOutline,
   mdiAccountCheckOutline,
   mdiAccountNetworkOutline,
@@ -35,13 +39,11 @@ import {
   mdiDatabaseOutline,
   mdiPlusThick,
   mdiTableArrowRight,
-  mdiSkipNextCircleOutline,
   mdiDeleteOutline,
   mdiEmailOutline,
   mdiFileDocumentOutline,
   mdiFileImportOutline,
   mdiFileExportOutline,
-  mdiLoading,
   mdiPlay,
   mdiPlus,
   mdiRobotOutline,
@@ -55,17 +57,22 @@ import {
 import { A2uiForm } from "../a2ui/A2uiForm";
 import { TaskCard } from "../a2ui/TaskCard";
 import type { FormAction } from "../a2ui/model";
-import { answerTask } from "../humanTasks";
+import { answerTask, useTasks } from "../humanTasks";
 import { parseForm, starterForm } from "../a2ui/model";
 import { sessions, workspaces } from "../api";
 import { DraftButton } from "./Draft";
 import { ApprovalCard } from "../Conversation";
 import { message } from "../errors";
 import { Decision, type ApprovalRequest } from "../gen/blitz/v1/turn_pb";
-import type { HumanTask, SkillInfo, WorkflowFile } from "../gen/blitz/v1/workspace_pb";
+import type { HumanTask, SkillInfo, WorkflowFile, WorkflowRun, WorkflowRunStep } from "../gen/blitz/v1/workspace_pb";
+import type { ItemIntent } from "../intent";
+import { ResizeHandle } from "../ui/ResizeHandle";
+import { cost, goingRun, latestSteps, ms, progress, seeRun, took, useWorkflowRuns, watchedRuns } from "../workflowRuns";
+import { dated, RunPanel, statusIcon } from "./RunPanel";
+import { WorkflowSchedule } from "./WorkflowSchedule";
 import { t, tn } from "../i18n";
 import { SuggestInput, SuggestTextarea } from "../SecretSuggest";
-import { Button, Chip, Dialog, Field, Icon, IconButton, Menu, Segmented, useSnackbar, type MenuEntry } from "../ui/controls";
+import { Button, Dialog, Field, Icon, IconButton, Menu, MultiSelect, Segmented, useSnackbar } from "../ui/controls";
 import { addLink, agentTypes, comingSoon, emptyWorkflowForm, formFromWorkflow, fromTemplate, gatewayTypes, linkId, pauseTypes, linkText, newStep, removeStep, sameWorkflowForm, setLink, specFromForm, methods, stepGroups, stepNeeds, templates, type AuthForm, type FieldForm, type PairForm, type LinkKind, type StepForm, type StepType, type Template, type WorkflowForm } from "./workflowForm";
 
 /** Each step type's icon. */
@@ -92,12 +99,28 @@ const typeIcons: Record<StepType, string> = {
   timer: mdiTimerSandComplete,
 };
 
-/** A step's state in a run. */
-type StepRun = { status: string; output: string; error: string };
-/** A run from the canvas: its background run, its steps, what it waits on. */
-type Live = { id: string; session: string; state: "running" | "waiting" | "done" | "failed" | "stopped"; steps: Record<string, StepRun>; approval: ApprovalRequest | null; task: HumanTask | null; error: string };
+type StepData = { step: StepForm; run?: WorkflowRunStep };
 
-type StepData = { step: StepForm; run?: StepRun };
+/** What dragging a step type from the toolbox carries. */
+const stepDrag = "application/x-blitz-step";
+
+/** The settings panel's width as the user left it (0: the default). */
+const sideKey = "blitz.flows.side";
+const sideDefault = 340;
+const stored = (k: string) => {
+  try {
+    return localStorage.getItem(k) ?? "";
+  } catch {
+    return "";
+  }
+};
+const store = (k: string, v: string) => {
+  try {
+    localStorage.setItem(k, v);
+  } catch {
+    // a private window: the default next time
+  }
+};
 
 /** A step on the canvas: its icon, title, what it runs or needs, and its state in a run. */
 function StepNode({ data, selected }: NodeProps<Node<StepData>>) {
@@ -144,22 +167,106 @@ function StepNode({ data, selected }: NodeProps<Node<StepData>>) {
           {s.forEach && <span className="flow-repeat" title={t("desktop.flows.repeats", { expr: s.forEach })}> ×N</span>}
         </span>
         <small className={`ellipsis ${needs && needs !== "coming_soon" ? "warn-text" : ""}`}>{sub}</small>
+        {data.run && <RunMeta run={data.run} />}
       </span>
-      {status && <Icon path={status === "running" ? mdiLoading : status === "done" ? mdiCheckCircleOutline : status === "skipped" ? mdiSkipNextCircleOutline : mdiCloseCircleOutline} spin={status === "running"} className={status === "failed" ? "error-text" : "muted"} size="sm" />}
+      {status && <StatusMark run={data.run!} />}
       {s.type !== "save_file" && <Handle type="source" position={Position.Right} />}
     </div>
   );
 }
 const nodeTypes = { step: StepNode };
 
+/** What a step's run took and spent, once it's ended. */
+const runMeta = (run: WorkflowRunStep) => (run.ended && run.status !== "skipped" ? [took(ms(run.started), ms(run.ended)), run.usage?.calls ? cost(run.usage.costUsd, run.usage.priced) : ""].filter(Boolean).join(" · ") : "");
+
+/** A step's state in the run shown. */
+function StatusMark({ run }: { run: WorkflowRunStep }) {
+  const icon = statusIcon(run.status);
+  return (
+    <span className="flow-node-status" title={[t(`desktop.flows.run_status.${run.status}`), runMeta(run), run.error].filter(Boolean).join(" · ")}>
+      <Icon path={icon.path} spin={icon.spin} className={icon.className} size="sm" />
+    </span>
+  );
+}
+
+/** Under a step's title: what its run took and spent. */
+function RunMeta({ run }: { run: WorkflowRunStep }) {
+  const meta = runMeta(run);
+  return meta ? <small className="flow-node-meta">{meta}</small> : null;
+}
+
+/**
+ * The canvas's step toolbox: every step type by group, each dragged onto
+ * the canvas (or clicked, to land in view); it folds to one button.
+ */
+function StepToolbox({ open, onToggle, onAdd }: { open: boolean; onToggle: () => void; onAdd: (type: StepType) => void }) {
+  return (
+    <div className={`flow-toolbox ${open ? "is-open" : ""}`} role="toolbar" aria-label={t("desktop.flows.palette")}>
+      <button type="button" className="flow-toolbox-head" aria-expanded={open} onClick={onToggle}>
+        <Icon path={mdiShapePlusOutline} size="sm" />
+        <span className="spacer">{t("desktop.flows.toolbox")}</span>
+        <Icon path={open ? mdiChevronUp : mdiChevronDown} size="sm" />
+      </button>
+      {open && (
+        <div className="flow-toolbox-body">
+          <span className="t-body-sm muted flow-toolbox-hint">{t("desktop.flows.toolbox_hint")}</span>
+          {stepGroups.map(({ group, types }) => (
+            <div key={group} className="flow-toolbox-group">
+              <span className="menu-label">{t(`desktop.flows.group.${group}`)}</span>
+              {types.map((type) => {
+                const soon = comingSoon.includes(type);
+                return (
+                  <button
+                    key={type}
+                    type="button"
+                    className="flow-tool"
+                    draggable={!soon}
+                    disabled={soon}
+                    title={t(`desktop.flows.type_hint.${type}`)}
+                    onDragStart={(e) => {
+                      e.dataTransfer.setData(stepDrag, type);
+                      e.dataTransfer.effectAllowed = "copy";
+                    }}
+                    onClick={() => onAdd(type)}
+                  >
+                    <Icon path={typeIcons[type]} size="sm" />
+                    <span className="ellipsis">{t(`desktop.flows.type.${type}`)}</span>
+                  </button>
+                );
+              })}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /**
  * The workspace's workflows (Studio › Workflows, spec_workflows_043):
  * listed, and each opened on a canvas: its steps from the palette, joined
  * by dragging from one's right edge to another's left, the selected step's
- * settings beside it. Run runs it in the background as /name, each step
- * marked as it goes, approvals asked for on the canvas.
+ * settings beside it. Run runs it in the background as /name; the run
+ * goes on with Studio closed, and its receipt (each step's state, times,
+ * tokens and cost, its events and what its steps streamed) shows under the
+ * canvas, whether it was started here, in a chat or by a worker.
  */
-export function WorkflowsPane({ workspace, onDirty }: { workspace: string; onDirty?: (dirty: boolean) => void }) {
+export function WorkflowsPane({
+  workspace,
+  onDirty,
+  onCanvas,
+  intent,
+  run: runToShow,
+}: {
+  workspace: string;
+  onDirty?: (dirty: boolean) => void;
+  /** Called with whether a workflow's canvas is open (it wants the room). */
+  onCanvas?: (open: boolean) => void;
+  /** A workflow to open (intent "show", its name the ID). */
+  intent?: ItemIntent;
+  /** With intent: the run to show on its canvas. */
+  run?: string;
+}) {
   const snack = useSnackbar();
   const [list, setList] = useState<WorkflowFile[]>([]);
   const [error, setError] = useState("");
@@ -179,8 +286,20 @@ export function WorkflowsPane({ workspace, onDirty }: { workspace: string; onDir
   const [skills, setSkills] = useState<SkillInfo[]>([]);
   const [rules, setRules] = useState<string[]>([]);
   const [mcpServers, setMcpServers] = useState<string[]>([]);
-  const [live, setLive] = useState<Live | null>(null);
-  const stop = useRef<AbortController | null>(null);
+  // The run shown under the canvas (its receipt, followed while it runs),
+  // the approval its background run waits on, and the runs closed here.
+  const [shownRun, setShownRun] = useState("");
+  const [receipt, setReceipt] = useState<WorkflowRun | null>(null);
+  const [approval, setApproval] = useState<ApprovalRequest | null>(null);
+  const dismissed = useRef(new Set<string>());
+  const [history, setHistory] = useState<WorkflowRun[]>([]);
+  const { runs } = useWorkflowRuns();
+  const { tasks } = useTasks();
+  // The settings panel (folded to give the canvas the room, its width the
+  // user's) and the toolbox.
+  const [sideOpen, setSideOpen] = useState(true);
+  const [sideWidth, setSideWidth] = useState(() => Number(stored(sideKey)) || sideDefault);
+  const [toolbox, setToolbox] = useState(() => stored("blitz.flows.toolbox") === "open");
 
   const refresh = useCallback(async () => {
     try {
@@ -197,13 +316,14 @@ export function WorkflowsPane({ workspace, onDirty }: { workspace: string; onDir
     workspaces.listRules({ workspace }).then((r) => setRules(r.rules.map((x) => x.name)), () => {});
     workspaces.listMCPServers({ workspace }).then((r) => setMcpServers(r.servers.map((x) => x.name)), () => {});
   }, [workspace, refresh]);
-  useEffect(() => () => stop.current?.abort(), []);
 
   const file = open ? list.find((w) => w.name === open) : undefined;
   const isNew = open === "";
   const dirty = open !== null && !sameWorkflowForm(form, base);
-  const running = live?.state === "running" || live?.state === "waiting";
-  useEffect(() => onDirty?.(dirty || running), [dirty, running, onDirty]);
+  const running = receipt?.status === "running";
+  useEffect(() => onDirty?.(dirty), [dirty, onDirty]);
+  useEffect(() => onCanvas?.(open !== null), [open, onCanvas]);
+  useEffect(() => () => onCanvas?.(false), [onCanvas]);
 
   const leave = (go: () => void) => (dirty ? setPending(() => go) : go());
   const show = (name: string, f: WorkflowForm, saved: boolean) =>
@@ -213,10 +333,9 @@ export function WorkflowsPane({ workspace, onDirty }: { workspace: string; onDir
       setOpen(name);
       setSelected("");
       setProblems([]);
-      setLive(null);
+      setShownRun("");
     });
   const close = () => {
-    if (running) return;
     leave(() => {
       setOpen(null);
       void refresh();
@@ -226,13 +345,17 @@ export function WorkflowsPane({ workspace, onDirty }: { workspace: string; onDir
   const setStep = (id: string, patch: Partial<StepForm>) => setForm((f) => ({ ...f, steps: f.steps.map((s) => (s.id === id ? { ...s, ...patch } : s)) }));
   const flowRef = useRef<ReactFlowInstance<Node<StepData>, Edge> | null>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
-  const add = (type: StepType) => {
-    // Where it's seen: the middle of the canvas as it's shown (moved on
-    // while a step is there already), else right of the last step.
+  const add = (type: StepType, dropped?: { x: number; y: number }) => {
+    // Where it's dropped, else where it's seen: the middle of the canvas
+    // as it's shown (moved on while a step is there already), else right
+    // of the last step.
     const right = form.steps.reduce((m, s) => Math.max(m, s.x), -280);
     let at = { x: right + 280, y: 80 };
     const box = canvasRef.current?.getBoundingClientRect();
-    if (flowRef.current && box) {
+    if (flowRef.current && dropped) {
+      const p = flowRef.current.screenToFlowPosition(dropped);
+      at = { x: Math.round(p.x - 90), y: Math.round(p.y - 24) };
+    } else if (flowRef.current && box) {
       const mid = flowRef.current.screenToFlowPosition({ x: box.left + box.width / 2, y: box.top + box.height / 2 });
       at = { x: Math.round(mid.x - 90), y: Math.round(mid.y - 24) };
       // Clear of the steps there (a step is about 180 by 50): below them.
@@ -242,10 +365,30 @@ export function WorkflowsPane({ workspace, onDirty }: { workspace: string; onDir
     if (type === "human_task") s.formJson = JSON.stringify(starterForm(), null, 2);
     setForm((f) => ({ ...f, steps: [...f.steps, s] }));
     setSelected(s.id);
+    setSideOpen(true);
+  };
+  // Opening the toolbox moves the steps under it into view, right of it.
+  const clearToolbox = () => {
+    const flow = flowRef.current;
+    const box = canvasRef.current?.getBoundingClientRect();
+    if (!flow || !box || !form.steps.length) return;
+    const left = Math.min(...form.steps.map((s) => flow.flowToScreenPosition({ x: s.x, y: s.y }).x));
+    const need = box.left + 230 - left;
+    if (need > 0) {
+      const vp = flow.getViewport();
+      void flow.setViewport({ ...vp, x: vp.x + need }, { duration: 200 });
+    }
+  };
+  const drop = (e: React.DragEvent) => {
+    const type = e.dataTransfer.getData(stepDrag) as StepType;
+    if (!type) return;
+    e.preventDefault();
+    add(type, { x: e.clientX, y: e.clientY });
   };
 
   // The canvas's nodes and links, from the form (its source of truth).
-  const nodes: Node<StepData>[] = useMemo(() => form.steps.map((s) => ({ id: s.id, type: "step", position: { x: s.x, y: s.y }, data: { step: s, run: live?.steps[s.id] }, selected: s.id === selected })), [form.steps, live, selected]);
+  const stepRuns = useMemo(() => (receipt ? latestSteps(receipt.steps) : {}), [receipt]);
+  const nodes: Node<StepData>[] = useMemo(() => form.steps.map((s) => ({ id: s.id, type: "step", position: { x: s.x, y: s.y }, data: { step: s, run: stepRuns[s.id] }, selected: s.id === selected })), [form.steps, stepRuns, selected]);
   const edges: Edge[] = useMemo(
     () =>
       form.links.map((l) => ({
@@ -255,9 +398,9 @@ export function WorkflowsPane({ workspace, onDirty }: { workspace: string; onDir
         label: linkText(l, (k) => t(`desktop.flows.link_text.${k}`)) || undefined,
         className: `flow-link is-${l.kind}`,
         selected: linkId(l) === selectedLink,
-        animated: live?.steps[l.from]?.status !== undefined && live?.steps[l.to]?.status === "running",
+        animated: stepRuns[l.from] !== undefined && stepRuns[l.to]?.status === "running",
       })),
-    [form.links, live, selectedLink],
+    [form.links, stepRuns, selectedLink],
   );
   const onNodesChange = (changes: NodeChange<Node<StepData>>[]) => {
     for (const c of changes) {
@@ -265,7 +408,10 @@ export function WorkflowsPane({ workspace, onDirty }: { workspace: string; onDir
       else if (c.type === "remove") setForm((f) => removeStep(f, c.id));
       else if (c.type === "select") {
         setSelected((cur) => (c.selected ? c.id : cur === c.id ? "" : cur));
-        if (c.selected) setSelectedLink("");
+        if (c.selected) {
+          setSelectedLink("");
+          setSideOpen(true);
+        }
       }
     }
   };
@@ -311,81 +457,152 @@ export function WorkflowsPane({ workspace, onDirty }: { workspace: string; onDir
     }
   };
 
-  // Runs the workflow as saved, in the background, as /name input.
+  // A workflow asked for (the status bar, an alert, a notification): open
+  // it, and the run named on it.
+  const handled = useRef(0);
+  useEffect(() => {
+    if (!intent || intent.n === handled.current || !intent.id) return;
+    const w = list.find((x) => x.name === intent.id);
+    if (!w) return;
+    handled.current = intent.n;
+    show(w.name, formFromWorkflow(w), true);
+    if (runToShow) {
+      dismissed.current.delete(runToShow);
+      setShownRun(runToShow);
+    }
+    // show is the pane's own, made each render
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [intent, list, runToShow]);
+
+  // A workflow opened while a run of it goes (started anywhere) shows that
+  // run, unless it was closed here.
+  const going = open ? goingRun(runs, workspace, open) : undefined;
+  useEffect(() => {
+    if (going && !shownRun && !dismissed.current.has(going.id)) setShownRun(going.id);
+  }, [going, shownRun]);
+
+  // Follows the shown run's receipt while it runs; a paused run that
+  // resumes (its task answered, its timer fired) is followed again.
+  const storeStatus = runs.find((r) => r.id === shownRun)?.status;
+  useEffect(() => {
+    if (!shownRun) {
+      setReceipt(null);
+      return;
+    }
+    const ctl = new AbortController();
+    void (async () => {
+      try {
+        for await (const r of workspaces.watchWorkflowRun({ workspace, id: shownRun }, { signal: ctl.signal })) if (r.run) setReceipt(r.run);
+      } catch (e) {
+        if (!ctl.signal.aborted) snack(message(e), { error: true });
+      }
+    })();
+    return () => ctl.abort();
+  }, [shownRun, workspace, storeStatus, snack]);
+
+  // A run shown takes room under the canvas: the workflow is fitted again
+  // in what's left.
+  const hasRun = !!receipt;
+  useEffect(() => {
+    if (!hasRun) return;
+    const id = setTimeout(() => void flowRef.current?.fitView({ padding: 0.15, maxZoom: 1, minZoom: 0.55, duration: 200 }), 300);
+    return () => clearTimeout(id);
+  }, [hasRun, shownRun]);
+  // While it's shown here, the app doesn't also announce its end.
+  useEffect(() => {
+    if (!shownRun) return;
+    watchedRuns.add(shownRun);
+    return () => void watchedRuns.delete(shownRun);
+  }, [shownRun]);
+  // A failure seen here leaves the status bar.
+  const shownFailed = receipt?.status === "failed" ? receipt.id : "";
+  useEffect(() => {
+    if (shownFailed) seeRun(shownFailed);
+  }, [shownFailed]);
+
+  // The approvals the run's background run waits on, asked for here.
+  const bgId = receipt?.status === "running" ? receipt.backgroundId : "";
+  useEffect(() => {
+    setApproval(null);
+    if (!bgId) return;
+    const ctl = new AbortController();
+    void (async () => {
+      try {
+        for await (const res of sessions.watchBackground({ id: bgId, follow: true }, { signal: ctl.signal })) {
+          const k = res.event?.kind;
+          if (k?.case === "approvalRequest") setApproval(k.value);
+          else if (k?.case === "finished") setApproval(null);
+        }
+      } catch {
+        // it ended, or the service is going: the receipt says how
+      }
+    })();
+    return () => ctl.abort();
+  }, [bgId]);
+
+  // The workflow's past runs, for the history menu, again as runs end.
+  const endedCount = runs.filter((r) => r.workflow === open && r.status !== "running").length;
+  useEffect(() => {
+    if (!open) return setHistory([]);
+    workspaces.listWorkflowRuns({ workspace, workflow: open, limit: 15 }).then(
+      (r) => setHistory(r.runs),
+      () => setHistory([]),
+    );
+  }, [open, workspace, endedCount, receipt?.status]);
+
+  // Runs the workflow as saved, in the background, as /name input: its
+  // receipt shows as its first step starts. It goes on with Studio closed.
   const run = async (name: string) => {
     setAsking(false);
     try {
       const started = await sessions.startBackground({ workspace, turn: { text: `/${name} ${input}`.trim(), command: true } });
-      setLive({ id: started.run?.id ?? "", session: started.run?.sessionId ?? "", state: "running", steps: {}, approval: null, task: null, error: "" });
-      await watch(name, started.run?.id ?? "", started.run?.sessionId ?? "");
-    } catch (e) {
-      snack(message(e), { error: true });
-    }
-  };
-  // Follows a background run: each step's state, approvals, and a human
-  // task it stops at (answered beside the canvas, which resumes it).
-  const watch = async (name: string, id: string, session: string) => {
-    const ctl = new AbortController();
-    stop.current = ctl;
-    let waiting = false;
-    try {
-      for await (const res of sessions.watchBackground({ id, follow: true }, { signal: ctl.signal })) {
+      for await (const res of sessions.watchBackground({ id: started.run?.id ?? "", follow: true })) {
         const k = res.event?.kind;
-        if (!k) continue;
-        if (k.case === "flowStep") {
-          setLive((l) => l && { ...l, steps: { ...l.steps, [k.value.id]: { status: k.value.status, output: k.value.output, error: k.value.error } } });
-          if (k.value.status === "waiting") waiting = true;
-        } else if (k.case === "approvalRequest") setLive((l) => l && { ...l, approval: k.value });
-        else if (k.case === "finished") {
+        if (k?.case === "flowStep" && k.value.run) {
+          dismissed.current.delete(k.value.run);
+          setShownRun(k.value.run);
+          return;
+        }
+        if (k?.case === "finished") {
           const err = k.value.error;
-          if (waiting && !err) {
-            const tasks = (await workspaces.listHumanTasks({ workspace })).tasks.filter((x) => x.sessionId === session && x.kind === "human_task");
-            setLive((l) => l && { ...l, state: "waiting", approval: null, task: tasks[0] ?? null });
-          } else {
-            setLive((l) => l && { ...l, state: err ? "failed" : "done", approval: null, error: err ? err.message || err.reason : "" });
-            snack(err ? t("desktop.flows.run_failed", { name }) : t("desktop.flows.run_done", { name }), { error: !!err });
-          }
+          if (err) snack(err.message || err.reason, { error: true });
+          return;
         }
       }
     } catch (e) {
-      if (!ctl.signal.aborted) {
-        setLive((l) => (l ? { ...l, state: "failed", error: message(e) } : null));
-        snack(message(e), { error: true });
-      }
-    } finally {
-      stop.current = null;
+      snack(message(e), { error: true });
     }
   };
   // Answers the human task the run waits on: it resumes in the background.
   const answer = async (task: HumanTask, action: FormAction) => {
     try {
-      const r = await answerTask(task, action);
-      setLive((l) => l && { ...l, id: r.run?.id ?? l.id, state: "running", task: null });
-      await watch(task.workflow, r.run?.id ?? "", task.sessionId);
+      await answerTask(task, action);
     } catch (e) {
       snack(message(e), { error: true });
     }
   };
   const halt = async () => {
-    if (!live) return;
     try {
-      await sessions.stopBackground({ id: live.id });
-    } catch {
-      // It may have ended.
+      await workspaces.stopWorkflowRun({ workspace, id: shownRun });
+    } catch (e) {
+      snack(message(e), { error: true });
     }
-    stop.current?.abort();
-    setLive((l) => l && { ...l, state: "stopped", approval: null });
   };
   const decide = async (d: Decision) => {
-    const req = live?.approval;
+    const req = approval;
     if (!req) return;
-    setLive((l) => l && { ...l, approval: null });
+    setApproval(null);
     try {
       await sessions.approve({ workspace, requestId: req.requestId, decision: d });
     } catch (e) {
       snack(message(e), { error: true });
     }
   };
+  const closeRun = () => {
+    dismissed.current.add(shownRun);
+    setShownRun("");
+  };
+  const task = receipt?.status === "waiting" ? tasks.find((x) => x.run === receipt.id) : undefined;
 
   const title = form.name || open || t("desktop.flows.new");
   const canRun = !!file && !dirty && !file.problem;
@@ -410,13 +627,20 @@ export function WorkflowsPane({ workspace, onDirty }: { workspace: string; onDir
         )}
         {list.length === 0 && !error && <p className="t-body-sm muted">{t("desktop.flows.none")}</p>}
         <div className="list">
-          {list.map((w) => (
+          {list.map((w) => {
+            const live = goingRun(runs, workspace, w.name);
+            const icon = live ? statusIcon(live.status) : null;
+            return (
             <div key={w.path} className="list-item">
               <button type="button" className="row-open" onClick={() => show(w.name, formFromWorkflow(w), true)}>
-                <Icon path={w.problem ? mdiAlertCircleOutline : mdiSitemapOutline} className={w.problem ? "error-text" : undefined} />
+                {icon ? <Icon path={icon.path} spin={icon.spin} className={icon.className} /> : <Icon path={w.problem ? mdiAlertCircleOutline : mdiSitemapOutline} className={w.problem ? "error-text" : undefined} />}
                 <span className="lines spacer">
                   <span className="ellipsis">/{w.name}</span>
-                  <small className={`ellipsis ${w.problem ? "error-text" : ""}`}>{w.problem || [tn("desktop.flows.steps", w.nodes.length), w.description].filter(Boolean).join(" · ")}</small>
+                  <small className={`ellipsis ${w.problem ? "error-text" : ""}`}>
+                    {live
+                      ? [t(`desktop.flows.run_status.${live.status}`), t("desktop.flow_runs.steps", progress(live)), cost(live.usage?.costUsd, live.usage?.priced)].join(" · ")
+                      : w.problem || [tn("desktop.flows.steps", w.nodes.length), w.description].filter(Boolean).join(" · ")}
+                  </small>
                 </span>
               </button>
               <span className="trailing">
@@ -433,16 +657,41 @@ export function WorkflowsPane({ workspace, onDirty }: { workspace: string; onDir
                 />
               </span>
             </div>
-          ))}
+            );
+          })}
         </div>
       </aside>
       <section className="slide-detail flow-detail" inert={open === null}>
         {open !== null && (
           <>
             <div className="row slide-back">
-              <IconButton icon={mdiArrowLeft} label={t("desktop.flows.back")} onClick={close} disabled={running} />
+              <IconButton icon={mdiArrowLeft} label={t("desktop.flows.back")} onClick={close} />
               <h2 className="t-headline spacer ellipsis">{title}</h2>
               {dirty && <span className="t-body-sm muted">{t("desktop.agents.unsaved")}</span>}
+              {file && (
+                <Menu
+                  placement="down end"
+                  className="flow-history-menu"
+                  trigger={(p) => <IconButton icon={mdiHistory} label={t("desktop.flows.history")} {...p} />}
+                  items={
+                    history.length
+                      ? [
+                          { heading: t("desktop.flows.history") },
+                          ...history.map((r) => ({
+                            label: dated(ms(r.started)),
+                            detail: [t(`desktop.flows.run_status.${r.status}`), took(ms(r.started), ms(r.ended) || Date.now()), cost(r.usage?.costUsd, r.usage?.priced), t(`desktop.flows.origin.${r.origin || "chat"}`)].join(" · "),
+                            icon: statusIcon(r.status).path,
+                            on: r.id === shownRun,
+                            onSelect: () => {
+                              dismissed.current.delete(r.id);
+                              setShownRun(r.id);
+                            },
+                          })),
+                        ]
+                      : [{ heading: t("desktop.flows.history_none") }]
+                  }
+                />
+              )}
               {running ? (
                 <Button icon={mdiStop} onClick={() => void halt()}>
                   {t("desktop.evals.stop")}
@@ -464,67 +713,88 @@ export function WorkflowsPane({ workspace, onDirty }: { workspace: string; onDir
             </div>
             <div className="flow-body">
               <div className="flow-main">
-              <div className="row flow-toolbar" role="toolbar" aria-label={t("desktop.flows.palette")}>
-                {/* Every step type, by group, in one menu: the canvas keeps the room. */}
-                <Menu
-                  className="flow-add-menu"
-                  trigger={(p) => (
-                    <Button variant="tonal" icon={mdiPlus} {...p}>
-                      {t("desktop.flows.add_step")}
-                    </Button>
-                  )}
-                  items={stepGroups.flatMap(({ group, types }): MenuEntry[] => [
-                    { heading: t(`desktop.flows.group.${group}`) },
-                    ...types.map((type) => ({ label: t(`desktop.flows.type.${type}`), detail: t(`desktop.flows.type_hint.${type}`), icon: typeIcons[type], disabled: comingSoon.includes(type), onSelect: () => add(type) })),
-                  ])}
-                />
-              </div>
-              <div className="flow-canvas" ref={canvasRef}>
-                <ReactFlow
-                  key={open}
-                  nodes={nodes}
-                  edges={edges}
-                  nodeTypes={nodeTypes}
-                  onNodesChange={onNodesChange}
-                  onEdgesChange={onEdgesChange}
-                  onConnect={(c: Connection) => c.source && c.target && setForm((f) => addLink(f, c.source, c.target))}
-                  onPaneClick={() => {
-                    setSelected("");
-                    setSelectedLink("");
+                <div
+                  className="flow-canvas"
+                  ref={canvasRef}
+                  onDragOver={(e) => {
+                    if (e.dataTransfer.types.includes(stepDrag)) {
+                      e.preventDefault();
+                      e.dataTransfer.dropEffect = "copy";
+                    }
                   }}
-                  colorMode={dark ? "dark" : "light"}
-                  deleteKeyCode={["Backspace", "Delete"]}
-                  // Fitted once the pane has slid in and has its width.
-                  onInit={(flow: ReactFlowInstance<Node<StepData>, Edge>) => {
-                    flowRef.current = flow;
-                    setTimeout(() => void flow.fitView({ padding: 0.12, maxZoom: 1, minZoom: 0.55 }), 400);
-                  }}
-                  proOptions={{ hideAttribution: true }}
+                  onDrop={drop}
                 >
-                  <Background gap={20} />
-                  <Controls showInteractive={false} />
-                </ReactFlow>
-              </div>
-              </div>
-              <div className="flow-side stack">
-                {live && (
-                  <div className={`card small-card stack ${live.state === "failed" ? "error" : ""}`} style={{ gap: 4 }}>
-                    <span className="row t-label" style={{ gap: 6 }}>
-                      <Icon path={live.state === "running" ? mdiLoading : live.state === "done" ? mdiCheckCircleOutline : mdiCloseCircleOutline} spin={live.state === "running"} size="sm" />
-                      {t(`desktop.flows.run_state.${live.state}`, { done: Object.values(live.steps).filter((s) => s.status === "done").length, total: form.steps.length })}
-                    </span>
-                    {live.error && <span className="t-body-sm">{live.error}</span>}
-                  </div>
+                  <ReactFlow
+                    key={open}
+                    nodes={nodes}
+                    edges={edges}
+                    nodeTypes={nodeTypes}
+                    onNodesChange={onNodesChange}
+                    onEdgesChange={onEdgesChange}
+                    onConnect={(c: Connection) => c.source && c.target && setForm((f) => addLink(f, c.source, c.target))}
+                    onPaneClick={() => {
+                      setSelected("");
+                      setSelectedLink("");
+                    }}
+                    colorMode={dark ? "dark" : "light"}
+                    deleteKeyCode={["Backspace", "Delete"]}
+                    // Fitted once the pane has slid in and has its width.
+                    onInit={(flow: ReactFlowInstance<Node<StepData>, Edge>) => {
+                      flowRef.current = flow;
+                      setTimeout(() => void flow.fitView({ padding: 0.15, maxZoom: 1, minZoom: 0.55 }), 400);
+                    }}
+                    proOptions={{ hideAttribution: true }}
+                  >
+                    <Background gap={20} />
+                    <Controls showInteractive={false} position="bottom-right" />
+                  </ReactFlow>
+                  <StepToolbox
+                    open={toolbox}
+                    onToggle={() => {
+                      store("blitz.flows.toolbox", toolbox ? "closed" : "open");
+                      setToolbox(!toolbox);
+                      if (!toolbox) clearToolbox();
+                    }}
+                    onAdd={(type) => add(type)}
+                  />
+                </div>
+                {receipt && (
+                  <RunPanel run={receipt} titleOf={(id) => form.steps.find((s) => s.id === id)?.title || ""} step={selected} onStep={setSelected} onStop={() => void halt()} onClose={closeRun}>
+                    {approval && <ApprovalCard req={approval} onDecide={(d) => void decide(d)} />}
+                    {task && <TaskCard task={task} onAnswer={(v) => void answer(task, v)} />}
+                  </RunPanel>
                 )}
-                {live?.approval && <ApprovalCard req={live.approval} onDecide={(d) => void decide(d)} />}
-                {live?.task && <TaskCard task={live.task} onAnswer={(v) => void answer(live.task!, v)} />}
+              </div>
+              <aside className={`flow-side ${sideOpen ? "" : "is-closed"}`} style={sideOpen ? { width: sideWidth } : undefined} aria-label={t("desktop.flows.settings_panel")}>
+                {!sideOpen ? (
+                  <button type="button" className="flow-side-rail" onClick={() => setSideOpen(true)} title={t("desktop.flows.side_show")} aria-label={t("desktop.flows.side_show")}>
+                    <Icon path={mdiChevronDoubleLeft} size="sm" />
+                    <span>{step ? step.title || t(`desktop.flows.type.${step.type}`) : link ? t("desktop.flows.link") : t("desktop.flows.settings")}</span>
+                  </button>
+                ) : (
+                  <>
+                    <ResizeHandle
+                      width={sideWidth}
+                      edge="left"
+                      min={260}
+                      max={() => (canvasRef.current?.parentElement?.parentElement?.getBoundingClientRect().width ?? 1200) * 0.5}
+                      label={t("desktop.flows.side_resize")}
+                      onResize={(w) => {
+                        const v = w || sideDefault;
+                        setSideWidth(v);
+                        store(sideKey, String(w));
+                      }}
+                    />
+                    <div className="row flow-side-head">
+                      {step ? <Icon path={typeIcons[step.type]} /> : null}
+                      <span className="t-title-sm spacer ellipsis">{step ? t(`desktop.flows.type.${step.type}`) : link ? t("desktop.flows.link_title", { from: titleOf(link.from), to: titleOf(link.to) }) : t("desktop.flows.settings")}</span>
+                      {step && <IconButton icon={mdiDeleteOutline} label={t("desktop.flows.remove_step")} small onClick={() => setForm((f) => removeStep(f, step.id))} />}
+                      {link && <IconButton icon={mdiDeleteOutline} label={t("desktop.flows.remove_link")} small onClick={() => setForm((f) => ({ ...f, links: f.links.filter((l) => linkId(l) !== selectedLink) }))} />}
+                      <IconButton icon={mdiChevronDoubleRight} label={t("desktop.flows.side_hide")} small onClick={() => setSideOpen(false)} />
+                    </div>
+                    <div className="flow-side-body stack">
                 {step ? (
                   <div className="stack flow-step-form" style={{ gap: 10 }}>
-                    <div className="row" style={{ gap: 6 }}>
-                      <Icon path={typeIcons[step.type]} />
-                      <span className="t-title-sm spacer">{t(`desktop.flows.type.${step.type}`)}</span>
-                      <IconButton icon={mdiDeleteOutline} label={t("desktop.flows.remove_step")} small onClick={() => setForm((f) => removeStep(f, step.id))} />
-                    </div>
                     <span className="t-body-sm muted">{t(`desktop.flows.type_hint.${step.type}`)}</span>
                     <Field label={t("desktop.flows.step_title")}>{(id) => <input id={id} className="input" value={step.title} placeholder={t(`desktop.flows.type.${step.type}`)} onChange={(e) => setStep(step.id, { title: e.target.value })} />}</Field>
                     {agentTypes.includes(step.type) && (
@@ -544,8 +814,12 @@ export function WorkflowsPane({ workspace, onDirty }: { workspace: string; onDir
                         <Field label={t(`desktop.flows.instructions.${step.type}`)} supporting={t("desktop.flows.template_hint")}>
                           {(id) => <textarea id={id} className="input" rows={5} value={step.instructions} placeholder={t(`desktop.flows.instructions_placeholder.${step.type}`)} onChange={(e) => setStep(step.id, { instructions: e.target.value })} />}
                         </Field>
-                        <Pick label={t("desktop.flows.skills")} hint={t("desktop.flows.skills_hint")} all={skills.map((s) => s.name)} chosen={step.skills} onChange={(v) => setStep(step.id, { skills: v })} />
-                        <Pick label={t("desktop.flows.rules")} hint={t("desktop.flows.rules_hint")} all={rules} chosen={step.rules} onChange={(v) => setStep(step.id, { rules: v })} />
+                        <Field label={t("desktop.flows.skills")} supporting={t("desktop.flows.skills_hint")}>
+                          {(id) => <MultiSelect id={id} label={t("desktop.flows.skills")} none={t("desktop.flows.none_chosen")} options={skills.map((s) => ({ value: s.name, detail: s.description }))} chosen={step.skills} onChange={(v) => setStep(step.id, { skills: v })} />}
+                        </Field>
+                        <Field label={t("desktop.flows.rules")} supporting={t("desktop.flows.rules_hint")}>
+                          {(id) => <MultiSelect id={id} label={t("desktop.flows.rules")} none={t("desktop.flows.none_chosen")} options={rules.map((r) => ({ value: r }))} chosen={step.rules} onChange={(v) => setStep(step.id, { rules: v })} />}
+                        </Field>
                       </>
                     )}
                     {step.type === "script" && (
@@ -723,19 +997,15 @@ export function WorkflowsPane({ workspace, onDirty }: { workspace: string; onDir
                         </div>
                       </div>
                     )}
-                    {live?.steps[step.id] && (live.steps[step.id].output || live.steps[step.id].error) && (
+                    {stepRuns[step.id] && (stepRuns[step.id].output || stepRuns[step.id].error) && (
                       <div className="stack" style={{ gap: 2 }}>
-                        <span className="t-label">{t(live.steps[step.id].error ? "desktop.flows.step_error" : "desktop.flows.step_output")}</span>
-                        <pre className="eval-text">{live.steps[step.id].error || live.steps[step.id].output}</pre>
+                        <span className="t-label">{t(stepRuns[step.id].error ? "desktop.flows.step_error" : "desktop.flows.step_output")}</span>
+                        <pre className="eval-text">{stepRuns[step.id].error || stepRuns[step.id].output}</pre>
                       </div>
                     )}
                   </div>
                 ) : link ? (
                   <div className="stack flow-link-form" style={{ gap: 10 }}>
-                    <div className="row" style={{ gap: 6 }}>
-                      <span className="t-title-sm spacer">{t("desktop.flows.link_title", { from: titleOf(link.from), to: titleOf(link.to) })}</span>
-                      <IconButton icon={mdiDeleteOutline} label={t("desktop.flows.remove_link")} small onClick={() => setForm((f) => ({ ...f, links: f.links.filter((l) => linkId(l) !== selectedLink) }))} />
-                    </div>
                     <Field label={t("desktop.flows.link_kind")}>
                       {(id) => (
                         <select id={id} className="select" value={link.kind} onChange={(e) => setForm((f) => setLink(f, selectedLink, { kind: e.target.value as LinkKind }))}>
@@ -768,15 +1038,18 @@ export function WorkflowsPane({ workspace, onDirty }: { workspace: string; onDir
                   </div>
                 ) : (
                   <div className="stack" style={{ gap: 10 }}>
-                    <span className="t-title-sm">{t("desktop.flows.settings")}</span>
                     <Field label={t("desktop.flows.name")} supporting={t("desktop.flows.name_hint", { name: form.name || "name" })}>
                       {(id) => <input id={id} className="input mono" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} />}
                     </Field>
                     <Field label={t("desktop.rules.description")}>{(id) => <input id={id} className="input" value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} />}</Field>
+                    <WorkflowSchedule workspace={workspace} workflow={file?.name ?? ""} disabled={!file || dirty} />
                     <span className="t-body-sm muted">{t("desktop.flows.canvas_hint")}</span>
                   </div>
                 )}
-              </div>
+                    </div>
+                  </>
+                )}
+              </aside>
             </div>
             {problems.length > 0 && (
               <div className="card error stack" role="alert" style={{ gap: 4 }}>
@@ -797,7 +1070,7 @@ export function WorkflowsPane({ workspace, onDirty }: { workspace: string; onDir
                 {t("desktop.agents.where", { path: file?.path || `.agents/workflows/${form.name.trim() || "…"}.flow.yaml` })}
               </span>
               {file && (
-                <Button danger icon={mdiDeleteOutline} disabled={running} onClick={() => setDeleting(true)}>
+                <Button danger icon={mdiDeleteOutline} onClick={() => setDeleting(true)}>
                   {t("desktop.rules.delete")}
                 </Button>
               )}
@@ -806,10 +1079,10 @@ export function WorkflowsPane({ workspace, onDirty }: { workspace: string; onDir
                   {t("desktop.agents.revert")}
                 </Button>
               )}
-              <Button onClick={close} disabled={running}>
+              <Button onClick={close}>
                 {t("desktop.cancel")}
               </Button>
-              <Button variant="filled" icon={mdiContentSaveOutline} disabled={busy || running || !form.name.trim() || (!dirty && !isNew)} onClick={() => void save()}>
+              <Button variant="filled" icon={mdiContentSaveOutline} disabled={busy || !form.name.trim() || (!dirty && !isNew)} onClick={() => void save()}>
                 {t("desktop.rules.save")}
               </Button>
             </div>
@@ -914,27 +1187,6 @@ export function WorkflowsPane({ workspace, onDirty }: { workspace: string; onDir
           </Dialog>,
           document.body,
         )}
-    </div>
-  );
-}
-
-/** Chips to choose some of all (those chosen that no longer exist kept). */
-function Pick({ label, hint, all, chosen, onChange }: { label: string; hint: string; all: string[]; chosen: string[]; onChange: (v: string[]) => void }) {
-  return (
-    <div className="stack" style={{ gap: 4 }}>
-      <span className="t-label">{label}</span>
-      <span className="t-body-sm muted">{hint}</span>
-      <div className="row wrap" style={{ gap: 6 }}>
-        {[...new Set([...all, ...chosen])].map((x) => {
-          const on = chosen.includes(x);
-          return (
-            <Chip key={x} selected={on} aria-pressed={on} onClick={() => onChange(on ? chosen.filter((y) => y !== x) : [...chosen, x])}>
-              {x}
-            </Chip>
-          );
-        })}
-        {all.length === 0 && chosen.length === 0 && <span className="t-body-sm muted">—</span>}
-      </div>
     </div>
   );
 }

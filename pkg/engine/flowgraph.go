@@ -97,6 +97,12 @@ type flowRun struct {
 	replay map[string]Replayed
 	// caught are the steps that failed into their error links.
 	caught map[string]bool
+	// receipt is the run's receipt (WF-19), a called workflow's its
+	// caller's; streamTo is the step a called workflow's turns stream to
+	// (the call step); agent is who runs agent steps that don't say.
+	receipt  *liveReceipt
+	streamTo string
+	agent    string
 }
 
 // Replayed is a finished step's result, kept with a paused run.
@@ -116,7 +122,52 @@ func (r *flowRun) waitingTasks() []FlowTask {
 func (r *flowRun) emit(e api.Event) {
 	r.events.Lock()
 	defer r.events.Unlock()
+	if r.receipt != nil && r.depth == 0 {
+		r.record(e)
+	}
 	r.on(e)
+}
+
+// record puts an event in the run's receipt: its own steps' as their
+// runs, a called workflow's steps and notices as events.
+func (r *flowRun) record(e api.Event) {
+	switch {
+	case e.Step != nil:
+		i := slices.IndexFunc(r.f.Nodes, func(n flows.Node) bool { return n.ID == e.Step.ID })
+		if e.Step.Workflow != r.f.Name || i < 0 {
+			text := e.Step.Workflow + " › " + cmp.Or(e.Step.Title, e.Step.ID) + ": " + e.Step.Status
+			if e.Step.Error != "" {
+				text += ": " + e.Step.Error
+			}
+			r.receipt.note("", "step", text, e.Step.Status == api.StepFailed)
+			return
+		}
+		agent := ""
+		if n := r.f.Nodes[i]; flows.IsAgentType(n.Type) {
+			agent = cmp.Or(n.Agent, r.agent)
+		}
+		r.receipt.step(e.Step, agent)
+	case e.Notice != nil && !e.Notice.Transient:
+		r.receipt.note("", "notice", e.Notice.Text, e.Notice.Error)
+	}
+}
+
+// emitFor is emit for step id's turns: what they stream and the tools
+// they call go in its receipt too.
+func (r *flowRun) emitFor(id string) func(api.Event) {
+	if r.receipt == nil {
+		return r.emit
+	}
+	to := cmp.Or(r.streamTo, id)
+	return func(e api.Event) {
+		switch {
+		case e.Text != nil && !e.Text.Thought && !e.Text.Repeat:
+			r.receipt.stream(to, e.Text.Text)
+		case e.ToolCall != nil && !e.ToolCall.Partial:
+			r.receipt.note(to, "tool", e.ToolCall.Name, false)
+		}
+		r.emit(e)
+	}
 }
 
 func (r *flowRun) title(id string) string {
@@ -133,7 +184,7 @@ func (r *flowRun) index(id string) int {
 }
 
 func (r *flowRun) step(n flows.Node, status string) *api.FlowStep {
-	return &api.FlowStep{Workflow: r.f.Name, ID: n.ID, Title: n.Title, Type: n.Type, Index: r.index(n.ID), Count: len(r.order), Status: status}
+	return &api.FlowStep{Workflow: r.f.Name, ID: n.ID, Title: n.Title, Type: n.Type, Index: r.index(n.ID), Count: len(r.order), Status: status, Run: r.runID}
 }
 
 // Link states while a run goes.
@@ -404,6 +455,11 @@ func (w *Workspace) stepInputOf(r *flowRun, n flows.Node, into []int, links []in
 // fills in its templates, runs it (trying again as its retry says, held
 // to its timeout), and says how it ended.
 func (w *Workspace) runFlowStep(ctx context.Context, r *flowRun, n flows.Node, input string, vars flows.Vars) (flows.Result, error) {
+	m := &stepMeter{}
+	ctx = withMeter(ctx, m)
+	if r.receipt != nil && r.depth == 0 {
+		r.receipt.meter(n.ID, m)
+	}
 	r.emit(api.Event{Step: r.step(n, api.StepRunning)})
 	fail := func(err error) (flows.Result, error) {
 		s := r.step(n, api.StepFailed)
@@ -439,6 +495,7 @@ func (w *Workspace) runFlowStep(ctx context.Context, r *flowRun, n flows.Node, i
 		if timeout > 0 {
 			sctx, cancel = context.WithTimeout(ctx, timeout)
 		}
+		m.try()
 		res, err = once(sctx)
 		cancel()
 		if err == nil || try >= attempts || ctx.Err() != nil {
@@ -545,7 +602,7 @@ func (w *Workspace) runStepOnce(ctx context.Context, r *flowRun, n flows.Node, i
 		r.turns.Lock()
 		defer r.turns.Unlock()
 	}
-	text, err := w.runStep(ctx, r.session, r.f, n, input, r.emit)
+	text, err := w.runStep(ctx, r.session, r.f, n, input, r.emitFor(n.ID))
 	if err != nil {
 		return flows.Result{}, err
 	}
@@ -566,7 +623,28 @@ func (w *Workspace) runFlow(ctx context.Context, sessionID string, f flows.Flow,
 // driveFlow runs f's graph in the orchestration session runID: from the
 // start (resume nil: input is its first message), or resumed with an
 // answer to one of its tasks.
-func (w *Workspace) driveFlow(ctx context.Context, sessionID string, f flows.Flow, input string, on func(api.Event), runID string, resume *genai.FunctionResponse, replay map[string]Replayed) (api.TurnResult, error) {
+func (w *Workspace) driveFlow(ctx context.Context, sessionID string, f flows.Flow, input string, on func(api.Event), runID string, resume *genai.FunctionResponse, replay map[string]Replayed) (res api.TurnResult, err error) {
+	run := &flowRun{f: f, input: input, session: sessionID, on: on, runID: runID, replay: replay, agent: w.engine.ActiveAgent()}
+	// Its receipt (WF-19): stopping the run through it cancels ctx.
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	origin, _ := ctx.Value(flowOriginKey{}).(string)
+	run.receipt = w.beginReceipt(run, origin, cancel)
+	beating := make(chan struct{})
+	go run.receipt.beat(beating)
+	defer func() {
+		close(beating)
+		switch {
+		case err != nil && ctx.Err() != nil:
+			run.receipt.end(RunStopped, "", err)
+		case err != nil:
+			run.receipt.end(RunFailed, "", err)
+		case len(run.waitingTasks()) > 0:
+			run.receipt.end(RunWaiting, "", nil)
+		default:
+			run.receipt.end(RunDone, res.Output, nil)
+		}
+	}()
 	if f.Problem != "" {
 		return api.TurnResult{}, fmt.Errorf("the workflow %s can't run: %s", f.Name, f.Problem)
 	}
@@ -574,8 +652,8 @@ func (w *Workspace) driveFlow(ctx context.Context, sessionID string, f flows.Flo
 	if err != nil {
 		return api.TurnResult{}, err
 	}
-	res := api.TurnResult{Before: w.engine.Usage(sessionID)}
-	run := &flowRun{f: f, order: order, input: input, session: sessionID, on: on, runID: runID, replay: replay}
+	run.order = order
+	res = api.TurnResult{Before: w.engine.Usage(sessionID)}
 	var results map[string]flows.Result
 	scheduler := workflow.NewDynamicNode("run", func(actx agent.Context, _ string, _ func(*adksession.Event) error) (string, error) {
 		var err error
@@ -726,7 +804,7 @@ func (w *Workspace) callStep(ctx context.Context, r *flowRun, n flows.Node, inpu
 	if err != nil {
 		return flows.Result{}, err
 	}
-	child := &flowRun{f: sub, order: order, input: input, session: r.session, on: r.emit, depth: r.depth + 1}
+	child := &flowRun{f: sub, order: order, input: input, session: r.session, on: r.emit, depth: r.depth + 1, runID: r.runID, receipt: r.receipt, streamTo: cmp.Or(r.streamTo, n.ID), agent: r.agent}
 	results, err := w.schedule(ctx, child, func(ctx context.Context, n flows.Node, input string, vars flows.Vars) (flows.Result, error) {
 		return w.runFlowStep(ctx, child, n, input, vars)
 	})

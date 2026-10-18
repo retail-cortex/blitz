@@ -106,9 +106,12 @@ export const viewEvent = "blitz:view";
 /** Which workspace, and which view to show ("chat" and "editor" close what's over the editor). */
 export interface ViewDetail {
   dir: string;
-  view: "chat" | "editor" | "changes" | "workers";
+  view: "chat" | "editor" | "changes" | "workers" | "workflows";
   /** Which changes: this session's (the default) or git's. */
   source?: "session" | "git";
+  /** Studio › Workflows: the workflow to open, and the run to show on it. */
+  workflow?: string;
+  run?: string;
 }
 // Views for a workspace that isn't there yet (it's opening), shown when it
 // mounts.

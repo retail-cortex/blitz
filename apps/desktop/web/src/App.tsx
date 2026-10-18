@@ -30,6 +30,7 @@ import { compose, goToFileEvent, openDocsEvent, openSettingsEvent, searchWorkspa
 import { DocsDrawer, type DocsAt } from "./docs/DocsDrawer";
 import { UnsavedDialog } from "./files/EditorPane";
 import { LicenseDrawer } from "./LicenseDrawer";
+import { FlowRunAlerts } from "./FlowRunAlerts";
 import { TaskAlerts } from "./TaskAlerts";
 import { TasksDialog } from "./TasksPanel";
 import { showTasks } from "./humanTasks";
@@ -298,7 +299,7 @@ function Shell() {
         }
         update((p) => openWorkspace(p, link.dir));
         if (link.view) {
-          showView({ dir: link.dir, view: link.view });
+          showView({ dir: link.dir, view: link.view, workflow: link.workflow, run: link.run });
           return;
         }
         if (link.prompt) compose({ dir: link.dir, text: link.prompt });
@@ -401,6 +402,7 @@ function Shell() {
         {license && <LicenseDrawer initial={license} onClose={() => setLicense(null)} />}
         <TasksDialog />
         <TaskAlerts />
+        <FlowRunAlerts />
         {searchOpen !== null && prefs.active && <SearchDialog dir={prefs.active} initialQuery={searchOpen} onClose={() => setSearchOpen(null)} />}
         {paletteOpen && <CommandPalette onClose={() => setPaletteOpen(false)} onOpenWorkspace={open} onSettings={(section = "appearance", scope) => openSettings(section, scope)} />}
         {confirmClose && (

@@ -481,6 +481,8 @@ message BackgroundRun {
   // Requests waiting for an answer.
   int32 waiting = 9;
   string error = 10;
+  // The workflow run it runs, when it runs one (GetWorkflowRun).
+  string workflow_run = 11;
 }
 
 // Request message for SessionService.StartBackground.

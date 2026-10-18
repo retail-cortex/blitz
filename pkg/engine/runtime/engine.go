@@ -508,6 +508,16 @@ func (e *Engine) EstimateCostUSD(model string, usage *genai.GenerateContentRespo
 	return e.usage.Estimate(settingsName(model), usage, 0).CostUSD
 }
 
+// EstimateUsage is a model call outside a session's usage (a rule's
+// judge, a workflow's extract step), priced by the configured prices; a
+// call that reported no tokens is unpriced.
+func (e *Engine) EstimateUsage(model string, usage *genai.GenerateContentResponseUsageMetadata) api.Usage {
+	if usage == nil {
+		return api.Usage{Calls: 1}
+	}
+	return e.usage.Estimate(settingsName(model), usage, 0)
+}
+
 // saveUsage keeps sessionID's usage so far in the store.
 func (e *Engine) saveUsage(ctx context.Context, sessionID string) {
 	if e.usageStore == nil {

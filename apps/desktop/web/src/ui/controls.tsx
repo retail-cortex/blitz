@@ -30,7 +30,7 @@ import {
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
-import { mdiClose, mdiMagnify } from "@mdi/js";
+import { mdiCheckboxBlankOutline, mdiCheckboxMarked, mdiClose, mdiMagnify, mdiMenuDown } from "@mdi/js";
 import { t } from "../i18n";
 
 /** A Material Design icon, given its SVG path (from @mdi/js). */
@@ -372,7 +372,66 @@ export type MenuEntry = MenuItem | "divider" | { heading: string };
 
 /** A menu's items that can be chosen. */
 function menuItems(el: HTMLElement): HTMLElement[] {
-  return [...el.querySelectorAll<HTMLElement>('[role="menuitem"]:not(:disabled)')];
+  return [...el.querySelectorAll<HTMLElement>('[role="menuitem"]:not(:disabled), [role="menuitemcheckbox"]:not(:disabled)')];
+}
+
+/**
+ * A choice of several from a list, in the room of one field: a button
+ * naming what's chosen opens the list with a check box each (and a filter
+ * when it's long); it stays open while boxes are ticked. Chosen values the
+ * list doesn't have (gone since) stay listed, so they can be unticked.
+ */
+export function MultiSelect({
+  label,
+  options,
+  chosen,
+  onChange,
+  none,
+  id,
+}: {
+  label: string;
+  options: { value: string; detail?: string }[];
+  chosen: string[];
+  onChange: (v: string[]) => void;
+  /** What the button says with nothing chosen. */
+  none: string;
+  id?: string;
+}) {
+  const { at, toggle, ref, layer } = useAnchoredMenu<HTMLSpanElement>("down start");
+  const [filter, setFilter] = useState("");
+  const all = [...options, ...chosen.filter((c) => !options.some((o) => o.value === c)).map((value) => ({ value, detail: undefined }))];
+  const q = filter.trim().toLowerCase();
+  const shown = q ? all.filter((o) => o.value.toLowerCase().includes(q) || o.detail?.toLowerCase().includes(q)) : all;
+  const flip = (v: string) => onChange(chosen.includes(v) ? chosen.filter((x) => x !== v) : [...chosen, v]);
+  return (
+    <span className="menu-anchor multi-select" ref={ref}>
+      <button type="button" id={id} className="select multi-select-button" aria-haspopup="menu" aria-expanded={!!at} aria-label={`${label}: ${chosen.join(", ") || none}`} onClick={toggle}>
+        <span className={`ellipsis spacer ${chosen.length ? "" : "muted"}`}>{chosen.length ? chosen.join(", ") : none}</span>
+        {chosen.length > 1 && <span className="multi-select-count">{chosen.length}</span>}
+        <Icon path={mdiMenuDown} size="sm" />
+      </button>
+      {at && (
+        <FloatingLayer style={{ ...at, minWidth: ref.current?.getBoundingClientRect().width }} className="multi-select-menu" layerRef={layer} label={label}>
+          {all.length > 8 && (
+            <input className="input multi-select-filter" placeholder={t("desktop.filter")} aria-label={t("desktop.filter")} value={filter} autoFocus onChange={(e) => setFilter(e.target.value)} />
+          )}
+          {shown.map((o) => {
+            const on = chosen.includes(o.value);
+            return (
+              <button key={o.value} type="button" role="menuitemcheckbox" aria-checked={on} className={`menu-item ${on ? "on" : ""}`} onClick={() => flip(o.value)}>
+                <Icon path={on ? mdiCheckboxMarked : mdiCheckboxBlankOutline} className={on ? "multi-select-on" : undefined} />
+                <span>
+                  {o.value}
+                  {o.detail && <small>{o.detail}</small>}
+                </span>
+              </button>
+            );
+          })}
+          {shown.length === 0 && <div className="menu-label">{t("desktop.none_found")}</div>}
+        </FloatingLayer>
+      )}
+    </span>
+  );
 }
 
 // Arrow keys move through a menu's items (wrapping), Home and End to its ends.

@@ -156,11 +156,14 @@ export interface UpdateStatus {
   notes?: string; // the release's page
 }
 
-/** A blitz:// link: a folder to open, with a prompt to fill in (open) or a view to show (workers). */
+/** A blitz:// link: a folder to open, with a prompt to fill in (open) or a view to show (workers, or a workflow's run). */
 export interface DeepLink {
   dir: string;
   prompt: string;
-  view?: "workers";
+  view?: "workers" | "workflows";
+  /** For workflows: the workflow, and the run to show on its canvas. */
+  workflow?: string;
+  run?: string;
 }
 
 /** The methods the program serving the page answers (the tray's), once asked. */

@@ -642,3 +642,30 @@ Use a test service with the API keys unset (`env -u GEMINI_API_KEY`); the workfl
   **Expected:** "the workflow changed since the run paused": the run isn't resumed.
 - [ ] Linux without a notification daemon, and Windows.
   **Expected:** Linux opens the tasks window directly; on Windows the notification comes from the Blitz app and opens the same window.
+
+## 52. Workflow runs: the canvas, receipts and schedules (spec_workflows_043 WF-09, WF-10, WF-19, WF-20)
+
+Use a test service with the API keys unset (`env -u GEMINI_API_KEY`) for everything but the cost checks; a run with agent steps on a real model costs a few cents.
+
+- [ ] Studio › Workflows › a workflow.
+  **Expected:** Studio's kinds shrink to icons and the canvas fills the drawer. **Steps** opens the toolbox (steps under it move into view); drag **Agent** onto the canvas: it lands where it's dropped and its settings open. Click a step type instead: it lands in view.
+- [ ] Drag the settings' left edge, then fold them with **»**.
+  **Expected:** the canvas widens; the rail names what's selected and unfolds them; selecting a step unfolds them too. The width is kept after reopening Studio; double-clicking the edge restores it.
+- [ ] An agent step's **Skills** and **Rules**.
+  **Expected:** a drop-down of check boxes (with a filter when there are more than eight); ticking keeps it open; the field lists what's chosen.
+- [ ] **Run** a workflow with an agent step and a save_file step, then close Studio at once.
+  **Expected:** the status bar shows */name 1/3*-style progress; its menu shows steps, time, cost and *1 approval waiting* when it asks; clicking it reopens the canvas on the run, with the approval under the canvas.
+- [ ] On the run panel: **Steps**, **Events**, **Stream**, **Copy the receipt**, fold, drag its top edge, close.
+  **Expected:** each step's start, duration, model, tokens and cost (agent steps priced, others "—"), the run's totals; events as they happen; the agent step's text appearing as it's written; the copied text is the receipt; closing the panel doesn't stop the run, and reopening the workflow shows it again.
+- [ ] Deny the approval with Studio open. Then run a workflow whose read_file step reads a missing file, and close Studio before it fails.
+  **Expected:** a failure shown on the canvas isn't announced again; with Studio closed, a snackbar "/name failed. It stopped at …" with **Open**, and a red item on the status bar until the run is opened; with the window behind another app, a system notification.
+- [ ] Close the app window (leave the tray), and let a scheduled run fail (a read_file step on a missing file).
+  **Expected:** within 10 s a notification "<name> failed" with why; clicking it opens the app on the workflow's canvas showing the failed run. With Settings › Appearance › Workflow tasks **Off**, nothing.
+- [ ] **Past runs** (the clock button).
+  **Expected:** the workflow's runs, newest first, with state, duration, cost and how each was started; picking one shows its receipt.
+- [ ] Select nothing on the canvas › **Schedule** › **Add a schedule**: *every minute*, input *test*.
+  **Expected:** the schedule shows with its next run and a switch; within a minute the run starts by itself (status bar), its receipt says *by a worker*; Studio › Workers shows the worker `<name>-schedule`, and its view shows the run's progress with **Open on the canvas**. Switch it off, change it, remove it.
+- [ ] Run a worker by hand (**Run now**), leave its view and come back while it runs.
+  **Expected:** the view shows the run going (its events from the start) instead of only the worker.
+- [ ] Stop the service while a run goes, start it again, open the workflow's **Past runs**.
+  **Expected:** after about three minutes the run reads *Stopped* with "the service stopped while it ran".

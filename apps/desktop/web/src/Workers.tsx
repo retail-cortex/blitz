@@ -27,6 +27,7 @@ import {
   mdiPlay,
   mdiProgressClock,
   mdiShieldCheckOutline,
+  mdiSitemapOutline,
   mdiStopCircleOutline,
 } from "@mdi/js";
 import { workers } from "./api";
@@ -36,6 +37,8 @@ import { language, t } from "./i18n";
 import { RunStatus, WorkerState, type Worker, type WorkerRun } from "./gen/blitz/v1/worker_pb";
 import { applyEvent, failed, summarizeArgs, type Entry } from "./turns";
 import { Button, Chip, Icon } from "./ui/controls";
+import { useOpenRun } from "./FlowRunAlerts";
+import { cost, goingRun, ms, progress, took, useWorkflowRuns } from "./workflowRuns";
 
 const stateKeys: Record<WorkerState, string> = {
   [WorkerState.UNSPECIFIED]: "",
@@ -131,21 +134,56 @@ export function WorkerView({
   // The hash shown is the one enabled: an edit since then fails.
   const enable = () => act(() => workers.enableWorker({ workspace: dir, name: worker.name, hash: worker.hash }));
   const disable = () => act(() => workers.disableWorker({ workspace: dir, name: worker.name }));
-  const runNow = () =>
-    act(async () => {
-      const started = (await workers.runWorker({ workspace: dir, name: worker.name })).run!;
+  // Follows a run as it goes (its events from the start), until it ends.
+  const following = useRef("");
+  const stopFollowing = useRef<AbortController | null>(null);
+  const follow = useCallback(
+    async (id: string) => {
+      if (following.current === id) return;
+      following.current = id;
+      stopFollowing.current?.abort();
+      const ctl = new AbortController();
+      stopFollowing.current = ctl;
       setLive([]);
-      setLiveId(started.id);
+      setLiveId(id);
       try {
-        for await (const res of workers.watchWorkerRun({ runId: started.id })) {
+        for await (const res of workers.watchWorkerRun({ runId: id }, { signal: ctl.signal })) {
           const ev = res.event; // none in the proxy's keepalive messages
-          if (ev) setLive((e) => applyEvent(e ?? [], ev));
+          if (ev && following.current === id) setLive((e) => applyEvent(e ?? [], ev));
         }
       } catch {
         // A run too quick to watch is simply recorded.
       }
+      if (following.current !== id) return;
+      following.current = "";
       setLiveId("");
-      await refreshRuns();
+      await refreshRuns().catch(() => {});
+    },
+    [refreshRuns],
+  );
+  // A run going when the worker is shown (started here before, by its
+  // schedule, or elsewhere) is followed again.
+  useEffect(() => {
+    workers.listRunningWorkerRuns({}).then(
+      (r) => {
+        const going = r.runs.find((x) => x.worker === worker.name && x.workspace === dir);
+        if (going) void follow(going.id);
+      },
+      () => {},
+    );
+    return () => {
+      following.current = "";
+      stopFollowing.current?.abort();
+    };
+  }, [dir, worker.name, follow]);
+  // A workflow worker's run, on its workflow's canvas.
+  const { runs: flowRuns } = useWorkflowRuns();
+  const openRun = useOpenRun();
+  const flowRun = worker.workflow && liveId ? goingRun(flowRuns, dir, worker.workflow) : undefined;
+  const runNow = () =>
+    act(async () => {
+      const started = (await workers.runWorker({ workspace: dir, name: worker.name })).run!;
+      await follow(started.id);
     });
   // Stopping takes a moment (the run's turn winds down): the list catches
   // up when it has, or when the run being watched here ends.
@@ -176,6 +214,14 @@ export function WorkerView({
             {worker.schedule} · <code>{worker.cron}</code> ({worker.timezone})
             {worker.nextRun && enabled && <div className="t-body-sm muted">{t("desktop.worker.next", { time: timestampDate(worker.nextRun).toLocaleString(language()) })}</div>}
           </dd>
+          {worker.workflow && (
+            <>
+              <dt>{t("desktop.worker.workflow")}</dt>
+              <dd>
+                <code>/{worker.workflow}</code>
+              </dd>
+            </>
+          )}
           {worker.agent && (
             <>
               <dt>{t("desktop.worker.agent")}</dt>
@@ -243,7 +289,15 @@ export function WorkerView({
               </Button>
             )}
           </div>
-          {live.length === 0 && <p className="muted">{t("desktop.worker.running")}</p>}
+          {flowRun && (
+            <div className="row t-body-sm" style={{ gap: 8 }}>
+              <span className="spacer muted">{[t("desktop.flow_runs.steps", progress(flowRun)), took(ms(flowRun.started), Date.now()), cost(flowRun.usage?.costUsd, flowRun.usage?.priced)].join(" · ")}</span>
+              <Button small icon={mdiSitemapOutline} onClick={() => openRun(flowRun)}>
+                {t("desktop.worker.open_run")}
+              </Button>
+            </div>
+          )}
+          {live.length === 0 && !flowRun && <p className="muted">{t("desktop.worker.running")}</p>}
           {live.map((e, i) =>
             e.kind === "tool" ? (
               <div key={i} className={`t-body-sm ${failed(e.result) ? "error-text" : "muted"}`}>

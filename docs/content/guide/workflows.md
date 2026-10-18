@@ -85,7 +85,23 @@ Waiting tasks show under the run on the canvas and, from any workspace, as a but
 
 ## Building one
 
-In the desktop app, **Studio › Workflows** lists them; **+** starts one, blank or from a template (a research brief; draft and refine; a script's report). On the canvas, **Add a step** lists every step type by group; pick one to add it, drag from a step's right edge to another's left edge to pass its output on, and select a step for its settings. **Run** asks for the input and runs it in the background: each step is marked as it goes, and anything that needs your approval is asked beside the canvas.
+In the desktop app, **Studio › Workflows** lists them; **+** starts one, blank or from a template (a research brief; draft and refine; a script's report). The canvas takes the room: Studio's list of kinds shrinks to icons. Open **Steps** on the canvas for every step type by group, and drag one where you want it (or click it to add it in view); drag from a step's right edge to another's left edge to pass its output on, and select a step for its settings. The settings beside the canvas can be made wider or narrower by dragging their edge, or folded away with **»** when you want the whole canvas. An agent step's skills and rules are a drop-down of check boxes.
+
+## Running and following a run
+
+**Run** asks for the input and runs it in the background. You don't have to watch: close Studio and carry on; the run goes on in the service. While it runs, the status bar shows it (*/research-brief 2/5*); click it to go back to the canvas. If a run fails, you hear of it wherever you are (or as a system notification when the app isn't in front), with **Open** to see where and why; with the app closed, the tray tells you, and its notification opens the app on the run. Opening a workflow while a run of it goes, started on the canvas, in a chat or by a worker, shows that run.
+
+Under the canvas, the run panel shows how it's going: each step marked on the canvas with what it took and spent, an approval or a person's form it waits on, and three tabs:
+
+- **Steps**: when each step started, how long it took, its tries, the model it used, its tokens in and out, and its cost, with the run's totals.
+- **Events**: everything that happened, as it happens: steps starting and ending, tools called, notices.
+- **Stream**: the text a step's agent is writing, live.
+
+Every run keeps this **receipt**, so a run is a record of what was done, by which models, when and at what cost. **Past runs** (the clock button) lists a workflow's runs; pick one to see its receipt, and **Copy the receipt** to paste it elsewhere. Fold the panel to its first line, drag its top edge to give it more or less room, or close it; closing it doesn't stop the run. **Stop** stops the run, wherever it was started.
+
+## Running on a schedule
+
+A workflow's settings (select nothing on the canvas) have **Schedule**: **Add a schedule**, say when in words or as cron (*every weekday at 9:00*, *hourly*, `0 6 * * 1`) and, if it needs one, its input. Each schedule is a [worker](workers.md) that runs the workflow's steps exactly as they are; switch it off and on, change it or remove it there. What a scheduled run may do without asking (write files, use the web) and its limits are the worker's, in **Studio › Workers**.
 
 ## The file
 

@@ -23,12 +23,14 @@ import (
 	"net/url"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"connectrpc.com/connect"
 	"github.com/retail-cortex/blitz/pkg/socket"
 	pb "github.com/retail-cortex/blitz/proto/blitz/v1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // taskService answers ListHumanTasks with a human task and a timer.
@@ -41,6 +43,10 @@ func (taskService) ListHumanTasks(context.Context, *connect.Request[pb.ListHuman
 		{Id: "r1/approve", Kind: "human_task", Title: "Approve the refund", Workflow: "refund-triage"},
 		{Id: "r2/wait", Kind: "timer"},
 	}}), nil
+}
+
+func (taskService) ListWorkflowRuns(_ context.Context, r *connect.Request[pb.ListWorkflowRunsRequest]) (*connect.Response[pb.ListWorkflowRunsResponse], error) {
+	return connect.NewResponse(&pb.ListWorkflowRunsResponse{Runs: []*pb.WorkflowRun{{Id: "r1", Status: "failed", Workflow: string(rune('a' + r.Msg.Limit - 20))}}}), nil
 }
 
 func TestFetchTasks(t *testing.T) {
@@ -59,8 +65,15 @@ func TestFetchTasks(t *testing.T) {
 	assert.Equal(t, "r1/approve", tasks[0].Id)
 	assert.Equal(t, "open", alerts)
 
+	runs, err := FetchRuns(context.Background(), sock)
+	require.NoError(t, err)
+	require.Len(t, runs, 1)
+	assert.Equal(t, "a", runs[0].Workflow, "the latest 20 asked for")
+
 	_, _, err = FetchTasks(context.Background(), filepath.Join(shortTemp(t), "none.sock"))
 	assert.Error(t, err, "nothing listening")
+	_, err = FetchRuns(context.Background(), filepath.Join(shortTemp(t), "none.sock"))
+	assert.Error(t, err)
 }
 
 func TestArrivedAndTasksLink(t *testing.T) {
@@ -117,4 +130,33 @@ func TestWithDot(t *testing.T) {
 	}
 	_, err := WithDot([]byte("not a png"))
 	assert.Error(t, err)
+}
+
+// Runs that failed since the tray started are announced once each, with
+// a link that opens the app on the run; alerts off says nothing.
+func TestFailedAndRunLink(t *testing.T) {
+	start := time.Unix(1000, 0)
+	at := func(sec int64) *timestamppb.Timestamp { return timestamppb.New(time.Unix(sec, 0)) }
+	failed := &pb.WorkflowRun{Id: "r1", Workflow: "brief", Workspace: "/w", Status: "failed", Ended: at(1100), Error: "The workflow brief stopped at Save: not approved"}
+	runs := []*pb.WorkflowRun{
+		failed,
+		{Id: "r2", Status: "failed", Ended: at(900)},
+		{Id: "r3", Status: "done", Ended: at(1200)},
+		{Id: "r4", Status: "failed"},
+	}
+	seen := map[string]bool{}
+	assert.Equal(t, []*pb.WorkflowRun{failed}, Failed(seen, runs, start), "only r1 failed since")
+	assert.Empty(t, Failed(seen, runs, start), "once")
+
+	assert.Empty(t, RunLink("off", failed))
+	u, err := url.Parse(RunLink("notify", failed))
+	require.NoError(t, err)
+	assert.Equal(t, "run", u.Host)
+	q := u.Query()
+	assert.Equal(t, "1", q.Get("notify"))
+	assert.Equal(t, "brief failed", q.Get("title"))
+	assert.Equal(t, failed.Error, q.Get("body"))
+	assert.Equal(t, "/w", q.Get("dir"))
+	assert.Equal(t, "brief", q.Get("workflow"))
+	assert.Equal(t, "r1", q.Get("run"))
 }

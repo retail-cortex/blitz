@@ -63,6 +63,8 @@ type bgRun struct {
 	dropped  int      // events dropped from the front, to keep keptRunEvents
 	requests []string // the requests it made, by ID
 	notify   map[chan struct{}]struct{}
+	// flowRun is the workflow run it runs, once a step says so.
+	flowRun string
 }
 
 // runs are the service's background runs.
@@ -81,6 +83,10 @@ func (r *bgRun) add(ev *pb.TurnEvent) {
 		r.requests = append(r.requests, k.ApprovalRequest.RequestId)
 	case *pb.TurnEvent_Question:
 		r.requests = append(r.requests, k.Question.RequestId)
+	case *pb.TurnEvent_FlowStep:
+		if r.flowRun == "" {
+			r.flowRun = k.FlowStep.Run
+		}
 	}
 	r.events = append(r.events, ev)
 	if over := len(r.events) - keptRunEvents; over > 0 {
@@ -101,7 +107,7 @@ func (r *bgRun) info(b *broker) *pb.BackgroundRun {
 	defer r.mu.Unlock()
 	m := &pb.BackgroundRun{
 		Id: r.id, Workspace: r.workspace, SessionId: r.session, Prompt: r.prompt, State: r.state,
-		Started: timestamppb.New(r.started), Error: r.errText,
+		Started: timestamppb.New(r.started), Error: r.errText, WorkflowRun: r.flowRun,
 	}
 	if !r.ended.IsZero() {
 		m.Ended = timestamppb.New(r.ended)

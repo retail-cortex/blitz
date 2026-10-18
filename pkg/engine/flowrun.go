@@ -133,6 +133,17 @@ func (w *Workspace) runStep(ctx context.Context, sessionID string, f flows.Flow,
 	return w.agentStep(ctx, sessionID, f, n, in, on)
 }
 
+// meterTurn adds what an agent step's turn spent to its step's meter
+// (WF-19): the chat's usage over the turn, on agent's model (the active
+// agent's when empty).
+func (w *Workspace) meterTurn(ctx context.Context, agent string, res api.TurnResult) {
+	if res.After.Calls == 0 && res.After.CostUSD == 0 {
+		return // it didn't get as far as the model
+	}
+	model, _ := w.engine.AgentModel(cmp.Or(agent, w.engine.ActiveAgent()))
+	meterUsage(ctx, model, usageSince(res.Before, res.After))
+}
+
 // saveStepFile writes a save_file step's input to path in the workspace,
 // once it's approved as any write is.
 func (w *Workspace) saveStepFile(ctx context.Context, path, text string) error {
@@ -184,6 +195,7 @@ func (w *Workspace) agentStep(ctx context.Context, sessionID string, f flows.Flo
 	label := fmt.Sprintf("/%s › %s", f.Name, cmp.Or(n.Title, n.ID))
 	st := flowStorage(ctx, w)
 	res, err := w.run(ctx, sessionID, turn{Turn: api.Turn{Text: label, Prompt: b.String()}}, on, st, opts...)
+	w.meterTurn(ctx, n.Agent, res)
 	if err != nil {
 		return "", err
 	}
@@ -210,6 +222,7 @@ func (w *Workspace) agentStep(ctx context.Context, sessionID string, f flows.Flo
 			return "", errors.New(i18n.T("flow.rule_blocked", "rule", r.Name, "reason", v.Reason))
 		case r.Action == gates.Revise:
 			again, err := w.run(ctx, sessionID, turn{Turn: api.Turn{Text: label, Prompt: i18n.T("flow.rule_revise", "rule", r.Name, "reason", v.Reason)}}, on, st, opts...)
+			w.meterTurn(ctx, n.Agent, again)
 			if err != nil {
 				return "", err
 			}

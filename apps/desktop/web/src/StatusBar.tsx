@@ -32,6 +32,7 @@ import {
 } from "@mdi/js";
 import { workspaces } from "./api";
 import { inboxCounts, useRuns } from "./backgroundRuns";
+import { FlowRunsItem } from "./FlowRunAlerts";
 import { showTasks, useTasks } from "./humanTasks";
 import { message, reason } from "./errors";
 import { configChanged, filesTouchedEvent, showPending, showView } from "./events";
@@ -80,6 +81,7 @@ export function StatusBar({ serviceUp, version, onWorkspaceSettings }: { service
       {ws && <Activity dir={dir} running={!!activity[dir]?.running} waiting={!!activity[dir]?.waiting} />}
       {serviceUp && <TasksItem />}
       {serviceUp && <RunsItem />}
+      {serviceUp && <FlowRunsItem />}
       {ws && <FailedItem dir={dir} />}
       {ws && serviceUp && <WorkspaceItems dir={dir} onWorkspaceSettings={() => onWorkspaceSettings(dir)} />}
     </footer>

@@ -36,6 +36,7 @@ import {
   originOf,
   pageEvents,
   parseDeepLink,
+  parseRunLink,
   parseTasksLink,
   tasksURL,
   parseLink,
@@ -356,4 +357,15 @@ describe("pictureExtension", () => {
     ["text/html", ""],
     ["", ""],
   ])("%s", (type, want) => expect(pictureExtension(type)).toBe(want));
+});
+
+describe("parseRunLink", () => {
+  it("reads a failed run's notification and the run it opens", () =>
+    expect(parseRunLink("blitz://run?notify=1&title=brief+failed&body=stopped+at+Save&dir=%2FUsers%2Fme%2Fshop&workflow=brief&run=flow-1")).toEqual({
+      title: "brief failed",
+      body: "stopped at Save",
+      open: { dir: "/Users/me/shop", prompt: "", view: "workflows", workflow: "brief", run: "flow-1" },
+    }));
+  it("takes a Windows folder, and Blitz for a missing title", () => expect(parseRunLink("blitz://run?dir=C%3A%5Cshop")).toMatchObject({ title: "Blitz", open: { dir: "C:\\shop" } }));
+  it.each(["blitz://run?dir=shop", "blitz://run", "blitz://tasks?dir=/x", "https://run?dir=/x", "nonsense"])("ignores %s", (raw) => expect(parseRunLink(raw)).toBeUndefined());
 });

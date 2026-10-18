@@ -133,6 +133,8 @@ type FlowStep struct {
 	// Output is what it produced, ended (the start of it, up to 4 KiB).
 	Output string
 	Error  string
+	// Run is the run's ID (its receipt's).
+	Run string
 }
 
 // A workflow step's status.

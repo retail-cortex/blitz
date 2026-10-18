@@ -274,7 +274,7 @@ func event(ev *pb.TurnEvent) (api.Event, bool) {
 		out.Notice = &api.Notice{Text: k.Notice.Text, Error: k.Notice.Error, Transient: k.Notice.Transient}
 	case *pb.TurnEvent_FlowStep:
 		s := k.FlowStep
-		out.Step = &api.FlowStep{Workflow: s.Workflow, ID: s.Id, Title: s.Title, Type: s.Type, Index: int(s.Index), Count: int(s.Count), Status: s.Status, Output: s.Output, Error: s.Error}
+		out.Step = &api.FlowStep{Workflow: s.Workflow, ID: s.Id, Title: s.Title, Type: s.Type, Index: int(s.Index), Count: int(s.Count), Status: s.Status, Output: s.Output, Error: s.Error, Run: s.Run}
 	default:
 		return api.Event{}, false
 	}

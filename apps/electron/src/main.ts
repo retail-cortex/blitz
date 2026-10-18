@@ -43,6 +43,7 @@ import {
   originOf,
   parseDeepLink,
   parseLink,
+  parseRunLink,
   parseTasksLink,
   taskWindowMethods,
   tasksURL,
@@ -63,6 +64,7 @@ import {
   type DeepLink,
   type MenuLabels,
   type PageEvent,
+  type RunLink,
   type TasksLink,
   type Unsaved,
 } from "./logic";
@@ -89,6 +91,8 @@ let taskWin: BrowserWindow | null = null;
 // A blitz://tasks link that came before the app was ready: it starts in
 // task mode, without its own window.
 let taskStart: TasksLink | undefined;
+// A failed run's notification asked for before the app was ready.
+let runStart: RunLink | undefined;
 let ready = false;
 // The page's first one-time link, until a window takes it; after that the
 // window's cookie lets the next one in at the origin.
@@ -106,7 +110,7 @@ if (!app.requestSingleInstanceLock()) {
   app.on("second-instance", (_e, argv) => {
     const links = linkArgs(argv);
     links.forEach((l) => void receiveLink(l));
-    if (links.some((l) => parseTasksLink(l))) return;
+    if (links.some((l) => parseTasksLink(l) || parseRunLink(l))) return;
     if (win) {
       if (win.isMinimized()) win.restore();
       win.show();
@@ -144,6 +148,10 @@ async function start() {
   ready = true;
   if (taskStart) {
     showTasks(taskStart);
+    return;
+  }
+  if (runStart) {
+    showRun(runStart);
     return;
   }
   await openApp();
@@ -220,6 +228,32 @@ function showTasks(t: TasksLink) {
   }
   const n = new Notification({ title: t.title, body: t.body });
   n.on("click", () => openTaskWindow());
+  n.show();
+  setTimeout(() => {
+    if (!win && !taskWin) app.quit();
+  }, 10 * 60_000).unref();
+}
+
+/**
+ * Says a workflow run failed (WF-19), from the tray: nothing when the
+ * app's window is open (it announces failures itself), else a
+ * notification that opens the app on the run (or the app on it at once,
+ * with no notifications here). Started only for this, the app quits after
+ * ten minutes of a notification nobody clicked.
+ */
+function showRun(r: RunLink) {
+  if (!ready) {
+    runStart = r;
+    return;
+  }
+  if (win && !win.isDestroyed()) return;
+  const open = () => {
+    pending.push(r.open);
+    void openApp();
+  };
+  if (!Notification.isSupported()) return open();
+  const n = new Notification({ title: r.title, body: r.body });
+  n.on("click", open);
   n.show();
   setTimeout(() => {
     if (!win && !taskWin) app.quit();
@@ -358,6 +392,8 @@ function setMenu(l: MenuLabels) {
 async function receiveLink(raw: string) {
   const tasks = parseTasksLink(raw);
   if (tasks) return showTasks(tasks);
+  const failed = parseRunLink(raw);
+  if (failed) return showRun(failed);
   const link = parseDeepLink(raw, homedir());
   if (!link) return;
   const info = await stat(link.dir).catch(() => undefined);

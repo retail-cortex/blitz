@@ -37,10 +37,20 @@ import (
 // recordDirs are where paused runs are recorded: the default session
 // storage, and each open workspace's.
 func (s *Server) recordDirs() []string {
-	dirs := []string{engine.FlowRecordsDir(filepath.Join(config.ConfigDir(s.configDir), "sessions"))}
+	var dirs []string
+	for _, d := range s.storageDirs() {
+		dirs = append(dirs, engine.FlowRecordsDir(d))
+	}
+	return dirs
+}
+
+// storageDirs are where sessions are kept: the default session storage,
+// and each open workspace's.
+func (s *Server) storageDirs() []string {
+	dirs := []string{filepath.Join(config.ConfigDir(s.configDir), "sessions")}
 	s.mu.Lock()
 	for _, w := range s.workspaces {
-		if d := engine.FlowRecordsDir(w.StorageDir()); !slices.Contains(dirs, d) {
+		if d := w.StorageDir(); !slices.Contains(dirs, d) {
 			dirs = append(dirs, d)
 		}
 	}

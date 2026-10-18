@@ -78,7 +78,8 @@ func (w *Workspace) ruleAsker() gates.Asker {
 		if err != nil {
 			return "", fmt.Errorf("%s", ModelErrorSummary(err, w.cfg))
 		}
-		reply, _, _, err := runtime.Ask(ctx, llm, instruction, prompt)
+		reply, served, usage, err := runtime.Ask(ctx, llm, instruction, prompt)
+		meterUsage(ctx, served, w.engine.EstimateUsage(served, usage))
 		return reply, err
 	}
 }

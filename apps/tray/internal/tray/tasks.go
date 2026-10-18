@@ -27,6 +27,7 @@ import (
 	"connectrpc.com/connect"
 	"github.com/retail-cortex/blitz/pkg/i18n"
 	"github.com/retail-cortex/blitz/pkg/socket"
+	"github.com/retail-cortex/blitz/pkg/textutil"
 	pb "github.com/retail-cortex/blitz/proto/blitz/v1"
 )
 
@@ -89,6 +90,50 @@ func TasksLink(alerts string, arrived []*pb.HumanTask) string {
 		q.Set("body", i18n.N("tray.tasks.notify_more", len(arrived)-1, "title", t.Title))
 	}
 	return "blitz://tasks?" + q.Encode()
+}
+
+// FetchRuns asks the service for the latest workflow runs, in every
+// workspace (spec_workflows_043 WF-19), newest first.
+func FetchRuns(ctx context.Context, sock string) ([]*pb.WorkflowRun, error) {
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	r, err := pb.NewWorkspaceServiceClient(clientFor(sock), socket.BaseURL).ListWorkflowRuns(ctx, connect.NewRequest(&pb.ListWorkflowRunsRequest{Limit: 20}))
+	if err != nil {
+		return nil, err
+	}
+	return r.Msg.Runs, nil
+}
+
+// Failed returns the runs that failed after since and aren't in seen, and
+// adds them to seen.
+func Failed(seen map[string]bool, runs []*pb.WorkflowRun, since time.Time) []*pb.WorkflowRun {
+	var out []*pb.WorkflowRun
+	for _, r := range runs {
+		if r.Status != "failed" || seen[r.Id] || r.Ended == nil || !r.Ended.AsTime().After(since) {
+			continue
+		}
+		seen[r.Id] = true
+		out = append(out, r)
+	}
+	return out
+}
+
+// RunLink is the link that tells the desktop app a workflow run failed:
+// blitz://run, with notify=1 a notification (titled and worded here in
+// the user's language) that opens the app on the run (its workspace, its
+// workflow's canvas). "" when alerts are off.
+func RunLink(alerts string, r *pb.WorkflowRun) string {
+	if alerts == "off" {
+		return ""
+	}
+	q := url.Values{}
+	q.Set("notify", "1")
+	q.Set("title", i18n.T("tray.runs.failed_title", "workflow", r.Workflow))
+	q.Set("body", textutil.Ellipsize(r.Error, 180))
+	q.Set("dir", r.Workspace)
+	q.Set("workflow", r.Workflow)
+	q.Set("run", r.Id)
+	return "blitz://run?" + q.Encode()
 }
 
 // TasksTitle is the tray menu's item for the waiting tasks.

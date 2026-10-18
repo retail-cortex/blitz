@@ -189,11 +189,14 @@ export function printOptions(pageSize: unknown) {
 /** The longest prompt a blitz:// link may carry (as deeplink.go). */
 export const maxLinkPrompt = 20000;
 
-/** A blitz:// link's folder, and its prompt (open) or view (workers). */
+/** A blitz:// link's folder, and its prompt (open) or view (workers, or a workflow's run). */
 export interface DeepLink {
   dir: string;
   prompt: string;
-  view?: "workers";
+  view?: "workers" | "workflows";
+  /** For workflows: the workflow, and the run to show on its canvas. */
+  workflow?: string;
+  run?: string;
 }
 
 /**
@@ -246,6 +249,38 @@ export function parseTasksLink(raw: string): TasksLink | undefined {
   if (u.protocol !== "blitz:" || action !== "tasks") return undefined;
   const cut = (s: string | null) => [...(s ?? "")].slice(0, 200).join("");
   return { notify: u.searchParams.get("notify") === "1", title: cut(u.searchParams.get("title")) || "Blitz", body: cut(u.searchParams.get("body")) };
+}
+
+/**
+ * What blitz://run says (spec_workflows_043 WF-19), from the tray when a
+ * workflow run fails with the app's window closed: the notification's
+ * title and body (in the user's language), and the run to open when it's
+ * clicked (its workspace, an absolute folder; its workflow; its ID).
+ * Undefined for any other link, or one without a folder.
+ */
+export interface RunLink {
+  title: string;
+  body: string;
+  open: DeepLink;
+}
+
+export function parseRunLink(raw: string): RunLink | undefined {
+  let u: URL;
+  try {
+    u = new URL(raw.trim());
+  } catch {
+    return undefined;
+  }
+  const action = (u.host || u.pathname.replace(/^\/+/, "")).replace(/\/$/, "");
+  if (u.protocol !== "blitz:" || action !== "run") return undefined;
+  const dir = u.searchParams.get("dir") ?? "";
+  if (!(dir.startsWith("/") || /^[A-Za-z]:[\\/]/.test(dir))) return undefined;
+  const cut = (s: string | null) => [...(s ?? "")].slice(0, 200).join("");
+  return {
+    title: cut(u.searchParams.get("title")) || "Blitz",
+    body: cut(u.searchParams.get("body")),
+    open: { dir, prompt: "", view: "workflows", workflow: cut(u.searchParams.get("workflow")), run: cut(u.searchParams.get("run")) },
+  };
 }
 
 /** The page's one-time link, opening on the tasks window (the page server keeps tasks). */

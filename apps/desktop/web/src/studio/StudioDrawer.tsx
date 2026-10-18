@@ -46,6 +46,8 @@ export type StudioKind = (typeof studioKinds)[number];
 export interface StudioOpen {
   kind: StudioKind;
   intent?: ItemIntent;
+  /** For workflows (an intent showing one): the run to show on its canvas. */
+  run?: string;
 }
 
 /** Each kind's icon. */
@@ -76,10 +78,19 @@ export function StudioDrawer({ dir, initial, onClose, onWorkers }: { dir: string
   useEffect(() => {
     if (kind === "workers") onWorkers?.();
   }, [kind, onWorkers]);
+  // A workflow's canvas takes the room: the kinds shrink to their icons.
+  const [compact, setCompact] = useState(false);
   const choose = (k: StudioKind) => {
     setDirty(false);
+    setCompact(false);
     setKind(k);
   };
+  // Asked again for a workflow's run while open (the status bar, an
+  // alert): back to Workflows, whose pane opens it.
+  const asked = initial.intent?.n;
+  useEffect(() => {
+    if (asked && initial.kind === "workflows") setKind("workflows");
+  }, [asked, initial.kind]);
   // Bumped to list the shown kind again (its pane starts over, unless it
   // holds unsaved changes).
   const [listed, setListed] = useState(0);
@@ -100,7 +111,7 @@ export function StudioDrawer({ dir, initial, onClose, onWorkers }: { dir: string
       title={t("desktop.studio")}
       icon={mdiBookOpenPageVariantOutline}
       onClose={onClose}
-      className="settings-drawer studio-drawer"
+      className={`settings-drawer studio-drawer ${compact ? "is-compact" : ""}`}
       dirty={dirty}
       headerActions={<IconButton icon={mdiRefresh} label={t("desktop.menu.agents.reload")} onClick={() => void reload()} />}
     >
@@ -141,7 +152,7 @@ export function StudioDrawer({ dir, initial, onClose, onWorkers }: { dir: string
           )}
           {kind === "guardrails" && <GuardrailsPane workspace={dir} onDirty={setDirty} onRules={() => choose("rules")} />}
           {kind === "evals" && <EvalsPane workspace={dir} onDirty={setDirty} forAgent={evalsFor} onHandled={() => setEvalsFor("")} />}
-          {kind === "workflows" && <WorkflowsPane workspace={dir} onDirty={setDirty} />}
+          {kind === "workflows" && <WorkflowsPane workspace={dir} onDirty={setDirty} onCanvas={setCompact} intent={initial.kind === "workflows" ? initial.intent : undefined} run={initial.run} />}
         </div>
       </div>
     </Drawer>

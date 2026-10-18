@@ -18,18 +18,18 @@
 // development build). It keeps a little state in memory and scripts turns
 // so every state of the conversation can be seen: streamed Markdown,
 // thinking, tool calls, a task list, an approval and a plan review.
-import { create, type JsonObject, type MessageInitShape } from "@bufbuild/protobuf";
+import { clone, create, type JsonObject, type MessageInitShape } from "@bufbuild/protobuf";
 import { timestampFromDate } from "@bufbuild/protobuf/wkt";
 import { Code, ConnectError, createRouterTransport } from "@connectrpc/connect";
 import { setTransport } from "../api";
 import { BackgroundRunSchema, MessageSchema, RunTurnResponseSchema, SessionInfoSchema, SessionService, WatchBackgroundResponseSchema, type BackgroundRun, type Message, type SessionInfo } from "../gen/blitz/v1/session_pb";
-import { ActionKind, ErrorInfoSchema, UsageSchema, type Usage } from "../gen/blitz/v1/turn_pb";
+import { ActionKind, Decision, ErrorInfoSchema, UsageSchema, type Usage } from "../gen/blitz/v1/turn_pb";
 
 type Out = MessageInitShape<typeof RunTurnResponseSchema>;
 import { RunStatus, WorkerService, WorkerState } from "../gen/blitz/v1/worker_pb";
 import { ConfigService, KeySource, MCPServerConfigSchema, type MCPServerConfig } from "../gen/blitz/v1/config_pb";
 import { FileKind, FileService, GitAction, RevisionDiff } from "../gen/blitz/v1/file_pb";
-import { AgentFileSchema, AgentScope, EvalResultSchema, ConflictChoice, GitOperation, PullOutcome, SuggestionKind, SuggestionSchema, WorkspaceService, type AgentDefinition } from "../gen/blitz/v1/workspace_pb";
+import { AgentFileSchema, AgentScope, EvalResultSchema, ConflictChoice, GitOperation, PullOutcome, SuggestionKind, SuggestionSchema, WorkflowRunEventSchema, WorkflowRunSchema, WorkflowRunStepSchema, WorkspaceService, type AgentDefinition, type WorkflowRun } from "../gen/blitz/v1/workspace_pb";
 
 // Whether the fake workspace is a git repository (?norepo: not yet).
 // The providers the fake has signed in to, and each one's sign-in.
@@ -919,37 +919,199 @@ async function* watchFakeTasks(workspace: string) {
     await sleep(500);
   }
 }
-// Background runs of workflows: the run's ID → the workflow.
+// Background runs of workflows: each drives itself (as the service's
+// do, watched or not), its events kept for watchers and its receipt
+// (WF-19) updated as it goes.
 const fakeFlowRuns = new Map<string, FakeFlow>();
+const flowLogs = new Map<string, { events: MessageInitShape<typeof WatchBackgroundResponseSchema>[]; done: boolean }>();
+let receiptsVersion = 0;
+const ago = (min: number) => timestampFromDate(new Date(Date.now() - min * 60000));
+const fakeUsage = (calls: number, input: number, output: number, usd: number) => create(UsageSchema, { calls, input: BigInt(input), output: BigInt(output), costUsd: usd, priced: true });
+// Past runs of the research brief: one done, one failed, one a worker's.
+const fakeReceipts: WorkflowRun[] = [
+  create(WorkflowRunSchema, {
+    id: "flow-past-2",
+    workspace: "",
+    workflow: "research-brief",
+    origin: "worker",
+    started: ago(60 * 20),
+    ended: ago(60 * 20 - 2),
+    status: "failed",
+    error: "The workflow research-brief stopped at Look it up: the page didn't load (timeout after 30s)",
+    usage: fakeUsage(1, 1800, 120, 0.0021),
+    models: ["gemini-4-argon"],
+    steps: [
+      { id: "notes", title: "Read the notes", type: "read_file", status: "done", started: ago(60 * 20), ended: ago(60 * 20), attempts: 1, usage: fakeUsage(0, 0, 0, 0) },
+      { id: "look-up", title: "Look it up", type: "browser", status: "failed", started: ago(60 * 20), ended: ago(60 * 20 - 2), attempts: 3, agent: "blitz", models: ["gemini-4-argon"], usage: fakeUsage(1, 1800, 120, 0.0021), error: "the page didn't load (timeout after 30s)" },
+    ],
+  }),
+  create(WorkflowRunSchema, {
+    id: "flow-past-1",
+    workspace: "",
+    workflow: "research-brief",
+    origin: "background",
+    started: ago(60 * 26),
+    ended: ago(60 * 26 - 3),
+    status: "done",
+    output: "# Coupon rounding\n\nRound each line half up…",
+    usage: fakeUsage(3, 9400, 1210, 0.0164),
+    models: ["gemini-4-argon", "gemini-4-flash"],
+    steps: [
+      { id: "notes", title: "Read the notes", type: "read_file", status: "done", started: ago(60 * 26), ended: ago(60 * 26), attempts: 1, usage: fakeUsage(0, 0, 0, 0) },
+      { id: "look-up", title: "Look it up", type: "browser", status: "done", started: ago(60 * 26), ended: ago(60 * 26 - 1), attempts: 1, agent: "blitz", models: ["gemini-4-argon"], usage: fakeUsage(1, 3100, 410, 0.0052) },
+      { id: "gather", title: "Gather", type: "accumulate", status: "done", started: ago(60 * 26 - 1), ended: ago(60 * 26 - 1), attempts: 1, usage: fakeUsage(0, 0, 0, 0) },
+      { id: "draft", title: "Draft the brief", type: "agent", status: "done", started: ago(60 * 26 - 1), ended: ago(60 * 26 - 3), attempts: 1, agent: "reviewer", models: ["gemini-4-argon", "gemini-4-flash"], usage: fakeUsage(2, 6300, 800, 0.0112) },
+      { id: "save", title: "Save the brief", type: "save_file", status: "done", started: ago(60 * 26 - 3), ended: ago(60 * 26 - 3), attempts: 1, usage: fakeUsage(0, 0, 0, 0) },
+    ],
+  }),
+];
+const fakeOutputs: Record<string, string> = {
+  notes: "Coupons round half up since 0.4; refunds round down.",
+  "look-up": "Most shops round each line, then the total.",
+  gather: "## Read the notes\n\nCoupons round half up…\n\n## Look it up\n\nMost shops round each line…",
+  draft: "# Coupon rounding\n\nRound each line half up, then total; refunds round down. Sources: notes, three shops' docs.",
+  save: "",
+};
+const fakeSpend: Record<string, [number, number, number, string[]]> = { "look-up": [3100, 410, 0.0052, ["gemini-4-argon"]], draft: [6300, 800, 0.0112, ["gemini-4-argon", "gemini-4-flash"]] };
 
-async function* watchFlow(r: BackgroundRun, f: FakeFlow, ev: (kind: unknown) => MessageInitShape<typeof WatchBackgroundResponseSchema>, s: ReturnType<typeof state>) {
+// Runs a workflow in the fake: its steps one after another, the agent
+// steps streaming their text, save_file asking for approval.
+async function driveFlow(r: BackgroundRun, f: FakeFlow, s: ReturnType<typeof state>) {
+  const log = { events: [] as MessageInitShape<typeof WatchBackgroundResponseSchema>[], done: false };
+  flowLogs.set(r.id, log);
+  const ev = (kind: unknown) => log.events.push({ event: { author: "blitz", kind } } as MessageInitShape<typeof WatchBackgroundResponseSchema>);
+  const rec = create(WorkflowRunSchema, { id: `flow-${Date.now()}`, workspace: r.workspace, workflow: f.name, origin: "background", sessionId: r.sessionId, input: r.prompt.split(" ").slice(1).join(" "), started: now(), status: "running", backgroundId: r.id, usage: fakeUsage(0, 0, 0, 0) });
+  rec.events.push(create(WorkflowRunEventSchema, { at: now(), kind: "run", text: "started" }));
+  fakeReceipts.unshift(rec);
+  const bump = () => {
+    let calls = 0, input = 0n, output = 0n, usd = 0;
+    for (const st of rec.steps) {
+      calls += st.usage?.calls ?? 0;
+      input += st.usage?.input ?? 0n;
+      output += st.usage?.output ?? 0n;
+      usd += st.usage?.costUsd ?? 0;
+    }
+    rec.usage = create(UsageSchema, { calls, input, output, costUsd: usd, priced: true });
+    rec.models = [...new Set(rec.steps.flatMap((x) => x.models))];
+    receiptsVersion++;
+  };
+  const note = (step: string, kind: string, text: string, error = false) => rec.events.push(create(WorkflowRunEventSchema, { at: now(), step, kind, text, error }));
+  const end = (status: string, error = "") => {
+    rec.status = status;
+    rec.ended = now();
+    rec.error = error;
+    rec.backgroundId = "";
+    rec.approvals = 0;
+    note("", "run", error ? `${status}: ${error}` : status, !!error);
+    r.state = status === "done" ? "done" : status;
+    r.ended = now();
+    log.done = true;
+    bump();
+  };
   const order = ["notes", "look-up", "gather", "draft", "save"].filter((id) => f.nodes.some((n) => n.id === id));
-  const outputs: Record<string, string> = { notes: "Coupons round half up since 0.4; refunds round down.", "look-up": "Most shops round each line, then the total.", gather: "## Read the notes\n\nCoupons round half up…\n\n## Look it up\n\nMost shops round each line…", draft: "# Coupon rounding\n\nRound each line half up, then total; refunds round down. Sources: notes, three shops' docs.", save: "" };
   for (const [i, id] of order.entries()) {
-    if (runStopped.has(r.id)) break;
+    if (runStopped.has(r.id)) return end("stopped");
     const n = f.nodes.find((x) => x.id === id)!;
-    const step = { workflow: f.name, id, title: n.title, type: n.type, index: i + 1, count: order.length };
-    yield ev({ case: "flowStep", value: { ...step, status: "running" } });
-    await sleep(900);
+    const step = { workflow: f.name, id, title: n.title, type: n.type, index: i + 1, count: order.length, run: rec.id };
+    ev({ case: "flowStep", value: { ...step, status: "running" } });
+    const spend = fakeSpend[id];
+    const row = create(WorkflowRunStepSchema, { id, title: n.title, type: n.type, status: "running", started: now(), attempts: 1, agent: spend ? n.agent || "blitz" : "", models: spend?.[3] ?? [], usage: fakeUsage(0, 0, 0, 0) });
+    rec.steps.push(row);
+    note(id, "step", "running");
+    bump();
+    if (spend) {
+      // Streams its text a few words at a time, spending as it goes.
+      const words = (fakeOutputs[id] ?? "").split(" ");
+      for (const [k, w] of words.entries()) {
+        if (runStopped.has(r.id)) break;
+        row.stream += (k ? " " : "") + w;
+        row.usage = fakeUsage(1, Math.round((spend[0] * (k + 1)) / words.length), Math.round((spend[1] * (k + 1)) / words.length), (spend[2] * (k + 1)) / words.length);
+        if (k === 2) note(id, "tool", "web_fetch");
+        bump();
+        await sleep(160);
+      }
+    } else await sleep(700);
+    if (runStopped.has(r.id)) {
+      row.status = "failed";
+      row.ended = now();
+      row.error = "stopped";
+      return end("stopped");
+    }
     if (n.type === "save_file") {
       const req = `${r.id}-save`;
       const answer = new Promise<string>((res) => s.pending.set(req, res));
       r.state = "waiting";
-      yield ev({ case: "approvalRequest", value: { requestId: req, tool: "save_file", kind: ActionKind.WRITE, detail: n.path, scopeLabel: n.path } });
+      r.waiting = 1;
+      rec.approvals = 1;
+      bump();
+      ev({ case: "approvalRequest", value: { requestId: req, tool: "save_file", kind: ActionKind.WRITE, detail: n.path, scopeLabel: n.path } });
       const a = await answer;
+      s.pending.delete(req);
       r.state = "running";
+      r.waiting = 0;
+      rec.approvals = 0;
+      if (a === "stop") {
+        row.status = "failed";
+        row.ended = now();
+        row.error = "stopped";
+        return end("stopped");
+      }
       if (a === "deny") {
-        yield ev({ case: "flowStep", value: { ...step, status: "failed", error: `${n.path}: not approved` } });
-        yield ev({ case: "finished", value: { output: "", before: s.usage, after: s.usage, error: create(ErrorInfoSchema, { reason: "NOT_APPROVED", message: `The workflow ${f.name} stopped at ${n.title}` }) } });
-        r.state = "failed";
-        return;
+        const error = `${n.path}: not approved`;
+        row.status = "failed";
+        row.ended = now();
+        row.error = error;
+        note(id, "step", `failed: ${error}`, true);
+        ev({ case: "flowStep", value: { ...step, status: "failed", error } });
+        ev({ case: "finished", value: { output: "", before: s.usage, after: s.usage, error: create(ErrorInfoSchema, { reason: "NOT_APPROVED", message: `The workflow ${f.name} stopped at ${n.title}: ${error}` }) } });
+        return end("failed", `The workflow ${f.name} stopped at ${n.title}: ${error}`);
       }
     }
-    yield ev({ case: "flowStep", value: { ...step, status: "done", output: outputs[id] ?? "" } });
+    row.status = "done";
+    row.ended = now();
+    row.output = fakeOutputs[id] ?? "";
+    note(id, "step", "done");
+    ev({ case: "flowStep", value: { ...step, status: "done", output: fakeOutputs[id] ?? "" } });
+    bump();
   }
-  r.state = "done";
-  r.ended = now();
-  yield ev({ case: "finished", value: { output: outputs.draft, before: s.usage, after: s.usage } });
+  rec.output = fakeOutputs.draft;
+  ev({ case: "finished", value: { output: fakeOutputs.draft, before: s.usage, after: s.usage } });
+  end("done");
+}
+
+// A receipt as a list shows it: without its events and its steps' text.
+const summary = (r: WorkflowRun) => {
+  const c = clone(WorkflowRunSchema, r);
+  c.events = [];
+  for (const x of c.steps) x.stream = x.output = "";
+  return c;
+};
+const receiptsFor = (workspace: string) => fakeReceipts.map((r) => (r.workspace ? r : Object.assign(r, { workspace: [...states.keys()][0] ?? workspace })));
+
+async function* watchFakeRuns(workspace: string) {
+  let last = -1;
+  for (;;) {
+    if (receiptsVersion !== last) {
+      last = receiptsVersion;
+      const cutoff = Date.now() - 10 * 60_000;
+      yield { runs: receiptsFor(workspace).filter((r) => (!workspace || r.workspace === workspace) && (r.status === "running" || r.status === "waiting" || (r.ended && Number(r.ended.seconds) * 1000 > cutoff))).map(summary) };
+    }
+    await sleep(300);
+  }
+}
+
+async function* watchFakeRun(id: string) {
+  let last = -1;
+  for (;;) {
+    const r = fakeReceipts.find((x) => x.id === id);
+    if (!r) throw new ConnectError(`no workflow run ${id}`, Code.NotFound);
+    if (receiptsVersion !== last) {
+      last = receiptsVersion;
+      yield { run: clone(WorkflowRunSchema, r) };
+    }
+    if (r.status !== "running") return;
+    await sleep(200);
+  }
 }
 
 async function* watchRun(id: string): AsyncGenerator<MessageInitShape<typeof WatchBackgroundResponseSchema>> {
@@ -957,10 +1119,19 @@ async function* watchRun(id: string): AsyncGenerator<MessageInitShape<typeof Wat
   if (!r) throw new ConnectError(`no background run ${id}`, Code.NotFound);
   const s = state(r.workspace);
   const ev = (kind: unknown) => ({ event: { author: "blitz", kind } }) as MessageInitShape<typeof WatchBackgroundResponseSchema>;
-  const flow = fakeFlowRuns.get(id);
-  if (flow) {
-    yield* watchFlow(r, flow, ev, s);
-    return;
+  const log = flowLogs.get(id);
+  if (log) {
+    // From the start, then as it goes (answered approvals left out).
+    for (let sent = 0; ; ) {
+      while (sent < log.events.length) {
+        const e = log.events[sent++];
+        const k = (e.event as { kind?: { case?: string; value?: { requestId?: string } } }).kind;
+        if (k?.case === "approvalRequest" && !s.pending.has(k.value?.requestId ?? "")) continue;
+        yield e;
+      }
+      if (log.done) return;
+      await sleep(150);
+    }
   }
   const ended = () => ev({ case: "finished", value: { output: "", before: s.usage, after: s.usage } });
   if (r.state === "done") {
@@ -1016,6 +1187,7 @@ export function installFake() {
           const run = create(BackgroundRunSchema, { id: `bg-${backgroundRuns().length + 1}`, workspace, sessionId: `session-flow-${Date.now()}`, prompt: turn!.text, state: "running", started: now() });
           backgroundRuns().unshift(run);
           fakeFlowRuns.set(run.id, f);
+          void driveFlow(run, f, state(workspace));
           return { run };
         },
         watchBackground: ({ id }) => watchRun(id),
@@ -1065,7 +1237,7 @@ export function installFake() {
         approve: ({ workspace, requestId, decision }) => {
           const task = state(workspace).tasks.get(requestId.replace(/-req$/, ""));
           if (task) task.answered = Date.now();
-          state(workspace).pending.get(requestId)?.(decision === 4 ? "deny" : "allow");
+          state(workspace).pending.get(requestId)?.(decision === Decision.DENY ? "deny" : "allow");
           return {};
         },
         answer: ({ workspace, requestId, answer }) => {
@@ -1116,6 +1288,22 @@ export function installFake() {
         // Workflows' human tasks, answered by their forms.
         listHumanTasks: ({ workspace }) => ({ alerts: fakeAlerts, tasks: fakeTasks.filter((x) => !workspace || x.workspace === workspace) }),
         watchHumanTasks: ({ workspace }) => watchFakeTasks(workspace),
+        listWorkflowRuns: ({ workspace, workflow, limit }) => ({ runs: receiptsFor(workspace).filter((r) => (!workspace || r.workspace === workspace) && (!workflow || r.workflow === workflow)).slice(0, limit || 50).map(summary) }),
+        getWorkflowRun: ({ id }) => {
+          const r = fakeReceipts.find((x) => x.id === id);
+          if (!r) throw new ConnectError(`no workflow run ${id}`, Code.NotFound);
+          return { run: r };
+        },
+        watchWorkflowRun: ({ id }) => watchFakeRun(id),
+        watchWorkflowRuns: ({ workspace }) => watchFakeRuns(workspace),
+        stopWorkflowRun: ({ id }) => {
+          const r = fakeReceipts.find((x) => x.id === id && x.status === "running");
+          if (!r) throw new ConnectError("the workflow run isn't running", Code.NotFound);
+          runStopped.add(r.backgroundId);
+          const bg = backgroundRuns().find((x) => x.id === r.backgroundId);
+          if (bg) state(bg.workspace).pending.get(`${bg.id}-save`)?.("stop");
+          return {};
+        },
         answerHumanTask: ({ taskId, actionJson }) => {
           const i = fakeTasks.findIndex((x) => x.id === taskId);
           if (i < 0) throw new ConnectError("no such task", Code.NotFound);

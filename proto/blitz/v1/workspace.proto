@@ -262,6 +262,22 @@ service WorkspaceService {
   rpc SaveWorkflow(SaveWorkflowRequest) returns (SaveWorkflowResponse);
   // Deletes a workflow from .agents/workflows (WORKFLOW_NOT_FOUND).
   rpc DeleteWorkflow(DeleteWorkflowRequest) returns (DeleteWorkflowResponse);
+  // Returns workflows' runs, newest first: each run's receipt (WF-19)
+  // without its events and its steps' text. Running ones are as they are
+  // now.
+  rpc ListWorkflowRuns(ListWorkflowRunsRequest) returns (ListWorkflowRunsResponse);
+  // Returns one run's whole receipt (RUN_NOT_FOUND).
+  rpc GetWorkflowRun(GetWorkflowRunRequest) returns (GetWorkflowRunResponse);
+  // Streams one run's receipt: as it is, then again each time it changes,
+  // until the run ends or pauses (RUN_NOT_FOUND).
+  rpc WatchWorkflowRun(WatchWorkflowRunRequest) returns (stream WatchWorkflowRunResponse);
+  // Streams the runs going and those that ended lately (summaries): as
+  // they are, then again each time one starts, changes state or ends, so
+  // a client shows what's running and hears of a failure from anywhere.
+  rpc WatchWorkflowRuns(WatchWorkflowRunsRequest) returns (stream WatchWorkflowRunsResponse);
+  // Stops a running workflow run, wherever it was started (a chat, the
+  // background, a worker); RUN_NOT_FOUND when it isn't running.
+  rpc StopWorkflowRun(StopWorkflowRunRequest) returns (StopWorkflowRunResponse);
   // Returns the tasks paused workflow runs wait on (human tasks' forms,
   // timers), oldest first: one workspace's, or every one's.
   rpc ListHumanTasks(ListHumanTasksRequest) returns (ListHumanTasksResponse);
@@ -2884,3 +2900,131 @@ message DeleteWorkflowRequest {
 
 // Response message for WorkspaceService.DeleteWorkflow.
 message DeleteWorkflowResponse {}
+
+// A workflow run's receipt (spec_workflows_043 WF-19): its envelope (what
+// started it, when, on what) and routing slip (each step's run, in the
+// order they ran), with what it spent.
+message WorkflowRun {
+  string id = 1;
+  string workspace = 2;
+  string workflow = 3;
+  // chat, background or worker.
+  string origin = 4;
+  // The chat its agent steps are turns in.
+  string session_id = 5;
+  string input = 6;
+  google.protobuf.Timestamp started = 7;
+  // Unset while it runs or waits.
+  google.protobuf.Timestamp ended = 8;
+  // running, waiting (on a human task or a timer), done, failed or
+  // stopped.
+  string status = 9;
+  string error = 10;
+  // What it produced (the start of it).
+  string output = 11;
+  // The steps' usage together, and every model they used.
+  Usage usage = 12;
+  repeated string models = 13;
+  repeated WorkflowRunStep steps = 14;
+  // Its events, oldest first (left out of lists).
+  repeated WorkflowRunEvent events = 15;
+  // The service's background run following it while one does (watch it
+  // with WatchBackground for approvals and the chat's events).
+  string background_id = 16;
+  // Approval requests that background run waits on.
+  int32 approvals = 17;
+}
+
+// One run of a workflow's step.
+message WorkflowRunStep {
+  string id = 1;
+  string title = 2;
+  string type = 3;
+  // running, waiting, done, failed or skipped.
+  string status = 4;
+  google.protobuf.Timestamp started = 5;
+  // Unset while it runs.
+  google.protobuf.Timestamp ended = 6;
+  // How many times it was tried (its retry).
+  int32 attempts = 7;
+  // An agent step's agent, and the models its calls used.
+  string agent = 8;
+  repeated string models = 9;
+  // Its model calls' tokens and cost (so far, while it runs).
+  Usage usage = 10;
+  // What it produced (the start of it; left out of lists).
+  string output = 11;
+  // The text its turns streamed (the start of it; left out of lists).
+  string stream = 12;
+  string error = 13;
+}
+
+// Something that happened in a workflow run.
+message WorkflowRunEvent {
+  google.protobuf.Timestamp at = 1;
+  // The step it's about, if any.
+  string step = 2;
+  // run (started, resumed, ended), step, tool or notice.
+  string kind = 3;
+  string text = 4;
+  bool error = 5;
+}
+
+// Request message for WorkspaceService.ListWorkflowRuns.
+message ListWorkflowRunsRequest {
+  // Empty: every workspace's.
+  string workspace = 1;
+  // Empty: every workflow's.
+  string workflow = 2;
+  // At most this many (50 when unset).
+  int32 limit = 3;
+}
+
+// Response message for WorkspaceService.ListWorkflowRuns.
+message ListWorkflowRunsResponse {
+  repeated WorkflowRun runs = 1;
+}
+
+// Request message for WorkspaceService.GetWorkflowRun.
+message GetWorkflowRunRequest {
+  string workspace = 1;
+  string id = 2;
+}
+
+// Response message for WorkspaceService.GetWorkflowRun.
+message GetWorkflowRunResponse {
+  WorkflowRun run = 1;
+}
+
+// Request message for WorkspaceService.WatchWorkflowRun.
+message WatchWorkflowRunRequest {
+  string workspace = 1;
+  string id = 2;
+}
+
+// Response message for WorkspaceService.WatchWorkflowRun.
+message WatchWorkflowRunResponse {
+  WorkflowRun run = 1;
+}
+
+// Request message for WorkspaceService.WatchWorkflowRuns.
+message WatchWorkflowRunsRequest {
+  // Empty: every workspace's.
+  string workspace = 1;
+}
+
+// Response message for WorkspaceService.WatchWorkflowRuns.
+message WatchWorkflowRunsResponse {
+  // Running and waiting runs, and those that ended in the last few
+  // minutes, newest first (summaries).
+  repeated WorkflowRun runs = 1;
+}
+
+// Request message for WorkspaceService.StopWorkflowRun.
+message StopWorkflowRunRequest {
+  string workspace = 1;
+  string id = 2;
+}
+
+// Response message for WorkspaceService.StopWorkflowRun.
+message StopWorkflowRunResponse {}

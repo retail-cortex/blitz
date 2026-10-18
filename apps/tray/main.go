@@ -307,6 +307,10 @@ func onReady() {
 	var tasksMu sync.Mutex
 	seen := map[string]bool{}
 	waiting, first, lastAsked := 0, true, time.Time{}
+	// Workflow runs that fail from now on tell the desktop app too (a
+	// notification that opens the run), whether or not its window is open
+	// (it announces them itself when it is).
+	failedSeen, trayStarted := map[string]bool{}, time.Now()
 	checkTasks := func(running bool) {
 		tasksMu.Lock()
 		defer tasksMu.Unlock()
@@ -328,6 +332,15 @@ func onReady() {
 				}
 			}
 			first = false
+			if runs, err := tray.FetchRuns(context.Background(), sock); err == nil {
+				for _, r := range tray.Failed(failedSeen, runs, trayStarted) {
+					if link := tray.RunLink(alerts, r); link != "" {
+						if err := acts.OpenLink(link); err != nil {
+							log.Printf("blitz-tray: %v", err)
+						}
+					}
+				}
+			}
 		}
 		if waiting > 0 {
 			tasksItem.SetTitle(tray.TasksTitle(waiting))

@@ -128,6 +128,8 @@ message FlowStep {
   // What it produced, ended (the start of it).
   string output = 8;
   string error = 9;
+  // The run's ID (its receipt's: GetWorkflowRun).
+  string run = 10;
 }
 
 // A message from Blitz itself about a turn.
