@@ -100,3 +100,32 @@ func TestControlFlowChecks(t *testing.T) {
 	_, err := ParseDuration("-1s", 0)
 	assert.Error(t, err)
 }
+
+func TestCallsAndRepeats(t *testing.T) {
+	for _, tt := range []struct{ name, in, problem string }{
+		{"no workflow", "nodes: [{id: a, type: workflow}]", "name the workflow"},
+		{"itself", "nodes: [{id: a, type: workflow, workflow: x}]", "can't run itself"},
+		{"bad for_each", "nodes: [{id: a, type: accumulate, for_each: 'x >'}]", "for_each:"},
+		{"gateway repeats", "nodes: [{id: a, type: parallel, for_each: steps.a.data}, {id: b, type: accumulate}, {id: c, type: accumulate}]\nedges: [{from: a, to: b}, {from: a, to: c}]", "doesn't repeat"},
+		{"concurrency", "nodes: [{id: a, type: accumulate, concurrency: 99}]", "concurrency 99"},
+	} {
+		t.Run(tt.name, func(t *testing.T) { assert.Contains(t, Parse("x", "", []byte(tt.in)).Problem, tt.problem) })
+	}
+	loops := CallLoops([]Flow{
+		{Name: "a", Nodes: []Node{{ID: "1", Type: Call, Workflow: "b"}}},
+		{Name: "b", Nodes: []Node{{ID: "1", Type: Call, Workflow: "c"}}},
+		{Name: "c", Nodes: []Node{{ID: "1", Type: Call, Workflow: "a"}}},
+		{Name: "d", Nodes: []Node{{ID: "1", Type: Call, Workflow: "a"}}},
+	})
+	assert.Equal(t, "a → b → c → a", loops["a"])
+	assert.Contains(t, loops, "c")
+	assert.NotContains(t, loops, "d", "calls into a loop, isn't in it")
+	items, err := List(`[1, "two"]`, Vars{})
+	require.NoError(t, err)
+	assert.Equal(t, []any{float64(1), "two"}, items)
+	_, err = List(`"x"`, Vars{})
+	assert.ErrorContains(t, err, "not a list")
+	v, err := Fill("{{ item.n }}#{{ index }}", Vars{Item: map[string]any{"n": "z"}, Index: 2})
+	require.NoError(t, err)
+	assert.Equal(t, "z#2", v)
+}

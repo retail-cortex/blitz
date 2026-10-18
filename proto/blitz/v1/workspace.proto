@@ -2693,6 +2693,12 @@ message FlowNode {
   string body = 25;
   string json_body = 26;
   FlowAuth auth = 27;
+  // The workflow a call step runs.
+  string workflow = 28;
+  // Runs the step once per item of this list (a CEL expression), so many
+  // at a time (0: 4).
+  string for_each = 29;
+  int32 concurrency = 30;
 }
 
 // A named value: a header, a query parameter.

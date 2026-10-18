@@ -15,6 +15,7 @@
 package engine
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -84,6 +85,8 @@ type flowRun struct {
 	// failures are the steps' own failures, by ID (ADK keeps only their
 	// messages).
 	failures sync.Map
+	// depth is how deep in called workflows this run is (0: the top).
+	depth int
 }
 
 func (r *flowRun) emit(e api.Event) {
@@ -129,7 +132,11 @@ type stepDone struct {
 // conditions, an error link when it fails); a step every link into which
 // is dead is skipped, and its links out die too. Steps that can run go
 // side by side. A failure without an error link stops the run.
-func (w *Workspace) schedule(ctx agent.Context, r *flowRun) (map[string]flows.Result, error) {
+// stepRunner runs one step (through RunNode at the top, directly in a
+// called workflow).
+type stepRunner func(ctx context.Context, n flows.Node, input string, vars flows.Vars) (flows.Result, error)
+
+func (w *Workspace) schedule(ctx context.Context, r *flowRun, run stepRunner) (map[string]flows.Result, error) {
 	links := make([]int, len(r.f.Edges))
 	results := map[string]flows.Result{}
 	state := map[string]string{} // ID → running, done, skipped
@@ -187,15 +194,9 @@ func (w *Workspace) schedule(ctx agent.Context, r *flowRun) (map[string]flows.Re
 		running++
 		input := w.stepInputOf(r, n, in(n.ID), links, results)
 		vars := flows.Vars{Input: r.input, Steps: copyResults(results)}
-		node := workflow.NewFunctionNode(n.ID, func(actx agent.Context, text string) (flows.Result, error) {
-			// Stopped with the run when another step fails.
-			sctx, stop := context.WithCancel(actx)
-			defer stop()
-			defer context.AfterFunc(runCtx, stop)()
-			return w.runFlowStep(sctx, r, n, text, vars)
-		}, workflow.NodeConfig{})
 		go func() {
-			res, err := workflow.RunNode[flows.Result](ctx, node, input, workflow.WithRunID("step-"+n.ID))
+			// Stopped with the run when another step fails.
+			res, err := run(runCtx, n, input, vars)
 			done <- stepDone{id: n.ID, result: res, err: err}
 		}()
 	}
@@ -370,9 +371,12 @@ func (w *Workspace) runFlowStep(ctx context.Context, r *flowRun, n flows.Node, i
 		r.failures.Store(n.ID, f)
 		return flows.Result{}, f
 	}
-	filled, err := fillStep(n, vars)
-	if err != nil {
-		return fail(err)
+	filled := n
+	if n.ForEach == "" { // a repeated step's are filled per item
+		var err error
+		if filled, err = fillStep(n, vars); err != nil {
+			return fail(err)
+		}
 	}
 	attempts, delay := 1, time.Second
 	if n.Retry != nil {
@@ -380,13 +384,20 @@ func (w *Workspace) runFlowStep(ctx context.Context, r *flowRun, n flows.Node, i
 		delay, _ = flows.ParseDuration(n.Retry.Delay, time.Second)
 	}
 	timeout, _ := flows.ParseDuration(n.Timeout, 0)
+	var err error
+	once := func(ctx context.Context) (flows.Result, error) {
+		if n.ForEach == "" {
+			return w.runStepOnce(ctx, r, filled, input)
+		}
+		return w.forEach(ctx, r, n, input, vars)
+	}
 	var res flows.Result
 	for try := 1; ; try++ {
 		sctx, cancel := ctx, context.CancelFunc(func() {})
 		if timeout > 0 {
 			sctx, cancel = context.WithTimeout(ctx, timeout)
 		}
-		res, err = w.runStepOnce(sctx, r, filled, input)
+		res, err = once(sctx)
 		cancel()
 		if err == nil || try >= attempts || ctx.Err() != nil {
 			break
@@ -484,6 +495,8 @@ func (w *Workspace) runStepOnce(ctx context.Context, r *flowRun, n flows.Node, i
 		return w.apiStep(ctx, n, input)
 	case n.Type == flows.A2ACall:
 		return w.a2aStep(ctx, n, input)
+	case n.Type == flows.Call:
+		return w.callStep(ctx, r, n, input)
 	case flows.IsAgentType(n.Type):
 		r.turns.Lock()
 		defer r.turns.Unlock()
@@ -515,7 +528,16 @@ func (w *Workspace) runFlow(ctx context.Context, sessionID string, f flows.Flow,
 	var results map[string]flows.Result
 	scheduler := workflow.NewDynamicNode("run", func(actx agent.Context, _ string, _ func(*adksession.Event) error) (string, error) {
 		var err error
-		results, err = w.schedule(actx, run)
+		results, err = w.schedule(actx, run, func(ctx context.Context, n flows.Node, input string, vars flows.Vars) (flows.Result, error) {
+			// Through RunNode, so a resumed run replays a finished step.
+			node := workflow.NewFunctionNode(n.ID, func(nctx agent.Context, text string) (flows.Result, error) {
+				sctx, stop := context.WithCancel(nctx)
+				defer stop()
+				defer context.AfterFunc(ctx, stop)()
+				return w.runFlowStep(sctx, run, n, text, vars)
+			}, workflow.NodeConfig{})
+			return workflow.RunNode[flows.Result](actx, node, input, workflow.WithRunID("step-"+n.ID))
+		})
 		return "", err
 	}, workflow.NodeConfig{})
 	root, err := workflowagent.New(workflowagent.Config{Name: "flow_" + strings.ReplaceAll(f.Name, "-", "_"), Description: f.Description, Edges: workflow.Chain(workflow.Start, scheduler)})
@@ -554,3 +576,99 @@ func (w *Workspace) runFlow(ctx context.Context, sessionID string, f flows.Flow,
 	res.Output = strings.Join(last, "\n\n")
 	return res, nil
 }
+
+// forEach runs a step once per item of its for_each list (WF-15), at most
+// its concurrency at a time (4 by default; agent steps take turns in the
+// chat anyway), item and index in its templates. Its text is each run's
+// under its number, its data the list of each run's data (or text). An
+// item that fails fails the step.
+func (w *Workspace) forEach(ctx context.Context, r *flowRun, n flows.Node, input string, vars flows.Vars) (flows.Result, error) {
+	items, err := flows.List(n.ForEach, vars)
+	if err != nil {
+		return flows.Result{}, fmt.Errorf("for_each: %w", err)
+	}
+	results := make([]flows.Result, len(items))
+	errs := make([]error, len(items))
+	sem := make(chan struct{}, cmp.Or(n.Concurrency, 4))
+	var wg sync.WaitGroup
+	for i, item := range items {
+		wg.Add(1)
+		sem <- struct{}{}
+		go func() {
+			defer wg.Done()
+			defer func() { <-sem }()
+			iv := vars
+			iv.Item, iv.Index = item, i
+			filled, err := fillStep(n, iv)
+			if err != nil {
+				errs[i] = err
+				return
+			}
+			results[i], errs[i] = w.runStepOnce(ctx, r, filled, input)
+		}()
+	}
+	wg.Wait()
+	for i, err := range errs {
+		if err != nil {
+			return flows.Result{}, fmt.Errorf("item %d: %w", i+1, err)
+		}
+	}
+	var parts []string
+	data := make([]any, len(results))
+	for i, res := range results {
+		parts = append(parts, fmt.Sprintf("## %d\n\n%s", i+1, res.Text))
+		data[i] = res.Data
+		if data[i] == nil {
+			data[i] = res.Text
+		}
+	}
+	return flows.Result{Text: strings.Join(parts, "\n\n"), Data: data}, nil
+}
+
+// callStep runs the workflow a call step names on its input (WF-15), its
+// steps in this run's chat, said as that workflow's; its result is what
+// that workflow's last steps produced (their data when there's one).
+func (w *Workspace) callStep(ctx context.Context, r *flowRun, n flows.Node, input string) (flows.Result, error) {
+	sub, ok := w.workflow(n.Workflow)
+	if !ok {
+		return flows.Result{}, fmt.Errorf("there's no workflow %q", n.Workflow)
+	}
+	if sub.Problem != "" {
+		return flows.Result{}, fmt.Errorf("the workflow %s can't run: %s", sub.Name, sub.Problem)
+	}
+	if r.depth >= maxCallDepth {
+		return flows.Result{}, fmt.Errorf("workflows call each other more than %d deep", maxCallDepth)
+	}
+	order, err := flows.Order(sub)
+	if err != nil {
+		return flows.Result{}, err
+	}
+	child := &flowRun{f: sub, order: order, input: input, session: r.session, on: r.emit, depth: r.depth + 1}
+	results, err := w.schedule(ctx, child, func(ctx context.Context, n flows.Node, input string, vars flows.Vars) (flows.Result, error) {
+		return w.runFlowStep(ctx, child, n, input, vars)
+	})
+	if err != nil {
+		var sf *stepFailure
+		if errors.As(err, &sf) {
+			return flows.Result{}, fmt.Errorf("%s stopped at %s: %w", sub.Name, sf.title, sf.err)
+		}
+		return flows.Result{}, err
+	}
+	var last []flows.Result
+	for _, s := range order {
+		if res, ran := results[s.ID]; ran && !slices.ContainsFunc(sub.Edges, func(e flows.Edge) bool { return e.From == s.ID && !e.Error }) {
+			last = append(last, res)
+		}
+	}
+	if len(last) == 1 {
+		return last[0], nil
+	}
+	var parts []string
+	for _, l := range last {
+		parts = append(parts, l.Text)
+	}
+	return flows.Result{Text: strings.Join(parts, "\n\n")}, nil
+}
+
+// maxCallDepth is how deep workflows may call each other.
+const maxCallDepth = 8

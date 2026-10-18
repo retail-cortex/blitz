@@ -28,11 +28,16 @@ A workflow runs as one turn in the chat. Each agent step is a turn of its own, s
 | Call an API | An HTTP request: method, URL, query, headers, a text or JSON body, and auth |
 | Call an MCP tool | A tool of one of the workspace's MCP servers, with arguments |
 | Ask a remote agent | A message to an agent over A2A; its reply is the output |
+| Call a workflow | Runs another workflow on its input; its output is that workflow's |
 | Script | Runs a skill's script; the input is its last argument, its output the step's |
 | Read a file | A workspace file's text |
 | Save to a file | Writes its input to a workspace file, once you approve |
 
 Email and data steps are shown on the canvas, and come later.
+
+## Repeating a step
+
+Any step can run **once per item** of a list: set *For each* to an expression giving one (`steps.read.data.orders`), and how many to run at a time. The step's settings see `{{ item }}` and `{{ index }}`; its output is every run's, in order, and its data the list of their results. A **Call a workflow** step runs another workflow as a step, so a long process can be built from smaller ones (workflows can't call each other in a loop).
 
 ## Calling services
 

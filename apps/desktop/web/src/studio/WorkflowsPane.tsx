@@ -80,6 +80,7 @@ const typeIcons: Record<StepType, string> = {
   api_call: mdiApi,
   mcp_call: mdiPowerPlugOutline,
   a2a_call: mdiAccountNetworkOutline,
+  workflow: mdiSitemapOutline,
 };
 
 /** A step's state in a run. */
@@ -117,13 +118,18 @@ function StepNode({ data, selected }: NodeProps<Node<StepData>>) {
           ? hostOf(s.url)
           : s.type === "mcp_call"
             ? `${s.server} › ${s.tool}`
+            : s.type === "workflow"
+              ? `/${s.workflow}`
             : s.path || (s.type === "script" ? `${s.skill} › ${s.script}` : t(`desktop.flows.type.${s.type}`));
   return (
     <div className={`flow-node ${selected ? "selected" : ""} ${status ? `is-${status}` : ""} ${comingSoon.includes(s.type) ? "soon" : ""}`}>
       {s.type !== "read_file" && <Handle type="target" position={Position.Left} />}
       <Icon path={typeIcons[s.type]} />
       <span className="lines spacer">
-        <span className="ellipsis">{s.title || t(`desktop.flows.type.${s.type}`)}</span>
+        <span className="ellipsis">
+          {s.title || t(`desktop.flows.type.${s.type}`)}
+          {s.forEach && <span className="flow-repeat" title={t("desktop.flows.repeats", { expr: s.forEach })}> ×N</span>}
+        </span>
         <small className={`ellipsis ${needs && needs !== "coming_soon" ? "warn-text" : ""}`}>{sub}</small>
       </span>
       {status && <Icon path={status === "running" ? mdiLoading : status === "done" ? mdiCheckCircleOutline : status === "skipped" ? mdiSkipNextCircleOutline : mdiCloseCircleOutline} spin={status === "running"} className={status === "failed" ? "error-text" : "muted"} size="sm" />}
@@ -590,6 +596,20 @@ export function WorkflowsPane({ workspace, onDirty }: { workspace: string; onDir
                         <Pairs label={t("desktop.flows.headers")} pairs={step.headers} workspace={workspace} onChange={(v) => setStep(step.id, { headers: v })} />
                       </>
                     )}
+                    {step.type === "workflow" && (
+                      <Field label={t("desktop.flows.call_workflow")} supporting={t("desktop.flows.call_workflow_hint")}>
+                        {(id) => (
+                          <select id={id} className="select" value={step.workflow} onChange={(e) => setStep(step.id, { workflow: e.target.value })}>
+                            <option value="">{t("desktop.flows.choose")}</option>
+                            {[...new Set([...list.map((w) => w.name).filter((n) => n !== form.name), step.workflow].filter(Boolean))].map((n) => (
+                              <option key={n} value={n}>
+                                /{n}
+                              </option>
+                            ))}
+                          </select>
+                        )}
+                      </Field>
+                    )}
                     {step.type === "extract" && (
                       <div className="stack" style={{ gap: 6 }}>
                         <span className="t-label">{t("desktop.flows.fields")}</span>
@@ -611,6 +631,16 @@ export function WorkflowsPane({ workspace, onDirty }: { workspace: string; onDir
                           <Button small icon={mdiPlus} onClick={() => setStep(step.id, { fields: [...step.fields, { name: "", type: "string", description: "" }] })}>
                             {t("desktop.flows.field_add")}
                           </Button>
+                        </div>
+                      </div>
+                    )}
+                    {!gatewayTypes.includes(step.type) && (
+                      <div className="stack" style={{ gap: 6 }}>
+                        <span className="t-label">{t("desktop.flows.repeat")}</span>
+                        <span className="t-body-sm muted">{t("desktop.flows.repeat_hint")}</span>
+                        <div className="row flow-field" style={{ gap: 6 }}>
+                          <input className="input mono" aria-label={t("desktop.flows.for_each")} placeholder={t("desktop.flows.for_each_placeholder")} value={step.forEach} onChange={(e) => setStep(step.id, { forEach: e.target.value })} />
+                          <input className="input flow-concurrency" type="number" min={1} max={32} aria-label={t("desktop.flows.concurrency")} title={t("desktop.flows.concurrency")} placeholder="4" disabled={!step.forEach.trim()} value={step.concurrency} onChange={(e) => setStep(step.id, { concurrency: e.target.value })} />
                         </div>
                       </div>
                     )}

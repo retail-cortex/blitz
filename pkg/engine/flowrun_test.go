@@ -16,9 +16,11 @@ package engine
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"sync"
 	"testing"
 
@@ -300,4 +302,60 @@ edges:
 	assert.JSONEq(t, `{"priority": "high", "amount": 42.5, "items": ["a", "2"]}`, string(saved))
 	assert.NoFileExists(t, filepath.Join(w.Dir(), "out", "low.md"))
 	assert.Contains(t, judge.Requests[0].Contents[0].Parts[0].Text, "amount (number)")
+}
+
+// A call step runs another workflow on its input, its steps in the same
+// run; workflows calling each other in a loop, or one that isn't there,
+// can't run. A repeated step runs once per item (WF-15).
+func TestFlowCallAndForEach(t *testing.T) {
+	w, _ := openTestWith(t, configtest.RunTools)
+	require.NoError(t, os.WriteFile(filepath.Join(w.Dir(), "people.json"), []byte(`[{"name": "ada"}, {"name": "bo"}, {"name": "cy"}]`), 0o644))
+	writeFlow(t, w, "keep", "nodes: [{id: save, type: save_file, title: Keep it, path: \"out/{{ input.size() }}.md\"}]\n")
+	writeFlow(t, w, "main", `nodes:
+  - {id: read, type: read_file, path: people.json}
+  - {id: each, type: save_file, path: "out/{{ item.name }}-{{ index }}.md", for_each: steps.read.data, concurrency: 2}
+  - {id: call, type: workflow, workflow: keep}
+edges:
+  - {from: read, to: each}
+  - {from: each, to: call}
+`)
+	writeFlow(t, w, "ping", "nodes: [{id: a, type: workflow, workflow: pong}]\n")
+	writeFlow(t, w, "pong", "nodes: [{id: a, type: workflow, workflow: ping}]\n")
+	writeFlow(t, w, "lost", "nodes: [{id: a, type: workflow, workflow: nowhere}]\n")
+	byName := map[string]flows.Flow{}
+	for _, f := range w.Workflows() {
+		byName[f.Name] = f
+	}
+	assert.Empty(t, byName["main"].Problem)
+	assert.Contains(t, byName["ping"].Problem, "ping → pong → ping")
+	assert.Contains(t, byName["pong"].Problem, "loop")
+	assert.Contains(t, byName["lost"].Problem, `no workflow "nowhere"`)
+
+	s := newSession(t, w)
+	var mu sync.Mutex
+	var steps []string
+	res, err := w.Run(context.Background(), s.ID, api.Turn{Text: "/main", Command: true}, func(e api.Event) {
+		if e.Step != nil && e.Step.Status == api.StepDone {
+			mu.Lock()
+			steps = append(steps, e.Step.Workflow+"/"+e.Step.ID)
+			mu.Unlock()
+		}
+	})
+	require.NoError(t, err)
+	for i, name := range []string{"ada", "bo", "cy"} {
+		data, err := os.ReadFile(filepath.Join(w.Dir(), "out", fmt.Sprintf("%s-%d.md", name, i)))
+		require.NoError(t, err)
+		assert.Contains(t, string(data), `"ada"`, "each got the step's input")
+	}
+	assert.Contains(t, steps, "keep/save", "the called workflow's step, said as its own")
+	called, err := os.ReadDir(filepath.Join(w.Dir(), "out"))
+	require.NoError(t, err)
+	assert.Len(t, called, 4, "three items and the called workflow's file")
+	assert.True(t, strings.HasPrefix(res.Output, "## 1\n\n"), "the repeated step's output went on: %q", res.Output)
+
+	_, err = w.Run(context.Background(), s.ID, api.Turn{Text: "/ping", Command: true}, func(api.Event) {})
+	assert.ErrorContains(t, err, "loop")
+	writeFlow(t, w, "notlist", "nodes: [{id: a, type: accumulate, for_each: input}]\n")
+	_, err = w.Run(context.Background(), s.ID, api.Turn{Text: "/notlist x", Command: true}, func(api.Event) {})
+	assert.ErrorContains(t, err, "not a list")
 }

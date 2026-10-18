@@ -41,6 +41,7 @@ func workflowMsg(f flows.Flow) *pb.WorkflowFile {
 		}
 		pn.Server, pn.Tool, pn.Url, pn.Method, pn.Body = n.Server, n.Tool, n.URL, n.Method, n.Body
 		pn.ArgumentsJson, pn.JsonBody = jsonText(n.Arguments), jsonText(n.JSON)
+		pn.Workflow, pn.ForEach, pn.Concurrency = n.Workflow, n.ForEach, int32(n.Concurrency)
 		for _, p := range n.Query {
 			pn.Query = append(pn.Query, &pb.FlowPair{Name: p.Name, Value: p.Value})
 		}
@@ -88,6 +89,7 @@ func workflowOf(m *pb.WorkflowFile) (flows.Flow, []string) {
 			fn.Retry = &flows.Retry{Attempts: int(n.GetRetryAttempts()), Delay: n.GetRetryDelay()}
 		}
 		fn.Server, fn.Tool, fn.URL, fn.Method, fn.Body = n.GetServer(), n.GetTool(), n.GetUrl(), n.GetMethod(), n.GetBody()
+		fn.Workflow, fn.ForEach, fn.Concurrency = n.GetWorkflow(), n.GetForEach(), int(n.GetConcurrency())
 		if s := strings.TrimSpace(n.GetArgumentsJson()); s != "" {
 			if err := json.Unmarshal([]byte(s), &fn.Arguments); err != nil {
 				probs = append(probs, fmt.Sprintf("step %s: the arguments aren't a JSON object: %v", n.GetId(), err))

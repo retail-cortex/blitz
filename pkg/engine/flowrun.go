@@ -50,8 +50,29 @@ func (w *Workspace) ProjectWorkflowsDir() string {
 	return filepath.Join(w.Dir(), ".agents", "workflows")
 }
 
-// Workflows are the workspace's workflows, read afresh, by name.
-func (w *Workspace) Workflows() []flows.Flow { return flows.Load(w.ProjectWorkflowsDir()) }
+// Workflows are the workspace's workflows, read afresh, by name; one in
+// a loop of workflows calling each other, or calling one that isn't there,
+// has that as its problem.
+func (w *Workspace) Workflows() []flows.Flow {
+	all := flows.Load(w.ProjectWorkflowsDir())
+	loops := flows.CallLoops(all)
+	for i, f := range all {
+		var probs []string
+		if f.Problem != "" {
+			probs = append(probs, f.Problem)
+		}
+		if loop, ok := loops[f.Name]; ok {
+			probs = append(probs, "the workflows call each other in a loop: "+loop)
+		}
+		for _, n := range f.Nodes {
+			if n.Type == flows.Call && n.Workflow != "" && !slices.ContainsFunc(all, func(o flows.Flow) bool { return o.Name == n.Workflow }) {
+				probs = append(probs, fmt.Sprintf("step %s: there's no workflow %q", n.ID, n.Workflow))
+			}
+		}
+		all[i].Problem = strings.Join(probs, "; ")
+	}
+	return all
+}
 
 // workflow is the workspace's workflow name.
 func (w *Workspace) workflow(name string) (flows.Flow, bool) {

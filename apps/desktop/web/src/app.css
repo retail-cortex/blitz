@@ -954,6 +954,8 @@ code.file-link:hover { text-decoration-color: currentColor; }
 .flow-field .suggest-field .input { width: 100%; }
 .flow-method .select { flex: 0 0 96px; width: 96px; }
 .flow-method .suggest-field { flex: 1; min-width: 0; }
+.flow-repeat { color: var(--md-primary); font-weight: 500; }
+.flow-field > .flow-concurrency { flex: 0 0 72px; width: 72px; }
 .flow-retry { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
 .workflows-pane .react-flow { --xy-background-color: transparent; }
 @media (max-width: 980px) {

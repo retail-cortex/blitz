@@ -74,6 +74,8 @@ func celEnv() (*cel.Env, error) {
 			cel.Variable("input", cel.StringType),
 			cel.Variable("output", cel.DynType),
 			cel.Variable("steps", cel.MapType(cel.StringType, cel.DynType)),
+			cel.Variable("item", cel.DynType),
+			cel.Variable("index", cel.IntType),
 		)
 	})
 	return env, envErr
@@ -96,6 +98,9 @@ type Vars struct {
 	Input  string
 	Output *Result
 	Steps  map[string]Result
+	// Item and Index are a repeated step's (WF-15).
+	Item  any
+	Index int
 }
 
 func (v Vars) activation() map[string]any {
@@ -103,7 +108,7 @@ func (v Vars) activation() map[string]any {
 	for id, r := range v.Steps {
 		steps[id] = r.Value()
 	}
-	act := map[string]any{"input": v.Input, "steps": steps, "output": nil}
+	act := map[string]any{"input": v.Input, "steps": steps, "output": nil, "item": plain(v.Item), "index": int64(v.Index)}
 	if v.Output != nil {
 		act["output"] = v.Output.Value()
 	}
@@ -274,4 +279,21 @@ func FillValue(v any, vars Vars) (any, error) {
 		return out, nil
 	}
 	return v, nil
+}
+
+// List evaluates a for-each expression: it must give a list.
+func List(expr string, vars Vars) ([]any, error) {
+	v, err := Eval(expr, vars)
+	if err != nil {
+		return nil, err
+	}
+	native, err := v.ConvertToNative(anyType)
+	if err != nil {
+		return nil, fmt.Errorf("%s isn't a list", expr)
+	}
+	items, ok := plain(native).([]any)
+	if !ok {
+		return nil, fmt.Errorf("%s is %s, not a list", expr, v.Type().TypeName())
+	}
+	return items, nil
 }

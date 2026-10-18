@@ -61,6 +61,8 @@ const (
 	MCPCall = "mcp_call"
 	A2ACall = "a2a_call"
 	APICall = "api_call"
+	// Call runs another workflow on its input (BPMN's call activity).
+	Call = "workflow"
 	// Exclusive takes its first link whose condition holds (else its
 	// default); Inclusive every one (else its default); Parallel every
 	// link. Each passes its input on.
@@ -73,7 +75,7 @@ const (
 )
 
 // Types are the step types, in the order the palette shows them.
-var Types = []string{Agent, Refine, Summarize, Extract, Accumulate, Browser, Script, ReadFile, SaveFile, MCPCall, A2ACall, APICall, Exclusive, Inclusive, Parallel, Email, Data}
+var Types = []string{Agent, Refine, Summarize, Extract, Accumulate, Browser, Script, ReadFile, SaveFile, MCPCall, A2ACall, APICall, Call, Exclusive, Inclusive, Parallel, Email, Data}
 
 // Pair is a named value: a header, a query parameter.
 type Pair struct {
@@ -179,6 +181,13 @@ type Node struct {
 	Body    string `yaml:"body,omitempty"`
 	JSON    any    `yaml:"json,omitempty"`
 	Auth    *Auth  `yaml:"auth,omitempty"`
+	// Workflow is the workflow a call step runs.
+	Workflow string `yaml:"workflow,omitempty"`
+	// ForEach (a CEL expression giving a list) runs the step once per
+	// item, Concurrency at a time (4 when unset), item and index in its
+	// templates (WF-15).
+	ForEach     string `yaml:"for_each,omitempty"`
+	Concurrency int    `yaml:"concurrency,omitempty"`
 	// Retry tries a failing step again; Timeout (a Go duration) stops a
 	// step that runs too long.
 	Retry   *Retry `yaml:"retry,omitempty"`
@@ -290,6 +299,10 @@ func Check(f Flow) []string {
 			probs = append(probs, where+": say what it's to do")
 		case n.Type == Extract && len(n.Fields) == 0:
 			probs = append(probs, where+": say which fields to pull out")
+		case n.Type == Call && n.Workflow == "":
+			probs = append(probs, where+": name the workflow it runs")
+		case n.Type == Call && n.Workflow == f.Name:
+			probs = append(probs, where+": a workflow can't run itself")
 		case n.Type == MCPCall && (n.Server == "" || n.Tool == ""):
 			probs = append(probs, where+": name the MCP server and its tool")
 		case (n.Type == APICall || n.Type == A2ACall) && strings.TrimSpace(n.URL) == "":
@@ -489,6 +502,16 @@ func checkSettings(n Node, i int) []string {
 			probs = append(probs, fmt.Sprintf("%s: field %s: type %q: string, number, boolean or list", where, fl.Name, fl.Type))
 		}
 	}
+	if n.ForEach != "" {
+		if IsGateway(n.Type) {
+			probs = append(probs, where+": a gateway doesn't repeat")
+		} else if err := CheckExpr(n.ForEach); err != nil {
+			probs = append(probs, fmt.Sprintf("%s: for_each: %v", where, err))
+		}
+	}
+	if n.Concurrency < 0 || n.Concurrency > 32 {
+		probs = append(probs, fmt.Sprintf("%s: concurrency %d: 1 to 32", where, n.Concurrency))
+	}
 	if n.Retry != nil {
 		if n.Retry.Attempts < 1 || n.Retry.Attempts > 10 {
 			probs = append(probs, fmt.Sprintf("%s: retry attempts %d: 1 to 10", where, n.Retry.Attempts))
@@ -584,7 +607,7 @@ func Save(dir string, f Flow, previous string) (string, []string, error) {
 func saveChecks(f Flow) []string {
 	var probs []string
 	for _, p := range Check(f) {
-		if strings.Contains(p, "say what it's to do") || strings.Contains(p, "name the") || strings.Contains(p, "give the URL") || strings.Contains(p, "which fields") || strings.Contains(p, "two links out") || strings.Contains(p, "don't run yet") || p == "it has no steps" {
+		if strings.Contains(p, "say what it's to do") || strings.Contains(p, "name the") || strings.Contains(p, "workflow it runs") || strings.Contains(p, "give the URL") || strings.Contains(p, "which fields") || strings.Contains(p, "two links out") || strings.Contains(p, "don't run yet") || p == "it has no steps" {
 			continue
 		}
 		probs = append(probs, p)
@@ -601,4 +624,38 @@ func Delete(dir, name string) error {
 		return fmt.Errorf("%w: %q", ErrUnknown, name)
 	}
 	return nil
+}
+
+// CallLoops says which workflows call themselves, through others: for
+// each workflow named in a loop, the loop ("a → b → a").
+func CallLoops(all []Flow) map[string]string {
+	calls := map[string][]string{}
+	for _, f := range all {
+		for _, n := range f.Nodes {
+			if n.Type == Call && n.Workflow != "" {
+				calls[f.Name] = append(calls[f.Name], n.Workflow)
+			}
+		}
+	}
+	out := map[string]string{}
+	var walk func(path []string)
+	walk = func(path []string) {
+		last := path[len(path)-1]
+		for _, next := range calls[last] {
+			if i := slices.Index(path, next); i >= 0 {
+				loop := append(slices.Clone(path[i:]), next)
+				for _, name := range path[i:] {
+					if _, ok := out[name]; !ok {
+						out[name] = strings.Join(loop, " → ")
+					}
+				}
+				continue
+			}
+			walk(append(slices.Clone(path), next))
+		}
+	}
+	for _, f := range all {
+		walk([]string{f.Name})
+	}
+	return out
 }

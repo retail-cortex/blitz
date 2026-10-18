@@ -75,7 +75,7 @@ func TestWorkflowsOverTheAPI(t *testing.T) {
 		{Id: "m", Type: "mcp_call", Server: "shop", Tool: "lookup", ArgumentsJson: `{"order": "{{ input }}"}`},
 		{Id: "a", Type: "api_call", Method: "POST", Url: "https://api.example.com/x", Query: []*pb.FlowPair{{Name: "q", Value: "1"}}, Headers: []*pb.FlowPair{{Name: "X-A", Value: "b"}},
 			JsonBody: `{"n": 1}`, Auth: &pb.FlowAuth{Type: "oauth2", TokenUrl: "https://auth.example.com/token", ClientId: "id", ClientSecret: "{secrets:s}", Scopes: []string{"read"}}},
-		{Id: "r", Type: "a2a_call", Url: "https://agents.example.com"},
+		{Id: "r", Type: "a2a_call", Url: "https://agents.example.com", ForEach: "[1, 2]", Concurrency: 2},
 	}}
 	got2, err := w.SaveWorkflow(ctx, connect.NewRequest(&pb.SaveWorkflowRequest{Workspace: dir, Workflow: calls}))
 	require.NoError(t, err)
@@ -85,6 +85,8 @@ func TestWorkflowsOverTheAPI(t *testing.T) {
 	assert.Equal(t, "oauth2", got2.Msg.Workflow.Nodes[1].Auth.Type)
 	assert.Equal(t, []string{"read"}, got2.Msg.Workflow.Nodes[1].Auth.Scopes)
 	assert.JSONEq(t, `{"n": 1}`, got2.Msg.Workflow.Nodes[1].JsonBody)
+	assert.Equal(t, "[1, 2]", got2.Msg.Workflow.Nodes[2].ForEach)
+	assert.Equal(t, int32(2), got2.Msg.Workflow.Nodes[2].Concurrency)
 	badJSON, err := w.SaveWorkflow(ctx, connect.NewRequest(&pb.SaveWorkflowRequest{Workspace: dir, Workflow: &pb.WorkflowFile{Name: "bad", Nodes: []*pb.FlowNode{{Id: "m", Type: "mcp_call", ArgumentsJson: "{nope"}}}}))
 	require.NoError(t, err)
 	assert.Contains(t, badJSON.Msg.Problems[0], "aren't a JSON object")

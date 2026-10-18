@@ -80,6 +80,10 @@ describe("the workflow canvas", () => {
     expect(specFromForm({ ...emptyWorkflowForm, steps: [mcp] }).nodes[0]).toMatchObject({ server: "shop", tool: "lookup", argumentsJson: '{"a": 1}', url: "", auth: undefined });
     expect(stepNeeds(newStep("mcp_call", [], 0, 0))).toBe("mcp");
     expect(stepNeeds(newStep("a2a_call", [], 0, 0))).toBe("url");
+    expect(stepNeeds(newStep("workflow", [], 0, 0))).toBe("workflow");
+    const each = { ...newStep("save_file", [], 0, 0), path: "x", forEach: " steps.a.data ", concurrency: "2", workflow: "ignored" };
+    expect(specFromForm({ ...emptyWorkflowForm, steps: [each] }).nodes[0]).toMatchObject({ forEach: "steps.a.data", concurrency: 2, workflow: "" });
+    expect(specFromForm({ ...emptyWorkflowForm, steps: [{ ...each, forEach: "" }] }).nodes[0]).toMatchObject({ concurrency: 0 });
     const back = formFromWorkflow(create(WorkflowFileSchema, { name: "x", nodes: [{ id: "a", type: "api_call", url: "u", jsonBody: "{}", auth: { type: "basic", username: "me", scopes: [] } }] }));
     expect(back.steps[0]).toMatchObject({ method: "GET", bodyKind: "json", body: "{}", auth: { type: "basic", username: "me", in: "header" } });
   });
