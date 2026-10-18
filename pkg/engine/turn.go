@@ -148,11 +148,22 @@ func (w *Workspace) run(ctx context.Context, sessionID string, t turn, on func(a
 	// The turn's plan state: the plan tools report the user's decision here.
 	gate := tools.NewPlanGate(t.Plan || t.planMode)
 	ctx = tools.WithPlanGate(ctx, gate)
-	var hookContext string
+	var hookContext, ruleGuidance string
+	// What before-agent rules said, shown once the prompt is recorded.
+	var ruleNotices []api.Notice
 	if !t.Accepted {
 		var err error
 		if hookContext, err = w.accept(ctx, sessionID, t.Text); err != nil {
 			return api.TurnResult{}, err
+		}
+		if !t.Aside {
+			// Before-agent rules judge the prompt (spec_gates_041).
+			ruleGuidance, err = w.beforeRules(ctx, t.Text, func(text string, isErr bool) {
+				ruleNotices = append(ruleNotices, api.Notice{Text: text, Error: isErr})
+			})
+			if err != nil {
+				return api.TurnResult{}, err
+			}
 		}
 	}
 
@@ -196,6 +207,9 @@ func (w *Workspace) run(ctx context.Context, sessionID string, t turn, on func(a
 	// and they must follow the prompt in the transcript.
 	if t.OnAccepted != nil {
 		t.OnAccepted()
+	}
+	for i := range ruleNotices {
+		on(api.Event{Notice: &ruleNotices[i]})
 	}
 
 	res := api.TurnResult{Before: w.engine.Usage(sessionID)}
@@ -245,6 +259,7 @@ func (w *Workspace) run(ctx context.Context, sessionID string, t turn, on func(a
 		prompt = withUserEdits(prompt, w.takeUserEdits())
 	}
 	prompt = withHookContext(prompt, "prompt_submit", hookContext)
+	prompt = withHookContext(prompt, "rules", ruleGuidance)
 	prompt = w.withMentions(ctx, prompt, t.Text)
 	prompt = withAdded(prompt, t.Context)
 	var err error
@@ -269,11 +284,13 @@ func (w *Workspace) run(ctx context.Context, sessionID string, t turn, on func(a
 		err = w.engine.Execute(ctx, sessionID, prompt, handler, opts...)
 		// An approved plan is carried out in the same turn (a few times at
 		// most, should the agent plan again).
+		carried := false
 		for i := 0; err == nil && i < maxPlanRounds; i++ {
 			_, path, mode, ok := gate.Take()
 			if !ok {
 				break
 			}
+			carried = true
 			w.planApproved(mode)
 			goAhead := runtime.CarryOutPrompt(path)
 			w.appendIn(st, sessionID, on, session.Message{Role: "user", Content: "(plan approved) " + goAhead, Kind: session.KindPlan})
@@ -304,6 +321,24 @@ func (w *Workspace) run(ctx context.Context, sessionID string, t turn, on func(a
 			w.appendIn(st, sessionID, on, session.Message{Role: "user", Content: "(goal) " + next, Kind: goalKind})
 			r.paragraph()
 			err = w.engine.Execute(ctx, sessionID, next, handler, base...)
+		}
+		// After-agent rules judge the answer and the changes; those that
+		// revise send the agent back, a couple of times at most (a plan
+		// that wasn't carried out isn't an answer to judge).
+		notice := func(text string, isErr bool) { on(api.Event{Notice: &api.Notice{Text: text, Error: isErr}}) }
+		for i := 0; err == nil && ctx.Err() == nil && (!(t.Plan || t.planMode) || carried); i++ {
+			reasons := w.afterRules(ctx, sessionID, r.output.String(), notice)
+			if len(reasons) == 0 {
+				break
+			}
+			if i == maxRuleRevisions {
+				notice(i18n.T("rule.still_failing", "n", maxRuleRevisions), true)
+				break
+			}
+			msg := revisePrompt(reasons)
+			w.appendIn(st, sessionID, on, session.Message{Role: "user", Content: "(rules) " + msg, Kind: session.KindRule})
+			r.paragraph()
+			err = w.engine.Execute(ctx, sessionID, msg, handler, base...)
 		}
 	}
 	if cause := context.Cause(ctx); err != nil && (errors.Is(cause, api.ErrCostLimit) || errors.Is(cause, api.ErrTimeLimit)) {

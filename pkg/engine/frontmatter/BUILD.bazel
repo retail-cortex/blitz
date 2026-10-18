@@ -1,0 +1,19 @@
+load("@rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "frontmatter",
+    srcs = ["frontmatter.go"],
+    importpath = "github.com/retail-cortex/blitz/pkg/engine/frontmatter",
+    visibility = ["//visibility:public"],
+    deps = ["@in_gopkg_yaml_v3//:yaml_v3"],
+)
+
+go_test(
+    name = "frontmatter_test",
+    srcs = ["frontmatter_test.go"],
+    embed = [":frontmatter"],
+    deps = [
+        "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//require",
+    ],
+)

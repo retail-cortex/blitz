@@ -20,6 +20,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -166,4 +167,20 @@ func TestNotesFilesystemErrors(t *testing.T) {
 		t.Skip("running with privileges that ignore file modes")
 	}
 	assert.Error(t, err, "a read-only directory can't take a note")
+}
+
+// A rule with when: is a gate, judged around the turn: never an
+// instruction in the prompt (spec_gates_041).
+func TestGateRulesAreNotInstructions(t *testing.T) {
+	ws := t.TempDir()
+	dir := filepath.Join(ws, ".agents", "rules")
+	require.NoError(t, os.MkdirAll(dir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "gate.md"), []byte("---\nwhen: after_agent\n---\nSay how it was tested."), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "plain.md"), []byte("Use tabs."), 0o644))
+	var texts []string
+	for _, d := range Load(ws, config.MemoryConfig{Enabled: true, RuleDirs: []string{".agents/rules"}}) {
+		texts = append(texts, d.Content)
+	}
+	assert.Contains(t, texts, "Use tabs.")
+	assert.NotContains(t, texts, "Say how it was tested.")
 }

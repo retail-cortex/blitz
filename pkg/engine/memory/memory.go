@@ -236,7 +236,10 @@ func (l *loader) rules(dir, root, base string) {
 		if !ok {
 			continue
 		}
-		paths, body := splitRule(text)
+		paths, gate, body := splitRule(text)
+		if gate {
+			continue // a gate (when:), judged around the turn, not an instruction (spec_gates_041)
+		}
 		if len(paths) == 0 {
 			// Loaded like an instruction file (imports included).
 			delete(l.seen, real)
@@ -268,15 +271,16 @@ func (l *loader) rules(dir, root, base string) {
 }
 
 // splitRule reads a rule file's optional frontmatter ("paths": a glob or a
-// list of globs) and returns the paths and the body.
-func splitRule(text string) (paths []string, body string) {
+// list of globs; "when": the rule gates turns) and returns the paths,
+// whether it's a gate, and the body.
+func splitRule(text string) (paths []string, gate bool, body string) {
 	s := strings.TrimLeft(strings.TrimPrefix(text, "\ufeff"), " \t\r\n")
 	if !strings.HasPrefix(s, "---") {
-		return nil, text
+		return nil, false, text
 	}
 	end := strings.Index(s[3:], "\n---")
 	if end < 0 {
-		return nil, text
+		return nil, false, text
 	}
 	fm := s[3 : 3+end]
 	rest := s[3+end+4:]
@@ -286,10 +290,11 @@ func splitRule(text string) (paths []string, body string) {
 		rest = ""
 	}
 	var meta struct {
-		Paths any `yaml:"paths"`
+		Paths any    `yaml:"paths"`
+		When  string `yaml:"when"`
 	}
 	if yaml.Unmarshal([]byte(fm), &meta) != nil {
-		return nil, text
+		return nil, false, text
 	}
 	switch v := meta.Paths.(type) {
 	case string:
@@ -301,7 +306,7 @@ func splitRule(text string) (paths []string, body string) {
 			}
 		}
 	}
-	return paths, rest
+	return paths, strings.TrimSpace(meta.When) != "", rest
 }
 
 // importRE finds @path tokens: at the start of a line or after

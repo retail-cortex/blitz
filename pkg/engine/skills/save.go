@@ -15,7 +15,6 @@
 package skills
 
 import (
-	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -27,7 +26,7 @@ import (
 	"regexp"
 	"strings"
 
-	"gopkg.in/yaml.v3"
+	"github.com/retail-cortex/blitz/pkg/engine/frontmatter"
 )
 
 // Writing a skill from Studio's form (spec_skills_013 SK-100): SKILL.md's
@@ -142,96 +141,17 @@ func Save(dir string, spec Spec, previous, hash string, reserved func(string) bo
 // fields the form edits set, or removed when empty, and the instructions
 // as its body.
 func Render(old []byte, spec Spec) ([]byte, error) {
-	var doc yaml.Node
-	if front, _, ok := splitFrontMatter(old); ok {
-		if err := yaml.Unmarshal(front, &doc); err != nil {
-			return nil, fmt.Errorf("SKILL.md's front matter: %w", err)
-		}
-	}
-	if len(doc.Content) == 0 {
-		doc = yaml.Node{Kind: yaml.DocumentNode, Content: []*yaml.Node{{Kind: yaml.MappingNode}}}
-	}
-	m := doc.Content[0]
-	if m.Kind != yaml.MappingNode {
-		return nil, errors.New("SKILL.md's front matter isn't a mapping")
-	}
-	setScalar(m, "name", spec.Name)
-	setScalar(m, "description", strings.TrimSpace(spec.Description))
-	setScalar(m, "allowed-tools", strings.Join(strings.Fields(spec.Tools), " "))
-	setList(m, "agents", spec.Agents)
-	setList(m, "skills", spec.Members)
-	front, err := yaml.Marshal(&doc)
+	data, err := frontmatter.Edit(old, spec.Instructions, func(f frontmatter.Fields) {
+		f.String("name", spec.Name)
+		f.String("description", strings.TrimSpace(spec.Description))
+		f.String("allowed-tools", strings.Join(strings.Fields(spec.Tools), " "))
+		f.List("agents", spec.Agents)
+		f.List("skills", spec.Members)
+	})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("SKILL.md's %w", err)
 	}
-	var b bytes.Buffer
-	b.WriteString("---\n")
-	b.Write(front)
-	b.WriteString("---\n\n")
-	if body := strings.TrimSpace(spec.Instructions); body != "" {
-		b.WriteString(body)
-		b.WriteString("\n")
-	}
-	return b.Bytes(), nil
-}
-
-// splitFrontMatter is SKILL.md's front matter and body.
-func splitFrontMatter(data []byte) (front, body []byte, ok bool) {
-	t := bytes.TrimSpace(data)
-	if !bytes.HasPrefix(t, []byte("---")) {
-		return nil, t, false
-	}
-	rest := t[3:]
-	i := bytes.Index(rest, []byte("\n---"))
-	if i < 0 {
-		return nil, t, false
-	}
-	return rest[:i], bytes.TrimSpace(rest[i+4:]), true
-}
-
-// index is where key's value is in the mapping m, or -1.
-func index(m *yaml.Node, key string) int {
-	for i := 0; i+1 < len(m.Content); i += 2 {
-		if m.Content[i].Value == key {
-			return i + 1
-		}
-	}
-	return -1
-}
-
-// set puts v as key's value in m (added at the end when new), or removes
-// key when v is nil.
-func set(m *yaml.Node, key string, v *yaml.Node) {
-	i := index(m, key)
-	switch {
-	case v == nil && i >= 0:
-		m.Content = append(m.Content[:i-1], m.Content[i+1:]...)
-	case v == nil:
-	case i >= 0:
-		m.Content[i] = v
-	default:
-		m.Content = append(m.Content, &yaml.Node{Kind: yaml.ScalarNode, Value: key}, v)
-	}
-}
-
-func setScalar(m *yaml.Node, key, value string) {
-	if value == "" {
-		set(m, key, nil)
-		return
-	}
-	set(m, key, &yaml.Node{Kind: yaml.ScalarNode, Value: value})
-}
-
-func setList(m *yaml.Node, key string, values []string) {
-	if len(values) == 0 {
-		set(m, key, nil)
-		return
-	}
-	seq := &yaml.Node{Kind: yaml.SequenceNode, Style: yaml.FlowStyle}
-	for _, v := range values {
-		seq.Content = append(seq.Content, &yaml.Node{Kind: yaml.ScalarNode, Value: v})
-	}
-	set(m, key, seq)
+	return data, nil
 }
 
 // Delete removes dir/<name>: SKILL.md and everything beside it.

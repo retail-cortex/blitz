@@ -24,6 +24,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -669,8 +670,32 @@ func (c *Checkpoints) SessionDiff(session string) string {
 		chs = append(chs, ch)
 	}
 	c.mu.Unlock()
-	sort.Slice(chs, func(i, j int) bool { return chs[i].Display < chs[j].Display })
+	return c.diffOf(chs)
+}
 
+// LatestTurnDiff returns a unified diff of the files session's latest
+// turn changed, from before it to their current content ("" when it
+// changed none): what an after-agent rule judges (spec_gates_041).
+func (c *Checkpoints) LatestTurnDiff(session string) string {
+	if c == nil {
+		return ""
+	}
+	c.mu.Lock()
+	var chs []*fileChange
+	for i := len(c.turns) - 1; i >= 0; i-- {
+		if c.turns[i].Session == session {
+			chs = slices.Clone(c.turns[i].Changes)
+			break
+		}
+	}
+	c.mu.Unlock()
+	return c.diffOf(chs)
+}
+
+// diffOf is the unified diff of each change's file, from its snapshot to
+// its content now, by name.
+func (c *Checkpoints) diffOf(chs []*fileChange) string {
+	sort.Slice(chs, func(i, j int) bool { return chs[i].Display < chs[j].Display })
 	var sb strings.Builder
 	for _, ch := range chs {
 		if ch.Before.TooLarge {

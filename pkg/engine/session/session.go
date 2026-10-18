@@ -114,6 +114,7 @@ type Message struct {
 const (
 	KindSteer = "steer"
 	KindHook  = "hook"
+	KindRule  = "rule" // after-agent rules asking for a revision (spec_gates_041)
 	KindPlan  = "plan" // the approved plan's go-ahead
 	KindTask  = "task" // a background task that ended (the model's side)
 )
