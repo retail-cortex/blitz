@@ -223,10 +223,7 @@ export function GuardrailsPane({ workspace, onDirty, onRules }: { workspace: str
           </div>
         </section>
         <section className="stack rule-section" style={{ gap: 4 }}>
-          <div className="row" style={{ gap: 8 }}>
-            <span className="t-title-sm spacer">{t("desktop.guardrails.yours")}</span>
-            <IconButton icon={mdiPlus} label={t("desktop.guardrails.new")} small onClick={() => showForm({ name: "" }, emptyGuardrailForm)} />
-          </div>
+          <span className="t-title-sm">{t("desktop.guardrails.yours")}</span>
           <span className="t-body-sm muted">{t("desktop.guardrails.yours_hint")}</span>
           {custom.length === 0 && <p className="t-body-sm muted">{t("desktop.rules.none_here")}</p>}
           <div className="list">
