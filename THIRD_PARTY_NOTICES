@@ -14,9 +14,9 @@ Go modules linked into blitz, blitzd and the desktop app
   Go standard library 1.27.2                                     BSD-3-Clause
   cel.dev/expr v0.25.2                                           Apache-2.0
   cloud.google.com/go v0.123.0                                   Apache-2.0
-  cloud.google.com/go/auth v0.23.2                               Apache-2.0
-  cloud.google.com/go/auth/oauth2adapt v0.2.8                    Apache-2.0
-  cloud.google.com/go/compute/metadata v0.9.0                    Apache-2.0
+  cloud.google.com/go/auth v0.24.0                               Apache-2.0
+  cloud.google.com/go/auth/oauth2adapt v0.3.0                    Apache-2.0
+  cloud.google.com/go/compute/metadata v0.10.0                   Apache-2.0
   connectrpc.com/connect v1.21.0                                 Apache-2.0
   fyne.io/systray v1.12.2                                        Apache-2.0
   github.com/Azure/azure-sdk-for-go/sdk/azcore v1.23.1           MIT
@@ -24,7 +24,7 @@ Go modules linked into blitz, blitzd and the desktop app
   github.com/Azure/azure-sdk-for-go/sdk/internal v1.12.0         MIT
   github.com/AzureAD/microsoft-authentication-library-for-go v1.8.0 MIT
   github.com/BurntSushi/toml v1.6.0                              MIT
-  github.com/a2aproject/a2a-go/v2 v2.5.0                         Apache-2.0
+  github.com/a2aproject/a2a-go/v2 v2.6.0                         Apache-2.0
   github.com/alecthomas/chroma/v2 v2.20.0                        MIT
   github.com/anthropics/anthropic-sdk-go v1.75.0                 MIT
   github.com/antlr4-go/antlr/v4 v4.13.0                          BSD-3-Clause
@@ -60,6 +60,7 @@ Go modules linked into blitz, blitzd and the desktop app
   github.com/charmbracelet/x/cellbuf v0.0.13                     MIT
   github.com/charmbracelet/x/exp/slice v0.0.0-20250327172914-2fdc97757edf MIT
   github.com/charmbracelet/x/term v0.2.1                         MIT
+  github.com/coder/websocket v1.8.15                             ISC
   github.com/cyberphone/json-canonicalization v0.0.0-20241213102144-19d51d7fe467 Apache-2.0
   github.com/digitorus/pkcs7 v0.0.0-20230818184609-3a137a874352  MIT
   github.com/digitorus/timestamp v0.0.0-20231217203849-220c5c2851b7 BSD-2-Clause
@@ -102,11 +103,11 @@ Go modules linked into blitz, blitzd and the desktop app
   github.com/google/go-cmp v0.7.0                                BSD-3-Clause
   github.com/google/go-containerregistry v0.21.7                 Apache-2.0
   github.com/google/jsonschema-go v0.4.3                         MIT
-  github.com/google/s2a-go v0.1.9                                Apache-2.0
+  github.com/google/s2a-go v0.1.10                               Apache-2.0
   github.com/google/safehtml v0.1.0                              BSD-3-Clause
   github.com/google/uuid v1.6.0                                  BSD-3-Clause
-  github.com/googleapis/enterprise-certificate-proxy v0.3.20     Apache-2.0
-  github.com/googleapis/gax-go/v2 v2.24.0                        BSD-3-Clause
+  github.com/googleapis/enterprise-certificate-proxy v0.3.22     Apache-2.0
+  github.com/googleapis/gax-go/v2 v2.26.2                        BSD-3-Clause
   github.com/gorilla/css v1.0.1                                  BSD-3-Clause
   github.com/gorilla/websocket v1.5.3                            BSD-2-Clause
   github.com/grpc-ecosystem/grpc-gateway/v2 v2.30.0              BSD-3-Clause
@@ -121,13 +122,13 @@ Go modules linked into blitz, blitzd and the desktop app
   github.com/mattn/go-runewidth v0.0.17                          MIT
   github.com/microcosm-cc/bluemonday v1.0.27                     BSD-3-Clause
   github.com/moby/sys/capability v0.4.0                          BSD-2-Clause
-  github.com/modelcontextprotocol/go-sdk v1.7.0                  Apache-2.0
+  github.com/modelcontextprotocol/go-sdk v1.8.0                  Apache-2.0
   github.com/mohae/deepcopy v0.0.0-20170308212314-bb9b5e7adda9   MIT
   github.com/muesli/reflow v0.3.0                                MIT
   github.com/muesli/termenv v0.16.0                              MIT
   github.com/ncruces/go-strftime v1.0.0                          MIT
   github.com/oklog/ulid/v2 v2.1.1                                Apache-2.0
-  github.com/openai/openai-go/v3 v3.54.0                         Apache-2.0
+  github.com/openai/openai-go/v3 v3.71.1                         Apache-2.0
   github.com/opencontainers/go-digest v1.0.0                     Apache-2.0
   github.com/opencontainers/runtime-spec v1.2.1                  Apache-2.0
   github.com/pb33f/ordered-map/v2 v2.3.1                         Apache-2.0
@@ -168,17 +169,17 @@ Go modules linked into blitz, blitzd and the desktop app
   go.opentelemetry.io/contrib/bridges/otelslog v0.20.1           Apache-2.0
   go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.70.0 Apache-2.0
   go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.70.0 Apache-2.0
-  go.opentelemetry.io/otel v1.46.0                               Apache-2.0
-  go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploghttp v0.22.0 Apache-2.0
+  go.opentelemetry.io/otel v1.47.0                               Apache-2.0
+  go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploghttp v0.23.0 Apache-2.0
   go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp v1.46.0 Apache-2.0
-  go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.46.0      Apache-2.0
-  go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp v1.46.0 Apache-2.0
-  go.opentelemetry.io/otel/log v0.22.0                           Apache-2.0
-  go.opentelemetry.io/otel/metric v1.46.0                        Apache-2.0
-  go.opentelemetry.io/otel/sdk v1.46.0                           Apache-2.0
-  go.opentelemetry.io/otel/sdk/log v0.22.0                       Apache-2.0
-  go.opentelemetry.io/otel/sdk/metric v1.46.0                    Apache-2.0
-  go.opentelemetry.io/otel/trace v1.46.0                         Apache-2.0
+  go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.47.0      Apache-2.0
+  go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp v1.47.0 Apache-2.0
+  go.opentelemetry.io/otel/log v1.47.0                           Apache-2.0
+  go.opentelemetry.io/otel/metric v1.47.0                        Apache-2.0
+  go.opentelemetry.io/otel/sdk v1.47.0                           Apache-2.0
+  go.opentelemetry.io/otel/sdk/log v1.47.0                       Apache-2.0
+  go.opentelemetry.io/otel/sdk/metric v1.47.0                    Apache-2.0
+  go.opentelemetry.io/otel/trace v1.47.0                         Apache-2.0
   go.opentelemetry.io/proto/otlp v1.11.0                         Apache-2.0
   go.yaml.in/yaml/v3 v3.0.5                                      Apache-2.0
   go.yaml.in/yaml/v4 v4.0.0-rc.2                                 Apache-2.0
@@ -187,18 +188,18 @@ Go modules linked into blitz, blitzd and the desktop app
   golang.org/x/image v0.46.0                                     BSD-3-Clause
   golang.org/x/mod v0.41.0                                       BSD-3-Clause
   golang.org/x/net v0.60.0                                       BSD-3-Clause
-  golang.org/x/oauth2 v0.36.0                                    BSD-3-Clause
-  golang.org/x/sync v0.23.0                                      BSD-3-Clause
+  golang.org/x/oauth2 v0.37.0                                    BSD-3-Clause
+  golang.org/x/sync v0.24.0                                      BSD-3-Clause
   golang.org/x/sys v0.48.0                                       BSD-3-Clause
   golang.org/x/term v0.46.0                                      BSD-3-Clause
   golang.org/x/text v0.42.0                                      BSD-3-Clause
-  golang.org/x/time v0.15.0                                      BSD-3-Clause
-  google.golang.org/adk/v2 v2.4.0                                Apache-2.0
-  google.golang.org/api v0.295.0                                 BSD-3-Clause
-  google.golang.org/genai v1.70.0                                Apache-2.0
-  google.golang.org/genproto/googleapis/api v0.0.0-20260819154853-08b0e4226688 Apache-2.0
-  google.golang.org/genproto/googleapis/rpc v0.0.0-20260819154853-08b0e4226688 Apache-2.0
-  google.golang.org/grpc v1.83.2                                 Apache-2.0
+  golang.org/x/time v0.16.0                                      BSD-3-Clause
+  google.golang.org/adk/v2 v2.6.0                                Apache-2.0
+  google.golang.org/api v0.300.0                                 BSD-3-Clause
+  google.golang.org/genai v1.74.0                                Apache-2.0
+  google.golang.org/genproto/googleapis/api v0.0.0-20260928230214-8a89bd6388cc Apache-2.0
+  google.golang.org/genproto/googleapis/rpc v0.0.0-20260928230214-8a89bd6388cc Apache-2.0
+  google.golang.org/grpc v1.84.0                                 Apache-2.0
   google.golang.org/protobuf v1.36.12                            BSD-3-Clause
   gopkg.in/yaml.v3 v3.0.1                                        Apache-2.0
   gvisor.dev/gvisor v0.0.0-20260926034703-66ed76bcb72f           Apache-2.0
@@ -252,18 +253,18 @@ cloud.google.com/go v0.123.0
 
 Licensed under the Apache License 2.0 (printed at the end).
 
-cloud.google.com/go/auth v0.23.2
+cloud.google.com/go/auth v0.24.0
 --------------------------------
 
 Licensed under the Apache License 2.0 (printed at the end).
 
-cloud.google.com/go/auth/oauth2adapt v0.2.8
+cloud.google.com/go/auth/oauth2adapt v0.3.0
 -------------------------------------------
 
 Licensed under the Apache License 2.0 (printed at the end).
 
-cloud.google.com/go/compute/metadata v0.9.0
--------------------------------------------
+cloud.google.com/go/compute/metadata v0.10.0
+--------------------------------------------
 
 Licensed under the Apache License 2.0 (printed at the end).
 
@@ -402,7 +403,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 
-github.com/a2aproject/a2a-go/v2 v2.5.0
+github.com/a2aproject/a2a-go/v2 v2.6.0
 --------------------------------------
 
 Licensed under the Apache License 2.0 (printed at the end).
@@ -1011,6 +1012,23 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+github.com/coder/websocket v1.8.15
+----------------------------------
+
+Copyright (c) 2025 Coder
+
+Permission to use, copy, modify, and distribute this software for any
+purpose with or without fee is hereby granted, provided that the above
+copyright notice and this permission notice appear in all copies.
+
+THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
 github.com/cyberphone/json-canonicalization v0.0.0-20241213102144-19d51d7fe467
 ------------------------------------------------------------------------------
@@ -1661,8 +1679,8 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-github.com/google/s2a-go v0.1.9
--------------------------------
+github.com/google/s2a-go v0.1.10
+--------------------------------
 
 Licensed under the Apache License 2.0 (printed at the end).
 
@@ -1728,12 +1746,12 @@ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-github.com/googleapis/enterprise-certificate-proxy v0.3.20
+github.com/googleapis/enterprise-certificate-proxy v0.3.22
 ----------------------------------------------------------
 
 Licensed under the Apache License 2.0 (printed at the end).
 
-github.com/googleapis/gax-go/v2 v2.24.0
+github.com/googleapis/gax-go/v2 v2.26.2
 ---------------------------------------
 
 Copyright 2016, Google Inc.
@@ -2036,7 +2054,7 @@ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-github.com/modelcontextprotocol/go-sdk v1.7.0
+github.com/modelcontextprotocol/go-sdk v1.8.0
 ---------------------------------------------
 
 Licensed under the Apache License 2.0 (printed at the end).
@@ -2146,7 +2164,7 @@ github.com/oklog/ulid/v2 v2.1.1
 
 Licensed under the Apache License 2.0 (printed at the end).
 
-github.com/openai/openai-go/v3 v3.54.0
+github.com/openai/openai-go/v3 v3.71.1
 --------------------------------------
 
 Licensed under the Apache License 2.0 (printed at the end).
@@ -3583,12 +3601,12 @@ go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.70.0
 
 Licensed under the Apache License 2.0 (printed at the end).
 
-go.opentelemetry.io/otel v1.46.0
+go.opentelemetry.io/otel v1.47.0
 --------------------------------
 
 Licensed under the Apache License 2.0 (printed at the end).
 
-go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploghttp v0.22.0
+go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploghttp v0.23.0
 -------------------------------------------------------------------
 
 Licensed under the Apache License 2.0 (printed at the end).
@@ -3598,42 +3616,42 @@ go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp v1.46.0
 
 Licensed under the Apache License 2.0 (printed at the end).
 
-go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.46.0
+go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.47.0
 ---------------------------------------------------------
 
 Licensed under the Apache License 2.0 (printed at the end).
 
-go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp v1.46.0
+go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp v1.47.0
 -----------------------------------------------------------------------
 
 Licensed under the Apache License 2.0 (printed at the end).
 
-go.opentelemetry.io/otel/log v0.22.0
+go.opentelemetry.io/otel/log v1.47.0
 ------------------------------------
 
 Licensed under the Apache License 2.0 (printed at the end).
 
-go.opentelemetry.io/otel/metric v1.46.0
+go.opentelemetry.io/otel/metric v1.47.0
 ---------------------------------------
 
 Licensed under the Apache License 2.0 (printed at the end).
 
-go.opentelemetry.io/otel/sdk v1.46.0
+go.opentelemetry.io/otel/sdk v1.47.0
 ------------------------------------
 
 Licensed under the Apache License 2.0 (printed at the end).
 
-go.opentelemetry.io/otel/sdk/log v0.22.0
+go.opentelemetry.io/otel/sdk/log v1.47.0
 ----------------------------------------
 
 Licensed under the Apache License 2.0 (printed at the end).
 
-go.opentelemetry.io/otel/sdk/metric v1.46.0
+go.opentelemetry.io/otel/sdk/metric v1.47.0
 -------------------------------------------
 
 Licensed under the Apache License 2.0 (printed at the end).
 
-go.opentelemetry.io/otel/trace v1.46.0
+go.opentelemetry.io/otel/trace v1.47.0
 --------------------------------------
 
 Licensed under the Apache License 2.0 (printed at the end).
@@ -3836,7 +3854,7 @@ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-golang.org/x/oauth2 v0.36.0
+golang.org/x/oauth2 v0.37.0
 ---------------------------
 
 Copyright 2009 The Go Authors.
@@ -3867,7 +3885,7 @@ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-golang.org/x/sync v0.23.0
+golang.org/x/sync v0.24.0
 -------------------------
 
 Copyright 2009 The Go Authors.
@@ -3991,7 +4009,7 @@ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-golang.org/x/time v0.15.0
+golang.org/x/time v0.16.0
 -------------------------
 
 Copyright 2009 The Go Authors.
@@ -4022,12 +4040,12 @@ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-google.golang.org/adk/v2 v2.4.0
+google.golang.org/adk/v2 v2.6.0
 -------------------------------
 
 Licensed under the Apache License 2.0 (printed at the end).
 
-google.golang.org/api v0.295.0
+google.golang.org/api v0.300.0
 ------------------------------
 
 Copyright (c) 2011 Google Inc. All rights reserved.
@@ -4058,22 +4076,22 @@ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-google.golang.org/genai v1.70.0
+google.golang.org/genai v1.74.0
 -------------------------------
 
 Licensed under the Apache License 2.0 (printed at the end).
 
-google.golang.org/genproto/googleapis/api v0.0.0-20260819154853-08b0e4226688
+google.golang.org/genproto/googleapis/api v0.0.0-20260928230214-8a89bd6388cc
 ----------------------------------------------------------------------------
 
 Licensed under the Apache License 2.0 (printed at the end).
 
-google.golang.org/genproto/googleapis/rpc v0.0.0-20260819154853-08b0e4226688
+google.golang.org/genproto/googleapis/rpc v0.0.0-20260928230214-8a89bd6388cc
 ----------------------------------------------------------------------------
 
 Licensed under the Apache License 2.0 (printed at the end).
 
-google.golang.org/grpc v1.83.2
+google.golang.org/grpc v1.84.0
 ------------------------------
 
 Licensed under the Apache License 2.0 (printed at the end).
