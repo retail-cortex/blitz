@@ -431,6 +431,8 @@
     "search.ws_enrich_error": "La description des fichiers s'est arrêtée : {error} (le prochain parcours réessaie).",
     "search.ws_never": "pas encore",
     "search.ws_reindex": "Parcours de l'espace de travail pour la recherche.",
+    "flow.waits_task": "⏸ /{workflow} vous attend : {title}",
+    "flow.waits_timer": "⏸ /{workflow} reprend à {time}",
     "flow.step": "▸ /{workflow} › {step} ({index} sur {count})",
     "flow.step_failed": "✗ /{workflow} › {step} : {error}",
     "flow.command": "Un flux de travail",

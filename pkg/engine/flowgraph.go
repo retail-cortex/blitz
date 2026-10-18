@@ -87,6 +87,30 @@ type flowRun struct {
 	failures sync.Map
 	// depth is how deep in called workflows this run is (0: the top).
 	depth int
+	// runID is the orchestration session's ID; waiting are the tasks it
+	// waits on (WF-16).
+	runID   string
+	mu      sync.Mutex
+	waiting []FlowTask
+	// replay are the results of steps that finished before the run paused,
+	// served again as it resumes (ADK's own replay misses them).
+	replay map[string]Replayed
+	// caught are the steps that failed into their error links.
+	caught map[string]bool
+}
+
+// Replayed is a finished step's result, kept with a paused run.
+type Replayed struct {
+	Result flows.Result `json:"result"`
+	// Caught is a failure its error link took.
+	Caught bool `json:"caught,omitempty"`
+}
+
+// waitingTasks are the tasks the run waits on.
+func (r *flowRun) waitingTasks() []FlowTask {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return slices.Clone(r.waiting)
 }
 
 func (r *flowRun) emit(e api.Event) {
@@ -201,6 +225,7 @@ func (w *Workspace) schedule(ctx context.Context, r *flowRun, run stepRunner) (m
 		}()
 	}
 	var failure error
+	paused := false
 	for {
 		if failure == nil {
 			for _, n := range r.order {
@@ -219,6 +244,11 @@ func (w *Workspace) schedule(ctx context.Context, r *flowRun, run stepRunner) (m
 		}
 		n := r.order[r.index(d.id)-1]
 		out := flows.Outputs(r.f, n.ID)
+		if d.err != nil && errors.Is(d.err, workflow.ErrNodeInterrupted) {
+			state[n.ID] = api.StepWaiting // the run pauses once the others are done
+			paused = true
+			continue
+		}
 		if d.err != nil {
 			if f, ok := r.failures.Load(n.ID); ok {
 				d.err = f.(*stepFailure)
@@ -236,6 +266,12 @@ func (w *Workspace) schedule(ctx context.Context, r *flowRun, run stepRunner) (m
 			}
 			state[n.ID] = api.StepDone
 			results[n.ID] = flows.Result{Text: msg, Data: map[string]any{"error": msg}}
+			r.mu.Lock()
+			if r.caught == nil {
+				r.caught = map[string]bool{}
+			}
+			r.caught[n.ID] = true
+			r.mu.Unlock()
 			for i, e := range r.f.Edges {
 				if e.From == n.ID {
 					if i == errLink {
@@ -266,8 +302,14 @@ func (w *Workspace) schedule(ctx context.Context, r *flowRun, run stepRunner) (m
 			}
 		}
 	}
+	if failure == nil && paused {
+		return results, errPaused
+	}
 	return results, failure
 }
+
+// errPaused is a run that waits on a task.
+var errPaused = errors.New("the workflow waits")
 
 func copyResults(m map[string]flows.Result) map[string]flows.Result {
 	out := make(map[string]flows.Result, len(m))
@@ -497,6 +539,8 @@ func (w *Workspace) runStepOnce(ctx context.Context, r *flowRun, n flows.Node, i
 		return w.a2aStep(ctx, n, input)
 	case n.Type == flows.Call:
 		return w.callStep(ctx, r, n, input)
+	case flows.Pauses(n.Type):
+		return flows.Result{}, fmt.Errorf("a human task or a timer waits only in a workflow run itself, not one it calls")
 	case flows.IsAgentType(n.Type):
 		r.turns.Lock()
 		defer r.turns.Unlock()
@@ -514,8 +558,15 @@ func (w *Workspace) runStepOnce(ctx context.Context, r *flowRun, n flows.Node, i
 
 // runFlow runs workflow f on input in sessionID (WF-03, WF-04, WF-11,
 // WF-12). The result's output is what the last steps that ran (those
-// that feed none) produced.
+// that feed none) produced; a run that pauses (WF-16) says so.
 func (w *Workspace) runFlow(ctx context.Context, sessionID string, f flows.Flow, input string, on func(api.Event)) (api.TurnResult, error) {
+	return w.driveFlow(ctx, sessionID, f, input, on, "flow-"+uuid.NewString(), nil, nil)
+}
+
+// driveFlow runs f's graph in the orchestration session runID: from the
+// start (resume nil: input is its first message), or resumed with an
+// answer to one of its tasks.
+func (w *Workspace) driveFlow(ctx context.Context, sessionID string, f flows.Flow, input string, on func(api.Event), runID string, resume *genai.FunctionResponse, replay map[string]Replayed) (api.TurnResult, error) {
 	if f.Problem != "" {
 		return api.TurnResult{}, fmt.Errorf("the workflow %s can't run: %s", f.Name, f.Problem)
 	}
@@ -524,11 +575,26 @@ func (w *Workspace) runFlow(ctx context.Context, sessionID string, f flows.Flow,
 		return api.TurnResult{}, err
 	}
 	res := api.TurnResult{Before: w.engine.Usage(sessionID)}
-	run := &flowRun{f: f, order: order, input: input, session: sessionID, on: on}
+	run := &flowRun{f: f, order: order, input: input, session: sessionID, on: on, runID: runID, replay: replay}
 	var results map[string]flows.Result
 	scheduler := workflow.NewDynamicNode("run", func(actx agent.Context, _ string, _ func(*adksession.Event) error) (string, error) {
 		var err error
 		results, err = w.schedule(actx, run, func(ctx context.Context, n flows.Node, input string, vars flows.Vars) (flows.Result, error) {
+			if done, ok := run.replay[n.ID]; ok {
+				if done.Caught {
+					f := &stepFailure{title: run.title(n.ID), err: errors.New(done.Result.Text)}
+					run.failures.Store(n.ID, f)
+					return flows.Result{}, f
+				}
+				return done.Result, nil
+			}
+			if flows.Pauses(n.Type) {
+				// Asks ADK for input, and is run again when it comes.
+				node := workflow.NewEmittingFunctionNode(n.ID, func(nctx agent.Context, text string, emit func(*adksession.Event) error) (flows.Result, error) {
+					return w.pauseStep(nctx, run, n, vars, emit)
+				}, workflow.NodeConfig{RerunOnResume: ptr(true)})
+				return workflow.RunNode[flows.Result](actx, node, input, workflow.WithRunID("step-"+n.ID))
+			}
 			// Through RunNode, so a resumed run replays a finished step.
 			node := workflow.NewFunctionNode(n.ID, func(nctx agent.Context, text string) (flows.Result, error) {
 				sctx, stop := context.WithCancel(nctx)
@@ -538,6 +604,9 @@ func (w *Workspace) runFlow(ctx context.Context, sessionID string, f flows.Flow,
 			}, workflow.NodeConfig{})
 			return workflow.RunNode[flows.Result](actx, node, input, workflow.WithRunID("step-"+n.ID))
 		})
+		if errors.Is(err, errPaused) {
+			return "", workflow.ErrNodeInterrupted
+		}
 		return "", err
 	}, workflow.NodeConfig{})
 	root, err := workflowagent.New(workflowagent.Config{Name: "flow_" + strings.ReplaceAll(f.Name, "-", "_"), Description: f.Description, Edges: workflow.Chain(workflow.Start, scheduler)})
@@ -552,21 +621,33 @@ func (w *Workspace) runFlow(ctx context.Context, sessionID string, f flows.Flow,
 	if err != nil {
 		return res, err
 	}
+	msg := genai.NewContentFromText(input, genai.RoleUser)
+	if resume != nil {
+		msg = &genai.Content{Role: genai.RoleUser, Parts: []*genai.Part{{FunctionResponse: resume}}}
+	}
 	var runErr error
-	for _, err := range rn.Run(ctx, "blitz", "flow-"+uuid.NewString(), genai.NewContentFromText(input, genai.RoleUser), agent.RunConfig{}) {
+	for _, err := range rn.Run(ctx, "blitz", runID, msg, agent.RunConfig{}) {
 		if err != nil {
 			runErr = err
 			break
 		}
 	}
 	res.After = w.engine.Usage(sessionID)
-	if runErr != nil {
+	if runErr != nil && !errors.Is(runErr, workflow.ErrNodeInterrupted) {
 		var failed *stepFailure
 		if errors.As(runErr, &failed) {
 			return res, fmt.Errorf("the workflow %s stopped at %s: %w", f.Name, failed.title, failed.err)
 		}
 		return res, fmt.Errorf("the workflow %s: %w", f.Name, runErr)
 	}
+	if tasks := run.waitingTasks(); len(tasks) > 0 {
+		kept := map[string]Replayed{}
+		for id, r := range results {
+			kept[id] = Replayed{Result: r, Caught: run.caught[id]}
+		}
+		return res, w.pauseRun(ctx, run, tasks, kept)
+	}
+	w.forgetRun(runID)
 	var last []string
 	for _, n := range order {
 		if _, ran := results[n.ID]; ran && !slices.ContainsFunc(f.Edges, func(e flows.Edge) bool { return e.From == n.ID && !e.Error }) {
@@ -576,6 +657,8 @@ func (w *Workspace) runFlow(ctx context.Context, sessionID string, f flows.Flow,
 	res.Output = strings.Join(last, "\n\n")
 	return res, nil
 }
+
+func ptr[T any](v T) *T { return &v }
 
 // forEach runs a step once per item of its for_each list (WF-15), at most
 // its concurrency at a time (4 by default; agent steps take turns in the

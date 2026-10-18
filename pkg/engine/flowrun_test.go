@@ -23,6 +23,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/retail-cortex/blitz/pkg/api"
 	"github.com/retail-cortex/blitz/pkg/config"
@@ -380,4 +381,94 @@ func TestRunDetachedFlow(t *testing.T) {
 	assert.Contains(t, string(data), "/bg › a")
 	_, err = w.RunDetached(context.Background(), api.Turn{Text: "/no-such-command", Command: true}, nil, func(api.Event) {})
 	assert.Error(t, err, "an unknown command isn't sent as a prompt")
+}
+
+const approveForm = `form:
+      components:
+        - {id: root, component: Column, children: [note, ok]}
+        - {id: note, component: TextField, label: Note, value: {path: /note}}
+        - {id: ok_label, component: Text, text: Approve}
+        - {id: ok, component: Button, child: ok_label, action: {event: {name: approve, context: {note: {path: /note}}}}}`
+
+// A human task pauses the run and records what it waits on; the answer
+// resumes it, finished steps replayed rather than run again; a workflow
+// changed since it paused isn't resumed. A timer is resumed once it's due
+// (WF-16).
+func TestFlowHumanTaskAndTimer(t *testing.T) {
+	w, _ := openTestWith(t, configtest.RunTools)
+	require.NoError(t, os.WriteFile(filepath.Join(w.Dir(), "req.md"), []byte("Refund 42"), 0o644))
+	writeFlow(t, w, "approve", `nodes:
+  - {id: read, type: read_file, path: req.md}
+  - id: ask
+    type: human_task
+    title: Approve the refund
+    instructions: "{{ steps.read.text }}?"
+    `+approveForm+`
+  - {id: save, type: save_file, path: out/note.md}
+edges:
+  - {from: read, to: ask}
+  - {from: ask, to: save}
+`)
+	s := newSession(t, w)
+	var notices []string
+	status := map[string]string{}
+	res, err := w.Run(context.Background(), s.ID, api.Turn{Text: "/approve", Command: true}, func(e api.Event) {
+		if e.Step != nil {
+			status[e.Step.ID] = e.Step.Status
+		}
+		if e.Notice != nil {
+			notices = append(notices, e.Notice.Text)
+		}
+	})
+	require.NoError(t, err)
+	assert.Empty(t, res.Output)
+	assert.Equal(t, map[string]string{"read": "done", "ask": "waiting"}, status)
+	assert.Contains(t, notices, "⏸ /approve waits for you: Approve the refund")
+	assert.NoFileExists(t, filepath.Join(w.Dir(), "out", "note.md"))
+	tasks := w.FlowTasks()
+	require.Len(t, tasks, 1)
+	require.Len(t, tasks[0].Tasks, 1)
+	task := tasks[0].Tasks[0]
+	assert.Equal(t, "Refund 42?", task.Message)
+	assert.Equal(t, "Button", task.Form.Components[3]["component"])
+	assert.Equal(t, s.ID, tasks[0].Session)
+
+	resumed := map[string]string{}
+	res, err = w.ResumeFlow(context.Background(), task.ID, map[string]any{"note": "fine by me"}, func(e api.Event) {
+		if e.Step != nil {
+			resumed[e.Step.ID] = e.Step.Status
+		}
+	})
+	require.NoError(t, err)
+	assert.Equal(t, map[string]string{"ask": "done", "save": "done"}, resumed, "read wasn't run again")
+	saved, err := os.ReadFile(filepath.Join(w.Dir(), "out", "note.md"))
+	require.NoError(t, err)
+	assert.Equal(t, "note: fine by me", string(saved))
+	assert.Equal(t, "note: fine by me", res.Output)
+	assert.Empty(t, w.FlowTasks(), "the run's record is gone")
+	_, err = w.ResumeFlow(context.Background(), task.ID, nil, func(api.Event) {})
+	assert.ErrorIs(t, err, ErrNoTask)
+
+	// A changed workflow isn't resumed.
+	_, err = w.Run(context.Background(), s.ID, api.Turn{Text: "/approve", Command: true}, func(api.Event) {})
+	require.NoError(t, err)
+	task = w.FlowTasks()[0].Tasks[0]
+	writeFlow(t, w, "approve", "nodes: [{id: read, type: read_file, path: req.md}]\n")
+	_, err = w.ResumeFlow(context.Background(), task.ID, map[string]any{}, func(api.Event) {})
+	assert.ErrorContains(t, err, "changed since its run paused")
+	assert.Empty(t, w.FlowTasks())
+
+	// A timer.
+	writeFlow(t, w, "later", "nodes:\n  - {id: wait, type: timer, title: Wait, wait: 1h}\n  - {id: save, type: save_file, path: out/later.md}\nedges: [{from: wait, to: save}]\n")
+	_, err = w.Run(context.Background(), s.ID, api.Turn{Text: "/later", Command: true}, func(api.Event) {})
+	require.NoError(t, err)
+	dir := FlowRecordsDir(w.cfg.Session.StorageDir)
+	assert.Empty(t, DueTimers(dir, time.Now()), "not due yet")
+	due := DueTimers(dir, time.Now().Add(2*time.Hour))
+	require.Len(t, due, 1)
+	for id := range due {
+		_, err = w.ResumeFlow(context.Background(), id, map[string]any{"fired_at": "now"}, func(api.Event) {})
+		require.NoError(t, err)
+	}
+	assert.FileExists(t, filepath.Join(w.Dir(), "out", "later.md"))
 }

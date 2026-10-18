@@ -63,6 +63,10 @@ const (
 	APICall = "api_call"
 	// Call runs another workflow on its input (BPMN's call activity).
 	Call = "workflow"
+	// HumanTask waits for a person to fill in its form (A2UI); Timer
+	// waits for a time (WF-16).
+	HumanTask = "human_task"
+	Timer     = "timer"
 	// Exclusive takes its first link whose condition holds (else its
 	// default); Inclusive every one (else its default); Parallel every
 	// link. Each passes its input on.
@@ -75,7 +79,10 @@ const (
 )
 
 // Types are the step types, in the order the palette shows them.
-var Types = []string{Agent, Refine, Summarize, Extract, Accumulate, Browser, Script, ReadFile, SaveFile, MCPCall, A2ACall, APICall, Call, Exclusive, Inclusive, Parallel, Email, Data}
+var Types = []string{Agent, Refine, Summarize, Extract, Accumulate, Browser, Script, ReadFile, SaveFile, MCPCall, A2ACall, APICall, Call, HumanTask, Timer, Exclusive, Inclusive, Parallel, Email, Data}
+
+// Pauses reports whether a step type pauses its run until it's resumed.
+func Pauses(t string) bool { return t == HumanTask || t == Timer }
 
 // Pair is a named value: a header, a query parameter.
 type Pair struct {
@@ -183,6 +190,13 @@ type Node struct {
 	Auth    *Auth  `yaml:"auth,omitempty"`
 	// Workflow is the workflow a call step runs.
 	Workflow string `yaml:"workflow,omitempty"`
+	// Form is a human task's form: A2UI v0.9 (components, and data, its
+	// starting values); its instructions are shown above it.
+	Form *Form `yaml:"form,omitempty"`
+	// Wait (a Go duration) or Until (a time, RFC 3339) is how long a
+	// timer waits; both take templates.
+	Wait  string `yaml:"wait,omitempty"`
+	Until string `yaml:"until,omitempty"`
 	// ForEach (a CEL expression giving a list) runs the step once per
 	// item, Concurrency at a time (4 when unset), item and index in its
 	// templates (WF-15).
@@ -303,6 +317,10 @@ func Check(f Flow) []string {
 			probs = append(probs, where+": name the workflow it runs")
 		case n.Type == Call && n.Workflow == f.Name:
 			probs = append(probs, where+": a workflow can't run itself")
+		case n.Type == HumanTask && (n.Form == nil || !n.Form.hasRoot()):
+			probs = append(probs, where+": give its form (A2UI components, one of them root)")
+		case n.Type == Timer && n.Wait == "" && n.Until == "":
+			probs = append(probs, where+": say how long it waits or until when")
 		case n.Type == MCPCall && (n.Server == "" || n.Tool == ""):
 			probs = append(probs, where+": name the MCP server and its tool")
 		case (n.Type == APICall || n.Type == A2ACall) && strings.TrimSpace(n.URL) == "":
@@ -426,7 +444,7 @@ func node(f Flow, id string) *Node {
 func checkSettings(n Node, i int) []string {
 	var probs []string
 	where := fmt.Sprintf("step %s", n.ID)
-	texts := map[string]string{"instructions": n.Instructions, "path": n.Path, "url": n.URL, "body": n.Body}
+	texts := map[string]string{"instructions": n.Instructions, "path": n.Path, "url": n.URL, "body": n.Body, "wait": n.Wait, "until": n.Until}
 	for _, p := range n.Query {
 		texts["query "+p.Name] = p.Value
 	}
@@ -503,10 +521,20 @@ func checkSettings(n Node, i int) []string {
 		}
 	}
 	if n.ForEach != "" {
-		if IsGateway(n.Type) {
+		if IsGateway(n.Type) || Pauses(n.Type) {
 			probs = append(probs, where+": a gateway doesn't repeat")
 		} else if err := CheckExpr(n.ForEach); err != nil {
 			probs = append(probs, fmt.Sprintf("%s: for_each: %v", where, err))
+		}
+	}
+	if n.Wait != "" && !strings.Contains(n.Wait, "{{") {
+		if _, err := ParseDuration(n.Wait, 0); err != nil {
+			probs = append(probs, fmt.Sprintf("%s: wait: %v", where, err))
+		}
+	}
+	if n.Until != "" && !strings.Contains(n.Until, "{{") {
+		if _, err := time.Parse(time.RFC3339, n.Until); err != nil {
+			probs = append(probs, fmt.Sprintf("%s: until %q: a time like 2026-10-20T09:00:00Z", where, n.Until))
 		}
 	}
 	if n.Concurrency < 0 || n.Concurrency > 32 {
@@ -607,7 +635,7 @@ func Save(dir string, f Flow, previous string) (string, []string, error) {
 func saveChecks(f Flow) []string {
 	var probs []string
 	for _, p := range Check(f) {
-		if strings.Contains(p, "say what it's to do") || strings.Contains(p, "name the") || strings.Contains(p, "workflow it runs") || strings.Contains(p, "give the URL") || strings.Contains(p, "which fields") || strings.Contains(p, "two links out") || strings.Contains(p, "don't run yet") || p == "it has no steps" {
+		if strings.Contains(p, "say what it's to do") || strings.Contains(p, "name the") || strings.Contains(p, "give its form") || strings.Contains(p, "how long it waits") || strings.Contains(p, "workflow it runs") || strings.Contains(p, "give the URL") || strings.Contains(p, "which fields") || strings.Contains(p, "two links out") || strings.Contains(p, "don't run yet") || p == "it has no steps" {
 			continue
 		}
 		probs = append(probs, p)
@@ -658,4 +686,15 @@ func CallLoops(all []Flow) map[string]string {
 		walk([]string{f.Name})
 	}
 	return out
+}
+
+// Form is a human task's form, in A2UI v0.9's basic catalog: components
+// (a flat list, one with id root) and data, the form's starting values.
+type Form struct {
+	Components []map[string]any `yaml:"components" json:"components"`
+	Data       map[string]any   `yaml:"data,omitempty" json:"data,omitempty"`
+}
+
+func (f *Form) hasRoot() bool {
+	return slices.ContainsFunc(f.Components, func(c map[string]any) bool { return c["id"] == "root" })
 }

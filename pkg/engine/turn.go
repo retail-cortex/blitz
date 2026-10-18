@@ -106,7 +106,7 @@ func (w *Workspace) RunDetached(ctx context.Context, t api.Turn, started func(se
 		// A workflow (spec_workflows_043 WF-10) or a command runs as it
 		// would in a chat.
 		if f, input, ok := w.flowCommand(t.Text); ok {
-			return w.runFlow(withFlowStorage(ctx, st), rec.ID, f, input, on)
+			return w.runFlow(withFlowOrigin(withFlowStorage(ctx, st), "background"), rec.ID, f, input, on)
 		}
 		if opts, err = w.expandCommand(ctx, &t); err != nil {
 			return api.TurnResult{}, err

@@ -431,6 +431,8 @@
     "search.ws_enrich_error": "Describing files stopped: {error} (the next scan tries again).",
     "search.ws_never": "not yet",
     "search.ws_reindex": "Scanning the workspace for search.",
+    "flow.waits_task": "⏸ /{workflow} waits for you: {title}",
+    "flow.waits_timer": "⏸ /{workflow} goes on at {time}",
     "flow.step": "▸ /{workflow} › {step} ({index} of {count})",
     "flow.step_failed": "✗ /{workflow} › {step}: {error}",
     "flow.command": "A workflow",

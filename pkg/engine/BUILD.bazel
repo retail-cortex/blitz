@@ -35,6 +35,7 @@ go_library(
         "flowcalls.go",
         "flowgraph.go",
         "flowrun.go",
+        "flowtasks.go",
         "fork.go",
         "gitbranches.go",
         "gitfiles.go",

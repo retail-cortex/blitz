@@ -431,6 +431,8 @@
     "search.ws_enrich_error": "Se detuvo la descripción de archivos: {error} (el próximo recorrido lo vuelve a intentar).",
     "search.ws_never": "todavía no",
     "search.ws_reindex": "Recorriendo el espacio de trabajo para la búsqueda.",
+    "flow.waits_task": "⏸ /{workflow} te espera: {title}",
+    "flow.waits_timer": "⏸ /{workflow} sigue a las {time}",
     "flow.step": "▸ /{workflow} › {step} ({index} de {count})",
     "flow.step_failed": "✗ /{workflow} › {step}: {error}",
     "flow.command": "Un flujo de trabajo",

@@ -143,6 +143,9 @@ const (
 	// StepSkipped is a step on a path not taken (a gateway's other
 	// branch): it doesn't run.
 	StepSkipped = "skipped"
+	// StepWaiting is a human task waiting for its answer, or a timer for
+	// its time: the run is paused until then.
+	StepWaiting = "waiting"
 )
 
 // Notice is a message from Blitz itself about a turn.
