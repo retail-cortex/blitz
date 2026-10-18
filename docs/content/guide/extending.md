@@ -13,6 +13,20 @@ A line can import another file with `@docs/style.md`: relative to the file, at m
 
 Rule files in `.blitz/rules/`, `.agents/rules/`, `.claude/rules/` and `~/.blitz/rules/` load too. One with frontmatter `paths: ["src/api/**/*.go"]` is given to the agent only when it first reads or edits a matching file. None of these files can grant permissions. `/memory` lists what's loaded; `/init` has the agent write `BLITZ.md`.
 
+A rule can also be checked rather than followed. Give it `when: before_agent` (it judges your prompt before the agent runs) or `when: after_agent` (it judges the answer and the changes before the turn ends), and say what a failure does:
+
+```markdown
+---
+when: after_agent
+action: revise     # block, warn or revise
+order: 10          # gates run by order
+agents: [coder]    # none: every agent
+---
+The answer says how the change was tested.
+```
+
+`block` stops a prompt (or marks an answer as failing), `warn` says so in the chat, and `revise` gives the agent the reason: with the prompt, or as a request to fix its answer (twice at most). A fast model judges each rule (the suggestions model). In the desktop app, **Studio › Rules** lists them in the order they run, reorders them by dragging, and has **Try it** to check a sample prompt or answer.
+
 Edit any of these, or an agent or skill in `.agents/`, while you work: the change applies from your next message, in the same conversation or a new one. Blitz checks the files' sizes and times before each message and reloads only what changed. `/reload` (in the app, **Agents › Reload agent files**) reads them all again now and says what it loaded. MCP servers in `.mcp.json` or `.agents/mcp_config.json` are the exception: open the workspace again to apply a change to them.
 
 ### Notes the agent keeps

@@ -50,5 +50,6 @@ Files are named `spec_<name>_NNN.md`, where `NNN` is the order of execution: eac
 | 038 | [electron](spec_electron_038.md) | The desktop app in Electron (one engine on every platform, a real app on Windows) over the page and `blitz-tray --serve` as its host; since v0.6.6 |
 | 039 | [secrets](spec_secrets_039.md) | The user's secrets in the system's keychain, named in prompts and settings as `{secrets:key}`; since v0.7.1 |
 | 040 | [studio](spec_studio_040.md) | What a workspace's .agents folder holds, each kind listed and edited in the desktop app; since v0.7.1 |
+| 041 | [gates](spec_gates_041.md) | Rules that gate an agent's turn, checked before it runs and after it answers; since v0.7.1 |
 
 Background and history: [the roadmap](../roadmap.md), [where to pick up](../../development/next-steps.md), [development](../../development/_index.md).

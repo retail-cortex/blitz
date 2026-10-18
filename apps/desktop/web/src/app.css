@@ -891,16 +891,27 @@ code.file-link:hover { text-decoration-color: currentColor; }
 .skill-files .skill-file-name { flex: 1 1 220px; width: auto; min-width: 0; }
 .add-skill { width: min(520px, 100%); min-width: 0; }
 .add-skill .list-item { min-width: 0; }
-@container agent-form (max-width: 640px) { /* A reference or script given the whole tab: its bar, then the editor or
+/* A reference or script given the whole tab: its bar, then the editor or
    preview filling the height left, then the test run. */
-.skill-file-view { min-height: calc(100vh - 300px); }
-.skill-file-body { flex: 1; display: flex; flex-direction: column; min-height: 280px; }
-.skill-file-body > .code-area { flex: 1; }
-.skill-file-preview { flex: 1; min-height: 280px; overflow: auto; border: 1px solid var(--md-outline-variant); border-radius: var(--field-radius); }
+.skill-file-body { display: flex; flex-direction: column; }
+.skill-file-body > .code-area { height: max(260px, calc(100vh - 470px)); }
+.skill-file-preview { height: max(260px, calc(100vh - 470px)); overflow: auto; border: 1px solid var(--md-outline-variant); border-radius: var(--field-radius); }
 .skill-file-head code { font-size: 13px; }
 .skill-test-run { padding: 8px 12px; }
 .skill-test-run.open { padding-bottom: 12px; display: flex; flex-direction: column; gap: 8px; }
 .skill-test-toggle { gap: 8px; width: 100%; padding: 4px 0; border: none; background: none; color: inherit; font: inherit; cursor: pointer; text-align: left; }
+/* Studio's rules: each list in the order its rules run, rows dragged to
+   reorder them. */
+.rule-section { margin-top: 8px; }
+/* A list row's main part: one button that opens it, beside the row's own buttons. */
+.row-open { display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0; padding: 0; border: none; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.row-open:disabled { cursor: default; }
+.row-open:focus-visible { outline: 2px solid var(--accent-a); outline-offset: 2px; border-radius: 4px; }
+.rule-row[draggable="true"] { cursor: grab; }
+.rule-row.dragging { opacity: 0.5; }
+.rule-grip { flex: none; }
+.rule-step { color: var(--md-on-surface-variant); font-variant-numeric: tabular-nums; }
+fieldset.rule-form { border: none; margin: 0; padding: 0; min-width: 0; }
 /* A slide pane in a settings section: a box of its own height. */
 .slide-box { height: min(440px, calc(100vh - 320px)); min-height: 300px; padding: 12px 12px 0; border: 1px solid var(--md-outline-variant); border-radius: var(--md-shape-md); }
 /* The Studio drawer: the kinds' list is narrow, and each kind's pane

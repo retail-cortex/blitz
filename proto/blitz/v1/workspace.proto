@@ -199,6 +199,23 @@ service WorkspaceService {
   // would (the policy, its sandbox and the permission rules apply): the
   // user starts it, so its approvals are given.
   rpc RunSkillScript(RunSkillScriptRequest) returns (RunSkillScriptResponse);
+  // Returns the workspace's rules (spec_gates_041): the gates in the
+  // order they run (before the agent, then after), then the instruction
+  // rules.
+  rpc ListRules(ListRulesRequest) returns (ListRulesResponse);
+  // Writes a rule in .agents/rules from Studio's form (renamed when the
+  // name differs from previous_name), keeping its front matter's other
+  // fields; problems, with nothing written, when it can't be saved.
+  rpc SaveRule(SaveRuleRequest) returns (SaveRuleResponse);
+  // Deletes a rule from .agents/rules (RULE_NOT_FOUND).
+  rpc DeleteRule(DeleteRuleRequest) returns (DeleteRuleResponse);
+  // Numbers the named rules in .agents/rules 10, 20, 30… in the order
+  // given: the order they run.
+  rpc ReorderRules(ReorderRulesRequest) returns (ReorderRulesResponse);
+  // Judges a sample against a rule as written (Try it): a prompt for a
+  // before-agent rule, an answer for an after-agent one. A judge that
+  // fails gives problem.
+  rpc TryRule(TryRuleRequest) returns (TryRuleResponse);
   // Returns skill scripts' environments (SCRIPTS_DISABLED).
   rpc ListEnvs(ListEnvsRequest) returns (ListEnvsResponse);
   // Removes one environment.
@@ -2209,5 +2226,99 @@ message DraftManifestResponse {
   // What was written or changed and why, a line each.
   repeated string changes = 2;
   // Why there's no draft (the model failed); the user's text stands.
+  string problem = 3;
+}
+
+// A rule file: a gate (when set) or an instruction rule.
+message RuleFile {
+  // Its path in the rule folder, without .md.
+  string name = 1;
+  string path = 2;
+  // before_agent or after_agent for a gate; empty for an instruction
+  // rule.
+  string when = 3;
+  // block, warn or revise (a gate).
+  string action = 4;
+  int32 order = 5;
+  // The agents it gates (none: every one).
+  repeated string agents = 6;
+  string description = 7;
+  // The files an instruction rule is scoped to.
+  repeated string paths = 8;
+  string text = 9;
+  // Why its front matter doesn't hold (it's skipped).
+  string problem = 10;
+  // In .agents/rules: Studio may change it.
+  bool editable = 11;
+}
+
+// What Studio's rule form edits.
+message RuleSpec {
+  string name = 1;
+  string when = 2;
+  string action = 3;
+  int32 order = 4;
+  repeated string agents = 5;
+  string description = 6;
+  repeated string paths = 7;
+  string text = 8;
+}
+
+// Request message for WorkspaceService.ListRules.
+message ListRulesRequest {
+  string workspace = 1;
+}
+
+// Response message for WorkspaceService.ListRules.
+message ListRulesResponse {
+  repeated RuleFile rules = 1;
+  // Where new rules are written (.agents/rules).
+  string dir = 2;
+}
+
+// Request message for WorkspaceService.SaveRule.
+message SaveRuleRequest {
+  string workspace = 1;
+  string previous_name = 2;
+  RuleSpec rule = 3;
+}
+
+// Response message for WorkspaceService.SaveRule.
+message SaveRuleResponse {
+  RuleFile rule = 1;
+  repeated string problems = 2;
+}
+
+// Request message for WorkspaceService.DeleteRule.
+message DeleteRuleRequest {
+  string workspace = 1;
+  string name = 2;
+}
+
+// Response message for WorkspaceService.DeleteRule.
+message DeleteRuleResponse {}
+
+// Request message for WorkspaceService.ReorderRules.
+message ReorderRulesRequest {
+  string workspace = 1;
+  repeated string names = 2;
+}
+
+// Response message for WorkspaceService.ReorderRules.
+message ReorderRulesResponse {}
+
+// Request message for WorkspaceService.TryRule.
+message TryRuleRequest {
+  string workspace = 1;
+  RuleSpec rule = 2;
+  // A prompt (before-agent) or an answer (after-agent).
+  string sample = 3;
+}
+
+// Response message for WorkspaceService.TryRule.
+message TryRuleResponse {
+  bool pass = 1;
+  string reason = 2;
+  // Why it couldn't be judged.
   string problem = 3;
 }

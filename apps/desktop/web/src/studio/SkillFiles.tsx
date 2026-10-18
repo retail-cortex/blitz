@@ -402,13 +402,15 @@ export function SkillFiles({ workspace, file, folder, onFile, onDirty, onOpen }:
         {folder === "scripts" && skill.scripts.length === 0 && <p className="t-body-sm muted">{t("desktop.skills.no_scripts")}</p>}
         {folder === "references" &&
           paths.map((p) => (
-            <div key={p} className="list-item" role="button" tabIndex={0} onClick={() => show(p)} onKeyDown={(e) => e.key === "Enter" && show(p)}>
-              <Icon path={previewIcon(previewKind(p))} />
-              <span className="ellipsis spacer" title={p}>
-                {p.replace(/^references\//, "")}
-              </span>
+            <div key={p} className="list-item">
+              <button type="button" className="row-open" onClick={() => show(p)}>
+                <Icon path={previewIcon(previewKind(p))} />
+                <span className="ellipsis spacer" title={p}>
+                  {p.replace(/^references\//, "")}
+                </span>
+              </button>
               <span className="trailing">
-                <IconButton icon={mdiDeleteOutline} label={t("desktop.skills.delete_file", { path: p })} small className="hover-only" onClick={(e) => (e.stopPropagation(), setDeleting(p))} />
+                <IconButton icon={mdiDeleteOutline} label={t("desktop.skills.delete_file", { path: p })} small className="hover-only" onClick={() => setDeleting(p)} />
               </span>
             </div>
           ))}
@@ -418,7 +420,8 @@ export function SkillFiles({ workspace, file, folder, onFile, onDirty, onOpen }:
             const lang = (languageOfScript(s.source) || s.language) as ScriptLanguage;
             const known = lang in languageIcons;
             return (
-              <div key={s.name} className="list-item" role="button" tabIndex={editable ? 0 : -1} aria-disabled={!editable} title={s.allowed ? s.source : s.reasons.join("; ")} onClick={() => editable && show(s.source)} onKeyDown={(e) => e.key === "Enter" && editable && show(s.source)}>
+              <div key={s.name} className="list-item" title={s.allowed ? s.source : s.reasons.join("; ")}>
+                <button type="button" className="row-open" disabled={!editable} onClick={() => show(s.source)}>
                 <Icon path={known ? languageIcons[lang] : mdiFileDocumentOutline} />
                 <span className="lines spacer">
                   <span className="ellipsis">{s.name}</span>
@@ -426,9 +429,10 @@ export function SkillFiles({ workspace, file, folder, onFile, onDirty, onOpen }:
                     {[known ? t(`desktop.skills.lang.${lang}`) : s.language, s.deps.length ? t("desktop.skills.packages_n", { n: s.deps.length }) : "", s.allowed ? t(s.found ? "desktop.skills.script_found" : "desktop.skills.script_declared", { source: s.source }) : t("desktop.skills.script_blocked", { reasons: s.reasons.join("; ") })].filter(Boolean).join(" · ")}
                   </small>
                 </span>
+                </button>
                 <span className="trailing">
                   <Icon path={s.allowed ? mdiCheckCircleOutline : mdiAlertCircleOutline} size="sm" className={s.allowed ? "muted" : "error-text"} />
-                  {editable && <IconButton icon={mdiDeleteOutline} label={t("desktop.skills.delete_file", { path: s.source })} small className="hover-only" onClick={(e) => (e.stopPropagation(), setDeleting(s.source))} />}
+                  {editable && <IconButton icon={mdiDeleteOutline} label={t("desktop.skills.delete_file", { path: s.source })} small className="hover-only" onClick={() => setDeleting(s.source)} />}
                 </span>
               </div>
             );
@@ -452,15 +456,17 @@ export function SkillFiles({ workspace, file, folder, onFile, onDirty, onOpen }:
           <span className="t-body-sm muted">{t("desktop.skills.packages_hint")}</span>
           <div className="list">
             {packages.map((p) => (
-              <div key={p} className="list-item" role="button" tabIndex={0} onClick={() => show(p)} onKeyDown={(e) => e.key === "Enter" && show(p)}>
-                <Icon path={packageKind(p) === "node" ? mdiNodejs : mdiLanguagePython} />
-                <span className="lines spacer">
-                  <span className="ellipsis">{p}</span>
-                  <small className="ellipsis">{active.has(p) ? t(packageKind(p) === "node" ? "desktop.skills.packages_node" : "desktop.skills.packages_python") : t("desktop.skills.packages_unused")}</small>
-                </span>
+              <div key={p} className="list-item">
+                <button type="button" className="row-open" onClick={() => show(p)}>
+                  <Icon path={packageKind(p) === "node" ? mdiNodejs : mdiLanguagePython} />
+                  <span className="lines spacer">
+                    <span className="ellipsis">{p}</span>
+                    <small className="ellipsis">{active.has(p) ? t(packageKind(p) === "node" ? "desktop.skills.packages_node" : "desktop.skills.packages_python") : t("desktop.skills.packages_unused")}</small>
+                  </span>
+                </button>
                 <span className="trailing">
                   <Icon path={mdiPackageVariantClosed} size="sm" className={active.has(p) ? "muted" : "error-text"} />
-                  <IconButton icon={mdiDeleteOutline} label={t("desktop.skills.delete_file", { path: p })} small className="hover-only" onClick={(e) => (e.stopPropagation(), setDeleting(p))} />
+                  <IconButton icon={mdiDeleteOutline} label={t("desktop.skills.delete_file", { path: p })} small className="hover-only" onClick={() => setDeleting(p)} />
                 </span>
               </div>
             ))}

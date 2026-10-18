@@ -26,6 +26,7 @@ import { t } from "../i18n";
 import { SecretsEditor } from "../SecretsEditor";
 import { Icon, IconButton, useSnackbar } from "../ui/controls";
 import { Drawer } from "../ui/Drawer";
+import { RulesPane } from "./RulesPane";
 import { SkillsPane } from "./SkillsPane";
 import { WorkersPane } from "./WorkersPane";
 
@@ -60,7 +61,6 @@ export const studioIcons: Record<StudioKind, string> = {
 const folders: Partial<Record<StudioKind, string>> = {
   workflows: ".agents/workflows/<name>.flow.yaml",
   evals: ".agents/evals/<name>.md",
-  rules: ".agents/rules/<name>.md",
   guardrails: ".agents/guardrails/<name>.md",
 };
 
@@ -113,6 +113,7 @@ export function StudioDrawer({ dir, initial, onClose, onWorkers }: { dir: string
         <div className="settings-pane">
           {kind === "agents" && <AgentEditor workspace={dir} scope={AgentScope.WORKSPACE} slide onDirty={setDirty} />}
           {kind === "skills" && <SkillsPane workspace={dir} onDirty={setDirty} />}
+          {kind === "rules" && <RulesPane workspace={dir} onDirty={setDirty} />}
           {kind === "workers" && <WorkersPane dir={dir} intent={initial.kind === "workers" ? initial.intent : undefined} onLeave={onClose} onDirty={setDirty} />}
           {kind === "secrets" && <SecretsEditor workspace={dir} />}
           {folders[kind] && <Coming kind={kind} />}

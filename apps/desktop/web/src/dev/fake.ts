@@ -580,6 +580,20 @@ const fakeSkillFile = (workspace: string, x: FakeSkill) => ({
   editable: true,
   spec: { name: x.name, description: x.description, tools: x.tools, agents: x.agents, members: x.members, instructions: x.instructions },
 });
+// Studio's rules: two gates before the agent, one after, an instruction
+// rule, and one from .claude/rules (read-only there).
+type FakeRule = { name: string; when: string; action: string; order: number; agents: string[]; description: string; paths: string[]; text: string };
+const fakeRules: FakeRule[] = [
+  { name: "no-prod", when: "before_agent", action: "block", order: 10, agents: [], description: "Never deploy to production", paths: [], text: "The prompt doesn't ask to deploy to production, or to change production data." },
+  { name: "small-changes", when: "before_agent", action: "revise", order: 20, agents: [], description: "", paths: [], text: "The prompt asks for a focused change, not a rewrite." },
+  { name: "tested", when: "after_agent", action: "revise", order: 10, agents: ["qa"], description: "Answers say how they were tested", paths: [], text: "The answer says how the change was tested." },
+  { name: "go-style", when: "", action: "", order: 0, agents: [], description: "", paths: ["*.go"], text: "Run gofmt; wrap errors with %w." },
+];
+const fakeRuleList = (workspace: string) =>
+  [
+    ...[...fakeRules].sort((a, b) => (a.when === b.when ? a.order - b.order || a.name.localeCompare(b.name) : (a.when === "before_agent" ? 0 : a.when === "after_agent" ? 1 : 2) - (b.when === "before_agent" ? 0 : b.when === "after_agent" ? 1 : 2))).map((r) => ({ ...r, path: `${workspace}/.agents/rules/${r.name}.md`, problem: "", editable: true })),
+    { name: "commits", when: "", action: "", order: 0, agents: [], description: "", paths: [], text: "Write commit messages in the imperative.", path: `${workspace}/.claude/rules/commits.md`, problem: "", editable: false },
+  ];
 // Worker runs going now (?fake&noruns: none).
 const fakeLive: { id: string; workspace: string; worker: string; status: RunStatus; started: ReturnType<typeof now>; manual: boolean; sessionId: string; error?: { reason: string; message: string } }[] = new URLSearchParams(location.search).has("noruns")
   ? []
@@ -887,6 +901,32 @@ export function installFake() {
         removeEnv: () => ({}),
         listSkills: ({ workspace, query }) => ({ skills: [...fakeOtherSkills, ...fakeProjectSkills.map((x) => fakeSkillInfo(workspace, x))].filter((x) => !query || x.name.includes(query)) }),
         getSkill: ({ name }) => ({ skill: { name, description: "Read and summarize PDF files", tools: [{ name: "read_file" }] } }),
+        // Studio › Rules: gates before and after the agent, and instruction rules.
+        listRules: ({ workspace }) => ({ dir: `${workspace}/.agents/rules`, rules: fakeRuleList(workspace) }),
+        saveRule: ({ workspace, previousName, rule }) => {
+          const r = rule!;
+          if (!/^[a-z0-9]+([-_][a-z0-9]+)*$/.test(r.name)) return { problems: [`name "${r.name}": lowercase letters, digits and single hyphens, up to 64`] };
+          if (!r.text.trim()) return { problems: ["the rule is empty: say what to check"] };
+          const i = fakeRules.findIndex((x) => x.name === previousName);
+          const next = { name: r.name, when: r.when, action: r.action, order: r.order, agents: r.agents, description: r.description, paths: r.paths, text: r.text };
+          if (i >= 0) fakeRules[i] = next;
+          else fakeRules.push(next);
+          return { rule: fakeRuleList(workspace).find((x) => x.name === r.name) };
+        },
+        deleteRule: ({ name }) => {
+          const i = fakeRules.findIndex((x) => x.name === name);
+          if (i < 0) throw new ConnectError(`no rule ${name}`, Code.NotFound);
+          fakeRules.splice(i, 1);
+          return {};
+        },
+        reorderRules: ({ names }) => {
+          names.forEach((n, i) => {
+            const r = fakeRules.find((x) => x.name === n);
+            if (r) r.order = (i + 1) * 10;
+          });
+          return {};
+        },
+        tryRule: async ({ sample }) => (await new Promise((r) => setTimeout(r, 700)), /test/i.test(sample) ? { pass: true, reason: "It names the tests it ran." } : { pass: false, reason: "It doesn't say how the change was tested." }),
         // Studio › Skills: the workspace's own skills, their files, copies.
         getSkillFile: ({ workspace, name }) => {
           const x = fakeProjectSkills.find((k) => k.name === name);
