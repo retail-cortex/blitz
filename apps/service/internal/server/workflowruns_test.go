@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
+	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/config/configtest"
 	pb "github.com/retail-cortex/blitz/proto/blitz/v1"
 	"github.com/stretchr/testify/assert"
@@ -141,4 +142,47 @@ func TestWorkflowRunsOverTheAPI(t *testing.T) {
 			w.Close()
 		})
 	}
+}
+
+// A background run's agent step that asks for approval: its receipt names
+// the background run and counts the request, which a watcher of that run
+// sees and answers, and the run goes on.
+func TestWorkflowRunApproval(t *testing.T) {
+	watchTasksEvery, watchRunEvery = 20*time.Millisecond, 20*time.Millisecond
+	t.Cleanup(func() { watchTasksEvery, watchRunEvery = time.Second, 300*time.Millisecond })
+	create := call("create_file", map[string]any{"path": "made.txt", "content": "hi\n"})
+	c, _ := serve(t, func(cfg *config.Config) { cfg.Blitz.AutoApprove = false }, create, text("made it"))
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	dir, _ := filepath.EvalSymlinks(t.TempDir())
+	writeFlowFile(t, dir, "make", "nodes:\n  - {id: a, type: agent, instructions: Make the file.}\n")
+
+	started, err := c.sessions.StartBackground(ctx, connect.NewRequest(&pb.StartBackgroundRequest{Workspace: dir, Turn: &pb.Turn{Text: "/make", Command: true}}))
+	require.NoError(t, err)
+	runs, err := c.workspaces.WatchWorkflowRuns(ctx, connect.NewRequest(&pb.WatchWorkflowRunsRequest{Workspace: dir}))
+	require.NoError(t, err)
+	defer runs.Close()
+	var run *pb.WorkflowRun
+	for run == nil || run.Approvals == 0 {
+		require.True(t, runs.Receive(), "%v", runs.Err())
+		if len(runs.Msg().Runs) > 0 {
+			run = runs.Msg().Runs[0]
+		}
+	}
+	assert.Equal(t, started.Msg.Run.Id, run.BackgroundId)
+
+	var request string
+	for _, ev := range watchAll(t, c, run.BackgroundId, false) {
+		if ar := ev.GetApprovalRequest(); ar != nil {
+			request = ar.RequestId
+		}
+	}
+	require.NotEmpty(t, request, "the waiting request isn't shown")
+	_, err = c.sessions.Approve(ctx, connect.NewRequest(&pb.ApproveRequest{Workspace: dir, RequestId: request, Decision: pb.Decision_DECISION_ONCE}))
+	require.NoError(t, err)
+	for run.Status == "running" {
+		require.True(t, runs.Receive(), "%v", runs.Err())
+		run = runs.Msg().Runs[0]
+	}
+	assert.Equal(t, "done", run.Status)
 }
