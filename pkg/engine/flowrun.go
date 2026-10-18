@@ -29,6 +29,7 @@ import (
 	"github.com/retail-cortex/blitz/pkg/engine/flows"
 	"github.com/retail-cortex/blitz/pkg/engine/gates"
 	"github.com/retail-cortex/blitz/pkg/engine/runtime"
+	"github.com/retail-cortex/blitz/pkg/engine/session"
 	"github.com/retail-cortex/blitz/pkg/engine/skills"
 	"github.com/retail-cortex/blitz/pkg/engine/tools"
 	"github.com/retail-cortex/blitz/pkg/i18n"
@@ -181,7 +182,8 @@ func (w *Workspace) agentStep(ctx context.Context, sessionID string, f flows.Flo
 	}
 	b.WriteString(skillNote(list))
 	label := fmt.Sprintf("/%s › %s", f.Name, cmp.Or(n.Title, n.ID))
-	res, err := w.run(ctx, sessionID, turn{Turn: api.Turn{Text: label, Prompt: b.String()}}, on, w.storage, opts...)
+	st := flowStorage(ctx, w)
+	res, err := w.run(ctx, sessionID, turn{Turn: api.Turn{Text: label, Prompt: b.String()}}, on, st, opts...)
 	if err != nil {
 		return "", err
 	}
@@ -207,7 +209,7 @@ func (w *Workspace) agentStep(ctx context.Context, sessionID string, f flows.Flo
 		case r.Action == gates.Block:
 			return "", errors.New(i18n.T("flow.rule_blocked", "rule", r.Name, "reason", v.Reason))
 		case r.Action == gates.Revise:
-			again, err := w.run(ctx, sessionID, turn{Turn: api.Turn{Text: label, Prompt: i18n.T("flow.rule_revise", "rule", r.Name, "reason", v.Reason)}}, on, w.storage, opts...)
+			again, err := w.run(ctx, sessionID, turn{Turn: api.Turn{Text: label, Prompt: i18n.T("flow.rule_revise", "rule", r.Name, "reason", v.Reason)}}, on, st, opts...)
 			if err != nil {
 				return "", err
 			}
@@ -341,4 +343,22 @@ func (w *Workspace) judgeCondition(ctx context.Context, condition, output string
 		return false, nil
 	}
 	return false, fmt.Errorf("the condition %q couldn't be judged: %s", condition, textutil.Ellipsize(reply, 200))
+}
+
+// flowStorageKey carries the storage a workflow's chat is in (a
+// background run's, a worker's), when it isn't the workspace's.
+type flowStorageKey struct{}
+
+// withFlowStorage is ctx with st as the storage a workflow's chat is in.
+func withFlowStorage(ctx context.Context, st *session.Storage) context.Context {
+	return context.WithValue(ctx, flowStorageKey{}, st)
+}
+
+// flowStorage is the storage a workflow's chat is in: ctx's, else the
+// workspace's.
+func flowStorage(ctx context.Context, w *Workspace) *session.Storage {
+	if st, ok := ctx.Value(flowStorageKey{}).(*session.Storage); ok && st != nil {
+		return st
+	}
+	return w.storage
 }

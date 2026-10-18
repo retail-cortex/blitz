@@ -359,3 +359,25 @@ edges:
 	_, err = w.Run(context.Background(), s.ID, api.Turn{Text: "/notlist x", Command: true}, func(api.Event) {})
 	assert.ErrorContains(t, err, "not a list")
 }
+
+// A background run (Studio's Run) of /name runs the workflow, its agent
+// steps in the run's own chat (WF-10); other commands expand too.
+func TestRunDetachedFlow(t *testing.T) {
+	w, _ := openTestWith(t, configtest.RunTools, text("Drafted."))
+	writeFlow(t, w, "bg", "nodes: [{id: a, type: agent, instructions: Draft it.}]\n")
+	var session string
+	var steps []string
+	res, err := w.RunDetached(context.Background(), api.Turn{Text: "/bg topic", Command: true}, func(id string) { session = id }, func(e api.Event) {
+		if e.Step != nil {
+			steps = append(steps, e.Step.ID+":"+e.Step.Status)
+		}
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "Drafted.", res.Output)
+	assert.Equal(t, []string{"a:running", "a:done"}, steps)
+	data, err := os.ReadFile(filepath.Join(w.cfg.Session.StorageDir, session+".jsonl"))
+	require.NoError(t, err, "the run's own chat")
+	assert.Contains(t, string(data), "/bg › a")
+	_, err = w.RunDetached(context.Background(), api.Turn{Text: "/no-such-command", Command: true}, nil, func(api.Event) {})
+	assert.Error(t, err, "an unknown command isn't sent as a prompt")
+}

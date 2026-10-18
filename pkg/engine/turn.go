@@ -101,8 +101,19 @@ func (w *Workspace) RunDetached(ctx context.Context, t api.Turn, started func(se
 		started(rec.ID)
 	}
 	w.sessionStarted(rec.ID, "background")
+	var opts []runtime.ExecOption
+	if t.Command {
+		// A workflow (spec_workflows_043 WF-10) or a command runs as it
+		// would in a chat.
+		if f, input, ok := w.flowCommand(t.Text); ok {
+			return w.runFlow(withFlowStorage(ctx, st), rec.ID, f, input, on)
+		}
+		if opts, err = w.expandCommand(ctx, &t); err != nil {
+			return api.TurnResult{}, err
+		}
+	}
 	planEvery := w.tools.Hooks().Mode() == api.ModePlan || w.cfg.Blitz.PlanReview == config.PlanReviewAlways
-	res, err := w.run(ctx, rec.ID, turn{Turn: t, planMode: planEvery && !t.Plan && t.ReadOnly == ""}, on, st)
+	res, err := w.run(ctx, rec.ID, turn{Turn: t, planMode: planEvery && !t.Plan && t.ReadOnly == ""}, on, st, opts...)
 	observability.RecordTurn(ctx, w.engine.ActiveAgent(), turnOutcome(err))
 	return res, err
 }
