@@ -29,7 +29,7 @@ type Out = MessageInitShape<typeof RunTurnResponseSchema>;
 import { RunStatus, WorkerService, WorkerState } from "../gen/blitz/v1/worker_pb";
 import { ConfigService, KeySource, MCPServerConfigSchema, type MCPServerConfig } from "../gen/blitz/v1/config_pb";
 import { FileKind, FileService, GitAction, RevisionDiff } from "../gen/blitz/v1/file_pb";
-import { AgentFileSchema, AgentScope, ConflictChoice, GitOperation, PullOutcome, SuggestionKind, SuggestionSchema, WorkspaceService, type AgentDefinition } from "../gen/blitz/v1/workspace_pb";
+import { AgentFileSchema, AgentScope, EvalResultSchema, ConflictChoice, GitOperation, PullOutcome, SuggestionKind, SuggestionSchema, WorkspaceService, type AgentDefinition } from "../gen/blitz/v1/workspace_pb";
 
 // Whether the fake workspace is a git repository (?norepo: not yet).
 // The providers the fake has signed in to, and each one's sign-in.
@@ -594,6 +594,35 @@ const fakeRuleList = (workspace: string) =>
     ...[...fakeRules].sort((a, b) => (a.when === b.when ? a.order - b.order || a.name.localeCompare(b.name) : (a.when === "before_agent" ? 0 : a.when === "after_agent" ? 1 : 2) - (b.when === "before_agent" ? 0 : b.when === "after_agent" ? 1 : 2))).map((r) => ({ ...r, path: `${workspace}/.agents/rules/${r.name}.md`, problem: "", editable: true })),
     { name: "commits", when: "", action: "", order: 0, agents: [], description: "", paths: [], text: "Write commit messages in the imperative.", path: `${workspace}/.claude/rules/commits.md`, problem: "", editable: false },
   ];
+// Studio's evals: returns answers (one agent misses a case) and stock
+// lookups, never run.
+type FakeCase = { id: string; name: string; prompt: string; output: string; type: string; threshold: number; scope: string };
+type FakeEval = { name: string; description: string; agents: string[]; skills: string[]; near: string; allow: string[]; cases: FakeCase[] };
+const fakeEvals: FakeEval[] = [
+  {
+    name: "returns",
+    description: "Return policy answers",
+    agents: ["blitz", "qa"],
+    skills: [],
+    near: "judge",
+    allow: [],
+    cases: [
+      { id: "window", name: "Return window", prompt: "What's the return window for an online order?", output: "30 days from delivery, with the receipt.", type: "near", threshold: 0.8, scope: "fail" },
+      { id: "tone", name: "Friendly", prompt: "Can I return a jacket I wore once?", output: "Yes, within 30 days if it's unwashed, with the tags.", type: "near", threshold: 0.8, scope: "warn" },
+      { id: "code", name: "", prompt: "Reply with only the return code format.", output: "RET-0000", type: "exact", threshold: 0, scope: "info" },
+    ],
+  },
+  { name: "stock", description: "", agents: [], skills: [], near: "embedding", allow: ["mcp"], cases: [{ id: "stock", name: "Sizes", prompt: "Which sizes of the trail jacket are in stock?", output: "S, M and L.", type: "near", threshold: 0.75, scope: "fail" }] },
+];
+const fakeEvalRuns: Record<string, { id: string; eval: string; status: string; started: ReturnType<typeof timestampFromDate>; results: MessageInitShape<typeof EvalResultSchema>[]; costUsd: number; counts: Record<string, number> }[]> = {
+  returns: [{ id: "run-1", eval: "returns", status: "passed", started: timestampFromDate(new Date(Date.now() - 26 * 3600e3)), results: [], costUsd: 0.0072, counts: { pass: 5, warn: 1 } }],
+};
+const fakeEvalFile = (workspace: string, e: FakeEval) => {
+  const runs = fakeEvalRuns[e.name] ?? [];
+  const last = runs[runs.length - 1];
+  return { ...e, path: `${workspace}/.agents/evals/${e.name}.md`, problem: "", lastRun: last && { ...last, results: [] } };
+};
+
 // Studio's guardrails: prompt injection with its defaults, secrets tuned,
 // limits switched off, and one of the workspace's own.
 type FakeGuard = { name: string; builtin: string; stage: string; action: string; agents: string[]; tools: string[]; description: string; pii: boolean; judge: boolean; off: boolean; limits?: { maxCostUsd: number; maxTurns: number; maxFilesChanged: number; allowedDomains: string[]; commands: string[] }; text: string };
@@ -915,6 +944,49 @@ export function installFake() {
         removeEnv: () => ({}),
         listSkills: ({ workspace, query }) => ({ skills: [...fakeOtherSkills, ...fakeProjectSkills.map((x) => fakeSkillInfo(workspace, x))].filter((x) => !query || x.name.includes(query)) }),
         getSkill: ({ name }) => ({ skill: { name, description: "Read and summarize PDF files", tools: [{ name: "read_file" }] } }),
+        // Studio › Evals: two evals, their runs, and a run streamed case by case.
+        listEvals: ({ workspace }) => ({ dir: `${workspace}/.agents/evals`, evals: fakeEvals.map((e) => fakeEvalFile(workspace, e)) }),
+        saveEval: ({ workspace, previousName, eval: spec }) => {
+          const e = spec!;
+          if (!/^[a-z0-9]+([-_][a-z0-9]+)*$/.test(e.name)) return { problems: [`name "${e.name}": lowercase letters, digits and single hyphens, up to 64`] };
+          const blank = e.cases.find((c) => !c.prompt.trim());
+          if (blank) return { problems: [`case ${blank.id}: it needs a prompt`] };
+          const next: FakeEval = { name: e.name, description: e.description, agents: e.agents, skills: e.skills, near: e.near || "judge", allow: e.allow, cases: e.cases.map((c) => ({ ...c, threshold: c.type === "near" ? c.threshold || 0.8 : 0 })) };
+          const i = fakeEvals.findIndex((x) => x.name === (previousName || e.name));
+          if (i >= 0) fakeEvals[i] = next;
+          else fakeEvals.push(next);
+          return { eval: fakeEvalFile(workspace, next) };
+        },
+        deleteEval: ({ name }) => {
+          const i = fakeEvals.findIndex((x) => x.name === name);
+          if (i < 0) throw new ConnectError(`no eval ${name}`, Code.NotFound);
+          fakeEvals.splice(i, 1);
+          return {};
+        },
+        listEvalRuns: ({ name }) => ({ runs: (fakeEvalRuns[name] ?? []).slice().reverse() }),
+        runEval: async function* ({ name }, ctx) {
+          const e = fakeEvals.find((x) => x.name === name);
+          if (!e) throw new ConnectError(`no eval ${name}`, Code.NotFound);
+          const started = timestampFromDate(new Date());
+          yield { event: { case: "started" as const, value: { id: `run-${Date.now()}`, eval: name, status: "running", started } } };
+          const results = [];
+          for (const c of e.cases) {
+            for (const agent of e.agents.length ? e.agents : ["blitz"]) {
+              await new Promise((r) => setTimeout(r, 700));
+              if (ctx.signal.aborted) return;
+              const miss = c.id === "tone" && agent === "qa";
+              const score = c.type === "exact" ? (miss ? 0 : 1) : miss ? 0.55 : 0.9;
+              const status = score >= (c.threshold || 1) ? "pass" : c.scope;
+              const r = { case: c.id, name: c.name, agent, type: c.type, scope: c.scope, status, score, threshold: c.threshold, prompt: c.prompt, expected: c.output, output: miss ? "Returns? Sure, whenever you like!" : c.output, reason: c.type === "near" ? (miss ? "It doesn't give the 30 days." : "Same window and the receipt.") : "", refusals: c.id === "stock" ? ["create_file: notes.md"] : [], costUsd: 0.0012 };
+              results.push(r);
+              yield { event: { case: "result" as const, value: r } };
+            }
+          }
+          const failed = results.some((r) => r.status === "fail" || r.status === "error");
+          const run = { id: `run-${Date.now()}`, eval: name, status: failed ? "failed" : "passed", started, results, costUsd: results.length * 0.0012, counts: results.reduce((m: Record<string, number>, r) => ({ ...m, [r.status]: (m[r.status] ?? 0) + 1 }), {}) };
+          (fakeEvalRuns[name] ??= []).push(run);
+          yield { event: { case: "finished" as const, value: run } };
+        },
         // Studio › Guardrails: the built-ins on or off, and the workspace's own.
         listGuardrails: ({ workspace }) => ({
           dir: `${workspace}/.agents/guardrails`,

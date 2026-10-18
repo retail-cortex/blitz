@@ -140,7 +140,7 @@ func evalSummary(run api.EvalRun) string {
 	var parts []string
 	for _, s := range []string{api.EvalPass, api.EvalFail, api.EvalWarn, api.EvalInfo, api.EvalError} {
 		if n := counts[s]; n > 0 {
-			parts = append(parts, i18n.T("eval.count."+s, "n", n))
+			parts = append(parts, i18n.N("eval.count."+s, n))
 		}
 	}
 	return strings.Join(parts, ", ")

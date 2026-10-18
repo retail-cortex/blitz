@@ -914,6 +914,12 @@ code.file-link:hover { text-decoration-color: currentColor; }
 .rog-grid .on { color: var(--md-on-surface); }
 @container settings-pane (max-width: 560px) { .rog-grid { grid-template-columns: 1fr; } .rog-row > span:first-child { margin-top: 6px; } .rog-head { display: none; } }
 .rule-form-intro { margin: -4px 0 4px; }
+/* Studio › Evals: a case's editor and a result's texts open under their row. */
+.eval-case-form, .eval-result-detail { margin: 2px 0 8px 36px; }
+.eval-case-form .pair, .eval-result-detail .pair { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px 16px; }
+.eval-threshold { width: 112px; }
+.eval-progress { width: 100%; height: 6px; accent-color: var(--md-primary); }
+.eval-text { margin: 0; padding: 8px 10px; max-height: 240px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; border-radius: var(--md-shape-sm, 8px); background: var(--md-code-bg); font: 12px/1.5 var(--md-mono); }
 /* A list row's main part: one button that opens it, beside the row's own buttons. */
 .row-open { display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0; padding: 0; border: none; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
 .row-open:disabled { cursor: default; }

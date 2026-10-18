@@ -26,6 +26,7 @@ import { t } from "../i18n";
 import { SecretsEditor } from "../SecretsEditor";
 import { Icon, IconButton, useSnackbar } from "../ui/controls";
 import { Drawer } from "../ui/Drawer";
+import { EvalsPane } from "./EvalsPane";
 import { GuardrailsPane } from "./GuardrailsPane";
 import { RulesPane } from "./RulesPane";
 import { SkillsPane } from "./SkillsPane";
@@ -61,7 +62,6 @@ export const studioIcons: Record<StudioKind, string> = {
 /** Where each kind's files are, in the workspace (secrets are in the keychain). */
 const folders: Partial<Record<StudioKind, string>> = {
   workflows: ".agents/workflows/<name>.flow.yaml",
-  evals: ".agents/evals/<name>.md",
 };
 
 /**
@@ -117,6 +117,7 @@ export function StudioDrawer({ dir, initial, onClose, onWorkers }: { dir: string
           {kind === "workers" && <WorkersPane dir={dir} intent={initial.kind === "workers" ? initial.intent : undefined} onLeave={onClose} onDirty={setDirty} />}
           {kind === "secrets" && <SecretsEditor workspace={dir} />}
           {kind === "guardrails" && <GuardrailsPane workspace={dir} onDirty={setDirty} onRules={() => choose("rules")} />}
+          {kind === "evals" && <EvalsPane workspace={dir} onDirty={setDirty} />}
           {folders[kind] && <Coming kind={kind} />}
         </div>
       </div>
