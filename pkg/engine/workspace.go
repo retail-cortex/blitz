@@ -147,11 +147,15 @@ type Workspace struct {
 	workerStore *workers.Store
 	runLog      *workers.RunLog
 	evalRuns    *evals.RunLog
-	runsMu      sync.Mutex
-	running     map[string]bool // workers running now, by name
-	newModel    func(ctx context.Context, cfg *config.Config, name string) (model.LLM, error)
-	warnedMu    sync.Mutex
-	warned      map[string]bool // messages warnOnce has shown
+	// flowStore keeps workflows' orchestration sessions (opened on first
+	// use); flowMu guards it.
+	flowStore *session.PersistentService
+	flowMu    sync.Mutex
+	runsMu    sync.Mutex
+	running   map[string]bool // workers running now, by name
+	newModel  func(ctx context.Context, cfg *config.Config, name string) (model.LLM, error)
+	warnedMu  sync.Mutex
+	warned    map[string]bool // messages warnOnce has shown
 	// sessionContext is session_start hook output waiting for each
 	// session's next prompt.
 	hookCtxMu      sync.Mutex

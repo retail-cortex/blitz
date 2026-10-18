@@ -19,6 +19,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"sync"
 	"testing"
 
 	"github.com/retail-cortex/blitz/pkg/api"
@@ -127,4 +128,46 @@ func TestRunFlowStops(t *testing.T) {
 	require.Empty(t, probs)
 	assert.Equal(t, "saved", f.Name)
 	require.NoError(t, w.DeleteWorkflow("saved"))
+}
+
+// Branches on ADK's engine (WF-11): two steps fed by none run side by
+// side and join into one; a step feeding two last steps ends the run with
+// both; the orchestration session is kept on disk.
+func TestRunFlowBranches(t *testing.T) {
+	w, _ := openTestWith(t, configtest.RunTools)
+	require.NoError(t, os.WriteFile(filepath.Join(w.Dir(), "a.md"), []byte("Alpha."), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(w.Dir(), "b.md"), []byte("Beta."), 0o644))
+	writeFlow(t, w, "fan", `nodes:
+  - {id: a, type: read_file, title: A, path: a.md}
+  - {id: b, type: read_file, title: B, path: b.md}
+  - {id: both, type: accumulate}
+  - {id: one, type: save_file, path: out/one.md}
+  - {id: two, type: save_file, path: out/two.md}
+edges:
+  - {from: a, to: both}
+  - {from: b, to: both}
+  - {from: both, to: one}
+  - {from: both, to: two}
+`)
+	s := newSession(t, w)
+	var mu sync.Mutex
+	done := map[string]bool{}
+	res, err := w.Run(context.Background(), s.ID, api.Turn{Text: "/fan", Command: true}, func(e api.Event) {
+		if e.Step != nil && e.Step.Status == api.StepDone {
+			mu.Lock()
+			done[e.Step.ID] = true
+			mu.Unlock()
+		}
+	})
+	require.NoError(t, err)
+	assert.Len(t, done, 5)
+	both := "## A\n\nAlpha.\n\n## B\n\nBeta."
+	assert.Equal(t, both+"\n\n"+both, res.Output, "both last steps")
+	for _, f := range []string{"one.md", "two.md"} {
+		data, err := os.ReadFile(filepath.Join(w.Dir(), "out", f))
+		require.NoError(t, err)
+		assert.Equal(t, both, string(data))
+	}
+	kept, _ := filepath.Glob(filepath.Join(w.cfg.Session.StorageDir, "flows", "*.events.jsonl"))
+	assert.NotEmpty(t, kept, "the orchestration session is on disk")
 }

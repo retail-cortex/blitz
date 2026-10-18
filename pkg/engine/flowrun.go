@@ -83,59 +83,6 @@ func (w *Workspace) flowCommand(text string) (flows.Flow, string, bool) {
 	return f, strings.TrimSpace(args), ok
 }
 
-// runFlow runs workflow f on input in sessionID: each step in order, its
-// input what the steps that feed it produced (the run's input for one fed
-// by none). It stops at the first step that fails. The result's output is
-// what the last steps (those that feed none) produced.
-func (w *Workspace) runFlow(ctx context.Context, sessionID string, f flows.Flow, input string, on func(api.Event)) (api.TurnResult, error) {
-	if f.Problem != "" {
-		return api.TurnResult{}, fmt.Errorf("the workflow %s can't run: %s", f.Name, f.Problem)
-	}
-	order, err := flows.Order(f)
-	if err != nil {
-		return api.TurnResult{}, err
-	}
-	res := api.TurnResult{Before: w.engine.Usage(sessionID)}
-	outputs := map[string]string{}
-	titles := map[string]string{}
-	for i, n := range order {
-		titles[n.ID] = cmp.Or(n.Title, n.ID)
-		step := api.FlowStep{Workflow: f.Name, ID: n.ID, Title: n.Title, Type: n.Type, Index: i + 1, Count: len(order), Status: api.StepRunning}
-		on(api.Event{Step: &step})
-		in := input
-		if from := flows.Inputs(f, n.ID); len(from) > 0 {
-			var parts []string
-			for _, id := range from {
-				if n.Type == flows.Accumulate || len(from) > 1 {
-					parts = append(parts, fmt.Sprintf("## %s\n\n%s", titles[id], outputs[id]))
-				} else {
-					parts = append(parts, outputs[id])
-				}
-			}
-			in = strings.Join(parts, "\n\n")
-		}
-		out, err := w.runStep(ctx, sessionID, f, n, in, on)
-		if err != nil {
-			step.Status, step.Error = api.StepFailed, err.Error()
-			on(api.Event{Step: &step})
-			res.After = w.engine.Usage(sessionID)
-			return res, fmt.Errorf("the workflow %s stopped at %s: %w", f.Name, titles[n.ID], err)
-		}
-		outputs[n.ID] = out
-		step.Status, step.Output = api.StepDone, textutil.Ellipsize(out, flowStepPreview)
-		on(api.Event{Step: &step})
-	}
-	var last []string
-	for _, n := range order {
-		if !slices.ContainsFunc(f.Edges, func(e flows.Edge) bool { return e.From == n.ID }) {
-			last = append(last, outputs[n.ID])
-		}
-	}
-	res.Output = strings.Join(last, "\n\n")
-	res.After = w.engine.Usage(sessionID)
-	return res, nil
-}
-
 // runStep runs one step on its input and returns what it produced.
 func (w *Workspace) runStep(ctx context.Context, sessionID string, f flows.Flow, n flows.Node, in string, on func(api.Event)) (string, error) {
 	switch n.Type {

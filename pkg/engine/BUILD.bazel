@@ -32,6 +32,7 @@ go_library(
         "export.go",
         "extensions.go",
         "files.go",
+        "flowgraph.go",
         "flowrun.go",
         "fork.go",
         "gitbranches.go",
@@ -114,8 +115,12 @@ go_library(
         "//pkg/textutil",
         "@com_github_google_uuid//:uuid",
         "@in_gopkg_yaml_v3//:yaml_v3",
+        "@org_golang_google_adk_v2//agent",
+        "@org_golang_google_adk_v2//agent/workflowagent",
         "@org_golang_google_adk_v2//model",
+        "@org_golang_google_adk_v2//runner",
         "@org_golang_google_adk_v2//session",
+        "@org_golang_google_adk_v2//workflow",
         "@org_golang_google_genai//:genai",
     ] + select({
         "@rules_go//go/platform:aix": [
