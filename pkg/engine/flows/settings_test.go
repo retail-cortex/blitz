@@ -60,6 +60,8 @@ func TestStepSettingsChecks(t *testing.T) {
 		{"field twice", Node{Type: Extract, Fields: []Field{{Name: "a"}, {Name: "a"}}}, `field "a" twice`},
 		{"bad field type", Node{Type: Extract, Fields: []Field{{Name: "a", Type: "date"}}}, `type "date"`},
 		{"gateway repeats", Node{Type: Exclusive, ForEach: "input"}, "a gateway doesn't repeat"},
+		{"a person repeats", Node{Type: Timer, Wait: "1h", ForEach: "input"}, "a person or a timer doesn't repeat"},
+		{"a timer retries", Node{Type: Timer, Wait: "1h", Retry: &Retry{Attempts: 2}}, "a person or a timer isn't tried again"},
 		{"bad for_each", Node{Type: Accumulate, ForEach: "1 +"}, "for_each"},
 		{"bad wait", Node{Type: Timer, Wait: "soon"}, "wait:"},
 		{"bad until", Node{Type: Timer, Until: "tomorrow"}, `until "tomorrow"`},

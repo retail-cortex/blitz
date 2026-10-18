@@ -35,7 +35,6 @@ import {
   mdiLoading,
   mdiPlay,
   mdiPlus,
-  mdiRefresh,
   mdiRobotOutline,
   mdiStop,
   mdiUndoVariant,
@@ -296,7 +295,6 @@ export function EvalsPane({ workspace, onDirty, forAgent, onHandled }: { workspa
         <div className="row side-head">
           <span className="t-title-sm spacer">{t("desktop.evals.title")}</span>
           <IconButton icon={mdiPlus} label={t("desktop.evals.new")} small onClick={() => showForm("", { ...emptyEvalForm, cases: [newCase([])] })} />
-          <IconButton icon={mdiRefresh} label={t("desktop.refresh")} small onClick={() => void refresh()} />
         </div>
         <p className="t-body-sm muted agent-dir">{t("desktop.workers.in", { path: ".agents/evals" })}</p>
         <p className="t-body-sm muted">{t("desktop.evals.intro")}</p>

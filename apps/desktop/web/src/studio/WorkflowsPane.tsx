@@ -44,7 +44,6 @@ import {
   mdiLoading,
   mdiPlay,
   mdiPlus,
-  mdiRefresh,
   mdiRobotOutline,
   mdiSitemapOutline,
   mdiStop,
@@ -66,8 +65,8 @@ import { Decision, type ApprovalRequest } from "../gen/blitz/v1/turn_pb";
 import type { HumanTask, SkillInfo, WorkflowFile } from "../gen/blitz/v1/workspace_pb";
 import { t, tn } from "../i18n";
 import { SuggestInput, SuggestTextarea } from "../SecretSuggest";
-import { Button, Chip, Dialog, Field, Icon, IconButton, Segmented, useSnackbar } from "../ui/controls";
-import { addLink, agentTypes, comingSoon, emptyWorkflowForm, formFromWorkflow, fromTemplate, gatewayTypes, linkId, linkText, newStep, removeStep, sameWorkflowForm, setLink, specFromForm, methods, stepGroups, stepNeeds, templates, type AuthForm, type FieldForm, type PairForm, type LinkKind, type StepForm, type StepType, type Template, type WorkflowForm } from "./workflowForm";
+import { Button, Chip, Dialog, Field, Icon, IconButton, Menu, Segmented, useSnackbar, type MenuEntry } from "../ui/controls";
+import { addLink, agentTypes, comingSoon, emptyWorkflowForm, formFromWorkflow, fromTemplate, gatewayTypes, linkId, pauseTypes, linkText, newStep, removeStep, sameWorkflowForm, setLink, specFromForm, methods, stepGroups, stepNeeds, templates, type AuthForm, type FieldForm, type PairForm, type LinkKind, type StepForm, type StepType, type Template, type WorkflowForm } from "./workflowForm";
 
 /** Each step type's icon. */
 const typeIcons: Record<StepType, string> = {
@@ -225,9 +224,21 @@ export function WorkflowsPane({ workspace, onDirty }: { workspace: string; onDir
   };
   const step = form.steps.find((s) => s.id === selected);
   const setStep = (id: string, patch: Partial<StepForm>) => setForm((f) => ({ ...f, steps: f.steps.map((s) => (s.id === id ? { ...s, ...patch } : s)) }));
+  const flowRef = useRef<ReactFlowInstance<Node<StepData>, Edge> | null>(null);
+  const canvasRef = useRef<HTMLDivElement>(null);
   const add = (type: StepType) => {
+    // Where it's seen: the middle of the canvas as it's shown (moved on
+    // while a step is there already), else right of the last step.
     const right = form.steps.reduce((m, s) => Math.max(m, s.x), -280);
-    const s = newStep(type, form.steps, right + 280, 80);
+    let at = { x: right + 280, y: 80 };
+    const box = canvasRef.current?.getBoundingClientRect();
+    if (flowRef.current && box) {
+      const mid = flowRef.current.screenToFlowPosition({ x: box.left + box.width / 2, y: box.top + box.height / 2 });
+      at = { x: Math.round(mid.x - 90), y: Math.round(mid.y - 24) };
+      // Clear of the steps there (a step is about 180 by 50): below them.
+      for (let i = 0; i < 40 && form.steps.some((o) => Math.abs(o.x - at.x) < 200 && Math.abs(o.y - at.y) < 70); i++) at = { x: at.x, y: at.y + 70 };
+    }
+    const s = newStep(type, form.steps, at.x, at.y);
     if (type === "human_task") s.formJson = JSON.stringify(starterForm(), null, 2);
     setForm((f) => ({ ...f, steps: [...f.steps, s] }));
     setSelected(s.id);
@@ -389,7 +400,6 @@ export function WorkflowsPane({ workspace, onDirty }: { workspace: string; onDir
         <div className="row side-head">
           <span className="t-title-sm spacer">{t("desktop.flows.title")}</span>
           <IconButton icon={mdiPlus} label={t("desktop.flows.new")} small onClick={() => setChoosing(true)} />
-          <IconButton icon={mdiRefresh} label={t("desktop.refresh")} small onClick={() => void refresh()} />
         </div>
         <p className="t-body-sm muted agent-dir">{t("desktop.workers.in", { path: ".agents/workflows" })}</p>
         <p className="t-body-sm muted">{t("desktop.flows.intro")}</p>
@@ -454,20 +464,22 @@ export function WorkflowsPane({ workspace, onDirty }: { workspace: string; onDir
             </div>
             <div className="flow-body">
               <div className="flow-main">
-              <div className="flow-palette" role="toolbar" aria-label={t("desktop.flows.palette")}>
-                {stepGroups.map(({ group, types }) => (
-                  <div key={group} className="flow-palette-group" role="group" aria-label={t(`desktop.flows.group.${group}`)}>
-                    <small className="muted flow-palette-label">{t(`desktop.flows.group.${group}`)}</small>
-                    {types.map((type) => (
-                      <button key={type} type="button" className="flow-palette-item" title={t(`desktop.flows.type_hint.${type}`)} disabled={comingSoon.includes(type)} onClick={() => add(type)}>
-                        <Icon path={typeIcons[type]} size="sm" />
-                        <span className="ellipsis">{t(`desktop.flows.type.${type}`)}</span>
-                      </button>
-                    ))}
-                  </div>
-                ))}
+              <div className="row flow-toolbar" role="toolbar" aria-label={t("desktop.flows.palette")}>
+                {/* Every step type, by group, in one menu: the canvas keeps the room. */}
+                <Menu
+                  className="flow-add-menu"
+                  trigger={(p) => (
+                    <Button variant="tonal" icon={mdiPlus} {...p}>
+                      {t("desktop.flows.add_step")}
+                    </Button>
+                  )}
+                  items={stepGroups.flatMap(({ group, types }): MenuEntry[] => [
+                    { heading: t(`desktop.flows.group.${group}`) },
+                    ...types.map((type) => ({ label: t(`desktop.flows.type.${type}`), detail: t(`desktop.flows.type_hint.${type}`), icon: typeIcons[type], disabled: comingSoon.includes(type), onSelect: () => add(type) })),
+                  ])}
+                />
               </div>
-              <div className="flow-canvas">
+              <div className="flow-canvas" ref={canvasRef}>
                 <ReactFlow
                   key={open}
                   nodes={nodes}
@@ -483,7 +495,10 @@ export function WorkflowsPane({ workspace, onDirty }: { workspace: string; onDir
                   colorMode={dark ? "dark" : "light"}
                   deleteKeyCode={["Backspace", "Delete"]}
                   // Fitted once the pane has slid in and has its width.
-                  onInit={(flow: ReactFlowInstance<Node<StepData>, Edge>) => setTimeout(() => void flow.fitView({ padding: 0.15, maxZoom: 1, minZoom: 0.7 }), 400)}
+                  onInit={(flow: ReactFlowInstance<Node<StepData>, Edge>) => {
+                    flowRef.current = flow;
+                    setTimeout(() => void flow.fitView({ padding: 0.12, maxZoom: 1, minZoom: 0.55 }), 400);
+                  }}
                   proOptions={{ hideAttribution: true }}
                 >
                   <Background gap={20} />
@@ -687,7 +702,7 @@ export function WorkflowsPane({ workspace, onDirty }: { workspace: string; onDir
                         </div>
                       </div>
                     )}
-                    {!gatewayTypes.includes(step.type) && (
+                    {!gatewayTypes.includes(step.type) && !pauseTypes.includes(step.type) && (
                       <div className="stack" style={{ gap: 6 }}>
                         <span className="t-label">{t("desktop.flows.repeat")}</span>
                         <span className="t-body-sm muted">{t("desktop.flows.repeat_hint")}</span>
@@ -697,7 +712,7 @@ export function WorkflowsPane({ workspace, onDirty }: { workspace: string; onDir
                         </div>
                       </div>
                     )}
-                    {!gatewayTypes.includes(step.type) && (
+                    {!gatewayTypes.includes(step.type) && !pauseTypes.includes(step.type) && (
                       <div className="stack" style={{ gap: 6 }}>
                         <span className="t-label">{t("desktop.flows.if_it_fails")}</span>
                         <span className="t-body-sm muted">{t("desktop.flows.if_it_fails_hint")}</span>

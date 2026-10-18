@@ -522,8 +522,10 @@ func checkSettings(n Node, i int) []string {
 		}
 	}
 	if n.ForEach != "" {
-		if IsGateway(n.Type) || Pauses(n.Type) {
+		if IsGateway(n.Type) {
 			probs = append(probs, where+": a gateway doesn't repeat")
+		} else if Pauses(n.Type) {
+			probs = append(probs, where+": a person or a timer doesn't repeat")
 		} else if err := CheckExpr(n.ForEach); err != nil {
 			probs = append(probs, fmt.Sprintf("%s: for_each: %v", where, err))
 		}
@@ -541,7 +543,9 @@ func checkSettings(n Node, i int) []string {
 	if n.Concurrency < 0 || n.Concurrency > 32 {
 		probs = append(probs, fmt.Sprintf("%s: concurrency %d: 1 to 32", where, n.Concurrency))
 	}
-	if n.Retry != nil {
+	if n.Retry != nil && Pauses(n.Type) {
+		probs = append(probs, where+": a person or a timer isn't tried again")
+	} else if n.Retry != nil {
 		if n.Retry.Attempts < 1 || n.Retry.Attempts > 10 {
 			probs = append(probs, fmt.Sprintf("%s: retry attempts %d: 1 to 10", where, n.Retry.Attempts))
 		}

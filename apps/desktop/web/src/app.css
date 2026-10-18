@@ -828,6 +828,11 @@ code.file-link:hover { text-decoration-color: currentColor; }
 
 /* The agent editor (the Agents view, Settings › Agents). */
 .agent-dir { margin: 0 4px 0 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Studio › Secrets: a title as the other kinds have, the form lined up under it. */
+.studio-secrets { display: flex; flex-direction: column; gap: 8px; }
+.studio-secrets-body { padding-inline: 12px 4px; }
+/* A list pane's intro and group headings line up with its title (12px in, as .side-head). */
+.slide-list > p.t-body-sm:not(.agent-dir), .slide-list > section > :is(.t-title-sm, .t-body-sm, p) { margin-inline: 12px 4px; }
 .agent-form .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 16px; }
 .agent-form .field .input, .agent-form .field .select { width: 100%; }
 .agent-form .field .input.slider-value { width: 76px; }
@@ -921,16 +926,13 @@ code.file-link:hover { text-decoration-color: currentColor; }
 .eval-progress { width: 100%; height: 6px; accent-color: var(--md-primary); }
 .eval-text { margin: 0; padding: 8px 10px; max-height: 240px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; border-radius: var(--md-shape-sm, 8px); background: var(--md-code-bg); font: 12px/1.5 var(--md-mono); }
 /* Studio › Workflows: the palette, the canvas and the selected step's settings side by side. */
-.flow-body { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 12px; min-height: 480px; height: calc(100% - 140px); }
+/* The canvas fills what the header and the footer leave; the settings beside it scroll on their own. */
+.flow-body { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 12px; min-height: 420px; height: calc(100% - 132px); }
+.flow-toolbar { gap: 12px; min-width: 0; }
+.flow-add-menu { max-height: min(56vh, 480px); overflow-y: auto; min-width: 300px; }
 .flow-main { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
-.flow-palette { display: flex; flex-wrap: wrap; gap: 4px 14px; }
-.flow-palette-group { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
-.flow-palette-label { margin-right: 2px; text-transform: uppercase; letter-spacing: 0.04em; font-size: 10px; }
-.flow-palette-item { display: flex; align-items: center; gap: 6px; padding: 4px 10px; border: 1px solid var(--md-outline-variant); border-radius: 999px; background: none; color: inherit; font: inherit; font-size: 13px; cursor: pointer; }
-.flow-palette-item:hover:not(:disabled) { background: var(--md-surface-container-high, var(--md-surface-container)); }
-.flow-palette-item:disabled { opacity: 0.55; cursor: default; }
-.flow-canvas { position: relative; flex: 1; min-height: 420px; border: 1px solid var(--md-outline-variant); border-radius: var(--md-shape-md); overflow: hidden; }
-.flow-side { gap: 10px; min-width: 0; overflow: auto; }
+.flow-canvas { position: relative; flex: 1; min-height: 300px; border: 1px solid var(--md-outline-variant); border-radius: var(--md-shape-md); overflow: hidden; }
+.flow-side { gap: 10px; min-width: 0; min-height: 0; overflow: auto; padding-right: 4px; }
 .flow-node { display: flex; align-items: center; gap: 8px; width: 180px; padding: 8px 10px; border: 1px solid var(--md-outline-variant); border-radius: var(--md-shape-md); background: var(--md-surface-container-low); color: var(--md-on-surface); font-size: 13px; line-height: 1.3; }
 .flow-node .lines { display: flex; flex-direction: column; min-width: 0; }
 .flow-node .lines small { color: var(--md-on-surface-variant); }

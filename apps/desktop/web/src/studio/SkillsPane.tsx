@@ -29,7 +29,6 @@ import {
   mdiLinkVariant,
   mdiPlus,
   mdiPuzzleOutline,
-  mdiRefresh,
   mdiShieldAlertOutline,
   mdiSitemapOutline,
   mdiUndoVariant,
@@ -203,10 +202,9 @@ export function SkillsPane({ workspace, onDirty }: { workspace: string; onDirty?
     <div className={`slide-pane skills-pane ${open ? "is-open" : ""}`}>
       <aside className="slide-list" inert={open !== null}>
         <div className="row side-head">
-          <span className="t-title-sm spacer">{t("desktop.skills.project_title")}</span>
+          <span className="t-title-sm spacer">{t("desktop.studio.skills")}</span>
           <IconButton icon={mdiContentCopy} label={t("desktop.skills.add_from")} small onClick={() => setAdding(true)} />
           <IconButton icon={mdiPlus} label={t("desktop.skills.new")} small onClick={startNew} />
-          <IconButton icon={mdiRefresh} label={t("desktop.refresh")} small onClick={() => void refresh()} />
         </div>
         <p className="t-body-sm muted agent-dir">{t("desktop.workers.in", { path: ".agents/skills" })}</p>
         {error && (

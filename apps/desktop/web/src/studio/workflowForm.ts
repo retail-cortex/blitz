@@ -35,6 +35,8 @@ export const stepGroups: { group: string; types: StepType[] }[] = [
 ];
 /** The gateways: they route rather than work. */
 export const gatewayTypes: StepType[] = ["exclusive", "inclusive", "parallel"];
+/** The steps that pause a run (a person, a time): they don't repeat or retry (WF-16). */
+export const pauseTypes: StepType[] = ["human_task", "timer"];
 /** The types shown, not run yet. */
 export const comingSoon: StepType[] = ["email", "data"];
 /** The types an agent runs. */

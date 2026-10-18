@@ -85,7 +85,7 @@ Waiting tasks show under the run on the canvas and, from any workspace, as a but
 
 ## Building one
 
-In the desktop app, **Studio › Workflows** lists them; **+** starts one, blank or from a template (a research brief; draft and refine; a script's report). On the canvas, click a step type to add it, drag from a step's right edge to another's left edge to pass its output on, and select a step for its settings. **Run** asks for the input and runs it in the background: each step is marked as it goes, and anything that needs your approval is asked beside the canvas.
+In the desktop app, **Studio › Workflows** lists them; **+** starts one, blank or from a template (a research brief; draft and refine; a script's report). On the canvas, **Add a step** lists every step type by group; pick one to add it, drag from a step's right edge to another's left edge to pass its output on, and select a step for its settings. **Run** asks for the input and runs it in the background: each step is marked as it goes, and anything that needs your approval is asked beside the canvas.
 
 ## The file
 

@@ -28,7 +28,6 @@ import {
   mdiGaugeFull,
   mdiLoading,
   mdiPlus,
-  mdiRefresh,
   mdiShieldAlertOutline,
   mdiShieldCheckOutline,
   mdiTune,
@@ -188,7 +187,6 @@ export function GuardrailsPane({ workspace, onDirty, onRules }: { workspace: str
           actions={
             <>
               <IconButton icon={mdiPlus} label={t("desktop.guardrails.new")} small onClick={() => showForm({ name: "" }, emptyGuardrailForm)} />
-              <IconButton icon={mdiRefresh} label={t("desktop.refresh")} small onClick={() => void refresh()} />
             </>
           }
         />

@@ -80,8 +80,13 @@ export function StudioDrawer({ dir, initial, onClose, onWorkers }: { dir: string
     setDirty(false);
     setKind(k);
   };
-  // Reload agent files: the agents, skills, instructions and rules read again.
+  // Bumped to list the shown kind again (its pane starts over, unless it
+  // holds unsaved changes).
+  const [listed, setListed] = useState(0);
+  // Reload: the agent files read again (agents, skills, instructions,
+  // rules) and the shown kind listed again: the one refresh in Studio.
   const reload = async () => {
+    if (!dirty) setListed((n) => n + 1);
     try {
       const r = await workspaces.reloadAgentFiles({ workspace: dir });
       snack(reloadSummary(r));
@@ -108,7 +113,7 @@ export function StudioDrawer({ dir, initial, onClose, onWorkers }: { dir: string
             </button>
           ))}
         </div>
-        <div className="settings-pane">
+        <div className="settings-pane" key={listed}>
           {kind === "agents" && (
             <AgentEditor
               workspace={dir}
@@ -124,7 +129,16 @@ export function StudioDrawer({ dir, initial, onClose, onWorkers }: { dir: string
           {kind === "skills" && <SkillsPane workspace={dir} onDirty={setDirty} />}
           {kind === "rules" && <RulesPane workspace={dir} onDirty={setDirty} onGuardrails={() => choose("guardrails")} />}
           {kind === "workers" && <WorkersPane dir={dir} intent={initial.kind === "workers" ? initial.intent : undefined} onLeave={onClose} onDirty={setDirty} />}
-          {kind === "secrets" && <SecretsEditor workspace={dir} />}
+          {kind === "secrets" && (
+            <div className="studio-secrets">
+              <div className="row side-head">
+                <span className="t-title-sm spacer">{t("desktop.studio.secrets")}</span>
+              </div>
+              <div className="studio-secrets-body">
+                <SecretsEditor workspace={dir} />
+              </div>
+            </div>
+          )}
           {kind === "guardrails" && <GuardrailsPane workspace={dir} onDirty={setDirty} onRules={() => choose("rules")} />}
           {kind === "evals" && <EvalsPane workspace={dir} onDirty={setDirty} forAgent={evalsFor} onHandled={() => setEvalsFor("")} />}
           {kind === "workflows" && <WorkflowsPane workspace={dir} onDirty={setDirty} />}

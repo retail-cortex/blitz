@@ -150,9 +150,9 @@ export function WorkersPane({
     <div className={`slide-pane workers-pane ${open ? "is-open" : ""}`}>
       <aside className="slide-list" inert={open !== null}>
         <div className="row side-head">
-          <span className="t-title-sm spacer">{t(global ? "desktop.workers.global_title" : "desktop.workers.project_title")}</span>
+          <span className="t-title-sm spacer">{t(global ? "desktop.workers.global_title" : "desktop.studio.workers")}</span>
           <IconButton icon={mdiCalendarPlus} label={t("desktop.newworker.title")} small onClick={() => setOpen({ mode: "new", name: "" })} />
-          <IconButton icon={mdiRefresh} label={t("desktop.refresh")} small onClick={() => void refresh()} />
+          {global && <IconButton icon={mdiRefresh} label={t("desktop.refresh")} small onClick={() => void refresh()} />}
         </div>
         <p className="t-body-sm muted agent-dir">{t("desktop.workers.in", { path: folder })}</p>
         {error && (

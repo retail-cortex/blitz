@@ -277,13 +277,14 @@ export function AgentEditor({
       {listed && (
       <aside className={`split-side ${slide ? "slide-list" : ""}`} inert={slide && open !== null}>
         <div className="row side-head">
-          <span className="t-title-sm spacer">{t(scope === AgentScope.USER ? "desktop.agents.user_title" : "desktop.agents.workspace_title")}</span>
+          <span className="t-title-sm spacer">{t(slide ? "desktop.studio.agents" : scope === AgentScope.USER ? "desktop.agents.user_title" : "desktop.agents.workspace_title")}</span>
           <IconButton icon={mdiPlus} label={t("desktop.agents.new")} small onClick={startNew} />
-          <IconButton icon={mdiRefresh} label={t("desktop.refresh")} small onClick={() => void refresh()} />
+          {!slide && <IconButton icon={mdiRefresh} label={t("desktop.refresh")} small onClick={() => void refresh()} />}
         </div>
         {dir && (
           <p className="t-body-sm muted agent-dir" title={dir}>
-            {t("desktop.agents.in", { path: dir })}
+            {/* In Studio, as its other kinds say it: the folder in the workspace. */}
+            {t("desktop.agents.in", { path: slide && workspace && dir.startsWith(workspace + "/") ? dir.slice(workspace.length + 1) : dir })}
           </p>
         )}
         {error && (

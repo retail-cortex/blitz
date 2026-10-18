@@ -31,7 +31,6 @@ import {
   mdiLoading,
   mdiPencilRuler,
   mdiPlus,
-  mdiRefresh,
   mdiScaleBalance,
   mdiUndoVariant,
 } from "@mdi/js";
@@ -214,8 +213,9 @@ export function RulesPane({ workspace, onDirty, onGuardrails }: { workspace: str
             </button>
             {r.editable && (
               <span className="trailing">
-                <IconButton icon={mdiArrowUp} label={t("desktop.rules.up", { name: r.name })} small className="hover-only" disabled={i === 0} onClick={() => void reorder(list, i, i - 1)} />
-                <IconButton icon={mdiArrowDown} label={t("desktop.rules.down", { name: r.name })} small className="hover-only" disabled={i === list.length - 1} onClick={() => void reorder(list, i, i + 1)} />
+                {/* Only the moves there are: none for the first's up or the last's down. */}
+                {i > 0 && <IconButton icon={mdiArrowUp} label={t("desktop.rules.up", { name: r.name })} small className="hover-only" onClick={() => void reorder(list, i, i - 1)} />}
+                {i < list.length - 1 && <IconButton icon={mdiArrowDown} label={t("desktop.rules.down", { name: r.name })} small className="hover-only" onClick={() => void reorder(list, i, i + 1)} />}
               </span>
             )}
           </div>
@@ -236,7 +236,6 @@ export function RulesPane({ workspace, onDirty, onGuardrails }: { workspace: str
           actions={
             <>
               <IconButton icon={mdiPlus} label={t("desktop.rules.new")} small onClick={() => startNew()} />
-              <IconButton icon={mdiRefresh} label={t("desktop.refresh")} small onClick={() => void refresh()} />
             </>
           }
         />

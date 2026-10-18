@@ -260,15 +260,15 @@ export function WorkerEditor({
         </label>
         <div className="field">
           <label className="t-label" htmlFor="worker-prompt">
-            {t("desktop.newworker.prompt")}
+            {t(f.workflow ? "desktop.newworker.input" : "desktop.newworker.prompt")}
           </label>
           {rewriting && <div className="progress" role="progressbar" aria-label={t("desktop.worker.rewriting")} />}
           <textarea
             id="worker-prompt"
             className="input new-worker-prompt"
             value={f.prompt}
-            placeholder={t("desktop.newworker.prompt_placeholder")}
-            rows={8}
+            placeholder={t(f.workflow ? "desktop.newworker.input_placeholder" : "desktop.newworker.prompt_placeholder")}
+            rows={f.workflow ? 3 : 8}
             onChange={(e) => set("prompt", e.target.value)}
           />
           <span>
