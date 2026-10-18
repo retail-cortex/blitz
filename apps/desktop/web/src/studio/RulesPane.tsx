@@ -188,10 +188,7 @@ export function RulesPane({ workspace, onDirty, onGuardrails }: { workspace: str
 
   const gateList = (key: "before" | "after", list: RuleFile[]) => (
     <section className="stack rule-section" style={{ gap: 4 }}>
-      <div className="row" style={{ gap: 8 }}>
-        <span className="t-title-sm spacer">{t(`desktop.rules.${key}`)}</span>
-        <IconButton icon={mdiPlus} label={t(`desktop.rules.new_${key}`)} small onClick={() => startNew(key === "before" ? "before_agent" : "after_agent")} />
-      </div>
+      <span className="t-title-sm">{t(`desktop.rules.${key}`)}</span>
       <span className="t-body-sm muted">{t(`desktop.rules.${key}_hint`)}</span>
       {list.length === 0 && <p className="t-body-sm muted">{t("desktop.rules.none_here")}</p>}
       <div className="list">
@@ -251,10 +248,7 @@ export function RulesPane({ workspace, onDirty, onGuardrails }: { workspace: str
         {gateList("before", sections.before)}
         {gateList("after", sections.after)}
         <section className="stack rule-section" style={{ gap: 4 }}>
-          <div className="row" style={{ gap: 8 }}>
-            <span className="t-title-sm spacer">{t("desktop.rules.instructions")}</span>
-            <IconButton icon={mdiPlus} label={t("desktop.rules.new_instruction")} small onClick={() => startNew("")} />
-          </div>
+          <span className="t-title-sm">{t("desktop.rules.instructions")}</span>
           <span className="t-body-sm muted">{t("desktop.rules.instructions_hint")}</span>
           <div className="list">
             {sections.instructions.map((r) => (
@@ -301,7 +295,11 @@ export function RulesPane({ workspace, onDirty, onGuardrails }: { workspace: str
                     { value: "after_agent", label: t("desktop.rules.after") },
                     { value: "instruction", label: t("desktop.rules.instruction") },
                   ]}
-                  onChange={(v) => set("when", v === "instruction" ? "" : (v as RuleWhen))}
+                  onChange={(v) => {
+                    const when = v === "instruction" ? "" : (v as RuleWhen);
+                    // A new gate goes last in the list it joins.
+                    setForm((f) => ({ ...f, when, order: open?.name === "" && when ? nextOrder(when === "after_agent" ? sections.after : sections.before) : f.order }));
+                  }}
                 />
                 <span className="t-body-sm muted">{t(gate ? `desktop.rules.${form.when === "before_agent" ? "before" : "after"}_hint` : "desktop.rules.instructions_hint")}</span>
               </div>

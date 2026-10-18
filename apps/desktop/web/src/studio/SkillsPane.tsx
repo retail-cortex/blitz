@@ -207,17 +207,7 @@ export function SkillsPane({ workspace, onDirty }: { workspace: string; onDirty?
           </div>
         )}
         {own.length === 0 && !error && (
-          <div className="stack" style={{ gap: 12 }}>
-            <p className="muted t-body-sm">{t("desktop.skills.none")}</p>
-            <span className="row" style={{ gap: 8 }}>
-              <Button variant="tonal" icon={mdiPlus} onClick={startNew}>
-                {t("desktop.skills.new")}
-              </Button>
-              <Button icon={mdiContentCopy} onClick={() => setAdding(true)}>
-                {t("desktop.skills.add_from")}
-              </Button>
-            </span>
-          </div>
+          <p className="muted t-body-sm">{t("desktop.skills.none")}</p>
         )}
         <div className="list">
           {own.map((s) => {
