@@ -16,6 +16,8 @@ package engine
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/retail-cortex/blitz/pkg/a2ui"
@@ -101,4 +103,48 @@ func TestCheckAnswer(t *testing.T) {
 		})
 	}
 	assert.Equal(t, "the answer isn't accepted: a: b; c", (&AnswerError{Problems: []a2ui.Problem{{Component: "a", Message: "b"}, {Message: "c"}}}).Error())
+}
+
+// A step whose failure an error link caught before the run paused is
+// replayed as caught when it resumes: the run goes the way it went
+// (WF-12, WF-16). A script step naming a skill that isn't there fails.
+func TestFlowResumeReplaysACaughtStep(t *testing.T) {
+	w, _ := openTestWith(t, configtest.RunTools)
+	writeFlow(t, w, "caught", `nodes:
+  - {id: miss, type: read_file, path: nope.md}
+  - id: ask
+    type: human_task
+    `+approveForm+`
+  - {id: save, type: save_file, path: out/note.md}
+edges:
+  - {from: miss, to: ask, error: true}
+  - {from: ask, to: save}
+`)
+	s := newSession(t, w)
+	status := map[string]string{}
+	_, err := w.Run(context.Background(), s.ID, api.Turn{Text: "/caught", Command: true}, func(e api.Event) {
+		if e.Step != nil {
+			status[e.Step.ID] = e.Step.Status
+		}
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "waiting", status["ask"])
+	tasks := w.FlowTasks()
+	require.Len(t, tasks, 1)
+	resumed := map[string]string{}
+	_, err = w.ResumeFlow(context.Background(), tasks[0].Tasks[0].ID, map[string]any{"note": "ok"}, func(e api.Event) {
+		if e.Step != nil {
+			resumed[e.Step.ID] = e.Step.Status
+		}
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "done", resumed["save"])
+	assert.NotContains(t, resumed, "miss", "replayed, not run again")
+	data, err := os.ReadFile(filepath.Join(w.Dir(), "out", "note.md"))
+	require.NoError(t, err)
+	assert.Equal(t, "note: ok", string(data))
+
+	writeFlow(t, w, "script", "nodes:\n  - {id: run, type: script, skill: nope, script: go.py}\n")
+	_, err = w.Run(context.Background(), s.ID, api.Turn{Text: "/script", Command: true}, func(api.Event) {})
+	assert.Error(t, err)
 }

@@ -218,3 +218,38 @@ func TestValidationRegexp(t *testing.T) {
 	}}
 	assert.Equal(t, []Problem{{Component: "a", Message: "doesn't pass its check"}}, tabs.Problems(nil))
 }
+
+// The edges of values: literal bindings, the whole model, numbers of
+// every Go type, and a model that's nil.
+func TestValueEdges(t *testing.T) {
+	data := map[string]any{"a": 1.0}
+	assert.Equal(t, data, GetPath(data, "/"))
+	assert.Equal(t, data, GetPath(data, ""))
+	_, ok := pathOf("literal")
+	assert.False(t, ok)
+	assert.Equal(t, "5", formatString(map[string]any{"value": 5}), "no template: the value")
+	for _, v := range []any{3, int64(3), json.Number("3"), 3.0, "3"} {
+		n, ok := number(v)
+		assert.True(t, ok, "%T", v)
+		assert.Equal(t, 3.0, n)
+	}
+	_, ok = number(true)
+	assert.False(t, ok)
+	for _, c := range []struct {
+		v    any
+		want bool
+	}{{nil, false}, {false, false}, {"", false}, {0.0, false}, {0, false}, {1, true}, {[]any{}, true}} {
+		assert.Equal(t, c.want, truthy(c.v), "%v", c.v)
+	}
+	assert.Equal(t, map[string]any{}, clone(nil))
+	ch := make(chan int)
+	assert.Equal(t, ch, normal(ch), "what JSON can't hold is left as it is")
+
+	// An answer from a form with no data: the context's bound values put back.
+	f := Form{Components: []map[string]any{
+		{"id": "root", "component": "Button", "action": map[string]any{"event": map[string]any{"name": "go", "context": map[string]any{"n": map[string]any{"path": "/n"}, "fixed": 1}}}},
+	}}
+	got, probs := f.Answer(Action{Name: "go", SourceComponentID: "root", Context: map[string]any{"n": 2, "fixed": 1}}, nil)
+	assert.Empty(t, probs)
+	assert.Equal(t, map[string]any{"action": "go", "n": 2, "fixed": 1}, got)
+}
