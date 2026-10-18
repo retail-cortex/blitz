@@ -62,6 +62,8 @@ var sentinels = map[string]error{
 	"NOTHING_TO_COMPACT":       api.ErrNothingToCompact,
 	"WORKSPACE_BUSY":           api.ErrWorkspaceBusy,
 	"UNKNOWN_WORKER":           api.ErrUnknownWorker,
+	"EVAL_NOT_FOUND":           api.ErrUnknownEval,
+	"EVAL_NOT_RUNNABLE":        api.ErrEvalNotRunnable,
 	"WORKER_EXISTS":            api.ErrWorkerExists,
 	"SANDBOX_UNAVAILABLE":      api.ErrSandboxUnavailable,
 	"OUTPUT_LIMIT":             api.ErrOutputLimit,
@@ -302,4 +304,20 @@ func decisionMsg(d api.Decision) pb.Decision {
 		return pb.Decision_DECISION_ALWAYS
 	}
 	return pb.Decision_DECISION_DENY
+}
+
+// evalResultOf is an eval result from the service.
+func evalResultOf(m *pb.EvalResult) api.EvalResult {
+	return api.EvalResult{Case: m.GetCase(), Name: m.GetName(), Agent: m.GetAgent(), Type: m.GetType(), Scope: m.GetScope(), Status: m.GetStatus(), Score: m.GetScore(),
+		Threshold: m.GetThreshold(), Prompt: m.GetPrompt(), Expected: m.GetExpected(), Output: m.GetOutput(), Reason: m.GetReason(), Refusals: m.GetRefusals(),
+		CostUSD: m.GetCostUsd(), Duration: m.GetDuration().AsDuration()}
+}
+
+// evalRunOf is an eval run from the service, of the workspace dir.
+func evalRunOf(m *pb.EvalRun, dir string) api.EvalRun {
+	run := api.EvalRun{ID: m.GetId(), Workspace: dir, Eval: m.GetEval(), Started: timeOf(m.GetStarted()), Duration: m.GetDuration().AsDuration(), Status: m.GetStatus(), CostUSD: m.GetCostUsd(), Error: m.GetError()}
+	for _, x := range m.GetResults() {
+		run.Results = append(run.Results, evalResultOf(x))
+	}
+	return run
 }

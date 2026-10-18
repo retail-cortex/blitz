@@ -34,6 +34,7 @@ import (
 	"github.com/retail-cortex/blitz/pkg/engine/runtime"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/genai"
 )
 
 // gone attaches to a service and then stops it: every call after fails.
@@ -58,6 +59,39 @@ func gone(t *testing.T) (*Remote, *[]string) {
 	return r, warnings
 }
 
+// An eval runs through the service: the run as it starts, each result as
+// it's scored, then the run (spec_evals_042).
+func TestRemoteRunEval(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("MODENV_PREFIX", "")
+	s := servicetest.New(func(ctx context.Context, dir string) (*engine.Workspace, error) {
+		cfg := config.DefaultConfig()
+		cfg.Tools.WorkspaceDir = dir
+		cfg.Session.StorageDir = t.TempDir()
+		return engine.Open(ctx, cfg, engine.Options{Model: runtime.NewMockLLM("gemini-3.8-flash", genai.NewContentFromText("4", genai.RoleModel))})
+	})
+	srv := httptest.NewServer(s.Handler())
+	t.Cleanup(func() { srv.Close(); s.Close() })
+	dir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, ".agents", "evals"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, ".agents", "evals", "sums.md"), []byte("| ID | Prompt | Output | Type |\n|-|-|-|-|\n| a | 2+2? | 4 | exact |\n"), 0o644))
+	r, err := AttachHTTP(context.Background(), http.DefaultClient, srv.URL, dir, func(string) {})
+	require.NoError(t, err)
+	var started api.EvalRun
+	var results []api.EvalResult
+	run, err := r.RunEval(context.Background(), "sums", api.EvalOptions{OnStart: func(x api.EvalRun) { started = x }, OnResult: func(x api.EvalResult) { results = append(results, x) }})
+	require.NoError(t, err)
+	assert.Equal(t, api.EvalRunning, started.Status)
+	require.Len(t, results, 1)
+	assert.Equal(t, api.EvalPass, results[0].Status)
+	assert.Equal(t, api.EvalPassed, run.Status)
+	assert.Equal(t, dir, run.Workspace)
+	require.Len(t, run.Results, 1)
+	assert.Equal(t, "4", run.Results[0].Output)
+	_, err = r.RunEval(context.Background(), "gone", api.EvalOptions{})
+	assert.Error(t, err)
+}
+
 // With the service gone, the calls that return an error return one.
 func TestRemoteCallsFailWithoutTheService(t *testing.T) {
 	r, _ := gone(t)
@@ -68,6 +102,7 @@ func TestRemoteCallsFailWithoutTheService(t *testing.T) {
 			return err
 		},
 		"Steer":                func() error { return r.Steer(ctx, "s", "x") },
+		"RunEval":              func() error { _, err := r.RunEval(ctx, "x", api.EvalOptions{}); return err },
 		"OpenSession":          func() error { _, _, err := r.OpenSession("", false); return err },
 		"ListSessions":         func() error { _, err := r.ListSessions(true); return err },
 		"NewSession":           func() error { _, err := r.NewSession(); return err },

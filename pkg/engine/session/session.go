@@ -58,6 +58,7 @@ var ErrInvalidID = errors.New("invalid session id")
 const (
 	OriginWorker     = "worker"     // a worker's run, scheduled or not
 	OriginBackground = "background" // a detached run (blitz --bg)
+	OriginEval       = "eval"       // an eval's case (deleted once it's scored)
 )
 
 // SessionRecord holds persistent metadata and chat history for a session.

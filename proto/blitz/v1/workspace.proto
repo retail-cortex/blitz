@@ -216,20 +216,37 @@ service WorkspaceService {
   // before-agent rule, an answer for an after-agent one. A judge that
   // fails gives problem.
   rpc TryRule(TryRuleRequest) returns (TryRuleResponse);
-  // Returns the workspace's guardrails (spec_gates_041): each built-in one,
-  // on (with its file) or off, then the custom ones.
+  // Returns the workspace's guardrails (spec_gates_041): each built-in one
+  // (its file, or its defaults), then the custom ones.
   rpc ListGuardrails(ListGuardrailsRequest) returns (ListGuardrailsResponse);
   // Writes a guardrail in .agents/guardrails from Studio's form (a
-  // built-in's file switches it on), keeping its front matter's other
+  // built-in's file holds its settings, or switches it off), keeping its front matter's other
   // fields; problems, with nothing written, when it can't be saved.
   rpc SaveGuardrail(SaveGuardrailRequest) returns (SaveGuardrailResponse);
-  // Deletes a guardrail from .agents/guardrails (a built-in's: switched
-  // off; GUARDRAIL_NOT_FOUND).
+  // Deletes a guardrail from .agents/guardrails (a built-in's: back to its
+  // defaults; GUARDRAIL_NOT_FOUND).
   rpc DeleteGuardrail(DeleteGuardrailRequest) returns (DeleteGuardrailResponse);
   // Checks a sample against a guardrail as written (Try it): a custom one
   // by the judge, the injection and secrets ones by their patterns. A
   // judge that fails gives problem.
   rpc TryGuardrail(TryGuardrailRequest) returns (TryGuardrailResponse);
+  // Returns the workspace's evals (spec_evals_042), by name, each with its
+  // last run's status.
+  rpc ListEvals(ListEvalsRequest) returns (ListEvalsResponse);
+  // Writes an eval in .agents/evals from Studio's form, keeping its front
+  // matter's other fields and the text around its table; problems, with
+  // nothing written, when it can't be saved (EVAL_NOT_FOUND for an
+  // unknown previous_name).
+  rpc SaveEval(SaveEvalRequest) returns (SaveEvalResponse);
+  // Deletes an eval from .agents/evals (EVAL_NOT_FOUND).
+  rpc DeleteEval(DeleteEvalRequest) returns (DeleteEvalResponse);
+  // Runs an eval: its cases (or those named) on each of its agents,
+  // streaming each result as it's scored, then the finished run, which
+  // is recorded. An eval with a problem, or no case to run, is
+  // FAILED_PRECONDITION (EVAL_NOT_RUNNABLE).
+  rpc RunEval(RunEvalRequest) returns (stream RunEvalResponse);
+  // Returns an eval's recorded runs, newest first.
+  rpc ListEvalRuns(ListEvalRunsRequest) returns (ListEvalRunsResponse);
   // Returns skill scripts' environments (SCRIPTS_DISABLED).
   rpc ListEnvs(ListEnvsRequest) returns (ListEnvsResponse);
   // Removes one environment.
@@ -2452,4 +2469,150 @@ message TryGuardrailResponse {
   bool pass = 1;
   string reason = 2;
   string problem = 3;
+}
+
+// A row of an eval's table.
+message EvalCase {
+  string id = 1;
+  string name = 2;
+  string prompt = 3;
+  // The output expected.
+  string output = 4;
+  // exact or near.
+  string type = 5;
+  // A near case's threshold, above 0 and up to 1.
+  double threshold = 6;
+  // fail, warn or info.
+  string scope = 7;
+}
+
+// An eval file in .agents/evals.
+message EvalFile {
+  string name = 1;
+  string path = 2;
+  string description = 3;
+  repeated string agents = 4;
+  repeated string skills = 5;
+  // judge or embedding.
+  string near = 6;
+  // network or mcp.
+  repeated string allow = 7;
+  repeated EvalCase cases = 8;
+  string problem = 9;
+  // Its last run, if any (without its results).
+  EvalRun last_run = 10;
+}
+
+// What Studio's eval form edits.
+message EvalSpec {
+  string name = 1;
+  string description = 2;
+  repeated string agents = 3;
+  repeated string skills = 4;
+  string near = 5;
+  repeated string allow = 6;
+  repeated EvalCase cases = 7;
+}
+
+// One case run by one agent, and its score.
+message EvalResult {
+  string case = 1;
+  string name = 2;
+  string agent = 3;
+  string type = 4;
+  string scope = 5;
+  // pass; fail, warn or info (the case's scope) when it didn't pass; or
+  // error when it couldn't be run or scored.
+  string status = 6;
+  double score = 7;
+  double threshold = 8;
+  string prompt = 9;
+  string expected = 10;
+  string output = 11;
+  string reason = 12;
+  // Actions the eval didn't allow, as "tool: detail".
+  repeated string refusals = 13;
+  double cost_usd = 14;
+  google.protobuf.Duration duration = 15;
+}
+
+// A run of an eval.
+message EvalRun {
+  string id = 1;
+  string eval = 2;
+  google.protobuf.Timestamp started = 3;
+  google.protobuf.Duration duration = 4;
+  // running, passed, failed or stopped.
+  string status = 5;
+  repeated EvalResult results = 6;
+  double cost_usd = 7;
+  string error = 8;
+  // The results by status (pass, fail, warn, info, error).
+  map<string, int32> counts = 9;
+}
+
+// Request message for WorkspaceService.ListEvals.
+message ListEvalsRequest {
+  string workspace = 1;
+}
+
+// Response message for WorkspaceService.ListEvals.
+message ListEvalsResponse {
+  repeated EvalFile evals = 1;
+  // .agents/evals.
+  string dir = 2;
+}
+
+// Request message for WorkspaceService.SaveEval.
+message SaveEvalRequest {
+  string workspace = 1;
+  // The eval edited; empty for a new one.
+  string previous_name = 2;
+  EvalSpec eval = 3;
+}
+
+// Response message for WorkspaceService.SaveEval.
+message SaveEvalResponse {
+  EvalFile eval = 1;
+  repeated string problems = 2;
+}
+
+// Request message for WorkspaceService.DeleteEval.
+message DeleteEvalRequest {
+  string workspace = 1;
+  string name = 2;
+}
+
+// Response message for WorkspaceService.DeleteEval.
+message DeleteEvalResponse {}
+
+// Request message for WorkspaceService.RunEval.
+message RunEvalRequest {
+  string workspace = 1;
+  string name = 2;
+  // The case IDs to run; none: every case.
+  repeated string cases = 3;
+}
+
+// Response message for WorkspaceService.RunEval: the run as it starts,
+// each result, then the finished run.
+message RunEvalResponse {
+  oneof event {
+    EvalRun started = 1;
+    EvalResult result = 2;
+    EvalRun finished = 3;
+  }
+}
+
+// Request message for WorkspaceService.ListEvalRuns.
+message ListEvalRunsRequest {
+  string workspace = 1;
+  string name = 2;
+  // At most this many (0: 20).
+  int32 limit = 3;
+}
+
+// Response message for WorkspaceService.ListEvalRuns.
+message ListEvalRunsResponse {
+  repeated EvalRun runs = 1;
 }

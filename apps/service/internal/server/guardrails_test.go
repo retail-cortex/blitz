@@ -25,8 +25,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// Studio's guardrails over the API: the built-ins off, switched on with
-// their settings, a custom one, try samples, switch one off (spec_gates_041).
+// Studio's guardrails over the API: the built-ins on by default, one tuned
+// and switched off, a custom one, try samples, reset one (spec_gates_041).
 func TestGuardrailsOverTheAPI(t *testing.T) {
 	c, _ := serve(t, nil)
 	w := c.workspaces

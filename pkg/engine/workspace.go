@@ -34,6 +34,7 @@ import (
 	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/engine/agents"
 	"github.com/retail-cortex/blitz/pkg/engine/audit"
+	"github.com/retail-cortex/blitz/pkg/engine/evals"
 	"github.com/retail-cortex/blitz/pkg/engine/memory"
 	"github.com/retail-cortex/blitz/pkg/engine/runtime"
 	"github.com/retail-cortex/blitz/pkg/engine/session"
@@ -145,6 +146,7 @@ type Workspace struct {
 	// workerStore records which workers are enabled.
 	workerStore *workers.Store
 	runLog      *workers.RunLog
+	evalRuns    *evals.RunLog
 	runsMu      sync.Mutex
 	running     map[string]bool // workers running now, by name
 	newModel    func(ctx context.Context, cfg *config.Config, name string) (model.LLM, error)
@@ -195,6 +197,7 @@ func Open(ctx context.Context, cfg *config.Config, o Options) (*Workspace, error
 		w.newModel = runtime.NewModel
 	}
 	w.runLog = workers.OpenRunLog(config.ExpandHome("~/.blitz/worker-runs"))
+	w.evalRuns = evals.OpenRunLog(config.ExpandHome("~/.blitz/eval-runs"))
 	w.running = map[string]bool{}
 	if w.workerStore = o.Workers; w.workerStore == nil {
 		var err error

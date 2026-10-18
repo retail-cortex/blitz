@@ -50,7 +50,12 @@ func (w *Workspace) skillMentions(text string) []*skills.Skill {
 // them, and a meta skill's members to activate. The transcript keeps the
 // prompt as typed. "" when it names none.
 func (w *Workspace) skillMentionNote(text string) string {
-	list := w.skillMentions(text)
+	return skillNote(w.skillMentions(text))
+}
+
+// skillNote gives the agent each skill in list (its instructions, its
+// references and a meta skill's members), as \skill-name sends them.
+func skillNote(list []*skills.Skill) string {
 	if len(list) == 0 {
 		return ""
 	}
