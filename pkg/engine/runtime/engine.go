@@ -499,6 +499,15 @@ func (e *Engine) RecordSpeech(ctx context.Context, sessionID, model string, usag
 	e.saveUsage(ctx, sessionID)
 }
 
+// EstimateCostUSD is what a model call outside a session cost (an eval's
+// judge), by the configured prices; 0 for a model without one.
+func (e *Engine) EstimateCostUSD(model string, usage *genai.GenerateContentResponseUsageMetadata) float64 {
+	if usage == nil {
+		return 0
+	}
+	return e.usage.Estimate(settingsName(model), usage, 0).CostUSD
+}
+
 // saveUsage keeps sessionID's usage so far in the store.
 func (e *Engine) saveUsage(ctx context.Context, sessionID string) {
 	if e.usageStore == nil {

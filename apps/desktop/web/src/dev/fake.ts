@@ -990,13 +990,13 @@ export function installFake() {
               const miss = c.id === "tone" && agent === "reviewer";
               const score = c.type === "exact" ? (miss ? 0 : 1) : miss ? 0.55 : 0.9;
               const status = score >= (c.threshold || 1) ? "pass" : c.scope;
-              const r = { case: c.id, name: c.name, agent, type: c.type, scope: c.scope, status, score, threshold: c.threshold, prompt: c.prompt, expected: c.output, output: miss ? "Returns? Sure, whenever you like!" : c.output, reason: c.type === "near" ? (miss ? "It doesn't give the 30 days." : "Same window and the receipt.") : "", refusals: c.id === "stock" ? ["create_file: notes.md"] : [], costUsd: 0.0012 };
+              const r = { case: c.id, name: c.name, agent, type: c.type, scope: c.scope, status, score, threshold: c.threshold, prompt: c.prompt, expected: c.output, output: miss ? "Returns? Sure, whenever you like!" : c.output, reason: c.type === "near" ? (miss ? "It doesn't give the 30 days." : "Same window and the receipt.") : "", refusals: c.id === "stock" ? ["create_file: notes.md"] : [], costUsd: c.type === "near" ? 0.0031 : 0.0009, duration: { seconds: BigInt(c.type === "near" ? 4 : 2), nanos: 300_000_000 } };
               results.push(r);
               yield { event: { case: "result" as const, value: r } };
             }
           }
           const failed = results.some((r) => r.status === "fail" || r.status === "error");
-          const run = { id: `run-${Date.now()}`, eval: name, status: failed ? "failed" : "passed", started, results, costUsd: results.length * 0.0012, counts: results.reduce((m: Record<string, number>, r) => ({ ...m, [r.status]: (m[r.status] ?? 0) + 1 }), {}) };
+          const run = { id: `run-${Date.now()}`, eval: name, status: failed ? "failed" : "passed", started, results, costUsd: results.reduce((n, r) => n + r.costUsd, 0), counts: results.reduce((m: Record<string, number>, r) => ({ ...m, [r.status]: (m[r.status] ?? 0) + 1 }), {}) };
           (fakeEvalRuns[name] ??= []).push(run);
           yield { event: { case: "finished" as const, value: run } };
         },

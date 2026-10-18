@@ -153,6 +153,19 @@ export function runCounts(run: Pick<EvalRun, "counts" | "results">): Record<stri
   return { ...run.counts };
 }
 
+/** A cost in US dollars: four decimals under a dollar, two from there. */
+export const money = (usd: number) => `$${usd < 1 ? usd.toFixed(4) : usd.toFixed(2)}`;
+
+/** What a run's results cost so far. */
+export const resultsCost = (results: Pick<EvalResult, "costUsd">[]) => results.reduce((sum, r) => sum + r.costUsd, 0);
+
+/** A duration in seconds, to one decimal under a minute. */
+export function seconds(d: { seconds: bigint; nanos: number } | undefined): string {
+  if (!d) return "";
+  const s = Number(d.seconds) + d.nanos / 1e9;
+  return s < 60 ? `${s.toFixed(1)} s` : `${Math.floor(s / 60)} min ${Math.round(s % 60)} s`;
+}
+
 /** Each case's latest results, by case ID. */
 export function resultsByCase(results: EvalResult[]): Map<string, EvalResult[]> {
   const out = new Map<string, EvalResult[]>();

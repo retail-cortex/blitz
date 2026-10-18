@@ -1710,6 +1710,8 @@
     "desktop.evals.background_passed.other": "All {count} evals passed",
     "desktop.evals.background_failed.one": "{count} of {total} evals failed: open Studio › Evals for why",
     "desktop.evals.background_failed.other": "{count} of {total} evals failed: open Studio › Evals for why",
+    "desktop.evals.cost": "Cost {cost}",
+    "desktop.evals.cost_so_far": "{cost} so far",
     "desktop.evals.title": "Evals",
     "desktop.evals.intro": "Check that your agents still answer as they should: each case's prompt runs on the agents you choose, without changing files, and its answer is compared with the one you expect.",
     "desktop.evals.none": "No evals yet: + makes one, or draft one for an agent below.",

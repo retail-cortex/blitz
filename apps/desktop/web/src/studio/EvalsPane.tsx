@@ -47,7 +47,7 @@ import { AgentScope, type AgentFile, type EvalCase, type EvalCaseSchema, type Ev
 import { Button, Chip, Dialog, Field, Icon, IconButton, Segmented, Switch, Tabs, useSnackbar } from "../ui/controls";
 import { DraftButton } from "./Draft";
 import { agentsToRefine, evalNameFor, evalsForAgent, refineRequest } from "./evalCoverage";
-import { casesFromDraft, duplicateIds, emptyEvalForm, formFromEval, moveCase, newCase, resultsByCase, resultStatuses, runCounts, sameEvalForm, specFromForm, type CaseForm, type EvalForm } from "./evalForm";
+import { casesFromDraft, duplicateIds, emptyEvalForm, formFromEval, money, resultsCost, seconds, moveCase, newCase, resultsByCase, resultStatuses, runCounts, sameEvalForm, specFromForm, type CaseForm, type EvalForm } from "./evalForm";
 
 type Tab = "cases" | "settings" | "runs";
 
@@ -311,7 +311,7 @@ export function EvalsPane({ workspace, onDirty, forAgent, onHandled }: { workspa
             const last = e.lastRun;
             const icon = e.problem ? mdiAlertCircleOutline : last ? statusIcon[last.status] : mdiFlaskOutline;
             const cls = e.problem ? "error-text" : last ? statusClass(last.status) : undefined;
-            const what = [tn("desktop.evals.cases", e.cases.length), last ? t("desktop.evals.last_run", { status: t(`desktop.evals.status.${last.status}`), summary: summary(last) }) : t("desktop.evals.never_run"), e.description].filter(Boolean).join(" · ");
+            const what = [tn("desktop.evals.cases", e.cases.length), last ? t("desktop.evals.last_run", { status: t(`desktop.evals.status.${last.status}`), summary: [summary(last), last.costUsd ? money(last.costUsd) : ""].filter(Boolean).join(" · ") }) : t("desktop.evals.never_run"), e.description].filter(Boolean).join(" · ");
             return (
               <div key={e.path} className="list-item">
                 <button type="button" className="row-open" onClick={() => showForm(e.name, formFromEval(e))}>
@@ -545,7 +545,7 @@ export function EvalsPane({ workspace, onDirty, forAgent, onHandled }: { workspa
                       <span className="t-title-sm spacer">
                         {running ? t("desktop.evals.running", { done: live.results.length, total: live.total }) : t(`desktop.evals.run_status.${live.run?.status ?? "stopped"}`)}
                       </span>
-                      <span className="t-body-sm muted">{summary({ counts: {}, results: live.results })}</span>
+                      <span className="t-body-sm muted">{[summary({ counts: {}, results: live.results }), live.results.length ? t(running ? "desktop.evals.cost_so_far" : "desktop.evals.cost", { cost: money(resultsCost(live.results)) }) : ""].filter(Boolean).join(" · ")}</span>
                     </div>
                     {running && <progress className="eval-progress" max={live.total} value={live.results.length} aria-label={t("desktop.evals.progress")} />}
                     {!running && <Refine workspace={workspace} results={live.results} />}
@@ -564,7 +564,7 @@ export function EvalsPane({ workspace, onDirty, forAgent, onHandled }: { workspa
                               <Icon path={statusIcon[r.status] ?? mdiFlaskOutline} className={statusClass(r.status)} />
                               <span className="lines spacer">
                                 <span className="ellipsis">{r.started ? new Date(Number(r.started.seconds) * 1000).toLocaleString() : r.id}</span>
-                                <small className="ellipsis">{[t(`desktop.evals.status.${r.status}`), summary(r), r.costUsd ? `$${r.costUsd.toFixed(4)}` : "", r.error].filter(Boolean).join(" · ")}</small>
+                                <small className="ellipsis">{[t(`desktop.evals.status.${r.status}`), summary(r), r.costUsd ? money(r.costUsd) : "", r.error].filter(Boolean).join(" · ")}</small>
                               </span>
                             </button>
                           </div>
@@ -699,7 +699,7 @@ function Results({ results }: { results: EvalResult[] }) {
                   {r.name && ` · ${r.name}`}
                   {` · ${r.agent}`}
                 </span>
-                <small className={`ellipsis ${r.status === "error" ? "error-text" : ""}`}>{[t(`desktop.evals.result.${r.status}`), scoreText(r), r.reason].filter(Boolean).join(" · ")}</small>
+                <small className={`ellipsis ${r.status === "error" ? "error-text" : ""}`}>{[t(`desktop.evals.result.${r.status}`), scoreText(r), r.reason, [r.costUsd ? money(r.costUsd) : "", seconds(r.duration)].filter(Boolean).join(", ")].filter(Boolean).join(" · ")}</small>
               </span>
             </button>
           </div>

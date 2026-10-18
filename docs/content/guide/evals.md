@@ -50,7 +50,7 @@ Each case runs in a throwaway session, unattended. It can read the workspace, bu
 
 ## Running one
 
-In the desktop app, **Studio › Evals** lists the evals with their last run; ▶ runs one. An eval's **Cases** tab edits its cases (each opens into its editor), **Settings** its agents, skills and scoring, and **Runs** shows the run as each case is scored, then past runs: open a result to see the expected answer beside the agent's, and why.
+In the desktop app, **Studio › Evals** lists the evals with their last run; ▶ runs one. An eval's **Cases** tab edits its cases (each opens into its editor), **Settings** its agents, skills and scoring, and **Runs** shows the run as each case is scored, with what it has cost so far (each case's agent calls and the judge's scoring), then past runs and their cost: open a result to see the expected answer beside the agent's, and why.
 
 From the shell, for CI:
 

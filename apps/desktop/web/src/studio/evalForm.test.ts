@@ -17,7 +17,7 @@
 import { create } from "@bufbuild/protobuf";
 import { describe, expect, it } from "vitest";
 import { EvalFileSchema, EvalResultSchema, EvalRunSchema } from "../gen/blitz/v1/workspace_pb";
-import { duplicateIds, emptyEvalForm, formFromEval, moveCase, newCase, nextCaseId, resultsByCase, runCounts, sameEvalForm, specFromForm } from "./evalForm";
+import { duplicateIds, money, resultsCost, seconds, emptyEvalForm, formFromEval, moveCase, newCase, nextCaseId, resultsByCase, runCounts, sameEvalForm, specFromForm } from "./evalForm";
 
 describe("the eval form", () => {
   const e = create(EvalFileSchema, {
@@ -71,5 +71,12 @@ describe("the eval form", () => {
     expect(runCounts(live)).toEqual({ pass: 2, fail: 1 });
     expect(runCounts(create(EvalRunSchema, { counts: { warn: 2 } }))).toEqual({ warn: 2 });
     expect(resultsByCase(live.results).get("c1")).toHaveLength(2);
+    expect(money(0.0012)).toBe("$0.0012");
+    expect(money(0.0142)).toBe("$0.0142");
+    expect(money(1.5)).toBe("$1.50");
+    expect(resultsCost([{ costUsd: 0.25 }, { costUsd: 0.5 }])).toBe(0.75);
+    expect(seconds({ seconds: 2n, nanos: 500_000_000 })).toBe("2.5 s");
+    expect(seconds({ seconds: 125n, nanos: 0 })).toBe("2 min 5 s");
+    expect(seconds(undefined)).toBe("");
   });
 });

@@ -1710,6 +1710,8 @@
     "desktop.evals.background_passed.other": "Las {count} evaluaciones pasaron",
     "desktop.evals.background_failed.one": "{count} de {total} evaluaciones falló: abre Studio › Evaluaciones para ver por qué",
     "desktop.evals.background_failed.other": "{count} de {total} evaluaciones fallaron: abre Studio › Evaluaciones para ver por qué",
+    "desktop.evals.cost": "Costo {cost}",
+    "desktop.evals.cost_so_far": "{cost} hasta ahora",
     "desktop.evals.title": "Evaluaciones",
     "desktop.evals.intro": "Comprueba que tus agentes siguen respondiendo como deben: el mensaje de cada caso se ejecuta en los agentes que elijas, sin cambiar archivos, y su respuesta se compara con la que esperas.",
     "desktop.evals.none": "Aún no hay evaluaciones: + crea una, o redacta una para un agente abajo.",

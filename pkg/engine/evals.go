@@ -144,17 +144,27 @@ func (w *Workspace) recordEval(run api.EvalRun) error {
 	return nil
 }
 
-// scorer scores a case's output: 0 to 1, and why.
-type scorer func(ctx context.Context, c evals.Case, output string) (float64, string, error)
+// scorer scores a case's output: 0 to 1, why, and what scoring cost.
+type scorer func(ctx context.Context, c evals.Case, output string) (score float64, why string, costUSD float64, err error)
 
 // evalScorer is how e's near cases are scored: by the judge (the
 // suggestions model, as rules are), or by the embeddings of
 // search.embedding_model.
 func (w *Workspace) evalScorer(ctx context.Context, e evals.Eval) (scorer, error) {
 	if e.Near != evals.Embedding {
-		ask := w.ruleAsker()
-		return func(ctx context.Context, c evals.Case, output string) (float64, string, error) {
-			return evals.JudgeNear(ctx, ask, c.Prompt, c.Output, output)
+		return func(ctx context.Context, c evals.Case, output string) (float64, string, float64, error) {
+			var spent float64
+			ask := func(ctx context.Context, instruction, prompt string) (string, error) {
+				llm, err := w.newModel(ctx, w.cfg, cmp.Or(w.cfg.Suggestions.Model, w.cfg.Permissions.Auto.Model))
+				if err != nil {
+					return "", fmt.Errorf("%s", ModelErrorSummary(err, w.cfg))
+				}
+				reply, served, usage, err := runtime.Ask(ctx, llm, instruction, prompt)
+				spent += w.engine.EstimateCostUSD(served, usage)
+				return reply, err
+			}
+			score, why, err := evals.JudgeNear(ctx, ask, c.Prompt, c.Output, output)
+			return score, why, spent, err
 		}, nil
 	}
 	ref := w.cfg.Search.EmbeddingModel
@@ -167,7 +177,7 @@ func (w *Workspace) evalScorer(ctx context.Context, e evals.Eval) (scorer, error
 	}
 	var mu sync.Mutex
 	cache := map[string][]float32{} // an expected output's vector, once
-	return func(ctx context.Context, c evals.Case, output string) (float64, string, error) {
+	return func(ctx context.Context, c evals.Case, output string) (float64, string, float64, error) {
 		mu.Lock()
 		want, ok := cache[c.Output]
 		mu.Unlock()
@@ -177,7 +187,7 @@ func (w *Workspace) evalScorer(ctx context.Context, e evals.Eval) (scorer, error
 		}
 		vecs, err := emb.Embed(ctx, texts)
 		if err != nil || len(vecs) != len(texts) {
-			return 0, "", fmt.Errorf("embedding the outputs: %v", err)
+			return 0, "", 0, fmt.Errorf("embedding the outputs: %v", err)
 		}
 		if !ok {
 			want = vecs[1]
@@ -185,7 +195,7 @@ func (w *Workspace) evalScorer(ctx context.Context, e evals.Eval) (scorer, error
 			cache[c.Output] = want
 			mu.Unlock()
 		}
-		return evals.Cosine(vecs[0], want), "", nil
+		return evals.Cosine(vecs[0], want), "", 0, nil
 	}, nil
 }
 
@@ -260,7 +270,8 @@ func (w *Workspace) runEvalCase(ctx context.Context, e evals.Eval, c evals.Case,
 		pass = evals.ExactMatch(c.Output, res.Output)
 		r.Score = map[bool]float64{true: 1}[pass]
 	} else {
-		s, why, err := score(ctx, c, SecretRedactor(w.cfg).String(res.Output))
+		s, why, spent, err := score(ctx, c, SecretRedactor(w.cfg).String(res.Output))
+		r.CostUSD += spent
 		if err != nil {
 			return fail(fmt.Errorf("scoring: %w", err))
 		}
