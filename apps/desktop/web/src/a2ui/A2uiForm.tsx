@@ -19,7 +19,7 @@ import { createPortal } from "react-dom";
 import { mdiAccountCircleOutline, mdiAlertCircleOutline, mdiCheck, mdiClose, mdiPlus } from "@mdi/js";
 import { t } from "../i18n";
 import { Button, Chip, Dialog, Field, Icon, Segmented, Tabs } from "../ui/controls";
-import { actionOf, answerOf, byId, childrenOf, failing, formProblems, resolve, safeUrl, scoped, setPath, type Component, type Form } from "./model";
+import { actionOf, byId, childrenOf, failing, formProblems, resolve, safeUrl, scoped, setPath, type Component, type Form, type FormAction } from "./model";
 
 /** The basic catalog's icons this renderer draws (others are left out). */
 const icons: Record<string, string> = { check: mdiCheck, close: mdiClose, add: mdiPlus, accountCircle: mdiAccountCircleOutline, error: mdiAlertCircleOutline };
@@ -37,7 +37,7 @@ const justify: Record<string, string> = { start: "flex-start", center: "center",
  * action's name and context). Nothing in a form is run as code or HTML:
  * text is text, and images only https or inline.
  */
-export function A2uiForm({ form, onAction, disabled }: { form: Form; onAction?: (answer: Record<string, unknown>) => void; disabled?: boolean }) {
+export function A2uiForm({ form, onAction, disabled }: { form: Form; onAction?: (action: FormAction) => void; disabled?: boolean }) {
   const [data, setData] = useState<Record<string, unknown>>(() => structuredClone(form.data ?? {}));
   const [tab, setTab] = useState<Record<string, string>>({});
   const [modal, setModal] = useState("");
@@ -86,7 +86,7 @@ export function A2uiForm({ form, onAction, disabled }: { form: Form; onAction?: 
             onClick={() => {
               setTouched(true);
               if (!action || formProblems(form, data).size > 0) return;
-              onAction?.(answerOf(action));
+              onAction?.({ ...action, sourceComponentId: c.id, data });
             }}
           >
             {typeof c.child === "string" ? textOf(all.get(c.child), data, scope) : ""}

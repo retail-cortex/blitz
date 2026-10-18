@@ -52,8 +52,8 @@ func humanTaskMsg(r engine.FlowRecord, t engine.FlowTask) *pb.HumanTask {
 	m := &pb.HumanTask{Id: t.ID, Run: r.Run, Workspace: r.Workspace, Workflow: r.Workflow, Step: t.Step, Title: t.Title, Kind: t.Kind,
 		Message: t.Message, Created: timestamppb.New(t.Created), SessionId: r.Session}
 	if t.Form != nil {
-		data, _ := json.Marshal(t.Form)
-		m.FormJson = string(data)
+		data, _ := json.Marshal(t.Form.Messages(t.ID))
+		m.A2UiJson = string(data)
 	}
 	if !t.FireAt.IsZero() {
 		m.FireAt = timestamppb.New(t.FireAt)
@@ -62,13 +62,19 @@ func humanTaskMsg(r engine.FlowRecord, t engine.FlowTask) *pb.HumanTask {
 }
 
 func (h workspaceService) ListHumanTasks(ctx context.Context, r req[pb.ListHumanTasksRequest]) (*connect.Response[pb.ListHumanTasksResponse], error) {
+	return ok(h.s.humanTasks(r.Msg.Workspace))
+}
+
+// humanTasks are the paused runs' tasks (one workspace's, or every one's),
+// oldest first, with how the user wants to hear of them.
+func (s *Server) humanTasks(workspace string) *pb.ListHumanTasksResponse {
 	out := &pb.ListHumanTasksResponse{Alerts: "notify"}
-	if cfg, err := config.Load(h.s.configDir); err == nil && cfg.UI.TaskAlerts != "" {
+	if cfg, err := config.Load(s.configDir); err == nil && cfg.UI.TaskAlerts != "" {
 		out.Alerts = cfg.UI.TaskAlerts
 	}
 	seen := map[string]bool{}
-	for _, dir := range h.s.recordDirs() {
-		for _, rec := range engine.ListFlowRecords(dir, r.Msg.Workspace) {
+	for _, dir := range s.recordDirs() {
+		for _, rec := range engine.ListFlowRecords(dir, workspace) {
 			for _, t := range rec.Tasks {
 				if !seen[t.ID] {
 					seen[t.ID] = true
@@ -78,7 +84,35 @@ func (h workspaceService) ListHumanTasks(ctx context.Context, r req[pb.ListHuman
 		}
 	}
 	slices.SortFunc(out.Tasks, func(a, b *pb.HumanTask) int { return a.Created.AsTime().Compare(b.Created.AsTime()) })
-	return ok(out)
+	return out
+}
+
+// watchTasksEvery is how often a task watch looks for changes.
+var watchTasksEvery = time.Second
+
+func (h workspaceService) WatchHumanTasks(ctx context.Context, r req[pb.ListHumanTasksRequest], stream *connect.ServerStream[pb.ListHumanTasksResponse]) error {
+	last := ""
+	tick := time.NewTicker(watchTasksEvery)
+	defer tick.Stop()
+	for {
+		cur := h.s.humanTasks(r.Msg.Workspace)
+		// What a client sees changing: the tasks (by ID) and the setting.
+		sig := cur.Alerts
+		for _, t := range cur.Tasks {
+			sig += "|" + t.Id
+		}
+		if sig != last {
+			last = sig
+			if err := stream.Send(cur); err != nil {
+				return err
+			}
+		}
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-tick.C:
+		}
+	}
 }
 
 func (h workspaceService) AnswerHumanTask(ctx context.Context, r req[pb.AnswerHumanTaskRequest]) (*connect.Response[pb.AnswerHumanTaskResponse], error) {
@@ -86,16 +120,21 @@ func (h workspaceService) AnswerHumanTask(ctx context.Context, r req[pb.AnswerHu
 	if err != nil {
 		return nil, err
 	}
-	answer := map[string]any{}
-	if s := strings.TrimSpace(r.Msg.AnswerJson); s != "" {
-		if err := json.Unmarshal([]byte(s), &answer); err != nil {
-			return nil, invalid(errors.New("answer_json isn't a JSON object"))
+	answer, err := w.CheckAnswer(r.Msg.TaskId, []byte(r.Msg.ActionJson), []byte(r.Msg.DataJson))
+	var bad *engine.AnswerError
+	switch {
+	case errors.Is(err, engine.ErrNoTask):
+		return nil, apiError(connect.CodeNotFound, "TASK_NOT_FOUND", err)
+	case errors.Is(err, engine.ErrNotAnswerable):
+		return nil, apiError(connect.CodeFailedPrecondition, "NOT_ANSWERABLE", err)
+	case errors.As(err, &bad):
+		probs := make([]string, len(bad.Problems))
+		for i, p := range bad.Problems {
+			probs[i] = p.String()
 		}
-	}
-	if !slices.ContainsFunc(w.FlowTasks(), func(rec engine.FlowRecord) bool {
-		return slices.ContainsFunc(rec.Tasks, func(t engine.FlowTask) bool { return t.ID == r.Msg.TaskId })
-	}) {
-		return nil, apiError(connect.CodeNotFound, "TASK_NOT_FOUND", engine.ErrNoTask)
+		return nil, apiError(connect.CodeInvalidArgument, "ANSWER_INVALID", err, "problems", strings.Join(probs, "\n"))
+	case err != nil:
+		return nil, err
 	}
 	run, err := h.s.resume(w, r.Msg.TaskId, answer)
 	if err != nil {

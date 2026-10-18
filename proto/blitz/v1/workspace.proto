@@ -265,8 +265,13 @@ service WorkspaceService {
   // Returns the tasks paused workflow runs wait on (human tasks' forms,
   // timers), oldest first: one workspace's, or every one's.
   rpc ListHumanTasks(ListHumanTasksRequest) returns (ListHumanTasksResponse);
-  // Answers a human task: its run resumes in the background
-  // (TASK_NOT_FOUND; WORKFLOW_CHANGED when its workflow changed since).
+  // Streams the tasks: the list now, then again each time it changes (a
+  // run pauses, a task is answered, a timer fires).
+  rpc WatchHumanTasks(ListHumanTasksRequest) returns (stream ListHumanTasksResponse);
+  // Answers a human task with A2UI's action message, checked against its
+  // form by the service: its run resumes in the background
+  // (TASK_NOT_FOUND; ANSWER_INVALID with the problems; NOT_ANSWERABLE for
+  // a timer; WORKFLOW_CHANGED when its workflow changed since).
   rpc AnswerHumanTask(AnswerHumanTaskRequest) returns (AnswerHumanTaskResponse);
   // Returns skill scripts' environments (SCRIPTS_DISABLED).
   rpc ListEnvs(ListEnvsRequest) returns (ListEnvsResponse);
@@ -2727,8 +2732,11 @@ message HumanTask {
   string kind = 7;
   // What's shown above the form.
   string message = 8;
-  // The form: A2UI v0.9 ({"components": [...], "data": {...}}).
-  string form_json = 9;
+  // The form as A2UI v0.9 server-to-client messages, any A2UI renderer's
+  // to draw: a JSON array of createSurface (the surface's ID is the
+  // task's), updateComponents and updateDataModel, its templates filled
+  // from the run as the step started.
+  string a2ui_json = 9;
   google.protobuf.Timestamp fire_at = 10;
   google.protobuf.Timestamp created = 11;
   // The chat its run's agent steps are turns in.
@@ -2753,8 +2761,14 @@ message ListHumanTasksResponse {
 message AnswerHumanTaskRequest {
   string workspace = 1;
   string task_id = 2;
-  // The form's values: a JSON object (the submitting action's context).
-  string answer_json = 3;
+  // A2UI v0.9's client-to-server action message, from one of the form's
+  // buttons: {"version": "v0.9", "action": {"name", "surfaceId",
+  // "sourceComponentId", "timestamp", "context"}}.
+  string action_json = 3;
+  // The surface's data model as the client had it (a JSON object; empty:
+  // the form's own, with the action's values), on which every check of
+  // the form must pass.
+  string data_json = 4;
 }
 
 // Response message for WorkspaceService.AnswerHumanTask.

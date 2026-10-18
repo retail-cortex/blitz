@@ -110,6 +110,7 @@ go_test(
     embed = [":server"],
     shard_count = 4,
     deps = [
+        "//pkg/a2ui",
         "//pkg/api",
         "//pkg/config",
         "//pkg/config/configtest",

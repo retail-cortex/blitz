@@ -15,7 +15,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { actionOf, answerOf, byId, childrenOf, failing, formProblems, getPath, parseForm, resolve, safeUrl, setPath, starterForm, type Component } from "./model";
+import { actionMessage, actionOf, byId, childrenOf, failing, formProblems, getPath, parseForm, parseMessages, resolve, safeUrl, setPath, starterForm, type Component } from "./model";
 
 describe("A2UI forms", () => {
   const data = { form: { note: "hi", tags: ["a"] }, items: [{ name: "x" }, { name: "y" }] };
@@ -50,7 +50,10 @@ describe("A2UI forms", () => {
     const button: Component = { id: "b", component: "Button", child: "l", action: { event: { name: "approve", context: { note: { path: "/form/note" }, fixed: 1 } } } };
     const a = actionOf(button, data)!;
     expect(a).toEqual({ name: "approve", context: { note: "hi", fixed: 1 } });
-    expect(answerOf(a)).toEqual({ action: "approve", note: "hi", fixed: 1 });
+    expect(actionMessage("run-7/ok", { ...a, sourceComponentId: "b", data }, new Date("2026-10-18T09:00:00Z"))).toEqual({
+      version: "v0.9",
+      action: { name: "approve", surfaceId: "run-7/ok", sourceComponentId: "b", timestamp: "2026-10-18T09:00:00.000Z", context: { note: "hi", fixed: 1 } },
+    });
     expect(actionOf({ id: "x", component: "Button" }, data)).toBeNull();
   });
 
@@ -71,5 +74,30 @@ describe("A2UI forms", () => {
     expect(safeUrl("https://example.com/a.png")).toBe(true);
     expect(safeUrl("javascript:alert(1)")).toBe(false);
     expect(safeUrl("http://example.com/a.png")).toBe(false);
+  });
+
+  it.each([
+    ["not JSON", "{", undefined],
+    ["not a list", "{}", "messages"],
+    ["no surface", JSON.stringify([{ version: "v0.9", updateComponents: { surfaceId: "s", components: [{ id: "root", component: "Text" }] } }]), "createSurface"],
+    ["no root", JSON.stringify([{ version: "v0.9", createSurface: { surfaceId: "s", catalogId: "c" } }]), "root"],
+  ])("refuses messages: %s", (_, text, problem) => {
+    const r = parseMessages(text);
+    expect(r.form).toBeUndefined();
+    if (problem) expect(r.problem).toBe(problem);
+  });
+
+  it("reads a surface from its messages", () => {
+    const r = parseMessages(
+      JSON.stringify([
+        { version: "v0.9", createSurface: { surfaceId: "run-7/ok", catalogId: "basic" } },
+        { version: "v0.9", updateComponents: { surfaceId: "run-7/ok", components: [{ id: "root", component: "Text", text: { path: "/note" } }] } },
+        { version: "v0.9", updateDataModel: { surfaceId: "run-7/ok", path: "/", value: { note: "hi", n: 1 } } },
+        { version: "v0.9", updateDataModel: { surfaceId: "run-7/ok", path: "/note", value: "later" } },
+      ]),
+    );
+    expect(r.surface).toBe("run-7/ok");
+    expect(r.form?.data).toEqual({ note: "later", n: 1 });
+    expect(r.form?.components).toHaveLength(1);
   });
 });

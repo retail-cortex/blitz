@@ -16,12 +16,12 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { mdiAccountCheckOutline, mdiOpenInApp } from "@mdi/js";
-import { workspaces } from "./api";
 import { TaskCard } from "./a2ui/TaskCard";
 import { canOpenApp, openApp } from "./desktop";
 import { message } from "./errors";
 import type { HumanTask } from "./gen/blitz/v1/workspace_pb";
-import { dropTask, hideTasks, refreshTasks, useTasks } from "./humanTasks";
+import { answerTask, hideTasks, refreshTasks, useTasks } from "./humanTasks";
+import type { FormAction } from "./a2ui/model";
 import { t, tn } from "./i18n";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { AppStateProvider } from "./state";
@@ -42,11 +42,10 @@ export function TasksPanel({ onDone }: { onDone?: () => void }) {
     if (loaded && tasks.length === 0) onDone?.();
   }, [loaded, tasks.length, onDone]);
 
-  const answer = async (x: HumanTask, values: Record<string, unknown>) => {
+  const answer = async (x: HumanTask, action: FormAction) => {
     setBusy(true);
     try {
-      await workspaces.answerHumanTask({ workspace: x.workspace, taskId: x.id, answerJson: JSON.stringify(values) });
-      dropTask(x.id);
+      await answerTask(x, action);
       snack(t("desktop.human_tasks.answered", { workflow: x.workflow }));
       void refreshTasks();
     } catch (e) {

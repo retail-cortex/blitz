@@ -867,6 +867,13 @@ const fakeFlowProblem = (f: FakeFlow) => {
   return q ? `step ${q.id}: say what it's to do` : "";
 };
 const fakeFlowFile = (workspace: string, f: FakeFlow) => ({ ...f, path: `${workspace}/.agents/workflows/${f.name}.flow.yaml`, problem: fakeFlowProblem(f) });
+// A form as A2UI's server-to-client messages, as the service sends a task's.
+const fakeMessages = (surfaceId: string, form: { components: unknown[]; data: unknown }) =>
+  JSON.stringify([
+    { version: "v0.9", createSurface: { surfaceId, catalogId: "https://a2ui.org/specification/v0_9/catalogs/basic/catalog.json", sendDataModel: true } },
+    { version: "v0.9", updateComponents: { surfaceId, components: form.components } },
+    { version: "v0.9", updateDataModel: { surfaceId, path: "/", value: form.data } },
+  ]);
 // Workflows' human tasks waiting: a refund to approve (?fake&notasks for none).
 const fakeTasks = new URLSearchParams(location.search).has("notasks")
   ? []
@@ -880,7 +887,8 @@ const fakeTasks = new URLSearchParams(location.search).has("notasks")
         title: "Approve the refund",
         kind: "human_task",
         message: "Order 4417 asks for a $240 refund: over the $100 limit.",
-        formJson: JSON.stringify({
+        // As the service sends it: A2UI's messages for the task's surface.
+        a2uiJson: fakeMessages("run-7/approve", {
           components: [
             { id: "root", component: "Column", children: ["amount", "note", "buttons"] },
             { id: "amount", component: "TextField", label: "Refund ($)", value: { path: "/amount" }, variant: "number" },
@@ -898,6 +906,19 @@ const fakeTasks = new URLSearchParams(location.search).has("notasks")
       },
     ];
 let fakeAlerts = "notify";
+// The task stream: the list now, then whenever it changes (as the service's).
+async function* watchFakeTasks(workspace: string) {
+  let last = "";
+  for (;;) {
+    const tasks = fakeTasks.filter((x) => !workspace || x.workspace === workspace);
+    const sig = fakeAlerts + tasks.map((x) => x.id).join("|");
+    if (sig !== last) {
+      last = sig;
+      yield { alerts: fakeAlerts, tasks };
+    }
+    await sleep(500);
+  }
+}
 // Background runs of workflows: the run's ID → the workflow.
 const fakeFlowRuns = new Map<string, FakeFlow>();
 
@@ -1094,9 +1115,12 @@ export function installFake() {
         getSkill: ({ name }) => ({ skill: { name, description: "Read and summarize PDF files", tools: [{ name: "read_file" }] } }),
         // Workflows' human tasks, answered by their forms.
         listHumanTasks: ({ workspace }) => ({ alerts: fakeAlerts, tasks: fakeTasks.filter((x) => !workspace || x.workspace === workspace) }),
-        answerHumanTask: ({ taskId }) => {
+        watchHumanTasks: ({ workspace }) => watchFakeTasks(workspace),
+        answerHumanTask: ({ taskId, actionJson }) => {
           const i = fakeTasks.findIndex((x) => x.id === taskId);
           if (i < 0) throw new ConnectError("no such task", Code.NotFound);
+          // The service checks the answer against the form; the fake, that it's an action.
+          if (!(JSON.parse(actionJson || "{}") as { action?: unknown }).action) throw new ConnectError("the answer isn't accepted: not an action message", Code.InvalidArgument);
           fakeTasks.splice(i, 1);
           return {};
         },

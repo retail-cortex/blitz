@@ -19,11 +19,12 @@ import type { HumanTask } from "../gen/blitz/v1/workspace_pb";
 import { t } from "../i18n";
 import { Icon } from "../ui/controls";
 import { A2uiForm } from "./A2uiForm";
-import { parseForm } from "./model";
+import { parseMessages, type FormAction } from "./model";
 
 /** A human task a run waits on: its title, message and form, answered by the form's buttons. */
-export function TaskCard({ task, onAnswer, busy }: { task: HumanTask; onAnswer: (values: Record<string, unknown>) => void; busy?: boolean }) {
-  const parsed = parseForm(task.formJson);
+export function TaskCard({ task, onAnswer, busy }: { task: HumanTask; onAnswer: (action: FormAction) => void; busy?: boolean }) {
+  // The form as the service sent it: A2UI's messages, filled from the run.
+  const parsed = parseMessages(task.a2uiJson);
   return (
     <div className="card outlined stack task-card" style={{ gap: 8 }} aria-busy={busy || undefined}>
       <span className="row t-title-sm" style={{ gap: 6 }}>

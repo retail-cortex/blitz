@@ -150,8 +150,48 @@ export function actionOf(c: Component, data: Record<string, unknown>, scope = ""
   return { name: event.name, context };
 }
 
-/** What a human task's answer is: the action's name and its context's values. */
-export const answerOf = (a: { name: string; context: Record<string, unknown> }) => ({ action: a.name, ...a.context });
+/** A button pressed: its action's name and resolved context, the button, and the surface's data model then. */
+export interface FormAction {
+  name: string;
+  context: Record<string, unknown>;
+  sourceComponentId: string;
+  data: Record<string, unknown>;
+}
+
+/** A2UI's client-to-server action message for a surface: what the service checks and a run gets. */
+export const actionMessage = (surfaceId: string, a: FormAction, now = new Date()) => ({
+  version: "v0.9",
+  action: { name: a.name, surfaceId, sourceComponentId: a.sourceComponentId, timestamp: now.toISOString(), context: a.context },
+});
+
+/**
+ * A surface's form from A2UI's server-to-client messages (a JSON array:
+ * createSurface, updateComponents, updateDataModel; a path's update is
+ * applied), with its surface's ID, or why it isn't one.
+ */
+export function parseMessages(text: string): { form?: Form; surface?: string; problem?: string } {
+  let list: unknown;
+  try {
+    list = JSON.parse(text);
+  } catch (e) {
+    return { problem: String((e as Error).message) };
+  }
+  if (!Array.isArray(list)) return { problem: "messages" };
+  let surface = "";
+  const form: Form = { components: [], data: {} };
+  for (const m of list as Record<string, Record<string, unknown> | undefined>[]) {
+    if (m?.createSurface) surface = String(m.createSurface.surfaceId ?? "");
+    if (m?.updateComponents && Array.isArray(m.updateComponents.components)) form.components = m.updateComponents.components as Component[];
+    if (m?.updateDataModel) {
+      const path = String(m.updateDataModel.path ?? "/");
+      const value = m.updateDataModel.value;
+      form.data = path === "/" ? ((value as Record<string, unknown>) ?? {}) : setPath(form.data ?? {}, path, value);
+    }
+  }
+  if (!surface) return { problem: "createSurface" };
+  if (!form.components.some((c) => c?.id === "root")) return { problem: "root" };
+  return { form, surface };
+}
 
 /** The child ids of a container: a list, or a template over a list in the data ({path, componentId}), each with its item's scope. */
 export function childrenOf(c: Component, data: Record<string, unknown>, scope = ""): { id: string; scope: string }[] {

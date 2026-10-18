@@ -28,6 +28,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/retail-cortex/blitz/pkg/a2ui"
 	"github.com/retail-cortex/blitz/pkg/api"
 	"github.com/retail-cortex/blitz/pkg/engine/flows"
 	"github.com/retail-cortex/blitz/pkg/engine/session"
@@ -197,7 +198,14 @@ func (w *Workspace) pauseStep(ctx agent.Context, r *flowRun, n flows.Node, vars 
 	if err != nil {
 		return flows.Result{}, err
 	}
-	task := FlowTask{ID: r.runID + "/" + n.ID, Step: n.ID, Title: cmpOr(n.Title, n.ID), Kind: n.Type, Message: filled.Instructions, Form: n.Form, Created: time.Now()}
+	form, err := fillForm(n.Form, vars)
+	if err != nil {
+		s := r.step(n, api.StepFailed)
+		s.Error = err.Error()
+		r.emit(api.Event{Step: s})
+		return flows.Result{}, &stepFailure{title: cmpOr(n.Title, n.ID), err: err}
+	}
+	task := FlowTask{ID: r.runID + "/" + n.ID, Step: n.ID, Title: cmpOr(n.Title, n.ID), Kind: n.Type, Message: filled.Instructions, Form: form, Created: time.Now()}
 	if n.Type == flows.Timer {
 		if task.FireAt, err = fireAt(filled); err != nil {
 			s := r.step(n, api.StepFailed)
@@ -222,6 +230,89 @@ func (w *Workspace) pauseStep(ctx agent.Context, r *flowRun, n flows.Node, vars 
 	s.Output = res.Text
 	r.emit(api.Event{Step: s})
 	return res, nil
+}
+
+// fillForm is a human task's form with its templates filled (WF-18): its
+// data's values and its components' text from the run's input and steps,
+// a template alone keeping its value's type ({{ steps.pull.data.amount }}
+// stays a number).
+func fillForm(f *flows.Form, vars flows.Vars) (*flows.Form, error) {
+	if f == nil {
+		return nil, nil
+	}
+	raw, err := json.Marshal(f)
+	if err != nil {
+		return nil, err
+	}
+	var v any
+	if err := json.Unmarshal(raw, &v); err != nil {
+		return nil, err
+	}
+	if v, err = flows.FillValue(v, vars); err != nil {
+		return nil, fmt.Errorf("its form: %w", err)
+	}
+	if raw, err = json.Marshal(v); err != nil {
+		return nil, err
+	}
+	var out flows.Form
+	return &out, json.Unmarshal(raw, &out)
+}
+
+// AnswerError is an answer a human task's form doesn't accept (WF-18):
+// its problems, each a component's failing check or what's wrong with the
+// action.
+type AnswerError struct{ Problems []a2ui.Problem }
+
+// Error lists the problems.
+func (e *AnswerError) Error() string {
+	lines := make([]string, len(e.Problems))
+	for i, p := range e.Problems {
+		lines[i] = p.String()
+	}
+	return "the answer isn't accepted: " + strings.Join(lines, "; ")
+}
+
+// ErrNotAnswerable is a task that isn't answered: a timer.
+var ErrNotAnswerable = errors.New("a timer isn't answered: its run goes on at its time")
+
+// CheckAnswer checks a client's answer to a human task (WF-18), so no
+// client is trusted to have checked it: action is A2UI's action message
+// (from one of the form's buttons), data the surface's data model as the
+// client had it (empty: the form's own, with the action's values). It
+// returns the answer the run gets, or an *AnswerError.
+func (w *Workspace) CheckAnswer(taskID string, action, data []byte) (map[string]any, error) {
+	var task *FlowTask
+	for _, rec := range w.FlowTasks() {
+		for i := range rec.Tasks {
+			if rec.Tasks[i].ID == taskID {
+				task = &rec.Tasks[i]
+			}
+		}
+	}
+	if task == nil {
+		return nil, fmt.Errorf("%w: %s", ErrNoTask, taskID)
+	}
+	if task.Kind != flows.HumanTask || task.Form == nil {
+		return nil, ErrNotAnswerable
+	}
+	a, err := a2ui.ParseAction(action)
+	if err != nil {
+		return nil, &AnswerError{Problems: []a2ui.Problem{{Message: err.Error()}}}
+	}
+	if a.SurfaceID != "" && a.SurfaceID != taskID {
+		return nil, &AnswerError{Problems: []a2ui.Problem{{Message: fmt.Sprintf("it answers %s, not this task", a.SurfaceID)}}}
+	}
+	var model map[string]any
+	if len(strings.TrimSpace(string(data))) > 0 {
+		if err := json.Unmarshal(data, &model); err != nil {
+			return nil, &AnswerError{Problems: []a2ui.Problem{{Message: "its data model isn't a JSON object"}}}
+		}
+	}
+	answer, probs := task.Form.Answer(a, model)
+	if len(probs) > 0 {
+		return nil, &AnswerError{Problems: probs}
+	}
+	return answer, nil
 }
 
 // fireAt is when a timer resumes its run: its wait from now, or its until.

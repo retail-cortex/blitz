@@ -92,9 +92,6 @@ func TestStudioHandlersRefuseMissingAndUnknown(t *testing.T) {
 		"TryRule": func() error {
 			return unary(w.TryRule, &pb.TryRuleRequest{Workspace: dir, Rule: &pb.RuleSpec{Name: "plain", Text: "Be kind."}})
 		},
-		"AnswerHumanTask": func() error {
-			return unary(w.AnswerHumanTask, &pb.AnswerHumanTaskRequest{Workspace: dir, TaskId: "r/s", AnswerJson: "[1]"})
-		},
 	}
 	for name, call := range invalidArg {
 		t.Run(name, func(t *testing.T) {

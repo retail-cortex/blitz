@@ -75,7 +75,9 @@ Agent steps can name an agent (otherwise the active one), skills (given with the
 
 ## People and time
 
-An **Ask a person** step pauses the run until someone answers its form: approve or reject, a note, an amount, a choice. The form is [A2UI](https://a2ui.org) (text, fields, checkboxes, choices, sliders, dates and buttons, laid out in rows, columns, cards and tabs), drawn with the app's own controls; on the canvas, write it as JSON beside a live preview, or have **Draft** write it from a description. The button pressed is the answer's `action`, with the form's values beside it, so a gateway after it can go on with `output.data.action == "approve"`.
+An **Ask a person** step pauses the run until someone answers its form: approve or reject, a note, an amount, a choice. The form is [A2UI](https://a2ui.org) (text, fields, checkboxes, choices, sliders, dates and buttons, laid out in rows, columns, cards and tabs), drawn with the app's own controls; on the canvas, write it as JSON beside a live preview, or have **Draft** write it from a description. Its data can come from the run: `data: {amount: "{{ steps.pull.data.amount }}"}` opens the form with the amount an earlier step found (a template alone keeps its type, so it's a number). The button pressed is the answer's `action`, with the form's values beside it, so a gateway after it can go on with `output.data.action == "approve"`. The service checks every answer against the form (its required fields and checks, and that the button is one of its own), so a script or another app can't answer what the form wouldn't accept.
+
+The form travels as standard [A2UI](https://a2ui.org) messages, so another A2UI client can show a task: `WatchHumanTasks` streams them, and `AnswerHumanTask` takes A2UI's action message.
 
 A **Wait** step pauses the run for a time or until one. A paused run costs nothing while it waits: the service keeps it, picks a timer's run up when it's due, and an answered task's run goes on in the background, in the chat it started in. A workflow you change while a run waits won't resume that run.
 

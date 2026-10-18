@@ -28,6 +28,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/retail-cortex/blitz/pkg/a2ui"
 	"github.com/retail-cortex/blitz/pkg/engine/gates"
 	"gopkg.in/yaml.v3"
 )
@@ -317,7 +318,7 @@ func Check(f Flow) []string {
 			probs = append(probs, where+": name the workflow it runs")
 		case n.Type == Call && n.Workflow == f.Name:
 			probs = append(probs, where+": a workflow can't run itself")
-		case n.Type == HumanTask && (n.Form == nil || !n.Form.hasRoot()):
+		case n.Type == HumanTask && (n.Form == nil || !n.Form.HasRoot()):
 			probs = append(probs, where+": give its form (A2UI components, one of them root)")
 		case n.Type == Timer && n.Wait == "" && n.Until == "":
 			probs = append(probs, where+": say how long it waits or until when")
@@ -689,12 +690,6 @@ func CallLoops(all []Flow) map[string]string {
 }
 
 // Form is a human task's form, in A2UI v0.9's basic catalog: components
-// (a flat list, one with id root) and data, the form's starting values.
-type Form struct {
-	Components []map[string]any `yaml:"components" json:"components"`
-	Data       map[string]any   `yaml:"data,omitempty" json:"data,omitempty"`
-}
-
-func (f *Form) hasRoot() bool {
-	return slices.ContainsFunc(f.Components, func(c map[string]any) bool { return c["id"] == "root" })
-}
+// (a flat list, one with id root) and data, the form's starting values;
+// templates in either are filled as the step starts.
+type Form = a2ui.Form

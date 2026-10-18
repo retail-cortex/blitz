@@ -19,10 +19,11 @@
 // tasks window; new ones are announced as the user's [ui] task_alerts says.
 
 import { useSyncExternalStore } from "react";
+import { actionMessage, type FormAction } from "./a2ui/model";
 import { workspaces } from "./api";
-import type { HumanTask } from "./gen/blitz/v1/workspace_pb";
+import type { HumanTask, ListHumanTasksResponse } from "./gen/blitz/v1/workspace_pb";
 
-/** How often the tasks are asked for while something shows them. */
+/** How often the tasks are asked for when the service can't stream them, or the stream breaks. */
 const pollMs = 10_000;
 
 /** How new tasks reach the user: a notification, the tasks at once, or nothing. */
@@ -39,7 +40,7 @@ export interface TasksState {
 let state: TasksState = { tasks: [], alerts: "notify", shown: false, loaded: false };
 const listeners = new Set<() => void>();
 const arrivals = new Set<(tasks: HumanTask[]) => void>();
-let timer: ReturnType<typeof setInterval> | undefined;
+let timer: ReturnType<typeof setTimeout> | undefined;
 
 /** The setting as the service says it, notify for anything else. */
 export const alertsOf = (s: string): TaskAlerts => (s === "open" || s === "off" ? s : "notify");
@@ -55,30 +56,68 @@ function set(next: Partial<TasksState>) {
   for (const f of listeners) f();
 }
 
-/** Asks for the tasks now (after answering one, say). */
-export async function refreshTasks() {
-  let r;
-  try {
-    r = await workspaces.listHumanTasks({ workspace: "" });
-  } catch {
-    return; // the service's state shows elsewhere
-  }
+/** Takes a list the service sent: the tasks, the setting, and which have arrived. */
+function take(r: ListHumanTasksResponse) {
   const tasks = r.tasks.filter((t) => t.kind === "human_task");
   const fresh = state.loaded ? arrived(state.tasks, tasks) : [];
   set({ tasks, alerts: alertsOf(r.alerts), loaded: true, shown: state.shown && tasks.length > 0 });
   if (fresh.length) for (const f of arrivals) f(fresh);
 }
 
+/** Asks for the tasks now (after answering one, say). */
+export async function refreshTasks() {
+  try {
+    take(await workspaces.listHumanTasks({ workspace: "" }));
+  } catch {
+    // the service's state shows elsewhere
+  }
+}
+
+let watching: AbortController | undefined;
+
+/**
+ * Follows the service's task stream (WatchHumanTasks) while something
+ * shows the tasks; an older service without it, or a broken stream, is
+ * asked every pollMs instead until the stream comes back.
+ */
+async function watch(ctl: AbortController) {
+  while (!ctl.signal.aborted) {
+    try {
+      for await (const r of workspaces.watchHumanTasks({ workspace: "" }, { signal: ctl.signal })) take(r);
+    } catch {
+      // An older service (unimplemented) or a dropped stream: ask now,
+      // and try the stream again after a while.
+    }
+    if (ctl.signal.aborted) return;
+    await refreshTasks();
+    await new Promise((res) => (timer = setTimeout(res, pollMs)));
+  }
+}
+
 function subscribe(f: () => void) {
   listeners.add(f);
   if (listeners.size === 1) {
-    void refreshTasks();
-    timer = setInterval(refreshTasks, pollMs);
+    watching = new AbortController();
+    void watch(watching);
   }
   return () => {
     listeners.delete(f);
-    if (listeners.size === 0) clearInterval(timer);
+    if (listeners.size === 0) {
+      watching?.abort();
+      clearTimeout(timer);
+    }
   };
+}
+
+/**
+ * Answers a human task with the button pressed (A2UI's action message, and
+ * the data model then): the service checks it against the form and the
+ * run goes on in the background; a refused answer is an error saying why.
+ */
+export async function answerTask(task: Pick<HumanTask, "id" | "workspace">, action: FormAction) {
+  const r = await workspaces.answerHumanTask({ workspace: task.workspace, taskId: task.id, actionJson: JSON.stringify(actionMessage(task.id, action)), dataJson: JSON.stringify(action.data) });
+  dropTask(task.id);
+  return r;
 }
 
 /** The tasks, oldest first, and the dialog's state, kept up to date while in use. */

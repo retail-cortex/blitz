@@ -87,6 +87,7 @@ go_library(
         "//pkg/pageserver:__pkg__",
     ],
     deps = [
+        "//pkg/a2ui",
         "//pkg/api",
         "//pkg/config",
         "//pkg/docx",

@@ -55,6 +55,8 @@ import {
 } from "@mdi/js";
 import { A2uiForm } from "../a2ui/A2uiForm";
 import { TaskCard } from "../a2ui/TaskCard";
+import type { FormAction } from "../a2ui/model";
+import { answerTask } from "../humanTasks";
 import { parseForm, starterForm } from "../a2ui/model";
 import { sessions, workspaces } from "../api";
 import { DraftButton } from "./Draft";
@@ -344,9 +346,9 @@ export function WorkflowsPane({ workspace, onDirty }: { workspace: string; onDir
     }
   };
   // Answers the human task the run waits on: it resumes in the background.
-  const answer = async (task: HumanTask, values: Record<string, unknown>) => {
+  const answer = async (task: HumanTask, action: FormAction) => {
     try {
-      const r = await workspaces.answerHumanTask({ workspace, taskId: task.id, answerJson: JSON.stringify(values) });
+      const r = await answerTask(task, action);
       setLive((l) => l && { ...l, id: r.run?.id ?? l.id, state: "running", task: null });
       await watch(task.workflow, r.run?.id ?? "", task.sessionId);
     } catch (e) {
