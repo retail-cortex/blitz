@@ -491,6 +491,10 @@ type SkillPolicy struct {
 	// UntrustedRoots are directories whose skills' scripts don't run: the
 	// workspace, while its project settings aren't trusted.
 	UntrustedRoots []string `toml:"-"`
+	// Reviewed reports whether the skill in a folder was reviewed and
+	// trusted with a content hash (SkillTrust; nil: every skill is). A
+	// skill on disk whose scripts weren't is asked about before each run.
+	Reviewed func(dir, hash string) bool `toml:"-"`
 }
 
 // Problems reports settings the policy can't honour as written.

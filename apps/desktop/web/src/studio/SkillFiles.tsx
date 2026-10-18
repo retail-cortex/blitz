@@ -39,6 +39,7 @@ import {
   mdiPackageVariantClosed,
   mdiPlus,
   mdiPowershell,
+  mdiLoading,
   mdiPlay,
   mdiUndoVariant,
   mdiUpload,
@@ -342,7 +343,7 @@ export function SkillFiles({ workspace, file, folder, onFile, onDirty, onOpen }:
               <div className="stack" style={{ gap: 8 }}>
                 <div className="row" style={{ gap: 8 }}>
                   <input className="input mono spacer" autoFocus value={args} placeholder={t("desktop.skills.args")} aria-label={t("desktop.skills.args")} onChange={(e) => setArgs(e.target.value)} onKeyDown={(e) => e.key === "Enter" && void testRun()} />
-                  <Button variant="filled" icon={mdiPlay} disabled={running || !script.allowed} onClick={() => void testRun()}>
+                  <Button variant="filled" icon={running ? mdiLoading : mdiPlay} iconSpin={running} disabled={running || !script.allowed} onClick={() => void testRun()}>
                     {running ? t("desktop.skills.running") : t("desktop.skills.run")}
                   </Button>
                 </div>

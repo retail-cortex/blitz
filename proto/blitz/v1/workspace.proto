@@ -930,6 +930,10 @@ message SkillInfo {
   // as paths in its folder: the first of each kind gives its scripts
   // their packages.
   repeated string package_files = 24;
+  // Its scripts, on disk, weren't reviewed and trusted with this content
+  // (hash): new, changed, or a registry's. Each run asks first, until
+  // ConfigService.TrustSkillScripts.
+  bool needs_review = 25;
 }
 
 // SkillTool is a tool a skill needs.

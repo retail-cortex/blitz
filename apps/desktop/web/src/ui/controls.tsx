@@ -50,13 +50,14 @@ export function Button({
   icon,
   danger,
   small,
+  iconSpin,
   className = "",
   children,
   ...rest
-}: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: Variant; icon?: string; danger?: boolean; small?: boolean }) {
+}: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: Variant; icon?: string; danger?: boolean; small?: boolean; iconSpin?: boolean }) {
   return (
     <button type="button" className={`btn ${variant} ${icon ? "has-icon" : ""} ${danger ? "danger" : ""} ${small ? "small" : ""} ${className}`} {...rest}>
-      {icon && <Icon path={icon} size="sm" />}
+      {icon && <Icon path={icon} size="sm" spin={iconSpin} />}
       {children}
     </button>
   );

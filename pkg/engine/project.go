@@ -62,7 +62,43 @@ func TrustProject(cfg *config.Config, hash string, trusted bool) error {
 	if err != nil {
 		return err
 	}
-	return trustStore(cfg).Set(dir, hash, trusted)
+	if err := trustStore(cfg).Set(dir, hash, trusted); err != nil || !trusted {
+		return err
+	}
+	sk, err := skills.NewProvider()
+	if err != nil {
+		return err
+	}
+	if fresh.Skills.Enabled {
+		_ = sk.DiscoverExternal(fresh.SkillSearchPaths(fresh.Tools.WorkspaceDir))
+	}
+	trustProjectSkills(fresh, sk)
+	return nil
+}
+
+// skillTrust is the store of reviewed skills in cfg's settings directory.
+func skillTrust(cfg *config.Config) *config.SkillTrust {
+	dir := cfg.Dir
+	if dir == "" {
+		dir = config.ConfigDir("")
+	}
+	return config.OpenSkillTrust(dir)
+}
+
+// trustProjectSkills records the workspace's skills with scripts as
+// reviewed with their content now: trusting the project's settings,
+// whose hash includes that content, reviewed them (SK-108).
+func trustProjectSkills(cfg *config.Config, sk *skills.Provider) {
+	dir, err := config.CanonicalWorkspace(cfg.Tools.WorkspaceDir)
+	if err != nil {
+		return
+	}
+	store := skillTrust(cfg)
+	for _, s := range projectSkillsWithScripts(sk, dir) {
+		if h, err := s.ContentHash(); err == nil {
+			_ = store.Trust(s.HostDir(), h)
+		}
+	}
 }
 
 // ForgetProjectTrust removes the decision for cfg's workspace, so it's
@@ -158,6 +194,9 @@ func (w *Workspace) loadProject(cfg *config.Config, forRun bool, warn func(strin
 		p.ApplyTrusted(cfg)
 		w.project.Loaded = true
 		w.project.Ignored = items(p.Ignored)
+		if w.project.State == api.TrustTrusted {
+			trustProjectSkills(cfg, w.skills) // reviewed with the project
+		}
 	default:
 		cfg.Skills.Policy.UntrustedRoots = append(cfg.Skills.Policy.UntrustedRoots, cfg.Tools.WorkspaceDir)
 		if dir, err := config.CanonicalWorkspace(cfg.Tools.WorkspaceDir); err == nil && dir != cfg.Tools.WorkspaceDir {

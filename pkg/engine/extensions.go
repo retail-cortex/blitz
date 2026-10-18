@@ -42,6 +42,7 @@ func (w *Workspace) skillInfo(s *skills.Skill) api.SkillInfo {
 	}
 	ev := skills.Evaluate(s, w.cfg.Skills.Policy)
 	info.Hash, info.Network, info.Env, info.Withheld, info.Blocked = ev.Hash, ev.Network, ev.Env, ev.Withheld, ev.Blocked
+	info.NeedsReview = ev.NeedsReview
 	if len(s.Scripts) > 0 {
 		info.Tier, info.Bypass = ev.Tier.String(), ev.Bypass
 	}

@@ -16,6 +16,8 @@ package server
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
@@ -106,4 +108,40 @@ func TestSkillEditingOverTheAPI(t *testing.T) {
 	_, err = os.Stat(filepath.Join(dir, ".agents", "skills", "notes"))
 	assert.True(t, os.IsNotExist(err))
 	assert.Equal(t, "SKILL_NOT_FOUND", reason(t, unary(w.GetSkillFile, &pb.GetSkillFileRequest{Workspace: dir, Name: "notes"})))
+}
+
+// A skill with scripts needs review until its content is trusted with
+// the hash shown; a stale hash is refused; a changed script needs review
+// again (SK-108).
+func TestSkillReviewOverTheAPI(t *testing.T) {
+	_, s := serve(t, nil)
+	srv := httptest.NewServer(s.Handler())
+	defer srv.Close()
+	c := pb.NewConfigServiceClient(http.DefaultClient, srv.URL)
+	ctx := context.Background()
+	dir := filepath.Join(t.TempDir(), "tool")
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "scripts"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "SKILL.md"), []byte("---\nname: tool\ndescription: d\n---\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "scripts", "run.py"), []byte("print(1)"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "requirements.txt"), []byte("rich\n"), 0o644))
+
+	got, err := c.GetSkillReview(ctx, connect.NewRequest(&pb.GetSkillReviewRequest{Dir: dir}))
+	require.NoError(t, err)
+	review := got.Msg.Review
+	require.NotNil(t, review)
+	require.Len(t, review.Scripts, 1)
+	assert.Equal(t, &pb.ReviewScript{Name: "run", Language: "python", Source: "scripts/run.py", Deps: []string{"rich"}}, review.Scripts[0])
+
+	assert.Equal(t, "HASH_MISMATCH", reason(t, unary(c.TrustSkillScripts, &pb.TrustSkillScriptsRequest{Dir: dir, Hash: "sha256:stale"})))
+	assert.Equal(t, "SKILL_NOT_FOUND", reason(t, unary(c.TrustSkillScripts, &pb.TrustSkillScriptsRequest{Dir: filepath.Join(dir, "nope"), Hash: "x"})))
+	require.NoError(t, unary(c.TrustSkillScripts, &pb.TrustSkillScriptsRequest{Dir: dir, Hash: review.Hash}))
+	got, err = c.GetSkillReview(ctx, connect.NewRequest(&pb.GetSkillReviewRequest{Dir: dir}))
+	require.NoError(t, err)
+	assert.Nil(t, got.Msg.Review, "trusted")
+
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "scripts", "more.py"), []byte("print(2)"), 0o644))
+	got, err = c.GetSkillReview(ctx, connect.NewRequest(&pb.GetSkillReviewRequest{Dir: dir}))
+	require.NoError(t, err)
+	require.NotNil(t, got.Msg.Review, "a script added: review again")
+	assert.Len(t, got.Msg.Review.Scripts, 2)
 }

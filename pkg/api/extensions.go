@@ -64,6 +64,9 @@ type SkillInfo struct {
 	// Project means the workspace's own: its folder is in the workspace,
 	// so Studio edits it.
 	Project bool
+	// NeedsReview means its scripts, on disk, weren't reviewed and trusted
+	// with this content (new, changed, a registry's): each run asks first.
+	NeedsReview bool
 }
 
 // SkillTool is a tool a skill needs.

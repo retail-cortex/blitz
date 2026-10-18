@@ -454,3 +454,29 @@ func TestSameNamedScriptsRunThemselves(t *testing.T) {
 	run("test.ts", "ts one\nts two\n", nodeErr)
 	run("test.py", "py one\npy two\n", pyErr)
 }
+
+// Scripts not reviewed with this content are asked about before each
+// run, whatever the tier; refused, they don't run (SK-108).
+func TestUnreviewedScriptsAsk(t *testing.T) {
+	for _, approve := range []bool{false, true} {
+		t.Run(map[bool]string{false: "refused", true: "approved"}[approve], func(t *testing.T) {
+			f := newScriptFixture(t, "", approve, func(p *config.SkillPolicy) {
+				p.Reviewed = func(string, string) bool { return false }
+			})
+			out := f.runner.Run(context.Background(), RunSkillScriptInput{Skill: "demo", Script: "work", Args: []string{"x"}})
+			var asked bool
+			for _, r := range *f.reqs {
+				if strings.Contains(r.Detail, "new or changed since they were reviewed") && r.MustAsk {
+					asked = true
+				}
+			}
+			assert.True(t, asked, "%+v", *f.reqs)
+			if approve {
+				assert.Empty(t, out.Error, "%+v", out)
+			} else {
+				assert.NotEmpty(t, out.Error, "%+v", out)
+				assert.Empty(t, out.Stdout)
+			}
+		})
+	}
+}

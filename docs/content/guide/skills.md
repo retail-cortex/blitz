@@ -43,6 +43,13 @@ A skill is one of four kinds, from what its folder holds:
 
 **In a prompt:** type `\` and a skill's name (the composer completes it) to use that skill for the request: its instructions go with your prompt, as `/skill-name` does.
 
+## Reviewing a skill's scripts
+
+A skill's scripts run without asking only once you've reviewed them: Blitz remembers the content you trusted, so a new or changed script (or a registry update) is asked about again. Until then the agent asks you before each run, and a worker's run is refused.
+
+- **Desktop:** installing a registry skill with scripts opens the review; Studio › Skills marks a skill **Scripts to review**, with **Review scripts** in its view. The review lists each script, its file and the packages it installs; **Trust these scripts** remembers them.
+- Trusting a workspace's project settings trusts its skills' scripts as they are, so you aren't asked twice.
+
 ## Skills from a registry
 
 A registry, such as your organization's Castor registry, offers skills to install by name. Each skill is a `.zip` whose SHA-256 the registry gives, and Blitz refuses one that doesn't match.

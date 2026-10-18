@@ -117,6 +117,14 @@ service ConfigService {
   rpc DeleteSecret(DeleteSecretRequest) returns (DeleteSecretResponse);
   // Returns the skills Blitz ships with.
   rpc ListBuiltinSkills(ListBuiltinSkillsRequest) returns (ListBuiltinSkillsResponse);
+  // Records that the user reviewed and trusted the scripts of the skill
+  // in a folder, with the content hash they were shown (HASH_MISMATCH if
+  // it changed since): its scripts then run without asking first, until
+  // its content changes (spec_skills_013 SK-108).
+  rpc TrustSkillScripts(TrustSkillScriptsRequest) returns (TrustSkillScriptsResponse);
+  // Returns what a skill's scripts are, for review, when they need it
+  // (nothing when they don't).
+  rpc GetSkillReview(GetSkillReviewRequest) returns (GetSkillReviewResponse);
   // Returns the MCP servers of the global settings, with the file they're in.
   rpc ListMCPServerConfigs(ListMCPServerConfigsRequest) returns (ListMCPServerConfigsResponse);
   // Adds an MCP server to the global settings, or replaces one (name):
@@ -575,6 +583,28 @@ message InstalledSkill {
   // Its folder.
   string dir = 4;
   google.protobuf.Timestamp installed = 5;
+  // Its scripts, when it has some that weren't reviewed with this content
+  // (a new install, an update): what to show before TrustSkillScripts.
+  SkillReview review = 6;
+}
+
+// What a skill's scripts are, for the user to review before trusting
+// them (spec_skills_013 SK-108).
+message SkillReview {
+  // The skill's folder and content hash, for TrustSkillScripts.
+  string dir = 1;
+  string hash = 2;
+  repeated ReviewScript scripts = 3;
+}
+
+// One script under review.
+message ReviewScript {
+  string name = 1;
+  string language = 2;
+  // Its path in the skill, or "inline".
+  string source = 3;
+  // The packages it installs.
+  repeated string deps = 4;
 }
 
 // Request message for ConfigService.ListSkillRegistries.
@@ -786,3 +816,26 @@ message DeleteSecretRequest {
 
 // Response message for ConfigService.DeleteSecret.
 message DeleteSecretResponse {}
+
+// Request message for ConfigService.TrustSkillScripts.
+message TrustSkillScriptsRequest {
+  // The skill's folder.
+  string dir = 1;
+  // Its content hash, as shown.
+  string hash = 2;
+}
+
+// Response message for ConfigService.TrustSkillScripts.
+message TrustSkillScriptsResponse {}
+
+// Request message for ConfigService.GetSkillReview.
+message GetSkillReviewRequest {
+  // The skill's folder.
+  string dir = 1;
+}
+
+// Response message for ConfigService.GetSkillReview.
+message GetSkillReviewResponse {
+  // Unset when its scripts need no review.
+  SkillReview review = 1;
+}

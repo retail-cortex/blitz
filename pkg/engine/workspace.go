@@ -249,6 +249,8 @@ func Open(ctx context.Context, cfg *config.Config, o Options) (*Workspace, error
 	if cfg.Blitz.TrustWorkspace {
 		o.Warn(i18n.T("project.trust_workspace_deprecated"))
 	}
+	// Skills' scripts on disk run unasked only once reviewed (SK-108).
+	cfg.Skills.Policy.Reviewed = skillTrust(cfg).Reviewed
 	w.loadProject(cfg, o.TrustProject || cfg.Blitz.TrustWorkspace, o.Warn)
 	w.loadPlugins(cfg, o.Warn)
 

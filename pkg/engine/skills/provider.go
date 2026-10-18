@@ -92,6 +92,23 @@ func (p *Provider) loadEmbeddedSkills() error {
 	return err
 }
 
+// LoadFolder reads the skill in folder dir (its SKILL.md and what's
+// beside it), as discovery would.
+func LoadFolder(dir string) (*Skill, error) {
+	p := filepath.Join(dir, "SKILL.md")
+	data, err := os.ReadFile(p)
+	if err != nil {
+		return nil, err
+	}
+	s, err := ParseSkillMD(data, p)
+	if err != nil {
+		return nil, err
+	}
+	s.fsys, s.root, s.hostDir = os.DirFS(dir), ".", dir
+	s.scanBundle()
+	return s, nil
+}
+
 // DiscoverExternal scans search directories for SKILL.md files. External
 // skills cannot replace built-in ones; conflicts are reported in the returned
 // (joined) error while other skills still load.

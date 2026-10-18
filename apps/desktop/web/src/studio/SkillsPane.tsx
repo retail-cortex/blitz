@@ -30,6 +30,7 @@ import {
   mdiPlus,
   mdiPuzzleOutline,
   mdiRefresh,
+  mdiShieldAlertOutline,
   mdiSitemapOutline,
   mdiUndoVariant,
 } from "@mdi/js";
@@ -39,6 +40,7 @@ import { message } from "../errors";
 import { t } from "../i18n";
 import type { SkillFile, SkillInfo } from "../gen/blitz/v1/workspace_pb";
 import { SuggestTextarea } from "../SecretSuggest";
+import { SkillReviewDialog } from "../SkillReview";
 import { forgetSkills } from "../skillMention";
 import { Button, Chip, Dialog, Field, Icon, IconButton, Tabs, useSnackbar } from "../ui/controls";
 import { DraftButton } from "./Draft";
@@ -81,6 +83,7 @@ export function SkillsPane({ workspace, onDirty }: { workspace: string; onDirty?
   const [pending, setPending] = useState<(() => void) | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [adding, setAdding] = useState(false);
+  const [reviewing, setReviewing] = useState(false);
   const [tools, setTools] = useState<string[]>([]);
   const [agents, setAgents] = useState<string[]>([]);
 
@@ -222,10 +225,10 @@ export function SkillsPane({ workspace, onDirty }: { workspace: string; onDirty?
             const broken = s.blocked.length > 0 && s.scripts.length > 0;
             return (
               <button key={s.name} className="list-item" title={s.dir} onClick={() => show(s.name)}>
-                <Icon path={broken ? mdiAlertCircleOutline : kindIcons[k]} className={broken ? "error-text" : undefined} />
+                <Icon path={broken ? mdiAlertCircleOutline : s.needsReview ? mdiShieldAlertOutline : kindIcons[k]} className={broken ? "error-text" : s.needsReview ? "warn-text" : undefined} />
                 <span className="lines">
                   <span className="ellipsis">{s.name}</span>
-                  <small className="ellipsis">{[t(`desktop.skills.kind.${k}`), s.description].filter(Boolean).join(" · ")}</small>
+                  <small className="ellipsis">{[s.needsReview ? t("desktop.review.pending") : "", t(`desktop.skills.kind.${k}`), s.description].filter(Boolean).join(" · ")}</small>
                 </span>
               </button>
             );
@@ -253,6 +256,25 @@ export function SkillsPane({ workspace, onDirty }: { workspace: string; onDirty?
                 { value: "scripts", label: t("desktop.skills.tab.scripts"), count: file?.skill?.scripts.length },
               ]}
             />
+            {file?.skill?.needsReview && (
+              <div className="card warn row wrap skill-review-banner" style={{ gap: 8 }}>
+                <Icon path={mdiShieldAlertOutline} size="sm" />
+                <span className="t-body-sm spacer">{t("desktop.review.banner")}</span>
+                <Button small variant="tonal" onClick={() => setReviewing(true)}>
+                  {t("desktop.review.open")}
+                </Button>
+              </div>
+            )}
+            {reviewing && file?.skill && (
+              <SkillReviewDialog
+                name={file.skill.name}
+                review={{ dir: file.skill.dir, hash: file.skill.hash, scripts: file.skill.scripts.map((s) => ({ name: s.name, language: s.language, source: s.source, deps: s.deps })) }}
+                onDone={(trusted) => {
+                  setReviewing(false);
+                  if (trusted) void workspaces.getSkillFile({ workspace, name: file.skill!.name }).then((r) => r.file && setFile(r.file), () => {});
+                }}
+              />
+            )}
             {tab === "general" && (
               <div className="worker agent-form skill-form">
                 <div className="pair">

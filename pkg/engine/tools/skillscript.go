@@ -174,9 +174,16 @@ func (s *SkillScripts) Run(ctx context.Context, in RunSkillScriptInput) (out Run
 		return fail("%v", err)
 	}
 
-	// Approval by tier: 3 asks every time and can't be remembered.
+	// Approval by tier: 3 asks every time and can't be remembered. Scripts
+	// not reviewed with this content (new, changed, a registry's) are
+	// asked about each time, whatever the tier (SK-108).
 	detail := fmt.Sprintf("Run %s from skill %s (%s)%s", sc.Name, skill.Name, ev.Tier, argsNote(in.Args))
 	switch {
+	case ev.NeedsReview:
+		if err := s.hooks.Approve(ctx, api.ApprovalRequest{Tool: "run_skill_script", Kind: api.ActionCommand, MustAsk: true,
+			Detail: detail + ": its scripts are new or changed since they were reviewed (trust them in Studio › Skills)"}); err != nil {
+			return fail("%v", err)
+		}
 	case ev.Bypass:
 		s.audit(detail, "bypass")
 	case ev.Tier >= skills.Tier3MandatoryApproval:

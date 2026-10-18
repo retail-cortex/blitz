@@ -561,7 +561,9 @@ const fakeSkillInfo = (workspace: string, x: FakeSkill) => {
     .map((p) => ({ name: p.replace(/^scripts\/|\.(py|ts|sh|cmd|bat)$/g, ""), language: ({ py: "python", ts: "typescript", sh: "shell" } as Record<string, string>)[p.split(".").pop()!] ?? "cmd", source: p, allowed: true, reasons: [] as string[], found: true, deps: p.endsWith(".py") ? fakeRequirements(x) : ([] as string[]) }));
   const packageFiles = ["scripts/requirements.txt", "requirements.txt", "scripts/pyproject.toml", "pyproject.toml", "scripts/package.json", "package.json"].filter((f) => f in x.files);
   const kind = x.members.length ? "meta" : scripts.length ? "scripts" : refs.length ? "references" : "simple";
-  return { name: x.name, description: x.description, dir: `${workspace}/.agents/skills/${x.name}`, kind, project: true, references: refs, scripts, packageFiles, agents: x.agents, members: x.members, blocked: [] as string[] };
+  // A skill's scripts wait for review until trusted at their content (SK-108).
+  const hash = "sha256:" + JSON.stringify(x.files).length;
+  return { name: x.name, description: x.description, dir: `${workspace}/.agents/skills/${x.name}`, kind, project: true, references: refs, scripts, packageFiles, agents: x.agents, members: x.members, blocked: [] as string[], hash, needsReview: scripts.length > 0 && fakeTrusted.get(x.name) !== hash };
 };
 // A skill's Python packages: its requirements.txt's lines.
 const fakeRequirements = (x: FakeSkill) =>
@@ -569,6 +571,8 @@ const fakeRequirements = (x: FakeSkill) =>
     .split("\n")
     .map((l) => l.replace(/#.*/, "").trim())
     .filter(Boolean);
+// The skills whose scripts were trusted, at which content.
+const fakeTrusted = new Map<string, string>();
 const fakeSkillFile = (workspace: string, x: FakeSkill) => ({
   skill: fakeSkillInfo(workspace, x),
   path: `${workspace}/.agents/skills/${x.name}/SKILL.md`,
@@ -926,7 +930,7 @@ export function installFake() {
           fakeProjectSkills.push(x);
           return { file: fakeSkillFile(workspace, x) };
         },
-        runSkillScript: ({ script, args }) => ({ exitCode: 0, stdout: `${script}: ${args.length ? args.join(" ") : "no arguments"}\n3 entries since v0.7.0\n`, stderr: "", sandbox: "seatbelt" }),
+        runSkillScript: async ({ script, args }) => (await new Promise((r) => setTimeout(r, 900)),  ({ exitCode: 0, stdout: `${script}: ${args.length ? args.join(" ") : "no arguments"}\n3 entries since v0.7.0\n`, stderr: "", sandbox: "seatbelt" })),
         getSettings: ({ workspace }) => {
           const s = state(workspace).settings;
           return { agent: s.agent, model: s.model, provider: s.provider, effort: s.effort, permissionMode: s.mode, agency: s.agency, locale: s.locale, style: s.style, imagesEnabled: true, speechModel: s.speechModel ?? "", acceptedMedia: fakeAccepted(s.provider) };
@@ -1252,6 +1256,9 @@ export function installFake() {
         }),
       });
       service(ConfigService, {
+        // Reviewing a skill's scripts: trusted at the content shown.
+        trustSkillScripts: ({ dir, hash }) => (fakeTrusted.set(dir.split("/").pop()!, hash), {}),
+        getSkillReview: () => ({}),
         listSkillRegistries: () => ({ registries: fakeRegistries, installed: fakeInstalledSkills }),
         listSecrets: ({ workspace }) => ({ secrets: (fakeSecrets.get(workspace) ?? []).map((key) => ({ key, updated: { seconds: BigInt(1760700000), nanos: 0 } })), store: "macOS Keychain" }),
         setSecret: ({ workspace, key }) => {

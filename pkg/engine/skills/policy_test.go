@@ -260,3 +260,32 @@ func TestScriptPlatforms(t *testing.T) {
 	assert.Equal(t, LanguageShell, s.Scripts[0].Language)
 	assert.Equal(t, LanguageCmd, s.Scripts[1].Language)
 }
+
+// A skill on disk with scripts needs review until its content is
+// trusted; a built-in never does, nor a skill without scripts (SK-108).
+func TestNeedsReview(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "s", "scripts"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "s", "SKILL.md"), []byte("---\nname: s\ndescription: d\n---\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "s", "scripts", "a.py"), []byte("print(1)"), 0o644))
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "plain"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "plain", "SKILL.md"), []byte("---\nname: plain\ndescription: d\n---\n"), 0o644))
+	s, err := LoadFolder(filepath.Join(dir, "s"))
+	require.NoError(t, err)
+	plain, err := LoadFolder(filepath.Join(dir, "plain"))
+	require.NoError(t, err)
+	_, err = LoadFolder(filepath.Join(dir, "missing"))
+	assert.Error(t, err)
+
+	trusted := map[string]string{}
+	p := config.DefaultConfig().Skills.Policy
+	p.Reviewed = func(d, h string) bool { return trusted[d] == h }
+	ev := Evaluate(s, p)
+	assert.True(t, ev.NeedsReview)
+	assert.True(t, ev.Scripts[0].Allowed, "asked about, not blocked")
+	trusted[s.HostDir()] = ev.Hash
+	assert.False(t, Evaluate(s, p).NeedsReview)
+	assert.False(t, Evaluate(plain, p).NeedsReview, "no scripts")
+	p.Reviewed = nil
+	assert.False(t, Evaluate(s, p).NeedsReview, "no store: as before")
+}

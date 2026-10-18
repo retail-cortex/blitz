@@ -15,11 +15,12 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
-import { mdiDeleteOutline, mdiDownload, mdiKeyOutline, mdiMagnify, mdiPlus, mdiRefresh } from "@mdi/js";
+import { mdiDeleteOutline, mdiDownload, mdiKeyOutline, mdiMagnify, mdiPlus, mdiRefresh, mdiShieldAlertOutline } from "@mdi/js";
 import { config } from "./api";
 import { message } from "./errors";
 import type { BuiltinSkill, InstalledSkill, RegistrySkill, SkillRegistry } from "./gen/blitz/v1/config_pb";
 import { t, tn } from "./i18n";
+import { SkillReviewDialog } from "./SkillReview";
 import { useApp } from "./state";
 import { Button, Icon, IconButton, useSnackbar } from "./ui/controls";
 
@@ -63,6 +64,9 @@ export function SkillSettings() {
     );
   }, []);
 
+  // A skill whose scripts wait for review (just installed, or Review scripts).
+  const [reviewing, setReviewing] = useState<InstalledSkill | null>(null);
+
   // Runs a change, says how it went, and reloads the lists.
   const act = async (run: () => Promise<string>) => {
     setBusy(true);
@@ -100,12 +104,23 @@ export function SkillSettings() {
   const install = (s: RegistrySkill) =>
     act(async () => {
       const r = await config.installRegistrySkill({ ref: `${s.registry}/${s.name}`, workspace: scope });
+      if (r.skill?.review) setReviewing(r.skill); // its scripts are reviewed before they run unasked
       return t("desktop.skills.installed", { name: s.name, version: r.skill?.version ?? s.version });
     });
 
   return (
     <div className="stack skill-settings" style={{ gap: 16 }}>
       <p className="t-body-sm muted">{t("desktop.skills.intro")}</p>
+      {reviewing?.review && (
+        <SkillReviewDialog
+          name={reviewing.name}
+          review={reviewing.review}
+          onDone={() => {
+            setReviewing(null);
+            void load();
+          }}
+        />
+      )}
       {error && <p className="error-text">{error}</p>}
 
       <section className="stack" style={{ gap: 8 }}>
@@ -224,6 +239,11 @@ export function SkillSettings() {
                     {i.dir}
                   </code>
                 </div>
+                {i.review && (
+                  <Button small icon={mdiShieldAlertOutline} onClick={() => setReviewing(i)}>
+                    {t("desktop.review.open")}
+                  </Button>
+                )}
                 <IconButton
                   icon={mdiDeleteOutline}
                   label={t("desktop.skills.uninstall", { name: i.name })}

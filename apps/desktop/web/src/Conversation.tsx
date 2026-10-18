@@ -65,6 +65,7 @@ import {
   mdiArrowExpand,
   mdiArrowCollapse,
   mdiPuzzleOutline,
+  mdiLoading,
 } from "@mdi/js";
 import { files, serviceLost, sessions, workspaces } from "./api";
 import { editorConfig, toEditor } from "./host";
@@ -1365,7 +1366,18 @@ function ToolRow({ name, args, result }: { name: string; args?: JsonObject; resu
   const open = advanced && opened;
   const openPath = useOpenPath();
   const bad = failed(result);
-  const status = result === undefined ? <Icon path={mdiProgressClock} size="sm" className="pulse" /> : bad ? <Icon path={mdiClose} size="sm" /> : <Icon path={mdiCheck} size="sm" />;
+  // Working: a spinner, and for a skill's script (which can take a while) the word.
+  const status =
+    result === undefined ? (
+      <span className="row tool-running" style={{ gap: 6 }}>
+        {name === "run_skill_script" && <span className="t-body-sm muted">{t("desktop.tool.running")}</span>}
+        <Icon path={mdiLoading} size="sm" spin />
+      </span>
+    ) : bad ? (
+      <Icon path={mdiClose} size="sm" />
+    ) : (
+      <Icon path={mdiCheck} size="sm" />
+    );
   return (
     <div className={`tool ${bad ? "failed" : ""} ${open ? "open" : ""}`}>
       <button className="tool-head" onClick={() => advanced && setOpen((o) => !o)} aria-expanded={advanced ? open : undefined}>

@@ -29,6 +29,7 @@ go_library(
         "project.go",
         "providers.go",
         "reference.go",
+        "skilltrust.go",
         "trust.go",
     ],
     embedsrcs = [
@@ -64,6 +65,7 @@ go_test(
         "project_test.go",
         "providers_test.go",
         "reference_test.go",
+        "skilltrust_test.go",
     ],
     embed = [":config"],
     deps = [

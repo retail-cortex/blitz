@@ -39,6 +39,9 @@ type Evaluation struct {
 	Env, Withheld []string
 	Hash          string // ContentHash, "" if it couldn't be computed
 	Scripts       []ScriptVerdict
+	// NeedsReview means the skill's scripts, on disk, weren't reviewed and
+	// trusted with this content (SK-108): each run asks first.
+	NeedsReview bool
 	// Blocked are reasons none of the skill's scripts may run.
 	Blocked []string
 }
@@ -92,6 +95,9 @@ func Evaluate(s *Skill, p config.SkillPolicy) Evaluation {
 	}
 	if root := untrustedRoot(s, p.UntrustedRoots); root != "" {
 		block("it's the project's (%s), whose settings aren't trusted: blitz trust", root)
+	}
+	if len(s.Scripts) > 0 && s.hostDir != "" && p.Reviewed != nil && !p.Reviewed(s.hostDir, ev.Hash) {
+		ev.NeedsReview = true // built-in skills are Blitz's own
 	}
 	if len(p.TrustedHashes) > 0 && !slices.Contains(p.TrustedHashes, ev.Hash) {
 		block("its content (%s) isn't in skills.policy.trusted_hashes", orNone(ev.Hash))
