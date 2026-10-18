@@ -25,6 +25,7 @@ import (
 	"github.com/google/cel-go/cel"
 	"github.com/google/cel-go/common/types"
 	"github.com/google/cel-go/common/types/ref"
+	"google.golang.org/protobuf/types/known/structpb"
 )
 
 // Expressions (spec_workflows_043 WF-13): conditions on links and
@@ -152,6 +153,21 @@ func Holds(expr string, vars Vars) (bool, error) {
 // anyType is what values convert to for JSON.
 var anyType = reflectAny()
 
+// structValue is a JSON value as protobuf has it.
+var structValue = reflect.TypeOf(&structpb.Value{})
+
+// native is v as plain Go values (JSON's types), nested ones too: a map
+// or list CEL built (a literal) holds CEL values, which converting to any
+// alone leaves as they are.
+func native(v ref.Val) (any, error) {
+	if pv, err := v.ConvertToNative(structValue); err == nil {
+		if s, ok := pv.(*structpb.Value); ok {
+			return s.AsInterface(), nil
+		}
+	}
+	return v.ConvertToNative(anyType)
+}
+
 // templateRE is a {{ expression }} in a setting.
 var templateRE = regexp.MustCompile(`\{\{\s*(.+?)\s*\}\}`)
 
@@ -181,7 +197,7 @@ func Fill(text string, vars Vars) (string, error) {
 		if s, ok := v.Value().(string); ok {
 			return s
 		}
-		native, err := v.ConvertToNative(anyType)
+		native, err := native(v)
 		if err != nil {
 			return fmt.Sprint(v.Value())
 		}
@@ -250,7 +266,7 @@ func FillValue(v any, vars Vars) (any, error) {
 			if err != nil {
 				return nil, fmt.Errorf("{{ %s }}: %w", m[1], err)
 			}
-			native, err := val.ConvertToNative(anyType)
+			native, err := native(val)
 			if err != nil {
 				return val.Value(), nil
 			}
@@ -287,7 +303,7 @@ func List(expr string, vars Vars) ([]any, error) {
 	if err != nil {
 		return nil, err
 	}
-	native, err := v.ConvertToNative(anyType)
+	native, err := native(v)
 	if err != nil {
 		return nil, fmt.Errorf("%s isn't a list", expr)
 	}

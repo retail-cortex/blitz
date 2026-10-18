@@ -50,6 +50,23 @@ func TestEvalCommand(t *testing.T) {
 	assert.Equal(t, exitUsage, exitCodeFor(err), "%v", err)
 }
 
+// An eval with no cases can't run (a usage error); a broken settings file
+// stops blitz eval before it opens the workspace.
+func TestEvalCommandEdges(t *testing.T) {
+	home := isolate(t)
+	dir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, ".agents", "evals"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, ".agents", "evals", "empty.md"), []byte("| ID | Name | Prompt | Output | Type |\n|-|-|-|-|-|\n"), 0o644))
+	_, err := runCLI(t, "-d", dir, "eval", "empty")
+	assert.Equal(t, exitUsage, exitCodeFor(err), "%v", err)
+	assert.ErrorContains(t, err, "no case to run")
+
+	require.NoError(t, os.MkdirAll(filepath.Join(home, ".blitz"), 0o700))
+	require.NoError(t, os.WriteFile(filepath.Join(home, ".blitz", ".env.toml"), []byte("[[[ not toml"), 0o600))
+	_, err = runCLI(t, "-d", dir, "eval", "empty")
+	assert.Error(t, err, "a broken settings file")
+}
+
 func TestPrintEvalResult(t *testing.T) {
 	tests := []struct {
 		name string

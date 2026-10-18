@@ -32,6 +32,7 @@ go_library(
         "@com_github_google_cel_go//common/types:go_default_library",
         "@com_github_google_cel_go//common/types/ref:go_default_library",
         "@in_gopkg_yaml_v3//:yaml_v3",
+        "@org_golang_google_protobuf//types/known/structpb",
     ],
 )
 
@@ -40,6 +41,7 @@ go_test(
     srcs = [
         "expr_test.go",
         "flows_test.go",
+        "settings_test.go",
     ],
     embed = [":flows"],
     deps = [

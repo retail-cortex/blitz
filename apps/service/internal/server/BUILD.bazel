@@ -94,6 +94,7 @@ go_test(
         "language_test.go",
         "leak_test.go",
         "listen_test.go",
+        "manifest_handlers_test.go",
         "mcp_test.go",
         "rules_test.go",
         "scheduler_test.go",

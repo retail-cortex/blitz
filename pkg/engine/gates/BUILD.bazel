@@ -36,6 +36,7 @@ go_library(
 go_test(
     name = "gates_test",
     srcs = [
+        "errors_test.go",
         "gates_test.go",
         "guardrails_test.go",
     ],

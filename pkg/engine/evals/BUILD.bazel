@@ -36,7 +36,10 @@ go_library(
 
 go_test(
     name = "evals_test",
-    srcs = ["evals_test.go"],
+    srcs = [
+        "errors_test.go",
+        "evals_test.go",
+    ],
     embed = [":evals"],
     deps = [
         "//pkg/api",

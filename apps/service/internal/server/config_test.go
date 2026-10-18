@@ -17,6 +17,7 @@ package server
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -257,10 +258,19 @@ func TestGetInterfaceLanguage(t *testing.T) {
 	de := `{"meta":{"locale":"de"},"messages":{"desktop.settings":"Einstellungen"}}`
 	require.NoError(t, os.WriteFile(filepath.Join(home, ".blitz", "locales", "de.json"), []byte(de), 0o600))
 	require.NoError(t, os.WriteFile(filepath.Join(home, ".blitz", "locales", "broken.json"), []byte("{"), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(home, ".blitz", "locales", "notes.txt"), []byte("not a catalog"), 0o600))
+	require.NoError(t, os.MkdirAll(filepath.Join(home, ".blitz", "locales", "old.json"), 0o700))
 	res, err = cc.GetInterfaceLanguage(context.Background(), connect.NewRequest(&pb.GetInterfaceLanguageRequest{}))
 	require.NoError(t, err)
 	assert.Equal(t, "de", res.Msg.Locale)
-	assert.Equal(t, []string{de}, res.Msg.Catalogs, "a broken catalog is left out")
+	assert.Equal(t, []string{de}, res.Msg.Catalogs, "a broken catalog, other files and folders are left out")
+
+	for i := range userCatalogs + 2 {
+		require.NoError(t, os.WriteFile(filepath.Join(home, ".blitz", "locales", fmt.Sprintf("x%02d.json", i)), []byte(de), 0o600))
+	}
+	res, err = cc.GetInterfaceLanguage(context.Background(), connect.NewRequest(&pb.GetInterfaceLanguageRequest{}))
+	require.NoError(t, err)
+	assert.Len(t, res.Msg.Catalogs, userCatalogs, "at most userCatalogs")
 }
 
 // API keys over the API: a plain key in the settings file is moved to the
