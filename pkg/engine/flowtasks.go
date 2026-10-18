@@ -295,7 +295,13 @@ func (w *Workspace) ResumeFlow(ctx context.Context, taskID string, answer map[st
 		other.SetWorkspace(w.Dir())
 		defer other.Release()
 		if _, err := other.Load(rec.Session); err != nil {
-			return api.TurnResult{}, fmt.Errorf("the run's chat: %w", err)
+			// A chat with nothing in it yet (the run paused first) isn't on
+			// disk: it starts now, under its ID.
+			created, cerr := other.CreateSession(rec.Session, "/"+rec.Workflow, w.engine.ActiveAgent())
+			if cerr != nil {
+				return api.TurnResult{}, fmt.Errorf("the run's chat: %w", err)
+			}
+			created.Origin = session.OriginBackground
 		}
 		ctx = withFlowStorage(ctx, other)
 	}
@@ -308,3 +314,7 @@ func (w *Workspace) ResumeFlow(ctx context.Context, taskID string, answer map[st
 func (w *Workspace) FlowTasks() []FlowRecord {
 	return ListFlowRecords(FlowRecordsDir(w.cfg.Session.StorageDir), w.Dir())
 }
+
+// StorageDir is where the workspace keeps sessions (and paused runs'
+// records, under it).
+func (w *Workspace) StorageDir() string { return w.cfg.Session.StorageDir }

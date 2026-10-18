@@ -16,6 +16,7 @@ syntax = "proto3";
 
 package blitz.v1;
 
+import "blitz/v1/session.proto";
 import "blitz/v1/turn.proto";
 import "google/protobuf/duration.proto";
 import "google/protobuf/timestamp.proto";
@@ -261,6 +262,12 @@ service WorkspaceService {
   rpc SaveWorkflow(SaveWorkflowRequest) returns (SaveWorkflowResponse);
   // Deletes a workflow from .agents/workflows (WORKFLOW_NOT_FOUND).
   rpc DeleteWorkflow(DeleteWorkflowRequest) returns (DeleteWorkflowResponse);
+  // Returns the tasks paused workflow runs wait on (human tasks' forms,
+  // timers), oldest first: one workspace's, or every one's.
+  rpc ListHumanTasks(ListHumanTasksRequest) returns (ListHumanTasksResponse);
+  // Answers a human task: its run resumes in the background
+  // (TASK_NOT_FOUND; WORKFLOW_CHANGED when its workflow changed since).
+  rpc AnswerHumanTask(AnswerHumanTaskRequest) returns (AnswerHumanTaskResponse);
   // Returns skill scripts' environments (SCRIPTS_DISABLED).
   rpc ListEnvs(ListEnvsRequest) returns (ListEnvsResponse);
   // Removes one environment.
@@ -2699,6 +2706,58 @@ message FlowNode {
   // at a time (0: 4).
   string for_each = 29;
   int32 concurrency = 30;
+  // A human task's form: A2UI v0.9 ({"components": [...], "data": {...}}).
+  string form_json = 31;
+  // How long a timer waits (a Go duration), or until when (RFC 3339).
+  string wait = 32;
+  string until = 33;
+}
+
+// A paused workflow run's task: a human task's form waiting for an
+// answer, or a timer waiting for its time.
+message HumanTask {
+  // Answer with it.
+  string id = 1;
+  string run = 2;
+  string workspace = 3;
+  string workflow = 4;
+  string step = 5;
+  string title = 6;
+  // human_task or timer.
+  string kind = 7;
+  // What's shown above the form.
+  string message = 8;
+  // The form: A2UI v0.9 ({"components": [...], "data": {...}}).
+  string form_json = 9;
+  google.protobuf.Timestamp fire_at = 10;
+  google.protobuf.Timestamp created = 11;
+  // The chat its run's agent steps are turns in.
+  string session_id = 12;
+}
+
+// Request message for WorkspaceService.ListHumanTasks.
+message ListHumanTasksRequest {
+  // Empty: every workspace's.
+  string workspace = 1;
+}
+
+// Response message for WorkspaceService.ListHumanTasks.
+message ListHumanTasksResponse {
+  repeated HumanTask tasks = 1;
+}
+
+// Request message for WorkspaceService.AnswerHumanTask.
+message AnswerHumanTaskRequest {
+  string workspace = 1;
+  string task_id = 2;
+  // The form's values: a JSON object (the submitting action's context).
+  string answer_json = 3;
+}
+
+// Response message for WorkspaceService.AnswerHumanTask.
+message AnswerHumanTaskResponse {
+  // The run, resumed in the background.
+  BackgroundRun run = 1;
 }
 
 // A named value: a header, a query parameter.

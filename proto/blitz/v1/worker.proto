@@ -132,6 +132,8 @@ message Worker {
   repeated string problems = 15;
   // Its latest recorded run (unset: none yet).
   WorkerRun last_run = 16;
+  // The workflow it runs, its prompt the input (spec_workflows_043).
+  string workflow = 17;
 }
 
 // Request message for WorkerService.ListWorkers.
@@ -168,6 +170,8 @@ message CreateWorkerRequest {
   string catch_up = 12;
   // The workflow: WORKER.md's body.
   string prompt = 13;
+  // The workflow it runs, its prompt the input.
+  string workflow = 14;
 }
 
 // WorkerDefinition is a WORKER.md as written: its frontmatter fields and
@@ -192,6 +196,8 @@ message WorkerDefinition {
   string catch_up = 11;
   // The workflow: WORKER.md's body.
   string prompt = 12;
+  // The workflow it runs, its prompt the input.
+  string workflow = 13;
 }
 
 // Request message for WorkerService.GetWorkerSpec.

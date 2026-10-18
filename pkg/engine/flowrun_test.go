@@ -472,3 +472,27 @@ edges:
 	}
 	assert.FileExists(t, filepath.Join(w.Dir(), "out", "later.md"))
 }
+
+// A worker can run a workflow: its steps under the worker's permissions,
+// in its run's chat, its prompt the input (WF-17).
+func TestWorkerRunsWorkflow(t *testing.T) {
+	w, _ := openTestWith(t, configtest.RunTools)
+	writeFlow(t, w, "nightly", "nodes: [{id: save, type: save_file, path: \"reports/{{ input }}.md\"}]\n")
+	addWorker(t, w, "night", "---\nschedule: daily at 6 AM\nworkflow: nightly\npermissions: [\"write:reports/\"]\n---\nsummary\n")
+	enable(t, w, "night")
+	run, err := w.RunWorker(context.Background(), "night", RunOptions{Manual: true})
+	require.NoError(t, err)
+	assert.Equal(t, api.RunSucceeded, run.Status, "run %+v", run)
+	assert.FileExists(t, filepath.Join(w.Dir(), "reports", "summary.md"))
+	info, err := w.ListWorkers()
+	require.NoError(t, err)
+	require.NotEmpty(t, info)
+	assert.Equal(t, "nightly", info[0].Workflow)
+
+	addWorker(t, w, "denied", "---\nschedule: daily at 6 AM\nworkflow: nightly\n---\nsecret\n")
+	enable(t, w, "denied")
+	run, err = w.RunWorker(context.Background(), "denied", RunOptions{Manual: true})
+	require.NoError(t, err)
+	assert.Equal(t, api.RunFailed, run.Status, "no write permission: %+v", run)
+	assert.NoFileExists(t, filepath.Join(w.Dir(), "reports", "secret.md"))
+}

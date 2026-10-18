@@ -39,6 +39,7 @@ go_library(
         "skills.go",
         "skills_edit.go",
         "studio.go",
+        "tasks.go",
         "worker.go",
         "workflows.go",
         "workspace.go",
@@ -101,6 +102,7 @@ go_test(
         "signin_test.go",
         "skills_edit_test.go",
         "skills_test.go",
+        "tasks_test.go",
         "worker_test.go",
         "workflows_test.go",
     ],
@@ -109,6 +111,7 @@ go_test(
     deps = [
         "//pkg/api",
         "//pkg/config",
+        "//pkg/config/configtest",
         "//pkg/engine",
         "//pkg/engine/lsp/lsptest",
         "//pkg/engine/memory",

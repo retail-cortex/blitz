@@ -65,7 +65,7 @@ func workerMsg(i api.WorkerInfo) *pb.Worker {
 		LastRun:   last,
 		Workspace: i.Workspace, Name: i.Name, Description: i.Description, Path: i.Path, Hash: i.Hash,
 		State: workerState(i.State), Schedule: i.Schedule, Cron: i.Cron, Timezone: i.Timezone, NextRun: timestamp(i.Next),
-		Agent: i.Agent, Model: i.Model, Permissions: i.Permissions,
+		Agent: i.Agent, Model: i.Model, Permissions: i.Permissions, Workflow: i.Workflow,
 		Limits:   &pb.WorkerLimits{MaxTurns: int32(i.Limits.MaxTurns), MaxCostUsd: i.Limits.MaxCostUSD, Timeout: durationpb.New(i.Limits.Timeout)},
 		Problems: i.Problems,
 	}
@@ -141,7 +141,7 @@ func (h workerService) CreateWorker(ctx context.Context, r req[pb.CreateWorkerRe
 	info, problems, err := w.CreateWorker(api.WorkerSpec{
 		Name: m.Name, Description: m.Description, Schedule: m.Schedule, Timezone: m.Timezone, Agent: m.Agent, Model: m.Model,
 		Permissions: m.Permissions, Limits: api.Limits{MaxTurns: int(m.MaxTurns), MaxCostUSD: m.MaxCostUsd, TimeoutRaw: m.Timeout},
-		CatchUp: m.CatchUp, Prompt: m.Prompt,
+		CatchUp: m.CatchUp, Prompt: m.Prompt, Workflow: m.Workflow,
 	})
 	if err != nil {
 		return nil, toAPI(err)
@@ -189,7 +189,7 @@ func workerDefinition(s api.WorkerSpec) *pb.WorkerDefinition {
 	return &pb.WorkerDefinition{
 		Name: s.Name, Description: s.Description, Schedule: s.Schedule, Timezone: s.Timezone, Agent: s.Agent, Model: s.Model,
 		Permissions: s.Permissions, MaxTurns: int32(s.Limits.MaxTurns), MaxCostUsd: s.Limits.MaxCostUSD, Timeout: s.Limits.TimeoutRaw,
-		CatchUp: s.CatchUp, Prompt: s.Prompt,
+		CatchUp: s.CatchUp, Prompt: s.Prompt, Workflow: s.Workflow,
 	}
 }
 
@@ -197,7 +197,7 @@ func workerSpec(d *pb.WorkerDefinition) api.WorkerSpec {
 	return api.WorkerSpec{
 		Name: d.Name, Description: d.Description, Schedule: d.Schedule, Timezone: d.Timezone, Agent: d.Agent, Model: d.Model,
 		Permissions: d.Permissions, Limits: api.Limits{MaxTurns: int(d.MaxTurns), MaxCostUSD: d.MaxCostUsd, TimeoutRaw: d.Timeout},
-		CatchUp: d.CatchUp, Prompt: d.Prompt,
+		CatchUp: d.CatchUp, Prompt: d.Prompt, Workflow: d.Workflow,
 	}
 }
 

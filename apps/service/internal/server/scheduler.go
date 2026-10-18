@@ -99,6 +99,7 @@ func (s *Server) StartScheduler(ctx context.Context) {
 		defer t.Stop()
 		for {
 			sc.rescan(sc.base)
+			s.resumeDueTimers(sc.base)
 			select {
 			case <-sc.base.Done():
 				return
