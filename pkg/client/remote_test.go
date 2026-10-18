@@ -219,7 +219,7 @@ func TestRemoteCallsWarnWithoutTheService(t *testing.T) {
 func TestRemoteBackendCalls(t *testing.T) {
 	create := call("create_file", map[string]any{"path": "made.txt", "content": "hi\n"})
 	r := attach(t, func(c *config.Config) {
-		c.Blitz.AutoApprove = false
+		c.Blitz.AutoApprove, c.Blitz.PermissionMode = false, "default"
 		c.Hooks.PromptSubmit = []config.HookConfig{{Command: "true"}}
 		c.Web.Enabled = false
 	}, create, text("made"), text("second"))

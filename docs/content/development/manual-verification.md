@@ -643,7 +643,7 @@ Use a test service with the API keys unset (`env -u GEMINI_API_KEY`); the workfl
 - [ ] Linux without a notification daemon, and Windows.
   **Expected:** Linux opens the tasks window directly; on Windows the notification comes from the Blitz app and opens the same window.
 
-## 52. Workflow runs: the canvas, receipts and schedules (spec_workflows_043 WF-09, WF-10, WF-19, WF-20)
+## 52. Workflow runs: the canvas, receipts, schedules and modes (spec_workflows_043 WF-09, WF-10, WF-19, WF-20, WF-21)
 
 Use a test service with the API keys unset (`env -u GEMINI_API_KEY`) for everything but the cost checks; a run with agent steps on a real model costs a few cents.
 
@@ -669,3 +669,9 @@ Use a test service with the API keys unset (`env -u GEMINI_API_KEY`) for everyth
   **Expected:** the view shows the run going (its events from the start) instead of only the worker.
 - [ ] Stop the service while a run goes, start it again, open the workflow's **Past runs**.
   **Expected:** after about three minutes the run reads *Stopped* with "the service stopped while it ran".
+- [ ] With no `permission_mode` in the settings, open a workspace. **+** in Studio › Workflows.
+  **Expected:** the status bar's mode is *Auto*; the new-workflow dialog offers **Permission mode** with *Auto (the default)* chosen, and the workflow made has it in its settings; the file has no `mode:` line.
+- [ ] Run a workflow with a save_file step (keys set: the reviewer is a model call).
+  **Expected:** no approval card: the reviewer allows it (`auto-allow` in the audit log); the run panel's summary ends with *Auto*.
+- [ ] Settings › Workspaces › the workspace › Behaviour › Permission mode: *Ask*. Restart the service, reopen the workspace, run the workflow again.
+  **Expected:** the workspace is still *Ask*; the workflow's settings say the workspace's mode applies instead; the run asks for the save; its summary says *Ask* and its events "Asked for Auto; the workspace's mode, Ask, applied". A workflow set to *Don't ask* refuses the save instead of asking.

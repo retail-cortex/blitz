@@ -16,12 +16,15 @@ package runtime
 
 import (
 	"context"
+	"iter"
 	"testing"
+	"time"
 
 	"github.com/retail-cortex/blitz/pkg/api"
 	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/adk/v2/model"
 	"google.golang.org/genai"
 )
 
@@ -108,6 +111,14 @@ func TestReviewPromptAndFailures(t *testing.T) {
 		defer func() { f.eng.llm = llm }()
 		_, _, err := f.eng.review(ctx, req)
 		assert.Error(t, err)
+	})
+	t.Run("too slow", func(t *testing.T) {
+		old := reviewTimeout
+		reviewTimeout = 20 * time.Millisecond
+		defer func() { reviewTimeout = old }()
+		f.eng.reviewModel = stalledModel{}
+		_, _, err := f.eng.review(ctx, req)
+		assert.ErrorContains(t, err, "didn't answer within 20ms", "the user decides")
 	})
 	t.Run("bad JSON", func(t *testing.T) {
 		f.eng.reviewModel = NewMockLLM("reviewer", textContent(`{"decision": allow}`))
@@ -203,4 +214,16 @@ func TestJudgeGoal(t *testing.T) {
 		_, err = f.eng.JudgeGoal(context.Background(), "s", "x")
 		assert.Error(t, err)
 	})
+}
+
+// stalledModel answers nothing until its call is cancelled.
+type stalledModel struct{}
+
+func (stalledModel) Name() string { return "stalled" }
+
+func (stalledModel) GenerateContent(ctx context.Context, _ *model.LLMRequest, _ bool) iter.Seq2[*model.LLMResponse, error] {
+	return func(yield func(*model.LLMResponse, error) bool) {
+		<-ctx.Done()
+		yield(nil, ctx.Err())
+	}
 }

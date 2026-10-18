@@ -53,6 +53,7 @@ func TestProxyReachesTheService(t *testing.T) {
 		cfg := config.DefaultConfig()
 		cfg.Tools.WorkspaceDir = d
 		cfg.Session.StorageDir = t.TempDir()
+		cfg.Blitz.PermissionMode = "default" // the approval travels through the proxy
 		return engine.Open(ctx, cfg, engine.Options{Model: runtime.NewMockLLM("m", create, genai.NewContentFromText("done", genai.RoleModel))})
 	})
 	l, err := socket.Listen(path)

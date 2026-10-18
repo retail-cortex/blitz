@@ -53,7 +53,7 @@ func TestStatusLine(t *testing.T) {
 	assert.Empty(t, statusLine(ctx, app), "none by default")
 
 	app.StatusLine = "default"
-	assert.Equal(t, "mock-a · default", statusLine(ctx, app))
+	assert.Equal(t, "mock-a · auto", statusLine(ctx, app), "a workspace opens in auto")
 
 	state := filepath.Join(t.TempDir(), "state.json")
 	app.StatusLine = "cat > " + state + "; printf 'first \\033[31mline\\nsecond\\n'"

@@ -29,7 +29,7 @@ import (
 // Studio's workflows (spec_workflows_043).
 
 func workflowMsg(f flows.Flow) *pb.WorkflowFile {
-	m := &pb.WorkflowFile{Name: f.Name, Path: f.Path, Description: f.Description, Problem: f.Problem}
+	m := &pb.WorkflowFile{Name: f.Name, Path: f.Path, Description: f.Description, Problem: f.Problem, Mode: f.Mode}
 	for _, n := range f.Nodes {
 		pn := &pb.FlowNode{Id: n.ID, Type: n.Type, Title: n.Title, X: n.Position.X, Y: n.Position.Y, Agent: n.Agent, Skills: n.Skills,
 			Instructions: n.Instructions, Rules: n.Rules, Skill: n.Skill, Script: n.ScriptName, Args: n.Args, Path: n.Path, Timeout: n.Timeout}
@@ -82,7 +82,7 @@ func jsonText(v any) string {
 
 // workflowOf is a workflow from the canvas, or what's wrong with its JSON.
 func workflowOf(m *pb.WorkflowFile) (flows.Flow, []string) {
-	f := flows.Flow{Name: m.GetName(), Description: m.GetDescription()}
+	f := flows.Flow{Name: m.GetName(), Description: m.GetDescription(), Mode: m.GetMode()}
 	var probs []string
 	for _, n := range m.GetNodes() {
 		fn := flows.Node{ID: n.GetId(), Type: n.GetType(), Title: n.GetTitle(), Position: flows.Position{X: n.GetX(), Y: n.GetY()}, Agent: n.GetAgent(), Skills: n.GetSkills(),

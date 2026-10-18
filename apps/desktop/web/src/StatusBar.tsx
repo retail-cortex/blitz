@@ -203,7 +203,7 @@ function WorkspaceItems({ dir, onWorkspaceSettings }: { dir: string; onWorkspace
   const st = useWorkspaceStatus(dir);
   const snack = useSnackbar();
   const s = st.settings;
-  const mode = modeOf(s?.permissionMode ?? "default");
+  const mode = modeOf(s?.permissionMode ?? "auto");
   const setMode = async (value: string) => {
     try {
       await workspaces.setPermissionMode({ workspace: dir, mode: value });

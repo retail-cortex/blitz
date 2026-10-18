@@ -2863,6 +2863,10 @@ message WorkflowFile {
   repeated FlowNode nodes = 4;
   repeated FlowEdge edges = 5;
   string problem = 6;
+  // The permission mode its steps run in: auto (empty), accept-edits,
+  // default, dont-ask or bypass; never looser than the workspace's
+  // (spec_workflows_043 WF-21).
+  string mode = 7;
 }
 
 // Request message for WorkspaceService.ListWorkflows.
@@ -2933,6 +2937,8 @@ message WorkflowRun {
   string background_id = 16;
   // Approval requests that background run waits on.
   int32 approvals = 17;
+  // The permission mode its steps ran in (spec_workflows_043 WF-21).
+  string mode = 18;
 }
 
 // One run of a workflow's step.

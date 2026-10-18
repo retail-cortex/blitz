@@ -17,6 +17,7 @@
 import { create } from "@bufbuild/protobuf";
 import { describe, expect, it } from "vitest";
 import { WorkflowFileSchema } from "../gen/blitz/v1/workspace_pb";
+import { flowModes, looser } from "../options";
 import { addLink, emptyWorkflowForm, noAuth, linkId, linkText, setLink, formFromWorkflow, fromTemplate, newStep, removeStep, sameWorkflowForm, specFromForm, stepNeeds, templates } from "./workflowForm";
 
 describe("the workflow canvas", () => {
@@ -39,6 +40,24 @@ describe("the workflow canvas", () => {
     expect(spec.edges).toEqual([{ from: "a", to: "s", when: "output.data.n > 1", if: "", default: false, error: false, label: "big" }]);
     expect(f.links[0]).toMatchObject({ kind: "when", condition: "output.data.n > 1" });
     expect(sameWorkflowForm(f, formFromWorkflow(w))).toBe(true);
+  });
+
+  it("runs in auto unless it says, and only writes another mode", () => {
+    const f = formFromWorkflow(create(WorkflowFileSchema, { name: "a" }));
+    expect(f.mode).toBe("auto");
+    expect(specFromForm(f).mode).toBe("");
+    expect(specFromForm({ ...f, mode: "dont-ask" }).mode).toBe("dont-ask");
+    expect(formFromWorkflow(create(WorkflowFileSchema, { name: "a", mode: "default" })).mode).toBe("default");
+    expect(fromTemplate("blank", (k) => k).mode).toBe("auto");
+    expect(fromTemplate("brief", (k) => k, "accept-edits").mode).toBe("accept-edits");
+  });
+
+  it("offers the modes a workflow runs in, auto first, and knows which the workspace holds back", () => {
+    expect(flowModes().map((m) => m.value)).toEqual(["auto", "accept-edits", "default", "dont-ask", "bypass"]);
+    expect(looser("auto", "default")).toBe(true);
+    expect(looser("auto", "accept-edits")).toBe(false);
+    expect(looser("dont-ask", "auto")).toBe(false);
+    expect(looser("bypass", "auto")).toBe(true);
   });
 
   it("adds steps and links, never a loop", () => {

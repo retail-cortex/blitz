@@ -68,7 +68,7 @@ func runState(t *testing.T, c clients, id string, states ...string) *pb.Backgrou
 
 func TestBackgroundRuns(t *testing.T) {
 	create := call("create_file", map[string]any{"path": "made.txt", "content": "hi\n"})
-	c, s := serve(t, func(cfg *config.Config) { cfg.Blitz.AutoApprove = false }, create, text("made it"))
+	c, s := serve(t, func(cfg *config.Config) { cfg.Blitz.AutoApprove, cfg.Blitz.PermissionMode = false, "default" }, create, text("made it"))
 	dir := t.TempDir()
 	ctx := context.Background()
 
@@ -141,7 +141,7 @@ func TestBackgroundRuns(t *testing.T) {
 
 func TestStoppingABackgroundRun(t *testing.T) {
 	create := call("create_file", map[string]any{"path": "made.txt", "content": "hi\n"})
-	c, s := serve(t, func(cfg *config.Config) { cfg.Blitz.AutoApprove = false }, create, text("made it"))
+	c, s := serve(t, func(cfg *config.Config) { cfg.Blitz.AutoApprove, cfg.Blitz.PermissionMode = false, "default" }, create, text("made it"))
 	dir := t.TempDir()
 	ctx := context.Background()
 	res, err := c.sessions.StartBackground(ctx, connect.NewRequest(&pb.StartBackgroundRequest{Workspace: dir, Turn: &pb.Turn{Text: "make a file"}}))

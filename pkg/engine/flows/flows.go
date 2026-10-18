@@ -29,6 +29,7 @@ import (
 	"time"
 
 	"github.com/retail-cortex/blitz/pkg/a2ui"
+	"github.com/retail-cortex/blitz/pkg/api"
 	"github.com/retail-cortex/blitz/pkg/engine/gates"
 	"gopkg.in/yaml.v3"
 )
@@ -236,9 +237,26 @@ type Flow struct {
 	Name        string `yaml:"-"`
 	Path        string `yaml:"-"`
 	Description string `yaml:"description,omitempty"`
-	Nodes       []Node `yaml:"nodes"`
-	Edges       []Edge `yaml:"edges,omitempty"`
-	Problem     string `yaml:"-"`
+	// Mode is the permission mode its steps run in (WF-21): auto when
+	// empty, and never looser than the workspace's.
+	Mode    string `yaml:"mode,omitempty"`
+	Nodes   []Node `yaml:"nodes"`
+	Edges   []Edge `yaml:"edges,omitempty"`
+	Problem string `yaml:"-"`
+}
+
+// Modes are the permission modes a workflow can run in, auto first (the
+// default). Plan isn't one: a workflow carries its steps out.
+var Modes = []api.PermissionMode{api.ModeAuto, api.ModeAcceptEdits, api.ModeDefault, api.ModeDontAsk, api.ModeBypass}
+
+// ModeOf is the permission mode f's steps ask to run in: its mode, or
+// auto.
+func ModeOf(f Flow) api.PermissionMode {
+	m, err := api.ParsePermissionMode(f.Mode)
+	if err != nil || strings.TrimSpace(f.Mode) == "" {
+		return api.ModeAuto
+	}
+	return m
 }
 
 // ErrUnknown means there's no workflow of that name.
@@ -291,6 +309,9 @@ func Check(f Flow) []string {
 	}
 	if len(f.Nodes) == 0 {
 		probs = append(probs, "it has no steps")
+	}
+	if m, err := api.ParsePermissionMode(f.Mode); err != nil || !slices.Contains(Modes, m) {
+		probs = append(probs, fmt.Sprintf("mode %q: one of auto, accept-edits, default, dont-ask or bypass", f.Mode))
 	}
 	ids := map[string]bool{}
 	for i, n := range f.Nodes {

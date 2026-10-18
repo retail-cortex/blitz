@@ -29,6 +29,7 @@ import (
 	"github.com/retail-cortex/blitz/pkg/api"
 	"github.com/retail-cortex/blitz/pkg/engine/flows"
 	"github.com/retail-cortex/blitz/pkg/engine/session"
+	"github.com/retail-cortex/blitz/pkg/engine/tools"
 	"github.com/retail-cortex/blitz/pkg/textutil"
 	"google.golang.org/adk/v2/agent"
 	"google.golang.org/adk/v2/agent/workflowagent"
@@ -100,7 +101,9 @@ type flowRun struct {
 	// receipt is the run's receipt (WF-19), a called workflow's its
 	// caller's; streamTo is the step a called workflow's turns stream to
 	// (the call step); agent is who runs agent steps that don't say.
-	receipt  *liveReceipt
+	receipt *liveReceipt
+	// mode is the permission mode its steps run in (WF-21).
+	mode     api.PermissionMode
 	streamTo string
 	agent    string
 }
@@ -623,13 +626,35 @@ func (w *Workspace) runFlow(ctx context.Context, sessionID string, f flows.Flow,
 // driveFlow runs f's graph in the orchestration session runID: from the
 // start (resume nil: input is its first message), or resumed with an
 // answer to one of its tasks.
+// flowMode is ctx running f's steps in its permission mode (WF-21): the
+// workflow's own (auto unless it says) when that's no looser than the
+// workspace's, which the user may restrict, and bypass only with the OS
+// sandbox. It returns the mode the steps run in, and the workflow's when
+// that was held back.
+func (w *Workspace) flowMode(ctx context.Context, f flows.Flow) (context.Context, api.PermissionMode, api.PermissionMode) {
+	want, current := flows.ModeOf(f), w.tools.Hooks().Mode()
+	switch {
+	case want == current:
+		return ctx, current, ""
+	case api.Looser(want, current), want == api.ModeBypass && !w.tools.ShellSandbox().Active():
+		return ctx, current, want
+	}
+	return tools.WithMode(ctx, want), want, ""
+}
+
 func (w *Workspace) driveFlow(ctx context.Context, sessionID string, f flows.Flow, input string, on func(api.Event), runID string, resume *genai.FunctionResponse, replay map[string]Replayed) (res api.TurnResult, err error) {
 	run := &flowRun{f: f, input: input, session: sessionID, on: on, runID: runID, replay: replay, agent: w.engine.ActiveAgent()}
+	var held api.PermissionMode
+	ctx, run.mode, held = w.flowMode(ctx, f)
 	// Its receipt (WF-19): stopping the run through it cancels ctx.
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	origin, _ := ctx.Value(flowOriginKey{}).(string)
 	run.receipt = w.beginReceipt(run, origin, cancel)
+	if held != "" {
+		// held: what it asked for: what applies (the page words it).
+		run.receipt.note("", "run", fmt.Sprintf("held: %s: %s", held, run.mode), false)
+	}
 	beating := make(chan struct{})
 	go run.receipt.beat(beating)
 	defer func() {

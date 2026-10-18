@@ -172,7 +172,7 @@ func addRunFlags(f *pflag.FlagSet, o *rootOptions) {
 	f.StringArrayVar(&o.allowRules, "allow", nil, `Allow an action without asking, for this run: a rule such as "shell(go test *)" or "write(docs/**)" (repeatable)`)
 	f.StringArrayVar(&o.denyRules, "deny", nil, `Refuse an action, for this run: a rule such as "shell(git push *)" or "web(*.internal)" (repeatable)`)
 	f.StringVar(&o.effort, "effort", "", "Reasoning effort for this run: minimal, low, medium, high, or max (where the model supports it)")
-	f.StringVar(&o.mode, "permission-mode", "", "Start in a permission mode: default, accept-edits, plan, dont-ask, or bypass (needs the OS sandbox)")
+	f.StringVar(&o.mode, "permission-mode", "", "Start in a permission mode: auto (the default), default, accept-edits, plan, dont-ask, or bypass (needs the OS sandbox)")
 	f.StringArrayVar(&o.images, "image", nil, "Attach an image to the first prompt (repeatable); @file.png in a prompt also works")
 }
 

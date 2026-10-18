@@ -19,7 +19,7 @@ import { timestampFromMs } from "@bufbuild/protobuf/wkt";
 import { describe, expect, it } from "vitest";
 import { UsageSchema } from "../gen/blitz/v1/turn_pb";
 import { WorkflowRunSchema } from "../gen/blitz/v1/workspace_pb";
-import { receiptText, statusIcon } from "./RunPanel";
+import { eventText, receiptText, statusIcon } from "./RunPanel";
 import { scheduleName } from "./WorkflowSchedule";
 
 // A run's time (any but 0, which is "unset").
@@ -32,6 +32,7 @@ describe("a run's receipt", () => {
       workflow: "brief",
       status: "failed",
       origin: "worker",
+      mode: "auto",
       input: "the notes",
       started: timestampFromMs(T),
       ended: timestampFromMs(T + 12_000),
@@ -47,6 +48,7 @@ describe("a run's receipt", () => {
     expect(lines[1]).toContain("12s");
     expect(lines[1]).toContain("$0.016");
     expect(lines[2]).toContain("the notes");
+    expect(lines[2]).toContain("Auto");
     expect(lines[4]).toContain("Read the notes");
     expect(lines[4]).toContain("0.7s");
     expect(lines[5]).toContain("m1");
@@ -77,4 +79,11 @@ describe("a workflow's schedule", () => {
     { workflow: "brief", taken: ["brief-schedule", "brief-schedule-2"], want: "brief-schedule-3" },
     { workflow: "My Brief", taken: [], want: "-y--rief-schedule" },
   ])("names its worker $want", ({ workflow, taken, want }) => expect(scheduleName(workflow, taken)).toBe(want));
+});
+
+describe("a run's events", () => {
+  it("word a mode the workspace held back, and a status, in the user's language", () => {
+    expect(eventText("held: auto: default")).toBe("Asked for Auto; the workspace's mode, Ask, applied");
+    expect(eventText("something else")).toBe("something else");
+  });
 });

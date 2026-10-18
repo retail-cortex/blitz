@@ -67,6 +67,8 @@ import { Decision, type ApprovalRequest } from "../gen/blitz/v1/turn_pb";
 import type { HumanTask, SkillInfo, WorkflowFile, WorkflowRun, WorkflowRunStep } from "../gen/blitz/v1/workspace_pb";
 import type { ItemIntent } from "../intent";
 import { ResizeHandle } from "../ui/ResizeHandle";
+import { flowModes, looser, modeOf } from "../options";
+import { useWorkspaceStatus } from "../status";
 import { cost, goingRun, latestSteps, ms, progress, seeRun, took, useWorkflowRuns, watchedRuns } from "../workflowRuns";
 import { dated, RunPanel, statusIcon } from "./RunPanel";
 import { WorkflowSchedule } from "./WorkflowSchedule";
@@ -280,6 +282,9 @@ export function WorkflowsPane({
   const [pending, setPending] = useState<(() => void) | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [choosing, setChoosing] = useState(false);
+  // The mode a new workflow runs in, chosen as it's made (WF-21).
+  const [newMode, setNewMode] = useState("auto");
+  const workspaceMode = useWorkspaceStatus(workspace).settings?.permissionMode ?? "auto";
   const [asking, setAsking] = useState(false);
   const [input, setInput] = useState("");
   const [agents, setAgents] = useState<string[]>([]);
@@ -1042,6 +1047,7 @@ export function WorkflowsPane({
                       {(id) => <input id={id} className="input mono" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} />}
                     </Field>
                     <Field label={t("desktop.rules.description")}>{(id) => <input id={id} className="input" value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} />}</Field>
+                    <FlowModeField value={form.mode} workspaceMode={workspaceMode} onChange={(mode) => setForm((f) => ({ ...f, mode }))} />
                     <WorkflowSchedule workspace={workspace} workflow={file?.name ?? ""} disabled={!file || dirty} />
                     <span className="t-body-sm muted">{t("desktop.flows.canvas_hint")}</span>
                   </div>
@@ -1092,6 +1098,7 @@ export function WorkflowsPane({
       {choosing &&
         createPortal(
           <Dialog title={t("desktop.flows.new")} icon={mdiSitemapOutline} onClose={() => setChoosing(false)} footer={<Button onClick={() => setChoosing(false)}>{t("desktop.cancel")}</Button>}>
+            <FlowModeField value={newMode} workspaceMode={workspaceMode} onChange={setNewMode} />
             <div className="list">
               {templates.map((tpl: Template) => (
                 <button
@@ -1100,7 +1107,7 @@ export function WorkflowsPane({
                   className="list-item"
                   onClick={() => {
                     setChoosing(false);
-                    const f = fromTemplate(tpl, (k) => t(`desktop.flows.template.${k}`));
+                    const f = fromTemplate(tpl, (k) => t(`desktop.flows.template.${k}`), newMode);
                     const taken = list.map((w) => w.name);
                     let name = f.name;
                     for (let n = 2; name && taken.includes(name); n++) name = `${f.name}-${n}`;
@@ -1297,5 +1304,23 @@ function HumanTaskFields({ step, workspace, onChange }: { step: StepForm; worksp
         </div>
       )}
     </>
+  );
+}
+
+/** A workflow's permission mode, and what the workspace's mode makes of it: a looser one is held back (WF-21). */
+function FlowModeField({ value, workspaceMode, onChange }: { value: string; workspaceMode: string; onChange: (mode: string) => void }) {
+  const held = looser(value, workspaceMode);
+  return (
+    <Field label={t("desktop.flows.mode")} supporting={held ? t("desktop.flows.mode_held", { mode: modeOf(workspaceMode).label }) : modeOf(value).detail}>
+      {(id) => (
+        <select id={id} className="select" value={value} onChange={(e) => onChange(e.target.value)}>
+          {flowModes().map((m) => (
+            <option key={m.value} value={m.value}>
+              {m.value === "auto" ? t("desktop.flows.mode_default", { mode: m.label }) : m.label}
+            </option>
+          ))}
+        </select>
+      )}
+    </Field>
   );
 }

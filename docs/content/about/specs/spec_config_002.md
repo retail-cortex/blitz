@@ -33,7 +33,7 @@ One TOML file, `.env.toml`, loaded through `github.com/rrmcguinness/modenv` (hie
 | | `default_model` | `""` | overrides `llm.<provider>.model` |
 | | `agency_level` | `high` | `low\|medium\|high\|extreme` |
 | | `temperature` / `max_tokens` | `0.2` / `65536` | global generation settings (`max_tokens` was 8192 until 2026-10-01: with thinking counted against it, long replies such as a file were cut off). One default for every model: when a provider rejects it as above the model's maximum and says what that is (Anthropic, OpenAI, Gemini), the request goes again at that maximum, which the model keeps (`outputcap.go`) |
-| | `permission_mode` | `default` | `default\|accept-edits\|plan\|dont-ask\|bypass`; bypass needs the OS sandbox ([spec_approvals_005](spec_approvals_005.md) APR-14) |
+| | `permission_mode` | `auto` (unset; `bypass` with `auto_approve = true`) | `auto\|default\|accept-edits\|plan\|dont-ask\|bypass`; bypass needs the OS sandbox; a workspace's own settings may set it ([spec_approvals_005](spec_approvals_005.md) APR-14) |
 | | `auto_approve` | `false` | older spelling of `permission_mode = "bypass"` |
 | | `goal_max_continues` | 20 | how often a `/goal` sends the agent on before stopping ([spec_sessions_017](spec_sessions_017.md) SES-19) |
 | | `plan_review` | `agent-decides` | `always` (every prompt is planned for approval first), `agent-decides` (the agent may call `enter_plan_mode`), `never` ([spec_workspace_018](spec_workspace_018.md) WS-45) |

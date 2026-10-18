@@ -32,6 +32,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { WorkflowRun, WorkflowRunStep } from "../gen/blitz/v1/workspace_pb";
 import { t, tn } from "../i18n";
 import { Button, Icon, IconButton, Tabs, useSnackbar } from "../ui/controls";
+import { modeOf } from "../options";
 import { cost, ms, progress, tokens, took } from "../workflowRuns";
 
 /** A run's or a step's status as an icon (and whether it spins). */
@@ -62,7 +63,7 @@ export function receiptText(run: WorkflowRun): string {
   const lines = [
     `/${run.workflow} · ${run.id}`,
     `${t(`desktop.flows.run_status.${run.status}`)} · ${dated(ms(run.started))} · ${took(ms(run.started), ms(run.ended) || Date.now())} · ${cost(run.usage?.costUsd, run.usage?.priced)}`,
-    `${t("desktop.flows.receipt.origin")}: ${t(`desktop.flows.origin.${run.origin || "chat"}`)}${run.input ? ` · ${t("desktop.flows.input")}: ${run.input}` : ""}`,
+    `${t("desktop.flows.receipt.origin")}: ${t(`desktop.flows.origin.${run.origin || "chat"}`)}${run.mode ? ` · ${t("desktop.flows.mode")}: ${modeOf(run.mode).label}` : ""}${run.input ? ` · ${t("desktop.flows.input")}: ${run.input}` : ""}`,
     "",
   ];
   for (const s of run.steps) {
@@ -160,6 +161,7 @@ export function RunPanel({
     took(ms(run.started), ms(run.ended) || now),
     cost(run.usage?.costUsd, run.usage?.priced),
     run.usage?.calls ? t("desktop.flows.run_tokens", { input: tokens(run.usage.input), output: tokens(run.usage.output) }) : "",
+    run.mode ? modeOf(run.mode).label : "",
   ]
     .filter(Boolean)
     .join(" · ");
@@ -312,8 +314,9 @@ function EventLog({ run, titleOf }: { run: WorkflowRun; titleOf: (id: string) =>
 }
 
 /** A step or run event's text (its status, then why), in the user's words. */
-function eventText(text: string): string {
+export function eventText(text: string): string {
   const [status, ...rest] = text.split(": ");
+  if (status === "held" && rest.length === 2) return t("desktop.flows.mode_held_event", { want: modeOf(rest[0]).label, mode: modeOf(rest[1]).label });
   const known = ["running", "waiting", "done", "failed", "skipped", "stopped", "started", "resumed"];
   if (!known.includes(status)) return text;
   return [t(`desktop.flows.run_status.${status}`), ...rest].join(": ");

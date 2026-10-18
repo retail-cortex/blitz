@@ -120,7 +120,7 @@ func TestRemoteOperationsAndTypedErrors(t *testing.T) {
 func TestRemoteTurnWithApprovalAndQuestion(t *testing.T) {
 	create := call("create_file", map[string]any{"path": "made.txt", "content": "hi\n"})
 	ask := call("ask_user_question", map[string]any{"question": "Tabs or spaces?"})
-	r := attach(t, func(c *config.Config) { c.Blitz.AutoApprove = false }, create, ask, text("all done"))
+	r := attach(t, func(c *config.Config) { c.Blitz.AutoApprove, c.Blitz.PermissionMode = false, "default" }, create, ask, text("all done"))
 	var asked []string
 	r.SetUI(
 		func(_ context.Context, req api.ApprovalRequest) (api.Decision, error) {

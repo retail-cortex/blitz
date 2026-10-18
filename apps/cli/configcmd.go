@@ -125,7 +125,7 @@ default_agent = "blitz"
 agency_level  = "high"      # low | medium | high | extreme
 temperature   = 0.2
 max_tokens    = 65536
-permission_mode = "default" # default | accept-edits | plan | dont-ask | bypass (bypass needs the OS sandbox)
+permission_mode = "auto"    # auto | default | accept-edits | plan | dont-ask | bypass (bypass needs the OS sandbox)
 auto_approve  = false       # older spelling of permission_mode = "bypass"
 plan_review = "agent-decides" # always | agent-decides | never: when the agent plans for approval first
 trust_workspace = false     # deprecated since v0.2.0: trust the project's settings for each run

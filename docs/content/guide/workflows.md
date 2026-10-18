@@ -99,6 +99,12 @@ Under the canvas, the run panel shows how it's going: each step marked on the ca
 
 Every run keeps this **receipt**, so a run is a record of what was done, by which models, when and at what cost. **Past runs** (the clock button) lists a workflow's runs; pick one to see its receipt, and **Copy the receipt** to paste it elsewhere. Fold the panel to its first line, drag its top edge to give it more or less room, or close it; closing it doesn't stop the run. **Stop** stops the run, wherever it was started.
 
+## Its permission mode
+
+A workflow runs in the `auto` [permission mode](safety.md#permission-modes) unless you choose another: a reviewer model decides what would otherwise ask you, so a run in the background or on a schedule doesn't stop for every file it writes. Choose the mode when you make the workflow (**+** asks, with Auto first) or in its settings: *Accept edits*, *Ask*, *Don't ask* (anything that would ask is refused, for unattended runs that must not do more than their rules allow) or *Bypass*.
+
+The workspace's mode is the limit. If you restrict a workspace to *Ask*, its workflows ask too, whatever they choose: the settings say so, and the run's receipt says which mode its steps ran in and why. A workflow can always choose a stricter mode than its workspace's.
+
 ## Running on a schedule
 
 A workflow's settings (select nothing on the canvas) have **Schedule**: **Add a schedule**, say when in words or as cron (*every weekday at 9:00*, *hourly*, `0 6 * * 1`) and, if it needs one, its input. Each schedule is a [worker](workers.md) that runs the workflow's steps exactly as they are; switch it off and on, change it or remove it there. What a scheduled run may do without asking (write files, use the web) and its limits are the worker's, in **Studio › Workers**.
@@ -109,6 +115,7 @@ A workflow is `.agents/workflows/<name>.flow.yaml`, versioned with the project, 
 
 ```yaml
 description: A one-page brief from the notes and the web
+mode: accept-edits   # leave it out for auto
 nodes:
   - {id: notes, type: read_file, title: Read the notes, path: notes/topic.md, position: {x: 0, y: 0}}
   - {id: look-up, type: browser, title: Look it up, instructions: Find the latest figures., position: {x: 0, y: 160}}

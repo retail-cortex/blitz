@@ -228,7 +228,7 @@ function state(dir: string): State {
         create(SessionInfoSchema, { id: "session-1b", title: "Add the cart API docs", workspace: dir, messageCount: 9, updated: now() }),
       ],
       active: first.id,
-      settings: { agent: "blitz", model: "gemini-4-argon", provider: "gemini", effort: "", mode: "default", agency: "high", locale: "en-US", style: "default" },
+      settings: { agent: "blitz", model: "gemini-4-argon", provider: "gemini", effort: "", mode: "auto", agency: "high", locale: "en-US", style: "default" },
       pending: new Map(),
       tasks: new Map(),
       usage: create(UsageSchema, { calls: 3, input: 18234n, output: 2210n, lastPrompt: 12876n, costUsd: 0.0123, priced: true }),
@@ -804,6 +804,7 @@ type FakeFlow = {
   description: string;
   nodes: { id: string; type: string; title: string; x: number; y: number; agent: string; skills: string[]; instructions: string; rules: string[]; skill: string; script: string; args: string[]; path: string; fields?: { name: string; type: string; description: string }[]; url?: string; method?: string; server?: string; tool?: string; argumentsJson?: string; headers?: { name: string; value: string }[]; auth?: { type: string; token?: string } }[];
   edges: { from: string; to: string; when?: string; if?: string; default?: boolean; error?: boolean; label?: string }[];
+  mode?: string;
 };
 const flowNode = (id: string, type: string, title: string, x: number, y: number, extra: Partial<FakeFlow["nodes"][number]> = {}) => ({ id, type, title, x, y, agent: "", skills: [], instructions: "", rules: [], skill: "", script: "", args: [], path: "", ...extra });
 const fakeFlows: FakeFlow[] = [
@@ -980,8 +981,13 @@ async function driveFlow(r: BackgroundRun, f: FakeFlow, s: ReturnType<typeof sta
   const log = { events: [] as MessageInitShape<typeof WatchBackgroundResponseSchema>[], done: false };
   flowLogs.set(r.id, log);
   const ev = (kind: unknown) => log.events.push({ event: { author: "blitz", kind } } as MessageInitShape<typeof WatchBackgroundResponseSchema>);
-  const rec = create(WorkflowRunSchema, { id: `flow-${Date.now()}`, workspace: r.workspace, workflow: f.name, origin: "background", sessionId: r.sessionId, input: r.prompt.split(" ").slice(1).join(" "), started: now(), status: "running", backgroundId: r.id, usage: fakeUsage(0, 0, 0, 0) });
+  // Its mode (WF-21): the workflow's, auto unless it says, held back by a stricter workspace.
+  const rank: Record<string, number> = { plan: 0, "dont-ask": 1, default: 2, "accept-edits": 3, auto: 3, bypass: 4 };
+  const want = f.mode || "auto";
+  const mode = (rank[want] ?? 2) > (rank[s.settings.mode] ?? 2) ? s.settings.mode : want;
+  const rec = create(WorkflowRunSchema, { id: `flow-${Date.now()}`, workspace: r.workspace, workflow: f.name, origin: "background", sessionId: r.sessionId, input: r.prompt.split(" ").slice(1).join(" "), started: now(), status: "running", backgroundId: r.id, usage: fakeUsage(0, 0, 0, 0), mode });
   rec.events.push(create(WorkflowRunEventSchema, { at: now(), kind: "run", text: "started" }));
+  if (mode !== want) rec.events.push(create(WorkflowRunEventSchema, { at: now(), kind: "run", text: `held: ${want}: ${mode}` }));
   fakeReceipts.unshift(rec);
   const bump = () => {
     let calls = 0, input = 0n, output = 0n, usd = 0;
@@ -1037,7 +1043,7 @@ async function driveFlow(r: BackgroundRun, f: FakeFlow, s: ReturnType<typeof sta
       row.error = "stopped";
       return end("stopped");
     }
-    if (n.type === "save_file") {
+    if (n.type === "save_file" && mode !== "auto" && mode !== "accept-edits" && mode !== "bypass") {
       const req = `${r.id}-save`;
       const answer = new Promise<string>((res) => s.pending.set(req, res));
       r.state = "waiting";
@@ -1320,6 +1326,7 @@ export function installFake() {
           const next: FakeFlow = {
             name: w.name,
             description: w.description,
+            mode: w.mode,
             nodes: w.nodes.map((n) => ({ ...n, skills: [...n.skills], rules: [...n.rules], args: [...n.args], fields: n.fields.map((f) => ({ ...f })) })),
             edges: w.edges.map((e) => ({ from: e.from, to: e.to, when: e.when, if: e.if, default: e.default, error: e.error, label: e.label })),
           };

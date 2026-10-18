@@ -167,7 +167,7 @@ func TestGitInit(t *testing.T) {
 func TestUndoAfterResume(t *testing.T) {
 	var cfg *config.Config
 	w, _ := openTestWith(t, func(c *config.Config) {
-		c.Blitz.AutoApprove = false
+		c.Blitz.AutoApprove, c.Blitz.PermissionMode = false, "default"
 		cfg = c
 	}, toolCall("create_file", map[string]any{"path": "notes.txt", "content": "hi\n"}), text("created"))
 	w.SetUI(func(context.Context, api.ApprovalRequest) (api.Decision, error) { return api.DecisionOnce, nil }, nil)

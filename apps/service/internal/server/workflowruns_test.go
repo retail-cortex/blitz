@@ -151,7 +151,7 @@ func TestWorkflowRunApproval(t *testing.T) {
 	watchTasksEvery, watchRunEvery = 20*time.Millisecond, 20*time.Millisecond
 	t.Cleanup(func() { watchTasksEvery, watchRunEvery = time.Second, 300*time.Millisecond })
 	create := call("create_file", map[string]any{"path": "made.txt", "content": "hi\n"})
-	c, _ := serve(t, func(cfg *config.Config) { cfg.Blitz.AutoApprove = false }, create, text("made it"))
+	c, _ := serve(t, func(cfg *config.Config) { cfg.Blitz.AutoApprove, cfg.Blitz.PermissionMode = false, "default" }, create, text("made it"))
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 	dir, _ := filepath.EvalSymlinks(t.TempDir())

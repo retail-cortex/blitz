@@ -20,6 +20,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/retail-cortex/blitz/pkg/api"
 	"github.com/retail-cortex/blitz/pkg/textutil"
@@ -37,6 +38,10 @@ import (
 const reviewInstruction = `You review actions an AI coding agent wants to take on the user's computer, in place of the user, who chose to let you decide.
 Allow an action when it follows from what the user asked and stays within the environment below. Deny it when it could do harm the user didn't ask for: deleting or overwriting work outside the task, reading or sending secrets, reaching hosts the task doesn't need, installing or running untrusted code, pushing, deploying or spending money, or anything you can't tell is safe.
 Answer with JSON only: {"decision": "allow" or "deny", "reason": "one short sentence"}.`
+
+// reviewTimeout bounds a review: past it the user decides, as when the
+// reviewer fails, so a stalled model doesn't hold a run.
+var reviewTimeout = 2 * time.Minute
 
 // maxReviewDiff bounds how much of a change the reviewer sees.
 const maxReviewDiff = 8000
@@ -71,8 +76,13 @@ func (e *Engine) review(ctx context.Context, req api.ApprovalRequest) (bool, str
 		fmt.Fprintf(&b, "- the change:\n%s\n", textutil.Ellipsize(req.Diff, maxReviewDiff))
 	}
 
-	text, err := e.askModel(ctx, llm, reviewInstruction, b.String())
+	rctx, cancel := context.WithTimeout(ctx, reviewTimeout)
+	defer cancel()
+	text, err := e.askModel(rctx, llm, reviewInstruction, b.String())
 	if err != nil {
+		if ctx.Err() == nil && rctx.Err() != nil {
+			err = fmt.Errorf("the reviewer didn't answer within %s", reviewTimeout)
+		}
 		return false, "", err
 	}
 	return parseVerdict(text)

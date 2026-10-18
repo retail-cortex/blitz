@@ -15,8 +15,32 @@
 package tools
 
 import (
+	"fmt"
+	"strings"
+
 	"github.com/retail-cortex/blitz/pkg/api"
+	"github.com/retail-cortex/blitz/pkg/config"
 )
+
+// StartingMode is the permission mode a workspace opens in: [blitz]
+// permission_mode, else bypass for the older auto_approve = true, else
+// auto.
+func StartingMode(cfg *config.Config) (api.PermissionMode, error) {
+	if strings.TrimSpace(cfg.Blitz.PermissionMode) == "" {
+		if cfg.Blitz.AutoApprove {
+			return api.ModeBypass, nil
+		}
+		return api.ModeAuto, nil
+	}
+	mode, err := api.ParsePermissionMode(cfg.Blitz.PermissionMode)
+	if err != nil {
+		return "", fmt.Errorf("blitz.permission_mode: %w", err)
+	}
+	if cfg.Blitz.AutoApprove && mode == api.ModeDefault {
+		mode = api.ModeBypass
+	}
+	return mode, nil
+}
 
 // Mode returns the permission mode.
 func (h *Hooks) Mode() api.PermissionMode {

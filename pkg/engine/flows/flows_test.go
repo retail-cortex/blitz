@@ -19,6 +19,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/retail-cortex/blitz/pkg/api"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -88,6 +89,8 @@ func TestCheck(t *testing.T) {
 		{"bad link", "nodes: [{id: a, type: accumulate}]\nedges: [{from: a, to: b}]", "no such step"},
 		{"self link", "nodes: [{id: a, type: accumulate}]\nedges: [{from: a, to: a}]", "can't feed itself"},
 		{"loop", "nodes: [{id: a, type: accumulate}, {id: b, type: accumulate}]\nedges: [{from: a, to: b}, {from: b, to: a}]", "the steps loop"},
+		{"unknown mode", "mode: yolo\nnodes: [{id: a, type: accumulate}]", `mode "yolo"`},
+		{"plan mode", "mode: plan\nnodes: [{id: a, type: accumulate}]", `mode "plan"`},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -95,6 +98,16 @@ func TestCheck(t *testing.T) {
 		})
 	}
 	assert.Contains(t, Parse("Bad", "", []byte("nodes: [{id: a, type: accumulate}]")).Problem, "name")
+}
+
+// A workflow runs in auto unless it names another mode (WF-21).
+func TestModeOf(t *testing.T) {
+	for in, want := range map[string]api.PermissionMode{"": api.ModeAuto, "auto": api.ModeAuto, "default": api.ModeDefault, "acceptEdits": api.ModeAcceptEdits, "dont-ask": api.ModeDontAsk, "yolo": api.ModeAuto} {
+		t.Run(in, func(t *testing.T) {
+			assert.Equal(t, want, ModeOf(Flow{Mode: in}))
+		})
+	}
+	assert.Empty(t, Parse("x", "", []byte("mode: dont-ask\nnodes: [{id: a, type: accumulate}]")).Problem)
 }
 
 func TestSaveLoadDelete(t *testing.T) {

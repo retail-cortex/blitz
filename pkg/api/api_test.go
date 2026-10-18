@@ -121,3 +121,25 @@ func TestSmallHelpers(t *testing.T) {
 
 	assert.Equal(t, "qa · task-3", TaskRequest{Agent: "qa", TaskID: "task-3"}.Label())
 }
+
+// Looser orders the modes from plan to bypass; accept-edits and auto are
+// level.
+func TestLooser(t *testing.T) {
+	tests := []struct {
+		a, b PermissionMode
+		want bool
+	}{
+		{ModeAuto, ModeDefault, true},
+		{ModeDefault, ModeAuto, false},
+		{ModeAuto, ModeAcceptEdits, false},
+		{ModeAcceptEdits, ModeAuto, false},
+		{ModeBypass, ModeAuto, true},
+		{ModeDontAsk, ModeDefault, false},
+		{ModeDefault, ModePlan, true},
+	}
+	for _, tt := range tests {
+		t.Run(string(tt.a)+" over "+string(tt.b), func(t *testing.T) {
+			assert.Equal(t, tt.want, Looser(tt.a, tt.b))
+		})
+	}
+}

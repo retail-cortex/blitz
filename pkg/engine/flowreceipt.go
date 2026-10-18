@@ -71,9 +71,11 @@ type FlowReceipt struct {
 	Workflow  string `json:"workflow"`
 	// Origin is chat, background or worker; Session the chat its agent
 	// steps are turns in.
-	Origin  string    `json:"origin"`
-	Session string    `json:"session"`
-	Input   string    `json:"input"`
+	Origin  string `json:"origin"`
+	Session string `json:"session"`
+	Input   string `json:"input"`
+	// Mode is the permission mode its steps ran in (WF-21).
+	Mode    string    `json:"mode,omitempty"`
 	Started time.Time `json:"started"`
 	Ended   time.Time `json:"ended,omitzero"`
 	Status  string    `json:"status"`
@@ -164,12 +166,12 @@ func (w *Workspace) beginReceipt(r *flowRun, origin string, cancel context.Cance
 	now := time.Now()
 	if old, err := readReceipt(path); err == nil {
 		lr.r = old
-		lr.r.Status, lr.r.Ended, lr.r.Error = RunRunning, time.Time{}, ""
+		lr.r.Status, lr.r.Ended, lr.r.Error, lr.r.Mode = RunRunning, time.Time{}, "", string(r.mode)
 		lr.r.Events = append(lr.r.Events, ReceiptEvent{At: now, Kind: "run", Text: "resumed"})
 	} else {
 		pruneReceipts(dir)
 		lr.r = FlowReceipt{Run: r.runID, Workspace: w.Dir(), Workflow: r.f.Name, Origin: cmp.Or(origin, "chat"), Session: r.session,
-			Input: textutil.Ellipsize(r.input, flowStepPreview), Started: now, Status: RunRunning,
+			Input: textutil.Ellipsize(r.input, flowStepPreview), Mode: string(r.mode), Started: now, Status: RunRunning,
 			Events: []ReceiptEvent{{At: now, Kind: "run", Text: "started"}}}
 	}
 	liveRuns.Store(r.runID, lr)

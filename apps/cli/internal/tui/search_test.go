@@ -52,7 +52,7 @@ func searchApp(t *testing.T, input string, replies ...*genai.Content) (*App, *ru
 	cfg.Tools.WorkspaceDir = t.TempDir()
 	cfg.Images.Dir = t.TempDir()
 	cfg.Audit.Enabled = false
-	cfg.Blitz.AutoApprove = false
+	cfg.Blitz.AutoApprove, cfg.Blitz.PermissionMode = false, "default"
 	cfg.Tools.ApprovalsFile = ""
 	cfg.Sandbox.AllowNetwork = true
 	cfg.Web.Enabled, cfg.Web.AllowPrivate = true, true

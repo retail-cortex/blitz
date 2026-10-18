@@ -133,12 +133,14 @@ export const linkId = (l: { from: string; to: string }) => `${l.from}->${l.to}`;
 export interface WorkflowForm {
   name: string;
   description: string;
+  /** The permission mode its steps run in (WF-21): auto unless chosen. */
+  mode: string;
   steps: StepForm[];
   links: LinkForm[];
 }
 
 /** A new, empty workflow. */
-export const emptyWorkflowForm: WorkflowForm = { name: "", description: "", steps: [], links: [] };
+export const emptyWorkflowForm: WorkflowForm = { name: "", description: "", mode: "auto", steps: [], links: [] };
 
 const asType = (t: string): StepType => ((stepTypes as readonly string[]).includes(t) ? (t as StepType) : "agent");
 
@@ -147,6 +149,7 @@ export function formFromWorkflow(w: WorkflowFile): WorkflowForm {
   return {
     name: w.name,
     description: w.description,
+    mode: w.mode || "auto",
     steps: w.nodes.map((n) => ({
       id: n.id,
       type: asType(n.type),
@@ -206,6 +209,8 @@ export function specFromForm(f: WorkflowForm) {
   return {
     name: f.name.trim(),
     description: f.description.trim(),
+    // auto is a workflow's own default: the file doesn't say it.
+    mode: f.mode === "auto" ? "" : f.mode,
     nodes: f.steps.map((s) => {
       const agent = agentTypes.includes(s.type);
       return {
@@ -358,8 +363,12 @@ export const templates = ["blank", "brief", "refine", "report"] as const;
 /** A template's name. */
 export type Template = (typeof templates)[number];
 
-/** A template's steps and links; text fills in its titles and instructions. */
-export function fromTemplate(tpl: Template, text: (key: string) => string): WorkflowForm {
+/** A template's steps and links, run in mode; text fills in its titles and instructions. */
+export function fromTemplate(tpl: Template, text: (key: string) => string, mode = "auto"): WorkflowForm {
+  return { ...template(tpl, text), mode };
+}
+
+function template(tpl: Template, text: (key: string) => string): Omit<WorkflowForm, "mode"> {
   switch (tpl) {
     case "brief":
       return {

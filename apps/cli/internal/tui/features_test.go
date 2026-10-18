@@ -284,7 +284,7 @@ func TestCtrlCAtApprovalCancelsTurn(t *testing.T) {
 	cfg.Tools.WorkspaceDir = t.TempDir()
 	cfg.Tools.ApprovalsFile = filepath.Join(t.TempDir(), "approvals.json")
 	cfg.Images.Dir = t.TempDir()
-	cfg.Blitz.AutoApprove = false // approvals required
+	cfg.Blitz.AutoApprove, cfg.Blitz.PermissionMode = false, "default" // approvals required
 	llm := runtime.NewMockLLM("m",
 		&genai.Content{Role: genai.RoleModel, Parts: []*genai.Part{{FunctionCall: &genai.FunctionCall{Name: "create_file", Args: map[string]any{"path": "x.txt", "content": "x"}}}}},
 		genai.NewContentFromText("should never be reached", genai.RoleModel))

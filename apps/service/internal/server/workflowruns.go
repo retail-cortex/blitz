@@ -54,7 +54,7 @@ func runStepMsg(s engine.StepReceipt) *pb.WorkflowRunStep {
 // runMsg is a receipt for the wire, with the background run following it
 // (if one does).
 func (s *Server) runMsg(r engine.FlowReceipt) *pb.WorkflowRun {
-	m := &pb.WorkflowRun{Id: r.Run, Workspace: r.Workspace, Workflow: r.Workflow, Origin: r.Origin, SessionId: r.Session, Input: r.Input,
+	m := &pb.WorkflowRun{Id: r.Run, Workspace: r.Workspace, Workflow: r.Workflow, Origin: r.Origin, SessionId: r.Session, Input: r.Input, Mode: r.Mode,
 		Started: timestamppb.New(r.Started), Status: r.Status, Error: r.Error, Output: r.Output, Usage: usageMsg(r.Usage), Models: r.Models}
 	if !r.Ended.IsZero() {
 		m.Ended = timestamppb.New(r.Ended)

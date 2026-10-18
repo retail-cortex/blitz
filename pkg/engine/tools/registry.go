@@ -164,16 +164,14 @@ func NewRegistry(cfg *config.Config, agentReg *agents.Registry, skillProv *skill
 		go sweepCredentials()
 	}
 
-	// The starting permission mode: [blitz] permission_mode, or bypass for
-	// the older auto_approve = true. Bypass needs the OS sandbox; without
-	// it the session starts in default mode and says why.
-	mode, err := api.ParsePermissionMode(cfg.Blitz.PermissionMode)
+	// The starting permission mode: [blitz] permission_mode, else bypass
+	// for the older auto_approve = true, else auto (the reviewer decides;
+	// the user restricts it per workspace). Bypass needs the OS sandbox;
+	// without it the session starts in default mode and says why.
+	mode, err := StartingMode(cfg)
 	if err != nil {
 		ws.Close()
-		return nil, fmt.Errorf("blitz.permission_mode: %w", err)
-	}
-	if cfg.Blitz.AutoApprove && mode == api.ModeDefault {
-		mode = api.ModeBypass
+		return nil, err
 	}
 	var modeNote error
 	if mode == api.ModeBypass && !osb.Active() {

@@ -192,6 +192,7 @@ go_test(
         "files_test.go",
         "flowanswer_test.go",
         "flowcalls_test.go",
+        "flowmode_test.go",
         "flowreceipt_test.go",
         "flowrun_test.go",
         "flowsteps_test.go",
