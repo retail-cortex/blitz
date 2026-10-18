@@ -46,6 +46,10 @@ import (
 func (w *Workspace) Run(ctx context.Context, sessionID string, t api.Turn, on func(api.Event)) (api.TurnResult, error) {
 	var opts []runtime.ExecOption
 	if t.Command {
+		// A workflow runs as this turn, step by step (spec_workflows_043).
+		if f, input, ok := w.flowCommand(t.Text); ok {
+			return w.runFlow(ctx, sessionID, f, input, on)
+		}
 		var err error
 		if opts, err = w.expandCommand(ctx, &t); err != nil {
 			return api.TurnResult{}, err

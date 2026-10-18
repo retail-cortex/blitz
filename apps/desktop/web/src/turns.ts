@@ -20,6 +20,7 @@
 import type { JsonObject } from "@bufbuild/protobuf";
 import type { Message } from "./gen/blitz/v1/session_pb";
 import type { Task, TurnEvent } from "./gen/blitz/v1/turn_pb";
+import { t } from "./i18n";
 
 /**
  * A user message: a prompt (index is its place in the transcript, once
@@ -180,6 +181,13 @@ export function applyEvent(entries: Entry[], ev: TurnEvent): Entry[] {
     }
     case "notice":
       return [...close(entries), { kind: "notice", text: k.value.text, tone: k.value.error ? "error" : "info" }];
+    case "flowStep": {
+      // A workflow's step: a line as it starts, and if it fails.
+      const s = k.value;
+      if (s.status === "running") return [...close(entries), { kind: "notice", text: t("desktop.flows.step_line", { workflow: s.workflow, step: s.title || s.id, index: s.index, count: s.count }), tone: "info" }];
+      if (s.status === "failed") return [...close(entries), { kind: "notice", text: t("desktop.flows.step_failed", { workflow: s.workflow, step: s.title || s.id, error: s.error }), tone: "error" }];
+      return entries;
+    }
     case "finished": {
       const err = k.value.error;
       const done = close(entries);

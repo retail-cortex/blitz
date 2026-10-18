@@ -186,6 +186,9 @@ func eventMsg(e api.Event) *pb.TurnEvent {
 		out.Kind = &pb.TurnEvent_Tasks{Tasks: tasks}
 	case e.Notice != nil:
 		out.Kind = &pb.TurnEvent_Notice{Notice: &pb.Notice{Text: e.Notice.Text, Error: e.Notice.Error, Transient: e.Notice.Transient}}
+	case e.Step != nil:
+		s := e.Step
+		out.Kind = &pb.TurnEvent_FlowStep{FlowStep: &pb.FlowStep{Workflow: s.Workflow, Id: s.ID, Title: s.Title, Type: s.Type, Index: int32(s.Index), Count: int32(s.Count), Status: s.Status, Output: s.Output, Error: s.Error}}
 	}
 	return out
 }

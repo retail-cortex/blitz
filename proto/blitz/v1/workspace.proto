@@ -251,6 +251,16 @@ service WorkspaceService {
   // beside the cases given, saving nothing. An unknown agent is
   // INVALID_ARGUMENT; a model that fails gives problem.
   rpc DraftEvalCases(DraftEvalCasesRequest) returns (DraftEvalCasesResponse);
+  // Returns the workspace's workflows (spec_workflows_043), by name. Run
+  // one as a turn ("/name input"), in a session or in the background.
+  rpc ListWorkflows(ListWorkflowsRequest) returns (ListWorkflowsResponse);
+  // Writes a workflow in .agents/workflows from Studio's canvas; problems,
+  // with nothing written, when it can't be saved (WORKFLOW_NOT_FOUND for
+  // an unknown previous_name). A step not filled in yet is saved, and is
+  // the workflow's problem until it is.
+  rpc SaveWorkflow(SaveWorkflowRequest) returns (SaveWorkflowResponse);
+  // Deletes a workflow from .agents/workflows (WORKFLOW_NOT_FOUND).
+  rpc DeleteWorkflow(DeleteWorkflowRequest) returns (DeleteWorkflowResponse);
   // Returns skill scripts' environments (SCRIPTS_DISABLED).
   rpc ListEnvs(ListEnvsRequest) returns (ListEnvsResponse);
   // Removes one environment.
@@ -2636,3 +2646,81 @@ message DraftEvalCasesResponse {
   repeated EvalCase cases = 1;
   string problem = 2;
 }
+
+// A workflow's step.
+message FlowNode {
+  string id = 1;
+  // agent, refine, summarize, accumulate, browser, script, read_file,
+  // save_file; email and data are shown, not run yet.
+  string type = 2;
+  string title = 3;
+  // Where it sits on the canvas.
+  double x = 4;
+  double y = 5;
+  // The agent an agent, refine, summarize or browser step runs (empty:
+  // the active one).
+  string agent = 6;
+  repeated string skills = 7;
+  // What it's to do (a browser step's goal; a summary's focus).
+  string instructions = 8;
+  // Rules its output must pass, beyond the gates every turn has.
+  repeated string rules = 9;
+  // A script step's skill, script and arguments.
+  string skill = 10;
+  string script = 11;
+  repeated string args = 12;
+  // A read_file or save_file step's file, in the workspace.
+  string path = 13;
+}
+
+// A link carrying a step's output to another.
+message FlowEdge {
+  string from = 1;
+  string to = 2;
+}
+
+// A workflow file in .agents/workflows.
+message WorkflowFile {
+  string name = 1;
+  string path = 2;
+  string description = 3;
+  repeated FlowNode nodes = 4;
+  repeated FlowEdge edges = 5;
+  string problem = 6;
+}
+
+// Request message for WorkspaceService.ListWorkflows.
+message ListWorkflowsRequest {
+  string workspace = 1;
+}
+
+// Response message for WorkspaceService.ListWorkflows.
+message ListWorkflowsResponse {
+  repeated WorkflowFile workflows = 1;
+  // .agents/workflows.
+  string dir = 2;
+}
+
+// Request message for WorkspaceService.SaveWorkflow.
+message SaveWorkflowRequest {
+  string workspace = 1;
+  // The workflow edited; empty for a new one.
+  string previous_name = 2;
+  // What to write (its path and problem aside).
+  WorkflowFile workflow = 3;
+}
+
+// Response message for WorkspaceService.SaveWorkflow.
+message SaveWorkflowResponse {
+  WorkflowFile workflow = 1;
+  repeated string problems = 2;
+}
+
+// Request message for WorkspaceService.DeleteWorkflow.
+message DeleteWorkflowRequest {
+  string workspace = 1;
+  string name = 2;
+}
+
+// Response message for WorkspaceService.DeleteWorkflow.
+message DeleteWorkflowResponse {}

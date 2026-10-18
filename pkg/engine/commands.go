@@ -15,6 +15,7 @@
 package engine
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -29,6 +30,7 @@ import (
 	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/engine/commands"
 	"github.com/retail-cortex/blitz/pkg/engine/runtime"
+	"github.com/retail-cortex/blitz/pkg/i18n"
 )
 
 // commandDirs are where command files live, with their source: the user's
@@ -87,6 +89,11 @@ func (w *Workspace) ListCommands() []api.CommandInfo {
 	out := make([]api.CommandInfo, 0, len(byName))
 	for _, c := range byName {
 		out = append(out, api.CommandInfo{Name: c.Name, Description: c.Description, ArgumentHint: c.ArgumentHint, Source: c.Source})
+	}
+	// Workflows run as /name (spec_workflows_043), over a command of the same name.
+	for _, f := range w.Workflows() {
+		out = slices.DeleteFunc(out, func(c api.CommandInfo) bool { return c.Name == f.Name })
+		out = append(out, api.CommandInfo{Name: f.Name, Description: cmp.Or(f.Description, i18n.T("flow.command")), ArgumentHint: i18n.T("flow.argument"), Source: "workflow"})
 	}
 	// MCP servers' prompts, as /mcp__<server>__<prompt> (PAR-MCP-03).
 	for _, p := range w.tools.MCP().Prompts(context.Background(), mcpPromptWait) {

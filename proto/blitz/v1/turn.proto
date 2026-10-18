@@ -107,7 +107,27 @@ message TurnEvent {
     // Something the user should know about the turn that isn't the
     // agent's output, such as a message that couldn't be saved.
     Notice notice = 10;
+    // A workflow's step starting or ending (spec_workflows_043).
+    FlowStep flow_step = 11;
   }
+}
+
+// A workflow's step starting, or how it ended.
+message FlowStep {
+  string workflow = 1;
+  string id = 2;
+  string title = 3;
+  // agent, refine, summarize, accumulate, browser, script, read_file or
+  // save_file.
+  string type = 4;
+  // Step index of count, from 1.
+  int32 index = 5;
+  int32 count = 6;
+  // running, done or failed.
+  string status = 7;
+  // What it produced, ended (the start of it).
+  string output = 8;
+  string error = 9;
 }
 
 // A message from Blitz itself about a turn.
