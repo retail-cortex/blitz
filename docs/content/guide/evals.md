@@ -12,7 +12,7 @@ Spec: [evals](../about/specs/spec_evals_042.md).
 Evals belong with making an agent, so in Studio they come right after **Agents**:
 
 1. **Write the agent** (or let another agent write it).
-2. **Draft its evals.** The agent's form has **Write evals**, and Studio › Evals lists **Agents without evals** with **Draft evals**: a model reads what the agent is for and its instructions and proposes cases (typical asks, edge cases, what it should decline). Edit them, then save.
+2. **Draft its evals.** The agent's form has **Write evals**, and Studio › Evals lists your agents without evals (not Blitz's built-in ones) with **Draft evals**: a model reads what the agent is for and its instructions and proposes cases (typical asks, edge cases, what it should decline). Edit them, then save.
 3. **Run them.**
 4. **Refine.** When the agent misses cases, **Refine its instructions** has the model rewrite them with those cases in hand; you review the change, and it's saved to the agent.
 5. **Run again.** Later, saving the agent (or a skill its evals use) offers to run its evals again.

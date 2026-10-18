@@ -100,6 +100,8 @@ export function EvalsPane({ workspace, onDirty, forAgent, onHandled }: { workspa
   const [deleting, setDeleting] = useState(false);
   const [agents, setAgents] = useState<string[]>([]);
   const [skills, setSkills] = useState<string[]>([]);
+  // The agents with a file (the workspace's, the user's): built-in ones get no drafted evals.
+  const [ownAgents, setOwnAgents] = useState<string[]>([]);
   const [runs, setRuns] = useState<EvalRun[]>([]);
   const [live, setLive] = useState<{ run: EvalRun | null; results: EvalResult[]; total: number } | null>(null);
   const [shown, setShown] = useState<string>("");
@@ -123,6 +125,9 @@ export function EvalsPane({ workspace, onDirty, forAgent, onHandled }: { workspa
     workspaces.listAgents({ workspace }).then(
       (r) => setAgents(r.agents.map((a) => a.name)),
       () => {},
+    );
+    void Promise.all([AgentScope.WORKSPACE, AgentScope.USER].map((scope) => workspaces.listAgentFiles({ workspace, scope }).then((r) => r.files.flatMap((f) => (f.agent && !f.problem ? [f.agent.name] : [])), () => [] as string[]))).then((all) =>
+      setOwnAgents([...new Set(all.flat())]),
     );
     workspaces.listSkills({ workspace }).then(
       (r) => setSkills(r.skills.map((s) => s.name)),
@@ -261,7 +266,7 @@ export function EvalsPane({ workspace, onDirty, forAgent, onHandled }: { workspa
   const title = isNew && !form.name ? t("desktop.evals.new") : form.name || open || "";
   const canRun = !!file && !dirty && !file.problem && form.cases.length > 0;
   const shownRun = runs.find((r) => r.id === shown);
-  const uncovered = agents.filter((a) => evalsForAgent(list, a).length === 0);
+  const uncovered = ownAgents.filter((a) => evalsForAgent(list, a).length === 0);
   // Drafted cases: a new eval for the agent, or more cases in the open one.
   const drafted = (agent: string, cases: EvalCase[], append: boolean) => {
     setDrafting(null);
@@ -461,7 +466,7 @@ export function EvalsPane({ workspace, onDirty, forAgent, onHandled }: { workspa
                   <Button icon={mdiPlus} onClick={addCase}>
                     {t("desktop.evals.add_case")}
                   </Button>
-                  <Button icon={mdiCreationOutline} disabled={agents.length === 0} onClick={() => setDrafting({ agent: form.agents[0] ?? agents[0] ?? "", append: true })}>
+                  <Button icon={mdiCreationOutline} disabled={ownAgents.length === 0} onClick={() => setDrafting({ agent: form.agents.find((a) => ownAgents.includes(a)) ?? ownAgents[0] ?? "", append: true })}>
                     {t("desktop.evals.draft_cases")}
                   </Button>
                 </div>
@@ -618,7 +623,7 @@ export function EvalsPane({ workspace, onDirty, forAgent, onHandled }: { workspa
         createPortal(
           <DraftCases
             workspace={workspace}
-            agents={agents}
+            agents={ownAgents}
             agent={drafting.agent}
             existing={drafting.append ? specFromForm(form).cases : []}
             onClose={() => setDrafting(null)}
