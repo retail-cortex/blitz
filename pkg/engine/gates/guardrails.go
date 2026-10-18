@@ -133,8 +133,16 @@ type Guardrail struct {
 // BuiltinDefault is a built-in guardrail as it runs without a file: on,
 // with its default action.
 func BuiltinDefault(b Builtin) Guardrail {
-	return Guardrail{Name: b.ID, Builtin: b.ID, Stage: b.Stage, Action: b.Action}
+	g := Guardrail{Name: b.ID, Builtin: b.ID, Stage: b.Stage, Action: b.Action}
+	if b.ID == BuiltinLimits {
+		g.Limits.Commands = slices.Clone(DefaultCommands)
+	}
+	return g
 }
+
+// DefaultCommands are the commands the limits guardrail refuses without a
+// file: force pushes, and deleting the whole disk or home folder.
+var DefaultCommands = []string{"git push*--force*", "git push* -f*", "rm -rf /", "rm -rf ~", "rm -rf ~/"}
 
 // guardMeta is a guardrail file's front matter.
 type guardMeta struct {
@@ -325,7 +333,9 @@ func CommandDenied(command string, denied []string) string {
 	c := strings.Join(strings.Fields(command), " ")
 	for _, g := range denied {
 		g = strings.Join(strings.Fields(g), " ")
-		if re, err := regexp.Compile("^" + textutil.GlobToRegex(g) + "$"); err == nil && re.MatchString(c) {
+		// A command isn't a path: * is anything, slashes too.
+		pattern := strings.NewReplacer(`\*`, ".*", `\?`, ".").Replace(regexp.QuoteMeta(g))
+		if re, err := regexp.Compile("^" + pattern + "$"); err == nil && re.MatchString(c) {
 			return g
 		}
 	}

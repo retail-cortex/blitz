@@ -920,7 +920,7 @@ export function installFake() {
           dir: `${workspace}/.agents/guardrails`,
           builtins: fakeBuiltinGuards.map((b) => {
             const g = fakeGuards.find((x) => x.builtin === b.id);
-            return { ...b, file: g ? fakeGuardFile(workspace, g) : { name: b.id, builtin: b.id, stage: b.stage, action: b.defaultAction, agents: [], tools: [], description: "", pii: false, judge: false, text: "", off: false, path: "", problem: "", editable: true } };
+            return { ...b, file: g ? fakeGuardFile(workspace, g) : { name: b.id, builtin: b.id, stage: b.stage, action: b.defaultAction, agents: [], tools: [], description: "", pii: false, judge: false, text: "", off: false, path: "", problem: "", editable: true, limits: b.id === "limits" ? { maxCostUsd: 0, maxTurns: 0, maxFilesChanged: 0, allowedDomains: [], commands: ["git push*--force*", "git push* -f*", "rm -rf /", "rm -rf ~", "rm -rf ~/"] } : undefined } };
           }),
           guardrails: fakeGuards.filter((g) => !g.builtin).map((g) => fakeGuardFile(workspace, g)),
         }),

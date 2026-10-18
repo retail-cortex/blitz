@@ -40,7 +40,7 @@ commands: ["git push --force*"]
 ---
 ```
 
-`prompt_injection` watches what web pages, the browser and MCP servers return for text aimed at the agent (`action: warn` tells the agent it's data, not orders; `block` withholds it; `judge: true` has a model confirm a match). `secrets` masks credentials in answers (`action: redact`, `warn` or `block`; `pii: true` adds email addresses, phone numbers, card and social security numbers). Your own guardrail is a check in plain English, judged by the suggestions model:
+Without a file, `limits` refuses force pushes (`git push*--force*`, `git push* -f*`) and `rm -rf` of `/` or `~`; a file's `commands` replaces that list. `prompt_injection` watches what web pages, the browser and MCP servers return for text aimed at the agent (`action: warn` tells the agent it's data, not orders; `block` withholds it; `judge: true` has a model confirm a match). `secrets` masks credentials in answers (`action: redact`, `warn` or `block`; `pii: true` adds email addresses, phone numbers, card and social security numbers). Your own guardrail is a check in plain English, judged by the suggestions model:
 
 ```markdown
 ---

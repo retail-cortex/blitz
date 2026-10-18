@@ -86,9 +86,12 @@ export function formFromGuardrail(g: GuardrailFile): GuardrailForm {
   };
 }
 
+/** The commands the limits guardrail refuses by default (gates.DefaultCommands). */
+export const defaultCommands = ["git push*--force*", "git push* -f*", "rm -rf /", "rm -rf ~", "rm -rf ~/"];
+
 /** A built-in's form with its defaults (on). */
 export function formForBuiltin(id: BuiltinId): GuardrailForm {
-  return { ...emptyGuardrailForm, name: id, builtin: id, stage: builtinDefaults[id].stage, action: builtinDefaults[id].action };
+  return { ...emptyGuardrailForm, name: id, builtin: id, stage: builtinDefaults[id].stage, action: builtinDefaults[id].action, commands: id === "limits" ? defaultCommands.join("\n") : "" };
 }
 
 const split = (s: string, by: RegExp) =>

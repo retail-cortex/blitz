@@ -1681,7 +1681,7 @@
     "desktop.guardrails.builtin_about.limits": "Spending, model calls, files changed, domains and commands",
     "desktop.guardrails.builtin_help.prompt_injection": "Watches what tools bring back (web pages, MCP results; any tools you name) for text that tries to give the agent instructions. Warn tells the agent it's data to work with, not orders; Block withholds it.",
     "desktop.guardrails.builtin_help.secrets": "Masks credentials (API keys, tokens, private keys, passwords) in the agent's answers, and personal data if you choose: email addresses, phone numbers, card numbers, social security numbers.",
-    "desktop.guardrails.builtin_help.limits": "Holds every turn to these limits; an action past one is stopped. Empty means no limit of that kind.",
+    "desktop.guardrails.builtin_help.limits": "Holds every turn to these limits; an action past one is stopped. Empty means no limit of that kind; by default it refuses force pushes and deleting the whole disk or home folder.",
     "desktop.guardrails.custom_intro": "A guardrail says one thing to catch, in plain English: a model checks it at the stage you choose. If it's about the quality of the work rather than safety, make it a rule.",
     "desktop.guardrails.off": "Off",
     "desktop.guardrails.switched_on": "{name} is on",

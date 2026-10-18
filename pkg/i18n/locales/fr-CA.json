@@ -1681,7 +1681,7 @@
     "desktop.guardrails.builtin_about.limits": "Dépenses, appels au modèle, fichiers modifiés, domaines et commandes",
     "desktop.guardrails.builtin_help.prompt_injection": "Surveille ce que rapportent les outils (pages Web, résultats MCP ; les outils que vous nommez) pour du texte qui tente de donner des instructions à l'agent. Avertir lui dit que ce sont des données, pas des ordres ; Bloquer le retient.",
     "desktop.guardrails.builtin_help.secrets": "Masque les identifiants (clés d'API, jetons, clés privées, mots de passe) dans les réponses de l'agent, et les données personnelles si vous le choisissez : courriels, téléphones, numéros de carte, numéros d'assurance sociale.",
-    "desktop.guardrails.builtin_help.limits": "Tient chaque tour dans ces limites ; une action qui en dépasse une est arrêtée. Vide signifie aucune limite de ce type.",
+    "desktop.guardrails.builtin_help.limits": "Tient chaque tour dans ces limites ; une action qui en dépasse une est arrêtée. Vide signifie aucune limite de ce type ; par défaut, il refuse les push forcés et la suppression du disque entier ou du dossier personnel.",
     "desktop.guardrails.custom_intro": "Un garde-fou énonce une chose à repérer, en langage clair : un modèle la vérifie à l'étape choisie. S'il porte sur la qualité du travail plutôt que la sécurité, faites-en une règle.",
     "desktop.guardrails.off": "Désactivé",
     "desktop.guardrails.switched_on": "{name} est activé",

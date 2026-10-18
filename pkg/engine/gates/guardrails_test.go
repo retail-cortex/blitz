@@ -116,6 +116,14 @@ func TestDomainsAndCommands(t *testing.T) {
 	assert.Equal(t, "rm -rf /*", CommandDenied("rm -rf /", denied))
 	assert.Empty(t, CommandDenied("git push origin main", denied))
 	assert.Empty(t, CommandDenied("echo rm -rf /", denied), "matched against the whole command")
+	assert.Equal(t, "git push --force*", CommandDenied("git push --force origin feature/x", denied), "* takes slashes too")
+	for _, c := range []string{"git push --force", "git push origin main --force-with-lease", "git push -f", "git push origin feature/x -f", "rm -rf /", "rm  -rf ~/"} {
+		assert.NotEmpty(t, CommandDenied(c, DefaultCommands), c)
+	}
+	for _, c := range []string{"git push", "git push --follow-tags origin main", "rm -rf /tmp/build", "rm -rf ./dist"} {
+		assert.Empty(t, CommandDenied(c, DefaultCommands), c)
+	}
+	assert.Equal(t, DefaultCommands, BuiltinDefault(Builtins[2]).Limits.Commands, "limits refuses them without a file")
 }
 
 func TestJudgeGuardrailAndInjection(t *testing.T) {

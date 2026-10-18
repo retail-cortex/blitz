@@ -17,7 +17,7 @@
 import { create } from "@bufbuild/protobuf";
 import { describe, expect, it } from "vitest";
 import { GuardrailFileSchema } from "../gen/blitz/v1/workspace_pb";
-import { emptyGuardrailForm, formForBuiltin, formFromGuardrail, sameGuardrailForm, specFromForm, stageHasTools } from "./guardrailForm";
+import { emptyGuardrailForm, formForBuiltin, formFromGuardrail, sameGuardrailForm, specFromForm, stageHasTools, defaultCommands } from "./guardrailForm";
 
 describe("the guardrail form", () => {
   it("reads the limits guardrail and writes its limits back", () => {
@@ -45,6 +45,7 @@ describe("the guardrail form", () => {
     expect(f).toMatchObject({ off: true, action: "warn", pii: true });
     expect(specFromForm({ ...f, off: false })).toMatchObject({ off: false, action: "warn", pii: true });
     expect(formForBuiltin("limits").off).toBe(false);
+    expect(specFromForm(formForBuiltin("limits")).limits?.commands).toEqual(defaultCommands);
   });
 
   it("keeps each built-in's own settings only", () => {

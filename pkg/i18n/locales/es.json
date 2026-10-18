@@ -1681,7 +1681,7 @@
     "desktop.guardrails.builtin_about.limits": "Gasto, llamadas al modelo, archivos cambiados, dominios y comandos",
     "desktop.guardrails.builtin_help.prompt_injection": "Vigila lo que traen las herramientas (páginas web, resultados MCP; las herramientas que nombres) en busca de texto que intente dar instrucciones al agente. Avisar le dice al agente que son datos, no órdenes; Bloquear lo retiene.",
     "desktop.guardrails.builtin_help.secrets": "Oculta credenciales (claves de API, tokens, claves privadas, contraseñas) en las respuestas del agente, y datos personales si eliges: correos, teléfonos, tarjetas, números de seguro social.",
-    "desktop.guardrails.builtin_help.limits": "Mantiene cada turno dentro de estos límites; una acción que los pase se detiene. Vacío significa sin límite de ese tipo.",
+    "desktop.guardrails.builtin_help.limits": "Mantiene cada turno dentro de estos límites; una acción que los pase se detiene. Vacío significa sin límite de ese tipo; de forma predeterminada rechaza los push forzados y borrar todo el disco o la carpeta personal.",
     "desktop.guardrails.custom_intro": "Una barrera dice una cosa que detectar, en lenguaje sencillo: un modelo la comprueba en la etapa que elijas. Si trata de la calidad del trabajo más que de seguridad, conviértela en una regla.",
     "desktop.guardrails.off": "Desactivada",
     "desktop.guardrails.switched_on": "{name} está activada",
