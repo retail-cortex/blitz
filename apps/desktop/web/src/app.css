@@ -866,6 +866,8 @@ code.file-link:hover { text-decoration-color: currentColor; }
 .slide-pane { position: relative; height: 100%; min-height: 0; overflow: hidden; }
 .slide-pane .slide-list, .slide-pane .slide-detail { transition: transform 0.22s cubic-bezier(0.2, 0, 0, 1), opacity 0.22s, visibility 0s; }
 .slide-pane .slide-list { width: 100%; height: 100%; overflow-y: auto; padding: 0 0 8px; border-right: none; display: flex; flex-direction: column; gap: 8px; }
+/* A long list scrolls: its parts keep their height rather than squeeze. */
+.slide-pane .slide-list > * { flex-shrink: 0; }
 .slide-pane .slide-detail { position: absolute; inset: 0; overflow-y: auto; padding: 0 4px 0 0; transform: translateX(100%); opacity: 0; visibility: hidden; transition-delay: 0s, 0s, 0.22s; }
 .slide-pane.is-open .slide-list { transform: translateX(-24px); opacity: 0; visibility: hidden; transition-delay: 0s, 0s, 0.22s; }
 .slide-pane.is-open .slide-detail { transform: none; opacity: 1; visibility: visible; transition-delay: 0s; }
