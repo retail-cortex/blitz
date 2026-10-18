@@ -91,6 +91,26 @@ func (h sessionService) LoadSession(ctx context.Context, r req[pb.LoadSessionReq
 	return ok(&pb.LoadSessionResponse{Session: sessionMsg(s), Branched: branched})
 }
 
+func (h sessionService) ListSessionTools(ctx context.Context, r req[pb.ListSessionToolsRequest]) (*connect.Response[pb.ListSessionToolsResponse], error) {
+	w, err := h.s.workspace(ctx, r.Msg.Workspace)
+	if err != nil {
+		return nil, err
+	}
+	list, err := w.SessionTools(r.Msg.SessionId)
+	if err != nil {
+		return nil, apiError(connect.CodeNotFound, "SESSION_NOT_FOUND", err, "ref", r.Msg.SessionId)
+	}
+	out := &pb.ListSessionToolsResponse{}
+	for _, t := range list {
+		m := &pb.SessionTool{Turn: int32(t.Turn), Prompt: t.Prompt, Call: &pb.ToolCall{Id: t.ID, Name: t.Name, Args: structMsg(t.Args)}}
+		if t.Result != nil {
+			m.Result = &pb.ToolResult{Id: t.ID, Name: t.Name, Result: structMsg(t.Result)}
+		}
+		out.Tools = append(out.Tools, m)
+	}
+	return ok(out)
+}
+
 func (h sessionService) SaveSnapshot(ctx context.Context, r req[pb.SaveSnapshotRequest]) (*connect.Response[pb.SaveSnapshotResponse], error) {
 	w, err := h.s.workspace(ctx, r.Msg.Workspace)
 	if err != nil {

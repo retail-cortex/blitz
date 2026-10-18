@@ -27,6 +27,7 @@ describe("previewKind", () => {
     ["a/b/shot.PNG", "image"],
     ["photo.jpeg", "image"],
     ["spec.pdf", "pdf"],
+    ["notes/brief.DOCX", "docx"],
     ["audio/overview.wav", "audio"],
     ["talk.MP3", "audio"],
     ["voice.opus", "audio"],

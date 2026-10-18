@@ -18,6 +18,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/retail-cortex/blitz/pkg/api"
@@ -75,6 +76,11 @@ func TestFlowRunsInAuto(t *testing.T) {
 	r, _, err := FlowReceiptOf(w.StorageDir(), run)
 	require.NoError(t, err)
 	assert.Equal(t, "auto", r.Mode)
+	var allowed bool
+	for _, e := range r.Events {
+		allowed = allowed || e.Kind == "approval" && e.Step == "a" && strings.HasPrefix(e.Text, "auto-allow: the step asked for it")
+	}
+	assert.True(t, allowed, "the reviewer's decision is on the receipt: %+v", r.Events)
 
 	_, err = w.SetPermissionMode("default")
 	require.NoError(t, err)

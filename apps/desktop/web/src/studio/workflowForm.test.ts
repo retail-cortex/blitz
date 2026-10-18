@@ -18,7 +18,7 @@ import { create } from "@bufbuild/protobuf";
 import { describe, expect, it } from "vitest";
 import { WorkflowFileSchema } from "../gen/blitz/v1/workspace_pb";
 import { flowModes, looser } from "../options";
-import { schedulePermissions, addLink, emptyWorkflowForm, noAuth, linkId, linkText, setLink, formFromWorkflow, fromTemplate, newStep, removeStep, sameWorkflowForm, specFromForm, stepNeeds, templates } from "./workflowForm";
+import { schedulePermissions, startsOnInput, addLink, emptyWorkflowForm, noAuth, linkId, linkText, setLink, formFromWorkflow, fromTemplate, newStep, removeStep, sameWorkflowForm, specFromForm, stepNeeds, templates } from "./workflowForm";
 
 describe("the workflow canvas", () => {
   it("reads a workflow and writes back each step's own settings", () => {
@@ -130,5 +130,12 @@ describe("the workflow canvas", () => {
     ];
     expect(schedulePermissions(steps)).toEqual(["write:drafts/draft.md", "write:reports/", "web:api.example.com", "mcp:github:create_issue", "web:*"]);
     expect(schedulePermissions([{ ...newStep("agent", [], 0, 0) }])).toEqual([]);
+  });
+
+  it("knows when a workflow starts on its input", () => {
+    const draft = fromTemplate("refine", (k) => k);
+    expect(startsOnInput(draft)).toBe(true);
+    expect(startsOnInput(fromTemplate("report", (k) => k))).toBe(false); // a script first
+    expect(startsOnInput({ steps: [newStep("read_file", [], 0, 0)], links: [] })).toBe(false);
   });
 });

@@ -17,10 +17,11 @@
 import { mdiCalendarClock, mdiCalendarPlus, mdiCheck, mdiDeleteOutline, mdiPencilOutline } from "@mdi/js";
 import { useCallback, useEffect, useState } from "react";
 import { workers } from "../api";
-import { message } from "../errors";
+import { message, reason } from "../errors";
 import { WorkerState, type Worker } from "../gen/blitz/v1/worker_pb";
 import { t } from "../i18n";
-import { Button, Field, Icon, IconButton, Switch, useSnackbar } from "../ui/controls";
+import { Button, Dialog, Field, Icon, IconButton, Switch, useSnackbar } from "../ui/controls";
+import { createPortal } from "react-dom";
 
 /** A new schedule's worker's name: the workflow's, then -2, -3, … past those taken. */
 export function scheduleName(workflow: string, taken: string[]): string {
@@ -42,7 +43,7 @@ type Draft = { name: string; schedule: string; input: string };
  * and removed here. What a worker may do and its limits are in Studio ›
  * Workers.
  */
-export function WorkflowSchedule({ workspace, workflow, disabled, permissions = [] }: { workspace: string; workflow: string; disabled: boolean; permissions?: string[] }) {
+export function WorkflowSchedule({ workspace, workflow, disabled, permissions = [], needsInput = false }: { workspace: string; workflow: string; disabled: boolean; permissions?: string[]; needsInput?: boolean }) {
   const snack = useSnackbar();
   const [all, setAll] = useState<Worker[]>([]);
   const [draft, setDraft] = useState<Draft | null>(null);
@@ -96,7 +97,34 @@ export function WorkflowSchedule({ workspace, workflow, disabled, permissions = 
       setDraft({ name: w.name, schedule: spec.worker?.schedule ?? w.schedule, input: spec.worker?.prompt ?? "" });
     });
   const flip = (w: Worker, on: boolean) => act(() => (on ? workers.enableWorker({ workspace, name: w.name, hash: w.hash }) : workers.disableWorker({ workspace, name: w.name })));
-  const remove = (w: Worker) => act(() => workers.deleteWorker({ workspace, name: w.name }));
+  // A schedule whose run is going now: asked first, its run stopped, then removed.
+  const [stopping, setStopping] = useState<Worker | null>(null);
+  const remove = async (w: Worker) => {
+    try {
+      await workers.deleteWorker({ workspace, name: w.name });
+      await refresh();
+    } catch (e) {
+      if (reason(e) === "RUN_IN_PROGRESS") setStopping(w);
+      else snack(message(e), { error: true });
+    }
+  };
+  const stopAndRemove = (w: Worker) =>
+    act(async () => {
+      setStopping(null);
+      const going = (await workers.listRunningWorkerRuns({})).runs.filter((r) => r.workspace === workspace && r.worker === w.name);
+      for (const r of going) await workers.stopWorkerRun({ runId: r.id }).catch(() => {});
+      // The run ends as it's stopped; the removal waits for that.
+      for (let i = 0; i < 20; i++) {
+        try {
+          await workers.deleteWorker({ workspace, name: w.name });
+          return;
+        } catch (e) {
+          if (reason(e) !== "RUN_IN_PROGRESS") throw e;
+          await new Promise((res) => setTimeout(res, 500));
+        }
+      }
+      throw new Error(t("desktop.flows.schedule.still_running"));
+    });
 
   return (
     <div className="stack flow-schedule" style={{ gap: 6 }}>
@@ -122,7 +150,9 @@ export function WorkflowSchedule({ workspace, workflow, disabled, permissions = 
           <Field label={t("desktop.flows.schedule.when")} supporting={t("desktop.flows.schedule.when_hint")}>
             {(id) => <input id={id} className="input" autoFocus value={draft.schedule} placeholder={t("desktop.flows.schedule.when_placeholder")} onChange={(e) => setDraft({ ...draft, schedule: e.target.value })} />}
           </Field>
-          <Field label={t("desktop.flows.input")}>{(id) => <textarea id={id} className="input" rows={2} value={draft.input} placeholder={t("desktop.flows.input_placeholder")} onChange={(e) => setDraft({ ...draft, input: e.target.value })} />}</Field>
+          <Field label={t("desktop.flows.input")} supporting={needsInput && !draft.input.trim() ? <span className="warn-text">{t("desktop.flows.schedule.needs_input")}</span> : undefined}>
+            {(id) => <textarea id={id} className="input" rows={2} value={draft.input} placeholder={t("desktop.flows.input_placeholder")} onChange={(e) => setDraft({ ...draft, input: e.target.value })} />}
+          </Field>
           {problems.map((p) => (
             <span key={p} className="t-body-sm error-text">
               {p}
@@ -144,6 +174,25 @@ export function WorkflowSchedule({ workspace, workflow, disabled, permissions = 
           </Button>
         </div>
       )}
+      {stopping &&
+        createPortal(
+          <Dialog
+            title={t("desktop.flows.schedule.stop_title")}
+            icon={mdiCalendarClock}
+            onClose={() => setStopping(null)}
+            footer={
+              <>
+                <Button onClick={() => setStopping(null)}>{t("desktop.cancel")}</Button>
+                <Button variant="filled" danger onClick={() => void stopAndRemove(stopping)}>
+                  {t("desktop.flows.schedule.stop_go")}
+                </Button>
+              </>
+            }
+          >
+            <p>{t("desktop.flows.schedule.stop_body", { when: stopping.schedule })}</p>
+          </Dialog>,
+          document.body,
+        )}
     </div>
   );
 }

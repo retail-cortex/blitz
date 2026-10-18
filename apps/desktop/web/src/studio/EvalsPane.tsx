@@ -44,7 +44,7 @@ import { workspaces } from "../api";
 import { message } from "../errors";
 import { t, tn } from "../i18n";
 import { AgentScope, type AgentFile, type EvalCase, type EvalCaseSchema, type EvalFile, type EvalResult, type EvalRun } from "../gen/blitz/v1/workspace_pb";
-import { Button, Chip, Dialog, Field, Icon, IconButton, Segmented, Switch, Tabs, useSnackbar } from "../ui/controls";
+import { Button, Dialog, Field, Icon, IconButton, Segmented, Switch, Tabs, useSnackbar, MultiSelect } from "../ui/controls";
 import { DraftButton } from "./Draft";
 import { agentsToRefine, evalNameFor, evalsForAgent, refineRequest } from "./evalCoverage";
 import { casesFromDraft, duplicateIds, emptyEvalForm, formFromEval, money, resultsCost, seconds, moveCase, newCase, resultsByCase, resultStatuses, runCounts, sameEvalForm, specFromForm, type CaseForm, type EvalForm } from "./evalForm";
@@ -484,31 +484,12 @@ export function EvalsPane({ workspace, onDirty, forAgent, onHandled }: { workspa
                 <div className="stack" style={{ gap: 6 }}>
                   <span className="t-label">{t("desktop.evals.agents")}</span>
                   <span className="t-body-sm muted">{form.agents.length ? t("desktop.evals.agents_some") : t("desktop.evals.agents_none")}</span>
-                  <div className="row wrap" style={{ gap: 6 }}>
-                    {[...new Set([...agents, ...form.agents])].map((a) => {
-                      const on = form.agents.includes(a);
-                      return (
-                        <Chip key={a} selected={on} aria-pressed={on} onClick={() => set("agents", on ? form.agents.filter((x) => x !== a) : [...form.agents, a])}>
-                          {a}
-                        </Chip>
-                      );
-                    })}
-                  </div>
+                  <MultiSelect label={t("desktop.evals.agents")} none={t("desktop.studio.active_agent")} options={[...new Set([...agents, ...form.agents])].map((v) => ({ value: v }))} chosen={form.agents} onChange={(v) => set("agents", v)} />
                 </div>
                 <div className="stack" style={{ gap: 6 }}>
                   <span className="t-label">{t("desktop.evals.skills")}</span>
                   <span className="t-body-sm muted">{t("desktop.evals.skills_hint")}</span>
-                  <div className="row wrap" style={{ gap: 6 }}>
-                    {[...new Set([...skills, ...form.skills])].map((s) => {
-                      const on = form.skills.includes(s);
-                      return (
-                        <Chip key={s} selected={on} aria-pressed={on} onClick={() => set("skills", on ? form.skills.filter((x) => x !== s) : [...form.skills, s])}>
-                          {s}
-                        </Chip>
-                      );
-                    })}
-                    {skills.length === 0 && form.skills.length === 0 && <span className="t-body-sm muted">{t("desktop.evals.no_skills")}</span>}
-                  </div>
+                  <MultiSelect label={t("desktop.evals.skills")} none={t("desktop.flows.none_chosen")} options={[...new Set([...skills, ...form.skills])].map((v) => ({ value: v }))} chosen={form.skills} onChange={(v) => set("skills", v)} />
                 </div>
                 <div className="stack" style={{ gap: 4 }}>
                   <span className="t-label">{t("desktop.evals.near")}</span>

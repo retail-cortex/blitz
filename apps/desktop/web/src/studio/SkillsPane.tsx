@@ -42,7 +42,7 @@ import type { SkillFile, SkillInfo } from "../gen/blitz/v1/workspace_pb";
 import { SuggestTextarea } from "../SecretSuggest";
 import { SkillReviewDialog } from "../SkillReview";
 import { forgetSkills } from "../skillMention";
-import { Button, Chip, Dialog, Field, Icon, IconButton, Tabs, useSnackbar } from "../ui/controls";
+import { Button, Chip, Dialog, Field, Icon, IconButton, Tabs, useSnackbar, MultiSelect } from "../ui/controls";
 import { DraftButton } from "./Draft";
 import { evalsForSkill, runInBackground } from "./evalCoverage";
 import { SkillFiles } from "./SkillFiles";
@@ -340,16 +340,7 @@ export function SkillsPane({ workspace, onDirty }: { workspace: string; onDirty?
                 <div className="stack" style={{ gap: 6 }}>
                   <span className="t-label">{t("desktop.skills.agents")}</span>
                   <span className="t-body-sm muted">{form.agents.length ? t("desktop.skills.agents_some") : t("desktop.skills.agents_all")}</span>
-                  <div className="row wrap" style={{ gap: 6 }}>
-                    {[...new Set([...agents, ...form.agents])].map((a) => {
-                      const on = form.agents.includes(a);
-                      return (
-                        <Chip key={a} selected={on} aria-pressed={on} onClick={() => set("agents", on ? form.agents.filter((x) => x !== a) : [...form.agents, a])}>
-                          {a}
-                        </Chip>
-                      );
-                    })}
-                  </div>
+                  <MultiSelect label={t("desktop.skills.agents")} none={t("desktop.studio.every_agent")} options={[...new Set([...agents, ...form.agents])].map((v) => ({ value: v }))} chosen={form.agents} onChange={(v) => set("agents", v)} />
                 </div>
                 <div className="stack" style={{ gap: 6 }}>
                   <span className="t-label">{t("desktop.skills.tools")}</span>

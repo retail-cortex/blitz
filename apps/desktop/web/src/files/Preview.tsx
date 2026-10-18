@@ -42,6 +42,7 @@ export function Preview({ dir, path, kind, text, line, find, onFound }: { dir: s
   if (kind === "table") return <TableView dir={dir} path={path} line={line} />;
   if (kind === "svg") return <SvgPreview text={text ?? ""} name={path} />;
   if (kind === "html") return <HtmlPreview dir={dir} path={path} text={text ?? ""} />;
+  if (kind === "docx") return <DocxPreview dir={dir} path={path} />;
   return <FilePreview dir={dir} path={path} kind={kind} />;
 }
 
@@ -139,6 +140,28 @@ function HtmlPreview({ dir, path, text }: { dir: string; path: string; text: str
       <iframe title={path} sandbox="allow-scripts allow-forms allow-popups allow-modals" srcDoc={doc} />
     </div>
   );
+}
+
+// A Word document as its text: the service reads it as Markdown, shown as
+// Markdown files are (read-only; Open in the system's viewer for the rest).
+function DocxPreview({ dir, path }: { dir: string; path: string }) {
+  const [text, setText] = useState<string>();
+  const [error, setError] = useState("");
+  useEffect(() => {
+    let live = true;
+    setText(undefined);
+    setError("");
+    files.readPreview({ workspace: dir, path }).then(
+      (r) => live && setText(new TextDecoder().decode(r.data)),
+      (e) => live && setError(message(e)),
+    );
+    return () => {
+      live = false;
+    };
+  }, [dir, path]);
+  if (error) return <p className="preview error-text t-body-sm" style={{ padding: 16 }}>{error}</p>;
+  if (text === undefined) return null;
+  return <MarkdownPreview dir={dir} path={path} text={text} />;
 }
 
 function FilePreview({ dir, path, kind }: { dir: string; path: string; kind: PreviewKind }) {

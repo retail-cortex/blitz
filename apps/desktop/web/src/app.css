@@ -50,7 +50,8 @@
 .history-head { display: flex; flex-direction: column; gap: 8px; padding: 12px 12px 4px; }
 .history-search { position: relative; display: flex; align-items: center; }
 .history-search .icon { position: absolute; left: 10px; color: var(--md-on-surface-variant); pointer-events: none; }
-.history-search .input { width: 100%; padding-left: 34px; }
+.history-search { width: 100%; }
+.history-search .input { flex: 1; width: 100%; min-width: 0; padding-left: 34px; }
 .history-head .seg { align-self: flex-start; }
 .history-all { display: flex; align-items: center; gap: 10px; cursor: pointer; }
 .history-menu input[type="checkbox"] { flex: none; width: 16px; height: 16px; margin: 0; accent-color: var(--accent-a); cursor: pointer; }

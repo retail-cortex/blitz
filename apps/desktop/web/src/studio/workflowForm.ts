@@ -460,3 +460,14 @@ export function schedulePermissions(steps: Pick<StepForm, "type" | "path" | "url
   }
   return [...out].filter((p) => p !== "write:");
 }
+
+/**
+ * Whether the workflow starts on its input: a first step (nothing links
+ * to it) is an agent, refine, summarize or browser step, whose work is
+ * the input. A schedule without one gives that step nothing to work on.
+ */
+export function startsOnInput(f: Pick<WorkflowForm, "steps" | "links">): boolean {
+  const fed = new Set(f.links.map((l) => l.to));
+  return f.steps.some((s) => !fed.has(s.id) && agentTypes.includes(s.type));
+}
+

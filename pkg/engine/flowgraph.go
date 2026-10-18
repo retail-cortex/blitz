@@ -27,6 +27,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/retail-cortex/blitz/pkg/api"
+	"github.com/retail-cortex/blitz/pkg/engine/audit"
 	"github.com/retail-cortex/blitz/pkg/engine/flows"
 	"github.com/retail-cortex/blitz/pkg/engine/session"
 	"github.com/retail-cortex/blitz/pkg/engine/tools"
@@ -462,6 +463,15 @@ func (w *Workspace) runFlowStep(ctx context.Context, r *flowRun, n flows.Node, i
 	ctx = withMeter(ctx, m)
 	if r.receipt != nil && r.depth == 0 {
 		r.receipt.meter(n.ID, m)
+	}
+	if r.receipt != nil {
+		// Each decision on the step's actions goes on the receipt: what
+		// the auto reviewer, a rule or a person allowed or refused (WF-19).
+		step := cmp.Or(r.streamTo, n.ID)
+		ctx = tools.WithDecisionObserver(ctx, func(e audit.Entry) {
+			refused := e.Kind == audit.KindDenial || strings.HasPrefix(e.Decision, "auto-deny")
+			r.receipt.note(step, "approval", e.Decision+" · "+e.Detail, refused)
+		})
 	}
 	r.emit(api.Event{Step: r.step(n, api.StepRunning)})
 	fail := func(err error) (flows.Result, error) {

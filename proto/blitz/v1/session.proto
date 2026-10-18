@@ -42,6 +42,9 @@ service SessionService {
   // Makes a session active: by ID, or a new session copied from the
   // snapshot a name refers to (branched).
   rpc LoadSession(LoadSessionRequest) returns (LoadSessionResponse);
+  // The tool calls a saved session made, each with its result and the
+  // prompt it ran under, so a reopened chat shows them.
+  rpc ListSessionTools(ListSessionToolsRequest) returns (ListSessionToolsResponse);
   // Saves a copy of the active session under a name (SNAPSHOT_NAME_TAKEN
   // unless force).
   rpc SaveSnapshot(SaveSnapshotRequest) returns (SaveSnapshotResponse);
@@ -526,3 +529,25 @@ message StopBackgroundRequest {
 message StopBackgroundResponse {
   BackgroundRun run = 1;
 }
+
+// Request message for SessionService.ListSessionTools.
+message ListSessionToolsRequest {
+  string workspace = 1;
+  string session_id = 2;
+}
+
+// One tool call of a saved session: its call, its result, and the prompt
+// it ran under (turn: the session's n-th prompt, 0 first; prompt: its
+// start).
+message SessionTool {
+  int32 turn = 1;
+  string prompt = 2;
+  ToolCall call = 3;
+  ToolResult result = 4;
+}
+
+// Response message for SessionService.ListSessionTools.
+message ListSessionToolsResponse {
+  repeated SessionTool tools = 1;
+}
+

@@ -108,6 +108,41 @@ export function splitAttachments(text: string): { text: string; images?: { url: 
   return { text: text.slice(0, m.index).trimEnd(), images: m[1].split(", ").filter(Boolean).map((name) => ({ url: "", name })) };
 }
 
+/** A saved session's tool call (ListSessionTools), as withTools takes it. */
+export interface SavedTool {
+  turn: number;
+  prompt: string;
+  call?: { id: string; name: string; args?: JsonObject };
+  result?: { result?: JsonObject };
+}
+
+const startOf = (s: string) => s.replace(/\s+/g, " ").trim().slice(0, 60);
+
+/**
+ * A reopened chat's entries with its tool calls back where they ran: each
+ * after its prompt (the one whose text it names, else the turn-th prompt),
+ * in order, before the answer. Tools whose prompt can't be found are left
+ * out rather than shown in the wrong place.
+ */
+export function withTools(entries: Entry[], tools: SavedTool[]): Entry[] {
+  if (!tools.length) return entries;
+  const prompts = entries.flatMap((e, i) => (e.kind === "user" && !e.sub ? [i] : []));
+  const byPrompt = new Map<number, Entry[]>();
+  for (const t of tools) {
+    if (!t.call) continue;
+    const want = startOf(t.prompt);
+    const nth = prompts[t.turn];
+    const at = nth !== undefined && (!want || startOf((entries[nth] as UserEntry).text).startsWith(want.slice(0, 40)))
+      ? nth
+      : prompts.find((i) => want && startOf((entries[i] as UserEntry).text).startsWith(want.slice(0, 40)));
+    if (at === undefined) continue;
+    const list = byPrompt.get(at) ?? [];
+    list.push({ kind: "tool", id: t.call.id, name: t.call.name, args: t.call.args, result: t.result?.result ?? (t.result ? {} : undefined) });
+    byPrompt.set(at, list);
+  }
+  return entries.flatMap((e, i) => [e, ...(byPrompt.get(i) ?? [])]);
+}
+
 /** The entries for a saved session's messages. */
 export function fromMessages(messages: Message[]): Entry[] {
   return messages.map((m, i): Entry => {

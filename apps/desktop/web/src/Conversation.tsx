@@ -76,6 +76,7 @@ import type { SessionInfo } from "./gen/blitz/v1/session_pb";
 import { Decision, type ApprovalRequest, type Question, type Task, type Usage } from "./gen/blitz/v1/turn_pb";
 import type { BackgroundTask, GetSettingsResponse, GetSuggestionsResponse } from "./gen/blitz/v1/workspace_pb";
 import { addWait, dropWait, type Pending } from "./waits";
+import { withTools } from "./turns";
 import { allCommands, helpText, matchCommands, parseCommand, type CommandSpec } from "./commands";
 import { builtin, type CommandContext } from "./slashCommands";
 import {
@@ -237,17 +238,26 @@ export function Conversation({
     }
   }, [dir]);
 
+  // The session shown, for answers that arrive after another is shown.
+  const shownId = useRef("");
   const show = useCallback(
     (s: SessionInfo) => {
       setSession(s);
       setEntries(fromMessages(s.messages));
+      shownId.current = s.id;
+      // Its tool calls, back where they ran (an older service has none to give).
+      if (s.messages.length)
+        sessions.listSessionTools({ workspace: dir, sessionId: s.id }).then(
+          (r) => shownId.current === s.id && r.tools.length && setEntries((cur) => withTools(cur, r.tools)),
+          () => {},
+        );
       setTasks([]);
       setTurnUsage("");
       setError("");
       stick.current = true;
       refreshTotal();
     },
-    [refreshTotal],
+    [dir, refreshTotal],
   );
 
   // Reloads the active session's messages (after a rewind, say).

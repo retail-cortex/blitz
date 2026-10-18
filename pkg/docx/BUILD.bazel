@@ -20,6 +20,7 @@ go_library(
         "docx.go",
         "math.go",
         "parts.go",
+        "read.go",
     ],
     importpath = "github.com/retail-cortex/blitz/pkg/docx",
     visibility = ["//visibility:public"],
@@ -35,6 +36,7 @@ go_test(
     srcs = [
         "docx_test.go",
         "math_test.go",
+        "read_test.go",
     ],
     # Every page of the user guide, written as a document.
     data = ["//docs:markdown"],

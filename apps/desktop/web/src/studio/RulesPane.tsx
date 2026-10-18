@@ -40,7 +40,7 @@ import { message } from "../errors";
 import { t } from "../i18n";
 import type { RuleFile } from "../gen/blitz/v1/workspace_pb";
 import { SuggestTextarea } from "../SecretSuggest";
-import { Button, Chip, Dialog, Field, Icon, IconButton, Segmented, useSnackbar } from "../ui/controls";
+import { Button, Dialog, Field, Icon, IconButton, Segmented, useSnackbar, MultiSelect } from "../ui/controls";
 import { DraftButton } from "./Draft";
 import { GatesTitle } from "./RulesOrGuardrails";
 import { emptyRuleForm, formFromRule, moved, nextOrder, ruleSections, sameRuleForm, specFromForm, validRuleName, type RuleAction, type RuleForm, type RuleWhen } from "./ruleForm";
@@ -321,16 +321,7 @@ export function RulesPane({ workspace, onDirty, onGuardrails }: { workspace: str
                 <div className="stack" style={{ gap: 6 }}>
                   <span className="t-label">{t("desktop.rules.agents")}</span>
                   <span className="t-body-sm muted">{form.agents.length ? t("desktop.rules.agents_some") : t("desktop.rules.agents_all")}</span>
-                  <div className="row wrap" style={{ gap: 6 }}>
-                    {[...new Set([...agents, ...form.agents])].map((a) => {
-                      const on = form.agents.includes(a);
-                      return (
-                        <Chip key={a} selected={on} aria-pressed={on} onClick={() => set("agents", on ? form.agents.filter((x) => x !== a) : [...form.agents, a])}>
-                          {a}
-                        </Chip>
-                      );
-                    })}
-                  </div>
+                  <MultiSelect label={t("desktop.rules.agents")} none={t("desktop.studio.every_agent")} options={[...new Set([...agents, ...form.agents])].map((v) => ({ value: v }))} chosen={form.agents} onChange={(v) => set("agents", v)} />
                 </div>
               ) : (
                 <Field label={t("desktop.rules.paths")} supporting={t("desktop.rules.paths_hint")}>
