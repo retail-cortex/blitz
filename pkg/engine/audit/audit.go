@@ -36,7 +36,8 @@ const (
 	KindApproval   = "approval"
 	KindDenial     = "denial"
 	KindHook       = "hook"
-	KindRule       = "rule" // a rule's verdict on a prompt or an answer (spec_gates_041)
+	KindRule       = "rule"      // a rule's verdict on a prompt or an answer (spec_gates_041)
+	KindGuardrail  = "guardrail" // a guardrail's decision on a prompt, a tool call, a result or an answer
 	KindUndo       = "undo"
 	KindAttachment = "attachment"  // an image sent to the model: path and hash only
 	KindUserShell  = "user_shell"  // a command the user ran with "!" (not an agent action)

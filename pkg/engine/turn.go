@@ -144,6 +144,11 @@ func (w *Workspace) run(ctx context.Context, sessionID string, t turn, on func(a
 	// agents, skills, instruction files or rules may have changed.
 	w.RetryModel(ctx)
 	w.refreshAgentFiles(ctx)
+	// The turn's guardrails, read now; their turn and cost limits apply.
+	if !t.Aside {
+		w.startGuardrails(sessionID, &t.Turn)
+		defer w.guards.turns.Delete(sessionID)
+	}
 	ctx = tools.WithPromptID(ctx, uuid.NewString())
 	// The turn's plan state: the plan tools report the user's decision here.
 	gate := tools.NewPlanGate(t.Plan || t.planMode)
@@ -158,9 +163,12 @@ func (w *Workspace) run(ctx context.Context, sessionID string, t turn, on func(a
 		}
 		if !t.Aside {
 			// Before-agent rules judge the prompt (spec_gates_041).
-			ruleGuidance, err = w.beforeRules(ctx, t.Text, func(text string, isErr bool) {
-				ruleNotices = append(ruleNotices, api.Notice{Text: text, Error: isErr})
-			})
+			note := func(text string, isErr bool) { ruleNotices = append(ruleNotices, api.Notice{Text: text, Error: isErr}) }
+			// Input guardrails first: safety before the team's expectations.
+			if err = w.inputGuardrails(ctx, sessionID, t.Text, note); err != nil {
+				return api.TurnResult{}, err
+			}
+			ruleGuidance, err = w.beforeRules(ctx, t.Text, note)
 			if err != nil {
 				return api.TurnResult{}, err
 			}

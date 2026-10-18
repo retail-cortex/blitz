@@ -203,6 +203,8 @@ func WithInstructions(text string) Option { return func(e *Engine) { e.extraInst
 // Engine orchestrates the Google ADK execution lifecycle for Blitz.
 // It is safe for concurrent use.
 type Engine struct {
+	// guard checks each step (guardrails; nil: none).
+	guard Guard
 	// secrets expands {secrets:key} as the model is called (nil: none).
 	secrets func(text string) (string, []string)
 	// hookContext is pre_tool hooks' additional_context, by tool call ID,
@@ -703,6 +705,7 @@ func (e *Engine) afterModel(ctx agent.Context, resp *model.LLMResponse, respErr 
 	if e.secrets != nil {
 		maskSecrets(resp)
 	}
+	e.guardOutput(ctx, resp) // guardrails on the answer: secrets, personal data, custom checks
 	if resp == nil || resp.Partial {
 		return nil, nil
 	}
@@ -787,6 +790,14 @@ func (e *Engine) beforeTool(ctx agent.Context, t tool.Tool, args map[string]any)
 	if r := e.preToolHooks(ctx, t, args); r != nil {
 		return r, nil
 	}
+	if e.guard != nil { // guardrails on the action: limits, custom checks
+		v := e.guard.ToolCall(ctx, e.guardCall(ctx, ctx, t.Name(), args))
+		e.tell(ctx, v.Notices)
+		if v.Refusal != "" {
+			log.Log(audit.Entry{Kind: audit.KindDenial, Tool: t.Name(), Decision: "guardrail", Detail: v.Refusal})
+			return map[string]any{"error": v.Refusal}, nil
+		}
+	}
 	if err := e.toolReg.ApproveMCP(ctx, t.Name(), args); err != nil {
 		return map[string]any{"error": err.Error()}, nil
 	}
@@ -862,6 +873,13 @@ func (e *Engine) afterTool(ctx agent.Context, t tool.Tool, args, result map[stri
 	e.toolReg.Hooks().Audit().Log(entry)
 	out := result
 	changed := false
+	if e.guard != nil && toolErr == nil { // guardrails on what the tool brought back: injection, custom checks
+		v := e.guard.ToolResult(ctx, e.guardCall(ctx, ctx, t.Name(), args), out)
+		e.tell(ctx, v.Notices)
+		if v.Result != nil {
+			out, changed = v.Result, true
+		}
+	}
 	if r := e.attachRules(ctx, t.Name(), args, out, toolErr); r != nil {
 		out, changed = r, true
 	}

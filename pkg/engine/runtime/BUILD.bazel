@@ -27,6 +27,7 @@ go_library(
         "engine.go",
         "fallback.go",
         "geminifiles.go",
+        "guard.go",
         "httpclient.go",
         "images.go",
         "keycommand.go",

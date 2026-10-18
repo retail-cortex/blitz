@@ -96,6 +96,7 @@ type Workspace struct {
 	goals        map[string]api.Goal // by session
 	cfg          *config.Config
 	policyMu     sync.Mutex // guards cfg.Workers.Policy, which the settings can change
+	guards       guarding   // each turn's guardrails (spec_gates_041)
 	agents       *agents.Registry
 	skills       *skills.Provider
 	tools        *tools.Registry
@@ -369,6 +370,7 @@ func Open(ctx context.Context, cfg *config.Config, o Options) (*Workspace, error
 		runtime.WithTaskDone(w.taskEnded),
 		runtime.WithProjectTrusted(w.project.Loaded),
 		runtime.WithSecrets(w.expandSecrets),
+		runtime.WithGuard(guard{w}), // guardrails at every step (spec_gates_041)
 	)...)
 	if err != nil {
 		w.Close()

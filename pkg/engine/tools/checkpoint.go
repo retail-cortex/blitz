@@ -692,6 +692,26 @@ func (c *Checkpoints) LatestTurnDiff(session string) string {
 	return c.diffOf(chs)
 }
 
+// LatestTurnFiles are the files session's latest turn changed (absolute
+// paths): what the limits guardrail counts (spec_gates_041).
+func (c *Checkpoints) LatestTurnFiles(session string) []string {
+	if c == nil {
+		return nil
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for i := len(c.turns) - 1; i >= 0; i-- {
+		if c.turns[i].Session == session {
+			var out []string
+			for _, ch := range c.turns[i].Changes {
+				out = append(out, ch.Abs)
+			}
+			return out
+		}
+	}
+	return nil
+}
+
 // diffOf is the unified diff of each change's file, from its snapshot to
 // its content now, by name.
 func (c *Checkpoints) diffOf(chs []*fileChange) string {

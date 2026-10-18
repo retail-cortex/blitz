@@ -16,7 +16,10 @@ load("@rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "gates",
-    srcs = ["gates.go"],
+    srcs = [
+        "gates.go",
+        "guardrails.go",
+    ],
     importpath = "github.com/retail-cortex/blitz/pkg/engine/gates",
     visibility = [
         # The engine and the service (//tools:check_deps checks libraries).
@@ -25,13 +28,17 @@ go_library(
     ],
     deps = [
         "//pkg/engine/frontmatter",
+        "//pkg/textutil",
         "@in_gopkg_yaml_v3//:yaml_v3",
     ],
 )
 
 go_test(
     name = "gates_test",
-    srcs = ["gates_test.go"],
+    srcs = [
+        "gates_test.go",
+        "guardrails_test.go",
+    ],
     embed = [":gates"],
     deps = [
         "@com_github_stretchr_testify//assert",

@@ -121,6 +121,30 @@ func (f Fields) Int(key string, n int) {
 	f.set(key, &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!int", Value: strconv.Itoa(n)})
 }
 
+// Bool sets key to true, or removes it when b is false.
+func (f Fields) Bool(key string, b bool) {
+	if !b {
+		f.set(key, nil)
+		return
+	}
+	f.set(key, &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!bool", Value: "true"})
+}
+
+// Map sets key to m, in its keys' sorted order, or removes it when m is
+// empty.
+func (f Fields) Map(key string, m map[string]any) {
+	if len(m) == 0 {
+		f.set(key, nil)
+		return
+	}
+	var n yaml.Node
+	if err := n.Encode(m); err != nil {
+		f.set(key, nil)
+		return
+	}
+	f.set(key, &n)
+}
+
 // List sets key to values, written on one line, or removes it when
 // there are none.
 func (f Fields) List(key string, values []string) {
