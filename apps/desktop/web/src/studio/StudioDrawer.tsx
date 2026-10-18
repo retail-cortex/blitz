@@ -113,7 +113,7 @@ export function StudioDrawer({ dir, initial, onClose, onWorkers }: { dir: string
         <div className="settings-pane">
           {kind === "agents" && <AgentEditor workspace={dir} scope={AgentScope.WORKSPACE} slide onDirty={setDirty} />}
           {kind === "skills" && <SkillsPane workspace={dir} onDirty={setDirty} />}
-          {kind === "rules" && <RulesPane workspace={dir} onDirty={setDirty} />}
+          {kind === "rules" && <RulesPane workspace={dir} onDirty={setDirty} onGuardrails={() => choose("guardrails")} />}
           {kind === "workers" && <WorkersPane dir={dir} intent={initial.kind === "workers" ? initial.intent : undefined} onLeave={onClose} onDirty={setDirty} />}
           {kind === "secrets" && <SecretsEditor workspace={dir} />}
           {folders[kind] && <Coming kind={kind} />}

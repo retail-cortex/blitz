@@ -584,7 +584,7 @@ const fakeSkillFile = (workspace: string, x: FakeSkill) => ({
 // rule, and one from .claude/rules (read-only there).
 type FakeRule = { name: string; when: string; action: string; order: number; agents: string[]; description: string; paths: string[]; text: string };
 const fakeRules: FakeRule[] = [
-  { name: "no-prod", when: "before_agent", action: "block", order: 10, agents: [], description: "Never deploy to production", paths: [], text: "The prompt doesn't ask to deploy to production, or to change production data." },
+  { name: "clear-ask", when: "before_agent", action: "block", order: 10, agents: [], description: "Prompts say what to change", paths: [], text: "The prompt says which part of the code to change and what the result should be." },
   { name: "small-changes", when: "before_agent", action: "revise", order: 20, agents: [], description: "", paths: [], text: "The prompt asks for a focused change, not a rewrite." },
   { name: "tested", when: "after_agent", action: "revise", order: 10, agents: ["qa"], description: "Answers say how they were tested", paths: [], text: "The answer says how the change was tested." },
   { name: "go-style", when: "", action: "", order: 0, agents: [], description: "", paths: ["*.go"], text: "Run gofmt; wrap errors with %w." },

@@ -33,6 +33,7 @@ import {
   mdiPlus,
   mdiRefresh,
   mdiScaleBalance,
+  mdiShieldLockOutline,
   mdiUndoVariant,
 } from "@mdi/js";
 import { workspaces } from "../api";
@@ -62,7 +63,7 @@ type Open = { name: string } | null;
  * outside .agents/rules (another rule folder, the global one) open
  * read-only.
  */
-export function RulesPane({ workspace, onDirty }: { workspace: string; onDirty?: (dirty: boolean) => void }) {
+export function RulesPane({ workspace, onDirty, onGuardrails }: { workspace: string; onDirty?: (dirty: boolean) => void; onGuardrails?: () => void }) {
   const snack = useSnackbar();
   const [rules, setRules] = useState<RuleFile[]>([]);
   const [error, setError] = useState("");
@@ -236,6 +237,16 @@ export function RulesPane({ workspace, onDirty }: { workspace: string; onDirty?:
           <IconButton icon={mdiRefresh} label={t("desktop.refresh")} small onClick={() => void refresh()} />
         </div>
         <p className="t-body-sm muted agent-dir">{t("desktop.workers.in", { path: ".agents/rules" })}</p>
+        {/* Rules or guardrails: the work's quality here, safety and limits there (spec_gates_041 GT-11). */}
+        <div className="card outlined row wrap studio-intro" style={{ gap: 10 }}>
+          <Icon path={mdiScaleBalance} className="muted" />
+          <span className="t-body-sm spacer">{t("desktop.rules.intro")}</span>
+          {onGuardrails && (
+            <Button small icon={mdiShieldLockOutline} onClick={onGuardrails}>
+              {t("desktop.rules.to_guardrails")}
+            </Button>
+          )}
+        </div>
         {error && (
           <div className="card error row small-card">
             <Icon path={mdiAlertCircleOutline} size="sm" /> {error}
@@ -270,6 +281,7 @@ export function RulesPane({ workspace, onDirty }: { workspace: string; onDirty?:
               <h2 className="t-headline spacer ellipsis">{form.name || t("desktop.rules.new")}</h2>
               {dirty && <span className="t-body-sm muted">{t("desktop.agents.unsaved")}</span>}
             </div>
+            <p className="t-body-sm muted rule-form-intro">{t(form.when ? "desktop.rules.form_intro_gate" : "desktop.rules.form_intro_instruction")}</p>
             {!editable && current && (
               <div className="card row small-card" style={{ gap: 8 }}>
                 <Icon path={mdiFileDocumentOutline} size="sm" />
