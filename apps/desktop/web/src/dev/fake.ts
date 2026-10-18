@@ -706,6 +706,10 @@ const fakeFiles = new Map<string, string>([
   ["go.mod", "module example.com/shop\n\ngo 1.27\n"],
   ["data/sales.csv", fakeSales],
   ["docs/pricing.md", fakePricing],
+  // A page with its own stylesheet and script, previewed in a sandboxed frame.
+  ["site/index.html", '<!doctype html>\n<html>\n<head>\n  <title>Shop</title>\n  <link rel="stylesheet" href="site.css">\n</head>\n<body>\n  <h1>The shop</h1>\n  <p id="when">Loading…</p>\n  <script src="app.js"></script>\n</body>\n</html>\n'],
+  ["site/site.css", "body { font-family: Georgia, serif; margin: 40px; color: #234; }\nh1 { color: #b04a1a; border-bottom: 2px solid #b04a1a; }\n"],
+  ["site/app.js", 'document.getElementById("when").textContent = "Script ran: " + (2 + 2);\n'],
   [
     "README.md",
     "# Shop\n\nA small shop server. Run it with `go run ./cmd/shop`. See [the design](docs/design.md#requests), [main.go](cmd/shop/main.go#L10), [the cart package](internal/cart/) and [Usage](#usage).\n\n## Usage\n\n| Path | What |\n| --- | --- |\n| `/cart` | the cart |\n\n- [x] discounts\n- [ ] checkout\n\n```mermaid\nflowchart LR\n  client[Browser] --> cart[\"/cart handler\"] --> store[(SQLite)]\n```\n",
