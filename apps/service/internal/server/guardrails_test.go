@@ -37,11 +37,16 @@ func TestGuardrailsOverTheAPI(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, list.Msg.Builtins, 3)
 	assert.Equal(t, "prompt_injection", list.Msg.Builtins[0].Id)
-	assert.Nil(t, list.Msg.Builtins[0].File, "off")
+	injection := list.Msg.Builtins[0].File
+	require.NotNil(t, injection, "on by default")
+	assert.Empty(t, injection.Path, "its defaults, no file")
+	assert.Equal(t, "warn", injection.Action)
+	assert.True(t, injection.Editable)
+	assert.False(t, injection.Off)
 	assert.Equal(t, filepath.Join(dir, ".agents", "guardrails"), list.Msg.Dir)
 
 	for _, s := range []*pb.GuardrailSpec{
-		{Builtin: "limits", Action: "block", Limits: &pb.GuardrailLimits{MaxTurns: 20, Commands: []string{"git push --force*"}}},
+		{Builtin: "limits", Action: "block", Limits: &pb.GuardrailLimits{MaxTurns: 20, Commands: []string{"git push --force*"}}, Off: true},
 		{Builtin: "secrets", Action: "redact", Pii: true},
 		{Name: "careful", Stage: "action", Action: "warn", Tools: []string{"run_shell_command"}, Text: "No deleting branches."},
 	} {
@@ -59,6 +64,7 @@ func TestGuardrailsOverTheAPI(t *testing.T) {
 	limits := list.Msg.Builtins[2]
 	require.NotNil(t, limits.File)
 	assert.Equal(t, int32(20), limits.File.Limits.MaxTurns)
+	assert.True(t, limits.File.Off)
 	assert.True(t, list.Msg.Builtins[1].File.Pii)
 	require.Len(t, list.Msg.Guardrails, 1)
 	assert.Equal(t, "careful", list.Msg.Guardrails[0].Name)
@@ -72,5 +78,9 @@ func TestGuardrailsOverTheAPI(t *testing.T) {
 	assert.NotEmpty(t, tried.Msg.Problem, "the mock judge has nothing to say")
 
 	require.NoError(t, unary(w.DeleteGuardrail, &pb.DeleteGuardrailRequest{Workspace: dir, Name: "limits"}))
+	list, err = w.ListGuardrails(ctx, connect.NewRequest(&pb.ListGuardrailsRequest{Workspace: dir}))
+	require.NoError(t, err)
+	assert.Empty(t, list.Msg.Builtins[2].File.Path, "back to its defaults")
+	assert.False(t, list.Msg.Builtins[2].File.Off)
 	assert.Equal(t, "GUARDRAIL_NOT_FOUND", reason(t, unary(w.DeleteGuardrail, &pb.DeleteGuardrailRequest{Workspace: dir, Name: "limits"})))
 }

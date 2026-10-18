@@ -36,7 +36,15 @@ describe("the guardrail form", () => {
       judge: false,
       limits: { maxCostUsd: 2.5, maxTurns: 20, maxFilesChanged: 3, allowedDomains: ["example.com", "docs.dev"], commands: ["git push --force*", "rm -rf /*"] },
       text: "",
+      off: false,
     });
+  });
+
+  it("keeps a built-in's settings when it's switched off", () => {
+    const f = formFromGuardrail(create(GuardrailFileSchema, { name: "secrets", builtin: "secrets", stage: "output", action: "warn", pii: true, off: true }));
+    expect(f).toMatchObject({ off: true, action: "warn", pii: true });
+    expect(specFromForm({ ...f, off: false })).toMatchObject({ off: false, action: "warn", pii: true });
+    expect(formForBuiltin("limits").off).toBe(false);
   });
 
   it("keeps each built-in's own settings only", () => {

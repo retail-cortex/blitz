@@ -23,6 +23,7 @@ import {
   mdiCloseCircleOutline,
   mdiContentSaveOutline,
   mdiDeleteOutline,
+  mdiRestore,
   mdiEyeOffOutline,
   mdiGaugeFull,
   mdiLoading,
@@ -98,7 +99,7 @@ export function GuardrailsPane({ workspace, onDirty, onRules }: { workspace: str
   const file = builtinOpen?.file ?? customOpen;
   const editable = !file || file.editable;
   const isNew = open !== null && "name" in open && open.name === "";
-  const dirty = open !== null && editable && (!sameGuardrailForm(form, base) || (!!builtinOpen && !builtinOpen.file));
+  const dirty = open !== null && editable && !sameGuardrailForm(form, base);
   useEffect(() => onDirty?.(dirty), [dirty, onDirty]);
 
   const leave = (go: () => void) => (dirty ? setPending(() => go) : go());
@@ -118,12 +119,12 @@ export function GuardrailsPane({ workspace, onDirty, onRules }: { workspace: str
     });
   const set = <K extends keyof GuardrailForm>(k: K, v: GuardrailForm[K]) => setForm((f) => ({ ...f, [k]: v }));
 
-  // Switching a built-in on writes its file with its defaults (or as last
-  // set); off deletes it.
+  // Built-ins are on by default: switching one off writes enabled: false
+  // in its file, keeping its settings; on again removes it.
   const toggle = async (b: BuiltinGuardrail, on: boolean) => {
     try {
-      if (on) await workspaces.saveGuardrail({ workspace, guardrail: specFromForm(formForBuiltin(b.id as BuiltinId)) });
-      else await workspaces.deleteGuardrail({ workspace, name: b.id });
+      const f = b.file ? formFromGuardrail(b.file) : formForBuiltin(b.id as BuiltinId);
+      await workspaces.saveGuardrail({ workspace, guardrail: specFromForm({ ...f, off: !on }) });
       snack(t(on ? "desktop.guardrails.switched_on" : "desktop.guardrails.switched_off", { name: t(`desktop.guardrails.builtin.${b.id}`) }));
       await refresh();
     } catch (e) {
@@ -135,7 +136,7 @@ export function GuardrailsPane({ workspace, onDirty, onRules }: { workspace: str
     setBusy(true);
     setProblems([]);
     try {
-      const previous = file ? file.name : "";
+      const previous = file?.path ? file.name : "";
       const r = await workspaces.saveGuardrail({ workspace, previousName: previous, guardrail: specFromForm(form) });
       if (r.problems.length || !r.guardrail) return setProblems(r.problems);
       snack(t("desktop.guardrails.saved", { name: form.builtin ? t(`desktop.guardrails.builtin.${form.builtin}`) : r.guardrail.name }));
@@ -152,7 +153,7 @@ export function GuardrailsPane({ workspace, onDirty, onRules }: { workspace: str
     const name = file?.name ?? "";
     try {
       await workspaces.deleteGuardrail({ workspace, name });
-      snack(t("desktop.guardrails.deleted", { name }));
+      snack(t(builtinOpen ? "desktop.guardrails.reset_done" : "desktop.guardrails.deleted", { name: builtinOpen ? title : name }));
       setOpen(null);
       await refresh();
     } catch (e) {
@@ -202,14 +203,14 @@ export function GuardrailsPane({ workspace, onDirty, onRules }: { workspace: str
           <div className="list">
             {builtins.map((g) => {
               const id = g.id as BuiltinId;
-              const on = !!g.file;
+              const on = !g.file?.off;
               return (
                 <div key={g.id} className="list-item guardrail-row">
                   <button type="button" className="row-open" onClick={() => showForm({ builtin: id }, g.file ? formFromGuardrail(g.file) : formForBuiltin(id))}>
                     <Icon path={builtinIcons[id]} className={on ? undefined : "muted"} />
                     <span className="lines spacer">
                       <span className="ellipsis">{t(`desktop.guardrails.builtin.${id}`)}</span>
-                      <small className={`ellipsis ${g.file?.problem ? "error-text" : ""}`}>{g.file?.problem || [t(`desktop.guardrails.stage.${g.stage}`), on ? t(`desktop.guardrails.action.${g.file!.action}`) : t("desktop.guardrails.off"), t(`desktop.guardrails.builtin_about.${id}`)].join(" · ")}</small>
+                      <small className={`ellipsis ${g.file?.problem ? "error-text" : ""}`}>{g.file?.problem || [t(`desktop.guardrails.stage.${g.stage}`), on ? t(`desktop.guardrails.action.${g.file?.action ?? g.defaultAction}`) : t("desktop.guardrails.off"), t(`desktop.guardrails.builtin_about.${id}`)].join(" · ")}</small>
                     </span>
                   </button>
                   <span className="trailing">
@@ -249,8 +250,8 @@ export function GuardrailsPane({ workspace, onDirty, onRules }: { workspace: str
             <div className="row slide-back">
               <IconButton icon={mdiArrowLeft} label={t("desktop.guardrails.back")} onClick={close} />
               <h2 className="t-headline spacer ellipsis">{title}</h2>
-              {builtinOpen && !builtinOpen.file && <span className="t-body-sm muted">{t("desktop.guardrails.off_until_saved")}</span>}
-              {dirty && builtinOpen?.file && <span className="t-body-sm muted">{t("desktop.agents.unsaved")}</span>}
+              {dirty && <span className="t-body-sm muted">{t("desktop.agents.unsaved")}</span>}
+              {b && <Switch label={t(`desktop.guardrails.builtin.${b}`)} checked={!form.off} disabled={!editable} onChange={(v) => set("off", !v)} />}
             </div>
             <p className="t-body-sm muted rule-form-intro">{t(b ? `desktop.guardrails.builtin_help.${b}` : "desktop.guardrails.custom_intro")}</p>
             <fieldset className="worker agent-form rule-form" disabled={!editable}>
@@ -380,9 +381,9 @@ export function GuardrailsPane({ workspace, onDirty, onRules }: { workspace: str
               <span className="t-body-sm muted spacer ellipsis" title={file?.path}>
                 {file?.path ? t("desktop.agents.where", { path: file.path }) : t("desktop.agents.where", { path: `.agents/guardrails/${b || form.name.trim() || "…"}.md` })}
               </span>
-              {file?.editable && (
-                <Button danger icon={mdiDeleteOutline} onClick={() => setDeleting(true)}>
-                  {b ? t("desktop.guardrails.switch_off") : t("desktop.rules.delete")}
+              {file?.editable && file.path && (
+                <Button danger={!b} icon={b ? mdiRestore : mdiDeleteOutline} onClick={() => setDeleting(true)}>
+                  {b ? t("desktop.guardrails.reset") : t("desktop.rules.delete")}
                 </Button>
               )}
               {dirty && file && (
@@ -393,7 +394,7 @@ export function GuardrailsPane({ workspace, onDirty, onRules }: { workspace: str
               <Button onClick={close}>{editable ? t("desktop.cancel") : t("desktop.close")}</Button>
               {editable && (
                 <Button variant="filled" icon={mdiContentSaveOutline} disabled={busy || (!b && !form.name.trim()) || (!!file && !dirty && !isNew)} onClick={() => void save()}>
-                  {builtinOpen && !builtinOpen.file ? t("desktop.guardrails.save_on") : t("desktop.rules.save")}
+                  {t("desktop.rules.save")}
                 </Button>
               )}
             </div>
@@ -403,19 +404,19 @@ export function GuardrailsPane({ workspace, onDirty, onRules }: { workspace: str
       {deleting &&
         createPortal(
           <Dialog
-            title={t(b ? "desktop.guardrails.off_title" : "desktop.guardrails.delete_title", { name: title })}
-            icon={mdiDeleteOutline}
+            title={t(b ? "desktop.guardrails.reset_title" : "desktop.guardrails.delete_title", { name: title })}
+            icon={b ? mdiRestore : mdiDeleteOutline}
             onClose={() => setDeleting(false)}
             footer={
               <>
                 <Button onClick={() => setDeleting(false)}>{t("desktop.cancel")}</Button>
-                <Button variant="filled" danger onClick={() => void remove()}>
-                  {b ? t("desktop.guardrails.switch_off") : t("desktop.rules.delete")}
+                <Button variant="filled" danger={!b} onClick={() => void remove()}>
+                  {b ? t("desktop.guardrails.reset") : t("desktop.rules.delete")}
                 </Button>
               </>
             }
           >
-            <p>{t(b ? "desktop.guardrails.off_body" : "desktop.rules.delete_body", { path: file?.path ?? "" })}</p>
+            <p>{t(b ? "desktop.guardrails.reset_body" : "desktop.rules.delete_body", { path: file?.path ?? "" })}</p>
           </Dialog>,
           document.body,
         )}

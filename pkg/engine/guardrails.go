@@ -65,7 +65,7 @@ func (w *Workspace) guardrailDirs() []string {
 }
 
 // Guardrails are the workspace's guardrails, read afresh: the built-in
-// ones switched on, then custom ones.
+// ones (with their defaults when they have no file), then custom ones.
 func (w *Workspace) Guardrails() []gates.Guardrail { return gates.LoadGuardrails(w.guardrailDirs()...) }
 
 // guardState is what the guardrails hold during a turn: those read as it
@@ -405,7 +405,8 @@ func (w *Workspace) inputGuardrails(ctx context.Context, sessionID, text string,
 type GuardrailSpec = gates.GuardrailSpec
 
 // SaveGuardrail writes a guardrail in .agents/guardrails (a built-in's
-// file switches it on), returning it as read back, or the problems.
+// file holds its settings, or switches it off), returning it as read back,
+// or the problems.
 func (w *Workspace) SaveGuardrail(spec GuardrailSpec, previous string) (gates.Guardrail, []string, error) {
 	path, probs, err := gates.SaveGuardrail(w.ProjectGuardrailsDir(), spec, previous)
 	if err != nil || len(probs) > 0 {
@@ -419,7 +420,7 @@ func (w *Workspace) SaveGuardrail(spec GuardrailSpec, previous string) (gates.Gu
 }
 
 // DeleteGuardrail removes a guardrail from .agents/guardrails (a
-// built-in's: switched off).
+// built-in's: back to its defaults).
 func (w *Workspace) DeleteGuardrail(name string) error {
 	return gates.DeleteGuardrail(w.ProjectGuardrailsDir(), name)
 }

@@ -130,6 +130,16 @@ func (f Fields) Bool(key string, b bool) {
 	f.set(key, &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!bool", Value: "true"})
 }
 
+// Flag sets key to v, or removes it when v is def (what a missing key
+// means).
+func (f Fields) Flag(key string, v, def bool) {
+	if v == def {
+		f.set(key, nil)
+		return
+	}
+	f.set(key, &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!bool", Value: strconv.FormatBool(v)})
+}
+
 // Map sets key to m, in its keys' sorted order, or removes it when m is
 // empty.
 func (f Fields) Map(key string, m map[string]any) {

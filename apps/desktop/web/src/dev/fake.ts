@@ -594,17 +594,18 @@ const fakeRuleList = (workspace: string) =>
     ...[...fakeRules].sort((a, b) => (a.when === b.when ? a.order - b.order || a.name.localeCompare(b.name) : (a.when === "before_agent" ? 0 : a.when === "after_agent" ? 1 : 2) - (b.when === "before_agent" ? 0 : b.when === "after_agent" ? 1 : 2))).map((r) => ({ ...r, path: `${workspace}/.agents/rules/${r.name}.md`, problem: "", editable: true })),
     { name: "commits", when: "", action: "", order: 0, agents: [], description: "", paths: [], text: "Write commit messages in the imperative.", path: `${workspace}/.claude/rules/commits.md`, problem: "", editable: false },
   ];
-// Studio's guardrails: two built-ins on, one of the workspace's own.
-type FakeGuard = { name: string; builtin: string; stage: string; action: string; agents: string[]; tools: string[]; description: string; pii: boolean; judge: boolean; limits?: { maxCostUsd: number; maxTurns: number; maxFilesChanged: number; allowedDomains: string[]; commands: string[] }; text: string };
+// Studio's guardrails: prompt injection with its defaults, secrets tuned,
+// limits switched off, and one of the workspace's own.
+type FakeGuard = { name: string; builtin: string; stage: string; action: string; agents: string[]; tools: string[]; description: string; pii: boolean; judge: boolean; off: boolean; limits?: { maxCostUsd: number; maxTurns: number; maxFilesChanged: number; allowedDomains: string[]; commands: string[] }; text: string };
 const fakeBuiltinGuards = [
   { id: "prompt_injection", stage: "tool_result", defaultAction: "warn", actions: ["warn", "block"] },
   { id: "secrets", stage: "output", defaultAction: "redact", actions: ["redact", "warn", "block"] },
   { id: "limits", stage: "action", defaultAction: "block", actions: ["block"] },
 ];
 const fakeGuards: FakeGuard[] = [
-  { name: "secrets", builtin: "secrets", stage: "output", action: "redact", agents: [], tools: [], description: "", pii: true, judge: false, text: "" },
-  { name: "limits", builtin: "limits", stage: "action", action: "block", agents: [], tools: [], description: "", pii: false, judge: false, limits: { maxCostUsd: 2, maxTurns: 40, maxFilesChanged: 0, allowedDomains: [], commands: ["git push --force*", "rm -rf /*"] }, text: "" },
-  { name: "no-branch-delete", builtin: "", stage: "action", action: "block", agents: [], tools: ["run_shell_command"], description: "Branches stay", pii: false, judge: false, text: "Deleting a git branch, locally or on the remote." },
+  { name: "secrets", builtin: "secrets", stage: "output", action: "redact", agents: [], tools: [], description: "", pii: true, judge: false, off: false, text: "" },
+  { name: "limits", builtin: "limits", stage: "action", action: "block", agents: [], tools: [], description: "", pii: false, judge: false, off: true, limits: { maxCostUsd: 2, maxTurns: 40, maxFilesChanged: 0, allowedDomains: [], commands: ["git push --force*", "rm -rf /*"] }, text: "" },
+  { name: "no-branch-delete", builtin: "", stage: "action", action: "block", agents: [], tools: ["run_shell_command"], description: "Branches stay", pii: false, judge: false, off: false, text: "Deleting a git branch, locally or on the remote." },
 ];
 const fakeGuardFile = (workspace: string, g: FakeGuard) => ({ ...g, path: `${workspace}/.agents/guardrails/${g.name}.md`, problem: "", editable: true });
 // Worker runs going now (?fake&noruns: none).
@@ -917,7 +918,10 @@ export function installFake() {
         // Studio › Guardrails: the built-ins on or off, and the workspace's own.
         listGuardrails: ({ workspace }) => ({
           dir: `${workspace}/.agents/guardrails`,
-          builtins: fakeBuiltinGuards.map((b) => ({ ...b, file: fakeGuards.find((g) => g.builtin === b.id) && fakeGuardFile(workspace, fakeGuards.find((g) => g.builtin === b.id)!) })),
+          builtins: fakeBuiltinGuards.map((b) => {
+            const g = fakeGuards.find((x) => x.builtin === b.id);
+            return { ...b, file: g ? fakeGuardFile(workspace, g) : { name: b.id, builtin: b.id, stage: b.stage, action: b.defaultAction, agents: [], tools: [], description: "", pii: false, judge: false, text: "", off: false, path: "", problem: "", editable: true } };
+          }),
           guardrails: fakeGuards.filter((g) => !g.builtin).map((g) => fakeGuardFile(workspace, g)),
         }),
         saveGuardrail: ({ workspace, previousName, guardrail }) => {
@@ -925,8 +929,8 @@ export function installFake() {
           const name = g.builtin || g.name;
           if (!g.builtin && !/^[a-z0-9]+([-_][a-z0-9]+)*$/.test(name)) return { problems: [`name "${name}": lowercase letters, digits and single hyphens, up to 64`] };
           if (!g.builtin && !g.text.trim()) return { problems: ["the guardrail is empty: say what to catch"] };
-          const next = { name, builtin: g.builtin, stage: g.builtin ? fakeBuiltinGuards.find((b) => b.id === g.builtin)!.stage : g.stage, action: g.action, agents: g.agents, tools: g.tools, description: g.description, pii: g.pii, judge: g.judge, limits: g.limits, text: g.text };
-          const i = fakeGuards.findIndex((x) => x.name === (previousName || name));
+          const next = { name, builtin: g.builtin, stage: g.builtin ? fakeBuiltinGuards.find((b) => b.id === g.builtin)!.stage : g.stage, action: g.action, agents: g.agents, tools: g.tools, description: g.description, pii: g.pii, judge: g.judge, limits: g.limits, text: g.text, off: g.off };
+          const i = fakeGuards.findIndex((x) => x.name === (g.builtin || previousName || name));
           if (i >= 0) fakeGuards[i] = next;
           else fakeGuards.push(next);
           return { guardrail: fakeGuardFile(workspace, next) };

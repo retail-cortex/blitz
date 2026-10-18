@@ -46,10 +46,12 @@ export interface GuardrailForm {
   domains: string;
   commands: string;
   text: string;
+  /** Switched off (enabled: false), its settings kept. */
+  off: boolean;
 }
 
 /** A new custom guardrail's form: an action check that blocks. */
-export const emptyGuardrailForm: GuardrailForm = { name: "", builtin: "", stage: "action", action: "block", agents: [], tools: "", description: "", pii: false, judge: false, maxCostUsd: "", maxTurns: "", maxFilesChanged: "", domains: "", commands: "", text: "" };
+export const emptyGuardrailForm: GuardrailForm = { name: "", builtin: "", stage: "action", action: "block", agents: [], tools: "", description: "", pii: false, judge: false, maxCostUsd: "", maxTurns: "", maxFilesChanged: "", domains: "", commands: "", text: "", off: false };
 
 /** Each built-in's stage and default action. */
 export const builtinDefaults: Record<BuiltinId, { stage: GuardStage; action: string; actions: string[] }> = {
@@ -80,10 +82,11 @@ export function formFromGuardrail(g: GuardrailFile): GuardrailForm {
     domains: (l?.allowedDomains ?? []).join(", "),
     commands: (l?.commands ?? []).join("\n"),
     text: g.text,
+    off: g.off,
   };
 }
 
-/** A built-in's form, off until saved: its defaults. */
+/** A built-in's form with its defaults (on). */
 export function formForBuiltin(id: BuiltinId): GuardrailForm {
   return { ...emptyGuardrailForm, name: id, builtin: id, stage: builtinDefaults[id].stage, action: builtinDefaults[id].action };
 }
@@ -112,6 +115,7 @@ export function specFromForm(f: GuardrailForm) {
         ? { maxCostUsd: Number(f.maxCostUsd) || 0, maxTurns: Math.floor(Number(f.maxTurns)) || 0, maxFilesChanged: Math.floor(Number(f.maxFilesChanged)) || 0, allowedDomains: split(f.domains, /,/), commands: split(f.commands, /\n/) }
         : undefined,
     text: b ? "" : f.text,
+    off: f.off,
   };
 }
 

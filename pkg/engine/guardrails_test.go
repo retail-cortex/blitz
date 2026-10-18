@@ -192,7 +192,7 @@ func TestWorkspaceGuardrails(t *testing.T) {
 	_, probs, err = w.SaveGuardrail(GuardrailSpec{Name: "careful", Stage: gates.StageAction, Action: gates.Warn, Text: "No deleting."}, "")
 	require.NoError(t, err)
 	require.Empty(t, probs)
-	assert.Len(t, w.Guardrails(), 2)
+	assert.Len(t, w.Guardrails(), 4, "the three built-ins (on by default) and careful")
 
 	v, err := w.TryGuardrail(context.Background(), g, "Mail ada@example.com")
 	require.NoError(t, err)
@@ -206,5 +206,7 @@ func TestWorkspaceGuardrails(t *testing.T) {
 	assert.Error(t, err)
 
 	require.NoError(t, w.DeleteGuardrail("secrets"))
-	assert.Len(t, w.Guardrails(), 1)
+	all := w.Guardrails()
+	require.Len(t, all, 4)
+	assert.Equal(t, gates.BuiltinDefault(gates.Builtins[1]), all[1], "back to its defaults")
 }

@@ -2347,10 +2347,11 @@ message GuardrailLimits {
   repeated string commands = 5;
 }
 
-// A guardrail file.
+// A guardrail file, or a built-in guardrail without one (its defaults).
 message GuardrailFile {
   // Its file's name without .md (a built-in's is its id).
   string name = 1;
+  // Empty for a built-in guardrail running with its defaults.
   string path = 2;
   // prompt_injection, secrets or limits; empty for a custom one.
   string builtin = 3;
@@ -2370,17 +2371,20 @@ message GuardrailFile {
   // A custom guardrail's check.
   string text = 12;
   string problem = 13;
-  // In .agents/guardrails: Studio may change it.
+  // In .agents/guardrails, or a built-in one's defaults: Studio may
+  // change it.
   bool editable = 14;
+  // Switched off (enabled: false).
+  bool off = 15;
 }
 
-// A built-in guardrail, on or off.
+// A built-in guardrail: on by default.
 message BuiltinGuardrail {
   string id = 1;
   string stage = 2;
   string default_action = 3;
   repeated string actions = 4;
-  // Its file, when it's on.
+  // As it runs: its file, or its defaults (no path).
   GuardrailFile file = 5;
 }
 
@@ -2397,6 +2401,8 @@ message GuardrailSpec {
   bool judge = 9;
   GuardrailLimits limits = 10;
   string text = 11;
+  // Switches it off, keeping its settings.
+  bool off = 12;
 }
 
 // Request message for WorkspaceService.ListGuardrails.

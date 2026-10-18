@@ -31,9 +31,9 @@ func guardrailMsg(g gates.Guardrail, dir string) *pb.GuardrailFile {
 	l := g.Limits
 	return &pb.GuardrailFile{
 		Name: g.Name, Path: g.Path, Builtin: g.Builtin, Stage: g.Stage, Action: g.Action, Agents: g.Agents, Tools: g.Tools,
-		Description: g.Description, Pii: g.PII, Judge: g.Judge, Text: g.Text, Problem: g.Problem,
+		Description: g.Description, Pii: g.PII, Judge: g.Judge, Text: g.Text, Problem: g.Problem, Off: g.Off,
 		Limits:   &pb.GuardrailLimits{MaxCostUsd: l.MaxCostUSD, MaxTurns: int32(l.MaxTurns), MaxFilesChanged: int32(l.MaxFilesChanged), AllowedDomains: l.AllowedDomains, Commands: l.Commands},
-		Editable: gates.ValidName(g.Name) && filepath.Dir(g.Path) == dir,
+		Editable: gates.ValidName(g.Name) && (g.Path == "" || filepath.Dir(g.Path) == dir),
 	}
 }
 
@@ -41,7 +41,7 @@ func guardrailSpec(s *pb.GuardrailSpec) engine.GuardrailSpec {
 	l := s.GetLimits()
 	return engine.GuardrailSpec{
 		Name: s.GetName(), Builtin: s.GetBuiltin(), Stage: s.GetStage(), Action: s.GetAction(), Agents: s.GetAgents(), Tools: s.GetTools(),
-		Description: s.GetDescription(), PII: s.GetPii(), Judge: s.GetJudge(), Text: s.GetText(),
+		Description: s.GetDescription(), PII: s.GetPii(), Judge: s.GetJudge(), Text: s.GetText(), Off: s.GetOff(),
 		Limits: gates.Limits{MaxCostUSD: l.GetMaxCostUsd(), MaxTurns: int(l.GetMaxTurns()), MaxFilesChanged: int(l.GetMaxFilesChanged()), AllowedDomains: l.GetAllowedDomains(), Commands: l.GetCommands()},
 	}
 }

@@ -31,9 +31,10 @@ import (
 )
 
 // Guardrails (spec_gates_041 GT-20 on): safety and limits at every step
-// of a turn, in .agents/guardrails/<name>.md. A built-in one (builtin:)
-// is switched on by its file; a custom one is a check in plain English the
-// judge applies at its stage.
+// of a turn, in .agents/guardrails/<name>.md. A built-in one runs with its
+// defaults until its file (builtin:) changes them, or switches it off
+// (enabled: false); a custom one is a check in plain English the judge
+// applies at its stage.
 
 // The stages a guardrail checks.
 const (
@@ -123,8 +124,16 @@ type Guardrail struct {
 	Judge  bool
 	Limits Limits
 	// Text is a custom guardrail's check, in plain English.
-	Text    string
+	Text string
+	// Off is a guardrail switched off (enabled: false): it checks nothing.
+	Off     bool
 	Problem string
+}
+
+// BuiltinDefault is a built-in guardrail as it runs without a file: on,
+// with its default action.
+func BuiltinDefault(b Builtin) Guardrail {
+	return Guardrail{Name: b.ID, Builtin: b.ID, Stage: b.Stage, Action: b.Action}
 }
 
 // guardMeta is a guardrail file's front matter.
@@ -138,6 +147,7 @@ type guardMeta struct {
 	PII         bool     `yaml:"pii"`
 	Judge       bool     `yaml:"judge"`
 	Limits      Limits   `yaml:"limits"`
+	Enabled     *bool    `yaml:"enabled"`
 }
 
 // ParseGuardrail reads a guardrail file; what doesn't hold is its
@@ -155,6 +165,7 @@ func ParseGuardrail(name, path string, data []byte) Guardrail {
 	}
 	g.Builtin, g.Stage, g.Action = strings.TrimSpace(m.Builtin), strings.TrimSpace(m.Stage), strings.TrimSpace(m.Action)
 	g.Agents, g.Tools, g.Description, g.PII, g.Judge, g.Limits = m.Agents, m.Tools, m.Description, m.PII, m.Judge, m.Limits
+	g.Off = m.Enabled != nil && !*m.Enabled
 	g.Problem = checkGuardrail(&g)
 	return g
 }
@@ -206,8 +217,9 @@ func (g Guardrail) Checks(tool string, external bool) bool {
 }
 
 // LoadGuardrails reads every guardrail file (*.md) in dirs, a name in an
-// earlier folder winning: the built-in ones first, in catalog order, then
-// custom ones by stage and name.
+// earlier folder winning, and adds each built-in one without a file, with
+// its defaults: the built-in ones first, in catalog order, then custom
+// ones by stage and name.
 func LoadGuardrails(dirs ...string) []Guardrail {
 	var out []Guardrail
 	seen := map[string]bool{}
@@ -230,6 +242,11 @@ func LoadGuardrails(dirs ...string) []Guardrail {
 			out = append(out, ParseGuardrail(name, p, data))
 		}
 	}
+	for _, b := range Builtins {
+		if !seen[b.ID] && !slices.ContainsFunc(out, func(g Guardrail) bool { return g.Builtin == b.ID }) {
+			out = append(out, BuiltinDefault(b))
+		}
+	}
 	slices.SortStableFunc(out, func(a, b Guardrail) int {
 		rank := func(g Guardrail) int {
 			if i := slices.IndexFunc(Builtins, func(x Builtin) bool { return x.ID == g.Builtin }); i >= 0 {
@@ -246,11 +263,12 @@ func LoadGuardrails(dirs ...string) []Guardrail {
 	return out
 }
 
-// Active are the guardrails that hold (no problem) at stage for agent.
+// Active are the guardrails that hold (no problem, not switched off) at
+// stage for agent.
 func Active(all []Guardrail, stage, agent string) []Guardrail {
 	var out []Guardrail
 	for _, g := range all {
-		if g.Problem == "" && g.Stage == stage && g.GuardsAgent(agent) {
+		if g.Problem == "" && !g.Off && g.Stage == stage && g.GuardsAgent(agent) {
 			out = append(out, g)
 		}
 	}
@@ -361,6 +379,9 @@ type GuardrailSpec struct {
 	Judge       bool
 	Limits      Limits
 	Text        string
+	// Off switches the guardrail off (enabled: false), keeping its
+	// settings.
+	Off bool
 }
 
 // CheckGuardrail is what keeps spec from being saved.
@@ -383,11 +404,15 @@ func CheckGuardrail(spec GuardrailSpec) []string {
 }
 
 // SaveGuardrail writes dir/<name>.md from spec (a built-in's file is
-// named by its id) and returns its path, or the problems that keep it
-// from being saved. previous is the guardrail edited ("" for a new one).
+// named by its id, and edited in place when it's there) and returns its
+// path, or the problems that keep it from being saved. previous is the
+// custom guardrail edited ("" for a new one).
 func SaveGuardrail(dir string, spec GuardrailSpec, previous string) (string, []string, error) {
 	if spec.Builtin != "" {
-		spec.Name = spec.Builtin
+		spec.Name, previous = spec.Builtin, ""
+		if _, err := os.Stat(filepath.Join(dir, spec.Builtin+".md")); err == nil {
+			previous = spec.Builtin
+		}
 	}
 	spec.Name = strings.TrimSpace(spec.Name)
 	if probs := CheckGuardrail(spec); len(probs) > 0 {
@@ -420,6 +445,7 @@ func SaveGuardrail(dir string, spec GuardrailSpec, previous string) (string, []s
 		f.Bool("pii", spec.Builtin == BuiltinSecrets && spec.PII)
 		f.Bool("judge", spec.Builtin == BuiltinInjection && spec.Judge)
 		f.Map("limits", limitsFields(spec))
+		f.Flag("enabled", !spec.Off, true)
 	})
 	if err != nil {
 		return "", nil, fmt.Errorf("the guardrail's %w", err)
@@ -463,6 +489,6 @@ func limitsFields(spec GuardrailSpec) map[string]any {
 	return out
 }
 
-// DeleteGuardrail removes guardrail name from dir (a built-in's file: it's
-// switched off).
+// DeleteGuardrail removes guardrail name from dir (a built-in's file: it
+// runs with its defaults again).
 func DeleteGuardrail(dir, name string) error { return Delete(dir, name) }
