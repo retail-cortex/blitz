@@ -9,7 +9,7 @@ Blitz's desktop app is a window onto the [service](service.md), laid out like an
 
 ## Install
 
-*Since v0.6.6 the desktop app is built on Electron*, the same on every platform:
+*Since v0.7.0 the desktop app is built on Electron*, the same on every platform:
 
 - **macOS 13 and later:** `Blitz_<version>_macos_arm64.dmg` (Apple silicon) or `Blitz_<version>_macos_x64.dmg` (Intel), signed with a Developer ID and notarized when the release is.
 - **Windows 10 (1803) and later:** `Blitz_<version>_windows_x64_setup.exe`. Run it: it installs Blitz for you, with no administrator needed, adds it to the Start menu, the desktop and **Add or remove programs** (where you can uninstall it; your settings and conversations stay), and starts it. It isn't signed yet, so SmartScreen asks first (**More info › Run anyway**). Or take `Blitz_<version>_windows_x64.zip`, unzip it anywhere and run `Blitz.exe`. Either way Blitz keeps itself up to date.

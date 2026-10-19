@@ -439,7 +439,7 @@ deny           = ["*-nightly"]
 
 **Goal.** A Wails desktop app with a tab per workspace, alongside the CLI, without a second copy of the program's logic.
 
-*Since v0.6.6 the desktop app is Electron ([spec_electron_038](specs/spec_electron_038.md)); the Wails app below is removed from the repository (restorable from the v0.6.5 tag).*
+*Since v0.7.0 the desktop app is Electron ([spec_electron_038](specs/spec_electron_038.md)); the Wails app below is removed from the repository (restorable from the v0.6.5 tag).*
 
 **Decisions (2026-09-26).**
 - **One engine service per user** (revised the same day; it replaces "a process per tab"). A single `blitz serve` daemon hosts every open workspace, because scheduled workers across workspaces are planned (item 24). Each workspace's state must therefore be per workspace, not per process (see phase 5b).
