@@ -303,6 +303,11 @@ func (w *Workspace) a2aStep(ctx context.Context, n flows.Node, input string) (fl
 		if err != nil {
 			return flows.Result{}, fmt.Errorf("%s: %w", card.Name, err)
 		}
+		// ADK's remote agent reports a call that failed as an event, not an
+		// error: the step fails, rather than answering nothing.
+		if ev != nil && ev.ErrorMessage != "" {
+			return flows.Result{}, fmt.Errorf("%s: %s", card.Name, ev.ErrorMessage)
+		}
 		if ev == nil || ev.Partial || ev.Content == nil {
 			continue
 		}

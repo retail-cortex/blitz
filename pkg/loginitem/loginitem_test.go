@@ -245,9 +245,11 @@ func TestInstallFailures(t *testing.T) {
 	if goruntime.GOOS != "linux" {
 		t.Skip("the systemd steps")
 	}
-	t.Setenv("HOME", t.TempDir())
 	for _, failing := range []string{"daemon-reload", "enable", "restart"} {
 		t.Run(failing, func(t *testing.T) {
+			// A home of its own: an earlier case's unit file would make this
+			// one the same item again, which only starts the service.
+			t.Setenv("HOME", t.TempDir())
 			var ran []string
 			old := RunSystem
 			RunSystem = func(name string, args ...string) error {
@@ -262,6 +264,27 @@ func TestInstallFailures(t *testing.T) {
 			assert.Contains(t, ran[len(ran)-1], failing, "nothing runs after the failure")
 		})
 	}
+}
+
+// Installing the same item again only starts the service, never restarts
+// it, so the runs going in it go on.
+func TestInstallSameItemStarts(t *testing.T) {
+	if goruntime.GOOS != "linux" {
+		t.Skip("the systemd steps")
+	}
+	t.Setenv("HOME", t.TempDir())
+	var ran []string
+	old := RunSystem
+	RunSystem = func(_ string, args ...string) error {
+		ran = append(ran, strings.Join(args, " "))
+		return nil
+	}
+	t.Cleanup(func() { RunSystem = old })
+	require.NoError(t, Install("/b/blitzd"))
+	assert.Equal(t, []string{"--user daemon-reload", "--user enable blitz.service", "--user restart blitz.service"}, ran)
+	ran = nil
+	require.NoError(t, Install("/b/blitzd"))
+	assert.Equal(t, []string{"--user start blitz.service"}, ran, "the same item: started, not restarted")
 }
 
 // Installing and uninstalling report an entry they can't write or remove.

@@ -147,16 +147,30 @@ func TestFlowA2AStepCases(t *testing.T) {
 	defer hs.Close()
 	none := httptest.NewServer(http.NotFoundHandler())
 	defer none.Close()
+	// A card whose agent is on an approved host that doesn't answer.
+	deadCard := *card
+	deadCard.SupportedInterfaces = []*a2a.AgentInterface{{URL: "http://127.0.0.1:1/invoke", ProtocolBinding: a2a.TransportProtocolJSONRPC, ProtocolVersion: a2a.Version}}
+	deadMux := http.NewServeMux()
+	deadMux.Handle(a2asrv.WellKnownAgentCardPath, a2asrv.NewStaticAgentCardHandler(&deadCard))
+	dead := httptest.NewServer(deadMux)
+	defer dead.Close()
 	w := openCalls(t, nil)
+	// RunTools is bypass mode, which approves every host where the OS
+	// sandbox runs (Linux): asking needs the default mode.
+	asks := openCalls(t, func(c *config.Config) { c.Blitz.AutoApprove = false })
 
-	cases := []struct{ name, url, want string }{
-		{name: "a bad URL", url: "http://[::1", want: "the URL"},
-		{name: "no card", url: none.URL, want: "the agent card"},
-		{name: "a host the card names, refused", url: base.String(), want: "not approved"},
+	cases := []struct {
+		name, url, want string
+		w               *Workspace
+	}{
+		{name: "a bad URL", url: "http://[::1", want: "the URL", w: w},
+		{name: "no card", url: none.URL, want: "the agent card", w: w},
+		{name: "a host the card names, refused", url: base.String(), want: "not approved", w: asks},
+		{name: "its agent doesn't answer", url: dead.URL, want: "elsewhere: ", w: w},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			_, err := w.a2aStep(context.Background(), flows.Node{ID: "ask", URL: c.url}, "hi")
+			_, err := c.w.a2aStep(context.Background(), flows.Node{ID: "ask", URL: c.url}, "hi")
 			assert.ErrorContains(t, err, c.want)
 		})
 	}
