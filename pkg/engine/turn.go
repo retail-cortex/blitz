@@ -46,6 +46,10 @@ import (
 func (w *Workspace) Run(ctx context.Context, sessionID string, t api.Turn, on func(api.Event)) (api.TurnResult, error) {
 	var opts []runtime.ExecOption
 	if t.Command {
+		// A workflow runs as this turn, step by step (spec_workflows_043).
+		if f, input, ok := w.flowCommand(t.Text); ok {
+			return w.runFlow(ctx, sessionID, f, input, on)
+		}
 		var err error
 		if opts, err = w.expandCommand(ctx, &t); err != nil {
 			return api.TurnResult{}, err
@@ -97,8 +101,19 @@ func (w *Workspace) RunDetached(ctx context.Context, t api.Turn, started func(se
 		started(rec.ID)
 	}
 	w.sessionStarted(rec.ID, "background")
+	var opts []runtime.ExecOption
+	if t.Command {
+		// A workflow (spec_workflows_043 WF-10) or a command runs as it
+		// would in a chat.
+		if f, input, ok := w.flowCommand(t.Text); ok {
+			return w.runFlow(withFlowOrigin(withFlowStorage(ctx, st), "background"), rec.ID, f, input, on)
+		}
+		if opts, err = w.expandCommand(ctx, &t); err != nil {
+			return api.TurnResult{}, err
+		}
+	}
 	planEvery := w.tools.Hooks().Mode() == api.ModePlan || w.cfg.Blitz.PlanReview == config.PlanReviewAlways
-	res, err := w.run(ctx, rec.ID, turn{Turn: t, planMode: planEvery && !t.Plan && t.ReadOnly == ""}, on, st)
+	res, err := w.run(ctx, rec.ID, turn{Turn: t, planMode: planEvery && !t.Plan && t.ReadOnly == ""}, on, st, opts...)
 	observability.RecordTurn(ctx, w.engine.ActiveAgent(), turnOutcome(err))
 	return res, err
 }
@@ -144,15 +159,34 @@ func (w *Workspace) run(ctx context.Context, sessionID string, t turn, on func(a
 	// agents, skills, instruction files or rules may have changed.
 	w.RetryModel(ctx)
 	w.refreshAgentFiles(ctx)
+	// The turn's guardrails, read now; their turn and cost limits apply.
+	if !t.Aside {
+		w.startGuardrails(sessionID, &t.Turn)
+		defer w.guards.turns.Delete(sessionID)
+	}
 	ctx = tools.WithPromptID(ctx, uuid.NewString())
 	// The turn's plan state: the plan tools report the user's decision here.
 	gate := tools.NewPlanGate(t.Plan || t.planMode)
 	ctx = tools.WithPlanGate(ctx, gate)
-	var hookContext string
+	var hookContext, ruleGuidance string
+	// What before-agent rules said, shown once the prompt is recorded.
+	var ruleNotices []api.Notice
 	if !t.Accepted {
 		var err error
 		if hookContext, err = w.accept(ctx, sessionID, t.Text); err != nil {
 			return api.TurnResult{}, err
+		}
+		if !t.Aside {
+			// Before-agent rules judge the prompt (spec_gates_041).
+			note := func(text string, isErr bool) { ruleNotices = append(ruleNotices, api.Notice{Text: text, Error: isErr}) }
+			// Input guardrails first: safety before the team's expectations.
+			if err = w.inputGuardrails(ctx, sessionID, t.Text, note); err != nil {
+				return api.TurnResult{}, err
+			}
+			ruleGuidance, err = w.beforeRules(ctx, t.Text, note)
+			if err != nil {
+				return api.TurnResult{}, err
+			}
 		}
 	}
 
@@ -166,6 +200,8 @@ func (w *Workspace) run(ctx context.Context, sessionID string, t turn, on func(a
 	case t.planMode:
 		prompt = runtime.PlanPrompt(prompt)
 	}
+	// \skill-name in the prompt: those skills' instructions go with it.
+	prompt += w.skillMentionNote(t.Text)
 	if !t.Aside {
 		w.activate(st, sessionID)
 		prompt := -1 // the prompt's index in the transcript, for /rewind
@@ -194,6 +230,9 @@ func (w *Workspace) run(ctx context.Context, sessionID string, t turn, on func(a
 	// and they must follow the prompt in the transcript.
 	if t.OnAccepted != nil {
 		t.OnAccepted()
+	}
+	for i := range ruleNotices {
+		on(api.Event{Notice: &ruleNotices[i]})
 	}
 
 	res := api.TurnResult{Before: w.engine.Usage(sessionID)}
@@ -243,6 +282,7 @@ func (w *Workspace) run(ctx context.Context, sessionID string, t turn, on func(a
 		prompt = withUserEdits(prompt, w.takeUserEdits())
 	}
 	prompt = withHookContext(prompt, "prompt_submit", hookContext)
+	prompt = withHookContext(prompt, "rules", ruleGuidance)
 	prompt = w.withMentions(ctx, prompt, t.Text)
 	prompt = withAdded(prompt, t.Context)
 	var err error
@@ -267,11 +307,13 @@ func (w *Workspace) run(ctx context.Context, sessionID string, t turn, on func(a
 		err = w.engine.Execute(ctx, sessionID, prompt, handler, opts...)
 		// An approved plan is carried out in the same turn (a few times at
 		// most, should the agent plan again).
+		carried := false
 		for i := 0; err == nil && i < maxPlanRounds; i++ {
 			_, path, mode, ok := gate.Take()
 			if !ok {
 				break
 			}
+			carried = true
 			w.planApproved(mode)
 			goAhead := runtime.CarryOutPrompt(path)
 			w.appendIn(st, sessionID, on, session.Message{Role: "user", Content: "(plan approved) " + goAhead, Kind: session.KindPlan})
@@ -302,6 +344,24 @@ func (w *Workspace) run(ctx context.Context, sessionID string, t turn, on func(a
 			w.appendIn(st, sessionID, on, session.Message{Role: "user", Content: "(goal) " + next, Kind: goalKind})
 			r.paragraph()
 			err = w.engine.Execute(ctx, sessionID, next, handler, base...)
+		}
+		// After-agent rules judge the answer and the changes; those that
+		// revise send the agent back, a couple of times at most (a plan
+		// that wasn't carried out isn't an answer to judge).
+		notice := func(text string, isErr bool) { on(api.Event{Notice: &api.Notice{Text: text, Error: isErr}}) }
+		for i := 0; err == nil && ctx.Err() == nil && (!(t.Plan || t.planMode) || carried); i++ {
+			reasons := w.afterRules(ctx, sessionID, r.output.String(), notice)
+			if len(reasons) == 0 {
+				break
+			}
+			if i == maxRuleRevisions {
+				notice(i18n.T("rule.still_failing", "n", maxRuleRevisions), true)
+				break
+			}
+			msg := revisePrompt(reasons)
+			w.appendIn(st, sessionID, on, session.Message{Role: "user", Content: "(rules) " + msg, Kind: session.KindRule})
+			r.paragraph()
+			err = w.engine.Execute(ctx, sessionID, msg, handler, base...)
 		}
 	}
 	if cause := context.Cause(ctx); err != nil && (errors.Is(cause, api.ErrCostLimit) || errors.Is(cause, api.ErrTimeLimit)) {

@@ -24,9 +24,9 @@ In plan mode, with `/plan`, or when the agent chooses to plan first, it presents
 | `dont-ask` | Anything that would ask is refused instead (for CI and scripts) |
 | `bypass` | Everything; only while the OS sandbox is active, and deny rules, blocked paths and the sandboxes still apply |
 
-Choose one with `--permission-mode`, `[blitz] permission_mode`, or `/mode` in a session.
+A workspace starts in `auto` unless you choose another with `--permission-mode`, `[blitz] permission_mode`, or `/mode` in a session. To restrict one workspace, choose its mode in its settings (**Settings › Workspaces**, Behaviour): it's kept for that workspace and it opens in it again. A [workflow](workflows.md#its-permission-mode) runs in its own mode, but never a looser one than its workspace's.
 
-In the `auto` mode the reviewer sees the action (and its diff), the last few messages and what you tell it about your environment, and answers allow or deny. A denial goes back to the agent with the reason, and every decision is in the audit log (`auto-allow`, `auto-deny`); its tokens count in `/cost`. When the reviewer can't answer, you're asked. A small, fast model is enough:
+In the `auto` mode the reviewer sees the action (and its diff), the last few messages and what you tell it about your environment, and answers allow or deny. A denial goes back to the agent with the reason, and every decision is in the audit log (`auto-allow`, `auto-deny`); its tokens count in `/cost`. When the reviewer can't answer (or takes more than two minutes), you're asked. A small, fast model is enough:
 
 ```toml
 [permissions.auto]

@@ -20,6 +20,7 @@
 import type { JsonObject } from "@bufbuild/protobuf";
 import type { Message } from "./gen/blitz/v1/session_pb";
 import type { Task, TurnEvent } from "./gen/blitz/v1/turn_pb";
+import { t } from "./i18n";
 
 /**
  * A user message: a prompt (index is its place in the transcript, once
@@ -96,13 +97,61 @@ export function latestTurn(entries: Entry[]): number {
   return 0;
 }
 
+/**
+ * A saved prompt's text and the images sent with it: the transcript notes
+ * them by name on a last line ("[images: a.png, b.jpg]", AttachmentNote),
+ * shown as named chips rather than as text.
+ */
+export function splitAttachments(text: string): { text: string; images?: { url: string; name: string }[] } {
+  const m = /\n?\[images: ([^\]\n]+)\]\s*$/.exec(text);
+  if (!m) return { text };
+  return { text: text.slice(0, m.index).trimEnd(), images: m[1].split(", ").filter(Boolean).map((name) => ({ url: "", name })) };
+}
+
+/** A saved session's tool call (ListSessionTools), as withTools takes it. */
+export interface SavedTool {
+  turn: number;
+  prompt: string;
+  call?: { id: string; name: string; args?: JsonObject };
+  result?: { result?: JsonObject };
+}
+
+const startOf = (s: string) => s.replace(/\s+/g, " ").trim().slice(0, 60);
+
+/**
+ * A reopened chat's entries with its tool calls back where they ran: each
+ * after its prompt (the one whose text it names, else the turn-th prompt),
+ * in order, before the answer. Tools whose prompt can't be found are left
+ * out rather than shown in the wrong place.
+ */
+export function withTools(entries: Entry[], tools: SavedTool[]): Entry[] {
+  if (!tools.length) return entries;
+  const prompts = entries.flatMap((e, i) => (e.kind === "user" && !e.sub ? [i] : []));
+  const byPrompt = new Map<number, Entry[]>();
+  for (const t of tools) {
+    if (!t.call) continue;
+    const want = startOf(t.prompt);
+    const nth = prompts[t.turn];
+    const at = nth !== undefined && (!want || startOf((entries[nth] as UserEntry).text).startsWith(want.slice(0, 40)))
+      ? nth
+      : prompts.find((i) => want && startOf((entries[i] as UserEntry).text).startsWith(want.slice(0, 40)));
+    if (at === undefined) continue;
+    const list = byPrompt.get(at) ?? [];
+    list.push({ kind: "tool", id: t.call.id, name: t.call.name, args: t.call.args, result: t.result?.result ?? (t.result ? {} : undefined) });
+    byPrompt.set(at, list);
+  }
+  return entries.flatMap((e, i) => [e, ...(byPrompt.get(i) ?? [])]);
+}
+
 /** The entries for a saved session's messages. */
 export function fromMessages(messages: Message[]): Entry[] {
   return messages.map((m, i): Entry => {
     if (m.kind === "task") return { kind: "notice", text: m.text, tone: "info" }; // a background task that ended
     if (m.role !== "user") return { kind: "model", text: m.text, author: "", open: false };
     const sub = subKinds[m.kind];
-    return sub ? { kind: "user", text: m.text, sub } : { kind: "user", text: m.text, index: i };
+    if (sub) return { kind: "user", text: m.text, sub };
+    const { text, images } = splitAttachments(m.text);
+    return images ? { kind: "user", text, index: i, images } : { kind: "user", text, index: i };
   });
 }
 
@@ -180,6 +229,13 @@ export function applyEvent(entries: Entry[], ev: TurnEvent): Entry[] {
     }
     case "notice":
       return [...close(entries), { kind: "notice", text: k.value.text, tone: k.value.error ? "error" : "info" }];
+    case "flowStep": {
+      // A workflow's step: a line as it starts, and if it fails.
+      const s = k.value;
+      if (s.status === "running") return [...close(entries), { kind: "notice", text: t("desktop.flows.step_line", { workflow: s.workflow, step: s.title || s.id, index: s.index, count: s.count }), tone: "info" }];
+      if (s.status === "failed") return [...close(entries), { kind: "notice", text: t("desktop.flows.step_failed", { workflow: s.workflow, step: s.title || s.id, error: s.error }), tone: "error" }];
+      return entries;
+    }
     case "finished": {
       const err = k.value.error;
       const done = close(entries);

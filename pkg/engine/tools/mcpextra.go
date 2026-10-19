@@ -90,7 +90,7 @@ func (m *MCPManager) sessionOf(ctx context.Context, s *mcpServer) (*mcp.ClientSe
 
 // server is the running server named name.
 func (m *MCPManager) server(name string) (*mcpServer, error) {
-	for _, s := range m.servers {
+	for _, s := range m.list() {
 		if s.cfg.Name == name {
 			return s, nil
 		}
@@ -111,7 +111,7 @@ type MCPResource struct {
 func (m *MCPManager) Resources(ctx context.Context, server string) ([]MCPResource, error) {
 	var out []MCPResource
 	var errs []error
-	for _, s := range m.servers {
+	for _, s := range m.list() {
 		if server != "" && s.cfg.Name != server || s.toolset == nil {
 			continue
 		}
@@ -191,7 +191,7 @@ func (m *MCPManager) Prompts(ctx context.Context, wait time.Duration) []MCPPromp
 	var mu sync.Mutex
 	var out []MCPPrompt
 	var wg sync.WaitGroup
-	for _, s := range m.servers {
+	for _, s := range m.list() {
 		if s.toolset == nil {
 			continue
 		}

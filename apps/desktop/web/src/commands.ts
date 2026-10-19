@@ -54,14 +54,15 @@ export function parseCommand(line: string): { name: string; args: string } | und
 
 /**
  * The commands offered while the user types "/prefix" (no space yet;
- * leading whitespace allowed, as parseCommand trims it): prefix matches
- * first, then the rest containing it.
+ * leading whitespace allowed, as parseCommand trims it): the one named
+ * exactly first, then prefix matches, then the rest containing it.
  */
 export function matchCommands(draft: string, all: CommandSpec[]): CommandSpec[] {
   const m = /^\s*\/(\S*)$/.exec(draft);
   if (!m) return [];
   const q = m[1].toLowerCase();
-  const starts = all.filter((c) => c.name.startsWith(q));
+  // The command typed in full first: Enter runs /mode, not /model.
+  const starts = all.filter((c) => c.name.startsWith(q)).sort((a, b) => Number(b.name === q) - Number(a.name === q));
   const contains = all.filter((c) => !c.name.startsWith(q) && (c.name.includes(q) || (q.length > 2 && c.description.toLowerCase().includes(q))));
   return [...starts, ...contains].slice(0, 12);
 }

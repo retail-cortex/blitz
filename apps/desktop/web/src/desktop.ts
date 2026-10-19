@@ -104,6 +104,7 @@ type AppMethods = {
   DownloadUpdate(): Promise<UpdateStatus>;
   ApplyUpdate(): Promise<void>;
   Quit(): Promise<void>;
+  OpenApp(): Promise<void>;
   PreviewOpen(id: string, url: string): Promise<string>;
   PreviewBounds(id: string, b: PreviewBounds): Promise<void>;
   PreviewVisible(id: string, visible: boolean): Promise<void>;
@@ -155,10 +156,14 @@ export interface UpdateStatus {
   notes?: string; // the release's page
 }
 
-/** A blitz://open link: a folder to open, with a prompt to fill in. */
+/** A blitz:// link: a folder to open, with a prompt to fill in (open) or a view to show (workers, or a workflow's run). */
 export interface DeepLink {
   dir: string;
   prompt: string;
+  view?: "workers" | "workflows";
+  /** For workflows: the workflow, and the run to show on its canvas. */
+  workflow?: string;
+  run?: string;
 }
 
 /** The methods the program serving the page answers (the tray's), once asked. */
@@ -502,7 +507,7 @@ export async function toggleFullscreen(): Promise<void> {
 }
 
 /**
- * Calls f with each blitz://open link: those the app was opened with, then
+ * Calls f with each blitz:// link: those the app was opened with, then
  * each as it comes.
  */
 export function onDeepLink(f: (link: DeepLink) => void): () => void {
@@ -517,6 +522,18 @@ export function onDeepLink(f: (link: DeepLink) => void): () => void {
     .catch(() => {});
   return off;
 }
+
+/** Calls f when the tray says workflows' human tasks have arrived (the app's window is open). */
+export function onTasksOpen(f: () => void): () => void {
+  const on = windowEvents();
+  if (!on) return () => {};
+  return on("tasks:open", () => f());
+}
+
+/** From the tasks window: opens the app's own window (spec_electron_038 EL-110). */
+export const openApp = () => app().OpenApp();
+/** Whether this window can open the app's own (the Electron app's tasks window). */
+export const canOpenApp = () => windowHas("OpenApp");
 
 /** Calls f with the workspace a clicked notification is about. */
 export function onNotificationOpen(f: (dir: string) => void): () => void {

@@ -156,7 +156,7 @@ func (r lineReader) next(typ string) map[string]any {
 // Another program drives a session: prompts, an approval and a question
 // over stdin, events and results on stdout.
 func TestStreamJSONInput(t *testing.T) {
-	e := testEnvWith(t, func(c *config.Config) { c.Blitz.AutoApprove = false },
+	e := testEnvWith(t, func(c *config.Config) { c.Blitz.AutoApprove, c.Blitz.PermissionMode = false, "default" },
 		toolCall("create_file", map[string]any{"path": "a.txt", "content": "x"}), genai.NewContentFromText("made it", genai.RoleModel),
 		toolCall("ask_user_question", map[string]any{"question": "Which colour?", "options": []any{"red", "blue"}}),
 		genai.NewContentFromText("blue it is", genai.RoleModel))

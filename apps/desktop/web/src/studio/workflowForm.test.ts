@@ -1,0 +1,141 @@
+/**
+ * Copyright 2026 Retail Cortex
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+import { create } from "@bufbuild/protobuf";
+import { describe, expect, it } from "vitest";
+import { WorkflowFileSchema } from "../gen/blitz/v1/workspace_pb";
+import { flowModes, looser } from "../options";
+import { schedulePermissions, startsOnInput, addLink, emptyWorkflowForm, noAuth, linkId, linkText, setLink, formFromWorkflow, fromTemplate, newStep, removeStep, sameWorkflowForm, specFromForm, stepNeeds, templates } from "./workflowForm";
+
+describe("the workflow canvas", () => {
+  it("reads a workflow and writes back each step's own settings", () => {
+    const w = create(WorkflowFileSchema, {
+      name: "brief",
+      nodes: [
+        { id: "a", type: "agent", x: 10.4, y: 20, agent: "writer", instructions: "Write.", rules: ["short"], path: "ignored" },
+        { id: "s", type: "script", skill: "pdf", script: "render", args: ["--a4", "-q"] },
+        { id: "z", type: "weird" },
+      ],
+      edges: [{ from: "a", to: "s", when: "output.data.n > 1", label: "big" }, { from: "a", to: "gone" }],
+    });
+    const f = formFromWorkflow(w);
+    expect(f.steps[1].args).toBe("--a4 -q");
+    expect(f.steps[2].type).toBe("agent");
+    const spec = specFromForm(f);
+    expect(spec.nodes[0]).toMatchObject({ x: 10, agent: "writer", rules: ["short"], path: "" });
+    expect(spec.nodes[1]).toMatchObject({ skill: "pdf", script: "render", args: ["--a4", "-q"], instructions: "" });
+    expect(spec.edges).toEqual([{ from: "a", to: "s", when: "output.data.n > 1", if: "", default: false, error: false, label: "big" }]);
+    expect(f.links[0]).toMatchObject({ kind: "when", condition: "output.data.n > 1" });
+    expect(sameWorkflowForm(f, formFromWorkflow(w))).toBe(true);
+  });
+
+  it("runs in auto unless it says, and only writes another mode", () => {
+    const f = formFromWorkflow(create(WorkflowFileSchema, { name: "a" }));
+    expect(f.mode).toBe("auto");
+    expect(specFromForm(f).mode).toBe("");
+    expect(specFromForm({ ...f, mode: "dont-ask" }).mode).toBe("dont-ask");
+    expect(formFromWorkflow(create(WorkflowFileSchema, { name: "a", mode: "default" })).mode).toBe("default");
+    expect(fromTemplate("blank", (k) => k).mode).toBe("auto");
+    expect(fromTemplate("brief", (k) => k, "accept-edits").mode).toBe("accept-edits");
+  });
+
+  it("offers the modes a workflow runs in, auto first, and knows which the workspace holds back", () => {
+    expect(flowModes().map((m) => m.value)).toEqual(["auto", "accept-edits", "default", "dont-ask", "bypass"]);
+    expect(looser("auto", "default")).toBe(true);
+    expect(looser("auto", "accept-edits")).toBe(false);
+    expect(looser("dont-ask", "auto")).toBe(false);
+    expect(looser("bypass", "auto")).toBe(true);
+  });
+
+  it("adds steps and links, never a loop", () => {
+    const a = newStep("agent", [], 0, 0);
+    const b = newStep("agent", [a], 100, 0);
+    expect([a.id, b.id]).toEqual(["agent-1", "agent-2"]);
+    expect(newStep("read_file", [], 0, 0).id).toBe("read-file-1");
+    let f = { ...emptyWorkflowForm, steps: [a, b] };
+    f = addLink(f, a.id, b.id);
+    expect(f.links).toHaveLength(1);
+    expect(addLink(f, a.id, b.id)).toBe(f);
+    expect(f.links[0].kind).toBe("always");
+    const g = setLink(f, linkId(f.links[0]), { kind: "error" });
+    expect(specFromForm(g).edges[0]).toMatchObject({ error: true, when: "" });
+    expect(linkText(g.links[0], (k) => `<${k}>`)).toBe("<error>");
+    expect(linkText({ ...g.links[0], kind: "if", condition: "The customer sounds angry about the refund" }, (k) => k)).toBe("The customer sounds angry a…");
+    expect(addLink(f, b.id, a.id)).toBe(f);
+    expect(addLink(f, a.id, a.id)).toBe(f);
+    expect(removeStep(f, a.id)).toMatchObject({ steps: [b], links: [] });
+  });
+
+  it("says what a step needs", () => {
+    expect(stepNeeds(newStep("agent", [], 0, 0))).toBe("instructions");
+    expect(stepNeeds(newStep("script", [], 0, 0))).toBe("script");
+    expect(stepNeeds(newStep("save_file", [], 0, 0))).toBe("path");
+    expect(stepNeeds(newStep("email", [], 0, 0))).toBe("coming_soon");
+    expect(stepNeeds(newStep("accumulate", [], 0, 0))).toBe("");
+    expect(stepNeeds(newStep("extract", [], 0, 0))).toBe("fields");
+    const x = { ...newStep("extract", [], 0, 0), fields: [{ name: "total", type: "number" as const, description: "" }, { name: " ", type: "string" as const, description: "" }], retryAttempts: "3", retryDelay: "2s" };
+    expect(specFromForm({ ...emptyWorkflowForm, steps: [x] }).nodes[0]).toMatchObject({ fields: [{ name: "total", type: "number", description: "" }], retryAttempts: 3, retryDelay: "2s" });
+    expect(specFromForm({ ...emptyWorkflowForm, steps: [{ ...newStep("exclusive", [], 0, 0), retryAttempts: "3", timeout: "1m" }] }).nodes[0]).toMatchObject({ retryAttempts: 0, timeout: "" });
+  });
+
+  it("keeps each call's own settings", () => {
+    const api = { ...newStep("api_call", [], 0, 0), url: " https://api.example.com/x ", method: "POST", query: [{ name: "q", value: "1" }, { name: " ", value: "x" }], bodyKind: "json" as const, body: '{"n": 1}', server: "ignored", auth: { ...noAuth, type: "oauth2" as const, tokenUrl: "https://a/t", clientId: "id", clientSecret: "{secrets:s}", scopes: "read write", token: "ignored" } };
+    expect(specFromForm({ ...emptyWorkflowForm, steps: [api] }).nodes[0]).toMatchObject({ url: "https://api.example.com/x", method: "POST", query: [{ name: "q", value: "1" }], jsonBody: '{"n": 1}', body: "", server: "", auth: { type: "oauth2", scopes: ["read", "write"], token: "" } });
+    expect(specFromForm({ ...emptyWorkflowForm, steps: [{ ...api, method: "GET", bodyKind: "text", body: "hi", auth: { ...noAuth, type: "api_key", name: "X-Key", value: "k", in: "query" } }] }).nodes[0]).toMatchObject({ method: "", body: "hi", jsonBody: "", auth: { type: "api_key", in: "query" } });
+    const mcp = { ...newStep("mcp_call", [], 0, 0), server: "shop", tool: " lookup ", argumentsJson: '{"a": 1}', url: "ignored" };
+    expect(specFromForm({ ...emptyWorkflowForm, steps: [mcp] }).nodes[0]).toMatchObject({ server: "shop", tool: "lookup", argumentsJson: '{"a": 1}', url: "", auth: undefined });
+    expect(stepNeeds(newStep("mcp_call", [], 0, 0))).toBe("mcp");
+    expect(stepNeeds(newStep("a2a_call", [], 0, 0))).toBe("url");
+    expect(stepNeeds(newStep("workflow", [], 0, 0))).toBe("workflow");
+    expect(stepNeeds(newStep("human_task", [], 0, 0))).toBe("form");
+    expect(stepNeeds(newStep("timer", [], 0, 0))).toBe("timer");
+    expect(specFromForm({ ...emptyWorkflowForm, steps: [{ ...newStep("timer", [], 0, 0), wait: " 1h ", formJson: "x" }] }).nodes[0]).toMatchObject({ wait: "1h", formJson: "" });
+    const each = { ...newStep("save_file", [], 0, 0), path: "x", forEach: " steps.a.data ", concurrency: "2", workflow: "ignored" };
+    expect(specFromForm({ ...emptyWorkflowForm, steps: [each] }).nodes[0]).toMatchObject({ forEach: "steps.a.data", concurrency: 2, workflow: "" });
+    expect(specFromForm({ ...emptyWorkflowForm, steps: [{ ...each, forEach: "" }] }).nodes[0]).toMatchObject({ concurrency: 0 });
+    const back = formFromWorkflow(create(WorkflowFileSchema, { name: "x", nodes: [{ id: "a", type: "api_call", url: "u", jsonBody: "{}", auth: { type: "basic", username: "me", scopes: [] } }] }));
+    expect(back.steps[0]).toMatchObject({ method: "GET", bodyKind: "json", body: "{}", auth: { type: "basic", username: "me", in: "header" } });
+  });
+
+  it("starts from templates", () => {
+    for (const tpl of templates) {
+      const f = fromTemplate(tpl, (k) => k);
+      for (const l of f.links) expect(f.steps.map((s) => s.id)).toEqual(expect.arrayContaining([l.from, l.to]));
+    }
+    expect(fromTemplate("brief", (k) => k).steps.map((s) => s.type)).toEqual(["read_file", "browser", "accumulate", "agent", "save_file"]);
+  });
+
+  it("lets a scheduled run do what its steps do: save their files, call their hosts, use their tools", () => {
+    const steps = [
+      { ...newStep("save_file", [], 0, 0), path: "drafts/draft.md" },
+      { ...newStep("save_file", [], 0, 0), id: "s2", path: "reports/{{date}}.md" },
+      { ...newStep("api_call", [], 0, 0), url: "https://api.example.com/v1/x" },
+      { ...newStep("api_call", [], 0, 0), id: "bad", url: "not a url" },
+      { ...newStep("mcp_call", [], 0, 0), server: "github", tool: "create_issue" },
+      { ...newStep("browser", [], 0, 0) },
+      { ...newStep("agent", [], 0, 0) },
+    ];
+    expect(schedulePermissions(steps)).toEqual(["write:drafts/draft.md", "write:reports/", "web:api.example.com", "mcp:github:create_issue", "web:*"]);
+    expect(schedulePermissions([{ ...newStep("agent", [], 0, 0) }])).toEqual([]);
+  });
+
+  it("knows when a workflow starts on its input", () => {
+    const draft = fromTemplate("refine", (k) => k);
+    expect(startsOnInput(draft)).toBe(true);
+    expect(startsOnInput(fromTemplate("report", (k) => k))).toBe(false); // a script first
+    expect(startsOnInput({ steps: [newStep("read_file", [], 0, 0)], links: [] })).toBe(false);
+  });
+});

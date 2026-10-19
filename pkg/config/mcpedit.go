@@ -55,6 +55,35 @@ func AddMCPServer(prefixDir string, s MCPServerConfig) (string, error) {
 	return path, err
 }
 
+// ReplaceMCPServer puts s in place of the entry named name (which s may
+// rename), keeping its place in the file. The entry is written afresh, so
+// comments inside it are lost; the rest of the file is kept as it was.
+func ReplaceMCPServer(prefixDir, name string, s MCPServerConfig) (string, error) {
+	if s.Name == "" || (s.Command == "") == (s.URL == "") {
+		return "", errors.New("an MCP server needs a name and either a command or a URL")
+	}
+	var found bool
+	path, err := editConfigFile(ConfigDir(prefixDir), func(doc string) string {
+		start, end, ok := mcpBlock(doc, name)
+		if !ok {
+			return doc
+		}
+		found = true
+		lines := strings.Split(doc, "\n")
+		entry := strings.Split(strings.TrimSuffix(mcpServerTOML(s), "\n"), "\n")
+		return strings.Join(slices.Concat(lines[:start:start], entry, lines[end:]), "\n")
+	}, func(m map[string]any) error {
+		if !found {
+			return nil
+		}
+		return oneNamed(m, s.Name)
+	})
+	if err == nil && !found {
+		return "", fmt.Errorf("%w: %s", ErrNoMCPServer, name)
+	}
+	return path, err
+}
+
 // RemoveMCPServer deletes the entry named name.
 func RemoveMCPServer(prefixDir, name string) (string, error) {
 	var found bool
@@ -174,6 +203,21 @@ func mcpServerTOML(s MCPServerConfig) string {
 	}
 	if len(s.Agents) > 0 {
 		fmt.Fprintf(&b, "agents = %s\n", tomlList(s.Agents))
+	}
+	if len(s.Tools) > 0 {
+		fmt.Fprintf(&b, "tools = %s\n", tomlList(s.Tools))
+	}
+	if s.AutoApprove {
+		b.WriteString("auto_approve = true\n")
+	}
+	if s.Sandbox != nil {
+		fmt.Fprintf(&b, "sandbox = %v\n", *s.Sandbox)
+	}
+	if s.TimeoutSeconds > 0 {
+		fmt.Fprintf(&b, "timeout_seconds = %d\n", s.TimeoutSeconds)
+	}
+	if s.Disabled {
+		b.WriteString("disabled = true\n")
 	}
 	return b.String()
 }

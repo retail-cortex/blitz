@@ -91,6 +91,25 @@ func TestWorkersLifecycle(t *testing.T) {
 	assert.Equal(t, api.StateDisabled, off.State, "disable %+v %v", off, err)
 }
 
+// A policy reloaded from the settings applies from the next listing:
+// its default limits fill in, and kinds it no longer allows are dropped.
+func TestReloadWorkerPolicy(t *testing.T) {
+	w, _ := openTestWith(t, func(c *config.Config) { c.Workers.Policy.Allow = []string{"shell"} })
+	addWorker(t, w, "deps", "---\nschedule: Daily at 6 AM\npermissions: [\"shell:go list -m -u all\"]\n---\nReport outdated modules.\n")
+	before, err := w.ListWorkers()
+	require.NoError(t, err)
+	require.Len(t, before[0].Permissions, 1)
+
+	cfg := config.DefaultConfig()
+	cfg.Workers.Policy.Allow = nil
+	cfg.Workers.Policy.DefaultMaxTurns = 7
+	w.ReloadWorkerPolicy(cfg)
+	after, err := w.ListWorkers()
+	require.NoError(t, err)
+	assert.Empty(t, after[0].Permissions, "shell isn't allowed any more")
+	assert.Equal(t, 7, after[0].Limits.MaxTurns, "the new default")
+}
+
 func TestWorkersCanBeTurnedOff(t *testing.T) {
 	w, _ := openTestWith(t, func(c *config.Config) { c.Workers.Enabled = false })
 	_, err := w.ListWorkers()

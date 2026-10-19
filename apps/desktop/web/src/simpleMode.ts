@@ -14,35 +14,53 @@
  * limitations under the License.
  */
 
-// Simple and advanced (Settings › Appearance › Show advanced settings):
+// Simple and advanced (Show advanced, in the Settings title bar):
 // what a newcomer sees, and what waits until asked for. Hidden settings
 // keep working with what they're set to; hiding never resets anything.
 // The smaller choices (a row, a button) are made where they're drawn,
 // with useAdvanced (state.tsx); the larger ones are here.
 
 /** The Settings dialog's sections, in order. */
-export const allSections = ["appearance", "documents", "providers", "permissions", "agents", "skills", "file", "workspaces", "service", "logs", "about"] as const;
+export const allSections = ["providers", "appearance", "agents", "skills", "workers", "mcp", "secrets", "workspaces", "permissions", "service", "logs", "about"] as const;
 /** A section of the Settings dialog. */
 export type SectionId = (typeof allSections)[number];
 
-const simpleSections: ReadonlySet<SectionId> = new Set(["appearance", "providers", "workspaces", "about"]);
+/**
+ * The sections in groups, each under a heading (desktop.settings.group.<id>):
+ * getting started; the global setup, in Studio's order; where Blitz works
+ * and what it may do; the system. Together they're allSections, in order.
+ */
+export const sectionGroups: readonly { id: string; sections: readonly SectionId[] }[] = [
+  { id: "start", sections: ["providers", "appearance"] },
+  { id: "setup", sections: ["agents", "skills", "workers", "mcp", "secrets"] },
+  { id: "access", sections: ["workspaces", "permissions"] },
+  { id: "system", sections: ["service", "logs", "about"] },
+];
+
+const simpleSections: ReadonlySet<SectionId> = new Set(["providers", "appearance", "workspaces", "about"]);
 
 /** The Settings dialog's sections shown: everything, or what a newcomer needs. */
 export function settingsSections(advanced: boolean): SectionId[] {
   return allSections.filter((s) => advanced || simpleSections.has(s));
 }
 
-/** The section to open on: the one asked for, unless it's hidden (then Appearance). */
+/** The groups shown, each with its sections shown (none left: the group isn't). */
+export function shownGroups(advanced: boolean): { id: string; sections: SectionId[] }[] {
+  const shown = settingsSections(advanced);
+  return sectionGroups.map((g) => ({ id: g.id, sections: g.sections.filter((s) => shown.includes(s)) })).filter((g) => g.sections.length > 0);
+}
+
+/** The section to open on: the one asked for, unless it's hidden (then the first). */
 export function sectionShown(asked: SectionId, advanced: boolean): SectionId {
-  return settingsSections(advanced).includes(asked) ? asked : "appearance";
+  return settingsSections(advanced).includes(asked) ? asked : allSections[0];
 }
 
 /** The top bar's menus, in order. */
-export type MenuId = "workspaces" | "changes" | "agents" | "workers" | "help";
+export type MenuId = "workspaces" | "changes" | "studio" | "help";
 
-/** The top bar's menus shown: simple keeps Workspaces, Changes and Help. */
+/** The top bar's menus shown: simple keeps Workspaces, Changes and Help; Studio (agents, skills, workflows… and workers) is advanced. */
 export function menuIds(advanced: boolean): MenuId[] {
-  return advanced ? ["workspaces", "changes", "agents", "workers", "help"] : ["workspaces", "changes", "help"];
+  return advanced ? ["workspaces", "changes", "studio", "help"] : ["workspaces", "changes", "help"];
 }
 
 /**

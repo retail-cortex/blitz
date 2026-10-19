@@ -146,7 +146,33 @@ const (
 	LanguageUnspecified ScriptLanguage = ""
 	LanguagePython      ScriptLanguage = "python"
 	LanguageTypeScript  ScriptLanguage = "typescript"
+	// LanguageShell is a POSIX shell script (/bin/sh; macOS and Linux) and
+	// LanguageCmd a Windows batch script (cmd.exe): Blitz's, not Castor's
+	// (spec_skills_013 SK-105).
+	LanguageShell ScriptLanguage = "shell"
+	LanguageCmd   ScriptLanguage = "cmd"
+	// LanguageJavaScript runs with node, as TypeScript does, and
+	// LanguagePowerShell with pwsh (or Windows PowerShell): Blitz's too
+	// (SK-106).
+	LanguageJavaScript ScriptLanguage = "javascript"
+	LanguagePowerShell ScriptLanguage = "powershell"
 )
+
+// Node reports whether the language's scripts run with node
+// (TypeScript, JavaScript), with npm packages.
+func (l ScriptLanguage) Node() bool { return l == LanguageTypeScript || l == LanguageJavaScript }
+
+// Platform is the operating system a language's scripts run on ("" for
+// any): shell scripts need a POSIX shell, cmd scripts Windows.
+func (l ScriptLanguage) Platform() string {
+	switch l {
+	case LanguageShell:
+		return "unix"
+	case LanguageCmd:
+		return "windows"
+	}
+	return ""
+}
 
 // UnmarshalYAML reads python / typescript, or the proto enum names.
 func (l *ScriptLanguage) UnmarshalYAML(n *yaml.Node) error {
@@ -158,8 +184,16 @@ func (l *ScriptLanguage) UnmarshalYAML(n *yaml.Node) error {
 		*l = LanguagePython
 	case "typescript", "ts":
 		*l = LanguageTypeScript
+	case "shell", "sh", "bash":
+		*l = LanguageShell
+	case "cmd", "bat", "batch":
+		*l = LanguageCmd
+	case "javascript", "js", "node":
+		*l = LanguageJavaScript
+	case "powershell", "pwsh", "ps1":
+		*l = LanguagePowerShell
 	default:
-		return fmt.Errorf("line %d: unknown script language %q (use python or typescript)", n.Line, n.Value)
+		return fmt.Errorf("line %d: unknown script language %q (use python, typescript, javascript, shell, cmd or powershell)", n.Line, n.Value)
 	}
 	return nil
 }
@@ -183,6 +217,8 @@ type ScriptDefinition struct {
 	// RequiresPython is the Python a script needs (">=3.11"); without it,
 	// the script's PEP 723 metadata may say (BL-SK-03).
 	RequiresPython string `yaml:"requires_python,omitempty"`
+	// Found means it wasn't declared but found in scripts/ (SK-98).
+	Found bool `yaml:"-"`
 }
 
 // CompiledReference is Castor's pointer to a registered, hashed skill.

@@ -22,6 +22,7 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/retail-cortex/blitz/pkg/config"
+	"github.com/retail-cortex/blitz/pkg/engine/skills"
 	"github.com/retail-cortex/blitz/pkg/secrets"
 	"github.com/retail-cortex/blitz/pkg/skillreg"
 	pb "github.com/retail-cortex/blitz/proto/blitz/v1"
@@ -63,8 +64,71 @@ func skillError(err error) error {
 	return apiError(connect.CodeFailedPrecondition, "REGISTRY_FAILED", err)
 }
 
-func installedSkill(i skillreg.Installed) *pb.InstalledSkill {
-	return &pb.InstalledSkill{Name: i.Name, Registry: i.Registry, Version: i.Version, Dir: i.Dir, Installed: timestamp(i.Time)}
+func (h configService) installedSkill(i skillreg.Installed) *pb.InstalledSkill {
+	out := &pb.InstalledSkill{Name: i.Name, Registry: i.Registry, Version: i.Version, Dir: i.Dir, Installed: timestamp(i.Time)}
+	out.Review, _ = h.skillReview(i.Dir) // a registry's skill with scripts is reviewed before they run unasked
+	return out
+}
+
+// skillTrust is the store of reviewed skills in the service's settings
+// directory (spec_skills_013 SK-108).
+func (h configService) skillTrust() *config.SkillTrust {
+	return config.OpenSkillTrust(config.ConfigDir(h.s.configDir))
+}
+
+// skillReview is what the scripts of the skill in folder dir are, when
+// they need review (it has scripts not trusted with its content now);
+// nil when they don't.
+func (h configService) skillReview(dir string) (*pb.SkillReview, error) {
+	s, err := skills.LoadFolder(dir)
+	if err != nil {
+		return nil, err
+	}
+	if len(s.Scripts) == 0 {
+		return nil, nil
+	}
+	hash, err := s.ContentHash()
+	if err != nil {
+		return nil, err
+	}
+	if h.skillTrust().Reviewed(dir, hash) {
+		return nil, nil
+	}
+	out := &pb.SkillReview{Dir: dir, Hash: hash}
+	for _, sc := range s.Scripts {
+		src := sc.RelativePath
+		if src == "" {
+			src = "inline"
+		}
+		out.Scripts = append(out.Scripts, &pb.ReviewScript{Name: sc.Name, Language: string(sc.Language), Source: src, Deps: sc.Dependencies})
+	}
+	return out, nil
+}
+
+func (h configService) TrustSkillScripts(_ context.Context, r req[pb.TrustSkillScriptsRequest]) (*connect.Response[pb.TrustSkillScriptsResponse], error) {
+	s, err := skills.LoadFolder(r.Msg.Dir)
+	if err != nil {
+		return nil, apiError(connect.CodeNotFound, "SKILL_NOT_FOUND", err, "dir", r.Msg.Dir)
+	}
+	hash, err := s.ContentHash()
+	if err != nil {
+		return nil, err
+	}
+	if hash != r.Msg.Hash {
+		return nil, apiError(connect.CodeFailedPrecondition, "HASH_MISMATCH", errors.New("the skill changed since it was shown"))
+	}
+	if err := h.skillTrust().Trust(r.Msg.Dir, hash); err != nil {
+		return nil, err
+	}
+	return ok(&pb.TrustSkillScriptsResponse{})
+}
+
+func (h configService) GetSkillReview(_ context.Context, r req[pb.GetSkillReviewRequest]) (*connect.Response[pb.GetSkillReviewResponse], error) {
+	review, err := h.skillReview(r.Msg.Dir)
+	if err != nil {
+		return nil, apiError(connect.CodeNotFound, "SKILL_NOT_FOUND", err, "dir", r.Msg.Dir)
+	}
+	return ok(&pb.GetSkillReviewResponse{Review: review})
 }
 
 // problems are a joined error's parts, one line each.
@@ -90,7 +154,7 @@ func (h configService) ListSkillRegistries(context.Context, req[pb.ListSkillRegi
 		out.Registries = append(out.Registries, &pb.SkillRegistry{Name: r.Name, Url: r.URL, HasToken: store.HasToken(r.Name)})
 	}
 	for _, i := range all {
-		out.Installed = append(out.Installed, installedSkill(i))
+		out.Installed = append(out.Installed, h.installedSkill(i))
 	}
 	return ok(out)
 }
@@ -139,14 +203,14 @@ func (h configService) InstallRegistrySkill(ctx context.Context, r req[pb.Instal
 	if err != nil {
 		return nil, skillError(err)
 	}
-	return ok(&pb.InstallRegistrySkillResponse{Skill: installedSkill(i)})
+	return ok(&pb.InstallRegistrySkillResponse{Skill: h.installedSkill(i)})
 }
 
 func (h configService) UpdateRegistrySkills(ctx context.Context, r req[pb.UpdateRegistrySkillsRequest]) (*connect.Response[pb.UpdateRegistrySkillsResponse], error) {
 	done, err := h.s.skillStore().Update(ctx, r.Msg.Names...)
 	out := &pb.UpdateRegistrySkillsResponse{Problems: problems(err)}
 	for _, i := range done {
-		out.Updated = append(out.Updated, installedSkill(i))
+		out.Updated = append(out.Updated, h.installedSkill(i))
 	}
 	return ok(out)
 }
@@ -160,7 +224,7 @@ func (h configService) UninstallRegistrySkill(_ context.Context, r req[pb.Uninst
 	if err != nil {
 		return nil, skillError(err)
 	}
-	return ok(&pb.UninstallRegistrySkillResponse{Skill: installedSkill(i)})
+	return ok(&pb.UninstallRegistrySkillResponse{Skill: h.installedSkill(i)})
 }
 
 // scopeDir is a request's workspace, checked: "" for the user, else an
@@ -173,4 +237,16 @@ func (h configService) scopeDir(workspace string) (string, error) {
 		return "", apiError(connect.CodeInvalidArgument, "INVALID_WORKSPACE", errors.New("workspace must be an absolute directory"))
 	}
 	return filepath.Clean(config.ExpandHome(workspace)), nil
+}
+
+func (h configService) ListBuiltinSkills(context.Context, req[pb.ListBuiltinSkillsRequest]) (*connect.Response[pb.ListBuiltinSkillsResponse], error) {
+	list, err := skills.Builtins()
+	if err != nil {
+		return nil, err
+	}
+	out := &pb.ListBuiltinSkillsResponse{}
+	for _, s := range list {
+		out.Skills = append(out.Skills, &pb.BuiltinSkill{Name: s.Name, Description: s.Description, Version: s.Version})
+	}
+	return ok(out)
 }

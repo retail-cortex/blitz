@@ -14,12 +14,9 @@
  * limitations under the License.
  */
 
-import { useCallback, useEffect, useState } from "react";
 import {
   mdiAutoFix,
   mdiBookOpenPageVariantOutline,
-  mdiCalendarClock,
-  mdiCalendarPlus,
   mdiChevronDown,
   mdiClose,
   mdiCogOutline,
@@ -28,42 +25,25 @@ import {
   mdiFolderOutline,
   mdiGit,
   mdiHistory,
-  mdiInboxOutline,
   mdiInformationOutline,
   mdiLightningBolt,
-  mdiPauseCircleOutline,
   mdiPencilOutline,
-  mdiPlay,
-  mdiShieldCheckOutline,
-  mdiRobotOutline,
-  mdiPlus,
-  mdiRefresh,
   mdiSourceBranch,
   mdiSourceCommit,
   mdiWebPlus,
 } from "@mdi/js";
-import { workers, workspaces } from "./api";
-import { inboxCounts, useRuns } from "./backgroundRuns";
 import type { ChangesSource } from "./Changes";
 import { canPreview } from "./desktop";
 import { openDocs, openWeb, startSetup } from "./events";
 import { docSections } from "./docs/sections";
-import { fileName } from "./agentForm";
-import { AgentScope, type AgentFile } from "./gen/blitz/v1/workspace_pb";
-import { WorkerState, type Worker, type WorkerRun } from "./gen/blitz/v1/worker_pb";
-import { runningEntries } from "./runningWorkers";
-import { intent, type ItemIntent } from "./intent";
 import { t, tn } from "./i18n";
 import { displayName, forgetWorkspace, openWorkspace, openWorkspaces, recentWorkspaces } from "./prefs";
-import { InboxDrawer } from "./RunsInbox";
-import { workerStateLabel } from "./Workers";
 import type { Section } from "./SettingsDrawer";
+import { type StudioKind } from "./studio/StudioDrawer";
 import { useApp } from "./state";
 import { menuIds } from "./simpleMode";
 import { workspaceColor } from "./palette";
-import { Icon, IconButton, Menu, ToolbarSearch, useSnackbar, type MenuEntry } from "./ui/controls";
-import { message } from "./errors";
-import { reloadSummary } from "./reload";
+import { Icon, IconButton, Menu, ToolbarSearch, type MenuEntry } from "./ui/controls";
 import { useWorkerFailures } from "./workerFailures";
 
 /** The app's name and mark, at the left of the top bar. */
@@ -79,8 +59,8 @@ export function Brand() {
 /**
  * The top bar's menus, from the left edge of the center panel: Workspaces
  * (open one, switch, edit its settings, close), Changes (the session's or
- * git's), Agents and Workers (add one, or open, run, edit or remove one
- * from the list; the background runs), Help; at the right, the
+ * git's), Studio (a button: the workspace's agents, skills, workers and
+ * the rest, in one drawer), Help; at the right, the
  * search (the command palette) and Settings (the global settings, an icon).
  * What they open shows over the editor, in a dialog. Without a workspace
  * (the welcome screen) only Workspaces, Help, the search and Settings
@@ -91,8 +71,7 @@ export function MenuBar({
   onChanges,
   onCommit,
   onHistory,
-  onAgent,
-  onWorker,
+  onStudio,
   onSearch,
   onSettings,
   onOpenWorkspace,
@@ -104,8 +83,8 @@ export function MenuBar({
   onCommit?: () => void;
   /** Shows the workspace's history (View revisions for every file). */
   onHistory?: () => void;
-  onAgent?: (i: ItemIntent) => void;
-  onWorker?: (i: ItemIntent) => void;
+  /** Opens Studio on a kind. */
+  onStudio?: (kind: StudioKind) => void;
   onSearch: () => void;
   onSettings: (section: Section, scope?: string) => void;
   onOpenWorkspace: () => void;
@@ -115,52 +94,7 @@ export function MenuBar({
   // Simple mode keeps Workspaces, Changes and Help (simpleMode.ts).
   const advanced = prefs.advanced;
   const menus = menuIds(advanced);
-  const runs = useRuns();
   const failures = useWorkerFailures();
-  const [agents, setAgents] = useState<AgentFile[]>([]);
-  const [workerList, setWorkerList] = useState<Worker[]>([]);
-  // Every workspace's runs going now, each with Stop.
-  const [liveRuns, setLiveRuns] = useState<WorkerRun[]>([]);
-  const snack = useSnackbar();
-  const [inbox, setInbox] = useState(false);
-
-  // The lists are asked for when the workspace opens and each time their
-  // menu opens, so they show what's on disk now.
-  const loadAgents = useCallback(() => {
-    if (!dir) return;
-    workspaces.listAgentFiles({ workspace: dir, scope: AgentScope.WORKSPACE }).then(
-      (r) => setAgents(r.files),
-      () => setAgents([]),
-    );
-  }, [dir]);
-  // Reload agent files: the agents, skills, instructions and rules read again.
-  const reloadAgentFiles = async () => {
-    try {
-      const r = await workspaces.reloadAgentFiles({ workspace: dir });
-      snack(reloadSummary(r));
-      if (r.problems.length) snack(`${t("reload.problems")} ${r.problems.join("; ")}`, { error: true });
-      loadAgents();
-    } catch (e) {
-      snack(message(e), { error: true });
-    }
-  };
-  const loadWorkers = useCallback(() => {
-    if (!dir) return;
-    workers.listWorkers({ workspace: dir }).then(
-      (r) => setWorkerList(r.workers),
-      () => setWorkerList([]),
-    );
-    workers.listRunningWorkerRuns({}).then(
-      (r) => setLiveRuns(r.runs),
-      () => setLiveRuns([]),
-    );
-  }, [dir]);
-  useEffect(() => {
-    loadAgents();
-    loadWorkers();
-  }, [loadAgents, loadWorkers]);
-
-  const { active, waiting } = inboxCounts(runs);
   const failed = dir ? (failures[dir] ?? 0) : 0;
 
   const changes: MenuEntry[] = [
@@ -169,66 +103,6 @@ export function MenuBar({
   ];
   if (onHistory) changes.push({ label: t("desktop.menu.changes.history"), icon: mdiSourceBranch, onSelect: onHistory });
   if (onCommit) changes.push("divider", { label: t("desktop.commit.open"), icon: mdiSourceCommit, onSelect: onCommit });
-
-  const agentItems: MenuEntry[] = [
-    { label: t("desktop.menu.agents.add"), icon: mdiPlus, onSelect: () => onAgent?.(intent("new")) },
-    { label: t("desktop.menu.agents.reload"), detail: t("desktop.menu.agents.reload_hint"), icon: mdiRefresh, disabled: !dir, onSelect: () => void reloadAgentFiles() },
-    "divider",
-    ...(agents.length === 0
-      ? [{ heading: t("desktop.menu.agents.none") }]
-      : agents.map((f): MenuEntry => {
-          const name = f.agent?.displayName || f.agent?.name || fileName(f.path);
-          return {
-            label: name,
-            detail: f.problem ? t("desktop.agents.broken") : f.agent?.description,
-            icon: mdiRobotOutline,
-            danger: !!f.problem,
-            onSelect: () => onAgent?.(intent("edit", f.path)),
-            actions: [{ icon: mdiDeleteOutline, label: t("desktop.menu.remove", { name }), removes: true, onSelect: () => onAgent?.(intent("delete", f.path)) }],
-          };
-        })),
-  ];
-
-  const workerItems: MenuEntry[] = [
-    { label: t("desktop.menu.workers.add"), icon: mdiCalendarPlus, onSelect: () => onWorker?.(intent("new")) },
-    {
-      label: t("desktop.inbox.title"),
-      detail: waiting > 0 ? tn("desktop.inbox.waiting", waiting) : active > 0 ? tn("desktop.inbox.running", active) : undefined,
-      icon: mdiInboxOutline,
-      onSelect: () => setInbox(true),
-    },
-    ...runningEntries(liveRuns, {
-      dir,
-      workspaceName: (d) => displayName(prefs.workspaces.find((w) => w.dir === d) ?? { dir: d }),
-      // Its worker, here; in another workspace, that workspace.
-      onShow: (r) => (r.workspace === dir ? onWorker?.(intent("show", r.worker)) : update((p) => openWorkspace(p, r.workspace))),
-      onStop: (r) =>
-        void workers.stopWorkerRun({ runId: r.id }).then(
-          () => {
-            snack(t("desktop.menu.workers.stopping", { name: r.worker }));
-            setLiveRuns((runs) => runs.filter((x) => x.id !== r.id));
-          },
-          (e) => snack(message(e), { error: true }),
-        ),
-    }),
-    "divider",
-    ...(workerList.length === 0
-      ? [{ heading: t("desktop.menu.workers.none") }]
-      : workerList.map(
-          (w): MenuEntry => ({
-            label: w.name,
-            detail: `${workerStateLabel(w.state)} · ${w.schedule}`,
-            icon: mdiCalendarClock,
-            onSelect: () => onWorker?.(intent("show", w.name)),
-            actions: workerActions(w).map(([kind, icon, label]) => ({
-              icon,
-              label: t(label, { name: w.name }),
-              removes: kind === "delete",
-              onSelect: () => onWorker?.(intent(kind, w.name)),
-            })),
-          }),
-        )),
-  ];
 
   const status = (w: { dir: string }) => {
     const a = activity[w.dir];
@@ -296,27 +170,12 @@ export function MenuBar({
               {t("desktop.view.changes")}
             </button>
           )}
-          {menus.includes("agents") && (
-            <Menu
-              className="menubar-menu"
-              trigger={(p) => <MenuButton label={t("desktop.view.agents")} {...p} onClick={() => (loadAgents(), p.onClick())} />}
-              items={agentItems}
-            />
-          )}
-          {menus.includes("workers") && (
-          <Menu
-            className="menubar-menu"
-            trigger={(p) => (
-              <MenuButton
-                label={t("desktop.view.workers")}
-                badge={active > 0 ? { n: waiting || active, waiting: waiting > 0 } : undefined}
-                dot={failed > 0}
-                {...p}
-                onClick={() => (loadWorkers(), p.onClick())}
-              />
-            )}
-            items={workerItems}
-          />
+          {/* Studio: everything the workspace's .agents folder holds, in one drawer; a dot when a worker failed. */}
+          {menus.includes("studio") && (
+            <button type="button" className="menubar-item" onClick={() => onStudio?.("overview")}>
+              {t("desktop.studio")}
+              {failed > 0 && <span className="dot menubar-dot" title={tn("desktop.switcher.failed_runs", failed)} />}
+            </button>
           )}
         </>
       )}
@@ -325,24 +184,9 @@ export function MenuBar({
       <ToolbarSearch onClick={onSearch} />
       {/* A web page in the editor (EL-102), from anywhere: the editor's own button shows only with a file open. */}
       {dir && canPreview() && <IconButton icon={mdiWebPlus} label={t("desktop.web.open")} onClick={() => openWeb({ dir, url: "" })} />}
-      <IconButton icon={mdiCogOutline} label={t("desktop.menu.settings_hint")} onClick={() => onSettings("appearance")} />
-      {inbox && <InboxDrawer list={runs} onClose={() => setInbox(false)} />}
+      <IconButton icon={mdiCogOutline} label={t("desktop.menu.settings_hint")} onClick={() => onSettings("providers")} />
     </nav>
   );
-}
-
-/**
- * The buttons on a worker's row in the Workers menu: Run (enabled ones),
- * Disable, or Review and enable (which shows it, its permissions and
- * Enable, rather than enabling unseen), Edit and Delete.
- */
-export function workerActions(w: Pick<Worker, "state">): [ItemIntent["kind"], string, string][] {
-  const enabled = w.state === WorkerState.ENABLED;
-  const out: [ItemIntent["kind"], string, string][] = [];
-  if (enabled) out.push(["run", mdiPlay, "desktop.menu.workers.run"], ["disable", mdiPauseCircleOutline, "desktop.menu.workers.disable"]);
-  else out.push(["show", mdiShieldCheckOutline, "desktop.menu.workers.review"]);
-  out.push(["edit", mdiPencilOutline, "desktop.menu.workers.edit"], ["delete", mdiDeleteOutline, "desktop.menu.remove"]);
-  return out;
 }
 
 /** A menu's button in the bar: its name, a badge or dot for what waits there, and a chevron. */

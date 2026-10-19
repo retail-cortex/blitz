@@ -220,7 +220,7 @@ func TestTaskAsksItsSession(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			sub := NewMockLLM("qa-model", &genai.Content{Role: genai.RoleModel, Parts: []*genai.Part{{FunctionCall: c.call}}}, textContent("finished"))
-			f, ctx, _ := taskEngine(t, sub, func(cfg *config.Config) { cfg.Blitz.AutoApprove = false })
+			f, ctx, _ := taskEngine(t, sub, func(cfg *config.Config) { cfg.Blitz.AutoApprove, cfg.Blitz.PermissionMode = false, "default" })
 			watchCtx, stop := context.WithCancel(context.Background())
 			defer stop()
 			events := f.eng.Watch(watchCtx, []string{"s"})
@@ -288,7 +288,7 @@ func TestAgentRunDefaults(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			sub := NewMockLLM("sub", c.replies...)
 			f := newEngineWith(t, fixtureOpts{
-				cfg:  func(cfg *config.Config) { cfg.Blitz.AutoApprove = false },
+				cfg:  func(cfg *config.Config) { cfg.Blitz.AutoApprove, cfg.Blitz.PermissionMode = false, "default" },
 				opts: []Option{WithAgentModel("worker", sub)},
 			})
 			dir := t.TempDir()
@@ -340,7 +340,7 @@ func TestTaskInItsOwnWorktree(t *testing.T) {
 	create := &genai.Content{Role: genai.RoleModel, Parts: []*genai.Part{{FunctionCall: &genai.FunctionCall{Name: "create_file", Args: map[string]any{"path": "made.txt", "content": "hi\n"}}}}}
 	sub := NewMockLLM("sub", create, textContent("made it"))
 	f, ctx, _ := taskEngine(t, sub, func(c *config.Config) {
-		c.Blitz.AutoApprove = false
+		c.Blitz.AutoApprove, c.Blitz.PermissionMode = false, "default"
 		c.Permissions.Allow = []string{"write(**)"}
 		ws := c.Tools.WorkspaceDir
 		for _, args := range [][]string{{"init", "-q"}, {"commit", "-q", "--allow-empty", "-m", "first"}} {

@@ -325,12 +325,24 @@ export function WorkspaceSettingsForm({
           id="behaviour"
           icon={mdiTune}
           title={t("desktop.rs.behaviour")}
-          summary={[modes().find((m) => m.value === (settings?.permissionMode ?? "default"))?.label, agencies().find((a) => a.value === settings?.agency)?.label].filter(Boolean).join(" · ")}
+          summary={[modes().find((m) => m.value === (settings?.permissionMode ?? "auto"))?.label, agencies().find((a) => a.value === settings?.agency)?.label].filter(Boolean).join(" · ")}
           pairs
         >
-          <Field label={t("desktop.rs.mode")} supporting={modes().find((m) => m.value === settings?.permissionMode)?.detail}>
+          <Field label={t("desktop.rs.mode")} supporting={[modes().find((m) => m.value === settings?.permissionMode)?.detail, t("desktop.rs.mode_kept")].filter(Boolean).join(". ")}>
             {(id) => (
-              <select id={id} className="select" value={settings?.permissionMode ?? "default"} onChange={(e) => act(() => workspaces.setPermissionMode({ workspace: dir, mode: e.target.value }))}>
+              <select
+                id={id}
+                className="select"
+                value={settings?.permissionMode ?? "auto"}
+                onChange={(e) => {
+                  const mode = e.target.value;
+                  // Applied, then kept as the workspace's own: it opens in it again (WF-21).
+                  void act(async () => {
+                    await workspaces.setPermissionMode({ workspace: dir, mode });
+                    await config.setConfigValue({ workspace: dir, key: "blitz.permission_mode", value: mode });
+                  });
+                }}
+              >
                 {modes().map((m) => (
                   <option key={m.value} value={m.value}>
                     {m.label}

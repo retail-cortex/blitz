@@ -43,11 +43,16 @@ import {
   originOf,
   parseDeepLink,
   parseLink,
+  parseRunLink,
+  parseTasksLink,
+  taskWindowMethods,
+  tasksURL,
   pictureExtension,
   maxPictureBytes,
   previewContent,
   previewId,
   previewStep,
+  addressURL,
   previewURL,
   printCheckScript,
   printLoadScript,
@@ -59,6 +64,8 @@ import {
   type DeepLink,
   type MenuLabels,
   type PageEvent,
+  type RunLink,
+  type TasksLink,
   type Unsaved,
 } from "./logic";
 
@@ -79,6 +86,17 @@ const host = path.join(app.getAppPath(), "bin", process.platform === "win32" ? "
 const pageDir = path.join(app.getAppPath(), "page");
 
 let win: BrowserWindow | null = null;
+// The tasks window (EL-110): a workflow's human tasks, without the app.
+let taskWin: BrowserWindow | null = null;
+// A blitz://tasks link that came before the app was ready: it starts in
+// task mode, without its own window.
+let taskStart: TasksLink | undefined;
+// A failed run's notification asked for before the app was ready.
+let runStart: RunLink | undefined;
+let ready = false;
+// The page's first one-time link, until a window takes it; after that the
+// window's cookie lets the next one in at the origin.
+let firstLink = "";
 let origin = "";
 let sidecar: ChildProcess | null = null;
 let quitting = false;
@@ -90,12 +108,20 @@ if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
   app.on("second-instance", (_e, argv) => {
-    linkArgs(argv).forEach((l) => void receiveLink(l));
+    const links = linkArgs(argv);
+    links.forEach((l) => void receiveLink(l));
+    if (links.some((l) => parseTasksLink(l) || parseRunLink(l))) return;
     if (win) {
       if (win.isMinimized()) win.restore();
       win.show();
       win.focus();
+    } else if (ready) {
+      void openApp(); // started for a task, and now the app itself
     }
+  });
+  // macOS: opening the app while only the tasks window (or nothing) is open.
+  app.on("activate", () => {
+    if (ready && !win && !taskWin) void openApp();
   });
   app.on("open-url", (e, url) => {
     e.preventDefault();
@@ -117,8 +143,35 @@ async function start() {
   // (copy), and full screen.
   session.defaultSession.setPermissionRequestHandler((_wc, permission, done) => done(["notifications", "clipboard-sanitized-write", "fullscreen"].includes(permission)));
   setMenu(englishMenu);
-  const link = await serve();
-  origin = originOf(link);
+  firstLink = await serve();
+  origin = originOf(firstLink);
+  ready = true;
+  if (taskStart) {
+    showTasks(taskStart);
+    return;
+  }
+  if (runStart) {
+    showRun(runStart);
+    return;
+  }
+  await openApp();
+}
+
+/** A one-time link to the page, or the page itself once a window has let the app in. */
+function takeLink(): string {
+  const l = firstLink;
+  firstLink = "";
+  return l || origin + "/";
+}
+
+/** Opens the app's window on the page, or shows it. */
+async function openApp() {
+  if (win && !win.isDestroyed()) {
+    if (win.isMinimized()) win.restore();
+    win.show();
+    win.focus();
+    return;
+  }
   win = new BrowserWindow({
     width: 1280,
     height: 820,
@@ -142,8 +195,103 @@ async function start() {
     },
   });
   win.once("ready-to-show", () => win?.show());
+  win.on("closed", () => {
+    win = null;
+  });
   guard(win);
-  await win.loadURL(link);
+  await win.loadURL(takeLink());
+}
+
+/**
+ * Shows a workflow's human tasks (EL-110): in the app's window when it's
+ * open (its dialog; it notifies by itself), else a notification that opens the tasks window, or the
+ * tasks window at once (asked, or no notifications here). Started only for
+ * this, the app quits when the tasks window closes, or after ten minutes
+ * of a notification nobody clicked.
+ */
+function showTasks(t: TasksLink) {
+  if (!ready) {
+    taskStart = t;
+    return;
+  }
+  // The app's window announces new tasks itself; asked to show them (the
+  // tray's menu, or task_alerts = open), it shows its tasks dialog.
+  if (win && !win.isDestroyed()) {
+    if (t.notify) return;
+    void openApp();
+    send("tasks:open");
+    return;
+  }
+  if (!t.notify || !Notification.isSupported()) {
+    openTaskWindow();
+    return;
+  }
+  const n = new Notification({ title: t.title, body: t.body });
+  n.on("click", () => openTaskWindow());
+  n.show();
+  setTimeout(() => {
+    if (!win && !taskWin) app.quit();
+  }, 10 * 60_000).unref();
+}
+
+/**
+ * Says a workflow run failed (WF-19), from the tray: nothing when the
+ * app's window is open (it announces failures itself), else a
+ * notification that opens the app on the run (or the app on it at once,
+ * with no notifications here). Started only for this, the app quits after
+ * ten minutes of a notification nobody clicked.
+ */
+function showRun(r: RunLink) {
+  if (!ready) {
+    runStart = r;
+    return;
+  }
+  if (win && !win.isDestroyed()) return;
+  const open = () => {
+    pending.push(r.open);
+    void openApp();
+  };
+  if (!Notification.isSupported()) return open();
+  const n = new Notification({ title: r.title, body: r.body });
+  n.on("click", open);
+  n.show();
+  setTimeout(() => {
+    if (!win && !taskWin) app.quit();
+  }, 10 * 60_000).unref();
+}
+
+/** The small window with only the tasks: their forms, Submit and Later. */
+function openTaskWindow() {
+  if (taskWin && !taskWin.isDestroyed()) {
+    taskWin.show();
+    taskWin.focus();
+    return;
+  }
+  taskWin = new BrowserWindow({
+    width: 440,
+    height: 520,
+    minWidth: 360,
+    minHeight: 360,
+    show: false,
+    title: "Blitz",
+    alwaysOnTop: false,
+    ...(process.platform === "darwin"
+      ? { titleBarStyle: "hiddenInset" as const, vibrancy: "under-window" as const, visualEffectState: "active" as const, backgroundColor: "#00000000" }
+      : { backgroundColor: "#131314", icon: path.join(app.getAppPath(), "icon.png") }),
+    webPreferences: {
+      preload: path.join(__dirname, "preload.js"),
+      sandbox: true,
+      contextIsolation: true,
+      nodeIntegration: false,
+      spellcheck: false,
+    },
+  });
+  taskWin.once("ready-to-show", () => taskWin?.show());
+  taskWin.on("closed", () => {
+    taskWin = null;
+  });
+  guard(taskWin);
+  void taskWin.loadURL(tasksURL(takeLink()));
 }
 
 /**
@@ -162,8 +310,8 @@ function serve(): Promise<string> {
       if (first) {
         first = false;
         resolve(link);
-      } else if (win && !win.isDestroyed()) {
-        void win.loadURL(link);
+      } else {
+        reload(link);
       }
     });
     child.once("error", reject);
@@ -174,12 +322,24 @@ function serve(): Promise<string> {
       serve().then(
         (link) => {
           origin = originOf(link);
-          if (win && !win.isDestroyed()) void win.loadURL(link);
+          reload(link);
         },
         (err) => fail(err),
       );
     });
   });
+}
+
+/** Points the open windows at the page served again (a new one-time link each). */
+function reload(link: string) {
+  if (win && !win.isDestroyed()) {
+    void win.loadURL(link);
+    if (taskWin && !taskWin.isDestroyed()) void taskWin.loadURL(tasksURL(origin + "/"));
+  } else if (taskWin && !taskWin.isDestroyed()) {
+    void taskWin.loadURL(tasksURL(link));
+  } else {
+    firstLink = link;
+  }
 }
 
 /** The window stays on the page: other links open outside it, if anywhere. */
@@ -230,6 +390,10 @@ function setMenu(l: MenuLabels) {
 
 /** A blitz:// link: to the page at once when it's up, else when it asks (PendingLinks). */
 async function receiveLink(raw: string) {
+  const tasks = parseTasksLink(raw);
+  if (tasks) return showTasks(tasks);
+  const failed = parseRunLink(raw);
+  if (failed) return showRun(failed);
   const link = parseDeepLink(raw, homedir());
   if (!link) return;
   const info = await stat(link.dir).catch(() => undefined);
@@ -262,8 +426,22 @@ async function printPDF(html: string, pageSize: unknown): Promise<string> {
 
 // The page's calls to the window, from its own origin only.
 ipcMain.handle("blitz:call", async (e, method: unknown, args: unknown) => {
-  if (originOf(e.senderFrame?.url ?? "") !== origin || !win) throw new Error("not the page");
+  if (originOf(e.senderFrame?.url ?? "") !== origin) throw new Error("not the page");
   if (!isWindowMethod(method)) throw new Error(`no such call: ${String(method)}`);
+  const from = BrowserWindow.fromWebContents(e.sender);
+  const a0 = Array.isArray(args) ? args : [];
+  if (from && from === taskWin) {
+    if (!taskWindowMethods.includes(method)) throw new Error(`not from the tasks window: ${method}`);
+    if (method === "OpenApp") return openApp();
+    if (method === "SetAppearance") nativeTheme.themeSource = theme(a0[0]);
+    if (method === "OpenURL") {
+      const url = text(a0, 0);
+      if (!isExternal(url)) throw new Error(`not opening ${JSON.stringify(url)}: only web and mail links open`);
+      await shell.openExternal(url);
+    }
+    return;
+  }
+  if (!win || from !== win) throw new Error("not the page");
   const a = Array.isArray(args) ? args : [];
   switch (method) {
     case "ChooseWorkspace": {
@@ -308,7 +486,7 @@ ipcMain.handle("blitz:call", async (e, method: unknown, args: unknown) => {
       return;
     case "PreviewOpen": {
       const id = previewId(a[0]);
-      const url = previewURL(a[1]);
+      const url = addressURL(a[1]);
       if (!id || !url) throw new Error(`not opening ${JSON.stringify(a[1])}: only web addresses open in a preview`);
       openPreview(id, url);
       return url;
@@ -362,6 +540,8 @@ ipcMain.handle("blitz:call", async (e, method: unknown, args: unknown) => {
       const pdf = await preview(a).view.webContents.printToPDF(printOptions(a[1]));
       return pdf.toString("base64");
     }
+    case "OpenApp":
+      return openApp();
     case "Quit":
       // As the menu's Quit: closing asks first about unsaved changes. An
       // update waiting to be put in place (the host's ApplyUpdate) goes

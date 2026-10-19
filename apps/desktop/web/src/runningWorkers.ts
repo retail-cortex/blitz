@@ -14,42 +14,22 @@
  * limitations under the License.
  */
 
-// The Workers menu's "Running now" section: every worker run going now, in
-// any workspace, each with Stop (spec_desktop_024 DSK-91a).
+// The worker runs going now (Studio › Workers, a workspace's; Settings ›
+// Workers, every workspace's), each with Stop (spec_desktop_024 DSK-91a).
 
-import { mdiProgressClock, mdiStopCircleOutline } from "@mdi/js";
 import { timestampDate } from "@bufbuild/protobuf/wkt";
 import type { WorkerRun } from "./gen/blitz/v1/worker_pb";
 import { language, t } from "./i18n";
-import type { MenuEntry } from "./ui/controls";
 
-/** What a running row does: open the worker (in this workspace), or switch to its workspace; and stop it. */
-export interface RunningActions {
-  dir: string;
-  /** The workspace's name as the app shows it. */
-  workspaceName: (dir: string) => string;
-  onShow: (run: WorkerRun) => void;
-  onStop: (run: WorkerRun) => void;
-}
-
-/** The section's entries: a heading and a row per run, or nothing when none runs. */
-export function runningEntries(runs: WorkerRun[], a: RunningActions): MenuEntry[] {
-  if (runs.length === 0) return [];
+/**
+ * A running row's detail: the run's workspace, by the name workspaceName
+ * gives it, when it isn't dir (none for ""), and since when it runs.
+ */
+export function runDetail(r: WorkerRun, dir: string, workspaceName: (dir: string) => string): string {
   return [
-    { heading: t("desktop.menu.workers.running") },
-    ...runs.map(
-      (r): MenuEntry => ({
-        label: r.worker,
-        detail: [
-          r.workspace === a.dir ? "" : a.workspaceName(r.workspace),
-          r.started ? t("desktop.menu.workers.since", { time: timestampDate(r.started).toLocaleTimeString(language(), { hour: "numeric", minute: "2-digit" }) }) : "",
-        ]
-          .filter(Boolean)
-          .join(" · "),
-        icon: mdiProgressClock,
-        onSelect: () => a.onShow(r),
-        actions: [{ icon: mdiStopCircleOutline, label: t("desktop.menu.workers.stop", { name: r.worker }), onSelect: () => a.onStop(r) }],
-      }),
-    ),
-  ];
+    dir && r.workspace === dir ? "" : workspaceName(r.workspace),
+    r.started ? t("desktop.menu.workers.since", { time: timestampDate(r.started).toLocaleTimeString(language(), { hour: "numeric", minute: "2-digit" }) }) : "",
+  ]
+    .filter(Boolean)
+    .join(" · ");
 }

@@ -75,6 +75,7 @@ describe("formFromWorker", () => {
     schedule: "Daily at 6 AM",
     timezone: "Europe/Paris",
     agent: "qa",
+    workflow: "nightly",
     model: "gemini/gemini-3.8-flash",
     permissions: ["shell:go list -m -u all", "write:reports/*"],
     maxTurns: 30,

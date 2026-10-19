@@ -131,20 +131,47 @@ func (a Actions) OpenApp() error {
 		return a.Run(name, args...)
 	}
 	if goruntime.GOOS == "darwin" {
-		// Blitz.app/Contents/MacOS/blitz-tray
-		if app := filepath.Dir(filepath.Dir(a.Beside)); strings.HasSuffix(app, ".app") {
+		if app := appBundle(a.Beside); app != "" {
 			return a.Run("open", app)
 		}
 		return a.Run("open", "-a", "Blitz")
 	}
 	name := "blitz-desktop"
-	if p := filepath.Join(a.Beside, name); isFile(p) {
-		return a.Run(p)
+	// In the Electron app: <root>/resources/app/bin/blitz-tray, the app
+	// <root>/blitz-desktop (Linux); else beside the tray.
+	for _, p := range []string{filepath.Join(a.Beside, "..", "..", "..", name), filepath.Join(a.Beside, name)} {
+		if isFile(p) {
+			return a.Run(filepath.Clean(p))
+		}
 	}
 	if p, err := exec.LookPath(name); err == nil {
 		return a.Run(p)
 	}
 	return errors.New(i18n.T("tray.error.no_app", "name", name))
+}
+
+// appBundle is the .app the tray is in (Blitz.app/Contents/Resources/app/bin
+// in the Electron app, Blitz.app/Contents/MacOS before), or "".
+func appBundle(beside string) string {
+	for d := beside; d != filepath.Dir(d); d = filepath.Dir(d) {
+		if strings.HasSuffix(d, ".app") {
+			return d
+		}
+	}
+	return ""
+}
+
+// OpenLink opens a link (blitz://…) with the program the system has for
+// it: the desktop app, for blitz links.
+func (a Actions) OpenLink(link string) error {
+	switch goruntime.GOOS {
+	case "darwin":
+		return a.Run("open", link)
+	case "windows":
+		return a.Run("rundll32", "url.dll,FileProtocolHandler", link)
+	default:
+		return a.Run("xdg-open", link)
+	}
 }
 
 // OpenLogs shows the logs folder in the file manager: the running

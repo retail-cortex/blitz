@@ -18,6 +18,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -329,4 +330,153 @@ func TestNodeVersion(t *testing.T) {
 	}
 	_, ok := nodeVersion("node 22")
 	assert.False(t, ok)
+}
+
+// A shell script found in scripts/ runs with /bin/sh in the sandbox, its
+// arguments and SKILL_DIR passed; a cmd script is refused off Windows
+// (SK-105).
+func TestRunShellScript(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell scripts run on macOS and Linux")
+	}
+	skillsDir := t.TempDir()
+	dir := filepath.Join(skillsDir, "shelly")
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "scripts"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "SKILL.md"), []byte("---\nname: shelly\ndescription: d\n---\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "scripts", "hello.sh"), []byte("echo \"hello $1|$2\"\ntest -n \"$SKILL_DIR\" && echo dir\nexit 3\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "scripts", "win.cmd"), []byte("@echo off\necho hi\n"), 0o644))
+	prov, _ := skills.NewProvider()
+	require.NoError(t, prov.DiscoverExternal([]string{skillsDir}))
+	wsDir, _ := filepath.EvalSymlinks(t.TempDir())
+	ws, err := OpenWorkspace(WorkspaceOptions{Dir: wsDir})
+	require.NoError(t, err)
+	t.Cleanup(func() { ws.Close() })
+	policy := config.DefaultConfig().Skills.Policy
+	hooks, _ := approverHooks(true)
+	r := NewSkillScripts(prov, policy, ws, hooks, NewPyEnvs(filepath.Join(t.TempDir(), "envs"), policy.Packages),
+		ScriptBoxConfig{Mode: os.Getenv("BLITZ_PYENV_SANDBOX"), Blocked: ws.Blocked(), StateDir: t.TempDir()})
+	if _, err := r.Box(); err != nil {
+		t.Skipf("no script sandbox: %v", err)
+	}
+
+	out := r.Run(context.Background(), RunSkillScriptInput{Skill: "shelly", Script: "hello", Args: []string{"a b", "c"}})
+	require.Empty(t, out.Error, "%+v", out)
+	assert.Equal(t, 3, out.ExitCode, "%+v", out)
+	assert.Equal(t, "hello a b|c\ndir\n", out.Stdout, "%+v", out)
+
+	out = r.Run(context.Background(), RunSkillScriptInput{Skill: "shelly", Script: "win"})
+	assert.Contains(t, out.Error, "cmd scripts run on Windows only")
+}
+
+// A JavaScript script runs with node; a PowerShell one with pwsh, when
+// it's installed (SK-106).
+func TestRunJavaScriptAndPowerShell(t *testing.T) {
+	skillsDir := t.TempDir()
+	dir := filepath.Join(skillsDir, "multi")
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "scripts"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "SKILL.md"), []byte("---\nname: multi\ndescription: d\n---\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "scripts", "hi.mjs"), []byte("console.log('js', process.argv.slice(2).join('|'))\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "scripts", "hi.ps1"), []byte("Write-Output \"ps $($args -join '|')\"\n"), 0o644))
+	prov, _ := skills.NewProvider()
+	require.NoError(t, prov.DiscoverExternal([]string{skillsDir}))
+	wsDir, _ := filepath.EvalSymlinks(t.TempDir())
+	ws, err := OpenWorkspace(WorkspaceOptions{Dir: wsDir})
+	require.NoError(t, err)
+	t.Cleanup(func() { ws.Close() })
+	policy := config.DefaultConfig().Skills.Policy
+	hooks, _ := approverHooks(true)
+	r := NewSkillScripts(prov, policy, ws, hooks, NewPyEnvs(filepath.Join(t.TempDir(), "envs"), policy.Packages),
+		ScriptBoxConfig{Mode: os.Getenv("BLITZ_PYENV_SANDBOX"), Blocked: ws.Blocked(), StateDir: t.TempDir()})
+	if _, err := r.Box(); err != nil {
+		t.Skipf("no script sandbox: %v", err)
+	}
+	t.Run("javascript", func(t *testing.T) {
+		if _, err := SystemNode(); err != nil {
+			t.Skip(err)
+		}
+		out := r.Run(context.Background(), RunSkillScriptInput{Skill: "multi", Script: "hi.mjs", Args: []string{"a", "b"}})
+		require.Empty(t, out.Error, "%+v", out)
+		assert.Equal(t, "js a|b\n", out.Stdout)
+	})
+	t.Run("powershell", func(t *testing.T) {
+		out := r.Run(context.Background(), RunSkillScriptInput{Skill: "multi", Script: "hi.ps1", Args: []string{"a"}})
+		if strings.Contains(out.Error, "need pwsh") {
+			t.Skip(out.Error)
+		}
+		require.Empty(t, out.Error, "%+v", out)
+		assert.Equal(t, "ps a\n", out.Stdout)
+	})
+}
+
+// test.py and test.ts side by side, each edited after a first run: each
+// runs itself, with its edits, and never the other (the two shared the
+// name "test", so running the TypeScript one ran the Python one).
+func TestSameNamedScriptsRunThemselves(t *testing.T) {
+	skillsDir := t.TempDir()
+	dir := filepath.Join(skillsDir, "pair")
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "scripts"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "SKILL.md"), []byte("---\nname: pair\ndescription: d\n---\n"), 0o644))
+	write := func(name, body string) {
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "scripts", name), []byte(body), 0o644))
+	}
+	write("test.py", "print('py one')\n")
+	write("test.ts", "console.log('ts one');\n")
+	prov, _ := skills.NewProvider()
+	require.NoError(t, prov.DiscoverExternal([]string{skillsDir}))
+	wsDir, _ := filepath.EvalSymlinks(t.TempDir())
+	ws, err := OpenWorkspace(WorkspaceOptions{Dir: wsDir})
+	require.NoError(t, err)
+	t.Cleanup(func() { ws.Close() })
+	policy := config.DefaultConfig().Skills.Policy
+	hooks, _ := approverHooks(true)
+	r := NewSkillScripts(prov, policy, ws, hooks, NewPyEnvs(filepath.Join(t.TempDir(), "envs"), policy.Packages),
+		ScriptBoxConfig{Mode: os.Getenv("BLITZ_PYENV_SANDBOX"), Blocked: ws.Blocked(), StateDir: t.TempDir()})
+	if _, err := r.Box(); err != nil {
+		t.Skipf("no script sandbox: %v", err)
+	}
+	_, pyErr := SystemPython()
+	_, nodeErr := SystemNode()
+	run := func(script, want string, skip error) {
+		t.Helper()
+		if skip != nil {
+			t.Log(skip)
+			return
+		}
+		out := r.Run(context.Background(), RunSkillScriptInput{Skill: "pair", Script: script})
+		require.Empty(t, out.Error, "%+v", out)
+		assert.Equal(t, want, out.Stdout, "%s", script)
+	}
+	run("test.py", "py one\n", pyErr)
+	run("test.ts", "ts one\n", nodeErr)
+	write("test.ts", "console.log('ts one');\nconsole.log('ts two');\n")
+	write("test.py", "print('py one')\nprint('py two')\n")
+	require.NoError(t, prov.Reload())
+	run("test.ts", "ts one\nts two\n", nodeErr)
+	run("test.py", "py one\npy two\n", pyErr)
+}
+
+// Scripts not reviewed with this content are asked about before each
+// run, whatever the tier; refused, they don't run (SK-108).
+func TestUnreviewedScriptsAsk(t *testing.T) {
+	for _, approve := range []bool{false, true} {
+		t.Run(map[bool]string{false: "refused", true: "approved"}[approve], func(t *testing.T) {
+			f := newScriptFixture(t, "", approve, func(p *config.SkillPolicy) {
+				p.Reviewed = func(string, string) bool { return false }
+			})
+			out := f.runner.Run(context.Background(), RunSkillScriptInput{Skill: "demo", Script: "work", Args: []string{"x"}})
+			var asked bool
+			for _, r := range *f.reqs {
+				if strings.Contains(r.Detail, "new or changed since they were reviewed") && r.MustAsk {
+					asked = true
+				}
+			}
+			assert.True(t, asked, "%+v", *f.reqs)
+			if approve {
+				assert.Empty(t, out.Error, "%+v", out)
+			} else {
+				assert.NotEmpty(t, out.Error, "%+v", out)
+				assert.Empty(t, out.Stdout)
+			}
+		})
+	}
 }

@@ -107,6 +107,10 @@ func (h configService) changed(ctx context.Context, dir, path string) *pb.Config
 				slog.Warn("permission rules not reloaded", "workspace", w.Dir(), "error", perr)
 			}
 			w.ReloadSearch(cfg)
+			w.ReloadWorkerPolicy(cfg)
+			if merr := w.ReloadMCP(ctx, cfg); merr != nil {
+				slog.Warn("MCP servers not reloaded", "workspace", w.Dir(), "error", merr)
+			}
 			err = w.ReloadProviders(ctx, cfg)
 		}
 		if dir != "" && err != nil {

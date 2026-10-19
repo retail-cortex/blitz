@@ -26,6 +26,7 @@ export interface WorkerForm {
   schedule: string;
   timezone: string;
   agent: string;
+  workflow: string;
   model: string;
   /** One "kind:pattern" a line. */
   permissions: string;
@@ -43,6 +44,7 @@ export const emptyWorkerForm: WorkerForm = {
   schedule: "",
   timezone: "",
   agent: "",
+  workflow: "",
   model: "",
   permissions: "",
   maxTurns: "",
@@ -86,6 +88,7 @@ export function workerRequest(f: WorkerForm) {
     schedule: f.schedule.trim(),
     timezone: f.timezone.trim(),
     agent: f.agent,
+    workflow: f.workflow,
     model: f.model.trim(),
     permissions: f.permissions
       .split("\n")
@@ -110,6 +113,7 @@ export function formFromWorker(d: WorkerFields): WorkerForm {
     schedule: d.schedule,
     timezone: d.timezone,
     agent: d.agent,
+    workflow: d.workflow,
     model: d.model,
     permissions: d.permissions.join("\n"),
     maxTurns: d.maxTurns > 0 ? String(d.maxTurns) : "",

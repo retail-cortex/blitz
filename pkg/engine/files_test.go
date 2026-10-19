@@ -26,6 +26,7 @@ import (
 
 	"github.com/retail-cortex/blitz/pkg/api"
 	"github.com/retail-cortex/blitz/pkg/config"
+	"github.com/retail-cortex/blitz/pkg/docx"
 	"github.com/retail-cortex/blitz/pkg/engine/tools"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -280,6 +281,10 @@ func TestReadPreview(t *testing.T) {
 	write(t, w.Dir(), "talk.MP3", "ID3")
 	write(t, w.Dir(), "demo.mov", "moov")
 	write(t, w.Dir(), "main.go", "package main")
+	brief, err := docx.Render([]byte("# Brief\n\nOne line.\n"), docx.Options{})
+	require.NoError(t, err)
+	write(t, w.Dir(), "brief.docx", string(brief))
+	write(t, w.Dir(), "broken.docx", "not a zip")
 	for _, tc := range []struct {
 		path, mime, data string
 		err              error
@@ -290,6 +295,8 @@ func TestReadPreview(t *testing.T) {
 		{"audio/overview.wav", "audio/wav", "RIFF", nil},
 		{"talk.MP3", "audio/mpeg", "ID3", nil},
 		{"demo.mov", "video/quicktime", "moov", nil},
+		{"brief.docx", "text/markdown; charset=utf-8", "# Brief\n\nOne line.\n", nil},
+		{"broken.docx", "", "", ErrNoPreview},
 		{"main.go", "", "", ErrNoPreview},
 		{"none.png", "", "", fs.ErrNotExist},
 		{"../x.png", "", "", ErrBadPath},

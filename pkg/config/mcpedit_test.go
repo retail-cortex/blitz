@@ -92,3 +92,44 @@ func TestEditMCPServers(t *testing.T) {
 	_, err = SetMCPServerDisabled("", "nope", true)
 	assert.ErrorIs(t, err, ErrNoMCPServer)
 }
+
+// Replacing an entry keeps its place and the rest of the file; it may
+// rename the server, but not onto another's name.
+func TestReplaceMCPServer(t *testing.T) {
+	home := isolateConfigEnv(t)
+	path := filepath.Join(home, ".blitz", ".env.toml")
+	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o700))
+	require.NoError(t, os.WriteFile(path, []byte(mcpDoc), 0o600))
+
+	off := false
+	_, err := ReplaceMCPServer("", "fs", MCPServerConfig{
+		Name: "files", Command: "npx", Args: []string{"@acme/fs", "--ro"}, Env: map[string]string{"ROOT": "/srv"},
+		Tools: []string{"read"}, AutoApprove: true, Sandbox: &off, TimeoutSeconds: 60, Disabled: true,
+	})
+	require.NoError(t, err)
+	got := servers(t)
+	require.Len(t, got, 2)
+	assert.Equal(t, "files", got[0].Name, "kept its place")
+	assert.Equal(t, []string{"@acme/fs", "--ro"}, got[0].Args)
+	assert.Equal(t, map[string]string{"ROOT": "/srv"}, got[0].Env, "the old sub-table went with the entry")
+	assert.Equal(t, []string{"read"}, got[0].Tools)
+	assert.True(t, got[0].AutoApprove)
+	require.NotNil(t, got[0].Sandbox)
+	assert.False(t, *got[0].Sandbox)
+	assert.Equal(t, 60, got[0].TimeoutSeconds)
+	assert.True(t, got[0].Disabled)
+	assert.Equal(t, "db", got[1].Name)
+
+	_, err = ReplaceMCPServer("", "db", MCPServerConfig{Name: "files", Command: "x"})
+	assert.ErrorContains(t, err, "already configured")
+	assert.Equal(t, "db", servers(t)[1].Name, "nothing written")
+	_, err = ReplaceMCPServer("", "nope", MCPServerConfig{Name: "nope", Command: "x"})
+	assert.ErrorIs(t, err, ErrNoMCPServer)
+	_, err = ReplaceMCPServer("", "db", MCPServerConfig{Name: "db"})
+	assert.ErrorContains(t, err, "needs a name and either")
+
+	data, err := os.ReadFile(path)
+	require.NoError(t, err)
+	assert.Contains(t, string(data), "# my settings")
+	assert.Contains(t, string(data), "[web]\nenabled = true")
+}

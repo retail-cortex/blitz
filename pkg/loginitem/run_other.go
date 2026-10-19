@@ -20,5 +20,6 @@ package loginitem
 
 func runPath() string         { return "" }
 func runInstalled() bool      { return false }
+func runProgram() string      { return "" }
 func installRun(string) error { return ErrUnsupported }
 func uninstallRun() error     { return ErrUnsupported }

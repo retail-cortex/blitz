@@ -16,6 +16,7 @@ syntax = "proto3";
 
 package blitz.v1;
 
+import "blitz/v1/session.proto";
 import "blitz/v1/turn.proto";
 import "google/protobuf/duration.proto";
 import "google/protobuf/timestamp.proto";
@@ -172,14 +173,164 @@ service WorkspaceService {
   rpc ListSkills(ListSkillsRequest) returns (ListSkillsResponse);
   // Returns one skill (SKILL_NOT_FOUND).
   rpc GetSkill(GetSkillRequest) returns (GetSkillResponse);
+  // Returns a skill as Studio edits it: its SKILL.md's fields and hash,
+  // and whether it's the workspace's own, which may be edited
+  // (SKILL_NOT_FOUND; spec_skills_013 SK-100).
+  rpc GetSkillFile(GetSkillFileRequest) returns (GetSkillFileResponse);
+  // Writes a skill of the workspace's from Studio's form: a new one in
+  // .agents/skills, or an existing one (renamed when the name differs) if
+  // its SKILL.md still has the hash read (HASH_MISMATCH). Its front
+  // matter's other fields are kept. Problems are returned, with nothing
+  // written, when it can't be saved.
+  rpc SaveSkill(SaveSkillRequest) returns (SaveSkillResponse);
+  // Deletes a skill of the workspace's: its folder (SKILL_NOT_FOUND).
+  rpc DeleteSkill(DeleteSkillRequest) returns (DeleteSkillResponse);
+  // Returns one of a skill's files (references/…, scripts/…).
+  rpc ReadSkillFile(ReadSkillFileRequest) returns (ReadSkillFileResponse);
+  // Writes one of a workspace skill's files, under references/ or
+  // scripts/, never outside its folder.
+  rpc WriteSkillFile(WriteSkillFileRequest) returns (WriteSkillFileResponse);
+  // Removes one of a workspace skill's files.
+  rpc DeleteSkillFile(DeleteSkillFileRequest) returns (DeleteSkillFileResponse);
+  // Copies any skill the workspace sees into .agents/skills under a name
+  // of its own, files and all, to edit (problems, nothing written, when
+  // the name won't do).
+  rpc CopySkill(CopySkillRequest) returns (CopySkillResponse);
+  // Runs one of a skill's scripts now with arguments, as run_skill_script
+  // would (the policy, its sandbox and the permission rules apply): the
+  // user starts it, so its approvals are given.
+  rpc RunSkillScript(RunSkillScriptRequest) returns (RunSkillScriptResponse);
+  // Returns the workspace's rules (spec_gates_041): the gates in the
+  // order they run (before the agent, then after), then the instruction
+  // rules.
+  rpc ListRules(ListRulesRequest) returns (ListRulesResponse);
+  // Writes a rule in .agents/rules from Studio's form (renamed when the
+  // name differs from previous_name), keeping its front matter's other
+  // fields; problems, with nothing written, when it can't be saved.
+  rpc SaveRule(SaveRuleRequest) returns (SaveRuleResponse);
+  // Deletes a rule from .agents/rules (RULE_NOT_FOUND).
+  rpc DeleteRule(DeleteRuleRequest) returns (DeleteRuleResponse);
+  // Numbers the named rules in .agents/rules 10, 20, 30… in the order
+  // given: the order they run.
+  rpc ReorderRules(ReorderRulesRequest) returns (ReorderRulesResponse);
+  // Judges a sample against a rule as written (Try it): a prompt for a
+  // before-agent rule, an answer for an after-agent one. A judge that
+  // fails gives problem.
+  rpc TryRule(TryRuleRequest) returns (TryRuleResponse);
+  // Returns the workspace's guardrails (spec_gates_041): each built-in one
+  // (its file, or its defaults), then the custom ones.
+  rpc ListGuardrails(ListGuardrailsRequest) returns (ListGuardrailsResponse);
+  // Writes a guardrail in .agents/guardrails from Studio's form (a
+  // built-in's file holds its settings, or switches it off), keeping its front matter's other
+  // fields; problems, with nothing written, when it can't be saved.
+  rpc SaveGuardrail(SaveGuardrailRequest) returns (SaveGuardrailResponse);
+  // Deletes a guardrail from .agents/guardrails (a built-in's: back to its
+  // defaults; GUARDRAIL_NOT_FOUND).
+  rpc DeleteGuardrail(DeleteGuardrailRequest) returns (DeleteGuardrailResponse);
+  // Checks a sample against a guardrail as written (Try it): a custom one
+  // by the judge, the injection and secrets ones by their patterns. A
+  // judge that fails gives problem.
+  rpc TryGuardrail(TryGuardrailRequest) returns (TryGuardrailResponse);
+  // Returns the workspace's evals (spec_evals_042), by name, each with its
+  // last run's status.
+  rpc ListEvals(ListEvalsRequest) returns (ListEvalsResponse);
+  // Writes an eval in .agents/evals from Studio's form, keeping its front
+  // matter's other fields and the text around its table; problems, with
+  // nothing written, when it can't be saved (EVAL_NOT_FOUND for an
+  // unknown previous_name).
+  rpc SaveEval(SaveEvalRequest) returns (SaveEvalResponse);
+  // Deletes an eval from .agents/evals (EVAL_NOT_FOUND).
+  rpc DeleteEval(DeleteEvalRequest) returns (DeleteEvalResponse);
+  // Runs an eval: its cases (or those named) on each of its agents,
+  // streaming each result as it's scored, then the finished run, which
+  // is recorded. An eval with a problem, or no case to run, is
+  // FAILED_PRECONDITION (EVAL_NOT_RUNNABLE).
+  rpc RunEval(RunEvalRequest) returns (stream RunEvalResponse);
+  // Returns an eval's recorded runs, newest first.
+  rpc ListEvalRuns(ListEvalRunsRequest) returns (ListEvalRunsResponse);
+  // Drafts cases for an agent from its description and instructions,
+  // beside the cases given, saving nothing. An unknown agent is
+  // INVALID_ARGUMENT; a model that fails gives problem.
+  rpc DraftEvalCases(DraftEvalCasesRequest) returns (DraftEvalCasesResponse);
+  // Returns the workspace's workflows (spec_workflows_043), by name. Run
+  // one as a turn ("/name input"), in a session or in the background.
+  rpc ListWorkflows(ListWorkflowsRequest) returns (ListWorkflowsResponse);
+  // Writes a workflow in .agents/workflows from Studio's canvas; problems,
+  // with nothing written, when it can't be saved (WORKFLOW_NOT_FOUND for
+  // an unknown previous_name). A step not filled in yet is saved, and is
+  // the workflow's problem until it is.
+  rpc SaveWorkflow(SaveWorkflowRequest) returns (SaveWorkflowResponse);
+  // Deletes a workflow from .agents/workflows (WORKFLOW_NOT_FOUND).
+  rpc DeleteWorkflow(DeleteWorkflowRequest) returns (DeleteWorkflowResponse);
+  // Returns workflows' runs, newest first: each run's receipt (WF-19)
+  // without its events and its steps' text. Running ones are as they are
+  // now.
+  rpc ListWorkflowRuns(ListWorkflowRunsRequest) returns (ListWorkflowRunsResponse);
+  // Returns one run's whole receipt (RUN_NOT_FOUND).
+  rpc GetWorkflowRun(GetWorkflowRunRequest) returns (GetWorkflowRunResponse);
+  // Streams one run's receipt: as it is, then again each time it changes,
+  // until the run ends or pauses (RUN_NOT_FOUND).
+  rpc WatchWorkflowRun(WatchWorkflowRunRequest) returns (stream WatchWorkflowRunResponse);
+  // Streams the runs going and those that ended lately (summaries): as
+  // they are, then again each time one starts, changes state or ends, so
+  // a client shows what's running and hears of a failure from anywhere.
+  rpc WatchWorkflowRuns(WatchWorkflowRunsRequest) returns (stream WatchWorkflowRunsResponse);
+  // Stops a running workflow run, wherever it was started (a chat, the
+  // background, a worker); RUN_NOT_FOUND when it isn't running.
+  rpc StopWorkflowRun(StopWorkflowRunRequest) returns (StopWorkflowRunResponse);
+
+  // The workspace dashboard (spec_health_044): the facts about its items
+  // and runs, each item's latest verdict, and the scores.
+  rpc GetWorkspaceHealth(GetWorkspaceHealthRequest) returns (GetWorkspaceHealthResponse);
+  // Streams the dashboard: as it is, then again each time it changes (a
+  // file, a run, a verdict).
+  rpc WatchWorkspaceHealth(WatchWorkspaceHealthRequest) returns (stream WatchWorkspaceHealthResponse);
+  // How many items a check would judge, and its estimated cost.
+  rpc EstimateHealthCheck(EstimateHealthCheckRequest) returns (EstimateHealthCheckResponse);
+  // Judges the items that changed (or all, with force), one at a time,
+  // streaming each verdict; HEALTH_CHECK_RUNNING when one is going.
+  rpc CheckWorkspaceHealth(CheckWorkspaceHealthRequest) returns (stream CheckWorkspaceHealthResponse);
+  // Stops the workspace's check after the item being judged.
+  rpc StopHealthCheck(StopHealthCheckRequest) returns (StopHealthCheckResponse);
+  // Starts a check in the service and returns at once: it goes on whoever
+  // watches, its progress in the dashboard (WorkspaceHealth.progress);
+  // HEALTH_CHECK_RUNNING when one is going.
+  rpc StartHealthCheck(StartHealthCheckRequest) returns (StartHealthCheckResponse);
+
+  // The composer (spec_composer_045): starts a guided conversation that
+  // makes a component of a kind ("workflow"), and runs its first turn: a
+  // question, or a draft checked by the kind's own rules.
+  rpc StartCompose(StartComposeRequest) returns (StartComposeResponse);
+  // Answers the composer's question (or asks a change of its draft) and
+  // runs its next turn; COMPOSE_NOT_FOUND once the session has ended.
+  rpc AnswerCompose(AnswerComposeRequest) returns (AnswerComposeResponse);
+  // Ends a composer session.
+  rpc DropCompose(DropComposeRequest) returns (DropComposeResponse);
+  // Returns the tasks paused workflow runs wait on (human tasks' forms,
+  // timers), oldest first: one workspace's, or every one's.
+  rpc ListHumanTasks(ListHumanTasksRequest) returns (ListHumanTasksResponse);
+  // Streams the tasks: the list now, then again each time it changes (a
+  // run pauses, a task is answered, a timer fires).
+  rpc WatchHumanTasks(WatchHumanTasksRequest) returns (stream WatchHumanTasksResponse);
+  // Answers a human task with A2UI's action message, checked against its
+  // form by the service: its run resumes in the background
+  // (TASK_NOT_FOUND; ANSWER_INVALID with the problems; NOT_ANSWERABLE for
+  // a timer; WORKFLOW_CHANGED when its workflow changed since).
+  rpc AnswerHumanTask(AnswerHumanTaskRequest) returns (AnswerHumanTaskResponse);
   // Returns skill scripts' environments (SCRIPTS_DISABLED).
   rpc ListEnvs(ListEnvsRequest) returns (ListEnvsResponse);
   // Removes one environment.
   rpc RemoveEnv(RemoveEnvRequest) returns (RemoveEnvResponse);
   // Removes environments no allowed script needs, and incomplete ones.
   rpc PruneEnvs(PruneEnvsRequest) returns (PruneEnvsResponse);
-  // Returns the configured MCP servers.
+  // Has the model write or improve a manifest field (an agent's or a
+  // skill's instructions, a script, a rule): nothing is saved.
+  rpc DraftManifest(DraftManifestRequest) returns (DraftManifestResponse);
+  // Returns the configured MCP servers and how each is doing.
   rpc ListMCPServers(ListMCPServersRequest) returns (ListMCPServersResponse);
+  // Stops an MCP server and starts it afresh when the next turn lists its
+  // tools (NOT_FOUND when it isn't running).
+  rpc RestartMCPServer(RestartMCPServerRequest) returns (RestartMCPServerResponse);
   // Returns what the active agent can use.
   rpc ListTools(ListToolsRequest) returns (ListToolsResponse);
 
@@ -881,6 +1032,26 @@ message SkillInfo {
   repeated string withheld = 16;
   // Why none of the scripts may run.
   repeated string blocked = 17;
+  // Its folder on disk ("" for a built-in skill).
+  string dir = 18;
+  // simple, references, scripts or meta, from its folder.
+  string kind = 19;
+  // The agents it's offered to (none: every one).
+  repeated string agents = 20;
+  // The skills a meta skill combines.
+  repeated string members = 21;
+  // Its files under references/, as references/<path>.
+  repeated string references = 22;
+  // The workspace's own: its folder is in the workspace.
+  bool project = 23;
+  // Its package files (requirements.txt, pyproject.toml, package.json),
+  // as paths in its folder: the first of each kind gives its scripts
+  // their packages.
+  repeated string package_files = 24;
+  // Its scripts, on disk, weren't reviewed and trusted with this content
+  // (hash): new, changed, or a registry's. Each run asks first, until
+  // ConfigService.TrustSkillScripts.
+  bool needs_review = 25;
 }
 
 // SkillTool is a tool a skill needs.
@@ -900,6 +1071,8 @@ message SkillScript {
   repeated string deps = 5;
   bool allowed = 6;
   repeated string reasons = 7;
+  // Not declared, but found in scripts/.
+  bool found = 8;
 }
 
 // Request message for WorkspaceService.ListSkills.
@@ -923,6 +1096,143 @@ message GetSkillRequest {
 // Response message for WorkspaceService.GetSkill.
 message GetSkillResponse {
   SkillInfo skill = 1;
+}
+
+// What Studio's skill form edits.
+message SkillSpec {
+  // Its folder's name: lowercase letters, digits and single hyphens.
+  string name = 1;
+  string description = 2;
+  // The tools it may use (allowed-tools), space-separated.
+  string tools = 3;
+  repeated string agents = 4;
+  // The skills a meta skill combines.
+  repeated string members = 5;
+  string instructions = 6;
+}
+
+// A skill as Studio edits it.
+message SkillFile {
+  SkillInfo skill = 1;
+  // Its SKILL.md.
+  string path = 2;
+  // SKILL.md's content hash, for SaveSkill ("" when not editable).
+  string hash = 3;
+  SkillSpec spec = 4;
+  // The workspace's own: Studio may change it.
+  bool editable = 5;
+}
+
+// Request message for WorkspaceService.GetSkillFile.
+message GetSkillFileRequest {
+  string workspace = 1;
+  string name = 2;
+}
+
+// Response message for WorkspaceService.GetSkillFile.
+message GetSkillFileResponse {
+  SkillFile file = 1;
+}
+
+// Request message for WorkspaceService.SaveSkill.
+message SaveSkillRequest {
+  string workspace = 1;
+  // The skill edited; empty for a new one.
+  string previous_name = 2;
+  // Its SKILL.md's hash when read.
+  string hash = 3;
+  SkillSpec skill = 4;
+}
+
+// Response message for WorkspaceService.SaveSkill.
+message SaveSkillResponse {
+  SkillFile file = 1;
+  repeated string problems = 2;
+}
+
+// Request message for WorkspaceService.DeleteSkill.
+message DeleteSkillRequest {
+  string workspace = 1;
+  string name = 2;
+}
+
+// Response message for WorkspaceService.DeleteSkill.
+message DeleteSkillResponse {}
+
+// Request message for WorkspaceService.ReadSkillFile.
+message ReadSkillFileRequest {
+  string workspace = 1;
+  string name = 2;
+  // Relative to the skill's folder.
+  string path = 3;
+}
+
+// Response message for WorkspaceService.ReadSkillFile.
+message ReadSkillFileResponse {
+  bytes content = 1;
+}
+
+// Request message for WorkspaceService.WriteSkillFile.
+message WriteSkillFileRequest {
+  string workspace = 1;
+  string name = 2;
+  // references/… or scripts/…
+  string path = 3;
+  bytes content = 4;
+}
+
+// Response message for WorkspaceService.WriteSkillFile.
+message WriteSkillFileResponse {
+  SkillFile file = 1;
+}
+
+// Request message for WorkspaceService.DeleteSkillFile.
+message DeleteSkillFileRequest {
+  string workspace = 1;
+  string name = 2;
+  string path = 3;
+}
+
+// Response message for WorkspaceService.DeleteSkillFile.
+message DeleteSkillFileResponse {
+  SkillFile file = 1;
+}
+
+// Request message for WorkspaceService.CopySkill.
+message CopySkillRequest {
+  string workspace = 1;
+  // The skill copied: any the workspace sees.
+  string from = 2;
+  // The copy's name.
+  string name = 3;
+}
+
+// Response message for WorkspaceService.CopySkill.
+message CopySkillResponse {
+  SkillFile file = 1;
+  repeated string problems = 2;
+}
+
+// Request message for WorkspaceService.RunSkillScript.
+message RunSkillScriptRequest {
+  string workspace = 1;
+  string name = 2;
+  string script = 3;
+  repeated string args = 4;
+}
+
+// Response message for WorkspaceService.RunSkillScript.
+message RunSkillScriptResponse {
+  int32 exit_code = 1;
+  string stdout = 2;
+  string stderr = 3;
+  bool timed_out = 4;
+  // The sandbox it ran in.
+  string sandbox = 5;
+  // Files it wrote to its output directory.
+  repeated string output_files = 6;
+  // Why it didn't run, or failed to.
+  string error = 7;
 }
 
 // Env is an isolated Python environment built for skill scripts.
@@ -984,6 +1294,12 @@ message MCPServer {
   bool auto_approve = 3;
   // Configured, but never started (disabled = true).
   bool disabled = 4;
+  // "disabled", "idle" (its tools not listed yet), "connected" or
+  // "failed" (error says why).
+  string state = 5;
+  string error = 6;
+  // How many tools it offered when last listed.
+  int32 tools = 7;
 }
 
 // Request message for WorkspaceService.ListMCPServers.
@@ -995,6 +1311,15 @@ message ListMCPServersRequest {
 message ListMCPServersResponse {
   repeated MCPServer servers = 1;
 }
+
+// Request message for WorkspaceService.RestartMCPServer.
+message RestartMCPServerRequest {
+  string workspace = 1;
+  string name = 2;
+}
+
+// Response message for WorkspaceService.RestartMCPServer.
+message RestartMCPServerResponse {}
 
 // ToolInfo is a tool an agent can call.
 message ToolInfo {
@@ -1980,3 +2305,1026 @@ message MergeBranchResponse {
   // The git status after the merge.
   GetGitStatusResponse status = 3;
 }
+
+// Request message for WorkspaceService.DraftManifest.
+message DraftManifestRequest {
+  string workspace = 1;
+  // agent, skill, script, rule, guardrail, eval or workflow_step.
+  string kind = 2;
+  string name = 3;
+  string description = 4;
+  // The text now; empty to write it afresh.
+  string current = 5;
+  // What the user asks; empty to improve it.
+  string request = 6;
+  // A script's language (python or typescript).
+  string language = 7;
+}
+
+// Response message for WorkspaceService.DraftManifest.
+message DraftManifestResponse {
+  string text = 1;
+  // What was written or changed and why, a line each.
+  repeated string changes = 2;
+  // Why there's no draft (the model failed); the user's text stands.
+  string problem = 3;
+}
+
+// A rule file: a gate (when set) or an instruction rule.
+message RuleFile {
+  // Its path in the rule folder, without .md.
+  string name = 1;
+  string path = 2;
+  // before_agent or after_agent for a gate; empty for an instruction
+  // rule.
+  string when = 3;
+  // block, warn or revise (a gate).
+  string action = 4;
+  int32 order = 5;
+  // The agents it gates (none: every one).
+  repeated string agents = 6;
+  string description = 7;
+  // The files an instruction rule is scoped to.
+  repeated string paths = 8;
+  string text = 9;
+  // Why its front matter doesn't hold (it's skipped).
+  string problem = 10;
+  // In .agents/rules: Studio may change it.
+  bool editable = 11;
+}
+
+// What Studio's rule form edits.
+message RuleSpec {
+  string name = 1;
+  string when = 2;
+  string action = 3;
+  int32 order = 4;
+  repeated string agents = 5;
+  string description = 6;
+  repeated string paths = 7;
+  string text = 8;
+}
+
+// Request message for WorkspaceService.ListRules.
+message ListRulesRequest {
+  string workspace = 1;
+}
+
+// Response message for WorkspaceService.ListRules.
+message ListRulesResponse {
+  repeated RuleFile rules = 1;
+  // Where new rules are written (.agents/rules).
+  string dir = 2;
+}
+
+// Request message for WorkspaceService.SaveRule.
+message SaveRuleRequest {
+  string workspace = 1;
+  string previous_name = 2;
+  RuleSpec rule = 3;
+}
+
+// Response message for WorkspaceService.SaveRule.
+message SaveRuleResponse {
+  RuleFile rule = 1;
+  repeated string problems = 2;
+}
+
+// Request message for WorkspaceService.DeleteRule.
+message DeleteRuleRequest {
+  string workspace = 1;
+  string name = 2;
+}
+
+// Response message for WorkspaceService.DeleteRule.
+message DeleteRuleResponse {}
+
+// Request message for WorkspaceService.ReorderRules.
+message ReorderRulesRequest {
+  string workspace = 1;
+  repeated string names = 2;
+}
+
+// Response message for WorkspaceService.ReorderRules.
+message ReorderRulesResponse {}
+
+// Request message for WorkspaceService.TryRule.
+message TryRuleRequest {
+  string workspace = 1;
+  RuleSpec rule = 2;
+  // A prompt (before-agent) or an answer (after-agent).
+  string sample = 3;
+}
+
+// Response message for WorkspaceService.TryRule.
+message TryRuleResponse {
+  bool pass = 1;
+  string reason = 2;
+  // Why it couldn't be judged.
+  string problem = 3;
+}
+
+// The limits guardrail's limits; zero or empty means none of that kind.
+message GuardrailLimits {
+  double max_cost_usd = 1;
+  int32 max_turns = 2;
+  int32 max_files_changed = 3;
+  repeated string allowed_domains = 4;
+  // Shell commands not to run (globs over the whole command).
+  repeated string commands = 5;
+}
+
+// A guardrail file, or a built-in guardrail without one (its defaults).
+message GuardrailFile {
+  // Its file's name without .md (a built-in's is its id).
+  string name = 1;
+  // Empty for a built-in guardrail running with its defaults.
+  string path = 2;
+  // prompt_injection, secrets or limits; empty for a custom one.
+  string builtin = 3;
+  // input, tool_result, output or action.
+  string stage = 4;
+  // block, warn or redact.
+  string action = 5;
+  repeated string agents = 6;
+  // The tools a tool-result or action guardrail checks.
+  repeated string tools = 7;
+  string description = 8;
+  // The secrets guardrail masks personal data too.
+  bool pii = 9;
+  // The injection guardrail confirms with the judge.
+  bool judge = 10;
+  GuardrailLimits limits = 11;
+  // A custom guardrail's check.
+  string text = 12;
+  string problem = 13;
+  // In .agents/guardrails, or a built-in one's defaults: Studio may
+  // change it.
+  bool editable = 14;
+  // Switched off (enabled: false).
+  bool off = 15;
+}
+
+// A built-in guardrail: on by default.
+message BuiltinGuardrail {
+  string id = 1;
+  string stage = 2;
+  string default_action = 3;
+  repeated string actions = 4;
+  // As it runs: its file, or its defaults (no path).
+  GuardrailFile file = 5;
+}
+
+// What Studio's guardrail form edits.
+message GuardrailSpec {
+  string name = 1;
+  string builtin = 2;
+  string stage = 3;
+  string action = 4;
+  repeated string agents = 5;
+  repeated string tools = 6;
+  string description = 7;
+  bool pii = 8;
+  bool judge = 9;
+  GuardrailLimits limits = 10;
+  string text = 11;
+  // Switches it off, keeping its settings.
+  bool off = 12;
+}
+
+// Request message for WorkspaceService.ListGuardrails.
+message ListGuardrailsRequest {
+  string workspace = 1;
+}
+
+// Response message for WorkspaceService.ListGuardrails.
+message ListGuardrailsResponse {
+  repeated BuiltinGuardrail builtins = 1;
+  repeated GuardrailFile guardrails = 2;
+  // Where new guardrails are written (.agents/guardrails).
+  string dir = 3;
+}
+
+// Request message for WorkspaceService.SaveGuardrail.
+message SaveGuardrailRequest {
+  string workspace = 1;
+  string previous_name = 2;
+  GuardrailSpec guardrail = 3;
+}
+
+// Response message for WorkspaceService.SaveGuardrail.
+message SaveGuardrailResponse {
+  GuardrailFile guardrail = 1;
+  repeated string problems = 2;
+}
+
+// Request message for WorkspaceService.DeleteGuardrail.
+message DeleteGuardrailRequest {
+  string workspace = 1;
+  string name = 2;
+}
+
+// Response message for WorkspaceService.DeleteGuardrail.
+message DeleteGuardrailResponse {}
+
+// Request message for WorkspaceService.TryGuardrail.
+message TryGuardrailRequest {
+  string workspace = 1;
+  GuardrailSpec guardrail = 2;
+  string sample = 3;
+}
+
+// Response message for WorkspaceService.TryGuardrail.
+message TryGuardrailResponse {
+  bool pass = 1;
+  string reason = 2;
+  string problem = 3;
+}
+
+// A row of an eval's table.
+message EvalCase {
+  string id = 1;
+  string name = 2;
+  string prompt = 3;
+  // The output expected.
+  string output = 4;
+  // exact or near.
+  string type = 5;
+  // A near case's threshold, above 0 and up to 1.
+  double threshold = 6;
+  // fail, warn or info.
+  string scope = 7;
+}
+
+// An eval file in .agents/evals.
+message EvalFile {
+  string name = 1;
+  string path = 2;
+  string description = 3;
+  repeated string agents = 4;
+  repeated string skills = 5;
+  // judge or embedding.
+  string near = 6;
+  // network or mcp.
+  repeated string allow = 7;
+  repeated EvalCase cases = 8;
+  string problem = 9;
+  // Its last run, if any (without its results).
+  EvalRun last_run = 10;
+}
+
+// What Studio's eval form edits.
+message EvalSpec {
+  string name = 1;
+  string description = 2;
+  repeated string agents = 3;
+  repeated string skills = 4;
+  string near = 5;
+  repeated string allow = 6;
+  repeated EvalCase cases = 7;
+}
+
+// One case run by one agent, and its score.
+message EvalResult {
+  string case = 1;
+  string name = 2;
+  string agent = 3;
+  string type = 4;
+  string scope = 5;
+  // pass; fail, warn or info (the case's scope) when it didn't pass; or
+  // error when it couldn't be run or scored.
+  string status = 6;
+  double score = 7;
+  double threshold = 8;
+  string prompt = 9;
+  string expected = 10;
+  string output = 11;
+  string reason = 12;
+  // Actions the eval didn't allow, as "tool: detail".
+  repeated string refusals = 13;
+  double cost_usd = 14;
+  google.protobuf.Duration duration = 15;
+}
+
+// A run of an eval.
+message EvalRun {
+  string id = 1;
+  string eval = 2;
+  google.protobuf.Timestamp started = 3;
+  google.protobuf.Duration duration = 4;
+  // running, passed, failed or stopped.
+  string status = 5;
+  repeated EvalResult results = 6;
+  double cost_usd = 7;
+  string error = 8;
+  // The results by status (pass, fail, warn, info, error).
+  map<string, int32> counts = 9;
+}
+
+// Request message for WorkspaceService.ListEvals.
+message ListEvalsRequest {
+  string workspace = 1;
+}
+
+// Response message for WorkspaceService.ListEvals.
+message ListEvalsResponse {
+  repeated EvalFile evals = 1;
+  // .agents/evals.
+  string dir = 2;
+}
+
+// Request message for WorkspaceService.SaveEval.
+message SaveEvalRequest {
+  string workspace = 1;
+  // The eval edited; empty for a new one.
+  string previous_name = 2;
+  EvalSpec eval = 3;
+}
+
+// Response message for WorkspaceService.SaveEval.
+message SaveEvalResponse {
+  EvalFile eval = 1;
+  repeated string problems = 2;
+}
+
+// Request message for WorkspaceService.DeleteEval.
+message DeleteEvalRequest {
+  string workspace = 1;
+  string name = 2;
+}
+
+// Response message for WorkspaceService.DeleteEval.
+message DeleteEvalResponse {}
+
+// Request message for WorkspaceService.RunEval.
+message RunEvalRequest {
+  string workspace = 1;
+  string name = 2;
+  // The case IDs to run; none: every case.
+  repeated string cases = 3;
+}
+
+// Response message for WorkspaceService.RunEval: the run as it starts,
+// each result, then the finished run.
+message RunEvalResponse {
+  oneof event {
+    EvalRun started = 1;
+    EvalResult result = 2;
+    EvalRun finished = 3;
+  }
+}
+
+// Request message for WorkspaceService.ListEvalRuns.
+message ListEvalRunsRequest {
+  string workspace = 1;
+  string name = 2;
+  // At most this many (0: 20).
+  int32 limit = 3;
+}
+
+// Response message for WorkspaceService.ListEvalRuns.
+message ListEvalRunsResponse {
+  repeated EvalRun runs = 1;
+}
+
+// Request message for WorkspaceService.DraftEvalCases.
+message DraftEvalCasesRequest {
+  string workspace = 1;
+  string agent = 2;
+  // What to draft cases for (optional).
+  string request = 3;
+  // The cases the eval has, not to repeat.
+  repeated EvalCase existing = 4;
+}
+
+// Response message for WorkspaceService.DraftEvalCases.
+message DraftEvalCasesResponse {
+  repeated EvalCase cases = 1;
+  string problem = 2;
+}
+
+// A workflow's step.
+message FlowNode {
+  string id = 1;
+  // agent, refine, summarize, accumulate, browser, script, read_file,
+  // save_file; email and data are shown, not run yet.
+  string type = 2;
+  string title = 3;
+  // Where it sits on the canvas.
+  double x = 4;
+  double y = 5;
+  // The agent an agent, refine, summarize or browser step runs (empty:
+  // the active one).
+  string agent = 6;
+  repeated string skills = 7;
+  // What it's to do (a browser step's goal; a summary's focus).
+  string instructions = 8;
+  // Rules its output must pass, beyond the gates every turn has.
+  repeated string rules = 9;
+  // A script step's skill, script and arguments.
+  string skill = 10;
+  string script = 11;
+  repeated string args = 12;
+  // A read_file or save_file step's file, in the workspace.
+  string path = 13;
+  // What an extract step pulls out.
+  repeated FlowField fields = 14;
+  // Tries in all when it fails (0 or 1: once), the first wait (a Go
+  // duration, doubled each time), and the most it may take.
+  int32 retry_attempts = 15;
+  string retry_delay = 16;
+  string timeout = 17;
+  // An MCP call's server, tool and arguments (a JSON object; string
+  // values take templates).
+  string server = 18;
+  string tool = 19;
+  string arguments_json = 20;
+  // An API call's URL (an A2A call's: where its agent card is), method,
+  // query, headers, body (text) or JSON body (JSON), and auth. Values
+  // take templates and {secrets:key}.
+  string url = 21;
+  string method = 22;
+  repeated FlowPair query = 23;
+  repeated FlowPair headers = 24;
+  string body = 25;
+  string json_body = 26;
+  FlowAuth auth = 27;
+  // The workflow a call step runs.
+  string workflow = 28;
+  // Runs the step once per item of this list (a CEL expression), so many
+  // at a time (0: 4).
+  string for_each = 29;
+  int32 concurrency = 30;
+  // A human task's form: A2UI v0.9 ({"components": [...], "data": {...}}).
+  string form_json = 31;
+  // How long a timer waits (a Go duration), or until when (RFC 3339).
+  string wait = 32;
+  string until = 33;
+}
+
+// A paused workflow run's task: a human task's form waiting for an
+// answer, or a timer waiting for its time.
+message HumanTask {
+  // Answer with it.
+  string id = 1;
+  string run = 2;
+  string workspace = 3;
+  string workflow = 4;
+  string step = 5;
+  string title = 6;
+  // human_task or timer.
+  string kind = 7;
+  // What's shown above the form.
+  string message = 8;
+  // The form as A2UI v0.9 server-to-client messages, any A2UI renderer's
+  // to draw: a JSON array of createSurface (the surface's ID is the
+  // task's), updateComponents and updateDataModel, its templates filled
+  // from the run as the step started.
+  string a2ui_json = 9;
+  google.protobuf.Timestamp fire_at = 10;
+  google.protobuf.Timestamp created = 11;
+  // The chat its run's agent steps are turns in.
+  string session_id = 12;
+}
+
+// Request message for WorkspaceService.ListHumanTasks.
+message ListHumanTasksRequest {
+  // Empty: every workspace's.
+  string workspace = 1;
+}
+
+// Response message for WorkspaceService.ListHumanTasks.
+message ListHumanTasksResponse {
+  repeated HumanTask tasks = 1;
+  // How a waiting task reaches the user with no window open ([ui]
+  // task_alerts): notify, open or off.
+  string alerts = 2;
+}
+
+// Request message for WorkspaceService.WatchHumanTasks.
+message WatchHumanTasksRequest {
+  // Empty: every workspace's.
+  string workspace = 1;
+}
+
+// Response message for WorkspaceService.WatchHumanTasks: the tasks now
+// (each message the whole list).
+message WatchHumanTasksResponse {
+  repeated HumanTask tasks = 1;
+  // How a waiting task reaches the user with no window open ([ui]
+  // task_alerts): notify, open or off.
+  string alerts = 2;
+}
+
+// Request message for WorkspaceService.AnswerHumanTask.
+message AnswerHumanTaskRequest {
+  string workspace = 1;
+  string task_id = 2;
+  // A2UI v0.9's client-to-server action message, from one of the form's
+  // buttons: {"version": "v0.9", "action": {"name", "surfaceId",
+  // "sourceComponentId", "timestamp", "context"}}.
+  string action_json = 3;
+  // The surface's data model as the client had it (a JSON object; empty:
+  // the form's own, with the action's values), on which every check of
+  // the form must pass.
+  string data_json = 4;
+}
+
+// Response message for WorkspaceService.AnswerHumanTask.
+message AnswerHumanTaskResponse {
+  // The run, resumed in the background.
+  BackgroundRun run = 1;
+}
+
+// A named value: a header, a query parameter.
+message FlowPair {
+  string name = 1;
+  string value = 2;
+}
+
+// How an API call authenticates.
+message FlowAuth {
+  // bearer, basic, api_key or oauth2 (client credentials).
+  string type = 1;
+  string token = 2;
+  string username = 3;
+  string password = 4;
+  // An API key's name, value, and where it goes (header or query).
+  string name = 5;
+  string value = 6;
+  string in = 7;
+  // OAuth2 client credentials'.
+  string token_url = 8;
+  string client_id = 9;
+  string client_secret = 10;
+  repeated string scopes = 11;
+  string audience = 12;
+}
+
+// A value an extract step pulls out.
+message FlowField {
+  string name = 1;
+  // string, number, boolean or list.
+  string type = 2;
+  string description = 3;
+}
+
+// A link carrying a step's output to another.
+message FlowEdge {
+  string from = 1;
+  string to = 2;
+  // A condition: CEL (when) or plain English judged by a model (if).
+  string when = 3;
+  string if = 4;
+  // Taken when none of its step's conditional links is.
+  bool default = 5;
+  // Taken when its step fails, the error as its input.
+  bool error = 6;
+  string label = 7;
+}
+
+// A workflow file in .agents/workflows.
+message WorkflowFile {
+  string name = 1;
+  string path = 2;
+  string description = 3;
+  repeated FlowNode nodes = 4;
+  repeated FlowEdge edges = 5;
+  string problem = 6;
+  // The permission mode its steps run in: auto (empty), accept-edits,
+  // default, dont-ask or bypass; never looser than the workspace's
+  // (spec_workflows_043 WF-21).
+  string mode = 7;
+}
+
+// Request message for WorkspaceService.ListWorkflows.
+message ListWorkflowsRequest {
+  string workspace = 1;
+}
+
+// Response message for WorkspaceService.ListWorkflows.
+message ListWorkflowsResponse {
+  repeated WorkflowFile workflows = 1;
+  // .agents/workflows.
+  string dir = 2;
+}
+
+// Request message for WorkspaceService.SaveWorkflow.
+message SaveWorkflowRequest {
+  string workspace = 1;
+  // The workflow edited; empty for a new one.
+  string previous_name = 2;
+  // What to write (its path and problem aside).
+  WorkflowFile workflow = 3;
+}
+
+// Response message for WorkspaceService.SaveWorkflow.
+message SaveWorkflowResponse {
+  WorkflowFile workflow = 1;
+  repeated string problems = 2;
+}
+
+// Request message for WorkspaceService.DeleteWorkflow.
+message DeleteWorkflowRequest {
+  string workspace = 1;
+  string name = 2;
+}
+
+// Response message for WorkspaceService.DeleteWorkflow.
+message DeleteWorkflowResponse {}
+
+// A workflow run's receipt (spec_workflows_043 WF-19): its envelope (what
+// started it, when, on what) and routing slip (each step's run, in the
+// order they ran), with what it spent.
+message WorkflowRun {
+  string id = 1;
+  string workspace = 2;
+  string workflow = 3;
+  // chat, background or worker.
+  string origin = 4;
+  // The chat its agent steps are turns in.
+  string session_id = 5;
+  string input = 6;
+  google.protobuf.Timestamp started = 7;
+  // Unset while it runs or waits.
+  google.protobuf.Timestamp ended = 8;
+  // running, waiting (on a human task or a timer), done, failed or
+  // stopped.
+  string status = 9;
+  string error = 10;
+  // What it produced (the start of it).
+  string output = 11;
+  // The steps' usage together, and every model they used.
+  Usage usage = 12;
+  repeated string models = 13;
+  repeated WorkflowRunStep steps = 14;
+  // Its events, oldest first (left out of lists).
+  repeated WorkflowRunEvent events = 15;
+  // The service's background run following it while one does (watch it
+  // with WatchBackground for approvals and the chat's events).
+  string background_id = 16;
+  // Approval requests that background run waits on.
+  int32 approvals = 17;
+  // The permission mode its steps ran in (spec_workflows_043 WF-21).
+  string mode = 18;
+}
+
+// One run of a workflow's step.
+message WorkflowRunStep {
+  string id = 1;
+  string title = 2;
+  string type = 3;
+  // running, waiting, done, failed or skipped.
+  string status = 4;
+  google.protobuf.Timestamp started = 5;
+  // Unset while it runs.
+  google.protobuf.Timestamp ended = 6;
+  // How many times it was tried (its retry).
+  int32 attempts = 7;
+  // An agent step's agent, and the models its calls used.
+  string agent = 8;
+  repeated string models = 9;
+  // Its model calls' tokens and cost (so far, while it runs).
+  Usage usage = 10;
+  // What it produced (the start of it; left out of lists).
+  string output = 11;
+  // The text its turns streamed (the start of it; left out of lists).
+  string stream = 12;
+  string error = 13;
+}
+
+// Something that happened in a workflow run.
+message WorkflowRunEvent {
+  google.protobuf.Timestamp at = 1;
+  // The step it's about, if any.
+  string step = 2;
+  // run (started, resumed, ended), step, tool or notice.
+  string kind = 3;
+  string text = 4;
+  bool error = 5;
+}
+
+// Request message for WorkspaceService.ListWorkflowRuns.
+message ListWorkflowRunsRequest {
+  // Empty: every workspace's.
+  string workspace = 1;
+  // Empty: every workflow's.
+  string workflow = 2;
+  // At most this many (50 when unset).
+  int32 limit = 3;
+}
+
+// Response message for WorkspaceService.ListWorkflowRuns.
+message ListWorkflowRunsResponse {
+  repeated WorkflowRun runs = 1;
+}
+
+// Request message for WorkspaceService.GetWorkflowRun.
+message GetWorkflowRunRequest {
+  string workspace = 1;
+  string id = 2;
+}
+
+// Response message for WorkspaceService.GetWorkflowRun.
+message GetWorkflowRunResponse {
+  WorkflowRun run = 1;
+}
+
+// Request message for WorkspaceService.WatchWorkflowRun.
+message WatchWorkflowRunRequest {
+  string workspace = 1;
+  string id = 2;
+}
+
+// Response message for WorkspaceService.WatchWorkflowRun.
+message WatchWorkflowRunResponse {
+  WorkflowRun run = 1;
+}
+
+// Request message for WorkspaceService.WatchWorkflowRuns.
+message WatchWorkflowRunsRequest {
+  // Empty: every workspace's.
+  string workspace = 1;
+}
+
+// Response message for WorkspaceService.WatchWorkflowRuns.
+message WatchWorkflowRunsResponse {
+  // Running and waiting runs, and those that ended in the last few
+  // minutes, newest first (summaries).
+  repeated WorkflowRun runs = 1;
+}
+
+// Request message for WorkspaceService.StopWorkflowRun.
+message StopWorkflowRunRequest {
+  string workspace = 1;
+  string id = 2;
+}
+
+// Response message for WorkspaceService.StopWorkflowRun.
+message StopWorkflowRunResponse {}
+
+// A workspace's dashboard (spec_health_044).
+message WorkspaceHealth {
+  google.protobuf.Timestamp at = 1;
+  repeated HealthItem items = 2;
+  // The runs per day, the last 30, oldest first.
+  repeated HealthDay days = 3;
+  repeated HealthSignal signals = 4;
+  // The workspace's score and each kind's (1–5; 0: not judged).
+  double overall = 5;
+  map<string, double> by_kind = 6;
+  // The workspace's score before the last check.
+  double previous_overall = 7;
+  google.protobuf.Timestamp last_check = 8;
+  double last_cost_usd = 9;
+  // Why the last scheduled check didn't run.
+  string skipped = 10;
+  // The judge's model ("" the default); the schedule ("" or "off": by
+  // hand) and its next time; a scheduled check's cost limit.
+  string model = 11;
+  string schedule = 12;
+  google.protobuf.Timestamp next = 13;
+  double max_cost_usd = 14;
+  // A check is going, and how far it is.
+  bool checking = 15;
+  HealthCheckProgress progress = 16;
+  // How the last check ended: the items it judged, and those it couldn't.
+  int32 last_judged = 17;
+  repeated string last_errors = 18;
+}
+
+// How far a check going is.
+message HealthCheckProgress {
+  // The item being judged ("kind/name"), its place, and the cost so far.
+  string item = 1;
+  int32 index = 2;
+  int32 total = 3;
+  double cost_usd = 4;
+}
+
+// One agent, skill, rule, guardrail, eval, workflow or worker.
+message HealthItem {
+  string kind = 1;
+  string name = 2;
+  string path = 3;
+  string detail = 4;
+  string problem = 5;
+  // uncovered, stale, unused, never_run, failing, disabled, off.
+  repeated string flags = 6;
+  // Runs, activations or decisions in the last 30 days; fired, a rule's or
+  // guardrail's that stopped, warned or revised.
+  int32 uses = 7;
+  int32 fired = 8;
+  HealthRuns runs = 9;
+  HealthEvals evals = 10;
+  // Uses per day, as WorkspaceHealth.days.
+  repeated int32 daily = 11;
+  // Its latest verdict, and its overall scores over time (oldest first).
+  HealthVerdict verdict = 12;
+  repeated double history = 13;
+}
+
+// A workflow's or a worker's runs in the last 30 days.
+message HealthRuns {
+  int32 runs = 1;
+  int32 done = 2;
+  int32 failed = 3;
+  int32 stopped = 4;
+  double cost_usd = 5;
+  int64 median_ms = 6;
+  google.protobuf.Timestamp last = 7;
+  string failing_step = 8;
+}
+
+// An agent's or an eval's latest eval results.
+message HealthEvals {
+  int32 runs = 1;
+  google.protobuf.Timestamp last = 2;
+  int32 passed = 3;
+  int32 cases = 4;
+}
+
+// The judge's verdict on an item.
+message HealthVerdict {
+  string model = 1;
+  google.protobuf.Timestamp at = 2;
+  repeated HealthScore scores = 3;
+  double overall = 4;
+  // A–D.
+  string grade = 5;
+  string summary = 6;
+  repeated string fixes = 7;
+  double cost_usd = 8;
+  // It's for the item as it is now (not changed since).
+  bool current = 9;
+}
+
+// One rubric line's score.
+message HealthScore {
+  string line = 1;
+  int32 score = 2;
+  string reason = 3;
+}
+
+// One day's runs.
+message HealthDay {
+  string date = 1;
+  int32 done = 2;
+  int32 failed = 3;
+  int32 stopped = 4;
+  double cost_usd = 5;
+}
+
+// A safety signal: the reviewer's denials, a rule's or a guardrail's
+// decisions, by what they were about.
+message HealthSignal {
+  string kind = 1;
+  string about = 2;
+  int32 count = 3;
+  google.protobuf.Timestamp last = 4;
+  string detail = 5;
+}
+
+// Request message for WorkspaceService.GetWorkspaceHealth.
+message GetWorkspaceHealthRequest {
+  string workspace = 1;
+}
+
+// Response message for WorkspaceService.GetWorkspaceHealth.
+message GetWorkspaceHealthResponse {
+  WorkspaceHealth health = 1;
+}
+
+// Request message for WorkspaceService.WatchWorkspaceHealth.
+message WatchWorkspaceHealthRequest {
+  string workspace = 1;
+}
+
+// Response message for WorkspaceService.WatchWorkspaceHealth.
+message WatchWorkspaceHealthResponse {
+  WorkspaceHealth health = 1;
+}
+
+// Which items a check judges: kinds, items ("kind/name"), or all; force
+// re-judges unchanged ones.
+message HealthCheckScope {
+  repeated string kinds = 1;
+  repeated string items = 2;
+  bool force = 3;
+}
+
+// Request message for WorkspaceService.EstimateHealthCheck.
+message EstimateHealthCheckRequest {
+  string workspace = 1;
+  HealthCheckScope scope = 2;
+}
+
+// Response message for WorkspaceService.EstimateHealthCheck.
+message EstimateHealthCheckResponse {
+  int32 items = 1;
+  double cost_usd = 2;
+  // Every model is priced (else the cost is a floor).
+  bool priced = 3;
+}
+
+// Request message for WorkspaceService.CheckWorkspaceHealth.
+message CheckWorkspaceHealthRequest {
+  string workspace = 1;
+  HealthCheckScope scope = 2;
+}
+
+// Response message for WorkspaceService.CheckWorkspaceHealth: one item's
+// verdict (or why it has none), then a last one with done.
+message CheckWorkspaceHealthResponse {
+  string item = 1;
+  int32 index = 2;
+  int32 total = 3;
+  HealthVerdict verdict = 4;
+  string error = 5;
+  double cost_usd = 6;
+  bool done = 7;
+  int32 judged = 8;
+}
+
+// Request message for WorkspaceService.StopHealthCheck.
+message StopHealthCheckRequest {
+  string workspace = 1;
+}
+
+// Response message for WorkspaceService.StopHealthCheck.
+message StopHealthCheckResponse {}
+
+// Request message for WorkspaceService.StartHealthCheck.
+message StartHealthCheckRequest {
+  string workspace = 1;
+  HealthCheckScope scope = 2;
+}
+
+// Response message for WorkspaceService.StartHealthCheck.
+message StartHealthCheckResponse {}
+
+// A composer conversation as it is.
+message ComposeSession {
+  string id = 1;
+  string kind = 2;
+  repeated ComposeTurn turns = 3;
+  // The composer's last turn is a question waiting for an answer.
+  bool asking = 4;
+  // The latest draft (unset until there's one).
+  ComposeDraft draft = 5;
+  double cost_usd = 6;
+}
+
+// One message of a composer conversation: the user's, or the composer's
+// (a question with its suggested answers, or a draft's summary).
+message ComposeTurn {
+  string role = 1;
+  string text = 2;
+  repeated string options = 3;
+}
+
+// A component the composer wrote: its name, a summary, its file, what the
+// kind's checks still find wrong, and for a workflow the workflow itself.
+message ComposeDraft {
+  string name = 1;
+  string summary = 2;
+  string file = 3;
+  repeated string problems = 4;
+  WorkflowFile workflow = 5;
+}
+
+// Request message for WorkspaceService.StartCompose.
+message StartComposeRequest {
+  string workspace = 1;
+  string kind = 2;
+  // What the user wants.
+  string request = 3;
+  // The component being changed, as its file ("" for a new one).
+  string current = 4;
+}
+
+// Response message for WorkspaceService.StartCompose.
+message StartComposeResponse {
+  ComposeSession session = 1;
+}
+
+// Request message for WorkspaceService.AnswerCompose.
+message AnswerComposeRequest {
+  string workspace = 1;
+  string id = 2;
+  string answer = 3;
+}
+
+// Response message for WorkspaceService.AnswerCompose.
+message AnswerComposeResponse {
+  ComposeSession session = 1;
+}
+
+// Request message for WorkspaceService.DropCompose.
+message DropComposeRequest {
+  string workspace = 1;
+  string id = 2;
+}
+
+// Response message for WorkspaceService.DropCompose.
+message DropComposeResponse {}

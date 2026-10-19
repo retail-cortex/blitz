@@ -13,6 +13,46 @@ A line can import another file with `@docs/style.md`: relative to the file, at m
 
 Rule files in `.blitz/rules/`, `.agents/rules/`, `.claude/rules/` and `~/.blitz/rules/` load too. One with frontmatter `paths: ["src/api/**/*.go"]` is given to the agent only when it first reads or edits a matching file. None of these files can grant permissions. `/memory` lists what's loaded; `/init` has the agent write `BLITZ.md`.
 
+A rule can also be checked rather than followed. Give it `when: before_agent` (it judges your prompt before the agent runs) or `when: after_agent` (it judges the answer and the changes before the turn ends), and say what a failure does:
+
+```markdown
+---
+when: after_agent
+action: revise     # block, warn or revise
+order: 10          # gates run by order
+agents: [coder]    # none: every agent
+---
+The answer says how the change was tested.
+```
+
+`block` stops a prompt (or marks an answer as failing), `warn` says so in the chat, and `revise` gives the agent the reason: with the prompt, or as a request to fix its answer (twice at most). A fast model judges each rule (the suggestions model). In the desktop app, **Studio › Rules** lists them in the order they run, reorders them by dragging, and has **Try it** to check a sample prompt or answer.
+
+Rules are about the quality of the work. **Guardrails** are about safety and limits, and they watch every step of a turn: your prompt, each tool call before it runs, what each tool brings back, and the answer. Three are built in, and they're on by default. A file in `.agents/guardrails/` named after one (`~/.blitz/guardrails/` for every workspace) changes its settings, or switches it off with `enabled: false`; delete the file to go back to the defaults:
+
+```markdown
+---
+builtin: limits
+max_cost_usd: 2        # per turn
+max_turns: 40          # model calls per turn
+max_files_changed: 20
+allowed_domains: [example.com]
+commands: ["git push --force*"]
+---
+```
+
+Without a file, `limits` refuses force pushes (`git push*--force*`, `git push* -f*`) and `rm -rf` of `/` or `~`; a file's `commands` replaces that list. `prompt_injection` watches what web pages, the browser and MCP servers return for text aimed at the agent (`action: warn` tells the agent it's data, not orders; `block` withholds it; `judge: true` has a model confirm a match). `secrets` masks credentials in answers (`action: redact`, `warn` or `block`; `pii: true` adds email addresses, phone numbers, card and social security numbers). Your own guardrail is a check in plain English, judged by the suggestions model:
+
+```markdown
+---
+stage: action          # input, tool_result, output or action
+action: block          # or warn
+tools: [run_shell_command]
+---
+Deleting a git branch, locally or on the remote.
+```
+
+A rule that can't be checked lets the turn go on; a guardrail that can't be checked and blocks stops what it guards. In the desktop app, **Studio › Guardrails** switches the built-ins off and on, tunes them (or resets them to their defaults), and edits your own, with **Try it**.
+
 Edit any of these, or an agent or skill in `.agents/`, while you work: the change applies from your next message, in the same conversation or a new one. Blitz checks the files' sizes and times before each message and reloads only what changed. `/reload` (in the app, **Agents › Reload agent files**) reads them all again now and says what it loaded. MCP servers in `.mcp.json` or `.agents/mcp_config.json` are the exception: open the workspace again to apply a change to them.
 
 ### Notes the agent keeps
@@ -89,7 +129,7 @@ Other failures warn unless `fail_closed = true`. Hooks come from your own truste
 
 ## Custom commands
 
-A Markdown file is a slash command: `~/.blitz/commands/fix.md` is `/fix`. In a project, `.blitz/commands/`, `.claude/commands/` and `.agents/workflows/` work too; the project's win, and `db/migrate.md` is `/db:migrate`. The body is the prompt, with `$ARGUMENTS` or `$1`…`$9` for what you type after the command.
+A Markdown file is a slash command: `~/.blitz/commands/fix.md` is `/fix`. In a project, `.blitz/commands/`, `.claude/commands/` and `.agents/workflows/` work too; the project's win, and `db/migrate.md` is `/db:migrate`. A `.flow.yaml` in `.agents/workflows/` is a [workflow](workflows.md): several steps, run by the same `/name`. The body is the prompt, with `$ARGUMENTS` or `$1`…`$9` for what you type after the command.
 
 ```markdown
 ---

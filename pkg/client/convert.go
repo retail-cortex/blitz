@@ -62,6 +62,8 @@ var sentinels = map[string]error{
 	"NOTHING_TO_COMPACT":       api.ErrNothingToCompact,
 	"WORKSPACE_BUSY":           api.ErrWorkspaceBusy,
 	"UNKNOWN_WORKER":           api.ErrUnknownWorker,
+	"EVAL_NOT_FOUND":           api.ErrUnknownEval,
+	"EVAL_NOT_RUNNABLE":        api.ErrEvalNotRunnable,
 	"WORKER_EXISTS":            api.ErrWorkerExists,
 	"SANDBOX_UNAVAILABLE":      api.ErrSandboxUnavailable,
 	"OUTPUT_LIMIT":             api.ErrOutputLimit,
@@ -231,6 +233,7 @@ func skill(s *pb.SkillInfo) api.SkillInfo {
 		Name: s.Name, Description: s.Description, Version: s.Version, License: s.License, Category: s.Category,
 		Compatibility: s.Compatibility, Tags: s.Tags, Hash: s.Hash, Tier: s.Tier, Bypass: s.Bypass,
 		Network: s.Network, NeedsNetwork: s.NeedsNetwork, Env: s.Env, Withheld: s.Withheld, Blocked: s.Blocked,
+		Dir: s.Dir,
 	}
 	for _, t := range s.Tools {
 		out.Tools = append(out.Tools, api.SkillTool{Name: t.Name, Scopes: t.Scopes, Why: t.Why})
@@ -269,6 +272,9 @@ func event(ev *pb.TurnEvent) (api.Event, bool) {
 		}
 	case *pb.TurnEvent_Notice:
 		out.Notice = &api.Notice{Text: k.Notice.Text, Error: k.Notice.Error, Transient: k.Notice.Transient}
+	case *pb.TurnEvent_FlowStep:
+		s := k.FlowStep
+		out.Step = &api.FlowStep{Workflow: s.Workflow, ID: s.Id, Title: s.Title, Type: s.Type, Index: int(s.Index), Count: int(s.Count), Status: s.Status, Output: s.Output, Error: s.Error, Run: s.Run}
 	default:
 		return api.Event{}, false
 	}
@@ -301,4 +307,20 @@ func decisionMsg(d api.Decision) pb.Decision {
 		return pb.Decision_DECISION_ALWAYS
 	}
 	return pb.Decision_DECISION_DENY
+}
+
+// evalResultOf is an eval result from the service.
+func evalResultOf(m *pb.EvalResult) api.EvalResult {
+	return api.EvalResult{Case: m.GetCase(), Name: m.GetName(), Agent: m.GetAgent(), Type: m.GetType(), Scope: m.GetScope(), Status: m.GetStatus(), Score: m.GetScore(),
+		Threshold: m.GetThreshold(), Prompt: m.GetPrompt(), Expected: m.GetExpected(), Output: m.GetOutput(), Reason: m.GetReason(), Refusals: m.GetRefusals(),
+		CostUSD: m.GetCostUsd(), Duration: m.GetDuration().AsDuration()}
+}
+
+// evalRunOf is an eval run from the service, of the workspace dir.
+func evalRunOf(m *pb.EvalRun, dir string) api.EvalRun {
+	run := api.EvalRun{ID: m.GetId(), Workspace: dir, Eval: m.GetEval(), Started: timeOf(m.GetStarted()), Duration: m.GetDuration().AsDuration(), Status: m.GetStatus(), CostUSD: m.GetCostUsd(), Error: m.GetError()}
+	for _, x := range m.GetResults() {
+		run.Results = append(run.Results, evalResultOf(x))
+	}
+	return run
 }

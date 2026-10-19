@@ -610,3 +610,53 @@ func TestSetSearchValues(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, cfg.Search.Enabled, "back to the default")
 }
+
+// The global worker limits are set with their types (a count, dollars, a
+// length of time, permission kinds), refused when they aren't one, and
+// removed with "" (WK-63).
+func TestSetWorkerPolicyValues(t *testing.T) {
+	keysEnv(t)
+	for key, value := range map[string]string{
+		"workers.policy.allow":                "shell, web, shell",
+		"workers.policy.max_concurrent":       "3",
+		"workers.policy.default_max_turns":    "40",
+		"workers.policy.max_turns":            "120",
+		"workers.policy.default_max_cost_usd": "2",
+		"workers.policy.max_cost_usd":         "12.5",
+		"workers.policy.default_timeout":      "20m",
+		"workers.policy.max_timeout":          "90m",
+	} {
+		_, err := SetValue("", "", key, value)
+		require.NoError(t, err, key)
+	}
+	cfg, err := Load("")
+	require.NoError(t, err)
+	assert.Equal(t, WorkerPolicy{Allow: []string{"shell", "web"}, DefaultMaxTurns: 40, DefaultMaxCostUSD: 2, DefaultTimeout: "20m", MaxTurns: 120, MaxCostUSD: 12.5, MaxTimeout: "90m", MaxConcurrent: 3}, cfg.Workers.Policy)
+
+	tests := []struct{ key, value string }{
+		{"workers.policy.max_concurrent", "-2"},
+		{"workers.policy.max_cost_usd", "-1"},
+		{"workers.policy.max_cost_usd", "NaN"},
+		{"workers.policy.max_cost_usd", "lots"},
+		{"workers.policy.max_timeout", "0s"},
+		{"workers.policy.max_timeout", "a while"},
+		{"workers.policy.allow", "shell, email"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.key+"="+tt.value, func(t *testing.T) {
+			_, err := SetValue("", "", tt.key, tt.value)
+			assert.Error(t, err)
+		})
+	}
+
+	_, err = SetValue("", "", "workers.policy.allow", "none")
+	require.NoError(t, err)
+	cfg, err = Load("")
+	require.NoError(t, err)
+	assert.Empty(t, cfg.Workers.Policy.Allow, "none: workers may only read")
+	_, err = SetValue("", "", "workers.policy.allow", "")
+	require.NoError(t, err)
+	cfg, err = Load("")
+	require.NoError(t, err)
+	assert.Equal(t, WorkerPermissionKinds, cfg.Workers.Policy.Allow, "back to the default")
+}

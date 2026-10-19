@@ -18,10 +18,11 @@ import { useCallback, useEffect, useState } from "react";
 import {
   mdiBrain,
   mdiCheckCircleOutline,
+  mdiXml,
   mdiCogOutline,
-  mdiFileDocumentEditOutline,
   mdiFolderMultipleOutline,
   mdiKeyChainVariant,
+  mdiKeyVariant,
   mdiProgressClock,
   mdiPuzzleOutline,
   mdiRobotOutline,
@@ -33,17 +34,22 @@ import {
   mdiMonitor,
   mdiPaletteOutline,
   mdiPencilOutline,
+  mdiPowerPlugOutline,
   mdiScaleBalance,
   mdiServerNetwork,
   mdiTextBoxSearchOutline,
   mdiAlertCircleOutline,
   mdiWeatherNight,
   mdiWhiteBalanceSunny,
+  mdiCalendarClock,
 } from "@mdi/js";
 import { appVersion, canUpdate, checkUpdate, cliStatus, downloadUpdate, installCLI, isLinuxApp, installService, openURL, reinstallCLI, restartService, serviceStatus, setTray, stopService, type CLIStatus, type ServiceStatus, type UpdateStatus } from "./desktop";
 import { restart, shouldDownload, updateLine } from "./updates";
+import { config } from "./api";
+import { message } from "./errors";
 import { SandboxFixResult, sandboxDetail, useSandboxFix } from "./SandboxNotice";
 import { configChanged, showLicense } from "./events";
+import { useStopGuard } from "./stopGuard";
 import { checkService, settleTimeout, type ServiceCheck, shownVersion, waitForService, withTimeout } from "./serviceVersion";
 import { languages, t } from "./i18n";
 import { workspaceColor } from "./palette";
@@ -55,28 +61,36 @@ import { LogViewer } from "./LogViewer";
 import { ProviderSettings } from "./ProviderSettings";
 import { SettingsFile } from "./settingsfile/SettingsFile";
 import { DocumentSettings } from "./files/DocumentSettings";
+import { McpSettings } from "./McpSettings";
+import { SecretsEditor } from "./SecretsEditor";
 import { SkillSettings } from "./SkillSettings";
+import { WorkersSettings } from "./WorkersSettings";
+import { refreshTasks, useTasks, type TaskAlerts } from "./humanTasks";
 import { useAdvanced, useApp } from "./state";
-import { sectionShown, settingsSections, type SectionId } from "./simpleMode";
+import { sectionShown, shownGroups, type SectionId } from "./simpleMode";
 import { paletteOf, type ThemePref } from "./theme";
 import { darkThemes, lightThemes, type DarkThemeId, type LightThemeId } from "./themes";
-import { Button, Chip, Icon, IconButton, Segmented, Switch, useSnackbar } from "./ui/controls";
+import { Button, Chip, Dialog, Icon, IconButton, Segmented, Switch, useSnackbar } from "./ui/controls";
 import { Drawer } from "./ui/Drawer";
 import { LookFields, WorkspaceSettingsForm } from "./WorkspaceSettingsForm";
 import { useWorkspaceSettings } from "./workspaceSettings";
 
-/** A section of the Settings dialog (simpleMode.ts lists them, and which a newcomer sees). */
-export type Section = SectionId;
+/**
+ * What Settings opens on: a section (simpleMode.ts lists them, and which a
+ * newcomer sees), or "file", the settings file on the other side of them.
+ */
+export type Section = SectionId | "file";
 
-const sectionIcons: Record<Section, string> = {
-  appearance: mdiPaletteOutline,
-  documents: mdiLanguageMarkdownOutline,
+const sectionIcons: Record<SectionId, string> = {
   providers: mdiKeyChainVariant,
-  permissions: mdiShieldCheckOutline,
+  secrets: mdiKeyVariant,
+  appearance: mdiPaletteOutline,
   agents: mdiRobotOutline,
   skills: mdiPuzzleOutline,
-  file: mdiFileDocumentEditOutline,
+  workers: mdiCalendarClock,
+  mcp: mdiPowerPlugOutline,
   workspaces: mdiFolderMultipleOutline,
+  permissions: mdiShieldCheckOutline,
   service: mdiServerNetwork,
   logs: mdiTextBoxSearchOutline,
   about: mdiInformationOutline,
@@ -86,59 +100,125 @@ const sectionIcons: Record<Section, string> = {
  * The window's settings, opening on a section (initial) and, for
  * Workspaces and the settings file, on a workspace (scope): a workspace's
  * own settings are in Workspaces (its pencil in the Workspaces menu, and
- * the status bar's model, open them there).
+ * the status bar's model, open them there). The title bar holds Show
+ * advanced settings and, with them, the settings file (</>): Settings turns
+ * over to show it, as a page's source, and back.
  */
-export function SettingsDrawer({ onClose, initial = "appearance", scope: initialScope = "" }: { onClose: () => void; initial?: Section; scope?: string }) {
+export function SettingsDrawer({ onClose, initial = "providers", scope: initialScope = "" }: { onClose: () => void; initial?: Section; scope?: string }) {
   const advanced = useAdvanced();
-  const [asked, setSection] = useState<Section>(initial);
+  const { update } = useApp();
+  const [asked, setSection] = useState<SectionId>(initial === "file" ? "providers" : initial);
   const [scope, setScope] = useState(initialScope);
-  // Simple mode shows what a newcomer needs (settingsSections); a section
-  // hidden when advanced is turned off falls back to Appearance.
-  const sections = settingsSections(advanced);
+  const flip = useFlip(initial === "file");
+  // Simple mode shows what a newcomer needs (settingsSections), in their
+  // groups; a section hidden when advanced is turned off falls back to the
+  // first.
+  const groups = shownGroups(advanced);
   const section = sectionShown(asked, advanced);
+  const showFile = flip.face === "file" && advanced;
+  const actions = (
+    <>
+      <label className="row drawer-switch t-label" title={t("desktop.settings.advanced.detail")}>
+        {t("desktop.settings.advanced.short")}
+        <Switch label={t("desktop.settings.advanced")} checked={advanced} onChange={(on) => update((p) => ({ ...p, advanced: on }))} />
+      </label>
+      {advanced && (
+        <IconButton
+          icon={mdiXml}
+          label={t(showFile ? "desktop.settings.file.back" : "desktop.settings.file.show")}
+          selected={showFile}
+          onClick={() => flip.turn(showFile ? "settings" : "file")}
+        />
+      )}
+    </>
+  );
   return (
-    <Drawer title={t("desktop.settings")} icon={mdiCogOutline} onClose={onClose} className="settings-drawer">
-      <div className="settings">
-        <div className="settings-nav list" role="tablist">
-          {sections.map((id) => (
-            <button
-              key={id}
-              role="tab"
-              aria-selected={id === section}
-              data-autofocus={id === section ? "" : undefined}
-              className={`list-item ${id === section ? "active" : ""}`}
-              title={t(`desktop.settings.${id}`)}
-              onClick={() => setSection(id)}
-            >
-              <Icon path={sectionIcons[id]} />
-              <span className="settings-nav-label">{t(`desktop.settings.${id}`)}</span>
-            </button>
-          ))}
+    <Drawer title={t("desktop.settings")} icon={mdiCogOutline} onClose={onClose} className="settings-drawer" headerActions={actions}>
+      <div className={`settings-flip ${flip.turning}`} onAnimationEnd={flip.turned}>
+        <div className="settings" hidden={showFile}>
+          <div className="settings-nav list" role="tablist">
+            {groups.flatMap((g) => [
+              // Headings with advanced settings, when there are enough sections to need them.
+              ...(advanced ? [<span key={`group-${g.id}`} role="presentation" className="settings-nav-group">{t(`desktop.settings.group.${g.id}`)}</span>] : []),
+              ...g.sections.map((id) => (
+              <button
+                key={id}
+                role="tab"
+                aria-selected={id === section}
+                data-autofocus={id === section && !showFile ? "" : undefined}
+                className={`list-item ${id === section ? "active" : ""}`}
+                title={t(`desktop.settings.${id}`)}
+                onClick={() => setSection(id)}
+              >
+                <Icon path={sectionIcons[id]} />
+                <span className="settings-nav-label">{t(`desktop.settings.${id}`)}</span>
+              </button>
+            )),
+            ])}
+          </div>
+          <div className="settings-pane">
+            {section === "providers" && <ProviderSettings workspace="" />}
+            {section === "secrets" && <SecretsEditor />}
+            {section === "appearance" && <Appearance />}
+            {section === "agents" && <UserAgents />}
+            {section === "skills" && <SkillSettings />}
+            {section === "workers" && <WorkersSettings onLeave={onClose} />}
+            {section === "mcp" && <McpSettings />}
+            {section === "workspaces" && (
+              <Workspaces
+                initial={initial === "workspaces" ? initialScope : ""}
+                onSettingsFile={(dir) => {
+                  setScope(dir);
+                  flip.turn("file");
+                }}
+              />
+            )}
+            {section === "permissions" && <PermissionSettings workspace="" />}
+            {section === "service" && <Service />}
+            {section === "logs" && <LogViewer />}
+            {section === "about" && <About />}
+          </div>
         </div>
-        <div className="settings-pane">
-          {section === "appearance" && <Appearance />}
-          {section === "documents" && <DocumentSettings />}
-          {section === "providers" && <ProviderSettings workspace="" />}
-          {section === "permissions" && <PermissionSettings workspace="" />}
-          {section === "agents" && <UserAgents />}
-          {section === "skills" && <SkillSettings />}
-          {section === "file" && <FileSection scope={scope} />}
-          {section === "workspaces" && (
-            <Workspaces
-              initial={initial === "workspaces" ? initialScope : ""}
-              onSettingsFile={(dir) => {
-                setScope(dir);
-                setSection("file");
-              }}
-            />
-          )}
-          {section === "service" && <Service />}
-          {section === "logs" && <LogViewer />}
-          {section === "about" && <About />}
-        </div>
+        {/* Kept once shown, so turning back and forth keeps what's typed. */}
+        {advanced && flip.shown && (
+          <div className="settings-file-side" hidden={!showFile}>
+            <FileSection key={scope} scope={scope} />
+          </div>
+        )}
       </div>
     </Drawer>
   );
+}
+
+/**
+ * Settings' two sides: the sections and the settings file. Turning goes
+ * out (a quarter turn), changes side and comes back in; with reduced
+ * motion it changes side at once. shown: the file's side has been shown.
+ */
+function useFlip(file: boolean) {
+  const [face, setFace] = useState<"settings" | "file">(file ? "file" : "settings");
+  const [next, setNext] = useState<"settings" | "file" | null>(null);
+  const [turning, setTurning] = useState<"" | "flip-out" | "flip-in">("");
+  const [shown, setShown] = useState(file);
+  const turn = (to: "settings" | "file") => {
+    if (to === face && !next) return;
+    if (to === "file") setShown(true);
+    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) {
+      setFace(to);
+      return;
+    }
+    setNext(to);
+    setTurning("flip-out");
+  };
+  const turned = (e: React.AnimationEvent) => {
+    if (e.target !== e.currentTarget) return;
+    if (turning === "flip-out" && next) {
+      setFace(next);
+      setNext(null);
+      setTurning("flip-in");
+    } else setTurning("");
+  };
+  return { face, turning, shown, turn, turned };
 }
 
 // The user's agents (~/.blitz/agents), offered the tools and models of
@@ -164,16 +244,49 @@ function Setting({ title, detail, children }: { title: string; detail?: string; 
 // The window's look and behaviour. Simple mode shows the switch for
 // advanced settings, theme, language and notifications; the rest have
 // sensible defaults and show with advanced settings.
+/**
+ * How workflows' human tasks reach the user ([ui] task_alerts, in the
+ * user's settings file, which the tray reads too): a notification, the
+ * tasks at once, or nothing.
+ */
+function TaskAlertsSetting() {
+  const { alerts, loaded } = useTasks();
+  const snack = useSnackbar();
+  const set = async (value: TaskAlerts) => {
+    try {
+      await config.setConfigValue({ workspace: "", key: "ui.task_alerts", value });
+      await refreshTasks();
+    } catch (e) {
+      snack(message(e), { error: true });
+    }
+  };
+  return (
+    <Setting title={t("desktop.settings.task_alerts")} detail={t("desktop.settings.task_alerts.detail")}>
+      <select className="select language-select" aria-label={t("desktop.settings.task_alerts")} value={alerts} disabled={!loaded} onChange={(e) => void set(e.target.value as TaskAlerts)}>
+        {(["notify", "open", "off"] as const).map((v) => (
+          <option key={v} value={v}>
+            {t(`desktop.settings.task_alerts.${v}`)}
+          </option>
+        ))}
+      </select>
+    </Setting>
+  );
+}
+
 function Appearance() {
   const { prefs, update, theme } = useApp();
   const palette = paletteOf(theme, prefs.light_theme, prefs.dark_theme);
+  const [documents, setDocuments] = useState(false);
   return (
     <div className="stack" style={{ gap: 0 }}>
-      <Setting title={t("desktop.settings.advanced")} detail={t("desktop.settings.advanced.detail")}>
-        <Switch label={t("desktop.settings.advanced")} checked={prefs.advanced} onChange={(advanced) => update((p) => ({ ...p, advanced }))} />
-      </Setting>
+      {documents && (
+        <Dialog title={t("desktop.settings.documents")} icon={mdiLanguageMarkdownOutline} onClose={() => setDocuments(false)} large closeButton>
+          <DocumentSettings />
+        </Dialog>
+      )}
       <Setting title={t("desktop.settings.theme")} detail={t("desktop.settings.theme.detail")}>
         <Segmented<ThemePref>
+          equal
           label={t("desktop.settings.theme")}
           value={prefs.theme}
           onChange={(theme) => update((p) => ({ ...p, theme }))}
@@ -216,10 +329,18 @@ function Appearance() {
       <Setting title={t("desktop.settings.notifications")} detail={t("desktop.settings.notifications.detail")}>
         <Switch label={t("desktop.settings.notifications")} checked={prefs.notifications === "on"} onChange={(on) => update((p) => ({ ...p, notifications: on ? "on" : "off" }))} />
       </Setting>
+      <TaskAlertsSetting />
+      {/* The Markdown previews' styles, in a dialog of their own. */}
+      <Setting title={t("desktop.settings.documents")} detail={t("desktop.settings.documents.detail")}>
+        <Button variant="outlined" icon={mdiLanguageMarkdownOutline} onClick={() => setDocuments(true)}>
+          {t("desktop.settings.documents.edit")}
+        </Button>
+      </Setting>
       {prefs.advanced && (
         <>
         <Setting title={t("desktop.settings.composer")} detail={t("desktop.settings.composer.detail")}>
           <Segmented
+            equal
             label={t("desktop.settings.composer")}
             value={prefs.composer}
             onChange={(composer) => update((p) => ({ ...p, composer }))}
@@ -231,6 +352,7 @@ function Appearance() {
         </Setting>
         <Setting title={t("desktop.settings.density")} detail={t("desktop.settings.density.detail")}>
           <Segmented
+            equal
             label={t("desktop.settings.density")}
             value={prefs.density}
             onChange={(density) => update((p) => ({ ...p, density }))}
@@ -250,6 +372,7 @@ function Appearance() {
         )}
         <Setting title={t("desktop.settings.width")} detail={t("desktop.settings.width.detail")}>
           <Segmented
+            equal
             label={t("desktop.settings.width")}
             value={prefs.width}
             onChange={(width) => update((p) => ({ ...p, width }))}
@@ -261,6 +384,7 @@ function Appearance() {
         </Setting>
         <Setting title={t("desktop.settings.doc_width")} detail={t("desktop.settings.doc_width.detail")}>
           <Segmented
+            equal
             label={t("desktop.settings.doc_width")}
             value={prefs.doc_width}
             onChange={(doc_width) => update((p) => ({ ...p, doc_width }))}
@@ -379,6 +503,7 @@ function OpenWorkspaceSettings({ dir, onSettingsFile }: { dir: string; onSetting
 }
 
 function Service() {
+  const { guard, dialog: stopping } = useStopGuard();
   const [status, setStatus] = useState<ServiceStatus | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -428,6 +553,7 @@ function Service() {
   if (!status) return <p className="muted">{error || t("desktop.checking")}</p>;
   return (
     <div className="stack" style={{ gap: 0 }}>
+      {stopping}
       <Setting title={t("desktop.service.status")} detail={t("desktop.service.status.detail")}>
         {waiting ? (
           <Chip className="static" icon={mdiProgressClock}>
@@ -438,10 +564,10 @@ function Service() {
             <Chip className="static" icon={mdiCheckCircleOutline} selected>
               {t("desktop.service.running")}
             </Chip>
-            <Button small variant="tonal" disabled={!status.service || busy} onClick={() => act(() => restartService(version?.info?.pid ?? 0), true)}>
+            <Button small variant="tonal" disabled={!status.service || busy} onClick={() => guard(() => void act(() => restartService(version?.info?.pid ?? 0), true))}>
               {t("desktop.service.restart_short")}
             </Button>
-            <Button small danger disabled={busy} onClick={() => act(() => stopService(version?.info?.pid ?? 0), false)}>
+            <Button small danger disabled={busy} onClick={() => guard(() => void act(() => stopService(version?.info?.pid ?? 0), false))}>
               {t("desktop.service.stop")}
             </Button>
           </div>
@@ -456,7 +582,7 @@ function Service() {
           variant="tonal"
           small
           disabled={!status.service || busy}
-          onClick={() => act(installService, true)}
+          onClick={() => guard(() => void act(installService, true))}
         >
           {status.installed ? t("desktop.service.reinstall") : t("desktop.service.install_short")}
         </Button>
@@ -485,7 +611,7 @@ function Service() {
       {version && (
         <Setting title={t("desktop.service.version")} detail={version.stale ? t(`desktop.service.stale.${version.stale}`, { service: shownVersion(version.info?.version ?? "?"), app: shownVersion(version.app), path: version.info?.executable ?? "" }) : undefined}>
           <span className={version.stale ? "error-text" : "muted"}>
-            {version.info ? shownVersion(version.info.version) : t("desktop.service.version_unknown")} · {t("desktop.service.app_version", { version: shownVersion(version.app) })}
+            {version.info ? shownVersion(version.info.version) : t("desktop.service.version_unknown")}
           </span>
         </Setting>
       )}

@@ -16,7 +16,7 @@
 
 import { create } from "@bufbuild/protobuf";
 import { describe, expect, it } from "vitest";
-import { addTools, advancedCount, agentFromForm, agentPath, deleteTarget, emptyAgentForm, fileName, formFromAgent, invalidFields, sameForm, toolChoices, validAgentName, type AgentForm } from "./agentForm";
+import { addTools, advancedCount, agentFromForm, agentPath, deleteTarget, emptyAgentForm, newAgentForm, starterTools, fileName, formFromAgent, invalidFields, sameForm, toolChoices, validAgentName, type AgentForm } from "./agentForm";
 import { AgentDefinitionSchema } from "./gen/blitz/v1/workspace_pb";
 
 const valid: AgentForm = { ...emptyAgentForm, name: "reviewer", description: "Reviews changes" };
@@ -147,5 +147,11 @@ describe("the agent form", () => {
     ["a file that doesn't load by its path", "/a/half-done.md", "", { path: "/a/half-done.md" }],
   ])("deletes %s", (_, path, name, want) => {
     expect(deleteTarget(path, name)).toEqual(want);
+  });
+
+  it("starts a new agent with tools to read, search and change files, never none", () => {
+    expect(newAgentForm.tools).toEqual(starterTools);
+    expect(starterTools).toEqual(expect.arrayContaining(["read_file", "edit", "grep"]));
+    expect(starterTools).not.toContain("run_shell_command");
   });
 });

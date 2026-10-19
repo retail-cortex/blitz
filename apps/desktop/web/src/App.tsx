@@ -20,15 +20,21 @@ import { mdiAlertOutline, mdiFolderOpenOutline, mdiLightningBolt, mdiServerOff }
 import { config as configAPI, onServiceLost, workspaces as workspaceAPI } from "./api";
 import { appVersion, chooseWorkspace, type LicenseText, installService, onAppMenu, onDeepLink, onNotificationOpen, restartService, serviceStatus, type ServiceStatus, setAppMenu, toggleFullscreen } from "./desktop";
 import { checkService, type ServiceCheck, shownVersion } from "./serviceVersion";
+import { useStopGuard } from "./stopGuard";
 import { CommandPalette } from "./CommandPalette";
 import { SearchDialog } from "./SearchDialog";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { applyUserLanguage, t, useLanguage } from "./i18n";
 import { message, reason } from "./errors";
-import { compose, goToFileEvent, openDocsEvent, openSettingsEvent, searchWorkspaceEvent, showLicenseEvent } from "./events";
+import { globalHome } from "./workersOverview";
+import { compose, goToFileEvent, openDocsEvent, openSettingsEvent, searchWorkspaceEvent, showLicenseEvent, showView } from "./events";
 import { DocsDrawer, type DocsAt } from "./docs/DocsDrawer";
 import { UnsavedDialog } from "./files/EditorPane";
 import { LicenseDrawer } from "./LicenseDrawer";
+import { FlowRunAlerts } from "./FlowRunAlerts";
+import { TaskAlerts } from "./TaskAlerts";
+import { TasksDialog } from "./TasksPanel";
+import { showTasks } from "./humanTasks";
 import { Brand, MenuBar } from "./MenuBar";
 import { unsavedIn } from "./files/unsaved";
 import { closeWorkspace, displayName, openWorkspace, openWorkspaces, recentWorkspaces } from "./prefs";
@@ -110,6 +116,7 @@ function StaleService({ state, check }: { state: ServiceCheck; check: () => Prom
   const [bin, setBin] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const { guard, dialog: stopping } = useStopGuard();
   useEffect(() => {
     serviceStatus().then((s) => setBin(s.service), () => setBin(""));
   }, []);
@@ -144,10 +151,11 @@ function StaleService({ state, check }: { state: ServiceCheck; check: () => Prom
         {error && <span className="error-text"> {error}</span>}
       </span>
       {bin ? (
-        <Button variant="tonal" small disabled={busy} onClick={restart}>
+        <Button variant="tonal" small disabled={busy} onClick={() => guard(() => void restart())}>
           {busy ? t("desktop.service.restarting") : t("desktop.service.restart")}
         </Button>
       ) : null}
+      {stopping}
     </div>
   );
 }
@@ -231,7 +239,7 @@ function Shell() {
         setPaletteOpen(true);
       } else if ((e.metaKey || e.ctrlKey) && e.key === ",") {
         e.preventDefault();
-        setSettingsAt({ section: "appearance" });
+        setSettingsAt({ section: "providers" });
       } else if (isFocusComposerKey(e)) {
         e.preventDefault();
         window.dispatchEvent(new Event(focusComposerEvent));
@@ -279,12 +287,24 @@ function Shell() {
     };
   }, []);
   // A click on a notification shows its workspace.
-  useEffect(() => onNotificationOpen((dir) => update((p) => openWorkspace(p, dir))), [update]);
-  // A blitz://open link opens its folder with the prompt filled in, not sent.
+  // A notification about tasks (no folder) opens the tasks dialog.
+  useEffect(() => onNotificationOpen((dir) => (dir ? update((p) => openWorkspace(p, dir)) : showTasks())), [update]);
+  // A blitz://open link opens its folder with the prompt filled in, not
+  // sent; blitz://workers (the tray's) opens it on its workers, or
+  // Settings › Workers for the global ones.
   useEffect(
     () =>
-      onDeepLink((link) => {
+      onDeepLink(async (link) => {
+        // The global workers' (the home workspace's) are in Settings › Workers.
+        if (link.view === "workers" && link.dir === (await globalHome())) {
+          setSettingsAt({ section: "workers" });
+          return;
+        }
         update((p) => openWorkspace(p, link.dir));
+        if (link.view) {
+          showView({ dir: link.dir, view: link.view, workflow: link.workflow, run: link.run });
+          return;
+        }
         if (link.prompt) compose({ dir: link.dir, text: link.prompt });
         snack(t("desktop.link_opened", { dir: displayName({ dir: link.dir, name: "" }) }));
       }),
@@ -383,6 +403,9 @@ function Shell() {
         {docsAt && <DocsDrawer key={`${docsAt.page ?? "(last)"}#${docsAt.anchor ?? ""}`} initial={docsAt} onClose={() => setDocsAt(null)} />}
         {settingsAt && <SettingsDrawer initial={settingsAt.section} scope={settingsAt.scope} onClose={() => setSettingsAt(null)} />}
         {license && <LicenseDrawer initial={license} onClose={() => setLicense(null)} />}
+        <TasksDialog />
+        <TaskAlerts />
+        <FlowRunAlerts />
         {searchOpen !== null && prefs.active && <SearchDialog dir={prefs.active} initialQuery={searchOpen} onClose={() => setSearchOpen(null)} />}
         {paletteOpen && <CommandPalette onClose={() => setPaletteOpen(false)} onOpenWorkspace={open} onSettings={(section = "appearance", scope) => openSettings(section, scope)} />}
         {confirmClose && (
@@ -432,7 +455,9 @@ function ServiceDown({ status, onStarted, error, setError }: { status: ServiceSt
     setError("");
     setBusy(true);
     try {
-      await installService();
+      // Up after all (it was busy, or starting): left as it is, with the
+      // runs going in it; installing would stop it.
+      if (!(await serviceStatus()).running) await installService();
       onStarted();
     } catch (e) {
       setError(String(e));

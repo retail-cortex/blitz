@@ -22,6 +22,7 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"flag"
 	"fmt"
 	"image"
@@ -48,17 +49,30 @@ func cmd(args []string, stderr io.Writer) int {
 	icon := fs.String("icon", "", "its icon, a square PNG of 256 px or more")
 	ver := fs.String("version", "0.0.0", "its version (a.b.c)")
 	out := fs.String("out", "", "where the rewritten program goes")
+	name := fs.String("name", "Blitz.exe", "its file name, as its details give it")
+	desc := fs.String("description", "Blitz", "what it is, as Explorer and Task Manager show it")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
-	if err := run(*in, *icon, *ver, *out); err != nil {
+	if err := run(*in, *icon, *ver, *out, Details{Name: *name, Description: *desc}); err != nil {
 		fmt.Fprintln(stderr, "winexe:", err)
 		return 1
 	}
 	return 0
 }
 
-func run(in, iconPath, ver, out string) error {
+// Details are what a program's version details say beside the version.
+type Details struct {
+	// Name is its file name (OriginalFilename).
+	Name string
+	// Description is what it is (FileDescription).
+	Description string
+}
+
+// blitzExe is Blitz.exe's details.
+var blitzExe = Details{Name: "Blitz.exe", Description: "Blitz"}
+
+func run(in, iconPath, ver, out string, d Details) error {
 	if in == "" || iconPath == "" || out == "" {
 		return fmt.Errorf("--in, --icon and --out are needed")
 	}
@@ -71,18 +85,26 @@ func run(in, iconPath, ver, out string) error {
 		return err
 	}
 	var b bytes.Buffer
-	if err := Rewrite(bytes.NewReader(exe), png, ver, &b); err != nil {
+	if err := Rewrite(bytes.NewReader(exe), png, ver, d, &b); err != nil {
 		return err
 	}
 	return os.WriteFile(out, b.Bytes(), 0o755)
 }
 
 // Rewrite writes exe with Blitz's icon (from png, at every size Windows
-// uses) as its first icon and its version details naming Blitz, keeping
-// its other resources (its manifest among them).
-func Rewrite(exe io.ReadSeeker, png []byte, ver string, out io.Writer) error {
+// uses) as its first icon and its version details naming Blitz (and d),
+// keeping its other resources (its manifest among them).
+func Rewrite(exe io.ReadSeeker, png []byte, ver string, d Details, out io.Writer) error {
 	rs, err := winres.LoadFromEXE(exe)
-	if err != nil {
+	switch {
+	case errors.Is(err, winres.ErrNoResources):
+		// A Go program (the setup program) has none: it gets a manifest
+		// too, running as whoever starts it. Without one, Windows takes a
+		// program named like a setup program for an installer and asks
+		// for an administrator.
+		rs = &winres.ResourceSet{}
+		rs.SetManifest(winres.AppManifest{ExecutionLevel: winres.AsInvoker, DPIAwareness: winres.DPIPerMonitorV2, UseCommonControlsV6: true})
+	case err != nil:
 		return fmt.Errorf("reading the program's resources: %w", err)
 	}
 	img, _, err := image.Decode(bytes.NewReader(png))
@@ -106,10 +128,10 @@ func Rewrite(exe io.ReadSeeker, png []byte, ver string, out io.Writer) error {
 	v.SetProductVersion(ver)
 	for k, s := range map[string]string{
 		version.ProductName:      "Blitz",
-		version.FileDescription:  "Blitz",
+		version.FileDescription:  d.Description,
 		version.CompanyName:      "Retail Cortex",
 		version.InternalName:     "Blitz",
-		version.OriginalFilename: "Blitz.exe",
+		version.OriginalFilename: d.Name,
 		version.LegalCopyright:   "Copyright 2026 Retail Cortex",
 		version.ProductVersion:   ver,
 		version.FileVersion:      ver,

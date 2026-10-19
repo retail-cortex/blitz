@@ -53,6 +53,8 @@ type Config struct {
 	Workers WorkersConfig `toml:"workers"`
 	// Suggestions shape the desktop app's welcome tiles.
 	Suggestions SuggestionsConfig `toml:"suggestions"`
+	// Health is the workspace dashboard's judge and its schedule.
+	Health HealthConfig `toml:"health"`
 	// Git is what Blitz does with git in a workspace that's a repository.
 	Git     GitConfig     `toml:"git"`
 	Tools   ToolsConfig   `toml:"tools"`
@@ -431,6 +433,11 @@ type WorkersConfig struct {
 	NotifyOn []string `toml:"notify_on"`
 }
 
+// ScriptLanguages are the languages a skill's scripts may be written in
+// (skills.policy.languages): javascript runs with node as typescript
+// does; shell, cmd and powershell with the system's shells.
+var ScriptLanguages = []string{"python", "typescript", "javascript", "shell", "cmd", "powershell"}
+
 // WorkerPolicy is the host's limit on workers. A worker asks for
 // permissions and limits; the policy removes what it doesn't allow and
 // caps the rest.
@@ -486,6 +493,10 @@ type SkillPolicy struct {
 	// UntrustedRoots are directories whose skills' scripts don't run: the
 	// workspace, while its project settings aren't trusted.
 	UntrustedRoots []string `toml:"-"`
+	// Reviewed reports whether the skill in a folder was reviewed and
+	// trusted with a content hash (SkillTrust; nil: every skill is). A
+	// skill on disk whose scripts weren't is asked about before each run.
+	Reviewed func(dir, hash string) bool `toml:"-"`
 }
 
 // Problems reports settings the policy can't honour as written.
@@ -508,8 +519,8 @@ func (p SkillPolicy) Problems() []string {
 		probs = append(probs, "skills.policy.network_allow is ignored unless network = \"allowlist\"")
 	}
 	for _, l := range p.Languages {
-		if !strings.EqualFold(l, "python") && !strings.EqualFold(l, "typescript") {
-			probs = append(probs, fmt.Sprintf("skills.policy.languages: unknown language %q (python, typescript)", l))
+		if !slices.ContainsFunc(ScriptLanguages, func(k string) bool { return strings.EqualFold(k, l) }) {
+			probs = append(probs, fmt.Sprintf("skills.policy.languages: unknown language %q (%s)", l, strings.Join(ScriptLanguages, ", ")))
 		}
 	}
 	if p.MaxTimeoutSeconds < 0 {
@@ -770,6 +781,7 @@ func DefaultConfig() *Config {
 
 			GoalMaxContinues: 20,
 		},
+		Health: HealthConfig{Schedule: "every day at 02:00", MaxCostUSD: 1},
 		LLM: LLMConfig{
 			Provider:            "gemini",
 			MaxRetries:          3,
@@ -796,7 +808,7 @@ func DefaultConfig() *Config {
 			Paths:    []string{".agents/workers", "workers"},
 			NotifyOn: []string{"failed", "limited"},
 			Policy: WorkerPolicy{
-				Allow:             []string{"shell", "write", "delete", "web", "mcp"},
+				Allow:             slices.Clone(WorkerPermissionKinds),
 				DefaultMaxTurns:   50,
 				DefaultMaxCostUSD: 1,
 				DefaultTimeout:    "30m",
@@ -815,7 +827,7 @@ func DefaultConfig() *Config {
 			},
 			Policy: SkillPolicy{
 				MinHITLTier:       2,
-				Languages:         []string{"python", "typescript"},
+				Languages:         slices.Clone(ScriptLanguages),
 				Sandbox:           "auto",
 				Network:           "none",
 				MaxTimeoutSeconds: 300,

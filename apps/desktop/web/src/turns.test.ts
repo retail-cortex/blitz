@@ -18,7 +18,7 @@ import { create } from "@bufbuild/protobuf";
 import { describe, expect, it } from "vitest";
 import { TurnEventSchema, type TurnEvent } from "./gen/blitz/v1/turn_pb";
 import { MessageSchema } from "./gen/blitz/v1/session_pb";
-import { applyEvent, assignPromptIndices, failed, fromMessages, groupTools, latestTurn, parseDiff, summarizeArgs, tasksOf, turnAnswers, type Entry } from "./turns";
+import { applyEvent, assignPromptIndices, failed, fromMessages, splitAttachments, withTools, groupTools, latestTurn, parseDiff, summarizeArgs, tasksOf, turnAnswers, type Entry } from "./turns";
 
 const text = (t: string, opts: { partial?: boolean; repeat?: boolean; thought?: boolean } = {}): TurnEvent =>
   create(TurnEventSchema, { author: "blitz", kind: { case: "text", value: { text: t, ...opts } } });
@@ -103,6 +103,29 @@ describe("thoughts and kinds", () => {
     const saved = [msg("user", "fix it"), msg("model", "ok"), msg("user", "also this", "steer"), msg("user", "(plan approved) go", "plan"), msg("user", "next")];
     const entries = fromMessages(saved);
     expect(entries.map((e) => (e.kind === "user" ? `${e.sub ?? "prompt"}:${e.index ?? "-"}` : e.kind))).toEqual(["prompt:0", "model", "steer:-", "plan:-", "prompt:4"]);
+  });
+
+  it("shows the images a saved prompt was sent with as named chips, not as text", () => {
+    const [e] = fromMessages([msg("user", "What colours?\n[images: gradient.png, logo.jpg]")]);
+    expect(e).toEqual({ kind: "user", text: "What colours?", index: 0, images: [{ url: "", name: "gradient.png" }, { url: "", name: "logo.jpg" }] });
+    expect(splitAttachments("no images here")).toEqual({ text: "no images here" });
+    expect(splitAttachments("a [images: inline] mention stays\nand more").images).toBeUndefined();
+  });
+
+  it("puts a reopened chat's tool calls back after their prompts, before the answers", () => {
+    const entries = fromMessages([msg("user", "what's here?"), msg("model", "Nothing much."), msg("user", "read it"), msg("model", "Done.")]);
+    const tools = [
+      { turn: 0, prompt: "what's here?", call: { id: "a", name: "list_files", args: { path: "." } }, result: { result: { files: [] } } },
+      { turn: 1, prompt: "read it", call: { id: "b", name: "read_file", args: { path: "x" } } },
+      { turn: 5, prompt: "a prompt that isn't there", call: { id: "c", name: "grep" } },
+    ];
+    const out = withTools(entries, tools);
+    expect(out.map((e) => (e.kind === "tool" ? `tool:${e.name}` : e.kind))).toEqual(["user", "tool:list_files", "model", "user", "tool:read_file", "model"]);
+    expect(out[1]).toMatchObject({ kind: "tool", id: "a", result: { files: [] } });
+    expect((out[4] as { result?: unknown }).result).toBeUndefined();
+    // Matched by its prompt's text when the count is off (a prompt not saved as one).
+    expect(withTools(entries, [{ turn: 0, prompt: "read it", call: { id: "d", name: "glob" } }]).map((e) => e.kind)).toEqual(["user", "model", "user", "tool", "model"]);
+    expect(withTools(entries, [])).toBe(entries);
   });
 
   it("shows a background task that ended as a notice", () => {

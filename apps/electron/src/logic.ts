@@ -30,6 +30,8 @@ export const windowMethods = [
   "PendingLinks",
   "ToggleFullscreen",
   "Quit",
+  // The tasks window's: opens the app's own window (EL-110).
+  "OpenApp",
   // The web preview (EL-100).
   "PreviewOpen",
   "PreviewBounds",
@@ -44,8 +46,11 @@ export const windowMethods = [
 ] as const;
 export type WindowMethod = (typeof windowMethods)[number];
 
+/** What the tasks window may call (EL-110): it has no editor, menu or previews. */
+export const taskWindowMethods: readonly WindowMethod[] = ["OpenURL", "SetAppearance", "OpenApp"];
+
 /** The events the window sends the page. */
-export const pageEvents = ["menu:about", "menu:settings", "deeplink:open", "notification:open", "preview:state"] as const;
+export const pageEvents = ["menu:about", "menu:settings", "deeplink:open", "notification:open", "preview:state", "tasks:open"] as const;
 export type PageEvent = (typeof pageEvents)[number];
 
 /**
@@ -184,16 +189,22 @@ export function printOptions(pageSize: unknown) {
 /** The longest prompt a blitz:// link may carry (as deeplink.go). */
 export const maxLinkPrompt = 20000;
 
-/** A blitz://open link's folder and prompt. */
+/** A blitz:// link's folder, and its prompt (open) or view (workers, or a workflow's run). */
 export interface DeepLink {
   dir: string;
   prompt: string;
+  view?: "workers" | "workflows";
+  /** For workflows: the workflow, and the run to show on its canvas. */
+  workflow?: string;
+  run?: string;
 }
 
 /**
- * Reads blitz://open?dir=<folder>&prompt=<text>: the folder must be an
- * absolute path (whether it's a folder is the main process's to check),
- * the prompt at most maxLinkPrompt characters. Undefined otherwise.
+ * Reads blitz://open?dir=<folder>&prompt=<text> and, from the tray,
+ * blitz://workers?dir=<folder> (the folder's workers): the folder must be
+ * an absolute path (whether it's a folder is the main process's to
+ * check), the prompt at most maxLinkPrompt characters. Undefined
+ * otherwise.
  */
 export function parseDeepLink(raw: string, home = ""): DeepLink | undefined {
   let u: URL;
@@ -204,15 +215,76 @@ export function parseDeepLink(raw: string, home = ""): DeepLink | undefined {
   }
   if (u.protocol !== "blitz:") return undefined;
   const action = (u.host || u.pathname.replace(/^\/+/, "")).replace(/\/$/, "");
-  if (action !== "open") return undefined;
+  if (action !== "open" && action !== "workers") return undefined;
   let dir = u.searchParams.get("dir") ?? "";
   if (home && (dir === "~" || dir.startsWith("~/"))) dir = home + dir.slice(1);
   const absolute = dir.startsWith("/") || /^[A-Za-z]:[\\/]/.test(dir);
   if (!absolute) return undefined;
+  if (action === "workers") return { dir, prompt: "", view: "workers" };
   const prompt = u.searchParams.get("prompt") ?? "";
   if ([...prompt].length > maxLinkPrompt) return undefined;
   return { dir, prompt };
 }
+
+/**
+ * What blitz://tasks asks (EL-110), from the tray when a workflow's human
+ * task waits: to notify first (notify=1, with the notification's title
+ * and body in the user's language) or open the tasks window at once.
+ * Undefined for any other link.
+ */
+export interface TasksLink {
+  notify: boolean;
+  title: string;
+  body: string;
+}
+
+export function parseTasksLink(raw: string): TasksLink | undefined {
+  let u: URL;
+  try {
+    u = new URL(raw.trim());
+  } catch {
+    return undefined;
+  }
+  const action = (u.host || u.pathname.replace(/^\/+/, "")).replace(/\/$/, "");
+  if (u.protocol !== "blitz:" || action !== "tasks") return undefined;
+  const cut = (s: string | null) => [...(s ?? "")].slice(0, 200).join("");
+  return { notify: u.searchParams.get("notify") === "1", title: cut(u.searchParams.get("title")) || "Blitz", body: cut(u.searchParams.get("body")) };
+}
+
+/**
+ * What blitz://run says (spec_workflows_043 WF-19), from the tray when a
+ * workflow run fails with the app's window closed: the notification's
+ * title and body (in the user's language), and the run to open when it's
+ * clicked (its workspace, an absolute folder; its workflow; its ID).
+ * Undefined for any other link, or one without a folder.
+ */
+export interface RunLink {
+  title: string;
+  body: string;
+  open: DeepLink;
+}
+
+export function parseRunLink(raw: string): RunLink | undefined {
+  let u: URL;
+  try {
+    u = new URL(raw.trim());
+  } catch {
+    return undefined;
+  }
+  const action = (u.host || u.pathname.replace(/^\/+/, "")).replace(/\/$/, "");
+  if (u.protocol !== "blitz:" || action !== "run") return undefined;
+  const dir = u.searchParams.get("dir") ?? "";
+  if (!(dir.startsWith("/") || /^[A-Za-z]:[\\/]/.test(dir))) return undefined;
+  const cut = (s: string | null) => [...(s ?? "")].slice(0, 200).join("");
+  return {
+    title: cut(u.searchParams.get("title")) || "Blitz",
+    body: cut(u.searchParams.get("body")),
+    open: { dir, prompt: "", view: "workflows", workflow: cut(u.searchParams.get("workflow")), run: cut(u.searchParams.get("run")) },
+  };
+}
+
+/** The page's one-time link, opening on the tasks window (the page server keeps tasks). */
+export const tasksURL = (link: string) => link + (link.includes("?") ? "&" : "?") + "tasks";
 
 /** The blitz:// links among a command line's arguments. */
 export const linkArgs = (argv: readonly string[]) => argv.filter((a) => a.startsWith("blitz:"));
@@ -246,6 +318,27 @@ export function previewURL(raw: unknown): string | undefined {
   }
   if ((u.protocol !== "http:" && u.protocol !== "https:") || !u.hostname) return undefined;
   return u.href;
+}
+
+/** Where a typed search goes (EL-101a): Google, with the words as its query. */
+export const searchURL = (words: string) => `https://www.google.com/search?q=${encodeURIComponent(words)}`;
+
+/**
+ * What the address bar opens (EL-101a): a web address as previewURL takes
+ * it, else a Google search for the words. Words are anything with a space,
+ * or a bare word that isn't a host (no dot, no port, not this machine's,
+ * not an IPv6 address).
+ * Other schemes (file:, javascript:) are still refused, not searched.
+ */
+export function addressURL(raw: unknown): string | undefined {
+  if (typeof raw !== "string") return undefined;
+  const s = raw.trim();
+  if (!s) return undefined;
+  if (/\s/.test(s)) return searchURL(s);
+  if (/^[a-z][a-z0-9+.-]*:(?!\d)/i.test(s)) return previewURL(s);
+  const host = s.split(/[/?#]/)[0] ?? "";
+  if (!s.startsWith("[") && !host.includes(".") && !/:\d+$/.test(host) && !isLocalHost(host)) return searchURL(s);
+  return previewURL(s) ?? searchURL(s);
 }
 
 /** Whether a host name is this machine's (localhost, 127.0.0.1, [::1]). */

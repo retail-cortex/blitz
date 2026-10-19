@@ -196,3 +196,4 @@
    whole middle, and what's under it (faint at 95%, the blur not always
    drawn) only got in the way of reading it. */
 :root[data-glass="on"] .drawer { left: 8px; right: 8px; bottom: 8px; background: var(--glass-solid); }
+:root[data-glass="on"] .slide-back, :root[data-glass="on"] .slide-actions { background: var(--glass-solid); }

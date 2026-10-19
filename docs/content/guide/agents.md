@@ -59,10 +59,10 @@ An agent is a Markdown file: front matter, then the system prompt.
 | Where | Who gets it |
 |---|---|
 | `~/.blitz/agents/*.md` | You, in every workspace (desktop: **Settings › Agents**) |
-| `.agents/agents/*.md` in the project | Everyone who works in it (desktop: the **Agents** menu) |
+| `.agents/agents/*.md` in the project | Everyone who works in it (desktop: **Studio › Agents, skills and rules…** › Agents) |
 | A plugin's `agents/` folder | Whoever enables the plugin |
 
-In the desktop app both are with the advanced settings (**Settings › Appearance › Show advanced settings**): **Add agent**, fill in the name, description and instructions, and open **Advanced** for the rest. `/setup` and `/agents update` also write project agents for you, and the `agent-creator` agent writes one from a description.
+In the desktop app both are with the advanced settings (**Show advanced** (in the Settings title bar)): **Add agent**, fill in the name, description and instructions, and open **Advanced** for the rest. `/setup` and `/agents update` also write project agents for you, and the `agent-creator` agent writes one from a description.
 
 ```markdown
 ---

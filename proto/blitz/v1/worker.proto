@@ -64,7 +64,8 @@ service WorkerService {
   // Streams a run's events: those already produced, then live ones until
   // it finishes.
   rpc WatchWorkerRun(WatchWorkerRunRequest) returns (stream WatchWorkerRunResponse);
-  // Lists the runs going now, in every workspace, for the Workers menu.
+  // Lists the runs going now, in every workspace (Studio › Workers and
+  // Settings › Workers).
   rpc ListRunningWorkerRuns(ListRunningWorkerRunsRequest) returns (ListRunningWorkerRunsResponse);
   // Stops a run going now: its turn is cancelled and it's recorded as
   // stopped (RUN_NOT_RUNNING when it isn't going).
@@ -74,6 +75,16 @@ service WorkerService {
   // saved. A model that fails gives problem instead of an error
   // (NO_INSTRUCTIONS without instructions).
   rpc RewriteWorker(RewriteWorkerRequest) returns (RewriteWorkerResponse);
+  // Lists every workspace the service has workers on record for (enabled
+  // or disabled), and the home workspace the user's global workers run
+  // in (~/.blitz/home, made when missing), each with its workers. A
+  // workspace whose folder is gone is listed as missing, with the workers
+  // on record; one that can't be opened, with the problem.
+  rpc ListAllWorkers(ListAllWorkersRequest) returns (ListAllWorkersResponse);
+  // Forgets every worker of a workspace: none of them is enabled any
+  // more, and the service no longer looks for its folder. Their files
+  // aren't touched. Refused while one of them runs (RUN_IN_PROGRESS).
+  rpc ForgetWorkspaceWorkers(ForgetWorkspaceWorkersRequest) returns (ForgetWorkspaceWorkersResponse);
 }
 
 // WorkerState is whether a worker may run.
@@ -121,6 +132,8 @@ message Worker {
   repeated string problems = 15;
   // Its latest recorded run (unset: none yet).
   WorkerRun last_run = 16;
+  // The workflow it runs, its prompt the input (spec_workflows_043).
+  string workflow = 17;
 }
 
 // Request message for WorkerService.ListWorkers.
@@ -157,6 +170,8 @@ message CreateWorkerRequest {
   string catch_up = 12;
   // The workflow: WORKER.md's body.
   string prompt = 13;
+  // The workflow it runs, its prompt the input.
+  string workflow = 14;
 }
 
 // WorkerDefinition is a WORKER.md as written: its frontmatter fields and
@@ -181,6 +196,8 @@ message WorkerDefinition {
   string catch_up = 11;
   // The workflow: WORKER.md's body.
   string prompt = 12;
+  // The workflow it runs, its prompt the input.
+  string workflow = 13;
 }
 
 // Request message for WorkerService.GetWorkerSpec.
@@ -394,3 +411,64 @@ message RewriteWorkerResponse {
   // Why there's no rewrite: the model's failure, redacted.
   string problem = 4;
 }
+
+// Request message for WorkerService.ListAllWorkers.
+message ListAllWorkersRequest {}
+
+// One workspace's workers, in ListAllWorkersResponse.
+message WorkspaceWorkers {
+  // The workspace's folder.
+  string workspace = 1;
+  // Whether it's the home workspace (the user's global workers).
+  bool home = 2;
+  // Whether its folder is gone: workers then has only each worker on
+  // record's workspace, name and state (enabled or disabled).
+  bool missing = 3;
+  // Its workers, by name.
+  repeated Worker workers = 4;
+  // Why its workers can't be listed (it can't be opened), redacted.
+  string problem = 5;
+}
+
+// Response message for WorkerService.ListAllWorkers.
+message ListAllWorkersResponse {
+  // The home workspace, where the global workers run.
+  string home = 1;
+  // The home workspace first, then the others by folder.
+  repeated WorkspaceWorkers workspaces = 2;
+  // The global limits on every worker ([workers.policy]).
+  WorkerPolicySettings policy = 3;
+}
+
+// The global limits on every worker, as the settings have them
+// ([workers.policy]; spec_workers_023 WK-63). A worker asks for
+// permissions and limits; these remove what isn't allowed, fill in what
+// it leaves out, and cap the rest.
+message WorkerPolicySettings {
+  // The permission kinds a worker may be given: shell, write, delete,
+  // web, mcp (none: it may only read).
+  repeated string allow = 1;
+  // What a worker that sets no limit gets.
+  int32 default_max_turns = 2;
+  double default_max_cost_usd = 3;
+  string default_timeout = 4;
+  // The most a worker may ask for.
+  int32 max_turns = 5;
+  double max_cost_usd = 6;
+  string max_timeout = 7;
+  // How many worker runs may go at once, across workspaces, as set.
+  int32 max_concurrent = 8;
+  // How many the service allows now: a change to max_concurrent applies
+  // when the service restarts.
+  int32 running_max_concurrent = 9;
+  // The settings file they're in.
+  string path = 10;
+}
+
+// Request message for WorkerService.ForgetWorkspaceWorkers.
+message ForgetWorkspaceWorkersRequest {
+  string workspace = 1;
+}
+
+// Response message for WorkerService.ForgetWorkspaceWorkers.
+message ForgetWorkspaceWorkersResponse {}

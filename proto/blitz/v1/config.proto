@@ -108,6 +108,32 @@ service ConfigService {
   rpc UpdateRegistrySkills(UpdateRegistrySkillsRequest) returns (UpdateRegistrySkillsResponse);
   // Removes a skill installed from a registry (NOT_INSTALLED).
   rpc UninstallRegistrySkill(UninstallRegistrySkillRequest) returns (UninstallRegistrySkillResponse);
+  // Returns the names of the user's secrets in a scope (global, or a
+  // workspace's own), never their values.
+  rpc ListSecrets(ListSecretsRequest) returns (ListSecretsResponse);
+  // Stores a secret's value in the system's keychain.
+  rpc SetSecret(SetSecretRequest) returns (SetSecretResponse);
+  // Removes a secret.
+  rpc DeleteSecret(DeleteSecretRequest) returns (DeleteSecretResponse);
+  // Returns the skills Blitz ships with.
+  rpc ListBuiltinSkills(ListBuiltinSkillsRequest) returns (ListBuiltinSkillsResponse);
+  // Records that the user reviewed and trusted the scripts of the skill
+  // in a folder, with the content hash they were shown (HASH_MISMATCH if
+  // it changed since): its scripts then run without asking first, until
+  // its content changes (spec_skills_013 SK-108).
+  rpc TrustSkillScripts(TrustSkillScriptsRequest) returns (TrustSkillScriptsResponse);
+  // Returns what a skill's scripts are, for review, when they need it
+  // (nothing when they don't).
+  rpc GetSkillReview(GetSkillReviewRequest) returns (GetSkillReviewResponse);
+  // Returns the MCP servers of the global settings, with the file they're in.
+  rpc ListMCPServerConfigs(ListMCPServerConfigsRequest) returns (ListMCPServerConfigsResponse);
+  // Adds an MCP server to the global settings, or replaces one (name):
+  // open workspaces apply it at once.
+  rpc SaveMCPServer(SaveMCPServerRequest) returns (SaveMCPServerResponse);
+  // Removes an MCP server from the global settings (NOT_FOUND).
+  rpc RemoveMCPServer(RemoveMCPServerRequest) returns (RemoveMCPServerResponse);
+  // Turns an MCP server of the global settings on or off (NOT_FOUND).
+  rpc SetMCPServerEnabled(SetMCPServerEnabledRequest) returns (SetMCPServerEnabledResponse);
 }
 
 // Request message for ConfigService.GetInterfaceLanguage.
@@ -557,6 +583,28 @@ message InstalledSkill {
   // Its folder.
   string dir = 4;
   google.protobuf.Timestamp installed = 5;
+  // Its scripts, when it has some that weren't reviewed with this content
+  // (a new install, an update): what to show before TrustSkillScripts.
+  SkillReview review = 6;
+}
+
+// What a skill's scripts are, for the user to review before trusting
+// them (spec_skills_013 SK-108).
+message SkillReview {
+  // The skill's folder and content hash, for TrustSkillScripts.
+  string dir = 1;
+  string hash = 2;
+  repeated ReviewScript scripts = 3;
+}
+
+// One script under review.
+message ReviewScript {
+  string name = 1;
+  string language = 2;
+  // Its path in the skill, or "inline".
+  string source = 3;
+  // The packages it installs.
+  repeated string deps = 4;
 }
 
 // Request message for ConfigService.ListSkillRegistries.
@@ -640,4 +688,154 @@ message UninstallRegistrySkillRequest {
 // Response message for ConfigService.UninstallRegistrySkill.
 message UninstallRegistrySkillResponse {
   InstalledSkill skill = 1;
+}
+
+// MCPServerConfig is an MCP server's settings ([[mcp.servers]]): exactly
+// one of command (stdio) and url (streamable HTTP).
+message MCPServerConfig {
+  string name = 1;
+  string command = 2;
+  repeated string args = 3;
+  map<string, string> env = 4;
+  string url = 5;
+  map<string, string> headers = 6;
+  // Configured, but never started.
+  bool disabled = 7;
+  // Only these of its tools; empty for all.
+  repeated string tools = 8;
+  // Its tools run without asking.
+  bool auto_approve = 9;
+  // A stdio server runs in the OS sandbox unless this is false.
+  optional bool sandbox = 10;
+  // Names its tools prefix__tool.
+  string prefix = 11;
+  // The agents offered its tools; empty for the main agent, * for all.
+  repeated string agents = 12;
+  // Bounds one tool call; 0 for the default (300).
+  int32 timeout_seconds = 13;
+}
+
+// Request message for ConfigService.ListMCPServerConfigs.
+message ListMCPServerConfigsRequest {}
+
+// Response message for ConfigService.ListMCPServerConfigs.
+message ListMCPServerConfigsResponse {
+  repeated MCPServerConfig servers = 1;
+  // The global settings file.
+  string path = 2;
+}
+
+// Request message for ConfigService.SaveMCPServer.
+message SaveMCPServerRequest {
+  // The server replaced; empty to add one.
+  string name = 1;
+  MCPServerConfig server = 2;
+}
+
+// Response message for ConfigService.SaveMCPServer.
+message SaveMCPServerResponse {
+  ConfigChange change = 1;
+}
+
+// Request message for ConfigService.RemoveMCPServer.
+message RemoveMCPServerRequest {
+  string name = 1;
+}
+
+// Response message for ConfigService.RemoveMCPServer.
+message RemoveMCPServerResponse {
+  ConfigChange change = 1;
+}
+
+// Request message for ConfigService.SetMCPServerEnabled.
+message SetMCPServerEnabledRequest {
+  string name = 1;
+  bool enabled = 2;
+}
+
+// Response message for ConfigService.SetMCPServerEnabled.
+message SetMCPServerEnabledResponse {
+  ConfigChange change = 1;
+}
+
+// BuiltinSkill is a skill Blitz ships with.
+message BuiltinSkill {
+  string name = 1;
+  string description = 2;
+  string version = 3;
+}
+
+// Request message for ConfigService.ListBuiltinSkills.
+message ListBuiltinSkillsRequest {}
+
+// Response message for ConfigService.ListBuiltinSkills.
+message ListBuiltinSkillsResponse {
+  // By name.
+  repeated BuiltinSkill skills = 1;
+}
+
+// Secret is one of the user's secrets, as listed: its key ({secrets:key}
+// in prompts and settings) and when its value was set; never the value.
+message Secret {
+  string key = 1;
+  google.protobuf.Timestamp updated = 2;
+}
+
+// Request message for ConfigService.ListSecrets.
+message ListSecretsRequest {
+  // Empty for the global secrets.
+  string workspace = 1;
+}
+
+// Response message for ConfigService.ListSecrets.
+message ListSecretsResponse {
+  repeated Secret secrets = 1;
+  // Where the values are kept ("macOS Keychain").
+  string store = 2;
+  // The scope's stored names start with this: urn:blitz:<scope>:secrets:.
+  string prefix = 3;
+}
+
+// Request message for ConfigService.SetSecret.
+message SetSecretRequest {
+  // Empty for a global secret.
+  string workspace = 1;
+  string key = 2;
+  string value = 3;
+}
+
+// Response message for ConfigService.SetSecret.
+message SetSecretResponse {}
+
+// Request message for ConfigService.DeleteSecret.
+message DeleteSecretRequest {
+  // Empty for a global secret.
+  string workspace = 1;
+  string key = 2;
+}
+
+// Response message for ConfigService.DeleteSecret.
+message DeleteSecretResponse {}
+
+// Request message for ConfigService.TrustSkillScripts.
+message TrustSkillScriptsRequest {
+  // The skill's folder.
+  string dir = 1;
+  // Its content hash, as shown.
+  string hash = 2;
+}
+
+// Response message for ConfigService.TrustSkillScripts.
+message TrustSkillScriptsResponse {}
+
+// Request message for ConfigService.GetSkillReview.
+message GetSkillReviewRequest {
+  // The skill's folder.
+  string dir = 1;
+}
+
+// Response message for ConfigService.GetSkillReview.
+message GetSkillReviewResponse {
+  // Unset when its scripts need no review.
+  SkillReview review = 1;
 }

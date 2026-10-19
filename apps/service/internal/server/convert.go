@@ -107,6 +107,7 @@ func skillMsg(s api.SkillInfo) *pb.SkillInfo {
 		Name: s.Name, Description: s.Description, Version: s.Version, License: s.License, Category: s.Category,
 		Compatibility: s.Compatibility, Tags: s.Tags, Hash: s.Hash, Tier: s.Tier, Bypass: s.Bypass,
 		Network: s.Network, NeedsNetwork: s.NeedsNetwork, Env: s.Env, Withheld: s.Withheld, Blocked: s.Blocked,
+		Dir: s.Dir, Kind: s.Kind, Agents: s.Agents, Members: s.Members, References: s.References, Project: s.Project, PackageFiles: s.PackageFiles, NeedsReview: s.NeedsReview,
 	}
 	for _, t := range s.Tools {
 		out.Tools = append(out.Tools, &pb.SkillTool{Name: t.Name, Scopes: t.Scopes, Why: t.Why})
@@ -114,7 +115,7 @@ func skillMsg(s api.SkillInfo) *pb.SkillInfo {
 	for _, sc := range s.Scripts {
 		out.Scripts = append(out.Scripts, &pb.SkillScript{
 			Name: sc.Name, Language: sc.Language, Source: sc.Source, Timeout: durationpb.New(sc.Timeout),
-			Deps: sc.Deps, Allowed: sc.Allowed, Reasons: sc.Reasons,
+			Deps: sc.Deps, Allowed: sc.Allowed, Reasons: sc.Reasons, Found: sc.Found,
 		})
 	}
 	return out
@@ -185,6 +186,9 @@ func eventMsg(e api.Event) *pb.TurnEvent {
 		out.Kind = &pb.TurnEvent_Tasks{Tasks: tasks}
 	case e.Notice != nil:
 		out.Kind = &pb.TurnEvent_Notice{Notice: &pb.Notice{Text: e.Notice.Text, Error: e.Notice.Error, Transient: e.Notice.Transient}}
+	case e.Step != nil:
+		s := e.Step
+		out.Kind = &pb.TurnEvent_FlowStep{FlowStep: &pb.FlowStep{Workflow: s.Workflow, Id: s.ID, Title: s.Title, Type: s.Type, Index: int32(s.Index), Count: int32(s.Count), Status: s.Status, Output: s.Output, Error: s.Error, Run: s.Run}}
 	}
 	return out
 }

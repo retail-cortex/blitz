@@ -62,6 +62,9 @@ type Registry struct {
 	searcher     *webSearcher  // nil: no search provider configured
 	searchErr    error         // why the configured provider can't be used
 	fetch        bool          // web_fetch is available
+	// web is the web settings, for workflows' calls (spec_workflows_043).
+	web   WebFetchConfig
+	webOn bool
 	// modeNote is why the configured permission mode couldn't be used
 	// (bypass without the OS sandbox); nil when it was.
 	modeNote error
@@ -161,16 +164,14 @@ func NewRegistry(cfg *config.Config, agentReg *agents.Registry, skillProv *skill
 		go sweepCredentials()
 	}
 
-	// The starting permission mode: [blitz] permission_mode, or bypass for
-	// the older auto_approve = true. Bypass needs the OS sandbox; without
-	// it the session starts in default mode and says why.
-	mode, err := api.ParsePermissionMode(cfg.Blitz.PermissionMode)
+	// The starting permission mode: [blitz] permission_mode, else bypass
+	// for the older auto_approve = true, else auto (the reviewer decides;
+	// the user restricts it per workspace). Bypass needs the OS sandbox;
+	// without it the session starts in default mode and says why.
+	mode, err := StartingMode(cfg)
 	if err != nil {
 		ws.Close()
-		return nil, fmt.Errorf("blitz.permission_mode: %w", err)
-	}
-	if cfg.Blitz.AutoApprove && mode == api.ModeDefault {
-		mode = api.ModeBypass
+		return nil, err
 	}
 	var modeNote error
 	if mode == api.ModeBypass && !osb.Active() {
@@ -292,6 +293,11 @@ func NewRegistry(cfg *config.Config, agentReg *agents.Registry, skillProv *skill
 		}})
 	}
 	r.fetch = cfg.Web.Enabled
+	r.webOn = cfg.Web.Enabled
+	r.web = WebFetchConfig{
+		AllowDomains: cfg.Web.AllowDomains, DenyDomains: cfg.Web.DenyDomains, AllowPrivate: cfg.Web.AllowPrivate,
+		AllowNetwork: sb.AllowNetwork, MaxBytes: cfg.Web.MaxBytes, Rules: rules, Timeout: time.Duration(cfg.Web.TimeoutSeconds) * time.Second,
+	}
 	if cfg.Web.Enabled && cfg.Browser.Enabled {
 		timeout := time.Duration(cfg.Web.TimeoutSeconds) * time.Second
 		if timeout < 30*time.Second {
@@ -347,6 +353,7 @@ func NewRegistry(cfg *config.Config, agentReg *agents.Registry, skillProv *skill
 		entries = append(entries,
 			entry{[]string{"list_or_search_skills"}, func() (tool.Tool, error) { return NewListSkillsTool(skillProv) }},
 			entry{[]string{"activate_skill"}, func() (tool.Tool, error) { return NewActivateSkillTool(skillProv, &cfg.Skills.Policy) }},
+			entry{[]string{"read_skill_file"}, func() (tool.Tool, error) { return NewReadSkillFileTool(skillProv) }},
 		)
 	}
 	if agentReg != nil {

@@ -57,6 +57,7 @@ func openTestWith(t *testing.T, mutate func(*config.Config), replies ...*genai.C
 	cfg.Tools.WorkspaceDir = t.TempDir()
 	cfg.Session.StorageDir = t.TempDir()
 	cfg.Tools.ApprovalsFile = filepath.Join(t.TempDir(), "a.json")
+	cfg.Blitz.PermissionMode = "default" // the tests answer approvals; auto's reviewer has its own
 	if mutate != nil {
 		mutate(cfg)
 	}

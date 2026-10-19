@@ -35,6 +35,8 @@ type WorkerInfo struct {
 	Next     time.Time
 	Agent    string
 	Model    string
+	// Workflow is the workflow it runs ("": its prompt, as a turn).
+	Workflow string
 	// CatchUp is "once" when a run missed while nothing was running should
 	// happen as soon as possible, otherwise "none".
 	CatchUp string
@@ -137,6 +139,7 @@ type WorkerSpec struct {
 	Name, Description  string
 	Schedule, Timezone string
 	Agent, Model       string
+	Workflow           string   // run with the prompt as input ("": a turn)
 	Permissions        []string // "kind:pattern"
 	Limits             Limits   // TimeoutRaw, not Timeout
 	CatchUp            string   // "", "none" or "once"

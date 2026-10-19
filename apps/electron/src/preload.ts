@@ -31,6 +31,7 @@ const methods = [
   "PendingLinks",
   "ToggleFullscreen",
   "Quit",
+  "OpenApp",
   "PreviewOpen",
   "PreviewBounds",
   "PreviewVisible",
@@ -42,7 +43,7 @@ const methods = [
   "PreviewPrintPDF",
   "PreviewPicture",
 ];
-const events = new Set(["menu:about", "menu:settings", "deeplink:open", "notification:open", "preview:state"]);
+const events = new Set(["menu:about", "menu:settings", "deeplink:open", "notification:open", "preview:state", "tasks:open"]);
 
 contextBridge.exposeInMainWorld("blitzElectron", {
   /** The calls the window answers. */

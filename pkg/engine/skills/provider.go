@@ -58,6 +58,16 @@ func NewProvider() (*Provider, error) {
 	return p, nil
 }
 
+// Builtins are the skills Blitz ships with, by name: what every workspace
+// has before it finds any of its own (Settings › Skills lists them).
+func Builtins() ([]*Skill, error) {
+	p, err := NewProvider()
+	if err != nil {
+		return nil, err
+	}
+	return p.listLocked(), nil
+}
+
 func (p *Provider) loadEmbeddedSkills() error {
 	err := fs.WalkDir(builtin.FS, ".", func(path string, d fs.DirEntry, err error) error {
 		if err != nil || d.IsDir() || d.Name() != "SKILL.md" {
@@ -72,6 +82,7 @@ func (p *Provider) loadEmbeddedSkills() error {
 		skill, err := ParseSkillMD(data, "builtin://"+path)
 		if err == nil && skill.Name != "" {
 			skill.fsys, skill.root = builtin.FS, filepath.ToSlash(filepath.Dir(path))
+			skill.scanBundle()
 			p.skills[skill.Name] = skill
 			p.builtin[skill.Name] = true
 		}
@@ -79,6 +90,23 @@ func (p *Provider) loadEmbeddedSkills() error {
 	})
 
 	return err
+}
+
+// LoadFolder reads the skill in folder dir (its SKILL.md and what's
+// beside it), as discovery would.
+func LoadFolder(dir string) (*Skill, error) {
+	p := filepath.Join(dir, "SKILL.md")
+	data, err := os.ReadFile(p)
+	if err != nil {
+		return nil, err
+	}
+	s, err := ParseSkillMD(data, p)
+	if err != nil {
+		return nil, err
+	}
+	s.fsys, s.root, s.hostDir = os.DirFS(dir), ".", dir
+	s.scanBundle()
+	return s, nil
 }
 
 // DiscoverExternal scans search directories for SKILL.md files. External
@@ -231,17 +259,10 @@ func (p *Provider) discover(dirs []string) error {
 				return nil
 			}
 			if skill.Name != "" {
-				// Discover any neighboring resource files
+				// Its resources, references and scripts, from its folder.
 				skillDir := filepath.Dir(path)
 				skill.fsys, skill.root, skill.hostDir = os.DirFS(skillDir), ".", skillDir
-				resources := []string{}
-				entries, _ := os.ReadDir(skillDir)
-				for _, entry := range entries {
-					if !entry.IsDir() && entry.Name() != "SKILL.md" {
-						resources = append(resources, entry.Name())
-					}
-				}
-				skill.Resources = resources
+				skill.scanBundle()
 				p.skills[skill.Name] = skill
 			}
 			return nil
@@ -249,6 +270,14 @@ func (p *Provider) discover(dirs []string) error {
 	}
 
 	return errors.Join(errs...)
+}
+
+// IsBuiltin reports whether name is a built-in skill's, which a skill on
+// disk can't take.
+func (p *Provider) IsBuiltin(name string) bool {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	return p.builtin[name]
 }
 
 // List returns all discovered skills sorted by name.

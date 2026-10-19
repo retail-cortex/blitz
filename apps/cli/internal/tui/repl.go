@@ -21,6 +21,7 @@ package tui
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -222,6 +223,16 @@ func (p *Printer) Handle(ev api.Event) {
 			color = Red
 		}
 		fmt.Fprintf(p.out, "%s%s%s\n", color, safe(ev.Notice.Text), Reset)
+		p.spin.Start(i18n.T("spinner.working"))
+	case ev.Step != nil && ev.Step.Status != api.StepDone:
+		// A workflow's step: a line as it starts, and if it fails.
+		p.spin.Stop()
+		p.flushText()
+		if s := ev.Step; s.Status == api.StepFailed {
+			fmt.Fprintf(p.out, "%s%s%s\n", Red, safe(i18n.T("flow.step_failed", "workflow", s.Workflow, "step", cmp.Or(s.Title, s.ID), "error", s.Error)), Reset)
+		} else {
+			fmt.Fprintf(p.out, "%s%s%s\n", Dim, safe(i18n.T("flow.step", "workflow", s.Workflow, "step", cmp.Or(s.Title, s.ID), "index", s.Index, "count", s.Count)), Reset)
+		}
 		p.spin.Start(i18n.T("spinner.working"))
 	case ev.ToolCall != nil && ev.ToolCall.Name == "todo", ev.ToolResult != nil && ev.ToolResult.Name == "todo" && ev.ToolResult.Result["error"] == nil:
 		// Shown as the checklist (Tasks).

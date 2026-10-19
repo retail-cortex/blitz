@@ -32,7 +32,7 @@ import (
 
 func TestBackgroundRuns(t *testing.T) {
 	create := call("create_file", map[string]any{"path": "made.txt", "content": "hi\n"})
-	r, url := attachURL(t, func(c *config.Config) { c.Blitz.AutoApprove = false }, create, text("made it"))
+	r, url := attachURL(t, func(c *config.Config) { c.Blitz.AutoApprove, c.Blitz.PermissionMode = false, "default" }, create, text("made it"))
 	b := AttachBackgroundHTTP(http.DefaultClient, url)
 	ctx := context.Background()
 

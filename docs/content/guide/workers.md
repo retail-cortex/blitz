@@ -15,11 +15,11 @@ Workers run in the **Blitz service** (`blitzd`), not in the window or the termin
 blitz service install     # starts the service at login (launchd or systemd)
 ```
 
-The desktop app and `blitz service install` keep it running. A service the CLI started on its own stops after 15 idle minutes, and with it the schedules. Keys a worker needs belong in `~/.blitz/.env.toml` (or the keychain): a service started at login doesn't see your shell's environment. In the desktop app, Workers is with the advanced settings (**Settings › Appearance › Show advanced settings**).
+The desktop app and `blitz service install` keep it running. A service the CLI started on its own stops after 15 idle minutes, and with it the schedules. Keys a worker needs belong in `~/.blitz/.env.toml` (or the keychain): a service started at login doesn't see your shell's environment. In the desktop app, Workers is with the advanced settings (**Show advanced** (in the Settings title bar)).
 
 ## Your first worker
 
-**Desktop:** **Workers › Add worker**, then fill in:
+**Desktop:** **Studio › Workers**, then **New worker** (the calendar icon), and fill in:
 
 | Field | What to put |
 |---|---|
@@ -54,7 +54,7 @@ blitz workers enable deps     # shows what it may do, then asks
 
 ## The file
 
-`.agents/workers/<name>/WORKER.md` (or `workers/<name>/WORKER.md`): the folder's name is the worker's (lowercase letters, digits, `-` and `_`). Only `schedule` and the workflow (the text after the front matter) are required; an unknown key makes the worker invalid, so typos show up at once.
+`.agents/workers/<name>/WORKER.md` (or `workers/<name>/WORKER.md`): the folder's name is the worker's (lowercase letters, digits, `-` and `_`). Only `schedule` and the prompt (the text after the front matter, unless `workflow` names one to run) are required; an unknown key makes the worker invalid, so typos show up at once.
 
 | Key | Default | Meaning |
 |---|---|---|
@@ -63,6 +63,7 @@ blitz workers enable deps     # shows what it may do, then asks
 | `timezone` | the service machine's | An IANA name, such as `Europe/Paris` |
 | `agent` | the workspace's agent | Run as another agent, for its runs only |
 | `model` | the workspace's model | `provider/model`, for its runs only |
+| `workflow` | none | Run this [workflow](workflows.md) instead of a prompt; the text after the front matter, optional then, is its input |
 | `permissions` | none: read only | What it may do (below) |
 | `limits` | 50 calls, $1, `30m` | `max_turns` (model calls), `max_cost_usd`, `timeout` |
 | `catch_up` | `none` | `once`: when the service starts or the worker is enabled, run once if a scheduled time passed since its last run |
@@ -93,18 +94,43 @@ Reading the workspace never needs permission. A command with `;`, `&`, `|`, `$`,
 - **States:** new (never enabled), enabled, disabled, changed, invalid (its problems are listed).
 - **Run now:** **Run now** in the app, or `blitz workers run <name>`, runs an enabled worker at once and shows what it does.
 - **Two at once?** The same worker never runs twice at the same time; a scheduled tick that finds it running is recorded as skipped.
-- **Stop a run:** the Workers menu lists every run going now, in any workspace, under **Running now**. Hover one and click **Stop**, or use **Stop** in the worker's run list or `blitz workers stop <name>`. The run ends as **stopped**. Files it already changed stay changed, and `blitz workers undo <run-id>` puts them back.
+- **Stop a run:** **Studio › Workers** lists the workspace's runs going now under **Running now**, and **Settings › Workers** every workspace's. Click **Stop**, or use **Stop** in the worker's run list or `blitz workers stop <name>`. The run ends as **stopped**. Files it already changed stay changed, and `blitz workers undo <run-id>` puts them back.
 
 | Desktop | Terminal |
 |---|---|
-| **Workers › Add worker** | Write `WORKER.md` |
+| **Studio › Workers › New worker** | Write `WORKER.md` |
 | Open a worker, **Enable as shown** | `blitz workers enable <name>` |
 | **Run now** | `blitz workers run <name>` |
 | **Disable** | `blitz workers disable <name>` |
-| **Stop** (Workers menu › Running now, or the run list) | `blitz workers stop <name>` |
+| **Stop** (Running now, or the run list) | `blitz workers stop <name>` |
 | The worker's run list | `blitz workers runs <name>` |
 | **Edit**, **Delete** | Edit or remove the folder |
 | | `blitz workers undo <run-id>` |
+
+## Global workers
+
+Some work belongs to no project: a morning news digest, tidying your downloads. A **global worker** is saved in `~/.blitz/workers/<name>/WORKER.md` and runs in a folder of its own, `~/.blitz/home`, made the first time it's needed. Everything else is the same: review and enable, schedules, permissions, runs.
+
+**Desktop:** **Settings › Workers**, then **New worker** in the Global workers box. **Terminal:** write the file, then `blitz workers enable <name> --dir ~/.blitz/home`.
+
+## Limits for every worker
+
+**Settings › Workers › Limits for every worker** caps what any worker may do, in your global settings (`[workers.policy]`):
+
+| Setting | What it does |
+|---|---|
+| Model calls, Cost, Time | What a worker that sets no limit gets, and the most one may ask for |
+| Runs at once | How many runs go at the same time, across every workspace (applies when the service restarts) |
+| Workers may be given | The permission kinds a worker may have: shell commands, writing files, deleting files, the web, MCP tools. All off: workers may only read |
+
+A change applies from each worker's next run.
+
+## Every workspace's workers
+
+The service runs a workspace's enabled workers whether or not the app has that workspace open. **Settings › Workers** lists every workspace with workers on record, so none runs unseen:
+
+- **Not in your workspaces:** **Add and open** brings it back into the app, on its workers.
+- **Folder missing:** the folder was moved or deleted, so its workers don't run. **Forget** disables them and stops the service looking for the folder; nothing on disk is touched.
 
 ## Runs and their results
 
@@ -112,7 +138,7 @@ Each run is a conversation of its own, titled `⏰ <name>` and the time: open it
 
 A run's file changes are its own checkpoint, outside `/undo`: `blitz workers undo <run-id>` puts them back (`--force` overwrites files changed since).
 
-**When one fails:** the Workers menu gets a red dot, the status bar a failed-runs button, and a new chat's welcome screen offers **Find out why the worker … failed**. To be told elsewhere, set a command in your settings:
+**When one fails:** the Studio button gets a red dot, the status bar a failed-runs button, and a new chat's welcome screen offers **Find out why the worker … failed**. To be told elsewhere, set a command in your settings:
 
 ```toml
 [workers]
@@ -123,6 +149,6 @@ notify_on = ["failed", "limited"]
 ## Good to know
 
 - **The service must be running** at the scheduled time. Missed times collapse into one run when it's back if `catch_up: once` is set, and are skipped otherwise; a laptop that's asleep may miss them.
-- **Background runs are different:** `blitz --bg "<prompt>"` runs one prompt in the service now, and waits for you to answer what it asks ([the service](../products/service.md#background-runs)). Workers run on a schedule and never wait.
+- **Background runs are different:** `blitz --bg "<prompt>"` runs one prompt in the service now, and waits for you to answer what it asks ([the service](../products/service.md#background-runs)). Workers run on a schedule and never wait for an approval; only a workflow's Ask a person step pauses one, until someone answers it.
 - **A loop is lighter:** `/loop 30m <prompt>` repeats a prompt while the session or window is open, with your usual approvals.
 - **Project workers and trust:** a workspace's workers are files in the project, so read them before enabling; project hooks don't run for workers until you trust the project's settings ([Sharing settings with your team](configuration.md#sharing-settings-with-your-team)).

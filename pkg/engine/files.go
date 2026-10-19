@@ -33,6 +33,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/retail-cortex/blitz/pkg/docx"
 	"github.com/retail-cortex/blitz/pkg/engine/tools"
 )
 
@@ -277,14 +278,16 @@ func PreviewType(p string) string { return previewTypes[strings.ToLower(path.Ext
 var ErrNoPreview = errors.New("no preview")
 
 // ReadPreview returns an image, PDF or sound file's bytes and media type,
-// for the editor to show or play (FIL-54).
+// for the editor to show or play (FIL-54); a Word document's, its text as
+// Markdown.
 func (w *Workspace) ReadPreview(p string) (string, []byte, error) {
 	rel, _, err := userPath(p)
 	if err != nil {
 		return "", nil, err
 	}
 	mime := PreviewType(p)
-	if mime == "" {
+	isDocx := strings.EqualFold(path.Ext(p), ".docx")
+	if mime == "" && !isDocx {
 		return "", nil, fmt.Errorf("%w for %s: not an image, a PDF or sound", ErrNoPreview, p)
 	}
 	data, _, err := w.files().UserReadFile(rel, maxPreviewBytes)
@@ -293,6 +296,14 @@ func (w *Workspace) ReadPreview(p string) (string, []byte, error) {
 	}
 	if err != nil {
 		return "", nil, err
+	}
+	if isDocx {
+		// A Word document previews as its text, in Markdown.
+		md, err := docx.ToMarkdown(data)
+		if err != nil {
+			return "", nil, fmt.Errorf("%w for %s: %v", ErrNoPreview, p, err)
+		}
+		return "text/markdown; charset=utf-8", []byte(md), nil
 	}
 	return mime, data, nil
 }

@@ -49,6 +49,7 @@ type frontmatter struct {
 	Timezone    string     `yaml:"timezone"`
 	Agent       string     `yaml:"agent"`
 	Model       string     `yaml:"model"`
+	Workflow    string     `yaml:"workflow"`
 	Permissions []string   `yaml:"permissions"`
 	Limits      api.Limits `yaml:"limits"`
 	Overlap     string     `yaml:"overlap"`
@@ -77,6 +78,9 @@ type Worker struct {
 	CatchUp string
 	// Prompt is the workflow: WORKER.md's body.
 	Prompt string
+	// Flow is a workflow (spec_workflows_043 WF-17) the worker runs, its
+	// prompt the workflow's input.
+	Flow string
 }
 
 var validName = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,63}$`)
@@ -108,7 +112,7 @@ func Load(dir string) (*Worker, error) {
 	w := &Worker{
 		Name: filepath.Base(dir), Description: strings.TrimSpace(f.Description), Dir: dir, Path: path,
 		Agent: f.Agent, Model: f.Model, Limits: f.Limits, Overlap: f.Overlap, CatchUp: f.CatchUp,
-		Prompt: strings.TrimSpace(string(body)),
+		Prompt: strings.TrimSpace(string(body)), Flow: strings.TrimSpace(f.Workflow),
 	}
 	var problems []string
 	if !validName.MatchString(w.Name) {
@@ -117,7 +121,7 @@ func Load(dir string) (*Worker, error) {
 	if f.Name != "" && f.Name != w.Name {
 		problems = append(problems, fmt.Sprintf("name %q doesn't match the directory %q", f.Name, w.Name))
 	}
-	if w.Prompt == "" {
+	if w.Prompt == "" && w.Flow == "" {
 		problems = append(problems, "the workflow (the text after the frontmatter) is empty")
 	}
 	if w.Schedule, err = ParseSchedule(f.Schedule, f.Timezone); err != nil {
@@ -187,7 +191,7 @@ func ReadSpec(dir string) (api.WorkerSpec, string, error) {
 		return spec, hash, nil
 	}
 	spec.Description, spec.Schedule, spec.Timezone = f.Description, f.Schedule, f.Timezone
-	spec.Agent, spec.Model, spec.Permissions, spec.CatchUp = f.Agent, f.Model, f.Permissions, f.CatchUp
+	spec.Agent, spec.Model, spec.Permissions, spec.CatchUp, spec.Workflow = f.Agent, f.Model, f.Permissions, f.CatchUp, f.Workflow
 	spec.Limits = api.Limits{MaxTurns: f.Limits.MaxTurns, MaxCostUSD: f.Limits.MaxCostUSD, TimeoutRaw: f.Limits.TimeoutRaw}
 	spec.Prompt = strings.TrimSpace(string(body))
 	return spec, hash, nil
@@ -204,6 +208,7 @@ type fileFrontmatter struct {
 	Timezone    string      `yaml:"timezone,omitempty"`
 	Agent       string      `yaml:"agent,omitempty"`
 	Model       string      `yaml:"model,omitempty"`
+	Workflow    string      `yaml:"workflow,omitempty"`
 	Permissions []string    `yaml:"permissions,omitempty"`
 	Limits      *fileLimits `yaml:"limits,omitempty"`
 	CatchUp     string      `yaml:"catch_up,omitempty"`
@@ -221,7 +226,7 @@ func Render(s api.WorkerSpec) []byte {
 	fm := fileFrontmatter{
 		Name: s.Name, Description: strings.TrimSpace(s.Description), Schedule: strings.TrimSpace(s.Schedule),
 		Timezone: strings.TrimSpace(s.Timezone), Agent: strings.TrimSpace(s.Agent), Model: strings.TrimSpace(s.Model),
-		CatchUp: s.CatchUp,
+		Workflow: strings.TrimSpace(s.Workflow), CatchUp: s.CatchUp,
 	}
 	for _, p := range s.Permissions {
 		if p = strings.TrimSpace(p); p != "" {

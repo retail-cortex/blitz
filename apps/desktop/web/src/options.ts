@@ -43,6 +43,14 @@ export const modes = (): Option[] =>
 /** The permission mode option for a value (the default mode if unknown). */
 export const modeOf = (v: string) => modes().find((m) => m.value === v) ?? modes()[0];
 
+/** The permission modes a workflow can run in, auto (its default) first: plan isn't one (WF-21). */
+export const flowModes = (): Option[] => ["auto", "accept-edits", "default", "dont-ask", "bypass"].map((v) => modeOf(v));
+
+const modeRank: Record<string, number> = { plan: 0, "dont-ask": 1, default: 2, "accept-edits": 3, auto: 3, bypass: 4 };
+
+/** Whether mode a lets more through than b (accept-edits and auto are level), as the service holds a workflow's mode back. */
+export const looser = (a: string, b: string) => (modeRank[a] ?? 2) > (modeRank[b] ?? 2);
+
 /** The reasoning efforts ("" is Auto). */
 export const efforts = (): Option[] =>
   ["", "minimal", "low", "medium", "high", "max"].map((value) => ({

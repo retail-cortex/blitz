@@ -18,18 +18,19 @@
 // development build). It keeps a little state in memory and scripts turns
 // so every state of the conversation can be seen: streamed Markdown,
 // thinking, tool calls, a task list, an approval and a plan review.
-import { create, type JsonObject, type MessageInitShape } from "@bufbuild/protobuf";
+import { clone, create, type JsonObject, type MessageInitShape } from "@bufbuild/protobuf";
 import { timestampFromDate } from "@bufbuild/protobuf/wkt";
 import { Code, ConnectError, createRouterTransport } from "@connectrpc/connect";
 import { setTransport } from "../api";
 import { BackgroundRunSchema, MessageSchema, RunTurnResponseSchema, SessionInfoSchema, SessionService, WatchBackgroundResponseSchema, type BackgroundRun, type Message, type SessionInfo } from "../gen/blitz/v1/session_pb";
-import { ActionKind, ErrorInfoSchema, UsageSchema, type Usage } from "../gen/blitz/v1/turn_pb";
+import { ActionKind, Decision, ErrorInfoSchema, UsageSchema, type Usage } from "../gen/blitz/v1/turn_pb";
 
 type Out = MessageInitShape<typeof RunTurnResponseSchema>;
 import { RunStatus, WorkerService, WorkerState } from "../gen/blitz/v1/worker_pb";
-import { ConfigService, KeySource } from "../gen/blitz/v1/config_pb";
+import { ConfigService, KeySource, MCPServerConfigSchema, type MCPServerConfig } from "../gen/blitz/v1/config_pb";
 import { FileKind, FileService, GitAction, RevisionDiff } from "../gen/blitz/v1/file_pb";
-import { AgentFileSchema, AgentScope, ConflictChoice, GitOperation, PullOutcome, SuggestionKind, SuggestionSchema, WorkspaceService, type AgentDefinition } from "../gen/blitz/v1/workspace_pb";
+import { HealthCheckProgressSchema, HealthVerdictSchema, WorkspaceHealthSchema, type HealthItem, type WorkspaceHealth } from "../gen/blitz/v1/workspace_pb";
+import { AgentFileSchema, AgentScope, EvalResultSchema, ConflictChoice, GitOperation, PullOutcome, SuggestionKind, SuggestionSchema, WorkflowRunEventSchema, WorkflowRunSchema, WorkflowRunStepSchema, WorkspaceService, type AgentDefinition, type WorkflowRun } from "../gen/blitz/v1/workspace_pb";
 
 // Whether the fake workspace is a git repository (?norepo: not yet).
 // The providers the fake has signed in to, and each one's sign-in.
@@ -228,7 +229,7 @@ function state(dir: string): State {
         create(SessionInfoSchema, { id: "session-1b", title: "Add the cart API docs", workspace: dir, messageCount: 9, updated: now() }),
       ],
       active: first.id,
-      settings: { agent: "blitz", model: "gemini-4-argon", provider: "gemini", effort: "", mode: "default", agency: "high", locale: "en-US", style: "default" },
+      settings: { agent: "blitz", model: "gemini-4-argon", provider: "gemini", effort: "", mode: "auto", agency: "high", locale: "en-US", style: "default" },
       pending: new Map(),
       tasks: new Map(),
       usage: create(UsageSchema, { calls: 3, input: 18234n, output: 2210n, lastPrompt: 12876n, costUsd: 0.0123, priced: true }),
@@ -520,12 +521,129 @@ const change = (workspace: string) => ({ change: { path: configPath(workspace), 
 // The workspace's workers, and each one's WORKER.md as written (spec).
 type FakeWorker = Record<string, unknown> & { name: string; hash: string; state: WorkerState; path: string; spec: Record<string, unknown> & { schedule: string } };
 const fakeSpec = (name: string, o: Record<string, unknown> = {}) => ({ name, description: "", schedule: "", timezone: "", agent: "", model: "", permissions: [] as string[], maxTurns: 0, maxCostUsd: 0, timeout: "", catchUp: "", prompt: "", ...o });
+// The home workspace the global workers run in (~/.blitz/home), and theirs.
+const fakeHome = "/home/me/.blitz/home";
+const fakeGlobal: FakeWorker[] = [
+  { name: "daily-news", description: "Summarises the morning's news in ~/notes/news.md.", state: WorkerState.ENABLED, schedule: "Daily at 7 AM", cron: "0 7 * * *", timezone: "America/Chicago", hash: "77ab", path: "/home/me/.blitz/workers/daily-news/WORKER.md", limits: { maxTurns: 10, maxCostUsd: 0.2 }, spec: fakeSpec("daily-news", { schedule: "Daily at 7 AM", timezone: "America/Chicago", prompt: "Summarise the morning's news." }) },
+];
+// Other workspaces with workers on record (Settings › Workers): one not
+// in the app's workspaces, one whose folder is gone.
+const fakeElsewhere = [
+  { workspace: "/home/me/notes", home: false, missing: false, problem: "", workers: [{ workspace: "/home/me/notes", name: "weekly-notes", state: WorkerState.ENABLED, schedule: "Fridays at 17:00", problems: [], permissions: [] }] },
+  { workspace: "/home/me/old-site", home: false, missing: true, problem: "", workers: [{ workspace: "/home/me/old-site", name: "backup", state: WorkerState.ENABLED, problems: [], permissions: [] }] },
+];
+// The global limits on every worker ([workers.policy]); the service still
+// runs two at once until it restarts.
+const fakePolicy = { allow: ["shell", "write", "web"], defaultMaxTurns: 50, defaultMaxCostUsd: 1, defaultTimeout: "30m", maxTurns: 200, maxCostUsd: 10, maxTimeout: "2h", maxConcurrent: 3, runningMaxConcurrent: 2, path: "/home/me/.blitz/.env.toml" };
+// Studio's skills: the workspace's own, with their files, and those it
+// sees elsewhere (yours, a plugin's, built in) to copy or reference.
+type FakeSkill = { name: string; description: string; tools: string; agents: string[]; members: string[]; instructions: string; files: Record<string, string> };
+const fakeProjectSkills: FakeSkill[] = [
+  {
+    name: "release-notes",
+    description: "Write release notes from the git log",
+    tools: "read_file run_shell_command",
+    agents: [],
+    members: [],
+    instructions: "Read `git log` since the last tag, group the changes by what they mean for users, and write the notes in the style the reference shows.",
+    files: { "references/style.md": "# Style\n\n- Start with what's new for users.\n- Short lines.\n", "scripts/count.py": '"""count: changes since a tag."""\n\nimport sys\n\nprint("3 entries since", sys.argv[1:] or ["the last tag"])\n', "scripts/tag.sh": '#!/bin/sh\n# tag: tags the release.\nset -eu\n\necho "tagging $1"\n', "references/brand.pdf": "%PDF-1.4", "references/logo.png": "" },
+  },
+  { name: "ship-it", description: "Cut a release: notes, tag and checks", tools: "", agents: ["reviewer"], members: ["release-notes", "pdf"], instructions: "Write the notes, then tag the release once the checks pass.", files: {} },
+  { name: "tone", description: "Keep answers short and friendly", tools: "", agents: [], members: [], instructions: "Answer in two or three sentences.", files: {} },
+];
+const fakeOtherSkills = [
+  { name: "pdf", description: "Read and summarize PDF files", dir: "/home/me/.blitz/skills/pdf", kind: "simple", project: false, scripts: [], references: [], blocked: [] as string[], agents: [] as string[], members: [] as string[] },
+  { name: "deploy", version: "1.2.0", description: "Deploy to staging and production", dir: "/home/me/.blitz/plugins/acme/skills/deploy", kind: "scripts", project: false, scripts: [], references: [], blocked: [] as string[], agents: [] as string[], members: [] as string[] },
+];
+const fakeSkillInfo = (workspace: string, x: FakeSkill) => {
+  const refs = Object.keys(x.files).filter((p) => p.startsWith("references/"));
+  const scripts = Object.keys(x.files)
+    .filter((p) => /^scripts\/.+\.(py|ts|sh|cmd|bat)$/.test(p))
+    .map((p) => ({ name: p.replace(/^scripts\/|\.(py|ts|sh|cmd|bat)$/g, ""), language: ({ py: "python", ts: "typescript", sh: "shell" } as Record<string, string>)[p.split(".").pop()!] ?? "cmd", source: p, allowed: true, reasons: [] as string[], found: true, deps: p.endsWith(".py") ? fakeRequirements(x) : ([] as string[]) }));
+  const packageFiles = ["scripts/requirements.txt", "requirements.txt", "scripts/pyproject.toml", "pyproject.toml", "scripts/package.json", "package.json"].filter((f) => f in x.files);
+  const kind = x.members.length ? "meta" : scripts.length ? "scripts" : refs.length ? "references" : "simple";
+  // A skill's scripts wait for review until trusted at their content (SK-108).
+  const hash = "sha256:" + JSON.stringify(x.files).length;
+  return { name: x.name, description: x.description, dir: `${workspace}/.agents/skills/${x.name}`, kind, project: true, references: refs, scripts, packageFiles, agents: x.agents, members: x.members, blocked: [] as string[], hash, needsReview: scripts.length > 0 && fakeTrusted.get(x.name) !== hash };
+};
+// A skill's Python packages: its requirements.txt's lines.
+const fakeRequirements = (x: FakeSkill) =>
+  (x.files["scripts/requirements.txt"] ?? x.files["requirements.txt"] ?? "")
+    .split("\n")
+    .map((l) => l.replace(/#.*/, "").trim())
+    .filter(Boolean);
+// The skills whose scripts were trusted, at which content.
+const fakeTrusted = new Map<string, string>();
+const fakeSkillFile = (workspace: string, x: FakeSkill) => ({
+  skill: fakeSkillInfo(workspace, x),
+  path: `${workspace}/.agents/skills/${x.name}/SKILL.md`,
+  hash: "sha256:" + x.name.length,
+  editable: true,
+  spec: { name: x.name, description: x.description, tools: x.tools, agents: x.agents, members: x.members, instructions: x.instructions },
+});
+// Studio's rules: two gates before the agent, one after, an instruction
+// rule, and one from .claude/rules (read-only there).
+type FakeRule = { name: string; when: string; action: string; order: number; agents: string[]; description: string; paths: string[]; text: string };
+const fakeRules: FakeRule[] = [
+  { name: "clear-ask", when: "before_agent", action: "block", order: 10, agents: [], description: "Prompts say what to change", paths: [], text: "The prompt says which part of the code to change and what the result should be." },
+  { name: "small-changes", when: "before_agent", action: "revise", order: 20, agents: [], description: "", paths: [], text: "The prompt asks for a focused change, not a rewrite." },
+  { name: "tested", when: "after_agent", action: "revise", order: 10, agents: ["qa"], description: "Answers say how they were tested", paths: [], text: "The answer says how the change was tested." },
+  { name: "go-style", when: "", action: "", order: 0, agents: [], description: "", paths: ["*.go"], text: "Run gofmt; wrap errors with %w." },
+];
+const fakeRuleList = (workspace: string) =>
+  [
+    ...[...fakeRules].sort((a, b) => (a.when === b.when ? a.order - b.order || a.name.localeCompare(b.name) : (a.when === "before_agent" ? 0 : a.when === "after_agent" ? 1 : 2) - (b.when === "before_agent" ? 0 : b.when === "after_agent" ? 1 : 2))).map((r) => ({ ...r, path: `${workspace}/.agents/rules/${r.name}.md`, problem: "", editable: true })),
+    { name: "commits", when: "", action: "", order: 0, agents: [], description: "", paths: [], text: "Write commit messages in the imperative.", path: `${workspace}/.claude/rules/commits.md`, problem: "", editable: false },
+  ];
+// Studio's evals: returns answers (one agent misses a case) and stock
+// lookups, never run.
+type FakeCase = { id: string; name: string; prompt: string; output: string; type: string; threshold: number; scope: string };
+type FakeEval = { name: string; description: string; agents: string[]; skills: string[]; near: string; allow: string[]; cases: FakeCase[] };
+const fakeEvals: FakeEval[] = [
+  {
+    name: "returns",
+    description: "Return policy answers",
+    agents: ["blitz", "reviewer"],
+    skills: [],
+    near: "judge",
+    allow: [],
+    cases: [
+      { id: "window", name: "Return window", prompt: "What's the return window for an online order?", output: "30 days from delivery, with the receipt.", type: "near", threshold: 0.8, scope: "fail" },
+      { id: "tone", name: "Friendly", prompt: "Can I return a jacket I wore once?", output: "Yes, within 30 days if it's unwashed, with the tags.", type: "near", threshold: 0.8, scope: "warn" },
+      { id: "code", name: "", prompt: "Reply with only the return code format.", output: "RET-0000", type: "exact", threshold: 0, scope: "info" },
+    ],
+  },
+  { name: "stock", description: "", agents: [], skills: [], near: "embedding", allow: ["mcp"], cases: [{ id: "stock", name: "Sizes", prompt: "Which sizes of the trail jacket are in stock?", output: "S, M and L.", type: "near", threshold: 0.75, scope: "fail" }] },
+];
+const fakeEvalRuns: Record<string, { id: string; eval: string; status: string; started: ReturnType<typeof timestampFromDate>; results: MessageInitShape<typeof EvalResultSchema>[]; costUsd: number; counts: Record<string, number> }[]> = {
+  returns: [{ id: "run-1", eval: "returns", status: "passed", started: timestampFromDate(new Date(Date.now() - 26 * 3600e3)), results: [], costUsd: 0.0072, counts: { pass: 5, warn: 1 } }],
+};
+const fakeEvalFile = (workspace: string, e: FakeEval) => {
+  const runs = fakeEvalRuns[e.name] ?? [];
+  const last = runs[runs.length - 1];
+  return { ...e, path: `${workspace}/.agents/evals/${e.name}.md`, problem: "", lastRun: last && { ...last, results: [] } };
+};
+
+// Studio's guardrails: prompt injection with its defaults, secrets tuned,
+// limits switched off, and one of the workspace's own.
+type FakeGuard = { name: string; builtin: string; stage: string; action: string; agents: string[]; tools: string[]; description: string; pii: boolean; judge: boolean; off: boolean; limits?: { maxCostUsd: number; maxTurns: number; maxFilesChanged: number; allowedDomains: string[]; commands: string[] }; text: string };
+const fakeBuiltinGuards = [
+  { id: "prompt_injection", stage: "tool_result", defaultAction: "warn", actions: ["warn", "block"] },
+  { id: "secrets", stage: "output", defaultAction: "redact", actions: ["redact", "warn", "block"] },
+  { id: "limits", stage: "action", defaultAction: "block", actions: ["block"] },
+];
+const fakeGuards: FakeGuard[] = [
+  { name: "secrets", builtin: "secrets", stage: "output", action: "redact", agents: [], tools: [], description: "", pii: true, judge: false, off: false, text: "" },
+  { name: "limits", builtin: "limits", stage: "action", action: "block", agents: [], tools: [], description: "", pii: false, judge: false, off: true, limits: { maxCostUsd: 2, maxTurns: 40, maxFilesChanged: 0, allowedDomains: [], commands: ["git push --force*", "rm -rf /*"] }, text: "" },
+  { name: "no-branch-delete", builtin: "", stage: "action", action: "block", agents: [], tools: ["run_shell_command"], description: "Branches stay", pii: false, judge: false, off: false, text: "Deleting a git branch, locally or on the remote." },
+];
+const fakeGuardFile = (workspace: string, g: FakeGuard) => ({ ...g, path: `${workspace}/.agents/guardrails/${g.name}.md`, problem: "", editable: true });
 // Worker runs going now (?fake&noruns: none).
 const fakeLive: { id: string; workspace: string; worker: string; status: RunStatus; started: ReturnType<typeof now>; manual: boolean; sessionId: string; error?: { reason: string; message: string } }[] = new URLSearchParams(location.search).has("noruns")
   ? []
   : [
-      { id: "live-1", workspace: "/home/me/blitz", worker: "nightly-deps", status: RunStatus.RUNNING, started: now(), manual: false, sessionId: "worker-nightly-3" },
-      { id: "live-2", workspace: "/home/me/notes", worker: "daily-news", status: RunStatus.RUNNING, started: now(), manual: true, sessionId: "worker-news-1" },
+      { id: "live-1", workspace: "/home/me/shop", worker: "nightly-deps", status: RunStatus.RUNNING, started: now(), manual: false, sessionId: "worker-nightly-3" },
+      { id: "live-2", workspace: fakeHome, worker: "daily-news", status: RunStatus.RUNNING, started: now(), manual: true, sessionId: "worker-news-1" },
     ];
 const fakeWorkers: FakeWorker[] = [
   {
@@ -589,6 +707,10 @@ const fakeFiles = new Map<string, string>([
   ["go.mod", "module example.com/shop\n\ngo 1.27\n"],
   ["data/sales.csv", fakeSales],
   ["docs/pricing.md", fakePricing],
+  // A page with its own stylesheet and script, previewed in a sandboxed frame.
+  ["site/index.html", '<!doctype html>\n<html>\n<head>\n  <title>Shop</title>\n  <link rel="stylesheet" href="site.css">\n</head>\n<body>\n  <h1>The shop</h1>\n  <p id="when">Loading…</p>\n  <script src="app.js"></script>\n</body>\n</html>\n'],
+  ["site/site.css", "body { font-family: Georgia, serif; margin: 40px; color: #234; }\nh1 { color: #b04a1a; border-bottom: 2px solid #b04a1a; }\n"],
+  ["site/app.js", 'document.getElementById("when").textContent = "Script ran: " + (2 + 2);\n'],
   [
     "README.md",
     "# Shop\n\nA small shop server. Run it with `go run ./cmd/shop`. See [the design](docs/design.md#requests), [main.go](cmd/shop/main.go#L10), [the cart package](internal/cart/) and [Usage](#usage).\n\n## Usage\n\n| Path | What |\n| --- | --- |\n| `/cart` | the cart |\n\n- [x] discounts\n- [ ] checkout\n\n```mermaid\nflowchart LR\n  client[Browser] --> cart[\"/cart handler\"] --> store[(SQLite)]\n```\n",
@@ -614,6 +736,16 @@ const fakeFiles = new Map<string, string>([
 ]);
 const fakeGit: Record<string, string> = { "internal/cart/discount.go": "modified", "internal/cart/discount_test.go": "untracked", "web/app.ts": "added" };
 // Skill registries in the fake: Castor's offer, and what was installed.
+// The user's secrets' names, by scope ("" global).
+const fakeSecrets = new Map<string, string[]>([["", ["github_token", "jira_api_key"]]]);
+
+// Settings › MCP servers: the global servers, edited in place.
+const fakeMCP: MCPServerConfig[] = [
+  create(MCPServerConfigSchema, { name: "github", command: "npx", args: ["-y", "@modelcontextprotocol/server-github"], env: { GITHUB_TOKEN: "ghp_…" } }),
+  create(MCPServerConfigSchema, { name: "jira", url: "https://mcp.atlassian.example/v1/mcp", headers: { "X-Team": "core" } }),
+  create(MCPServerConfigSchema, { name: "postgres", command: "postgres-mcp", args: ["--ro"], disabled: true }),
+];
+
 const fakeRegistries: { name: string; url: string; hasToken: boolean }[] = [];
 const fakeRegistrySkills = [
   { registry: "castor", name: "lit-review", description: "Reviews the literature on a question and keeps refs.bib in order", version: "1.2.0", castorId: "sk_lit" },
@@ -671,11 +803,462 @@ function backgroundRuns(): BackgroundRun[] {
   return fakeRuns;
 }
 
+// Studio's workflows: a research brief, and a draft not finished yet.
+type FakeFlow = {
+  name: string;
+  description: string;
+  nodes: { id: string; type: string; title: string; x: number; y: number; agent: string; skills: string[]; instructions: string; rules: string[]; skill: string; script: string; args: string[]; path: string; fields?: { name: string; type: string; description: string }[]; url?: string; method?: string; server?: string; tool?: string; argumentsJson?: string; headers?: { name: string; value: string }[]; auth?: { type: string; token?: string } }[];
+  edges: { from: string; to: string; when?: string; if?: string; default?: boolean; error?: boolean; label?: string }[];
+  mode?: string;
+};
+const flowNode = (id: string, type: string, title: string, x: number, y: number, extra: Partial<FakeFlow["nodes"][number]> = {}) => ({ id, type, title, x, y, agent: "", skills: [], instructions: "", rules: [], skill: "", script: "", args: [], path: "", ...extra });
+const fakeFlows: FakeFlow[] = [
+  {
+    name: "research-brief",
+    description: "A one-page brief from the notes and the web",
+    nodes: [
+      flowNode("notes", "read_file", "Read the notes", 0, 0, { path: "notes/coupons.md" }),
+      flowNode("look-up", "browser", "Look it up", 0, 160, { instructions: "Find how other shops round coupon discounts." }),
+      flowNode("gather", "accumulate", "Gather", 280, 80),
+      flowNode("draft", "agent", "Draft the brief", 560, 80, { agent: "reviewer", instructions: "Write a one-page brief: the key points first, sources cited.", rules: ["tested"] }),
+      flowNode("save", "save_file", "Save the brief", 840, 80, { path: "briefs/coupons.md" }),
+    ],
+    edges: [
+      { from: "notes", to: "gather" },
+      { from: "look-up", to: "gather" },
+      { from: "gather", to: "draft" },
+      { from: "draft", to: "save" },
+    ],
+  },
+  {
+    name: "refund-triage",
+    description: "Big refunds to a person, the rest straight through",
+    nodes: [
+      flowNode("ticket", "read_file", "Read the ticket", 0, 80, { path: "tickets/latest.md" }),
+      flowNode("pull", "extract", "Pull out the refund", 260, 80, { fields: [{ name: "amount", type: "number", description: "" }, { name: "order", type: "string", description: "" }] }),
+      flowNode("size", "exclusive", "How big?", 520, 80),
+      flowNode("review", "agent", "Review it", 720, 0, { agent: "reviewer", instructions: "Check order {{ steps.pull.data.order }} before refunding {{ steps.pull.data.amount }}." }),
+      flowNode("refund", "agent", "Refund it", 720, 160, { instructions: "Refund order {{ steps.pull.data.order }}." }),
+      flowNode("log", "save_file", "Log it", 980, 80, { path: "refunds/log.md" }),
+    ],
+    edges: [
+      { from: "ticket", to: "pull" },
+      { from: "pull", to: "size" },
+      { from: "size", to: "review", when: "output.data.amount > 100", label: "over $100" },
+      { from: "size", to: "refund", default: true },
+      { from: "review", to: "log" },
+      { from: "refund", to: "log" },
+      { from: "pull", to: "log", error: true },
+    ],
+  },
+  {
+    name: "order-status",
+    description: "Look the order up, ask shipping, file it",
+    nodes: [
+      flowNode("get", "api_call", "Get the order", 0, 80, { url: "https://api.shop.example/orders/{{ input }}", method: "GET", headers: [{ name: "Accept", value: "application/json" }], auth: { type: "bearer", token: "{secrets:shop_token}" } } as Partial<FakeFlow["nodes"][number]>),
+      flowNode("ship", "a2a_call", "Ask shipping", 280, 0, { url: "https://agents.shipping.example", instructions: "When does order {{ input }} ship?" }),
+      flowNode("issue", "mcp_call", "File an issue", 280, 160, { server: "github", tool: "create_issue", argumentsJson: '{"title": "Order {{ input }}"}' }),
+    ],
+    edges: [
+      { from: "get", to: "ship" },
+      { from: "get", to: "issue", error: true },
+    ],
+  },
+  { name: "weekly-digest", description: "", nodes: [flowNode("sum-up", "summarize", "", 0, 80), flowNode("mail", "email", "", 280, 80)], edges: [{ from: "sum-up", to: "mail" }] },
+];
+const fakeFlowProblem = (f: FakeFlow) => {
+  const p = f.nodes.find((n) => n.type === "email" || n.type === "data");
+  if (p) return `step ${p.id}: ${p.type} steps don't run yet`;
+  const q = f.nodes.find((n) => (n.type === "agent" || n.type === "refine" || n.type === "browser") && !n.instructions.trim());
+  return q ? `step ${q.id}: say what it's to do` : "";
+};
+const fakeFlowFile = (workspace: string, f: FakeFlow) => ({ ...f, path: `${workspace}/.agents/workflows/${f.name}.flow.yaml`, problem: fakeFlowProblem(f) });
+// A form as A2UI's server-to-client messages, as the service sends a task's.
+const fakeMessages = (surfaceId: string, form: { components: unknown[]; data: unknown }) =>
+  JSON.stringify([
+    { version: "v0.9", createSurface: { surfaceId, catalogId: "https://a2ui.org/specification/v0_9/catalogs/basic/catalog.json", sendDataModel: true } },
+    { version: "v0.9", updateComponents: { surfaceId, components: form.components } },
+    { version: "v0.9", updateDataModel: { surfaceId, path: "/", value: form.data } },
+  ]);
+// Workflows' human tasks waiting: a refund to approve (?fake&notasks for none).
+const fakeTasks = new URLSearchParams(location.search).has("notasks")
+  ? []
+  : [
+      {
+        id: "run-7/approve",
+        run: "run-7",
+        workspace: "/Users/me/shop",
+        workflow: "refund-triage",
+        step: "approve",
+        title: "Approve the refund",
+        kind: "human_task",
+        message: "Order 4417 asks for a $240 refund: over the $100 limit.",
+        // As the service sends it: A2UI's messages for the task's surface.
+        a2uiJson: fakeMessages("run-7/approve", {
+          components: [
+            { id: "root", component: "Column", children: ["amount", "note", "buttons"] },
+            { id: "amount", component: "TextField", label: "Refund ($)", value: { path: "/amount" }, variant: "number" },
+            { id: "note", component: "TextField", label: "Note for the customer", value: { path: "/note" }, variant: "longText" },
+            { id: "buttons", component: "Row", justify: "end", children: ["reject", "approve"] },
+            { id: "reject_label", component: "Text", text: "Reject" },
+            { id: "reject", component: "Button", child: "reject_label", action: { event: { name: "reject", context: { note: { path: "/note" } } } } },
+            { id: "approve_label", component: "Text", text: "Approve" },
+            { id: "approve", component: "Button", variant: "primary", child: "approve_label", action: { event: { name: "approve", context: { amount: { path: "/amount" }, note: { path: "/note" } } } } },
+          ],
+          data: { amount: 240, note: "" },
+        }),
+        created: now(),
+        sessionId: "session-flow-7",
+      },
+    ];
+let fakeAlerts = "notify";
+// The task stream: the list now, then whenever it changes (as the service's).
+async function* watchFakeTasks(workspace: string) {
+  let last = "";
+  for (;;) {
+    const tasks = fakeTasks.filter((x) => !workspace || x.workspace === workspace);
+    const sig = fakeAlerts + tasks.map((x) => x.id).join("|");
+    if (sig !== last) {
+      last = sig;
+      yield { alerts: fakeAlerts, tasks };
+    }
+    await sleep(500);
+  }
+}
+// Background runs of workflows: each drives itself (as the service's
+// do, watched or not), its events kept for watchers and its receipt
+// (WF-19) updated as it goes.
+const fakeFlowRuns = new Map<string, FakeFlow>();
+const flowLogs = new Map<string, { events: MessageInitShape<typeof WatchBackgroundResponseSchema>[]; done: boolean }>();
+let receiptsVersion = 0;
+const ago = (min: number) => timestampFromDate(new Date(Date.now() - min * 60000));
+const fakeUsage = (calls: number, input: number, output: number, usd: number) => create(UsageSchema, { calls, input: BigInt(input), output: BigInt(output), costUsd: usd, priced: true });
+// Past runs of the research brief: one done, one failed, one a worker's.
+const fakeReceipts: WorkflowRun[] = [
+  create(WorkflowRunSchema, {
+    id: "flow-past-2",
+    workspace: "",
+    workflow: "research-brief",
+    origin: "worker",
+    started: ago(60 * 20),
+    ended: ago(60 * 20 - 2),
+    status: "failed",
+    error: "The workflow research-brief stopped at Look it up: the page didn't load (timeout after 30s)",
+    usage: fakeUsage(1, 1800, 120, 0.0021),
+    models: ["gemini-4-argon"],
+    steps: [
+      { id: "notes", title: "Read the notes", type: "read_file", status: "done", started: ago(60 * 20), ended: ago(60 * 20), attempts: 1, usage: fakeUsage(0, 0, 0, 0) },
+      { id: "look-up", title: "Look it up", type: "browser", status: "failed", started: ago(60 * 20), ended: ago(60 * 20 - 2), attempts: 3, agent: "blitz", models: ["gemini-4-argon"], usage: fakeUsage(1, 1800, 120, 0.0021), error: "the page didn't load (timeout after 30s)" },
+    ],
+  }),
+  create(WorkflowRunSchema, {
+    id: "flow-past-1",
+    workspace: "",
+    workflow: "research-brief",
+    origin: "background",
+    started: ago(60 * 26),
+    ended: ago(60 * 26 - 3),
+    status: "done",
+    output: "# Coupon rounding\n\nRound each line half up…",
+    usage: fakeUsage(3, 9400, 1210, 0.0164),
+    models: ["gemini-4-argon", "gemini-4-flash"],
+    steps: [
+      { id: "notes", title: "Read the notes", type: "read_file", status: "done", started: ago(60 * 26), ended: ago(60 * 26), attempts: 1, usage: fakeUsage(0, 0, 0, 0) },
+      { id: "look-up", title: "Look it up", type: "browser", status: "done", started: ago(60 * 26), ended: ago(60 * 26 - 1), attempts: 1, agent: "blitz", models: ["gemini-4-argon"], usage: fakeUsage(1, 3100, 410, 0.0052) },
+      { id: "gather", title: "Gather", type: "accumulate", status: "done", started: ago(60 * 26 - 1), ended: ago(60 * 26 - 1), attempts: 1, usage: fakeUsage(0, 0, 0, 0) },
+      { id: "draft", title: "Draft the brief", type: "agent", status: "done", started: ago(60 * 26 - 1), ended: ago(60 * 26 - 3), attempts: 1, agent: "reviewer", models: ["gemini-4-argon", "gemini-4-flash"], usage: fakeUsage(2, 6300, 800, 0.0112) },
+      { id: "save", title: "Save the brief", type: "save_file", status: "done", started: ago(60 * 26 - 3), ended: ago(60 * 26 - 3), attempts: 1, usage: fakeUsage(0, 0, 0, 0) },
+    ],
+  }),
+];
+const fakeOutputs: Record<string, string> = {
+  notes: "Coupons round half up since 0.4; refunds round down.",
+  "look-up": "Most shops round each line, then the total.",
+  gather: "## Read the notes\n\nCoupons round half up…\n\n## Look it up\n\nMost shops round each line…",
+  draft: "# Coupon rounding\n\nRound each line half up, then total; refunds round down. Sources: notes, three shops' docs.",
+  save: "",
+};
+const fakeSpend: Record<string, [number, number, number, string[]]> = { "look-up": [3100, 410, 0.0052, ["gemini-4-argon"]], draft: [6300, 800, 0.0112, ["gemini-4-argon", "gemini-4-flash"]] };
+
+// The workspace dashboard (spec_health_044): the fake's items with facts,
+// most of them judged, a check that judges what changed item by item.
+const fakeDaily = (seed: number) => Array.from({ length: 30 }, (_, i) => ((i * 7 + seed * 3) % 5 === 0 ? 0 : (i + seed) % 4));
+const fakeVerdict = (overall: number, lines: [string, number, string][], summary: string, fixes: string[], current = true) =>
+  create(HealthVerdictSchema, {
+    model: "gemini/gemini-4-flash",
+    at: ago(60 * 9),
+    overall,
+    grade: overall >= 4.5 ? "A" : overall >= 3.5 ? "B" : overall >= 2.5 ? "C" : "D",
+    summary,
+    fixes,
+    costUsd: 0.0021,
+    current,
+    scores: lines.map(([line, score, reason]) => ({ line, score, reason })),
+  });
+const fakeHealth: WorkspaceHealth = create(WorkspaceHealthSchema, {
+  at: ago(0),
+  overall: 3.9,
+  previousOverall: 3.6,
+  byKind: { agent: 4.2, skill: 3.4, rule: 4.6, guardrail: 4.8, eval: 3.1, workflow: 3.3, worker: 4.0 },
+  lastCheck: ago(60 * 9),
+  lastCostUsd: 0.034,
+  model: "gemini/gemini-4-flash",
+  schedule: "every day at 02:00",
+  next: timestampFromDate(new Date(Date.now() + 5 * 3600_000)),
+  maxCostUsd: 1,
+  days: Array.from({ length: 30 }, (_, i) => {
+    const d = new Date(Date.now() - (29 - i) * 86400_000);
+    const done = (i * 5) % 7, failed = i % 6 === 0 ? 2 : i % 9 === 0 ? 1 : 0;
+    return { date: d.toISOString().slice(0, 10), done, failed, stopped: i % 13 === 0 ? 1 : 0, costUsd: done * 0.011 + failed * 0.004 };
+  }),
+  signals: [
+    { kind: "denial", about: "run_shell_command", count: 3, last: ago(120), detail: "pushing to main isn't part of the task" },
+    { kind: "rule", about: "cites-sources", count: 2, last: ago(300), detail: "the brief quotes figures without a source" },
+  ],
+  items: [
+    { kind: "agent", name: "writer", path: "/home/me/shop/.agents/agents/writer.md", detail: "Writes briefs and release notes", uses: 14, daily: fakeDaily(1), history: [3.6, 4.0, 4.4],
+      evals: { runs: 4, last: ago(60 * 30), passed: 5, cases: 6 },
+      verdict: fakeVerdict(4.4, [["Its instructions are clear and complete: what it's for, how it works, when it's done", 5, "Purpose, tone and the finish line are all stated."], ["Its tools fit what it's for, and no more", 4, "web_fetch is listed but no task needs it."], ["Its evals cover what it does", 4, "Six cases; none for release notes."], ["Its runs succeed", 5, "Every run in 30 days finished."]], "A clear, well-scoped writer; release notes lack an eval.", ["Add an eval case: \"Write release notes for v1.2 from CHANGELOG.md\" expecting a bulleted list of user-facing changes.", "Remove web_fetch from its tools."]) },
+    { kind: "agent", name: "reviewer", path: "/home/me/shop/.agents/agents/reviewer.md", detail: "Reviews pull requests", flags: ["stale"], uses: 6, daily: fakeDaily(2), history: [4.1, 3.9],
+      evals: { runs: 2, last: ago(60 * 24 * 6), passed: 3, cases: 4 },
+      verdict: fakeVerdict(3.9, [["Its instructions are clear and complete: what it's for, how it works, when it's done", 4, "Clear, but it doesn't say what to do with a failing build."], ["Its tools fit what it's for, and no more", 4, "Fine."], ["Its evals cover what it does", 3, "Out of date since its last change."], ["Its runs succeed", 4, "One failure in six."]], "Solid; rerun its evals after the last edit.", ["Run its evals again: it changed after they last ran."]) },
+    { kind: "agent", name: "triage", path: "/home/me/shop/.agents/agents/triage.md", detail: "Sorts incoming issues", flags: ["uncovered"], uses: 2, daily: fakeDaily(3), history: [],
+      verdict: fakeVerdict(2.8, [["Its instructions are clear and complete: what it's for, how it works, when it's done", 3, "It lists labels but not when to use each."], ["Its tools fit what it's for, and no more", 3, "It can write files but only needs to read."], ["Its evals cover what it does", 1, "No eval checks it."], ["Its runs succeed", 4, "Both runs finished."]], "Useful but unproven: no evals and loose tools.", ["Add an eval with three issues and the label each should get.", "Replace write_file with read_file in its tools."]) },
+    { kind: "agent", name: "broken", path: "/home/me/shop/.agents/agents/broken.md", problem: "failed to parse YAML frontmatter: line 3: did not find expected key", daily: fakeDaily(0) },
+    { kind: "skill", name: "pdf", path: "/home/me/shop/.agents/skills/pdf", detail: "scripts", uses: 9, daily: fakeDaily(4), history: [3.2, 3.8],
+      verdict: fakeVerdict(3.8, [["Its description says when to use it (it's what makes an agent choose it)", 4, "Says PDFs; could name forms and tables."], ["Its instructions can be followed step by step", 4, "Clear steps."], ["Its scripts run and pass the policy (or it needs none)", 3, "render.py needs the network, which the policy denies."], ["Something uses it", 4, "Used nine times."]], "Works; its render script hits the network policy.", ["Make render.py work offline, or ask for network in its front matter."]) },
+    { kind: "skill", name: "changelog", path: "/home/me/shop/.agents/skills/changelog", detail: "simple", flags: ["unused"], daily: fakeDaily(0),
+      verdict: fakeVerdict(3.0, [["Its description says when to use it (it's what makes an agent choose it)", 2, "\"Changelog helper\" doesn't say when."], ["Its instructions can be followed step by step", 4, "Fine."], ["Its scripts run and pass the policy (or it needs none)", 5, "None needed."], ["Something uses it", 1, "Never used."]], "Never chosen: its description doesn't say when.", ["Rewrite its description: \"Use when asked to update CHANGELOG.md or write release notes.\""]) },
+    { kind: "rule", name: "cites-sources", path: "/home/me/shop/.agents/rules/cites-sources.md", detail: "after_agent", uses: 11, fired: 2, daily: fakeDaily(5), history: [4.6],
+      verdict: fakeVerdict(4.6, [["It can be judged pass or fail from a prompt or an answer alone", 5, "Yes."], ["It isn't redundant with another rule or guardrail", 4, "Fine."], ["It fires when it should, and only then", 5, "Both firings were right."]], "A sharp, well-aimed rule.", []) },
+    { kind: "guardrail", name: "secrets", detail: "secrets · output", uses: 40, fired: 1, daily: fakeDaily(6), history: [4.8],
+      verdict: fakeVerdict(4.8, [["What it checks is clear and can be decided", 5, "Built-in."], ["Its action fits the risk (block, redact or warn)", 5, "Redacts."], ["It fires when it should, and only then", 4, "One redaction, correct."]], "Doing its job.", []) },
+    { kind: "guardrail", name: "limits", detail: "limits · action", flags: ["off"], daily: fakeDaily(0) },
+    { kind: "eval", name: "writing", path: "/home/me/shop/.agents/evals/writing.md", detail: "The writer's briefs", uses: 4, daily: fakeDaily(7), evals: { runs: 4, last: ago(60 * 30), passed: 5, cases: 6 }, history: [3.0, 3.1],
+      verdict: fakeVerdict(3.1, [["Its cases cover the agent's job, the hard cases too", 3, "Only briefs; no long inputs."], ["Its expected outputs and thresholds are sensible", 3, "0.95 is strict for Near."], ["It tells good from bad (not always passing or always failing)", 4, "Mixed results."]], "Covers the basics; thresholds are tight.", ["Lower the Near threshold of case brief-2 to 0.8.", "Add a case with a 20-page input."]) },
+    { kind: "workflow", name: "research-brief", path: "/home/me/shop/.agents/workflows/research-brief.flow.yaml", detail: "A one-page brief from the notes and the web", flags: ["failing"], uses: 7, daily: fakeDaily(8), history: [3.6, 3.3],
+      runs: { runs: 7, done: 3, failed: 4, stopped: 0, costUsd: 0.146, medianMs: 41000n, last: ago(90), failingStep: "Look it up" },
+      verdict: fakeVerdict(2.9, [["Its steps are well defined and in a sensible order", 4, "Good order."], ["It handles failure (retries, error links, timeouts)", 2, "The browser step has no timeout or retry."], ["Its cost and duration fit what it does", 3, "Fine."], ["Its runs succeed", 2, "Four of seven failed at Look it up."], ["Its permission mode fits what it does", 4, "Auto suits it."]], "Fails at the web step: give it a timeout and a retry.", ["Give Look it up a 60s timeout and 2 retries.", "Add an error link from Look it up to Draft so a brief is written from the notes alone."]) },
+    { kind: "workflow", name: "refund-triage", path: "/home/me/shop/.agents/workflows/refund-triage.flow.yaml", detail: "Big refunds wait for a person", uses: 12, daily: fakeDaily(9), history: [4.0],
+      runs: { runs: 12, done: 11, failed: 1, stopped: 0, costUsd: 0.082, medianMs: 9000n, last: ago(30) },
+      verdict: fakeVerdict(4.0, [["Its steps are well defined and in a sensible order", 4, "Clear."], ["It handles failure (retries, error links, timeouts)", 4, "Has an error path."], ["Its cost and duration fit what it does", 4, "Cheap."], ["Its runs succeed", 4, "11 of 12."], ["Its permission mode fits what it does", 4, "Fine."]], "Reliable.", []) },
+    { kind: "workflow", name: "weekly-digest", path: "/home/me/shop/.agents/workflows/weekly-digest.flow.yaml", problem: "step mail: email steps don't run yet", daily: fakeDaily(0) },
+    { kind: "worker", name: "nightly-brief", path: "/home/me/shop/.agents/workers/nightly-brief/WORKER.md", detail: "research-brief", uses: 6, daily: fakeDaily(10), history: [4.0],
+      runs: { runs: 6, done: 4, failed: 2, stopped: 0, costUsd: 0.31, medianMs: 52000n, last: ago(600) },
+      verdict: fakeVerdict(4.0, [["Its permissions are as tight as its work allows", 4, "Writes only briefs/."], ["Its schedule and limits fit its work", 4, "Nightly, $0.50 cap."], ["Its runs succeed", 4, "Four of six."]], "Well bounded.", []) },
+  ],
+});
+
+let fakeChecking = false;
+let fakeProgress: { item: string; index: number; total: number; costUsd: number } | undefined;
+async function* watchFakeHealth(): AsyncGenerator<{ health: WorkspaceHealth }> {
+  let last = "";
+  for (;;) {
+    const sig = JSON.stringify([fakeHealth.items.map((i) => i.verdict?.overall ?? 0), fakeChecking, fakeHealth.lastCheck?.seconds.toString()]);
+    if (sig !== last) {
+      last = sig;
+      yield { health: clone(WorkspaceHealthSchema, { ...fakeHealth, checking: fakeChecking }) };
+    }
+    await new Promise((r) => setTimeout(r, 400));
+  }
+}
+const fakeDue = (scope?: { kinds: string[]; items: string[]; force: boolean }): HealthItem[] =>
+  fakeHealth.items.filter((it) => !it.problem && (!scope?.kinds.length || scope.kinds.includes(it.kind)) && (!scope?.items.length || scope.items.includes(`${it.kind}/${it.name}`)) && (scope?.force || !it.verdict || !it.verdict.current || it.name === "reviewer"));
+let fakeStopCheck = false;
+async function* fakeCheck(scope?: { kinds: string[]; items: string[]; force: boolean }) {
+  const due = fakeDue(scope);
+  fakeChecking = true;
+  fakeStopCheck = false;
+  let cost = 0;
+  let judged = 0;
+  try {
+    for (const [i, it] of due.entries()) {
+      if (fakeStopCheck) break;
+      yield { item: `${it.kind}/${it.name}`, index: i + 1, total: due.length, costUsd: cost };
+      await new Promise((r) => setTimeout(r, 700));
+      cost += 0.0019;
+      const v = it.verdict ? clone(HealthVerdictSchema, it.verdict) : fakeVerdict(3.5, [["Overall", 4, "Judged in the fake."]], "Judged in the fake.", []);
+      v.at = ago(0);
+      v.current = true;
+      if (it.name === "reviewer") v.overall = Math.min(5, v.overall + 0.3);
+      v.grade = v.overall >= 4.5 ? "A" : v.overall >= 3.5 ? "B" : v.overall >= 2.5 ? "C" : "D";
+      it.verdict = v;
+      it.history = [...it.history, v.overall];
+      judged++;
+      yield { item: `${it.kind}/${it.name}`, index: i + 1, total: due.length, verdict: v, costUsd: cost };
+    }
+  } finally {
+    fakeChecking = false;
+    fakeHealth.lastCheck = ago(0);
+    fakeHealth.lastCostUsd = cost;
+  }
+  yield { done: true, judged, costUsd: cost };
+}
+
+// Runs a workflow in the fake: its steps one after another, the agent
+// steps streaming their text, save_file asking for approval.
+async function driveFlow(r: BackgroundRun, f: FakeFlow, s: ReturnType<typeof state>) {
+  const log = { events: [] as MessageInitShape<typeof WatchBackgroundResponseSchema>[], done: false };
+  flowLogs.set(r.id, log);
+  const ev = (kind: unknown) => log.events.push({ event: { author: "blitz", kind } } as MessageInitShape<typeof WatchBackgroundResponseSchema>);
+  // Its mode (WF-21): the workflow's, auto unless it says, held back by a stricter workspace.
+  const rank: Record<string, number> = { plan: 0, "dont-ask": 1, default: 2, "accept-edits": 3, auto: 3, bypass: 4 };
+  const want = f.mode || "auto";
+  const mode = (rank[want] ?? 2) > (rank[s.settings.mode] ?? 2) ? s.settings.mode : want;
+  const rec = create(WorkflowRunSchema, { id: `flow-${Date.now()}`, workspace: r.workspace, workflow: f.name, origin: "background", sessionId: r.sessionId, input: r.prompt.split(" ").slice(1).join(" "), started: now(), status: "running", backgroundId: r.id, usage: fakeUsage(0, 0, 0, 0), mode });
+  rec.events.push(create(WorkflowRunEventSchema, { at: now(), kind: "run", text: "started" }));
+  if (mode !== want) rec.events.push(create(WorkflowRunEventSchema, { at: now(), kind: "run", text: `held: ${want}: ${mode}` }));
+  fakeReceipts.unshift(rec);
+  const bump = () => {
+    let calls = 0, input = 0n, output = 0n, usd = 0;
+    for (const st of rec.steps) {
+      calls += st.usage?.calls ?? 0;
+      input += st.usage?.input ?? 0n;
+      output += st.usage?.output ?? 0n;
+      usd += st.usage?.costUsd ?? 0;
+    }
+    rec.usage = create(UsageSchema, { calls, input, output, costUsd: usd, priced: true });
+    rec.models = [...new Set(rec.steps.flatMap((x) => x.models))];
+    receiptsVersion++;
+  };
+  const note = (step: string, kind: string, text: string, error = false) => rec.events.push(create(WorkflowRunEventSchema, { at: now(), step, kind, text, error }));
+  const end = (status: string, error = "") => {
+    rec.status = status;
+    rec.ended = now();
+    rec.error = error;
+    rec.backgroundId = "";
+    rec.approvals = 0;
+    note("", "run", error ? `${status}: ${error}` : status, !!error);
+    r.state = status === "done" ? "done" : status;
+    r.ended = now();
+    log.done = true;
+    bump();
+  };
+  const order = ["notes", "look-up", "gather", "draft", "save"].filter((id) => f.nodes.some((n) => n.id === id));
+  for (const [i, id] of order.entries()) {
+    if (runStopped.has(r.id)) return end("stopped");
+    const n = f.nodes.find((x) => x.id === id)!;
+    const step = { workflow: f.name, id, title: n.title, type: n.type, index: i + 1, count: order.length, run: rec.id };
+    ev({ case: "flowStep", value: { ...step, status: "running" } });
+    const spend = fakeSpend[id];
+    const row = create(WorkflowRunStepSchema, { id, title: n.title, type: n.type, status: "running", started: now(), attempts: 1, agent: spend ? n.agent || "blitz" : "", models: spend?.[3] ?? [], usage: fakeUsage(0, 0, 0, 0) });
+    rec.steps.push(row);
+    note(id, "step", "running");
+    bump();
+    if (spend) {
+      // Streams its text a few words at a time, spending as it goes.
+      const words = (fakeOutputs[id] ?? "").split(" ");
+      for (const [k, w] of words.entries()) {
+        if (runStopped.has(r.id)) break;
+        row.stream += (k ? " " : "") + w;
+        row.usage = fakeUsage(1, Math.round((spend[0] * (k + 1)) / words.length), Math.round((spend[1] * (k + 1)) / words.length), (spend[2] * (k + 1)) / words.length);
+        if (k === 2) note(id, "tool", "web_fetch");
+        bump();
+        await sleep(160);
+      }
+    } else await sleep(700);
+    if (runStopped.has(r.id)) {
+      row.status = "failed";
+      row.ended = now();
+      row.error = "stopped";
+      return end("stopped");
+    }
+    if (n.type === "save_file" && mode !== "auto" && mode !== "accept-edits" && mode !== "bypass") {
+      const req = `${r.id}-save`;
+      const answer = new Promise<string>((res) => s.pending.set(req, res));
+      r.state = "waiting";
+      r.waiting = 1;
+      rec.approvals = 1;
+      bump();
+      ev({ case: "approvalRequest", value: { requestId: req, tool: "save_file", kind: ActionKind.WRITE, detail: n.path, scopeLabel: n.path } });
+      const a = await answer;
+      s.pending.delete(req);
+      r.state = "running";
+      r.waiting = 0;
+      rec.approvals = 0;
+      if (a === "stop") {
+        row.status = "failed";
+        row.ended = now();
+        row.error = "stopped";
+        return end("stopped");
+      }
+      if (a === "deny") {
+        const error = `${n.path}: not approved`;
+        row.status = "failed";
+        row.ended = now();
+        row.error = error;
+        note(id, "step", `failed: ${error}`, true);
+        ev({ case: "flowStep", value: { ...step, status: "failed", error } });
+        ev({ case: "finished", value: { output: "", before: s.usage, after: s.usage, error: create(ErrorInfoSchema, { reason: "NOT_APPROVED", message: `The workflow ${f.name} stopped at ${n.title}: ${error}` }) } });
+        return end("failed", `The workflow ${f.name} stopped at ${n.title}: ${error}`);
+      }
+    }
+    row.status = "done";
+    row.ended = now();
+    row.output = fakeOutputs[id] ?? "";
+    note(id, "step", "done");
+    ev({ case: "flowStep", value: { ...step, status: "done", output: fakeOutputs[id] ?? "" } });
+    bump();
+  }
+  rec.output = fakeOutputs.draft;
+  ev({ case: "finished", value: { output: fakeOutputs.draft, before: s.usage, after: s.usage } });
+  end("done");
+}
+
+// A receipt as a list shows it: without its events and its steps' text.
+const summary = (r: WorkflowRun) => {
+  const c = clone(WorkflowRunSchema, r);
+  c.events = [];
+  for (const x of c.steps) x.stream = x.output = "";
+  return c;
+};
+const receiptsFor = (workspace: string) => fakeReceipts.map((r) => (r.workspace ? r : Object.assign(r, { workspace: [...states.keys()][0] ?? workspace })));
+
+async function* watchFakeRuns(workspace: string) {
+  let last = -1;
+  for (;;) {
+    if (receiptsVersion !== last) {
+      last = receiptsVersion;
+      const cutoff = Date.now() - 10 * 60_000;
+      yield { runs: receiptsFor(workspace).filter((r) => (!workspace || r.workspace === workspace) && (r.status === "running" || r.status === "waiting" || (r.ended && Number(r.ended.seconds) * 1000 > cutoff))).map(summary) };
+    }
+    await sleep(300);
+  }
+}
+
+async function* watchFakeRun(id: string) {
+  let last = -1;
+  for (;;) {
+    const r = fakeReceipts.find((x) => x.id === id);
+    if (!r) throw new ConnectError(`no workflow run ${id}`, Code.NotFound);
+    if (receiptsVersion !== last) {
+      last = receiptsVersion;
+      yield { run: clone(WorkflowRunSchema, r) };
+    }
+    if (r.status !== "running") return;
+    await sleep(200);
+  }
+}
+
 async function* watchRun(id: string): AsyncGenerator<MessageInitShape<typeof WatchBackgroundResponseSchema>> {
   const r = backgroundRuns().find((x) => x.id === id);
   if (!r) throw new ConnectError(`no background run ${id}`, Code.NotFound);
   const s = state(r.workspace);
   const ev = (kind: unknown) => ({ event: { author: "blitz", kind } }) as MessageInitShape<typeof WatchBackgroundResponseSchema>;
+  const log = flowLogs.get(id);
+  if (log) {
+    // From the start, then as it goes (answered approvals left out).
+    for (let sent = 0; ; ) {
+      while (sent < log.events.length) {
+        const e = log.events[sent++];
+        const k = (e.event as { kind?: { case?: string; value?: { requestId?: string } } }).kind;
+        if (k?.case === "approvalRequest" && !s.pending.has(k.value?.requestId ?? "")) continue;
+        yield e;
+      }
+      if (log.done) return;
+      await sleep(150);
+    }
+  }
   const ended = () => ev({ case: "finished", value: { output: "", before: s.usage, after: s.usage } });
   if (r.state === "done") {
     yield ev({ case: "text", value: { text: "The release notes are in docs/releases/0.4.md." } });
@@ -722,6 +1305,17 @@ export function installFake() {
           return { session: n };
         },
         listBackground: () => ({ runs: backgroundRuns() }),
+        // A workflow's run from Studio (/name input); other prompts aren't faked.
+        startBackground: ({ workspace, turn }) => {
+          const name = (turn?.text ?? "").replace(/^\//, "").split(" ")[0];
+          const f = fakeFlows.find((x) => x.name === name);
+          if (!f) throw new ConnectError("the fake runs only workflows in the background", Code.Unimplemented);
+          const run = create(BackgroundRunSchema, { id: `bg-${backgroundRuns().length + 1}`, workspace, sessionId: `session-flow-${Date.now()}`, prompt: turn!.text, state: "running", started: now() });
+          backgroundRuns().unshift(run);
+          fakeFlowRuns.set(run.id, f);
+          void driveFlow(run, f, state(workspace));
+          return { run };
+        },
         watchBackground: ({ id }) => watchRun(id),
         stopBackground: ({ id }) => {
           const r = backgroundRuns().find((x) => x.id === id);
@@ -769,7 +1363,7 @@ export function installFake() {
         approve: ({ workspace, requestId, decision }) => {
           const task = state(workspace).tasks.get(requestId.replace(/-req$/, ""));
           if (task) task.answered = Date.now();
-          state(workspace).pending.get(requestId)?.(decision === 4 ? "deny" : "allow");
+          state(workspace).pending.get(requestId)?.(decision === Decision.DENY ? "deny" : "allow");
           return {};
         },
         answer: ({ workspace, requestId, answer }) => {
@@ -794,7 +1388,17 @@ export function installFake() {
       service(WorkspaceService, {
         // The slash commands' (slashCommands.ts): enough to see each answer.
         getSandbox: () => ({ summary: ["Shell commands: sandboxed (sandbox-exec)", "Network: allowed for listed hosts", "Writable: the workspace and the temp folder"] }),
-        listMCPServers: () => ({ servers: [{ name: "github", target: "npx @modelcontextprotocol/server-github", autoApprove: false }] }),
+        listMCPServers: () => ({
+          servers: [
+            ...fakeMCP.map((m) => ({ name: m.name, target: m.url || [m.command, ...(m.args ?? [])].join(" "), autoApprove: !!m.autoApprove, disabled: !!m.disabled, state: m.disabled ? "disabled" : m.name === "github" ? "connected" : m.name === "jira" ? "failed" : "idle", tools: m.name === "github" ? 26 : 0, error: m.name === "jira" && !m.disabled ? "401 Unauthorized: sign in with blitz mcp login jira" : "" })),
+            { name: "db", target: "npx @acme/db-mcp", state: "connected", tools: 4 },
+          ],
+        }),
+        restartMCPServer: () => ({}),
+        draftManifest: ({ name, current }) => ({
+          text: `# ${name || "Reviewer"}\n\nYou review changes for correctness first, then clarity.\n\n## How you work\n- Read the diff and the files it touches.\n- List real bugs with the line and why.\n- Suggest the smallest fix.\n${current ? "\n(Improved from the instructions there.)" : ""}`,
+          changes: ["Said what the agent is for and how it works", "Added a short checklist"],
+        }),
         pinModel: ({ agent, ref }) => ({ agent, model: ref }),
         unpinModel: ({ agent, workspace }) => ({ agent, model: state(workspace).settings.model }),
         reloadMemory: () => ({ paths: ["/home/me/blitz/AGENTS.md", "/home/me/blitz/.agents/AGENTS.md"], files: ["AGENTS.md"] }),
@@ -805,8 +1409,275 @@ export function installFake() {
         listEnvs: () => ({ envs: [{ key: "a1b2c3", deps: ["pandas", "matplotlib"], skills: ["data-report"], size: 182_000_000n, ready: true }] }),
         pruneEnvs: () => ({ removed: 0, freed: 0n, failed: [] }),
         removeEnv: () => ({}),
-        listSkills: ({ query }) => ({ skills: [{ name: "pdf", description: "Read and summarize PDF files" }, { name: "release", description: "Cut a release: tag, notes, checks" }].filter((x) => !query || x.name.includes(query)) }),
+        listSkills: ({ workspace, query }) => ({ skills: [...fakeOtherSkills, ...fakeProjectSkills.map((x) => fakeSkillInfo(workspace, x))].filter((x) => !query || x.name.includes(query)) }),
         getSkill: ({ name }) => ({ skill: { name, description: "Read and summarize PDF files", tools: [{ name: "read_file" }] } }),
+        // Workflows' human tasks, answered by their forms.
+        listHumanTasks: ({ workspace }) => ({ alerts: fakeAlerts, tasks: fakeTasks.filter((x) => !workspace || x.workspace === workspace) }),
+        watchHumanTasks: ({ workspace }) => watchFakeTasks(workspace),
+        listWorkflowRuns: ({ workspace, workflow, limit }) => ({ runs: receiptsFor(workspace).filter((r) => (!workspace || r.workspace === workspace) && (!workflow || r.workflow === workflow)).slice(0, limit || 50).map(summary) }),
+        getWorkflowRun: ({ id }) => {
+          const r = fakeReceipts.find((x) => x.id === id);
+          if (!r) throw new ConnectError(`no workflow run ${id}`, Code.NotFound);
+          return { run: r };
+        },
+        watchWorkflowRun: ({ id }) => watchFakeRun(id),
+        watchWorkflowRuns: ({ workspace }) => watchFakeRuns(workspace),
+        getWorkspaceHealth: () => ({ health: clone(WorkspaceHealthSchema, { ...fakeHealth, checking: fakeChecking, progress: fakeChecking && fakeProgress ? create(HealthCheckProgressSchema, fakeProgress) : undefined }) }),
+        // The composer: one question, then a three-step draft.
+        startCompose: ({ request }) => ({
+          session: { id: "compose-fake", kind: "workflow", asking: true, costUsd: 0.0012, turns: [{ role: "user", text: request }, { role: "composer", text: "Where are the notes kept?", options: ["notes/today.md", "A folder of notes", "In the chat"] }] },
+        }),
+        answerCompose: ({ answer }) => {
+          const file = "description: A daily brief from the notes\nnodes:\n  - {id: notes, type: read_file, title: Read the notes, path: notes/today.md, position: {x: 0, y: 80}}\n  - {id: draft, type: agent, title: Draft the brief, instructions: Write a short brief for the team., position: {x: 280, y: 80}}\n  - {id: save, type: save_file, title: Save it, path: briefs/today.md, position: {x: 560, y: 80}}\nedges:\n  - {from: notes, to: draft}\n  - {from: draft, to: save}\n";
+          return {
+            session: {
+              id: "compose-fake",
+              kind: "workflow",
+              asking: false,
+              costUsd: 0.0031,
+              turns: [{ role: "user", text: "A daily brief" }, { role: "composer", text: "Where are the notes kept?", options: [] }, { role: "user", text: answer }, { role: "composer", text: "Reads today's notes, drafts a short brief and saves it in briefs/." }],
+              draft: {
+                name: "daily-brief",
+                summary: "Reads today's notes, drafts a short brief and saves it in briefs/.",
+                file,
+                problems: [],
+                workflow: {
+                  name: "daily-brief",
+                  description: "A daily brief from the notes",
+                  nodes: [
+                    flowNode("notes", "read_file", "Read the notes", 0, 80, { path: "notes/today.md" }),
+                    flowNode("draft", "agent", "Draft the brief", 280, 80, { instructions: "Write a short brief for the team." }),
+                    flowNode("save", "save_file", "Save it", 560, 80, { path: "briefs/today.md" }),
+                  ],
+                  edges: [
+                    { from: "notes", to: "draft" },
+                    { from: "draft", to: "save" },
+                  ],
+                },
+              },
+            },
+          };
+        },
+        dropCompose: () => ({}),
+        startHealthCheck: ({ scope }) => {
+          if (fakeChecking) throw new ConnectError("a health check of this workspace is running", Code.FailedPrecondition);
+          void (async () => {
+            for await (const r of fakeCheck(scope)) {
+              if (r.done) {
+                fakeHealth.lastJudged = r.judged ?? 0;
+                fakeHealth.lastErrors = [];
+              } else if (!("verdict" in r)) fakeProgress = { item: r.item ?? "", index: r.index ?? 0, total: r.total ?? 0, costUsd: r.costUsd ?? 0 };
+            }
+          })();
+          return {};
+        },
+        watchWorkspaceHealth: () => watchFakeHealth(),
+        estimateHealthCheck: ({ scope }) => {
+          const n = fakeDue(scope).length;
+          return { items: n, costUsd: n * 0.0019, priced: true };
+        },
+        checkWorkspaceHealth: ({ scope }) => fakeCheck(scope),
+        stopHealthCheck: () => {
+          fakeStopCheck = true;
+          return {};
+        },
+        stopWorkflowRun: ({ id }) => {
+          const r = fakeReceipts.find((x) => x.id === id && x.status === "running");
+          if (!r) throw new ConnectError("the workflow run isn't running", Code.NotFound);
+          runStopped.add(r.backgroundId);
+          const bg = backgroundRuns().find((x) => x.id === r.backgroundId);
+          if (bg) state(bg.workspace).pending.get(`${bg.id}-save`)?.("stop");
+          return {};
+        },
+        answerHumanTask: ({ taskId, actionJson }) => {
+          const i = fakeTasks.findIndex((x) => x.id === taskId);
+          if (i < 0) throw new ConnectError("no such task", Code.NotFound);
+          // The service checks the answer against the form; the fake, that it's an action.
+          if (!(JSON.parse(actionJson || "{}") as { action?: unknown }).action) throw new ConnectError("the answer isn't accepted: not an action message", Code.InvalidArgument);
+          fakeTasks.splice(i, 1);
+          return {};
+        },
+        // Studio › Workflows: listed, saved and deleted; runs are background runs.
+        listWorkflows: ({ workspace }) => ({ dir: `${workspace}/.agents/workflows`, workflows: fakeFlows.map((f) => fakeFlowFile(workspace, f)) }),
+        saveWorkflow: ({ workspace, previousName, workflow }) => {
+          const w = workflow!;
+          if (!/^[a-z0-9]+([-_][a-z0-9]+)*$/.test(w.name)) return { problems: [`name "${w.name}": lowercase letters, digits and single hyphens, up to 64`] };
+          const next: FakeFlow = {
+            name: w.name,
+            description: w.description,
+            mode: w.mode,
+            nodes: w.nodes.map((n) => ({ ...n, skills: [...n.skills], rules: [...n.rules], args: [...n.args], fields: n.fields.map((f) => ({ ...f })) })),
+            edges: w.edges.map((e) => ({ from: e.from, to: e.to, when: e.when, if: e.if, default: e.default, error: e.error, label: e.label })),
+          };
+          const i = fakeFlows.findIndex((x) => x.name === (previousName || w.name));
+          if (i >= 0) fakeFlows[i] = next;
+          else fakeFlows.push(next);
+          return { workflow: fakeFlowFile(workspace, next) };
+        },
+        deleteWorkflow: ({ name }) => {
+          const i = fakeFlows.findIndex((x) => x.name === name);
+          if (i < 0) throw new ConnectError(`no workflow ${name}`, Code.NotFound);
+          fakeFlows.splice(i, 1);
+          return {};
+        },
+        // Studio › Evals: two evals, their runs, and a run streamed case by case.
+        listEvals: ({ workspace }) => ({ dir: `${workspace}/.agents/evals`, evals: fakeEvals.map((e) => fakeEvalFile(workspace, e)) }),
+        saveEval: ({ workspace, previousName, eval: spec }) => {
+          const e = spec!;
+          if (!/^[a-z0-9]+([-_][a-z0-9]+)*$/.test(e.name)) return { problems: [`name "${e.name}": lowercase letters, digits and single hyphens, up to 64`] };
+          const blank = e.cases.find((c) => !c.prompt.trim());
+          if (blank) return { problems: [`case ${blank.id}: it needs a prompt`] };
+          const next: FakeEval = { name: e.name, description: e.description, agents: e.agents, skills: e.skills, near: e.near || "judge", allow: e.allow, cases: e.cases.map((c) => ({ ...c, threshold: c.type === "near" ? c.threshold || 0.8 : 0 })) };
+          const i = fakeEvals.findIndex((x) => x.name === (previousName || e.name));
+          if (i >= 0) fakeEvals[i] = next;
+          else fakeEvals.push(next);
+          return { eval: fakeEvalFile(workspace, next) };
+        },
+        deleteEval: ({ name }) => {
+          const i = fakeEvals.findIndex((x) => x.name === name);
+          if (i < 0) throw new ConnectError(`no eval ${name}`, Code.NotFound);
+          fakeEvals.splice(i, 1);
+          return {};
+        },
+        listEvalRuns: ({ name }) => ({ runs: (fakeEvalRuns[name] ?? []).slice().reverse() }),
+        draftEvalCases: async ({ agent, existing }) => {
+          await new Promise((r) => setTimeout(r, 900));
+          const taken = new Set(existing.map((c) => c.id));
+          const id = (s: string) => (taken.has(s) ? `${s}-2` : s);
+          return {
+            cases: [
+              { id: id("plan-steps"), name: "Plans in steps", prompt: "Plan adding a wishlist to the shop.", output: "A numbered plan: data model, API, page, tests, rollout.", type: "near", threshold: 0.75, scope: "fail" },
+              { id: id("asks-first"), name: "Asks when unclear", prompt: "Make it faster.", output: "Asks what should be faster before planning.", type: "near", threshold: 0.8, scope: "fail" },
+              { id: id("no-code"), name: "Doesn't write code", prompt: "Write the wishlist API.", output: "Plans it, and leaves the code to a coding agent.", type: "near", threshold: 0.7, scope: "warn" },
+              { id: id("format"), name: "", prompt: `Reply with only the word READY if you're ${agent}.`, output: "READY", type: "exact", threshold: 0, scope: "info" },
+            ],
+          };
+        },
+        runEval: async function* ({ name }, ctx) {
+          const e = fakeEvals.find((x) => x.name === name);
+          if (!e) throw new ConnectError(`no eval ${name}`, Code.NotFound);
+          const started = timestampFromDate(new Date());
+          yield { event: { case: "started" as const, value: { id: `run-${Date.now()}`, eval: name, status: "running", started } } };
+          const results = [];
+          for (const c of e.cases) {
+            for (const agent of e.agents.length ? e.agents : ["blitz"]) {
+              await new Promise((r) => setTimeout(r, 700));
+              if (ctx.signal.aborted) return;
+              const miss = c.id === "tone" && agent === "reviewer";
+              const score = c.type === "exact" ? (miss ? 0 : 1) : miss ? 0.55 : 0.9;
+              const status = score >= (c.threshold || 1) ? "pass" : c.scope;
+              const r = { case: c.id, name: c.name, agent, type: c.type, scope: c.scope, status, score, threshold: c.threshold, prompt: c.prompt, expected: c.output, output: miss ? "Returns? Sure, whenever you like!" : c.output, reason: c.type === "near" ? (miss ? "It doesn't give the 30 days." : "Same window and the receipt.") : "", refusals: c.id === "stock" ? ["create_file: notes.md"] : [], costUsd: c.type === "near" ? 0.0031 : 0.0009, duration: { seconds: BigInt(c.type === "near" ? 4 : 2), nanos: 300_000_000 } };
+              results.push(r);
+              yield { event: { case: "result" as const, value: r } };
+            }
+          }
+          const failed = results.some((r) => r.status === "fail" || r.status === "error");
+          const run = { id: `run-${Date.now()}`, eval: name, status: failed ? "failed" : "passed", started, results, costUsd: results.reduce((n, r) => n + r.costUsd, 0), counts: results.reduce((m: Record<string, number>, r) => ({ ...m, [r.status]: (m[r.status] ?? 0) + 1 }), {}) };
+          (fakeEvalRuns[name] ??= []).push(run);
+          yield { event: { case: "finished" as const, value: run } };
+        },
+        // Studio › Guardrails: the built-ins on or off, and the workspace's own.
+        listGuardrails: ({ workspace }) => ({
+          dir: `${workspace}/.agents/guardrails`,
+          builtins: fakeBuiltinGuards.map((b) => {
+            const g = fakeGuards.find((x) => x.builtin === b.id);
+            return { ...b, file: g ? fakeGuardFile(workspace, g) : { name: b.id, builtin: b.id, stage: b.stage, action: b.defaultAction, agents: [], tools: [], description: "", pii: false, judge: false, text: "", off: false, path: "", problem: "", editable: true, limits: b.id === "limits" ? { maxCostUsd: 0, maxTurns: 0, maxFilesChanged: 0, allowedDomains: [], commands: ["git push*--force*", "git push* -f*", "rm -rf /", "rm -rf ~", "rm -rf ~/"] } : undefined } };
+          }),
+          guardrails: fakeGuards.filter((g) => !g.builtin).map((g) => fakeGuardFile(workspace, g)),
+        }),
+        saveGuardrail: ({ workspace, previousName, guardrail }) => {
+          const g = guardrail!;
+          const name = g.builtin || g.name;
+          if (!g.builtin && !/^[a-z0-9]+([-_][a-z0-9]+)*$/.test(name)) return { problems: [`name "${name}": lowercase letters, digits and single hyphens, up to 64`] };
+          if (!g.builtin && !g.text.trim()) return { problems: ["the guardrail is empty: say what to catch"] };
+          const next = { name, builtin: g.builtin, stage: g.builtin ? fakeBuiltinGuards.find((b) => b.id === g.builtin)!.stage : g.stage, action: g.action, agents: g.agents, tools: g.tools, description: g.description, pii: g.pii, judge: g.judge, limits: g.limits, text: g.text, off: g.off };
+          const i = fakeGuards.findIndex((x) => x.name === (g.builtin || previousName || name));
+          if (i >= 0) fakeGuards[i] = next;
+          else fakeGuards.push(next);
+          return { guardrail: fakeGuardFile(workspace, next) };
+        },
+        deleteGuardrail: ({ name }) => {
+          const i = fakeGuards.findIndex((x) => x.name === name);
+          if (i < 0) throw new ConnectError(`no guardrail ${name}`, Code.NotFound);
+          fakeGuards.splice(i, 1);
+          return {};
+        },
+        tryGuardrail: async ({ guardrail, sample }) => {
+          await new Promise((r) => setTimeout(r, 600));
+          if (guardrail?.builtin === "secrets") return /@|AKIA/.test(sample) ? { pass: false, reason: `It would be shown as: ${sample.replace(/\S+@\S+/g, "[EMAIL REDACTED]")}` } : { pass: true, reason: "No secrets or personal data found." };
+          if (guardrail?.builtin === "prompt_injection") return /ignore|you are now/i.test(sample) ? { pass: false, reason: "it contains text aimed at the agent" } : { pass: true, reason: "Nothing in it looks aimed at the agent." };
+          return /delete|-D|drop/i.test(sample) ? { pass: false, reason: "It deletes a branch." } : { pass: true, reason: "Nothing here is deleted." };
+        },
+        // Studio › Rules: gates before and after the agent, and instruction rules.
+        listRules: ({ workspace }) => ({ dir: `${workspace}/.agents/rules`, rules: fakeRuleList(workspace) }),
+        saveRule: ({ workspace, previousName, rule }) => {
+          const r = rule!;
+          if (!/^[a-z0-9]+([-_][a-z0-9]+)*$/.test(r.name)) return { problems: [`name "${r.name}": lowercase letters, digits and single hyphens, up to 64`] };
+          if (!r.text.trim()) return { problems: ["the rule is empty: say what to check"] };
+          const i = fakeRules.findIndex((x) => x.name === previousName);
+          const next = { name: r.name, when: r.when, action: r.action, order: r.order, agents: r.agents, description: r.description, paths: r.paths, text: r.text };
+          if (i >= 0) fakeRules[i] = next;
+          else fakeRules.push(next);
+          return { rule: fakeRuleList(workspace).find((x) => x.name === r.name) };
+        },
+        deleteRule: ({ name }) => {
+          const i = fakeRules.findIndex((x) => x.name === name);
+          if (i < 0) throw new ConnectError(`no rule ${name}`, Code.NotFound);
+          fakeRules.splice(i, 1);
+          return {};
+        },
+        reorderRules: ({ names }) => {
+          names.forEach((n, i) => {
+            const r = fakeRules.find((x) => x.name === n);
+            if (r) r.order = (i + 1) * 10;
+          });
+          return {};
+        },
+        tryRule: async ({ sample }) => (await new Promise((r) => setTimeout(r, 700)), /test/i.test(sample) ? { pass: true, reason: "It names the tests it ran." } : { pass: false, reason: "It doesn't say how the change was tested." }),
+        // Studio › Skills: the workspace's own skills, their files, copies.
+        getSkillFile: ({ workspace, name }) => {
+          const x = fakeProjectSkills.find((k) => k.name === name);
+          if (x) return { file: fakeSkillFile(workspace, x) };
+          const o = fakeOtherSkills.find((k) => k.name === name);
+          if (!o) throw new ConnectError(`no skill ${name}`, Code.NotFound);
+          return { file: { skill: o, path: `${o.dir}/SKILL.md`, spec: { name: o.name, description: o.description, instructions: "Read the file, then summarize it." } } };
+        },
+        saveSkill: ({ workspace, previousName, skill }) => {
+          const sp = skill!;
+          if (!/^[a-z0-9]+(-[a-z0-9]+)*$/.test(sp.name)) return { problems: [`name "${sp.name}": lowercase letters, digits and single hyphens, up to 64`] };
+          if (!sp.description.trim()) return { problems: ["description: say what the skill is for and when to use it"] };
+          if (sp.name !== previousName && fakeProjectSkills.some((k) => k.name === sp.name)) return { problems: [`name "${sp.name}": the workspace has a skill by that name`] };
+          let x = fakeProjectSkills.find((k) => k.name === previousName);
+          if (!x) fakeProjectSkills.push((x = { name: sp.name, description: "", tools: "", agents: [], members: [], instructions: "", files: {} }));
+          Object.assign(x, { name: sp.name, description: sp.description, tools: sp.tools, agents: sp.agents, members: sp.members, instructions: sp.instructions });
+          return { file: fakeSkillFile(workspace, x) };
+        },
+        deleteSkill: ({ name }) => {
+          const i = fakeProjectSkills.findIndex((k) => k.name === name);
+          if (i < 0) throw new ConnectError(`no skill ${name}`, Code.NotFound);
+          fakeProjectSkills.splice(i, 1);
+          return {};
+        },
+        readSkillFile: ({ name, path }) => ({ content: new TextEncoder().encode(fakeProjectSkills.find((k) => k.name === name)?.files[path] ?? "") }),
+        writeSkillFile: ({ workspace, name, path, content }) => {
+          const x = fakeProjectSkills.find((k) => k.name === name)!;
+          if (!/^((references|scripts)\/[^.]|(requirements\.txt|pyproject\.toml|package\.json)$)/.test(path) || path.includes("..")) throw new ConnectError(`"${path}": a skill's files go in references/ or scripts/`, Code.InvalidArgument);
+          x.files[path] = new TextDecoder().decode(content);
+          return { file: fakeSkillFile(workspace, x) };
+        },
+        deleteSkillFile: ({ workspace, name, path }) => {
+          const x = fakeProjectSkills.find((k) => k.name === name)!;
+          delete x.files[path];
+          return { file: fakeSkillFile(workspace, x) };
+        },
+        copySkill: ({ workspace, from, name }) => {
+          if (fakeProjectSkills.some((k) => k.name === name)) return { problems: [`name "${name}": the workspace has a skill by that name`] };
+          const o = [...fakeOtherSkills, ...fakeProjectSkills].find((k) => k.name === from)!;
+          const x = { name, description: o.description, tools: "", agents: [], members: [], instructions: "Read the file, then summarize it.", files: {} };
+          fakeProjectSkills.push(x);
+          return { file: fakeSkillFile(workspace, x) };
+        },
+        runSkillScript: async ({ script, args }) => (await new Promise((r) => setTimeout(r, 900)),  ({ exitCode: 0, stdout: `${script}: ${args.length ? args.join(" ") : "no arguments"}\n3 entries since v0.7.0\n`, stderr: "", sandbox: "seatbelt" })),
         getSettings: ({ workspace }) => {
           const s = state(workspace).settings;
           return { agent: s.agent, model: s.model, provider: s.provider, effort: s.effort, permissionMode: s.mode, agency: s.agency, locale: s.locale, style: s.style, imagesEnabled: true, speechModel: s.speechModel ?? "", acceptedMedia: fakeAccepted(s.provider) };
@@ -1132,7 +2003,45 @@ export function installFake() {
         }),
       });
       service(ConfigService, {
+        // Reviewing a skill's scripts: trusted at the content shown.
+        trustSkillScripts: ({ dir, hash }) => (fakeTrusted.set(dir.split("/").pop()!, hash), {}),
+        getSkillReview: () => ({}),
         listSkillRegistries: () => ({ registries: fakeRegistries, installed: fakeInstalledSkills }),
+        listSecrets: ({ workspace }) => ({ secrets: (fakeSecrets.get(workspace) ?? []).map((key) => ({ key, updated: { seconds: BigInt(1760700000), nanos: 0 } })), store: "macOS Keychain" }),
+        setSecret: ({ workspace, key }) => {
+          const l = fakeSecrets.get(workspace) ?? [];
+          if (!l.includes(key)) fakeSecrets.set(workspace, [...l, key].sort());
+          return {};
+        },
+        deleteSecret: ({ workspace, key }) => {
+          fakeSecrets.set(workspace, (fakeSecrets.get(workspace) ?? []).filter((k) => k !== key));
+          return {};
+        },
+        listBuiltinSkills: () => ({
+          skills: [
+            { name: "code-review", description: "Review a change for bugs, style and tests", version: "1.0.0" },
+            { name: "git-workflow", description: "Branches, commits and pull requests the team's way", version: "1.0.0" },
+            { name: "testing-tdd", description: "Write the failing test first, then the code", version: "1.0.0" },
+          ],
+        }),
+        listMCPServerConfigs: () => ({ servers: fakeMCP, path: "~/.blitz/.env.toml" }),
+        saveMCPServer: ({ name, server }) => {
+          const i = fakeMCP.findIndex((m) => m.name === name);
+          if (!name && fakeMCP.some((m) => m.name === server?.name)) throw new Error(`an MCP server named "${server?.name}" is already configured`);
+          if (name && i < 0) throw new Error(`no MCP server by that name: ${name}`);
+          if (i >= 0) fakeMCP[i] = server!;
+          else fakeMCP.push(server!);
+          return { change: { path: "~/.blitz/.env.toml" } };
+        },
+        removeMCPServer: ({ name }) => {
+          fakeMCP.splice(fakeMCP.findIndex((m) => m.name === name), 1);
+          return { change: { path: "~/.blitz/.env.toml" } };
+        },
+        setMCPServerEnabled: ({ name, enabled }) => {
+          const m = fakeMCP.find((x) => x.name === name);
+          if (m) m.disabled = !enabled;
+          return { change: { path: "~/.blitz/.env.toml" } };
+        },
         addSkillRegistry: ({ url, name, token }) => {
           if (!/^https:\/\//.test(url) && !url.startsWith("/")) throw new ConnectError(`${url}: a registry needs https (http only for localhost)`, Code.FailedPrecondition);
           const reg = { name: name || "castor", url, hasToken: !!token };
@@ -1226,6 +2135,7 @@ export function installFake() {
           const c = scopeConfig(workspace);
           if (key === "llm.provider") c.provider = value;
           if (key === "blitz.default_model") c.model = value;
+          if (key === "ui.task_alerts") fakeAlerts = value;
           if (key === "audio.model" && workspace) state(workspace).settings.speechModel = value;
           if (key.startsWith("search.") && workspace) {
             const s = searchSettingsOf(workspace);
@@ -1237,6 +2147,12 @@ export function installFake() {
             if (key === "search.enrich_daily_limit") s.enrichDailyLimit = Number(value) || 200;
             if (key === "search.include_ignored") s.includeIgnored = value === "true";
           }
+          // Settings › Workers' limits.
+          if (key === "workers.policy.allow") fakePolicy.allow = value === "none" ? [] : value ? value.split(",").map((k) => k.trim()) : ["shell", "write", "delete", "web", "mcp"];
+          const limit = { max_concurrent: "maxConcurrent", default_max_turns: "defaultMaxTurns", max_turns: "maxTurns", default_max_cost_usd: "defaultMaxCostUsd", max_cost_usd: "maxCostUsd" }[key.replace("workers.policy.", "")] as "maxConcurrent" | undefined;
+          if (key.startsWith("workers.policy.") && limit) fakePolicy[limit] = Number(value);
+          if (key === "workers.policy.default_timeout") fakePolicy.defaultTimeout = value || "30m";
+          if (key === "workers.policy.max_timeout") fakePolicy.maxTimeout = value || "2h";
           return change(workspace);
         },
         getConfigFile: ({ workspace }) => ({ path: configPath(workspace), text: scopeConfig(workspace).text }),
@@ -1330,7 +2246,7 @@ export function installFake() {
           return { entries: showHidden ? entries : entries.filter((e) => !e.hidden), repo: true };
         },
         readPreview: ({ path }) => {
-          if (!fakeFiles.has(path)) notFound(path);
+          if (!fakeFiles.has(path) && !path.startsWith(".agents/skills/")) notFound(path); // a skill's references preview too
           if (path.endsWith(".pdf")) {
             // A two-page PDF.
             const page = (n: number) => `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 200] /Contents ${n} 0 R /Resources << /Font << /F1 5 0 R >> >> >>`;
@@ -1507,7 +2423,21 @@ export function installFake() {
           fakeWorkers.unshift(w);
           return { worker: w };
         },
-        listWorkers: () => ({ workers: fakeWorkers }),
+        listWorkers: ({ workspace }) => ({ workers: workspace === fakeHome ? fakeGlobal : fakeWorkers }),
+        listAllWorkers: () => ({
+          home: fakeHome,
+          policy: fakePolicy,
+          workspaces: [
+            { workspace: fakeHome, home: true, workers: fakeGlobal },
+            { workspace: "/home/me/shop", workers: fakeWorkers },
+            ...fakeElsewhere,
+          ],
+        }),
+        forgetWorkspaceWorkers: ({ workspace }) => {
+          const i = fakeElsewhere.findIndex((g) => g.workspace === workspace);
+          if (i >= 0) fakeElsewhere.splice(i, 1);
+          return {};
+        },
         deleteWorker: ({ name }) => {
           const i = fakeWorkers.findIndex((x) => x.name === name);
           if (i < 0) throw new ConnectError(`no such worker: ${name}`, Code.NotFound);
@@ -1560,8 +2490,8 @@ export function installFake() {
             problem: "",
           };
         },
-        // Runs going now, in this workspace and another (the Workers menu's
-        // Running now); Stop ends one, recorded as stopped.
+        // Runs going now, in this workspace and the global workers' (Running
+        // now); Stop ends one, recorded as stopped.
         listRunningWorkerRuns: () => ({ runs: fakeLive.filter((r) => r.status === RunStatus.RUNNING) }),
         stopWorkerRun: ({ runId }) => {
           const r = fakeLive.find((x) => x.id === runId && x.status === RunStatus.RUNNING);

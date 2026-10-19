@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+import { useSecretSuggest } from "./SecretSuggest";
 import { memo, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { timestampDate } from "@bufbuild/protobuf/wkt";
@@ -63,6 +64,8 @@ import {
   mdiConsoleLine,
   mdiArrowExpand,
   mdiArrowCollapse,
+  mdiPuzzleOutline,
+  mdiLoading,
 } from "@mdi/js";
 import { files, serviceLost, sessions, workspaces } from "./api";
 import { editorConfig, toEditor } from "./host";
@@ -73,6 +76,7 @@ import type { SessionInfo } from "./gen/blitz/v1/session_pb";
 import { Decision, type ApprovalRequest, type Question, type Task, type Usage } from "./gen/blitz/v1/turn_pb";
 import type { BackgroundTask, GetSettingsResponse, GetSuggestionsResponse } from "./gen/blitz/v1/workspace_pb";
 import { addWait, dropWait, type Pending } from "./waits";
+import { withTools } from "./turns";
 import { allCommands, helpText, matchCommands, parseCommand, type CommandSpec } from "./commands";
 import { builtin, type CommandContext } from "./slashCommands";
 import {
@@ -93,6 +97,7 @@ import {
   type LoadSessionDetail,
 } from "./events";
 import { appendMention, insertMention, isAttachablePath, mentionAt } from "./mentions";
+import { insertSkill, skillAt, skillOptions, skillsFor } from "./skillMention";
 import { pollMs, shouldPoll, welcomeTiles, type TileAction } from "./suggestions";
 import { ComposerDock, focusComposerEvent } from "./composerDock";
 import { refreshRuns, runInSession } from "./backgroundRuns";
@@ -233,17 +238,26 @@ export function Conversation({
     }
   }, [dir]);
 
+  // The session shown, for answers that arrive after another is shown.
+  const shownId = useRef("");
   const show = useCallback(
     (s: SessionInfo) => {
       setSession(s);
       setEntries(fromMessages(s.messages));
+      shownId.current = s.id;
+      // Its tool calls, back where they ran (an older service has none to give).
+      if (s.messages.length)
+        sessions.listSessionTools({ workspace: dir, sessionId: s.id }).then(
+          (r) => shownId.current === s.id && r.tools.length && setEntries((cur) => withTools(cur, r.tools)),
+          () => {},
+        );
       setTasks([]);
       setTurnUsage("");
       setError("");
       stick.current = true;
       refreshTotal();
     },
-    [refreshTotal],
+    [dir, refreshTotal],
   );
 
   // Reloads the active session's messages (after a rewind, say).
@@ -1362,7 +1376,18 @@ function ToolRow({ name, args, result }: { name: string; args?: JsonObject; resu
   const open = advanced && opened;
   const openPath = useOpenPath();
   const bad = failed(result);
-  const status = result === undefined ? <Icon path={mdiProgressClock} size="sm" className="pulse" /> : bad ? <Icon path={mdiClose} size="sm" /> : <Icon path={mdiCheck} size="sm" />;
+  // Working: a spinner, and for a skill's script (which can take a while) the word.
+  const status =
+    result === undefined ? (
+      <span className="row tool-running" style={{ gap: 6 }}>
+        {name === "run_skill_script" && <span className="t-body-sm muted">{t("desktop.tool.running")}</span>}
+        <Icon path={mdiLoading} size="sm" spin />
+      </span>
+    ) : bad ? (
+      <Icon path={mdiClose} size="sm" />
+    ) : (
+      <Icon path={mdiCheck} size="sm" />
+    );
   return (
     <div className={`tool ${bad ? "failed" : ""} ${open ? "open" : ""}`}>
       <button className="tool-head" onClick={() => advanced && setOpen((o) => !o)} aria-expanded={advanced ? open : undefined}>
@@ -1487,7 +1512,8 @@ function JsonBlock({ label, value }: { label: string; value: JsonObject }) {
   );
 }
 
-function ApprovalCard({ req, onDecide, who, autoFocus = true }: { req: ApprovalRequest; onDecide: (d: Decision) => void; who?: string; autoFocus?: boolean }) {
+/** An approval request, with its decisions (the canvas shows one too). */
+export function ApprovalCard({ req, onDecide, who, autoFocus = true }: { req: ApprovalRequest; onDecide: (d: Decision) => void; who?: string; autoFocus?: boolean }) {
   const files = req.diff ? parseDiff(req.diff) : [];
   const advanced = useAdvanced(); // Always allow: advanced
   return (
@@ -1705,7 +1731,27 @@ function Composer({
     requestAnimationFrame(() => ref.current?.setSelectionRange(r.caret, r.caret));
     if (isAttachablePath(path)) onAddImagePath(path);
   };
-  const trackCaret = (e: { currentTarget: HTMLTextAreaElement }) => setCaret(e.currentTarget.selectionStart ?? 0);
+  // Completing \skill-name: the skills the workspace sees.
+  const skillToken = menuOpen || mention ? null : skillAt(draft, caret);
+  const [skillList, setSkillList] = useState<{ name: string; description: string }[]>([]);
+  useEffect(() => {
+    if (skillToken) void skillsFor(dir).then(setSkillList);
+  }, [!!skillToken, dir]); // eslint-disable-line react-hooks/exhaustive-deps
+  const skillFound = skillToken ? skillOptions(skillToken.query, skillList) : [];
+  const skillOpen = !!skillToken && skillFound.length > 0 && dismissed !== draft;
+  const chooseSkill = (name: string) => {
+    if (!skillToken) return;
+    const r = insertSkill(draft, skillToken, name);
+    setDraft(r.text);
+    setCaret(r.caret);
+    requestAnimationFrame(() => ref.current?.setSelectionRange(r.caret, r.caret));
+  };
+  // Completing {secrets:…}: the workspace's and the global names.
+  const secretSuggest = useSecretSuggest(draft, setDraft, ref, dir);
+  const trackCaret = (e: { currentTarget: HTMLTextAreaElement }) => {
+    setCaret(e.currentTarget.selectionStart ?? 0);
+    secretSuggest.trackCaret(e);
+  };
   // Grow with the text, up to a limit.
   useEffect(() => {
     const el = ref.current;
@@ -1746,6 +1792,31 @@ function Composer({
           <div className="command-hint t-body-sm muted">
             <kbd>↑</kbd>
             <kbd>↓</kbd> {t("desktop.keys.choose")} · <kbd>{t("desktop.keys.tab")}</kbd> {t("desktop.keys.complete")} · <kbd>{t("desktop.keys.esc")}</kbd> {t("desktop.keys.close")}
+          </div>
+        </div>
+      )}
+      {!menuOpen && !mentionOpen && !skillOpen && secretSuggest.menu}
+      {skillOpen && (
+        <div className="command-menu" role="listbox" aria-label={t("desktop.skills.mention")}>
+          {skillFound.map((s, i) => (
+            <button
+              key={s.name}
+              role="option"
+              aria-selected={i === pick}
+              className={`command-option ${i === pick ? "on" : ""}`}
+              onMouseDown={(e) => {
+                e.preventDefault(); // keep the focus in the field
+                chooseSkill(s.name);
+              }}
+            >
+              <Icon path={mdiPuzzleOutline} size="sm" />
+              <code>\{s.name}</code>
+              <span className="spacer ellipsis muted t-body-sm">{s.description}</span>
+            </button>
+          ))}
+          <div className="command-hint t-body-sm muted">
+            <kbd>↑</kbd>
+            <kbd>↓</kbd> {t("desktop.keys.choose")} · <kbd>{t("desktop.keys.tab")}</kbd> {t("desktop.skills.mention_add")} · <kbd>{t("desktop.keys.esc")}</kbd> {t("desktop.keys.close")}
           </div>
         </div>
       )}
@@ -1807,6 +1878,25 @@ function Composer({
           }
         }}
         onKeyDown={(e) => {
+          if (!menuOpen && !mentionOpen && !skillOpen && secretSuggest.onKeyDown(e)) return;
+          if (skillOpen && !e.nativeEvent.isComposing) {
+            const n = skillFound.length;
+            if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+              e.preventDefault();
+              setPick((p) => (p + (e.key === "ArrowDown" ? 1 : n - 1)) % n);
+              return;
+            }
+            if (e.key === "Escape") {
+              e.preventDefault();
+              setDismissed(draft);
+              return;
+            }
+            if (e.key === "Tab" || (e.key === "Enter" && !e.shiftKey)) {
+              e.preventDefault();
+              chooseSkill(skillFound[Math.min(pick, n - 1)].name);
+              return;
+            }
+          }
           if (mentionOpen && !e.nativeEvent.isComposing) {
             const n = found.paths.length;
             if (e.key === "ArrowDown" || e.key === "ArrowUp") {

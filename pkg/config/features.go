@@ -43,6 +43,10 @@ type UIConfig struct {
 	// Notify is how the terminal tells you: both (bell and desktop
 	// notification), bell, desktop or off.
 	Notify string `toml:"notify"`
+	// TaskAlerts is how a workflow's human task reaches you when no app
+	// window is open: "notify" (a notification that opens the task's small
+	// window), "open" (the window opens at once) or "off".
+	TaskAlerts string `toml:"task_alerts"`
 	// StatusLine is the line shown above each prompt: "default" (model,
 	// mode, context, cost), a shell command that reads the session's state
 	// as JSON and prints the line, or "" for none.
@@ -599,6 +603,7 @@ func applyFeatureDefaults(c *Config) {
 		LocalesDir:    filepath.Join(dir, "locales"),
 		NotifyAfter:   30,
 		Notify:        "both",
+		TaskAlerts:    "notify",
 		Editor:        "emacs",
 		Keybindings:   filepath.Join(dir, "keybindings.toml"),
 	}
@@ -628,4 +633,22 @@ func applyFeatureDefaults(c *Config) {
 	// Prices in effect when the configuration loads: a service running
 	// across a price change picks the new price up at its next restart.
 	c.Pricing = DefaultPricingAt(time.Now())
+}
+
+// HealthConfig is the workspace dashboard's judge (spec_health_044): it
+// rates each agent, skill, rule, guardrail, eval, workflow and worker on
+// the evidence, when asked and on a schedule. Only the user's settings
+// (global or a workspace's own) set it: a project may not spend the
+// user's money.
+type HealthConfig struct {
+	// Model judges ("provider/model"; empty: the auto mode's reviewer,
+	// else the default model).
+	Model string `toml:"model"`
+	// Schedule is when the workspace's items that changed are judged again,
+	// in words or as cron ("off" or empty: only when asked). It waits for
+	// a first check made by hand.
+	Schedule string `toml:"schedule"`
+	// MaxCostUSD is the most a scheduled check may cost, estimated
+	// beforehand: one that would cost more doesn't run, and says why.
+	MaxCostUSD float64 `toml:"max_cost_usd"`
 }

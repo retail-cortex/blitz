@@ -77,8 +77,8 @@ func TestMCPServersAndPrompts(t *testing.T) {
 	w := openMCP(t)
 	servers := w.ListMCPServers()
 	require.Len(t, servers, 3)
-	assert.Equal(t, api.MCPServer{Name: "other", Target: "some-server --stdio"}, servers[1])
-	assert.Equal(t, api.MCPServer{Name: "off", Target: "never-started", Disabled: true}, servers[2], "a disabled server is listed, marked")
+	assert.Equal(t, api.MCPServer{Name: "other", Target: "some-server --stdio", State: "idle"}, servers[1], "not started until a turn lists its tools")
+	assert.Equal(t, api.MCPServer{Name: "off", Target: "never-started", Disabled: true, State: "disabled"}, servers[2], "a disabled server is listed, marked")
 	assert.True(t, servers[0].AutoApprove)
 
 	offers := w.ActiveAgentTools().MCP

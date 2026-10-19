@@ -67,6 +67,27 @@ genrule(
     tools = ["//apps/electron/winexe"],
 )
 
+# The setup program (apps/electron/winsetup) with Blitz's icon, named as
+# itself. Without a zip it's the uninstaller: in the zip as "Uninstall
+# Blitz.exe", so an update keeps it (EL-81).
+genrule(
+    name = "uninstaller_exe",
+    srcs = [
+        "//apps/electron/winsetup:winsetup_windows_amd64",
+        "//apps/electron:appicon.png",
+        "//build:version",
+    ],
+    outs = ["windows/uninstall.exe"],
+    cmd = "$(location //apps/electron/winexe) --in $(location //apps/electron/winsetup:winsetup_windows_amd64) --icon $(location //apps/electron:appicon.png) --version $$(cat $(location //build:version)) --name 'Uninstall Blitz.exe' --description 'Blitz Setup' --out $@",
+    tools = ["//apps/electron/winexe"],
+)
+
+pkg_files(
+    name = "uninstaller",
+    srcs = [":uninstaller_exe"],
+    renames = {":uninstaller_exe": "Uninstall Blitz.exe"},
+)
+
 pkg_files(
     name = "electron_windows",
     srcs = ["@electron_win32_x64//:files_but_program"],
@@ -88,10 +109,26 @@ pkg_zip(
     srcs = [
         ":electron_windows",
         ":notices",
+        ":uninstaller",
         ":windows_files",
     ],
     out = "Blitz_windows_x64.zip",
     package_dir = "Blitz",
+    visibility = ["//visibility:public"],
+)
+
+# Released as Blitz_<version>_windows_x64_setup.exe: the setup program
+# with the zip at its end, which installs it for the person running it,
+# without an administrator (EL-81).
+genrule(
+    name = "windows_setup",
+    srcs = [
+        ":uninstaller_exe",
+        ":windows_zip",
+    ],
+    outs = ["Blitz_windows_x64_setup.exe"],
+    cmd = "$(location //apps/electron/winsetup/pack) --exe $(location :uninstaller_exe) --zip $(location :windows_zip) --out $@",
+    tools = ["//apps/electron/winsetup/pack"],
     visibility = ["//visibility:public"],
 )
 
@@ -415,6 +452,14 @@ sh_test(
     srcs = ["contents_test.sh"],
     args = ["$(rootpath :windows_zip)"],
     data = [":windows_zip"],
+)
+
+sh_test(
+    name = "windows_setup_contents_test",
+    size = "small",
+    srcs = ["contents_test.sh"],
+    args = ["$(rootpath :windows_setup)"],
+    data = [":windows_setup"],
 )
 
 sh_test(

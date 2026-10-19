@@ -30,7 +30,7 @@ import {
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
-import { mdiClose, mdiMagnify } from "@mdi/js";
+import { mdiCheckboxBlankOutline, mdiCheckboxMarked, mdiClose, mdiMagnify, mdiMenuDown } from "@mdi/js";
 import { t } from "../i18n";
 
 /** A Material Design icon, given its SVG path (from @mdi/js). */
@@ -50,13 +50,14 @@ export function Button({
   icon,
   danger,
   small,
+  iconSpin,
   className = "",
   children,
   ...rest
-}: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: Variant; icon?: string; danger?: boolean; small?: boolean }) {
+}: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: Variant; icon?: string; danger?: boolean; small?: boolean; iconSpin?: boolean }) {
   return (
     <button type="button" className={`btn ${variant} ${icon ? "has-icon" : ""} ${danger ? "danger" : ""} ${small ? "small" : ""} ${className}`} {...rest}>
-      {icon && <Icon path={icon} size="sm" />}
+      {icon && <Icon path={icon} size="sm" spin={iconSpin} />}
       {children}
     </button>
   );
@@ -106,26 +107,57 @@ export function Chip({
 /**
  * A segmented button: one of a few options, as radio buttons. Each option
  * is named by its label, even where its text is hidden (icons only).
+ * Equal makes every option as wide as the widest, as Settings' are.
  */
 export function Segmented<T extends string>({
   value,
   options,
   onChange,
   small,
+  equal,
   label,
 }: {
   value: T;
   options: { value: T; label: string; icon?: string }[];
   onChange: (v: T) => void;
   small?: boolean;
+  equal?: boolean;
   label: string;
 }) {
   return (
-    <div className={`seg ${small ? "small" : ""}`} role="radiogroup" aria-label={label}>
+    <div className={`seg${small ? " small" : ""}${equal ? " equal" : ""}`} role="radiogroup" aria-label={label}>
       {options.map((o) => (
         <button key={o.value} type="button" role="radio" aria-checked={o.value === value} aria-label={o.label} className={o.value === value ? "on" : ""} onClick={() => onChange(o.value)}>
           {o.icon && <Icon path={o.icon} size="sm" />}
           <span className="seg-label">{o.label}</span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * Tabs over one panel: the chosen one marked; ← and → (Home, End) move
+ * between them, as a tab list does. The panel is the caller's.
+ */
+export function Tabs<T extends string>({ value, tabs, onChange, label }: { value: T; tabs: { value: T; label: string; icon?: string; note?: ReactNode; count?: number }[]; onChange: (v: T) => void; label: string }) {
+  const key = (e: React.KeyboardEvent) => {
+    const i = tabs.findIndex((x) => x.value === value);
+    const to = e.key === "ArrowRight" ? i + 1 : e.key === "ArrowLeft" ? i - 1 : e.key === "Home" ? 0 : e.key === "End" ? tabs.length - 1 : -2;
+    if (to === -2) return;
+    e.preventDefault();
+    const next = tabs[(to + tabs.length) % tabs.length];
+    onChange(next.value);
+    (e.currentTarget.querySelector(`[data-tab="${next.value}"]`) as HTMLElement | null)?.focus();
+  };
+  return (
+    <div className="tabs" role="tablist" aria-label={label} onKeyDown={key}>
+      {tabs.map((x) => (
+        <button key={x.value} type="button" role="tab" data-tab={x.value} aria-selected={x.value === value} tabIndex={x.value === value ? 0 : -1} className={`tab ${x.value === value ? "on" : ""}`} onClick={() => onChange(x.value)}>
+          {x.icon && <Icon path={x.icon} size="sm" />}
+          <span>{x.label}</span>
+          {!!x.count && <span className="badge tab-badge">{x.count}</span>}
+          {x.note}
         </button>
       ))}
     </div>
@@ -340,7 +372,66 @@ export type MenuEntry = MenuItem | "divider" | { heading: string };
 
 /** A menu's items that can be chosen. */
 function menuItems(el: HTMLElement): HTMLElement[] {
-  return [...el.querySelectorAll<HTMLElement>('[role="menuitem"]:not(:disabled)')];
+  return [...el.querySelectorAll<HTMLElement>('[role="menuitem"]:not(:disabled), [role="menuitemcheckbox"]:not(:disabled)')];
+}
+
+/**
+ * A choice of several from a list, in the room of one field: a button
+ * naming what's chosen opens the list with a check box each (and a filter
+ * when it's long); it stays open while boxes are ticked. Chosen values the
+ * list doesn't have (gone since) stay listed, so they can be unticked.
+ */
+export function MultiSelect({
+  label,
+  options,
+  chosen,
+  onChange,
+  none,
+  id,
+}: {
+  label: string;
+  options: { value: string; detail?: string }[];
+  chosen: string[];
+  onChange: (v: string[]) => void;
+  /** What the button says with nothing chosen. */
+  none: string;
+  id?: string;
+}) {
+  const { at, toggle, ref, layer } = useAnchoredMenu<HTMLSpanElement>("down start");
+  const [filter, setFilter] = useState("");
+  const all = [...options, ...chosen.filter((c) => !options.some((o) => o.value === c)).map((value) => ({ value, detail: undefined }))];
+  const q = filter.trim().toLowerCase();
+  const shown = q ? all.filter((o) => o.value.toLowerCase().includes(q) || o.detail?.toLowerCase().includes(q)) : all;
+  const flip = (v: string) => onChange(chosen.includes(v) ? chosen.filter((x) => x !== v) : [...chosen, v]);
+  return (
+    <span className="menu-anchor multi-select" ref={ref}>
+      <button type="button" id={id} className="select multi-select-button" aria-haspopup="menu" aria-expanded={!!at} aria-label={`${label}: ${chosen.join(", ") || none}`} onClick={toggle}>
+        <span className={`ellipsis spacer ${chosen.length ? "" : "muted"}`}>{chosen.length ? chosen.join(", ") : none}</span>
+        {chosen.length > 1 && <span className="multi-select-count">{chosen.length}</span>}
+        <Icon path={mdiMenuDown} size="sm" />
+      </button>
+      {at && (
+        <FloatingLayer style={{ ...at, minWidth: ref.current?.getBoundingClientRect().width }} className="multi-select-menu" layerRef={layer} label={label}>
+          {all.length > 8 && (
+            <input className="input multi-select-filter" placeholder={t("desktop.filter")} aria-label={t("desktop.filter")} value={filter} autoFocus onChange={(e) => setFilter(e.target.value)} />
+          )}
+          {shown.map((o) => {
+            const on = chosen.includes(o.value);
+            return (
+              <button key={o.value} type="button" role="menuitemcheckbox" aria-checked={on} className={`menu-item ${on ? "on" : ""}`} onClick={() => flip(o.value)}>
+                <Icon path={on ? mdiCheckboxMarked : mdiCheckboxBlankOutline} className={on ? "multi-select-on" : undefined} />
+                <span>
+                  {o.value}
+                  {o.detail && <small>{o.detail}</small>}
+                </span>
+              </button>
+            );
+          })}
+          {shown.length === 0 && <div className="menu-label">{t("desktop.none_found")}</div>}
+        </FloatingLayer>
+      )}
+    </span>
+  );
 }
 
 // Arrow keys move through a menu's items (wrapping), Home and End to its ends.

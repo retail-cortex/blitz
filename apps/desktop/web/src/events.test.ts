@@ -15,7 +15,7 @@
  */
 
 import { beforeAll, describe, expect, it, vi } from "vitest";
-import { compose, composeEvent, startSetup, takePendingCompose, viewEvent, type ComposeDetail, type ViewDetail } from "./events";
+import { compose, composeEvent, showView, startSetup, takePendingCompose, takePendingView, viewEvent, type ComposeDetail, type ViewDetail } from "./events";
 
 // Tests run without a DOM: the window is an event target.
 beforeAll(() => {
@@ -38,6 +38,19 @@ describe("startSetup", () => {
     window.removeEventListener(composeEvent, run);
     expect(seen).toEqual(["view chat", "/setup run=true fresh=true"]);
     expect(takePendingCompose("/s")).toBeUndefined();
+  });
+});
+
+describe("showView", () => {
+  it("goes to the workspace that takes it, or waits for it", () => {
+    const take = (e: Event) => (e as CustomEvent<ViewDetail>).detail.dir === "/open" && e.preventDefault();
+    window.addEventListener(viewEvent, take);
+    showView({ dir: "/open", view: "workers" });
+    showView({ dir: "/opening", view: "workers" });
+    window.removeEventListener(viewEvent, take);
+    expect(takePendingView("/open")).toBeUndefined();
+    expect(takePendingView("/opening")).toEqual({ dir: "/opening", view: "workers" });
+    expect(takePendingView("/opening")).toBeUndefined();
   });
 });
 

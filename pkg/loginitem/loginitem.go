@@ -82,7 +82,8 @@ func LogFile() string { return config.ExpandHome("~/.blitz/logs/service.log") }
 func domain() string { return "gui/" + strconv.Itoa(os.Getuid()) }
 
 // Install writes the login item for blitzd (an absolute path) and starts
-// it now, replacing a previous item and stopping the service it ran.
+// it now, replacing a previous item and stopping the service it ran; the
+// same item again only starts the service if it isn't running.
 func Install(blitzd string) error {
 	path, err := Path()
 	if err != nil {
@@ -91,18 +92,29 @@ func Install(blitzd string) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
 	}
+	// The same item again (the app's Start, a repeated install): the
+	// service it runs is started if it isn't, never stopped, so the runs
+	// going in it go on.
 	switch goruntime.GOOS {
 	case "darwin":
 		if err := os.MkdirAll(filepath.Dir(LogFile()), 0o700); err != nil {
 			return err
 		}
-		if err := os.WriteFile(path, []byte(launchdPlist(blitzd, LogFile())), 0o644); err != nil {
+		plist := launchdPlist(blitzd, LogFile())
+		if same(path, plist) && RunSystem("launchctl", "print", domain()+"/"+Label) == nil {
+			return RunSystem("launchctl", "kickstart", domain()+"/"+Label)
+		}
+		if err := os.WriteFile(path, []byte(plist), 0o644); err != nil {
 			return err
 		}
 		_ = RunSystem("launchctl", "bootout", domain()+"/"+Label) // a previous install
 		return RunSystem("launchctl", "bootstrap", domain(), path)
 	default: // linux
-		if err := os.WriteFile(path, []byte(systemdUnitFile(blitzd)), 0o644); err != nil {
+		unit := systemdUnitFile(blitzd)
+		if same(path, unit) {
+			return RunSystem("systemctl", "--user", "start", Unit)
+		}
+		if err := os.WriteFile(path, []byte(unit), 0o644); err != nil {
 			return err
 		}
 		if err := RunSystem("systemctl", "--user", "daemon-reload"); err != nil {
@@ -114,6 +126,12 @@ func Install(blitzd string) error {
 		// restart, not start: a running unit keeps its old program otherwise.
 		return RunSystem("systemctl", "--user", "restart", Unit)
 	}
+}
+
+// same reports whether the file at path holds text already.
+func same(path, text string) bool {
+	data, err := os.ReadFile(path)
+	return err == nil && string(data) == text
 }
 
 // Uninstall stops the service the login item runs and removes the item.

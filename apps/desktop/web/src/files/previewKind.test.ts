@@ -20,11 +20,14 @@ import { defaultView, playsVideo, previewKind, previewOnly } from "./previewKind
 describe("previewKind", () => {
   it.each([
     ["README.md", "markdown"],
+    ["site/index.html", "html"],
+    ["page.HTM", "html"],
     ["docs/guide.MARKDOWN", "markdown"],
     ["logo.svg", "svg"],
     ["a/b/shot.PNG", "image"],
     ["photo.jpeg", "image"],
     ["spec.pdf", "pdf"],
+    ["notes/brief.DOCX", "docx"],
     ["audio/overview.wav", "audio"],
     ["talk.MP3", "audio"],
     ["voice.opus", "audio"],
@@ -45,6 +48,8 @@ describe("previewKind", () => {
 describe("defaultView", () => {
   it.each<[string, Parameters<typeof defaultView>[0], boolean, boolean, string]>([
     ["markdown opens rendered", "markdown", false, false, "preview"],
+    ["html opens rendered", "html", false, false, "preview"],
+    ["html at a line opens its source", "html", true, false, "source"],
     ["markdown at a line opens its source", "markdown", true, false, "source"],
     ["an empty markdown file opens its source", "markdown", false, true, "source"],
     ["svg opens its source", "svg", false, false, "source"],

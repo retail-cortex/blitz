@@ -35,6 +35,8 @@ import (
 	"sync/atomic"
 
 	"github.com/retail-cortex/blitz/pkg/api"
+	"github.com/retail-cortex/blitz/pkg/redact"
+	"github.com/retail-cortex/blitz/pkg/secrets"
 
 	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/engine/agents"
@@ -187,12 +189,24 @@ func WithAgentModel(agent string, llm model.LLM) Option {
 	}
 }
 
+// WithSecrets gives the engine {secrets:key} values (spec_secrets_039):
+// expand puts them in text's place and returns those used. They're put in
+// only as the model is called, never in the session, the transcript or
+// the hooks' view.
+func WithSecrets(expand func(text string) (string, []string)) Option {
+	return func(e *Engine) { e.secrets = expand }
+}
+
 // WithInstructions appends text (e.g. project memory) to every agent's instructions.
 func WithInstructions(text string) Option { return func(e *Engine) { e.extraInstructions = text } }
 
 // Engine orchestrates the Google ADK execution lifecycle for Blitz.
 // It is safe for concurrent use.
 type Engine struct {
+	// guard checks each step (guardrails; nil: none).
+	guard Guard
+	// secrets expands {secrets:key} as the model is called (nil: none).
+	secrets func(text string) (string, []string)
 	// hookContext is pre_tool hooks' additional_context, by tool call ID,
 	// until the result goes back.
 	hookContext sync.Map
@@ -485,6 +499,25 @@ func (e *Engine) RecordSpeech(ctx context.Context, sessionID, model string, usag
 	e.saveUsage(ctx, sessionID)
 }
 
+// EstimateCostUSD is what a model call outside a session cost (an eval's
+// judge), by the configured prices; 0 for a model without one.
+func (e *Engine) EstimateCostUSD(model string, usage *genai.GenerateContentResponseUsageMetadata) float64 {
+	if usage == nil {
+		return 0
+	}
+	return e.usage.Estimate(settingsName(model), usage, 0).CostUSD
+}
+
+// EstimateUsage is a model call outside a session's usage (a rule's
+// judge, a workflow's extract step), priced by the configured prices; a
+// call that reported no tokens is unpriced.
+func (e *Engine) EstimateUsage(model string, usage *genai.GenerateContentResponseUsageMetadata) api.Usage {
+	if usage == nil {
+		return api.Usage{Calls: 1}
+	}
+	return e.usage.Estimate(settingsName(model), usage, 0)
+}
+
 // saveUsage keeps sessionID's usage so far in the store.
 func (e *Engine) saveUsage(ctx context.Context, sessionID string) {
 	if e.usageStore == nil {
@@ -592,7 +625,7 @@ func (e *Engine) newLLMAgentWith(reg *tools.Registry, spec *agents.AgentSpec, ll
 	return llmagent.New(llmagent.Config{
 		Name:                  spec.Name,
 		Description:           spec.Description,
-		InstructionProvider:   func(agent.ReadonlyContext) (string, error) { return fullInstruction, nil },
+		InstructionProvider:   func(agent.ReadonlyContext) (string, error) { return e.expandSecrets(fullInstruction), nil },
 		Model:                 withAgentSettings(llm, spec),
 		Tools:                 list,
 		Toolsets:              toolsets,
@@ -605,18 +638,93 @@ func (e *Engine) newLLMAgentWith(reg *tools.Registry, spec *agents.AgentSpec, ll
 	})
 }
 
-// beforeModel enforces the per-run model-call budget.
-func (e *Engine) beforeModel(ctx agent.Context, _ *model.LLMRequest) (*model.LLMResponse, error) {
+// beforeModel enforces the per-run model-call budget, and puts
+// {secrets:key} values into the request's messages.
+func (e *Engine) beforeModel(ctx agent.Context, req *model.LLMRequest) (*model.LLMResponse, error) {
 	if st := stateFrom(ctx); st != nil && st.maxTurns > 0 {
 		if n := st.turns.Add(1); n > int64(st.maxTurns) {
 			return nil, fmt.Errorf("%w (%d model calls)", api.ErrMaxTurns, st.maxTurns)
 		}
 	}
+	if req != nil {
+		req.Contents = e.expandContents(req.Contents)
+	}
 	return nil, nil
+}
+
+// expandSecrets is text with {secrets:key} values put in, and those used
+// remembered for the redactors.
+func (e *Engine) expandSecrets(text string) string {
+	if e.secrets == nil {
+		return text
+	}
+	out, used := e.secrets(text)
+	redact.Remember(used...)
+	return out
+}
+
+// expandContents puts secrets into copies of the messages that name them:
+// the session's own stay as they were, so nothing stores a value.
+func (e *Engine) expandContents(contents []*genai.Content) []*genai.Content {
+	if e.secrets == nil {
+		return contents
+	}
+	var out []*genai.Content
+	for i, c := range contents {
+		if c == nil || !partsNameSecrets(c.Parts) {
+			if out != nil {
+				out = append(out, c)
+			}
+			continue
+		}
+		if out == nil {
+			out = append(make([]*genai.Content, 0, len(contents)), contents[:i]...)
+		}
+		cp := &genai.Content{Role: c.Role, Parts: make([]*genai.Part, len(c.Parts))}
+		for j, p := range c.Parts {
+			if p == nil || !secrets.HasPlaceholders(p.Text) {
+				cp.Parts[j] = p
+				continue
+			}
+			q := *p
+			q.Text = e.expandSecrets(p.Text)
+			cp.Parts[j] = &q
+		}
+		out = append(out, cp)
+	}
+	if out == nil {
+		return contents
+	}
+	return out
+}
+
+func partsNameSecrets(parts []*genai.Part) bool {
+	for _, p := range parts {
+		if p != nil && secrets.HasPlaceholders(p.Text) {
+			return true
+		}
+	}
+	return false
+}
+
+// maskSecrets masks the secret values the model echoes in its answer.
+func maskSecrets(resp *model.LLMResponse) {
+	if resp == nil || resp.Content == nil {
+		return
+	}
+	for _, p := range resp.Content.Parts {
+		if p != nil && p.Text != "" {
+			p.Text = redact.Mask(p.Text)
+		}
+	}
 }
 
 // afterModel records token usage for the run's session.
 func (e *Engine) afterModel(ctx agent.Context, resp *model.LLMResponse, respErr error) (*model.LLMResponse, error) {
+	if e.secrets != nil {
+		maskSecrets(resp)
+	}
+	e.guardOutput(ctx, resp) // guardrails on the answer: secrets, personal data, custom checks
 	if resp == nil || resp.Partial {
 		return nil, nil
 	}
@@ -701,6 +809,14 @@ func (e *Engine) beforeTool(ctx agent.Context, t tool.Tool, args map[string]any)
 	if r := e.preToolHooks(ctx, t, args); r != nil {
 		return r, nil
 	}
+	if e.guard != nil { // guardrails on the action: limits, custom checks
+		v := e.guard.ToolCall(ctx, e.guardCall(ctx, ctx, t.Name(), args))
+		e.tell(ctx, v.Notices)
+		if v.Refusal != "" {
+			log.Log(audit.Entry{Kind: audit.KindDenial, Tool: t.Name(), Decision: "guardrail", Detail: v.Refusal})
+			return map[string]any{"error": v.Refusal}, nil
+		}
+	}
 	if err := e.toolReg.ApproveMCP(ctx, t.Name(), args); err != nil {
 		return map[string]any{"error": err.Error()}, nil
 	}
@@ -776,6 +892,13 @@ func (e *Engine) afterTool(ctx agent.Context, t tool.Tool, args, result map[stri
 	e.toolReg.Hooks().Audit().Log(entry)
 	out := result
 	changed := false
+	if e.guard != nil && toolErr == nil { // guardrails on what the tool brought back: injection, custom checks
+		v := e.guard.ToolResult(ctx, e.guardCall(ctx, ctx, t.Name(), args), out)
+		e.tell(ctx, v.Notices)
+		if v.Result != nil {
+			out, changed = v.Result, true
+		}
+	}
 	if r := e.attachRules(ctx, t.Name(), args, out, toolErr); r != nil {
 		out, changed = r, true
 	}
@@ -910,7 +1033,9 @@ func (e *Engine) buildTreeLocked(active string, override model.LLM) (tree, error
 			var sb strings.Builder
 			sb.WriteString("\n\n## Available Agent Skills:\n")
 			for _, s := range allSkills {
-				fmt.Fprintf(&sb, "- **%s**: %s\n", s.Name, s.Description)
+				if s.OfferedTo(rootSpec.Name) { // agents: offers it to others only
+					fmt.Fprintf(&sb, "- **%s**: %s\n", s.Name, s.Description)
+				}
 			}
 			sb.WriteString("\nUse `activate_skill` to load full skill instructions whenever relevant.\n")
 			rootInstruction += sb.String()

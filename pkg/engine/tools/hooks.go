@@ -255,6 +255,19 @@ type TaskAsker struct {
 	Ask     api.UserPromptFunc
 }
 
+type decisionKey struct{}
+
+// DecisionObserver hears of each decision on an action: what the audit
+// log records (the tool, what it does, the decision, and whether it was
+// refused).
+type DecisionObserver func(e audit.Entry)
+
+// WithDecisionObserver has f hear of the decisions on ctx's actions, as
+// they're recorded (a workflow run's receipt).
+func WithDecisionObserver(ctx context.Context, f DecisionObserver) context.Context {
+	return context.WithValue(ctx, decisionKey{}, f)
+}
+
 type modeKey struct{}
 
 // WithMode runs ctx's actions in permission mode m instead of the
@@ -289,6 +302,14 @@ func (h *Hooks) Approve(ctx context.Context, req api.ApprovalRequest) error {
 	if h == nil {
 		return fmt.Errorf("%w: no approval hooks configured", ErrNotApproved)
 	}
+	// Every decision goes to the audit log, and to whoever ctx says hears
+	// of them (a workflow run's receipt).
+	decided := func(e audit.Entry) {
+		h.Audit().Log(e)
+		if f, ok := ctx.Value(decisionKey{}).(DecisionObserver); ok && f != nil {
+			f(e)
+		}
+	}
 	// Permission rules first: deny wins in every mode and run, and ask
 	// forces the question below.
 	h.mu.RLock()
@@ -296,30 +317,27 @@ func (h *Hooks) Approve(ctx context.Context, req api.ApprovalRequest) error {
 	h.mu.RUnlock()
 	effect, rule := rules.Decide(ruleKind(req), req.Targets)
 	if effect == EffectDeny {
-		h.Audit().Log(audit.Entry{Kind: audit.KindDenial, Tool: req.Tool, Detail: req.Detail, Decision: "rule-deny " + rule.String()})
+		decided(audit.Entry{Kind: audit.KindDenial, Tool: req.Tool, Detail: req.Detail, Decision: "rule-deny " + rule.String()})
 		return fmt.Errorf("%w: %s is denied by the permission rule deny %s", ErrNotApproved, req.Detail, rule)
 	}
 	mustAsk := req.MustAsk || effect == EffectAsk
 
 	if decide, ok := ctx.Value(unattendedKey{}).(api.Approver); ok {
 		if mustAsk { // an ask rule needs a person, and nobody is watching
-			h.Audit().Log(audit.Entry{Kind: audit.KindDenial, Tool: req.Tool, Detail: req.Detail, Decision: "unattended-refused"})
+			decided(audit.Entry{Kind: audit.KindDenial, Tool: req.Tool, Detail: req.Detail, Decision: "unattended-refused"})
 			return fmt.Errorf("%w: %s needs to be asked about (an ask rule), and this run is unattended", ErrNotApproved, req.Detail)
 		}
 		decision, err := decide(ctx, req)
 		allowed := err == nil && decision != api.DecisionDeny
-		h.mu.RLock()
-		log := h.audit
-		h.mu.RUnlock()
 		if allowed {
-			log.Log(audit.Entry{Kind: audit.KindApproval, Tool: req.Tool, Detail: req.Detail, Decision: "unattended-permitted"})
+			decided(audit.Entry{Kind: audit.KindApproval, Tool: req.Tool, Detail: req.Detail, Decision: "unattended-permitted"})
 			return nil
 		}
-		log.Log(audit.Entry{Kind: audit.KindDenial, Tool: req.Tool, Detail: req.Detail, Decision: "unattended-refused"})
+		decided(audit.Entry{Kind: audit.KindDenial, Tool: req.Tool, Detail: req.Detail, Decision: "unattended-refused"})
 		return fmt.Errorf("%w: %s isn't among this unattended run's permissions", ErrNotApproved, req.Detail)
 	}
 	h.mu.RLock()
-	policy, approver, store, log := h.policy, h.approver, h.store, h.audit
+	policy, approver, store := h.policy, h.approver, h.store
 	if m, ok := ctx.Value(modeKey{}).(api.PermissionMode); ok {
 		policy.Mode = m
 	}
@@ -331,7 +349,7 @@ func (h *Hooks) Approve(ctx context.Context, req api.ApprovalRequest) error {
 		if decision == "deny" || decision == "no-approver" || decision == "error" {
 			kind = audit.KindDenial
 		}
-		log.Log(audit.Entry{Kind: kind, Tool: req.Tool, Detail: req.Detail, Decision: decision})
+		decided(audit.Entry{Kind: kind, Tool: req.Tool, Detail: req.Detail, Decision: decision})
 		observability.RecordApproval(ctx, string(req.Kind), decision)
 	}
 
@@ -393,13 +411,13 @@ func (h *Hooks) Approve(ctx context.Context, req api.ApprovalRequest) error {
 		allowed, reason, err := reviewer(ctx, req)
 		switch {
 		case err != nil:
-			log.Log(audit.Entry{Kind: audit.KindApproval, Tool: req.Tool, Detail: req.Detail, Decision: "auto-error", Error: err.Error()})
+			decided(audit.Entry{Kind: audit.KindApproval, Tool: req.Tool, Detail: req.Detail, Decision: "auto-error", Error: err.Error()})
 			// No verdict: the user decides, as in the default mode.
 		case allowed:
-			log.Log(audit.Entry{Kind: audit.KindApproval, Tool: req.Tool, Detail: req.Detail, Decision: "auto-allow: " + reason})
+			decided(audit.Entry{Kind: audit.KindApproval, Tool: req.Tool, Detail: req.Detail, Decision: "auto-allow: " + reason})
 			return nil
 		default:
-			log.Log(audit.Entry{Kind: audit.KindDenial, Tool: req.Tool, Detail: req.Detail, Decision: "auto-deny: " + reason})
+			decided(audit.Entry{Kind: audit.KindDenial, Tool: req.Tool, Detail: req.Detail, Decision: "auto-deny: " + reason})
 			return fmt.Errorf("%w: the auto mode's reviewer denied %s: %s", ErrNotApproved, req.Detail, reason)
 		}
 	}

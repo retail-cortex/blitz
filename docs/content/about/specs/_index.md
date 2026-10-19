@@ -48,5 +48,12 @@ Files are named `spec_<name>_NNN.md`, where `NNN` is the order of execution: eac
 | 036 | [windows](spec_windows_036.md) | Blitz on Windows: the tray runs the service and serves the desktop page on a loopback port, behind a one-time link, in an Edge app window |
 | 037 | [visual editor](spec_visual_editor_037.md) | Draft: Markdown edited in its rendered form (TipTap), code blocks as CodeMirror editors, and language servers (gopls first) for the editor through a `LanguageService` on the service |
 | 038 | [electron](spec_electron_038.md) | The desktop app in Electron (one engine on every platform, a real app on Windows) over the page and `blitz-tray --serve` as its host; since v0.7.0 |
+| 039 | [secrets](spec_secrets_039.md) | The user's secrets in the system's keychain, named in prompts and settings as `{secrets:key}`; since v0.7.1 |
+| 040 | [studio](spec_studio_040.md) | What a workspace's .agents folder holds, each kind listed and edited in the desktop app; since v0.7.1 |
+| 041 | [gates](spec_gates_041.md) | Rules that gate an agent's turn, checked before it runs and after it answers, and guardrails at every step of it; since v0.7.1 |
+| 042 | [evals](spec_evals_042.md) | Cases that check an agent still answers as it should, run and scored exactly or by meaning; since v0.7.1 |
+| 043 | [workflows](spec_workflows_043.md) | Steps joined into a graph, run as one turn (/name) and built on a canvas; since v0.7.1 |
+| 044 | [health](spec_health_044.md) | A workspace's dashboard: what it holds, how its runs go, and each item's quality judged on the evidence, on request and nightly; since v0.7.1 |
+| 045 | [composer](spec_composer_045.md) | A guided conversation that makes a component: asks what it needs, writes the file, checks it with the engine's rules and hands it to the editor as a draft; for workflows since v0.7.1, the other kinds next |
 
 Background and history: [the roadmap](../roadmap.md), [where to pick up](../../development/next-steps.md), [development](../../development/_index.md).

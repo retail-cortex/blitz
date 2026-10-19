@@ -18,11 +18,17 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
+	"maps"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 
 	"github.com/retail-cortex/blitz/pkg/api"
+	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/engine"
+	"github.com/retail-cortex/blitz/pkg/redact"
 
 	"connectrpc.com/connect"
 	pb "github.com/retail-cortex/blitz/proto/blitz/v1"
@@ -59,7 +65,7 @@ func workerMsg(i api.WorkerInfo) *pb.Worker {
 		LastRun:   last,
 		Workspace: i.Workspace, Name: i.Name, Description: i.Description, Path: i.Path, Hash: i.Hash,
 		State: workerState(i.State), Schedule: i.Schedule, Cron: i.Cron, Timezone: i.Timezone, NextRun: timestamp(i.Next),
-		Agent: i.Agent, Model: i.Model, Permissions: i.Permissions,
+		Agent: i.Agent, Model: i.Model, Permissions: i.Permissions, Workflow: i.Workflow,
 		Limits:   &pb.WorkerLimits{MaxTurns: int32(i.Limits.MaxTurns), MaxCostUsd: i.Limits.MaxCostUSD, Timeout: durationpb.New(i.Limits.Timeout)},
 		Problems: i.Problems,
 	}
@@ -135,7 +141,7 @@ func (h workerService) CreateWorker(ctx context.Context, r req[pb.CreateWorkerRe
 	info, problems, err := w.CreateWorker(api.WorkerSpec{
 		Name: m.Name, Description: m.Description, Schedule: m.Schedule, Timezone: m.Timezone, Agent: m.Agent, Model: m.Model,
 		Permissions: m.Permissions, Limits: api.Limits{MaxTurns: int(m.MaxTurns), MaxCostUSD: m.MaxCostUsd, TimeoutRaw: m.Timeout},
-		CatchUp: m.CatchUp, Prompt: m.Prompt,
+		CatchUp: m.CatchUp, Prompt: m.Prompt, Workflow: m.Workflow,
 	})
 	if err != nil {
 		return nil, toAPI(err)
@@ -183,7 +189,7 @@ func workerDefinition(s api.WorkerSpec) *pb.WorkerDefinition {
 	return &pb.WorkerDefinition{
 		Name: s.Name, Description: s.Description, Schedule: s.Schedule, Timezone: s.Timezone, Agent: s.Agent, Model: s.Model,
 		Permissions: s.Permissions, MaxTurns: int32(s.Limits.MaxTurns), MaxCostUsd: s.Limits.MaxCostUSD, Timeout: s.Limits.TimeoutRaw,
-		CatchUp: s.CatchUp, Prompt: s.Prompt,
+		CatchUp: s.CatchUp, Prompt: s.Prompt, Workflow: s.Workflow,
 	}
 }
 
@@ -191,7 +197,7 @@ func workerSpec(d *pb.WorkerDefinition) api.WorkerSpec {
 	return api.WorkerSpec{
 		Name: d.Name, Description: d.Description, Schedule: d.Schedule, Timezone: d.Timezone, Agent: d.Agent, Model: d.Model,
 		Permissions: d.Permissions, Limits: api.Limits{MaxTurns: int(d.MaxTurns), MaxCostUSD: d.MaxCostUsd, TimeoutRaw: d.Timeout},
-		CatchUp: d.CatchUp, Prompt: d.Prompt,
+		CatchUp: d.CatchUp, Prompt: d.Prompt, Workflow: d.Workflow,
 	}
 }
 
@@ -271,18 +277,28 @@ func (h workerService) ListWorkerRuns(ctx context.Context, r req[pb.ListWorkerRu
 	if err != nil {
 		return nil, err
 	}
-	out := &pb.ListWorkerRunsResponse{}
-	for _, run := range sc.liveRuns(w.Dir(), r.Msg.Name) {
-		out.Runs = append(out.Runs, runMsg(run))
-	}
 	runs, err := w.WorkerRuns(r.Msg.Name, int(r.Msg.Limit))
 	if err != nil {
 		return nil, toAPI(err)
 	}
-	for _, run := range runs {
+	out := &pb.ListWorkerRunsResponse{}
+	for _, run := range withLive(sc.liveRuns(w.Dir(), r.Msg.Name), runs) {
 		out.Runs = append(out.Runs, runMsg(run))
 	}
 	return ok(out)
+}
+
+// withLive is the runs going now, then the recorded ones, each run once:
+// a finished run is recorded before the scheduler lets it go, so for a
+// moment it's in both.
+func withLive(live, recorded []api.Run) []api.Run {
+	out := slices.Clone(live)
+	for _, run := range recorded {
+		if !slices.ContainsFunc(live, func(l api.Run) bool { return l.ID == run.ID }) {
+			out = append(out, run)
+		}
+	}
+	return out
 }
 
 func (h workerService) UndoWorkerRun(ctx context.Context, r req[pb.UndoWorkerRunRequest]) (*connect.Response[pb.UndoWorkerRunResponse], error) {
@@ -399,4 +415,83 @@ func (h workerService) WatchWorkerRun(ctx context.Context, r req[pb.WatchWorkerR
 			return ctx.Err()
 		}
 	}
+}
+
+func (h workerService) ListAllWorkers(ctx context.Context, _ req[pb.ListAllWorkersRequest]) (*connect.Response[pb.ListAllWorkersResponse], error) {
+	sc := h.s.sched
+	if sc == nil {
+		return nil, errNoScheduler
+	}
+	home, err := config.EnsureHomeWorkspace("")
+	if err != nil {
+		return nil, err
+	}
+	cfg, err := config.Load(h.s.configDir)
+	if err != nil {
+		return nil, invalid(err)
+	}
+	path, _, err := config.ReadSettingsFile(h.s.configDir, "")
+	if err != nil {
+		return nil, invalid(err)
+	}
+	p := cfg.Workers.Policy
+	policy := &pb.WorkerPolicySettings{
+		Allow: p.Allow, DefaultMaxTurns: int32(p.DefaultMaxTurns), DefaultMaxCostUsd: p.DefaultMaxCostUSD, DefaultTimeout: p.DefaultTimeout,
+		MaxTurns: int32(p.MaxTurns), MaxCostUsd: p.MaxCostUSD, MaxTimeout: p.MaxTimeout,
+		MaxConcurrent: int32(p.MaxConcurrent), RunningMaxConcurrent: int32(cap(sc.slots)), Path: path,
+	}
+	known := sc.cfg.Store.Known()
+	others := slices.Sorted(maps.Keys(known))
+	others = slices.DeleteFunc(others, func(d string) bool { return d == home })
+	out := &pb.ListAllWorkersResponse{Home: home, Policy: policy}
+	for _, dir := range append([]string{home}, others...) {
+		group := &pb.WorkspaceWorkers{Workspace: dir, Home: dir == home}
+		out.Workspaces = append(out.Workspaces, group)
+		if _, err := os.Stat(dir); errors.Is(err, fs.ErrNotExist) {
+			group.Missing = true
+			for _, name := range slices.Sorted(maps.Keys(known[dir])) {
+				state := pb.WorkerState_WORKER_STATE_DISABLED
+				if known[dir][name] {
+					state = pb.WorkerState_WORKER_STATE_ENABLED
+				}
+				group.Workers = append(group.Workers, &pb.Worker{Workspace: dir, Name: name, State: state})
+			}
+			continue
+		}
+		w, err := h.s.workspace(ctx, dir)
+		if err != nil {
+			group.Problem = redact.Mask(err.Error())
+			continue
+		}
+		list, err := w.ListWorkers()
+		if err != nil {
+			group.Problem = redact.Mask(err.Error())
+			continue
+		}
+		for _, info := range list {
+			group.Workers = append(group.Workers, workerMsg(info))
+		}
+	}
+	return ok(out)
+}
+
+func (h workerService) ForgetWorkspaceWorkers(ctx context.Context, r req[pb.ForgetWorkspaceWorkersRequest]) (*connect.Response[pb.ForgetWorkspaceWorkersResponse], error) {
+	sc := h.s.sched
+	if sc == nil {
+		return nil, errNoScheduler
+	}
+	dir := r.Msg.Workspace
+	if real, err := canonical(dir); err == nil {
+		dir = real
+	} else if !filepath.IsAbs(dir) {
+		return nil, apiError(connect.CodeInvalidArgument, "INVALID_WORKSPACE", err, "workspace", dir)
+	}
+	if len(sc.liveRuns(dir, "")) > 0 {
+		return nil, toAPI(api.ErrRunInProgress)
+	}
+	if err := sc.cfg.Store.ForgetWorkspace(dir); err != nil {
+		return nil, err
+	}
+	sc.rescan(ctx)
+	return ok(&pb.ForgetWorkspaceWorkersResponse{})
 }

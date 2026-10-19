@@ -106,13 +106,28 @@ export const viewEvent = "blitz:view";
 /** Which workspace, and which view to show ("chat" and "editor" close what's over the editor). */
 export interface ViewDetail {
   dir: string;
-  view: "chat" | "editor" | "changes" | "workers";
+  view: "chat" | "editor" | "changes" | "workers" | "workflows";
   /** Which changes: this session's (the default) or git's. */
   source?: "session" | "git";
+  /** Studio › Workflows: the workflow to open, and the run to show on it. */
+  workflow?: string;
+  run?: string;
 }
-/** Asks a workspace to show a view. */
+// Views for a workspace that isn't there yet (it's opening), shown when it
+// mounts.
+const pendingViews = new Map<string, ViewDetail>();
+
+/** Asks a workspace to show a view. One for a workspace that isn't there yet waits for it. */
 export function showView(detail: ViewDetail) {
-  window.dispatchEvent(new CustomEvent(viewEvent, { detail }));
+  const taken = !window.dispatchEvent(new CustomEvent(viewEvent, { detail, cancelable: true }));
+  if (!taken) pendingViews.set(detail.dir, detail);
+}
+
+/** The view waiting to be shown in a workspace, once. */
+export function takePendingView(dir: string): ViewDetail | undefined {
+  const v = pendingViews.get(dir);
+  pendingViews.delete(dir);
+  return v;
 }
 
 /** The event that loads a session in a workspace. */

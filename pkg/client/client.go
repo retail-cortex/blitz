@@ -604,7 +604,7 @@ func (r *Remote) ListMCPServers() []api.MCPServer {
 	}
 	var out []api.MCPServer
 	for _, m := range res.Msg.Servers {
-		out = append(out, api.MCPServer{Name: m.Name, Target: m.Target, AutoApprove: m.AutoApprove, Disabled: m.Disabled})
+		out = append(out, api.MCPServer{Name: m.Name, Target: m.Target, AutoApprove: m.AutoApprove, Disabled: m.Disabled, State: m.State, Error: m.Error, Tools: int(m.Tools)})
 	}
 	return out
 }
@@ -1025,4 +1025,32 @@ func (r *Remote) SearchSession(terms string) (int, string) {
 		return 0, ""
 	}
 	return int(res.Msg.Found), res.Msg.Prompt
+}
+
+// RunEval runs the workspace's eval name (WorkspaceService.RunEval),
+// telling o of the run's start and each result as they stream in.
+func (r *Remote) RunEval(ctx context.Context, name string, o api.EvalOptions) (api.EvalRun, error) {
+	stream, err := r.workspaces.RunEval(ctx, connect.NewRequest(&pb.RunEvalRequest{Workspace: r.dir, Name: name, Cases: o.Cases}))
+	if err != nil {
+		return api.EvalRun{}, fromAPI(err)
+	}
+	defer stream.Close()
+	for stream.Receive() {
+		switch k := stream.Msg().Event.(type) {
+		case *pb.RunEvalResponse_Started:
+			if o.OnStart != nil {
+				o.OnStart(evalRunOf(k.Started, r.dir))
+			}
+		case *pb.RunEvalResponse_Result:
+			if o.OnResult != nil {
+				o.OnResult(evalResultOf(k.Result))
+			}
+		case *pb.RunEvalResponse_Finished:
+			return evalRunOf(k.Finished, r.dir), nil
+		}
+	}
+	if err := stream.Err(); err != nil {
+		return api.EvalRun{}, fromAPI(err)
+	}
+	return api.EvalRun{}, errors.New("the service ended the eval without finishing it")
 }

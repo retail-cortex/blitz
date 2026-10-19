@@ -19,8 +19,10 @@ import (
 	"os"
 	"path"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
+	"sync"
 )
 
 const mask = "[REDACTED]"
@@ -77,7 +79,43 @@ func FromEnv(namePatterns []string, extra ...string) *Redactor {
 	return New(append(values, extra...)...)
 }
 
-// String masks secrets in s. A nil Redactor still applies the built-in patterns.
+// remembered are secret values learned while running ({secrets:key}
+// values, as they're used): every Redactor masks them.
+var remembered struct {
+	sync.RWMutex
+	values []string // longest first
+}
+
+// Remember adds values for every Redactor to mask from now on (ignoring
+// ones shorter than 8 characters, as New does).
+func Remember(values ...string) {
+	remembered.Lock()
+	defer remembered.Unlock()
+	added := false
+	for _, v := range values {
+		if len(v) >= 8 && !slices.Contains(remembered.values, v) {
+			remembered.values = append(remembered.values, v)
+			added = true
+		}
+	}
+	if added {
+		sort.Slice(remembered.values, func(i, j int) bool { return len(remembered.values[i]) > len(remembered.values[j]) })
+	}
+}
+
+// Mask masks only the remembered values in s (not the patterns): for text
+// shown as it is, such as a model's answer.
+func Mask(s string) string {
+	remembered.RLock()
+	defer remembered.RUnlock()
+	for _, v := range remembered.values {
+		s = strings.ReplaceAll(s, v, mask)
+	}
+	return s
+}
+
+// String masks secrets in s. A nil Redactor still applies the built-in
+// patterns and the remembered values.
 func (r *Redactor) String(s string) string {
 	if s == "" {
 		return s
@@ -87,6 +125,7 @@ func (r *Redactor) String(s string) string {
 			s = strings.ReplaceAll(s, v, mask)
 		}
 	}
+	s = Mask(s)
 	for _, re := range patterns {
 		s = re.ReplaceAllString(s, mask)
 	}

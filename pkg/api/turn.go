@@ -116,7 +116,39 @@ type Event struct {
 	// Notice is something the user should know about the turn that isn't
 	// the agent's output, such as a message that couldn't be saved.
 	Notice *Notice
+	// Step is a workflow's step starting or ending (spec_workflows_043).
+	Step *FlowStep
 }
+
+// FlowStep is a workflow's step starting, or how it ended.
+type FlowStep struct {
+	Workflow string
+	ID       string
+	Title    string
+	Type     string
+	// Index and Count place it: step Index of Count, from 1.
+	Index, Count int
+	// Status is StepRunning, StepDone or StepFailed.
+	Status string
+	// Output is what it produced, ended (the start of it, up to 4 KiB).
+	Output string
+	Error  string
+	// Run is the run's ID (its receipt's).
+	Run string
+}
+
+// A workflow step's status.
+const (
+	StepRunning = "running"
+	StepDone    = "done"
+	StepFailed  = "failed"
+	// StepSkipped is a step on a path not taken (a gateway's other
+	// branch): it doesn't run.
+	StepSkipped = "skipped"
+	// StepWaiting is a human task waiting for its answer, or a timer for
+	// its time: the run is paused until then.
+	StepWaiting = "waiting"
+)
 
 // Notice is a message from Blitz itself about a turn.
 type Notice struct {

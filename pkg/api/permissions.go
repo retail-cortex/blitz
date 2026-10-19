@@ -165,6 +165,14 @@ const (
 // is only offered when the session started in it.
 var Modes = []PermissionMode{ModeDefault, ModeAcceptEdits, ModeAuto, ModePlan, ModeDontAsk, ModeBypass}
 
+// modeRank orders the permission modes from the strictest.
+var modeRank = map[PermissionMode]int{ModePlan: 0, ModeDontAsk: 1, ModeDefault: 2, ModeAcceptEdits: 3, ModeAuto: 3, ModeBypass: 4}
+
+// Looser reports whether mode a lets more through without asking than b
+// (accept-edits and auto are level: each lets through what the other
+// asks about).
+func Looser(a, b PermissionMode) bool { return modeRank[a] > modeRank[b] }
+
 // ErrUnknownMode reports a name that isn't a permission mode.
 var ErrUnknownMode = errors.New("unknown permission mode")
 

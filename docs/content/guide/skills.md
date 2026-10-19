@@ -26,6 +26,30 @@ scripts:
 ---
 ```
 
+## Kinds of skill, and Studio
+
+A skill is one of four kinds, from what its folder holds:
+
+| Kind | What it has |
+|---|---|
+| Simple | `SKILL.md` alone |
+| With references | A `references/` folder: the agent reads its files when the skill calls for them (`read_skill_file`) |
+| With scripts | Python (`.py`), TypeScript (`.ts`), JavaScript (`.js`, `.mjs`), shell (`.sh`, macOS and Linux), cmd (`.cmd`, `.bat`, Windows) or PowerShell (`.ps1`, where `pwsh` is installed) files in `scripts/`, or scripts declared in the front matter, run sandboxed under the skills policy. A `requirements.txt` or `pyproject.toml` (Python) or `package.json` (JavaScript, TypeScript) gives them an isolated environment with those packages, installed once you approve: in Studio, the Scripts tab's **Packages** section adds and edits them |
+| Combines skills | `skills: [a, b]` in the front matter: activating it activates them too |
+
+`agents: [reviewer]` in the front matter offers a skill only to those agents.
+
+**Desktop:** **Studio › Skills** lists the workspace's skills (`.agents/skills`). **+** makes one; click one to edit it: **General** (what it's for, its name, instructions with **Redraft**, the skills it combines, the agents it's offered to, its tools), **References** (add, upload, edit or delete files; PDFs, images and Markdown preview) and **Scripts** (a new script from a template, **Redraft** to have the model write it, and **Test run** with arguments). Opening a file gives it the whole tab; the back arrow returns to the list. **Add from…** copies any skill you can see into the workspace to change it, or references it in the skill you're editing.
+
+**In a prompt:** type `\` and a skill's name (the composer completes it) to use that skill for the request: its instructions go with your prompt, as `/skill-name` does.
+
+## Reviewing a skill's scripts
+
+A skill's scripts run without asking only once you've reviewed them: Blitz remembers the content you trusted, so a new or changed script (or a registry update) is asked about again. Until then the agent asks you before each run, and a worker's run is refused.
+
+- **Desktop:** installing a registry skill with scripts opens the review; Studio › Skills marks a skill **Scripts to review**, with **Review scripts** in its view. The review lists each script, its file and the packages it installs; **Trust these scripts** remembers them.
+- Trusting a workspace's project settings trusts its skills' scripts as they are, so you aren't asked twice.
+
 ## Skills from a registry
 
 A registry, such as your organization's Castor registry, offers skills to install by name. Each skill is a `.zip` whose SHA-256 the registry gives, and Blitz refuses one that doesn't match.

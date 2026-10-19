@@ -15,19 +15,20 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
-import { mdiDeleteOutline, mdiDownload, mdiKeyOutline, mdiMagnify, mdiPlus, mdiRefresh } from "@mdi/js";
+import { mdiDeleteOutline, mdiDownload, mdiKeyOutline, mdiMagnify, mdiPlus, mdiRefresh, mdiShieldAlertOutline } from "@mdi/js";
 import { config } from "./api";
 import { message } from "./errors";
-import type { InstalledSkill, RegistrySkill, SkillRegistry } from "./gen/blitz/v1/config_pb";
+import type { BuiltinSkill, InstalledSkill, RegistrySkill, SkillRegistry } from "./gen/blitz/v1/config_pb";
 import { t, tn } from "./i18n";
+import { SkillReviewDialog } from "./SkillReview";
 import { useApp } from "./state";
 import { Button, Icon, IconButton, useSnackbar } from "./ui/controls";
 
 /**
  * Settings › Skills (spec_skills_013 SK-96): the skill registries, such as
- * Castor, the skills they offer, and those installed from them. A skill
- * installs for the user or into the active workspace; open sessions see
- * it at once.
+ * Castor, the skills they offer, and those installed from them; then the
+ * skills Blitz ships with. A skill installs for the user or into the
+ * active workspace; open sessions see it at once.
  */
 export function SkillSettings() {
   const snack = useSnackbar();
@@ -35,6 +36,7 @@ export function SkillSettings() {
   const active = prefs.workspaces.find((w) => w.dir === prefs.active && w.open)?.dir ?? "";
   const [registries, setRegistries] = useState<SkillRegistry[]>([]);
   const [installed, setInstalled] = useState<InstalledSkill[]>([]);
+  const [builtins, setBuiltins] = useState<BuiltinSkill[]>([]);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [url, setUrl] = useState("");
@@ -55,6 +57,15 @@ export function SkillSettings() {
     }
   }, []);
   useEffect(() => void load(), [load]);
+  useEffect(() => {
+    config.listBuiltinSkills({}).then(
+      (r) => setBuiltins(r.skills),
+      () => {}, // the rest of the section works without them
+    );
+  }, []);
+
+  // A skill whose scripts wait for review (just installed, or Review scripts).
+  const [reviewing, setReviewing] = useState<InstalledSkill | null>(null);
 
   // Runs a change, says how it went, and reloads the lists.
   const act = async (run: () => Promise<string>) => {
@@ -93,12 +104,23 @@ export function SkillSettings() {
   const install = (s: RegistrySkill) =>
     act(async () => {
       const r = await config.installRegistrySkill({ ref: `${s.registry}/${s.name}`, workspace: scope });
+      if (r.skill?.review) setReviewing(r.skill); // its scripts are reviewed before they run unasked
       return t("desktop.skills.installed", { name: s.name, version: r.skill?.version ?? s.version });
     });
 
   return (
     <div className="stack skill-settings" style={{ gap: 16 }}>
       <p className="t-body-sm muted">{t("desktop.skills.intro")}</p>
+      {reviewing?.review && (
+        <SkillReviewDialog
+          name={reviewing.name}
+          review={reviewing.review}
+          onDone={() => {
+            setReviewing(null);
+            void load();
+          }}
+        />
+      )}
       {error && <p className="error-text">{error}</p>}
 
       <section className="stack" style={{ gap: 8 }}>
@@ -217,6 +239,11 @@ export function SkillSettings() {
                     {i.dir}
                   </code>
                 </div>
+                {i.review && (
+                  <Button small icon={mdiShieldAlertOutline} onClick={() => setReviewing(i)}>
+                    {t("desktop.review.open")}
+                  </Button>
+                )}
                 <IconButton
                   icon={mdiDeleteOutline}
                   label={t("desktop.skills.uninstall", { name: i.name })}
@@ -224,6 +251,23 @@ export function SkillSettings() {
                   disabled={busy}
                   onClick={() => act(async () => (await config.uninstallRegistrySkill({ name: i.name, workspace: workspaceOf(i.dir) }), t("desktop.skills.uninstalled", { name: i.name })))}
                 />
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+      {builtins.length > 0 && (
+        <section className="stack" style={{ gap: 8 }}>
+          <span className="t-title-sm">{t("desktop.skills.builtin")}</span>
+          <div className="list">
+            {builtins.map((b) => (
+              <div key={b.name} className="rule">
+                <div className="stack spacer" style={{ gap: 2, minWidth: 0 }}>
+                  <span>
+                    <strong>{b.name}</strong> {b.version && <span className="t-body-sm muted">{b.version}</span>}
+                  </span>
+                  {b.description && <span className="t-body-sm muted">{b.description}</span>}
+                </div>
               </div>
             ))}
           </div>
@@ -238,3 +282,4 @@ export function workspaceOf(dir: string): string {
   const m = /^(.*)\/\.agents\/skills\/[^/]+$/.exec(dir);
   return m ? m[1] : "";
 }
+

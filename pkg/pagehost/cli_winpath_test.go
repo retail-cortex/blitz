@@ -133,6 +133,23 @@ func TestWindowsInstallCLIErrors(t *testing.T) {
 	assert.Zero(t, r.announced, "nothing to announce")
 }
 
+// The uninstaller takes the app's folder off the user's PATH, and leaves a
+// PATH without it alone.
+func TestRemoveFromUserPath(t *testing.T) {
+	r := &winRegistry{user: `C:\Tools;C:\Users\me\AppData\Local\Programs\Blitz\resources\app\bin;%USERPROFILE%\bin`}
+	fakeWindows(t, r)
+	require.NoError(t, RemoveFromUserPath(`c:\users\me\appdata\local\programs\blitz\resources\app\bin\`))
+	assert.Equal(t, []string{`C:\Tools;%USERPROFILE%\bin`}, r.writes)
+	assert.Equal(t, 1, r.announced)
+	require.NoError(t, RemoveFromUserPath(`C:\Elsewhere`))
+	assert.Len(t, r.writes, 1, "nothing to take out")
+
+	r.readErr = errors.New("no registry")
+	assert.Error(t, RemoveFromUserPath(`C:\Tools`))
+	r.readErr, r.writeErr = nil, errors.New("denied")
+	assert.Error(t, RemoveFromUserPath(`C:\Tools`))
+}
+
 func TestWinPaths(t *testing.T) {
 	t.Setenv("BLITZ_TEST_HOME", `C:\Users\me`)
 	assert.Equal(t, []string{`C:\a`, `C:\b`}, splitWinPath(` C:\a ;;C:\b;`))

@@ -25,9 +25,6 @@ import (
 	"github.com/retail-cortex/blitz/pkg/engine/tools"
 )
 
-// modeRank orders the permission modes from the strictest.
-var modeRank = map[api.PermissionMode]int{api.ModePlan: 0, api.ModeDontAsk: 1, api.ModeDefault: 2, api.ModeAcceptEdits: 3, api.ModeAuto: 3, api.ModeBypass: 4}
-
 // agentRun gives a sub-agent's run its agent's own permission mode and
 // model-call budget, from its frontmatter (spec_background_agents_032
 // BGA-50). A mode looser than the workspace's applies only to built-in
@@ -44,7 +41,7 @@ func (e *Engine) agentRun(ctx context.Context, spec *agents.AgentSpec) context.C
 	if spec.PermissionMode != "" && m != "" {
 		current := e.toolReg.Hooks().Mode()
 		switch {
-		case modeRank[m] > modeRank[current] && !e.mayLoosen(spec):
+		case api.Looser(m, current) && !e.mayLoosen(spec):
 			slog.WarnContext(ctx, "agent permission_mode not applied: a project's agent can't loosen the mode until the project is trusted", "agent", spec.Name, "mode", m)
 		case m == api.ModeBypass && !e.toolReg.ShellSandbox().Active():
 			slog.WarnContext(ctx, "agent permission_mode not applied: bypass needs the OS sandbox", "agent", spec.Name)

@@ -36,11 +36,15 @@ import {
   originOf,
   pageEvents,
   parseDeepLink,
+  parseRunLink,
+  parseTasksLink,
+  tasksURL,
   parseLink,
   pictureExtension,
   previewContent,
   previewId,
   previewStep,
+  addressURL,
   previewURL,
   printCheckScript,
   printLoadScript,
@@ -137,6 +141,20 @@ describe("what the page sends", () => {
   });
 });
 
+describe("parseTasksLink", () => {
+  it.each([
+    ["blitz://tasks", { notify: false, title: "Blitz", body: "" }],
+    ["blitz://tasks?notify=1&title=Refund%20triage&body=Approve%20it", { notify: true, title: "Refund triage", body: "Approve it" }],
+    ["blitz:tasks/", { notify: false, title: "Blitz", body: "" }],
+  ])("reads %s", (raw, want) => expect(parseTasksLink(raw)).toEqual(want));
+  it.each(["blitz://open?dir=/x", "https://tasks", "nonsense"])("ignores %s", (raw) => expect(parseTasksLink(raw)).toBeUndefined());
+  it("cuts long text", () => expect(parseTasksLink("blitz://tasks?title=" + "x".repeat(500))!.title).toHaveLength(200));
+  it("opens the page on the tasks window", () => {
+    expect(tasksURL("http://127.0.0.1:5/open?t=ab")).toBe("http://127.0.0.1:5/open?t=ab&tasks");
+    expect(tasksURL("http://127.0.0.1:5/")).toBe("http://127.0.0.1:5/?tasks");
+  });
+});
+
 describe("parseDeepLink", () => {
   it.each([
     { name: "a folder and a prompt", raw: "blitz://open?dir=/tmp/shop&prompt=Fix%20the%20tests", want: { dir: "/tmp/shop", prompt: "Fix the tests" } },
@@ -146,6 +164,10 @@ describe("parseDeepLink", () => {
     { name: "no folder", raw: "blitz://open?prompt=hi", want: undefined },
     { name: "another action", raw: "blitz://run?dir=/tmp", want: undefined },
     { name: "another scheme", raw: "https://open?dir=/tmp", want: undefined },
+    { name: "a folder's workers", raw: "blitz://workers?dir=/tmp/shop&prompt=ignored", want: { dir: "/tmp/shop", prompt: "", view: "workers" } },
+    { name: "workers without a folder", raw: "blitz://workers", want: undefined },
+    { name: "workers of a relative folder", raw: "blitz://workers?dir=shop", want: undefined },
+    { name: "another action", raw: "blitz://settings?dir=/tmp", want: undefined },
     { name: "a prompt too long", raw: `blitz://open?dir=/tmp&prompt=${"x".repeat(maxLinkPrompt + 1)}`, want: undefined },
   ])("$name", ({ raw, want }) => expect(parseDeepLink(raw, "/home/me")).toEqual(want));
 
@@ -174,6 +196,27 @@ describe("previewURL", () => {
     { raw: "", want: undefined },
     { raw: 42, want: undefined },
   ])("$raw", ({ raw, want }) => expect(previewURL(raw)).toBe(want));
+});
+
+describe("addressURL", () => {
+  const google = (q: string) => `https://www.google.com/search?q=${q}`;
+  it.each([
+    { raw: "localhost:3000", want: "http://localhost:3000/" },
+    { raw: "localhost", want: "http://localhost/" },
+    { raw: "example.com", want: "https://example.com/" },
+    { raw: "https://example.com/a?b", want: "https://example.com/a?b" },
+    { raw: "intranet:8080/x", want: "https://intranet:8080/x" },
+    { raw: "[::1]:8080", want: "http://[::1]:8080/" },
+    { raw: "golang", want: google("golang") },
+    { raw: "react hooks", want: google("react%20hooks") },
+    { raw: "  what is 2+2? ", want: google("what%20is%202%2B2%3F") },
+    { raw: "c++/templates", want: google("c%2B%2B%2Ftemplates") },
+    { raw: "react: hooks", want: google("react%3A%20hooks") },
+    { raw: "file:///etc/passwd", want: undefined },
+    { raw: "javascript:alert(1)", want: undefined },
+    { raw: "", want: undefined },
+    { raw: 42, want: undefined },
+  ])("$raw", ({ raw, want }) => expect(addressURL(raw)).toBe(want));
 });
 
 describe("isLocalHost", () => {
@@ -314,4 +357,15 @@ describe("pictureExtension", () => {
     ["text/html", ""],
     ["", ""],
   ])("%s", (type, want) => expect(pictureExtension(type)).toBe(want));
+});
+
+describe("parseRunLink", () => {
+  it("reads a failed run's notification and the run it opens", () =>
+    expect(parseRunLink("blitz://run?notify=1&title=brief+failed&body=stopped+at+Save&dir=%2FUsers%2Fme%2Fshop&workflow=brief&run=flow-1")).toEqual({
+      title: "brief failed",
+      body: "stopped at Save",
+      open: { dir: "/Users/me/shop", prompt: "", view: "workflows", workflow: "brief", run: "flow-1" },
+    }));
+  it("takes a Windows folder, and Blitz for a missing title", () => expect(parseRunLink("blitz://run?dir=C%3A%5Cshop")).toMatchObject({ title: "Blitz", open: { dir: "C:\\shop" } }));
+  it.each(["blitz://run?dir=shop", "blitz://run", "blitz://tasks?dir=/x", "https://run?dir=/x", "nonsense"])("ignores %s", (raw) => expect(parseRunLink(raw)).toBeUndefined());
 });

@@ -19,6 +19,7 @@ import (
 	"path"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"slices"
 	"strings"
 
@@ -38,6 +39,9 @@ type Evaluation struct {
 	Env, Withheld []string
 	Hash          string // ContentHash, "" if it couldn't be computed
 	Scripts       []ScriptVerdict
+	// NeedsReview means the skill's scripts, on disk, weren't reviewed and
+	// trusted with this content (SK-108): each run asks first.
+	NeedsReview bool
 	// Blocked are reasons none of the skill's scripts may run.
 	Blocked []string
 }
@@ -61,6 +65,21 @@ func (e Evaluation) Runnable() bool {
 	return false
 }
 
+// goos is the operating system scripts run on (a variable for tests).
+var goos = runtime.GOOS
+
+// platformReason is why a script of language can't run on os ("" when it
+// can): shell scripts need macOS or Linux, cmd scripts Windows.
+func platformReason(l ScriptLanguage, os string) string {
+	switch {
+	case l.Platform() == "unix" && os == "windows":
+		return "shell scripts run on macOS and Linux, not Windows"
+	case l.Platform() == "windows" && os != "windows":
+		return "cmd scripts run on Windows only"
+	}
+	return ""
+}
+
 // Evaluate applies policy p to skill s.
 func Evaluate(s *Skill, p config.SkillPolicy) Evaluation {
 	var ev Evaluation
@@ -76,6 +95,9 @@ func Evaluate(s *Skill, p config.SkillPolicy) Evaluation {
 	}
 	if root := untrustedRoot(s, p.UntrustedRoots); root != "" {
 		block("it's the project's (%s), whose settings aren't trusted: blitz trust", root)
+	}
+	if len(s.Scripts) > 0 && s.hostDir != "" && p.Reviewed != nil && !p.Reviewed(s.hostDir, ev.Hash) {
+		ev.NeedsReview = true // built-in skills are Blitz's own
 	}
 	if len(p.TrustedHashes) > 0 && !slices.Contains(p.TrustedHashes, ev.Hash) {
 		block("its content (%s) isn't in skills.policy.trusted_hashes", orNone(ev.Hash))
@@ -121,6 +143,9 @@ func Evaluate(s *Skill, p config.SkillPolicy) Evaluation {
 		if !slices.ContainsFunc(p.Languages, func(l string) bool { return strings.EqualFold(l, string(sc.Language)) }) {
 			v.Reasons = append(v.Reasons, fmt.Sprintf("language %q isn't in skills.policy.languages", orNone(string(sc.Language))))
 		}
+		if r := platformReason(sc.Language, goos); r != "" {
+			v.Reasons = append(v.Reasons, r)
+		}
 		v.TimeoutSeconds = sc.TimeoutSeconds
 		if v.TimeoutSeconds == 0 && hints != nil {
 			v.TimeoutSeconds = hints.TimeoutSeconds
@@ -129,7 +154,7 @@ func Evaluate(s *Skill, p config.SkillPolicy) Evaluation {
 			v.TimeoutSeconds = p.MaxTimeoutSeconds
 		}
 		check := checkDependency
-		if sc.Language == LanguageTypeScript {
+		if sc.Language.Node() {
 			check = checkNPMDependency
 		}
 		for _, dep := range sc.Dependencies {

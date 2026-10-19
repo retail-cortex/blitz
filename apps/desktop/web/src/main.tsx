@@ -20,6 +20,7 @@ import { App } from "./App";
 import { detectHost } from "./desktop";
 import { EditorPanel } from "./EditorPanel";
 import { editorConfig } from "./host";
+import { TasksApp } from "./TasksPanel";
 import { installQuietInputs } from "./ui/inputs";
 import "./m3.css";
 import "./app.css";
@@ -43,7 +44,7 @@ async function start() {
   });
   createRoot(document.getElementById("root")!).render(
     <StrictMode>
-      {editorConfig() ? <EditorPanel /> : <App />}
+      {editorConfig() ? <EditorPanel /> : new URLSearchParams(location.search).has("tasks") ? <TasksApp /> : <App />}
     </StrictMode>,
   );
 }

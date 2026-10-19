@@ -134,6 +134,9 @@ type Backend interface {
 	ListMCPServers() []MCPServer
 	ListCommands() []CommandInfo
 	ActiveAgentTools() AgentTools
+	// RunEval runs the workspace's eval name (spec_evals_042) and records
+	// the run.
+	RunEval(ctx context.Context, name string, o EvalOptions) (EvalRun, error)
 
 	// Context, memory and language.
 	SessionUsage() (Usage, error)

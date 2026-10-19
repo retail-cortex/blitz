@@ -149,10 +149,15 @@ func TestHostSetTrayAndFileManager(t *testing.T) {
 		t.Skip("the registry")
 	}
 	svc, beside, _ := fakeSystem(t)
-	h := Host{Service: svc, Beside: beside, Tray: "/opt/blitz/blitz-tray"}.Handler()
+	t.Setenv("XDG_CONFIG_HOME", "")
+	started := 0
+	h := Host{Service: svc, Beside: beside, Tray: "/opt/blitz/blitz-tray", StartTray: func() error { started++; return nil }}.Handler()
 	for _, on := range []bool{true, false} {
 		code, body := call(t, h, "SetTray", on)
 		require.Equal(t, http.StatusOK, code, string(body))
+		if goruntime.GOOS == "linux" {
+			assert.Equal(t, 1, started, "switched on, the tray starts in this session")
+		}
 		_, body = call(t, h, "ServiceStatus")
 		var st ServiceStatus
 		require.NoError(t, json.Unmarshal(body, &st))
@@ -160,6 +165,34 @@ func TestHostSetTrayAndFileManager(t *testing.T) {
 	}
 	code, body := call(t, h, "FileManager")
 	assert.Equal(t, http.StatusOK, code, string(body))
+}
+
+// Repair rewrites the tray's entry when its program is gone, and starts
+// the tray where launchd doesn't.
+func TestHostRepair(t *testing.T) {
+	if goruntime.GOOS == "windows" {
+		t.Skip("the registry")
+	}
+	svc, beside, _ := fakeSystem(t)
+	t.Setenv("XDG_CONFIG_HOME", "")
+	tray := filepath.Join(beside, "blitz-tray")
+	require.NoError(t, os.WriteFile(tray, nil, 0o755))
+	require.NoError(t, loginitem.InstallTray(filepath.Join(beside, "gone", "blitz-tray")))
+	started := 0
+	h := Host{Service: svc, Beside: beside, Tray: tray, StartTray: func() error { started++; return nil }}
+	require.NoError(t, h.Repair())
+	assert.Equal(t, tray, loginitem.TrayProgram())
+	if goruntime.GOOS == "linux" {
+		assert.Equal(t, 1, started)
+	}
+	require.NoError(t, h.Repair(), "nothing to repair")
+	assert.LessOrEqual(t, started, 1)
+
+	h.StartTray = func() error { return errors.New("no display") }
+	require.NoError(t, loginitem.InstallTray(filepath.Join(beside, "gone", "blitz-tray")))
+	if goruntime.GOOS == "linux" {
+		assert.ErrorContains(t, h.Repair(), "no display")
+	}
 }
 
 func mustJSON(t *testing.T, v any) string {

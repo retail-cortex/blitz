@@ -23,7 +23,9 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -32,6 +34,7 @@ import (
 	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/engine/agents"
 	"github.com/retail-cortex/blitz/pkg/engine/audit"
+	"github.com/retail-cortex/blitz/pkg/engine/evals"
 	"github.com/retail-cortex/blitz/pkg/engine/memory"
 	"github.com/retail-cortex/blitz/pkg/engine/runtime"
 	"github.com/retail-cortex/blitz/pkg/engine/session"
@@ -43,6 +46,7 @@ import (
 	"github.com/retail-cortex/blitz/pkg/observability"
 	"github.com/retail-cortex/blitz/pkg/plugins"
 	"github.com/retail-cortex/blitz/pkg/redact"
+	"github.com/retail-cortex/blitz/pkg/secrets"
 	"google.golang.org/adk/v2/model"
 	"google.golang.org/genai"
 )
@@ -92,6 +96,8 @@ type Workspace struct {
 	goalMu       sync.Mutex
 	goals        map[string]api.Goal // by session
 	cfg          *config.Config
+	policyMu     sync.Mutex // guards cfg.Workers.Policy, which the settings can change
+	guards       guarding   // each turn's guardrails (spec_gates_041)
 	agents       *agents.Registry
 	skills       *skills.Provider
 	tools        *tools.Registry
@@ -117,6 +123,8 @@ type Workspace struct {
 	// default_model is one); agentRefs are the models agents were last
 	// pinned to by default_model or [agent_models].
 	rebuildMu sync.Mutex
+	// healthMu lets one health check of the workspace run at a time.
+	healthMu  sync.Mutex
 	agentRefs map[string]string
 	// bgCtx ends when the workspace closes; bg counts the work it bounds
 	// (writing suggestions), which Close waits for.
@@ -140,11 +148,16 @@ type Workspace struct {
 	// workerStore records which workers are enabled.
 	workerStore *workers.Store
 	runLog      *workers.RunLog
-	runsMu      sync.Mutex
-	running     map[string]bool // workers running now, by name
-	newModel    func(ctx context.Context, cfg *config.Config, name string) (model.LLM, error)
-	warnedMu    sync.Mutex
-	warned      map[string]bool // messages warnOnce has shown
+	evalRuns    *evals.RunLog
+	// flowStore keeps workflows' orchestration sessions (opened on first
+	// use); flowMu guards it.
+	flowStore *session.PersistentService
+	flowMu    sync.Mutex
+	runsMu    sync.Mutex
+	running   map[string]bool // workers running now, by name
+	newModel  func(ctx context.Context, cfg *config.Config, name string) (model.LLM, error)
+	warnedMu  sync.Mutex
+	warned    map[string]bool // messages warnOnce has shown
 	// sessionContext is session_start hook output waiting for each
 	// session's next prompt.
 	hookCtxMu      sync.Mutex
@@ -190,6 +203,7 @@ func Open(ctx context.Context, cfg *config.Config, o Options) (*Workspace, error
 		w.newModel = runtime.NewModel
 	}
 	w.runLog = workers.OpenRunLog(config.ExpandHome("~/.blitz/worker-runs"))
+	w.evalRuns = evals.OpenRunLog(config.ExpandHome("~/.blitz/eval-runs"))
 	w.running = map[string]bool{}
 	if w.workerStore = o.Workers; w.workerStore == nil {
 		var err error
@@ -245,9 +259,12 @@ func Open(ctx context.Context, cfg *config.Config, o Options) (*Workspace, error
 	if cfg.Blitz.TrustWorkspace {
 		o.Warn(i18n.T("project.trust_workspace_deprecated"))
 	}
+	// Skills' scripts on disk run unasked only once reviewed (SK-108).
+	cfg.Skills.Policy.Reviewed = skillTrust(cfg).Reviewed
 	w.loadProject(cfg, o.TrustProject || cfg.Blitz.TrustWorkspace, o.Warn)
 	w.loadPlugins(cfg, o.Warn)
 
+	cfg.MCP.Servers = mcpWithSecrets(cfg.MCP.Servers, dir)
 	if w.tools, err = tools.NewRegistry(cfg, w.agents, w.skills); err != nil {
 		return nil, fmt.Errorf("failed to initialize tools: %w", err)
 	}
@@ -361,6 +378,8 @@ func Open(ctx context.Context, cfg *config.Config, o Options) (*Workspace, error
 		runtime.WithNotice(o.Warn),
 		runtime.WithTaskDone(w.taskEnded),
 		runtime.WithProjectTrusted(w.project.Loaded),
+		runtime.WithSecrets(w.expandSecrets),
+		runtime.WithGuard(guard{w}), // guardrails at every step (spec_gates_041)
 	)...)
 	if err != nil {
 		w.Close()
@@ -590,4 +609,42 @@ func ModelErrorSummary(err error, cfg *config.Config) string {
 	}
 	r := redact.FromEnv(cfg.Sandbox.ScrubEnv, cfg.LLM.Gemini.APIKey, cfg.LLM.OpenAI.APIKey, cfg.LLM.Anthropic.APIKey)
 	return r.String(msg)
+}
+
+// mcpWithSecrets is servers with {secrets:key} in their env and header
+// values put in, for the workspace in dir (the values are masked in logs:
+// SecretRedactor masks every MCP env and header value).
+func mcpWithSecrets(servers []config.MCPServerConfig, dir string) []config.MCPServerConfig {
+	lookup := config.Vault("").Resolve(config.SecretScope("", dir))
+	expand := func(m map[string]string) map[string]string {
+		var out map[string]string
+		for k, v := range m {
+			if !secrets.HasPlaceholders(v) {
+				continue
+			}
+			if out == nil {
+				out = maps.Clone(m)
+			}
+			x, used := secrets.Expand(v, lookup)
+			redact.Remember(used...)
+			out[k] = x
+		}
+		if out == nil {
+			return m
+		}
+		return out
+	}
+	out := slices.Clone(servers)
+	for i := range out {
+		out[i].Env = expand(out[i].Env)
+		out[i].Headers = expand(out[i].Headers)
+	}
+	return out
+}
+
+// expandSecrets puts secrets' values into text (spec_secrets_039):
+// {secrets:key} the workspace's own, else the global one;
+// {secrets:global:key} and {secrets:workspace:key} only that scope's.
+func (w *Workspace) expandSecrets(text string) (string, []string) {
+	return secrets.Expand(text, config.Vault("").Resolve(config.SecretScope("", w.Dir())))
 }

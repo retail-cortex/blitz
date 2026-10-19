@@ -16,7 +16,10 @@ load("@rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "redact",
-    srcs = ["redact.go"],
+    srcs = [
+        "pii.go",
+        "redact.go",
+    ],
     importpath = "github.com/retail-cortex/blitz/pkg/redact",
     visibility = ["//visibility:public"],
 )
@@ -24,7 +27,11 @@ go_library(
 go_test(
     name = "redact_test",
     size = "small",
-    srcs = ["redact_test.go"],
+    srcs = [
+        "pii_test.go",
+        "redact_test.go",
+        "remember_test.go",
+    ],
     embed = [":redact"],
     deps = ["@com_github_stretchr_testify//assert"],
 )

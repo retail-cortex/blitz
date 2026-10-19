@@ -92,6 +92,31 @@ func windowsInstallCLI(cli string, again bool) (CLIInstall, error) {
 	return out, nil
 }
 
+// RemoveFromUserPath takes dir out of the user's PATH on Windows: the
+// uninstaller's (apps/electron/winsetup), for the folder Install put
+// there (WIN-14). Nothing is written when it isn't there.
+func RemoveFromUserPath(dir string) error {
+	user, err := readUserPath()
+	if err != nil {
+		return err
+	}
+	entries := splitWinPath(user)
+	var next []string
+	for _, e := range entries {
+		if !sameWinPath(expandWin(e), dir) {
+			next = append(next, e)
+		}
+	}
+	if len(next) == len(entries) {
+		return nil
+	}
+	if err := writeUserPath(strings.Join(next, ";")); err != nil {
+		return err
+	}
+	pathChanged()
+	return nil
+}
+
 // splitWinPath is a PATH's folders, the empty ones left out.
 func splitWinPath(v string) []string {
 	var out []string

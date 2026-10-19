@@ -58,6 +58,7 @@ var ErrInvalidID = errors.New("invalid session id")
 const (
 	OriginWorker     = "worker"     // a worker's run, scheduled or not
 	OriginBackground = "background" // a detached run (blitz --bg)
+	OriginEval       = "eval"       // an eval's case (deleted once it's scored)
 )
 
 // SessionRecord holds persistent metadata and chat history for a session.
@@ -114,6 +115,7 @@ type Message struct {
 const (
 	KindSteer = "steer"
 	KindHook  = "hook"
+	KindRule  = "rule" // after-agent rules asking for a revision (spec_gates_041)
 	KindPlan  = "plan" // the approved plan's go-ahead
 	KindTask  = "task" // a background task that ended (the model's side)
 )

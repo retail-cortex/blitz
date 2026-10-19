@@ -114,6 +114,9 @@ vitest_bin.vitest_test(
     # runfiles tree while V8 reports the real ones.
     patch_node_fs = False,
     tags = ["no-sandbox"],
+    # The whole suite instrumented: about 3 minutes on CI's macOS runner,
+    # 5 on a slow one, which the default (moderate, 5 minutes) cut off.
+    timeout = "long",
 )
 
 tsc_bin.tsc_test(

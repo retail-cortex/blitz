@@ -282,7 +282,7 @@ export const builtinCommands: Builtin[] = [
         [t("status.session"), md(c.sessionTitle || c.sessionId || "")],
         [t("status.agent"), md(s?.agent ?? "")],
         [t("status.model"), md(`${model.provider ? model.provider + "/" : ""}${model.name}`) + (model.unavailable ? ` — ${md(model.unavailable)}` : "")],
-        [t("status.mode"), modeOf(s?.permissionMode ?? "default").label],
+        [t("status.mode"), modeOf(s?.permissionMode ?? "auto").label],
         [t("desktop.cmd.effort_row"), efforts().find((e) => e.value === (s?.effort ?? ""))?.label ?? t("desktop.effort.auto")],
       ];
       if (u && u.calls > 0) rows.push([t("desktop.usage.cost"), u.priced ? "$" + u.costUsd.toFixed(4) : t("desktop.usage.unpriced")]);
@@ -639,7 +639,7 @@ export const builtinCommands: Builtin[] = [
     args: "[default|accept-edits|plan|dont-ask|bypass]",
     group: "safety",
     async run(c) {
-      if (!c.args) return c.say(t("desktop.mode.is", { mode: modeOf(c.settings?.permissionMode ?? "default").label }), "info", true);
+      if (!c.args) return c.say(t("desktop.mode.is", { mode: modeOf(c.settings?.permissionMode ?? "auto").label }), "info", true);
       const r = await workspaces.setPermissionMode({ workspace: c.dir, mode: c.args });
       c.say(t("desktop.mode.now", { mode: modeOf(r.mode).label }));
       c.settingsChanged();

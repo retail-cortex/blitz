@@ -232,3 +232,60 @@ func TestStorageURIDefinitions(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "https://storage.googleapis.com/bucket/dir/s.py", u)
 }
+
+// Shell scripts need macOS or Linux, cmd scripts Windows (SK-105).
+func TestScriptPlatforms(t *testing.T) {
+	tests := []struct {
+		lang ScriptLanguage
+		os   string
+		ok   bool
+	}{
+		{LanguageShell, "darwin", true},
+		{LanguageShell, "linux", true},
+		{LanguageShell, "windows", false},
+		{LanguageCmd, "windows", true},
+		{LanguageCmd, "linux", false},
+		{LanguagePython, "windows", true},
+	}
+	for _, tt := range tests {
+		t.Run(string(tt.lang)+"/"+tt.os, func(t *testing.T) {
+			assert.Equal(t, tt.ok, platformReason(tt.lang, tt.os) == "")
+		})
+	}
+	for ext, want := range map[string]ScriptLanguage{"a.sh": LanguageShell, "a.cmd": LanguageCmd, "a.bat": LanguageCmd, "a.ps1": LanguagePowerShell, "a.js": LanguageJavaScript, "a.rb": LanguageUnspecified} {
+		assert.Equal(t, want, ScriptLanguageOf(ext), ext)
+	}
+	s, err := ParseSkillMD([]byte("---\nname: x\ndescription: d\nscripts:\n  - name: a\n    language: bash\n    inline_code: echo\n  - name: b\n    language: bat\n    inline_code: echo\n---\n"), "x")
+	require.NoError(t, err)
+	assert.Equal(t, LanguageShell, s.Scripts[0].Language)
+	assert.Equal(t, LanguageCmd, s.Scripts[1].Language)
+}
+
+// A skill on disk with scripts needs review until its content is
+// trusted; a built-in never does, nor a skill without scripts (SK-108).
+func TestNeedsReview(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "s", "scripts"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "s", "SKILL.md"), []byte("---\nname: s\ndescription: d\n---\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "s", "scripts", "a.py"), []byte("print(1)"), 0o644))
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "plain"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "plain", "SKILL.md"), []byte("---\nname: plain\ndescription: d\n---\n"), 0o644))
+	s, err := LoadFolder(filepath.Join(dir, "s"))
+	require.NoError(t, err)
+	plain, err := LoadFolder(filepath.Join(dir, "plain"))
+	require.NoError(t, err)
+	_, err = LoadFolder(filepath.Join(dir, "missing"))
+	assert.Error(t, err)
+
+	trusted := map[string]string{}
+	p := config.DefaultConfig().Skills.Policy
+	p.Reviewed = func(d, h string) bool { return trusted[d] == h }
+	ev := Evaluate(s, p)
+	assert.True(t, ev.NeedsReview)
+	assert.True(t, ev.Scripts[0].Allowed, "asked about, not blocked")
+	trusted[s.HostDir()] = ev.Hash
+	assert.False(t, Evaluate(s, p).NeedsReview)
+	assert.False(t, Evaluate(plain, p).NeedsReview, "no scripts")
+	p.Reviewed = nil
+	assert.False(t, Evaluate(s, p).NeedsReview, "no store: as before")
+}

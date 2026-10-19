@@ -66,6 +66,7 @@ export function WorkerEditor({
   const [f, setF] = useState<WorkerForm>({ ...emptyWorkerForm, name: edit?.name ?? "", timezone: edit ? "" : (Intl.DateTimeFormat().resolvedOptions().timeZone ?? "") });
   const [named, setNamed] = useState(!!edit); // the name was typed (or is fixed), not made from the description
   const [agents, setAgents] = useState<string[]>([]);
+  const [flows, setFlows] = useState<string[]>([]);
   const catalog = useModelCatalog(dir);
   const [problems, setProblems] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
@@ -105,6 +106,10 @@ export function WorkerEditor({
   useEffect(() => {
     workspaces.listAgents({ workspace: dir }).then(
       (r) => setAgents(r.agents.map((a) => a.name)),
+      () => {},
+    );
+    workspaces.listWorkflows({ workspace: dir }).then(
+      (r) => setFlows(r.workflows.map((w) => w.name)),
       () => {},
     );
   }, [dir]);
@@ -241,17 +246,29 @@ export function WorkerEditor({
             <ModelInput value={f.model} onChange={(v) => set("model", v)} catalog={catalog} placeholder={t("desktop.newworker.model_placeholder")} />
           </label>
         </div>
+        <label className="field">
+          <span className="t-label">{t("desktop.newworker.workflow")}</span>
+          <select className="select" value={f.workflow} onChange={(e) => set("workflow", e.target.value)}>
+            <option value="">{t("desktop.newworker.workflow_none")}</option>
+            {[...new Set([...flows, f.workflow].filter(Boolean))].map((n) => (
+              <option key={n} value={n}>
+                /{n}
+              </option>
+            ))}
+          </select>
+          <span className="supporting">{t(f.workflow ? "desktop.newworker.workflow_hint" : "desktop.newworker.workflow_none_hint")}</span>
+        </label>
         <div className="field">
           <label className="t-label" htmlFor="worker-prompt">
-            {t("desktop.newworker.prompt")}
+            {t(f.workflow ? "desktop.newworker.input" : "desktop.newworker.prompt")}
           </label>
           {rewriting && <div className="progress" role="progressbar" aria-label={t("desktop.worker.rewriting")} />}
           <textarea
             id="worker-prompt"
             className="input new-worker-prompt"
             value={f.prompt}
-            placeholder={t("desktop.newworker.prompt_placeholder")}
-            rows={8}
+            placeholder={t(f.workflow ? "desktop.newworker.input_placeholder" : "desktop.newworker.prompt_placeholder")}
+            rows={f.workflow ? 3 : 8}
             onChange={(e) => set("prompt", e.target.value)}
           />
           <span>

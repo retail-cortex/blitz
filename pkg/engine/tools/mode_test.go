@@ -87,6 +87,35 @@ func TestParsePermissionMode(t *testing.T) {
 	assert.ErrorIs(t, err, api.ErrUnknownMode, "unknown mode: %v", err)
 }
 
+// A workspace opens in auto unless the settings name a mode; the older
+// auto_approve = true is bypass.
+func TestStartingMode(t *testing.T) {
+	tests := []struct {
+		name, mode  string
+		autoApprove bool
+		want        api.PermissionMode
+	}{
+		{name: "nothing set", want: api.ModeAuto},
+		{name: "auto_approve", autoApprove: true, want: api.ModeBypass},
+		{name: "default", mode: "default", want: api.ModeDefault},
+		{name: "default with auto_approve", mode: "default", autoApprove: true, want: api.ModeBypass},
+		{name: "an alias", mode: "dontAsk", want: api.ModeDontAsk},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := config.DefaultConfig()
+			cfg.Blitz.PermissionMode, cfg.Blitz.AutoApprove = tt.mode, tt.autoApprove
+			got, err := StartingMode(cfg)
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+	cfg := config.DefaultConfig()
+	cfg.Blitz.PermissionMode = "yolo"
+	_, err := StartingMode(cfg)
+	assert.ErrorIs(t, err, api.ErrUnknownMode)
+}
+
 // Bypass (and auto_approve, its older spelling) needs the OS sandbox.
 func TestBypassNeedsTheSandbox(t *testing.T) {
 	for _, mutate := range []func(*config.Config){

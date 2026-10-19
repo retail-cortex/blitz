@@ -133,7 +133,7 @@ Exit codes: 0 success, 1 error, 2 usage, 3 --max-turns reached,
 	f.BoolVarP(&o.version, "version", "v", false, "Print Blitz version")
 	addRunFlags(f, o)
 
-	root.AddCommand(newExecCommand(o), newInitCommand(o), newDoctorCommand(&o.global), newConfigCommand(&o.global), newServeCommand(), newWorkersCommand(&o.global), newServiceCommand(), newLicenseCommand(), newTrustCommand(&o.global), newMCPCommand(&o.global), newWorktreesCommand(&o.global), newMemoryCommand(&o.global), newPluginCommand(), newSkillsCommand(), newModelsCommand(&o.global), newUpdateCommand(), newSessionsCommand(&o.global), newAgentsCommand(), newAttachCommand(o), newLogsCommand(), newStopCommand(), newSecurityCommand(), newSearchCommand(&o.global), newAuthCommand(&o.global))
+	root.AddCommand(newExecCommand(o), newInitCommand(o), newDoctorCommand(&o.global), newConfigCommand(&o.global), newServeCommand(), newWorkersCommand(&o.global), newServiceCommand(), newLicenseCommand(), newTrustCommand(&o.global), newMCPCommand(&o.global), newWorktreesCommand(&o.global), newMemoryCommand(&o.global), newPluginCommand(), newSkillsCommand(), newModelsCommand(&o.global), newUpdateCommand(), newSessionsCommand(&o.global), newAgentsCommand(), newAttachCommand(o), newLogsCommand(), newStopCommand(), newSecurityCommand(), newSearchCommand(&o.global), newEvalCommand(&o.global), newAuthCommand(&o.global))
 	groupHelp(root)
 	return root
 }
@@ -172,7 +172,7 @@ func addRunFlags(f *pflag.FlagSet, o *rootOptions) {
 	f.StringArrayVar(&o.allowRules, "allow", nil, `Allow an action without asking, for this run: a rule such as "shell(go test *)" or "write(docs/**)" (repeatable)`)
 	f.StringArrayVar(&o.denyRules, "deny", nil, `Refuse an action, for this run: a rule such as "shell(git push *)" or "web(*.internal)" (repeatable)`)
 	f.StringVar(&o.effort, "effort", "", "Reasoning effort for this run: minimal, low, medium, high, or max (where the model supports it)")
-	f.StringVar(&o.mode, "permission-mode", "", "Start in a permission mode: default, accept-edits, plan, dont-ask, or bypass (needs the OS sandbox)")
+	f.StringVar(&o.mode, "permission-mode", "", "Start in a permission mode: auto (the default), default, accept-edits, plan, dont-ask, or bypass (needs the OS sandbox)")
 	f.StringArrayVar(&o.images, "image", nil, "Attach an image to the first prompt (repeatable); @file.png in a prompt also works")
 }
 

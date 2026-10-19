@@ -24,6 +24,7 @@ import { Button, useSnackbar } from "../ui/controls";
 import { takeAnchor } from "../events";
 import { Markdown, MarkdownDocProvider, scrollToHeading } from "../Markdown";
 import { playsVideo, type PreviewKind } from "./previewKind";
+import { inlineHtml, type HtmlLoaders } from "./htmlPreview";
 
 import { showFound } from "./find";
 import { TableView } from "./TableView";
@@ -32,7 +33,7 @@ const PdfView = lazy(() => import("./PdfView").then((m) => ({ default: m.PdfView
 
 /**
  * A file shown rather than edited (FIL-54): Markdown rendered from the
- * editor's current text, an SVG from it as an image, and images, PDFs and
+ * editor's current text, an HTML page from it in a sandboxed frame, an SVG from it as an image, and images, PDFs and
  * sound from the file's bytes (ReadPreview), PDFs drawn with pdf.js and
  * sound in the system's player.
  */
@@ -40,6 +41,8 @@ export function Preview({ dir, path, kind, text, line, find, onFound }: { dir: s
   if (kind === "markdown") return <MarkdownPreview dir={dir} path={path} text={text ?? ""} find={find} onFound={onFound} />;
   if (kind === "table") return <TableView dir={dir} path={path} line={line} />;
   if (kind === "svg") return <SvgPreview text={text ?? ""} name={path} />;
+  if (kind === "html") return <HtmlPreview dir={dir} path={path} text={text ?? ""} />;
+  if (kind === "docx") return <DocxPreview dir={dir} path={path} />;
   return <FilePreview dir={dir} path={path} kind={kind} />;
 }
 
@@ -101,6 +104,64 @@ function SvgPreview({ text, name }: { text: string; name: string }) {
       <img src={url} alt={name} />
     </div>
   );
+}
+
+// An HTML page from the editor's text, its relative files put inline
+// (htmlPreview.ts), in a frame whose scripts run sandboxed: no access to
+// the app, its storage or the service. Redrawn a moment after typing stops.
+function HtmlPreview({ dir, path, text }: { dir: string; path: string; text: string }) {
+  const [doc, setDoc] = useState<string>();
+  const first = useRef(true);
+  useEffect(() => {
+    let live = true;
+    const load: HtmlLoaders = {
+      text: (p) => files.readFile({ workspace: dir, path: p }).then((f) => (f.binary || f.tooLarge ? Promise.reject(new Error(p)) : f.text)),
+      dataURL: (p) =>
+        files.readPreview({ workspace: dir, path: p }).then(
+          (r) =>
+            new Promise<string>((res, rej) => {
+              const reader = new FileReader();
+              reader.onload = () => res(String(reader.result));
+              reader.onerror = () => rej(reader.error);
+              reader.readAsDataURL(new Blob([r.data as Uint8Array<ArrayBuffer>], { type: r.mime }));
+            }),
+        ),
+    };
+    const timer = setTimeout(() => void inlineHtml(text, path, load).then((d) => live && setDoc(d), () => live && setDoc(text)), first.current ? 0 : 400);
+    first.current = false;
+    return () => {
+      live = false;
+      clearTimeout(timer);
+    };
+  }, [dir, path, text]);
+  if (doc === undefined) return null;
+  return (
+    <div className="preview preview-html">
+      <iframe title={path} sandbox="allow-scripts allow-forms allow-popups allow-modals" srcDoc={doc} />
+    </div>
+  );
+}
+
+// A Word document as its text: the service reads it as Markdown, shown as
+// Markdown files are (read-only; Open in the system's viewer for the rest).
+function DocxPreview({ dir, path }: { dir: string; path: string }) {
+  const [text, setText] = useState<string>();
+  const [error, setError] = useState("");
+  useEffect(() => {
+    let live = true;
+    setText(undefined);
+    setError("");
+    files.readPreview({ workspace: dir, path }).then(
+      (r) => live && setText(new TextDecoder().decode(r.data)),
+      (e) => live && setError(message(e)),
+    );
+    return () => {
+      live = false;
+    };
+  }, [dir, path]);
+  if (error) return <p className="preview error-text t-body-sm" style={{ padding: 16 }}>{error}</p>;
+  if (text === undefined) return null;
+  return <MarkdownPreview dir={dir} path={path} text={text} />;
 }
 
 function FilePreview({ dir, path, kind }: { dir: string; path: string; kind: PreviewKind }) {

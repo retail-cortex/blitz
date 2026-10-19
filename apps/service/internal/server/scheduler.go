@@ -18,7 +18,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"log/slog"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -73,7 +75,7 @@ func WithScheduler(c SchedulerConfig) Option {
 		s.sched = &scheduler{
 			s: s, cfg: c, cron: cron.New(), slots: make(chan struct{}, c.MaxConcurrent),
 			base: base, cancel: cancel,
-			entries: map[string]entry{}, live: map[string]*liveRun{}, waiting: map[string]bool{},
+			entries: map[string]entry{}, live: map[string]*liveRun{}, waiting: map[string]bool{}, missing: map[string]bool{},
 		}
 	}
 }
@@ -97,6 +99,8 @@ func (s *Server) StartScheduler(ctx context.Context) {
 		defer t.Stop()
 		for {
 			sc.rescan(sc.base)
+			s.resumeDueTimers(sc.base)
+			s.healthDue()
 			select {
 			case <-sc.base.Done():
 				return
@@ -123,6 +127,7 @@ type scheduler struct {
 	entries map[string]entry    // by workspace and worker
 	live    map[string]*liveRun // runs going now, by ID
 	waiting map[string]bool     // scheduled runs waiting for a slot, by workspace and worker
+	missing map[string]bool     // workspaces whose folder is gone, said once
 }
 
 var errStopped = errors.New("the worker scheduler has stopped")
@@ -166,6 +171,22 @@ func (c cronSchedule) Next(t time.Time) time.Time { return c.Schedule.Next(t) }
 func (sc *scheduler) rescan(ctx context.Context) {
 	seen := map[string]bool{}
 	for _, dir := range sc.cfg.Store.Workspaces() {
+		// A folder that's gone (moved, deleted, an unplugged drive) is said
+		// once, not every rescan; its workers run again if it comes back,
+		// and Settings › Workers can forget them (WK-62).
+		if _, err := os.Stat(dir); errors.Is(err, fs.ErrNotExist) {
+			sc.mu.Lock()
+			said := sc.missing[dir]
+			sc.missing[dir] = true
+			sc.mu.Unlock()
+			if !said {
+				slog.Warn("workers: the workspace's folder is gone; its workers don't run until it's back", "workspace", dir)
+			}
+			continue
+		}
+		sc.mu.Lock()
+		delete(sc.missing, dir)
+		sc.mu.Unlock()
 		w, err := sc.s.workspace(ctx, dir)
 		if err != nil {
 			slog.Warn("workers: can't open workspace", "workspace", dir, "error", err)

@@ -110,3 +110,16 @@ func (r BackgroundRun) Active() bool { return r.State == "running" || r.State ==
 
 // ErrUnknownRun means the service has no background run with that ID.
 var ErrUnknownRun = errors.New("no such background run")
+
+// SessionTool is one tool call a saved session made, with its result, so
+// a reopened chat shows its tools as they ran.
+type SessionTool struct {
+	// Turn is the prompt it ran under: the Turn-th prompt of the session
+	// (0 first); Prompt is that prompt's start, to check it by.
+	Turn   int
+	Prompt string
+	ID     string
+	Name   string
+	Args   map[string]any
+	Result map[string]any
+}

@@ -24,6 +24,7 @@ import { configChanged } from "../events";
 import { fileState, goToLine, languageSupport } from "../files/codemirror";
 import { t } from "../i18n";
 import { Button, Icon, useSnackbar } from "../ui/controls";
+import { secretCompletion } from "../files/secretCompletion";
 import { settingsExtensions, setProblems, type LineProblem } from "./editor";
 import { searchSettings, type SettingRef } from "./toml";
 
@@ -72,6 +73,7 @@ export function SettingsFile({ scopes, initial = "" }: { scopes: { dir: string; 
     const labels = { type: t("desktop.file.type"), default: t("desktop.file.default") };
     const state = fileState(doc, lang, { save: () => saveRef.current(), changed: (s: EditorState) => setText(s.doc.toString()) }, true, [
       settingsExtensions(() => reference.current, labels, setCurrent),
+      secretCompletion(workspace),
       placeholder(t("desktop.file.empty")),
     ], false);
     if (!view.current) view.current = new EditorView({ parent: host.current!, state });

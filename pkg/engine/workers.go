@@ -53,8 +53,28 @@ func defaultWorkerStore() (*workers.Store, error) {
 	return workers.OpenStore(config.ExpandHome("~/.blitz/workers.json"))
 }
 
-// workerRoots are the directories holding the workspace's workers.
+// workerPolicy is the host's limit on workers ([workers.policy]) now.
+func (w *Workspace) workerPolicy() config.WorkerPolicy {
+	w.policyMu.Lock()
+	defer w.policyMu.Unlock()
+	return w.cfg.Workers.Policy
+}
+
+// ReloadWorkerPolicy applies cfg's [workers.policy] (Settings › Workers'
+// limits) from the next listing or run (WK-63); a run going keeps the
+// limits it started with.
+func (w *Workspace) ReloadWorkerPolicy(cfg *config.Config) {
+	w.policyMu.Lock()
+	defer w.policyMu.Unlock()
+	w.cfg.Workers.Policy = cfg.Workers.Policy
+}
+
+// workerRoots are the directories holding the workspace's workers; the
+// home workspace's are the user's global workers (~/.blitz/workers).
 func (w *Workspace) workerRoots() []string {
+	if config.IsHomeWorkspace("", w.Dir()) {
+		return []string{config.UserWorkersDir("")}
+	}
 	var out []string
 	for _, p := range w.cfg.Workers.Paths {
 		if !filepath.IsAbs(p) {
@@ -87,7 +107,7 @@ func (w *Workspace) workerInfo(wk *workers.Worker, loadErr error, now time.Time)
 	info := api.WorkerInfo{
 		Workspace: w.Dir(), Name: wk.Name, Description: wk.Description, Path: wk.Path, Hash: wk.Hash,
 		State:    w.workerStore.State(w.Dir(), wk, loadErr),
-		Schedule: wk.Schedule.Text, Cron: wk.Schedule.Cron, Agent: wk.Agent, Model: wk.Model, CatchUp: wk.CatchUp,
+		Schedule: wk.Schedule.Text, Cron: wk.Schedule.Cron, Agent: wk.Agent, Model: wk.Model, Workflow: wk.Flow, CatchUp: wk.CatchUp,
 	}
 	if wk.Schedule.Location != nil {
 		info.Timezone = wk.Schedule.Location.String()
@@ -99,7 +119,7 @@ func (w *Workspace) workerInfo(wk *workers.Worker, loadErr error, now time.Time)
 		info.Problems = []string{loadErr.Error()}
 	}
 	if loadErr == nil {
-		eff := workers.Apply(wk, w.cfg.Workers.Policy)
+		eff := workers.Apply(wk, w.workerPolicy())
 		for _, p := range eff.Permissions {
 			info.Permissions = append(info.Permissions, p.String())
 		}
@@ -407,7 +427,7 @@ func (w *Workspace) RunWorker(ctx context.Context, name string, o RunOptions) (a
 		w.runsMu.Unlock()
 	}()
 
-	eff := workers.Apply(wk, w.cfg.Workers.Policy)
+	eff := workers.Apply(wk, w.workerPolicy())
 	agent := cmp.Or(wk.Agent, w.engine.ActiveAgent())
 	run := api.Run{ID: newRunID(), Workspace: w.Dir(), Worker: name, Hash: wk.Hash, Status: api.RunRunning, Manual: o.Manual, Started: time.Now()}
 
@@ -459,7 +479,24 @@ func (w *Workspace) RunWorker(ctx context.Context, name string, o RunOptions) (a
 			opts = append(opts, runtime.WithModel(llm))
 		}
 	}
-	if runErr == nil {
+	switch {
+	case runErr != nil:
+	case wk.Flow != "":
+		// A workflow (WF-17): its steps run under the worker's permissions,
+		// in its run's chat, the prompt as its input.
+		f, ok := w.workflow(wk.Flow)
+		if !ok {
+			runErr = fmt.Errorf("there's no workflow %q", wk.Flow)
+			break
+		}
+		fctx := withFlowOrigin(withFlowStorage(runCtx, st), "worker")
+		if eff.Limits.Timeout > 0 {
+			var cancel context.CancelFunc
+			fctx, cancel = context.WithTimeout(fctx, eff.Limits.Timeout)
+			defer cancel()
+		}
+		_, runErr = w.runFlow(fctx, rec.ID, f, wk.Prompt, on)
+	default:
 		_, runErr = w.run(runCtx, rec.ID, turn{Turn: api.Turn{
 			Text: wk.Prompt, Prompt: fmt.Sprintf(unattendedPreamble, name) + wk.Prompt,
 			MaxTurns: eff.Limits.MaxTurns, MaxCostUSD: eff.Limits.MaxCostUSD, Timeout: eff.Limits.Timeout,

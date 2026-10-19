@@ -21,7 +21,7 @@ import { mdiCodeBraces, mdiMagnify, mdiFileTreeOutline, mdiMessageTextOutline } 
 import { ChangesDrawer, type ChangesSource } from "./Changes";
 import { CommitDialog } from "./CommitDialog";
 import { Conversation } from "./Conversation";
-import { filesTouchedEvent, goToFile, historyEvent, openFileEvent, openWebEvent, revealInTreeEvent, viewEvent, type HistoryDetail, type OpenFileDetail, type OpenWebDetail, type ViewDetail } from "./events";
+import { filesTouchedEvent, goToFile, historyEvent, openFileEvent, openWebEvent, revealInTreeEvent, takePendingView, viewEvent, type HistoryDetail, type OpenFileDetail, type OpenWebDetail, type ViewDetail } from "./events";
 import { HistoryDrawer } from "./files/HistoryDrawer";
 import { EditorPane } from "./files/EditorPane";
 import { FilesShelf } from "./files/FilesShelf";
@@ -40,9 +40,9 @@ import { Icon, IconButton, useSnackbar } from "./ui/controls";
 import { panelWidth, useWindowWidth } from "./ui/layout";
 import { ResizeHandle } from "./ui/ResizeHandle";
 import { Brand, MenuBar } from "./MenuBar";
+import { StudioDrawer, type StudioOpen } from "./studio/StudioDrawer";
 import { intent as newIntent, type ItemIntent } from "./intent";
 import type { Section } from "./SettingsDrawer";
-import { WorkerDrawer } from "./Workers";
 import { AgentEditor } from "./AgentEditor";
 import { AgentScope } from "./gen/blitz/v1/workspace_pb";
 
@@ -50,7 +50,7 @@ import { AgentScope } from "./gen/blitz/v1/workspace_pb";
  * One open workspace, laid out like an IDE: the top bar (the brand over
  * the Files shelf, then the menus from the center panel's left edge), the
  * Files shelf on the left, the
- * editor in the middle (Changes, an agent or a worker open over it, in
+ * editor in the middle (Changes, an agent or Studio open over it, in
  * the drawer, from the menus), the chat on the
  * right, and the run settings panel beside it. Kept mounted while another
  * is shown, so a turn keeps streaming.
@@ -74,43 +74,46 @@ export function Workspace({
 }) {
   const { prefs, update, theme, activity } = useApp();
   // What the menus opened: a view in the drawer beside the workspace (the
-  // changes, this session's or git's; history; a worker), and a dialog
-  // over it (committing). A worker and an agent have their own states: a
+  // changes, this session's or git's; history; Studio), and a dialog
+  // over it (committing). Studio and an agent have their own states: a
   // form with unsaved changes asks before another view takes the drawer
   // (the drawer closes the one it replaces).
   const [drawer, setDrawer] = useState<{ kind: "changes"; source: ChangesSource } | { kind: "history"; path: string; folder: boolean } | null>(null);
-  const [worker, setWorker] = useState<ItemIntent | null>(null);
   const [agent, setAgent] = useState<ItemIntent | null>(null);
+  const [studio, setStudio] = useState<StudioOpen | null>(null);
   const [modal, setModal] = useState<{ kind: "commit" } | null>(null);
   const dir = ws.dir;
   const { settings, modelProblem, settingsError, settingsReason, project, reviewing, setReviewing, refreshSettings } = useWorkspaceSettings(dir);
 
-  // Showing a worker sees the workers' failed runs (BL-WK-11).
+  // Showing the workers (Studio › Workers) sees their failed runs (BL-WK-11).
   const seeWorkers = useCallback(() => update((p) => ({ ...p, workspaces: p.workspaces.map((w) => (w.dir === dir ? { ...w, workers_seen: Date.now() } : w)) })), [dir, update]);
-  useEffect(() => {
-    if (visible && worker) seeWorkers();
-  }, [visible, worker, seeWorkers]);
   useEffect(() => publishStatus(dir, { settings }), [dir, settings]);
 
   // The command palette, the status bar and the chat ask for a view: the
   // editor (what's open beside or over it closes), or the changes or
   // workers in the drawer.
-  const showView = useCallback((v: ViewDetail["view"], source: ViewDetail["source"] = "session") => {
+  const showView = useCallback((v: ViewDetail["view"], source: ViewDetail["source"] = "session", d?: ViewDetail) => {
     if (v === "changes") setDrawer({ kind: "changes", source });
-    else if (v === "workers") setWorker(newIntent("show"));
+    else if (v === "workers") setStudio({ kind: "workers", intent: newIntent("show") });
+    else if (v === "workflows") setStudio({ kind: "workflows", intent: newIntent("show", d?.workflow ?? ""), run: d?.run });
     else {
       setDrawer(null);
-      setWorker(null);
       setAgent(null);
+      setStudio(null);
       setModal(null);
     }
   }, []);
   useEffect(() => {
     const f = (e: Event) => {
       const d = (e as CustomEvent<ViewDetail>).detail;
-      if (d.dir === dir) showView(d.view, d.source);
+      if (d.dir !== dir) return;
+      e.preventDefault(); // taken
+      showView(d.view, d.source, d);
     };
     window.addEventListener(viewEvent, f);
+    // One asked for before this workspace was there (a blitz://workers link).
+    const waiting = takePendingView(dir);
+    if (waiting) showView(waiting.view, waiting.source, waiting);
     return () => window.removeEventListener(viewEvent, f);
   }, [dir, showView]);
 
@@ -246,8 +249,7 @@ export function Workspace({
           onChanges={(source) => setDrawer({ kind: "changes", source })}
           onCommit={() => setModal({ kind: "commit" })}
           onHistory={() => setDrawer({ kind: "history", path: "", folder: true })}
-          onAgent={setAgent}
-          onWorker={setWorker}
+          onStudio={(kind) => setStudio({ kind })}
           onSearch={onSearch}
           onSettings={onSettings}
           onOpenWorkspace={onOpenWorkspace}
@@ -319,7 +321,7 @@ export function Workspace({
       {visible && modal?.kind === "commit" && <CommitDialog dir={dir} onClose={() => setModal(null)} onCommitted={() => setTouched((n) => n + 1)} />}
       {visible && drawer?.kind === "changes" && <ChangesDrawer key={drawer.source} dir={dir} initial={drawer.source} onClose={() => setDrawer(null)} />}
       {visible && agent && <AgentEditor key={agent.n} workspace={dir} scope={AgentScope.WORKSPACE} intent={agent} drawer={{ onClose: () => setAgent(null) }} />}
-      {visible && worker && <WorkerDrawer key={worker.n} dir={dir} intent={worker} onClose={() => setWorker(null)} />}
+      {visible && studio && <StudioDrawer key={studio.kind === "workflows" ? studio.kind : `${studio.kind}-${studio.intent?.n ?? 0}`} dir={dir} initial={studio} onClose={() => setStudio(null)} onWorkers={seeWorkers} />}
       {reviewing && visible && <ProjectDialog dir={dir} onClose={() => setReviewing(false)} onDecided={refreshSettings} />}
     </section>
   );

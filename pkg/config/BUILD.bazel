@@ -21,6 +21,7 @@ go_library(
         "check.go",
         "config.go",
         "features.go",
+        "home.go",
         "locale.go",
         "mcpedit.go",
         "modelsettings.go",
@@ -28,6 +29,7 @@ go_library(
         "project.go",
         "providers.go",
         "reference.go",
+        "skilltrust.go",
         "trust.go",
     ],
     embedsrcs = [
@@ -55,6 +57,7 @@ go_test(
         "edit_test.go",
         "env_test.go",
         "helpers_test.go",
+        "home_test.go",
         "locale_test.go",
         "mcpedit_test.go",
         "modelsettings_test.go",
@@ -62,6 +65,7 @@ go_test(
         "project_test.go",
         "providers_test.go",
         "reference_test.go",
+        "skilltrust_test.go",
     ],
     embed = [":config"],
     deps = [

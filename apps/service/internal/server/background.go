@@ -63,6 +63,8 @@ type bgRun struct {
 	dropped  int      // events dropped from the front, to keep keptRunEvents
 	requests []string // the requests it made, by ID
 	notify   map[chan struct{}]struct{}
+	// flowRun is the workflow run it runs, once a step says so.
+	flowRun string
 }
 
 // runs are the service's background runs.
@@ -81,6 +83,10 @@ func (r *bgRun) add(ev *pb.TurnEvent) {
 		r.requests = append(r.requests, k.ApprovalRequest.RequestId)
 	case *pb.TurnEvent_Question:
 		r.requests = append(r.requests, k.Question.RequestId)
+	case *pb.TurnEvent_FlowStep:
+		if r.flowRun == "" {
+			r.flowRun = k.FlowStep.Run
+		}
 	}
 	r.events = append(r.events, ev)
 	if over := len(r.events) - keptRunEvents; over > 0 {
@@ -101,7 +107,7 @@ func (r *bgRun) info(b *broker) *pb.BackgroundRun {
 	defer r.mu.Unlock()
 	m := &pb.BackgroundRun{
 		Id: r.id, Workspace: r.workspace, SessionId: r.session, Prompt: r.prompt, State: r.state,
-		Started: timestamppb.New(r.started), Error: r.errText,
+		Started: timestamppb.New(r.started), Error: r.errText, WorkflowRun: r.flowRun,
 	}
 	if !r.ended.IsZero() {
 		m.Ended = timestamppb.New(r.ended)
@@ -125,6 +131,14 @@ func (r *bgRun) info(b *broker) *pb.BackgroundRun {
 
 // start runs t in a new session of w, in the background.
 func (s *Server) startRun(w *workspace, t api.Turn) (*bgRun, error) {
+	return s.startExec(w, t.Text, func(ctx context.Context, started func(string), on func(api.Event)) (api.TurnResult, error) {
+		return w.RunDetached(ctx, t, started, on)
+	})
+}
+
+// startExec starts a background run of exec (a turn, or a workflow
+// resumed): labelled by its first line, its events kept for watchers.
+func (s *Server) startExec(w *workspace, label string, exec func(ctx context.Context, started func(string), on func(api.Event)) (api.TurnResult, error)) (*bgRun, error) {
 	// Checked and added in one step: a run Close's stopRuns misses would
 	// never be cancelled.
 	s.mu.Lock()
@@ -133,7 +147,7 @@ func (s *Server) startRun(w *workspace, t api.Turn) (*bgRun, error) {
 		return nil, apiError(connect.CodeUnavailable, "SHUTTING_DOWN", errServerClosed)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	first, _, _ := strings.Cut(strings.TrimSpace(t.Text), "\n")
+	first, _, _ := strings.Cut(strings.TrimSpace(label), "\n")
 	s.runs.mu.Lock()
 	s.runs.next++
 	r := &bgRun{
@@ -149,12 +163,14 @@ func (s *Server) startRun(w *workspace, t api.Turn) (*bgRun, error) {
 	go func() {
 		defer close(r.done)
 		ctx = withSink(ctx, r.add)
-		res, err := w.RunDetached(ctx, t, func(id string) {
+		var once sync.Once
+		res, err := exec(ctx, func(id string) {
 			r.mu.Lock()
 			r.session = id
 			r.mu.Unlock()
-			close(started)
+			once.Do(func() { close(started) })
 		}, func(e api.Event) { r.add(eventMsg(e)) })
+		once.Do(func() { close(started) })
 		r.mu.Lock()
 		switch {
 		case ctx.Err() != nil:

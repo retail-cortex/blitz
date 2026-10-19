@@ -294,6 +294,10 @@ func TestWorkerHandlersNeedAScheduler(t *testing.T) {
 		"RunWorker":      func() error { return unary(wk.RunWorker, &pb.RunWorkerRequest{Workspace: dir}) },
 		"ListWorkerRuns": func() error { return unary(wk.ListWorkerRuns, &pb.ListWorkerRunsRequest{Workspace: dir}) },
 		"GetWorkerRun":   func() error { return unary(wk.GetWorkerRun, &pb.GetWorkerRunRequest{RunId: "x"}) },
+		"ListAllWorkers": func() error { return unary(wk.ListAllWorkers, &pb.ListAllWorkersRequest{}) },
+		"ForgetWorkspaceWorkers": func() error {
+			return unary(wk.ForgetWorkspaceWorkers, &pb.ForgetWorkspaceWorkersRequest{Workspace: dir})
+		},
 		"WatchWorkerRun": func() error {
 			return streamErr(wk.WatchWorkerRun(ctx, connect.NewRequest(&pb.WatchWorkerRunRequest{RunId: "x"})))
 		},
@@ -465,7 +469,7 @@ func TestRevokeApprovalsStillSaved(t *testing.T) {
 	create := call("create_file", map[string]any{"path": "made.txt", "content": "hi\n"})
 	approvalsDir := t.TempDir()
 	c, _ := serveEvery(t, func(cfg *config.Config) {
-		cfg.Blitz.AutoApprove = false
+		cfg.Blitz.AutoApprove, cfg.Blitz.PermissionMode = false, "default"
 		cfg.Tools.ApprovalsFile = filepath.Join(approvalsDir, "approvals.json")
 	}, create, text("made"))
 	w := c.workspaces
@@ -489,7 +493,7 @@ func TestRevokeApprovalsStillSaved(t *testing.T) {
 // changed since and NOTHING_TO_UNDO reported once there's nothing left.
 func TestChangesOverTheAPI(t *testing.T) {
 	create := call("create_file", map[string]any{"path": "made.txt", "content": "hi\n"})
-	c, _ := serveEvery(t, func(cfg *config.Config) { cfg.Blitz.AutoApprove = false }, create, text("made"), create, text("made again"))
+	c, _ := serveEvery(t, func(cfg *config.Config) { cfg.Blitz.AutoApprove, cfg.Blitz.PermissionMode = false, "default" }, create, text("made"), create, text("made again"))
 	w := c.workspaces
 	ctx := context.Background()
 	dir := t.TempDir()
@@ -544,7 +548,7 @@ func TestUnknownAgentOverTheAPI(t *testing.T) {
 
 func TestProcessesOverTheAPI(t *testing.T) {
 	start := call("run_shell_command", map[string]any{"command": "echo started; sleep 30", "background": true})
-	c, _ := serveEvery(t, func(cfg *config.Config) { cfg.Blitz.AutoApprove = false }, start, text("started"))
+	c, _ := serveEvery(t, func(cfg *config.Config) { cfg.Blitz.AutoApprove, cfg.Blitz.PermissionMode = false, "default" }, start, text("started"))
 	w := c.workspaces
 	ctx := context.Background()
 	dir := t.TempDir()

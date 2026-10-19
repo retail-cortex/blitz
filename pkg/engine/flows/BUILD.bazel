@@ -1,0 +1,54 @@
+# Copyright 2026 Retail Cortex
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "flows",
+    srcs = [
+        "expr.go",
+        "flows.go",
+    ],
+    importpath = "github.com/retail-cortex/blitz/pkg/engine/flows",
+    visibility = [
+        # The engine and the service (//tools:check_deps checks libraries).
+        "//apps/service:__subpackages__",
+        "//pkg/engine:__subpackages__",
+    ],
+    deps = [
+        "//pkg/a2ui",
+        "//pkg/api",
+        "//pkg/engine/gates",
+        "@com_github_google_cel_go//cel:go_default_library",
+        "@com_github_google_cel_go//common/types:go_default_library",
+        "@com_github_google_cel_go//common/types/ref:go_default_library",
+        "@in_gopkg_yaml_v3//:yaml_v3",
+        "@org_golang_google_protobuf//types/known/structpb",
+    ],
+)
+
+go_test(
+    name = "flows_test",
+    srcs = [
+        "expr_test.go",
+        "flows_test.go",
+        "settings_test.go",
+    ],
+    embed = [":flows"],
+    deps = [
+        "//pkg/api",
+        "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//require",
+    ],
+)

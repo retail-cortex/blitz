@@ -207,6 +207,7 @@ a { color: var(--md-primary); }
 .muted { color: var(--md-on-surface-variant); }
 .mono { font-family: var(--md-mono); }
 .error-text { color: var(--md-error); }
+.warning-text { color: var(--md-warning); }
 .ellipsis { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .row { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .stack { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
@@ -288,6 +289,15 @@ a { color: var(--md-primary); }
 .seg button:first-child { border-left: none; }
 .seg button.on { background: var(--accent-tint); color: var(--on-accent-tint); }
 .seg.small button { height: 32px; padding: 0 12px; }
+/* Tabs: a row of labels over one panel, the chosen one underlined. */
+.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--md-outline-variant); overflow-x: auto; }
+.tab { position: relative; display: inline-flex; align-items: center; gap: 6px; height: 40px; padding: 0 14px; border: none; background: transparent; color: var(--md-on-surface-variant); font: 500 13px/18px var(--md-font); cursor: pointer; white-space: nowrap; }
+.tab.on { color: var(--md-primary); }
+.tab.on::before { content: ""; position: absolute; left: 10px; right: 10px; bottom: -1px; height: 3px; border-radius: 3px 3px 0 0; background: var(--md-primary); }
+.tab:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
+/* Every option as wide as the widest. */
+.seg.equal { display: inline-grid; grid-auto-flow: column; grid-auto-columns: 1fr; }
+.seg.equal button { justify-content: center; }
 /* An M3 search bar that opens a search (the top bar's: the palette). */
 .toolbar-search {
   position: relative; display: inline-flex; align-items: center; gap: 10px; width: clamp(180px, 24vw, 360px); height: 40px; padding: 0 8px 0 14px;
@@ -437,6 +447,8 @@ input[type="range"] { accent-color: var(--accent-a); width: 100%; }
 .pulse { animation: pulse 1.2s ease-in-out infinite; }
 @keyframes pulse { 50% { opacity: 0.3; } }
 .badge { min-width: 16px; height: 16px; padding: 0 4px; border-radius: 8px; background: var(--md-error); color: var(--md-on-error); font: 500 11px/16px var(--md-font); text-align: center; }
+.tab-badge { margin-left: 2px; background: var(--md-surface-container-highest); color: var(--md-on-surface-variant); }
+.tab.on .tab-badge { background: var(--accent-tint); color: var(--on-accent-tint); }
 
 .divider { height: 1px; background: var(--md-outline-variant); flex: none; }
 .vdivider { width: 1px; background: var(--md-outline-variant); flex: none; }

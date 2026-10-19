@@ -71,7 +71,7 @@ func runTurn(t *testing.T, c clients, dir, prompt string, decide pb.Decision, an
 
 func TestApprovalsTravelOverTheStream(t *testing.T) {
 	create := call("create_file", map[string]any{"path": "made.txt", "content": "hi\n"})
-	c, _ := serve(t, func(cfg *config.Config) { cfg.Blitz.AutoApprove = false }, create, text("done"), create, text("done"))
+	c, _ := serve(t, func(cfg *config.Config) { cfg.Blitz.AutoApprove, cfg.Blitz.PermissionMode = false, "default" }, create, text("done"), create, text("done"))
 	dir := t.TempDir()
 
 	// Approved once: the file is written.
@@ -120,7 +120,7 @@ func TestRequestsWithoutAClientAreRefused(t *testing.T) {
 // stays pending.
 func TestCancellingWhileAnApprovalWaits(t *testing.T) {
 	create := call("create_file", map[string]any{"path": "made.txt", "content": "hi\n"})
-	c, s := serve(t, func(cfg *config.Config) { cfg.Blitz.AutoApprove = false }, create, text("done"))
+	c, s := serve(t, func(cfg *config.Config) { cfg.Blitz.AutoApprove, cfg.Blitz.PermissionMode = false, "default" }, create, text("done"))
 	dir := t.TempDir()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

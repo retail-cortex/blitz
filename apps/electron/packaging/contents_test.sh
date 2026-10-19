@@ -29,6 +29,12 @@ if [[ "$pkg" == *.zip ]]; then
 		grep -qx "$f" <<<"$list" || no "the zip has no $f"
 	done
 	grep -q '^Blitz/electron.exe$' <<<"$list" && no "the zip still has electron.exe"
+	# Its name has a space, which list (a column) cuts.
+	grep -q 'Blitz/Uninstall Blitz.exe$' <<<"$(unzip -l "$pkg")" || no "the zip has no Uninstall Blitz.exe"
+elif [[ "$pkg" == *_setup.exe ]]; then
+	# The setup program, then the zip, its length and BLITZZIP (pkg/wininstall).
+	[ "$(head -c 2 "$pkg")" = "MZ" ] || no "the setup program isn't a Windows program"
+	[ "$(tail -c 8 "$pkg")" = "BLITZZIP" ] || no "the setup program carries no zip"
 elif [ -d "$pkg" ]; then
 	r="$pkg/Contents/Resources"
 	for exe in blitz blitzd blitz-tray; do

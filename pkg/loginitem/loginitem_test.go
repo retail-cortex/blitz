@@ -73,6 +73,22 @@ func TestInstallStopUninstall(t *testing.T) {
 		assert.Equal(t, "systemctl --user daemon-reload; systemctl --user enable blitz.service; systemctl --user restart blitz.service", strings.Join(*ran, "; "), "install ran %q", *ran)
 	}
 
+	// The same item again doesn't stop the service the runs are going in.
+	*ran = nil
+	require.NoError(t, Install(bin))
+	switch goruntime.GOOS {
+	case "darwin":
+		assert.Len(t, *ran, 2, "reinstall ran %q", *ran)
+		assert.True(t, strings.HasPrefix((*ran)[0], "launchctl print gui/"), "reinstall ran %q", *ran)
+		assert.True(t, strings.HasPrefix((*ran)[1], "launchctl kickstart gui/"), "reinstall ran %q", *ran)
+	case "linux":
+		assert.Equal(t, []string{"systemctl --user start blitz.service"}, *ran)
+	}
+	// Another program is installed in its place, and the old service stops.
+	*ran = nil
+	require.NoError(t, Install("/opt/other/blitzd"))
+	assert.Contains(t, strings.Join(*ran, "; "), map[string]string{"darwin": "bootout", "linux": "restart"}[goruntime.GOOS])
+
 	*ran = nil
 	err = Stop()
 	assert.NoError(t, err, "stop: %v, ran %q", err, *ran)
@@ -229,9 +245,11 @@ func TestInstallFailures(t *testing.T) {
 	if goruntime.GOOS != "linux" {
 		t.Skip("the systemd steps")
 	}
-	t.Setenv("HOME", t.TempDir())
 	for _, failing := range []string{"daemon-reload", "enable", "restart"} {
 		t.Run(failing, func(t *testing.T) {
+			// A home of its own: an earlier case's unit file would make this
+			// one the same item again, which only starts the service.
+			t.Setenv("HOME", t.TempDir())
 			var ran []string
 			old := RunSystem
 			RunSystem = func(name string, args ...string) error {
@@ -246,6 +264,27 @@ func TestInstallFailures(t *testing.T) {
 			assert.Contains(t, ran[len(ran)-1], failing, "nothing runs after the failure")
 		})
 	}
+}
+
+// Installing the same item again only starts the service, never restarts
+// it, so the runs going in it go on.
+func TestInstallSameItemStarts(t *testing.T) {
+	if goruntime.GOOS != "linux" {
+		t.Skip("the systemd steps")
+	}
+	t.Setenv("HOME", t.TempDir())
+	var ran []string
+	old := RunSystem
+	RunSystem = func(_ string, args ...string) error {
+		ran = append(ran, strings.Join(args, " "))
+		return nil
+	}
+	t.Cleanup(func() { RunSystem = old })
+	require.NoError(t, Install("/b/blitzd"))
+	assert.Equal(t, []string{"--user daemon-reload", "--user enable blitz.service", "--user restart blitz.service"}, ran)
+	ran = nil
+	require.NoError(t, Install("/b/blitzd"))
+	assert.Equal(t, []string{"--user start blitz.service"}, ran, "the same item: started, not restarted")
 }
 
 // Installing and uninstalling report an entry they can't write or remove.

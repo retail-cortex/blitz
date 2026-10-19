@@ -18,6 +18,7 @@ go_library(
     name = "loginitem",
     srcs = [
         "loginitem.go",
+        "repair.go",
         "run_other.go",
         "run_windows.go",
     ],
@@ -38,6 +39,7 @@ go_test(
     size = "small",
     srcs = [
         "loginitem_test.go",
+        "repair_test.go",
         "run_other_test.go",
     ],
     embed = [":loginitem"],

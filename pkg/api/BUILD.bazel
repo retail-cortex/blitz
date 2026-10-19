@@ -21,6 +21,7 @@ go_library(
         "changes.go",
         "context.go",
         "doc.go",
+        "evals.go",
         "extensions.go",
         "models.go",
         "permissions.go",

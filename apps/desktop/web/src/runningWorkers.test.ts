@@ -16,34 +16,21 @@
 
 import { create } from "@bufbuild/protobuf";
 import { timestampFromDate } from "@bufbuild/protobuf/wkt";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { RunStatus, WorkerRunSchema } from "./gen/blitz/v1/worker_pb";
-import { runningEntries } from "./runningWorkers";
+import { runDetail } from "./runningWorkers";
 
-const run = (id: string, workspace: string, worker: string) =>
-  create(WorkerRunSchema, { id, workspace, worker, status: RunStatus.RUNNING, started: timestampFromDate(new Date(2026, 9, 16, 14, 5)) });
+const run = (id: string, workspace: string, worker: string, started = true) =>
+  create(WorkerRunSchema, { id, workspace, worker, status: RunStatus.RUNNING, started: started ? timestampFromDate(new Date(2026, 9, 16, 14, 5)) : undefined });
 
-describe("runningEntries", () => {
-  const actions = () => ({ dir: "/w/here", workspaceName: (d: string) => d.split("/").pop()!, onShow: vi.fn(), onStop: vi.fn() });
-
-  it("is nothing when no run is going", () => {
-    expect(runningEntries([], actions())).toEqual([]);
-  });
-
-  it("heads the runs, naming another workspace's, each with Stop", () => {
-    const a = actions();
-    const runs = [run("1", "/w/here", "nightly"), run("2", "/w/notes", "news")];
-    const entries = runningEntries(runs, a);
-    expect(entries[0]).toEqual({ heading: "Running now" });
-    const [, here, there] = entries as { label: string; detail: string; onSelect: () => void; actions: { label: string; onSelect: () => void }[] }[];
-    expect(here.label).toBe("nightly");
-    expect(here.detail).toMatch(/^since /);
-    expect(there.detail).toMatch(/^notes · since /);
-    expect(there.actions[0].label).toBe("Stop news");
-
-    there.actions[0].onSelect();
-    expect(a.onStop).toHaveBeenCalledWith(runs[1]);
-    here.onSelect();
-    expect(a.onShow).toHaveBeenCalledWith(runs[0]);
+describe("runDetail", () => {
+  const name = (d: string) => d.split("/").pop()!;
+  it.each([
+    ["this workspace's: since when", run("1", "/w/here", "nightly"), "/w/here", /^since /],
+    ["another workspace's: its name first", run("2", "/w/notes", "news"), "/w/here", /^notes · since /],
+    ["every workspace's (no dir): its name", run("3", "/w/here", "nightly"), "", /^here · since /],
+    ["not started yet: the workspace only", run("4", "/w/notes", "news", false), "/w/here", /^notes$/],
+  ])("%s", (_, r, dir, want) => {
+    expect(runDetail(r, dir, name)).toMatch(want);
   });
 });

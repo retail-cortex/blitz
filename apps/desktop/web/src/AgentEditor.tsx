@@ -14,16 +14,20 @@
  * limitations under the License.
  */
 
+import { GradeBadge } from "./studio/GradeBadge";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { mdiAlertCircleOutline, mdiChevronDown, mdiChevronRight, mdiClose, mdiContentSaveOutline, mdiDeleteOutline, mdiPlus, mdiRefresh, mdiRobotOutline, mdiUndoVariant } from "@mdi/js";
+import { mdiAlertCircleOutline, mdiArrowLeft, mdiChevronDown, mdiChevronRight, mdiClose, mdiContentSaveOutline, mdiDeleteOutline, mdiFlaskOutline, mdiPlus, mdiRefresh, mdiRobotOutline, mdiUndoVariant } from "@mdi/js";
 import { workspaces } from "./api";
 import { message } from "./errors";
-import { t } from "./i18n";
+import { t, tn } from "./i18n";
 import { ModelInput, useModelCatalog } from "./ModelInput";
-import { AgentScope, type AgentFile } from "./gen/blitz/v1/workspace_pb";
-import { addTools, advancedCount, agentFromForm, agentPath, deleteTarget, emptyAgentForm, fileName, formFromAgent, invalidFields, sameForm, toolChoices, validAgentName, type AgentField, type AgentForm } from "./agentForm";
+import { AgentScope, type AgentFile, type EvalFile } from "./gen/blitz/v1/workspace_pb";
+import { addTools, advancedCount, agentFromForm, agentPath, deleteTarget, emptyAgentForm, newAgentForm, fileName, formFromAgent, invalidFields, sameForm, toolChoices, validAgentName, type AgentField, type AgentForm } from "./agentForm";
 import { agencies, efforts, modes } from "./options";
+import { SuggestTextarea } from "./SecretSuggest";
+import { DraftButton } from "./studio/Draft";
+import { evalsForAgent, runInBackground } from "./studio/evalCoverage";
 import { Button, Dialog, Field, Icon, IconButton, Segmented, Switch, useSnackbar } from "./ui/controls";
 import { Drawer } from "./ui/Drawer";
 import { workerName } from "./workerForm";
@@ -51,6 +55,10 @@ export function AgentEditor({
   context = workspace,
   intent,
   drawer,
+  list,
+  slide,
+  onDirty,
+  onEvals,
 }: {
   workspace: string;
   scope: AgentScope;
@@ -58,8 +66,17 @@ export function AgentEditor({
   intent?: ItemIntent;
   /** Shown in the drawer (the Agents menu's); closing, or another view taking the drawer, asks first when there are unsaved edits. */
   drawer?: { onClose: () => void };
+  /** The agents listed beside the form (the user's always; a workspace's in Studio). */
+  list?: boolean;
+  /** The list fills the pane and the form slides in over it, closed by Cancel or Save (Studio's). */
+  slide?: boolean;
+  /** Hears whether the form holds unsaved changes (Studio's drawer asks before closing). */
+  onDirty?: (dirty: boolean) => void;
+  /** Opens Studio › Evals for an agent: its eval, or a draft of one (Studio's; the agents' evals are shown when set). */
+  onEvals?: (agent: string) => void;
 }) {
   const snack = useSnackbar();
+  const [evals, setEvals] = useState<EvalFile[]>([]);
   const [files, setFiles] = useState<AgentFile[]>([]);
   const [dir, setDir] = useState("");
   const [error, setError] = useState("");
@@ -80,6 +97,7 @@ export function AgentEditor({
   const catalog = useModelCatalog(context);
 
   const dirty = open !== null && !sameForm(form, base);
+  useEffect(() => onDirty?.(dirty), [dirty, onDirty]);
   const dirtyRef = useRef(dirty);
   dirtyRef.current = dirty;
   const openRef = useRef(open);
@@ -89,6 +107,7 @@ export function AgentEditor({
     try {
       const res = await workspaces.listAgentFiles({ workspace, scope });
       setFiles(res.files);
+      if (onEvals) workspaces.listEvals({ workspace }).then((r) => setEvals(r.evals), () => {});
       setDir(res.dir);
       setError("");
       // The open file changed on disk: shown again, unless it has unsaved edits.
@@ -145,8 +164,8 @@ export function AgentEditor({
   const startNew = () =>
     leave(() => {
       setOpen({ path: "" });
-      setForm(emptyAgentForm);
-      setBase(emptyAgentForm);
+      setForm(newAgentForm);
+      setBase(newAgentForm);
       setNamed(false);
       setProblems([]);
     });
@@ -154,7 +173,9 @@ export function AgentEditor({
   // The workspace's agents are listed in the top bar's Agents menu, which
   // opens one in the drawer (intent); the user's (Settings › Agents) keep
   // their list beside the form.
-  const listed = scope === AgentScope.USER;
+  const listed = slide || (list ?? scope === AgentScope.USER);
+  // Back to the list (slide), asking first when there are unsaved edits.
+  const close = () => leave(() => setOpen(null));
 
   // What the top bar's Agents menu asked for: a new agent, or one to edit
   // or delete, once the list has it.
@@ -194,7 +215,14 @@ export function AgentEditor({
       setOpen({ path: res.file.path });
       setForm(saved);
       setBase(saved);
-      snack(t("desktop.agents.saved", { name: saved.name }));
+      const covering = onEvals ? evalsForAgent(evals, saved.name) : [];
+      // Its evals are offered, not run: each run is model calls.
+      if (covering.length)
+        snack(tn("desktop.evals.saved_covered", covering.length, { name: saved.name }), {
+          action: { label: tn("desktop.evals.run_them", covering.length), run: () => void runInBackground(workspace, covering.map((e) => e.name), snack) },
+        });
+      else snack(t("desktop.agents.saved", { name: saved.name }));
+      if (slide) setOpen(null);
       await refresh();
     } catch (e) {
       setProblems([message(e)]);
@@ -234,8 +262,8 @@ export function AgentEditor({
           {t("desktop.agents.revert")}
         </Button>
       )}
-      {path === "" && (
-        <Button onClick={() => (drawer ? drawer.onClose() : setOpen(null))}>{t("desktop.cancel")}</Button>
+      {(path === "" || slide) && (
+        <Button onClick={() => (slide ? close() : drawer ? drawer.onClose() : setOpen(null))}>{t("desktop.cancel")}</Button>
       )}
       <Button variant="filled" icon={mdiContentSaveOutline} disabled={busy || invalid.length > 0 || (!dirty && path !== "")} onClick={() => void save()}>
         {t("desktop.agents.save")}
@@ -245,18 +273,19 @@ export function AgentEditor({
   const fieldError = (k: AgentField) => (invalid.includes(k) && (k !== "name" || form.name) && (k !== "description" || form.description || form.name) ? t(`desktop.agents.invalid.${k}`) : undefined);
 
   const body = (
-    <div className={`agent-editor ${listed ? "agent-editor-user" : ""}`}>
+    <div className={`agent-editor ${slide ? `slide-pane ${open !== null ? "is-open" : ""}` : listed ? "agent-editor-user" : ""}`}>
       <div className="split">
       {listed && (
-      <aside className="split-side">
+      <aside className={`split-side ${slide ? "slide-list" : ""}`} inert={slide && open !== null}>
         <div className="row side-head">
-          <span className="t-title-sm spacer">{t(scope === AgentScope.USER ? "desktop.agents.user_title" : "desktop.agents.workspace_title")}</span>
+          <span className="t-title-sm spacer">{t(slide ? "desktop.studio.agents" : scope === AgentScope.USER ? "desktop.agents.user_title" : "desktop.agents.workspace_title")}</span>
           <IconButton icon={mdiPlus} label={t("desktop.agents.new")} small onClick={startNew} />
-          <IconButton icon={mdiRefresh} label={t("desktop.refresh")} small onClick={() => void refresh()} />
+          {!slide && <IconButton icon={mdiRefresh} label={t("desktop.refresh")} small onClick={() => void refresh()} />}
         </div>
         {dir && (
           <p className="t-body-sm muted agent-dir" title={dir}>
-            {t("desktop.agents.in", { path: dir })}
+            {/* In Studio, as its other kinds say it: the folder in the workspace. */}
+            {t("desktop.agents.in", { path: slide && workspace && dir.startsWith(workspace + "/") ? dir.slice(workspace.length + 1) : dir })}
           </p>
         )}
         {error && (
@@ -288,8 +317,12 @@ export function AgentEditor({
               <button key={f.path} className={`list-item ${open?.path === f.path ? "active" : ""} ${f.problem ? "has-problem" : ""}`} title={f.problem || f.path} onClick={() => show(f)}>
                 <Icon path={f.problem ? mdiAlertCircleOutline : mdiRobotOutline} className={f.problem ? "error-text" : undefined} />
                 <span className="lines">
-                  <span className="ellipsis">{f.agent?.displayName || name}</span>
-                  <small className={`ellipsis ${f.problem ? "error-text" : ""}`}>{f.problem ? t("desktop.agents.broken") : f.agent?.description}</small>
+                  <span className="ellipsis">
+                    {f.agent?.displayName || name} <GradeBadge kind="agent" name={f.agent?.name || name} />
+                  </span>
+                  <small className={`ellipsis ${f.problem ? "error-text" : ""}`}>
+                    {f.problem ? t("desktop.agents.broken") : [f.agent?.description, onEvals && f.agent && evalsForAgent(evals, f.agent.name).length === 0 ? t("desktop.evals.no_evals_yet") : ""].filter(Boolean).join(" · ")}
+                  </small>
                 </span>
               </button>
             );
@@ -297,7 +330,14 @@ export function AgentEditor({
         </div>
       </aside>
       )}
-      <section className="split-main">
+      <section className={`split-main ${slide ? "slide-detail" : ""}`} inert={slide && open === null}>
+        {slide && open !== null && (
+          <div className="row slide-back">
+            <IconButton icon={mdiArrowLeft} label={t("desktop.agents.back")} onClick={close} />
+            <h2 className="t-headline spacer ellipsis">{form.displayName.trim() || form.name.trim() || (open.path ? fileName(open.path) : t("desktop.agents.new"))}</h2>
+            {dirty && <span className="t-body-sm muted">{t("desktop.agents.unsaved")}</span>}
+          </div>
+        )}
         {!listed && error && (
           <div className="card error row small-card">
             <Icon path={mdiAlertCircleOutline} size="sm" /> {error}
@@ -311,10 +351,10 @@ export function AgentEditor({
             </Button>
           </div>
         )}
-        {listed && open === null && files.length > 0 && <p className="muted">{t("desktop.agents.choose")}</p>}
+        {listed && !slide && open === null && files.length > 0 && <p className="muted">{t("desktop.agents.choose")}</p>}
         {open !== null && file?.problem && !file.agent && (
           <div className="worker">
-            <h2 className="t-headline">{fileName(file.path)}</h2>
+            {!slide && <h2 className="t-headline">{fileName(file.path)}</h2>}
             <div className="card error stack" style={{ gap: 4 }}>
               <span className="row" style={{ gap: 6 }}>
                 <Icon path={mdiAlertCircleOutline} size="sm" /> {t("desktop.agents.broken_detail")}
@@ -331,7 +371,7 @@ export function AgentEditor({
         )}
         {open !== null && !(file?.problem && !file.agent) && (
           <div className="worker agent-form">
-            {!drawer && (
+            {!drawer && !slide && (
               <div className="row">
                 <h2 className="t-headline spacer ellipsis">{form.displayName.trim() || form.name.trim() || t("desktop.agents.new")}</h2>
                 {dirty && <span className="t-body-sm muted">{t("desktop.agents.unsaved")}</span>}
@@ -358,13 +398,35 @@ export function AgentEditor({
                 {(id) => <input id={id} className="input" value={form.description} onChange={(e) => set("description", e.target.value)} />}
               </Field>
             </div>
+            <div className="row field-tools">
+              <span className="spacer" />
+              <DraftButton workspace={workspace || context} kind="agent" name={form.displayName || form.name} description={form.description} current={form.prompt} onUse={(text) => set("prompt", text)} disabled={!(workspace || context)} />
+            </div>
             <Field label={t("desktop.agents.prompt")} supporting={t("desktop.agents.prompt_hint", { placeholder: "{agency_instructions}" })}>
-              {(id) => <textarea id={id} className="input agent-prompt" value={form.prompt} rows={8} spellCheck={false} placeholder={t("desktop.agents.prompt_placeholder")} onChange={(e) => set("prompt", e.target.value)} />}
+              {(id) => <SuggestTextarea id={id} className="input agent-prompt" value={form.prompt} rows={8} spellCheck={false} placeholder={t("desktop.agents.prompt_placeholder")} onValue={(v) => set("prompt", v)} workspace={scope === AgentScope.WORKSPACE ? workspace : ""} />}
             </Field>
             <label className="row agent-switch">
               <Switch checked={form.background} label={t("desktop.agents.background")} onChange={(v) => set("background", v)} />
               <span className="t-label">{t("desktop.agents.background")}</span>
             </label>
+            {onEvals && previous && (
+              <div className="row agent-evals" style={{ gap: 8 }}>
+                <Icon path={mdiFlaskOutline} className="muted" />
+                <span className="stack spacer" style={{ gap: 0 }}>
+                  <span className="t-label">{t("desktop.evals.title")}</span>
+                  <span className="t-body-sm muted">
+                    {evalsForAgent(evals, previous).length
+                      ? evalsForAgent(evals, previous)
+                          .map((e) => (e.lastRun ? t("desktop.evals.agent_eval_run", { name: e.name, status: t(`desktop.evals.status.${e.lastRun.status}`) }) : t("desktop.evals.agent_eval", { name: e.name })))
+                          .join(" · ")
+                      : t("desktop.evals.agent_none")}
+                  </span>
+                </span>
+                <Button small icon={mdiFlaskOutline} onClick={() => onEvals(previous)}>
+                  {evalsForAgent(evals, previous).length ? t("desktop.evals.open_evals") : t("desktop.evals.write_evals")}
+                </Button>
+              </div>
+            )}
             <Advanced form={form} set={set} fieldError={fieldError}>
               <Field label={t("desktop.agents.name")} supporting={t("desktop.agents.name_hint")} error={fieldError("name")}>
                 {(id) => (
@@ -440,6 +502,11 @@ export function AgentEditor({
               </div>
               <ToolPicker offered={tools} chosen={form.tools} onChange={(v) => set("tools", v)} />
             </Advanced>
+            {form.tools.length === 0 && (
+              <div className="card warn row small-card" role="note">
+                <Icon path={mdiAlertCircleOutline} size="sm" /> {t("desktop.agents.no_tools")}
+              </div>
+            )}
             {problems.length > 0 && (
               <div className="card error stack" role="alert" style={{ gap: 4 }}>
                 {problems.map((p) => (
@@ -449,7 +516,7 @@ export function AgentEditor({
                 ))}
               </div>
             )}
-            {drawer ? footer && createPortal(actions(open.path), footer) : <div className="row wrap agent-actions">{actions(open.path)}</div>}
+            {drawer ? footer && createPortal(actions(open.path), footer) : <div className={`row wrap agent-actions ${slide ? "slide-actions" : ""}`}>{actions(open.path)}</div>}
           </div>
         )}
       </section>
@@ -520,10 +587,10 @@ export function AgentEditor({
 }
 
 /**
- * The tools an agent may use: a box for each tool offered and each the
- * agent already names, and a field to add one by name.
+ * The tools an agent (or a skill) may use: a box for each tool offered
+ * and each it already names, and a field to add one by name.
  */
-function ToolPicker({ offered, chosen, onChange }: { offered: string[]; chosen: string[]; onChange: (tools: string[]) => void }) {
+export function ToolPicker({ offered, chosen, onChange }: { offered: string[]; chosen: string[]; onChange: (tools: string[]) => void }) {
   const [adding, setAdding] = useState("");
   const all = toolChoices(offered, chosen);
   const toggle = (name: string, on: boolean) => onChange(on ? [...chosen, name] : chosen.filter((x) => x !== name));

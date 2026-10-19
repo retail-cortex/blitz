@@ -15,26 +15,27 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { allSections, menuIds, sectionShown, settingsSections, showsSignIn } from "./simpleMode";
+import { allSections, menuIds, sectionGroups, sectionShown, settingsSections, showsSignIn, shownGroups } from "./simpleMode";
 
 describe("simple mode", () => {
   it("keeps what a newcomer needs in Settings, and everything with advanced", () => {
-    expect(settingsSections(false)).toEqual(["appearance", "providers", "workspaces", "about"]);
+    expect(settingsSections(false)).toEqual(["providers", "appearance", "workspaces", "about"]);
     expect(settingsSections(true)).toEqual([...allSections]);
   });
 
   it.each([
-    { asked: "logs" as const, advanced: false, want: "appearance" },
+    { asked: "logs" as const, advanced: false, want: "providers" },
     { asked: "logs" as const, advanced: true, want: "logs" },
     { asked: "workspaces" as const, advanced: false, want: "workspaces" },
-    { asked: "file" as const, advanced: false, want: "appearance" },
+    { asked: "skills" as const, advanced: false, want: "providers" },
+    { asked: "appearance" as const, advanced: false, want: "appearance" },
   ])("opens $asked as $want (advanced: $advanced)", ({ asked, advanced, want }) => {
     expect(sectionShown(asked, advanced)).toBe(want);
   });
 
-  it("keeps Workspaces, Changes and Help in the bar", () => {
+  it("keeps Workspaces, Changes and Help in the bar, and Studio with advanced settings", () => {
     expect(menuIds(false)).toEqual(["workspaces", "changes", "help"]);
-    expect(menuIds(true)).toEqual(["workspaces", "changes", "agents", "workers", "help"]);
+    expect(menuIds(true)).toEqual(["workspaces", "changes", "studio", "help"]);
   });
 
   it.each([
@@ -45,5 +46,17 @@ describe("simple mode", () => {
     { advanced: true, method: "api_key", want: true },
   ])("shows sign-in for $method: $want (advanced: $advanced)", ({ advanced, method, want }) => {
     expect(showsSignIn(advanced, method)).toBe(want);
+  });
+  it("groups every section once, in order", () => {
+    expect(sectionGroups.flatMap((g) => g.sections)).toEqual([...allSections]);
+  });
+
+  it("shows only the groups with a section shown", () => {
+    expect(shownGroups(false).map((g) => [g.id, g.sections])).toEqual([
+      ["start", ["providers", "appearance"]],
+      ["access", ["workspaces"]],
+      ["system", ["about"]],
+    ]);
+    expect(shownGroups(true).map((g) => g.id)).toEqual(["start", "setup", "access", "system"]);
   });
 });

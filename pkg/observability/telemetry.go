@@ -30,7 +30,6 @@ import (
 	"go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploghttp"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
-	logglobal "go.opentelemetry.io/otel/log/global"
 	sdklog "go.opentelemetry.io/otel/sdk/log"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/resource"
@@ -159,7 +158,7 @@ func NewTelemetry(cfg config.TelemetryConfig, version string, r *redact.Redactor
 		),
 	}
 	otel.SetTracerProvider(t.tp)
-	logglobal.SetLoggerProvider(t.lp)
+	otel.SetLoggerProvider(t.lp)
 	// Export failures (collector down) go to the log file, not the terminal.
 	otel.SetErrorHandler(otel.ErrorHandlerFunc(func(err error) {
 		slog.Debug("telemetry export failed", "error", err)

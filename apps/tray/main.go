@@ -39,6 +39,7 @@ import (
 	"io/fs"
 	"log"
 	"os"
+	"os/exec"
 	"path/filepath"
 	goruntime "runtime"
 	"sync"
@@ -53,6 +54,7 @@ import (
 	"github.com/retail-cortex/blitz/pkg/pageserver"
 	"github.com/retail-cortex/blitz/pkg/selfupdate"
 	"github.com/retail-cortex/blitz/pkg/socket"
+	"github.com/retail-cortex/blitz/pkg/wininstall"
 )
 
 // version is set at link time for releases.
@@ -60,6 +62,9 @@ var version = "dev"
 
 // every is how often the tray asks the service how it is.
 const every = 2 * time.Second
+
+// tasksEvery is how often the tray asks for workflows' human tasks.
+const tasksEvery = 10 * time.Second
 
 func main() {
 	install := flag.Bool("install", false, "Start the tray at login (and now), then exit")
@@ -121,10 +126,20 @@ func installTray() error {
 	}
 	// launchd has started it on macOS; on Linux and Windows, start it in
 	// this session.
-	if goruntime.GOOS == "windows" || goruntime.GOOS == "linux" && (os.Getenv("DISPLAY") != "" || os.Getenv("WAYLAND_DISPLAY") != "") {
-		return tray.Detached(exe) // a tray already running keeps its lock; this one exits
+	if goruntime.GOOS == "darwin" {
+		return nil
 	}
-	return nil
+	return startTray(exe)
+}
+
+// startTray starts exe (this program) as the tray in this session, on
+// Windows or a Linux desktop (none without a display). A tray already
+// running keeps its lock; the new one exits.
+func startTray(exe string) error {
+	if goruntime.GOOS == "linux" && os.Getenv("DISPLAY") == "" && os.Getenv("WAYLAND_DISPLAY") == "" {
+		return nil
+	}
+	return tray.Detached(exe)
 }
 
 // lockFile holds the lock: kept here, it isn't collected (and closed,
@@ -167,6 +182,12 @@ func serveWindow(dir string) error {
 	}
 	sock := socket.DefaultSocket()
 	host := newHost(sock, newActions(sock))
+	// Login entries an older install wrote may name programs since moved.
+	go func() {
+		if err := host.Repair(); err != nil {
+			fmt.Fprintln(os.Stderr, "blitz-tray:", err)
+		}
+	}()
 	// The Electron app updates itself through its host (pkg/pagehost).
 	host.Updates = &pagehost.Updater{
 		Version: version, HostExe: host.Tray,
@@ -201,8 +222,19 @@ func applyDownloaded(staged, root, relaunch string, waitPID int) error {
 	}.Run()
 	if err != nil {
 		fmt.Fprintln(log, time.Now().Format(time.RFC3339), err)
+		return err
 	}
-	return err
+	if goruntime.GOOS == "windows" {
+		// Installed with the setup program: Add or remove programs shows
+		// the new version (EL-81).
+		out, verr := exec.Command(filepath.Join(acts.Beside, "blitz-tray.exe"), "--version").Output()
+		if v := wininstall.TrayVersion(string(out)); verr == nil && v != "" {
+			if err := wininstall.SetDisplayVersion(v); err != nil {
+				fmt.Fprintln(log, time.Now().Format(time.RFC3339), "updating the installed version:", err)
+			}
+		}
+	}
+	return nil
 }
 
 // newActions controls the service on sock.
@@ -231,7 +263,7 @@ func newActions(sock string) tray.Actions {
 // service.
 func newHost(sock string, acts tray.Actions) pagehost.Host {
 	exe, _ := program()
-	return pagehost.Host{Service: acts, Beside: acts.Beside, Version: version, Socket: sock, Tray: exe, Prefs: pagehost.NewPrefsStore(config.ExpandHome("~/.blitz/desktop.json"))}
+	return pagehost.Host{Service: acts, Beside: acts.Beside, Version: version, Socket: sock, Tray: exe, StartTray: func() error { return startTray(exe) }, Prefs: pagehost.NewPrefsStore(config.ExpandHome("~/.blitz/desktop.json"))}
 }
 
 func onReady() {
@@ -253,7 +285,14 @@ func onReady() {
 	restart := systray.AddMenuItem(i18n.T("tray.restart"), "")
 	systray.AddSeparator()
 	open := systray.AddMenuItem(i18n.T("tray.open_app"), "")
+	// Workflows' human tasks waiting (spec_electron_038 EL-110): shown while there are some.
+	tasksItem := systray.AddMenuItem("", "")
+	tasksItem.Hide()
 	logs := systray.AddMenuItem(i18n.T("tray.open_logs"), "")
+	systray.AddSeparator()
+	// What the running service has: its MCP servers and workers.
+	mcpMenu := &submenu{parent: systray.AddMenuItem(i18n.T("tray.mcp"), "")}
+	workersMenu := &submenu{parent: systray.AddMenuItem(i18n.T("tray.workers"), "")}
 	systray.AddSeparator()
 	// Windows: the tray is what starts at login (and starts the service).
 	atLogin := &systray.MenuItem{ClickedCh: make(chan struct{})}
@@ -263,8 +302,57 @@ func onReady() {
 	}
 	quit := systray.AddMenuItem(i18n.T("tray.quit"), i18n.T("tray.quit_hint"))
 
+	// The tasks, asked for every tasksEvery while the service runs: new
+	// ones tell the desktop app (a notification, or its tasks window).
+	var tasksMu sync.Mutex
+	seen := map[string]bool{}
+	waiting, first, lastAsked := 0, true, time.Time{}
+	// Workflow runs that fail from now on tell the desktop app too (a
+	// notification that opens the run), whether or not its window is open
+	// (it announces them itself when it is).
+	failedSeen, trayStarted := map[string]bool{}, time.Now()
+	checkTasks := func(running bool) {
+		tasksMu.Lock()
+		defer tasksMu.Unlock()
+		if !running {
+			waiting = 0
+		} else if time.Since(lastAsked) >= tasksEvery {
+			lastAsked = time.Now()
+			tasks, alerts, err := tray.FetchTasks(context.Background(), sock)
+			if err != nil {
+				return // an older service, or a moment's trouble
+			}
+			waiting = len(tasks)
+			arrived := tray.Arrived(seen, tasks)
+			// Tasks already waiting when the tray starts are only shown,
+			// not announced again.
+			if link := tray.TasksLink(alerts, arrived); link != "" && !first {
+				if err := acts.OpenLink(link); err != nil {
+					log.Printf("blitz-tray: %v", err)
+				}
+			}
+			first = false
+			if runs, err := tray.FetchRuns(context.Background(), sock); err == nil {
+				for _, r := range tray.Failed(failedSeen, runs, trayStarted) {
+					if link := tray.RunLink(alerts, r); link != "" {
+						if err := acts.OpenLink(link); err != nil {
+							log.Printf("blitz-tray: %v", err)
+						}
+					}
+				}
+			}
+		}
+		if waiting > 0 {
+			tasksItem.SetTitle(tray.TasksTitle(waiting))
+			tasksItem.Show()
+		} else {
+			tasksItem.Hide()
+		}
+	}
+	isWaiting := func() bool { tasksMu.Lock(); defer tasksMu.Unlock(); return waiting > 0 }
+
 	show := func(m tray.Menu, note string) {
-		setIcon(m.Running)
+		setIcon(m.Running, m.Running && isWaiting())
 		title := m.State.Title
 		if note != "" {
 			title = note
@@ -289,16 +377,38 @@ func onReady() {
 	busy := ""
 	setBusy := func(s string) { mu.Lock(); busy = s; mu.Unlock() }
 	isBusy := func() bool { mu.Lock(); defer mu.Unlock(); return busy != "" }
+	var do func(doing string, f func() error)
+	click := func(a tray.Action) {
+		do("", func() error { return tray.Do(context.Background(), sock, a, acts.OpenLink) })
+	}
 	refresh := func() {
 		st := status()
 		mu.Lock()
 		note := busy
 		mu.Unlock()
+		checkTasks(st.Running)
 		show(tray.MenuFor(st), note)
+		var extras tray.Extras
+		var err error
+		if st.Running {
+			extras, err = tray.FetchExtras(context.Background(), sock)
+		}
+		// Shown while the service runs and answers (an older one doesn't).
+		for _, sm := range []*submenu{mcpMenu, workersMenu} {
+			if st.Running && err == nil {
+				sm.parent.Show()
+			} else {
+				sm.parent.Hide()
+			}
+		}
+		if st.Running && err == nil {
+			mcpMenu.show(tray.MCPEntries(extras), click)
+			workersMenu.show(tray.WorkerEntries(extras), click)
+		}
 	}
 	refresh()
 
-	do := func(doing string, f func() error) {
+	do = func(doing string, f func() error) {
 		setBusy(doing)
 		refresh()
 		go func() {
@@ -331,6 +441,10 @@ func onReady() {
 				do(i18n.T("tray.restarting"), acts.Restart)
 			case <-open.ClickedCh:
 				if err := acts.OpenApp(); err != nil {
+					do("", func() error { return err })
+				}
+			case <-tasksItem.ClickedCh:
+				if err := acts.OpenLink("blitz://tasks"); err != nil {
 					do("", func() error { return err })
 				}
 			case <-logs.ClickedCh:

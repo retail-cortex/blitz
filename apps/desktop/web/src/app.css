@@ -50,7 +50,8 @@
 .history-head { display: flex; flex-direction: column; gap: 8px; padding: 12px 12px 4px; }
 .history-search { position: relative; display: flex; align-items: center; }
 .history-search .icon { position: absolute; left: 10px; color: var(--md-on-surface-variant); pointer-events: none; }
-.history-search .input { width: 100%; padding-left: 34px; }
+.history-search { width: 100%; }
+.history-search .input { flex: 1; width: 100%; min-width: 0; padding-left: 34px; }
 .history-head .seg { align-self: flex-start; }
 .history-all { display: flex; align-items: center; gap: 10px; cursor: pointer; }
 .history-menu input[type="checkbox"] { flex: none; width: 16px; height: 16px; margin: 0; accent-color: var(--accent-a); cursor: pointer; }
@@ -158,6 +159,7 @@
 .menubar-dot { flex: none; width: 7px; height: 7px; margin-left: 2px; border-radius: 50%; background: var(--md-error); }
 .menubar .toolbar-search { margin: 0 4px 0 8px; flex: 0 1 auto; min-width: 40px; }
 .menubar-menu { min-width: 260px; max-width: min(420px, calc(100vw - 32px)); }
+.studio-menu { min-width: 220px; max-width: min(320px, calc(100vw - 32px)); }
 .title-edit { opacity: 0; color: var(--md-on-surface-variant); transition: opacity 0.1s; }
 .session-title:hover .title-edit { opacity: 1; }
 
@@ -514,16 +516,34 @@ body.resizing iframe, body.resizing .cm-editor { pointer-events: none; }
 .drawer { container: drawer / inline-size; }
 .settings-drawer .settings { gap: 32px; }
 .settings-drawer .settings-nav { width: 220px; position: sticky; top: 0; align-self: flex-start; }
+/* A group's heading in Settings' side list (Getting started, Global setup…). */
+.settings-nav-group { padding: 12px 16px 4px; font: 500 12px/16px var(--md-font); color: var(--md-on-surface-variant); }
+.settings-nav-group:first-child { padding-top: 0; }
 /* A form reads best at a measure: the settings, a worker's form and the
    licenses keep to one, centered in the sheet; Changes, History and the
    guide take its whole width. */
 .settings-drawer .settings-pane { max-width: 960px; }
 .settings-drawer .settings { width: 100%; max-width: 1220px; margin-inline: auto; }
+/* The settings file is Settings' other side (its title bar's braces): it
+   turns a quarter out, changes side and turns back in. */
+.settings-flip { min-height: 100%; }
+.settings[hidden], .settings-file-side[hidden] { display: none; }
+.settings-flip.flip-out { animation: settings-flip-out 140ms ease-in forwards; }
+.settings-flip.flip-in { animation: settings-flip-in 160ms ease-out; }
+@keyframes settings-flip-out { to { transform: perspective(1600px) rotateY(90deg); } }
+@keyframes settings-flip-in { from { transform: perspective(1600px) rotateY(-90deg); } }
+.settings-file-side { width: 100%; max-width: 1220px; margin-inline: auto; }
+/* Show advanced, in the title bar: its words, then the switch. */
+.drawer-switch { gap: 10px; margin-inline-end: 4px; cursor: pointer; white-space: nowrap; }
+@container drawer (max-width: 600px) { .drawer-switch { font-size: 0; gap: 0; } }
 :is(.worker-drawer, .agent-drawer, .inbox-drawer, .license-drawer) > :is(.body, footer) > * { width: 100%; max-width: 1080px; margin-inline: auto; }
 @container drawer (max-width: 600px) {
   .settings-drawer .settings-nav { width: 48px; }
   .settings-drawer .settings-nav .list-item { justify-content: center; padding-inline: 0; }
   .settings-drawer .settings-nav-label { display: none; }
+  /* Icons only: a group's heading is a thin rule between the groups. */
+  .settings-drawer .settings-nav-group { height: 1px; padding: 0; margin: 8px 10px; overflow: hidden; color: transparent; background: var(--md-outline-variant); }
+  .settings-drawer .settings-nav-group:first-child { display: none; }
 }
 .setting { display: flex; align-items: center; gap: 24px; padding: 16px 0; border-bottom: 1px solid var(--md-outline-variant); }
 .setting > .stack { flex: 1; min-width: 200px; }
@@ -531,6 +551,12 @@ body.resizing iframe, body.resizing .cm-editor { pointer-events: none; }
    (a path) wraps inside it rather than squeezing the description. */
 .setting-control { flex: 0 1 auto; min-width: 0; max-width: 55%; }
 .setting-control code { overflow-wrap: anywhere; }
+/* Appearance's menus (the light and dark themes, the language) line up. */
+.setting-control .language-select { width: 220px; max-width: 100%; }
+/* Settings › MCP servers: a server's row, and the form's timeout beside its agents. */
+.mcp-row { align-items: flex-start; padding: 8px 0; }
+.mcp-row > .icon { margin-top: 2px; }
+.mcp-form-pair > .field { flex: 1; min-width: 0; }
 /* A narrow settings pane (the drawer at its narrower widths) puts each
    control under its description rather than squeezing either. */
 .settings-pane { container: settings-pane / inline-size; }
@@ -594,6 +620,14 @@ body.resizing iframe, body.resizing .cm-editor { pointer-events: none; }
 /* Command completion (above the composer) */
 .command-menu { position: absolute; left: 0; right: 0; bottom: calc(100% + 8px); z-index: 30; max-height: min(360px, 45vh); overflow-y: auto; padding: 6px;
   background: var(--md-surface-container-high); border-radius: var(--md-shape-lg); box-shadow: var(--md-elevation-2); }
+/* Draft with AI: what changed, and the draft. */
+.draft-changes { margin: 0; padding-left: 20px; }
+.draft-text { width: 100%; min-height: 240px; }
+/* A field's own tools (Redraft) above it, at the right. */
+.field-tools { margin-bottom: -4px; }
+/* A text box completing {secrets:…}: its menu opens below it. */
+.suggest-field { position: relative; display: flex; flex-direction: column; gap: 4px; }
+.suggest-field > .command-menu { top: calc(100% + 4px); bottom: auto; }
 .command-option { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 36px; padding: 6px 12px; border: none; border-radius: var(--md-shape-sm);
   background: none; color: var(--md-on-surface); font: inherit; text-align: left; cursor: pointer; }
 .command-option.on { background: var(--accent-tint); color: var(--on-accent-tint); }
@@ -736,6 +770,9 @@ body.resizing iframe, body.resizing .cm-editor { pointer-events: none; }
 .editor-note { padding: 24px; }
 /* Previews (FIL-54): Markdown rendered, images on a checkerboard, PDFs. */
 .preview { flex: 1; min-height: 0; overflow: auto; }
+/* An HTML page on white, as a browser draws one that sets no background. */
+.preview-html { display: flex; overflow: hidden; }
+.preview-html iframe { flex: 1; width: 100%; height: 100%; border: 0; background: #fff; }
 .preview-image { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 16px;
   background: repeating-conic-gradient(var(--md-surface-container) 0% 25%, var(--md-surface) 0% 50%) 50% / 20px 20px; }
 .preview-image img { max-width: 100%; max-height: calc(100% - 32px); object-fit: contain; box-shadow: var(--md-elevation-1); }
@@ -795,6 +832,11 @@ code.file-link:hover { text-decoration-color: currentColor; }
 
 /* The agent editor (the Agents view, Settings › Agents). */
 .agent-dir { margin: 0 4px 0 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Studio › Secrets: a title as the other kinds have, the form lined up under it. */
+.studio-secrets { display: flex; flex-direction: column; gap: 8px; }
+.studio-secrets-body { padding-inline: 12px 4px; }
+/* A list pane's intro and group headings line up with its title (12px in, as .side-head). */
+.slide-list > p.t-body-sm:not(.agent-dir), .slide-list > section > :is(.t-title-sm, .t-body-sm, p) { margin-inline: 12px 4px; }
 .agent-form .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 16px; }
 .agent-form .field .input, .agent-form .field .select { width: 100%; }
 .agent-form .field .input.slider-value { width: 76px; }
@@ -828,6 +870,222 @@ code.file-link:hover { text-decoration-color: currentColor; }
 .agent-editor-user { height: min(640px, calc(100vh - 300px)); border: 1px solid var(--md-outline-variant); border-radius: var(--md-shape-md); overflow: hidden; }
 .agent-editor-user .split-side { width: 230px; }
 .agent-editor-user .split-main { padding: 18px 20px; }
+/* A list that fills its pane, an item's view sliding in over it from the
+   right, closed by back, Cancel or Save (Studio's agents and workers). */
+.slide-pane { position: relative; height: 100%; min-height: 0; overflow: hidden; }
+.slide-pane .slide-list, .slide-pane .slide-detail { transition: transform 0.22s cubic-bezier(0.2, 0, 0, 1), opacity 0.22s, visibility 0s; }
+.slide-pane .slide-list { width: 100%; height: 100%; overflow-y: auto; padding: 0 0 8px; border-right: none; display: flex; flex-direction: column; gap: 8px; }
+/* A long list scrolls: its parts keep their height rather than squeeze. */
+.slide-pane .slide-list > * { flex-shrink: 0; }
+.slide-pane .slide-detail { position: absolute; inset: 0; overflow-y: auto; padding: 0 4px 0 0; transform: translateX(100%); opacity: 0; visibility: hidden; transition-delay: 0s, 0s, 0.22s; }
+.slide-pane.is-open .slide-list { transform: translateX(-24px); opacity: 0; visibility: hidden; transition-delay: 0s, 0s, 0.22s; }
+.slide-pane.is-open .slide-detail { transform: none; opacity: 1; visibility: visible; transition-delay: 0s; }
+.slide-pane .agent-form, .slide-pane .worker { max-width: none; }
+.slide-back, .slide-actions { position: sticky; z-index: 1; background: var(--md-surface); }
+.slide-back { top: 0; gap: 8px; padding-bottom: 12px; }
+.slide-actions { bottom: 0; padding: 12px 0; margin-top: 4px; border-top: 1px solid var(--md-outline-variant); }
+.slide-actions:empty { display: none; }
+@media (prefers-reduced-motion: reduce) { .slide-pane .slide-list, .slide-pane .slide-detail { transition: none; } }
+/* Settings › Workers' limits: a name, then what a worker that sets none
+   gets and the most it may ask for. */
+.worker-limits-grid { display: grid; grid-template-columns: minmax(110px, max-content) minmax(0, 1fr) minmax(0, 1fr); gap: 8px 12px; align-items: center; max-width: 640px; }
+.worker-limits-grid .input { width: 100%; }
+/* Studio's skills: a skill's files beside the open one's editor, and a
+   script's test run. */
+.skill-file-list .list-item[aria-disabled="true"] { cursor: default; }
+.code-area { height: 100%; min-height: 240px; border: 1px solid var(--md-outline); border-radius: var(--field-radius); overflow: hidden; }
+.code-area .cm-editor { height: 100%; }
+.code-area:focus-within { border-color: var(--accent-a); box-shadow: 0 0 0 3px var(--focus-ring); }
+.skill-run-output { margin: 0; max-height: 220px; overflow: auto; padding: 8px 10px; border-radius: var(--md-shape-xs); background: var(--md-surface-container); font: 12px/1.5 var(--md-mono); white-space: pre-wrap; }
+.add-skill-list { max-height: 46vh; overflow-y: auto; }
+.skill-member-add, .skill-language { width: auto; min-width: 200px; }
+.skill-files .skill-file-name { flex: 1 1 220px; width: auto; min-width: 0; }
+.add-skill { width: min(520px, 100%); min-width: 0; }
+.add-skill .list-item { min-width: 0; }
+/* A reference or script given the whole tab: its bar, then the editor or
+   preview filling the height left, then the test run. */
+.skill-file-body { display: flex; flex-direction: column; }
+.skill-file-body > .code-area { height: max(260px, calc(100vh - 470px)); }
+.skill-file-preview { height: max(260px, calc(100vh - 470px)); overflow: auto; border: 1px solid var(--md-outline-variant); border-radius: var(--field-radius); }
+.skill-file-head code { font-size: 13px; }
+.skill-test-run { padding: 8px 12px; }
+.skill-test-run.open { padding-bottom: 12px; display: flex; flex-direction: column; gap: 8px; }
+.skill-test-toggle { gap: 8px; width: 100%; padding: 4px 0; border: none; background: none; color: inherit; font: inherit; cursor: pointer; text-align: left; }
+/* Studio's rules: each list in the order its rules run, rows dragged to
+   reorder them. */
+.rule-section { margin-top: 8px; }
+/* Rules or guardrails, side by side at the top of both pages. */
+.rules-or-guardrails { display: flex; flex-direction: column; gap: 10px; padding: 12px 14px; margin-bottom: 4px; animation: drawer-down 0.18s cubic-bezier(0.2, 0, 0, 1); }
+.rog-grid { display: grid; grid-template-columns: minmax(90px, max-content) minmax(0, 1fr) minmax(0, 1fr); gap: 6px 16px; }
+.rog-row { display: contents; }
+.rog-kind { display: flex; align-items: center; gap: 6px; font-weight: 500; color: var(--md-on-surface-variant); }
+.rog-kind.on { color: var(--md-on-surface); }
+.rog-grid .on { color: var(--md-on-surface); }
+@container settings-pane (max-width: 560px) { .rog-grid { grid-template-columns: 1fr; } .rog-row > span:first-child { margin-top: 6px; } .rog-head { display: none; } }
+.rule-form-intro { margin: -4px 0 4px; }
+/* Studio › Evals: a case's editor and a result's texts open under their row. */
+.eval-case-form, .eval-result-detail { margin: 2px 0 8px 36px; }
+.eval-case-form .pair, .eval-result-detail .pair { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px 16px; }
+.eval-threshold { width: 112px; }
+.eval-progress { width: 100%; height: 6px; accent-color: var(--md-primary); }
+.eval-text { margin: 0; padding: 8px 10px; max-height: 240px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; border-radius: var(--md-shape-sm, 8px); background: var(--md-code-bg); font: 12px/1.5 var(--md-mono); }
+/* Studio › Workflows: the palette, the canvas and the selected step's settings side by side. */
+/* The canvas fills what the header and the footer leave; the settings beside it scroll on their own. */
+/* The canvas takes the room: the settings beside it fold to a rail and
+   their width is the user's; the run's receipt sits under it. */
+.flow-body { display: flex; gap: 12px; min-height: 420px; height: calc(100% - 124px); }
+.flow-main { display: flex; flex-direction: column; gap: 8px; flex: 1; min-width: 0; min-height: 0; }
+.flow-canvas { position: relative; flex: 1; min-height: 240px; border: 1px solid var(--md-outline-variant); border-radius: var(--md-shape-md); overflow: hidden; }
+.flow-side { position: relative; display: flex; flex-direction: column; flex: none; min-width: 0; min-height: 0; max-width: 50%; }
+.flow-side.is-closed { width: 36px; }
+.flow-side-head { gap: 6px; padding: 0 0 8px; border-bottom: 1px solid var(--md-outline-variant); }
+.flow-side-body { gap: 10px; flex: 1; min-height: 0; overflow: auto; padding: 10px 4px 4px 0; }
+.flow-side-rail { display: flex; flex-direction: column; align-items: center; gap: 8px; height: 100%; width: 36px; padding: 8px 0; border: 1px solid var(--md-outline-variant); border-radius: var(--md-shape-md); background: none; color: var(--md-on-surface-variant); font: 500 12px/16px var(--md-font); cursor: pointer; }
+.flow-side-rail > span { writing-mode: vertical-rl; max-height: 70%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.flow-side-rail:hover { background: var(--md-surface-container); color: var(--md-on-surface); }
+.flow-toolbox { position: absolute; top: 10px; left: 10px; z-index: 5; display: flex; flex-direction: column; width: 200px; max-height: calc(100% - 20px); border: 1px solid var(--md-outline-variant); border-radius: var(--md-shape-md); background: var(--md-surface-container-low); box-shadow: var(--md-elevation-1); }
+.flow-toolbox:not(.is-open) { width: auto; }
+.flow-toolbox-head { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: none; border-radius: var(--md-shape-md); background: none; color: var(--md-on-surface); font: 500 13px/18px var(--md-font); cursor: pointer; }
+.flow-toolbox-head:hover { background: var(--md-surface-container); }
+.flow-toolbox-body { overflow-y: auto; padding: 0 6px 8px; border-top: 1px solid var(--md-outline-variant); }
+.flow-toolbox-hint { display: block; padding: 8px 4px 2px; font-size: 12px; }
+.flow-toolbox-group .menu-label { padding: 8px 4px 2px; }
+.flow-tool { display: flex; align-items: center; gap: 8px; width: 100%; padding: 5px 6px; border: none; border-radius: var(--md-shape-sm, 8px); background: none; color: var(--md-on-surface); font: 13px/18px var(--md-font); text-align: left; cursor: grab; }
+.flow-tool:hover:not(:disabled), .flow-tool:focus-visible { background: var(--md-surface-container-high); }
+.flow-tool:disabled { opacity: 0.45; cursor: default; }
+.flow-tool:active { cursor: grabbing; }
+.flow-node-status { display: inline-flex; flex-direction: column; align-items: flex-end; gap: 1px; }
+.flow-node-meta { font-size: 10px; line-height: 12px; color: var(--md-on-surface-variant); white-space: nowrap; }
+.flow-schedule-row { padding: 2px 0; }
+.flow-schedule-row .lines { display: flex; flex-direction: column; min-width: 0; }
+.flow-runs-menu, .flow-history-menu { min-width: 300px; max-width: min(420px, calc(100vw - 32px)); }
+/* A run's receipt: its header line always, its steps, events and stream
+   below while it's open. */
+.run-panel { position: relative; display: flex; flex-direction: column; flex: none; min-height: 0; border: 1px solid var(--md-outline-variant); border-radius: var(--md-shape-md); background: var(--md-surface-container-low); }
+.run-panel.is-open { height: min(42%, 340px); min-height: 200px; }
+.run-panel.is-failed { border-color: color-mix(in srgb, var(--md-error) 50%, var(--md-outline-variant)); }
+.run-panel-resize { position: absolute; left: 0; right: 0; top: -5px; height: 8px; cursor: row-resize; z-index: 5; border-radius: 4px; }
+.run-panel-resize:hover, body.resizing .run-panel-resize { background: color-mix(in srgb, var(--md-primary) 30%, transparent); }
+.run-panel-attention { max-height: 50%; overflow: auto; }
+.sb-flow { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.run-panel-head { gap: 6px; padding: 4px 6px 4px 12px; min-height: 40px; }
+.run-panel-attention { gap: 8px; padding: 0 12px 8px; flex: none; }
+.run-panel-body { display: flex; flex-direction: column; gap: 6px; flex: 1; min-height: 0; padding: 0 12px 8px; }
+.run-panel-content { flex: 1; min-height: 0; overflow: auto; }
+.run-error { padding: 0 0 2px; }
+.run-table { width: 100%; border-collapse: collapse; font-size: 12px; line-height: 16px; table-layout: fixed; }
+.run-table th { position: sticky; top: 0; z-index: 1; padding: 4px 8px; background: var(--md-surface-container-low); color: var(--md-on-surface-variant); font-weight: 500; text-align: left; white-space: nowrap; border-bottom: 1px solid var(--md-outline-variant); }
+.run-table th:first-child { width: auto; }
+.run-table th:nth-child(2) { width: 112px; }
+.run-table th:nth-child(3) { width: 64px; }
+.run-table th:nth-child(4) { width: 22%; }
+.run-table th:nth-child(5), .run-table th:nth-child(6) { width: 86px; }
+.run-table th:nth-child(7) { width: 76px; }
+.run-table td { padding: 4px 8px; vertical-align: top; border-bottom: 1px solid color-mix(in srgb, var(--md-outline-variant) 50%, transparent); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.run-table td:first-child { white-space: normal; }
+.run-table .num { text-align: right; }
+.run-table tfoot td { font-weight: 500; border-bottom: none; border-top: 1px solid var(--md-outline-variant); }
+.run-table tr.is-selected td { background: color-mix(in srgb, var(--md-primary) 8%, transparent); }
+.run-step-name { display: flex; align-items: center; gap: 6px; max-width: 100%; padding: 0; border: none; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.run-step-name:hover > .ellipsis { text-decoration: underline; }
+.run-step-error { padding-left: 22px; white-space: normal; overflow-wrap: anywhere; }
+.run-events { display: grid; grid-template-columns: auto auto 1fr; gap: 2px 10px; font-size: 12px; line-height: 16px; }
+.run-event { display: contents; }
+.run-event-kind { color: var(--md-on-surface-variant); }
+.run-event-text { overflow-wrap: anywhere; }
+.run-stream { height: 100%; }
+.run-stream > .select { align-self: flex-start; max-width: 320px; }
+.run-stream-text { flex: 1; max-height: none; min-height: 80px; }
+.ok-text { color: var(--md-success, #2e7d32); }
+/* Several chosen in the room of one field: a button, then a list of check boxes. */
+.multi-select { display: block; }
+.multi-select-button { display: flex; align-items: center; gap: 6px; width: 100%; text-align: left; cursor: pointer; }
+.multi-select-count { padding: 0 6px; border-radius: 10px; background: var(--md-secondary-container); color: var(--md-on-secondary-container); font-size: 11px; line-height: 18px; }
+.multi-select-menu { max-width: min(360px, calc(100vw - 32px)); }
+.multi-select-menu .multi-select-on { color: var(--md-primary); }
+.multi-select-filter { margin: 4px 8px 6px; width: calc(100% - 16px); }
+.settings-drawer.studio-drawer.is-compact .settings-nav { width: 48px; }
+.studio-drawer.is-compact .settings-nav .list-item { justify-content: center; padding-inline: 0; }
+.studio-drawer.is-compact .settings-nav-label { display: none; }
+.studio-drawer.is-compact .settings { gap: 12px; }
+.settings-drawer.studio-drawer.is-compact :is(.settings, .settings-pane) { max-width: none; }
+.flow-node { display: flex; align-items: center; gap: 8px; width: 180px; padding: 8px 10px; border: 1px solid var(--md-outline-variant); border-radius: var(--md-shape-md); background: var(--md-surface-container-low); color: var(--md-on-surface); font-size: 13px; line-height: 1.3; }
+.flow-node .lines { display: flex; flex-direction: column; min-width: 0; }
+.flow-node .lines small { color: var(--md-on-surface-variant); }
+.flow-node.selected, .flow-node.is-running { border-color: var(--md-primary); box-shadow: 0 0 0 1px var(--md-primary); }
+.flow-node.is-failed { border-color: var(--md-error); box-shadow: 0 0 0 1px var(--md-error); }
+.flow-node.soon, .flow-node.is-skipped, .flow-gateway.is-skipped { opacity: 0.45; }
+.flow-gateway { display: flex; flex-direction: column; align-items: center; gap: 6px; width: 90px; }
+.flow-diamond { display: grid; place-items: center; width: 40px; height: 40px; transform: rotate(45deg); border: 1.5px solid var(--md-outline); border-radius: 6px; background: var(--md-surface-container-low); color: var(--md-on-surface); }
+.flow-diamond > .icon { transform: rotate(-45deg); }
+.flow-gateway.selected .flow-diamond, .flow-gateway.is-running .flow-diamond { border-color: var(--md-primary); box-shadow: 0 0 0 1px var(--md-primary); }
+.flow-gateway-title { max-width: 120px; color: var(--md-on-surface-variant); }
+.workflows-pane .react-flow__handle { width: 8px; height: 8px; }
+.flow-link.is-error .react-flow__edge-path { stroke: var(--md-error); stroke-dasharray: 5 4; }
+.flow-link.is-default .react-flow__edge-path { stroke-dasharray: 2 3; }
+.workflows-pane .react-flow__edge-text { font-size: 11px; fill: var(--md-on-surface-variant); }
+.workflows-pane .react-flow__edge-textbg { fill: var(--md-surface); }
+.flow-field .input { min-width: 0; flex: 1; }
+.flow-field .select { flex: 0 0 110px; width: 110px; }
+.flow-field > .input:first-child { flex: 0 0 40%; }
+.flow-field > .suggest-field { flex: 1; min-width: 0; }
+.flow-field .suggest-field .input { width: 100%; }
+.flow-method .select { flex: 0 0 96px; width: 96px; }
+.flow-method .suggest-field { flex: 1; min-width: 0; }
+/* A2UI forms (human tasks): the app's controls, laid out as the form says. */
+.a2ui-form { gap: 12px; }
+.a2ui-column { gap: 10px; }
+.a2ui-row { gap: 8px; }
+.a2ui-text { margin: 0; white-space: pre-wrap; }
+.a2ui-divider { width: 100%; border: 0; border-top: 1px solid var(--md-outline-variant); margin: 4px 0; }
+.a2ui-image { max-width: 100%; border-radius: var(--md-shape-sm); }
+.a2ui-image.icon, .a2ui-image.avatar { width: 40px; height: 40px; }
+.a2ui-check { gap: 8px; }
+.a2ui-check input { accent-color: var(--md-primary); width: 16px; height: 16px; }
+.a2ui-slider { width: 100%; accent-color: var(--md-primary); }
+/* Workflows' human tasks: the dialog over the app, and the Electron app's small tasks window (TasksPanel.tsx). */
+.tasks-panel { display: grid; gap: 10px; }
+.tasks-list { display: grid; gap: 2px; max-height: 160px; overflow: auto; }
+.tasks-list .list-item { gap: 10px; text-align: start; }
+.tasks-panel .task-card { margin: 0; }
+.tasks-dialog { width: min(520px, calc(100vw - 32px)); }
+.tasks-empty { margin: 8px 0; }
+.tasks-window { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; height: 100vh; background: var(--md-surface); color: var(--md-on-surface); }
+.tasks-window-head { gap: 8px; padding: 14px 16px 8px; -webkit-app-region: drag; app-region: drag; }
+.tasks-window-head .icon { color: var(--md-primary); }
+.tasks-window-body { overflow: auto; padding: 4px 16px 12px; }
+.tasks-window-foot { gap: 8px; padding: 8px 12px; border-top: 1px solid var(--md-outline-variant); }
+/* macOS: the window's buttons sit over the header's left. */
+:root[data-native-glass] .tasks-window-head { padding-left: 80px; }
+.flow-form-json { font-size: 12px; }
+.flow-form-preview { gap: 8px; }
+.flow-repeat { color: var(--md-primary); font-weight: 500; }
+.flow-field > .flow-concurrency { flex: 0 0 72px; width: 72px; }
+.flow-retry { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.workflows-pane .react-flow { --xy-background-color: transparent; }
+@media (max-width: 980px) {
+  .flow-body { flex-direction: column; height: auto; }
+  .flow-canvas { flex: none; height: 460px; }
+  .flow-side, .flow-side.is-closed { width: auto !important; max-width: none; }
+  .flow-side .panel-resize { display: none; }
+}
+/* A list row's main part: one button that opens it, beside the row's own buttons. */
+.row-open { display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0; padding: 0; border: none; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.row-open:disabled { cursor: default; }
+.row-open:focus-visible { outline: 2px solid var(--accent-a); outline-offset: 2px; border-radius: 4px; }
+.rule-row[draggable="true"] { cursor: grab; }
+.rule-row.dragging { opacity: 0.5; }
+.rule-grip { flex: none; }
+.rule-step { color: var(--md-on-surface-variant); font-variant-numeric: tabular-nums; }
+fieldset.rule-form { border: none; margin: 0; padding: 0; min-width: 0; }
+/* A slide pane in a settings section: a box of its own height. */
+.slide-box { height: min(440px, calc(100vh - 320px)); min-height: 300px; padding: 12px 12px 0; border: 1px solid var(--md-outline-variant); border-radius: var(--md-shape-md); }
+/* The Studio drawer: the kinds' list is narrow, and each kind's pane
+   fills the drawer's height (and scrolls itself). */
+.studio-drawer > .body { overflow: hidden; }
+.studio-drawer .settings { height: 100%; min-height: 0; gap: 24px; }
+.settings-drawer.studio-drawer .settings-nav { width: 168px; }
+.studio-drawer .settings-pane { display: flex; flex-direction: column; min-height: 0; overflow-y: auto; }
 /* The editor answers to its pane, not the window: in a narrow pane (the
    Agents view beside a wide chat, Settings on a small screen) the list
    goes above the form, and then the form's pairs become one column. */
@@ -1114,3 +1372,106 @@ code.file-link:hover { text-decoration-color: currentColor; }
 .history-graph .lane-7 { stroke: var(--graph-7); } .history-graph .node.lane-7 { fill: var(--graph-7); } .history-graph .node.merge.lane-7 { stroke: var(--graph-7); }
 /* A merge is a ring in its lane's colour. */
 .history-graph .node.merge { fill: var(--md-surface-container-high); stroke-width: 2.5; }
+
+/* Studio's Overview (spec_health_044): the workspace dashboard. Cards in a
+   grid that reflows with the pane; each opens in place into its detail. */
+.studio-drawer .settings-pane:has(> .overview) { max-width: none; }
+.overview { display: flex; flex-direction: column; gap: 12px; min-height: 0; padding-bottom: 16px; container-type: inline-size; container-name: overview; }
+.overview-loading { padding: 16px; }
+.overview-head { gap: 8px; flex-wrap: wrap; }
+.overview-progress { gap: 12px; padding: 8px 12px; }
+.overview-progress progress { width: 160px; accent-color: var(--md-primary); }
+.overview-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px; align-items: start; }
+.overview-card { display: flex; flex-direction: column; gap: 10px; padding: 12px 14px; min-width: 0; }
+.overview-card.wide, .overview-card.is-open { grid-column: 1 / -1; }
+.overview-card-head { gap: 8px; width: 100%; padding: 0; border: none; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.overview-card-head:hover .t-title-sm { text-decoration: underline; }
+.overview-score { gap: 20px; align-items: center; flex-wrap: wrap; }
+.overview-score-text { gap: 2px; min-width: 160px; }
+.overview-kinds { display: flex; flex-wrap: wrap; gap: 6px; margin-left: auto; }
+.overview-kind { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 6px 8px; border: none; border-radius: var(--md-shape-md); background: none; color: inherit; font: inherit; cursor: pointer; min-width: 72px; }
+.overview-kind:hover { background: var(--md-surface-container-high); }
+.overview-kind-row { gap: 12px; align-items: center; }
+.overview-stats { gap: 24px; }
+.overview-stat { display: flex; flex-direction: column; }
+.overview-split { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.overview-top { gap: 8px; padding: 3px 4px; border: none; border-radius: var(--md-shape-xs); background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.overview-top:hover { background: var(--md-surface-container-high); }
+.overview-attention { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.overview-attention li { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.overview-attention .attention-error > .icon { color: var(--md-error); }
+.overview-attention .attention-warn > .icon { color: var(--md-warning); }
+.overview-attention .attention-info > .icon { color: var(--md-on-surface-variant); }
+.overview-table th:nth-child(n) { width: auto; }
+.overview-table th:first-child { width: 34%; }
+.overview-table tr { cursor: pointer; }
+.overview-table tr.overview-verdict-row { cursor: default; }
+.overview-table tr.is-shown td { background: color-mix(in srgb, var(--md-primary) 6%, transparent); }
+.overview-table tr.has-problem td:first-child { color: var(--md-error); }
+.overview-table td .sparkline { vertical-align: middle; margin-left: 6px; }
+.overview-detail { gap: 10px; padding: 6px 4px 10px 22px; white-space: normal; }
+.overview-facts { margin: 0; padding-left: 18px; color: var(--md-on-surface-variant); }
+.overview-scores { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 8px 16px; }
+.overview-score-line { display: flex; gap: 10px; align-items: flex-start; }
+.score-pips { display: inline-flex; gap: 2px; padding-top: 4px; flex: none; }
+.score-pips .pip { width: 8px; height: 8px; border-radius: 50%; background: var(--md-surface-container-highest); }
+.score-pips .pip.on { background: currentColor; }
+.overview-fix { gap: 8px; padding: 6px 8px; border-radius: var(--md-shape-sm); background: var(--md-surface-container); }
+@container overview (max-width: 640px) {
+  .overview-split { grid-template-columns: 1fr; }
+  .overview-kinds { margin-left: 0; }
+  .overview-table th:nth-child(5), .overview-table td:nth-child(5) { display: none; }
+}
+
+/* Grades: A–D by colour (tertiary, primary, warning, error), on rings, badges and pips. */
+.grade-a { color: var(--md-tertiary); }
+.grade-b { color: var(--md-primary); }
+.grade-c { color: var(--md-warning); }
+.grade-d { color: var(--md-error); }
+.grade-none { color: var(--md-outline); }
+.grade-badge { display: inline-flex; align-items: center; justify-content: center; min-width: 18px; height: 18px; margin-left: 4px; padding: 0 5px; border-radius: var(--md-shape-full);
+  font-size: 11px; font-weight: 600; line-height: 1; vertical-align: middle; background: color-mix(in srgb, currentColor 14%, transparent); }
+.grade-badge.is-old { opacity: 0.55; }
+.grade-badge.judging { min-width: 8px; width: 8px; height: 8px; padding: 0; background: var(--md-primary); animation: grade-pulse 1s ease-in-out infinite alternate; }
+@keyframes grade-pulse { from { opacity: 0.3; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .grade-badge.judging { animation: none; } }
+.flag-chip { display: inline-block; margin: 0 4px 2px 0; padding: 1px 6px; border-radius: var(--md-shape-full); font-size: 11px; background: var(--md-surface-container-high); color: var(--md-on-surface-variant); }
+.flag-chip.flag-failing, .flag-chip.flag-stale { background: var(--md-warning-container); color: var(--md-on-warning-container); }
+.flag-chip.flag-uncovered { background: var(--md-secondary-container); }
+
+/* Charts (ui/charts.tsx). */
+.score-ring { flex: none; }
+.score-ring-track { fill: none; stroke: var(--md-surface-container-highest); stroke-width: 6; }
+.score-ring-value { fill: none; stroke: currentColor; stroke-width: 6; stroke-linecap: round; transition: stroke-dasharray 0.5s ease; }
+.score-ring-grade { fill: currentColor; font-weight: 600; font-family: var(--md-font-display, var(--md-font)); }
+.score-ring-sub { fill: var(--md-on-surface-variant); }
+.chart-bars { display: flex; flex-direction: column; gap: 6px; }
+.chart-bar { display: grid; grid-template-columns: minmax(80px, 30%) 1fr auto; gap: 8px; align-items: center; font-size: 12px; }
+.chart-bar-track { height: 8px; border-radius: var(--md-shape-full); background: var(--md-surface-container-highest); overflow: hidden; }
+.chart-bar-fill { display: block; height: 100%; border-radius: inherit; background: var(--md-primary); transition: width 0.4s ease; }
+.chart-bar-fill.good { background: var(--md-tertiary); }
+.chart-bar-fill.warn { background: var(--md-warning); }
+.chart-bar-fill.bad { background: var(--md-error); }
+.chart-bar-text { color: var(--md-on-surface-variant); min-width: 48px; text-align: right; }
+.chart-columns { width: 100%; height: 120px; display: block; }
+.chart-axis { stroke: var(--md-outline-variant); }
+.chart-part.done { fill: var(--md-tertiary); }
+.chart-part.failed { fill: var(--md-error); }
+.chart-part.stopped { fill: var(--md-outline); }
+.chart-line { fill: none; stroke: var(--md-primary); stroke-width: 2; }
+.chart-legend { gap: 14px; flex-wrap: wrap; }
+.chart-legend .legend::before { content: ""; display: inline-block; width: 10px; height: 10px; margin-right: 5px; border-radius: 2px; vertical-align: -1px; }
+.chart-legend .legend.done::before { background: var(--md-tertiary); }
+.chart-legend .legend.failed::before { background: var(--md-error); }
+.chart-legend .legend.stopped::before { background: var(--md-outline); }
+.chart-legend .legend.line::before { height: 2px; vertical-align: 3px; background: var(--md-primary); }
+.sparkline polyline { fill: none; stroke: var(--md-primary); stroke-width: 1.5; }
+
+/* The composer (spec_composer_045): a short conversation, then the draft. */
+.compose-dialog .body { gap: 12px; }
+.compose-turns { max-height: 46vh; overflow-y: auto; padding-right: 4px; }
+.compose-turn { max-width: 85%; padding: 8px 12px; border-radius: var(--md-shape-md); font-size: 14px; line-height: 20px; white-space: pre-wrap; }
+.compose-turn.user { align-self: flex-end; background: var(--md-primary-container); color: var(--md-on-primary-container); }
+.compose-turn.composer { align-self: flex-start; background: var(--md-surface-container-high); }
+.compose-steps { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 2px; }
+.compose-entry .icon { color: var(--md-primary); }

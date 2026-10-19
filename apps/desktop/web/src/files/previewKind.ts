@@ -14,32 +14,34 @@
  * limitations under the License.
  */
 
-// What the editor can show other than as text: Markdown rendered, images
-// and PDFs, and sound to play.
+// What the editor can show other than as text: Markdown and HTML
+// rendered, images and PDFs, and sound to play.
 
 /**
- * How a file previews: markdown and svg are text with a rendered view
+ * How a file previews: markdown, html and svg are text with a rendered view
  * beside the source; image, pdf and audio show only as a preview (audio as
  * a player); null has none.
  */
-export type PreviewKind = "markdown" | "svg" | "image" | "pdf" | "audio" | "video" | "table" | null;
+export type PreviewKind = "markdown" | "html" | "svg" | "image" | "pdf" | "docx" | "audio" | "video" | "table" | null;
 
 /** The preview a file has, by its name. */
 export function previewKind(path: string): PreviewKind {
   const ext = path.slice(path.lastIndexOf(".") + 1).toLowerCase();
   if (path.lastIndexOf(".") <= path.lastIndexOf("/")) return null;
   if (["md", "markdown", "mdx"].includes(ext)) return "markdown";
+  if (["html", "htm", "xhtml"].includes(ext)) return "html";
   if (ext === "svg") return "svg";
   if (["csv", "tsv", "tab"].includes(ext)) return "table";
   if (["png", "jpg", "jpeg", "gif", "webp", "bmp", "ico"].includes(ext)) return "image";
   if (ext === "pdf") return "pdf";
+  if (ext === "docx") return "docx";
   if (["wav", "mp3", "m4a", "aac", "ogg", "oga", "opus", "flac", "weba"].includes(ext)) return "audio";
   if (["mp4", "m4v", "mov", "webm", "avi", "wmv", "flv", "mpeg", "mpg", "3gp"].includes(ext)) return "video";
   return null;
 }
 
 /** Whether a kind shows only as a preview (it has no text to edit). */
-export const previewOnly = (k: PreviewKind) => k === "image" || k === "pdf" || k === "audio" || k === "video";
+export const previewOnly = (k: PreviewKind) => k === "image" || k === "pdf" || k === "docx" || k === "audio" || k === "video";
 
 /** Whether the window's web view plays a video file (MP4, QuickTime, WebM); others open in the system's player. */
 export const playsVideo = (path: string) => /\.(mp4|m4v|mov|webm)$/i.test(path);
@@ -48,7 +50,7 @@ export const playsVideo = (path: string) => /\.(mp4|m4v|mov|webm)$/i.test(path);
 export type View = "source" | "preview";
 
 /**
- * How a file shows when it opens: Markdown rendered, unless it opened at a
+ * How a file shows when it opens: Markdown and HTML rendered, unless it opened at a
  * line (a search hit, a link to one) or is empty (a new file, to write);
  * a table as a table (at a line, that row's page); an SVG as its source;
  * images and PDFs only as previews.
@@ -56,5 +58,5 @@ export type View = "source" | "preview";
 export function defaultView(k: PreviewKind, opened: { atLine: boolean; empty: boolean }): View {
   if (previewOnly(k)) return "preview";
   if (k === "table") return opened.empty ? "source" : "preview"; // a table opens at a line's row
-  return k === "markdown" && !opened.atLine && !opened.empty ? "preview" : "source";
+  return (k === "markdown" || k === "html") && !opened.atLine && !opened.empty ? "preview" : "source";
 }
