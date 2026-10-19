@@ -41,6 +41,8 @@ import {
   parseTasksLink,
   tasksURL,
   parseLink,
+  renewEvery,
+  shouldRenew,
   pictureExtension,
   previewContent,
   previewId,
@@ -75,6 +77,19 @@ describe("parseLink", () => {
     { name: "no ticket", line: line("https://127.0.0.1:5123/open"), want: undefined },
     { name: "a ticket that isn't hex", line: line("https://127.0.0.1:5123/open?t=../x"), want: undefined },
   ])("$name", ({ line, want }) => expect(parseLink(line)).toEqual(want));
+});
+
+describe("shouldRenew", () => {
+  const origin = "https://127.0.0.1:5123";
+  it.each([
+    { name: "a certificate error on the page", error: "net::ERR_CERT_DATE_INVALID", url: origin + "/blitz.v1.X/Y", last: 0, now: renewEvery, want: true },
+    { name: "the page itself", error: "net::ERR_CERT_AUTHORITY_INVALID", url: origin + "/", last: 0, now: renewEvery, want: true },
+    { name: "renewed a moment ago", error: "net::ERR_CERT_DATE_INVALID", url: origin + "/", last: 1000, now: 1000 + renewEvery - 1, want: false },
+    { name: "another error", error: "net::ERR_CONNECTION_REFUSED", url: origin + "/", last: 0, now: renewEvery, want: false },
+    { name: "another site's certificate", error: "net::ERR_CERT_DATE_INVALID", url: "https://example.com/", last: 0, now: renewEvery, want: false },
+    { name: "another port", error: "net::ERR_CERT_DATE_INVALID", url: "https://127.0.0.1:5124/", last: 0, now: renewEvery, want: false },
+  ])("$name", ({ error, url, last, now, want }) => expect(shouldRenew(error, url, origin, last, now)).toBe(want));
+  it("not before the page is served", () => expect(shouldRenew("net::ERR_CERT_DATE_INVALID", "https://127.0.0.1:5123/", "", 0, renewEvery)).toBe(false));
 });
 
 describe("isPageCertificate", () => {

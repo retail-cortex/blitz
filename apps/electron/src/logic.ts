@@ -92,6 +92,19 @@ export function isPageCertificate(hostname: string, fingerprint: string, pinned:
   return pinned !== "" && hostname === "127.0.0.1" && fingerprint === pinned;
 }
 
+/** How soon after renewing the page server's certificate another error may renew it again (ms). */
+export const renewEvery = 60_000;
+
+/**
+ * Whether a failed request means the page server needs a new certificate:
+ * a certificate error (net::ERR_CERT_…) on the page's own origin, and none
+ * renewed in the last renewEvery, so a server that keeps failing isn't
+ * started again and again.
+ */
+export function shouldRenew(error: string, url: string, origin: string, lastRenew: number, now: number): boolean {
+  return origin !== "" && error.startsWith("net::ERR_CERT_") && originOf(url) === origin && now - lastRenew >= renewEvery;
+}
+
 /** The origin of a URL ("" when it isn't one). */
 export function originOf(url: string): string {
   try {

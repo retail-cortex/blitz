@@ -45,6 +45,7 @@ import {
   originOf,
   parseDeepLink,
   parseLink,
+  shouldRenew,
   parseRunLink,
   parseTasksLink,
   taskWindowMethods,
@@ -153,6 +154,16 @@ async function start() {
   // the app's windows only (the web tabs have a session of their own), and
   // every other certificate is left to Chromium (-3).
   session.defaultSession.setCertificateVerifyProc((req, done) => done(isPageCertificate(req.hostname, fingerprintOf(req.certificate.data), pinned) ? 0 : -3));
+  // Should Chromium ever refuse that certificate anyway (a later Electron
+  // checking its dates despite the pin, say), the host is started again:
+  // it makes a new certificate, and the windows reload on its link (EL-02).
+  let renewed = 0;
+  session.defaultSession.webRequest.onErrorOccurred((d) => {
+    if (!shouldRenew(d.error, d.url, origin, renewed, Date.now())) return;
+    renewed = Date.now();
+    console.warn(`blitz: the page server's certificate was refused (${d.error}); starting it again`);
+    sidecar?.kill();
+  });
   setMenu(englishMenu);
   firstLink = await serve();
   origin = originOf(firstLink);
