@@ -1,12 +1,12 @@
 ---
-title: "A recipe app's harness, in Studio"
+title: "A recipe app's harness"
 weight: 15
 ---
 
-This tutorial takes one real project and gives it everything an agent needs to work on it well. The project is **Recipe Books**: a mobile-first web app where people collect recipes by hand, from a photo or by talking to an AI agent, then search them, share books and build shopping lists. You'll set up its agents, their evals, skills with scripts, rules, guardrails, secrets, a scheduled workflow and the dashboard that grades all of it, every one in **Studio**:
+This tutorial takes one real project and gives it everything an agent needs to work on it well. The project is **Recipe Books**: a mobile-first web app where people collect recipes by hand, from a photo or by talking to an AI agent, then search them, share books and build shopping lists. You'll set up its agents, their evals, skills with scripts, rules, guardrails, secrets, a scheduled workflow and the dashboard that grades all of it, every one in **Harness**:
 
 1. [Start from the spec](#1-start-from-the-spec)
-2. [Open Studio](#2-open-studio)
+2. [Open Harness](#2-open-harness)
 3. [An agent that reviews, and changes nothing](#3-an-agent-that-reviews-and-changes-nothing)
 4. [Evals: proof the agent still works](#4-evals-proof-the-agent-still-works)
 5. [A skill with a script](#5-a-skill-with-a-script)
@@ -19,7 +19,7 @@ This tutorial takes one real project and gives it everything an agent needs to w
 
 The order matters. Agents come first because everything else checks or uses them. Evals follow straight away, while you still remember what the agent is for. Rules and guardrails watch every turn after that, and the workflow at the end uses all of it. Writing the app's code is the [software developer tutorial](software-developer.md)'s job. This one builds the harness that code gets written in.
 
-You need the desktop app and a model it can use ([Getting started](../getting-started/_index.md)). Everything Studio makes is a file in `.agents/`, shown here as well, so you can write any of it by hand, review it in a pull request, or use it from the terminal. Most steps cost nothing. Drafting with AI, running evals and grading make small model calls (cents for this project), and each one says what it costs before or as it runs.
+You need the desktop app and a model it can use ([Getting started](../getting-started/_index.md)). Everything Harness makes is a file in `.agents/`, shown here as well, so you can write any of it by hand, review it in a pull request, or use it from the terminal. Most steps cost nothing. Drafting with AI, running evals and grading make small model calls (cents for this project), and each one says what it costs before or as it runs.
 
 ## 1. Start from the spec
 
@@ -50,9 +50,9 @@ Setup confirms it's **Software** and interviews you. You might answer: *a PWA in
 
 Then setup writes `.agents/AGENTS.md` (the stack, the Bazel commands, the layout) and offers skills and agents that fit the specs. For Recipe Books it offered skills such as `add-api-endpoint`, `db-migration`, `search-and-shopping-aggregation`, `pwa-feature` and `e2e-playwright`, and four agents: a search and performance reviewer, a security and access auditor, an ADK and Gemini specialist, and an accessibility reviewer. Take them all; you can delete any later. Make the first commit.
 
-## 2. Open Studio
+## 2. Open Harness
 
-**Studio** in the menu bar opens the workspace's harness: one list of kinds on the left (Overview, Agents, Evals, Skills, Rules, Guardrails, Workflows, Workers, Secrets) and the selected kind beside it. It opens on **Overview**.
+**Harness** in the menu bar opens the workspace's harness: one list of kinds on the left (Overview, Agents, Evals, Skills, Rules, Guardrails, Workflows, Workers, Secrets) and the selected kind beside it. It opens on **Overview**.
 
 The Overview costs nothing to show, because it reads only what the workspace already records. Right after setup you'll see:
 
@@ -64,7 +64,7 @@ The workspace's own ring says **Not judged yet**. Leave it for now; you'll grade
 
 ## 3. An agent that reviews, and changes nothing
 
-**Studio › Agents** lists the four. Open **Search & Performance Reviewer**. Its form shows the description, the instructions, its tools and, under **Advanced**, its permission mode. The file behind it, `.agents/agents/search-perf-reviewer.md`, begins:
+**Harness › Agents** lists the four. Open **Search & Performance Reviewer**. Its form shows the description, the instructions, its tools and, under **Advanced**, its permission mode. The file behind it, `.agents/agents/search-perf-reviewer.md`, begins:
 
 ```markdown
 ---
@@ -91,7 +91,7 @@ Its instructions also name the spec IDs it checks against (`SRCH-01`–`SRCH-06`
 
 Instructions drift. A model update, a tidy-up of the prompt or a new skill can quietly break an agent that worked last week. An **eval** catches that: a table of prompts, each with the answer you expect, run on the agent whenever it changes.
 
-**Studio › Evals** lists your agents that have no evals, each with **Draft evals**. Choose it for **search-perf-reviewer**. A model reads what the agent is for and its instructions, then proposes cases: typical asks, edge cases, and what it should decline. For Recipe Books it drafted cases like these (shortened):
+**Harness › Evals** lists your agents that have no evals, each with **Draft evals**. Choose it for **search-perf-reviewer**. A model reads what the agent is for and its instructions, then proposes cases: typical asks, edge cases, and what it should decline. For Recipe Books it drafted cases like these (shortened):
 
 | ID | Prompt | Output (expected) | Type | Threshold | Scope |
 |---|---|---|---|---|---|
@@ -117,7 +117,7 @@ More in [Evals](../guide/evals.md).
 
 A skill is a recipe the agent follows for one kind of task. Most are instructions, but some steps are better as code: they're exact, quick and cost no tokens. Shopping lists are one. `SHOP-02` says `1 cup flour` + `2 cups flour` must become `3 cups flour`, and arithmetic is a script's job, not a model's.
 
-**Studio › Skills** › **search-and-shopping-aggregation** › **Scripts** › new script, Python. Name it `normalize.py` and write (or describe it and use **Redraft** to have the model write it):
+**Harness › Skills** › **search-and-shopping-aggregation** › **Scripts** › new script, Python. Name it `normalize.py` and write (or describe it and use **Redraft** to have the model write it):
 
 ```python
 """normalize.py: shopping list lines, summed by canonical ingredient (SHOP-02)."""
@@ -163,7 +163,7 @@ Back on **General**, add the agents it's offered to (`search-perf-reviewer`), so
 
 The workflow in step 9 calls the staging server, which needs a token. A token pasted into a prompt or a file ends up in transcripts, logs and git. A **secret** stays in your OS keychain and is named instead: `{secrets:staging_token}`.
 
-**Studio › Secrets** › add one: name `staging_token`, then the value. The list shows each secret's name (as you'd write it) and when it was set, never the value. **Replace** sets a new value without showing the old one.
+**Harness › Secrets** › add one: name `staging_token`, then the value. The list shows each secret's name (as you'd write it) and when it was set, never the value. **Replace** sets a new value without showing the old one.
 
 `{secrets:staging_token}` now works in prompts, agent instructions, MCP server settings and workflow steps. The value goes in only as the model or the service is called. The transcript, the audit log and the workflow file keep the placeholder, and if a model ever echoes the value back, it's shown masked. A workspace's secrets are its own. **Settings › Secrets** holds global ones for every workspace, and the workspace's own wins a name clash.
 
@@ -171,7 +171,7 @@ The workflow in step 9 calls the staging server, which needs a token. A token pa
 
 Instructions ask; a **rule** checks. A rule with `when` is judged by a fast model at a fixed point in every turn: `before_agent` on your prompt, or `after_agent` on the answer and the files it changed. For Recipe Books, the spec requires tests for every backend change (`OVW-11`), so make that a rule the agent can't skip.
 
-**Studio › Rules** › **+**, named `backend-tests`:
+**Harness › Rules** › **+**, named `backend-tests`:
 
 ```markdown
 ---
@@ -193,7 +193,7 @@ Before you rely on it, use **Try it**. Paste an answer like "Added the `/api/v1/
 
 ## 8. Guardrails: safety and limits
 
-Rules are about quality. **Guardrails** are about what must never happen, and they watch every step: your prompt, each tool call before it runs, what each tool brings back, and the answer. **Studio › Guardrails** shows the three built-ins, on by default:
+Rules are about quality. **Guardrails** are about what must never happen, and they watch every step: your prompt, each tool call before it runs, what each tool brings back, and the answer. **Harness › Guardrails** shows the three built-ins, on by default:
 
 - **limits** refuses force pushes and `rm -rf` of `/` or `~`, and can cap cost, model calls and files changed per turn;
 - **prompt_injection** watches what web pages, the browser and MCP servers return for text aimed at the agent;
@@ -238,7 +238,7 @@ The prompt asks to reveal, print or send an API key, token or password.
 
 The reviewer is useful when you remember to ask it. A **workflow** makes it a routine: steps joined on a canvas and run as one job. Here the routine is a daily check that staging's search is still under `SRCH-06`'s 300 ms.
 
-You could drag the steps onto the canvas yourself. Describing it is faster. **Studio › Workflows** › **+** › **Compose with AI**:
+You could drag the steps onto the canvas yourself. Describing it is faster. **Harness › Workflows** › **+** › **Compose with AI**:
 
 > Every weekday morning, call staging's search health endpoint, https://staging.recipes.example/api/v1/search/health, with the staging_token secret. Have search-perf-reviewer compare the numbers with the 300 ms p95 target in SRCH-06 and say what to fix. Save the review to reports/search-latency.md.
 
@@ -278,19 +278,19 @@ edges:
   - {from: review, to: save}
 ```
 
-**Run** it, with the input left empty (its first step needs none). It runs in the background, so you can close Studio, and the status bar shows its progress. The run panel under the canvas marks each step as it finishes, with the model it used, its tokens and its cost. The workflow runs in **Auto** mode by default: a reviewer model decides what would otherwise ask you, such as reaching a new host or writing the report, so the run doesn't stop for each one. The run keeps a **receipt** of what each step did, which model did it, when, and what it cost. In a chat, `/search-latency-check` runs it too. More in [Workflows](../guide/workflows.md).
+**Run** it, with the input left empty (its first step needs none). It runs in the background, so you can close Harness, and the status bar shows its progress. The run panel under the canvas marks each step as it finishes, with the model it used, its tokens and its cost. The workflow runs in **Auto** mode by default: a reviewer model decides what would otherwise ask you, such as reaching a new host or writing the report, so the run doesn't stop for each one. The run keeps a **receipt** of what each step did, which model did it, when, and what it cost. In a chat, `/search-latency-check` runs it too. More in [Workflows](../guide/workflows.md).
 
 ## 10. Run it every weekday
 
 The composer doesn't set schedules, because a schedule lives outside the workflow's file. Select nothing on the canvas, then **Schedule** › **Add a schedule**: *every weekday at 7:00*.
 
-The schedule is a **worker**, `search-latency-check-schedule`, created and enabled for you. It runs the workflow's steps exactly as they are, and it may do without asking only what those steps do: reach `staging.recipes.example` and write `reports/search-latency.md`. Open it in **Studio › Workers** to read those permissions. Limits on model calls, cost (a dollar by default) and time stop a run that goes wrong. Editing the worker pauses it until you enable it again, so what runs is always what you read. When a scheduled run fails, the app tells you, or the tray does if the app is closed. More in [Workers](../guide/workers.md).
+The schedule is a **worker**, `search-latency-check-schedule`, created and enabled for you. It runs the workflow's steps exactly as they are, and it may do without asking only what those steps do: reach `staging.recipes.example` and write `reports/search-latency.md`. Open it in **Harness › Workers** to read those permissions. Limits on model calls, cost (a dollar by default) and time stop a run that goes wrong. Editing the worker pauses it until you enable it again, so what runs is always what you read. When a scheduled run fails, the app tells you, or the tray does if the app is closed. More in [Workers](../guide/workers.md).
 
 ## 11. Grade the whole workspace
 
 Back on **Overview**, the facts have filled in: the workflow's runs and cost on the chart, eval coverage for the reviewer, and fewer items needing attention. Now grade it. **Re-check** says how many items it will judge and about what that will cost, then judges them one at a time while the rings fill in.
 
-A judge model rates each item against a rubric for its kind. An agent is rated on how clear its instructions are, whether its tools fit, whether its evals cover it and whether its runs succeed. A workflow is rated on how it handles failure, what it costs and how often it succeeds, and so on. The judge sees the item's file and what the records say about it, so a grade rests on evidence. Items get **A** to **D**, shown as badges in every Studio list.
+A judge model rates each item against a rubric for its kind. An agent is rated on how clear its instructions are, whether its tools fit, whether its evals cover it and whether its runs succeed. A workflow is rated on how it handles failure, what it costs and how often it succeeds, and so on. The judge sees the item's file and what the records say about it, so a grade rests on evidence. Items get **A** to **D**, shown as badges in every Harness list.
 
 Open a low grade. Each rubric line has a score from 1 to 5 and a reason, plus up to three suggested fixes. For this workspace, expect something like:
 

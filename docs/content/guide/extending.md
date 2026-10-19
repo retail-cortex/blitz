@@ -25,7 +25,7 @@ agents: [coder]    # none: every agent
 The answer says how the change was tested.
 ```
 
-`block` stops a prompt (or marks an answer as failing), `warn` says so in the chat, and `revise` gives the agent the reason: with the prompt, or as a request to fix its answer (twice at most). A fast model judges each rule (the suggestions model). In the desktop app, **Studio › Rules** lists them in the order they run, reorders them by dragging, and has **Try it** to check a sample prompt or answer.
+`block` stops a prompt (or marks an answer as failing), `warn` says so in the chat, and `revise` gives the agent the reason: with the prompt, or as a request to fix its answer (twice at most). A fast model judges each rule (the suggestions model). In the desktop app, **Harness › Rules** lists them in the order they run, reorders them by dragging, and has **Try it** to check a sample prompt or answer.
 
 Rules are about the quality of the work. **Guardrails** are about safety and limits, and they watch every step of a turn: your prompt, each tool call before it runs, what each tool brings back, and the answer. Three are built in, and they're on by default. A file in `.agents/guardrails/` named after one (`~/.blitz/guardrails/` for every workspace) changes its settings, or switches it off with `enabled: false`; delete the file to go back to the defaults:
 
@@ -51,7 +51,7 @@ tools: [run_shell_command]
 Deleting a git branch, locally or on the remote.
 ```
 
-A rule that can't be checked lets the turn go on; a guardrail that can't be checked and blocks stops what it guards. In the desktop app, **Studio › Guardrails** switches the built-ins off and on, tunes them (or resets them to their defaults), and edits your own, with **Try it**.
+A rule that can't be checked lets the turn go on; a guardrail that can't be checked and blocks stops what it guards. In the desktop app, **Harness › Guardrails** switches the built-ins off and on, tunes them (or resets them to their defaults), and edits your own, with **Try it**.
 
 Edit any of these, or an agent or skill in `.agents/`, while you work: the change applies from your next message, in the same conversation or a new one. Blitz checks the files' sizes and times before each message and reloads only what changed. `/reload` (in the app, **Agents › Reload agent files**) reads them all again now and says what it loaded. MCP servers in `.mcp.json` or `.agents/mcp_config.json` are the exception: open the workspace again to apply a change to them.
 

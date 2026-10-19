@@ -34,7 +34,7 @@ mkdir -p ~/Projects/blitz-research && cd ~/Projects/blitz-research && git init
 
 The setup wizard writes the instructions every agent in this folder reads, and proposes skills and agents. It asks what the project is, so it works for a course as well as for code.
 
-- **Desktop:** the chat's first tile, **Set up this workspace for agents**, or **Help › Set up the agent harness**.
+- **Desktop:** the chat's first tile, **Set up this workspace for agents**, or **Help › Set up the harness**.
 - **Terminal:** `/setup`.
 
 Setup starts with the specification. Choose **Research or science** when it asks what kind of project this is (it guesses from your notebooks and data). For a study it's worth it: what you want to find out, the data, where training runs and the results you'll report become numbered specs in `.agents/specs/` that setup, and later your skills and agents, follow.
@@ -215,7 +215,7 @@ The paper is A4 or Letter, from your locale; `[pdf] page_size` sets it.
 
 ## 9. Digest new sources overnight
 
-A worker is a workflow the Blitz service runs on a schedule, unattended, with only the permissions you give it ([Workers](../guide/workers.md)). This one writes notes and flashcards for whatever you dropped in `inbox/` during the day. Create `.agents/workers/digest/WORKER.md` (or, with advanced settings on, **Studio › Workers › New worker** in the desktop app):
+A worker is a workflow the Blitz service runs on a schedule, unattended, with only the permissions you give it ([Workers](../guide/workers.md)). This one writes notes and flashcards for whatever you dropped in `inbox/` during the day. Create `.agents/workers/digest/WORKER.md` (or, with advanced settings on, **Harness › Workers › New worker** in the desktop app):
 
 ```markdown
 ---

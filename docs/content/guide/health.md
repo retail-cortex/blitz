@@ -3,7 +3,7 @@ title: Workspace health
 weight: 59
 ---
 
-**Studio › Overview** is your workspace's dashboard: what it holds, how its runs go, what needs attention, and how good each agent, skill, rule, guardrail, eval, workflow and worker is. Studio opens on it.
+**Harness › Overview** is your workspace's dashboard: what it holds, how its runs go, what needs attention, and how good each agent, skill, rule, guardrail, eval, workflow and worker is. Harness opens on it.
 
 Spec: [workspace health](../about/specs/spec_health_044.md).
 
@@ -23,7 +23,7 @@ Every card opens in place with the arrow in its corner, and the Overview remembe
 
 A judge model rates each item against a rubric for its kind: for an agent, whether its instructions are clear, whether its tools fit, whether its evals cover it and whether its runs succeed; for a workflow, whether it handles failure, what it costs and how often it succeeds; and so on. It's given the item's file and what the records say about it (its eval results, runs, failures and costs), so a grade rests on evidence, not opinion. Each rubric line gets a score from 1 to 5 with a reason, and up to three **suggested fixes**.
 
-An item's grade is its overall score: **A** from 4.5, **B** from 3.5, **C** from 2.5, else **D**. A kind's and the workspace's grades average their items, weighted by how much each is used; a file that doesn't load counts as a D. Grades also show as badges beside each item in Studio's lists.
+An item's grade is its overall score: **A** from 4.5, **B** from 3.5, **C** from 2.5, else **D**. A kind's and the workspace's grades average their items, weighted by how much each is used; a file that doesn't load counts as a D. Grades also show as badges beside each item in Harness's lists.
 
 **Improve** on a fix puts a request in the chat for the agent to make that change: send it, and you review the edit as you would any other (its diff, approvals, undo).
 

@@ -5,7 +5,7 @@ weight: 55
 
 What each release of Blitz brings, beyond the change list on [GitHub's releases page](https://github.com/retail-cortex/blitz/releases).
 
-- [Blitz 0.7.2](blitz-0.7.2.md): no more frozen window with many workspaces open (the window and Blitz talk over one encrypted HTTP/2 connection); evals keep running when you leave them, with a time limit per case; skills get trigger phrases and scenarios you can try, keep and run; the Studio button opens and closes Studio; on Windows, Open Blitz opens the app, and the Edge window is gone.
+- [Blitz 0.7.2](blitz-0.7.2.md): no more frozen window with many workspaces open (the window and Blitz talk over one encrypted HTTP/2 connection); evals keep running when you leave them, with a time limit per case; skills get trigger phrases and scenarios you can try, keep and run; the Harness button opens and closes Harness; on Windows, Open Blitz opens the app, and the Edge window is gone.
 - [Blitz 0.7.1](blitz-0.7.1.md): Studio for agents, evals, skills with scripts, rules, guardrails, secrets, workflows and workers; workflows on a canvas or composed with AI; a workspace dashboard that grades it all; a Windows setup program.
 - [Blitz 0.7.0](blitz-0.7.0.md): a new desktop app on Electron, Windows included, that updates itself; web pages beside the chat, added to it or saved into the workspace; One Light and One Dark Pro themes; the chat or the editor expands over the other.
 - [Blitz 0.6.5](blitz-0.6.5.md): branches and merges on the Changes page; version control in plain words; edits to rules, instructions and skills apply from the next message, with `/reload` to read them all again; braces in your rules no longer break Gemini turns.
