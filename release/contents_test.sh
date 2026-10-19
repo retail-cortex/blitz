@@ -15,13 +15,13 @@
 
 # Every release archive carries the license, the notice and the
 # third-party notices beside the programs, and blz, a link to blitz (but
-# Windows's zip, which has the tray instead).
+# Windows's zip: no links there).
 set -euo pipefail
 fail=0
 for archive in "$@"; do
 	case "$archive" in *.zip) # GNU tar can't list zips
 		list="$(unzip -Z1 "$archive")"
-		for f in LICENSE NOTICE THIRD_PARTY_NOTICES README.md blitz.exe blitzd.exe blitz-tray.exe; do
+		for f in LICENSE NOTICE THIRD_PARTY_NOTICES README.md blitz.exe blitzd.exe; do
 			grep -q "/$f$" <<<"$list" || { echo "✗ $(basename "$archive") has no $f"; fail=1; }
 		done
 		continue

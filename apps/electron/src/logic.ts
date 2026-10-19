@@ -53,26 +53,43 @@ export const taskWindowMethods: readonly WindowMethod[] = ["OpenURL", "SetAppear
 export const pageEvents = ["menu:about", "menu:settings", "deeplink:open", "notification:open", "preview:state", "tasks:open"] as const;
 export type PageEvent = (typeof pageEvents)[number];
 
+/** A link to the page, and the fingerprint of the certificate its server has. */
+export interface PageLink {
+  url: string;
+  fingerprint: string;
+}
+
 /**
  * The link to the page in a line blitz-tray --serve wrote: a one-time
- * link on the loopback address ({"url": "http://127.0.0.1:<port>/open?t=<hex>"}),
- * or undefined for anything else.
+ * link on the loopback address, over HTTPS, with its server's certificate
+ * ({"url": "https://127.0.0.1:<port>/open?t=<hex>", "fingerprint": "AB:…"},
+ * SHA-256 as colon-separated hex), or undefined for anything else.
  */
-export function parseLink(line: string): string | undefined {
-  let url: unknown;
+export function parseLink(line: string): PageLink | undefined {
+  let url: unknown, fingerprint: unknown;
   try {
-    url = (JSON.parse(line) as { url?: unknown }).url;
+    ({ url, fingerprint } = JSON.parse(line) as { url?: unknown; fingerprint?: unknown });
   } catch {
     return undefined;
   }
-  if (typeof url !== "string") return undefined;
+  if (typeof url !== "string" || typeof fingerprint !== "string" || !/^([0-9A-F]{2}:){31}[0-9A-F]{2}$/.test(fingerprint)) return undefined;
   try {
     const u = new URL(url);
-    if (u.protocol !== "http:" || u.hostname !== "127.0.0.1" || !u.port || u.pathname !== "/open" || !/^[0-9a-f]+$/.test(u.searchParams.get("t") ?? "")) return undefined;
+    if (u.protocol !== "https:" || u.hostname !== "127.0.0.1" || !u.port || u.pathname !== "/open" || !/^[0-9a-f]+$/.test(u.searchParams.get("t") ?? "")) return undefined;
   } catch {
     return undefined;
   }
-  return url;
+  return { url, fingerprint };
+}
+
+/**
+ * Whether a certificate is the page server's: on the loopback address,
+ * with the fingerprint blitz-tray --serve named (pinned). The window
+ * trusts that one certificate, made by the server as it started, and
+ * leaves every other to Chromium's own checks.
+ */
+export function isPageCertificate(hostname: string, fingerprint: string, pinned: string): boolean {
+  return pinned !== "" && hostname === "127.0.0.1" && fingerprint === pinned;
 }
 
 /** The origin of a URL ("" when it isn't one). */

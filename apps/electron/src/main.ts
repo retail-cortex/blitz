@@ -21,6 +21,7 @@
 // picker, printing to PDF, notifications, the menu, closing with unsaved
 // changes, the web previews) through the preload's window.blitzElectron.
 import { spawn, type ChildProcess } from "node:child_process";
+import { X509Certificate } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { mkdtemp, rm, stat, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
@@ -36,6 +37,7 @@ import {
   englishMenu,
   gpuOff,
   isExternal,
+  isPageCertificate,
   isWindowMethod,
   keepLine,
   linkArgs,
@@ -98,6 +100,9 @@ let ready = false;
 // window's cookie lets the next one in at the origin.
 let firstLink = "";
 let origin = "";
+// The page server's certificate (its SHA-256 fingerprint), the one the
+// window trusts for it: the server makes a new one each time it starts.
+let pinned = "";
 let sidecar: ChildProcess | null = null;
 let quitting = false;
 let editorUnsaved: Unsaved = unsaved(undefined);
@@ -142,6 +147,12 @@ async function start() {
   // Only what the page needs: notifications, writing to the clipboard
   // (copy), and full screen.
   session.defaultSession.setPermissionRequestHandler((_wc, permission, done) => done(["notifications", "clipboard-sanitized-write", "fullscreen"].includes(permission)));
+  // The page is served over HTTP/2, so its streams share one connection
+  // (HTTP/1.1 allows six per host, and the page's open streams took them
+  // all). That needs TLS: the page server's own certificate is trusted, in
+  // the app's windows only (the web tabs have a session of their own), and
+  // every other certificate is left to Chromium (-3).
+  session.defaultSession.setCertificateVerifyProc((req, done) => done(isPageCertificate(req.hostname, fingerprintOf(req.certificate.data), pinned) ? 0 : -3));
   setMenu(englishMenu);
   firstLink = await serve();
   origin = originOf(firstLink);
@@ -307,11 +318,12 @@ function serve(): Promise<string> {
     createInterface({ input: child.stdout! }).on("line", (line) => {
       const link = parseLink(line);
       if (!link) return;
+      pinned = link.fingerprint;
       if (first) {
         first = false;
-        resolve(link);
+        resolve(link.url);
       } else {
-        reload(link);
+        reload(link.url);
       }
     });
     child.once("error", reject);
@@ -339,6 +351,15 @@ function reload(link: string) {
     void taskWin.loadURL(tasksURL(link));
   } else {
     firstLink = link;
+  }
+}
+
+/** A certificate's SHA-256 fingerprint (colon-separated hex), from its PEM; "" if it can't be read. */
+function fingerprintOf(pem: string): string {
+  try {
+    return new X509Certificate(pem).fingerprint256;
+  } catch {
+    return "";
   }
 }
 

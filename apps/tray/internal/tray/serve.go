@@ -29,6 +29,9 @@ import (
 // Link is what Serve writes for each link it makes: one JSON line.
 type Link struct {
 	URL string `json:"url"`
+	// Fingerprint is the page server's certificate's (SHA-256, colon-
+	// separated hex): the one certificate the window trusts for it.
+	Fingerprint string `json:"fingerprint"`
 }
 
 // Serve serves the desktop page for a window that shows it (the Electron
@@ -43,13 +46,13 @@ func Serve(o pageserver.Options, in io.Reader, out io.Writer) error {
 	}
 	defer srv.Close()
 	enc := json.NewEncoder(out)
-	if err := enc.Encode(Link{URL: srv.OpenURL()}); err != nil {
+	if err := enc.Encode(Link{URL: srv.OpenURL(), Fingerprint: srv.Fingerprint()}); err != nil {
 		return err
 	}
 	lines := bufio.NewScanner(in)
 	for lines.Scan() {
 		if strings.TrimSpace(lines.Text()) == "link" {
-			if err := enc.Encode(Link{URL: srv.OpenURL()}); err != nil {
+			if err := enc.Encode(Link{URL: srv.OpenURL(), Fingerprint: srv.Fingerprint()}); err != nil {
 				return err
 			}
 		}

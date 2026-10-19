@@ -51,8 +51,7 @@ helper process (IMG-52).
 - **Playwright end-to-end tests for the desktop page (M).** Decided
   2026-10-01, deferred until the usability pass settles the UI, so the
   fake service (`dev/fake.ts`) isn't rewritten twice. Playwright, for its
-  Chromium (the Electron app's engine since v0.6.6, and Edge's for the
-  Windows tray's page). Two tiers: `?fake` for every flow, on every push; a few smoke
+  Chromium (the Electron app's engine since v0.6.6). Two tiers: `?fake` for every flow, on every push; a few smoke
   tests against a throwaway keyless `blitzd` (`BLITZ_SOCKET`, `HOME` in a
   short `/tmp` dir), which catch the fake drifting from the service. A
   `//apps/desktop/web:e2e` target (tagged `requires-network`/`manual`:

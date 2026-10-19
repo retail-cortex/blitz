@@ -36,7 +36,7 @@ The Linux `.deb` runs in ChromeOS's Linux container (Crostini): `amd64` on Intel
 
 ### On Windows
 
-Unzip `blitz_<version>_windows_amd64.zip` and run `blitz-tray.exe`. It starts the service and puts a bolt in the notification area (amber while the service runs, grey when it doesn't). **Open Blitz** shows the app in an Edge window with no tabs or address bar, served by the tray on `127.0.0.1` to that window only; **Start Blitz at login** keeps it. Most of the app works as on macOS and Linux. Choosing a workspace asks for its path, and Export as PDF and installing the CLI aren't there. Spec: [Windows](../about/specs/spec_windows_036.md).
+Install it with `Blitz_<version>_windows_x64_setup.exe` (above). The app comes with `blitz-tray.exe`, which starts the service and puts a bolt in the notification area (amber while the service runs, grey when it doesn't); **Open Blitz** in its menu opens the app, and **Start Blitz at login** keeps the tray. Up to 0.7.1 the CLI's zip had a tray that showed the app in an Edge window instead; that's gone, since the app does it all. Spec: [Windows](../about/specs/spec_windows_036.md).
 
 ## The window
 
@@ -79,7 +79,7 @@ The window keeps only its own settings, in `~/.blitz/desktop.json`: its theme, l
 
 ## How it talks to the service
 
-A web page can't open a Unix socket, so the app starts a host beside it, `blitz-tray --serve`, which serves the page on a loopback address behind a one-time link and forwards the page's API calls, and only those, to the service's socket. The page uses Connect's generated TypeScript client against its own origin; responses stream through as they arrive, so turn events appear as they happen. The host listens only on `127.0.0.1` and stops when the window closes, so nothing new is reachable from the network.
+A web page can't open a Unix socket, so the app starts a host beside it, `blitz-tray --serve`, which serves the page on a loopback address behind a one-time link and forwards the page's API calls, and only those, to the service's socket. It speaks HTTP/2 over TLS, so every call and stream shares one connection (a browser allows only six HTTP/1.1 connections to a host, too few for a window with several workspaces open), and the window trusts only the certificate that host made for itself as it started. The page uses Connect's generated TypeScript client against its own origin; responses stream through as they arrive, so turn events appear as they happen. The host listens only on `127.0.0.1` and stops when the window closes, so nothing new is reachable from the network.
 
 Model and tool output is rendered as React elements (Markdown with raw HTML skipped), never as HTML. Web links open in the system browser, and images in output are never fetched. Mermaid diagrams are drawn in Mermaid's strict mode, and their SVG is sanitized before it's shown.
 

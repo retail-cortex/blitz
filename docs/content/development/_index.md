@@ -21,8 +21,8 @@ A monorepo of independent apps over shared packages, one Go module. The rule: **
 | `pkg/api` | The contract between front ends and the engine: `Backend`, and the values, events and errors that cross it. Depends only on `config` and `images` |
 | `pkg/client` | `Backend` over the service's API |
 | `pkg/loginitem` | Starting the service at login and controlling it (launchd, systemd), and the tray (also the registry's Run key on Windows), for the CLI, the desktop app and the tray |
-| `pkg/pagehost` | The page's calls to the program serving it (`blitz-tray --serve` for the Electron app, the tray's page on Windows): the window's preferences (`~/.blitz/desktop.json`), the service, installing the `blitz` command, the OS sandbox, updates |
-| `pkg/pageserver` | The desktop page in front of the service: the proxy to its socket (the tray uses it, for the Electron app and on Windows), and the loopback server, behind a one-time link and a cookie, that serves the page to a browser on Windows |
+| `pkg/pagehost` | The page's calls to the program serving it (`blitz-tray --serve` for the Electron app): the window's preferences (`~/.blitz/desktop.json`), the service, installing the `blitz` command, the OS sandbox, updates |
+| `pkg/pageserver` | The desktop page in front of the service: the proxy to its socket (the tray uses it, for the Electron app), and the loopback server, HTTP/2 over TLS with a certificate of its own, behind a one-time link and a cookie, that serves the page to a browser on Windows |
 | `pkg/fileview` | Showing files and folders in the system's programs (file manager, viewer), never running one: for the desktop app and the tray |
 | `pkg/socket` | Where the service listens (the per-user Unix socket), and how to reach it |
 | `pkg/engine` | The program without a UI: `engine.Open` builds a `Workspace` (registries, tools, sessions, model, engine) implementing `api.Backend` with typed operations that return data and never print |

@@ -16,6 +16,8 @@ package tray
 
 import (
 	"bufio"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
 	"errors"
 	"io"
@@ -48,29 +50,37 @@ func TestServe(t *testing.T) {
 		outW.Close()
 	}()
 	lines := bufio.NewScanner(outR)
-	next := func() string {
+	next := func() Link {
 		t.Helper()
 		require.True(t, lines.Scan(), "a link")
 		var l Link
 		require.NoError(t, json.Unmarshal(lines.Bytes(), &l))
-		require.NotEmpty(t, l.URL)
-		return l.URL
+		require.True(t, strings.HasPrefix(l.URL, "https://127.0.0.1:"), l.URL)
+		require.NotEmpty(t, l.Fingerprint)
+		return l
 	}
 
-	first := next()
+	link := next()
+	first := link.URL
 	jar, err := cookiejar.New(nil)
 	require.NoError(t, err)
-	client := &http.Client{Jar: jar}
+	// The window's way: trust the certificate the line names, and no other.
+	client := &http.Client{Jar: jar, Transport: pinned(link.Fingerprint)}
 	res, err := client.Get(first)
 	require.NoError(t, err)
 	body, _ := io.ReadAll(res.Body)
 	res.Body.Close()
 	assert.Equal(t, http.StatusOK, res.StatusCode)
+	assert.Equal(t, 2, res.ProtoMajor, "HTTP/2")
+	_, err = (&http.Client{Transport: pinned("00:11")}).Get(first)
+	assert.Error(t, err, "another certificate isn't trusted")
 	assert.Contains(t, string(body), "<title>Blitz</title>", "the page from the directory")
 
 	_, err = inW.Write([]byte("something else\nlink\n"))
 	require.NoError(t, err)
-	assert.NotEqual(t, first, next(), "a new link each time")
+	again := next()
+	assert.NotEqual(t, first, again.URL, "a new link each time")
+	assert.Equal(t, link.Fingerprint, again.Fingerprint, "the same server")
 
 	require.NoError(t, inW.Close())
 	select {
@@ -79,8 +89,24 @@ func TestServe(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("still serving after its input ended")
 	}
-	_, err = http.Get(first)
+	_, err = client.Get(first)
 	assert.Error(t, err, "no longer serving")
+}
+
+// pinned trusts only the certificate with fingerprint, as the Electron
+// app's window does, and speaks only HTTP/2.
+func pinned(fingerprint string) *http.Transport {
+	var p http.Protocols
+	p.SetHTTP2(true)
+	return &http.Transport{Protocols: &p, TLSClientConfig: &tls.Config{
+		InsecureSkipVerify: true, // checked below, by the fingerprint
+		VerifyPeerCertificate: func(raw [][]byte, _ [][]*x509.Certificate) error {
+			if len(raw) == 0 || pageserver.Fingerprint(raw[0]) != fingerprint {
+				return errors.New("not the page server's certificate")
+			}
+			return nil
+		},
+	}}
 }
 
 // A directory without the page is refused.

@@ -17,9 +17,7 @@
 // Open the logs. It starts at login beside the service (--install), and
 // talks to the service over its socket like any client.
 //
-// Windows has no desktop app: there the tray serves the desktop page
-// itself (pkg/pageserver) and Open Blitz shows it in an Edge app window.
-// The service has no login item there either, so the tray starts it, and
+// On Windows the service has no login item, so the tray starts it, and
 // its menu has Start at login for the tray.
 //
 // --serve serves the page without an icon, for the Electron app's window
@@ -36,7 +34,6 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"io/fs"
 	"log"
 	"os"
 	"os/exec"
@@ -71,7 +68,7 @@ func main() {
 	uninstall := flag.Bool("uninstall", false, "Stop starting the tray at login, then exit")
 	showVersion := flag.Bool("version", false, "Print the version and exit")
 	serve := flag.Bool("serve", false, "Serve the desktop page for a window (the Electron app): print a link to it as a JSON line, a new one for each \"link\" line read, until standard input closes")
-	pageDir := flag.String("page", "", "With --serve: the built page's directory (default: the page built into the tray)")
+	pageDir := flag.String("page", "", "With --serve: the built page's directory")
 	applyUpdate := flag.Bool("apply-update", false, "Put a downloaded desktop app in place of the running one (the app's host runs this), then start it")
 	staged := flag.String("staged", "", "With --apply-update: the new app")
 	root := flag.String("root", "", "With --apply-update: the app it replaces")
@@ -165,20 +162,16 @@ func lock() bool {
 	return true
 }
 
-// serveWindow serves the page for the Electron app's window (--serve):
-// the page in dir, else the one built in; no icon, and no tray lock, so a
-// tray can show its icon beside it.
+// serveWindow serves the page in dir for the Electron app's window
+// (--serve): no icon, and no tray lock, so a tray can show its icon
+// beside it.
 func serveWindow(dir string) error {
-	p := page
-	if dir != "" {
-		d, err := tray.PageDir(dir)
-		if err != nil {
-			return err
-		}
-		p = d
+	if dir == "" {
+		return errors.New("--serve needs --page: the built page's directory")
 	}
-	if p == nil {
-		return errors.New("this blitz-tray has no page built in: pass --page")
+	p, err := tray.PageDir(dir)
+	if err != nil {
+		return err
 	}
 	sock := socket.DefaultSocket()
 	host := newHost(sock, newActions(sock))
@@ -270,10 +263,6 @@ func onReady() {
 	sock := socket.DefaultSocket()
 	acts := newActions(sock)
 	status := acts.Status
-
-	if page != nil {
-		acts.Page = pageLink(page, sock, acts)
-	}
 
 	tray.SetupLocale()
 	systray.SetTitle("")
@@ -480,25 +469,4 @@ func toggleAtLogin(item *systray.MenuItem) error {
 		item.Uncheck()
 	}
 	return err
-}
-
-// pageLink serves the page (on its first use) and returns a link that
-// opens it, a new one each time.
-func pageLink(page fs.FS, sock string, acts tray.Actions) func() (string, error) {
-	var (
-		mu  sync.Mutex
-		srv *pageserver.Server
-	)
-	return func() (string, error) {
-		mu.Lock()
-		defer mu.Unlock()
-		if srv == nil {
-			s, err := pageserver.Start(pageserver.Options{Page: page, Socket: sock, Host: newHost(sock, acts).Handler()})
-			if err != nil {
-				return "", err
-			}
-			srv = s
-		}
-		return srv.OpenURL(), nil
-	}
 }

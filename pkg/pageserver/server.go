@@ -23,11 +23,22 @@
 // own address as their host (no DNS rebinding) and, when they say where
 // they come from, come from the page (no other site, not even another
 // port on 127.0.0.1, whose requests a browser would send the cookie with).
+//
+// A Server speaks only HTTP/2, over TLS: a browser keeps at most six
+// HTTP/1.1 connections to a host, and each of the page's open streams
+// (a turn, its watches) held one, so a seventh request waited for one to
+// end and the window froze. HTTP/2 carries them all on one connection.
+// The certificate is the Server's own, made in memory as it starts and
+// never written down; the window that shows the page trusts that one
+// certificate by its fingerprint (Fingerprint), so a program that took
+// the port after the Server stopped couldn't pose as it.
 package pageserver
 
 import (
 	"crypto/rand"
 	"crypto/subtle"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/hex"
 	"errors"
 	"io/fs"
@@ -64,6 +75,8 @@ type Server struct {
 	ln      net.Listener
 	srv     *http.Server
 	host    string // 127.0.0.1:port, what requests must name
+	cert    *x509.Certificate
+	print   string // the certificate's fingerprint
 	cookie  string // the cookie's name: per port, as cookies ignore ports
 	secret  string // the cookie's value
 	page    http.Handler
@@ -93,9 +106,17 @@ func Start(o Options) (*Server, error) {
 		ln.Close()
 		return nil, errors.New("pageserver: only a loopback address is allowed")
 	}
+	cert, print, err := newCert(tcp.IP, time.Now())
+	if err != nil {
+		ln.Close()
+		return nil, err
+	}
+	leaf, _ := x509.ParseCertificate(cert.Certificate[0]) // just made
 	s := &Server{
 		ln:      ln,
 		host:    tcp.String(),
+		cert:    leaf,
+		print:   print,
 		cookie:  "blitz_" + strconv.Itoa(tcp.Port),
 		secret:  random(),
 		page:    pageHandler(o.Page),
@@ -104,13 +125,41 @@ func Start(o Options) (*Server, error) {
 		tickets: map[string]time.Time{},
 		now:     time.Now,
 	}
-	s.srv = &http.Server{Handler: s, ReadHeaderTimeout: 10 * time.Second}
-	go s.srv.Serve(ln)
+	// HTTP/2 only: an HTTP/1.1 client is turned away at the handshake.
+	var protocols http.Protocols
+	protocols.SetHTTP2(true)
+	s.srv = &http.Server{
+		Handler:           s,
+		ReadHeaderTimeout: 10 * time.Second,
+		Protocols:         &protocols,
+		TLSConfig: &tls.Config{
+			Certificates: []tls.Certificate{cert},
+			MinVersion:   tls.VersionTLS13,
+		},
+	}
+	go s.srv.ServeTLS(ln, "", "")
 	return s, nil
 }
 
-// Origin is the page's origin: http://127.0.0.1:port.
-func (s *Server) Origin() string { return "http://" + s.host }
+// Origin is the page's origin: https://127.0.0.1:port.
+func (s *Server) Origin() string { return "https://" + s.host }
+
+// Fingerprint is the SHA-256 fingerprint of the Server's certificate, the
+// one the window showing the page trusts (pageserver's Fingerprint).
+func (s *Server) Fingerprint() string { return s.print }
+
+// Transport reaches this Server, and nothing else, over HTTP/2: what a Go
+// client (a test, say) uses in place of the window.
+func (s *Server) Transport() *http.Transport {
+	pool := x509.NewCertPool()
+	pool.AddCert(s.cert)
+	var protocols http.Protocols
+	protocols.SetHTTP2(true)
+	return &http.Transport{
+		TLSClientConfig: &tls.Config{RootCAs: pool, MinVersion: tls.VersionTLS13},
+		Protocols:       &protocols,
+	}
+}
 
 // OpenURL is a link that opens the page once: it lets the browser in (a
 // cookie) and then goes to the page, so the link in the address bar and
@@ -197,6 +246,7 @@ func (s *Server) open(w http.ResponseWriter, r *http.Request) {
 		Value:    s.secret,
 		Path:     "/",
 		HttpOnly: true,
+		Secure:   true,
 		SameSite: http.SameSiteStrictMode,
 	})
 	http.Redirect(w, r, to, http.StatusSeeOther)

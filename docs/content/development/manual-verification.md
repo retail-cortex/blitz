@@ -383,6 +383,7 @@ Set `fallback_models = ["anthropic/claude-sonnet-5"]` with a working Anthropic k
 - [ ] `bazel build //:mac-app`, copy it out of Bazel's output (`ditto "$(bazel cquery --output=files //:mac-app)" /tmp/Blitz.app`) and open it with no service running. **Expected:** it offers to install the service; accepting runs `blitz service install` and the app continues.
 - [ ] With the service running: open a workspace with "+". **Expected:** a tab named after the directory, showing the active agent and model (or why the model is unavailable).
 - [ ] 💲 A turn in the app: its text appears as it streams, not only at the end. **This checks that responses stream through the host (`blitz-tray --serve`) into the Electron window**, which the tests can't: they exercise the proxy without a window.
+- [ ] Many streams at once (spec_electron_038 EL-01a): open four workspaces, start a turn in two, open Studio › Overview and a workflow's canvas. **Expected:** the window keeps answering: menus, Settings and opening files respond at once. In the window's developer tools (View › Toggle Developer Tools › Network, the Protocol column), the page's requests are `h2`.
 - [ ] 💲 A turn that edits a file with approvals on. **Expected:** the approval shows the diff; "Allow once" edits the file; "Deny" doesn't, and the agent says so.
 - [ ] 💲 While a turn runs, type a message and press Steer. **Expected:** "Queued for the agent", and the agent takes it into account at its next tool call; Stop ends the turn with "Interrupted."
 - [ ] 💲 An `ask_user_question`. **Expected:** the question with its options; the answer reaches the agent.
@@ -552,22 +553,22 @@ These touch your real keychain and settings: use a test key, or a throwaway `--c
 - [ ] CI's Linux job summary has the coverage table; lower `tools/coverage/floor.txt`'s number above the total on a branch and the job fails.
 - [ ] After CI on `main`, the site's **About › Coverage** shows the same total, the commit it measured, and each package's files when expanded.
 
-## 45. Windows: the tray and its page (spec_windows_036)
+## 45. Windows: the tray (spec_windows_036)
 
-On Windows 10 (1803 or later) or 11: unzip `blitz_<version>_windows_amd64.zip` (or `bazel build //release:archives`), with no API key set for a free run.
+On Windows 10 (1803 or later) or 11: install `Blitz_<version>_windows_x64_setup.exe` (or unzip `Blitz_<version>_windows_x64.zip`), with no API key set for a free run. The tray is `resources\app\bin\blitz-tray.exe` in the app's folder.
 
 - [ ] Run `blitz-tray.exe`.
   **Expected:** no console window; an amber bolt in the notification area within a few seconds (the tray started `blitzd.exe`); its tooltip says "Blitz service: running (…)". A second `blitz-tray.exe` exits at once.
 - [ ] **Open Blitz**.
-  **Expected:** an Edge window with no tabs or address bar shows the desktop page, connected; the address it lands on is `http://127.0.0.1:<port>/`, not the `/open?t=…` link. Open a workspace (type its path) and run a turn: it streams, and an approval works.
-- [ ] In that window: **Show in File Explorer** on a file, Settings › Service's controls, Help › About's licenses.
+  **Expected:** the Blitz app opens (not Edge, not a browser), connected. Open a workspace and run a turn: it streams, and an approval works.
+- [ ] In the app: **Show in File Explorer** on a file, Settings › Service's controls, Help › About's licenses.
   **Expected:** Explorer opens with the file selected; Stop turns the icon grey and Restart amber; the license texts show.
 - [ ] **Stop the service**, then **Start the service** from the tray.
   **Expected:** the icon goes grey, then amber; `~/.blitz/logs` shows the service stopping cleanly ("exit: a client asked").
 - [ ] Tick **Start Blitz at login**, sign out and in.
   **Expected:** `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` has `Blitz`; after signing in, the icon is back and the service runs. Untick it: the value is gone.
-- [ ] From PowerShell, `curl.exe -i http://127.0.0.1:<port>/` (the port from the Edge window), and the same with `-H "Host: example.com"`.
-  **Expected:** 403 both times: no cookie, and a foreign host.
+- [ ] With the app open, the port of its page server: `Get-NetTCPConnection -State Listen -OwningProcess (Get-Process blitz-tray).Id`. Then `curl.exe -k --http2 -i https://127.0.0.1:<port>/`, the same with `-H "Host: example.com"`, and `curl.exe -k --http1.1 https://127.0.0.1:<port>/`.
+  **Expected:** 403 for the first two (no cookie, and a foreign host); the HTTP/1.1 request is refused with no answer.
 - [ ] `icacls %USERPROFILE%\.blitz\run`
   **Expected:** only you, SYSTEM and Administrators.
 

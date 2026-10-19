@@ -18,7 +18,7 @@ Markdown files open in the Files editor as a read-only preview, and are changed 
 
 The owner's brief (2026-10-08) asked for TipTap with Monaco code blocks, over a WebSocket bridge to gopls. Decided the same day, after looking at what Blitz has:
 
-- **Code blocks are CodeMirror 6, not Monaco.** The Files editor is CodeMirror already (FIL-40): one editor, one theme, one set of keys. CodeMirror needs no web workers, no `eval` and no extra fonts, so it works unchanged in the app's web views (Chromium in the Electron app since v0.7.0; WebKit and WebKitGTK in the Wails app before), in Edge on Windows ([spec_windows_036](spec_windows_036.md)) and under VS Code's content security policy. Monaco would add 3–5 MB, worker bundling and a second editor.
+- **Code blocks are CodeMirror 6, not Monaco.** The Files editor is CodeMirror already (FIL-40): one editor, one theme, one set of keys. CodeMirror needs no web workers, no `eval` and no extra fonts, so it works unchanged in the app's web views (Chromium in the Electron app since v0.7.0; WebKit and WebKitGTK in the Wails app before), in Edge on Windows until v0.7.1 ([spec_windows_036](spec_windows_036.md)) and under VS Code's content security policy. Monaco would add 3–5 MB, worker bundling and a second editor.
 - **The editor reaches language servers through the service's API, not a WebSocket.** The service already runs a language server per workspace and language for the agent (FS-61), kills it with the workspace, and (on macOS and Linux) when the service dies. A new `LanguageService` (FIL-64) puts the editor on the same servers. No WebSocket: the app's web view refuses them, the VS Code proxy doesn't carry them, and the service never listens on a port (SVC-01). No second gopls beside the agent's.
 
 What the brief asked, and where this spec answers it:
@@ -106,7 +106,7 @@ A new Connect service, in a new `language.proto` beside the other protos. Every 
 ## 8. Size, platforms and dependencies
 
 - **VE-55** New packages, pinned (DSK-99) and in THIRD_PARTY_NOTICES (all MIT): `@tiptap/react`, `@tiptap/pm`, `@tiptap/starter-kit` and the table, task list and link extensions; a Markdown parser that gives each block its source range (`markdown-it` with its source maps, or mdast through remark, which Preview has already; decided in phase 2) and `@codemirror/lint`. Together about 300 kB, in the visual editor's chunk, loaded with the first Markdown file.
-- **VE-56** Platforms: the app on macOS, Linux and Windows (Electron's Chromium since v0.7.0; WebKit and WebKitGTK before), the Windows tray's page in Edge, and a browser in development. The VS Code extension shows only the chat (VSC-04), so it gets none of this until it shows files.
+- **VE-56** Platforms: the app on macOS, Linux and Windows (Electron's Chromium since v0.7.0; WebKit and WebKitGTK before), the Windows tray's page in Edge until v0.7.1, and a browser in development. The VS Code extension shows only the chat (VSC-04), so it gets none of this until it shows files.
 
 ## 9. Tests
 

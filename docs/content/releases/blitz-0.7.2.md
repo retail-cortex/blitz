@@ -1,0 +1,21 @@
+---
+title: Blitz 0.7.2
+weight: 1
+---
+
+**No more frozen window, however many workspaces you have open.** Download it from the [GitHub release](https://github.com/retail-cortex/blitz/releases/tag/v0.7.2).
+
+**Open everything at once.** With a few workspaces open, a turn running and Studio up, the app could stop answering: menus, settings and files all waited, as if the service had crashed. It hadn't. The window could only hold six connections to Blitz at a time, and every live view (a running turn, a workspace's tasks, a workflow's progress) kept one busy. Now they all share one, so keep as many workspaces, chats and canvases open as you like.
+
+**Who should update:** everyone, and especially if you work in several workspaces at once.
+
+### What's changed
+
+- **The window talks to Blitz over HTTP/2.** Every request and live update now shares a single connection, so there's no longer a limit of six.
+- **The connection is encrypted, even on your own machine.** Each time the app starts, it makes a private certificate for that session only. The window trusts that one certificate and nothing else, so no other program on your computer can pose as Blitz, even if it grabs the same port.
+- **On Windows, Open Blitz opens the app.** The tray's **Open Blitz** now opens the Blitz app instead of an Edge window.
+
+### Good to know
+
+- **The Edge window on Windows is gone.** Up to 0.7.1, the CLI's Windows zip had a tray that showed Blitz in an Edge window. The Blitz app has replaced it, so install it with `Blitz_0.7.2_windows_x64_setup.exe`. The CLI zip now holds `blitz.exe` and `blitzd.exe`, like the other platforms' archives.
+- Your settings, workspaces and conversations carry over from 0.7.1. The app updates itself, or install the new one over the old.

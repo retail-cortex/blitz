@@ -33,6 +33,7 @@ import {
   maxContentHTML,
   maxLinkPrompt,
   menuLabels,
+  isPageCertificate,
   originOf,
   pageEvents,
   parseDeepLink,
@@ -58,22 +59,37 @@ import {
 } from "./logic";
 
 describe("parseLink", () => {
+  const fp = Array(32).fill("AB").join(":");
+  const line = (url: string, fingerprint: string = fp) => JSON.stringify({ url, fingerprint });
   it.each([
-    { name: "the host's link", line: '{"url":"http://127.0.0.1:5123/open?t=ab12"}', want: "http://127.0.0.1:5123/open?t=ab12" },
+    { name: "the host's link", line: line("https://127.0.0.1:5123/open?t=ab12"), want: { url: "https://127.0.0.1:5123/open?t=ab12", fingerprint: fp } },
     { name: "not JSON", line: "starting", want: undefined },
     { name: "no url", line: '{"link":"x"}', want: undefined },
-    { name: "another host", line: '{"url":"http://example.com:5123/open?t=ab12"}', want: undefined },
-    { name: "https", line: '{"url":"https://127.0.0.1:5123/open?t=ab12"}', want: undefined },
-    { name: "no port", line: '{"url":"http://127.0.0.1/open?t=ab12"}', want: undefined },
-    { name: "another path", line: '{"url":"http://127.0.0.1:5123/?t=ab12"}', want: undefined },
-    { name: "no ticket", line: '{"url":"http://127.0.0.1:5123/open"}', want: undefined },
-    { name: "a ticket that isn't hex", line: '{"url":"http://127.0.0.1:5123/open?t=../x"}', want: undefined },
-  ])("$name", ({ line, want }) => expect(parseLink(line)).toBe(want));
+    { name: "no fingerprint", line: '{"url":"https://127.0.0.1:5123/open?t=ab12"}', want: undefined },
+    { name: "a fingerprint too short", line: line("https://127.0.0.1:5123/open?t=ab12", "AB:CD"), want: undefined },
+    { name: "a fingerprint in lower case", line: line("https://127.0.0.1:5123/open?t=ab12", fp.toLowerCase()), want: undefined },
+    { name: "another host", line: line("https://example.com:5123/open?t=ab12"), want: undefined },
+    { name: "plain http", line: line("http://127.0.0.1:5123/open?t=ab12"), want: undefined },
+    { name: "no port", line: line("https://127.0.0.1/open?t=ab12"), want: undefined },
+    { name: "another path", line: line("https://127.0.0.1:5123/?t=ab12"), want: undefined },
+    { name: "no ticket", line: line("https://127.0.0.1:5123/open"), want: undefined },
+    { name: "a ticket that isn't hex", line: line("https://127.0.0.1:5123/open?t=../x"), want: undefined },
+  ])("$name", ({ line, want }) => expect(parseLink(line)).toEqual(want));
+});
+
+describe("isPageCertificate", () => {
+  const fp = Array(32).fill("AB").join(":");
+  it.each([
+    { name: "the page server's", host: "127.0.0.1", fingerprint: fp, pinned: fp, want: true },
+    { name: "another certificate on the loopback address", host: "127.0.0.1", fingerprint: fp.replace("AB", "CD"), pinned: fp, want: false },
+    { name: "the same certificate for another host", host: "example.com", fingerprint: fp, pinned: fp, want: false },
+    { name: "nothing pinned yet", host: "127.0.0.1", fingerprint: "", pinned: "", want: false },
+  ])("$name", ({ host, fingerprint, pinned, want }) => expect(isPageCertificate(host, fingerprint, pinned)).toBe(want));
 });
 
 describe("originOf", () => {
   it("is the URL's origin, or empty", () => {
-    expect(originOf("http://127.0.0.1:5123/open?t=ab")).toBe("http://127.0.0.1:5123");
+    expect(originOf("https://127.0.0.1:5123/open?t=ab")).toBe("https://127.0.0.1:5123");
     expect(originOf("not a url")).toBe("");
   });
 });
