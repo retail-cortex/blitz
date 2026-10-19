@@ -245,7 +245,9 @@ go_test(
         "workspace_test.go",
     ],
     embed = [":engine"],
-    shard_count = 10,
+    # Each shard well inside small's minute, on a slow runner too (10 shards
+    # took up to 41 s on CI's macOS runner, and 62 s on a slow one).
+    shard_count = 16,
     deps = [
         "//pkg/a2ui",
         "//pkg/api",

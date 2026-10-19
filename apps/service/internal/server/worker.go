@@ -277,18 +277,28 @@ func (h workerService) ListWorkerRuns(ctx context.Context, r req[pb.ListWorkerRu
 	if err != nil {
 		return nil, err
 	}
-	out := &pb.ListWorkerRunsResponse{}
-	for _, run := range sc.liveRuns(w.Dir(), r.Msg.Name) {
-		out.Runs = append(out.Runs, runMsg(run))
-	}
 	runs, err := w.WorkerRuns(r.Msg.Name, int(r.Msg.Limit))
 	if err != nil {
 		return nil, toAPI(err)
 	}
-	for _, run := range runs {
+	out := &pb.ListWorkerRunsResponse{}
+	for _, run := range withLive(sc.liveRuns(w.Dir(), r.Msg.Name), runs) {
 		out.Runs = append(out.Runs, runMsg(run))
 	}
 	return ok(out)
+}
+
+// withLive is the runs going now, then the recorded ones, each run once:
+// a finished run is recorded before the scheduler lets it go, so for a
+// moment it's in both.
+func withLive(live, recorded []api.Run) []api.Run {
+	out := slices.Clone(live)
+	for _, run := range recorded {
+		if !slices.ContainsFunc(live, func(l api.Run) bool { return l.ID == run.ID }) {
+			out = append(out, run)
+		}
+	}
+	return out
 }
 
 func (h workerService) UndoWorkerRun(ctx context.Context, r req[pb.UndoWorkerRunRequest]) (*connect.Response[pb.UndoWorkerRunResponse], error) {

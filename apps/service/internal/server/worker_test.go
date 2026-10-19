@@ -562,3 +562,26 @@ func addWorkerIn(t *testing.T, root, name, content string) {
 	require.NoError(t, os.MkdirAll(wd, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(wd, workers.FileName), []byte(content), 0o644))
 }
+
+// A run that has finished but is still going for the scheduler is listed
+// once, as it goes; the others in order.
+func TestWithLive(t *testing.T) {
+	for _, tc := range []struct {
+		name           string
+		live, recorded []api.Run
+		want           []string
+	}{
+		{name: "none", want: nil},
+		{name: "recorded only", recorded: []api.Run{{ID: "b"}, {ID: "a"}}, want: []string{"b", "a"}},
+		{name: "live then recorded", live: []api.Run{{ID: "c"}}, recorded: []api.Run{{ID: "b"}}, want: []string{"c", "b"}},
+		{name: "in both: once", live: []api.Run{{ID: "c", Status: api.RunRunning}}, recorded: []api.Run{{ID: "c", Status: api.RunSucceeded}, {ID: "b"}}, want: []string{"c", "b"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var ids []string
+			for _, r := range withLive(tc.live, tc.recorded) {
+				ids = append(ids, r.ID)
+			}
+			assert.Equal(t, tc.want, ids)
+		})
+	}
+}
