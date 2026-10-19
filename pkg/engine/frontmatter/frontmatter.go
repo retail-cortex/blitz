@@ -121,6 +121,15 @@ func (f Fields) Int(key string, n int) {
 	f.set(key, &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!int", Value: strconv.Itoa(n)})
 }
 
+// Float sets key to x, or removes it when x is 0.
+func (f Fields) Float(key string, x float64) {
+	if x == 0 {
+		f.set(key, nil)
+		return
+	}
+	f.set(key, &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!float", Value: strconv.FormatFloat(x, 'f', -1, 64)})
+}
+
 // Bool sets key to true, or removes it when b is false.
 func (f Fields) Bool(key string, b bool) {
 	if !b {

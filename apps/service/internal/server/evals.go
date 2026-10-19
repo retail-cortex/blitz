@@ -59,7 +59,7 @@ func evalOf(s *pb.EvalSpec) evals.Eval {
 
 func evalResultMsg(r api.EvalResult) *pb.EvalResult {
 	return &pb.EvalResult{Case: r.Case, Name: r.Name, Agent: r.Agent, Type: r.Type, Scope: r.Scope, Status: r.Status, Score: r.Score, Threshold: r.Threshold,
-		Prompt: r.Prompt, Expected: r.Expected, Output: r.Output, Reason: r.Reason, Refusals: r.Refusals, CostUsd: r.CostUSD, Duration: durationpb.New(r.Duration)}
+		Prompt: r.Prompt, Expected: r.Expected, Output: r.Output, Reason: r.Reason, Refusals: r.Refusals, CostUsd: r.CostUSD, Duration: durationpb.New(r.Duration), SkillsUsed: r.SkillsUsed}
 }
 
 func evalRunMsg(r api.EvalRun) *pb.EvalRun {

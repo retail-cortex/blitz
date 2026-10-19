@@ -29,7 +29,9 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"slices"
 	"strings"
+	"unicode"
 
 	"gopkg.in/yaml.v3"
 )
@@ -140,7 +142,73 @@ func (s *Skill) Matches(query string) bool {
 			return true
 		}
 	}
+	for _, p := range s.TriggerPhrases {
+		if TriggerMatches(q, p) {
+			return true
+		}
+	}
 	return false
+}
+
+// TriggerMatches reports whether a request is near a trigger phrase
+// (SK-110): one holds the other, or it has most of the phrase's words
+// (two thirds of those that aren't stop words, however short: "pdf"
+// counts, "the" doesn't; all of them when every one is a stop word), a
+// word matching one that starts the same (plurals, other endings).
+// Phrases are examples, so no two people need write them alike.
+func TriggerMatches(request, phrase string) bool {
+	r, p := strings.ToLower(strings.TrimSpace(request)), strings.ToLower(strings.TrimSpace(phrase))
+	if r == "" || p == "" {
+		return false
+	}
+	if strings.Contains(r, p) || strings.Contains(p, r) {
+		return true
+	}
+	words := strings.FieldsFunc(r, notWordRune)
+	pws := strings.FieldsFunc(p, notWordRune)
+	if slices.ContainsFunc(pws, func(w string) bool { return !stopWords[w] }) {
+		pws = slices.DeleteFunc(pws, func(w string) bool { return stopWords[w] })
+	}
+	var want, have int
+	for _, pw := range pws {
+		want++
+		if slices.ContainsFunc(words, func(w string) bool { return sameWord(w, pw) }) {
+			have++
+		}
+	}
+	return want > 0 && have*3 >= want*2
+}
+
+// stopWords are English words that say little on their own: a trigger
+// phrase's other words decide whether a request is near it.
+var stopWords = func() map[string]bool {
+	m := map[string]bool{}
+	for _, w := range strings.Fields(`a an the and or but nor so yet if then than as of to in on at by for from with
+		without into onto about over under up down out off is are was were be been being am do does did done
+		have has had having can could would should will shall may might must it its it's this that these those
+		there here i me my mine we us our ours you your yours he him his she her hers they them their theirs
+		what which who whom whose when where why how all any some each every no not just also very too more most
+		please let lets let's want need like get got make some something`) {
+		m[w] = true
+	}
+	return m
+}()
+
+func notWordRune(c rune) bool { return !unicode.IsLetter(c) && !unicode.IsDigit(c) }
+
+// sameWord: equal, or alike enough to be the same word written another
+// way: they open with four letters or more alike, three quarters of the
+// shorter ("release" and "releases", "summary" and "summarize"; not
+// "contract" and "control").
+func sameWord(a, b string) bool {
+	if a == b {
+		return true
+	}
+	n := 0
+	for n < len(a) && n < len(b) && a[n] == b[n] {
+		n++
+	}
+	return n >= 4 && n*4 >= min(len(a), len(b))*3
 }
 
 // maxHashedBytes bounds how much of a skill's directory ContentHash reads.

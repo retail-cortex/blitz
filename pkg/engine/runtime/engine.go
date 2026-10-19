@@ -1034,10 +1034,10 @@ func (e *Engine) buildTreeLocked(active string, override model.LLM) (tree, error
 			sb.WriteString("\n\n## Available Agent Skills:\n")
 			for _, s := range allSkills {
 				if s.OfferedTo(rootSpec.Name) { // agents: offers it to others only
-					fmt.Fprintf(&sb, "- **%s**: %s\n", s.Name, s.Description)
+					fmt.Fprintf(&sb, "- **%s**: %s%s\n", s.Name, s.Description, skills.TriggerHint(s.TriggerPhrases))
 				}
 			}
-			sb.WriteString("\nUse `activate_skill` to load full skill instructions whenever relevant.\n")
+			sb.WriteString("\nUse `activate_skill` to load full skill instructions whenever relevant. A skill's \"for requests like\" are examples of what it's for: match a request to them by meaning, not by wording.\n")
 			rootInstruction += sb.String()
 		}
 	}

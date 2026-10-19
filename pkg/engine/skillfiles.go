@@ -80,7 +80,7 @@ func (w *Workspace) GetSkillFile(name string) (api.SkillFile, error) {
 	}
 	f := api.SkillFile{
 		Info: w.skillInfo(s), Path: s.Path, Editable: w.ownsSkill(s),
-		Spec: api.SkillSpec{Name: s.Name, Description: s.Description, Tools: s.AllowedTools, Agents: s.Agents, Members: s.Members, Instructions: s.Content},
+		Spec: api.SkillSpec{Name: s.Name, Description: s.Description, Tools: s.AllowedTools, Agents: s.Agents, Members: s.Members, Instructions: s.Content, Triggers: s.TriggerPhrases},
 	}
 	if f.Editable {
 		data, err := os.ReadFile(s.Path)
@@ -107,7 +107,7 @@ func (w *Workspace) SaveSkill(spec api.SkillSpec, previous, hash string) (api.Sk
 		return api.SkillFile{}, nil, err
 	}
 	_, problems, err := skills.Save(dir, skills.Spec{
-		Name: spec.Name, Description: spec.Description, Tools: spec.Tools, Agents: spec.Agents, Members: spec.Members, Instructions: spec.Instructions,
+		Name: spec.Name, Description: spec.Description, Tools: spec.Tools, Agents: spec.Agents, Members: spec.Members, Instructions: spec.Instructions, Triggers: spec.Triggers,
 	}, previous, hash, w.skills.IsBuiltin)
 	if err != nil || len(problems) > 0 {
 		return api.SkillFile{}, problems, err
@@ -176,7 +176,7 @@ func (w *Workspace) CopySkill(from, name string) (api.SkillFile, []string, error
 		return api.SkillFile{}, nil, fmt.Errorf("%w: %q", skills.ErrUnknownSkill, from)
 	}
 	name = strings.TrimSpace(name)
-	spec := skills.Spec{Name: name, Description: src.Description, Tools: src.AllowedTools, Agents: src.Agents, Members: src.Members, Instructions: src.Content}
+	spec := skills.Spec{Name: name, Description: src.Description, Tools: src.AllowedTools, Agents: src.Agents, Members: src.Members, Instructions: src.Content, Triggers: src.TriggerPhrases}
 	if probs := skills.Check(spec, w.skills.IsBuiltin); len(probs) > 0 {
 		return api.SkillFile{}, probs, nil
 	}

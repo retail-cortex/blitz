@@ -52,7 +52,8 @@ import { casesFromDraft, duplicateIds, emptyEvalForm, formFromEval, money, resul
 type Tab = "cases" | "settings" | "runs";
 
 /** A result's (or a run's) icon and colour, by status. */
-const statusIcon: Record<string, string> = {
+/** A run's or a result's status, as an icon (a skill's scenarios share it). */
+export const statusIcon: Record<string, string> = {
   pass: mdiCheckCircleOutline,
   passed: mdiCheckCircleOutline,
   fail: mdiCloseCircleOutline,
@@ -63,7 +64,8 @@ const statusIcon: Record<string, string> = {
   running: mdiLoading,
   stopped: mdiStop,
 };
-const statusClass = (s: string) => (s === "fail" || s === "failed" || s === "error" ? "error-text" : s === "warn" ? "warn-text" : "muted");
+/** A status's colour. */
+export const statusClass = (s: string) => (s === "fail" || s === "failed" || s === "error" ? "error-text" : s === "warn" ? "warn-text" : "muted");
 
 /** A run's counts, as "2 passed · 1 failed". */
 const summary = (run: Pick<EvalRun, "counts" | "results">) => {
@@ -694,7 +696,8 @@ export function EvalsPane({ workspace, onDirty, forAgent, onHandled }: { workspa
 }
 
 /** A run's results, each a row that opens into the prompt, the output expected and the output, and why. */
-function Results({ results }: { results: EvalResult[] }) {
+/** A run's results, each opening on what was expected and what came back. */
+export function Results({ results }: { results: EvalResult[] }) {
   const [open, setOpen] = useState<number | null>(null);
   if (!results.length) return null;
   return (
@@ -727,6 +730,7 @@ function Results({ results }: { results: EvalResult[] }) {
                 </div>
               </div>
               {r.reason && <span className="t-body-sm">{r.reason}</span>}
+              {r.skillsUsed.length > 0 && <span className="t-body-sm muted">{t("desktop.scenarios.used", { skills: r.skillsUsed.join(", ") })}</span>}
               {r.refusals.length > 0 && (
                 <div className="stack" style={{ gap: 2 }}>
                   <span className="t-label">{t("desktop.evals.refused")}</span>

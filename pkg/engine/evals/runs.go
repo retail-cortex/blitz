@@ -25,6 +25,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"sync"
 
 	"github.com/retail-cortex/blitz/pkg/api"
@@ -41,11 +42,14 @@ type RunLog struct {
 func OpenRunLog(dir string) *RunLog { return &RunLog{dir: dir} }
 
 func (l *RunLog) file(workspace, eval string) (string, error) {
-	if !ValidName(eval) {
+	base := eval
+	if skill, ok := strings.CutPrefix(eval, api.SkillEvalPrefix); ok && ValidName(skill) {
+		base = "skill--" + skill // a skill's scenarios; no eval's name has "--"
+	} else if !ValidName(eval) {
 		return "", fmt.Errorf("%w: %q", ErrUnknown, eval)
 	}
 	sum := sha256.Sum256([]byte(workspace))
-	return filepath.Join(l.dir, hex.EncodeToString(sum[:8])+"-"+eval+".jsonl"), nil
+	return filepath.Join(l.dir, hex.EncodeToString(sum[:8])+"-"+base+".jsonl"), nil
 }
 
 // Append records a finished run.

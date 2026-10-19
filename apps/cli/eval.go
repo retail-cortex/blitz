@@ -34,23 +34,40 @@ import (
 type evalOptions struct {
 	cases []string
 	json  bool
+	skill string
 }
 
 func newEvalCommand(g *globalFlags) *cobra.Command {
 	var o evalOptions
 	cmd := &cobra.Command{
-		Use:   "eval <name>",
+		Use:   "eval <name> | --skill <skill>",
 		Short: "Run one of the workspace's evals (.agents/evals/<name>.md)",
 		Long: `Run an eval: each case's prompt on each agent the eval names (the active
 one when it names none), unattended and without changing files or running
 commands, each output scored against the one expected: exact, or near by a
-model's judgement or embeddings. Exits 1 when a case scoped fail fails.`,
-		Args: cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error { return runEval(cmd, g, o, args[0]) },
+model's judgement or embeddings. Exits 1 when a case scoped fail fails.
+
+With --skill, run a skill's scenarios (scenarios/*.md, Castor's format):
+each prompt with the skills offered, checking the skills it expects were
+used, or that the skill wasn't, and the answer against the outcome.`,
+		Args: func(cmd *cobra.Command, args []string) error {
+			if o.skill != "" {
+				return cobra.NoArgs(cmd, args)
+			}
+			return cobra.ExactArgs(1)(cmd, args)
+		},
+		RunE: func(cmd *cobra.Command, args []string) error {
+			name := api.SkillEvalPrefix + o.skill
+			if o.skill == "" {
+				name = args[0]
+			}
+			return runEval(cmd, g, o, name)
+		},
 	}
 	f := cmd.Flags()
 	f.StringSliceVar(&o.cases, "case", nil, "Run only these cases, by ID (comma-separated or repeated)")
 	f.BoolVar(&o.json, "json", false, "Print the run as JSON when it's done, instead of each result")
+	f.StringVar(&o.skill, "skill", "", "Run this skill's scenarios instead of an eval (--case picks scenarios by name)")
 	return cmd
 }
 

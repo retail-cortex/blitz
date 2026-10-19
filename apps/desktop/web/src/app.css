@@ -899,6 +899,7 @@ code.file-link:hover { text-decoration-color: currentColor; }
 .skill-run-output { margin: 0; max-height: 220px; overflow: auto; padding: 8px 10px; border-radius: var(--md-shape-xs); background: var(--md-surface-container); font: 12px/1.5 var(--md-mono); white-space: pre-wrap; }
 .add-skill-list { max-height: 46vh; overflow-y: auto; }
 .skill-member-add, .skill-language { width: auto; min-width: 200px; }
+.skill-trigger-add { width: auto; min-width: 260px; flex: 1; }
 .skill-files .skill-file-name { flex: 1 1 220px; width: auto; min-width: 0; }
 .add-skill { width: min(520px, 100%); min-width: 0; }
 .add-skill .list-item { min-width: 0; }

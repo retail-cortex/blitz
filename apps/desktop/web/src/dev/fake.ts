@@ -537,7 +537,9 @@ const fakeElsewhere = [
 const fakePolicy = { allow: ["shell", "write", "web"], defaultMaxTurns: 50, defaultMaxCostUsd: 1, defaultTimeout: "30m", maxTurns: 200, maxCostUsd: 10, maxTimeout: "2h", maxConcurrent: 3, runningMaxConcurrent: 2, path: "/home/me/.blitz/.env.toml" };
 // Studio's skills: the workspace's own, with their files, and those it
 // sees elsewhere (yours, a plugin's, built in) to copy or reference.
-type FakeSkill = { name: string; description: string; tools: string; agents: string[]; members: string[]; instructions: string; files: Record<string, string> };
+type FakeSkill = { name: string; description: string; tools: string; agents: string[]; members: string[]; instructions: string; files: Record<string, string>; triggers?: string[]; scenarios?: FakeScenario[] };
+// A skill's scenarios (SK-111): Castor's behaviour tests.
+type FakeScenario = { name: string; description: string; prompt: string; executes: boolean; expectedSkills: string[]; threshold: number; outcome: string };
 const fakeProjectSkills: FakeSkill[] = [
   {
     name: "release-notes",
@@ -546,6 +548,11 @@ const fakeProjectSkills: FakeSkill[] = [
     agents: [],
     members: [],
     instructions: "Read `git log` since the last tag, group the changes by what they mean for users, and write the notes in the style the reference shows.",
+    triggers: ["write the release notes", "what changed since the last release"],
+    scenarios: [
+      { name: "notes-since-tag", description: "Notes from the log", prompt: "Write the release notes for v2.4", executes: true, expectedSkills: [], threshold: 0.8, outcome: "## What's new\n- Wishlists you can share.\n- Faster checkout." },
+      { name: "not-for-bugs", description: "Bug reports aren't notes", prompt: "Why does checkout fail with a 500?", executes: false, expectedSkills: [], threshold: 0.7, outcome: "Looks at the error and the logs; no release notes." },
+    ],
     files: { "references/style.md": "# Style\n\n- Start with what's new for users.\n- Short lines.\n", "scripts/count.py": '"""count: changes since a tag."""\n\nimport sys\n\nprint("3 entries since", sys.argv[1:] or ["the last tag"])\n', "scripts/tag.sh": '#!/bin/sh\n# tag: tags the release.\nset -eu\n\necho "tagging $1"\n', "references/brand.pdf": "%PDF-1.4", "references/logo.png": "" },
   },
   { name: "ship-it", description: "Cut a release: notes, tag and checks", tools: "", agents: ["reviewer"], members: ["release-notes", "pdf"], instructions: "Write the notes, then tag the release once the checks pass.", files: {} },
@@ -564,7 +571,7 @@ const fakeSkillInfo = (workspace: string, x: FakeSkill) => {
   const kind = x.members.length ? "meta" : scripts.length ? "scripts" : refs.length ? "references" : "simple";
   // A skill's scripts wait for review until trusted at their content (SK-108).
   const hash = "sha256:" + JSON.stringify(x.files).length;
-  return { name: x.name, description: x.description, dir: `${workspace}/.agents/skills/${x.name}`, kind, project: true, references: refs, scripts, packageFiles, agents: x.agents, members: x.members, blocked: [] as string[], hash, needsReview: scripts.length > 0 && fakeTrusted.get(x.name) !== hash };
+  return { name: x.name, description: x.description, dir: `${workspace}/.agents/skills/${x.name}`, kind, project: true, references: refs, scripts, packageFiles, agents: x.agents, members: x.members, blocked: [] as string[], hash, needsReview: scripts.length > 0 && fakeTrusted.get(x.name) !== hash, triggers: x.triggers ?? [], scenarios: x.scenarios?.length ?? 0 };
 };
 // A skill's Python packages: its requirements.txt's lines.
 const fakeRequirements = (x: FakeSkill) =>
@@ -579,7 +586,7 @@ const fakeSkillFile = (workspace: string, x: FakeSkill) => ({
   path: `${workspace}/.agents/skills/${x.name}/SKILL.md`,
   hash: "sha256:" + x.name.length,
   editable: true,
-  spec: { name: x.name, description: x.description, tools: x.tools, agents: x.agents, members: x.members, instructions: x.instructions },
+  spec: { name: x.name, description: x.description, tools: x.tools, agents: x.agents, members: x.members, instructions: x.instructions, triggers: x.triggers ?? [] },
 });
 // Studio's rules: two gates before the agent, one after, an instruction
 // rule, and one from .claude/rules (read-only there).
@@ -1604,7 +1611,9 @@ export function installFake() {
           };
         },
         runEval: async function* ({ name, background }, ctx) {
-          const e = fakeEvals.find((x) => x.name === name);
+          // A skill's scenarios run as the eval "skill:<name>" (SK-111).
+          const sk = name.startsWith("skill:") ? fakeProjectSkills.find((k) => k.name === name.slice(6)) : undefined;
+          const e = sk ? ({ name, description: "", agents: [], skills: [], near: "judge", allow: [], cases: (sk.scenarios ?? []).map((sc) => ({ id: sc.name, name: sc.description, prompt: sc.prompt, output: sc.outcome, type: "near", threshold: sc.threshold, scope: "fail" })) } as FakeEval) : fakeEvals.find((x) => x.name === name);
           if (!e) throw new ConnectError(`no eval ${name}`, Code.NotFound);
           const live = startFakeEval(e);
           // Without background, it stops when the caller leaves (blitz eval).
@@ -1697,8 +1706,39 @@ export function installFake() {
           if (sp.name !== previousName && fakeProjectSkills.some((k) => k.name === sp.name)) return { problems: [`name "${sp.name}": the workspace has a skill by that name`] };
           let x = fakeProjectSkills.find((k) => k.name === previousName);
           if (!x) fakeProjectSkills.push((x = { name: sp.name, description: "", tools: "", agents: [], members: [], instructions: "", files: {} }));
-          Object.assign(x, { name: sp.name, description: sp.description, tools: sp.tools, agents: sp.agents, members: sp.members, instructions: sp.instructions });
+          Object.assign(x, { name: sp.name, description: sp.description, tools: sp.tools, agents: sp.agents, members: sp.members, instructions: sp.instructions, triggers: sp.triggers });
           return { file: fakeSkillFile(workspace, x) };
+        },
+        listSkillScenarios: ({ workspace, skill }) => ({ scenarios: (fakeProjectSkills.find((k) => k.name === skill)?.scenarios ?? []).map((sc) => ({ ...sc, path: `${workspace}/.agents/skills/${skill}/scenarios/${sc.name}.md`, problem: "" })) }),
+        saveSkillScenario: ({ workspace, skill, previousName, scenario }) => {
+          const x = fakeProjectSkills.find((k) => k.name === skill);
+          if (!x) throw new ConnectError(`no skill ${skill}`, Code.NotFound);
+          const sc = scenario!;
+          const probs = [!/^[a-z0-9]+(-[a-z0-9]+)*$/.test(sc.name) && `name "${sc.name}": lowercase letters, digits and single hyphens, up to 64`, !sc.prompt.trim() && "prompt: what to ask the agent", !sc.outcome.trim() && "outcome: the answer expected"].filter(Boolean) as string[];
+          if (probs.length) return { problems: probs };
+          const list = (x.scenarios ??= []);
+          const next = { name: sc.name, description: sc.description, prompt: sc.prompt, executes: sc.executes, expectedSkills: sc.expectedSkills, threshold: sc.threshold, outcome: sc.outcome };
+          const i = list.findIndex((k) => k.name === (previousName || sc.name));
+          if (i >= 0) list[i] = next;
+          else list.push(next);
+          list.sort((a, b) => a.name.localeCompare(b.name));
+          return { scenario: { ...next, path: `${workspace}/.agents/skills/${skill}/scenarios/${sc.name}.md`, problem: "" } };
+        },
+        deleteSkillScenario: ({ skill, name }) => {
+          const x = fakeProjectSkills.find((k) => k.name === skill);
+          const i = x?.scenarios?.findIndex((k) => k.name === name) ?? -1;
+          if (!x || i < 0) throw new ConnectError(`no scenario ${name}`, Code.NotFound);
+          x.scenarios!.splice(i, 1);
+          return {};
+        },
+        // Tried once: it uses the skill when the prompt is near one of its trigger phrases (or it's given it).
+        trySkill: async ({ skill, agent, prompt, force }) => {
+          await new Promise((r) => setTimeout(r, 900));
+          const x = fakeProjectSkills.find((k) => k.name === skill);
+          const words = prompt.toLowerCase().split(/\W+/);
+          const near = (x?.triggers ?? []).some((p) => p.toLowerCase().split(/\W+/).filter((w) => w.length > 3).filter((w) => words.some((v) => v.startsWith(w.slice(0, 5)))).length >= 2);
+          const triggered = force || near;
+          return { agent: agent || x?.agents[0] || "blitz", output: triggered ? "## What's new in v2.4\n- Wishlists you can share with a link.\n- Checkout is a step shorter." : "I can help with that: what would you like to know?", skillsUsed: triggered ? [skill] : [], triggered, forced: force, refusals: [], costUsd: 0.0024, duration: { seconds: 3n, nanos: 0 } };
         },
         deleteSkill: ({ name }) => {
           const i = fakeProjectSkills.findIndex((k) => k.name === name);

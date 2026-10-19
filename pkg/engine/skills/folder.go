@@ -43,6 +43,9 @@ const (
 const (
 	ReferencesDir = "references"
 	ScriptsDir    = "scripts"
+	// ScenariosDir holds Castor's scenarios: the skill's behaviour tests
+	// (scenarios.go).
+	ScenariosDir = "scenarios"
 )
 
 // scriptLanguages are the languages of scripts found in scripts/, by

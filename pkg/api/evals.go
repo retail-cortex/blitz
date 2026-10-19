@@ -68,6 +68,26 @@ type EvalResult struct {
 	Refusals []string      `json:"refusals,omitempty"`
 	CostUSD  float64       `json:"cost_usd,omitempty"`
 	Duration time.Duration `json:"duration"`
+	// SkillsUsed are the skills the agent used (a skill's scenario,
+	// spec_skills_013 SK-111).
+	SkillsUsed []string `json:"skills_used,omitempty"`
+}
+
+// SkillEvalPrefix names a skill's scenarios as an eval: RunEval,
+// EvalRuns and blitz eval take "skill:<name>" (spec_skills_013 SK-111).
+const SkillEvalPrefix = "skill:"
+
+// SkillTry is a prompt tried once with a skill (SK-112): what the agent
+// answered, the skills it used, and whether this one was among them.
+type SkillTry struct {
+	Skill, Agent, Prompt string
+	Output               string
+	SkillsUsed           []string
+	// Triggered: the agent used the skill; Forced: it was given it.
+	Triggered, Forced bool
+	Refusals          []string
+	CostUSD           float64
+	Duration          time.Duration
 }
 
 // EvalRun is a run of an eval: every case (or those asked for) by every

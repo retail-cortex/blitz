@@ -27,25 +27,41 @@ export interface SkillForm {
   agents: string[];
   members: string[];
   instructions: string;
+  /** Trigger phrases: requests it's for, which the model matches by meaning (SK-110). */
+  triggers: string[];
 }
 
 /** A new skill's form. */
-export const emptySkillForm: SkillForm = { name: "", description: "", tools: [], agents: [], members: [], instructions: "" };
+export const emptySkillForm: SkillForm = { name: "", description: "", tools: [], agents: [], members: [], instructions: "", triggers: [] };
 
 /** The form for a skill as read. */
 export function formFromSkill(f: SkillFile): SkillForm {
   const s = f.spec;
-  return { name: s?.name ?? "", description: s?.description ?? "", tools: (s?.tools ?? "").split(/\s+/).filter(Boolean), agents: [...(s?.agents ?? [])], members: [...(s?.members ?? [])], instructions: s?.instructions ?? "" };
+  return { name: s?.name ?? "", description: s?.description ?? "", tools: (s?.tools ?? "").split(/\s+/).filter(Boolean), agents: [...(s?.agents ?? [])], members: [...(s?.members ?? [])], instructions: s?.instructions ?? "", triggers: [...(s?.triggers ?? [])] };
 }
 
 /** The form as SaveSkill takes it. */
 export function specFromForm(f: SkillForm) {
-  return { name: f.name.trim(), description: f.description.trim(), tools: f.tools.join(" "), agents: f.agents, members: f.members, instructions: f.instructions };
+  return { name: f.name.trim(), description: f.description.trim(), tools: f.tools.join(" "), agents: f.agents, members: f.members, instructions: f.instructions, triggers: f.triggers };
 }
 
 /** Whether two forms hold the same skill. */
 export function sameSkillForm(a: SkillForm, b: SkillForm): boolean {
   return JSON.stringify(specFromForm(a)) === JSON.stringify(specFromForm(b));
+}
+
+/** A trigger phrase as typed, tidied ("" when blank); the list it joins, without it twice. */
+export function addTrigger(list: readonly string[], typed: string): string[] {
+  const p = typed.trim().replace(/\s+/g, " ");
+  return p && !list.includes(p) ? [...list, p] : [...list];
+}
+
+/** A scenario's name made from its prompt ("Write the release notes" → write-the-release-notes), at most five words. */
+export function scenarioName(prompt: string, taken: readonly string[]): string {
+  const base = skillName(prompt.split(/\s+/).slice(0, 5).join(" ")) || "scenario";
+  let name = base;
+  for (let n = 2; taken.includes(name); n++) name = `${base}-${n}`;
+  return name;
 }
 
 /** Whether name may name a skill: lowercase letters, digits and single hyphens, up to 64. */

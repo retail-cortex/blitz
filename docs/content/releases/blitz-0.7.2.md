@@ -12,6 +12,7 @@ weight: 1
 ### What's changed
 
 - **Evals keep running when you leave.** Start an eval, then close it or Studio and get on with something else: it carries on, and the list shows it running. Open it again to watch it finish, or stop it. Every case also has a time limit, so one that gets stuck is marked as an error and the run moves on.
+- **Skills you can test.** Give a skill **trigger phrases**, examples of what it's for, and the agent picks it up for requests like them, however they're worded. Then, on the skill's new **Scenarios** tab, **Try it** with a prompt: you see straight away whether the agent used the skill and what it said. **Keep it** turns a good try into a scenario, and **Run all** checks them all in the background. Scenarios are saved in Castor's format, so a skill you share carries its tests, and `blitz eval --skill <name>` runs them in CI.
 - **The Studio button opens and closes Studio.** Click it again to close Studio, as its ✕ does.
 
 - **The window talks to Blitz over HTTP/2.** Every request and live update now shares a single connection, so there's no longer a limit of six.

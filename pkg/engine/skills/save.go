@@ -24,6 +24,8 @@ import (
 	"path"
 	"path/filepath"
 	"regexp"
+	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/retail-cortex/blitz/pkg/engine/frontmatter"
@@ -50,6 +52,40 @@ type Spec struct {
 	Agents       []string
 	Members      []string
 	Instructions string
+	// Triggers are Castor's trigger_phrases: requests the skill is for,
+	// examples the model matches by meaning, not wording (SK-110).
+	Triggers []string
+}
+
+// Limits on trigger phrases: how many, and how long each.
+const (
+	MaxTriggers      = 20
+	MaxTriggerLength = 200
+)
+
+// TriggerHint is how the skills' listing gives a skill's trigger phrases
+// (SK-110): " For requests like: "a"; "b".", or "" without any.
+func TriggerHint(phrases []string) string {
+	phrases = CleanTriggers(phrases)
+	if len(phrases) == 0 {
+		return ""
+	}
+	quoted := make([]string, len(phrases))
+	for i, p := range phrases {
+		quoted[i] = strconv.Quote(p)
+	}
+	return " For requests like: " + strings.Join(quoted, "; ") + "."
+}
+
+// CleanTriggers trims each phrase and leaves out blank ones and repeats.
+func CleanTriggers(phrases []string) []string {
+	var out []string
+	for _, p := range phrases {
+		if p = strings.Join(strings.Fields(p), " "); p != "" && !slices.Contains(out, p) {
+			out = append(out, p)
+		}
+	}
+	return out
 }
 
 // nameRE is a skill's name, as the Agent Skills format has it: lowercase
@@ -78,6 +114,15 @@ func Check(spec Spec, reserved func(string) bool) []string {
 	}
 	if strings.TrimSpace(spec.Description) == "" {
 		probs = append(probs, "description: say what the skill is for and when to use it")
+	}
+	triggers := CleanTriggers(spec.Triggers)
+	if len(triggers) > MaxTriggers {
+		probs = append(probs, fmt.Sprintf("trigger phrases: at most %d", MaxTriggers))
+	}
+	for _, p := range triggers {
+		if len(p) > MaxTriggerLength {
+			probs = append(probs, fmt.Sprintf("trigger phrase %q: at most %d characters", p[:40]+"…", MaxTriggerLength))
+		}
 	}
 	for _, m := range spec.Members {
 		switch {
@@ -147,6 +192,7 @@ func Render(old []byte, spec Spec) ([]byte, error) {
 		f.String("allowed-tools", strings.Join(strings.Fields(spec.Tools), " "))
 		f.List("agents", spec.Agents)
 		f.List("skills", spec.Members)
+		f.List("trigger_phrases", CleanTriggers(spec.Triggers))
 	})
 	if err != nil {
 		return nil, fmt.Errorf("SKILL.md's %w", err)

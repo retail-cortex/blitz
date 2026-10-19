@@ -46,7 +46,8 @@ import { Button, Chip, Dialog, Field, Icon, IconButton, Tabs, useSnackbar, Multi
 import { DraftButton } from "./Draft";
 import { evalsForSkill, runInBackground } from "./evalCoverage";
 import { SkillFiles } from "./SkillFiles";
-import { emptySkillForm, formFromSkill, kindOf, sameSkillForm, skillName, specFromForm, validSkillName, type SkillForm, type SkillKind } from "./skillForm";
+import { SkillScenarios } from "./SkillScenarios";
+import { addTrigger, emptySkillForm, formFromSkill, kindOf, sameSkillForm, skillName, specFromForm, validSkillName, type SkillForm, type SkillKind } from "./skillForm";
 
 /** Each kind's icon (SK-97). */
 const kindIcons: Record<SkillKind, string> = { simple: mdiPuzzleOutline, references: mdiBookOpenVariant, scripts: mdiCodeBraces, meta: mdiSitemapOutline };
@@ -54,16 +55,17 @@ const kindIcons: Record<SkillKind, string> = { simple: mdiPuzzleOutline, referen
 /** What slides in over the list: a skill (by name), or a new one (""). */
 type Open = { name: string } | null;
 
-type Tab = "general" | "references" | "scripts";
+type Tab = "general" | "references" | "scripts" | "scenarios";
 
 /**
  * The workspace's skills (Studio › Skills, spec_skills_013 SK-100–SK-103):
  * its own, with their kind, fill the pane, with New and **Add from…**
  * (copy any skill the workspace sees, or reference it in the open meta
  * skill). A skill's form slides in over the list, as an agent's does,
- * with three tabs: General (name, description, tools, agents, the skills
- * it combines, its instructions with Draft), References and Scripts (its
- * files). Back, Cancel and Save return to the list; with unsaved edits,
+ * with four tabs: General (name, description, trigger phrases, tools,
+ * agents, the skills it combines, its instructions with Draft),
+ * References and Scripts (its files), and Scenarios (try it, keep what
+ * works, run them: SkillScenarios). Back, Cancel and Save return to the list; with unsaved edits,
  * leaving asks first (onDirty tells the drawer too).
  */
 export function SkillsPane({ workspace, onDirty }: { workspace: string; onDirty?: (dirty: boolean) => void }) {
@@ -87,6 +89,8 @@ export function SkillsPane({ workspace, onDirty }: { workspace: string; onDirty?
   const [reviewing, setReviewing] = useState(false);
   const [tools, setTools] = useState<string[]>([]);
   const [agents, setAgents] = useState<string[]>([]);
+  // A trigger phrase being typed, added on Enter or leaving the field.
+  const [trigger, setTrigger] = useState("");
 
   const refresh = useCallback(async () => {
     forgetSkills(workspace); // the composer's \skill list asks again
@@ -253,6 +257,7 @@ export function SkillsPane({ workspace, onDirty }: { workspace: string; onDirty?
                 { value: "general", label: t("desktop.skills.tab.general") },
                 { value: "references", label: t("desktop.skills.tab.references"), count: file?.skill?.references.length },
                 { value: "scripts", label: t("desktop.skills.tab.scripts"), count: file?.skill?.scripts.length },
+                { value: "scenarios", label: t("desktop.skills.tab.scenarios"), count: file?.skill?.scenarios },
               ]}
             />
             {file?.skill?.needsReview && (
@@ -303,6 +308,35 @@ export function SkillsPane({ workspace, onDirty }: { workspace: string; onDirty?
                       />
                     )}
                   </Field>
+                </div>
+                <div className="stack" style={{ gap: 6 }}>
+                  <span className="t-label">{t("desktop.skills.triggers")}</span>
+                  <span className="t-body-sm muted">{t("desktop.skills.triggers_hint")}</span>
+                  <div className="row wrap" style={{ gap: 6 }}>
+                    {form.triggers.map((p) => (
+                      <Chip key={p} onClick={() => set("triggers", form.triggers.filter((x) => x !== p))} aria-label={t("desktop.skills.trigger_remove", { phrase: p })}>
+                        {p} <Icon path={mdiClose} size="sm" />
+                      </Chip>
+                    ))}
+                    <input
+                      className="input skill-trigger-add"
+                      aria-label={t("desktop.skills.trigger_add")}
+                      placeholder={t("desktop.skills.trigger_placeholder")}
+                      value={trigger}
+                      onChange={(e) => setTrigger(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key !== "Enter" || !trigger.trim()) return;
+                        e.preventDefault();
+                        set("triggers", addTrigger(form.triggers, trigger));
+                        setTrigger("");
+                      }}
+                      onBlur={() => {
+                        if (!trigger.trim()) return;
+                        set("triggers", addTrigger(form.triggers, trigger));
+                        setTrigger("");
+                      }}
+                    />
+                  </div>
                 </div>
                 <div className="row field-tools">
                   <span className="spacer" />
@@ -363,7 +397,8 @@ export function SkillsPane({ workspace, onDirty }: { workspace: string; onDirty?
                 <Icon path={mdiFileDocumentMultipleOutline} size="sm" /> {t("desktop.skills.save_first")}
               </p>
             )}
-            {tab !== "general" && saved && file && <SkillFiles key={tab} workspace={workspace} file={file} folder={tab} onFile={setFile} onDirty={setFilesDirty} onOpen={setFileOpen} onReview={() => setReviewing(true)} />}
+            {tab === "scenarios" && saved && file && <SkillScenarios key={file.skill?.name} workspace={workspace} file={file} agents={agents} changed={!sameSkillForm(form, base)} onChanged={() => void workspaces.getSkillFile({ workspace, name: file.skill?.name ?? "" }).then((r) => r.file && setFile(r.file), () => {})} />}
+            {(tab === "references" || tab === "scripts") && saved && file && <SkillFiles key={tab} workspace={workspace} file={file} folder={tab} onFile={setFile} onDirty={setFilesDirty} onOpen={setFileOpen} onReview={() => setReviewing(true)} />}
             {!(tab !== "general" && fileOpen) && (
             <div className="row wrap agent-actions slide-actions">
               <span className="t-body-sm muted spacer ellipsis" title={where}>
