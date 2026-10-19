@@ -7,7 +7,7 @@ weight: 45
 
 | | |
 |---|---|
-| Status | **In progress** for v0.7.1 (the owner's request, 2026-10-18): CMP-01–CMP-06 for workflows first; skills, agents, evals, rules, guardrails and workers follow as recipes. |
+| Status | **Done for workflows** in v0.7.1 (the owner's request, 2026-10-18): CMP-01–CMP-06. Next, for v0.7.2: the other kinds' recipes (CMP-07) and the Overview's Improve through the composer (CMP-08). |
 | Source | `pkg/engine/compose/` (sessions, recipes), `pkg/engine/compose.go` (the workspace's context and model), `apps/service/internal/server/compose.go`, `proto/blitz/v1/workspace.proto`, `apps/desktop/web/src/studio/ComposeDialog.tsx`, `apps/desktop/web/src/studio/compose.ts` |
 | Tests | `pkg/engine/compose/compose_test.go`, `pkg/engine/compose_test.go`, `apps/service/internal/server/compose_test.go`, `apps/desktop/web/src/studio/compose.test.ts`; manual checks in MANUAL_VERIFICATION §54 |
 | Depends on | [spec_workflows_043](spec_workflows_043.md) (the workflow file and its checks), [spec_studio_040](spec_studio_040.md) (the editors), [spec_health_044](spec_health_044.md) (a later caller: Improve) |
@@ -26,9 +26,9 @@ The composer is one service for every kind: a short conversation that asks only 
 - **CMP-04** **Context**: the recipe names what the model may refer to, from the workspace as it is: for a workflow, the step types and their settings, the workspace's agents, skills (and their scripts), rules, MCP servers' tools and the other workflows (for call steps), each by name with its description. It never sees secrets' values, only their names (for `{secrets:name}`).
 - **CMP-05** **API**: `StartCompose` (workspace, kind, the request, and for an edit the current component as its file) and `AnswerCompose` (session, answer) each return the session as it is after the composer's turn; `DropCompose` forgets one. Plain calls: nothing is held open (the window's connections are few, spec_desktop_024).
 - **CMP-06** **Workflows in Studio**: the new-workflow dialog has **Compose with AI** beside the templates: the request, then the conversation (questions as text with their suggested answers as buttons, a field to answer in your own words), then the draft's summary, its steps as a list and its problems, with **Open on the canvas**, which opens it as a new, unsaved workflow (its mode and name as drafted) to review, change and save.
-- **CMP-07** *(next)* Recipes for skills (SKILL.md, with scripts), agents (frontmatter and instructions, least tools), evals (cases from an agent's description and its failed runs), rules and guardrails, and workers (schedule and least permissions); each editor's **Compose** opens the same dialog on its kind, an edit passing the current file.
-- **CMP-08** *(next)* The Overview's **Improve** asks the composer for the item with the fix as the request, and opens the result as a draft in the item's editor.
+- **CMP-07** *(next, v0.7.2)* Recipes for skills (SKILL.md, with scripts), agents (frontmatter and instructions, least tools), evals (cases from an agent's description and its failed runs), rules and guardrails, and workers (schedule and least permissions); each editor's **Compose** opens the same dialog on its kind, an edit passing the current file.
+- **CMP-08** *(next, v0.7.2)* The Overview's **Improve** asks the composer for the item with the fix as the request, and opens the result as a draft in the item's editor.
 
 ## 3. Known gaps
 
-In progress: workflows only. A session doesn't survive the service restarting. A failed turn (the model unreachable, an answer unreadable twice) is `FailedPrecondition` (`COMPOSE_FAILED`), not `Unavailable`, which the page reads as the service gone. A schedule in the request ("every weekday") isn't drafted: schedules are kept apart from the workflow file (WF-20) and set after saving.
+Workflows only, in v0.7.1; the other kinds follow in v0.7.2. A session doesn't survive the service restarting. A failed turn (the model unreachable, an answer unreadable twice) is `FailedPrecondition` (`COMPOSE_FAILED`), not `Unavailable`, which the page reads as the service gone. A schedule in the request ("every weekday") isn't drafted: schedules are kept apart from the workflow file (WF-20) and set after saving.

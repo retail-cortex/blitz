@@ -1,6 +1,6 @@
 ---
 title: Blitz 0.6.0
-weight: 6
+weight: 7
 ---
 
 **Your documents, everywhere they need to go.** Download it from the [GitHub release](https://github.com/retail-cortex/blitz/releases/tag/v0.6.0).

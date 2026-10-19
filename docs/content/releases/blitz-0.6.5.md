@@ -1,6 +1,6 @@
 ---
 title: Blitz 0.6.5
-weight: 2
+weight: 3
 ---
 
 **Branches on the Changes page, version control in plain words, and instructions that take effect from your next message.** Download it from the [GitHub release](https://github.com/retail-cortex/blitz/releases/tag/v0.6.5).

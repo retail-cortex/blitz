@@ -1,6 +1,6 @@
 ---
 title: Blitz 0.6.6
-weight: 1
+weight: 2
 ---
 
 **A new desktop app for Mac, Windows and Linux: it updates itself, opens your web app beside the chat, and comes in the colours you like.** Download it from the [GitHub release](https://github.com/retail-cortex/blitz/releases/tag/v0.6.6).

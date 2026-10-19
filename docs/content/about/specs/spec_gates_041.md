@@ -7,7 +7,7 @@ weight: 41
 
 | | |
 |---|---|
-| Status | **In progress** since v0.7.1 (the owner's request, 2026-10-17). Done: rules (GT-01–GT-11), guardrails (GT-20–GT-29). |
+| Status | **Done** in v0.7.1 (the owner's request, 2026-10-17): rules GT-01–GT-11, guardrails GT-20–GT-29. |
 | Source | `pkg/engine/gates/gates.go`, `pkg/engine/frontmatter/frontmatter.go`, `pkg/engine/rules.go`, `pkg/engine/turn.go`, `pkg/engine/memory/memory.go` (`splitRule`), `pkg/engine/tools/checkpoint.go` (`LatestTurnDiff`), `apps/service/internal/server/rules.go`, `apps/desktop/web/src/studio/RulesPane.tsx`, `apps/desktop/web/src/studio/RulesOrGuardrails.tsx`, `apps/desktop/web/src/studio/ruleForm.ts`, `pkg/engine/gates/guardrails.go`, `pkg/engine/guardrails.go`, `pkg/engine/runtime/guard.go`, `pkg/redact/pii.go`, `apps/service/internal/server/guardrails.go`, `apps/desktop/web/src/studio/GuardrailsPane.tsx`, `apps/desktop/web/src/studio/guardrailForm.ts` |
 | Tests | `pkg/engine/gates/gates_test.go`, `pkg/engine/frontmatter/frontmatter_test.go`, `pkg/engine/rules_test.go`, `pkg/engine/memory/memory_more_test.go` (`TestGateRulesAreNotInstructions`), `apps/service/internal/server/rules_test.go`, `apps/desktop/web/src/studio/ruleForm.test.ts`, `pkg/engine/gates/guardrails_test.go`, `pkg/engine/guardrails_test.go`, `pkg/redact/pii_test.go`, `apps/service/internal/server/guardrails_test.go`, `apps/desktop/web/src/studio/guardrailForm.test.ts` |
 | Depends on | [spec_memory_012](spec_memory_012.md) (rule files), [spec_studio_040](spec_studio_040.md) |

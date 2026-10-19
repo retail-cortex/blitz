@@ -7,7 +7,7 @@ weight: 40
 
 | | |
 |---|---|
-| Status | **In progress** since v0.7.1 (the owner's request, 2026-10-17). Done: the menu, the drawer, agents, workers, secrets, AI drafts, secrets completion (STU-01–STU-08). Next: skills, rules, guardrails, evals, workflows, each with its own spec where it adds behaviour. |
+| Status | **Done** in v0.7.1 (the owner's request, 2026-10-17): STU-01–STU-09. The kinds that add behaviour have their own specs: skills ([spec_skills_013](spec_skills_013.md)), rules and guardrails ([spec_gates_041](spec_gates_041.md)), evals ([spec_evals_042](spec_evals_042.md)), workflows ([spec_workflows_043](spec_workflows_043.md)), the Overview ([spec_health_044](spec_health_044.md)) and the composer ([spec_composer_045](spec_composer_045.md)). |
 | Source | `apps/desktop/web/src/studio/` (`StudioDrawer.tsx`, `Draft.tsx`), `MenuBar.tsx`, `simpleMode.ts`, `ui/controls.tsx` (`Tabs`), `SecretSuggest.tsx`, `secretComplete.ts`, `files/secretCompletion.ts`, `pkg/engine/draft.go`, `apps/service/internal/server/studio.go` |
 | Tests | `pkg/engine/draft_test.go`, `apps/service/internal/server/mcp_test.go` (`TestDraftManifestOverTheAPI`), `apps/desktop/web/src/secretComplete.test.ts`, `apps/desktop/web/src/simpleMode.test.ts` |
 
